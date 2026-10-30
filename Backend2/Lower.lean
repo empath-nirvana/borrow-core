@@ -1062,6 +1062,8 @@ where
       match L.sh c', L.sh n' with
       | .clos .., .unk => return ([], [])
       | .opq, .unk => return ([], [])
+      -- `Tok`'s cell (`Ref 1`) read as `Unk`: forgotten.
+      | .ref _, .unk => return ([], [])
       | _, _ =>
         if L.triv c' && L.w c' == L.w n' then return ([], locs vs)
         let ts ← fresh (L.w n')
@@ -1069,6 +1071,7 @@ where
     match L.sh c, L.sh n with
     | .clos .., .unk => return ([], [])
     | .opq, .unk => return ([], [])
+    | .ref _, .unk => return ([], [])
     | .pair .., .pair .. => do
       let (s₀, a, b) ← splitPair c ls false
       let (s₁, va) ← sub (← child c 0) (← child n 0) a

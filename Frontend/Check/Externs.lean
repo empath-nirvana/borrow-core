@@ -437,7 +437,7 @@ def ioWrapper (p : Program) (m : IOMain) (args : List UInt8 := []) (outs : Bool 
   let src := match m.loopB with
     | none => wrapperSrc (m.caps.map (·.name)) (capsTy m.caps) m.A args outs
     | some B => loopWrapperSrc (m.caps.map (·.name)) (capsTy m.caps) m.A B args outs
-  match parseProgram src (resolve := false) with
+  match parseProgram src (resolve := false) (internal := true) with
   | .ok w =>
     -- The wrapper's externs are the harness's, which no program declares (`reservedDecl?`).
     for d in w.decls do

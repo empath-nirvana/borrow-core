@@ -252,6 +252,8 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
       "with " ++ (match nm with | some n => n ++ " = " | none => "") ++ h ++ (if As.isEmpty then "" else "[" ++ ", ".intercalate (As.map (VTy.pp · 0)) ++ "]") ++
         "(" ++ P.pp 0 k ++ ") { '" ++ x ++ ", " ++ b.name ++ " ->" ++ nl (k + 2) ++
         M.pp 0 (k + 2) ++ " }"
+    | .app _ (.sugar _ .fin) (.pair _ V (.thunkv _ (.lam _ _ _ D))) =>
+      V.pp 1 k ++ " finally { " ++ D.pp 0 (k + 2) ++ " }"
     | .thunk _ M => "thunk " ++ M.pp 0 (k + 2)
     | .thunkv _ M => "thunkv " ++ M.pp 0 (k + 2)
     | .bangThunk _ M => "!thunk " ++ M.pp 0 (k + 2)

@@ -720,6 +720,8 @@ generator: it does not perform the iteration effect. -/
 def rowV (env : Env) : Nat → Val → List Inst
   | 0, _ => []
   | n + 1, V => match V with
+    | .app _ (.sugar _ .fin) (.pair _ V (.thunkv _ (.lam _ _ _ D))) =>
+      env.union (rowV env n V) (rowC env n D)
     | .app _ (.app _ (.sugar _ (.handle h _ As nm)) P) (.thunkv _ (.lam _ _ _ M)) =>
       let inner := rowC env n M
       let inner := match env.handler? h, env.chandler? h with
@@ -1647,6 +1649,7 @@ def withInV (env : Env) : Nat → Val → Bool
   | 0, _ => false
   | k + 1, V => match V with
     | .app _ (.app _ (.sugar _ (.handle ..)) _) _ => true
+    | .app _ (.sugar _ .fin) _ => true
     | .app _ f W =>
       let pull := match headName f with
         | some x => (env.pullArgs x W).any fun (V, p) => p && (env.iterCall? V).isSome
@@ -1937,6 +1940,13 @@ def trV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
 def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
   | 0, _, _, V => throw ⟨V.span, "internal error: a value nested too deeply"⟩
   | k + 1, cx, cs, V => match V with
+    -- `with h(…) { M } finally { D }` (SPEC §42): `[then]` around the handled computation, `D`
+    -- the finaliser and run again on the normal exit: `x <- with h(…) { M } unwind (D); D; x`.
+    | .app sp (.sugar _ .fin) (.pair _ W (.thunkv _ (.lam _ _ _ D))) => do
+      let r ← fresh "fx_fin"
+      let u ← fresh "fx_finu"
+      goV k cx cs (.run sp (.unwind sp ⟨r, sp⟩ none (.ret sp W) D
+        (.bind sp ⟨u, sp⟩ none D (.ret sp (.var sp r)))))
     | .app sp (.app sp₂ (.sugar ksp (.handle h l As nm)) P) (.thunkv tsp (.lam lsp b A M)) =>
       match cx.env.handler? h, cx.env.chandler? h with
       | some hs, _ => withBlk k cx cs sp sp₂ ksp hs l P tsp lsp b A M nm

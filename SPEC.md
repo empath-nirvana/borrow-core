@@ -977,8 +977,10 @@ Two constants, at a dead context like the borrow axioms (`Core/Tok.lean`):
 `mint` allocates the cell by the ordinary `alloc` step and `burn` frees it, so their compatibility
 lemmas are `[TR]` 6.141 and 6.142 (`tokMint_compatX`, `tokBurn_compatX`, by `wpTS_alloc` and
 `wpTS_free`, the lemmas `ewp_alloc` and `ewp_free` take at an effect row). `burn` is the only
-constant that takes a `Tok`. The surface spells the type `tok` and the constants `tok_mint` and
-`tok_burn`; programs do not write them, the elaboration of §42's declared types does.
+constant that takes a `Tok`. A program cannot write them: the lexer has no keyword for the
+constants and the parser reads the type `tok` only in the source the elaboration writes and parses
+back (its templates, a type printed as surface syntax, the `run_io` wrapper). The elaboration of
+§42's declared types is the one place that names them (`Const.tokMint`, `Const.tokBurn`).
 
 `Tok` is linear with no derived drop (`tok_linear`: `HasDtor` has no `opq` constructor), and it owns
 its cell, so it is not `VTy.OwnFree` (`tok_not_ownFree`): an abort cannot abandon it (`[let]`'s
@@ -7877,9 +7879,11 @@ the call. The rules, beside the table's:
 
 | # | construct | elaborates to | where |
 |---|---|---|---|
-| D4 | a field `must_close g: A` | the field's type is `A * tok` (`Tok`, §11), in the structure, a block's cell (`ref (A * tok)`) and its shape | parser |
-| E7 | a value `e` for a marked field, in `C(…)`, `box C(…)` or `N { … }` | `(e, tok_mint ())`: the constructor mints the token | parser |
-| M5 | a constructor pattern's sub-pattern `p` at a marked field | `let (x, t) = o; _ <- return (tok_burn t); …`, then `p` matched against `x`: the written `match` burns the token, where the arm is reached (a variable or `_`), or before `p` is tested | parser |
+| D4 | a field `must_close g: A` | the field's type is `A * tok` (`Tok`, §11), in the structure, a block's cell (`ref (A * tok)`) and its shape | `Elab/Data.lean` (`structOf`, `typeDecls`) |
+| E7 | a value `e` for a marked field, in `C(…)`, `box C(…)` or `N { … }` | `(e, tok_mint ())`: the constructor mints the token | `Elab/Data.lean` (`conVal`) |
+| M5 | a constructor pattern's sub-pattern `p` at a marked field | `let (x, t) = o; _ <- return (tok_burn t); …`, then `p` matched against `x`: the written `match` burns the token, where the arm is reached (a variable or `_`), or before `p` is tested | `Elab/Data.lean` (`MPat.burn`, `burnBind`) |
+
+The parser calls each of these with the table, as it calls D1–M4.
 
 `tok_burn` is emitted at M5 only; E7 is the only `tok_mint`. A row that binds the whole value to a
 variable passes it on unburned. So a declared value is consumed exactly where the program writes
@@ -7900,12 +7904,21 @@ is refused by a kernel fact, not by a check of the elaborator:
   and the value is not consumed. `Imm̲ 'b (A ⊗ Tok) = Imm̲ 'b A ⊗ Unk`, so a view reads the fields
   and forgets the token's view.
 
-**No run ends with a declared value unconsumed.** A token the run did not burn keeps its cell
-(`TokLive`), and every theorem that frees every cell says none is left: on every run of a closed
-program of `F A`, `A` unrestricted, that reaches a value (`tok_released`, from `leakFree_closed`),
-on the run `adequacyC` gives (`adequacyC_tok`), and from every configuration a closed program of
-`F 1` reaches (`tok_released_every_run`, from `adequacyD`). `mint` allocates the cell at any
-location the memory does not hold and `burn` frees it (`mint_step`, `burn_step`).
+**The entry consumes `main`'s result by its derived drop.** A program with no externs whose
+`main : F A` answers a value that is neither unrestricted nor a loop the driver runs is entered as
+`main : F 1 = io_main_result : A <- M; return ()` (`Frontend.Check.discardEntry`): the checker
+drops the result by its derived drop, at a `dtor` node (`entry_derives`, over `drop_derives`), and
+the run ends with every cell freed (`entry_runs`, from `adequacyC`). The host never abandons a
+value. At a declared type there is no derived drop (`entry_decl_no_drop`), so the program is
+refused: "`main`'s result is not consumed in its scope, …". A program with capabilities already
+asks its result to be unrestricted (§11). `mint` allocates the token's cell at any location the
+memory does not hold and `burn` frees it (`mint_step`, `burn_step`).
+
+**A borrow's view.** A view of a marked field forgets the token (`Imm̲ 'b Tok = Unk`). When a
+binder's slot of a view is not used and cannot stay live where its scope ends (under `boxed[@a]`,
+whose context must outlive `@a`, and `Unk` outlives nothing), the checker consumes it by its derived
+drop at the head of its scope (`dropStuck`, `drop_derives` at `HasDtor.unk`); it is not owed and its
+drop does nothing observable. So `t.id` reads through `imm 'a Txn` (`corpus/decl-view.bc`).
 
 **`finally` on `with`** (user, 2026-10-30: "the syntax should be with open finally"):
 
@@ -7913,9 +7926,10 @@ location the memory does not hold and `burn` frees it (`mint_step`, `burn_step`)
 
 the kernel's `[then]` (§24, §27) around the handled computation. `D : F_Σ 1` is written once and
 placed twice, as the finaliser and on the normal exit, so it runs once on either; each placement is
-a term the checker types, at its own row (§27: it may perform I/O). The effects pass (§18) reads
-`[then]`'s parts for their rows and elaborates a `with` inside them; the handled computation and
-the finaliser thread no capability. It is decision 2's "cleanup goes
+a term the checker types, at its own row (§27). The parser reads `finally` as the sugar `fin`,
+which the effects pass (§18) elaborates beside `with` (`Frontend/Elab/Effects.lean`, `goV`); it
+reads `[then]`'s parts for their rows and elaborates a `with` inside them. The handled computation
+and the finaliser thread no capability, so a finaliser does no I/O yet: see *Open*. It is decision 2's "cleanup goes
 in a finaliser", made readable, and not a drop: `D` is a call the program wrote. `[then]` gives `M`
 and `D` disjoint contexts, so a value `D` consumes is not used in `M`: "commit in the body, roll
 back on an abort" lends the value into `M` or holds it as a handler's state.
@@ -7928,6 +7942,20 @@ message reads the declarations (`Data.Table`); the refusal is the kernel's.
 
 **Not this:** an implicit call of the named function at the end of a scope without a written
 `finally`. That would be a drop that is not derived.
+
+**Open (#746).**
+- *Every token minted is burned by a `burn` step.* What is proved is leak freedom: every cell a
+  run allocates is freed (`adequacyC`, `adequacyD`, `leakFree_closed`), the token's among them. The
+  statement that the cell is freed by `burn`, and not by some other `free`, is not stated: on this
+  machine `burn` is `free` after a β step, and `Tok`'s relation is `Ref 1`'s, so neither the step
+  relation nor the model tells a token's cell from a `Ref 1` cell. It needs a model change: `mint`
+  and `burn` as steps of their own over a cell marked as a token, which `free` does not release
+  (stuck), so that safety and the empty final memory give, on every run from `∅` to a value,
+  for each `mint` step allocating `ℓ`, a later `burn` step releasing `ℓ`.
+- *I/O in a finaliser.* `[then]`'s `D` is at `F_Σ 1` beside `N` in one context: a capability the
+  effects pass threads into `D` would be consumed there and not handed back. Capabilities as
+  borrows held across `[then]` (§29's relaxed lend, `PinLaw`), or a finaliser that hands its
+  capabilities back, would carry it; neither is in this entry.
 
 ### Programs
 
@@ -7950,6 +7978,8 @@ message reads the declarations (`Data.Table`); the refusal is the kernel's.
 | `corpus/decl-promise.bc` | promises stored in a queue (a recursive declaration of blocks) and answered later by a `fold_own` (§60), each by a `match`; a recursion under a depth budget would abandon the rest at exhaustion, which the kernel refuses | the answers' sum |
 | `corpus/decl-guard.bc` | a guard stored in a record beside data, released by a `finally` on a `with` | the guard released on the normal exit |
 | `corpus/reject/decl-txn-raise.bc`, `decl-promise-raise.bc`, `decl-guard-raise.bc` | each of the three with the value live across a `raise` and no finaliser | refused: `[let]`'s `hW` (`decl_not_ownFree`) |
+| `corpus/decl-view.bc` | `t.id` read through `imm 'a Txn`, the token's view dropped by its derived drop, the transaction committed after | i32[712] |
+| `corpus/reject/decl-burn-written.bc` | a program that takes a record apart as a tuple and writes `tok_burn` | refused: no such name |
 
 Each rule is pinned beside its elaboration written by hand (`scripts/check-sugar.sh`):
 `corpus/sugar/data-forms.bc` and `data-update.bc` beside core forms, and `data-box-tree`,
@@ -10145,9 +10175,12 @@ relation or the machine.
   `free`, sound by `[TR]` 6.141 and 6.142). A data field marked `must_close` holds `A * tok`: a
   constructor mints, a written `match` burns, and nothing else does. Every refusal is a kernel
   fact: no derived drop (`decl_linear`, `TDerivesP.dtor_hasDtor`), not `OwnFree` across an abort
-  (`decl_not_ownFree`). No run ends with one unconsumed (`tok_released`, `adequacyC_tok`). The
-  surface adds `with … { M } finally { D }` over `[then]`, and messages that name the field and
-  its consumer. `fundamentalC`, `adequacyC`, `adequacyD` keep their statements; no other
+  (`decl_not_ownFree`). The entry of a program without externs discards a result that is not
+  unrestricted by its derived drop (`entry_derives`, `entry_runs`), so a declared result is refused
+  and an owned one freed. `tok`, `tok_mint` and `tok_burn` are not surface syntax. A binder's
+  slot of a view that cannot stay live is dropped at the head of its scope (`dropStuck`). The
+  surface adds `with … { M } finally { D }` over `[then]` (the sugar `fin`, elaborated by the
+  effects pass), and messages that name the field and its consumer. `fundamentalC`, `adequacyC`, `adequacyD` keep their statements; no other
   program's acceptance or output changes.
 
 - **1.14** (2026-10-30) — §11, §34, §35 (#746, 1b): a backend compiles `IORun.expr r []`, the

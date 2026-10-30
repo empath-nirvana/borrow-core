@@ -277,7 +277,7 @@ def destructSrc (v : String) : List String → String
 
 /-- Parse the computation `src` as a `main` body. -/
 def parseComp (src : String) : Except Error Comp := do
-  let p ← parseProgram ("main : F 1 =\n" ++ src) (resolve := false)
+  let p ← parseProgram ("main : F 1 =\n" ++ src) (resolve := false) (internal := true)
   match p.decls.findSome? (fun | .main _ _ M => some M | _ => none) with
   | some M => pure M
   | none => throw ⟨Span.none, "internal error: a template without main"⟩

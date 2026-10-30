@@ -165,6 +165,10 @@ structure PState where
   lastStop : Pos
   /-- The next number for a generated name. -/
   fresh : Nat := 0
+  /-- Source the elaboration writes and parses back (its templates, a type printed as surface
+  syntax, the `run_io` wrapper): it may name `tok`, the token of a declared type (SPEC §42),
+  which a program cannot write. -/
+  internal : Bool := false
   /-- Inside `< M, N >`, where `>` is not an operator. -/
   angle : Bool := false
   /-- The `let mut` variables in scope. -/
@@ -678,7 +682,10 @@ def rtyAtom : Nat → P RTy
     -- `clock` and `args` are also variables'.
     | .ident "clock" => discard bump; pure (.handle t.span .clock)
     | .ident "args" => discard bump; pure (.handle t.span .args)
-    | .ident "tok" => discard bump; pure (.handle t.span .tok)
+    -- `tok`, only in the elaboration's own source (SPEC §42).
+    | .ident "tok" =>
+      if (← get).internal then do discard bump; pure (.handle t.span .tok)
+      else do discard bump; pure (.name t.span "tok")
     | .kw "top" => discard bump; pure (.top t.span)
     -- `bool` is `1 + 1`, `inr ()` for true (the prelude, typed elaboration §5.4).
     | .ident "bool" => discard bump; pure (.sum t.span (.unit t.span) (.unit t.span))
@@ -1830,18 +1837,16 @@ def withBlock : Nat → P Val
     modify fun s => { s with blockThreads := thr, joined := [] }
     let V : Val := .app sp (.app sp (.sugar t.span (.handle h.name x As nm)) place)
       (.thunkv sp (.lam sp b (holeTy sp) M))
-    -- `with h { M } finally { D }` (SPEC §42): `[then]` around the handled computation, `D`
-    -- the finaliser and run again on the normal exit, `x <- with h { M } unwind (D); D; return x`.
+    -- `with h { M } finally { D }` (SPEC §42): the sugar `fin`, which the effects pass
+    -- elaborates to `[then]` (`Frontend.Elab.Effects`).
     unless (← peek).tok == .ident "finally" do return V
     discard bump
     expectSym "{"
     let D ← comp n
     expectSym "}"
     let fsp ← spanFrom st
-    let r ← freshName "io_fin"
     let u ← freshName "io_finu"
-    pure (.run fsp (.unwind fsp ⟨r, fsp⟩ none (.ret fsp V) D
-      (.bind fsp ⟨u, fsp⟩ none D (.ret fsp (.var fsp r)))))
+    pure (.app fsp (.sugar fsp .fin) (.pair fsp V (.thunkv fsp (.lam fsp ⟨u, fsp⟩ (holeTy fsp) D))))
 
 /-- The suffixes of a value spine, associating to the left: argument atoms and `[@]`. -/
 def valSuffixes : Nat → Pos → Val → P Val
@@ -3223,7 +3228,8 @@ def decls (n : Nat) : Nat → List Decl → P (List Decl)
 /-- Run a parser over the tokens of `src`, requiring it to consume all of them. With `resolve`,
 each name is resolved to its binder (SPEC §41, rule R1), and no fresh binder is named as a name
 of the source. -/
-def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data : Data.Table := []) :
+def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data : Data.Table := [])
+    (internal : Bool := false) :
     Except Error (α × PState) := do
   let toks ← lex src
   let fuel := fuelPerToken * (toks.size + 1)
@@ -3234,7 +3240,7 @@ def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data
   let taken := if resolve then toks.toList.filterMap (fun t => match t.tok with
     | .ident s => some s
     | _ => none) |>.eraseDups else []
-  go.run { toks, pos := 0, lastStop := ⟨1, 1⟩, resolve, taken, data }
+  go.run { toks, pos := 0, lastStop := ⟨1, 1⟩, resolve, taken, data, internal }
 
 /-- The `data` declarations written in the tokens `toks`, each read where it is (SPEC §42): a
 declaration is in scope in its whole module. A declaration that does not read is left to the
@@ -3287,10 +3293,11 @@ def dataOf (lib : String → Option String) (src : String) : Data.Table :=
 /-- The declarations of a source file. At most one `main` is accepted. Its names are resolved
 (`resolve`) unless it is code the elaborator generated. -/
 def parseProgram (src : String) (resolve : Bool := true)
-    (lib : String → Option String := fun _ => none) : Except Error Program := do
+    (lib : String → Option String := fun _ => none) (internal : Bool := false) :
+    Except Error Program := do
   -- The `data` declarations in scope (SPEC §42): the prelude's, the included modules', the
   -- program's own.
-  let ds ← (·.1) <$> runPS (fun n => decls n n []) src resolve (dataOf lib src)
+  let ds ← (·.1) <$> runPS (fun n => decls n n []) src resolve (dataOf lib src) internal
   let mains := ds.filter fun | .main .. => true | _ => false
   match mains with
   | _ :: .main sp _ _ :: _ => .error ⟨sp, "a program has at most one `main`"⟩

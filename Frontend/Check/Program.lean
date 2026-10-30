@@ -315,6 +315,32 @@ def checkElaborated (el : Frontend.Elab.Elaborated) (wrapped : Bool) : Except Er
   | some e => throw (Frontend.Elab.renderError el.origins e)
   | none => pure rep
 
+/-- The binder `main`'s result is held at in `discardEntry`'s entry. -/
+def mainResult : String := "io_main_result"
+
+/-- **The entry discards `main`'s result by its derived drop** (SPEC §42): a program with no
+externs whose `main : F A` answers a value `A` that is neither unrestricted nor a loop the driver
+runs (`U (νX. …)`) is entered as `main : F 1 = io_main_result : A <- M; return ()`. The checker
+drops the result by its derived drop (`drop_derives`, at a `dtor` node; `entry_derives` in
+`Core/Decl.lean`), and the run ends with every cell freed (`entry_runs`). At a type with no
+derived drop, a declared type's among them, no rule consumes the result and the program is
+refused. `none` when `main` is entered as it is. -/
+def discardEntry (el : Frontend.Elab.Elaborated) (r : Report) :
+    Except Error (Option Frontend.Elab.Elaborated) := do
+  let some c := r.main | return none
+  let .ret A := c.C | return none
+  if A.persistent then return none
+  if let .thunk (.nu _) := A then return none
+  let ds := el.prog.decls.toArray
+  if !(← externs ds).isEmpty then return none
+  let decls ← el.prog.decls.mapM fun
+    | .main sp (.ret asp A) M =>
+      pure (Decl.main sp (.ret asp (.unit asp))
+        (.bind sp ⟨mainResult, sp⟩ (some A) M (.ret sp (.unit sp))))
+    | .main sp _ _ => throw ⟨sp, "internal error: the entry of `main`"⟩
+    | d => pure d
+  pure (some { el with prog := ⟨decls⟩ })
+
 /-- Check a program, after elaborating it (`Frontend.Elab.elaborate`: the sugar of SPEC §11 and
 §14): the checker sees only the elaborated program, which the report carries, so that nothing
 after the check elaborates the program again. The lines of the libraries, when they are included,
@@ -329,7 +355,12 @@ def checkProgram (p : Program) : Except Error Report := do
   if let some e := reservedDecl? p.decls then throw e
   let el ← Frontend.Elab.elaborate p
   if let some e := reservedDecl? el.prog.decls then throw e
-  checkElaborated el false
+  let r ← checkElaborated el false
+  match ← discardEntry el r with
+  | some el' => (checkElaborated el' false).mapError fun e =>
+      { e with msg := e.msg.replace s!"`{mainResult}`" "`main`'s result" }
+  | none => pure r
+
 
 /-! ### Soundness -/
 

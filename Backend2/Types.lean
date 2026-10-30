@@ -275,7 +275,8 @@ def ofV (ms : MachSet) : VTy → Except String LTy
   | .bang A => return .bang (← ofV ms A)
   | .fam L => return .fam (← ofV ms L)
   -- `Tok` is a location owning a unit cell, `Ref 1`'s relation (`vCE_tok_eq_ref`), made by
-  -- `alloc` and released by `free` (`tokMint`, `tokBurn`).
+  -- `alloc` and released by `free` (`tokMint`, `tokBurn`); its view is `Unk` (`Imm̲ 'b Tok`), a
+  -- pointer read as forgotten (`Layout.joinRe`, `Lower.reVals`).
   | .opq .tok => pure (.ref .unit)
   | .opq k => pure (.opq k)
   | .unk => pure .unk
@@ -365,8 +366,7 @@ def LTy.ownsOpq : LTy → Bool
 
 /-- `VTy.Drop` on the LIR type: values that hold no owned cell. -/
 def LTy.drops : LTy → Bool
-  | .opq k => k != .tok
-  | .unit | .zero | .int _ | .unk | .bang _ | .imm _ | .mut _ => true
+  | .unit | .zero | .int _ | .unk | .opq _ | .bang _ | .imm _ | .mut _ => true
   | .pair a b | .sum a b => a.drops && b.drops
   | .mu _ | .tvar _ | .ref _ | .fam _ | .thunk _ => false
 

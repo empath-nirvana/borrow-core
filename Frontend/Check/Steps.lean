@@ -913,6 +913,18 @@ def dropOne {C : CCTy} (sp : Span) (i : Nat) (r : Res Δ T (.comp C)) :
     else throw ⟨sp, "internal error: an owed slot has no destructor"⟩
   | none => throw ⟨sp, "internal error: an owed slot is out of range"⟩
 
+/-- The binders' slots `0 … k − 1` of a scope whose body can leave none of them live, each with a
+derived drop, consumed by it at the head of the body (`drop_derives`): the body neither uses such
+a slot nor can weaken it, as under `boxed[@a]`, whose context must outlive `@a` (`[]I`), a slot
+of `Unk` among them. Such a slot is not owed (an owed one is dropped at the terminal), so its type
+is persistent or a borrow, and its drop does nothing observable.  `[spec §12]` -/
+def dropStuck {C : CCTy} (sp : Span) (k : Nat) (r : Res Δ T (.comp C)) :
+    Except Error (Res Δ T (.comp C)) :=
+  (List.range k).foldlM (init := r) fun r i =>
+    if !(r.F.u.getD i false) && !(r.F.w.getD i true) && (T[i]?.map hasDtorB).getD false then
+      dropOne sp i r
+    else pure r
+
 /-- Drop what the terminal computation `r` leaves owed, the lowest index (the most recently
 bound variable) first. -/
 def dropOwed {C : CCTy} (E : Env) (sp : Span) (r : Res Δ T (.comp C)) :
@@ -960,6 +972,8 @@ def withIt {C D : CCTy} (E : Env) (T : List CVTy) (sp : Span) (r₁ : Res Δ (wi
 def caseIt {A B : CVTy} {C : CCTy} (E : Env) (T : List CVTy) (sp : Span) (x y : Ident)
     (rV : Res Δ T (.val (.sum A B))) (r₁ : Res Δ (A :: T) (.comp C))
     (r₂ : Res Δ (B :: T) (.comp C)) : Except Error (Res Δ T (.comp C)) := do
+  let r₁ ← dropStuck x.span 1 r₁
+  let r₂ ← dropStuck y.span 1 r₂
   let F₁ ← popL E x.span x.name r₁.F
   let F₂ ← popL E y.span y.name r₂.F
   if s₁ : subL F₁.u (orL F₂.u F₂.w) = true then
@@ -1006,7 +1020,9 @@ def lamIt {A : CVTy} {C : CCTy} (E : Env) (sp : Span) (x : Ident) (rM : Res Δ (
         | none => rLam { sp, name := x.name } <$> popL E x.span x.name rM.F
       else rLam { sp, name := x.name } <$> popL E x.span x.name rM.F
     | none => rLam { sp, name := x.name } <$> popL E x.span x.name rM.F
-  | _, rM => rLam { sp, name := x.name } <$> popL E x.span x.name rM.F
+  | _, rM => do
+    let rM ← dropStuck x.span 1 rM
+    rLam { sp, name := x.name } <$> popL E x.span x.name rM.F
 
 /-! ### Effectful bindings  `[spec §19]` -/
 
@@ -1095,6 +1111,7 @@ destructors of the slots `N` uses. -/
 def effBind (E : Env) (sp : Span) (x : Ident) {S : CRow} {A B : CVTy}
     (rM : Res Δ T (.comp (effOf S A))) (rN : Res Δ (A :: T) (.comp (effOf S B))) :
     Except Error (Res Δ T (.comp (effOf S B))) := do
+  let rN ← dropStuck x.span 1 rN
   let FN ← popL E x.span x.name rN.F
   if hw : Row.cancelsB S = true then
     let p : CVTy → Bool := fun A => ownFreeB A && (!Row.unrB S || isBangB A)

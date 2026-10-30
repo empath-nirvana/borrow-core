@@ -231,6 +231,8 @@ def joinRe (c v : Nat) : GM Unit := do
       | .ref a, .imm c | .mut a, .imm c | .imm a, .imm c => join a c
       | .fam a, .fam c => todo := (a, c) :: todo
       | .clos .., .unk | .opq, .unk => pure ()
+      -- `Tok`'s cell (`ofV`: `Ref 1`) read through `Imm̲`: forgotten, `Imm̲ 'b Tok = Unk`.
+      | .ref _, .unk => pure ()
       | _, _ => join rx ry
   throw "layout: a reborrowed read too deep"
 

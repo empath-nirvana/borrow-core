@@ -533,6 +533,9 @@ inductive VSugar where
   /-- `n.op`: the operation `op` performed at the handler named `n` (SPEC §38), applied to its
   argument. Elaborated away by `Frontend.Elab.Effects`. -/
   | named (n : String) (op : String)
+  /-- `with h(…) { M } finally { D }` (SPEC §42), applied to `(with h(…) { M }, thunkv fun _ -> D)`:
+  `[then]` around the handled computation, elaborated by `Frontend.Elab.Effects` next to `with`. -/
+  | fin
   /-- A handler site of a control effect (SPEC §19), resolved by `Frontend.Elab.Effects` and
   assembled with its clauses where the types are known (`Frontend.Sugar`): applied to the
   handler's arguments, its return clause, the tuple of its operation clauses and the thunk of its

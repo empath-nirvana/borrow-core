@@ -18,7 +18,11 @@ type former and no new class: `N` is a linear type with no derived drop.
 | a borrow of `N` is linear with a derived drop: a loan ends, `N` is not consumed | `decl_imm_drop`, `decl_mut_drop` |
 | an abort cannot abandon `N` | `decl_not_ownFree` (`[let]`'s `hW`, `[raise]`'s `hd`) |
 | `mint` allocates the token's cell; `burn` frees it | `mint_step`, `burn_step` |
-| no run ends with a declared value unconsumed | `tok_released`, `tok_released_every_run`, `adequacyC_tok` |
+| the entry discards `main`'s result by its derived drop, which a declared type has none of | `entry_derives`, `entry_runs`, `entry_decl_no_drop` |
+
+That every cell a `mint` step allocates is freed later by a `burn` step is not stated here: on
+the current machine `burn` is `free` after a β step, and `Tok`'s relation is `Ref 1`'s, so neither
+the step relation nor the model tells a token's cell from a `Ref 1`'s (SPEC §42, *Open*).
 
 The checker inserts a drop only at a `dtor` node, which carries `HasDtor` (`TDerivesP.dtor_hasDtor`,
 `Frontend/Check/TDerives.lean`), so it inserts none at `N`.
@@ -151,37 +155,31 @@ theorem burn_step (μ : Heap) (ℓ : Loc) (h : μ ℓ = some .unit) :
     Steps μ (.app burnE (.val (.loc ℓ))) (μ.del ℓ) (.val .unit) :=
   .more (Step1.head (Head.beta μ _ _)) (.more (Step1.head (Head.free μ ℓ .unit h)) (.refl _ _))
 
-/-! ### No run ends with a declared value unconsumed
+/-! ### The entry: `main`'s result discarded by its derived drop
 
-A declared value is consumed by `burn`, which frees its token's cell; one left unconsumed keeps the
-cell. The token's cell is an `own` cell of the relation (`Opaque.rel .tok`), so the theorems that
-every cell is freed (`adequacyC`, `adequacyD`, `leakFree_closed`) say that no token is left. -/
+A program's entry discards `main`'s result by its derived drop (`drop_derives`), not by leaving it
+to the host: `x <- main; dtorE A x; return ()`. It is a derivation exactly when the result has a
+derived drop; at a declared type it has none (`decl_linear`), so no rule consumes it.  `[spec §42]` -/
 
-/-- A token is live in a memory at `ℓ`: the memory holds its cell. -/
-def TokLive (μ : Heap) (ℓ : Loc) : Prop := μ ℓ = some .unit
+/-- The entry around `main : F A`: `x <- e; dtorE A x; return ()`. -/
+def entryE (A : VTy) (e : Expr) : Expr := .app (.val (.lam (dropE A 0 (.val .unit)))) e
 
-/-- **No run ends with a declared value unconsumed.** On every run of a closed program of `F A`,
-`A` unrestricted, that reaches a value, the final memory holds no token: every one minted was
-burned.  `[spec §42]` -/
-theorem tok_released {e : Expr} {A : VTy} (hA : A.Persistent)
-    (h : CDerives LifeCtx.empty [] e (.comp (.ret A))) {μ₁ : Heap} {w : Val}
-    (hs : Steps Adequacy.emptyMem e μ₁ (.val w)) : ∀ ℓ, ¬ TokLive μ₁ ℓ := by
-  obtain ⟨rfl, -⟩ := EffPrograms.leakFree_closed hA h hs
-  intro ℓ hℓ; cases hℓ
+/-- **The entry is a derivation at a result with a derived drop.**  `[spec §42]` -/
+theorem entry_derives {Δ : LifeCtx} {e : Expr} {A : VTy}
+    (h : CDerives Δ [] e (.comp (.ret A))) (hA : HasDtor A) :
+    CDerives Δ [] (entryE A e) (.comp (.ret .unit)) :=
+  .bind .nil h (drop_derives (Γ₁ := [⟨A, true⟩]) (Γ₂ := [⟨A, false⟩]) (.left .nil) (.here .nil) hA
+    (.ret (.unitI (.cons .nil))))
 
-/-- **Every token live on a run is released on it.** From every configuration a closed program of
-`F 1` reaches, the run goes on to the empty memory, so every token that configuration holds is
-burned on the way.  `[spec §42]` -/
-theorem tok_released_every_run {e : Expr} (h : CDerives LifeCtx.empty [] e (.comp (.ret .unit)))
-    {μ₁ : Heap} {e₁ : Expr} (hs : Steps Adequacy.emptyMem e μ₁ e₁) :
-    Steps μ₁ e₁ Adequacy.emptyMem (.val .unit) ∧ ∀ ℓ, ¬ TokLive Adequacy.emptyMem ℓ :=
-  ⟨adequacyD h hs, fun _ hℓ => by cases hℓ⟩
+/-- **The entry frees every cell**: from the empty memory it runs to `()` at the empty memory
+(`adequacyC` at `entry_derives`), so a result with a derived drop is freed, not left to the
+host.  `[spec §42]` -/
+theorem entry_runs {e : Expr} {A : VTy} (h : CDerives LifeCtx.empty [] e (.comp (.ret A)))
+    (hA : HasDtor A) :
+    Steps Adequacy.emptyMem (entryE A e) Adequacy.emptyMem (.val .unit) :=
+  adequacyC (entry_derives h hA)
 
-/-- **`adequacyC` leaves no token.** The run `adequacyC` gives ends with no token live.
-`[spec §42]` -/
-theorem adequacyC_tok {e : Expr} (h : CDerives LifeCtx.empty [] e (.comp (.ret .unit))) :
-    Steps Adequacy.emptyMem e Adequacy.emptyMem (.val .unit) ∧
-      ∀ ℓ, ¬ TokLive Adequacy.emptyMem ℓ :=
-  ⟨adequacyC h, fun _ hℓ => by cases hℓ⟩
+/-- At a declared type the entry has no derived drop to use: `main`'s result is refused. -/
+theorem entry_decl_no_drop (A : VTy) : ¬ HasDtor (declTy A) := (decl_linear A).2
 
 end BoCa.Fig16.LogRel.Core

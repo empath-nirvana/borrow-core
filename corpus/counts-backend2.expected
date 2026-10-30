@@ -119,6 +119,7 @@ data-turnstile 4 0 0 53 21 18
 decl-guard 0 0 0 0 0 0
 decl-promise 6 0 0 15 15 0
 decl-txn 0 0 0 0 0 0
+decl-view 0 0 0 6 3 0
 deep-list 100003 0 0 300003 300003 0
 div-abstraction 0 0 0 0 0 0
 div-euclid 3 0 0 3 3 0

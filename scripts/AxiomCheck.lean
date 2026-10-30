@@ -715,8 +715,8 @@ import Backend2.Lint
 #print axioms BoCa.Fig16.LogRel.Core.decl_mut_drop
 #print axioms BoCa.Fig16.LogRel.Core.mint_step
 #print axioms BoCa.Fig16.LogRel.Core.burn_step
-#print axioms BoCa.Fig16.LogRel.Core.tok_released
-#print axioms BoCa.Fig16.LogRel.Core.tok_released_every_run
-#print axioms BoCa.Fig16.LogRel.Core.adequacyC_tok
 #print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesP.dtor_hasDtor
 #print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.dtor_hasDtor
+#print axioms BoCa.Fig16.LogRel.Core.entry_derives
+#print axioms BoCa.Fig16.LogRel.Core.entry_runs
+#print axioms BoCa.Fig16.LogRel.Core.entry_decl_no_drop
