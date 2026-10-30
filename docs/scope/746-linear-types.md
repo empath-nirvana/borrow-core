@@ -46,7 +46,7 @@ running `bcc` from this worktree (section 6).
   rules exactly at unrestricted types; that is stated as three inversion lemmas on the context
   relations (not on `CDerives`).
 - **Derived drop** (1.2): `DerivedDrop A := Linear A ∧ HasDtor A`, licensed by `drop_derives`,
-  pure at the row (decision 1).
+  pure at the row (decision 1: `dtor_wf`'s type and `kTy_cancel_hasDtor_iff`).
 - **Not a drop** (1.3): `⊤` (`topI`), `absurd` (`zeroE`) and an abort's abandonment of a
   `VTy.Drop` context (`effLet`'s `hW`, `effRaise`'s `hd`) absorb a context. This is decision 2;
   SPEC says so.
@@ -124,8 +124,11 @@ def DerivedDrop (A : VTy) : Prop := Linear A ∧ HasDtor A
 --       (h : CDerives Δ Γ₂ e (.comp C)) : CDerives Δ Γ (dropE T i e) (.comp C)
 -- over `dtor_wf` (`Core/Dtor.lean:518`). The drop is the value's one use.
 
-/-- Decision 1: a derived drop is pure at the row. Today `dropOne`
-(`Frontend/Check/Steps.lean:671`) and `Consts.lean:145` check this per use. -/
+/-- The syntactic side condition `TiedDer.ofCDerives` needs: `dtorE A` contains no
+perform, raise, handler or iterate. Today `dropOne` (`Frontend/Check/Steps.lean:671`) and
+`Consts.lean:145` check this per use. It holds at every type, so it is not decision 1: that a
+derived drop is pure at the row is carried by `HasDtor.close`/`.nu` asking for a `ret` cancel,
+by `dtor_wf` typing `dtorE A` at `A ⊸ F 1`, and by `kTy_cancel_hasDtor_iff` (1.5). -/
 theorem dtorE_effFree {A : VTy} (h : HasDtor A) : (dtorE A).effFree = true
 theorem dtorE_closed {A : VTy} (h : HasDtor A) : closedAt 0 (dtorE A) = true
 ```
