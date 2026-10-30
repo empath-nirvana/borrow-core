@@ -346,7 +346,7 @@ def walkC (d : Decls) (owner : String) (names : List String) : Nat → TCx → C
       walkC d owner names n c M
       walkC d owner names n c.pushDead D
       walkC d owner names n (c.push x.name (bindTy c A M)) N
-    | .withbor2r _ _ _ _ _ _ _ m M => walkC d owner names n (c.push m.name none) M
+    | .withbor2r _ _ _ _ _ _ _ _ m M => walkC d owner names n (c.push m.name none) M
     | _ => pure ()
 end
 

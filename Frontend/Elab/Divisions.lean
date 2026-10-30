@@ -84,7 +84,7 @@ def goC (ks : List Key) (owner : String) : Comp → Comp
   | .abort sp k i V => .abort sp k i (goV ks owner V)
   | .handle sp k st hr hc M => .handle sp k st (goV ks owner hr) (goV ks owner hc) (goC ks owner M)
   | .unwind sp x A M D N => .unwind sp x A (goC ks owner M) (goC ks owner D) (goC ks owner N)
-  | .withbor2r sp x b A B r p m M => .withbor2r sp x b A B r p m (goC ks owner M)
+  | .withbor2r sp kd x b A B r p m M => .withbor2r sp kd x b A B r p m (goC ks owner M)
   | .loop sp ℓ src V M N => .loop sp ℓ src (goV ks owner V) (goC ks owner M) (goC ks owner N)
   | M => M
 end
@@ -125,7 +125,7 @@ def candC : Comp → Bool
   | .ret _ V | .absurd _ V | .perform _ _ _ V | .abort _ _ _ V => candV V
   | .bind _ _ _ M N | .with_ _ M N => candC M || candC N
   | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
-  | .nuOut _ M | .ascribe _ M _ | .withbor2r _ _ _ _ _ _ _ _ M => candC M
+  | .nuOut _ M | .ascribe _ M _ | .withbor2r _ _ _ _ _ _ _ _ _ M => candC M
   | .handle _ _ _ hr hc M => candV hr || candV hc || candC M
   | .letUnit _ V M | .letPair _ _ _ V M => candV V || candC M
   | .case _ V _ M _ N | .loop _ _ _ V M N => candV V || candC M || candC N

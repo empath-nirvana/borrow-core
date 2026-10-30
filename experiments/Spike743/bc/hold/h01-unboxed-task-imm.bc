@@ -1,0 +1,43 @@
+-- Hold (round 3): a task built from the view, unboxed (a local handler's continuation as a thunk),
+-- held across `await` inside an `imm` relaxed lend (W-imm), then run to its end. The task is a `U`
+-- value in the body's context; `[then]` and `CDerivesP` admit it with no new rule.
+--
+-- Answer: i32[6] (the task's handler answers `inr` at the resume that finishes it: -1, plus 7).
+include async
+
+effect Sub { ctl pause() }
+-- Not `delay i32`: a pause hands back its count of pauses so far, so the type is not a loop's.
+type SubT = U (nu X. F (i32 + (U X * i32)) & F 1)
+handler sub: Sub, i32 -> SubT = {
+  return(v) = (thunkv nu_in < return (inl v), return () >);
+  pause(k) = (thunkv nu_in <
+    u <- return (); t <- (force k).1 u; return (inr (t, 1)),
+    (force k).2 >)
+}
+fn sresume(t: SubT) -> i32 + (SubT * i32) = (nu_out (force t)).1
+fn scancel(t: SubT) -> 1 = (nu_out (force t)).2
+fn sfinish(t: SubT) -> i32 = match sresume(t) { inl v -> v | inr (t2, c) -> scancel(t2); 0 - c }
+
+fn child<'r>(k: imm 'r i32, n: i32) -> i32 with Sub =
+  let a = *k;
+  pause();
+  a * n
+
+fn spawn_child<'r>(k: imm 'r i32, n: i32) -> SubT = with sub { child(k, n) }
+
+fn done(v: i32) -> Task[i32] = with spawn { v }
+fn step(t: Task[i32]) -> Task[i32] = match resume(t) { inl v -> done(v) | inr t2 -> t2 }
+fn fin(t: Task[i32]) -> i32 = match resume(t) { inl v -> v | inr t2 -> cancel(t2); 0 - 1 }
+fn parent() -> i32 with Async =
+  let req = alloc(7);
+  let v = borrow imm req { 'r, k ->
+    let (k1, k) = copy['r, i32] k;
+    let t1 = spawn_child(k1, 2);
+    await();
+    sfinish(t1) + *k
+  };
+  let _ = free(req);
+  v
+main -> i32 =
+  let t = with spawn { parent() };
+  fin(step(step(t)))

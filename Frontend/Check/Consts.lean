@@ -510,6 +510,27 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
           (outlivesB_sound _ _ _ hTo) he hd)
   | c@(.withbor1U ..) | c@(.withbor2U ..) | c@(.withbor3U ..) | c@(.withloadU ..)
   | c@(.sliceBorrowMutU ..) | c@(.sliceBorrowImmU ..) => synConstU E Δ T sp c
+  | .divIterate r St B R => do
+      -- The #743 spike: the kernel's `iterate` in the core text (SPEC §14).
+      let S ← E.elabRow Δ sp r
+      let St ← E.elabV Δ St
+      let B ← E.elabV Δ B
+      let R ← E.elabV Δ R
+      if hS : BoCa.Fig16.LogRel.Core.Row.divB S = true then
+        pure ⟨_, ⟨.iterate (at_ sp) (.val (BoCa.Fig16.LogRel.Core.iterTy S St B R)) S St B R, S, [],
+          (Fam.dead T).map fun _ hd => TTied.iterate (at_ sp) S St B R hS hd⟩⟩
+      else err sp "`div_iterate`: its row does not hold `Div`'s `tick`"
+  | .divFuelK r A => do
+      -- The #743 spike: the kernel's `div_fuel` in the core text (SPEC §14).
+      let S ← E.elabRow Δ sp r
+      let A ← E.elabV Δ A
+      if hS : (S.all fun o => o.n != BoCa.divEff) = true then
+        pure ⟨_, ⟨.divFuel (at_ sp) (.val (BoCa.Fig16.LogRel.Core.divFuelTy S A)) S A,
+          BoCa.Fig16.LogRel.Core.tickSig :: S, [],
+          (Fam.dead T).map fun _ hd => TTied.divFuel (at_ sp) S A
+            (fun o ho => by simpa using List.all_eq_true.mp hS o ho) hd⟩⟩
+      else err sp "`div_fuel_k`: its row holds `Div`'s name"
+  | .reifyK .. => err sp "internal error: `reify_k` is checked with its residual (`synV`)"
 
 /-- The lifetime of a family at a shape: the lifetime of its first leaf. -/
 def famLife (M : Mode) : CShape → CVTy → Option CLife

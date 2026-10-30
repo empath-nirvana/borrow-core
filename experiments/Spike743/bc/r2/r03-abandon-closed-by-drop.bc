@@ -1,0 +1,61 @@
+-- A3 (PinLoop, abandonment): r01's loop observed once while its state holds a view, then
+-- dropped without `close`. Accepted: the derived drop of the loop closes it (its close step runs, the owner is freed); `live 0`, 4 tags.
+def add : i32 * i32 => i32 = unbang host[add32]
+
+type ULp = U (loop (ref i32 * 1) (ref i32 * i32))
+
+main : F i32 =
+  r <- return (alloc[i32] i32[7]);
+  l : ULp <- return (thunkv nu_in <
+    (nu_out (lend_loop_r['x, top, i32, 1, []](r, q) return (
+    (thunkv
+      let (v, s) = q;
+      let (old, acc) = s;
+      w <- return (copy['x, i32] v);
+      let (v1, v2) = w;
+      a <- return (withload['x, 'z, i32, i32] v1 (thunkv Fun 'z < dom. return (thunkv fun (y : i32) ->
+             return (boxed['z] y))));
+      b <- (case old {
+        inl o -> return (withload['x, 'z, i32, i32] o (thunkv Fun 'z < dom. return (thunkv fun (y : i32) ->
+             return (boxed['z] y))))
+      | inr u -> let () = u; return i32[0] });
+      return (inr (inl v2, add (acc, add (a, b))))),
+    ((thunkv ((
+      let (v, s) = q;
+      let (old, acc) = s;
+      a <- return (withload['x, 'z, i32, i32] v (thunkv Fun 'z < dom. return (thunkv fun (y : i32) ->
+             return (boxed['z] y))));
+      b <- (case old {
+        inl o -> return (withload['x, 'z, i32, i32] o (thunkv Fun 'z < dom. return (thunkv fun (y : i32) ->
+             return (boxed['z] y))))
+      | inr u -> let () = u; return i32[0] });
+      return (add (acc, add (a, b)))) : F i32)),
+     ((inr (), i32[0]) : (imm 'x i32 + 1) * i32))))).1,
+    (nu_out (lend_loop_r['x, top, i32, 1, []](r, q) return (
+    (thunkv
+      let (v, s) = q;
+      let (old, acc) = s;
+      w <- return (copy['x, i32] v);
+      let (v1, v2) = w;
+      a <- return (withload['x, 'z, i32, i32] v1 (thunkv Fun 'z < dom. return (thunkv fun (y : i32) ->
+             return (boxed['z] y))));
+      b <- (case old {
+        inl o -> return (withload['x, 'z, i32, i32] o (thunkv Fun 'z < dom. return (thunkv fun (y : i32) ->
+             return (boxed['z] y))))
+      | inr u -> let () = u; return i32[0] });
+      return (inr (inl v2, add (acc, add (a, b))))),
+    ((thunkv ((
+      let (v, s) = q;
+      let (old, acc) = s;
+      a <- return (withload['x, 'z, i32, i32] v (thunkv Fun 'z < dom. return (thunkv fun (y : i32) ->
+             return (boxed['z] y))));
+      b <- (case old {
+        inl o -> return (withload['x, 'z, i32, i32] o (thunkv Fun 'z < dom. return (thunkv fun (y : i32) ->
+             return (boxed['z] y))))
+      | inr u -> let () = u; return i32[0] });
+      return (add (acc, add (a, b)))) : F i32)),
+     ((inr (), i32[0]) : (imm 'x i32 + 1) * i32))))).2 >);
+  o1 <- (nu_out (force l)).1;
+  case o1 {
+    inl p -> let (r2, u) = p; let () = u; x <- return (free[i32] r2); return i32[0]
+  | inr l2 -> return i32[1] }

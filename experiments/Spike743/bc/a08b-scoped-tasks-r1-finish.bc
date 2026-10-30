@@ -1,0 +1,34 @@
+-- A2 (a08 with enough rounds for every task to finish).
+-- borrow (`spawn_in`) each hold a copy of the outer view in a cell they own, and lend that cell
+-- across `await`s (R1), reading the outer place through the inner view. The tasks are run for a
+-- bounded number of rounds inside the outer borrow's scope; the outer lend ends after.
+include async
+
+fn reader<'r>(tag: i32, k: imm 'r i32) -> i32 with Async =
+  let c = alloc(k);
+  let v = borrow mut c { m ->
+    await();
+    let a = modify m { kk -> let (k1, k2) = copy['r, i32] kk; (k1, *k2) };
+    await();
+    let b = modify m { kk -> let (k1, k2) = copy['r, i32] kk; (k1, *k2) };
+    a + b
+  };
+  let k = free(c);
+  v * tag + *k
+
+main -> List[i32] =
+  let cfg = alloc(42);
+  let d = alloc(());
+  let (d, v) = borrow imm cfg { 'r, k ->
+    let v = borrow mut d { 'd, e ->
+      let (k1, k2) = copy['r, i32] k;
+      let (k2, k3) = copy['r, i32] k2;
+      let q = queue_in[i32]();
+      let q = push_in(q, with spawn_in { reader(1, k1) });
+      let q = push_in(q, with spawn_in { reader(2, k2) });
+      let q = push_in(q, with spawn_in { reader(3, k3) });
+      with on_exhausted(!{ u -> nil() }) { run_in(q, 5) } };
+    (d, v) };
+  let _ = free(d);
+  let _ = free(cfg);
+  v

@@ -1,0 +1,34 @@
+-- A2 (nested relaxed lends at a depth set at run time): `deep(n)` allocates a cell holding `n`,
+-- lends it across `await`s, and inside the lend reads `n` through the view and recurses, so `n`
+-- relaxed lends are open at once (each under the last's body, by `[nil-dead]` at the call). Tasks
+-- (`Exhausted`, abortive, is handled inside each lend, since an abortive operation does not cross
+-- a relaxed lend) of depths 4 and 6 are interleaved and the deeper one is cancelled with every lend open.
+include async
+
+fn done(v: i32) -> Task[i32] = with spawn { v }
+fn step(t: Task[i32]) -> Task[i32] = match resume(t) { inl v -> done(v) | inr t2 -> t2 }
+fn fin(t: Task[i32]) -> i32 = match resume(t) { inl v -> v | inr t2 -> cancel(t2); 0 - 1 }
+
+fn deep(n: i32) -> i32 with Async, Exhausted =
+  if n == 0 { await(); 0 } else {
+    let c = alloc(n);
+    let v = borrow mut c { m ->
+      let k = modify m { x -> (x, x) };
+      await();
+      let below = with on_exhausted(!{ u -> 0 - 7 }) { deep(k - 1) };
+      await();
+      modify m { x -> (x + below, x + below) }
+    };
+    let _ = free(c);
+    v }
+
+main -> i32 * i32 =
+  let a = with spawn { with on_exhausted(!{ u -> 0 - 7 }) { deep(4) } };
+  let b = with spawn { with on_exhausted(!{ u -> 0 - 7 }) { deep(6) } };
+  let a = step(a); let b = step(b); let a = step(a); let b = step(b);
+  let a = step(a); let b = step(b); let a = step(a); let b = step(b);
+  let b = step(b); let b = step(b);
+  cancel(b);
+  let a = step(a); let a = step(a); let a = step(a); let a = step(a); let a = step(a);
+  let a = step(a); let a = step(a); let a = step(a); let a = step(a);
+  (fin(a), 0)

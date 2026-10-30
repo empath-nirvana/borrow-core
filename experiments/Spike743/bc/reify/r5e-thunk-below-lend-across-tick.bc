@@ -1,0 +1,73 @@
+-- R5 (round 4): the shape of `thunkF_RL_fails_below_at` under `reify`. Each turn of the reified
+-- loop runs `innert`, whose W-tick lend of its own cell (`'y`, below the loop's `'x`) builds a
+-- thunk capturing the view `mut 'y`, ticks directly with the thunk held (a stop of the reified
+-- loop, inside both lends, the stored continuation holding a `U` over a view below `'x`), then
+-- forces it (cell 1 + 5). `innert` answers 12 (6, plus its cell's 6); each outer turn adds 13;
+-- the loop finishes at 39 after three turns.
+--
+-- Answer: i32[39039]: 39 * 1000 + 39.
+fn rd<'r>(k: imm 'r i32) -> i32 = *k
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+def mul : i32 * i32 => i32 = unbang host[mul32]
+def lt : i32 * i32 => 1 + 1 = unbang host[lt_s32]
+def eq : i32 * i32 => 1 + 1 = unbang host[eq32]
+
+def innert : !U (1 -o F[4294967295.0 lin 1 ~> 1 + 1] i32) =
+  !thunkv fun (z : 1) ->
+    d <- return (alloc[i32] i32[1]);
+    p <- withbor2rt['y, dom, i32, i32, [4294967295.0 lin 1 ~> 1 + 1]](d, n) (
+      th <- return ((thunkv fun (u : 1) ->
+          q <- return (withswap['y, i32, i32] n (thunkv fun (a : i32) -> return (plus (a, i32[5]), plus (a, i32[5]))));
+          return q) : U (1 -o F (mut 'y i32 * i32)));
+      t0 <- perform[4294967295.0] ();
+      case t0 { inl a -> return () | inr b -> return () };
+      u1 <- return ();
+      q <- force th u1;
+      let (n, r) = q;
+      let () = forget_mut['y, i32] n;
+      return (boxed['y] r));
+    let (d, v) = p;
+    w <- return (free[i32] d);
+    return (plus (v, w))
+def mk : !U (1 -o F U (nu X. F ((ref i32 * i32) + U X) & F (ref i32 * i32))) =
+  !thunkv fun (z : 1) ->
+    c <- return (alloc[i32] i32[0]);
+    t <- return ((thunkv fun (u0 : 1) ->
+      p <- withbor2rt['x, dom, i32, i32 + i32, [4294967295.0 lin 1 ~> 1 + 1]](c, m) (
+        st <- return ((!thunkv fun (v : mut 'x i32) ->
+          < ig <- return (unbang innert); z0 <- return (); iv <- force ig z0;
+            q <- return (withswap['x, i32, i32] v (thunkv fun (a : i32) -> return (plus (a, plus (iv, i32[1])), plus (a, plus (iv, i32[1])))));
+            let (v, r) = q;
+            g <- return (lt (r, i32[39]));
+            case g { inl ge -> let () = forget_mut['x, i32] v; return (inl r) | inr lo -> return (inr v) },
+            q2 <- return (withswap['x, i32, i32] v (thunkv fun (a : i32) -> return (a, a)));
+            let (v, r2) = q2; let () = forget_mut['x, i32] v; return r2 >) :
+            !U (mut 'x i32 -o F[4294967295.0 lin 1 ~> 1 + 1] (i32 + mut 'x i32) & F[4294967295.0 lin 1 ~> 1 + 1] i32));
+        f <- return (unbang div_iterate[[4294967295.0 lin 1 ~> 1 + 1], mut 'x i32, i32, i32]);
+        a0 <- return (st, m);
+        o <- force f a0;
+        case o { inl b -> return (boxed['x] (inl b)) | inr z -> return (boxed['x] (inr z)) });
+      let (c, o) = p;
+      case o { inl b -> return (inl (c, b)) | inr z -> return (inr (c, z)) }) :
+      U (1 -o F[4294967295.0 lin 1 ~> 1 + 1] ((ref i32 * i32) + (ref i32 * i32))));
+    rf <- return (unbang reify_k[[], ref i32 * i32]);
+    force rf t
+def drive : !U (U (nu X. F ((ref i32 * i32) + U X) & F (ref i32 * i32)) -o F[4294967295.0 lin 1 ~> 1 + 1] ((ref i32 * i32) + (ref i32 * i32))) =
+  !thunkv fun (l0 : U (nu X. F ((ref i32 * i32) + U X) & F (ref i32 * i32))) ->
+    st <- return ((!thunkv fun (l : U (nu X. F ((ref i32 * i32) + U X) & F (ref i32 * i32))) ->
+      < o <- (nu_out (force l)).1;
+        case o { inl p -> return (inl p) | inr l2 -> return (inr l2) },
+        (nu_out (force l)).2 >) :
+      !U (U (nu X. F ((ref i32 * i32) + U X) & F (ref i32 * i32)) -o F[4294967295.0 lin 1 ~> 1 + 1] ((ref i32 * i32) + U (nu X. F ((ref i32 * i32) + U X) & F (ref i32 * i32))) & F[4294967295.0 lin 1 ~> 1 + 1] (ref i32 * i32)));
+    f <- return (unbang div_iterate[[4294967295.0 lin 1 ~> 1 + 1], U (nu X. F ((ref i32 * i32) + U X) & F (ref i32 * i32)), ref i32 * i32, ref i32 * i32]);
+    a0 <- return (st, l0);
+    force f a0
+
+main : F i32 =
+  g <- return (unbang mk); z <- return (); l0 <- force g z;
+  t <- return ((thunkv fun (u : 1) -> dg <- return (unbang drive); force dg l0) : U (1 -o F[4294967295.0 lin 1 ~> 1 + 1] ((ref i32 * i32) + (ref i32 * i32))));
+  df <- return (unbang div_fuel_k[[], (ref i32 * i32) + (ref i32 * i32)]);
+  a1 <- return (t, i32[100]);
+  o <- force df a1;
+  case o { inl p -> let (c, v) = p; w <- return (free[i32] c); return (plus (mul (v, i32[1000]), w)) | inr p -> let (c, v) = p; w <- return (free[i32] c); return (plus (mul (v, i32[100]), w)) }

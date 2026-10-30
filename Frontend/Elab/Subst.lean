@@ -123,6 +123,9 @@ def Const.subst (σ : TySubst) : Const → Const
   | .countFold S => .countFold (S.subst σ)
   | .countTry S E => .countTry (S.subst σ) (E.subst σ)
   | .boundedFix A C => .boundedFix (A.subst σ) (C.subst σ)
+  | .divIterate r St B R => .divIterate (r.subst σ) (St.subst σ) (B.subst σ) (R.subst σ)
+  | .divFuelK r A => .divFuelK (r.subst σ) (A.subst σ)
+  | .reifyK r B => .reifyK (r.subst σ) (B.subst σ)
   | .withbor1U x A B r => .withbor1U x (A.subst σ) (B.subst σ) (r.subst σ)
   | .withbor2U x b A B r => .withbor2U x b (A.subst σ) (B.subst σ) (r.subst σ)
   | .withbor3U a x A B r => .withbor3U a x (A.subst σ) (B.subst σ) (r.subst σ)
@@ -198,8 +201,8 @@ def Comp.subst (σ : TySubst) : Comp → Comp
     .handle sp n (st.map (SiteRec.mapTy (VTy.subst σ)))
       (hr.subst σ) (hc.subst σ) (M.subst σ)
   | .unwind sp x A M D N => .unwind sp x (A.map (VTy.subst σ)) (M.subst σ) (D.subst σ) (N.subst σ)
-  | .withbor2r sp x b A B r p m M =>
-      .withbor2r sp x b (A.subst σ) (B.subst σ) (r.subst σ) p m (M.subst σ)
+  | .withbor2r sp kd x b A B r p m M =>
+      .withbor2r sp kd x b (A.subst σ) (B.subst σ) (r.subst σ) p m (M.subst σ)
 end
 
 end Frontend

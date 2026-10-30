@@ -101,7 +101,7 @@ def Pins.assurance : Pins → String
   | ps =>
     let sites (r : String) : List String :=
       ((ps.filter (·.rule == r)).map fun p => s!"{p.line}:{p.col}").eraseDups
-    let parts := ["R1", "R2"].filterMap fun r =>
+    let parts := ["R1", "R2", "W-imm", "W-nest", "W-tick", "W-hold"].filterMap fun r =>
       match sites r with
       | [] => none
       | xs => some s!"{r} at {", ".intercalate xs}"

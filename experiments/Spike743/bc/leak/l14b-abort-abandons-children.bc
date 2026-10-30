@@ -1,0 +1,69 @@
+-- Leak (W-hold): an abort caught inside the lend abandons the children's queue.
+include async
+
+fn child<'r>(k: imm 'r i32, n: i32) -> i32 with Async =
+  let a = *k;
+  await();
+  a * n
+
+fn start<'r, 'n < 'r>(k1: imm 'r i32, k2: imm 'r i32) -> QueueIn[i32]<'n /\ 'r /\ top> =
+  let q = queue_in[i32]['n /\ 'r /\ top]();
+  let t1 = with spawn_in { child(k1, 2) };
+  let q = push_in[i32]['n /\ 'r /\ top](q, t1);
+  let t2 = with spawn_in { child(k2, 3) };
+  push_in[i32]['n /\ 'r /\ top](q, t2)
+
+-- One round of the children in queue order: the queue, and whether a child is still pending.
+fn one_round<'n>(q: QueueIn[i32]<'n>) -> QueueIn[i32]<'n> * (1 + 1) =
+  let (n, s) = q;
+  let (b, p) = round_in(n, rev_in(n, s));
+  ((n, rev_in(n, b)), p)
+
+-- The children's values summed, a child still pending cancelled (and counted -100).
+fn finish<'n>(q: QueueIn[i32]<'n>) -> i32 =
+  let (n, s) = q;
+  let (vs, cut) = values_in(n, rev_in(n, s));
+  let mut acc = 0;
+  let mut cur = vs;
+  for _ in 0..n {
+    match unroll cur { inl u -> cur = (roll inl () : List[i32]) | inr (x, r) -> acc = acc + x; cur = r }
+  };
+  match unroll cur { inl u -> () | inr (x, r) -> () };
+  if cut { acc - 100 } else { acc }
+
+fn cancel_all<'n>(q: QueueIn[i32]<'n>) -> 1 = let _ = finish(q); ()
+
+include fail
+
+fn raiser<'n>(q: QueueIn[i32]<'n>) -> i32 with Fail[i32] = let z = q; raise(3)
+
+-- An abort caught here, with the queue live at it.
+fn drop_in<'n>(q: QueueIn[i32]<'n>) -> i32 = with default(0) { raiser(q) }
+
+fn rd<'r>(k: imm 'r i32) -> i32 = *k
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+main : F i32 =
+  req <- return (alloc[i32] i32[7]);
+  t <- return (thunkv fun (u0 : 1) ->
+    withbor1rh['r, dom, i32, i32, [4294967295.0 lin 1 ~> 1 + 1, 9.0 cancel 1 ~> 1]](req, k) (
+      kk <- return (copy['r, i32] k);
+      let (k1, k) = kk;
+      kk2 <- return (copy['r, i32] k);
+      let (k2, k) = kk2;
+      sf <- return ((unbang start) ['r] ['r_n]);
+      a2 <- return (k1, k2);
+      q0 <- force sf a2;
+      df6 <- return ((unbang drop_in) ['r_n /\ 'r /\ top]);
+      e <- force df6 q0;
+      let () = forget_imm['r, i32] k;
+      return (boxed['r] e)));
+  handle_with[9](
+      ((!thunkv fun (p : ref i32 * i32) ->
+        let (c, v) = p; w <- return (free[i32] c); return v) : !U (ref i32 * i32 -o F i32)),
+      (((!thunkv fun (q : 1 * U ((1 -o F i32) & F 1)) ->
+        let (x, k) = q; (force k).1 x), ()) : !U (1 * U ((1 -o F i32) & F 1) -o F i32) * 1)) (
+    df <- return (unbang div_fuel_k[[9.0 cancel 1 ~> 1], ref i32 * i32]);
+    a1 <- return (t, i32[100]);
+    force df a1)

@@ -136,6 +136,9 @@ def Const.respan (sp : Span) : Const → Const
   | .countFold S => .countFold (S.respan sp)
   | .countTry S E => .countTry (S.respan sp) (E.respan sp)
   | .boundedFix A C => .boundedFix (A.respan sp) (C.respan sp)
+  | .divIterate r St B R => .divIterate (r.respan sp) (St.respan sp) (B.respan sp) (R.respan sp)
+  | .divFuelK r A => .divFuelK (r.respan sp) (A.respan sp)
+  | .reifyK r B => .reifyK (r.respan sp) (B.respan sp)
   | .withbor1U x A B r => .withbor1U (x.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
   | .withbor2U x b A B r =>
       .withbor2U (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
@@ -204,8 +207,8 @@ def Comp.respan (sp : Span) : Comp → Comp
       (hr.respan sp) (hc.respan sp) (M.respan sp)
   | .unwind _ x A M D N =>
       .unwind sp (x.respan sp) (A.map (VTy.respan sp)) (M.respan sp) (D.respan sp) (N.respan sp)
-  | .withbor2r _ x b A B r p m M =>
-      .withbor2r sp (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
+  | .withbor2r _ kd x b A B r p m M =>
+      .withbor2r sp kd (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
         (p.respan sp) (m.respan sp) (M.respan sp)
 end
 

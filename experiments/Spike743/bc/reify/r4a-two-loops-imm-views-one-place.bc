@@ -1,0 +1,67 @@
+-- R4 (round 4): two reified loops over `imm` views of one place, interleaved, held across the
+-- `tick`s of a W-tick `imm` lend. `c` (7) is lent `imm` as `k` across direct `tick`s
+-- (`withbor1rt`, its ticks answered by `div_fuel_k` outside); inside, two computations each read
+-- a copy of `k` at every turn of a `Div` loop of their own and are reified; the lend's body
+-- observes them in turn, a direct tick between observations, and both finish inside the lend.
+-- Loop 1 answers 7 * 2 + j and finishes at j = 3 (17); loop 2 answers 7 * 3 + j and finishes at
+-- j = 2 (23).
+--
+-- Answer: i32[54]: 17 + 23 + the view's 7, plus the cell's 7 after the lend.
+fn rd<'r>(k: imm 'r i32) -> i32 = *k
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+def mul : i32 * i32 => i32 = unbang host[mul32]
+def lt : i32 * i32 => 1 + 1 = unbang host[lt_s32]
+def eq : i32 * i32 => 1 + 1 = unbang host[eq32]
+
+
+main : F i32 =
+  c <- return (alloc[i32] i32[7]);
+  t <- return (thunkv fun (u0 : 1) ->
+    withbor1rt['x, dom, i32, i32, [4294967295.0 lin 1 ~> 1 + 1]](c, k) (
+      kk <- return (copy['x, i32] k); let (k1, k) = kk;
+      kk2 <- return (copy['x, i32] k); let (k2, k) = kk2;
+      t1 <- return ((thunkv fun (u1 : 1) ->
+          st <- return ((!thunkv fun (sq : imm 'x i32 * i32) ->
+          < let (v, j) = sq;
+            cp <- return (copy['x, i32] v); let (v1, v) = cp;
+            rv <- return ((unbang rd) ['x] v1);
+            r <- return (plus (mul (rv, i32[2]), j));
+            g <- return (lt (j, i32[3]));
+            case g { inl ge -> let () = forget_imm['x, i32] v; return (inl r) | inr lo -> return (inr (v, plus (j, i32[1]))) },
+            let (v, j) = sq; let () = forget_imm['x, i32] v; return (plus (i32[1000], j)) >) :
+            !U (imm 'x i32 * i32 -o F[4294967295.0 lin 1 ~> 1 + 1] (i32 + imm 'x i32 * i32) & F[4294967295.0 lin 1 ~> 1 + 1] i32));
+          f <- return (unbang div_iterate[[4294967295.0 lin 1 ~> 1 + 1], imm 'x i32 * i32, i32, i32]);
+          a0 <- return (st, (k1, i32[1]));
+          force f a0) : U (1 -o F[4294967295.0 lin 1 ~> 1 + 1] (i32 + i32)));
+      t2 <- return ((thunkv fun (u2 : 1) ->
+          st <- return ((!thunkv fun (sq : imm 'x i32 * i32) ->
+          < let (v, j) = sq;
+            cp <- return (copy['x, i32] v); let (v1, v) = cp;
+            rv <- return ((unbang rd) ['x] v1);
+            r <- return (plus (mul (rv, i32[3]), j));
+            g <- return (lt (j, i32[2]));
+            case g { inl ge -> let () = forget_imm['x, i32] v; return (inl r) | inr lo -> return (inr (v, plus (j, i32[1]))) },
+            let (v, j) = sq; let () = forget_imm['x, i32] v; return (plus (i32[1000], j)) >) :
+            !U (imm 'x i32 * i32 -o F[4294967295.0 lin 1 ~> 1 + 1] (i32 + imm 'x i32 * i32) & F[4294967295.0 lin 1 ~> 1 + 1] i32));
+          f <- return (unbang div_iterate[[4294967295.0 lin 1 ~> 1 + 1], imm 'x i32 * i32, i32, i32]);
+          a0 <- return (st, (k2, i32[1]));
+          force f a0) : U (1 -o F[4294967295.0 lin 1 ~> 1 + 1] (i32 + i32)));
+      rf <- return (unbang reify_k[[], i32]);
+      l1 <- force rf t1;
+      rf2 <- return (unbang reify_k[[], i32]);
+      l2 <- force rf2 t2;
+      d0 <- perform[4294967295.0] (); case d0 { inl a -> return () | inr b -> return () };
+      o1 <- (nu_out (force l1)).1;
+      d0 <- perform[4294967295.0] (); case d0 { inl a -> return () | inr b -> return () };
+      o2 <- (nu_out (force l2)).1;
+      d0 <- perform[4294967295.0] (); case d0 { inl a -> return () | inr b -> return () };
+      a <- (case o1 { inl b -> return b | inr m1 -> o3 <- (nu_out (force m1)).1;
+                        case o3 { inl b -> return b | inr m2 -> (nu_out (force m2)).2 } });
+      b <- (case o2 { inl b -> return b | inr n1 -> (nu_out (force n1)).2 });
+      y <- return ((unbang rd) ['x] k);
+      return (boxed['x] (plus (plus (a, b), y)))));
+  df <- return (unbang div_fuel_k[[], ref i32 * i32]);
+  a1 <- return (t, i32[100]);
+  p <- force df a1;
+  let (c, v) = p; w <- return (free[i32] c); return (plus (v, w))

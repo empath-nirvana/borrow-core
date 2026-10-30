@@ -1159,7 +1159,8 @@ def startsComp (t : Tok) : Bool :=
   match t with
   | .kw "return" | .kw "absurd" | .kw "nu_in" | .kw "delay_in" | .kw "stream_in" | .kw "nu_out"
   | .kw "delay_out" | .kw "stream_out" | .kw "force" | .sym "<" | .kw "case" | .kw "match"
-  | .kw "if" | .kw "perform" | .kw "abort" | .kw "handle_with" | .kw "withbor2r" => true
+  | .kw "if" | .kw "perform" | .kw "abort" | .kw "handle_with" | .kw "withbor2r" | .kw "withbor1r" | .kw "slice_borrow_r" | .kw "lend_loop_r"
+  | .kw "withbor2rt" | .kw "withbor1rt" | .kw "withbor2rh" | .kw "withbor1rh" => true
   | _ => false
 
 /-- A binary operator: one of the surface's arithmetic and comparisons, or `&&`/`||`, which are
@@ -2407,8 +2408,14 @@ def compPrefix : Nat → P Comp
       modify fun s => { s with angle }
       let M ← compPrefix n
       pure (.handle (← spanFrom st) k none hr hc M)
-    | .kw "withbor2r" =>
-      -- `withbor2r['x, @b, A, B, [ROW]](p, m) M`, the relaxed lend (SPEC §29).
+    | .kw "withbor2r" | .kw "withbor1r" | .kw "slice_borrow_r" | .kw "lend_loop_r"
+    | .kw "withbor2rt" | .kw "withbor1rt" | .kw "withbor2rh" | .kw "withbor1rh" =>
+      -- `withbor2r['x, @b, A, B, [ROW]](p, m) M`, the relaxed lend (SPEC §29), and the spike's
+      -- kinds of it (`Comp.withbor2r`'s `kd`).
+      let kd := match (← peek).tok with
+        | .kw "withbor1r" => 1 | .kw "slice_borrow_r" => 2 | .kw "lend_loop_r" => 3
+        | .kw "withbor2rt" => 4 | .kw "withbor1rt" => 5 | .kw "withbor2rh" => 6
+        | .kw "withbor1rh" => 7 | _ => 0
       discard bump
       expectSym "["
       let as ← args n CKw.withbor2U.sig
@@ -2423,7 +2430,7 @@ def compPrefix : Nat → P Comp
       withScope do
       let m ← bindName m
       let M ← compPrefix n
-      pure (.withbor2r (← spanFrom st) x b A B r p m M)
+      pure (.withbor2r (← spanFrom st) kd x b A B r p m M)
     | _ =>
       let M ← compAtom n
       compSuffixes n st M

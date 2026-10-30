@@ -1,0 +1,34 @@
+-- Leak (main's R1): the sub-task over the view handed to the scheduler as an operation's argument.
+include async
+
+effect Sub { ctl pause() }
+type SubT = U (nu X. F (i32 + (U X * i32)) & F 1)
+handler sub: Sub, i32 -> SubT = {
+  return(v) = (thunkv nu_in < return (inl v), return () >);
+  pause(k) = (thunkv nu_in <
+    u <- return (); t <- (force k).1 u; return (inr (t, 1)),
+    (force k).2 >)
+}
+fn sresume(t: SubT) -> i32 + (SubT * i32) = (nu_out (force t)).1
+fn scancel(t: SubT) -> 1 = (nu_out (force t)).2
+fn sfinish(t: SubT) -> i32 = match sresume(t) { inl v -> v | inr (t2, c) -> scancel(t2); 0 - c }
+
+fn mk<'x>(m: mut 'x i32) -> SubT =
+  with sub { modify m { x -> x + 1 }; pause(); modify m { x -> (x * 3, x * 3) } }
+
+fn done(v: i32) -> Task[i32] = with spawn { v }
+fn step(t: Task[i32]) -> Task[i32] = match resume(t) { inl v -> done(v) | inr t2 -> t2 }
+fn fin(t: Task[i32]) -> i32 = match resume(t) { inl v -> v | inr t2 -> cancel(t2); 0 - 1 }
+effect Stash { ctl stash(t: SubT) }
+handler keep: Stash, i32 -> i32 = {
+  return(v) = v;
+  stash(t, k) = { let r = sfinish(t); k(()) }
+}
+
+fn worker() -> i32 with Async, Stash =
+  let c = alloc(10);
+  let v = borrow mut c { m -> let t = mk(m); stash(t); await(); 1 };
+  let w = free(c);
+  v + w
+
+main -> i32 = with keep { let t = with spawn { worker() }; fin(step(t)) }

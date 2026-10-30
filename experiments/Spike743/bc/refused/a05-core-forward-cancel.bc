@@ -1,0 +1,36 @@
+-- A2 ([handle] of the lender's name with [then], in the core text): inside a relaxed lend of
+-- `c`, a handler of a second name `2` catches the body's `perform[2.0]` (the kernel refuses a handler of
+-- a name already in its answer's row, so the lender's own name `1` cannot be handled inside). Its
+-- clause forwards the operation to the outer handler, holding the inner continuation `k` (which
+-- holds the view) across the outer stop, with `unwind ((force k).2)` cancelling `k` if the outer
+-- stop is cancelled. The outer clause cancels: the inner κ's finaliser writes 99 through the view
+-- while the lend is open, then the owner's finaliser frees `c`.
+--
+-- Answer: inl i32[7].
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+main : F (i32 + i32) =
+  c <- return (alloc[i32] i32[10]);
+  handle_with[1](
+      ((!thunkv fun (p : ref i32 * i32) ->
+        let (c, v) = p; w <- return (free[i32] c); return (inr (plus (v, w)))) : !U (ref i32 * i32 -o F (i32 + i32))),
+      (((!thunkv fun (q : i32 * U ((1 -o F (i32 + i32)) & F 1)) ->
+        let (x, k) = q; u <- (force k).2; return (inl x)), ()) : !U (i32 * U ((1 -o F (i32 + i32)) & F 1) -o F (i32 + i32)) * 1)) (
+    withbor2r['x, dom, i32, i32, [1.0 cancel i32 ~> 1]](c, m) (
+      r <- handle_with[2](
+          ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F[1.0 cancel i32 ~> 1] i32)),
+          (((!thunkv fun (q : i32 * U ((1 -o F[1.0 cancel i32 ~> 1] i32) & F 1)) ->
+            let (x, k) = q;
+            u <- perform[1.0] x unwind ((force k).2);
+            (force k).1 u), ()) : !U (i32 * U ((1 -o F[1.0 cancel i32 ~> 1] i32) & F 1) -o F[1.0 cancel i32 ~> 1] i32) * 1)) (
+        u <- perform[2.0] i32[7] unwind (
+          q <- return (withswap['x, i32, 1] m (thunkv fun (v : i32) -> return (i32[99], ())));
+          let (m, z) = q;
+          let () = z;
+          return (forget_mut['x, i32] m));
+        q <- return (withswap['x, i32, i32] m (thunkv fun (v : i32) ->
+          return (plus (v, i32[1]), plus (v, i32[1]))));
+        let (m, r) = q;
+        let () = forget_mut['x, i32] m;
+        return r);
+      return (boxed['x] r)))

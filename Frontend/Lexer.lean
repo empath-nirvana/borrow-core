@@ -61,7 +61,7 @@ def keywords : List String :=
     "thunk", "thunkv", "unbang",
     "boxed", "unbox", "roll", "unroll", "run", "absurd",
     "nu_in", "nu_out", "delay_in", "delay_out", "stream_in", "stream_out",
-    "perform", "abort", "handle_with", "unwind", "withbor2r", "writes",
+    "perform", "abort", "handle_with", "unwind", "withbor2r", "withbor1r", "slice_borrow_r", "lend_loop_r", "withbor2rt", "withbor1rt", "withbor2rh", "withbor1rh", "writes",
     -- types, lifetimes, shapes
     "ref", "imm", "mut", "box", "unk", "i32", "i64", "u8", "f32", "f64", "input", "output", "mu", "all", "forall", "top", "dom",
     "block", "val", "fam", "view", "nu", "delay", "loop", "stream", "str", "iter", "leaf", "sized",
@@ -73,7 +73,7 @@ def keywords : List String :=
     "fold_imm", "fold_own", "fold_reuse", "fixd", "unfold_s", "unfold", "host",
     "alloc_s", "free_s", "withbor_s_mut", "withbor_s_imm", "withbor_f2_mut", "withbor_f2_imm",
     "shorten_mut", "shorten_imm", "array_new", "array_empty", "array_free", "array_size", "array_replace",
-    "slice_borrow_mut", "slice_borrow_imm", "slice_get_mut", "slice_len_mut", "count_fold", "count_try", "bounded_fix",
+    "slice_borrow_mut", "slice_borrow_imm", "slice_get_mut", "slice_len_mut", "count_fold", "count_try", "bounded_fix", "div_iterate", "div_fuel_k", "reify_k",
     "slice_split_imm", "slice_split_mut", "slice_empty_imm", "slice_empty_mut",
     "slice_replace_mut", "slice_swap_mut",
     "array_len", "array_get", "array_copy", "array_forget",

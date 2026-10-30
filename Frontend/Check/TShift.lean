@@ -273,6 +273,10 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | t@(.foldReuse ..) => t
   | t@(.unfoldN ..) => t
   | t@(.lendR ..) => t
+  | t@(.lendRI ..) => t
+  | t@(.lendRF ..) => t
+  | t@(.lendRT ..) => t
+  | t@(.lendRH ..) => t
   | t@(.iterate ..) => t
   | t@(.divFuel ..) => t
   | t@(.reify ..) => t
@@ -322,7 +326,7 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
       AbsF.orO (AbsF.withO (.atom .pers) (tc.absF Δ)) (te.absF Δ)
   | .effHandleVB _ _ _ _ _ _ _ _ d _ _ _ _ tc te =>
       AbsF.orO (AbsF.withO (.atom .pers) (tc.absF Δ)) (AbsF.withO (.atom (.outl Δ d)) (te.absF Δ))
-  | .lendR .. | .lendLoopR .. | .nilDead .. => none
+  | .lendR .. | .lendRI .. | .lendRF .. | .lendRT .. | .lendRH .. | .lendLoopR .. | .nilDead .. => none
   -- Not placed at a wider context: rules the checker does not apply (the tail-resumptive
   -- `[handle]` and `[handle-last]` of `Div`'s rows, and `[let-poly]`, whose copies are `use`
   -- nodes).

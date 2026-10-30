@@ -1,0 +1,67 @@
+-- R1 (round 4): closing a reified W-tick loop with no *next*, and closing one that finished in its
+-- first segment. `mka`'s first segment runs turn 1 (cell 1) and stops at the tick: *close* answers
+-- the tick *close*, `iterate` runs its close step (reading 1), the lend ends, and the residual is
+-- `(c, 1)`. `mkb`'s first turn finishes (6 >= 3): the loop is `done (c, 6)` and *close* hands back
+-- `res (c, 6)`.
+--
+-- Answer: i32[707]: (1 * 100 + 1) + (6 * 100 + 6).
+fn rd<'r>(k: imm 'r i32) -> i32 = *k
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+def mul : i32 * i32 => i32 = unbang host[mul32]
+def lt : i32 * i32 => 1 + 1 = unbang host[lt_s32]
+def eq : i32 * i32 => 1 + 1 = unbang host[eq32]
+
+def mka : !U (1 -o F U (nu X. F ((ref i32 * i32) + U X) & F (ref i32 * i32))) =
+  !thunkv fun (z : 1) ->
+    c <- return (alloc[i32] i32[0]);
+    t <- return ((thunkv fun (u0 : 1) ->
+      p <- withbor2rt['x, dom, i32, i32 + i32, [4294967295.0 lin 1 ~> 1 + 1]](c, m) (
+        st <- return ((!thunkv fun (v : mut 'x i32) ->
+          < q <- return (withswap['x, i32, i32] v (thunkv fun (a : i32) -> return (plus (a, i32[1]), plus (a, i32[1]))));
+            let (v, r) = q;
+            g <- return (lt (r, i32[10]));
+            case g { inl ge -> let () = forget_mut['x, i32] v; return (inl r) | inr lo -> return (inr v) },
+            q2 <- return (withswap['x, i32, i32] v (thunkv fun (a : i32) -> return (a, a)));
+            let (v, r2) = q2; let () = forget_mut['x, i32] v; return r2 >) :
+            !U (mut 'x i32 -o F[4294967295.0 lin 1 ~> 1 + 1] (i32 + mut 'x i32) & F[4294967295.0 lin 1 ~> 1 + 1] i32));
+        f <- return (unbang div_iterate[[4294967295.0 lin 1 ~> 1 + 1], mut 'x i32, i32, i32]);
+        a0 <- return (st, m);
+        o <- force f a0;
+        case o { inl b -> return (boxed['x] (inl b)) | inr z -> return (boxed['x] (inr z)) });
+      let (c, o) = p;
+      case o { inl b -> return (inl (c, b)) | inr z -> return (inr (c, z)) }) :
+      U (1 -o F[4294967295.0 lin 1 ~> 1 + 1] ((ref i32 * i32) + (ref i32 * i32))));
+    rf <- return (unbang reify_k[[], ref i32 * i32]);
+    force rf t
+def mkb : !U (1 -o F U (nu X. F ((ref i32 * i32) + U X) & F (ref i32 * i32))) =
+  !thunkv fun (z : 1) ->
+    c <- return (alloc[i32] i32[5]);
+    t <- return ((thunkv fun (u0 : 1) ->
+      p <- withbor2rt['x, dom, i32, i32 + i32, [4294967295.0 lin 1 ~> 1 + 1]](c, m) (
+        st <- return ((!thunkv fun (v : mut 'x i32) ->
+          < q <- return (withswap['x, i32, i32] v (thunkv fun (a : i32) -> return (plus (a, i32[1]), plus (a, i32[1]))));
+            let (v, r) = q;
+            g <- return (lt (r, i32[3]));
+            case g { inl ge -> let () = forget_mut['x, i32] v; return (inl r) | inr lo -> return (inr v) },
+            q2 <- return (withswap['x, i32, i32] v (thunkv fun (a : i32) -> return (a, a)));
+            let (v, r2) = q2; let () = forget_mut['x, i32] v; return r2 >) :
+            !U (mut 'x i32 -o F[4294967295.0 lin 1 ~> 1 + 1] (i32 + mut 'x i32) & F[4294967295.0 lin 1 ~> 1 + 1] i32));
+        f <- return (unbang div_iterate[[4294967295.0 lin 1 ~> 1 + 1], mut 'x i32, i32, i32]);
+        a0 <- return (st, m);
+        o <- force f a0;
+        case o { inl b -> return (boxed['x] (inl b)) | inr z -> return (boxed['x] (inr z)) });
+      let (c, o) = p;
+      case o { inl b -> return (inl (c, b)) | inr z -> return (inr (c, z)) }) :
+      U (1 -o F[4294967295.0 lin 1 ~> 1 + 1] ((ref i32 * i32) + (ref i32 * i32))));
+    rf <- return (unbang reify_k[[], ref i32 * i32]);
+    force rf t
+
+main : F i32 =
+  ga <- return (unbang mka); z <- return (); la <- force ga z;
+  qa <- (nu_out (force la)).2;
+  let (ca, va) = qa; wa <- return (free[i32] ca);
+  gb <- return (unbang mkb); z2 <- return (); lb <- force gb z2;
+  qb <- (nu_out (force lb)).2;
+  let (cb, vb) = qb; wb <- return (free[i32] cb);
+  return (plus (plus (mul (va, i32[100]), wa), plus (mul (vb, i32[100]), wb)))

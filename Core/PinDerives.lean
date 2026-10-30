@@ -53,6 +53,26 @@ def Row.ResumeO (S : Row) (x : LifeVar) : Prop :=
   ∀ o ∈ S, o.abort = false ∧ o.q ≠ .unr ∧ o.fin = .ret .unit ∧ o.B = .unit ∧ o.n ≠ 0 ∧
     ¬ VFree x o.A ∧ (∀ Δ a, VOutlives Δ a o.A) ∧ NoThunkT o.A
 
+/-- **W-tick (the #743 spike): the row a relaxed lend's callback may stop at, with `Div`.** Each
+operation is `Div`'s `tick : 1 ↠ Next` (must-resume, answering `Next`), or one `Row.ResumeO`
+admits. Nothing else is new.  `[spec §14, §29]` -/
+def Row.ResumeOT (S : Row) (x : LifeVar) : Prop :=
+  ∀ o ∈ S, o = tickSig ∨ (o.abort = false ∧ o.q ≠ .unr ∧ o.fin = .ret .unit ∧ o.B = .unit ∧
+    o.n ≠ 0 ∧ ¬ VFree x o.A ∧ (∀ Δ a, VOutlives Δ a o.A) ∧ NoThunkT o.A)
+
+theorem Row.ResumeO.toT {S : Row} {x : LifeVar} (h : Row.ResumeO S x) : Row.ResumeOT S x :=
+  fun o ho => .inr (h o ho)
+
+/-- The view a relaxed lend of `Ref T` hands its callback: `Imm 'x T` when `k`, else
+`Mut 'x T`. -/
+def lendView (k : Bool) (x : LifeVar) (T : VTy) : VTy :=
+  if k then .imm (.var x) T else .mut (.var x) T
+
+/-- The side condition on the lent type: `withbor1U`'s scoping when `k` (`imm`), `withbor2U`'s
+witness otherwise (`mut`). -/
+def LendSide (k : Bool) (Δ : LifeCtx) (T : VTy) : Prop :=
+  if k then VScoped Δ T else ∃ b', Δ.Defines b' ∧ VOutlivesLe Δ b' T
+
 /-- A lend's callback `Λ. λm. M`. -/
 def lendCb (M : Expr) : Val := ⟨.lam (.lam M), .lam⟩
 
@@ -520,6 +540,69 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (hS : Row.ResumeO S x) (hM1 : closedAt 1 M = true) (hcb : closedAt 0 (lendCb M).1 = true)
       (hdc : closedAt 0 d = true) (hd : CDerivesP Δ [] d (.val (.lolli (.ref T) .unit)))
       (hM : CDerivesP (Δ.extend x b) [⟨.mut (.var x) T, true⟩] M
+        (.comp (CTy.effOf S (.box (.var x) B)))) :
+      CDerivesP Δ [⟨.ref T, true⟩] (.app (.app (.val (withborUV d)) (.var 0)) (.val (lendCb M)))
+        (.comp (CTy.effOf S (.tensor (.ref T) B)))
+  /-- **W-imm (the #743 spike): R1 at an `imm` view.** `r : Ref T ⊢ withborU d r (Λ. λm. M) :
+  F_Σ (Ref T ⊗ B)`, the callback typed with the view `m : Imm 'x T` alone in its context, at a
+  row of resuming operations. `lendR`'s premises with `withbor1U`'s scoping of `T`. -/
+  | lendRI {Δ : LifeCtx} {x : LifeVar} {b : Lifetime.Life} {T B : VTy} {d M : Expr} {S : Row}
+      (hb : Δ.Defines b) (hx : Δ.find? x = none) (hbx : b.mentions x = false)
+      (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
+      (hT : ¬ VFree x T) (hB : ¬ VFree x B) (hBn : NoThunkT B) (hsc : VScoped Δ T)
+      (hS : Row.ResumeO S x) (hM1 : closedAt 1 M = true) (hcb : closedAt 0 (lendCb M).1 = true)
+      (hdc : closedAt 0 d = true) (hd : CDerivesP Δ [] d (.val (.lolli (.ref T) .unit)))
+      (hM : CDerivesP (Δ.extend x b) [⟨.imm (.var x) T, true⟩] M
+        (.comp (CTy.effOf S (.box (.var x) B)))) :
+      CDerivesP Δ [⟨.ref T, true⟩] (.app (.app (.val (withborUV d)) (.var 0)) (.val (lendCb M)))
+        (.comp (CTy.effOf S (.tensor (.ref T) B)))
+  /-- **W-nest (the #743 spike): R1 at a family.** `a : Array A ⊢ withborU d a (Λ. λm. M) :
+  F_Σ (Array A ⊗ B)`, an owned array lent as the family `[Mut 'x A]` to a callback at a row of
+  resuming operations, the view alone in its context. `lendR`'s premises with
+  `sliceBorrowMU`'s side conditions. A relaxed lend may hold another of any kind (its premise is
+  in `CDerivesP`, under `nilDead`), so nesting is not a clause of the rule. -/
+  | lendRF {Δ : LifeCtx} {x : LifeVar} {b : Lifetime.Life} {A B : VTy} {d M : Expr} {S : Row}
+      (hb : Δ.Defines b) (hx : Δ.find? x = none) (hbx : b.mentions x = false)
+      (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
+      (hA : ¬ VFree x A) (hB : ¬ VFree x B) (hBn : NoThunkT B)
+      (hsideA : ∃ b', Δ.Defines b' ∧ VOutlivesLe Δ b' A)
+      (hsideB : ∃ b', Δ.Defines b' ∧ VOutlivesLe Δ b' B)
+      (hS : Row.ResumeO S x) (hM1 : closedAt 1 M = true) (hcb : closedAt 0 (lendCb M).1 = true)
+      (hdc : closedAt 0 d = true) (hd : CDerivesP Δ [] d (.val (.lolli (.array A) .unit)))
+      (hM : CDerivesP (Δ.extend x b) [⟨VTy.sliceMut (.var x) A, true⟩] M
+        (.comp (CTy.effOf S (.box (.var x) B)))) :
+      CDerivesP Δ [⟨.array A, true⟩] (.app (.app (.val (withborUV d)) (.var 0)) (.val (lendCb M)))
+        (.comp (CTy.effOf S (.tensor (.array A) B)))
+  /-- **W-tick (the #743 spike): R1 and W-imm at a row holding `Div`.** `lendR` (`k = false`) and
+  `lendRI` (`k = true`) with `Row.ResumeOT` for `Row.ResumeO`: the callback may also perform
+  `Div`'s `tick`, so a loop of `iterate` inside the lend ticks with the view live. -/
+  | lendRT {Δ : LifeCtx} {x : LifeVar} {b : Lifetime.Life} {T B : VTy} {d M : Expr} {S : Row}
+      (k : Bool)
+      (hb : Δ.Defines b) (hx : Δ.find? x = none) (hbx : b.mentions x = false)
+      (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
+      (hT : ¬ VFree x T) (hB : ¬ VFree x B) (hBn : NoThunkT B) (hside : LendSide k Δ T)
+      (hS : Row.ResumeOT S x) (hM1 : closedAt 1 M = true) (hcb : closedAt 0 (lendCb M).1 = true)
+      (hdc : closedAt 0 d = true) (hd : CDerivesP Δ [] d (.val (.lolli (.ref T) .unit)))
+      (hM : CDerivesP (Δ.extend x b) [⟨lendView k x T, true⟩] M
+        (.comp (CTy.effOf S (.box (.var x) B)))) :
+      CDerivesP Δ [⟨.ref T, true⟩] (.app (.app (.val (withborUV d)) (.var 0)) (.val (lendCb M)))
+        (.comp (CTy.effOf S (.tensor (.ref T) B)))
+  /-- **W-hold (the #743 spike): R1 and W-imm with a nursery scope.** `lendRT`, the callback
+  typed at a second fresh lifetime `'y ⊏ 'x` beside the view's: what is boxed at `'y` (a task
+  spawned under BOXED-κ at `'y`, a queue of them) may hold views at `'x` (`Imm 'x A ⊐ @'y`), and is
+  held across the callback's stops. `'y` is free in neither `T` nor `B`, so nothing boxed at `'y`
+  leaves the callback. The term is `lendRT`'s: lifetimes are erased. -/
+  | lendRH {Δ : LifeCtx} {x : LifeVar} {b : Lifetime.Life} {T B : VTy} {d M : Expr} {S : Row}
+      (k : Bool) (y : LifeVar)
+      (hb : Δ.Defines b) (hx : Δ.find? x = none) (hbx : b.mentions x = false)
+      (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
+      (hy : (Δ.extend x b).find? y = none)
+      (hΔy : ∀ z u, (Δ.extend x b).find? z = some u → u.mentions y = false)
+      (hT : ¬ VFree x T) (hB : ¬ VFree x B) (hyT : ¬ VFree y T) (hyB : ¬ VFree y B)
+      (hBn : NoThunkT B) (hside : LendSide k Δ T)
+      (hS : Row.ResumeOT S x) (hM1 : closedAt 1 M = true) (hcb : closedAt 0 (lendCb M).1 = true)
+      (hdc : closedAt 0 d = true) (hd : CDerivesP Δ [] d (.val (.lolli (.ref T) .unit)))
+      (hM : CDerivesP (Δ.extend x b |>.extend y (.var x)) [⟨lendView k x T, true⟩] M
         (.comp (CTy.effOf S (.box (.var x) B)))) :
       CDerivesP Δ [⟨.ref T, true⟩] (.app (.app (.val (withborUV d)) (.var 0)) (.val (lendCb M)))
         (.comp (CTy.effOf S (.tensor (.ref T) B)))

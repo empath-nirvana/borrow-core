@@ -2,6 +2,7 @@ import Paper.S2_Statics.Definitions
 import Support.Dynamics.Interpreter
 import Backend.Source
 import Backend.Clos.Convert
+import Core.PinDerives
 
 /-!
 # Backend — the falsifier: allocators and lend tags  (docs/async-capabilities.md §6.1)
@@ -108,6 +109,8 @@ structure TagInfo where
   suspended : Bool := false
   /-- The cells the tag was pushed on. -/
   cells : Array Nat
+  /-- R2's per-observation lend (`lendLoopR`): reactivated at each observation of its loop. -/
+  r2 : Bool := false
 
 structure St where
   cells : Std.HashMap Nat Val := {}
@@ -262,6 +265,10 @@ def ofStep : BoCa.Step → R
 def markLend : UInt64 := 0x4c454e44_00000001
 def markRetag : UInt64 := 0x4c454e44_00000002
 def markEnd : UInt64 := 0x4c454e44_00000003
+/-- R2's lend: a fresh `imm` tag, or the loop's parked tag reactivated. -/
+def markLendR2 : UInt64 := 0x4c454e44_00000004
+/-- R2's `next` frame: the tag is parked when the step answers `inr`, ended when `inl`. -/
+def markEndR2 : UInt64 := 0x4c454e44_00000005
 
 def mk (m : UInt64) : Expr := .prim (.lit (.i64 m))
 
@@ -288,6 +295,37 @@ def withborUD? : Expr → Option Expr
       (.lam (.app d (.var 2))))) (.app (.app (.var 0) .unit) (.var 1)))) => some d
   | _ => none
 
+/-- R2's `next` lend: `λx.λf. let (t, v) = LENDR2 x; (x, ENDR2 t (f () v))`. -/
+def withborR2NextT : Expr :=
+  .lam (.lam (.letpair (.app (mk markLendR2) (.var 1))
+    (.pair (.var 3) (.app (.app (mk markEndR2) (.var 1)) (.app (.app (.var 2) .unit) (.var 0))))))
+
+/-- R2's `close` lend: `λx.λf. let (t, v) = LENDR2 x; (x, END t (f () v))`. -/
+def withborR2CloseT : Expr :=
+  .lam (.lam (.letpair (.app (mk markLendR2) (.var 1))
+    (.pair (.var 3) (.app (.app (mk markEnd) (.var 1)) (.app (.app (.var 2) .unit) (.var 0))))))
+
+/-- `lendStepE` (`Core/PinDerives.lean`) with its `next` lend `wn` and its `close` lend `wc`. -/
+def lendStepWith (wn wc : Expr) : Expr :=
+  .lam (.lam (.case (.var 0)
+    (.seq (.var 0) (.letpair (.var 2)
+      (.app
+        (.lam (.letpair (.var 0) (.case (.var 0)
+          (.inj₁ (.pair (.var 2) (.var 0)))
+          (.inj₂ (.pair (.var 2) (.var 0))))))
+        (.app (.app wn (.var 1))
+          (.lam (.lam (.app (.app (.var 8) .unit) (.pair (.var 0) (.var 2)))))))))
+    (.seq (.var 0) (.letpair (.var 2)
+      (.app (.app wc (.var 1))
+        (.lam (.lam (.app (.app (.var 7) .unit) (.pair (.var 0) (.var 2))))))))))
+
+theorem lendStepWith_wbInl :
+    lendStepWith BoCa.Fig16.LogRel.Core.wbInl BoCa.Fig16.LogRel.Core.wbInl =
+      BoCa.Fig16.LogRel.Core.lendStepE := rfl
+
+/-- R2's step, marked. -/
+def lendStepT : Expr := lendStepWith withborR2NextT withborR2CloseT
+
 /-- A node whose children are instrumented, marked if it is a lend. -/
 def mark (e : Expr) : Expr :=
   if e == BoCa.withbor then withborT
@@ -296,8 +334,10 @@ def mark (e : Expr) : Expr :=
     | some d => withborUT d
     | none => e
 
-/-- Mark every lend of `e`. -/
-def instrument : Expr → Expr
+/-- Mark every lend of `e`; R2's step (`lendStepE`) as R2's. -/
+def instrument (e : Expr) : Expr :=
+  if e == BoCa.Fig16.LogRel.Core.lendStepE then lendStepT else
+  match e with
   | .pair a b => mark (.pair (instrument a) (instrument b))
   | .inj₁ a => mark (.inj₁ (instrument a))
   | .inj₂ a => mark (.inj₂ (instrument a))
@@ -355,6 +395,33 @@ def lend (o : Opts) (act : List Nat) (x : Val) : M R := do
   if n = 0 && p ≠ 0 then
     if let some e ← tagCheck act (mkLoc c p) .lend then return .stuck e
   let t ← newTag (if p = 0 then .lend else .mut) ((List.range n).toArray.map (c + ·))
+  match pairVal (litVal t).1 (retagVal t x.1) with
+  | some v => return .next v.1
+  | none => return .stuck "internal error: a retagged value is not a value"
+
+/-- `LENDR2 x`: R2's lend of the owner `x`. When a parked R2 tag of the same loop is on the
+cell's stack, it is reactivated (the views the state holds are views of it); otherwise a fresh
+R2 tag is pushed, after the source check of any lend. -/
+def lendR2 (o : Opts) (act : List Nat) (x : Val) : M R := do
+  let some (c, 1, 0) := lendCells x.1
+    | return .stuck "R2 lends an owned cell"
+  match ← present o (mkLoc c 0) with
+  | .error e => return .stuck s!"lend of location {c}: {e}"
+  | .ok _ => pure ()
+  let stk := (← get).lent.getD c #[]
+  let mut parked : Option Nat := none
+  for t in stk do
+    if let some inf ← tagInfo t then
+      if inf.r2 && inf.live && inf.suspended then parked := some t
+  let t ← match parked with
+    | some t => pure t
+    | none => do
+      if let some e ← tagCheck act (mkLoc c 0) .lend then return .stuck e
+      -- `lend_loop_imm` and `lend_loop_mut` erase alike (`lendLoopE_is_checked`), so the kind is
+      -- an owner's lend's, `lend`: exclusive, `imm` or `mut` unknown.
+      let t ← newTag .lend #[c]
+      modify fun s => { s with tags := s.tags.modify (t - 1) ({ · with r2 := true }) }
+      pure t
   match pairVal (litVal t).1 (retagVal t x.1) with
   | some v => return .next v.1
   | none => return .stuck "internal error: a retagged value is not a value"
@@ -460,9 +527,11 @@ def delta (o : Opts) (act : List Nat) : Expr → Val → M R
     return .next (tabFill ⟨f, h.pair_right⟩ ℓ (arrLen c) 0 n)
   | f, v => return ofStep (BoCa.delta wasmHost Mem.empty f v)
 
-/-- The frame `END t [·]`, if `f` is one. -/
-def endFrame? : Expr → Option Nat
-  | .app (.prim (.lit (.i64 m))) (.prim (.lit (.i64 t))) => if m = markEnd then some t.toNat else none
+/-- The frame `END t [·]` or `ENDR2 t [·]`, if `f` is one: the tag, and whether it is R2's `next`. -/
+def endFrame? : Expr → Option (Nat × Bool)
+  | .app (.prim (.lit (.i64 m))) (.prim (.lit (.i64 t))) =>
+    if m = markEnd then some (t.toNat, false)
+    else if m = markEndR2 then some (t.toNat, true) else none
   | _ => none
 
 /-- One step of the checked machine, with the active tags `act`: `BoCa.step`, its memory steps
@@ -521,12 +590,18 @@ def step (o : Opts) (act : List Nat) : Expr → M R
     | .op r K p => return .op r (.case K e₁ e₂) p
   | .app f a => do
     match endFrame? f with
-    | some t =>
+    | some (t, r2next) =>
       -- The frame is on the running path: its lend is not suspended.
       if (← tagInfo t).any (·.suspended) then
         modify fun s => { s with tags := s.tags.modify (t - 1) ({ · with suspended := false }) }
       match ← step o (t :: act) a with
-      | .value v => endTag t; return .next v.1
+      | .value v =>
+        -- R2's `next` step answered `inr`: the loop goes on, and its lend is parked.
+        match r2next, v.1 with
+        | true, .inj₂ _ =>
+          modify fun s => { s with tags := s.tags.modify (t - 1) ({ · with suspended := true }) }
+        | _, _ => endTag t
+        return .next v.1
       | .next a' => return .next (.app f a')
       | .stuck r => return .stuck r
       | .op r K p =>
@@ -542,6 +617,7 @@ def step (o : Opts) (act : List Nat) : Expr → M R
       match f with
       | .prim (.lit (.i64 m)) =>
         if m = markLend then lend o act v
+        else if m = markLendR2 then lendR2 o act v
         else if m = markRetag then retag act v
         else return ofStep (BoCa.delta wasmHost Mem.empty f v)
       | _ =>

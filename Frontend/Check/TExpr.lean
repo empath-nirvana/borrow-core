@@ -536,6 +536,10 @@ inductive TExpr where
   | effHandleL (info : TInfo) (jdg : Jdg) (S : Row) (SW : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (Xs : Nat → VTy) (n : UInt32) (A : VTy) (R : VTy) (u : Masks) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr)
   | letPoly (info : TInfo) (jdg : Jdg) (C : CTy) (j : Jdg) (tV tN : TExpr)
   | lendR (info : TInfo) (jdg : Jdg) (x : LifeVar) (b : Lifetime.Life) (T : VTy) (B : VTy) (S : Row) (td tM : TExpr)
+  | lendRI (info : TInfo) (jdg : Jdg) (x : LifeVar) (b : Lifetime.Life) (T : VTy) (B : VTy) (S : Row) (td tM : TExpr)
+  | lendRF (info : TInfo) (jdg : Jdg) (x : LifeVar) (b : Lifetime.Life) (A : VTy) (B : VTy) (S : Row) (td tM : TExpr)
+  | lendRT (info : TInfo) (jdg : Jdg) (x : LifeVar) (b : Lifetime.Life) (T : VTy) (B : VTy) (S : Row) (td tM : TExpr)
+  | lendRH (info : TInfo) (jdg : Jdg) (x : LifeVar) (b : Lifetime.Life) (T : VTy) (B : VTy) (S : Row) (y : LifeVar) (td tM : TExpr)
   | lendLoopR (info : TInfo) (jdg : Jdg) (x : LifeVar) (A : VTy) (S : VTy) (B : VTy) (R : VTy) (tN tK ts0 : TExpr)
   | nilDead (info : TInfo) (jdg : Jdg) (j : Jdg) (t : TExpr)
   /-- **Derived**: the destructor of `A` (`dtorE`, SPEC §12), a finaliser or a drop. -/
@@ -693,6 +697,10 @@ def TExpr.erase : TExpr → Expr
   | .effHandleL _ _ _ _ E _ _ n _ _ _ _ _ tc te => (hndExpr n (E.map Prod.fst) (.pair (Expr.pairL (tc.erase)) (lastTuple E 0 (Expr.pairL (Expr.pairR (tc.erase))) (Expr.pairR (Expr.pairR (tc.erase))))) (te.erase))
   | .letPoly _ _ _ _ tV tN => (.app (.val (.lam (Expr.letBody (tN.erase) (tV.erase)))) (.val (.lam (Expr.lamBody (tV.erase)))))
   | .lendR _ _ _ _ _ _ _ td tM => (.app (.app (.val (withborUV (td.erase))) (.var 0)) (.val (lendCb (tM.erase))))
+  | .lendRI _ _ _ _ _ _ _ td tM => (.app (.app (.val (withborUV (td.erase))) (.var 0)) (.val (lendCb (tM.erase))))
+  | .lendRF _ _ _ _ _ _ _ td tM => (.app (.app (.val (withborUV (td.erase))) (.var 0)) (.val (lendCb (tM.erase))))
+  | .lendRT _ _ _ _ _ _ _ td tM => (.app (.app (.val (withborUV (td.erase))) (.var 0)) (.val (lendCb (tM.erase))))
+  | .lendRH _ _ _ _ _ _ _ _ td tM => (.app (.app (.val (withborUV (td.erase))) (.var 0)) (.val (lendCb (tM.erase))))
   | .lendLoopR _ _ _ A _ B R tN tK ts0 => (lendLoopApp A B R (tN.erase) (tK.erase) (ts0.erase))
   | .nilDead _ _ _ t => t.erase
   | .dtor _ _ A => dtorE A
@@ -809,6 +817,10 @@ def TExpr.info : TExpr → TInfo
   | .effHandleL i _ _ _ _ _ _ _ _ _ _ _ _ _ _ => i
   | .letPoly i _ _ _ _ _ => i
   | .lendR i _ _ _ _ _ _ _ _ => i
+  | .lendRI i _ _ _ _ _ _ _ _ => i
+  | .lendRF i _ _ _ _ _ _ _ _ => i
+  | .lendRT i _ _ _ _ _ _ _ _ => i
+  | .lendRH i _ _ _ _ _ _ _ _ _ => i
   | .lendLoopR i _ _ _ _ _ _ _ _ _ => i
   | .nilDead i _ _ _ => i
   | .dtor i _ _ | .allocS i _ _ | .freeS i _ _ | .withborSM i _ _ _ _ | .withborSI i _ _ _ _
@@ -921,6 +933,10 @@ def TExpr.jdg : TExpr → Jdg
   | .effHandleL _ j _ _ _ _ _ _ _ _ _ _ _ _ _ => j
   | .letPoly _ j _ _ _ _ => j
   | .lendR _ j _ _ _ _ _ _ _ => j
+  | .lendRI _ j _ _ _ _ _ _ _ => j
+  | .lendRF _ j _ _ _ _ _ _ _ => j
+  | .lendRT _ j _ _ _ _ _ _ _ => j
+  | .lendRH _ j _ _ _ _ _ _ _ _ => j
   | .lendLoopR _ j _ _ _ _ _ _ _ _ => j
   | .nilDead _ j _ _ => j
   | .dtor _ j _ | .allocS _ j _ | .freeS _ j _ | .withborSM _ j _ _ _ | .withborSI _ j _ _ _
@@ -1041,6 +1057,10 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .effHandleL _ _ _ _ _ _ _ _ _ _ _ _ _ tc te => [(.push 0, tc), (.push 0, te)]
   | .letPoly _ _ _ _ tV tN => [(.fresh 0, tV), (.push 1, tN)]
   | .lendR _ _ _ _ _ _ _ td tM => [(.fresh 0, td), (.fresh 1, tM)]
+  | .lendRI _ _ _ _ _ _ _ td tM => [(.fresh 0, td), (.fresh 1, tM)]
+  | .lendRF _ _ _ _ _ _ _ td tM => [(.fresh 0, td), (.fresh 1, tM)]
+  | .lendRT _ _ _ _ _ _ _ td tM => [(.fresh 0, td), (.fresh 1, tM)]
+  | .lendRH _ _ _ _ _ _ _ _ td tM => [(.fresh 0, td), (.fresh 1, tM)]
   | .lendLoopR _ _ _ _ _ _ _ tN tK ts0 => [(.fresh 1, tN), (.fresh 1, tK), (.fresh 0, ts0)]
   | .nilDead _ _ _ t => [(.fresh 0, t)]
   | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
@@ -1174,6 +1194,10 @@ def TExpr.isLam : TExpr → Bool
   | .effHandleL _ _ _ _ E _ _ n _ _ _ _ _ tc te => (((hndExpr n (E.map Prod.fst) (.pair (Expr.pairL (tc.erase)) (lastTuple E 0 (Expr.pairL (Expr.pairR (tc.erase))) (Expr.pairR (Expr.pairR (tc.erase))))) (te.erase)) : Expr) matches .lam _)
   | .letPoly _ _ _ _ _ _ => false
   | .lendR _ _ _ _ _ _ _ _ _ => false
+  | .lendRI _ _ _ _ _ _ _ _ _ => false
+  | .lendRF _ _ _ _ _ _ _ _ _ => false
+  | .lendRT _ _ _ _ _ _ _ _ _ => false
+  | .lendRH _ _ _ _ _ _ _ _ _ _ => false
   | .lendLoopR _ _ _ A _ B R tN tK ts0 => (((lendLoopApp A B R (tN.erase) (tK.erase) (ts0.erase)) : Expr) matches .lam _)
   | .nilDead _ _ _ t => t.isLam
   | .dtor _ _ A => (dtorE A matches .lam _)
@@ -1290,6 +1314,10 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .effHandleL _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ => rfl
   | .letPoly _ _ _ _ _ _ => rfl
   | .lendR _ _ _ _ _ _ _ _ _ => rfl
+  | .lendRI _ _ _ _ _ _ _ _ _ => rfl
+  | .lendRF _ _ _ _ _ _ _ _ _ => rfl
+  | .lendRT _ _ _ _ _ _ _ _ _ => rfl
+  | .lendRH _ _ _ _ _ _ _ _ _ _ => rfl
   | .lendLoopR _ _ _ _ _ _ _ _ _ _ => rfl
   | .nilDead _ _ _ t => isLam_eq t
   | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..

@@ -1,0 +1,35 @@
+-- A2: an inner relaxed lend whose owner is a cell holding the outer lend's view. The inner body
+-- reaches the outer place only through the inner view (swap the view out, write, swap it back),
+-- across awaits; one task is cancelled while both lends are open.
+include async
+
+fn done(v: i32) -> Task[i32] = with spawn { v }
+fn step(t: Task[i32]) -> Task[i32] = match resume(t) { inl v -> done(v) | inr t2 -> t2 }
+fn fin(t: Task[i32]) -> i32 = match resume(t) { inl v -> v | inr t2 -> cancel(t2); 0 - 1 }
+
+fn worker(n: i32) -> i32 with Async =
+  let c = alloc(n);
+  let v = borrow mut c { m ->
+    let d = alloc(m);
+    let w = borrow mut d { k ->
+      await();
+      modify k { mm -> modify mm { x -> x + 5 }; mm };
+      await();
+      modify k { mm -> let r = modify mm { x -> (x, x) }; (mm, r) }
+    };
+    let m2 = free(d);
+    await();
+    modify m2 { x -> (x + w, x + w) }
+  };
+  let _ = free(c);
+  v
+
+main -> i32 =
+  let a = with spawn { worker(1) };
+  let b = with spawn { worker(2) };
+  let a = step(a);
+  let b = step(b);
+  cancel(b);
+  let a = step(a);
+  let a = step(a);
+  fin(a)

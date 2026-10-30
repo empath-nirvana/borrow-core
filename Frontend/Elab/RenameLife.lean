@@ -134,6 +134,9 @@ def Const.renameLife (f : Span → String → Life) : Const → Const
   | .countFold S => .countFold (S.renameLife f)
   | .countTry S E => .countTry (S.renameLife f) (E.renameLife f)
   | .boundedFix A C => .boundedFix (A.renameLife f) (C.renameLife f)
+  | .divIterate r St B R => .divIterate (r.renameLife f) (St.renameLife f) (B.renameLife f) (R.renameLife f)
+  | .divFuelK r A => .divFuelK (r.renameLife f) (A.renameLife f)
+  | .reifyK r B => .reifyK (r.renameLife f) (B.renameLife f)
   | .withbor1U x A B r => .withbor1U (x.renameLife f) (A.renameLife f) (B.renameLife f) (r.renameLife f)
   | .withbor2U x b A B r =>
       .withbor2U (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f) (r.renameLife f)
@@ -201,8 +204,8 @@ def Comp.renameLife (f : Span → String → Life) : Comp → Comp
       (hr.renameLife f) (hc.renameLife f) (M.renameLife f)
   | .unwind s x A M D N =>
       .unwind s (x.renameLife f) (A.map (VTy.renameLife f)) (M.renameLife f) (D.renameLife f) (N.renameLife f)
-  | .withbor2r s x b A B r p m M =>
-      .withbor2r s (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f)
+  | .withbor2r s kd x b A B r p m M =>
+      .withbor2r s kd (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f)
         (r.renameLife f) p m (M.renameLife f)
 end
 

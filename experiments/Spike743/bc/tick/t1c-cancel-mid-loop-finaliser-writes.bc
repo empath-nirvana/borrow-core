@@ -1,0 +1,43 @@
+-- T1 (W-tick), cancel mid-loop: t1a whose `await` is under `[then]`, its finaliser writing 99
+-- through the view (row 16 inside a `Div` loop), and whose handler cancels the continuation at the
+-- first `await`: the turn's finaliser writes through the view with the lend open, then the lend
+-- ends and the owner's finaliser frees the cell.
+--
+-- Answer: i32[7], the cancel clause's answer; `live 0`.
+def plus : i32 * i32 => i32 = unbang host[add32]
+def lt : i32 * i32 => 1 + 1 = unbang host[lt_s32]
+
+main : F i32 =
+  c <- return (alloc[i32] i32[0]);
+  t <- return (thunkv fun (u0 : 1) ->
+    withbor2rt['x, dom, i32, i32, [4294967295.0 lin 1 ~> 1 + 1, 1.0 cancel 1 ~> 1]](c, m) (
+      st <- return ((!thunkv fun (v : mut 'x i32) ->
+        < q <- return (withswap['x, i32, i32] v (thunkv fun (a : i32) ->
+              return (plus (a, i32[1]), plus (a, i32[1]))));
+          let (v, r) = q;
+          u <- perform[1.0] () unwind (
+            q2 <- return (withswap['x, i32, 1] v (thunkv fun (z : i32) -> return (i32[99], ())));
+            let (v, z2) = q2;
+            let () = z2;
+            return (forget_mut['x, i32] v));
+          let () = u;
+          g <- return (lt (r, i32[3]));
+          case g {
+            inl ge -> let () = forget_mut['x, i32] v; return (inl r)
+          | inr lo -> return (inr v)
+          },
+          let () = forget_mut['x, i32] v; return i32[4294967295] >) :
+          !U (mut 'x i32 -o F[4294967295.0 lin 1 ~> 1 + 1, 1.0 cancel 1 ~> 1] (i32 + mut 'x i32)
+            & F[4294967295.0 lin 1 ~> 1 + 1, 1.0 cancel 1 ~> 1] i32));
+      f <- return (unbang div_iterate[[4294967295.0 lin 1 ~> 1 + 1, 1.0 cancel 1 ~> 1], mut 'x i32, i32, i32]);
+      a0 <- return (st, m);
+      o <- force f a0;
+      case o { inl b -> return (boxed['x] b) | inr z -> return (boxed['x] z) }));
+  handle_with[1](
+      ((!thunkv fun (p : ref i32 * i32) ->
+        let (c, v) = p; w <- return (free[i32] c); return (plus (v, w))) : !U (ref i32 * i32 -o F i32)),
+      (((!thunkv fun (q : 1 * U ((1 -o F i32) & F 1)) ->
+        let (x, k) = q; let () = x; w <- (force k).2; let () = w; return i32[7]), ()) : !U (1 * U ((1 -o F i32) & F 1) -o F i32) * 1)) (
+    df <- return (unbang div_fuel_k[[1.0 cancel 1 ~> 1], ref i32 * i32]);
+    a1 <- return (t, i32[100]);
+    force df a1)

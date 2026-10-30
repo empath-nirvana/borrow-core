@@ -1,0 +1,61 @@
+-- R2 (round 4): `mk2` makes the loop (its cell allocated in `mk`, whose scope has ended),
+-- observes it once and returns it, with a count, through `pass`; `main` observes it twice more
+-- and closes it. Turns add 2: after turns 1-4 the cell is 8 (< 9), so the close step reads 8.
+--
+-- Answer: i32[808]: 8 * 100 + 8, plus the count 0.
+fn rd<'r>(k: imm 'r i32) -> i32 = *k
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+def mul : i32 * i32 => i32 = unbang host[mul32]
+def lt : i32 * i32 => 1 + 1 = unbang host[lt_s32]
+def eq : i32 * i32 => 1 + 1 = unbang host[eq32]
+
+def mk : !U (1 -o F U (nu X. F ((ref i32 * i32) + U X) & F (ref i32 * i32))) =
+  !thunkv fun (z : 1) ->
+    c <- return (alloc[i32] i32[0]);
+    t <- return ((thunkv fun (u0 : 1) ->
+      p <- withbor2rt['x, dom, i32, i32 + i32, [4294967295.0 lin 1 ~> 1 + 1]](c, m) (
+        st <- return ((!thunkv fun (v : mut 'x i32) ->
+          < q <- return (withswap['x, i32, i32] v (thunkv fun (a : i32) -> return (plus (a, i32[2]), plus (a, i32[2]))));
+            let (v, r) = q;
+            g <- return (lt (r, i32[9]));
+            case g { inl ge -> let () = forget_mut['x, i32] v; return (inl r) | inr lo -> return (inr v) },
+            q2 <- return (withswap['x, i32, i32] v (thunkv fun (a : i32) -> return (a, a)));
+            let (v, r2) = q2; let () = forget_mut['x, i32] v; return r2 >) :
+            !U (mut 'x i32 -o F[4294967295.0 lin 1 ~> 1 + 1] (i32 + mut 'x i32) & F[4294967295.0 lin 1 ~> 1 + 1] i32));
+        f <- return (unbang div_iterate[[4294967295.0 lin 1 ~> 1 + 1], mut 'x i32, i32, i32]);
+        a0 <- return (st, m);
+        o <- force f a0;
+        case o { inl b -> return (boxed['x] (inl b)) | inr z -> return (boxed['x] (inr z)) });
+      let (c, o) = p;
+      case o { inl b -> return (inl (c, b)) | inr z -> return (inr (c, z)) }) :
+      U (1 -o F[4294967295.0 lin 1 ~> 1 + 1] ((ref i32 * i32) + (ref i32 * i32))));
+    rf <- return (unbang reify_k[[], ref i32 * i32]);
+    force rf t
+
+def mk2 : !U (1 -o F (U (nu X. F ((ref i32 * i32) + U X) & F (ref i32 * i32)) * i32)) =
+  !thunkv fun (z : 1) ->
+    g <- return (unbang mk); z1 <- return (); l0 <- force g z1;
+    o <- (nu_out (force l0)).1;
+    case o {
+      inl p -> let (c, v) = p; w <- return (free[i32] c); g2 <- return (unbang mk); z2 <- return ();
+               l1 <- force g2 z2; return (l1, plus (mul (v, i32[1000]), w))
+    | inr l1 -> return (l1, i32[0])
+    }
+
+def pass : !U (U (nu X. F ((ref i32 * i32) + U X) & F (ref i32 * i32)) * i32 -o F (U (nu X. F ((ref i32 * i32) + U X) & F (ref i32 * i32)) * i32)) = !thunkv fun (p : U (nu X. F ((ref i32 * i32) + U X) & F (ref i32 * i32)) * i32) -> return p
+
+main : F i32 =
+  g <- return (unbang mk2); z <- return (); p0 <- force g z;
+  pf <- return (unbang pass); p <- force pf p0;
+  let (l, a) = p;
+  o1 <- (nu_out (force l)).1;
+  case o1 {
+    inl p -> let (c, v) = p; w <- return (free[i32] c); return (plus (mul (v, i32[1000]), w))
+  | inr l1 ->
+      o2 <- (nu_out (force l1)).1;
+      case o2 {
+        inl p -> let (c, v) = p; w <- return (free[i32] c); return (plus (mul (v, i32[1000]), w))
+      | inr l2 -> q <- (nu_out (force l2)).2; let (c, v) = q; w <- return (free[i32] c); return (plus (a, plus (mul (v, i32[100]), w)))
+      }
+  }
