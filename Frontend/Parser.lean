@@ -684,8 +684,8 @@ def rtyAtom : Nat → P RTy
     | .ident "args" => discard bump; pure (.handle t.span .args)
     -- `tok`, only in the elaboration's own source (SPEC §42).
     | .ident "tok" =>
-      if (← get).internal then do discard bump; pure (.handle t.span .tok)
-      else do discard bump; pure (.name t.span "tok")
+      unless (← get).internal do failAt t.span "unknown type `tok`"
+      discard bump; pure (.handle t.span .tok)
     | .kw "top" => discard bump; pure (.top t.span)
     -- `bool` is `1 + 1`, `inr ()` for true (the prelude, typed elaboration §5.4).
     | .ident "bool" => discard bump; pure (.sum t.span (.unit t.span) (.unit t.span))
@@ -1845,8 +1845,9 @@ def withBlock : Nat → P Val
     let D ← comp n
     expectSym "}"
     let fsp ← spanFrom st
-    let u ← freshName "io_finu"
-    pure (.app fsp (.sugar fsp .fin) (.pair fsp V (.thunkv fsp (.lam fsp ⟨u, fsp⟩ (holeTy fsp) D))))
+    -- `D`'s binder is `()`'s, which `D` does not name and the printed form does not write, so
+    -- it is one fixed name: the printed program reads back to the same term.
+    pure (.app fsp (.sugar fsp .fin) (.pair fsp V (.thunkv fsp (.lam fsp ⟨"io_finu", fsp⟩ (holeTy fsp) D))))
 
 /-- The suffixes of a value spine, associating to the left: argument atoms and `[@]`. -/
 def valSuffixes : Nat → Pos → Val → P Val
@@ -1895,6 +1896,14 @@ def valAtom : Nat → P Val
       expectSym ")"
       let sp ← spanFrom st
       pure (.app sp (.sugar t.span (.cells c k)) V)
+    -- `tok_mint` and `tok_burn`, only in the elaboration's own source (SPEC §42); a program
+    -- cannot name them, so its printed form reads back the same.
+    | .ident "tok_mint" =>
+      unless (← get).internal do failAt t.span "unknown variable `tok_mint`"
+      discard bump; pure (.const t.span .tokMint)
+    | .ident "tok_burn" =>
+      unless (← get).internal do failAt t.span "unknown variable `tok_burn`"
+      discard bump; pure (.const t.span .tokBurn)
     | .ident s =>
       discard bump
       let nx ← peek

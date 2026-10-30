@@ -510,10 +510,12 @@ def alpha (map : Bool) (file : String) : IO UInt32 := do
     return 0
 
 /-- Parse `src`, print it, parse the output, and compare the two ASTs up to spans. The printed
-program's names are already its binders (SPEC §41), so it is read back without resolving them. -/
+program's names are already its binders (SPEC §41), so it is read back without resolving them.
+The printed program is the elaboration's, which names `tok`, `tok_mint` and `tok_burn` (SPEC §42),
+so it is read back as the elaboration's own source (`internal`). -/
 def roundTrip (p : Program) : Except String Unit := do
   let out := p.pp
-  match parseProgram out (resolve := false) (lib := Frontend.Sugar.libSrc) with
+  match parseProgram out (resolve := false) (lib := Frontend.Sugar.libSrc) (internal := true) with
   | .error e => throw s!"the printed program does not parse: {e.render}\n{out}"
   | .ok q =>
     if q.strip == p.strip then pure ()

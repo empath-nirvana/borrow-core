@@ -7987,7 +7987,7 @@ message reads the declarations (`Data.Table`); the refusal is the kernel's.
 | `corpus/decl-guard.bc` | a guard stored in a record beside data, released by a `finally` on a `with` | the guard released on the normal exit |
 | `corpus/reject/decl-txn-raise.bc`, `decl-promise-raise.bc`, `decl-guard-raise.bc` | each of the three with the value live across a `raise` and no finaliser | refused: `[let]`'s `hW` (`decl_not_ownFree`) |
 | `corpus/decl-view.bc` | `t.id` read through `imm 'a Txn`, the token's view dropped by its derived drop, the transaction committed after | i32[712] |
-| `corpus/reject/decl-burn-written.bc` | a program that takes a record apart as a tuple and writes `tok_burn` | refused: no such name |
+| `corpus/fail/decl-burn-written.bc` | a program that takes a record apart as a tuple and writes `tok_burn` | refused by the parser: `tok`, `tok_mint` and `tok_burn` are read only in the elaboration's own source, so a printed elaboration reads back the same |
 
 Each rule is pinned beside its elaboration written by hand (`scripts/check-sugar.sh`):
 `corpus/sugar/data-forms.bc` and `data-update.bc` beside core forms, and `data-box-tree`,
