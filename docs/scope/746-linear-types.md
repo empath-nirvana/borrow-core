@@ -60,8 +60,10 @@ running `bcc` from this worktree (section 6).
 - **Checker** (1.6): `dtorB_complete`/`dtorB_completeA`, hence `hasDtorB_iff`, with the fallback
   of defining `HasDtor` by `dtorB`. Then `Class.of` provably computes the two classes and the drop
   bit, and `Env.pushOwn` provably owes exactly the `DerivedDrop` slots.
-- **Declared types with no derived drop** (section 2): L-T (decision 4), a field of a new opaque kind
-  `tok`, with `mint`/`burn` constants. No new type former, no change to `VTy.Drop`.
+- **Declared types with no derived drop** (section 2): decision 4 revised to L-D over L-T. A field
+  of a new opaque kind `tok` that is an owned unit cell (§25 pattern), with `mint`/`burn`
+  allocating and freeing it. No new type former. Because the token owns a cell, a declared value
+  cannot be abandoned at an abort; `adequacyC` (memory empty at the end) sees any that is.
 - **Sites** (section 5): the checker reads kernel facts throughout (it builds the derivation). The
   elaborator emits terms the checker types, with three places that restate a kernel definition
   instead of reading it. Both backends rebuild copy and drop decisions from the erased term rather
@@ -272,7 +274,7 @@ theorem Env.pushOwn_own (E : Env) (x : String) (A : CVTy) :
 
 ---
 
-## 2. Declared types with no derived drop (decision 4: L-T)
+## 2. Declared types with no derived drop (decision 4, revised: L-D over L-T)
 
 Every drop is derived: the language has no hand-written drops. Linear types with no derived drop
 already exist (capabilities, must-resume continuations, closures that hold one). L-T lets a data
@@ -280,10 +282,21 @@ declaration put its type in that group, for a value whose silent destruction is 
 transaction that must be committed or aborted). Today a `data` type is transparent (SPEC §42)
 and `HasDtor` is derived structurally, so the declaration needs a fact the kernel sees.
 
+**Revised 2026-10-30** (user agreed to the literature pass's recommendations,
+`scratch-archive/linear-types/no-drop-literature.md`). The obligations that need a declared type
+are the ones that leave one scope: a transaction or promise held as a value, a guard stored in
+data, an endpoint sent to another task. For those, "abandoned at a recoverable abort and the
+program goes on" defeats the point. So the guarantee is the strong one: no run ends with a
+declared value unconsumed, and an abort cannot abandon one. Lexical obligations stay with
+handlers (2.4), which is the common path. Decision 1 is kept: a drop is never effectful.
+
 ### 2.1 Mechanism
 
 A declared type `N` with payload `A` is `A ⊗ Tok`, where `Tok = VTy.opq .tok` is a new opaque kind
-(`Core/Opaque.lean:24`) with two constants:
+(`Core/Opaque.lean:24`) whose value owns one unit cell (the §25 pattern, as κ's capture cell),
+with two constants. The sketch below is L-T's; under L-D, `mint` allocates the cell and `burn`
+frees it, and their compatibility lemmas are `ewp_alloc`/`ewp_free` ([TR] 6.141, 6.142, as §25)
+instead of the `I32`-leaf case:
 
 ```lean
 inductive Opaque where
@@ -300,9 +313,9 @@ def Opaque.Holds : Opaque → Val → Prop
 --   | tokBurn {Δ Γ} (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ burn (.val (.lolli (.opq .tok) .unit))
 ```
 
-`Tok` holds `∅`, so the compatibility lemmas are the `I32`-leaf case. No new `VTy` former, and
-`VTy.Drop`'s `opq` constructor is not narrowed: such a value can still be abandoned by an abort
-(decision 2), when its payload is `VTy.Drop` too.
+`Tok` holds its cell, so `Tok` is not `VTy.OwnFree` (`NoOwn`), and neither is any type containing
+it. No new `VTy` former. The cell lowers to no words (`zeroCell`, §23), so the token costs nothing
+at run time.
 
 ### 2.2 The statements
 
@@ -336,13 +349,18 @@ theorem TDerivesP.dtor_hasDtor : TDerivesP Δ Γ (.dtor i j A) j' → HasDtor A
   `persistent` is conjunctive, so a declared field makes the container linear with no derived
   drop. `getAt` needs the discarded fields `Forgettable` (section 3), so a projection that would
   discard a declared field has no derivation.
-- **Across an abort.** `N` is live across an abortive computation exactly when its payload is
-  `VTy.Drop` (abandoned, decision 2); otherwise `[let]`'s `hW` fails and `[then]`'s `finalOf` finds
-  no destructor, and the program is refused.
-- **`fundamentalC`/`adequacyC`.** Two compatibility lemmas (`mint`, `burn`) and the `tok` model.
-  Their statements are unchanged.
-- **Guarantee.** No *derived* drop: the checker cannot insert one (`TDerivesP.dtor_hasDtor`), an
-  abort abandons it only under 1.3, and `[then]` has no destructor to run. An explicit `burn` is a
+- **Across an abort.** `N` is never `VTy.OwnFree`, so `[let]`'s `hW` fails whenever a declared
+  value is live across a computation that may abort or cancel. The program is refused unless the
+  value is under a `[then]` whose written `D` consumes it, or is lent into the body, or is held as
+  handler state (2.4). The literature pass's wall 3 applies: `[then]` gives `M` and `D` disjoint
+  contexts, so "commit in the body, roll back on abort" uses a lend into `M` or handler state.
+- **`fundamentalC`/`adequacyC`.** Two compatibility lemmas (`mint`, `burn`, by `ewp_alloc`/`ewp_free`)
+  and the `tok` model. Their statements are unchanged, and `adequacyC`'s empty final memory now
+  says no declared value was left unconsumed on any run. The step from "every cell freed" to
+  "every declared value consumed" is stated and proved as its own lemma (§25 *Open* names it).
+- **Guarantee.** No *derived* drop: the checker cannot insert one (`TDerivesP.dtor_hasDtor`). No
+  abandonment: an abort cannot pass over one (above). Semantically, no run ends with one
+  unconsumed (`adequacyC`). An explicit `burn` is a
   use; the gate step (section 7, step 3) pins that the elaborator emits `burn` only at a written
   `match`.
 - **`!N`.** `.bang A` is persistent for every `A`. Q10.
@@ -644,15 +662,16 @@ Each step lands with its kernel statements proved, or stops.
    - F2 (5.5): both backends compile the checked `run_io` (and the loop wrapper), with the harness
      externs as host functions meeting their contracts; their own prologue and epilogue go. Then
      Lint admits a `.drop` at an `.opq` type only at an abort site.
-2. **Declared types, L-T** (item 3).
-   - Kernel: `Opaque.tok` and its model, `CDerives.tokMint`/`tokBurn` with compatibility lemmas,
+2. **Declared types, L-D over L-T** (item 3).
+   - Kernel: `Opaque.tok` as an owned unit cell and its model, `CDerives.tokMint`/`tokBurn` with
+     `ewp_alloc`/`ewp_free` compatibility lemmas, the consumption lemma from `adequacyC`,
      `tok_linear`, the closure lemmas, `decl_linear`, `decl_imm_drop`, `decl_mut_drop`,
      `TDerivesP.dtor_hasDtor`. The SPEC §11, §12 and §42 entries first.
    - Elaboration of the declaration and its `match` (2.3).
    - The surface of 2.4: the field keyword, `finally` on `with` over `[then]`, and the error.
-   - **Before building:** name a program that needs a declared type with no derived drop and
-     cannot be written as a handler. A resource is a handler (2.4), so files are not such a
-     program. If there is none, this step waits.
+   - Target programs (from the literature pass): a transaction held as a value and committed in
+     another function; a promise stored in a queue and answered later; a guard stored in data.
+     Each has a reject twin that leaves the value live across a `raise` with no finaliser.
 3. **Gate step** (item 4).
    - Kernel: each pinned site cites the rule it emits (`drop_derives`, `copy_derives`, a constant,
      `topI`/`zeroE`, `effLet`'s `hW`). Every `burn` the elaborator emits is at a written `match`.
