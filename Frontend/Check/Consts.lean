@@ -528,6 +528,7 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
           (Fam.dead T).map fun _ hd => TTied.divFuel (at_ sp) S A
             (fun o ho => by simpa using List.all_eq_true.mp hS o ho) hd⟩⟩
       else err sp "`div_fuel_k`: its row holds `Div`'s name"
+  | .reifyK .. => err sp "internal error: `reify_k` is checked with its residual (`synV`)"
 
 /-- The lifetime of a family at a shape: the lifetime of its first leaf. -/
 def famLife (M : Mode) : CShape → CVTy → Option CLife

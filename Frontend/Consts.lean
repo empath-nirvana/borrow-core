@@ -27,7 +27,7 @@ inductive CKw where
   | arrayNew | arrayEmpty | arrayFree | arraySize | arrayReplace | arrayLen | arrayGet | arrayCopy
   | arrayForget | sliceBorrowMut | sliceBorrowImm | sliceGetMut | sliceLenMut
   | sliceSplitImm | sliceSplitMut | sliceEmptyImm | sliceEmptyMut | sliceReplaceMut | sliceSwapMut
-  | countFold | countTry | boundedFix | divIterate | divFuelK
+  | countFold | countTry | boundedFix | divIterate | divFuelK | reifyK
   | withbor1U | withbor2U | withbor3U | withloadU | sliceBorrowMutU | sliceBorrowImmU
   deriving DecidableEq, Repr
 
@@ -55,7 +55,7 @@ def CKw.str : CKw → String
   | .sliceReplaceMut => "slice_replace_mut" | .sliceSwapMut => "slice_swap_mut"
   | .countFold => "count_fold" | .countTry => "count_try"
   | .boundedFix => "bounded_fix"
-  | .divIterate => "div_iterate" | .divFuelK => "div_fuel_k"
+  | .divIterate => "div_iterate" | .divFuelK => "div_fuel_k" | .reifyK => "reify_k"
   | .withbor1U => "withbor1u" | .withbor2U => "withbor2u" | .withbor3U => "withbor3u"
   | .withloadU => "withloadu" | .sliceBorrowMutU => "slice_borrow_mut_u"
   | .sliceBorrowImmU => "slice_borrow_imm_u"
@@ -69,7 +69,7 @@ def CKw.all : List CKw :=
    .arrayForget, .sliceBorrowMut, .sliceBorrowImm, .sliceGetMut, .sliceLenMut,
    .sliceSplitImm, .sliceSplitMut, .sliceEmptyImm, .sliceEmptyMut, .sliceReplaceMut,
    .sliceSwapMut,
-   .countFold, .countTry, .boundedFix, .divIterate, .divFuelK,
+   .countFold, .countTry, .boundedFix, .divIterate, .divFuelK, .reifyK,
    .withbor1U, .withbor2U, .withbor3U, .withloadU, .sliceBorrowMutU, .sliceBorrowImmU]
 
 def CKw.ofString? (s : String) : Option CKw := CKw.all.find? (·.str == s)
@@ -90,6 +90,7 @@ def CKw.sig : CKw → List ArgKind
   | .boundedFix => [ty, cty]
   | .divIterate => [row, ty, ty, ty]
   | .divFuelK => [row, ty]
+  | .reifyK => [row, ty]
   | .copy | .forgetImm | .forgetMut => [life, ty]
   | .forgetUnk => []
   | .withbor1 => [binder, ty, ty]
@@ -167,6 +168,7 @@ def Const.ofArgs : CKw → List Arg → Option Const
   | .boundedFix, [.ty A, .cty C] => some (.boundedFix A C)
   | .divIterate, [.row r, .ty St, .ty B, .ty R] => some (.divIterate r St B R)
   | .divFuelK, [.row r, .ty A] => some (.divFuelK r A)
+  | .reifyK, [.row r, .ty B] => some (.reifyK r B)
   | .withbor1U, [.binder x, .ty A, .ty B, .row r] => some (.withbor1U x A B r)
   | .withbor2U, [.binder x, .life b, .ty A, .ty B, .row r] => some (.withbor2U x b A B r)
   | .withbor3U, [.life a, .binder x, .ty A, .ty B, .row r] => some (.withbor3U a x A B r)
@@ -237,6 +239,7 @@ def Const.toArgs : Const → CKw × List Arg
   | .boundedFix A C => (.boundedFix, [.ty A, .cty C])
   | .divIterate r St B R => (.divIterate, [.row r, .ty St, .ty B, .ty R])
   | .divFuelK r A => (.divFuelK, [.row r, .ty A])
+  | .reifyK r B => (.reifyK, [.row r, .ty B])
   | .withbor1U x A B r => (.withbor1U, [.binder x, .ty A, .ty B, .row r])
   | .withbor2U x b A B r => (.withbor2U, [.binder x, .life b, .ty A, .ty B, .row r])
   | .withbor3U a x A B r => (.withbor3U, [.life a, .binder x, .ty A, .ty B, .row r])

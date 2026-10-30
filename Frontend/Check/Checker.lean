@@ -306,6 +306,30 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
       let A' ← E.elabV Δ A
       let r ← chkV n E Δ T V A'
       pure ⟨A', r⟩
+    | .const sp (.reifyK r Bs) => do
+      -- The #743 spike: the kernel's `reify_res` in the core text (SPEC §14), its residual
+      -- `λb. return b : !U(B ⊸ F_Σ B)` checked at the empty context.
+      let S ← E.elabRow Δ sp r
+      let B ← E.elabV Δ Bs
+      if hS : (S.all fun o => o.n != BoCa.divEff) = true then
+        let resV : Val := .bangThunkv sp (.lam sp ⟨"res_b", sp⟩ Bs (.ret sp (.var sp "res_b")))
+        let E0 : Env := { E with vars := [], own := [], nExt := 0, row := none }
+        let rr ← chkV n E0 Δ [] resV (BoCa.Fig16.LogRel.Core.resTy S B B)
+        if hv : isValB rr.t.erase = true then
+        if hcl : BoCa.Fig16.LogRel.Core.closedAt 0 (Expr.toVal rr.t.erase).1 = true then
+          have hq : rr.t.erase = (Expr.toVal rr.t.erase).1 := by
+            unfold Expr.toVal; rw [dif_pos hv]
+          have hb : Btw rr.F.u rr.F.w [] := by
+            have hu := rr.F.hu; have hw := rr.F.hw
+            simp only [List.length_nil, List.length_eq_zero_iff] at hu hw
+            rw [hu, hw]; exact .nil
+          pure ⟨_, ⟨.reify (at_ sp) (.val (BoCa.Fig16.LogRel.Core.reifyTy S B B)) S B B rr.t,
+            (BoCa.Fig16.LogRel.Core.tickSig :: S) ∪ rr.sigs, rr.pins,
+            (Fam.dead T).map fun _ hd => TTied.reify (at_ sp) S B B (Expr.toVal rr.t.erase)
+              (fun o ho => by simpa using List.all_eq_true.mp hS o ho) hcl (rr.F.d [] hb) hq hd⟩⟩
+        else err sp "internal error: `reify_k`'s residual is not closed"
+        else err sp "internal error: `reify_k`'s residual is not a value"
+      else err sp "`reify_k`: its row holds `Div`'s name"
     | .const sp c => synConst E Δ T sp c
     | .shorten sp m σ a V => do
       let s ← E.elabS Δ σ

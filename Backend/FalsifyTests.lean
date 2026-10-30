@@ -149,6 +149,23 @@ def r2Between : Expr :=
       .letpair (.app (.var 1) (.inj₂ .unit)) <|
       .seq (letE (freeE (.var 1)) .unit) (.seq (letE (freeE (.var 6)) .unit) (.var 2)))
 
+/-- `reify` (`Core/DivReify.lean`) of a computation that lends `r` (`withbor`), stores the view in
+an outer cell `c`, and ticks, which no typed computation can (a lend's callback is closed but for
+its view): the tick is answered by `reify`'s handler, which answers the loop holding the
+continuation, the lend open inside it. The consumer then reads through the view out of `c`, and
+closes the loop (the tick answered *close*, the lend ends, the residual `λb. b` hands back the
+owner and the answer). Under R1's rule the tag is suspended while `reify`'s loop holds it. -/
+def reifyBetween : Expr :=
+  letE (allocE (lit 0)) <|
+  letE (allocE (lit 5)) <|
+  letE (.app (.val (BoCa.Fig16.LogRel.Core.reifyV ⟨.lam (.var 0), .lam⟩)) (.lam (.inj₁
+      (borrowE (.var 1) (.seq (storeE (.var 4) (.var 0))
+        (letE (BoLo.performE (.pair (.prim (.lit (.i32 4294967295))) (.pair (lit 0) .unit)))
+          (lit 0))))))) <|
+  letE (loadE (loadE (.var 2))) <|
+  .letpair (.app (.var 1) (.val closeV)) <|
+  .seq (letE (freeE (.var 1)) .unit) (.seq (letE (freeE (.var 5)) .unit) (.var 2))
+
 /-- Each negative test: its name, its term, the mode that must report it, a part of the report,
 and what `Support`'s interpreter answers. -/
 def negatives : List (String × Expr × String × String × String) :=
@@ -165,7 +182,8 @@ def negatives : List (String × Expr × String × String × String) :=
       "source interpreter: stuck"),
    ("neg-r2-after-close", r2AfterClose, "tags", "after its lend ended", "i32[9]"),
    ("neg-r2-after-finish", r2AfterFinish, "tags", "after its lend ended", "i32[9]"),
-   ("neg-r2-between", r2Between, "tags", "while its lend is suspended", "i32[5]")]
+   ("neg-r2-between", r2Between, "tags", "while its lend is suspended", "i32[5]"),
+   ("neg-reify-between", reifyBetween, "tags", "while its lend is suspended", "i32[5]")]
 
 /-- The negative tests that are loops: each is driven as a `main` that returns a loop is, one
 observation at a time (`Falsify.interpLoop`, `Source.interpLoop`). -/

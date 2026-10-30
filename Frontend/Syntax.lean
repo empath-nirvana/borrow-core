@@ -323,6 +323,10 @@ inductive Const where
   /-- `div_fuel_k[[r], A]`: the kernel's `div_fuel` handling `Div` around a computation at `tick, r`
   (SPEC §14), in the core text for the #743 spike. -/
   | divFuelK (r : Row) (A : VTy)
+  /-- `reify_k[[r], B]`: the kernel's `reify_res` (SPEC §14) at the row `r` and the residual
+  `λb. return b : !U(B ⊸ F_r B)`, in the core text for the #743 spike: a computation at `tick, r`
+  answering `B ⊕ B` made into the loop value `U(Loop_r B B)`. -/
+  | reifyK (r : Row) (B : VTy)
   /-- The unwinding borrows of SPEC §19, each at the row `r` of its callback:
   `withbor1u['x, A, B, [r]]`, `withbor2u['x, @b, A, B, [r]]`, `withbor3u[@a, 'x, A, B, [r]]`,
   `withloadu[@a, 'x, A, B, [r]]`, `slice_borrow_mut_u['x, @b, A, B, [r]]`,
@@ -971,6 +975,7 @@ def Const.strip : Const → Const
   | .boundedFix A C => .boundedFix A.strip C.strip
   | .divIterate r St B R => .divIterate r.strip St.strip B.strip R.strip
   | .divFuelK r A => .divFuelK r.strip A.strip
+  | .reifyK r B => .reifyK r.strip B.strip
   | .withbor1U x A B r => .withbor1U x.strip A.strip B.strip r.strip
   | .withbor2U x b A B r => .withbor2U x.strip b.strip A.strip B.strip r.strip
   | .withbor3U a x A B r => .withbor3U a.strip x.strip A.strip B.strip r.strip

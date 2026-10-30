@@ -136,6 +136,7 @@ def Const.respan (sp : Span) : Const → Const
   | .boundedFix A C => .boundedFix (A.respan sp) (C.respan sp)
   | .divIterate r St B R => .divIterate (r.respan sp) (St.respan sp) (B.respan sp) (R.respan sp)
   | .divFuelK r A => .divFuelK (r.respan sp) (A.respan sp)
+  | .reifyK r B => .reifyK (r.respan sp) (B.respan sp)
   | .withbor1U x A B r => .withbor1U (x.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
   | .withbor2U x b A B r =>
       .withbor2U (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)

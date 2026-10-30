@@ -123,6 +123,7 @@ def Const.subst (σ : TySubst) : Const → Const
   | .boundedFix A C => .boundedFix (A.subst σ) (C.subst σ)
   | .divIterate r St B R => .divIterate (r.subst σ) (St.subst σ) (B.subst σ) (R.subst σ)
   | .divFuelK r A => .divFuelK (r.subst σ) (A.subst σ)
+  | .reifyK r B => .reifyK (r.subst σ) (B.subst σ)
   | .withbor1U x A B r => .withbor1U x (A.subst σ) (B.subst σ) (r.subst σ)
   | .withbor2U x b A B r => .withbor2U x b (A.subst σ) (B.subst σ) (r.subst σ)
   | .withbor3U a x A B r => .withbor3U a x (A.subst σ) (B.subst σ) (r.subst σ)
