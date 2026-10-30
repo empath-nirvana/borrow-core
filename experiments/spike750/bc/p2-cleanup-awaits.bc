@@ -1,0 +1,50 @@
+-- #750, target program 2 in the core text: a task holding a relaxed lend of `c` is cancelled at
+-- its `await`, and its finaliser awaits (a flush) before it writes through the view.
+--
+-- The cancel is a resume: `await` is `1.0 lin (1 + 1) ~> 1 + 1`, a linear operation whose answer
+-- says "go on" (`inl`) or "cancelled" (`inr`); the body raises `1.1 aff 1 ~> 0` on `inr`. The
+-- handler's clause for `1.0` reads the argument: `inl ()` is the body's `await`, which it cancels,
+-- `(force k).1 (inr ())`; `inr ()` is the finaliser's `await` (the flush), which it resumes,
+-- `(force k).1 (inl ())`. The region is live: the finaliser's `await` is caught by the task's own
+-- handler, as any `await` is. The clause for `1.1` answers `inl 7`, "cancelled".
+--
+-- `bcc check` refuses it at `[lend-R]`:
+--   31:5: the row of a relaxed lend's body has only operations that resume once (affine or
+--   linear), of names other than 0, answering `1` with the empty cancel row, whose arguments are
+--   closed data with no `U` (R1, SPEC §29)
+-- `bcc interp` needs a checked program, so the run is the same term written in Lean
+-- (`Spike750/Runs.lean`, `cancelResume`): answer `inl i32[7]`, `live 0`, under lend tags.
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+main : F (i32 + i32) =
+  c <- return (alloc[i32] i32[10]);
+  handle_with[1](
+      ((!thunkv fun (p : ref i32 * i32) ->
+        let (c, v) = p; w <- return (free[i32] c); return (inr (plus (v, w)))) : !U (ref i32 * i32 -o F (i32 + i32))),
+      (((!thunkv fun (q : (1 + 1) * U (((1 + 1) -o F (i32 + i32)) & top)) ->
+          let (x, k) = q;
+          case x {
+            inl u -> let () = u; w <- return (inr () : 1 + 1); (force k).1 w
+          | inr u -> let () = u; w <- return (inl () : 1 + 1); (force k).1 w
+          }) : !U ((1 + 1) * U (((1 + 1) -o F (i32 + i32)) & top) -o F (i32 + i32))),
+       (((!thunkv fun (e : 1) -> let () = e; return (inl i32[7])) : !U (1 -o F (i32 + i32))), ()))) (
+    withbor2r['x, dom, i32, i32, [1.0 lin (1 + 1) ~> 1 + 1, 1.1 aff 1 ~> 0]](c, m) (
+      r <- perform[1.0] (inl ()) unwind (
+        s <- perform[1.0] (inr ());
+        case s {
+          inl u -> let () = u;
+            q <- return (withswap['x, i32, 1] m (thunkv fun (v : i32) -> return (i32[99], ())));
+            let (m, z) = q;
+            let () = z;
+            return (forget_mut['x, i32] m)
+        | inr u -> let () = u; return (forget_mut['x, i32] m)
+        });
+      case r {
+        inl u -> let () = u;
+          q <- return (withswap['x, i32, i32] m (thunkv fun (v : i32) ->
+            return (plus (v, i32[1]), plus (v, i32[1]))));
+          let (m, r2) = q;
+          let () = forget_mut['x, i32] m;
+          return (boxed['x] r2)
+      | inr u -> let () = forget_mut['x, i32] m; abort[1.1] u
+      }))
