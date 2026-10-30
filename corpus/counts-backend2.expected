@@ -116,6 +116,9 @@ data-particles 4 0 0 669 653 150
 data-rose 14 0 0 56 56 0
 data-rose-vec 5 0 0 220 220 15
 data-turnstile 4 0 0 53 21 18
+decl-guard 0 0 0 0 0 0
+decl-promise 6 0 0 15 15 0
+decl-txn 0 0 0 0 0 0
 deep-list 100003 0 0 300003 300003 0
 div-abstraction 0 0 0 0 0 0
 div-euclid 3 0 0 3 3 0

@@ -411,6 +411,13 @@ corpus/data-rose.bc flows [0, 4294967295], finaliser; main [1], finaliser
 corpus/data-rose.bc 24:15: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/data-rose.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/data-turnstile.bc flows [0, 4294967295]; main []
+corpus/decl-guard.bc flows [0, 2, 4294967295], finaliser; main [1, 2], finaliser
+corpus/decl-guard.bc 26:3: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/decl-guard.bc 27:5: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/decl-guard.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/decl-guard.bc 2.0 abortive: -; condition 2 holds; -
+corpus/decl-promise.bc flows [0, 4294967295]; main []
+corpus/decl-txn.bc flows [0, 4294967295]; main []
 corpus/deep-list.bc flows [0, 4294967295]; main []
 corpus/div-abstraction.bc flows [0, 2, 4294967295]; main [1, 2, 3]
 corpus/div-abstraction.bc 26:3: handle 1: inside [2]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds

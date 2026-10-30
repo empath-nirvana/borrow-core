@@ -274,6 +274,9 @@ def ofV (ms : MachSet) : VTy → Except String LTy
   | .box _ A => ofV ms A
   | .bang A => return .bang (← ofV ms A)
   | .fam L => return .fam (← ofV ms L)
+  -- `Tok` is a location owning a unit cell, `Ref 1`'s relation (`vCE_tok_eq_ref`), made by
+  -- `alloc` and released by `free` (`tokMint`, `tokBurn`).
+  | .opq .tok => pure (.ref .unit)
   | .opq k => pure (.opq k)
   | .unk => pure .unk
   | .thunk C => ofU ms false C
@@ -399,7 +402,9 @@ theorem ofV_persistent {ms : MachSet} : ∀ {A : VTy} {t : LTy}, A.persistent = 
 theorem ofV_drops {ms : MachSet} {A : VTy} (hA : A.OwnFree) : ∀ {t : LTy}, ofV ms A = .ok t →
     t.drops = true := by
   induction hA with
-  | opq k hk => intro t h; simp only [ofV] at h; cases h; simpa [LTy.drops, Opaque.Host] using hk
+  | opq k hk =>
+    intro t h; cases k <;> simp only [ofV] at h <;> cases h <;>
+      first | rfl | exact absurd rfl hk
   | unit | zero | int | unk | imm | «mut» =>
       intro t h; simp only [ofV] at h
       first

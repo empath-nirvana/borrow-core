@@ -152,6 +152,8 @@ corpus/data-option-block.bc 1.0 cancellable abortive: branch; agree
 corpus/data-option.bc 1.0 cancellable abortive: branch; agree
 corpus/data-rose-vec.bc 1.0 cancellable abortive: branch; agree
 corpus/data-rose.bc 1.0 cancellable abortive: branch; agree
+corpus/decl-guard.bc 1.0 cancellable abortive: branch; agree
+corpus/decl-guard.bc 2.0 cancellable abortive: -; agree
 corpus/div-abstraction.bc 2.0 cancellable abortive: branch; agree
 corpus/div-abstraction.bc 1.0 cancellable abortive: branch; agree
 corpus/div-abstraction.bc 3.0 cancellable abortive: branch; agree
