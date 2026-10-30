@@ -366,7 +366,7 @@ word)" stands for the word recorded in the introduction.
 | `Core/EffRules.lean:957` `Row.Weak`, `Row.weakB` | a row with a cancellable or unrestricted operation | `Row.Cancels`, `Row.cancelsB` *(prov.)*: "weakening" names the structural rule only |
 | `Core/EffRules.lean:1041` `VTy.Drop`, `Ctx.Drops`, `dropB` | holds no `own` cell | kept; its doc says "abandoned by an abort (SPEC §19), not a drop"; renaming is Q8′ |
 | `Frontend/Elab/Tir.lean:33–48` `Class` | `persistent / dtor / linear` | section 1.6 |
-| SPEC §12 class 1 (`SPEC.md:1225–1231`) | "forgettable … genuinely (removed word)" | "Forgettable types: the types whose derived drop does nothing (the unrestricted ones and the borrows)" |
+| SPEC §12 class 1 (`SPEC.md:1225–1231`) | "forgettable … genuinely (removed word)" | "Forgettable types: the types whose destructor does nothing (the unrestricted ones and the borrows)" |
 | SPEC §12 class 2 (`:1232–1245`) | "These are linear" | unchanged: correct |
 | SPEC §12 class 3 (`:1246–1249`) | "strictly linear" | "linear with no derived drop" |
 | SPEC §12 opening (`:1212–1216`) | cites an experiment directory named with the removed word | cites `Core/Dtor.lean` (Q13 for the directory) |
