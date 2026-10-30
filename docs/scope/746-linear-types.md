@@ -60,7 +60,7 @@ running `bcc` from this worktree (section 6).
 - **Checker** (1.6): `dtorB_complete`/`dtorB_completeA`, hence `hasDtorB_iff`, with the fallback
   of defining `HasDtor` by `dtorB`. Then `Class.of` provably computes the two classes and the drop
   bit, and `Env.pushOwn` provably owes exactly the `DerivedDrop` slots.
-- **Declared types with no destructor** (section 2): L-T (decision 4), a field of a new opaque kind
+- **Declared types with no derived drop** (section 2): L-T (decision 4), a field of a new opaque kind
   `tok`, with `mint`/`burn` constants. No new type former, no change to `VTy.Drop`.
 - **Sites** (section 5): the checker reads kernel facts throughout (it builds the derivation). The
   elaborator emits terms the checker types, with three places that restate a kernel definition
@@ -272,11 +272,13 @@ theorem Env.pushOwn_own (E : Env) (x : String) (A : CVTy) :
 
 ---
 
-## 2. Declared types with no destructor (decision 4: L-T)
+## 2. Declared types with no derived drop (decision 4: L-T)
 
-A data declaration states that its type has no destructor, for a value whose silent destruction is
-a bug (a transaction that must be committed or aborted). Today a `data` type is transparent
-(SPEC §42) and `HasDtor` is derived structurally, so the declaration needs a fact the kernel sees.
+Every drop is derived: the language has no hand-written drops. Linear types with no derived drop
+already exist (capabilities, must-resume continuations, closures that hold one). L-T lets a data
+declaration put its type in that group, for a value whose silent destruction is a bug (a
+transaction that must be committed or aborted). Today a `data` type is transparent (SPEC §42)
+and `HasDtor` is derived structurally, so the declaration needs a fact the kernel sees.
 
 ### 2.1 Mechanism
 
@@ -622,15 +624,17 @@ Each step lands with its kernel statements proved, or stops.
 5. **Book chapter: linear values** (`book/src/guide/linear.md`, after *Ownership and borrows*).
    It describes what steps 1–4 built and nothing else, and every example runs as a book program.
    - The language is linear: a value is unrestricted or linear, and there is no third class.
-     Most linear values still feel droppable because the checker inserts their derived drop
+     Every drop is derived, from the type's structure; there are no hand-written drops. Most
+     linear values still feel droppable because the checker inserts their derived drop
      (`drop_derives`) where their scope ends. A borrow `imm` is linear with a derived copy
      (`copy_derives`).
-   - Values with no derived drop: capabilities, must-resume continuations, one-shot closures that
-     hold one, and declared types (L-T). What the checker says when one is left unused, and how to
-     fix it.
-   - Writing programs that want to forget a value: give the type a destructor, give a task or
-     continuation a cancel branch (`cancel`), or consume the value with a function written for
-     it. Each one is described as the derivation it inserts, not as a different kind of type.
+   - Linear types with no derived drop: capabilities, must-resume continuations, one-shot closures
+     that hold one, and declared types (L-T). What the checker says when one is left unused, and
+     how to fix it.
+   - Writing programs that want to forget a value: keep the type's fields droppable so its drop
+     is derived, give a task or continuation a cancel branch (`cancel`), or consume the value
+     with a function written for it. Each one is described as the derivation it inserts or the
+     consumption it writes, not as a different kind of type.
    - What an abort does to the values in scope (decision 2: they are abandoned, not dropped), and
      where cleanup goes (`[then]` finalisers).
    - A comparison with Rust's affine types. This is the only place the word appears, as a
