@@ -30,6 +30,12 @@ running `bcc` from this worktree (section 6).
   `Backend2/Lint.lean:149` exempts from the type check. The site's own `UNPROVED:` comment
   (`Convert.lean:1380–1386`) says "no typing rule lets a term discard" it. Section 5.5 states the
   kernel statement that would license it.
+- **HARD STOP finding (F2).** Backend2's Lint admits a `.drop` at an opaque host type (`.opq`)
+  at any site (`Backend2/Lint.lean:70`, `t.drops`). The kernel abandons such a value only at an
+  abort (decision 2); no constant and no `HasDtor` rule drops it anywhere else. Whether any
+  program reaches such a drop is unchecked. Fixed in step 1 (section 7), not deferred to the gate
+  step: L-T's `Tok` is an `.opq` type, so until it is fixed Backend2 would admit dropping a
+  declared value.
 - **Two classes** (section 1.1): `Unrestricted A := A.Persistent`, `Linear A := ¬ A.Persistent`.
   Contraction (`Ctx.SplitP.dup`) and weakening (`Ctx.DeadP.drop`, `Ctx.SoloP.skip`) are kernel
   rules exactly at unrestricted types; that is stated as three inversion lemmas on the context
@@ -502,7 +508,7 @@ the LIR type is the checked type's image is `UNPROVED:` at `Layout.lean:697`).
 |---|---|---|
 | `Lint.lean:57–62` `copyable` | `persistent` (`SplitP.dup`, `copyable_ofV`), `.imm` (`copy`), `.fam (.imm)` (`arrCopy`) | K, at the type. **F4:** admits an `imm` copy at any site, which the kernel licenses only at the constant |
 | `Lint.lean:64–73` `droppable`: `persistent` | `DeadP.drop`, `SoloP.skip` | K |
-| `droppable`: `t.drops` | `VTy.Drop` (`ofV_drops`) | K at an abort (`effLet`'s `hW`, `effRaise`). Outside an abort, the forget constants license `imm`/`mut`/`unk`; **F2:** nothing licenses `.opq` there (no constant, no `HasDtor.opq`). Lint does not check that the drop is at an abort |
+| `droppable`: `t.drops` | `VTy.Drop` (`ofV_drops`) | K at an abort (`effLet`'s `hW`, `effRaise`). Outside an abort, the forget constants license `imm`/`mut`/`unk`; **HARD STOP F2:** nothing licenses `.opq` there (no constant, no `HasDtor.opq`). Lint does not check that the drop is at an abort |
 | `droppable`: `.fam (.imm _)` | `arrForget` | K |
 | `droppable`: `.fam (.mut _)` | cites `forget_fam_compatX`, which Core instantiates only at `imm` | **F7:** the licence is `HasDtor.arrayMut` (`Dtor.lean:436`), whose `dtorAt` is `idx` then `forget` (`Dtor.lean:168`), at a `dtor` node. Mis-cited and broader than the kernel's (any site). A borrow, so no owned value is lost |
 | `Lint.lean:149` + `Prog.stackKs`; **`Convert.lean:1329`** (`k'`), **`:1388–1389`** (`kv`) | drops a level's suspended computation, a closure | **HARD STOP F3.** No kernel rule. The `UNPROVED:` justification (`:1380–1386`) reads layout closure classes (`stackedOf`, `:3790`; `calleeCodes`), not types |
@@ -548,7 +554,7 @@ have not verified that none exists.
 | # | site | statement |
 |---|---|---|
 | **F3 (HARD STOP)** | `Backend2/Convert.lean:1329, 1388–1389`; `Lint.lean:149` `stackKs` | one of: (a) a kernel derived drop at the stack machine's closure type, the machine's `k` as codata `νX. … & F 1` whose `close` frees nothing because its state is in the level's frame, so the drop is a `dtor` node that `drop_derives` licenses (`theorem stackK_hasDtor : HasDtor (stackKTy …)`); (b) a named assertion in the trusted base (a `PinLaw`-style field, `StackLaw.k_drop`: "a level's `k` over a stack address alone holds no resource but that frame"); (c) the drop removed, the stack step consuming `k` |
-| F2 | `Lint.lean:70` `t.drops` at `.opq` outside an abort | Lint reads the site's rule: a `.drop` at an `.opq` type only at an abort site. Statement: every `.drop x` Convert emits at an `.opq` type is at an `abortK`/`effLet` site |
+| **F2 (HARD STOP)** | `Lint.lean:70` `t.drops` at `.opq` outside an abort | Lint reads the site's rule: a `.drop` at an `.opq` type only at an abort site. Statement: every `.drop x` Convert emits at an `.opq` type is at an `abortK`/`effLet` site |
 | F4 | `Lint.lean:57–62` `copyable` at `.imm` anywhere | `DerivedCopy` + `copy_derives` (1.4), under which a copy at any site is a derivation |
 | F5 | `Convert.lean:379`, `:2622`, `:853`, `:888`, `:2682`; `Clos/Convert.lean`, `Capture.lean:1013`, `Unwind.lean:295` | carry the typed term's rule (`DeadP`, `Ctx.Dead`, `Ctx.Drops`) to the site; a lemma `SplitMasks.neither_absorbed`: a live slot neither mask uses is persistent, or the node absorbs it (`topI`/`zeroE`) |
 | F6 | `Sugar.lean:4505`; `Effects.lean:393–396, 466–471` | call `isAbortive` (`Core/ClauseKinds.lean:374`) |
@@ -589,6 +595,8 @@ Each step lands with its kernel statements proved, or stops.
      `Env.pushOwn_own` (or the fallback).
    - Binder `linear` removed (3.3); messages (3.2); SPEC, decisions and docs (3.1); the goldens of
      section 6.
+   - F2 (5.5): Lint admits a `.drop` at an `.opq` type only at an abort site, and every such drop
+     Convert emits is at one. First, which programs reach an `.opq` drop outside an abort today.
 2. **Declared types, L-T** (item 3).
    - Kernel: `Opaque.tok` and its model, `CDerives.tokMint`/`tokBurn` with compatibility lemmas,
      `tok_linear`, the closure lemmas, `decl_linear`, `decl_imm_drop`, `decl_mut_drop`,
@@ -597,7 +605,7 @@ Each step lands with its kernel statements proved, or stops.
 3. **Gate step** (item 4).
    - Kernel: each pinned site cites the rule it emits (`drop_derives`, `copy_derives`, a constant,
      `topI`/`zeroE`, `effLet`'s `hW`). Every `burn` the elaborator emits is at a written `match`.
-     F2 and F4–F7 (5.5) fixed, or each given its `UNPROVED:` with the statement it would need.
+     F4–F7 (5.5) fixed, or each given its `UNPROVED:` with the statement it would need.
    - `corpus/reject/linear-*`: a declared type paired with every construct that inserts operations
      (implicit drop, `for` copies, field read, E5, `[then]` finaliser, an abort across it).
 4. **F3** (item 5). Kernel: 5.5's F3 statement, (a) or (b), or the drop removed. `Prog.stackKs`
