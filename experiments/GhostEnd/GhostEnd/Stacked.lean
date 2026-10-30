@@ -248,10 +248,12 @@ def vRLs (σ : LStack) : LSub → VTy → List Life → List SRec → Val → WP
       ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ vRLs σ δ A αs ls v'
   | δ, A, αs, ls, v => vC true A ls (extS δ σ αs) v
 termination_by structural _ A => A
-/-- **`cRL_σ`**, D16.1's computation relation. At `F_Σ R` the piece `OpenD_σ` at Σ's table. -/
+/-- **`cRL_σ`**, D16.1's computation relation. At `F_Σ R` the piece `OpenD_σ` at Σ's table; at a
+row holding `Div` (`CTy.divAt`) the kernel's `cC`, as at `ν`. -/
 def cRLs (σ : LStack) : LSub → CTy → List Life → List SRec → Expr → WProp
   | δ, .ret B, αs, ls, e => wpTS ls e fun ls'' v => vRLs σ δ B αs ls'' v
   | δ, .eff n i q A B fin C, αs, ls, e =>
+      if (CTy.eff n i q A B fin C).divAt then cC (.eff n i q A B fin C) ls (extS δ σ αs) e else
       bodyS δ σ (rowTab n i q A B fin C δ) (fun αs' ls v => effRetS σ δ C αs' ls v)
         (OpenS δ σ (rowTab n i q A B fin C δ) (fun αs' ls v => effRetS σ δ C αs' ls v)) αs ls e
   | δ, .arr A C, αs, ls, e => fun ρ =>
@@ -544,8 +546,14 @@ theorem cRLs_nil : ∀ (δ : LSub) (C : CTy), cRLs [] δ C [] = fun ls e => cC C
       rw [vRLs_nil δ B]; rfl
   | δ, .eff n i q A B fin C => by
       funext ls e ρ
-      exact propext (bodyS_nil_iff (Q' := effRet C δ)
-        (fun ls v ρ => by rw [effRetS_nil δ C]))
+      by_cases hd : (CTy.eff n i q A B fin C).divAt = true
+      · simp only [cRLs, hd, if_true]; rfl
+      · have hd' : (CTy.eff n i q A B fin C).divAt = false := by simpa using hd
+        simp only [cRLs, hd', Bool.false_eq_true, if_false]
+        show _ = effWp (CTy.eff n i q A B fin C).divAt _ _ ls e ρ
+        rw [hd']
+        exact propext (bodyS_nil_iff (Q' := effRet C δ)
+          (fun ls v ρ => by rw [effRetS_nil δ C]))
   | δ, .arr A C => by
       funext ls e
       show (fun ρ => ∀ v, (vRLs [] δ A [] ls v ─⋆ cRLs [] δ C [] ls (.app e (.val v))) ρ) = _
@@ -683,9 +691,14 @@ theorem thunkE_RLs {G : List Life → List SRec → WProp} {M : Expr} {n i : UIn
     vRLs σ δ (.thunk (.eff n i q A B fin C)) αs ls (Val.lam (Expr.psub 1 γ M)) ρ := by
   obtain ⟨ds, ρz, ρn, hc, hn, hz, hth⟩ := hG
   refine ⟨ds, ρz, ρn, hc, hn, hz, fun ls' he αs' hr ρv τ hv hcv => ?_⟩
-  refine wpG_step (fun μ => Step1N.head (Head.beta μ _ Val.unit) rfl) ls' _ τ ?_
-  rw [← substAll_cons_l]
-  exact hM αs' hr ls' τ (hth ls' he αs' hr ρv τ hv hcv)
+  have h := hM αs' hr ls' τ (hth ls' he αs' hr ρv τ hv hcv)
+  rw [substAll_cons_l] at h
+  show cRLs σ δ (.eff n i q A B fin C) αs' ls' (.app (.val (Val.lam (Expr.psub 1 γ M))) (.val .unit)) τ
+  by_cases hd : (CTy.eff n i q A B fin C).divAt = true
+  · simp only [cRLs, hd, if_true] at h ⊢
+    exact cC_step _ (fun μ => Step1N.head (Head.beta μ _ Val.unit) rfl) _ _ _ h
+  · simp only [cRLs, hd, Bool.false_eq_true, if_false] at h ⊢
+    exact wpG_step (fun μ => Step1N.head (Head.beta μ _ Val.unit) rfl) ls' _ τ h
 
 end
 

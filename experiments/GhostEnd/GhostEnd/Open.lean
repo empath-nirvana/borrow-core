@@ -59,7 +59,8 @@ theorem withbor_of_relendOfTyped (H : RelendOfTyped) {Δ : LifeCtx} {δ : LSub}
     (hbx : b.mentions x = false) (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
     {T B : VTy} (hT : ¬ VFree x T) (hB : ¬ VFree x B)
     {βP : Life} (hP : ∀ ls w σ, vC true T ls δ w σ → σ.InStratum βP)
-    {S : Row} (hS : Row.Resume S x) {M : Expr} (hM : closedAt 1 M = true)
+    {S : Row} (hS : Row.Resume S x) (hSd : Row.divB S = false) {M : Expr}
+    (hM : closedAt 1 M = true)
     (hD : CDerives (Δ.extend x b) [⟨.mut (.var x) T, true⟩] M
       (.comp (CTy.effOf S (.box (.var x) B))))
     (l : BoCa.Loc) (v : Val) (ls : List SRec) :
@@ -67,7 +68,7 @@ theorem withbor_of_relendOfTyped (H : RelendOfTyped) {Δ : LifeCtx} {δ : LSub}
       (cC (CTy.effOf S (.tensor (.ref T) B)) ls δ
         (.app (.app withbor (.val (.loc l))) (.val ⟨.lam (.lam M), .lam⟩))) := by
   intro ρ hρ
-  refine (cC_effOf S _ ls δ _ ρ).mpr ?_
+  refine (cC_effOf S _ ls δ _ ρ hSd).mpr ?_
   exact withbor_relend (Row.tab S δ) (Row.tab_plainCancel S δ) hP _ v
     (relend_lam2 (opTable_mono _) hM (H Δ δ x b T B S M hδ hx hbx hΔx hT hB hS hD l ls)) ρ hρ
 
