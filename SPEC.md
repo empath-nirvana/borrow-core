@@ -7945,13 +7945,21 @@ message reads the declarations (`Data.Table`); the refusal is the kernel's.
 
 **Open (#746).**
 - *Every token minted is burned by a `burn` step.* What is proved is leak freedom: every cell a
-  run allocates is freed (`adequacyC`, `adequacyD`, `leakFree_closed`), the token's among them. The
-  statement that the cell is freed by `burn`, and not by some other `free`, is not stated: on this
-  machine `burn` is `free` after a β step, and `Tok`'s relation is `Ref 1`'s, so neither the step
-  relation nor the model tells a token's cell from a `Ref 1` cell. It needs a model change: `mint`
-  and `burn` as steps of their own over a cell marked as a token, which `free` does not release
-  (stuck), so that safety and the empty final memory give, on every run from `∅` to a value,
-  for each `mint` step allocating `ℓ`, a later `burn` step releasing `ℓ`.
+  run allocates is freed (`adequacyC`, `adequacyD`, `leakFree_closed`), the token's among them.
+  The statement is `decl_consumed` (`Core/Decl.lean`), a `Prop`: on every run `c 0, …, c n` of a
+  closed derivation of `F 1` from `∅` to a value (`IsRun`), each `mint` at `i` allocating `ℓ`
+  (`MintsAt`: `mint ()`'s β, then `alloc` of `ℓ`) has a `burn` of `ℓ` at some `j ≥ i + 2`
+  (`BurnsAt`: `burn ℓ`'s β, then `free` of `ℓ`). The fact its proof needs is that the cell a
+  `mint` step allocates is released by no step but a `burn` step's `free`. Neither the step
+  relation nor the model carries it: `mint` and `burn` are λs over `alloc` and `free`, a step reads
+  only its redex, and `Tok`'s relation is `Ref 1`'s (`vCE_tok_eq_ref`). On the current machine the
+  statement does not hold: `mintE`'s code is a derivation at `1 ⊸ Ref 1` by `thunkV`, `[λ]` and
+  `⊸E` over `alloc` (`mintE_derives_ref`), and on the run of `free (mintE ())` the `mint` step's
+  cell is released by `free` (`decl_consumed_mintE_at_ref`). The model change it needs: `mint` and
+  `burn` as primitives with steps of their own (`Head.mint`, `Head.burn`) over a cell marked as a
+  token (a heap cell kind beside the value cell), `alloc` and `free` stuck at a token cell, and
+  `Tok`'s relation its own `own` cell kind, which `free`'s weakest precondition does not accept;
+  then safety (adequacy's no stuck state) and the empty final memory give `decl_consumed`.
 - *I/O in a finaliser.* `[then]`'s `D` is at `F_Σ 1` beside `N` in one context: a capability the
   effects pass threads into `D` would be consumed there and not handed back. Capabilities as
   borrows held across `[then]` (§29's relaxed lend, `PinLaw`), or a finaliser that hands its
