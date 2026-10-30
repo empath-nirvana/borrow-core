@@ -1,0 +1,38 @@
+-- Leak (main's W-imm): a child spawned with `spawn_in` inside the relaxed lend, its continuation boxed at
+-- the meet of the lifetimes in scope (the lend's own `'r`), so that it could be stored where `'r` is.
+include async
+
+effect Sub { ctl pause() }
+type SubT = U (nu X. F (i32 + (U X * i32)) & F 1)
+handler sub: Sub, i32 -> SubT = {
+  return(v) = (thunkv nu_in < return (inl v), return () >);
+  pause(k) = (thunkv nu_in <
+    u <- return (); t <- (force k).1 u; return (inr (t, 1)),
+    (force k).2 >)
+}
+fn sresume(t: SubT) -> i32 + (SubT * i32) = (nu_out (force t)).1
+fn scancel(t: SubT) -> 1 = (nu_out (force t)).2
+fn sfinish(t: SubT) -> i32 = match sresume(t) { inl v -> v | inr (t2, c) -> scancel(t2); 0 - c }
+
+fn mk<'x>(m: mut 'x i32) -> SubT =
+  with sub { modify m { x -> x + 1 }; pause(); modify m { x -> (x * 3, x * 3) } }
+
+fn done(v: i32) -> Task[i32] = with spawn { v }
+fn step(t: Task[i32]) -> Task[i32] = match resume(t) { inl v -> done(v) | inr t2 -> t2 }
+fn fin(t: Task[i32]) -> i32 = match resume(t) { inl v -> v | inr t2 -> cancel(t2); 0 - 1 }
+
+fn child<'r>(k: imm 'r i32) -> i32 with Async = await(); *k
+
+fn spawn_c<'r>(k: imm 'r i32) -> TaskIn[i32]<'r /\ top> = with spawn_in { child(k) }
+
+fn worker() -> i32 with Async =
+  let c = alloc(10);
+  let v = borrow imm c { 'r, k ->
+    let t = spawn_c(k);
+    await();
+    match resume_in(t) { inl v -> v | inr t2 -> cancel_in(t2); 0 }
+  };
+  let w = free(c);
+  v + w
+
+main -> i32 = let t = with spawn { worker() }; fin(step(t))
