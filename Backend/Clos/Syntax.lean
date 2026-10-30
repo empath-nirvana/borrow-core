@@ -64,9 +64,6 @@ inductive Op where
   | scopedAlloc (k : Nat)
   /-- `free ℓ` of the cell `scopedAlloc k` allocates: `free`. -/
   | scopedFree (k : Nat)
-  /-- `alloc v` of a capability's cell (SPEC §11, §34): `alloc`; the flat IR places the cell at
-  `addr`, a word of the program's data, and frees nothing. -/
-  | staticCell (addr : Nat)
   /-- The address `addr` of a byte of the program's data (a literal's bytes, SPEC §17), an `i32`
   word: a backend places the data (`Flat.Exp.data`). -/
   | dataAddr (addr : Nat)
@@ -210,9 +207,9 @@ structure Prog where
   main : Tm
   /-- The owned folds' steps, which the flat IR may compile by pointer reversal. -/
   folds : List FoldCode := []
-  /-- For a `main` that returns a loop (SPEC §11): the code run on the value the loop finishes
-  with, once the stage has driven it. -/
-  fin : Option Nat := none
+  /-- `main` returns a loop (SPEC §11), which the stage drives: its value is the one the loop
+  finishes with. -/
+  drives : Bool := false
   /-- The literals' bytes, in read-only data from address `dataBase`. -/
   data : Array UInt8 := #[]
   /-- The code of a literal's tabulator, `λi. litByte (a, n, i)` over its captured `(a, n)`,

@@ -43,8 +43,7 @@ variable's type is walked once):
   equation over its shape and width (a byte at `u8`, 4 at `i32` and `f32`, else its words'), and
   the bytes of each type (`tyBytes`, which an allocation's width class is read through) are at
   least those of every variable's, answer's and `main`'s node of that type (`!` erased); each
-  static cell's bytes (`staticBytes`) are its width class's most (`staticsOk`), and every value a
-  static cell is made with fits it.
+  static cell's bytes (`staticBytes`) are its width class's most (`staticsOk`).
 
 `checkFlow` checks the closure flow (`Backend2/Flow.lean`) the same way: its sets are a solution of
 its inclusion constraints, and every direct call it licenses (`known`) is of a variable whose set is
@@ -66,8 +65,6 @@ structure CSt where
   frames : Std.HashMap Nat Nat := {}
   /-- Each site's `κ` region node, from its first `kappaPut` or `kappaTake`. -/
   regions : Std.HashMap Nat Nat := {}
-  /-- Each static cell made (`Op.staticCell`): its index, its contents' node, and where. -/
-  statics : Array (Nat × Nat × String) := #[]
   /-- The variables of the program, each with the function it was met in. -/
   vars : Std.HashMap Var String := {}
 
@@ -292,10 +289,6 @@ def walk (p : Prog) (w : String) : Nat → Tm → Nat → CM Unit
       match op with
       | .alloc _ | .allocLent _ _ =>
         eq "a new cell's contents" (← kd dst 0) (← a 0)
-      | .staticCell k => do
-        let c ← kd dst 0
-        eq "a new cell's contents" c (← a 0)
-        modify fun s => { s with statics := s.statics.push (k, c, w) }
       | .free => eq "a freed cell's contents" dst (← kd (← a 0) 0)
       | .swap => do
         eq "a swapped-in value" (← kd (← kd dst 0) 0) (← a 1)
@@ -379,7 +372,7 @@ def walk (p : Prog) (w : String) : Nat → Tm → Nat → CM Unit
     | .copy x x' b => do
       eq s!"a copy of x{x}" (← nv x) (← nv x')
       walk p w f b dst
-    | .drop x b => do
+    | .drop x b | .abandon _ x b => do
       let _ ← nv x
       walk p w f b dst
 
@@ -618,19 +611,14 @@ def cellsOk (L : Layouts) (roots : List (String × LTy × Nat)) : CM Unit := do
       throw s!"{w}: a value at node {r} takes {b} bytes in a cell, more than its type's most ({tb}, `tyBytes`)"
 
 /-- Each static cell's bytes (`staticBytes`) are the most of its width class's types' (`tyBytes`,
-`!` erased), and every value a static cell is made with fits its word or its bytes. -/
-def staticsOk (p : Prog) (L : Layouts) (sites : Array (Nat × Nat × String)) : CM Unit := do
+`!` erased). -/
+def staticsOk (p : Prog) (L : Layouts) : CM Unit := do
   unless L.staticBytes.size == p.statics.size do
     throw s!"the layouts give {L.staticBytes.size} static cells, the program {p.statics.size}"
   for (cls, k) in p.statics.toList.zipIdx do
     let be := cls.foldl (fun b t => max b (L.tyBytes.getD t.unbang 0)) 0
     unless L.staticBytes[k]! == be do
       throw s!"static cell {k} reserves {L.staticBytes[k]!} bytes, its width class's types take {be}"
-  for (k, c, w) in sites do
-    let some sb := L.staticBytes[k]? | throw s!"{w}: no static cell {k}"
-    let b := L.bytes[← rp L c]!
-    unless b ≤ max 8 sb do
-      throw s!"{w}: static cell {k} reserves {max 8 sb} bytes, its contents at node {← rp L c} take {b}"
 
 end
 
@@ -692,7 +680,7 @@ def check (p : Prog) (L : Layouts) : Except String Unit := do
       unless (L.union.getD R #[]).contains c do
         throw s!"code c{c}'s class is {R}, whose codes do not hold it"
     layoutOk L
-    staticsOk p L (← get).statics
+    staticsOk p L
     cellsOk L roots
   let _ ← act.run {}
 
@@ -789,7 +777,7 @@ def go (w : String) : Nat → Tm → Option Var → Except String Unit
     | .copy x x' b => do
       F.sub w x x'
       go w f b dst
-    | .drop _ b => go w f b dst
+    | .drop _ b | .abandon _ _ b => go w f b dst
     | .unit | .lit _ | .pair .. | .inj .. | .absurd _ => pure ()
 
 end FCtx
@@ -880,7 +868,7 @@ def binds : Nat → Tm → List (Var × Tm)
   | 0, _ => []
   | f + 1, t => match t with
     | .letv x e b => (x, e) :: (binds f e ++ binds f b)
-    | .letpair _ _ _ b | .copy _ _ b | .drop _ b => binds f b
+    | .letpair _ _ _ b | .copy _ _ b | .drop _ b | .abandon _ _ b => binds f b
     | .case _ _ b₁ _ b₂ => binds f b₁ ++ binds f b₂
     | _ => []
 
@@ -998,15 +986,6 @@ def perturbLayouts (p : Prog) (L : Layouts) : List (String × Option Layouts) :=
     let b := L.bytes[L.node x]!
     if b == 0 then none
     pure { L with tyBytes := L.tyBytes.insert t.unbang (b - 1) }
-  -- A static cell whose class takes bytes, one byte narrower.
-  let shrinkStatic := ((List.range L.staticBytes.size).find? (L.staticBytes[·]! > 0)).map fun k =>
-    { L with staticBytes := L.staticBytes.set! k (L.staticBytes[k]! - 1) }
-  -- A static cell made with a value wider than it (its bytes past the cell's word and class).
-  let staticSites := match (walkProg p L).run {} with
-    | .ok (_, st) => st.statics
-    | .error _ => #[]
-  let staticWide := staticSites[0]?.map fun (k, c, _) =>
-    { L with bytes := L.bytes.set! (L.r c) (max 8 (L.staticBytes.getD k 0) + 8) }
   -- A field on no cycle boxed; a class on no cycle kept on the heap (the literal tables' first).
   let reps := (List.range L.rep.size).filter fun v => L.rep[v]! == v
   let g' := fieldGraph L true
@@ -1074,8 +1053,6 @@ def perturbLayouts (p : Prog) (L : Layouts) : List (String × Option Layouts) :=
    ("shrink a value's bytes in a cell", shrink),
    ("give an integer the other slot's width", slot),
    ("narrow a type's bytes below a value of it", narrow),
-   ("shrink a static cell", shrinkStatic),
-   ("make a static cell with a value wider than it", staticWide),
    ("box a field on no cycle", boxFree),
    ("keep a class on no cycle on the heap", heapFree),
    ("move a κ region's node", region),

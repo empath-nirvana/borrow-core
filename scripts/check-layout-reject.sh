@@ -13,7 +13,7 @@ cd "$(dirname "$0")/.."
 bcc=.lake/build/bin/bcc
 # Programs chosen so that every perturbation has a target in one of them: closure classes of
 # several codes and widths, recursive types with boxed fields, a class kept on the heap, cells,
-# κ regions and frames, a static cell whose width class holds a `!` type, a host operation's pair
+# κ regions and frames, a capability's cell whose width class holds a `!` type, a host operation's pair
 # argument and the literal tables' class (neither on a cycle), a pointer read through a shared
 # borrow at a node of the owner's former.
 progs=(
@@ -43,8 +43,6 @@ families=(
   "shrink a value's bytes in a cell|bytes in a cell, its shape and width give"
   "give an integer the other slot's width|bytes in a cell, its shape and width give"
   "narrow a type's bytes below a value of it|more than its type's most"
-  "shrink a static cell|reserves [0-9]+ bytes, its width class's types take"
-  "make a static cell with a value wider than it|static cell [0-9]+ reserves [0-9]+ bytes, its contents at node [0-9]+ take"
   "box a field on no cycle|boxed field [0-9]+\.[0-9]+ is on no cycle of the fields"
   "keep a class on no cycle on the heap|heap class [0-9]+ is on no cycle of the fields and environments"
   "move a pointer read's contents|a pointer read through a shared borrow: its contents"

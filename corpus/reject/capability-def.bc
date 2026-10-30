@@ -1,0 +1,6 @@
+-- A capability's name declared other than as an extern (SPEC §11): `run_io` binds `stdout`
+-- around `main`'s body, which would capture this `def`.
+-- expect: 4:5: `stdout` is a capability: it is declared only as an extern (SPEC §11)
+def stdout : i32 = i32[3]
+
+main : F i32 = return stdout

@@ -220,8 +220,7 @@ def Prog.mergeCodesT (p : Prog) : Prog × Option Types := Id.run do
     let f (c : Nat) : Nat := to.getD c c
     p := { p with
       codes := p.codes.map fun (c : Code) => { c with body := c.body.renameCodes f }
-      main := p.main.renameCodes f
-      fin := p.fin.map f }
+      main := p.main.renameCodes f }
   return (p, none)
 
 def Prog.mergeCodes (p : Prog) : Prog := p.mergeCodesT.1

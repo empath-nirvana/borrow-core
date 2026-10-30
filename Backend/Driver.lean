@@ -48,6 +48,9 @@ structure CheckedProg where
   prog : Frontend.Program
   main : Frontend.Check.Checked
   io : Option Frontend.Check.IOMain
+  /-- The keys of the `def`s the elaboration copied (`Elaborated.keys`), which `run_io`'s check
+  carries (`Frontend.Check.ioRunOf`). -/
+  keys : List Frontend.DefKey
 
 /-- Parse and check `src`; a `main` with externs must be a standard I/O program (SPEC §11). -/
 def checkedOf (file src : String) : Except String CheckedProg := do
@@ -59,21 +62,44 @@ def checkedOf (file src : String) : Except String CheckedProg := do
     | .error e => throw s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"
   let some c := r.main | throw s!"{file}: no `main`"
   match Frontend.Check.ioMainOf r.el.prog c with
-  | .ok io => pure ⟨r.el.prog, c, io⟩
+  | .ok io => pure ⟨r.el.prog, c, io, r.el.keys⟩
   | .error e => throw s!"{file}: {e}"
 
-/-- The host implementation of each extern, in declaration order. -/
-def extImpls (m : Frontend.Check.IOMain) : Except String (List Clos.ExtImpl) :=
-  m.externs.mapM fun x => match x.role with
-    | .cap fd => pure (.cap fd)
-    | .clockCap => pure .clockCell
+/-- The host implementation of each extern of `run_io`, in declaration order: an operation, or
+the harness's make or take of a stream's capability cell. A capability is not an extern of
+`run_io`: the harness makes it. -/
+def extImpls (xs : List Frontend.Check.ExternSpec) : Except String (List Clos.ExtImpl) :=
+  xs.mapM fun x => match x.role with
     | .readByte => pure (.io .readByte)
     | .writeByte => pure (.io .writeByte)
     | .writeAll => pure (.io .writeAll)
     | .readInto => pure (.io .readInto)
     | .clockNow => pure (.io .clockNow)
     | .clockSleep => pure (.io .clockSleep)
-    | .harness => throw s!"extern `{x.name}` is the model's harness and is not compiled"
+    | .mk s => pure (.mk (capStream s))
+    | .take s => pure (.take (capStream s))
+    | .cap _ | .clockCap =>
+      throw s!"extern `{x.name}` is a capability, which run_io's harness makes"
+where
+  capStream : Frontend.Check.IOStream → Clos.CapStream
+    | .input => .input
+    | .output => .output
+    | .clock => .clock
+    | .args => .args
+
+/-- **The program a backend compiles, for a program with capabilities** (SPEC §11): `run_io`
+checked in its compiled form (`Frontend.Check.IORun`, the term `IORun.every_run` and
+`externs_every_run` are about), which returns `main`'s result and weakens the outputs, built with
+no arguments in the term (the arguments are the stream `mk_args`'s host gives `args`), and its
+externs in declaration order. A backend compiles `IORun.expr r []`: this term applied to its
+argument `IORun.arg []`, each extern its host. `none` for a program without capabilities,
+compiled as `main`. -/
+def CheckedProg.runIO (k : CheckedProg) :
+    Except String (Option (Frontend.Check.IORun × List Frontend.Check.ExternSpec)) := do
+  let some m := k.io | return none
+  let w ← Frontend.Check.ioWrapper k.prog m [] (outs := false)
+  let r ← Frontend.Check.ioRunOf w k.keys
+  return some (r, ← Frontend.Check.wrapperExterns w)
 
 /-- The program reads standard input. -/
 def CheckedProg.readsInput (k : CheckedProg) : Bool :=
@@ -99,11 +125,11 @@ def lowerEffects (p : Clos.Prog) : Except String (Clos.Prog × Option Clos.Types
 
 /-- The closure IR of a checked program, and its layout types when collapsing found them. -/
 def CheckedProg.closTypes (k : CheckedProg) : Except String (Clos.Prog × Option Clos.Types) := do
-  let p ← match k.io with
-    | none => Clos.convert k.main.e
-    | some m => Clos.convertMain (← extImpls m) m.loopB.isSome k.main.e
+  let (p, c) ← match ← k.runIO with
+    | none => pure (← Clos.convert k.main.e, k.main)
+    | some (r, xs) => pure (← Clos.convertMain (← extImpls xs) r.loops r.c.e (Frontend.Check.IORun.arg []).1, r.c)
   let (p, T) ← lowerEffects p
-  pure ({ p with exits := k.main.exitsOnDivError }, T)
+  pure ({ p with exits := c.exitsOnDivError }, T)
 
 /-- The closure IR of a checked program. -/
 def CheckedProg.clos (k : CheckedProg) : Except String Clos.Prog := return (← k.closTypes).1
@@ -264,7 +290,10 @@ def compileWatTimed (file src : String) : IO (Except String String) := do
     let clos ← ExceptT.mk <| stage "convert" (fun (q : Clos.Prog) =>
         s!"{q.codes.size} codes, {q.size} nodes") fun _ => match io with
       | none => Clos.convert c.e
-      | some m => do Clos.convertMain (← extImpls m) m.loopB.isSome c.e
+      | some _ => do
+        match ← CheckedProg.runIO ⟨r.el.prog, c, io, r.el.keys⟩ with
+        | some (w, xs) => Clos.convertMain (← extImpls xs) w.loops w.c.e (Frontend.Check.IORun.arg []).1
+        | none => Clos.convert c.e
     let clos ← ExceptT.mk <| stage "effects" (fun (q : Clos.Prog) =>
         s!"{q.codes.size} codes, {q.size} nodes") fun _ => do (← clos.capture).unwind
     let _ ← ExceptT.mk <| analysis "  flow (converted)" flowSize fun _ =>
@@ -297,7 +326,7 @@ def ioRunOf (file : String) (k : CheckedProg) (m : Frontend.Check.IOMain)
   let w ← match Frontend.Check.ioWrapper k.prog m args with
     | .ok w => pure w
     | .error e => throw s!"{file}: {e}"
-  match Frontend.Check.ioRunOf w with
+  match Frontend.Check.ioRunOf w k.keys with
   | .ok r => pure r
   | .error e => throw s!"{file}: {e}"
 
@@ -312,8 +341,8 @@ def interpStage (stage file : String) (k : Except String CheckedProg) (input : L
     | none => interpSource runFuel k.main.e
     | some m =>
       let r ← ioRunOf file k m args
-      if r.loops then interpIOLoop runFuel (r.expr input) k.main.exitsOnDivError
-      else interpIO runFuel (r.expr input) k.main.exitsOnDivError
+      if r.loops then interpIOLoop runFuel (r.expr input) r.c.exitsOnDivError
+      else interpIO runFuel (r.expr input) r.c.exitsOnDivError
   | "clos" => Clos.interp runFuel (← (← k).clos) input args
   | "flat" => Flat.interp runFuel (← (← k).flat) input args
   | "flat-counts" => Flat.interp runFuel (← (← k).flat true) input args
@@ -345,8 +374,8 @@ def interpChecked (o : Falsify.Opts) (file : String) (k : CheckedProg) (input : 
   | none => Falsify.interpSource o runFuel k.main.e
   | some m =>
     let r ← ioRunOf file k m args
-    if r.loops then Falsify.interpIOLoop o runFuel (r.expr input) k.main.exitsOnDivError
-    else Falsify.interpIO o runFuel (r.expr input) k.main.exitsOnDivError
+    if r.loops then Falsify.interpIOLoop o runFuel (r.expr input) r.c.exitsOnDivError
+    else Falsify.interpIO o runFuel (r.expr input) r.c.exitsOnDivError
 
 /-- A closed term on the falsifier's machine under `o`. -/
 def interpCheckedExpr (o : Falsify.Opts) (e : BoCa.Expr) : Except String (Output × String) :=
@@ -414,6 +443,19 @@ def trusted (file src : String) : Except String String := do
     | some c => xs.zipIdx.filterMap fun (x, i) =>
         if BoCa.Fig16.LogRel.Core.occ (xs.length - 1 - i) c.e then some x else none
     | none => xs
+  -- A program with capabilities is compiled as `run_io` (SPEC §11): the harness's makes and takes
+  -- it calls are in its trusted base too.
+  let harness ← match r.main with
+    | some c => match Frontend.Check.ioMainOf r.el.prog c with
+      | .ok (some m) => do
+        let w ← Frontend.Check.ioWrapper r.el.prog m []
+        let ws ← Frontend.Check.wrapperExterns w
+        pure (ws.filterMap fun x => match x.role with
+          | .mk _ | .take _ => some (x.name, x.ty)
+          | _ => none)
+      | _ => pure []
+    | none => pure []
+  let xs := xs ++ harness
   let lines := Frontend.Check.trustedReport xs
   let unproved := xs.filter fun (n, _) => match Frontend.Check.findExtern n with
     | some x => x.host.isSome

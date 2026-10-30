@@ -352,6 +352,14 @@ def LTy.persistent : LTy → Bool
   | .mu a => a.persistent
   | .opq _ | .ref _ | .imm _ | .mut _ | .fam _ | .thunk _ => false
 
+/-- The type holds an opaque value (`.opq`) it owns: one no rule but a `[let]`'s abort (`effLet`'s
+`hW`, `Ctx.Drops`), `⊤` (`topI`) or `0` (`zeroE`) discards. -/
+def LTy.ownsOpq : LTy → Bool
+  | .opq _ => true
+  | .pair a b | .sum a b => a.ownsOpq || b.ownsOpq
+  | .mu a => a.ownsOpq
+  | _ => false
+
 /-- `VTy.Drop` on the LIR type: values that hold no owned cell. -/
 def LTy.drops : LTy → Bool
   | .unit | .zero | .int _ | .unk | .opq _ | .bang _ | .imm _ | .mut _ => true

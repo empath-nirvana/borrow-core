@@ -1,7 +1,6 @@
--- check: old-backend-refuses
 -- A capability's cell swapped to hold a `!` closure of three captured values and back: the cell
--- is as wide as its width class, whose `!` type is read through (`Layouts.staticBytes`), so the
--- swap does not write over `stdout`'s cell. The old backend refuses the program.
+-- is as wide as its width class, whose `!` type is read through, so the swap does not write over
+-- `stdout`'s cell.
 --
 -- Answer: `O` on standard output, then i64[110].
 main -> i64 =

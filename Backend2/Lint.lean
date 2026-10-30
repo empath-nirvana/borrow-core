@@ -17,7 +17,12 @@ verifies and never fills in:
 - every `copy` is of a variable its type lets the program duplicate (`copyable`): a persistent
   one, `!` read off the LIR type (`Types.ofV` keeps it), or an `imm` borrow;
 - every `drop` is of a variable its type lets the program discard (`droppable`), but for the
-  callees' suspended computations a stack machine drops (`Prog.stackKs`).
+  callees' suspended computations a stack machine drops (`Prog.stackKs`); a type owning an opaque
+  value is never `droppable`;
+- every `abandon` meets the premise of the rule the node carries (`abandonable`): at a `[let]`'s
+  abort, `effLet`'s `hW` (the variable's type holds no owned cell, `VTy.Drop`); at `⊤`, `topI`'s,
+  which has none. It is the only node at which an opaque value is discarded, and `Convert` emits
+  it only at those rules' sites.
 -/
 
 namespace Backend2.Lint
@@ -63,14 +68,23 @@ def copyable (t : LTy) : Bool :=
     | .imm _ | .fam (.imm _) => true
     | _ => false
 
-/-- A type whose values `drop` may discard: a persistent one (`Ctx.DeadP.drop`, `Ctx.SoloP.skip`),
-one that holds no owned cell (`LTy.drops`: `[let]`'s `Ctx.Drops` at an abort, and the `forget`
-constants at `Imm`, `Mut`, `Unk`, `!A`), or a family of borrows (`array_forget`, and the
-destructor at `[Mut A]`, `dtorAt`: `forget_fam_compatX`). -/
+/-- A type whose values `drop` may discard anywhere: a persistent one (`Ctx.DeadP.drop`,
+`Ctx.SoloP.skip`), one that holds no owned cell and no opaque value (`LTy.drops` without
+`LTy.ownsOpq`: the `forget` constants at `Imm`, `Mut`, `Unk`, `!A`), or a family of borrows
+(`array_forget`, and the destructor at `[Mut A]`, `dtorAt`: `forget_fam_compatX`). -/
 def droppable (t : LTy) : Bool :=
-  t.persistent || t.drops || match t with
+  t.persistent || (t.drops && !t.ownsOpq) || match t with
     | .fam (.imm _) | .fam (.mut _) => true
     | _ => false
+
+/-- A type whose values an `abandon` node at the rule `r` may discard: the premise of `r`, read
+on the LIR type. At a `[let]`'s abort, `CDerives.effLet`'s `hW : S.Weak → Γ₂.Drops`: each slot
+of `N`'s context is at a `VTy.Drop` type, which `LTy.drops` reads (`ofV_drops`), an opaque value
+among them. At `⊤`, `CDerives.topI`, which has no premise: `⊤` absorbs its whole context at every
+type. No other rule discards an opaque value: no constant forgets it and it has no destructor. -/
+def abandonable : Abandon → LTy → Bool
+  | .letAbort, t => t.drops
+  | .top, _ => true
 
 /-- A slot a split duplicates (`Ctx.SplitP.dup`: of persistent type) is `copyable` at its LIR
 type. -/
@@ -83,10 +97,11 @@ theorem droppable_ofV_persistent {ms : MachSet} {A : VTy} {t : LTy} (hA : A.pers
     (h : ofV ms A = .ok t) : droppable t = true := by
   simp [droppable, ofV_persistent hA h]
 
-/-- A slot an abort drops (`Ctx.Drops`: of a `VTy.Drop` type) is `droppable` at its LIR type. -/
-theorem droppable_ofV_drop {ms : MachSet} {A : VTy} {t : LTy} (hA : A.OwnFree)
-    (h : ofV ms A = .ok t) : droppable t = true := by
-  simp [droppable, ofV_drops hA h]
+/-- A slot an abort abandons (`Ctx.Drops`: of a `VTy.OwnFree` type) is `abandonable` at its LIR
+type. -/
+theorem abandonable_ofV_drop {ms : MachSet} {A : VTy} {t : LTy} (hA : A.OwnFree)
+    (h : ofV ms A = .ok t) : abandonable .letAbort t = true := by
+  simp [abandonable, ofV_drops hA h]
 
 /-- The variables left after `t`, its value consumed by its context. -/
 def lintTm (w : String) (p : Prog) : Nat → Std.HashSet Var → Tm → LM Left
@@ -147,7 +162,14 @@ def lintTm (w : String) (p : Prog) : Nat → Std.HashSet Var → Tm → LM Left
       match p.ty[x]? with
       | some t =>
         if !droppable t && !p.stackKs.contains x then
-          bad w s!"x{x} dropped at {t}, which may own a cell"
+          bad w s!"x{x} dropped at {t}, which may own a cell or an opq value"
+      | none => bad w s!"x{x} has no type"
+      lintTm w p f (← use w env x) b
+    | .abandon r x b => do
+      match p.ty[x]? with
+      | some t =>
+        if !abandonable r t then
+          bad w s!"x{x} abandoned at {t} ({r.name}), where the rule's premise does not hold"
       | none => bad w s!"x{x} has no type"
       lintTm w p f (← use w env x) b
 

@@ -401,10 +401,6 @@ def evalOp (ty : Var → IM LTy) (op : Op) (args : List Var) (resTy : LTy) : IM 
   | .cntSucc, [.int i] => pure (.int ((i + 1) &&& 0xFFFFFFFF))
   | .cntPred, [.int i] => pure (.int ((i - 1) &&& 0xFFFFFFFF))
   | .clampLen, [.int c] => pure (.int (if c.toUInt32 < 0x80000000 then c &&& 0xFFFFFFFF else 0))
-  | .staticCell k, [v] => do
-    let a := staticAt + k
-    modify fun s => { s with mem := s.mem.insert a (some v) }
-    pure (.loc a)
   | .stackSwap _, [.int h] => do
     let old := (← get).cur
     if h != 0 && !(← get).taskStacks.contains h.toNat then bad s!"a swap to {h}, which is not a stack"
@@ -539,7 +535,7 @@ def eval (p : Prog) : Nat → LTy → Tm → IM LV
       if t.ownsN true 64 then bad s!"a copy of x{x} at {t}, which owns a cell or holds a mut borrow"
       bindV x' (← peekV x)
       eval p f rt b
-    | .drop x b => do
+    | .drop x b | .abandon _ x b => do
       let t ← tyIn p x
       if t.ownsN false 64 then bad s!"a drop of x{x} at {t}, which owns a cell"
       let _ ← takeV x

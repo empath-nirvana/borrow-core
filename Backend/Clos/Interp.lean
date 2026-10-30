@@ -198,7 +198,7 @@ def emitBytes (fd : UInt32) (bs : List UInt8) : IM Unit :=
   | _ => throw "closure IR: a write to a stream that is not an output"
 
 def applyOp : Op → List CV → IM CV
-  | .alloc, [v] | .scopedAlloc _, [v] | .staticCell _, [v] => allocObj (.cell v)
+  | .alloc, [v] | .scopedAlloc _, [v] => allocObj (.cell v)
   | .free, [l] | .scopedFree _, [l] => do let (a, c) ← cellOf l; freeCell a; pure c
   | .load, [l] => do let (_, c) ← cellOf l; deepCopy objFuel c
   | .store, [l, v] => do
@@ -540,11 +540,7 @@ def interp (fuel : Nat) (p : Prog) (input : List UInt8) (args : List UInt8 := []
   let act : IM (String × UInt32) := do
     let (v, rest) ← eval p.codes fuel [] p.main
     if !rest.isEmpty then throw "closure IR: main leaves variables unconsumed"
-    let v ← match p.fin with
-      | none => pure v
-      | some c => do
-        let r ← drive p.codes fuel v
-        callClos p.codes fuel (← allocObj (.clos c [])) r
+    let v ← if p.drives then drive p.codes fuel v else pure v
     let pv ← observe objFuel v
     deepDrop objFuel v
     pure (reportExit p.exits pv (← get).heap.size)

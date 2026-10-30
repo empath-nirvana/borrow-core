@@ -110,10 +110,11 @@ def convert (e : BoCa.Expr) : Except String Prog := do
   let sel := polySelect e fun s m => convertWith s m e
   return (← convertWith (sel.contains ·) false e).1
 
-/-- **Closure-convert `main` over its externs** (`convertMainWith`), each polymorphic let whose
-uses are at different rows as its β-reduct.  `[spec §11]` -/
-def convertMain (exts : List ExtImpl) (loops : Bool) (e : BoCa.Expr) : Except String Prog := do
-  let sel := polySelect e fun s m => convertMainWith s m exts loops e
-  return (← convertMainWith (sel.contains ·) false exts loops e).1
+/-- **Closure-convert `run_io` applied to `arg` over its externs** (`convertMainWith`), each
+polymorphic let whose uses are at different rows as its β-reduct.  `[spec §11]` -/
+def convertMain (exts : List ExtImpl) (loops : Bool) (e arg : BoCa.Expr) :
+    Except String Prog := do
+  let sel := polySelect e fun s m => convertMainWith s m exts loops e arg
+  return (← convertMainWith (sel.contains ·) false exts loops e arg).1
 
 end Backend.Clos

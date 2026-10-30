@@ -1,4 +1,6 @@
 corpus/axes/scope-data-effects.bc: checker grows 1→3 (i32 holds i32, 1, mu X. 1 + ref i32 * ref X; mu X. 1 + ref i32 * ref X holds mu X. 1 + ref i32 * ref X, 1, i32); layout types grow none; disagree
+corpus/capability-bang-width.bc: checker grows none (); layout types grow 1→4; disagree
+corpus/capability-swap-width.bc: checker grows none (); layout types grow 1→2; disagree
 corpus/data-fold-list.bc: checker grows 1→3 (i32 holds i32, 1, mu X. 1 + ref i32 * ref X; mu X. 1 + ref i32 * ref X holds mu X. 1 + ref i32 * ref X, 1, i32); layout types grow none; disagree
 corpus/data-fold-tree.bc: checker grows 1→4 (mu X. 1 + ref X * ref i32 * ref X holds mu X. 1 + ref X * ref i32 * ref X, 1, i32; i32 holds i32, 1, mu X. 1 + ref X * ref i32 * ref X); layout types grow none; disagree
 corpus/data-fold-whole.bc: checker grows 1→3 (i32 holds i32, 1, mu X. 1 + ref i32 * ref X; mu X. 1 + ref i32 * ref X holds mu X. 1 + ref i32 * ref X, 1, i32); layout types grow none; disagree

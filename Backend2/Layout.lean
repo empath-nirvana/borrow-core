@@ -323,7 +323,7 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
   | .prim op as => do
     let a (i : Nat) : GM Nat := do nv (as.getD i 0)
     match op with
-    | .alloc _ | .allocLent _ _ | .staticCell _ => join (← kid dst 0) (← a 0)
+    | .alloc _ | .allocLent _ _ => join (← kid dst 0) (← a 0)
     | .free => join dst (← kid (← a 0) 0)
     | .swap => do
       join (← kid (← kid dst 0) 0) (← a 1)
@@ -391,7 +391,7 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
     walk p f cc b₂ dst
   | .absurd _ => pure cc
   | .copy x x' b => do join (← nv x) (← nv x'); walk p f cc b dst
-  | .drop _ b => walk p f cc b dst
+  | .drop _ b | .abandon _ _ b => walk p f cc b dst
 
 -- UNPROVED: that the closure classes hold every code whose closure can reach each place. It
 -- should hold because `walk` joins the two sides of every move a closure makes: a binding, a
@@ -445,7 +445,7 @@ structure Layouts where
   codeEnv : Std.HashMap Nat (List Nat)
   /-- Each site's `κ` region's contents node (SPEC §52). -/
   regions : Std.HashMap Nat Nat := {}
-  /-- **Each static cell's bytes** (`Prog.statics`, `Op.staticCell`): the most bytes of its width
+  /-- **Each static cell's bytes** (`Prog.statics`): the most bytes of its width
   class's types, each read through `tyBytes` with its `!`s erased. -/
   staticBytes : Array Nat := #[]
 
@@ -692,7 +692,7 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
           -- persistent type or of `imm` borrows and each `drop` at a persistent type, one with no
           -- owned cell or a family of borrows (`Lint.copyable`, `Lint.droppable`), `!` read off
           -- the LIR type; a persistent value holds no resource (`vP_empty_of_persistent`), a
-          -- `VTy.Drop` one no owned cell (`vC_noOwn_of_drop`), a family of borrows none
+          -- `VTy.OwnFree` one no owned cell (`vC_noOwn_of_ownFree`), a family of borrows none
           -- (`forget_fam_compatX`).
           -- UNPROVED: that a variable's LIR type is the image of its node's checked type (by
           -- construction in `Convert`, not proved), and the stack machines' drops of a level's

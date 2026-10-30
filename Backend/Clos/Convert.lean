@@ -921,13 +921,19 @@ def convertWith (sel : Nat → Bool) (mark : Bool) (e : Expr) :
 
 /-! ### Externs  `[spec §11]` -/
 
-/-- The host implementation of an extern: a capability cell holding a stream's file
-descriptor, or an I/O operation. -/
+/-- A stream whose capability cell the harness makes and takes back (SPEC §11, §34). -/
+inductive CapStream where
+  | input
+  | output
+  | clock
+  | args
+
+/-- The host implementation of an extern: an I/O operation, or the harness's make or take of a
+stream's capability cell. -/
 inductive ExtImpl where
-  | cap (fd : Nat)
-  /-- The clock's cell, holding the model's time `i64[0]` (SPEC §34). -/
-  | clockCell
   | io (k : IOOp)
+  | mk (s : CapStream)
+  | take (s : CapStream)
 
 /-- An operation's closure, as the extern's value: `Λ. λm. op m`, with one `Λ` per lifetime
 parameter (each argument is `()`, and is dropped). -/
@@ -939,74 +945,81 @@ def ioValue (k : IOOp) : CM Tm := do
     c ← register ⟨[], u, .drop u (.clos c [])⟩
   pure (.clos c [])
 
-/-- A word of the program's data for a capability's cell, after the literals' bytes: its
-address.  `[spec §35]` -/
-def staticWord : CM Nat := do
-  let d := (← get).data
-  let pad := (8 - d.size % 8) % 8
-  modify fun s => { s with data := d ++ Array.replicate (pad + 8) 0 }
-  return dataBase + d.size + pad
+/-- `[]`, the empty byte list. -/
+def nilTm : CM Tm := do
+  let u ← fresh
+  return .letv u .unit (.inj false u)
 
-/-- Take the capabilities back from `main`'s result `(caps, a)`: each cell is freed with its
-content, and the result is `a`. -/
-def epilogue (r : Var) (n : Nat) : CM Tm := do
-  if n == 0 then return .var r
-  let caps ← fresh; let a ← fresh
-  -- The capability variables, and the destructuring that binds them.
-  let rec split : Nat → Var → CM (List Var × (Tm → Tm))
-    | 0, _ => pure ([], id)
-    | 1, v => pure ([v], id)
-    | k + 1, v => do
-      let x ← fresh; let rest ← fresh
-      let (xs, wrap) ← split k rest
-      pure (x :: xs, fun t => .letpair x rest v (wrap t))
-  let (xs, wrap) ← split n caps
-  let mut body : Tm := .var a
-  for x in xs.reverse do
-    let c ← fresh
-    body := .letv c (.prim .free [x]) (.drop c body)
-  return .letpair caps a r (wrap body)
+/-- A fresh cell holding the literal `c`. -/
+def capCell (c : BoCa.IntLit) : CM Tm := do
+  let l ← fresh
+  return .letv l (.lit c) (.prim .alloc [l])
 
-/-- Closure-convert `main` over its externs, given in declaration order: the prologue binds each
-extern to its host implementation (a cell holding a capability's file descriptor, a word of the
-program's data (`staticWord`, `Op.staticCell`), or an operation's closure), an extern `main`
-does not use is dropped, and when there are capabilities
-`main`'s result `(caps, a)` gives them back and `a` is the program's value. When `main` returns a
-loop (`loops`), its value is the loop, and the taking back is the code `fin`, run on the value
-the loop finishes with. The polymorphic lets `sel` holds of are replaced by their β-reducts and,
-with `mark`, their uses marked; the marked uses are returned too. `convertMain`
+/-- **The host function of a harness make** (SPEC §11, §34), as the extern's value `λm. …`: a
+fresh cell, the stream's capability, holding the stream's descriptor (the clock's: the time `0`).
+`mk_input` and `mk_args` drop their argument, a byte list (persistent): the host's stream is the
+platform's standard input or arguments, whatever bytes the term passes. `mk_output` holds its
+argument, the descriptor. Each call allocates its own cell, as the model's `alloc` does, so the
+extern's contract (`mkInput_meets`, …) holds at every call, with no condition on the run. -/
+def mkValue (s : CapStream) : CM Tm := do
+  let m ← fresh
+  let body ← match s with
+    | .input => pure <| .drop m (← capCell (.i32 0))
+    | .args => pure <| .drop m (← capCell (.i32 0xFFFFFFFF))
+    | .clock => pure <| .drop m (← capCell (.i64 0))
+    | .output => pure <| .prim .alloc [m]
+  pure (.clos (← register ⟨[], m, body⟩) [])
+
+/-- **The host function of a harness take** (SPEC §11, §34), as the extern's value `λm. …`: the
+capability's cell freed, and the extern's result: the empty byte list for `take_input` and
+`take_args`, the descriptor and the empty list for `take_output` (each byte went to the
+descriptor when it was written), the cell's contents for `take_clock`. The contract met
+is the extern's (`takeInput_meets`, …).
+
+The cell of `ref input` (and `ref args`) holds, in the model, a byte list; in the host it holds the
+stream's descriptor, an `i32`, which `free` answers here and the host discards. That is the host's
+representation of the cell, inside the trusted extern (`ExternsMeet`), not a value of the checked
+term: the term passes the capability `ref input`, whose contract the host meets, and gets back the
+byte list. -/
+def takeValue (s : CapStream) : CM Tm := do
+  let m ← fresh; let w ← fresh
+  let body ← match s with
+    | .input | .args => pure <| .letv w (.prim .free [m]) (.drop w (← nilTm))
+    | .output =>
+      let n ← fresh
+      pure <| .letv w (.prim .free [m]) (.letv n (← nilTm) (.pair w n))
+    | .clock => pure <| .prim .free [m]
+  pure (.clos (← register ⟨[], m, body⟩) [])
+
+/-- **Closure-convert `run_io`** (SPEC §11): the term `IORun.expr r []` of the checked wrapper
+`e` (its compiled form, `λinp. N : Bytes ⊸ F A`) applied to its argument `arg` (`IORun.arg []`),
+with each extern its host implementation (`ExtImpl`: an operation's closure, or the harness's
+make or take), given in declaration order. The application is converted as `conv` converts any
+`(λx. N) V`. Each extern the term uses is bound to its host's value; one it does not use has no
+occurrence to put a value at, as in `substAll γ e`, and is not made. The program's value is
+`run_io`'s, `main`'s result. When `run_io` returns a loop (`loops`), its value is the loop, which
+the entry drives. The polymorphic lets `sel` holds of are replaced by their β-reducts and, with
+`mark`, their uses marked; the marked uses are returned too. `convertMain`
 (`Backend/Clos/Poly.lean`) replaces the lets whose uses are at different rows.  `[spec §11]` -/
 def convertMainWith (sel : Nat → Bool) (mark : Bool) (exts : List ExtImpl) (loops : Bool)
-    (e : Expr) : Except String (Prog × Array PolyUse) := do
-  let e := prepare sel mark e
-  let ncaps := (exts.filter fun | .cap _ | .clockCell => true | _ => false).length
-  let act : CM (Tm × Option Nat) := do
+    (e arg : Expr) : Except String (Prog × Array PolyUse) := do
+  let e := prepare sel mark (.app e arg)
+  let .app (.lam _) _ := e | throw "run_io is not a function"
+  let act : CM Tm := do
     let xs ← exts.mapM fun _ => fresh
-    let ctx := xs.reverse
+    let ctx := Ctx.ofList xs.reverse
     let used ← fvsAt 0 0
-    let r ← fresh
-    let t ← conv (Ctx.ofList ctx) e 0
-    let ep ← epilogue r ncaps
-    let (main, fin) ← if loops then do
-        let c ← register ⟨[], r, ep⟩
-        pure (t, some c)
-      else pure (.letv r t ep, none)
-    let mut body : Tm := main
-    for (x, i) in ctx.zipIdx do
-      if i ∉ used then body := .drop x body
-    for (x, ext) in (xs.zip exts).reverse do
-      match ext with
-      | .cap fd =>
-        let l ← fresh
-        let a ← staticWord
-        body := .letv l (.lit (.i32 fd.toUInt32)) (.letv x (.prim (.staticCell a) [l]) body)
-      | .clockCell =>
-        let l ← fresh
-        body := .letv l (.lit (.i64 0)) (.letv x (.prim (.staticCell (← staticWord)) [l]) body)
-      | .io k => body := .letv x (← ioValue k) body
-    return (body, fin)
-  let ((t, fin), s) ← act.run { next := dummy + 1, codes := #[], pre := .of e }
-  pure ({ codes := s.codes, main := t, fin, folds := s.folds, data := s.data,
+    let mut body ← conv ctx e 0
+    for ((x, ext), i) in ((xs.zip exts).reverse).zipIdx do
+      if i ∉ used then continue
+      let v ← match ext with
+        | .io k => ioValue k
+        | .mk s => mkValue s
+        | .take s => takeValue s
+      body := .letv x v body
+    return body
+  let (t, s) ← act.run { next := dummy + 1, codes := #[], pre := .of e }
+  pure ({ codes := s.codes, main := t, drives := loops, folds := s.folds, data := s.data,
           litCode := s.litCode }, s.uses)
 
 end Backend.Clos

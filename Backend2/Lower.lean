@@ -492,10 +492,6 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
         pure (Exp.slot off w)
       else pure (.alloc (.c64 w.toUInt64))
     return [.set t addr] ++ (← storeCell n (.loc t) (locs (← arg 0))) ++ (← emit d [.loc t])
-  | .staticCell k => do
-    -- A capability's cell, as wide as its width class (`Prog.statics`).
-    let a := Exp.data ((← read).staticAt.getD k 0)
-    return (← storeCell n a (locs (← arg 0))) ++ (← emit d [a])
   | .free => do
     let pn ← argN 0
     let a := Exp.loc ((← arg 0).headD 0)
@@ -764,7 +760,7 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
 
 /-- A term is a single value form: its words can be bound where they are made. -/
 def tmSimple : Tm → Bool
-  | .letv .. | .letpair .. | .case .. | .copy .. | .drop .. | .absurd _ => false
+  | .letv .. | .letpair .. | .case .. | .copy .. | .drop .. | .abandon .. | .absurd _ => false
   | _ => true
 
 /-- The term `t`, whose value is at node `n`, its words to `d`. -/
@@ -835,7 +831,7 @@ def lowerTm (fuel : Nat) (t : Tm) (n : Nat) (d : Dest) : LM (List Stmt) := do
     let (s, ls) ← copyVals (← nodeV x) (← vals x) (tick := true)
     bindVals x' ls
     return s ++ (← lowerTm f b n d)
-  | .drop x b => do
+  | .drop x b | .abandon _ x b => do
     let s ← dropVals (← nodeV x) (← vals x)
     return s ++ (← lowerTm f b n d)
 

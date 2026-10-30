@@ -824,7 +824,7 @@ are regressions in the corpus: `lend-owner-returned` (`t4`), `swap-cell-width` (
 | a lent cell's frame slot | `Driver.lean:189` (`slotsOf`); `Lower.lean:471`, `:499` | read (`rel`) and UNPROVED (that the allocating function frees it on every path, from its uses there and the LIR's linearity, which `Lint` checks on the compile path, `Driver.lean:383`): ambiguous | `TDerivesAt.lendScope_rel` | the backend's own split of the code into functions | `t4`, `t18` (fixed) |
 | a literal's view shares the literal's bytes | `Convert.lean:2348` (`withLitView`), `:1461`; `Lower.lean:536` | read (the view), UNPROVED (the tabulator's code, the closure flow's): ambiguous | `litView` (`litViewT`, `TDerivesAt.litView_shape`); `Prog.lits` | no: which code a table's closure is, is the flow's (`TFacts.lean`) | `t13` (fixed) |
 | an allocation's width; a cell's narrow representation; an array slot's stride | `Convert.lean:269` (`classOf`), `:3473`, `:1936`; `Layout.lean:716`; `Lower.lean:471`, `:270`, `:274` | UNPROVED: the width class. Checked on every compile (§10.1): each node's bytes (`bytes`) and that each type's most bytes (`tyBytes`) cover every variable of the type | `Checked.classAt`, `Checked.classAt_alloc` (closed under `swap`); a value's bytes from its own type; that a location holds only its class's types at run time is not proved (`TFacts.lean`) | — | `t7` (fixed) |
-| a capability cell's width | `Driver.lean:124` (`classesOf`), `Convert.lean:3648`; `Layout.lean:735` (`staticBytes`); `Lower.lean:495`, `:1205` | UNPROVED: the width class. Checked on every compile (§10.1): `staticBytes` is the class's most bytes, `!` erased, and holds the value the cell is made with | the checker's construction (`cellClasses`), checked closed (`cellsOkB`, `cellsOkB_sound`); as the row above | — | `t17` (fixed); a `!` type in the class was read as no bytes (fixed: `capability-bang-width`) |
+| a capability cell's width | `Driver.lean` (`classesOf`), `Convert.lean` (`mkClosOf`: `Op.alloc` at the class) | UNPROVED: the width class. Checked on every compile (§10.1) as every allocation's: the class is read through `tyBytes`, `!` erased, which covers every value of its types | the checker's construction (`cellClasses`), checked closed (`cellsOkB`, `cellsOkB_sound`); as the row above | — | `t17` (fixed); a `!` type in the class was read as no bytes (fixed: `capability-bang-width`) |
 | a parameter's `noalias`, `readonly`, `nonnull`, `dereferenceable` | `Lower.lean:1124` (`paramFacts`) | read (the mode, and the bytes of the contents' type) | the parameter's LTy; cites `CellU.CompatS.kinds`, `adequacyD` | — | — |
 | a read through `Imm̲` | `Lower.lean:518`; `Layout.lean:213` (`joinRe`) | read; the reading checked related to the contents as `joinRe` relates them (`reCompat`, §10.1) | the `load`'s result type (`withload`'s callback, `fold_imm`'s `immReborrow`) | — | — |
 | which words are pointers | `Lower.lean:104` (`addrKinds`) | read | the layout node, built from the LTy | — | — |
@@ -832,7 +832,8 @@ are regressions in the corpus: `lend-owner-returned` (`t4`), `swap-cell-width` (
 | a block's allocation, release and lend | `Convert.lean:1936`, `:1945`, `:1969` | read | `allocS`, `freeS`, `withborSM`/`SI`, `withborF2M`/`F2I` | — | — |
 | a swap through a `mut` borrow; a fold's cell freed or emptied | `Convert.lean:1546`, `:1570` | read | `withswap`; `foldOwn`, `foldReuse` at their shape | — | — |
 | a relaxed lend: `mut`, its finaliser on a cancel | `Convert.lean:2716` | read | `lendR` | — | — |
-| the capabilities freed at `main`'s end | `Convert.lean:3603` (`epilogue`) | read | `main`'s type `(caps, a)` | — | — |
+| the capabilities made and taken back | `Convert.lean` (`mkClosOf`, `takeClosOf`; `convMain`) | read: `run_io` (SPEC §11) compiled, its harness externs the host functions | `IORun`, `externs_every_run` at `ExternsMeet` (the host functions' claim) | — | — |
+| an opaque value abandoned | `Convert.lean` (`abandons`, `Frame.letF`'s rule, `abortK`); `Lint.lean` (`abandonable`) | read: an `abandon` node at the rule the typed term applies there (`[let]`'s abort arm, `hW`, on the branch or a frame's; `topI`), the rule carried on the frame; Lint admits an opaque value at no `drop` | `Ctx.Drops`; `topI` | — | — |
 | the closure classes: which codes reach a place; each class's codes, tags and width | `Layout.lean:406` (`places`, `join`), `:608` (`resolve`) | UNPROVED: the analysis. Its result is checked on every compile (`Driver.lean:211`, `checkedLayouts`, §10.1): a solution of the program's constraints, before anything reads it | joins over every move; not a typing fact | no: #674 replaces it | — |
 | boxed fields; heap closure environments | `Layout.lean:642`; read flat at `Lower.lean:451` (host, `divLit` and I/O operations), `:558` (`tabLit`) | UNPROVED: one owner (by LIR linearity, which `Lint` checks), and the flat readings at `Lower.lean:451`, `:558`. Checked on every compile (§10.1): every box and heap class on a cycle of the fields (SPEC §35's rule, which guards those readings), no cycle left inline, and the widths and triviality their equations; not that they are the fewest | SPEC §35's rule | no: the classes are not a typing fact | — |
 | a direct call of a known code (the 0-CFA) | `Flow.lean:119`, `:168`; read at `Lower.lean:346` | UNPROVED: the analysis, cut at its fuel. Its result is checked on every compile (`Driver.lean:226`, `checkedFlow`, §10.1): the sets satisfy the flow's inclusions, and each direct call's set is its one code | not a typing fact | no: #674 replaces it | the solver linked one site per (variable, component, code) (fixed, §10.1) |
@@ -883,7 +884,7 @@ machines. It does not use the analyses' solvers (`find`, `join`, `walk`, `resolv
     `!` erased) cover every variable, answer and `main` of the type: an allocation's width class
     is read through them (`Layouts.clsBytes`).
   - Each static cell's bytes (`staticBytes`) are the most of its width class's types' (`tyBytes`,
-    `!` erased), and the value it is made with fits it (`staticsOk`).
+    `!` erased) (`staticsOk`).
   - Each machine's frame node and each site's `κ` region node is one node, and the region is
     `Layouts.regions`'s.
   - The flow's sets satisfy its inclusions (`gen`, `link`, `coarse`), and every direct call
@@ -897,7 +898,7 @@ machines. It does not use the analyses' solvers (`find`, `join`, `walk`, `resolv
   - That the constraints cover every run-time move. They are the moves the analysis reads,
     re-derived independently, so a move both miss is missed.
 - **Read from the typed term, not checked here.** Which types a cell may hold over its life (an
-  allocation's width class, `Checked.classAt`, on `Op.alloc`; a capability's, `Prog.statics`).
+  allocation's width class, `Checked.classAt`, on `Op.alloc`; a capability's, `cellClasses`).
   `Lower` marks it `UNPROVED:`.
 - **What stays trusted.** That `Lower` reads the checked facts as they mean.
 - **A sizing bug, found reading this port.** `Lower` sized the static cells with `tyBytes` keyed
@@ -905,9 +906,9 @@ machines. It does not use the analyses' solvers (`find`, `join`, `walk`, `resolv
   class holds a `!` type was given a word for it. `capability-bang-width` swaps a `!` closure of
   three captured values (32 bytes) into `stderr`'s cell: on main it wrote over `stdout`'s cell, so
   the Wasm build lost its `O` and the native build exited 1 with no output. The size is now a
-  layout fact (`staticBytes`, `!` erased) that `Lower` reads and the check verifies; with the old
-  key the check refuses the program (`static cell 0 reserves 8 bytes, its width class's types
-  take 32`).
+  layout fact (`!` erased) that `Lower` reads and the check verifies. A capability's cell is now
+  allocated by the harness's make at its width class (`Op.alloc`), read through `tyBytes` as every
+  allocation's.
 - **A solver bug it found.** The flow's solver linked a code to a variable's call sites once per
   (variable, component, code), not once per site. A variable called in several arms of a `case`
   got its argument and answer moves only at its first site. `for-yield-branch` and `state-machine`
@@ -926,8 +927,7 @@ machines. It does not use the analyses' solvers (`find`, `join`, `walk`, `resolv
     cycle (on `array-replace`, a host operation's pair argument); keep a class on no cycle on the
     heap (on `div-unhandled`, the literal tables' class);
   - bytes in a cell: shrink a value's bytes; give an integer the other slot's width; narrow a
-    type's bytes below a variable's; shrink a static cell; make a static cell with a value wider
-    than it;
+    type's bytes below a variable's;
   - machines: move a `κ` region's node; move a machine's frame node at one access;
   - reads through a shared borrow: move a reborrowed read's node; move a pointer read's contents
     (on `tree-view-tasks`, where the reading and the cell's pointer are both `ref` nodes: the arm

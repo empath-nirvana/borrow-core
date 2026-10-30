@@ -124,9 +124,6 @@ inductive Op where
   /-- `k − 1` of a budget that is not `0` (`bounded_fix`'s count, read unsigned, SPEC §20): it does
   not wrap. -/
   | cntPred
-  /-- A capability's cell (SPEC §11, §34): the `k`-th static word of the program's data, holding
-  the argument. Freeing it frees nothing. -/
-  | staticCell (k : Nat)
   /-- **The task stack** (SPEC §52). `stackSwap h`: the current stack becomes `h` (`0`: none yet),
   and the one it was is the result; the register is the static word `k`. -/
   | stackSwap (k : Nat)
@@ -163,6 +160,22 @@ inductive CodeKind where
   | amp
   deriving Inhabited, BEq, Repr
 
+/-- **The rule an `abandon` node is at** (decision 2): a computation that does not return to its
+context absorbs it. Not a drop: no destructor runs. `Lint.abandonable` checks each rule's premise:
+at a `[let]`'s abort, the abandoned values hold no owned cell (`VTy.OwnFree`, `vC_noOwn_of_ownFree`);
+`⊤` has none. -/
+inductive Abandon where
+  /-- `[let]`'s abort (`CDerives.effLet`'s `hW : S.Weak → Γ₂.Drops`): `N`'s context, at the abort
+  branch of the `[let]` or of a frame it pushed. -/
+  | letAbort
+  /-- `⊤`'s introduction (`CDerives.topI`): the whole context. -/
+  | top
+  deriving Inhabited, BEq, Repr
+
+def Abandon.name : Abandon → String
+  | .letAbort => "let abort"
+  | .top => "top"
+
 inductive Tm where
   | var (x : Var)
   | unit
@@ -191,6 +204,9 @@ inductive Tm where
   | copy (x x' : Var) (b : Tm)
   /-- `x` consumed: its destructor. -/
   | drop (x : Var) (b : Tm)
+  /-- `x` abandoned at the rule `r`, which the typed term applies here (`Abandon`): nothing runs.
+  `Lint` admits an opaque value here and at no `drop`. -/
+  | abandon (r : Abandon) (x : Var) (b : Tm)
   deriving Inhabited
 
 /-- A closure code: its kind, its functions (one, or a `&`'s two), the closure type it builds. -/
@@ -221,7 +237,7 @@ structure Prog where
   ty : Std.HashMap Var LTy
   /-- The literals' bytes, the program's read-only data. -/
   data : Array UInt8 := #[]
-  /-- The static words' cells (`Op.staticCell`, the stack register): each one's width class (none:
+  /-- The static words' cells (the stack register, `Op.stackSwap`): each one's width class (none:
   one word). -/
   statics : Array (List LTy) := #[]
   /-- The literal tables' code (`Op.litByte`). -/

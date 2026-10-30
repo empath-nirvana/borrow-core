@@ -516,13 +516,6 @@ def lowerFree (k : Option Nat) (l : Var) (d : Dest) : LM (List Stmt) := do
 def lowerPrim : Op → List Var → Dest → LM (List Stmt)
   | .alloc, [v], d => lowerAlloc none v d
   | .scopedAlloc k, [v], d => lowerAlloc (some k) v d
-  | .staticCell addr, [v], d => do
-      -- A capability's cell: the word at `addr` of the program's data, holding the contents.
-      let some n := (← T).cons[v]? | throw "flat IR: an untyped cell"
-      if (← T).cellWords n > 1 || (← T).byteCell n then
-        throw "flat IR: a capability's cell wider than its word"
-      return (← storeCell n (.data (addr - dataBase)) (locs (← vals v))) ++
-        (← emit d [.data (addr - dataBase)])
   | .free, [l], d => lowerFree none l d
   | .scopedFree k, [l], d => lowerFree (some k) l d
   | .load, [l], d => do
@@ -1101,27 +1094,22 @@ def countsReport : List Stmt :=
     [.call [] fPrintDec [.stat 1]] ++ outStr "\ncopies " ++
     [.call [] fPrintDec [.stat 2]] ++ outStr "\n"
 
-/-- Run `main` (driving it and running the code `fin` on what it finishes with, when it returns
-a loop), print the value, drop it, print the live count, and with `counts` the run's counts. With
+/-- Run `main` (driving it, when it returns a loop: its value is the one the loop finishes
+with), print the value, drop it, print the live count, and with `counts` the run's counts. With
 `exits`, `main`'s value is `inl v`, whose `v` is printed, or `inr ()`, which prints nothing and
 ends the run with exit status `1` (SPEC §39). -/
-def entryFn (fMain : Nat) (fin : Option Nat) (counts : Bool) (exits : Bool := false) : LM Fn := do
+def entryFn (fMain : Nat) (drives : Bool) (counts : Bool) (exits : Bool := false) : LM Fn := do
   let T ← T
   let (body, nloc) ← inFn 0 do
     let m ← fresh (T.words T.mainTy)
-    let (run, v) ← match fin with
-      | none => pure ([Stmt.call m fMain []], m)
-      | some c => do
+    let (run, v) ← if drives then do
         let r := match T.ty T.mainTy with
           | .fn _ c _ => match T.ty c with | .sum r _ => r | _ => c
           | _ => T.mainTy
         let rs ← fresh (T.words r)
-        let es ← fresh (T.answerWords T.codeTy[c]!)
-        -- `fin` captures nothing.
-        let (_, fv) ← closVals c []
-        let self := if T.isRec (T.codeType c) then fv.take 1 else []
-        pure ([Stmt.call m fMain [], .call rs (← helper (.drive T.mainTy)) (locs m),
-          .call es (codeFn c) (self ++ locs rs)], es.take (T.words T.resTy))
+        pure ([Stmt.call m fMain [], .call rs (← helper (.drive T.mainTy)) (locs m)],
+          rs.take (T.words T.resTy))
+      else pure ([Stmt.call m fMain []], m)
     let dr ← dropVals T.resTy v
     let (shown, status) ← if exits then do
         let .sum .. := T.ty T.resTy | throw "flat IR: `main`'s value is not `inl v` or `inr ()`"
@@ -1590,7 +1578,7 @@ def lower (p : Clos.Prog) (counts : Bool := false) (types : Option Types := none
   let act : LM (List Fn) := do
     let codes ← p.codes.toList.zipIdx.mapM fun (c, k) => lowerCode k c
     let main ← lowerMain p.main
-    let entry ← entryFn fMain p.fin counts p.exits
+    let entry ← entryFn fMain p.drives counts p.exits
     let mut gen : Array Fn := #[]
     for _ in [0:1 <<< 20] do
       let q := (← get).queue
