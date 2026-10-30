@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.14 · 2026-10-30
+Version 1.15 · 2026-10-30
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -959,6 +959,33 @@ a cell holding a handle cannot copy it out either. In compiled code the content 
 that is the `I32` case with `Imm̲ = Unk`, as at `U C`. A new host resource is a new `k` with its
 model, not a new former.
 
+### `Tok`: the token of a declared type
+
+    A ::= … | Tok                                   (VTy.opq .tok)
+
+`Tok` is an opaque kind that is not a host type (`Opaque.Host k` is `k ≠ tok`). Its value is a
+location owning a unit cell, the pattern of §25's capture cell, and its relation, in both modes, is
+`Ref 1`'s (`Opaque.rel`, `Core/Opaque.lean`):
+
+    𝒱⟦Tok⟧δ(v) ≜ ∃ℓ v′. ⌜v = ℓ⌝ ⋆ ℓ ↦ v′ ⋆ ⌜v′ = ()⌝        Imm̲ 'b Tok ≜ Unk
+
+Two constants, at a dead context like the borrow axioms (`Core/Tok.lean`):
+
+    mint ≜ λx. alloc x : 1 ⊸ Tok        (CDerives.tokMint)
+    burn ≜ λc. free c  : Tok ⊸ 1        (CDerives.tokBurn)
+
+`mint` allocates the cell by the ordinary `alloc` step and `burn` frees it, so their compatibility
+lemmas are `[TR]` 6.141 and 6.142 (`tokMint_compatX`, `tokBurn_compatX`, by `wpTS_alloc` and
+`wpTS_free`, the lemmas `ewp_alloc` and `ewp_free` take at an effect row). `burn` is the only
+constant that takes a `Tok`. The surface spells the type `tok` and the constants `tok_mint` and
+`tok_burn`; programs do not write them, the elaboration of §42's declared types does.
+
+`Tok` is linear with no derived drop (`tok_linear`: `HasDtor` has no `opq` constructor), and it owns
+its cell, so it is not `VTy.OwnFree` (`tok_not_ownFree`): an abort cannot abandon it (`[let]`'s
+`hW`, `[raise]`'s `hd`), and neither can it abandon a type that holds it. A `Tok` the run did not
+burn keeps its cell, so `adequacyC`'s empty final memory says every one was burned (§42).
+A cell of `1` lowers to no words (`zeroCell`, §23).
+
 ### Capabilities
 
 Standard I/O is a bundle of three capabilities, one per effect:
@@ -1317,8 +1344,13 @@ does not, the checker consumes it by its destructor:
 
 **A value that must not be dropped.** A value whose silent destruction is a bug, such as a
 transaction that must be committed or aborted, needs a type in group 3, which the program must
-consume on every path. Declared types with no destructor (#746) give a data declaration that
-type.
+consume on every path. A field marked `must_close` in a data declaration (§42, *Declared types
+with no derived drop*) holds `Tok` (§11), so the declared type is linear with no derived drop
+(`decl_linear`), and so is every type that holds it (`not_hasDtor_tensor_right` and the closure
+lemmas of `Core/Decl.lean`). The checker inserts a drop only as a `dtor` node of the typed term,
+which carries `HasDtor` (`TDerivesP.dtor_hasDtor`), so it inserts none at such a type. A borrow of
+one, `Imm @a N` or `Mut @a N`, is linear with a derived drop (`decl_imm_drop`, `decl_mut_drop`): the
+loan ends, the value is not consumed.
 
 ### Soundness
 
@@ -7830,6 +7862,71 @@ Written with the kernel's forms today, their counts rise or they are refused:
 So A7 waits for a block to be lowered as one object (N1, layouts from types): the block form is in
 `FShape`, has its destructor, and is then one object a node, the rule's count.
 
+### Declared types with no derived drop (#746, L-D over L-T)
+
+Every drop is derived (§12); the language has no written drops. A declaration may put its type
+among the linear types with no derived drop, for a value whose silent destruction is a bug: a
+transaction that must be committed, a promise that must be answered, a guard that must be
+released. It is no new class and no new type former: a field holds §11's `Tok`.
+
+    data N = C(…, must_close g: A, …)            data N = { …, must_close(f) g: A, … }
+
+`must_close` (spelling provisional) marks a field; `must_close(f)` also names the function `f` that
+consumes the value, which only the error messages read: nothing calls `f` unless the program writes
+the call. The rules, beside the table's:
+
+| # | construct | elaborates to | where |
+|---|---|---|---|
+| D4 | a field `must_close g: A` | the field's type is `A * tok` (`Tok`, §11), in the structure, a block's cell (`ref (A * tok)`) and its shape | parser |
+| E7 | a value `e` for a marked field, in `C(…)`, `box C(…)` or `N { … }` | `(e, tok_mint ())`: the constructor mints the token | parser |
+| M5 | a constructor pattern's sub-pattern `p` at a marked field | `let (x, t) = o; _ <- return (tok_burn t); …`, then `p` matched against `x`: the written `match` burns the token, where the arm is reached (a variable or `_`), or before `p` is tested | parser |
+
+`tok_burn` is emitted at M5 only; E7 is the only `tok_mint`. A row that binds the whole value to a
+variable passes it on unburned. So a declared value is consumed exactly where the program writes
+a `match` on it (directly, or in the function that consumes it), and every other way it could go
+is refused by a kernel fact, not by a check of the elaborator:
+
+- **Unused at the end of its scope**: its type has no derived drop (`decl_linear`), and the
+  checker inserts a drop only as a `dtor` node, which carries `HasDtor`
+  (`TDerivesP.dtor_hasDtor`).
+- **Live across a computation that may abort or cancel**: `[let]`'s `hW` asks the rest of the
+  context to be `VTy.OwnFree` (§19), and a type holding `Tok` is not (`decl_not_ownFree`). The
+  program is accepted when the value is consumed before, lent into the computation, held as a
+  handler's state, or under a `[then]` whose written finaliser consumes it (`finally`, below).
+- **Copied**: it is not persistent, so no split duplicates it (`Ctx.SplitP.both_live_iff`).
+- **A field read that discards it** (E5's projection): `getAt` asks the discarded fields to be
+  `Forgettable` (§5); a field read of a record that holds one at another field consumes it.
+- **Its borrow** is linear with a derived drop (`decl_imm_drop`, `decl_mut_drop`): a loan ends
+  and the value is not consumed. `Imm̲ 'b (A ⊗ Tok) = Imm̲ 'b A ⊗ Unk`, so a view reads the fields
+  and forgets the token's view.
+
+**No run ends with a declared value unconsumed.** A token the run did not burn keeps its cell
+(`TokLive`), and every theorem that frees every cell says none is left: on every run of a closed
+program of `F A`, `A` unrestricted, that reaches a value (`tok_released`, from `leakFree_closed`),
+on the run `adequacyC` gives (`adequacyC_tok`), and from every configuration a closed program of
+`F 1` reaches (`tok_released_every_run`, from `adequacyD`). `mint` allocates the cell at any
+location the memory does not hold and `burn` frees it (`mint_step`, `burn_step`).
+
+**`finally` on `with`** (user, 2026-10-30: "the syntax should be with open finally"):
+
+    with h(…) { M } finally { D }  ≜  run (x <- (with h(…) { M }) unwind (D); _ <- D; return x)
+
+the kernel's `[then]` (§24, §27) around the handled computation. `D : F_Σ 1` is written once and
+placed twice, as the finaliser and on the normal exit, so it runs once on either; each placement is
+a term the checker types, at its own row (§27: it may perform I/O). It is decision 2's "cleanup goes
+in a finaliser", made readable, and not a drop: `D` is a call the program wrote. `[then]` gives `M`
+and `D` disjoint contexts, so a value `D` consumes is not used in `M`: "commit in the body, roll
+back on an abort" lends the value into `M` or holds it as a handler's state.
+
+**Errors name the consumer.** A value whose type holds a marked field, unused at the end of its
+scope or live across an abort, is refused with one message that names the value and its type
+(the declaration's name), the field that carries the obligation, and the fix: "pass it to `f`
+before its scope ends" when the field names `f`, otherwise "consume it with a `match` on `N`". The
+message reads the declarations (`Data.Table`); the refusal is the kernel's.
+
+**Not this:** an implicit call of the named function at the end of a scope without a written
+`finally`. That would be a drop that is not derived.
+
 ### Programs
 
 | program | what it shows | answer |
@@ -7847,6 +7944,10 @@ So A7 waits for a block to be lowered as one object (N1, layouts from types): th
 | `corpus/data-option-block.bc` | a block whose field holds the root inside an option, `tail: Option[List]` | `i32[6]` |
 | `corpus/reject/data-no-root.bc` | mutual recursion with no member on every cycle | refused |
 | `corpus/data-fold-*.bc`, `corpus/fail/data-fold-*.bc`, `corpus/reject/data-fold-*.bc` | the fold block (F1, F2) | §60 |
+| `corpus/decl-txn.bc` | a transaction held as a value, begun in one function and committed in another, which matches it | the committed id |
+| `corpus/decl-promise.bc` | promises stored in a queue (a list of them) and answered later, each by a `match` | the answers' sum |
+| `corpus/decl-guard.bc` | a guard stored in a record beside data, released by a `finally` on a `with` | the guard released on the normal exit |
+| `corpus/reject/decl-txn-raise.bc`, `decl-promise-raise.bc`, `decl-guard-raise.bc` | each of the three with the value live across a `raise` and no finaliser | refused: `[let]`'s `hW` (`decl_not_ownFree`) |
 
 Each rule is pinned beside its elaboration written by hand (`scripts/check-sugar.sh`):
 `corpus/sugar/data-forms.bc` and `data-update.bc` beside core forms, and `data-box-tree`,
@@ -7859,7 +7960,12 @@ T10 has no declaration: its form as written is tuple assignment and `let (mut a,
 
 ### Baseline
 
-No change to `CDerives`, `Core/`, `Paper/`, `Support/`, the relation, the machine or the checker.
+No change to `CDerives`, `Core/`, `Paper/`, `Support/`, the relation, the machine or the checker,
+but §11's `Tok` for *Declared types with no derived drop*: the opaque kind `tok` with its relation,
+`VTy.OwnFree` at the host kinds only, and the two constants `tokMint` and `tokBurn` with their
+compatibility lemmas. `fundamentalC`, `adequacyC` and `adequacyD` keep their statements. No
+`Paper/` or `Support/` file and no step of the machine changes: `mint` and `burn` are λs over
+`alloc` and `free`.
 Every corpus program that was accepted elaborates as it did: its goldens, exit status,
 `corpus/counts.expected`, `kernel-counts.expected` and `cells.expected` are unchanged; new
 programs get rows.
@@ -10029,6 +10135,18 @@ relation or the machine.
 ---
 
 ## Changelog
+
+- **1.15** (2026-10-30) — §11, §12, §42 (#746, step 2): declared types with no derived drop, L-D
+  over L-T. The opaque kind `Tok` (`VTy.opq .tok`, not a host type) is a location owning a unit
+  cell, its relation `Ref 1`'s; `VTy.OwnFree` holds at the host kinds only. Two constants,
+  `mint : 1 ⊸ Tok` and `burn : Tok ⊸ 1` (`CDerives.tokMint`, `tokBurn`, λs over `alloc` and
+  `free`, sound by `[TR]` 6.141 and 6.142). A data field marked `must_close` holds `A * tok`: a
+  constructor mints, a written `match` burns, and nothing else does. Every refusal is a kernel
+  fact: no derived drop (`decl_linear`, `TDerivesP.dtor_hasDtor`), not `OwnFree` across an abort
+  (`decl_not_ownFree`). No run ends with one unconsumed (`tok_released`, `adequacyC_tok`). The
+  surface adds `with … { M } finally { D }` over `[then]`, and messages that name the field and
+  its consumer. `fundamentalC`, `adequacyC`, `adequacyD` keep their statements; no other
+  program's acceptance or output changes.
 
 - **1.14** (2026-10-30) — §11, §34, §35 (#746, 1b): a backend compiles `IORun.expr r []`, the
   checked `run_io` in its compiled form (`Bytes ⊸ F A`, the outputs weakened in the term) applied
