@@ -1,0 +1,24 @@
+-- A declared value live across a cancellable operation (`yield`): the rest after it runs only when
+-- the generator is pulled again, so the checker's `[then]` needs a finaliser that consumes the
+-- value on a cancel, the destructor of its type (`finalOf`, a `dtor` node, `HasDtor`), and `Txn`
+-- has none (`decl_linear`); `[let]` abandons only what holds no owned cell (`decl_not_ownFree`).
+-- Refused.
+include yield
+
+data Txn = { id: i32, must_close(commit) log: i32 }
+
+fn begin(id: i32) -> Txn = Txn { id: id, log: 0 }
+
+fn commit(t: Txn) -> i32 = match t { Txn { id, log } -> id * 100 + log }
+
+fn gen() -> 1 with Yield[i32] =
+  let t = begin(7);
+  yield(1);
+  let r = commit(t);
+  ()
+
+main -> i32 =
+  let mut s = 0;
+  for x in gen() { s = s + x };
+  s
+-- expect: 16:3: `t`, of type `i32 * i32 * tok`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell: `Txn` holds the field `log`, marked `must_close`; pass it to `commit` before the computation that may abort, or close it in a `finally`
