@@ -559,7 +559,7 @@ have not verified that none exists.
 | # | site | statement |
 |---|---|---|
 | **F3 (HARD STOP)** | `Backend2/Convert.lean:1329, 1388–1389`; `Lint.lean:149` `stackKs` | one of: (a) a kernel derived drop at the stack machine's closure type, the machine's `k` as codata `νX. … & F 1` whose `close` frees nothing because its state is in the level's frame, so the drop is a `dtor` node that `drop_derives` licenses (`theorem stackK_hasDtor : HasDtor (stackKTy …)`); (b) a named assertion in the trusted base (a `PinLaw`-style field, `StackLaw.k_drop`: "a level's `k` over a stack address alone holds no resource but that frame"); (c) the drop removed, the stack step consuming `k` |
-| **F2 (HARD STOP)** | `Lint.lean:70` `t.drops` at `.opq` outside an abort; reached at `Convert.lean:3640–3659` `epilogue` and `Clos/Convert.lean:950–968` | the epilogue is the compiled `run_io` take-back: each capability consumed at its harness extern's type, only the unrestricted result dropped (`DeadP`), `Output`'s result handed to the platform. Statement: the epilogue realises `run_io`'s checked wrapper. Then Lint admits a `.drop` at an `.opq` type only at an abort site |
+| **F2 (HARD STOP)** | `Lint.lean:70` `t.drops` at `.opq` outside an abort; reached at `Convert.lean:3640–3659` `epilogue` and `Clos/Convert.lean:950–968` | the backends compile the checked `run_io` wrapper, the object of `externs_every_run` (`Core/Stdio.lean:794`), instead of `main` plus a prologue and epilogue of their own. The harness externs (`mk_*`, `take_*`) become host functions like the operations, at the same trust boundary: each meets its extern's contract (`ExternsMeet`). `take_input`'s `Bytes` and the clock's and arguments' results are then dropped by `DeadP` inside the checked term, and no `.opq` value is dropped. Then Lint admits a `.drop` at an `.opq` type only at an abort site |
 | F4 | `Lint.lean:57–62` `copyable` at `.imm` anywhere | `DerivedCopy` + `copy_derives` (1.4), under which a copy at any site is a derivation |
 | F5 | `Convert.lean:379`, `:2622`, `:853`, `:888`, `:2682`; `Clos/Convert.lean`, `Capture.lean:1013`, `Unwind.lean:295` | carry the typed term's rule (`DeadP`, `Ctx.Dead`, `Ctx.Drops`) to the site; a lemma `SplitMasks.neither_absorbed`: a live slot neither mask uses is persistent, or the node absorbs it (`topI`/`zeroE`) |
 | F6 | `Sugar.lean:4505`; `Effects.lean:393–396, 466–471` | call `isAbortive` (`Core/ClauseKinds.lean:374`) |
@@ -600,9 +600,9 @@ Each step lands with its kernel statements proved, or stops.
      `Env.pushOwn_own` (or the fallback).
    - Binder `linear` removed (3.3); messages (3.2); SPEC, decisions and docs (3.1); the goldens of
      section 6.
-   - F2 (5.5): both backends' epilogues compile `run_io`'s take-back (the harness externs need a
-     host implementation, or the capabilities go to the platform as `main`'s result); then Lint
-     admits a `.drop` at an `.opq` type only at an abort site.
+   - F2 (5.5): both backends compile the checked `run_io` (and the loop wrapper), with the harness
+     externs as host functions meeting their contracts; their own prologue and epilogue go. Then
+     Lint admits a `.drop` at an `.opq` type only at an abort site.
 2. **Declared types, L-T** (item 3).
    - Kernel: `Opaque.tok` and its model, `CDerives.tokMint`/`tokBurn` with compatibility lemmas,
      `tok_linear`, the closure lemmas, `decl_linear`, `decl_imm_drop`, `decl_mut_drop`,
