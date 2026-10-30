@@ -121,7 +121,7 @@ def Tm.opPayloads : Tm → List Var × List Var
     let (a, c) := e.opPayloads
     let (a', c') := b.opPayloads
     (a ++ a', c ++ c')
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b | .hnd _ _ _ b | .ubind _ _ b => b.opPayloads
+  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b | .hnd _ _ _ b | .ubind _ _ b => b.opPayloads
   | .case _ _ b₁ _ b₂ =>
     let (a, c) := b₁.opPayloads
     let (a', c') := b₂.opPayloads
@@ -155,7 +155,7 @@ def wrapRaise (O : Ops) (p : Var) : KM Tm := do
   let a ← kfresh; let b ← kfresh; let i ← kfresh; let v ← kfresh; let v' ← kfresh
   let b' ← kfresh; let p' ← kfresh; let a' ← kfresh; let i' ← kfresh
   -- The name and the operation as literals again, so that the key stays known (`payloadKey`).
-  return .letpair a b p (.drop a (.letpair i v b (.drop i (.letv v' (.con k O.aborts.length v)
+  return .letpair a b p (.drop .word a (.letpair i v b (.drop .word i (.letv v' (.con k O.aborts.length v)
     (.letv i' (.lit (.i32 key.2)) (.letv b' (.pair i' v') (.letv a' (.lit (.i32 key.1))
       (.letv p' (.pair a' b') (.raise p')))))))))
 
@@ -199,28 +199,28 @@ def Ops.of (p : Prog) : Except String Ops := do
 def withClause (cls : Var) : Nat → (Var → KM Tm) → KM Tm
   | 0, k => do
     let c ← kfresh; let r ← kfresh
-    return .letpair c r cls (.drop r (← k c))
+    return .letpair c r cls (.drop .clauses r (← k c))
   | j + 1, k => do
     let c ← kfresh; let r ← kfresh
-    return .letpair c r cls (.drop c (← withClause r j k))
+    return .letpair c r cls (.drop .clauses c (← withClause r j k))
 
 /-- `arm j` for the operation index `i` among `js`, by a compare per index; `i` is dropped. -/
 def dispatchOp (i : Var) (arm : Nat → KM Tm) : List Nat → KM Tm
   | [] => throw "capture: a handler with no clause"
-  | [j] => do return .drop i (← arm j)
+  | [j] => do return .drop .word i (← arm j)
   | j :: js => do
     let i' ← kfresh; let l ← kfresh; let pr ← kfresh; let bo ← kfresh; let u₁ ← kfresh
     let u₂ ← kfresh
-    return .copy i i' (.letv l (.lit (.i32 j.toUInt32)) (.letv pr (.pair i' l)
+    return .copy .word i i' (.letv l (.lit (.i32 j.toUInt32)) (.letv pr (.pair i' l)
       (.letv bo (.prim (.host (.rel .w32 .eq)) [pr])
-        (.case bo u₁ (.drop u₁ (← dispatchOp i arm js)) u₂ (.drop u₂ (.drop i (← arm j)))))))
+        (.case bo u₁ (.drop .word u₁ (← dispatchOp i arm js)) u₂ (.drop .word u₂ (.drop .word i (← arm j)))))))
 
 /-- A handler of abortive operations: `catch`, then the answer clause or the caught operation's
 clause. -/
 def abortiveSite (O : Ops) (n : UInt32) (hr cls : Var) (b : Tm) : KM Tm := do
   let ops := ((O.aborts.filter (·.1 == n)).map (·.2.toNat)).eraseDups
   let v ← kfresh
-  if ops.isEmpty then return .letv v b (.drop cls (.app hr v))
+  if ops.isEmpty then return .letv v b (.drop .clauses cls (.app hr v))
   let r ← kfresh; let q ← kfresh; let m ← kfresh; let qi ← kfresh; let i ← kfresh; let w ← kfresh
   let onRaise ← dispatchOp i (fun j => withClause cls j fun c => do
     if !O.wrapsAborts then return .app c w
@@ -228,8 +228,8 @@ def abortiveSite (O : Ops) (n : UInt32) (hr cls : Var) (b : Tm) : KM Tm := do
     let some k := O.aborts.idxOf? (n, j.toUInt32) | return .app c w
     let x ← kfresh
     return .when w k O.aborts.length x (.app c x) (.absurd w)) ops
-  return .letv r (.catch n b) (.case r v (.drop cls (.app hr v)) q
-    (.drop hr (.letpair m qi q (.drop m (.letpair i w qi onRaise)))))
+  return .letv r (.catch n b) (.case r v (.drop .clauses cls (.app hr v)) q
+    (.drop .clauses hr (.letpair m qi q (.drop .word m (.letpair i w qi onRaise)))))
 
 /-- `drive`'s body: the answer clause, a clause of the name, or (`forward`) forwarding. -/
 def drvBody (O : Ops) (h : HInfo) (forward : Bool) : KM Tm := do
@@ -242,9 +242,9 @@ def drvBody (O : Ops) (h : HInfo) (forward : Bool) : KM Tm := do
   for (idx, j) in (O.keysOf h.n).reverse do
     let w ← kfresh; let cls₂ ← kfresh; let kap ← kfresh; let arg ← kfresh
     let call ← withClause cls₂ j fun c => pure (.app c arg)
-    chain := .when pl idx K w (.copy cls cls₂ (.letv kap (.clos (h.kapOf idx) [hr, cls, k])
+    chain := .when pl idx K w (.copy .clauses cls cls₂ (.letv kap (.clos (h.kapOf idx) [hr, cls, k])
       (.letv arg (.pair w kap) call))) chain
-  return .case r v (.drop cls (.app hr v)) q (.letpair pl k q chain)
+  return .case r v (.drop .clauses cls (.app hr v)) q (.letpair pl k q chain)
 
 /-- `drive`'s body without its forwarding, when its handler's body suspends with no other name's
 operation: the forwarding arm is unreachable. -/
@@ -260,16 +260,16 @@ where
 `()`, or re-raises the error the cancel kept (`reraise`). -/
 def kapBody (h : HInfo) (reraise : Bool) (res : Nat := h.res) : Except String Tm := do
   let #[hr, cls, k, s, s', u₁, u₂, mk, mm, e, eu, eq] := h.kVars | throw "capture: κ's variables"
-  let err : Tm := if reraise then .reraise eq else .drop eq .unit
-  return .letv s' (.var s) (.case s' u₁ (.drop u₁ (.clos res [hr, cls, k])) u₂
-    (.drop u₂ (.drop hr (.drop cls (.letv mk .unit (.letv mm (.inj true mk)
+  let err : Tm := if reraise then .reraise eq else .drop .payload eq .unit
+  return .letv s' (.var s) (.case s' u₁ (.drop .word u₁ (.clos res [hr, cls, k])) u₂
+    (.drop .word u₂ (.drop .clauses hr (.drop .clauses cls (.letv mk .unit (.letv mm (.inj true mk)
       (.letv e (.app k mm) (.case e eu (.var eu) eq err))))))))
 
 /-- A control handler's site: its body becomes the code `B`, run and driven. -/
 def controlSite (O : Ops) (n : UInt32) (hr cls : Var) (b : Tm) : KM Tm := do
   let fvb := b.fvs
   let u ← kfresh
-  let cB ← kregister ⟨fvb, u, .drop u b⟩
+  let cB ← kregister ⟨fvb, u, .drop .word u b⟩
   let cDrv ← kregister default
   let cKap ← kregister default
   let cRes ← kregister default
@@ -324,8 +324,8 @@ def handlers (O : Ops) : Tm → KM Tm
   | .letv x e b => return .letv x (← handlers O e) (← handlers O b)
   | .letpair x y p b => return .letpair x y p (← handlers O b)
   | .case s x b₁ y b₂ => return .case s x (← handlers O b₁) y (← handlers O b₂)
-  | .copy x x' b => return .copy x x' (← handlers O b)
-  | .drop x b => return .drop x (← handlers O b)
+  | .copy l x x' b => return .copy l x x' (← handlers O b)
+  | .drop l x b => return .drop l x (← handlers O b)
   | t => pure t
 
 /-! ### Which codes suspend -/
@@ -333,7 +333,7 @@ def handlers (O : Ops) : Tm → KM Tm
 /-- The calls in tail position of a term, by their function variables. -/
 def Tm.tailCalls : Tm → List Var
   | .app f _ => [f]
-  | .letv _ _ b | .letpair _ _ _ b | .copy _ _ b | .drop _ b => b.tailCalls
+  | .letv _ _ b | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b => b.tailCalls
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => b₁.tailCalls ++ b₂.tailCalls
   | _ => []
 
@@ -341,7 +341,7 @@ def Tm.tailCalls : Tm → List Var
 def Tm.calls : Tm → List Var
   | .app f _ => [f]
   | .letv _ e b => e.calls ++ b.calls
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b | .catch _ b | .fin _ _ b | .catchAll b => b.calls
+  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b | .catch _ b | .fin _ _ b | .catchAll b => b.calls
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => b₁.calls ++ b₂.calls
   | _ => []
 
@@ -349,7 +349,7 @@ def Tm.calls : Tm → List Var
 def Tm.callees : Tm → List Var
   | .app f _ | .run f _ => [f]
   | .letv _ e b => e.callees ++ b.callees
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b | .catch _ b | .fin _ _ b | .catchAll b => b.callees
+  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b | .catch _ b | .fin _ _ b | .catchAll b => b.callees
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => b₁.callees ++ b₂.callees
   | _ => []
 
@@ -357,7 +357,7 @@ def Tm.callees : Tm → List Var
 def Tm.catches : Tm → List UInt32
   | .catch n b => n :: b.catches
   | .letv _ e b => e.catches ++ b.catches
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b | .fin _ _ b | .catchAll b => b.catches
+  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b | .fin _ _ b | .catchAll b => b.catches
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => b₁.catches ++ b₂.catches
   | _ => []
 
@@ -365,7 +365,7 @@ def Tm.catches : Tm → List UInt32
 def Tm.finalisers : Tm → List Var
   | .fin _ dd b => dd :: b.finalisers
   | .letv _ e b => e.finalisers ++ b.finalisers
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b | .catch _ b | .catchAll b => b.finalisers
+  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b | .catch _ b | .catchAll b => b.finalisers
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => b₁.finalisers ++ b₂.finalisers
   | _ => []
 
@@ -429,7 +429,7 @@ def sKeysOf (O : Ops) (F : SFacts) (self : Nat) (sel : List (Var × Bool)) : Tm 
       | .inj v _ => (x, v) :: sel
       | _ => sel
     unionKeys (sKeysOf O F self sel e) (sKeysOf O F self sel' b)
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b | .catch _ b | .fin _ _ b | .catchAll b =>
+  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b | .catch _ b | .fin _ _ b | .catchAll b =>
     sKeysOf O F self sel b
   | .case s _ b₁ _ b₂ => match (sel.lookup s).orElse fun _ => O.selArg s with
     | some false => sKeysOf O F self sel b₁
@@ -445,7 +445,7 @@ def ownPoints (O : Ops) (F : SFacts) (self : Nat) (tail : Bool) : Tm → Bool
   | .await _ _ => !(sKeysOf O F self [] (.await 0 0)).isEmpty
   | .app f a => !tail && (F.codesOf f).any fun c => !(F.keysAt c (O.selArg a)).isEmpty
   | .letv _ e b => ownPoints O F self false e || ownPoints O F self tail b
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b => ownPoints O F self tail b
+  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b => ownPoints O F self tail b
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ =>
     ownPoints O F self tail b₁ || ownPoints O F self tail b₂
   | .catch _ b | .fin _ _ b | .catchAll b => ownPoints O F self false b
@@ -548,14 +548,14 @@ def Tm.operands : Tm → List Var
   | .letv _ e b => e.operands ++ b.operands
   | .letpair _ _ p b => p :: b.operands
   | .case s _ b₁ _ b₂ | .when s _ _ _ b₁ b₂ => s :: b₁.operands ++ b₂.operands
-  | .copy x _ b | .drop x b | .fin _ x b => x :: b.operands
+  | .copy _ x _ b | .drop _ x b | .fin _ x b => x :: b.operands
   | .hnd _ hr cls b | .ubind hr cls b => hr :: cls :: b.operands
   | .catch _ b | .catchAll b => b.operands
 
 /-- The variables the `let`s of a term bind, at any depth. -/
 def Tm.letBound : Tm → List Var
   | .letv x e b => x :: e.letBound ++ b.letBound
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b | .fin _ _ b | .catch _ b | .catchAll b
+  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b | .fin _ _ b | .catch _ b | .catchAll b
   | .hnd _ _ _ b | .ubind _ _ b => b.letBound
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => b₁.letBound ++ b₂.letBound
   | _ => []
@@ -575,7 +575,7 @@ def Tm.paths : Tm → List TPath
     { π with uses := e.operands ++ π.uses, bound := x :: e.letBound ++ π.bound,
              lets := (x, e) :: π.lets }
   | .letpair _ _ p b => b.paths.map fun π => { π with uses := p :: π.uses }
-  | .copy x _ b | .drop x b => b.paths.map fun π => { π with uses := x :: π.uses }
+  | .copy _ x _ b | .drop _ x b => b.paths.map fun π => { π with uses := x :: π.uses }
   | .case s _ b₁ _ b₂ | .when s _ _ _ b₁ b₂ =>
     (b₁.paths ++ b₂.paths).map fun π => { π with uses := s :: π.uses }
   | t => [{ uses := t.operands, bound := [], lets := [], tail := t }]
@@ -607,14 +607,14 @@ def TPath.resume? (defs : Std.HashMap Var Tm) (B : Tm) (k : Var) (ka : List Var)
 variables they consumed dropped. -/
 def Tm.dropResume (kk s ff y : Var) : Tm → Tm
   | .app a b =>
-    if a == kk && b == s then .drop kk (.drop s .unit)
-    else if a == ff && b == y then .drop ff (.var y) else .app a b
+    if a == kk && b == s then .drop .kappa kk (.drop .word s .unit)
+    else if a == ff && b == y then .drop .kappa ff (.var y) else .app a b
   | .letv x e b => .letv x (e.dropResume kk s ff y) (b.dropResume kk s ff y)
   | .letpair x z p b => .letpair x z p (b.dropResume kk s ff y)
   | .case s' x b₁ z b₂ => .case s' x (b₁.dropResume kk s ff y) z (b₂.dropResume kk s ff y)
   | .when s' k n x b r => .when s' k n x (b.dropResume kk s ff y) (r.dropResume kk s ff y)
-  | .copy x x' b => .copy x x' (b.dropResume kk s ff y)
-  | .drop x b => .drop x (b.dropResume kk s ff y)
+  | .copy l x x' b => .copy l x x' (b.dropResume kk s ff y)
+  | .drop l x b => .drop l x (b.dropResume kk s ff y)
   | t => t
 
 /-- The clause code `λp. let (w, k) = p; B` without its resumes, when it is tail-resumptive: every
@@ -646,8 +646,8 @@ def Tm.allVars : Tm → List Var
   | .letpair x y p b => x :: y :: p :: b.allVars
   | .case s x b₁ y b₂ => s :: x :: y :: b₁.allVars ++ b₂.allVars
   | .when s _ _ x b r => s :: x :: b.allVars ++ r.allVars
-  | .copy x x' b => x :: x' :: b.allVars
-  | .drop x b => x :: b.allVars
+  | .copy _ x x' b => x :: x' :: b.allVars
+  | .drop _ x b => x :: b.allVars
   | .fin _ dd b => dd :: b.allVars
   | .catch _ b | .catchAll b => b.allVars
   | t => t.operands
@@ -666,8 +666,8 @@ def Tm.rename (σ : Std.HashMap Var Var) : Tm → Tm
   | .case s x b₁ y b₂ => .case (σ.getD s s) (σ.getD x x) (b₁.rename σ) (σ.getD y y) (b₂.rename σ)
   | .when s k n x b r => .when (σ.getD s s) k n (σ.getD x x) (b.rename σ) (r.rename σ)
   | .absurd s => .absurd (σ.getD s s)
-  | .copy x x' b => .copy (σ.getD x x) (σ.getD x' x') (b.rename σ)
-  | .drop x b => .drop (σ.getD x x) (b.rename σ)
+  | .copy l x x' b => .copy l (σ.getD x x) (σ.getD x' x') (b.rename σ)
+  | .drop l x b => .drop l (σ.getD x x) (b.rename σ)
   | .raise p => .raise (σ.getD p p)
   | .reraise p => .reraise (σ.getD p p)
   | .perform p => .perform (σ.getD p p)
@@ -695,14 +695,14 @@ def directCalls (O : Ops) (direct : Std.HashMap OpKey Nat) : Tm → KM Tm
     let some tc := direct[key]? | return .perform p
     let a ← kfresh; let b ← kfresh; let i ← kfresh; let w ← kfresh; let u ← kfresh
     let arg ← kfresh; let f ← kfresh
-    return .letpair a b p (.letpair i w b (.drop a (.drop i (.letv u .unit
+    return .letpair a b p (.letpair i w b (.drop .word a (.drop .word i (.letv u .unit
       (.letv arg (.pair w u) (.letv f (.clos tc []) (.app f arg)))))))
   | .letv x e b => return .letv x (← directCalls O direct e) (← directCalls O direct b)
   | .letpair x y p b => return .letpair x y p (← directCalls O direct b)
   | .case s x b₁ y b₂ => return .case s x (← directCalls O direct b₁) y (← directCalls O direct b₂)
   | .when s k n x b r => return .when s k n x (← directCalls O direct b) (← directCalls O direct r)
-  | .copy x x' b => return .copy x x' (← directCalls O direct b)
-  | .drop x b => return .drop x (← directCalls O direct b)
+  | .copy l x x' b => return .copy l x x' (← directCalls O direct b)
+  | .drop l x b => return .drop l x (← directCalls O direct b)
   | .catch n b => return .catch n (← directCalls O direct b)
   | .fin p dd b => return .fin p dd (← directCalls O direct b)
   | t => pure t
@@ -806,7 +806,7 @@ def collectPoints (F : SFacts) (self : Nat) (liveAwait : Bool) (g : Nat) (fs : L
     Tm → List Point
   | .letv x e b =>
     collectPoints F self liveAwait g (.let_ x b :: fs) e ++ collectPoints F self liveAwait g fs b
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b => collectPoints F self liveAwait g fs b
+  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b => collectPoints F self liveAwait g fs b
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ =>
     collectPoints F self liveAwait g fs b₁ ++ collectPoints F self liveAwait g fs b₂
   | .catch n b => collectPoints F self liveAwait g (.catch_ n :: fs) b
@@ -824,7 +824,7 @@ def MEnv.hasSusp (E : MEnv) : Tm → Bool
   | .await _ _ => E.liveAwait
   | .app f _ => E.F.pollAt f
   | .letv _ e b => E.hasSusp e || E.hasSusp b
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b | .catch _ b | .fin _ _ b | .catchAll b => E.hasSusp b
+  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b | .catch _ b | .fin _ _ b | .catchAll b => E.hasSusp b
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => E.hasSusp b₁ || E.hasSusp b₂
   | _ => false
 
@@ -835,8 +835,8 @@ def Tm.plain : Tm → Tm
   | .letpair x y p b => .letpair x y p b.plain
   | .case s x b₁ y b₂ => .case s x b₁.plain y b₂.plain
   | .when s k n x b r => .when s k n x b.plain r.plain
-  | .copy x x' b => .copy x x' b.plain
-  | .drop x b => .drop x b.plain
+  | .copy l x x' b => .copy l x x' b.plain
+  | .drop l x b => .drop l x b.plain
   | .catch n b => .catch n b.plain
   | .fin p dd b => .fin p dd b.plain
   | .catchAll b => .catchAll b.plain
@@ -859,7 +859,7 @@ def mkTuple (xs : List Var) (k : Var → KM Tm) : KM Tm := do
 /-- Bind the variables `xs` from the right-nested tuple `t`, then `body`. -/
 def unTuple (t : Var) (xs : List Var) (body : Tm) : KM Tm := do
   match xs with
-  | [] => return .drop t body
+  | [] => return .drop .word t body
   | [x] => return .letv x (.var t) body
   | x :: rest => do
     let r ← kfresh
@@ -879,7 +879,7 @@ def MEnv.suspend (E : MEnv) (j : Nat) (pl : Var) (k : Option Var) : KM Tm := do
 def MEnv.payload (E : MEnv) (p : Var) (k : Var → KM Tm) : KM Tm := do
   let some key := payloadKey E.O.defs p | throw "capture: a control operation whose name is not a literal"
   let a ← kfresh; let b ← kfresh; let i ← kfresh; let w ← kfresh; let pl ← kfresh
-  return .letpair a b p (.letpair i w b (.drop a (.drop i
+  return .letpair a b p (.letpair i w b (.drop .word a (.drop .word i
     (.letv pl (.con (E.O.keyIdx key) E.O.keys.size w) (← k pl)))))
 
 def MEnv.pointIdx (E : MEnv) (x : Var) : KM Nat := do
@@ -913,8 +913,8 @@ def MEnv.outcome (E : MEnv) (fs : List Frame) : Tm → KM Tm
       let r ← kfresh; let q ← kfresh
       return .letv r (← E.outcome (.let_ x b :: fs) e) (.case r x (← E.outcome fs b) q (.inj true q))
   | .letpair x y p b => return .letpair x y p (← E.outcome fs b)
-  | .copy x x' b => return .copy x x' (← E.outcome fs b)
-  | .drop x b => return .drop x (← E.outcome fs b)
+  | .copy l x x' b => return .copy l x x' (← E.outcome fs b)
+  | .drop l x b => return .drop l x (← E.outcome fs b)
   | .case s x b₁ y b₂ => return .case s x (← E.outcome fs b₁) y (← E.outcome fs b₂)
   | .when s k n x b r => return .when s k n x (← E.outcome fs b) (← E.outcome fs r)
   | .catch n b => do
@@ -977,8 +977,8 @@ def MEnv.resumeArm (E : MEnv) (j : Nat) (y : Var) (k : Option Var) : KM Tm := do
 /-- The first error kept: `e` when it is one; else `r`'s error. -/
 def errNext (e r : Var) : KM Tm := do
   let u ← kfresh; let v ← kfresh; let q ← kfresh; let ee ← kfresh; let u₃ ← kfresh
-  return .case e u (.case r v (.drop v (.inj false u)) q (.drop u (.inj true q)))
-    ee (.drop r (.letv u₃ (.var ee) (.inj true u₃)))
+  return .case e u (.case r v (.drop .word v (.inj false u)) q (.drop .word u (.inj true q)))
+    ee (.drop .payload r (.letv u₃ (.var ee) (.inj true u₃)))
 
 /-- Cancel point `j`, `z` the cancel's `()`: the callee's `k` first, then the finalisers of its
 `fin` frames, innermost first, every other variable dropped; the first error kept. -/
@@ -1000,7 +1000,7 @@ def MEnv.cancelArm (E : MEnv) (j : Nat) (z : Var) (k : Option Var) : KM Tm := do
           (.letv e' (← errNext e rr) (← go rest e'))))
       else
         let u₀ ← kfresh
-        return .letv u₀ .unit (.letv u (.inj true u₀) (.letv rr (.app dd u) (.drop rr (← go rest e))))
+        return .letv u₀ .unit (.letv u (.inj true u₀) (.letv rr (.app dd u) (.drop .word rr (← go rest e))))
   let tail ← go fins e₀
   -- `z` is every point's: each injects a copy of its own, whose injection's type is its own
   -- (`Clos.Types` keys an injection's type by its payload).
@@ -1010,7 +1010,7 @@ def MEnv.cancelArm (E : MEnv) (j : Nat) (z : Var) (k : Option Var) : KM Tm := do
       let mz ← kfresh
       pure (.letv z' (.var z) (.letv mz (.inj true z') (.letv e₀ (.app k mz) tail)))
     | none => pure (.letv z' (.var z) (.letv e₀ (.inj false z') tail))
-  return Tm.drops others start
+  return Tm.drops .abort others start
 
 /-- Group `g`'s resume code: `inl y` resumes, `inr ()` cancels, by the state's variant. -/
 def MEnv.resumeCode (E : MEnv) (g : Nat) : KM Code := do
@@ -1067,7 +1067,7 @@ def crossedScopes (F : SFacts) : List Nat → Tm → List Nat × List Nat
     let (o₁, c₁) := crossedScopes F op e
     let (o₂, c₂) := crossedScopes F o₁ b
     (o₂, c₁ ++ c₂)
-  | op, .letpair _ _ _ b | op, .copy _ _ b | op, .drop _ b | op, .catch _ b | op, .fin _ _ b
+  | op, .letpair _ _ _ b | op, .copy _ _ _ b | op, .drop _ _ b | op, .catch _ b | op, .fin _ _ b
   | op, .catchAll b => crossedScopes F op b
   | op, .case _ _ b₁ _ b₂ | op, .when _ _ _ _ b₁ b₂ =>
     let (o₁, c₁) := crossedScopes F op b₁
@@ -1087,7 +1087,7 @@ def plainCode (F : SFacts) (t : Tm) : Except String Tm := do
 def Tm.hasCapture : Tm → Bool
   | .perform _ | .hnd .. | .ubind .. => true
   | .letv _ e b => e.hasCapture || b.hasCapture
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b => b.hasCapture
+  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b => b.hasCapture
   | .case _ _ b₁ _ b₂ => b₁.hasCapture || b₂.hasCapture
   | _ => false
 

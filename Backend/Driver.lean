@@ -227,7 +227,7 @@ on the program each stage receives. -/
 /-- The nodes of a closure-IR term. -/
 def Clos.Tm.size : Clos.Tm → Nat
   | .letv _ e b => 1 + e.size + b.size
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b => 1 + b.size
+  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b => 1 + b.size
   | .case _ _ b₁ _ b₂ => 1 + b₁.size + b₂.size
   | _ => 1
 

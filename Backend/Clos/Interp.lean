@@ -467,11 +467,11 @@ def eval (codes : Array Code) : Nat → Env → Tm → IM (CV × Env)
           | .inj true v => do freeObj a; eval codes n ((y, v) :: env) b₂
           | _ => throw "closure IR: case of a non-injection"
         | _ => throw "closure IR: case of a non-injection"
-    | .copy x x' b => do
+    | .copy _ x x' b => do
         let some v := env.lookup x | throw s!"closure IR: copy of consumed variable {x}"
         let v' ← deepCopy objFuel v
         eval codes n ((x', v') :: env) b
-    | .drop x b => do
+    | .drop _ x b => do
         let (v, env) ← take env x
         deepDrop objFuel v
         eval codes n env b

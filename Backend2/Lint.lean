@@ -14,11 +14,12 @@ verifies and never fills in:
   unreachable);
 - every call has its callee's number of arguments, and every closure its code's environment;
 - every `lend` answers a borrow of its kind: `mut` or `imm` (`Op.lend`, SPEC §57);
-- every `copy` is of a variable its type lets the program duplicate (`copyable`): a persistent
-  one, `!` read off the LIR type (`Types.ofV` keeps it), or an `imm` borrow;
-- every `drop` is of a variable its type lets the program discard (`droppable`), but for the
-  callees' suspended computations a stack machine drops (`Prog.stackKs`); a type owning an opaque
-  value is never `droppable`;
+- every `copy` meets the premise of the rule the node carries (`copiesAt`): `Ctx.SplitP.dup` at a
+  persistent type, `!` read off the LIR type (`Types.ofV` keeps it); the `copy` constants and
+  `copy_derives` at an `imm` borrow;
+- every `drop` meets the premise of the rule the node carries (`dropsAt`); the callees' suspended
+  computations a stack machine drops are the rule `stackK` (`Prog.stackKs`); no rule drops a
+  type owning an opaque value;
 - every `abandon` meets the premise of the rule the node carries (`abandonable`): at a `[let]`'s
   abort, `effLet`'s `hW` (the variable's type holds no owned cell, `VTy.Drop`); at `⊤`, `topI`'s,
   which has none. It is the only node at which an opaque value is discarded, and `Convert` emits
@@ -60,22 +61,47 @@ def borrowMode (t : LTy) : Option Bool :=
   | .imm _ | .fam (.imm _) => some false
   | _ => none
 
-/-- A type whose values `copy` may duplicate: a persistent one (`LTy.persistent`: a slot a split
-duplicates, `Ctx.SplitP.dup`, and what `clone` copies), or an `imm` borrow or a family of them
-(the `copy` and `array_copy` constants, `axCopyTy`, `arrCopyTy`). -/
-def copyable (t : LTy) : Bool :=
-  t.persistent || match t with
+/-- **A copy at the rule `r`**, its premise read on the LIR type:
+- `dup` (`Ctx.SplitP.dup`): an unrestricted type (`LTy.persistent`, kept by `ofV_persistent`);
+- `const` and `derived` (`CDerives.copy`/`arrCopy`, `copy_derives`): `DerivedCopy`, an `imm`
+  borrow or a family of them. -/
+def copiesAt : CopyRule → LTy → Bool
+  | .dup, t => t.persistent
+  | .const, t | .derived, t => match t.unbang with
     | .imm _ | .fam (.imm _) => true
     | _ => false
 
-/-- A type whose values `drop` may discard anywhere: a persistent one (`Ctx.DeadP.drop`,
-`Ctx.SoloP.skip`), one that holds no owned cell and no opaque value (`LTy.drops` without
-`LTy.ownsOpq`: the `forget` constants at `Imm`, `Mut`, `Unk`, `!A`), or a family of borrows
-(`array_forget`, and the destructor at `[Mut A]`, `dtorAt`: `forget_fam_compatX`). -/
-def droppable (t : LTy) : Bool :=
-  t.persistent || (t.drops && !t.ownsOpq) || match t with
-    | .fam (.imm _) | .fam (.mut _) => true
+/-- A type whose values `copy` may duplicate at some rule. -/
+def copyable (t : LTy) : Bool := copiesAt .dup t || copiesAt .derived t
+
+/-- **A drop at the rule `r`**, its premise read on the LIR type:
+- `dead` (`Ctx.DeadP.drop`, `Ctx.SoloP.skip`): an unrestricted type;
+- `forget` (the `forget` constants, `arrForget`): `Imm`, `Mut`, `Unk`, `[Imm A]`;
+- `dtor` (`drop_derives`): a leaf the destructor forgets: an unrestricted type, a borrow, `Unk`,
+  or a family of borrows (`HasDtor.arrayMut` at `[Mut A]`: `dtorAt` is `idx` then `forget`);
+- `unused`: an unrestricted type, the premise of the weakening the part that receives the slot
+  applies at its leaves (`Ctx.DeadP.drop`); a persistent value holds no resource
+  (`vP_empty_of_persistent`), so dropping it at the split is the same. A slot the part absorbs
+  instead (`⊤`, `absurd`, an abort) is refused here, not dropped: that no checked program has one
+  of a type that is not persistent is `UNPROVED:` (`Check.SplitMasks.NeitherAbsorbed` states the
+  cases);
+- `superseded` (`effRaise`'s `hd`): an unrestricted type, or one that holds no owned cell and no
+  opaque value (`LTy.drops` without `LTy.ownsOpq`), or a family of `imm` borrows;
+- `stackK` (`UNPROVED:`, F3): the variable is one of `Prog.stackKs`.
+No rule drops a value that owns an opaque value: an abort abandons it (`abandon`). -/
+def dropsAt (p : Prog) (x : Var) : DropRule → LTy → Bool
+  | .dead, t => t.persistent
+  | .forget, t => match t.unbang with
+    | .imm _ | .mut _ | .unk | .fam (.imm _) => true
     | _ => false
+  | .dtor, t => t.persistent || match t.unbang with
+    | .imm _ | .mut _ | .unk | .fam (.imm _) | .fam (.mut _) => true
+    | _ => false
+  | .unused, t => t.persistent
+  | .superseded, t => t.persistent || (t.drops && !t.ownsOpq) || match t with
+    | .fam (.imm _) => true
+    | _ => false
+  | .stackK, _ => p.stackKs.contains x
 
 /-- A type whose values an `abandon` node at the rule `r` may discard: the premise of `r`, read
 on the LIR type. At a `[let]`'s abort, `CDerives.effLet`'s `hW : S.Weak → Γ₂.Drops`: each slot
@@ -89,13 +115,13 @@ def abandonable : Abandon → LTy → Bool
 /-- A slot a split duplicates (`Ctx.SplitP.dup`: of persistent type) is `copyable` at its LIR
 type. -/
 theorem copyable_ofV {ms : MachSet} {A : VTy} {t : LTy} (hA : A.persistent = true)
-    (h : ofV ms A = .ok t) : copyable t = true := by
-  simp [copyable, ofV_persistent hA h]
+    (h : ofV ms A = .ok t) : copiesAt .dup t = true := by
+  simp [copiesAt, ofV_persistent hA h]
 
 /-- A slot a leaf drops (`Ctx.DeadP.drop`: of persistent type) is `droppable` at its LIR type. -/
-theorem droppable_ofV_persistent {ms : MachSet} {A : VTy} {t : LTy} (hA : A.persistent = true)
-    (h : ofV ms A = .ok t) : droppable t = true := by
-  simp [droppable, ofV_persistent hA h]
+theorem droppable_ofV_persistent {ms : MachSet} {A : VTy} {t : LTy} (p : Prog) (x : Var)
+    (hA : A.persistent = true) (h : ofV ms A = .ok t) : dropsAt p x .dead t = true := by
+  simp [dropsAt, ofV_persistent hA h]
 
 /-- A slot an abort abandons (`Ctx.Drops`: of a `VTy.OwnFree` type) is `abandonable` at its LIR
 type. -/
@@ -152,17 +178,18 @@ def lintTm (w : String) (p : Prog) : Nat → Std.HashSet Var → Tm → LM Left
           bad w s!"the arms of a case on x{sv} consume different variables: {a.toList.filter (!b.contains ·)} / {b.toList.filter (!a.contains ·)}"
         return some a
     | .absurd sv => do let _ ← use w env sv; return none
-    | .copy x x' b => do
+    | .copy r x x' b => do
       if !env.contains x then bad w s!"x{x} copied when it is not owned"
       match p.ty[x]? with
-      | some t => if !copyable t then bad w s!"x{x} copied at {t}, which is not persistent"
+      | some t =>
+        if !copiesAt r t then bad w s!"x{x} copied at {t} ({r.name}), where the rule's premise does not hold"
       | none => bad w s!"x{x} has no type"
       lintTm w p f (← bindNew w p env x') b
-    | .drop x b => do
+    | .drop r x b => do
       match p.ty[x]? with
       | some t =>
-        if !droppable t && !p.stackKs.contains x then
-          bad w s!"x{x} dropped at {t}, which may own a cell or an opq value"
+        if !dropsAt p x r t then
+          bad w s!"x{x} dropped at {t} ({r.name}), where the rule's premise does not hold"
       | none => bad w s!"x{x} has no type"
       lintTm w p f (← use w env x) b
     | .abandon r x b => do

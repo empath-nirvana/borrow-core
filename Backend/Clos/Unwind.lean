@@ -63,8 +63,8 @@ def Tm.fv : Tm → List Var
   | .case s x b₁ y b₂ => s :: b₁.fv.filter (· != x) ++ b₂.fv.filter (· != y)
   | .when s _ _ x b r => s :: b.fv.filter (· != x) ++ r.fv
   | .absurd s => [s]
-  | .copy x x' b => x :: b.fv.filter (· != x')
-  | .drop x b => x :: b.fv
+  | .copy _ x x' b => x :: b.fv.filter (· != x')
+  | .drop _ x b => x :: b.fv
   | .raise p | .reraise p | .perform p => [p]
   | .await p k => [p, k]
   | .hnd _ hr cls b => hr :: cls :: b.fv
@@ -78,14 +78,14 @@ def Tm.fvs (t : Tm) : List Var := (t.fv.filter (fun x => !Var.isSelf x)).eraseDu
 /-- Every `letv`'s definition, by its variable. -/
 def defsOf (acc : Std.HashMap Var Tm) : Tm → Std.HashMap Var Tm
   | .letv x e b => defsOf (defsOf (acc.insert x e) e) b
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b | .hnd _ _ _ b | .ubind _ _ b | .catch _ b
+  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b | .hnd _ _ _ b | .ubind _ _ b | .catch _ b
   | .fin _ _ b | .catchAll b => defsOf acc b
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => defsOf (defsOf acc b₁) b₂
   | _ => acc
 
 /-- The term a term's value is built by: its tail under bindings. -/
 def Tm.tail : Tm → Tm
-  | .letv _ _ b | .letpair _ _ _ b | .copy _ _ b | .drop _ b => b.tail
+  | .letv _ _ b | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b => b.tail
   | t => t
 
 /-- The `i32` literal a variable is bound to. -/
@@ -148,7 +148,7 @@ def UFacts.raises (F : UFacts) : Tm → Raises
   | .reraise _ => F.rr
   | .app f a | .run f a => F.callRaises f a
   | .letv _ e b => Raises.union (F.raises e) (F.raises b)
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b => F.raises b
+  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b => F.raises b
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => Raises.union (F.raises b₁) (F.raises b₂)
   | .catch n b => (F.raises b).map (·.filter (·.1 != n))
   | .fin _ dd b => Raises.union (F.raises b) (F.rcOf (F.codesOf dd))
@@ -158,7 +158,7 @@ def UFacts.raises (F : UFacts) : Tm → Raises
 def UFacts.caughtAll (F : UFacts) : Tm → Raises
   | .catchAll b => Raises.union (F.raises b) (F.caughtAll b)
   | .letv _ e b => Raises.union (F.caughtAll e) (F.caughtAll b)
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b | .catch _ b | .fin _ _ b => F.caughtAll b
+  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b | .catch _ b | .fin _ _ b => F.caughtAll b
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => Raises.union (F.caughtAll b₁) (F.caughtAll b₂)
   | _ => some []
 
@@ -211,10 +211,10 @@ def callAs (sumMode calleeSum raising : Bool) (f a : Var) : UM Tm := do
     return .letv r (.app f a) (.case r v (.var v) q (.absurd q))
 
 /-- Drop each variable, then `t`. -/
-def Tm.drops (xs : List Var) (t : Tm) : Tm := xs.foldr (fun x t => .drop x t) t
+def Tm.drops (l : Licence) (xs : List Var) (t : Tm) : Tm := xs.foldr (fun x t => .drop l x t) t
 
 /-- `inr p`, the variables `xs` dropped first. -/
-def propagateOn (xs : List Var) (p : Var) : Tm := Tm.drops xs (.inj true p)
+def propagateOn (xs : List Var) (p : Var) : Tm := Tm.drops .abort xs (.inj true p)
 
 /-- `onName q` when the payload `q = (m, …)` has the name `n`, `onOther q` otherwise: a compare
 of `m`, unless every key `ks` the payload may have decides it. -/
@@ -223,10 +223,10 @@ def byName (n : UInt32) (ks : List OpKey) (q : Var) (onName onOther : Var → UM
   if ks.all (·.1 != n) then return ← onOther q
   let m ← ufresh; let rest ← ufresh; let m' ← ufresh; let l ← ufresh; let pr ← ufresh
   let bo ← ufresh; let u₁ ← ufresh; let u₂ ← ufresh; let q₁ ← ufresh; let q₂ ← ufresh
-  return .letpair m rest q (.copy m m' (.letv l (.lit (.i32 n)) (.letv pr (.pair m' l)
+  return .letpair m rest q (.copy .word m m' (.letv l (.lit (.i32 n)) (.letv pr (.pair m' l)
     (.letv bo (.prim (.host (.rel .w32 .eq)) [pr])
-      (.case bo u₁ (.drop u₁ (.letv q₁ (.pair m rest) (← onOther q₁)))
-        u₂ (.drop u₂ (.letv q₂ (.pair m rest) (← onName q₂))))))))
+      (.case bo u₁ (.drop .word u₁ (.letv q₁ (.pair m rest) (← onOther q₁)))
+        u₂ (.drop .word u₂ (.letv q₂ (.pair m rest) (← onName q₂))))))))
 
 /-- The finaliser `dd` on `inj₂ ()` (a frame's clauses may be one code, `markUbinds`), then the
 raise of `q` again, or the finaliser's own error. -/
@@ -234,8 +234,8 @@ def finalise (E : UEnv) (dd q : Var) : UM Tm := do
   let u₀ ← ufresh; let u ← ufresh; let dr ← ufresh
   let fin ← if E.sumOf (E.F.codesOf dd) then do
       let u₂ ← ufresh; let q₂ ← ufresh
-      pure (.case dr u₂ (.drop u₂ (.inj true q)) q₂ (.drop q (.inj true q₂)))
-    else pure (.drop dr (.inj true q))
+      pure (.case dr u₂ (.drop .word u₂ (.inj true q)) q₂ (.drop .payload q (.inj true q₂)))
+    else pure (.drop .word dr (.inj true q))
   return .letv u₀ .unit (.letv u (.inj true u₀) (.letv dr (.app dd u) fin))
 
 /-- A finaliser frame's normal end on the body's value `v`: `dd` dropped, unless what follows
@@ -243,7 +243,7 @@ calls it (`keep`, its clauses one code); at `poll`, only at an `inl` of the outc
 having moved `dd` into a suspension's state. As a sum when `sumMode`. -/
 def finNormal (sumMode poll keep : Bool) (dd v : Var) : UM Tm := do
   let wrap (t : Tm) : UM Tm := if sumMode then wrapInl t else pure t
-  let dropDd (t : Tm) : Tm := if keep then t else .drop dd t
+  let dropDd (t : Tm) : Tm := if keep then t else .drop .abort dd t
   if !poll then return dropDd (← wrap (.var v))
   let x ← ufresh; let s ← ufresh
   return .case v x (dropDd (← wrap (.inj false x))) s (← wrap (.inj true s))
@@ -257,8 +257,8 @@ def lowerP (E : UEnv) (outer : List Var) : Tm → UM Tm
   | .letpair x y p b => return .letpair x y p (← lowerP E outer b)
   | .case s x b₁ y b₂ => return .case s x (← lowerP E outer b₁) y (← lowerP E outer b₂)
   | .when s k n x b r => return .when s k n x (← lowerP E outer b) (← lowerP E outer r)
-  | .copy x x' b => return .copy x x' (← lowerP E outer b)
-  | .drop x b => return .drop x (← lowerP E outer b)
+  | .copy l x x' b => return .copy l x x' (← lowerP E outer b)
+  | .drop l x b => return .drop l x (← lowerP E outer b)
   | .app f a => callAs false (E.sumAt f) (E.mayR (.app f a)) f a
   | .reraise p => do
     -- No finaliser raises: no error is kept.
@@ -297,8 +297,8 @@ def lowerS (E : UEnv) (outer : List Var) : Tm → UM Tm
   | .letpair x y p b => return .letpair x y p (← lowerS E outer b)
   | .case s x b₁ y b₂ => return .case s x (← lowerS E outer b₁) y (← lowerS E outer b₂)
   | .when s k n x b r => return .when s k n x (← lowerS E outer b) (← lowerS E outer r)
-  | .copy x x' b => return .copy x x' (← lowerS E outer b)
-  | .drop x b => return .drop x (← lowerS E outer b)
+  | .copy l x x' b => return .copy l x x' (← lowerS E outer b)
+  | .drop l x b => return .drop l x (← lowerS E outer b)
   | .catch n b => do
     -- `inl (inl v)`, `inl (inr q)` when `q` is of the name `n`, else `inr q`.
     if !E.mayR b then return ← wrapInl (← wrapInl (← lowerP E outer b))
@@ -345,7 +345,7 @@ def ufUnion (parent : Array Nat) (a b : Nat) : Array Nat :=
 def sitesOf (F : UFacts) : Tm → List (List Nat)
   | .app f _ | .run f _ => [F.codesOf f]
   | .letv _ e b => sitesOf F e ++ sitesOf F b
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b | .catch _ b | .catchAll b => sitesOf F b
+  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b | .catch _ b | .catchAll b => sitesOf F b
   | .fin _ dd b => F.codesOf dd :: sitesOf F b
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => sitesOf F b₁ ++ sitesOf F b₂
   | _ => []
@@ -356,8 +356,8 @@ def Tm.maxVar : Tm → Var
   | .letpair x y p b => max (max x y) (max p b.maxVar)
   | .case s x b₁ y b₂ => max s (max (max x y) (max b₁.maxVar b₂.maxVar))
   | .when s _ _ x b r => max (max s x) (max b.maxVar r.maxVar)
-  | .copy x x' b => max (max x x') b.maxVar
-  | .drop x b => max x b.maxVar
+  | .copy _ x x' b => max (max x x') b.maxVar
+  | .drop _ x b => max x b.maxVar
   | .hnd _ hr cls b => max (max hr cls) b.maxVar
   | .ubind nn dd b => max (max nn dd) b.maxVar
   | .fin _ dd b => max dd b.maxVar
@@ -368,7 +368,7 @@ def Tm.maxVar : Tm → Var
 def Tm.hasRaise : Tm → Bool
   | .raise _ | .reraise .. | .catch .. | .fin .. | .catchAll _ => true
   | .letv _ e b => e.hasRaise || b.hasRaise
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b => b.hasRaise
+  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b => b.hasRaise
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => b₁.hasRaise || b₂.hasRaise
   | _ => false
 
@@ -376,7 +376,7 @@ def Tm.hasRaise : Tm → Bool
 def Tm.raiseSites : Tm → Nat
   | .raise _ => 1
   | .letv _ e b => e.raiseSites + b.raiseSites
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b | .catch _ b | .fin _ _ b | .catchAll b =>
+  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b | .catch _ b | .fin _ _ b | .catchAll b =>
     b.raiseSites
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => b₁.raiseSites + b₂.raiseSites
   | _ => 0

@@ -161,7 +161,7 @@ def freeUses : Nat → Tm → List (Var × Bool)
     | .letpair _ _ p b => (p, false) :: freeUses f b
     | .case s _ b₁ _ b₂ => (s, false) :: (freeUses f b₁ ++ freeUses f b₂)
     | .absurd s => [(s, false)]
-    | .copy x _ b | .drop x b | .abandon _ x b => (x, false) :: freeUses f b
+    | .copy _ x _ b | .drop _ x b | .abandon _ x b => (x, false) :: freeUses f b
 
 /-- The lend scopes a term allocates cells for, and the variables its `letpair`s bind first. -/
 def scopesIn : Nat → Tm → List Nat × List Var
@@ -179,7 +179,7 @@ def scopesIn : Nat → Tm → List Nat × List Var
       let (s₁, x₁) := scopesIn f b₁
       let (s₂, x₂) := scopesIn f b₂
       (s₁ ++ s₂, x₁ ++ x₂)
-    | .copy _ _ b | .drop _ b | .abandon _ _ b => scopesIn f b
+    | .copy _ _ _ b | .drop _ _ b | .abandon _ _ b => scopesIn f b
     | _ => ([], [])
 
 -- UNPROVED: that a variable its function uses only as the operand of `free` is freed on every

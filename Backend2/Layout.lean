@@ -392,8 +392,8 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
     let cc ← walk p f cc b₁ dst
     walk p f cc b₂ dst
   | .absurd _ => pure cc
-  | .copy x x' b => do join (← nv x) (← nv x'); walk p f cc b dst
-  | .drop _ b | .abandon _ _ b => walk p f cc b dst
+  | .copy _ x x' b => do join (← nv x) (← nv x'); walk p f cc b dst
+  | .drop _ _ b | .abandon _ _ b => walk p f cc b dst
 
 -- UNPROVED: that the closure classes hold every code whose closure can reach each place. It
 -- should hold because `walk` joins the two sides of every move a closure makes: a binding, a
@@ -690,12 +690,12 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
           let ft (j c : Nat) : Bool := !boxed.contains (v, j) && trivial[c]!
           -- Copying or dropping a cell, a borrow or a family is its words alone (`trivial`): an
           -- owned `Ref` or array is never copied or dropped by `copy`/`drop` but inside a value
-          -- that owns nothing. `Lint` checks, on every program compiled, that each `copy` is at a
-          -- persistent type or of `imm` borrows and each `drop` at a persistent type, one with no
-          -- owned cell or a family of borrows (`Lint.copyable`, `Lint.droppable`), `!` read off
-          -- the LIR type; a persistent value holds no resource (`vP_empty_of_persistent`), a
-          -- `VTy.OwnFree` one no owned cell (`vC_noOwn_of_ownFree`), a family of borrows none
-          -- (`forget_fam_compatX`).
+          -- that owns nothing. `Lint` checks, on every program compiled, each `copy` and `drop`
+          -- against its rule's premise (`Lint.copiesAt`, `Lint.dropsAt`): a persistent type, an
+          -- `imm` borrow or a family of them at a copy; a persistent type, one with no owned
+          -- cell, or a family of borrows at a drop, `!` read off the LIR type; a persistent value
+          -- holds no resource (`vP_empty_of_persistent`), a `VTy.OwnFree` one no owned cell
+          -- (`vC_noOwn_of_ownFree`), a family of borrows none.
           -- UNPROVED: that a variable's LIR type is the image of its node's checked type (by
           -- construction in `Convert`, not proved), and the stack machines' drops of a level's
           -- suspended computation, which no type licenses (`Prog.stackKs`, at `genStackMach`). If

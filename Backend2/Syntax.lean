@@ -176,6 +176,52 @@ def Abandon.name : Abandon → String
   | .letAbort => "let abort"
   | .top => "top"
 
+/-- **The rule a `drop` node is at**: the kernel rule that discards the value there. `Lint.dropsAt`
+checks each rule's premise on the variable's LIR type. -/
+inductive DropRule where
+  /-- Weakening at an unrestricted type (`Ctx.DeadP.drop`, `Ctx.SoloP.skip`): a persistent value,
+  among them the machine's own words (a unit, a counter). -/
+  | dead
+  /-- A `forget` constant applied (`CDerives.forgetImm`, `forgetMut`, `forgetUnk`, `arrForget`):
+  a borrow, `Unk`, or a family of `imm` borrows. -/
+  | forget
+  /-- A piece of the destructor of a `dtor` node's type (`drop_derives` over `dtor_wf`): each leaf
+  the type's `HasDtor` derivation forgets, among them a family of `mut` borrows
+  (`HasDtor.arrayMut`, whose `dtorAt` is `idx` then `forget`). -/
+  | dtor
+  /-- A live slot of a split's context that neither part's mask holds, or one a leaf or a frame
+  leaves: weakened (`Ctx.DeadP.drop`), at a persistent type, where the kernel weakens it at the
+  leaves of the part that receives it. The kernel may instead absorb it (`⊤`, `absurd`, an
+  abort); `Lint` refuses such a drop at a type that is not persistent. `UNPROVED:` that no checked
+  program has one (`Check.SplitMasks.NeitherAbsorbed` states the cases). -/
+  | unused
+  /-- A raise's payload superseded by a finaliser's (`then_fin`, `unwind_prefix`): at a type that
+  holds no owned cell (`CDerives.effRaise`'s `hd : o.A.Drop`), and owns no opaque value. -/
+  | superseded
+  /-- A level's suspended computation a stack machine drops (`Prog.stackKs`). `UNPROVED:` no
+  kernel rule; #746 item 5 (F3) states the one that would license it. -/
+  | stackK
+  deriving Inhabited, BEq, Repr
+
+def DropRule.name : DropRule → String
+  | .dead => "dead" | .forget => "forget" | .dtor => "dtor" | .unused => "unused"
+  | .superseded => "superseded" | .stackK => "stack k"
+
+/-- **The rule a `copy` node is at.** `Lint.copiesAt` checks each rule's premise on the LIR type. -/
+inductive CopyRule where
+  /-- A split that gives an unrestricted slot to both parts (`Ctx.SplitP.dup`). -/
+  | dup
+  /-- The `copy` or `array_copy` constant applied (`CDerives.copy`, `CDerives.arrCopy`). -/
+  | const
+  /-- The derived copy of an `imm` borrow or a family of them, where no constant is written
+  (`copy_derives` at `DerivedCopy`, `Core/Classes.lean`): `copyE A i e` is a derivation whenever
+  `e` is one with both copies live, so a copy at any site is licensed. -/
+  | derived
+  deriving Inhabited, BEq, Repr
+
+def CopyRule.name : CopyRule → String
+  | .dup => "dup" | .const => "const" | .derived => "derived"
+
 inductive Tm where
   | var (x : Var)
   | unit
@@ -200,10 +246,10 @@ inductive Tm where
   | case (s x : Var) (b₁ : Tm) (y : Var) (b₂ : Tm)
   /-- Unreachable: `s` has type `0`. -/
   | absurd (s : Var)
-  /-- `x'` a copy of `x`; `x` stays owned. -/
-  | copy (x x' : Var) (b : Tm)
-  /-- `x` consumed: its destructor. -/
-  | drop (x : Var) (b : Tm)
+  /-- `x'` a copy of `x` at the rule `r`; `x` stays owned. -/
+  | copy (r : CopyRule) (x x' : Var) (b : Tm)
+  /-- `x` consumed at the rule `r`: its destructor. -/
+  | drop (r : DropRule) (x : Var) (b : Tm)
   /-- `x` abandoned at the rule `r`, which the typed term applies here (`Abandon`): nothing runs.
   `Lint` admits an opaque value here and at no `drop`. -/
   | abandon (r : Abandon) (x : Var) (b : Tm)
