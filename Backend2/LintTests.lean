@@ -65,16 +65,42 @@ def closT : LTy := .thunk (.arr .unit (.ret .unit))
 #guard accepts (dropProg (.mut i32T))
 #guard accepts (dropProg (.fam (.mut i32T)))
 
--- A drop of an opaque value, or of a pair holding one: refused where the typed term does not
--- abandon it, accepted where it does (`Prog.abandoned`: an abort's `Ctx.Drops`, `⊤`).
+-- A drop of an opaque value, or of a pair holding one: refused. No constant forgets an opaque
+-- value and it has no destructor, so only an `abandon` node discards one.
 #guard refuses (dropProg (.opq .output)) "which may own a cell or an opq value"
 #guard refuses (dropProg (.pair i32T (.opq .input))) "or an opq value"
-/-- `dropProg t` with `x0` abandoned by the typed term. -/
-def abandonProg (t : LTy) : Prog := { dropProg t with abandoned := ({} : Std.HashSet Var).insert 0 }
+
+/-- `f0 (x0 : t) = abandon x0 (a [let]'s abort); ()`. -/
+def abandonProg (t : LTy) : Prog where
+  fns := #[{ name := "abandons", params := [0], ret := .unit, body := .abandon .letAbort 0 .unit }]
+  codes := #[]
+  main := .unit
+  mainTy := .unit
+  ty := ({} : Std.HashMap Var LTy).insert 0 t
 #guard accepts (abandonProg (.opq .output))
 #guard accepts (abandonProg (.pair i32T (.opq .input)))
--- Abandonment admits no more than `LTy.drops`: an owned cell is refused there too.
-#guard refuses (abandonProg (.ref i32T)) "may own a cell"
+-- An abandonment admits no more than `LTy.drops`: an owned cell is refused there too.
+#guard refuses (abandonProg (.ref i32T)) "abandoned at ref i32 (let abort), which may own a cell"
+
+/-- A `[let]`'s branch on its premise's outcome `x0 : 1 + i32`, with `x1`, an output stream, in
+`N`'s context: the abort arm abandons `x1` (`hW`) and answers the abort `inr e`; the value arm
+`ok` gets `x1` with the value `u`. -/
+def letArms (ok : Tm) : Prog where
+  fns := #[{ name := "let arms", params := [0, 1], ret := .sum (.opq .output) i32T,
+             body := .case 0 2 ok 3 (.abandon .letAbort 1 (.inj true 3)) }]
+  codes := #[]
+  main := .unit
+  mainTy := .unit
+  ty := (((((({} : Std.HashMap Var LTy).insert 0 (.sum .unit i32T)).insert 1 (.opq .output)).insert 2
+    .unit).insert 3 i32T).insert 4 i32T)
+
+-- The value arm hands the stream on: accepted.
+#guard accepts (letArms (.drop 2 (.inj false 1)))
+-- The value arm drops the stream, which the abort arm abandons: refused. The abort arm's
+-- abandonment is a node at its own site and licenses nothing in the other arm, so the same
+-- variable's drop there is checked by its type alone.
+#guard refuses (letArms (.drop 2 (.drop 1 (.letv 4 (.lit (.i32 0)) (.inj true 4)))))
+  "x1 dropped at Output, which may own a cell or an opq value"
 
 -- A drop no type licenses, of a stack machine's level (`Prog.stackKs`): accepted.
 #guard accepts { dropProg closT with stackKs := ({} : Std.HashSet Var).insert 0 }

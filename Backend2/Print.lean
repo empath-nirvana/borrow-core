@@ -18,7 +18,6 @@ def ppOp : Op → String
   | .split c => if c then "split" else "split!"
   | .litByte => "litByte"
   | .litView c => s!"litView[{c}]"
-  | .staticCell k => s!"static[{k}]"
   | .alloc _ => "alloc" | .allocLent s _ => s!"allocLent[s{s}]" | .free => "free" | .release => "release" | .swap => "swap"
   | .lend m => if m then "lend mut" else "lend imm" | .relend => "relend"
   | .load => "load" | .take => "take" | .put => "put" | .newArr => "newArr"
@@ -58,6 +57,7 @@ def Tm.pp (ty : Var → String) : Nat → Tm → List String
   | d, .absurd s => [ind d ++ s!"absurd {v s}"]
   | d, .copy x x' b => (ind d ++ s!"copy {v x} -> {v x'}") :: Tm.pp ty d b
   | d, .drop x b => (ind d ++ s!"drop {v x}") :: Tm.pp ty d b
+  | d, .abandon r x b => (ind d ++ s!"abandon {v x} ({r.name})") :: Tm.pp ty d b
 
 def Prog.pp (p : Prog) : List String :=
   let ty := fun x => (p.ty[x]?.map LTy.pp).getD "?"

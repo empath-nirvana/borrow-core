@@ -516,14 +516,7 @@ def lowerFree (k : Option Nat) (l : Var) (d : Dest) : LM (List Stmt) := do
 def lowerPrim : Op → List Var → Dest → LM (List Stmt)
   | .alloc, [v], d => lowerAlloc none v d
   | .scopedAlloc k, [v], d => lowerAlloc (some k) v d
-  | .staticCell addr, [v], d => do
-      -- A capability's cell: the word at `addr` of the program's data, holding the contents.
-      let some n := (← T).cons[v]? | throw "flat IR: an untyped cell"
-      if (← T).cellWords n > 1 || (← T).byteCell n then
-        throw "flat IR: a capability's cell wider than its word"
-      return (← storeCell n (.data (addr - dataBase)) (locs (← vals v))) ++
-        (← emit d [.data (addr - dataBase)])
-  | .free, [l], d | .io .takeCell, [l], d => lowerFree none l d
+  | .free, [l], d => lowerFree none l d
   | .scopedFree k, [l], d => lowerFree (some k) l d
   | .load, [l], d => do
       let a ← locElem (← vty l)

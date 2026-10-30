@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.12 · 2026-10-29
+Version 1.12 · 2026-10-30
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1032,10 +1032,15 @@ capabilities from the input bytes by `mk_input`/`mk_output` (fd 1 for `stdout`, 
 `stderr`), runs `main`'s body with them bound to their names, takes the capabilities back and
 returns the outputs with `main`'s result. An undeclared stream is made and taken back empty.
 `main`'s body is put in the wrapper as its elaborated term, not as its printed form, so the
-elaborator's marks (§3) reach the check. `run_io` is checked like any `main`, so it has a
-`CDerives` derivation at the context of the operation and harness externs; `bcc interp` runs it
-with the model implementations, and both backends compile it with the host implementations
-(*Lowering*).
+elaborator's marks (§3) reach the check, and the check carries the elaboration's keys of the
+`def`s it copied. `run_io` is checked like any `main`, so it has a `CDerives` derivation at the
+context of the operation and harness externs; `bcc interp` runs it with the model
+implementations, and both backends compile it with the host implementations (*Lowering*).
+
+The harness externs are `run_io`'s alone. A program that declares one of them, or `io_inp` or
+`io_main_body` (the names the wrapper binds around `main`'s body), or that declares a capability
+other than as an extern, is refused: it could otherwise make a capability of its own, or have a
+name of its own captured by the wrapper.
 
 ### Theorems
 
@@ -1067,6 +1072,16 @@ with the model implementations, and both backends compile it with the host imple
 and other host handles are not memory: adequacy says nothing about them (whether a stream was
 flushed or closed). That the compiled lowering behaves as the model is tested, not proved.
 
+**What is proved and what is trusted.** Proved: the checked `run_io`, at any implementation of
+its externs that meets `ExternsMeet`, runs safely from every input to a value at the empty memory
+(`externs_every_run`), and at the models does (`IORun.every_run`). Trusted at the I/O boundary:
+that each host implementation meets its extern's contract, the one hypothesis `ExternsMeet`
+names, unconditionally (at every call, record list and lifetime substitution). The harness's
+makes and takes are host implementations like the operations and sit at the same boundary; a
+backend adds no code of its own around `run_io` that makes, takes, copies or drops a value. That
+a backend compiles the checked term faithfully is the compiler's obligation (`docs/compiler.md`), outside this
+boundary, and is tested, not proved.
+
 ### Assurance
 
 Each extern records its assurance level, on the ladder of decision 27: (1) assumed,
@@ -1077,26 +1092,27 @@ the program's trusted base.
 
 | extern | model | host implementation |
 |---|---|---|
-| `stdin`, `stdout`, `stderr` | proved (7): cells with the model content | the cells `run_io` makes by `mk_input` and `mk_output`, words of the program's data holding the fd; assumed (1), checked against the model on the corpus |
+| `stdin`, `stdout`, `stderr` | proved (7): cells with the model content | the heap cells `run_io` makes by `mk_input` and `mk_output`, holding the fd; assumed (1), checked against the model on the corpus |
 | `read_byte`, `write_byte` | proved (7) | WASI `fd_read`/`fd_write`; interpreter-checked (2): the flat-IR interpreter runs the lowering against scripted streams |
 | `write_all`, `read_into` | proved (7) | WASI `fd_write` of the view, again after a short write; `fd_read` into the view until it is full or the input ends; interpreter-checked (2) |
-| `mk_input`, `mk_output`, `take_input`, `take_output` | proved (7) | host functions: a make stores the stream's descriptor in its capability's cell, a word of the program's data (`stdin`'s, or `stdout`'s for `1` and `stderr`'s otherwise); a take ends the cell, answering the empty list (`take_output`: the descriptor and the empty list). Assumed (1); each meets its contract on a run that makes each stream once before taking it back, as `run_io` does |
+| `mk_input`, `mk_output`, `take_input`, `take_output` | proved (7) | host functions: a make allocates a fresh heap cell holding the stream's descriptor (`mk_input`: `0`, its argument dropped; `mk_output`: its argument), as the model's `alloc` does at every call; a take frees the cell, answering the empty list (`take_output`: the descriptor and the empty list). Assumed (1), each claimed to meet its extern's contract |
 
 An extern the compiler has no implementation for is reported as assumed and not compiled.
 `bcc trusted` lists, beside the externs `main` reaches, the harness externs `run_io` calls.
 
 ### Lowering
 
-Both backends compile `run_io`, the checked wrapper `IORun` holds and `bcc interp` runs, with
-each extern bound to its host implementation: the operations, and the harness's makes and takes
-as host functions (`Backend/Clos/Convert.lean`, `mkValue`, `takeValue`;
-`Backend2/Convert.lean`, `mkClosOf`, `takeClosOf`). `run_io`'s parameter is bound to the
-platform's input, the empty byte list: the program's input is the stream `mk_input`'s host gives
-`stdin`, descriptor 0. Of `run_io`'s value `((fd, out), ((fd', err), a))` the platform prints `a`;
-the outputs are persistent and dropped, their byte lists empty, since each byte went to its
-descriptor when it was written. Each capability's cell is a word of the program's data (§35),
-made by a harness make and ended by a harness take inside the compiled term; no backend makes,
-takes or drops a capability of its own. `read_byte` is WASI `fd_read` of one byte from
+Both backends compile `run_io` checked as `IORun` holds it, with each extern bound to its host
+implementation: the operations, and the harness's makes and takes as host functions
+(`Backend/Clos/Convert.lean`, `mkValue`, `takeValue`; `Backend2/Convert.lean`, `mkClosOf`,
+`takeClosOf`). The compiled `run_io` is built with no arguments in the term: `mk_args` is passed
+the empty list, and its host reads the host's arguments; `bcc interp` builds `run_io` with the
+run's arguments as that list. `run_io`'s parameter is bound to the platform's input, the empty
+byte list: the program's input is the stream `mk_input`'s host gives `stdin`, descriptor 0. Of
+`run_io`'s value `((fd, out), ((fd', err), a))` the platform prints `a`; the outputs are
+persistent and dropped, their byte lists empty, since each byte went to its descriptor when it was
+written. Each capability's cell is a heap cell, allocated by a harness make and freed by a harness
+take inside the compiled term. `read_byte` is WASI `fd_read` of one byte from
 the cell's descriptor (end of input, or an error, is `inr ()`); `write_all` is `fd_write` of the
 view's bytes, called again after a short write; `read_into` is `fd_read` into the view, called
 again until it is full or a read answers nothing; `write_byte` is `fd_write` of one
@@ -1110,8 +1126,9 @@ WASI-only feature is part of the semantics (decision 25).
 
     main : F (U (Loop (Caps ⊗ A) (Caps ⊗ B)))
 
-The runtime drives it: it observes `next` until the loop finishes with `(caps, a)`, then takes
-the capabilities back and prints `a`; it never closes it. A `main` with no externs may return a
+The runtime drives `run_io`'s loop (below): it observes `next` until it finishes, `run_io`
+having taken the capabilities back when `main`'s loop finished with `(caps, a)`, and prints `a`;
+it never closes it. A `main` with no externs may return a
 loop with no capabilities, `main : F (U (Loop A B))`, the instance `Caps = 1` written without
 them: the runtime drives it the same way and prints `a` (`corpus/sugar/loop-main.bc`). Nothing in the kernel changes (no
 rule, no relation clause, no machine step); what is new is this obligation of the runtime and
@@ -6087,11 +6104,11 @@ effects, at `io-upper`'s counts (`2 0 0`), and every §11 program keeps its coun
 
 | extern | model | host implementation |
 |---|---|---|
-| `clock` | proved (7): a cell holding the time | the cell `run_io` makes by `mk_clock`, a word of the program's data; the time is the host's monotonic clock; assumed (1) |
+| `clock` | proved (7): a cell holding the time | the heap cell `run_io` makes by `mk_clock`; the time is the host's monotonic clock; assumed (1) |
 | `clock_now`, `clock_sleep` | proved (7) | WASI `clock_time_get`, `poll_oneoff`; assumed (1): the real clock is not checked against the model |
-| `args` | proved (7): a cell holding the arguments | the cell `run_io` makes by `mk_args`, over the arguments, read once; interpreter-checked (2) |
+| `args` | proved (7): a cell holding the arguments | the heap cell `run_io` makes by `mk_args`, over the arguments, read once; interpreter-checked (2) |
 | `read_arg` | proved (7) | the arguments in memory (WASI `args_sizes_get`, `args_get`); interpreter-checked (2) |
-| `mk_clock`, `take_clock`, `mk_args`, `take_args` | proved (7) | host functions, as §11's harness: the clock's cell holding the time `0` (`take_clock` answers its word), the arguments' cell holding the stream `0xFFFFFFFF` (`mk_args` drops the empty list the platform passes; `take_args` answers the empty list); assumed (1) |
+| `mk_clock`, `take_clock`, `mk_args`, `take_args` | proved (7) | host functions, as §11's harness: a make allocates a fresh heap cell, the clock's holding the time `0`, the arguments' the stream `0xFFFFFFFF` (`mk_args` drops the empty list the platform passes); a take frees it (`take_clock` answers its contents, `take_args` the empty list); assumed (1), each claimed to meet its extern's contract |
 
 `bcc trusted` lists the externs `main` reaches, now that a library brings in a platform's
 externs the program may never use: an extern is in a program's trusted base when it occurs in
@@ -6224,10 +6241,12 @@ is the one it was, and every program's output. Only the backend changes, below t
   refuses a resuming operation across a borrow block's body (a continuation held across a lend is
   T1, #172), and a lend in the arguments of a function that threads a capability. A scope between
   two suspensions is framed in each code that runs it: `corpus/async-lend-slots.bc`.
-- **Capability cells are static.** `stdin`, `stdout`, `stderr`, `args` and `clock` (§11, §34) are
-  each a word of the program's data, after its literals (`Backend/Clos/Convert.lean`,
-  `staticWord`; `Op.staticCell`): the harness's make stores the descriptor there, and its take
-  (`take_cell`), of an address below the heap, frees nothing.
+- **Capability cells are heap cells.** `stdin`, `stdout`, `stderr`, `args` and `clock` (§11,
+  §34) are each allocated by a call of a harness make, which `run_io` makes, and freed by its take
+  (`Backend/Clos/Convert.lean`, `mkValue`, `takeValue`; `Backend2/Convert.lean`, `mkClosOf`,
+  `takeClosOf`): a fresh cell at each call meets the make's contract with no condition on the run.
+  They were words of the program's data until the backends compiled the checked `run_io` (1.12);
+  removing these allocations again is #747.
 - **One box a node.** A recursive type boxes the fields that close its cycles: the back edges of
   one depth-first search over the pair and sum fields (`Backend/Clos/Types.lean`). Where that
   boxes two fields or more of one cycle, a sum's payload is boxed instead when that boxes fewer
@@ -10001,13 +10020,18 @@ relation or the machine.
 
 ## Changelog
 
-- **1.12** (2026-10-29) — §11, §34 (#746, F2): both backends compile `run_io`, the checked
+- **1.12** (2026-10-30) — §11, §34, §35 (#746, F2): both backends compile `run_io`, the checked
   wrapper `IORun.every_run` is about, in place of `main` with a capability prologue and epilogue of
   their own. The harness externs (`mk_input`, `mk_output`, `take_input`, `take_output`, the
-  clock's and the arguments') are host functions, assumed (1), each claimed to meet its contract;
-  `bcc trusted` lists those `run_io` calls. `main`'s body enters the wrapper as its elaborated
-  term. Backend2's lint admits a drop at a type owning an opaque value only where the typed term
-  abandons it (an abort's `Ctx.Drops`, `⊤`: `Prog.abandoned`).
+  clock's and the arguments') are host functions, assumed (1), each claimed to meet its contract
+  with no condition: a make allocates a fresh heap cell at every call and a take frees it, so the
+  capability cells are heap cells again (§35; their removal is #747). `bcc trusted` lists those
+  `run_io` calls. A program may not declare a harness extern, `io_inp` or `io_main_body`, nor a
+  capability other than as an extern. `main`'s body enters the wrapper as its elaborated term, and
+  the wrapper's check carries the elaboration's keys of the `def`s it copied. §11 states what is
+  proved and what is trusted at the I/O boundary. Backend2's LIR has an `abandon` node, carrying
+  the rule it is at (a `[let]`'s abort arm, `hW`, its rule on the frame; `⊤`), and the lint admits
+  an opaque value at no other discard.
 
 - **1.11** (2026-10-29) — §61 (#722, U1 of #595): the owned fold and the destructor at the class
   `P`. The class (`Ref` and arrays of any member, `μ` nested in `μ`), the constant `foldOwnG` with

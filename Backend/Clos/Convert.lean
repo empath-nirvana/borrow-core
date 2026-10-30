@@ -945,59 +945,43 @@ def ioValue (k : IOOp) : CM Tm := do
     c ← register ⟨[], u, .drop u (.clos c [])⟩
   pure (.clos c [])
 
-/-- A word of the program's data for a capability's cell, after the literals' bytes: its
-address.  `[spec §35]` -/
-def staticWord : CM Nat := do
-  let d := (← get).data
-  let pad := (8 - d.size % 8) % 8
-  modify fun s => { s with data := d ++ Array.replicate (pad + 8) 0 }
-  return dataBase + d.size + pad
-
 /-- `[]`, the empty byte list. -/
 def nilTm : CM Tm := do
   let u ← fresh
   return .letv u .unit (.inj false u)
 
-/-- A cell at the static word `a` holding the literal `c`. -/
-def staticLit (a : Nat) (c : BoCa.IntLit) : CM Tm := do
+/-- A fresh cell holding the literal `c`. -/
+def capCell (c : BoCa.IntLit) : CM Tm := do
   let l ← fresh
-  return .letv l (.lit c) (.prim (.staticCell a) [l])
+  return .letv l (.lit c) (.prim .alloc [l])
 
-/-- **The host function of a harness make** (SPEC §11, §34), as the extern's value `λm. …`: the
-stream's capability cell, a word of the program's data, holding the stream's descriptor (the
-clock's: the time `0`). `mk_input` and `mk_args` drop their argument, the byte list the platform
-passes (empty); `mk_output` holds its argument, the descriptor, in stdout's word when it is `1`
-and in stderr's otherwise. Each stream has one word, so the contract (`mkInput_meets`, …) is met
-by a run that makes each stream once before taking it back, as `run_io` does. -/
+/-- **The host function of a harness make** (SPEC §11, §34), as the extern's value `λm. …`: a
+fresh cell, the stream's capability, holding the stream's descriptor (the clock's: the time `0`).
+`mk_input` and `mk_args` drop their argument, the byte list the platform passes (empty);
+`mk_output` holds its argument, the descriptor. Each call allocates its own cell, as the model's
+`alloc` does, so the extern's contract (`mkInput_meets`, …) holds at every call. -/
 def mkValue (s : CapStream) : CM Tm := do
   let m ← fresh
   let body ← match s with
-    | .input => pure <| .drop m (← staticLit (← staticWord) (.i32 0))
-    | .args => pure <| .drop m (← staticLit (← staticWord) (.i32 0xFFFFFFFF))
-    | .clock => pure <| .drop m (← staticLit (← staticWord) (.i64 0))
-    | .output =>
-      let aOut ← staticWord; let aErr ← staticWord
-      let m' ← fresh; let one ← fresh; let pr ← fresh; let b ← fresh
-      let u₁ ← fresh; let u₂ ← fresh
-      pure <| .copy m m' (.letv one (.lit (.i32 1)) (.letv pr (.pair m' one)
-        (.letv b (.prim (.host (.rel .w32 .eq)) [pr])
-          (.case b u₁ (.drop u₁ (.prim (.staticCell aErr) [m]))
-            u₂ (.drop u₂ (.prim (.staticCell aOut) [m]))))))
+    | .input => pure <| .drop m (← capCell (.i32 0))
+    | .args => pure <| .drop m (← capCell (.i32 0xFFFFFFFF))
+    | .clock => pure <| .drop m (← capCell (.i64 0))
+    | .output => pure <| .prim .alloc [m]
   pure (.clos (← register ⟨[], m, body⟩) [])
 
 /-- **The host function of a harness take** (SPEC §11, §34), as the extern's value `λm. …`: the
-capability's cell ended (`IOOp.takeCell`; a word of the program's data, so nothing is freed), and
-the extern's result: the empty byte list for `take_input` and `take_args`, the descriptor and the
-empty list for `take_output` (each byte went to the descriptor when it was written), the cell's
-word for `take_clock`. The contract met is the extern's (`takeInput_meets`, …). -/
+capability's cell freed, and the extern's result: the empty byte list for `take_input` and
+`take_args`, the descriptor and the empty list for `take_output` (each byte went to the
+descriptor when it was written), the cell's contents for `take_clock`. The contract met
+is the extern's (`takeInput_meets`, …). -/
 def takeValue (s : CapStream) : CM Tm := do
   let m ← fresh; let w ← fresh
   let body ← match s with
-    | .input | .args => pure <| .letv w (.prim (.io .takeCell) [m]) (.drop w (← nilTm))
+    | .input | .args => pure <| .letv w (.prim .free [m]) (.drop w (← nilTm))
     | .output =>
       let n ← fresh
-      pure <| .letv w (.prim (.io .takeCell) [m]) (.letv n (← nilTm) (.pair w n))
-    | .clock => pure <| .prim (.io .takeCell) [m]
+      pure <| .letv w (.prim .free [m]) (.letv n (← nilTm) (.pair w n))
+    | .clock => pure <| .prim .free [m]
   pure (.clos (← register ⟨[], m, body⟩) [])
 
 /-- The program's value from `run_io`'s `((fd, out), ((fd', err), a))`: `a`. The outputs are

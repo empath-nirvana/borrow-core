@@ -9,28 +9,28 @@ extern read_arg : !(all 'l0 < top. mut 'l0 args => mut 'l0 args * (u8 + 1))
   host: the arguments read once into memory (WASI args_sizes_get, args_get; libc argv); interpreter-checked (2)
 extern stdout : ref output
   contract: model proved (7), vC_outRep (a cell holding (1, nil))
-  host: the cell run_io makes by mk_output, a word of the program's data holding fd 1; assumed (1)
+  host: the heap cell run_io makes by mk_output, holding fd 1; assumed (1)
 extern args : ref args
   contract: model proved (7), vC_argsRep (a cell holding the arguments, each followed by 0)
-  host: the cell run_io makes by mk_args, a word of the program's data, over the arguments, read once (WASI args_get; libc argv); interpreter-checked (2)
+  host: the heap cell run_io makes by mk_args, over the arguments, read once (WASI args_get; libc argv); interpreter-checked (2)
 extern mk_input : !((mu X. 1 + u8 * X) => ref input)
   contract: model proved (7), mkInput_meets
-  host: standard input's cell, a word of the program's data, holding fd 0; its argument, the empty list the platform passes, dropped; meets its contract when each stream is made once before its take (run_io); assumed (1)
+  host: a fresh heap cell holding fd 0; its argument, the empty list the platform passes, dropped; assumed (1)
 extern mk_output : !(i32 => ref output)
   contract: model proved (7), mkOutput_meets
-  host: an output stream's cell, a word of the program's data, holding its argument, the descriptor: stdout's cell at 1, stderr's otherwise; meets its contract when each stream is made once before its take (run_io); assumed (1)
+  host: a fresh heap cell holding its argument, the descriptor; assumed (1)
 extern take_input : !(ref input => (mu X. 1 + u8 * X))
   contract: model proved (7), takeInput_meets
-  host: standard input's cell ended, answering the empty list; assumed (1)
+  host: the cell freed, answering the empty list; assumed (1)
 extern take_output : !(ref output => i32 * (mu X. 1 + u8 * X))
   contract: model proved (7), takeOutput_meets
-  host: an output stream's cell ended, answering the descriptor and the empty list (each byte went to the descriptor when it was written); assumed (1)
+  host: the cell freed, answering the descriptor and the empty list (each byte went to the descriptor when it was written); assumed (1)
 extern mk_args : !((mu X. 1 + u8 * X) => ref args)
   contract: model proved (7), mkArgs_meets
-  host: the arguments' cell, a word of the program's data, holding the stream 0xFFFFFFFF, the host's arguments; its argument, the empty list the platform passes, dropped; meets its contract when each stream is made once before its take (run_io); assumed (1)
+  host: a fresh heap cell holding the stream 0xFFFFFFFF, the host's arguments; its argument, the empty list the platform passes, dropped; assumed (1)
 extern take_args : !(ref args => (mu X. 1 + u8 * X))
   contract: model proved (7), takeArgs_meets
-  host: the arguments' cell ended, answering the empty list; assumed (1)
+  host: the cell freed, answering the empty list; assumed (1)
 typing: unconditional: a CDerives derivation (fundamentalC, adequacyD)
 unproved boundaries: 11 (write_byte, write_all, read_arg, stdout, args, mk_input, mk_output, take_input, take_output, mk_args, take_args)
 always trusted: the allocator and runtime (Backend/Wasm/Runtime.lean), the WAT printer, wasmtime

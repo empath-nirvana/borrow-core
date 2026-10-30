@@ -213,11 +213,11 @@ def unitT : TM Nat := newNode .unit
 
 /-- The type of a saturated primitive, constraining its operands. -/
 def primTy : Op → List Var → TM Nat
-  | .alloc, [v] | .scopedAlloc _, [v] | .staticCell _, [v] => do
+  | .alloc, [v] | .scopedAlloc _, [v] => do
       let n ← newLoc (← tyVar v)
       modify fun s => { s with cons := s.cons.insert v n }
       pure n
-  | .free, [l] | .scopedFree _, [l] | .load, [l] | .io .takeCell, [l] => do
+  | .free, [l] | .scopedFree _, [l] | .load, [l] => do
       let a ← newNode .any
       unify (← tyVar l) (← newLoc a)
       pure a

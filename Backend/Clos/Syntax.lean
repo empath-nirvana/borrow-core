@@ -44,16 +44,12 @@ inductive IOOp where
   /-- `clock_sleep (m, ns)`: wait at least `max(ns, 0)` nanoseconds on the clock in the cell `m`;
   the result is `m` (SPEC §34). -/
   | clockSleep
-  /-- `take_cell m`: the capability's cell `m` ended (the harness's take, SPEC §11), its word the
-  result: the stream's descriptor, or the clock's time. -/
-  | takeCell
   deriving Repr, DecidableEq
 
 /-- The lifetime parameters of an operation's extern: the `Λ`s before its argument. -/
 def IOOp.lifes : IOOp → Nat
   | .readByte | .writeByte | .clockNow | .clockSleep => 1
   | .writeAll | .readInto => 2
-  | .takeCell => 0
 
 /-- The primitives of `[TR]` §1, §8 and §9, saturated, and the I/O operations of §11. -/
 inductive Op where
@@ -68,9 +64,6 @@ inductive Op where
   | scopedAlloc (k : Nat)
   /-- `free ℓ` of the cell `scopedAlloc k` allocates: `free`. -/
   | scopedFree (k : Nat)
-  /-- `alloc v` of a capability's cell (SPEC §11, §34): `alloc`; the flat IR places the cell at
-  `addr`, a word of the program's data, and frees nothing. -/
-  | staticCell (addr : Nat)
   /-- The address `addr` of a byte of the program's data (a literal's bytes, SPEC §17), an `i32`
   word: a backend places the data (`Flat.Exp.data`). -/
   | dataAddr (addr : Nat)

@@ -127,9 +127,9 @@ def stackOps (c : Frontend.Check.Checked) : MachSet := Id.run do
 
 /-- **The width classes** (SPEC §57): for each type the compiled term `c` allocates a cell at, its
 class (`Checked.classAt`, `Checked.classAt_alloc`), and for the contents of each capability's cell
-(a harness make's result, which no `alloc` node allocates) the class the checker's construction
-gives it (`cellClasses`), checked closed under the term's `swap`s (`cellsOkB`, `cellsOkB_sound`):
-each type's LIR types. -/
+(a harness make's result, which no `alloc` node of the term allocates) the class the checker's
+construction gives it (`cellClasses`), checked closed under the term's `swap`s (`cellsOkB`,
+`cellsOkB_sound`): each type's LIR types. -/
 def classesOf (c : Frontend.Check.Checked) : Except String (List (VTy × List LTy)) := do
   let ms := machineOps c
   let lir (tys : List VTy) : List LTy := tys.filterMap fun t => (ofV ms t).toOption
@@ -161,7 +161,7 @@ def freeUses : Nat → Tm → List (Var × Bool)
     | .letpair _ _ p b => (p, false) :: freeUses f b
     | .case s _ b₁ _ b₂ => (s, false) :: (freeUses f b₁ ++ freeUses f b₂)
     | .absurd s => [(s, false)]
-    | .copy x _ b | .drop x b => (x, false) :: freeUses f b
+    | .copy x _ b | .drop x b | .abandon _ x b => (x, false) :: freeUses f b
 
 /-- The lend scopes a term allocates cells for, and the variables its `letpair`s bind first. -/
 def scopesIn : Nat → Tm → List Nat × List Var
@@ -179,7 +179,7 @@ def scopesIn : Nat → Tm → List Nat × List Var
       let (s₁, x₁) := scopesIn f b₁
       let (s₂, x₂) := scopesIn f b₂
       (s₁ ++ s₂, x₁ ++ x₂)
-    | .copy _ _ b | .drop _ b => scopesIn f b
+    | .copy _ _ b | .drop _ b | .abandon _ _ b => scopesIn f b
     | _ => ([], [])
 
 -- UNPROVED: that a variable its function uses only as the operand of `free` is freed on every
@@ -259,7 +259,7 @@ and whose body takes its continuation is converted again with the level's cell p
 next point (`threadedOf`, SPEC §50): the conversion's second run, at those machines. -/
 def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) : Except String (Prog × CState) := do
   -- A program with capabilities is compiled as `run_io` (SPEC §11), the term `IORun.every_run`
-  -- is about; the platform's handler of `Fail[DivError]` is read off `main`'s own check.
+  -- is about.
   let (c, exts, io, loops) ← match ← k.runIO with
     | none => pure (k.main, [], false, false)
     | some (r, xs) => pure (r.c, ← extsOf xs, true, r.loops)
@@ -269,7 +269,7 @@ def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) : Except String 
       Except String (Prog × CState × Std.HashMap Nat LTy × Std.HashMap Nat LTy) := do
     let (p, st) ← convertProg exts ctx c.t c.C io loops census (directFacts c) (machineOps c)
       threaded stacked classes
-    let p := { p with exits := k.main.exitsOnDivError }
+    let p := { p with exits := c.exitsOnDivError }
     if st.done.isEmpty then return (p, st, {}, {})
     -- A call in tail position whose callee's suspended computations may be the machine's own
     -- closes a loop of tail calls, and passes its outcome on (SPEC §49, `tailPass`).
@@ -293,8 +293,7 @@ def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) : Except String 
     -- computations' classes.
     let sk := stackedOf st recursive (stackOps c) (suspCodes L)
     let th := (threadedOf st recursive).filter fun i _ => !sk.contains i
-    let p := { p with fns := p₂.fns, codes := p₂.codes, ty := p₂.ty, statics := p₂.statics }
-    return ({ p with abandoned := p₂.abandoned }, st₂, th, sk)
+    return ({ p with fns := p₂.fns, codes := p₂.codes, ty := p₂.ty, statics := p₂.statics }, st₂, th, sk)
   let (p, st, th, sk) ← run {} {}
   if th.isEmpty && sk.isEmpty then return (p, st)
   let (p, st, _, _) ← run th sk
@@ -427,7 +426,7 @@ def watTimed (file src : String) : IO (Except String String) := do
     let some c := r.main | throw s!"{file}: no `main`"
     let k ← ExceptT.mk <| stage "io main" (fun _ => "") fun _ =>
       match Frontend.Check.ioMainOf r.el.prog c with
-        | .ok io => pure (⟨r.el.prog, c, io⟩ : Backend.CheckedProg)
+        | .ok io => pure (⟨r.el.prog, c, io, r.el.keys⟩ : Backend.CheckedProg)
         | .error e => throw s!"{file}: {e}"
     let (p, _) ← ExceptT.mk <| stage "lir" (fun (q : Prog × CState) =>
         s!"{q.1.fns.size} functions, {q.1.codes.size} codes") fun _ => lirOf k

@@ -48,6 +48,9 @@ structure CheckedProg where
   prog : Frontend.Program
   main : Frontend.Check.Checked
   io : Option Frontend.Check.IOMain
+  /-- The keys of the `def`s the elaboration copied (`Elaborated.keys`), which `run_io`'s check
+  carries (`Frontend.Check.ioRunOf`). -/
+  keys : List Frontend.DefKey
 
 /-- Parse and check `src`; a `main` with externs must be a standard I/O program (SPEC §11). -/
 def checkedOf (file src : String) : Except String CheckedProg := do
@@ -59,7 +62,7 @@ def checkedOf (file src : String) : Except String CheckedProg := do
     | .error e => throw s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"
   let some c := r.main | throw s!"{file}: no `main`"
   match Frontend.Check.ioMainOf r.el.prog c with
-  | .ok io => pure ⟨r.el.prog, c, io⟩
+  | .ok io => pure ⟨r.el.prog, c, io, r.el.keys⟩
   | .error e => throw s!"{file}: {e}"
 
 /-- The host implementation of each extern of `run_io`, in declaration order: an operation, or
@@ -92,7 +95,7 @@ def CheckedProg.runIO (k : CheckedProg) :
     Except String (Option (Frontend.Check.IORun × List Frontend.Check.ExternSpec)) := do
   let some m := k.io | return none
   let w ← Frontend.Check.ioWrapper k.prog m []
-  let r ← Frontend.Check.ioRunOf w
+  let r ← Frontend.Check.ioRunOf w k.keys
   return some (r, ← Frontend.Check.wrapperExterns w)
 
 /-- The program reads standard input. -/
@@ -119,11 +122,11 @@ def lowerEffects (p : Clos.Prog) : Except String (Clos.Prog × Option Clos.Types
 
 /-- The closure IR of a checked program, and its layout types when collapsing found them. -/
 def CheckedProg.closTypes (k : CheckedProg) : Except String (Clos.Prog × Option Clos.Types) := do
-  let p ← match ← k.runIO with
-    | none => Clos.convert k.main.e
-    | some (r, xs) => Clos.convertMain (← extImpls xs) r.loops r.c.e
+  let (p, c) ← match ← k.runIO with
+    | none => pure (← Clos.convert k.main.e, k.main)
+    | some (r, xs) => pure (← Clos.convertMain (← extImpls xs) r.loops r.c.e, r.c)
   let (p, T) ← lowerEffects p
-  pure ({ p with exits := k.main.exitsOnDivError }, T)
+  pure ({ p with exits := c.exitsOnDivError }, T)
 
 /-- The closure IR of a checked program. -/
 def CheckedProg.clos (k : CheckedProg) : Except String Clos.Prog := return (← k.closTypes).1
@@ -285,7 +288,7 @@ def compileWatTimed (file src : String) : IO (Except String String) := do
         s!"{q.codes.size} codes, {q.size} nodes") fun _ => match io with
       | none => Clos.convert c.e
       | some _ => do
-        match ← CheckedProg.runIO ⟨r.el.prog, c, io⟩ with
+        match ← CheckedProg.runIO ⟨r.el.prog, c, io, r.el.keys⟩ with
         | some (w, xs) => Clos.convertMain (← extImpls xs) w.loops w.c.e
         | none => Clos.convert c.e
     let clos ← ExceptT.mk <| stage "effects" (fun (q : Clos.Prog) =>
@@ -320,7 +323,7 @@ def ioRunOf (file : String) (k : CheckedProg) (m : Frontend.Check.IOMain)
   let w ← match Frontend.Check.ioWrapper k.prog m args with
     | .ok w => pure w
     | .error e => throw s!"{file}: {e}"
-  match Frontend.Check.ioRunOf w with
+  match Frontend.Check.ioRunOf w k.keys with
   | .ok r => pure r
   | .error e => throw s!"{file}: {e}"
 
@@ -335,8 +338,8 @@ def interpStage (stage file : String) (k : Except String CheckedProg) (input : L
     | none => interpSource runFuel k.main.e
     | some m =>
       let r ← ioRunOf file k m args
-      if r.loops then interpIOLoop runFuel (r.expr input) k.main.exitsOnDivError
-      else interpIO runFuel (r.expr input) k.main.exitsOnDivError
+      if r.loops then interpIOLoop runFuel (r.expr input) r.c.exitsOnDivError
+      else interpIO runFuel (r.expr input) r.c.exitsOnDivError
   | "clos" => Clos.interp runFuel (← (← k).clos) input args
   | "flat" => Flat.interp runFuel (← (← k).flat) input args
   | "flat-counts" => Flat.interp runFuel (← (← k).flat true) input args
@@ -368,8 +371,8 @@ def interpChecked (o : Falsify.Opts) (file : String) (k : CheckedProg) (input : 
   | none => Falsify.interpSource o runFuel k.main.e
   | some m =>
     let r ← ioRunOf file k m args
-    if r.loops then Falsify.interpIOLoop o runFuel (r.expr input) k.main.exitsOnDivError
-    else Falsify.interpIO o runFuel (r.expr input) k.main.exitsOnDivError
+    if r.loops then Falsify.interpIOLoop o runFuel (r.expr input) r.c.exitsOnDivError
+    else Falsify.interpIO o runFuel (r.expr input) r.c.exitsOnDivError
 
 /-- A closed term on the falsifier's machine under `o`. -/
 def interpCheckedExpr (o : Falsify.Opts) (e : BoCa.Expr) : Except String (Output × String) :=

@@ -198,9 +198,8 @@ def emitBytes (fd : UInt32) (bs : List UInt8) : IM Unit :=
   | _ => throw "closure IR: a write to a stream that is not an output"
 
 def applyOp : Op → List CV → IM CV
-  | .alloc, [v] | .scopedAlloc _, [v] | .staticCell _, [v] => allocObj (.cell v)
-  | .free, [l] | .scopedFree _, [l] | .io .takeCell, [l] => do
-    let (a, c) ← cellOf l; freeCell a; pure c
+  | .alloc, [v] | .scopedAlloc _, [v] => allocObj (.cell v)
+  | .free, [l] | .scopedFree _, [l] => do let (a, c) ← cellOf l; freeCell a; pure c
   | .load, [l] => do let (_, c) ← cellOf l; deepCopy objFuel c
   | .store, [l, v] => do
       let (a, c) ← cellOf l

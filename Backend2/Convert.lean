@@ -89,8 +89,11 @@ structure OutInfo where
 value of the computation being converted, up to the machine's own answer. Each frame owns the
 next `own` of the continuation's arguments (the variables of its context). -/
 inductive Frame where
-  /-- `x <- [·]; N`: `N` is the join `fn`, on every argument and the value. -/
-  | letF (fn : Nat) (own : Nat)
+  /-- `x <- [·]; N`: `N` is the join `fn`, on every argument and the value. `abort` is the rule
+  that abandons the frame's own arguments when an abort unwinds it: `some .letAbort` for a
+  `[let]` at a row (`effLet`'s `hW`), `none` for a frame the typed term gives no such rule, whose
+  arguments an abort drops by their types. -/
+  | letF (fn : Nat) (own : Nat) (abort : Option Abandon)
   /-- `[·] then x. N unwind D`: `N` the join `fnN`; `D` the finaliser `fnD`, on the frame's own
   arguments, answering at its row's payload `pd`. -/
   | thenF (fnN fnD : Nat) (own : Nat) (pd : Pay)
@@ -110,7 +113,7 @@ inductive Frame where
   deriving Inhabited, BEq
 
 def Frame.own : Frame → Nat
-  | .letF _ k | .thenF _ _ k _ | .dropF k => k
+  | .letF _ k _ | .thenF _ _ k _ | .dropF k => k
   | .cellF | .stackH => 1
   | .stackF => 2
 
@@ -249,8 +252,6 @@ structure CState where
   /-- The callees' suspended computations a stack machine's points drop (`genStackMach`,
   `Prog.stackKs`). -/
   stackKs : Std.HashSet Var := {}
-  /-- The variables the typed term abandons (`abandons`, `Prog.abandoned`). -/
-  abandoned : Std.HashSet Var := {}
 
 abbrev CM := StateT CState (Except String)
 
@@ -356,12 +357,10 @@ def bindTm (e : Tm) (t : LTy) (k : Var → CM Tm) : CM Tm := do
 
 def drops (xs : List Var) (b : Tm) : Tm := xs.foldr (fun x b => .drop x b) b
 
-/-- `xs` dropped where the typed term abandons them: the context a `[let]`'s abort drops (`hW`,
-`Ctx.Drops`), at its abort branch or a frame's (`abortK`), or the slots `⊤` absorbs (`topI`). Each
-is recorded (`Prog.abandoned`): `Lint` admits a drop at a type owning an opaque value only there. -/
-def abandons (xs : List Var) (b : Tm) : CM Tm := do
-  modify fun s => { s with abandoned := xs.foldl (·.insert ·) s.abandoned }
-  return drops xs b
+/-- `xs` abandoned at the rule `r` the typed term applies here (`Tm.abandon`): the context a
+`[let]`'s abort absorbs (`hW`, `Ctx.Drops`), at its abort branch or a frame's (`abortK`), or the
+context `⊤` absorbs (`topI`). -/
+def abandons (r : Abandon) (xs : List Var) (b : Tm) : Tm := xs.foldr (fun x b => .abandon r x b) b
 
 def live (ctx : Ctx) : List Var := ctx.filterMap id
 
@@ -835,12 +834,13 @@ def applyK (F : OutInfo) : Kont → List Var → Var → CM Tm
   | [.stackF], [f, d], x => do popThen f d (← outValue F x)
   | .stackF :: _, _, _ => throw "LIR: a level's frame above the bottom of its continuation"
   | .stackH :: _, _, _ => throw "LIR: a value at a site's stack"
-  | .letF fn _ :: _, args, x | .thenF fn _ _ _ :: _, args, x => pure (.call fn (args ++ [x]))
+  | .letF fn _ _ :: _, args, x | .thenF fn _ _ _ :: _, args, x => pure (.call fn (args ++ [x]))
   | .dropF _ :: _, _, _ => throw "LIR: a value at a frame that only drops"
 
-/-- The abort `e` (at the machine's payload) through `K`: each frame's arguments dropped, a
-finaliser run, its own abort superseding (`then_fin`, `unwind_prefix`); then the machine's
-answer. -/
+/-- The abort `e` (at the machine's payload) through `K`: each frame's arguments abandoned at the
+frame's rule (a `[let]`'s, `hW`) or dropped, a finaliser run, its own abort superseding
+(`then_fin`, `unwind_prefix`); then the machine's answer. A `raise` (`effRaise`) abandons nothing
+itself: its whole context is its argument's, carried in the abort. -/
 def abortK (F : OutInfo) : Kont → List Var → Var → CM Tm
   | [], _, e => outAbort F e
   | f :: rest, args, e => do
@@ -866,7 +866,7 @@ def abortK (F : OutInfo) : Kont → List Var → Var → CM Tm
     | .stackH => match own with
       | [h] => freeStackThen h (← abortK F rest more e)
       | _ => throw "LIR: a site's stack frame without its stack"
-    | .letF .. => abandons own (← abortK F rest more e)
+    | .letF _ _ (some r) => return abandons r own (← abortK F rest more e)
     | _ => return drops own (← abortK F rest more e)
 
 /-- The cancel of `K`, `err` the error kept so far (`1 ⊕ P`, `cp` the cancel row's payload `P`):
@@ -1735,7 +1735,7 @@ def nodeAt (fuel : Nat) (obs : Nat) (C : LCTy) (Cv : CTy) (steps : List PathStep
           setFn fnMap { name := "observe map", params := [gP, xP], body := .letv v mb (← outValue F v),
                         ret := F.ty }
           readFact "unfoldN:machine"
-          pointK [.letF fnMap 1] [g] (.var r) M
+          pointK [.letF fnMap 1 none] [g] (.var r) M
         return .copy g g' (.letv st (.app g' s) t)
     | none =>
       let t ← runPath fuel st steps fun r => mapStates fuel obs A g r
@@ -2044,66 +2044,45 @@ def nilOf (t : LTy) : CM Tm := do
   let u ← fresh .unit; let w ← fresh (LTy.unrollMu b)
   return .letv u .unit (.letv w (.inj false u) (.prim .roll [w]))
 
-/-- A new static word for a capability's cell holding a `B`, as wide as `B`'s width class
-(`Checked.classAt`, SPEC §57): its index. -/
-def newStatic (B : VTy) : CM Nat := do
-  let k := (← get).statics.size
-  let cls ← classOf B
-  modify fun s => { s with statics := s.statics.push cls }
-  return k
-
 /-- **The host function of a harness make** (SPEC §11, §34), as the extern's closure at its type
-`t` (`A ⊸ F (Ref B)`): the stream's capability cell, a static word of the program's data
-(`Op.staticCell`), holding the stream's descriptor (the clock's: the time `0`). `mk_input` and
-`mk_args` drop their argument, the byte list the platform passes (empty); `mk_output` holds its
-argument, the descriptor, in stdout's word when it is `1` and in stderr's otherwise. Each stream
-has one word, so the contract (`mkInput_meets`, …) is met by a run that makes each stream once
-before taking it back, as `run_io` does. -/
+`t` (`A ⊸ F (Ref B)`): a fresh cell, the stream's capability, as wide as `B`'s width class
+(`Checked.classAt`, SPEC §57: a `swap` may put a wider value in it), holding the stream's
+descriptor (the clock's: the time `0`). `mk_input` and `mk_args` drop their argument, the byte list
+the platform passes (empty); `mk_output` holds its argument, the descriptor. Each call allocates
+its own cell, as the model's `alloc` does, so the extern's contract (`mkInput_meets`, …) holds at
+every call. -/
 def mkClosOf (s : CapStream) (B : VTy) (t : LTy) : CM Tm := do
   let .thunk (.arr a (.ret b)) := t.peel | throw s!"LIR: a harness make at {t}"
-  let lit (c : IntLit) (w : Width) (k : Nat) : CM Tm := do
+  let cls ← classOf B
+  let cell (c : IntLit) (w : Width) : CM Tm := do
     let l ← fresh (.int w)
-    return .letv l (.lit c) (.prim (.staticCell k) [l])
-  match s with
-  | .input | .args | .clock =>
-    let k ← newStatic B
-    mkClos "extern" [] (.arr a (.ret b)) (some a) b fun ctx => do
-      let some p :: _ := ctx | throw "LIR: an extern's argument"
-      let cell ← match s with
-        | .input => lit (.i32 0) .w32 k
-        | .args => lit (.i32 0xFFFFFFFF) .w32 k
-        | _ => lit (.i64 0) .w64 k
-      return .drop p cell
-  | .output =>
-    let kOut ← newStatic B; let kErr ← newStatic B
-    mkClos "extern" [] (.arr a (.ret b)) (some a) b fun ctx => do
-      let some p :: _ := ctx | throw "LIR: an extern's argument"
-      let p' ← fresh i32T; let one ← fresh i32T; let pr ← fresh (.pair i32T i32T)
-      let c ← fresh (.sum .unit .unit); let u₁ ← fresh .unit; let u₂ ← fresh .unit
-      return .copy p p' (.letv one (.lit (.i32 1)) (.letv pr (.pair p' one)
-        (.letv c (.prim (.host (.rel .w32 .eq)) [pr])
-          (.case c u₁ (.drop u₁ (.prim (.staticCell kErr) [p]))
-            u₂ (.drop u₂ (.prim (.staticCell kOut) [p]))))))
+    return .letv l (.lit c) (.prim (.alloc cls) [l])
+  mkClos "extern" [] (.arr a (.ret b)) (some a) b fun ctx => do
+    let some p :: _ := ctx | throw "LIR: an extern's argument"
+    match s with
+    | .input => return .drop p (← cell (.i32 0) .w32)
+    | .args => return .drop p (← cell (.i32 0xFFFFFFFF) .w32)
+    | .clock => return .drop p (← cell (.i64 0) .w64)
+    | .output => return .prim (.alloc cls) [p]
 
 /-- **The host function of a harness take** (SPEC §11, §34), as the extern's closure at its type
-`t` (`Ref B ⊸ F R`): the capability's cell ended (`IOKind.takeCell`; a static word, so nothing is
-freed), and the extern's result: the empty byte list for `take_input` and `take_args`, the
-descriptor and the empty list for `take_output` (each byte went to the descriptor when it was
-written), the cell's word for `take_clock`. The contract met is the extern's (`takeInput_meets`,
-…). -/
+`t` (`Ref B ⊸ F R`): the capability's cell freed, and the extern's result: the empty byte list for
+`take_input` and `take_args`, the descriptor and the empty list for `take_output` (each byte went
+to the descriptor when it was written), the cell's contents for `take_clock`. The
+contract met is the extern's (`takeInput_meets`, …). -/
 def takeClosOf (s : CapStream) (t : LTy) : CM Tm := do
   let .thunk (.arr a (.ret b)) := t.peel | throw s!"LIR: a harness take at {t}"
   mkClos "extern" [] (.arr a (.ret b)) (some a) b fun ctx => do
     let some p :: _ := ctx | throw "LIR: an extern's argument"
     match s with
-    | .clock => return .prim (.io .takeCell) [p]
+    | .clock => return .prim .free [p]
     | .input | .args =>
       let w ← fresh i32T
-      return .letv w (.prim (.io .takeCell) [p]) (.drop w (← nilOf b))
+      return .letv w (.prim .free [p]) (.drop w (← nilOf b))
     | .output =>
       let .pair _ bT := b.peel | throw s!"LIR: take_output answers {b}"
       let w ← fresh i32T; let n ← fresh bT
-      return .letv w (.prim (.io .takeCell) [p]) (.letv n (← nilOf bT) (.pair w n))
+      return .letv w (.prim .free [p]) (.letv n (← nilOf bT) (.pair w n))
 
 /-! ### The conversion -/
 
@@ -2286,6 +2265,7 @@ def renameTm (m : Std.HashMap Var Var) : Tm → CM Tm
     let x'' ← freshLike x'
     return .copy (m.getD x x) x'' (← renameTm (m.insert x' x'') b)
   | .drop x b => return .drop (m.getD x x) (← renameTm m b)
+  | .abandon r x b => return .abandon r (m.getD x x) (← renameTm m b)
 
 /-- **`κ`'s code** at the clause `idx` of a drive (SPEC §49): a `&` closure over the handled
 computation's suspended `k` and the handler's values, `kT` its type (`kTy`). Its resume entry
@@ -2489,7 +2469,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     | some (some x) => return leaf ctx (some i) (.var x)
     | _ => throw s!"LIR: variable {i} is not live"
   | .unitI .. => return leaf ctx none .unit
-  | .topI .. => abandons (live ctx) .unit
+  | .topI .. => return abandons .top (live ctx) .unit
   | .lit _ _ c => return leaf ctx none (.lit c)
   | .tensorI _ j _ _ u t₁ t₂ => do
     let (pre, c₁, c₂) ← splitCtx ctx u "tensorI"
@@ -2541,7 +2521,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
       let aT ← vty A
       let m ← fresh (.sum aT pT); let x ← fresh aT; let e ← fresh pT
       return pre (.letv m (← conv fuel c₁ tM)
-        (.case m x (← conv fuel (some x :: c₂) tN) e (← abandons (live c₂) (.inj true e))))
+        (.case m x (← conv fuel (some x :: c₂) tN) e (abandons .letAbort (live c₂) (.inj true e))))
   | .effSub _ _ S S' A c => do
     -- `[sub]`: the payload of `Σ` as one of `Σ'`.  [spec §47]
     readFact "effSub:rows"
@@ -2762,12 +2742,12 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
         let some pF := payTy F.pay | throw "LIR: an abort where the machine's row holds none"
         let r ← fresh (.sum aT pT); let x ← fresh aT; let e ← fresh pT; let e' ← fresh pF
         return pre (.letv r (← conv fuel c₁ inner) (.case r x (← convK fuel (some x :: c₂) tN K args)
-          e (← abandons (live c₂) (.letv e' (← coercePay p F.pay e fun v => pure (.var v))
+          e (abandons .letAbort (live c₂) (.letv e' (← coercePay p F.pay e fun v => pure (.var v))
             (← abortK F K args e')))))
     readFact "effLet:machine join"
     let fn ← joinFn fuel c₂ A tN K args
     let own := live c₂
-    return pre (← convK fuel c₁ tM (.letF fn own.length :: K) (own ++ args))
+    return pre (← convK fuel c₁ tM (.letF fn own.length (some .letAbort) :: K) (own ++ args))
   | .effThen _ _ A _ _ _ SD u tM tN tD => do
     readFact "effThen:machine join"
     let (pre, c₁, c₂) ← splitCtx ctx u "effThen"
@@ -2930,7 +2910,10 @@ def convWorkK (fuel : Nat) (k : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : 
       let (pre, c₁, c₂) ← splitCtx ctx u "bind"
       let fn ← joinWith c₂ A args fun ctx' args' => convWorkK fuel (k + 1) ctx' tN K args'
       let own := live c₂
-      return pre (← convK fuel c₁ tM (.letF fn own.length :: K) (own ++ args))
+      -- A `[let]`'s frame abandons its arguments at an abort (`hW`); a plain bind's premise is at
+      -- no row, so no abort unwinds its frame.
+      let abort := if t matches .effLet .. then some Abandon.letAbort else none
+      return pre (← convK fuel c₁ tM (.letF fn own.length abort :: K) (own ++ args))
   | .sumE _ _ A B _ u tV t₁ t₂ => do
     let (pre, c₁, c₂) ← splitCtx ctx u "sumE"
     let aT ← vty A; let bT ← vty B
@@ -3353,7 +3336,7 @@ def convWork (fuel : Nat) (k : Nat) (ph : Pay) (ctx : Ctx) (t : TExpr) : CM Tm :
         let pass ← coercePay p ph e fun e' => pure (.inj true e')
         return pre (.letv m (← conv fuel c₁ tM)
           (.case m x (← convWork fuel (k + 1) ph (some x :: c₂) tN) e
-            (← abandons (live c₂) pass)))
+            (abandons .letAbort (live c₂) pass)))
   | .sumE _ _ A B _ u tV t₁ t₂ => do
     let (pre, c₁, c₂) ← splitCtx ctx u "sumE"
     let aT ← vty A; let bT ← vty B
@@ -3807,8 +3790,7 @@ def tailPass (s : CState) (loop : Nat × Var × OutInfo × Nat → Bool) : Excep
         setFn fn { name := "tail", params := [oP], body := .var oP, ret := M.ty }
   let ((), s') ← act.run s
   return ({ fns := s'.fns, codes := s'.codes, main := default, mainTy := default, ty := s'.ty,
-            data := s'.data, statics := s'.statics, lits := s'.lits, stackKs := s'.stackKs,
-            abandoned := s'.abandoned }, s')
+            data := s'.data, statics := s'.statics, lits := s'.lits, stackKs := s'.stackKs }, s')
 
 /-- **State cells** (SPEC §49): each machine operation whose suspended computation's closure class
 holds itself (`recursive`, the layouts' classes that keep their environment on the heap, §35)
@@ -3821,8 +3803,7 @@ def cellPass (s : CState) (recursive : Nat → Bool) : Except String (Prog × CS
         let _ ← genMach m ops
   let ((), s') ← act.run s
   return ({ fns := s'.fns, codes := s'.codes, main := default, mainTy := default, ty := s'.ty,
-            data := s'.data, statics := s'.statics, lits := s'.lits, stackKs := s'.stackKs,
-            abandoned := s'.abandoned }, s')
+            data := s'.data, statics := s'.statics, lits := s'.lits, stackKs := s'.stackKs }, s')
 
 /-- **The levels whose state cell is passed on** (SPEC §50), from a conversion's machines and the
 layouts' recursive classes (`recursive`, as `cellPass` reads them): each machine whose body takes
@@ -3884,7 +3865,6 @@ def convertProg (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CT
   let ((m, mT), s) ← (convMain exts ctx t C io loops).run
     { census, direct, mach, threaded, stacked, classes }
   return ({ fns := s.fns, codes := s.codes, main := m, mainTy := mT, ty := s.ty, data := s.data,
-            statics := s.statics, lits := s.lits, stackKs := s.stackKs,
-            abandoned := s.abandoned }, s)
+            statics := s.statics, lits := s.lits, stackKs := s.stackKs }, s)
 
 end Backend2

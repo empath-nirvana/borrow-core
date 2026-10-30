@@ -13,9 +13,10 @@ The standard externs, each with its type, its role, its model and its assurance 
   is the stream (file descriptor `0`, `1`, `2` in compiled code). `read_byte`, `write_byte`,
   `write_all` and `read_into` are the operations, lowered to WASI `fd_read`/`fd_write`.
   `mk_input`, `mk_output`, `take_input`, `take_output` (and the clock's and the arguments') are
-  the harness: in the model `alloc` and `free`, in compiled code host functions that make and end
-  the capabilities' cells. `checkExterns` checks a program's extern declarations against the
-  table, by name and by type.
+  the harness: in the model `alloc` and `free`, in compiled code host functions that allocate and
+  free the capabilities' cells. Only `run_io` declares them: a program that declares a harness
+  extern, or a name the wrapper binds, is refused (`reservedDecl?`). `checkExterns` checks a
+  program's extern declarations against the table, by name and by type.
 * **`run_io`** (`ioWrapper`). A `main : F (Caps ⊗ A)` whose externs include capabilities is
   wrapped into `run_io : Bytes ⊸ F ((I32 ⊗ Bytes) ⊗ ((I32 ⊗ Bytes) ⊗ A))`: the capabilities are
   made from the input bytes by the harness, `main`'s body runs with them bound to their names,
@@ -25,7 +26,8 @@ The standard externs, each with its type, its role, its model and its assurance 
 * **The model run** (`IORun`). The checked wrapper with the model of each extern, chosen by
   type from `stdModel`, and the proofs `io_every_run` asks for: `IORun.every_run` is
   `io_every_run` at it. `bcc interp` runs exactly `IORun.expr`; both backends compile the same
-  checked wrapper with each extern's host implementation (`Backend.CheckedProg.runIO`).
+  checked wrapper, built with no arguments in the term, with each extern's host implementation
+  (`Backend.CheckedProg.runIO`).
 -/
 
 namespace Frontend.Check
@@ -113,31 +115,29 @@ def ExternSpec.isCap (x : ExternSpec) : Bool :=
   | .cap _ | .clockCap => true
   | _ => false
 
-/-- The host of a harness make: the stream's capability cell, a word of the program's data,
-holding `holds`. Its claim is the contract of the extern's `*_meets`, for a run that makes each
-stream once before taking it back, as `run_io` does: a second make of a stream before its take
-would answer the same word. -/
-def mkHost (cell holds : String) : String :=
-  s!"{cell} cell, a word of the program's data, holding {holds}; " ++
-    "meets its contract when each stream is made once before its take (run_io)"
+/-- The host of a harness make: a fresh heap cell, the stream's capability, holding `holds`. Its
+claim is the contract of the extern's `*_meets`, at every call: each call allocates its own cell,
+as the model's `alloc` does. -/
+def mkHost (holds : String) : String :=
+  s!"a fresh heap cell holding {holds}"
 
-/-- The host of a harness take: the stream's capability cell ended (a word of the program's data,
-so nothing is freed), answering `ans`. Its claim is the contract of the extern's `*_meets`. -/
-def takeHost (cell ans : String) : String :=
-  s!"{cell} cell ended, answering {ans}"
+/-- The host of a harness take: the capability's cell freed, answering `ans`. Its claim is the
+contract of the extern's `*_meets`. -/
+def takeHost (ans : String) : String :=
+  s!"the cell freed, answering {ans}"
 
 /-- The host of a capability: the cell `run_io` makes by the harness's `mk`. -/
 def capHost (mk rest : String) : String :=
-  s!"the cell run_io makes by {mk}, a word of the program's data{rest}"
+  s!"the heap cell run_io makes by {mk}{rest}"
 
 /-- The standard externs.  `[spec §11]` -/
 def stdExterns : List ExternSpec :=
   [ ⟨"stdin", .ref (.opq .input), .cap 0, "vC_bytes (a cell holding the input)",
-      some (capHost "mk_input" " holding fd 0", .assumed)⟩,
+      some (capHost "mk_input" ", holding fd 0", .assumed)⟩,
     ⟨"stdout", .ref (.opq .output), .cap 1, "vC_outRep (a cell holding (1, nil))",
-      some (capHost "mk_output" " holding fd 1", .assumed)⟩,
+      some (capHost "mk_output" ", holding fd 1", .assumed)⟩,
     ⟨"stderr", .ref (.opq .output), .cap 2, "vC_outRep (a cell holding (2, nil))",
-      some (capHost "mk_output" " holding fd 2", .assumed)⟩,
+      some (capHost "mk_output" ", holding fd 2", .assumed)⟩,
     ⟨"clock", .ref (.opq .clock), .clockCap, "vC_clockRep (a cell holding the time, i64[0])",
       some (capHost "mk_clock" "; the time is the host's monotonic clock", .assumed)⟩,
     ⟨"args", .ref (.opq .args), .cap 0xFFFFFFFF,
@@ -161,25 +161,23 @@ def stdExterns : List ExternSpec :=
       some ("the arguments read once into memory (WASI args_sizes_get, args_get; libc argv)",
         .interpChecked)⟩,
     ⟨"mk_clock", externTy (mkClockC (.opq .clock)), .mk .clock, "mkClock_meets",
-      some (mkHost "the clock's" "the time 0 (clock_now reads the host's monotonic clock)",
-        .assumed)⟩,
+      some (mkHost "the time 0 (clock_now reads the host's monotonic clock)", .assumed)⟩,
     ⟨"mk_args", externTy (mkInputC (.opq .args)), .mk .args, "mkArgs_meets",
-      some (mkHost "the arguments'" ("the stream 0xFFFFFFFF, the host's arguments; " ++
+      some (mkHost ("the stream 0xFFFFFFFF, the host's arguments; " ++
         "its argument, the empty list the platform passes, dropped"), .assumed)⟩,
     ⟨"take_args", externTy (takeInputC (.opq .args)), .take .args, "takeArgs_meets",
-      some (takeHost "the arguments'" "the empty list", .assumed)⟩,
+      some (takeHost "the empty list", .assumed)⟩,
     ⟨"take_clock", externTy (takeClockC (.opq .clock)), .take .clock, "takeClock_meets",
-      some (takeHost "the clock's" "the cell's word", .assumed)⟩,
+      some (takeHost "its contents", .assumed)⟩,
     ⟨"mk_input", externTy (mkInputC (.opq .input)), .mk .input, "mkInput_meets",
-      some (mkHost "standard input's"
-        "fd 0; its argument, the empty list the platform passes, dropped", .assumed)⟩,
+      some (mkHost "fd 0; its argument, the empty list the platform passes, dropped",
+        .assumed)⟩,
     ⟨"mk_output", externTy (mkOutputC (.opq .output)), .mk .output, "mkOutput_meets",
-      some (mkHost "an output stream's"
-        "its argument, the descriptor: stdout's cell at 1, stderr's otherwise", .assumed)⟩,
+      some (mkHost "its argument, the descriptor", .assumed)⟩,
     ⟨"take_input", externTy (takeInputC (.opq .input)), .take .input, "takeInput_meets",
-      some (takeHost "standard input's" "the empty list", .assumed)⟩,
+      some (takeHost "the empty list", .assumed)⟩,
     ⟨"take_output", externTy (takeOutputC (.opq .output)), .take .output, "takeOutput_meets",
-      some (takeHost "an output stream's" ("the descriptor and the empty list " ++
+      some (takeHost ("the descriptor and the empty list " ++
         "(each byte went to the descriptor when it was written)"), .assumed)⟩ ]
 
 def findExtern (n : String) : Option ExternSpec := stdExterns.find? (·.name == n)
@@ -429,6 +427,11 @@ def ioWrapper (p : Program) (m : IOMain) (args : List UInt8 := []) : Except Stri
     | some B => loopWrapperSrc (m.caps.map (·.name)) (capsTy m.caps) m.A B args
   match parseProgram src (resolve := false) with
   | .ok w =>
+    -- The wrapper's externs are the harness's, which no program declares (`reservedDecl?`).
+    for d in w.decls do
+      if let .extern _ n _ := d then
+        unless harnessExterns.contains n.name do
+          throw s!"run_io: the wrapper declares `{n.name}`, which is not the harness's"
     let ds ← w.decls.mapM fun
       | .main sp C M =>
         let (M', n) := fillBody body M
@@ -532,11 +535,12 @@ theorem IORun.loop_every_run (r : IORun) (hp : r.c.pins = []) (hl : r.loops = tr
 
 end
 
-/-- Check the wrapper and give every extern its model. The wrapper holds `main`'s printed core,
-checked already with its explicit copies (`clone(x)`, printed as `x`), so implicit copies are not
-checked again. -/
-def ioRunOf (w : Program) : Except String IORun := do
-  let r ← match checkProgram w (copies := false) with
+/-- Check the wrapper `w` (`ioWrapper`) and give every extern its model. The wrapper holds
+`main`'s elaborated body and the program's elaborated declarations, checked already: their
+implicit copies are not checked again, and the uses of the `def`s the first elaboration copied
+carry its keys `keys` (`Elaborated.keys`, `checkProgram`'s `wrapped`). -/
+def ioRunOf (w : Program) (keys : List DefKey) : Except String IORun := do
+  let r ← match checkProgram w (wrapped := some keys) with
     | .ok r => pure r
     | .error e => throw s!"run_io:{e.render}"
   let some c := r.main | throw "run_io: no main"

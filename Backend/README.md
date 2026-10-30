@@ -60,8 +60,8 @@ ends. `scripts/falsify.sh` runs every accepted program the four ways and require
 No stage optimizes beyond choosing layouts, defunctionalizing closures, calling known codes
 directly, compiling `let` as a binding, cancelling the copy and drop inside `swap`, compiling
 the Z combinator's fixed point natively, building codata thunks eagerly, merging equal codes,
-compiling owned folds by pointer reversal (Stack), placing scoped cells in frame slots and
-capability cells in the data (Representation). The WAT printer and the runtime are the only
+compiling owned folds by pointer reversal (Stack) and placing scoped cells in frame slots
+(Representation). The WAT printer and the runtime are the only
 steps no Lean interpreter observes, and natively the LLVM IR printer, the native runtime and
 `clang`.
 
@@ -267,9 +267,8 @@ type must not undergo automatic conversion to an `sret` pointer"), so the pointe
 
 **Addresses.** Words are real pointers (`inttoptr`, `ptrtoint`): there is no linear memory. The
 program's data is the global `@bc_data`, and its addresses are the flat IR's `Exp.data off`
-(the closure IR's `Op.dataAddr`, a literal's address, and a capability cell's): `@bc_data + off`
-natively, `dataBase + off` in Wasm and in the flat-IR interpreter. The data is writable, since a
-capability's cell is a word of it; `bc_free` skips an address in it, as Wasm's `$free` skips one
+(the closure IR's `Op.dataAddr`, a literal's address): `@bc_data + off`
+natively, `dataBase + off` in Wasm and in the flat-IR interpreter. The data is writable; `bc_free` skips an address in it, as Wasm's `$free` skips one
 below the heap. The new backend's flat IR says which locals hold an address (`Fn.ptrs`) and computes
 addresses from bases (`Exp.gep`); the emitter's typed mode, which only the new backend uses, holds
 those as `ptr`s, computes addresses with `getelementptr`, and states the parameters' facts
@@ -408,12 +407,11 @@ Not objects:
   whose address is taken: no allocation and no live range. A scope a suspension crosses keeps a
   heap cell, since the suspended state holds its address; typing excludes it today (a
   continuation held across a lend is T1, #172), so no program has one.
-- **Capability cells.** `stdin`, `stdout`, `stderr`, `args` and `clock` are words of the
-  program's data, after its literals (`Clos/Convert.lean`, `staticWord`; `Op.staticCell`):
-  the harness's make stores the descriptor there (`mkValue`), and its take's `take_cell`
-  (`takeValue`) frees nothing. A program with capabilities is compiled as the checked `run_io`
-  (SPEC §11), whose harness externs are these host functions; the backend adds no make or take
-  of its own.
+- **Capability cells.** `stdin`, `stdout`, `stderr`, `args` and `clock` are heap cells: each
+  call of a harness make allocates one holding the descriptor (`Clos/Convert.lean`, `mkValue`),
+  and the take frees it (`takeValue`). A program with capabilities is compiled as the checked
+  `run_io` (SPEC §11), whose harness externs are these host functions; the backend adds no make
+  or take of its own.
 
 - **Literals** (SPEC §17). A string literal's tabulator, the λ the elaborator writes for `"…"`
   (a compare with the length, then a search on the index down to one byte), is recognised by
@@ -590,12 +588,12 @@ A `main` may declare the standard externs (`Frontend/Check/Externs.lean`): the c
 `write_byte`, `write_all`, `read_into`. Its type is then `F (Caps ⊗ A)`, handing the capabilities back after `A`, or
 `F (U (loop (Caps ⊗ A) (Caps ⊗ B)))` for a program that runs until its input ends.
 
-- **Compiled stages.** `Clos.convertMain` binds each extern before `main` runs: a capability to a
-  cell holding its file descriptor (`i32[0]`, `[1]`, `[2]`), a word of the program's data
-  (Representation), an operation to the closure
-  `Λ. λm. op m` over the closure-IR primitive `io readByte`/`io writeByte`. An extern `main` does
-  not use is dropped. After `main`, its result `(caps, a)` is taken apart, each capability cell
-  freed, and `a` is the program's value. In the flat IR the operations are inline, over the
+- **Compiled stages.** `Clos.convertMain` compiles the checked `run_io` and binds each of its
+  externs: a harness make or take to its host function (a fresh cell holding the file descriptor,
+  `i32[0]`, `[1]`, `[2]`; the cell freed), an operation to the closure
+  `Λ. λm. op m` over the closure-IR primitive `io readByte`/`io writeByte`. An extern `run_io`
+  does not use is dropped. Of `run_io`'s value the outputs are dropped and `main`'s result `a` is
+  the program's value. In the flat IR the operations are inline, over the
   statements `getc fd` and `putc fd b`, and `read_byte`'s answer `(m, inl b)` or `(m, inr ())` is
   three words; in Wasm those statements are `$getc` and `$putfd`, WASI `fd_read` and `fd_write`
   of one byte. `write_all` and `read_into` (`Λ. Λ. λp. op p`) take a byte view `(p, n)`: the
@@ -663,8 +661,8 @@ emit nothing for `tickBound`, so their code is the same with and without it.
 `scripts/compile-corpus.sh` checks every corpus program's counts against
 `corpus/counts.expected` (`name allocs indirect copies loads stores bounds`): a count above the
 file fails the gate, one below it is reported, and `--write-counts` rewrites the file. A pure arithmetic program (`int-arith`, `int-ops`) allocates
-nothing and makes no indirect call; frame slots and capability cells are not counted (they are no
-allocation); what remains is cells, arrays, boxed recursive fields (a
+nothing and makes no indirect call; frame slots are not counted (they are no
+allocation); what remains is cells (a capability's among them), arrays, boxed recursive fields (a
 list's nodes), and the heap environments of the few recursive closure types (Open), whose calls
 are the only dispatched ones. `bcc-counts --native <file>` runs the native build (Native) in place of `wasmtime`, and requires
 the same counts and exit status as the flat IR. `bcc-counts --sites <file>` prints the program's closure calls: how
@@ -783,7 +781,7 @@ merging finds the layout types of its result, which the flat IR reuses.
 
 No optimizations beyond the layouts, defunctionalization, direct calls of known codes, native
 fixed points, pointer reversal, building a closure in its code's own environment object, frame
-slots for scoped cells and static capability cells; no stack switching. SPEC §19's handlers,
+slots for scoped cells; no stack switching. SPEC §19's handlers,
 operations and cancels are lowered, but for a name with both
 control and abortive operations and a cancel whose finalisers may raise under a handler reached
 from its own body (rejected). A tail-resumptive operation is a direct call when its handlers have

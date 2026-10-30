@@ -29,11 +29,9 @@ open BoCa
 
 abbrev Var := Nat
 
-/-- The host implementations of the externs that are operations, and `takeCell`, the harness's
-take of a capability's cell (SPEC §11): the cell ended, its word (the stream's descriptor, or the
-clock's time) the result. -/
+/-- The host implementations of the externs that are operations. -/
 inductive IOKind where
-  | readByte | writeByte | writeAll | readInto | clockNow | clockSleep | takeCell
+  | readByte | writeByte | writeAll | readInto | clockNow | clockSleep
   deriving Inhabited, BEq, Repr
 
 /-- A primitive: an operation on its arguments' values that runs no code of the program. -/
@@ -126,9 +124,6 @@ inductive Op where
   /-- `k − 1` of a budget that is not `0` (`bounded_fix`'s count, read unsigned, SPEC §20): it does
   not wrap. -/
   | cntPred
-  /-- A capability's cell (SPEC §11, §34): the `k`-th static word of the program's data, holding
-  the argument. Freeing it frees nothing. -/
-  | staticCell (k : Nat)
   /-- **The task stack** (SPEC §52). `stackSwap h`: the current stack becomes `h` (`0`: none yet),
   and the one it was is the result; the register is the static word `k`. -/
   | stackSwap (k : Nat)
@@ -165,6 +160,21 @@ inductive CodeKind where
   | amp
   deriving Inhabited, BEq, Repr
 
+/-- **The rule an `abandon` node is at** (decision 2): a computation that does not return to its
+context absorbs it. Not a drop: no destructor runs, and the abandoned values hold no owned cell
+(`VTy.Drop`, `vC_noOwn_of_drop`). -/
+inductive Abandon where
+  /-- `[let]`'s abort (`CDerives.effLet`'s `hW : S.Weak → Γ₂.Drops`): `N`'s context, at the abort
+  branch of the `[let]` or of a frame it pushed. -/
+  | letAbort
+  /-- `⊤`'s introduction (`CDerives.topI`): the whole context. -/
+  | top
+  deriving Inhabited, BEq, Repr
+
+def Abandon.name : Abandon → String
+  | .letAbort => "let abort"
+  | .top => "top"
+
 inductive Tm where
   | var (x : Var)
   | unit
@@ -193,6 +203,9 @@ inductive Tm where
   | copy (x x' : Var) (b : Tm)
   /-- `x` consumed: its destructor. -/
   | drop (x : Var) (b : Tm)
+  /-- `x` abandoned at the rule `r`, which the typed term applies here (`Abandon`): nothing runs.
+  `Lint` admits an opaque value here and at no `drop`. -/
+  | abandon (r : Abandon) (x : Var) (b : Tm)
   deriving Inhabited
 
 /-- A closure code: its kind, its functions (one, or a `&`'s two), the closure type it builds. -/
@@ -223,7 +236,7 @@ structure Prog where
   ty : Std.HashMap Var LTy
   /-- The literals' bytes, the program's read-only data. -/
   data : Array UInt8 := #[]
-  /-- The static words' cells (`Op.staticCell`, the stack register): each one's width class (none:
+  /-- The static words' cells (the stack register, `Op.stackSwap`): each one's width class (none:
   one word). -/
   statics : Array (List LTy) := #[]
   /-- The literal tables' code (`Op.litByte`). -/
@@ -238,10 +251,6 @@ structure Prog where
   machine's points drop, their state being on the task stack (SPEC §52; `genStackMach`, an
   `UNPROVED:` site). `Lint` checks every other drop by its type. -/
   stackKs : Std.HashSet Var := {}
-  /-- **The variables the typed term abandons** (`Convert.abandons`): the context a `[let]`'s abort
-  drops (`hW`, `Ctx.Drops`) at its abort branch or a frame's, and the slots `⊤` absorbs (`topI`).
-  `Lint` admits a drop at a type owning an opaque value (`LTy.ownsOpq`) only of these. -/
-  abandoned : Std.HashSet Var := {}
   deriving Inhabited
 
 end Backend2

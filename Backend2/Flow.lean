@@ -96,7 +96,7 @@ def gen (p : Prog) (L : Layouts) (base : Nat) : Nat → Tm → Option Var → FM
       coarse p L x; coarse p L y
       gen p L base f b₁ dst; gen p L base f b₂ dst
     | .copy x x' b => do edge p x x'; gen p L base f b dst
-    | .drop _ b => gen p L base f b dst
+    | .drop _ b | .abandon _ _ b => gen p L base f b dst
     | .unit | .lit _ | .pair .. | .inj .. | .absurd _ => pure ()
 where
   site (s : Site) : FM Unit := do

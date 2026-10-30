@@ -323,8 +323,8 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
   | .prim op as => do
     let a (i : Nat) : GM Nat := do nv (as.getD i 0)
     match op with
-    | .alloc _ | .allocLent _ _ | .staticCell _ => join (← kid dst 0) (← a 0)
-    | .free | .io .takeCell => join dst (← kid (← a 0) 0)
+    | .alloc _ | .allocLent _ _ => join (← kid dst 0) (← a 0)
+    | .free => join dst (← kid (← a 0) 0)
     | .swap => do
       join (← kid (← kid dst 0) 0) (← a 1)
       join (← kid dst 1) (← kid (← a 0) 0)
@@ -391,7 +391,7 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
     walk p f cc b₂ dst
   | .absurd _ => pure cc
   | .copy x x' b => do join (← nv x) (← nv x'); walk p f cc b dst
-  | .drop _ b => walk p f cc b dst
+  | .drop _ b | .abandon _ _ b => walk p f cc b dst
 
 -- UNPROVED: that the closure classes hold every code whose closure can reach each place. It
 -- should hold because `walk` joins the two sides of every move a closure makes: a binding, a
@@ -445,7 +445,7 @@ structure Layouts where
   codeEnv : Std.HashMap Nat (List Nat)
   /-- Each site's `κ` region's contents node (SPEC §52). -/
   regions : Std.HashMap Nat Nat := {}
-  /-- **Each static cell's bytes** (`Prog.statics`, `Op.staticCell`): the most bytes of its width
+  /-- **Each static cell's bytes** (`Prog.statics`): the most bytes of its width
   class's types, each read through `tyBytes` with its `!`s erased. -/
   staticBytes : Array Nat := #[]
 

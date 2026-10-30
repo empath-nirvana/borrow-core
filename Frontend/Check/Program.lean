@@ -220,16 +220,70 @@ def checkDecl (ds : Array Decl) (k : Nat) (keys : List DefKey) :
       let c ← checkMain ds k keys sp C M
       pure (s!"main : {ppCTy c.C}", some c, [(c.ctx.length, c.t)])
 
+/-! ### The names `run_io` reserves -/
+
+/-- **The harness's externs** (SPEC §11, §34): the makes and takes of the capabilities, which only
+`run_io`'s wrapper (`Frontend.Check.ioWrapper`) declares. -/
+def harnessExterns : List String :=
+  ["mk_input", "mk_output", "take_input", "take_output", "mk_clock", "take_clock", "mk_args",
+   "take_args"]
+
+/-- **The capabilities** (SPEC §11, §34): each is declared only as an extern, which `run_io`'s
+wrapper replaces by a binder of the same name around `main`'s body. -/
+def capabilityNames : List String := ["stdin", "stdout", "stderr", "clock", "args"]
+
+/-- **The wrapper's names around `main`'s body** (`Frontend.Check.wrapperSrc`): its parameter, and
+the hole the body is put at. -/
+def wrapperBinders : List String := ["io_inp", "io_main_body"]
+
+/-- The names a declaration declares, each where it is written. -/
+def _root_.Frontend.Decl.declared : Decl → List Ident
+  | .type _ n .. | .shape _ n _ | .def_ _ n .. | .extern _ n _ | .handler _ n .. | .poly _ n .. => [n]
+  | .effect _ n _ ops => n :: ops.map (·.name)
+  | .chandler _ h => [h.name]
+  | .data _ d => d.name :: d.cons.map (·.name)
+  | .main .. | .include .. => []
+
+/-- **A declaration of a name `run_io` reserves** (SPEC §11): a harness extern, or a wrapper's
+binder, declared at all; a capability declared other than as an extern. A program that declared a
+harness extern could make a capability of its own, and one that declared a binder's name would
+have it captured by the wrapper. -/
+def reservedDecl? (ds : List Decl) : Option Error :=
+  ds.findSome? fun d =>
+    let isExtern := d matches .extern ..
+    (d.declared.find? fun n =>
+      harnessExterns.contains n.name || wrapperBinders.contains n.name ||
+        (!isExtern && capabilityNames.contains n.name)).map fun n =>
+      if harnessExterns.contains n.name then
+        ⟨n.span, s!"`{n.name}` is the I/O harness's: only `run_io` makes and takes back the " ++
+          "capabilities (SPEC §11)"⟩
+      else if wrapperBinders.contains n.name then
+        ⟨n.span, s!"`{n.name}` is reserved by `run_io`, which binds it around `main` (SPEC §11)"⟩
+      else
+        ⟨n.span, s!"`{n.name}` is a capability: it is declared only as an extern (SPEC §11)"⟩
+
 /-- Check a program, after elaborating it (`Frontend.Elab.elaborate`: the sugar of SPEC §11 and
 §14): the checker sees only the elaborated program, which the report carries, so that nothing
 after the check elaborates the program again. The lines of the libraries, when they are included,
 are not reported. An error in code generated for a sugar names the sugar
-(`Frontend.Elab.renderError`). A checked program is then rejected if it copies recursive data
-implicitly (`Frontend.Check.implicitCopy`, on the typed terms the check returns): such a use is
-written `clone(x)`. With `copies := false` that check is skipped: for a program rebuilt from the
-printed core of one already checked with it (`run_io`'s wrapper). -/
-def checkProgram (p : Program) (copies : Bool := true) : Except Error Report := do
+(`Frontend.Elab.renderError`). A program that declares a name `run_io` reserves is refused
+(`reservedDecl?`), as written and as elaborated. A checked program is then rejected if it copies
+recursive data implicitly (`Frontend.Check.implicitCopy`, on the typed terms the check returns):
+such a use is written `clone(x)`.
+
+With `wrapped := some keys`, `p` is `run_io`'s wrapper (`Frontend.Check.ioRunOf`) around the
+elaborated declarations of a program checked already, whose elaboration gave the keys `keys`
+(`DefKey`: which `def`s are copies of one body). The wrapper declares the harness, the implicit
+copies are not checked again, and the uses of those `def`s carry their keys, as in the first
+check. -/
+def checkProgram (p : Program) (wrapped : Option (List DefKey) := none) :
+    Except Error Report := do
+  if wrapped.isNone then
+    if let some e := reservedDecl? p.decls then throw e
   let el ← Frontend.Elab.elaborate p
+  if wrapped.isNone then
+    if let some e := reservedDecl? el.prog.decls then throw e
+  let el := { el with keys := el.keys ++ wrapped.getD [] }
   let ds := el.prog.decls.toArray
   let lib := el.lib
   let r : Except Error (Report × List (Nat × TExpr)) :=
@@ -264,7 +318,7 @@ def checkProgram (p : Program) (copies : Bool := true) : Except Error Report := 
     | some c => [c.pins.assurance]
     | none => []
   let rep := { rep with lines := rep.lines ++ loops.eraseDups ++ fx.eraseDups ++ assurance, handles }
-  if !copies then return rep
+  if wrapped.isSome then return rep
   match implicitCopy terms with
   | some e => throw (Frontend.Elab.renderError el.origins e)
   | none => pure rep
