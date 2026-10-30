@@ -1,0 +1,35 @@
+-- A2 ([handle] of the lender's name, an inner handler whose clause holds κ across the outer
+-- stop): inside a relaxed lend, a handler of `Async` itself catches the body's `await`, and its
+-- clause performs the outer `await` before resuming κ. So at the outer stop the lend is crossed
+-- with the view held inside the inner κ, held by the clause's frame. One task is cancelled there.
+include async
+
+handler fwd[A]: Async, A -> A with Async = { return(v) = v; await(k) = { let u = await(); k(u) }; log(x, k) = k(()) }
+
+fn done(v: i32) -> Task[i32] = with spawn { v }
+fn step(t: Task[i32]) -> Task[i32] = match resume(t) { inl v -> done(v) | inr t2 -> t2 }
+fn fin(t: Task[i32]) -> i32 = match resume(t) { inl v -> v | inr t2 -> cancel(t2); 0 - 1 }
+
+fn worker() -> i32 with Async =
+  let c = alloc(10);
+  let v = borrow mut c { m ->
+    with fwd {
+      modify m { x -> x + 1 };
+      await();
+      modify m { x -> x * 3 };
+      await();
+      modify m { x -> (x + 2, x + 2) }
+    }
+  };
+  let _ = free(c);
+  v
+
+main -> i32 =
+  let a = with spawn { worker() };
+  let b = with spawn { worker() };
+  let a = step(a);
+  let b = step(b);
+  cancel(b);
+  let a = step(a);
+  let a = step(a);
+  fin(a)

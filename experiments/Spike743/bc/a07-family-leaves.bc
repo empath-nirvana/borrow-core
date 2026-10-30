@@ -1,0 +1,40 @@
+-- A2 (writes through `mut` leaves of a family under a relaxed lend): a task owns a cell holding
+-- an array and lends it across `await`s. Inside the lend it swaps the array out through the view,
+-- holds it (owned) across an `await`, writes its leaves through an ordinary slice lend, awaits,
+-- and swaps it back. One task is cancelled while the array is out of the cell (it is dropped on
+-- the cancel path) and one while it is back in.
+include async
+include slice
+
+fn ones(i: i32) -> i32 = i + 1
+fn done(v: i32) -> Task[i32] = with spawn { v }
+fn step(t: Task[i32]) -> Task[i32] = match resume(t) { inl v -> done(v) | inr t2 -> t2 }
+fn fin(t: Task[i32]) -> i32 = match resume(t) { inl v -> v | inr t2 -> cancel(t2); 0 - 1 }
+
+fn worker() -> i32 with Async =
+  let c = alloc(array_new[i32](4, ones));
+  let v = borrow mut c { m ->
+    let arr = modify m { a -> (array_new[i32](0, ones), a) };
+    await();
+    let mut arr = arr;
+    borrow mut arr { s -> let s = set(s, 0, 50); let s = set(s, 3, 7); discard_mut(s) };
+    await();
+    let s0 = at(&arr, 0, 0);
+    let s3 = at(&arr, 3, 0);
+    modify m { e -> arr };
+    await();
+    s0 + s3
+  };
+  let _ = free(c);
+  v
+
+main -> i32 =
+  let a = with spawn { worker() };
+  let b = with spawn { worker() };
+  let d = with spawn { worker() };
+  let a = step(a); let b = step(b); let d = step(d);
+  cancel(b);
+  let a = step(a); let d = step(d); let d = step(d);
+  cancel(d);
+  let a = step(a); let a = step(a);
+  fin(a)
