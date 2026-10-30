@@ -65,6 +65,8 @@ theorem CDerivesP.ofC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | mutSub a0 a1 ih0 => exact CDerivesP.mutSub ih0 a1
   | alloc a0 => exact CDerivesP.alloc a0
   | free a0 => exact CDerivesP.free a0
+  | tokMint a0 => exact CDerivesP.tokMint a0
+  | tokBurn a0 => exact CDerivesP.tokBurn a0
   | swap a0 => exact CDerivesP.swap a0
   | copy a0 => exact CDerivesP.copy a0
   | forgetImm a0 => exact CDerivesP.forgetImm a0
@@ -170,6 +172,8 @@ theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | mutSub _ hle ih => exact mutSub_compatC ih hle
   | alloc hΓ => exact alloc_compatX hΓ
   | free hΓ => exact free_compatX hΓ
+  | tokMint hΓ => exact tokMint_compatX hΓ
+  | tokBurn hΓ => exact tokBurn_compatX hΓ
   | swap hΓ => exact swap_compatX hΓ
   | copy hΓ => exact copy_compatX hΓ
   | forgetImm hΓ => exact forgetImm_compatX hΓ

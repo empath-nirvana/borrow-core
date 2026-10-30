@@ -1038,14 +1038,15 @@ theorem Row.abortOnly_abort (S : Row) (δ : LSub) : (Row.tab S.abortOnly δ).Abo
 
 /-! ### Own-free contexts -/
 
-/-- A type whose values hold no `own` cell: data, borrows, `!`. An abort abandons a value of such a
-type (SPEC §19); that is not a drop.  `[spec §19]` -/
+/-- A type whose values hold no `own` cell: data, borrows, `!`, the opaque host types. An abort
+abandons a value of such a type (SPEC §19); that is not a drop. `Tok` owns its cell, so it is not
+here, and neither is any type that holds it (SPEC §11, §42).  `[spec §19]` -/
 inductive _root_.BoCa.Fig16.LogRel.Core.VTy.OwnFree : VTy → Prop where
   | unit : VTy.OwnFree .unit
   | zero : VTy.OwnFree .zero
   | int (w : Width) : VTy.OwnFree (.int w)
   | unk : VTy.OwnFree .unk
-  | opq (k : Opaque) : VTy.OwnFree (.opq k)
+  | opq (k : Opaque) (hk : k.Host) : VTy.OwnFree (.opq k)
   | bang (A : VTy) : VTy.OwnFree (.bang A)
   | imm (a : Lifetime.Life) (A : VTy) : VTy.OwnFree (.imm a A)
   | «mut» (a : Lifetime.Life) (A : VTy) : VTy.OwnFree (.mut a A)
@@ -1059,7 +1060,7 @@ theorem vC_noOwn_of_ownFree {A : VTy} (hA : A.OwnFree) :
   | zero => intro ls δ v ρ h; exact h.elim
   | int w => intro ls δ v ρ h; rw [h.1]; exact noOwn_empty
   | unk => intro ls δ v ρ h; rw [h.1]; exact noOwn_empty
-  | opq k => intro ls δ v ρ h; rw [h.1]; exact noOwn_empty
+  | opq k hk => intro ls δ v ρ h; rw [vCE, Opaque.rel_host hk] at h; rw [h.1]; exact noOwn_empty
   | bang A => intro ls δ v ρ h; rw [h.1]; exact noOwn_empty
   | imm a A =>
       intro ls δ v ρ h

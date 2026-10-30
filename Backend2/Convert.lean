@@ -2129,6 +2129,7 @@ def litCode : CM Nat := do
 not a constant. -/
 def constArity : TExpr → Option Nat
   | .alloc .. | .free .. | .copy .. | .forgetImm .. | .forgetMut .. | .forgetUnk .. | .hostOp ..
+  | .tokMint .. | .tokBurn ..
   | .arrNew .. | .arrFree .. | .arrSize .. | .arrReplace .. | .arrLen .. | .arrGet .. | .arrCopy ..
   | .arrForget .. | .countFold .. | .countTry .. | .sliceGetM .. | .sliceLenM .. | .sliceSplitI ..
   | .sliceSplitM .. | .sliceReplaceM .. | .sliceSwapM .. | .dtor .. | .foldImm .. | .foldOwn ..
@@ -3591,7 +3592,8 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
   readFact s!"{ruleName c}:expand"
   match c, args with
   | .alloc _ _ A, [v] => return .prim (.alloc (← classOf A)) [v]
-  | .free .., [x] => return .prim .free [x]
+  | .free .., [x] | .tokBurn .., [x] => return .prim .free [x]
+  | .tokMint .., [v] => return .prim (.alloc (← classOf .unit)) [v]
   | .swap .., [x, v] => return .prim .swap [x, v]
   | .copy .., [x] | .arrCopy .., [x] => dup x fun x x' => pure (.pair x x')
   | .forgetImm .., [x] | .forgetMut .., [x] | .forgetUnk .., [x] | .arrForget .., [x] =>

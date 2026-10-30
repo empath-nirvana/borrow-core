@@ -839,7 +839,7 @@ macro "cd_terms" : tactic => `(tactic| (try simp_all [withPair, absurdE, copy, f
     withbor, withload, withswap, sizeV, replaceV, arrLenV, copyV, forgetV, emptyFamV, swapV,
     Val.arr, withborUE, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV, divFuelV, reifyV, BoCa.BoLo.performE,
     BoCa.BoLo.raiseE, opArgE, thenE, hndTerm, hndExpr, Expr.val, Val.lam, Val.prim, Val.unit,
-    Val.i32, lam2, elet, unit', v0, v1, v2, v3, load', store']))
+    Val.i32, lam2, elet, unit', v0, v1, v2, v3, load', store', mintE, burnE]))
 
 /-- `force x` is `x` or `x ()`. -/
 theorem forceE_var {C : CTy} {i : Nat} {e : Expr} (h : forceE C (.var i) = e) :
@@ -853,7 +853,7 @@ macro "cd_at " h:ident : tactic => `(tactic| (simp [withPair, absurdE, copy, for
     withbor, withload, withswap, sizeV, replaceV, arrLenV, copyV, forgetV, emptyFamV, swapV,
     Val.arr, withborUE, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV, divFuelV, reifyV, BoCa.BoLo.performE,
     BoCa.BoLo.raiseE, opArgE, thenE, hndTerm, hndExpr, Expr.val, Val.lam, Val.prim, Val.unit,
-    Val.i32, lam2, elet, unit', v0, v1, v2, v3, load', store'] at $h:ident))
+    Val.i32, lam2, elet, unit', v0, v1, v2, v3, load', store', mintE, burnE] at $h:ident))
 
 /-- The primitives that have a rule of their own. -/
 def PrimRule : Prim → Prop
@@ -1458,7 +1458,8 @@ def OtherLam (e : Expr) : Prop :=
   e = copy ∨ e = swap ∨ e = withbor ∨ e = withload ∨ e = withswap ∨ e = sizeV.1 ∨
     e = replaceV.1 ∨ e = arrLenV.1 ∨ e = swapV.1 ∨ (∃ F, e = (foldImmV F).1) ∨
     (∃ F, e = (foldOwnV F).1) ∨ (∃ F, e = (foldReuseV F).1) ∨ (∃ C, e = (unfoldV C).1) ∨
-    e = divFuelV.1 ∨ (∃ res, e = (reifyV res).1) ∨ (∃ B, e = (FoldP.foldOwnGV B).1)
+    e = divFuelV.1 ∨ (∃ res, e = (reifyV res).1) ∨ (∃ B, e = (FoldP.foldOwnGV B).1) ∨
+    e = mintE ∨ e = burnE
 
 /-- A λ-constant, read at the views of its axiom's type. -/
 def LamAx (e : Expr) (j : Jdg) : Prop :=
@@ -1555,6 +1556,10 @@ theorem LamInv.ofAx {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {j : Jdg} (h : LamA
     LamInv Δ Γ M j :=
   .inr (.inr (.inr (.inr (.inr h))))
 
+theorem otherLam_mint : OtherLam mintE := by simp [OtherLam]
+
+theorem otherLam_burn : OtherLam burnE := by simp [OtherLam]
+
 theorem lamAx_other {e : Expr} (h : OtherLam e) (T : VTy) : LamAx e (.val T) :=
   .inr (.inr ⟨h, T, ValCls.refl T⟩)
 
@@ -1645,7 +1650,9 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       intro M he
       exact LamInv.ofAx (he ▸ lamAx_other
         (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
-          (.inr (.inr (.inr (.inr ⟨_, rfl⟩))))))))))))))) _)
+          (.inr (.inr (.inr (.inr (.inl ⟨_, rfl⟩)))))))))))))))) _)
+  | tokMint => intro M he; exact LamInv.ofAx (he ▸ lamAx_other otherLam_mint _)
+  | tokBurn => intro M he; exact LamInv.ofAx (he ▸ lamAx_other otherLam_burn _)
   | forgetBang => intro M he; exact LamInv.ofAx (he ▸ lamAx_forget (.inl ⟨_, rfl, .inl ⟨_, rfl⟩⟩))
   | forgetImm =>
       intro M he; exact LamInv.ofAx (he ▸ lamAx_forget (.inl ⟨_, rfl, .inr (.inl ⟨_, _, rfl⟩)⟩))
@@ -1872,7 +1879,7 @@ macro "not_const" : tactic => `(tactic| (simp only [NotConst, OtherLam, forget, 
     withborUE, divFuelV, reifyV, rkV, BoCa.BoLo.hndE,
     Expr.val, Val.lam, lam2, elet, unit', v0, v1, v2, v3, load', store', thenE, ne_eq,
     bindE, hndTerm, hndExpr, Val.unit, Val.prim, Val.i32, Val.inj₁, Val.inj₂, Val.pair,
-    BoCa.BoLo.performE, opArgE, free', alloc',
+    BoCa.BoLo.performE, opArgE, free', alloc', mintE, burnE,
     Expr.lam.injEq, reduceCtorEq, not_false_eq_true, not_exists, not_or, forall_const, and_self,
     implies_true, and_true, true_and, exists_false, or_self, Expr.app.injEq, Expr.letpair.injEq,
     Expr.pair.injEq, Expr.seq.injEq, Expr.case.injEq, false_and, and_false]))
@@ -1881,7 +1888,7 @@ macro "not_const" : tactic => `(tactic| (simp only [NotConst, OtherLam, forget, 
 macro "not_other " h:ident : tactic => `(tactic| (simp [OtherLam, copy, swap, withbor, withload,
     withswap, sizeV, replaceV, arrLenV, swapV, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV, Expr.val,
     divFuelV, reifyV, rkV, BoCa.BoLo.hndE, Val.lam, lam2, elet, unit', v0, v1, v2, v3, withborUE,
-    thenE, load', store', Val.prim,
+    thenE, load', store', Val.prim, mintE, burnE,
     Val.unit] at $h:ident))
 
 /-- A term is no `⟨M, N⟩`, by unfolding. -/

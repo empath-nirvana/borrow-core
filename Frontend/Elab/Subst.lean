@@ -80,6 +80,8 @@ def Const.subst (σ : TySubst) : Const → Const
   | .forgetImm a A => .forgetImm a (A.subst σ)
   | .forgetMut a A => .forgetMut a (A.subst σ)
   | .forgetUnk => .forgetUnk
+  | .tokMint => .tokMint
+  | .tokBurn => .tokBurn
   | .forgetBang A => .forgetBang (A.subst σ)
   | .withbor1 x A B => .withbor1 x (A.subst σ) (B.subst σ)
   | .withbor2 x b A B => .withbor2 x b (A.subst σ) (B.subst σ)

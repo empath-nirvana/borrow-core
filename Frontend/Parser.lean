@@ -678,6 +678,7 @@ def rtyAtom : Nat → P RTy
     -- `clock` and `args` are also variables'.
     | .ident "clock" => discard bump; pure (.handle t.span .clock)
     | .ident "args" => discard bump; pure (.handle t.span .args)
+    | .ident "tok" => discard bump; pure (.handle t.span .tok)
     | .kw "top" => discard bump; pure (.top t.span)
     -- `bool` is `1 + 1`, `inr ()` for true (the prelude, typed elaboration §5.4).
     | .ident "bool" => discard bump; pure (.sum t.span (.unit t.span) (.unit t.span))

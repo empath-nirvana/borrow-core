@@ -687,19 +687,19 @@ theorem d_takeClock : CDerives LifeCtx.empty [] (.val takeCapV) (.comp (takeCloc
 
 theorem cC_clockNowC : cC (clockNowC .i64) = cC (clockNowC (.opq .clock)) := by
   funext ls δ e ρ
-  simp only [clockNowC, cC, vCE, forceE, Opaque.Holds, Val.IsInt]
+  simp only [clockNowC, cC, vCE, forceE, Opaque.rel, Opaque.Holds, Val.IsInt]
 
 theorem cC_clockSleepC : cC (clockSleepC .i64) = cC (clockSleepC (.opq .clock)) := by
   funext ls δ e ρ
-  simp only [clockSleepC, cC, vCE, forceE, Opaque.Holds, Val.IsInt]
+  simp only [clockSleepC, cC, vCE, forceE, Opaque.rel, Opaque.Holds, Val.IsInt]
 
 theorem cC_mkClockC : cC (mkClockC .i64) = cC (mkClockC (.opq .clock)) := by
   funext ls δ e ρ
-  simp only [mkClockC, cC, vCE, Opaque.Holds, Val.IsInt]
+  simp only [mkClockC, cC, vCE, Opaque.rel, Opaque.Holds, Val.IsInt]
 
 theorem cC_takeClockC : cC (takeClockC .i64) = cC (takeClockC (.opq .clock)) := by
   funext ls δ e ρ
-  simp only [takeClockC, cC, vCE, Opaque.Holds, Val.IsInt]
+  simp only [takeClockC, cC, vCE, Opaque.rel, Opaque.Holds, Val.IsInt]
 
 /-- **The model of `clock_now` meets its contract.**  `[spec §34]` -/
 theorem clockNow_meets (ls : List SRec) (δ : LSub) :

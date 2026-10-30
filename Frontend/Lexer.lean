@@ -69,7 +69,7 @@ def keywords : List String :=
     "node", "array", "array_imm", "array_mut",
     -- constants and derived forms
     "alloc", "free", "swap", "copy", "copy_bang", "forget_imm", "forget_mut", "forget_unk",
-    "forget_bang", "withbor1", "withbor2", "withbor3", "withload", "withswap",
+    "forget_bang", "tok_mint", "tok_burn", "withbor1", "withbor2", "withbor3", "withload", "withswap",
     "fold_imm", "fold_own", "fold_reuse", "fixd", "unfold_s", "unfold", "host",
     "alloc_s", "free_s", "withbor_s_mut", "withbor_s_imm", "withbor_f2_mut", "withbor_f2_imm",
     "shorten_mut", "shorten_imm", "array_new", "array_empty", "array_free", "array_size", "array_replace",

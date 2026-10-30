@@ -20,6 +20,7 @@ inductive ArgKind where
 /-- The keywords of constants. -/
 inductive CKw where
   | alloc | free | swap | copy | copyBang | forgetImm | forgetMut | forgetUnk | forgetBang
+  | tokMint | tokBurn
   | withbor1 | withbor2 | withbor3 | withload | withswap
   | foldImm | foldOwn | foldReuse | fixd | unfoldS | unfold
   | i32 | i64 | u8 | f32 | f64 | host
@@ -36,6 +37,7 @@ def CKw.str : CKw → String
   | .alloc => "alloc" | .free => "free" | .swap => "swap" | .copy => "copy"
   | .copyBang => "copy_bang" | .forgetImm => "forget_imm" | .forgetMut => "forget_mut"
   | .forgetUnk => "forget_unk" | .forgetBang => "forget_bang"
+  | .tokMint => "tok_mint" | .tokBurn => "tok_burn"
   | .withbor1 => "withbor1" | .withbor2 => "withbor2" | .withbor3 => "withbor3"
   | .withload => "withload" | .withswap => "withswap"
   | .foldImm => "fold_imm" | .foldOwn => "fold_own" | .foldReuse => "fold_reuse"
@@ -61,6 +63,7 @@ def CKw.str : CKw → String
 
 def CKw.all : List CKw :=
   [.alloc, .free, .swap, .copy, .copyBang, .forgetImm, .forgetMut, .forgetUnk, .forgetBang,
+   .tokMint, .tokBurn,
    .withbor1, .withbor2, .withbor3, .withload, .withswap,
    .foldImm, .foldOwn, .foldReuse, .fixd, .unfoldS, .unfold, .i32, .i64, .u8, .f32, .f64, .host,
    .allocS, .freeS, .withborSMut, .withborSImm, .withborF2Mut, .withborF2Imm,
@@ -88,7 +91,7 @@ def CKw.sig : CKw → List ArgKind
   | .unfold => [cty, ty]
   | .boundedFix => [ty, cty]
   | .copy | .forgetImm | .forgetMut => [life, ty]
-  | .forgetUnk => []
+  | .forgetUnk | .tokMint | .tokBurn => []
   | .withbor1 => [binder, ty, ty]
   | .withbor2 => [binder, life, ty, ty]
   | .withbor3 | .withload => [life, binder, ty, ty]
@@ -114,6 +117,8 @@ def Const.ofArgs : CKw → List Arg → Option Const
   | .forgetImm, [.life a, .ty A] => some (.forgetImm a A)
   | .forgetMut, [.life a, .ty A] => some (.forgetMut a A)
   | .forgetUnk, [] => some .forgetUnk
+  | .tokMint, [] => some .tokMint
+  | .tokBurn, [] => some .tokBurn
   | .forgetBang, [.ty A] => some (.forgetBang A)
   | .withbor1, [.binder x, .ty A, .ty B] => some (.withbor1 x A B)
   | .withbor2, [.binder x, .life b, .ty A, .ty B] => some (.withbor2 x b A B)
@@ -182,6 +187,8 @@ def Const.toArgs : Const → CKw × List Arg
   | .forgetImm a A => (.forgetImm, [.life a, .ty A])
   | .forgetMut a A => (.forgetMut, [.life a, .ty A])
   | .forgetUnk => (.forgetUnk, [])
+  | .tokMint => (.tokMint, [])
+  | .tokBurn => (.tokBurn, [])
   | .forgetBang A => (.forgetBang, [.ty A])
   | .withbor1 x A B => (.withbor1, [.binder x, .ty A, .ty B])
   | .withbor2 x b A B => (.withbor2, [.binder x, .life b, .ty A, .ty B])

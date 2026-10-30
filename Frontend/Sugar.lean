@@ -1596,7 +1596,8 @@ def capTyC (c : String) : CVTy := .ref (.opq (match capKind c with
   | .input => .input
   | .output => .output
   | .clock => .clock
-  | .args => .args))
+  | .args => .args
+  | .tok => .tok))
 
 /-- `main` with ambient capabilities, elaborated: its new type and body. `c` is the typing
 context of `main`.  `[spec §11, §14]` -/

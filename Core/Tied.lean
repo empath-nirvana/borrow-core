@@ -154,6 +154,10 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       CDerivesAt Ξ Δ Γ (.val (.prim .alloc)) (.val (.lolli A (.ref A)))
   | free {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
       CDerivesAt Ξ Δ Γ (.val (.prim .free)) (.val (.lolli (.ref A) A))
+  /-- `mint : 1 ⊸ Tok`.  `[spec §11, §42]` -/
+  | tokMint {Δ Γ} (hΓ : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ mintE (.val mintTy)
+  /-- `burn : Tok ⊸ 1`.  `[spec §11, §42]` -/
+  | tokBurn {Δ Γ} (hΓ : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ burnE (.val burnTy)
   | swap {Δ Γ A B} (hΓ : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ swap (.val (axSwapTy A B))
   | copy {Δ Γ a A} (hΓ : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ copy (.val (axCopyTy a A))
   | forgetImm {Δ Γ a A} (hΓ : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ forget (.val (axForgetImmTy a A))
@@ -495,6 +499,8 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | mutSub _ hle ih1 => exact .mutSub ih1 hle
   | alloc hΓ => exact .alloc hΓ
   | free hΓ => exact .free hΓ
+  | tokMint hΓ => exact .tokMint hΓ
+  | tokBurn hΓ => exact .tokBurn hΓ
   | swap hΓ => exact .swap hΓ
   | copy hΓ => exact .copy hΓ
   | forgetImm hΓ => exact .forgetImm hΓ
@@ -872,6 +878,8 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | mutSub _ hle ih1 => exact .mutSub (ih1 he) hle
   | alloc hΓ => exact .alloc hΓ
   | free hΓ => exact .free hΓ
+  | tokMint hΓ => exact .tokMint hΓ
+  | tokBurn hΓ => exact .tokBurn hΓ
   | swap hΓ => exact .swap hΓ
   | copy hΓ => exact .copy hΓ
   | forgetImm hΓ => exact .forgetImm hΓ

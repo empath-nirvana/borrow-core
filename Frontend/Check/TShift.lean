@@ -235,6 +235,8 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | t@(.forgetImm ..) => t
   | t@(.forgetMut ..) => t
   | t@(.forgetUnk ..) => t
+  | t@(.tokMint ..) => t
+  | t@(.tokBurn ..) => t
   | t@(.lit ..) => t
   | t@(.hostOp ..) => t
   | t@(.arrNew ..) => t
@@ -329,7 +331,8 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .withborF2I .. => some .ff
   | .use _ _ _ _ _ ab _ => ab
   | .var .. | .force .. | .unitI .. | .copyBang .. | .forgetBang .. | .alloc .. | .free ..
-  | .swap .. | .copy .. | .forgetImm .. | .forgetMut .. | .forgetUnk .. | .lit .. | .hostOp ..
+  | .swap .. | .copy .. | .forgetImm .. | .forgetMut .. | .forgetUnk .. | .tokMint .. | .tokBurn .. | .lit ..
+  | .hostOp ..
   | .arrNew .. | .arrFree .. | .arrSize .. | .arrReplace .. | .arrLen .. | .arrGet ..
   | .arrCopy .. | .arrForget .. | .countFold .. | .countTry .. | .boundedFix ..
   | .sliceBorrowM .. | .sliceBorrowI .. | .sliceGetM .. | .sliceLenM .. | .sliceSplitI ..

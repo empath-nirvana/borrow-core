@@ -294,6 +294,8 @@ theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' 
   | mutSub _ hle ih => exact .mutSub ih hle
   | alloc hΓ => exact .alloc (deadP_append h' hΓ)
   | free hΓ => exact .free (deadP_append h' hΓ)
+  | tokMint hΓ => exact .tokMint (deadP_append h' hΓ)
+  | tokBurn hΓ => exact .tokBurn (deadP_append h' hΓ)
   | swap hΓ => exact .swap (deadP_append h' hΓ)
   | copy hΓ => exact .copy (deadP_append h' hΓ)
   | forgetImm hΓ => exact .forgetImm (deadP_append h' hΓ)

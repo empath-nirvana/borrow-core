@@ -819,9 +819,11 @@ theorem boundsAvoidB_sound {Δ : LifeCtx} {x : LifeVar} (h : boundsAvoidB Δ x =
 
 /-! ### Rows  `[spec §19]` -/
 
-/-- `VTy.OwnFree`, decided: data, borrows and `!`, under `⊗` and `⊕`. -/
+/-- `VTy.OwnFree`, decided: data, borrows, `!` and the host types, under `⊗` and `⊕`; not `Tok`,
+which owns its cell. -/
 def ownFreeB : VTy → Bool
-  | .unit | .zero | .int _ | .unk | .opq _ | .bang _ | .imm _ _ | .mut _ _ => true
+  | .opq k => k != .tok
+  | .unit | .zero | .int _ | .unk | .bang _ | .imm _ _ | .mut _ _ => true
   | .tensor A B | .sum A B => ownFreeB A && ownFreeB B
   | _ => false
 
@@ -830,7 +832,7 @@ theorem ownFreeB_sound : ∀ A : VTy, ownFreeB A = true → A.OwnFree
   | .zero, _ => .zero
   | .int w, _ => .int w
   | .unk, _ => .unk
-  | .opq k, _ => .opq k
+  | .opq k, h => .opq k (by simpa [ownFreeB, Opaque.Host] using h)
   | .bang A, _ => .bang A
   | .imm a A, _ => .imm a A
   | .mut a A, _ => .mut a A
@@ -848,6 +850,7 @@ theorem ownFreeB_iff (A : VTy) : ownFreeB A = true ↔ A.OwnFree := by
   refine ⟨ownFreeB_sound A, fun h => ?_⟩
   induction h with
   | tensor _ _ ih₁ ih₂ | sum _ _ ih₁ ih₂ => simp [ownFreeB, ih₁, ih₂]
+  | opq k hk => simpa [ownFreeB, Opaque.Host] using hk
   | _ => rfl
 
 /-- `RowLe S S'`, decided: every operation of `S` is found in `S'` as itself. -/

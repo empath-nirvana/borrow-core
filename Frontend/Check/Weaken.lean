@@ -475,6 +475,14 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.forgetUnk (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (by rfl) _ _).symm⟩
+  | tokMint hΓ =>
+      intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
+      exact ⟨.tokMint (deadP_ins (live_eval_atom hf hp) Γa hΓ),
+        (shift_closed0 (by rfl) _ _).symm⟩
+  | tokBurn hΓ =>
+      intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
+      exact ⟨.tokBurn (deadP_ins (live_eval_atom hf hp) Γa hΓ),
+        (shift_closed0 (by rfl) _ _).symm⟩
   | lit c hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.lit c (deadP_ins (live_eval_atom hf hp) Γa hΓ), rfl⟩
@@ -1040,6 +1048,14 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
   | forgetUnk hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.forgetUnk (deadP_ins (live_eval_atom hf hp) Γa hΓ),
+        (shift_closed0 (by rfl) _ _).symm⟩
+  | tokMint hΓ =>
+      intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
+      exact ⟨.tokMint (deadP_ins (live_eval_atom hf hp) Γa hΓ),
+        (shift_closed0 (by rfl) _ _).symm⟩
+  | tokBurn hΓ =>
+      intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
+      exact ⟨.tokBurn (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (by rfl) _ _).symm⟩
   | lit c hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'

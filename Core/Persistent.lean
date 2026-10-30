@@ -69,7 +69,7 @@ theorem vCE_empty_of_persistent : ∀ (A : VTy) {η : Option (Nat → TEnt)},
   | .zero, _, _, _, _, _, _, _, _, h => h.elim
   | .unk, _, _, _, _, _, _, _, _, h => h.1
   | .int _, _, _, _, _, _, _, _, _, h => h.1
-  | .opq _, _, _, _, _, _, _, _, _, h => h.1
+  | .opq _, _, _, hp, _, _, _, _, _, _ => by simp [VTy.Persistent, VTy.persistent] at hp
   | .bang _, _, _, _, _, _, _, _, _, h => h.1
   | .tvar n, η, hη, _, b, ls, _, v, ρ, h => by
       cases η with

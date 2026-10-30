@@ -78,13 +78,14 @@ def Qual.str : Qual → String
   | .cancel => "cancel"
   | .unr => "unr"
 
-/-- The host resource kinds the surface names (SPEC §11, §34): `input`, `output`, `clock`,
-`args`. -/
+/-- The opaque types the surface names: the host resource kinds (SPEC §11, §34) `input`,
+`output`, `clock`, `args`, and `tok`, the token of a declared type (SPEC §42). -/
 inductive HostKind where
   | input
   | output
   | clock
   | args
+  | tok
   deriving DecidableEq, Repr, Inhabited
 
 /-- The surface name of a host resource kind. -/
@@ -93,6 +94,7 @@ def HostKind.name : HostKind → String
   | .output => "output"
   | .clock => "clock"
   | .args => "args"
+  | .tok => "tok"
 
 mutual
 /-- Value types (syntax-core §4), with the built-in abbreviations as nodes of their own:
@@ -257,6 +259,10 @@ inductive Const where
   | forgetImm (a : Life) (A : VTy)
   | forgetMut (a : Life) (A : VTy)
   | forgetUnk
+  /-- `tok_mint : 1 => tok`: a declared value's token (SPEC §42). -/
+  | tokMint
+  /-- `tok_burn : tok => 1`: the token released (SPEC §42). -/
+  | tokBurn
   | forgetBang (A : VTy)
   | withbor1 (x : Ident) (A B : VTy)
   | withbor2 (x : Ident) (b : Life) (A B : VTy)
@@ -915,6 +921,8 @@ def Const.strip : Const → Const
   | .forgetImm a A => .forgetImm a.strip A.strip
   | .forgetMut a A => .forgetMut a.strip A.strip
   | .forgetUnk => .forgetUnk
+  | .tokMint => .tokMint
+  | .tokBurn => .tokBurn
   | .forgetBang A => .forgetBang A.strip
   | .withbor1 x A B => .withbor1 x.strip A.strip B.strip
   | .withbor2 x b A B => .withbor2 x.strip b.strip A.strip B.strip

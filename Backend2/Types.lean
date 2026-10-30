@@ -362,7 +362,8 @@ def LTy.ownsOpq : LTy → Bool
 
 /-- `VTy.Drop` on the LIR type: values that hold no owned cell. -/
 def LTy.drops : LTy → Bool
-  | .unit | .zero | .int _ | .unk | .opq _ | .bang _ | .imm _ | .mut _ => true
+  | .opq k => k != .tok
+  | .unit | .zero | .int _ | .unk | .bang _ | .imm _ | .mut _ => true
   | .pair a b | .sum a b => a.drops && b.drops
   | .mu _ | .tvar _ | .ref _ | .fam _ | .thunk _ => false
 
@@ -398,7 +399,8 @@ theorem ofV_persistent {ms : MachSet} : ∀ {A : VTy} {t : LTy}, A.persistent = 
 theorem ofV_drops {ms : MachSet} {A : VTy} (hA : A.OwnFree) : ∀ {t : LTy}, ofV ms A = .ok t →
     t.drops = true := by
   induction hA with
-  | unit | zero | int | unk | opq | imm | «mut» =>
+  | opq k hk => intro t h; simp only [ofV] at h; cases h; simpa [LTy.drops, Opaque.Host] using hk
+  | unit | zero | int | unk | imm | «mut» =>
       intro t h; simp only [ofV] at h
       first
         | (cases h; rfl)
@@ -436,7 +438,7 @@ def LTy.pp : LTy → String
   | .mut a => s!"mut {a.pp}"
   | .fam l => s!"[{l.pp}]"
   | .opq k => match k with
-    | .input => "Input" | .output => "Output" | .clock => "Clock" | .args => "Args"
+    | .input => "Input" | .output => "Output" | .clock => "Clock" | .args => "Args" | .tok => "Tok"
   | .unk => "Unk"
   | .thunk k => s!"U {k.pp}"
   | .bang a => s!"!{a.pp}"

@@ -295,7 +295,7 @@ def sF (S : VTy → Val → WProp) (δ : LSub) : VTy → Val → WProp
       fun ρ => ∃ P, ptoMut ℓ α P ρ ∧ ∀ u σ, P u σ → S T u σ
   | .unk, _ => emp
   | .int w, v => ⌜v.IsInt w⌝
-  | .opq k, v => ⌜k.Holds v⌝
+  | .opq k, v => k.rel v
   | .tvar _, _ => fun _ => False
   | .mu A, v => fun ρ => (VTy.mu A).Cl 0 ∧ S (VTy.inst (.mu A) A) v ρ
 

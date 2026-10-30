@@ -13,6 +13,7 @@ import Core.EffBoxed
 import Core.PolyLet
 import Core.DivHandle
 import Core.DivHandleLast
+import Core.Tok
 import Support.LogicalRelation.Adequacy
 
 /-!
@@ -180,6 +181,11 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       CDerives Δ Γ (.val (.prim .alloc)) (.val (.lolli A (.ref A)))
   | free {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ (.val (.prim .free)) (.val (.lolli (.ref A) A))
+  /-- `mint : 1 ⊸ Tok`: a declared value's token, a fresh unit cell.  `[spec §11, §42]` -/
+  | tokMint {Δ Γ} (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ mintE (.val mintTy)
+  /-- `burn : Tok ⊸ 1`: the token's cell freed, the one constant that takes a `Tok`.
+  `[spec §11, §42]` -/
+  | tokBurn {Δ Γ} (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ burnE (.val burnTy)
   | swap {Δ Γ A B} (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ swap (.val (axSwapTy A B))
   | copy {Δ Γ a A} (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ copy (.val (axCopyTy a A))
   | forgetImm {Δ Γ a A} (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ forget (.val (axForgetImmTy a A))
@@ -622,6 +628,8 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | mutSub _ hle ih => exact mutSub_compatC ih hle
   | alloc hΓ => exact alloc_compatX hΓ
   | free hΓ => exact free_compatX hΓ
+  | tokMint hΓ => exact tokMint_compatX hΓ
+  | tokBurn hΓ => exact tokBurn_compatX hΓ
   | swap hΓ => exact swap_compatX hΓ
   | copy hΓ => exact copy_compatX hΓ
   | forgetImm hΓ => exact forgetImm_compatX hΓ

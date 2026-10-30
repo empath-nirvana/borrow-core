@@ -142,8 +142,8 @@ theorem not_forget_kappa {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy}
       · simp only [OtherLam, copy, swap, withbor, withload, withswap, sizeV, replaceV, arrLenV,
           swapV,
           foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV, Expr.val, Val.lam, lam2, elet, unit', v0, v1, v2,
-          v3, divFuelV, reifyV, rkV, BoCa.BoLo.hndE, Expr.lam.injEq, reduceCtorEq, exists_false,
-          or_self] at ho
+          v3, divFuelV, reifyV, rkV, BoCa.BoLo.hndE, mintE, burnE, Val.prim, Expr.lam.injEq,
+          Expr.app.injEq, reduceCtorEq, exists_false, or_self, false_and, and_false] at ho
   · -- `[app]`: `forget` at `κ ⊸ C`, typed at `κ`'s slot
     cases hi
     obtain rfl := hΓ A (splitP_le_right hs _ _ (soloP_le hx))

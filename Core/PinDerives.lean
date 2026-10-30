@@ -189,6 +189,11 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       CDerivesP Δ Γ (.val (.prim .alloc)) (.val (.lolli A (.ref A)))
   | free {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
       CDerivesP Δ Γ (.val (.prim .free)) (.val (.lolli (.ref A) A))
+  /-- `mint : 1 ⊸ Tok`: a declared value's token, a fresh unit cell.  `[spec §11, §42]` -/
+  | tokMint {Δ Γ} (hΓ : Ctx.DeadP Γ) : CDerivesP Δ Γ mintE (.val mintTy)
+  /-- `burn : Tok ⊸ 1`: the token's cell freed, the one constant that takes a `Tok`.
+  `[spec §11, §42]` -/
+  | tokBurn {Δ Γ} (hΓ : Ctx.DeadP Γ) : CDerivesP Δ Γ burnE (.val burnTy)
   | swap {Δ Γ A B} (hΓ : Ctx.DeadP Γ) : CDerivesP Δ Γ swap (.val (axSwapTy A B))
   | copy {Δ Γ a A} (hΓ : Ctx.DeadP Γ) : CDerivesP Δ Γ copy (.val (axCopyTy a A))
   | forgetImm {Δ Γ a A} (hΓ : Ctx.DeadP Γ) : CDerivesP Δ Γ forget (.val (axForgetImmTy a A))
