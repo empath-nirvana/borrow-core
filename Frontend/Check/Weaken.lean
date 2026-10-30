@@ -763,6 +763,8 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
   | lendR => intro _ _ _ _ _ hf _; cases hf
   | lendRI => intro _ _ _ _ _ hf _; cases hf
   | lendRF => intro _ _ _ _ _ hf _; cases hf
+  | lendRT => intro _ _ _ _ _ hf _; cases hf
+  | lendRH => intro _ _ _ _ _ hf _; cases hf
   | lendLoopR => intro _ _ _ _ _ hf _; cases hf
   | nilDead => intro _ _ _ _ _ hf _; cases hf
   | dtor hA hc he hΓ =>

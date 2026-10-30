@@ -132,6 +132,8 @@ def Const.renameLife (f : Span → String → Life) : Const → Const
   | .countFold S => .countFold (S.renameLife f)
   | .countTry S E => .countTry (S.renameLife f) (E.renameLife f)
   | .boundedFix A C => .boundedFix (A.renameLife f) (C.renameLife f)
+  | .divIterate r St B R => .divIterate (r.renameLife f) (St.renameLife f) (B.renameLife f) (R.renameLife f)
+  | .divFuelK r A => .divFuelK (r.renameLife f) (A.renameLife f)
   | .withbor1U x A B r => .withbor1U (x.renameLife f) (A.renameLife f) (B.renameLife f) (r.renameLife f)
   | .withbor2U x b A B r =>
       .withbor2U (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f) (r.renameLife f)

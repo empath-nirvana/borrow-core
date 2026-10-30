@@ -798,6 +798,87 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       | some A'' => err p.span s!"`withbor2r` lends an owned cell `ref A`, but `{p.name} : {E.ppV A''}`"
       | none => err sp "internal error: variable out of range"
 
+    | .withbor2r sp (kd + 4) x b A B r p m M =>
+      do
+      -- The #743 spike: W-tick (`withbor2rt`/`withbor1rt`, `CDerivesP.lendRT`) and W-hold
+      -- (`withbor2rh`/`withbor1rh`, `CDerivesP.lendRH`). `kv`: the view is `imm`; `hold`: the body
+      -- is checked under a nursery scope `'x_n ⊏ 'x`. Its body sees the view alone.
+      let kv : Bool := kd == 1 || kd == 3
+      let hold : Bool := kd ≥ 2
+      let rule : String := if hold then "W-hold" else "W-tick"
+      let bl ← E.elabL Δ b
+      let A' ← E.elabV Δ A
+      let B' ← E.elabV Δ B
+      let S ← E.elabRow Δ sp r
+      let v := Δ.freshVar
+      let ⟨⟨hx, hT, hB⟩⟩ ← freshFor sp v A' B'
+      let some i := lookupVar p.name E.vars
+        | err p.span s!"`{rule}` lends a variable, and `{p.name}` is not one in scope"
+      match hi : T[i]? with
+      | some (.ref A'') =>
+        if hA : A'' = A' then
+          if hwf : bl.wf Δ = true then
+            if hbx : bl.mentions v = false then
+              if hΔx : boundsAvoidB Δ v = true then
+                let ⟨hside⟩ ← lendSideW (Δ := Δ) sp kv bl A'
+                if hS : Row.resumeOTB S v = true then
+                  if hBn : noThunkB B' = true then
+                    let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A')
+                    let V := BoCa.Fig16.LogRel.Core.lendView kv v A'
+                    if hold then
+                      let Δ1 := Δ.extend v bl
+                      let y := Δ1.freshVar
+                      let ⟨⟨hy, hyT, hyB⟩⟩ ← freshFor (Δ := Δ1) sp y A' B'
+                      if hΔy : boundsAvoidB Δ1 y = true then
+                        let E' : Env :=
+                          { E with vars := [], own := [], nExt := 0,
+                                   lenv := (x.name, v) :: (x.name ++ "_n", y) :: E.lenv,
+                                   row := some S }
+                        let rM ← chkC n (E'.pushOwn m.name V) (Δ1.extend y (.var v))
+                          [V] M (effOf S (.box (.var v) B'))
+                        if hL : subL (allL [V]) (orL rM.F.u rM.F.w) = true then
+                          if hM1 : BoCa.Fig16.LogRel.Core.closedAt 1 rM.e = true then
+                            if hcb : BoCa.Fig16.LogRel.Core.closedAt 0 (BoCa.Fig16.LogRel.Core.lendCb rM.e).1 = true then
+                              if h : overlapOK T (Fam.deadStrict T).u (oneL T i) = true then
+                                pure ⟨_, rLendRH (at_ sp) ⟨rule, sp.start.line, sp.start.col⟩ kv v y bl i
+                                  (hA ▸ hi) (defines_of_wf hwf) hx hbx (boundsAvoidB_sound hΔx) hy
+                                  (boundsAvoidB_sound hΔy) hT hB hyT hyB (noThunkB_sound hBn) hside
+                                  (Row.resumeOTB_sound hS) hdt hdc hde rM hL hM1 hcb h⟩
+                              else err sp "internal error: a relaxed lend's place"
+                            else err sp "internal error: a relaxed lend's body is not closed"
+                          else err sp "internal error: a relaxed lend's body is not closed"
+                        else err sp s!"the view `{m.name}` of this relaxed lend is not consumed"
+                      else err sp s!"`{rule}`: its nursery number {ppLVar y} occurs in a bound"
+                    else
+                      let E' : Env :=
+                        { E with vars := [], own := [], nExt := 0, lenv := (x.name, v) :: E.lenv,
+                                 row := some S }
+                      let rM ← chkC n (E'.pushOwn m.name V) (Δ.extend v bl)
+                        [V] M (effOf S (.box (.var v) B'))
+                      if hL : subL (allL [V]) (orL rM.F.u rM.F.w) = true then
+                        if hM1 : BoCa.Fig16.LogRel.Core.closedAt 1 rM.e = true then
+                          if hcb : BoCa.Fig16.LogRel.Core.closedAt 0 (BoCa.Fig16.LogRel.Core.lendCb rM.e).1 = true then
+                            if h : overlapOK T (Fam.deadStrict T).u (oneL T i) = true then
+                              pure ⟨_, rLendRT (at_ sp) ⟨rule, sp.start.line, sp.start.col⟩ kv v bl i
+                                (hA ▸ hi) (defines_of_wf hwf) hx hbx (boundsAvoidB_sound hΔx) hT hB
+                                (noThunkB_sound hBn) hside (Row.resumeOTB_sound hS) hdt hdc hde rM hL
+                                hM1 hcb h⟩
+                            else err sp "internal error: a relaxed lend's place"
+                          else err sp "internal error: a relaxed lend's body is not closed"
+                        else err sp "internal error: a relaxed lend's body is not closed"
+                      else err sp s!"the view `{m.name}` of this relaxed lend is not consumed"
+                  else err sp s!"a relaxed lend's result `{E.ppV B'}` holds a `U` (R1, SPEC §29)"
+                else err sp (s!"`{rule}`: the row of a relaxed lend's body has only `Div`'s " ++
+                  "`tick` and operations that resume at most once, of names other than 0, " ++
+                  "answering `1` with the empty cancel row, whose arguments are closed data " ++
+                  "with no `U` (SPEC §29, the #743 spike)")
+              else err sp s!"`{rule}`: its number {ppLVar v} occurs in a bound of the lifetime context"
+            else err sp s!"`{rule}`: its bound mentions its own number {ppLVar v}"
+          else err sp s!"`{rule}`: the bound `{E.ppL bl}` is not defined here"
+        else throw (mismatch p.span (E.ppV (.ref A')) (E.ppV (.ref A'')))
+      | some A'' => err p.span s!"`{rule}` lends an owned cell `ref A`, but `{p.name} : {E.ppV A''}`"
+      | none => err sp "internal error: variable out of range"
+
     | .withbor2r sp _ x b A B r p m M => do
       -- R1, the relaxed lend (SPEC §29): its body sees the view alone.
       let bl ← E.elabL Δ b

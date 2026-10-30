@@ -317,6 +317,12 @@ inductive Const where
   | countTry (S E : VTy)
   /-- `bounded_fix[A, C]`: the fuelled fixed point of SPEC §20. -/
   | boundedFix (A : VTy) (C : CTy)
+  /-- `div_iterate[[r], St, B, R]`: the kernel's `iterate` at a row `r` holding `Div` (SPEC §14),
+  in the core text for the #743 spike (`experiments/Spike743`). -/
+  | divIterate (r : Row) (St B R : VTy)
+  /-- `div_fuel_k[[r], A]`: the kernel's `div_fuel` handling `Div` around a computation at `tick, r`
+  (SPEC §14), in the core text for the #743 spike. -/
+  | divFuelK (r : Row) (A : VTy)
   /-- The unwinding borrows of SPEC §19, each at the row `r` of its callback:
   `withbor1u['x, A, B, [r]]`, `withbor2u['x, @b, A, B, [r]]`, `withbor3u[@a, 'x, A, B, [r]]`,
   `withloadu[@a, 'x, A, B, [r]]`, `slice_borrow_mut_u['x, @b, A, B, [r]]`,
@@ -963,6 +969,8 @@ def Const.strip : Const → Const
   | .countFold S => .countFold S.strip
   | .countTry S E => .countTry S.strip E.strip
   | .boundedFix A C => .boundedFix A.strip C.strip
+  | .divIterate r St B R => .divIterate r.strip St.strip B.strip R.strip
+  | .divFuelK r A => .divFuelK r.strip A.strip
   | .withbor1U x A B r => .withbor1U x.strip A.strip B.strip r.strip
   | .withbor2U x b A B r => .withbor2U x.strip b.strip A.strip B.strip r.strip
   | .withbor3U a x A B r => .withbor3U a.strip x.strip A.strip B.strip r.strip

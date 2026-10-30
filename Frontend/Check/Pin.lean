@@ -52,13 +52,27 @@ theorem Row.resumeOB_sound {S : Row} {x : LifeVar} (h : Row.resumeOB S x = true)
   obtain ⟨⟨⟨⟨⟨⟨⟨h₁, h₂⟩, h₃⟩, h₄⟩, h₅⟩, h₆⟩, h₇⟩, h₈⟩ := this
   exact ⟨h₁, h₂, h₃, h₄, h₅, not_vfree_of_vfreeB h₆, outlivesAllB_sound _ h₇, noThunkB_sound h₈⟩
 
+/-- `Row.ResumeOT` (W-tick, the #743 spike), decided: each operation is `tick`, or one
+`Row.resumeOB` admits. -/
+def Row.resumeOTB (S : Row) (x : LifeVar) : Bool :=
+  S.all fun o => decide (o = BoCa.Fig16.LogRel.Core.tickSig) || Row.resumeOB [o] x
+
+theorem Row.resumeOTB_sound {S : Row} {x : LifeVar} (h : Row.resumeOTB S x = true) :
+    BoCa.Fig16.LogRel.Core.Row.ResumeOT S x := by
+  intro o ho
+  have := List.all_eq_true.mp h o ho
+  simp only [Bool.or_eq_true, decide_eq_true_eq] at this
+  rcases this with h | h
+  · exact .inl h
+  · exact .inr (Row.resumeOB_sound h o (List.mem_singleton.mpr rfl))
+
 end BoCa.Fig16.LogRel.Core.Check
 
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (CDerivesP Jdg NoThunkT Row.ResumeO VFree VOutlivesLe HasDtor dtorE
-  dtor_wf withborUV lendCb closedAt)
+open BoCa.Fig16.LogRel.Core (CDerivesP Jdg NoThunkT Row.ResumeO Row.ResumeOT VFree VOutlivesLe HasDtor dtorE
+  dtor_wf withborUV lendCb closedAt lendView LendSide)
 
 /-- A derivation that uses a relaxed rule: its tie is not claimed. -/
 theorem TiedDer.pinned {p : Pins} {s : CRow} {Δ : LifeCtx} {Γ : Ctx CVTy} {e : BoCa.Expr}
@@ -144,6 +158,72 @@ def rLendRF (i : TInfo) {A B : CVTy} {S : CRow} (q : Pin) (x : LifeVar) (b : CLi
     .lendRF hb hx hbx hΔx hT hB hBn hside hsideB hS hM1 hcb hdc (.dtor hdt hdc hde .nil) dM
   let rL : Res Δ T JL :=
     ⟨.nilDead i JL JL (.lam i JL (.array A) (effOf S (.tensor (.array A) B)) tR), rM.sigs, q :: rM.pins,
+      (Fam.deadStrict T).map fun _ hd => TTied.pinned q (.nilDead hd (.lam hR1))⟩
+  rApp i rL k hk h
+
+/-- `LendSide kv Δ A`, decided: `A` scoped (`imm`), or `A ⊒ @b` (`mut`). -/
+def lendSideW (sp : Span) (kv : Bool) (b : CLife) (A : CVTy) :
+    Except Error (PLift (LendSide kv Δ A)) :=
+  match kv with
+  | true =>
+    if hsc : scopedB Δ A = true then
+      pure ⟨by simpa [LendSide] using scopedB_sound hsc⟩
+    else throw ⟨sp, s!"`{ppVTy A}` mentions a lifetime not in scope"⟩
+  | false => do
+    let ⟨h⟩ ← outlivesWitness (Δ := Δ) sp b A
+    pure ⟨by simpa [LendSide] using h⟩
+
+/-- **W-tick** (`CDerivesP.lendRT`, the #743 spike) at the slot `k : ref A`: `rLendR` (`kv =
+false`) or `rLendRI` (`kv = true`) at a row that may hold `Div`'s `tick`.  `[spec §29]` -/
+def rLendRT (i : TInfo) {A B : CVTy} {S : CRow} (q : Pin) (kv : Bool) (x : LifeVar) (b : CLife)
+    (k : Nat) (hk : T[k]? = some (.ref A)) (hb : Δ.Defines b) (hx : Δ.find? x = none)
+    (hbx : b.mentions x = false) (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
+    (hT : ¬ VFree x A) (hB : ¬ VFree x B) (hBn : NoThunkT B) (hside : LendSide kv Δ A)
+    (hS : Row.ResumeOT S x)
+    (hdt : HasDtor (.ref A)) (hdc : closedAt 0 (dtorE (.ref A)) = true)
+    (hde : (dtorE (.ref A)).effFree = true)
+    (rM : Res (Δ.extend x b) [lendView kv x A] (.comp (effOf S (.box (.var x) B))))
+    (hL : subL (allL [lendView kv x A]) (orL rM.F.u rM.F.w) = true)
+    (hM1 : closedAt 1 rM.e = true) (hcb : closedAt 0 (lendCb rM.e).1 = true)
+    (h : overlapOK T (Fam.deadStrict T).u (oneL T k) = true) :
+    Res Δ T (.comp (effOf S (.tensor (.ref A) B))) :=
+  let dM := (rM.F.d _ (btw_allL _ _ _ rM.F.hu rM.F.hw hL)).2
+  let J : Jdg := .comp (effOf S (.tensor (.ref A) B))
+  let JL : Jdg := .comp (.arr (.ref A) (effOf S (.tensor (.ref A) B)))
+  let tR : TExpr := .lendRT i J x b A B S (.dtor i (.val (.lolli (.ref A) .unit)) (.ref A)) rM.t
+  let hR1 : TDerivesP Δ [⟨.ref A, true⟩] tR J :=
+    .lendRT kv hb hx hbx hΔx hT hB hBn hside hS hM1 hcb hdc (.dtor hdt hdc hde .nil) dM
+  let rL : Res Δ T JL :=
+    ⟨.nilDead i JL JL (.lam i JL (.ref A) (effOf S (.tensor (.ref A) B)) tR), rM.sigs, q :: rM.pins,
+      (Fam.deadStrict T).map fun _ hd => TTied.pinned q (.nilDead hd (.lam hR1))⟩
+  rApp i rL k hk h
+
+/-- **W-hold** (`CDerivesP.lendRH`, the #743 spike) at the slot `k : ref A`: `rLendRT` with the
+body checked at `Δ, 'x ⊏ @b, 'y ⊏ 'x`, the nursery scope `'y`.  `[spec §29]` -/
+def rLendRH (i : TInfo) {A B : CVTy} {S : CRow} (q : Pin) (kv : Bool) (x y : LifeVar)
+    (b : CLife) (k : Nat) (hk : T[k]? = some (.ref A)) (hb : Δ.Defines b) (hx : Δ.find? x = none)
+    (hbx : b.mentions x = false) (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
+    (hy : (Δ.extend x b).find? y = none)
+    (hΔy : ∀ z u, (Δ.extend x b).find? z = some u → u.mentions y = false)
+    (hT : ¬ VFree x A) (hB : ¬ VFree x B) (hyT : ¬ VFree y A) (hyB : ¬ VFree y B)
+    (hBn : NoThunkT B) (hside : LendSide kv Δ A) (hS : Row.ResumeOT S x)
+    (hdt : HasDtor (.ref A)) (hdc : closedAt 0 (dtorE (.ref A)) = true)
+    (hde : (dtorE (.ref A)).effFree = true)
+    (rM : Res ((Δ.extend x b).extend y (.var x)) [lendView kv x A]
+      (.comp (effOf S (.box (.var x) B))))
+    (hL : subL (allL [lendView kv x A]) (orL rM.F.u rM.F.w) = true)
+    (hM1 : closedAt 1 rM.e = true) (hcb : closedAt 0 (lendCb rM.e).1 = true)
+    (h : overlapOK T (Fam.deadStrict T).u (oneL T k) = true) :
+    Res Δ T (.comp (effOf S (.tensor (.ref A) B))) :=
+  let dM := (rM.F.d _ (btw_allL _ _ _ rM.F.hu rM.F.hw hL)).2
+  let J : Jdg := .comp (effOf S (.tensor (.ref A) B))
+  let JL : Jdg := .comp (.arr (.ref A) (effOf S (.tensor (.ref A) B)))
+  let tR : TExpr := .lendRH i J x b A B S y (.dtor i (.val (.lolli (.ref A) .unit)) (.ref A)) rM.t
+  let hR1 : TDerivesP Δ [⟨.ref A, true⟩] tR J :=
+    .lendRH kv y hb hx hbx hΔx hy hΔy hT hB hyT hyB hBn hside hS hM1 hcb hdc
+      (.dtor hdt hdc hde .nil) dM
+  let rL : Res Δ T JL :=
+    ⟨.nilDead i JL JL (.lam i JL (.ref A) (effOf S (.tensor (.ref A) B)) tR), rM.sigs, q :: rM.pins,
       (Fam.deadStrict T).map fun _ hd => TTied.pinned q (.nilDead hd (.lam hR1))⟩
   rApp i rL k hk h
 

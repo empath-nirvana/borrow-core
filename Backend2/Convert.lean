@@ -2439,7 +2439,7 @@ def joinWith (c₂ : Ctx) (A : VTy) (args : List Var) (body : Ctx → List Var �
 at an outcome, each is converted inside a machine.  `[spec §49]` -/
 def machNode : TExpr → Bool
   | .effLet .. | .effThen .. | .bind .. | .sumE .. | .tensorE .. | .unitE .. | .zeroE .. | .effSub ..
-  | .effRaise .. | .effPerform .. | .nilDead .. | .lendR .. | .lendRI .. | .lendRF .. => true
+  | .effRaise .. | .effPerform .. | .nilDead .. | .lendR .. | .lendRI .. | .lendRF .. | .lendRT .. | .lendRH .. => true
   | .lendScope _ _ _ t => machNode t
   | _ => false
 
@@ -2697,7 +2697,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     -- `[nil-dead]` (SPEC §29): the term at the empty context, the context's slots consumed.
     readFact "nilDead:context"
     return drops (live ctx) (← conv fuel [] c)
-  | .effHandleT .. | .lendR .. | .lendRI .. | .lendRF .. | .lendLoopR .. | .iterate .. | .divFuel ..
+  | .effHandleT .. | .lendR .. | .lendRI .. | .lendRF .. | .lendRT .. | .lendRH .. | .lendLoopR .. | .iterate .. | .divFuel ..
   | .reify .. | .letPoly .. => outside t
   | t =>
     match transparent? t with

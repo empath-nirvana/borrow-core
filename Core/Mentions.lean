@@ -338,6 +338,22 @@ theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
         rw [mentions_of_closed hw] at hk; cases hk
       · subst hk; exact ⟨_, rfl, rfl⟩
       · rw [mentions_of_closed hcb] at hk; cases hk
+  | lendRT _ _ _ _ _ _ _ _ _ _ _ hcb hdc =>
+      intro k hk
+      simp only [mentions, Expr.val, Bool.or_eq_true, beq_iff_eq] at hk
+      rcases hk with (hk | hk) | hk
+      · have hw : closedAt 0 (withborUV _).1 = true := withborUE_closed hdc
+        rw [mentions_of_closed hw] at hk; cases hk
+      · subst hk; exact ⟨_, rfl, rfl⟩
+      · rw [mentions_of_closed hcb] at hk; cases hk
+  | lendRH _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ hcb hdc =>
+      intro k hk
+      simp only [mentions, Expr.val, Bool.or_eq_true, beq_iff_eq] at hk
+      rcases hk with (hk | hk) | hk
+      · have hw : closedAt 0 (withborUV _).1 = true := withborUE_closed hdc
+        rw [mentions_of_closed hw] at hk; cases hk
+      · subst hk; exact ⟨_, rfl, rfl⟩
+      · rw [mentions_of_closed hcb] at hk; cases hk
   | @lendLoopR _ _ A _ B R N K s0 _ _ _ _ _ _ _ _ _ hN1 hK1 hs0c _ _ _ _ _ _ =>
       intro k hk
       have hcN : closedAt 0 (lendCb N).1 = true := by

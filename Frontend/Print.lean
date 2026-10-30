@@ -297,7 +297,8 @@ def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .withbor2r _ kd x b A B r p m M =>
       let as := (Const.withbor2U x b A B r).toArgs.2
       let kw := match kd with
-        | 1 => "withbor1r" | 2 => "slice_borrow_r" | 3 => "lend_loop_r" | _ => "withbor2r"
+        | 1 => "withbor1r" | 2 => "slice_borrow_r" | 3 => "lend_loop_r" | 4 => "withbor2rt"
+        | 5 => "withbor1rt" | 6 => "withbor2rh" | 7 => "withbor1rh" | _ => "withbor2r"
       kw ++ "[" ++ ", ".intercalate (as.map Arg.pp) ++ s!"]({p.name}, {m.name}) " ++ M.pp 1 k
     | .force _ x => "force " ++ x.name
     | .lam _ x A M => "fun (" ++ x.name ++ " : " ++ A.pp ++ ") ->" ++ nl (k + 2) ++ M.pp 0 (k + 2)

@@ -98,6 +98,42 @@ def PinNest : Prop :=
       (.app (.app (.val (withborUV d)) (.var 0)) (.val (lendCb M)))
       (CTy.effOf S (.tensor (.array A) B))
 
+/-- **W-tick** (the #743 spike, P1's shape and #750's nursery): `lendRT`'s compatibility lemma.
+`PinStop` (`k = false`) and `PinStopImm` (`k = true`) with `Row.ResumeOT` for `Row.ResumeO`: the
+callback's row may also hold `Div`'s `tick`. The conclusion is `SemC` at that row, which is the
+relation the kernel already gives a row holding `Div` (`cC_effOf_wp`: `cwp`, not `ewpTS`). -/
+def PinStopTick : Prop :=
+  ∀ (Δ : LifeCtx) (x : LifeVar) (b : Lifetime.Life) (T B : VTy) (d M : Expr) (S : Row) (k : Bool),
+    Δ.Defines b → Δ.find? x = none → b.mentions x = false →
+    (∀ y u, Δ.find? y = some u → u.mentions x = false) →
+    ¬ VFree x T → ¬ VFree x B → NoThunkT B → LendSide k Δ T →
+    Row.ResumeOT S x → closedAt 1 M = true → closedAt 0 (lendCb M).1 = true →
+    closedAt 0 d = true → SemV (ℍ := ℍ) Δ [] d (.lolli (.ref T) .unit) →
+    CDerivesP (Δ.extend x b) [⟨lendView k x T, true⟩] M
+      (.comp (CTy.effOf S (.box (.var x) B))) →
+    SemC (ℍ := ℍ) Δ [⟨.ref T, true⟩]
+      (.app (.app (.val (withborUV d)) (.var 0)) (.val (lendCb M)))
+      (CTy.effOf S (.tensor (.ref T) B))
+
+/-- **W-hold** (the #743 spike, #750's nursery): `lendRH`'s compatibility lemma. `PinStopTick`
+with the callback typed at a second fresh lifetime `'y ⊏ 'x`, the nursery scope: what is boxed at
+`'y` may hold views at `'x` across the callback's stops, and `'y` is free in `T` and `B`. -/
+def PinStopHold : Prop :=
+  ∀ (Δ : LifeCtx) (x y : LifeVar) (b : Lifetime.Life) (T B : VTy) (d M : Expr) (S : Row)
+    (k : Bool),
+    Δ.Defines b → Δ.find? x = none → b.mentions x = false →
+    (∀ y u, Δ.find? y = some u → u.mentions x = false) →
+    (Δ.extend x b).find? y = none →
+    (∀ z u, (Δ.extend x b).find? z = some u → u.mentions y = false) →
+    ¬ VFree x T → ¬ VFree x B → ¬ VFree y T → ¬ VFree y B → NoThunkT B → LendSide k Δ T →
+    Row.ResumeOT S x → closedAt 1 M = true → closedAt 0 (lendCb M).1 = true →
+    closedAt 0 d = true → SemV (ℍ := ℍ) Δ [] d (.lolli (.ref T) .unit) →
+    CDerivesP (Δ.extend x b |>.extend y (.var x)) [⟨lendView k x T, true⟩] M
+      (.comp (CTy.effOf S (.box (.var x) B))) →
+    SemC (ℍ := ℍ) Δ [⟨.ref T, true⟩]
+      (.app (.app (.val (withborUV d)) (.var 0)) (.val (lendCb M)))
+      (CTy.effOf S (.tensor (.ref T) B))
+
 /-- **PinLaw**: the one named assumption. Its fields are stated over `CDerivesP` derivations
 only. -/
 structure PinLaw : Prop where
@@ -109,6 +145,10 @@ structure PinLaw : Prop where
   stopImm : PinStopImm (ℍ := ℍ)
   /-- W-nest (the #743 spike): R1 at an owned array's family of `mut` leaves. -/
   nest : PinNest (ℍ := ℍ)
+  /-- W-tick (the #743 spike): R1 and W-imm at a row holding `Div`'s `tick`. -/
+  tick : PinStopTick (ℍ := ℍ)
+  /-- W-hold (the #743 spike): R1 and W-imm with a nursery scope `'y ⊏ 'x`. -/
+  hold : PinStopHold (ℍ := ℍ)
 
 /-! ### The rows a relaxed lend admits
 
