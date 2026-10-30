@@ -298,6 +298,7 @@ with no new case.
 | block borrow `withborS σ : refTy σ ⊸ (∀'c ⊏ ⊓Δ. famTy M 'c σ ⊸ ['c] T) ⊸ refTy σ ⊗ T`, `shortenE`: `withborS_wf`, `withborSM_wf`, `withborSI_wf`, `shortenE_wf` | `BlockBorrow.lean` |
 | block allocation and free: `allocS`, `freeS` (`d_allocS`, `d_freeS`) | `Blocks.lean` |
 | destructors `dtorE T : T ⊸ F 1` at every `HasDtor T` (forgettable types, `Ref`, `⊗`/`⊕`/`[@a]`, `μ` of the class `P` by `foldOwn` or `foldOwnG`, codata by `close`), and the drop `dropE T i e = (dtorE T xᵢ; e)`: `dtor_wf`, `drop_derives` (SPEC §12, §61) | `Dtor.lean` |
+| the two classes of value type, unrestricted (`VTy.Persistent`) and linear: contraction and weakening exactly at unrestricted types (`Ctx.SplitP.both_live_iff`, `Ctx.DeadP.live_iff`, `Ctx.SoloP.live_succ_iff`); the derived drop `DerivedDrop`, pure and closed (`dtorE_effFree`, `dtorE_closed`); the derived copy at `Imm` (`DerivedCopy`, `copy_derives`); the classes of `κ` (`kTy_lin`, `kTy_cancel_linear`, `kTy_cancel_hasDtor_iff`, `kTy_unr`); `forgettable_iff` (SPEC §10, §12, §19) | `Classes.lean` |
 
 These facts are stated at the typed world:
 

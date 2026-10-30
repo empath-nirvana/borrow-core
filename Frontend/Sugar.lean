@@ -536,7 +536,7 @@ def varsFor (A : CVTy) : Val → Option (List (String × CVTy))
     | (some (.var _ x), T) | (some (.clone _ x), T) => some (x, T)
     | _ => none
 
-def isLinear (A : CVTy) : Bool := Class.of A == .linear
+def isLinear (A : CVTy) : Bool := Class.of A == .linear false
 
 /-- The variables a terminal `return V` of the body puts in each component of the result that
 has no destructor, as the loops' states hold them: a variable the terminal names by a copy made
@@ -2402,7 +2402,7 @@ def fieldRead (c : TCx) (sp fsp : Span) (f : String) (j k : Nat) (rolls : Bool) 
     | some B => pure B
     | none => throw ⟨fsp, s!"`.{f}` reads a field of a record, but this has type `{ppT A}`"⟩
   let copied (B : CVTy) : DM Unit := do
-    unless Class.of B == .persistent do
+    unless Class.of B == .unrestricted do
       throw ⟨fsp, s!"`.{f}` through a borrow copies the field, and its type `{ppT B}` is not " ++
         "persistent: match the record instead"⟩
   let bindIt (what : String) : Error := ⟨sp, s!"`.{f}` reads a field of {what}: bind it, " ++
@@ -2412,7 +2412,7 @@ def fieldRead (c : TCx) (sp fsp : Span) (f : String) (j k : Nat) (rolls : Bool) 
     let B ← fieldTy A
     copied B
     -- A persistent record is copied out, `*e`, and projected.
-    if Class.of A == .persistent then
+    if Class.of A == .unrestricted then
       return .run sp (projectField fsp rolls j k (.app fsp (.sugar fsp .deref) R) fun v => .ret fsp v)
     pure (loadField fsp (← c.surfaceL fsp a) (← c.surface fsp A) (← c.surface fsp B) rolls j k R)
   | .mut a A => do
@@ -2432,7 +2432,7 @@ def fieldRead (c : TCx) (sp fsp : Span) (f : String) (j k : Nat) (rolls : Bool) 
     pure (.app sp (.app sp (.const fsp (.withswap (← c.surfaceL fsp a) As Bs)) (.lend x.span x .mut))
       (.thunkv fsp (.lam fsp ⟨r, fsp⟩ As body)))
   | T => do
-    if Class.of T == .persistent then
+    if Class.of T == .unrestricted then
       return .run sp (projectField fsp rolls j k R fun v => .ret fsp v)
     match head with
     | some x => do
@@ -3550,7 +3550,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         -- An explicit copy: the variable, at the span of `clone(x)`, its use marked written for
         -- the check of implicit copies (`Frontend/Check/Copies.lean`, decision 39).
         let A ← need W.span "`clone`'s argument" ((← refresh c).tyV W')
-        unless Class.of A == .persistent do
+        unless Class.of A == .unrestricted do
           throw ⟨ksp, s!"`clone` copies a persistent value, and `{ppT A}` is not persistent"⟩
         pure (.clone sp x)
       | "clone", _ => throw ⟨W.span, "`clone` takes a variable: `clone(x)`"⟩
@@ -3701,7 +3701,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
           (.thunkv sp (.lamL sp y (.dom sp) (.ret sp (.thunkv sp (.lam sp ⟨"io_dv", sp⟩
             (.view sp (.var sp y.name) As) (.ret sp (.boxed sp (.var sp y.name) (.var sp "io_dv"))))))))
       let content (A : CVTy) : DM VTy := do
-        unless Class.of A == .persistent do
+        unless Class.of A == .unrestricted do
           throw ⟨dsp, s!"`*` copies the content, and `{ppT A}` is not persistent"⟩
         (c.surface dsp A : Except Error VTy)
       match (← refresh c).tyV V', V' with
@@ -4677,7 +4677,7 @@ case {if w then "io_hole_get" else get} \{ inl io_ve{sfx} -> {el}force io_hole_b
         pure ("", some (s!"borrow {if m then "mut" else "imm"} {a.name} \{ {lv}, io_lv{sfx} -> ",
             a.name), p, cu, b, "0", e, s!"len({a.name})", wi, g)
       | .owned A => do
-        unless Class.of A == .persistent do
+        unless Class.of A == .unrestricted do
           throw ⟨V.span, s!"a `for` over an owned array copies each element, and `{ppT A}` is " ++
             "not persistent: iterate `&a` or `&mut a`"⟩
         let (p, cu, b, e, wi, g) := view false lv (← pp A) s!"io_lv{sfx}" s!"{x.name} <- return *io_ve{sfx};\n"
@@ -4970,7 +4970,7 @@ while ({w}m) \{
 };
 force io_hole_rest"
       | .owned A => do
-        unless Class.of A == .persistent do
+        unless Class.of A == .unrestricted do
           throw ⟨V.span, s!"a `for` over an owned array copies each element, and `{ppT A}` is " ++
             "not persistent: iterate a view of it"⟩
         let At ← pp A
@@ -5115,7 +5115,7 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
         | none => pure .zero
       | none => pure .unit
     checkBreaks M (keep.map fun _ => Vt)
-    if keep.isNone && Class.of Bg == .linear then
+    if keep.isNone && Class.of Bg == .linear false then
       throw ⟨sp, s!"`{i.callee}` returns `{ppT Bg}`, which has no destructor: bind the loop's value, " ++
         "`let r = for …`"⟩
     if keep.isSome && Bg != Vt && Bg != .zero then

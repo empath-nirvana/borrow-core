@@ -76,6 +76,7 @@ import Core.StreamPrograms
 import Core.Integers
 import Core.IntPrograms
 import Core.Dtor
+import Core.Classes
 import Core.ArrayWp
 import Core.Arrays
 import Core.SliceFrames

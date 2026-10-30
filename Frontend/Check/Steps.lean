@@ -1,4 +1,5 @@
 import Frontend.Check.Rules
+import Core.Classes
 
 /-!
 # Frontend — Check — steps shared by the checker's cases
@@ -12,7 +13,7 @@ contexts, `boxed`, application to a variable, `<,>`, `case` and `Fun`.
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (Jdg FShape HasDtor dtorAlgs)
+open BoCa.Fig16.LogRel.Core (Jdg FShape HasDtor dtorAlgs DerivedDrop Linear)
 
 /-! ### Fold shapes and destructors, decided -/
 
@@ -301,6 +302,201 @@ def hasDtorB (A : CVTy) : Bool := dtorB false A
 
 theorem hasDtorB_sound {A : CVTy} (h : hasDtorB A = true) : HasDtor A := dtorB_sound A h
 
+open BoCa.Fig16.LogRel.Core.FoldP (clB keysIn resO resO_leaf pBodyB_iff Bnd Stack) in
+mutual
+/-- **`dtorB false` is complete for `HasDtor`.** -/
+theorem dtorB_complete : ∀ A : CVTy, HasDtor A → dtorB false A = true
+  | .tensor A B, h => by
+      cases h with
+      | tensor h₁ h₂ => simp [dtorB, dtorB_complete A h₁, dtorB_complete B h₂]
+  | .sum A B, h => by
+      cases h with
+      | sum h₁ h₂ => simp [dtorB, dtorB_complete A h₁, dtorB_complete B h₂]
+  | .ref A, h => by
+      cases h with
+      | ref h => simpa [dtorB] using dtorB_complete A h
+  | .tvar _, h => by cases h
+  | .box _ A, h => by
+      cases h with
+      | box h => simpa [dtorB] using dtorB_complete A h
+  | .mu A, h => by
+      cases h with
+      | mu hP h₁ h₂ h₃ =>
+          simp only [dtorB, Bool.false_and, Bool.false_eq_true, if_false, Bool.and_eq_true]
+          exact ⟨(pBodyB_iff A).mpr hP, dtorB_completeA A [A] ⟨h₁, h₂, h₃⟩⟩
+  | .thunk (.amp _ (.ret .unit)), _ => rfl
+  | .thunk (.nu (.amp C (.ret R))), h => by
+      cases h with
+      | nu hC hRc h =>
+          simp [dtorB, CTy.nuOkB_complete _ hC, VTy.clB_complete 0 R hRc, dtorB_complete R h]
+  | .thunk (.nu (.ret _)), h | .thunk (.nu (.arr _ _)), h | .thunk (.nu .top), h
+  | .thunk (.nu (.all _ _ _)), h | .thunk (.nu (.nu _)), h | .thunk (.nu (.eff _ _ _ _ _ _ _)), h
+  | .thunk (.nu (.amp _ (.arr _ _))), h | .thunk (.nu (.amp _ (.amp _ _))), h
+  | .thunk (.nu (.amp _ .top)), h | .thunk (.nu (.amp _ (.all _ _ _))), h
+  | .thunk (.nu (.amp _ (.nu _))), h | .thunk (.nu (.amp _ (.eff _ _ _ _ _ _ _))), h
+  | .thunk (.ret _), h | .thunk (.arr _ _), h | .thunk .top, h
+  | .thunk (.all _ _ _), h | .thunk (.eff _ _ _ _ _ _ _), h
+  | .thunk (.amp _ (.ret (.tensor _ _))), h | .thunk (.amp _ (.ret .zero)), h
+  | .thunk (.amp _ (.ret (.sum _ _))), h | .thunk (.amp _ (.ret (.thunk _))), h
+  | .thunk (.amp _ (.ret (.ref _))), h | .thunk (.amp _ (.ret (.imm _ _))), h
+  | .thunk (.amp _ (.ret (.mut _ _))), h | .thunk (.amp _ (.ret (.box _ _))), h
+  | .thunk (.amp _ (.ret (.bang _))), h | .thunk (.amp _ (.ret .unk)), h
+  | .thunk (.amp _ (.ret (.tvar _))), h | .thunk (.amp _ (.ret (.mu _))), h
+  | .thunk (.amp _ (.ret (.int _))), h | .thunk (.amp _ (.ret (.fam _))), h
+  | .thunk (.amp _ (.ret (.opq _))), h
+  | .thunk (.amp _ (.arr _ _)), h
+  | .thunk (.amp _ (.amp _ _)), h | .thunk (.amp _ .top), h
+  | .thunk (.amp _ (.all _ _ _)), h | .thunk (.amp _ (.nu _)), h
+  | .thunk (.amp _ (.eff _ _ _ _ _ _ _)), h => by cases h
+  | .unit, _ | .zero, _ | .int _, _ | .unk, _ | .bang _, _ | .imm _ _, _ | .mut _ _, _ => rfl
+  | .opq _, h => by cases h
+  | .fam (.ref A), h => by
+      cases h with
+      | array h => simpa [dtorB] using dtorB_complete A h
+  | .fam (.imm _ _), _ | .fam (.mut _ _), _ => rfl
+  | .fam .unit, h | .fam (.tensor _ _), h | .fam .zero, h | .fam (.sum _ _), h
+  | .fam (.thunk _), h | .fam (.box _ _), h
+  | .fam (.bang _), h | .fam .unk, h | .fam (.tvar _), h | .fam (.mu _), h
+  | .fam (.int _), h | .fam (.fam _), h | .fam (.opq _), h => by cases h
+
+/-- **`dtorB true` is complete for `AlgDtor`**, at every stack: the recursion carries the stack
+as `AlgDtor` does, `A :: Bs` under a `μ` that is not closed. -/
+theorem dtorB_completeA : ∀ (A : CVTy) (Bs : Stack), AlgDtor Bs A → dtorB true A = true
+  | .tensor A B, Bs, h => by
+      by_cases hc : clB 0 (.tensor A B) = true
+      · have h₁ := h.1
+        rw [resO_leaf dtorAlgs Bs hc] at h₁
+        rw [dtorB_closed _ hc]
+        exact dtorB_complete _ h₁
+      · obtain ⟨h₁, h₂, h₃⟩ := h
+        simp only [BoCa.Fig16.LogRel.Core.FoldP.resO, if_neg hc] at h₁
+        cases h₁ with
+        | tensor ha hb =>
+          have hA : AlgDtor Bs A := ⟨ha, fun B' Bs' hm => h₂ B' Bs' (by
+              simp only [keysIn, List.mem_append]; exact .inl hm),
+            fun Bs' S hm => h₃ Bs' S (by simp only [keysIn, List.mem_append]; exact .inl hm)⟩
+          have hB : AlgDtor Bs B := ⟨hb, fun B' Bs' hm => h₂ B' Bs' (by
+              simp only [keysIn, List.mem_append]; exact .inr hm),
+            fun Bs' S hm => h₃ Bs' S (by simp only [keysIn, List.mem_append]; exact .inr hm)⟩
+          simp [dtorB, dtorB_completeA A Bs hA, dtorB_completeA B Bs hB]
+  | .sum A B, Bs, h => by
+      by_cases hc : clB 0 (.sum A B) = true
+      · have h₁ := h.1
+        rw [resO_leaf dtorAlgs Bs hc] at h₁
+        rw [dtorB_closed _ hc]
+        exact dtorB_complete _ h₁
+      · obtain ⟨h₁, h₂, h₃⟩ := h
+        simp only [BoCa.Fig16.LogRel.Core.FoldP.resO, if_neg hc] at h₁
+        cases h₁ with
+        | sum ha hb =>
+          have hA : AlgDtor Bs A := ⟨ha, fun B' Bs' hm => h₂ B' Bs' (by
+              simp only [keysIn, List.mem_append]; exact .inl hm),
+            fun Bs' S hm => h₃ Bs' S (by simp only [keysIn, List.mem_append]; exact .inl hm)⟩
+          have hB : AlgDtor Bs B := ⟨hb, fun B' Bs' hm => h₂ B' Bs' (by
+              simp only [keysIn, List.mem_append]; exact .inr hm),
+            fun Bs' S hm => h₃ Bs' S (by simp only [keysIn, List.mem_append]; exact .inr hm)⟩
+          simp [dtorB, dtorB_completeA A Bs hA, dtorB_completeA B Bs hB]
+  | .ref A, Bs, h => by
+      by_cases hc : clB 0 A = true
+      · have h₁ := h.1
+        rw [resO_leaf dtorAlgs Bs (A := .ref A) hc] at h₁
+        cases h₁ with
+        | ref h₁ => simp [dtorB, hc, dtorB_complete A h₁]
+      · obtain ⟨h₁, h₂, h₃⟩ := h
+        simp only [BoCa.Fig16.LogRel.Core.FoldP.resO, if_neg hc] at h₁
+        simp only [dtorB, hc, Bool.not_false, Bool.and_self, if_true]
+        exact dtorB_completeA A Bs ⟨h₁, h₂, h₃⟩
+  | .tvar _, _, _ => rfl
+  | .box a A, Bs, h => by
+      have h₁ := h.1
+      simp only [BoCa.Fig16.LogRel.Core.FoldP.resO] at h₁
+      cases h₁ with
+      | box h₁ => simpa [dtorB] using dtorB_complete A h₁
+  | .mu A, Bs, h => by
+      by_cases hc : clB 0 (.mu A) = true
+      · have h₁ := h.1
+        rw [resO_leaf dtorAlgs Bs hc] at h₁
+        cases h₁ with
+        | mu hP h₁ h₂ h₃ =>
+            simp only [dtorB, hc, Bool.not_true, Bool.and_false, Bool.false_eq_true, if_false,
+              Bool.and_eq_true]
+            exact ⟨(pBodyB_iff A).mpr hP, dtorB_completeA A [A] ⟨h₁, h₂, h₃⟩⟩
+      · obtain ⟨-, h₂, h₃⟩ := h
+        have hroot : HasDtor (resO dtorAlgs (A :: Bs) A) :=
+          h₂ A Bs (by simp [keysIn, hc])
+        have hA : AlgDtor (A :: Bs) A := ⟨hroot,
+          fun B' Bs' hm => h₂ B' Bs' (by simp only [keysIn, if_neg hc]; exact .tail _ hm),
+          fun Bs' S hm => h₃ Bs' S (by simp only [keysIn, if_neg hc]; exact .tail _ hm)⟩
+        simp only [dtorB, hc, Bool.not_false, Bool.and_self, if_true]
+        exact dtorB_completeA A (A :: Bs) hA
+  | .thunk (.amp _ (.ret .unit)), _, _ => rfl
+  | .thunk (.nu (.amp C (.ret R))), _, h => by
+      have h₁ := h.1
+      simp only [BoCa.Fig16.LogRel.Core.FoldP.resO] at h₁
+      cases h₁ with
+      | nu hC hRc h =>
+          simp [dtorB, CTy.nuOkB_complete _ hC, VTy.clB_complete 0 R hRc, dtorB_complete R h]
+  | .thunk (.nu (.ret _)), _, h | .thunk (.nu (.arr _ _)), _, h | .thunk (.nu .top), _, h
+  | .thunk (.nu (.all _ _ _)), _, h | .thunk (.nu (.nu _)), _, h
+  | .thunk (.nu (.eff _ _ _ _ _ _ _)), _, h
+  | .thunk (.nu (.amp _ (.arr _ _))), _, h | .thunk (.nu (.amp _ (.amp _ _))), _, h
+  | .thunk (.nu (.amp _ .top)), _, h | .thunk (.nu (.amp _ (.all _ _ _))), _, h
+  | .thunk (.nu (.amp _ (.nu _))), _, h | .thunk (.nu (.amp _ (.eff _ _ _ _ _ _ _))), _, h
+  | .thunk (.ret _), _, h | .thunk (.arr _ _), _, h | .thunk .top, _, h
+  | .thunk (.all _ _ _), _, h | .thunk (.eff _ _ _ _ _ _ _), _, h
+  | .thunk (.amp _ (.ret (.tensor _ _))), _, h | .thunk (.amp _ (.ret .zero)), _, h
+  | .thunk (.amp _ (.ret (.sum _ _))), _, h | .thunk (.amp _ (.ret (.thunk _))), _, h
+  | .thunk (.amp _ (.ret (.ref _))), _, h | .thunk (.amp _ (.ret (.imm _ _))), _, h
+  | .thunk (.amp _ (.ret (.mut _ _))), _, h | .thunk (.amp _ (.ret (.box _ _))), _, h
+  | .thunk (.amp _ (.ret (.bang _))), _, h | .thunk (.amp _ (.ret .unk)), _, h
+  | .thunk (.amp _ (.ret (.tvar _))), _, h | .thunk (.amp _ (.ret (.mu _))), _, h
+  | .thunk (.amp _ (.ret (.int _))), _, h | .thunk (.amp _ (.ret (.fam _))), _, h
+  | .thunk (.amp _ (.ret (.opq _))), _, h
+  | .thunk (.amp _ (.arr _ _)), _, h
+  | .thunk (.amp _ (.amp _ _)), _, h | .thunk (.amp _ .top), _, h
+  | .thunk (.amp _ (.all _ _ _)), _, h | .thunk (.amp _ (.nu _)), _, h
+  | .thunk (.amp _ (.eff _ _ _ _ _ _ _)), _, h => by
+      have h₁ := h.1
+      simp only [BoCa.Fig16.LogRel.Core.FoldP.resO] at h₁
+      cases h₁
+  | .unit, _, _ | .zero, _, _ | .int _, _, _ | .unk, _, _ | .bang _, _, _ | .imm _ _, _, _
+  | .mut _ _, _, _ => rfl
+  | .opq _, _, h => by
+      have h₁ := h.1
+      simp only [BoCa.Fig16.LogRel.Core.FoldP.resO] at h₁
+      cases h₁
+  | .fam (.ref A), Bs, h => by
+      by_cases hc : clB 0 A = true
+      · have h₁ := h.1
+        rw [resO_leaf dtorAlgs Bs (A := .fam (.ref A)) hc] at h₁
+        cases h₁ with
+        | array h₁ => simp [dtorB, hc, dtorB_complete A h₁]
+      · obtain ⟨-, h₂, h₃⟩ := h
+        have hS : HasDtor (resO dtorAlgs Bs A) := h₃ Bs A (by simp [keysIn, hc])
+        have hA : AlgDtor Bs A := ⟨hS,
+          fun B' Bs' hm => h₂ B' Bs' (by simp only [keysIn, if_neg hc]; exact .tail _ hm),
+          fun Bs' S hm => h₃ Bs' S (by simp only [keysIn, if_neg hc]; exact .tail _ hm)⟩
+        simp only [dtorB, hc, Bool.not_false, Bool.and_self, if_true]
+        exact dtorB_completeA A Bs hA
+  | .fam (.imm _ _), _, _ | .fam (.mut _ _), _, _ => rfl
+  | .fam .unit, _, h | .fam (.tensor _ _), _, h | .fam .zero, _, h | .fam (.sum _ _), _, h
+  | .fam (.thunk _), _, h | .fam (.box _ _), _, h
+  | .fam (.bang _), _, h | .fam .unk, _, h | .fam (.tvar _), _, h | .fam (.mu _), _, h
+  | .fam (.int _), _, h | .fam (.fam _), _, h | .fam (.opq _), _, h => by
+      have h₁ := h.1
+      simp only [BoCa.Fig16.LogRel.Core.FoldP.resO] at h₁
+      cases h₁
+end
+
+/-- **`hasDtorB` decides `HasDtor`.**  `[spec §12]` -/
+theorem hasDtorB_iff (A : CVTy) : hasDtorB A = true ↔ HasDtor A :=
+  ⟨dtorB_sound A, dtorB_complete A⟩
+
+instance : DecidablePred HasDtor := fun A => decidable_of_iff _ (hasDtorB_iff A)
+
+instance : DecidablePred DerivedDrop := fun A =>
+  inferInstanceAs (Decidable (¬ A.Persistent ∧ HasDtor A))
+
 
 /-- What the checker knows at a point besides `Δ` and the slot types `T`: the declarations in
 scope, the name of each slot (a dead binder has none), the lifetime names, a `def`'s type
@@ -576,6 +772,13 @@ def Env.push (E : Env) (x : Option String) : Env := { E with vars := x :: E.vars
 and the binder is not `linear` (SPEC §12). -/
 def Env.pushOwn (E : Env) (x : String) (A : CVTy) (lin : Bool := false) : Env :=
   { E with vars := some x :: E.vars, own := (!lin && !A.persistent && hasDtorB A) :: E.own }
+
+/-- A binder that is not `linear` owes exactly the slot with a derived drop.  `[spec §12]` -/
+theorem Env.pushOwn_own (E : Env) (x : String) (A : CVTy) :
+    (E.pushOwn x A).own.head? = some (decide (DerivedDrop A)) := by
+  simp only [Env.pushOwn, List.head?_cons, Option.some.injEq]
+  rw [Bool.eq_iff_iff]
+  simp [DerivedDrop, Linear, hasDtorB_iff]
 
 /-- Nothing owed: a value, or a computation that is not in tail position. -/
 def Env.clearOwn (E : Env) : Env := { E with own := [] }

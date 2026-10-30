@@ -73,6 +73,25 @@ theorem VTy.clB_sound : ∀ (k : Nat) (A : VTy), VTy.clB k A = true → A.Cl k
   | k, .tvar n, h => by simpa [VTy.clB, VTy.Cl] using h
   | k, .mu A, h => clB_sound (k + 1) A h
 
+/-- `VTy.clB` is complete for `Cl`. -/
+theorem VTy.clB_complete : ∀ (k : Nat) (A : VTy), A.Cl k → VTy.clB k A = true
+  | _, .unit, _ => rfl
+  | k, .tensor A B, h => by simp [VTy.clB, clB_complete k A h.1, clB_complete k B h.2]
+  | _, .zero, _ => rfl
+  | k, .sum A B, h => by simp [VTy.clB, clB_complete k A h.1, clB_complete k B h.2]
+  | _, .thunk _, _ => rfl
+  | k, .ref A, h => clB_complete k A h
+  | k, .imm _ A, h => clB_complete k A h
+  | k, .mut _ A, h => clB_complete k A h
+  | k, .box _ A, h => clB_complete k A h
+  | k, .bang A, h => clB_complete k A h
+  | k, .fam A, h => clB_complete k A h
+  | _, .unk, _ => rfl
+  | _, .int _, _ => rfl
+  | _, .opq _, _ => rfl
+  | k, .tvar n, h => by simpa [VTy.clB, VTy.Cl] using h
+  | k, .mu A, h => clB_complete (k + 1) A h
+
 /-- `Occ k A`, decided. -/
 def VTy.occB : Nat → VTy → Bool
   | _, .unit => false
@@ -115,6 +134,29 @@ theorem VTy.not_occ_of_occB : ∀ (k : Nat) (A : VTy), VTy.occB k A = false → 
       simp only [VTy.occB, beq_eq_false_iff_ne] at hb
       exact hb h
   | k, .mu A, hb, h => not_occ_of_occB (k + 1) A hb h
+
+theorem VTy.occ_of_occB : ∀ (k : Nat) (A : VTy), VTy.occB k A = true → A.Occ k
+  | _, .unit, h | _, .zero, h | _, .thunk _, h | _, .unk, h | _, .int _, h | _, .opq _, h => by
+      simp [VTy.occB] at h
+  | k, .tensor A B, h => by
+      simp only [VTy.occB, Bool.or_eq_true] at h
+      exact h.elim (fun h => .inl (occ_of_occB k A h)) (fun h => .inr (occ_of_occB k B h))
+  | k, .sum A B, h => by
+      simp only [VTy.occB, Bool.or_eq_true] at h
+      exact h.elim (fun h => .inl (occ_of_occB k A h)) (fun h => .inr (occ_of_occB k B h))
+  | k, .ref A, h => occ_of_occB k A h
+  | k, .imm _ A, h => occ_of_occB k A h
+  | k, .mut _ A, h => occ_of_occB k A h
+  | k, .box _ A, h => occ_of_occB k A h
+  | k, .bang A, h => occ_of_occB k A h
+  | k, .fam A, h => occ_of_occB k A h
+  | k, .tvar n, h => by simpa [VTy.occB, VTy.Occ] using h
+  | k, .mu A, h => occ_of_occB (k + 1) A h
+
+theorem VTy.occB_false_of_not_occ (k : Nat) (A : VTy) (h : ¬ A.Occ k) : VTy.occB k A = false := by
+  cases hb : VTy.occB k A
+  · rfl
+  · exact absurd (VTy.occ_of_occB k A hb) h
 
 /-- `NoMut k A`, decided. -/
 def VTy.noMutB : Nat → VTy → Bool
@@ -225,6 +267,39 @@ theorem CTy.nuOkB_sound : ∀ C : CTy, CTy.nuOkB C = true → C.NuOk
       exact ⟨CTy.nuLeafB_sound C h.1, CTy.nuLeafB_sound D h.2⟩
   | .ret _, h | .arr _ _, h | .top, h | .all _ _ _, h | .nu _, h | .eff _ _ _ _ _ _ _, h => by
       simp [CTy.nuOkB] at h
+
+/-- `VTy.polyB` is complete for `VTy.Poly`. -/
+theorem VTy.polyB_complete : ∀ A : VTy, A.Poly → VTy.polyB A = true
+  | .tensor A B, h => by simp [VTy.polyB, polyB_complete A h.1, polyB_complete B h.2]
+  | .sum A B, h => by simp [VTy.polyB, polyB_complete A h.1, polyB_complete B h.2]
+  | .tvar _, _ => rfl
+  | .box _ A, h => by simpa [VTy.polyB] using polyB_complete A h
+  | .unit, h | .zero, h | .thunk _, h | .unk, h | .int _, h | .opq _, h | .ref _, h | .imm _ _, h
+  | .mut _ _, h | .bang _, h | .mu _, h | .fam _, h => by
+      simp only [VTy.polyB, Bool.not_eq_true']
+      exact VTy.occB_false_of_not_occ 0 _ h
+
+/-- `CTy.effLeafB` is complete for `CTy.EffLeaf`. -/
+theorem CTy.effLeafB_complete : ∀ C : CTy, C.EffLeaf → CTy.effLeafB C = true
+  | .ret A, h => VTy.polyB_complete A h
+  | .eff _ _ _ A B _ C, h => by
+      simp [CTy.effLeafB, VTy.clB_complete 0 A h.1, VTy.clB_complete 0 B h.2.1,
+        effLeafB_complete C h.2.2]
+  | .arr _ _, h | .amp _ _, h | .top, h | .all _ _ _, h | .nu _, h => h.elim
+
+/-- `CTy.nuLeafB` is complete for `CTy.NuLeaf`. -/
+theorem CTy.nuLeafB_complete : ∀ C : CTy, C.NuLeaf → CTy.nuLeafB C = true
+  | .ret A, h => VTy.polyB_complete A h
+  | .amp C D, h => by simp [CTy.nuLeafB, nuLeafB_complete C h.1, nuLeafB_complete D h.2]
+  | .eff n i q A B fin C, h => CTy.effLeafB_complete (.eff n i q A B fin C) h
+  | .arr A D, h => by simp [CTy.nuLeafB, VTy.clB_complete 0 A h.1, nuLeafB_complete D h.2]
+  | .top, h | .all _ _ _, h | .nu _, h => h.elim
+
+/-- `CTy.nuOkB` is complete for `CTy.NuOk`. -/
+theorem CTy.nuOkB_complete : ∀ C : CTy, C.NuOk → CTy.nuOkB C = true
+  | .amp C D, h => by
+      simp [CTy.nuOkB, CTy.nuLeafB_complete C h.1, CTy.nuLeafB_complete D h.2]
+  | .ret _, h | .arr _ _, h | .top, h | .all _ _ _, h | .nu _, h | .eff _ _ _ _ _ _ _, h => h.elim
 
 /-- The bodies `C` of the thunks `U(νX. C)` in a value type: where `nu_in` looks for the type
 whose unrolling its body has. -/
@@ -767,6 +842,13 @@ theorem dropB_sound : ∀ A : VTy, dropB A = true → A.Drop
       exact .sum (dropB_sound A h.1) (dropB_sound B h.2)
   | .thunk _, h | .ref _, h | .box _ _, h | .tvar _, h | .mu _, h | .fam _, h => by
       simp [dropB] at h
+
+/-- `dropB` decides `VTy.Drop`.  `[spec §19]` -/
+theorem dropB_iff (A : VTy) : dropB A = true ↔ A.Drop := by
+  refine ⟨dropB_sound A, fun h => ?_⟩
+  induction h with
+  | tensor _ _ ih₁ ih₂ | sum _ _ ih₁ ih₂ => simp [dropB, ih₁, ih₂]
+  | _ => rfl
 
 /-- `RowLe S S'`, decided: every operation of `S` is found in `S'` as itself. -/
 def rowLeB (S S' : Row) : Bool := S.all fun o => Row.find S' o.n o.i == some o

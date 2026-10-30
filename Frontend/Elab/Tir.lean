@@ -30,22 +30,40 @@ def Ty.known : Ty → Bool
   | .none => false
   | _ => true
 
-/-- SPEC §12's three classes of value type: persistent (copied and dropped freely), with a
-destructor (dropped by the checker), and strictly linear (no destructor: it must be consumed or
-handed back). -/
+/-- The kernel's two classes of value type (`Core/Classes.lean`): unrestricted (copied and
+dropped by the kernel's own contraction and weakening), and linear, with the bit `drop` when it
+has a derived drop (`HasDtor`: the checker drops it where it goes unused).  `[spec §10, §12]` -/
 inductive Class where
-  | persistent
-  | dtor
-  | linear
+  | unrestricted
+  | linear (drop : Bool)
   deriving DecidableEq, Repr, Inhabited
 
 def Class.of (A : CVTy) : Class :=
-  if A.persistent then .persistent else if hasDtorB A then .dtor else .linear
+  if A.persistent then .unrestricted else .linear (hasDtorB A)
 
 def Class.name : Class → String
-  | .persistent => "persistent"
-  | .dtor => "destructor"
-  | .linear => "linear"
+  | .unrestricted => "persistent"
+  | .linear true => "destructor"
+  | .linear false => "linear"
+
+open BoCa.Fig16.LogRel.Core (Unrestricted Linear HasDtor) in
+/-- `Class.of` computes the unrestricted class. -/
+theorem Class.of_unrestricted (A : CVTy) : Class.of A = .unrestricted ↔ Unrestricted A := by
+  unfold Class.of
+  cases h : A.persistent <;> simp [h, Unrestricted, BoCa.Fig16.LogRel.Core.VTy.Persistent]
+
+open BoCa.Fig16.LogRel.Core (Unrestricted Linear HasDtor) in
+/-- `Class.of` computes the linear class and its derived-drop bit. -/
+theorem Class.of_linear (A : CVTy) (d : Bool) :
+    Class.of A = .linear d ↔ Linear A ∧ (d = true ↔ HasDtor A) := by
+  unfold Class.of
+  cases h : A.persistent
+  · simp only [Bool.false_eq_true, if_false, Class.linear.injEq, ← hasDtorB_iff]
+    constructor
+    · rintro rfl; exact ⟨by simp [h], Iff.rfl⟩
+    · rintro ⟨-, hd⟩
+      cases d <;> cases hb : hasDtorB A <;> simp_all
+  · simp [h]
 
 /-- A variable a node binds: its name, identity, type and class. -/
 structure Binder where
