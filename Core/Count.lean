@@ -90,14 +90,14 @@ theorem entails_x_top : LifeCtx.EntailsLt Δ₂ (.var 1) LifeCtx.empty.meetOfDom
   obtain ⟨m, n, hm, -, hlt⟩ := hδ 1 _ rfl
   exact ⟨m, 0, hm, rfl, by simp only [Lifetime.SLife.Lt] at hlt ⊢; omega⟩
 
-theorem persistent_cons {A : VTy} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    Persistent (⟨.bang A, true⟩ :: Γ) := by
+theorem banged_cons {A : VTy} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
+    Ctx.Banged (⟨.bang A, true⟩ :: Γ) := by
   intro s hs hl
   cases hs with
   | head => exact ⟨A, rfl⟩
   | tail _ hs' => exact dead_noLive (P := fun s => ∃ A, s.ty = .bang A) hΓ s hs' hl
 
-theorem persistent_dead {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) : Persistent Γ :=
+theorem banged_dead {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) : Ctx.Banged Γ :=
   dead_noLive (P := fun s => ∃ A, s.ty = .bang A) hΓ
 
 /-- The counter at fuel `0`: `Λ. λl. forget l; 0`. -/
@@ -105,7 +105,7 @@ def c₀V : Val := .lam (.val (.lam (.seq (.app forget (.var 0)) (.inj₁ (.val 
 
 theorem d_c₀ {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ (.val c₀V) (.val countTy) :=
-  .bangThunkV (persistent_dead hΓ) rfl
+  .bangThunkV (banged_dead hΓ) rfl
     (.allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false ok_empty rfl hy)
       (dead_noLive hΓ)
       (.ret (.thunkV rfl (.lam
@@ -177,7 +177,7 @@ def stepV : Val := .lam (.val (.lam (.app (.app withload (.var 0)) cbE)))
 
 theorem d_step {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty (⟨countTy, true⟩ :: Γ) (.val stepV) (.val countTy) := by
-  refine .bangThunkV (persistent_cons hΓ) rfl
+  refine .bangThunkV (banged_cons hΓ) rfl
     (.allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false ok_empty rfl hy) ?_
       (.ret (.thunkV rfl (.lam (.ret ?_)))))
   · intro s hs hl

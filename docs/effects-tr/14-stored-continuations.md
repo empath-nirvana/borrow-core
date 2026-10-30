@@ -73,7 +73,7 @@ Case (E) needs no new idea.
 - **Compatibility.** The box is introduced by `[]I` at the continuation value. Its obligation,
   `r_S ∈ Res_c`, is 6.60 per captured value (`vC_outlivesLe`, SPEC §23), assembled as L5.4.2
   assembles modes.
-- **Storing** beyond `c` is refused by outlives, as for an `Aff` closure (SPEC §22).
+- **Storing** beyond `c` is refused by outlives, as for a `Clo` closure (SPEC §22).
 - **Resuming** within `c`: the external cells are live, and resume is L5.14's resume bullet at
   the full carrier.
 - **Cancelling** a frozen continuation is "resuming it into `raise`" (SPEC §19,
@@ -262,7 +262,7 @@ across `next` needs O8.
 | target | how | further condition |
 |---|---|---|
 | **generator objects** | `Gen ≜ Ref(1 ⊕ κ°)`, with `next ≜ step` an answering operation. The recursion moves into the heap, and the type is inductive: no `μ` under `U`, unlike `strm` (D1.6), and no positivity premise. | none beyond the two above |
-| **capabilities held across `yield`** | an owned capability inside the segment is an `own` cell of `r_o` or `r_e` | across a **linear** yield, none. Across an **affine** yield (a generator that may be dropped), the capability needs a destructor, and §2's `cap` has none (D2.4, T5.2.2). A lend frame inside the segment needs one too, which [lend]'s `bound(ρ).req = lin` refuses today. This is #245's fourth seam (which effects destructors may perform), and it is a decision, not a lemma. |
+| **capabilities held across `yield`** | an owned capability inside the segment is an `own` cell of `r_o` or `r_e` | across a **linear** yield, none. Across a **cancellable** yield (a generator that may be dropped), the capability needs a destructor, and §2's `cap` has none (D2.4, T5.2.2). A lend frame inside the segment needs one too, which [lend]'s `bound(ρ).req = lin` refuses today. This is #245's fourth seam (which effects destructors may perform), and it is a decision, not a lemma. |
 | **task queues** | `Ref(List κ°)`, with `I_c` lifted pointwise by a separating list. `step` pops, resumes and pushes. | every task's external footprint in `Res_c` |
 | **handler state** | the handler's state in a cell. The clause owns it while the body is suspended (`withswap`); the body has it lent while it runs. This is linear state in Møgelberg & Staton's sense, with the continuation as its user (*Linear usage of state*, LMCS 10(1:17), 2014 [via phase A]). | as for generators |
 | **T1** | T14.10 | as above |
@@ -321,9 +321,9 @@ a few new steps; **L** touches every definition of the relation.
 |---|---|---|---|
 | β | T7.1 and T7.5 (mechanised) | T13.2: no new obligation | 0 |
 | η | absent | T13.8(a), (c): one tree induction | 1 S |
-| η at affine operations (forwarding a cancel) | absent | D13.7's frame: machine row, typing rule, L13.9, `Dtor.run` and `DR` flattening, cases of L6.2, L6.3, L6.5 | about 5 S |
+| η at cancellable operations (forwarding a cancel) | absent | D13.7's frame: machine row, typing rule, L13.9, `Dtor.run` and `DR` flattening, cases of L6.2, L6.3, L6.5 | about 5 S |
 | η at linear operations in general | — | open (O6) | — |
-| interaction law | absent | T13.13 (special case); P13.14 (fails at affine); general open (O6) | 1 S |
+| interaction law | absent | T13.13 (special case); P13.14 (fails at cancellable); general open (O6) | 1 S |
 | hiding, binary | absent | open (O7); no law needs it | — |
 | tensor, instance parametricity, destructor form, contraction | proved (§7) | unchanged; no proof shortened (§13.6) | 0 |
 
@@ -335,8 +335,8 @@ a few new steps; **L** touches every definition of the relation.
    contraction come from generativity and independence, not from the three facts (§13.6). Read as
    a structure for the TR, the framing **adds a layer of vocabulary without removing work**.
 2. **The framing yields two new laws, each with a sharp limit.**
-   - η holds at linear and abortive operations, and at affine ones only with a frame that holds a
-     continuation (D13.7). That frame is a new former, and it bears on #245's fourth seam.
+   - η holds at linear and abortive operations, and at cancellable ones only with a frame that holds
+     a continuation (D13.7). That frame is a new former, and it bears on #245's fourth seam.
    - The interaction law holds only at operations resumed exactly once (P13.14).
 
    These are useful findings, but they are additions, not reductions.
@@ -394,7 +394,7 @@ O3 is not withdrawn: it stands, reduced to O5 and O2 by T14.6.
 **New to us** (in the sense of §12.3: not found in the sources above and the #235 and #245
 reports; not a claim of priority):
 
-1. η at affine operations is not a term of §2, because forwarding a cancel needs a frame that
+1. η at cancellable operations is not a term of §2, because forwarding a cancel needs a frame that
    owns a continuation (L13.5, P13.6, D13.7).
 2. η at a fresh instance with renaming fails through `ieq` (P13.10). So generativity forces η to
    be stated at the same instance.

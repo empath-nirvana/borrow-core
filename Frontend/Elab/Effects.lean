@@ -8,9 +8,9 @@ import Frontend.Elab.Divisions
 # Frontend — Elab — effects and handlers  `[spec §18, §19, §20, §21, §30, §32, §34, §38, §39]`
 
 An effect declares operations, each **answering** (`fn`) or **control** (`ctl`, with the
-structural qualifier of its continuation: affine by default, `linear ctl`, `multi ctl`). An effect
-is one or the other. This pass resolves every operation to the handler that serves it, before the
-rest of the sugar; it knows no effect by name.
+structural qualifier of its continuation: cancellable by default, must resume at `linear ctl`,
+unrestricted at `multi ctl`). An effect is one or the other. This pass resolves every operation to
+the handler that serves it, before the rest of the sugar; it knows no effect by name.
 
 * **Answering effects** are capabilities (§18): `handler h(s: S) for E { op(x) -> e }` gives each
   clause as a function over a `mut` borrow of the state,
@@ -82,7 +82,7 @@ is not run in place, other than an effectful block; a block parameter stored; a 
 row passed as a value (effectful callbacks, #161); a lend `&mut x` in the arguments of a call that threads a capability; an operation of an answering
 effect inside a clause; an effect with both kinds of operation; type parameters on an answering
 effect; an unrestricted operation that answers `never` (`multi ctl`: an abortive operation is
-affine, decision 63); a function with a row whose result is a computation (a loop or a
+cancellable, decision 63); a function with a row whose result is a computation (a loop or a
 generator).
 -/
 
@@ -474,7 +474,7 @@ def _root_.Frontend.OpDecl.abortive (o : OpDecl) : Bool :=
 /-- The qualifier of a control operation. -/
 def _root_.Frontend.OpDecl.qual (o : OpDecl) : Qual := match o.kind with
   | .ctl q => q
-  | .fn => .aff
+  | .fn => .cancel
 
 /-- The operations of a site, at its type arguments: `(q, A, B)` per operation, in order. -/
 def Env.siteOps (env : Env) (s : Site) : List (Qual × VTy × VTy) :=
@@ -707,7 +707,7 @@ where
           if r == y.name && y.name.startsWith "io_p" then x.name :: go k y.name N
           else [x.name, y.name]
         | _ => [x.name, y.name]
-      | .bind _ x none (.ret _ (.var _ q)) _ _ => if q == p then [x.name] else []
+      | .bind _ x none (.ret _ (.var _ q)) _ => if q == p then [x.name] else []
       | _ => []
 
 /-- The names of a function's parameters (`paramNamesIn`). -/
@@ -774,13 +774,13 @@ def rowC (env : Env) : Nat → Comp → List Inst
   | n + 1, M => match M with
     | .ret _ V | .absurd _ V => rowV env n V
     -- A copy of a block parameter is the block parameter (`Cx.copy`).
-    | .bind _ x A (.ret _ V) N _ =>
+    | .bind _ x A (.ret _ V) N =>
       match V.copyOf?.bind fun y => List.lookup y env.cbRows with
       | some r => rowC { env with cbRows := (x.name, r) :: env.cbRows } n N
       | none => match A with
         | some A => env.union (pullRow env n (isPullTy A) V) (rowC env n N)
         | none => env.union (rowV env n V) (rowC env n N)
-    | .bind _ _ _ M N _ | .with_ _ M N => env.union (rowC env n M) (rowC env n N)
+    | .bind _ _ _ M N | .with_ _ M N => env.union (rowC env n M) (rowC env n N)
     | .letUnit _ V M | .letPair _ _ _ V M => env.union (rowV env n V) (rowC env n M)
     | .case _ V _ M _ N =>
       env.union (rowV env n V) (env.union (rowC env n M) (rowC env n N))
@@ -884,7 +884,7 @@ def capsTy (sp : Span) (cs : List Cap) (A : VTy) : VTy :=
 /-- `let (c₁, r₁) = t; …; let (cₙ, x) = rₙ₋₁; N`: the capabilities bound again from `t`, and
 `x` to the rest. -/
 def unpack (sp : Span) : List Cap → String → String → Comp → EM Comp
-  | [], x, t, N => pure (.bind sp ⟨x, sp⟩ none (.ret sp (.var sp t)) N false)
+  | [], x, t, N => pure (.bind sp ⟨x, sp⟩ none (.ret sp (.var sp t)) N)
   | [c], x, t, N => pure (.letPair sp ⟨c.var, sp⟩ ⟨x, sp⟩ (.var sp t) N)
   | c :: cs, x, t, N => do
     let r ← fresh "fx_r"
@@ -893,10 +893,10 @@ def unpack (sp : Span) : List Cap → String → String → Comp → EM Comp
 /-- `t <- M; K`, with the bindings `M` begins with moved before it (they bind fresh names, or
 capabilities that `K` binds again), so that the head of the binding is one statement. -/
 def bindFlat (sp : Span) (t : String) (A : Option VTy) : Comp → Comp → Comp
-  | .bind sp' a B M N lin, K => .bind sp' a B M (bindFlat sp t A N K) lin
+  | .bind sp' a B M N, K => .bind sp' a B M (bindFlat sp t A N K)
   | .letPair sp' x y V M, K => .letPair sp' x y V (bindFlat sp t A M K)
   | .letUnit sp' V M, K => .letUnit sp' V (bindFlat sp t A M K)
-  | M, K => .bind sp ⟨t, sp⟩ A M K false
+  | M, K => .bind sp ⟨t, sp⟩ A M K
 
 /-- A terminal that leaves a loop: `break`, `break e`, `continue`, or `return e` from a loop's
 body. -/
@@ -919,7 +919,7 @@ inductive Bind where
 
 /-- `x <- M; N`, flattened (`bindFlat`) when `flat`. -/
 def Bind.bindAt (sp : Span) (x : String) (A : Option VTy) (M N : Comp) (flat : Bool) : Comp :=
-  if flat then bindFlat sp x A M N else .bind sp ⟨x, sp⟩ A M N false
+  if flat then bindFlat sp x A M N else .bind sp ⟨x, sp⟩ A M N
 
 def Bind.run : Bind → Comp → EM Comp
   | .one sp x A M flat, N => pure (Bind.bindAt sp x A M N flat)
@@ -938,14 +938,14 @@ def mayLoop : Nat → Comp → Bool
   | k + 1, M => match M with
     | .loop _ _ (.each _) (.app _ (.sugar _ .count) _) B N => mayLoop k B || mayLoop k N
     | .loop .. => true
-    | .bind _ _ _ M N _ | .with_ _ M N => mayLoop k M || mayLoop k N
+    | .bind _ _ _ M N | .with_ _ M N => mayLoop k M || mayLoop k N
     | .letUnit _ _ M | .letPair _ _ _ _ M | .lam _ _ _ M | .lamL _ _ _ M => mayLoop k M
     | .case _ _ _ M _ N => mayLoop k M || mayLoop k N
     | _ => false
 
 /-- `w <- perform[n.i] (V, w)`: an operation at a `for`'s site, which threads `w`. -/
 def threadedPerform (sp : Span) (n i : Nat) (V : Val) (w : String) : Bind := .k fun N =>
-  pure (.bind sp ⟨w, sp⟩ none (.perform sp n i (.pair sp V (.var sp w))) N false)
+  pure (.bind sp ⟨w, sp⟩ none (.perform sp n i (.pair sp V (.var sp w))) N)
 
 /-- The plain calls of a value, bound first in the order its evaluation runs them in (leftmost
 first), so that an effectful call lifted out of it keeps its place among them. A call is bound
@@ -991,7 +991,7 @@ def refsC : Nat → Comp → List String
   | 0, _ => []
   | n + 1, M => match M with
     | .ret _ V | .absurd _ V | .perform _ _ _ V | .abort _ _ _ V => refsV n V
-    | .bind _ _ _ M N _ | .with_ _ M N => refsC n M ++ refsC n N
+    | .bind _ _ _ M N | .with_ _ M N => refsC n M ++ refsC n N
     | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
     | .nuOut _ M | .ascribe _ M _ => refsC n M
     | .handle _ _ _ hr hc M => refsV n hr ++ refsV n hc ++ refsC n M
@@ -1020,10 +1020,10 @@ def unboxesC (k : String) : Nat → Comp → Bool
   | n + 1, M => match M with
     | .ret _ V | .absurd _ V | .perform _ _ _ V | .abort _ _ _ V => unboxesV k n V
     -- A copy of the continuation is the continuation (`Cx.copy`).
-    | .bind _ x _ (.ret _ V@(.var ..)) N _ | .bind _ x _ (.ret _ V@(.clone ..)) N _
-    | .bind _ x _ (.ret _ V@(.ascribe ..)) N _ =>
+    | .bind _ x _ (.ret _ V@(.var ..)) N | .bind _ x _ (.ret _ V@(.clone ..)) N
+    | .bind _ x _ (.ret _ V@(.ascribe ..)) N =>
       if V.copyOf? == some k then unboxesC x.name n N else unboxesV k n V || unboxesC k n N
-    | .bind _ _ _ M N _ | .with_ _ M N => unboxesC k n M || unboxesC k n N
+    | .bind _ _ _ M N | .with_ _ M N => unboxesC k n M || unboxesC k n N
     | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
     | .nuOut _ M | .ascribe _ M _ => unboxesC k n M
     | .handle _ _ _ hr hc M => unboxesV k n hr || unboxesV k n hc || unboxesC k n M
@@ -1181,7 +1181,7 @@ def Cx.givenC (cx : Cx) : Nat → Comp → List Cap
   | 0, _ => []
   | n + 1, M => match M with
     | .ret _ V | .absurd _ V => cx.givenV n V
-    | .bind _ _ _ M N _ | .with_ _ M N => cx.givenC n M ++ cx.givenC n N
+    | .bind _ _ _ M N | .with_ _ M N => cx.givenC n M ++ cx.givenC n N
     | .letUnit _ V M | .letPair _ _ _ V M => cx.givenV n V ++ cx.givenC n M
     | .case _ V _ M _ N => cx.givenV n V ++ cx.givenC n M ++ cx.givenC n N
     | .loop _ _ _ V M N => cx.givenV n V ++ cx.givenC n M ++ cx.givenC n N
@@ -1665,9 +1665,9 @@ where
     | 0, _ => false
     | k + 1, M => match M with
       | .ret _ V | .absurd _ V => withInV env k V
-      | .bind _ _ (some A) (.ret _ V) N _ =>
+      | .bind _ _ (some A) (.ret _ V) N =>
         (isPullTy A && (env.iterCall? V).isSome) || withInV env k V || withInC k N
-      | .bind _ _ _ M N _ | .with_ _ M N => withInC k M || withInC k N
+      | .bind _ _ _ M N | .with_ _ M N => withInC k M || withInC k N
       | .letUnit _ V M | .letPair _ _ _ V M => withInV env k V || withInC k M
       | .loop _ _ src V M N => (src matches .each _ && (env.iterCall? V).isSome) || withInV env k V ||
         withInC k M || withInC k N
@@ -1716,7 +1716,7 @@ def noLend (sp : Span) (what : String) (W : Val) : EM Unit := do
 /-- `bindParams`: the parameters `xs` bound from the tuple `p`. -/
 def bindParams (sp : Span) (p : String) : List Ident → Comp → EM Comp
   | [], M => pure (.letUnit sp (.var sp p) M)
-  | [x], M => pure (if x.name == p then M else .bind sp x none (.ret sp (.var sp p)) M false)
+  | [x], M => pure (if x.name == p then M else .bind sp x none (.ret sp (.var sp p)) M)
   | [x, y], M => pure (.letPair sp x y (.var sp p) M)
   | x :: xs, M => do
     let r ← fresh "fx_p"
@@ -1724,7 +1724,7 @@ def bindParams (sp : Span) (p : String) : List Ident → Comp → EM Comp
 
 /-- A computation with `f` applied at each terminal reached through tail positions. -/
 def wrapTerms (f : Comp → Comp) : Comp → Comp
-  | .bind sp x A M N lin => .bind sp x A M (wrapTerms f N) lin
+  | .bind sp x A M N => .bind sp x A M (wrapTerms f N)
   | .letUnit sp V M => .letUnit sp V (wrapTerms f M)
   | .letPair sp x y V M => .letPair sp x y V (wrapTerms f M)
   | .case sp V x M y N => .case sp V x (wrapTerms f M) y (wrapTerms f N)
@@ -1734,17 +1734,16 @@ def wrapTerms (f : Comp → Comp) : Comp → Comp
 /-- `x <- return V'; N` after the bindings `bs` of `V'`'s calls. A value that is one call's answer
 binds `x` as the call's binding does: `x` is the call's answer.  `[spec §18]` -/
 def bindValue (sp : Span) (x : Ident) (A : Option VTy) (rsp : Span) (bs : List Bind) (V' : Val)
-    (N : Comp) (lin : Bool) : EM Comp := do
-  if !lin then
-    match bs.getLast?, V' with
-    | some (.one bsp y B M flat), .var _ z =>
-      if y == z then return ← chain (bs.dropLast ++ [.one bsp x.name (A <|> B) M flat]) N
-    | some (.caps bsp t B M cs y flat post), .var _ z =>
-      if y == z && (A.isNone || B.isNone) then
-        let B' := B <|> A.map (capsTy sp cs)
-        return ← chain (bs.dropLast ++ [.caps bsp t B' M cs x.name flat post]) N
-    | _, _ => pure ()
-  chain bs (.bind sp x A (.ret rsp V') N lin)
+    (N : Comp) : EM Comp := do
+  match bs.getLast?, V' with
+  | some (.one bsp y B M flat), .var _ z =>
+    if y == z then return ← chain (bs.dropLast ++ [.one bsp x.name (A <|> B) M flat]) N
+  | some (.caps bsp t B M cs y flat post), .var _ z =>
+    if y == z && (A.isNone || B.isNone) then
+      let B' := B <|> A.map (capsTy sp cs)
+      return ← chain (bs.dropLast ++ [.caps bsp t B' M cs x.name flat post]) N
+  | _, _ => pure ()
+  chain bs (.bind sp x A (.ret rsp V') N)
 
 mutual
 /-- `M` with its operations resolved, handing the capabilities `cs` back beside its result: each
@@ -1781,7 +1780,7 @@ def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
         | none => trRet n cx cs wrap sp V
       | _, _ => trRet n cx cs wrap sp V
     | .ret sp V => trRet n cx cs wrap sp V
-    | .bind sp x A M N lin => trBind n cx cs wrap sp x A M N lin
+    | .bind sp x A M N => trBind n cx cs wrap sp x A M N
     | .letUnit sp V M =>
       let (bs, V') ← trV n cx cs V
       chain bs (.letUnit sp V' (← trC n cx cs wrap M))
@@ -1832,39 +1831,37 @@ def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
       if !wrap || cs.isEmpty then return T
       let rv ← fresh "fx_t"
       pure (.bind T.span ⟨rv, T.span⟩ none T
-        (.ret T.span (capsTuple T.span cs (.var T.span rv))) false)
+        (.ret T.span (capsTuple T.span cs (.var T.span rv))))
 
 /-- `x <- M; N` of `trC`. -/
-def trBind : Nat → Cx → List Cap → Bool → Span → Ident → Option VTy → Comp → Comp → Bool → EM Comp
-  | 0, _, _, _, sp, _, _, _, _, _ => throw ⟨sp, "internal error: a body nested too deeply"⟩
-  | n + 1, cx, cs, wrap, sp, x, A, M, N, lin => do
+def trBind : Nat → Cx → List Cap → Bool → Span → Ident → Option VTy → Comp → Comp → EM Comp
+  | 0, _, _, _, sp, _, _, _, _ => throw ⟨sp, "internal error: a body nested too deeply"⟩
+  | n + 1, cx, cs, wrap, sp, x, A, M, N => do
     -- `x <- return y`, a copy of a block parameter, a continuation or a layer's `call`.
     if let some y := (match M with | .ret _ V => V.copyOf? | _ => none) then
       if let some cx' := cx.copy x.name y then
-        return .bind sp x A M (← trC n cx' cs wrap N) lin
+        return .bind sp x A M (← trC n cx' cs wrap N)
     -- `x : pull A B R <- return g(W)`: the stored generator of the call.
     if let (some A', .ret rsp V) := (A, M) then
       if let (true, some (g, gs, i, f, W)) := (isPullTy A', cx.env.iterCall? V) then
         let (bs, V') ← pullSite n cx cs rsp g gs i f W
-        return ← chain bs (.bind sp x A (.ret rsp V') (← trC n cx cs wrap N) lin)
+        return ← chain bs (.bind sp x A (.ret rsp V') (← trC n cx cs wrap N))
     let csM := cx.needC M
     let N' ← trC n cx cs wrap N
     if csM.isEmpty then
       if let .ret rsp V := M then
         -- A value: its effectful calls bound before the binding, which keeps its form.
         let (bs, V') ← trV n cx [] V
-        bindValue sp x A rsp bs V' N' lin
-      else pure (.bind sp x A (← trC n cx [] false M) N' lin)
+        bindValue sp x A rsp bs V' N'
+      else pure (.bind sp x A (← trC n cx [] false M) N')
     else if let .ret rsp V := M then
       let (bs, V') ← trV n cx cs V
-      bindValue sp x A rsp bs V' N' lin
+      bindValue sp x A rsp bs V' N'
     else
       -- `M` hands back the capabilities it uses, which are bound again for `N`.
       let t ← fresh "fx_b"
       let M' ← trC n cx csM true M
-      let v ← fresh "fx_v"
-      let N'' := if lin then .bind sp x none (.ret sp (.var sp v)) N' lin else N'
-      let body ← if lin then unpack sp csM v t N'' else unpack sp csM x.name t N'
+      let body ← unpack sp csM x.name t N'
       pure (bindFlat sp t (A.map (capsTy sp csM)) M' body)
 
 /-- A computation under a form that does not thread capabilities: its control operations
@@ -2103,11 +2100,11 @@ def blockResult : Nat → Cx → Span → Val → List Cap → EM (List Bind × 
     let r ← fresh "fx_v"
     if csM.isEmpty then
       let bind : Bind := .k fun N =>
-        pure (.bind sp ⟨t, sp⟩ none (.ret sp blk) (.letPair sp ⟨pl, sp⟩ ⟨q, sp⟩ (.var sp t) N) false)
+        pure (.bind sp ⟨t, sp⟩ none (.ret sp blk) (.letPair sp ⟨pl, sp⟩ ⟨q, sp⟩ (.var sp t) N))
       return ([bind], .pair sp (.var sp pl) (.var sp q))
     let bind : Bind := .k fun N => do
       let rest ← unpack sp csM r q N
-      pure (.bind sp ⟨t, sp⟩ none (.ret sp blk) (.letPair sp ⟨pl, sp⟩ ⟨q, sp⟩ (.var sp t) rest) false)
+      pure (.bind sp ⟨t, sp⟩ none (.ret sp blk) (.letPair sp ⟨pl, sp⟩ ⟨q, sp⟩ (.var sp t) rest))
     pure ([bind], .pair sp (.var sp pl) (.var sp r))
 
 /-- The call of member `j` through the function `g` of a self-reference, on `W` with the
@@ -2116,8 +2113,7 @@ def memberCall (sp : Span) (rs : RSelf) (j : Nat) (g f z a : String) (W : Val) :
   .bind sp ⟨f, sp⟩ none (.ret sp (.mark sp (.selfCall j rs.members.length) (.unbang sp (.var sp g))))
     (.bind sp ⟨z, sp⟩ none (.ret sp (.unit sp))
       (.bind sp ⟨a, sp⟩ none (.ret sp (capsTuple sp rs.env W))
-        (.app sp (projAt sp j rs.members.length (.app sp (.force sp ⟨f, sp⟩) ⟨z, sp⟩)) ⟨a, sp⟩)
-        false) false) false
+        (.app sp (projAt sp j rs.members.length (.app sp (.force sp ⟨f, sp⟩) ⟨z, sp⟩)) ⟨a, sp⟩)))
 
 /-- `g(W)` of a member `g` of the recursive group whose generator is being elaborated (SPEC §20):
 a direct call of the self-reference, `case self { inl _ ⇒ abort[e.0] () | inr f ⇒ (force f ()).j
@@ -2246,7 +2242,7 @@ def opCall : Nat → Cx → List Cap → Span → String → OpSig → Val → O
       -- which the call instantiates.
       let ann := if o.decl.lives.isEmpty then some (capsTy sp [lc] o.decl.res) else none
       let inner : Comp := .bind sp ⟨q, sp⟩ ann (.ret sp call)
-        (.letPair sp ⟨m₂, sp⟩ ⟨r, sp⟩ (.var sp q) (.ret sp (.var sp r))) false
+        (.letPair sp ⟨m₂, sp⟩ ⟨r, sp⟩ (.var sp q) (.ret sp (.var sp r)))
       let blk : Val := .app sp (.app sp (.sugar sp (.borrow .mut l)) (.var sp c.var))
         (.thunkv sp (.lam sp ⟨m, sp⟩ (holeTy sp) inner))
       let bind : Bind := .caps sp t none (.ret sp blk) [c] r false id
@@ -2313,7 +2309,7 @@ def fnCall : Nat → Cx → List Cap → Span → Val → String → FSig → Va
     -- bound again at their own types, which are.
     let N' (N : Comp) : Comp := if ann.isSome || used.isEmpty then N else
       used.foldr (fun c K => .bind sp ⟨c.var, sp⟩ (some (c.ty sp))
-        (.ret sp (.var sp c.var)) K false) N
+        (.ret sp (.var sp c.var)) K) N
     let bind : Bind := .caps sp t ann (.ret sp (.app sp f' (capsTuple sp used W'))) used r false N'
     pure (b ++ [bind], .var sp r)
 
@@ -2436,7 +2432,7 @@ def blockCall : Nat → Cx → List Cap → Span → Val → String → FSig →
       else (closedResult g.decl).map (capsTy sp used)
     let N' (N : Comp) : Comp := if ann.isSome || typed.isEmpty then N else
       typed.foldr (fun c K => .bind sp ⟨c.var, sp⟩ (some (c.ty sp))
-        (.ret sp (.var sp c.var)) K false) N
+        (.ret sp (.var sp c.var)) K) N
     let bind : Bind := .caps sp t ann (.ret sp (.app sp f' (capsTuple sp used W'))) used r false N'
     pure (bs ++ [bind], .var sp r)
 
@@ -2633,7 +2629,7 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       let rv : Val := .var sp rn
       let params : Bind := .k fun N => do
         pure (.bind sp ⟨pv, sp⟩ none (.ret sp hv)
-          (← bindParams sp pv (ch.params.map (·.1) ++ [⟨rn, sp⟩]) N) false)
+          (← bindParams sp pv (ch.params.map (·.1) ++ [⟨rn, sp⟩]) N))
       -- The clauses, after the handler.
       let ev ← fresh "fx_ae"
       let mut arms : List (String × Comp) := []
@@ -2646,7 +2642,7 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
         let q ← fresh "fx_aq"
         arms := arms ++ [(q, ← bindParams c.name.span q c.params (c.body.subst σr))]
       let rec dispatch : Nat → String → List (String × Comp) → Comp
-        | _, v, [(q, N)] => .bind sp ⟨q, sp⟩ none (.ret sp (.var sp v)) N false
+        | _, v, [(q, N)] => .bind sp ⟨q, sp⟩ none (.ret sp (.var sp v)) N
         | m + 1, v, (q, N) :: rest =>
           let y := v ++ "r"
           .case sp (.var sp v) ⟨q, sp⟩ N ⟨y, sp⟩ (dispatch m y rest)
@@ -2794,20 +2790,20 @@ def reborrowed : Nat → Span → Span → Val → List Cap → EM (List Bind ×
     for c in csM.reverse do
       let l := c.life
       let t ← fresh "fx_rb"
-      let inner : Comp := .bind sp ⟨t, sp⟩ none blk (.ret sp (.var sp t)) false
+      let inner : Comp := .bind sp ⟨t, sp⟩ none blk (.ret sp (.var sp t))
       blk := .ret sp (.app sp (.app sp (.sugar ksp (.borrow .mut l)) (.var sp c.var))
         (.thunkv sp (.lam sp ⟨c.var, sp⟩ (holeTy sp) inner)))
     let bind : Bind := .k fun N => do
       -- The capabilities bound again from the nested pairs `(c₁, (c₂, … r))`.
       let rec unwrap : List Cap → String → Comp → EM Comp
-        | [], v, K => pure (.bind sp ⟨r, sp⟩ none (.ret sp (.var sp v)) K false)
+        | [], v, K => pure (.bind sp ⟨r, sp⟩ none (.ret sp (.var sp v)) K)
         | c :: cs, v, K => do
           let w ← fresh "fx_rw"
           pure (.letPair sp ⟨c.var, sp⟩ ⟨w, sp⟩ (.var sp v) (← unwrap cs w K))
       let t ← fresh "fx_rt"
       match blk with
-      | .ret _ V => pure (.bind sp ⟨t, sp⟩ none (.ret sp V) (← unwrap csM t N) false)
-      | B => pure (.bind sp ⟨t, sp⟩ none B (← unwrap csM t N) false)
+      | .ret _ V => pure (.bind sp ⟨t, sp⟩ none (.ret sp V) (← unwrap csM t N))
+      | B => pure (.bind sp ⟨t, sp⟩ none B (← unwrap csM t N))
     pure ([bind], .var sp r)
 
 /-- `for x in g(W) { M }; N`, `g` performing the iteration effect `i` (SPEC §15): a handler site
@@ -2997,7 +2993,7 @@ def layerCopy : Nat → Env → Span → String → RGroup → List Cap → List
         (.case gsp (.var gsp self) ⟨e, gsp⟩ (.ret gsp (.inl gsp (.var gsp e))) ⟨gv, gsp⟩ (.ret gsp wrapped))
         (.bind gsp ⟨sf, gsp⟩ none (.ret gsp (.unbang gsp (.var gsp sv)))
           (.bind gsp ⟨yv, gsp⟩ none (.ret gsp (.pair gsp (.var gsp self₂) (.var gsp u)))
-            (.app gsp (.force gsp ⟨sf, gsp⟩) ⟨yv, gsp⟩) false) false) false))
+            (.app gsp (.force gsp ⟨sf, gsp⟩) ⟨yv, gsp⟩)))))
     let tf : FnParts := ⟨true, lives, genT, genT, ⟨sv, gsp⟩, .ret gsp (.bangThunkv gsp inner)⟩
     let (tA, tV) := tf.build gsp
     report gsp "lowering" (s!"layer {L} for the group {", ".intercalate rs.members}: `{name}`, a " ++
@@ -3128,11 +3124,10 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
       let fixC : Comp :=
           (.bind gsp ⟨fb, gsp⟩ none (.ret gsp (.unbang gsp (.const gsp (.boundedFix (.unit gsp) R))))
             (.bind gsp ⟨fa, gsp⟩ none (.ret gsp arg)
-              (.app gsp (projAt gsp j n (.app gsp (.force gsp ⟨fb, gsp⟩) ⟨fa, gsp⟩)) ⟨p, gsp⟩) false)
-            false)
+              (.app gsp (projAt gsp j n (.app gsp (.force gsp ⟨fb, gsp⟩) ⟨fa, gsp⟩)) ⟨p, gsp⟩)))
       let body : Comp :=
         .bind gsp ⟨sv, gsp⟩ none (.ret gsp inst) (applied.foldr (fun (y, V) K =>
-          .bind gsp ⟨y, gsp⟩ none (.ret gsp V) K false) fixC) false
+          .bind gsp ⟨y, gsp⟩ none (.ret gsp V) K) fixC)
       let drv : FnParts := ⟨true, lives, capsTy gsp cs f.P, capsTy gsp cs f.T, ⟨p, gsp⟩, body⟩
       let (dA, dV) := drv.build gsp rowR
       let dn := copyName mn keys
@@ -3179,11 +3174,11 @@ def deepCopy : Nat → Env → Span → String → String → String → EM Stri
     for (_, f) in G.members do
       let body ← trC k cx [] true f.body
       let xi ← fresh "fx_ra"
-      bodies := bodies ++ [(⟨xi, gsp⟩, .bind gsp f.p none (.ret gsp (.var gsp xi)) body false)]
+      bodies := bodies ++ [(⟨xi, gsp⟩, .bind gsp f.p none (.ret gsp (.var gsp xi)) body)]
     let fa ← fresh "fx_rarg"
     let rec dispatch : Nat → String → List (Ident × Comp) → EM Comp
       | _, _, [] => throw ⟨gsp, "internal error: an empty group"⟩
-      | _, v, [(xi, B₁)] => pure (.bind gsp xi none (.ret gsp (.var gsp v)) B₁ false)
+      | _, v, [(xi, B₁)] => pure (.bind gsp xi none (.ret gsp (.var gsp v)) B₁)
       | 0, _, _ => throw ⟨gsp, "internal error: a group nested too deeply"⟩
       | n + 1, v, (xi, B₁) :: rest => do
         let y ← fresh "fx_rq"
@@ -3319,10 +3314,10 @@ def clauseDef (env : Env) (h : HSig) (o : OpDecl) (c : Clause) : EM Decl := do
     match T with
     | .ret _ V => if V.lends then
         .bind T.span ⟨w, T.span⟩ none T
-          (.bind T.span ⟨v, T.span⟩ (some o.res) (.ret T.span (.var T.span w)) hand false) false
+          (.bind T.span ⟨v, T.span⟩ (some o.res) (.ret T.span (.var T.span w)) hand)
       -- A value is handed on as itself, at the operation's result type.
       else .ret T.span (.pair T.span (.var T.span st) (.ascribe T.span V o.res))
-    | _ => .bind T.span ⟨v, T.span⟩ (some o.res) T hand false) c.body
+    | _ => .bind T.span ⟨v, T.span⟩ (some o.res) T hand) c.body
   let modifyV : Val := .app sp (.app sp (.sugar sp (.borrow .modify "")) (.var sp cv))
     (.thunkv sp (.lam sp h.st (.name sp "_") body))
   let b ← fresh "fx_b"
@@ -3330,9 +3325,9 @@ def clauseDef (env : Env) (h : HSig) (o : OpDecl) (c : Clause) : EM Decl := do
   -- A lent state is the capability itself: the clause runs with the state's name bound to the
   -- borrow, and hands back the borrow it ends with (SPEC §34). Otherwise the clause runs on the
   -- state's value, swapped out of the lent cell (`modify`).
-  let inner : Comp := if h.lent then .bind sp h.st none (.ret sp (.var sp cv)) body false else
+  let inner : Comp := if h.lent then .bind sp h.st none (.ret sp (.var sp cv)) body else
     .bind sp ⟨b, sp⟩ none (.ret sp modifyV)
-      (.letPair sp ⟨cv, sp⟩ ⟨r, sp⟩ (.var sp b) (.ret sp (.pair sp (.var sp cv) (.var sp r)))) false
+      (.letPair sp ⟨cv, sp⟩ ⟨r, sp⟩ (.var sp b) (.ret sp (.pair sp (.var sp cv) (.var sp r))))
   -- One parameter is the component itself (`Parser.paramVar`).
   let p ← match c.params with
     | [x] => pure x.name
@@ -3354,7 +3349,7 @@ def hasWhile : Nat → Comp → Bool
   | k + 1, M => match M with
     | .loop _ _ .while_ _ _ _ | .loop _ _ .forever _ _ _ => true
     | .loop _ _ _ _ B N => hasWhile k B || hasWhile k N
-    | .bind _ _ _ M N _ | .with_ _ M N => hasWhile k M || hasWhile k N
+    | .bind _ _ _ M N | .with_ _ M N => hasWhile k M || hasWhile k N
     | .letUnit _ _ M | .letPair _ _ _ _ M | .lam _ _ _ M | .lamL _ _ _ M => hasWhile k M
     | .case _ _ _ M _ N => hasWhile k M || hasWhile k N
     | .unwind _ _ _ M D N => hasWhile k M || hasWhile k D || hasWhile k N
@@ -3409,9 +3404,9 @@ def forOverParam (xs : List String) : Nat → Comp → Option Span
     | .loop sp _ src V B N =>
       if (match src, V with | .each _, .app _ f _ => (headName f).any xs.contains | _, _ => false) then some sp
       else (forOverParam xs k B).orElse fun _ => forOverParam xs k N
-    | .bind _ x _ (.ret _ V) N _ =>
+    | .bind _ x _ (.ret _ V) N =>
       if V.copyOf?.any xs.contains then forOverParam (x.name :: xs) k N else forOverParam xs k N
-    | .bind _ _ _ M N _ | .with_ _ M N | .case _ _ _ M _ N =>
+    | .bind _ _ _ M N | .with_ _ M N | .case _ _ _ M _ N =>
       (forOverParam xs k M).orElse fun _ => forOverParam xs k N
     | .letUnit _ _ M | .letPair _ _ _ _ M | .lam _ _ _ M | .lamL _ _ _ M => forOverParam xs k M
     | _ => none
@@ -3622,7 +3617,7 @@ def pipesC (pe : PipeEnv) : Nat → Comp → EM Comp
   | 0, M => pure M
   | k + 1, M => match M with
     | .ret sp V => do pure (.ret sp (← pipesV pe k V))
-    | .bind sp x A M N lin => do pure (.bind sp x A (← pipesC pe k M) (← pipesC pe k N) lin)
+    | .bind sp x A M N => do pure (.bind sp x A (← pipesC pe k M) (← pipesC pe k N))
     | .lam sp x A M => do pure (.lam sp x A (← pipesC pe k M))
     | .app sp M x => do pure (.app sp (← pipesC pe k M) x)
     | .with_ sp M N => do pure (.with_ sp (← pipesC pe k M) (← pipesC pe k N))
@@ -3723,17 +3718,17 @@ def splitDiv (env : Env) : Nat → Comp → (Comp → Comp) × Comp
       | .app asp f W@(.app ..) =>
         if perfV W then none else
           let a : Ident := ⟨s!"fx_ma{asp.start.line}_{asp.start.col}", asp⟩
-          some (fun H => .bind asp a none (.ret asp W) H false, rest (.app asp f (.var asp a.name)))
+          some (fun H => .bind asp a none (.ret asp W) H, rest (.app asp f (.var asp a.name)))
       | _ => none
     match M with
-    | .bind sp x A M₁ N lin =>
+    | .bind sp x A M₁ N =>
       if perf M₁ then
         match M₁ with
-        | .ret rsp V => (lift V fun V' => .bind sp x A (.ret rsp V') N lin).getD (id, M)
+        | .ret rsp V => (lift V fun V' => .bind sp x A (.ret rsp V') N).getD (id, M)
         | _ => (id, M)
       else
         let (K, R) := splitDiv env k N
-        (fun H => .bind sp x A M₁ (K H) lin, R)
+        (fun H => .bind sp x A M₁ (K H), R)
     | .letPair sp x y V N =>
       if perfV V then (lift V fun V' => .letPair sp x y V' N).getD (id, M) else
         let (K, R) := splitDiv env k N
@@ -3877,13 +3872,13 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
           throw ⟨e.span, s!"`{e.name}` is answering and takes type parameters: not provided"⟩
         if let some o := ops.find? (fun o => o.abortive && o.kind == .ctl .unr) then
           throw ⟨o.name.span, s!"`{o.name.name}` is `multi ctl` and answers `never`: an " ++
-            "operation that never resumes is affine, `ctl` (decision 63)"⟩
+            "operation that never resumes is cancellable, `ctl` (decision 63)"⟩
         env := { env with effs := env.effs ++ [sig],
                           ops := env.ops ++ (ops.zipIdx.map fun (o, i) => ⟨e.name, i, o⟩) }
         report sp "effect" (s!"{e.name}: " ++ ", ".intercalate (ops.map fun o =>
           s!"{o.name.name}{match o.kind with
             | .fn => ""
-            | .ctl q => s!" (ctl, {match q with | .lin => "linear" | .aff => "affine" | .unr => "unrestricted"}{
+            | .ctl q => s!" (ctl, {match q with | .lin => "must-resume" | .cancel => "cancellable" | .unr => "unrestricted"}{
                 if o.abortive then ", abortive" else ""})"}"))
       | .handler sp h st S e cs lent =>
         let some eff := env.eff? e.name

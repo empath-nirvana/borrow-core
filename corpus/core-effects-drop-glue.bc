@@ -1,5 +1,5 @@
 -- SPEC §19's drop glue in the core text: an owned cell `c` is live across a call of `check`, at
--- the row of the abortive operation `1.0 aff i32 ~> 0`. The checker binds the call by `[then]`
+-- the row of the abortive operation `1.0 cancel i32 ~> 0`. The checker binds the call by `[then]`
 -- with a finaliser it inserts, the cell's destructor, as it inserts SPEC §12's destructors: when
 -- the call aborts, the rest does not run and the finaliser frees `c`. When the call returns, the
 -- rest frees `c` itself.
@@ -9,7 +9,7 @@
 
 def plus : i32 * i32 => i32 = unbang host[add32]
 
-def check : !U (i32 -o F[1.0 aff i32 ~> 0] i32) =
+def check : !U (i32 -o F[1.0 cancel i32 ~> 0] i32) =
   !thunkv fun (x : i32) ->
     z <- return ((unbang host[eqz32]) x);
     case z {
@@ -17,7 +17,7 @@ def check : !U (i32 -o F[1.0 aff i32 ~> 0] i32) =
     | inr isz -> abort[1.0] i32[7]
     }
 
-def use_cell : !U (i32 -o F[1.0 aff i32 ~> 0] i32) =
+def use_cell : !U (i32 -o F[1.0 cancel i32 ~> 0] i32) =
   !thunkv fun (a : i32) ->
     c <- return (alloc[i32] i32[3]);
     f <- return (unbang check);

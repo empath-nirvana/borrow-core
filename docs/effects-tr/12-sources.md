@@ -33,7 +33,7 @@ one there, the difference is in the setting, and it is named.
 | HPP06 | Hyland, Plotkin & Power, *Combining effects: sum and tensor*, TCS 357, 2006 | [via #235] | sum and tensor (§7.3) |
 | ZM19 | Zhang & Myers, *Abstraction-safe effect handlers via tunneling*, PACMPL 3 (POPL 2019), DOI 10.1145/3290318 | [verified]; content [via #235] | no accidental handling (T7.16) |
 | THLM24 | Tang, Hillerström, Lindley & Morris, *Soundly handling linearity*, PACMPL 8 (POPL 2024), DOI 10.1145/3632896 | [verified]; content [via #235] | multi-shot persistence (C5.3, first row) |
-| MM18 | Munch-Maccagnoni, *Resource polymorphism*, arXiv 1803.02796, 2018 | [via #235]; `A & 1` [recalled] | the affine continuation as `A & 1` (D1.8) |
+| MM18 | Munch-Maccagnoni, *Resource polymorphism*, arXiv 1803.02796, 2018 | [via #235]; `A & 1` [recalled] | the cancellable continuation as `A & 1` (D1.8) |
 | PS93 | Pitts & Stark, *Observable properties of higher order functions that dynamically create local names, or: What's new?*, MFCS 1993, LNCS 711, DOI 10.1007/3-540-57182-5_8 | [verified]; content [recalled] | partial bijections of names as worlds (D4.7) |
 | dVP21 | de Vilhena & Pottier, *A separation logic for effect handlers*, PACMPL 5 (POPL 2021), DOI 10.1145/3434314 | [verified]; content [recalled] | `ewp` with protocols, the shape SPEC §19 and D5.3 follow (§12.3) |
 | SPEC | borrow-core `SPEC.md` §19 (native capture), §20 (`bounded_fix`) | read | `ewpTS`, protocols, the static continuation, drop glue, `bounded_fix` |

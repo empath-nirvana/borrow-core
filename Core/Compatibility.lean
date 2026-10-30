@@ -794,11 +794,11 @@ theorem allI_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {x : LifeVar} {b : Lifetime.L
 
 /-- `!Γ` holds no resource. -/
 theorem gSepC_persistent {ls : List SRec} {δ : LSub} :
-    ∀ {Γ : Ctx VTy} {γ : List Val} {ρ : WRes}, Persistent Γ → gSepC ls δ Γ γ ρ → ρ = PMap.empty
+    ∀ {Γ : Ctx VTy} {γ : List Val} {ρ : WRes}, Ctx.Banged Γ → gSepC ls δ Γ γ ρ → ρ = PMap.empty
   | [], _, _, _, h => h.1
   | _ :: _, [], _, _, h => h.1
   | s :: Γ, v :: γ, ρ, hp, h => by
-      have hp' : Persistent Γ := fun t ht hl => hp t (List.mem_cons_of_mem _ ht) hl
+      have hp' : Ctx.Banged Γ := fun t ht hl => hp t (List.mem_cons_of_mem _ ht) hl
       unfold gSepC at h
       split at h
       · rename_i hl
@@ -811,7 +811,7 @@ theorem gSepC_persistent {ls : List SRec} {δ : LSub} :
       · exact gSepC_persistent hp' h
 
 theorem bangLamI_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {body : Expr} {T₁ T₂ : VTy}
-    (hΓp : Persistent Γ) (h : SemV Δ (⟨T₁, true⟩ :: Γ) body T₂) :
+    (hΓp : Ctx.Banged Γ) (h : SemV Δ (⟨T₁, true⟩ :: Γ) body T₂) :
     SemV Δ Γ (.val (.lam body)) (.bang (.lolli T₁ T₂)) := by
   intro δ γ ls ρ hδ hg
   obtain ⟨hlen, hgs⟩ := gDenC_iff.mp hg
@@ -829,7 +829,7 @@ theorem bangLamI_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {body : Expr} {T₁ T₂ 
 /-! ### Lemma 6.160 (⊸E-compat) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
 
 theorem bangAllI_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {x : LifeVar} {b : Lifetime.Life}
-    {S : VTy} {e : Expr} {T : VTy} (hΓp : Persistent Γ) (_hx : Δ.find? x = none)
+    {S : VTy} {e : Expr} {T : VTy} (hΓp : Ctx.Banged Γ) (_hx : Δ.find? x = none)
     (hbx : b.mentions x = false)
     (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
     (hΓx : ∀ s ∈ Γ, s.live = true → ¬ VFree x s.ty)

@@ -291,10 +291,10 @@ and cases of the wrapper's own source (where `wrapperSrc` and `loopWrapperSrc` p
 number of holes filled. -/
 def fillBody (B : Comp) : Comp → Comp × Nat
   | .force _ x => if x.name == bodyHole then (B, 1) else (.force x.span x, 0)
-  | .bind sp x A M N lin =>
+  | .bind sp x A M N =>
     let (M', i) := fillBody B M
     let (N', j) := fillBody B N
-    (.bind sp x A M' N' lin, i + j)
+    (.bind sp x A M' N', i + j)
   | .lam sp x A M => let (M', i) := fillBody B M; (.lam sp x A M', i)
   | .letUnit sp V M => let (M', i) := fillBody B M; (.letUnit sp V M', i)
   | .letPair sp x y V M => let (M', i) := fillBody B M; (.letPair sp x y V M', i)

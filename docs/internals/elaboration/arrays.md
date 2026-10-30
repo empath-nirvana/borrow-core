@@ -182,7 +182,7 @@ main : F 1 =
             return (boxed['x] ()))));
   let (r2, u) = q;
   return u
--- expect: 7:16: `r` is used twice here, and its type `ref array i32` is not persistent
+-- expect: 7:16: `r` is used twice here, and its type `ref array i32` is linear
 ```
 
 ## Why an element's view can live as long as the family

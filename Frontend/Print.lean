@@ -187,9 +187,6 @@ def Comp.level : Comp → Nat
   | .app .. | .proj .. | .inst .. => 2
   | _ => 3
 
-/-- `linear ` before a `linear` binder. -/
-def linKw (lin : Bool) : String := if lin then "linear " else ""
-
 /-- A newline followed by `k` spaces. -/
 def nl (k : Nat) : String := "\n" ++ "".pushn ' ' k
 
@@ -287,9 +284,9 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
 def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=
   paren (M.level < lvl) <| match M with
     | .ret _ V => "return " ++ V.pp 1 k
-    | .bind _ x none M N lin => linKw lin ++ x.name ++ " <- " ++ M.pp 1 (k + 2) ++ ";" ++ nl k ++ N.pp 0 k
-    | .bind _ x (some A) M N lin =>
-      linKw lin ++ x.name ++ " : " ++ A.pp ++ " <- " ++ M.pp 1 (k + 2) ++ ";" ++ nl k ++ N.pp 0 k
+    | .bind _ x none M N => x.name ++ " <- " ++ M.pp 1 (k + 2) ++ ";" ++ nl k ++ N.pp 0 k
+    | .bind _ x (some A) M N =>
+      x.name ++ " : " ++ A.pp ++ " <- " ++ M.pp 1 (k + 2) ++ ";" ++ nl k ++ N.pp 0 k
     | .unwind _ x A M D N =>
       x.name ++ (match A with | some A => " : " ++ A.pp | none => "") ++ " <- " ++ M.pp 1 (k + 2) ++
         " unwind (" ++ D.pp 0 (k + 2) ++ ");" ++ nl k ++ N.pp 0 k
@@ -323,12 +320,12 @@ def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .loop _ ℓ .while_ c M N =>
       lbl ℓ ++ "while " ++ c.pp 1 k ++ " {" ++ nl (k + 2) ++
         M.pp 0 (k + 2) ++ nl k ++ "};" ++ nl k ++ N.pp 0 k
-    | .loop _ ℓ (.each x) V M (.bind _ r A (.ret _ (.app _ (.sugar _ .forRes) (.thunk _ d))) N _) =>
+    | .loop _ ℓ (.each x) V M (.bind _ r A (.ret _ (.app _ (.sugar _ .forRes) (.thunk _ d))) N) =>
       "let " ++ r.name ++ (match A with | some A => " : " ++ A.pp | none => "") ++ " = " ++
         lbl ℓ ++ "for " ++ x.name ++ " in " ++ V.pp 1 k ++ " {" ++ nl (k + 2) ++
         M.pp 0 (k + 2) ++ nl k ++ "} else {" ++ nl (k + 2) ++ d.pp 0 (k + 2) ++ nl k ++ "};" ++
         nl k ++ N.pp 0 k
-    | .loop _ ℓ (.each x) V M (.bind _ r A (.ret _ (.sugar _ .forRes)) N _) =>
+    | .loop _ ℓ (.each x) V M (.bind _ r A (.ret _ (.sugar _ .forRes)) N) =>
       "let " ++ r.name ++ (match A with | some A => " : " ++ A.pp | none => "") ++ " = " ++
         lbl ℓ ++ "for " ++ x.name ++ " in " ++ V.pp 1 k ++ " {" ++ nl (k + 2) ++
         M.pp 0 (k + 2) ++ nl k ++ "};" ++ nl k ++ N.pp 0 k
@@ -372,7 +369,7 @@ def Decl.pp : Decl → String
       (match o.kind with
         | .fn => "fn "
         | .ctl .lin => "linear ctl "
-        | .ctl .aff => "ctl "
+        | .ctl .cancel => "ctl "
         | .ctl .unr => "multi ctl ") ++
       o.name.name ++
         (if o.lives.isEmpty then "" else "<" ++ ", ".intercalate (o.lives.map fun (a, b) =>

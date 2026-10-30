@@ -411,13 +411,13 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
     | .ret sp V => do
       let ⟨_, r⟩ ← synV n E Δ T V
       pure ⟨_, rRet (at_ sp) r⟩
-    | .bind sp x oA M N lin => do
+    | .bind sp x oA M N => do
       let ⟨A, S', rM⟩ ← bindHead n (E.ownIn (mentionsC · M)) Δ T sp oA M
       match S', rM with
       | [], rM =>
         let rM := rUnfoldStep (at_ sp) rM
-        let ⟨C, rN⟩ ← synC n ((E.minus rM.F.u).pushOwn x.name A lin) Δ (A :: T) N
-        let FN ← popL E x.span x.name rN.F lin
+        let ⟨C, rN⟩ ← synC n ((E.minus rM.F.u).pushOwn x.name A) Δ (A :: T) N
+        let FN ← popL E x.span x.name rN.F
         if h : overlapOK T rM.F.u FN.u = true then pure ⟨C, rScope (at_ sp) (rBind (atB sp [x.name]) rM FN h)⟩
         else throw (splitErr E T sp rM.F.u FN.u)
       | o :: os, rM =>
@@ -425,8 +425,8 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
         let S := E.row.getD (o :: os)
         let rM' ← liftRow E M.span S rM
         let ⟨_, rN⟩ ← atRow E N.span S
-          (← synC n { (E.minus rM.F.u).pushOwn x.name A lin with row := some S } Δ (A :: T) N)
-        pure ⟨_, ← effBind E sp x lin rM' rN⟩
+          (← synC n { (E.minus rM.F.u).pushOwn x.name A with row := some S } Δ (A :: T) N)
+        pure ⟨_, ← effBind E sp x rM' rN⟩
     | .unwind sp x oA M D N => do
       let ⟨A, S', rM⟩ ← bindHead n (E.ownIn (mentionsC · M)) Δ T sp oA M
       let S := E.row.getD S'
@@ -526,8 +526,8 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
             else err sp (s!"the handler's clauses must be values: variables, pairs, injections " ++
               "and functions")
           else match firstBad BoCa.Fig16.LogRel.Core.VTy.persistent T rH.F.u with
-            | some i => err sp (s!"a handler's clauses use only persistent variables: {E.slotName i}, " ++
-                s!"of type `{E.slotTy T i}`, is not persistent")
+            | some i => err sp (s!"a handler's clauses use only unrestricted variables: {E.slotName i}, " ++
+                s!"of type `{E.slotTy T i}`, is linear")
             | none => err sp "internal error: a handler's clauses"
         else throw (splitErr E T sp rr.F.u rc.F.u)
     | .force sp x =>
@@ -678,8 +678,9 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                     else err sp s!"the view `{m.name}` of this relaxed lend is not consumed"
                   else err sp s!"a relaxed lend's result `{E.ppV B'}` holds a `U`: its value is read back after the lend is re-lent (R1, SPEC §29)"
                 else err sp ("the row of a relaxed lend's body has only operations that resume " ++
-                  "once (affine or linear), of names other than 0, answering `1` with the empty " ++
-                  "cancel row, whose arguments are closed data with no `U` (R1, SPEC §29)")
+                  "at most once (cancellable or must-resume), of names other than 0, answering " ++
+                  "`1` with the empty cancel row, whose arguments are closed data with no `U` " ++
+                  "(R1, SPEC §29)")
               else err sp s!"`withbor2r`: its number {ppLVar v} occurs in a bound of the lifetime context"
             else err sp s!"`withbor2r`: its bound mentions its own number {ppLVar v}"
           else err sp s!"`withbor2r`: the bound `{E.ppL bl}` is not defined here"
@@ -720,7 +721,7 @@ def abortIt : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → Na
   | n + 1, E, Δ, T, sp, k, i, V, B => do
     let ⟨S, o, hf⟩ ← findOp E sp "abort" k i
     if ha : o.abort = true then
-      if hd : dropB o.A = true then
+      if hd : ownFreeB o.A = true then
         let rV ← chkV n E Δ T V o.A
         pure ⟨S, rRaise (at_ sp) B hf ha hd rV⟩
       else err sp s!"the argument of the abortive operation {k}.{i}, of type `{E.ppV o.A}`, does not drop"
@@ -747,13 +748,13 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
             pure (hC ▸ rEffSub (at_ sp) (S := []) rfl r)
           else err sp "internal error: a returner chain"
         | none => err sp s!"`return V` is checked against `{E.ppC C}`, which is not an `F` type"
-    | .bind sp x oA M N lin => do
+    | .bind sp x oA M N => do
       let ⟨A, S', rM⟩ ← bindHead n (E.ownIn (mentionsC · M)) Δ T sp oA M
       match S', rM with
       | [], rM =>
         let rM := rUnfoldStep (at_ sp) rM
-        let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A lin) Δ (A :: T) N C
-        let FN ← popL E x.span x.name rN.F lin
+        let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A) Δ (A :: T) N C
+        let FN ← popL E x.span x.name rN.F
         if h : overlapOK T rM.F.u FN.u = true then pure (rScope (at_ sp) (rBind (atB sp [x.name]) rM FN h))
         else throw (splitErr E T sp rM.F.u FN.u)
       | o :: os, rM =>
@@ -762,8 +763,8 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
         | some (S, B) =>
           if hC : effOf S B = C then do
             let rM' ← liftRow E M.span S rM
-            let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A lin) Δ (A :: T) N (effOf S B)
-            pure (hC ▸ (← effBind E sp x lin rM' rN))
+            let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A) Δ (A :: T) N (effOf S B)
+            pure (hC ▸ (← effBind E sp x rM' rN))
           else err sp "internal error: a returner chain"
         | none => err sp (s!"the bound computation performs the operations " ++
             s!"`{ppRow E (o :: os)}`, so this must have a type `F[…] B`, but `{E.ppC C}` is expected")

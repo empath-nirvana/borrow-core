@@ -62,7 +62,7 @@ theorem d_algI {Γ : Ctx VTy} {A R : VTy} {M : Expr} (hΓ : Ctx.Dead Γ)
       (⟨A, true⟩ :: ⟨.unit, false⟩ :: Γ) M (.comp (.ret R))) :
     CDerives LifeCtx.empty Γ (.val (.lam (.val (.lam M))))
       (.val (.bang (VTy.all 0 LifeCtx.empty.meetOfDom (VTy.lolli A R)))) :=
-  .bangThunkV (persistent_dead hΓ) rfl
+  .bangThunkV (banged_dead hΓ) rfl
     (.allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false ok_empty rfl hy)
       (dead_noLive hΓ) (.ret (.thunkV rfl (.lam h))))
 
@@ -70,7 +70,7 @@ theorem d_algI {Γ : Ctx VTy} {A R : VTy} {M : Expr} (hΓ : Ctx.Dead Γ)
 theorem d_algO {Δ : LifeCtx} {Γ : Ctx VTy} {A R : VTy} {M : Expr} (hΓ : Ctx.Dead Γ)
     (h : CDerives Δ (⟨A, true⟩ :: Γ) M (.comp (.ret R))) :
     CDerives Δ Γ (.val (.lam M)) (.val (.bang (VTy.lolli A R))) :=
-  .bangThunkV (persistent_dead hΓ) rfl (.lam h)
+  .bangThunkV (banged_dead hΓ) rfl (.lam h)
 
 /-- `case r {inj₁ u. u; 0 | inj₂ n. n + 1}`. -/
 def countAlgB : Expr := .case (.var 0) (.seq (.var 0) (.inj₁ (.val .unit))) (.inj₂ (.var 0))

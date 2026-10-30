@@ -4,4 +4,4 @@ type B = 1 + 1
 main : F (B * B) =
   r <- return (alloc[B] (inl ()));
   return (free[B] r, free[B] r)
--- expect: 6:10: `r` is used twice here, and its type `ref (1 + 1)` is not persistent
+-- expect: 6:10: `r` is used twice here, and its type `ref (1 + 1)` is linear

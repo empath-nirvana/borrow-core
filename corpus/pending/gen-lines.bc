@@ -1,4 +1,4 @@
--- pending: a continuation that holds a capability across an affine operation (SPEC §19, kernel)
+-- pending: a continuation that holds a capability across a cancellable operation (SPEC §19, kernel)
 -- A generator over the input: `lines` reads the bytes of the input it is given and yields each
 -- line as a list, then hands the input back; `main` writes each line back through closures over
 -- the output that a fold builds (`axes/data-effects`).
@@ -7,7 +7,7 @@
 -- input capability (no destructor, §12), is live across `yield`, whose continuation may be
 -- cancelled.
 --
--- now: 23:18: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abort, and its type has no destructor: an abortive operation of the bound computation would abandon it
+-- now: 23:18: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell
 
 include yield
 

@@ -73,7 +73,7 @@ None of these later axes is covered by the POPL'25 formalisation. Its Figure 2 h
 **Mapping onto our calculus**
 - Our `imm` view is OxCaml's borrow (aliased + local) plus `shared` contention plus `read` visibility. Ours is stronger, because an `imm` view **freezes** the place.
 - Our `mut` has no OxCaml counterpart.
-- Our affine and unrestricted qualifiers correspond to `once` and `many`. OxCaml has no *linear* (must-use) mode.
+- Our cancellable and unrestricted qualifiers correspond to OxCaml's `once` and `many`. OxCaml has no *linear* (must-use) mode.
 - Uniqueness is a separate past axis in OxCaml. For us it is implied by ownership.
 - Our effect rows cover yielding and statefulness, and more.
 - Our lifetimes are finer than locality.
@@ -199,7 +199,7 @@ Each capability is a pair (what local aliases are denied, what global aliases ar
 
 **Mapping onto our calculus**
 - `inout` and `borrowing` correspond to `mut` and `imm`, but Swift's are second-class (parameter-only).
-- `consuming` and `~Copyable` correspond to our linear/affine qualifiers.
+- `consuming` and `~Copyable` correspond to our must-resume/cancellable qualifiers.
 - Swift is the cautionary case: exclusivity for heap data is dynamic because classes alias freely.
 
 ---
@@ -314,7 +314,7 @@ No single system matches. The best fit is **Rust's borrow structure plus OxCaml'
 - Unique tokens (uniqueness + locality: OxCaml keys, GhostCell, LaCasa) then let shared mutable state be mediated with no run-time cost. A lock is needed only to hand the token across threads dynamically.
 
 **What OxCaml worked out that we should adopt**
-1. **The past/future duality, with implications attached to closure capture.** Capturing `unique` makes a closure `once`; capturing `uncontended` makes it `nonportable`. Our linear/affine qualifiers are the future side. We should name the past side (uniqueness from ownership; "not shared with another thread").
+1. **The past/future duality, with implications attached to closure capture.** Capturing `unique` makes a closure `once`; capturing `uncontended` makes it `nonportable`. Our must-resume/cancellable qualifiers are the future side. We should name the past side (uniqueness from ownership; "not shared with another thread").
 2. **Mode crossing through structurally computed modal kinds** (with-bounds, least-fixpoint recursive kinds), rather than traits. OxCaml chose this explicitly ("OxCaml does not support traits"). It fits our working default of no traits and structural derive. Deeply immutable data crosses contention and portability.
 3. **Separating the permission from the data** (capsule/key/password). Zero-cost interior mutability, with a lock only for cross-thread transfer.
 4. **Using the callback's mode to exclude re-entrancy.** Their portable-callback rule is the precedent for our effect-row exclusion.

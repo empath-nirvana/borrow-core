@@ -33,7 +33,7 @@ item 10 and D1, `docs/decisions.md` 67). This design takes that plan as its base
   - re-derivations inside the frontend (D1–D7).
 - **The principle** (§1.4). Recognising a fixed scheme is exact. Recognising a property of user
   code is a search. Such a property should come from where it was decided.
-- **The base design** (§3). `Div` is a library effect with one linear operation,
+- **The base design** (§3). `Div` is a library effect with one must-resume operation,
   `tick() -> Next`, where `Next` is `next` or `close`.
   - **Loops perform it.** A `while`, a `loop` or a drain is a kernel loop primitive, `iterate`,
     at a row holding `Div`. Ticks stand exactly where today's machine skips.
@@ -128,7 +128,7 @@ loss.
 |---|---|---|---|---|
 | B1 | the operations each code may suspend with or raise | least solution over the flow, iterated (`SFacts.of`, `Capture.lean:469–519`; `UFacts`, `Unwind.lean`). SPEC.md:3204: "the rows' information, recovered after erasure" | the derivation's `F_Σ` types | — |
 | B2 | layout types | unification (`Types.lean`); on failure `capture` runs again with answers as variants (`Driver.lean:93–101`) | the checker | u8 (the re-injection is the identity on one sum type) |
-| B3 | the qualifier `lin`/`aff`/`unr` | discarded at conversion (`Convert.lean:737–739`); `κ`'s cancel arm built for every qualifier (`kapBody`, `Capture.lean:259–266`) | the term: `hnd (n, (qs, H))` | — |
+| B3 | the qualifier `lin`/`cancel`/`unr` | discarded at conversion (`Convert.lean:737–739`); `κ`'s cancel arm built for every qualifier (`kapBody`, `Capture.lean:259–266`) | the term: `hnd (n, (qs, H))` | — |
 | B4 | abortive or control | read off `raise` against `perform` (`Ops.of`, `Capture.lean:178–194`) | kept: correct as is | — |
 | B5 | the site of an operation | kept: the name is a literal (`Convert.lean:737`, `:755`) | — | — |
 | B6 | each name's signature, the effect context | `Checked.sigs` reaches `CheckedProg.main` (`Driver.lean:47–51`), and nothing in `Backend/` reads it | the checker (`Checked.Ξ`, `Program.lean:49`) | — |
@@ -182,7 +182,7 @@ loss.
   driven `while` of `range`.
 - **The frontend knew the kinds.** `bcc check bench/chain-gen/main.bc` reports `for over filter
   (Yield): … the body is its clause`, and `stored generator of map (Yield): … its clause keeps the
-  continuation (affine) as the rest`, at elaboration, before any backend pass.
+  continuation as the rest`, at elaboration, before any backend pass.
 
 ### 1.4 The principle
 
@@ -428,9 +428,9 @@ computation that ticks forever is not in it. That is why today's div is `ν` cod
   `reify` and `div_fuel`, and any borrow frame at a `Div` row would have to be indexed. None is
   needed while `tick` obeys T1. It is used only if the greatest fixed point fails at items 1–5.
 
-**Unknown 2: the residual.** A loop closed early hands back what has no destructor (SPEC §14). An
-affine cancel answers `()`, and a cancel that answered the residual would change "the canceller
-sees `()`" (algebra, *Cancel*).
+**Unknown 2: the residual.** A loop closed early hands back what has no destructor (SPEC §14). The
+cancel of a cancellable continuation answers `()`, and a cancel that answered the residual would
+change "the canceller sees `()`" (algebra, *Cancel*).
 - **Candidate** (hypothesis): `tick`'s continuation is linear, so closing is `κ close`, a resume.
   The code after the tick returns `inr` of the residual by name (§3.2).
 - **To show**: a kernel program whose loop holds a capability with no destructor is closed by
@@ -456,8 +456,8 @@ each proved, with `#print axioms` within `[propext, Classical.choice, Quot.sound
 1. Items 1–5 are not provable, by the greatest fixed point or by the indexed fragment, without
    indexing a borrow frame. That would be a borrow-calculus cost. Then stop, and fall back
    (§3.6).
-2. No linear `tick` program of unknown 2 hands the residual back, and only a cancel that answers
-   it works. That is the algebra hard stop on *Cancel* (§9.1).
+2. No must-resume `tick` program of unknown 2 hands the residual back, and only a cancel that
+   answers it works. That is the algebra hard stop on *Cancel* (§9.1).
 3. A counted program's observations cannot be matched by any placement. That is hard-stop item 2
    (§9.1).
 
@@ -514,7 +514,8 @@ Only the site table remains in M (N3: user clause kinds' codes, copy groups, con
 - *Typing*: `[handle]`'s premise that the clauses' context is persistent holds where the clause
   is graded ω. Where it is graded 1, the context drops.
 - *Law*: a clause graded 1 runs at most once per instance of its handler (`catch_abort`).
-- *Proofs*: `handle_compatC`'s abortive case with an affine environment.
+- *Proofs*: `handle_compatC`'s abortive case with an environment that holds no owned cell
+  (`Ctx.OwnFree`).
 - *Borrows*: none.
 - Its own unit, after unit 9.
 
@@ -616,7 +617,7 @@ No step of this design changes a decided equation, if S0's candidates hold. Thes
 
 | candidate | law | change | programs | where it stands |
 |---|---|---|---|---|
-| closing a loop by a cancel that answers the residual | *Cancel*: "the canceller sees `()`" | a cancel answering `R` | every `div_fuel` over a loop holding a capability with no destructor: `corpus/io-fuel.bc`, `lend-lib-loop.bc`, `lend-lib-each.bc` | avoided by the linear `tick` (S0, unknown 2); a stop if S0 kills it |
+| closing a loop by a cancel that answers the residual | *Cancel*: "the canceller sees `()`" | a cancel answering `R` | every `div_fuel` over a loop holding a capability with no destructor: `corpus/io-fuel.bc`, `lend-lib-loop.bc`, `lend-lib-each.bc` | avoided by the must-resume `tick` (S0, unknown 2); a stop if S0 kills it |
 | ticks other than at today's skips | hard-stop item 2 | `div_fuel`'s counts and the skips a pull consumer sees | the `div_fuel` programs of §4.1 and the pull consumers, e.g. `for-data-div.bc`'s `first_two` | avoided by placement (S0, unknown 3); a stop if no placement matches |
 
 **A restriction to record**: a program's handler of `Div` at a row without `Div` (§4.2). No
@@ -625,7 +626,7 @@ existing program is rejected by it.
 ### 9.2 Defects
 
 1. **The checked qualifier is discarded at conversion** (`Convert.lean:737–739`). The backend
-   builds a cancel arm for every `κ` (`Capture.lean:259–266`), a linear `κ`'s included. It
+   builds a cancel arm for every `κ` (`Capture.lean:259–266`), a must-resume `κ`'s included. It
    matters more now: `tick` is linear, so every `reify` machine would carry dead cancel arms.
    Root fix: keep `qs` (B3).
 2. **The elaboration schemes are strings** (`Sugar.lean:253`, `:570`, `:1057`; 18 call sites).

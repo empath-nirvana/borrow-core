@@ -29,22 +29,22 @@ The parser rejects programs outside the grammar before any checking. Examples, f
 main : F (i32 * i32) =
   r <- return (alloc[i32] i32[1]);
   return (free[i32] r, free[i32] r)
--- expect: 3:10: `r` is used twice here, and its type `ref i32` is not persistent
+-- expect: 3:10: `r` is used twice here, and its type `ref i32` is linear
 ```
 
 **Implicit deep copy.** A persistent variable of a type that holds recursive data is used again
 after a use that would therefore copy it; that use is written `clone(x)` (see [Ownership and
 borrows](../../../book/src/guide/ownership.md)). The message names the use after it.
 
-**Not consumed.** A variable is left unused and cannot be dropped: its type has no destructor,
-it is declared `linear`, or it cannot be dropped where its scope ends (inside a value, where no
+**Not consumed.** A variable is left unused and cannot be dropped: its type is linear and has no
+derived drop, or it cannot be dropped where its scope ends (inside a value, where no
 drop is inserted).
 
 ```bc,reject
 main : F 1 =
   k <- return (thunk (return i32[1]));
   return ()
--- expect: 2:3: `k` is not consumed in its scope, and its type `U (F i32)` has no destructor
+-- expect: 2:3: `k` is not consumed in its scope, and its type `U (F i32)` is linear and has no derived drop
 ```
 
 **Unbalanced arms.** The arms of a `case`, or the components of `<M, N>`, consume different
@@ -58,7 +58,7 @@ main : F i32 =
     inl u -> force k
   | inr u -> return i32[2]
   }
--- expect: 4:3: in this `case`, `k` is consumed in the `inl` arm but not in the `inr` arm, and its type `U (F i32)` has no destructor
+-- expect: 4:3: in this `case`, `k` is consumed in the `inl` arm but not in the `inr` arm, and its type `U (F i32)` is linear and has no derived drop
 ```
 
 **Promotion.** `!thunk` and `!thunkv` build a value that holds no resource, so their body may use

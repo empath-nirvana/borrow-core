@@ -8,7 +8,7 @@ System A is judged on its own terms, with no borrows in sight. Its properties ar
 - **Effects:** a signature is a set of operations, each with arities and a continuation qualifier.
 - **Rows:** a row is a sum of signatures with an optional row variable. Row variables are in the kernel (decision 62). The row algebra must meet the Yoshioka conditions (see [P2](properties/effect-safety.md)).
 - **Handlers:** a handler is a model of a signature. Handlers are deep.
-- **Continuations:** a continuation is linear or affine. Discarding it is an explicit cancel. Multi-shot is ignored.
+- **Continuations:** a continuation is must-resume or cancellable. Discarding it is an explicit cancel. Multi-shot is ignored.
 
 **Its properties:**
 - [P2 Effect safety](properties/effect-safety.md)

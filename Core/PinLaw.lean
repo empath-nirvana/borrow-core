@@ -76,17 +76,17 @@ structure PinLaw : Prop where
 /-! ### The rows a relaxed lend admits
 
 `Row.ResumeO` is satisfiable by the operations a task performs inside a relaxed lend: the
-scheduler's `await : 1 ↠^aff 1` and the generator's `yield : i32 ↠^aff 1`. An abortive operation
-is outside it. -/
+scheduler's `await : 1 ↠^cancel 1` and the generator's `yield : i32 ↠^cancel 1`. An abortive
+operation is outside it. -/
 
-/-- `await : 1 ↠^aff 1` at the name `1`. -/
-def pinAwaitSig : OpSig := ⟨1, 0, .aff, .unit, .unit, .ret .unit⟩
+/-- `await : 1 ↠^cancel 1` at the name `1`. -/
+def pinAwaitSig : OpSig := ⟨1, 0, .cancel, .unit, .unit, .ret .unit⟩
 
-/-- `yield : i32 ↠^aff 1` at the name `2`. -/
-def pinYieldSig : OpSig := ⟨2, 0, .aff, .int .w32, .unit, .ret .unit⟩
+/-- `yield : i32 ↠^cancel 1` at the name `2`. -/
+def pinYieldSig : OpSig := ⟨2, 0, .cancel, .int .w32, .unit, .ret .unit⟩
 
-/-- `raise : i32 ↠^aff 0`, abortive. -/
-def pinRaiseSig : OpSig := ⟨3, 0, .aff, .int .w32, .zero, .ret .unit⟩
+/-- `raise : i32 ↠^cancel 0`, abortive. -/
+def pinRaiseSig : OpSig := ⟨3, 0, .cancel, .int .w32, .zero, .ret .unit⟩
 
 theorem resumeO_await_yield (x : LifeVar) : Row.ResumeO [pinAwaitSig, pinYieldSig] x := by
   intro o ho

@@ -1,4 +1,4 @@
--- expect: 12:11: the row of a relaxed lend's body has only operations that resume once (affine or linear), of names other than 0, answering `1` with the empty cancel row, whose arguments are closed data with no `U` (R1, SPEC §29)
+-- expect: 12:11: the row of a relaxed lend's body has only operations that resume at most once (cancellable or must-resume), of names other than 0, answering `1` with the empty cancel row, whose arguments are closed data with no `U` (R1, SPEC §29)
 -- SPEC §29 (docs/async-capabilities.md §6.2 row 10, `n9`): a task spawned inside a relaxed lend,
 -- capturing the view. The spawn is an operation whose argument is the task, a thunk: the second
 -- `yield` hands the scheduler `{ modify m … }`, which holds `m` and could run after the lend

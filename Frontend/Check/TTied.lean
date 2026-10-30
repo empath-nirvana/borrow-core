@@ -19,7 +19,7 @@ R, FP, adequacy, `PinLaw`'s theorems) holds of `t.erase`.
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt CDerivesP Jdg EffCtx RowAt SigsAt Persistent
+open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt CDerivesP Jdg EffCtx RowAt SigsAt Ctx.Banged
   CtxOutlives HasDtor dtorE dtor_wf rowAt_of_sigsAt)
 
 /-- **A typed derivation tied at every effect context at which the list `s` is**.  `[spec §19]` -/
@@ -197,14 +197,14 @@ theorem allE {p : Pins} {s : CRow} {t : TExpr} {x : LifeVar} {b a : CLife} {C : 
     TTied p s Δ Γ (.allE i (.comp (C.instLife x a)) x b a C t) (.comp (C.instLife x a)) :=
   ⟨fun hn Ξ hΞ => .allE (h.1 hn Ξ hΞ) hlt, .allE h.2 hlt⟩
 
-theorem bangThunkF {p : Pins} {s : CRow} {t : TExpr} {A : CVTy} (hp : Persistent Γ)
+theorem bangThunkF {p : Pins} {s : CRow} {t : TExpr} {A : CVTy} (hp : Ctx.Banged Γ)
     (h : TTied p s Δ (⟨.unit, false⟩ :: Γ) t (.comp (.ret A))) :
     TTied p s Δ Γ (.bangThunkF i (.val (.bang (.thunk (.ret A)))) A t)
       (.val (.bang (.thunk (.ret A)))) :=
   ⟨fun hn Ξ hΞ => .bangThunkF hp (h.1 hn Ξ hΞ), .bangThunkF hp h.2⟩
 
 theorem bangThunkV {p : Pins} {s : CRow} {t : TExpr} {N : BoCa.Expr} {C : CCTy}
-    (hp : Persistent Γ) (hC : C.isRet = false) (h : TTied p s Δ Γ t (.comp C))
+    (hp : Ctx.Banged Γ) (hC : C.isRet = false) (h : TTied p s Δ Γ t (.comp C))
     (q : t.erase = .val (BoCa.Val.lam N)) :
     TTied p s Δ Γ (.bangThunkV i (.val (.bang (.thunk C))) C t) (.val (.bang (.thunk C))) :=
   ⟨fun hn Ξ hΞ => .bangThunkV hp hC (h.1 hn Ξ hΞ) q, .bangThunkV hp hC h.2 q⟩
@@ -286,15 +286,15 @@ theorem effPerform {p : Pins} {s : CRow} {t : TExpr} {S : CRow} {o : COpSig}
 /-- `[raise]` reads its row. -/
 theorem effRaise {p : Pins} {s : CRow} {t : TExpr} {S : CRow} {o : COpSig} {B : CVTy}
     (hf : BoCa.Fig16.LogRel.Core.Row.find S o.n o.i = some o) (ha : o.abort = true)
-    (hd : o.A.Drop) (h : TTied p s Δ Γ t (.val o.A)) :
+    (hd : o.A.OwnFree) (h : TTied p s Δ Γ t (.val o.A)) :
     TTied p (S ∪ s) Δ Γ (.effRaise i (.comp (effOf S B)) S o B t) (.comp (effOf S B)) :=
   ⟨fun hn Ξ hΞ => .effRaise (rowAt_of_union_left hΞ) hf ha hd (h.1 hn Ξ (sigsAt_union_right hΞ)),
     .effRaise hf ha hd h.2⟩
 
 theorem effLet (u : Masks) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tM tN : TExpr} {A B : CVTy}
     {S : CRow} (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
-    (hcv : Covers u.u₁ 0 tM.erase ∧ Covers u.u₂ 1 tN.erase) (hW : S.Weak → Γ₂.Drops)
-    (hU : S.Unr → Persistent Γ₂) (hM : TTied p₁ s₁ Δ Γ₁ tM (.comp (effOf S A)))
+    (hcv : Covers u.u₁ 0 tM.erase ∧ Covers u.u₂ 1 tN.erase) (hW : S.Cancels → Γ₂.OwnFree)
+    (hU : S.Unr → Ctx.Banged Γ₂) (hM : TTied p₁ s₁ Δ Γ₁ tM (.comp (effOf S A)))
     (hN : TTied p₂ s₂ Δ (⟨A, true⟩ :: Γ₂) tN (.comp (effOf S B))) :
     TTied (p₁ ++ p₂) (s₁ ∪ s₂) Δ Γ (.effLet i (.comp (effOf S B)) A B S u tM tN)
       (.comp (effOf S B)) :=
@@ -306,7 +306,7 @@ theorem effLet (u : Masks) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : 
 theorem effThenA (u : Masks) {p₁ p₂ p₃ : Pins} {s₁ s₂ s₃ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tM tN tD : TExpr}
     {A B : CVTy} {S : CRow} (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
     (hcv : Covers u.u₁ 0 tM.erase ∧ Covers u.u₂ 1 tN.erase ∧ Covers u.u₂ 1 tD.erase) (hNZ : S.NZ)
-    (hUq : S.Uniq) (hU : S.UnrD → Persistent Γ₂) (hM : TTied p₁ s₁ Δ Γ₁ tM (.comp (effOf S A)))
+    (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hM : TTied p₁ s₁ Δ Γ₁ tM (.comp (effOf S A)))
     (hN : TTied p₂ s₂ Δ (⟨A, true⟩ :: Γ₂) tN (.comp (effOf S B)))
     (hD : TTied p₃ s₃ Δ (⟨.unit, false⟩ :: Γ₂) tD (.comp (.ret .unit))) :
     TTied (p₁ ++ (p₂ ++ p₃)) (s₁ ∪ (s₂ ∪ s₃)) Δ Γ

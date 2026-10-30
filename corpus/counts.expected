@@ -3,12 +3,6 @@
 # locals) and bounds checks (each test of an index against an array's length an access makes: `idx`, `split`, a literal's byte; not a loop's end test).
 # name allocs indirect copies loads stores bounds
 13-2-sum-prog 37 9 0 153 111 0
-aff-capture 1 0 0 3 3 0 # the log; the scope cell `d` holds `1` and takes no words, and the closure captures a borrow and allocates nothing
-aff-coerce 1 0 0 3 3 0 # the counter's cell; `main`'s lifetime is a cell of no words
-aff-counter 2 0 0 29 29 0 # the cell the closure is stored in, and the counter's cell; the calls through `mut` are direct
-aff-depth 2 0 0 49 49 0 # as aff-counter: four calls through three functions and a reborrow, all direct
-aff-drop 3 0 0 5 5 0 # three counters' cells, each freed by its `close`
-aff-higher 2 6 0 8 8 0 # two counters' cells; the indirect calls are `runner`'s calls of its argument, which closures built at two sites reach: the flow analysis is monovariant, and the argument's code is chosen at run time, as a `dyn` call's is
 answers-two-types 0 2 0 0 0 0 # nothing: `journal`'s clause resumes in tail position, so `attempt` is forwarded by a direct call and no continuation is built; the indirect calls are of `fake_api`'s answer, a function of its state (SPEC §19, *Handler state*)
 aoc/2020-08 9 0 0 10217 7452 7579
 aoc/2021-06 7 0 0 6410 4780 6364
@@ -83,6 +77,12 @@ capture-store-raise 0 2 0 0 0 0 # the two steps of the stored task, whose code i
 capture-take-hand 1 0 0 1 1 0 # the producer's cell; the kernel program take adds its count's node and its handler's two closures
 capture-tick-hand 0 0 0 0 0 0 # equal to the kernel program tick-native
 clause-captures 6 3 0 10 10 0 # the counter and the cells; the indirect calls are the state-passing answers of `asking`, as in the probe P4(a) (a native handler parameter is not built)
+clo-capture 1 0 0 3 3 0 # the log; the scope cell `d` holds `1` and takes no words, and the closure captures a borrow and allocates nothing
+clo-coerce 1 0 0 3 3 0 # the counter's cell; `main`'s lifetime is a cell of no words
+clo-counter 2 0 0 29 29 0 # the cell the closure is stored in, and the counter's cell; the calls through `mut` are direct
+clo-depth 2 0 0 49 49 0 # as clo-counter: four calls through three functions and a reborrow, all direct
+clo-drop 3 0 0 5 5 0 # three counters' cells, each freed by its `close`
+clo-higher 2 6 0 8 8 0 # two counters' cells; the indirect calls are `runner`'s calls of its argument, which closures built at two sites reach: the flow analysis is monovariant, and the argument's code is chosen at run time, as a `dyn` call's is
 clone-reuse 6 0 1 36 27 0
 comp-param 0 0 0 0 0 0 # every argument is a closed block and every error a branch
 core-callback-dead 0 0 0 0 0 0 # the callback and the function it answers are closed λs; each call's code is known

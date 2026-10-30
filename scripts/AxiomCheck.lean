@@ -260,18 +260,18 @@ import Backend2.Lint
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.return_resumes
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.handle_fold
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.loop_abort
--- SPEC §7 (entry 22): the affine closure, an instance of `ν` with an argument and a boxed rest
-#print axioms BoCa.Fig16.LogRel.Core.cC_aff_iff
-#print axioms BoCa.Fig16.LogRel.Core.aff_coind
-#print axioms BoCa.Fig16.LogRel.Core.affEffBody_nuOk
-#print axioms BoCa.Fig16.LogRel.Core.obs_transfer_affBox
+-- SPEC §7 (entry 22): the closure, an instance of `ν` with an argument and a boxed rest
+#print axioms BoCa.Fig16.LogRel.Core.cC_clo_iff
+#print axioms BoCa.Fig16.LogRel.Core.clo_coind
+#print axioms BoCa.Fig16.LogRel.Core.cloEffBody_nuOk
+#print axioms BoCa.Fig16.LogRel.Core.obs_transfer_cloBox
 #print axioms BoCa.Fig16.LogRel.Core.d_mkBox
 #print axioms BoCa.Fig16.LogRel.Core.d_callMut
 #print axioms BoCa.Fig16.LogRel.Core.d_ofFn
 #print axioms BoCa.Fig16.LogRel.Core.d_once
-#print axioms BoCa.Fig16.LogRel.Core.Aff.counterProg_runs
-#print axioms BoCa.Fig16.LogRel.Core.Aff.passProg_runs
-#print axioms BoCa.Fig16.LogRel.Core.Aff.logProg_runs
+#print axioms BoCa.Fig16.LogRel.Core.Clo.counterProg_runs
+#print axioms BoCa.Fig16.LogRel.Core.Clo.passProg_runs
+#print axioms BoCa.Fig16.LogRel.Core.Clo.logProg_runs
 -- SPEC §24 (entry 23): the polymorphic let, `[handle]` at a value form, `[then]` at option A
 #print axioms BoCa.Fig16.LogRel.Core.psub_fill
 #print axioms BoCa.Fig16.LogRel.Core.letPoly_compatC
@@ -355,7 +355,7 @@ import Backend2.Lint
 #print axioms BoCa.Fig16.LogRel.Core.LiveOK.ne_opPlug
 #print axioms BoCa.Fig16.LogRel.Core.LiveOK.not_stuck
 #print axioms BoCa.Fig16.LogRel.Core.EffPrograms.leakFree_closed
--- SPEC §19, *Typing*: decision R, one signature per operation; §18, abortive operations affine
+-- SPEC §19, *Typing*: decision R, one signature per operation; §18, abortive operations cancellable
 #print axioms BoCa.Fig16.LogRel.Core.CDerivesAt.toCDerives
 #print axioms BoCa.Fig16.LogRel.Core.CDerivesAt.ofEffFree
 #print axioms BoCa.Fig16.LogRel.Core.CDerivesAt.effThenA
@@ -578,7 +578,7 @@ import Backend2.Lint
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.der_raiseJ
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.der_letJ
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.kappa_cancel_jr
-#print axioms BoCa.Fig16.LogRel.Core.Inversions.kcancel_jr_aff
+#print axioms BoCa.Fig16.LogRel.Core.Inversions.kcancel_jr_cancellable
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.not_der_progT
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.not_der_progT_ret
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.not_der_progNCrecT

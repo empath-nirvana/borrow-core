@@ -81,7 +81,7 @@ theorem finObl_eq (δ : LSub) (F : CTy) :
 theorem OpSig.ent_fin (δ : LSub) (o : OpSig) :
     (o.ent δ).fin = if capB o.q o.B then finObl o.fin δ else none := rfl
 
-/-- A capturable entry: not abortive, not linear. -/
+/-- A capturable entry: not abortive, not must-resume. -/
 theorem capB_of_ent {δ : LSub} {o : OpSig} (ha : (o.ent δ).abort = false) (hq : (o.ent δ).q ≠ .lin) :
     capB o.q o.B = true := by
   simp only [OpSig.ent, OpSig.abort, Bool.and_eq_false_iff, bne_eq_false_iff_eq] at ha hq
@@ -1221,7 +1221,7 @@ theorem raise_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {o : Op
 persistent at an unrestricted row.  A cancel passing the frame leaves it behind
 (`ent_plain`).  At a row holding `Div`, bind at `cwp` (`cwp_bind`).  `[spec §14, §19, §27]` -/
 theorem let_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B : VTy} {S : Row}
-    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hW : S.Weak → Γ₂.Drops) (hU : S.Unr → Persistent Γ₂)
+    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hW : S.Cancels → Γ₂.OwnFree) (hU : S.Unr → Ctx.Banged Γ₂)
     (hM : SemC Δ Γ₁ M (CTy.effOf S A)) (hN : SemC Δ (⟨A, true⟩ :: Γ₂) N (CTy.effOf S B)) :
     SemC Δ Γ (.app (.val (.lam N)) M) (CTy.effOf S B) := by
   intro δ γ ls ρ hδ hg
@@ -1230,7 +1230,7 @@ theorem let_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B 
       ∀ ls ρ, gDenC ls δ Γ₂ γ ρ → NoOwn ρ := by
     intro n i en hT ha ls' σ h
     obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
-    exact gDenC_noOwn (hW ⟨o, (Row.find_mem hf).1, OpSig.weak_of_ent (Or.inr ha)⟩) h
+    exact gDenC_noOwn (hW ⟨o, (Row.find_mem hf).1, OpSig.cancels_of_ent (Or.inr ha)⟩) h
   have hU' : ∀ n i en, Row.tab S δ n i = some en → en.q = .unr →
       ∀ ls ρ, gDenC ls δ Γ₂ γ ρ → ρ = PMap.empty := by
     intro n i en hT hq ls' σ h
@@ -1242,7 +1242,7 @@ theorem let_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B 
     intro n i en hT ha hq ls' K₁ ρ' σ ρ'' hcan hσ hc'
     obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
     exact ent_plain δ _ (fun n => by simp [Kont.HasHnd]) (by simp [Kont.Catches])
-      (gDenC_noOwn (hW ⟨o, (Row.find_mem hf).1, OpSig.weak_of_ent (Or.inl hq)⟩) hσ) o hcan hc'
+      (gDenC_noOwn (hW ⟨o, (Row.find_mem hf).1, OpSig.cancels_of_ent (Or.inl hq)⟩) hσ) o hcan hc'
   have hk : ∀ ls' v, Entails ((fun ls v => vC true A ls δ v) ls' v ⋆ gDenC ls' δ Γ₂ γ)
       (effWp (Row.divB S) (Row.tab S δ) (fun ls v => vC true B ls δ v) ls'
         ((Kont.appR (.val (.lam (Expr.psub 1 γ N))) .hole).plug (.val v))) := by
@@ -1272,7 +1272,7 @@ pending at the finaliser persistent where `Σ_D` has an unrestricted operation. 
 row does not hold `Div` (`hSD`): a finaliser does not tick.  At a row holding `Div`, `[then]` at
 `cwp` (`cwp_then`).  `[spec §14, §19, §27]` -/
 theorem then_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A B : VTy}
-    {S SM SD : Row} (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hU : S.UnrD → Persistent Γ₂)
+    {S SM SD : Row} (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hU : S.UnrD → Ctx.Banged Γ₂)
     (hMS : RowLe SM S) (hDS : RowLe SD S)
     (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
       capB o.q o.B = true → ThenLe o.fin SD o'.fin)
@@ -1376,7 +1376,7 @@ theorem vC_kTy_of_kapRel {S : Row} {R B : VTy} {q : Qual} {F : CTy} {δ : LSub} 
     · simp only [if_true]; trivial
   cases q with
   | lin => exact fun ls' he => ⟨hres ls' he, trivial⟩
-  | aff => exact fun ls' he => ⟨hres ls' he, hcan (by simp) ls' he⟩
+  | cancel => exact fun ls' he => ⟨hres ls' he, hcan (by simp) ls' he⟩
   | unr => exact ⟨hu rfl, fun ls' he => ⟨hres ls' he, hcan (by simp) ls' he⟩⟩
 
 /-- A cancel row's table is below that of `κ`'s cancel branch. -/

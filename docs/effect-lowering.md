@@ -18,7 +18,7 @@ lowering visible in the closure or flat IR; every decided law and every borrow g
   | class | programs | what dispatches |
   |---|---|---|
   | (a) Rust dispatches too | 3 whole, and part of 2 more | a queue that holds tasks of more than one body |
-  | (b) our flow analysis | 1 (`aff-higher`) | one code called with closures of two codes |
+  | (b) our flow analysis | 1 (`clo-higher`) | one code called with closures of two codes |
   | (c) caused by a handler | 25 | a handler with a state (7); the two codes of a stored task or generator (8); one task body copied per spawn site (10) |
   | (d) a closure chain built by a fold | 4 whole, and part of 2 more | not effects; outside this design |
 
@@ -78,7 +78,7 @@ before any type is known. By inspection.
 |---|---|---|
 | which site an operation goes to | resolved lexically: `call 16:18: yield (Yield) → perform[1.0], handled by the caller at 14:1` (`bcc check`) | kept: the name `n` is a literal in `perform`'s payload |
 | the clauses at a site | the handler declaration's clauses, with their types | recovered: `Solver.clausesAt` over the flow |
-| the clause's kind (tail-resumptive, abortive, keeps `κ`) | partly in the report (`its clause keeps the continuation (affine) as the rest`) | recovered syntactically: `tailClause?`, `findResume` |
+| the clause's kind (tail-resumptive, abortive, keeps `κ`) | partly in the report (`its clause keeps the continuation as the rest`) | recovered syntactically: `tailClause?`, `findResume` |
 | the handler's state | §21's `S = S' ⊗ P` | lost: it is a closure `U(S ⊸ F …)` applied at each resume, a dispatched call |
 | that two copies are one body at two names | the copy table (`range__n1`, `ticker__n1`, `ticker__n2`) | lost: the codes differ in their keys |
 | which `unfold` is a `while` and who observes it | §14's machine, `main` driven by the runtime | lost: an `unfold` is a closure; `drive` exists for `main` only |
@@ -166,7 +166,7 @@ thunk per site. Rust's tasks of one `async fn` have one type, so a queue of them
 
 | program | indirect | sites | union, flow | cause |
 |---|---|---|---|---|
-| `aff-higher` | 6 | 3 | `[101, 113, 133, 145]`, flow `[101, 133]`; `[108, 140]` | `runner`'s call of its argument, which the counter's closure and `aff_of_fn`'s reach at two call sites. A Rust `runner` with a generic `call<F: FnMut>` is monomorphised per closure type. |
+| `clo-higher` | 6 | 3 | `[101, 113, 133, 145]`, flow `[101, 133]`; `[108, 140]` | `runner`'s call of its argument, which the counter's closure and `clo_of_fn`'s reach at two call sites. A Rust `runner` with a generic `call<F: FnMut>` is monomorphised per closure type. |
 
 **(a) Rust's program dispatches too: a queue of tasks of more than one body.** A Rust executor
 over these holds `Pin<Box<dyn Future>>`, and each poll goes through the vtable (as
@@ -231,9 +231,9 @@ the body" (`bench/README.md`) does not hold for this program.
 - Three control names. Name 1 is the `for` in `main` over `filter`'s output; it is
   tail-resumptive.
 - Names 2 and 3 are the stored-generator sites of `map` and `range` (`bcc check`: `stored
-  generator of map … its clause keeps the continuation (affine) as the rest`).
+  generator of map … its clause keeps the continuation as the rest`).
 - 39 codes may suspend.
-- Each adapter's instance drains its `it` with exactly one `for`, and `it` is affine, so it has
+- Each adapter's instance drains its `it` with exactly one `for`, and `it` is linear, so it has
   no other use. The generator is known at the call (`range(…) |> map(…)`). The instance is made
   without it, so the pull site's `κ` is materialised for every element.
 
@@ -302,9 +302,9 @@ For each kind of continuation: the law, the lowering, and what must be known at 
     passing on `s'`, equals threading `s` through the cell.
   - This follows from H-op, `kappa_resume_steps` and β, by induction on the body's run. It is not
     a Core theorem by name. **Hypothesis**, to be stated as one with the unit (§6).
-  - It holds for a linear or affine operation. An `unr` continuation resumed twice would see one
-    cell where state-passing gives each resume its own state. `unr` keeps state-passing; multi-shot
-    is not designed for (decision 63).
+  - It holds for a must-resume or cancellable operation. An `unr` continuation resumed twice would
+    see one cell where state-passing gives each resume its own state. `unr` keeps state-passing;
+    multi-shot is not designed for (decision 63).
 
 ### 2.4 Resume or cancel (the `deadline` pattern)
 
@@ -326,13 +326,13 @@ code outside the site: `timeout`'s `deadline`, `scaled` in `div-infer` and
   changes laws 5 and 6. It is not proposed.
 - **Needed.** As §2.3, and the clause's split into a deciding part and the rest.
 
-### 2.5 Affine and linear continuations that are stored
+### 2.5 Cancellable and must-resume continuations that are stored
 
 A clause that keeps `κ`: a stored generator's site (`κ` is the rest), `spawn`'s `await` (BOXED-κ,
 §28), a scheduler's queue.
 
 - **Law.** H-op with `κ` as a value; resume (`kappa_resume_steps`); cancel (`kappa_cancel_steps`);
-  `κ` used once (item 4). A linear `κ` has no cancel branch (`kappaC_cancel_lin`).
+  `κ` used once (item 4). A must-resume `κ` has no cancel branch (`kappaC_cancel_lin`).
 - **Lowering.** A state machine (`Capture`): Rust's coroutine transform, sized statically,
   suspension through calls nests. This is the one place a state machine is the behaviour's own
   cost.
@@ -418,7 +418,7 @@ Multi-shot (`unr`) is left on today's lowering and never shapes a choice (decisi
 | abortive | none: unwinding ends each lend, innermost first (`unwind_prefix`) | — | a finaliser's raise supersedes (item 6), as `Unwind` builds | unchanged |
 | tail-resumptive, direct | none is built. A lend around the `perform` spans a call, not a suspension. Typing still refuses a resuming operation inside a borrow block unless R1 (T1, §19), and the lowering accepts nothing new | an R1 lend under a direct `yield` holds across a call only | the clause runs no finaliser | unchanged; scoped cells there become frame slots (no resumption point) |
 | resume or cancel | none is built; the cancel unwinds `K`'s lends in place, innermost first | as above | cancel rows read where the cancel is invoked, as today; a finaliser that may suspend stays rejected (`Capture`, §27 *Lowering*) | unchanged |
-| affine or linear, stored | as today: the state holds the lent cell's location | as today | as today | unchanged |
+| cancellable or must-resume, stored | as today: the state holds the lent cell's location | as today | as today | unchanged |
 | async (BOXED-κ, R1) | as today | the merged task code moves `κ` and copies no cell | `cancel(t)` runs the same cancel arm | unchanged |
 
 No option needs a kernel change. Push stages change what the elaborator emits; the checker types
@@ -480,7 +480,7 @@ default, with callbacks dispatched. #541 asks for the opposite where Rust monomo
 | **S2: one body per profile** (§5.8(2)) | (definition, profile) | a switch per callback call | smallest; dispatch of class (b) everywhere a callback differs |
 
 **Recommendation: S1.**
-- It removes (b) (`aff-higher`) and #509's per-site copies at once.
+- It removes (b) (`clo-higher`) and #509's per-site copies at once.
 - §2.5's merge across names is the same sharing.
 - A recursion that creates closure codes without bound falls back to dispatch, and the report
   names it.
@@ -557,7 +557,7 @@ For the (b) and (c) programs, the predicted `indirect` after the units named:
 | `answers-two-types`, `clause-captures`, `div-infer`, `effects-cancel-two-sites`, `hygiene-handler-state`, `reconcile-chain`, `reconcile-clock` | 2, 3, 4, 4, 2, 3, 8 | 0 each | 3, 4 |
 | `capture-store-raise`, `async-r1-cancel`, `-drain`, `-effects`, `-generator`, `-local-borrows`, `-nested`, `async-race` | 2, 5, 3, 6, 3, 4, 3, 15 | 0 each | 5 |
 | `async-bank-inbox`, `async-cancel`, `async-lend-slots`, `async-logged`, `async-map`, `async-mapreduce`, `async-scheduler`, `async-scoped`, `async-try-join`, `async-workers-scoped` | 6, 3, 6, 4, 4, 9, 6, 4, 17, 7 | 0 each | 5 (both halves) |
-| `aff-higher` | 6 | 0 | 6 |
+| `clo-higher` | 6 | 0 | 6 |
 | (a) and (d) programs | as now | unchanged: one dispatch per resume of a queue of several bodies (a); the fold chains (d) | — |
 
 `allocs` and `copies` may not rise. `allocs` falls where a continuation is no longer built
@@ -593,7 +593,7 @@ Units in dependency order. Each lands with its spec text, its acceptance program
 | 3 | **Classify, then lower before `Capture`**: reorder `lowerEffects` (specialise, flow, classify, direct lowerings, `capture`, `unwind`, `collapse`); a native handler state for tail-resumptive clauses (§2.3), with its equation stated and proved over the elaborated terms | 1 | `hygiene-handler-state`, `clause-captures`, `answers-two-types`: indirect 0 |
 | 4 | **Resume or cancel in place** (§2.4) | 3 | `div-infer`, `effects-cancel-two-sites`, `reconcile-chain`, `reconcile-clock`: indirect 0, allocations no higher; `corpus/reject/*` messages unchanged |
 | 5 | **One code per codata value of a site; copies across non-nesting names merged** (§2.5) | 3 | `capture-store-raise`, `async-r1-*`, `async-race` and the same-body async programs: indirect 0; async-tree indirect 0; `scripts/falsify.sh` four modes |
-| 6 | **Specialisation S1** (§3.2), with a code-size column in the counts | 3 | `aff-higher` indirect 0; #509's reproduction compiles once per key; kill criterion 5 |
+| 6 | **Specialisation S1** (§3.2), with a code-size column in the counts | 3 | `clo-higher` indirect 0; #509's reproduction compiles once per key; kill criterion 5 |
 | 7 | **Push stages** (§3.3) at elaboration, with the pull/push equation proved over elaborated terms | 1, 2 | chain-gen ≤ 1.3×; `gen-pipeline-adapters` `0 0 0`; `gen-adapters`, `gen-adapters-fail` counts no higher; `take-failing` still rejected |
 | 8 | **Abortive pass-through and loop exit** (§2.2; #537 fixes 3 and 6) | — | gen-tree ≤ 1.4×; raise-small ≤ 1.1× |
 | 9 | **H1 site table** (§3.1), if unit 5's merge condition or unit 3's state shape cannot be recovered from the closure IR | 3 | the backend's checks agree with every table entry on the corpus |

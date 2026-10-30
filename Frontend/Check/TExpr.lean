@@ -78,9 +78,9 @@ premise on the context's live slots.  `[spec §10]` -/
 inductive Atom where
   /-- The type is persistent (`Ctx.DeadP`, `Ctx.SoloP`, `Ctx.SplitP`'s `dup`). -/
   | pers
-  /-- A `!` type (`Persistent`). -/
+  /-- A `!` type (`Ctx.Banged`). -/
   | bang
-  /-- `VTy.Drop`, as `dropB` decides it (`Ctx.Drops`). -/
+  /-- `VTy.OwnFree`, as `ownFreeB` decides it (`Ctx.OwnFree`). -/
   | drop
   /-- The lifetime variable is not free in it (`∀I`'s premise). -/
   | nfree (x : LifeVar)

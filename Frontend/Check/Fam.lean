@@ -23,7 +23,7 @@ the enclosing rule instead of threaded. `Fam T P` packages the masks and the fam
 | `Fam.split` | `Ctx.SplitP Γ Γ₁ Γ₂` (a persistent slot used on both sides goes to both), and the parts' masks related to their contexts (`SplitMasks`) |
 | `Fam.merge` | the same context for both `case` arms or both `⟨,⟩` components |
 | `Fam.popLive`, `Fam.popDead` | a binder's slot, live or dead |
-| `Fam.restrict` | a premise on every live slot: `CtxOutlives`, `Persistent`, `allI`'s `hΓx` |
+| `Fam.restrict` | a premise on every live slot: `CtxOutlives`, `Ctx.Banged`, `allI`'s `hΓx` |
 -/
 
 namespace BoCa.Fig16.LogRel.Core.Check

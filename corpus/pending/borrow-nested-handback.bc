@@ -1,5 +1,5 @@
 -- pending: refused #495
--- now: 16:3: `q` is used twice here, and its type `array u8 * i32` is not persistent
+-- now: 16:3: `q` is used twice here, and its type `array u8 * i32` is linear
 --
 -- A borrow block inside another borrow block's body. The outer block lends `q` (the inner block
 -- is a lend of it) and does not bind it, so it hands `q` back (SPEC §17, *Surface*); the owner

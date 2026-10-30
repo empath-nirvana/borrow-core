@@ -85,10 +85,6 @@ theorem rt_comp : roundTrips parseComp Comp.strip (Comp.pp · 0 0)
     "x <- (force f).1; case x { inl u -> return u | inr v -> < return v, <> > }" = true := by
   decide +kernel
 
-theorem rt_linear : roundTrips parseComp Comp.strip (Comp.pp · 0 0)
-    "linear x <- return (); linear y : 1 <- return x; return y" = true := by
-  decide +kernel
-
 theorem rt_ty : roundTrips parseVTy VTy.strip (VTy.pp · 0)
     "!U (Nat -o F (all 'y < top. imm 'y Nat => Nat) & top) * mu X. 1 + ref X" = true := by
   decide +kernel

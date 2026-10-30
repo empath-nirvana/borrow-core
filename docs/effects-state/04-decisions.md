@@ -344,8 +344,8 @@ These are detailed under each topic below (the IDs in brackets).
 ## 2. Continuations and multi-shot
 
 **C1. Continuation modes and qualifiers.**
-- Content: affine by default, plus `linear ctl` and `multi ctl`. Weakening is the continuation's
-  destructor, `cancel`.
+- Content: cancellable by default (`ctl`), plus `linear ctl` (must resume) and `multi ctl`
+  (unrestricted). A cancellable continuation's derived drop is its `cancel`.
 - Words: the user's spelling guidance of 2026-10-01 (decision 55); no quote on the semantics.
 - Strength: provisional (spelling). The qualifier lattice is as built (SPEC §19).
 - Scope: kernel.
@@ -359,16 +359,16 @@ These are detailed under each topic below (the IDs in brackets).
 - Strength: decided as a requirement (relayed).
 - Scope: kernel.
 - Source: #18 issuecomment-5914322704.
-- **Note.** "Linear" here sits beside an affine default with `cancel` (C1, SPEC §19). The record
-  does not say whether "linear" meant "not duplicable" (which affine also is) or "must be
-  resumed". Unclear.
+- **Note.** "Linear" here sits beside a cancellable default (C1, SPEC §19). The kernel reads it as
+  the type class: the continuation of `ctl` and of `linear ctl` is linear, and `ctl`'s also has
+  a cancel branch.
 
 **C3. Multi-shot only if free.**
 - Words: "we also don't need multishot unless we get it for free" and "if we can figure out a way
   it falls out for free sure. Otherwise eh…" (2026-10-02). Also "it's worth pursuing why we can't
   have multishot, but it's not a blocker".
-- Strength: default (a priority call, not a ban). Design and prove for linear and affine; drop
-  multi-shot if it breaks a law or adds a rule.
+- Strength: default (a priority call, not a ban). Design and prove for must-resume and cancellable;
+  drop multi-shot if it breaks a law or adds a rule.
 - Scope: kernel and lowering.
 - Sources: mem:`multishot-only-if-free`:8-17; #245 comment 2026-10-02T14:48
   (issuecomment-5954971439); #246 body (side question).
@@ -779,7 +779,7 @@ inferred from names.**
 - Words: "As an aside i don't like using the rust names for these things." (2026-10-02)
 - Strength: default (preference). Rust names appear only as comparisons.
 - Scope: surface and docs.
-- Sources: mem:`own-names-not-rust`:8-17; decision 60 (`Aff`); PR #141 comment 2026-10-02.
+- Sources: mem:`own-names-not-rust`:8-17; decision 60 (`Clo`); PR #141 comment 2026-10-02.
 
 **N2. Syntax choices are not blocking.**
 - Words: "honestly I don't care that much about syntax right now unless we're forced to keep

@@ -4,4 +4,4 @@ type B = 1 + 1
 main : F (B * B) =
   k <- return (thunkv fun (y : B) -> return y);
   return (k (inl ()), k (inr ()))
--- expect: 6:10: `k` is used twice here, and its type `1 + 1 => 1 + 1` is not persistent
+-- expect: 6:10: `k` is used twice here, and its type `1 + 1 => 1 + 1` is linear

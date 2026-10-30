@@ -3,9 +3,9 @@ import Core.Demonic
 /-!
 # Core — a handled program, typed and run  `[spec §19]`
 
-`handle_1 (perform (1, (0, ()))) with (λx. x, (λp. let (x, k) = p; k.resume x, ()))`: one linear
-operation `1 ↠ 1`, whose clause resumes `κ` once. The program is typed at `F 1` by §19's rules
-(`effHandle`, `effPerform`), so `adequacyD` runs every run of it to `()` at the empty memory.
+`handle_1 (perform (1, (0, ()))) with (λx. x, (λp. let (x, k) = p; k.resume x, ()))`: one
+must-resume operation `1 ↠ 1`, whose clause resumes `κ` once. The program is typed at `F 1` by §19's
+rules (`effHandle`, `effPerform`), so `adequacyD` runs every run of it to `()` at the empty memory.
 -/
 
 noncomputable section
@@ -19,7 +19,7 @@ open BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Steps performE)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
-/-- The effect: one linear operation `1 ↠ 1`. -/
+/-- The effect: one must-resume operation `1 ↠ 1`. -/
 abbrev E₁ : List (Qual × VTy × VTy) := [(.lin, .unit, .unit)]
 
 /-- The clause `λp. let (x, k) = p; (k (inj₁ ())) x`: resume `κ` with the argument. -/
@@ -63,11 +63,11 @@ theorem prog_runs {μ₁ : Heap} {e₁ : Expr} (hs : Steps Adequacy.emptyMem pro
 def clC : Expr :=
   .val (.lam (.letpair (.var 0) (.seq (.var 1) (.app (.var 0) (.val (.inj₂ .unit))))))
 
-/-- The program with an affine operation whose clause cancels `κ`. -/
+/-- The program with a cancellable operation whose clause cancels `κ`. -/
 def progC : Expr :=
-  bindE (.pair clC (.val .unit)) (bindE hr (hndTerm 1 [.aff] 0 1 (performE (opArgE 1 0 (.val .unit)))))
+  bindE (.pair clC (.val .unit)) (bindE hr (hndTerm 1 [.cancel] 0 1 (performE (opArgE 1 0 (.val .unit)))))
 
-theorem clC_derives : CDerives LifeCtx.empty [] clC (.val (clauseTy [] .unit (.aff, .unit, .unit))) := by
+theorem clC_derives : CDerives LifeCtx.empty [] clC (.val (clauseTy [] .unit (.cancel, .unit, .unit))) := by
   refine .bangThunkV (fun _ hs => by simp at hs) rfl (.lam ?_)
   refine .tensorE (.left .nil) (.var (.here .nil)) ?_
   refine .unitE (.right (.left (.dead .nil))) (.var (.there (.here (.cons .nil)))) ?_
@@ -79,10 +79,10 @@ theorem progC_derives : CDerives LifeCtx.empty [] progC (.comp (.ret .unit)) := 
   refine .bind (.right .nil)
     (.ret (.bangThunkV (C := .arr .unit (.ret .unit)) (fun s hs hl => by
       simp at hs; subst hs; simp at hl) rfl (.lam (.ret (.var (.here (.cons .nil))))))) ?_
-  exact .effHandle (S := []) (E := [(.aff, .unit, .unit)]) (A := .unit) (R := .unit)
+  exact .effHandle (S := []) (E := [(.cancel, .unit, .unit)]) (A := .unit) (R := .unit)
     (.left (.left .nil)) (.left (.right .nil)) (.here (.cons .nil)) (.there (.here .nil))
     (by decide) (by simp) (by simp) rfl
-    (.effPerform (o := ⟨1, 0, .aff, .unit, .unit, .ret .unit⟩) (by rfl) rfl (.unitI (.cons (.cons .nil))))
+    (.effPerform (o := ⟨1, 0, .cancel, .unit, .unit, .ret .unit⟩) (by rfl) rfl (.unitI (.cons (.cons .nil))))
 
 /-- **Every run of the cancelling program reaches `()` at the empty memory.** -/
 theorem progC_runs {μ₁ : Heap} {e₁ : Expr} (hs : Steps Adequacy.emptyMem progC μ₁ e₁) :

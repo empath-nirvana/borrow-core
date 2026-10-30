@@ -44,7 +44,7 @@ The work is not starting from zero. A coherent effect kernel is built, proved an
   - Unique decomposition and determinism hold with effects (`Core/Steps.lean`).
 - **Types.**
   - Per-operation layers `CTy.eff n i q A B C`. A row is a first-match list keyed by `(n, i)`.
-  - Continuation qualifiers `lin`, `aff` and `unr`.
+  - Continuation qualifiers `lin`, `cancel` and `unr`.
   - `F_Σ R = CTy.effOf`.
 - **Typing.** `CDerives` has `[sub]`, `[perform]`, `[raise]`, `[let]`, `[then]` (finalisers), `[handle]` and `boundedFix`, plus six unwinding borrow constants (`withbor1U/2U/3U`, `withloadU`, `sliceBorrowMU/IU`).
 - **Semantics.** One generic `opTable` gives the protocol table of a row. `ewpTS` is the least fixed point over `wpG`. `contShare` and `KapRel` put the Kripke quantifier on the continuation.
@@ -62,7 +62,7 @@ The work is not starting from zero. A coherent effect kernel is built, proved an
 
 **Around the kernel**
 - Outlives and `'main` (SPEC §23).
-- Affine closures as ν codata (SPEC §22), with positivity only for the effectful form.
+- `Clo` closures as ν codata (SPEC §22), with positivity only for the effectful form.
 - Bounded recursion and `Exhausted` (§20/§21).
 - `Loop_Σ` as codata.
 
@@ -112,7 +112,7 @@ Effect work is easy to do against the proof model alone and get the implementati
 | effects and handlers: answering capabilities | §18 | `effects-*` |
 | native capture: `handle`/`perform` with suspend, resume, cancel and finalisers, compiled to state machines | §19 | `capture-*`, kernel programs |
 | recursion: bounded and deep drivers, `Exhausted`, the fixed point of a generator | §20, §21 | `rec-*` |
-| affine closures (codata with arguments) | §22 | `aff-*` |
+| `Clo` closures (codata with arguments) | §22 | `clo-*` |
 | non-strict outlives, `'main` | §23 | `lend-*` |
 | externs and I/O capabilities (linear, opaque host resources) | §11, decision 31 | `io-*` |
 | arrays and slices | §9 | `array-*`, `slice-*` |

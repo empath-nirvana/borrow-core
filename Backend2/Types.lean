@@ -227,7 +227,7 @@ abbrev MachSet := Std.HashSet (UInt32 × UInt32)
 
 /-- What cancelling a computation suspended at an operation answers (SPEC §49): `()`, or the first
 error its finalisers raised, one of the operation's cancel row's abortive operations (`cp`, its
-payload's summands); `1` at a cancel row `⊤` (a linear operation, never cancelled). -/
+payload's summands); `1` at a cancel row `⊤` (a must-resume operation, never cancelled). -/
 def cancelResTy (cp : Option (List ((UInt32 × UInt32) × LTy))) : LTy :=
   match cp.bind payOf with
   | none => .unit
@@ -395,7 +395,7 @@ theorem ofV_persistent {ms : MachSet} : ∀ {A : VTy} {t : LTy}, A.persistent = 
   | .mut _ _, _, hp, _ | .fam _, _, hp, _ => by simp [VTy.persistent] at hp
 
 /-- The LIR type of a `VTy.Drop` type drops. -/
-theorem ofV_drops {ms : MachSet} {A : VTy} (hA : A.Drop) : ∀ {t : LTy}, ofV ms A = .ok t →
+theorem ofV_drops {ms : MachSet} {A : VTy} (hA : A.OwnFree) : ∀ {t : LTy}, ofV ms A = .ok t →
     t.drops = true := by
   induction hA with
   | unit | zero | int | unk | opq | imm | «mut» =>

@@ -97,7 +97,7 @@ def stepR : Val :=
 
 theorem d_stepR {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ (.val stepR) (.val (.bang (.thunk (stepSC .unit (.ref .unit))))) :=
-  .bangThunkV (persistent_dead hΓ) rfl (.lam (.withI
+  .bangThunkV (banged_dead hΓ) rfl (.lam (.withI
     (.ret (.tensorI (.dead (.dead (.right (deadSplit hΓ))))
       (.unitI (.cons (.cons (.cons hΓ)))) (.var (.there (.there (.here hΓ))))))
     (.ret (.lolliE (.dead (.dead (.left (deadSplit hΓ)))) (.var (.there (.there (.here hΓ))))
@@ -158,7 +158,7 @@ theorem d_stepN {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ (.val stepN) (.val (.bang (.thunk (stepSC natN natN)))) := by
   have D4 : Ctx.Dead (⟨.tensor natN natN, false⟩ :: ⟨.unit, false⟩ :: ⟨.sum .unit .unit, false⟩ ::
       ⟨natN, false⟩ :: Γ) := .cons (.cons (.cons (.cons hΓ)))
-  refine .bangThunkV (persistent_dead hΓ) rfl (.lam (.withI ?_ ?_))
+  refine .bangThunkV (banged_dead hΓ) rfl (.lam (.withI ?_ ?_))
   · refine .bind (.dead (.dead (.left (deadSplit hΓ))))
       (.ret (.lolliE (.dead (.dead (.left (deadSplit hΓ)))) (.var (.there (.there (.here hΓ))))
         (d_dup (.cons (.cons (.cons hΓ)))))) ?_

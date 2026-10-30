@@ -41,4 +41,4 @@ def report : !(all 'a < top. mut 'a output * (mut 'a output * i32) => 1) =
 main -> 1 =
   report(&mut stdout, &mut stdout, 7);
   ()
--- now: 42:9: `io_lm42_3` is used twice here, and its type `mut 'io_lb42_3 output` is not persistent
+-- now: 42:9: `io_lm42_3` is used twice here, and its type `mut 'io_lb42_3 output` is linear

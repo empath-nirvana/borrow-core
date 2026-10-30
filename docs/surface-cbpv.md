@@ -134,7 +134,6 @@ computation type), and `{C}` abbreviates `U C`, so braces mean "thunk" in both t
 |---|---|
 | `let p = e; S` | bind an expression. `p` is a pattern: `x`, `_`, `()`, `(p, q)`. |
 | `p <- M; S` | bind the result of a surviving force: `t!`, `f!(e)`, `d.poll`, `s.next`, `d.close`, `suspend c.op(e)`, or a `match` on one of these |
-| `linear let x = e; S` | the core's `linear` binder (SPEC §12 opt-out) |
 | `e; S` | a statement whose value is `()` |
 
 `<-` is required exactly where the right side forces a live object, and a warning elsewhere.
@@ -327,7 +326,6 @@ Everything below reads only the syntax: no type is consulted.
 | `let (p, q) = e; S` | `let (y#, z#) = ⟦e⟧;` then `p`, `q` bound from `y#`, `z#` |
 | `let () = e; S`, `e; S` | `let () = ⟦e⟧; ⟦S⟧` |
 | `let _ = e; S` | `y# <- return ⟦e⟧; ⟦S⟧` (`y#` is dropped by SPEC §12) |
-| `linear let x = e; S` | `linear x <- return ⟦e⟧; ⟦S⟧` |
 | `p <- M; S` | `y# <- ⟦M⟧; ⟦let p = y#; S⟧` |
 | tail `e` | `return ⟦e⟧` |
 | `t!` | `force t` |
@@ -942,7 +940,7 @@ main : F i32 =
   t0 <- return (thunkv stream_in < (stream_out (force f z)).1, (stream_out (force f z)).2 >);
   p1 <- (stream_out (force t0)).1;
   let (x1, t1) = p1;
-  linear q <- return (alloc[i32] i32[40]);
+  q <- return (alloc[i32] i32[40]);
   v <- return (free[i32] q);
   return (plus (plus (plus (n, m), x1), v))
 ```

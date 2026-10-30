@@ -97,11 +97,11 @@ The draft registers OQ-9 as "the first unknown" and probes option (a), a relativ
 does not record that (b)'s route exists at today's stop.
 
 **F3. Mis-citations.** OQ-20 and OQ-27 cite "#279, external input" for `withtake` and for η at
-affine operations. Both items are in a comment on **#251** (2026-10-02T16:10Z). #279 is the D16.1
-issue and contains neither. OQ-14 cites "T2, #173" for generative instances. #173 is "an outlives
-rule for thunks `U C`" (theory index T2, `docs/theory-index.md:657`). It is the confinement that
-generative instances would need, and it is also option (b) of OQ-28. The draft does not cross-link
-OQ-14 and OQ-28 through #173.
+cancellable operations. Both items are in a comment on **#251** (2026-10-02T16:10Z). #279 is the
+D16.1 issue and contains neither. OQ-14 cites "T2, #173" for generative instances. #173 is "an
+outlives rule for thunks `U C`" (theory index T2, `docs/theory-index.md:657`). It is the confinement
+that generative instances would need, and it is also option (b) of OQ-28. The draft does not
+cross-link OQ-14 and OQ-28 through #173.
 
 **F4. The recorded cancel-error decision and the built SPEC disagree.** This bears on OQ-21.
 
@@ -303,7 +303,7 @@ deferred.
 
 ### OQ-7. Finalisers at a non-abortive table
 
-*Question.* Should finalisers, the unwinding borrow forms and the effectful `Aff` close be stated
+*Question.* Should finalisers, the unwinding borrow forms and the effectful `Clo` close be stated
 and lifted at every `TableOK` table (a), or kept abortive-only (b)?
 
 *Class.* **EVIDENCED + CONSTRAINED + GENUINELY OPEN.** Settleable by proof.
@@ -376,7 +376,8 @@ That re-entry choice is the printed freshness, applied once per resumption.
 - Option (b) has PROVED instances at [Core σ=[]], with today's stop:
   - resume of a 6.64 lend (`imm_spans_yield`);
   - resume of a 6.65 lend (`withbor_spans_yields_cC`);
-  - drop or cancel of a 6.65 lend at an affine yield (`spans_two_affine_yields`, `withborR_compat`).
+  - drop or cancel of a 6.65 lend at a cancellable yield (`spans_two_affine_yields`,
+    `withborR_compat`).
 
   The general borrower is reduced to `RelendOfTyped` (`Open.lean:45`), which is OPEN. GFP is
   refuted as first stated, by a witness that does not arise; `GFPA` is OPEN.
@@ -539,7 +540,7 @@ erasable; excluded, or an explicit opt-in with a visible cost".
 - `nu_op_fails_multishot` is REFUTED at [EffModelRel]. In that sibling calculus it is a
   closed-program `CtxEq`.
 - The kernel carries `unr` in `kTy` (`Core/EffRules.lean:976-980`), `contShare`
-  (`Core/EffDefs.lean:144`) and `S.Unr → Persistent Γ₂` (`Core/Fundamental.lean:354, 361`).
+  (`Core/EffDefs.lean:144`) and `S.Unr → Ctx.Banged Γ₂` (`Core/Fundamental.lean:354, 361`).
 - TR §10.3 is a phase-A counterexample at a relevant qualifier.
 
 *Needs the user?* No. The census is off the critical path, as the record says.
@@ -724,7 +725,7 @@ state machines…)". (b) is triggered only "when a program needs it", and none d
 
 *Needs the user?* No.
 
-### OQ-27. η with cancel at an affine operation
+### OQ-27. η with cancel at a cancellable operation
 
 *Question.* Is the cancel-forwarding term `let r = op x in resume k r` typable, so that L-ETA is a
 law to prove?
@@ -743,7 +744,7 @@ law to prove?
 
 ### OQ-28. How a stored continuation is bounded
 
-*Question.* `[gen]` as a rule with `κ` at `[@c] U(Aff^c A B)` (a), or an outlives rule at `U C`,
+*Question.* `[gen]` as a rule with `κ` at `[@c] U(Clo^c A B)` (a), or an outlives rule at `U C`,
 so that `[gen]` is derived (b)?
 
 *Class.* **EVIDENCED + ATTEMPTED + GENUINELY OPEN (proof).** Its option (b) is #173 / T2 (F3).
@@ -761,7 +762,7 @@ so that `[gen]` is derived (b)?
 - `docs/effects-tr/16-regress.md` §16.6 (i) lists `[gen]` among what tier 1 still has to prove.
 
 *Needs the user?* No. It is a tier-1 item. The one non-mechanical step named is T14.4's
-coinduction (`aff_coind`).
+coinduction (`clo_coind`).
 
 ### OQ-29. An operation that answers a borrow into the handler's state
 
@@ -838,7 +839,7 @@ against a configuration]:
 - §10.1: the lend consumes and answers its capability. That is BoLo's `withbor` shape, which the
   kernel's borrows already have.
 - §10.3: the return clause run twice under a contractible operation. The kernel asks
-  `S.Unr → Persistent Γ₂` (`Core/Fundamental.lean:354, 361`) and `contShare`'s `ρ = ∅` at `unr`
+  `S.Unr → Ctx.Banged Γ₂` (`Core/Fundamental.lean:354, 361`) and `contShare`'s `ρ = ∅` at `unr`
   (`Core/EffDefs.lean:144`).
 
 The draft's "`CDerives` has no modes" overlooks those qualifiers. §10.2 (the frame-owned `Res`) has

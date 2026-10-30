@@ -19,7 +19,7 @@ given exactly the slots its body's derivation takes.
 
 The premises on the context are moved past the inserted slots by `deadP_ins`, `soloP_ins`,
 `splitP_route` (a live inserted slot goes to the part whose absorption it satisfies) and `live_ins`
-(a premise on every live slot: `Persistent`, `CtxOutlives`, `∀I`'s freshness, `Ctx.Drops`).
+(a premise on every live slot: `Ctx.Banged`, `CtxOutlives`, `∀I`'s freshness, `Ctx.OwnFree`).
 -/
 
 namespace BoCa.Fig16.LogRel.Core.Check
@@ -231,8 +231,8 @@ theorem live_ins {P : Slot VTy → Prop} {Γa Γb : Ctx VTy} (hp : ∀ s ∈ Γp
   · exact hp s hs hl
   · exact h s (List.mem_append_right _ hs) hl
 
-theorem persistent_ins {Γa Γb : Ctx VTy} (hp : LiveP Atom.bang.eval Γp)
-    (h : Persistent (Γa ++ Γb)) : Persistent (Γa ++ Γp ++ Γb) :=
+theorem banged_ins {Γa Γb : Ctx VTy} (hp : LiveP Atom.bang.eval Γp)
+    (h : Ctx.Banged (Γa ++ Γb)) : Ctx.Banged (Γa ++ Γp ++ Γb) :=
   live_ins (fun s hs hl => isBangB_sound (hp s hs hl)) h
 
 theorem ctxOutlives_ins {Δ : LifeCtx} {a : Lifetime.Life} {Γa Γb : Ctx VTy}
@@ -245,27 +245,27 @@ theorem fresh_ins {x : LifeVar} {Γa Γb : Ctx VTy} (hp : LiveP (Atom.nfree x).e
     ∀ s ∈ Γa ++ Γp ++ Γb, s.live = true → ¬ VFree x s.ty :=
   live_ins (fun s hs hl => not_vfree_of_vfreeB (by simpa [Atom.eval] using hp s hs hl)) h
 
-theorem weak_of_unr {S : Row} (h : S.Unr) : S.Weak := by
+theorem cancels_of_unr {S : Row} (h : S.Unr) : S.Cancels := by
   obtain ⟨o, ho, hq⟩ := h
   exact ⟨o, ho, by rw [hq]; decide⟩
 
 /-- `[let]`'s premises on the rest's context, past inserted slots that satisfy its condition. -/
 theorem letCond_ins {S : Row} {Γa Γb : Ctx VTy} (hp : LiveP (TExpr.absF.letCond S).eval Γp)
-    (hW : S.Weak → (Γa ++ Γb).Drops) (hU : S.Unr → Persistent (Γa ++ Γb)) :
-    (S.Weak → (Γa ++ Γp ++ Γb).Drops) ∧ (S.Unr → Persistent (Γa ++ Γp ++ Γb)) := by
+    (hW : S.Cancels → (Γa ++ Γb).OwnFree) (hU : S.Unr → Ctx.Banged (Γa ++ Γb)) :
+    (S.Cancels → (Γa ++ Γp ++ Γb).OwnFree) ∧ (S.Unr → Ctx.Banged (Γa ++ Γp ++ Γb)) := by
   unfold TExpr.absF.letCond at hp
-  by_cases hw : Row.weakB S = true
+  by_cases hw : Row.cancelsB S = true
   · rw [if_pos hw] at hp
-    have hd : LiveP dropB Γp := hp.imp fun A hA => by
+    have hd : LiveP ownFreeB Γp := hp.imp fun A hA => by
       simp only [AbsF.eval_and, AbsF.eval_atom, Bool.and_eq_true] at hA; exact hA.1
-    refine ⟨fun h => live_ins (fun s hs hl => dropB_sound _ (hd s hs hl)) (hW h),
+    refine ⟨fun h => live_ins (fun s hs hl => ownFreeB_sound _ (hd s hs hl)) (hW h),
       fun h => live_ins (fun s hs hl => isBangB_sound ?_) (hU h)⟩
     have hu : Row.unrB S = true := Row.unrB_iff.mpr h
     have := hp s hs hl
     simp only [hu, if_true, AbsF.eval_and, AbsF.eval_atom, Atom.eval, Bool.and_eq_true] at this
     exact this.2
-  · refine ⟨fun h => absurd (Row.weakB_iff.mpr h) hw,
-      fun h => absurd (Row.weakB_iff.mpr (weak_of_unr h)) hw⟩
+  · refine ⟨fun h => absurd (Row.cancelsB_iff.mpr h) hw,
+      fun h => absurd (Row.cancelsB_iff.mpr (cancels_of_unr h)) hw⟩
 
 /-! ### Weakening -/
 
@@ -416,13 +416,13 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
       obtain ⟨f', hf', hb, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ih (_ :: Γa) Γb Γp f' rfl hf' hp'
       rw [List.length_cons] at d e
-      exact ⟨.bangThunkF (persistent_ins (live_atom hb) hpΓ) d, by
+      exact ⟨.bangThunkF (banged_ins (live_atom hb) hpΓ) d, by
         simp only [TExpr.shift, TExpr.erase, Expr.shift, Expr.val, Val.lam, e]⟩
   | bangThunkV hpΓ hC _ q ih =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
       obtain ⟨f', hf', hb, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f' rfl hf' hp'
-      exact ⟨.bangThunkV (persistent_ins (live_atom hb) hpΓ) hC d (by rw [e, q]; rfl), e⟩
+      exact ⟨.bangThunkV (banged_ins (live_atom hb) hpΓ) hC d (by rw [e, q]; rfl), e⟩
   | bangE _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
@@ -711,7 +711,7 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
       obtain ⟨dN, eN⟩ := ihN (_ :: Γa₂) Γb₂ Γp₂ k₁ rfl hk₁ w₁
       obtain ⟨dD, eD⟩ := ihD (_ :: Γa₂) Γb₂ Γp₂ k₂ rfl hk₂ w₂
       rw [ha₁, hl₁] at dM eM; rw [List.length_cons, ha₂, hl₂] at dN eN dD eD
-      exact ⟨.effThen hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [eM]; rfl), hcv.2.1.ins₂ (by rw [eN]), hcv.2.2.ins₂ (by rw [eD])⟩ hNZ hUq (fun hu => persistent_ins (hc.imp fun A hA => by
+      exact ⟨.effThen hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [eM]; rfl), hcv.2.1.ins₂ (by rw [eN]), hcv.2.2.ins₂ (by rw [eD])⟩ hNZ hUq (fun hu => banged_ins (hc.imp fun A hA => by
           rw [if_pos (Row.unrDB_iff.mpr hu), AbsF.eval_atom] at hA; exact hA) (hU hu))
           hMS hDS hfin hP hSD dM dN dD, by
         simp only [TExpr.shift, TExpr.erase, thenE, Expr.shift, Expr.val, Val.lam, Val.prim, eM,
@@ -982,13 +982,13 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
       obtain ⟨f', hf', hb, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ih (_ :: Γa) Γb Γp f' rfl hf' hp'
       rw [List.length_cons] at d e
-      exact ⟨.bangThunkF (persistent_ins (live_atom hb) hpΓ) d, by
+      exact ⟨.bangThunkF (banged_ins (live_atom hb) hpΓ) d, by
         simp only [TExpr.shift, TExpr.erase, Expr.shift, Expr.val, Val.lam, e]⟩
   | bangThunkV hpΓ hC _ q ih =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
       obtain ⟨f', hf', hb, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f' rfl hf' hp'
-      exact ⟨.bangThunkV (persistent_ins (live_atom hb) hpΓ) hC d (by rw [e, q]; rfl), e⟩
+      exact ⟨.bangThunkV (banged_ins (live_atom hb) hpΓ) hC d (by rw [e, q]; rfl), e⟩
   | bangE _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
@@ -1277,7 +1277,7 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
       obtain ⟨dN, eN⟩ := ihN (_ :: Γa₂) Γb₂ Γp₂ k₁ rfl hk₁ w₁
       obtain ⟨dD, eD⟩ := ihD (_ :: Γa₂) Γb₂ Γp₂ k₂ rfl hk₂ w₂
       rw [ha₁, hl₁] at dM eM; rw [List.length_cons, ha₂, hl₂] at dN eN dD eD
-      exact ⟨.effThen hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [eM]; rfl), hcv.2.1.ins₂ (by rw [eN]), hcv.2.2.ins₂ (by rw [eD])⟩ hNZ hUq (fun hu => persistent_ins (hc.imp fun A hA => by
+      exact ⟨.effThen hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [eM]; rfl), hcv.2.1.ins₂ (by rw [eN]), hcv.2.2.ins₂ (by rw [eD])⟩ hNZ hUq (fun hu => banged_ins (hc.imp fun A hA => by
           rw [if_pos (Row.unrDB_iff.mpr hu), AbsF.eval_atom] at hA; exact hA) (hU hu))
           hMS hDS hfin hP hSD dM dN dD, by
         simp only [TExpr.shift, TExpr.erase, thenE, Expr.shift, Expr.val, Val.lam, Val.prim, eM,

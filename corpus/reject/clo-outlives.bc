@@ -1,11 +1,11 @@
--- An affine closure (SPEC §22) bounded by the lifetime of the borrow it captures. The closure's
+-- A closure (SPEC §22) bounded by the lifetime of the borrow it captures. The closure's
 -- state is `ml : mut 'x i32`, and a closure outlives `'c` only when its state does; BoLo's
--- outlives is strict, so `mut 'x i32` does not outlive `'x` (`Core/AffPrograms.lean`,
--- `logState_not_outlives`). `corpus/aff-capture.bc` bounds the same closure by a `'w` below `'x`.
-include aff
+-- outlives is strict, so `mut 'x i32` does not outlive `'x` (`Core/CloPrograms.lean`,
+-- `logState_not_outlives`). `corpus/clo-capture.bc` bounds the same closure by a `'w` below `'x`.
+include clo
 
-fn logger<'x>(ml: mut 'x i32) -> box 'x Aff[i32, i32]<'x> =
-  boxed['x] aff_new[mut 'x i32, i32, i32]['x](ml, !thunkv fun (m : mut 'x i32) ->
+fn logger<'x>(ml: mut 'x i32) -> box 'x Clo[i32, i32]<'x> =
+  boxed['x] clo_new[mut 'x i32, i32, i32]['x](ml, !thunkv fun (m : mut 'x i32) ->
     < fun (a : i32) ->
         q <- return (withswap['x, i32, i32] m (thunkv fun (v : i32) -> return (v + a, v + a)));
         let (m, t) = q;
@@ -16,8 +16,8 @@ main -> i32 =
   let log = alloc(0);
   let r = borrow mut log { 'x, ml ->
     let k = logger ['x](ml);
-    let (a, k) = aff_call(k, 5);
-    aff_close(k);
+    let (a, k) = clo_call(k, 5);
+    clo_close(k);
     a };
   r + free(log)
 -- expect: 12:20: `boxed['x]`: `m`, of type `mut 'x i32`, is used inside, and it cannot be shown to outlive `'x`

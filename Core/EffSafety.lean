@@ -82,7 +82,7 @@ theorem LiveOK.ne_opPlug {μ : Heap} {e : Expr} (hL : LiveOK (ℍ := ℍ) μ e) 
   ne_opPlug_of_goes hL.goes hn hK
 
 /-- A `LiveOK` configuration holds no stuck redex at an evaluation position (`StuckAt`): `() ()`,
-a linear `κ`'s cancel branch (`kappaC_cancel_lin`), among them. -/
+a must-resume `κ`'s cancel branch (`kappaC_cancel_lin`), among them. -/
 theorem LiveOK.not_stuck {μ : Heap} {K : Kont} {s : Expr} (hL : LiveOK (ℍ := ℍ) μ (K.plug s))
     (hs : StuckAt (ℍ := ℍ) s) : False := by
   rcases hL.goes with hv | ⟨μ', e', hst⟩

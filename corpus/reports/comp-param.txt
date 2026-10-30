@@ -1,4 +1,4 @@
-effect 17:1: Fail: raise (ctl, affine, abortive)
+effect 17:1: Fail: raise (ctl, cancellable, abortive)
 row 19:1: boom: Fail[i32]
 lowering 19:1: copy `boom__n2`: `boom` for the site 2 of `Fail`
 lowering 19:1: copy `boom__n6`: `boom` for the site 6 of `Fail`

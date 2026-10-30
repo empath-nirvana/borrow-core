@@ -177,7 +177,7 @@ def Val.respan (sp : Span) : Val → Val
 
 def Comp.respan (sp : Span) : Comp → Comp
   | .ret _ V => .ret sp (V.respan sp)
-  | .bind _ x A M N lin => .bind sp (x.respan sp) (A.map ((VTy.respan sp))) (M.respan sp) (N.respan sp) lin
+  | .bind _ x A M N => .bind sp (x.respan sp) (A.map ((VTy.respan sp))) (M.respan sp) (N.respan sp)
   | .force _ x => .force sp (x.respan sp)
   | .lam _ x A M => .lam sp (x.respan sp) (A.respan sp) (M.respan sp)
   | .app _ M x => .app sp (M.respan sp) (x.respan sp)

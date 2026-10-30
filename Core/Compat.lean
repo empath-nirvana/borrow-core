@@ -377,7 +377,7 @@ theorem allI_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {x : LifeVar} {b : Lifetime.L
 /-! ### `!` -/
 
 /-- Promotion of `thunk M : U (F A)` over `!Γ`. -/
-theorem bangThunkF_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy} (hp : Persistent Γ)
+theorem bangThunkF_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy} (hp : Ctx.Banged Γ)
     (h : SemC Δ (⟨.unit, false⟩ :: Γ) M (.ret A)) :
     SemV Δ Γ (.val (.lam M)) (.bang (.thunk (.ret A))) := by
   intro δ γ ls ρ hδ hg
@@ -391,7 +391,7 @@ theorem bangThunkF_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy} (h
 
 /-- Promotion of a λ-value `V : C` (`C` not an `F`) over `!Γ`: `bangLamI_compatX` at
 `C = A ⊸ F B`, `bangAllI_compatX` at `C = ∀'x ⊏ @b. F B`. -/
-theorem bangThunkV_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy} (hp : Persistent Γ)
+theorem bangThunkV_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy} (hp : Ctx.Banged Γ)
     (hC : C.isRet = false) (h : SemC Δ Γ (.val (.lam N)) C) :
     SemV Δ Γ (.val (.lam N)) (.bang (.thunk C)) := by
   intro δ γ ls ρ hδ hg

@@ -18,7 +18,7 @@ use:
   when an unused live slot of that type can be given to `t`'s derivation. It is read off the
   rules' premises on the context's live slots: a leaf drops a persistent slot (`Ctx.DeadP`,
   `Ctx.SoloP`), `⟨⟩` absorbs any (`topI`), a split gives the slot to either part, two premises at
-  one context both take it, and a premise on every live slot (`Persistent`, `CtxOutlives`, `∀I`'s
+  one context both take it, and a premise on every live slot (`Ctx.Banged`, `CtxOutlives`, `∀I`'s
   freshness, `[let]`'s drops) conjoins its condition. `none` is a node whose derivation cannot be
   placed at a wider context at all: the relaxed rules at their fixed contexts (SPEC §29).
 
@@ -40,7 +40,7 @@ open BoCa.Lifetime (LifeCtx LifeVar)
 def Atom.eval : Atom → VTy → Bool
   | .pers, A => A.persistent
   | .bang, A => isBangB A
-  | .drop, A => dropB A
+  | .drop, A => ownFreeB A
   | .nfree x, A => !vfreeB x A
   | .outl Δ a, A => outlivesB Δ a A
 
@@ -342,7 +342,7 @@ where
   /-- `[let]`'s premise on the rest's live slots: they drop at a row with weakening, and are `!`
   at an unrestricted row. -/
   letCond (S : Row) : AbsF :=
-    if Row.weakB S then (AbsF.atom .drop).and (if Row.unrB S then .atom .bang else .tt) else .tt
+    if Row.cancelsB S then (AbsF.atom .drop).and (if Row.unrB S then .atom .bang else .tt) else .tt
 
 theorem TExpr.absF_shift (d : Nat) : ∀ (t : TExpr) (c : Nat) (Δ : LifeCtx),
     (t.shift d c).absF Δ = t.absF Δ := by

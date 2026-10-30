@@ -1,5 +1,5 @@
 -- pending: SPEC §21 Open (a task whose loop is a while, under spawn), SPEC §30 Open (a task performing an answering effect handled outside its spawn)
--- now: 97:34: type mismatch: expected `mut 'fx_rl134 ((mu X. 1 + (i32 * i32) * X) * (1 + 1)) * i32`, but this has type `U (nu X. F[7.0 aff 1 ~> 1, 7.1 aff i32 ~> 1] (mut 'fx_rl134 ((mu X. 1 + (i32 * i32) * X) * (1 + 1)) * i32 + U X) & F[7.0 aff 1 ~> 1, 7.1 aff i32 ~> 1] 1)`
+-- now: 97:34: type mismatch: expected `mut 'fx_rl134 ((mu X. 1 + (i32 * i32) * X) * (1 + 1)) * i32`, but this has type `U (nu X. F[7.0 cancel 1 ~> 1, 7.1 cancel i32 ~> 1] (mut 'fx_rl134 ((mu X. 1 + (i32 * i32) * X) * (1 + 1)) * i32 + U X) & F[7.0 cancel 1 ~> 1, 7.1 cancel i32 ~> 1] 1)`
 -- A reconcile loop in the style of a Kubernetes operator, against a fake API. The desired state
 -- is a list of deployments (name, replicas); the API's handler owns the observed state. One task
 -- per object reconciles it: it reads the observed replicas, asks the API to scale one step toward

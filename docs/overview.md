@@ -19,7 +19,7 @@ mechanization of Wagner, Gierczak, Marshall, Li and Ahmed, *From Linearity to Bo
 - **Codata:** one former `νX. C` with coiteration; the delay type for loops that may not
   terminate, streams and finite iterators are abbreviations over it, each with a mandatory
   `close` (§7).
-- **The affine closure:** `Aff[A, B]<'c>` (`lib/aff.bc`), codata whose `call` takes an argument
+- **The closure `Clo`:** `Clo[A, B]<'c>` (`lib/clo.bc`), codata whose `call` takes an argument
   and hands back the rest: called any number of times, through a `mut` borrow, then closed; its
   captured state is hidden by its type (§22).
 - **Integers and bytes:** `i32`/`i64` with Wasm's operations, and the byte `u8` (§8).
@@ -44,10 +44,10 @@ mechanization of Wagner, Gierczak, Marshall, Li and Ahmed, *From Linearity to Bo
   sums, with no change to the kernel (§18). Spellings are provisional.
 - **Effects and handlers, in the kernel:** `perform`, `raise`, `hnd`, the finaliser frame `ubind`,
   and `ccatch`/`cfin` for cancels; the effectful returner `F_Σ A`; answering and control
-  operations, a control operation's continuation linear, affine or unrestricted; unwinding, which
-  ends each lend it passes; and cancelling a stored continuation (decision C of SPEC §19's
-  *Cancels*: the canceller re-raises the first finaliser error that names a handler outside the
-  cancelled region) (§19).
+  operations, a control operation's continuation must-resume, cancellable or unrestricted;
+  unwinding, which ends each lend it passes; and cancelling a stored continuation (decision C of
+  SPEC §19's *Cancels*: the canceller re-raises the first finaliser error that names a handler
+  outside the cancelled region) (§19).
 
 Recursion is the fixed point of a generator (decision 24, SPEC §20, §21): a function calls itself,
 and functions call one another, as written; the group is the bounded fixed point of its generator,

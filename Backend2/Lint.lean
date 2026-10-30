@@ -97,9 +97,9 @@ theorem droppable_ofV_persistent {ms : MachSet} {A : VTy} {t : LTy} (hA : A.pers
     (h : ofV ms A = .ok t) : droppable t = true := by
   simp [droppable, ofV_persistent hA h]
 
-/-- A slot an abort abandons (`Ctx.Drops`: of a `VTy.Drop` type) is `abandonable` at its LIR
+/-- A slot an abort abandons (`Ctx.Drops`: of a `VTy.OwnFree` type) is `abandonable` at its LIR
 type. -/
-theorem abandonable_ofV_drop {ms : MachSet} {A : VTy} {t : LTy} (hA : A.Drop)
+theorem abandonable_ofV_drop {ms : MachSet} {A : VTy} {t : LTy} (hA : A.OwnFree)
     (h : ofV ms A = .ok t) : abandonable .letAbort t = true := by
   simp [abandonable, ofV_drops hA h]
 

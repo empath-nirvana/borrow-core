@@ -295,7 +295,7 @@ def walkC (d : Decls) (owner : String) (names : List String) : Nat → TCx → C
   | 0, _, _ => pure ()
   | n + 1, c, M => match M with
     | .ret _ V | .absurd _ V | .perform _ _ _ V | .abort _ _ _ V => walkV d owner names n c V
-    | .bind _ x A M N _ => do
+    | .bind _ x A M N => do
       walkC d owner names n c M
       walkC d owner names n (c.push x.name (bindTy c A M)) N
     | .lam _ x A M => walkC d owner names n (c.push x.name (c.elabV A)) M

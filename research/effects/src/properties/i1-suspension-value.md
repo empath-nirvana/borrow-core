@@ -18,7 +18,7 @@ Survey A1 ("Σ must type continuation values and the loans they hold"); System C
 
 ## Evidence
 
-`ewp_gen` (L14.3) on `lift-stage1` (Core σ=[]); the affine closure as ν codata (`Core/Aff.lean`, positivity only).
+`ewp_gen` (L14.3) on `lift-stage1` (Core σ=[]); the closure `Clo` as ν codata (`Core/Clo.lean`, positivity only).
 
 ## Experiments
 

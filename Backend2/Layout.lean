@@ -692,7 +692,7 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
           -- persistent type or of `imm` borrows and each `drop` at a persistent type, one with no
           -- owned cell or a family of borrows (`Lint.copyable`, `Lint.droppable`), `!` read off
           -- the LIR type; a persistent value holds no resource (`vP_empty_of_persistent`), a
-          -- `VTy.Drop` one no owned cell (`vC_noOwn_of_drop`), a family of borrows none
+          -- `VTy.OwnFree` one no owned cell (`vC_noOwn_of_ownFree`), a family of borrows none
           -- (`forget_fam_compatX`).
           -- UNPROVED: that a variable's LIR type is the image of its node's checked type (by
           -- construction in `Convert`, not proved), and the stack machines' drops of a level's

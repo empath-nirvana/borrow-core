@@ -20,7 +20,7 @@ is one (`path_of_steps`).
   the raise on; one whose own raise escapes supersedes it.  The trace is over where a handler of
   the raise's name catches it, or where the raise leaves `K`.
 * **The cancel, read prefix-closed, under frame deadness** (`cancel_prefix`).  The start is the
-  cancel run of a continuation `kappa H K`, or of `kappaC aff ℓ H K` after its cell's release.
+  cancel run of a continuation `kappa H K`, or of `kappaC hasCancel ℓ H K` after its cell's release.
   Every path from there is a prefix of the cancel trace of the dead region `K†` (`CancelTr`).
   `K†` holds no handler and no `ccatch` frame (`hasHnd_dead`, `noCC_dead`), so nothing in the
   region intercepts the cancel.  It fires `K`'s finalisers innermost first, each by
@@ -44,7 +44,7 @@ is one (`path_of_steps`).
   `progOutT` (`Core/EffCancelTyped.lean`) is typed by a tied derivation (`dAt_progOutT`), its run
   cancels `κ` (`progOutT_cancels`), and its region's finaliser raises `2`: it meets
   `cancel_prefix`'s hypotheses (`progOutT_cancel_prefix`).  So does `progOutTA`, the same program
-  at an affine raise of `2` (`progOutTA_cancel_prefix`): a tied derivation types it at `Ξ₁₂A`,
+  at a cancellable raise of `2` (`progOutTA_cancel_prefix`): a tied derivation types it at `Ξ₁₂A`,
   which has no unrestricted abortive operation (`dAt_progOutTA`, `noUnrExn_Ξ₁₂A`), the shape the
   checker gives every program it accepts (`checkProgram_tiedAt`, `Frontend/Check/Program.lean`).
 -/
@@ -1770,21 +1770,21 @@ theorem unwind_prefix {e : Expr} {FR : UInt32 → Prop} {μ : Heap} {K₀ K : Ko
     hq
 
 /-- **The cancel, read prefix-closed** (S5): in a run of a term typed by a tied derivation, from
-the empty memory, a configuration `c₀` cancels a continuation, `kappa H K` or `kappaC aff ℓ H K`
-(its cell), and a run from `c₀` reaches the start of its cancel run, `K₀[cancelOf K]` (after the
-three administrative steps, and at the cell after `ℓ`'s release).  When each of `K`'s finalisers is
-typed at a row of abortive operations of names in `FR`, names of `Ξ`: every path from there is a
-prefix of the cancel trace of the dead region `K†` with nothing kept (`CancelTr`).  The cancel is
-not interceptable: `K†` holds no handler and no `ccatch` frame (`hasHnd_dead`, `noCC_dead`), so
-it stops only at `K`'s finalisers, which it fires innermost first, each running alone, and at the
-running finalisers' `cfin` frames, which it passes (`[cfin-cancel]`); the first kept error wins;
-and the canceller gets `()` or the kept error, an error of a name of `Ξ`, re-raised.
-`[spec §19, §27]` -/
+the empty memory, a configuration `c₀` cancels a continuation, `kappa H K` or
+`kappaC hasCancel ℓ H K` (its cell), and a run from `c₀` reaches the start of its cancel run,
+`K₀[cancelOf K]` (after the three administrative steps, and at the cell after `ℓ`'s release).  When
+each of `K`'s finalisers is typed at a row of abortive operations of names in `FR`, names of `Ξ`:
+every path from there is a prefix of the cancel trace of the dead region `K†` with nothing kept
+(`CancelTr`).  The cancel is not interceptable: `K†` holds no handler and no `ccatch` frame
+(`hasHnd_dead`, `noCC_dead`), so it stops only at `K`'s finalisers, which it fires innermost first,
+each running alone, and at the running finalisers' `cfin` frames, which it passes (`[cfin-cancel]`);
+the first kept error wins; and the canceller gets `()` or the kept error, an error of a name of `Ξ`,
+re-raised. `[spec §19, §27]` -/
 theorem cancel_prefix {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerivesAt Ξ Δ Γ e j) {FR : UInt32 → Prop} (hFR : ∀ m, FR m → Ξ.Names m)
     {μ₀ μ : Heap} {K₀ : Kont} {H : Val} {K : Kont} {c₀ : Expr}
     (hc₀ : c₀ = K₀.plug (.app (kappa H K) (.val (Val.inj₂ .unit))) ∨
-      ∃ aff ℓ, c₀ = K₀.plug (.app (kappaC aff ℓ H K) (.val (Val.inj₂ .unit))))
+      ∃ hasCancel ℓ, c₀ = K₀.plug (.app (kappaC hasCancel ℓ H K) (.val (Val.inj₂ .unit))))
     (h₀ : Steps (ℍ := ℍ) Adequacy.emptyMem e μ₀ c₀)
     (hc : Steps (ℍ := ℍ) μ₀ c₀ μ (K₀.plug (cancelOf K)))
     (hfin : ∀ D ∈ K.fins, FinRow FR D) {q : List (Heap × Expr)}
@@ -2082,20 +2082,20 @@ theorem progOutT_cancel_prefix {q : List (Heap × Expr)}
     subst hD
     exact finRow_raiseU2
 
-/-! #### At an affine raise: a context with no unrestricted abortive operation
+/-! #### At a cancellable raise: a context with no unrestricted abortive operation
 
-`progOutTA` is `progOutT` with its raise of `2` affine (`rSigA 2`), every handler of `2` at the tag
-`aff`.  Its effect context `Ξ₁₂A`, `1 : 1 ↠^unr 1` and `2 : 1 ↠^aff 0`, has no unrestricted abortive
-operation (`noUnrExn_Ξ₁₂A`, decision 63's restriction), so a tied derivation at it has the shape
-the checker gives every program it accepts (`checkProgram_tiedAt`).  A tied derivation types it
-(`dAt_progOutTA`), its run cancels `κ` (`progOutTA_cancels`), and its region's finaliser raises
-`2`: it meets `cancel_prefix`'s hypotheses (`progOutTA_cancel_prefix`). -/
+`progOutTA` is `progOutT` with its raise of `2` cancellable (`rSigA 2`), every handler of `2` at the
+tag `cancel`.  Its effect context `Ξ₁₂A`, `1 : 1 ↠^unr 1` and `2 : 1 ↠^cancel 0`, has no
+unrestricted abortive operation (`noUnrExn_Ξ₁₂A`, decision 63's restriction), so a tied derivation
+at it has the shape the checker gives every program it accepts (`checkProgram_tiedAt`).  A tied
+derivation types it (`dAt_progOutTA`), its run cancels `κ` (`progOutTA_cancels`), and its region's
+finaliser raises `2`: it meets `cancel_prefix`'s hypotheses (`progOutTA_cancel_prefix`). -/
 
-/-- The effect context of `progOutTA`: `1 : 1 ↠^unr 1` and `2 : 1 ↠^aff 0`. -/
+/-- The effect context of `progOutTA`: `1 : 1 ↠^unr 1` and `2 : 1 ↠^cancel 0`. -/
 def Ξ₁₂A : EffCtx := fun n => if n = 1 then [(.unr, .unit, .unit)] else
-  if n = 2 then [(.aff, .unit, .zero)] else []
+  if n = 2 then [(.cancel, .unit, .zero)] else []
 
-/-- **`Ξ₁₂A` has no unrestricted abortive operation**: `1` resumes, and `2` is affine. -/
+/-- **`Ξ₁₂A` has no unrestricted abortive operation**: `1` resumes, and `2` is cancellable. -/
 theorem noUnrExn_Ξ₁₂A : Ξ₁₂A.NoUnrExn := by
   intro n p hp hq
   unfold Ξ₁₂A at hp
@@ -2132,7 +2132,7 @@ theorem rowAt_p1A (F : CTy) : RowAt Ξ₁₂A [pSig 1 F] :=
   rowAt_left (S' := [rSigA 2]) (rowAt_twoA' F)
 
 /-- `progTA`'s `[then]`, tied to `Ξ₁₂A`: `perform 1 then x. x unwind raise 2` at `{2, 1⟨{2}⟩}`,
-the raise affine. -/
+the raise cancellable. -/
 theorem dAt_then₂A {Δ : LifeCtx} :
     CDerivesAt Ξ₁₂A Δ [] ((uF (raiseU 2) .hole).plug (performU 1))
       (.comp (CTy.effOf [rSigA 2, pSig 1 (finRA 2)] .unit)) := by
@@ -2173,19 +2173,19 @@ theorem dAt_then₂A {Δ : LifeCtx} :
   · exact .effSub (RowLe.nil _) (.ret (.var (.here .nil)))
   · exact .effRaise (o := rSigA 2) rowAt_r2A rfl rfl .unit (.unitI (.cons .nil))
 
-/-- `hnd (2, H₂) [·]` around `progTA`'s `[then]`, tied, `H₂`'s tag `aff`. -/
+/-- `hnd (2, H₂) [·]` around `progTA`'s `[then]`, tied, `H₂`'s tag `cancel`. -/
 theorem dAt_inner₂A {Δ : LifeCtx} :
     CDerivesAt Ξ₁₂A Δ [] ((KA 2).plug (performU 1))
       (.comp (CTy.effOf [pSig 1 (finRA 2)] .unit)) := by
-  show CDerivesAt Ξ₁₂A Δ [] (hndExpr 2 [.aff] (.pair (.val idV) (.pair (.val (constC Val.unit))
+  show CDerivesAt Ξ₁₂A Δ [] (hndExpr 2 [.cancel] (.pair (.val idV) (.pair (.val (constC Val.unit))
     (.val Val.unit))) ((uF (raiseU 2) .hole).plug (performU 1))) _
-  exact .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.aff, .unit, .zero)]) (fs := finsNil)
+  exact .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.cancel, .unit, .zero)]) (fs := finsNil)
     (rowAt_twoA _) .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_idV _ .unit)
       (.tensorI .nil (d_constC_raise _ (.unitI (.cons .nil))) (.unitI .nil))) rfl)
     (by decide) (by simp [pSig]) (by simp) rfl dAt_then₂A
 
-/-- **`progTA` is typed by a tied derivation** at `Ξ₁₂A`, at the row holding the affine `2`. -/
+/-- **`progTA` is typed by a tied derivation** at `Ξ₁₂A`, at the row holding the cancellable `2`. -/
 theorem dAt_progTA {Δ : LifeCtx} :
     CDerivesAt Ξ₁₂A Δ [] progTA (.comp (CTy.effOf [rSigA 2] .unit)) := by
   show CDerivesAt Ξ₁₂A Δ [] (hndExpr 1 [.unr] (.pair (.val idV) (.pair (.val cancelCT)
@@ -2208,17 +2208,17 @@ theorem dAt_progTA {Δ : LifeCtx} :
 /-- **`progOutTA` is typed by a tied derivation** at `Ξ₁₂A`, at `F (1 ⊕ 1)`. -/
 theorem dAt_progOutTA {Δ : LifeCtx} :
     CDerivesAt Ξ₁₂A Δ [] progOutTA (.comp (.ret (.sum .unit .unit))) := by
-  show CDerivesAt Ξ₁₂A Δ [] (hndExpr 2 [.aff] (.pair (.val injlV)
+  show CDerivesAt Ξ₁₂A Δ [] (hndExpr 2 [.cancel] (.pair (.val injlV)
     (.pair (.val (constC (Val.inj₂ Val.unit))) (.val Val.unit))) progTA)
     (.comp (CTy.effOf [] (.sum .unit .unit)))
-  exact .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.aff, .unit, .zero)]) (fs := finsNil)
+  exact .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.cancel, .unit, .zero)]) (fs := finsNil)
     rowAt_r2A .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_injlV _ .unit .unit)
       (.tensorI .nil (d_constC_raise _ (.sumI₂ (.unitI (.cons .nil)))) (.unitI .nil))) rfl)
     (by decide) (by simp) (by simp) rfl dAt_progTA
 
-/-- The canceller's context in `progOutTA`: the live affine handler of `2`. -/
-abbrev K₂ₒA : Kont := hF (hQ 2 .aff injlV (constC (Val.inj₂ Val.unit))) .hole
+/-- The canceller's context in `progOutTA`: the live cancellable handler of `2`. -/
+abbrev K₂ₒA : Kont := hF (hQ 2 .cancel injlV (constC (Val.inj₂ Val.unit))) .hole
 
 /-- The finalisers of `KA m`: the one finaliser `λ_. raise m`. -/
 theorem fins_KA (m : UInt32) : (KA m).fins = [(finV (raiseU m)).1] := rfl

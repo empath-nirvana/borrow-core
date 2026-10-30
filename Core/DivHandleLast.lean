@@ -11,11 +11,11 @@ and while it works `κ`'s cancel is its unwind finaliser.
 
 **The rule** (`effHandleL`): the clauses are written out from a tuple of works `w` and a tuple of
 exits `nf` (`lastTuple`), as `effHandleT`'s are from its answering functions.  A work
-`w : !U(A ⊸ F_{Σ_W}(B ⊕ X))` runs at a row `Σ_W ≤ Σ`, and may tick, raise and perform affine
+`w : !U(A ⊸ F_{Σ_W}(B ⊕ X))` runs at a row `Σ_W ≤ Σ`, and may tick, raise and perform cancellable
 operations of the rows outside; an exit `nf : !U(X ⊸ F_Σ R)`.  The handler's operations are
-affine or abortive; an abortive operation's clause is its work `w : !U(A ⊸ F_Σ R)` itself.  `κ`'s
-type never appears in a program, so its cancel branch is given the table of the operation's own
-cancel row `fs j` (`ewp_handle_or`'s `hTc` asks only that it be above the entry's obligation).
+cancellable or abortive; an abortive operation's clause is its work `w : !U(A ⊸ F_Σ R)` itself.
+`κ`'s type never appears in a program, so its cancel branch is given the table of the operation's
+own cancel row `fs j` (`ewp_handle_or`'s `hTc` asks only that it be above the entry's obligation).
 
 **The proof** (`cwp_handle_last`), at a row holding `Div`, is `cwp_handle_tail`'s: the greatest
 fixed point of the handled computations together with the finaliser frame around a work, `κ` in
@@ -357,7 +357,7 @@ def LastFinOK (S SW : Row) (F : CTy) (X : VTy) : Prop :=
   F.isTop = false ∧ RowLe F.rowOf S ∧ Row.divB F.rowOf = false ∧
   (∀ m i o o', Row.find SW m i = some o → Row.find S m i = some o' →
     capB o.q o.B = true → ThenLe o.fin F.rowOf o'.fin) ∧
-  (Row.UnrD F.rowOf → SW.PendPers) ∧ (Row.Weak F.rowOf → X.Drop)
+  (Row.UnrD F.rowOf → SW.PendPers) ∧ (Row.Cancels F.rowOf → X.OwnFree)
 
 /-- **At the empty cancel row**, the one the checker emits, `LastFinOK` is `[then]`'s `hfin` at
 the empty finaliser row.  `[spec §27, §51]` -/
@@ -413,7 +413,7 @@ table of its cancel row `G`, beside `z`, which the cancel leaves held (left behi
 raise or be captured, so `X` drops there), and then runs the exit at `z`.  `[spec §51]` -/
 theorem last_cont {δ : LSub} {T' : OpTab} {Px' : Table} (hPx' : Px'.Mono) {G : Row}
     (hGT : (Row.tab G δ).Le T') (hGu : ∀ n i o, Row.find G n i = some o → o.q ≠ .unr)
-    {X : VTy} (hXd : G.Weak → X.Drop) {Qout : List SRec → Val → WProp} {en : OpEnt}
+    {X : VTy} (hXd : G.Cancels → X.OwnFree) {Qout : List SRec → Val → WProp} {en : OpEnt}
     (hq : en.q ≠ .lin) {B : VTy} (hPB : ∀ ls w ρ, vC true B ls δ w ρ → en.PB ls w ρ)
     {j : Nat} {vn nfv : Val} (hnf : PureSteps (pickE j (.val vn)) (.val nfv))
     (hX : ∀ ls z σ, vC true X ls δ z σ →
@@ -440,14 +440,14 @@ theorem last_cont {δ : LSub} {T' : OpTab} {Px' : Table} (hPx' : Px'.Mono) {G : 
       ((ewp_orBot (opTable_mono _)).mpr hcan) hz (ResU.CompS.comm hc)
     · intro m i en' hT ha ls' σ h
       obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
-      exact vC_noOwn_of_drop (hXd ⟨o, (Row.find_mem hf).1, OpSig.weak_of_ent (Or.inr ha)⟩) h
+      exact vC_noOwn_of_ownFree (hXd ⟨o, (Row.find_mem hf).1, OpSig.cancels_of_ent (Or.inr ha)⟩) h
     · intro m i en' hT hq'
       obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
       exact absurd hq' (hGu m i o hf)
     · intro m i en' hT ha hq' ls' K₁ ρ' σ ρ'' hcan' hσ hc'
       obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
       exact ent_plain δ _ (exitK_plain j vn z).1 ((exitK_plain j vn z).2 0)
-        (vC_noOwn_of_drop (hXd ⟨o, (Row.find_mem hf).1, OpSig.weak_of_ent (Or.inl hq')⟩) hσ) o
+        (vC_noOwn_of_ownFree (hXd ⟨o, (Row.find_mem hf).1, OpSig.cancels_of_ent (Or.inl hq')⟩) hσ) o
         hcan' hc'
     · rintro ls' w τ ⟨τa, τb, hcab, hw, hz'⟩
       obtain ⟨rfl, rfl⟩ := hw
@@ -482,7 +482,7 @@ section
 variable {δ : LSub} {S SW : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {Xs : Nat → VTy}
   {n : UInt32} {A R : VTy} (hnd : n ≠ divEff) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n)
   (hlen : E.length ≤ 2 ^ 32) (hNZ : S.NZ) (hSW : RowLe SW S) (hSu : ¬ S.UnrD)
-  (hAff : ∀ o ∈ E, o.1 = .aff ∨ (o.2.2.isZero && o.1 != .lin) = true)
+  (hCancel : ∀ o ∈ E, o.1 = .cancel ∨ (o.2.2.isZero && o.1 != .lin) = true)
   (hFin : ∀ j, j < E.length → LastFinOK S SW (fs j) (Xs j))
   {vr vw vn : Val} {ls₀ : List SRec}
   (hVr : vC true (retTy S A R) ls₀ δ vr PMap.empty)
@@ -522,14 +522,15 @@ theorem last_hTc {T : OpTab} (hT₀ : ∀ i en, T n i = some en →
   refine ⟨Row.tab (fs j).rowOf δ, ?_, OpTab.Le.refl _⟩
   rw [OpSig.ent_fin, if_pos hcap, finObl_eq, if_neg (by simp [(hFin j hj).1])]
 
-/-- A non-abortive operation of the handler is affine. -/
-theorem last_aff (hAff : ∀ o ∈ E, o.1 = .aff ∨ (o.2.2.isZero && o.1 != .lin) = true) {j : Nat}
+/-- A non-abortive operation of the handler is cancellable. -/
+theorem last_cancel (hCancel : ∀ o ∈ E, o.1 = .cancel ∨ (o.2.2.isZero && o.1 != .lin) = true)
+    {j : Nat}
     (hj : j < E.length) (ha : (E[j].2.2.isZero && E[j].1 != .lin) = false) : E[j].1 ≠ .lin := by
-  rcases hAff E[j] (List.getElem_mem hj) with h | h
+  rcases hCancel E[j] (List.getElem_mem hj) with h | h
   · rw [h]; decide
   · rw [ha] at h; cases h
 
-include hnd hn0 hnS hlen hNZ hSW hSu hAff hFin hVr hVw hVn in
+include hnd hn0 hnS hlen hNZ hSW hSu hCancel hFin hVr hVw hVn in
 /-- **`Closing` under a `[handle-last]` handler**: Core's `ewp_handle` at the closing tables; a
 clause's work is in `Closing` at its row, under the finaliser frame (`closing_then`), whose answer
 is `last_cont` at the closing table. -/
@@ -563,7 +564,7 @@ theorem last_closing (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {ρ :
       show ewpTS ls' (.app (lastClause j (OpSig.ent δ _).abort (.val vw) (.val vn))
         (.pair (.val v) κ.1)) _ _ σ
       rw [ha]
-      have hq := last_aff hAff hj ha
+      have hq := last_cancel hCancel hj ha
       obtain ⟨hFt, hFS, hFd, hFth, hFP, hFX⟩ := hFin j hj
       have hTcj : lastTc fs δ i = some (Row.tab (fs j).rowOf δ) := by simp [lastTc, hji]
       rw [hTcj] at hσ
@@ -662,7 +663,7 @@ section
 variable {δ : LSub} {S SW : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {Xs : Nat → VTy}
   {n : UInt32} {A R : VTy} (hnd : n ≠ divEff) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n)
   (hlen : E.length ≤ 2 ^ 32) (hNZ : S.NZ) (hSW : RowLe SW S) (hSu : ¬ S.UnrD)
-  (hAff : ∀ o ∈ E, o.1 = .aff ∨ (o.2.2.isZero && o.1 != .lin) = true)
+  (hCancel : ∀ o ∈ E, o.1 = .cancel ∨ (o.2.2.isZero && o.1 != .lin) = true)
   (hFin : ∀ j, j < E.length → LastFinOK S SW (fs j) (Xs j))
   {vr vw vn : Val} {ls₀ : List SRec}
   (hVr : vC true (retTy S A R) ls₀ δ vr PMap.empty)
@@ -680,7 +681,7 @@ def lastP (δ : LSub) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CT
     Nv = lastN j κ vn ∧ Dv = lastD κ ∧ PureSteps (pickE j (.val vn)) (.val nfv) ∧
     vC true (exitTy S R (Xs j)) ls₀ δ nfv PMap.empty
 
-include hnd hn0 hnS hlen hNZ hSW hSu hAff hFin hVr hVw hVn in
+include hnd hn0 hnS hlen hNZ hSW hSu hCancel hFin hVr hVw hVn in
 /-- **`[handle-last]` at a row holding `Div`**, by coinduction with the candidate `lastY`: the
 handled computations under the handler (`ewp_handle_or`, the inner tick passing the handler),
 and the finaliser frame around a work, one segment each (`cwpF_frame_then`), `κ` resumed or
@@ -708,7 +709,7 @@ theorem cwp_handle_last (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {�
       cwpF (Row.tab S δ) (fun ls v => vC true R ls δ v) Y ls x ρ := by
     rintro ls x ρ ⟨κ, y, en, Tk, Q₁, Nv, Dv, ρy, ρk,
       ⟨j, hj, nfv, ha, rfl, rfl, rfl, rfl, rfl, hnf, hVnf⟩, rfl, hy, hk, hcy⟩
-    have hq := last_aff hAff hj ha
+    have hq := last_cancel hCancel hj ha
     obtain ⟨-, hFS, hFd, hFth, hFP, hFX⟩ := hFin j hj
     refine cwpF_frame_then hSd hFd hNZ hSW hFS hFth hFP (lastN j κ vn) (lastD κ)
       (fun ls => KapRelT (divTab (Row.tab S δ) (fun ls v => vC true R ls δ v) Y)
@@ -764,7 +765,7 @@ theorem cwp_handle_last (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {�
       have ho := hcont ls'' he w hw
       rw [Kont.plug_comp]
       exact ⟨lastY_fold (Or.inl ⟨_, rfl, ho.1⟩),
-        last_closing hnd hn0 hnS hlen hNZ hSW hSu hAff hFin hVr hVw hVn hSd ho.2⟩
+        last_closing hnd hn0 hnS hlen hNZ hSW hSu hCancel hFin hVr hVw hVn hSd ho.2⟩
     · intro ls' v σ hv
       have hf := (hVr.2 ls' (ext_empty' ls₀ ls')) v σ σ hv (compS_empty_left σ)
       have := (cC_effOf_wp S R ls' δ _ σ).mp hf
@@ -819,14 +820,14 @@ section
 variable {δ : LSub} {S SW : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {Xs : Nat → VTy}
   {n : UInt32} {A R : VTy} (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n)
   (hlen : E.length ≤ 2 ^ 32) (hNZ : S.NZ) (hSW : RowLe SW S) (hSu : ¬ S.UnrD)
-  (hAff : ∀ o ∈ E, o.1 = .aff ∨ (o.2.2.isZero && o.1 != .lin) = true)
+  (hCancel : ∀ o ∈ E, o.1 = .cancel ∨ (o.2.2.isZero && o.1 != .lin) = true)
   (hFin : ∀ j, j < E.length → LastFinOK S SW (fs j) (Xs j))
   {vr vw vn : Val} {ls₀ : List SRec}
   (hVr : vC true (retTy S A R) ls₀ δ vr PMap.empty)
   (hVw : vC true (worksTy S SW R Xs E 0) ls₀ δ vw PMap.empty)
   (hVn : vC true (exitsTy S R Xs E 0) ls₀ δ vn PMap.empty)
 
-include hn0 hnS hlen hNZ hSW hSu hAff hFin hVr hVw hVn in
+include hn0 hnS hlen hNZ hSW hSu hCancel hFin hVr hVw hVn in
 /-- **A `[handle-last]` handler at a row that does not hold `Div`**: Core's `ewp_handle`; a
 clause's work runs at its row under the finaliser frame (`ewp_frame_then`), whose answer is
 `last_cont`.  `[spec §19, §27, §51]` -/
@@ -850,7 +851,7 @@ theorem ewp_handle_last (hSd : Row.divB S = false) {ls : List SRec} {e : Expr} {
     · show ewpTS ls' (.app (lastClause j (OpSig.ent δ _).abort (.val vw) (.val vn))
         (.pair (.val v) κ.1)) _ _ σ
       rw [ha]
-      have hq := last_aff hAff hj ha
+      have hq := last_cancel hCancel hj ha
       obtain ⟨-, hFS, -, hFth, hFP, hFX⟩ := hFin j hj
       have hTcj : lastTc fs δ i = some (Row.tab (fs j).rowOf δ) := by simp [lastTc, hji]
       rw [hTcj] at hσ
@@ -889,7 +890,7 @@ theorem ewp_handle_last (hSd : Row.divB S = false) {ls : List SRec} {e : Expr} {
 end
 
 /-- **`[handle-last]`** (T-A): `handle_n e with (h_ret, ws, nfs)`, the clauses written out from the
-works `ws` and the exits `nfs` (`lastTuple`).  The handler's operations are affine or abortive,
+works `ws` and the exits `nfs` (`lastTuple`).  The handler's operations are cancellable or abortive,
 the work's row `Σ_W ≤ Σ`, `Σ` with no unrestricted operation at any depth (`κ` is not
 persistent), and each operation's cancel row as `LastFinOK` says.  At a row holding `Div` the
 handled computation's ticks pass the handler (`cwp_handle_last`); elsewhere it is Core's handler
@@ -902,7 +903,7 @@ theorem handleL_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Hr Hw Hn e : 
     (hc : SemV Δ Γ₁ (.pair Hr (.pair Hw Hn))
       (.tensor (retTy S A R) (.tensor (worksTy S SW R Xs E 0) (exitsTy S R Xs E 0))))
     (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
-    (hNZ : S.NZ) (hAff : ∀ o ∈ E, o.1 = .aff ∨ (o.2.2.isZero && o.1 != .lin) = true)
+    (hNZ : S.NZ) (hCancel : ∀ o ∈ E, o.1 = .cancel ∨ (o.2.2.isZero && o.1 != .lin) = true)
     (hSW : RowLe SW S) (hSu : ¬ S.UnrD)
     (hFin : ∀ j, j < E.length → LastFinOK S SW (fs j) (Xs j))
     (he : SemC Δ Γ₂ e (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)) :
@@ -960,14 +961,14 @@ theorem handleL_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Hr Hw Hn e : 
     intro ρf fρ ps hf hcf hT htg Al k
     obtain ⟨ls', vr, vw, vn, h₁, h₂, h₃, hVr, hVw, hVn⟩ := key ρf fρ ps hf hcf hT htg
     rw [h₁, h₂, h₃]
-    exact ewp_unfold (opTable_mono _) (ewp_handle_last (fs := fs) hn0 hnS hlen hNZ hSW hSu hAff hFin
-      hVr hVw hVn hSd hE') ρf fρ ps hf hcf hT htg Al k
+    exact ewp_unfold (opTable_mono _) (ewp_handle_last (fs := fs) hn0 hnS hlen hNZ hSW hSu hCancel
+      hFin hVr hVw hVn hSd hE') ρf fρ ps hf hcf hT htg Al k
   · refine cwp_roll (ewp_fold (divTab_mono _ _ _) ?_)
     intro ρf fρ ps hf hcf hT htg Al k
     obtain ⟨ls', vr, vw, vn, h₁, h₂, h₃, hVr, hVw, hVn⟩ := key ρf fρ ps hf hcf hT htg
     rw [h₁, h₂, h₃]
     exact ewp_unfold (divTab_mono _ _ _) (cwp_out (cwp_handle_last (fs := fs) hnd hn0 hnS hlen hNZ
-      hSW hSu hAff hFin hVr hVw hVn hSd hE')) ρf fρ ps hf hcf hT htg Al k
+      hSW hSu hCancel hFin hVr hVw hVn hSd hE')) ρf fρ ps hf hcf hT htg Al k
 
 end BoCa.Fig16.LogRel.Core
 

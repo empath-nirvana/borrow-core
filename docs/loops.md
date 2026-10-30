@@ -359,7 +359,7 @@ div today (measured: `main : F U (delay i32)` for GR, and "`for` is div: `gen` l
     remain.
   - The `let mut` variables live after the loop still travel in the raise's payload. The payload
     is the same set as a join point's parameters.
-  - At a generator site the clause holds an affine `κ`, which has no destructor. It must cancel
+  - At a generator site the clause holds a cancellable `κ`, which has no destructor. It must cancel
     `κ` before raising, as `leave` does today, so nothing is saved there.
 
 | option | exits | covers | decision needed |

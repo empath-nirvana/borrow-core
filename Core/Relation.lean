@@ -247,7 +247,7 @@ def SemC (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (C : CTy) : Prop :=
 abbrev SemV (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (A : VTy) : Prop := SemC Δ Γ e (.ret A)
 
 /-- `!Γ`: every live slot is at a `!` type. -/
-def Persistent (Γ : Ctx VTy) : Prop := ∀ s ∈ Γ, s.live = true → ∃ A, s.ty = .bang A
+def Ctx.Banged (Γ : Ctx VTy) : Prop := ∀ s ∈ Γ, s.live = true → ∃ A, s.ty = .bang A
 
 end BoCa.Fig16.LogRel.Core
 

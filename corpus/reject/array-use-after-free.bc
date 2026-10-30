@@ -11,4 +11,4 @@ main : F (A * (i32 + i32)) =
   u <- return ((unbang array_free[i32]) (gone, a));
   let () = u;
   return ((unbang array_replace[i32]) (a, (i32[0], i32[1])))
--- expect: 11:3: `a` is used twice here, and its type `array i32` is not persistent
+-- expect: 11:3: `a` is used twice here, and its type `array i32` is linear

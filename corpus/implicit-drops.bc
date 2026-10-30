@@ -8,7 +8,7 @@
 -- * `t1`, a stream whose state owns a cell, is dropped after one element. Its destructor is
 --   `close`, and the close component returns `()` without mentioning its state `s`, which is
 --   dropped there: the close frees the cell.
--- * `q` is `linear`: it must be consumed, and it is.
+-- * `q` is consumed by `free`, so nothing is dropped for it.
 --
 -- Answer: i32[6047]: 7 (the head of [7, 30]) + 1000 (the `inl` arm) + 5000 (the stream's first
 -- element) + 40 (read from `q`). The wrong arm of the first `case` gives 7040, of the second
@@ -64,6 +64,6 @@ main : F i32 =
   t0 <- return (thunkv stream_in < (stream_out (force f z)).1, (stream_out (force f z)).2 >);
   p1 <- (stream_out (force t0)).1;
   let (x1, t1) = p1;
-  linear q <- return (alloc[i32] i32[40]);
+  q <- return (alloc[i32] i32[40]);
   v <- return (free[i32] q);
   return (plus (plus (plus (n, m), x1), v))

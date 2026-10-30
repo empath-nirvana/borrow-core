@@ -1,11 +1,5 @@
 # The new backend's counts per run (scripts/compile-backend2.sh, bcc-counts --backend new): name allocs indirect copies loads stores bounds.
 13-2-sum-prog 37 9 3 120 78 0
-aff-capture 1 0 0 3 3 0
-aff-coerce 1 0 0 3 3 0
-aff-counter 2 0 0 17 17 0
-aff-depth 2 0 0 29 29 0
-aff-drop 3 0 0 5 5 0
-aff-higher 2 6 0 8 8 0
 answers-two-types 0 2 0 0 0 0
 aoc/2020-08 9 0 0 10217 7452 3481
 aoc/2021-06 7 0 0 6410 4780 2264
@@ -80,6 +74,12 @@ capture-store-raise 0 0 0 0 0 0
 capture-take-hand 1 0 0 1 1 0
 capture-tick-hand 0 0 0 0 0 0
 clause-captures 6 3 0 10 10 0
+clo-capture 1 0 0 3 3 0
+clo-coerce 1 0 0 3 3 0
+clo-counter 2 0 0 17 17 0
+clo-depth 2 0 0 29 29 0
+clo-drop 3 0 0 5 5 0
+clo-higher 2 6 0 8 8 0
 clone-reuse 6 0 1 27 18 0
 comp-param 0 0 0 0 0 0
 core-callback-dead 0 0 0 0 0 0

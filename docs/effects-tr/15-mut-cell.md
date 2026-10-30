@@ -18,8 +18,8 @@ is marked open, with its exact statement.
    *rebased*: its resource is in `Res_c`, the stratum strictly above `'c`. Resume is `d_callMut`.
    Drop is `close`, which runs the continuation's cancel, and that cancel disposes of every owned
    cell exactly once. The one new proof is a coinduction (T14.4). It shows that the kernel's
-   continuation value `kappa n H K`, under a handler whose `yield` clause returns it, is an affine
-   closure `Aff^c` (§22). Every other step is an existing lemma.
+   continuation value `kappa n H K`, under a handler whose `yield` clause returns it, is a closure
+   `Clo^c` (§22). Every other step is an existing lemma.
 2. **Rebasing costs nothing.** No relabelling is needed. [TR]'s `↭` already keeps every lifetime a
    run opens out of what the run hands back, at a stop as at a return (L14.1). [TR] 6.147
    (`wpTS_box`), through 6.50 (`updV_outlives`), puts each new suspension back in `Res_c`
@@ -62,13 +62,13 @@ a smaller number lives longer, `⊤ = 0`.
   `mut(b, u, σ, Q)` with `α ⊑ b` and `σ ∈ Res_b`; its predicate `Q` read at `ls₀`, the members of
   `ls` strictly longer-lived than `b`; and `P` lying in `Res_b` at every list (`hunif`).
 
-**Definition D14.2 (the cell and its invariant).** The cell has type `Mut @a ([@c] U(Aff^c A B))`
-(SPEC §22, `affBox`). Its resource is
+**Definition D14.2 (the cell and its invariant).** The cell has type `Mut @a ([@c] U(Clo^c A B))`
+(SPEC §22, `cloBox`). Its resource is
 
-    ptoMutS ℓ_c δ(a) ls (λ ls₀. vC true (affBox c A B) ls₀ δ)
+    ptoMutS ℓ_c δ(a) ls (λ ls₀. vC true (cloBox c A B) ls₀ δ)
 
-so its witness `ρ̄` is in `Res_b ∩ Res_{δ(c)}`, and the content `v` satisfies `𝒱⟦[@c] U(Aff^c A B)⟧`.
-By `cC_aff_iff` (`Core/Aff.lean`) this is the **invariant at `'c`**:
+so its witness `ρ̄` is in `Res_b ∩ Res_{δ(c)}`, and the content `v` satisfies `𝒱⟦[@c] U(Clo^c A B)⟧`.
+By `cC_clo_iff` (`Core/Clo.lean`) this is the **invariant at `'c`**:
 
 - `@ρ̄ ⊐ δ(c)`;
 - at every list `ls'` with `Ext ls ls' ρ̄`:
@@ -84,7 +84,7 @@ following fields:
 
 | field | value | meaning |
 |---|---|---|
-| `q` | `aff` | resumed at most once, or cancelled |
+| `q` | `cancel` | resumed at most once, or cancelled |
 | `abort` | `false` | a resuming operation |
 | `PA` | `vC B_y` | the argument relation |
 | `PB` | `vC A` | the answer relation |
@@ -98,19 +98,19 @@ The handler is
 and `gen(M) ≜ hnd H_gen M`.
 
 - `B ≜ B_y ⊕ 1`.
-- `done` is the closed affine closure that answers `(inj₂ (), done)` at every call and `()` at
-  `close`. It is derivable by `d_mkBox` at the state `1`, so `fundamentalC` puts it in `vC (affBox c A B)`.
+- `done` is the closed `Clo` closure that answers `(inj₂ (), done)` at every call and `()` at
+  `close`. It is derivable by `d_mkBox` at the state `1`, so `fundamentalC` puts it in `vC (cloBox c A B)`.
 - The handler is deep. At a stop the machine reifies `κ = kappa n H_gen K` (`Core/EffRules.lean`).
   It has two branches, `κ (inj₁ ()) w` (`ewp_kappa_resume`: run `hnd H_gen K[w]`) and
   `κ (inj₂ ())` (`ewp_kappa_cancel`: run the cancel under `ccatch`). These are exactly
-  `Aff^c`'s eliminations `call` and `close`, in the same encoding (`cC_aff_iff`'s
+  `Clo^c`'s eliminations `call` and `close`, in the same encoding (`cC_clo_iff`'s
   `.app (.app e (inj₁ ())) a` and `.app e (inj₂ ())`). This is the representation #251 asks for:
   resume is `call`, cancel is `close`.
 
 **Definition D14.4 (the generator's postcondition).** `Q_gen` is the greatest fixed point of
 
     F(Q)(ls, v)  ≜  (∃ b κ'. v = (inj₁ b, κ')  ∧  vC B_y ls δ b ⋆ KapRel ∅ Q en_y ls κ')
-                 ∨  (v = (inj₂ (), done)  ∧  vC (affBox c A B) ls δ done)
+                 ∨  (v = (inj₂ (), done)  ∧  vC (cloBox c A B) ls δ done)
 
 `KapRel Tout Qout en ls κ` is the relation of `κ`'s type at an operation's entry
 (`Core/EffRules.lean`):
@@ -144,13 +144,13 @@ suspended lifetimes in the world", #245).
 
 **Definition D14.6 (resume and drop).**
 
-- **Resume** is `callMutE i j` (`d_callMut`, `Core/AffRules.lean`):
+- **Resume** is `callMutE i j` (`d_callMut`, `Core/CloRules.lean`):
   1. `withswap` the witness out ([TR] 6.66 in the proof of `withswap_compatX`, `wpTS_M_antiFrameX`);
   2. call it at `a` (`κ (inj₁ ()) a`), which resumes `K` under `H_gen` up to the next `yield` or
      the end of the body;
   3. swap the rest in.
 - **Drop** is `close`: `κ (inj₂ ())`, which is cancel. It is reached as the destructor of the cell's
-  content (`hasDtor_aff`, `hasDtor_affBox`; SPEC §12 class 2) or by `d_closeBox`.
+  content (`hasDtor_clo`, `hasDtor_cloBox`; SPEC §12 group 2) or by `d_closeBox`.
 
 ## 14.2 Rebasing is forced by `↭`
 
@@ -193,36 +193,36 @@ new machinery.
 *Proof.* `ewp_handle` (`Core/EffRules.lean`) with `Tin = T_y` and `Tout = ∅`.
 
 - `hret`: `hr ()` returns `(inj₂ (), done)`. `ewp_val`, the right disjunct of `F(Q_gen) =
-  Q_gen`, and `done ∈ vC (affBox c A B)` (D14.3).
+  Q_gen`, and `done ∈ vC (cloBox c A B)` (D14.3).
 - `hop` at `en_y` (non-abortive): the hypothesis is `(vC B_y ls δ b ⋆ KapRel ∅ Q_gen en_y ls κ) ρ`.
   The clause returns `(inj₁ b, κ)`, which is the left disjunct of `F(Q_gen) = Q_gen` with the same
   resources. `ewp_val`. ∎
 
-**Theorem T14.4 (a rebased continuation is a bounded affine closure).** Assume:
+**Theorem T14.4 (a rebased continuation is a bounded `Clo` closure).** Assume:
 
-- (H1) `en_y.q = aff`;
+- (H1) `en_y.q = cancel`;
 - (H2) `ρ̄ ∈ Res_{δ(c)}`;
 - (H3) `KapRel ∅ Q_gen en_y ls κ ρ̄`;
 - (H4) `Δ ⊢ A ⊐ @c` (SPEC §23's `VOutlives`, strict at the `Imm`/`Mut` rules) and `A.Cl 0`.
 
-Then `vC true (affBox c A B) ls δ κ ρ̄`.
+Then `vC true (cloBox c A B) ls δ κ ρ̄`.
 
 *Proof.* The box clause of `vC` asks two things.
 
 - **The stratum.** This is (H2).
-- **The thunk.** `vC true (affT c A B) ls δ κ ρ̄`: at every `ls'` with `Ext ls ls' ρ̄`,
-  `cC (affC c A B) ls' δ κ ρ̄`.
+- **The thunk.** `vC true (cloT c A B) ls δ κ ρ̄`: at every `ls'` with `Ext ls ls' ρ̄`,
+  `cC (cloC c A B) ls' δ κ ρ̄`.
 
-The thunk is by `aff_coind` (`Core/Aff.lean`) with the candidate
+The thunk is by `clo_coind` (`Core/Clo.lean`) with the candidate
 
-    R ≜ R_κ ∪ nuRel (affBody c A B) δ
+    R ≜ R_κ ∪ nuRel (cloBody c A B) δ
     R_κ(ls, e, ρ) ≜ ∃ κ. e = κ ∧ ρ ∈ Res_{δ(c)} ∧ KapRel ∅ Q_gen en_y ls κ ρ
 
 `R_κ` holds of `κ` at every such `ls'`, by (H2) and (H3) with `Ext.trans`, since `KapRel` is
-Kripke. It remains to show `R ⊆ nuF (affBody c A B) δ R`.
+Kripke. It remains to show `R ⊆ nuF (cloBody c A B) δ R`.
 
 - **`nuRel` part:** `nuRel_out`, then `nuF_mono` along `nuRel ⊆ R` (`Core/NuRel.lean`).
-- **`R_κ` part:** the two clauses of `cC_aff_iff`'s unrolling, with `U X` read at `R`.
+- **`R_κ` part:** the two clauses of `cC_clo_iff`'s unrolling, with `U X` read at `R`.
   1. **call.** Let `a` and `r_a` satisfy `vC A ls δ a r_a`, and compose `ρ ● r_a`.
      - (H3)'s resumption conjunct at `ls' = ls` (`Ext.refl`) gives
        `ewpTS ls (κ (inj₁ ()) a) (opTable ∅) Q_gen (ρ ● r_a)`, which is `wpTS` by D14.4.
@@ -237,7 +237,7 @@ Kripke. It remains to show `R ⊆ nuF (affBody c A B) δ R`.
 
          So `κ'` is in `thunkR R` (`Core/Relation.lean`) at `ls''`, through `R_κ`. The boxed rest
          `[@c] U X` holds: the stratum, then `thunkR R`.
-       - **Right disjunct**, `(inj₂ (), done)`: `done ∈ vC (affBox c A B)`, which is `nuRel` behind
+       - **Right disjunct**, `(inj₂ (), done)`: `done ∈ vC (cloBox c A B)`, which is `nuRel` behind
          the box. So it is in `R`.
 
      Together these give `vC (B ⊗ [@c] U X)` read at `R`.
@@ -247,7 +247,7 @@ Kripke. It remains to show `R ⊆ nuF (affBody c A B) δ R`.
 **Theorem T14.5 (the `Mut`-cell lemma).** Let `ℓ_c` hold a cell as in D14.2 whose content is a
 rebased continuation (D14.5) under (H1) and (H4). Then:
 
-1. **Resume.** For `m : Mut @a ([@c] U(Aff^c A B))` at `ℓ_c` and `a ∈ 𝒱⟦A⟧`, `callMutE` runs to
+1. **Resume.** For `m : Mut @a ([@c] U(Clo^c A B))` at `ℓ_c` and `a ∈ 𝒱⟦A⟧`, `callMutE` runs to
    `(m, b)` with `b ∈ 𝒱⟦B⟧`, and afterwards the cell satisfies D14.2's invariant again. If the
    call reached a `yield`, the new content is a rebased continuation.
    - The resumed continuation re-opens, inside its obligation, whatever it re-opens, at the
@@ -262,10 +262,10 @@ rebased continuation (D14.5) under (H1) and (H4). Then:
 
 *Proof.*
 
-1. By T14.4 the content is in `vC (affBox c A B)`. `d_callMut` is a `CDerives` derivation, so
+1. By T14.4 the content is in `vC (cloBox c A B)`. `d_callMut` is a `CDerives` derivation, so
    `fundamentalC` gives its semantic typing at every closing substitution in `𝒢⟦Γ⟧`, including one
    that maps the borrow to `ℓ_c` and the argument to `a`. Its derivation is `withswap`, `[]E` and
-   `d_callAff`, so its soundness is `withswap_compatX` (6.66 inside), `cC_aff_iff`'s call clause
+   `d_callClo`, so its soundness is `withswap_compatX` (6.66 inside), `cC_clo_iff`'s call clause
    and the `[]I` of the rest. The rest is the call clause's `[@c] U X` at T14.4's candidate `R`.
    - At a `yield` it is in `R_κ`: a rebased continuation.
    - At the body's end it is `done`.
@@ -278,7 +278,7 @@ rebased continuation (D14.5) under (H1) and (H4). Then:
      never gets stuck (`wpG`), so no location is freed twice. None is left in `ρ⁺` as `own`.
    - The cancel run itself is `ewp_kappa_cancel` then `ewp_ccatch`. It unwinds `K`'s frames
      innermost first, running their finalisers (SPEC §19 [finalise-cancel]).
-   - The content is consumed by `close`. `not_persistent_affBox` and `not_affine_aff` leave no
+   - The content is consumed by `close`. `not_persistent_affBox` and `not_forgettable_clo` leave no
      copy that could be resumed or cancelled again. ∎
 
 T14.5 is the lemma #251 states. Every step is an existing lemma except two things written here:
@@ -291,7 +291,7 @@ turns on which bodies *produce* one.
 
 **Theorem T14.6 (production without a spanning lend).** Assume:
 
-- `Δ; Γ ⊢ M : F_Σ 1` in the kernel, with `Σ = {yield : B_y ↠ A}` at `aff`;
+- `Δ; Γ ⊢ M : F_Σ 1` in the kernel, with `Σ = {yield : B_y ↠ A}` at `cancel`;
 - `Δ ⊢ Γ ⊐ @c` and (H4);
 - `γ ∈ 𝒢⟦Γ⟧δ` at `ρ`.
 
@@ -311,12 +311,12 @@ lifetime the body opens has ended before it suspends. This is T1 as the kernel s
 
 **Definition D14.7 (candidate rule `[gen]`).**
 
-    Δ; Γ ⊢ M : F_{yield : B_y ↠ A (aff)} 1      Δ ⊢ Γ ⊐ @c      Δ ⊢ A ⊐ @c      A.Cl 0
+    Δ; Γ ⊢ M : F_{yield : B_y ↠ A (cancel)} 1      Δ ⊢ Γ ⊐ @c      Δ ⊢ A ⊐ @c      A.Cl 0
     ─────────────────────────────────────────────────────────────────────────────────────────
-    Δ; Γ ⊢ gen_c M : F((B_y ⊕ 1) ⊗ [@c] U(Aff^c A (B_y ⊕ 1)))
+    Δ; Γ ⊢ gen_c M : F((B_y ⊕ 1) ⊗ [@c] U(Clo^c A (B_y ⊕ 1)))
 
 - `H_gen`'s clause boxes `κ` at `@c`. The kernel cannot type that today: `κ : U(…)` has no outlives
-  rule (SPEC §22, `aff_not_outlives`), so `[]I` refuses it. That is the reason for a rule.
+  rule (SPEC §22, `clo_not_outlives`), so `[]I` refuses it. That is the reason for a rule.
 - Its compatibility lemma is T14.6 followed by T14.4.
 - It is one `CDerives` rule and adds no index. Under the growth discipline it needs a SPEC entry
   before it lands, and none is made here.
@@ -384,7 +384,7 @@ where:
 needs `@(rest) ⊐ α′`, which the fresh choice gives. This is a sketch, not a proof.
 
 *What exists.* The existing relabelling (§15.5) proves O14.2's conclusion only for `imm` views at
-data types. `relabel_obs`'s `thunk` case is the observable view, `True` (`vC_obs_aff`), so it
+data types. `relabel_obs`'s `thunk` case is the observable view, `True` (`vC_obs_clo`), so it
 transports nothing at `U`.
 
 ## 14.5 How rebasing instantiates the existing machinery
@@ -460,7 +460,7 @@ lend ends before the `yield` and begins again after it. LoopBorrow covers it wit
 covers the lend only. A view or closure derived from it cannot survive the `yield`
 (`not_lendingYield_mut`, `not_lendingYield_imm`).
 
-**C14.3 (generator objects).** Take `gen_c M` (D14.7) stored in a cell `Mut @a ([@c] U(Aff^c A
+**C14.3 (generator objects).** Take `gen_c M` (D14.7) stored in a cell `Mut @a ([@c] U(Clo^c A
 (B_y ⊕ 1)))`.
 
 - `next` is `d_callMut`.
@@ -476,7 +476,7 @@ covers the lend only. A view or closure derived from it cannot survive the `yiel
 | **borrowed from outside** at `'x ⊐ 'c` | yes | `Δ ⊢ Γ ⊐ @c` in D14.7, so 6.62 puts it in `Res_{δ(c)}` |
 | **borrowed inside the generator** across the `yield` | open | O14.1 |
 
-**C14.5 (task queues).** A queue is a family of cells of `[@c] U(Aff^c A B)`. Polling a task is
+**C14.5 (task queues).** A queue is a family of cells of `[@c] U(Clo^c A B)`. Polling a task is
 `d_callMut` on its cell (C14.1: the scheduler may hold lends while it polls). A finished task is
 dropped by `close`. Tasks are disjoint because their witnesses are separate owned resources
 (6.41). Tasks whose bodies have no spanning lend are covered.
@@ -493,7 +493,7 @@ other suspension.
 | L14.1 | a suspension holds no internal cell | proved here; kind-level part machine-checked (`upd_borrow_top`) |
 | L14.2 | re-rebasing | [TR] 6.147 at the typed world, mechanised (`wpTS_box`) |
 | L14.3 | the generator handler | proved here, an instance of `ewp_handle` |
-| T14.4 | a rebased continuation is a bounded affine closure | proved here, by `aff_coind` |
+| T14.4 | a rebased continuation is a bounded `Clo` closure | proved here, by `clo_coind` |
 | **T14.5** | **the `Mut`-cell lemma: resume and drop** | **proved here** |
 | T14.6 | production without a spanning lend | proved here, from `fundamentalC` |
 | D14.7 | the rule `[gen]` | candidate; its compatibility is T14.6 + T14.4; needs a SPEC entry |
@@ -508,27 +508,27 @@ other suspension.
 3. L14.3 as one application of `ewp_handle`.
 4. L14.1's lifetime clause, extending `upd_borrow_top`.
 
-Everything else is cited by name: `cC_aff_iff`, `aff_coind`, `nuF_mono`, `nuRel_out`,
+Everything else is cited by name: `cC_clo_iff`, `clo_coind`, `nuF_mono`, `nuRel_out`,
 `KapRel`, `ewp_kappa_resume`, `ewp_kappa_cancel`, `ewp_ccatch`, `cC_effOf`, `wpTS_box`,
 `updV_outlives`, `outlives_comp`, `vC_outlives`, `d_callMut`, `withswap_compatX`,
-`hasDtor_affBox`, `not_persistent_affBox`, `fundamentalC`. No `CDerives` index is added. D14.7
+`hasDtor_cloBox`, `not_persistent_affBox`, `fundamentalC`. No `CDerives` index is added. D14.7
 is one rule.
 
 **Hypotheses, and where each is spent.**
 
 | hypothesis | spent in |
 |---|---|
-| (H1) `aff` | T14.4's close clause |
+| (H1) `cancel` | T14.4's close clause |
 | (H2) | the box and the call's stratum |
 | (H3) | both clauses |
 | (H4) | the call's stratum, through 6.60 |
-| `A.Cl 0` | `cC_aff_iff` and `aff_coind` |
+| `A.Cl 0` | `cC_clo_iff` and `clo_coind` |
 | `Δ ⊢ Γ ⊐ @c` (T14.6) | 6.62 at the first run |
 
 **Not covered here.**
 
-- Forwarded effects (`Tout ≠ ∅`). Their `Aff` would be §22's effectful closure, whose relation
-  clause is not stated in `Core/Aff.lean`.
+- Forwarded effects (`Tout ≠ ∅`). Their `Clo` would be §22's effectful closure, whose relation
+  clause is not stated in `Core/Clo.lean`.
 - Multi-shot continuations (`q = unr`). `KapRel` asks `ρ = ∅` there, and the closure is
-  persistent, not affine.
+  unrestricted, with no `close` to run.
 - The relevant qualifier (open in SPEC §19).

@@ -174,7 +174,7 @@ def loopStep : Val := .lam (withPair (.inj₂ (.var 2)) (.var 2))
 
 theorem d_loopStep {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ (.val loopStep) (.val (.bang (.thunk (stepDC .unit .unit)))) :=
-  .bangThunkV (persistent_dead hΓ) rfl (.lam (.withI
+  .bangThunkV (banged_dead hΓ) rfl (.lam (.withI
     (.ret (.sumI₂ (.var (.there (.there (.here hΓ))))))
     (.ret (.var (.there (.there (.here hΓ)))))))
 
@@ -221,7 +221,7 @@ def countDownStep : Val := .lam (withPair countDownNext countDownClose)
 theorem d_countDownStep {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ (.val countDownStep)
       (.val (.bang (.thunk (stepDC natN (.tensor natN natN))))) := by
-  refine .bangThunkV (persistent_dead hΓ) rfl (.lam (.withI ?_ ?_))
+  refine .bangThunkV (banged_dead hΓ) rfl (.lam (.withI ?_ ?_))
   · refine .tensorE (.dead (.dead (.left (deadSplit hΓ)))) (.var (.there (.there (.here hΓ)))) ?_
     refine .sumE (.right (.left (.dead (.dead (.dead (deadSplit hΓ))))))
       (natN_unroll ▸ CDerives.unroll (A := natBody) (.var (.there (.here (.cons (.cons (.cons hΓ))))))) ?_ ?_
@@ -282,7 +282,7 @@ def counterStep : Val := .lam (withPair counterNext counterClose)
 theorem d_counterStep {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ (.val counterStep)
       (.val (.bang (.thunk (stepDC .unit (.ref natN))))) := by
-  refine .bangThunkV (persistent_dead hΓ) rfl (.lam (.withI ?_ ?_))
+  refine .bangThunkV (banged_dead hΓ) rfl (.lam (.withI ?_ ?_))
   · refine .tensorE (B := natN) (.dead (.dead (.left (deadSplit hΓ))))
       (.lolliE (.dead (.dead (.right (deadSplit hΓ)))) (.unitI (.cons (.cons (.cons hΓ))))
         (.lolliE (.dead (.dead (.left (deadSplit hΓ)))) (.var (.there (.there (.here hΓ))))

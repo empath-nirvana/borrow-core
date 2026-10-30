@@ -35,7 +35,7 @@ its type:
 main : F 1 =
   k <- return (thunk (return i32[1]));
   return ()
--- expect: 2:3: `k` is not consumed in its scope, and its type `U (F i32)` has no destructor
+-- expect: 2:3: `k` is not consumed in its scope, and its type `U (F i32)` is linear and has no derived drop
 ```
 
 ## Where the call goes
@@ -55,30 +55,25 @@ main : F i32 =
     inl u -> force k
   | inr u -> return i32[2]
   }
--- expect: 4:3: in this `case`, `k` is consumed in the `inl` arm but not in the `inr` arm, and its type `U (F i32)` has no destructor
+-- expect: 4:3: in this `case`, `k` is consumed in the `inl` arm but not in the `inr` arm, and its type `U (F i32)` is linear and has no derived drop
 ```
 
 A drop is never moved earlier than the end of the path. Closing codata runs code, so moving the
 call would reorder effects.
 
-## Opting out: `linear`
+## A type with no derived drop
 
-`linear x <- M; N` declares that `x` must be used explicitly. It is for values whose silent
-destruction is a bug, such as a transaction that must be committed or aborted.
-
-```bc,reject
-main : F 1 =
-  linear r <- return (alloc[i32] i32[1]);
-  return ()
--- expect: 2:10: `r` is declared `linear` and is not consumed in its scope
-```
+Which values the checker drops is a fact about their type: an owned slot is dropped exactly when
+its type is linear and has a derived drop (`Env.pushOwn_own`). There is no binder that opts out.
+A value whose silent destruction is a bug, such as a transaction that must be committed or
+aborted, gets a type with no derived drop: a declared type whose payload carries a token the
+checker cannot drop (SPEC §12; declared types are #746's next step).
 
 ## Current limits
 
 - Only variables bound by `<-`, `let`, a `case` arm or `fun` are dropped. Inside a value (`run M`,
   `thunk M`, the scrutinee of a `case`), a variable consumed on one path must be consumed on
   every path.
-- `linear` is available on `<-` binders only.
 - Externs are never dropped.
 
 `SPEC.md` §12 is the specification of this feature.
