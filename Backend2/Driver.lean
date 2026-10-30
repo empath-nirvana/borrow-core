@@ -451,3 +451,37 @@ def interpStage (stage : String) (k : Except String Backend.CheckedProg) (input 
   | _ => throw s!"unknown stage `{stage}`"
 
 end Backend2
+
+namespace Backend2
+/-! ### Probe (F2, temporary): drops at a type holding an owned `.opq`. -/
+
+def ownsOpq : LTy → Bool
+  | .opq _ => true
+  | .pair a b | .sum a b => ownsOpq a || ownsOpq b
+  | .bang a | .mu a | .ref a => ownsOpq a
+  | _ => false
+
+/-- Each drop at a type owning an `.opq`, with the constructors on its path (innermost last). -/
+def opqDropsTm (p : Prog) (ctx : List String) : Nat → Tm → List (Var × String × List String)
+  | 0, _ => []
+  | f + 1, t => match t with
+    | .letv x e b =>
+      opqDropsTm p (ctx ++ [s!"let x{x}:={(Tm.pp (fun _ => "") 0 e).headD ""}"]) f e ++
+        opqDropsTm p (ctx ++ [s!"let x{x}"]) f b
+    | .letpair x y q b => opqDropsTm p (ctx ++ [s!"let (x{x},x{y})=x{q}"]) f b
+    | .case s x b₁ y b₂ =>
+      opqDropsTm p (ctx ++ [s!"case x{s} inl x{x}"]) f b₁ ++ opqDropsTm p (ctx ++ [s!"case x{s} inr x{y}"]) f b₂
+    | .copy x x' b => opqDropsTm p (ctx ++ [s!"copy x{x}->x{x'}"]) f b
+    | .drop x b =>
+      let here := match p.ty[x]? with
+        | some ty => if ownsOpq ty then [(x, ty.pp, ctx)] else []
+        | none => []
+      here ++ opqDropsTm p (ctx ++ [s!"drop x{x}"]) f b
+    | _ => []
+
+def opqDropReport (k : Backend.CheckedProg) : Except String (List String) := do
+  let (p, _) ← lirOf k
+  let fs := p.fns.toList.map (fun d => (d.name, d.body)) ++ [("main", p.main)]
+  return fs.flatMap fun (n, b) => (opqDropsTm p [] (1 <<< 22) b).map fun (x, ty, ctx) =>
+    s!"OPQDROP fn={n} x{x} : {ty} | path: {" ; ".intercalate (ctx.drop (ctx.length - 8))}"
+end Backend2
