@@ -642,6 +642,9 @@ Each is a **STOP**: stop and report. Do not take it.
 
 ## 9. Open questions for the user
 
+Accepted provisionally by the user, 2026-10-29: each recommendation below stands until it causes a
+problem, which is reported, not worked around.
+
 > **Q10. `!N` at a declared type `N`.** `.bang A` is persistent for every `A`, so `!(A ⊗ Tok)` is
 > unrestricted, and `SplitP.dup` then `!E` would duplicate a `Tok`. No rule introduces `!A` except
 > at `!U C` (promotion) and the constants, so `!N` should be uninhabited.
