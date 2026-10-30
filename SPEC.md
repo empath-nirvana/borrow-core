@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.15 · 2026-10-30
+Version 1.16 · 2026-10-30
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1354,6 +1354,36 @@ which carries `HasDtor` (`TDerivesP.dtor_hasDtor`), so it inserts none at such a
 one, `Imm @a N` or `Mut @a N`, is linear with a derived drop (`decl_imm_drop`, `decl_mut_drop`): the
 loan ends, the value is not consumed.
 
+### Every insertion site cites its rule
+
+Every stage that inserts a drop, a copy or an abandonment names the kernel rule it emits, and
+`scripts/PinSites.lean` (a gate step) checks the names (#746):
+
+- **The checker** inserts a drop only as a `dtor` node (`rDrop`, `finNode`), typed by
+  `TDerivesP.dtor`, which carries `HasDtor`; erased, it is `drop_derives`.
+- **The elaboration** emits `tok_burn` only where it compiles a written `match` (`Data.compile`,
+  through `Data.burnBind`), and no copy or drop of its own: a field read, `*e` and a `for` over an
+  owned array copy only at an unrestricted type (`Class.of`), and the checker inserts every drop.
+  An operation is abortive by the kernel's `isAbortive` (`OpDecl.abortive`, `Sugar`'s clause
+  types).
+- **Backend2**'s `drop`, `copy` and `abandon` nodes carry their rule (`Backend2.DropRule`,
+  `CopyRule`, `Abandon`), and `Lint` checks each rule's premise on the variable's type at every
+  node: weakening and a split's `dup` at an unrestricted type; the `forget` constants at a borrow,
+  `Unk` or `[Imm A]`; a destructor's leaves, `[Mut A]` among them (`HasDtor.arrayMut`), only inside
+  a `dtor` node's destructor; the `copy` constants and the derived copy (`copy_derives`) at
+  `DerivedCopy`; a superseded raise payload at a type with no owned cell (`effRaise`'s `hd`);
+  `[let]`'s abort (`hW`) and `⊤` at `abandon`. A live slot no part's mask holds is dropped at the
+  rule `unused`, at a persistent type only: the weakening its part applies at its leaves
+  (`Ctx.DeadP.drop`). A slot the kernel absorbs instead (`⊤`, `absurd`, an abort) at another type
+  is refused by `Lint`, not dropped; that no checked program has one is `UNPROVED:`
+  (`Check.SplitMasks.NeitherAbsorbed`, which `neitherAbsorbed_of` reduces to
+  `Check.UnmentionedAbsorbed`). The cancel of a must-resume `κ`
+  (cancel row `⊤`) is unreachable: it has no derived drop (`kTy_lin`). `[nil-dead]` is at a context
+  with no live slot.
+- **The old backend** converts the erased term, so its `copy` and `drop` carry a licence
+  (`Backend.Clos.Licence`) naming the rule each site relies on; those rebuilt from occurrences are
+  marked `UNPROVED:` with what is not read.
+
 ### Soundness
 
 The elaborated term, with drops inserted, is what the checker returns, as the erasure of its typed
@@ -2075,7 +2105,7 @@ and §19 is preserved: every construct of this entry is elaborated into core bef
   has no destructor and must be handed back, and a cancel answers `()` with no residual. So a
   generator over the input, or one that writes as it yields, is rejected by the checker
   (`corpus/pending/gen-digits.bc`, `gen-lines.bc`, `gen-lazy.bc`, `gen-adapters-io.bc`). It needs
-  a cancel that hands back a residual, or a `linear ctl` iteration effect (no `break`).
+  a cancel that hands back a residual, or a `must_resume ctl` iteration effect (no `break`).
 - **Callbacks that yield** to a `for`'s site: a block takes the loop's threaded variables and
   hands them back at each call (§32, `corpus/yield-callback.bc`). `|>` chains the adapters as
   functions over stored generators (§33). Adapters written as handlers over a computation would
@@ -2492,14 +2522,14 @@ they emit (*Laws*, below), and the cost of each is measured against the program 
 
 ### Declarations
 
-    effect E[T, …] { fn op(x₁: A₁, …) -> B; ctl op(…) -> B; linear ctl …; multi ctl …; … }
+    effect E[T, …] { fn op(x₁: A₁, …) -> B; ctl op(…) -> B; must_resume ctl …; multi ctl …; … }
     handler h(mut s: S): E = { op(x₁, …) = e; … }                                   (answering)
     handler h[T, …](p: A, …): E[A, …], A -> R with E₂[…] = { return(x) = M; op(x, …, k) = N; … }
     with h[A, …](e, …) { M }          with h(&mut c) { M }
     fn f(…) -> T with E₁, E₂[A] = …                                       (a written row)
 
 An **effect** declares its operations, each **answering** (`fn`, Koka's `fun`) or **control**
-(`ctl`, with the structural qualifier of §19: cancellable by default, `linear ctl` for must
+(`ctl`, with the structural qualifier of §19: cancellable by default, `must_resume ctl` for must
 resume, `multi ctl` for unrestricted). An effect is one kind or the other. A control operation
 whose answer is `never` (the type `0`) at a cancellable or unrestricted qualifier is **abortive**
 (§19). An abortive operation is cancellable: `multi ctl op(…) -> never` is rejected, and so is an
@@ -2774,7 +2804,7 @@ of three continuation types:
 
 | qualifier | surface | class | its one use | `κ` is |
 |---|---|---|---|---|
-| **must resume** (`lin`) | `linear ctl` | linear | resumed exactly once: a must-complete computation | `U((B ⊸ F_Σ R) & ⊤)` |
+| **must resume** (`lin`) | `must_resume ctl` | linear | resumed exactly once: a must-complete computation | `U((B ⊸ F_Σ R) & ⊤)` |
 | **cancellable** (`cancel`) | `ctl` | linear | resumed once, or cancelled (the cancel a derived drop when it is pure, `kTy_cancel_hasDtor_iff`) | `U((B ⊸ F_Σ R) & F_Σ 1)` |
 | **unrestricted** (`unr`) | `multi ctl` | unrestricted | resumed any number of times, or cancelled; its captures are persistent (`lam_bang_persistent`) | `!U((B ⊸ F_Σ R) & F_Σ 1)` |
 
@@ -9354,18 +9384,21 @@ changes (`Backend2/Types.lean`, `Syntax.lean`): `LTy` gains `bang`, `!A`, which 
   class's keys), it compares them with every `!` erased (`LTy.sameRep`, `LTy.unbang`;
   `sameRep_iff`, `sameRep_bang_left`, `sameRep_bang_right`). A `use` body's and a destructor's
   keys keep `!`: a key fixes the LIR types of what it converts.
-- **Copies.** `Lint` checks that every `copy` is of a variable whose LIR type is persistent
-  (`LTy.persistent`, `VTy.persistent`'s image: a slot a split duplicates, `Ctx.SplitP.dup`, and
-  what `clone` copies), or an `imm` borrow or a family of them (the `copy` and `array_copy`
-  constants). `ofV_persistent`: a persistent type's LIR type is persistent, so a slot the masks
-  duplicate passes (`Lint.copyable_ofV`).
-- **Drops.** `Lint` checks that every `drop` is of a variable whose LIR type is persistent
-  (`Ctx.DeadP.drop`), holds no owned cell (`LTy.drops`, `VTy.OwnFree`'s image: `[let]`'s
-  `Ctx.OwnFree` and the `forget` constants; `ofV_drops`), or is a family of borrows
-  (`forget_fam_compatX`: `array_forget`, the destructor at `[Mut A]`). The one exception is a stack
-  machine's drop of a level's suspended computation, whose state is on the task stack (SPEC §52):
-  a closure, which no type lets a term discard, listed in `Prog.stackKs` and marked `UNPROVED:`
-  at the conversion.
+- **Copies.** Every `copy` carries its rule (`CopyRule`), and `Lint.copiesAt` checks its premise:
+  a split's `dup` at a persistent LIR type (`LTy.persistent`, `VTy.persistent`'s image, and what
+  `clone` copies); the `copy` and `array_copy` constants and the derived copy (`copy_derives`) at
+  an `imm` borrow or a family of them. `ofV_persistent`: a persistent type's LIR type is
+  persistent, so a slot the masks duplicate passes (`Lint.copyable_ofV`).
+- **Drops.** Every `drop` carries its rule (`DropRule`), and `Lint.dropsAt` checks its premise
+  (§12, *Every insertion site cites its rule*): weakening at a persistent type
+  (`Ctx.DeadP.drop`); a `forget` constant at a borrow, `Unk` or `[Imm A]`; a destructor's leaves,
+  `[Mut A]` among them (`HasDtor.arrayMut`), inside a `dtor` node's destructor only; a live slot no
+  mask holds at a persistent type (the weakening its part applies at its leaves); a superseded
+  raise payload at a type with no owned cell and no opaque value (`LTy.drops`, `VTy.OwnFree`'s
+  image; `ofV_drops`). The one exception is a stack machine's drop
+  of a level's suspended computation, whose state is on the task stack (SPEC §52): a closure,
+  which no type lets a term discard, at the rule `stackK`, which admits only `Prog.stackKs`, and
+  marked `UNPROVED:` at the conversion.
 - **`trivial`.** A copy or a drop the conversion makes is `Lint`-checked by the variable's type,
   so an owned `Ref` or array is never copied or dropped by `copy`/`drop` outside a `!` (which owns
   nothing, `bang_owns_nothing`) on a program that compiles.
@@ -10164,6 +10197,20 @@ relation or the machine.
 ---
 
 ## Changelog
+
+- **1.16** (2026-10-30) — §12, §19, §59 (#746, step 3): every site that inserts a drop, a copy or
+  an abandonment cites its kernel rule, checked by `scripts/PinSites.lean`. Backend2's `drop` and
+  `copy` carry their rule (`DropRule`, `CopyRule`) and `Lint` checks each premise: an `imm` copy
+  only at the constants or `copy_derives`, a `[Mut A]` drop only inside a destructor
+  (`HasDtor.arrayMut`), a live slot no mask holds at the rule `unused` at a persistent type only
+  (that no checked program absorbs one of another type is `UNPROVED:`,
+  `Check.SplitMasks.NeitherAbsorbed`); a must-resume `κ`'s cancel is unreachable; `[nil-dead]`
+  is at a context with no live slot. The old backend's `copy` and `drop` carry a licence. The
+  elaboration reads abortive operations by the kernel's `isAbortive`. The qualifier `linear ctl` is
+  spelled `must_resume ctl`, and `linear` is no longer a keyword. `corpus/reject/linear-*`: a
+  declared type at each construct that inserts an operation, each refused by a kernel fact.
+  `fundamentalC`, `adequacyC`, `adequacyD` keep their statements; no program's acceptance or output
+  changes.
 
 - **1.15** (2026-10-30) — §11, §12, §42 (#746, step 2): declared types with no derived drop, L-D
   over L-T. The opaque kind `Tok` (`VTy.opq .tok`, not a host type) is a location owning a unit
