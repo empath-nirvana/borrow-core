@@ -347,7 +347,7 @@ theorem TDerivesP.dtor_hasDtor : TDerivesP Δ Γ (.dtor i j A) j' → HasDtor A
   `match`.
 - **`!N`.** `.bang A` is persistent for every `A`. Q10.
 
-### 2.4 Surface: the close obligation, written and pointed at (user direction 2026-10-30)
+### 2.4 Surface: explicit consumption, `finally`, resources as effects (user direction 2026-10-30)
 
 A type with no derived drop must be readable and easy to use. The kernel already has everything
 this needs, so this section adds surface forms and errors only. Spellings are provisional.
@@ -358,19 +358,27 @@ this needs, so this section adds surface forms and errors only. Spellings are pr
   program writes L-T. The declaration may also name the function that closes it. The name is used
   only by errors and by `finally`, and nothing calls that function unless the program writes the
   call.
-- **`finally`** on a binding: the program writes the cleanup once (`let f = open(…) finally
-  close(f)`). It elaborates to the kernel's `[then]` (`M then x. N unwind D`, SPEC §27) with the
-  written call as `D`. `D` runs at its own row, so it may perform IO. The same written call is
-  placed at the end of the scope for the normal exit. Both placements are checked terms, and the
-  call is one the program wrote, so this is not a drop. It is decision 2's "cleanup goes in a
-  finaliser", made readable. The parser's raw `unwind (D)` (`Parser.lean:2430`) is the existing
-  hook.
+- **`finally` on a `with`** (user, 2026-10-30: "the syntax should be with open finally"):
+  `with h { … } finally D`. It elaborates to the kernel's `[then]` around the handled computation
+  (`M then x. N unwind D`, SPEC §27). `D` runs at its own row, so it may perform IO, and the same
+  written `D` runs on the normal exit. Both placements are checked terms, and `D` is a call the
+  program wrote, so this is not a drop. It is decision 2's "cleanup goes in a finaliser", made
+  readable. The parser's raw `unwind (D)` (`Parser.lean:2430`) is the existing hook.
+- **Resources are effects** (user, same day: "File IO is the _classic_ effect and if we aren't
+  modeling it as an effect we have gone very wrong"). IO already is: `lib/sys.bc` declares the
+  effects, and the platform handlers (`lib/wasi.bc`) hold the stream cells as their state. A file
+  is opened by a
+  handler, `with open(path) { … }`. The open file is the handler's state, and `read`/`write` are its
+  operations, so the program holds no handle and owes no close. The handler's definition closes the
+  file on both exits: on return it closes, and on an abort it closes through `[then]`. The handler
+  is written once, in the library. File IO itself is a later feature, outside #746. It will also
+  need to decide how a body names one of two open files (named instances or passed capabilities,
+  System C). #746 supplies only `finally` on `with`.
 - **Errors point at the fix.** A value with no derived drop that is unused at the end of its scope,
   or live across an abort, gets one message that names:
   - the value and its type;
   - the field that carries the obligation;
-  - the two fixes: call the close function before the scope ends, or add `finally <close>(x)` to
-    its binding.
+  - the fix: pass it to the function that consumes it before the scope ends.
 - **Not this:** an implicit call of the named close function at scope end without a written
   `finally`. That would be a non-derived drop. Every drop stays derived; a close runs only where
   the program wrote it.
@@ -641,8 +649,10 @@ Each step lands with its kernel statements proved, or stops.
      `tok_linear`, the closure lemmas, `decl_linear`, `decl_imm_drop`, `decl_mut_drop`,
      `TDerivesP.dtor_hasDtor`. The SPEC §11, §12 and §42 entries first.
    - Elaboration of the declaration and its `match` (2.3).
-   - The surface of 2.4: the field keyword, `finally` over `[then]`, and the error that names
-     both fixes.
+   - The surface of 2.4: the field keyword, `finally` on `with` over `[then]`, and the error.
+   - **Before building:** name a program that needs a declared type with no derived drop and
+     cannot be written as a handler. A resource is a handler (2.4), so files are not such a
+     program. If there is none, this step waits.
 3. **Gate step** (item 4).
    - Kernel: each pinned site cites the rule it emits (`drop_derives`, `copy_derives`, a constant,
      `topI`/`zeroE`, `effLet`'s `hW`). Every `burn` the elaborator emits is at a written `match`.
@@ -662,8 +672,8 @@ Each step lands with its kernel statements proved, or stops.
    - Linear types with no derived drop: capabilities, must-resume continuations, one-shot closures
      that hold one, and declared types (L-T). What the checker says when one is left unused, and
      how to fix it.
-   - Close obligations (2.4): marking a field "needs an explicit close", `finally`, and reading
-     the error that points at them.
+   - Resources are handlers: `with open(…) { … }`, and `finally` on a `with` for the program's own
+     cleanup. Values with no derived drop, and the error that points at their consumer (2.4).
    - Writing programs that want to forget a value: keep the type's fields droppable so its drop
      is derived, give a task or continuation a cancel branch (`cancel`), or consume the value
      with a function written for it. Each one is described as the derivation it inserts or the
