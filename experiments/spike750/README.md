@@ -121,3 +121,43 @@ Labels: **[proved in Lean]**, **[checked by inspection]**, **[not verified]**.
   cancels in one call.
 - Is `[await-c]`, a rule that refuses plain `[perform]` of an operation, acceptable as a kernel
   rule?
+
+# Round 2: the rules in the kernel
+
+The rules are on this branch in `Core/`, the checker and SPEC §29a:
+- `[await-c]` is `CDerives.effAwait`, and `[perform]` gains `hac`;
+- the cancel-only widening of `[lend-R]` is `Row.ResumeOC`, with `PinStop` widened;
+- `[then]` with `Div` in the finaliser's row is `CDerivesP.effThenDiv`, whose soundness is
+  `PinLaw.fin`;
+- the termination-sensitive cancel row is `Row.CancelTotal`.
+
+`Spike750/Round2.lean` checks the premises at each target's rows and runs the targets that can
+run.
+
+## Targets
+
+1. **Transaction on a borrowed connection, rollback awaits: expressed under `PinLaw.stop`.**
+   - Its lend row is admitted (`resumeOC_txn`); R1 as it was refuses it (`not_resumeO_txn`).
+   - `[then]`'s premises hold without `Div` (`then_premises_txn`), and its row is
+     `CancelTotal` (`cancelTotal_txn`).
+   - Runs: `txnCancel_eval` answers `inl 7` and `txnCommit_eval` answers `inl 5`. The
+     falsifier reports `live 0` for both, with the rollback's write inside the lend.
+   - The checker refuses it. The core text has no `await` form, and the checker's `[then]`
+     types the finaliser at `F 1` only.
+2. **Completion read into a borrowed buffer: expressed under `PinLaw.stop` and the extern
+   contract.**
+   - The finaliser waits on a completion operation that is not cancellable (`complete`,
+     `1 ↠^lin 1`), which `Row.ResumeO` already admits (`resumeOC_io`).
+   - Run: `ioCancel_eval` answers `inl 7`, with `live 0`.
+   - With `await` in the finaliser instead, a second cancel makes the finaliser raise before the
+     completion arrives. The buffer's lend would then end while the host holds it, so the
+     finaliser must wait on an operation that is not cancellable.
+3. **Nursery under a timeout: refused.**
+   - (a) The finaliser is typed by `effThenDiv` (`nursery_thenDiv_premises`), and its `Div`
+     reaches the parent's cancel row (`not_cancelTotal_nursery`).
+   - But the wait is inside the request's lend, and `Row.ResumeOC` has no clause for `tick`
+     (`not_resumeOC_nursery`).
+   - (b) A fuelled wait has no `Div`. At exhaustion the children still hold the borrow, and
+     nothing consumes them: a task is not `VTy.Drop` (`not_drops_task`), so `hW` refuses them
+     across `exhausted()`. The only other rule that absorbs a context is `absurd` after a pure
+     `F 0`, which is a `Div` loop or a halting primitive that the kernel does not have.

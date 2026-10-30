@@ -5195,6 +5195,50 @@ another), `async-r1-generator.bc` and `async-r1-drain.bc` (§15's self-referenti
 
 ---
 
+## 29a. Entry 28a — a cancel as a resume with a raise (#750, spike branch only)
+
+Not on `main`. Spike #750, round 2: the rules below are on `spike-cancel-resume` to see what
+they break. Nothing here is decided.
+
+### Typing
+
+- **Cancellable operations** (`OpSig.awaitB`): an operation `0` of a name other than `Div`'s,
+  linear, answering `1 ⊕ 1`. The kernel has no other marker, so the shape decides. Its `fin` is
+  its cancel row, read by typing only (`OpSig.finRead = capB ∨ awaitB`): `[sub]` grows it
+  (`OpSig.LeF`, `FinLe`), and `[then]`'s `hfin` records the finaliser's row in it.
+- **`[await-c]`** (`CDerives.effAwait`): at a dead context, a row finding the cancellable `a` at
+  `(n, 0)`, `a : 1 ↠^lin 1 ⊕ 1`, and an abortive `c : 1 ↠ 0` at `(n, 1)`,
+
+      await_n ≜ perform_n (0, ()) to r. case r {inl u. return u | inr u. raise_n (1, u)}  : F_Σ 1
+
+  `[perform]` gains `hac : o.awaitB = false`: a cancellable operation is performed only as
+  `await_n`. The cancel is `(force κ).1 (inr ())`; no machine step is added.
+- **`[lend-R]`** asks `Row.ResumeOC Σ 'x` in place of `Row.ResumeO`: each operation is one
+  `Row.ResumeO` admits, a cancellable operation of a nonzero name taking closed data (at any
+  cancel row), or an abortive `cancelled` at `(n, 1)`, affine, at `1`, of a name whose operation
+  `0` is cancellable. `Row.ResumeO.toC`: every row R1 admitted it still admits.
+- **`[then]` with `Div` in the finaliser's row** (`CDerivesP.effThenDiv`): `effThen` without
+  `hSD`, its body's row `Σ_M` holding no capturable operation (`hcap`), so no cancel run
+  (`κ.2`, a least fixed point) reaches the finaliser. `CDerives.effThen` keeps `hSD`.
+- **Where termination matters**: `Row.CancelTotal Σ`, every capturable or cancellable operation
+  of `Σ` at a cancel row that is not `⊤` and does not hold `Div`. A cancel that must end
+  (`run_in`'s cancel-at-budget) asks for it. That such a cancel ends is open.
+
+### Semantics
+
+No change to the machine, the relation or a borrow lemma. `await_compatC` proves `[await-c]`
+from `[perform]`, `case`, `[raise]` and `[let]`. `PinLaw` gains a field and widens one:
+
+- `PinStop`'s premise is `Row.ResumeOC`;
+- `PinLaw.fin : PinFin`, `then_compatC` without `hSD` at a body with no capturable operation.
+  At a finaliser row without `Div` it is `then_compatC` (`pinFin_divFree`).
+
+### Open
+
+- Whether `PinFin` holds: it needs `cwp_then` with the finaliser at `cwp`.
+- The surface: no `await` form, and `lib/async.bc`'s tasks are `νX. F(A + Task) & F 1`.
+- The lowering of a finaliser that suspends (§27 *Lowering*).
+
 ## 30. Entry 29 — effectful blocks and async tasks at the surface
 
 ### Motivation
