@@ -440,8 +440,8 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
 - **Answer:** the four label-introducing axioms are instances "by `rfl`"; "The source is returned
   exactly when its mode lacks contraction". The gap the schema predicts is the shift from
   adjoint logic's affine mode to its unrestricted one: "the table has no axiom for the last,
-  lending a `Mut` as an `Imm` (`axWithborMITy`). Rust has it (`&mut T → &T`)." "I have not derived `withborMI_compat` and have not verified that any
-  obstruction is real."
+  lending a `Mut` as an `Imm` (`axWithborMITy`). Rust has it (`&mut T → &T`)." "I have not derived
+  `withborMI_compat` and have not verified that any obstruction is real."
 - **Status:** partial (schema proved; the predicted rule open).
 - **Key results:** `shiftTy`, `ret_iff_not_C`, `axWithborMITy` (stated type).
 - **Feeds:** [T3](#t3-lending-a-mut-as-an-imm) (= strings K2′); [BorrowedClosures](#borrowedclosures).

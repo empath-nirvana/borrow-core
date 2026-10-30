@@ -41,8 +41,8 @@ writes the type `FnMut^c A B` as the experiment did, and SPEC §22 writes it `Cl
    - `Fn` is `!U(A ⊸ F B)`.
 
    What `experiments/BorrowedClosures` anticipated as "a mode index on the codata former" is
-   supplied by `ν`'s observation set: the `close` observation is what gives the closure a derived drop.
-   No new former is needed, no index on `⊸`, and no new `CDerives` rule.
+   supplied by `ν`'s observation set: the `close` observation is what gives the closure a derived
+   drop. No new former is needed, no index on `⊸`, and no new `CDerives` rule.
 
 3. **Is it derivable?**
    - **Not in `Core` as it is [inspection].** `CTy.NuLeaf` (`Core/Types.lean`) admits only
@@ -234,16 +234,16 @@ closed (`nestProg`).
 - **`ModesLabels`.** Its README's last section proposes mode-annotated arrows: lin = `FnOnce`,
   `FnMut` at the mode with weakening only, unr = `Fn`.
   - The experiment does not need annotated arrows: the modes are the three shapes of §1.
-  - **`FnMut` is not at the weakening mode in `ModesLabels`' sense [inspection].** `weaken_sound` says a value
-    at a weakenable mode holds no `own` cell, and a `Clo` closure can own cells: the counter
-    owns one, freed by its `close`. Its weakening is a destructor, as for `Ref A` under §12, not
-    the free weakening of `Mut`.
+  - **`FnMut` is not at the weakening mode in `ModesLabels`' sense [inspection].** `weaken_sound`
+    says a value at a weakenable mode holds no `own` cell, and a `Clo` closure can own cells: the
+    counter owns one, freed by its `close`. Its weakening is a destructor, as for `Ref A` under §12,
+    not the free weakening of `Mut`.
   - So `σ(m) = W` splits in two: *forgettable* (`Mut`, class 1) and *droppable by an action*
     (`FnMut`, and `Ref` since §12). The label reading is unaffected: a `Clo` closure breaks
     independence only through the borrows its state holds, and its `[@c]` bound is the label
     that licenses it.
-- **`Shifts`.** The missing shift from the weakening mode to `unr` (`withborMI`, `&mut T → &T`) is not needed. An
-  `Imm` view of a closure is `Unk` whatever the shift.
+- **`Shifts`.** The missing shift from the weakening mode to `unr` (`withborMI`, `&mut T → &T`) is
+  not needed. An `Imm` view of a closure is `Unk` whatever the shift.
 - **§12.69 and `obs_transfer`.** §0.4. Nothing is relaxed that was not already relaxed, and
   nothing new is kept at the observable view.
 - **#233, R2a, `docs/second-class-and-system-c.md`.** R2a's "closure value" (`!` code and an

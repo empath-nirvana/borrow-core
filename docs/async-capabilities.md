@@ -62,8 +62,8 @@ The programs are in `experiments/AsyncCap/bc/`. Each is marked pending and recor
 `bcc check` message (they do not parse: the surface is provisional). A1 and A4 run, and are in the
 corpus (`corpus/async-scheduler.bc`, `corpus/async-map.bc`; U2, SPEC §30), and so do A5 and A6
 (`corpus/async-logged.bc`, `corpus/async-cancel.bc`; SPEC §32). `lib/async.bc` EXISTS
-(U2, SPEC §30). `effect Async { ctl await() }` declares `await : 1 ↠^cancel 1`. The scheduler is, per
-task, a handler of `Async` whose clause stores the task's continuation as the task's rest
+(U2, SPEC §30). `effect Async { ctl await() }` declares `await : 1 ↠^cancel 1`. The scheduler is,
+per task, a handler of `Async` whose clause stores the task's continuation as the task's rest
 (`with spawn { … }`), and across tasks a loop that resumes the queued tasks until none is pending
 (`run_until_empty`). The spelling `async::run { s -> s.spawn { … } }` below is the designed one;
 U2 spells spawning `push(q, with spawn { … })` (SPEC §30 *Open*: `s.spawn` needs a provided

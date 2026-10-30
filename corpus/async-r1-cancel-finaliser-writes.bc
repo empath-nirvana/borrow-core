@@ -1,9 +1,9 @@
 -- SPEC §29, R1, in the core text (docs/async-capabilities.md §6.2 row 16,
 -- `experiments/AsyncCap/bc/accept/m4-cancel-finaliser-writes.bc`): a task cancelled inside a
 -- relaxed lend whose own finaliser writes through the view. `withbor2r` lends `c` as `m`; the
--- body performs `1.0` (cancellable, resuming) under `[then]`, whose finaliser writes 99 through `m`.
--- The handler's clause cancels the continuation at the operation: the borrower's finaliser runs
--- first, with the lend still open, then the lend ends and the owner's finaliser frees `c`.
+-- body performs `1.0` (cancellable, resuming) under `[then]`, whose finaliser writes 99 through
+-- `m`. The handler's clause cancels the continuation at the operation: the borrower's finaliser
+-- runs first, with the lend still open, then the lend ends and the owner's finaliser frees `c`.
 -- `bcc interp --check tags` checks that order: a write through `m` after the lend ended is
 -- reported. The surface has no `then … unwind …` (U2), so the program is written in the core.
 --

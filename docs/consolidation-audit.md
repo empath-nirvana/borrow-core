@@ -251,10 +251,10 @@ adequacy through `embed` (`adequacy_of_derivesWf`), and FP only as `fundamentalC
 - **Variants in place.** `Ref` does not distribute over `⊕`, because the leaf layout depends on
   the tag (`CBPVMu/README.md`, *The common list shape*; `LeafPlaces/README.md` §4). Borrowing a
   payload place while the tag is fixed is open (`docs/dream-properties.md` P6).
-- **`Forgettable` at `μ` and `U`.** `Forgettable` (`Records/Encoding.lean:228-235`) has no `μ` or `U`
-  case. `forgettable_immReborrow` holds at BoLo's `Ty`, but `Imm̲ 'b N = μY. 1 ⊕ Y` needs a recursive
-  drop (a `foldOwn`). So "project one field of an `Imm` record" at μ-typed fields needs a new
-  lemma. **[unverified]**: not attempted.
+- **`Forgettable` at `μ` and `U`.** `Forgettable` (`Records/Encoding.lean:228-235`) has no `μ` or
+  `U` case. `forgettable_immReborrow` holds at BoLo's `Ty`, but `Imm̲ 'b N = μY. 1 ⊕ Y` needs a
+  recursive drop (a `foldOwn`). So "project one field of an `Imm` record" at μ-typed fields needs a
+  new lemma. **[unverified]**: not attempted.
 - **Reuse tokens.**
   - A `foldReuse` token is not tied to its node.
   - Leaf size is uniform in the model, so a token of `Ref 1` can be filled at any type.

@@ -427,7 +427,7 @@ with `Collapse` reading the node. `iterate`, `divFuel` and `reify` once B2 produ
    - `reify` and `effHandleT` have no typed program anywhere: no Core derivation and no checker
      producer.
 4. **Qualifiers.**
-   - Over 152 programs, `[handle]` nodes type 573 cancellable operations, 2 linear ones and no
+   - Over 152 programs, `[handle]` nodes type 573 cancellable operations, 2 must-resume ones and no
      unrestricted one.
    - The backend discards all of them (`Convert.lean:740`) and gives every κ the same cancel arm.
 5. **`Clo` is not in the compiler's import closure.** Neither are `BlockTrack`, `ReuseList` and

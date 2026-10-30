@@ -260,8 +260,8 @@ So η holds only at the same instance. It needs generativity in exactly the sens
 (new-ν): a fresh name differs from every name in scope.
 
 **What η needs.** The binary relation (T13.8 is a `TreeRel` induction), and generativity through
-P13.10. At cancellable operations it also needs a frame that holds a continuation (D13.7). It does not
-need rebasing: the binary relation erases lifetimes. At the lift, the forwarding clause holds
+P13.10. At cancellable operations it also needs a frame that holds a continuation (D13.7). It does
+not need rebasing: the binary relation erases lifetimes. At the lift, the forwarding clause holds
 `k` across an outer operation. If that operation suspends, `k` is a continuation held inside
 another continuation. When `k` holds a borrow, that is §14's case. Its typing then rests on L14.4
 (§14.3).

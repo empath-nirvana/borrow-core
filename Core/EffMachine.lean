@@ -11,16 +11,16 @@ that is its configuration's only step (`Step1Only`: unique decomposition and det
 * **H-ret** (`catch_ret`): `hnd (n, H) v` steps to `h_ret v`.
 * **H-op** (`catch_step`): the catch of `perform (n, (i, v))` hands the clause `c` the argument and
   `κ`, keeping the store.  At an unrestricted operation `κ` is `kappa H K` (`catch_unr`).  At a
-  must-resume or cancellable one the next two steps allocate `κ`'s cell at a location `ℓ` the memory does
-  not hold, any such, and make `κ` `kappaC` at `ℓ`, cancellable exactly at a cancellable operation
-  (`catch_cell`); every run from the catch is a prefix of those three steps or goes on from them
-  (`catchEv_cell`).
+  must-resume or cancellable one the next two steps allocate `κ`'s cell at a location `ℓ` the memory
+  does not hold, any such, and make `κ` `kappaC` at `ℓ`, cancellable exactly at a cancellable
+  operation (`catch_cell`); every run from the catch is a prefix of those three steps or goes on
+  from them (`catchEv_cell`).
 * **Deep resume and cancel at the cell.**  Resuming `kappaC` at `ℓ` releases `ℓ` and runs
   `hnd (n, H) K[w]` (`kappaC_resume`): three steps reach the release, and after it `κ` resumes as
-  `kappa` does (`kappaC_resume_parts`, `kappa_resume_kResume`).  Cancelling a cancellable `κ` releases
-  `ℓ` and runs `κ`'s cancel run (`kappaC_cancel`, `kappaC_cancel_parts`); a linear `κ`'s cancel
-  branch has no step (`kappaC_cancel_lin`).  On a run to a value, a use of `κ` at its cell
-  releases the cell three steps later (`use_frees_cell`).
+  `kappa` does (`kappaC_resume_parts`, `kappa_resume_kResume`).  Cancelling a cancellable `κ`
+  releases `ℓ` and runs `κ`'s cancel run (`kappaC_cancel`, `kappaC_cancel_parts`); a must-resume
+  `κ`'s cancel branch has no step (`kappaC_cancel_lin`).  On a run to a value, a use of `κ` at its
+  cell releases the cell three steps later (`use_frees_cell`).
 * **H-fwd** (`catch_fwd`): an operation passes a handler of another name, which takes no step on
   it; the nearest handler of its name catches it, and `κ` holds the passed handler, so resuming
   `κ` reinstalls both (`fwd_resume`).  An abortive operation steps as if the passed handler were
@@ -348,8 +348,8 @@ theorem catch_step (μ : Heap) {n i : UInt32} {qs hr hs c : Val} (v : Val) {K : 
         (kappaAt (capTag qs.1 i.toNat) (hndVal n qs hr hs) K)))) :=
   step1Only_plug (Head.hop μ n i qs hr hs c v K hc hK) rfl K₀
 
-/-- A continuation at a must-resume or cancellable operation owns a cell; it is cancellable exactly at a cancellable
-operation.  `[spec §25]` -/
+/-- A continuation at a must-resume or cancellable operation owns a cell; it is cancellable exactly
+at a cancellable operation.  `[spec §25]` -/
 def cellCancel (q : Qual) : Bool := q == .cancel
 
 /-- The tag of a must-resume or cancellable operation makes `[op]`'s `κ` a cell's.  `[spec §25]` -/
@@ -375,13 +375,16 @@ theorem catch_unr (μ : Heap) {n i : UInt32} {qs hr hs c : Val} (v : Val) {K : K
 of its configuration; this is that configuration, as an allocation in its context. -/
 theorem plug_kappaCell (K₀ : Kont) (c v : Val) (hasCancel : Bool) (H : Val) (K : Kont) :
     K₀.plug (.app (.val c) (.pair (.val v) (kappaCell hasCancel H K))) =
-      (K₀.comp (.appR (.val c) (.pairR v (.appR (.val (Val.lam (kappaCBody hasCancel H K))) .hole)))).plug
+      (K₀.comp (.appR (.val c)
+          (.pairR v (.appR (.val (Val.lam (kappaCBody hasCancel H K))) .hole)))).plug
         (.app (.val (.prim .alloc)) (.val Val.unit)) := by
   rw [Kont.plug_comp]; rfl
 
 /-- The allocation's answer `ℓ`, back in its configuration: `κ` before its β-step. -/
-theorem plug_kappaCellLoc (K₀ : Kont) (c v : Val) (hasCancel : Bool) (H : Val) (K : Kont) (ℓ : Loc) :
-    (K₀.comp (.appR (.val c) (.pairR v (.appR (.val (Val.lam (kappaCBody hasCancel H K))) .hole)))).plug
+theorem plug_kappaCellLoc (K₀ : Kont) (c v : Val) (hasCancel : Bool) (H : Val) (K : Kont)
+    (ℓ : Loc) :
+    (K₀.comp (.appR (.val c)
+        (.pairR v (.appR (.val (Val.lam (kappaCBody hasCancel H K))) .hole)))).plug
         (.val (Val.loc ℓ)) =
       K₀.plug (.app (.val c) (.pair (.val v)
         (.app (.val (Val.lam (kappaCBody hasCancel H K))) (.val (Val.loc ℓ))))) := by
@@ -399,8 +402,8 @@ theorem kappaCell_beta (μ : Heap) (K₀ : Kont) (c v : Val) (hasCancel : Bool) 
   rw [kappaCBody_subst, Kont.plug_comp, Kont.plug_comp] at h
   exact h
 
-/-- **H-op at a must-resume or cancellable operation** (`catch_cell`): the catch hands the clause the
-argument and `κ` before its cell, keeping the store; the cell is allocated at a location the
+/-- **H-op at a must-resume or cancellable operation** (`catch_cell`): the catch hands the clause
+the argument and `κ` before its cell, keeping the store; the cell is allocated at a location the
 memory does not hold, any such; and `κ`'s β-step makes it `kappaC` there, cancellable exactly at a
 cancellable operation.  `[spec §19, §25]` -/
 theorem catch_cell {μ : Heap} {ℓ : Loc} (hℓ : μ ℓ = none) {n i : UInt32} {qs hr hs c : Val}
@@ -409,7 +412,8 @@ theorem catch_cell {μ : Heap} {ℓ : Loc} (hℓ : μ ℓ = none) {n i : UInt32}
     Steps (ℍ := ℍ) μ
       (K₀.plug (hndE (hndVal n qs hr hs) (K.plug (performE (.val (opPayload n i v))))))
       (μ.upd ℓ Val.unit)
-      (K₀.plug (.app (.val c) (.pair (.val v) (kappaC (cellCancel q) ℓ (hndVal n qs hr hs) K)))) := by
+      (K₀.plug (.app (.val c)
+        (.pair (.val v) (kappaC (cellCancel q) ℓ (hndVal n qs hr hs) K)))) := by
   have h₁ := (catch_step (qs := qs) (hr := hr) μ v hc hK K₀).1
   rw [htag, kappaAt_cell hq, plug_kappaCell] at h₁
   have h₂ := (step1_alloc_iff (ℍ := ℍ) (μ := μ)
@@ -418,11 +422,11 @@ theorem catch_cell {μ : Heap} {ℓ : Loc} (hℓ : μ ℓ = none) {n i : UInt32}
   rw [plug_kappaCellLoc] at h₂
   exact .more h₁ (.more h₂ (.more (kappaCell_beta _ K₀ c v _ ℓ _ K).1 (.refl _ _)))
 
-/-- **A capture event allocates `κ`'s cell** (`catchEv_cell`).  Every run from a catch of a linear
-or cancellable operation is a prefix of, or goes on from: the `[op]` step, keeping the store, to the
-clause applied to the argument and `κ` before its cell; the allocation of the cell at a location
-`ℓ` the memory does not hold; and `κ`'s β-step, which hands the clause `kappaC` at `ℓ`, cancellable
-exactly at a cancellable operation.  `[spec §19, §25]` -/
+/-- **A capture event allocates `κ`'s cell** (`catchEv_cell`).  Every run from a catch of a
+must-resume or cancellable operation is a prefix of, or goes on from: the `[op]` step, keeping the
+store, to the clause applied to the argument and `κ` before its cell; the allocation of the cell at
+a location `ℓ` the memory does not hold; and `κ`'s β-step, which hands the clause `kappaC` at `ℓ`,
+cancellable exactly at a cancellable operation.  `[spec §19, §25]` -/
 theorem catchEv_cell {μ μ' : Heap} {E : Expr} {n i : UInt32} {qs hr hs c : Val} {v : Val}
     {K : Kont} {q : Qual} (hq : q ≠ .unr) (hc : clauseAt hs.1 i.toNat = some c)
     (hK : K.HasHnd n = false) (htag : capTag qs.1 i.toNat = q.tag) {K₀ : Kont}
@@ -433,7 +437,8 @@ theorem catchEv_cell {μ μ' : Heap} {E : Expr} {n i : UInt32} {qs hr hs c : Val
     (μ' = μ ∧ E = K₀.plug (.app (.val c) (.pair (.val v)
       (kappaCell (cellCancel q) (hndVal n qs hr hs) K)))) ∨
     (∃ ℓ, μ ℓ = none ∧ μ' = μ.upd ℓ Val.unit ∧ E = K₀.plug (.app (.val c) (.pair (.val v)
-      (.app (.val (Val.lam (kappaCBody (cellCancel q) (hndVal n qs hr hs) K))) (.val (Val.loc ℓ)))))) ∨
+      (.app (.val (Val.lam (kappaCBody (cellCancel q) (hndVal n qs hr hs) K)))
+        (.val (Val.loc ℓ)))))) ∨
     ∃ ℓ, μ ℓ = none ∧ Steps (ℍ := ℍ) (μ.upd ℓ Val.unit)
       (K₀.plug (.app (.val c) (.pair (.val v) (kappaC (cellCancel q) ℓ (hndVal n qs hr hs) K))))
       μ' E := by
@@ -501,7 +506,7 @@ def kResBr (ℓ : Loc) (H : Val) (K : Kont) : Expr :=
     (.val (.lam (hndE (H.shift 3 0) ((K.shift 3 0).plug (.var 0))))))
 
 /-- `κ`'s cancel branch at its cell `ℓ`, under its binders `s` and `u`: at a cancellable operation
-`u; free ℓ; ccatch (K†[raise (0, (0, none))])`, at a linear one `() ()`.  `[spec §25]` -/
+`u; free ℓ; ccatch (K†[raise (0, (0, none))])`, at a must-resume one `() ()`.  `[spec §25]` -/
 def kCanBr (hasCancel : Bool) (ℓ : Loc) (K : Kont) : Expr :=
   if hasCancel then
     .seq (.var 0) (.seq (freeE (.val (.loc ℓ)))
@@ -532,7 +537,7 @@ theorem subst_kCanBr_cancel (ℓ : Loc) (K : Kont) (s a : Val) :
   rw [e]
   rfl
 
-/-- The cancel branch of a linear `κ`: `() ()`. -/
+/-- The cancel branch of a must-resume `κ`: `() ()`. -/
 theorem subst_kCanBr_lin (ℓ : Loc) (K : Kont) (s a : Val) :
     Expr.subst 0 a (Expr.subst 1 s (kCanBr false ℓ K)) = stuckE := rfl
 
@@ -581,7 +586,8 @@ theorem kappaC_resume_parts (hasCancel : Bool) (ℓ : Loc) (H : Val) (K : Kont) 
 `kappaC` at `ℓ` releases `ℓ` and runs `hnd H K[w]`, in every context.  `[spec §19, §25]` -/
 theorem kappaC_resume {μ : Heap} {ℓ : Loc} (hℓ : μ ℓ = some Val.unit) (hasCancel : Bool) (H : Val)
     (K : Kont) (w : Val) (K₀ : Kont) :
-    Steps (ℍ := ℍ) μ (K₀.plug (.app (.app (kappaC hasCancel ℓ H K) (.val (Val.inj₁ .unit))) (.val w)))
+    Steps (ℍ := ℍ) μ
+      (K₀.plug (.app (.app (kappaC hasCancel ℓ H K) (.val (Val.inj₁ .unit))) (.val w)))
       (μ.del ℓ) (K₀.plug (hndE H (K.plug (.val w)))) := by
   obtain ⟨h₁, h₂⟩ := kappaC_resume_parts (ℍ := ℍ) hasCancel ℓ H K w
   have hfree := (step1_free_iff (ℍ := ℍ) (μ := μ)
@@ -607,9 +613,9 @@ theorem kappaC_cancel_parts (ℓ : Loc) (H : Val) (K : Kont) :
   rw [subst_kCanBr_cancel] at h
   exact .more h (.one (Step1.head (Head.seq μ _)))
 
-/-- **Cancelling a cancellable `κ` at its cell** (`kappaC_cancel`): at a store holding `ℓ` with `()`, it
-releases `ℓ` and runs `κ`'s cancel run `ccatch (K†[raise (0, (0, none))])`, in every context.
-`[spec §19, §25]` -/
+/-- **Cancelling a cancellable `κ` at its cell** (`kappaC_cancel`): at a store holding `ℓ` with
+`()`, it releases `ℓ` and runs `κ`'s cancel run `ccatch (K†[raise (0, (0, none))])`, in every
+context. `[spec §19, §25]` -/
 theorem kappaC_cancel {μ : Heap} {ℓ : Loc} (hℓ : μ ℓ = some Val.unit) (H : Val) (K : Kont)
     (K₀ : Kont) :
     Steps (ℍ := ℍ) μ (K₀.plug (.app (kappaC true ℓ H K) (.val (Val.inj₂ .unit)))) (μ.del ℓ)
@@ -621,8 +627,8 @@ theorem kappaC_cancel {μ : Heap} {ℓ : Loc} (hℓ : μ ℓ = some Val.unit) (H
   rw [Kont.plug_comp, Kont.plug_comp] at hfree
   exact ((h₁ μ).plug K₀).trans (.more hfree ((h₂ _).plug K₀))
 
-/-- **A linear `κ`'s cancel branch has no step** (`kappaC_cancel_lin`): cancelling `κ` at a linear
-operation reaches `() ()`, which takes no step in any context.  `[spec §25]` -/
+/-- **A must-resume `κ`'s cancel branch has no step** (`kappaC_cancel_lin`): cancelling `κ` at a
+must-resume operation reaches `() ()`, which takes no step in any context.  `[spec §25]` -/
 theorem kappaC_cancel_lin (μ : Heap) (ℓ : Loc) (H : Val) (K : Kont) (K₀ : Kont) :
     Steps (ℍ := ℍ) μ (K₀.plug (.app (kappaC false ℓ H K) (.val (Val.inj₂ .unit)))) μ
       (K₀.plug stuckE) ∧ ∀ μ' E, ¬ Step1 (ℍ := ℍ) μ (K₀.plug stuckE) μ' E := by
@@ -677,11 +683,12 @@ theorem steps_seq_free {μ μ' : Heap} {K₀ : Kont} {a : Val} {ℓ : Loc} {R : 
 
 /-- **A use of `κ` releases its cell three steps later** (`use_frees_cell`).  On a run to a value
 from `κ` at its cell `ℓ` applied to a value `w`, in any context: `w` is `inj₁ ()`, or `inj₂ ()` at
-a cancellable `κ` (a must-resume `κ`'s cancel branch has no step); the memory holds `ℓ` with `()`; and the
-run takes `κ`'s β-step, its `case` and its `;`, each keeping the store and its configuration's
-only step, then releases `ℓ`, and goes on.  `[spec §25]` -/
+a cancellable `κ` (a must-resume `κ`'s cancel branch has no step); the memory holds `ℓ` with `()`;
+and the run takes `κ`'s β-step, its `case` and its `;`, each keeping the store and its
+configuration's only step, then releases `ℓ`, and goes on.  `[spec §25]` -/
 theorem use_frees_cell {μ μ' : Heap} {K₀ : Kont} {hasCancel : Bool} {ℓ : Loc} {H : Val} {K : Kont}
-    {w v : Val} (hs : Steps (ℍ := ℍ) μ (K₀.plug (.app (kappaC hasCancel ℓ H K) (.val w))) μ' (.val v)) :
+    {w v : Val}
+    (hs : Steps (ℍ := ℍ) μ (K₀.plug (.app (kappaC hasCancel ℓ H K) (.val w))) μ' (.val v)) :
     (w = Val.inj₁ Val.unit ∨ (hasCancel = true ∧ w = Val.inj₂ Val.unit)) ∧ μ ℓ = some Val.unit ∧
     ∃ e₁ e₂ e₃ e₄, Step1Only (ℍ := ℍ) μ (K₀.plug (.app (kappaC hasCancel ℓ H K) (.val w))) μ e₁ ∧
       Step1Only (ℍ := ℍ) μ e₁ μ e₂ ∧ Step1Only (ℍ := ℍ) μ e₂ μ e₃ ∧

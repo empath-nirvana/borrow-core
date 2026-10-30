@@ -1,4 +1,4 @@
--- expect: 18:16: `boxed['fx_rl5]`: `fx_rb35`, of type `i32 => i32 * i32`, is used inside, and it cannot be shown to outlive `'fx_rl5`
+-- expect: 18:16: `boxed['fx_rl5]`: `fx_rb34`, of type `i32 => i32 * i32`, is used inside, and it cannot be shown to outlive `'fx_rl5`
 -- A `let mut` as an instance of `State` (#611) inside a function served by an answering handler
 -- (`Log`): the state-passing site's answer, a function of the state, is used inside the boxed
 -- result of the capability's borrow and does not outlive it.

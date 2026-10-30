@@ -1770,16 +1770,16 @@ theorem unwind_prefix {e : Expr} {FR : UInt32 → Prop} {μ : Heap} {K₀ K : Ko
     hq
 
 /-- **The cancel, read prefix-closed** (S5): in a run of a term typed by a tied derivation, from
-the empty memory, a configuration `c₀` cancels a continuation, `kappa H K` or `kappaC hasCancel ℓ H K`
-(its cell), and a run from `c₀` reaches the start of its cancel run, `K₀[cancelOf K]` (after the
-three administrative steps, and at the cell after `ℓ`'s release).  When each of `K`'s finalisers is
-typed at a row of abortive operations of names in `FR`, names of `Ξ`: every path from there is a
-prefix of the cancel trace of the dead region `K†` with nothing kept (`CancelTr`).  The cancel is
-not interceptable: `K†` holds no handler and no `ccatch` frame (`hasHnd_dead`, `noCC_dead`), so
-it stops only at `K`'s finalisers, which it fires innermost first, each running alone, and at the
-running finalisers' `cfin` frames, which it passes (`[cfin-cancel]`); the first kept error wins;
-and the canceller gets `()` or the kept error, an error of a name of `Ξ`, re-raised.
-`[spec §19, §27]` -/
+the empty memory, a configuration `c₀` cancels a continuation, `kappa H K` or
+`kappaC hasCancel ℓ H K` (its cell), and a run from `c₀` reaches the start of its cancel run,
+`K₀[cancelOf K]` (after the three administrative steps, and at the cell after `ℓ`'s release).  When
+each of `K`'s finalisers is typed at a row of abortive operations of names in `FR`, names of `Ξ`:
+every path from there is a prefix of the cancel trace of the dead region `K†` with nothing kept
+(`CancelTr`).  The cancel is not interceptable: `K†` holds no handler and no `ccatch` frame
+(`hasHnd_dead`, `noCC_dead`), so it stops only at `K`'s finalisers, which it fires innermost first,
+each running alone, and at the running finalisers' `cfin` frames, which it passes (`[cfin-cancel]`);
+the first kept error wins; and the canceller gets `()` or the kept error, an error of a name of `Ξ`,
+re-raised. `[spec §19, §27]` -/
 theorem cancel_prefix {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerivesAt Ξ Δ Γ e j) {FR : UInt32 → Prop} (hFR : ∀ m, FR m → Ξ.Names m)
     {μ₀ μ : Heap} {K₀ : Kont} {H : Val} {K : Kont} {c₀ : Expr}
@@ -2084,12 +2084,12 @@ theorem progOutT_cancel_prefix {q : List (Heap × Expr)}
 
 /-! #### At a cancellable raise: a context with no unrestricted abortive operation
 
-`progOutTA` is `progOutT` with its raise of `2` cancellable (`rSigA 2`), every handler of `2` at the tag
-`cancel`.  Its effect context `Ξ₁₂A`, `1 : 1 ↠^unr 1` and `2 : 1 ↠^cancel 0`, has no unrestricted abortive
-operation (`noUnrExn_Ξ₁₂A`, decision 63's restriction), so a tied derivation at it has the shape
-the checker gives every program it accepts (`checkProgram_tiedAt`).  A tied derivation types it
-(`dAt_progOutTA`), its run cancels `κ` (`progOutTA_cancels`), and its region's finaliser raises
-`2`: it meets `cancel_prefix`'s hypotheses (`progOutTA_cancel_prefix`). -/
+`progOutTA` is `progOutT` with its raise of `2` cancellable (`rSigA 2`), every handler of `2` at the
+tag `cancel`.  Its effect context `Ξ₁₂A`, `1 : 1 ↠^unr 1` and `2 : 1 ↠^cancel 0`, has no
+unrestricted abortive operation (`noUnrExn_Ξ₁₂A`, decision 63's restriction), so a tied derivation
+at it has the shape the checker gives every program it accepts (`checkProgram_tiedAt`).  A tied
+derivation types it (`dAt_progOutTA`), its run cancels `κ` (`progOutTA_cancels`), and its region's
+finaliser raises `2`: it meets `cancel_prefix`'s hypotheses (`progOutTA_cancel_prefix`). -/
 
 /-- The effect context of `progOutTA`: `1 : 1 ↠^unr 1` and `2 : 1 ↠^cancel 0`. -/
 def Ξ₁₂A : EffCtx := fun n => if n = 1 then [(.unr, .unit, .unit)] else

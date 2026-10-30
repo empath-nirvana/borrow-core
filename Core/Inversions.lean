@@ -38,18 +38,18 @@ on both sides of a split is persistent (`splitP_both`).
 `bind` are read with their premises at the judgement each concludes with, and the same-term rules'
 path from there (`der_hndJ`, `der_thenJ`, `der_performJ`, `der_raiseJ`, `der_letJ`); those rules
 only grow rows (`JR.rowLe`).  `κ`'s cancel branch, applied, is read at what they reach from its
-type (`kappa_cancel_jr` at an unrestricted `κ`, `kcancel_jr_cancellable` at a cancellable one), and at a row
-only when its cancel row is no `⊤` and below the row (`cancelTy_rowLe`).
+type (`kappa_cancel_jr` at an unrestricted `κ`, `kcancel_jr_cancellable` at a cancellable one), and
+at a row only when its cancel row is no `⊤` and below the row (`cancelTy_rowLe`).
 
-**A continuation is used once.**  At a resuming must-resume or cancellable operation, a clause's `κ` is at
-`kTy`, a thunk of an `&`, which is not persistent (`kTy_not_persistent`): a live slot of it is
-neither dropped by a consumed context nor read on both sides of a split, and a linear `κ`'s cancel
-is at `⊤` only (`der_cancel_lin`).  So no clause that drops `κ` (R1), resumes it twice (R2), or
-cancels and then resumes it (R4) is typed at its clause type, and at a linear operation no clause
-that cancels it (R3) (`refuses_R_clauses`).  The refusals are of `κ`'s use: at the same clause types
-a clause that resumes `κ` once is typed, and a clause that cancels `κ` is typed at a cancellable
-operation and refused at a linear one (`clauseRefusals_pinned`).  At an unrestricted operation `κ`
-is `!`, and none of this applies.
+**A continuation is used once.**  At a resuming must-resume or cancellable operation, a clause's `κ`
+is at `kTy`, a thunk of an `&`, which is not persistent (`kTy_not_persistent`): a live slot of it is
+neither dropped by a consumed context nor read on both sides of a split, and a must-resume `κ`'s
+cancel is at `⊤` only (`der_cancel_lin`).  So no clause that drops `κ` (R1), resumes it twice (R2),
+or cancels and then resumes it (R4) is typed at its clause type, and at a must-resume operation no
+clause that cancels it (R3) (`refuses_R_clauses`).  The refusals are of `κ`'s use: at the same
+clause types a clause that resumes `κ` once is typed, and a clause that cancels `κ` is typed at a
+cancellable operation and refused at a must-resume one (`clauseRefusals_pinned`).  At an
+unrestricted operation `κ` is `!`, and none of this applies.
 
 **Cost** (`CLAUDE.md`, *Do not invert `CDerives` casually*).  A rule added to `CDerives` adds a case
 to each inversion.  The case is closed by the rule's conclusion's term (`cd_terms`), unless the rule
@@ -2807,8 +2807,8 @@ theorem k_twice {Δ : LifeCtx} {Γb : Ctx VTy} {K A : VTy} {N M : Expr} {j : Jdg
   subst hT
   exact hp
 
-/-- **A linear `κ`'s cancel is at `⊤` only**: `κ (inj₂ ())` projects `κ`'s `&` onto its cancel
-branch, `⊤` at a linear operation, and `κ` is no function of `⊸`. -/
+/-- **A must-resume `κ`'s cancel is at `⊤` only**: `κ (inj₂ ())` projects `κ`'s `&` onto its cancel
+branch, `⊤` at a must-resume operation, and `κ` is no function of `⊸`. -/
 theorem der_cancel_lin {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {S : Row} {R B : VTy} {F : CTy}
     {j : Jdg} (h : CDerives Δ Γ (cancelE (.var i)) j)
     (hi : ∀ T, Γ[i]? = some ⟨T, true⟩ → T = kTy S R .lin B F) : JR (.comp .top) j := by
@@ -2839,8 +2839,8 @@ theorem der_cancel_lin {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {S : Row} {R B : 
   · cases hu
   · rcases hX with hX | hX | ⟨Z, hX⟩ | ⟨Z, hX⟩ <;> cases hX
 
-/-- **R1's clause is refused at a resuming must-resume or cancellable operation**: `return ff` consumes its
-context, where the slot of `k : kTy` is live, and `kTy` is not persistent. -/
+/-- **R1's clause is refused at a resuming must-resume or cancellable operation**: `return ff`
+consumes its context, where the slot of `k : kTy` is live, and `kTy` is not persistent. -/
 theorem refuses_dropClause {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q : Qual}
     {A B : VTy} {F : CTy} (hq : q ≠ .unr) (hres : (B.isZero && q != .lin) = false) :
     ¬ CDerives Δ Γ dropCl.1 (.val (clauseTy S R (q, A, B) F)) := by
@@ -2853,8 +2853,9 @@ theorem refuses_dropClause {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q 
   · obtain ⟨S', Y, he⟩ := hr.comp_val
     exact effOf_ne_top S' Y he.symm
 
-/-- **R2's clause is refused at a resuming must-resume or cancellable operation**: `resume k () to _.
-resume k ()` reads `k` on both sides of a bind, so its slot would be persistent. -/
+/-- **R2's clause is refused at a resuming must-resume or cancellable operation**:
+`resume k () to _. resume k ()` reads `k` on both sides of a bind, so its slot would be
+persistent. -/
 theorem refuses_twiceClause {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q : Qual}
     {A B : VTy} {F : CTy} (hq : q ≠ .unr) (hres : (B.isZero && q != .lin) = false) :
     ¬ CDerives Δ Γ twiceCl.1 (.val (clauseTy S R (q, A, B) F)) := by
@@ -2881,7 +2882,7 @@ theorem refuses_cancelResumeClause {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : 
     (by simp only [resumeE]; not_withPair) (by simp only [resumeE]; not_const)
     (by simp [cancelE, Expr.HasVar]) (by simp [resumeE, Expr.HasVar, Expr.shift]))
 
-/-- **R3's clause is refused at a linear operation**: a linear `κ`'s cancel is at `⊤` only
+/-- **R3's clause is refused at a must-resume operation**: a must-resume `κ`'s cancel is at `⊤` only
 (`der_cancel_lin`), and a bind takes its computation at a row. -/
 theorem refuses_cancelClause_lin {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {A B : VTy}
     {F : CTy} : ¬ CDerives Δ Γ cancelCl.1 (.val (clauseTy S R (.lin, A, B) F)) := by
@@ -2901,7 +2902,8 @@ theorem refuses_cancelClause_lin {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VT
   exact effOf_ne_top _ _ this
 
 /-- **The clause typing refuses R1–R4's clauses** at the classes S6's witnesses name: R1, R2 and R4
-at every resuming must-resume or cancellable operation, R3 at every must-resume one, at every cancel row. -/
+at every resuming must-resume or cancellable operation, R3 at every must-resume one, at every cancel
+row. -/
 theorem refuses_R_clauses {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q : Qual} {A B : VTy}
     {F : CTy} (hq : q ≠ .unr) (hres : (B.isZero && q != .lin) = false) :
     ¬ CDerives Δ Γ dropCl.1 (.val (clauseTy S R (q, A, B) F)) ∧
@@ -2914,8 +2916,8 @@ theorem refuses_R_clauses {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q :
 /-! ### The refusals pin `κ`'s use -/
 
 open EffExamples in
-/-- **A clause that cancels `κ` is refused at a linear operation**: `x; κ (inj₂ ())` answers at `⊤`,
-and the clause at a row. -/
+/-- **A clause that cancels `κ` is refused at a must-resume operation**: `x; κ (inj₂ ())` answers at
+`⊤`, and the clause at a row. -/
 theorem refuses_clC_lin {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {A B : VTy} {F : CTy} :
     ¬ CDerives Δ Γ clC (.val (clauseTy S R (.lin, A, B) F)) := by
   intro h
@@ -2931,9 +2933,10 @@ theorem refuses_clC_lin {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {A B :
   exact effOf_ne_top _ _ this
 
 open EffExamples in
-/-- **The refusals are of `κ`'s use, not of the clauses' form.**  At the clause type of a linear
-operation `1 ↠ 1`, a clause that resumes `κ` once is typed (`cl₀`) and R1–R4's clauses are not; a
-clause that cancels `κ` (`clC`) is typed at a cancellable operation and refused at a must-resume one. -/
+/-- **The refusals are of `κ`'s use, not of the clauses' form.**  At the clause type of a
+must-resume operation `1 ↠ 1`, a clause that resumes `κ` once is typed (`cl₀`) and R1–R4's clauses
+are not; a clause that cancels `κ` (`clC`) is typed at a cancellable operation and refused at a
+must-resume one. -/
 theorem clauseRefusals_pinned :
     (CDerives LifeCtx.empty [] cl₀ (.val (clauseTy [] .unit (.lin, .unit, .unit))) ∧
       ¬ CDerives LifeCtx.empty [] dropCl.1 (.val (clauseTy [] .unit (.lin, .unit, .unit))) ∧

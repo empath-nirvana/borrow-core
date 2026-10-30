@@ -42,7 +42,8 @@ documentation, arXiv, and Crossref. Every claim about a source I could not reach
      reified, and a stored `κ` would hold a lend across a suspension".
    - **The same shape recurs** elsewhere: "nothing of kind K may be live at a suspension of kind
      S".
-     - Tang et al. and Affect: no linear or affine value (in their sense) in a multi-shot continuation.
+     - Tang et al. and Affect: no linear or affine value (in their sense) in a multi-shot
+       continuation.
      - Swift: no actor-isolated `inout` across an `await`.
      - OxCaml's *yielding* axis.
      - Koka's tail-resumptive `fun` operations, which, like our answering operations, are not
@@ -210,10 +211,10 @@ can be leaked in Rust", "there's no sound way to take a borrowed slice, pass it 
 wait for the kernel to finish its IO". The answer is **owned buffers**: the operation takes the
 buffer and gives it back.
 
-For us [inspection]: our continuations are linear with a cancel branch, and cancellation is finalisation
-(`docs/effects-tr/` D1.8, §8), so the leak half of that argument does not apply. The ownership
-half does: a suspending I/O operation whose payload is a *lend* is exactly a lend spanning the
-stop. Under the slice, the payload is the owned buffer, and the answer returns it.
+For us [inspection]: our continuations are linear with a cancel branch, and cancellation is
+finalisation (`docs/effects-tr/` D1.8, §8), so the leak half of that argument does not apply. The
+ownership half does: a suspending I/O operation whose payload is a *lend* is exactly a lend spanning
+the stop. Under the slice, the payload is the owned buffer, and the answer returns it.
 
 ---
 
@@ -389,8 +390,8 @@ stop. Under the slice, the payload is the owned buffer, and the answer returns i
 
 **None of them has borrows in the lifetime sense across a suspension.** Hazel, blaze and Affect
 have heap ownership in the continuation. Tang et al. and Affect slice on *multiplicity*: no
-linear or affine value (their classes) may be live in a multi-shot continuation. Their slice has the same shape
-as ours, indexed by the operation's annotation; the index is multiplicity, not lifetime.
+linear or affine value (their classes) may be live in a multi-shot continuation. Their slice has the
+same shape as ours, indexed by the operation's annotation; the index is multiplicity, not lifetime.
 
 ### 5.3 Lifetimes as tokens versus lifetimes as strata
 

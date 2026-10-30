@@ -10,7 +10,7 @@ case.
 
 **The rule** (`effHandleT`, decision 68): every clause of a non-abortive operation **resumes `κ`
 in tail position** with an answer it computes from the operation's argument, by a function
-`g : !U(A ⊸ F_{Σ_N} B)` of a row `Σ_N ≤ Σ` of linear operations; a clause of an abortive
+`g : !U(A ⊸ F_{Σ_N} B)` of a row `Σ_N ≤ Σ` of must-resume operations; a clause of an abortive
 operation is `g : !U(A ⊸ F_Σ R)`.  The clauses are written out from the tuple of the `g`s
 (`tailTuple`): `λ(x, κ). (λw. κ.1 w) (g x)` and `λx. g x`.  This is the class that lowers to a
 direct call.  `g x` may tick.
@@ -21,8 +21,8 @@ row, `κ` resumed into one segment of the candidate.  The candidate is a least f
 (`TailY`), so that the resume frame's `κ` resumes into the candidate itself.  A segment of the
 handled computation under the handler is `ewp_handle_or`: the inner tick passes the handler, and
 a clause's answer resumes `κ` there.  The resume frame is `cwpF_frame` from the clause's row to
-the outer one; the clause's row is linear, so the frame holds `κ` through every stop.  `Closing`
-is `ewp_handle` at the closing tables.
+the outer one; the clause's row is of must-resume operations, so the frame holds `κ` through every
+stop.  `Closing` is `ewp_handle` at the closing tables.
 -/
 
 noncomputable section
@@ -317,7 +317,7 @@ theorem Row.divB_ofEff_eq {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat �
   · obtain ⟨o, hfo, ho⟩ := Row.divB_find h
     exact Row.divB_iff.mpr ⟨o, by rw [hf]; exact hfo, ho⟩
 
-/-- A row of linear operations: every entry linear, none abortive. -/
+/-- A row of must-resume operations: every entry at `lin`, none abortive. -/
 theorem Row.tab_lin {SN : Row} (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false) (δ : LSub)
     {n i : UInt32} {en : OpEnt} (h : Row.tab SN δ n i = some en) : en.q = .lin ∧ en.abort = false := by
   obtain ⟨o, hf, rfl⟩ := Row.tab_some h
@@ -344,7 +344,7 @@ theorem kapRelT_resume {Tb : Table} (hTb : Tb.Mono) {Qout : List SRec → Val �
   exact ewp_pureSteps hTb (resK_steps κ w) _ _ σ
     ((hk.2 ls (Ext.refl ls σ₂)).1 w σ₁ σ (by exact hw) (ResU.CompS.comm hc))
 
-/-- The frame conditions at a row of linear operations, for any frame. -/
+/-- The frame conditions at a row of must-resume operations, for any frame. -/
 theorem lin_conds {T : OpTab} (hL : ∀ n i en, T n i = some en → en.q = .lin ∧ en.abort = false)
     (K : Kont) (Fr : List SRec → WProp) :
     (∀ n i en, T n i = some en → en.abort = true → ∀ ls ρ, Fr ls ρ → NoOwn ρ) ∧
@@ -388,7 +388,7 @@ theorem tail_clause_of {i : UInt32} {en : OpEnt}
 
 include hnd hn0 hnS hlen hSN hLin hVr hVc in
 /-- **`Closing` under a tail-resuming handler**: Core's `ewp_handle` at the closing tables; a
-clause's answering function is in `Closing` at its linear row, under the resume frame. -/
+clause's answering function is in `Closing` at its must-resume row, under the resume frame. -/
 theorem tail_closing (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {ρ : WRes}
     (h : Closing (Row.tab (Row.ofEff n E 0 fs ++ S) δ) (fun ls v => vC true A ls δ v) ls e ρ) :
     Closing (Row.tab S δ) (fun ls v => vC true R ls δ v) ls (hndE (tailH n E vr vc) e) ρ := by
@@ -622,7 +622,7 @@ variable {δ : LSub} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → 
 
 include hnd hn0 hnS hlen hSN hLin hVr hVc in
 /-- **A tail-resuming handler at a row that does not hold `Div`**: Core's `ewp_handle`; a
-clause's answering function runs at its linear row under the resume frame. -/
+clause's answering function runs at its must-resume row under the resume frame. -/
 theorem ewp_handle_tail (hSd : Row.divB S = false) {ls : List SRec} {e : Expr} {ρ : WRes}
     (h : ewpTS ls e (opTable (Row.tab (Row.ofEff n E 0 fs ++ S) δ)) (fun ls v => vC true A ls δ v) ρ) :
     ewpTS ls (hndE (tailH n E vr vc) e) (opTable (Row.tab S δ)) (fun ls v => vC true R ls δ v) ρ := by

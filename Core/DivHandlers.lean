@@ -1,12 +1,12 @@
 import Core.DivIterate
 
 /-!
-# Core — `Div`: steps of a handler with one linear clause  `[spec §14, §19]`
+# Core — `Div`: steps of a handler of one must-resume operation  `[spec §14, §19]`
 
-The handlers of `Div` the kernel has (`div_fuel`, `reify`) have one linear clause.  At a tick the
-`[op]` step gives `κ` its cell (`hnd_tick`); resuming `κ` frees it and runs the continuation under
-the handler (`ewp_kappaC_resume_in`).  An operation of another name passes a handler of `Div`
-under a plain frame (`hnd_fwd`).
+The handlers of `Div` the kernel has (`div_fuel`, `reify`) have one clause, of a must-resume
+operation.  At a tick the `[op]` step gives `κ` its cell (`hnd_tick`); resuming `κ` frees it and
+runs the continuation under the handler (`ewp_kappaC_resume_in`).  An operation of another name
+passes a handler of `Div` under a plain frame (`hnd_fwd`).
 -/
 
 noncomputable section
@@ -60,11 +60,11 @@ theorem kappaAt_lin (d : UInt32) (hr c : Val) (K : Kont) :
       kappaCell false (hndVal d (qualsVal [Qual.lin]) hr (c.pair Val.unit)) K := by
   simp only [kappaAt, qualsVal, Qual.tag, Val.pair, Val.i32]; rfl
 
-/-- A linear `κ` at its cell, as a value. -/
+/-- A must-resume `κ` at its cell, as a value. -/
 def kapV (ℓ : Loc) (H : Val) (K : Kont) : Val := ⟨kappaC false ℓ H K, isVal_kappaC false ℓ H K⟩
 
-/-- **A tick under a handler of `Div` with one linear clause `c`**, in a context `K₀`: the
-clause, with `κ` given its cell. -/
+/-- **A tick under a handler of `Div` with one clause `c`**, of a must-resume operation, in a
+context `K₀`: the clause, with `κ` given its cell. -/
 theorem hnd_tick {Tb : Table} (hTb : Tb.Mono) (hr c : Val) (K₀ K₁ : Kont)
     (hK₁ : K₁.HasHnd divEff = false) {ls : List SRec} {Q : List SRec → Val → WProp} {ρ : WRes}
     (h : ∀ ℓ : Loc, (ptoOwn ℓ Val.unit ─⋆ ewpTS ls (K₀.plug (.app (.val c)

@@ -76,8 +76,8 @@ structure PinLaw : Prop where
 /-! ### The rows a relaxed lend admits
 
 `Row.ResumeO` is satisfiable by the operations a task performs inside a relaxed lend: the
-scheduler's `await : 1 ↠^cancel 1` and the generator's `yield : i32 ↠^cancel 1`. An abortive operation
-is outside it. -/
+scheduler's `await : 1 ↠^cancel 1` and the generator's `yield : i32 ↠^cancel 1`. An abortive
+operation is outside it. -/
 
 /-- `await : 1 ↠^cancel 1` at the name `1`. -/
 def pinAwaitSig : OpSig := ⟨1, 0, .cancel, .unit, .unit, .ret .unit⟩

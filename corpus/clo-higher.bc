@@ -1,12 +1,12 @@
--- Higher-order closures (SPEC §22): a closure capturing a closure, and a closure taking a
--- closure.
+-- Higher-order closures (SPEC §22): a closure capturing a closure, and a closure taking a closure.
 --
 -- `doubler(k)` is a closure whose state is the closure `k`: each call calls `k` and doubles its
 -- answer, and closing it closes `k`. Its bound is `k`'s own `'c`: its state `box 'c …` outlives
 -- `'c` (SPEC §23); like `clo-drop.bc`'s `nest`, it is built with `clo_new` and `boxed['c]`, since
--- `clo_new_boxed`'s bound would put its `'c` strictly below. `runner` is a closure whose call takes a closure `f` (owned) and calls it with 5,
--- then closes it; its state is the running total of `f`'s answers. The argument's type names no
--- state, so `runner` takes a counter over a cell and an unrestricted function made a closure alike.
+-- `clo_new_boxed`'s bound would put its `'c` strictly below. `runner` is a closure whose call takes
+-- a closure `f` (owned) and calls it with 5, then closes it; its state is the running total of
+-- `f`'s answers. The argument's type names no state, so `runner` takes a counter over a cell and an
+-- unrestricted function made a closure alike.
 --
 -- Answer: i32[12062], and `live 0`. `doubler` over a counter from 0 answers 2 and 6 (`2 + 60`);
 -- `runner` answers 105 for a counter from 100, then 105 + 15 for `x * 3` (`12000`). Closing

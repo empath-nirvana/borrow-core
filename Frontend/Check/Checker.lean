@@ -678,8 +678,9 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                     else err sp s!"the view `{m.name}` of this relaxed lend is not consumed"
                   else err sp s!"a relaxed lend's result `{E.ppV B'}` holds a `U`: its value is read back after the lend is re-lent (R1, SPEC §29)"
                 else err sp ("the row of a relaxed lend's body has only operations that resume " ++
-                  "at most once (cancellable or must-resume), of names other than 0, answering `1` with the empty " ++
-                  "cancel row, whose arguments are closed data with no `U` (R1, SPEC §29)")
+                  "at most once (cancellable or must-resume), of names other than 0, answering " ++
+                  "`1` with the empty cancel row, whose arguments are closed data with no `U` " ++
+                  "(R1, SPEC §29)")
               else err sp s!"`withbor2r`: its number {ppLVar v} occurs in a bound of the lifetime context"
             else err sp s!"`withbor2r`: its bound mentions its own number {ppLVar v}"
           else err sp s!"`withbor2r`: the bound `{E.ppL bl}` is not defined here"
@@ -720,7 +721,7 @@ def abortIt : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → Na
   | n + 1, E, Δ, T, sp, k, i, V, B => do
     let ⟨S, o, hf⟩ ← findOp E sp "abort" k i
     if ha : o.abort = true then
-      if hd : dropB o.A = true then
+      if hd : ownFreeB o.A = true then
         let rV ← chkV n E Δ T V o.A
         pure ⟨S, rRaise (at_ sp) B hf ha hd rV⟩
       else err sp s!"the argument of the abortive operation {k}.{i}, of type `{E.ppV o.A}`, does not drop"

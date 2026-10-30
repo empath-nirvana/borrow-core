@@ -598,8 +598,8 @@ def firstClause (S : CRow) (R c : CVTy) :
       else firstClause S R c es
 
 /-- The operations `E` of a handler read back from the type of its clauses' tuple, with
-`clausesTy S R E` that type. An abortive operation is read as cancellable: `cancel` and `unr` give it
-the same clause type. -/
+`clausesTy S R E` that type. An abortive operation is read as cancellable: `cancel` and `unr` give
+it the same clause type. -/
 def clausesRead (S : CRow) (R : CVTy) :
     (Tc : CVTy) → Option {E // BoCa.Fig16.LogRel.Core.clausesTy S R E = Tc}
   | .unit => some ⟨[], rfl⟩
@@ -710,8 +710,8 @@ def mergeErr (E : Env) (T : List CVTy) (sp : Span) (what₁ what₂ intro : Stri
 def unconsumed (E : Env) (sp : Span) (x : String) (A : CVTy) : Error :=
   if hasDtorB A then
     ⟨sp, s!"`{x}` is not consumed in its scope, and it cannot be dropped where its scope ends"⟩
-  else ⟨sp, s!"`{x}` is not consumed in its scope, and its type `{E.ppV A}` is linear and has no " ++
-    "derived drop"⟩
+  else ⟨sp, s!"`{x}` is not consumed in its scope, and its type `{E.ppV A}` is linear and " ++
+    "has no derived drop"⟩
 
 def mismatch (sp : Span) (want got : String) : Error :=
   ⟨sp, s!"type mismatch: expected `{want}`, but this has type `{got}`"⟩
@@ -876,13 +876,11 @@ def dropOne {C : CCTy} (sp : Span) (i : Nat) (r : Res Δ T (.comp C)) :
   match hi : T[i]? with
   | some A =>
     if hA : hasDtorB A = true then
-      if hE : (BoCa.Fig16.LogRel.Core.dtorE A).effFree = true then
-        if hc : BoCa.Fig16.LogRel.Core.closedAt 0 (BoCa.Fig16.LogRel.Core.dtorE A) = true then
-          if h : overlapOK T (oneL T i) r.F.u = true then
-            pure (rDrop (at_ sp) (at_ sp) i A hi (hasDtorB_sound hA) hc hE r h)
-          else throw ⟨sp, "internal error: a dropped slot is used"⟩
-        else throw ⟨sp, "internal error: a destructor is not closed"⟩
-      else throw ⟨sp, "internal error: a destructor performs or handles an operation"⟩
+      if h : overlapOK T (oneL T i) r.F.u = true then
+        pure (rDrop (at_ sp) (at_ sp) i A hi (hasDtorB_sound hA)
+          (BoCa.Fig16.LogRel.Core.dtorE_closed (hasDtorB_sound hA))
+          (BoCa.Fig16.LogRel.Core.dtorE_effFree A) r h)
+      else throw ⟨sp, "internal error: a dropped slot is used"⟩
     else throw ⟨sp, "internal error: an owed slot has no destructor"⟩
   | none => throw ⟨sp, "internal error: an owed slot is out of range"⟩
 
@@ -1015,8 +1013,8 @@ def finalOf (E : Env) (sp : Span) (_S : CRow) (u : List Bool) :
     | some A =>
       if hasDtorB A then dropOne sp (i + 1) r
       else throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across a computation " ++
-        "that may abort, and its type is linear with no derived drop, and an abort abandons only " ++
-        "a value that holds no owned cell"⟩
+        "that may abort, and its type is linear with no derived drop, and an abort abandons " ++
+        "only a value that holds no owned cell"⟩
     | none => throw ⟨sp, "internal error: a slot is out of range"⟩
   pure r
 
@@ -1070,10 +1068,10 @@ def effBind (E : Env) (sp : Span) (x : Ident) {S : CRow} {A B : CVTy}
     Except Error (Res Δ T (.comp (effOf S B))) := do
   let FN ← popL E x.span x.name rN.F
   if hw : Row.cancelsB S = true then
-    let p : CVTy → Bool := fun A => dropB A && (!Row.unrB S || isBangB A)
+    let p : CVTy → Bool := fun A => ownFreeB A && (!Row.unrB S || isBangB A)
     if hs : usedSat p T FN.u = true then
       let FN' := (FN.restrict p hs).map fun _ ⟨h, hp⟩ =>
-        (⟨h, fun _ s hsm hl => dropB_sound _ (by
+        (⟨h, fun _ s hsm hl => ownFreeB_sound _ (by
             have := hp s hsm hl
             simp only [p, Bool.and_eq_true] at this
             exact this.1),
@@ -1084,7 +1082,8 @@ def effBind (E : Env) (sp : Span) (x : Ident) {S : CRow} {A B : CVTy}
             · exact absurd (Row.unrB_iff.mpr hU) (by simp [h'])
             · exact h')⟩ :
           TTied rN.pins rN.sigs Δ (mkCtx (A :: T) (true :: _)) rN.t (.comp (effOf S B)) ∧
-            (S.Cancels → (mkCtx T _).OwnFree) ∧ (S.Unr → BoCa.Fig16.LogRel.Core.Ctx.Banged (mkCtx T _)))
+            (S.Cancels → (mkCtx T _).OwnFree) ∧
+            (S.Unr → BoCa.Fig16.LogRel.Core.Ctx.Banged (mkCtx T _)))
       if h : overlapOK T rM.F.u FN'.u = true then pure (rScope (at_ sp) (rEffLet (atB sp [x.name]) rM FN' h))
       else throw (splitErr E T sp rM.F.u FN'.u)
     else
@@ -1095,7 +1094,8 @@ def effBind (E : Env) (sp : Span) (x : Ident) {S : CRow} {A B : CVTy}
       (⟨h, fun hW => absurd (Row.cancelsB_iff.mpr hW) (by simp [hw]),
         fun hU => absurd (Row.cancelsB_iff.mpr (Row.cancels_of_unr hU)) (by simp [hw])⟩ :
         TTied rN.pins rN.sigs Δ (mkCtx (A :: T) (true :: _)) rN.t (.comp (effOf S B)) ∧
-          (S.Cancels → (mkCtx T _).OwnFree) ∧ (S.Unr → BoCa.Fig16.LogRel.Core.Ctx.Banged (mkCtx T _)))
+          (S.Cancels → (mkCtx T _).OwnFree) ∧
+          (S.Unr → BoCa.Fig16.LogRel.Core.Ctx.Banged (mkCtx T _)))
     if h : overlapOK T rM.F.u FN'.u = true then pure (rScope (at_ sp) (rEffLet (atB sp [x.name]) rM FN' h))
     else throw (splitErr E T sp rM.F.u FN'.u)
 

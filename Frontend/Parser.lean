@@ -2271,7 +2271,8 @@ def statement : Nat → Pos → Bool → P Comp
           let V ← valAtom n
           let sp ← spanFrom st
           let a ← freshName "io_a"
-          pure (Comp.bind sp ⟨a, sp⟩ none (.ret sp V) (.app sp (.force t.span ⟨f, t.span⟩) ⟨a, sp⟩), none)
+          pure (Comp.bind sp ⟨a, sp⟩ none (.ret sp V)
+            (.app sp (.force t.span ⟨f, t.span⟩) ⟨a, sp⟩), none)
         else pure (Comp.force (← spanFrom st) ⟨f, t.span⟩, none)
       | tok, _ =>
         if startsComp tok then pure (← compPrefix n, none)

@@ -39,7 +39,7 @@ theorem sep_emp_elim {P : WProp} {ρ : WRes} (h : (P ⋆ emp) ρ) : P ρ := by
   obtain ⟨σ₁, σ₂, hc, hp, ⟨rfl, -⟩⟩ := h
   rw [compS_empty_eq hc]; exact hp
 
-/-- `tick`'s entry: linear, not abortive, `1 ↠ Next`. -/
+/-- `tick`'s entry: must resume, not abortive, `1 ↠ Next`. -/
 def OpEnt.IsTick (en : OpEnt) : Prop :=
   en.q = .lin ∧ en.abort = false ∧ (∀ ls v ρ, en.PA ls v ρ ↔ v = .unit ∧ ρ = PMap.empty) ∧
     ∀ ls w ρ, en.PB ls w ρ ↔ (w = nextV ∨ w = closeV) ∧ ρ = PMap.empty

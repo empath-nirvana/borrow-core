@@ -657,7 +657,8 @@ theorem ewp_kappaC_resume {Tb : Table} (hTb : Tb.Mono) (hasCancel : Bool) (ℓ :
   rw [show (0 + 1 : Nat) = 1 from rfl, show (0 + 1 + 1 : Nat) = 2 from rfl, kappa_resume_subst]
   exact hq
 
-/-- **Cancelling a cancellable `κ`** frees its cell, then runs `ccatch (K†[raise (0, (0, none))])`. -/
+/-- **Cancelling a cancellable `κ`** frees its cell, then runs
+`ccatch (K†[raise (0, (0, none))])`. -/
 theorem ewp_kappaC_cancel {Tb : Table} (hTb : Tb.Mono) (ℓ : Loc) (H : Val) (K : Kont)
     {ls : List SRec} {Q : List SRec → Val → WProp} {ρ : WRes}
     (h : (ptoOwn ℓ Val.unit ⋆ ewpTS ls (ccatchE (K.dead.plug (raiseE (.val (cancelVal none)))))
@@ -1112,7 +1113,8 @@ theorem substAll_cons_psub (v : Val) (γ : List Val) (e : Expr) :
   show Expr.psub 0 (v :: γ) e = _
   rw [Expr.psub_cons 0 v γ e, Val.shift_zero]
 
-theorem OpSig.cancels_of_ent {o : OpSig} {δ : LSub} (h : (o.ent δ).q ≠ .lin ∨ (o.ent δ).abort = true) :
+theorem OpSig.cancels_of_ent {o : OpSig} {δ : LSub}
+    (h : (o.ent δ).q ≠ .lin ∨ (o.ent δ).abort = true) :
     o.q ≠ .lin := by
   rcases h with h | h
   · exact h
@@ -1142,8 +1144,8 @@ def cancelTy (S : Row) (F : CTy) : CTy :=
   if F.isTop then .top else CTy.effOf (F.rowOf ++ S) .unit
 
 /-- `κ`'s type at an operation `A ↠^q B` of a handler answering `F_Σ R`, whose cancel row is `F`:
-`U((B ⊸ F_Σ R) & ⊤)` (must resume: resumed), `U((B ⊸ F_Σ R) & C)` (cancellable: resumed or cancelled), and
-its `!` (unrestricted), with `C = cancelTy Σ F`.  `[spec §19, §27]` -/
+`U((B ⊸ F_Σ R) & ⊤)` (must resume: resumed), `U((B ⊸ F_Σ R) & C)` (cancellable: resumed or
+cancelled), and its `!` (unrestricted), with `C = cancelTy Σ F`.  `[spec §19, §27]` -/
 def kTy (S : Row) (R : VTy) (q : Qual) (B : VTy) (F : CTy := .ret .unit) : VTy :=
   match q with
   | .lin => .thunk (.amp (.arr B (CTy.effOf S R)) .top)

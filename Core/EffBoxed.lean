@@ -29,7 +29,8 @@ about the handled computation `e : F_{E_n ⊕ Σ} A` under `Γ₂`:
   `@d` (`Row.AnsOutlives`).
 
 `ewp_handleS` is `ewp_handle` at the stratified table: the clause receives `κ`'s share in `Res_α`.
-At a must-resume or cancellable operation `κ` also holds its cell, an `own` cell, which is in every stratum.
+At a must-resume or cancellable operation `κ` also holds its cell, an `own` cell, which is in every
+stratum.
 -/
 
 noncomputable section
@@ -176,8 +177,8 @@ theorem stop_sem {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {S : Row} {A : VTy}
 
 /-- **`[handle]` at the stratified table**: `ewp_handle`, its inner computation in `ewpTS` at
 `opTableS α Tin`, so the clause of a capturing operation receives `κ` in `Res_α`. The proof is
-`ewp_handle`'s; at a must-resume or cancellable operation `κ`'s resource is the share and its cell, an
-`own` cell. -/
+`ewp_handle`'s; at a must-resume or cancellable operation `κ`'s resource is the share and its cell,
+an `own` cell. -/
 theorem ewp_handleS (α : Life) (Tin Tout : OpTab) (n : UInt32) (hn0 : n ≠ 0)
     (hTin : ∀ m i, m ≠ n → Tin m i = Tout m i) (qs hr hs : Val)
     (Qin Qout : List SRec → Val → WProp) (Tc : UInt32 → Option OpTab)

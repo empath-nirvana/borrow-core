@@ -302,9 +302,9 @@ For each kind of continuation: the law, the lowering, and what must be known at 
     passing on `s'`, equals threading `s` through the cell.
   - This follows from H-op, `kappa_resume_steps` and β, by induction on the body's run. It is not
     a Core theorem by name. **Hypothesis**, to be stated as one with the unit (§6).
-  - It holds for a must-resume or cancellable operation. An `unr` continuation resumed twice would see one
-    cell where state-passing gives each resume its own state. `unr` keeps state-passing; multi-shot
-    is not designed for (decision 63).
+  - It holds for a must-resume or cancellable operation. An `unr` continuation resumed twice would
+    see one cell where state-passing gives each resume its own state. `unr` keeps state-passing;
+    multi-shot is not designed for (decision 63).
 
 ### 2.4 Resume or cancel (the `deadline` pattern)
 
@@ -332,7 +332,7 @@ A clause that keeps `κ`: a stored generator's site (`κ` is the rest), `spawn`'
 §28), a scheduler's queue.
 
 - **Law.** H-op with `κ` as a value; resume (`kappa_resume_steps`); cancel (`kappa_cancel_steps`);
-  `κ` used once (item 4). A linear `κ` has no cancel branch (`kappaC_cancel_lin`).
+  `κ` used once (item 4). A must-resume `κ` has no cancel branch (`kappaC_cancel_lin`).
 - **Lowering.** A state machine (`Capture`): Rust's coroutine transform, sized statically,
   suspension through calls nests. This is the one place a state machine is the behaviour's own
   cost.

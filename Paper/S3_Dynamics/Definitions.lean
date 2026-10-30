@@ -325,11 +325,11 @@ unwinds; `ccatch e` catches the reserved name `0`, the cancel of a continuation.
 *catches* a `raise` of name `n` when it is a handler of `n`, a finaliser, a cancel-mode finaliser
 `cfin`, or (at `n = 0`) a `ccatch`; a `perform` of name `n` is caught only by a handler of `n`.
 
-**The capture cell** (`[spec §25]`).  At a must-resume or cancellable operation, the continuation `κ` the
-`[op]` step hands the clause owns a fresh cell holding `()`, allocated by the ordinary `alloc`
-before the clause runs.  Using `κ` frees it: resuming, and at a cancellable operation cancelling.  A
-linear `κ`'s cancel branch has no step.  So a `κ` dropped leaves its cell behind, and a `κ` used
-twice frees its cell twice.
+**The capture cell** (`[spec §25]`).  At a must-resume or cancellable operation, the continuation
+`κ` the `[op]` step hands the clause owns a fresh cell holding `()`, allocated by the ordinary
+`alloc` before the clause runs.  Using `κ` frees it: resuming, and at a cancellable operation
+cancelling.  A must-resume `κ`'s cancel branch has no step.  So a `κ` dropped leaves its cell
+behind, and a `κ` used twice frees its cell twice.
 
 **Cancels.**  A cancel is a `raise` of the reserved name `0` whose payload is a cancel state: the
 first error a finaliser of the cancelled region raised, if any (`cancelVal`).  The cancelled region
@@ -471,9 +471,9 @@ def freeE (e : Expr) : Expr := .app (.val (.prim .free)) e
 /-- A term with no step: `() ()`.  `[spec §25]` -/
 def stuckE : Expr := .app (.val .unit) (.val .unit)
 
-/-- `κ` at a must-resume (`hasCancel = false`) or cancellable operation, its cell at `ℓ`: `kappa`'s branches,
-each freeing `ℓ` once the branch is chosen.  A linear `κ`'s cancel branch is at `⊤` and has no
-step.  `[spec §25]` -/
+/-- `κ` at a must-resume (`hasCancel = false`) or cancellable operation, its cell at `ℓ`: `kappa`'s
+branches, each freeing `ℓ` once the branch is chosen.  A must-resume `κ`'s cancel branch is at `⊤`
+and has no step.  `[spec §25]` -/
 def kappaC (hasCancel : Bool) (ℓ : Loc) (H : Val) (K : Kont) : Expr :=
   .val (.lam (.case (.var 0)
     (.seq (.var 0) (.seq (freeE (.val (.loc ℓ)))
@@ -493,8 +493,8 @@ def kappaCBody (hasCancel : Bool) (H : Val) (K : Kont) : Expr :=
         (ccatchE ((K.dead.shift 3 0).plug (raiseE (.val (cancelVal none))))))
     else stuckE))
 
-/-- `κ` at a must-resume or cancellable operation, before its cell: `(λc. kappaCBody) (alloc ())`, so the
-cell is allocated by the ordinary `alloc` step, and `κ` is `kappaC` at its location.
+/-- `κ` at a must-resume or cancellable operation, before its cell: `(λc. kappaCBody) (alloc ())`,
+so the cell is allocated by the ordinary `alloc` step, and `κ` is `kappaC` at its location.
 `[spec §25]` -/
 def kappaCell (hasCancel : Bool) (H : Val) (K : Kont) : Expr :=
   .app (.val (.lam (kappaCBody hasCancel H K))) (.app (.val (.prim .alloc)) (.val .unit))

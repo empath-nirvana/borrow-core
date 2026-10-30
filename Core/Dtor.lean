@@ -24,8 +24,8 @@ value goes unused (`drop_derives`), so the elaborated term uses the value exactl
 | `ArrayImm @a A` | `array_forget` |
 
 The first two rows are the forgettable types, whose destructor does nothing; every type of
-`Forgettable` (`Core/Records.lean`) is one (`hasDtor_of_forgettable`). The other rows deallocate or run
-`close` code. `U C` in general has no destructor: a thunk of `F A` or of `A ⊸ C` can only be
+`Forgettable` (`Core/Records.lean`) is one (`hasDtor_of_forgettable`). The other rows deallocate or
+run `close` code. `U C` in general has no destructor: a thunk of `F A` or of `A ⊸ C` can only be
 disposed of by running it. Nor does `μ` outside the fold class `P` (for example `X` under `U`).
 
 The `alg` mode `dtorAt true A` is the destructor of `A⟨1⟩` (`FoldP.resO dtorAlgs`): `A` with

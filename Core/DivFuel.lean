@@ -17,7 +17,7 @@ computation answers a function of the budget's self-reference, driven by `bounde
 
 `bounded_fix`'s self-reference is `inl ()` once the budget is spent and otherwise the fixed point
 at one less, so the budget is the machine's, counted down by the machine (SPEC §20): the
-handler's state is a native counter.  `tick` is linear, so `κ` owns a cell, freed when it is
+handler's state is a native counter.  `tick` must resume, so `κ` owns a cell, freed when it is
 resumed.  Every path of the clause resumes `κ` once, in tail position up to the counter's
 application.
 
@@ -61,7 +61,7 @@ def fuelBody : Expr :=
 /-- The tick's clause `λ((), κ). λself. …`. -/
 def fuelC : Val := .lam (.letpair (.var 0) (.val (.lam fuelBody)))
 
-/-- The handler value: the name `Div`, the tick linear. -/
+/-- The handler value: the name `Div`, `tick` must resume. -/
 def fuelH : Val := hndVal divEff (qualsVal [.lin]) fuelR (Val.pair fuelC .unit)
 
 /-- `bounded_fix`'s step: `λ(self, g). g self`. -/

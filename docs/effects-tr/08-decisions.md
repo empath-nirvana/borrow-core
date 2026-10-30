@@ -98,9 +98,9 @@ the lend answers the capability with `inr e` (D3.6).
    continuation between the operation and the lend, as an abortive operation discards it up to
    its handler. Independence requires everything that continuation holds to be droppable or to
    have a destructor, which is `W ∈ q_o` at the capture points (L5.15.2 uses the protocol's cancel
-   conjunct, present exactly when `W ∈ q_o`). So the runner bound `rbnd(E)` contains `cancel` exactly
-   when `E` has a fallible operation, and the frames across a fallible operation are checked as
-   frames across a `raise`. No new rule is needed.
+   conjunct, present exactly when `W ∈ q_o`). So the runner bound `rbnd(E)` contains `cancel`
+   exactly when `E` has a fallible operation, and the frames across a fallible operation are checked
+   as frames across a `raise`. No new rule is needed.
 3. **Phase B implemented it.** Phase B's `coRes`, `coK`, `coStep` and the failure branch of
    `runL_rel` are (b), at every operation; its Fundamental Property covers it. Restricting to
    fallible operations is a special case (`E_o = 0` makes the branch empty), and it is what the

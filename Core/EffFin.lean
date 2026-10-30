@@ -81,7 +81,7 @@ theorem finObl_eq (δ : LSub) (F : CTy) :
 theorem OpSig.ent_fin (δ : LSub) (o : OpSig) :
     (o.ent δ).fin = if capB o.q o.B then finObl o.fin δ else none := rfl
 
-/-- A capturable entry: not abortive, not linear. -/
+/-- A capturable entry: not abortive, not must-resume. -/
 theorem capB_of_ent {δ : LSub} {o : OpSig} (ha : (o.ent δ).abort = false) (hq : (o.ent δ).q ≠ .lin) :
     capB o.q o.B = true := by
   simp only [OpSig.ent, OpSig.abort, Bool.and_eq_false_iff, bne_eq_false_iff_eq] at ha hq

@@ -22,7 +22,7 @@ open BoCa.Fig16.LogRel.Core.Check
 open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt CDerivesP Jdg VFree VOutlives VOutlivesLe FShape FD₁ mutM immM
   d_allocS d_freeS withborSM_wf withborSI_wf withborM2_wf withborI2_wf FamSide cbTy2 famTy2
   plainV HasDtor dtorE dtor_wf withborUE withbor1UTy withbor2UTy withbor3UTy withloadUTy
-  sliceBorrowMUTy sliceBorrowIUTy closedAt)
+  sliceBorrowMUTy sliceBorrowIUTy closedAt dtorE_closed dtorE_effFree)
 
 /-! ### Fold shapes -/
 
@@ -144,10 +144,7 @@ def famSide (sp : Span) (M : CLife → CVTy → CVTy) (c x y : LifeVar) (A B T' 
 def finaliser (sp : Span) (src : CVTy) :
     Except Error (PLift (HasDtor src ∧ closedAt 0 (dtorE src) = true ∧ (dtorE src).effFree = true)) :=
   if h : hasDtorB src = true then
-    if hc : closedAt 0 (dtorE src) = true then
-      if he : (dtorE src).effFree = true then pure ⟨hasDtorB_sound h, hc, he⟩
-      else err sp "internal error: a destructor performs or handles an operation"
-    else err sp "internal error: a destructor is not closed"
+    pure ⟨hasDtorB_sound h, dtorE_closed (hasDtorB_sound h), dtorE_effFree src⟩
   else err sp (s!"the source `{ppVTy src}` has no destructor, so it cannot be finalised when " ++
     "the callback aborts")
 

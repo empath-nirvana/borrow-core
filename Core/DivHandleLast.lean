@@ -13,9 +13,9 @@ and while it works `κ`'s cancel is its unwind finaliser.
 exits `nf` (`lastTuple`), as `effHandleT`'s are from its answering functions.  A work
 `w : !U(A ⊸ F_{Σ_W}(B ⊕ X))` runs at a row `Σ_W ≤ Σ`, and may tick, raise and perform cancellable
 operations of the rows outside; an exit `nf : !U(X ⊸ F_Σ R)`.  The handler's operations are
-cancellable or abortive; an abortive operation's clause is its work `w : !U(A ⊸ F_Σ R)` itself.  `κ`'s
-type never appears in a program, so its cancel branch is given the table of the operation's own
-cancel row `fs j` (`ewp_handle_or`'s `hTc` asks only that it be above the entry's obligation).
+cancellable or abortive; an abortive operation's clause is its work `w : !U(A ⊸ F_Σ R)` itself.
+`κ`'s type never appears in a program, so its cancel branch is given the table of the operation's
+own cancel row `fs j` (`ewp_handle_or`'s `hTc` asks only that it be above the entry's obligation).
 
 **The proof** (`cwp_handle_last`), at a row holding `Div`, is `cwp_handle_tail`'s: the greatest
 fixed point of the handled computations together with the finaliser frame around a work, `κ` in
@@ -523,7 +523,8 @@ theorem last_hTc {T : OpTab} (hT₀ : ∀ i en, T n i = some en →
   rw [OpSig.ent_fin, if_pos hcap, finObl_eq, if_neg (by simp [(hFin j hj).1])]
 
 /-- A non-abortive operation of the handler is cancellable. -/
-theorem last_cancel (hCancel : ∀ o ∈ E, o.1 = .cancel ∨ (o.2.2.isZero && o.1 != .lin) = true) {j : Nat}
+theorem last_cancel (hCancel : ∀ o ∈ E, o.1 = .cancel ∨ (o.2.2.isZero && o.1 != .lin) = true)
+    {j : Nat}
     (hj : j < E.length) (ha : (E[j].2.2.isZero && E[j].1 != .lin) = false) : E[j].1 ≠ .lin := by
   rcases hCancel E[j] (List.getElem_mem hj) with h | h
   · rw [h]; decide
@@ -960,8 +961,8 @@ theorem handleL_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Hr Hw Hn e : 
     intro ρf fρ ps hf hcf hT htg Al k
     obtain ⟨ls', vr, vw, vn, h₁, h₂, h₃, hVr, hVw, hVn⟩ := key ρf fρ ps hf hcf hT htg
     rw [h₁, h₂, h₃]
-    exact ewp_unfold (opTable_mono _) (ewp_handle_last (fs := fs) hn0 hnS hlen hNZ hSW hSu hCancel hFin
-      hVr hVw hVn hSd hE') ρf fρ ps hf hcf hT htg Al k
+    exact ewp_unfold (opTable_mono _) (ewp_handle_last (fs := fs) hn0 hnS hlen hNZ hSW hSu hCancel
+      hFin hVr hVw hVn hSd hE') ρf fρ ps hf hcf hT htg Al k
   · refine cwp_roll (ewp_fold (divTab_mono _ _ _) ?_)
     intro ρf fρ ps hf hcf hT htg Al k
     obtain ⟨ls', vr, vw, vn, h₁, h₂, h₃, hVr, hVw, hVn⟩ := key ρf fρ ps hf hcf hT htg

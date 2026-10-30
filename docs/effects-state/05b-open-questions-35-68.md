@@ -441,9 +441,9 @@ not at all (c)?
 
 ## OQ-48: Answering/control commutation at a cancellable operation, on the kernel
 
-**Question.** L-INTER holds in T13.13's special case. P13.14 says it fails at a cancellable operation
-whose clause cancels, but P13.14 was computed by hand in a sibling calculus. Machine-check it in
-`CDerives` (a), or withdraw it and state L-INTER at `cancel` (b)?
+**Question.** L-INTER holds in T13.13's special case. P13.14 says it fails at a cancellable
+operation whose clause cancels, but P13.14 was computed by hand in a sibling calculus. Machine-check
+it in `CDerives` (a), or withdraw it and state L-INTER at `cancel` (b)?
 
 **Class: EVIDENCED (PAPER-ONLY, sibling); CONSTRAINED by U22. Settles by proof.**
 

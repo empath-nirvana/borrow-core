@@ -296,8 +296,8 @@ theorem checkProgram_tied {p : Program} {r : Report} {c : Checked}
     ∀ Ξ : EffCtx, SigsAt Ξ c.sigs → CDerivesAt Ξ LifeCtx.empty c.ctx c.t.erase (.comp c.C) :=
   c.tied.tied.1 hp
 
-/-- **At the program's own effect context**, whose abortive operations are cancellable (decision 63):
-`main`'s derivation is `CDerivesAt c.Ξ`, and `c.Ξ` has no unrestricted operation answering `0`.
+/-- **At the program's own effect context**, whose abortive operations are cancellable (decision
+63): `main`'s derivation is `CDerivesAt c.Ξ`, and `c.Ξ` has no unrestricted operation answering `0`.
 `[spec §18, §19]` -/
 theorem checkProgram_tiedAt {p : Program} {r : Report} {c : Checked}
     (_h : checkProgram p = .ok r) (_hc : r.main = some c) (hp : c.pins = []) :

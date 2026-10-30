@@ -4,7 +4,7 @@ import Support.Dynamics.Iterate
 /-!
 # Core — `Div`: the relation at a row that holds it  `[spec §14, §19]`
 
-`Div` is the reserved name `divEff` with one linear operation `tick : 1 ↠ Next`, `Next = 1 ⊕ 1`
+`Div` is the reserved name `divEff` with one must-resume operation `tick : 1 ↠ Next`, `Next = 1 ⊕ 1`
 (`Support/Dynamics/Iterate.lean`).  A row *holds* `Div` when the operation it finds at
 `(divEff, 0)` is `tick` (`CTy.divAt`).
 
@@ -41,7 +41,7 @@ open BoCa.Lifetime (LSub)
 /-- `Next = 1 ⊕ 1`.  `[spec §14]` -/
 abbrev nextTy : VTy := .sum .unit .unit
 
-/-- `tick : 1 ↠ Next`, the operation `0` of `Div`, linear: its continuation has no cancel.
+/-- `tick : 1 ↠ Next`, the operation `0` of `Div`, must resume: its continuation has no cancel.
 `[spec §14]` -/
 def tickSig : OpSig := ⟨divEff, 0, .lin, .unit, nextTy, .ret .unit⟩
 

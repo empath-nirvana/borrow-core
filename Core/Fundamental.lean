@@ -456,7 +456,7 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       CDerives Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
   /-- `[handle]` at clauses that resume `κ` in tail position: `handle_n e with (h_ret, gs)`, the
   clauses written out from a tuple `gs` of answering functions (`tailTuple`), each at a row `Σ_N`
-  of linear operations below `Σ`; an abortive operation's clause is its function itself.  The
+  of must-resume operations below `Σ`; an abortive operation's clause is its function itself.  The
   handled row may hold `Div` (decision 68).  `[spec §14, §19]` -/
   | effHandleT {Δ Γ Γ₁ Γ₂} {Hr Hc e : Expr} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
       {n : UInt32} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁)
@@ -471,9 +471,9 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   `ws` of works and a tuple `nfs` of exits (`lastTuple`): each non-abortive clause runs its work
   `w : !U(A ⊸ F_{Σ_W}(B ⊕ X))`, then resumes `κ` in tail position at `inl` or cancels it and runs
   its exit `nf : !U(X ⊸ F_Σ R)` at `inr`, with `κ`'s cancel its unwind finaliser while the work
-  runs; an abortive operation's clause is its work.  The operations are cancellable or abortive, `Σ_W ≤
-  Σ`, `Σ` has no unrestricted operation at any depth, and each cancel row is as `LastFinOK` says.
-  The handled row may hold `Div`.  `[spec §14, §19, §27, §51]` -/
+  runs; an abortive operation's clause is its work.  The operations are cancellable or abortive,
+  `Σ_W ≤ Σ`, `Σ` has no unrestricted operation at any depth, and each cancel row is as `LastFinOK`
+  says. The handled row may hold `Div`.  `[spec §14, §19, §27, §51]` -/
   | effHandleL {Δ Γ Γ₁ Γ₂} {Hr Hw Hn e : Expr} {S SW : Row} {E : List (Qual × VTy × VTy)}
       {fs : Nat → CTy} {Xs : Nat → VTy} {n : UInt32} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
       (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁) (hHw : Hw.ValFormIn Γ₁) (hHn : Hn.ValFormIn Γ₁)

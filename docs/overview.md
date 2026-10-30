@@ -44,10 +44,10 @@ mechanization of Wagner, Gierczak, Marshall, Li and Ahmed, *From Linearity to Bo
   sums, with no change to the kernel (§18). Spellings are provisional.
 - **Effects and handlers, in the kernel:** `perform`, `raise`, `hnd`, the finaliser frame `ubind`,
   and `ccatch`/`cfin` for cancels; the effectful returner `F_Σ A`; answering and control
-  operations, a control operation's continuation must-resume, cancellable or unrestricted; unwinding, which
-  ends each lend it passes; and cancelling a stored continuation (decision C of SPEC §19's
-  *Cancels*: the canceller re-raises the first finaliser error that names a handler outside the
-  cancelled region) (§19).
+  operations, a control operation's continuation must-resume, cancellable or unrestricted;
+  unwinding, which ends each lend it passes; and cancelling a stored continuation (decision C of
+  SPEC §19's *Cancels*: the canceller re-raises the first finaliser error that names a handler
+  outside the cancelled region) (§19).
 
 Recursion is the fixed point of a generator (decision 24, SPEC §20, §21): a function calls itself,
 and functions call one another, as written; the group is the bounded fixed point of its generator,

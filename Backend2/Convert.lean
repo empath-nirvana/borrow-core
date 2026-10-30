@@ -1185,7 +1185,7 @@ def genMach (m : Mach) (cellOps : List Key := []) : CM (List (Key × Nat)) := do
         | _, _ => resumeTm F p fs y reuse
     setFn rres { name := s!"resume {op.1}.{op.2}", params := [s₁, y], body := rb, ret := F.ty }
     let s₂ ← fresh envTy
-    -- At a cancel row `⊤` (a linear operation) the cancel entry is never run.
+    -- At a cancel row `⊤` (a must-resume operation) the cancel entry is never run.
     let cb ← match cp with
       | none => pure (.drop s₂ .unit)
       | some cp => withState s₂ fun c st => do
@@ -2209,7 +2209,7 @@ def renameTm (m : Std.HashMap Var Var) : Tm → CM Tm
 computation's suspended `k` and the handler's values, `kT` its type (`kTy`). Its resume entry
 resumes `k` with the answer and drives the outcome again (`driveFn`): the handler is deep. Its
 cancel entry cancels `k`, every frame of the region unwound, and answers at `κ`'s cancel type
-(`cancelTy`: the outcome `cM` or the payload `cPay`); at `⊤` (a linear `κ`) it is never run.
+(`cancelTy`: the outcome `cM` or the payload `cPay`); at `⊤` (a must-resume `κ`) it is never run.
 
 With `swap` (SPEC §52), the last handler value is the site's stack, made current around each run
 of `k` and freed by a cancel. With `region` too (the site's tag), `κ`'s environment is that stack

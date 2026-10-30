@@ -256,9 +256,9 @@ theorem letCond_ins {S : Row} {Γa Γb : Ctx VTy} (hp : LiveP (TExpr.absF.letCon
   unfold TExpr.absF.letCond at hp
   by_cases hw : Row.cancelsB S = true
   · rw [if_pos hw] at hp
-    have hd : LiveP dropB Γp := hp.imp fun A hA => by
+    have hd : LiveP ownFreeB Γp := hp.imp fun A hA => by
       simp only [AbsF.eval_and, AbsF.eval_atom, Bool.and_eq_true] at hA; exact hA.1
-    refine ⟨fun h => live_ins (fun s hs hl => dropB_sound _ (hd s hs hl)) (hW h),
+    refine ⟨fun h => live_ins (fun s hs hl => ownFreeB_sound _ (hd s hs hl)) (hW h),
       fun h => live_ins (fun s hs hl => isBangB_sound ?_) (hU h)⟩
     have hu : Row.unrB S = true := Row.unrB_iff.mpr h
     have := hp s hs hl

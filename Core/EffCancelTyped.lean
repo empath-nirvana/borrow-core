@@ -189,8 +189,8 @@ def rSigA (n : UInt32) : OpSig := ⟨n, 0, .cancel, .unit, .zero, .ret .unit⟩
 /-- The cancel row of a cancellable raise of `m`. -/
 abbrev finRA (m : UInt32) : CTy := CTy.effOf [rSigA m] .unit
 
-/-- An abortive operation's clause type does not read its qualifier, at a cancellable or unrestricted
-one: `!U(A ⊸ F_Σ R)`. -/
+/-- An abortive operation's clause type does not read its qualifier, at a cancellable or
+unrestricted one: `!U(A ⊸ F_Σ R)`. -/
 theorem clauseTy_abortive {S : Row} {R A : VTy} {q : Qual} {F : CTy} (hq : q ≠ .lin) :
     clauseTy S R (q, A, .zero) F = .bang (.thunk (.arr A (CTy.effOf S R))) := by
   cases q <;> simp_all [clauseTy, VTy.isZero]
@@ -1399,10 +1399,10 @@ def e7c (nw ni : UInt32) (qi : Qual) : Expr :=
 section Rejections
 open BoCa.Fig16.LogRel.Core.Inversions
 
-/-- **`timeout`'s clause reads `κ`'s cancel at its row**: at the clause type of a cancellable `A ↠ B`,
-`B` no `0`, at the cancel row `F`, the clause applies `κ`'s cancel branch, at `cancelTy Σ F`, which
-the same-term rules read at the clause's row `Σ` or below: `F` is no `⊤`, and `Σ` finds each
-operation `F` finds. -/
+/-- **`timeout`'s clause reads `κ`'s cancel at its row**: at the clause type of a cancellable
+`A ↠ B`, `B` no `0`, at the cancel row `F`, the clause applies `κ`'s cancel branch, at
+`cancelTy Σ F`, which the same-term rules read at the clause's row `Σ` or below: `F` is no `⊤`, and
+`Σ` finds each operation `F` finds. -/
 theorem timeoutCl_finds {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F : CTy}
     {ob : Option Lifetime.Life} (hB : B.isZero = false)
     (h : CDerives Δ Γ (.val timeoutCl) (.val (clauseTyO S R ob (.cancel, A, B) F))) :

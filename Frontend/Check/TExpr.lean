@@ -80,7 +80,7 @@ inductive Atom where
   | pers
   /-- A `!` type (`Ctx.Banged`). -/
   | bang
-  /-- `VTy.OwnFree`, as `dropB` decides it (`Ctx.OwnFree`). -/
+  /-- `VTy.OwnFree`, as `ownFreeB` decides it (`Ctx.OwnFree`). -/
   | drop
   /-- The lifetime variable is not free in it (`∀I`'s premise). -/
   | nfree (x : LifeVar)

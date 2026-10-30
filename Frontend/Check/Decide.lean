@@ -820,12 +820,12 @@ theorem boundsAvoidB_sound {Δ : LifeCtx} {x : LifeVar} (h : boundsAvoidB Δ x =
 /-! ### Rows  `[spec §19]` -/
 
 /-- `VTy.OwnFree`, decided: data, borrows and `!`, under `⊗` and `⊕`. -/
-def dropB : VTy → Bool
+def ownFreeB : VTy → Bool
   | .unit | .zero | .int _ | .unk | .opq _ | .bang _ | .imm _ _ | .mut _ _ => true
-  | .tensor A B | .sum A B => dropB A && dropB B
+  | .tensor A B | .sum A B => ownFreeB A && ownFreeB B
   | _ => false
 
-theorem dropB_sound : ∀ A : VTy, dropB A = true → A.OwnFree
+theorem ownFreeB_sound : ∀ A : VTy, ownFreeB A = true → A.OwnFree
   | .unit, _ => .unit
   | .zero, _ => .zero
   | .int w, _ => .int w
@@ -835,19 +835,19 @@ theorem dropB_sound : ∀ A : VTy, dropB A = true → A.OwnFree
   | .imm a A, _ => .imm a A
   | .mut a A, _ => .mut a A
   | .tensor A B, h => by
-      simp only [dropB, Bool.and_eq_true] at h
-      exact .tensor (dropB_sound A h.1) (dropB_sound B h.2)
+      simp only [ownFreeB, Bool.and_eq_true] at h
+      exact .tensor (ownFreeB_sound A h.1) (ownFreeB_sound B h.2)
   | .sum A B, h => by
-      simp only [dropB, Bool.and_eq_true] at h
-      exact .sum (dropB_sound A h.1) (dropB_sound B h.2)
+      simp only [ownFreeB, Bool.and_eq_true] at h
+      exact .sum (ownFreeB_sound A h.1) (ownFreeB_sound B h.2)
   | .thunk _, h | .ref _, h | .box _ _, h | .tvar _, h | .mu _, h | .fam _, h => by
-      simp [dropB] at h
+      simp [ownFreeB] at h
 
-/-- `dropB` decides `VTy.OwnFree`.  `[spec §19]` -/
-theorem dropB_iff (A : VTy) : dropB A = true ↔ A.OwnFree := by
-  refine ⟨dropB_sound A, fun h => ?_⟩
+/-- `ownFreeB` decides `VTy.OwnFree`.  `[spec §19]` -/
+theorem ownFreeB_iff (A : VTy) : ownFreeB A = true ↔ A.OwnFree := by
+  refine ⟨ownFreeB_sound A, fun h => ?_⟩
   induction h with
-  | tensor _ _ ih₁ ih₂ | sum _ _ ih₁ ih₂ => simp [dropB, ih₁, ih₂]
+  | tensor _ _ ih₁ ih₂ | sum _ _ ih₁ ih₂ => simp [ownFreeB, ih₁, ih₂]
   | _ => rfl
 
 /-- `RowLe S S'`, decided: every operation of `S` is found in `S'` as itself. -/

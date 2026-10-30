@@ -49,9 +49,9 @@ Rust made `mem::forget` safe because `Rc<RefCell<T>>` cycles leak. Two layers co
 guarantee:
 
 1. **Modes.** Cycle-capable shared cells live at a mode with weakening (unrestricted, or
-   linear with a derived drop). Adjoint logic's independence principle then forbids them from containing
-   linear values. A cycle may leak memory but never a linear resource (files, locks, linear
-   obligations). Compare Rust's proposed `Leak` auto-trait.
+   linear with a derived drop). Adjoint logic's independence principle then forbids them from
+   containing linear values. A cycle may leak memory but never a linear resource (files, locks,
+   linear obligations). Compare Rust's proposed `Leak` auto-trait.
 2. **Regions.** Shared mutable cells are allocated only in an arena `'r`, and the arena is
    linear. Cycles live inside something that is freed wholesale when its scope ends, so memory
    does not leak either (Tofte–Talpin regions; `alloc` as a handler).

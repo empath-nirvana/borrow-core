@@ -44,8 +44,8 @@ Operation arguments and answers, and capability states, are ground. This is phas
 - abortive operations `a : A_a ↠ 0`, with `A_a` ground.
 
 By convention an abortive operation has qualifier `q_a = cancel` (phase A, `docs/effect-model.md`
-§1.2: "an abortive operation counts as cancellable"). An operation `o` is *fallible* when `W ∈ q_o`; a
-co-operation may fail only at a fallible operation (D1.9, §8.2).
+§1.2: "an abortive operation counts as cancellable"). An operation `o` is *fallible* when `W ∈ q_o`;
+a co-operation may fail only at a fallible operation (D1.9, §8.2).
 
 The signature contains one built-in effect, `Res`, with one resuming operation
 `use : 1 ↠^{lin} 1` and nothing else. Its instances are the handles of `using` frames (D1.9).

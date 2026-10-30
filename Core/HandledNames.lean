@@ -1848,7 +1848,7 @@ theorem kappaAt_le {V : HIn} (t : UInt32) {H : Val} {K : Kont} {x : Expr} (hx : 
     fun B h => ⟨h, h⟩
   unfold BoLo.kappaAt
   split
-  · -- linear
+  · -- must resume
     refine ⟨hin_app_of ?_ (hin_app_of (empty_le _) (empty_le _)), ?_⟩
     · show (Expr.case _ _ _).hin ≤ V
       simp only [Expr.val, Val.lam, Expr.hin, append_le_iff, hin_freeE, hin_hndE]

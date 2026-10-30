@@ -723,7 +723,8 @@ theorem raiseOK_kappa {H : Val} {K : Kont} (hH : H.1.RaiseOK P) (hK : KRaiseOK P
   · exact raiseOK_ccatchE.2 (plug_raiseOK _ (kraiseOK_shift (kraiseOK_dead hK) 2)
       raiseOK_raise_cancel_none)
 
-/-- κ at a must-resume or cancellable operation, before its cell, at a handler and a context at `P`. -/
+/-- κ at a must-resume or cancellable operation, before its cell, at a handler and a context at
+`P`. -/
 theorem raiseOK_kappaCell {H : Val} {K : Kont} (hasCancel : Bool) (hH : H.1.RaiseOK P)
     (hK : KRaiseOK P K) : (kappaCell hasCancel H K).RaiseOK P := by
   simp only [kappaCell, kappaCBody, Expr.val, Val.lam, Val.prim, Val.unit]
@@ -1136,7 +1137,8 @@ theorem kraiseOK_of_kappa {H : Val} {K : Kont} (h : (kappa H K).RaiseOK P) :
   simp only [kappa, Expr.val, Val.lam, Expr.RaiseOK] at h
   exact (raiseOK_hndE.1 h.2.1.2).2
 
-/-- κ at a must-resume or cancellable operation, at its cell, holds its context in its resume branch. -/
+/-- κ at a must-resume or cancellable operation, at its cell, holds its context in its resume
+branch. -/
 theorem kraiseOK_of_kappaC {hasCancel : Bool} {ℓ : Loc} {H : Val} {K : Kont}
     (h : (kappaC hasCancel ℓ H K).RaiseOK P) : KRaiseOK P (K.shift 3 0) := by
   simp only [kappaC, Expr.val, Val.lam, Expr.RaiseOK] at h
@@ -1153,8 +1155,8 @@ theorem kcfinNamed_of_cancel {e : Expr} (he : e.RaiseOK P) {K₀ : Kont} {H : Va
   rcases h₀ with rfl | ⟨hasCancel, ℓ, rfl⟩
   · have hc := (plug_raiseOK_inv K₀ (a := .app (kappa H K) (.val (Val.inj₂ .unit))) trivial he).2
     exact kcfinNamed_of_shift (kcfinNamed_of_kraiseOK (kraiseOK_of_kappa (raiseOK_app_lam_inv hc)))
-  · have hc := (plug_raiseOK_inv K₀ (a := .app (kappaC hasCancel ℓ H K) (.val (Val.inj₂ .unit))) trivial
-      he).2
+  · have hc := (plug_raiseOK_inv K₀ (a := .app (kappaC hasCancel ℓ H K) (.val (Val.inj₂ .unit)))
+      trivial he).2
     exact kcfinNamed_of_shift (kcfinNamed_of_kraiseOK (kraiseOK_of_kappaC (raiseOK_app_lam_inv hc)))
 
 end Lemmas
@@ -1595,9 +1597,9 @@ theorem raiseOK_reach {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j 
   raiseOK_steps (Ξ.names_zero) hs (raiseOK_of_derivesAt h) heapRaiseOK_empty
 
 /-- **`CancelsNamed P μ₀ e`**: at every configuration a run from `(μ₀, e)` reaches that cancels a
-continuation `κ`, `kappa H K` or `kappaC hasCancel ℓ H K` (`κ` at its cell) applied to `inj₂ ()`, every
-running finaliser's `cfin` frame of the cancelled region `K` keeps none or a raise of a name in
-`P`.  A `cfin` frame keeps what a finaliser raised (`[cfin-raise]`) or what a cancel passing it
+continuation `κ`, `kappa H K` or `kappaC hasCancel ℓ H K` (`κ` at its cell) applied to `inj₂ ()`,
+every running finaliser's `cfin` frame of the cancelled region `K` keeps none or a raise of a name
+in `P`.  A `cfin` frame keeps what a finaliser raised (`[cfin-raise]`) or what a cancel passing it
 kept (`[cfin-cancel]`), so this is a whole-run fact about the names finalisers raise.
 `[spec §19]` -/
 def CancelsNamed (P : UInt32 → Prop) (μ₀ : Heap) (e : Expr) : Prop :=

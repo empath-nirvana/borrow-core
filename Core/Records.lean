@@ -26,8 +26,8 @@ covers it.
 | match on `Imm @a ⟨…⟩` | `loadCase` = `withload` + `vcase` | `loadCase_wf` |
 | run `g : A ⊸ A ⊗ B` on field `p` of `Mut @a {…}` | `swapField` = `withswap` + `modAt` | `swapField_wf`, `swapField_sem` |
 
-`Forgettable` is the set of value types a closed term consumes (`forgetT`).  `Imm̲ 'b A` is forgettable
-when `A`'s spine of `⊗`, `⊕` and `[@a]` holds no `μ` or type variable
+`Forgettable` is the set of value types a closed term consumes (`forgetT`).  `Imm̲ 'b A` is
+forgettable when `A`'s spine of `⊗`, `⊕` and `[@a]` holds no `μ` or type variable
 (`forgettable_immReborrow`).  The reborrowing facts are `Imm̲`, outlives, 6.131 (`reborrow_vShape`)
 and 6.60 (`vC_outlives`) at `valTy`/`sumTy`, each the binary clause iterated.
 -/

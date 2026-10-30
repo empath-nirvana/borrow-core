@@ -3,9 +3,9 @@ import Core.Demonic
 /-!
 # Core — a handled program, typed and run  `[spec §19]`
 
-`handle_1 (perform (1, (0, ()))) with (λx. x, (λp. let (x, k) = p; k.resume x, ()))`: one linear
-operation `1 ↠ 1`, whose clause resumes `κ` once. The program is typed at `F 1` by §19's rules
-(`effHandle`, `effPerform`), so `adequacyD` runs every run of it to `()` at the empty memory.
+`handle_1 (perform (1, (0, ()))) with (λx. x, (λp. let (x, k) = p; k.resume x, ()))`: one
+must-resume operation `1 ↠ 1`, whose clause resumes `κ` once. The program is typed at `F 1` by §19's
+rules (`effHandle`, `effPerform`), so `adequacyD` runs every run of it to `()` at the empty memory.
 -/
 
 noncomputable section
@@ -19,7 +19,7 @@ open BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Steps performE)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
-/-- The effect: one linear operation `1 ↠ 1`. -/
+/-- The effect: one must-resume operation `1 ↠ 1`. -/
 abbrev E₁ : List (Qual × VTy × VTy) := [(.lin, .unit, .unit)]
 
 /-- The clause `λp. let (x, k) = p; (k (inj₁ ())) x`: resume `κ` with the argument. -/

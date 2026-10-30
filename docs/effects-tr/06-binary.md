@@ -236,7 +236,8 @@ At the start `T = ⟦P⟧`, `Wd = Wd.init`; at `done ĝ`, `T = ret ĝ`. By induc
   the frame, so in a run of a moded program (T5.2) only the frame's steps touch it.
 - **A co-operation's failure**: `coK`'s failure branch runs `Tree.dtors d` then writes the state
   and answers `inr e`; the machine runs `dtors(S₁)` up to the run frame and answers
-  `(cap, inr e)`. `S₁` holds no `run` frame (as above, the runner's fallible operation has `cancel`).
+  `(cap, inr e)`. `S₁` holds no `run` frame (as above, the runner's fallible operation has
+  `cancel`).
 - **A return through `run`**: `runL`'s `ret` case writes the state (`wr`, no event, the cell is
   live) and answers `inl x`; the machine answers `(cap, inl v̂)`.
 - **A return through `fin`, a cancel**: `addFin`'s `free`; `Tree.dtors`'s `free`s; the machine's

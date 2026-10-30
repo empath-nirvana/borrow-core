@@ -5,7 +5,7 @@ import Support.Dynamics.Host
 /-!
 # Support — Dynamics — the loop `iterate`  `[spec §14]`
 
-`Div` is the effect of the reserved name `divEff` with one linear operation, `tick : 1 ↠ Next`,
+`Div` is the effect of the reserved name `divEff` with one must-resume operation, `tick : 1 ↠ Next`,
 `Next = 1 ⊕ 1`: `inj₁ ()` is the answer *next* and `inj₂ ()` the answer *close*.
 
 `iterate (f, s)` continues as `iterNext f s`:

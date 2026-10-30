@@ -30,7 +30,7 @@ fn bump<'t>(freq: Map[text 't, i32], order: buf (text 't), word: text 't)
   (freq, o)
 
 -- (`u0`: named `u`, the first view clashed with the `inr u` of the last loop: "`u` is used
--- twice here, and its type `array_imm 't u8` is not persistent"; not minimised.)
+-- twice here, and its type `array_imm 't u8` is linear"; not minimised.)
 fn freq<'t>(t: text 't) -> string =
   let (t, u0) = array_copy['t, u8] t;
   let n = len(u0);

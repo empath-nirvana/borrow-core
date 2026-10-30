@@ -156,7 +156,7 @@ structure OpSig where
   B : VTy
   fin : CTy := .ret .unit
 
-/-- An operation `A ↠^q B` is capturable: not linear, and not abortive (its answer type is not
+/-- An operation `A ↠^q B` is capturable: not must-resume, and not abortive (its answer type is not
 `0`), so a continuation captured at it has a cancel branch, and its cancel row is read.
 `[spec §27]` -/
 def capB (q : Qual) (B : VTy) : Bool := q != .lin && !B.isZero

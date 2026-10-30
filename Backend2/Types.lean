@@ -227,7 +227,7 @@ abbrev MachSet := Std.HashSet (UInt32 × UInt32)
 
 /-- What cancelling a computation suspended at an operation answers (SPEC §49): `()`, or the first
 error its finalisers raised, one of the operation's cancel row's abortive operations (`cp`, its
-payload's summands); `1` at a cancel row `⊤` (a linear operation, never cancelled). -/
+payload's summands); `1` at a cancel row `⊤` (a must-resume operation, never cancelled). -/
 def cancelResTy (cp : Option (List ((UInt32 × UInt32) × LTy))) : LTy :=
   match cp.bind payOf with
   | none => .unit

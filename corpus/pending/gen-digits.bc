@@ -4,10 +4,10 @@
 --
 -- Blocked by the kernel: `yield` is cancellable (`ctl`), so its continuation may be cancelled, and
 -- what is live across it must drop (§19's `[let]` side condition, or a `[then]` finaliser). The
--- input's iterator holds the input capability, `ref input`, which is linear with no derived drop (§12): it must
--- be handed back, and a cancel answers `()`, with no residual. A `linear ctl` operation would
--- allow it, without `break` (its continuation cannot be cancelled). What is missing is a
--- continuation whose cancel hands back a residual, or a capability with a destructor.
+-- input's iterator holds the input capability, `ref input`, which is linear with no derived drop
+-- (§12): it must be handed back, and a cancel answers `()`, with no residual. A `linear ctl`
+-- operation would allow it, without `break` (its continuation cannot be cancelled). What is missing
+-- is a continuation whose cancel hands back a residual, or a capability with a destructor.
 --
 -- now: 18:27: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell
 

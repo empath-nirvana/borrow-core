@@ -781,7 +781,8 @@ checker. The following carry over unchanged:
    - **type functions in rule conclusions**: lifetime substitution, `unfoldTy` and `ν`'s
      instantiation, the folds' types, the array and slice constants' types;
    - **type predicates that must be invariant**: `OwnFree`, `Persistent`, `Ctx.Banged`,
-     `CtxOutlives`, `Cl`, `NuOk`, `EffLeaf`, `EffFree`, `isRet`, `Ctx.OwnFree`, and the destructor class.
+     `CtxOutlives`, `Cl`, `NuOk`, `EffLeaf`, `EffFree`, `isRet`, `Ctx.OwnFree`, and the destructor
+     class.
 
    **Cost (hypothesis).** The size of `Core/Weaken.lean` (172 lines) plus one commutation lemma
    per type function above. It is dominated by the type functions, not by names.

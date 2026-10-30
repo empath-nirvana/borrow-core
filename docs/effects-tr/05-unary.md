@@ -311,8 +311,8 @@ in `Elim_{Tab(ρ₀)}(A ⇒^ρ C)`, and `M`'s hypothesis applies. ∎
 **Lemma L5.13 (abortive operation).** [ab] is compatible.
 
 *Proof.* `abstop(S_e, π(x), a, v̂)` with resource `r_e`. `Π_E(a, v̂, Cancel(S_e))(r_e)` needs
-`Cancel(S_e)(r_e)`: `r_e ∈ ⟦bnd(T).req⟧ ⊆ ⟦cancel⟧ = NoOwn` because `E` has an abortive operation, so
-`cancel ≤ bnd(E).req ≤ bnd(T).req`. ∎
+`Cancel(S_e)(r_e)`: `r_e ∈ ⟦bnd(T).req⟧ ⊆ ⟦cancel⟧ = NoOwn` because `E` has an abortive operation,
+so `cancel ≤ bnd(E).req ≤ bnd(T).req`. ∎
 
 **Lemma L5.14 (handler).** [handle] and [handleAt] are compatible.
 

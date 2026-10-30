@@ -187,7 +187,7 @@ blocker. "Runs (shape)" means it runs only in a shape the language forces, named
 
 | functionality | program | today | target |
 |---|---|---|---|
-| a generator that reads its input and yields digits, lines or tokens, then hands the input back | `gen-digits`, `gen-lines`, `gen-adapters-io` | refused: the iterator holding `ref input` "is live across a computation that may abort, and its type has no destructor" (measured) | north star stage 3 (a watch stream) |
+| a generator that reads its input and yields digits, lines or tokens, then hands the input back | `gen-digits`, `gen-lines`, `gen-adapters-io` | refused: the iterator holding `ref input` "is live across a computation that may abort, and its type is linear with no derived drop" (measured) | north star stage 3 (a watch stream) |
 | a generator that writes as it yields | `gen-lazy` | refused, the same for `ref output` (measured) | outside |
 
 **B5: a borrow held across a resuming operation.**
@@ -430,9 +430,10 @@ nesting elaboration, behind the yes/no spike S-D (§9).
 ### 4.5 B4: a suspended computation that owns a capability
 
 **What fails.** "`io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a
-computation that may abort, and its type has no destructor" (measured, `gen-digits`, `gen-lines`,
-`gen-adapters-io`; `gen-lazy` for `ref output`). `yield` is cancellable, so what is live across it must
-drop; a capability has no destructor and must be handed back; a cancel answers `()` (SPEC §15
+computation that may abort, and its type is linear with no derived drop, and an abort abandons
+only a value that holds no owned cell" (measured, `gen-digits`, `gen-lines`, `gen-adapters-io`;
+`gen-lazy` for `ref output`). `yield` is cancellable, so what is live across it must drop; a
+capability has no destructor and must be handed back; a cancel answers `()` (SPEC §15
 *Open*). North-star stage 3 is this shape: a watch stream decoded from a socket the stream owns.
 
 | way | performance | proof cost | ergonomics | verdict |
@@ -718,9 +719,9 @@ async-channel.bc: async-channel.bc:65:21: the clauses box `κ` at `top`, so the 
 async-fanout.bc: async-fanout.bc:30:16: this argument of `push` has type `i32 * (mu X. 1 + ((mu X1. 1 + i32 * X1) + box top U (nu X. F ((mu X. 1 
 async-progress.bc: async-progress.bc:39:19: the body of `with spawn` assigns a `let mut` variable declared outside it, or lends a place declared 
 async-stream.bc: async-stream.bc:35:4: `sensor` performs `Exhausted`, which its written row does not list
-async-worker-pool.bc: async-worker-pool.bc:46:51: `clone` copies a persistent value, and `U (delay (mu X. 1 + i32 * X))` is not persistent
+async-worker-pool.bc: async-worker-pool.bc:46:51: `clone` copies an unrestricted value, and `U (delay (mu X. 1 + i32 * X))` is linear
 backtrack-multishot.bc: backtrack-multishot.bc:34:1: expected a declaration (`type`, `shape`, `def`, `fn`, `extern`, `effect`, `handler` or `main
-borrow-nested-handback.bc: borrow-nested-handback.bc:16:3: `q` is used twice here, and its type `array u8 * i32` is not persistent
+borrow-nested-handback.bc: borrow-nested-handback.bc:16:3: `q` is used twice here, and its type `array u8 * i32` is linear
 box-dup.bc: box-dup.bc:30:63: `boxed['a]`: `x`, of type `box 'l0 i32`, is used inside, and it cannot be shown to outlive `'a`
 callbacks-in-data.bc: callbacks-in-data.bc:28:52: type mismatch: expected `!(i32 => i32)`, but this has type `!(i32 => U (delay i32))`
 closure-captures-int.bc: closure-captures-int.bc:28:41: `!thunk` promotes only over `!` types, but `n`, of type `i32`, is used inside
@@ -736,12 +737,12 @@ div-in-adapter.bc: div-in-adapter.bc:17:29: an operation of `Fail` is performed 
 effects-generic-store.bc: effects-generic-store.bc:31:9: `assoc`: an answering handler is `handler h(mut s: S): E = { op(x) = e; … }` (or `handle
 fold-under-u.bc: fold-under-u.bc:34:8: the type of the closure's parameter `o` is not determined here: pass it where a function type is expected,
 for-buf-borrow.bc: for-buf-borrow.bc:16:55: the iterator of this `for` holds the borrow of `v`: a borrow block over a loop lends its place again 
-for-in-if-lend.bc: for-in-if-lend.bc:15:3: `a` is used twice here, and its type `array i32` is not persistent
+for-in-if-lend.bc: for-in-if-lend.bc:15:3: `a` is used twice here, and its type `array i32` is linear
 for-view-effect-copy.bc: for-view-effect-copy.bc:16:1: `show__wasi_stdout_cell` loops, so it is called in direct style one step at a time, and a 
 for-view-local.bc: for-view-local.bc:14:1: `count` loops, so it is called in direct style one step at a time, and a borrow at `'a` cannot stay op
 gen-adapters-io.bc: gen-adapters-io.bc:16:56: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abor
 gen-digits.bc: gen-digits.bc:18:27: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abort, and its
-gen-lazy.bc: gen-lazy.bc:22:5: `o`, of type `ref output`, is live across a computation that may abort, and its type has no destructor: an abortiv
+gen-lazy.bc: gen-lazy.bc:22:5: `o`, of type `ref output`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell
 gen-lines.bc: gen-lines.bc:23:18: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abort, and its t
 io-two-tasks.bc: io-two-tasks.bc:22:11: two tasks spawned in this block are given the capability of `Stdout`: a capability is lent to one task at
 lc-0039-combination-sum.bc: lc-0039-combination-sum.bc:58:28: in this `case`, `out` is consumed in the `inr` arm but not in the `inl` arm
@@ -749,8 +750,8 @@ lc-0070-climbing-stairs-memo.bc: lc-0070-climbing-stairs-memo.bc:38:32: no handl
 lc-0208-trie-boxed.bc: runs since #722, as `corpus/leetcode/trees/0208-implement-trie-boxed.bc` (the destructor at the class `P`, SPEC §61); its error was `io_d23` is not consumed in its scope, and its type `(1 + (mu X. (1 + 1) * array (1 + X))) + 
 lend-nested.bc: lend-nested.bc:33:38: type mismatch: expected `i32`, but this has type `ref array i32 * i32`
 lend-two.bc: lend-two.bc:31:14: type mismatch: expected `ref output`, but this has type `imm 'io_lb31_3 i32`
-loop-handler-binder.bc: loop-handler-binder.bc:18:3: `e` is used twice here, and its type `array_imm 'a u8` is not persistent
-loop-shadow-linear.bc: loop-shadow-linear.bc:21:5: `w` is used twice here, and its type `array_imm 'a i32` is not persistent
+loop-handler-binder.bc: loop-handler-binder.bc:18:3: `e` is used twice here, and its type `array_imm 'a u8` is linear
+loop-shadow-linear.bc: loop-shadow-linear.bc:21:5: `w` is used twice here, and its type `array_imm 'a i32` is linear
 loop-shadow-owner.bc: loop-shadow-owner.bc:17:42: type mismatch: expected `array u8 * i32`, but this has type `i32`
 map-div-fold.bc: map-div-fold.bc:60:93: type mismatch: expected `i32`, but this has type `U (delay i32)`
 noalloc.bc: noalloc.bc:30:1: expected a declaration (`type`, `shape`, `def`, `fn`, `extern`, `effect`, `handler` or `main`), found name `noalloc`
@@ -760,7 +761,7 @@ print-borrowed-list.bc: print-borrowed-list.bc:37:12: expected a value, found `i
 raise-in-fold.bc: raise-in-fold.bc:70:69: `sum_alg` performs `Fail` and is passed as a value: it can only be called (effectful callbacks, #161)
 rec-in-for-linear.bc: rec-in-for-linear.bc:19:20: in this `case`, `a` is consumed in the `inr` arm but not in the `inl` arm
 state-machine-audit.bc: state-machine-audit.bc:72:1: this borrow block's result has type `mut 'fx_l_audit (i32 * i32 * i32) * i32`, which has the
-two-writers.bc: two-writers.bc:42:9: `io_lm42_3` is used twice here, and its type `mut 'io_lb42_3 output` is not persistent
+two-writers.bc: two-writers.bc:42:9: `io_lm42_3` is used twice here, and its type `mut 'io_lb42_3 output` is linear
 ```
 
 ### 10.2 The probes
@@ -883,11 +884,11 @@ main -> List[i32] * List[Obj] =
   (counts, cluster)
 ```
 
-It gives `op-d.bc:45:50: this computation performs the operations `[3.0 cancel i32 ~> i32, 3.1 cancel
-i32 * i32 ~> 1 + 1]`, which are not within the row `[]` here` (the position is in `lib/async.bc`,
-printed under the user's file, #479's B11). The same with `spawn_in` under a unit cell's lend
-(`op-c.bc`) gives the R1 message "the row of a relaxed lend's body has only operations that resume
-once …".
+It gives `op-d.bc:45:50: this computation performs the operations `[3.0 cancel i32 ~> i32, 3.1
+cancel i32 * i32 ~> 1 + 1]`, which are not within the row `[]` here` (the position is in
+`lib/async.bc`, printed under the user's file, #479's B11). The same with `spawn_in` under a unit
+cell's lend (`op-c.bc`) gives the R1 message "the row of a relaxed lend's body has only operations
+that resume once …".
 
 **`json2.bc`, `json3.bc`: a JSON-shaped value.**
 
@@ -1268,7 +1269,7 @@ fn bump<'t>(freq: Map[text 't, i32], order: buf (text 't), word: text 't)
   (freq, o)
 
 -- (`u0`: named `u`, the first view clashed with the `inr u` of the last loop: "`u` is used
--- twice here, and its type `array_imm 't u8` is not persistent"; not minimised.)
+-- twice here, and its type `array_imm 't u8` is linear"; not minimised.)
 fn freq<'t>(t: text 't) -> string =
   let (t, u0) = array_copy['t, u8] t;
   let n = len(u0);
@@ -1828,10 +1829,10 @@ Every one runs; four need an arena for an object graph.
 
 | program | what it does | status | the refusal, or the workaround | blocker | allocs / indirect | probe |
 |---|---|---|---|---|---|---|
-| Richards | a scheduler over task records in a linked list, packets in linked queues; tasks change other tasks' state | workaround: task records in an arena (`array i32`, links are indices); packets owned, moved queue to queue (`richards_mu.bc`) | the shared record: "`t` is used twice here, and its type `ref (i32 * i32)` is not persistent"; the per-task function field: "`i` is not consumed in its scope, and it cannot be dropped where its scope ends" (an array of `!` functions); a div helper in an `if` arm returning an owned array, refused in generated code | B13, B15, B7 | 2 / 0 | `awfy/richards.bc` (23246 / 9297, the reference counts) |
-| DeltaBlue | a constraint graph: variables and constraints point at each other; the planner walks and mutates strengths | workaround: arena | a constraint in two variables' lists: the same "used twice"; two `imm` views of one cell: "`v` is used twice here, and its type `imm 'a i32` is not persistent" | B13, B9 | 416 / 0 | `awfy/deltablue.bc` (chain test: 100 of 100, plan length 101) |
+| Richards | a scheduler over task records in a linked list, packets in linked queues; tasks change other tasks' state | workaround: task records in an arena (`array i32`, links are indices); packets owned, moved queue to queue (`richards_mu.bc`) | the shared record: "`t` is used twice here, and its type `ref (i32 * i32)` is linear"; the per-task function field: "`i` is not consumed in its scope, and it cannot be dropped where its scope ends" (an array of `!` functions); a div helper in an `if` arm returning an owned array, refused in generated code | B13, B15, B7 | 2 / 0 | `awfy/richards.bc` (23246 / 9297, the reference counts) |
+| DeltaBlue | a constraint graph: variables and constraints point at each other; the planner walks and mutates strengths | workaround: arena | a constraint in two variables' lists: the same "used twice"; two `imm` views of one cell: "`v` is used twice here, and its type `imm 'a i32` is linear" | B13, B9 | 416 / 0 | `awfy/deltablue.bc` (chain test: 100 of 100, plan length 101) |
 | Havlak | loop recognition: a CFG with edge lists, DFS numbering, union-find, a loop forest with parent pointers | workaround: arena, explicit DFS stack | the recursive DFS inside the `for` over out-edges: "in this `case`, `last` is consumed in the `inr` arm but not in the `inl` arm" (#492) | B13, B7 | 1806 / 0 | `awfy/havlak.bc` |
-| CD | collision detection over a red-black tree keyed by call sign (parent pointers, rotations) | workaround: arena tree with a sentinel | a child holding its parent: "`parent` is used twice here, and its type `ref i32` is not persistent" | B13 | 2 / 0 | `awfy/cd_rbtree.bc` (the tree part only) |
+| CD | collision detection over a red-black tree keyed by call sign (parent pointers, rotations) | workaround: arena tree with a sentinel | a child holding its parent: "`parent` is used twice here, and its type `ref i32` is linear" | B13 | 2 / 0 | `awfy/cd_rbtree.bc` (the tree part only) |
 | Json | parse JSON into a tree and print it | natural | a lookup returning a view into the tree: "`unroll V` needs `V : mu X. A`, but `V : imm 'a (mu X. …)`" | B3, B9 | 36 / 0 | `awfy/json.bc` |
 | NBody, Mandelbrot, Sieve | — | natural | `bench/` (recorded) | — | — | `bench/n-body`, `bench/mandelbrot`, `bench/sieve` |
 | Bounce | balls in an array, mutated in place | natural | `for b in &mut balls { modify b { … } }` | — | 1 / 0 | `awfy/bounce.bc` |
@@ -1849,7 +1850,7 @@ Every one runs. Two needed libraries written by hand.
 | binary-trees, mandelbrot, n-body, spectral-norm | natural (`bench/`, 0.40×, 1.01×, 1.78×, 0.99× of Rust, recorded) | output is a count or a scaled integer, not the Game's PBM or `%.9f` | B16 (float formatting) | — | `bench/` |
 | fannkuch-redux | natural | `for … break` in place of `while` (#503) | B7 | 5 / 0 | `bg/fannkuch.bc` |
 | fasta | natural; byte-identical to the reference | — | — | 7 / 0 | `bg/fasta.bc` |
-| k-nucleotide | workaround | a lookup by a literal's view: "this argument of `map_lookup` has type `array_imm 'l1 u8`, which is not `K`" (SPEC §36 *Not provided*: a lookup by a key at another lifetime); sorting entries that hold views: "`x` is used twice here, and its type `array_imm 'io_q0 u8 * i32` is not persistent" | B16, B9 | 41 / 0 | `bg/knuc.bc` |
+| k-nucleotide | workaround | a lookup by a literal's view: "this argument of `map_lookup` has type `array_imm 'l1 u8`, which is not `K`" (SPEC §36 *Not provided*: a lookup by a key at another lifetime); sorting entries that hold views: "`x` is used twice here, and its type `array_imm 'io_q0 u8 * i32` is linear" | B16, B9 | 41 / 0 | `bg/knuc.bc` |
 | pidigits | workaround: `lib/float.bc`'s unsigned `Big` plus a sign and a small division written in the program | — | B16 (a signed bignum library) | 533 / 0 | `bg/pidigits.bc` (1000 digits correct) |
 | regex-redux | natural, with a Pike VM written in the program (about 230 lines); all counts and replacements match Python's `re` | — | B16 (a regex library, #225) | 591769 / 0 | `bg/regex.bc` |
 | reverse-complement | workaround | a lend in an `if` arm (#502); and **a callee's `let mut tbl` makes its caller's `tbl` "used twice"** (new, §12.7) | B7 | 6 / 0 | `bg/revcomp.bc`, `bg/mut-name-capture.bc` |
@@ -1880,8 +1881,8 @@ keyed by views), is refused by #491 and #492, both B7. So the AoC subset gates o
 
 | program | status | the refusal, or the workaround | blocker | allocs / indirect | probe |
 |---|---|---|---|---|---|
-| tree-walker (jlox) | workaround: environments in an arena (a parent index per environment); a closure is (function id, environment index); instances index a field table. `makeCounter` twice, aliasing a closure, bound methods: output `1 2 1 3 11 12` | two closures sharing one captured variable: "`ml` is used twice here, and its type `mut 'x i32` is not persistent"; a buffer of AST nodes: "`mu X. …` has no filler" | B13, B14 | 124 / 0 | `lox/tree-arena.bc`, `lox/natural-shared-env.bc` |
-| bytecode VM (clox) | workaround: arena indices for upvalues, frames, globals; the dispatch `while` is a flat loop (about 1.5 loads and 1.5 bounds checks per instruction, no allocation) | an upvalue pointing into the growing stack: "`stack` is used twice here, and its type `array i32 * i32` is not persistent"; native functions in a table (B15) | B13, B15 | 99 / 0 | `lox/clox-vm.bc`, `lox/natural-upvalue.bc` |
+| tree-walker (jlox) | workaround: environments in an arena (a parent index per environment); a closure is (function id, environment index); instances index a field table. `makeCounter` twice, aliasing a closure, bound methods: output `1 2 1 3 11 12` | two closures sharing one captured variable: "`ml` is used twice here, and its type `mut 'x i32` is linear"; a buffer of AST nodes: "`mu X. …` has no filler" | B13, B14 | 124 / 0 | `lox/tree-arena.bc`, `lox/natural-shared-env.bc` |
+| bytecode VM (clox) | workaround: arena indices for upvalues, frames, globals; the dispatch `while` is a flat loop (about 1.5 loads and 1.5 bounds checks per instruction, no allocation) | an upvalue pointing into the growing stack: "`stack` is used twice here, and its type `array i32 * i32` is linear"; native functions in a table (B15) | B13, B15 | 99 / 0 | `lox/clox-vm.bc`, `lox/natural-upvalue.bc` |
 
 ### 12.6 Data structures and concurrency
 
@@ -1889,10 +1890,10 @@ keyed by views), is refused by #491 and #492, both B7. So the AoC subset gates o
 |---|---|---|---|---|
 | hash map | natural (`lib/map.bc`: generic, insert, lookup, remove, a view by `map_get`, iteration) | iterating a map whose keys are owned strings: "type mismatch: expected `array u8 * i32`, but this has type `array_imm 'y u8 * i32`" (at `lib/map.bc:230`) | B16 | `ds/hashmap.bc` |
 | B-tree | workaround: arena, generic with a comparator (2000 keys, height 6); natural since #722 | nodes owning arrays of children: runs with its derived destructor (SPEC §61), 200 keys, at Rust's 77 allocations (792 at 2000 keys); it was "`e` is not consumed in its scope, and its type `1 + (mu X. …)` has no destructor" | B14 (closed for the owned destructor) | `ds/btree.bc`, `corpus/btree-boxed.bc` |
-| LRU cache | workaround: arena list with a sentinel plus `Map[i32, i32]`; LeetCode 146's example | the classic map-to-node plus linked nodes: "`n` is used twice here, and its type `ref (mu X. (i32 * i32) * (1 + ref X) * (1 + ref X))` is not persistent" | B13 | `ds/lru-arena.bc`, `ds/lru-cells.bc` |
+| LRU cache | workaround: arena list with a sentinel plus `Map[i32, i32]`; LeetCode 146's example | the classic map-to-node plus linked nodes: "`n` is used twice here, and its type `ref (mu X. (i32 * i32) * (1 + ref X) * (1 + ref X))` is linear" | B13 | `ds/lru-arena.bc`, `ds/lru-cells.bc` |
 | doubly linked list | workaround: arena | linking cells both ways: "`a` is used twice here …" | B13 | `ds/dll-cells.bc` |
 | union-find, ring buffer, arena allocator | natural | ids are aliases, not distinct types (no `data`) | B3 | `ds/unionfind.bc`, `ds/ringbuf.bc`, `ds/arena.bc` |
-| priority queue | natural with a heap written in the program; `lib/buf.bc`'s heap takes an `i32` priority and persistent elements: "`x` is used twice here, and its type `i32 * array u8 * i32` is not persistent" | — | B16 | `ds/pq.bc` |
+| priority queue | natural with a heap written in the program; `lib/buf.bc`'s heap takes an `i32` priority and persistent elements: "`x` is used twice here, and its type `i32 * array u8 * i32` is linear" | — | B16 | `ds/pq.bc` |
 | parallel map-reduce | blocked as parallelism: two `spawn_in` tasks over disjoint `split_at_mut` halves run *interleaved on one thread* (`unconditional` means only that no `PinLaw` assumption is used; it says nothing about running on two cores) | no OS threads | **B12** (#212) | `conc/split-halves.bc` |
 | worker pool with channels | workaround: **a scheduler written in the program serves the job queue and the results** (control operations `take_job`, `send_res`, `wait_turn`; the decision-57 port). Two workers, five jobs | the natural form, tasks sharing a channel effect: "two tasks spawned in this block are given the capability of `Chan` …" | B1 | `conc/worker-pool-port.bc`, `conc/worker-pool.bc` |
 | stage pipeline | natural as generators composed with `\|>`; blocked as tasks over channels (B1's message) | — | B1 | `conc/pipeline-gen.bc`, `conc/pipeline-tasks.bc` |
@@ -1962,11 +1963,11 @@ awfy/cd_rbtree.bc: (i32[877], (i32[1], f64[…]))
 awfy/json.bc: i32[12]
 awfy/fn_array.bc: fn_array.bc:5:44: `i` is not consumed in its scope, and it cannot be dropped where its scope ends
 awfy/modify_assign.bc: (i32[6], i32[0])
-bg/mut-name-capture.bc: mut-name-capture.bc:14:14: `tbl` is used twice here, and its type `array u8` is not persistent
+bg/mut-name-capture.bc: mut-name-capture.bc:14:14: `tbl` is used twice here, and its type `array u8` is linear
 bg/mut-name-capture-renamed.bc: runs
 bg/pidigits.bc: runs
-ds/lru-cells.bc: lru-cells.bc:14:3: `n` is used twice here, and its type `ref (mu X. (i32 * i32) * (1 + ref X) * (1 + ref X))` is not persistent
-ds/dll-cells.bc: dll-cells.bc:19:3: `a` is used twice here, and its type `ref (mu X. i32 * (1 + ref X) * (1 + ref X))` is not persistent
+ds/lru-cells.bc: lru-cells.bc:14:3: `n` is used twice here, and its type `ref (mu X. (i32 * i32) * (1 + ref X) * (1 + ref X))` is linear
+ds/dll-cells.bc: dll-cells.bc:19:3: `a` is used twice here, and its type `ref (mu X. i32 * (1 + ref X) * (1 + ref X))` is linear
 ds/btree-boxed.bc: runs since #722, as `corpus/btree-boxed.bc` (200 keys there; `2000 0 6` and Rust's 792 allocations at 2000); its error was `e` is not consumed in its scope, and its type `1 + (mu X. (array i32 * i32) * array (1 + X) * i32)` has no destructor
 ds/lru-arena.bc: runs
 conc/worker-pool-port.bc: ((i32[3], i32[2]), inr (i32[51], inr (i32[42], inr (i32[31], inr (i32[22], inr (i32[11], inl ()))))))

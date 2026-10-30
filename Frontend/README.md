@@ -261,18 +261,18 @@ chosen by the enclosing rule instead of threaded.
 **Implicit destructors** (SPEC §12). `Env.own` marks the slots **owed** to the computation
 being checked: variables bound by `x <- M; N`, `let (x, y) = V; M`, a `case` arm or `fun` whose
 type is linear with a derived drop (`hasDtorB`, which decides `HasDtor`: `hasDtorB_iff`; the
-owed slot is exactly `DerivedDrop A`, `Env.pushOwn_own`). What is owed flows into tail positions: the body of `<-` and `let`
-(less what the head or `V` used), both `case` arms, both `<,>` components, `fun`/`Fun` bodies,
-`nu_in` and ascriptions. The head `M` of `x <- M; N` is owed the owed variables it
-mentions by name (`mentionsC`). A value, and so every computation inside one, starts with
-nothing owed. At a terminal computation (`Comp.terminal`), the checker checks it with nothing
-owed, then wraps the result in `dtorE A xᵢ; …` for each owed slot `i` it neither used nor
+owed slot is exactly `DerivedDrop A`, `Env.pushOwn_own`). What is owed flows into tail positions:
+the body of `<-` and `let` (less what the head or `V` used), both `case` arms, both `<,>`
+components, `fun`/`Fun` bodies, `nu_in` and ascriptions. The head `M` of `x <- M; N` is owed the
+owed variables it mentions by name (`mentionsC`). A value, and so every computation inside one,
+starts with nothing owed. At a terminal computation (`Comp.terminal`), the checker checks it with
+nothing owed, then wraps the result in `dtorE A xᵢ; …` for each owed slot `i` it neither used nor
 absorbed, the lowest index outermost (`dropOwed`). Each wrap is `rDrop`, which applies
 `drop_derives` (`Core/Dtor.lean`: `unitE` over `lolliE` of the variable and `dtor_wf`) to a split
 of the variable leaf and the computation, so the result is still a `Res`, and
 `checkProgram_sound` is unchanged. The erasure contains the calls, and the backend compiles them
-as ordinary code. A binder whose variable is left unconsumed is reported with its type, linear with no
-derived drop. A `case` or `<,>` whose parts differ in a variable with no derived drop names that
+as ordinary code. A binder whose variable is left unconsumed is reported with its type, linear with
+no derived drop. A `case` or `<,>` whose parts differ in a variable with no derived drop names that
 type.
 
 **Cross-check.** `CrossCheck.lean` proves by `decide +kernel` that the ten `def`s of §13.1
@@ -323,7 +323,7 @@ of the search; none is a change to `CDerives`.
 The checker applies §19's rules (`Core/Fundamental.lean`) through the builders `rEffSub`,
 `rPerform`, `rRaise`, `rEffLet`, `rEffThen` and `rEffHandle` (`Rules.lean`) and the six unwinding
 borrows (`synConstU`, `Consts.lean`); their side conditions are decided by `rowLeB`, `Row.nzB`,
-`Row.uniqB`, `Row.cancelsB`, `Row.unrB`, `Row.unwindB`, `dropB` and `CTy.effLeafB`
+`Row.uniqB`, `Row.cancelsB`, `Row.unrB`, `Row.unwindB`, `ownFreeB` and `CTy.effLeafB`
 (`Decide.lean`), each with its soundness lemma.
 
 * **The current row.** `Env.row` is the row of the returner chain `F_Σ B` a computation is checked
@@ -334,8 +334,9 @@ borrows (`synConstU`, `Consts.lean`); their side conditions are decided by `rowL
   `F_Σ A` when `Σ′ ⊆ Σ` (`rowLeB`), by `[sub]`; `return V` checks at `F_Σ A` the same way.
 * **Effectful binds.** `x <- M; N` whose head synthesizes `F_Σ′ A` with `Σ′` nonempty is at the
   current row `Σ` (or `Σ′`, when none is set), `M` lifted by `[sub]`. At a row with no weakening
-  (every operation `lin`) it is `[let]`; when every slot `N` uses drops (`dropB`), and is a `!`
-  type at an unrestricted row, `[let]` with the family restricted to those slots; otherwise
+  (every operation `lin`) it is `[let]`; when every slot `N` uses holds no owned cell
+  (`ownFreeB`), and is a `!` type at an unrestricted row, `[let]` with the family restricted to
+  those slots; otherwise
   `[then]`, with the finaliser `finalOf`: the destructors (SPEC §12, `rDrop`) of the
   non-persistent slots `N` uses, at `F 1` (SPEC §24: a finaliser lets no raise escape). A slot
   with no destructor there is an error naming it. An annotated head `x : A <- M` at a nonempty

@@ -87,7 +87,7 @@ def reifyR : Val := .lam (.case (.var 0) (.inj₁ (.var 0)) (.inj₂ (.app (.val
 /-- The tick's clause `λ((), κ). inr (tickLoop κ)`. -/
 def reifyC (res : Val) : Val := .lam (.letpair (.var 0) (.inj₂ (.val (.lam (tlX res)))))
 
-/-- The handler value: the name `Div`, the tick linear. -/
+/-- The handler value: the name `Div`, `tick` must resume. -/
 def reifyH (res : Val) : Val :=
   hndVal divEff (qualsVal [.lin]) reifyR (Val.pair (reifyC res) .unit)
 

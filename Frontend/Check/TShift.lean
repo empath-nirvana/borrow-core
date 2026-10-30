@@ -40,7 +40,7 @@ open BoCa.Lifetime (LifeCtx LifeVar)
 def Atom.eval : Atom → VTy → Bool
   | .pers, A => A.persistent
   | .bang, A => isBangB A
-  | .drop, A => dropB A
+  | .drop, A => ownFreeB A
   | .nfree x, A => !vfreeB x A
   | .outl Δ a, A => outlivesB Δ a A
 

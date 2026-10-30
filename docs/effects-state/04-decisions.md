@@ -367,8 +367,8 @@ These are detailed under each topic below (the IDs in brackets).
 - Words: "we also don't need multishot unless we get it for free" and "if we can figure out a way
   it falls out for free sure. Otherwise eh…" (2026-10-02). Also "it's worth pursuing why we can't
   have multishot, but it's not a blocker".
-- Strength: default (a priority call, not a ban). Design and prove for must-resume and cancellable; drop
-  multi-shot if it breaks a law or adds a rule.
+- Strength: default (a priority call, not a ban). Design and prove for must-resume and cancellable;
+  drop multi-shot if it breaks a law or adds a rule.
 - Scope: kernel and lowering.
 - Sources: mem:`multishot-only-if-free`:8-17; #245 comment 2026-10-02T14:48
   (issuecomment-5954971439); #246 body (side question).

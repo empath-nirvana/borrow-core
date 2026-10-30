@@ -2082,7 +2082,8 @@ def fuseChecked (V : Val) (x : Ident) (M : Comp) (y : Ident) (N : Comp) : Option
   | .run _ (.bind s₁ ta A₁ Ma (.bind s₂ tb A₂ Mb (.case s₃ h q OK u ERR))) =>
     if !(ta.name.startsWith "io_da" && tb.name.startsWith "io_db") then none else do
     let OK' ← checkedArm false (fun v => .bind x.span x none (.ret x.span v) M) 8 OK
-    let ERR' ← checkedArm true (fun v => .bind y.span y (some (divErrTy y.span)) (.ret y.span v) N) 8 ERR
+    let ERR' ← checkedArm true
+      (fun v => .bind y.span y (some (divErrTy y.span)) (.ret y.span v) N) 8 ERR
     pure (.bind s₁ ta A₁ Ma (.bind s₂ tb A₂ Mb (.case s₃ h q OK' u ERR')))
   | _ => none
 

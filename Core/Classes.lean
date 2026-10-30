@@ -18,12 +18,13 @@ the derived rules over existing rules.
 
 | fact | statement |
 |---|---|
-| a derived drop is pure and closed | `dtorE_effFree`, `dtorE_closed` |
+| a derived drop is pure at the row | `dtor_wf`'s type, `HasDtor.close`, `HasDtor.nu`, `kTy_cancel_hasDtor_iff` |
+| a destructor holds no operation, and a derived drop is closed | `dtorE_effFree`, `dtorE_closed` |
 | a derived copy is a derivation | `copy_derives` |
 | `κ` at `lin` is linear with no derived drop | `kTy_lin` |
 | `κ` at the default qualifier is linear; its cancel is a derived drop exactly when pure | `kTy_cancel_linear`, `kTy_cancel_hasDtor_iff` |
 | `κ` at `unr` is unrestricted | `kTy_unr` |
-| the types whose derived drop does nothing | `forgettable_iff` |
+| the types whose destructor does nothing (the unrestricted ones and the borrows) | `forgettable_iff` |
 
 Three rules absorb a context without using its slots, and none is a drop: `⊤` introduction
 (`CDerives.topI`), `absurd` (`CDerives.zeroE`), and the abandonment of a `VTy.OwnFree` context at an
@@ -293,9 +294,12 @@ theorem algsIn_effFree : ∀ (A : VTy), ∀ e ∈ algsIn A, e.effFree = true
   | .fam (.opq _), _, he => by simp [algsIn] at he
 end
 
-/-- A derived drop is pure at the row: `dtorE A` performs no operation, at every `A`; the
-hypothesis is the one the checker has where it inserts a drop.  `[spec §12]` -/
-theorem dtorE_effFree {A : VTy} (_h : HasDtor A) : (dtorE A).effFree = true :=
+/-- `dtorE A` holds no `perform`, `raise`, `hnd` or `iterate`, at every `A`: the syntactic side
+condition `TiedDer.ofCDerives` (`Frontend/Check/Tied.lean`) asks of an inserted drop. It is not
+the statement that a derived drop is pure at the row: that is carried by `dtor_wf`'s type
+`A ⊸ F 1` at the empty row, by `HasDtor.close` and `HasDtor.nu` asking a `.ret` cancel
+(`Core/Dtor.lean`), and at `κ` by `kTy_cancel_hasDtor_iff`.  `[spec §12]` -/
+theorem dtorE_effFree (A : VTy) : (dtorE A).effFree = true :=
   dtorAt_effFree false A
 
 /-- A derived drop is a closed term: `dtor_wf` types it at the empty context
@@ -379,9 +383,9 @@ theorem kTy_cancel_hasDtor_iff {S : Row} {R B : VTy} {F : CTy} :
 /-- `κ` at `unr` is unrestricted. -/
 theorem kTy_unr {S : Row} {R B : VTy} {F : CTy} : Unrestricted (kTy S R .unr B F) := rfl
 
-/-! ### The types whose derived drop does nothing -/
+/-! ### The types whose destructor does nothing -/
 
-/-- `Forgettable` (`Core/Records.lean`) is the types that hold no owned cell and have a derived drop:
+/-- `Forgettable` (`Core/Records.lean`) is the types that hold no owned cell and have a destructor:
 `VTy.OwnFree` without the opaque host types, which have no destructor.  `[spec §12, §19]` -/
 theorem forgettable_iff {A : VTy} : Forgettable A ↔ A.OwnFree ∧ HasDtor A := by
   constructor

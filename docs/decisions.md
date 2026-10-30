@@ -64,8 +64,9 @@ Each entry: the decision, and why. Newest last.
     linear type (`DerivedDrop A := Linear A ∧ HasDtor A`), not a third class. A destructor that
     frees or closes is an action whose placement can be observed: it goes at the end of each path,
     never earlier than an effect. Four decisions of #746 (2026-10-29) fix the rest:
-    1. **A derived drop is pure at the row** (`dtorE_effFree`). The cancel of a continuation whose
-       cancel row is not empty is a use, written or emitted as `(force κ).2`, not a derived drop.
+    1. **A derived drop is pure at the row** (`dtor_wf`'s type, `HasDtor.close`/`.nu`,
+       `kTy_cancel_hasDtor_iff`). The cancel of a continuation whose cancel row is not empty is a
+       use, written or emitted as `(force κ).2`, not a derived drop.
     2. **An abort's abandonment is not a drop.** `⊤`, `absurd` and an abort absorb a context; an
        abort abandons only slots that hold no owned cell (`VTy.OwnFree`, which is not narrowed), so
        nothing leaks. Opaque host types are linear and may be abandoned there.
@@ -73,7 +74,8 @@ Each entry: the decision, and why. Newest last.
        `copy` constant). No site inserts one today.
     4. **A declared type may have no derived drop.** Its payload is paired with a token of the
        opaque kind `tok` (`A ⊗ Tok`, minted at construction and burned at a written `match`), so
-       `HasDtor` fails at it and the checker cannot drop it; borrows of it still have a derived drop.
+       `HasDtor` fails at it and the checker cannot drop it; borrows of it still have a derived
+       drop.
 24. **Recursion is the fixed point of a generator, called directly (revised twice; first read
     "recursion is always structured, no general direct recursion", then "recursion is an
     effect").** A recursive function is written as ordinary self-calls. A mutually recursive group
@@ -716,7 +718,7 @@ Each entry: the decision, and why. Newest last.
     - **`Yield[T]` is a library effect**, `effect Yield[T] { ctl yield(x: T) }` in `lib/yield.bc` (`include yield`), cancellable. A generator is a function that performs it and writes it in its row, `fn range(lo: i32, hi: i32) -> 1 with Yield[i32]`; `yield(x)` is an operation call (no keyword, decision 49).
     - **The elaborator knows an iteration effect by its structure**: one control operation that resumes and answers `()`. No effect's name appears in `Frontend/`.
     - **`for x in g(e) { M }` is a handler site** (push). The loop's variables are threaded through the operation (the generator's copy for the site takes their tuple first and hands it back first, generic in its type), so the body is the clause; `break` and `return` cancel the continuation. Alternative not taken: a state-passing answer type (`W ⊸ F (R ⊗ W)`), which allocates closures per `yield`.
-    - **A `for` whose body performs a control operation, or may loop** (a `while`, a `loop`, a `for` over anything but a count), drains the generator's stored generator instead: a cancellable continuation has no destructor, so a clause cannot hold one across an operation, and a clause is total. So a generator that maps another (`for x in range(…) { yield(x * x) }`) runs as a loop over the stored source.
+    - **A `for` whose body performs a control operation, or may loop** (a `while`, a `loop`, a `for` over anything but a count), drains the generator's stored generator instead: a cancellable continuation at a non-empty cancel row has no derived drop, so a clause cannot hold one across an operation, and a clause is total. So a generator that maps another (`for x in range(…) { yield(x * x) }`) runs as a loop over the stored source.
     - **The stored generator** of a call is its pull view, codata `pull A B R = νX. F((A ⊗ U X) ⊕ (B ⊕ U X)) & F R`; `pull` is read in a type only, not reserved. A call is stored where that type is written to be expected: an argument at a parameter of that type, or `let g : U (pull A B R) = g(e)`. Nothing else stores a call, so a call of a generator in any other position performs its operations where it stands (delegation is a call; `yield from` is withdrawn). Its `close` cancels the continuation, so `R = 1`.
     - **A generator's loops are a div body's at its row** (`Loop_Σ`), which runs nothing when called; `while` and `loop` are loops of any div body, and a loop's body may loop, except a counted loop's and a clause.
     - **Adapters** (`lib/adapters.bc`) are generic generators over stored generators, with the names of decision 41 but `from_iter` (an iterator over the input holds a capability, below). Alternative not taken: adapters as handlers over a computation, which need a handler's state threaded through the operation and functions over computations (#161).
@@ -792,9 +794,10 @@ Each entry: the decision, and why. Newest last.
 60. **Provisional (the closure `Clo`, SPEC §22, #239; spellings to be confirmed by the user).**
     - **The name `Clo`.** The closure `Clo` is `type Clo[A, B]<'c>` in `lib/clo.bc`, a closure with
       a `close` observation, the middle one of the three kinds of function (linear with no derived
-      drop `A => B`; linear with a derived drop, `Clo`; unrestricted `!(A => B)`), with operations `clo_new`, `clo_call`, `clo_call_mut`, `clo_close`,
-      `clo_of_fn` and `clo_once`. Rust's names (`FnOnce`, `FnMut`, `Fn`) appear only as
-      comparisons. The Lean names follow (`cloT`, `cloBox`, `d_callMut`, `d_ofFn`, `d_once`).
+      drop `A => B`; linear with a derived drop, `Clo`; unrestricted `!(A => B)`), with operations
+      `clo_new`, `clo_call`, `clo_call_mut`, `clo_close`, `clo_of_fn` and `clo_once`. Rust's names
+      (`FnOnce`, `FnMut`, `Fn`) appear only as comparisons. The Lean names follow (`cloT`, `cloBox`,
+      `d_callMut`, `d_ofFn`, `d_once`).
     - **Parameterised `type`.** `type N[T, …]<'a, …> = A`, used as `N[A, …]<'b, …>`, is
       substitution at each use (`docs/type-declarations-design.md` §4.1–4.2): the piece of #141's
       stage D2 the declaration needs. No regularity check is made, since a `type` cannot mention
@@ -833,9 +836,9 @@ Each entry: the decision, and why. Newest last.
     - Where the `unr` qualifier or `multi ctl` causes friction, it is restricted or removed.
     - Applied on 2026-10-12, among the user's decisions of that day listed in the tier-1 landing
       inventory (`experiments/Targets/LANDING.md` on `tier1-effects`): "E5 and E9 at an `unr`
-      `exn` signature are **restricted out**". An abortive operation is cancellable: `multi ctl op(…) ->
-      never` is rejected, and so is an unrestricted operation answering `0` in a core row (SPEC
-      §18, 0.47).
+      `exn` signature are **restricted out**". An abortive operation is cancellable:
+      `multi ctl op(…) -> never` is rejected, and so is an unrestricted operation answering `0` in a
+      core row (SPEC §18, 0.47).
 64. **E3's direction is built (effect instances, SPEC §38, #519; spellings provisional).**
     - **Resolution is lexical and by instance**, as `docs/effects-scoping.md` E3 decided (Effekt,
       Helium): an operation goes to the innermost handler of its instance, an effect at its type
@@ -886,9 +889,9 @@ Each entry: the decision, and why. Newest last.
       general route and lifts it."
     - So a handler of another name around a body that ticks is typed only when its clause resumes
       `κ` in tail position (`effHandleT`, SPEC §14 *The effect `Div` in the kernel*): each clause is
-      `λ(x, κ). (λw. κ.1 w) (g x)`, `g : !U(A ⊸ F_{Σ_N} B)` at a row `Σ_N ≤ Σ` of linear operations,
-      or, at an abortive operation, `g` itself. `effHandleV` and `effHandleVB` ask the handled row
-      not to hold `Div`.
+      `λ(x, κ). (λw. κ.1 w) (g x)`, `g : !U(A ⊸ F_{Σ_N} B)` at a row `Σ_N ≤ Σ` of must-resume
+      operations, or, at an abortive operation, `g` itself. `effHandleV` and `effHandleVB` ask the
+      handled row not to hold `Div`.
     - This is a deliberate, temporary restriction (hard-stop item 4), not the design: #564 proves
       `handle_general` and lifts it.
     - What `effHandleL` (#564 route R-1, SPEC §51) lifts: "typed only when its clause resumes `κ` in

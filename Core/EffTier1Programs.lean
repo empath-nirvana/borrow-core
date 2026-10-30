@@ -12,7 +12,7 @@ closed term with a derivation tied to its effect context (`CDerivesAt ΞE`), rea
 (`CDerivesAt.toCDerives`), and a run computed by `runM` from the empty memory to its answer at the
 empty memory (`runM_val`). `ΞE` declares `exn : 1 ↠ 0` at the names `1` and `6`,
 `wait : 1 ↠ 1` at `2` and `yield : bool ↠ 1` at `3`, all cancellable, and `log : bool ↠ 1` at `4`
-and `tick : 1 ↠ 1` at `5`, linear. No abortive operation of it is unrestricted
+and `tick : 1 ↠ 1` at `5`, must resume. No abortive operation of it is unrestricted
 (`noUnrExn_ΞE`), as at the effect context of every program the checker accepts.
 
 | program | shows | answer |
@@ -21,7 +21,7 @@ and `tick : 1 ↠ 1` at `5`, linear. No abortive operation of it is unrestricted
 | `sumGen` (E2d) | a consumer of a generator, let-bound once and used at `yield ⊙ ∅` and `yield ⊙ exn`; the raise passes its reinstalled handler | `(tt, inr ())` |
 | `deepGen` (E4) | a deep handler: reinstalled at each resume, it catches both yields, its clause performing `tick` at each; a handler of `tick` counts them | `((), 2)` |
 | `deepGenPlain` (E4) | the same deep handler under a handler of `tick` that resumes | `()` |
-| `nestedLogOutside`, `nestedFailOutside` (E5) | a state-passing handler of the linear `log` and `toResult`, nested both ways: the log kept beside the error, or dropped with the handler the raise unwinds | `(inr (), tt)`, `inr ()` |
+| `nestedLogOutside`, `nestedFailOutside` (E5) | a state-passing handler of the must-resume `log` and `toResult`, nested both ways: the log kept beside the error, or dropped with the handler the raise unwinds | `(inr (), tt)`, `inr ()` |
 | `tunnel` (E6) | `fwrap`'s handler of `exnᵢ` passes the callback's raise of `exnₒ` to `toResult` | `inr ()` |
 | `e7a`, `e7b`, `e7d` (E7) | `timeout` cancels a suspended body: the finalisers fire innermost first, and the first error is kept and re-raised at the canceller | `inr ()` |
 | `e8b` (E8b) | an unwind fires a finaliser whose raise supersedes the pending one | `inl (inr ())` |
@@ -34,8 +34,8 @@ the body with the function in place (`threeUses_subst`, `sumGenUses_subst`, `tim
 and that copy, the function replaced by the bound variable, is the let's body (`threeUses_unfill`,
 `sumGenUses_unfill`, `timeoutUses_unfill`; `Core/LetCopy.lean`).
 E5's state function and E9's closure hold a `bool` across a `[let]` at a row with `exn`, which
-needs that row to have no unrestricted operation: `exn` is cancellable. The programs the backend compiles
-are kernel programs (`Backend/Kernel.lean`).
+needs that row to have no unrestricted operation: `exn` is cancellable. The programs the backend
+compiles are kernel programs (`Backend/Kernel.lean`).
 -/
 
 noncomputable section
@@ -60,7 +60,7 @@ def appE (M V : Expr) : Expr := .app (.lam (.app (M.shift 1 0) (.var 0))) V
 
 /-- The effect context of the programs: `exn : 1 ↠ 0` cancellable at `1` and at `6`, `wait : 1 ↠ 1`
 cancellable at `2`, `yield : bool ↠ 1` cancellable at `3`, `log : bool ↠ 1` must resume at `4`, and
-`tick : 1 ↠ 1` linear at `5`. -/
+`tick : 1 ↠ 1` must resume at `5`. -/
 def ΞE : EffCtx := fun n =>
   if n = 1 then [(.cancel, .unit, .zero)] else
   if n = 2 then [(.cancel, .unit, .unit)] else
@@ -206,7 +206,8 @@ def e7d : Expr :=
 /-! ### E8b: unwinding through a finaliser that raises (`e8b`) -/
 
 /-- **E8b**: `toResult_a (toResult_b ((raise exn_a ()) then x. x unwind raise exn_b ()))`. -/
-def e8b : Expr := hndE (toResultH 1 .cancel) (hndE (toResultH 6 .cancel) (thenU (raiseU 1) (raiseU 6)))
+def e8b : Expr :=
+  hndE (toResultH 1 .cancel) (hndE (toResultH 6 .cancel) (thenU (raiseU 1) (raiseU 6)))
 
 /-! ### E9: a stored continuation (`stored-k-resume`, `stored-k-cancel`, `stored-k-fin`) -/
 
@@ -644,7 +645,8 @@ theorem dAt_pairRet {Δ : LifeCtx} (S : Row) (A X : VTy) :
     (.effSub (RowLe.nil S) (.ret (.tensorI (.right (.left .nil)) (.var (.there (.here .nil)))
       (.var (.here (.cons .nil)))))))))))
 
-/-- `k (inj₁ ()) y`: a must-resume or cancellable `k` at the slot `1` resumed at `y` at the slot `0`. -/
+/-- `k (inj₁ ()) y`: a must-resume or cancellable `k` at the slot `1` resumed at `y` at the slot
+`0`. -/
 theorem dAt_kResume {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} {R B : VTy}
     {q : Qual} (hq : q ≠ .unr) :
     CDerivesAt Ξ Δ (⟨B, true⟩ :: ⟨kTy S R q B, true⟩ :: Γ)
@@ -661,8 +663,8 @@ theorem dAt_kResume {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} 
         (.here (.cons hΓ.toP))
   | unr => exact absurd rfl hq
 
-/-- **The clause `op (_, k) ⇒ resume k ()`** at a resuming must-resume or cancellable operation `A ↠ 1`,
-`A` persistent (the argument is dropped). -/
+/-- **The clause `op (_, k) ⇒ resume k ()`** at a resuming must-resume or cancellable operation
+`A ↠ 1`, `A` persistent (the argument is dropped). -/
 theorem dAt_resumeCl {Δ : LifeCtx} (S : Row) (R : VTy) {q : Qual} {A : VTy} (hq : q ≠ .unr)
     (hA : A.Persistent) :
     CDerivesAt Ξ Δ [] (.val resumeClV) (.val (clauseTy S R (q, A, .unit))) := by
@@ -979,7 +981,7 @@ abbrev countR : VTy := .thunk (.arr natN (CTy.effOf [] (.tensor .unit natN)))
 theorem rowAt_tick : RowAt ΞE (tickRow ++ []) :=
   rowAt_ofEff_append ΞE_5 (by decide) (by simp) (rowAt_nil ΞE)
 
-/-- A row of one linear operation drops no continuation and copies none. -/
+/-- A row of one must-resume operation drops no continuation and copies none. -/
 theorem not_cancels_tick : ¬ (tickRow ++ []).Cancels := by
   rintro ⟨o, ho, hq⟩
   simp [Row.ofEff] at ho
@@ -993,7 +995,7 @@ theorem not_unr_tick : ¬ (tickRow ++ []).Unr := by
   cases hq
 
 /-- **`yield (_, k) ⇒ tick (); resume k ()`** at the cancellable `bool ↠ 1`, at `tick`'s row:
-`tick ()` is a `[let]` at a row of one linear operation, so the continuation holding `k` is
+`tick ()` is a `[let]` at a row of one must-resume operation, so the continuation holding `k` is
 neither dropped nor copied. -/
 theorem dAt_tickingCl {Δ : LifeCtx} :
     CDerivesAt ΞE Δ [] (.val tickingClV)
@@ -1030,7 +1032,7 @@ theorem dAt_deepGenE {Δ : LifeCtx} :
       (.effPerform (o := ⟨3, 0, .cancel, boolT, .unit, .ret .unit⟩) hY
         (by simp [Row.ofEff, Row.find]) rfl (.sumI₁ (.unitI (.drop rfl .nil))))
 
-/-- **`tick (_, k) ⇒ λc. resume k () to g. g (c + 1)`** at the linear `1 ↠ 1`, at the pure row:
+/-- **`tick (_, k) ⇒ λc. resume k () to g. g (c + 1)`** at the must-resume `1 ↠ 1`, at the pure row:
 the count is held across the resume. -/
 theorem dAt_countCl {Δ : LifeCtx} :
     CDerivesAt ΞE Δ [] (.val countClV) (.val (clauseTy [] countR (.lin, .unit, .unit))) := by
@@ -1290,7 +1292,8 @@ def timeoutUsesW : Expr :=
     (bindE (hndE (toResultH 1 .cancel) (appE timeoutRE (failCbE 1))) (.pair (.var 1) (.var 0)))
 
 theorem timeoutUses_subst :
-    (timeoutUses.subst 0 (Val.lam (hndE (hQ 2 .cancel idV tmClV) (appE (.var 0) .unit)))).shift 1 0 =
+    (timeoutUses.subst 0
+      (Val.lam (hndE (hQ 2 .cancel idV tmClV) (appE (.var 0) .unit)))).shift 1 0 =
       timeoutUsesW := rfl
 
 /-- E10's body is its copy with `timeout` replaced by the bound variable (`Expr.unfill`). -/

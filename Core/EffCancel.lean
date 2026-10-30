@@ -409,7 +409,8 @@ def ThenAbortCompat : Prop :=
     SemC (ℍ := ℍ) Δ Γ (thenE N D M) (CTy.effOf S B)
 
 /-- The row of `prog`'s `[then]`: the abortive `2` and the cancellable `1`. -/
-def S₁₂ : Row := [⟨2, 0, .cancel, .unit, .zero, .ret .unit⟩, ⟨1, 0, .cancel, .unit, .unit, .ret .unit⟩]
+def S₁₂ : Row :=
+  [⟨2, 0, .cancel, .unit, .zero, .ret .unit⟩, ⟨1, 0, .cancel, .unit, .unit, .ret .unit⟩]
 
 /-- `prog`'s `[then]`: `perform 1 then x. x unwind raise 2`. -/
 def thenProg : Expr := thenE (.var 0) (raiseU 2) (performU 1)
@@ -429,7 +430,8 @@ theorem semC_thenProg (h : ThenAbortCompat (ℍ := ℍ)) :
     .effSub (S := []) (fun _ _ _ h => by simp [Row.find] at h) (.ret (.var (.here .nil)))
   have hD : CDerives LifeCtx.empty [⟨.unit, false⟩] (raiseE (opArgE 2 0 (.val .unit)))
       (.comp (CTy.effOf S₁₂.abortOnly .unit)) :=
-    .effRaise (o := ⟨2, 0, .cancel, .unit, .zero, .ret .unit⟩) (by rfl) rfl .unit (.unitI (.cons .nil))
+    .effRaise (o := ⟨2, 0, .cancel, .unit, .zero, .ret .unit⟩) (by rfl) rfl .unit
+      (.unitI (.cons .nil))
   exact h .nil (by intro o ho; simp [S₁₂] at ho; rcases ho with rfl | rfl <;> decide)
     (by simp [Row.Uniq, S₁₂]) (fun _ s hs => absurd hs List.not_mem_nil)
     (fundamentalC hM) (fundamentalC hN) (fundamentalC hD)

@@ -86,9 +86,9 @@ main -> 1 =
 
 ## Cancellation
 
-A task is a linear value: it has to be either run to the end or cancelled. Cancelling frees
-everything the task owns, so nothing leaks. Here the first of two lookups to finish wins, and the
-other is cancelled along with the cell it holds:
+A task is linear, with a cancel branch: it has to be either run to the end or cancelled. Cancelling
+frees everything the task owns, so nothing leaks. Here the first of two lookups to finish wins, and
+the other is cancelled along with the cell it holds:
 
 ```bc
 include async

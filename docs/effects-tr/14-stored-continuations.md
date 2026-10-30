@@ -335,8 +335,8 @@ a few new steps; **L** touches every definition of the relation.
    contraction come from generativity and independence, not from the three facts (§13.6). Read as
    a structure for the TR, the framing **adds a layer of vocabulary without removing work**.
 2. **The framing yields two new laws, each with a sharp limit.**
-   - η holds at linear and abortive operations, and at cancellable ones only with a frame that holds a
-     continuation (D13.7). That frame is a new former, and it bears on #245's fourth seam.
+   - η holds at linear and abortive operations, and at cancellable ones only with a frame that holds
+     a continuation (D13.7). That frame is a new former, and it bears on #245's fourth seam.
    - The interaction law holds only at operations resumed exactly once (P13.14).
 
    These are useful findings, but they are additions, not reductions.

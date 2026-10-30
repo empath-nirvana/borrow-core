@@ -8,9 +8,9 @@ import Frontend.Elab.Divisions
 # Frontend — Elab — effects and handlers  `[spec §18, §19, §20, §21, §30, §32, §34, §38, §39]`
 
 An effect declares operations, each **answering** (`fn`) or **control** (`ctl`, with the
-structural qualifier of its continuation: cancellable by default, must resume at `linear ctl`, unrestricted at `multi ctl`). An effect
-is one or the other. This pass resolves every operation to the handler that serves it, before the
-rest of the sugar; it knows no effect by name.
+structural qualifier of its continuation: cancellable by default, must resume at `linear ctl`,
+unrestricted at `multi ctl`). An effect is one or the other. This pass resolves every operation to
+the handler that serves it, before the rest of the sugar; it knows no effect by name.
 
 * **Answering effects** are capabilities (§18): `handler h(s: S) for E { op(x) -> e }` gives each
   clause as a function over a `mut` borrow of the state,
@@ -1861,8 +1861,6 @@ def trBind : Nat → Cx → List Cap → Bool → Span → Ident → Option VTy 
       -- `M` hands back the capabilities it uses, which are bound again for `N`.
       let t ← fresh "fx_b"
       let M' ← trC n cx csM true M
-      -- A name is drawn here as for the head's value, which keeps the generated names that follow.
-      let _ ← fresh "fx_v"
       let body ← unpack sp csM x.name t N'
       pure (bindFlat sp t (A.map (capsTy sp csM)) M' body)
 

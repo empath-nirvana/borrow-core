@@ -7,8 +7,8 @@ import Core.EffPrograms
 Four programs that `CDerives` types at no context and no judgement, each refused by inversion
 (`Core/Inversions.lean`).  Three are handlers whose clause tuple `(cl, ())` is `[handle]`'s or
 BOXED-κ's (§28), so the clause is at its clause type (`handleWith_clause`, `clause_lin`), and its
-`κ` at a linear operation is at `kTy`, a thunk of an `&`, bare or boxed; a view of either has the
-thunk head (`kviewO`).
+`κ` at a must-resume operation is at `kTy`, a thunk of an `&`, bare or boxed; a view of either has
+the thunk head (`kviewO`).
 
 * **AT13** (`not_der_at13`): a clause that forgets `κ`.  `forget`'s axioms take `!`, `Imm`, `Mut`,
   `Unk` and `ArrayImm`, and as a λ it drops its argument only at a persistent type
@@ -72,8 +72,8 @@ theorem kview {C₁ C₂ : CTy} {A : VTy} (h : VView (.thunk (.amp C₁ C₂)) A
     (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
   exact ⟨by rw [hh.persistent]; rfl, hh⟩
 
-/-- A view of `κ`'s type at `lin` and `cancel`, bare or boxed (BOXED-κ), is not persistent and has the
-thunk head. -/
+/-- A view of `κ`'s type at `lin` and `cancel`, bare or boxed (BOXED-κ), is not persistent and has
+the thunk head. -/
 theorem kviewO {C₁ C₂ : CTy} {A : VTy} (ob : Option Lifetime.Life)
     (h : VView (kBoxO ob (.thunk (.amp C₁ C₂))) A) :
     A.persistent = false ∧ Hnf A (.thunk (.amp C₁ C₂)) := by
@@ -236,8 +236,8 @@ theorem handleWith_clause {Δ : LifeCtx} {Γ : Ctx VTy} {n : UInt32} {q : Qual} 
   obtain rfl := hslot T hT
   exact ⟨Γ₁, S₁, T, S, R, E, fs, ob, hle₁, hP, hv, hE⟩
 
-/-- The clause tuple's clause is read at the clause type of its handler's one operation: at a linear
-operation, `!U(A ⊗ kTy ⊸ F_Σ R)`. -/
+/-- The clause tuple's clause is read at the clause type of its handler's one operation: at a
+must-resume operation, `!U(A ⊗ kTy ⊸ F_Σ R)`. -/
 theorem clause_lin {Δ : LifeCtx} {Γ : Ctx VTy} {cl : Expr} {S₁ : Row} {T₁ : VTy} {S : Row}
     {R : VTy} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {ob : Option Lifetime.Life}
     (hP : CDerives Δ Γ (.pair cl .unit) (.comp (CTy.effOf S₁ T₁)))

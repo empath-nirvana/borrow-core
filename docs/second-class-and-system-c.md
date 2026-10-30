@@ -249,8 +249,8 @@ run produces**. What is missing is (a) and (b) below.
     - a counter in the machine state, never reused, which gives persistent labels and suits
       multi-shot continuations; or
     - a cell allocated by `hnd` whose location is the name, freed when the `hnd` frame returns.
-      A cell suits must-resume and cancellable continuations, since the frame and its `κ` own it. It does
-      not suit multi-shot continuations, whose copies would share an owned cell.
+      A cell suits must-resume and cancellable continuations, since the frame and its `κ` own it. It
+      does not suit multi-shot continuations, whose copies would share an owned cell.
 - **Cost:** one primitive, plus its cases in unique decomposition and determinism (`head_det_eff`).
   - A counter changes `Heap`, which is the paper's machine state, or adds a component beside it.
   - Names as locations change `Head.hop`'s name type.

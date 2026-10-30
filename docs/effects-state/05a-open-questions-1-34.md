@@ -97,11 +97,11 @@ The draft registers OQ-9 as "the first unknown" and probes option (a), a relativ
 does not record that (b)'s route exists at today's stop.
 
 **F3. Mis-citations.** OQ-20 and OQ-27 cite "#279, external input" for `withtake` and for η at
-cancellable operations. Both items are in a comment on **#251** (2026-10-02T16:10Z). #279 is the D16.1
-issue and contains neither. OQ-14 cites "T2, #173" for generative instances. #173 is "an outlives
-rule for thunks `U C`" (theory index T2, `docs/theory-index.md:657`). It is the confinement that
-generative instances would need, and it is also option (b) of OQ-28. The draft does not cross-link
-OQ-14 and OQ-28 through #173.
+cancellable operations. Both items are in a comment on **#251** (2026-10-02T16:10Z). #279 is the
+D16.1 issue and contains neither. OQ-14 cites "T2, #173" for generative instances. #173 is "an
+outlives rule for thunks `U C`" (theory index T2, `docs/theory-index.md:657`). It is the confinement
+that generative instances would need, and it is also option (b) of OQ-28. The draft does not
+cross-link OQ-14 and OQ-28 through #173.
 
 **F4. The recorded cancel-error decision and the built SPEC disagree.** This bears on OQ-21.
 
@@ -376,7 +376,8 @@ That re-entry choice is the printed freshness, applied once per resumption.
 - Option (b) has PROVED instances at [Core σ=[]], with today's stop:
   - resume of a 6.64 lend (`imm_spans_yield`);
   - resume of a 6.65 lend (`withbor_spans_yields_cC`);
-  - drop or cancel of a 6.65 lend at a cancellable yield (`spans_two_affine_yields`, `withborR_compat`).
+  - drop or cancel of a 6.65 lend at a cancellable yield (`spans_two_affine_yields`,
+    `withborR_compat`).
 
   The general borrower is reduced to `RelendOfTyped` (`Open.lean:45`), which is OPEN. GFP is
   refuted as first stated, by a witness that does not arise; `GFPA` is OPEN.
