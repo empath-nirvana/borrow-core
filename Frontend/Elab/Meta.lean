@@ -57,7 +57,7 @@ def TCx.ofScope (scope : List Decl) (all : Bool) : TCx :=
   let ds := scope.toArray
   let xs := externsBefore ds ds.size
   let vars := (xs.map (fun (x, B) => if all || B.persistent then some x else none)).reverse
-  { E := Env.mk ⟨ds, ds.size, []⟩ vars [] [] [] xs.length none, T := (xs.map (·.2)).reverse }
+  { E := Env.mk ⟨ds, ds.size, [], []⟩ vars [] [] [] xs.length none, T := (xs.map (·.2)).reverse }
 
 /-- A written type, elaborated. -/
 def TCx.elabV (c : TCx) (A : VTy) : Option CVTy := (c.E.elabV c.Δ A).toOption
@@ -130,14 +130,14 @@ def ppT (A : CVTy) : String := ppVTy A
 
 /-- A type as surface syntax. -/
 def toSurface (sp : Span) (A : CVTy) : Except Error VTy := do
-  match parseProgram s!"type IoT = {ppT A}\n" with
+  match parseProgram s!"type IoT = {ppT A}\n" (internal := true) with
   | .ok ⟨[.type _ _ _ _ B]⟩ => pure B
   | _ => throw ⟨sp, s!"internal error: the type `{ppT A}` does not print as surface syntax"⟩
 
 /-- A type as surface syntax in a context, its lifetimes by the names the context gives them. -/
 def TCx.surface (c : TCx) (sp : Span) (A : CVTy) : Except Error VTy := do
   let src := ppV c.E.lenv 0 0 A
-  match parseProgram s!"type IoT = {src}\n" with
+  match parseProgram s!"type IoT = {src}\n" (internal := true) with
   | .ok ⟨[.type _ _ _ _ B]⟩ => pure (B.respan sp)
   | _ => throw ⟨sp, s!"internal error: the type `{src}` does not print as surface syntax"⟩
 

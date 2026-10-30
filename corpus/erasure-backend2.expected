@@ -116,6 +116,10 @@ data-particles erased handles 0 performs 0 raises 0 left 0 0
 data-rose erased handles 1 performs 0 raises 3 left 0 0
 data-rose-vec erased handles 3 performs 0 raises 4 left 0 0
 data-turnstile erased handles 0 performs 0 raises 0 left 0 0
+decl-guard erased handles 2 performs 0 raises 1 left 0 0
+decl-promise erased handles 0 performs 0 raises 0 left 0 0
+decl-txn erased handles 0 performs 0 raises 0 left 0 0
+decl-view erased handles 0 performs 0 raises 0 left 0 0
 deep-list erased handles 0 performs 0 raises 0 left 0 0
 div-abstraction erased handles 7 performs 0 raises 4 left 0 0
 div-euclid erased handles 2 performs 0 raises 7 left 0 0

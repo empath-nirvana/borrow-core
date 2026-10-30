@@ -119,6 +119,10 @@ data-particles 4 0 0 669 653 353
 data-rose 14 0 0 56 56 0 # one cell per `box Forest` field and one per forest's tail, two copies of the tree
 data-rose-vec 5 0 0 284 220 31 # the buffer of each node with children, two per tree, and `[1, [], 2]`'s; an empty buffer allocates nothing
 data-turnstile 4 0 0 53 21 36
+decl-guard 0 0 0 0 0 0
+decl-promise 6 0 0 24 24 0
+decl-txn 0 0 0 0 0 0
+decl-view 0 0 0 6 3 0
 deep-list 100003 0 0 450003 450003 0
 div-abstraction 0 0 0 0 0 0
 div-euclid 3 0 0 3 3 0

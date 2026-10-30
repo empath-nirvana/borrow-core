@@ -417,6 +417,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       | [], rM =>
         let rM := rUnfoldStep (at_ sp) rM
         let ⟨C, rN⟩ ← synC n ((E.minus rM.F.u).pushOwn x.name A) Δ (A :: T) N
+        let rN ← dropStuck x.span 1 rN
         let FN ← popL E x.span x.name rN.F
         if h : overlapOK T rM.F.u FN.u = true then pure ⟨C, rScope (at_ sp) (rBind (atB sp [x.name]) rM FN h)⟩
         else throw (splitErr E T sp rM.F.u FN.u)
@@ -435,6 +436,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
         (← synC n { (E.minus rM.F.u).pushOwn x.name A with row := some S } Δ (A :: T) N)
       let rD ← chkC n ((E.minus rM.F.u).push none) Δ (.unit :: T) D
         (effOf [] .unit)
+      let rN ← dropStuck x.span 1 rN
       let FN ← popL E x.span x.name rN.F
       pure ⟨_, ← thenIt E sp x.name rM' FN rD⟩
     | .perform sp k i V => do
@@ -568,6 +570,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       | .tensor A B, rV => do
         let ⟨C, rM⟩ ← synC n ((E.minus rV.F.u).pushOwn x.name A |>.pushOwn y.name B) Δ
           (B :: A :: T) M
+        let rM ← dropStuck sp 2 rM
         let F₁ ← popL E y.span y.name rM.F
         let F₂ ← popL E x.span x.name F₁
         if h : overlapOK T rV.F.u F₂.u = true then pure ⟨C, rScope (at_ sp) (rTensorE (atB sp [x.name, y.name]) rV F₂ h)⟩
@@ -754,6 +757,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
       | [], rM =>
         let rM := rUnfoldStep (at_ sp) rM
         let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A) Δ (A :: T) N C
+        let rN ← dropStuck x.span 1 rN
         let FN ← popL E x.span x.name rN.F
         if h : overlapOK T rM.F.u FN.u = true then pure (rScope (at_ sp) (rBind (atB sp [x.name]) rM FN h))
         else throw (splitErr E T sp rM.F.u FN.u)
@@ -777,6 +781,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
           let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A) Δ (A :: T) N (effOf S B)
           let rD ← chkC n ((E.minus rM.F.u).push none) Δ (.unit :: T) D
             (effOf [] .unit)
+          let rN ← dropStuck x.span 1 rN
           let FN ← popL E x.span x.name rN.F
           pure (hC ▸ (← thenIt E sp x.name rM' FN rD))
         else err sp "internal error: a returner chain"
@@ -819,6 +824,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
       | .tensor A B, rV => do
         let rM ← chkC n ((E.minus rV.F.u).pushOwn x.name A |>.pushOwn y.name B) Δ
           (B :: A :: T) M C
+        let rM ← dropStuck sp 2 rM
         let F₁ ← popL E y.span y.name rM.F
         let F₂ ← popL E x.span x.name F₁
         if h : overlapOK T rV.F.u F₂.u = true then pure (rScope (at_ sp) (rTensorE (atB sp [x.name, y.name]) rV F₂ h))

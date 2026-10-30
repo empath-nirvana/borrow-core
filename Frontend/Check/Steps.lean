@@ -690,10 +690,39 @@ def firstMissing : List Bool → List Bool → List Bool → Option Nat
   | a :: as, b :: bs, c :: cs => if a && !(b || c) then some 0 else (firstMissing as bs cs).map (· + 1)
   | _, _, _ => none
 
+/-- `B` occurs in `A`. -/
+def occursTy (B : CVTy) : CVTy → Bool
+  | .tensor X Y => .tensor X Y == B || occursTy B X || occursTy B Y
+  | .sum X Y => .sum X Y == B || occursTy B X || occursTy B Y
+  | .ref X => .ref X == B || occursTy B X
+  | .box a X => .box a X == B || occursTy B X
+  | .bang X => .bang X == B || occursTy B X
+  | .mu X => .mu X == B || occursTy B X
+  | .fam X => .fam X == B || occursTy B X
+  | A => A == B
+
+/-- The fix a message names for a value whose type holds a field marked `must_close` (SPEC §42):
+the declaration, the field and the function that consumes it. Message text only: the refusal is
+the kernel's. -/
+def Env.closeHint (E : Env) (A : CVTy) (abort : Bool) : String :=
+  let holds (n : String) : Bool := match E.elabV LifeCtx.empty (.name .none n) with
+    | .ok N => occursTy N A
+    | .error _ => false
+  match E.scope.closes.find? (holds ·.1) with
+  | some (n, g, f) =>
+    let fix := match f with
+      | some f => s!"pass it to `{f}`"
+      | none => s!"consume it with a `match` on `{n}`"
+    let at_ := if abort then " before the computation that may abort, or close it in a `finally`"
+      else " before its scope ends"
+    s!": `{n}` holds the field `{g}`, marked `must_close`; {fix}{at_}"
+  | none => ""
+
 /-- Why slot `i` was not dropped where a path does not consume it. -/
 def Env.notDropped (E : Env) (T : List CVTy) (i : Nat) : String :=
   match T[i]? with
-  | some A => if hasDtorB A then "" else s!", and its type `{E.ppV A}` is linear and has no derived drop"
+  | some A => if hasDtorB A then "" else
+      s!", and its type `{E.ppV A}` is linear and has no derived drop" ++ E.closeHint A false
   | none => ""
 
 /-- The two parts of a `case` or a `<,>` do not consume the same variables. -/
@@ -711,7 +740,7 @@ def unconsumed (E : Env) (sp : Span) (x : String) (A : CVTy) : Error :=
   if hasDtorB A then
     ⟨sp, s!"`{x}` is not consumed in its scope, and it cannot be dropped where its scope ends"⟩
   else ⟨sp, s!"`{x}` is not consumed in its scope, and its type `{E.ppV A}` is linear and " ++
-    "has no derived drop"⟩
+    "has no derived drop" ++ E.closeHint A false⟩
 
 def mismatch (sp : Span) (want got : String) : Error :=
   ⟨sp, s!"type mismatch: expected `{want}`, but this has type `{got}`"⟩
@@ -884,6 +913,18 @@ def dropOne {C : CCTy} (sp : Span) (i : Nat) (r : Res Δ T (.comp C)) :
     else throw ⟨sp, "internal error: an owed slot has no destructor"⟩
   | none => throw ⟨sp, "internal error: an owed slot is out of range"⟩
 
+/-- The binders' slots `0 … k − 1` of a scope whose body can leave none of them live, each with a
+derived drop, consumed by it at the head of the body (`drop_derives`): the body neither uses such
+a slot nor can weaken it, as under `boxed[@a]`, whose context must outlive `@a` (`[]I`), a slot
+of `Unk` among them. Such a slot is not owed (an owed one is dropped at the terminal), so its type
+is persistent or a borrow, and its drop does nothing observable.  `[spec §12]` -/
+def dropStuck {C : CCTy} (sp : Span) (k : Nat) (r : Res Δ T (.comp C)) :
+    Except Error (Res Δ T (.comp C)) :=
+  (List.range k).foldlM (init := r) fun r i =>
+    if !(r.F.u.getD i false) && !(r.F.w.getD i true) && (T[i]?.map hasDtorB).getD false then
+      dropOne sp i r
+    else pure r
+
 /-- Drop what the terminal computation `r` leaves owed, the lowest index (the most recently
 bound variable) first. -/
 def dropOwed {C : CCTy} (E : Env) (sp : Span) (r : Res Δ T (.comp C)) :
@@ -931,6 +972,8 @@ def withIt {C D : CCTy} (E : Env) (T : List CVTy) (sp : Span) (r₁ : Res Δ (wi
 def caseIt {A B : CVTy} {C : CCTy} (E : Env) (T : List CVTy) (sp : Span) (x y : Ident)
     (rV : Res Δ T (.val (.sum A B))) (r₁ : Res Δ (A :: T) (.comp C))
     (r₂ : Res Δ (B :: T) (.comp C)) : Except Error (Res Δ T (.comp C)) := do
+  let r₁ ← dropStuck x.span 1 r₁
+  let r₂ ← dropStuck y.span 1 r₂
   let F₁ ← popL E x.span x.name r₁.F
   let F₂ ← popL E y.span y.name r₂.F
   if s₁ : subL F₁.u (orL F₂.u F₂.w) = true then
@@ -977,7 +1020,9 @@ def lamIt {A : CVTy} {C : CCTy} (E : Env) (sp : Span) (x : Ident) (rM : Res Δ (
         | none => rLam { sp, name := x.name } <$> popL E x.span x.name rM.F
       else rLam { sp, name := x.name } <$> popL E x.span x.name rM.F
     | none => rLam { sp, name := x.name } <$> popL E x.span x.name rM.F
-  | _, rM => rLam { sp, name := x.name } <$> popL E x.span x.name rM.F
+  | _, rM => do
+    let rM ← dropStuck x.span 1 rM
+    rLam { sp, name := x.name } <$> popL E x.span x.name rM.F
 
 /-! ### Effectful bindings  `[spec §19]` -/
 
@@ -1014,7 +1059,7 @@ def finalOf (E : Env) (sp : Span) (_S : CRow) (u : List Bool) :
       if hasDtorB A then dropOne sp (i + 1) r
       else throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across a computation " ++
         "that may abort, and its type is linear with no derived drop, and an abort abandons " ++
-        "only a value that holds no owned cell"⟩
+        "only a value that holds no owned cell" ++ E.closeHint A true⟩
     | none => throw ⟨sp, "internal error: a slot is out of range"⟩
   pure r
 
@@ -1066,6 +1111,7 @@ destructors of the slots `N` uses. -/
 def effBind (E : Env) (sp : Span) (x : Ident) {S : CRow} {A B : CVTy}
     (rM : Res Δ T (.comp (effOf S A))) (rN : Res Δ (A :: T) (.comp (effOf S B))) :
     Except Error (Res Δ T (.comp (effOf S B))) := do
+  let rN ← dropStuck x.span 1 rN
   let FN ← popL E x.span x.name rN.F
   if hw : Row.cancelsB S = true then
     let p : CVTy → Bool := fun A => ownFreeB A && (!Row.unrB S || isBangB A)

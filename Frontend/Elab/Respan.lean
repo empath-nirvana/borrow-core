@@ -90,6 +90,8 @@ def Const.respan (sp : Span) : Const → Const
   | .forgetImm a A => .forgetImm (a.respan sp) (A.respan sp)
   | .forgetMut a A => .forgetMut (a.respan sp) (A.respan sp)
   | .forgetUnk => .forgetUnk
+  | .tokMint => .tokMint
+  | .tokBurn => .tokBurn
   | .forgetBang A => .forgetBang (A.respan sp)
   | .withbor1 x A B => .withbor1 (x.respan sp) (A.respan sp) (B.respan sp)
   | .withbor2 x b A B => .withbor2 (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp)

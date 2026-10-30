@@ -63,6 +63,9 @@ structure Scope where
   upto : Nat
   /-- The key of each `def` the elaboration generates (`DefKey`), read at its uses. -/
   keys : List DefKey := []
+  /-- The fields marked `must_close` of the program's declarations: the declaration, the field,
+  and the function that consumes it, if named. Read by the messages only (SPEC §42). -/
+  closes : List (String × String × Option String) := []
 
 /-- A `type` declaration in scope: its type and lifetime parameters, body and own scope. -/
 structure TypeInfo where
@@ -165,6 +168,7 @@ def ppV (nm : List (String × LifeVar)) (d p : Nat) : CVTy → String
   | .opq .output => "output"
   | .opq .clock => "clock"
   | .opq .args => "args"
+  | .opq .tok => "tok"
   -- The variable of the `nu` around (`ppC`), which occurs only as `U X`.
   | .tvar n => if n < d then tvName (d - 1 - n) else if n == d then "U X" else s!"?{n}"
   | .mu A => parenIf (p > 0) s!"mu {tvName d}. {ppV nm (d + 1) 0 A}"
@@ -294,7 +298,8 @@ def elabV : Nat → TyEnv → VTy → Except Error CVTy
         | .input => .input
         | .output => .output
         | .clock => .clock
-        | .args => .args))
+        | .args => .args
+        | .tok => .tok))
     | .mu sp X A => do
         let B ← elabV n { E with mu := X.name :: E.mu } A
         -- A template's type, elaborated with its type parameters as placeholders to match a call

@@ -277,7 +277,7 @@ def destructSrc (v : String) : List String → String
 
 /-- Parse the computation `src` as a `main` body. -/
 def parseComp (src : String) : Except Error Comp := do
-  let p ← parseProgram ("main : F 1 =\n" ++ src) (resolve := false)
+  let p ← parseProgram ("main : F 1 =\n" ++ src) (resolve := false) (internal := true)
   match p.decls.findSome? (fun | .main _ _ M => some M | _ => none) with
   | some M => pure M
   | none => throw ⟨Span.none, "internal error: a template without main"⟩
@@ -607,6 +607,9 @@ inductive Origin where
   | effects (r : Elab.Effects.Report)
   /-- The key of a `def` the elaboration generates (`DefKey`). -/
   | defKey (k : DefKey)
+  /-- The field `g` of the declaration `n` is marked `must_close`, consumed by `f` when it names
+  one: read by the checker's messages (SPEC §42). -/
+  | closes (n g : String) (f : Option String)
   deriving BEq, Inhabited
 
 /-- Where generated code came from, and what the elaboration reports: per span, its origins. -/
@@ -1596,7 +1599,8 @@ def capTyC (c : String) : CVTy := .ref (.opq (match capKind c with
   | .input => .input
   | .output => .output
   | .clock => .clock
-  | .args => .args))
+  | .args => .args
+  | .tok => .tok))
 
 /-- `main` with ambient capabilities, elaborated: its new type and body. `c` is the typing
 context of `main`.  `[spec §11, §14]` -/
@@ -2552,7 +2556,7 @@ made while elaborating the declaration it is in). -/
 def refresh (c : TCx) : DM TCx := do
   let st ← get
   let ds := (st.lib ++ st.out ++ st.caps).toArray
-  pure { c with E := { c.E with scope := ⟨ds, ds.size, []⟩ } }
+  pure { c with E := { c.E with scope := { c.E.scope with decls := ds, upto := ds.size, keys := [] } } }
 
 /-! #### The total `for` over data  `[spec §16]`
 
@@ -6122,7 +6126,15 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let (ioDecls, incl₀) ← (if ioFirst then expandIncludes libNames.length
       [Decl.include Span.none ⟨"io", Span.none⟩] ([], []) else pure ([], []) : Except Error _)
   let (decls₀, incl) ← expandIncludes libNames.length p.decls (ioDecls, incl₀)
-  -- `data` declarations (SPEC §42): `type` and `shape` declarations, in place.
+  -- `data` declarations (SPEC §42): `type` and `shape` declarations, in place. Their fields
+  -- marked `must_close` are recorded for the checker's messages.
+  for d in decls₀ do
+    if let .data sp dd := d then
+      for c in dd.cons do
+        for (f, j) in c.fields.zipIdx do
+          if let some cl := f.close then
+            let g := (f.name.map (·.name)).getD s!"{j + 1} of `{c.name.name}`"
+            modify (· ++ [(sp, .closes dd.name.name g (cl.map (·.name)))])
   let decls₀ ← (dataDecls decls₀ : Except Error _)
   -- A program's declaration shadows an included module's of the same name (SPEC §41, rule R1):
   -- the module's is renamed, and so is every use of it in the module's own declarations.

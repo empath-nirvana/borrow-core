@@ -720,6 +720,8 @@ generator: it does not perform the iteration effect. -/
 def rowV (env : Env) : Nat → Val → List Inst
   | 0, _ => []
   | n + 1, V => match V with
+    | .app _ (.sugar _ .fin) (.pair _ V (.thunkv _ (.lam _ _ _ D))) =>
+      env.union (rowV env n V) (rowC env n D)
     | .app _ (.app _ (.sugar _ (.handle h _ As nm)) P) (.thunkv _ (.lam _ _ _ M)) =>
       let inner := rowC env n M
       let inner := match env.handler? h, env.chandler? h with
@@ -781,6 +783,7 @@ def rowC (env : Env) : Nat → Comp → List Inst
         | some A => env.union (pullRow env n (isPullTy A) V) (rowC env n N)
         | none => env.union (rowV env n V) (rowC env n N)
     | .bind _ _ _ M N | .with_ _ M N => env.union (rowC env n M) (rowC env n N)
+    | .unwind _ _ _ M D N => env.union (rowC env n M) (env.union (rowC env n D) (rowC env n N))
     | .letUnit _ V M | .letPair _ _ _ V M => env.union (rowV env n V) (rowC env n M)
     | .case _ V _ M _ N =>
       env.union (rowV env n V) (env.union (rowC env n M) (rowC env n N))
@@ -1646,6 +1649,7 @@ def withInV (env : Env) : Nat → Val → Bool
   | 0, _ => false
   | k + 1, V => match V with
     | .app _ (.app _ (.sugar _ (.handle ..)) _) _ => true
+    | .app _ (.sugar _ .fin) _ => true
     | .app _ f W =>
       let pull := match headName f with
         | some x => (env.pullArgs x W).any fun (V, p) => p && (env.iterCall? V).isSome
@@ -1672,6 +1676,7 @@ where
       | .loop _ _ src V M N => (src matches .each _ && (env.iterCall? V).isSome) || withInV env k V ||
         withInC k M || withInC k N
       | .case _ V _ M _ N => withInV env k V || withInC k M || withInC k N
+      | .unwind _ _ _ M D N => withInC k M || withInC k D || withInC k N
       | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
       | .nuOut _ M | .ascribe _ M _ => withInC k M
       | _ => false
@@ -1818,6 +1823,14 @@ def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
         throw ⟨sp, s!"an operation of `{c.eff}` is performed here, in a form that does not " ++
           "thread its capability"⟩
       pure (.with_ sp (← trC n cx [] false M) (← trC n cx [] false N))
+    -- `[then]` (`finally`, SPEC §42): the handled computation and the finaliser thread no
+    -- capability; the rest is in tail position.
+    | .unwind sp x A M D N =>
+      if let some c := (cx.needC M ++ cx.needC D).head? then
+        throw ⟨sp, s!"an operation of `{c.eff}` is performed here, in a form that does not " ++
+          "thread its capability"⟩
+      pure (.unwind sp x A (← trC n cx [] false M) (← trC n cx [] false D)
+        (← trC n cx cs wrap N))
     | .proj sp i M => do pure (.proj sp i (← trInner n cx M))
     | .app sp M y => do pure (.app sp (← trInner n cx M) y)
     | .inst sp M a => do pure (.inst sp (← trInner n cx M) a)
@@ -1927,6 +1940,13 @@ def trV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
 def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
   | 0, _, _, V => throw ⟨V.span, "internal error: a value nested too deeply"⟩
   | k + 1, cx, cs, V => match V with
+    -- `with h(…) { M } finally { D }` (SPEC §42): `[then]` around the handled computation, `D`
+    -- the finaliser and run again on the normal exit: `x <- with h(…) { M } unwind (D); D; x`.
+    | .app sp (.sugar _ .fin) (.pair _ W (.thunkv _ (.lam _ _ _ D))) => do
+      let r ← fresh "fx_fin"
+      let u ← fresh "fx_finu"
+      goV k cx cs (.run sp (.unwind sp ⟨r, sp⟩ none (.ret sp W) D
+        (.bind sp ⟨u, sp⟩ none D (.ret sp (.var sp r)))))
     | .app sp (.app sp₂ (.sugar ksp (.handle h l As nm)) P) (.thunkv tsp (.lam lsp b A M)) =>
       match cx.env.handler? h, cx.env.chandler? h with
       | some hs, _ => withBlk k cx cs sp sp₂ ksp hs l P tsp lsp b A M nm

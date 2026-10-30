@@ -277,6 +277,8 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let A ← E.elabV Δ A
       (cDead (fun j => .forgetMut (at_ sp) j a A) fun hd _ => .forgetMut (a := a) (A := A) hd)
   | .forgetUnk => (cDead (fun j => .forgetUnk (at_ sp) j) fun hd _ => .forgetUnk hd)
+  | .tokMint => (cDead (fun j => .tokMint (at_ sp) j) fun hd _ => .tokMint hd)
+  | .tokBurn => (cDead (fun j => .tokBurn (at_ sp) j) fun hd _ => .tokBurn hd)
   | .forgetBang A => do
       let A ← E.elabV Δ A
       (cDead (fun j => .forgetBang (at_ sp) j A) fun hd _ => .forgetBang (A := A) hd)

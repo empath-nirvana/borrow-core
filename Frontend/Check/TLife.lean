@@ -178,6 +178,8 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .mutSub ii jj a b A t => t.lifeBinders
   | .alloc ii jj A => []
   | .free ii jj A => []
+  | .tokMint ii jj => []
+  | .tokBurn ii jj => []
   | .swap ii jj A B => []
   | .copy ii jj a A => []
   | .forgetImm ii jj a A => []
@@ -289,6 +291,8 @@ def TExpr.domFree : TExpr → Bool
   | .mutSub ii jj a b A t => t.domFree
   | .alloc ii jj A => true
   | .free ii jj A => true
+  | .tokMint ii jj => true
+  | .tokBurn ii jj => true
   | .swap ii jj A B => true
   | .copy ii jj a A => true
   | .forgetImm ii jj a A => true
@@ -399,6 +403,8 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .mutSub ii jj a b A t => .mutSub ii jj a b A (t.reAb Δr)
   | .alloc ii jj A => .alloc ii jj A
   | .free ii jj A => .free ii jj A
+  | .tokMint ii jj => .tokMint ii jj
+  | .tokBurn ii jj => .tokBurn ii jj
   | .swap ii jj A B => .swap ii jj A B
   | .copy ii jj a A => .copy ii jj a A
   | .forgetImm ii jj a A => .forgetImm ii jj a A
@@ -702,6 +708,12 @@ theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | free a0 =>
       intro Δ' he hd
       exact TDerivesP.free a0
+  | tokMint a0 =>
+      intro Δ' he hd
+      exact TDerivesP.tokMint a0
+  | tokBurn a0 =>
+      intro Δ' he hd
+      exact TDerivesP.tokBurn a0
   | swap a0 =>
       intro Δ' he hd
       exact TDerivesP.swap a0
@@ -1018,6 +1030,12 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
   | free a0 =>
       intro Δ' he hd
       exact TDerivesAt.free a0
+  | tokMint a0 =>
+      intro Δ' he hd
+      exact TDerivesAt.tokMint a0
+  | tokBurn a0 =>
+      intro Δ' he hd
+      exact TDerivesAt.tokBurn a0
   | swap a0 =>
       intro Δ' he hd
       exact TDerivesAt.swap a0

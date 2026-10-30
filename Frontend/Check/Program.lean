@@ -122,8 +122,9 @@ def checkFuel : Nat := 1 <<< 20
 
 /-- The environment at the top of the declaration `k`, with the keys of the `def`s the
 elaboration generates (`DefKey`). -/
-def Env.top (ds : Array Decl) (k : Nat) (keys : List DefKey := []) : Env :=
-  ⟨⟨ds, k, keys⟩, [], [], [], [], 0, none⟩
+def Env.top (ds : Array Decl) (k : Nat) (keys : List DefKey := [])
+    (closes : List (String × String × Option String) := []) : Env :=
+  ⟨⟨ds, k, keys, closes⟩, [], [], [], [], 0, none⟩
 
 /-- The externs, in declaration order, each elaborated in the declarations before it. -/
 def externs (ds : Array Decl) : Except Error (List (String × CVTy)) :=
@@ -157,11 +158,12 @@ def sigsErr (s : CRow) : String :=
       | none => "internal error: the operations' signatures"
 
 /-- Check `main : C = M`. -/
-def checkMain (ds : Array Decl) (k : Nat) (keys : List DefKey) (sp : Span) (C : CTy) (M : Comp) :
-    CheckM Checked := do
+def checkMain (ds : Array Decl) (k : Nat) (keys : List DefKey) (sp : Span) (C : CTy) (M : Comp)
+    (closes : List (String × String × Option String) := []) : CheckM Checked := do
   let xs ← externs ds
   let T := (xs.map (·.2)).reverse
-  let E : Env := { Env.top ds k keys with vars := (xs.map (some ·.1)).reverse, nExt := xs.length }
+  let E₀ := Env.top ds k keys closes
+  let E : Env := { E₀ with vars := (xs.map (some ·.1)).reverse, nExt := xs.length }
   let C' ← E.elabC LifeCtx.empty C
   let r ← chkC checkFuel E LifeCtx.empty T M C'
   if h : subL (allL T) (orL r.F.u r.F.w) = true then
@@ -180,7 +182,8 @@ def checkMain (ds : Array Decl) (k : Nat) (keys : List DefKey) (sp : Span) (C : 
 /-- Check one declaration; the line `bcc check` prints for it, `main`'s result, and the typed term
 of a `def` without parameters checked at its declaration, at its context's length. That check is
 its key's at `Δ = ∅` and the externs before it (`DefEntry`), which its uses read. -/
-def checkDecl (ds : Array Decl) (k : Nat) (keys : List DefKey) :
+def checkDecl (ds : Array Decl) (k : Nat) (keys : List DefKey)
+    (closes : List (String × String × Option String) := []) :
     Decl → CheckM (String × Option Checked × List (Nat × TExpr))
   | .type _ n [] [] A => do
       let A' ← (Env.top ds k).elabV LifeCtx.empty A
@@ -198,7 +201,8 @@ def checkDecl (ds : Array Decl) (k : Nat) (keys : List DefKey) :
         -- At the persistent externs declared before it (SPEC §11).
         let xs ← externs (ds.extract 0 k)
         let T := (xs.map (·.2)).reverse
-        let E : Env := { Env.top ds k keys with
+        let E₀ := Env.top ds k keys closes
+        let E : Env := { E₀ with
           vars := (xs.map fun (x, B) => if B.persistent then some x else none).reverse,
           nExt := xs.length }
         let A' ← E.elabV LifeCtx.empty A
@@ -217,7 +221,7 @@ def checkDecl (ds : Array Decl) (k : Nat) (keys : List DefKey) :
       let A' ← (Env.top ds k).elabV LifeCtx.empty A
       pure (s!"extern {n.name} : {ppVTy A'}", none, [])
   | .main sp C M => do
-      let c ← checkMain ds k keys sp C M
+      let c ← checkMain ds k keys sp C M closes
       pure (s!"main : {ppCTy c.C}", some c, [(c.ctx.length, c.t)])
 
 /-! ### The names `run_io` reserves -/
@@ -271,11 +275,14 @@ implicit copies are not checked again. -/
 def checkElaborated (el : Frontend.Elab.Elaborated) (wrapped : Bool) : Except Error Report := do
   let ds := el.prog.decls.toArray
   let lib := el.lib
+  let closes := el.origins.filterMap fun (_, o) => match o with
+    | .closes n g f => some (n, g, f)
+    | _ => none
   let r : Except Error (Report × List (Nat × TExpr)) :=
     ((List.range ds.size).foldlM (init := ((⟨[], none, el, []⟩ : Report), [])) fun (acc, ts) k =>
       match (ds[k]? : Option Decl) with
       | some d => do
-          let (line, m, t) ← checkDecl ds k el.keys d
+          let (line, m, t) ← checkDecl ds k el.keys closes d
           pure ({ acc with lines := if k < lib then acc.lines else acc.lines ++ [line],
                            main := m <|> acc.main }, ts ++ t)
       | none => pure (acc, ts) : CheckM _).run' []
@@ -308,6 +315,32 @@ def checkElaborated (el : Frontend.Elab.Elaborated) (wrapped : Bool) : Except Er
   | some e => throw (Frontend.Elab.renderError el.origins e)
   | none => pure rep
 
+/-- The binder `main`'s result is held at in `discardEntry`'s entry. -/
+def mainResult : String := "io_main_result"
+
+/-- **The entry discards `main`'s result by its derived drop** (SPEC §42): a program with no
+externs whose `main : F A` answers a value `A` that is neither unrestricted nor a loop the driver
+runs (`U (νX. …)`) is entered as `main : F 1 = io_main_result : A <- M; return ()`. The checker
+drops the result by its derived drop (`drop_derives`, at a `dtor` node; `entry_derives` in
+`Core/Decl.lean`), and the run ends with every cell freed (`entry_runs`). At a type with no
+derived drop, a declared type's among them, no rule consumes the result and the program is
+refused. `none` when `main` is entered as it is. -/
+def discardEntry (el : Frontend.Elab.Elaborated) (r : Report) :
+    Except Error (Option Frontend.Elab.Elaborated) := do
+  let some c := r.main | return none
+  let .ret A := c.C | return none
+  if A.persistent then return none
+  if let .thunk (.nu _) := A then return none
+  let ds := el.prog.decls.toArray
+  if !(← externs ds).isEmpty then return none
+  let decls ← el.prog.decls.mapM fun
+    | .main sp (.ret asp A) M =>
+      pure (Decl.main sp (.ret asp (.unit asp))
+        (.bind sp ⟨mainResult, sp⟩ (some A) M (.ret sp (.unit sp))))
+    | .main sp _ _ => throw ⟨sp, "internal error: the entry of `main`"⟩
+    | d => pure d
+  pure (some { el with prog := ⟨decls⟩ })
+
 /-- Check a program, after elaborating it (`Frontend.Elab.elaborate`: the sugar of SPEC §11 and
 §14): the checker sees only the elaborated program, which the report carries, so that nothing
 after the check elaborates the program again. The lines of the libraries, when they are included,
@@ -322,7 +355,12 @@ def checkProgram (p : Program) : Except Error Report := do
   if let some e := reservedDecl? p.decls then throw e
   let el ← Frontend.Elab.elaborate p
   if let some e := reservedDecl? el.prog.decls then throw e
-  checkElaborated el false
+  let r ← checkElaborated el false
+  match ← discardEntry el r with
+  | some el' => (checkElaborated el' false).mapError fun e =>
+      { e with msg := e.msg.replace s!"`{mainResult}`" "`main`'s result" }
+  | none => pure r
+
 
 /-! ### Soundness -/
 

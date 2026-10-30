@@ -72,7 +72,7 @@ def vShapeE : Option (Nat → SEnt) → VTy → LSub → Val → WProp
       fun ρ => ∃ P, ptoMut ℓ α P ρ ∧ ∀ u σ, P u σ → vShapeE η T δ u σ
   | _, .unk, _, _ => emp
   | _, .int w, _, v => ⌜v.IsInt w⌝
-  | _, .opq k, _, v => ⌜k.Holds v⌝
+  | _, .opq k, _, v => k.rel v
   | η, .tvar n, _, v => sEnvP η n v
   | η, .mu A, δ, v => fun ρ => (sClose η (.mu A)).Cl 0 ∧
       ∀ P : Val → WProp,

@@ -379,7 +379,7 @@ def vF (S : Bool → VTy → List SRec → Val → WProp) (δ : LSub) :
     Bool → VTy → List SRec → Val → WProp
   | _, .unit, _, v => ⌜v = .unit⌝
   | _, .int w, _, v => ⌜v.IsInt w⌝
-  | _, .opq k, _, v => ⌜k.Holds v⌝
+  | _, .opq k, _, v => k.rel v
   | b, .tensor A B, ls, v => ex fun v₁ => ex fun v₂ => ⌜v = .pair v₁ v₂⌝ ⋆ S b A ls v₁ ⋆ S b B ls v₂
   | _, .zero, _, _ => fun _ => False
   | b, .sum A B, ls, v =>

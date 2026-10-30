@@ -165,6 +165,10 @@ structure PState where
   lastStop : Pos
   /-- The next number for a generated name. -/
   fresh : Nat := 0
+  /-- Source the elaboration writes and parses back (its templates, a type printed as surface
+  syntax, the `run_io` wrapper): it may name `tok`, the token of a declared type (SPEC §42),
+  which a program cannot write. -/
+  internal : Bool := false
   /-- Inside `< M, N >`, where `>` is not an operator. -/
   angle : Bool := false
   /-- The `let mut` variables in scope. -/
@@ -678,6 +682,10 @@ def rtyAtom : Nat → P RTy
     -- `clock` and `args` are also variables'.
     | .ident "clock" => discard bump; pure (.handle t.span .clock)
     | .ident "args" => discard bump; pure (.handle t.span .args)
+    -- `tok`, only in the elaboration's own source (SPEC §42).
+    | .ident "tok" =>
+      unless (← get).internal do failAt t.span "unknown type `tok`"
+      discard bump; pure (.handle t.span .tok)
     | .kw "top" => discard bump; pure (.top t.span)
     -- `bool` is `1 + 1`, `inr ()` for true (the prelude, typed elaboration §5.4).
     | .ident "bool" => discard bump; pure (.sum t.span (.unit t.span) (.unit t.span))
@@ -1607,6 +1615,7 @@ def bindMPatNames : Nat → Data.MPat → P Data.MPat
     | .con sp c b ps => return .con sp c b (← ps.mapM (bindMPatNames n))
     | .inj sp l q => return .inj sp l (← bindMPatNames n q)
     | .free sp q => return .free sp (← bindMPatNames n q)
+    | .burn sp q => return .burn sp (← bindMPatNames n q)
     | p => pure p
 
 /-- A constructor `C`, `C(e, …)`, or a record literal `N { f: e, … }`, after its name; `boxed`
@@ -1826,8 +1835,19 @@ def withBlock : Nat → P Val
     let thr := if bound.contains "io_bt" then [] else thr
     let M := if thr.isEmpty then M else handOn { t := "io_bt" } thr M
     modify fun s => { s with blockThreads := thr, joined := [] }
-    pure (.app sp (.app sp (.sugar t.span (.handle h.name x As nm)) place)
-      (.thunkv sp (.lam sp b (holeTy sp) M)))
+    let V : Val := .app sp (.app sp (.sugar t.span (.handle h.name x As nm)) place)
+      (.thunkv sp (.lam sp b (holeTy sp) M))
+    -- `with h { M } finally { D }` (SPEC §42): the sugar `fin`, which the effects pass
+    -- elaborates to `[then]` (`Frontend.Elab.Effects`).
+    unless (← peek).tok == .ident "finally" do return V
+    discard bump
+    expectSym "{"
+    let D ← comp n
+    expectSym "}"
+    let fsp ← spanFrom st
+    -- `D`'s binder is `()`'s, which `D` does not name and the printed form does not write, so
+    -- it is one fixed name: the printed program reads back to the same term.
+    pure (.app fsp (.sugar fsp .fin) (.pair fsp V (.thunkv fsp (.lam fsp ⟨"io_finu", fsp⟩ (holeTy fsp) D))))
 
 /-- The suffixes of a value spine, associating to the left: argument atoms and `[@]`. -/
 def valSuffixes : Nat → Pos → Val → P Val
@@ -1876,6 +1896,14 @@ def valAtom : Nat → P Val
       expectSym ")"
       let sp ← spanFrom st
       pure (.app sp (.sugar t.span (.cells c k)) V)
+    -- `tok_mint` and `tok_burn`, only in the elaboration's own source (SPEC §42); a program
+    -- cannot name them, so its printed form reads back the same.
+    | .ident "tok_mint" =>
+      unless (← get).internal do failAt t.span "unknown variable `tok_mint`"
+      discard bump; pure (.const t.span .tokMint)
+    | .ident "tok_burn" =>
+      unless (← get).internal do failAt t.span "unknown variable `tok_burn`"
+      discard bump; pure (.const t.span .tokBurn)
     | .ident s =>
       discard bump
       let nx ← peek
@@ -2659,6 +2687,17 @@ def dataFields (n : Nat) (named : Bool) (close : String) : P (List DField) := do
   let mut fs : Array DField := #[]
   for _ in [0:n] do
     if ← isSym close then break
+    -- `must_close` or `must_close(f)` before a field (SPEC §42): a field named `must_close` is
+    -- `must_close: A`.
+    let mark ← match (← peek).tok, (← peekAt 1).tok with
+      | .ident "must_close", .sym ":" => pure none
+      | .ident "must_close", .sym "(" => do
+        discard bump; discard bump
+        let f ← ident "the function that closes it"
+        expectSym ")"
+        pure (some (some f))
+      | .ident "must_close", _ => do discard bump; pure (some none)
+      | _, _ => pure none
     let t ← peek
     let t1 ← peekAt 1
     -- A field's name may be a word the core reserves (`val`): it is only ever a field's.
@@ -2666,10 +2705,10 @@ def dataFields (n : Nat) (named : Bool) (close : String) : P (List DField) := do
       | .ident x, .sym ":" | .kw x, .sym ":" => do
         discard bump
         expectSym ":"
-        pure (DField.mk (some ⟨x, t.span⟩) (← vty n))
+        pure (DField.mk (some ⟨x, t.span⟩) (← vty n) mark)
       | _, _ =>
         if named then expected "a field `f: A`"
-        else pure (DField.mk none (← vty n))
+        else pure (DField.mk none (← vty n) mark)
     fs := fs.push f
     if ← isSym "," then discard bump else break
   pure fs.toList
@@ -3198,7 +3237,8 @@ def decls (n : Nat) : Nat → List Decl → P (List Decl)
 /-- Run a parser over the tokens of `src`, requiring it to consume all of them. With `resolve`,
 each name is resolved to its binder (SPEC §41, rule R1), and no fresh binder is named as a name
 of the source. -/
-def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data : Data.Table := []) :
+def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data : Data.Table := [])
+    (internal : Bool := false) :
     Except Error (α × PState) := do
   let toks ← lex src
   let fuel := fuelPerToken * (toks.size + 1)
@@ -3209,7 +3249,7 @@ def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data
   let taken := if resolve then toks.toList.filterMap (fun t => match t.tok with
     | .ident s => some s
     | _ => none) |>.eraseDups else []
-  go.run { toks, pos := 0, lastStop := ⟨1, 1⟩, resolve, taken, data }
+  go.run { toks, pos := 0, lastStop := ⟨1, 1⟩, resolve, taken, data, internal }
 
 /-- The `data` declarations written in the tokens `toks`, each read where it is (SPEC §42): a
 declaration is in scope in its whole module. A declaration that does not read is left to the
@@ -3262,10 +3302,11 @@ def dataOf (lib : String → Option String) (src : String) : Data.Table :=
 /-- The declarations of a source file. At most one `main` is accepted. Its names are resolved
 (`resolve`) unless it is code the elaborator generated. -/
 def parseProgram (src : String) (resolve : Bool := true)
-    (lib : String → Option String := fun _ => none) : Except Error Program := do
+    (lib : String → Option String := fun _ => none) (internal : Bool := false) :
+    Except Error Program := do
   -- The `data` declarations in scope (SPEC §42): the prelude's, the included modules', the
   -- program's own.
-  let ds ← (·.1) <$> runPS (fun n => decls n n []) src resolve (dataOf lib src)
+  let ds ← (·.1) <$> runPS (fun n => decls n n []) src resolve (dataOf lib src) internal
   let mains := ds.filter fun | .main .. => true | _ => false
   match mains with
   | _ :: .main sp _ _ :: _ => .error ⟨sp, "a program has at most one `main`"⟩

@@ -322,4 +322,18 @@ theorem TDerivesP.jdg_eq {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
     (h : TDerivesP Δ Γ t j) : t.jdg = j := by
   cases h <;> rfl
 
+/-- **An inserted drop carries `HasDtor`**: a `dtor` node of the typed term is typed only at a type
+with a derived drop. The checker inserts a drop only as a `dtor` node, so it inserts none at a
+linear type with no derived drop, a declared type among them (`decl_linear`).  `[spec §12, §42]` -/
+theorem TDerivesP.dtor_hasDtor {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {j : Jdg} {A : VTy}
+    {j' : Jdg} (h : TDerivesP Δ Γ (.dtor i j A) j') : HasDtor A := by
+  cases h with
+  | dtor hA _ _ _ => exact hA
+
+/-- The same at the typed derivation at an effect context. -/
+theorem TDerivesAt.dtor_hasDtor {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {j : Jdg}
+    {A : VTy} {j' : Jdg} (h : TDerivesAt Ξ Δ Γ (.dtor i j A) j') : HasDtor A := by
+  cases h with
+  | dtor hA _ _ _ => exact hA
+
 end BoCa.Fig16.LogRel.Core.Check

@@ -274,6 +274,10 @@ def ofV (ms : MachSet) : VTy → Except String LTy
   | .box _ A => ofV ms A
   | .bang A => return .bang (← ofV ms A)
   | .fam L => return .fam (← ofV ms L)
+  -- `Tok` is a location owning a unit cell, `Ref 1`'s relation (`vCE_tok_eq_ref`), made by
+  -- `alloc` and released by `free` (`tokMint`, `tokBurn`); its view is `Unk` (`Imm̲ 'b Tok`), a
+  -- pointer read as forgotten (`Layout.joinRe`, `Lower.reVals`).
+  | .opq .tok => pure (.ref .unit)
   | .opq k => pure (.opq k)
   | .unk => pure .unk
   | .thunk C => ofU ms false C
@@ -398,7 +402,10 @@ theorem ofV_persistent {ms : MachSet} : ∀ {A : VTy} {t : LTy}, A.persistent = 
 theorem ofV_drops {ms : MachSet} {A : VTy} (hA : A.OwnFree) : ∀ {t : LTy}, ofV ms A = .ok t →
     t.drops = true := by
   induction hA with
-  | unit | zero | int | unk | opq | imm | «mut» =>
+  | opq k hk =>
+    intro t h; cases k <;> simp only [ofV] at h <;> cases h <;>
+      first | rfl | exact absurd rfl hk
+  | unit | zero | int | unk | imm | «mut» =>
       intro t h; simp only [ofV] at h
       first
         | (cases h; rfl)
@@ -436,7 +443,7 @@ def LTy.pp : LTy → String
   | .mut a => s!"mut {a.pp}"
   | .fam l => s!"[{l.pp}]"
   | .opq k => match k with
-    | .input => "Input" | .output => "Output" | .clock => "Clock" | .args => "Args"
+    | .input => "Input" | .output => "Output" | .clock => "Clock" | .args => "Args" | .tok => "Tok"
   | .unk => "Unk"
   | .thunk k => s!"U {k.pp}"
   | .bang a => s!"!{a.pp}"

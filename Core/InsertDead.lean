@@ -323,6 +323,12 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
   | mutSub _ hle ih => intro Γa Γb hΓ; exact .mutSub (ih Γa Γb hΓ) hle
   | alloc hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .alloc (deadP_insert hd Γa hΓ)
   | free hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .free (deadP_insert hd Γa hΓ)
+  | tokMint hΓ =>
+      intro Γa Γb hΓ'; subst hΓ'
+      rw [shift_closed0 (e := mintE) (by rfl)]; exact .tokMint (deadP_insert hd Γa hΓ)
+  | tokBurn hΓ =>
+      intro Γa Γb hΓ'; subst hΓ'
+      rw [shift_closed0 (e := burnE) (by rfl)]; exact .tokBurn (deadP_insert hd Γa hΓ)
   | swap hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := BoCa.swap) (by rfl)]; exact .swap (deadP_insert hd Γa hΓ)
@@ -683,6 +689,12 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
   | mutSub _ hle ih => intro Γa Γb hΓ; exact .mutSub (ih Γa Γb hΓ) hle
   | alloc hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .alloc (deadP_insert hd Γa hΓ)
   | free hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .free (deadP_insert hd Γa hΓ)
+  | tokMint hΓ =>
+      intro Γa Γb hΓ'; subst hΓ'
+      rw [shift_closed0 (e := mintE) (by rfl)]; exact .tokMint (deadP_insert hd Γa hΓ)
+  | tokBurn hΓ =>
+      intro Γa Γb hΓ'; subst hΓ'
+      rw [shift_closed0 (e := burnE) (by rfl)]; exact .tokBurn (deadP_insert hd Γa hΓ)
   | swap hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := BoCa.swap) (by rfl)]; exact .swap (deadP_insert hd Γa hΓ)

@@ -1,0 +1,28 @@
+-- A guard stored in data (SPEC §42, *Declared types with no derived drop*): `Guard`'s field `lock`
+-- is marked `must_close(release)`, so a guard is linear with no derived drop, and so is
+-- `Session`, which stores one beside its data. `main` takes the session apart and runs the work
+-- under `with … finally { … }`: `[then]` (SPEC §27) around the handled computation, its finaliser
+-- releasing the guard on either exit. The inner handler handles `Fail[u8]`, so a `Fail[i32]` that
+-- `work` raises passes through it, and the finaliser runs then; here `work` answers, and the same
+-- written finaliser runs on the normal exit. Without the `finally` the guard would be live across
+-- a computation that may abort (`corpus/reject/decl-guard-raise.bc`).
+--
+-- Answer: inl (inl i32[42]), the work's answer; `live 0`: the guard's token burned by `release`.
+include fail
+
+data Guard = { must_close(release) lock: i32 }
+
+data Session = { user: i32, guard: Guard }
+
+fn open_session(u: i32) -> Session = Session { user: u, guard: Guard { lock: u } }
+
+fn release(g: Guard) -> i32 = match g { Guard { lock } -> lock }
+
+fn work(u: i32) -> i32 with Fail[i32] = if u > 100 { raise(u) } else { u * 6 }
+
+main -> (i32 + u8) + i32 =
+  let s = open_session(7);
+  let Session { user, guard } = s;
+  with to_result[i32, i32 + u8] {
+    with to_result[u8, i32] { work(user) } finally { let r = release(guard); () }
+  }

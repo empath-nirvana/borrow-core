@@ -252,6 +252,8 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
       "with " ++ (match nm with | some n => n ++ " = " | none => "") ++ h ++ (if As.isEmpty then "" else "[" ++ ", ".intercalate (As.map (VTy.pp · 0)) ++ "]") ++
         "(" ++ P.pp 0 k ++ ") { '" ++ x ++ ", " ++ b.name ++ " ->" ++ nl (k + 2) ++
         M.pp 0 (k + 2) ++ " }"
+    | .app _ (.sugar _ .fin) (.pair _ V (.thunkv _ (.lam _ _ _ D))) =>
+      V.pp 1 k ++ " finally { " ++ D.pp 0 (k + 2) ++ " }"
     | .thunk _ M => "thunk " ++ M.pp 0 (k + 2)
     | .thunkv _ M => "thunkv " ++ M.pp 0 (k + 2)
     | .bangThunk _ M => "!thunk " ++ M.pp 0 (k + 2)
@@ -386,7 +388,10 @@ def Decl.pp : Decl → String
       String.join (cs.map fun c => nl 2 ++ cl c ++ ";") ++ nl 0 ++ "}"
   | .poly _ n tps lps H A V => Decl.ppPoly n tps lps H A V
   | .data _ d =>
-    let field (f : DField) : String := (match f.name with
+    let field (f : DField) : String := (match f.close with
+      | some (some c) => s!"must_close({c.name}) "
+      | some none => "must_close "
+      | none => "") ++ (match f.name with
       | some x => x.name ++ ": "
       | none => "") ++ f.ty.pp
     let params := if d.tps.isEmpty then "" else "[" ++ ", ".intercalate (d.tps.map (·.name)) ++ "]"

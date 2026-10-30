@@ -468,6 +468,8 @@ inductive TExpr where
   | mutSub (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (b : Lifetime.Life) (A : VTy) (t : TExpr)
   | alloc (info : TInfo) (jdg : Jdg) (A : VTy)
   | free (info : TInfo) (jdg : Jdg) (A : VTy)
+  | tokMint (info : TInfo) (jdg : Jdg)
+  | tokBurn (info : TInfo) (jdg : Jdg)
   | swap (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy)
   | copy (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
   | forgetImm (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
@@ -623,6 +625,8 @@ def TExpr.erase : TExpr → Expr
   | .mutSub _ _ _ _ _ t => t.erase
   | .alloc _ _ _ => (.val (.prim .alloc))
   | .free _ _ _ => (.val (.prim .free))
+  | .tokMint _ _ => mintE
+  | .tokBurn _ _ => burnE
   | .swap _ _ _ _ => BoCa.swap
   | .copy _ _ _ _ => BoCa.copy
   | .forgetImm _ _ _ _ => forget
@@ -737,6 +741,8 @@ def TExpr.info : TExpr → TInfo
   | .mutSub i _ _ _ _ _ => i
   | .alloc i _ _ => i
   | .free i _ _ => i
+  | .tokMint i _ => i
+  | .tokBurn i _ => i
   | .swap i _ _ _ => i
   | .copy i _ _ _ => i
   | .forgetImm i _ _ _ => i
@@ -847,6 +853,8 @@ def TExpr.jdg : TExpr → Jdg
   | .mutSub _ j _ _ _ _ => j
   | .alloc _ j _ => j
   | .free _ j _ => j
+  | .tokMint _ j => j
+  | .tokBurn _ j => j
   | .swap _ j _ _ => j
   | .copy _ j _ _ => j
   | .forgetImm _ j _ _ => j
@@ -965,6 +973,8 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .mutSub _ _ _ _ _ t => [(.push 0, t)]
   | .alloc _ _ _ => []
   | .free _ _ _ => []
+  | .tokMint _ _ => []
+  | .tokBurn _ _ => []
   | .swap _ _ _ _ => []
   | .copy _ _ _ _ => []
   | .forgetImm _ _ _ _ => []
@@ -1096,6 +1106,8 @@ def TExpr.isLam : TExpr → Bool
   | .mutSub _ _ _ _ _ t => t.isLam
   | .alloc _ _ _ => false
   | .free _ _ _ => false
+  | .tokMint _ _ => ((mintE : Expr) matches .lam _)
+  | .tokBurn _ _ => ((burnE : Expr) matches .lam _)
   | .swap _ _ _ _ => ((BoCa.swap : Expr) matches .lam _)
   | .copy _ _ _ _ => ((BoCa.copy : Expr) matches .lam _)
   | .forgetImm _ _ _ _ => ((forget : Expr) matches .lam _)
@@ -1210,6 +1222,8 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .mutSub _ _ _ _ _ t => isLam_eq t
   | .alloc _ _ _ => rfl
   | .free _ _ _ => rfl
+  | .tokMint _ _ => rfl
+  | .tokBurn _ _ => rfl
   | .swap _ _ _ _ => rfl
   | .copy _ _ _ _ => rfl
   | .forgetImm _ _ _ _ => rfl

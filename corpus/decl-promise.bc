@@ -1,0 +1,24 @@
+-- Promises stored in a queue and answered later (SPEC §42, *Declared types with no derived drop*):
+-- `Promise`'s field `id` is marked `must_close(answer)`, so a promise holds §11's `Tok` and is
+-- linear with no derived drop, and so is `Queue`, which holds promises. `request` puts a promise
+-- in the queue; `answer_all`, later, folds the queue (`fold_own`, SPEC §60), taking each block
+-- apart (`box Push`) and answering its promise with `answer`, whose `match` burns its token. A fold
+-- is total; a recursion under a depth budget would abandon the rest of the queue where the budget
+-- runs out, which a value with no derived drop refuses. A queue left unanswered, or live across a
+-- `raise` (`corpus/reject/decl-promise-raise.bc`), is refused by the kernel.
+--
+-- Answer: i32[60], the promises 1, 2 and 3 each answered with 10; `live 0`: every token burned.
+
+data Promise = { must_close(answer) id: i32 }
+
+data Queue = Empty | Push(head: Promise, rest: Queue)
+
+fn request(id: i32, q: Queue) -> Queue = box Push(Promise { id: id }, q)
+
+fn answer(p: Promise, v: i32) -> i32 = match p { Promise { id } -> id * v }
+
+fn answer_all(q: Queue) -> i32 = fold_own q { Empty -> 0 | box Push(p, r) -> answer(p, 10) + r }
+
+main -> i32 =
+  let q = request(1, request(2, request(3, Empty)));
+  answer_all(q)

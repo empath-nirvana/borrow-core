@@ -492,8 +492,9 @@ theorem vC_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life}
       obtain ⟨rfl, -⟩ := h
       exact ResU.inStratum_empty α
   | opq k =>
-      obtain ⟨rfl, -⟩ := h
-      exact ResU.inStratum_empty α
+      rcases Opaque.rel_cases h with ⟨-, rfl, -⟩ | ⟨-, ℓ, -, rfl⟩
+      · exact ResU.inStratum_empty α
+      · exact ResU.inStratum_single_own α ℓ _
   | zero => exact False.elim h
   | tensor T₁ T₂ =>
       cases hT with
@@ -588,8 +589,9 @@ theorem vC_outlivesLe {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life}
       obtain ⟨rfl, -⟩ := h
       exact outlivesLe_of_outlives (ResU.inStratum_empty α)
   | opq k =>
-      obtain ⟨rfl, -⟩ := h
-      exact outlivesLe_of_outlives (ResU.inStratum_empty α)
+      rcases Opaque.rel_cases h with ⟨-, rfl, -⟩ | ⟨-, ℓ, -, rfl⟩
+      · exact outlivesLe_of_outlives (ResU.inStratum_empty α)
+      · exact outlivesLe_of_outlives (ResU.inStratum_single_own α ℓ _)
   | zero => exact False.elim h
   | tensor T₁ T₂ =>
       cases hT with

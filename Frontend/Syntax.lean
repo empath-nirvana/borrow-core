@@ -78,13 +78,14 @@ def Qual.str : Qual → String
   | .cancel => "cancel"
   | .unr => "unr"
 
-/-- The host resource kinds the surface names (SPEC §11, §34): `input`, `output`, `clock`,
-`args`. -/
+/-- The opaque types the surface names: the host resource kinds (SPEC §11, §34) `input`,
+`output`, `clock`, `args`, and `tok`, the token of a declared type (SPEC §42). -/
 inductive HostKind where
   | input
   | output
   | clock
   | args
+  | tok
   deriving DecidableEq, Repr, Inhabited
 
 /-- The surface name of a host resource kind. -/
@@ -93,6 +94,7 @@ def HostKind.name : HostKind → String
   | .output => "output"
   | .clock => "clock"
   | .args => "args"
+  | .tok => "tok"
 
 mutual
 /-- Value types (syntax-core §4), with the built-in abbreviations as nodes of their own:
@@ -210,7 +212,16 @@ type as written; `box A` is a cell of its own (SPEC §42).  `[spec §42]` -/
 structure DField where
   name : Option Ident
   ty : VTy
+  /-- `must_close g: A` (spelling provisional): `some none`, or `some (some f)` for
+  `must_close(f)`, which names the function that consumes the value, for the messages only. The
+  field holds `A * tok` (SPEC §42, *Declared types with no derived drop*). -/
+  close : Option (Option Ident) := none
   deriving DecidableEq, Repr
+
+/-- A field's type in the declaration's structure: `A * tok` when it is marked `must_close`
+(D4), `A` otherwise.  `[spec §42]` -/
+def DField.fullTy (f : DField) : VTy :=
+  if f.close.isSome then .tensor .none f.ty (.handle .none .tok) else f.ty
 
 /-- A constructor of a `data` declaration, its fields in order.  `[spec §42]` -/
 structure DCon where
@@ -257,6 +268,10 @@ inductive Const where
   | forgetImm (a : Life) (A : VTy)
   | forgetMut (a : Life) (A : VTy)
   | forgetUnk
+  /-- `tok_mint : 1 => tok`: a declared value's token (SPEC §42). -/
+  | tokMint
+  /-- `tok_burn : tok => 1`: the token released (SPEC §42). -/
+  | tokBurn
   | forgetBang (A : VTy)
   | withbor1 (x : Ident) (A B : VTy)
   | withbor2 (x : Ident) (b : Life) (A B : VTy)
@@ -518,6 +533,9 @@ inductive VSugar where
   /-- `n.op`: the operation `op` performed at the handler named `n` (SPEC §38), applied to its
   argument. Elaborated away by `Frontend.Elab.Effects`. -/
   | named (n : String) (op : String)
+  /-- `with h(…) { M } finally { D }` (SPEC §42), applied to `(with h(…) { M }, thunkv fun _ -> D)`:
+  `[then]` around the handled computation, elaborated by `Frontend.Elab.Effects` next to `with`. -/
+  | fin
   /-- A handler site of a control effect (SPEC §19), resolved by `Frontend.Elab.Effects` and
   assembled with its clauses where the types are known (`Frontend.Sugar`): applied to the
   handler's arguments, its return clause, the tuple of its operation clauses and the thunk of its
@@ -915,6 +933,8 @@ def Const.strip : Const → Const
   | .forgetImm a A => .forgetImm a.strip A.strip
   | .forgetMut a A => .forgetMut a.strip A.strip
   | .forgetUnk => .forgetUnk
+  | .tokMint => .tokMint
+  | .tokBurn => .tokBurn
   | .forgetBang A => .forgetBang A.strip
   | .withbor1 x A B => .withbor1 x.strip A.strip B.strip
   | .withbor2 x b A B => .withbor2 x.strip b.strip A.strip B.strip
@@ -1070,7 +1090,7 @@ def Decl.strip : Decl → Decl
   | .poly _ n tps lps H A V => .poly .none n.strip (tps.map Ident.strip) (lps.map Ident.strip)
       (H.map VTy.strip) A.strip V.strip
   | .data _ d => .data .none (DataDecl.mk d.name.strip (d.tps.map Ident.strip) (d.lps.map Ident.strip)
-      d.record (d.cons.map fun c => DCon.mk c.name.strip (c.fields.map fun f => DField.mk (f.name.map Ident.strip) f.ty.strip)))
+      d.record (d.cons.map fun c => DCon.mk c.name.strip (c.fields.map fun f => DField.mk (f.name.map Ident.strip) f.ty.strip (f.close.map (·.map Ident.strip)))))
 
 def Program.strip (p : Program) : Program := ⟨p.decls.map Decl.strip⟩
 

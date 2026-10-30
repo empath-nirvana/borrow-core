@@ -88,6 +88,8 @@ def Const.renameLife (f : Span → String → Life) : Const → Const
   | .forgetImm a A => .forgetImm (a.renameLife f) (A.renameLife f)
   | .forgetMut a A => .forgetMut (a.renameLife f) (A.renameLife f)
   | .forgetUnk => .forgetUnk
+  | .tokMint => .tokMint
+  | .tokBurn => .tokBurn
   | .forgetBang A => .forgetBang (A.renameLife f)
   | .withbor1 x A B => .withbor1 (x.renameLife f) (A.renameLife f) (B.renameLife f)
   | .withbor2 x b A B => .withbor2 (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f)

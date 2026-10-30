@@ -1,0 +1,26 @@
+-- `corpus/decl-guard.bc` without the `finally`: the guard is released after the work, and the work
+-- may raise a `Fail[i32]` that passes through the inner handler, so the guard is live across a
+-- computation that may abort with no finaliser. `Guard` holds a token's cell, so `[let]`'s `hW`
+-- fails (`decl_not_ownFree`), and the `[then]` the checker would build instead needs `Guard`'s
+-- derived drop, which it has none of (`decl_linear`). Refused.
+include fail
+
+data Guard = { must_close(release) lock: i32 }
+
+data Session = { user: i32, guard: Guard }
+
+fn open_session(u: i32) -> Session = Session { user: u, guard: Guard { lock: u } }
+
+fn release(g: Guard) -> i32 = match g { Guard { lock } -> lock }
+
+fn work(u: i32) -> i32 with Fail[i32] = if u > 100 { raise(u) } else { u * 6 }
+
+main -> (i32 + u8) + i32 =
+  let s = open_session(7);
+  let Session { user, guard } = s;
+  with to_result[i32, i32 + u8] {
+    let w = with to_result[u8, i32] { work(user) };
+    let r = release(guard);
+    w
+  }
+-- expect: 22:13: `guard`, of type `i32 * tok`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell: `Guard` holds the field `lock`, marked `must_close`; pass it to `release` before the computation that may abort, or close it in a `finally`

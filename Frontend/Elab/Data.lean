@@ -265,7 +265,7 @@ def structOf (t : Table) (g : List String) (root : String) (toX : Option String)
     let pays ← cis.mapM fun c => do
       let tys ← c.fields.mapM fun f => do
         regular g d f.ty
-        let A ← fieldTyOf t g root toX k f.ty
+        let A ← fieldTyOf t g root toX k f.fullTy
         pure (if c.block then VTy.ref .none A else A)
       pure (tupleTy .none tys)
     pure (sumTy .none pays)
@@ -412,7 +412,7 @@ def typeDecls (t : Table) (sp : Span) (d : DataDecl) : Except Error (List Decl) 
     let some e := t.decl? n | pure ()
     for c in consInfo t e rec_ root do
       for (f, j) in c.fields.zipIdx do
-        let A ← match fieldTyOf t g root (some X) 64 f.ty with
+        let A ← match fieldTyOf t g root (some X) 64 f.fullTy with
           | .ok A => pure A
           | .error m => err m
         let A ← match openX t X 64 A with
@@ -459,7 +459,7 @@ def typeDecls (t : Table) (sp : Span) (d : DataDecl) : Except Error (List Decl) 
     if !(e.tps.isEmpty && e.lps.isEmpty) then continue
     for c in consInfo t e rec_ root do
       if !c.block then continue
-      let leaves := c.fields.map fun f => Shape.leaf sp f.ty
+      let leaves := c.fields.map fun f => Shape.leaf sp f.fullTy
       let rec node : List Shape → Shape
         | [] => .leaf sp (.unit sp)
         | [σ] => σ
@@ -522,16 +522,19 @@ def conVal (t : Table) (sp : Span) (c : String) (boxed : Bool) (args : List Val)
   unless args.length == k do
     err <| s!"`{c}` has {k} field{if k == 1 then "" else "s"}, but {args.length} " ++
       s!"{if args.length == 1 then "is" else "are"} given"
+  -- A field marked `must_close` holds its value with a fresh token (E7): the one `tok_mint`.
+  let margs := (args.zip ci.fields).map fun (a, f) =>
+    if f.close.isSome then .pair sp a (.app sp (.const sp .tokMint) (.unit sp)) else a
   if ci.block then
     unless boxed do
       if reuse then
         return injectV sp i ci (.app sp (.sugar sp (.cells c k)) (tupleV sp args))
       err <| s!"`{c}` builds a block, one cell per field: allocate it with `box {c}(…)`"
     let P : Val := if i.mono then
-        .app sp (.const sp (.allocS (.name sp (shapeName i.decl.name.name c)))) (tupleV sp args)
-      else tupleV sp (args.map fun a => .app sp (.sugar sp (.call "alloc")) a)
+        .app sp (.const sp (.allocS (.name sp (shapeName i.decl.name.name c)))) (tupleV sp margs)
+      else tupleV sp (margs.map fun a => .app sp (.sugar sp (.call "alloc")) a)
     return injectV sp i ci P
-  let V := injectV sp i ci (tupleV sp args)
+  let V := injectV sp i ci (tupleV sp margs)
   if boxed then return .app sp (.sugar sp (.call "alloc")) V
   pure V
 
@@ -614,16 +617,19 @@ inductive MPat where
   | bool (sp : Span) (b : Bool)
   | inj (sp : Span) (left : Bool) (p : MPat)
   | free (sp : Span) (p : MPat)
+  /-- Internal: a field marked `must_close`, `A * tok`, whose token the written pattern burns and
+  whose value it matches with `p` (SPEC §42, M5). -/
+  | burn (sp : Span) (p : MPat)
   deriving Inhabited
 
 def MPat.span : MPat → Span
-  | .wild sp | .tuple sp _ | .con sp _ _ _ | .lit sp _ _ | .bool sp _ | .inj sp _ _ | .free sp _ => sp
+  | .wild sp | .tuple sp _ | .con sp _ _ _ | .lit sp _ _ | .bool sp _ | .inj sp _ _ | .free sp _ | .burn sp _ => sp
   | .var x => x.span
 
 /-- A pattern that matches everything, a variable or `_`, possibly a cell's content. -/
 def MPat.irrefutable : MPat → Bool
   | .wild _ | .var _ => true
-  | .free _ p => p.irrefutable
+  | .free _ p | .burn _ p => p.irrefutable
   | _ => false
 
 /-- A pattern written with no constructor, literal or `box`: `match`'s draft-0 form takes it. -/
@@ -666,7 +672,7 @@ def familySig (t : Table) : Head → Option (List (Head × Nat))
 declaration is looked up in the table. -/
 def MPat.head (t : Table) : MPat → Except Error (Option (Head × List MPat))
   | .wild _ | .var _ => pure none
-  | .free _ p => MPat.head t p
+  | .free _ p | .burn _ p => MPat.head t p
   | .tuple _ ps => pure (some (.tuple ps.length, ps))
   | .con sp c b ps => do
     let some (d, i) := t.con? c | throw ⟨sp, s!"no constructor `{c}` is declared"⟩
@@ -679,6 +685,11 @@ def MPat.head (t : Table) : MPat → Except Error (Option (Head × List MPat))
         | .error _ => false
       unless block do
         throw ⟨sp, s!"`{c}` is not a block, so it holds no cells to free: match it without `box`"⟩
+    -- A field marked `must_close`: the written pattern burns its token (M5).
+    let fs := (d.cons[i]?.map (·.fields)).getD []
+    let ps := (ps.zip fs).map fun (p, f) => if f.close.isNone then p else match p with
+      | .free fsp q => .free fsp (.burn q.span q)
+      | p => .burn p.span p
     let ps := if b then ps.map (fun p => MPat.free p.span p) else ps
     pure (some (.con d.name.name i, ps))
   | .lit _ _ key => pure (some (.lit key, []))
@@ -757,7 +768,7 @@ where
 def MPat.render : Nat → MPat → String
   | 0, _ => "…"
   | _ + 1, .wild _ | _ + 1, .var _ => "_"
-  | n + 1, .free _ p => MPat.render n p
+  | n + 1, .free _ p | n + 1, .burn _ p => MPat.render n p
   | n + 1, .tuple _ ps => "(" ++ ", ".intercalate (ps.map (MPat.render n)) ++ ")"
   | n + 1, .con _ c _ ps => if ps.isEmpty then c else c ++ "(" ++ ", ".intercalate (ps.map (MPat.render n)) ++ ")"
   | _ + 1, .lit _ _ key => key
@@ -832,6 +843,13 @@ def bindAll (sp : Span) : List (Ident × RB) → Comp → Comp
 def freeBind (sp : Span) (x : Ident) (c : String) (M : Comp) : Comp :=
   .bind sp x none (.ret sp (.app sp (.sugar sp (.call "free")) (.var sp c))) M
 
+/-- `let (x, t) = c; _ <- return tok_burn(t); M`: a marked field's token burned, its value bound
+(SPEC §42, M5). The one place the elaboration emits `tok_burn`. -/
+def burnBind (sp : Span) (x : Ident) (c : String) (M : Comp) : Comp :=
+  let t := s!"io_{x.name}_tok"
+  .letPair sp x ⟨t, sp⟩ (.var sp c)
+    (.bind sp ⟨s!"{t}u", sp⟩ none (.ret sp (.app sp (.const sp .tokBurn) (.var sp t))) M)
+
 /-- An occurrence of the generated code, and whether it is a block's cell. -/
 abbrev Occ := String × Bool
 
@@ -871,13 +889,23 @@ def compile (t : Table) (sp : Span) (arms : Array Comp) (info? : String → Opti
       -- pattern's cells freed.
       let mut bs := row.binds
       let mut frees : List (Ident × String) := []
+      let mut burns : List (Ident × String) := []
       for (p, (o, _)) in row.pats.zip cols do
         match p with
         | .var x => bs := bs ++ [(x, .occ o)]
         | .free _ (.var x) => frees := frees ++ [(x, o)]
         | .free fsp (.wild _) => frees := frees ++ [(⟨s!"{o}_d", fsp⟩, o)]
+        | .burn _ (.var x) => burns := burns ++ [(x, o)]
+        | .burn bsp (.wild _) => burns := burns ++ [(⟨s!"{o}_v", bsp⟩, o)]
+        | .free fsp (.burn _ (.var x)) =>
+          frees := frees ++ [(⟨s!"{o}_d", fsp⟩, o)]
+          burns := burns ++ [(x, s!"{o}_d")]
+        | .free fsp (.burn bsp (.wild _)) =>
+          frees := frees ++ [(⟨s!"{o}_d", fsp⟩, o)]
+          burns := burns ++ [(⟨s!"{o}_v", bsp⟩, s!"{o}_d")]
         | _ => pure ()
       let M := bindAll sp bs ((arms[row.arm]?).getD (.top sp))
+      let M := burns.foldr (fun (x, o) M => burnBind sp x o M) M
       pure (frees.foldr (fun (x, o) M => freeBind sp x o M) M)
     | some j =>
       -- Column `j` first.
@@ -905,6 +933,18 @@ def compile (t : Table) (sp : Span) (arms : Array Comp) (info? : String → Opti
           | [] => pure ()
         let M ← compile t sp arms info? fold? fuel rows' ((o', false) :: rest)
         return freeBind fsp ⟨o', fsp⟩ o M
+      -- A marked field tested: its token burned first, then its value tested (M5).
+      if let .burn bsp _ := p then
+        let o' ← freshOcc
+        let mut rows' : List Row := []
+        for r in rows do
+          match r.pats with
+          | .burn _ q :: ps => rows' := rows' ++ [{ r with pats := q :: ps }]
+          | .wild s :: ps => rows' := rows' ++ [{ r with pats := .wild s :: ps }]
+          | q :: _ => throw ⟨q.span, "internal error: a field marked `must_close`"⟩
+          | [] => pure ()
+        let M ← compile t sp arms info? fold? fuel rows' ((o', false) :: rest)
+        return burnBind bsp ⟨o', bsp⟩ o M
       if cell then throw ⟨p.span, cellPatErr fold?⟩
       let some (h, _) ← (p.head t : Except Error _) | throw ⟨sp, "internal error: a test"⟩
       match h with
@@ -1064,6 +1104,7 @@ def foldBox (t : Table) (k : FoldKind) (root : String) : Nat → MPat → Except
     | .tuple sp ps => do pure (.tuple sp (← ps.mapM (foldBox t k root n)))
     | .inj sp l q => do pure (.inj sp l (← foldBox t k root n q))
     | .free sp q => do pure (.free sp (← foldBox t k root n q))
+    | .burn sp q => do pure (.burn sp (← foldBox t k root n q))
     | .con sp c b ps => do
       let ps ← ps.mapM (foldBox t k root n)
       if !b then return .con sp c b ps

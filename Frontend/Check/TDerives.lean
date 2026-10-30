@@ -111,6 +111,10 @@ inductive TDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → TExpr → Jdg → P
       TDerivesAt Ξ Δ Γ (TExpr.alloc (info := info) (jdg := (.val (.lolli A (.ref A)))) (A := A)) (.val (.lolli A (.ref A)))
   | free {Δ Γ A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
       TDerivesAt Ξ Δ Γ (TExpr.free (info := info) (jdg := (.val (.lolli (.ref A) A))) (A := A)) (.val (.lolli (.ref A) A))
+  | tokMint {Δ Γ} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
+      TDerivesAt Ξ Δ Γ (TExpr.tokMint (info := info) (jdg := (.val mintTy))) (.val mintTy)
+  | tokBurn {Δ Γ} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
+      TDerivesAt Ξ Δ Γ (TExpr.tokBurn (info := info) (jdg := (.val burnTy))) (.val burnTy)
   | swap {Δ Γ A B} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
       TDerivesAt Ξ Δ Γ (TExpr.swap (info := info) (jdg := (.val (axSwapTy A B))) (A := A) (B := B)) (.val (axSwapTy A B))
   | copy {Δ Γ a A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
@@ -400,6 +404,10 @@ inductive TDerivesP : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
       TDerivesP Δ Γ (TExpr.alloc (info := info) (jdg := (.val (.lolli A (.ref A)))) (A := A)) (.val (.lolli A (.ref A)))
   | free {Δ Γ A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
       TDerivesP Δ Γ (TExpr.free (info := info) (jdg := (.val (.lolli (.ref A) A))) (A := A)) (.val (.lolli (.ref A) A))
+  | tokMint {Δ Γ} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
+      TDerivesP Δ Γ (TExpr.tokMint (info := info) (jdg := (.val mintTy))) (.val mintTy)
+  | tokBurn {Δ Γ} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
+      TDerivesP Δ Γ (TExpr.tokBurn (info := info) (jdg := (.val burnTy))) (.val burnTy)
   | swap {Δ Γ A B} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
       TDerivesP Δ Γ (TExpr.swap (info := info) (jdg := (.val (axSwapTy A B))) (A := A) (B := B)) (.val (axSwapTy A B))
   | copy {Δ Γ a A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
@@ -734,6 +742,12 @@ theorem TDerivesAt.erase {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr}
   | free a0 =>
       dsimp only [TExpr.erase]
       exact CDerivesAt.free a0
+  | tokMint a0 =>
+      dsimp only [TExpr.erase]
+      exact CDerivesAt.tokMint a0
+  | tokBurn a0 =>
+      dsimp only [TExpr.erase]
+      exact CDerivesAt.tokBurn a0
   | swap a0 =>
       dsimp only [TExpr.erase]
       exact CDerivesAt.swap a0
@@ -1062,6 +1076,12 @@ theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | free a0 =>
       dsimp only [TExpr.erase]
       exact CDerivesP.free a0
+  | tokMint a0 =>
+      dsimp only [TExpr.erase]
+      exact CDerivesP.tokMint a0
+  | tokBurn a0 =>
+      dsimp only [TExpr.erase]
+      exact CDerivesP.tokBurn a0
   | swap a0 =>
       dsimp only [TExpr.erase]
       exact CDerivesP.swap a0
@@ -1326,6 +1346,8 @@ theorem TDerivesAt.toP {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {
   | mutSub a0 a1 ih0 => exact TDerivesP.mutSub ih0 a1
   | alloc a0 => exact TDerivesP.alloc a0
   | free a0 => exact TDerivesP.free a0
+  | tokMint a0 => exact TDerivesP.tokMint a0
+  | tokBurn a0 => exact TDerivesP.tokBurn a0
   | swap a0 => exact TDerivesP.swap a0
   | copy a0 => exact TDerivesP.copy a0
   | forgetImm a0 => exact TDerivesP.forgetImm a0
@@ -1448,5 +1470,19 @@ theorem TDerivesAt.jdg_eq {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr
 theorem TDerivesP.jdg_eq {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
     (h : TDerivesP Δ Γ t j) : t.jdg = j := by
   cases h <;> rfl
+
+/-- **An inserted drop carries `HasDtor`**: a `dtor` node of the typed term is typed only at a type
+with a derived drop. The checker inserts a drop only as a `dtor` node, so it inserts none at a
+linear type with no derived drop, a declared type among them (`decl_linear`).  `[spec §12, §42]` -/
+theorem TDerivesP.dtor_hasDtor {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {j : Jdg} {A : VTy}
+    {j' : Jdg} (h : TDerivesP Δ Γ (.dtor i j A) j') : HasDtor A := by
+  cases h with
+  | dtor hA _ _ _ => exact hA
+
+/-- The same at the typed derivation at an effect context. -/
+theorem TDerivesAt.dtor_hasDtor {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {j : Jdg}
+    {A : VTy} {j' : Jdg} (h : TDerivesAt Ξ Δ Γ (.dtor i j A) j') : HasDtor A := by
+  cases h with
+  | dtor hA _ _ _ => exact hA
 
 end BoCa.Fig16.LogRel.Core.Check
