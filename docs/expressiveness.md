@@ -441,7 +441,7 @@ capability has no destructor and must be handed back; a cancel answers `()` (SPE
 | Rust's way: the iterator owns the handle; `Drop` closes it | parity | n/a: a capability has no destructor by design (§12) | good | not available as is |
 | give the capability a destructor | parity | lemma; changes §12's group 3 | fair: a dropped stream silently closes the input | rejected: the user's linear-obligation goals (#209, #210) want the capability back |
 | **close hands back a residual**: cancelling the generator resumes it with `close`, and it returns what it owns | parity | lemma or less: S0 proved it for loops (unknown 2, `experiments/DivEffect/README.md`); generators need the same close at their `yield`'s observation | best | **recommended**: one mechanism with B2 |
-| a `linear ctl` iteration effect (no `break`) | parity | lemma | poor: no early exit | a fallback named by SPEC §15 |
+| a `must_resume ctl` iteration effect (no `break`) | parity | lemma | poor: no early exit | a fallback named by SPEC §15 |
 | pass the capability per pull (the per-turn lend of B1) | parity | none or lemma (as B1) | fair | the same mechanism as B1; good where the consumer owns the capability anyway |
 
 **Elaboration candidate.** *Writes:* `for b in digits(&mut stdin) { … break … }`. *Elaborates to:*

@@ -344,7 +344,7 @@ These are detailed under each topic below (the IDs in brackets).
 ## 2. Continuations and multi-shot
 
 **C1. Continuation modes and qualifiers.**
-- Content: cancellable by default (`ctl`), plus `linear ctl` (must resume) and `multi ctl`
+- Content: cancellable by default (`ctl`), plus `must_resume ctl` (must resume) and `multi ctl`
   (unrestricted). A cancellable continuation's derived drop is its `cancel`.
 - Words: the user's spelling guidance of 2026-10-01 (decision 55); no quote on the semantics.
 - Strength: provisional (spelling). The qualifier lattice is as built (SPEC §19).
@@ -360,7 +360,7 @@ These are detailed under each topic below (the IDs in brackets).
 - Scope: kernel.
 - Source: #18 issuecomment-5914322704.
 - **Note.** "Linear" here sits beside a cancellable default (C1, SPEC §19). The kernel reads it as
-  the type class: the continuation of `ctl` and of `linear ctl` is linear, and `ctl`'s also has
+  the type class: the continuation of `ctl` and of `must_resume ctl` is linear, and `ctl`'s also has
   a cancel branch.
 
 **C3. Multi-shot only if free.**
@@ -845,7 +845,7 @@ inferred from names.**
 - Relevance: PR #141's option D providers are typed attributes, not comments.
 
 **N8. Effect spellings.**
-- Content: `effect`/`handler`/`with`/`fn`/`ctl`/`linear ctl`/`multi ctl`, `raise`, `Yield`,
+- Content: `effect`/`handler`/`with`/`fn`/`ctl`/`must_resume ctl`/`multi ctl`, `raise`, `Yield`,
   `Exhausted`, `with deep`, `with L`, `k(v)`.
 - Strength: provisional (spelling), "to be settled after rewriting a sample of the corpus".
 - Scope: surface.

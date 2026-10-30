@@ -2,7 +2,7 @@
 -- A generator's `let mut` as an instance of `State` (#611), live across `yield`: the generator's
 -- loop is div, and no handler wraps a div computation (§21 *Open*). The state is carried in the
 -- loop's state, as the generator's variables are.
-effect State[T] { linear ctl get() -> T; linear ctl put(v: T) }
+effect State[T] { must_resume ctl get() -> T; must_resume ctl put(v: T) }
 
 handler state[T, A](mut s: T): State[T], A -> A * T = {
   return(a) = (a, s);

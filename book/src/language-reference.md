@@ -55,7 +55,7 @@ main -> 1 =
 
 - the keywords of programs: `borrow`, `box`, `break`, `clone`, `continue`, `def`, `div`, `effect`,
   `else`, `fn`, `fold_imm`, `fold_own`, `fold_reuse`, `for`, `handler`, `if`, `imm`, `in`,
-  `include`, `inl`, `inr`, `let`, `linear`, `loop`, `main`, `match`, `modify`, `mut`, `poly`,
+  `include`, `inl`, `inr`, `let`, `loop`, `main`, `match`, `modify`, `mut`, `poly`,
   `return`, `total`, `type`, `while`, `with`;
 - the built-in types and operations: `alloc`, `array`, `array_imm`, `array_mut`, `array_new`,
   `f32`, `f64`, `free`, `host`, `i32`, `i64`, `ref`, `swap`, `u8`;
@@ -132,7 +132,7 @@ main -> 1 =
 - `type` names a type; the name and the type are interchangeable
   ([Tuples and sums](guide/basics.md#tuples-and-sums)).
 - `effect`: an operation declared `fn` answers its caller; `ctl` receives the continuation and
-  resumes it at most once, `linear ctl` exactly once, and `ctl op(…) -> never` never. `-> B`
+  resumes it at most once, `must_resume ctl` exactly once, and `ctl op(…) -> never` never. `-> B`
   left out is `-> 1`. A handler of `fn` operations keeps its state in its `mut` parameter; a
   control handler names the body's type `A` and its answer `R`, and has a `return(x)` clause
   ([Effects and handlers](guide/effects.md)).

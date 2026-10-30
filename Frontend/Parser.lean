@@ -2857,7 +2857,7 @@ def decl (n : Nat) : P Decl := do
     pure (.data (← spanFrom st) d)
   | .kw "effect" =>
     -- `effect E[T, …] { fn op(x: A, …) -> B; ctl op(…) -> B; … }` (SPEC §18, §19); `-> B` left
-    -- out is `-> 1`. `ctl` is cancellable; `linear ctl` must resume, `multi ctl` unrestricted.
+    -- out is `-> 1`. `ctl` is cancellable; `must_resume ctl` must resume, `multi ctl` unrestricted.
     discard bump
     let x ← uident "an effect name"
     let tps ← if ← isSym "[" then do
@@ -2872,8 +2872,8 @@ def decl (n : Nat) : P Decl := do
       if ← isSym "}" then break
       let kind ← if ← isKw "fn" then do discard bump; pure OpKind.fn
         else do
-          let q ← if ← isKw "linear" then do discard bump; pure Qual.lin
-            else match (← peek).tok with
+          let q ← match (← peek).tok with
+              | .ident "must_resume" => do discard bump; pure Qual.lin
               | .ident "multi" => do discard bump; pure Qual.unr
               | _ => pure Qual.cancel
           match (← peek).tok with

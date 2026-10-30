@@ -81,7 +81,7 @@ body. The declaration says how often `k` may be resumed:
 | declared | the clause |
 |---|---|
 | `ctl op(…) -> B` | resumes `k` at most once; if it does not, the rest of the body is cancelled |
-| `linear ctl op(…) -> B` | resumes `k` exactly once |
+| `must_resume ctl op(…) -> B` | resumes `k` exactly once |
 | `ctl op(…) -> never` | receives no `k`: the operation is **abortive**, as `raise` is |
 
 A control handler names the type of the body it handles and what it returns (`Watch, i32 -> i32`

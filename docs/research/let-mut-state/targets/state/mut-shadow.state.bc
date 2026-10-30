@@ -1,6 +1,6 @@
 -- `mut-shadow.bc` with its `let mut`s as instances of the ordinary control effect `State`, the state the
 -- handler's parameter: the form #611's translation would give before its state-passing transformation.
-effect State[T] { linear ctl get() -> T; linear ctl put(v: T) }
+effect State[T] { must_resume ctl get() -> T; must_resume ctl put(v: T) }
 
 handler state[T, A](mut s: T): State[T], A -> A * T = {
   return(a) = (a, s);
