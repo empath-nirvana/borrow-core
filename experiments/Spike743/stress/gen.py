@@ -243,15 +243,255 @@ def program(seed, wide=False):
     return "\n".join(out) + "\n", total
 
 
+# ---------------------------------------------------------------------------------------------
+# NURSERY=1 (round 3): W-tick and W-hold sites, in the core text. A task lends its request (`imm`
+# with N children holding copies of the view, or `mut` with one writer child) with a nursery
+# scope (`withbor1rh` / `withbor2rh`), spawns the children with `spawn_in` at `'r_n`, may tick
+# directly, and waits in a `div_iterate` loop: each turn awaits the scheduler (`9.0`), runs one
+# round of the children, may cancel the parent (`8.0`, cancelled by its handler) or one child, and
+# goes on while a child is pending. `div_fuel_k` closes the wait at a random budget; the close step
+# cancels the children still pending. The generator simulates the run.
+
+TICK = "4294967295.0 lin 1 ~> 1 + 1"
+ROWN = f"[{TICK}, 9.0 cancel 1 ~> 1, 8.0 cancel 1 ~> 1]"
+
+
+STATS = {k: 0 for k in ['programs', 'children', 'mut', 'direct_ticks', 'loop_ticks', 'fuel_closed', 'parent_cancelled', 'child_culled', 'children_cancelled', 'turns']}
+
+
+def nursery_program(seed):
+    r = random.Random(seed)
+    kv = r.random() < 0.7                    # imm view, N children; else mut, one writer
+    n = r.randint(1, 4) if kv else 1
+    req = r.randint(1, 20)
+    awaits = [r.randint(0, 4) for _ in range(n)]
+    mults = [r.randint(1, 9) for _ in range(n)]
+    adds = [r.randint(1, 9) for _ in range(n)]
+    direct = r.randint(0, 3)                  # ticks performed directly before the spawns
+    fuel = r.randint(0, 8)
+    cj = r.choice([None, None, r.randint(1, 6)])   # the turn whose `8.0` is cancelled
+    cc = r.choice([None, r.randint(1, 5)])         # the turn after which the head child is cancelled
+    Q = "QueueIn[i32]<'n /\\ 'r /\\ top>"
+    QN = "QueueIn[i32]<'r_n /\\ 'r /\\ top>"
+    L = ["-- Stress (round 3, NURSERY=1): W-tick and W-hold, generated; see gen.py.", "include async", ""]
+    if kv:
+        for i in range(n):
+            L.append(f"fn child{i}<'r>(k: imm 'r i32) -> i32 with Async =")
+            L.append("  let a = *k;")
+            L.append(f"  for _ in 0..{awaits[i]} {{ await() }};")
+            L.append(f"  a * {mults[i]}")
+            L.append("")
+        ks = ", ".join(f"k{i}: imm 'r i32" for i in range(n))
+        L.append(f"fn start<'r, 'n < 'r>({ks}) -> {Q} =")
+        L.append(f"  let q = queue_in[i32]['n /\\ 'r /\\ top]();")
+        for i in range(n):
+            L.append(f"  let t{i} = with spawn_in {{ child{i}(k{i}) }};")
+            L.append(f"  let q = push_in[i32]['n /\\ 'r /\\ top](q, t{i});")
+        L.append("  q")
+    else:
+        L.append("fn writer<'r>(m: mut 'r i32) -> i32 with Async =")
+        L.append(f"  modify m {{ x -> x + {adds[0]} }};")
+        L.append(f"  for _ in 0..{awaits[0]} {{ await(); modify m {{ x -> x + 1 }} }};")
+        L.append(f"  modify m {{ x -> (x * {mults[0]}, x * {mults[0]}) }}")
+        L.append("")
+        L.append(f"fn start<'r, 'n < 'r>(m: mut 'r i32) -> {Q} =")
+        L.append(f"  let q = queue_in[i32]['n /\\ 'r /\\ top]();")
+        L.append("  let t0 = with spawn_in { writer(m) };")
+        L.append(f"  push_in[i32]['n /\\ 'r /\\ top](q, t0)")
+    L += ["", """fn one_round<'n>(q: QueueIn[i32]<'n>) -> QueueIn[i32]<'n> * (1 + 1) =
+  let (n, s) = q;
+  let (b, p) = round_in(n, rev_in(n, s));
+  ((n, b), p)
+
+fn finish<'n>(q: QueueIn[i32]<'n>) -> i32 =
+  let (n, s) = q;
+  let (vs, cut) = values_in(n, rev_in(n, s));
+  let mut acc = 0;
+  let mut cur = vs;
+  for _ in 0..n {
+    match unroll cur { inl u -> cur = (roll inl () : List[i32]) | inr (x, r) -> acc = acc + x; cur = r }
+  };
+  match unroll cur { inl u -> () | inr (x, r) -> () };
+  if cut { acc - 100 } else { acc }
+
+fn cancel_all<'n>(q: QueueIn[i32]<'n>) -> 1 = let _ = finish(q); ()
+
+fn cull<'n>(q: QueueIn[i32]<'n>) -> QueueIn[i32]<'n> =
+  let (n, s) = q;
+  match unroll s {
+    inl u -> (n, roll inl ())
+  | inr (x, r) -> match x {
+      inl v -> (n, roll inr (inl v, r))
+    | inr t -> cancel_in(t); (n, roll inr (inl (0 - 1), r))
+    }
+  }
+
+fn rd<'r>(k: imm 'r i32) -> i32 = *k
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+def eq : i32 * i32 => 1 + 1 = unbang host[eq32]
+""", "main : F i32 =", f"  req <- return (alloc[i32] i32[{req}]);", "  t <- return (thunkv fun (u0 : 1) ->"]
+    kw = "withbor1rh" if kv else "withbor2rh"
+    L.append(f"    {kw}['r, dom, i32, i32, {ROWN}](req, k) (")
+    for j in range(direct):
+        L.append(f"      d{j} <- perform[4294967295.0] ();")
+        L.append(f"      case d{j} {{ inl a -> return () | inr b -> return () }};")
+    if kv:
+        names = []
+        for i in range(n):
+            L.append(f"      kk{i} <- return (copy['r, i32] k);")
+            L.append(f"      let (k{i}, k) = kk{i};")
+            names.append(f"k{i}")
+        arg = "(" + ", ".join(names) + ")" if n > 1 else names[0]
+        L.append(f"      sf <- return ((unbang start) ['r] ['r_n]);")
+        L.append(f"      a2 <- return {arg};" if n > 1 else f"      a2 <- return {arg};")
+        L.append("      q0 <- force sf a2;")
+    else:
+        L.append(f"      sf <- return ((unbang start) ['r] ['r_n]);")
+        L.append("      q0 <- force sf k;")
+    fin = "(cf <- return ((unbang cancel_all) ['r_n /\\ 'r /\\ top]); force cf"
+    L.append(f"      st <- return ((!thunkv fun (sq : {QN} * i32) ->")
+    L.append("        < let (q, j) = sq;")
+    L.append(f"          u <- perform[9.0] () unwind ({fin.replace('force cf', 'force cf q')}));")
+    L.append("          let () = u;")
+    L.append(f"          rf <- return ((unbang one_round) ['r_n /\\ 'r /\\ top]);")
+    L.append("          o <- force rf q;")
+    L.append("          let (q1, p) = o;")
+    L.append(f"          c8 <- return (eq (j, i32[{cj if cj is not None else 0}]));")
+    L.append(f"          q2 <- (case c8 {{ inl ne -> return q1 | inr is -> v8 <- perform[8.0] () unwind ({fin.replace('force cf', 'force cf q1')})); let () = v8; return q1 }});")
+    L.append(f"          cc <- return (eq (j, i32[{cc if cc is not None else 0}]));")
+    L.append(f"          q3 <- (case cc {{ inl ne -> return q2 | inr is -> cu <- return ((unbang cull) ['r_n /\\ 'r /\\ top]); force cu q2 }});")
+    L.append("          case p {")
+    L.append(f"            inl done -> ff <- return ((unbang finish) ['r_n /\\ 'r /\\ top]); s <- force ff q3; return (inl s)")
+    L.append("          | inr more -> let () = more; return (inr (q3, plus (j, i32[1])))")
+    L.append("          },")
+    L.append(f"          let (q, j) = sq; ff <- return ((unbang finish) ['r_n /\\ 'r /\\ top]); force ff q >) :")
+    L.append(f"          !U ({QN} * i32 -o F{ROWN} (i32 + {QN} * i32) & F{ROWN} i32));")
+    L.append(f"      f <- return (unbang div_iterate[{ROWN}, {QN} * i32, i32, i32]);")
+    L.append("      a0 <- return (st, (q0, i32[1]));")
+    L.append("      o <- force f a0;")
+    L.append("      s <- (case o { inl b -> return b | inr z -> return z });")
+    if kv:
+        L.append("      y <- return ((unbang rd) ['r] k);")
+        L.append("      x <- return (plus (s, y));")
+        L.append("      return (boxed['r] x)));")
+    else:
+        L.append("      return (boxed['r] s)));")
+    K8 = "U ((1 -o F[8.0 cancel 1 ~> 1] i32) & F[8.0 cancel 1 ~> 1] 1)"
+    L.append("""  handle_with[8](
+      ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+      (((!thunkv fun (q : 1 * U ((1 -o F i32) & F 1)) ->
+        let (x, k) = q; let () = x; w <- (force k).2; let () = w; return i32[5]), ()) :
+        !U (1 * U ((1 -o F i32) & F 1) -o F i32) * 1)) (
+  handle_with[9](
+      ((!thunkv fun (p : ref i32 * i32) ->
+        let (c, v) = p; w <- return (free[i32] c); return (plus (v, %s))) : !U (ref i32 * i32 -o F[8.0 cancel 1 ~> 1] i32)),
+      (((!thunkv fun (q : 1 * %s) ->
+        let (x, k) = q; (force k).1 x), ()) : !U (1 * %s -o F[8.0 cancel 1 ~> 1] i32) * 1)) (
+    df <- return (unbang div_fuel_k[[9.0 cancel 1 ~> 1, 8.0 cancel 1 ~> 1], ref i32 * i32]);
+    a1 <- return (t, i32[%d]);
+    force df a1))""" % ("i32[0]" if kv else "w", K8, K8, fuel))
+    # --- simulation ---
+    budget = [fuel]
+    def tick():
+        if budget[0] > 0:
+            budget[0] -= 1
+            return True
+        return False
+    for _ in range(direct):
+        tick()
+    # A task needs one observation per `await` and one more for its value: the observation that
+    # runs it to its end answers the finished task, whose next observation answers the value.
+    cell = [req]
+    tasks = []
+    for i in range(n):
+        t = ['pend', awaits[i] + 1, i, 0, None]
+        if not kv:
+            cell[0] = (cell[0] + adds[0]) % M32
+            if awaits[0] == 0:
+                cell[0] = (cell[0] * mults[0]) % M32
+                t[4] = cell[0]
+        else:
+            t[4] = (req * mults[i]) % M32
+        tasks.append(t)
+    slots = list(reversed(tasks))
+    def resume_child(t):
+        t[3] += 1
+        if not kv and t[3] <= awaits[0]:
+            cell[0] = (cell[0] + 1) % M32
+            if t[3] == awaits[0]:
+                cell[0] = (cell[0] * mults[0]) % M32
+                t[4] = cell[0]
+        t[1] -= 1
+        if t[1] == 0:
+            t[0], t[1] = 'val', t[4]
+    def finish_val():
+        acc, cut = 0, False
+        for t in slots:
+            if t[0] == 'val':
+                acc = (acc + t[1]) % M32
+            else:
+                cut = True
+                t[0], t[1] = 'cancelled', 0
+        return (acc - 100) % M32 if cut else acc
+    STATS['programs'] += 1
+    STATS['children'] += n
+    STATS['mut'] += 0 if kv else 1
+    STATS['direct_ticks'] += direct
+    j = 1
+    answer = None
+    while True:
+        STATS['turns'] += 1
+        # turn j: await (resumed), a round
+        pending = False
+        for t in reversed(slots):        # processed first-pushed first
+            if t[0] == 'pend':
+                resume_child(t)
+                if t[0] == 'pend':
+                    pending = True
+        if cj is not None and j == cj:
+            answer = 5
+            STATS['parent_cancelled'] += 1
+            STATS['children_cancelled'] += sum(1 for t in slots if t[0] == 'pend')
+            break
+        if cc is not None and j == cc:
+            h = slots[0]
+            if h[0] == 'pend':
+                h[0], h[1] = 'val', (-1) % M32
+                STATS['child_culled'] += 1
+        if not pending:
+            s = finish_val()
+            break
+        if tick():
+            STATS['loop_ticks'] += 1
+            j += 1
+            continue
+        STATS['fuel_closed'] += 1
+        STATS['children_cancelled'] += sum(1 for t in slots if t[0] == 'pend')
+        s = finish_val()
+        break
+    if answer is None:
+        if kv:
+            answer = (s + req) % M32
+        else:
+            answer = (s + cell[0]) % M32
+    return "\n".join(L) + "\n", answer
+
+
 def main():
     outdir, first, count = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
     os.makedirs(outdir, exist_ok=True)
     for s in range(first, first + count):
-        src, total = program(s, os.environ.get("WIDE") == "1")
+        if os.environ.get("NURSERY") == "1":
+            src, total = nursery_program(s)
+        else:
+            src, total = program(s, os.environ.get("WIDE") == "1")
         with open(os.path.join(outdir, f"s{s:04d}.bc"), "w") as f:
             f.write(src)
         with open(os.path.join(outdir, f"s{s:04d}.expect"), "w") as f:
             f.write(f"i32[{total}]\nlive 0\n")
+    if os.environ.get("NURSERY") == "1":
+        print("nursery stats:", STATS)
 
 
 if __name__ == "__main__":
