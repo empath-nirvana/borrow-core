@@ -478,12 +478,118 @@ def eq : i32 * i32 => 1 + 1 = unbang host[eq32]
     return "\n".join(L) + "\n", answer
 
 
+# ---------------------------------------------------------------------------------------------
+# TICK=1 (round 3): W-tick sites alone (`withbor2rt` / `withbor1rt`, no nursery). A task lends a
+# cell it owns across a `div_iterate` loop: each turn awaits (`9.0`), and either adds to the cell
+# through a `mut` view (under `[then]`, its finaliser writing a mark through the view when the turn
+# is cancelled), or reads it through an `imm` view; the loop finishes at a random bound, or
+# `div_fuel_k` closes it, or the parent is cancelled at a random turn (`8.0`).
+
+def tick_program(seed):
+    r = random.Random(seed)
+    kv = r.random() < 0.4
+    init = r.randint(0, 9)
+    inc = r.randint(1, 5)
+    bound = r.randint(1, 8)
+    fuel = r.randint(0, 8)
+    direct = r.randint(0, 2)
+    cj = r.choice([None, None, r.randint(1, 6)])
+    mark = r.randint(50, 99)
+    kw = "withbor1rt" if kv else "withbor2rt"
+    V = "imm 'x i32" if kv else "mut 'x i32"
+    St = f"{V} * i32"
+    L = ["-- Stress (round 3, TICK=1): W-tick, generated; see gen.py.", "include async", "",
+         "fn rd<'r>(k: imm 'r i32) -> i32 = *k", "",
+         "def plus : i32 * i32 => i32 = unbang host[add32]",
+         "def lt : i32 * i32 => 1 + 1 = unbang host[lt_s32]",
+         "def eq : i32 * i32 => 1 + 1 = unbang host[eq32]", "",
+         "main : F i32 =", f"  c <- return (alloc[i32] i32[{init}]);",
+         "  t <- return (thunkv fun (u0 : 1) ->",
+         f"    {kw}['x, dom, i32, i32, {ROWN}](c, m) ("]
+    for jj in range(direct):
+        L.append(f"      d{jj} <- perform[4294967295.0] ();")
+        L.append(f"      case d{jj} {{ inl a -> return () | inr b -> return () }};")
+    L.append(f"      st <- return ((!thunkv fun (sq : {St}) ->")
+    L.append("        < let (v, j) = sq;")
+    L.append("          u <- perform[9.0] ();")
+    L.append("          let () = u;")
+    if kv:
+        L.append("          cp <- return (copy['x, i32] v);")
+        L.append("          let (v1, v) = cp;")
+        L.append("          rv <- return ((unbang rd) ['x] v1);")
+        L.append(f"          r <- return (plus (rv, j));")
+        L.append(f"          c8 <- return (eq (j, i32[{cj if cj is not None else 0}]));")
+        L.append("          w8 <- (case c8 { inl ne -> return () | inr is -> perform[8.0] () });")
+        L.append("          let () = w8;")
+    else:
+        L.append(f"          q <- return (withswap['x, i32, i32] v (thunkv fun (a : i32) -> return (plus (a, i32[{inc}]), plus (a, i32[{inc}]))));")
+        L.append("          let (v, r) = q;")
+        L.append(f"          c8 <- return (eq (j, i32[{cj if cj is not None else 0}]));")
+        L.append("          w8 <- (case c8 { inl ne -> return () | inr is -> perform[8.0] () }) unwind (")
+        L.append(f"            q2 <- return (withswap['x, i32, 1] v (thunkv fun (z : i32) -> return (i32[{mark}], ())));")
+        L.append("            let (v, z2) = q2; let () = z2; return (forget_mut['x, i32] v));")
+        L.append("          let () = w8;")
+    L.append(f"          g <- return (lt (j, i32[{bound}]));")
+    L.append("          case g {")
+    forget = "forget_imm" if kv else "forget_mut"
+    L.append(f"            inl ge -> let () = {forget}['x, i32] v; return (inl r)")
+    L.append("          | inr lo -> return (inr (v, plus (j, i32[1])))")
+    L.append("          },")
+    L.append(f"          let (v, j) = sq; let () = {forget}['x, i32] v; return (plus (i32[1000], j)) >) :")
+    L.append(f"          !U ({St} -o F{ROWN} (i32 + {St}) & F{ROWN} i32));")
+    L.append(f"      f <- return (unbang div_iterate[{ROWN}, {St}, i32, i32]);")
+    L.append("      a0 <- return (st, (m, i32[1]));")
+    L.append("      o <- force f a0;")
+    L.append("      case o { inl b -> return (boxed['x] b) | inr z -> return (boxed['x] z) }));")
+    K8 = "U ((1 -o F[8.0 cancel 1 ~> 1] i32) & F[8.0 cancel 1 ~> 1] 1)"
+    L.append("""  handle_with[8](
+      ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+      (((!thunkv fun (q : 1 * U ((1 -o F i32) & F 1)) ->
+        let (x, k) = q; let () = x; w <- (force k).2; let () = w; return i32[5]), ()) :
+        !U (1 * U ((1 -o F i32) & F 1) -o F i32) * 1)) (
+  handle_with[9](
+      ((!thunkv fun (p : ref i32 * i32) ->
+        let (c, v) = p; w <- return (free[i32] c); return (plus (v, w))) : !U (ref i32 * i32 -o F[8.0 cancel 1 ~> 1] i32)),
+      (((!thunkv fun (q : 1 * %s) ->
+        let (x, k) = q; (force k).1 x), ()) : !U (1 * %s -o F[8.0 cancel 1 ~> 1] i32) * 1)) (
+    df <- return (unbang div_fuel_k[[9.0 cancel 1 ~> 1, 8.0 cancel 1 ~> 1], ref i32 * i32]);
+    a1 <- return (t, i32[%d]);
+    force df a1))""" % (K8, K8, fuel))
+    # simulation
+    budget = fuel
+    for _ in range(direct):
+        if budget > 0:
+            budget -= 1
+    cell = init
+    j = 1
+    while True:
+        if kv:
+            res = (cell + j) % M32
+        else:
+            cell = (cell + inc) % M32
+            res = cell
+        if cj is not None and j == cj:
+            return "\n".join(L) + "\n", 5
+        if j >= bound:
+            ans = res
+            break
+        if budget > 0:
+            budget -= 1
+            j += 1
+            continue
+        ans = (1000 + j + 1) % M32
+        break
+    return "\n".join(L) + "\n", (ans + cell) % M32
+
+
 def main():
     outdir, first, count = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
     os.makedirs(outdir, exist_ok=True)
     for s in range(first, first + count):
         if os.environ.get("NURSERY") == "1":
             src, total = nursery_program(s)
+        elif os.environ.get("TICK") == "1":
+            src, total = tick_program(s)
         else:
             src, total = program(s, os.environ.get("WIDE") == "1")
         with open(os.path.join(outdir, f"s{s:04d}.bc"), "w") as f:
