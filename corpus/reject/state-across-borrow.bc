@@ -1,4 +1,4 @@
--- expect: 19:5: this borrow block's body performs the operation 1.0, which resumes: only an abortive operation crosses a borrow's scope (a continuation held across a lend is T1, #172)
+-- expect: 19:5: the row of a relaxed lend's body has only operations that resume at most once (cancellable or must-resume), of names other than 0, answering `1` with the empty cancel row, whose arguments are closed data with no `U` (R1, SPEC §29)
 -- A `let mut` as an instance of the ordinary control effect `State` (#611), its state the
 -- handler's parameter: an assignment inside a borrow block is an operation of the handler inside the
 -- borrow's callback. Every borrow callback's row is empty, unwind-only (every operation abortive) or,
