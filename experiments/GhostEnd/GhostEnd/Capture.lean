@@ -81,7 +81,7 @@ theorem closure_spans_yield (δ : LSub) (l : BoCa.Loc) (v : Val) (ls : List SRec
     simp [LifeCtx.empty, LifeCtx.find?, Lifetime.assocFind] at h
   obtain ⟨β, hβ⟩ : ∃ β, LifeCtx.empty.meetOfDom.interp δ = some β :=
     Lifetime.Life.interp_defined_of_wf hδ (Lifetime.meetOfDomL_wf LifeCtx.empty.entries)
-  refine withbor_of_rbodyC hδ hβ hT (by simp [VFree]) (βP := ⊤) ?_ (by decide) rb_body l v ls
+  refine withbor_of_rbodyC hδ hβ hT (by simp [VFree]) (βP := ⊤) ?_ (by decide) (by decide) rb_body l v ls
   intro ls w σ h
   rw [h.1]; exact ResU.inStratum_empty _
 

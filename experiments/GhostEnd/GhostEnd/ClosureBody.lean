@@ -270,14 +270,14 @@ theorem relend_of_rbodyC (hT : ¬ VFree x T) {B : VTy} (hB : ¬ VFree x B) {M : 
 theorem withbor_of_rbodyC {δ : LSub} (hδ : Δ.Models δ) {β : Life} (hβ : b.interp δ = some β)
     (hT : ¬ VFree x T) {B : VTy} (hB : ¬ VFree x B)
     {βP : Life} (hP : ∀ ls w σ, vC true T ls δ w σ → σ.InStratum βP)
-    {M : Expr} (hM : closedAt 1 M = true)
+    (hSd : Row.divB S = false) {M : Expr} (hM : closedAt 1 M = true)
     (h : RBodyC Δ x b T S [] true M (ansRC x (.box (.var x) B))) (l : BoCa.Loc) (v : Val)
     (ls : List SRec) :
     Entails (ptoOwn l v ⋆ vC true T ls δ v)
       (cC (CTy.effOf S (.tensor (.ref T) B)) ls δ
         (.app (.app withbor (.val (.loc l))) (.val ⟨.lam (.lam M), .lam⟩))) := by
   intro ρ hρ
-  refine (cC_effOf S _ ls δ _ ρ).mpr ?_
+  refine (cC_effOf S _ ls δ _ ρ hSd).mpr ?_
   exact withbor_relend (Row.tab S δ) (Row.tab_plainCancel S δ) hP _ v
     (relend_lam2 (opTable_mono _) hM (relend_of_rbodyC hT hB hδ hβ h l ls)) ρ hρ
 

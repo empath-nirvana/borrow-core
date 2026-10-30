@@ -48,7 +48,7 @@ theorem spans_two_yields (δ : LSub) (l : BoCa.Loc) (v : Val) (ls : List SRec) :
   refine withbor_spans_yields_cC (Δ := LifeCtx.empty) (x := 0) hδ (by decide)
     (fun y u h => by simp [LifeCtx.empty, LifeCtx.find?, Lifetime.assocFind] at h) hβ
     (by simp [VFree]) (by simp [VFree]) (βP := ⊤) ?_ (by decide) d_nfEx
-    [yieldOp] yieldOp (by simp [Row.find, yieldOp]) (by decide) rfl rfl ys
+    [yieldOp] (by decide) yieldOp (by simp [Row.find, yieldOp]) (by decide) rfl rfl ys
     (by simp [ys]; decide) ?_ l v ls
   · intro ls w σ h
     rw [h.1]; exact ResU.inStratum_empty _
@@ -67,7 +67,7 @@ theorem spans_two_yields_sem :
     (fun y u h => by simp [LifeCtx.empty, LifeCtx.find?, Lifetime.assocFind] at h)
     (by simp [VFree]) (by simp [VFree])
     ⟨LifeCtx.empty.meetOfDom, LifeCtx.defines_of_wf rfl, .unit⟩ (by decide) d_nfEx
-    [yieldOp] yieldOp (by simp [Row.find, yieldOp]) (by decide) rfl rfl ys
+    [yieldOp] (by decide) yieldOp (by simp [Row.find, yieldOp]) (by decide) rfl rfl ys
     (by simp [ys]; decide)
     (fun δ y hy ls => by
       simp only [ys, List.mem_cons, List.not_mem_nil, or_false] at hy

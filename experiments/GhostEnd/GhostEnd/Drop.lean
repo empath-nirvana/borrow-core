@@ -219,7 +219,8 @@ theorem withborR_spans_yields_cC {Δ : LifeCtx} {δ : LSub} (hδ : Δ.Models δ)
     (hN : CDerives (Δ.extend x b) [⟨.mut (.var x) T, true⟩] Nf (.comp (.ret (.box (.var x) B))))
     {d : Expr} (hdc : closedAt 0 d = true)
     (hd : ∀ ls, wpTS ls d (fun ls'' => vP (.lolli (.ref T) .unit) ls'' δ) PMap.empty)
-    (S : Row) (hRA : ∀ o ∈ S, o.abort = false ∧ o.q ≠ .unr) (hFin : ∀ o ∈ S, o.fin = .ret .unit)
+    (S : Row) (hSd : Row.divB S = false) (hRA : ∀ o ∈ S, o.abort = false ∧ o.q ≠ .unr)
+    (hFin : ∀ o ∈ S, o.fin = .ret .unit)
     (o : OpSig) (hf : Row.find S o.n o.i = some o) (hoB : o.B = .unit)
     (ys : List Val) (hys : ∀ y ∈ ys, closedAt 0 y.1 = true)
     (hy : ∀ y ∈ ys, ∀ ls, vC true o.A ls δ y PMap.empty)
@@ -228,7 +229,7 @@ theorem withborR_spans_yields_cC {Δ : LifeCtx} {δ : LSub} (hδ : Δ.Models δ)
       (cC (CTy.effOf S (.tensor (.ref T) B)) ls δ
         (.app (.app (.val (withborUV d)) (.val (.loc l))) (.val (cbV o.n o.i ys Nf)))) := by
   intro ρ hρ
-  refine (cC_effOf S _ ls δ _ ρ).mpr ?_
+  refine (cC_effOf S _ ls δ _ ρ hSd).mpr ?_
   have hRA' : ResumeAff (Row.tab S δ) := by
     intro n i en hT
     obtain ⟨o', hf', rfl⟩ := Row.tab_some hT
@@ -252,7 +253,8 @@ theorem withborR_spans_yields_sem {Δ : LifeCtx} {x : LifeVar} {b : Lifetime.Lif
     {Nf : Expr} (hNf : closedAt 1 Nf = true)
     (hN : CDerives (Δ.extend x b) [⟨.mut (.var x) T, true⟩] Nf (.comp (.ret (.box (.var x) B))))
     {d : Expr} (hdc : closedAt 0 d = true) (hd : SemV Δ [] d (.lolli (.ref T) .unit))
-    (S : Row) (hRA : ∀ o ∈ S, o.abort = false ∧ o.q ≠ .unr) (hFin : ∀ o ∈ S, o.fin = .ret .unit)
+    (S : Row) (hSd : Row.divB S = false) (hRA : ∀ o ∈ S, o.abort = false ∧ o.q ≠ .unr)
+    (hFin : ∀ o ∈ S, o.fin = .ret .unit)
     (o : OpSig) (hf : Row.find S o.n o.i = some o) (hoB : o.B = .unit)
     (ys : List Val) (hys : ∀ y ∈ ys, closedAt 0 y.1 = true)
     (hy : ∀ δ, ∀ y ∈ ys, ∀ ls, vC true o.A ls δ y PMap.empty)
@@ -292,7 +294,7 @@ theorem withborR_spans_yields_sem {Δ : LifeCtx} {x : LifeVar} {b : Lifetime.Lif
       intro ls'
       have h := hd δ [] ls' PMap.empty hδ (gDenC_nil ls' δ)
       rwa [show substAll [] d = d from BoCa.Adequacy.psub_nil 0 d] at h
-    exact withborR_spans_yields_cC hδ hbx hΔx hβ hT hB hP hNf hN hdc hd' S hRA hFin o hf hoB ys
+    exact withborR_spans_yields_cC hδ hbx hΔx hβ hT hB hP hNf hN hdc hd' S hSd hRA hFin o hf hoB ys
       hys (hy δ) ℓ v' ls ρ hrest
 
 /-- **Under the kernel's `[handle]`, at an affine yield.** The body is handed to `handle_compatC`
@@ -317,18 +319,19 @@ theorem handleR_spans_yields {Δ : LifeCtx} {Γ Γ₁ Γr Γc : Ctx VTy} {S' : R
     (hsp : Ctx.SplitP Γ Γ₁ [⟨.ref T, true⟩]) (hsp₁ : Ctx.SplitP Γ₁ Γr Γc)
     (hr : Ctx.SoloP Γr ir (retTy S' (.tensor (.ref T) B) R))
     (hc : Ctx.SoloP Γc ic (clausesTy S' R E))
-    (hn0 : n ≠ 0) (hnS : ∀ o ∈ S', o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) :
+    (hn0 : n ≠ 0) (hnS : ∀ o ∈ S', o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (hdv : Row.divB (Row.ofEff n E 0 ++ S') = false) :
     SemC Δ Γ (hndTerm n (E.map Prod.fst) ir ic
       (.app (.app (.val (withborUV d)) (.var 0)) (.val (cbV o.n o.i ys Nf)))) (CTy.effOf S' R) :=
-  handle_compatC hsp hsp₁ hr hc hn0 hnS hlen
-    (withborR_spans_yields_sem hb hbx hΔx hT hB hside hNf hN hdc hd _ hRA hFin o hf hoB ys hys hy
+  handle_compatC hsp hsp₁ hr hc hn0 hnS hlen hdv
+    (withborR_spans_yields_sem hb hbx hΔx hT hB hside hNf hN hdc hd _ hdv hRA hFin o hf hoB ys hys hy
       hcb)
 
 namespace Drop
 open GhostEnd.Instance (nfEx d_nfEx ys)
 
-/-- `yield : I32 ↠ 1`, affine and resuming. -/
-def yieldAff : OpSig := ⟨7, 0, .aff, .int .w32, .unit, .ret .unit⟩
+/-- `yield : I32 ↠ 1`, cancellable and resuming. -/
+def yieldAff : OpSig := ⟨7, 0, .cancel, .int .w32, .unit, .ret .unit⟩
 
 /-- **A lend spanning two affine yields**, every hypothesis discharged. The finaliser is
 `free : Ref 1 ⊸ 1`. -/
@@ -344,7 +347,7 @@ theorem spans_two_affine_yields (δ : LSub) (l : BoCa.Loc) (v : Val) (ls : List 
   refine withborR_spans_yields_cC (Δ := LifeCtx.empty) (x := 0) hδ (by decide)
     (fun y u h => by simp [LifeCtx.empty, LifeCtx.find?, Lifetime.assocFind] at h) hβ
     (by simp [VFree]) (by simp [VFree]) (βP := ⊤) ?_ (by decide) d_nfEx (by decide) ?_
-    [yieldAff] ?_ (fun o ho => by simp at ho; subst ho; rfl) yieldAff
+    [yieldAff] (by decide) ?_ (fun o ho => by simp at ho; subst ho; rfl) yieldAff
     (by simp [Row.find, yieldAff]) rfl ys
     (by simp [ys]; decide) ?_ l v ls
   · intro ls w σ h
