@@ -582,6 +582,289 @@ def tick_program(seed):
     return "\n".join(L) + "\n", (ans + cell) % M32
 
 
+# REIFY=1 (round 4): W-tick lends whose computation `reify_k` makes a first-class loop value
+# (`bc/reify/mk.py` builds the pieces). A loop owns a fresh cell lent `mut` (turns add through the
+# view; some turns run `inner`, a nested W-tick lend whose tick is a stop of the loop) or `imm`
+# (turns read through it); its turns may `await`. The consumer observes it a random number of
+# times, directly (some of it inside a lend of another cell, the loop stored in a cell there
+# first), through `drive` (a `Div` loop of its own, with fuel), or as a task the handler stores,
+# which `main` steps a random number of times and then cancels or runs to the end, a second
+# loop observed between steps; the consumer's own `await`s hold the loop, under a finaliser that
+# closes it or under none (the loop's derived destructor).
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "bc", "reify"))
+
+RSTATS = {k: 0 for k in ['programs', 'mut', 'imm', 'inner', 'aw', 'direct', 'drive', 'task',
+                         'nexts', 'stops', 'closes', 'dones', 'cancels', 'cancel_in_loop',
+                         'stored', 'in_lend', 'second', 'cons_awaits', 'derived_drop',
+                         'derived_drop_cancelled']}
+
+
+class LoopSim:
+    """The loop's observable behaviour: its first segment, *next* and *close*."""
+
+    def __init__(self, kv, init, inc, lim, aw, inner):
+        self.kv, self.inc, self.lim, self.aw, self.inner = kv, inc, lim, aw, inner
+        self.cell = init
+        self.j = 1
+        self.pos = None
+        self.awaits = 0
+        self.turn()
+
+    def turn(self):
+        if self.inner:
+            self.pos = 'inner'
+            RSTATS['stops'] += 1
+            return
+        self.finish_turn(self.inc)
+
+    def finish_turn(self, add):
+        if self.kv:
+            r = (self.cell + self.j) % M32
+        else:
+            self.cell = (self.cell + add) % M32
+            r = self.cell
+        if self.aw:
+            self.awaits += 1
+        if (self.j >= self.lim) if self.kv else (r >= self.lim):
+            self.pos = 'done'
+            self.r = r
+        else:
+            self.j += 1
+            self.pos = 'back'
+            RSTATS['stops'] += 1
+
+    def next(self):
+        if self.pos == 'done':
+            return True
+        RSTATS['nexts'] += 1
+        if self.pos == 'inner':
+            self.finish_turn(8 + self.inc)
+        else:
+            self.turn()
+        return self.pos == 'done'
+
+    def close(self):
+        """The residual's answer."""
+        RSTATS['closes'] += 1
+        if self.pos == 'inner':
+            self.finish_turn(2 + self.inc)
+        if self.pos == 'done':
+            return self.r
+        return (1000 + self.j) % M32 if self.kv else self.cell
+
+
+def reify_program(seed):
+    import mk
+    r = random.Random(seed)
+    kv = r.random() < 0.35
+    inner = (not kv) and r.random() < 0.3
+    aw = r.random() < 0.5
+    mode = r.choice(['direct', 'direct', 'drive', 'task', 'task'])
+    init = r.randint(0, 9)
+    inc = 1 if inner else r.randint(1, 4)
+    lim = r.randint(1, 6) if kv else init + r.randint(1, 6) * (9 if inner else inc)
+    mark = r.randint(50, 99) if (aw and not kv and r.random() < 0.5) else None
+    RSTATS['programs'] += 1
+    RSTATS['imm' if kv else 'mut'] += 1
+    RSTATS['inner'] += inner
+    RSTATS['aw'] += aw
+    RSTATS[mode] += 1
+    lend = mk.lend_imm("x", lim, aw) if kv else mk.lend_mut("x", inc, lim, aw, mark=mark,
+                                                             inner="inner" if inner else None)
+    L = [f"-- Stress (round 4, REIFY=1, seed {seed}): W-tick under `reify`, generated; see gen.py.",
+         mk.PRE]
+    if inner:
+        L.append(mk.INNER)
+    L.append(mk.mk_def("mk", init, lend, aw))
+    sim = LoopSim(kv, init, inc, lim, aw, inner)
+    LT = mk.loopt(aw)
+    fin = mk.fin
+
+    def done_ans(scale):
+        return (sim.r * scale + sim.cell) % M32
+
+    if mode == 'drive':
+        fuel = r.randint(0, 6)
+        L.append(mk.drive_def(aw))
+        body = mk.drive_main(aw, fuel)
+        # `drive`: next until done, its ticks answered next while fuel lasts, then close.
+        while True:
+            if sim.next():
+                ans = done_ans(1000)
+                RSTATS['dones'] += 1
+                break
+            if fuel > 0:
+                fuel -= 1
+                continue
+            v = sim.close()
+            ans = (v * 100 + sim.cell) % M32
+            break
+        if aw:
+            body = body.replace("main : F i32 =\n", "main : F i32 =\n  " + mk.aw_now("", "  ")[:-1] + "\n", 1)
+            body = body.rstrip("\n") + ")\n"
+        L.append(body)
+        return "\n".join(L), ans
+
+    if mode == 'direct':
+        n = r.randint(0, 5)
+        lend_at = r.randint(0, n) if (not aw and r.random() < 0.4) else None
+        out, ind, ans, closed = [], "  ", None, False
+        out.append("g <- return (unbang mk); z <- return (); l0 <- force g z;")
+        cur, depth, depth_in = "l0", 0, 0
+        in_lend = False
+        for k in range(n + 1):
+            if lend_at == k and not in_lend:
+                in_lend = True
+                RSTATS['in_lend'] += 1
+                stored = r.random() < 0.5
+                if stored:
+                    RSTATS['stored'] += 1
+                    out.append(f"s <- return (alloc[{LT}] {cur});")
+                out.append("d <- return (alloc[i32] i32[0]);")
+                out.append("r <- return (withbor2['y, top, i32, i32] d (thunkv Fun 'y < dom. return (thunkv fun (m : mut 'y i32) ->")
+                if stored:
+                    out.append(f"  ls <- return (free[{LT}] s);")
+                    cur = "ls"
+                out.append("  " + mk.setm("y", "i32[3]"))
+            if k == n:
+                break
+            if sim.pos == 'done':
+                break
+            o = f"o{k}"
+            out.append(("  " if in_lend else "") + f"{o} <- (nu_out (force {cur})).1;")
+            d = sim.next()
+            nxt = f"l{k + 1}"
+            pre = "  " if in_lend else ""
+            if d:
+                RSTATS['dones'] += 1
+                ans = done_ans(1000)
+                res = f"let (c, v) = p; w <- return (free[i32] c); " + (
+                    "return (boxed['y] (plus (mul (v, i32[1000]), w)))" if in_lend else
+                    "return (plus (mul (v, i32[1000]), w))")
+                out.append(pre + f"case {o} {{ inl p -> {res} | inr {nxt} -> q <- (nu_out (force {nxt})).2; let (c, v) = q; w <- return (free[i32] c); return " + ("(boxed['y] i32[0])" if in_lend else "i32[0]") + " }")
+                closed = True
+                break
+            out.append(pre + f"case {o} {{ inl p -> let (c, v) = p; w <- return (free[i32] c); return " + ("(boxed['y] i32[1])" if in_lend else "i32[1]") + f" | inr {nxt} ->")
+            if in_lend:
+                depth_in += 1
+            else:
+                depth += 1
+            cur = nxt
+        if not closed:
+            v = sim.close()
+            ans = (v * 100 + sim.cell) % M32
+            pre = "  " if in_lend else ""
+            out.append(pre + f"q <- (nu_out (force {cur})).2; let (c, v) = q; w <- return (free[i32] c); return " +
+                       ("(boxed['y] (plus (mul (v, i32[100]), w)))" if in_lend else "(plus (mul (v, i32[100]), w))"))
+        if in_lend:
+            out.append("  " + "}" * depth_in)
+            out.append("  )));")
+            out.append("let (d, x) = r; e <- return (free[i32] d); return (plus (x, e))")
+            ans = (ans + 3) % M32
+        out.append("}" * depth)
+        body = "\n  ".join(out)
+        main = "main : F i32 =\n  " + (mk.aw_now("  " + body.replace("\n  ", "\n    "), "  ") if aw else body) + "\n"
+        L.append(main)
+        return "\n".join(L), ans
+
+    # task: the consumer `cons` (at `await`), `main` steps it.
+    n = r.randint(0, 4)
+    # A loop at `await` cannot be closed by a finaliser (its close performs `await`), and has no
+    # derived destructor: the consumer does not hold it across an `await` of its own.
+    cons_aw = [(not aw) and r.random() < 0.5 for _ in range(n + 1)]
+    # A loop at a row has no derived destructor (its close performs the row): a finaliser then.
+    finz = r.random() < 0.6
+    if not finz:
+        RSTATS['derived_drop'] += 1
+    C = ["def cons : !U (1 -o F[" + mk.AW + "] i32) =", "  !thunkv fun (z : 1) ->",
+         "    g <- return (unbang mk); z1 <- return (); l0 <- force g z1;"]
+    awaits = sim.awaits
+    cur, depth, ans, closed = "l0", 0, None, False
+    for k in range(n + 1):
+        if cons_aw[k] and sim.pos != 'done':
+            RSTATS['cons_awaits'] += 1
+            awaits += 1
+            fz = f" unwind ({mk.CLOSE_UNIT(cur)})" if finz else ""
+            C.append(f"    u{k} <- perform[1.0] (){fz}; let () = u{k};")
+        if k == n or sim.pos == 'done':
+            break
+        before = sim.awaits
+        d = sim.next()
+        awaits += sim.awaits - before
+        nxt = f"l{k + 1}"
+        C.append(f"    o{k} <- (nu_out (force {cur})).1;")
+        if d:
+            RSTATS['dones'] += 1
+            ans = done_ans(1000)
+            C.append(f"    case o{k} {{ inl p -> {fin('p')} | inr {nxt} -> {mk.close_fin(nxt, '7')} }}")
+            closed = True
+            break
+        C.append(f"    case o{k} {{ inl p -> {fin('p', '7')} | inr {nxt} ->")
+        depth += 1
+        cur = nxt
+    if not closed:
+        if sim.pos == 'done':
+            ans = done_ans(100)
+            RSTATS['dones'] += 1
+        else:
+            before = sim.awaits
+            ans = (sim.close() * 100 + sim.cell) % M32
+            awaits += sim.awaits - before
+        C.append(f"    {mk.close_fin(cur, '100')}")
+    C.append("    " + "}" * depth)
+    L.append("\n".join(C) + "\n")
+    # `main`'s plan: P steps then cancel, or awaits + 1 steps to the end.
+    P = r.randint(0, awaits + 1)
+    second = r.random() < 0.5
+    if second:
+        RSTATS['second'] += 1
+        L.append(mk.mk_def("mkd", 100, mk.lend_mut("x", 10, 100000, False), False))
+    M = ["main : F i32 =", "  tk0 <- " + mk.task_h("    cg <- return (unbang cons); z <- return (); force cg z") + ";"]
+    sec = 0
+    if second:
+        M.append("  g2 <- return (unbang mkd); z2 <- return (); m0 <- force g2 z2;")
+        sec_cur = "m0"
+    CAN = 9
+
+    def end_second(val):
+        if not second:
+            return f"return {val}"
+        return f"q8 <- (nu_out (force {sec_cur})).2; let (c8, v8) = q8; w8 <- return (free[i32] c8); return (plus ({val}, plus (v8, w8)))"
+    steps = P if P <= awaits else awaits + 1
+    depth = 0
+    for i in range(steps):
+        tk, tn = f"tk{i}", f"tk{i + 1}"
+        if second and r.random() < 0.6:
+            sec += 1
+            mo, mn = f"mo{i}", f"m{i + 1}"
+            M.append(f"  {mo} <- (nu_out (force {sec_cur})).1;")
+            M.append(f"  case {mo} {{ inl p -> c9 <- (nu_out (force {tk})).2; let () = c9; {fin('p')} | inr {mn} ->")
+            depth += 1
+            sec_cur = mn
+        M.append(f"  s{i} <- (nu_out (force {tk})).1;")
+        last = (P > awaits and i == steps - 1)
+        if last:
+            M.append(f"  case s{i} {{ inl v -> {end_second('v')} | inr {tn} -> c9 <- (nu_out (force {tn})).2; let () = c9; {end_second('i32[0]')} }}")
+        else:
+            M.append(f"  case s{i} {{ inl v -> {end_second('v')} | inr {tn} ->")
+            depth += 1
+    if P <= awaits:
+        RSTATS['cancels'] += 1
+        # The consumer does not `await` itself when the loop does: a cancel before its end stops
+        # inside a turn of the loop (or of its close), the lend open.
+        RSTATS['cancel_in_loop'] += aw and P < awaits
+        RSTATS['derived_drop_cancelled'] += (not finz) and (not aw) and P < awaits and any(cons_aw)
+        M.append(f"  c9 <- (nu_out (force tk{steps})).2; let () = c9; {end_second(str(CAN))}")
+        total = CAN
+    else:
+        total = ans
+    M.append("  " + "}" * depth)
+    if second:
+        total = (total + 2 * (100 + 10 * (1 + sec))) % M32
+    L.append("\n".join(M) + "\n")
+    return "\n".join(L), total
+
 def main():
     outdir, first, count = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
     os.makedirs(outdir, exist_ok=True)
@@ -590,6 +873,8 @@ def main():
             src, total = nursery_program(s)
         elif os.environ.get("TICK") == "1":
             src, total = tick_program(s)
+        elif os.environ.get("REIFY") == "1":
+            src, total = reify_program(s)
         else:
             src, total = program(s, os.environ.get("WIDE") == "1")
         with open(os.path.join(outdir, f"s{s:04d}.bc"), "w") as f:
@@ -598,6 +883,8 @@ def main():
             f.write(f"i32[{total}]\nlive 0\n")
     if os.environ.get("NURSERY") == "1":
         print("nursery stats:", STATS)
+    if os.environ.get("REIFY") == "1":
+        print("reify stats:", RSTATS)
 
 
 if __name__ == "__main__":

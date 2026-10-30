@@ -1,0 +1,50 @@
+-- P2's kernel shape (round 4): `echo<'a>(t)` reads its borrowed `t : imm 'a i32` at every step of
+-- a `Div` loop made a first-class loop value by `reify_k`, which the caller observes step by step
+-- (`drive`-like, three *next*s) and closes. The loop holds the view `t`, not a lend: no relaxed
+-- rule is used (the assurance is `unconditional`).
+--
+-- Answer: i32[39]: step j answers 7 + j and the loop finishes at j = 4 (11) on the third *next*;
+-- 11 + 7 * 3 read through the view, plus the cell's 7.
+fn rd<'r>(k: imm 'r i32) -> i32 = *k
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+def mul : i32 * i32 => i32 = unbang host[mul32]
+def lt : i32 * i32 => 1 + 1 = unbang host[lt_s32]
+def eq : i32 * i32 => 1 + 1 = unbang host[eq32]
+
+
+def echo : !U (forall 'a < top. imm 'a i32 -o F U (nu X. F (i32 + U X) & F i32)) =
+  !thunkv Fun 'a < top. fun (t : imm 'a i32) ->
+    th <- return ((thunkv fun (u0 : 1) ->
+        st <- return ((!thunkv fun (sq : imm 'a i32 * i32) ->
+          < let (v, j) = sq;
+            cp <- return (copy['a, i32] v); let (v1, v) = cp;
+            rv <- return ((unbang rd) ['a] v1);
+            r <- return (plus (mul (rv, i32[1]), j));
+            g <- return (lt (j, i32[4]));
+            case g { inl ge -> let () = forget_imm['a, i32] v; return (inl r) | inr lo -> return (inr (v, plus (j, i32[1]))) },
+            let (v, j) = sq; let () = forget_imm['a, i32] v; return (plus (i32[1000], j)) >) :
+            !U (imm 'a i32 * i32 -o F[4294967295.0 lin 1 ~> 1 + 1] (i32 + imm 'a i32 * i32) & F[4294967295.0 lin 1 ~> 1 + 1] i32));
+          f <- return (unbang div_iterate[[4294967295.0 lin 1 ~> 1 + 1], imm 'a i32 * i32, i32, i32]);
+          a0 <- return (st, (t, i32[1]));
+          force f a0) : U (1 -o F[4294967295.0 lin 1 ~> 1 + 1] (i32 + i32)));
+    rf <- return (unbang reify_k[[], i32]);
+    force rf th
+
+main : F i32 =
+  c <- return (alloc[i32] i32[7]);
+  r <- return (withbor1['y, i32, i32] c (thunkv Fun 'y < dom. return (thunkv fun (k : imm 'y i32) ->
+    kk <- return (copy['y, i32] k); let (k1, k) = kk;
+    e <- return (unbang echo);
+    l0 <- ((force e) ['y]) k1;
+    o1 <- (nu_out (force l0)).1;
+    a <- (case o1 { inl b -> return b | inr l1 ->
+           o2 <- (nu_out (force l1)).1;
+           case o2 { inl b -> return b | inr l2 ->
+             o3 <- (nu_out (force l2)).1;
+             case o3 { inl b -> return b | inr l3 -> (nu_out (force l3)).2 } } });
+    y <- return ((unbang rd) ['y] k);
+    return (boxed['y] (plus (a, mul (y, i32[3])))))));
+  let (c, v) = r;
+  w <- return (free[i32] c);
+  return (plus (v, w))
