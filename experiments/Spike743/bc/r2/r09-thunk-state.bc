@@ -1,0 +1,71 @@
+-- A3 (PinLoop, `thunk_not_outlives`): R2's state may hold a `U` (PinLoop has no `NoThunkT` on
+-- the state). r01's loop, its state `(U (F i32) + 1) * i32` holding a thunk that captures the
+-- previous observation's view and reads it when forced. Each next step forces the old thunk
+-- (a stale view read inside a closure) and stores a new one; the close step forces the last.
+-- Answer: as r01, 63.
+def add : i32 * i32 => i32 = unbang host[add32]
+
+type ULp = U (loop (ref i32 * 1) (ref i32 * i32))
+
+main : F i32 =
+  r <- return (alloc[i32] i32[7]);
+  l : ULp <- return (thunkv nu_in <
+    (nu_out (lend_loop_r['x, top, i32, 1, []](r, q) return (
+    (thunkv
+      let (v, s) = q;
+      let (old, acc) = s;
+      w <- return (copy['x, i32] v);
+      let (v1, v2) = w;
+      a <- return (withload['x, 'z, i32, i32] v1 (thunkv Fun 'z < dom. return (thunkv fun (y : i32) ->
+             return (boxed['z] y))));
+      b <- (case old {
+        inl o -> force o
+      | inr u -> let () = u; return i32[0] });
+      return (inr (inl (thunk return (withload['x, 'z, i32, i32] v2 (thunkv Fun 'z < dom. return (thunkv fun (y : i32) ->
+             return (boxed['z] y))))), add (acc, add (a, b))))),
+    ((thunkv ((
+      let (v, s) = q;
+      let (old, acc) = s;
+      a <- return (withload['x, 'z, i32, i32] v (thunkv Fun 'z < dom. return (thunkv fun (y : i32) ->
+             return (boxed['z] y))));
+      b <- (case old {
+        inl o -> force o
+      | inr u -> let () = u; return i32[0] });
+      return (add (acc, add (a, b)))) : F i32)),
+     ((inr (), i32[0]) : (U (F i32) + 1) * i32))))).1,
+    (nu_out (lend_loop_r['x, top, i32, 1, []](r, q) return (
+    (thunkv
+      let (v, s) = q;
+      let (old, acc) = s;
+      w <- return (copy['x, i32] v);
+      let (v1, v2) = w;
+      a <- return (withload['x, 'z, i32, i32] v1 (thunkv Fun 'z < dom. return (thunkv fun (y : i32) ->
+             return (boxed['z] y))));
+      b <- (case old {
+        inl o -> force o
+      | inr u -> let () = u; return i32[0] });
+      return (inr (inl (thunk return (withload['x, 'z, i32, i32] v2 (thunkv Fun 'z < dom. return (thunkv fun (y : i32) ->
+             return (boxed['z] y))))), add (acc, add (a, b))))),
+    ((thunkv ((
+      let (v, s) = q;
+      let (old, acc) = s;
+      a <- return (withload['x, 'z, i32, i32] v (thunkv Fun 'z < dom. return (thunkv fun (y : i32) ->
+             return (boxed['z] y))));
+      b <- (case old {
+        inl o -> force o
+      | inr u -> let () = u; return i32[0] });
+      return (add (acc, add (a, b)))) : F i32)),
+     ((inr (), i32[0]) : (U (F i32) + 1) * i32))))).2 >);
+  o1 <- (nu_out (force l)).1;
+  case o1 {
+    inl p -> let (r2, u) = p; let () = u; x <- return (free[i32] r2); return i32[0]
+  | inr l2 -> o2 <- (nu_out (force l2)).1;
+    case o2 {
+      inl p -> let (r2, u) = p; let () = u; x <- return (free[i32] r2); return i32[0]
+    | inr l3 -> o3 <- (nu_out (force l3)).1;
+      case o3 {
+        inl p -> let (r2, u) = p; let () = u; x <- return (free[i32] r2); return i32[0]
+      | inr l4 -> o4 <- (nu_out (force l4)).1;
+        case o4 {
+          inl p -> let (r2, u) = p; let () = u; x <- return (free[i32] r2); return i32[0]
+        | inr l5 -> q5 <- (nu_out (force l5)).2; let (r2, t) = q5; x <- return (free[i32] r2); return t } } } }

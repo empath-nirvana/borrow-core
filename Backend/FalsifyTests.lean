@@ -134,6 +134,21 @@ def r2AfterFinish : Expr :=
       (letE (loadE (.var 0)) (.seq (letE (freeE (.var 2)) .unit) (.var 0)))))
     (lit 0)
 
+/-- R2's loop over `r = alloc 5` whose next step stores the view in an outer cell `c` and goes
+on (`N = let (v, s) = q; c := v; inr s`), which no typed step can (`N` is closed but for `q`):
+between the two observations the view is read out of `c`. Under R2's rule the tag is parked
+there, live and suspended. -/
+def r2Between : Expr :=
+  letE (allocE (lit 0)) <|
+  letE (allocE (lit 5)) <|
+  letE (r2Loop (.letpair (.var 0) (.seq (storeE (.var 5) (.var 1)) (.inj₂ (.var 0)))) (lit 0)
+    .unit) <|
+  .case (.app (.var 0) (.inj₁ .unit))
+    (lit 0)
+    (letE (loadE (loadE (.var 3))) <|
+      .letpair (.app (.var 1) (.inj₂ .unit)) <|
+      .seq (letE (freeE (.var 1)) .unit) (.seq (letE (freeE (.var 6)) .unit) (.var 2)))
+
 /-- Each negative test: its name, its term, the mode that must report it, a part of the report,
 and what `Support`'s interpreter answers. -/
 def negatives : List (String × Expr × String × String × String) :=
@@ -149,7 +164,8 @@ def negatives : List (String × Expr × String × String × String) :=
    ("neg-active-at-boundary", activeAtBoundary, "tags", "active at an observation boundary",
       "source interpreter: stuck"),
    ("neg-r2-after-close", r2AfterClose, "tags", "after its lend ended", "i32[9]"),
-   ("neg-r2-after-finish", r2AfterFinish, "tags", "after its lend ended", "i32[9]")]
+   ("neg-r2-after-finish", r2AfterFinish, "tags", "after its lend ended", "i32[9]"),
+   ("neg-r2-between", r2Between, "tags", "while its lend is suspended", "i32[5]")]
 
 /-- The negative tests that are loops: each is driven as a `main` that returns a loop is, one
 observation at a time (`Falsify.interpLoop`, `Source.interpLoop`). -/

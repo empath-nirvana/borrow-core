@@ -526,7 +526,9 @@ reusing run is the new `--alloc least` (`Alloc.leastFree`, as `runM`).
     a finish leaves its tag live (a lend that never ended). Every other check is unchanged.
   The negative tests `neg-r2-after-close` (a view handed out of the close step and read after
   the owner has been written) and `neg-r2-after-finish` (a view handed out with the owner when
-  `next` finishes, read after the owner is written) must still trip.
+  `next` finishes, read after the owner is written) must still trip, and `neg-r2-between` (a
+  view stored by `next` in an outer cell and read between two observations) must trip at its
+  parked tag.
 - *Observation boundaries.* A `main` that returns a loop is driven one observation at a time. At
   each boundary between observations (and before the first) every live tag must be *suspended*:
   a resuming operation crossed its frame and the frame has not been on the running path since, so

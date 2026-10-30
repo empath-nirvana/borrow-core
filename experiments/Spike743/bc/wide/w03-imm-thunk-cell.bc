@@ -1,0 +1,40 @@
+-- B3 (W-imm attack, `thunk_not_outlives`): W-imm's premise scopes the lent type (`VScoped`), not
+-- `VOutlivesLe`, so a cell holding a task (a boxed thunk) may be lent `imm` across `await`s; the
+-- view is copied and both copies held across the stops, then the cell is freed and its task run
+-- to the end. Outer tasks cancelled at each stop.
+-- Answer: 5 + 7 * 3 = 26 for the task that finishes; -1 for the ones cancelled at a stop.
+include async
+
+fn done(v: i32) -> Task[i32] = with spawn { v }
+fn step(t: Task[i32]) -> Task[i32] = match resume(t) { inl v -> done(v) | inr t2 -> t2 }
+fn fin(t: Task[i32]) -> i32 = match resume(t) { inl v -> v | inr t2 -> cancel(t2); 0 - 1 }
+
+fn inner(n: i32) -> i32 with Async =
+  await();
+  n * 3
+
+fn worker(t0: Task[i32]) -> i32 with Async =
+  let c = alloc(t0);
+  let v = borrow imm c { 'q, r ->
+    let (r1, r2) = copy['q, Task[i32]] r;
+    await();
+    let p = (r1, 5);
+    await();
+    let (r1, k) = p;
+    k
+  };
+  let t = free(c);
+  v + fin(step(t))
+
+main -> i32 * (i32 * i32) =
+  let a = with spawn { inner(7) };
+  let b = with spawn { inner(8) };
+  let d = with spawn { inner(9) };
+  let t0 = with spawn { worker(a) };
+  let t1 = with spawn { worker(b) };
+  let t2 = with spawn { worker(d) };
+  cancel(t1);
+  let t2 = step(t2);
+  cancel(t2);
+  let t0 = step(step(t0));
+  (fin(t0), (0, 0))
