@@ -278,10 +278,11 @@ theorem effSub {p : Pins} {s : CRow} {t : TExpr} {S S' : CRow} {A : CVTy}
 /-- `[perform]` reads its row. -/
 theorem effPerform {p : Pins} {s : CRow} {t : TExpr} {S : CRow} {o : COpSig}
     (hf : BoCa.Fig16.LogRel.Core.Row.find S o.n o.i = some o) (hna : o.abort = false)
-    (h : TTied p s Δ Γ t (.val o.A)) :
+    (hac : o.awaitB = false) (h : TTied p s Δ Γ t (.val o.A)) :
     TTied p (S ∪ s) Δ Γ (.effPerform i (.comp (effOf S o.B)) S o t) (.comp (effOf S o.B)) :=
-  ⟨fun hn Ξ hΞ => .effPerform (rowAt_of_union_left hΞ) hf hna (h.1 hn Ξ (sigsAt_union_right hΞ)),
-    .effPerform hf hna h.2⟩
+  ⟨fun hn Ξ hΞ => .effPerform (rowAt_of_union_left hΞ) hf hna hac
+      (h.1 hn Ξ (sigsAt_union_right hΞ)),
+    .effPerform hf hna hac h.2⟩
 
 /-- `[raise]` reads its row. -/
 theorem effRaise {p : Pins} {s : CRow} {t : TExpr} {S : CRow} {o : COpSig} {B : CVTy}
@@ -313,7 +314,7 @@ theorem effThenA (u : Masks) {p₁ p₂ p₃ : Pins} {s₁ s₂ s₃ : CRow} {Γ
       (.effThen i (.comp (effOf S B)) A B S S [] u tM tN tD) (.comp (effOf S B)) :=
   have hfin : ∀ n k o o', BoCa.Fig16.LogRel.Core.Row.find S n k = some o →
       BoCa.Fig16.LogRel.Core.Row.find S n k = some o' →
-      BoCa.Fig16.LogRel.Core.capB o.q o.B = true →
+      o.finRead = true →
       BoCa.Fig16.LogRel.Core.ThenLe o.fin [] o'.fin :=
     fun _ _ o _ hf hf' _ => by rw [hf] at hf'; cases hf'; exact BoCa.Fig16.LogRel.Core.ThenLe.nil o.fin
   have hP : BoCa.Fig16.LogRel.Core.Row.UnrD [] → S.PendPers :=

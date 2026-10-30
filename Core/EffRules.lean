@@ -950,6 +950,34 @@ theorem ext_empty' (ls ls' : List SRec) : Ext ls ls' PMap.empty :=
 /-- The payload expression `(n, (i, V))`. -/
 def opArgE (n i : UInt32) (V : Expr) : Expr := .pair (.val (Val.i32 n)) (.pair (.val (Val.i32 i)) V)
 
+/-- `B` is `1 ⊕ 1`. -/
+def VTy.isNext : VTy → Bool
+  | .sum .unit .unit => true
+  | _ => false
+
+theorem VTy.eq_of_isNext {B : VTy} (h : B.isNext = true) : B = .sum .unit .unit := by
+  unfold VTy.isNext at h
+  split at h
+  · rfl
+  · cases h
+
+/-- **A cancellable operation** (`[await-c]`): the operation `0` of a name other than `Div`'s,
+linear, answering `1 ⊕ 1` ("go on" / "cancelled"). Its `fin` is its cancel row: what the
+finalisers that a cancel at it runs may perform (`[then]`'s `hfin`). The kernel has no other
+marker, so the shape decides.  `[spec §29a]` -/
+def OpSig.awaitB (o : OpSig) : Bool :=
+  o.q == .lin && o.i == 0 && o.B.isNext && o.n != BoCa.divEff
+
+/-- An entry whose cancel row typing reads: a capturable entry (§27), or a cancellable one
+(`OpSig.awaitB`), whose cancel is a resume with `inr ()`.  `[spec §27, §29a]` -/
+def OpSig.finRead (o : OpSig) : Bool := capB o.q o.B || o.awaitB
+
+/-- `await_n ≜ perform_n (0, ()) to r. case r {inl u. return u | inr u. raise_n (1, u)}`: the
+only form in which a cancellable operation is performed (`[await-c]`).  `[spec §29a]` -/
+def awaitE (n : UInt32) : Expr :=
+  .app (.val (.lam (.case (.var 0) (.var 0) (raiseE (opArgE n 1 (.var 0))))))
+    (performE (opArgE n 0 .unit))
+
 /-- A row's names are not the reserved `0`. -/
 def Row.NZ (S : Row) : Prop := ∀ o ∈ S, o.n ≠ 0
 

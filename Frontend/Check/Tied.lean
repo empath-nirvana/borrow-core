@@ -217,10 +217,10 @@ theorem effSub {s : CRow} {e : BoCa.Expr} {S S' : CRow} {A : CVTy}
 /-- `[perform]` reads its row. -/
 theorem effPerform {s : CRow} {V : BoCa.Expr} {S : CRow} {o : COpSig}
     (hf : BoCa.Fig16.LogRel.Core.Row.find S o.n o.i = some o) (hna : o.abort = false)
-    (h : TiedAt s Δ Γ V (.val o.A)) :
+    (hac : o.awaitB = false) (h : TiedAt s Δ Γ V (.val o.A)) :
     TiedAt (S ∪ s) Δ Γ (BoCa.BoLo.performE (BoCa.Fig16.LogRel.Core.opArgE o.n o.i V))
       (.comp (effOf S o.B)) :=
-  fun Ξ hΞ => .effPerform (rowAt_of_union_left hΞ) hf hna (h Ξ (sigsAt_union_right hΞ))
+  fun Ξ hΞ => .effPerform (rowAt_of_union_left hΞ) hf hna hac (h Ξ (sigsAt_union_right hΞ))
 
 /-- `[raise]` reads its row. -/
 theorem effRaise {s : CRow} {V : BoCa.Expr} {S : CRow} {o : COpSig} {B : CVTy}
@@ -549,11 +549,11 @@ theorem effSub {p : Pins} {s : CRow} {e : BoCa.Expr} {S S' : CRow} {A : CVTy}
 /-- `[perform]` reads its row. -/
 theorem effPerform {p : Pins} {s : CRow} {V : BoCa.Expr} {S : CRow} {o : COpSig}
     (hf : BoCa.Fig16.LogRel.Core.Row.find S o.n o.i = some o) (hna : o.abort = false)
-    (h : TiedDer p s Δ Γ V (.val o.A)) :
+    (hac : o.awaitB = false) (h : TiedDer p s Δ Γ V (.val o.A)) :
     TiedDer p (S ∪ s) Δ Γ (BoCa.BoLo.performE (BoCa.Fig16.LogRel.Core.opArgE o.n o.i V))
       (.comp (effOf S o.B)) :=
-  ⟨fun hn => TiedAt.effPerform hf hna (h.1 hn),
-    CDerivesP.effPerform hf hna h.2⟩
+  ⟨fun hn => TiedAt.effPerform hf hna hac (h.1 hn),
+    CDerivesP.effPerform hf hna hac h.2⟩
 
 /-- `[raise]` reads its row. -/
 theorem effRaise {p : Pins} {s : CRow} {V : BoCa.Expr} {S : CRow} {o : COpSig} {B : CVTy}

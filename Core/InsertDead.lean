@@ -116,6 +116,17 @@ theorem deadP_prepend (hd : Ctx.Dead Γd) {Γ : Ctx VTy} (h : Ctx.DeadP Γ) :
   | nil => exact h
   | cons _ ih => exact .cons ih
 
+theorem dead_insert (hd : Ctx.Dead Γd) : ∀ (Γa : Ctx VTy) {Γb : Ctx VTy},
+    Ctx.Dead (Γa ++ Γb) → Ctx.Dead (Γa ++ Γd ++ Γb)
+  | [], _, h => by
+      induction hd with
+      | nil => exact h
+      | cons _ ih => exact .cons ih
+  | _ :: Γa, _, h => by
+      rw [List.cons_append] at h
+      cases h with
+      | cons h => exact .cons (dead_insert hd Γa h)
+
 theorem deadP_insert (hd : Ctx.Dead Γd) : ∀ (Γa : Ctx VTy) {Γb : Ctx VTy},
     Ctx.DeadP (Γa ++ Γb) → Ctx.DeadP (Γa ++ Γd ++ Γb)
   | [], _, h => deadP_prepend hd h
@@ -491,7 +502,12 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       rw [shift_closed0 (unfoldV_closed C)]
       exact .unfoldN C S hC (deadP_insert hd Γa hΓ)
   | effSub hle _ ih => intro Γa Γb hΓ; exact .effSub hle (ih Γa Γb hΓ)
-  | effPerform hf hna _ ih => intro Γa Γb hΓ; exact .effPerform hf hna (ih Γa Γb hΓ)
+  | effPerform hf hna hac _ ih => intro Γa Γb hΓ; exact .effPerform hf hna hac (ih Γa Γb hΓ)
+  | effAwait hΓ hfa ha haA hfc hc hcA =>
+      intro Γa Γb hΓ'; subst hΓ'
+      rw [shift_closed0 (e := awaitE _) (by simp [awaitE, closedAt, opArgE, BoCa.BoLo.performE,
+        BoCa.BoLo.raiseE, Expr.val, Val.prim, Val.i32, Val.lam])]
+      exact .effAwait (dead_insert hd Γa hΓ) hfa ha haA hfc hc hcA
   | effRaise hf ha hdr _ ih => intro Γa Γb hΓ; exact .effRaise hf ha hdr (ih Γa Γb hΓ)
   | effLet hs hW hU _ _ ihM ihN =>
       intro Γa Γb hΓ; subst hΓ
@@ -851,7 +867,12 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
       rw [shift_closed0 (unfoldV_closed C)]
       exact .unfoldN C S hC (deadP_insert hd Γa hΓ)
   | effSub hle _ ih => intro Γa Γb hΓ; exact .effSub hle (ih Γa Γb hΓ)
-  | effPerform hAt hf hna _ ih => intro Γa Γb hΓ; exact .effPerform hAt hf hna (ih Γa Γb hΓ)
+  | effPerform hAt hf hna hac _ ih => intro Γa Γb hΓ; exact .effPerform hAt hf hna hac (ih Γa Γb hΓ)
+  | effAwait hAt hΓ hfa ha haA hfc hc hcA =>
+      intro Γa Γb hΓ'; subst hΓ'
+      rw [shift_closed0 (e := awaitE _) (by simp [awaitE, closedAt, opArgE, BoCa.BoLo.performE,
+        BoCa.BoLo.raiseE, Expr.val, Val.prim, Val.i32, Val.lam])]
+      exact .effAwait hAt (dead_insert hd Γa hΓ) hfa ha haA hfc hc hcA
   | effRaise hAt hf ha hdr _ ih => intro Γa Γb hΓ; exact .effRaise hAt hf ha hdr (ih Γa Γb hΓ)
   | effLet hs hW hU _ _ ihM ihN =>
       intro Γa Γb hΓ; subst hΓ

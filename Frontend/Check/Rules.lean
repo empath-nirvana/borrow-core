@@ -525,9 +525,10 @@ def rEffSub {S S' : CRow} {A : CVTy} (hle : rowLeB S S' = true) (r : Res Δ T (.
 
 /-- `[perform]`: a non-abortive operation of the row, at its argument; it reads the row. -/
 def rPerform {S : CRow} {o : COpSig} (hf : BoCa.Fig16.LogRel.Core.Row.find S o.n o.i = some o)
-    (hna : o.abort = false) (r : Res Δ T (.val o.A)) : Res Δ T (.comp (effOf S o.B)) :=
+    (hna : o.abort = false) (hac : o.awaitB = false) (r : Res Δ T (.val o.A)) :
+    Res Δ T (.comp (effOf S o.B)) :=
   ⟨.effPerform i (.comp (effOf S o.B)) S o r.t, S ∪ r.sigs, r.pins,
-    r.F.map fun _ h => TTied.effPerform i hf hna h⟩
+    r.F.map fun _ h => TTied.effPerform i hf hna hac h⟩
 
 /-- The abortive rule (SPEC §19): an abortive operation of the row, at any answer `B`; its argument
 drops. It reads the row. -/

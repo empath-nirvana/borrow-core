@@ -42,6 +42,8 @@ theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
       exact hPin.stop _ _ _ _ _ _ _ _ hb hx hbx hΔx hT hB hBn hside hS hM1 hcb hdc ihd hM
   | lendLoopR hx hbx hΔx hA hB hR hBn hRn hsc hN1 hK1 hs0c hN hK hs0 _ _ _ =>
       exact hPin.loop _ _ _ _ _ _ _ _ _ hx hbx hΔx hA hB hR hBn hRn hsc hN1 hK1 hs0c hN hK hs0
+  | effThenDiv hs hNZ _ hU hMS hDS hfin hP hcap _ _ _ ihM ihN ihD =>
+      exact hPin.fin _ _ _ _ _ _ _ _ _ _ _ _ hs hNZ hU hMS hDS hfin hP hcap ihM ihN ihD
   | @nilDead _ _ _ j hΓ _ ih => cases j <;> exact semC_dead .nil hΓ ih
 
 /-- **Adequacy under `PinLaw`**: a closed `CDerivesP` computation of `F 1` runs from the empty

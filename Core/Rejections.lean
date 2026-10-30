@@ -195,7 +195,7 @@ theorem not_forget_kappa {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy}
   · cases hu
   · cases hu
   · cases hu
-  · rcases hX with hX | hX | ⟨Z, hX⟩ | ⟨Z, hX⟩ <;> simp [forget, Expr.val, Val.lam] at hX
+  · rcases hX with hX | hX | ⟨Z, hX⟩ | ⟨Z, hX⟩ | ⟨_, hX, -, -⟩ <;> simp [forget, Expr.val, Val.lam, unit'] at hX
 
 /-! ### The handler of the clause tuple `(cl, ())` -/
 
@@ -319,7 +319,7 @@ theorem alloc_row {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {T : VTy}
     exact (effOf_ne_amp _ _ _ _ he.symm).elim
   · cases hu
   · cases hu
-  · rcases hX with hX | hX | ⟨Z, hX⟩ | ⟨Z, hX⟩ <;> cases hX
+  · rcases hX with hX | hX | ⟨Z, hX⟩ | ⟨Z, hX⟩ | ⟨_, hX, -, -⟩ <;> cases hX
 
 /-- A view of a `Ref` is no `!`. -/
 theorem vview_ref_bang {A X : VTy} (h : VView (.ref A) (.bang X)) : False := by
@@ -398,7 +398,7 @@ theorem alloc_var_row {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {S : Row} {T : VTy
   · cases hu
   · cases hu
   · cases hu
-  · rcases hX with hX | hX | ⟨Z, hX⟩ | ⟨Z, hX⟩ <;> cases hX
+  · rcases hX with hX | hX | ⟨Z, hX⟩ | ⟨Z, hX⟩ | ⟨_, hX, -, -⟩ <;> cases hX
 
 /-- AT08's clause. -/
 abbrev at08Cl : Expr :=
@@ -516,7 +516,7 @@ theorem d_at08Once : CDerives LifeCtx.empty [] at08Once (.comp (.ret .unit)) := 
   refine .bind (.right .nil) (.ret (d_hrS (.cons .nil))) ?_
   exact .effHandle (S := []) (E := [(.lin, .unit, .unit)]) (n := 5) (A := .unit) (R := .unit)
     (.left (.left .nil)) (.left (.right .nil)) (.here (.cons .nil)) (.there (.here .nil))
-    (by decide) (by simp) (by simp) rfl (.effPerform (o := fooSig) rfl rfl (.unitI (by cdead)))
+    (by decide) (by simp) (by simp) rfl (.effPerform (o := fooSig) rfl rfl rfl (.unitI (by cdead)))
 
 /-- **AT08 with the copy used once runs**: every run, under every allocator, ends at `()` with the
 empty memory. -/
@@ -715,7 +715,7 @@ theorem at05_M {Δ : LifeCtx} {Γ : Ctx VTy} {W F : Expr} {j : Jdg}
   · cases hu
   · cases hu
   · rcases hc.w with rfl | rfl <;>
-      rcases hX with hX | hX | ⟨Z, hX⟩ | ⟨Z, hX⟩ <;> simp [withborUE, Expr.val, Val.lam] at hX
+      rcases hX with hX | hX | ⟨Z, hX⟩ | ⟨Z, hX⟩ | ⟨_, hX, -, -⟩ <;> simp [withborUE, Expr.val, Val.lam] at hX
 
 /-- **The callback is read at no unwinding callback type**: under `∀'x`, `λm. (m, m)` at `L ⊸ …`
 uses `m` on both sides of a split, so `L` is persistent, while it is a borrow. -/
@@ -796,7 +796,7 @@ theorem at05_core {Δ : LifeCtx} {Γ : Ctx VTy} {W F : Expr} {j : Jdg}
   · rcases hc.f with rfl | rfl <;> cases hu
   · rcases hc.f with rfl | rfl <;> cases hu
   · rcases hc.w with rfl | rfl <;>
-      rcases hX with hX | hX | ⟨Z, hX⟩ | ⟨Z, hX⟩ <;> simp [withborUE, Expr.val, Val.lam] at hX
+      rcases hX with hX | hX | ⟨Z, hX⟩ | ⟨Z, hX⟩ | ⟨_, hX, -, -⟩ <;> simp [withborUE, Expr.val, Val.lam] at hX
 
 /-- AT05's innermost term: `(c, r) ← w c f; (free c, r)`. -/
 abbrev at05N₃ (W F : Expr) : Expr :=

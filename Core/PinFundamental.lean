@@ -121,7 +121,8 @@ theorem CDerivesP.ofC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | nuOut a0 a1 ih0 => exact CDerivesP.nuOut a0 ih0
   | unfoldN a0 a1 a2 a3 => exact CDerivesP.unfoldN a0 a1 a2 a3
   | effSub a0 a1 ih0 => exact CDerivesP.effSub a0 ih0
-  | effPerform a0 a1 a2 ih0 => exact CDerivesP.effPerform a0 a1 ih0
+  | effPerform a0 a1 a2 a3 ih0 => exact CDerivesP.effPerform a0 a1 a2 ih0
+  | effAwait a0 a1 a2 a3 a4 a5 a6 => exact CDerivesP.effAwait a0 a1 a2 a3 a4 a5 a6
   | effRaise a0 a1 a2 a3 ih0 => exact CDerivesP.effRaise a0 a1 a2 ih0
   | effLet a0 a1 a2 a3 a4 ih0 ih1 => exact CDerivesP.effLet a0 a1 a2 ih0 ih1
   | effThen a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2 => exact CDerivesP.effThen a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 ih1 ih2
@@ -229,11 +230,13 @@ theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | nuOut hC _ ih => exact nuOut_compatX hC ih
   | unfoldN C S hC hΓ => exact unfold_compatX hC S hΓ
   | effSub hle _ ih => exact sub_compatC hle ih
-  | effPerform hf hna _ ih => exact perform_compatC hf hna ih
+  | effPerform hf hna _ _ ih => exact perform_compatC hf hna ih
+  | effAwait hΓ hfa ha haA hfc hc hcA => exact semC_dead .nil hΓ (await_compatC hfa ha haA hfc hc hcA)
   | effRaise hf ha hd _ ih => exact raise_compatC hf ha (fun _ _ _ _ h => vC_noOwn_of_drop hd h) ih
   | effLet hs hW hU _ _ ihM ihN => exact let_compatC hs hW hU ihM ihN
   | effThen hs hNZ _ hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
-      exact then_compatC hs hNZ hU hMS hDS hfin hP hSD ihM ihN ihD
+      exact then_compatC hs hNZ hU hMS hDS (fun n i o o' h₁ h₂ hc => hfin n i o o' h₁ h₂
+        (by simp [OpSig.finRead, hc])) hP hSD ihM ihN ihD
   | effHandleV hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
       exact handleV_compatC hs hd hH ihc hn0 hnS hlen hdv ihe
   | effHandleVB hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
@@ -247,6 +250,8 @@ theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
       exact hPin.stop _ _ _ _ _ _ _ _ hb hx hbx hΔx hT hB hBn hside hS hM1 hcb hdc ihd hM
   | lendLoopR hx hbx hΔx hA hB hR hBn hRn hsc hN1 hK1 hs0c hN hK hs0 _ _ _ =>
       exact hPin.loop _ _ _ _ _ _ _ _ _ hx hbx hΔx hA hB hR hBn hRn hsc hN1 hK1 hs0c hN hK hs0
+  | effThenDiv hs hNZ _ hU hMS hDS hfin hP hcap _ _ _ ihM ihN ihD =>
+      exact hPin.fin _ _ _ _ _ _ _ _ _ _ _ _ hs hNZ hU hMS hDS hfin hP hcap ihM ihN ihD
   | @nilDead _ _ _ j hΓ _ ih => cases j <;> exact semC_dead .nil hΓ ih
 
 /-- **Adequacy under `PinLaw`**: a closed `CDerivesP` computation of `F 1` runs from the empty

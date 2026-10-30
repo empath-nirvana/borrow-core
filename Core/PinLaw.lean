@@ -30,14 +30,16 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-- **PinStop.** R1's compatibility lemma, as a `Prop`: the relaxed lend at `r : Ref T`, whose
 borrower `M` is typed in `CDerivesP` at a resuming row with the view `Mut 'x T` in its context, is
-in the kernel's relation at `F_Σ (Ref T ⊗ B)`. -/
+in the kernel's relation at `F_Σ (Ref T ⊗ B)`. The row is `Row.ResumeOC`: besides resuming
+operations, a cancellable `await` and its abortive `cancelled`, so the borrower may stop, be
+resumed with `inr ()`, and unwind past the lend through finalisers that stop again. -/
 def PinStop : Prop :=
   ∀ (Δ : LifeCtx) (x : LifeVar) (b : Lifetime.Life) (T B : VTy) (d M : Expr) (S : Row),
     Δ.Defines b → Δ.find? x = none → b.mentions x = false →
     (∀ y u, Δ.find? y = some u → u.mentions x = false) →
     ¬ VFree x T → ¬ VFree x B → NoThunkT B →
     (∃ b', Δ.Defines b' ∧ VOutlivesLe Δ b' T) →
-    Row.ResumeO S x → closedAt 1 M = true → closedAt 0 (lendCb M).1 = true →
+    Row.ResumeOC S x → closedAt 1 M = true → closedAt 0 (lendCb M).1 = true →
     closedAt 0 d = true → SemV (ℍ := ℍ) Δ [] d (.lolli (.ref T) .unit) →
     CDerivesP (Δ.extend x b) [⟨.mut (.var x) T, true⟩] M
       (.comp (CTy.effOf S (.box (.var x) B))) →
@@ -65,13 +67,61 @@ def PinLoop : Prop :=
     SemC (ℍ := ℍ) Δ [⟨.ref A, true⟩] (lendLoopApp A B R N K s0)
       (CTy.loop (.tensor (.ref A) B) (.tensor (.ref A) R))
 
+/-- **PinFin.** `[then]`'s compatibility lemma with `Div` admitted in the finaliser's row
+(`CDerivesP.effThenDiv`): `then_compatC` without `hSD`, at a body `M` whose row has no capturable
+operation. Where `Σ_D` holds `Div`, `Σ` does, and the relation at `Σ` is `cwp`: the finaliser's
+run is a greatest fixed point of segments, run on the ordinary unwind. `hcap` keeps every
+finaliser off a cancel run, whose obligation (`cancelObl`) is a least fixed point. -/
+def PinFin : Prop :=
+  ∀ (Δ : LifeCtx) (Γ Γ₁ Γ₂ : Ctx VTy) (M N D : Expr) (A B : VTy) (S SM SD : Row),
+    Ctx.SplitP Γ Γ₁ Γ₂ → S.NZ → (S.UnrD → Persistent Γ₂) → RowLe SM S → RowLe SD S →
+    (∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
+      o.finRead = true → ThenLe o.fin SD o'.fin) →
+    (SD.UnrD → SM.PendPers) → (∀ o ∈ SM, capB o.q o.B = false) →
+    SemC (ℍ := ℍ) Δ Γ₁ M (CTy.effOf SM A) →
+    SemC (ℍ := ℍ) Δ (⟨A, true⟩ :: Γ₂) N (CTy.effOf S B) →
+    SemC (ℍ := ℍ) Δ (⟨.unit, false⟩ :: Γ₂) D (CTy.effOf SD .unit) →
+    SemC (ℍ := ℍ) Δ Γ (thenE N D M) (CTy.effOf S B)
+
+/-- `PinFin` at a finaliser row without `Div` is `then_compatC`: the field asserts only the
+rows that hold `Div`. -/
+theorem pinFin_divFree {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A B : VTy}
+    {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hU : S.UnrD → Persistent Γ₂)
+    (hMS : RowLe SM S) (hDS : RowLe SD S)
+    (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
+      o.finRead = true → ThenLe o.fin SD o'.fin)
+    (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false)
+    (hM : SemC (ℍ := ℍ) Δ Γ₁ M (CTy.effOf SM A))
+    (hN : SemC (ℍ := ℍ) Δ (⟨A, true⟩ :: Γ₂) N (CTy.effOf S B))
+    (hD : SemC (ℍ := ℍ) Δ (⟨.unit, false⟩ :: Γ₂) D (CTy.effOf SD .unit)) :
+    SemC (ℍ := ℍ) Δ Γ (thenE N D M) (CTy.effOf S B) :=
+  then_compatC hs hNZ hU hMS hDS (fun n i o o' h₁ h₂ hc => hfin n i o o' h₁ h₂
+    (OpSig.finRead_of_capB hc)) hP hSD hM hN hD
+
 /-- **PinLaw**: the one named assumption. Its fields are stated over `CDerivesP` derivations
-only. -/
+and the kernel's relation only. -/
 structure PinLaw : Prop where
-  /-- R1: the lend held across resuming operations is in the relation. -/
+  /-- R1: the lend held across resuming operations, and across the cancel path, is in the
+  relation. -/
   stop : PinStop (ℍ := ℍ)
   /-- R2: the lend over a loop whose state holds the borrow is in the relation. -/
   loop : PinLoop (ℍ := ℍ)
+  /-- `[then]` with a finaliser that may loop is in the relation. -/
+  fin : PinFin (ℍ := ℍ)
+
+/-! ### The cancel row where termination matters
+
+A cancel at a cancellable operation is a resume with `inr ()`; what it runs before the handler's
+`cancelled` clause is the finalisers between the operation and the handler, whose rows `[then]`
+records in the operation's cancel row (`hfin`, `ThenLe`), `Div` included. A cancel that must end
+(a bounded scheduler's cancel-at-budget, `run_in`) asks for its tasks' row `Row.CancelTotal`.
+That such a cancel ends is open, as decision 69's "finalisers are total" is. -/
+
+/-- Every cancellable or capturable operation of the row has a cancel row that is not `⊤` and does
+not hold `Div`.  `[spec §29a]` -/
+def Row.CancelTotal (S : Row) : Prop :=
+  ∀ o ∈ S, o.finRead = true → o.fin.isTop = false ∧ Row.divB o.fin.rowOf = false
+
 
 /-! ### The rows a relaxed lend admits
 
