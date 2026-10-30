@@ -720,7 +720,3 @@ import Backend2.Lint
 #print axioms BoCa.Fig16.LogRel.Core.entry_derives
 #print axioms BoCa.Fig16.LogRel.Core.entry_runs
 #print axioms BoCa.Fig16.LogRel.Core.entry_decl_no_drop
-#print axioms BoCa.Fig16.LogRel.Core.mintE_derives_ref
-#print axioms BoCa.Fig16.LogRel.Core.mintFreeE_derives
-#print axioms BoCa.Fig16.LogRel.Core.mintFreeRun_isRun
-#print axioms BoCa.Fig16.LogRel.Core.decl_consumed_mintE_at_ref
