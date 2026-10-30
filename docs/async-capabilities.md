@@ -506,6 +506,27 @@ reusing run is the new `--alloc least` (`Alloc.leastFree`, as `runM`).
 - *Checks.* An access through an ended tag, through an inactive one, a free through a view, a
   write through an `imm` tag, any access through a tag (or the owner) under a live exclusive tag,
   a write under a live `imm` one, and a lend not ended at the end of the run.
+- *R2's per-observation lend* (#743 spike). R2 (`lendLoopR`) re-lends the place at every
+  observation, and its state may hold `imm` views from earlier observations: the re-lend is to
+  the same place, so a view from an earlier observation is a view of the same lend. The
+  harness marks R2's step (`lendStepE`, recognised as a closed term before the run) instead of
+  its two `withbor`s:
+  - the lend has kind `lend`, as any lend from an owner: R2's term is also the erasure of the
+    strict `lend_loop_mut` (`lendLoopE_is_checked`), so the erased term does not say `imm`, and a
+    write through an R2 view is not detected (the same limit as `withbor1`'s, above);
+  - at the first observation, `LEND` pushes a fresh tag over the cell; at every later
+    observation (`next` or `close`) of the same loop, it *reactivates* that tag instead of
+    pushing a new one, so the views kept in the state are again usable, and only during an
+    observation;
+  - when `next`'s step answers `inr` (the loop goes on), the tag is *parked*: live, suspended,
+    usable by nothing until the next observation reactivates it; when it answers `inl` (the loop
+    finishes and hands the owner back) or `close`'s step answers, the tag ends;
+  - so a view used between observations is used through a suspended tag, a view used after the
+    loop finished or closed is used through an ended tag, and a loop dropped without `close` or
+    a finish leaves its tag live (a lend that never ended). Every other check is unchanged.
+  The negative tests `neg-r2-after-close` (a view handed out of the close step and read after
+  the owner has been written) and `neg-r2-after-finish` (a view handed out with the owner when
+  `next` finishes, read after the owner is written) must still trip.
 - *Observation boundaries.* A `main` that returns a loop is driven one observation at a time. At
   each boundary between observations (and before the first) every live tag must be *suspended*:
   a resuming operation crossed its frame and the frame has not been on the running path since, so

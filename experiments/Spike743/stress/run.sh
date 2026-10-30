@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Generate COUNT stress programs from seed FIRST into DIR, check each, compare its answer with the
 # simulated one, and run the accepted ones under every mode of scripts/falsify.sh.
-#     run.sh DIR FIRST COUNT
+#     [GEN=gen_r2.py] run.sh DIR FIRST COUNT
 set -uo pipefail
 root="$(cd "$(dirname "$0")/../../.." && pwd)"
 bcc="$root/.lake/build/bin/bcc"
 dir=$1; first=$2; count=$3
-python3 "$(dirname "$0")/gen.py" "$dir" "$first" "$count"
+python3 "$(dirname "$0")/${GEN:-gen.py}" "$dir" "$first" "$count"
 acc=0; rej=0; wrong=0; ok=()
 for f in "$dir"/s*.bc; do
   s=${f%.bc}

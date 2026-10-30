@@ -106,6 +106,34 @@ def activeAtBoundary : Expr :=
   letE (allocE (lit 5)) <|
   .lam (.letpair (.app (Falsify.mk Falsify.markLend) (.var 1)) (.inj₂ (.lam (.inj₁ (lit 0)))))
 
+/-- R2's term (`lendLoopApp`) at `r`, the variable `0`, with the steps `N`, `K` and the first
+state `s₀`, each untyped. -/
+def r2Loop (N K s0 : Expr) : Expr :=
+  BoCa.Fig16.LogRel.Core.lendLoopApp (.int .w32) .unit (.int .w32) N K s0
+
+/-- R2's loop over `r = alloc 5` whose close step hands the view out (`K = let (v, s) = q; v`),
+which no typed close step can (`R` is free of the lend's lifetime): after the close, the owner is
+written and the view read. Under R2's rule the tag ended at the close. -/
+def r2AfterClose : Expr :=
+  letE (allocE (lit 5)) <|
+  letE (r2Loop (.inj₂ .unit) (.letpair (.var 0) (.var 1)) .unit) <|
+  .letpair (.app (.var 0) (.inj₂ .unit)) <|
+  .seq (storeE (.var 1) (lit 9)) <|
+  letE (loadE (.var 0)) <|
+  .seq (letE (freeE (.var 2)) .unit) (.var 0)
+
+/-- R2's loop over `r = alloc 5` whose next step finishes the loop and hands the view out with
+the owner (`N = let (v, s) = q; inl v`), which no typed step can (`B` is free of the lend's
+lifetime): the owner is written, then the view read. Under R2's rule the tag ended when
+the step answered `inl`. -/
+def r2AfterFinish : Expr :=
+  letE (allocE (lit 5)) <|
+  letE (r2Loop (.letpair (.var 0) (.inj₁ (.var 1))) (.letpair (.var 0) (.var 0)) .unit) <|
+  .case (.app (.var 0) (.inj₁ .unit))
+    (.letpair (.var 0) (.seq (storeE (.var 1) (lit 9))
+      (letE (loadE (.var 0)) (.seq (letE (freeE (.var 2)) .unit) (.var 0)))))
+    (lit 0)
+
 /-- Each negative test: its name, its term, the mode that must report it, a part of the report,
 and what `Support`'s interpreter answers. -/
 def negatives : List (String × Expr × String × String × String) :=
@@ -119,7 +147,9 @@ def negatives : List (String × Expr × String × String × String) :=
    ("neg-imm-write", immWrite, "tags", "write of location 0 through an imm tag", "i32[9]"),
    ("neg-dropped-lend", droppedLend, "tags", "never ended", "live 1"),
    ("neg-active-at-boundary", activeAtBoundary, "tags", "active at an observation boundary",
-      "source interpreter: stuck")]
+      "source interpreter: stuck"),
+   ("neg-r2-after-close", r2AfterClose, "tags", "after its lend ended", "i32[9]"),
+   ("neg-r2-after-finish", r2AfterFinish, "tags", "after its lend ended", "i32[9]")]
 
 /-- The negative tests that are loops: each is driven as a `main` that returns a loop is, one
 observation at a time (`Falsify.interpLoop`, `Source.interpLoop`). -/
