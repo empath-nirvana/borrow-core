@@ -347,6 +347,34 @@ theorem TDerivesP.dtor_hasDtor : TDerivesP Δ Γ (.dtor i j A) j' → HasDtor A
   `match`.
 - **`!N`.** `.bang A` is persistent for every `A`. Q10.
 
+### 2.4 Surface: the close obligation, written and pointed at (user direction 2026-10-30)
+
+A type with no derived drop must be readable and easy to use. The kernel already has everything
+this needs, so this section adds surface forms and errors only. Spellings are provisional.
+
+- **A field keyword** in the data declaration marks a field "needs an explicit close". It
+  elaborates to L-T: the field is stored with a `Tok`, so the field has no derived drop and every
+  type that contains it has none (2.3, *Containers and fields*). The keyword is the only way a
+  program writes L-T. The declaration may also name the function that closes it. The name is used
+  only by errors and by `finally`, and nothing calls that function unless the program writes the
+  call.
+- **`finally`** on a binding: the program writes the cleanup once (`let f = open(…) finally
+  close(f)`). It elaborates to the kernel's `[then]` (`M then x. N unwind D`, SPEC §27) with the
+  written call as `D`. `D` runs at its own row, so it may perform IO. The same written call is
+  placed at the end of the scope for the normal exit. Both placements are checked terms, and the
+  call is one the program wrote, so this is not a drop. It is decision 2's "cleanup goes in a
+  finaliser", made readable. The parser's raw `unwind (D)` (`Parser.lean:2430`) is the existing
+  hook.
+- **Errors point at the fix.** A value with no derived drop that is unused at the end of its scope,
+  or live across an abort, gets one message that names:
+  - the value and its type;
+  - the field that carries the obligation;
+  - the two fixes: call the close function before the scope ends, or add `finally <close>(x)` to
+    its binding.
+- **Not this:** an implicit call of the named close function at scope end without a written
+  `finally`. That would be a non-derived drop. Every drop stays derived; a close runs only where
+  the program wrote it.
+
 ---
 
 ## 3. Vocabulary
@@ -613,10 +641,13 @@ Each step lands with its kernel statements proved, or stops.
      `tok_linear`, the closure lemmas, `decl_linear`, `decl_imm_drop`, `decl_mut_drop`,
      `TDerivesP.dtor_hasDtor`. The SPEC §11, §12 and §42 entries first.
    - Elaboration of the declaration and its `match` (2.3).
+   - The surface of 2.4: the field keyword, `finally` over `[then]`, and the error that names
+     both fixes.
 3. **Gate step** (item 4).
    - Kernel: each pinned site cites the rule it emits (`drop_derives`, `copy_derives`, a constant,
      `topI`/`zeroE`, `effLet`'s `hW`). Every `burn` the elaborator emits is at a written `match`.
      F4–F7 (5.5) fixed, or each given its `UNPROVED:` with the statement it would need.
+   - `linear ctl` renamed (Q12, revisited).
    - `corpus/reject/linear-*`: a declared type paired with every construct that inserts operations
      (implicit drop, `for` copies, field read, E5, `[then]` finaliser, an abort across it).
 4. **F3** (item 5). Kernel: 5.5's F3 statement, (a) or (b), or the drop removed. `Prog.stackKs`
@@ -631,6 +662,8 @@ Each step lands with its kernel statements proved, or stops.
    - Linear types with no derived drop: capabilities, must-resume continuations, one-shot closures
      that hold one, and declared types (L-T). What the checker says when one is left unused, and
      how to fix it.
+   - Close obligations (2.4): marking a field "needs an explicit close", `finally`, and reading
+     the error that points at them.
    - Writing programs that want to forget a value: keep the type's fields droppable so its drop
      is derived, give a task or continuation a cancel branch (`cancel`), or consume the value
      with a function written for it. Each one is described as the derivation it inserts or the
@@ -699,6 +732,10 @@ problem, which is reported, not worked around.
 > `multi ctl` (unrestricted). `linear ctl` is true, but it reads as if `ctl`'s `κ` were not linear.
 > Not blocking. Recommendation: keep the keywords until the user spells them; prose and messages
 > say "cancellable" and "must resume" now.
+>
+> **Revisited 2026-10-30 (user): fix it.** `linear ctl` uses "linear" for "no derived drop". Every
+> `ctl` continuation is linear; the must-resume one is linear with no derived drop. Rename the
+> keyword to say what it adds (must resume) in step 3. The spelling is provisional.
 
 > **Q13. The experiment directory** whose name is the removed word (cited at `SPEC.md:1216`).
 > Options: rename it, or leave it (outside the library) and drop SPEC's pointer. Recommendation:
