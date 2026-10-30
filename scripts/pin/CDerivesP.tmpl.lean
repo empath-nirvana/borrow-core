@@ -112,6 +112,36 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
         (.comp (CTy.effOf S (.box (.var x) B)))) :
       CDerivesP Δ [⟨.ref T, true⟩] (.app (.app (.val (withborUV d)) (.var 0)) (.val (lendCb M)))
         (.comp (CTy.effOf S (.tensor (.ref T) B)))
+  /-- **W-imm (the #743 spike): R1 at an `imm` view.** `r : Ref T ⊢ withborU d r (Λ. λm. M) :
+  F_Σ (Ref T ⊗ B)`, the callback typed with the view `m : Imm 'x T` alone in its context, at a
+  row of resuming operations. `lendR`'s premises with `withbor1U`'s scoping of `T`. -/
+  | lendRI {Δ : LifeCtx} {x : LifeVar} {b : Lifetime.Life} {T B : VTy} {d M : Expr} {S : Row}
+      (hb : Δ.Defines b) (hx : Δ.find? x = none) (hbx : b.mentions x = false)
+      (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
+      (hT : ¬ VFree x T) (hB : ¬ VFree x B) (hBn : NoThunkT B) (hsc : VScoped Δ T)
+      (hS : Row.ResumeO S x) (hM1 : closedAt 1 M = true) (hcb : closedAt 0 (lendCb M).1 = true)
+      (hdc : closedAt 0 d = true) (hd : CDerivesP Δ [] d (.val (.lolli (.ref T) .unit)))
+      (hM : CDerivesP (Δ.extend x b) [⟨.imm (.var x) T, true⟩] M
+        (.comp (CTy.effOf S (.box (.var x) B)))) :
+      CDerivesP Δ [⟨.ref T, true⟩] (.app (.app (.val (withborUV d)) (.var 0)) (.val (lendCb M)))
+        (.comp (CTy.effOf S (.tensor (.ref T) B)))
+  /-- **W-nest (the #743 spike): R1 at a family.** `a : Array A ⊢ withborU d a (Λ. λm. M) :
+  F_Σ (Array A ⊗ B)`, an owned array lent as the family `[Mut 'x A]` to a callback at a row of
+  resuming operations, the view alone in its context. `lendR`'s premises with
+  `sliceBorrowMU`'s side conditions. A relaxed lend may hold another of any kind (its premise is
+  in `CDerivesP`, under `nilDead`), so nesting is not a clause of the rule. -/
+  | lendRF {Δ : LifeCtx} {x : LifeVar} {b : Lifetime.Life} {A B : VTy} {d M : Expr} {S : Row}
+      (hb : Δ.Defines b) (hx : Δ.find? x = none) (hbx : b.mentions x = false)
+      (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
+      (hA : ¬ VFree x A) (hB : ¬ VFree x B) (hBn : NoThunkT B)
+      (hsideA : ∃ b', Δ.Defines b' ∧ VOutlivesLe Δ b' A)
+      (hsideB : ∃ b', Δ.Defines b' ∧ VOutlivesLe Δ b' B)
+      (hS : Row.ResumeO S x) (hM1 : closedAt 1 M = true) (hcb : closedAt 0 (lendCb M).1 = true)
+      (hdc : closedAt 0 d = true) (hd : CDerivesP Δ [] d (.val (.lolli (.array A) .unit)))
+      (hM : CDerivesP (Δ.extend x b) [⟨VTy.sliceMut (.var x) A, true⟩] M
+        (.comp (CTy.effOf S (.box (.var x) B)))) :
+      CDerivesP Δ [⟨.array A, true⟩] (.app (.app (.val (withborUV d)) (.var 0)) (.val (lendCb M)))
+        (.comp (CTy.effOf S (.tensor (.array A) B)))
   /-- **R2, the shared lend over a loop whose state holds the borrow.** `r : Ref A ⊢` the
   per-observation lend of `r` (`lendLoopApp`) `: U(Loop (Ref A ⊗ B) (Ref A ⊗ R))`. At each
   observation `r` is lent `Imm 'x A` at a fresh `'x` below `⊓Δ`, and the step `N` (to continue,

@@ -198,7 +198,8 @@ theorem withbor_spans_yields_cC {Δ : LifeCtx} {δ : LSub} (hδ : Δ.Models δ) 
     {βP : Life} (hP : ∀ ls w σ, vC true T ls δ w σ → σ.InStratum βP)
     {Nf : Expr} (hNf : closedAt 1 Nf = true)
     (hN : CDerives (Δ.extend x b) [⟨.mut (.var x) T, true⟩] Nf (.comp (.ret (.box (.var x) B))))
-    (S : Row) (o : OpSig) (hf : Row.find S o.n o.i = some o) (ha : o.abort = false)
+    (S : Row) (hSd : Row.divB S = false) (o : OpSig) (hf : Row.find S o.n o.i = some o)
+    (ha : o.abort = false)
     (hq : o.q = .lin) (hoB : o.B = .unit)
     (ys : List Val) (hys : ∀ y ∈ ys, closedAt 0 y.1 = true)
     (hy : ∀ y ∈ ys, ∀ ls, vC true o.A ls δ y PMap.empty)
@@ -207,7 +208,7 @@ theorem withbor_spans_yields_cC {Δ : LifeCtx} {δ : LSub} (hδ : Δ.Models δ) 
       (cC (CTy.effOf S (.tensor (.ref T) B)) ls δ
         (.app (.app withbor (.val (.loc l))) (.val (cbV o.n o.i ys Nf)))) := by
   intro ρ hρ
-  refine (cC_effOf S _ ls δ _ ρ).mpr ?_
+  refine (cC_effOf S _ ls δ _ ρ hSd).mpr ?_
   refine withbor_spans_yields hδ hbx hΔx hβ hT hB hP hNf (fundamentalC hN) (Row.tab S δ)
     (Row.tab_plainCancel S δ)
     (en := o.ent δ) (by simp [Row.tab, hf]) ha hq ?_ ys hys hy l v ls ρ hρ

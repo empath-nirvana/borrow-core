@@ -40,6 +40,10 @@ theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
 --@CORE_CASES@
   | lendR hb hx hbx hΔx hT hB hBn hside hS hM1 hcb hdc _ hM ihd _ =>
       exact hPin.stop _ _ _ _ _ _ _ _ hb hx hbx hΔx hT hB hBn hside hS hM1 hcb hdc ihd hM
+  | lendRI hb hx hbx hΔx hT hB hBn hsc hS hM1 hcb hdc _ hM ihd _ =>
+      exact hPin.stopImm _ _ _ _ _ _ _ _ hb hx hbx hΔx hT hB hBn hsc hS hM1 hcb hdc ihd hM
+  | lendRF hb hx hbx hΔx hA hB hBn hsideA hsideB hS hM1 hcb hdc _ hM ihd _ =>
+      exact hPin.nest _ _ _ _ _ _ _ _ hb hx hbx hΔx hA hB hBn hsideA hsideB hS hM1 hcb hdc ihd hM
   | lendLoopR hx hbx hΔx hA hB hR hBn hRn hsc hN1 hK1 hs0c hN hK hs0 _ _ _ =>
       exact hPin.loop _ _ _ _ _ _ _ _ _ hx hbx hΔx hA hB hR hBn hRn hsc hN1 hK1 hs0c hN hK hs0
   | @nilDead _ _ _ j hΓ _ ih => cases j <;> exact semC_dead .nil hΓ ih

@@ -98,6 +98,55 @@ def rLendR (i : TInfo) {A B : CVTy} {S : CRow} (q : Pin) (x : LifeVar) (b : CLif
       (Fam.deadStrict T).map fun _ hd => TTied.pinned q (.nilDead hd (.lam hR1))⟩
   rApp i rL k hk h
 
+/-- **W-imm** (`CDerivesP.lendRI`, the #743 spike) at the slot `k : ref A`: `rLendR` at an `imm` view.  `[spec §29]` -/
+def rLendRI (i : TInfo) {A B : CVTy} {S : CRow} (q : Pin) (x : LifeVar) (b : CLife) (k : Nat)
+    (hk : T[k]? = some (.ref A)) (hb : Δ.Defines b) (hx : Δ.find? x = none)
+    (hbx : b.mentions x = false) (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
+    (hT : ¬ VFree x A) (hB : ¬ VFree x B) (hBn : NoThunkT B)
+    (hsc : BoCa.Fig16.LogRel.Core.VScoped Δ A) (hS : Row.ResumeO S x)
+    (hdt : HasDtor (.ref A)) (hdc : closedAt 0 (dtorE (.ref A)) = true)
+    (hde : (dtorE (.ref A)).effFree = true)
+    (rM : Res (Δ.extend x b) [.imm (.var x) A] (.comp (effOf S (.box (.var x) B))))
+    (hL : subL (allL [.imm (.var x) A]) (orL rM.F.u rM.F.w) = true)
+    (hM1 : closedAt 1 rM.e = true) (hcb : closedAt 0 (lendCb rM.e).1 = true)
+    (h : overlapOK T (Fam.deadStrict T).u (oneL T k) = true) :
+    Res Δ T (.comp (effOf S (.tensor (.ref A) B))) :=
+  let dM := (rM.F.d _ (btw_allL _ _ _ rM.F.hu rM.F.hw hL)).2
+  let J : Jdg := .comp (effOf S (.tensor (.ref A) B))
+  let JL : Jdg := .comp (.arr (.ref A) (effOf S (.tensor (.ref A) B)))
+  let tR : TExpr := .lendRI i J x b A B S (.dtor i (.val (.lolli (.ref A) .unit)) (.ref A)) rM.t
+  let hR1 : TDerivesP Δ [⟨.ref A, true⟩] tR J :=
+    .lendRI hb hx hbx hΔx hT hB hBn hsc hS hM1 hcb hdc (.dtor hdt hdc hde .nil) dM
+  let rL : Res Δ T JL :=
+    ⟨.nilDead i JL JL (.lam i JL (.ref A) (effOf S (.tensor (.ref A) B)) tR), rM.sigs, q :: rM.pins,
+      (Fam.deadStrict T).map fun _ hd => TTied.pinned q (.nilDead hd (.lam hR1))⟩
+  rApp i rL k hk h
+
+/-- **W-nest** (`CDerivesP.lendRF`, the #743 spike) at the slot `k : array A`: `rLendR` at a family.  `[spec §29]` -/
+def rLendRF (i : TInfo) {A B : CVTy} {S : CRow} (q : Pin) (x : LifeVar) (b : CLife) (k : Nat)
+    (hk : T[k]? = some (.array A)) (hb : Δ.Defines b) (hx : Δ.find? x = none)
+    (hbx : b.mentions x = false) (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
+    (hT : ¬ VFree x A) (hB : ¬ VFree x B) (hBn : NoThunkT B)
+    (hside : ∃ b', Δ.Defines b' ∧ VOutlivesLe Δ b' A)
+    (hsideB : ∃ b', Δ.Defines b' ∧ VOutlivesLe Δ b' B) (hS : Row.ResumeO S x)
+    (hdt : HasDtor (.array A)) (hdc : closedAt 0 (dtorE (.array A)) = true)
+    (hde : (dtorE (.array A)).effFree = true)
+    (rM : Res (Δ.extend x b) [.fam (.mut (.var x) A)] (.comp (effOf S (.box (.var x) B))))
+    (hL : subL (allL [.fam (.mut (.var x) A)]) (orL rM.F.u rM.F.w) = true)
+    (hM1 : closedAt 1 rM.e = true) (hcb : closedAt 0 (lendCb rM.e).1 = true)
+    (h : overlapOK T (Fam.deadStrict T).u (oneL T k) = true) :
+    Res Δ T (.comp (effOf S (.tensor (.array A) B))) :=
+  let dM := (rM.F.d _ (btw_allL _ _ _ rM.F.hu rM.F.hw hL)).2
+  let J : Jdg := .comp (effOf S (.tensor (.array A) B))
+  let JL : Jdg := .comp (.arr (.array A) (effOf S (.tensor (.array A) B)))
+  let tR : TExpr := .lendRF i J x b A B S (.dtor i (.val (.lolli (.array A) .unit)) (.array A)) rM.t
+  let hR1 : TDerivesP Δ [⟨.array A, true⟩] tR J :=
+    .lendRF hb hx hbx hΔx hT hB hBn hside hsideB hS hM1 hcb hdc (.dtor hdt hdc hde .nil) dM
+  let rL : Res Δ T JL :=
+    ⟨.nilDead i JL JL (.lam i JL (.array A) (effOf S (.tensor (.array A) B)) tR), rM.sigs, q :: rM.pins,
+      (Fam.deadStrict T).map fun _ hd => TTied.pinned q (.nilDead hd (.lam hR1))⟩
+  rApp i rL k hk h
+
 /-- **R2** (`CDerivesP.lendLoopR`) at the slot `k : ref A`: the per-observation `imm` lend of `k`
 over a loop whose state `S` may mention the lend's lifetime, its steps `rN`, `rK` checked at
 `Δ, 'x ⊏ ⊓Δ` and the pair `(view, state)` alone, its first state `rs0` at the empty context. As

@@ -244,6 +244,8 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .effHandleL ii jj S SW E fs Xs n A R u site inside tc te => tc.lifeBinders ++ te.lifeBinders
   | .letPoly ii jj C j tV tN => tV.lifeBinders ++ tN.lifeBinders
   | .lendR ii jj x b T B S td tM => [x] ++ td.lifeBinders ++ tM.lifeBinders
+  | .lendRI ii jj x b T B S td tM => [x] ++ td.lifeBinders ++ tM.lifeBinders
+  | .lendRF ii jj x b A B S td tM => [x] ++ td.lifeBinders ++ tM.lifeBinders
   | .lendLoopR ii jj x A S B R tN tK ts0 => [x] ++ [x] ++ [x] ++ tN.lifeBinders ++ tK.lifeBinders ++ ts0.lifeBinders
   | .nilDead ii jj j t => t.lifeBinders
   | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
@@ -355,6 +357,8 @@ def TExpr.domFree : TExpr → Bool
   | .effHandleL ii jj S SW E fs Xs n A R u site inside tc te => tc.domFree && te.domFree
   | .letPoly ii jj C j tV tN => tV.domFree && tN.domFree
   | .lendR ii jj x b T B S td tM => false
+  | .lendRI ii jj x b T B S td tM => false
+  | .lendRF ii jj x b A B S td tM => false
   | .lendLoopR ii jj x A S B R tN tK ts0 => false
   | .nilDead ii jj j t => t.domFree
   | .dtor .. | .allocS .. | .freeS .. => true
@@ -465,6 +469,8 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .effHandleL ii jj S SW E fs Xs n A R u site inside tc te => .effHandleL ii jj S SW E fs Xs n A R u site inside (tc.reAb Δr) (te.reAb Δr)
   | .letPoly ii jj C j tV tN => .letPoly ii jj C j (tV.reAb Δr) (tN.reAb Δr)
   | .lendR ii jj x b T B S td tM => .lendR ii jj x b T B S (td.reAb Δr) (tM.reAb (Δr.extend x b))
+  | .lendRI ii jj x b T B S td tM => .lendRI ii jj x b T B S (td.reAb Δr) (tM.reAb (Δr.extend x b))
+  | .lendRF ii jj x b A B S td tM => .lendRF ii jj x b A B S (td.reAb Δr) (tM.reAb (Δr.extend x b))
   | .lendLoopR ii jj x A S B R tN tK ts0 => .lendLoopR ii jj x A S B R (tN.reAb (Δr.extend x Δr.meetOfDom)) (tK.reAb (Δr.extend x Δr.meetOfDom)) (ts0.reAb (Δr.extend x Δr.meetOfDom))
   | .nilDead ii jj j t => .nilDead ii jj j (t.reAb Δr)
   | t@(.dtor ..) | t@(.allocS ..) | t@(.freeS ..) | t@(.withborSM ..) | t@(.withborSI ..)
@@ -874,6 +880,8 @@ theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
       intro Δ' he hd
       exact TDerivesP.letPoly a0 a1 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a3) (ih1 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a5)
   | lendR => intro _ _ hd; simp [TExpr.domFree] at hd
+  | lendRI => intro _ _ hd; simp [TExpr.domFree] at hd
+  | lendRF => intro _ _ hd; simp [TExpr.domFree] at hd
   | lendLoopR => intro _ _ hd; simp [TExpr.domFree] at hd
   | nilDead a0 a1 ih0 =>
       intro Δ' he hd

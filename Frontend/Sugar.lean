@@ -3174,6 +3174,16 @@ def relaxedC? (sp : Span) : Val → Option (Ident × Comp)
       (.thunkv _ (.lamL _ _ _ (.ret _ (.thunkv _ (.lam _ m _ M))))) =>
     let p : Ident := ⟨s!"io_rp{sp.start.line}_{sp.start.col}", sp⟩
     some (m, .bind sp p none (.ret sp P) (.withbor2r sp 0 x b A B r p m M))
+  -- The #743 spike: W-imm (an `imm` block of an owned cell) and W-nest (a `mut` block of an
+  -- owned array), as `withbor1r` and `slice_borrow_r`.
+  | .app _ (.app _ (.const _ (.withbor1U x A B r)) P)
+      (.thunkv _ (.lamL _ _ _ (.ret _ (.thunkv _ (.lam _ m _ M))))) =>
+    let p : Ident := ⟨s!"io_rp{sp.start.line}_{sp.start.col}", sp⟩
+    some (m, .bind sp p none (.ret sp P) (.withbor2r sp 1 x (.dom sp) A B r p m M))
+  | .app _ (.app _ (.const _ (.sliceBorrowMutU x b A B r)) P)
+      (.thunkv _ (.lamL _ _ _ (.ret _ (.thunkv _ (.lam _ m _ M))))) =>
+    let p : Ident := ⟨s!"io_rp{sp.start.line}_{sp.start.col}", sp⟩
+    some (m, .bind sp p none (.ret sp P) (.withbor2r sp 2 x b A B r p m M))
   | .mark _ _ V => relaxedC? sp V
   | _ => none
 
@@ -4216,8 +4226,12 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
           if !r.isEmpty then
             if let some o := r.find? (fun o => !o.abort) then
               -- A `mut` borrow of an owned cell: the relaxed lend R1 (SPEC §29).
-              if let some (.mut, P) := borrowKind? V then
-                if let some (.ref _) := c.tyV P then
+              let relaxedOK : Bool := match borrowKind? V with
+                | some (.mut, P) => match c.tyV P with | some (.ref _) | some (.array _) => true | _ => false
+                | some (.imm, P) => match c.tyV P with | some (.ref _) => true | _ => false
+                | _ => false
+              if let some (_, _) := borrowKind? V then
+                if relaxedOK then
                   if let some a := r.find? (·.abort) then
                     throw ⟨V.span, s!"this borrow block's body performs the operation {o.n}.{o.i}, " ++
                       s!"which resumes, and the abortive operation {a.n}.{a.i}: an abortive " ++

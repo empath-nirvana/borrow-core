@@ -1,0 +1,39 @@
+-- B3 (W-imm attack): an `imm` relaxed lend whose view is copied three ways, the copies held in a
+-- pair and as variables across `await`s; inside, a nested W-imm of a
+-- cell holding what one copy read; tasks cancelled at each stop.
+include async
+
+fn done(v: i32) -> Task[i32] = with spawn { v }
+fn step(t: Task[i32]) -> Task[i32] = match resume(t) { inl v -> done(v) | inr t2 -> t2 }
+fn fin(t: Task[i32]) -> i32 = match resume(t) { inl v -> v | inr t2 -> cancel(t2); 0 - 1 }
+
+fn worker() -> i32 with Async =
+  let c = alloc(21);
+  let v = borrow imm c { 'q, r ->
+    let (r1, r2) = copy['q, i32] r;
+    let (r2, r3) = copy['q, i32] r2;
+    let p = (r1, 1);
+    let x2 = *r2;
+    let d = alloc(x2);
+    await();
+    let w = borrow imm d { 'z, k -> await(); *k };
+    let y = free(d);
+    await();
+    let (r1, one) = p;
+    *r1 + x2 + *r3 + w + y + one
+  };
+  let _ = free(c);
+  v
+
+main -> i32 * (i32 * (i32 * i32)) =
+  let t0 = with spawn { worker() };
+  let t1 = with spawn { worker() };
+  let t2 = with spawn { worker() };
+  let t3 = with spawn { worker() };
+  cancel(t1);
+  let t2 = step(t2);
+  cancel(t2);
+  let t3 = step(step(t3));
+  cancel(t3);
+  let t0 = step(step(step(t0)));
+  (fin(t0), (0, (0, 0)))

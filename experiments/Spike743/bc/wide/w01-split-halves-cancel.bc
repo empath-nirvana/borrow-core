@@ -1,0 +1,50 @@
+-- B3 (W-nest attack): an owned array lent as a family across `await`s; inside, the slice is split,
+-- each half held in its own variable (one in a pair, one as an element view from `get_mut`)
+-- across `await`s, written after; tasks cancelled at each of the stops.
+include async
+include slice
+
+fn ones(i: i32) -> i32 = i + 1
+fn done(v: i32) -> Task[i32] = with spawn { v }
+fn step(t: Task[i32]) -> Task[i32] = match resume(t) { inl v -> done(v) | inr t2 -> t2 }
+fn fin(t: Task[i32]) -> i32 = match resume(t) { inl v -> v | inr t2 -> cancel(t2); 0 - 1 }
+
+fn worker() -> i32 with Async =
+  let mut a = array_new[i32](4, ones);
+  borrow mut a { s ->
+    match split_at_mut(s, 2) {
+      inl (head, tail) ->
+        let p = (tail, 100);
+        await();
+        match get_mut(head, 1) {
+          inl e ->
+            await();
+            modify e { y -> y * 7 };
+            let (t, k) = p;
+            await();
+            let t = set(t, 0, k);
+            discard_mut(t)
+        | inr u -> let (t, k) = p; discard_mut(t)
+        }
+    | inr b -> discard_mut(b)
+    } };
+  await();
+  let x1 = at(&a, 1, 0);
+  let x2 = at(&a, 2, 0);
+  x1 * 1000 + x2
+
+main -> i32 * (i32 * (i32 * (i32 * i32))) =
+  let t0 = with spawn { worker() };
+  let t1 = with spawn { worker() };
+  let t2 = with spawn { worker() };
+  let t3 = with spawn { worker() };
+  let t4 = with spawn { worker() };
+  cancel(t1);
+  let t2 = step(t2);
+  cancel(t2);
+  let t3 = step(step(t3));
+  cancel(t3);
+  let t4 = step(step(step(t4)));
+  cancel(t4);
+  let t0 = step(step(step(step(t0))));
+  (fin(t0), (0, (0, (0, 0))))

@@ -696,8 +696,109 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       else err sp "`lend_loop_r`: its number occurs in a bound of the lifetime context"
       else err sp "`lend_loop_r`: `⊓Δ` mentions its number"
       else err sp s!"`lend_loop_r`: `{E.ppV R'}` mentions the lend's lifetime"
-    | .withbor2r sp kd x b A B r p m M => do
-      if kd != 0 then err sp s!"the spike's relaxed lends of kind {kd} are not built yet" else
+    | .withbor2r sp 1 x b A B r p m M => do
+      -- W-imm (`withbor1r`, the #743 spike): R1 at an `imm` view.
+      -- R1, the relaxed lend (SPEC §29): its body sees the view alone.
+      let bl ← E.elabL Δ b
+      let A' ← E.elabV Δ A
+      let B' ← E.elabV Δ B
+      let S ← E.elabRow Δ sp r
+      let v := Δ.freshVar
+      let ⟨⟨hx, hT, hB⟩⟩ ← freshFor sp v A' B'
+      let some i := lookupVar p.name E.vars
+        | err p.span s!"`withbor2r` lends a variable, and `{p.name}` is not one in scope"
+      match hi : T[i]? with
+      | some (.ref A'') =>
+        if hA : A'' = A' then
+          if hwf : bl.wf Δ = true then
+            if hbx : bl.mentions v = false then
+              if hΔx : boundsAvoidB Δ v = true then
+                if hsc : scopedB Δ A' = true then
+                if hS : Row.resumeOB S v = true then
+                  if hBn : noThunkB B' = true then
+                    let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A')
+                    let E' : Env :=
+                      { E with vars := [], own := [], nExt := 0, lenv := (x.name, v) :: E.lenv,
+                               row := some S }
+                    let rM ← chkC n (E'.pushOwn m.name (.imm (.var v) A')) (Δ.extend v bl)
+                      [.imm (.var v) A'] M (effOf S (.box (.var v) B'))
+                    if hL : subL (allL [.imm (.var v) A']) (orL rM.F.u rM.F.w) = true then
+                      if hM1 : BoCa.Fig16.LogRel.Core.closedAt 1 rM.e = true then
+                        if hcb : BoCa.Fig16.LogRel.Core.closedAt 0 (BoCa.Fig16.LogRel.Core.lendCb rM.e).1 = true then
+                          if h : overlapOK T (Fam.deadStrict T).u (oneL T i) = true then
+                            pure ⟨_, rLendRI (at_ sp) ⟨"W-imm", sp.start.line, sp.start.col⟩ v bl i (hA ▸ hi)
+                              (defines_of_wf hwf) hx hbx (boundsAvoidB_sound hΔx) hT hB
+                              (noThunkB_sound hBn) (scopedB_sound hsc) (Row.resumeOB_sound hS) hdt hdc hde rM hL hM1
+                              hcb h⟩
+                          else err sp "internal error: a relaxed lend's place"
+                        else err sp "internal error: a relaxed lend's body is not closed"
+                      else err sp "internal error: a relaxed lend's body is not closed"
+                    else err sp s!"the view `{m.name}` of this relaxed lend is not consumed"
+                  else err sp s!"a relaxed lend's result `{E.ppV B'}` holds a `U`: its value is read back after the lend is re-lent (R1, SPEC §29)"
+                else err sp ("the row of a relaxed lend's body has only operations that resume " ++
+                  "at most once (cancellable or must-resume), of names other than 0, answering " ++
+                  "`1` with the empty cancel row, whose arguments are closed data with no `U` " ++
+                  "(R1, SPEC §29)")
+                else err sp s!"`withbor1r`: `{E.ppV A'}` is not scoped"
+              else err sp s!"`withbor2r`: its number {ppLVar v} occurs in a bound of the lifetime context"
+            else err sp s!"`withbor2r`: its bound mentions its own number {ppLVar v}"
+          else err sp s!"`withbor2r`: the bound `{E.ppL bl}` is not defined here"
+        else throw (mismatch p.span (E.ppV (.ref A')) (E.ppV (.ref A'')))
+      | some A'' => err p.span s!"`withbor2r` lends an owned cell `ref A`, but `{p.name} : {E.ppV A''}`"
+      | none => err sp "internal error: variable out of range"
+
+    | .withbor2r sp 2 x b A B r p m M => do
+      -- W-nest (`slice_borrow_r`, the #743 spike): R1 at an owned array's family of `mut` leaves.
+      -- R1, the relaxed lend (SPEC §29): its body sees the view alone.
+      let bl ← E.elabL Δ b
+      let A' ← E.elabV Δ A
+      let B' ← E.elabV Δ B
+      let S ← E.elabRow Δ sp r
+      let v := Δ.freshVar
+      let ⟨⟨hx, hT, hB⟩⟩ ← freshFor sp v A' B'
+      let some i := lookupVar p.name E.vars
+        | err p.span s!"`withbor2r` lends a variable, and `{p.name}` is not one in scope"
+      match hi : T[i]? with
+      | some (.array A'') =>
+        if hA : A'' = A' then
+          if hwf : bl.wf Δ = true then
+            if hbx : bl.mentions v = false then
+              if hΔx : boundsAvoidB Δ v = true then
+                let ⟨hside⟩ ← outlivesWitness sp bl A'
+                let ⟨hsideB⟩ ← outlivesWitness sp bl B'
+                if hS : Row.resumeOB S v = true then
+                  if hBn : noThunkB B' = true then
+                    let ⟨hdt, hdc, hde⟩ ← finaliser sp (.array A')
+                    let E' : Env :=
+                      { E with vars := [], own := [], nExt := 0, lenv := (x.name, v) :: E.lenv,
+                               row := some S }
+                    let rM ← chkC n (E'.pushOwn m.name (.fam (.mut (.var v) A'))) (Δ.extend v bl)
+                      [.fam (.mut (.var v) A')] M (effOf S (.box (.var v) B'))
+                    if hL : subL (allL [.fam (.mut (.var v) A')]) (orL rM.F.u rM.F.w) = true then
+                      if hM1 : BoCa.Fig16.LogRel.Core.closedAt 1 rM.e = true then
+                        if hcb : BoCa.Fig16.LogRel.Core.closedAt 0 (BoCa.Fig16.LogRel.Core.lendCb rM.e).1 = true then
+                          if h : overlapOK T (Fam.deadStrict T).u (oneL T i) = true then
+                            pure ⟨_, rLendRF (at_ sp) ⟨"W-nest", sp.start.line, sp.start.col⟩ v bl i (hA ▸ hi)
+                              (defines_of_wf hwf) hx hbx (boundsAvoidB_sound hΔx) hT hB
+                              (noThunkB_sound hBn) hside hsideB (Row.resumeOB_sound hS) hdt hdc hde rM hL hM1
+                              hcb h⟩
+                          else err sp "internal error: a relaxed lend's place"
+                        else err sp "internal error: a relaxed lend's body is not closed"
+                      else err sp "internal error: a relaxed lend's body is not closed"
+                    else err sp s!"the view `{m.name}` of this relaxed lend is not consumed"
+                  else err sp s!"a relaxed lend's result `{E.ppV B'}` holds a `U`: its value is read back after the lend is re-lent (R1, SPEC §29)"
+                else err sp ("the row of a relaxed lend's body has only operations that resume " ++
+                  "at most once (cancellable or must-resume), of names other than 0, answering " ++
+                  "`1` with the empty cancel row, whose arguments are closed data with no `U` " ++
+                  "(R1, SPEC §29)")
+              else err sp s!"`withbor2r`: its number {ppLVar v} occurs in a bound of the lifetime context"
+            else err sp s!"`withbor2r`: its bound mentions its own number {ppLVar v}"
+          else err sp s!"`withbor2r`: the bound `{E.ppL bl}` is not defined here"
+        else throw (mismatch p.span (E.ppV (.array A')) (E.ppV (.array A'')))
+      | some A'' => err p.span s!"`withbor2r` lends an owned cell `ref A`, but `{p.name} : {E.ppV A''}`"
+      | none => err sp "internal error: variable out of range"
+
+    | .withbor2r sp _ x b A B r p m M => do
       -- R1, the relaxed lend (SPEC §29): its body sees the view alone.
       let bl ← E.elabL Δ b
       let A' ← E.elabV Δ A

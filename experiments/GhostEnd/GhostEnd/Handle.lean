@@ -31,7 +31,8 @@ theorem withbor_spans_yields_sem {Δ : LifeCtx} {x : LifeVar} {b : Lifetime.Life
     (hside : ∃ b', Δ.Defines b' ∧ VOutlivesLe Δ b' T)
     {Nf : Expr} (hNf : closedAt 1 Nf = true)
     (hN : CDerives (Δ.extend x b) [⟨.mut (.var x) T, true⟩] Nf (.comp (.ret (.box (.var x) B))))
-    (S : Row) (o : OpSig) (hf : Row.find S o.n o.i = some o) (ha : o.abort = false)
+    (S : Row) (hSd : Row.divB S = false) (o : OpSig) (hf : Row.find S o.n o.i = some o)
+    (ha : o.abort = false)
     (hq : o.q = .lin) (hoB : o.B = .unit)
     (ys : List Val) (hys : ∀ y ∈ ys, closedAt 0 y.1 = true)
     (hy : ∀ δ, ∀ y ∈ ys, ∀ ls, vC true o.A ls δ y PMap.empty)
@@ -64,7 +65,7 @@ theorem withbor_spans_yields_sem {Δ : LifeCtx} {x : LifeVar} {b : Lifetime.Life
     obtain ⟨β', hb'⟩ := hdef δ hδ
     have hP : ∀ ls' w σ', vC true T ls' δ w σ' → σ'.InStratum (Life.down β') :=
       fun ls' w σ' h => vC_outlivesLe hδ hb' hO true ls' w σ' h _ (Life.down_sqsubset β')
-    exact withbor_spans_yields_cC hδ hbx hΔx hβ hT hB hP hNf hN S o hf ha hq hoB ys hys (hy δ)
+    exact withbor_spans_yields_cC hδ hbx hΔx hβ hT hB hP hNf hN S hSd o hf ha hq hoB ys hys (hy δ)
       ℓ v' ls ρ hrest
 
 /-- **Under the kernel's `[handle]`.** The body, at a row of the handler's operations followed by
@@ -86,10 +87,11 @@ theorem handle_spans_yields {Δ : LifeCtx} {Γ Γ₁ Γr Γc : Ctx VTy} {S' : Ro
     (hsp : Ctx.SplitP Γ Γ₁ [⟨.ref T, true⟩]) (hsp₁ : Ctx.SplitP Γ₁ Γr Γc)
     (hr : Ctx.SoloP Γr ir (retTy S' (.tensor (.ref T) B) R))
     (hc : Ctx.SoloP Γc ic (clausesTy S' R E))
-    (hn0 : n ≠ 0) (hnS : ∀ o ∈ S', o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) :
+    (hn0 : n ≠ 0) (hnS : ∀ o ∈ S', o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (hdv : Row.divB (Row.ofEff n E 0 ++ S') = false) :
     SemC Δ Γ (hndTerm n (E.map Prod.fst) ir ic
       (.app (.app withbor (.var 0)) (.val (cbV o.n o.i ys Nf)))) (CTy.effOf S' R) :=
-  handle_compatC hsp hsp₁ hr hc hn0 hnS hlen
-    (withbor_spans_yields_sem hb hbx hΔx hT hB hside hNf hN _ o hf ha hq hoB ys hys hy hcb)
+  handle_compatC hsp hsp₁ hr hc hn0 hnS hlen hdv
+    (withbor_spans_yields_sem hb hbx hΔx hT hB hside hNf hN _ hdv o hf ha hq hoB ys hys hy hcb)
 
 end GhostEnd

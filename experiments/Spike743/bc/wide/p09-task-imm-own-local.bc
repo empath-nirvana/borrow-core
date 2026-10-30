@@ -1,0 +1,16 @@
+-- B3 (W-imm): #743 probe P8, `scratch-743/t/p09-task-imm-own-local.bc`, copied unchanged.
+include async
+
+fn worker() -> i32 with Async =
+  let c = alloc(10);
+  let v = borrow imm c { r ->
+    let a = *r;
+    await();
+    a + 1
+  };
+  let _ = free(c);
+  v
+
+main -> List[i32] =
+  let q = push(queue[i32](), with spawn { worker() });
+  run_until_empty(q)

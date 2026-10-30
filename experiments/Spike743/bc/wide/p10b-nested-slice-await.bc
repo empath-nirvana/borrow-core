@@ -1,0 +1,40 @@
+-- B3 (W-nest, the closest P10 analog without E5): a task lends a cell across `await`s (R1);
+-- inside, it owns an array and lends it `mut` as a family across `await`s (W-nest); inside that,
+-- it splits the slice, puts the head in a cell and lends the cell across an `await` (R1, three
+-- lends open), then walks the tail with a `for` that awaits at each element.
+-- Answer per task: the array [1, 2, 3, 4] becomes [1, 2, 6, 8]; 10 + 6 + 8 = 24; two tasks.
+include async
+include slice
+
+fn ones(i: i32) -> i32 = i + 1
+
+fn walk<'a>(tail: array_mut 'a i32) -> 1 with Async =
+  for x in tail { modify x { y -> y * 2 }; await() }
+
+fn worker() -> i32 with Async =
+  let c = alloc(10);
+  let v = borrow mut c { m ->
+    let mut a = array_new[i32](4, ones);
+    borrow mut a { s ->
+      await();
+      match split_at_mut(s, 2) {
+        inl (head, tail) ->
+          let d = alloc(head);
+          let w = borrow mut d { k -> await(); modify k { h -> (h, 0) } };
+          let head = free(d);
+          discard_mut(head);
+          walk(tail)
+      | inr b -> discard_mut(b)
+      } };
+    let x2 = at(&a, 2, 0);
+    let x3 = at(&a, 3, 0);
+    await();
+    modify m { x -> (x + x2 + x3, x + x2 + x3) }
+  };
+  let _ = free(c);
+  v
+
+main -> List[i32] =
+  let q = push(queue[i32](), with spawn { worker() });
+  let q = push(q, with spawn { worker() });
+  run_until_empty(q)
