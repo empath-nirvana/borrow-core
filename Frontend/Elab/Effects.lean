@@ -3,12 +3,13 @@ import Frontend.Print
 import Frontend.Elab.Subst
 import Frontend.Elab.Instances
 import Frontend.Elab.Divisions
+import Frontend.Check.Elab
 
 /-!
 # Frontend — Elab — effects and handlers  `[spec §18, §19, §20, §21, §30, §32, §34, §38, §39]`
 
 An effect declares operations, each **answering** (`fn`) or **control** (`ctl`, with the
-structural qualifier of its continuation: cancellable by default, must resume at `linear ctl`,
+structural qualifier of its continuation: cancellable by default, must resume at `must_resume ctl`,
 unrestricted at `multi ctl`). An effect is one or the other. This pass resolves every operation to
 the handler that serves it, before the rest of the sugar; it knows no effect by name.
 
@@ -386,14 +387,35 @@ def Env.iterEff (env : Env) (e : String) : Bool :=
     | _ => false
   | none => false
 
+/-- The qualifier of a control operation. -/
+def _root_.Frontend.OpDecl.qual (o : OpDecl) : Qual := match o.kind with
+  | .ctl q => q
+  | .fn => .cancel
+
+/-- The operation's answer at the kernel's type, elaborated with no name in scope
+(`Check.elabV`): `none` when the written answer names a type (an alias or a parameter). -/
+def _root_.Frontend.OpDecl.coreRes? (o : OpDecl) : Option CVTy :=
+  (Frontend.Check.elabV Frontend.Check.tyFuel
+    ⟨⟨#[], 0, [], []⟩, .empty, .empty, [], [], [], [], []⟩ o.res).toOption
+
+/-- **The operation is abortive** (SPEC §19): the kernel's `isAbortive` (`Core/ClauseKinds.lean`),
+its clause taking no `κ`, on the operation's row entry `(q, A, B)` as `Env.rowOf` gives it to the
+checker. `isAbortive` reads the qualifier and the answer. An answer written as a name (an alias of
+`never`, a parameter a site instantiates at `never`) is read as not abortive here; the kernel's
+clause type (`clauseTy_abortive`) then refuses the clause the elaboration writes, so the
+difference refuses a program and admits none. -/
+def _root_.Frontend.OpDecl.abortive (o : OpDecl) : Bool :=
+  match o.coreRes? with
+  | some B => BoCa.Fig16.LogRel.Core.ClauseKinds.isAbortive (o.qual.toCore, .unit, B)
+  | none => false
+
 /-- The **exhaustion effect** (SPEC §20): the first declared effect with no type parameters whose
 one operation is abortive and takes no argument (`Exhausted` of `lib/rec.bc`). `bounded`, the
 default driver of a recursion, performs it when the budget of depth is spent. The structure
 decides it, not the effect's name. -/
 def Env.exhEff? (env : Env) : Option EffSig :=
   env.effs.find? fun e => e.tps.isEmpty && match e.ops with
-    | [o] => (match o.res with | .zero _ => true | _ => false) && o.kind != .ctl .lin &&
-        o.kind != .fn && o.params.isEmpty
+    | [o] => o.abortive && o.kind != .fn && o.params.isEmpty
     | _ => false
 
 /-- The function `x` is a **heap driver** of recursion (SPEC §20): its written type is
@@ -464,17 +486,6 @@ def tupleTy (sp : Span) : List VTy → VTy
   | [A] => A
   | A :: As => .tensor sp A (tupleTy sp As)
 
-/-- The operation is abortive: answer `0` at a qualifier with weakening. -/
-def _root_.Frontend.OpDecl.abortive (o : OpDecl) : Bool :=
-  (match o.res with | .zero _ => true | _ => false) && (match o.kind with
-    | .ctl .lin => false
-    | .ctl _ => true
-    | .fn => false)
-
-/-- The qualifier of a control operation. -/
-def _root_.Frontend.OpDecl.qual (o : OpDecl) : Qual := match o.kind with
-  | .ctl q => q
-  | .fn => .cancel
 
 /-- The operations of a site, at its type arguments: `(q, A, B)` per operation, in order. -/
 def Env.siteOps (env : Env) (s : Site) : List (Qual × VTy × VTy) :=

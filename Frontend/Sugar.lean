@@ -4502,7 +4502,7 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
       match cl with
       | .thunkv csp (.lam lsp x _ body) =>
         let K := BoCa.Fig16.LogRel.Core.kTy S Rc q Bi
-        let T : CVTy := if Bi.isZero && q != .lin then Ai
+        let T : CVTy := if BoCa.Fig16.LogRel.Core.ClauseKinds.isAbortive (q, Ai, Bi) then Ai
           else .tensor Ai (if i.boxK then .box kBound K else K)
         let body' ← surfC n (cS.push x.name (some T)) (some ans) (body.subst σ)
         hcs := hcs ++ [.bangThunkv csp (.lam lsp x (← (cP.surface lsp T : Except Error VTy)) body')]
