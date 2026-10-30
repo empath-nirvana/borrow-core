@@ -3,7 +3,7 @@
 -- at a bound: its lifetime parameter `'d` is the meet of the lifetimes in scope at each `with`,
 -- and its `await` clause receives the continuation boxed there (BOXED-κ, SPEC §28, at a bound
 -- other than `top`). The borrow `'r` outlives that meet only below a scope of its own, so the
--- tasks are spawned inside `borrow mut d { 'd, … }`, a unit cell's scope (as `aff-capture.bc`'s
+-- tasks are spawned inside `borrow mut d { 'd, … }`, a unit cell's scope (as `clo-capture.bc`'s
 -- `'w`); without it the spawn is refused (`corpus/reject/spawn-in-unscoped.bc`). The queue holds
 -- tasks of `TaskIn[i32]<'d>`, and `run_in` runs it round robin for at most 4 rounds, a counted
 -- loop, so the scheduler runs inside the borrow's scope; a task still pending after them would be

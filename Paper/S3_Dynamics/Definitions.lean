@@ -325,11 +325,11 @@ unwinds; `ccatch e` catches the reserved name `0`, the cancel of a continuation.
 *catches* a `raise` of name `n` when it is a handler of `n`, a finaliser, a cancel-mode finaliser
 `cfin`, or (at `n = 0`) a `ccatch`; a `perform` of name `n` is caught only by a handler of `n`.
 
-**The capture cell** (`[spec §25]`).  At a linear or affine operation, the continuation `κ` the
-`[op]` step hands the clause owns a fresh cell holding `()`, allocated by the ordinary `alloc`
-before the clause runs.  Using `κ` frees it: resuming, and at an affine operation cancelling.  A
-linear `κ`'s cancel branch has no step.  So a `κ` dropped leaves its cell behind, and a `κ` used
-twice frees its cell twice.
+**The capture cell** (`[spec §25]`).  At a must-resume or cancellable operation, the continuation
+`κ` the `[op]` step hands the clause owns a fresh cell holding `()`, allocated by the ordinary
+`alloc` before the clause runs.  Using `κ` frees it: resuming, and at a cancellable operation
+cancelling.  A must-resume `κ`'s cancel branch has no step.  So a `κ` dropped leaves its cell
+behind, and a `κ` used twice frees its cell twice.
 
 **Cancels.**  A cancel is a `raise` of the reserved name `0` whose payload is a cancel state: the
 first error a finaliser of the cancelled region raised, if any (`cancelVal`).  The cancelled region
@@ -368,7 +368,7 @@ qualifiers, its answer clause and its clauses.  `[spec §19, §25]` -/
 def hndVal (n : UInt32) (qs hr hs : Val) : Val := .pair (.i32 n) (.pair qs (.pair hr hs))
 
 /-- The `i`-th tag of a right-nested tuple of tags; `2` (unrestricted) where there is none.
-The tags are `0` (linear), `1` (affine) and `2` (unrestricted).  `[spec §25]` -/
+The tags are `0` (must resume), `1` (cancellable) and `2` (unrestricted).  `[spec §25]` -/
 def capTag : Expr → Nat → UInt32
   | .pair (.prim (.lit (.i32 t))) _, 0 => t
   | .pair _ r, i + 1 => capTag r i
@@ -471,36 +471,36 @@ def freeE (e : Expr) : Expr := .app (.val (.prim .free)) e
 /-- A term with no step: `() ()`.  `[spec §25]` -/
 def stuckE : Expr := .app (.val .unit) (.val .unit)
 
-/-- `κ` at a linear (`aff = false`) or affine operation, its cell at `ℓ`: `kappa`'s branches,
-each freeing `ℓ` once the branch is chosen.  A linear `κ`'s cancel branch is at `⊤` and has no
-step.  `[spec §25]` -/
-def kappaC (aff : Bool) (ℓ : Loc) (H : Val) (K : Kont) : Expr :=
+/-- `κ` at a must-resume (`hasCancel = false`) or cancellable operation, its cell at `ℓ`: `kappa`'s
+branches, each freeing `ℓ` once the branch is chosen.  A must-resume `κ`'s cancel branch is at `⊤`
+and has no step.  `[spec §25]` -/
+def kappaC (hasCancel : Bool) (ℓ : Loc) (H : Val) (K : Kont) : Expr :=
   .val (.lam (.case (.var 0)
     (.seq (.var 0) (.seq (freeE (.val (.loc ℓ)))
       (.val (.lam (hndE (H.shift 3 0) ((K.shift 3 0).plug (.var 0)))))))
-    (if aff then
+    (if hasCancel then
       .seq (.var 0) (.seq (freeE (.val (.loc ℓ)))
         (ccatchE ((K.dead.shift 2 0).plug (raiseE (.val (cancelVal none))))))
     else stuckE)))
 
 /-- `kappaC`'s body over its cell, the cell the variable `c` (index `0` outside the `λs`). -/
-def kappaCBody (aff : Bool) (H : Val) (K : Kont) : Expr :=
+def kappaCBody (hasCancel : Bool) (H : Val) (K : Kont) : Expr :=
   .lam (.case (.var 0)
     (.seq (.var 0) (.seq (freeE (.var 2))
       (.val (.lam (hndE (H.shift 4 0) ((K.shift 4 0).plug (.var 0)))))))
-    (if aff then
+    (if hasCancel then
       .seq (.var 0) (.seq (freeE (.var 2))
         (ccatchE ((K.dead.shift 3 0).plug (raiseE (.val (cancelVal none))))))
     else stuckE))
 
-/-- `κ` at a linear or affine operation, before its cell: `(λc. kappaCBody) (alloc ())`, so the
-cell is allocated by the ordinary `alloc` step, and `κ` is `kappaC` at its location.
+/-- `κ` at a must-resume or cancellable operation, before its cell: `(λc. kappaCBody) (alloc ())`,
+so the cell is allocated by the ordinary `alloc` step, and `κ` is `kappaC` at its location.
 `[spec §25]` -/
-def kappaCell (aff : Bool) (H : Val) (K : Kont) : Expr :=
-  .app (.val (.lam (kappaCBody aff H K))) (.app (.val (.prim .alloc)) (.val .unit))
+def kappaCell (hasCancel : Bool) (H : Val) (K : Kont) : Expr :=
+  .app (.val (.lam (kappaCBody hasCancel H K))) (.app (.val (.prim .alloc)) (.val .unit))
 
 /-- The continuation the `[op]` step hands the clause, by the operation's tag: `kappaCell` at a
-linear (`0`) or affine (`1`) operation, `kappa` otherwise.  `[spec §19, §25]` -/
+must-resume (`0`) or cancellable (`1`) operation, `kappa` otherwise.  `[spec §19, §25]` -/
 def kappaAt (t : UInt32) (H : Val) (K : Kont) : Expr :=
   if t = 0 then kappaCell false H K else if t = 1 then kappaCell true H K else kappa H K
 

@@ -1,15 +1,15 @@
-# The affine closure, Rust's `FnMut`
+# The closure `Clo`, Rust's `FnMut`
 
 Issue #236, the experiment; #239 lifted it into the kernel as SPEC §22. The kernel change of §8
 is made: the positivity relaxation is in `Core/`, the closure's lemmas and derived rules in
-`Core/Aff.lean` and `Core/AffRules.lean`, the programs in `Core/AffPrograms.lean`, and the
-library declaration is `Aff[A, B]<'c>` in `lib/aff.bc` (decision 60: the name is not Rust's).
-The Lean names below are the library's (`affT`, `affBox`, `d_callAff`, `d_ofFn`); this document
-writes the type `FnMut^c A B` as the experiment did, and SPEC §22 writes it `Aff^c A B`.
+`Core/Clo.lean` and `Core/CloRules.lean`, the programs in `Core/CloPrograms.lean`, and the
+library declaration is `Clo[A, B]<'c>` in `lib/clo.bc` (decision 60: the name is not Rust's).
+The Lean names below are the library's (`cloT`, `cloBox`, `d_callClo`, `d_ofFn`); this document
+writes the type `FnMut^c A B` as the experiment did, and SPEC §22 writes it `Clo^c A B`.
 
 **How claims are marked.**
 
-- **[Lean]**: a theorem in `Core/Aff.lean`, `Core/AffRules.lean` or `Core/AffPrograms.lean`. Axioms are within
+- **[Lean]**: a theorem in `Core/Clo.lean`, `Core/CloRules.lean` or `Core/CloPrograms.lean`. Axioms are within
   `[propext, Classical.choice, Quot.sound]`, with no `sorry`. Each program is one closed
   `CDerives` derivation; `*_runs` is its adequacy instance at every host, and `*_eval` is the
   interpreter at Wasm's host, checked by `decide`.
@@ -24,7 +24,7 @@ writes the type `FnMut^c A B` as the experiment did, and SPEC §22 writes it `Af
 
        FnMut^c A B  ≜  νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1
 
-   An affine closure is a value of `U(FnMut^c A B)`. It has two observations:
+   a `Clo` closure is a value of `U(FnMut^c A B)`. It has two observations:
    - `call` takes an `A` and answers a `B` together with the rest of the closure;
    - `close` ends the closure.
 
@@ -41,8 +41,8 @@ writes the type `FnMut^c A B` as the experiment did, and SPEC §22 writes it `Af
    - `Fn` is `!U(A ⊸ F B)`.
 
    What `experiments/BorrowedClosures` anticipated as "a mode index on the codata former" is
-   supplied by `ν`'s observation set: the `close` observation is what makes the closure affine.
-   No new former is needed, no index on `⊸`, and no new `CDerives` rule.
+   supplied by `ν`'s observation set: the `close` observation is what gives the closure a derived
+   drop. No new former is needed, no index on `⊸`, and no new `CDerives` rule.
 
 3. **Is it derivable?**
    - **Not in `Core` as it is [inspection].** `CTy.NuLeaf` (`Core/Types.lean`) admits only
@@ -68,7 +68,7 @@ writes the type `FnMut^c A B` as the experiment did, and SPEC §22 writes it `Af
 
    It is the unrolling of the greatest fixed point (`NuRel.lean`). At the program's view the
    clause is kept whole. In the observable view it is relaxed to `True`, like every `U C`
-   (`vC_obs_fnMut`). That relaxation is never spent against an affine closure:
+   (`vC_obs_fnMut`). That relaxation is never spent against a `Clo` closure:
    - an `Imm` payload is read through `Imm̲`, which takes `U C` to `Unk`, the paper's clause (4)
      (`immReborrow_fnMut`, `immReborrow_fnBox`);
    - a `Mut` payload is held at the program's view.
@@ -98,9 +98,9 @@ writes the type `FnMut^c A B` as the experiment did, and SPEC §22 writes it `Af
 |---|---|---|---|
 | 1 | call repeatedly through a `Mut` borrow; the state persists | **[Lean]** | `d_callMut`; `counterProg`: a counter owning a cell, stored in a cell, lent, called with 1 then 2 through the borrow, closed: `4`, no cell left |
 | 2 | pass a borrowed closure on, at any depth | **[Lean]** | `d_passF n` for every `n`; `passF` reborrows once (`withbor` form 3) and calls twice; `passProg 3` = `13` |
-| 3 | a closure capturing a closure; closures taking closures | **[Lean]** for capture and for `!` functions taking a borrowed closure; **[Lean]** positivity only for an affine closure whose argument is a closure | `nestProg` = `8`; `twiceV`, `reV`, `passF`; `fnBody_nuOk_higher` |
+| 3 | a closure capturing a closure; closures taking closures | **[Lean]** for capture and for `!` functions taking a borrowed closure; **[Lean]** positivity only for a `Clo` closure whose argument is a closure | `nestProg` = `8`; `twiceV`, `reV`, `passF`; `fnBody_nuOk_higher` |
 | 4 | store or return one, bounded by the borrows it captures | **[Lean]** | `counterProg` stores one in a cell; `retProg` returns one from a function (`15`); `logProg` captures `Mut 'x I32`, is boxed at `'w ⊏ 'x`, and writes through the borrow (`12`); `logState_not_outlives`, `fnMut_not_outlives` |
-| 5 | forget/drop | **[Lean]**; the policy **[inspection]** | `hasDtor_fnMut`; `dropProg` (`0`, its cell freed by the destructor); `not_affine_fnMut` |
+| 5 | forget/drop | **[Lean]**; the policy **[inspection]** | `hasDtor_fnMut`; `dropProg` (`0`, its cell freed by the destructor); `not_forgettable_clo` |
 | 6 | `Fn ≤ FnMut ≤ FnOnce`, with refusals | **[Lean]** for the coercions and for the premises the refusals lack; the refusal of a uniform `FnOnce → FnMut` is **[inspection]** | `d_fromFn`, `fromFnProg` (`23`); `d_once`, `onceProg` (`5`); `not_persistent_fnMut`, `not_hasDtor_lolli` |
 
 ---
@@ -188,7 +188,7 @@ Each is closed, typed at `F I32`, run by adequacy at every host and by the inter
 | `nestProg` | `Programs.lean` | an outer closure whose state is the counter, boxed at `'x ⊏ ⊤`, doubling each answer. Closing it closes the counter | `8` |
 | `retProg` | `Capture.lean` | `mkCounter : !U(I32 ⊸ F([@⊤] U FnMut))` returns a closure owning a fresh cell | `15` |
 | `logProg` | `Capture.lean` | a logger whose state is the captured `Mut 'x I32`. It is boxed at `'w ⊏ 'x` and adds each argument to the log through `withswap` on the borrow. The owner reads the log after the borrow ends | `12` |
-| `fromFnProg` | `Programs.lean` | `λx. x + 10 : !U(I32 ⊸ F I32)` made an affine closure and called twice | `23` |
+| `fromFnProg` | `Programs.lean` | `λx. x + 10 : !U(I32 ⊸ F I32)` made a `Clo` closure and called twice | `23` |
 | `onceProg` | `Programs.lean` | the counter used once as `U(I32 ⊸ F I32)` | `5` |
 | `dropProg` | `Programs.lean` | the counter over a cell, never called, dropped by its destructor | `0` |
 
@@ -200,16 +200,16 @@ borrow, and `[@c]` is strict (`'a ⊏ @c`). At the empty lifetime context only `
 closure boxed at `⊤` is lent from inside one scope `'x ⊏ ⊤` (`scopeProg`). A closure that
 captures a borrow at `'x` is boxed at a shorter `'w ⊏ 'x` (`logProg`). It cannot be boxed at `'x`
 itself (`logState_not_outlives`). Rust's `+ 'c` is non-strict and needs neither scope. This is
-BoLo's strict outlives, not a property of the affine closure [inspection].
+BoLo's strict outlives, not a property of the closure `Clo` [inspection].
 
 ## 5. Dropping
 
-**Choice: dropping an affine closure runs its destructor, `close`.** `close` disposes of the
+**Choice: dropping a `Clo` closure runs its destructor, `close`.** `close` disposes of the
 captured state. Owned linear captures are freed (the counter's `close` frees its cell), captured
 borrows are forgotten (the logger's `close` forgets `Mut 'x I32`), and captured closures are
 closed (`nestProg`).
 
-- **Justification.** This is SPEC §12 class 2, unchanged. `HasDtor.nu` already gives every
+- **Justification.** This is SPEC §12 group 2, unchanged. `HasDtor.nu` already gives every
   `U(νX. C & F R)` with a closed droppable residual the destructor "force, `nuOut`, `π₂`, then
   the residual's destructor" (`hasDtor_fnMut` is that constructor at `FnMut`'s body). So the
   checker's insertion policy (§12) drops an unused closure at the end of its scope, as it drops
@@ -221,9 +221,9 @@ closed (`nestProg`).
     classes 1 and 2).
   - A capture without one, such as a `U(A ⊸ F B)` (`not_hasDtor_lolli`), is accepted only when
     the creator writes an explicit `close` for it.
-- **Affine by destructor, not by `forget`.** An affine closure is not `Affine`
-  (`not_affine_fnMut`): discarding it is an action, so it is never dropped silently, and an
-  explicit `linear` binder (§12 opt-out) keeps the obligation to call `close`.
+- **A derived drop by destructor, not by `forget`.** A `Clo` closure is not `Forgettable`
+  (`not_forgettable_clo`, the experiment's name): discarding it is an action, its `close`, placed by
+  the checker's insertion policy so that it never reorders effects.
 
 ## 6. Relations
 
@@ -232,18 +232,18 @@ closed (`nestProg`).
   415:9), and that is right for `FnMut`. The paper's limit is lifted the other way: through a
   `Mut` borrow the closure is callable, by `withswap`, with no change to `withswap`.
 - **`ModesLabels`.** Its README's last section proposes mode-annotated arrows: lin = `FnOnce`,
-  aff = `FnMut`, unr = `Fn`.
+  `FnMut` at the mode with weakening only, unr = `Fn`.
   - The experiment does not need annotated arrows: the modes are the three shapes of §1.
-  - **`FnMut` is not `aff` in `ModesLabels`' sense [inspection].** `weaken_sound` says a value
-    at a weakenable mode holds no `own` cell, and an affine closure can own cells: the counter
-    owns one, freed by its `close`. Its weakening is a destructor, as for `Ref A` under §12, not
-    the free weakening of `Mut`.
-  - So `σ(aff) = W` splits in two: *forgettable* (`Mut`, class 1) and *droppable by an action*
-    (`FnMut`, and `Ref` since §12). The label reading is unaffected: an affine closure breaks
+  - **`FnMut` is not at the weakening mode in `ModesLabels`' sense [inspection].** `weaken_sound`
+    says a value at a weakenable mode holds no `own` cell, and a `Clo` closure can own cells: the
+    counter owns one, freed by its `close`. Its weakening is a destructor, as for `Ref A` under §12,
+    not the free weakening of `Mut`.
+  - So `σ(m) = W` splits in two: *forgettable* (`Mut`, class 1) and *droppable by an action*
+    (`FnMut`, and `Ref` since §12). The label reading is unaffected: a `Clo` closure breaks
     independence only through the borrows its state holds, and its `[@c]` bound is the label
     that licenses it.
-- **`Shifts`.** The missing `aff → unr` shift (`withborMI`, `&mut T → &T`) is not needed. An
-  `Imm` view of a closure is `Unk` whatever the shift.
+- **`Shifts`.** The missing shift from the weakening mode to `unr` (`withborMI`, `&mut T → &T`) is
+  not needed. An `Imm` view of a closure is `Unk` whatever the shift.
 - **§12.69 and `obs_transfer`.** §0.4. Nothing is relaxed that was not already relaxed, and
   nothing new is kept at the observable view.
 - **#233, R2a, `docs/second-class-and-system-c.md`.** R2a's "closure value" (`!` code and an
@@ -259,7 +259,7 @@ closed (`nestProg`).
 - `cC_fnMut_iff` (the clause), `fnMut_coind`, `vC_obs_fnMut`, `immReborrow_fnMut`,
   `immReborrow_fnBox`, `obs_transfer_fnBox`.
 - `fnBody_nuOk`, `fnBody_nuOk_higher`, `fnEffBody_nuOk`.
-- `hasDtor_fnMut`, `hasDtor_fnBox`, `not_affine_fnMut`, `not_persistent_fnMut`,
+- `hasDtor_fnMut`, `hasDtor_fnBox`, `not_forgettable_clo`, `not_persistent_fnMut`,
   `not_persistent_fnBox`, `not_hasDtor_lolli`, `fnMut_not_outlives`, `logState_not_outlives`,
   `logState_ctx_not_outlives`.
 - The derived rules of §3, and `d_passF` at every depth.
@@ -268,9 +268,9 @@ closed (`nestProg`).
 ## 8. The kernel change it implies
 
 Made in #239 (SPEC §22), as described here, with one addition: `type` declarations take type and
-lifetime parameters, so the library can declare `Aff[A, B]<'c>`. The checker's positivity
+lifetime parameters, so the library can declare `Clo[A, B]<'c>`. The checker's positivity
 decision and the backend's eager codata thunks (`Backend/Clos/Collapse.lean`) admit the new
-shapes, and the corpus programs `corpus/aff-*.bc` cover the requirements of §0.
+shapes, and the corpus programs `corpus/clo-*.bc` cover the requirements of §0.
 
 - **SPEC §7.** Positivity (`CTy.NuOk`) gains two shapes:
   - an observation with a closed argument, `A ⊸ D`;
@@ -302,12 +302,12 @@ shapes, and the corpus programs `corpus/aff-*.bc` cover the requirements of §0.
 - **A lifetime-polymorphic argument** (`∀'a. Mut 'a T ⊸ F(B ⊗ [@c] U X)`). It needs `∀` in
   observation trees. `cB` at `∀` would change `δ` under a candidate fixed at one `δ`. Not
   attempted. Today an argument's lifetimes are fixed when the closure's type is written.
-- **An affine closure taking an affine closure,** as a program. The type is positive
+- **a `Clo` closure taking a `Clo` closure,** as a program. The type is positive
   (`fnBody_nuOk_higher`); no program exercises it.
 - **Effectful calls,** as a program (§6).
 - **The closure sugar and its checker rule** (§8): not built.
 - **Lowering [hypothesis].** The model's `unfold step s` is a fixed-point combinator over a
-  thunk. The backend should represent an affine closure as R2a's defunctionalised pair: a
+  thunk. The backend should represent a `Clo` closure as R2a's defunctionalised pair: a
   pointer to the state and a code tag. A call through `Mut` is then an indirect call on the
   state in place, not a `withswap` of the whole value. Not measured.
 - **A uniform `FnOnce → FnMut`** is refused by inspection only. For some `A` and `B` such a

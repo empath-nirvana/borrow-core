@@ -1,0 +1,34 @@
+-- The coercions between the three kinds of function (SPEC §22): from the unrestricted `!(A => B)`
+-- to the closure `box 'c Clo[A, B]<'c>`, and from the closure to `A => B`, linear with no derived
+-- drop (cf. Rust's `Fn ≤ FnMut ≤ FnOnce`). `clo_of_fn` makes an unrestricted function a closure
+-- whose state is the function; `clo_once` makes a closure a function that calls it once and
+-- closes the rest. The other directions are refused: a closure is linear
+-- (`corpus/reject/clo-copy.bc`), and `A => B` has no derived drop, so it cannot be the state a
+-- `close` disposes of
+-- (`corpus/reject/clo-linear-state.bc`).
+--
+-- Answer: i32[230011], and `live 0`: `x + 10` as a closure answers 11 and 12 (`23`, times
+-- 10000); the counter from 10, made linear and called once with 1, answers 11, and its `close`
+-- frees its cell. A coercion that dropped the counter without closing it leaves its cell live.
+-- Both closures are bounded by `main`'s own lifetime (SPEC §23).
+
+include clo
+
+fn counter<'c>(start: i32) -> box 'c Clo[i32, i32]<'c> =
+  clo_new_boxed[ref i32, i32, i32]['c](alloc(start), !thunkv fun (s : ref i32) ->
+    < fun (a : i32) ->
+        cx <- return (swap[i32, i32] s i32[0]);
+        let (c, x) = cx;
+        cu <- return (swap[i32, i32] c (x + a));
+        let (c1, u) = cu;
+        return (x + a, c1),
+      n <- return (free[i32] s); return () >)
+
+main -> i32 =
+  let f = clo_of_fn[i32, i32](!thunkv fun (x : i32) -> return (x + 10));
+  let (a, f) = clo_call(f, 1);
+  let (b, f) = clo_call(f, 2);
+  clo_close(f);
+  let g = clo_once[i32, i32](counter(10));
+  let c = g(1);
+  (a + b) * 10000 + c

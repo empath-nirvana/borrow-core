@@ -1,10 +1,4 @@
 corpus/13-2-sum-prog.bc flows [0, 4294967295]; main []
-corpus/aff-capture.bc flows [0, 4294967295]; main []
-corpus/aff-coerce.bc flows [0, 4294967295]; main []
-corpus/aff-counter.bc flows [0, 4294967295]; main []
-corpus/aff-depth.bc flows [0, 4294967295]; main []
-corpus/aff-drop.bc flows [0, 4294967295]; main []
-corpus/aff-higher.bc flows [0, 4294967295]; main []
 corpus/answers-two-types.bc flows [0, 1, 2, 4294967295]; main [1, 2]
 corpus/answers-two-types.bc 23:21: handle 1: inside [2]; row []; ops 1.0 tail+state; names 1.0 []; condition 2 holds
 corpus/answers-two-types.bc 23:40: handle 2: inside []; row [1]; ops 2.0 tail; names 2.0 []; condition 2 holds
@@ -308,6 +302,12 @@ corpus/clause-captures.bc 42:13: handle 1: inside []; row []; ops 1.0 tail+state
 corpus/clause-captures.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/clause-captures.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/clause-captures.bc 1.0 tail+state: machine; condition 2 holds; -
+corpus/clo-capture.bc flows [0, 4294967295]; main []
+corpus/clo-coerce.bc flows [0, 4294967295]; main []
+corpus/clo-counter.bc flows [0, 4294967295]; main []
+corpus/clo-depth.bc flows [0, 4294967295]; main []
+corpus/clo-drop.bc flows [0, 4294967295]; main []
+corpus/clo-higher.bc flows [0, 4294967295]; main []
 corpus/clone-reuse.bc flows [0, 4294967295]; main []
 corpus/comp-param.bc flows [0, 3, 5, 4294967295]; main [2, 3, 4, 5, 6]
 corpus/comp-param.bc 21:56: handle 6: inside []; row []; ops 6.0 abortive; names 6.0 []; condition 2 holds

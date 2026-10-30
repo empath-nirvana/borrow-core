@@ -59,7 +59,7 @@ them.
 | issue | title (abridged) | state | PR(s) |
 |---|---|---|---|
 | #258 | Ghost-end lemma: end internal Mut borrows at freeze, re-lend fresh at resume (closes O15.1 with naturality) | closed | #259 merged |
-| #260 | Ghost-end, general case: typed borrowers, drop at affine yields, 6.64/6.66/6.150 at resuming tables, nested lends | closed | #261 merged |
+| #260 | Ghost-end, general case: typed borrowers, drop at cancellable yields, 6.64/6.66/6.150 at resuming tables, nested lends | closed | #261 merged |
 | #262 | values carrying a lend across a suspension | closed | #263 merged |
 | #264 | KernelInvariant from TW preservation; bridge vs re-lendable-by-construction relation | closed | #265 merged |
 | #266 | Feasibility: fundamental lemma at vRL/cRL (route b) | closed | #267 merged |
@@ -167,7 +167,7 @@ Unless stated otherwise, each file has no refutation and no consumer in `Core/`.
 **Handle.lean** (#258)
 - PROVED: `withbor_spans_yields_sem` :27 and `handle_spans_yields` :72. A lend spanning yields is
   handed to K's `handle_compatC` unchanged.
-- OPEN here: the drop half at an affine yield. Drop.lean addresses it.
+- OPEN here: the drop half at a cancellable yield. Drop.lean addresses it.
 - World: K.
 
 **Open.lean** (#258, #260)
@@ -220,12 +220,12 @@ Unless stated otherwise, each file has no refutation and no consumer in `Core/`.
 - World: K + G1.
 
 **Drop.lean** (#260)
-- Goal: drop at an affine yield.
+- Goal: drop at a cancellable yield.
 - PROVED: `opTableO` :49, `ewp_then_owner` :70, `withborR_compat` :108,
   `withborR_spans_yields_cC` :195, `withborR_spans_yields_sem` :230, `handleR_spans_yields` :284
   and `spans_two_affine_yields` :318.
-- OPEN: "`RBody` at an affine row … is not done" (README:258).
-- World: K at an affine row, under K's `[handle]`.
+- OPEN: "`RBody` at a cancellable row … is not done" (README:258).
+- World: K at a cancellable row, under K's `[handle]`.
 
 **Frames.lean** (#260)
 - PROVED: `opTable_extR` :32, `ewpPostR_ext` :46, `ewpTS_M_antiFrameR` :89 (6.66 at a resuming
@@ -842,11 +842,11 @@ pre-#76 `wpTS`. I did not build to confirm this.
 
 ---
 
-## 9. Closures, codata and the affine closure
+## 9. Closures, codata and the closure `Clo`
 
 | experiment | effects relevance | world | proved (key) | refuted | open | kernel |
 |---|---|---|---|---|---|---|
-| **FnMut** (#236, PR #238; kernel #239, PR #240, merged 2026-10-02) | the affine closure `Aff^c A B = νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`; #274's `[gen]` types a continuation at it | K, `cC` with ν, no row | now in Core: `affBody_nuOk` Core/Aff.lean:53, `cC_aff_iff` :72, `aff_coind` :83, `hasDtor_aff` :108, `not_affine_aff` :128 | none | `[gen]` (see §11, lift-stage1) | **promoted**: SPEC §22, `Core/Aff*.lean`, `lib/aff.bc`; the fork is at `60936af`; the directory has no Lean |
+| **FnMut** (#236, PR #238; kernel #239, PR #240, merged 2026-10-02) | the closure `Clo^c A B = νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`; #274's `[gen]` types a continuation at it | K, `cC` with ν, no row | now in Core: `cloBody_nuOk` Core/Clo.lean:53, `cC_clo_iff` :72, `clo_coind` :83, `hasDtor_clo` :108, `not_forgettable_clo` :128 | none | `[gen]` (see §11, lift-stage1) | **promoted**: SPEC §22, `Core/Aff*.lean`, `lib/clo.bc`; the fork is at `60936af`; the directory has no Lean |
 | **Recursion** (borrow_lang `bb5de9b`, 2026-09-25) | ν/codata, coiteration | TW-old (CBPVWorld) | `unfold_sem` Nu.lean:281, `take2Close_runs` :403, `build3Free_runs` Mu.lean:221, `immReborrow_unroll` ImmMu.lean:414 | `naive_ne` ImmMu.lean:469 (syntactic inequality) | chooser and 6.131 at `μ`; observation depth | ancestor of SPEC §6/§7 (`SPEC.md:274`, `:386`) |
 | **CBPVMu** | folds, fuel-free borrowed fold | TW-old | `vC_mu_iff` RelMu.lean:347, `vC_ind` :425, `fundamentalC`/`adequacyC` Fundamental.lean:211/:329 | none | `WpChainCommutes`, continuity | assembled into Core |
 | **CBPVWorld** (borrow_lang `534637e`/`a31b498`, 2026-09-24) | none; ancestor of K | TW-old | `fundamentalC` Fundamental.lean:160, `adequacyC` :270 | none | `⊸E`/`∀E` on subterms | assembled into Core |
@@ -978,7 +978,7 @@ ModesLabels (ownership kinds as adjoint modes) are what HandlersAsBorrows later 
 | GhostEnd: General | K + G1 | reduction lemma | none | `RBodyOfTyped` | no |
 | GhostEnd: Branch | K | `branch_spans_yields` | none | none | no |
 | GhostEnd: Loop | K + G1 | `loop_spans_yields` | none | the `[app]` gap | no |
-| GhostEnd: Drop | K at an affine row | `withborR_compat`, `spans_two_affine_yields` | none | `RBody` at an affine row | no |
+| GhostEnd: Drop | K at a cancellable row | `withborR_compat`, `spans_two_affine_yields` | none | `RBody` at a cancellable row | no |
 | GhostEnd: Frames | K | `ewpTS_M_antiFrameR` | none | 6.150 lift (#277) | no (audit: promote) |
 | GhostEnd: Table | K | `wpG_tabAt` | none | `Imm` table | no (audit: promote) |
 | GhostEnd: Descend | K + G1 | `openD_bind` | none | none | no |
@@ -1012,7 +1012,7 @@ ModesLabels (ownership kinds as adjoint modes) are what HandlersAsBorrows later 
 | LoopBorrow | K-pure | `wpTS_M_refold`, `refoldKripkeD`, six programs | `refoldKripke_false` (**arises**), `not_markerInstallable`, `not_lendingYield_*` | spanning lend (#172) | **yes**: SPEC §14 per-observation lend |
 | FrameTheorems | K-pure (pre-#76 `wpTS`) | `wpTS_footprint`, `call_frame`, `imm_call_keeps` | `not_runsAgreeOnDom` (arising not checked) | `EveryRunFootprint`, two-run laws | no; probably stale against current `wpTS` |
 | TwoRun | K-pure (pre-#76 `wpTS`) | `freshRun_det`, `wpTS_footprint_fresh` | `not_everyRunFootprint`, `not_everyRunFootprintRen`, `not_readFootprint` (none arise) | `ReadFootprintTyped` | no; probably stale against current `wpTS` |
-| FnMut | K, ν | `cC_aff_iff`, `aff_coind` (now in Core) | none | `[gen]` (lift-stage1) | **yes**: SPEC §22 |
+| FnMut | K, ν | `cC_clo_iff`, `clo_coind` (now in Core) | none | `[gen]` (lift-stage1) | **yes**: SPEC §22 |
 | Recursion / CBPVMu / CBPVWorld | TW-old | ν coiteration, μ folds, FP | `naive_ne` (syntactic) | `WpChainCommutes` etc. | **yes**: assembled into Core |
 | Affine | K-pure | `ADerives.elab`, `fundamentalA` | none | effectful destructors | **yes**: SPEC §12 |
 | Grades | K-pure | `cderives_iff_graded`, `prog_runs_any` | none | migrating Core | no (decision 19) |
@@ -1025,7 +1025,7 @@ ModesLabels (ownership kinds as adjoint modes) are what HandlersAsBorrows later 
 
 **Summary of standing.**
 - At K, the effects results the kernel uses come from three places: LoopBorrow's per-observation
-  lend, FnMut's affine closure, and the motivations HandlersControl supplied for SPEC §19.
+  lend, FnMut's `Clo` closure, and the motivations HandlersControl supplied for SPEC §19.
 - Every GhostEnd, Restrat and EffModelRel result lives at a world other than K or W, and none is
   imported by Core.
 - No experiment states or proves anything at the planned Kripke world W.

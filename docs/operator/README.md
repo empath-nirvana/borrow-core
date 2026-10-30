@@ -558,7 +558,7 @@ elaboration decision 6).
 - **Where the operator meets it.** Every raise under a borrow (`call(cfg, || get(&api, …))`), and
   every cancellation (§2: cancellation is not resuming).
 - **The questions.**
-  - What happens to a live value with no destructor (a capability, a thunk, SPEC §12 class 3)?
+  - What happens to a live value with no destructor (a capability, a thunk, SPEC §12 group 3)?
     Either raise is illegal while one is live, or the handler receives it with the error, as
     `close` hands back a residual. The operator's capabilities live in handlers, not in bodies,
     so a body holds only borrows of them, and a borrow just ends. That makes the second answer

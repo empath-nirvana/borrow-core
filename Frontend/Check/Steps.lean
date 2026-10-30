@@ -1,4 +1,5 @@
 import Frontend.Check.Rules
+import Core.Classes
 
 /-!
 # Frontend — Check — steps shared by the checker's cases
@@ -12,7 +13,7 @@ contexts, `boxed`, application to a variable, `<,>`, `case` and `Fun`.
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (Jdg FShape HasDtor dtorAlgs)
+open BoCa.Fig16.LogRel.Core (Jdg FShape HasDtor dtorAlgs DerivedDrop Linear)
 
 /-! ### Fold shapes and destructors, decided -/
 
@@ -301,6 +302,201 @@ def hasDtorB (A : CVTy) : Bool := dtorB false A
 
 theorem hasDtorB_sound {A : CVTy} (h : hasDtorB A = true) : HasDtor A := dtorB_sound A h
 
+open BoCa.Fig16.LogRel.Core.FoldP (clB keysIn resO resO_leaf pBodyB_iff Bnd Stack) in
+mutual
+/-- **`dtorB false` is complete for `HasDtor`.** -/
+theorem dtorB_complete : ∀ A : CVTy, HasDtor A → dtorB false A = true
+  | .tensor A B, h => by
+      cases h with
+      | tensor h₁ h₂ => simp [dtorB, dtorB_complete A h₁, dtorB_complete B h₂]
+  | .sum A B, h => by
+      cases h with
+      | sum h₁ h₂ => simp [dtorB, dtorB_complete A h₁, dtorB_complete B h₂]
+  | .ref A, h => by
+      cases h with
+      | ref h => simpa [dtorB] using dtorB_complete A h
+  | .tvar _, h => by cases h
+  | .box _ A, h => by
+      cases h with
+      | box h => simpa [dtorB] using dtorB_complete A h
+  | .mu A, h => by
+      cases h with
+      | mu hP h₁ h₂ h₃ =>
+          simp only [dtorB, Bool.false_and, Bool.false_eq_true, if_false, Bool.and_eq_true]
+          exact ⟨(pBodyB_iff A).mpr hP, dtorB_completeA A [A] ⟨h₁, h₂, h₃⟩⟩
+  | .thunk (.amp _ (.ret .unit)), _ => rfl
+  | .thunk (.nu (.amp C (.ret R))), h => by
+      cases h with
+      | nu hC hRc h =>
+          simp [dtorB, CTy.nuOkB_complete _ hC, VTy.clB_complete 0 R hRc, dtorB_complete R h]
+  | .thunk (.nu (.ret _)), h | .thunk (.nu (.arr _ _)), h | .thunk (.nu .top), h
+  | .thunk (.nu (.all _ _ _)), h | .thunk (.nu (.nu _)), h | .thunk (.nu (.eff _ _ _ _ _ _ _)), h
+  | .thunk (.nu (.amp _ (.arr _ _))), h | .thunk (.nu (.amp _ (.amp _ _))), h
+  | .thunk (.nu (.amp _ .top)), h | .thunk (.nu (.amp _ (.all _ _ _))), h
+  | .thunk (.nu (.amp _ (.nu _))), h | .thunk (.nu (.amp _ (.eff _ _ _ _ _ _ _))), h
+  | .thunk (.ret _), h | .thunk (.arr _ _), h | .thunk .top, h
+  | .thunk (.all _ _ _), h | .thunk (.eff _ _ _ _ _ _ _), h
+  | .thunk (.amp _ (.ret (.tensor _ _))), h | .thunk (.amp _ (.ret .zero)), h
+  | .thunk (.amp _ (.ret (.sum _ _))), h | .thunk (.amp _ (.ret (.thunk _))), h
+  | .thunk (.amp _ (.ret (.ref _))), h | .thunk (.amp _ (.ret (.imm _ _))), h
+  | .thunk (.amp _ (.ret (.mut _ _))), h | .thunk (.amp _ (.ret (.box _ _))), h
+  | .thunk (.amp _ (.ret (.bang _))), h | .thunk (.amp _ (.ret .unk)), h
+  | .thunk (.amp _ (.ret (.tvar _))), h | .thunk (.amp _ (.ret (.mu _))), h
+  | .thunk (.amp _ (.ret (.int _))), h | .thunk (.amp _ (.ret (.fam _))), h
+  | .thunk (.amp _ (.ret (.opq _))), h
+  | .thunk (.amp _ (.arr _ _)), h
+  | .thunk (.amp _ (.amp _ _)), h | .thunk (.amp _ .top), h
+  | .thunk (.amp _ (.all _ _ _)), h | .thunk (.amp _ (.nu _)), h
+  | .thunk (.amp _ (.eff _ _ _ _ _ _ _)), h => by cases h
+  | .unit, _ | .zero, _ | .int _, _ | .unk, _ | .bang _, _ | .imm _ _, _ | .mut _ _, _ => rfl
+  | .opq _, h => by cases h
+  | .fam (.ref A), h => by
+      cases h with
+      | array h => simpa [dtorB] using dtorB_complete A h
+  | .fam (.imm _ _), _ | .fam (.mut _ _), _ => rfl
+  | .fam .unit, h | .fam (.tensor _ _), h | .fam .zero, h | .fam (.sum _ _), h
+  | .fam (.thunk _), h | .fam (.box _ _), h
+  | .fam (.bang _), h | .fam .unk, h | .fam (.tvar _), h | .fam (.mu _), h
+  | .fam (.int _), h | .fam (.fam _), h | .fam (.opq _), h => by cases h
+
+/-- **`dtorB true` is complete for `AlgDtor`**, at every stack: the recursion carries the stack
+as `AlgDtor` does, `A :: Bs` under a `μ` that is not closed. -/
+theorem dtorB_completeA : ∀ (A : CVTy) (Bs : Stack), AlgDtor Bs A → dtorB true A = true
+  | .tensor A B, Bs, h => by
+      by_cases hc : clB 0 (.tensor A B) = true
+      · have h₁ := h.1
+        rw [resO_leaf dtorAlgs Bs hc] at h₁
+        rw [dtorB_closed _ hc]
+        exact dtorB_complete _ h₁
+      · obtain ⟨h₁, h₂, h₃⟩ := h
+        simp only [BoCa.Fig16.LogRel.Core.FoldP.resO, if_neg hc] at h₁
+        cases h₁ with
+        | tensor ha hb =>
+          have hA : AlgDtor Bs A := ⟨ha, fun B' Bs' hm => h₂ B' Bs' (by
+              simp only [keysIn, List.mem_append]; exact .inl hm),
+            fun Bs' S hm => h₃ Bs' S (by simp only [keysIn, List.mem_append]; exact .inl hm)⟩
+          have hB : AlgDtor Bs B := ⟨hb, fun B' Bs' hm => h₂ B' Bs' (by
+              simp only [keysIn, List.mem_append]; exact .inr hm),
+            fun Bs' S hm => h₃ Bs' S (by simp only [keysIn, List.mem_append]; exact .inr hm)⟩
+          simp [dtorB, dtorB_completeA A Bs hA, dtorB_completeA B Bs hB]
+  | .sum A B, Bs, h => by
+      by_cases hc : clB 0 (.sum A B) = true
+      · have h₁ := h.1
+        rw [resO_leaf dtorAlgs Bs hc] at h₁
+        rw [dtorB_closed _ hc]
+        exact dtorB_complete _ h₁
+      · obtain ⟨h₁, h₂, h₃⟩ := h
+        simp only [BoCa.Fig16.LogRel.Core.FoldP.resO, if_neg hc] at h₁
+        cases h₁ with
+        | sum ha hb =>
+          have hA : AlgDtor Bs A := ⟨ha, fun B' Bs' hm => h₂ B' Bs' (by
+              simp only [keysIn, List.mem_append]; exact .inl hm),
+            fun Bs' S hm => h₃ Bs' S (by simp only [keysIn, List.mem_append]; exact .inl hm)⟩
+          have hB : AlgDtor Bs B := ⟨hb, fun B' Bs' hm => h₂ B' Bs' (by
+              simp only [keysIn, List.mem_append]; exact .inr hm),
+            fun Bs' S hm => h₃ Bs' S (by simp only [keysIn, List.mem_append]; exact .inr hm)⟩
+          simp [dtorB, dtorB_completeA A Bs hA, dtorB_completeA B Bs hB]
+  | .ref A, Bs, h => by
+      by_cases hc : clB 0 A = true
+      · have h₁ := h.1
+        rw [resO_leaf dtorAlgs Bs (A := .ref A) hc] at h₁
+        cases h₁ with
+        | ref h₁ => simp [dtorB, hc, dtorB_complete A h₁]
+      · obtain ⟨h₁, h₂, h₃⟩ := h
+        simp only [BoCa.Fig16.LogRel.Core.FoldP.resO, if_neg hc] at h₁
+        simp only [dtorB, hc, Bool.not_false, Bool.and_self, if_true]
+        exact dtorB_completeA A Bs ⟨h₁, h₂, h₃⟩
+  | .tvar _, _, _ => rfl
+  | .box a A, Bs, h => by
+      have h₁ := h.1
+      simp only [BoCa.Fig16.LogRel.Core.FoldP.resO] at h₁
+      cases h₁ with
+      | box h₁ => simpa [dtorB] using dtorB_complete A h₁
+  | .mu A, Bs, h => by
+      by_cases hc : clB 0 (.mu A) = true
+      · have h₁ := h.1
+        rw [resO_leaf dtorAlgs Bs hc] at h₁
+        cases h₁ with
+        | mu hP h₁ h₂ h₃ =>
+            simp only [dtorB, hc, Bool.not_true, Bool.and_false, Bool.false_eq_true, if_false,
+              Bool.and_eq_true]
+            exact ⟨(pBodyB_iff A).mpr hP, dtorB_completeA A [A] ⟨h₁, h₂, h₃⟩⟩
+      · obtain ⟨-, h₂, h₃⟩ := h
+        have hroot : HasDtor (resO dtorAlgs (A :: Bs) A) :=
+          h₂ A Bs (by simp [keysIn, hc])
+        have hA : AlgDtor (A :: Bs) A := ⟨hroot,
+          fun B' Bs' hm => h₂ B' Bs' (by simp only [keysIn, if_neg hc]; exact .tail _ hm),
+          fun Bs' S hm => h₃ Bs' S (by simp only [keysIn, if_neg hc]; exact .tail _ hm)⟩
+        simp only [dtorB, hc, Bool.not_false, Bool.and_self, if_true]
+        exact dtorB_completeA A (A :: Bs) hA
+  | .thunk (.amp _ (.ret .unit)), _, _ => rfl
+  | .thunk (.nu (.amp C (.ret R))), _, h => by
+      have h₁ := h.1
+      simp only [BoCa.Fig16.LogRel.Core.FoldP.resO] at h₁
+      cases h₁ with
+      | nu hC hRc h =>
+          simp [dtorB, CTy.nuOkB_complete _ hC, VTy.clB_complete 0 R hRc, dtorB_complete R h]
+  | .thunk (.nu (.ret _)), _, h | .thunk (.nu (.arr _ _)), _, h | .thunk (.nu .top), _, h
+  | .thunk (.nu (.all _ _ _)), _, h | .thunk (.nu (.nu _)), _, h
+  | .thunk (.nu (.eff _ _ _ _ _ _ _)), _, h
+  | .thunk (.nu (.amp _ (.arr _ _))), _, h | .thunk (.nu (.amp _ (.amp _ _))), _, h
+  | .thunk (.nu (.amp _ .top)), _, h | .thunk (.nu (.amp _ (.all _ _ _))), _, h
+  | .thunk (.nu (.amp _ (.nu _))), _, h | .thunk (.nu (.amp _ (.eff _ _ _ _ _ _ _))), _, h
+  | .thunk (.ret _), _, h | .thunk (.arr _ _), _, h | .thunk .top, _, h
+  | .thunk (.all _ _ _), _, h | .thunk (.eff _ _ _ _ _ _ _), _, h
+  | .thunk (.amp _ (.ret (.tensor _ _))), _, h | .thunk (.amp _ (.ret .zero)), _, h
+  | .thunk (.amp _ (.ret (.sum _ _))), _, h | .thunk (.amp _ (.ret (.thunk _))), _, h
+  | .thunk (.amp _ (.ret (.ref _))), _, h | .thunk (.amp _ (.ret (.imm _ _))), _, h
+  | .thunk (.amp _ (.ret (.mut _ _))), _, h | .thunk (.amp _ (.ret (.box _ _))), _, h
+  | .thunk (.amp _ (.ret (.bang _))), _, h | .thunk (.amp _ (.ret .unk)), _, h
+  | .thunk (.amp _ (.ret (.tvar _))), _, h | .thunk (.amp _ (.ret (.mu _))), _, h
+  | .thunk (.amp _ (.ret (.int _))), _, h | .thunk (.amp _ (.ret (.fam _))), _, h
+  | .thunk (.amp _ (.ret (.opq _))), _, h
+  | .thunk (.amp _ (.arr _ _)), _, h
+  | .thunk (.amp _ (.amp _ _)), _, h | .thunk (.amp _ .top), _, h
+  | .thunk (.amp _ (.all _ _ _)), _, h | .thunk (.amp _ (.nu _)), _, h
+  | .thunk (.amp _ (.eff _ _ _ _ _ _ _)), _, h => by
+      have h₁ := h.1
+      simp only [BoCa.Fig16.LogRel.Core.FoldP.resO] at h₁
+      cases h₁
+  | .unit, _, _ | .zero, _, _ | .int _, _, _ | .unk, _, _ | .bang _, _, _ | .imm _ _, _, _
+  | .mut _ _, _, _ => rfl
+  | .opq _, _, h => by
+      have h₁ := h.1
+      simp only [BoCa.Fig16.LogRel.Core.FoldP.resO] at h₁
+      cases h₁
+  | .fam (.ref A), Bs, h => by
+      by_cases hc : clB 0 A = true
+      · have h₁ := h.1
+        rw [resO_leaf dtorAlgs Bs (A := .fam (.ref A)) hc] at h₁
+        cases h₁ with
+        | array h₁ => simp [dtorB, hc, dtorB_complete A h₁]
+      · obtain ⟨-, h₂, h₃⟩ := h
+        have hS : HasDtor (resO dtorAlgs Bs A) := h₃ Bs A (by simp [keysIn, hc])
+        have hA : AlgDtor Bs A := ⟨hS,
+          fun B' Bs' hm => h₂ B' Bs' (by simp only [keysIn, if_neg hc]; exact .tail _ hm),
+          fun Bs' S hm => h₃ Bs' S (by simp only [keysIn, if_neg hc]; exact .tail _ hm)⟩
+        simp only [dtorB, hc, Bool.not_false, Bool.and_self, if_true]
+        exact dtorB_completeA A Bs hA
+  | .fam (.imm _ _), _, _ | .fam (.mut _ _), _, _ => rfl
+  | .fam .unit, _, h | .fam (.tensor _ _), _, h | .fam .zero, _, h | .fam (.sum _ _), _, h
+  | .fam (.thunk _), _, h | .fam (.box _ _), _, h
+  | .fam (.bang _), _, h | .fam .unk, _, h | .fam (.tvar _), _, h | .fam (.mu _), _, h
+  | .fam (.int _), _, h | .fam (.fam _), _, h | .fam (.opq _), _, h => by
+      have h₁ := h.1
+      simp only [BoCa.Fig16.LogRel.Core.FoldP.resO] at h₁
+      cases h₁
+end
+
+/-- **`hasDtorB` decides `HasDtor`.**  `[spec §12]` -/
+theorem hasDtorB_iff (A : CVTy) : hasDtorB A = true ↔ HasDtor A :=
+  ⟨dtorB_sound A, dtorB_complete A⟩
+
+instance : DecidablePred HasDtor := fun A => decidable_of_iff _ (hasDtorB_iff A)
+
+instance : DecidablePred DerivedDrop := fun A =>
+  inferInstanceAs (Decidable (¬ A.Persistent ∧ HasDtor A))
+
 
 /-- What the checker knows at a point besides `Δ` and the slot types `T`: the declarations in
 scope, the name of each slot (a dead binder has none), the lifetime names, a `def`'s type
@@ -359,7 +555,7 @@ def ppRow (E : Env) (S : CRow) : String :=
   "[" ++ ", ".intercalate (S.map fun o =>
     s!"{o.n}.{o.i} {qualStr o.q} {E.ppV o.A} ~> {E.ppV o.B}") ++ "]"
 
-theorem Row.weak_of_unr {S : CRow} (h : S.Unr) : S.Weak := by
+theorem Row.cancels_of_unr {S : CRow} (h : S.Unr) : S.Cancels := by
   obtain ⟨o, ho, hq⟩ := h
   exact ⟨o, ho, by rw [hq]; decide⟩
 
@@ -381,17 +577,17 @@ def findOp (E : Env) (sp : Span) (what : String) (k i : Nat) :
 /-- `κ`'s type `kTy S R q B`, read back: the qualifier and the operation's answer. -/
 def kRead : CVTy → Option (CQual × CVTy)
   | .thunk (.amp (.arr B _) .top) => some (.lin, B)
-  | .thunk (.amp (.arr B _) _) => some (.aff, B)
+  | .thunk (.amp (.arr B _) _) => some (.cancel, B)
   | .bang (.thunk (.amp (.arr B _) _)) => some (.unr, B)
   | _ => none
 
 /-- The operations a clause's type may be the type of: a control operation `A ↠^q B` (its
-argument `A ⊗ κ`), then an abortive one `A ↠^aff 0`. -/
+argument `A ⊗ κ`), then an abortive one `A ↠^cancel 0`. -/
 def clauseCands : CVTy → List (CQual × CVTy × CVTy)
   | .bang (.thunk (.arr (.tensor A K) _)) =>
       (match kRead K with | some (q, B) => [(q, A, B)] | none => []) ++
-        [(.aff, .tensor A K, .zero)]
-  | .bang (.thunk (.arr A _)) => [(.aff, A, .zero)]
+        [(.cancel, .tensor A K, .zero)]
+  | .bang (.thunk (.arr A _)) => [(.cancel, A, .zero)]
   | _ => []
 
 /-- The first candidate whose clause type is `c`. -/
@@ -402,8 +598,8 @@ def firstClause (S : CRow) (R c : CVTy) :
       else firstClause S R c es
 
 /-- The operations `E` of a handler read back from the type of its clauses' tuple, with
-`clausesTy S R E` that type. An abortive operation is read as affine: `aff` and `unr` give it
-the same clause type. -/
+`clausesTy S R E` that type. An abortive operation is read as cancellable: `cancel` and `unr` give
+it the same clause type. -/
 def clausesRead (S : CRow) (R : CVTy) :
     (Tc : CVTy) → Option {E // BoCa.Fig16.LogRel.Core.clausesTy S R E = Tc}
   | .unit => some ⟨[], rfl⟩
@@ -418,8 +614,8 @@ operation `A ↠^q B` (its argument `A ⊗ [@d] κ`), then an abortive one. -/
 def clauseCandsB : CVTy → List (CQual × CVTy × CVTy)
   | .bang (.thunk (.arr (.tensor A (.box d K)) _)) =>
       (match kRead K with | some (q, B) => [(q, A, B)] | none => []) ++
-        [(.aff, .tensor A (.box d K), .zero)]
-  | .bang (.thunk (.arr A _)) => [(.aff, A, .zero)]
+        [(.cancel, .tensor A (.box d K), .zero)]
+  | .bang (.thunk (.arr A _)) => [(.cancel, A, .zero)]
   | _ => []
 
 /-- The first candidate whose clause type under BOXED-κ at `@d` is `c`. -/
@@ -485,8 +681,8 @@ def Env.slotTy (E : Env) (T : List CVTy) (i : Nat) : String := (T[i]?.map E.ppV)
 
 def splitErr (E : Env) (T : List CVTy) (sp : Span) (u₁ u₂ : List Bool) : Error :=
   match firstOverlap T u₁ u₂ with
-  | some i => ⟨sp, s!"{E.slotName i} is used twice here, and its type `{E.slotTy T i}` is not " ++
-      "persistent"⟩
+  | some i => ⟨sp, s!"{E.slotName i} is used twice here, and its type `{E.slotTy T i}` is " ++
+      "linear"⟩
   | none => ⟨sp, "internal error: context split"⟩
 
 /-- The first slot `a` uses that `b` neither uses nor absorbs. -/
@@ -497,7 +693,7 @@ def firstMissing : List Bool → List Bool → List Bool → Option Nat
 /-- Why slot `i` was not dropped where a path does not consume it. -/
 def Env.notDropped (E : Env) (T : List CVTy) (i : Nat) : String :=
   match T[i]? with
-  | some A => if hasDtorB A then "" else s!", and its type `{E.ppV A}` has no destructor"
+  | some A => if hasDtorB A then "" else s!", and its type `{E.ppV A}` is linear and has no derived drop"
   | none => ""
 
 /-- The two parts of a `case` or a `<,>` do not consume the same variables. -/
@@ -511,11 +707,11 @@ def mergeErr (E : Env) (T : List CVTy) (sp : Span) (what₁ what₂ intro : Stri
   | _, _ => ⟨sp, "internal error: merge"⟩
 
 /-- A binder's variable is neither consumed nor dropped when its scope closes. -/
-def unconsumed (E : Env) (sp : Span) (x : String) (A : CVTy) (lin : Bool) : Error :=
-  if lin then ⟨sp, s!"`{x}` is declared `linear` and is not consumed in its scope"⟩
-  else if hasDtorB A then
+def unconsumed (E : Env) (sp : Span) (x : String) (A : CVTy) : Error :=
+  if hasDtorB A then
     ⟨sp, s!"`{x}` is not consumed in its scope, and it cannot be dropped where its scope ends"⟩
-  else ⟨sp, s!"`{x}` is not consumed in its scope, and its type `{E.ppV A}` has no destructor"⟩
+  else ⟨sp, s!"`{x}` is not consumed in its scope, and its type `{E.ppV A}` is linear and " ++
+    "has no derived drop"⟩
 
 def mismatch (sp : Span) (want got : String) : Error :=
   ⟨sp, s!"type mismatch: expected `{want}`, but this has type `{got}`"⟩
@@ -543,11 +739,11 @@ def convC (E : Env) (sp : Span) (C : CCTy) : (Σ D : CCTy, Res Δ T (.comp D)) �
       else throw (mismatch sp (E.ppC C) (E.ppC D))
     | _, _ => throw (mismatch sp (E.ppC C) (E.ppC D))
 
-def popL {A : CVTy} {P : List Bool → Prop} (E : Env) (sp : Span) (x : String) (F : Fam (A :: T) P)
-    (lin : Bool := false) : Except Error (Fam T (fun L => P (true :: L))) :=
+def popL {A : CVTy} {P : List Bool → Prop} (E : Env) (sp : Span) (x : String) (F : Fam (A :: T) P) :
+    Except Error (Fam T (fun L => P (true :: L))) :=
   match F.popLive with
   | some F' => pure F'
-  | none => throw (unconsumed E sp x A lin)
+  | none => throw (unconsumed E sp x A)
 
 def popD {A : CVTy} {P : List Bool → Prop} (sp : Span) (F : Fam (A :: T) P) :
     Except Error (Fam T (fun L => P (false :: L))) :=
@@ -569,13 +765,20 @@ def lookupVar (x : String) : List (Option String) → Option Nat
   | [] => none
   | y :: ys => if y == some x then some 0 else (lookupVar x ys).map (· + 1)
 
-/-- A slot that is not owed: a dead binder, or `linear`. -/
+/-- A slot that is not owed: a dead binder. -/
 def Env.push (E : Env) (x : Option String) : Env := { E with vars := x :: E.vars, own := false :: E.own }
 
-/-- A binder's live slot `x : A`, owed to its scope when `A` has a destructor, is not persistent
-and the binder is not `linear` (SPEC §12). -/
-def Env.pushOwn (E : Env) (x : String) (A : CVTy) (lin : Bool := false) : Env :=
-  { E with vars := some x :: E.vars, own := (!lin && !A.persistent && hasDtorB A) :: E.own }
+/-- A binder's live slot `x : A`, owed to its scope when `A` is linear and has a derived drop
+(SPEC §12). -/
+def Env.pushOwn (E : Env) (x : String) (A : CVTy) : Env :=
+  { E with vars := some x :: E.vars, own := (!A.persistent && hasDtorB A) :: E.own }
+
+/-- A binder owes exactly the slot with a derived drop.  `[spec §12]` -/
+theorem Env.pushOwn_own (E : Env) (x : String) (A : CVTy) :
+    (E.pushOwn x A).own.head? = some (decide (DerivedDrop A)) := by
+  simp only [Env.pushOwn, List.head?_cons, Option.some.injEq]
+  rw [Bool.eq_iff_iff]
+  simp [DerivedDrop, Linear, hasDtorB_iff]
 
 /-- Nothing owed: a value, or a computation that is not in tail position. -/
 def Env.clearOwn (E : Env) : Env := { E with own := [] }
@@ -633,7 +836,7 @@ def mentionsV (x : String) : Val → Bool
 /-- `x` occurs free in a computation. -/
 def mentionsC (x : String) : Comp → Bool
   | .ret _ V | .absurd _ V => mentionsV x V
-  | .bind _ y _ M N _ => mentionsC x M || (y.name != x && mentionsC x N)
+  | .bind _ y _ M N => mentionsC x M || (y.name != x && mentionsC x N)
   | .force _ y => y.name == x
   | .lam _ y _ M => y.name != x && mentionsC x M
   | .app _ M y => mentionsC x M || y.name == x
@@ -673,13 +876,11 @@ def dropOne {C : CCTy} (sp : Span) (i : Nat) (r : Res Δ T (.comp C)) :
   match hi : T[i]? with
   | some A =>
     if hA : hasDtorB A = true then
-      if hE : (BoCa.Fig16.LogRel.Core.dtorE A).effFree = true then
-        if hc : BoCa.Fig16.LogRel.Core.closedAt 0 (BoCa.Fig16.LogRel.Core.dtorE A) = true then
-          if h : overlapOK T (oneL T i) r.F.u = true then
-            pure (rDrop (at_ sp) (at_ sp) i A hi (hasDtorB_sound hA) hc hE r h)
-          else throw ⟨sp, "internal error: a dropped slot is used"⟩
-        else throw ⟨sp, "internal error: a destructor is not closed"⟩
-      else throw ⟨sp, "internal error: a destructor performs or handles an operation"⟩
+      if h : overlapOK T (oneL T i) r.F.u = true then
+        pure (rDrop (at_ sp) (at_ sp) i A hi (hasDtorB_sound hA)
+          (BoCa.Fig16.LogRel.Core.dtorE_closed (hasDtorB_sound hA))
+          (BoCa.Fig16.LogRel.Core.dtorE_effFree A) r h)
+      else throw ⟨sp, "internal error: a dropped slot is used"⟩
     else throw ⟨sp, "internal error: an owed slot has no destructor"⟩
   | none => throw ⟨sp, "internal error: an owed slot is out of range"⟩
 
@@ -812,8 +1013,8 @@ def finalOf (E : Env) (sp : Span) (_S : CRow) (u : List Bool) :
     | some A =>
       if hasDtorB A then dropOne sp (i + 1) r
       else throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across a computation " ++
-        "that may abort, and its type has no destructor: an abortive operation of the bound " ++
-        "computation would abandon it"⟩
+        "that may abort, and its type is linear with no derived drop, and an abort abandons " ++
+        "only a value that holds no owned cell"⟩
     | none => throw ⟨sp, "internal error: a slot is out of range"⟩
   pure r
 
@@ -838,7 +1039,7 @@ def thenIt (E : Env) (sp : Span) (x : String) {S : CRow} {A B : CVTy} {tN : TExp
           let F' : Fam T (fun L => (TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp (effOf S B)) ∧
               TTied rD.pins rD.sigs Δ (mkCtx (.unit :: T) (false :: L)) rD.t
                 (.comp (effOf [] .unit))) ∧
-              (S.UnrD → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T L))) ←
+              (S.UnrD → BoCa.Fig16.LogRel.Core.Ctx.Banged (mkCtx T L))) ←
             if hu : Row.unrDB S = true then
               if hs : usedSat isBangB T F.u = true then
                 pure ((F.restrict isBangB hs).map fun _ ⟨h, hp⟩ => ⟨h, fun _ => persistent_of hp⟩)
@@ -859,17 +1060,18 @@ def thenIt (E : Env) (sp : Span) (x : String) {S : CRow} {A B : CVTy} {tN : TExp
   else throw ⟨sp, s!"the row `{ppRow E S}` has an operation of the reserved name 0"⟩
 
 /-- `x <- M; N` whose head `M` performs operations, at the row `S` (SPEC §19). At a row with no
-weakening, or when every slot `N` uses drops (and is `!` at an unrestricted row), `[let]`;
-otherwise `[then]`, with the finaliser `finalOf`: the destructors of the slots `N` uses. -/
-def effBind (E : Env) (sp : Span) (x : Ident) (lin : Bool) {S : CRow} {A B : CVTy}
+cancellable or unrestricted operation, or when every slot `N` uses holds no owned cell (and is `!`
+at an unrestricted row), `[let]`; otherwise `[then]`, with the finaliser `finalOf`: the
+destructors of the slots `N` uses. -/
+def effBind (E : Env) (sp : Span) (x : Ident) {S : CRow} {A B : CVTy}
     (rM : Res Δ T (.comp (effOf S A))) (rN : Res Δ (A :: T) (.comp (effOf S B))) :
     Except Error (Res Δ T (.comp (effOf S B))) := do
-  let FN ← popL E x.span x.name rN.F lin
-  if hw : Row.weakB S = true then
-    let p : CVTy → Bool := fun A => dropB A && (!Row.unrB S || isBangB A)
+  let FN ← popL E x.span x.name rN.F
+  if hw : Row.cancelsB S = true then
+    let p : CVTy → Bool := fun A => ownFreeB A && (!Row.unrB S || isBangB A)
     if hs : usedSat p T FN.u = true then
       let FN' := (FN.restrict p hs).map fun _ ⟨h, hp⟩ =>
-        (⟨h, fun _ s hsm hl => dropB_sound _ (by
+        (⟨h, fun _ s hsm hl => ownFreeB_sound _ (by
             have := hp s hsm hl
             simp only [p, Bool.and_eq_true] at this
             exact this.1),
@@ -880,7 +1082,8 @@ def effBind (E : Env) (sp : Span) (x : Ident) (lin : Bool) {S : CRow} {A B : CVT
             · exact absurd (Row.unrB_iff.mpr hU) (by simp [h'])
             · exact h')⟩ :
           TTied rN.pins rN.sigs Δ (mkCtx (A :: T) (true :: _)) rN.t (.comp (effOf S B)) ∧
-            (S.Weak → (mkCtx T _).Drops) ∧ (S.Unr → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T _)))
+            (S.Cancels → (mkCtx T _).OwnFree) ∧
+            (S.Unr → BoCa.Fig16.LogRel.Core.Ctx.Banged (mkCtx T _)))
       if h : overlapOK T rM.F.u FN'.u = true then pure (rScope (at_ sp) (rEffLet (atB sp [x.name]) rM FN' h))
       else throw (splitErr E T sp rM.F.u FN'.u)
     else
@@ -888,10 +1091,11 @@ def effBind (E : Env) (sp : Span) (x : Ident) (lin : Bool) {S : CRow} {A B : CVT
       thenIt E sp x.name rM FN rD
   else
     let FN' := FN.map fun _ h =>
-      (⟨h, fun hW => absurd (Row.weakB_iff.mpr hW) (by simp [hw]),
-        fun hU => absurd (Row.weakB_iff.mpr (Row.weak_of_unr hU)) (by simp [hw])⟩ :
+      (⟨h, fun hW => absurd (Row.cancelsB_iff.mpr hW) (by simp [hw]),
+        fun hU => absurd (Row.cancelsB_iff.mpr (Row.cancels_of_unr hU)) (by simp [hw])⟩ :
         TTied rN.pins rN.sigs Δ (mkCtx (A :: T) (true :: _)) rN.t (.comp (effOf S B)) ∧
-          (S.Weak → (mkCtx T _).Drops) ∧ (S.Unr → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T _)))
+          (S.Cancels → (mkCtx T _).OwnFree) ∧
+          (S.Unr → BoCa.Fig16.LogRel.Core.Ctx.Banged (mkCtx T _)))
     if h : overlapOK T rM.F.u FN'.u = true then pure (rScope (at_ sp) (rEffLet (atB sp [x.name]) rM FN' h))
     else throw (splitErr E T sp rM.F.u FN'.u)
 

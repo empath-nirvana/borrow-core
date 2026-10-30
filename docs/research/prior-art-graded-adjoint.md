@@ -4,7 +4,7 @@ I did not edit the repo. Downloaded PDFs were converted to text in `/private/tmp
 
 ### Bottom line
 - **Closest system:** no single prior system is "our calculus as an adjoint system". The nearest construction is three pieces combined:
-  1. Pruiksma–Chargin–Pfenning–Reed adjoint logic, for the `lin`/`aff`/`unr` modes and the concurrency reading.
+  1. Pruiksma–Chargin–Pfenning–Reed adjoint logic, for its linear/affine/unrestricted modes and the concurrency reading.
   2. Curien–Fiore–Munch-Maccagnoni, for keeping the CBPV `U`/`F` effect adjunction separate from the resource adjunction.
   3. Marshall–Orchard fractional uniqueness, or the OxCaml contention axis, for `imm`/`mut`.
 - **Have `imm`/`mut` been modes or grades before?** Yes, in two places, but never with lifetimes ordered as a chain, never with lexical lend blocks inside a mode theory, and never with effect handlers.
@@ -92,7 +92,7 @@ I did not edit the repo. Downloaded PDFs were converted to text in `/private/tmp
 5. **Interior mutability:** none. "Shared memory implementation" is listed as future work.
 6. **Proofs, on paper:** cut elimination via multicut (Thm 2.10), identity expansion (2.9), conservativity, preservation and progress. No mechanisation mentioned.
 7. **Map to ours:**
-   - `lin`/`aff`/`unr` correspond exactly to modes with σ = {}, {W}, {W, C}, and `!` is a shift.
+   - `lin`/`cancel`/`unr` correspond exactly to modes with σ = {}, {W}, {W, C}, and `!` is a shift.
    - The independence principle is the shape our "unr may not depend on lin" rules must take.
    - Missing from their system: borrow modes, lifetimes, effects and handlers, and CBPV.
 
@@ -143,7 +143,7 @@ I did not edit the repo. Downloaded PDFs were converted to text in `/private/tmp
 **Graded CBPV: it exists.**
 - Torczon, Suárez Acevedo, Agrawal, Velez-Ginorio, Weirich, *Effects and Coeffects in Call-By-Push-Value*, OOPSLA 2024, PACMPL 8, DOI 10.1145/3689750, arXiv 2311.11795 (FT).
   - Effects grade the thunk type `U_φ B`; coeffects grade the returner `F_q A`. `U_φ(F A)` gives the graded monad and `F_q(U B)` the graded comonad.
-  - A resource semiring {0, 1, ω} recovers linear and affine tracking.
+  - A resource semiring {0, 1, ω} recovers linear and affine tracking in Granule's sense.
   - Effect soundness and coeffect soundness are proved via fundamental lemmas of logical relations, mechanised in Coq.
   - No borrows, no handlers, no concurrency.
   - **This is the closest mechanised precedent for our kernel's U/F plus grades plus logical-relation proof.**
@@ -162,7 +162,7 @@ I did not edit the repo. Downloaded PDFs were converted to text in `/private/tmp
 - Peters, Jacobs, Kalinichenko, Stevenson, Smith, Dreyer, Eisenberg, *Mode Crossing*, ICFP 2026, PACMPL 10, Art. 283 (FT). Modal kinds; soundness in Rocq/Iris.
 - **Map:** shared/uncontended is a mode-level imm/mut, but per thread, not per lifetime. Locality is a two-point lifetime. There is no mutable borrow with lifetimes.
 
-**Adjacent effects work.** van Rooij, Krebbers, *Affect: An Affine Type and Effect System*, POPL 2025, PACMPL 9, pp. 126–154 (AB). Affine types track one-shot versus multi-shot continuations; logical relation in Iris/Coq. Relevant to our `lin`/`aff`/`unr` continuations. No borrows.
+**Adjacent effects work.** van Rooij, Krebbers, *Affect: An Affine Type and Effect System*, POPL 2025, PACMPL 9, pp. 126–154 (AB). Affine types track one-shot versus multi-shot continuations; logical relation in Iris/Coq. Relevant to our `lin`/`cancel`/`unr` continuations. No borrows.
 
 ### 5. CBPV as an adjunction
 - Levy: `U ⊣ F`, with `UF` a monad and `FU` a comonad. Confirmed only as cited in Torczon et al. ("Levy 2003a"); the book and adjunction-model papers are (unverified) this session.
@@ -170,7 +170,7 @@ I did not edit the repo. Downloaded PDFs were converted to text in `/private/tmp
   - Effects and resources are orthogonal. The models linearise CBPV adjunction models, or equivalently extend LNL with an adjoint resolution of effects.
   - Recovers Levy (cartesian linear structure, trivial resources) and Benton (trivial effects).
   - The adjoint resolution of effects corresponds to polarisation.
-  - **Lesson for us:** our CBPV `U`/`F` and our `lin`/`aff`/`unr`/`!` shifts are two different adjunctions, and an adjoint presentation must keep both.
+  - **Lesson for us:** our CBPV `U`/`F` and our `lin`/`cancel`/`unr`/`!` shifts are two different adjunctions, and an adjoint presentation must keep both.
 - Munch-Maccagnoni, *Resource Polymorphism*, arXiv 1803.02796 (AB): ownership, move and RAII for OCaml from polarisation. Combette, Munch-Maccagnoni, *A resource modality for RAII*, LOLA 2018 (unverified content). Neither has a borrow mode with lifetimes.
 
 ### 6. Have imm/mut been modes or grades?
@@ -183,10 +183,10 @@ I did not edit the repo. Downloaded PDFs were converted to text in `/private/tmp
 1. Lifetimes inside the mode or grade structure. No surveyed system has lifetimes in the mode theory: Marshall–Orchard and OxCaml are lexical and unindexed, and Pure Borrow's lifetimes are type-level atoms forming a meet-semilattice. BoCa's lifetimes are ordered as a chain, together with reborrowing at a shorter lifetime.
 2. Any adjoint or categorical model of borrowing. It is explicitly future work in Marshall–Orchard 2024 and in Vollmer et al. 2025.
 3. T1 (a resuming operation cannot cross a borrow), or any interaction of borrow modes with deep handlers. Met and Affect cover effects with modes or affinity, but not borrows.
-4. A concurrency story derived from borrow modes. The adjoint-logic concurrency results (multicast, cancellation, deadlock freedom) concern `lin`/`aff`/`unr` modes only. DRFCaml's data-race freedom is a separate axis, not derived from borrows.
+4. A concurrency story derived from borrow modes. The adjoint-logic concurrency results (multicast, cancellation, deadlock freedom) concern their linear/affine/unrestricted modes only. DRFCaml's data-race freedom is a separate axis, not derived from borrows.
 5. Mechanised adjoint logic. I found none. The adjoint-logic papers (PCPR18, Licata–Shulman–Riley, Jang et al.) are on paper. The only mechanised graded CBPV is Torczon et al. in Coq, and the only mechanised mode-based data-race-freedom work is OxCaml's Rocq/Iris line.
 
 ### What our calculus would add or lack relative to each
-- **Versus PCPR adjoint logic:** they have the `lin`/`aff`/`unr` modes and shifts. We would add borrow modes, lifetimes, CBPV and handlers. They have a process semantics we lack.
+- **Versus PCPR adjoint logic:** they have linear/affine/unrestricted modes and shifts. We would add borrow modes, lifetimes, CBPV and handlers. They have a process semantics we lack.
 - **Versus Marshall–Orchard:** they use fractions for `imm`; we use lifetimes and lexical lends. They lack effects and the fundamental property and adequacy; we lack fraction-style split and join, unless BoCa's reborrow is read that way, which I have not checked.
 - **Versus DRFCaml:** they have proved data-race freedom with interior mutability. We have neither threads nor interior mutability. Their imm/mut is not lifetime-scoped.

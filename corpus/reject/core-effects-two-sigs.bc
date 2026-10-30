@@ -1,7 +1,7 @@
 -- One operation with two signatures (SPEC §19, decision R): the two handlers of the name `1` give
 -- its operation `1.0` the argument `i32` and the argument `1`. A program gives each operation one
 -- signature, so each instance of a name has one protocol.
--- expect: 5:1: the operation 1.0 has two signatures in this program, `aff i32 ~> 0` and `aff 1 ~> 0`: an operation has one signature (decision R)
+-- expect: 5:1: the operation 1.0 has two signatures in this program, `cancel i32 ~> 0` and `cancel 1 ~> 0`: an operation has one signature (decision R)
 main : F (i32 * i32) =
   hr : !U (i32 -o F i32) <- return (!thunkv fun (v : i32) -> return v);
   hc : !U (i32 -o F i32) * 1 <- return ((!thunkv fun (e : i32) -> return e), ());

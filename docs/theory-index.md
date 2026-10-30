@@ -34,16 +34,16 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
 
 ## Experiments
 
-### Affine
+### Implicit destructors (`experiments/Affine`)
 
 - **Question:** "Can an owned value (`Ref A`, a block, a list, a codata thunk) go unused, with
   the elaborator inserting its destructor so the result is an ordinary linear core program?"
   (#43)
 - **Answer:** "yes, with no model change and no new invariant. Every droppable type's destructor
-  is a closed `CDerives` derivation. The affine judgment `ADerives` elaborates into `CDerives`
+  is a closed `CDerives` derivation. The experiment's judgment `ADerives` elaborates into `CDerives`
   by a translation that never inverts `CDerives`."
 - **Status:** proved; promoted (SPEC §12, `Core/Dtor.lean`, `Frontend/Check`).
-- **Key results:** `dtor_wf`, `hasDtor_of_affine`, `ADerives.elab`, `fundamentalA`,
+- **Key results:** `dtor_wf`, `hasDtor_of_forgettable`, `ADerives.elab`, `fundamentalA`,
   `adequacyA`, `owner_not_shared`, `drop_needs_live`, `sumAff_leaks`, `blockAff_leaks`.
 - **Feeds:** SPEC §12; K3 (destructors that perform I/O, [T9](#t9-destructors-that-perform-io-or-fail-k3));
   decision 23; `U C` has no destructor, which is why `ν` needs `close`.
@@ -206,12 +206,12 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
   kernel change is described, not made. Open: a lifetime-polymorphic argument (`∀` in
   observation trees), the closure sugar, the lowering.
 - **Key results:** `cC_fnMut_iff`, `obs_transfer_fnBox`, `immReborrow_fnMut`, `d_callMut`,
-  `d_passF`, `d_fromFn`, `d_once`, `logState_not_outlives`, `not_affine_fnMut`; the programs
+  `d_passF`, `d_fromFn`, `d_once`, `logState_not_outlives`, `not_forgettable_clo`; the programs
   `counterProg`, `passProg`, `nestProg`, `retProg`, `logProg`, `fromFnProg`, `onceProg`,
   `dropProg`.
 - **Feeds:** SPEC §2's closure table and §7's positivity; #233 and
   `docs/effect-polymorphism.md` R2a (the environment type hidden); [ModesLabels](#modeslabels)
-  (an affine closure is droppable by an action, not forgettable).
+  (a `Clo` closure is droppable by an action, not forgettable).
 - **Links:** [`docs/fnmut.md`](fnmut.md);
   [`experiments/FnMut/README.md`](../experiments/FnMut/README.md).
 
@@ -399,11 +399,11 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
   same-lifetime projection).
 - **Status:** proved; promoted (SPEC §5, with the encoding changed to "no trailing `1`").
 - **Key results:** `immReborrow_recTy`, `outlives_recTy`, `reborrow_vDen_recTy`,
-  `vX_outlives_recTy`, `affine_immReborrow`, `loadField_sem`, `swapField_sem`,
+  `vX_outlives_recTy`, `forgettable_immReborrow`, `loadField_sem`, `swapField_sem`,
   `not_outlives_own_view`.
 - **Not derived:** "The `Mut` analogue for a boxed field … is not attempted" (the fresh-lifetime
   form was later derived by Optics' `fstLens`/`splitMut`).
-- **Feeds:** [#10] ([T18](#t18-affine-at-recursive-types)), [T4](#t4-same-lifetime-views-through-a-pointer).
+- **Feeds:** [#10] ([T18](#t18-forgettable-at-recursive-types)), [T4](#t4-same-lifetime-views-through-a-pointer).
 - **Links:** [`experiments/Records/README.md`](../experiments/Records/README.md).
 
 ### Recursion
@@ -438,10 +438,10 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
 
 - **Question:** are the borrow axioms instances of one labelled-shift schema?
 - **Answer:** the four label-introducing axioms are instances "by `rfl`"; "The source is returned
-  exactly when its mode lacks contraction". "**The gap the schema predicts.** … **aff→unr**; the
-  table has no axiom for the last, lending a `Mut` as an `Imm` (`axWithborMITy`). Rust has it
-  (`&mut T → &T`)." "I have not derived `withborMI_compat` and have not verified that any
-  obstruction is real."
+  exactly when its mode lacks contraction". The gap the schema predicts is the shift from
+  adjoint logic's affine mode to its unrestricted one: "the table has no axiom for the last,
+  lending a `Mut` as an `Imm` (`axWithborMITy`). Rust has it (`&mut T → &T`)." "I have not derived
+  `withborMI_compat` and have not verified that any obstruction is real."
 - **Status:** partial (schema proved; the predicted rule open).
 - **Key results:** `shiftTy`, `ret_iff_not_C`, `axWithborMITy` (stated type).
 - **Feeds:** [T3](#t3-lending-a-mut-as-an-imm) (= strings K2′); [BorrowedClosures](#borrowedclosures).
@@ -534,12 +534,12 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
 - **Question:** check the plan to consolidate the experiments into one world, claim by claim.
 - **Answer:** the base is `CBPVMu`; "`Relaxed` transfers cleanly, but nothing uses it"; "`embed`
   transfers typings at `cbv` images only"; loose ends: outlives at `U C`/`Unk`, `NoMut`, the
-  fold class, variants in place, `Affine` at `μ`, reuse tokens, same-lifetime projection, the
+  fold class, variants in place, `Forgettable` at `μ`, reuse tokens, same-lifetime projection, the
   delay type.
 - **Status:** done (the work list became SPEC §3–§7); its §5 loose ends are indexed below.
 - **Feeds:** [T2](#t2-an-outlives-rule-for-thunks-u-c), [T4](#t4-same-lifetime-views-through-a-pointer),
   [T7](#t7-conservative-extension-and-agreement-of-the-worlds), [T15](#t15-recursive-types-and-folds-beyond-fshape),
-  [T18](#t18-affine-at-recursive-types), [#19], [#20], [#77].
+  [T18](#t18-forgettable-at-recursive-types), [#19], [#20], [#77].
 - **Links:** [`docs/consolidation-audit.md`](consolidation-audit.md).
 
 ---
@@ -670,7 +670,7 @@ obstruction exist unless a Lean name is given.
 | T15 | Recursive types and folds beyond `FShape` | [#182] |
 | T16 | Read footprint and two-run laws | [#41] |
 | T17 | Side conditions of family borrows | [#183] |
-| T18 | `Affine` at recursive types | [#10] |
+| T18 | `Forgettable` at recursive types | [#10] |
 | T19 | Tasks holding borrows at different lifetimes | [#52] |
 | T20 | Lexically scoped handlers as borrows | [#170] |
 | T21 | The derived type of projection operations | [#160] |
@@ -904,7 +904,7 @@ obstruction exist unless a Lean name is given.
   (SPEC §17 Open).
 - **Issue:** [#183]. Related: [#11].
 
-### T18. `Affine` at recursive types
+### T18. `Forgettable` at recursive types
 
 - **Statement.** A lemma that `Imm̲ 'b` of a `μ`-typed field is droppable (e.g. `Imm̲ 'b N =
   μY. 1 ⊕ Y` needs a recursive drop), so projection past an unboxed `μ`-typed field is available.
@@ -1007,7 +1007,7 @@ Results later work can rely on. Each is machine-checked unless marked.
   `envValue_unlinked`); `!T` has image `∅`.
 - **The per-observation lend needs no new rule**, and a pull-form lending yield is excluded
   (`not_lendingYield_mut`, `not_lendingYield_imm`).
-- **Affine drops are elaboration** (`ADerives.elab`); grades are not net-negative as a context
+- **Implicit drops are elaboration** (`ADerives.elab`); grades are not net-negative as a context
   coordinate and erase at `0` (`cderives_iff_graded`, `prog_runs_any`).
 - **Ownership kinds are adjoint modes** at the model (`weaken_sound`, `dup_sound`,
   `mode_immReborrow`).

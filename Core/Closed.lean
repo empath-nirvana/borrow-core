@@ -376,13 +376,13 @@ theorem closedAt_kappa {H : Val} {K : Kont} (hH : closedAt 0 H.1 = true)
     | exact closedAt_mono _ hK' (by omega)
 
 /-- `κ` with its cell at `ℓ` is closed. -/
-theorem closedAt_kappaC (aff : Bool) (ℓ : Loc) {H : Val} {K : Kont}
+theorem closedAt_kappaC (hasCancel : Bool) (ℓ : Loc) {H : Val} {K : Kont}
     (hH : closedAt 0 H.1 = true) (hK : closedAt 0 (K.plug .unit) = true) :
-    closedAt 0 (BoCa.BoLo.kappaC aff ℓ H K) = true := by
+    closedAt 0 (BoCa.BoLo.kappaC hasCancel ℓ H K) = true := by
   have hK' := closedAt_dead 0 K hK
   simp only [BoCa.BoLo.kappaC, val_shift_closed hH, kont_shift_closed _ K 0 hK,
     kont_shift_closed _ K.dead 0 hK']
-  cases aff <;>
+  cases hasCancel <;>
   simp only [Expr.val, Val.lam, closedAt, hndE, ccatchE, raiseE, Val.prim, Bool.and_eq_true,
     decide_eq_true_eq, BoCa.BoLo.freeE, BoCa.BoLo.stuckE, Val.loc, Val.unit, Bool.false_eq_true,
     if_true, if_false] <;>
@@ -397,13 +397,13 @@ theorem closedAt_kappaC (aff : Bool) (ℓ : Loc) {H : Val} {K : Kont}
     | exact closedAt_mono _ hK' (by omega)
 
 /-- `κ` before its cell is closed. -/
-theorem closedAt_kappaCell (aff : Bool) {H : Val} {K : Kont}
+theorem closedAt_kappaCell (hasCancel : Bool) {H : Val} {K : Kont}
     (hH : closedAt 0 H.1 = true) (hK : closedAt 0 (K.plug .unit) = true) :
-    closedAt 0 (BoCa.BoLo.kappaCell aff H K) = true := by
+    closedAt 0 (BoCa.BoLo.kappaCell hasCancel H K) = true := by
   have hK' := closedAt_dead 0 K hK
   simp only [BoCa.BoLo.kappaCell, BoCa.BoLo.kappaCBody, val_shift_closed hH,
     kont_shift_closed _ K 0 hK, kont_shift_closed _ K.dead 0 hK']
-  cases aff <;>
+  cases hasCancel <;>
   simp only [Expr.val, Val.lam, closedAt, hndE, ccatchE, raiseE, Val.prim, Bool.and_eq_true,
     decide_eq_true_eq, BoCa.BoLo.freeE, BoCa.BoLo.stuckE, Val.unit, Bool.false_eq_true,
     if_true, if_false] <;>

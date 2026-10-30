@@ -67,7 +67,7 @@ def goV (ks : List Key) (owner : String) : Val → Val
 def goC (ks : List Key) (owner : String) : Comp → Comp
   | .ret sp V => .ret sp (goV ks owner V)
   | .absurd sp V => .absurd sp (goV ks owner V)
-  | .bind sp x A M N lin => .bind sp x A (goC ks owner M) (goC ks owner N) lin
+  | .bind sp x A M N => .bind sp x A (goC ks owner M) (goC ks owner N)
   | .lam sp x A M => .lam sp x A (goC ks owner M)
   | .app sp M x => .app sp (goC ks owner M) x
   | .with_ sp M N => .with_ sp (goC ks owner M) (goC ks owner N)
@@ -123,7 +123,7 @@ def candV : Val → Bool
 /-- The computation has a division that may fail. -/
 def candC : Comp → Bool
   | .ret _ V | .absurd _ V | .perform _ _ _ V | .abort _ _ _ V => candV V
-  | .bind _ _ _ M N _ | .with_ _ M N => candC M || candC N
+  | .bind _ _ _ M N | .with_ _ M N => candC M || candC N
   | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
   | .nuOut _ M | .ascribe _ M _ | .withbor2r _ _ _ _ _ _ _ _ M => candC M
   | .handle _ _ _ hr hc M => candV hr || candV hc || candC M

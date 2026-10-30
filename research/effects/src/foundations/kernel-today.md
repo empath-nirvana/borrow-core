@@ -4,7 +4,7 @@ borrow-core has a working, proved effect kernel at Core σ=[], meaning the kerne
 
 **The kernel**
 - **Machine:** six primitives (`perform`, `raise`, `hnd`, `ubind`, `ccatch`, `cfin`) plus `boundedFix`. Handlers are deep, and determinism holds with effects.
-- **Types:** operation layers with qualifiers `lin`, `aff` and `unr`, and rows of them.
+- **Types:** operation layers with qualifiers `lin`, `cancel` and `unr`, and rows of them.
 - **Typing:** `[sub]`, `[perform]`, `[raise]`, `[let]`, `[then]`, `[handle]`, `boundedFix`, and six unwinding borrow constants.
 - **Semantics:** one generic `opTable`, and `ewpTS` as a least fixed point over `wpG`. Handler soundness is `ewp_handle`.
 

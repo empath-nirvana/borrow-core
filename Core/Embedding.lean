@@ -199,7 +199,7 @@ theorem split_cbvCtx {Γ Γ₁ Γ₂ : Ctx Ty} (h : Ctx.Split Γ Γ₁ Γ₂) :
   | right _ ih => exact .right ih
   | dead _ ih => exact .dead ih
 
-theorem persistent_cbv {Γ : Ctx Ty} (h : Ctx.Persistent Γ) : Persistent (cbvCtx Γ) := by
+theorem banged_cbv {Γ : Ctx Ty} (h : Ctx.Persistent Γ) : Ctx.Banged (cbvCtx Γ) := by
   intro s hs hl
   obtain ⟨t, ht, rfl⟩ := mem_cbvCtx hs
   obtain ⟨T, hT⟩ := h t ht hl
@@ -310,12 +310,12 @@ theorem embed {Δ : LifeCtx} {Γ : Ctx Ty} {e : Expr} {T : Ty} (h : DerivesWf Δ
   | withswapAx hΓd => intro _ _; rw [cbv_axWithswapTy]; exact .withswap (dead_cbvCtx hΓd)
   | bangLamI hΓp hwf _ ih =>
       intro hΔ hΓ
-      exact .bangThunkV (persistent_cbv hΓp) rfl
+      exact .bangThunkV (banged_cbv hΓp) rfl
         (.lam (.ret (ih hΔ (Ctx.ScopedB.cons (fun _ => hwf) hΓ))))
   | bangAllI hΓp hx hb hnb _ ih =>
       intro hΔ hΓ
       have hside := allISide_of_scopedB hΔ hx hb hΓ
-      exact .bangThunkV (persistent_cbv hΓp) rfl (.allI hside.1 hside.2.1
+      exact .bangThunkV (banged_cbv hΓp) rfl (.allI hside.1 hside.2.1
         (not_vFree_cbvCtx hside.2.2) (.ret (ih (hΔ.extend hx hb) (Ctx.ScopedB.allI hnb hΓ))))
   | bangE _ ih => intro hΔ hΓ; exact .bangE (ih hΔ hΓ)
   | copyBangAx hΓd => intro _ _; exact .copyBang (dead_cbvCtx hΓd)

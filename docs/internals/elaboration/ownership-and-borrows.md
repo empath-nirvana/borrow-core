@@ -54,7 +54,7 @@ error:
 main : F i32 =
   k <- return (thunkv fun (y : i32) -> return y);
   return ((unbang host[add32]) (k i32[1], k i32[2]))
--- expect: 3:32: `k` is used twice here, and its type `i32 => i32` is not persistent
+-- expect: 3:32: `k` is used twice here, and its type `i32 => i32` is linear
 ```
 
 Leaving an owned value unused is not always an error: the checker frees an unused cell for you
@@ -90,7 +90,7 @@ is freed, and cannot be freed twice: both are uses of a variable already consume
 main : F (i32 * i32) =
   r <- return (alloc[i32] i32[1]);
   return (free[i32] r, free[i32] r)
--- expect: 3:10: `r` is used twice here, and its type `ref i32` is not persistent
+-- expect: 3:10: `r` is used twice here, and its type `ref i32` is linear
 ```
 
 ```bc,reject
@@ -100,7 +100,7 @@ main : F i32 =
   q <- return (swap[i32, i32] r x);
   let (r2, y) = q;
   return (free[i32] r2)
--- expect: 3:3: `r` is used twice here, and its type `ref i32` is not persistent
+-- expect: 3:3: `r` is used twice here, and its type `ref i32` is linear
 ```
 
 ## Borrowing
@@ -187,7 +187,7 @@ main : F 1 =
             p <- return (m, m);
             return (boxed['x] ()))));
   return ()
--- expect: 5:25: `m` is used twice here, and its type `mut 'x i32` is not persistent
+-- expect: 5:25: `m` is used twice here, and its type `mut 'x i32` is linear
 ```
 
 ### A borrow cannot escape
@@ -224,10 +224,10 @@ A box outlives the lifetime it is bounded by: `box 'c T` outlives `'c` itself. S
 bounded by `main`'s lifetime is made, called and closed in `main` with no scope of its own:
 
 ```bc
-include aff
+include clo
 
-fn counter<'c>(start: i32) -> box 'c Aff[i32, i32]<'c> =
-  aff_new_boxed[ref i32, i32, i32]['c](alloc(start), !thunkv fun (s : ref i32) ->
+fn counter<'c>(start: i32) -> box 'c Clo[i32, i32]<'c> =
+  clo_new_boxed[ref i32, i32, i32]['c](alloc(start), !thunkv fun (s : ref i32) ->
     < fun (a : i32) ->
         cx <- return (swap[i32, i32] s i32[0]);
         let (c, x) = cx;
@@ -238,9 +238,9 @@ fn counter<'c>(start: i32) -> box 'c Aff[i32, i32]<'c> =
 
 main -> i32 =
   let k = counter(10);
-  let (a, k) = aff_call(k, 1);
-  let (b, k) = aff_call(k, 2);
-  aff_close(k);
+  let (a, k) = clo_call(k, 1);
+  let (b, k) = clo_call(k, 2);
+  clo_close(k);
   a + b
 -- answer: i32[24]
 ```
@@ -250,9 +250,9 @@ at run time. Outside `main`, a lifetime that a call leaves undetermined where no
 scope is an error. The spelling `'main` is provisional.
 
 A generic function's lifetime parameters are unrelated to the lifetimes in its type arguments,
-unless a **lifetime bound** relates them. `aff_new_boxed` is declared
+unless a **lifetime bound** relates them. `clo_new_boxed` is declared
 
-    fn aff_new_boxed[S, A, B]<'c>(s: S, step: …) -> box 'c Aff[A, B]<'c>
+    fn clo_new_boxed[S, A, B]<'c>(s: S, step: …) -> box 'c Clo[A, B]<'c>
         where S: 'c = …
 
 and `where S: 'c` makes each instance's `'c` shorter than every lifetime in the type given for
@@ -262,5 +262,5 @@ shorter than `'x`; at `S = ref i32` there is no lifetime in `S`, and `'c` is onl
 The spelling `where S: 'c` is provisional.
 
 A closure that captures `mut 'x T` is bounded by a lifetime strictly below `'x`, never by `'x`
-itself, so it is made inside a scope below `'x` (`corpus/aff-capture.bc`).
+itself, so it is made inside a scope below `'x` (`corpus/clo-capture.bc`).
 

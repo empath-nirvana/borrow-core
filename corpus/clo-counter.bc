@@ -1,22 +1,22 @@
--- The affine closure (SPEC §22) called repeatedly through a `mut` borrow. `counter` is a closure
+-- The closure `Clo` (SPEC §22) called repeatedly through a `mut` borrow. `counter` is a closure
 -- whose state is an owned cell: each call adds its argument to the cell and answers the new
 -- total. The closure is stored in a cell `c`, and `twice` borrows it `mut` and calls it twice
--- (`aff_call_mut`: `withswap` takes the closure out, calls it, and puts the rest back), so the
+-- (`clo_call_mut`: `withswap` takes the closure out, calls it, and puts the rest back), so the
 -- second call sees the state the first one left. Then the closure is taken out of the cell and
 -- closed, which frees the counter's cell.
 --
 -- `counter(10)` names no lifetime, so its bound is `main`'s own lifetime (SPEC §23), and the
 -- closure is stored and lent `mut` under it: the box rule of outlives is non-strict, so
--- `box 'c …` outlives `'c`. `aff_new_boxed` boxes the closure and each rest.
+-- `box 'c …` outlives `'c`. `clo_new_boxed` boxes the closure and each rest.
 --
 -- Answer: i32[24], 11 + 13, and `live 0`. A call that did not store its total gives 11 + 12; a
 -- `close` that did not free the counter's cell leaves one cell live. The calls through the borrow
 -- are direct calls of the closure's code (`indirect 0`).
 
-include aff
+include clo
 
-fn counter<'c>(start: i32) -> box 'c Aff[i32, i32]<'c> =
-  aff_new_boxed[ref i32, i32, i32]['c](alloc(start), !thunkv fun (s : ref i32) ->
+fn counter<'c>(start: i32) -> box 'c Clo[i32, i32]<'c> =
+  clo_new_boxed[ref i32, i32, i32]['c](alloc(start), !thunkv fun (s : ref i32) ->
     < fun (a : i32) ->
         cx <- return (swap[i32, i32] s i32[0]);
         let (c, x) = cx;
@@ -25,14 +25,14 @@ fn counter<'c>(start: i32) -> box 'c Aff[i32, i32]<'c> =
         return (x + a, c1),
       n <- return (free[i32] s); return () >)
 
-fn twice<'a, 'c>(m: mut 'a (box 'c Aff[i32, i32]<'c>)) -> mut 'a (box 'c Aff[i32, i32]<'c>) * i32 =
-  let (m, x) = aff_call_mut(m, 1);
-  let (m, y) = aff_call_mut(m, 2);
+fn twice<'a, 'c>(m: mut 'a (box 'c Clo[i32, i32]<'c>)) -> mut 'a (box 'c Clo[i32, i32]<'c>) * i32 =
+  let (m, x) = clo_call_mut(m, 1);
+  let (m, y) = clo_call_mut(m, 2);
   (m, x + y)
 
 main -> i32 =
   let c = alloc(counter(10));
   let t = borrow mut c { 'w, m -> let (m, t) = twice(m); t };
   let k = free(c);
-  aff_close(k);
+  clo_close(k);
   t

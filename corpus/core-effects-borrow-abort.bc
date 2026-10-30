@@ -1,5 +1,5 @@
 -- SPEC §19 in the core text: an abort inside a `borrow mut` callback, caught outside. The cell `c`
--- is lent by the unwinding borrow `withbor2u` to a callback at the row `1.0 aff i32 ~> 0`; the
+-- is lent by the unwinding borrow `withbor2u` to a callback at the row `1.0 cancel i32 ~> 0`; the
 -- callback drops its borrow and aborts with `42`. The borrow ends on the way out: the finaliser,
 -- the cell's destructor, frees `c`, and `to_result` answers the error.
 --
@@ -10,7 +10,7 @@ main : F (i32 + i32) =
   handle_with[1](
       ((!thunkv fun (p : ref i32 * i32) -> let (r, v) = p; return (inl v)) : !U (ref i32 * i32 -o F (i32 + i32))),
       (((!thunkv fun (e : i32) -> return (inr e)), ()) : !U (i32 -o F (i32 + i32)) * 1)) (
-    w <- return withbor2u['x, top, i32, i32, [1.0 aff i32 ~> 0]];
-    cb : U (forall 'x < dom. mut 'x i32 -o F[1.0 aff i32 ~> 0] (box 'x i32)) <- return
+    w <- return withbor2u['x, top, i32, i32, [1.0 cancel i32 ~> 0]];
+    cb : U (forall 'x < dom. mut 'x i32 -o F[1.0 cancel i32 ~> 0] (box 'x i32)) <- return
       (thunkv Fun 'x < dom. fun (m : mut 'x i32) -> abort[1.0] i32[42]);
     force w c cb)

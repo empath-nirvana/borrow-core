@@ -30,8 +30,8 @@ restate a target to match them, or report that one does not hold. It may not cha
   continuation: `raise e to x. P = raise e`.
 - **Static per-site names** (SPEC §19, *Names*): an operation reaches the handler site it names;
   no accidental handling.
-- **Continuations are linear or affine; `unr` is tolerated, never designed for.** An affine `κ`
-  is consumed by exactly one of resume or cancel; a linear `κ` has no cancel.
+- **Continuations are must-resume or cancellable; `unr` is tolerated, never designed for.** A
+  cancellable `κ` is consumed by exactly one of resume or cancel; a must-resume `κ` has no cancel.
 - **Cancel is not interceptable** (SPEC §19, *Cancels*): the cancelled region's handlers are dead
   and catch nothing; the canceller sees `()`.
 - **Finalisers follow `finally`'s law**: `(raise e) then x. N unwind D = D (); raise e`. A

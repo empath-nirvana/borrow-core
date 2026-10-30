@@ -499,7 +499,7 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       have eM := ihM Γa₁ Γb₁ rfl
       have eN := ihN (_ :: Γa₂) Γb₂ rfl
       rw [h₁] at eM; rw [List.length_cons, h₂] at eN
-      exact .effLet hs' (fun hw => live_insert hd (P := fun s => s.ty.Drop) (hW hw))
+      exact .effLet hs' (fun hw => live_insert hd (P := fun s => s.ty.OwnFree) (hW hw))
         (fun hu => live_insert hd (hU hu)) eM eN
   | effThen hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
       intro Γa Γb hΓ; subst hΓ
@@ -539,7 +539,7 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       rw [shift_hndExpr]
       simp only [Expr.shift, tailTuple_shift]
       exact .effHandleT hs' (deadP_insert hd Γa₁ hdd) hHr' hHc' ec hn0 hnd hnS hlen hSN hLin ee
-  | effHandleL hs hdd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hAff hSW hSu hFin _ ihc ihe =>
+  | effHandleL hs hdd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
       have ec := ihc Γa₁ Γb₁ rfl
@@ -550,7 +550,7 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       rw [h₁] at ec hHr' hHw' hHn'; rw [h₂] at ee
       rw [shift_hndExpr]
       simp only [Expr.shift, lastTuple_shift]
-      exact .effHandleL hs' (deadP_insert hd Γa₁ hdd) hHr' hHw' hHn' ec hn0 hnd hnS hlen hNZ hAff
+      exact .effHandleL hs' (deadP_insert hd Γa₁ hdd) hHr' hHw' hHn' ec hn0 hnd hnS hlen hNZ hCancel
         hSW hSu hFin ee
   | @letPoly _ _ N _ _ b hcl hV _ _ ihN =>
       intro Γa Γb hΓ; subst hΓ
@@ -859,7 +859,7 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
       have eM := ihM Γa₁ Γb₁ rfl
       have eN := ihN (_ :: Γa₂) Γb₂ rfl
       rw [h₁] at eM; rw [List.length_cons, h₂] at eN
-      exact .effLet hs' (fun hw => live_insert hd (P := fun s => s.ty.Drop) (hW hw))
+      exact .effLet hs' (fun hw => live_insert hd (P := fun s => s.ty.OwnFree) (hW hw))
         (fun hu => live_insert hd (hU hu)) eM eN
   | effThen hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
       intro Γa Γb hΓ; subst hΓ
@@ -900,7 +900,7 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
       simp only [Expr.shift, tailTuple_shift]
       exact .effHandleT hAt hs' (deadP_insert hd Γa₁ hdd) hHr' hHc' ec hn0 hnd hnS hlen hSN hLin
         ee
-  | effHandleL hAt hs hdd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hAff hSW hSu hFin _ ihc ihe =>
+  | effHandleL hAt hs hdd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
       have ec := ihc Γa₁ Γb₁ rfl
@@ -912,7 +912,7 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
       rw [shift_hndExpr]
       simp only [Expr.shift, lastTuple_shift]
       exact .effHandleL hAt hs' (deadP_insert hd Γa₁ hdd) hHr' hHw' hHn' ec hn0 hnd hnS hlen hNZ
-        hAff hSW hSu hFin ee
+        hCancel hSW hSu hFin ee
   | @letPoly _ _ N _ _ b hcl hV _ _ ihN =>
       intro Γa Γb hΓ; subst hΓ
       have eN := ihN (⟨.unit, false⟩ :: Γa) Γb rfl

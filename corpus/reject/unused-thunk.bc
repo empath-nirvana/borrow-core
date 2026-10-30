@@ -5,4 +5,4 @@ type B = 1 + 1
 main : F 1 =
   k <- return (thunk (return (inl () : B)));
   return ()
--- expect: 6:3: `k` is not consumed in its scope, and its type `U (F (1 + 1))` has no destructor
+-- expect: 6:3: `k` is not consumed in its scope, and its type `U (F (1 + 1))` is linear and has no derived drop

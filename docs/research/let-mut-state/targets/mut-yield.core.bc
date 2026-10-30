@@ -1,10 +1,10 @@
 -- `mut-yield.bc` as its elaboration should read: written by hand in core.
-type UG = U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1)
+type UG = U (nu X. F[1.0 cancel i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 cancel i32 * i32 ~> i32] 1)
 
 def evens__n1 : !(i32 * i32 => UG) =
   !thunkv fun (p : i32 * i32) ->
     let (sum, n) = p;
-    turn : !U (i32 * (i32 * (i32 * i32)) -o F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + i32 * (i32 * (i32 * i32))) & F[1.0 aff i32 * i32 ~> i32] 1) <- return (!thunkv fun (s : i32 * (i32 * (i32 * i32))) ->
+    turn : !U (i32 * (i32 * (i32 * i32)) -o F[1.0 cancel i32 * i32 ~> i32] (i32 * 1 + i32 * (i32 * (i32 * i32))) & F[1.0 cancel i32 * i32 ~> i32] 1) <- return (!thunkv fun (s : i32 * (i32 * (i32 * i32))) ->
           < let (sum, t) = s;
             let (n, ik) = t;
             let (i, k) = ik;
@@ -14,7 +14,7 @@ def evens__n1 : !(i32 * i32 => UG) =
                 return inr (sum, (n, ((unbang host[add32]) (i, i32[2]), (unbang host[add32]) (k, i32[1]))))
             },
             return () >);
-    f <- return unbang unfold[nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1, i32 * (i32 * (i32 * i32))] turn;
+    f <- return unbang unfold[nu X. F[1.0 cancel i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 cancel i32 * i32 ~> i32] 1, i32 * (i32 * (i32 * i32))] turn;
     s <- return (sum, (n, (i32[0], i32[0])));
     return (thunkv nu_in < (nu_out force f s).1, (nu_out force f s).2 >)
 

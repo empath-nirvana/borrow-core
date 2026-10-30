@@ -37,7 +37,7 @@ Checked at `9aa27c3` (SPEC 0.86).
 | `μX. A`, `roll`/`unroll` | built; folds at `FShape` (closed leaf, `Ref X`, `X`, `⊗`, `⊕`) | SPEC §6 | recursive declarations; `X` under an array is outside `FShape` (B14) |
 | `νX. C`, `nu_in`/`nu_out`, `unfold` | built; observations may take closed arguments, the rest may be boxed `[@c]` | SPEC §7, §22 | codata declarations and materialised interface values, with the state hidden |
 | `&` products of computations | built; `.1`/`.2` select an observation | `Frontend/Parser.lean`, `compSuffixes` | an interface's observations are a `&` tree |
-| the affine closure `Aff[A, B]<'c>` | library, `lib/aff.bc` | SPEC §22 | the pattern every `mut` observation of an object follows |
+| the closure `Clo[A, B]<'c>` | library, `lib/clo.bc` | SPEC §22 | the pattern every `mut` observation of an object follows |
 | `pull`, `iter`, `loop`, `stream`, `delay`, `sized` | frontend abbreviations over `ν` | `Frontend/Syntax.lean`; #141 decision 6 says delete them for library declarations | the first library `codata` declarations |
 | generators | `Yield[T]` effect; `for` is a handler site | SPEC §15 | iteration methods are generators (`items(imm) with Yield[imm T]`) |
 | generic functions | templates, monomorphised; first-order matching | SPEC §15, decision 45 | generic declarations are type-level templates |
@@ -66,7 +66,7 @@ In `corpus/` and `lib/`: 0 `data` declarations, 243 `type` declarations (66 over
 corpus, `lib/`, `bench/` and `book/`.
 
 Today's "methods" are functions whose names carry the type (`map_insert`, `map_len`, `set_insert`,
-`heap_push`, `aff_call`), called with the receiver first and often handed back
+`heap_push`, `clo_call`), called with the receiver first and often handed back
 (`map_len(m: Map[K, V]) -> Map[K, V] * i32`). The corpus writes codata in core:
 `(nu_out (force g)).1` is an observation.
 
@@ -307,9 +307,9 @@ type:
     I<'c> = U (νX. (&ₘ Oₘ) & F 1)
 
 - An observation at mode `mut` or `imm` is `Aₘ ⊸ F_Σₘ (Bₘ ⊗ [@c] U X)`: it hands back the rest, as
-  `Aff`'s `call` does (SPEC §22).
+  `Clo`'s `call` does (SPEC §22).
 - A consuming observation is `Aₘ ⊸ F_Σₘ Bₘ`.
-- `F 1` is `close`, which runs the state's destructor (SPEC §12, class 2).
+- `F 1` is `close`, which runs the state's destructor (SPEC §12, group 2).
 - The value is `unfold step s` over the state `s`, with `step` built from `N`'s face.
 - An observation through a `mut` borrow of the object is `withswap` around the call (`d_callMut`,
   SPEC §22).
@@ -1132,7 +1132,7 @@ touches `Frontend/`.
 | # | unit | needs | refines | done when |
 |---|---|---|---|---|
 | U1 | **`data`, monomorphic and generic, transparent**: records, variants, `Option` and `Vec` as library declarations, constructors, record literals, `match`, fields, field update through `mut`, the single-root rule; recursion under a written `box` (§6.11, decided): `box C(…)` builds a block node, and a recursive constructor or field without `box` is an error that asks for it | — | #593 | `data-box-tree`, and T07, T09, T10, T11 as written; the #593 programs; `bcc desugar` of each equal to its hand lowering; a tree built without `box` rejected with a message that asks for `box` |
-| U2 | **Faces and dot**: `on` blocks (or the chosen spelling), a namespace per type, dot at the static binding time, the `&` inserted by mode, introductions. `lib/map.bc`, `lib/buf.bc` and `lib/aff.bc` get faces; the old names stay as aliases until the corpus has moved | U1 | #593 | `m.insert(k, v)` and `m.len()` on the map; the D1 clash (`List.map` against `Iter.map`) accepted; counts unchanged |
+| U2 | **Faces and dot**: `on` blocks (or the chosen spelling), a namespace per type, dot at the static binding time, the `&` inserted by mode, introductions. `lib/map.bc`, `lib/buf.bc` and `lib/clo.bc` get faces; the old names stay as aliases until the corpus has moved | U1 | #593 | `m.insert(k, v)` and `m.len()` on the map; the D1 clash (`List.map` against `Iter.map`) accepted; counts unchanged |
 | U3 | **Abstraction**: `hidden`, with the face as the boundary (§6.4's B1) | U2 | #593 | `Map` and `Stack` abstract; a client's `match` on them rejected, with a message |
 | U4 | **`codata` declarations and interfaces**: observations with modes; `gives`, checked; `x as I` by `unfold`; dot on interface values; the frontend's five `CTy` abbreviations deleted for library declarations (#141 decision 6) | U2 | #141 D3 | `faces.bc` written in the surface, with the same core; `pull` and `iter` as library declarations; counts unchanged |
 | U5 | **The context binding**: `with z = x as I { … }`, with the effect form `E_I` generated | U4 | — | `faces.bc`'s handlers generated |

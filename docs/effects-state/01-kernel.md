@@ -59,16 +59,16 @@ PROVED.
 
 | object | where | what |
 |---|---|---|
-| `Qual` = `lin`, `aff`, `unr` | `Core/Types.lean:37-41` | the continuation's structural qualifier. There is no `relevant` qualifier |
+| `Qual` = `lin`, `cancel`, `unr` | `Core/Types.lean:37-41` | the continuation's structural qualifier. There is no `relevant` qualifier |
 | `CTy.eff n i q A B C` | `Core/Types.lean:92` | **one operation layer** over `C`. A row is a stack of layers, not a set former |
 | `OpSig`; `CTy.effOf : List OpSig → VTy → CTy` | `Core/Types.lean:147-157` | `F_Σ R` = the row's layers over `F R`; `F_∅ R = F R` |
 | `CTy.EffFree` | `Core/Types.lean:140-144` | no layer anywhere. The stack semantics (`cB_iff_stacks` `Core/Computation.lean:55`, `cC_iff_stacks` :106) holds only at `EffFree` types |
 | `EffLeaf`, `NuLeaf`, `instT` | `Core/Types.lean:1135-1155` | `F_Σ A` is a ν observation leaf when its operation types are closed (`A.Cl 0 ∧ B.Cl 0`) |
 | `loopEffBody`, `loopEff` | `Core/Types.lean:1173-1177` | `Loop_Σ A B = νX. F_Σ(A ⊕ U X) & F_Σ B`. Positive at closed operation types: `loopEffBody_nuOk` (:1272) |
-| `affEffBody`, `affEffBody_nuOk` | `Core/Aff.lean:155-164` | effectful affine closure `νX. (A ⊸ F_Σ(B ⊗ [@c] U X)) & F_Σ 1`. **Positivity only.** It has no rules and no programs |
+| `cloEffBody`, `cloEffBody_nuOk` | `Core/Clo.lean:155-164` | effectful `Clo` closure `νX. (A ⊸ F_Σ(B ⊗ [@c] U X)) & F_Σ 1`. **Positivity only.** It has no rules and no programs |
 | `Row := List OpSig`; `Row.find` (first match) | `Core/EffRules.lean:33-38` | a row is a first-match list keyed by `(n, i)` |
 | `OpSig.abort` | `Core/EffRules.lean:40` | abortive ⇔ `B = 0` and `q ≠ lin` |
-| `RowLe`, `Row.NZ`, `Row.Weak`, `Row.Unr`, `Row.abortOnly`, `Row.Uniq` | `Core/EffRules.lean:699-746` | row order; names nonzero; has a weakening op; has an `unr` op; abortive sub-row; keys unique |
+| `RowLe`, `Row.NZ`, `Row.Cancels`, `Row.Unr`, `Row.abortOnly`, `Row.Uniq` | `Core/EffRules.lean:699-746` | row order; names nonzero; has a cancellable or unrestricted op; has an `unr` op; abortive sub-row; keys unique |
 | `Row.ofEff`, `kTy`, `clauseTy`, `clausesTy`, `retTy`, `hndTerm` | `Core/EffRules.lean:969-998` | an effect's row at name `n`; `κ`'s type `U((B ⊸ F_Σ R) & ⊤)` / `U((B ⊸ F_Σ R) & F_Σ 1)` / `!U(…)`; clause types (an abortive clause is `!U(A ⊸ F_Σ R)`) |
 | `Row.Unwind S x` | `Core/EffBorrow.lean:133-134` | every op abortive, name ≠ 0, `'x ∉ A`, and `A` outlives every lifetime |
 
@@ -82,8 +82,8 @@ the discharging lemma is named in the table.
 | `effSub` `[sub]` | :340 | `RowLe S S'` | `sub_compatC` `Core/EffRules.lean:774` |
 | `effPerform` | :343 | `Row.find S o.n o.i = some o`, `o.abort = false`, `V : o.A` | `perform_compatC` :781 |
 | `effRaise` | :348 | as above with `o.abort = true`, `o.A.Drop`, at any answer `B` | `raise_compatC` :797 |
-| `effLet` `[let]` | :353 | `S.Weak → Γ₂.Drops`, `S.Unr → Persistent Γ₂` | `let_compatC` :896 |
-| `effThen` `[then]` | :360 | `S.NZ`, `S.Uniq`, `S.Unr → Persistent Γ₂`, `D : F_{S.abortOnly} 1` | `then_compatC` :928 |
+| `effLet` `[let]` | :353 | `S.Cancels → Γ₂.OwnFree`, `S.Unr → Ctx.Banged Γ₂` | `let_compatC` :896 |
+| `effThen` `[then]` | :360 | `S.NZ`, `S.Uniq`, `S.Unr → Ctx.Banged Γ₂`, `D : F_{S.abortOnly} 1` | `then_compatC` :928 |
 | `effHandle` `[handle]` | :367 | `n ≠ 0`, `∀ o ∈ S, o.n ≠ n`, `|E| ≤ 2³²`, `h_ret`, clauses as variables | `handle_compatC` :1092 |
 | `boundedFix` | :196 | at every computation type `C` | `boundedFix_compatX` `Core/BoundedFix.lean:91` |
 | `withbor1U`, `withbor2U`, `withbor3U`, `withloadU`, `sliceBorrowMU`, `sliceBorrowIU` | :258-293 | each takes `hS : S.Unwind x` and a closed finaliser `d` | `Core/EffBorrow.lean:446, 275, 356, 548, 645, 726` |
@@ -206,7 +206,7 @@ unhandled op is not typed at `F 1`. This reading is mine, not a stated theorem.
 - `storeCancel` (:905).
 
 `Core/EffExamples.lean` has two more handled programs: `prog` (linear resume, :35) and `progC`
-(affine cancel, :67).
+(the cancel, :67).
 
 **Answering-handler laws** (`Core/Handlers.lean`). These are run facts about elaborated terms,
 not relation facts:
@@ -287,7 +287,7 @@ Section numbers are SPEC's `§N`; entry numbers are `N − 1`.
 | §19 (18) Native capture, :2270 | machine, cancels, `F_Σ`, six rules, `wpG`/`ewpTS`/op tables, LIFO frames, unwinding borrows, `Loop_Σ`, theorems, programs, lowering | Substance matches §1. Differences below |
 | §20 (19) Recursion as an effect, :2985 | `bounded_fix`; groups; `Exhausted`; heap driver; lowering. "Revised by §21" | Kernel matches (`Core/BoundedFix.lean`) |
 | §21 (20) Fixed point of a generator, :3134 | groups as `bounded_fix[1, R]` of a generator; layers; handler clauses after/with state | No kernel change, as stated. The spike's `boundedFixEnv_compatX` is cited as an instance in `experiments/SecondClass` |
-| §22 (21) Affine closure, :3288 | `Aff^c`; effectful closure positive | Pure `Aff` matches (`Core/Aff.lean`, `AffRules.lean`, `AffPrograms.lean`). The effectful form has positivity only (`affEffBody_nuOk`): no rules, no program |
+| §22 (21) `Clo` closure, :3288 | `Clo^c`; effectful closure positive | Pure `Clo` matches (`Core/Clo.lean`, `CloRules.lean`, `CloPrograms.lean`). The effectful form has positivity only (`cloEffBody_nuOk`): no rules, no program |
 | §23 (22) Non-strict outlives, :3463 | side conditions `⊑`, incl. at `Core/EffBorrow.lean` | Matches (`VOutlivesLe` premises on the `*U` twins) |
 
 **§19 against Lean: differences.**
@@ -423,7 +423,7 @@ Counts are allocations / dispatched / copies, from `corpus/counts.expected`.
   `rec-deep` 60040.
 - **Other groups:** `for-data-div`, `lend-*`, `io-*`.
 - **Pending, effect-related:**
-  - `gen-digits`, `gen-lines`, `gen-lazy`, `gen-adapters-io`: a capability across an affine
+  - `gen-digits`, `gen-lines`, `gen-lazy`, `gen-adapters-io`: a capability across a cancellable
     `yield`; a cancel has no residual;
   - `yield-callback`: #161;
   - `raise-in-fold`: K4, #178;
@@ -441,7 +441,7 @@ or `axiom`. Every worktree is clean.
 
 | branch | tip | contents | world | status |
 |---|---|---|---|---|
-| `lift-stage1` (worktree `~/repos/borrow-core-lift-stage1`) | `c9b3694` 2026-10-02 "WIP (#274, not for merge): [gen] transcription in progress, stopped" | `Core/AffTy.lean` (+108, a move of Aff's type/relation/`cC_aff_iff`/`aff_coind` before `CDerives`); `Core/Gen.lean` (+242): `genE`, `Qgen` (D14.4, :158), `ewp_gen` (L14.3, :199), from `ewpTS` at `[genOp]` to `ewpTS` at `OpTab.empty` with answer `Qgen`, taking a `hdone` premise | Core σ = [] | `ewp_gen` PROVED. T14.4 (`affBox_of_kapRel`), T14.6 (`gen_compatC`) and the `CDerives.gen` rule are named in the docstring (:27-38) and absent: OPEN, stopped. `Gen.lean` is imported by nothing. No PR. Plan: #274 owner comment 2026-10-02T23:07 |
+| `lift-stage1` (worktree `~/repos/borrow-core-lift-stage1`) | `c9b3694` 2026-10-02 "WIP (#274, not for merge): [gen] transcription in progress, stopped" | `Core/AffTy.lean` (+108, a move of the closure's type/relation/`cC_clo_iff`/`clo_coind` before `CDerives`); `Core/Gen.lean` (+242): `genE`, `Qgen` (D14.4, :158), `ewp_gen` (L14.3, :199), from `ewpTS` at `[genOp]` to `ewpTS` at `OpTab.empty` with answer `Qgen`, taking a `hdone` premise | Core σ = [] | `ewp_gen` PROVED. T14.4 (`cloBox_of_kapRel`), T14.6 (`gen_compatC`) and the `CDerives.gen` rule are named in the docstring (:27-38) and absent: OPEN, stopped. `Gen.lean` is imported by nothing. No PR. Plan: #274 owner comment 2026-10-02T23:07 |
 | `effect-callbacks` | `c321bd2` 2026-10-01 | elaborator only (`Frontend/Elab/Effects.lean` +1125, ports, `cbCopyOf`, …), SPEC §22 draft, ~30 corpus files; no theorems | none | REJECTED by the owner. PR #233 closed 2026-10-02: "It solves the first-order case only, and the higher-order cases … were left pending behind workarounds. The goal was the general form, so we're stepping back to restate what we're trying to do before building again." #161 OPEN |
 | `loophandle` | `51772c1` 2026-10-01 | `docs/handlers-over-div.md`: a derived `d_handleLoop` design | none | PAPER-ONLY. The doc says (:5-10): "Parked by the user before any Lean or probe was written: handlers around loops are not a priority" |
 | `borrow-core-188` worktree | detached `d1c2f6d` 2026-10-01 (#220) | an ancestor of main | — | merged; nothing unmerged |
@@ -493,7 +493,7 @@ on merging #284, #285 or #287.
     effect");
   - effects under `deep`; generic recursion;
   - recursion through a site or values.
-- **§22 Open**: the effectful affine closure has positivity only (§1.2 above).
+- **§22 Open**: the effectful `Clo` closure has positivity only (§1.2 above).
 
 ### 5.2 Gaps visible in the Lean, not recorded as one item
 
@@ -568,7 +568,7 @@ on merging #284, #285 or #287.
     `EffExamples.lean`, `EffPrograms.lean`;
   - `Core/Handlers.lean`, `Alloc.lean`, `Demonic.lean`, `BoundedFix.lean`, `Totality.lean`;
   - `Core/Types.lean` (:30-160, :1130-1280), `Relation.lean` (:1-215), `Fundamental.lean`,
-    `World.lean` (:110-201), `Aff.lean` (:140-168), `NuRel.lean`, `Nu.lean`, `Steps.lean`
+    `World.lean` (:110-201), `Clo.lean` (:140-168), `NuRel.lean`, `Nu.lean`, `Steps.lean`
     (declaration list), `Stdio.lean` (declaration list), `Computation.lean` (declaration list).
 - Paper and Support: `Paper/S1_Syntax/Definitions.lean` (:60-95),
   `Paper/S3_Dynamics/Definitions.lean` (:300-560), `Support/Dynamics/Interpreter.lean` (grep).

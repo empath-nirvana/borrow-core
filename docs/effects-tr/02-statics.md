@@ -91,7 +91,7 @@ The capturers and their modes:
 | an operation's own continuation | `b_x.req` | [op] |
 | a handler's clauses, forwarded through by `ρ` | `bound(ρ).req` | [handle] |
 | a resuming clause (run once per operation) | `unr` | [handle] |
-| a `using` frame (affine: it has a destructor) | `aff ≥ bound(ρ).req` | [using] |
+| a `using` frame (linear, with a destructor) | `cancel ≥ bound(ρ).req` | [using] |
 | a `lend` frame (linear: the capability has no destructor) | `lin = bound(ρ).req` | [lend] |
 
 **Lemma L2.2 (order facts).** For modes `m, k, m'` and bounds `b, b'`:
@@ -100,11 +100,11 @@ The capturers and their modes:
 2. `capture(Γ, X, m) ∧ m ≥ m' ⇒ capture(Γ, X, m')`.
 3. `ρ ⊆ ρ' ⇒ bound(ρ) ⊑ bound(ρ')`; in particular `bound(ρ).req ≤ bound(ρ').req`.
 4. `W ∈ q_o ⇒ W ∈ b.req` and `C ∈ q_o ⇒ C ∈ b.req` for `b = bnd(E)` or `b = hb(H, ρ_h)` (D2.8),
-   and the same for an abortive operation with `q_a = aff`.
+   and the same for an abortive operation with `q_a = cancel`.
 
 *Proof.* (1) is the subset order on subsets of `{W, C}`. (2) by transitivity of `⊇`. (3) `⊔` is
-monotone. (4) `bnd(E).req` and `hb(H, ρ_h).req` are `⨆_o q_o ⊔ ⨆_a aff` (D1.4, D2.8), which
-contains each `q_o` and `aff`. ∎
+monotone. (4) `bnd(E).req` and `hb(H, ρ_h).req` are `⨆_o q_o ⊔ ⨆_a cancel` (D1.4, D2.8), which
+contains each `q_o` and `cancel`. ∎
 
 ## 2.3 Tail resumption
 
@@ -130,7 +130,7 @@ position. That is what Lemma L5.12 uses: at a tail call the clause's own frames 
 **Definition D2.8 (handler bound).** For a handler `H` of `E` whose clauses may perform `ρ_h`:
 
     keeps(H) ≜ ∃ resuming o ∈ E. ¬ tail_k(N_o)
-    hb(H, ρ_h) ≜ (⨆_o q_o ⊔ ⨆_a aff,  keeps(H) ∨ bound(ρ_h).susp)
+    hb(H, ρ_h) ≜ (⨆_o q_o ⊔ ⨆_a cancel,  keeps(H) ∨ bound(ρ_h).susp)
 
 [PA `handlerBound`.] An instance with `b.susp = false` is **in place**; otherwise
 **suspending**.
@@ -199,7 +199,7 @@ Computations:
     [rlam]    Θ, r ≤ b ⊢ M : C ! ρ ▷ u                  ⊢ Λr ≤ b. M : ∀^ρ(r ≤ b). C ! ∅ ▷ u
     [rapp]    M : ∀^ρ(r ≤ b). C ! ρ₀ ▷ u    bound(σ) ⊑ b
                                                         ⊢ M [σ] : C[σ/r] ! ρ₀ ∪ ρ[σ/r] ▷ u
-    [newcap]  E has no abortive operation, every q_o ∈ {lin, aff}
+    [newcap]  E has no abortive operation, every q_o ∈ {lin, cancel}
               ·; ·; p:A_o, s:S ⊢ N_o : F ((B_o ⊗ S) ⊕ (E_o ⊗ S)) ! ∅  for every o   (D1.9)
               V : S ▷ u                                 ⊢ newcap_E S co V : F (cap_E S) ! ∅ ▷ u
     [getcap]  V : cap_E S ▷ u                           ⊢ getcap V : F S ! ∅ ▷ u
@@ -207,7 +207,7 @@ Computations:
               x ∉ atoms(A)    bound(ρ).req = lin
                                                         ⊢ lend V as x in M : F (cap_E S ⊗ (A ⊕ int)) ! ρ ▷ u₁ + u₂
     [using]   Ψ, x:Res^{none}; Γ ⊢ M : F A ! ρ_M ▷ u    ρ = ρ_M ∖ {x}
-              x ∉ atoms(A)    aff ≥ bound(ρ).req
+              x ∉ atoms(A)    cancel ≥ bound(ρ).req
                                                         ⊢ using x = acquire ℓ in M : F A ! ρ ▷ u
     [unfold]  V : strm^ρ A ▷ u                          ⊢ unfold V : F (A ⊕ (int ⊗ strm^ρ A)) &^{ρ,∅} F 1 ! ∅ ▷ u
     [bfix]    x : E^b ∈ Ψ    a : A_a ↠ 0 ∈ E    V : A_a ▷ u₁    x ∈ ρ
@@ -247,7 +247,7 @@ machine-checked).
 | [thunk] | no lent place, no `resD` captured | independence only | both side conditions are now carried by rows: a lent instance or a resource handle is an instance, and `x ∉ atoms(A)` at its binder confines it |
 | [handle] | clause captures checked at the forwarded row only | also at the handler's own bound | §10.3 |
 | [op], [handle] | `κ` the resume entry only | `κ : K(q, B, ρ', C)`, with `cancel` when `W ∈ q` | §8.1 |
-| [newcap] | co-operations `A × S → F (B × S)` | `F ((B ⊗ S) ⊕ (E_o ⊗ S))`, `aff` operations admitted | §8.2 |
+| [newcap] | co-operations `A × S → F (B × S)` | `F ((B ⊗ S) ⊕ (E_o ⊗ S))`, `cancel` operations admitted | §8.2 |
 | [bfix] | `fix` (general recursion) | bounded | §9.4 |
 | [ab] | `raise` as `op` at answer `void` | a separate former | phase B's `Cmp.ab`; the clause receives no continuation |
 

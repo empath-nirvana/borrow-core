@@ -211,7 +211,7 @@ def _root_.Frontend.Val.synthInj : Val → Bool
 returned, and the first arm of a `case` (the second is checked against it). -/
 def _root_.Frontend.Comp.synthInj : Comp → Bool
   | .ret _ V => V.synthInj
-  | .bind _ _ _ _ N _ | .letUnit _ _ N | .letPair _ _ _ _ N => N.synthInj
+  | .bind _ _ _ _ N | .letUnit _ _ N | .letPair _ _ _ _ N => N.synthInj
   | .case _ _ _ M _ _ => M.synthInj
   | .absurd .. => true
   | _ => false
@@ -327,7 +327,7 @@ def synCM : Nat → MCx → Comp → MM MTy
   | 0, _, _ => freshM
   | n + 1, c, m => match m with
     | .ret _ V => synM n c V
-    | .bind sp x oA M N _ => do
+    | .bind sp x oA M N => do
       let t ← match oA.bind c.tc.elabV with
         | some A => do chkCM n c M (.known A); pure (.known A)
         | none => do
@@ -374,9 +374,9 @@ end
 
 /-- Annotate the unannotated bindings at the spans `ann` with their types. -/
 def _root_.Frontend.Comp.annotate (ann : List (Span × VTy)) : Comp → Comp
-  | .bind sp x none M N lin =>
-    .bind sp x (ann.lookup sp) (M.annotate ann) (N.annotate ann) lin
-  | .bind sp x A M N lin => .bind sp x A (M.annotate ann) (N.annotate ann) lin
+  | .bind sp x none M N =>
+    .bind sp x (ann.lookup sp) (M.annotate ann) (N.annotate ann)
+  | .bind sp x A M N => .bind sp x A (M.annotate ann) (N.annotate ann)
   | .letUnit sp V M => .letUnit sp V (M.annotate ann)
   | .letPair sp x y V M => .letPair sp x y V (M.annotate ann)
   | .case sp V x M y N => .case sp V x (M.annotate ann) y (N.annotate ann)
@@ -387,7 +387,7 @@ def _root_.Frontend.Comp.annotate (ann : List (Span × VTy)) : Comp → Comp
 
 /-- An unannotated binding whose head has an injection in a synthesized position. -/
 def _root_.Frontend.Comp.needsFill : Comp → Bool
-  | .bind _ _ A M N _ => (A.isNone && M.synthInj) || M.needsFill || N.needsFill
+  | .bind _ _ A M N => (A.isNone && M.synthInj) || M.needsFill || N.needsFill
   | .letUnit _ _ M | .letPair _ _ _ _ M => M.needsFill
   | .case _ _ _ M _ N | .loop _ _ _ _ M N => M.needsFill || N.needsFill
   | .handle _ _ _ _ _ M => M.needsFill

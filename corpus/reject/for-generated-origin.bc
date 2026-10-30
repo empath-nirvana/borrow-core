@@ -1,4 +1,4 @@
--- expect: 9:3: `k` is not consumed in its scope, and its type `U (F 1)` has no destructor
+-- expect: 9:3: `k` is not consumed in its scope, and its type `U (F 1)` is linear and has no derived drop
 -- expect|   in the core generated for `for` here (`bcc desugar` shows it)
 -- An error in code a sugar generates is reported at the sugar, with a note naming it
 -- (docs/typed-elaboration.md §3). The loop threads `k`, a thunk with no destructor; the loop's

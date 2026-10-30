@@ -425,7 +425,7 @@ def typeDecls (t : Table) (sp : Span) (d : DataDecl) : Except Error (List Decl) 
         | none => pure ()
         | some why =>
           err <| s!"{what}, of type `{f.ty.pp}`, holds `{root}` {why}: outside §6's class " ++
-            "`P`, the recursive types a destructor is defined at (SPEC §61)"
+            "`P`, the recursive types a derived drop is defined at (SPEC §61)"
   if rec_ then for m in members do checkFields m
   let rootS ← match structOf t g root (if rec_ then some X else none) 64 root with
     | .ok S => pure S
@@ -437,7 +437,7 @@ def typeDecls (t : Table) (sp : Span) (d : DataDecl) : Except Error (List Decl) 
   if rec_ && !BoCa.Fig16.LogRel.Core.FoldP.pBodyB (pTy [X] 64 rootS) then
     err <| s!"`{root}`'s recursive type is outside §6's class `P` " ++
       s!"({(notP 1 (pTy [X] 64 rootS)).getD "its body is headed by its variable"}): " ++
-      "a destructor is defined only in the class (SPEC §61)"
+      "a derived drop is defined only in the class (SPEC §61)"
   let rootT : VTy := if rec_ then .mu sp ⟨X, sp⟩ rootS else rootS
   let mut out : List Decl := [mk root rootT]
   -- The other members, each after the members it names.
@@ -559,7 +559,7 @@ def recordVal (t : Table) (sp : Span) (n : String) (boxed : Bool) (fs : List (Id
   let vars := fs.map fun (x, _) => (x.name, fresh x.name)
   let body ← conVal t sp c.name.name boxed (names.map fun f => .var sp ((vars.lookup f).getD f)) reuse
   let M := fs.foldr (fun (x, V) M =>
-    .bind sp ⟨(vars.lookup x.name).getD x.name, x.span⟩ none (.ret sp V) M false) (Comp.ret sp body)
+    .bind sp ⟨(vars.lookup x.name).getD x.name, x.span⟩ none (.ret sp V) M) (Comp.ret sp body)
   pure (.run sp M)
 
 /-! ### Fields: E5, E6 -/
@@ -589,7 +589,7 @@ def fieldVars (pre : String) (k : Nat) : List String := (List.range k).map (s!"{
 /-- `let (x₀, (x₁, …)) = V; M`, the right-nested tuple taken apart. -/
 def letTuple (sp : Span) (V : Val) : List String → Comp → (String → String) → Comp
   | [], M, _ => .letUnit sp V M
-  | [x], M, _ => .bind sp ⟨x, sp⟩ none (.ret sp V) M false
+  | [x], M, _ => .bind sp ⟨x, sp⟩ none (.ret sp V) M
   | [x, y], M, _ => .letPair sp ⟨x, sp⟩ ⟨y, sp⟩ V M
   | x :: xs, M, fresh =>
     let r := fresh x
@@ -826,11 +826,11 @@ def testCol (row : Row) : Option Nat := row.pats.findIdx? (!·.irrefutable)
 /-- An arm, reached with its variables bound: each `x <- return v`, in order. -/
 def bindAll (sp : Span) : List (Ident × RB) → Comp → Comp
   | [], M => M
-  | (x, r) :: bs, M => .bind sp x none (.ret sp (r.toVal sp 64)) (bindAll sp bs M) false
+  | (x, r) :: bs, M => .bind sp x none (.ret sp (r.toVal sp 64)) (bindAll sp bs M)
 
 /-- `x <- return free(c); M`: a block's cell freed, its content bound. -/
 def freeBind (sp : Span) (x : Ident) (c : String) (M : Comp) : Comp :=
-  .bind sp x none (.ret sp (.app sp (.sugar sp (.call "free")) (.var sp c))) M false
+  .bind sp x none (.ret sp (.app sp (.sugar sp (.call "free")) (.var sp c))) M
 
 /-- An occurrence of the generated code, and whether it is a block's cell. -/
 abbrev Occ := String × Bool
@@ -1010,8 +1010,8 @@ where
   spine (sp : Span) (V : Val) : List (String × Comp) → CM Comp
     | [] => pure (.absurd sp V)
     | [(p, M)] => pure (match V with
-      | .var _ x => if x == p then M else .bind sp ⟨p, sp⟩ none (.ret sp V) M false
-      | V => .bind sp ⟨p, sp⟩ none (.ret sp V) M false)
+      | .var _ x => if x == p then M else .bind sp ⟨p, sp⟩ none (.ret sp V) M
+      | V => .bind sp ⟨p, sp⟩ none (.ret sp V) M)
     | [(p, M), (q, N)] => pure (.case sp V ⟨p, sp⟩ M ⟨q, sp⟩ N)
     | (p, M) :: arms => do
       let r ← freshOcc
@@ -1050,7 +1050,7 @@ def matchComp (t : Table) (sp : Span) (scruts : List Val) (arms : List (List MPa
         pre := pre ++ [(o, V)]
     let rs : List Row := arms.zipIdx.map fun ((ps, _), i) => { pats := ps, binds := [], arm := i }
     let M ← compile t sp (arms.map (·.2)).toArray infoOf none fuel rs cols
-    pure (pre.foldr (fun (o, V) M => .bind sp ⟨o, sp⟩ none (.ret sp V) M false) M)
+    pure (pre.foldr (fun (o, V) M => .bind sp ⟨o, sp⟩ none (.ret sp V) M) M)
   go.run fresh
 
 /-! ### The `fold` block: F1 -/

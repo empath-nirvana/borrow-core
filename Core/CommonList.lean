@@ -139,7 +139,7 @@ abbrev ΔA : LifeCtx := LifeCtx.empty.extend 0 LifeCtx.empty.meetOfDom
 /-- The count algebra at `ΔA`, bound at lifetime variable `1`. -/
 theorem d_countAlg1 {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives ΔA Γ (.val countAlgV) (.val (algTy natF 1 natN)) :=
-  .bangThunkV (persistent_dead hΓ) rfl
+  .bangThunkV (banged_dead hΓ) rfl
     (.allI (S := .unit) rfl (fun y u hy => by
         simp only [LifeCtx.extend, LifeCtx.find?, LifeCtx.empty] at hy
         simp only [Lifetime.assocFind] at hy

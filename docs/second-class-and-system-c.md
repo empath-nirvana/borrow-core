@@ -249,8 +249,8 @@ run produces**. What is missing is (a) and (b) below.
     - a counter in the machine state, never reused, which gives persistent labels and suits
       multi-shot continuations; or
     - a cell allocated by `hnd` whose location is the name, freed when the `hnd` frame returns.
-      A cell suits linear and affine continuations, since the frame and its `κ` own it. It does
-      not suit multi-shot continuations, whose copies would share an owned cell.
+      A cell suits must-resume and cancellable continuations, since the frame and its `κ` own it. It
+      does not suit multi-shot continuations, whose copies would share an owned cell.
 - **Cost:** one primitive, plus its cases in unique decomposition and determinism (`head_det_eff`).
   - A counter changes `Heap`, which is the paper's machine state, or adds a component beside it.
   - Names as locations change `Head.hop`'s name type.
@@ -291,7 +291,7 @@ run produces**. What is missing is (a) and (b) below.
   name the map gives, so they carry over unchanged.
 - **The persistent-capture rule for multi-shot continuations (watch item 2) stays intact.**
   - A token holds `∅`, so an unrestricted `κ` may capture it.
-  - The `[let]` premise `S.Unr → Persistent Γ₂` is unchanged.
+  - The `[let]` premise `S.Unr → Ctx.Banged Γ₂` is unchanged.
   - Nothing linear becomes copyable: the token is not a resource.
 - **Accidental handling (watch item 3).** Lexical tokens solve it, as in Effekt. Static names
   already solve it except for recursion through a site (decision 57), and generative names
@@ -306,7 +306,7 @@ run produces**. What is missing is (a) and (b) below.
 |---|---|---|---|
 | **L1: name variables** | rows keyed by name variables; `∀ν`; tokens as values; static names at sites | decision 57's copies per name assignment (one derivation per function, instantiated by `∀E` instead of the renaming lemma); ports (the port is the bound `ν`) | (b) |
 | **L2: generative names** | L1, plus (a) | recursion through a site (a fresh prompt per level); R3 becomes `∀ν`'s freshness, discharged at run time | (a) + (b) |
-| **L3: rowless, System C-faithful** | protocols stored in the world, keyed by prompt; `F A` carries only a profile (lin / aff / unr / abortive) for the `[let]` side conditions | tunneling for free: a callback's effects are its captured tokens, so higher-order functions need no row of the callback | **open problem, watch item 1**: the world would store predicates over worlds. Do not take it |
+| **L3: rowless, System C-faithful** | protocols stored in the world, keyed by prompt; `F A` carries only a profile (lin / cancel / unr / abortive) for the `[let]` side conditions | tunneling for free: a callback's effects are its captured tokens, so higher-order functions need no row of the callback | **open problem, watch item 1**: the world would store predicates over worlds. Do not take it |
 
 **Which listed gaps a capability-indexed design closes [inspection]:**
 

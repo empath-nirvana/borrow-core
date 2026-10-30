@@ -40,8 +40,8 @@ def values : 1 =
   run (a <- return ((unbox boxed['a /\ top] roll inl () :> 'b), shorten_imm[Pair, 'a] f);
        b : Nat * 1 <- return (g [top] x, (unroll (y : Nat) : 1 + Nat));
        c <- return (thunk return (), !thunk return ());
-       linear d <- return ();
-       linear e : 1 <- return d;
+       d <- return ();
+       e : 1 <- return d;
        return e)
 
 main : F 1 & top =

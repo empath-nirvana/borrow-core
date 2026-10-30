@@ -53,7 +53,7 @@ says so; that step is one the lift must redo.
 **Definition D4.2 (mode interpretation).** Each mode denotes a set of resources:
 
     ⟦lin⟧ ≜ Res
-    ⟦aff⟧ ≜ NoOwn ≜ {r | r|own = ∅}
+    ⟦cancel⟧ ≜ NoOwn ≜ {r | r|own = ∅}
     ⟦rel⟧ = ⟦unr⟧ ≜ Pers ≜ {r | r|own = ∅ ∧ r|mut = ∅ ∧ r ● r = r}
 
 In `Res_own`, `NoOwn = Pers = {∅}`.
@@ -66,17 +66,17 @@ In `Res_own`, `NoOwn = Pers = {∅}`.
 4. `C ∈ m ⇒ ⟦m⟧ ⊆ Pers`, and `r ∈ Pers ⇒ r = r ● r` (what a mode with contraction holds may be
    duplicated).
 
-*Proof.* (1) The pairs with `m ≥ k`, `m ≠ k` are `aff ≥ lin`, `rel ≥ lin`, `unr ≥ lin`,
-`unr ≥ aff`, `unr ≥ rel`; every set is in `⟦lin⟧ = Res`, `Pers ⊆ NoOwn` by definition, and
+*Proof.* (1) The pairs with `m ≥ k`, `m ≠ k` are `cancel ≥ lin`, `rel ≥ lin`, `unr ≥ lin`,
+`unr ≥ cancel`, `unr ≥ rel`; every set is in `⟦lin⟧ = Res`, `Pers ⊆ NoOwn` by definition, and
 `⟦unr⟧ = ⟦rel⟧`. (2) `∅` satisfies each condition. `(r₁ ● r₂)|own = r₁|own ⊎ r₂|own` because
 `●` combines only `imm` with `imm` ([TR] p. 5); likewise for `mut`. For `Pers`:
 `(r₁ ● r₂) ● (r₁ ● r₂) = (r₁ ● r₁) ● (r₂ ● r₂)` by commutativity and associativity
-([TR] 6.2, 6.3), `= r₁ ● r₂`. (3), (4) by the definitions; `W ∈ m` gives `m ∈ {aff, unr}` and
+([TR] 6.2, 6.3), `= r₁ ● r₂`. (3), (4) by the definitions; `W ∈ m` gives `m ∈ {cancel, unr}` and
 `C ∈ m` gives `m ∈ {rel, unr}`. ∎
 
 `NoOwn` is what BoLo's `wp` lets a run leave behind (`ρ⁺|own = ∅`, [TR] p. 6) and what the
 forget rules drop ([TR] 6.148, 6.149). `Pers` is BoLo's persistence: `!P ≜ emp ∧ P` holds of
-`∅`, and an `imm` cell is idempotent ([TR] 6.43 at `α = β`, 6.116). In the lift, `⟦aff⟧`
+`∅`, and an `imm` cell is idempotent ([TR] 6.43 at `α = β`, 6.116). In the lift, `⟦cancel⟧`
 contains `mut` and `imm` borrows and `⟦unr⟧` contains `imm` borrows.
 
 *Source.* The reading of a mode as a set of resources closed under composition is ours. It is
@@ -107,7 +107,7 @@ continuation is a thunk value (D1.8), so its resource is whatever `V⟦U_m^ρ C�
 
 - **one-shot** (`C ∉ q`): `κ¹(ℓ_κ, w)` holds `{ℓ_κ ↦ own(seg(S_κ))} ● r_κ`, where `r_κ` is the
   resource of the frames `S_κ`. Forcing it removes `ℓ_κ`. A second force is a use after free.
-  An affine continuation that is neither resumed nor cancelled is an `own` cell left at the end
+  A cancellable continuation that is neither resumed nor cancelled is an `own` cell left at the end
   of the run, which BoLo's `wp` forbids (`ρ⁺|own = ∅`).
 - **copyable** (`C ∈ q`): `κ*(S_κ, w)` holds `r_κ`, which must be in `Pers` (D4.6).
 

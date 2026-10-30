@@ -296,8 +296,8 @@ def siteKindMismatch (hs : List HandleSite) : Option (HandleSite × String) :=
 
 /-- The qualifier as SPEC writes it. -/
 def qualWord : Qual → String
-  | .lin => "linear"
-  | .aff => "affine"
+  | .lin => "must-resume"
+  | .cancel => "cancellable"
   | .unr => "unrestricted"
 
 /-- What a kind says of its clause, for the reports. -/

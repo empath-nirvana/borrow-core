@@ -102,7 +102,7 @@ structure Own where
   uses : List (UseKey × TExpr) := []
 
 def qualName : Qual → String
-  | .lin => "lin" | .aff => "aff" | .unr => "unr"
+  | .lin => "lin" | .cancel => "cancel" | .unr => "unr"
 
 /-- The depth bound of the walk: the checker's (`Frontend.Check.checkFuel`). -/
 def ownFuel : Nat := 1 <<< 20
@@ -233,7 +233,7 @@ def main (files : List String) : IO UInt32 := do
     IO.println s!"node\t{k}\t{progs.getD k 0}\t{static.getD k 0}\t{lib.getD k 0}\t{expanded.getD k 0}\t{" ".intercalate (firsts.getD k [])}"
   for k in vtyNames.map ("V." ++ ·) ++ ctyNames.map ("C." ++ ·) do
     IO.println s!"former\t{k}\t{fprogs.getD k 0}\t{fnodes.getD k 0}"
-  for k in ["lin", "aff", "unr"] do
+  for k in ["lin", "cancel", "unr"] do
     IO.println s!"qual\t{k}\t{qprogs.getD k 0}\t{qops.getD k 0}"
   for (k, n) in (rcount.toList.mergeSort (fun a b => a.1 ≤ b.1)) do
     let parts := k.splitOn ":"

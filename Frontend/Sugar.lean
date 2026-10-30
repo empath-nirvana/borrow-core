@@ -49,7 +49,7 @@ one is adding its name here. The elaboration brings in `io`, `div` and `prelude`
 (`elaborateS`); `include m` brings in any of them. -/
 def libNames : List String :=
   ["io", "div", "prelude", "lend", "adapters", "slice", "buf", "text", "textio", "iters", "fail",
-   "yield", "rec", "aff", "async", "list", "sys", "wasi", "key", "map", "float", "arith"]
+   "yield", "rec", "clo", "async", "list", "sys", "wasi", "key", "map", "float", "arith"]
 
 /-- The directory of the library: `$BCC_LIB` when it is set; otherwise `lib/` of the checkout
 whose `.lake/build/bin/` holds the running `bcc`; otherwise `lib/` of the working directory. -/
@@ -128,15 +128,14 @@ def _root_.Frontend.Val.elab (lend : Bool) : Val → Except Error Val
 `io_lend <- M[c/&c]; let (c, x) = io_lend; N`. With `lend`, the computation is such a head, and
 its `&c` outside nested binders becomes `c`. -/
 def _root_.Frontend.Comp.elab (lend : Bool) : Comp → Except Error Comp
-  | .bind sp x A M N lin => do
+  | .bind sp x A M N => do
     match M.takeLends.2 with
-    | [] => return .bind sp x A (← M.elab false) (← N.elab false) lin
+    | [] => return .bind sp x A (← M.elab false) (← N.elab false)
     | [c] =>
-      if A.isSome || lin then
-        throw ⟨sp, s!"`&{c.name}` cannot be used in an annotated or `linear` binding"⟩
+      if A.isSome then
+        throw ⟨sp, s!"`&{c.name}` cannot be used in an annotated binding"⟩
       let r : Ident := ⟨"io_lend", c.span⟩
       return .bind sp r none (← M.elab true) (.letPair sp c x (.var c.span r.name) (← N.elab false))
-        false
     | _ => throw ⟨sp, "a call lends at most one capability with `&`"⟩
   | .ret sp V => return .ret sp (← V.elab lend)
   | .absurd sp V => return .absurd sp (← V.elab lend)
@@ -203,7 +202,7 @@ def _root_.Frontend.Comp.fillS (hv : String → Option Val) (hc : String → Opt
   | M@(.force _ x) => (hc x.name).getD M
   | .ret sp V => .ret sp (V.fillS hv hc hs)
   | .absurd sp V => .absurd sp (V.fillS hv hc hs)
-  | .bind sp x A M N lin => .bind sp x A (M.fillS hv hc hs) (N.fillS hv hc hs) lin
+  | .bind sp x A M N => .bind sp x A (M.fillS hv hc hs) (N.fillS hv hc hs)
   | .lam sp x A M => .lam sp x A (M.fillS hv hc hs)
   | .app sp M x => .app sp (M.fillS hv hc hs) x
   | .with_ sp M N => .with_ sp (M.fillS hv hc hs) (N.fillS hv hc hs)
@@ -240,7 +239,7 @@ def _root_.Frontend.Comp.fill (hv : String → Option Val) (hc : String → Opti
 /-- Apply `f` to every terminal computation reached through tail positions: the body of a bind
 or a `let`, both arms of a `case`, and what follows a `for`. -/
 def wrapTail (f : Comp → Comp) : Comp → Comp
-  | .bind sp x A M N lin => .bind sp x A M (wrapTail f N) lin
+  | .bind sp x A M N => .bind sp x A M (wrapTail f N)
   | .letUnit sp V M => .letUnit sp V (wrapTail f M)
   | .letPair sp x y V M => .letPair sp x y V (wrapTail f M)
   | .case sp V x M y N => .case sp V x (wrapTail f M) y (wrapTail f N)
@@ -411,7 +410,7 @@ def liftAll (V : Val) : Val × List (Ident × Val) := (liftApps divFuel V).run [
 
 /-- The lifted applications bound before `M`. -/
 def chain (bs : List (Ident × Val)) (M : Comp) : Comp :=
-  bs.foldr (fun (x, V) N => .bind V.span x none (.ret V.span V) N false) M
+  bs.foldr (fun (x, V) N => .bind V.span x none (.ret V.span V) N) M
 
 /-! #### Types of bound variables -/
 
@@ -474,7 +473,7 @@ def headLoops (c : TCx) (exp : Option CVTy) : Comp → Option (Span × String)
 /-- Where a body loops, on its spine: a `for`, or a call run in direct style. `B` is the body's
 result type. -/
 def loopsAt (c : TCx) (B : Option CVTy) : Comp → Option (Span × String)
-  | .bind _ x A M N _ =>
+  | .bind _ x A M N =>
     (headLoops c (A.bind c.elabV) M).orElse fun _ => loopsAt (c.push x.name (bindTy c A M)) B N
   | .letUnit _ V M =>
     ((callIn c divFuel (some .unit) V).map fun (sp, f) => callMsg sp f).orElse fun _ =>
@@ -505,7 +504,7 @@ def _root_.Frontend.Val.names (n : String) : Val → Bool
 /-- `n` occurs in a computation. -/
 def _root_.Frontend.Comp.names (n : String) : Comp → Bool
   | .ret _ V | .absurd _ V => V.names n
-  | .bind _ _ _ M N _ | .with_ _ M N => M.names n || N.names n
+  | .bind _ _ _ M N | .with_ _ M N => M.names n || N.names n
   | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
   | .nuOut _ M | .ascribe _ M _ => M.names n
   | .letUnit _ V M | .letPair _ _ _ V M => V.names n || M.names n
@@ -536,7 +535,7 @@ def varsFor (A : CVTy) : Val → Option (List (String × CVTy))
     | (some (.var _ x), T) | (some (.clone _ x), T) => some (x, T)
     | _ => none
 
-def isLinear (A : CVTy) : Bool := Class.of A == .linear
+def isLinear (A : CVTy) : Bool := Class.of A == .linear false
 
 /-- The variables a terminal `return V` of the body puts in each component of the result that
 has no destructor, as the loops' states hold them: a variable the terminal names by a copy made
@@ -544,11 +543,11 @@ after the last loop, `x1 <- return x`, is `x` there. The residual is identified 
 followed through its copies, not by the name the terminal gives it (SPEC §41, #617). -/
 def termParts (parts : List CVTy) (ρ : List (String × String)) :
     Comp → Option (List (List (String × CVTy)))
-  | .bind _ x _ (.ret _ V) N _ => match V.copyOf? with
+  | .bind _ x _ (.ret _ V) N => match V.copyOf? with
     | some y => termParts parts ((x.name, (ρ.lookup y).getD y) :: ρ) N
     | none => termParts parts ρ N
   | .loop _ _ _ _ _ N => termParts parts [] N
-  | .bind _ _ _ _ N _ | .letUnit _ _ N | .letPair _ _ _ _ N => termParts parts ρ N
+  | .bind _ _ _ _ N | .letUnit _ _ N | .letPair _ _ _ _ N => termParts parts ρ N
   | .case _ _ _ M _ N => (termParts parts ρ M).orElse fun _ => termParts parts ρ N
   | .ret _ (.app _ (.sugar _ .retE) V) | .ret _ V =>
     ((parts.zip (alignV parts V)).filter (isLinear ·.1)).mapM fun (A, v) =>
@@ -593,7 +592,7 @@ def loopCxOf (sp : Span) (B : CVTy) (M : Comp) (bare : Bool := false) : Except E
   let K := tupleT lin
   match termParts parts [] M with
   | some ps => pure (if bare then ⟨B, K, K, ps, false⟩ else ⟨B, .tensor K .unit, K, ps, true⟩)
-  | none => throw ⟨sp, s!"a div function whose result holds `{ppT K}`, which has no destructor, " ++
+  | none => throw ⟨sp, s!"a div function whose result holds `{ppT K}`, which is linear with no derived drop, " ++
       "must hand it back by name: `return (c, …)` (SPEC §14)"⟩
 
 def internalError (sp : Span) (what : String) (e : Error) : Error :=
@@ -629,7 +628,7 @@ def template (sp : Span) (what : String) (src : String) : SM Comp := do
 
 /-- A computation has a loop on its spine or anywhere in it. -/
 def _root_.Frontend.Comp.hasFor : Comp → Bool
-  | .bind _ _ _ M N _ | .with_ _ M N => M.hasFor || N.hasFor
+  | .bind _ _ _ M N | .with_ _ M N => M.hasFor || N.hasFor
   | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
   | .nuOut _ M | .ascribe _ M _ | .letUnit _ _ M | .letPair _ _ _ _ M => M.hasFor
   | .case _ _ _ M _ N => M.hasFor || N.hasFor
@@ -652,7 +651,7 @@ def _root_.Frontend.Val.exitAt : Val → Option Span
 /-- The first `break`, `continue` or `return e` in a computation. -/
 def _root_.Frontend.Comp.exitAt : Comp → Option Span
   | .ret _ V | .absurd _ V => V.exitAt
-  | .bind _ _ _ M N _ | .with_ _ M N => M.exitAt.orElse fun _ => N.exitAt
+  | .bind _ _ _ M N | .with_ _ M N => M.exitAt.orElse fun _ => N.exitAt
   | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
   | .nuOut _ M | .ascribe _ M _ => M.exitAt
   | .letUnit _ V M | .letPair _ _ _ V M => V.exitAt.orElse fun _ => M.exitAt
@@ -684,7 +683,7 @@ def _root_.Frontend.Val.sugarAt (p : VSugar → Bool) : Val → Option Span
 /-- The first surface leaf satisfying `p` in a computation. -/
 def _root_.Frontend.Comp.sugarAt (p : VSugar → Bool) : Comp → Option Span
   | .ret _ V | .absurd _ V => V.sugarAt p
-  | .bind _ _ _ M N _ | .with_ _ M N => (M.sugarAt p).orElse fun _ => N.sugarAt p
+  | .bind _ _ _ M N | .with_ _ M N => (M.sugarAt p).orElse fun _ => N.sugarAt p
   | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
   | .nuOut _ M | .ascribe _ M _ => M.sugarAt p
   | .letUnit _ V M | .letPair _ _ _ V M => (V.sugarAt p).orElse fun _ => M.sugarAt p
@@ -710,14 +709,14 @@ def _root_.Frontend.Comp.isExit : Comp → Bool
 
 /-- A `break` on the spine outside every loop. -/
 def _root_.Frontend.Comp.spineBreak : Comp → Option Span
-  | .bind _ _ _ _ N _ | .letUnit _ _ N | .letPair _ _ _ _ N | .loop _ _ _ _ _ N => N.spineBreak
+  | .bind _ _ _ _ N | .letUnit _ _ N | .letPair _ _ _ _ N | .loop _ _ _ _ _ N => N.spineBreak
   | .case _ _ _ M _ N => M.spineBreak.orElse fun _ => N.spineBreak
   | .ret sp (.sugar _ .brk) | .ret sp (.app _ (.sugar _ .brk) _) => some sp
   | _ => none
 
 /-- The `break`s on the spine outside every inner loop, with their values. -/
 def _root_.Frontend.Comp.spineBreaks : Comp → List (Span × Option Val)
-  | .bind _ _ _ _ N _ | .letUnit _ _ N | .letPair _ _ _ _ N | .loop _ _ _ _ _ N => N.spineBreaks
+  | .bind _ _ _ _ N | .letUnit _ _ N | .letPair _ _ _ _ N | .loop _ _ _ _ _ N => N.spineBreaks
   | .case _ _ _ M _ N => M.spineBreaks ++ N.spineBreaks
   | .ret sp (.sugar _ .brk) => [(sp, none)]
   | .ret sp (.app _ (.sugar _ .brk) e) => [(sp, some e)]
@@ -726,13 +725,13 @@ def _root_.Frontend.Comp.spineBreaks : Comp → List (Span × Option Val)
 /-- What follows a loop whose value is bound with an `else` (`let r = for … else { d }; N`):
 `r`, its written type, `d`, and `N`. -/
 def _root_.Frontend.Comp.forElse? : Comp → Option (Ident × Option VTy × Comp × Comp)
-  | .bind _ r A (.ret _ (.app _ (.sugar _ .forRes) (.thunk _ d))) N _ => some (r, A, d, N)
+  | .bind _ r A (.ret _ (.app _ (.sugar _ .forRes) (.thunk _ d))) N => some (r, A, d, N)
   | _ => none
 
 /-- What follows a loop whose value is bound (`let r = for …; N`): `r`, its written type, and
 `N`. -/
 def _root_.Frontend.Comp.forRes? : Comp → Option (Ident × Option VTy × Comp)
-  | .bind _ r A (.ret _ (.sugar _ .forRes)) N _ => some (r, A, N)
+  | .bind _ r A (.ret _ (.sugar _ .forRes)) N => some (r, A, N)
   | _ => none
 
 /-- A right-nested tuple of values (`()` when empty). -/
@@ -769,25 +768,25 @@ since it never runs. Every exit is then a terminal. The bodies of loops are left
 each is moved when its loop is elaborated. -/
 def normExits : Nat → Comp → Except Error Comp
   | 0, M => pure M
-  | n + 1, .bind sp x A M N lin => do
+  | n + 1, .bind sp x A M N => do
     if M.isExit then return M
-    if !M.hasExit then return .bind sp x A M (← normExits n N) lin
+    if !M.hasExit then return .bind sp x A M (← normExits n N)
     let capture (ys : List Ident) : Except Error Unit :=
       if ys.any (fun y => mentionsC y.name N) then throw (exitOffSpine (M.exitAt.getD M.span))
       else pure ()
     match M with
     | .case csp V y M₁ z M₂ =>
       capture [y, z]
-      normExits n (.case csp V y (.bind sp x A M₁ N lin) z (.bind sp x A M₂ N lin))
-    | .bind bsp y B M₁ M₂ lin' =>
+      normExits n (.case csp V y (.bind sp x A M₁ N) z (.bind sp x A M₂ N))
+    | .bind bsp y B M₁ M₂ =>
       capture [y]
-      normExits n (.bind bsp y B M₁ (.bind sp x A M₂ N lin) lin')
+      normExits n (.bind bsp y B M₁ (.bind sp x A M₂ N))
     | .letPair lsp y z V M₁ =>
       capture [y, z]
-      normExits n (.letPair lsp y z V (.bind sp x A M₁ N lin))
-    | .letUnit lsp V M₁ => normExits n (.letUnit lsp V (.bind sp x A M₁ N lin))
-    | .loop fsp ℓ src V M₁ M₂ => normExits n (.loop fsp ℓ src V M₁ (.bind sp x A M₂ N lin))
-    | _ => pure (.bind sp x A M (← normExits n N) lin)
+      normExits n (.letPair lsp y z V (.bind sp x A M₁ N))
+    | .letUnit lsp V M₁ => normExits n (.letUnit lsp V (.bind sp x A M₁ N))
+    | .loop fsp ℓ src V M₁ M₂ => normExits n (.loop fsp ℓ src V M₁ (.bind sp x A M₂ N))
+    | _ => pure (.bind sp x A M (← normExits n N))
   | n + 1, .letUnit sp V M => do pure (.letUnit sp V (← normExits n M))
   | n + 1, .letPair sp x y V M => do pure (.letPair sp x y V (← normExits n M))
   | n + 1, .case sp V x M y N => do pure (.case sp V x (← normExits n M) y (← normExits n N))
@@ -814,7 +813,7 @@ return (thunkv nu_in < return (inl io_v), {close} >)"
   -- A terminal that lends keeps its binding unannotated, as `&c` requires.
   match T.takeLends.2, L with
   | [], _ => pure L
-  | _, .bind sp x _ M N lin => pure (.bind sp x none M N lin)
+  | _, .bind sp x _ M N => pure (.bind sp x none M N)
   | _, L => pure L
 
 /-- The latest binding of each name, oldest first. -/
@@ -823,7 +822,7 @@ def latest (env : List (String × Option CVTy)) : List (String × Option CVTy) :
 
 /-- A computation binds `y` on its spine. -/
 def _root_.Frontend.Comp.rebindsN (y : String) : Comp → Bool
-  | .bind _ x _ M N _ => x.name == y || M.rebindsN y || N.rebindsN y
+  | .bind _ x _ M N => x.name == y || M.rebindsN y || N.rebindsN y
   | .letUnit _ _ M => M.rebindsN y
   | .letPair _ a b _ M => a.name == y || b.name == y || M.rebindsN y
   | .case _ _ _ M _ N => M.rebindsN y || N.rebindsN y
@@ -854,7 +853,7 @@ site (`forYield`), both elaborated before the body's machine is. -/
 def paramPrefix : Comp → Comp → Comp
   | .letPair sp x y V@(.var ..) M, T | .letPair sp x y V@(.clone ..) M, T => .letPair sp x y V (paramPrefix M T)
   | .letUnit sp V@(.var ..) M, T | .letUnit sp V@(.clone ..) M, T => .letUnit sp V (paramPrefix M T)
-  | .bind sp x A (.ret s V@(.var ..)) M lin, T | .bind sp x A (.ret s V@(.clone ..)) M lin, T => .bind sp x A (.ret s V) (paramPrefix M T) lin
+  | .bind sp x A (.ret s V@(.var ..)) M, T | .bind sp x A (.ret s V@(.clone ..)) M, T => .bind sp x A (.ret s V) (paramPrefix M T)
   | _, T => T
 
 /-- Bind the variables of each component of `K` from `v`, a residual `K * 1` (or `1`). -/
@@ -962,7 +961,7 @@ def paramsOf : Nat → TCx → Comp → List (String × Option CVTy)
   | n + 1, c, .letPair _ x y V@(.var ..) M | n + 1, c, .letPair _ x y V@(.clone ..) M =>
     let (Ax, Ay) := pairTys c V
     (x.name, Ax) :: (y.name, Ay) :: paramsOf n ((c.push x.name Ax).push y.name Ay) M
-  | n + 1, c, .bind _ x A M@(.ret _ (.var ..)) N _ | n + 1, c, .bind _ x A M@(.ret _ (.clone ..)) N _ =>
+  | n + 1, c, .bind _ x A M@(.ret _ (.var ..)) N | n + 1, c, .bind _ x A M@(.ret _ (.clone ..)) N =>
     let T := bindTy c A M
     (x.name, T) :: paramsOf n (c.push x.name T) N
   | n + 1, c, .letUnit _ _ M => paramsOf n c M
@@ -1100,7 +1099,7 @@ def mTemplate (sp : Span) (what src : String) (vs : List (String × Val)) (cs : 
 terminal `()` is not bound at all (SPEC §41, rule R3: a turn hands on its state). -/
 def thenGo (T K : Comp) : Comp := match T with
   | .ret _ (.unit _) => K
-  | T => .bind T.span ⟨"io_u", T.span⟩ none T K false
+  | T => .bind T.span ⟨"io_u", T.span⟩ none T K
 
 /-- `M` with each terminal that goes on (the end of a loop's body, or a `break`) also naming
 `needs`: what a point inside the loop must carry for the loop's next iteration. -/
@@ -1166,7 +1165,7 @@ def mGoto (m : MCx) (sp : Span) (q : Nat) : MM Comp := do
     -- At a row, the join's code is a computation that performs the row's operations.
     let fv : Ident := ⟨s!"io_rf{q}", sp⟩
     let av : Ident := ⟨s!"io_ra{q}", sp⟩
-    return .bind sp fv none (.ret sp f) (.bind sp av none (.ret sp a) (.app sp (.force sp fv) av) false) false
+    return .bind sp fv none (.ret sp f) (.bind sp av none (.ret sp a) (.app sp (.force sp fv) av))
   if !p.summand then throw ⟨sp, "internal error: a join reached by a skip"⟩
   pure (.ret sp (m.skip sp (mInj sp q p.vars)))
 
@@ -1184,7 +1183,7 @@ def mFinish (m : MCx) (T : Comp) : MM Comp := do
     [] [("io_hole_t", T)]
   match T.takeLends.2, L with
   | [], _ => pure L
-  | _, .bind sp x _ M N lin => pure (.bind sp x none M N lin)
+  | _, .bind sp x _ M N => pure (.bind sp x none M N)
   | _, L => pure L
 
 /-- Bind the components of `v`, of type `T`, at each leaf of its tensors however they nest: a
@@ -1246,25 +1245,25 @@ mutual
 one observation, to a move or a finish. -/
 def mWalk (m : MCx) : Nat → TCx → Comp → MM Comp
   | 0, _, M => throw ⟨M.span, "internal error: a body nested too deeply"⟩
-  | n + 1, c, .bind sp x A M N lin => do
+  | n + 1, c, .bind sp x A M N => do
     if M.hasExit then
       match M with
       | .case csp V y M₁ z M₂ =>
         if mentionsC y.name N || mentionsC z.name N then throw (exitOffSpine (M.exitAt.getD M.span))
-        return (← mWalk m n c (.case csp V y (.bind sp x A M₁ N lin) z (.bind sp x A M₂ N lin)))
-      | .bind bsp y B M₁ M₂ lin' =>
+        return (← mWalk m n c (.case csp V y (.bind sp x A M₁ N) z (.bind sp x A M₂ N)))
+      | .bind bsp y B M₁ M₂ =>
         if mentionsC y.name N then throw (exitOffSpine (M.exitAt.getD M.span))
-        return (← mWalk m n c (.bind bsp y B M₁ (.bind sp x A M₂ N lin) lin'))
+        return (← mWalk m n c (.bind bsp y B M₁ (.bind sp x A M₂ N)))
       | .letPair lsp y z V M₁ =>
         if mentionsC y.name N || mentionsC z.name N then throw (exitOffSpine (M.exitAt.getD M.span))
-        return (← mWalk m n c (.letPair lsp y z V (.bind sp x A M₁ N lin)))
-      | .letUnit lsp V M₁ => return (← mWalk m n c (.letUnit lsp V (.bind sp x A M₁ N lin)))
+        return (← mWalk m n c (.letPair lsp y z V (.bind sp x A M₁ N)))
+      | .letUnit lsp V M₁ => return (← mWalk m n c (.letUnit lsp V (.bind sp x A M₁ N)))
       | _ => throw (exitOffSpine (M.exitAt.getD M.span))
     let exp := A.bind c.elabV
     if let .ret sp' V := M then
       if (nestedCall c exp V).isSome then
         let (V', bs) := liftBelow V
-        return (← mWalk m n c (chain bs (.bind sp x A (.ret sp' V') N lin)))
+        return (← mWalk m n c (chain bs (.bind sp x A (.ret sp' V') N)))
     let (M', lends) := M.takeLends
     match (match M' with | .ret _ V => (directCall c exp V).map (V, ·) | _ => none) with
     | some (V, Bf, Rf) =>
@@ -1279,7 +1278,7 @@ def mWalk (m : MCx) : Nat → TCx → Comp → MM Comp
       let some Tm := c.tyV V | throw ⟨sp, "the type of this call of a div function is not determined"⟩
       mCall m n c c' sp x A M' lend Tm Bf Rf N
     | none =>
-      pure (.bind sp x A M (← mWalk m n (c.push x.name (bindTy c A M)) N) lin)
+      pure (.bind sp x A M (← mWalk m n (c.push x.name (bindTy c A M)) N))
   | n + 1, c, .letUnit sp V M => do
     if V.hasExit then throw (exitOffSpine (V.exitAt.getD V.span))
     if (callIn c divFuel (some .unit) V).isSome then
@@ -1320,7 +1319,7 @@ def mWalk (m : MCx) : Nat → TCx → Comp → MM Comp
         return (← mWalk m n c (chain bs (.ret sp V')))
     let (T', _) := T.takeLends
     if (match T' with | .ret _ V => directCall c (if m.loops.isEmpty then some m.L.B else none) V | _ => none).isSome then
-      return (← mWalk m n c (.bind T.span ⟨"io_t", T.span⟩ none T (.ret T.span (.var T.span "io_t")) false))
+      return (← mWalk m n c (.bind T.span ⟨"io_t", T.span⟩ none T (.ret T.span (.var T.span "io_t"))))
     match m.loops.head? with
     | some l =>
       -- The end of a loop's body: back to its head.
@@ -1359,7 +1358,7 @@ def mCall (m : MCx) : Nat → TCx → TCx → Span → Ident → Option VTy → 
     let code ← mTemplate sp what src [("io_hole_k", skip)] [("io_hole_rest", rest)]
     mSet d code (← mClose { m with pre := false } sp what (h :: m.held))
     let go ← mGoto m sp d
-    pure (.bind sp ⟨v, sp⟩ none call go false)
+    pure (.bind sp ⟨v, sp⟩ none call go)
 
 /-- `for x in V { M }; N`, `while c { M }; N` or `loop { M }; N`: a point at its head, and a join
 after it when its body has a `break`. -/
@@ -1431,7 +1430,7 @@ def mLoop (m : MCx) : Nat → TCx → Span → LoopSrc → Val → Comp → Comp
     mSet h code (← mClose { m with pre := false } sp what held)
     let go ← mGoto m sp h
     match own with
-    | some o => pure (.bind sp ⟨o.v, sp⟩ none (.ret sp P.V) go false)
+    | some o => pure (.bind sp ⟨o.v, sp⟩ none (.ret sp P.V) go)
     | none => pure go
 end
 
@@ -1470,7 +1469,7 @@ def mResV (inj : Nat → Option (Nat × Nat)) : Val → Val
 def mResC (inj : Nat → Option (Nat × Nat)) : Comp → Comp
   | .ret sp V => .ret sp (mResV inj V)
   | .absurd sp V => .absurd sp (mResV inj V)
-  | .bind sp x A M N lin => .bind sp x A (mResC inj M) (mResC inj N) lin
+  | .bind sp x A M N => .bind sp x A (mResC inj M) (mResC inj N)
   | .lam sp x A M => .lam sp x A (mResC inj M)
   | .app sp M x => .app sp (mResC inj M) x
   | .with_ sp M N => .with_ sp (mResC inj M) (mResC inj N)
@@ -1610,9 +1609,8 @@ def ambientMain (c : TCx) (cs : List String) (sp : Span) (C : CTy) (M : Comp) :
   let M' := wrapTail (fun
       | .ret sp V => if V.takeLends.2.isEmpty then .ret sp (.pair sp capsV V)
           else .bind sp ⟨"io_r", sp⟩ none (.ret sp V) (.ret sp (.pair sp capsV (.var sp "io_r")))
-            false
       | T => .bind T.span ⟨"io_r", T.span⟩ none T
-          (.ret T.span (.pair T.span capsV (.var T.span "io_r"))) false) M
+          (.ret T.span (.pair T.span capsV (.var T.span "io_r")))) M
   let capsT := tupleTy sp (cs.map (capTy sp))
   let B := .tensor sp capsT A
   let Ac := c.elabV A
@@ -2036,8 +2034,7 @@ def divCase (sp : Span) (w : BoCa.Width) (o : SurfOp) (a b : Val) (ok : Val → 
   .bind sp ⟨ta, sp⟩ (some (.int sp w)) (.ret sp a)
     (.bind sp ⟨tb, sp⟩ (some (.int sp w)) (.ret sp b)
       (.case sp (h (divHost w o) (.pair sp (wide ta) (wide tb))) ⟨tq, sp⟩ (ok q) ⟨tu, sp⟩
-        (err (.var sp tb)))
-      false) false
+        (err (.var sp tb))))
 
 /-- `a o b` at `w` by a divisor at which it cannot fail (`safeDivisor`): its `inr` arm is never
 taken, and answers `0` only to be typed. The value is marked as the scheme (`SchemeMark.divLit`),
@@ -2063,7 +2060,7 @@ def divChecked (sp : Span) (w : BoCa.Width) (o : SurfOp) (a b : Val) : Val :=
       .bind sp ev (some (divErrTy sp))
         (.case sp (.app sp (.unbang sp (.const sp (.host (.eqz w)))) bv) u (.ret sp ovf) u
           (.ret sp zero))
-        (res (.inr sp (.var sp ev.name))) false
+        (res (.inr sp (.var sp ev.name)))
     else res (.inr sp zero)
   .run sp (divCase sp w o a b (fun q => res (.inl sp q)) err)
 
@@ -2074,7 +2071,7 @@ def checkedArm (right : Bool) (K : Val → Comp) : Nat → Comp → Option Comp
   | k + 1, M => match M, right with
     | .ret _ (.ascribe _ (.inl _ v) _), false => some (K v)
     | .ret _ (.ascribe _ (.inr _ v) _), true => some (K v)
-    | .bind sp z A M₁ M₂ l, _ => (checkedArm right K k M₂).map (.bind sp z A M₁ · l)
+    | .bind sp z A M₁ M₂, _ => (checkedArm right K k M₂).map (.bind sp z A M₁ ·)
     | _, _ => none
 
 /-- `case checked_div(a, b) { inl x -> M | inr y -> N }`, its scrutinee elaborated by
@@ -2082,12 +2079,12 @@ def checkedArm (right : Bool) (K : Val → Comp) : Nat → Comp → Option Comp
 so that the division is tested once (SPEC §39). -/
 def fuseChecked (V : Val) (x : Ident) (M : Comp) (y : Ident) (N : Comp) : Option Comp :=
   match V with
-  | .run _ (.bind s₁ ta A₁ Ma (.bind s₂ tb A₂ Mb (.case s₃ h q OK u ERR) l₂) l₁) =>
+  | .run _ (.bind s₁ ta A₁ Ma (.bind s₂ tb A₂ Mb (.case s₃ h q OK u ERR))) =>
     if !(ta.name.startsWith "io_da" && tb.name.startsWith "io_db") then none else do
-    let OK' ← checkedArm false (fun v => .bind x.span x none (.ret x.span v) M false) 8 OK
-    let ERR' ← checkedArm true (fun v => .bind y.span y (some (divErrTy y.span)) (.ret y.span v) N
-      false) 8 ERR
-    pure (.bind s₁ ta A₁ Ma (.bind s₂ tb A₂ Mb (.case s₃ h q OK' u ERR') l₂) l₁)
+    let OK' ← checkedArm false (fun v => .bind x.span x none (.ret x.span v) M) 8 OK
+    let ERR' ← checkedArm true
+      (fun v => .bind y.span y (some (divErrTy y.span)) (.ret y.span v) N) 8 ERR
+    pure (.bind s₁ ta A₁ Ma (.bind s₂ tb A₂ Mb (.case s₃ h q OK' u ERR')))
   | _ => none
 
 def isHoleTy : VTy → Bool
@@ -2189,7 +2186,7 @@ def boxTail (x : String) (S : Comp) : Comp :=
   wrapTail (fun
     | .ret sp V@(.var ..) | .ret sp V@(.clone ..) | .ret sp V@(.unit _) => .ret sp (.boxed sp (.var sp x) V)
     | T => .bind T.span ⟨"io_bx", T.span⟩ none T
-        (.ret T.span (.boxed T.span (.var T.span x) (.var T.span "io_bx"))) false) S
+        (.ret T.span (.boxed T.span (.var T.span x) (.var T.span "io_bx")))) S
 
 /-- `main`'s elaborated body `M` under its lifetime `'main`: a `mut` borrow of a unit cell,
 allocated before it and freed after. A cell of `1` takes no words, so the backend allocates nothing
@@ -2210,7 +2207,7 @@ def mainLife (sp : Span) (C : CTy) (caps : List String) (M : Comp) : Except Erro
   let B' := if caps.isEmpty then B else .tensor sp B (tupTy caps)
   let M := if caps.isEmpty then M else
     wrapTail (fun T => .bind T.span ⟨"io_bt", T.span⟩ none T
-      (.ret T.span (.pair T.span (.var T.span "io_bt") (tupleVal T.span caps))) false) M
+      (.ret T.span (.pair T.span (.var T.span "io_bt") (tupleVal T.span caps)))) M
   let cb : Val := .thunkv sp (.lamL sp x (.dom sp) (.ret sp (.thunkv sp
     (.lam sp ⟨"io_mainb", sp⟩ (.mut sp (.var sp "main") one) (boxTail "main" M)))))
   let borrow : Val :=
@@ -2218,10 +2215,10 @@ def mainLife (sp : Span) (C : CTy) (caps : List String) (M : Comp) : Except Erro
   -- `(r, caps)`, bound name by name.
   let rec unpack (v : String) : List String → Comp → Comp
     | [], N => N
-    | [c], N => .bind sp ⟨c, sp⟩ none (.ret sp (.var sp v)) N false
+    | [c], N => .bind sp ⟨c, sp⟩ none (.ret sp (.var sp v)) N
     | c :: cs, N => .letPair sp ⟨c, sp⟩ ⟨v ++ "_", sp⟩ (.var sp v) (unpack (v ++ "_") cs N)
   let after : Comp := .bind sp ⟨"io_mainu", sp⟩ none
-    (.ret sp (.app sp (.const sp (.free one)) (.var sp "io_main"))) (.ret sp (.var sp "io_mainr")) false
+    (.ret sp (.app sp (.const sp (.free one)) (.var sp "io_main"))) (.ret sp (.var sp "io_mainr"))
   let rest : Comp := if caps.isEmpty then
       .letPair sp ⟨"io_main", sp⟩ ⟨"io_mainr", sp⟩ (.var sp "io_mainp") after
     else
@@ -2229,14 +2226,14 @@ def mainLife (sp : Span) (C : CTy) (caps : List String) (M : Comp) : Except Erro
         (.letPair sp ⟨"io_mainr", sp⟩ ⟨"io_mainc", sp⟩ (.var sp "io_mainq")
           (unpack "io_mainc" caps after))
   pure (.bind sp ⟨"io_main", sp⟩ none (.ret sp (.app sp (.const sp (.alloc one)) (.unit sp)))
-    (.bind sp ⟨"io_mainp", sp⟩ none (.ret sp borrow) rest false) false)
+    (.bind sp ⟨"io_mainp", sp⟩ none (.ret sp borrow) rest))
 
 /-- The body `S` of `modify` returning the new content alone, with `()` for the result. -/
 def unitTail (S : Comp) : Comp :=
   wrapTail (fun
     | .ret sp V => .ret sp (.pair sp V (.unit sp))
     | T => .bind T.span ⟨"io_mv", T.span⟩ none T
-        (.ret T.span (.pair T.span (.var T.span "io_mv") (.unit T.span))) false) S
+        (.ret T.span (.pair T.span (.var T.span "io_mv") (.unit T.span)))) S
 
 /-- `handBackResult` at a terminal that hands back a bound value. -/
 def handBackTerm (withResult : Bool) (S : Comp) : Comp :=
@@ -2253,12 +2250,12 @@ rule R3): `(c, W)` at each terminal, `c` the place's new content, made `(c, ((),
 `((c, r), W)`, with a result `r`, made `(c, (r, W))`. The result is beside the variables. -/
 def handBackResult (withResult : Bool) : Comp → Comp
   -- A terminal value is handed on as it is.
-  | .bind _ ⟨"io_bt", _⟩ none (.ret _ V) (.ret sp (.pair psp (.var _ "io_bt") Wt)) _ =>
+  | .bind _ ⟨"io_bt", _⟩ none (.ret _ V) (.ret sp (.pair psp (.var _ "io_bt") Wt)) =>
     if withResult then
       .letPair sp ⟨"io_bn", sp⟩ ⟨"io_br", sp⟩ V
         (.ret sp (.pair psp (.var sp "io_bn") (.pair psp (.var sp "io_br") Wt)))
     else .ret sp (.pair psp V (.pair psp (.unit sp) Wt))
-  | .bind sp x A M N lin => .bind sp x A M (handBackResult withResult N) lin
+  | .bind sp x A M N => .bind sp x A M (handBackResult withResult N)
   | .letUnit sp V M => .letUnit sp V (handBackResult withResult M)
   | .letPair sp x y V M => .letPair sp x y V (handBackResult withResult M)
   | .case sp V x M y N => .case sp V x (handBackResult withResult M) y (handBackResult withResult N)
@@ -2332,7 +2329,7 @@ def lendBorrow (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A B : CVTy)
 
 /-- The body of a borrow callback: `r <- M; return (boxed['l] r)`. -/
 def boxedResult (sp : Span) (l : String) (M : Comp) : Comp :=
-  .bind sp ⟨"io_lr", sp⟩ none M (.ret sp (.boxed sp (.var sp l) (.var sp "io_lr"))) false
+  .bind sp ⟨"io_lr", sp⟩ none M (.ret sp (.boxed sp (.var sp l) (.var sp "io_lr")))
 
 /-! #### Fields  `[spec §42]` -/
 
@@ -2402,9 +2399,9 @@ def fieldRead (c : TCx) (sp fsp : Span) (f : String) (j k : Nat) (rolls : Bool) 
     | some B => pure B
     | none => throw ⟨fsp, s!"`.{f}` reads a field of a record, but this has type `{ppT A}`"⟩
   let copied (B : CVTy) : DM Unit := do
-    unless Class.of B == .persistent do
-      throw ⟨fsp, s!"`.{f}` through a borrow copies the field, and its type `{ppT B}` is not " ++
-        "persistent: match the record instead"⟩
+    unless Class.of B == .unrestricted do
+      throw ⟨fsp, s!"`.{f}` through a borrow copies the field, and its type `{ppT B}` is " ++
+        "linear: match the record instead"⟩
   let bindIt (what : String) : Error := ⟨sp, s!"`.{f}` reads a field of {what}: bind it, " ++
     s!"`let y = x.{f};`, which lends the place for the read"⟩
   match T with
@@ -2412,7 +2409,7 @@ def fieldRead (c : TCx) (sp fsp : Span) (f : String) (j k : Nat) (rolls : Bool) 
     let B ← fieldTy A
     copied B
     -- A persistent record is copied out, `*e`, and projected.
-    if Class.of A == .persistent then
+    if Class.of A == .unrestricted then
       return .run sp (projectField fsp rolls j k (.app fsp (.sugar fsp .deref) R) fun v => .ret fsp v)
     pure (loadField fsp (← c.surfaceL fsp a) (← c.surface fsp A) (← c.surface fsp B) rolls j k R)
   | .mut a A => do
@@ -2432,7 +2429,7 @@ def fieldRead (c : TCx) (sp fsp : Span) (f : String) (j k : Nat) (rolls : Bool) 
     pure (.app sp (.app sp (.const fsp (.withswap (← c.surfaceL fsp a) As Bs)) (.lend x.span x .mut))
       (.thunkv fsp (.lam fsp ⟨r, fsp⟩ As body)))
   | T => do
-    if Class.of T == .persistent then
+    if Class.of T == .unrestricted then
       return .run sp (projectField fsp rolls j k R fun v => .ret fsp v)
     match head with
     | some x => do
@@ -2451,7 +2448,7 @@ def fieldRead (c : TCx) (sp fsp : Span) (f : String) (j k : Nat) (rolls : Bool) 
       pure (.run sp (.letPair fsp ⟨r, fsp⟩ ⟨"io_mu", fsp⟩ (.pair fsp (.lend x.span x .mut) (.unit fsp))
         body))
     | none => match R with
-      | .var .. => throw (bindIt "a value that is not persistent")
+      | .var .. => throw (bindIt "a linear value")
       | R => pure (.run sp (projectField fsp rolls j k R fun v => .ret fsp v))
 
 /-- An owned array `x : array A` lent as its view (`array_mut 'l A` with `&mut x`, `array_imm 'l A`
@@ -2483,10 +2480,10 @@ def lendSlice (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A : CVTy) (v : BoCa.
   let boxR := Comp.ret sp (.boxed sp (.var sp l) (.var sp r.name))
   let body : Comp := match proj with
     | some false => .bind sp ⟨"io_lv", sp⟩ none (call l mv)
-        (.ret sp (.boxed sp (.var sp l) (.unit sp))) false
+        (.ret sp (.boxed sp (.var sp l) (.unit sp)))
     | some true => .bind sp ⟨"io_lp", sp⟩ none (call l mv)
-        (.letPair sp ⟨"io_lv", sp⟩ r (.var sp "io_lp") boxR) false
-    | none => .bind sp r none (call l mv) boxR false
+        (.letPair sp ⟨"io_lv", sp⟩ r (.var sp "io_lp") boxR)
+    | none => .bind sp r none (call l mv) boxR
   let cb : Val := .thunkv sp (.lamL sp li (.dom sp) (.ret sp (.thunkv sp
     (.lam sp ⟨mv, sp⟩ Tm body))))
   let C : Const := if m == .mut then .sliceBorrowMut li (.top sp) As Bs
@@ -3004,7 +3001,7 @@ inductive Head where
 /-- The kernel's qualifier. -/
 def coreQual : Qual → BoCa.Fig16.LogRel.Core.Qual
   | .lin => .lin
-  | .aff => .aff
+  | .cancel => .cancel
   | .unr => .unr
 
 /-- The type of the computation `C` when it is a returner chain `F[S] A`: `S` and `A`. -/
@@ -3039,7 +3036,7 @@ def effCallC (sp : Span) (f W : Val) (P : Option VTy := none) : Comp :=
   let sfx := s!"{sp.start.line}_{sp.start.col}"
   let g : Ident := ⟨s!"io_fg{sfx}", sp⟩
   let a : Ident := ⟨s!"io_fa{sfx}", sp⟩
-  .bind sp g none (.ret sp f) (.bind sp a P (.ret sp W) (.app sp (.force sp g) a) false) false
+  .bind sp g none (.ret sp f) (.bind sp a P (.ret sp W) (.app sp (.force sp g) a))
 
 /-- The parameter type of an effectful function's type, outside lifetime binders. -/
 def fnParamOf : CVTy → Option CVTy
@@ -3084,7 +3081,7 @@ def opsC (c : TCx) : Nat → Comp → List (Nat × Nat)
     | .perform _ n i V | .abort _ n i V => (n, i) :: opsV c k V
     | .handle _ n _ hr hc M => opsV c k hr ++ opsV c k hc ++ (opsC c k M).filter (·.1 != n)
     | .ret _ V | .absurd _ V => opsV c k V
-    | .bind _ _ _ M N _ | .with_ _ M N => opsC c k M ++ opsC c k N
+    | .bind _ _ _ M N | .with_ _ M N => opsC c k M ++ opsC c k N
     | .unwind _ _ _ M D N => opsC c k M ++ opsC c k D ++ opsC c k N
     | .withbor2r _ _ _ _ _ _ _ _ M => opsC c k M
     | .letUnit _ V M | .letPair _ _ _ V M => opsV c k V ++ opsC c k M
@@ -3125,7 +3122,7 @@ def cbRowed (r : Option Frontend.Check.CRow) (c : TCx) : TCx :=
 def surfRow (c : TCx) (sp : Span) : Frontend.Check.CRow → Except Error Frontend.Row
   | [] => pure .nil
   | o :: os => do
-    let q : Qual := match o.q with | .lin => .lin | .aff => .aff | .unr => .unr
+    let q : Qual := match o.q with | .lin => .lin | .cancel => .cancel | .unr => .unr
     pure (.cons o.n.toNat o.i.toNat q (← c.surface sp o.A) (← c.surface sp o.B) (← surfRow c sp os))
 
 /-- A borrow block's constant in its unwinding form, at the row `r` (SPEC §19). -/
@@ -3159,7 +3156,7 @@ def unwindingC? (sp : Span) : Val → Option Comp
         | .thunkv tsp (.lamL lsp xi b (.ret _ (.thunkv _ L))) => Val.thunkv tsp (.lamL lsp xi b L)
         | cb => cb
       some (.bind sp k none (.ret sp (.const ksp C)) (.bind sp p none (.ret sp P)
-        (.bind sp f cbTy (.ret sp cb) (.app sp (.app sp (.force sp k) p) f) false) false) false)
+        (.bind sp f cbTy (.ret sp cb) (.app sp (.app sp (.force sp k) p) f))))
     | _ => none
   -- A lent cell's mark is the plain borrow's scheme, not the unwinding form's.
   | .mark _ _ V => unwindingC? sp V
@@ -3176,7 +3173,7 @@ def relaxedC? (sp : Span) : Val → Option (Ident × Comp)
   | .app _ (.app _ (.const _ (.withbor2U x b A B r)) P)
       (.thunkv _ (.lamL _ _ _ (.ret _ (.thunkv _ (.lam _ m _ M))))) =>
     let p : Ident := ⟨s!"io_rp{sp.start.line}_{sp.start.col}", sp⟩
-    some (m, .bind sp p none (.ret sp P) (.withbor2r sp x b A B r p m M) false)
+    some (m, .bind sp p none (.ret sp P) (.withbor2r sp x b A B r p m M))
   | .mark _ _ V => relaxedC? sp V
   | _ => none
 
@@ -3202,7 +3199,7 @@ def restScope : String := "io_rest_scope"
 
 /-- `N`, what follows a loop, marked as outside it (`restScope`). -/
 def restOf (N : Comp) : Comp :=
-  .bind N.span ⟨restScope, N.span⟩ none (.ret N.span (.unit N.span)) N false
+  .bind N.span ⟨restScope, N.span⟩ none (.ret N.span (.unit N.span)) N
 
 /-! #### A record lent fieldwise  `[spec §36]` -/
 
@@ -3232,7 +3229,7 @@ def recBind (sp : Span) (R : CVTy) (V : Val) (k₀ : Nat) (M : Comp) : Comp :=
     let r := s!"io_rr{k₀}_{n}"
     .letPair sp ⟨l, sp⟩ ⟨r, sp⟩ V
       (recBind sp A (.var sp l) k₀ (recBind sp B (.var sp r) (k₀ + (recLeaves A).length) M))
-  | _ => .bind sp ⟨s!"io_rf{k₀}", sp⟩ none (.ret sp V) M false
+  | _ => .bind sp ⟨s!"io_rf{k₀}", sp⟩ none (.ret sp V) M
 
 /-! ### The machine of a recursion under a heap driver  `[spec §20]`
 
@@ -3270,7 +3267,7 @@ def rmSelfIn : Val → Bool
 /-- A computation calls a self-reference. -/
 def rmSelfInC : Comp → Bool
   | .ret _ V | .absurd _ V | .perform _ _ _ V | .abort _ _ _ V => rmSelfIn V
-  | .bind _ _ _ M N _ | .with_ _ M N => rmSelfInC M || rmSelfInC N
+  | .bind _ _ _ M N | .with_ _ M N => rmSelfInC M || rmSelfInC N
   | .letUnit _ V M | .letPair _ _ _ V M => rmSelfIn V || rmSelfInC M
   | .case _ V _ M _ N | .loop _ _ _ V M N => rmSelfIn V || rmSelfInC M || rmSelfInC N
   | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
@@ -3334,7 +3331,7 @@ def rmAns (sp : Span) (V : Val) : Comp := .ret sp (.ascribe sp V (rmOut sp))
 /-- The variables bound from the tuple `v` of `vars`, then `M`. -/
 def rmUnpack (sp : Span) (v : String) : List String → Comp → RMM Comp
   | [], M => pure (.letUnit sp (.var sp v) M)
-  | [x], M => pure (.bind sp ⟨x, sp⟩ none (.ret sp (.var sp v)) M false)
+  | [x], M => pure (.bind sp ⟨x, sp⟩ none (.ret sp (.var sp v)) M)
   | x :: xs, M => do
     let r ← rmFresh "fx_rmr"
     pure (.letPair sp ⟨x, sp⟩ ⟨r, sp⟩ (.var sp v) (← rmUnpack sp r xs M))
@@ -3345,73 +3342,73 @@ at each call of a self-reference. -/
 def rmWalk (I : RMInfo) : Nat → TCx → Comp → RMM Comp
   | 0, _, M => throw ⟨M.span, "internal error: a body nested too deeply"⟩
   | n + 1, c, M => match M with
-    | .bind sp x A (.ret rsp V) N lin =>
+    | .bind sp x A (.ret rsp V) N =>
       match rmSelfApp? V with
       | some (j, W) =>
         if rmSelfIn W then do
           let y ← rmFresh "fx_rmy"
           let some (j', a, W') := rmTake y divFuel W | throw ⟨sp, "internal error: a call of the group"⟩
           rmWalk I n c (.bind sp ⟨y, sp⟩ none (.ret rsp (.app rsp (.var rsp s!"fx_rself{j'}") a))
-            (.bind sp x A (.ret rsp (.app rsp (.var rsp s!"fx_rself{j}") W')) N lin) false)
+            (.bind sp x A (.ret rsp (.app rsp (.var rsp s!"fx_rself{j}") W')) N))
         else rmCall I n c sp x j W N
       | none =>
         if rmSelfIn V then do
           let y ← rmFresh "fx_rmy"
           let some (j, a, V') := rmTake y divFuel V | throw ⟨sp, "internal error: a call of the group"⟩
           rmWalk I n c (.bind sp ⟨y, sp⟩ none (.ret rsp (.app rsp (.var rsp s!"fx_rself{j}") a))
-            (.bind sp x A (.ret rsp V') N lin) false)
+            (.bind sp x A (.ret rsp V') N))
         else do
-          pure (.bind sp x A (.ret rsp V) (← rmWalk I n (c.push x.name (bindTy c A (.ret rsp V))) N) lin)
-    | .bind sp x A M₁ N lin =>
+          pure (.bind sp x A (.ret rsp V) (← rmWalk I n (c.push x.name (bindTy c A (.ret rsp V))) N))
+    | .bind sp x A M₁ N =>
       if !rmSelfInC M₁ then do
-        pure (.bind sp x A M₁ (← rmWalk I n (c.push x.name (bindTy c A M₁)) N) lin)
+        pure (.bind sp x A M₁ (← rmWalk I n (c.push x.name (bindTy c A M₁)) N))
       else
         let shadow (ys : List String) : RMM Unit := do
           if ys.any (mentionsC · N) then
             throw ⟨sp, "a recursion under a heap driver binds a name the rest of its body uses: rename it"⟩
         match M₁ with
-        | .bind bsp y B M₁₁ M₁₂ lin' => do
+        | .bind bsp y B M₁₁ M₁₂ => do
           shadow [y.name]
-          rmWalk I n c (.bind bsp y B M₁₁ (.bind sp x A M₁₂ N lin) lin')
+          rmWalk I n c (.bind bsp y B M₁₁ (.bind sp x A M₁₂ N))
         | .case csp V y P z Q => do
           shadow [y.name, z.name]
-          rmWalk I n c (.case csp V y (.bind sp x A P N lin) z (.bind sp x A Q N lin))
+          rmWalk I n c (.case csp V y (.bind sp x A P N) z (.bind sp x A Q N))
         | .letPair lsp y z V P => do
           shadow [y.name, z.name]
-          rmWalk I n c (.letPair lsp y z V (.bind sp x A P N lin))
-        | .letUnit lsp V P => rmWalk I n c (.letUnit lsp V (.bind sp x A P N lin))
+          rmWalk I n c (.letPair lsp y z V (.bind sp x A P N))
+        | .letUnit lsp V P => rmWalk I n c (.letUnit lsp V (.bind sp x A P N))
         | _ => throw ⟨M₁.span, "a recursion under a heap driver calls itself in a form that is not provided here"⟩
     | .ret sp V =>
       if rmSelfIn V then do
         let y ← rmFresh "fx_rmy"
         let some (j, a, V') := rmTake y divFuel V | throw ⟨sp, "internal error: a call of the group"⟩
         rmWalk I n c (.bind sp ⟨y, sp⟩ none (.ret sp (.app sp (.var sp s!"fx_rself{j}") a))
-          (.ret sp V') false)
+          (.ret sp V'))
       else pure (rmAns sp (.inl sp V))
     | .case sp V x M₁ y M₂ =>
       if rmSelfIn V then do
         let t ← rmFresh "fx_rmt"
-        rmWalk I n c (.bind sp ⟨t, sp⟩ none (.ret sp V) (.case sp (.var sp t) x M₁ y M₂) false)
+        rmWalk I n c (.bind sp ⟨t, sp⟩ none (.ret sp V) (.case sp (.var sp t) x M₁ y M₂))
       else do
         let (Ax, Ay) := sumTys c V
         pure (.case sp V x (← rmWalk I n (c.push x.name Ax) M₁) y (← rmWalk I n (c.push y.name Ay) M₂))
     | .letPair sp x y V M₁ =>
       if rmSelfIn V then do
         let t ← rmFresh "fx_rmt"
-        rmWalk I n c (.bind sp ⟨t, sp⟩ none (.ret sp V) (.letPair sp x y (.var sp t) M₁) false)
+        rmWalk I n c (.bind sp ⟨t, sp⟩ none (.ret sp V) (.letPair sp x y (.var sp t) M₁))
       else do
         let (Ax, Ay) := pairTys c V
         pure (.letPair sp x y V (← rmWalk I n ((c.push x.name Ax).push y.name Ay) M₁))
     | .letUnit sp V M₁ =>
       if rmSelfIn V then do
         let t ← rmFresh "fx_rmt"
-        rmWalk I n c (.bind sp ⟨t, sp⟩ none (.ret sp V) (.letUnit sp (.var sp t) M₁) false)
+        rmWalk I n c (.bind sp ⟨t, sp⟩ none (.ret sp V) (.letUnit sp (.var sp t) M₁))
       else do pure (.letUnit sp V (← rmWalk I n c M₁))
     | T => do
       if rmSelfInC T then
         throw ⟨T.span, "a recursion under a heap driver calls itself in a form that is not provided here"⟩
       let t ← rmFresh "fx_rmt"
-      pure (.bind T.span ⟨t, T.span⟩ none T (rmAns T.span (.inl T.span (.var T.span t))) false)
+      pure (.bind T.span ⟨t, T.span⟩ none T (rmAns T.span (.inl T.span (.var T.span t))))
 
 /-- `x <- return fx_rself{j}(W); N`: the request `inr (inj_j W, f)`, with the frame `f` of what
 `N` uses (none when `N` answers `x`), and the frame's resume arm. -/
@@ -3435,7 +3432,7 @@ def rmCall (I : RMInfo) : Nat → TCx → Span → Ident → Nat → Val → Com
     let cR := (vars.foldl (fun c (y, T) => c.push y (some T)) I.base).push x.name (some I.B')
     let rest ← rmWalk I n cR N
     let kv ← rmFresh "fx_rmk"
-    let arm ← rmUnpack sp kv (vars.map (·.1)) (.bind sp x none (.ret sp (.var sp "fx_rmb")) rest false)
+    let arm ← rmUnpack sp kv (vars.map (·.1)) (.bind sp x none (.ret sp (.var sp "fx_rmb")) rest)
     modify fun s => { s with arms := s.arms.set! f (kv, arm) }
     let frame : Val := Elab.Effects.injAt sp f I.nf (tupleVal sp (vars.map (·.1)))
     pure (rmAns sp (.inr sp (.pair sp arg (.inl sp frame))))
@@ -3454,7 +3451,7 @@ def recMachine (scope : List Decl) (d : Decl) : SM Decl := do
   let some Pc := c₀.elabV Pt | throw (err "the self-references' type")
   let some Bc := c₀.elabV B | throw (err "the answer type")
   let rec peel : Nat → TCx → Comp → Except Error (TCx × Ident × VTy × Comp)
-    | k + 1, c, .bind _ x A M N _ => peel k (c.push x.name (bindTy c A M)) N
+    | k + 1, c, .bind _ x A M N => peel k (c.push x.name (bindTy c A M)) N
     | k + 1, c, .letPair _ x y W N =>
       let (Ax, Ay) := pairTys c W
       peel k ((c.push x.name Ax).push y.name Ay) N
@@ -3479,7 +3476,7 @@ def recMachine (scope : List Decl) (d : Decl) : SM Decl := do
   -- The resume: the frame's variant, then its arm.
   let rec dispatch : Nat → String → List (String × Comp) → Comp
     | _, v, [] => .absurd sp (.var sp v)
-    | _, v, [(kv, arm)] => .bind sp ⟨kv, sp⟩ none (.ret sp (.var sp v)) (arm.subst σ) false
+    | _, v, [(kv, arm)] => .bind sp ⟨kv, sp⟩ none (.ret sp (.var sp v)) (arm.subst σ)
     | 0, v, _ => .absurd sp (.var sp v)
     | k + 1, v, (kv, arm) :: rest =>
       .case sp (.var sp v) ⟨kv, sp⟩ (arm.subst σ) ⟨s!"{v}r", sp⟩ (dispatch k s!"{v}r" rest)
@@ -3550,8 +3547,8 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         -- An explicit copy: the variable, at the span of `clone(x)`, its use marked written for
         -- the check of implicit copies (`Frontend/Check/Copies.lean`, decision 39).
         let A ← need W.span "`clone`'s argument" ((← refresh c).tyV W')
-        unless Class.of A == .persistent do
-          throw ⟨ksp, s!"`clone` copies a persistent value, and `{ppT A}` is not persistent"⟩
+        unless Class.of A == .unrestricted do
+          throw ⟨ksp, s!"`clone` copies an unrestricted value, and `{ppT A}` is linear"⟩
         pure (.clone sp x)
       | "clone", _ => throw ⟨W.span, "`clone` takes a variable: `clone(x)`"⟩
       | k, _ => throw ⟨ksp, s!"`{k}` is written with its arguments: `{k}(…)`"⟩
@@ -3701,8 +3698,8 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
           (.thunkv sp (.lamL sp y (.dom sp) (.ret sp (.thunkv sp (.lam sp ⟨"io_dv", sp⟩
             (.view sp (.var sp y.name) As) (.ret sp (.boxed sp (.var sp y.name) (.var sp "io_dv"))))))))
       let content (A : CVTy) : DM VTy := do
-        unless Class.of A == .persistent do
-          throw ⟨dsp, s!"`*` copies the content, and `{ppT A}` is not persistent"⟩
+        unless Class.of A == .unrestricted do
+          throw ⟨dsp, s!"`*` copies the content, and `{ppT A}` is linear"⟩
         (c.surface dsp A : Except Error VTy)
       match (← refresh c).tyV V', V' with
       | some (.imm a A), _ =>
@@ -3740,7 +3737,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
           (.ret sp (.app sp (.app sp (.const ksp (.withswap (.var ksp l) As Bs)) (.var sp mv))
             (.thunkv tsp (.lam lsp b As S''))))
           (.letPair sp ⟨"io_mm", sp⟩ ⟨"io_mr", sp⟩ (.var sp "io_mw")
-            (.ret sp (.boxed sp (.var sp l) (.var sp "io_mr")))) false
+            (.ret sp (.boxed sp (.var sp l) (.var sp "io_mr"))))
     | .app sp (.app sp₂ (.sugar ksp (.borrow k x)) P) (.thunkv tsp (.lam lsp b _ S)) => do
       -- The callback's row, when this block is an unwinding borrow; blocks inside are not.
       let cbr := (← get).cbRow
@@ -3867,7 +3864,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
               (.pair lsp (.var lsp "io_bw") (.var lsp "io_bn")))
             (id "io_bp") (.letPair lsp (id "io_bv") (id "io_bq") (.var lsp "io_bp") (.ret lsp (.var lsp "io_bv")))
             (id "io_bo") (.ret lsp (.var lsp "io_bo")))
-          (boxTail x S') false
+          (boxTail x S')
         let cb : Val := .thunkv tsp (.lamL lsp xi (.dom lsp) (.ret lsp (.thunkv lsp
           (.lam lsp (id "io_bw") Tbs body))))
         let ids (s : String) : Ident := ⟨s, sp⟩
@@ -3876,8 +3873,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         pure <| (fun v => Val.ascribe sp v (.tensor sp bufTy Bs)) <| (.run sp (.letPair sp (ids "io_ba") (ids "io_bn") P'
           (.bind sp (ids "io_br") none (.ret sp (.app sp (.app sp₂ (.const ksp C) (.var sp "io_ba")) cb))
             (.letPair sp (ids "io_ba2") (ids "io_bv2") (.var sp "io_br")
-              (.ret sp (.pair sp (.pair sp (.var sp "io_ba2") (.var sp "io_bn")) (.var sp "io_bv2"))))
-            false)))
+              (.ret sp (.pair sp (.pair sp (.var sp "io_ba2") (.var sp "io_bn")) (.var sp "io_bv2")))))))
       | .imm, .tensor (.int .w32) (.bang (.thunk (.arr (.int .w32) (.ret (.int .w8))))) => do
         -- A literal `lit = i32 * !(i32 => u8)`: its bytes tabulated into an array, lent as a
         -- family, and the array freed (`lit_view`, design §5.7). The callback first copies the
@@ -3899,7 +3895,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let id (s : String) : Ident := ⟨s, lsp⟩
         let body : Comp := .letPair lsp (id "io_lc") (id "io_ld")
           (.app lsp (.unbang lsp (.const lsp (.arrayCopy (.var lsp x) U8s))) (.var lsp "io_lw"))
-          (.bind lsp b none (.ret lsp (.var lsp "io_lc")) (boxTail x S') false)
+          (.bind lsp b none (.ret lsp (.var lsp "io_lc")) (boxTail x S'))
         let cb : Val := .thunkv tsp (.lamL lsp xi (.dom lsp) (.ret lsp (.thunkv lsp
           (.lam lsp (id "io_lw") (.arrayImm lsp (.var lsp x) U8s) body))))
         let ids (s : String) : Ident := ⟨s, sp⟩
@@ -3913,7 +3909,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
                 (.ret sp (.app sp (.app sp₂ (.const ksp (.sliceBorrowImm xi (.dom ksp) U8s Bs))
                   (.var sp "io_la")) cb))
                 (.letPair sp (ids "io_la2") (ids "io_lv") (.var sp "io_lr")
-                  (.ret sp (.pair sp (.var sp "io_lp") (.var sp "io_lv")))) false) false)) false))
+                  (.ret sp (.pair sp (.var sp "io_lp") (.var sp "io_lv")))))))))
       | .imm, R@(.tensor _ _) =>
         -- A record of arrays and persistent values, lent fieldwise: each array as a family by
         -- its own `slice_borrow_imm`, nested left to right, the last at the block's lifetime and
@@ -3958,7 +3954,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
           | some i => .var sp s!"io_rv{i}"
           | none => .var sp s!"io_rf{k}") 0
         let Bs ← c.surface ksp B
-        let mut body : Comp := .bind sp b none (.ret sp rVal) (boxTail (lname (m - 1)) S') false
+        let mut body : Comp := .bind sp b none (.ret sp rVal) (boxTail (lname (m - 1)) S')
         let mut resTy : VTy := Bs
         let mut app : Val := .unit sp
         for i in (List.range m).reverse do
@@ -3973,7 +3969,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
           if i > 0 then
             let r := s!"io_rres{i}"
             body := .bind sp ⟨r, sp⟩ none (.ret sp app)
-              (.ret sp (.boxed sp (.var sp (lname (i - 1))) (.var sp r))) false
+              (.ret sp (.boxed sp (.var sp (lname (i - 1))) (.var sp r)))
         -- What the borrows hand back: each array, then the block's result.
         let rec unpack : Nat → String → Comp → Comp
           | 0, _, M => M
@@ -3985,7 +3981,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let Rs ← c.surface ksp R
         let fin : Comp := .ret sp (.pair sp back (.var sp s!"io_rq{m - 1}"))
         let M : Comp := recBind sp R P' 0
-          (.bind sp ⟨"io_rtop", sp⟩ none (.ret sp app) (unpack m "io_rtop" fin) false)
+          (.bind sp ⟨"io_rtop", sp⟩ none (.ret sp app) (unpack m "io_rtop" fin))
         pure (Val.ascribe sp (.run sp M) (.tensor sp Rs Bs))
       | .famMut, .tensor (.ref A) (.ref B) => do
         let dom ← need lsp "the block's bound" (c.elabL (.dom lsp))
@@ -4233,7 +4229,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
                   match relaxedC? V.span V' with
                   | some (m, M') =>
                     let body := match M' with
-                      | .bind _ _ _ _ (.withbor2r _ _ _ _ _ _ _ _ B) _ => B
+                      | .bind _ _ _ _ (.withbor2r _ _ _ _ _ _ _ _ B) => B
                       | M => M
                     let outer := c.E.vars.filterMap id |>.filter fun y =>
                       y != m.name && Frontend.Check.mentionsC y body
@@ -4267,7 +4263,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
         pure (effCallC sp f W P)
       | none => pure (.ret sp V')
     | .absurd sp V => do pure (.absurd sp (← surfV n c (some .zero) V))
-    | .bind sp x A M N lin => do
+    | .bind sp x A M N => do
       -- The answer type of a handler site whose clauses run after it, by its name.
       let A ← match A with
         | some T => do pure (some (T.subst (← get).siteRes))
@@ -4280,7 +4276,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
         modify fun s => { s with exits := saved }
         return N'
       -- A borrow block over a loop, or a `let r = &x`: lent per observation (`LoopLend`).
-      if let some L ← (Frontend.Elab.LoopLend.hook c (dataFor (← get).sizedFns) sp x A M N lin :
+      if let some L ← (Frontend.Elab.LoopLend.hook c (dataFor (← get).sizedFns) sp x A M N :
           Except Error (Option Comp)) then
         return (← surfC n c exp L)
       -- An annotated head that performs operations of the current row is at that row, as the
@@ -4300,7 +4296,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
         | _ => surfC n c atA M
       let c ← refresh c
       let N' ← surfC n (c.push x.name (bindTy c A M')) exp N
-      pure (.bind sp x A M' N' lin)
+      pure (.bind sp x A M' N')
     | .lam sp x A M => do
       let (A', C) := match exp with
         | some (.arr A' C) => (some A', some C)
@@ -4379,13 +4375,13 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
         let rT := (A.bind c.elabV).orElse fun _ => resultOfC (c'.tyC d')
         let N₀' ← surfC n (c.push r.name rT) exp N₀
         pure (.loop sp ℓ src V' M' (.bind N.span r A (.ret r.span (.app r.span (.sugar r.span .forRes)
-          (.thunk d.span d'))) N₀' false))
+          (.thunk d.span d'))) N₀'))
       | none, some (r, A, N₀) =>
         let rT := (A.bind c.elabV).orElse fun _ => (T.bind finOf).bind fun B =>
           -- A source that never ends: the loop's value is `break e`'s.
           if B == .zero then none else some B
         let N₀' ← surfC n (c.push r.name rT) exp N₀
-        pure (.loop sp ℓ src V' M' (.bind N.span r A (.ret r.span (.sugar r.span .forRes)) N₀' false))
+        pure (.loop sp ℓ src V' M' (.bind N.span r A (.ret r.span (.sugar r.span .forRes)) N₀'))
       | none, none => pure (.loop sp ℓ src V' M' (← surfC n c exp N))
     | .perform sp k i V => do
       let e := (Frontend.Check.findOp c.E sp "perform" k i).toOption.map (·.2.1.A)
@@ -4519,8 +4515,8 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
     let core ← if i.after.isNone then pure hd else do
       let r : Ident := ⟨s!"io_ar{i.n}", sp⟩
       pure (.bind sp r none hd (.ret sp (binds.foldr (fun (x, _, _) t => Val.pair sp (.var sp x.name) t)
-        (.var sp r.name))) false)
-    pure (binds.foldr (fun (x, T, a) K => Comp.bind sp x (some T) (.ret sp a) K false) core)
+        (.var sp r.name))))
+    pure (binds.foldr (fun (x, T, a) K => Comp.bind sp x (some T) (.ret sp a) K) core)
 
 /-- `for x in V' { M }; N` over a sized source (`dataSrcOf`), `V'` elaborated: a counted loop,
 `count_try` over the length of the source's data (the section *The total `for` over data*);
@@ -4677,9 +4673,9 @@ case {if w then "io_hole_get" else get} \{ inl io_ve{sfx} -> {el}force io_hole_b
         pure ("", some (s!"borrow {if m then "mut" else "imm"} {a.name} \{ {lv}, io_lv{sfx} -> ",
             a.name), p, cu, b, "0", e, s!"len({a.name})", wi, g)
       | .owned A => do
-        unless Class.of A == .persistent do
+        unless Class.of A == .unrestricted do
           throw ⟨V.span, s!"a `for` over an owned array copies each element, and `{ppT A}` is " ++
-            "not persistent: iterate `&a` or `&mut a`"⟩
+            "linear: iterate `&a` or `&mut a`"⟩
         let (p, cu, b, e, wi, g) := view false lv (← pp A) s!"io_lv{sfx}" s!"{x.name} <- return *io_ve{sfx};\n"
         pure (s!"io_oa{sfx} <- return io_hole_src;\n", some (s!"borrow imm io_oa{sfx} \{ {lv}, io_lv{sfx} -> ",
             s!"io_oa{sfx}"), p, cu, b, "0", e, s!"len({V.pp})", wi, g)
@@ -4970,9 +4966,9 @@ while ({w}m) \{
 };
 force io_hole_rest"
       | .owned A => do
-        unless Class.of A == .persistent do
+        unless Class.of A == .unrestricted do
           throw ⟨V.span, s!"a `for` over an owned array copies each element, and `{ppT A}` is " ++
-            "not persistent: iterate a view of it"⟩
+            "linear: iterate a view of it"⟩
         let At ← pp A
         pure s!"{w}a <- return io_hole_src;
 let ({w}a, {w}n) = array_size[{At}]({w}a);
@@ -5115,8 +5111,8 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
         | none => pure .zero
       | none => pure .unit
     checkBreaks M (keep.map fun _ => Vt)
-    if keep.isNone && Class.of Bg == .linear then
-      throw ⟨sp, s!"`{i.callee}` returns `{ppT Bg}`, which has no destructor: bind the loop's value, " ++
+    if keep.isNone && Class.of Bg == .linear false then
+      throw ⟨sp, s!"`{i.callee}` returns `{ppT Bg}`, which is linear with no derived drop: bind the loop's value, " ++
         "`let r = for …`"⟩
     if keep.isSome && Bg != Vt && Bg != .zero then
       throw ⟨sp, s!"the loop's value has type `{ppT Vt}`, and `{i.callee}` returns `{ppT Bg}`"⟩
@@ -5146,10 +5142,10 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     let leave (tsp : Span) (o : Val) : Comp :=
       let ex : Val := .inr tsp (.pair tsp (tupleVal tsp wsN) o)
       .bind tsp ⟨s!"io_c{sfx}", tsp⟩ none (.proj tsp false (.force tsp ⟨s!"io_k{sfx}", tsp⟩))
-        (.ret tsp (if looping then .inl tsp ex else ex)) false
+        (.ret tsp (if looping then .inl tsp ex else ex))
     let resume (tsp : Span) : Comp :=
       .bind tsp ⟨s!"io_wv{sfx}", tsp⟩ none (.ret tsp (tupleVal tsp wsN))
-        (.app tsp (.proj tsp true (.force tsp ⟨s!"io_k{sfx}", tsp⟩)) ⟨s!"io_wv{sfx}", tsp⟩) false
+        (.app tsp (.proj tsp true (.force tsp ⟨s!"io_k{sfx}", tsp⟩)) ⟨s!"io_wv{sfx}", tsp⟩)
     let brk (tsp : Span) (e : Val) : Val := if hasRet then .inl tsp e else e
     let body := wrapTail (fun
       | .ret tsp (.sugar _ .brk) => leave tsp (brk tsp (.unit tsp))
@@ -5887,9 +5883,9 @@ def specC : Nat → TCx → Comp → DM Comp
   | n + 1, c, M => match M with
     | .ret sp V => do pure (.ret sp (← specV n c V))
     | .absurd sp V => do pure (.absurd sp (← specV n c V))
-    | .bind sp x A M N lin => do
+    | .bind sp x A M N => do
       let t := bindTy c A M
-      pure (.bind sp x A (← specC n c M) (← specC n (c.push x.name t) N) lin)
+      pure (.bind sp x A (← specC n c M) (← specC n (c.push x.name t) N))
     | .lam sp x A M => do pure (.lam sp x A (← specC n (c.push x.name (c.elabV A)) M))
     | .app sp M x => do pure (.app sp (← specC n c M) x)
     | .with_ sp M N => do pure (.with_ sp (← specC n c.pushDead.pushDead M)
@@ -5917,7 +5913,7 @@ def specC : Nat → TCx → Comp → DM Comp
       | some (r, A, N₀) =>
         let rT := (A.bind c.elabV).orElse fun _ => (c.tyV V.takeLends.1).bind finOf
         let N₀' ← specC n (c.push r.name rT) N₀
-        pure (.loop sp ℓ src (← specV n c V) M' (.bind N.span r A (.ret r.span (.sugar r.span .forRes)) N₀' false))
+        pure (.loop sp ℓ src (← specV n c V) M' (.bind N.span r A (.ret r.span (.sugar r.span .forRes)) N₀'))
       | none => pure (.loop sp ℓ src (← specV n c V) M' (← specC n c N))
     | .perform sp k i V => do pure (.perform sp k i (← specV n c V))
     | .abort sp k i V => do pure (.abort sp k i (← specV n c V))

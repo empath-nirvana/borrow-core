@@ -1,13 +1,13 @@
-import Core.AffRules
+import Core.CloRules
 import Core.Weaken
 
 /-!
-# The affine closure — a counter, called through a `Mut` borrow  `[spec §22]`
+# The closure `Clo` — a counter, called through a `Mut` borrow  `[spec §22]`
 
     alloc () to d₀. withbor d₀ (Λ'x. λd. forget d;
-      mkBox⊤ (alloc 0) counterStep to f.          -- f : [@⊤] U(Aff^⊤ I32 I32), owning a cell
+      mkBox⊤ (alloc 0) counterStep to f.          -- f : [@⊤] U(Clo^⊤ I32 I32), owning a cell
       alloc f to r.
-      withbor r (Λ'w. λm.                         -- m : Mut 'w ([@⊤] U(Aff^⊤ I32 I32))
+      withbor r (Λ'w. λm.                         -- m : Mut 'w ([@⊤] U(Clo^⊤ I32 I32))
         1 to a. callMut m a to (m, x₁).           -- the state persists between the calls
         2 to a. callMut m a to (m, x₂).
         forget m; [x₁ + x₂]) to (r, t).
@@ -25,7 +25,7 @@ noncomputable section
 
 variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 
-namespace BoCa.Fig16.LogRel.Core.Aff
+namespace BoCa.Fig16.LogRel.Core.Clo
 open BoCa
 open BoCa.Fig16
 open BoCa.Fig16.BoLo
@@ -53,8 +53,8 @@ def counterStep : Val :=
 theorem d_counterStep {Δ : LifeCtx} {Γ : Ctx VTy} {c : Lifetime.Life} (hc : Δ.Defines c)
     (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ (.val counterStep)
-      (.val (.bang (.thunk (.arr (.ref .i32) (affStepC c .i32 .i32 (.ref .i32)))))) := by
-  refine .bangThunkV (persistent_dead hΓ) rfl (.lam (.withI (.lam (.ret ?_)) (.ret ?_)))
+      (.val (.bang (.thunk (.arr (.ref .i32) (cloStepC c .i32 .i32 (.ref .i32)))))) := by
+  refine .bangThunkV (banged_dead hΓ) rfl (.lam (.withI (.lam (.ret ?_)) (.ret ?_)))
   · -- `let (s₁, n) = swap s 0`
     refine .letpairV (.right (.dead (.dead (.left (deadSplit hΓ)))))
       (.lolliE (split_kill _).toP (d_i32 0 (kill_dead _).toP)
@@ -92,7 +92,7 @@ theorem d_counterStep {Δ : LifeCtx} {Γ : Ctx VTy} {c : Lifetime.Life} (hc : Δ
 /-! ### The borrower: two calls through `Mut` -/
 
 /-- The payload: the counter closure, outliving `⊤`. -/
-abbrev PC : VTy := affBox .top .i32 .i32
+abbrev PC : VTy := cloBox .top .i32 .i32
 
 /-- `1 to a. callMut m a to (m, x₁). 2 to a. callMut m a to (m, x₂). forget m; [x₂ + x₁]`,
 `m` at `0`. -/
@@ -255,27 +255,27 @@ set_option maxRecDepth 100000 in
 call's total: the closure's state persisted across the two calls through the borrow. -/
 theorem counterProg_eval : i32NoLeak (eval counterProg) = some 4 := by decide
 
-end BoCa.Fig16.LogRel.Core.Aff
+end BoCa.Fig16.LogRel.Core.Clo
 
 end
 
 
 
 /-!
-# The affine closure — coercions, drop, nesting  `[spec §22]`
+# The closure `Clo` — coercions, drop, nesting  `[spec §22]`
 
 Each program is one closed `CDerives` derivation at `F I32`.  It runs at every host from the
 empty memory to a 32-bit literal and the empty memory (`*_runs`, by `theorem32` over
 `fundamentalC`), and the interpreter at Wasm's host returns the stated literal with no cell
 left (`*_eval`, by `decide`).
 
-* `ofFnProg` (persistent ≤ affine): `λx. x + 10 : !U(I32 ⊸ F I32)` made an affine closure
+* `ofFnProg` (`!(A ⇒ B)` to `Clo`): `λx. x + 10 : !U(I32 ⊸ F I32)` made a closure
   (`d_ofFn`), called with `1` and `2`, closed: `11 + 12 = 23`.
-* `onceProg` (affine ≤ linear): the counter over a fresh cell, made a `U(I32 ⊸ F I32)` by
+* `onceProg` (`Clo` to `A ⇒ B`): the counter over a fresh cell, made a `U(I32 ⊸ F I32)` by
   `onceE` and called with `5`: `5`.  The rest is closed inside `onceE`, which frees the cell.
 * `dropProg` (drop): the counter over a cell holding `7`, never called, dropped by its
   destructor (`dropE`, SPEC §12): `0`, and the cell is freed by the destructor's `close`.
-* `nestProg` (an affine closure capturing another): an outer closure whose state is the
+* `nestProg` (a closure capturing another): an outer closure whose state is the
   counter, doubling each answer; called with `1` and `2`, closed: `2 + 6 = 8`.  Closing the
   outer closure closes the inner one, which frees its cell.
 -/
@@ -284,7 +284,7 @@ noncomputable section
 
 variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 
-namespace BoCa.Fig16.LogRel.Core.Aff
+namespace BoCa.Fig16.LogRel.Core.Clo
 open BoCa
 open BoCa.Fig16
 open BoCa.Fig16.BoLo
@@ -312,10 +312,10 @@ theorem seqC {V M : Expr} {C : CTy} (hV : CDerives Δ (partP V 0 Γ).1 V (.val .
   .unitE (partP_split V 0 Γ) hV hM
 
 theorem callC {c : Lifetime.Life} {A B : VTy} {i j : Nat} (hA : A.Cl 0)
-    (hf : Ctx.SoloP (partP (.var i) 0 Γ).1 i (affT c A B))
+    (hf : Ctx.SoloP (partP (.var i) 0 Γ).1 i (cloT c A B))
     (ha : Ctx.SoloP (partP (.var i) 0 Γ).2 j A) :
-    CDerives Δ Γ (callE i j) (.comp (.ret (.tensor B (affBox c A B)))) :=
-  d_callAff hA (partP_split (.var i) 0 Γ) hf ha
+    CDerives Δ Γ (callE i j) (.comp (.ret (.tensor B (cloBox c A B)))) :=
+  d_callClo hA (partP_split (.var i) 0 Γ) hf ha
 
 theorem unboxC {c : Lifetime.Life} {T : VTy} {C : CTy} {i : Nat} {N : Expr}
     (hx : Ctx.SoloP (partP (.var i) 0 Γ).1 i (.box c T))
@@ -327,8 +327,8 @@ theorem mkBoxC {c : Lifetime.Life} {A B S : VTy} {C : CTy} {s₀ K : Expr} {step
     (hA : A.Cl 0) (hc : Δ.Defines c) (hS : VOutlives Δ c S)
     (hs₀ : CDerives Δ (partP s₀ 0 Γ).1 s₀ (.val S))
     (hstep : CDerives Δ (kill (⟨S, true⟩ :: (partP s₀ 0 Γ).2)) (.val step)
-      (.val (.bang (.thunk (.arr S (affStepC c A B S))))))
-    (hK : CDerives Δ (⟨affBox c A B, true⟩ :: ⟨affCodeT c A B S, false⟩ :: ⟨S, false⟩ ::
+      (.val (.bang (.thunk (.arr S (cloStepC c A B S))))))
+    (hK : CDerives Δ (⟨cloBox c A B, true⟩ :: ⟨cloCodeT c A B S, false⟩ :: ⟨S, false⟩ ::
       (partP s₀ 0 Γ).2) K (.comp C)) :
     CDerives Δ Γ (mkE c A B s₀ step K) (.comp C) :=
   d_mkBox' hA hc hS (partP_split s₀ 0 Γ) hs₀ hstep hK
@@ -351,20 +351,20 @@ theorem runs_i32 {e : Expr} (h : CDerives LifeCtx.empty [] e (.comp (.ret .i32))
   obtain ⟨v, hsteps, n, rfl⟩ := theorem32 e (fun v => ∃ n, v = Val.i32 n) hwp
   exact ⟨n, hsteps⟩
 
-abbrev FC : VTy := affBox .top .i32 .i32
+abbrev FC : VTy := cloBox .top .i32 .i32
 
 /-- Call a boxed closure at `i` with the argument at `j`, then `K` with `(b, rest)` split:
 `b` at `1`, the rest at `0`. -/
 def callBoxE (i j : Nat) (K : Expr) : Expr := bindE (bindE (.var i) (callE 0 (j + 1))) (.letpair (.var 0) K)
 
-/-! ### Persistent ≤ affine -/
+/-! ### From `!(A ⇒ B)` to `Clo` -/
 
 /-- `λx. x + 10`. -/
 def incV : Val := .lam (addE (.var 0) (i32E 10))
 
 theorem d_inc {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ (.val incV) (.val (.bang (.lolli .i32 .i32))) :=
-  .bangThunkV (persistent_dead hΓ) rfl (.lam (.ret
+  .bangThunkV (banged_dead hΓ) rfl (.lam (.ret
     (.lolliE (split_kill' _).toP
       (.tensorI (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) (d_i32 10 (.cons hΓ.toP)))
       (.bangE (.hostOp (.bin .w32 .add) (kill_dead _).toP)))))
@@ -397,7 +397,7 @@ theorem ofFnProg_runs :
 set_option maxRecDepth 100000 in
 theorem ofFnProg_eval : i32NoLeak (eval ofFnProg) = some 23 := by decide
 
-/-! ### Affine ≤ linear -/
+/-! ### From `Clo` to `A ⇒ B` -/
 
 /-- `mkBox⊤ (alloc 0) counterStep to bf. bf to f. (onceE f) 5`. -/
 def onceProg : Expr :=
@@ -428,7 +428,7 @@ theorem dropProg_derives : CDerives LifeCtx.empty [] dropProg (.comp (.ret .i32)
   have hT : LifeCtx.empty.Defines .top := LifeCtx.defines_of_wf rfl
   refine mkBoxC trivial hT (.ref .int)
     (appP (d_i32 7 (by cdeadP)) (.alloc (by cdeadP))) (d_counterStep hT (kill_dead _)) ?_
-  exact drop_derives (partP_split (.var 0) 0 _) (by csoloP) (hasDtor_affBox (A := .i32) trivial .top .i32)
+  exact drop_derives (partP_split (.var 0) 0 _) (by csoloP) (hasDtor_cloBox (A := .i32) trivial .top .i32)
     (.ret (d_i32 0 (by cdeadP)))
 
 theorem dropProg_runs :
@@ -458,9 +458,9 @@ theorem outlives_ctxX {Γ : Ctx VTy} (h : (Γ.all fun s => !s.live || outX s.ty)
   have := List.all_eq_true.mp h s hs
   simpa [hl] using this
 
-/-! ### An affine closure capturing another -/
+/-! ### A closure capturing another -/
 
-/-- The outer step over the inner closure `s : [@⊤] U(Aff^⊤ I32 I32)`:
+/-- The outer step over the inner closure `s : [@⊤] U(Clo^⊤ I32 I32)`:
 `λs. ⟨λa. callBox s a to (b, r). (b + b, [r]), s to g. g π₂⟩`.  Closing the outer closure
 closes the inner one. -/
 def doubleStep : Val :=
@@ -485,7 +485,7 @@ theorem d_nestBody : CDerives Δ₁ ΓS nestBody (.comp (.ret (.box (.var 0) .i3
     (appP (d_i32 0 (by cdeadP)) (.alloc (by cdeadP))) (d_counterStep hT (kill_dead _)) ?_
   refine mkBoxC trivial hX (.box (entailsLe_of_entailsLt (BoCa.Programs.entailsLt_top rfl))) (.var (by csoloP)) ?_ ?_
   · -- the outer step
-    refine .bangThunkV (persistent_dead (kill_dead _)) rfl (.lam (.withI (.lam ?_) ?_))
+    refine .bangThunkV (banged_dead (kill_dead _)) rfl (.lam (.withI (.lam ?_) ?_))
     · refine bindC (unboxC (by csoloP)
         (callC (A := .i32) (B := .i32) (c := .top) trivial (by csoloP) (by csoloP))) ?_
       refine letC (.var (by csoloP)) ?_
@@ -519,16 +519,16 @@ set_option maxRecDepth 100000 in
 closed the inner one. -/
 theorem nestProg_eval : i32NoLeak (eval nestProg) = some 8 := by decide
 
-end BoCa.Fig16.LogRel.Core.Aff
+end BoCa.Fig16.LogRel.Core.Clo
 
 end
 
 
 
 /-!
-# The affine closure — passed on borrowed, at any depth  `[spec §22]`
+# The closure `Clo` — passed on borrowed, at any depth  `[spec §22]`
 
-Under the borrow `'w` of the counter (`Counter.lean`), `M = Mut 'w ([@⊤] U(Aff^⊤ I32 I32))`:
+Under the borrow `'w` of the counter (`Counter.lean`), `M = Mut 'w ([@⊤] U(Clo^⊤ I32 I32))`:
 
 * `twiceV : !U(M ⊸ F(M ⊗ I32))` calls through the borrow twice;
 * `reV : !U(M ⊸ F(M ⊗ I32))` reborrows it at a fresh `'v ⊏ 'w` (`withbor`'s third form,
@@ -547,7 +547,7 @@ noncomputable section
 
 variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 
-namespace BoCa.Fig16.LogRel.Core.Aff
+namespace BoCa.Fig16.LogRel.Core.Clo
 open BoCa
 open BoCa.Fig16
 open BoCa.Fig16.BoLo
@@ -560,9 +560,9 @@ theorem weak0 {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives �
 
 /-- Call through `Mut` at the split by the argument. -/
 theorem callMutW {Δ : LifeCtx} {Γ : Ctx VTy} {a c : Lifetime.Life} {A B : VTy} {i j : Nat}
-    (hA : A.Cl 0) (hm : Ctx.SoloP (part (.var j) 0 Γ).2 i (.mut a (affBox c A B)))
+    (hA : A.Cl 0) (hm : Ctx.SoloP (part (.var j) 0 Γ).2 i (.mut a (cloBox c A B)))
     (ha : Ctx.Solo (part (.var j) 0 Γ).1 j A) :
-    CDerives Δ Γ (callMutE i j) (.val (.tensor (.mut a (affBox c A B)) B)) :=
+    CDerives Δ Γ (callMutE i j) (.val (.tensor (.mut a (cloBox c A B)) B)) :=
   d_callMut hA (part_split (.var j) 0 Γ).toP hm ha
 
 /-- The borrowed counter. -/
@@ -578,7 +578,7 @@ def twiceV : Val :=
     (elet (i32E 2) (.letpair (callMutE 2 0) (.pair (.var 1) (addE (.var 3) (.var 0)))))))
 
 theorem d_twice : CDerives Δ₂ [] (.val twiceV) (.val passTy) := by
-  refine .bangThunkV (persistent_dead .nil) rfl (.lam (.ret ?_))
+  refine .bangThunkV (banged_dead .nil) rfl (.lam (.ret ?_))
   refine bindP (d_i32 1 (by cdeadP)) ?_
   refine letP (callMutW (A := .i32) (B := .i32) (c := .top) trivial (by csoloP) (by csolo)) ?_
   refine bindP (d_i32 2 (by cdeadP)) ?_
@@ -606,7 +606,7 @@ theorem d_reCb : CDerives Δ₂ [] reCb
 def reV : Val := .lam (.app (.app withbor (.var 0)) reCb)
 
 theorem d_re : CDerives Δ₂ [] (.val reV) (.val passTy) := by
-  refine .bangThunkV (persistent_dead .nil) rfl (.lam (.ret ?_))
+  refine .bangThunkV (banged_dead .nil) rfl (.lam (.ret ?_))
   exact appW (weak0 d_reCb (by cdead)) (appW (.var (by csolo))
     (.withbor3 (a := .var 1) (A := PC) (B := .i32) 2 (by cdeadP) rfl (vfree_PC 2)
       (by simp [VFree])))
@@ -621,7 +621,7 @@ def passF : ℕ → Val
   | n + 1 => .lam (.app (.val (passF n)) (.var 0))
 
 theorem d_pass0 : CDerives Δ₂ [] (.val (passF 0)) (.val passTy) := by
-  refine .bangThunkV (persistent_dead .nil) rfl (.lam (.ret ?_))
+  refine .bangThunkV (banged_dead .nil) rfl (.lam (.ret ?_))
   refine letP (.lolliE (split_kill' _).toP (.var (by csoloP)) (.bangE (weak0 d_re (kill_dead _)))) ?_
   refine letP (.lolliE (split_kill' _).toP (.var (by csoloP))
     (.bangE (weak0 d_twice (kill_dead _)))) ?_
@@ -630,7 +630,7 @@ theorem d_pass0 : CDerives Δ₂ [] (.val (passF 0)) (.val passTy) := by
 /-- **At every depth.**  `passF n` is typed for every `n`. -/
 theorem d_passF : ∀ (n : ℕ) {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ₂ Γ (.val (passF n)) (.val passTy)
   | 0, _, hΓ => weak0 d_pass0 hΓ
-  | n + 1, _, hΓ => .bangThunkV (persistent_dead hΓ) rfl (.lam (.ret
+  | n + 1, _, hΓ => .bangThunkV (banged_dead hΓ) rfl (.lam (.ret
       (.lolliE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) (.bangE (d_passF n (.cons hΓ))))))
 
 /-! ### The program -/
@@ -664,34 +664,34 @@ set_option maxRecDepth 100000 in
 /-- Through three more functions: `3 + (4 + 6) = 13`, no cell left. -/
 theorem passProg3_eval : i32NoLeak (eval (passProg 3)) = some 13 := by decide
 
-end BoCa.Fig16.LogRel.Core.Aff
+end BoCa.Fig16.LogRel.Core.Clo
 
 end
 
 
 
 /-!
-# The affine closure — returned, and bounded by the borrows it captures  `[spec §22]`
+# The closure `Clo` — returned, and bounded by the borrows it captures  `[spec §22]`
 
-* `retProg`: `mkCounter : !U(I32 ⊸ F([@⊤] U(Aff^⊤ I32 I32)))` allocates the counter's cell
+* `retProg`: `mkCounter : !U(I32 ⊸ F([@⊤] U(Clo^⊤ I32 I32)))` allocates the counter's cell
   and returns the closure, owned.  Called at `10`, the closure is called with `5` and closed:
   `15`.  (`counterProg` stores a closure in a cell.)
 * `logProg`: a logger capturing a borrow.  `log : Ref I32` is lent as `ml : Mut 'x I32`; inside a
-  scope `'w ⊏ 'x` the logger is made with state `ml`, so it is `[@'w] U(Aff^'w I32 I32)`:
+  scope `'w ⊏ 'x` the logger is made with state `ml`, so it is `[@'w] U(Clo^'w I32 I32)`:
   it outlives `'w` because its state does (`'w ⊏ 'x`).  Each call adds its argument to the log
   through `ml` (`withswap`); `close` forgets `ml`.  Called with `5` and `7` and closed; after the
   borrow ends the owner frees the log: `12`.
 * The bound is the captured borrow's lifetime: the logger's state does not outlive `'x`
   (`logState_not_outlives`), so `[]I` at `'x` over the state, the premise of `d_mkBox`, is
   refused; and no closure value outlives anything except through its box
-  (`aff_not_outlives`).
+  (`clo_not_outlives`).
 -/
 
 noncomputable section
 
 variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 
-namespace BoCa.Fig16.LogRel.Core.Aff
+namespace BoCa.Fig16.LogRel.Core.Clo
 open BoCa
 open BoCa.Fig16
 open BoCa.Fig16.BoLo
@@ -705,7 +705,7 @@ def mkCounterV : Val :=
 
 theorem d_mkCounter : CDerives LifeCtx.empty [] (.val mkCounterV) (.val (.bang (.lolli .i32 FC))) := by
   have hT : LifeCtx.empty.Defines .top := LifeCtx.defines_of_wf rfl
-  refine .bangThunkV (persistent_dead .nil) rfl (.lam ?_)
+  refine .bangThunkV (banged_dead .nil) rfl (.lam ?_)
   exact mkBoxC trivial hT (.ref .int) (appP (.var (by csoloP)) (.alloc (by cdeadP)))
     (d_counterStep hT (kill_dead _)) (.ret (.var (by csoloP)))
 
@@ -797,7 +797,7 @@ theorem d_logInner :
   refine seqC (appP (.var (by csoloP)) (.forgetImm (by cdeadP))) ?_
   refine mkBoxC trivial (LifeCtx.defines_of_wf rfl) (.mut lt_w_x) (.var (by csoloP)) ?_ ?_
   · -- the logger's step
-    refine .bangThunkV (persistent_dead (kill_dead _)) rfl (.lam (.withI (.lam ?_) ?_))
+    refine .bangThunkV (banged_dead (kill_dead _)) rfl (.lam (.withI (.lam ?_) ?_))
     · refine letC (appP (.thunkV rfl (.lam (A := .i32) (C := .ret (.tensor .i32 .i32)) (.ret (bindP (A := .i32) (d_add (pairP (.var (by csoloP))
           (.var (by csoloP))) (by cdeadP)) (pairP (.var (by csoloP)) (.var (by csoloP)))))))
         (appP (.var (by csoloP)) (.withswap (by cdeadP)))) ?_
@@ -882,12 +882,12 @@ theorem logState_ctx_not_outlives : ¬ CtxOutlives Δ₂ [⟨LS, true⟩] (.var 
   fun h => logState_not_outlives (h.2 ⟨LS, true⟩ (by simp) rfl)
 
 /-- **An unboxed closure outlives nothing**: `VOutlives` has no rule at `U C`, so a closure is
-stored or lent beyond its creation only as `[@c] U(Aff^c A B)`, boxed where its state is in
+stored or lent beyond its creation only as `[@c] U(Clo^c A B)`, boxed where its state is in
 the context. -/
-theorem aff_not_outlives (Δ : LifeCtx) (a c : Lifetime.Life) (A B : VTy) :
-    ¬ VOutlives Δ a (affT c A B) := by
+theorem clo_not_outlives (Δ : LifeCtx) (a c : Lifetime.Life) (A B : VTy) :
+    ¬ VOutlives Δ a (cloT c A B) := by
   intro h; cases h
 
-end BoCa.Fig16.LogRel.Core.Aff
+end BoCa.Fig16.LogRel.Core.Clo
 
 end

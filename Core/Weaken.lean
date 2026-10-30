@@ -5,7 +5,7 @@ import Core.Examples
 
 A derivation at `Γ` is one at `Γ ++ Γ'` when every slot of `Γ'` is consumed: the de Bruijn
 indices of `Γ` are unchanged, and every rule's context premise (`SplitP`, `SoloP`, `DeadP`,
-`CtxOutlives`, `∀I`'s freshness premise, `Persistent`) holds of the extended context.  It lets a
+`CtxOutlives`, `∀I`'s freshness premise, `Ctx.Banged`) holds of the extended context.  It lets a
 closed callback typed at `[]` sit beside a free variable.
 -/
 
@@ -56,8 +56,8 @@ theorem ctxOutlives_append (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {a 
     (h : CtxOutlives Δ Γ a) : CtxOutlives Δ (Γ ++ Γ') a :=
   ⟨h.1, live_append h' h.2⟩
 
-theorem persistent_append (h' : Ctx.Dead Γ') {Γ : Ctx VTy} (h : Persistent Γ) :
-    Persistent (Γ ++ Γ') :=
+theorem banged_append (h' : Ctx.Dead Γ') {Γ : Ctx VTy} (h : Ctx.Banged Γ) :
+    Ctx.Banged (Γ ++ Γ') :=
   live_append (P := fun s => ∃ A, s.ty = .bang A) h' h
 
 /-- **Weakening** by consumed slots at the end. -/
@@ -87,8 +87,8 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | zeroE hs _ ihV => exact .zeroE (splitP_append h' hs) ihV
   | allI hbx hΔx hΓx _ ih => exact .allI hbx hΔx (live_append h' hΓx) ih
   | allE _ hlt ih => exact .allE ih hlt
-  | bangThunkF hp _ ih => exact .bangThunkF (persistent_append h' hp) ih
-  | bangThunkV hp hC _ ih => exact .bangThunkV (persistent_append h' hp) hC ih
+  | bangThunkF hp _ ih => exact .bangThunkF (banged_append h' hp) ih
+  | bangThunkV hp hC _ ih => exact .bangThunkV (banged_append h' hp) hC ih
   | bangE _ ih => exact .bangE ih
   | copyBang hΓ => exact .copyBang (deadP_append h' hΓ)
   | forgetBang hΓ => exact .forgetBang (deadP_append h' hΓ)
@@ -165,10 +165,10 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | effRaise hf ha hd _ ih => exact .effRaise hf ha hd ih
   | effLet hs hW hU _ _ ihM ihN =>
       exact .effLet (splitP_append h' hs)
-        (fun hw => live_append (P := fun s => s.ty.Drop) h' (hW hw))
-        (fun hu => persistent_append h' (hU hu)) ihM ihN
+        (fun hw => live_append (P := fun s => s.ty.OwnFree) h' (hW hw))
+        (fun hu => banged_append h' (hU hu)) ihM ihN
   | effThen hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
-      exact .effThen (splitP_append h' hs) hNZ hUq (fun hu => persistent_append h' (hU hu))
+      exact .effThen (splitP_append h' hs) hNZ hUq (fun hu => banged_append h' (hU hu))
         hMS hDS hfin hP hSD ihM ihN ihD
   | effHandleV hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
       exact .effHandleV (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen hdv
@@ -179,9 +179,9 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
       exact .effHandleT (splitP_append h' hs) (deadP_append h' hd) hHr.append hHc.append ihc hn0
         hnd hnS hlen hSN hLin ihe
-  | effHandleL hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hAff hSW hSu hFin _ ihc ihe =>
+  | effHandleL hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
       exact .effHandleL (splitP_append h' hs) (deadP_append h' hd) hHr.append hHw.append
-        hHn.append ihc hn0 hnd hnS hlen hNZ hAff hSW hSu hFin ihe
+        hHn.append ihc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin ihe
   | letPoly b hcl hV _ _ ihN => exact .letPoly b hcl hV ihN
 
 end BoCa.Fig16.LogRel.Core

@@ -76,6 +76,7 @@ import Core.StreamPrograms
 import Core.Integers
 import Core.IntPrograms
 import Core.Dtor
+import Core.Classes
 import Core.ArrayWp
 import Core.Arrays
 import Core.SliceFrames
@@ -106,7 +107,7 @@ import Core.ClauseKinds
 import Core.ClauseNames
 import Core.HandledNames
 import Core.ClauseOwn
-import Core.Aff
-import Core.AffRules
-import Core.AffPrograms
+import Core.Clo
+import Core.CloRules
+import Core.CloPrograms
 import Core.Mentions

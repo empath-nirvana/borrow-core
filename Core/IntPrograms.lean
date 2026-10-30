@@ -142,7 +142,7 @@ def sumToStep : Val := .lam (withPair sumToNext (.val .unit))
 theorem d_sumToStep :
     CDerives LifeCtx.empty [⟨sumS, false⟩] (.val sumToStep)
       (.val (.bang (.thunk (stepDC .i32 sumS)))) := by
-  refine .bangThunkV (persistent_dead (.cons .nil)) rfl (.lam (.withI (.ret ?_) (.ret ?_)))
+  refine .bangThunkV (banged_dead (.cons .nil)) rfl (.lam (.withI (.ret ?_) (.ret ?_)))
   · refine letP (A := .i32) (B := .i32) (.var (by csoloP)) ?_
     refine caseP (A := .unit) (B := .unit) (d_hop (.eqz .w32) (.var (by csoloP)) (by cdeadP)) ?_ ?_
     · refine .sumI₂ (pairP ?_ ?_)

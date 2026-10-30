@@ -424,14 +424,15 @@ side an input.
 
 ### 3.7 What this repository already has
 
-- `experiments/ModesLabels` checks that `lin` (`Ref`, `⊸`, `∀`), `aff` (`Mut`) and `unr` (`Imm`,
-  `!T`, `1`, `Unk`) satisfy their structural properties *semantically* at every type
-  (`weaken_sound`, `contract_sound`). It finds that the only formers that break the declaration
-  of independence are the two labelled borrows. Its reading is that a lifetime label is a licence
-  to break independence for a scope.
+- `experiments/ModesLabels` checks that `lin` (`Ref`, `⊸`, `∀`), the mode with weakening only
+  (`Mut`) and `unr` (`Imm`, `!T`, `1`, `Unk`) satisfy their structural properties *semantically* at
+  every type (`weaken_sound`, `contract_sound`). It finds that the only formers that break the
+  declaration of independence are the two labelled borrows. Its reading is that a lifetime label is
+  a licence to break independence for a scope.
 - `experiments/Shifts` shows that the four label-introducing borrow axioms are instances of one
   "labelled shift" schema `src ⊸ (∀'x ⊏ bnd. view 'x ⊸ ['x] T) ⊸ …`. It notes that the schema
-  predicts an `aff → unr` shift (lending a `Mut` as an `Imm`) with no axiom behind it.
+  predicts a shift from adjoint logic's affine mode to its unrestricted one (lending a `Mut` as
+  an `Imm`) with no axiom behind it.
 - `experiments/Grades` provides interval grades over `{0, 1, ∞}` with endpoint type conditions.
   It shows `GDerives ⇔ CDerives` under the Core profile, and proves erasure at grade `0`.
 
@@ -804,15 +805,15 @@ add `⅋`.
 | candidate | where it lands *(ours)* | why |
 |---|---|---|
 | usage: linear / affine / strict / unrestricted / erased | **an adjoint mode preorder**, already in `experiments/Grades` | The five grades `[1,1]`, `[0,1]`, `[1,∞]`, `[0,∞]`, `[0,0]` are Pruiksma–Pfenning's four modes plus an erased grade. Jang et al. give the four modes a sequential CBV semantics with garbage freedom and an erasure theorem based on the mode preorder (whether their erasure matches our grade `0` was not checked). `ModesLabels` checks `σ` semantically. |
-| `Imm` / `Mut` | a mode for the payload plus a labelled shift | `ModesLabels`/`Shifts`: `Imm` is `unr`, `Mut` is `aff`. The borrow axioms are shifts that break independence under a lifetime label. The adjoint frame classifies them; the label is not a mode. |
+| `Imm` / `Mut` | a mode for the payload plus a labelled shift | `ModesLabels`/`Shifts`: `Imm` is `unr`, `Mut` is at the mode with weakening only. The borrow axioms are shifts that break independence under a lifetime label. The adjoint frame classifies them; the label is not a mode. |
 | locality (`local`/`global`) | **sugar over lifetimes, plus a lowering** | OxCaml's `borrow` is `withbor` with `local` for the lifetime. For owned data, "does not escape the region" is already forced by linearity (every cell is freed), so stack placement is a LIFO property of the lowering (dream C4), not a mode in the relation. OxCaml needs it as a mode because OCaml has a GC and free aliasing. |
 | portability / contention | **a separate axis, needed only with threads and interior mutability** | Closures are `!T` and hold no resource (decision 3), so persistent closures cross threads trivially. The unsound case is an `Imm` borrow of data with interior mutability shared across threads (DRFCaml's `shared` versus `contended`). That arrives with interior mutability (being explored in another experiment, not on `main`) and threads, not before. |
 | security levels | **a second semiring, as a product; a binary theorem** | Granule combines grades as products (ICFP 2019). The soundness theorem is noninterference, a two-run property (Abel–Bernardy Thm 7.10), which needs a binary relation we do not have (`experiments/TwoRun`). |
 
 **Verdict.**
 
-- **One adjoint mode lattice covers usage and the `!`/linear/affine split.** The evidence is
-  strong: it is printed (Pruiksma–Pfenning; Jang et al.) and partly built (`Grades`,
+- **One adjoint mode lattice covers usage and adjoint logic's `!`/linear/affine split.** The
+  evidence is strong: it is printed (Pruiksma–Pfenning; Jang et al.) and partly built (`Grades`,
   `ModesLabels`).
 - **It does not absorb the rest.** OxCaml, the most developed modal system, is a product of axes
   (nine in its documentation) ordered pointwise, and each axis is justified by its own model (ICFP

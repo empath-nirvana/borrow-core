@@ -1,5 +1,5 @@
 -- pending: SPEC §30 Open (a task of spawn capturing an outer borrow)
--- now: 46:51: `clone` copies a persistent value, and `U (delay (mu X. 1 + i32 * X))` is not persistent
+-- now: 46:51: `clone` copies an unrestricted value, and `U (delay (mu X. 1 + i32 * X))` is linear
 -- A worker pool whose workers share a read-only configuration. `main` owns the configuration
 -- (a scale and an offset) and lends it `imm` to every task of the pool; each worker processes its
 -- jobs, reading the configuration through the borrow and awaiting between jobs. The tasks run

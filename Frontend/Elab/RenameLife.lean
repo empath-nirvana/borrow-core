@@ -175,7 +175,7 @@ def Val.renameLife (f : Span → String → Life) : Val → Val
 
 def Comp.renameLife (f : Span → String → Life) : Comp → Comp
   | .ret s V => .ret s (V.renameLife f)
-  | .bind s x A M N lin => .bind s (x.renameLife f) (A.map ((VTy.renameLife f))) (M.renameLife f) (N.renameLife f) lin
+  | .bind s x A M N => .bind s (x.renameLife f) (A.map ((VTy.renameLife f))) (M.renameLife f) (N.renameLife f)
   | .force s x => .force s (x.renameLife f)
   | .lam s x A M => .lam s (x.renameLife f) (A.renameLife f) (M.renameLife f)
   | .app s M x => .app s (M.renameLife f) (x.renameLife f)

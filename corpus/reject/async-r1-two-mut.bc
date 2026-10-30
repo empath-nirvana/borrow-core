@@ -1,4 +1,4 @@
--- expect: 11:5: `m` is used twice here, and its type `mut 'io_l0 i32` is not persistent
+-- expect: 11:5: `m` is used twice here, and its type `mut 'io_l0 i32` is linear
 -- SPEC §29 (docs/async-capabilities.md §6.2 row 2, `n2`): two tasks holding `mut` borrows of one
 -- cell. Inside a relaxed lend, the view `m` is moved into two values that cross the suspension,
 -- a task's state each. A `mut` view is linear (B6): the second is a second use. R1 lends an

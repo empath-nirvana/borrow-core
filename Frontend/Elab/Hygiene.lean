@@ -110,10 +110,10 @@ def _root_.Frontend.Val.hygD (defs : Ren) (glob : String → Bool) (ρ : Ren) : 
 /-- `M` with its binders renamed by `glob` and its occurrences by `ρ`. -/
 def _root_.Frontend.Comp.hygD (defs : Ren) (glob : String → Bool) (ρ : Ren) : Comp → HM Comp
   | .ret sp V => do pure (.ret sp (← V.hygD defs glob ρ))
-  | .bind sp x A M N lin => do
+  | .bind sp x A M N => do
     let M' ← M.hygD defs glob ρ
     let (x', ρ') ← bind glob ρ x
-    pure (.bind sp x' A M' (← N.hygD defs glob ρ') lin)
+    pure (.bind sp x' A M' (← N.hygD defs glob ρ'))
   | .force sp x => pure (.force sp (lookI ρ x))
   | .lam sp x A M => do
     let (x', ρ') ← bind glob ρ x

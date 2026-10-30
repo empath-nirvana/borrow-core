@@ -45,7 +45,7 @@ syntax, the elaboration chapters, the theorems and the contributing rules are in
   across `await` with no `Pin`, by ghost end; two relaxed rules and one named hypothesis,
   `PinLaw`, over typed programs; `experiments/AsyncCap` proves the Fundamental Property and
   adequacy from it. Not built.
-- [The affine closure, `FnMut`](fnmut.md) — Rust's `FnMut` as codata, `νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`
+- [The closure `Clo`, `FnMut`](fnmut.md) — Rust's `FnMut` as codata, `νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`
   (#236): an experiment over a fork of `Core` with `ν`'s positivity relaxed; the kernel change is
   described, not made.
 - [Strings and slices](strings-slices-design.md) — slices, buffers, UTF-8 text and literals, end

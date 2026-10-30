@@ -148,7 +148,7 @@ def sigsErr (s : CRow) : String :=
   | none =>
     match s.find? (fun o => o.q == .unr && o.B.isZero) with
     | some o => s!"the operation {o.n}.{o.i} is unrestricted and answers `0`: an abortive " ++
-        "operation is affine (decision 63)"
+        "operation is cancellable (decision 63)"
     | none =>
       match s.findSome? (fun o => (s.find? fun o' => o'.n == o.n && o'.i == o.i &&
           !(o'.q == o.q && o'.A == o.A && o'.B == o.B)).map (o, ·)) with
@@ -174,7 +174,7 @@ def checkMain (ds : Array Decl) (k : Nat) (keys : List DefKey) (sp : Span) (C : 
     else throw ⟨sp, sigsErr r.sigs⟩
   else match firstUnconsumed r.F.u r.F.w with
     | some i => throw ⟨sp, s!"`main` does not consume the extern {E.slotName i}, of type " ++
-        s!"`{E.slotTy T i}`, which is not persistent"⟩
+        s!"`{E.slotTy T i}`, which is linear"⟩
     | none => throw ⟨sp, "internal error: main"⟩
 
 /-- Check one declaration; the line `bcc check` prints for it, `main`'s result, and the typed term
@@ -296,8 +296,8 @@ theorem checkProgram_tied {p : Program} {r : Report} {c : Checked}
     ∀ Ξ : EffCtx, SigsAt Ξ c.sigs → CDerivesAt Ξ LifeCtx.empty c.ctx c.t.erase (.comp c.C) :=
   c.tied.tied.1 hp
 
-/-- **At the program's own effect context**, whose abortive operations are affine (decision 63):
-`main`'s derivation is `CDerivesAt c.Ξ`, and `c.Ξ` has no unrestricted operation answering `0`.
+/-- **At the program's own effect context**, whose abortive operations are cancellable (decision
+63): `main`'s derivation is `CDerivesAt c.Ξ`, and `c.Ξ` has no unrestricted operation answering `0`.
 `[spec §18, §19]` -/
 theorem checkProgram_tiedAt {p : Program} {r : Report} {c : Checked}
     (_h : checkProgram p = .ok r) (_hc : r.main = some c) (hp : c.pins = []) :

@@ -165,7 +165,7 @@ raises `exn`; so it is lowered per use (`Backend/Clos/Poly.lean`). -/
 def polyId : Expr :=
   letE (.lam (.var 0))
     (letE (letE (appE (.var 0) pureCbE) (appE (.var 0) .unit))
-      (letE (BoCa.BoLo.hndE (toResultH 1 .aff)
+      (letE (BoCa.BoLo.hndE (toResultH 1 .cancel)
           (letE (appE (.var 1) (failCbE 1)) (appE (.var 0) .unit)))
         (.pair (.var 1) (.var 0))))
 

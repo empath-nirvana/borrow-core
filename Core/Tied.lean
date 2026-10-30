@@ -25,7 +25,7 @@ a derivation: every instance of a handler site has one protocol (§19 *Names*).
 * `SigsAt Ξ S`: every entry of the list `S` is at `Ξ`'s signature; it ties every row whose
   entries are among `S`'s (`rowAt_of_sigsAt`).
 * `EffCtx.NoUnrExn`: no operation of `Ξ` is unrestricted and answers `0`.  An abortive operation
-  is affine (decision 63's restriction, §18); in a row tied to such a context an unrestricted
+  is cancellable (decision 63's restriction, §18); in a row tied to such a context an unrestricted
   operation resumes (`abort_false_of_rowAt`).
 -/
 
@@ -128,11 +128,11 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
   | allE {Δ Γ M x b a C} (h : CDerivesAt Ξ Δ Γ M (.comp (.all x b C))) (hlt : Δ.EntailsLt a b) :
       CDerivesAt Ξ Δ Γ (.app M (.val .unit)) (.comp (C.instLife x a))
   /-- Promotion of `thunk M : U (F A)` over `!Γ`. -/
-  | bangThunkF {Δ Γ M A} (hp : Persistent Γ)
+  | bangThunkF {Δ Γ M A} (hp : Ctx.Banged Γ)
       (h : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A))) :
       CDerivesAt Ξ Δ Γ (.val (.lam M)) (.val (.bang (.thunk (.ret A))))
   /-- Promotion of a λ-value `V : C` over `!Γ`. -/
-  | bangThunkV {Δ Γ N C} (hp : Persistent Γ) (hC : C.isRet = false)
+  | bangThunkV {Δ Γ N C} (hp : Ctx.Banged Γ) (hC : C.isRet = false)
       (h : CDerivesAt Ξ Δ Γ (.val (.lam N)) (.comp C)) :
       CDerivesAt Ξ Δ Γ (.val (.lam N)) (.val (.bang (.thunk C)))
   /-- Dereliction. -/
@@ -376,12 +376,12 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
   tied to `Ξ`.  `[spec §19]` -/
   | effRaise {Δ Γ V} {S : Row} {o : OpSig} {B : VTy} (hAt : RowAt Ξ S)
       (hf : Row.find S o.n o.i = some o)
-      (ha : o.abort = true) (hd : o.A.Drop) (h : CDerivesAt Ξ Δ Γ V (.val o.A)) :
+      (ha : o.abort = true) (hd : o.A.OwnFree) (h : CDerivesAt Ξ Δ Γ V (.val o.A)) :
       CDerivesAt Ξ Δ Γ (BoCa.BoLo.raiseE (opArgE o.n o.i V)) (.comp (CTy.effOf S B))
   /-- `[let]`: `M to x. N` at a row; `N`'s context drops at a row with weakening and is
   persistent at an unrestricted row.  `[spec §19]` -/
   | effLet {Δ Γ Γ₁ Γ₂ M N A B} {S : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
-      (hW : S.Weak → Γ₂.Drops) (hU : S.Unr → Persistent Γ₂)
+      (hW : S.Cancels → Γ₂.OwnFree) (hU : S.Unr → Ctx.Banged Γ₂)
       (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf S A)))
       (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) :
       CDerivesAt Ξ Δ Γ (.app (.val (.lam N)) M) (.comp (CTy.effOf S B))
@@ -393,7 +393,7 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
   finaliser are persistent where `Σ_D` has one.  `[then]` at option A, the finaliser at `F 1`, is
   `CDerivesAt.effThenA`.  `[spec §19, §24, §27]` -/
   | effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
-      (hUq : S.Uniq) (hU : S.UnrD → Persistent Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)
+      (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)
       (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
         capB o.q o.B = true → ThenLe o.fin SD o'.fin)
       (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false)
@@ -443,7 +443,7 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       (hc : CDerivesAt Ξ Δ Γ₁ (.pair Hr (.pair Hw Hn))
         (.val (.tensor (retTy S A R) (.tensor (worksTy S SW R Xs E 0) (exitsTy S R Xs E 0)))))
       (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
-      (hNZ : S.NZ) (hAff : ∀ o ∈ E, o.1 = .aff ∨ (o.2.2.isZero && o.1 != .lin) = true)
+      (hNZ : S.NZ) (hCancel : ∀ o ∈ E, o.1 = .cancel ∨ (o.2.2.isZero && o.1 != .lin) = true)
       (hSW : RowLe SW S) (hSu : ¬ S.UnrD)
       (hFin : ∀ j, j < E.length → LastFinOK S SW (fs j) (Xs j))
       (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
@@ -566,8 +566,8 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
       exact .effHandleVB hs hd hH ihc hn0 hnS hlen hdv ihe hΓd hSd
   | effHandleT _ hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
       exact .effHandleT hs hd hHr hHc ihc hn0 hnd hnS hlen hSN hLin ihe
-  | effHandleL _ hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hAff hSW hSu hFin _ ihc ihe =>
-      exact .effHandleL hs hd hHr hHw hHn ihc hn0 hnd hnS hlen hNZ hAff hSW hSu hFin ihe
+  | effHandleL _ hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
+      exact .effHandleL hs hd hHr hHw hHn ihc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin ihe
   | iterate S St B R _ hS hΓ => exact .iterate S St B R hS hΓ
   | divFuel S A _ hS hΓ => exact .divFuel S A hS hΓ
   | reify S B R res _ hS hcl _ hΓ ih => exact .reify S B R res hS hcl ih hΓ
@@ -576,7 +576,7 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
 /-- `[then]` with its finaliser at the pure row (§24, option A), tied: `effThen` at `Σ_M = Σ` and
 `Σ_D = ∅`, as `CDerives.effThenA`.  `[spec §24, §27]` -/
 theorem CDerivesAt.effThenA {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ M N D A B} {S : Row}
-    (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Persistent Γ₂)
+    (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂)
     (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf S A)))
     (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
     (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (.ret .unit))) :
@@ -977,7 +977,7 @@ theorem rowAt_of_sigsAt {Ξ : EffCtx} {S : Row} (h : SigsAt Ξ S) : RowAt Ξ S :
 
 /-- **No abortive operation is unrestricted**: every operation `Ξ` gives at `unr` answers
 something other than `0`, so an abortive operation (answer `0` at a qualifier with weakening) is
-affine.  Decision 63's restriction: `multi ctl op(…) -> never` is not provided.
+cancellable.  Decision 63's restriction: `multi ctl op(…) -> never` is not provided.
 `[spec §18, §19]` -/
 def EffCtx.NoUnrExn (Ξ : EffCtx) : Prop := ∀ n, ∀ p ∈ Ξ n, p.1 = .unr → p.2.2.isZero = false
 

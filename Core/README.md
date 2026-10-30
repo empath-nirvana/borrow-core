@@ -36,10 +36,10 @@ bytes written), with `Imm̲ = Unk`, not persistent and with no destructor.
 `C` (`CTy.NuOk`) is interpreted as a greatest fixed point equal to its unrolling (`NuRel.lean`,
 `cC_nu_iff`). `D A`, `Stream A` and `Iter A R R'` are abbreviations over it (`CTy.delay`,
 `CTy.stream`, `CTy.iter`). An observation may take a closed argument, `A ⊸ D`, and the rest may be
-boxed, `[@a] U X` (`[spec §22]`); the affine closure `Aff^c A B = νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`
+boxed, `[@a] U X` (`[spec §22]`); the closure `Clo^c A B = νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`
 is the instance that uses both, with its relation clause, coinduction and observable-view facts
-in `Aff.lean`, its derived rules (introduction, call, call through `Mut`, close, the two
-coercions) in `AffRules.lean`, and its programs in `AffPrograms.lean`.
+in `Clo.lean`, its derived rules (introduction, call, call through `Mut`, close, the two
+coercions) in `CloRules.lean`, and its programs in `CloPrograms.lean`.
 
 ### The judgment `CDerives Δ Γ e j`
 
@@ -166,15 +166,15 @@ effect).
 - **The handler laws as machine lemmas** (`SPEC.md` §19 *Laws*, §25, `EffMachine.lean`), in every
   context, each step its configuration's only step (`Step1Only`, `step1Only_plug`) but an
   allocation. H-ret (`catch_ret`); H-op: the catch hands the clause `kappa` at an unrestricted
-  operation (`catch_unr`), and at a linear or affine one allocates `κ`'s cell at a free location and
-  hands `kappaC` there (`catch_cell`), every run from the catch a prefix of those three steps or
-  going on from them (`catchEv_cell`); resuming `kappaC` releases the cell and runs `hnd H K[w]`
-  (`kappaC_resume`), an affine cancel releases it and cancels (`kappaC_cancel`), a linear cancel has
-  no step (`kappaC_cancel_lin`), and on a run to a value a use of `κ` releases its cell three steps
-  later (`use_frees_cell`); H-fwd (`catch_fwd`, `fwd_resume`, `fwd_abort`); `[unwind]`, `[then]` and
-  `[finalise]` (`catch_abort`, `then_ret`, `then_fin`). A2: `raise p` under frames that catch
-  nothing of its name steps, in every context, as `raise p` does (`abort_absorbs`, `abort_to`,
-  `abort_app`).
+  operation (`catch_unr`), and at a must-resume or cancellable one allocates `κ`'s cell at a free
+  location and hands `kappaC` there (`catch_cell`), every run from the catch a prefix of those three
+  steps or going on from them (`catchEv_cell`); resuming `kappaC` releases the cell and runs
+  `hnd H K[w]` (`kappaC_resume`), a cancellable `κ`'s cancel releases it and cancels
+  (`kappaC_cancel`), a must-resume one's has no step (`kappaC_cancel_lin`), and on a run to a value
+  a use of `κ` releases its cell three steps later (`use_frees_cell`); H-fwd (`catch_fwd`,
+  `fwd_resume`, `fwd_abort`); `[unwind]`, `[then]` and `[finalise]` (`catch_abort`, `then_ret`,
+  `then_fin`). A2: `raise p` under frames that catch nothing of its name steps, in every context, as
+  `raise p` does (`abort_absorbs`, `abort_to`, `abort_app`).
 - **Totality** (`SPEC.md` §14, `Totality.lean`). A closed computation of `F A` terminates on every
   run: under every allocator its run reaches a value (`total_every_alloc`), every run under an
   allocator is a prefix of it (`total_run_prefix`), every run continues to a value
@@ -222,8 +222,8 @@ effect).
   pending under frames with no running finaliser's `cfin`, every path is a prefix of the unwind
   trace (`unwind_prefix`, `UnwindTr`): the finalisers fire innermost first, each running alone, one
   that returns `()` hands the raise on and one whose raise escapes supersedes it. From the start of
-  a continuation's cancel run, `kappa H K` or `kappaC aff ℓ H K` after its cell's release, in a run
-  of a tied term, every path is a prefix of the cancel trace of `K†` (`cancel_prefix`,
+  a continuation's cancel run, `kappa H K` or `kappaC` at its cell after its cell's release, in a
+  run of a tied term, every path is a prefix of the cancel trace of `K†` (`cancel_prefix`,
   `CancelTr`): `K`'s finalisers fire innermost first, a running finaliser's `cfin` is passed by
   `[cfin-cancel]`, the first kept error wins, and the canceller gets `()` or the kept error, of a
   name of the effect context. The hypothesis is each finaliser's typing at a row of abortive
@@ -231,19 +231,19 @@ effect).
   `finOK_of_finRow`, through `ownWorld` and `wpG_seg`). On complete runs, given that each fired
   finaliser runs alone to a value or an uncaught raise (`FinAloneAt`): `finaliserOrder_at`
   (`CancelRun`, `UnwindRun`). `progOutT` meets `cancel_prefix`'s hypotheses
-  (`progOutT_cancel_prefix`), and so does `progOutTA`, the same program at an affine raise, typed
-  at an effect context with no unrestricted abortive operation (`progOutTA_cancel_prefix`).
+  (`progOutT_cancel_prefix`), and so does `progOutTA`, the same program at a cancellable raise,
+  typed at an effect context with no unrestricted abortive operation (`progOutTA_cancel_prefix`).
 - **Inversions, and what no derivation types** (`SPEC.md` §19 *Laws* item 4 and *Programs*,
   `Inversions.lean`, `Rejections.lean`). Each inversion is an induction on `CDerives` that carries a
   class of judgements through the rules concluding with their premise's term: a variable is read at
   a view of its live slot's type (`der_var`), an application is typed by a rule that concludes with
   one (`der_app`), a λ-value through the rule that types its body or as a constant (`der_lam`),
   `swap` at its axiom alone (`der_swap`), and every free variable of a typed term has a live slot
-  (`fv_live`). A clause's linear or affine `κ` is neither dropped nor used twice, nor cancelled at a
-  linear operation (`refuses_R_clauses`, `clauseRefusals_pinned`), and `at05`, `at06`, `at08` and
-  `at13` have no derivation at all (`not_der_at05`, …). `at08Once`, `at08` with the copy used once,
-  is typed and every run of it ends at `()` (`d_at08Once`, `at08Once_runs`; the kernel program
-  `at08-once`). A rule added to `CDerives` adds a case to each inversion.
+  (`fv_live`). A clause's must-resume or cancellable `κ` is neither dropped nor used twice, nor
+  cancelled at a must-resume operation (`refuses_R_clauses`, `clauseRefusals_pinned`), and `at05`,
+  `at06`, `at08` and `at13` have no derivation at all (`not_der_at05`, …). `at08Once`, `at08` with
+  the copy used once, is typed and every run of it ends at `()` (`d_at08Once`, `at08Once_runs`; the
+  kernel program `at08-once`). A rule added to `CDerives` adds a case to each inversion.
 - **What §27's typing rejects** (`SPEC.md` §19 *Laws* item 6, §27 *Programs*,
   `EffCancelTyped.lean`). `[handle]`, `[then]`, `[perform]`, `[raise]`, `[let]` and `bind` are
   read with their premises at their conclusions, and the rules that conclude with their premise's
@@ -298,6 +298,7 @@ with no new case.
 | block borrow `withborS σ : refTy σ ⊸ (∀'c ⊏ ⊓Δ. famTy M 'c σ ⊸ ['c] T) ⊸ refTy σ ⊗ T`, `shortenE`: `withborS_wf`, `withborSM_wf`, `withborSI_wf`, `shortenE_wf` | `BlockBorrow.lean` |
 | block allocation and free: `allocS`, `freeS` (`d_allocS`, `d_freeS`) | `Blocks.lean` |
 | destructors `dtorE T : T ⊸ F 1` at every `HasDtor T` (forgettable types, `Ref`, `⊗`/`⊕`/`[@a]`, `μ` of the class `P` by `foldOwn` or `foldOwnG`, codata by `close`), and the drop `dropE T i e = (dtorE T xᵢ; e)`: `dtor_wf`, `drop_derives` (SPEC §12, §61) | `Dtor.lean` |
+| the two classes of value type, unrestricted (`VTy.Persistent`) and linear: contraction and weakening exactly at unrestricted types (`Ctx.SplitP.both_live_iff`, `Ctx.DeadP.live_iff`, `Ctx.SoloP.live_succ_iff`); the derived drop `DerivedDrop`, pure at the row (`dtor_wf`, `HasDtor.close`/`.nu`, `kTy_cancel_hasDtor_iff`), its term holding no operation and closed (`dtorE_effFree`, `dtorE_closed`); the derived copy at `Imm` (`DerivedCopy`, `copy_derives`); the classes of `κ` (`kTy_lin`, `kTy_cancel_linear`, `kTy_cancel_hasDtor_iff`, `kTy_unr`); `forgettable_iff` (SPEC §10, §12, §19) | `Classes.lean` |
 
 These facts are stated at the typed world:
 
@@ -342,7 +343,7 @@ The `IntPrograms.lean` runs are theorems at every host; the interpreter's result
 | `Places` | `Family.lean`, `FamilyPrograms.lean`, re-derived in `CDerives` at `VTy` payloads |
 | `LeafPlaces` | `Steps.lean` (step inversions; `DelayNaive.lean` uses it too), `Weaken.lean`, `BlockBorrow.lean` (plain types, `famTy`, `shortenE`, `withborS`, typing), `BlockTrack.lean` (`withborS_ret`, `withborS_packed`, `wpTSAngelic_allocBorrow`), `BlockPrograms.lean` |
 | `Recursion` (`Nu.lean`) | `StreamPrograms.lean`; the stream former it gave became an instance of the general `νX. C` (`NuRel.lean`, `Nu.lean`) |
-| `FnMut` (#236, #239) | the positivity relaxation (`Types.lean`, `Relation.lean`, `RelationFacts.lean`, `NuRel.lean`, `Computation.lean`, `Nu.lean`); `Aff.lean`, `AffRules.lean`, `AffPrograms.lean` (the programs in the sub-namespace `Aff`) |
+| `FnMut` (#236, #239) | the positivity relaxation (`Types.lean`, `Relation.lean`, `RelationFacts.lean`, `NuRel.lean`, `Computation.lean`, `Nu.lean`); `Clo.lean`, `CloRules.lean`, `CloPrograms.lean` (the programs in the sub-namespace `Clo`) |
 
 ## Decisions taken
 
@@ -372,9 +373,9 @@ Name collisions settled:
   - Neither is excluded by typing. The model is sound either way, but lowering a handle to one
     word needs both excluded.
 - **Records.**
-  - `getAt`/`loadField` need the dropped fields `Affine`. `Imm̲ 'b A` is shown affine only when
-    `A`'s `⊗`/`⊕`/`[@a]` spine holds no `μ` or type variable (`affine_immReborrow` with
-    `VTy.SpineMuFree`), because `Affine` has no `μ` case. So an `Imm` record cannot yet be
+  - `getAt`/`loadField` need the dropped fields `Forgettable`. `Imm̲ 'b A` is shown forgettable only
+    when `A`'s `⊗`/`⊕`/`[@a]` spine holds no `μ` or type variable (`forgettable_immReborrow` with
+    `VTy.SpineMuFree`), because `Forgettable` has no `μ` case. So an `Imm` record cannot yet be
     projected past an unboxed `μ`-typed field. `swapField`, `recE` and `loadCase` do not need
     this: `bagProg` updates a list field through `Mut`.
   - Variants in place: `Ref` does not distribute over `⊕`.
