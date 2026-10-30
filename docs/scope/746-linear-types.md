@@ -619,6 +619,24 @@ Each step lands with its kernel statements proved, or stops.
      (implicit drop, `for` copies, field read, E5, `[then]` finaliser, an abort across it).
 4. **F3** (item 5). Kernel: 5.5's F3 statement, (a) or (b), or the drop removed. `Prog.stackKs`
    deleted.
+5. **Book chapter: linear values** (`book/src/guide/linear.md`, after *Ownership and borrows*).
+   It describes what steps 1–4 built and nothing else, and every example runs as a book program.
+   - The language is linear: a value is unrestricted or linear, and there is no third class.
+     Most linear values still feel droppable because the checker inserts their derived drop
+     (`drop_derives`) where their scope ends. A borrow `imm` is linear with a derived copy
+     (`copy_derives`).
+   - Values with no derived drop: capabilities, must-resume continuations, one-shot closures that
+     hold one, and declared types (L-T). What the checker says when one is left unused, and how to
+     fix it.
+   - Writing programs that want to forget a value: give the type a destructor, give a task or
+     continuation a cancel branch (`cancel`), or consume the value with a function written for
+     it. Each one is described as the derivation it inserts, not as a different kind of type.
+   - What an abort does to the values in scope (decision 2: they are abandoned, not dropped), and
+     where cleanup goes (`[then]` finalisers).
+   - A comparison with Rust's affine types. This is the only place the word appears, as a
+     citation (Q15).
+   - The opening of `guide/ownership.md` ("copyable or owned … this is its model") is rewritten to
+     match: Rust's model is affine, and this language's is linear with derived drops.
 
 ---
 
