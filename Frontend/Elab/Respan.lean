@@ -202,8 +202,8 @@ def Comp.respan (sp : Span) : Comp → Comp
       (hr.respan sp) (hc.respan sp) (M.respan sp)
   | .unwind _ x A M D N =>
       .unwind sp (x.respan sp) (A.map (VTy.respan sp)) (M.respan sp) (D.respan sp) (N.respan sp)
-  | .withbor2r _ x b A B r p m M =>
-      .withbor2r sp (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
+  | .withbor2r _ kd x b A B r p m M =>
+      .withbor2r sp kd (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
         (p.respan sp) (m.respan sp) (M.respan sp)
 end
 

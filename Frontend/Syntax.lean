@@ -725,8 +725,14 @@ inductive Comp where
   | unwind (sp : Span) (x : Ident) (A : Option VTy) (M D N : Comp)
   /-- `withbor2r['x, @b, A, B, [ROW]](p, m) M`: the relaxed lend R1 (SPEC §29). The owned cell
   `p : ref A` is lent as `m : mut 'x A` to `M`, which may perform the resuming operations of the
-  row and sees only `m`; its value is `(p, B)`.  `[spec §29]` -/
-  | withbor2r (sp : Span) (x : Ident) (b : Life) (A B : VTy) (r : Row) (p m : Ident) (M : Comp)
+  row and sees only `m`; its value is `(p, B)`.  `[spec §29]`
+
+  The kind `kd` (the #743 spike, `experiments/Spike743`): `0` is R1 (`withbor2r`); `1` lends the
+  cell `imm` (`withbor1r`, W-imm, `CDerivesP.lendRI`); `2` lends an owned array as a family of
+  `mut` leaves (`slice_borrow_r`, W-nest, `CDerivesP.lendRF`); `3` is R2 (`lend_loop_r`,
+  `CDerivesP.lendLoopR`), its body `return ((thunkv N), ((thunkv (K : F R)), (s₀ : S)))`, `m` the
+  pair `(view, state)` in `N` and `K`. -/
+  | withbor2r (sp : Span) (kd : Nat) (x : Ident) (b : Life) (A B : VTy) (r : Row) (p m : Ident) (M : Comp)
 end
 
 deriving instance DecidableEq for Val, Comp
@@ -1033,8 +1039,8 @@ def Comp.strip : Comp → Comp
   | .abort _ n i V => .abort .none n i V.strip
   | .handle _ n st hr hc M => .handle .none n (st.map SiteRec.strip) hr.strip hc.strip M.strip
   | .unwind _ x A M D N => .unwind .none x.strip (A.map VTy.strip) M.strip D.strip N.strip
-  | .withbor2r _ x b A B r p m M =>
-      .withbor2r .none x.strip b.strip A.strip B.strip r.strip p.strip m.strip M.strip
+  | .withbor2r _ kd x b A B r p m M =>
+      .withbor2r .none kd x.strip b.strip A.strip B.strip r.strip p.strip m.strip M.strip
 end
 
 /-- The lifetime bounds of a template, under its row.  `[spec §23]` -/
@@ -1088,7 +1094,7 @@ def Comp.span : Comp → Span
   | .proj sp _ _ | .top sp | .letUnit sp _ _ | .letPair sp _ _ _ _ | .case sp _ _ _ _ _
   | .absurd sp _ | .lamL sp _ _ _ | .inst sp _ _ | .nuIn sp _ | .nuOut sp _
   | .ascribe sp _ _ | .loop sp _ _ _ _ _ | .perform sp _ _ _ | .abort sp _ _ _ | .handle sp _ _ _ _ _
-  | .unwind sp _ _ _ _ _ | .withbor2r sp _ _ _ _ _ _ _ _ => sp
+  | .unwind sp _ _ _ _ _ | .withbor2r sp _ _ _ _ _ _ _ _ _ => sp
 
 def Life.span : Life → Span
   | .var sp _ | .top sp | .dom sp | .meet sp _ _ | .join sp _ _ => sp
@@ -1147,7 +1153,7 @@ def Comp.anySugar (p : VSugar → Bool) : Comp → Bool
   | .perform _ _ _ V | .abort _ _ _ V => V.anySugar p
   | .handle _ _ _ hr hc M => hr.anySugar p || hc.anySugar p || M.anySugar p
   | .unwind _ _ _ M D N => M.anySugar p || D.anySugar p || N.anySugar p
-  | .withbor2r _ _ _ _ _ _ _ _ M => M.anySugar p
+  | .withbor2r _ _ _ _ _ _ _ _ _ M => M.anySugar p
   | .force .. | .top _ => false
 end
 

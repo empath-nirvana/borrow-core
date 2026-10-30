@@ -344,7 +344,7 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
         (S.map fun _ => effOf [] .unit) D
       let rest ← inferC n (E.push (some x.name)) Δ (slot A :: T) exp N
       pure (node rest.ty.c? [hd, d, rest] [b])
-    | .withbor2r sp x b A B r _ m M => do
+    | .withbor2r sp kd x b A B r _ m M => do
       -- R1 (SPEC §29): the body sees the view alone.
       let bl := (E.elabL Δ b).toOption.getD .top
       let A' := (E.elabV Δ A).toOption
@@ -353,10 +353,16 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
       let v := Δ.freshVar
       let E' : Env := { E with vars := [some m.name], own := [false], nExt := 0,
                                 lenv := (x.name, v) :: E.lenv, row := S }
-      let bm ← mkBinder m.name (A'.map (.mut (.var v)))
-      let body ← inferC n E' (Δ.extend v bl) [slot (A'.map (.mut (.var v)))]
+      -- The spike's kinds (`Comp.withbor2r`'s `kd`): the view `imm` (1), a family (2); R2 (3) is
+      -- typed by the checker alone.
+      if kd == 3 then pure (node none [] []) else
+      let view : CVTy → CVTy := fun A => match kd with
+        | 1 => .imm (.var v) A | 2 => .fam (.mut (.var v) A) | _ => .mut (.var v) A
+      let src : CVTy → CVTy := fun A => if kd == 2 then .array A else .ref A
+      let bm ← mkBinder m.name (A'.map view)
+      let body ← inferC n E' (Δ.extend v bl) [slot (A'.map view)]
         (do pure (effOf (← S) (.box (.var v) (← B')))) M
-      pure (node (do pure (effOf (← S) (.tensor (.ref (← A')) (← B')))) [body] [bm])
+      pure (node (do pure (effOf (← S) (.tensor (src (← A')) (← B')))) [body] [bm])
 end
 
 /-! ### Externs -/

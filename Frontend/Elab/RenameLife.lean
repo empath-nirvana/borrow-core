@@ -199,8 +199,8 @@ def Comp.renameLife (f : Span → String → Life) : Comp → Comp
       (hr.renameLife f) (hc.renameLife f) (M.renameLife f)
   | .unwind s x A M D N =>
       .unwind s (x.renameLife f) (A.map (VTy.renameLife f)) (M.renameLife f) (D.renameLife f) (N.renameLife f)
-  | .withbor2r s x b A B r p m M =>
-      .withbor2r s (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f)
+  | .withbor2r s kd x b A B r p m M =>
+      .withbor2r s kd (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f)
         (r.renameLife f) p m (M.renameLife f)
 end
 

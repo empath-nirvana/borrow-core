@@ -998,7 +998,7 @@ def refsC : Nat → Comp → List String
     | .letUnit _ V M | .letPair _ _ _ V M => refsV n V ++ refsC n M
     | .case _ V _ M _ N | .loop _ _ _ V M N => refsV n V ++ refsC n M ++ refsC n N
     | .unwind _ _ _ M D N => refsC n M ++ refsC n D ++ refsC n N
-    | .withbor2r _ _ _ _ _ _ _ _ M => refsC n M
+    | .withbor2r _ _ _ _ _ _ _ _ _ M => refsC n M
     | .force .. | .top _ => []
 end
 
@@ -1030,7 +1030,7 @@ def unboxesC (k : String) : Nat → Comp → Bool
     | .letUnit _ V M | .letPair _ _ _ V M => unboxesV k n V || unboxesC k n M
     | .case _ V _ M _ N | .loop _ _ _ V M N => unboxesV k n V || unboxesC k n M || unboxesC k n N
     | .unwind _ _ _ M D N => unboxesC k n M || unboxesC k n D || unboxesC k n N
-    | .withbor2r _ _ _ _ _ _ _ _ M => unboxesC k n M
+    | .withbor2r _ _ _ _ _ _ _ _ _ M => unboxesC k n M
     | .force .. | .top _ => false
 end
 

@@ -196,8 +196,8 @@ def Comp.subst (σ : TySubst) : Comp → Comp
     .handle sp n (st.map (SiteRec.mapTy (VTy.subst σ)))
       (hr.subst σ) (hc.subst σ) (M.subst σ)
   | .unwind sp x A M D N => .unwind sp x (A.map (VTy.subst σ)) (M.subst σ) (D.subst σ) (N.subst σ)
-  | .withbor2r sp x b A B r p m M =>
-      .withbor2r sp x b (A.subst σ) (B.subst σ) (r.subst σ) p m (M.subst σ)
+  | .withbor2r sp kd x b A B r p m M =>
+      .withbor2r sp kd x b (A.subst σ) (B.subst σ) (r.subst σ) p m (M.subst σ)
 end
 
 end Frontend

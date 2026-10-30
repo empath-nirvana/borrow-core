@@ -98,6 +98,40 @@ def rLendR (i : TInfo) {A B : CVTy} {S : CRow} (q : Pin) (x : LifeVar) (b : CLif
       (Fam.deadStrict T).map fun _ hd => TTied.pinned q (.nilDead hd (.lam hR1))⟩
   rApp i rL k hk h
 
+/-- **R2** (`CDerivesP.lendLoopR`) at the slot `k : ref A`: the per-observation `imm` lend of `k`
+over a loop whose state `S` may mention the lend's lifetime, its steps `rN`, `rK` checked at
+`Δ, 'x ⊏ ⊓Δ` and the pair `(view, state)` alone, its first state `rs0` at the empty context. As
+`rLendR`, the λ over the rule's node at the empty context, placed by `nilDead` and applied to the
+slot. The core form is `lend_loop_r` (the #743 spike, `experiments/Spike743`).  `[spec §29]` -/
+def rLendLoopR (i : TInfo) {A S B R : CVTy} (q : Pin) (x : LifeVar) (k : Nat)
+    (hk : T[k]? = some (.ref A)) (hx : Δ.find? x = none) (hbx : Δ.meetOfDom.mentions x = false)
+    (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
+    (hA : ¬ VFree x A) (hB : ¬ VFree x B) (hR : ¬ VFree x R) (hBn : NoThunkT B)
+    (hRn : NoThunkT R) (hsc : BoCa.Fig16.LogRel.Core.VScoped Δ A)
+    (rN : Res (Δ.extend x Δ.meetOfDom) [.tensor (.imm (.var x) A) S] (.comp (.ret (.sum B S))))
+    (rK : Res (Δ.extend x Δ.meetOfDom) [.tensor (.imm (.var x) A) S] (.comp (.ret R)))
+    (rs0 : Res (Δ.extend x Δ.meetOfDom) [] (.val S))
+    (hLN : subL (allL [.tensor (.imm (.var x) A) S]) (orL rN.F.u rN.F.w) = true)
+    (hLK : subL (allL [.tensor (.imm (.var x) A) S]) (orL rK.F.u rK.F.w) = true)
+    (hLs0 : subL (allL []) (orL rs0.F.u rs0.F.w) = true)
+    (hN1 : closedAt 1 rN.e = true) (hK1 : closedAt 1 rK.e = true)
+    (hs0c : closedAt 0 rs0.e = true)
+    (h : overlapOK T (Fam.deadStrict T).u (oneL T k) = true) :
+    Res Δ T (.comp (BoCa.Fig16.LogRel.Core.CTy.loop (.tensor (.ref A) B) (.tensor (.ref A) R))) :=
+  let dN := (rN.F.d _ (btw_allL _ _ _ rN.F.hu rN.F.hw hLN)).2
+  let dK := (rK.F.d _ (btw_allL _ _ _ rK.F.hu rK.F.hw hLK)).2
+  let ds0 := (rs0.F.d _ (btw_allL _ _ _ rs0.F.hu rs0.F.hw hLs0)).2
+  let C : CCTy := BoCa.Fig16.LogRel.Core.CTy.loop (.tensor (.ref A) B) (.tensor (.ref A) R)
+  let J : Jdg := .comp C
+  let JL : Jdg := .comp (.arr (.ref A) C)
+  let tR : TExpr := .lendLoopR i J x A S B R rN.t rK.t rs0.t
+  let hR2 : TDerivesP Δ [⟨.ref A, true⟩] tR J :=
+    .lendLoopR hx hbx hΔx hA hB hR hBn hRn hsc hN1 hK1 hs0c dN dK ds0
+  let rL : Res Δ T JL :=
+    ⟨.nilDead i JL JL (.lam i JL (.ref A) C tR), rN.sigs ++ rK.sigs, q :: (rN.pins ++ rK.pins ++ rs0.pins),
+      (Fam.deadStrict T).map fun _ hd => TTied.pinned q (.nilDead hd (.lam hR2))⟩
+  rApp i rL k hk h
+
 end
 
 end Frontend.Check

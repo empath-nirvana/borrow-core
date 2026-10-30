@@ -639,7 +639,65 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let C' ← E.elabC Δ C
       let r ← chkC n E Δ T M C'
       pure ⟨C', r⟩
-    | .withbor2r sp x b A B r p m M => do
+    | .withbor2r sp 3 x _ A B _ p q M => do
+      -- R2 (`lend_loop_r`, the #743 spike, `experiments/Spike743`): `M` is
+      -- `return ((thunkv N), ((thunkv (K : F R)), (s₀ : S)))`, `q` the pair `(view, state)` in the
+      -- steps `N` and `K`; `S` may mention `'x`.
+      let .ret _ (.pair _ (.thunkv _ N) (.pair _ (.thunkv _ (.ascribe _ K RC)) (.ascribe _ s0 SV))) := M
+        | err sp "`lend_loop_r`'s body is `return ((thunkv N), ((thunkv (K : F R)), (s0 : S)))`"
+      let A' ← E.elabV Δ A
+      let B' ← E.elabV Δ B
+      let v := Δ.freshVar
+      let Δ' := Δ.extend v Δ.meetOfDom
+      let Ex : Env := { E with vars := [], own := [], nExt := 0, lenv := (x.name, v) :: E.lenv,
+                               row := none }
+      let S' ← Ex.elabV Δ' SV
+      let RC' ← E.elabC Δ RC
+      let .ret R' := RC' | err sp "`lend_loop_r`'s close step is ascribed `F R`"
+      let ⟨⟨hx, hA, hB⟩⟩ ← freshFor sp v A' B'
+      if hR : vfreeB v R' = false then
+      if hbx : Δ.meetOfDom.mentions v = false then
+      if hΔx : boundsAvoidB Δ v = true then
+      if hBn : noThunkB B' = true then
+      if hRn : noThunkB R' = true then
+      if hsc : scopedB Δ A' = true then
+        let P : CVTy := .tensor (.imm (.var v) A') S'
+        let rN ← chkC n (Ex.pushOwn q.name P) Δ' [P] N (.ret (.sum B' S'))
+        let rK ← chkC n (Ex.pushOwn q.name P) Δ' [P] K (.ret R')
+        let rs0 ← chkV n Ex Δ' [] s0 S'
+        let some i := lookupVar p.name E.vars
+          | err p.span s!"`lend_loop_r` lends a variable, and `{p.name}` is not one in scope"
+        match hi : T[i]? with
+        | some (.ref A'') =>
+          if hAA : A'' = A' then
+          if hLN : subL (allL [P]) (orL rN.F.u rN.F.w) = true then
+          if hLK : subL (allL [P]) (orL rK.F.u rK.F.w) = true then
+          if hLs : subL (allL []) (orL rs0.F.u rs0.F.w) = true then
+          if hN1 : BoCa.Fig16.LogRel.Core.closedAt 1 rN.e = true then
+          if hK1 : BoCa.Fig16.LogRel.Core.closedAt 1 rK.e = true then
+          if hs0c : BoCa.Fig16.LogRel.Core.closedAt 0 rs0.e = true then
+          if h : overlapOK T (Fam.deadStrict T).u (oneL T i) = true then
+            pure ⟨_, rLendLoopR (at_ sp) ⟨"R2", sp.start.line, sp.start.col⟩ v i (hAA ▸ hi) hx hbx
+              (boundsAvoidB_sound hΔx) hA hB (not_vfree_of_vfreeB hR) (noThunkB_sound hBn)
+              (noThunkB_sound hRn) (scopedB_sound hsc) rN rK rs0 hLN hLK hLs hN1 hK1 hs0c h⟩
+          else err sp "internal error: R2's place"
+          else err sp "`lend_loop_r`: the first state is not closed"
+          else err sp "`lend_loop_r`: the close step is not closed"
+          else err sp "`lend_loop_r`: the next step is not closed"
+          else err sp "`lend_loop_r`: the first state uses a variable"
+          else err sp s!"`lend_loop_r`: the close step does not consume `{q.name}`"
+          else err sp s!"`lend_loop_r`: the next step does not consume `{q.name}`"
+          else throw (mismatch p.span (E.ppV (.ref A')) (E.ppV (.ref A'')))
+        | some A'' => err p.span s!"`lend_loop_r` lends an owned cell `ref A`, but `{p.name} : {E.ppV A''}`"
+        | none => err sp "internal error: variable out of range"
+      else err sp s!"`lend_loop_r`: `{E.ppV A'}` is not scoped"
+      else err sp s!"`lend_loop_r`: `{E.ppV R'}` holds a `U`"
+      else err sp s!"`lend_loop_r`: `{E.ppV B'}` holds a `U`"
+      else err sp "`lend_loop_r`: its number occurs in a bound of the lifetime context"
+      else err sp "`lend_loop_r`: `⊓Δ` mentions its number"
+      else err sp s!"`lend_loop_r`: `{E.ppV R'}` mentions the lend's lifetime"
+    | .withbor2r sp kd x b A B r p m M => do
+      if kd != 0 then err sp s!"the spike's relaxed lends of kind {kd} are not built yet" else
       -- R1, the relaxed lend (SPEC §29): its body sees the view alone.
       let bl ← E.elabL Δ b
       let A' ← E.elabV Δ A

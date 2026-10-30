@@ -294,9 +294,11 @@ def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .abort _ n i V => s!"abort[{n}.{i}] " ++ V.pp 1 k
     | .handle _ n _ hr hc M =>
       s!"handle_with[{n}](" ++ hr.pp 0 (k + 2) ++ ", " ++ hc.pp 0 (k + 2) ++ ") " ++ M.pp 1 k
-    | .withbor2r _ x b A B r p m M =>
+    | .withbor2r _ kd x b A B r p m M =>
       let as := (Const.withbor2U x b A B r).toArgs.2
-      "withbor2r[" ++ ", ".intercalate (as.map Arg.pp) ++ s!"]({p.name}, {m.name}) " ++ M.pp 1 k
+      let kw := match kd with
+        | 1 => "withbor1r" | 2 => "slice_borrow_r" | 3 => "lend_loop_r" | _ => "withbor2r"
+      kw ++ "[" ++ ", ".intercalate (as.map Arg.pp) ++ s!"]({p.name}, {m.name}) " ++ M.pp 1 k
     | .force _ x => "force " ++ x.name
     | .lam _ x A M => "fun (" ++ x.name ++ " : " ++ A.pp ++ ") ->" ++ nl (k + 2) ++ M.pp 0 (k + 2)
     | .app _ M x => M.pp 2 k ++ " " ++ x.name

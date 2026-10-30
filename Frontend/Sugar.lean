@@ -163,7 +163,7 @@ def _root_.Frontend.Comp.elab (lend : Bool) : Comp → Except Error Comp
     let hc' ← hc.elab false
     return .handle sp k st hr' hc' (← M.elab false)
   | .unwind sp x A M D N => return .unwind sp x A (← M.elab false) (← D.elab false) (← N.elab false)
-  | .withbor2r sp x b A B r p m M => return .withbor2r sp x b A B r p m (← M.elab false)
+  | .withbor2r sp kd x b A B r p m M => return .withbor2r sp kd x b A B r p m (← M.elab false)
 end
 
 /-! ### Filling a template's holes
@@ -220,7 +220,7 @@ def _root_.Frontend.Comp.fillS (hv : String → Option Val) (hc : String → Opt
   | .handle sp k st hr hc' M =>
     .handle sp k (st.orElse fun _ => hs k) (hr.fillS hv hc hs) (hc'.fillS hv hc hs) (M.fillS hv hc hs)
   | .unwind sp x A M D N => .unwind sp x A (M.fillS hv hc hs) (D.fillS hv hc hs) (N.fillS hv hc hs)
-  | .withbor2r sp x b A B r p m M => .withbor2r sp x b A B r p m (M.fillS hv hc hs)
+  | .withbor2r sp kd x b A B r p m M => .withbor2r sp kd x b A B r p m (M.fillS hv hc hs)
   | .loop sp ℓ src V M N => .loop sp ℓ src (V.fillS hv hc hs) (M.fillS hv hc hs) (N.fillS hv hc hs)
   | M => M
 end
@@ -513,7 +513,7 @@ def _root_.Frontend.Comp.names (n : String) : Comp → Bool
   | .perform _ _ _ V | .abort _ _ _ V => V.names n
   | .handle _ _ _ hr hc M => hr.names n || hc.names n || M.names n
   | .unwind _ _ _ M D N => M.names n || D.names n || N.names n
-  | .withbor2r _ _ _ _ _ _ p m M => p.name == n || m.name == n || M.names n
+  | .withbor2r _ _ _ _ _ _ _ p m M => p.name == n || m.name == n || M.names n
   | .force .. | .top _ => false
 end
 
@@ -634,7 +634,7 @@ def _root_.Frontend.Comp.hasFor : Comp → Bool
   | .case _ _ _ M _ N => M.hasFor || N.hasFor
   | .handle _ _ _ _ _ M => M.hasFor
   | .unwind _ _ _ M D N => M.hasFor || D.hasFor || N.hasFor
-  | .withbor2r _ _ _ _ _ _ _ _ M => M.hasFor
+  | .withbor2r _ _ _ _ _ _ _ _ _ M => M.hasFor
   | .loop .. => true
   | _ => false
 
@@ -660,7 +660,7 @@ def _root_.Frontend.Comp.exitAt : Comp → Option Span
   | .perform _ _ _ V | .abort _ _ _ V => V.exitAt
   | .handle _ _ _ hr hc M => hr.exitAt.orElse fun _ => hc.exitAt.orElse fun _ => M.exitAt
   | .unwind _ _ _ M D N => M.exitAt.orElse fun _ => D.exitAt.orElse fun _ => N.exitAt
-  | .withbor2r _ _ _ _ _ _ _ _ M => M.exitAt
+  | .withbor2r _ _ _ _ _ _ _ _ _ M => M.exitAt
   | .force .. | .top _ => none
 end
 
@@ -693,7 +693,7 @@ def _root_.Frontend.Comp.sugarAt (p : VSugar → Bool) : Comp → Option Span
   | .handle _ _ _ hr hc M =>
     ((hr.sugarAt p).orElse fun _ => hc.sugarAt p).orElse fun _ => M.sugarAt p
   | .unwind _ _ _ M D N => ((M.sugarAt p).orElse fun _ => D.sugarAt p).orElse fun _ => N.sugarAt p
-  | .withbor2r _ _ _ _ _ _ _ _ M => M.sugarAt p
+  | .withbor2r _ _ _ _ _ _ _ _ _ M => M.sugarAt p
   | .force .. | .top _ => none
 end
 
@@ -3083,7 +3083,7 @@ def opsC (c : TCx) : Nat → Comp → List (Nat × Nat)
     | .ret _ V | .absurd _ V => opsV c k V
     | .bind _ _ _ M N | .with_ _ M N => opsC c k M ++ opsC c k N
     | .unwind _ _ _ M D N => opsC c k M ++ opsC c k D ++ opsC c k N
-    | .withbor2r _ _ _ _ _ _ _ _ M => opsC c k M
+    | .withbor2r _ _ _ _ _ _ _ _ _ M => opsC c k M
     | .letUnit _ V M | .letPair _ _ _ V M => opsV c k V ++ opsC c k M
     | .case _ V _ M _ N | .loop _ _ _ V M N => opsV c k V ++ opsC c k M ++ opsC c k N
     | .app _ M _ | .proj _ _ M | .inst _ M _ | .nuIn _ M | .nuOut _ M | .ascribe _ M _ | .lamL _ _ _ M
@@ -3173,7 +3173,7 @@ def relaxedC? (sp : Span) : Val → Option (Ident × Comp)
   | .app _ (.app _ (.const _ (.withbor2U x b A B r)) P)
       (.thunkv _ (.lamL _ _ _ (.ret _ (.thunkv _ (.lam _ m _ M))))) =>
     let p : Ident := ⟨s!"io_rp{sp.start.line}_{sp.start.col}", sp⟩
-    some (m, .bind sp p none (.ret sp P) (.withbor2r sp x b A B r p m M))
+    some (m, .bind sp p none (.ret sp P) (.withbor2r sp 0 x b A B r p m M))
   | .mark _ _ V => relaxedC? sp V
   | _ => none
 
@@ -3274,7 +3274,7 @@ def rmSelfInC : Comp → Bool
   | .nuOut _ M | .ascribe _ M _ => rmSelfInC M
   | .handle _ _ _ hr hc M => rmSelfIn hr || rmSelfIn hc || rmSelfInC M
   | .unwind _ _ _ M D N => rmSelfInC M || rmSelfInC D || rmSelfInC N
-  | .withbor2r _ _ _ _ _ _ _ _ M => rmSelfInC M
+  | .withbor2r _ _ _ _ _ _ _ _ _ M => rmSelfInC M
   | _ => false
 end
 
@@ -4229,7 +4229,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
                   match relaxedC? V.span V' with
                   | some (m, M') =>
                     let body := match M' with
-                      | .bind _ _ _ _ (.withbor2r _ _ _ _ _ _ _ _ B) => B
+                      | .bind _ _ _ _ (.withbor2r _ _ _ _ _ _ _ _ _ B) => B
                       | M => M
                     let outer := c.E.vars.filterMap id |>.filter fun y =>
                       y != m.name && Frontend.Check.mentionsC y body
@@ -5924,8 +5924,8 @@ def specC : Nat → TCx → Comp → DM Comp
     | .unwind sp x A M D N => do
       let t := bindTy c A M
       pure (.unwind sp x A (← specC n c M) (← specC n c.pushDead D) (← specC n (c.push x.name t) N))
-    | .withbor2r sp x b A B r p m M => do
-      pure (.withbor2r sp x b A B r p m (← specC n (c.push m.name none) M))
+    | .withbor2r sp kd x b A B r p m M => do
+      pure (.withbor2r sp kd x b A B r p m (← specC n (c.push m.name none) M))
     | M => pure M
 end
 
