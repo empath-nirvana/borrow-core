@@ -102,4 +102,11 @@ theorem rt_program : roundTrips parseProgram Program.strip Program.pp
      main : F Nat = r <- return (alloc_s[Node] (one, alloc[Nat] one)); let (a, b) = r; return (id[Nat] a)"
     = true := by decide +kernel
 
+/-- A declaration with fields marked `must_close` (SPEC §42), and the token's type and constants. -/
+theorem rt_decl : roundTrips parseProgram Program.strip Program.pp
+    "data Txn = { id: i32, must_close(commit) log: i32 }
+     data Lock = Held(must_close i32) | Free
+     main : F 1 = t <- return (tok_mint ()); u <- return ((tok_burn : tok => 1) t); return u"
+    = true := by decide +kernel
+
 end Frontend.Tests

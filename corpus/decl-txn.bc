@@ -1,0 +1,22 @@
+-- A transaction held as a value (SPEC §42, *Declared types with no derived drop*): `Txn`'s field
+-- `log` is marked `must_close(commit)`, so `Txn` holds §11's `Tok` and is linear with no derived
+-- drop. `begin` makes one in one function, `write` takes it apart and builds the next, and
+-- `commit`, another function, consumes it with a `match`, which burns the token. Nothing drops a
+-- `Txn`: a program that left one unused, or live across a `raise`
+-- (`corpus/reject/decl-txn-raise.bc`), is refused by the kernel.
+--
+-- Answer: i32[712], the transaction 7 committed with its log 5 + 7; `live 0`: every token burned.
+
+data Txn = { id: i32, must_close(commit) log: i32 }
+
+fn begin(id: i32) -> Txn = Txn { id: id, log: 0 }
+
+fn write(t: Txn, x: i32) -> Txn = match t { Txn { id, log } -> Txn { id: id, log: log + x } }
+
+fn commit(t: Txn) -> i32 = match t { Txn { id, log } -> id * 100 + log }
+
+main -> i32 =
+  let t = begin(7);
+  let t = write(t, 5);
+  let t = write(t, 7);
+  commit(t)

@@ -63,6 +63,9 @@ structure Scope where
   upto : Nat
   /-- The key of each `def` the elaboration generates (`DefKey`), read at its uses. -/
   keys : List DefKey := []
+  /-- The fields marked `must_close` of the program's declarations: the declaration, the field,
+  and the function that consumes it, if named. Read by the messages only (SPEC §42). -/
+  closes : List (String × String × Option String) := []
 
 /-- A `type` declaration in scope: its type and lifetime parameters, body and own scope. -/
 structure TypeInfo where

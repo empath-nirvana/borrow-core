@@ -7913,7 +7913,9 @@ location the memory does not hold and `burn` frees it (`mint_step`, `burn_step`)
 
 the kernel's `[then]` (§24, §27) around the handled computation. `D : F_Σ 1` is written once and
 placed twice, as the finaliser and on the normal exit, so it runs once on either; each placement is
-a term the checker types, at its own row (§27: it may perform I/O). It is decision 2's "cleanup goes
+a term the checker types, at its own row (§27: it may perform I/O). The effects pass (§18) reads
+`[then]`'s parts for their rows and elaborates a `with` inside them; the handled computation and
+the finaliser thread no capability. It is decision 2's "cleanup goes
 in a finaliser", made readable, and not a drop: `D` is a call the program wrote. `[then]` gives `M`
 and `D` disjoint contexts, so a value `D` consumes is not used in `M`: "commit in the body, roll
 back on an abort" lends the value into `M` or holds it as a handler's state.
@@ -7945,7 +7947,7 @@ message reads the declarations (`Data.Table`); the refusal is the kernel's.
 | `corpus/reject/data-no-root.bc` | mutual recursion with no member on every cycle | refused |
 | `corpus/data-fold-*.bc`, `corpus/fail/data-fold-*.bc`, `corpus/reject/data-fold-*.bc` | the fold block (F1, F2) | §60 |
 | `corpus/decl-txn.bc` | a transaction held as a value, begun in one function and committed in another, which matches it | the committed id |
-| `corpus/decl-promise.bc` | promises stored in a queue (a list of them) and answered later, each by a `match` | the answers' sum |
+| `corpus/decl-promise.bc` | promises stored in a queue (a recursive declaration of blocks) and answered later by a `fold_own` (§60), each by a `match`; a recursion under a depth budget would abandon the rest at exhaustion, which the kernel refuses | the answers' sum |
 | `corpus/decl-guard.bc` | a guard stored in a record beside data, released by a `finally` on a `with` | the guard released on the normal exit |
 | `corpus/reject/decl-txn-raise.bc`, `decl-promise-raise.bc`, `decl-guard-raise.bc` | each of the three with the value live across a `raise` and no finaliser | refused: `[let]`'s `hW` (`decl_not_ownFree`) |
 

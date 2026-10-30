@@ -122,8 +122,9 @@ def checkFuel : Nat := 1 <<< 20
 
 /-- The environment at the top of the declaration `k`, with the keys of the `def`s the
 elaboration generates (`DefKey`). -/
-def Env.top (ds : Array Decl) (k : Nat) (keys : List DefKey := []) : Env :=
-  ⟨⟨ds, k, keys⟩, [], [], [], [], 0, none⟩
+def Env.top (ds : Array Decl) (k : Nat) (keys : List DefKey := [])
+    (closes : List (String × String × Option String) := []) : Env :=
+  ⟨⟨ds, k, keys, closes⟩, [], [], [], [], 0, none⟩
 
 /-- The externs, in declaration order, each elaborated in the declarations before it. -/
 def externs (ds : Array Decl) : Except Error (List (String × CVTy)) :=
@@ -157,11 +158,12 @@ def sigsErr (s : CRow) : String :=
       | none => "internal error: the operations' signatures"
 
 /-- Check `main : C = M`. -/
-def checkMain (ds : Array Decl) (k : Nat) (keys : List DefKey) (sp : Span) (C : CTy) (M : Comp) :
-    CheckM Checked := do
+def checkMain (ds : Array Decl) (k : Nat) (keys : List DefKey) (sp : Span) (C : CTy) (M : Comp)
+    (closes : List (String × String × Option String) := []) : CheckM Checked := do
   let xs ← externs ds
   let T := (xs.map (·.2)).reverse
-  let E : Env := { Env.top ds k keys with vars := (xs.map (some ·.1)).reverse, nExt := xs.length }
+  let E₀ := Env.top ds k keys closes
+  let E : Env := { E₀ with vars := (xs.map (some ·.1)).reverse, nExt := xs.length }
   let C' ← E.elabC LifeCtx.empty C
   let r ← chkC checkFuel E LifeCtx.empty T M C'
   if h : subL (allL T) (orL r.F.u r.F.w) = true then
@@ -180,7 +182,8 @@ def checkMain (ds : Array Decl) (k : Nat) (keys : List DefKey) (sp : Span) (C : 
 /-- Check one declaration; the line `bcc check` prints for it, `main`'s result, and the typed term
 of a `def` without parameters checked at its declaration, at its context's length. That check is
 its key's at `Δ = ∅` and the externs before it (`DefEntry`), which its uses read. -/
-def checkDecl (ds : Array Decl) (k : Nat) (keys : List DefKey) :
+def checkDecl (ds : Array Decl) (k : Nat) (keys : List DefKey)
+    (closes : List (String × String × Option String) := []) :
     Decl → CheckM (String × Option Checked × List (Nat × TExpr))
   | .type _ n [] [] A => do
       let A' ← (Env.top ds k).elabV LifeCtx.empty A
@@ -198,7 +201,8 @@ def checkDecl (ds : Array Decl) (k : Nat) (keys : List DefKey) :
         -- At the persistent externs declared before it (SPEC §11).
         let xs ← externs (ds.extract 0 k)
         let T := (xs.map (·.2)).reverse
-        let E : Env := { Env.top ds k keys with
+        let E₀ := Env.top ds k keys closes
+        let E : Env := { E₀ with
           vars := (xs.map fun (x, B) => if B.persistent then some x else none).reverse,
           nExt := xs.length }
         let A' ← E.elabV LifeCtx.empty A
@@ -217,7 +221,7 @@ def checkDecl (ds : Array Decl) (k : Nat) (keys : List DefKey) :
       let A' ← (Env.top ds k).elabV LifeCtx.empty A
       pure (s!"extern {n.name} : {ppVTy A'}", none, [])
   | .main sp C M => do
-      let c ← checkMain ds k keys sp C M
+      let c ← checkMain ds k keys sp C M closes
       pure (s!"main : {ppCTy c.C}", some c, [(c.ctx.length, c.t)])
 
 /-! ### The names `run_io` reserves -/
@@ -271,11 +275,14 @@ implicit copies are not checked again. -/
 def checkElaborated (el : Frontend.Elab.Elaborated) (wrapped : Bool) : Except Error Report := do
   let ds := el.prog.decls.toArray
   let lib := el.lib
+  let closes := el.origins.filterMap fun (_, o) => match o with
+    | .closes n g f => some (n, g, f)
+    | _ => none
   let r : Except Error (Report × List (Nat × TExpr)) :=
     ((List.range ds.size).foldlM (init := ((⟨[], none, el, []⟩ : Report), [])) fun (acc, ts) k =>
       match (ds[k]? : Option Decl) with
       | some d => do
-          let (line, m, t) ← checkDecl ds k el.keys d
+          let (line, m, t) ← checkDecl ds k el.keys closes d
           pure ({ acc with lines := if k < lib then acc.lines else acc.lines ++ [line],
                            main := m <|> acc.main }, ts ++ t)
       | none => pure (acc, ts) : CheckM _).run' []

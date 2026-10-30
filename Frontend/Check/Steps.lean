@@ -690,10 +690,39 @@ def firstMissing : List Bool → List Bool → List Bool → Option Nat
   | a :: as, b :: bs, c :: cs => if a && !(b || c) then some 0 else (firstMissing as bs cs).map (· + 1)
   | _, _, _ => none
 
+/-- `B` occurs in `A`. -/
+def occursTy (B : CVTy) : CVTy → Bool
+  | .tensor X Y => .tensor X Y == B || occursTy B X || occursTy B Y
+  | .sum X Y => .sum X Y == B || occursTy B X || occursTy B Y
+  | .ref X => .ref X == B || occursTy B X
+  | .box a X => .box a X == B || occursTy B X
+  | .bang X => .bang X == B || occursTy B X
+  | .mu X => .mu X == B || occursTy B X
+  | .fam X => .fam X == B || occursTy B X
+  | A => A == B
+
+/-- The fix a message names for a value whose type holds a field marked `must_close` (SPEC §42):
+the declaration, the field and the function that consumes it. Message text only: the refusal is
+the kernel's. -/
+def Env.closeHint (E : Env) (A : CVTy) (abort : Bool) : String :=
+  let holds (n : String) : Bool := match E.elabV LifeCtx.empty (.name .none n) with
+    | .ok N => occursTy N A
+    | .error _ => false
+  match E.scope.closes.find? (holds ·.1) with
+  | some (n, g, f) =>
+    let fix := match f with
+      | some f => s!"pass it to `{f}`"
+      | none => s!"consume it with a `match` on `{n}`"
+    let at_ := if abort then " before the computation that may abort, or close it in a `finally`"
+      else " before its scope ends"
+    s!": `{n}` holds the field `{g}`, marked `must_close`; {fix}{at_}"
+  | none => ""
+
 /-- Why slot `i` was not dropped where a path does not consume it. -/
 def Env.notDropped (E : Env) (T : List CVTy) (i : Nat) : String :=
   match T[i]? with
-  | some A => if hasDtorB A then "" else s!", and its type `{E.ppV A}` is linear and has no derived drop"
+  | some A => if hasDtorB A then "" else
+      s!", and its type `{E.ppV A}` is linear and has no derived drop" ++ E.closeHint A false
   | none => ""
 
 /-- The two parts of a `case` or a `<,>` do not consume the same variables. -/
@@ -711,7 +740,7 @@ def unconsumed (E : Env) (sp : Span) (x : String) (A : CVTy) : Error :=
   if hasDtorB A then
     ⟨sp, s!"`{x}` is not consumed in its scope, and it cannot be dropped where its scope ends"⟩
   else ⟨sp, s!"`{x}` is not consumed in its scope, and its type `{E.ppV A}` is linear and " ++
-    "has no derived drop"⟩
+    "has no derived drop" ++ E.closeHint A false⟩
 
 def mismatch (sp : Span) (want got : String) : Error :=
   ⟨sp, s!"type mismatch: expected `{want}`, but this has type `{got}`"⟩
@@ -1014,7 +1043,7 @@ def finalOf (E : Env) (sp : Span) (_S : CRow) (u : List Bool) :
       if hasDtorB A then dropOne sp (i + 1) r
       else throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across a computation " ++
         "that may abort, and its type is linear with no derived drop, and an abort abandons " ++
-        "only a value that holds no owned cell"⟩
+        "only a value that holds no owned cell" ++ E.closeHint A true⟩
     | none => throw ⟨sp, "internal error: a slot is out of range"⟩
   pure r
 

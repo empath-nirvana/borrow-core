@@ -212,7 +212,16 @@ type as written; `box A` is a cell of its own (SPEC §42).  `[spec §42]` -/
 structure DField where
   name : Option Ident
   ty : VTy
+  /-- `must_close g: A` (spelling provisional): `some none`, or `some (some f)` for
+  `must_close(f)`, which names the function that consumes the value, for the messages only. The
+  field holds `A * tok` (SPEC §42, *Declared types with no derived drop*). -/
+  close : Option (Option Ident) := none
   deriving DecidableEq, Repr
+
+/-- A field's type in the declaration's structure: `A * tok` when it is marked `must_close`
+(D4), `A` otherwise.  `[spec §42]` -/
+def DField.fullTy (f : DField) : VTy :=
+  if f.close.isSome then .tensor .none f.ty (.handle .none .tok) else f.ty
 
 /-- A constructor of a `data` declaration, its fields in order.  `[spec §42]` -/
 structure DCon where
@@ -1078,7 +1087,7 @@ def Decl.strip : Decl → Decl
   | .poly _ n tps lps H A V => .poly .none n.strip (tps.map Ident.strip) (lps.map Ident.strip)
       (H.map VTy.strip) A.strip V.strip
   | .data _ d => .data .none (DataDecl.mk d.name.strip (d.tps.map Ident.strip) (d.lps.map Ident.strip)
-      d.record (d.cons.map fun c => DCon.mk c.name.strip (c.fields.map fun f => DField.mk (f.name.map Ident.strip) f.ty.strip)))
+      d.record (d.cons.map fun c => DCon.mk c.name.strip (c.fields.map fun f => DField.mk (f.name.map Ident.strip) f.ty.strip (f.close.map (·.map Ident.strip)))))
 
 def Program.strip (p : Program) : Program := ⟨p.decls.map Decl.strip⟩
 

@@ -1,0 +1,26 @@
+-- `corpus/decl-promise.bc` with the queue of promises live across a `raise`: `check` may abort
+-- between the requests and the answers, with no finaliser. `Queue` holds `Promise`, which holds a
+-- token's cell, so it is not `OwnFree` and `[let]`'s `hW` fails; the `[then]` the checker would
+-- build instead needs `Queue`'s derived drop, and a type that holds a field with none has none
+-- (`not_hasDtor_mu_body`, `decl_linear`). Refused.
+include fail
+
+data Promise = { must_close(answer) id: i32 }
+
+data Queue = Empty | Push(head: Promise, rest: Queue)
+
+fn request(id: i32, q: Queue) -> Queue = box Push(Promise { id: id }, q)
+
+fn answer(p: Promise, v: i32) -> i32 = match p { Promise { id } -> id * v }
+
+fn answer_all(q: Queue) -> i32 = fold_own q { Empty -> 0 | box Push(p, r) -> answer(p, 10) + r }
+
+fn check(x: i32) -> i32 with Fail[i32] = if x > 3 { raise(x) } else { x }
+
+main -> i32 + i32 =
+  with to_result[i32, i32] {
+    let q = request(1, request(2, Empty));
+    let y = check(5);
+    answer_all(q) + y
+  }
+-- expect: 23:13: `q`, of type `mu X. 1 + ref (i32 * tok) * ref X`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell: `Promise` holds the field `id`, marked `must_close`; pass it to `answer` before the computation that may abort, or close it in a `finally`

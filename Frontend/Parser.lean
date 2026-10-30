@@ -1608,6 +1608,7 @@ def bindMPatNames : Nat → Data.MPat → P Data.MPat
     | .con sp c b ps => return .con sp c b (← ps.mapM (bindMPatNames n))
     | .inj sp l q => return .inj sp l (← bindMPatNames n q)
     | .free sp q => return .free sp (← bindMPatNames n q)
+    | .burn sp q => return .burn sp (← bindMPatNames n q)
     | p => pure p
 
 /-- A constructor `C`, `C(e, …)`, or a record literal `N { f: e, … }`, after its name; `boxed`
@@ -1827,8 +1828,20 @@ def withBlock : Nat → P Val
     let thr := if bound.contains "io_bt" then [] else thr
     let M := if thr.isEmpty then M else handOn { t := "io_bt" } thr M
     modify fun s => { s with blockThreads := thr, joined := [] }
-    pure (.app sp (.app sp (.sugar t.span (.handle h.name x As nm)) place)
-      (.thunkv sp (.lam sp b (holeTy sp) M)))
+    let V : Val := .app sp (.app sp (.sugar t.span (.handle h.name x As nm)) place)
+      (.thunkv sp (.lam sp b (holeTy sp) M))
+    -- `with h { M } finally { D }` (SPEC §42): `[then]` around the handled computation, `D`
+    -- the finaliser and run again on the normal exit, `x <- with h { M } unwind (D); D; return x`.
+    unless (← peek).tok == .ident "finally" do return V
+    discard bump
+    expectSym "{"
+    let D ← comp n
+    expectSym "}"
+    let fsp ← spanFrom st
+    let r ← freshName "io_fin"
+    let u ← freshName "io_finu"
+    pure (.run fsp (.unwind fsp ⟨r, fsp⟩ none (.ret fsp V) D
+      (.bind fsp ⟨u, fsp⟩ none D (.ret fsp (.var fsp r)))))
 
 /-- The suffixes of a value spine, associating to the left: argument atoms and `[@]`. -/
 def valSuffixes : Nat → Pos → Val → P Val
@@ -2660,6 +2673,17 @@ def dataFields (n : Nat) (named : Bool) (close : String) : P (List DField) := do
   let mut fs : Array DField := #[]
   for _ in [0:n] do
     if ← isSym close then break
+    -- `must_close` or `must_close(f)` before a field (SPEC §42): a field named `must_close` is
+    -- `must_close: A`.
+    let mark ← match (← peek).tok, (← peekAt 1).tok with
+      | .ident "must_close", .sym ":" => pure none
+      | .ident "must_close", .sym "(" => do
+        discard bump; discard bump
+        let f ← ident "the function that closes it"
+        expectSym ")"
+        pure (some (some f))
+      | .ident "must_close", _ => do discard bump; pure (some none)
+      | _, _ => pure none
     let t ← peek
     let t1 ← peekAt 1
     -- A field's name may be a word the core reserves (`val`): it is only ever a field's.
@@ -2667,10 +2691,10 @@ def dataFields (n : Nat) (named : Bool) (close : String) : P (List DField) := do
       | .ident x, .sym ":" | .kw x, .sym ":" => do
         discard bump
         expectSym ":"
-        pure (DField.mk (some ⟨x, t.span⟩) (← vty n))
+        pure (DField.mk (some ⟨x, t.span⟩) (← vty n) mark)
       | _, _ =>
         if named then expected "a field `f: A`"
-        else pure (DField.mk none (← vty n))
+        else pure (DField.mk none (← vty n) mark)
     fs := fs.push f
     if ← isSym "," then discard bump else break
   pure fs.toList

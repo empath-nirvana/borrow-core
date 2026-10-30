@@ -386,7 +386,10 @@ def Decl.pp : Decl → String
       String.join (cs.map fun c => nl 2 ++ cl c ++ ";") ++ nl 0 ++ "}"
   | .poly _ n tps lps H A V => Decl.ppPoly n tps lps H A V
   | .data _ d =>
-    let field (f : DField) : String := (match f.name with
+    let field (f : DField) : String := (match f.close with
+      | some (some c) => s!"must_close({c.name}) "
+      | some none => "must_close "
+      | none => "") ++ (match f.name with
       | some x => x.name ++ ": "
       | none => "") ++ f.ty.pp
     let params := if d.tps.isEmpty then "" else "[" ++ ", ".intercalate (d.tps.map (·.name)) ++ "]"
