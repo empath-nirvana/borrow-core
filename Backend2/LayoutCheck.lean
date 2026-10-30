@@ -296,7 +296,7 @@ def walk (p : Prog) (w : String) : Nat → Tm → Nat → CM Unit
         let c ← kd dst 0
         eq "a new cell's contents" c (← a 0)
         modify fun s => { s with statics := s.statics.push (k, c, w) }
-      | .free => eq "a freed cell's contents" dst (← kd (← a 0) 0)
+      | .free | .io .takeCell => eq "a freed cell's contents" dst (← kd (← a 0) 0)
       | .swap => do
         eq "a swapped-in value" (← kd (← kd dst 0) 0) (← a 1)
         eq "a swapped-out value" (← kd dst 1) (← kd (← a 0) 0)

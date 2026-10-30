@@ -44,12 +44,16 @@ inductive IOOp where
   /-- `clock_sleep (m, ns)`: wait at least `max(ns, 0)` nanoseconds on the clock in the cell `m`;
   the result is `m` (SPEC §34). -/
   | clockSleep
+  /-- `take_cell m`: the capability's cell `m` ended (the harness's take, SPEC §11), its word the
+  result: the stream's descriptor, or the clock's time. -/
+  | takeCell
   deriving Repr, DecidableEq
 
 /-- The lifetime parameters of an operation's extern: the `Λ`s before its argument. -/
 def IOOp.lifes : IOOp → Nat
   | .readByte | .writeByte | .clockNow | .clockSleep => 1
   | .writeAll | .readInto => 2
+  | .takeCell => 0
 
 /-- The primitives of `[TR]` §1, §8 and §9, saturated, and the I/O operations of §11. -/
 inductive Op where

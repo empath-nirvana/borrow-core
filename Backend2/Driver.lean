@@ -20,18 +20,27 @@ It is outside the import fence (`scripts/check-backend2.sh`).
 namespace Backend2
 open BoCa BoCa.Fig16.LogRel.Core BoCa.Fig16.LogRel.Core.Check
 
-/-- The implementation of each extern, in declaration order. -/
-def extsOf (m : Frontend.Check.IOMain) : Except String (List Ext) :=
-  m.externs.mapM fun x => match x.role with
-    | .cap fd => pure (.cap fd)
-    | .clockCap => pure .clock
+/-- The implementation of each extern of `run_io`, in declaration order: an operation, or the
+harness's make or take of a stream's capability cell. A capability is not an extern of `run_io`:
+the harness makes it. -/
+def extsOf (xs : List Frontend.Check.ExternSpec) : Except String (List Ext) :=
+  xs.mapM fun x => match x.role with
     | .readByte => pure (.io .readByte)
     | .writeByte => pure (.io .writeByte)
     | .writeAll => pure (.io .writeAll)
     | .readInto => pure (.io .readInto)
     | .clockNow => pure (.io .clockNow)
     | .clockSleep => pure (.io .clockSleep)
-    | .harness => throw s!"extern `{x.name}` is the model's harness and is not compiled"
+    | .mk s => pure (.mk (capStream s))
+    | .take s => pure (.take (capStream s))
+    | .cap _ | .clockCap =>
+      throw s!"extern `{x.name}` is a capability, which run_io's harness makes"
+where
+  capStream : Frontend.Check.IOStream → CapStream
+    | .input => .input
+    | .output => .output
+    | .clock => .clock
+    | .args => .args
 
 /-- A `handle` node of the typed term, as the direct-call facts read it: its name, operations,
 outer row, clauses' kinds and its handler pair's erasure. -/
@@ -116,19 +125,18 @@ def stackOps (c : Frontend.Check.Checked) : MachSet := Id.run do
       out := out.insert (n, j)
   return out
 
-/-- **The width classes** (SPEC §57): for each type `main` allocates a cell at, its class
-(`Checked.classAt`, `Checked.classAt_alloc`), and for the contents of each capability's cell (an
-extern, which no `alloc` node allocates) the class the checker's construction gives it
-(`cellClasses`), checked closed under the term's `swap`s (`cellsOkB`, `cellsOkB_sound`): each
-type's LIR types. -/
-def classesOf (k : Backend.CheckedProg) : Except String (List (VTy × List LTy)) := do
-  let c := k.main
+/-- **The width classes** (SPEC §57): for each type the compiled term `c` allocates a cell at, its
+class (`Checked.classAt`, `Checked.classAt_alloc`), and for the contents of each capability's cell
+(a harness make's result, which no `alloc` node allocates) the class the checker's construction
+gives it (`cellClasses`), checked closed under the term's `swap`s (`cellsOkB`, `cellsOkB_sound`):
+each type's LIR types. -/
+def classesOf (c : Frontend.Check.Checked) : Except String (List (VTy × List LTy)) := do
   let ms := machineOps c
   let lir (tys : List VTy) : List LTy := tys.filterMap fun t => (ofV ms t).toOption
   let mut out : List (VTy × List LTy) := c.cells.map fun cl => (cl.root, lir cl.tys)
   let es := c.t.cells.2
   for s in c.ctx do
-    if let .ref B := s.ty then
+    if let .bang (.thunk (.arr _ (.ret (.ref B)))) := s.ty then
       let B := B.eraseLife
       if out.any (·.1 == B) then continue
       let cls := cellClasses [B] es
@@ -250,17 +258,18 @@ layouts of the converted program decide the calls in tail position that close a 
 and whose body takes its continuation is converted again with the level's cell passed on to its
 next point (`threadedOf`, SPEC §50): the conversion's second run, at those machines. -/
 def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) : Except String (Prog × CState) := do
-  let c := k.main
-  let classes ← classesOf k
-  let (exts, ncaps, loops) ← match k.io with
-    | none => pure ([], 0, false)
-    | some m => pure (← extsOf m, m.caps.length, m.loopB.isSome)
+  -- A program with capabilities is compiled as `run_io` (SPEC §11), the term `IORun.every_run`
+  -- is about; the platform's handler of `Fail[DivError]` is read off `main`'s own check.
+  let (c, exts, io, loops) ← match ← k.runIO with
+    | none => pure (k.main, [], false, false)
+    | some (r, xs) => pure (r.c, ← extsOf xs, true, r.loops)
+  let classes ← classesOf c
   let ctx := c.ctx.map fun s => (s.ty, s.live)
   let run (threaded stacked : Std.HashMap Nat LTy) :
       Except String (Prog × CState × Std.HashMap Nat LTy × Std.HashMap Nat LTy) := do
-    let (p, st) ← convertProg exts ctx c.t c.C ncaps loops census (directFacts c) (machineOps c)
+    let (p, st) ← convertProg exts ctx c.t c.C io loops census (directFacts c) (machineOps c)
       threaded stacked classes
-    let p := { p with exits := c.exitsOnDivError }
+    let p := { p with exits := k.main.exitsOnDivError }
     if st.done.isEmpty then return (p, st, {}, {})
     -- A call in tail position whose callee's suspended computations may be the machine's own
     -- closes a loop of tail calls, and passes its outcome on (SPEC §49, `tailPass`).
@@ -284,7 +293,8 @@ def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) : Except String 
     -- computations' classes.
     let sk := stackedOf st recursive (stackOps c) (suspCodes L)
     let th := (threadedOf st recursive).filter fun i _ => !sk.contains i
-    return ({ p with fns := p₂.fns, codes := p₂.codes, ty := p₂.ty, statics := p₂.statics }, st₂, th, sk)
+    let p := { p with fns := p₂.fns, codes := p₂.codes, ty := p₂.ty, statics := p₂.statics }
+    return ({ p with abandoned := p₂.abandoned }, st₂, th, sk)
   let (p, st, th, sk) ← run {} {}
   if th.isEmpty && sk.isEmpty then return (p, st)
   let (p, st, _, _) ← run th sk

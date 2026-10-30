@@ -316,7 +316,7 @@ def evalOp (ty : Var → IM LTy) (op : Op) (args : List Var) (resTy : LTy) : IM 
     let b ← newObj 1
     writeAt b (some v)
     pure (.loc b)
-  | .free, [.loc a] => do
+  | .free, [.loc a] | .io .takeCell, [.loc a] => do
     let v ← readAt a
     if a ≥ staticAt then return v
     freeObj a 1

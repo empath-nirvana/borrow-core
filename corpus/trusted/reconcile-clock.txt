@@ -6,7 +6,25 @@ extern clock_sleep : !(all 'l0 < top. mut 'l0 clock * i64 => mut 'l0 clock)
   host: WASI poll_oneoff on a relative clock subscription (libc nanosleep); assumed (1)
 extern clock : ref clock
   contract: model proved (7), vC_clockRep (a cell holding the time, i64[0])
-  host: a runtime cell; the time is the host's monotonic clock; assumed (1)
+  host: the cell run_io makes by mk_clock, a word of the program's data; the time is the host's monotonic clock; assumed (1)
+extern mk_input : !((mu X. 1 + u8 * X) => ref input)
+  contract: model proved (7), mkInput_meets
+  host: standard input's cell, a word of the program's data, holding fd 0; its argument, the empty list the platform passes, dropped; meets its contract when each stream is made once before its take (run_io); assumed (1)
+extern mk_output : !(i32 => ref output)
+  contract: model proved (7), mkOutput_meets
+  host: an output stream's cell, a word of the program's data, holding its argument, the descriptor: stdout's cell at 1, stderr's otherwise; meets its contract when each stream is made once before its take (run_io); assumed (1)
+extern take_input : !(ref input => (mu X. 1 + u8 * X))
+  contract: model proved (7), takeInput_meets
+  host: standard input's cell ended, answering the empty list; assumed (1)
+extern take_output : !(ref output => i32 * (mu X. 1 + u8 * X))
+  contract: model proved (7), takeOutput_meets
+  host: an output stream's cell ended, answering the descriptor and the empty list (each byte went to the descriptor when it was written); assumed (1)
+extern mk_clock : !(1 => ref clock)
+  contract: model proved (7), mkClock_meets
+  host: the clock's cell, a word of the program's data, holding the time 0 (clock_now reads the host's monotonic clock); meets its contract when each stream is made once before its take (run_io); assumed (1)
+extern take_clock : !(ref clock => i64)
+  contract: model proved (7), takeClock_meets
+  host: the clock's cell ended, answering the cell's word; assumed (1)
 typing: unconditional: a CDerives derivation (fundamentalC, adequacyD)
-unproved boundaries: 3 (clock_now, clock_sleep, clock)
+unproved boundaries: 9 (clock_now, clock_sleep, clock, mk_input, mk_output, take_input, take_output, mk_clock, take_clock)
 always trusted: the allocator and runtime (Backend/Wasm/Runtime.lean), the WAT printer, wasmtime

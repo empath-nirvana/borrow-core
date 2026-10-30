@@ -29,9 +29,11 @@ open BoCa
 
 abbrev Var := Nat
 
-/-- The host implementations of the externs that are operations. -/
+/-- The host implementations of the externs that are operations, and `takeCell`, the harness's
+take of a capability's cell (SPEC §11): the cell ended, its word (the stream's descriptor, or the
+clock's time) the result. -/
 inductive IOKind where
-  | readByte | writeByte | writeAll | readInto | clockNow | clockSleep
+  | readByte | writeByte | writeAll | readInto | clockNow | clockSleep | takeCell
   deriving Inhabited, BEq, Repr
 
 /-- A primitive: an operation on its arguments' values that runs no code of the program. -/
@@ -236,6 +238,10 @@ structure Prog where
   machine's points drop, their state being on the task stack (SPEC §52; `genStackMach`, an
   `UNPROVED:` site). `Lint` checks every other drop by its type. -/
   stackKs : Std.HashSet Var := {}
+  /-- **The variables the typed term abandons** (`Convert.abandons`): the context a `[let]`'s abort
+  drops (`hW`, `Ctx.Drops`) at its abort branch or a frame's, and the slots `⊤` absorbs (`topI`).
+  `Lint` admits a drop at a type owning an opaque value (`LTy.ownsOpq`) only of these. -/
+  abandoned : Std.HashSet Var := {}
   deriving Inhabited
 
 end Backend2

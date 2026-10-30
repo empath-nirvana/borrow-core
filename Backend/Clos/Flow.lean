@@ -109,7 +109,7 @@ def genPrim : Op → List Var → GM Key
       let c ← freshKey
       emit (.sub (.var v) c)
       holding (.loc c)
-  | .free, [l] | .scopedFree _, [l] | .load, [l] => do
+  | .free, [l] | .scopedFree _, [l] | .load, [l] | .io .takeCell, [l] => do
       let r ← freshKey
       emit (.load (.var l) r)
       pure r

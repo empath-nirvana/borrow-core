@@ -10,69 +10,69 @@ aff-depth 2 0 0 49 49 0 # as aff-counter: four calls through three functions and
 aff-drop 3 0 0 5 5 0 # three counters' cells, each freed by its `close`
 aff-higher 2 6 0 8 8 0 # two counters' cells; the indirect calls are `runner`'s calls of its argument, which closures built at two sites reach: the flow analysis is monovariant, and the argument's code is chosen at run time, as a `dyn` call's is
 answers-two-types 0 2 0 0 0 0 # nothing: `journal`'s clause resumes in tail position, so `attempt` is forwarded by a direct call and no continuation is built; the indirect calls are of `fake_api`'s answer, a function of its state (SPEC §19, *Handler state*)
-aoc/2020-08 6 0 0 10216 7451 7579
-aoc/2021-06 4 0 0 6409 4779 6364
-aoc/2021-10 5 0 0 13182 8140 13219
+aoc/2020-08 6 0 0 10217 7452 7579
+aoc/2021-06 4 0 0 6410 4780 6364
+aoc/2021-10 5 0 0 13183 8141 13219
 aoc/2021-15 8 0 0 411123 385610 223710
-aoc/2022-01 4 0 0 8449 6900 8660
-aoc/2022-12 6 0 0 31567 14904 23849
-aoc/2022-21 12 0 0 33325 17589 19372 # the input string; the map from name to index (two arrays at 128 slots, doubled twice for the 165 names: six); the buffer of monkeys and its two doublings; the two arrays of values and marks
-aoc/2023-01 1 0 0 26413 4098 30923
-aoc/2023-03 7 0 0 11998 8593 10501
-aoc/2023-07 7 0 0 114731 108142 80684
-aoc/2024-01 5 0 0 141583 135261 128486 # the input string, the two lists' buffers, and the map's two arrays (sized for the 1000 numbers, so it never grows); a probe lends the key in a frame slot
-aoc/2024-02 2 0 0 8382 4899 8513
-aoc/2024-11 271 0 0 1960768 844134 1228669 # the input string; per count, the map's two arrays (sized for 5000 values, so they never grow) and its three buffers; per blink, the next `todo` buffer and the next counts' array; and the doublings of the `todo` buffers in the blinks with more than 64 new values
+aoc/2022-01 4 0 0 8450 6901 8660
+aoc/2022-12 6 0 0 31568 14905 23849
+aoc/2022-21 12 0 0 33326 17590 19372 # the input string; the map from name to index (two arrays at 128 slots, doubled twice for the 165 names: six); the buffer of monkeys and its two doublings; the two arrays of values and marks
+aoc/2023-01 1 0 0 26414 4099 30923
+aoc/2023-03 7 0 0 11999 8594 10501
+aoc/2023-07 7 0 0 114732 108143 80684
+aoc/2024-01 5 0 0 141584 135262 128486 # the input string, the two lists' buffers, and the map's two arrays (sized for the 1000 numbers, so it never grows); a probe lends the key in a frame slot
+aoc/2024-02 2 0 0 8383 4900 8513
+aoc/2024-11 271 0 0 1960769 844135 1228669 # the input string; per count, the map's two arrays (sized for 5000 values, so they never grow) and its three buffers; per blink, the next `todo` buffer and the next counts' array; and the doublings of the `todo` buffers in the blinks with more than 64 new values
 array-empty 0 0 0 0 0 1
 array-get 2 0 0 10 7 2
 array-refs 5 0 0 8 8 1
 array-replace 2 0 0 12 12 5
 array-sum 1 0 0 3000 3000 2024
-ascii-upper 1 0 0 4285 4178 4292 # the string the input is read into; the stdin and stdout cells are words of the program's data
-async-bank-inbox 21 6 0 640 572 16 # the two accounts' cells and inboxes, the scheduler's list nodes; one indirect call per resume of a stored task; a bounds check per slot visit; the slots an array resumed in place (§52): no list node per await; the array's fill, its slot moves and a bounds check per slot visit
-async-cancel 5 3 0 225 222 6 # the victim's `buf` and `extra`, freed by its cancel, and the scheduler's list nodes; an indirect call per resume or cancel of a stored task; a bounds check per slot visit; the slots an array resumed in place (§52): no list node per await; the array's fill, its slot moves and a bounds check per slot visit
-async-lend-slots 7 6 0 354 342 16 # the scheduler's list nodes and the result list's: every scoped cell is a frame slot; an indirect call per resume of a stored task; a bounds check per slot visit; the slots an array resumed in place (§52): no list node per await; the array's fill, its slot moves and a bounds check per slot visit
-async-logged 22 4 0 230 212 0 # the two tasks' cells, and the scheduler's and the log's list nodes; an indirect call per resume of a stored task
-async-map 20 4 0 308 294 10 # the input and result lists' nodes, the scheduler's, and an object per level of `map`'s recursion the task suspends through (SPEC §19 Lowering); one indirect call per resume of the stored task; a bounds check per slot visit; the slots an array resumed in place (§52): no list node per await; the array's fill, its slot moves and a bounds check per slot visit
-async-mapreduce 28 9 1 652 648 30 # the documents' and results' list nodes, the scheduler's, and an object per level of `sum_slowly`'s recursion a task suspends through; the copy is the written `clone(sums)`; a bounds check per slot visit; the slots an array resumed in place (§52): no list node per await; the array's fill, its slot moves and a bounds check per slot visit
+ascii-upper 1 0 0 4286 4179 4292 # the string the input is read into; the stdin and stdout cells are words of the program's data
+async-bank-inbox 21 6 0 643 575 16 # the two accounts' cells and inboxes, the scheduler's list nodes; one indirect call per resume of a stored task; a bounds check per slot visit; the slots an array resumed in place (§52): no list node per await; the array's fill, its slot moves and a bounds check per slot visit
+async-cancel 5 3 0 228 225 6 # the victim's `buf` and `extra`, freed by its cancel, and the scheduler's list nodes; an indirect call per resume or cancel of a stored task; a bounds check per slot visit; the slots an array resumed in place (§52): no list node per await; the array's fill, its slot moves and a bounds check per slot visit
+async-lend-slots 7 6 0 357 345 16 # the scheduler's list nodes and the result list's: every scoped cell is a frame slot; an indirect call per resume of a stored task; a bounds check per slot visit; the slots an array resumed in place (§52): no list node per await; the array's fill, its slot moves and a bounds check per slot visit
+async-logged 22 4 0 233 215 0 # the two tasks' cells, and the scheduler's and the log's list nodes; an indirect call per resume of a stored task
+async-map 20 4 0 311 297 10 # the input and result lists' nodes, the scheduler's, and an object per level of `map`'s recursion the task suspends through (SPEC §19 Lowering); one indirect call per resume of the stored task; a bounds check per slot visit; the slots an array resumed in place (§52): no list node per await; the array's fill, its slot moves and a bounds check per slot visit
+async-mapreduce 28 9 1 655 651 30 # the documents' and results' list nodes, the scheduler's, and an object per level of `sum_slowly`'s recursion a task suspends through; the copy is the written `clone(sums)`; a bounds check per slot visit; the slots an array resumed in place (§52): no list node per await; the array's fill, its slot moves and a bounds check per slot visit
 async-r1-cancel 4 5 0 5 5 0 # the two tasks' `buf` and `extra`; a task's state is a record of the state machine, its lent cell out of line
 async-r1-cancel-finaliser-writes 1 0 0 2 2 0 # the lent cell
-async-r1-drain 1 3 0 4 4 0 # the lent cell; the calls through the stored generator are dispatched
+async-r1-drain 1 3 0 7 7 0 # the lent cell; the calls through the stored generator are dispatched
 async-r1-effects 2 6 0 8 8 0 # the two tasks' cells
 async-r1-generator 1 3 0 4 4 0 # the lent cell
 async-r1-local-borrows 2 4 0 7 7 0 # the two tasks' cells, each lent across its task's suspension and out of line
 async-r1-nested 2 3 0 4 4 0 # the two lent cells
 async-race 3 15 0 3 3 0 # the three tasks' buffers; one indirect call per resume or cancel of a task, whose code `race` does not know
-async-scheduler 5 6 0 470 464 20 # the scheduler's list nodes, four per round of `run_until_empty`; one indirect call per resume of a stored task, whose code the queue does not know; a bounds check per slot visit; the slots an array resumed in place (§52): no list node per await; the array's fill, its slot moves and a bounds check per slot visit
+async-scheduler 5 6 0 473 467 20 # the scheduler's list nodes, four per round of `run_until_empty`; one indirect call per resume of a stored task, whose code the queue does not know; a bounds check per slot visit; the slots an array resumed in place (§52): no list node per await; the array's fill, its slot moves and a bounds check per slot visit
 async-scoped 25 4 0 283 273 0 # the read cell `cfg`, the scheduler's list nodes, rebuilt at each round, and the result list's; the scope's unit cell `d` takes no words; an indirect call per resume of a stored task
 async-stack-cancel 808 5 0 10015 11617 0
-async-stack-deep 6104 4750 0 20838453 23785275 14412
-async-stack-nested 24 46 0 1030 1098 40
+async-stack-deep 6104 4750 0 20838456 23785278 14412
+async-stack-nested 24 46 0 1033 1101 40
 async-timers 40 5 0 440 422 0 # the pending and finished lists' nodes; one indirect call per wake or cancel of a stored task
 async-try-join 28 17 0 498 492 0 # the groups' list nodes and the jobs' cells; one indirect call per resume or cancel of a task
-async-unr-site 10 11 0 400 417 18
+async-unr-site 10 11 0 403 420 18
 async-workers-scoped 43 7 1 792 776 0
-axes/borrow-across-loop 2 0 0 30 13 4
+axes/borrow-across-loop 2 0 0 32 15 4
 axes/codata-coeffects 2 0 0 27 10 16
-axes/codata-effects 0 0 0 11 1 0
-axes/codata-generic 0 0 0 5 1 0
+axes/codata-effects 0 0 0 13 3 0
+axes/codata-generic 0 0 0 7 3 0
 axes/data-coeffects 7 0 0 63 24 0
-axes/data-effects 24 9 0 117 90 0
-axes/effects-coeffects 1 0 0 12 2 0
-axes/free-monad 10 4 1 63 51 0
+axes/data-effects 24 9 0 118 91 0
+axes/effects-coeffects 1 0 0 14 4 0
+axes/free-monad 10 4 1 65 53 0
 axes/result-fold-imm 16 0 0 104 55 0
 axes/result-fold-own 14 0 0 49 49 0
 axes/scope-boxed-iter 3 0 0 13 8 3
-axes/scope-codata-effects 0 0 0 7 1 0
-axes/scope-data-effects 7 0 0 68 49 0
-axes/scope-loop-lend 2 0 0 30 13 4
+axes/scope-codata-effects 0 0 0 9 3 0
+axes/scope-data-effects 7 0 0 70 51 0
+axes/scope-loop-lend 2 0 0 32 15 4
 binder-copies 0 2 0 0 0 0
 block-capability 0 0 0 3 3 0
 block-capability-inner 0 0 0 5 5 0
 block-swap 2 0 0 4 4 0
-block-yield-inner 0 0 0 0 0 0
+block-yield-inner 0 0 0 3 3 0
 borrow-in-scope 2 0 0 4 3 0 # the borrowed cell and the cell holding the borrow
-btree-boxed 77 0 0 23560 19396 6885 # the B-tree's buffers: a leaf's keys, an inner node's keys and children (Rust's count, btree_boxed.rs)
+btree-boxed 77 0 0 23562 19398 6885 # the B-tree's buffers: a leaf's keys, an inner node's keys and children (Rust's count, btree_boxed.rs)
 bytes-upper 1 0 0 80 52 54
 capture-await-raise 0 0 0 0 0 0 # `skip` resumes in place and `to_result` is a branch: nothing is allocated or dispatched
 capture-log-hand 0 0 0 0 0 0 # equal to the kernel program log-outside-native (corpus/kernel-counts.expected)
@@ -91,15 +91,15 @@ core-effects-loop 0 0 0 0 0 0
 core-effects-reborrows 3 0 0 5 4 0
 core-effects-result 0 0 0 0 0 0
 core-effects-tail 0 0 0 0 0 0
-core-yield-loop 0 0 0 0 0 0 # its clause resumes or cancels: a state machine, with no allocation and no dispatched call
-core-yield-pull 0 0 0 0 0 0 # equal to corpus/gen-fib.bc, its surface form
+core-yield-loop 0 0 0 3 3 0 # its clause resumes or cancels: a state machine, with no allocation and no dispatched call
+core-yield-pull 0 0 0 3 3 0 # equal to corpus/gen-fib.bc, its surface form
 count-down 0 0 0 0 0 0
 count-down-exact 6 0 0 18 12 0
 count-fold 0 0 0 0 0 0
 count-try 0 0 0 0 0 0
 data-array-tree 4 0 0 104 80 14 # each `Node`'s array of children, two a tree; a `Tip` allocates nothing
 data-box-tree 9 0 0 27 27 0
-data-config 2 0 0 161 25 214
+data-config 2 0 0 163 27 214
 data-eval 10 0 0 56 56 0 # the cells of the terms, values and environments a run builds, the hand-made copies included
 data-fold-bang 4 0 0 14 14 0
 data-fold-block 9 0 0 62 31 0
@@ -113,23 +113,23 @@ data-group 5 0 0 21 21 0
 data-json-vec 6 0 0 228 188 33 # per copy of `[1, [2, 3], 4]`: the outer buffer and its doubling, and the inner buffer
 data-option 5 0 0 16 16 4
 data-option-block 12 0 0 30 30 0 # two cells per block, three blocks a list, two lists
-data-particles 1 0 0 667 651 353
+data-particles 1 0 0 669 653 353
 data-rose 14 0 0 56 56 0 # one cell per `box Forest` field and one per forest's tail, two copies of the tree
 data-rose-vec 5 0 0 284 220 31 # the buffer of each node with children, two per tree, and `[1, [], 2]`'s; an empty buffer allocates nothing
-data-turnstile 1 0 0 51 19 36
-deep-list 100000 0 0 450000 450000 0
+data-turnstile 1 0 0 53 21 36
+deep-list 100000 0 0 450003 450003 0
 div-abstraction 0 0 0 0 0 0
-div-euclid 0 0 0 1 1 0
-div-hof 0 0 0 0 0 0
-div-infer 0 4 0 1 1 0 # the resumptions of `scaled`'s continuation: a handler with a parameter dispatches at each resume (SPEC §21); every division is a test, no allocation
-div-innermost 0 0 0 1 1 0
+div-euclid 0 0 0 3 3 0
+div-hof 0 0 0 3 3 0
+div-infer 0 4 0 3 3 0 # the resumptions of `scaled`'s continuation: a handler with a parameter dispatches at each resume (SPEC §21); every division is a test, no allocation
+div-innermost 0 0 0 3 3 0
 div-literal 0 0 0 0 0 0
-div-overflow 0 0 0 1 1 0
+div-overflow 0 0 0 3 3 0
 div-own-fail 0 0 0 0 0 0
 div-recover 5 0 0 42 32 13 # the two arrays of rows and the buffers `means` builds; `bad`'s is dropped by the unwind
-div-recursive 0 0 0 1 1 0
-div-residual-copy 0 0 0 7 1 0
-div-unhandled 1 0 0 38 5 1 # the buffer, dropped by the unwind
+div-recursive 0 0 0 3 3 0
+div-residual-copy 0 0 0 9 3 0
+div-unhandled 1 0 0 39 6 1 # the buffer, dropped by the unwind
 effects-abstraction 0 0 0 0 0 0
 effects-borrow-raise 2 0 0 3 3 0 # the cell of each run; freed by the unwinding borrow on the abort
 effects-cancel-two-sites 0 4 0 0 0 0 # the indirect calls are of `scaled`'s answer, a function of its state (SPEC §19, *Handler state*)
@@ -148,48 +148,48 @@ effects-row-inferred 0 0 0 0 0 0
 effects-sum-gen 0 0 0 0 0 0 # equal to the kernel program sum-gen
 effects-tunnel 0 0 0 0 0 0 # equal to the kernel program tunnel
 family-swap 2 0 0 4 4 0
-fields 3 0 0 426 279 360 # the line buffer and its two growths at the long line; fields are views
+fields 3 0 0 427 280 360 # the line buffer and its two growths at the long line; fields are views
 filler-mu 3 0 0 43 39 5 # `r`'s buffer, the pushed element's array, and `s`'s buffer when it is pushed to; the fillers' empty arrays allocate nothing
 find-bytes 2 0 0 54 12 47
-float-arith 312 0 0 12893 6512 10974 # each float printed allocates its string and the big integers of the exact printer (SPEC §37; Rust's Ryū allocates none)
-float-compare 0 0 0 86 1 0
-float-convert 183 0 0 6720 2675 5375 # each float printed allocates its string and the big integers of the exact printer (SPEC §37; Rust's Ryū allocates none)
-float-ordered 81 0 0 1934 1376 1503 # each float printed allocates its string and the big integers of the exact printer (SPEC §37; Rust's Ryū allocates none)
-float-roundtrip 3721 0 0 258052 129687 218143 # each case's strings, and the big integers of the exact printer and parser (SPEC §37)
+float-arith 312 0 0 12895 6514 10974 # each float printed allocates its string and the big integers of the exact printer (SPEC §37; Rust's Ryū allocates none)
+float-compare 0 0 0 88 3 0
+float-convert 183 0 0 6722 2677 5375 # each float printed allocates its string and the big integers of the exact printer (SPEC §37; Rust's Ryū allocates none)
+float-ordered 81 0 0 1936 1378 1503 # each float printed allocates its string and the big integers of the exact printer (SPEC §37; Rust's Ryū allocates none)
+float-roundtrip 3721 0 0 258054 129689 218143 # each case's strings, and the big integers of the exact printer and parser (SPEC §37)
 fn-lifetime 7 0 0 39 24 0
 for-adapters 1 0 0 12 6 7
-for-data 1 0 0 47 6 27
-for-data-div 3 0 0 17 9 6 # the two arrays and the cell the views are lent from
+for-data 1 0 0 49 8 27
+for-data-div 3 0 0 20 12 6 # the two arrays and the cell the views are lent from
 for-finite 0 0 0 0 0 0
 for-in-if-lend 1 0 0 4 2 2
-for-never 0 0 0 0 0 0
+for-never 0 0 0 3 3 0
 for-return 1 0 0 9 5 4
-for-view-effect-copy 1 0 0 11 5 9 # the string the view lends
-for-yield-branch 0 0 0 0 0 0
-format 1 0 0 38 31 37 # the string, built at its capacity
-gen-adapters 5 0 0 30 30 0 # the nodes of the lists `chunks` builds; each generator one state machine, each stored generator one handler site, each `yield` to a `for` a direct call
-gen-adapters-fail 8 0 0 48 48 0 # the nodes of the lists `chunks` and `lines` build
+for-view-effect-copy 1 0 0 13 7 9 # the string the view lends
+for-yield-branch 0 0 0 3 3 0
+format 1 0 0 40 33 37 # the string, built at its capacity
+gen-adapters 5 0 0 33 33 0 # the nodes of the lists `chunks` builds; each generator one state machine, each stored generator one handler site, each `yield` to a `for` a direct call
+gen-adapters-fail 8 0 0 51 51 0 # the nodes of the lists `chunks` and `lines` build
 gen-borrowed 2 0 0 11 7 2
-gen-cell 1 0 0 11 6 0
-gen-close 4 0 0 12 12 0 # the list; the drop glue across each yield shares it with the rest (a finaliser frame's clauses one code, SPEC §19), so it is not copied
-gen-div 0 0 0 0 0 0 # the generator that read the input (the stdin cell) is in corpus/pending/ (a capability across a yield, SPEC §15 Open)
-gen-fib 0 0 0 0 0 0
-gen-from 0 0 0 0 0 0 # the generator that echoed the input (the stdin cell) is in corpus/pending/ (a capability across a yield, SPEC §15 Open)
-gen-nested 0 0 0 0 0 0
-gen-pipeline 0 0 0 0 0 0
-gen-pipeline-adapters 0 0 0 0 0 0
-gen-pipeline-pipe 0 0 0 0 0 0 # as gen-pipeline-adapters: the pipelines are its nested calls
+gen-cell 1 0 0 14 9 0
+gen-close 4 0 0 15 15 0 # the list; the drop glue across each yield shares it with the rest (a finaliser frame's clauses one code, SPEC §19), so it is not copied
+gen-div 0 0 0 3 3 0 # the generator that read the input (the stdin cell) is in corpus/pending/ (a capability across a yield, SPEC §15 Open)
+gen-fib 0 0 0 3 3 0
+gen-from 0 0 0 3 3 0 # the generator that echoed the input (the stdin cell) is in corpus/pending/ (a capability across a yield, SPEC §15 Open)
+gen-nested 0 0 0 3 3 0
+gen-pipeline 0 0 0 3 3 0
+gen-pipeline-adapters 0 0 0 3 3 0
+gen-pipeline-pipe 0 0 0 3 3 0 # as gen-pipeline-adapters: the pipelines are its nested calls
 gen-produce 0 0 0 0 0 0
-gen-return 0 0 0 14 1 0
+gen-return 0 0 0 16 3 0
 gen-tokenize-parse 0 0 0 34 0 17 # the stored generator's state is a stack value, and literal views are read-only data
-gen-value 0 0 0 0 0 0
+gen-value 0 0 0 3 3 0
 generated-names 1 0 0 2 2 0
 generic-in-def 0 0 0 0 0 0
 generic-pair-arg 0 0 0 0 0 0
-hello 0 0 0 16 1 0 # nothing: the output capability's cell is a word of the program's data, and the literal is read-only data
-http-request 2 0 0 592 401 513 # the array of header literals and the request string; literal views point into read-only data
+hello 0 0 0 18 3 0 # nothing: the output capability's cell is a word of the program's data, and the literal is read-only data
+http-request 2 0 0 594 403 513 # the array of header literals and the request string; literal views point into read-only data
 hygiene-answering-state 0 0 0 2 2 0
-hygiene-borrow-loop 1 0 0 3 1 0
+hygiene-borrow-loop 1 0 0 6 4 0
 hygiene-box-lib 1 0 0 4 4 0
 hygiene-clause-global 0 0 0 0 0 0
 hygiene-clause-name 0 0 0 2 2 0
@@ -205,25 +205,25 @@ implicit-drops 9 0 0 22 22 0
 int-arith 0 0 0 0 0 0
 int-ops 0 0 0 0 0 0
 int-slash 0 0 0 0 0 0
-io-aoc 2 0 0 166 134 60
-io-args 6 0 0 137 99 101 # a string per argument read and one at the end, and the runtime's reservation of the arguments' memory, read at their first use
-io-break 0 0 0 16 2 0
-io-cat 0 0 0 97 2 0
+io-aoc 2 0 0 167 135 60
+io-args 6 0 0 139 101 101 # a string per argument read and one at the end, and the runtime's reservation of the arguments' memory, read at their first use
+io-break 0 0 0 17 3 0
+io-cat 0 0 0 98 3 0
 io-effects 1 0 0 4154 4099 4135 # the input's string; the stdin, stdout and stderr cells are words of the program's data, and each operation is a direct call of the platform's clause
-io-for-after 0 0 0 35 2 0 # nothing: the lines are counted in the loop over the bytes, with no list per line, and the stdin and stdout cells are words of the program's data
-io-for-assign 0 0 0 5 1 0
-io-for-then 0 0 0 18 2 0
-io-fuel 0 0 0 11 1 0
+io-for-after 0 0 0 36 3 0 # nothing: the lines are counted in the loop over the bytes, with no list per line, and the stdin and stdout cells are words of the program's data
+io-for-assign 0 0 0 7 3 0
+io-for-then 0 0 0 19 3 0
+io-fuel 0 0 0 13 3 0
 io-guess 0 0 0 81 3 0
-io-head 0 0 0 32 2 0
-io-hex 0 0 0 46 2 0
-io-laws 10 0 0 434 226 163 # the fake handlers' cells, the collected strings and the views read into
-io-lines 0 0 0 19 2 0
-io-sections 0 0 0 28 2 0
-io-task 28 7 0 553 541 0 # the scope cell and the scheduler's list nodes; an indirect call per resume of a stored task
-io-upper 0 0 0 135 2 0
-io-upper-effects 0 0 0 135 2 0 # io-upper's: nothing, each operation a direct call that lends the stdin or stdout cell, a word of the program's data
-io-wc 0 0 0 61 2 0
+io-head 0 0 0 33 3 0
+io-hex 0 0 0 47 3 0
+io-laws 10 0 0 436 228 163 # the fake handlers' cells, the collected strings and the views read into
+io-lines 0 0 0 20 3 0
+io-sections 0 0 0 29 3 0
+io-task 28 7 0 555 543 0 # the scope cell and the scheduler's list nodes; an indirect call per resume of a stored task
+io-upper 0 0 0 136 3 0
+io-upper-effects 0 0 0 136 3 0 # io-upper's: nothing, each operation a direct call that lends the stdin or stdout cell, a word of the program's data
+io-wc 0 0 0 62 3 0
 iter-close 2 0 0 4 4 0
 iter-mut 1 0 0 16 16 17
 iter-mut-count 1 0 0 12 8 8
@@ -234,112 +234,112 @@ join-if-statement 0 0 0 0 0 0
 join-let-arm-reads 0 0 0 0 0 0
 join-let-both-arms 0 0 0 0 0 0
 join-let-if 0 0 0 0 0 0
-join-let-loop 0 0 0 0 0 0
+join-let-loop 0 0 0 3 3 0
 join-let-match 0 0 0 0 0 0
 join-let-nested 0 0 0 0 0 0
 join-let-with 0 0 0 2 2 0
-json-tokens 1 0 0 5275 4098 5090 # the input string; tokens are views, literal views read-only data
-key-value 2 0 0 4547 4162 4529 # the input string and the buffer of view pairs
-labels-json 2 0 0 359 159 339 # the output string and the one escaped string (the owned side of the sum)
-leetcode/arrays/0001-two-sum 19 0 0 4907 4528 4434 # the input string; per case, its buffer and the map's two arrays, sized for the case (Rust's `HashMap::with_capacity`)
-leetcode/arrays/0011-container-with-most-water 7 0 0 4406 4224 4321 # the input string and each case's buffer
-leetcode/arrays/0015-3sum 13 0 0 5090 4591 4743 # the input string, each case's buffer, and the buffer of its triples (one buffer of tuples, where Rust's `Vec<Vec<i32>>` allocates one per triple)
-leetcode/arrays/0033-search-in-rotated-sorted-array 8 0 0 4518 4238 4433 # the input string and each case's buffer
-leetcode/arrays/0053-maximum-subarray 7 0 0 4384 4220 4305 # the input string and each case's buffer
-leetcode/arrays/0121-best-time-to-buy-and-sell-stock 8 0 0 4418 4243 4329 # the input string and each case's buffer, as Rust's `Vec` per case
-leetcode/arrays/0152-maximum-product-subarray 8 0 0 4383 4233 4291 # the input string and each case's buffer
-leetcode/arrays/0153-find-minimum-in-rotated-sorted-array 8 0 0 4405 4239 4308 # the input string and each case's buffer
-leetcode/arrays/0217-contains-duplicate 13 0 0 5084 4854 4323 # the input string; per case, its buffer and the set's slots (its values are `1`, an array of no words)
-leetcode/arrays/0238-product-of-array-except-self 11 0 0 4390 4238 4285 # the input string, each case's buffer, and its answer array
-leetcode/binary/0190-reverse-bits 1 0 0 4232 4098 4211 # the input string; nothing per case
-leetcode/binary/0191-number-of-1-bits 1 0 0 4191 4098 4203 # the input string; nothing per case
-leetcode/binary/0268-missing-number 6 0 0 4280 4194 4217 # the input string and each case's buffer
-leetcode/binary/0338-counting-bits 5 0 0 4267 4148 4204 # the input string and each case's answer array
-leetcode/binary/0371-sum-of-two-integers 1 0 0 4213 4098 4214 # the input string; nothing per case
-leetcode/dp/0039-combination-sum 37 0 0 5493 4928 4861 # the input string; per case the candidates, the path and the answer's buffer, a copy of the path per combination (15), and the buffers that grow past their first capacity
-leetcode/dp/0055-jump-game 8 0 0 4399 4235 4279 # the input string and each case's buffer
-leetcode/dp/0062-unique-paths 7 0 0 4518 4233 4498 # the input string and each case's row
-leetcode/dp/0070-climbing-stairs 7 0 0 4386 4230 4318 # the input string and each case's memo array
-leetcode/dp/0091-decode-ways 1 0 0 4244 4098 4277 # the input string; the case is solved on a view of the line, nothing per case
-leetcode/dp/0139-word-break 13 0 0 5191 4493 5045 # the input string; per case the buffer of the words' views and the array of flags
-leetcode/dp/0198-house-robber 7 0 0 4347 4217 4269 # the input string and each case's buffer
-leetcode/dp/0213-house-robber-ii 7 0 0 4331 4214 4264 # the input string and each case's buffer; the two rows are sub-views
-leetcode/dp/0300-longest-increasing-subsequence 13 0 0 4603 4362 4467 # the input string; per case the buffer and the tails
-leetcode/dp/0322-coin-change 15 0 0 66313 16864 59910 # the input string; per case the buffer and the table
-leetcode/dp/1143-longest-common-subsequence 7 0 0 5617 4596 5361 # the input string and each case's table; the texts are views of the line
-leetcode/graphs/0128-longest-consecutive-sequence 15 0 0 5327 4694 4514 # the input string, the buffer of cases and one doubling of a case's buffer; per case, its buffer and the set's slots (no words for its values)
-leetcode/graphs/0133-clone-graph 38 0 0 5237 4563 4911 # the input string; per case the line's numbers, both graphs' two arrays, the map from node to copy and the queue (an arena: Rust's is a pointer graph of `Rc`s and a `HashMap`)
+json-tokens 1 0 0 5276 4099 5090 # the input string; tokens are views, literal views read-only data
+key-value 2 0 0 4548 4163 4529 # the input string and the buffer of view pairs
+labels-json 2 0 0 361 161 339 # the output string and the one escaped string (the owned side of the sum)
+leetcode/arrays/0001-two-sum 19 0 0 4908 4529 4434 # the input string; per case, its buffer and the map's two arrays, sized for the case (Rust's `HashMap::with_capacity`)
+leetcode/arrays/0011-container-with-most-water 7 0 0 4407 4225 4321 # the input string and each case's buffer
+leetcode/arrays/0015-3sum 13 0 0 5091 4592 4743 # the input string, each case's buffer, and the buffer of its triples (one buffer of tuples, where Rust's `Vec<Vec<i32>>` allocates one per triple)
+leetcode/arrays/0033-search-in-rotated-sorted-array 8 0 0 4519 4239 4433 # the input string and each case's buffer
+leetcode/arrays/0053-maximum-subarray 7 0 0 4385 4221 4305 # the input string and each case's buffer
+leetcode/arrays/0121-best-time-to-buy-and-sell-stock 8 0 0 4419 4244 4329 # the input string and each case's buffer, as Rust's `Vec` per case
+leetcode/arrays/0152-maximum-product-subarray 8 0 0 4384 4234 4291 # the input string and each case's buffer
+leetcode/arrays/0153-find-minimum-in-rotated-sorted-array 8 0 0 4406 4240 4308 # the input string and each case's buffer
+leetcode/arrays/0217-contains-duplicate 13 0 0 5085 4855 4323 # the input string; per case, its buffer and the set's slots (its values are `1`, an array of no words)
+leetcode/arrays/0238-product-of-array-except-self 11 0 0 4391 4239 4285 # the input string, each case's buffer, and its answer array
+leetcode/binary/0190-reverse-bits 1 0 0 4233 4099 4211 # the input string; nothing per case
+leetcode/binary/0191-number-of-1-bits 1 0 0 4192 4099 4203 # the input string; nothing per case
+leetcode/binary/0268-missing-number 6 0 0 4281 4195 4217 # the input string and each case's buffer
+leetcode/binary/0338-counting-bits 5 0 0 4268 4149 4204 # the input string and each case's answer array
+leetcode/binary/0371-sum-of-two-integers 1 0 0 4214 4099 4214 # the input string; nothing per case
+leetcode/dp/0039-combination-sum 37 0 0 5494 4929 4861 # the input string; per case the candidates, the path and the answer's buffer, a copy of the path per combination (15), and the buffers that grow past their first capacity
+leetcode/dp/0055-jump-game 8 0 0 4400 4236 4279 # the input string and each case's buffer
+leetcode/dp/0062-unique-paths 7 0 0 4519 4234 4498 # the input string and each case's row
+leetcode/dp/0070-climbing-stairs 7 0 0 4387 4231 4318 # the input string and each case's memo array
+leetcode/dp/0091-decode-ways 1 0 0 4245 4099 4277 # the input string; the case is solved on a view of the line, nothing per case
+leetcode/dp/0139-word-break 13 0 0 5192 4494 5045 # the input string; per case the buffer of the words' views and the array of flags
+leetcode/dp/0198-house-robber 7 0 0 4348 4218 4269 # the input string and each case's buffer
+leetcode/dp/0213-house-robber-ii 7 0 0 4332 4215 4264 # the input string and each case's buffer; the two rows are sub-views
+leetcode/dp/0300-longest-increasing-subsequence 13 0 0 4604 4363 4467 # the input string; per case the buffer and the tails
+leetcode/dp/0322-coin-change 15 0 0 66314 16865 59910 # the input string; per case the buffer and the table
+leetcode/dp/1143-longest-common-subsequence 7 0 0 5618 4597 5361 # the input string and each case's table; the texts are views of the line
+leetcode/graphs/0128-longest-consecutive-sequence 15 0 0 5328 4695 4514 # the input string, the buffer of cases and one doubling of a case's buffer; per case, its buffer and the set's slots (no words for its values)
+leetcode/graphs/0133-clone-graph 38 0 0 5238 4564 4911 # the input string; per case the line's numbers, both graphs' two arrays, the map from node to copy and the queue (an arena: Rust's is a pointer graph of `Rc`s and a `HashMap`)
 leetcode/graphs/0200-number-of-islands 25 0 0 5268 4634 4966 # the input string; per case the line's numbers (the grid), the seen array and the queue, as Rust
-leetcode/graphs/0207-course-schedule 39 0 0 4936 4526 4715 # the input string; per case the line's numbers, the graph's two arrays, the fill cursor, the counts and the queue (Rust's `Vec<Vec<usize>>` is a buffer per course)
-leetcode/graphs/0261-graph-valid-tree 19 0 0 4674 4405 4499 # the input string; per case the line's numbers and the parent and size arrays, as Rust
-leetcode/graphs/0269-alien-dictionary 37 0 0 11116 9741 5801 # the input string; per case the edge, count, used and taken arrays (on the stack in Rust, #496) and the answer's string
-leetcode/graphs/0323-number-of-connected-components 22 0 0 4711 4408 4528 # the input string; per case the line's numbers and the parent and size arrays, as Rust
+leetcode/graphs/0207-course-schedule 39 0 0 4937 4527 4715 # the input string; per case the line's numbers, the graph's two arrays, the fill cursor, the counts and the queue (Rust's `Vec<Vec<usize>>` is a buffer per course)
+leetcode/graphs/0261-graph-valid-tree 19 0 0 4675 4406 4499 # the input string; per case the line's numbers and the parent and size arrays, as Rust
+leetcode/graphs/0269-alien-dictionary 37 0 0 11117 9742 5801 # the input string; per case the edge, count, used and taken arrays (on the stack in Rust, #496) and the answer's string
+leetcode/graphs/0323-number-of-connected-components 22 0 0 4712 4409 4528 # the input string; per case the line's numbers and the parent and size arrays, as Rust
 leetcode/graphs/0417-pacific-atlantic-water-flow 31 0 0 5593 4707 5163 # the input string; per case the line's numbers, two seen arrays and two queues, as Rust
-leetcode/heaps/0295-find-median-from-data-stream 28 0 0 6855 6256 6569 # the input string; per case the two heaps and the buffer of its answers (#491: Rust would print them at once)
-leetcode/heaps/0295-find-median-from-data-stream-f64 281 0 0 11042 8858 9704 # each float printed allocates its string and the big integers of the exact printer (SPEC §37; Rust's Ryū allocates none)
-leetcode/heaps/0347-top-k-frequent-elements 31 0 0 7291 5974 5354 # the input string; per case, its buffer, the map's two arrays (sized for the case), the heap of `k + 1` and the answer's buffer
-leetcode/intervals/0056-merge-intervals 20 0 0 5061 4632 4596 # the input string; per case the buffer of intervals and the merged one (none for the empty case), as Rust
-leetcode/intervals/0057-insert-interval 21 0 0 4859 4410 4442 # the input string; per case the buffer of intervals and the result, as Rust
-leetcode/intervals/0252-meeting-rooms 11 0 0 4751 4446 4464 # the input string; per case the buffer of meetings, as Rust
-leetcode/intervals/0253-meeting-rooms-ii 20 0 0 5427 5040 5052 # the input string; per case the buffer of meetings and the heap (none for the empty case), as Rust
-leetcode/intervals/0435-non-overlapping-intervals 11 0 0 4933 4578 4612 # the input string; per case the buffer of intervals, as Rust
-leetcode/lists/0019-remove-nth-node-from-end-of-list 29 0 0 4558 4383 4290 # the input string; per case the line's numbers and a cell per node, as Rust's `Box`es; the removal allocates nothing
-leetcode/lists/0021-merge-two-sorted-lists 30 0 0 4551 4365 4290 # the input string; per case the line's numbers and a cell per node, as Rust's `Box`es; the merge allocates nothing
-leetcode/lists/0023-merge-k-sorted-lists 43 0 0 6111 5842 5014 # the input string; per case the line's numbers, a cell per node, the array of lists and the heap; the merge allocates no node
-leetcode/lists/0141-linked-list-cycle 18 0 0 4551 4333 4391 # the input string; per case the line's numbers and the `next` array (an arena: an owned list cannot have a cycle)
-leetcode/lists/0143-reorder-list 35 0 0 4874 4571 4310 # the input string; per case the line's numbers and a cell per node, as Rust's `Box`es
-leetcode/lists/0206-reverse-linked-list 32 0 0 4604 4392 4307 # the input string; per case the line's numbers and a cell per node, as Rust's `Box`es; the reversal allocates nothing
-leetcode/matrix/0048-rotate-image 5 0 0 4503 4238 4420 # the input string and each case's buffer, rotated in place
-leetcode/matrix/0054-spiral-matrix 15 0 0 4765 4342 4555 # the input string; per case the buffer and the answer's
-leetcode/matrix/0073-set-matrix-zeroes 19 0 0 4681 4288 4522 # the input string; per case the buffer and the two arrays of flags
-leetcode/matrix/0079-word-search 15 0 0 5126 4384 5154 # the input string; per case the grid and the word, owned to be threaded through the recursion
-leetcode/strings/0003-longest-substring-without-repeating-characters 2 0 0 7845 7521 7600 # the input string and the table of last positions, reused (on the stack in Rust, #496)
-leetcode/strings/0005-longest-palindromic-substring 1 0 0 4552 4098 4573 # the input string; the answers are views
-leetcode/strings/0020-valid-parentheses 2 0 0 4372 4169 4319 # the input string and the stack, reused from case to case
-leetcode/strings/0049-group-anagrams 70 0 0 8122 7209 6065 # the input string; per case, the buffer of words, the buffer of groups and the map's two arrays; per word, its key (a string), and per new group its buffer and its key made again for the insertion
-leetcode/strings/0076-minimum-window-substring 2 0 0 7723 7087 7518 # the input string and the counts, reused (on the stack in Rust, #496); the answers are views
-leetcode/strings/0125-valid-palindrome 1 0 0 4415 4098 4365 # the input string
-leetcode/strings/0242-valid-anagram 2 0 0 9283 6990 9014 # the input string and the counts, reused (on the stack in Rust, #496)
-leetcode/strings/0271-encode-and-decode-strings 22 0 0 5436 5067 5152 # the input string; per case the list, the encoded string and the decoded list, whose strings are views (Rust's `Vec<String>` allocates each)
-leetcode/strings/0424-longest-repeating-character-replacement 2 0 0 4803 4471 4807 # the input string and the counts, reused (on the stack in Rust, #496)
-leetcode/strings/0647-palindromic-substrings 1 0 0 4533 4098 4529 # the input string
-leetcode/trees/0098-validate-binary-search-tree 59 0 0 5360 4730 4515 # the input string; per case the line's tokens, two cells per node (Rust: one box)
-leetcode/trees/0100-same-tree 59 0 0 5185 4802 4526 # the input string; per case the line's tokens and two cells per node of each tree (Rust: one box)
-leetcode/trees/0102-binary-tree-level-order-traversal 58 0 0 5456 5110 4467 # the input string; per case the line's tokens, two cells per node (Rust: one box) and the queue
-leetcode/trees/0104-maximum-depth-of-binary-tree 48 0 0 5103 4626 4404 # the input string; per case the line's tokens, two cells per node (Rust: one box)
-leetcode/trees/0105-construct-binary-tree-from-preorder-and-inorder-traversal 39 0 0 4847 4514 4362 # the input string; per case the line's tokens and two cells per node (Rust: one box, and a `HashMap`, #211)
-leetcode/trees/0124-binary-tree-maximum-path-sum 65 0 0 5505 4850 4546 # the input string; per case the line's tokens, two cells per node (Rust: one box)
-leetcode/trees/0208-implement-trie 25 0 0 8067 7610 6535 # the input string; per case the trie's two buffers and their doublings and the answer's string (an arena)
-leetcode/trees/0208-implement-trie-boxed 58 0 0 10195 7601 5585 # the input's buffer, the tokens and the cases' buffers, and per case the trie's nodes, one array of 26 children each (Rust's count, trie_boxed.rs)
-leetcode/trees/0208-implement-trie-vec 58 0 0 11426 8286 5585 # as 0208-implement-trie-boxed, each node's children a `Vec[Option[Trie]]` (Rust's count, trie_boxed.rs)
-leetcode/trees/0211-design-add-and-search-words-data-structure 46 0 0 10900 9038 8615 # the input string; per case the trie's two buffers and their doublings, the search stack and the answer's string (an arena)
+leetcode/heaps/0295-find-median-from-data-stream 28 0 0 6856 6257 6569 # the input string; per case the two heaps and the buffer of its answers (#491: Rust would print them at once)
+leetcode/heaps/0295-find-median-from-data-stream-f64 281 0 0 11043 8859 9704 # each float printed allocates its string and the big integers of the exact printer (SPEC §37; Rust's Ryū allocates none)
+leetcode/heaps/0347-top-k-frequent-elements 31 0 0 7292 5975 5354 # the input string; per case, its buffer, the map's two arrays (sized for the case), the heap of `k + 1` and the answer's buffer
+leetcode/intervals/0056-merge-intervals 20 0 0 5062 4633 4596 # the input string; per case the buffer of intervals and the merged one (none for the empty case), as Rust
+leetcode/intervals/0057-insert-interval 21 0 0 4860 4411 4442 # the input string; per case the buffer of intervals and the result, as Rust
+leetcode/intervals/0252-meeting-rooms 11 0 0 4752 4447 4464 # the input string; per case the buffer of meetings, as Rust
+leetcode/intervals/0253-meeting-rooms-ii 20 0 0 5428 5041 5052 # the input string; per case the buffer of meetings and the heap (none for the empty case), as Rust
+leetcode/intervals/0435-non-overlapping-intervals 11 0 0 4934 4579 4612 # the input string; per case the buffer of intervals, as Rust
+leetcode/lists/0019-remove-nth-node-from-end-of-list 29 0 0 4559 4384 4290 # the input string; per case the line's numbers and a cell per node, as Rust's `Box`es; the removal allocates nothing
+leetcode/lists/0021-merge-two-sorted-lists 30 0 0 4552 4366 4290 # the input string; per case the line's numbers and a cell per node, as Rust's `Box`es; the merge allocates nothing
+leetcode/lists/0023-merge-k-sorted-lists 43 0 0 6112 5843 5014 # the input string; per case the line's numbers, a cell per node, the array of lists and the heap; the merge allocates no node
+leetcode/lists/0141-linked-list-cycle 18 0 0 4552 4334 4391 # the input string; per case the line's numbers and the `next` array (an arena: an owned list cannot have a cycle)
+leetcode/lists/0143-reorder-list 35 0 0 4875 4572 4310 # the input string; per case the line's numbers and a cell per node, as Rust's `Box`es
+leetcode/lists/0206-reverse-linked-list 32 0 0 4605 4393 4307 # the input string; per case the line's numbers and a cell per node, as Rust's `Box`es; the reversal allocates nothing
+leetcode/matrix/0048-rotate-image 5 0 0 4504 4239 4420 # the input string and each case's buffer, rotated in place
+leetcode/matrix/0054-spiral-matrix 15 0 0 4766 4343 4555 # the input string; per case the buffer and the answer's
+leetcode/matrix/0073-set-matrix-zeroes 19 0 0 4682 4289 4522 # the input string; per case the buffer and the two arrays of flags
+leetcode/matrix/0079-word-search 15 0 0 5127 4385 5154 # the input string; per case the grid and the word, owned to be threaded through the recursion
+leetcode/strings/0003-longest-substring-without-repeating-characters 2 0 0 7846 7522 7600 # the input string and the table of last positions, reused (on the stack in Rust, #496)
+leetcode/strings/0005-longest-palindromic-substring 1 0 0 4553 4099 4573 # the input string; the answers are views
+leetcode/strings/0020-valid-parentheses 2 0 0 4373 4170 4319 # the input string and the stack, reused from case to case
+leetcode/strings/0049-group-anagrams 70 0 0 8123 7210 6065 # the input string; per case, the buffer of words, the buffer of groups and the map's two arrays; per word, its key (a string), and per new group its buffer and its key made again for the insertion
+leetcode/strings/0076-minimum-window-substring 2 0 0 7724 7088 7518 # the input string and the counts, reused (on the stack in Rust, #496); the answers are views
+leetcode/strings/0125-valid-palindrome 1 0 0 4416 4099 4365 # the input string
+leetcode/strings/0242-valid-anagram 2 0 0 9284 6991 9014 # the input string and the counts, reused (on the stack in Rust, #496)
+leetcode/strings/0271-encode-and-decode-strings 22 0 0 5437 5068 5152 # the input string; per case the list, the encoded string and the decoded list, whose strings are views (Rust's `Vec<String>` allocates each)
+leetcode/strings/0424-longest-repeating-character-replacement 2 0 0 4804 4472 4807 # the input string and the counts, reused (on the stack in Rust, #496)
+leetcode/strings/0647-palindromic-substrings 1 0 0 4534 4099 4529 # the input string
+leetcode/trees/0098-validate-binary-search-tree 59 0 0 5361 4731 4515 # the input string; per case the line's tokens, two cells per node (Rust: one box)
+leetcode/trees/0100-same-tree 59 0 0 5186 4803 4526 # the input string; per case the line's tokens and two cells per node of each tree (Rust: one box)
+leetcode/trees/0102-binary-tree-level-order-traversal 58 0 0 5457 5111 4467 # the input string; per case the line's tokens, two cells per node (Rust: one box) and the queue
+leetcode/trees/0104-maximum-depth-of-binary-tree 48 0 0 5104 4627 4404 # the input string; per case the line's tokens, two cells per node (Rust: one box)
+leetcode/trees/0105-construct-binary-tree-from-preorder-and-inorder-traversal 39 0 0 4848 4515 4362 # the input string; per case the line's tokens and two cells per node (Rust: one box, and a `HashMap`, #211)
+leetcode/trees/0124-binary-tree-maximum-path-sum 65 0 0 5506 4851 4546 # the input string; per case the line's tokens, two cells per node (Rust: one box)
+leetcode/trees/0208-implement-trie 25 0 0 8068 7611 6535 # the input string; per case the trie's two buffers and their doublings and the answer's string (an arena)
+leetcode/trees/0208-implement-trie-boxed 58 0 0 10196 7602 5585 # the input's buffer, the tokens and the cases' buffers, and per case the trie's nodes, one array of 26 children each (Rust's count, trie_boxed.rs)
+leetcode/trees/0208-implement-trie-vec 58 0 0 11427 8287 5585 # as 0208-implement-trie-boxed, each node's children a `Vec[Option[Trie]]` (Rust's count, trie_boxed.rs)
+leetcode/trees/0211-design-add-and-search-words-data-structure 46 0 0 10901 9039 8615 # the input string; per case the trie's two buffers and their doublings, the search stack and the answer's string (an arena)
 leetcode/trees/0212-word-search-ii 102 0 0 21673 17226 17484 # the input string; per case the words as strings and their buffer, the trie's two buffers and their doublings, and the marks and found flags
-leetcode/trees/0226-invert-binary-tree 39 0 0 5042 4738 4345 # the input string; per case the line's tokens and two cells per node (Rust: one box); the inversion allocates nothing
-leetcode/trees/0230-kth-smallest-element-in-a-bst 89 29 0 5400 4966 4544 # the input string; per case the line's tokens, two cells per node (Rust: one box), and the recursive generator's objects (25 in all; the same walk as a plain recursion is 66); the walk's second call is a tail call, which passes its callee's outcome on (SPEC §14 *Tail calls*), so each resume of the suspended walk is a call of its continuation's code (indirect)
-leetcode/trees/0235-lowest-common-ancestor-of-a-binary-search-tree 74 0 0 5788 5270 4756 # the input string; per case the line's tokens and two cells per node (Rust: one box)
-leetcode/trees/0297-serialize-and-deserialize-binary-tree 80 0 0 6127 5640 5021 # the input string; per case the line's tokens, two cells per node of each of two trees (Rust: one box), the two strings and the second string's tokens
-leetcode/trees/0572-subtree-of-another-tree 70 0 0 6371 5928 4618 # the input string; per case the line's tokens and two cells per node of each tree (Rust: one box); the comparisons allocate and copy nothing
-lend-config 1 0 0 24 4 0
-lend-copy 3 0 0 38 17 13
-lend-div 2 0 0 36 12 8
+leetcode/trees/0226-invert-binary-tree 39 0 0 5043 4739 4345 # the input string; per case the line's tokens and two cells per node (Rust: one box); the inversion allocates nothing
+leetcode/trees/0230-kth-smallest-element-in-a-bst 89 29 0 5401 4967 4544 # the input string; per case the line's tokens, two cells per node (Rust: one box), and the recursive generator's objects (25 in all; the same walk as a plain recursion is 66); the walk's second call is a tail call, which passes its callee's outcome on (SPEC §14 *Tail calls*), so each resume of the suspended walk is a call of its continuation's code (indirect)
+leetcode/trees/0235-lowest-common-ancestor-of-a-binary-search-tree 74 0 0 5789 5271 4756 # the input string; per case the line's tokens and two cells per node (Rust: one box)
+leetcode/trees/0297-serialize-and-deserialize-binary-tree 80 0 0 6128 5641 5021 # the input string; per case the line's tokens, two cells per node of each of two trees (Rust: one box), the two strings and the second string's tokens
+leetcode/trees/0572-subtree-of-another-tree 70 0 0 6372 5929 4618 # the input string; per case the line's tokens and two cells per node of each tree (Rust: one box); the comparisons allocate and copy nothing
+lend-config 1 0 0 26 6 0
+lend-copy 3 0 0 41 20 13
+lend-div 2 0 0 39 15 8
 lend-lib-each 2 0 0 44 12 11
 lend-lib-gen 1 0 0 4 4 0
 lend-lib-loop 3 0 0 34 22 4
-lend-mut 1 0 0 11 6 0
+lend-mut 1 0 0 13 8 0
 lend-owner-joined 2 0 0 2 2 0
 lend-owner-returned 1 0 0 1 1 0
-lend-pipeline 2 0 0 121 103 6
-lend-server 1 0 0 16 3 0
-lend-shadow 2 0 0 33 13 5
+lend-pipeline 2 0 0 124 106 6
+lend-server 1 0 0 18 5 0
+lend-shadow 2 0 0 35 15 5
 list-blocks 13 0 0 55 43 0
 list-capability 6 0 0 31 22 0
 list-generic 27 0 0 148 102 0 # the lists' nodes, one object each; no frame and no closure is allocated
 literal-array-written 2 0 0 22 11 12
 loop-handler-binder 1 0 0 15 4 16
-loop-labels 0 0 0 0 0 0
+loop-labels 0 0 0 3 3 0
 loop-row-answer 0 0 0 0 0 0
 loop-shadow-linear 1 0 0 6 3 3
-loop-shadow-owner 1 0 0 11 7 10
+loop-shadow-owner 1 0 0 13 9 10
 loop-shadow-persistent 0 0 0 0 0 0
 main-lifetime 0 0 0 0 0 0 # main's lifetime and the unit cell `u` are cells of no words: nothing is allocated
 map-reuse 7 0 0 48 48 0
@@ -349,26 +349,26 @@ mut-block 0 0 0 0 0 0
 mut-block-nested 0 0 0 0 0 0
 mut-lend-arm 0 0 0 4 4 0
 mut-modify 1 0 0 2 2 0
-mut-name-capture 2 0 0 10 9 8
+mut-name-capture 2 0 0 12 11 8
 mut-run 0 0 0 0 0 0
 mut-shadow-arms 0 0 0 0 0 0
 name-clash 0 0 0 0 0 0
 nats-sum 0 0 0 0 0 0
-needs-stdout 0 0 0 7 1 0 # nothing: the stdout cell is a word of the program's data
+needs-stdout 0 0 0 9 3 0 # nothing: the stdout cell is a word of the program's data
 operator-rounds 166 0 24 1551 823 0 # the cluster's and the desired state's list nodes, rebuilt per update; the copies are the written `clone`s of the cluster and the spec
-parse-int 1 0 0 239 79 137 # the line buffer, reused; literal views read-only data
+parse-int 1 0 0 240 80 137 # the line buffer, reused; literal views read-only data
 parse-recover 246 0 31 1808 984 28 # the token list's nodes and the lists rebuilt per statement; the copies are the written `clone(rest)` per statement
 pipe-handlers 0 0 0 0 0 0
 poly-operators 0 0 0 0 0 0 # a case of an operator is a direct call; nothing is allocated
 poly-providers 2 0 0 90 48 69 # the two strings; the comparisons read views and allocate nothing
-print-borrowed-array 1 0 0 17 4 3
-quicksort 2 0 0 96889 88843 94775 # the data and the range stack; the output capability's cell is a word of the program's data
+print-borrowed-array 1 0 0 19 6 3
+quicksort 2 0 0 96891 88845 94775 # the data and the range stack; the output capability's cell is a word of the program's data
 rec-await-exhausted 2 0 0 9 6 0 # the two list cells; the one `await`'s clause resumes in tail position, a direct call
-rec-deep 30040 0 0 3097088 2169488 436560 # the tree, one object per node (its payload, boxed at the sum), and each group's buffer of frames growing by doubling
+rec-deep 30040 0 0 2169491 2169491 436560 # the tree, one object per node (its payload, boxed at the sum), and each group's buffer of frames growing by doubling
 rec-emit 6 0 0 216 252 0 # the frames of the continuation `summed` resumes in the middle of the recursion, as in the probe P2
 rec-even-odd 0 0 0 0 0 0
 rec-fib 0 0 0 0 0 0 # the recursion runs on the native stack: no frame is allocated
-rec-generic-deep 120054 0 0 1888544 1888544 502080 # the four lists of 30000 nodes, one object per node, and the heap driver's buffers, each grown by doubling
+rec-generic-deep 120054 0 0 1888547 1888547 502080 # the four lists of 30000 nodes, one object per node, and the heap driver's buffers, each grown by doubling
 rec-generic-layer 6 0 0 23 20 0
 rec-generic-mutual 8 0 0 44 32 0
 rec-layer 2 0 0 17 17 0 # the two cells only: the layers wrap the self-reference with no allocation
@@ -380,33 +380,33 @@ rec-parser 17 0 0 51 51 0 # the token lists and the tokens put back
 rec-tree 127 0 0 635 635 0 # the tree only, one object per node (its payload, boxed at the sum; an empty child is none)
 rec-yield 0 0 0 0 0 0
 reconcile-chain 19 3 0 457 458 0 # the journals' list nodes, and the continuations the clauses that resume before they answer capture (those resuming in tail position are direct calls); the indirect calls are of `service`'s answer, a function of its state built by its return clause or by its `request` clause (SPEC §19, *Handler state*)
-reconcile-clock 25 8 0 397 377 0 # the fake clock's cells, the journals' list nodes, and the continuations the clauses that resume before they answer capture; the platform's clock cell is a word of the program's data; the indirect calls are of `on_clock`'s answer, a function of its state (the clock capability) built by its return clause or by its `pause` clause (SPEC §19, *Handler state*)
+reconcile-clock 25 8 0 400 380 0 # the fake clock's cells, the journals' list nodes, and the continuations the clauses that resume before they answer capture; the platform's clock cell is a word of the program's data; the indirect calls are of `on_clock`'s answer, a function of its state (the clock capability) built by its return clause or by its `pause` clause (SPEC §19, *Handler state*)
 retry-block 2 0 0 5 5 0 # the clock cells
-reverse-bytes 1 0 0 132 91 41
+reverse-bytes 1 0 0 133 92 41
 sched-a 63 18 0 1558 897 0
-sched-a-div 31 5 0 1462 801 0
+sched-a-div 31 5 0 1465 804 0
 sched-b 64 18 0 1561 898 0
 slice-imm 1 0 0 6 5 2
 slice-lib 3 0 0 38 25 30
 slice-mut 1 0 0 8 8 4
 slice-split 1 0 0 19 13 20
-sort-lines 2 0 0 4465 4272 4370 # the input string and the buffer of line views
-sort-numbers 1 0 0 165 131 137
-split-at-mut 1 0 0 132 92 51
+sort-lines 2 0 0 4466 4273 4370 # the input string and the buffer of line views
+sort-numbers 1 0 0 167 133 137
+split-at-mut 1 0 0 133 93 51
 state-machine 0 0 0 0 0 0 # the generator's yields are direct calls of the loop's body
 storage-array 5461 0 0 71560 55180 10920 # one array per node of the tree of arrays (Rust's count, storage.rs)
 sum-i32 7 0 0 39 24 0
 sum-prog-exact 37 9 0 153 111 0
 surface/array-sum 1 0 0 3000 3000 2024
 surface/family-swap 2 0 0 4 4 0
-surface/io-upper 0 0 0 135 2 0
-surface/io-wc 0 0 0 61 2 0
+surface/io-upper 0 0 0 136 3 0
+surface/io-wc 0 0 0 62 3 0
 surface/map-reuse 6 0 0 42 42 0
 swap-cell-width 1 0 0 1 1 0
-text-lend-lifetime 1 0 0 81 71 77
-text-wordfreq 966 0 192 5450 3358 65 # the words' and counts' list nodes; the copies are the written `clone`s of words in comparisons and lookups
+text-lend-lifetime 1 0 0 83 73 77
+text-wordfreq 966 0 192 5452 3360 65 # the words' and counts' list nodes; the copies are the written `clone`s of words in comparisons and lookups
 tree-map 29 0 2 209 161 0 # the trees' nodes, one object per node; the copies are the written `clone(m)`s
 tree-view-tasks 1205 0 0 50505 29457 8727
-trim-replace 5 0 0 4639 4178 4707 # the input string, and one replaced string per line (four)
+trim-replace 5 0 0 4640 4179 4707 # the input string, and one replaced string per line (four)
 utf8-count 1 0 0 341 109 263 # the line buffer, reused; the stdin, stdout and stderr cells are words of the program's data
-yield-callback 0 0 0 0 0 0
+yield-callback 0 0 0 3 3 0

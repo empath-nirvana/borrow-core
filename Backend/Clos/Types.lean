@@ -217,7 +217,7 @@ def primTy : Op → List Var → TM Nat
       let n ← newLoc (← tyVar v)
       modify fun s => { s with cons := s.cons.insert v n }
       pure n
-  | .free, [l] | .scopedFree _, [l] | .load, [l] => do
+  | .free, [l] | .scopedFree _, [l] | .load, [l] | .io .takeCell, [l] => do
       let a ← newNode .any
       unify (← tyVar l) (← newLoc a)
       pure a

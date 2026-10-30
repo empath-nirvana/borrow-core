@@ -523,7 +523,7 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
         throw "flat IR: a capability's cell wider than its word"
       return (← storeCell n (.data (addr - dataBase)) (locs (← vals v))) ++
         (← emit d [.data (addr - dataBase)])
-  | .free, [l], d => lowerFree none l d
+  | .free, [l], d | .io .takeCell, [l], d => lowerFree none l d
   | .scopedFree k, [l], d => lowerFree (some k) l d
   | .load, [l], d => do
       let a ← locElem (← vty l)

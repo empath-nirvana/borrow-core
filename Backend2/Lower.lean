@@ -496,7 +496,7 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     -- A capability's cell, as wide as its width class (`Prog.statics`).
     let a := Exp.data ((← read).staticAt.getD k 0)
     return (← storeCell n a (locs (← arg 0))) ++ (← emit d [a])
-  | .free => do
+  | .free | .io .takeCell => do
     let pn ← argN 0
     let a := Exp.loc ((← arg 0).headD 0)
     let (s, vs) ← loadCell pn a (← wordsN (← contents pn))

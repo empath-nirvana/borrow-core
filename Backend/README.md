@@ -410,7 +410,10 @@ Not objects:
   continuation held across a lend is T1, #172), so no program has one.
 - **Capability cells.** `stdin`, `stdout`, `stderr`, `args` and `clock` are words of the
   program's data, after its literals (`Clos/Convert.lean`, `staticWord`; `Op.staticCell`):
-  the prologue stores the descriptor there, and the epilogue's `free` frees nothing.
+  the harness's make stores the descriptor there (`mkValue`), and its take's `take_cell`
+  (`takeValue`) frees nothing. A program with capabilities is compiled as the checked `run_io`
+  (SPEC §11), whose harness externs are these host functions; the backend adds no make or take
+  of its own.
 
 - **Literals** (SPEC §17). A string literal's tabulator, the λ the elaborator writes for `"…"`
   (a compare with the length, then a search on the index down to one byte), is recognised by
@@ -614,8 +617,9 @@ A `main` may declare the standard externs (`Frontend/Check/Externs.lean`): the c
   arg…`). The libc counterparts are `clock_gettime`, `nanosleep` and `argv`.
 - **Loops.** When `main` returns a loop, every stage drives it: it calls the loop on `inl ()`
   until the answer is `inl r` (the source stage by `driveSource`, the closure IR by its `drive`,
-  the flat IR by a `drive` function generated at the loop's type), then runs the epilogue on `r`, which the closure
-  conversion registers as the code `fin`. The source stage's run that finishes after `k`
+  the flat IR by a `drive` function generated at the loop's type), then runs `resultOf` on `r`
+  (`run_io`'s value: the outputs dropped, `main`'s result kept), which the closure conversion
+  registers as the code `fin`. The source stage's run that finishes after `k`
   observations is the run of `driveE k`, the program `IORun.loop_every_run` covers.
 - **The source stage** runs the model: the checker's `run_io` wrapper, with every extern given
   its Lean model (`IORun`), applied to standard input as a byte list, from the empty memory. Its

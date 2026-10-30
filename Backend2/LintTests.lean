@@ -65,6 +65,17 @@ def closT : LTy := .thunk (.arr .unit (.ret .unit))
 #guard accepts (dropProg (.mut i32T))
 #guard accepts (dropProg (.fam (.mut i32T)))
 
+-- A drop of an opaque value, or of a pair holding one: refused where the typed term does not
+-- abandon it, accepted where it does (`Prog.abandoned`: an abort's `Ctx.Drops`, `⊤`).
+#guard refuses (dropProg (.opq .output)) "which may own a cell or an opq value"
+#guard refuses (dropProg (.pair i32T (.opq .input))) "or an opq value"
+/-- `dropProg t` with `x0` abandoned by the typed term. -/
+def abandonProg (t : LTy) : Prog := { dropProg t with abandoned := ({} : Std.HashSet Var).insert 0 }
+#guard accepts (abandonProg (.opq .output))
+#guard accepts (abandonProg (.pair i32T (.opq .input)))
+-- Abandonment admits no more than `LTy.drops`: an owned cell is refused there too.
+#guard refuses (abandonProg (.ref i32T)) "may own a cell"
+
 -- A drop no type licenses, of a stack machine's level (`Prog.stackKs`): accepted.
 #guard accepts { dropProg closT with stackKs := ({} : Std.HashSet Var).insert 0 }
 

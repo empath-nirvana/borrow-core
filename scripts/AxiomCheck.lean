@@ -687,4 +687,4 @@ import Backend2.Lint
 #print axioms Backend2.LTy.sameRep_peel
 #print axioms Backend2.Lint.copyable_ofV
 #print axioms Backend2.Lint.droppable_ofV_persistent
-#print axioms Backend2.Lint.droppable_ofV_drop
+#print axioms Backend2.Lint.abandonable_ofV_drop
