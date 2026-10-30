@@ -957,9 +957,10 @@ def capCell (c : BoCa.IntLit) : CM Tm := do
 
 /-- **The host function of a harness make** (SPEC §11, §34), as the extern's value `λm. …`: a
 fresh cell, the stream's capability, holding the stream's descriptor (the clock's: the time `0`).
-`mk_input` and `mk_args` drop their argument, the byte list the platform passes (empty);
-`mk_output` holds its argument, the descriptor. Each call allocates its own cell, as the model's
-`alloc` does, so the extern's contract (`mkInput_meets`, …) holds at every call. -/
+`mk_input` and `mk_args` drop their argument, a byte list (persistent): the host's stream is the
+platform's standard input or arguments, whatever bytes the term passes. `mk_output` holds its
+argument, the descriptor. Each call allocates its own cell, as the model's `alloc` does, so the
+extern's contract (`mkInput_meets`, …) holds at every call, with no condition on the run. -/
 def mkValue (s : CapStream) : CM Tm := do
   let m ← fresh
   let body ← match s with
@@ -973,7 +974,13 @@ def mkValue (s : CapStream) : CM Tm := do
 capability's cell freed, and the extern's result: the empty byte list for `take_input` and
 `take_args`, the descriptor and the empty list for `take_output` (each byte went to the
 descriptor when it was written), the cell's contents for `take_clock`. The contract met
-is the extern's (`takeInput_meets`, …). -/
+is the extern's (`takeInput_meets`, …).
+
+The cell of `ref input` (and `ref args`) holds, in the model, a byte list; in the host it holds the
+stream's descriptor, an `i32`, which `free` answers here and the host discards. That is the host's
+representation of the cell, inside the trusted extern (`ExternsMeet`), not a value of the checked
+term: the term passes the capability `ref input`, whose contract the host meets, and gets back the
+byte list. -/
 def takeValue (s : CapStream) : CM Tm := do
   let m ← fresh; let w ← fresh
   let body ← match s with
@@ -984,52 +991,35 @@ def takeValue (s : CapStream) : CM Tm := do
     | .clock => pure <| .prim .free [m]
   pure (.clos (← register ⟨[], m, body⟩) [])
 
-/-- The program's value from `run_io`'s `((fd, out), ((fd', err), a))`: `a`. The outputs are
-persistent (`IORun.hR`) and dropped: each holds the descriptor and the bytes the host's
-`take_output` answers, none, since each byte went to its descriptor when it was written. -/
-def resultOf (r : Var) : CM Tm := do
-  let o ← fresh; let rest ← fresh; let e ← fresh; let a ← fresh
-  return .letpair o rest r (.letpair e a rest (.drop o (.drop e (.var a))))
-
-/-- **Closure-convert `run_io`** (SPEC §11): the checked wrapper `λinp. N` over its externs, given
-in declaration order, each bound to its host implementation (`ExtImpl`: an operation's closure,
-or the harness's make or take); an extern it does not use is dropped. `N` is converted with `inp`
-bound to the platform's input, the empty byte list: the program's input is the stream that
-`mk_input`'s host gives `stdin`. The program's value is `main`'s result `a` (`resultOf`). When
-`run_io` returns a loop (`loops`), its value is the loop, and `resultOf` is the code `fin`, run on
-the value the loop finishes with. The polymorphic lets `sel` holds of are replaced by their
-β-reducts and, with `mark`, their uses marked; the marked uses are returned too. `convertMain`
+/-- **Closure-convert `run_io`** (SPEC §11): the term `IORun.expr r []` of the checked wrapper
+`e` (its compiled form, `λinp. N : Bytes ⊸ F A`) applied to its argument `arg` (`IORun.arg []`),
+with each extern its host implementation (`ExtImpl`: an operation's closure, or the harness's
+make or take), given in declaration order. The application is converted as `conv` converts any
+`(λx. N) V`. Each extern the term uses is bound to its host's value; one it does not use has no
+occurrence to put a value at, as in `substAll γ e`, and is not made. The program's value is
+`run_io`'s, `main`'s result. When `run_io` returns a loop (`loops`), its value is the loop, which
+the entry drives. The polymorphic lets `sel` holds of are replaced by their β-reducts and, with
+`mark`, their uses marked; the marked uses are returned too. `convertMain`
 (`Backend/Clos/Poly.lean`) replaces the lets whose uses are at different rows.  `[spec §11]` -/
 def convertMainWith (sel : Nat → Bool) (mark : Bool) (exts : List ExtImpl) (loops : Bool)
-    (e : Expr) : Except String (Prog × Array PolyUse) := do
-  let e := prepare sel mark e
-  let .lam N := e | throw "run_io is not a function"
-  let act : CM (Tm × Option Nat) := do
+    (e arg : Expr) : Except String (Prog × Array PolyUse) := do
+  let e := prepare sel mark (.app e arg)
+  let .app (.lam _) _ := e | throw "run_io is not a function"
+  let act : CM Tm := do
     let xs ← exts.mapM fun _ => fresh
     let ctx := Ctx.ofList xs.reverse
     let used ← fvsAt 0 0
-    let inp ← fresh
-    let r ← fresh
-    let t ← conv (ctx.push inp) N 1
-    let t := if 0 ∈ (← fvsAt 1 0) then t else .drop inp t
-    let t := .letv inp (← nilTm) t
-    let res ← resultOf r
-    let (main, fin) ← if loops then do
-        let c ← register ⟨[], r, res⟩
-        pure (t, some c)
-      else pure (.letv r t res, none)
-    let mut body : Tm := main
-    for (x, i) in xs.reverse.zipIdx do
-      if i ∉ used then body := .drop x body
-    for (x, ext) in (xs.zip exts).reverse do
+    let mut body ← conv ctx e 0
+    for ((x, ext), i) in ((xs.zip exts).reverse).zipIdx do
+      if i ∉ used then continue
       let v ← match ext with
         | .io k => ioValue k
         | .mk s => mkValue s
         | .take s => takeValue s
       body := .letv x v body
-    return (body, fin)
-  let ((t, fin), s) ← act.run { next := dummy + 1, codes := #[], pre := .of e }
-  pure ({ codes := s.codes, main := t, fin, folds := s.folds, data := s.data,
+    return body
+  let (t, s) ← act.run { next := dummy + 1, codes := #[], pre := .of e }
+  pure ({ codes := s.codes, main := t, drives := loops, folds := s.folds, data := s.data,
           litCode := s.litCode }, s.uses)
 
 end Backend.Clos

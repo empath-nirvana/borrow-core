@@ -262,28 +262,13 @@ def reservedDecl? (ds : List Decl) : Option Error :=
       else
         ⟨n.span, s!"`{n.name}` is a capability: it is declared only as an extern (SPEC §11)"⟩
 
-/-- Check a program, after elaborating it (`Frontend.Elab.elaborate`: the sugar of SPEC §11 and
-§14): the checker sees only the elaborated program, which the report carries, so that nothing
-after the check elaborates the program again. The lines of the libraries, when they are included,
-are not reported. An error in code generated for a sugar names the sugar
-(`Frontend.Elab.renderError`). A program that declares a name `run_io` reserves is refused
-(`reservedDecl?`), as written and as elaborated. A checked program is then rejected if it copies
-recursive data implicitly (`Frontend.Check.implicitCopy`, on the typed terms the check returns):
-such a use is written `clone(x)`.
-
-With `wrapped := some keys`, `p` is `run_io`'s wrapper (`Frontend.Check.ioRunOf`) around the
-elaborated declarations of a program checked already, whose elaboration gave the keys `keys`
-(`DefKey`: which `def`s are copies of one body). The wrapper declares the harness, the implicit
-copies are not checked again, and the uses of those `def`s carry their keys, as in the first
-check. -/
-def checkProgram (p : Program) (wrapped : Option (List DefKey) := none) :
-    Except Error Report := do
-  if wrapped.isNone then
-    if let some e := reservedDecl? p.decls then throw e
-  let el ← Frontend.Elab.elaborate p
-  if wrapped.isNone then
-    if let some e := reservedDecl? el.prog.decls then throw e
-  let el := { el with keys := el.keys ++ wrapped.getD [] }
+/-- **Check an elaborated program** (`checkProgram` after `Frontend.Elab.elaborate`). With
+`wrapped`, `el.prog` is `run_io`'s wrapper (`Frontend.Check.ioRunOf`): the elaborated
+declarations of a program checked already, and the wrapper's own, which is written in the
+elaborated language and not elaborated; `el.keys` are the first elaboration's (`DefKey`: which
+`def`s are copies of one body), which the uses of those `def`s carry, as in the first check. The
+implicit copies are not checked again. -/
+def checkElaborated (el : Frontend.Elab.Elaborated) (wrapped : Bool) : Except Error Report := do
   let ds := el.prog.decls.toArray
   let lib := el.lib
   let r : Except Error (Report × List (Nat × TExpr)) :=
@@ -318,10 +303,26 @@ def checkProgram (p : Program) (wrapped : Option (List DefKey) := none) :
     | some c => [c.pins.assurance]
     | none => []
   let rep := { rep with lines := rep.lines ++ loops.eraseDups ++ fx.eraseDups ++ assurance, handles }
-  if wrapped.isSome then return rep
+  if wrapped then return rep
   match implicitCopy terms with
   | some e => throw (Frontend.Elab.renderError el.origins e)
   | none => pure rep
+
+/-- Check a program, after elaborating it (`Frontend.Elab.elaborate`: the sugar of SPEC §11 and
+§14): the checker sees only the elaborated program, which the report carries, so that nothing
+after the check elaborates the program again. The lines of the libraries, when they are included,
+are not reported. An error in code generated for a sugar names the sugar
+(`Frontend.Elab.renderError`). A program that declares a name `run_io` reserves is refused
+(`reservedDecl?`), as written and as elaborated. A checked program is then rejected if it copies
+recursive data implicitly (`Frontend.Check.implicitCopy`, on the typed terms the check returns):
+such a use is written `clone(x)`.
+
+Everything after the elaboration is `checkElaborated`. -/
+def checkProgram (p : Program) : Except Error Report := do
+  if let some e := reservedDecl? p.decls then throw e
+  let el ← Frontend.Elab.elaborate p
+  if let some e := reservedDecl? el.prog.decls then throw e
+  checkElaborated el false
 
 /-! ### Soundness -/
 

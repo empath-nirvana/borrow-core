@@ -19,9 +19,10 @@ verifies and never fills in:
 - every `drop` is of a variable its type lets the program discard (`droppable`), but for the
   callees' suspended computations a stack machine drops (`Prog.stackKs`); a type owning an opaque
   value is never `droppable`;
-- every `abandon` is of a variable whose type holds no owned cell (`abandonable`), at the rule the
-  node carries (`Abandon`: a `[let]`'s abort, `⊤`). It is the only node at which an opaque value is
-  discarded, and `Convert` emits it only at those rules' sites.
+- every `abandon` meets the premise of the rule the node carries (`abandonable`): at a `[let]`'s
+  abort, `effLet`'s `hW` (the variable's type holds no owned cell, `VTy.Drop`); at `⊤`, `topI`'s,
+  which has none. It is the only node at which an opaque value is discarded, and `Convert` emits
+  it only at those rules' sites.
 -/
 
 namespace Backend2.Lint
@@ -76,11 +77,14 @@ def droppable (t : LTy) : Bool :=
     | .fam (.imm _) | .fam (.mut _) => true
     | _ => false
 
-/-- A type whose values an `abandon` node may discard: one that holds no owned cell (`LTy.drops`:
-`[let]`'s `Ctx.Drops` at an abort, `⊤`'s absorption), an opaque value among them, or a
-`droppable` one. No other rule discards an opaque value: no constant forgets it and it has no
-destructor. -/
-def abandonable (t : LTy) : Bool := droppable t || t.drops
+/-- A type whose values an `abandon` node at the rule `r` may discard: the premise of `r`, read
+on the LIR type. At a `[let]`'s abort, `CDerives.effLet`'s `hW : S.Weak → Γ₂.Drops`: each slot
+of `N`'s context is at a `VTy.Drop` type, which `LTy.drops` reads (`ofV_drops`), an opaque value
+among them. At `⊤`, `CDerives.topI`, which has no premise: `⊤` absorbs its whole context at every
+type. No other rule discards an opaque value: no constant forgets it and it has no destructor. -/
+def abandonable : Abandon → LTy → Bool
+  | .letAbort, t => t.drops
+  | .top, _ => true
 
 /-- A slot a split duplicates (`Ctx.SplitP.dup`: of persistent type) is `copyable` at its LIR
 type. -/
@@ -96,7 +100,7 @@ theorem droppable_ofV_persistent {ms : MachSet} {A : VTy} {t : LTy} (hA : A.pers
 /-- A slot an abort abandons (`Ctx.Drops`: of a `VTy.Drop` type) is `abandonable` at its LIR
 type. -/
 theorem abandonable_ofV_drop {ms : MachSet} {A : VTy} {t : LTy} (hA : A.Drop)
-    (h : ofV ms A = .ok t) : abandonable t = true := by
+    (h : ofV ms A = .ok t) : abandonable .letAbort t = true := by
   simp [abandonable, ofV_drops hA h]
 
 /-- The variables left after `t`, its value consumed by its context. -/
@@ -164,7 +168,8 @@ def lintTm (w : String) (p : Prog) : Nat → Std.HashSet Var → Tm → LM Left
     | .abandon r x b => do
       match p.ty[x]? with
       | some t =>
-        if !abandonable t then bad w s!"x{x} abandoned at {t} ({r.name}), which may own a cell"
+        if !abandonable r t then
+          bad w s!"x{x} abandoned at {t} ({r.name}), where the rule's premise does not hold"
       | none => bad w s!"x{x} has no type"
       lintTm w p f (← use w env x) b
 

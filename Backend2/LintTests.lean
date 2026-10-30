@@ -70,17 +70,29 @@ def closT : LTy := .thunk (.arr .unit (.ret .unit))
 #guard refuses (dropProg (.opq .output)) "which may own a cell or an opq value"
 #guard refuses (dropProg (.pair i32T (.opq .input))) "or an opq value"
 
-/-- `f0 (x0 : t) = abandon x0 (a [let]'s abort); ()`. -/
-def abandonProg (t : LTy) : Prog where
-  fns := #[{ name := "abandons", params := [0], ret := .unit, body := .abandon .letAbort 0 .unit }]
+/-- `f0 (x0 : t) = abandon x0 (at the rule r); ()`. -/
+def abandonProg (t : LTy) (r : Abandon := .letAbort) : Prog where
+  fns := #[{ name := "abandons", params := [0], ret := .unit, body := .abandon r 0 .unit }]
   codes := #[]
   main := .unit
   mainTy := .unit
   ty := ({} : Std.HashMap Var LTy).insert 0 t
 #guard accepts (abandonProg (.opq .output))
 #guard accepts (abandonProg (.pair i32T (.opq .input)))
--- An abandonment admits no more than `LTy.drops`: an owned cell is refused there too.
-#guard refuses (abandonProg (.ref i32T)) "abandoned at ref i32 (let abort), which may own a cell"
+-- A `[let]`'s abort admits `effLet`'s `hW` (`VTy.Drop`, `LTy.drops`) and no more: an owned cell
+-- is refused.
+#guard refuses (abandonProg (.ref i32T))
+  "abandoned at ref i32 (let abort), where the rule's premise does not hold"
+-- So is a persistent byte list, which `VTy.Drop` does not hold (`μ`): a type the program may drop,
+-- but not one `hW` abandons.
+#guard refuses (abandonProg (.mu (.sum .unit (.pair (.int .w8) (.tvar 0)))))
+  "(let abort), where the rule's premise does not hold"
+-- So is a closure, or a family of borrows.
+#guard refuses (abandonProg closT) "(let abort), where the rule's premise does not hold"
+#guard refuses (abandonProg (.fam (.imm i32T))) "(let abort), where the rule's premise does not hold"
+-- `⊤` absorbs its whole context at every type: `topI` has no premise.
+#guard accepts (abandonProg (.ref i32T) .top)
+#guard accepts (abandonProg closT .top)
 
 /-- A `[let]`'s branch on its premise's outcome `x0 : 1 + i32`, with `x1`, an output stream, in
 `N`'s context: the abort arm abandons `x1` (`hW`) and answers the abort `inr e`; the value arm

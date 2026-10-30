@@ -22,12 +22,14 @@ The standard externs, each with its type, its role, its model and its assurance 
   made from the input bytes by the harness, `main`'s body runs with them bound to their names,
   and they are taken back. The wrapper is written as source around `main`'s elaborated body,
   parsed and checked like any program, so it has a `CDerives` derivation at the context of the
-  operations and the harness.
+  operations and the harness. Its compiled form (`outs := false`) is `run_io : Bytes ⊸ F A`:
+  the outputs `take_output` answers are weakened in the term.
 * **The model run** (`IORun`). The checked wrapper with the model of each extern, chosen by
   type from `stdModel`, and the proofs `io_every_run` asks for: `IORun.every_run` is
-  `io_every_run` at it. `bcc interp` runs exactly `IORun.expr`; both backends compile the same
-  checked wrapper, built with no arguments in the term, with each extern's host implementation
-  (`Backend.CheckedProg.runIO`).
+  `io_every_run` at it. `bcc interp` runs exactly `IORun.expr`. Both backends compile
+  `IORun.expr r []` for the compiled form `r`, built with no arguments in the term, with each
+  extern's host implementation for its model (`Backend.CheckedProg.runIO`): the checked wrapper
+  applied to its argument `IORun.arg []`, and nothing else.
 -/
 
 namespace Frontend.Check
@@ -164,14 +166,14 @@ def stdExterns : List ExternSpec :=
       some (mkHost "the time 0 (clock_now reads the host's monotonic clock)", .assumed)⟩,
     ⟨"mk_args", externTy (mkInputC (.opq .args)), .mk .args, "mkArgs_meets",
       some (mkHost ("the stream 0xFFFFFFFF, the host's arguments; " ++
-        "its argument, the empty list the platform passes, dropped"), .assumed)⟩,
+        "its argument, a byte list, dropped whatever it holds"), .assumed)⟩,
     ⟨"take_args", externTy (takeInputC (.opq .args)), .take .args, "takeArgs_meets",
       some (takeHost "the empty list", .assumed)⟩,
     ⟨"take_clock", externTy (takeClockC (.opq .clock)), .take .clock, "takeClock_meets",
       some (takeHost "its contents", .assumed)⟩,
     ⟨"mk_input", externTy (mkInputC (.opq .input)), .mk .input, "mkInput_meets",
-      some (mkHost "fd 0; its argument, the empty list the platform passes, dropped",
-        .assumed)⟩,
+      some (mkHost ("fd 0, the platform's standard input; " ++
+        "its argument, a byte list, dropped whatever it holds"), .assumed)⟩,
     ⟨"mk_output", externTy (mkOutputC (.opq .output)), .mk .output, "mkOutput_meets",
       some (mkHost "its argument, the descriptor", .assumed)⟩,
     ⟨"take_input", externTy (takeInputC (.opq .input)), .take .input, "takeInput_meets",
@@ -252,26 +254,30 @@ def takeExtra (caps : List String) : String :=
   (if caps.contains "args" then "io_args <- return ((unbang take_args) args);\n    " else "")
 
 /-- The source of `run_io`: the harness's externs and the wrapped `main`, which is given `args`
-as its arguments; `main`'s body is at the hole `bodyHole`.  `[spec §11, §34]` -/
-def wrapperSrc (caps : List String) (capsT A : CVTy) (args : List UInt8) : String :=
+as its arguments; `main`'s body is at the hole `bodyHole`. With `outs`, `run_io` returns the
+outputs `take_output` answers with `main`'s result `a`; without, it returns `a`, and the outputs,
+persistent, are weakened.  `[spec §11, §34]` -/
+def wrapperSrc (caps : List String) (capsT A : CVTy) (args : List UInt8) (outs : Bool) : String :=
   let B := bytesSrc
   let out := s!"(i32 * {B})"
+  let res := if outs then s!"{out} * ({out} * ({ppVTy A}))" else ppVTy A
+  let ret := if outs then "(io_out, (io_err, io_a))" else "io_a"
   s!"extern mk_input : !({B} => ref input)
 extern mk_output : !(i32 => ref output)
 extern take_input : !(ref input => {B})
 extern take_output : !(ref output => i32 * {B})
 {clockExterns caps}
-main : {B} -o F ({out} * ({out} * ({ppVTy A}))) =
+main : {B} -o F ({res}) =
   fun (io_inp : {B}) ->
     stdin <- return ((unbang mk_input) io_inp);
     stdout <- return ((unbang mk_output) i32[1]);
     stderr <- return ((unbang mk_output) i32[2]);
     {makeExtra caps args}io_r : ({ppVTy capsT}) * ({ppVTy A}) <- (force io_main_body);
     let (io_caps, io_a) = io_r;
-    " ++ rebindCaps caps "io_caps" ++ takeExtra caps ++ "io_in <- return ((unbang take_input) stdin);
+    " ++ rebindCaps caps "io_caps" ++ takeExtra caps ++ s!"io_in <- return ((unbang take_input) stdin);
     io_out <- return ((unbang take_output) stdout);
     io_err <- return ((unbang take_output) stderr);
-    return (io_out, (io_err, io_a))
+    return {ret}
 "
 
 /-- The name the wrapper's source holds `main`'s body at, as `force io_main_body`: the body is
@@ -313,8 +319,8 @@ def tupleNames : List String → String
 /-- The source of `run_io` for a `main` that returns a loop: a loop by `unfold` whose state is
 `main`'s loop and the capabilities `main` does not declare. Its `next` observes `main`'s loop and,
 when it finishes, takes the outputs back; its `close` closes it and takes them. `main`'s body is at
-the hole `bodyHole`.  `[spec §11]` -/
-def loopWrapperSrc (caps : List String) (capsT A B : CVTy) (args : List UInt8) :
+the hole `bodyHole`. `outs` is `wrapperSrc`'s.  `[spec §11]` -/
+def loopWrapperSrc (caps : List String) (capsT A B : CVTy) (args : List UInt8) (outs : Bool) :
     String :=
   let bs := bytesSrc
   let out := s!"(i32 * {bs})"
@@ -330,8 +336,10 @@ def loopWrapperSrc (caps : List String) (capsT A B : CVTy) (args : List UInt8) :
   let finA := if caps.isEmpty then "io_a <- return io_fin;" else "let (io_caps, io_a) = io_fin;"
   let finB := if caps.isEmpty then "io_b <- return io_fin;" else "let (io_caps, io_b) = io_fin;"
   let st := s!"({inner}) * {extraT}"
-  let res := s!"({out} * ({out} * ({ppVTy A})))"
-  let res' := s!"({out} * ({out} * ({ppVTy B})))"
+  let res := if outs then s!"({out} * ({out} * ({ppVTy A})))" else s!"({ppVTy A})"
+  let res' := if outs then s!"({out} * ({out} * ({ppVTy B})))" else s!"({ppVTy B})"
+  let retA := if outs then "(io_out, (io_err, io_a))" else "io_a"
+  let retB := if outs then "(io_out, (io_err, io_b))" else "io_b"
   let dx := destructNames "io_x" extra
   let rc := rebindCaps caps "io_caps"
   let ex := tupleNames extra
@@ -355,7 +363,7 @@ main : {bs} -o F (U (loop {res} {res'})) =
             {rc}{takeExtra caps}io_in <- return ((unbang take_input) stdin);
             io_out <- return ((unbang take_output) stdout);
             io_err <- return ((unbang take_output) stderr);
-            return (inl (io_out, (io_err, io_a)))
+            return (inl {retA})
         | inr io_rest -> return (inr (io_rest, {ex}))
         },
         let (io_it, io_x) = io_s;
@@ -364,7 +372,7 @@ main : {bs} -o F (U (loop {res} {res'})) =
         {rc}{takeExtra caps}io_in <- return ((unbang take_input) stdin);
         io_out <- return ((unbang take_output) stdout);
         io_err <- return ((unbang take_output) stderr);
-        return (io_out, (io_err, io_b)) >);
+        return {retB} >);
     io_f <- return (unbang (unfold[loop {res} {res'}, {st}] io_step));
     io_s0 : {st} <- return (io_l, {ex});
     return (thunkv nu_in < (nu_out (force io_f io_s0)).1, (nu_out (force io_f io_s0)).2 >)
@@ -414,8 +422,12 @@ def ioMainOf (p : Program) (c : Checked) : Except String (Option IOMain) := do
 
 /-- The wrapped program: the declarations other than `main` and the capabilities, the
 harness's externs, and `run_io` as `main`, with `main`'s elaborated body at its hole
-(`fillBody`).  `[spec §11]` -/
-def ioWrapper (p : Program) (m : IOMain) (args : List UInt8 := []) : Except String Program := do
+(`fillBody`). With `outs`, `run_io` returns the outputs with `main`'s result, which the model run
+observes (`take_output`'s model answers the bytes written); without, it returns `main`'s result
+alone, the outputs weakened in the term: the compiled form, whose hosts write each byte to its
+descriptor.  `[spec §11]` -/
+def ioWrapper (p : Program) (m : IOMain) (args : List UInt8 := []) (outs : Bool := true) :
+    Except String Program := do
   let some body := p.decls.findSome? (fun | .main _ _ M => some M | _ => none)
     | throw "no `main`"
   let keep := p.decls.filter fun
@@ -423,8 +435,8 @@ def ioWrapper (p : Program) (m : IOMain) (args : List UInt8 := []) : Except Stri
     | .extern _ n _ => !(m.caps.any (·.name == n.name))
     | _ => true
   let src := match m.loopB with
-    | none => wrapperSrc (m.caps.map (·.name)) (capsTy m.caps) m.A args
-    | some B => loopWrapperSrc (m.caps.map (·.name)) (capsTy m.caps) m.A B args
+    | none => wrapperSrc (m.caps.map (·.name)) (capsTy m.caps) m.A args outs
+    | some B => loopWrapperSrc (m.caps.map (·.name)) (capsTy m.caps) m.A B args outs
   match parseProgram src (resolve := false) with
   | .ok w =>
     -- The wrapper's externs are the harness's, which no program declares (`reservedDecl?`).
@@ -496,9 +508,13 @@ structure IORun where
   γ : List CVal
   hγ : List.Forall₂ (fun s v => s.live = true ∧ (s.ty, v) ∈ stdModel) c.ctx γ
 
+/-- `run_io`'s argument at the input `inp`: the byte list `bytesVal inp`. A compiled run is
+`IORun.expr r []` with each extern's host for its model: its argument is `IORun.arg []`. -/
+def IORun.arg (inp : List UInt8) : CVal := bytesVal inp
+
 /-- The expression `bcc interp` runs: `run_io[γ] inp`. -/
 def IORun.expr (r : IORun) (inp : List UInt8) : Expr :=
-  .app (BoCa.Fig16.LogRel.substAll r.γ r.c.e) (.val (bytesVal inp))
+  .app (BoCa.Fig16.LogRel.substAll r.γ r.c.e) (.val (IORun.arg inp))
 
 section
 variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
@@ -536,11 +552,13 @@ theorem IORun.loop_every_run (r : IORun) (hp : r.c.pins = []) (hl : r.loops = tr
 end
 
 /-- Check the wrapper `w` (`ioWrapper`) and give every extern its model. The wrapper holds
-`main`'s elaborated body and the program's elaborated declarations, checked already: their
-implicit copies are not checked again, and the uses of the `def`s the first elaboration copied
-carry its keys `keys` (`Elaborated.keys`, `checkProgram`'s `wrapped`). -/
+`main`'s elaborated body and the program's elaborated declarations, checked already, and the
+wrapper's own, written in the elaborated language: it is checked as it is, not elaborated again
+(`checkElaborated`). Its implicit copies are not checked again, and the uses of the `def`s the
+first elaboration copied carry that elaboration's keys `keys` (`Elaborated.keys`), the only keys
+there are. -/
 def ioRunOf (w : Program) (keys : List DefKey) : Except String IORun := do
-  let r ← match checkProgram w (wrapped := some keys) with
+  let r ← match checkElaborated ⟨w, 0, [], keys⟩ (wrapped := true) with
     | .ok r => pure r
     | .error e => throw s!"run_io:{e.render}"
   let some c := r.main | throw "run_io: no main"

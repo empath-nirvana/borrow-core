@@ -763,11 +763,11 @@ def Tm.builds : Tm → List Nat
   | .when _ _ _ _ b r => b.builds ++ r.builds
   | _ => []
 
-/-- The codes whose closures the program builds, from `main` and the codes it builds, and
-`fin`, which the entry calls: the others are in no union. -/
+/-- The codes whose closures the program builds, from `main` and the codes it builds: the others
+are in no union. -/
 def Prog.liveCodes (p : Prog) : Std.HashSet Nat := Id.run do
   let mut live : Std.HashSet Nat := {}
-  let mut work := p.main.builds ++ p.fin.toList
+  let mut work := p.main.builds
   for _ in [0:p.codes.size + 1] do
     let new := work.filter (!live.contains ·)
     if new.isEmpty then break
@@ -781,16 +781,13 @@ def Prog.types (p : Prog) : Except String Types := do
     let codeTy ← p.codes.mapM fun _ => newNode .any
     for (c, k) in p.codes.toList.zipIdx do inferCode codeTy p.codes k c
     let m ← infer codeTy p.codes p.main
-    let res ← match p.fin with
-      | none => pure m
-      | some c => do
+    let res ← if p.drives then do
         -- `main` is a loop: on `inl ()` it answers `inl r` or `inr` of the loop again.
         let r ← newNode .any
         let sel ← newNode (.sum (← unitT) (← unitT))
         unify m (← newNode (.fn sel (← newNode (.sum r m)) (← newNode .any)))
-        let e ← newNode .any
-        unify codeTy[c]! (← newNode (.fn r e e))
-        pure e
+        pure r
+      else pure m
     let env ← p.codes.mapM fun c => c.env.mapM tyVar
     pure (codeTy, env, m, res)
   let ((codeTy, env, m, res), s) ← act.run {}

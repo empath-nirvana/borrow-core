@@ -161,8 +161,9 @@ inductive CodeKind where
   deriving Inhabited, BEq, Repr
 
 /-- **The rule an `abandon` node is at** (decision 2): a computation that does not return to its
-context absorbs it. Not a drop: no destructor runs, and the abandoned values hold no owned cell
-(`VTy.Drop`, `vC_noOwn_of_drop`). -/
+context absorbs it. Not a drop: no destructor runs. `Lint.abandonable` checks each rule's premise:
+at a `[let]`'s abort, the abandoned values hold no owned cell (`VTy.Drop`, `vC_noOwn_of_drop`);
+`⊤` has none. -/
 inductive Abandon where
   /-- `[let]`'s abort (`CDerives.effLet`'s `hW : S.Weak → Γ₂.Drops`): `N`'s context, at the abort
   branch of the `[let]` or of a frame it pushed. -/

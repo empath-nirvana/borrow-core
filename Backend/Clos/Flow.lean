@@ -26,7 +26,7 @@ forwards to do. A call on an argument not known at the call takes both answers.
 
 Everything that calls a closure is a constraint, including what the flat IR's helpers do: `tab`
 calls its tabulator, an array's `drop` its consumer, and when `main` returns a loop the entry
-drives it and runs the code `fin` on what it finishes with. The analysis over-approximates the
+drives it. The analysis over-approximates the
 closures that reach each call, so a call of one code is a call of that code on every run: the
 closure IR's variables are each bound once and consumed once, and a closure's code does not
 change once it is built.
@@ -309,14 +309,13 @@ def Prog.constraints (p : Prog) : Array Con := Id.run do
         emit (.sub r (.res k false))
         emit (.sub r (.res k true))
     let m ← gen p.codes p.main
-    if let some fin := p.fin then
-      -- The entry drives the loop `main` returns: `inl r` goes to `fin`, `inr` loops again.
+    if p.drives then
+      -- The entry drives the loop `main` returns: `inr` loops again.
       let loop := Key.drive
       emit (.sub m loop)
       let r ← freshKey
       emit (.app loop .none r none)
       emit (.out r true loop)
-      if let some code := p.codes[fin]? then emit (.out r false (.var code.param))
   let ((), s) := act.run {}
   return s.cons
 
@@ -550,7 +549,7 @@ def Prog.flowAll (p : Prog) : Std.HashMap Var (Array Nat) × Option (Array Nat) 
     match c with
     | .app (.var f) .. | .fwd (.var f) .. => out := out.insert f (S.codes (.var f))
     | _ => pure ()
-  return (out, if p.fin.isSome then some (S.codes .drive) else none)
+  return (out, if p.drives then some (S.codes .drive) else none)
 
 /-- For every call `app f a`, keyed by `f`: the codes whose closures may be called there. -/
 def Prog.flow (p : Prog) : Std.HashMap Var (Array Nat) := p.flowAll.1

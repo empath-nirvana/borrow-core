@@ -260,14 +260,14 @@ next point (`threadedOf`, SPEC §50): the conversion's second run, at those mach
 def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) : Except String (Prog × CState) := do
   -- A program with capabilities is compiled as `run_io` (SPEC §11), the term `IORun.every_run`
   -- is about.
-  let (c, exts, io, loops) ← match ← k.runIO with
-    | none => pure (k.main, [], false, false)
-    | some (r, xs) => pure (r.c, ← extsOf xs, true, r.loops)
+  let (c, exts, arg, loops) ← match ← k.runIO with
+    | none => pure (k.main, [], none, false)
+    | some (r, xs) => pure (r.c, ← extsOf xs, some [], r.loops)
   let classes ← classesOf c
   let ctx := c.ctx.map fun s => (s.ty, s.live)
   let run (threaded stacked : Std.HashMap Nat LTy) :
       Except String (Prog × CState × Std.HashMap Nat LTy × Std.HashMap Nat LTy) := do
-    let (p, st) ← convertProg exts ctx c.t c.C io loops census (directFacts c) (machineOps c)
+    let (p, st) ← convertProg exts ctx c.t c.C arg loops census (directFacts c) (machineOps c)
       threaded stacked classes
     let p := { p with exits := c.exitsOnDivError }
     if st.done.isEmpty then return (p, st, {}, {})

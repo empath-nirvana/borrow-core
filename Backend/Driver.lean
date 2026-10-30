@@ -88,13 +88,16 @@ where
     | .args => .args
 
 /-- **The program a backend compiles, for a program with capabilities** (SPEC §11): `run_io`
-checked (`Frontend.Check.IORun`, the term `IORun.every_run` and `externs_every_run` are about),
-built with no arguments in the term (the arguments are the host's, read by `mk_args`'s host), and
-its externs in declaration order. `none` for a program without capabilities, compiled as `main`. -/
+checked in its compiled form (`Frontend.Check.IORun`, the term `IORun.every_run` and
+`externs_every_run` are about), which returns `main`'s result and weakens the outputs, built with
+no arguments in the term (the arguments are the stream `mk_args`'s host gives `args`), and its
+externs in declaration order. A backend compiles `IORun.expr r []`: this term applied to its
+argument `IORun.arg []`, each extern its host. `none` for a program without capabilities,
+compiled as `main`. -/
 def CheckedProg.runIO (k : CheckedProg) :
     Except String (Option (Frontend.Check.IORun × List Frontend.Check.ExternSpec)) := do
   let some m := k.io | return none
-  let w ← Frontend.Check.ioWrapper k.prog m []
+  let w ← Frontend.Check.ioWrapper k.prog m [] (outs := false)
   let r ← Frontend.Check.ioRunOf w k.keys
   return some (r, ← Frontend.Check.wrapperExterns w)
 
@@ -124,7 +127,7 @@ def lowerEffects (p : Clos.Prog) : Except String (Clos.Prog × Option Clos.Types
 def CheckedProg.closTypes (k : CheckedProg) : Except String (Clos.Prog × Option Clos.Types) := do
   let (p, c) ← match ← k.runIO with
     | none => pure (← Clos.convert k.main.e, k.main)
-    | some (r, xs) => pure (← Clos.convertMain (← extImpls xs) r.loops r.c.e, r.c)
+    | some (r, xs) => pure (← Clos.convertMain (← extImpls xs) r.loops r.c.e (Frontend.Check.IORun.arg []).1, r.c)
   let (p, T) ← lowerEffects p
   pure ({ p with exits := c.exitsOnDivError }, T)
 
@@ -289,7 +292,7 @@ def compileWatTimed (file src : String) : IO (Except String String) := do
       | none => Clos.convert c.e
       | some _ => do
         match ← CheckedProg.runIO ⟨r.el.prog, c, io, r.el.keys⟩ with
-        | some (w, xs) => Clos.convertMain (← extImpls xs) w.loops w.c.e
+        | some (w, xs) => Clos.convertMain (← extImpls xs) w.loops w.c.e (Frontend.Check.IORun.arg []).1
         | none => Clos.convert c.e
     let clos ← ExceptT.mk <| stage "effects" (fun (q : Clos.Prog) =>
         s!"{q.codes.size} codes, {q.size} nodes") fun _ => do (← clos.capture).unwind

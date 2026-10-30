@@ -18,7 +18,7 @@ extern stderr : ref output
   host: the heap cell run_io makes by mk_output, holding fd 2; assumed (1)
 extern mk_input : !((mu X. 1 + u8 * X) => ref input)
   contract: model proved (7), mkInput_meets
-  host: a fresh heap cell holding fd 0; its argument, the empty list the platform passes, dropped; assumed (1)
+  host: a fresh heap cell holding fd 0, the platform's standard input; its argument, a byte list, dropped whatever it holds; assumed (1)
 extern mk_output : !(i32 => ref output)
   contract: model proved (7), mkOutput_meets
   host: a fresh heap cell holding its argument, the descriptor; assumed (1)

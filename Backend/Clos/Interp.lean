@@ -540,11 +540,7 @@ def interp (fuel : Nat) (p : Prog) (input : List UInt8) (args : List UInt8 := []
   let act : IM (String × UInt32) := do
     let (v, rest) ← eval p.codes fuel [] p.main
     if !rest.isEmpty then throw "closure IR: main leaves variables unconsumed"
-    let v ← match p.fin with
-      | none => pure v
-      | some c => do
-        let r ← drive p.codes fuel v
-        callClos p.codes fuel (← allocObj (.clos c [])) r
+    let v ← if p.drives then drive p.codes fuel v else pure v
     let pv ← observe objFuel v
     deepDrop objFuel v
     pure (reportExit p.exits pv (← get).heap.size)

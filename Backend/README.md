@@ -268,8 +268,9 @@ type must not undergo automatic conversion to an `sret` pointer"), so the pointe
 **Addresses.** Words are real pointers (`inttoptr`, `ptrtoint`): there is no linear memory. The
 program's data is the global `@bc_data`, and its addresses are the flat IR's `Exp.data off`
 (the closure IR's `Op.dataAddr`, a literal's address): `@bc_data + off`
-natively, `dataBase + off` in Wasm and in the flat-IR interpreter. The data is writable; `bc_free` skips an address in it, as Wasm's `$free` skips one
-below the heap. The new backend's flat IR says which locals hold an address (`Fn.ptrs`) and computes
+natively, `dataBase + off` in Wasm and in the flat-IR interpreter. A literal's view is an address
+in it, which `bc_free` does not free (`bc_init` gives the data's bounds), as Wasm's `$free` does
+not free one below the heap. The new backend's flat IR says which locals hold an address (`Fn.ptrs`) and computes
 addresses from bases (`Exp.gep`); the emitter's typed mode, which only the new backend uses, holds
 those as `ptr`s, computes addresses with `getelementptr`, and states the parameters' facts
 (`Fn.facts`: `noalias`, `readonly`, `nonnull`, `dereferenceable`) as attributes (SPEC §50).
@@ -588,12 +589,13 @@ A `main` may declare the standard externs (`Frontend/Check/Externs.lean`): the c
 `write_byte`, `write_all`, `read_into`. Its type is then `F (Caps ⊗ A)`, handing the capabilities back after `A`, or
 `F (U (loop (Caps ⊗ A) (Caps ⊗ B)))` for a program that runs until its input ends.
 
-- **Compiled stages.** `Clos.convertMain` compiles the checked `run_io` and binds each of its
-  externs: a harness make or take to its host function (a fresh cell holding the file descriptor,
+- **Compiled stages.** `Clos.convertMain` compiles `IORun.expr r []`: the checked `run_io` in its
+  compiled form (`Bytes ⊸ F A`, the outputs weakened in the term) applied to its argument, the
+  empty byte list, as `conv` converts any `(λx. N) V`. It binds each extern the term uses: a harness make or take to its host function (a fresh cell holding the file descriptor,
   `i32[0]`, `[1]`, `[2]`; the cell freed), an operation to the closure
   `Λ. λm. op m` over the closure-IR primitive `io readByte`/`io writeByte`. An extern `run_io`
-  does not use is dropped. Of `run_io`'s value the outputs are dropped and `main`'s result `a` is
-  the program's value. In the flat IR the operations are inline, over the
+  does not use has no occurrence and is not made. `run_io`'s value, `main`'s result `a`, is the
+  program's value. In the flat IR the operations are inline, over the
   statements `getc fd` and `putc fd b`, and `read_byte`'s answer `(m, inl b)` or `(m, inr ())` is
   three words; in Wasm those statements are `$getc` and `$putfd`, WASI `fd_read` and `fd_write`
   of one byte. `write_all` and `read_into` (`Λ. Λ. λp. op p`) take a byte view `(p, n)`: the
@@ -615,14 +617,13 @@ A `main` may declare the standard externs (`Frontend/Check/Externs.lean`): the c
   arg…`). The libc counterparts are `clock_gettime`, `nanosleep` and `argv`.
 - **Loops.** When `main` returns a loop, every stage drives it: it calls the loop on `inl ()`
   until the answer is `inl r` (the source stage by `driveSource`, the closure IR by its `drive`,
-  the flat IR by a `drive` function generated at the loop's type), then runs `resultOf` on `r`
-  (`run_io`'s value: the outputs dropped, `main`'s result kept), which the closure conversion
-  registers as the code `fin`. The source stage's run that finishes after `k`
+  the flat IR by a `drive` function generated at the loop's type); `r` is the program's value
+  (`Prog.drives`). The source stage's run that finishes after `k`
   observations is the run of `driveE k`, the program `IORun.loop_every_run` covers.
 - **The source stage** runs the model: the checker's `run_io` wrapper, with every extern given
   its Lean model (`IORun`), applied to standard input as a byte list, from the empty memory. Its
-  value holds the bytes written to each stream; the stage writes them, then the report of
-  `main`'s result. This is the term `IORun.every_run` (`io_every_run`) is about. It reads all of
+  value holds the bytes written to each stream (the model's form, `ioWrapper`'s `outs`); the stage
+  writes them, then the report of `main`'s result. This is the term `IORun.every_run` (`io_every_run`) is about. It reads all of
   standard input before it runs, and holds it as a byte list in a cell, which each read copies:
   it is a reference, quadratic in the input.
 - **The interpreters** `clos` and `flat` read a scripted standard input and collect the two

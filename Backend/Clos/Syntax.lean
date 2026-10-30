@@ -207,9 +207,9 @@ structure Prog where
   main : Tm
   /-- The owned folds' steps, which the flat IR may compile by pointer reversal. -/
   folds : List FoldCode := []
-  /-- For a `main` that returns a loop (SPEC §11): the code run on the value the loop finishes
-  with, once the stage has driven it. -/
-  fin : Option Nat := none
+  /-- `main` returns a loop (SPEC §11), which the stage drives: its value is the one the loop
+  finishes with. -/
+  drives : Bool := false
   /-- The literals' bytes, in read-only data from address `dataBase`. -/
   data : Array UInt8 := #[]
   /-- The code of a literal's tabulator, `λi. litByte (a, n, i)` over its captured `(a, n)`,

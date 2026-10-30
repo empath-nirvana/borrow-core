@@ -352,8 +352,8 @@ def LTy.persistent : LTy → Bool
   | .mu a => a.persistent
   | .opq _ | .ref _ | .imm _ | .mut _ | .fam _ | .thunk _ => false
 
-/-- The type holds an opaque value (`.opq`) it owns: one no rule but an abort's abandonment
-(`[let]`'s `Ctx.Drops`, `raise`'s), `⊤` or `0` discards. -/
+/-- The type holds an opaque value (`.opq`) it owns: one no rule but a `[let]`'s abort (`effLet`'s
+`hW`, `Ctx.Drops`), `⊤` (`topI`) or `0` (`zeroE`) discards. -/
 def LTy.ownsOpq : LTy → Bool
   | .opq _ => true
   | .pair a b | .sum a b => a.ownsOpq || b.ownsOpq

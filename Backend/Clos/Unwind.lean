@@ -420,8 +420,6 @@ def Prog.unwind (p : Prog) : Except String Prog := do
   let raising := (List.range p.codes.size).filter fun c => !Raises.isEmpty F.rc[c]!
   let sumConv := (List.range p.codes.size).toArray.map fun c =>
     raising.any fun c' => ufFind parent c' == ufFind parent c
-  if let some fin := p.fin then
-    if sumConv[fin]! then throw "unwind: a loop's code raises"
   let E : UEnv := ⟨F, sumConv⟩
   let next := (terms.map Tm.maxVar).foldl max 0 + 1
   -- `self`s are not variables: the fresh ones are below them.

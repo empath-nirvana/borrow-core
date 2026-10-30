@@ -855,6 +855,8 @@ def abortK (F : OutInfo) : Kont → List Var → Var → CM Tm
         let some pF := payTy F.pay | throw "LIR: a finaliser's abort where the row holds none"
         let e' ← fresh pF; let u ← fresh .unit; let e₂ ← fresh pdT
         let sup ← coercePay pd F.pay e₂ fun v => pure (.var v)
+        -- The superseded payload `e` is dropped: a raise's payload is at a type that drops
+        -- (`CDerives.effRaise`'s `hd : o.A.Drop`).
         return .letv d (.call fnD own) (.letv e' (.case d u (.drop u (.var e)) e₂ (.drop e sup))
           (← abortK F rest more e'))
     | .cellF => match own with
@@ -870,8 +872,9 @@ def abortK (F : OutInfo) : Kont → List Var → Var → CM Tm
     | _ => return drops own (← abortK F rest more e)
 
 /-- The cancel of `K`, `err` the error kept so far (`1 ⊕ P`, `cp` the cancel row's payload `P`):
-each frame's arguments dropped, a finaliser run under the cancel, the first error kept (§19
-*Cancels*, `[cfin-raise]`); a finaliser's error is one of the cancel row's (§27). -/
+each frame's arguments abandoned at the frame's rule (a `[let]`'s, `hW`) or dropped, a finaliser
+run under the cancel, the first error kept (§19 *Cancels*, `[cfin-raise]`); a finaliser's error
+is one of the cancel row's (§27). -/
 def cancelK (cp : Pay) : Kont → List Var → Var → CM Tm
   | [], _, err => pure (.var err)
   | f :: rest, args, err => do
@@ -888,6 +891,9 @@ def cancelK (cp : Pay) : Kont → List Var → Var → CM Tm
         let u₀ ← fresh .unit; let e₀ ← fresh pF
         let u₁ ← fresh .unit; let e₁ ← fresh pdT; let u₂ ← fresh .unit; let e₂ ← fresh pdT
         let sup ← coercePay pd cp e₁ fun v => pure (.inj true v)
+        -- The error not kept (`e₀` superseded, or the finaliser's `e₂` after a kept one) is
+        -- dropped: a raise's payload is at a type that drops (`CDerives.effRaise`'s
+        -- `hd : o.A.Drop`).
         let kept : Tm := .case err u₀ (.case d u₁ (.drop u₁ (.inj false u₀)) e₁ (.drop u₀ sup))
           e₀ (.case d u₂ (.drop u₂ (.inj true e₀)) e₂ (.drop e₂ (.inj true e₀)))
         return .letv d (.call fnD own) (.letv err' kept (← cancelK cp rest more err'))
@@ -900,6 +906,7 @@ def cancelK (cp : Pay) : Kont → List Var → Var → CM Tm
     | .stackH => match own with
       | [h] => freeStackThen h (← cancelK cp rest more err)
       | _ => throw "LIR: a site's stack frame without its stack"
+    | .letF _ _ (some r) => return abandons r own (← cancelK cp rest more err)
     | _ => return drops own (← cancelK cp rest more err)
 
 /-! #### Resumption points -/
@@ -2047,10 +2054,11 @@ def nilOf (t : LTy) : CM Tm := do
 /-- **The host function of a harness make** (SPEC §11, §34), as the extern's closure at its type
 `t` (`A ⊸ F (Ref B)`): a fresh cell, the stream's capability, as wide as `B`'s width class
 (`Checked.classAt`, SPEC §57: a `swap` may put a wider value in it), holding the stream's
-descriptor (the clock's: the time `0`). `mk_input` and `mk_args` drop their argument, the byte list
-the platform passes (empty); `mk_output` holds its argument, the descriptor. Each call allocates
-its own cell, as the model's `alloc` does, so the extern's contract (`mkInput_meets`, …) holds at
-every call. -/
+descriptor (the clock's: the time `0`). `mk_input` and `mk_args` drop their argument, a byte list
+(persistent): the host's stream is the platform's standard input or arguments, whatever bytes the
+term passes. `mk_output` holds its argument, the descriptor. Each call allocates its own cell, as
+the model's `alloc` does, so the extern's contract (`mkInput_meets`, …) holds at every call, with
+no condition on the run. -/
 def mkClosOf (s : CapStream) (B : VTy) (t : LTy) : CM Tm := do
   let .thunk (.arr a (.ret b)) := t.peel | throw s!"LIR: a harness make at {t}"
   let cls ← classOf B
@@ -2069,7 +2077,13 @@ def mkClosOf (s : CapStream) (B : VTy) (t : LTy) : CM Tm := do
 `t` (`Ref B ⊸ F R`): the capability's cell freed, and the extern's result: the empty byte list for
 `take_input` and `take_args`, the descriptor and the empty list for `take_output` (each byte went
 to the descriptor when it was written), the cell's contents for `take_clock`. The
-contract met is the extern's (`takeInput_meets`, …). -/
+contract met is the extern's (`takeInput_meets`, …).
+
+The cell of `ref input` (and `ref args`) holds, in the model, a byte list; in the host it holds the
+stream's descriptor, an `i32`, which `free` answers here and the host discards. That is the host's
+representation of the cell, inside the trusted extern (`ExternsMeet`), not a value of the checked
+term: the term passes the capability `ref input`, whose contract the host meets, and gets back the
+byte list. -/
 def takeClosOf (s : CapStream) (t : LTy) : CM Tm := do
   let .thunk (.arr a (.ret b)) := t.peel | throw s!"LIR: a harness take at {t}"
   mkClos "extern" [] (.arr a (.ret b)) (some a) b fun ctx => do
@@ -3704,15 +3718,27 @@ def prepWorks (fuel : Nat) (depth : Nat) (t : TExpr) : CM Unit := do
 
 /-! ### `main` -/
 
-/-- The program's value from `run_io`'s `((fd, out), ((fd', err), a))`: `a`. The outputs are
-persistent (`IORun.hR`) and dropped: each holds the descriptor and the bytes the host's
-`take_output` answers, none, since each byte went to its descriptor when it was written. -/
-def resultOf (r : Var) : CM (Tm × LTy) := do
-  let .pair oT restT := (← tyOf r).peel
-    | throw "LIR: run_io's value is not its outputs and result"
-  let .pair eT aT := restT.peel | throw "LIR: run_io's value is not its outputs and result"
-  let o ← fresh oT; let rest ← fresh restT; let e ← fresh eT; let a ← fresh aT
-  return (.letpair o rest r (.letpair e a rest (.drop o (.drop e (.var a)))), aT)
+/-- `t` itself, or at a `μ` its unrolling, whose value `k` builds, rolled. -/
+def rolledAt (t : LTy) (k : LTy → CM Tm) : CM Tm := do
+  match t.peel with
+  | .mu b =>
+    let u := LTy.unrollMu b
+    let w ← fresh u
+    return .letv w (← k u) (.prim .roll [w])
+  | t' => k t'
+
+/-- `IORun.arg bs`, the byte list `bytesVal bs`, at its type `t` (`μX. 1 ⊕ (U8 ⊗ X)`): `run_io`'s
+argument, as the term holds it. -/
+def bytesValOf (t : LTy) : List UInt8 → CM Tm
+  | [] => rolledAt t fun t' => do
+    let .sum a _ := t'.peel | throw s!"LIR: a byte list at {t}"
+    let u ← fresh a
+    return .letv u .unit (.inj false u)
+  | b :: bs => rolledAt t fun t' => do
+    let .sum _ c := t'.peel | throw s!"LIR: a byte list at {t}"
+    let .pair a _ := c.peel | throw s!"LIR: a byte list at {t}"
+    let x ← fresh a; let r ← fresh t; let p ← fresh c
+    return .letv x (.lit (.u8 b)) (.letv r (← bytesValOf t bs) (.letv p (.pair x r) (.inj true p)))
 
 /-- Drive a loop (SPEC §11, §14): observe `next` until it finishes, its value the program's. -/
 def genDrive (lT : LTy) : CM Nat := do
@@ -3727,14 +3753,14 @@ def genDrive (lT : LTy) : CM Nat := do
   return fi
 
 /-- **The LIR of `main`**: its externs bound to their implementations (`exts`, in declaration
-order; the context's slot `i` is extern `n − 1 − i`) and its typed term converted. With `io`, the
+order; the context's slot `i` is extern `n − 1 − i`) and its typed term converted. With `arg`, the
 term is `run_io` (SPEC §11), `λinp. N`, whose externs are the operations and the harness's make
-and take (`mkClosOf`, `takeClosOf`): `N` is converted with `inp` bound to the platform's input, the
-empty byte list (the program's input is the stream `mk_input`'s host gives `stdin`), and the
-program's value is `main`'s result (`resultOf`). With `loops`, `run_io`'s value is a loop, driven
-until it finishes. -/
-def convMain (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) (io : Bool)
-    (loops : Bool) : CM (Tm × LTy) := do
+and take (`mkClosOf`, `takeClosOf`), and the program is `IORun.expr r arg`: `run_io` applied to
+its argument `IORun.arg arg` (`bytesValOf`), bound to `inp`. Its
+value is `run_io`'s, `main`'s result. With `loops`, `run_io`'s value is a loop, driven until it
+finishes. -/
+def convMain (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy)
+    (arg : Option (List UInt8)) (loops : Bool) : CM (Tm × LTy) := do
   let n := ctx.length
   let mut binds : List (Tm → Tm) := []
   let mut cx : Array (Option Var) := #[]
@@ -3751,28 +3777,25 @@ def convMain (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) 
       | .take s => takeClosOf s aT
     binds := (fun b => .letv x c b) :: binds
     cx := cx.push (some x)
-  let (ctx', t, C, pre) ← if io then do
+  let (ctx', t, C, pre) ← match arg with
+    | some bs => do
       let .lam _ _ A C' body := t | throw "LIR: run_io is not a λ"
       let inp ← fresh (← vty A)
-      let nil ← nilOf (← tyOf inp)
-      pure (some inp :: cx.toList, body, C', fun (b : Tm) => Tm.letv inp nil b)
-    else pure (cx.toList, t, C, id)
+      let tv ← bytesValOf (← tyOf inp) bs
+      pure (some inp :: cx.toList, body, C', fun (b : Tm) => Tm.letv inp tv b)
+    | none => pure (cx.toList, t, C, id)
   prepWorks (1 <<< 22) ctx'.length t
   let body ← conv (1 <<< 22) ctx' t
   genMerges
   let mT ← repJ (.comp C)
   let r ← fresh mT
-  let finish (v : Var) (vT : LTy) : CM (Tm × LTy) := if io then resultOf v else pure (.var v, vT)
   let (tm, resT) ← if loops then do
       let d ← genDrive mT
       let fT ← tyOf (← fresh (← selTy mT 0)) -- the loop's `next` answer
       let .sum vT _ := fT.peel | throw "LIR: main's loop"
       let v ← fresh vT
-      let (ep, resT) ← finish v vT
-      pure (Tm.letv r body (.letv v (.call d [r]) ep), resT)
-    else do
-      let (ep, resT) ← finish r mT
-      pure (Tm.letv r body ep, resT)
+      pure (Tm.letv r body (.letv v (.call d [r]) (.var v)), vT)
+    else pure (Tm.letv r body (.var r), mT)
   return (binds.foldl (fun t f => f t) (pre tm), resT)
 
 /-- **Loops of tail calls** (SPEC §49): each call in tail position made a point whose callee's
@@ -3857,12 +3880,13 @@ def stackedOf (s : CState) (recursive : Nat → Bool) (stackOps : MachSet)
 
 /-- Convert a checked `main` to a program; `threaded` the machines whose level's cell is passed on
 (`threadedOf` of a first conversion), `stacked` the stack machines (`stackedOf`). -/
-def convertProg (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) (io : Bool)
+def convertProg (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy)
+    (arg : Option (List UInt8))
     (loops : Bool) (census : Bool := false) (direct : Std.HashMap UInt32 (List Bool) := {})
     (mach : MachSet := {}) (threaded : Std.HashMap Nat LTy := {})
     (stacked : Std.HashMap Nat LTy := {}) (classes : List (VTy × List LTy) := []) :
     Except String (Prog × CState) := do
-  let ((m, mT), s) ← (convMain exts ctx t C io loops).run
+  let ((m, mT), s) ← (convMain exts ctx t C arg loops).run
     { census, direct, mach, threaded, stacked, classes }
   return ({ fns := s.fns, codes := s.codes, main := m, mainTy := mT, ty := s.ty, data := s.data,
             statics := s.statics, lits := s.lits, stackKs := s.stackKs }, s)
