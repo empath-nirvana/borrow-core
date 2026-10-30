@@ -2,7 +2,7 @@
 
 ## Statement
 
-A continuation is used as its qualifier says: a linear one exactly once, an affine one at most once, with an explicit cancel when it is not used.
+A continuation is used as its qualifier says: a must-resume one exactly once, a cancellable one exactly once by its resume or its cancel. Both are linear.
 
 **Lean target:** not yet stated. It goes in the targets library with an enumerated `sorry`.
 

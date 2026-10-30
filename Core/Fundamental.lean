@@ -154,11 +154,11 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   | allE {Δ Γ M x b a C} (h : CDerives Δ Γ M (.comp (.all x b C))) (hlt : Δ.EntailsLt a b) :
       CDerives Δ Γ (.app M (.val .unit)) (.comp (C.instLife x a))
   /-- Promotion of `thunk M : U (F A)` over `!Γ`. -/
-  | bangThunkF {Δ Γ M A} (hp : Persistent Γ)
+  | bangThunkF {Δ Γ M A} (hp : Ctx.Banged Γ)
       (h : CDerives Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A))) :
       CDerives Δ Γ (.val (.lam M)) (.val (.bang (.thunk (.ret A))))
   /-- Promotion of a λ-value `V : C` over `!Γ`. -/
-  | bangThunkV {Δ Γ N C} (hp : Persistent Γ) (hC : C.isRet = false)
+  | bangThunkV {Δ Γ N C} (hp : Ctx.Banged Γ) (hC : C.isRet = false)
       (h : CDerives Δ Γ (.val (.lam N)) (.comp C)) :
       CDerives Δ Γ (.val (.lam N)) (.val (.bang (.thunk C)))
   /-- Dereliction. -/
@@ -402,12 +402,12 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- `[raise]`: an abortive operation of the row, at any answer, its argument dropping.
   `[spec §19]` -/
   | effRaise {Δ Γ V} {S : Row} {o : OpSig} {B : VTy} (hf : Row.find S o.n o.i = some o)
-      (ha : o.abort = true) (hd : o.A.Drop) (h : CDerives Δ Γ V (.val o.A)) :
+      (ha : o.abort = true) (hd : o.A.OwnFree) (h : CDerives Δ Γ V (.val o.A)) :
       CDerives Δ Γ (BoCa.BoLo.raiseE (opArgE o.n o.i V)) (.comp (CTy.effOf S B))
   /-- `[let]`: `M to x. N` at a row; `N`'s context drops at a row with weakening and is
   persistent at an unrestricted row.  `[spec §19]` -/
   | effLet {Δ Γ Γ₁ Γ₂ M N A B} {S : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
-      (hW : S.Weak → Γ₂.Drops) (hU : S.Unr → Persistent Γ₂)
+      (hW : S.Cancels → Γ₂.OwnFree) (hU : S.Unr → Ctx.Banged Γ₂)
       (hM : CDerives Δ Γ₁ M (.comp (CTy.effOf S A)))
       (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) :
       CDerives Δ Γ (.app (.val (.lam N)) M) (.comp (CTy.effOf S B))
@@ -420,7 +420,7 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   finaliser must terminate (decision 69).  `[then]` at option A, the finaliser at `F 1`, is `CDerives.effThenA`.
   `[spec §14, §19, §24, §27]` -/
   | effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
-      (hUq : S.Uniq) (hU : S.UnrD → Persistent Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)
+      (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)
       (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
         capB o.q o.B = true → ThenLe o.fin SD o'.fin)
       (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false)
@@ -471,7 +471,7 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   `ws` of works and a tuple `nfs` of exits (`lastTuple`): each non-abortive clause runs its work
   `w : !U(A ⊸ F_{Σ_W}(B ⊕ X))`, then resumes `κ` in tail position at `inl` or cancels it and runs
   its exit `nf : !U(X ⊸ F_Σ R)` at `inr`, with `κ`'s cancel its unwind finaliser while the work
-  runs; an abortive operation's clause is its work.  The operations are affine or abortive, `Σ_W ≤
+  runs; an abortive operation's clause is its work.  The operations are cancellable or abortive, `Σ_W ≤
   Σ`, `Σ` has no unrestricted operation at any depth, and each cancel row is as `LastFinOK` says.
   The handled row may hold `Div`.  `[spec §14, §19, §27, §51]` -/
   | effHandleL {Δ Γ Γ₁ Γ₂} {Hr Hw Hn e : Expr} {S SW : Row} {E : List (Qual × VTy × VTy)}
@@ -480,7 +480,7 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (hc : CDerives Δ Γ₁ (.pair Hr (.pair Hw Hn))
         (.val (.tensor (retTy S A R) (.tensor (worksTy S SW R Xs E 0) (exitsTy S R Xs E 0)))))
       (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
-      (hNZ : S.NZ) (hAff : ∀ o ∈ E, o.1 = .aff ∨ (o.2.2.isZero && o.1 != .lin) = true)
+      (hNZ : S.NZ) (hCancel : ∀ o ∈ E, o.1 = .cancel ∨ (o.2.2.isZero && o.1 != .lin) = true)
       (hSW : RowLe SW S) (hSu : ¬ S.UnrD)
       (hFin : ∀ j, j < E.length → LastFinOK S SW (fs j) (Xs j))
       (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
@@ -497,7 +497,7 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
 /-- `[then]` with its finaliser at the pure row (SPEC §24, option A): `effThen` at `Σ_M = Σ` and
 `Σ_D = ∅`, since `F ⋈ ∅ ≤ F` (`ThenLe.nil`).  `[spec §24, §27]` -/
 theorem CDerives.effThenA {Δ Γ Γ₁ Γ₂ M N D A B} {S : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
-    (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Persistent Γ₂)
+    (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂)
     (hM : CDerives Δ Γ₁ M (.comp (CTy.effOf S A)))
     (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
     (hD : CDerives Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (.ret .unit))) :
@@ -682,7 +682,7 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | unfoldN C S hC hΓ => exact unfold_compatX hC S hΓ
   | effSub hle _ ih => exact sub_compatC hle ih
   | effPerform hf hna _ ih => exact perform_compatC hf hna ih
-  | effRaise hf ha hd _ ih => exact raise_compatC hf ha (fun _ _ _ _ h => vC_noOwn_of_drop hd h) ih
+  | effRaise hf ha hd _ ih => exact raise_compatC hf ha (fun _ _ _ _ h => vC_noOwn_of_ownFree hd h) ih
   | effLet hs hW hU _ _ ihM ihN => exact let_compatC hs hW hU ihM ihN
   | effThen hs hNZ _ hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
       exact then_compatC hs hNZ hU hMS hDS hfin hP hSD ihM ihN ihD
@@ -692,8 +692,8 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
       exact handleV_compatCB hs hd hH ihc hn0 hnS hlen hdv ihe hΓd hSd
   | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
       exact handleT_compatC hs hd hHr hHc ihc hn0 hnd hnS hlen hSN hLin ihe
-  | effHandleL hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hAff hSW hSu hFin _ ihc ihe =>
-      exact handleL_compatC hs hd hHr hHw hHn ihc hn0 hnd hnS hlen hNZ hAff hSW hSu hFin ihe
+  | effHandleL hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
+      exact handleL_compatC hs hd hHr hHw hHn ihc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin ihe
   | letPoly b hcl _ _ _ ihN => exact letPoly_compatC (Val.lam b) hcl ihN
 
 /-- **The stop lemma** (BOXED-κ's premise, `[spec §28]`): a computation typed at `F_Σ A` under

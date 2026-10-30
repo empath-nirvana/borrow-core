@@ -24,7 +24,7 @@ value goes unused (`drop_derives`), so the elaborated term uses the value exactl
 | `ArrayImm @a A` | `array_forget` |
 
 The first two rows are the forgettable types, whose destructor does nothing; every type of
-`Affine` (`Core/Records.lean`) is one (`hasDtor_of_affine`). The other rows deallocate or run
+`Forgettable` (`Core/Records.lean`) is one (`hasDtor_of_forgettable`). The other rows deallocate or run
 `close` code. `U C` in general has no destructor: a thunk of `F A` or of `A ⊸ C` can only be
 disposed of by running it. Nor does `μ` outside the fold class `P` (for example `X` under `U`).
 
@@ -445,7 +445,7 @@ theorem HasDtor.muF {A : VTy} (hF : (toFShape A).WF) (hG : (toFShape A).Guarded)
   · rw [keysIn_toFShape [A] A hF] at hm; cases hm
   · rw [keysIn_toFShape [A] A hF] at hm; cases hm
 
-theorem hasDtor_of_affine {A : VTy} (h : Affine A) : HasDtor A := by
+theorem hasDtor_of_forgettable {A : VTy} (h : Forgettable A) : HasDtor A := by
   induction h with
   | unit => exact .unit
   | zero => exact .zero

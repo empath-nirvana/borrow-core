@@ -45,7 +45,7 @@ inventory and no written record was found, it says so.
 | 10-01 → 10-02 | 6. Recursion: #227, then the #231 spike, then #232 | #227 merged with gaps, its `rec` site withdrawn by #232 |
 | 10-01 → 10-02 | 7. Effect polymorphism (#221) and first-order callbacks (#233) | #233 closed unmerged |
 | 10-02 | 8. Phase A/B models (#235: #237, #247) | merged as experiments; laws PROVED at EffModelRel only |
-| 10-02 | 9. Affine closures (#236, #238, #239, #240) | in the kernel (SPEC §22) |
+| 10-02 | 9. `Clo` closures (#236, #238, #239, #240) | in the kernel (SPEC §22) |
 | 10-02 | 10. Outlives (#241, #242, #243, #244) | in the kernel (SPEC §23) |
 | 10-02 | 11. Effects TR and its satellites (#245/#248, #249/#255, #250/#252, #251/#254, #253/#257) | merged; mostly PAPER-ONLY, plus EffModelRel and Restrat Lean |
 | 10-02 | 12. GhostEnd chain (#258 → #273, #281); regress question (#269/#272); prior art (#270/#271) | merged as experiments; tier decision and hard stop |
@@ -438,31 +438,31 @@ unmoded `CtxEq`. The audit's C3: "Every algebraic law lives off the kernel."
 
 ---
 
-## 9. Affine closures (#236, #238, #239, #240; 2026-10-02)
+## 9. `Clo` closures (#236, #238, #239, #240; 2026-10-02)
 
-**Goal.** #236: an affine closure callable through a `Mut` borrow, "higher-order from the
+**Goal.** #236: a `Clo` closure callable through a `Mut` borrow, "higher-order from the
 start". Requirements: called repeatedly, passed at any depth, nested, stored or returned within
 captured lifetimes, dropped, and coerced between the three modes. The issue says it is "what
 every higher-order effect attempt (#161, #233) built by hand".
 
 **Built.**
 
-- **#238 (merged 10-02 06:05Z)** found `Aff^c A B ≜ νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`. It is an
+- **#238 (merged 10-02 06:05Z)** found `Clo^c A B ≜ νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`. It is an
   abbreviation needing two relaxations of `ν` positivity, proved in a fork of Core.
 - **#240 (merged 10-02 07:12Z)** lifted the patch into the kernel as SPEC §22:
-  - `Core/Aff.lean` (`cC_aff_iff`, `aff_coind`);
-  - `Core/AffRules.lean` (`d_callMut`, `d_ofFn`, `d_once`);
-  - `lib/aff.bc`;
+  - `Core/Clo.lean` (`cC_clo_iff`, `clo_coind`);
+  - `Core/CloRules.lean` (`d_callMut`, `d_ofFn`, `d_once`);
+  - `lib/clo.bc`;
   - all six requirements as corpus programs.
 
-  The fork was deleted. The name `Aff` is provisional (decision 60), following the user's
+  The fork was deleted. The name `Clo` is provisional (decision 60), following the user's
   "Our names, not Rust's".
 
 **Proved.** PROVED at Core. The FP and adequacy are unchanged.
 
 **Why it moved on.** It was complete. Strict outlives costing extra scopes became #241.
 
-**Reusable.** `Aff` is the object the Mut-cell lemma (episode 11) and `[gen]` (episode 13)
+**Reusable.** `Clo` is the object the Mut-cell lemma (episode 11) and `[gen]` (episode 13)
 build on. This episode is the one case where an experiment fork was promoted cleanly into the
 kernel.
 
@@ -482,7 +482,7 @@ a non-strict `⊑`?". The issue adds: "the relaxation is an extension, not a cor
   - Obstructed in Lean: the `Imm`/`Mut` rules under `[]I` when non-strict
     (`not_vC_outlives_le`), and non-strict strata (`no_nonstrict_stratum`, Cantor).
 - **#244 (merged 10-02 13:10Z), SPEC §23, decision 61.** K1, E1 (`'main`), B1 (lifetime bounds
-  `where S: 'c`) and K2 at every rule. Scaffolding in the `aff-*` programs went from 10 scopes,
+  `where S: 'c`) and K2 at every rule. Scaffolding in the `clo-*` programs went from 10 scopes,
   6 cells and 18 `boxed` annotations to 1, 1 and 4.
 
 **Proved.** PROVED at Core. `Paper/` and `Support/` are unchanged.
@@ -531,7 +531,7 @@ Several inputs were added after launch, marked "not a change to the running brie
   `14-stored-continuations.md`).** Verdict: "The `F ⊣ U` framing removes no obligation." Capture
   rebasing does reduce open work: O3 reduces to one stated lemma, L14.4/O5.
 - **#254, the Mut cell (#251, now `docs/effects-tr/15-mut-cell.md`).**
-  - T14.5 (now T15.5) is PAPER-ONLY for rebased continuations, via `aff_coind` and `d_callMut`.
+  - T14.5 (now T15.5) is PAPER-ONLY for rebased continuations, via `clo_coind` and `d_callMut`.
   - The internal-lifetime case is OPEN as O15.1. Route 1 (refold at the old lifetime) is
     REFUTED by `refoldKripke_false` (`experiments/LoopBorrow/LoopBorrow/Obstruction.lean:245`),
     and `refold_fails_at_consumer_frame` shows the failing list arises. Route 2 is not derived.
@@ -572,7 +572,7 @@ Core:
 
 | PR (issue) | proved | left open |
 |---|---|---|
-| #259 (#258) | `segment_fundamental`; `ewpTS_M_frameR` (6.65 at a resuming table); straight-line borrowers; `spans_two_yields` | general typed borrowers; drop at affine yields; nested lends; 6.64/6.66/6.150 lifts |
+| #259 (#258) | `segment_fundamental`; `ewpTS_M_frameR` (6.65 at a resuming table); straight-line borrowers; `spans_two_yields` | general typed borrowers; drop at cancellable yields; nested lends; 6.64/6.66/6.150 lifts |
 | #261 (#260) | `Open`/`RBody`; loops (`loop_spans_yields`); drop (`withborR_compat`); `ewpTS_M_antiFrameR` | frames holding `'x`-values; rules with effectful premises |
 | #263 (#262) | lend table `TabAt`; tuples (`LOk`); closures by re-derivation (`TV`, `CloL`) | "a pure piece handed a `CloL` closure": not routine; `KernelInvariant` |
 | #265 (#264) | `KapRelR` positive; route (b) `vRL`/`cRL` defined | every route meets `URelend` |

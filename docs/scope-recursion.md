@@ -266,7 +266,7 @@ to `cC_{X↦R} B`. The map lemma is the polytypic lemma that fold (§2.6) needs 
 ### 3.4 `close` and leak freedom
 
 A `U C` cannot be dropped: `forget` exists at `!`, `Imm`, `Mut` and `Unk` only
-(`Fundamental.lean:107-126`; `Affine`, `experiments/Records/Records/Encoding.lean:228`). A
+(`Fundamental.lean:107-126`; `Forgettable`, `experiments/Records/Records/Encoding.lean:228`). A
 stream observed only by `next : F(A ⊗ U X)` always hands back a new `U X`, so a closed `F 1`
 program cannot end while holding one. So **`close` is necessary for linear codata in
 terminating programs at all, not only for leak freedom**. **[read / expected]**
@@ -305,8 +305,8 @@ through `VOutlives.mut`. After that, the `[@d]`-boxed iterator crosses scopes as
   - `now a = return (inj₁ a)` and `later t = return (inj₂ t)`, through `roll`.
   - `bind` is coiteration with state `(U(D A) ⊗ U(A ⊸ D B)) ⊕ U(D B)`. The continuation is
     carried in the state, so the step is `!`. **[expected]**
-  - With the cancellable `D`, `close` of a `bind` must dispose of `k : U(A ⊸ D B)`, which is
-    not affine. So continuations either are `!` or carry their own `& F 1`. This is a real
+  - With the cancellable `D`, `close` of a `bind` must dispose of `k : U(A ⊸ D B)`, which has
+    no derived drop. So continuations either are `!` or carry their own `& F 1`. This is a real
     design choice. It is not settled here.
 - **Loops.** `iterD : !U(S ⊸ F(A ⊕ S)) ⊸ S ⊸ U(D A)` is coiteration directly. For the
   cancellable `D`, it also takes a finalizer `!U(S ⊸ F 1)`.

@@ -4,11 +4,11 @@
 -- (`with h(&mut c)`), and the blocks perform its operations (SPEC §32): a `let mut` written in a
 -- block is lost when the block only writes it (#586: `x * 10 + a` is 12) and refused when it also
 -- reads it ("`!thunk` promotes only over `!` types, but `x`, of type `i32`, is used inside").
--- (3) is an `Aff` over its own cell (SPEC §22) called through `aff_call`; its close answers `1`,
+-- (3) is a `Clo` over its own cell (SPEC §22) called through `clo_call`; its close answers `1`,
 -- so the residual count is the last call's answer.
 include buf
 include rec
-include aff
+include clo
 include io
 include slice
 
@@ -26,8 +26,8 @@ fn walk(lo: i32, hi: i32, f: !(i32 => 1)) -> 1 with Exhausted =
   if lo < hi { let m = (lo + hi) / 2; walk(lo, m, f); f(m); walk(m + 1, hi, f) } else { () }
 
 -- A counter from `start` by `step`: each call answers the new count.
-fn aff_counter<'c>(start: i32, step: i32) -> box 'c Aff[1, i32]<'c> =
-  aff_new_boxed[ref (i32 * i32), 1, i32]['c](alloc((start, step)), !thunkv fun (s : ref (i32 * i32)) ->
+fn clo_counter<'c>(start: i32, step: i32) -> box 'c Clo[1, i32]<'c> =
+  clo_new_boxed[ref (i32 * i32), 1, i32]['c](alloc((start, step)), !thunkv fun (s : ref (i32 * i32)) ->
     < fun (a : 1) ->
         cx <- return (swap[i32 * i32, i32 * i32] s (0, 0));
         let (c, x) = cx;
@@ -50,8 +50,8 @@ main -> i32 * (i32 * (i32 * i32)) =
   for i in 0..k { let e = at(&arr, i, 0); print_dec(e); print_byte(b' ') };
   print_byte(b'\n');
   -- (3)
-  let tick = aff_counter(0, 3);
-  let (t1, tick) = aff_call(tick, ());
-  let (t2, tick) = aff_call(tick, ());
-  aff_close(tick);
+  let tick = clo_counter(0, 3);
+  let (t1, tick) = clo_call(tick, ());
+  let (t2, tick) = clo_call(tick, ());
+  clo_close(tick);
   (x * 10 + a, (sum, (t1 + t2, t2)))

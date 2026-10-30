@@ -65,17 +65,17 @@ inductive Mode where
   | imm
   deriving DecidableEq, Repr, Inhabited
 
-/-- The qualifier of an operation's continuation in a row (SPEC §19): linear, affine or
+/-- The qualifier of an operation's continuation in a row (SPEC §19): must resume, cancellable or
 unrestricted. -/
 inductive Qual where
   | lin
-  | aff
+  | cancel
   | unr
   deriving DecidableEq, Repr, Inhabited
 
 def Qual.str : Qual → String
   | .lin => "lin"
-  | .aff => "aff"
+  | .cancel => "cancel"
   | .unr => "unr"
 
 /-- The host resource kinds the surface names (SPEC §11, §34): `input`, `output`, `clock`,
@@ -674,9 +674,8 @@ inductive Val where
 /-- Computations (syntax-core §6.2), checked at a computation type. -/
 inductive Comp where
   | ret (sp : Span) (V : Val)
-  /-- `x <- M; N`, or `x : A <- M; N` with the annotation; `lin` for `linear x <- M; N`, whose
-  variable is not dropped implicitly (SPEC §12). -/
-  | bind (sp : Span) (x : Ident) (A : Option VTy) (M N : Comp) (lin : Bool)
+  /-- `x <- M; N`, or `x : A <- M; N` with the annotation. -/
+  | bind (sp : Span) (x : Ident) (A : Option VTy) (M N : Comp)
   /-- `force x`. -/
   | force (sp : Span) (x : Ident)
   /-- `fun (x : A) -> M`. -/
@@ -752,7 +751,7 @@ inductive Mark where
   deriving DecidableEq, Repr, Inhabited
 
 /-- The kind of an operation (SPEC §19): answering (`fn`), or control (`ctl`) with the structural
-qualifier of its continuation (`ctl` affine, `linear ctl`, `multi ctl` unrestricted). -/
+qualifier of its continuation (`ctl` cancellable, `linear ctl` must resume, `multi ctl` unrestricted). -/
 inductive OpKind where
   | fn
   | ctl (q : Qual)
@@ -1012,7 +1011,7 @@ def Val.strip : Val → Val
 
 def Comp.strip : Comp → Comp
   | .ret _ V => .ret .none V.strip
-  | .bind _ x A M N lin => .bind .none x.strip (A.map VTy.strip) M.strip N.strip lin
+  | .bind _ x A M N => .bind .none x.strip (A.map VTy.strip) M.strip N.strip
   | .force _ x => .force .none x.strip
   | .lam _ x A M => .lam .none x.strip A.strip M.strip
   | .app _ M x => .app .none M.strip x.strip
@@ -1084,7 +1083,7 @@ def Val.span : Val → Span
 
 /-- The span of a computation. -/
 def Comp.span : Comp → Span
-  | .ret sp _ | .bind sp _ _ _ _ _ | .force sp _ | .lam sp _ _ _ | .app sp _ _ | .with_ sp _ _
+  | .ret sp _ | .bind sp _ _ _ _ | .force sp _ | .lam sp _ _ _ | .app sp _ _ | .with_ sp _ _
   | .proj sp _ _ | .top sp | .letUnit sp _ _ | .letPair sp _ _ _ _ | .case sp _ _ _ _ _
   | .absurd sp _ | .lamL sp _ _ _ | .inst sp _ _ | .nuIn sp _ | .nuOut sp _
   | .ascribe sp _ _ | .loop sp _ _ _ _ _ | .perform sp _ _ _ | .abort sp _ _ _ | .handle sp _ _ _ _ _
@@ -1138,7 +1137,7 @@ def Val.anySugar (p : VSugar → Bool) : Val → Bool
 /-- A surface leaf satisfying `p` in a computation. -/
 def Comp.anySugar (p : VSugar → Bool) : Comp → Bool
   | .ret _ V | .absurd _ V => V.anySugar p
-  | .bind _ _ _ M N _ | .with_ _ M N => M.anySugar p || N.anySugar p
+  | .bind _ _ _ M N | .with_ _ M N => M.anySugar p || N.anySugar p
   | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
   | .nuOut _ M | .ascribe _ M _ => M.anySugar p
   | .letUnit _ V M | .letPair _ _ _ V M => V.anySugar p || M.anySugar p

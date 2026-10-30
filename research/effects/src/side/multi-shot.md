@@ -11,10 +11,10 @@ A multi-shot continuation can be resumed more than once. In our kernel this is t
 - **The kernel already enforces the capturing condition.**
   - An `unr` continuation is typed `!U(…)`.
   - Its share in `contShare` must be the empty resource (`Core/EffDefs.lean:144–149`).
-  - `[let]` requires `Persistent Γ₂` when the row has an `unr` operation (`Core/EffRules.lean:897`).
+  - `[let]` requires `Ctx.Banged Γ₂` when the row has an `unr` operation (`Core/EffRules.lean:897`).
 
   So a multi-shot continuation can capture only persistent data, with no owned resources and no `Mut` lends. This is the survey's A3, the capturing condition of Affect and Tang et al., and it holds at Core σ=[] as built.
-- **A law fails** (SIB). `nu_op_fails_multishot` (`experiments/EffModelRel/EffModelRel/Examples.lean:223`): Staton's ν/op law, which lets a fresh instance commute with an operation, fails for unrestricted operations, because one fresh instance is shared by both branches. The law holds for linear and affine operations.
+- **A law fails** (SIB). `nu_op_fails_multishot` (`experiments/EffModelRel/EffModelRel/Examples.lean:223`): Staton's ν/op law, which lets a fresh instance commute with an operation, fails for unrestricted operations, because one fresh instance is shared by both branches. The law holds for must-resume and cancellable operations.
 - **The literature** (survey A3, P1):
   - resuming twice duplicates `&mut` and owned values;
   - regions are exited twice (Yarrow);
@@ -29,7 +29,7 @@ A multi-shot continuation can be resumed more than once. In our kernel this is t
 ## Open, as side questions only
 
 - Does `nu_op_fails_multishot`'s counterexample arise in the kernel, or only in the sibling calculus?
-- Does restricting multi-shot to persistent captures cost any law we want for linear and affine operations? The evidence so far says no.
+- Does restricting multi-shot to persistent captures cost any law we want for must-resume and cancellable operations? The evidence so far says no.
 - `corpus/pending/backtrack-multishot.bc` stays pending.
 
 **The current answer:** multi-shot over persistent data is possible as built. Over resources it is impossible by linearity, and that is fine.

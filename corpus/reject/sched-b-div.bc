@@ -9,7 +9,7 @@ type Task<'d> = U (nu X. F (i32 + box 'd U X) & F 1)
 type E<'d> = box 'd Task<'d>
 type L<'d> = mu Y. 1 + (E<'d> * Y)
 type Q<'d> = (L<'d> * L<'d>) * (1 + 1)
-type Code = U (1 -o F[1.0 aff 1 ~> 1] i32)
+type Code = U (1 -o F[1.0 cancel 1 ~> 1] i32)
 type Sp = !(all 'd < top. box 'd Code => E<'d>)
 type ULp = U (loop i32 1)
 
@@ -41,7 +41,7 @@ def look : !(all 'r < top. imm 'r i32 => i32) =
            return (boxed['z] v))));
     return r)
 
-def task1 : !U (1 -o F[1.0 aff 1 ~> 1] i32) =
+def task1 : !U (1 -o F[1.0 cancel 1 ~> 1] i32) =
   !thunkv fun (u : 1) ->
     let () = u;
     c <- return (alloc[i32] i32[10]);
@@ -59,7 +59,7 @@ def task1 : !U (1 -o F[1.0 aff 1 ~> 1] i32) =
     return (plus (plus (plus (v1, v2), plus (v3, x)), i32[90]))
 
 -- Task 2, over the captured borrow: holds `k2 : imm 'r i32` across its `await`.
-def task2 : !(all 'r < top. imm 'r i32 => U (1 -o F[1.0 aff 1 ~> 1] i32)) =
+def task2 : !(all 'r < top. imm 'r i32 => U (1 -o F[1.0 cancel 1 ~> 1] i32)) =
   !thunkv Fun 'r < top. return (thunkv fun (k : imm 'r i32) ->
     return (thunkv fun (u : 1) ->
       let () = u;

@@ -287,8 +287,8 @@ ones have their run facts (`Frontend/Check/Derived.lean`).
 
 | # | form | where | produced? | read by the backend | class | what would change it |
 |---|---|---|---|---|---|---|
-| 138 | **`Aff^c A B`**, the affine closure (§22), and its 17 derived rules (`affIn`, `affOut`, `affUnfold`, `d_mk`, `d_callAff`, `d_callMut`, `d_close`, `d_ofFn`, `d_once`, …) | `Core/Aff.lean:32–50`, `Core/AffRules.lean` | **The elaborator never produces it.** Neither module is in the compiler's import closure (with `Core.BlockTrack`, `Core.ReuseList`, `Core.DivRuntime`, `Core.EffSafety`, `Core.EffCancelRuns`, `Core.Embedding` and `Core.DelayApprox`). It reaches code only where a user calls `lib/aff.bc`, in 6 corpus programs (`aff-*.bc`), as `unfoldN`/`nuIn`/`nuOut` nodes. | as `unfoldN` (row 87) | **C** | #605 (unit 22, `Aff` closure state by value). A writing callee called repeatedly is today a callee copy (`mutCap`, class D below); #632's D4 and #626's A2 would elaborate it to `Aff`. |
-| 139 | **Records and variants** (§5): `recI`, `recE`, `recEV`, `getAt`, `injAt`, `loadField`, `loadCase`, `modAt`, `swapField`, `vcase`, `dropT`, `tuple`, `recLet` and their `_wf` rules | `Core/Records.lean` | no. No declaration outside `Records.lean` uses them; the surface's blocks use `allocS`/`freeS`/`withborS` instead (rows 101–103) | — | **C** | U4 (#593, data declarations): elaborate data declarations to these forms, or delete them under Growth if U4 takes another route |
+| 138 | **`Clo^c A B`**, the closure `Clo` (§22), and its 17 derived rules (`cloIn`, `cloOut`, `cloUnfold`, `d_mk`, `d_callClo`, `d_callMut`, `d_close`, `d_ofFn`, `d_once`, …) | `Core/Clo.lean:32–50`, `Core/CloRules.lean` | **The elaborator never produces it.** Neither module is in the compiler's import closure (with `Core.BlockTrack`, `Core.ReuseList`, `Core.DivRuntime`, `Core.EffSafety`, `Core.EffCancelRuns`, `Core.Embedding` and `Core.DelayApprox`). It reaches code only where a user calls `lib/clo.bc`, in 6 corpus programs (`clo-*.bc`), as `unfoldN`/`nuIn`/`nuOut` nodes. | as `unfoldN` (row 87) | **C** | #605 (unit 22, `Clo` closure state by value). A writing callee called repeatedly is today a callee copy (`mutCap`, class D below); #632's D4 and #626's A2 would elaborate it to `Clo`. |
+| 139 | **Records and variants** (§5): `recI`, `recE`, `recEV`, `getAt`, `injAt`, `loadField`, `loadCase`, `modAt`, `swapField`, `vcase`, `forgetT`, `tuple`, `recLet` and their `_wf` rules | `Core/Records.lean` | no. No declaration outside `Records.lean` uses them; the surface's blocks use `allocS`/`freeS`/`withborS` instead (rows 101–103) | — | **C** | U4 (#593, data declarations): elaborate data declarations to these forms, or delete them under Growth if U4 takes another route |
 | 140 | `fixD`, `unfoldS`, `delayIn`/`delayOut`, `streamIn`/`streamOut` | `Core/Fundamental.lean` (instances of `unfoldN`, `nuIn`, `nuOut`) | yes, as `unfoldN`/`nuIn`/`nuOut` nodes (the checker's `tFixD`/`tUnfoldS`) | as row 87 | **B** | N4 |
 | 141 | `effHandle` (two-variable `[handle]`), `effThenA` | `Core/Fundamental.lean`, `Core/PinDerives.lean` | yes, as `effHandleV`/`effThen` nodes (`Frontend/Check/TiedDer.effHandle`) | as row 93 | **B** | N2 |
 | 142 | weakening by dead slots: `CDerives.append_dead`, `insert_dead` | `Core/Weaken.lean`, `Core/InsertDead.lean` | yes: the checker places a `def`'s body at each `use` with them (`Frontend/Check/Weaken.lean`, C2) | not needed: a typing fact with no runtime content | **A** | — |
@@ -308,7 +308,7 @@ workaround can be traced.
 |---|---|---|---|---|
 | §41 R2: write sets | `Frontend/Parser.lean:330` (`frame`), the `assigned` marks `:304`, `:311`, `:1703`, `:1758` | decides mutation | none of its own; feeds R3 | #632 (frames with exits; K1) |
 | §41 R3 *Out*: hand-on and join | `Parser.lean:1185` (`handOn`), `:1199` (`joinBind`), `:1208`, `:1217`, `:1068`; `Frontend/Sugar.lean:1095` (`thenGo`), `:2218–2246`, `:4302`, `:4758` | threads and rebuilds state | `tensorI`, `tensorE`, `bind`, `ret`, `sumE`; in loops, the state of `unfoldN`/`nuOut`/`countTry` | #632; #626's place model |
-| §41 R3 *In*: `mutCap` | `Frontend/Elab/Effects.lean:1352` (`mutCap`), `:1344` (`threadCap`), `:1520–1551`, `:2388–2436`, keys `:1458`, `copyFor` `:2924` | copies the callee and threads its writes as parameters | `lam`, `app`, `force`, `tensorE`, `bangThunkV` in the copies | #632 D4; `Aff` (row 136, #605); #626 A2 |
+| §41 R3 *In*: `mutCap` | `Frontend/Elab/Effects.lean:1352` (`mutCap`), `:1344` (`threadCap`), `:1520–1551`, `:2388–2436`, keys `:1458`, `copyFor` `:2924` | copies the callee and threads its writes as parameters | `lam`, `app`, `force`, `tensorE`, `bangThunkV` in the copies | #632 D4; `Clo` (row 136, #605); #626 A2 |
 | `escapingWriter` | `Effects.lean:1365`, thrown at `:1524`, `:1988` | refuses on escape grounds (`withbor2`'s `'x ∉ FV(B)` should) | — | #632; #626 |
 | other R3 refusals | `Parser.lean:1055` (`checkRun`), `:2040`; `Effects.lean:2490–2511` | refuses on mutation grounds | — | #632 |
 | `let mut` value lent through a cell | `Sugar.lean:2276` (`lendBorrow`'s value branch, `:2292–2297`) | copies the value into a cell and rebinds it after | `alloc`, `withbor1`/`withbor2`, `free`, under **`lendCell`** | #626 (place model); ergonomics N1 |
@@ -390,7 +390,7 @@ with `Collapse` reading the node. `iterate`, `divFuel` and `reify` once B2 produ
 
 **U-units:**
 - U4 (#593, data declarations): the records and variants forms (row 137), and `withborSI`.
-- Unit 22 (#605): `Aff` (row 136).
+- Unit 22 (#605): `Clo` (row 136).
 
 **Rule table:**
 - an elaboration rule for `letPoly`, a let used at several rows, or else delete it with
@@ -427,12 +427,12 @@ with `Collapse` reading the node. `iterate`, `divFuel` and `reify` once B2 produ
    - `reify` and `effHandleT` have no typed program anywhere: no Core derivation and no checker
      producer.
 4. **Qualifiers.**
-   - Over 152 programs, `[handle]` nodes type 573 affine operations, 2 linear ones and no
+   - Over 152 programs, `[handle]` nodes type 573 cancellable operations, 2 linear ones and no
      unrestricted one.
    - The backend discards all of them (`Convert.lean:740`) and gives every κ the same cancel arm.
-5. **`Aff` is not in the compiler's import closure.** Neither are `BlockTrack`, `ReuseList` and
-   `DivRuntime`. The elaborator never builds `Aff`. Where R3's callee copies stand in for it, it
-   reaches code only through `lib/aff.bc` in 6 user-written programs.
+5. **`Clo` is not in the compiler's import closure.** Neither are `BlockTrack`, `ReuseList` and
+   `DivRuntime`. The elaborator never builds `Clo`. Where R3's callee copies stand in for it, it
+   reaches code only through `lib/clo.bc` in 6 user-written programs.
 6. **Fold traversals are rare.**
    - `foldOwn` is in 15 programs, `foldReuse` in 3 and `foldImm` in 11.
    - The backend matches the two owned folds by re-recognising the erasure, and does not use the

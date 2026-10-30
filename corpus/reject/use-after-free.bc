@@ -7,4 +7,4 @@ main : F B =
   q <- return (swap[B, B] r x);
   let (r2, y) = q;
   return (free[B] r2)
--- expect: 6:3: `r` is used twice here, and its type `ref (1 + 1)` is not persistent
+-- expect: 6:3: `r` is used twice here, and its type `ref (1 + 1)` is linear

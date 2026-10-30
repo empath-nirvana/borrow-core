@@ -42,8 +42,8 @@ def Class.of (A : CVTy) : Class :=
   if A.persistent then .unrestricted else .linear (hasDtorB A)
 
 def Class.name : Class → String
-  | .unrestricted => "persistent"
-  | .linear true => "destructor"
+  | .unrestricted => "unrestricted"
+  | .linear true => "linear, with a derived drop"
   | .linear false => "linear"
 
 open BoCa.Fig16.LogRel.Core (Unrestricted Linear HasDtor) in

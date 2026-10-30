@@ -17,7 +17,7 @@ bcc=.lake/build/bin/bcc
 # argument and the literal tables' class (neither on a cycle), a pointer read through a shared
 # borrow at a node of the owner's former.
 progs=(
-  corpus/aff-higher.bc
+  corpus/clo-higher.bc
   corpus/deep-list.bc
   corpus/data-box-tree.bc
   corpus/sched-a.bc

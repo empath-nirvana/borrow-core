@@ -1,6 +1,6 @@
 -- The elaboration of `gen-yields.bc` in core, as `bcc desugar` prints it.
 
-def produce__n1__g0 : !U (i32 * 1 -o F[1.0 aff i32 * i32 ~> i32] (i32 * 1)) =
+def produce__n1__g0 : !U (i32 * 1 -o F[1.0 cancel i32 * i32 ~> i32] (i32 * 1)) =
   !thunkv fun (fx_pp3 : i32 * 1) ->
       let (fx_w1, io_p2) = fx_pp3;
       let () = io_p2;

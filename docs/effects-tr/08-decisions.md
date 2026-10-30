@@ -10,7 +10,7 @@ rests on a numbered result of this document, on phase B's Lean, or on a cited pa
 
 ## 8.1 Where a dropped continuation is destroyed: statically
 
-**The question.** Phase A destroys a dropped affine continuation *dynamically*: when a resuming
+**The question.** Phase A destroys a dropped cancellable continuation *dynamically*: when a resuming
 clause ends, the machine checks by reachability whether the clause's result mentions `κ`, and
 cancels `κ` if not (`clauseEnd`, `Val.mentions`). Congard, Munch-Maccagnoni & Douence place the
 destructor call at the weakening point of the typing derivation, *statically*. Which does the
@@ -29,7 +29,7 @@ weakening point… The kernel checks it; the elaborator establishes it").
    value's relation, `V⟦K(q, B, ρ', C)⟧`, which is a statement about the clause's *type*. A
    dynamic rule makes the obligation "if the clause's result does not mention `κ`, cancel `κ`",
    a property of a run, not of a type, and it is not preserved by putting `κ` in a data
-   structure the program later drops (phase A's own open problem 1: "an affine thunk holding a
+   structure the program later drops (phase A's own open problem 1: "a droppable thunk holding a
    continuation leaks when dropped"). With the static rule, exactly-once finalisation is
    linearity (T5.2.4): the one-shot continuation is a heap cell that its one use frees, and a
    cell left over violates `wp`'s `ρ⁺|own = ∅`.
@@ -40,8 +40,8 @@ weakening point… The kernel checks it; the elaborator establishes it").
    its drop glue are the static rule.
 4. **It is the source's construction.** Congard et al. make weakening an effect performed at the
    weakening points, which is what restores the strength `T(− ⊕ E)` needs in a linear setting, and
-   with it T7.3. The `A & 1` reading of an affine type is Munch-Maccagnoni's (*Resource
-   Polymorphism*, arXiv 1803.02796, 2018) [recalled].
+   with it T7.3. The `A & 1` encoding is Munch-Maccagnoni's, who reads it as an affine type in
+   his system (*Resource Polymorphism*, arXiv 1803.02796, 2018) [recalled].
 5. **It costs nothing at run time.** The reachability check was a model artefact (phase A §6:
    "`clauseEnd` reachability, leak tracking: model artifacts; with static weakening …, a dropped
    `κ` is a static destructor call").
@@ -57,7 +57,7 @@ weakening point… The kernel checks it; the elaborator establishes it").
   placement; it is the elaborator's choice, and a different placement can reorder a `free` with an
   `emit` in the same clause.
 - Phase A's stream had to be linear with an explicit `drop` because it had no static weakening
-  points (`docs/effect-model.md` §3.2: "if streams were affine, an implicit weakening would have to run the destructor").
+  points (`docs/effect-model.md` §3.2: "if streams had a derived drop, an implicit drop would have to run the destructor").
   With static weakening the same holds for every value holding a one-shot continuation: it is
   linear, and its destructor is called where the elaborator drops it. This calculus gives a
   destructor to continuations (`cancel`) and to streams (`drop`) only. A general destructor per
@@ -98,7 +98,7 @@ the lend answers the capability with `inr e` (D3.6).
    continuation between the operation and the lend, as an abortive operation discards it up to
    its handler. Independence requires everything that continuation holds to be droppable or to
    have a destructor, which is `W ∈ q_o` at the capture points (L5.15.2 uses the protocol's cancel
-   conjunct, present exactly when `W ∈ q_o`). So the runner bound `rbnd(E)` contains `aff` exactly
+   conjunct, present exactly when `W ∈ q_o`). So the runner bound `rbnd(E)` contains `cancel` exactly
    when `E` has a fallible operation, and the frames across a fallible operation are checked as
    frames across a `raise`. No new rule is needed.
 3. **Phase B implemented it.** Phase B's `coRes`, `coK`, `coStep` and the failure branch of

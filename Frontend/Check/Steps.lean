@@ -555,7 +555,7 @@ def ppRow (E : Env) (S : CRow) : String :=
   "[" ++ ", ".intercalate (S.map fun o =>
     s!"{o.n}.{o.i} {qualStr o.q} {E.ppV o.A} ~> {E.ppV o.B}") ++ "]"
 
-theorem Row.weak_of_unr {S : CRow} (h : S.Unr) : S.Weak := by
+theorem Row.cancels_of_unr {S : CRow} (h : S.Unr) : S.Cancels := by
   obtain ⟨o, ho, hq⟩ := h
   exact ⟨o, ho, by rw [hq]; decide⟩
 
@@ -577,17 +577,17 @@ def findOp (E : Env) (sp : Span) (what : String) (k i : Nat) :
 /-- `κ`'s type `kTy S R q B`, read back: the qualifier and the operation's answer. -/
 def kRead : CVTy → Option (CQual × CVTy)
   | .thunk (.amp (.arr B _) .top) => some (.lin, B)
-  | .thunk (.amp (.arr B _) _) => some (.aff, B)
+  | .thunk (.amp (.arr B _) _) => some (.cancel, B)
   | .bang (.thunk (.amp (.arr B _) _)) => some (.unr, B)
   | _ => none
 
 /-- The operations a clause's type may be the type of: a control operation `A ↠^q B` (its
-argument `A ⊗ κ`), then an abortive one `A ↠^aff 0`. -/
+argument `A ⊗ κ`), then an abortive one `A ↠^cancel 0`. -/
 def clauseCands : CVTy → List (CQual × CVTy × CVTy)
   | .bang (.thunk (.arr (.tensor A K) _)) =>
       (match kRead K with | some (q, B) => [(q, A, B)] | none => []) ++
-        [(.aff, .tensor A K, .zero)]
-  | .bang (.thunk (.arr A _)) => [(.aff, A, .zero)]
+        [(.cancel, .tensor A K, .zero)]
+  | .bang (.thunk (.arr A _)) => [(.cancel, A, .zero)]
   | _ => []
 
 /-- The first candidate whose clause type is `c`. -/
@@ -598,7 +598,7 @@ def firstClause (S : CRow) (R c : CVTy) :
       else firstClause S R c es
 
 /-- The operations `E` of a handler read back from the type of its clauses' tuple, with
-`clausesTy S R E` that type. An abortive operation is read as affine: `aff` and `unr` give it
+`clausesTy S R E` that type. An abortive operation is read as cancellable: `cancel` and `unr` give it
 the same clause type. -/
 def clausesRead (S : CRow) (R : CVTy) :
     (Tc : CVTy) → Option {E // BoCa.Fig16.LogRel.Core.clausesTy S R E = Tc}
@@ -614,8 +614,8 @@ operation `A ↠^q B` (its argument `A ⊗ [@d] κ`), then an abortive one. -/
 def clauseCandsB : CVTy → List (CQual × CVTy × CVTy)
   | .bang (.thunk (.arr (.tensor A (.box d K)) _)) =>
       (match kRead K with | some (q, B) => [(q, A, B)] | none => []) ++
-        [(.aff, .tensor A (.box d K), .zero)]
-  | .bang (.thunk (.arr A _)) => [(.aff, A, .zero)]
+        [(.cancel, .tensor A (.box d K), .zero)]
+  | .bang (.thunk (.arr A _)) => [(.cancel, A, .zero)]
   | _ => []
 
 /-- The first candidate whose clause type under BOXED-κ at `@d` is `c`. -/
@@ -681,8 +681,8 @@ def Env.slotTy (E : Env) (T : List CVTy) (i : Nat) : String := (T[i]?.map E.ppV)
 
 def splitErr (E : Env) (T : List CVTy) (sp : Span) (u₁ u₂ : List Bool) : Error :=
   match firstOverlap T u₁ u₂ with
-  | some i => ⟨sp, s!"{E.slotName i} is used twice here, and its type `{E.slotTy T i}` is not " ++
-      "persistent"⟩
+  | some i => ⟨sp, s!"{E.slotName i} is used twice here, and its type `{E.slotTy T i}` is " ++
+      "linear"⟩
   | none => ⟨sp, "internal error: context split"⟩
 
 /-- The first slot `a` uses that `b` neither uses nor absorbs. -/
@@ -693,7 +693,7 @@ def firstMissing : List Bool → List Bool → List Bool → Option Nat
 /-- Why slot `i` was not dropped where a path does not consume it. -/
 def Env.notDropped (E : Env) (T : List CVTy) (i : Nat) : String :=
   match T[i]? with
-  | some A => if hasDtorB A then "" else s!", and its type `{E.ppV A}` has no destructor"
+  | some A => if hasDtorB A then "" else s!", and its type `{E.ppV A}` is linear and has no derived drop"
   | none => ""
 
 /-- The two parts of a `case` or a `<,>` do not consume the same variables. -/
@@ -707,11 +707,11 @@ def mergeErr (E : Env) (T : List CVTy) (sp : Span) (what₁ what₂ intro : Stri
   | _, _ => ⟨sp, "internal error: merge"⟩
 
 /-- A binder's variable is neither consumed nor dropped when its scope closes. -/
-def unconsumed (E : Env) (sp : Span) (x : String) (A : CVTy) (lin : Bool) : Error :=
-  if lin then ⟨sp, s!"`{x}` is declared `linear` and is not consumed in its scope"⟩
-  else if hasDtorB A then
+def unconsumed (E : Env) (sp : Span) (x : String) (A : CVTy) : Error :=
+  if hasDtorB A then
     ⟨sp, s!"`{x}` is not consumed in its scope, and it cannot be dropped where its scope ends"⟩
-  else ⟨sp, s!"`{x}` is not consumed in its scope, and its type `{E.ppV A}` has no destructor"⟩
+  else ⟨sp, s!"`{x}` is not consumed in its scope, and its type `{E.ppV A}` is linear and has no " ++
+    "derived drop"⟩
 
 def mismatch (sp : Span) (want got : String) : Error :=
   ⟨sp, s!"type mismatch: expected `{want}`, but this has type `{got}`"⟩
@@ -739,11 +739,11 @@ def convC (E : Env) (sp : Span) (C : CCTy) : (Σ D : CCTy, Res Δ T (.comp D)) �
       else throw (mismatch sp (E.ppC C) (E.ppC D))
     | _, _ => throw (mismatch sp (E.ppC C) (E.ppC D))
 
-def popL {A : CVTy} {P : List Bool → Prop} (E : Env) (sp : Span) (x : String) (F : Fam (A :: T) P)
-    (lin : Bool := false) : Except Error (Fam T (fun L => P (true :: L))) :=
+def popL {A : CVTy} {P : List Bool → Prop} (E : Env) (sp : Span) (x : String) (F : Fam (A :: T) P) :
+    Except Error (Fam T (fun L => P (true :: L))) :=
   match F.popLive with
   | some F' => pure F'
-  | none => throw (unconsumed E sp x A lin)
+  | none => throw (unconsumed E sp x A)
 
 def popD {A : CVTy} {P : List Bool → Prop} (sp : Span) (F : Fam (A :: T) P) :
     Except Error (Fam T (fun L => P (false :: L))) :=
@@ -765,15 +765,15 @@ def lookupVar (x : String) : List (Option String) → Option Nat
   | [] => none
   | y :: ys => if y == some x then some 0 else (lookupVar x ys).map (· + 1)
 
-/-- A slot that is not owed: a dead binder, or `linear`. -/
+/-- A slot that is not owed: a dead binder. -/
 def Env.push (E : Env) (x : Option String) : Env := { E with vars := x :: E.vars, own := false :: E.own }
 
-/-- A binder's live slot `x : A`, owed to its scope when `A` has a destructor, is not persistent
-and the binder is not `linear` (SPEC §12). -/
-def Env.pushOwn (E : Env) (x : String) (A : CVTy) (lin : Bool := false) : Env :=
-  { E with vars := some x :: E.vars, own := (!lin && !A.persistent && hasDtorB A) :: E.own }
+/-- A binder's live slot `x : A`, owed to its scope when `A` is linear and has a derived drop
+(SPEC §12). -/
+def Env.pushOwn (E : Env) (x : String) (A : CVTy) : Env :=
+  { E with vars := some x :: E.vars, own := (!A.persistent && hasDtorB A) :: E.own }
 
-/-- A binder that is not `linear` owes exactly the slot with a derived drop.  `[spec §12]` -/
+/-- A binder owes exactly the slot with a derived drop.  `[spec §12]` -/
 theorem Env.pushOwn_own (E : Env) (x : String) (A : CVTy) :
     (E.pushOwn x A).own.head? = some (decide (DerivedDrop A)) := by
   simp only [Env.pushOwn, List.head?_cons, Option.some.injEq]
@@ -836,7 +836,7 @@ def mentionsV (x : String) : Val → Bool
 /-- `x` occurs free in a computation. -/
 def mentionsC (x : String) : Comp → Bool
   | .ret _ V | .absurd _ V => mentionsV x V
-  | .bind _ y _ M N _ => mentionsC x M || (y.name != x && mentionsC x N)
+  | .bind _ y _ M N => mentionsC x M || (y.name != x && mentionsC x N)
   | .force _ y => y.name == x
   | .lam _ y _ M => y.name != x && mentionsC x M
   | .app _ M y => mentionsC x M || y.name == x
@@ -1015,8 +1015,8 @@ def finalOf (E : Env) (sp : Span) (_S : CRow) (u : List Bool) :
     | some A =>
       if hasDtorB A then dropOne sp (i + 1) r
       else throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across a computation " ++
-        "that may abort, and its type has no destructor: an abortive operation of the bound " ++
-        "computation would abandon it"⟩
+        "that may abort, and its type is linear with no derived drop, and an abort abandons only " ++
+        "a value that holds no owned cell"⟩
     | none => throw ⟨sp, "internal error: a slot is out of range"⟩
   pure r
 
@@ -1041,7 +1041,7 @@ def thenIt (E : Env) (sp : Span) (x : String) {S : CRow} {A B : CVTy} {tN : TExp
           let F' : Fam T (fun L => (TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp (effOf S B)) ∧
               TTied rD.pins rD.sigs Δ (mkCtx (.unit :: T) (false :: L)) rD.t
                 (.comp (effOf [] .unit))) ∧
-              (S.UnrD → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T L))) ←
+              (S.UnrD → BoCa.Fig16.LogRel.Core.Ctx.Banged (mkCtx T L))) ←
             if hu : Row.unrDB S = true then
               if hs : usedSat isBangB T F.u = true then
                 pure ((F.restrict isBangB hs).map fun _ ⟨h, hp⟩ => ⟨h, fun _ => persistent_of hp⟩)
@@ -1062,13 +1062,14 @@ def thenIt (E : Env) (sp : Span) (x : String) {S : CRow} {A B : CVTy} {tN : TExp
   else throw ⟨sp, s!"the row `{ppRow E S}` has an operation of the reserved name 0"⟩
 
 /-- `x <- M; N` whose head `M` performs operations, at the row `S` (SPEC §19). At a row with no
-weakening, or when every slot `N` uses drops (and is `!` at an unrestricted row), `[let]`;
-otherwise `[then]`, with the finaliser `finalOf`: the destructors of the slots `N` uses. -/
-def effBind (E : Env) (sp : Span) (x : Ident) (lin : Bool) {S : CRow} {A B : CVTy}
+cancellable or unrestricted operation, or when every slot `N` uses holds no owned cell (and is `!`
+at an unrestricted row), `[let]`; otherwise `[then]`, with the finaliser `finalOf`: the
+destructors of the slots `N` uses. -/
+def effBind (E : Env) (sp : Span) (x : Ident) {S : CRow} {A B : CVTy}
     (rM : Res Δ T (.comp (effOf S A))) (rN : Res Δ (A :: T) (.comp (effOf S B))) :
     Except Error (Res Δ T (.comp (effOf S B))) := do
-  let FN ← popL E x.span x.name rN.F lin
-  if hw : Row.weakB S = true then
+  let FN ← popL E x.span x.name rN.F
+  if hw : Row.cancelsB S = true then
     let p : CVTy → Bool := fun A => dropB A && (!Row.unrB S || isBangB A)
     if hs : usedSat p T FN.u = true then
       let FN' := (FN.restrict p hs).map fun _ ⟨h, hp⟩ =>
@@ -1083,7 +1084,7 @@ def effBind (E : Env) (sp : Span) (x : Ident) (lin : Bool) {S : CRow} {A B : CVT
             · exact absurd (Row.unrB_iff.mpr hU) (by simp [h'])
             · exact h')⟩ :
           TTied rN.pins rN.sigs Δ (mkCtx (A :: T) (true :: _)) rN.t (.comp (effOf S B)) ∧
-            (S.Weak → (mkCtx T _).Drops) ∧ (S.Unr → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T _)))
+            (S.Cancels → (mkCtx T _).OwnFree) ∧ (S.Unr → BoCa.Fig16.LogRel.Core.Ctx.Banged (mkCtx T _)))
       if h : overlapOK T rM.F.u FN'.u = true then pure (rScope (at_ sp) (rEffLet (atB sp [x.name]) rM FN' h))
       else throw (splitErr E T sp rM.F.u FN'.u)
     else
@@ -1091,10 +1092,10 @@ def effBind (E : Env) (sp : Span) (x : Ident) (lin : Bool) {S : CRow} {A B : CVT
       thenIt E sp x.name rM FN rD
   else
     let FN' := FN.map fun _ h =>
-      (⟨h, fun hW => absurd (Row.weakB_iff.mpr hW) (by simp [hw]),
-        fun hU => absurd (Row.weakB_iff.mpr (Row.weak_of_unr hU)) (by simp [hw])⟩ :
+      (⟨h, fun hW => absurd (Row.cancelsB_iff.mpr hW) (by simp [hw]),
+        fun hU => absurd (Row.cancelsB_iff.mpr (Row.cancels_of_unr hU)) (by simp [hw])⟩ :
         TTied rN.pins rN.sigs Δ (mkCtx (A :: T) (true :: _)) rN.t (.comp (effOf S B)) ∧
-          (S.Weak → (mkCtx T _).Drops) ∧ (S.Unr → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T _)))
+          (S.Cancels → (mkCtx T _).OwnFree) ∧ (S.Unr → BoCa.Fig16.LogRel.Core.Ctx.Banged (mkCtx T _)))
     if h : overlapOK T rM.F.u FN'.u = true then pure (rScope (at_ sp) (rEffLet (atB sp [x.name]) rM FN' h))
     else throw (splitErr E T sp rM.F.u FN'.u)
 

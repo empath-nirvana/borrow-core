@@ -7,7 +7,7 @@
 | instances | static names; generative | static as built; generative is deferred |
 | deep or shallow | deep; shallow | deep (decided) |
 | continuation classes | tail-resumptive, abortive, one-shot; multi-shot | multi-shot is ignored |
-| discard | affine with cancel; linear | cancel as built (§19); the core is linear |
+| discard | silent weakening (the affine reading of other systems); linear with a cancel | cancel as built (§19); the core is linear |
 | `resume` and capabilities | second-class; first-class with boxing | open (see [Second-class values](../foundations/second-class.md)) |
 | a stored continuation's bound | a `[gen]` rule; an outlives rule at `U C` | OQ-28 |
 | lends across a stop | carried open in σ; ghost-end (end and re-lend) | OQ-9 |

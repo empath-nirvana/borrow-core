@@ -26,8 +26,8 @@ the derived rules over existing rules.
 | the types whose derived drop does nothing | `forgettable_iff` |
 
 Three rules absorb a context without using its slots, and none is a drop: `⊤` introduction
-(`CDerives.topI`), `absurd` (`CDerives.zeroE`), and the abandonment of a `VTy.Drop` context at an
-abort (`CDerives.effLet`'s `hW`, `CDerives.effRaise`'s `hd`; `vC_noOwn_of_drop`).
+(`CDerives.topI`), `absurd` (`CDerives.zeroE`), and the abandonment of a `VTy.OwnFree` context at an
+abort (`CDerives.effLet`'s `hW`, `CDerives.effRaise`'s `hd`; `vC_noOwn_of_ownFree`).
 -/
 
 noncomputable section
@@ -293,8 +293,8 @@ theorem algsIn_effFree : ∀ (A : VTy), ∀ e ∈ algsIn A, e.effFree = true
   | .fam (.opq _), _, he => by simp [algsIn] at he
 end
 
-/-- Decision 1: a derived drop is pure at the row. `dtorE A` holds no operation at every `A`;
-the hypothesis is the one the checker has where it inserts a drop.  `[spec §12]` -/
+/-- A derived drop is pure at the row: `dtorE A` performs no operation, at every `A`; the
+hypothesis is the one the checker has where it inserts a drop.  `[spec §12]` -/
 theorem dtorE_effFree {A : VTy} (_h : HasDtor A) : (dtorE A).effFree = true :=
   dtorAt_effFree false A
 
@@ -359,12 +359,13 @@ theorem kTy_lin {S : Row} {R B : VTy} {F : CTy} :
   cases h
 
 /-- `κ` at the default qualifier is linear, with a cancel branch: the `A & 1` encoding. -/
-theorem kTy_cancel_linear {S : Row} {R B : VTy} {F : CTy} : Linear (kTy S R .aff B F) := by
+theorem kTy_cancel_linear {S : Row} {R B : VTy} {F : CTy} : Linear (kTy S R .cancel B F) := by
   simp [kTy, VTy.persistent]
 
-/-- Decision 1: the cancel is a derived drop exactly when it is pure. -/
+/-- The cancel of `κ` at the default qualifier is a derived drop exactly when it is pure: when
+the cancel row is empty. -/
 theorem kTy_cancel_hasDtor_iff {S : Row} {R B : VTy} {F : CTy} :
-    HasDtor (kTy S R .aff B F) ↔ cancelTy S F = .ret .unit := by
+    HasDtor (kTy S R .cancel B F) ↔ cancelTy S F = .ret .unit := by
   simp only [kTy]
   constructor
   · intro h
@@ -380,12 +381,12 @@ theorem kTy_unr {S : Row} {R B : VTy} {F : CTy} : Unrestricted (kTy S R .unr B F
 
 /-! ### The types whose derived drop does nothing -/
 
-/-- `Affine` (`Core/Records.lean`) is the types that hold no owned cell and have a derived drop:
-`VTy.Drop` without the opaque host types, which have no destructor.  `[spec §12, §19]` -/
-theorem forgettable_iff {A : VTy} : Affine A ↔ A.Drop ∧ HasDtor A := by
+/-- `Forgettable` (`Core/Records.lean`) is the types that hold no owned cell and have a derived drop:
+`VTy.OwnFree` without the opaque host types, which have no destructor.  `[spec §12, §19]` -/
+theorem forgettable_iff {A : VTy} : Forgettable A ↔ A.OwnFree ∧ HasDtor A := by
   constructor
   · intro h
-    refine ⟨?_, hasDtor_of_affine h⟩
+    refine ⟨?_, hasDtor_of_forgettable h⟩
     induction h with
     | unit => exact .unit
     | zero => exact .zero

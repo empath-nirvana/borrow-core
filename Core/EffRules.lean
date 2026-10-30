@@ -609,9 +609,9 @@ theorem ewp_free {Tb : Table} (hTb : Tb.Mono) (K : Kont) (ℓ : Loc) (v : Val) {
     ⟨ρ₁, ρ₂, hc, hp, ewp_unfold hTb hq⟩))
 
 /-- `κ`'s body over its cell, at the cell's location, is `kappaC`. -/
-theorem kappaCBody_subst (aff : Bool) (ℓ : Loc) (H : Val) (K : Kont) :
-    Expr.subst 0 (Val.loc ℓ) (kappaCBody aff H K) = kappaC aff ℓ H K := by
-  cases aff <;>
+theorem kappaCBody_subst (hasCancel : Bool) (ℓ : Loc) (H : Val) (K : Kont) :
+    Expr.subst 0 (Val.loc ℓ) (kappaCBody hasCancel H K) = kappaC hasCancel ℓ H K := by
+  cases hasCancel <;>
   simp only [kappaCBody, kappaC, freeE, stuckE, hndE, ccatchE, raiseE, Expr.subst, Expr.val,
     Val.val_shift, Bool.false_eq_true, if_true, if_false, Val.loc, Val.lam, Val.prim, Val.unit] <;>
   rw [Expr.subst_shift 3 0 3 _ H.1 (by omega) (by omega),
@@ -621,12 +621,12 @@ theorem kappaCBody_subst (aff : Bool) (ℓ : Loc) (H : Val) (K : Kont) :
 
 /-- **The capture cell's allocation**: `κ` before its cell, at an evaluation position, allocates
 the cell by the ordinary `alloc` step and becomes `kappaC` at its location. -/
-theorem ewp_kappaCell {Tb : Table} (hTb : Tb.Mono) (aff : Bool) (H : Val) (K : Kont)
+theorem ewp_kappaCell {Tb : Table} (hTb : Tb.Mono) (hasCancel : Bool) (H : Val) (K : Kont)
     (Kc : Kont) {ls : List SRec} {Q : List SRec → Val → WProp} {ρ : WRes}
-    (h : ∀ ℓ : Loc, (ptoOwn ℓ Val.unit ─⋆ ewpTS ls (Kc.plug (kappaC aff ℓ H K)) Tb Q) ρ) :
-    ewpTS ls (Kc.plug (kappaCell aff H K)) Tb Q ρ := by
-  have e : Kc.plug (kappaCell aff H K) =
-      (Kc.comp (.appR (.val (.lam (kappaCBody aff H K))) .hole)).plug
+    (h : ∀ ℓ : Loc, (ptoOwn ℓ Val.unit ─⋆ ewpTS ls (Kc.plug (kappaC hasCancel ℓ H K)) Tb Q) ρ) :
+    ewpTS ls (Kc.plug (kappaCell hasCancel H K)) Tb Q ρ := by
+  have e : Kc.plug (kappaCell hasCancel H K) =
+      (Kc.comp (.appR (.val (.lam (kappaCBody hasCancel H K))) .hole)).plug
         (.app (.val (.prim .alloc)) (.val Val.unit)) := by
     rw [Kont.plug_comp]; rfl
   rw [e]
@@ -637,14 +637,14 @@ theorem ewp_kappaCell {Tb : Table} (hTb : Tb.Mono) (aff : Bool) (H : Val) (K : K
   exact h ℓ σ₁ σ₂ hp hc
 
 /-- `kappaC` is a value. -/
-theorem isVal_kappaC (aff : Bool) (ℓ : Loc) (H : Val) (K : Kont) :
-    IsVal (kappaC aff ℓ H K) := by unfold kappaC; exact .lam
+theorem isVal_kappaC (hasCancel : Bool) (ℓ : Loc) (H : Val) (K : Kont) :
+    IsVal (kappaC hasCancel ℓ H K) := by unfold kappaC; exact .lam
 
 /-- **Resuming a `κ` that owns a cell** at `w` frees the cell, then runs `hnd H K[w]`. -/
-theorem ewp_kappaC_resume {Tb : Table} (hTb : Tb.Mono) (aff : Bool) (ℓ : Loc)
+theorem ewp_kappaC_resume {Tb : Table} (hTb : Tb.Mono) (hasCancel : Bool) (ℓ : Loc)
     (H : Val) (K : Kont) (w : Val) {ls : List SRec} {Q : List SRec → Val → WProp} {ρ : WRes}
     (h : (ptoOwn ℓ Val.unit ⋆ ewpTS ls (hndE H (K.plug (.val w))) Tb Q) ρ) :
-    ewpTS ls (.app (.app (kappaC aff ℓ H K) (.val (Val.inj₁ .unit))) (.val w)) Tb Q ρ := by
+    ewpTS ls (.app (.app (kappaC hasCancel ℓ H K) (.val (Val.inj₁ .unit))) (.val w)) Tb Q ρ := by
   refine ewp_step hTb (fun μ => (Step1N.head (Head.beta μ _ _) rfl).plug (Kont.appL .hole w)) ls Q ρ ?_
   refine ewp_step hTb (fun μ => (Step1N.head (Head.case₁ μ Val.unit _ _) rfl).plug
     (Kont.appL .hole w)) ls Q ρ ?_
@@ -657,7 +657,7 @@ theorem ewp_kappaC_resume {Tb : Table} (hTb : Tb.Mono) (aff : Bool) (ℓ : Loc)
   rw [show (0 + 1 : Nat) = 1 from rfl, show (0 + 1 + 1 : Nat) = 2 from rfl, kappa_resume_subst]
   exact hq
 
-/-- **Cancelling an affine `κ`** frees its cell, then runs `ccatch (K†[raise (0, (0, none))])`. -/
+/-- **Cancelling a cancellable `κ`** frees its cell, then runs `ccatch (K†[raise (0, (0, none))])`. -/
 theorem ewp_kappaC_cancel {Tb : Table} (hTb : Tb.Mono) (ℓ : Loc) (H : Val) (K : Kont)
     {ls : List SRec} {Q : List SRec → Val → WProp} {ρ : WRes}
     (h : (ptoOwn ℓ Val.unit ⋆ ewpTS ls (ccatchE (K.dead.plug (raiseE (.val (cancelVal none)))))
@@ -761,11 +761,11 @@ theorem ewp_ccatch {T Tout : OpTab} (hT : T.Le Tout) :
       rw [dead_comp, dead_ccatchK]
       exact (hcont ls'' he).2 hq P hP
 
-/-- A qualifier's tag in a handler value: `0` linear, `1` affine, `2` unrestricted.
+/-- A qualifier's tag in a handler value: `0` must resume, `1` cancellable, `2` unrestricted.
 `[spec §25]` -/
 def Qual.tag : Qual → UInt32
   | .lin => 0
-  | .aff => 1
+  | .cancel => 1
   | .unr => 2
 
 /-- The tags of a list of qualifiers, as the right-nested tuple a handler value holds.
@@ -800,18 +800,18 @@ theorem capTag_qualsVal : ∀ (qs : List Qual) (j : Nat) (h : j < qs.length),
   | q :: qs => by
       simp only [qualsVal, Val.pair, Val.i32, Expr.subst, subst_qualsVal j s qs]
 
-/-- The continuation `[op]` hands at a tag: a cell at a linear or affine operation. -/
+/-- The continuation `[op]` hands at a tag: a cell at a must-resume or cancellable operation. -/
 theorem kappaAt_tag (q : Qual) (H : Val) (K : Kont) :
     kappaAt q.tag H K = (match q with
       | .lin => kappaCell false H K
-      | .aff => kappaCell true H K
+      | .cancel => kappaCell true H K
       | .unr => kappa H K) := by
   cases q <;> simp [kappaAt, Qual.tag]
 
 /-- **A handler** (`[handle]`), by induction on the least fixed point of the inner computation.
 `[ret]` answers through `h_ret`; an operation of the handler's name runs its clause, with `κ`
 resumed by the induction hypothesis and cancelled by the inner computation's cancel run of the
-dead region under `ccatch`; at a linear or affine operation `κ` first gets its cell
+dead region under `ccatch`; at a must-resume or cancellable operation `κ` first gets its cell
 (`ewp_kappaCell`), which its resume and its cancel free; an abortive one runs its clause and drops
 the abandoned continuation; an operation of another name passes outward, the handler reinstalled in
 its continuation, and dead in that continuation's cancel, so the inner cancel run is the outer one.
@@ -874,7 +874,7 @@ theorem ewp_handle_or (Tin Tout : OpTab) (Px Px' : Table) (hPx' : Px'.Mono) (n :
           · exact ewp_kappa_resume hM _ K₁ w
               ((hcont ls'' he).1 w τ₁ τ₂ hB hc)
           · exact fun Tk hTk => ewp_kappa_cancel (opTable_mono Tk) _ K₁ (hcan ls'' he hq' Tk hTk)
-      | aff | lin =>
+      | cancel | lin =>
           refine ewp_unfold hM (ewp_kappaCell hM _
             (hndVal m qs hr hs) K₁ (.appR (.val c) (.pairR v .hole)) (fun ℓ σ₁ σ₂ hcell hc₂ => ?_))
           obtain ⟨y, hy₁, hy₂⟩ := compS_reassoc hcak hc₂
@@ -953,8 +953,8 @@ def opArgE (n i : UInt32) (V : Expr) : Expr := .pair (.val (Val.i32 n)) (.pair (
 /-- A row's names are not the reserved `0`. -/
 def Row.NZ (S : Row) : Prop := ∀ o ∈ S, o.n ≠ 0
 
-/-- A row has an operation with weakening: an abortive, affine or unrestricted one. -/
-def Row.Weak (S : Row) : Prop := ∃ o ∈ S, o.q ≠ .lin
+/-- A row has a cancellable or unrestricted operation (every abortive one is one of these). -/
+def Row.Cancels (S : Row) : Prop := ∃ o ∈ S, o.q ≠ .lin
 
 /-- A row has an unrestricted operation. -/
 def Row.Unr (S : Row) : Prop := ∃ o ∈ S, o.q = .unr
@@ -1035,22 +1035,23 @@ theorem Row.abortOnly_abort (S : Row) (δ : LSub) : (Row.tab S.abortOnly δ).Abo
   obtain ⟨hm, -, -⟩ := Row.find_mem hf
   exact (List.mem_filter.mp hm).2
 
-/-! ### Contexts that drop -/
+/-! ### Own-free contexts -/
 
-/-- A type whose values hold no `own` cell: data, borrows, `!`.  `[spec §19]` -/
-inductive _root_.BoCa.Fig16.LogRel.Core.VTy.Drop : VTy → Prop where
-  | unit : VTy.Drop .unit
-  | zero : VTy.Drop .zero
-  | int (w : Width) : VTy.Drop (.int w)
-  | unk : VTy.Drop .unk
-  | opq (k : Opaque) : VTy.Drop (.opq k)
-  | bang (A : VTy) : VTy.Drop (.bang A)
-  | imm (a : Lifetime.Life) (A : VTy) : VTy.Drop (.imm a A)
-  | «mut» (a : Lifetime.Life) (A : VTy) : VTy.Drop (.mut a A)
-  | tensor {A B : VTy} : VTy.Drop A → VTy.Drop B → VTy.Drop (.tensor A B)
-  | sum {A B : VTy} : VTy.Drop A → VTy.Drop B → VTy.Drop (.sum A B)
+/-- A type whose values hold no `own` cell: data, borrows, `!`. An abort abandons a value of such a
+type (SPEC §19); that is not a drop.  `[spec §19]` -/
+inductive _root_.BoCa.Fig16.LogRel.Core.VTy.OwnFree : VTy → Prop where
+  | unit : VTy.OwnFree .unit
+  | zero : VTy.OwnFree .zero
+  | int (w : Width) : VTy.OwnFree (.int w)
+  | unk : VTy.OwnFree .unk
+  | opq (k : Opaque) : VTy.OwnFree (.opq k)
+  | bang (A : VTy) : VTy.OwnFree (.bang A)
+  | imm (a : Lifetime.Life) (A : VTy) : VTy.OwnFree (.imm a A)
+  | «mut» (a : Lifetime.Life) (A : VTy) : VTy.OwnFree (.mut a A)
+  | tensor {A B : VTy} : VTy.OwnFree A → VTy.OwnFree B → VTy.OwnFree (.tensor A B)
+  | sum {A B : VTy} : VTy.OwnFree A → VTy.OwnFree B → VTy.OwnFree (.sum A B)
 
-theorem vC_noOwn_of_drop {A : VTy} (hA : A.Drop) :
+theorem vC_noOwn_of_ownFree {A : VTy} (hA : A.OwnFree) :
     ∀ {ls : List SRec} {δ : LSub} {v : Val} {ρ : WRes}, vC true A ls δ v ρ → NoOwn ρ := by
   induction hA with
   | unit => intro ls δ v ρ h; rw [h.1]; exact noOwn_empty
@@ -1080,11 +1081,11 @@ theorem vC_noOwn_of_drop {A : VTy} (hA : A.Drop) :
       · exact ihA (pure_sep_iff.mp h).2
       · exact ihB (pure_sep_iff.mp h).2
 
-/-- Every live slot of `Γ` is at a type that drops. -/
-def _root_.BoCa.Ctx.Drops (Γ : Ctx VTy) : Prop := ∀ s ∈ Γ, s.live = true → s.ty.Drop
+/-- Every live slot of `Γ` is at an own-free type. -/
+def _root_.BoCa.Ctx.OwnFree (Γ : Ctx VTy) : Prop := ∀ s ∈ Γ, s.live = true → s.ty.OwnFree
 
 theorem gSepC_noOwn {ls : List SRec} {δ : LSub} : ∀ {Γ : Ctx VTy} {γ : List Val} {ρ : WRes},
-    Γ.Drops → gSepC ls δ Γ γ ρ → NoOwn ρ
+    Γ.OwnFree → gSepC ls δ Γ γ ρ → NoOwn ρ
   | [], _, _, _, h => by rw [h.1]; exact noOwn_empty
   | _ :: _, [], _, _, h => by rw [h.1]; exact noOwn_empty
   | s :: Γ, v :: γ, ρ, hd, h => by
@@ -1092,16 +1093,16 @@ theorem gSepC_noOwn {ls : List SRec} {δ : LSub} : ∀ {Γ : Ctx VTy} {γ : List
       split at h
       · rename_i hl
         obtain ⟨ρ₁, ρ₂, hc, h₁, h₂⟩ := h
-        exact noOwn_compS hc (vC_noOwn_of_drop (hd s (by simp) hl) h₁)
+        exact noOwn_compS hc (vC_noOwn_of_ownFree (hd s (by simp) hl) h₁)
           (gSepC_noOwn (fun s' hs' => hd s' (List.mem_cons_of_mem _ hs')) h₂)
       · exact gSepC_noOwn (fun s' hs' => hd s' (List.mem_cons_of_mem _ hs')) h
 
 theorem gDenC_noOwn {ls : List SRec} {δ : LSub} {Γ : Ctx VTy} {γ : List Val} {ρ : WRes}
-    (hd : Γ.Drops) (h : gDenC ls δ Γ γ ρ) : NoOwn ρ :=
+    (hd : Γ.OwnFree) (h : gDenC ls δ Γ γ ρ) : NoOwn ρ :=
   gSepC_noOwn hd (gDenC_iff.mp h).2
 
 theorem gDenC_persistent {ls : List SRec} {δ : LSub} {Γ : Ctx VTy} {γ : List Val} {ρ : WRes}
-    (hp : Persistent Γ) (h : gDenC ls δ Γ γ ρ) : ρ = PMap.empty :=
+    (hp : Ctx.Banged Γ) (h : gDenC ls δ Γ γ ρ) : ρ = PMap.empty :=
   gSepC_persistent hp (gDenC_iff.mp h).2
 
 /-! ### Compatibility of `[let]` and `[then]` -/
@@ -1111,7 +1112,7 @@ theorem substAll_cons_psub (v : Val) (γ : List Val) (e : Expr) :
   show Expr.psub 0 (v :: γ) e = _
   rw [Expr.psub_cons 0 v γ e, Val.shift_zero]
 
-theorem OpSig.weak_of_ent {o : OpSig} {δ : LSub} (h : (o.ent δ).q ≠ .lin ∨ (o.ent δ).abort = true) :
+theorem OpSig.cancels_of_ent {o : OpSig} {δ : LSub} (h : (o.ent δ).q ≠ .lin ∨ (o.ent δ).abort = true) :
     o.q ≠ .lin := by
   rcases h with h | h
   · exact h
@@ -1141,12 +1142,12 @@ def cancelTy (S : Row) (F : CTy) : CTy :=
   if F.isTop then .top else CTy.effOf (F.rowOf ++ S) .unit
 
 /-- `κ`'s type at an operation `A ↠^q B` of a handler answering `F_Σ R`, whose cancel row is `F`:
-`U((B ⊸ F_Σ R) & ⊤)` (linear: resumed), `U((B ⊸ F_Σ R) & C)` (affine: resumed or cancelled), and
+`U((B ⊸ F_Σ R) & ⊤)` (must resume: resumed), `U((B ⊸ F_Σ R) & C)` (cancellable: resumed or cancelled), and
 its `!` (unrestricted), with `C = cancelTy Σ F`.  `[spec §19, §27]` -/
 def kTy (S : Row) (R : VTy) (q : Qual) (B : VTy) (F : CTy := .ret .unit) : VTy :=
   match q with
   | .lin => .thunk (.amp (.arr B (CTy.effOf S R)) .top)
-  | .aff => .thunk (.amp (.arr B (CTy.effOf S R)) (cancelTy S F))
+  | .cancel => .thunk (.amp (.arr B (CTy.effOf S R)) (cancelTy S F))
   | .unr => .bang (.thunk (.amp (.arr B (CTy.effOf S R)) (cancelTy S F)))
 
 /-- A clause's type: `!U(A ⊗ K ⊸ F_Σ R)`, or `!U(A ⊸ F_Σ R)` at an abortive operation, `K` at the

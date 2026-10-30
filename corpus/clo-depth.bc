@@ -1,10 +1,10 @@
--- An affine closure (SPEC §22) lent `mut` and passed on through three functions, with a reborrow
+-- A closure (SPEC §22) lent `mut` and passed on through three functions, with a reborrow
 -- on the way: the borrowed closure is an ordinary value of an ordinary type,
--- `mut 'a (box 'c Aff[i32, i32]<'c>)`, so passing it on is a call, and nothing bounds the depth
--- (`Core/AffPrograms.lean`, `d_passF`, at every depth). `outer` reborrows it at a shorter `'v`
+-- `mut 'a (box 'c Clo[i32, i32]<'c>)`, so passing it on is a call, and nothing bounds the depth
+-- (`Core/CloPrograms.lean`, `d_passF`, at every depth). `outer` reborrows it at a shorter `'v`
 -- (`borrow mut m`, Rust's `&mut *m`) for one call of `middle`, then calls `middle` again through
 -- `m` itself; `middle` calls `inner` twice; `inner` calls the closure. Every call reaches the one
--- closure state: the counter from `aff-counter.bc`, which adds each argument to its cell, bounded
+-- closure state: the counter from `clo-counter.bc`, which adds each argument to its cell, bounded
 -- by `main`'s own lifetime (SPEC §23).
 --
 -- Answer: i32[1030610], and `live 0`. The four calls add 1, 2, 3 and 4 to one counter starting
@@ -12,10 +12,10 @@
 -- (`610`). A reborrow that called a copy of the state would leave the second `middle` answering
 -- 3 and 7.
 
-include aff
+include clo
 
-fn counter<'c>(start: i32) -> box 'c Aff[i32, i32]<'c> =
-  aff_new_boxed[ref i32, i32, i32]['c](alloc(start), !thunkv fun (s : ref i32) ->
+fn counter<'c>(start: i32) -> box 'c Clo[i32, i32]<'c> =
+  clo_new_boxed[ref i32, i32, i32]['c](alloc(start), !thunkv fun (s : ref i32) ->
     < fun (a : i32) ->
         cx <- return (swap[i32, i32] s i32[0]);
         let (c, x) = cx;
@@ -24,15 +24,15 @@ fn counter<'c>(start: i32) -> box 'c Aff[i32, i32]<'c> =
         return (x + a, c1),
       n <- return (free[i32] s); return () >)
 
-fn inner<'a, 'c>(m: mut 'a (box 'c Aff[i32, i32]<'c>), k: i32) -> mut 'a (box 'c Aff[i32, i32]<'c>) * i32 =
-  aff_call_mut(m, k)
+fn inner<'a, 'c>(m: mut 'a (box 'c Clo[i32, i32]<'c>), k: i32) -> mut 'a (box 'c Clo[i32, i32]<'c>) * i32 =
+  clo_call_mut(m, k)
 
-fn middle<'a, 'c>(m: mut 'a (box 'c Aff[i32, i32]<'c>), k: i32) -> mut 'a (box 'c Aff[i32, i32]<'c>) * i32 =
+fn middle<'a, 'c>(m: mut 'a (box 'c Clo[i32, i32]<'c>), k: i32) -> mut 'a (box 'c Clo[i32, i32]<'c>) * i32 =
   let (m, x) = inner(m, k);
   let (m, y) = inner(m, k + 1);
   (m, x * 100 + y)
 
-fn outer<'a, 'c>(m: mut 'a (box 'c Aff[i32, i32]<'c>)) -> i32 =
+fn outer<'a, 'c>(m: mut 'a (box 'c Clo[i32, i32]<'c>)) -> i32 =
   let x = borrow mut m { 'v, n -> let (n, x) = middle(n, 1); x };
   let (m, y) = middle(m, 3);
   x * 10000 + y
@@ -41,5 +41,5 @@ main -> i32 =
   let c = alloc(counter(0));
   let t = borrow mut c { 'w, m -> outer(m) };
   let k = free(c);
-  aff_close(k);
+  clo_close(k);
   t

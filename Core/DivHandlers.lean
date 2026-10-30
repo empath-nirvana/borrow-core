@@ -25,10 +25,10 @@ attribute [local simp] Expr.subst Val.val_shift Expr.shift_shift Expr.shift_zero
 
 /-- **Resuming a `κ` that owns a cell, in a context `K₀`**: `ewp_kappaC_resume`'s steps
 under `K₀`. -/
-theorem ewp_kappaC_resume_in {Tb : Table} (hTb : Tb.Mono) (K₀ : Kont) (aff : Bool) (ℓ : Loc)
+theorem ewp_kappaC_resume_in {Tb : Table} (hTb : Tb.Mono) (K₀ : Kont) (hasCancel : Bool) (ℓ : Loc)
     (H : Val) (K : Kont) (w : Val) {ls : List SRec} {Q : List SRec → Val → WProp} {ρ : WRes}
     (h : (ptoOwn ℓ Val.unit ⋆ ewpTS ls (K₀.plug (hndE H (K.plug (.val w)))) Tb Q) ρ) :
-    ewpTS ls (K₀.plug (.app (.app (kappaC aff ℓ H K) (.val (Val.inj₁ .unit))) (.val w))) Tb Q ρ := by
+    ewpTS ls (K₀.plug (.app (.app (kappaC hasCancel ℓ H K) (.val (Val.inj₁ .unit))) (.val w))) Tb Q ρ := by
   let K₁ : Kont := K₀.comp (.appL .hole w)
   have e₀ : ∀ x, K₀.plug (.app x (.val w)) = K₁.plug x := fun x => by
     simp only [K₁, Kont.plug_comp]; rfl

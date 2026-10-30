@@ -179,7 +179,7 @@ This is the declaration of independence made semantic: a thing at mode `m` holds
 `C ∈ mode(Γ(x))` (D2.3 and L2.1.2), so `r_x ∈ Pers` (L5.4.1, L4.2.4) and `r_x = r_x ● r_x`;
 give a copy to each side. A variable used on one side goes there. (2) A variable used in `u` but
 not in `uᵢ` has `lo(u(x)) = 0`, so `mode(Γ(x)) ≠ lin` (D2.3), so `r_x ∈ NoOwn` (L4.2.1 with
-`⟦m⟧ ⊆ ⟦aff⟧` or `⊆ Pers ⊆ NoOwn`); it goes into `r₀`. (3) `ω·u₁` has `hi = 2` wherever it is
+`⟦m⟧ ⊆ ⟦cancel⟧` or `⊆ Pers ⊆ NoOwn`); it goes into `r₀`. (3) `ω·u₁` has `hi = 2` wherever it is
 non-zero; as in (1) every such `r_x ∈ Pers`, and `Pers` is closed under `●`. ∎
 
 **Definition D5.7 (semantic judgement).**
@@ -311,8 +311,8 @@ in `Elim_{Tab(ρ₀)}(A ⇒^ρ C)`, and `M`'s hypothesis applies. ∎
 **Lemma L5.13 (abortive operation).** [ab] is compatible.
 
 *Proof.* `abstop(S_e, π(x), a, v̂)` with resource `r_e`. `Π_E(a, v̂, Cancel(S_e))(r_e)` needs
-`Cancel(S_e)(r_e)`: `r_e ∈ ⟦bnd(T).req⟧ ⊆ ⟦aff⟧ = NoOwn` because `E` has an abortive operation, so
-`aff ≤ bnd(E).req ≤ bnd(T).req`. ∎
+`Cancel(S_e)(r_e)`: `r_e ∈ ⟦bnd(T).req⟧ ⊆ ⟦cancel⟧ = NoOwn` because `E` has an abortive operation, so
+`cancel ≤ bnd(E).req ≤ bnd(T).req`. ∎
 
 **Lemma L5.14 (handler).** [handle] and [handleAt] are compatible.
 
@@ -339,7 +339,7 @@ below). It ends at `t`:
    - **mode** (D1.8): if `C ∈ q_o`, the mode is `unr` or `rel` and the resource must be `Pers`:
      `r'' ∈ Pers` by the protocol, `R_H ∈ ⟦⨆_o q_o⟧ ⊆ Pers` by the premise
      `capture(Γ, fv(H), … ⊔ ⨆_o q_o)` and L5.4.2, L4.2.4; there is no `ℓ_κ`. Otherwise
-     `q_o ∈ {lin, aff}` and the type is a `lin` thunk (D1.8), which asks nothing of the resource.
+     `q_o ∈ {lin, cancel}` and the type is a `lin` thunk (D1.8), which asks nothing of the resource.
    - **resume** (eliminations `[prj₁,] arg w :: S_e'`): forcing removes `ℓ_κ` (it is in the
      resource) and reaches `⟨S_κ ++ S_e' ; rt w⟩ = ⟨bind :: S₁ ++ f_H :: S_e' ; rt w⟩`, which is
      (★) at `(bind :: S₁, rt w)` with `S_e'` for `S_e`: the induction hypothesis, given by the
@@ -399,7 +399,7 @@ so it is resumed exactly once and the frame is reinstated. Nothing outside the f
 1. **`done v̂`**: the frame frees `ℓ_r` (owned, 6.142), emits `free ℓ`; the value.
 2. **A stop on `j`** (`use`): the frame answers in place (`ℓ_r` is owned by `R₀`, so present),
    emits `use ℓ`, and continues by the protocol's resumption (`Res`'s protocol is `Φ(())`).
-3. **A stop on `j' ≠ j`**: L5.6's stop case. Compatibility: `aff ≥ bound(ρ).req ≥ bnd(Tab ρ).req`
+3. **A stop on `j' ≠ j`**: L5.6's stop case. Compatibility: `cancel ≥ bound(ρ).req ≥ bnd(Tab ρ).req`
    (premise), so no effect of the table has a `C` operation; for `W` or an abortive operation,
    `Cancel(S₀')(R₀)` holds exactly, because `ℓ_r ↦ own(rsrc ℓ)` is the resource of the `fin`
    frame `f_U` and `r_e ∈ NoOwn`. So a cancel or an unwind through the frame frees `ℓ_r`. ∎

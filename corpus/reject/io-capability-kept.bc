@@ -1,4 +1,4 @@
--- expect: 6:1: `main` does not consume the extern `stdout`, of type `ref output`, which is not persistent
+-- expect: 6:1: `main` does not consume the extern `stdout`, of type `ref output`, which is linear
 extern stdin : ref input
 extern stdout : ref output
 

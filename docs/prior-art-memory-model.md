@@ -319,7 +319,7 @@ Sources were fetched and read in full unless marked.
   write must invalidate payload views.
 - **The call/return contract from the signature alone:** returned mutable views disjoint and
   outbound-clean, nothing returned borrows a local, outputs related to inputs by `.∗`.
-- **Abilities as surface syntax for modes:** `copy+drop` = unr, `drop` = aff, neither = lin; the
+- **Abilities as surface syntax for modes:** `copy+drop` = unr, `drop` = the mode with weakening only, neither = lin; the
   field rule and conditional abilities on generics. Reading through a view needs `copy`, overwriting
   needs `drop`, swapping needs neither — the structural reading of `withload` and `withswap`.
 - **Evidence second-class references scale:** over half of measured Move signatures contain a
@@ -335,6 +335,6 @@ Sources were fetched and read in full unless marked.
   gated on a `store`-like ability.
 - **Exclusivity:** do not import Move's weaker no-invalidation invariant; our `imm` cells promise
   immutability and any concurrency needs the stronger rule.
-- **Relevant types:** Move allows `copy` without `drop`; our lin/aff/unr lattice has no such point.
+- **Relevant types:** Move allows `copy` without `drop`; our lin/cancel/unr qualifiers have no such point.
 - **Assurance:** no mechanised combination of abilities, borrowing and leak-freedom exists; that is
   what our adequacy theorem would provide.

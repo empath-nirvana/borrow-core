@@ -819,13 +819,13 @@ theorem boundsAvoidB_sound {Δ : LifeCtx} {x : LifeVar} (h : boundsAvoidB Δ x =
 
 /-! ### Rows  `[spec §19]` -/
 
-/-- `VTy.Drop`, decided: data, borrows and `!`, under `⊗` and `⊕`. -/
+/-- `VTy.OwnFree`, decided: data, borrows and `!`, under `⊗` and `⊕`. -/
 def dropB : VTy → Bool
   | .unit | .zero | .int _ | .unk | .opq _ | .bang _ | .imm _ _ | .mut _ _ => true
   | .tensor A B | .sum A B => dropB A && dropB B
   | _ => false
 
-theorem dropB_sound : ∀ A : VTy, dropB A = true → A.Drop
+theorem dropB_sound : ∀ A : VTy, dropB A = true → A.OwnFree
   | .unit, _ => .unit
   | .zero, _ => .zero
   | .int w, _ => .int w
@@ -843,8 +843,8 @@ theorem dropB_sound : ∀ A : VTy, dropB A = true → A.Drop
   | .thunk _, h | .ref _, h | .box _ _, h | .tvar _, h | .mu _, h | .fam _, h => by
       simp [dropB] at h
 
-/-- `dropB` decides `VTy.Drop`.  `[spec §19]` -/
-theorem dropB_iff (A : VTy) : dropB A = true ↔ A.Drop := by
+/-- `dropB` decides `VTy.OwnFree`.  `[spec §19]` -/
+theorem dropB_iff (A : VTy) : dropB A = true ↔ A.OwnFree := by
   refine ⟨dropB_sound A, fun h => ?_⟩
   induction h with
   | tensor _ _ ih₁ ih₂ | sum _ _ ih₁ ih₂ => simp [dropB, ih₁, ih₂]
@@ -872,11 +872,11 @@ def Row.uniqB (S : Row) : Bool := decide (S.Pairwise fun o o' => ¬ (o.n = o'.n 
 theorem Row.uniqB_sound {S : Row} (h : Row.uniqB S = true) : S.Uniq :=
   (of_decide_eq_true h : S.Pairwise fun o o' => ¬ (o.n = o'.n ∧ o.i = o'.i))
 
-/-- `Row.Weak`, decided. -/
-def Row.weakB (S : Row) : Bool := S.any fun o => o.q != .lin
+/-- `Row.Cancels`, decided. -/
+def Row.cancelsB (S : Row) : Bool := S.any fun o => o.q != .lin
 
-theorem Row.weakB_iff {S : Row} : Row.weakB S = true ↔ S.Weak := by
-  simp [Row.weakB, Row.Weak]
+theorem Row.cancelsB_iff {S : Row} : Row.cancelsB S = true ↔ S.Cancels := by
+  simp [Row.cancelsB, Row.Cancels]
 
 /-- `Row.Unr`, decided. -/
 def Row.unrB (S : Row) : Bool := S.any fun o => o.q == .unr

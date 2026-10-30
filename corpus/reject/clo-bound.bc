@@ -1,13 +1,13 @@
 -- expect: 10:3: cannot show `'w` ⊏ `'x` from the lifetime context
--- A lifetime bound (SPEC §23) is checked where the instance is called. `aff_new_boxed`'s bound
+-- A lifetime bound (SPEC §23) is checked where the instance is called. `clo_new_boxed`'s bound
 -- `S: 'c` makes its instance at `S = mut 'x i32` take `'c` below `'x`; `logger` passes its `'w`,
 -- which it does not bound by `'x`, so the call cannot show `'w ⊏ 'x`. With `<'x, 'w < 'x>` it
--- checks (`corpus/aff-capture.bc`).
+-- checks (`corpus/clo-capture.bc`).
 
-include aff
+include clo
 
-fn logger<'x, 'w>(ml: mut 'x i32) -> box 'w Aff[i32, i32]<'w> =
-  aff_new_boxed[mut 'x i32, i32, i32]['w](ml, !thunkv fun (m : mut 'x i32) ->
+fn logger<'x, 'w>(ml: mut 'x i32) -> box 'w Clo[i32, i32]<'w> =
+  clo_new_boxed[mut 'x i32, i32, i32]['w](ml, !thunkv fun (m : mut 'x i32) ->
     < fun (a : i32) ->
         q <- return (withswap['x, i32, i32] m (thunkv fun (v : i32) -> return (v + a, v + a)));
         let (m, t) = q;
@@ -18,7 +18,7 @@ main -> i32 =
   let log = alloc(0);
   let r = borrow mut log { 'x, ml ->
     let k = logger(ml);
-    let (a, k) = aff_call(k, 5);
-    aff_close(k);
+    let (a, k) = clo_call(k, 5);
+    clo_close(k);
     a };
   r + free(log)

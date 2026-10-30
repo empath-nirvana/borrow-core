@@ -50,7 +50,7 @@ consumed the strict bound.
    - **The fresh lifetime of `withbor`/`withload`**: not a cost. It sits in the callback's
      argument, so the strict bound is a hypothesis the callback receives.
    - **`∀'a ⊏ @b` as a binder**: open. A non-strict binder is a new binder kind in `LifeCtx`
-     and `Models`. It was not probed, and no `aff-*` program needs it once E1 is in place.
+     and `Models`. It was not probed, and no `clo-*` program needs it once E1 is in place.
    - **The frontend's lifetime parameters, strictly below `top`**: their cost is removed by
      elaboration (E1), with no kernel change.
 3. **Lifetime bounds on generic parameters** (§4). Elaboration only. A bound `where S: 'c`
@@ -59,9 +59,9 @@ consumed the strict bound.
    lifetime expression as its bound, and the unchanged checker accepts the elaborated instance
    [checked]. A bound that would let `'c` equal a lifetime of `S` (`'c ⊑ 'q`) needs a non-strict
    binder, which is open.
-4. **Ergonomics** (§5). Across the six `aff-*` programs, the scaffolding comes to 10 scopes and
+4. **Ergonomics** (§5). Across the six `clo-*` programs, the scaffolding comes to 10 scopes and
    6 cells, allocated only to name a lifetime, plus 18 `boxed[…]` annotations. With K1, E1 and
-   B1, 1 scaffolding scope (`aff-capture`'s), 1 cell and 4 annotations remain. Four of the
+   B1, 1 scaffolding scope (`clo-capture`'s), 1 cell and 4 annotations remain. Four of the
    programs need K1 alone to lose a scope each, and they check and run with the corpus answers
    under the K1 patch [scratch].
 5. **Recommendation** (§6), in order:
@@ -90,7 +90,7 @@ Each row gives where strictness enters, what it protects, and the verdict.
 | 7 | The fresh lifetime of `withbor`/`withload` | `Core/Types.lean:1828–1846` (`∀'x ⊏ ⊓Δ` in `axWithbor*Ty`, `axWithloadTy`); `Core/FrameRules.lean:346` (`wpTS_M_frameX` picks `A ⊏ β`, below every tag) | `'x ⊏ ⊓Δ` | the borrow ends before every lifetime in scope | **not a cost**: a hypothesis the callback receives (§2.7) |
 | 8 | The `∀` binder | `Paper/S2_Statics/Definitions.lean:290` `Models` (2.52); `Core/Fundamental.lean:122`, `:295` (`allE`, `allEV`: `Δ ⊨ @a ⊏ @b`); `Core/Relation.lean:161` (`cC` at `∀`, `LtLife`) | `δ('a) ⊏ δ(@b)` | the body may use `'a ⊏ @b`, e.g. to box an `Imm @b T` at `'a` | **open**: a non-strict binder is a new binder kind; not probed |
 | 9 | The frontend's lifetime parameters | `Frontend/Parser.lean:2121` (`<'a>` is `<'a < top>`); `Frontend/Sugar.lean:4207` (an instance's lifetimes, `all 'io_qk < top`); SPEC §15 *Generic functions* | `'a ⊏ ⊤` | as row 8 | **elaboration** (E1, §2.9) |
-| 10 | §22's boxed rest | `Core/Aff.lean:32` `affBody`: `νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1` | a use of row 2 | each call's rest outlives `@c` | **no change of its own**; its cost is rows 3, 5 and 9 |
+| 10 | §22's boxed rest | `Core/Clo.lean:32` `cloBody`: `νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1` | a use of row 2 | each call's rest outlives `@c` | **no change of its own**; its cost is rows 3, 5 and 9 |
 | 11 | The checker | `Frontend/Check/Decide.lean:438–495` (`ltB`, `leB`, `outlivesB` at box/imm/mut); `Frontend/Check/Consts.lean:80` (`outlivesWitness`, row 6's witness); `Frontend/Check/Rules.lean:103` (`rBoxI`), `:134`, `:216` (`rAllEV`, `rAllE`) | `ltB` | as rows 3–8 | **follows the kernel**: K1 is `outlivesB`'s box arm at `leB`; K2 is a non-strict `outlivesB` for `outlivesWitness` |
 
 Two places were already non-strict before this issue. Both came from SPEC §4 (Entry 3):
@@ -160,7 +160,7 @@ A `[@x] U C` already boxed holds nothing at `x` (§2.2).
 
 `boxI_compatX` reads `CtxOutlives` through 6.60 as `ρ ∈ Res_α` for the context's resource. At
 `m : Mut 'x 1` boxed at `'x`, that membership is exactly what `borrow_cell` refutes. This is the
-case `logState_not_outlives` (`Core/AffPrograms.lean`) refuses syntactically: a closure capturing
+case `logState_not_outlives` (`Core/CloPrograms.lean`) refuses syntactically: a closure capturing
 `Mut 'x T` is bounded strictly below `'x`.
 
 The refutation is at 6.60, the step of `boxI_compatX` that consumes the premise. A refutation of
@@ -234,7 +234,7 @@ Two elaborations remove the cost, with no kernel change:
   rule that opens a lifetime without a borrow; it was not probed.
 - **E1′, instances at `top`.** A call that passes `top` uses an instance of the function with the
   parameter substituted, as templates already are for types (SPEC §15). It needs no cell, but it
-  instantiates every function the call reaches: `counter`, `twice`, `aff_call_mut`, …
+  instantiates every function the call reaches: `counter`, `twice`, `clo_call_mut`, …
   (`twice<'a, 'c>` at `'c = top` is refused today: "cannot show `top` ⊏ `top`").
 
 The sketches use E1.
@@ -273,8 +273,8 @@ The checker certifies a `CDerives` derivation, and its decisions mirror the rule
 | `Programs.lean` | `counterTop` (Core's `counterProg` without its scope: the closure boxed at `⊤` is lent `mut` under `Δ = ∅` through K1/K2's side condition) and `nestTop` (Core's `nestProg` without its scope: the outer closure boxed at `⊤` over the inner one, by K1's `[]I`); each `_derives`, `_runs` (adequacy at every host) and `_eval` (the interpreter at Wasm's host by `decide`: `4` and `8`, no cell left) |
 | `Obstructions.lean` | `borrow_cell`, `mut_outLe`, `not_vC_outlives_le`; `MutSelf`, `no_nonstrict_stratum` |
 | `bc/` | the B1 instances, checked and run by `bcc` (§4) |
-| `sketches/k1/` | four `aff-*` programs under K1 alone, checked under `k1.patch` [scratch] |
-| `sketches/all/` | the six `aff-*` programs and `lib/aff.bc` under K1, E1 and B1 [unchecked] |
+| `sketches/k1/` | four of the closure programs (the corpus's `clo-*`) under K1 alone, checked under `k1.patch` [scratch] |
+| `sketches/all/` | the six closure programs and the closure library under K1, E1 and B1 [unchecked] |
 | `k1.patch` | K1 as a library diff [scratch] |
 
 **K1 as a library change** [scratch]. `k1.patch` changes the following:
@@ -290,7 +290,7 @@ Every other consumer of `VOutlives` goes through `vC_outlives` (`Compatibility`,
 `unroll`, the family and block borrows). Applied to a worktree of `main`, `lake build Core
 Frontend bcc` succeeds. The four `sketches/k1/` programs check and run with their corpus answers,
 and `bcc` of `main` refuses all four at the box rule. Under the patch the six corpus
-`aff-*` programs still check, and `corpus/reject/aff-outlives.bc` (a closure capturing
+`clo-*` programs still check, and `corpus/reject/clo-outlives.bc` (a closure capturing
 `mut 'x i32` bounded by `'x`) is still refused, as §2.4 requires. Paper's `OutlivesRules` is untouched: the
 embedding of `Derives` into `CDerives` maps its strict premise to the non-strict one.
 
@@ -298,10 +298,10 @@ embedding of `Derives` into `CDerives` maps its strict premise to the non-strict
 
 ## 4. Lifetime bounds on generic parameters
 
-**The cost.** `fn aff_new[S, A, B]<'c>` cannot box its closure. At an instance with `S` mentioning
+**The cost.** `fn clo_new[S, A, B]<'c>` cannot box its closure. At an instance with `S` mentioning
 `'x`, SPEC §15 makes `'x` a parameter `all 'io_q0 < top.` of the instance, outside and unrelated to
 the template's own `all 'c < top.`. So `S ⊐ 'c` cannot be shown, and every caller writes
-`boxed['c] aff_new(…)`, with `boxed['c]` again on the state each call returns.
+`boxed['c] clo_new(…)`, with `boxed['c]` again on the state each call returns.
 
 **The design (B1).** `fn f[S, …]<'c>(…) where S: 'c`. At an instance whose `S` has lifetimes
 `q̄`, the template's `all 'c < top.` becomes `all 'c < 'q₁ /\ … /\ 'qₙ /\ top.` (`top` when `S` has
@@ -317,43 +317,43 @@ So B1 needs no judgment change and no new rule: elaboration only, in
 **Checked.** `experiments/Outlives/bc/capture-bounded.bc` writes out the instance B1 would make
 of
 
-    fn aff_new_boxed[S, A, B]<'c>(s: S, step: !U (S -o (A -o F (B * S)) & F 1)) -> box 'c Aff[A, B]<'c>
+    fn clo_new_boxed[S, A, B]<'c>(s: S, step: !U (S -o (A -o F (B * S)) & F 1)) -> box 'c Clo[A, B]<'c>
         where S: 'c
 
-at `S = mut 'q i32`, as `fn aff_new_boxed__mut<'q, 'c < 'q>`. `logger` calls it with no
-`boxed`. The program checks and runs to `aff-capture`'s answer (`i32[120512]`, `live 0`).
+at `S = mut 'q i32`, as `fn clo_new_boxed__mut<'q, 'c < 'q>`. `logger` calls it with no
+`boxed`. The program checks and runs to `clo-capture`'s answer (`i32[120512]`, `live 0`).
 `bc/counter-bounded.bc` does the same at `S = ref i32` (`<'c>`: no lifetime in `S`, so the bound
-is `top` and today's elaboration already is the bounded one), and runs to `aff-counter`'s answer.
+is `top` and today's elaboration already is the bounded one), and runs to `clo-counter`'s answer.
 
 **Where B1 stops.** B1's bound is strict: `'c < 'q`. A closure whose state is another closure
 bounded by `'c` (`nest`, `doubler`) wants its own bound to be `'c` as well. K1 admits that when
-the closure is made where `'c` is known (`sketches/k1/aff-drop.bc`, `aff-higher.bc`). Through the
-generic `aff_new_boxed`, however, it would need the instance's bound to be `'c ⊑ 'q`, which is a
+the closure is made where `'c` is known (`sketches/k1/clo-drop.bc`, `clo-higher.bc`). Through the
+generic `clo_new_boxed`, however, it would need the instance's bound to be `'c ⊑ 'q`, which is a
 non-strict binder (§2.8, open). The alternative is an instance specialised at equal lifetimes, an
-elaboration that was not designed further. The sketches keep `aff_new` and `boxed['c]` there.
+elaboration that was not designed further. The sketches keep `clo_new` and `boxed['c]` there.
 
 ---
 
 ## 5. Ergonomics
 
 Scaffolding counts only the scopes a program opens to name a lifetime, and the cells it allocates
-for them. It excludes the borrows a program is about (`aff-counter`'s `'w`, `aff-depth`'s `'w`
-and `'v`, `aff-capture`'s `'x`). `boxed[…]` counts annotations in code, not comments.
+for them. It excludes the borrows a program is about (`clo-counter`'s `'w`, `clo-depth`'s `'w`
+and `'v`, `clo-capture`'s `'x`). `boxed[…]` counts annotations in code, not comments.
 
 | program | scaffolding scopes now | after K1 | after K1 + E1 | cells for scopes now → after | `boxed[…]` now | after B1 |
 |---|---|---|---|---|---|---|
-| `aff-counter` | 2 (`'x`, `'y`) | 1 | 0 | 1 → 0 | 2 | 0 |
-| `aff-depth` | 2 (`'x`, `'y`) | 1 | 0 | 1 → 0 | 2 | 0 |
-| `aff-capture` | 1 (`'w`) | 1 | 1 | 1 → 1 | 2 | 0 |
-| `aff-coerce` | 1 (`'x`) | 1 | 0 | 1 → 0 | 2 | 0 |
-| `aff-drop` | 2 (`'x`, `'y`) | 1 | 0 | 1 → 0 | 4 | 2 |
-| `aff-higher` | 2 (`'x`, `'y`) | 1 | 0 | 1 → 0 | 6 | 2 |
+| `clo-counter` | 2 (`'x`, `'y`) | 1 | 0 | 1 → 0 | 2 | 0 |
+| `clo-depth` | 2 (`'x`, `'y`) | 1 | 0 | 1 → 0 | 2 | 0 |
+| `clo-capture` | 1 (`'w`) | 1 | 1 | 1 → 1 | 2 | 0 |
+| `clo-coerce` | 1 (`'x`) | 1 | 0 | 1 → 0 | 2 | 0 |
+| `clo-drop` | 2 (`'x`, `'y`) | 1 | 0 | 1 → 0 | 4 | 2 |
+| `clo-higher` | 2 (`'x`, `'y`) | 1 | 0 | 1 → 0 | 6 | 2 |
 | **total** | **10** | **6** | **1** | **6 → 1** | **18** | **4** |
 
 Two more counts:
 
 - The `'y` scopes K1 removes are reborrows of the scope cell's borrow, so they allocate nothing.
-- In `lib/aff.bc`, `aff_of_fn`'s 2 `boxed[…]` go to 0 under B1, and `aff_new_boxed` holds the 2
+- In `lib/clo.bc`, `clo_of_fn`'s 2 `boxed[…]` go to 0 under B1, and `clo_new_boxed` holds the 2
   that every closure definition no longer writes.
 
 Function signatures shrink as well:
@@ -362,7 +362,7 @@ Function signatures shrink as well:
 - `runner<'c, 'd>` becomes `<'c>`;
 - `logger<'x, 'w < 'x>` is unchanged: its `'w < 'x` is row 4, which stays.
 
-`aff-capture`'s remaining scope is a closure capturing `mut 'x i32`. It is bounded strictly below
+`clo-capture`'s remaining scope is a closure capturing `mut 'x i32`. It is bounded strictly below
 `'x` (§2.4), so some lifetime below `'x` must be in scope. An elaboration could open it
 implicitly when a lifetime argument must lie strictly below every lifetime available; that is not
 designed here.
@@ -395,9 +395,9 @@ In priority order:
    instance per function reached at `top`.
 3. **B1: `where S: 'c` bounds on generic functions.** Elaboration only, at the point where an
    instance's lifetime binders are made; the elaborated instance checks today. It removes 14 of 18
-   `boxed[…]` from the programs and both from `aff_of_fn`, and lets `aff_new` box its closure.
+   `boxed[…]` from the programs and both from `clo_of_fn`, and lets `clo_new` box its closure.
 4. **K2: `withbor`'s side condition non-strict at all three rules.** This is a kernel change,
-   proved for `withbor2` (`withbor2Le_compatX`). It is not needed by the `aff-*` programs: K1
+   proved for `withbor2` (`withbor2Le_compatX`). It is not needed by the `clo-*` programs: K1
    covers their boxed payloads. It removes a scope wherever a cell holding a borrow at `'x` is lent
    `mut` inside `'x`. `withbor2U`, the slice borrows and the family borrows should take it
    together, by the same one-step change.
@@ -411,7 +411,7 @@ In priority order:
 **Open:**
 
 - a non-strict `∀` binder (§2.8, and B1's limit in §4);
-- a rule that opens a lifetime without a borrow (the cell of E1, and `aff-capture`'s scope);
+- a rule that opens a lifetime without a borrow (the cell of E1, and `clo-capture`'s scope);
 - the relaxed `withbor2U`/slice/family side conditions, not rebuilt (§2.6);
 - a `SemV`-level refutation of `[]I` at the relaxed borrow rules, which needs a `wpTS` inversion
   at values (§2.4).

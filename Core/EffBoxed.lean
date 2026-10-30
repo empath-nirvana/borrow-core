@@ -29,7 +29,7 @@ about the handled computation `e : F_{E_n ⊕ Σ} A` under `Γ₂`:
   `@d` (`Row.AnsOutlives`).
 
 `ewp_handleS` is `ewp_handle` at the stratified table: the clause receives `κ`'s share in `Res_α`.
-At a linear or affine operation `κ` also holds its cell, an `own` cell, which is in every stratum.
+At a must-resume or cancellable operation `κ` also holds its cell, an `own` cell, which is in every stratum.
 -/
 
 noncomputable section
@@ -176,7 +176,7 @@ theorem stop_sem {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {S : Row} {A : VTy}
 
 /-- **`[handle]` at the stratified table**: `ewp_handle`, its inner computation in `ewpTS` at
 `opTableS α Tin`, so the clause of a capturing operation receives `κ` in `Res_α`. The proof is
-`ewp_handle`'s; at a linear or affine operation `κ`'s resource is the share and its cell, an
+`ewp_handle`'s; at a must-resume or cancellable operation `κ`'s resource is the share and its cell, an
 `own` cell. -/
 theorem ewp_handleS (α : Life) (Tin Tout : OpTab) (n : UInt32) (hn0 : n ≠ 0)
     (hTin : ∀ m i, m ≠ n → Tin m i = Tout m i) (qs hr hs : Val)
@@ -225,7 +225,7 @@ theorem ewp_handleS (α : Life) (Tin Tout : OpTab) (n : UInt32) (hn0 : n ≠ 0)
           · exact ewp_kappa_resume (opTable_mono Tout) _ K₁ w
               ((hcont ls'' he).1 w τ₁ τ₂ hB hc)
           · exact fun Tk hTk => ewp_kappa_cancel (opTable_mono Tk) _ K₁ (hcan ls'' he hq' Tk hTk)
-      | aff | lin =>
+      | cancel | lin =>
           refine ewp_unfold (opTable_mono Tout) (ewp_kappaCell (opTable_mono Tout) _
             (hndVal m qs hr hs) K₁ (.appR (.val c) (.pairR v .hole)) (fun ℓ σ₁ σ₂ hcell hc₂ => ?_))
           obtain ⟨y, hy₁, hy₂⟩ := compS_reassoc hcak hc₂

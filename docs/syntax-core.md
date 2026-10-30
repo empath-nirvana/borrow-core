@@ -96,7 +96,7 @@ lexically, innermost first, and are then discarded. Two consequences:
                | delay A | stream A | iter A A A | loop A A      (built-in abbreviations)
 
 `VTy`/`CTy` are defined at `Ty:33`/`Ty:57`. `box @ A` is `[@] A`. In a row, `n.i` is operation
-`i` of the handler name `n`, `q` its qualifier (`lin`, `aff` or `unr`), and `A ~> B` its argument
+`i` of the handler name `n`, `q` its qualifier (`lin`, `cancel` or `unr`), and `A ~> B` its argument
 and answer; `F[] A` is `F A` (`Frontend/README.md`, item 18). `buf A`, `string`, `text @`,
 `text_mut @` and `lit` are read by the parser as the types of section 8a.
 
@@ -229,7 +229,6 @@ Mode: **S** synthesizes, **C** checks only, **S/C** synthesizes when its parts d
 | `return V` | `V` | `ret` `Fu:67` | S/C |
 | `x <- M; N` | `(λx. N) M` (`bindE`, `FI:107`) | `bind` `Fu:69` | S/C |
 | `x : A <- M; N` | the same, `M` checked at `F A` | `bind` `Fu:69` | S/C |
-| `linear x <- M; N`, `linear x : A <- M; N` | the same; `x` is not dropped implicitly (§7) | `bind` `Fu:69` | S/C |
 | `force x` | `x ()` at `F A`, else `x` | `force` `Fu:73` | S |
 | `fun (x : A) -> M` | `λx. M` | `lam` `Fu:75` | S/C |
 | `M x` | `app M x` | `app` `Fu:77` | S |
@@ -347,7 +346,8 @@ types (`VTy.persistent`). It follows that:
   followed by the destructor of the residual `R`. `U C` otherwise has no destructor, so an unused thunk is an error.
   The same holds for a `case` whose arms consume different variables: arms that differ in a variable
   with a destructor are balanced by dropping it in the arm that does not use it. Any other
-  difference is an error. `linear x <- M; N` opts `x` out, and then `N` must consume it.
+  difference is an error. Which slots are dropped is a fact of the type: an owned slot of a linear
+  type with a derived drop.
 - **Constants and `def`s consume nothing.** They are typed at a dead context.
 <!-- ANCHOR_END: linearity -->
 
@@ -662,7 +662,7 @@ flag.
 - When a binder's scope closes, its variable must be consumed, or be absorbed by slack in its
   scope. With implicit destructors (§7) the checker consumes it itself where it can: see §11.1.
 - **Side conditions on contexts are read on the consumed context.** They are boxI's
-  `CtxOutlives Δ Γ @` (`Ty:1383`), bangThunk's `Persistent Γ` (`Rl:203`), and allI's `hΓx`
+  `CtxOutlives Δ Γ @` (`Ty:1383`), bangThunk's `Ctx.Banged Γ` (`Rl:203`), and allI's `hΓx`
   (`'x` is not free in any live slot). At such a boundary the slack is closed: the body
   consumes exactly what it used. This loses completeness but not soundness.
 
@@ -672,7 +672,7 @@ against the semantic definitions `EntailsLt`/`EntailsLe`/`Defines` (`S2:360,419,
 section 12).
 
 **Side conditions.** Every side condition is decided by a Bool function with a soundness lemma:
-`Ctx.Dead`/`Solo`/`Split` (constructed directly), `Persistent`, `VOutlives`/`CtxOutlives`,
+`Ctx.Dead`/`Solo`/`Split` (constructed directly), `Ctx.Banged`, `VOutlives`/`CtxOutlives`,
 `VScoped`, `VFree`/`mentions`, `NoMut`, `Cl`, `FShape.WF`/`Guarded`, `plainV`/`Shape.plain`,
 `Δ.Ok` (`okB`, `Support/Lifetimes/Terms.lean:89`), `Δ.find? x = none`, `C.isRet = false`
 (`Co:93`), `FamSide.hinst` (by computation), and foldImm's `∀ Δ' a, VOutlives Δ' a R`
@@ -902,4 +902,4 @@ How this checks:
     `add`, and fold applications as `def`s. A borrow example is added (§13).
 15. Integers and arrays are pending, and the erasure target is an open question (§14).
 16. Implicit destructors (SPEC §12): unused variables of a type with a destructor are
-    dropped by the checker at the end of each path; `linear x <- M; N` opts out (§6.2, §7, §11.1).
+    dropped by the checker at the end of each path (§6.2, §7, §11.1).

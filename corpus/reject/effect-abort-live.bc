@@ -1,8 +1,8 @@
 -- An abort while a value with no destructor is live (SPEC §19): the thunk `k` can be disposed of
--- only by running it (SPEC §12, class 3), and the call of `fail_if` may abort while it is live, so
+-- only by running it (SPEC §12, group 3), and the call of `fail_if` may abort while it is live, so
 -- the finaliser of that abort cannot drop it. Handing such a value to the handler with the error
 -- is not provided.
--- expect: 13:11: `k`, of type `U (F (1 + 1))`, is live across a computation that may abort, and its type has no destructor: an abortive operation of the bound computation would abandon it
+-- expect: 13:11: `k`, of type `U (F (1 + 1))`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell
 include fail
 type B = 1 + 1
 

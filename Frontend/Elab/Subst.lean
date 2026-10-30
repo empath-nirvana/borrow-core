@@ -173,7 +173,7 @@ def Val.subst (σ : TySubst) : Val → Val
 
 def Comp.subst (σ : TySubst) : Comp → Comp
   | .ret sp V => .ret sp (V.subst σ)
-  | .bind sp x A M N lin => .bind sp x (A.map (VTy.subst σ)) (M.subst σ) (N.subst σ) lin
+  | .bind sp x A M N => .bind sp x (A.map (VTy.subst σ)) (M.subst σ) (N.subst σ)
   | .force sp x => .force sp x
   | .lam sp x A M => .lam sp x (A.subst σ) (M.subst σ)
   | .app sp M x => .app sp (M.subst σ) x

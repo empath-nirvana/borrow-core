@@ -42,7 +42,7 @@ main -> i32 =
   let c = alloc(1);
   let n = take_all(c);
   n + free(c)
--- expect: 5:3: `c` is used twice here, and its type `ref i32` is not persistent
+-- expect: 5:3: `c` is used twice here, and its type `ref i32` is linear
 ```
 
 The second use is an error, so there is no use after free and no double free. A value that is
@@ -154,7 +154,7 @@ main -> i32 =
   let c = alloc(5);
   let n = borrow mut c { m -> free(c) };
   n
--- expect: 3:11: `c` is used twice here, and its type `ref i32` is not persistent
+-- expect: 3:11: `c` is used twice here, and its type `ref i32` is linear
 ```
 
 and a borrow can't outlive its lend: a call whose result mentions the lent place's lifetime

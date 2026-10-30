@@ -443,7 +443,7 @@ on main or `5cfe062`.
   - 6.65: `ewpTS_M_frameR` (`Relend.lean:117`, over `Relend` `:57`);
   - 6.64: `ewpTS_I_frameR` (`ImmLend.lean:175`);
   - 6.66: `ewpTS_M_antiFrameR` (`Frames.lean:89`);
-  - unwinding 6.65 with affine resumption: `withborR_compat` (`Drop.lean:108`, over
+  - unwinding 6.65 with cancellable resumption: `withborR_compat` (`Drop.lean:108`, over
     `opTableO` `:49`), which reuses Core's `withborUE`.
 
   README: "This is 6.65's proof as printed, applied once per resumption" (`:126–127`).

@@ -3,4 +3,4 @@ main -> i32 =
   let c = alloc(1);
   let d = clone(c);
   free(c) + free(d)
--- expect: 4:11: `clone` copies a persistent value, and `ref i32` is not persistent
+-- expect: 4:11: `clone` copies an unrestricted value, and `ref i32` is linear

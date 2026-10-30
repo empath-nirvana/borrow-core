@@ -78,7 +78,7 @@ The user's decisions on §11 are recorded there and in `docs/decisions.md` entry
 | **provided row** `P` | the effects the callee serves for the argument; written in the parameter's type |
 | **port** `p_E` | the static name at which a closure passed or stored at a given parameter or type performs its provided effect `E`; fixed by that declaration (per instance of a generic one) |
 | **tunneled row** `T` | the effects the argument performs that the callee does not serve; resolved where the argument was written; never written |
-| **profile** of a row | which of abortive, resuming (linear or affine) and unrestricted operations it has |
+| **profile** of a row | which of abortive, resuming (must-resume or cancellable) and unrestricted operations it has |
 | **closure value** | the representation of a passed callback: code `!U(∀'x. Mut 'x Env ⊗ A ⊸ F_Σ (Mut 'x Env ⊗ B))` and an environment lent as `Mut 'l Env` (SPEC §2's `FnMut` row, `(env, !code)`); the backend's defunctionalised closure |
 | **second-class callback** | a computation argument that is called or passed on, and never stored, returned or captured by a stored closure |
 | **stored callback** | a computation kept in data, a cell or a returned value, and run later |
@@ -199,7 +199,7 @@ reconcile functions.
 - `withbor1U`…`withbor3U` (`withbor2U_compatX`, `withbor3U_compatX`) take a callback whose row is
   `Row.Unwind`: abortive operations only.
 - `boxI` boxes any value, a thunk included, whose context outlives the box's lifetime
-  (`boxI_compatC`). `bangThunkV` promotes over `Persistent Γ`, which is `!` slots only.
+  (`boxI_compatC`). `bangThunkV` promotes over `Ctx.Banged Γ`, which is `!` slots only.
 - `CDerives` has 88 rules. `CDerives.append_dead` (`Core/Weaken.lean`) is a structural induction
   over all of them, and is the precedent for the renaming lemma's shape.
 
@@ -379,9 +379,9 @@ At a call `h(…, c, …)`, where `c` is at a computation parameter `f : (A) -> 
 - **Abortive `E`.** `hnd (p_E, (return, λv. raise_m v)) (f v)`. Typable today: the clause is `!`,
   captures nothing, and its argument drops. Its cost is a retag on the error path.
 - **Resuming `E`.**
-  - The relabel clause `λ(v, κ). y ← perform_m v; (force κ).1 y` holds an affine `κ` across a
+  - The relabel clause `λ(v, κ). y ← perform_m v; (force κ).1 y` holds a cancellable `κ` across a
     control operation. `κ` has no destructor (SPEC §15, *A body that performs a control
-    operation*). So `effLet`'s `S.Weak → Γ₂.Drops` premise fails, and **the clause is not
+    operation*). So `effLet`'s `S.Cancels → Γ₂.OwnFree` premise fails, and **the clause is not
     typable today**.
   - Two ways out:
     - specialisation (R2b), which substitutes `m` for `p_E` in the inlined code; or
@@ -412,7 +412,7 @@ At a call `h(…, c, …)`, where `c` is at a computation parameter `f : (A) -> 
   ends the reborrow, and `h` has `Mut 'l Env_c` again (`withbor3U_compatX`).
 - **It does not work if the captures are inside the thunk.**
   - A thunk `U(A ⊸ …)` that captures a `Mut` borrow is linear, so it can be forced once.
-  - `!U` cannot capture it: `bangThunkV` asks `Persistent Γ`, and `lam_bang_persistent` at the
+  - `!U` cannot capture it: `bangThunkV` asks `Ctx.Banged Γ`, and `lam_bang_persistent` at the
     paper level.
   - So a callback called more than once, with linear captures, must carry them in an environment
     passed beside the code: SPEC §2's `FnMut` row.
@@ -773,15 +773,15 @@ checker. The following carry over unchanged:
      - `CTy.effOf`, with `(effOf S R).ren π = effOf (S.ren π) (R.ren π)`;
      - `Row.find`, with `Row.find (S.ren π) (π n) i = (Row.find S n i).map (·.ren π)`, which needs
        injectivity;
-     - `RowLe`, `Row.NZ`, `Row.Uniq`, `Row.Weak`, `Row.Unr`, `Row.abortOnly` and `OpSig.abort`;
+     - `RowLe`, `Row.NZ`, `Row.Uniq`, `Row.Cancels`, `Row.Unr`, `Row.abortOnly` and `OpSig.abort`;
      - `Row.ofEff`, `clausesTy` and `retTy`;
    - **the unwinding borrows** (`Core/EffBorrow.lean`): `Row.Unwind`, and the unwinding borrows'
      types (`withbor3UTy` and its siblings);
    - **terms**: `hndTerm`, `opArgE`, `thenE`, `withborUE`;
    - **type functions in rule conclusions**: lifetime substitution, `unfoldTy` and `ν`'s
      instantiation, the folds' types, the array and slice constants' types;
-   - **type predicates that must be invariant**: `Drop`, `Persistent`, `CtxOutlives`, `Cl`,
-     `NuOk`, `EffLeaf`, `EffFree`, `isRet`, `Ctx.Drops`, and the destructor class.
+   - **type predicates that must be invariant**: `OwnFree`, `Persistent`, `Ctx.Banged`,
+     `CtxOutlives`, `Cl`, `NuOk`, `EffLeaf`, `EffFree`, `isRet`, `Ctx.OwnFree`, and the destructor class.
 
    **Cost (hypothesis).** The size of `Core/Weaken.lean` (172 lines) plus one commutation lemma
    per type function above. It is dominated by the type functions, not by names.
@@ -795,7 +795,7 @@ checker. The following carry over unchanged:
    then it is derivable with `T′` whenever:
    - `T′` has the same profile as `T`;
    - `T′`'s names are fresh for the derivation;
-   - `T′`'s operation types satisfy the same predicates (`Drop`, closedness for `Row.Unwind`).
+   - `T′`'s operation types satisfy the same predicates (`OwnFree`, closedness for `Row.Unwind`).
 
    This is row polymorphism as a meta-theorem over `CDerives`, not as a kernel former, so it does
    not touch decision 19. Not needed for correctness: without it, the checker derives one instance

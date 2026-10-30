@@ -204,7 +204,7 @@ Add `n ∉ names(Γ₂) ∪ names(A)` to `[handle]` (a), or keep freshness (R3) 
 ## OQ-39: Qualifier subsumption in `[sub]`
 
 **Question.** Should `[sub]` admit a row whose operation qualifiers are pointwise below in the
-grade order (`aff` below `lin`, `unr` below `aff`) (a), or exact qualifiers only (b)?
+grade order (`cancel` below `lin`, `unr` below `cancel`) (a), or exact qualifiers only (b)?
 
 **Class: GENUINELY OPEN (settle by proof). A deferrable detail.**
 
@@ -398,7 +398,7 @@ elimination (a), or drop it with every quantifier restricted to arising worlds (
 ## OQ-46: The world a stored payload is read at
 
 **Question.** `ptoMutS`/`ptoImmS` store a payload at `ls₀`, the records longer-lived than the cell.
-At `W`, should a stored payload (a `U` in a `Mut`, a stored generator, `Aff`, a `ν` cell) be read at
+At `W`, should a stored payload (a `U` in a `Mut`, a stored generator, `Clo`, a `ν` cell) be read at
 the longer-lived stack entries (a), or stack-free (b)?
 
 **Class: GENUINELY OPEN (settle by proof); EVIDENCED by the record-list precedent; CONSTRAINED in
@@ -439,11 +439,11 @@ not at all (c)?
 - **Needs the user?** No.
 - **Real unknown?** Yes as mathematics, but it is off the safety path.
 
-## OQ-48: Answering/control commutation at an affine operation, on the kernel
+## OQ-48: Answering/control commutation at a cancellable operation, on the kernel
 
-**Question.** L-INTER holds in T13.13's special case. P13.14 says it fails at an affine operation
+**Question.** L-INTER holds in T13.13's special case. P13.14 says it fails at a cancellable operation
 whose clause cancels, but P13.14 was computed by hand in a sibling calculus. Machine-check it in
-`CDerives` (a), or withdraw it and state L-INTER at `aff` (b)?
+`CDerives` (a), or withdraw it and state L-INTER at `cancel` (b)?
 
 **Class: EVIDENCED (PAPER-ONLY, sibling); CONSTRAINED by U22. Settles by proof.**
 

@@ -19,7 +19,7 @@ and so a `CDerives` derivation of the term's erasure (`TDerivesAt.erase`,
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (Jdg withPair withCtx absurdE forceE Persistent CtxOutlives HasDtor
+open BoCa.Fig16.LogRel.Core (Jdg withPair withCtx absurdE forceE Ctx.Banged CtxOutlives HasDtor
   dropE dtorE)
 
 abbrev CExpr := BoCa.Expr
@@ -316,7 +316,7 @@ def firstBad (p : CVTy → Bool) : List CVTy → List Bool → Option Nat
   | _, _ => none
 
 theorem persistent_of {L : List Bool} (h : ∀ s ∈ mkCtx T L, s.live = true → isBangB s.ty = true) :
-    Persistent (mkCtx T L) := fun s hs hl => isBangB_sound (h s hs hl)
+    Ctx.Banged (mkCtx T L) := fun s hs hl => isBangB_sound (h s hs hl)
 
 /-- `!thunk M`: every live slot of the context is at a `!` type. -/
 def rBangThunkF {A : CVTy} (r : Res Δ (.unit :: T) (.comp (.ret A))) :
@@ -542,7 +542,7 @@ at an unrestricted row. -/
 def rEffLet {S : CRow} {A B : CVTy} {tN : TExpr} {sN : CRow} {pN : Pins}
     (rM : Res Δ T (.comp (effOf S A)))
     (FN : Fam T (fun L => TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp (effOf S B)) ∧
-      (S.Weak → (mkCtx T L).Drops) ∧ (S.Unr → Persistent (mkCtx T L))))
+      (S.Cancels → (mkCtx T L).OwnFree) ∧ (S.Unr → Ctx.Banged (mkCtx T L))))
     (h : overlapOK T rM.F.u FN.u = true) : Res Δ T (.comp (effOf S B)) :=
   have hl : rM.F.u.length = FN.u.length := rM.F.hu.trans FN.hu.symm
   ⟨.effLet i (.comp (effOf S B)) A B S (Masks.of rM.F.u FN.u) rM.t tN, rM.sigs ∪ sN, rM.pins ++ pN,
@@ -555,7 +555,7 @@ def rEffThen {S : CRow} {A B : CVTy} {tN tD : TExpr} {sN sD : CRow} {pN pD : Pin
     (F : Fam T (fun L => (TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp (effOf S B)) ∧
       TTied pD sD Δ (mkCtx (.unit :: T) (false :: L)) tD
         (.comp (effOf [] .unit))) ∧
-      (S.UnrD → Persistent (mkCtx T L))))
+      (S.UnrD → Ctx.Banged (mkCtx T L))))
     (h : overlapOK T rM.F.u F.u = true) : Res Δ T (.comp (effOf S B)) :=
   have hl : rM.F.u.length = F.u.length := rM.F.hu.trans F.hu.symm
   ⟨.effThen i (.comp (effOf S B)) A B S S [] (Masks.of rM.F.u F.u) rM.t tN tD, rM.sigs ∪ (sN ∪ sD),

@@ -65,14 +65,14 @@ macro "not_withPairH" : tactic => `(tactic| (intro M₁ M₂ h; simp [withPair, 
 
 /-! ### A continuation is not forgotten -/
 
-/-- A type whose head is a thunk of an `&`: what `κ` is at `lin` and `aff`. -/
+/-- A type whose head is a thunk of an `&`: what `κ` is at `lin` and `cancel`. -/
 theorem kview {C₁ C₂ : CTy} {A : VTy} (h : VView (.thunk (.amp C₁ C₂)) A) :
     A.persistent = false ∧ Hnf A (.thunk (.amp C₁ C₂)) := by
   have hh := h.hnf_of (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h))
     (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
   exact ⟨by rw [hh.persistent]; rfl, hh⟩
 
-/-- A view of `κ`'s type at `lin` and `aff`, bare or boxed (BOXED-κ), is not persistent and has the
+/-- A view of `κ`'s type at `lin` and `cancel`, bare or boxed (BOXED-κ), is not persistent and has the
 thunk head. -/
 theorem kviewO {C₁ C₂ : CTy} {A : VTy} (ob : Option Lifetime.Life)
     (h : VView (kBoxO ob (.thunk (.amp C₁ C₂))) A) :
@@ -93,7 +93,7 @@ theorem kview_not {C : CTy} {A : VTy} (h : Hnf A (.thunk C)) :
     have := h.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h) <;> cases this
 
 /-- **`forget κ` has no derivation at `1`** when `κ`'s slot is a thunk of an `&` (`kTy` at `lin` and
-`aff`): `forget`'s axioms take `!`, `Imm`, `Mut`, `Unk` and `ArrayImm`, and as a λ it drops its
+`cancel`): `forget`'s axioms take `!`, `Imm`, `Mut`, `Unk` and `ArrayImm`, and as a λ it drops its
 argument only at a persistent type. -/
 theorem not_forget_kappa {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy}
     (h : CDerives Δ Γ (.app forget (.var 0)) (.val .unit))
@@ -269,7 +269,7 @@ theorem clause_lin {Δ : LifeCtx} {Γ : Ctx VTy} {cl : Expr} {S₁ : Row} {T₁ 
 /-- AT13's clause: `λ(a, κ). forget κ; ()`. -/
 abbrev at13Cl : Expr := .lam (.letpair (.var 0) (.seq (.app forget (.var 0)) unit'))
 
-/-- **AT13**: `forget κ`.  A linear or affine continuation has no weakening, and the `forget`
+/-- **AT13**: `forget κ`.  A must-resume or cancellable continuation is linear, and the `forget`
 constants are at `Imm`, `Mut`, `!` and `Unk`; discarding `κ` is an explicit cancel. -/
 def at13 : Expr := handleWith 5 .lin at13Cl fooE
 
@@ -357,7 +357,7 @@ theorem not_der_at06 {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives Δ Γ
   obtain ⟨T, hT⟩ := fv_live hB 1 (by simp [Expr.HasVar, dropB, free', Expr.val, Val.prim, Val.inj₁,
     Val.unit])
   have hT' : Γ_cl[0]? = some ⟨T, true⟩ := by simpa using hT
-  obtain ⟨X, rfl⟩ := persistent_slot hp hT'
+  obtain ⟨X, rfl⟩ := banged_slot hp hT'
   have := hle_p 0 _ (hle_cl 0 _ hT')
   simp only [List.getElem?_cons_zero, Option.some.injEq, Slot.mk.injEq] at this
   obtain ⟨rfl, -⟩ := this
@@ -489,7 +489,7 @@ def at08Once : Expr := handleWith 5 .lin at08OnceCl fooE
 resumed once. -/
 theorem d_at08OnceCl {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ at08OnceCl (.val (clauseTy [] .unit (.lin, .unit, .unit))) := by
-  refine .bangThunkV (persistent_dead hΓ) rfl (.lam ?_)
+  refine .bangThunkV (banged_dead hΓ) rfl (.lam ?_)
   refine .tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_
   refine .bind (A := .ref (kTy [] .unit .lin .unit)) (.left (.right (.dead (deadSplit hΓ))))
     (.ret (appW (.var (by csolo)) (.alloc (by cdead)))) ?_

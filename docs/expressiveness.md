@@ -44,7 +44,7 @@ kill criterion.
 zero-cost target: natural form, and counts at most Rust's, or within reach of that by a named fix
 that does not change the language. Of 95 programs, 7 are zero cost, 67 within reach and 21 out of
 reach (§17.9). §18 re-ranks the blockers by programs kept out of reach: B2, B1, B14, B11, B4, B17
-(north star), then B5 (T1), B13, #174, SPEC §36's lookup, B12, #9, an `Aff` with by-value state.
+(north star), then B5 (T1), B13, #174, SPEC §36's lookup, B12, #9, a `Clo` with by-value state.
 §19's build units end the document; each is done when named programs reach zero cost. §16.1
 corrects the thread claim: async tasks run on one thread, and "disjoint `mut` halves,
 `unconditional`" is about `PinLaw`, not parallelism.
@@ -272,7 +272,7 @@ report for T01, T02, T07, T09 and T10 are correct; T08's and T14's were checked 
 | T09 | `[10, 92, 55]`, 11 | a particle as a pair; one `modify` per element in place of field updates | B3 | 1 / 0 |
 | T10 | `6765 2 3 1 21` | no tuple assignment; `p % q` in `main`'s `while` ("the type of the body `main_div_error` handles is not determined", #517), so `checked_rem` | sugar, B7 | 0 / 0 |
 | T11 | `80 50 demo true`, 4000, 1 | the record as a nested pair, rebuilt per update | B3 | 2 / 0 |
-| T12 | 52, 15, `[0..5]`, 9, 6 | #586 in two faces: a write-only assignment in a block is lost (12, not 52); one that also reads is refused with "`!thunk` promotes only over `!` types"; the state moved into an answering handler; the counter as a hand-built `Aff` | B7 (#586) | 4 / 0 |
+| T12 | 52, 15, `[0..5]`, 9, 6 | #586 in two faces: a write-only assignment in a block is lost (12, not 52); one that also reads is refused with "`!thunk` promotes only over `!` types"; the state moved into an answering handler; the counter as a hand-built `Clo` | B7 (#586) | 4 / 0 |
 | T13 | balances 130 and 20, refused `[0, 1]` | **the Rust shape runs**: `main` lends each account `mut` to a teller of `spawn_in` inside `borrow mut d { 'd, … }`; the teller reads its `txs` argument across `await`; `bcc trusted`: "unconditional" (measured). Only the hand-back of a nested borrow is by hand (#495). The report's shape, a borrow *block inside* the task spanning `await` while reading `txs`, is refused by R1 | B5 only for the block form | 30 / 6 |
 | T14 | buffer `[49, 1, 37, 29, 24, 61]`, again 45, 1 log, sum 61 | `fill(&mut b)` inside the `with`s refused: "a place is lent (`&mut x`) in the arguments of `fill`, which also threads a capability: lend it in a call of its own"; `borrow mut b { v -> … }` *outside* the `with`s, with `fill` over an `array_mut` view, works | B6 (§18's row: an ordering constraint, not a missing capability) | 3 / 0 |
 
@@ -284,7 +284,7 @@ report for T01, T02, T07, T09 and T10 are correct; T08's and T14's were checked 
 | B1 | a capability is a `mut` borrow; a task of `spawn_in` is given it until it ends, so two tasks cannot both use it; a task of `spawn` cannot hold a borrow (`κ` boxed at `top`); a task's observations have the empty row, so it cannot perform an outer control effect | SPEC §34 *Tasks* (PROPOSED), §30 *Open*; `lib/async.bc:31`; measured `op-a`, `op-d` |
 | B2 | a handler around a div computation is not provided | SPEC §21 *Open*; measured `op-e` |
 | B3 | no `data` declarations; a `mu` nested in a `mu` must be closed; record fields and variants in place are limited | parser; SPEC §5 *Open*, §31 *Open*; #182, #32, #19; measured `json2` |
-| B4 | `yield` is affine; what is live across it must drop; a capability has no destructor; a cancel answers `()` | SPEC §15 *Open*, §19 `[let]`; measured `gen-*` |
+| B4 | `yield` is cancellable; what is live across it must drop; a capability has no destructor; a cancel answers `()` | SPEC §15 *Open*, §19 `[let]`; measured `gen-*` |
 | B5 | a resuming operation cannot cross a borrow (T1); R1 relaxes it only for a body closed but for its view | SPEC §19 *Open* (T1, #172), §29; measured `parse-recover-gen`, `async-bank` |
 | B6 | a call lends one place; a looping callee takes one borrow, re-lent each step; a lend in a capability-threading call, and a capability through `for … in &a`, are not provided | SPEC §14 *Open*, §18 *Not provided* and *Open* |
 | B7 | elaboration decisions taken too early or by name (loop class before typing, threaded variables by name, assignments outside joins) | `docs/loops.md` §1; `docs/ergonomics.md` §7.1; #586 |
@@ -353,7 +353,7 @@ owning its own state (`corpus/async-bank-inbox.bc`); read-only sharing (`async-w
 | Rust's way, threads: `Arc<Mutex<S>>` | a lock per access | relation (threads, #212) | good | later, for #212's lock-backed handlers; outside the target set |
 | linear ownership transfer: the service is passed from task to task by hand | parity | none | poor: every task returns the service and the scheduler re-plumbs it | today's route for one shared service; `operator-rounds.bc` does it synchronously |
 | handler-owned state served by the scheduler (an actor): tasks send requests as operations of the scheduler's own effect; it answers from state it owns | one dispatch per request in the driver | lemma at most: the task type's observation takes the answer, an argument without `X` (§22) | fair: the service's ops become scheduler ops | a fallback; it needs a request-response task type, which `lib/async.bc` lacks (only `log`, one-way) |
-| **per-turn lend** (the service lent to a task for one turn): the scheduler holds the capability; resuming a task lends it for that turn; the task hands it back at its `await`. This is SPEC §34 *Open*'s first option ("thread the capability through `await` … as a `for`'s site threads its variables") | parity: the capability is a pointer argument of the resume, the state stays in the scheduler's frame | none or lemma (hypothesis, §9's spike S-B): the task type `box 'd U(νX. (Mut 'x S ⊸ F(Mut 'x S ⊗ (A + box 'd U X))) & F 1)` is an affine closure with an argument (§22), `'x` fixed at the `with` | best: the program as written in `operator-reconcile.bc` | **recommended** |
+| **per-turn lend** (the service lent to a task for one turn): the scheduler holds the capability; resuming a task lends it for that turn; the task hands it back at its `await`. This is SPEC §34 *Open*'s first option ("thread the capability through `await` … as a `for`'s site threads its variables") | parity: the capability is a pointer argument of the resume, the state stays in the scheduler's frame | none or lemma (hypothesis, §9's spike S-B): the task type `box 'd U(νX. (Mut 'x S ⊸ F(Mut 'x S ⊗ (A + box 'd U X))) & F 1)` is a `Clo` closure with an argument (§22), `'x` fixed at the `with` | best: the program as written in `operator-reconcile.bc` | **recommended** |
 | SILL_S manifest sharing (Balzer–Pfenning, cited): shared and linear layers, acquire ↑ and release ↓ | parity on one thread | relation: a shared mode and shifts | good | used as the *reading* of the per-turn lend, not as new formers: acquire is the resume, release is the `await`, and the equi-synchronising condition (released at the type acquired) is "hands it back" |
 | codata cells / #119 branded region | index arithmetic, no check | lemma plus the region-length Kripke fact (#119) | fair | not needed: the service is one value, not a graph of aliases |
 | explicit RC | as Rust's `Rc` | relation | fair | outside the target set |
@@ -361,7 +361,7 @@ owning its own state (`corpus/async-bank-inbox.bc`); read-only sharing (`async-w
 **The elaboration candidate.**
 - *What the user writes:* `operator-reconcile.bc` unchanged: `with fake_api(&mut st) { … with spawn { reconcile(1, 3) } … run_until_empty(q) }`, the tasks calling `observed` and `update`.
 - *What it elaborates to:* `spawn_with[S]`: a spawn whose clauses keep `κ` at `'d` (as `spawn_in`'s do) and whose task type takes the capability at each observation and answers it back with the step; `run_until_empty` threads the capability through every `resume`, as §32 threads a block's capabilities (`!U(C ⊗ A ⊸ F_Σ(C ⊗ B))`) and §15 a `for`'s variables through its site.
-- *Which rule checks it:* §22's affine closure with an argument, §28/§32's BOXED-κ at `'d`, and §32's capability threading. The task never holds the borrow across `await`: it hands it back there. So T1 is not crossed, R1 and `PinLaw` are not used, and the Links hazard (Tang et al., cited: a handler dropping a continuation that holds a linear resource) does not arise, because a suspended task holds no lend.
+- *Which rule checks it:* §22's `Clo` closure with an argument, §28/§32's BOXED-κ at `'d`, and §32's capability threading. The task never holds the borrow across `await`: it hands it back there. So T1 is not crossed, R1 and `PinLaw` are not used, and the Links hazard (Tang et al., cited: a handler dropping a continuation that holds a linear resource) does not arise, because a suspended task holds no lend.
 - *Memory management at the surface:* none.
 
 **Recommendation.** The per-turn lend. It is the strongest foundation of the options because it is
@@ -405,7 +405,7 @@ are the prerequisite for writing most of T01–T14 naturally (§2.2).
 … found name `data`"). A recursive type inside another must be closed (measured, `json2.bc`: "`mu
 Y. …` must be closed: it mentions an enclosing type variable"), so `mu X. … List[X] …`, the natural
 JSON value, is not a type. Fields of a borrowed record are lent only when every other field is
-affine, and variants in place are open (SPEC §5 *Open*, #19). n-body has no fixed-size arrays
+`Forgettable`, and variants in place are open (SPEC §5 *Open*, #19). n-body has no fixed-size arrays
 (#72, #496), which is where Rust's 1.56× over C comes from (recorded, `bench/README.md`).
 
 What works (measured): the same document with arrays encoded in the one `mu` (`json3.bc`, `i32[7]`,
@@ -431,14 +431,14 @@ nesting elaboration, behind the yes/no spike S-D (§9).
 
 **What fails.** "`io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a
 computation that may abort, and its type has no destructor" (measured, `gen-digits`, `gen-lines`,
-`gen-adapters-io`; `gen-lazy` for `ref output`). `yield` is affine, so what is live across it must
+`gen-adapters-io`; `gen-lazy` for `ref output`). `yield` is cancellable, so what is live across it must
 drop; a capability has no destructor and must be handed back; a cancel answers `()` (SPEC §15
 *Open*). North-star stage 3 is this shape: a watch stream decoded from a socket the stream owns.
 
 | way | performance | proof cost | ergonomics | verdict |
 |---|---|---|---|---|
 | Rust's way: the iterator owns the handle; `Drop` closes it | parity | n/a: a capability has no destructor by design (§12) | good | not available as is |
-| give the capability a destructor | parity | lemma; changes §12's class 3 | fair: a dropped stream silently closes the input | rejected: the user's linear-obligation goals (#209, #210) want the capability back |
+| give the capability a destructor | parity | lemma; changes §12's group 3 | fair: a dropped stream silently closes the input | rejected: the user's linear-obligation goals (#209, #210) want the capability back |
 | **close hands back a residual**: cancelling the generator resumes it with `close`, and it returns what it owns | parity | lemma or less: S0 proved it for loops (unknown 2, `experiments/DivEffect/README.md`); generators need the same close at their `yield`'s observation | best | **recommended**: one mechanism with B2 |
 | a `linear ctl` iteration effect (no `break`) | parity | lemma | poor: no early exit | a fallback named by SPEC §15 |
 | pass the capability per pull (the per-turn lend of B1) | parity | none or lemma (as B1) | fair | the same mechanism as B1; good where the consumer owns the capability anyway |
@@ -537,7 +537,7 @@ typed `imm`, reading `len` of a `mut` parameter, and using one shared view twice
 
 | way | performance | proof cost | ergonomics | verdict |
 |---|---|---|---|---|
-| Rust's way: `&*v`, `&T: Copy` | parity | lemma (#174 `axWithborMITy`, "does not compose as stated"; the missing shift is the aff→unr pair of the adjoint mode table, `experiments/Shifts`) | good | the target |
+| Rust's way: `&*v`, `&T: Copy` | parity | lemma (#174 `axWithborMITy`, "does not compose as stated"; the missing shift is the pair from adjoint logic's affine mode to its unrestricted one, `experiments/Shifts`) | good | the target |
 | **#58: insert `copy` where an `imm` borrow is used twice** | free (a pointer) | none (`copy` exists) | good | **recommended** |
 | `mut`-taking variants of read-only callees (`len_mut`, today) | parity | none | fair | the fallback if #174's spike is killed: the "more limited borrow checker" of the premise |
 
@@ -592,7 +592,7 @@ foundation its fix is. Every count is from §2.
 | SILL_S manifest sharing | session-types report §6 | B1: the per-turn lend read as acquire (resume) / release (`await`), equi-synchronising | its shared *layer* and shift formers are set aside: no target program needs a type-level shared mode once the lend is per turn |
 | codata cells | mutation report G4; #119 | named as B1's alternative | set aside for the target set: no target program has aliased handles into one region. Kept for graphs and observer lists |
 | the BoLo semantic seam (a trusted or library primitive proved semantically against the relation, as DRFCaml's capsules and RustBelt's `Cell`) | modes report §1, §8 | — | set aside: every recommended fix is typed by existing rules or one compatibility lemma; no target program needs a primitive outside the calculus |
-| adjoint modes | graded-adjoint report §3; `experiments/Shifts` | B9: #174 is the missing aff→unr shift of the mode table | the full adjoint re-presentation is set aside: it is a reframing with no target program behind it |
+| adjoint modes | graded-adjoint report §3; `experiments/Shifts` | B9: #174 is the missing shift from adjoint logic's affine mode to its unrestricted one | the full adjoint re-presentation is set aside: it is a reframing with no target program behind it |
 | explicit RC plus arenas | #94, #119 comment, `docs/prior-art-memory-model.md` | B1's comparison column | set aside for the target set; arenas already work as library code (`corpus/leetcode/trees/0208-implement-trie.bc` is accepted) |
 | fork-join with a named assumption | #212's scoping (Route 0) | — | set aside: threads are outside the target set. The per-turn lend is designed so that #212's lock-backed handler can serve the same task type |
 | the Links soundness hazard | session-types report §9 (Tang et al., POPL 2024) | B1 and B4: the per-turn lend holds no lend at a suspension, and the residual close hands back every linear resource, so no handler can drop a continuation that holds one | — |
@@ -638,7 +638,7 @@ which programs are accepted gets its SPEC entry first, and the algebra hard stop
 | # | unit | removes | acceptance | done when |
 |---|---|---|---|---|
 | 1 | **`handle_general`** (#564, on S0 and `Div` in the kernel, landed): a handler that keeps `κ` around a ticking body, and the surface's §21 restriction lifted | B2 | `op-e.bc` (one reconcile task with `while`, a shared service; §10.2) as `corpus/operator-one-task.bc`; `async-fanout`; `async-stream`'s second cause | `operator-one-task` runs with its golden, and SPEC §21 *Open*'s "a handler around a div computation" is removed |
-| 2 | **spike S-B**: yes/no — is a task type whose observation takes the service `Mut 'x S` and answers it back, `box 'd U(νX. (Mut 'x S ⊸ F(Mut 'x S ⊗ (A + box 'd U X))) & F 1)` with `'x` fixed at the `with`, derivable from §22's affine closure with an argument and §32's capability threading, with no new compatibility lemma? | B1 (decides its form) | `operator-reconcile.bc` written against a hand-built `spawn_with` in core text | **yes**: unit 3 as designed. **Kill** (a new lemma or relation change is needed): unit 3 builds the actor route instead (a request-response task type, one lemma at §22), with the same acceptance |
+| 2 | **spike S-B**: yes/no — is a task type whose observation takes the service `Mut 'x S` and answers it back, `box 'd U(νX. (Mut 'x S ⊸ F(Mut 'x S ⊗ (A + box 'd U X))) & F 1)` with `'x` fixed at the `with`, derivable from §22's `Clo` closure with an argument and §32's capability threading, with no new compatibility lemma? | B1 (decides its form) | `operator-reconcile.bc` written against a hand-built `spawn_with` in core text | **yes**: unit 3 as designed. **Kill** (a new lemma or relation change is needed): unit 3 builds the actor route instead (a request-response task type, one lemma at §22), with the same acceptance |
 | 3 | **the per-turn lend** (`spawn_with`): a scheduler that owns a service and lends it to each task for one turn; the surface `with h(&mut s) { … with spawn { … } … }` elaborates to it when a task uses `h`'s capability | B1 | `corpus/pending/operator-reconcile.bc` (golden `[3, 4, 2]` and the converged cluster, from its header), `io-two-tasks.bc`, `async-channel.bc`, `async-progress.bc` | `operator-reconcile.bc` moves from `pending/` to `corpus/` with its golden, and SPEC §34 *Open*'s "concurrent writers" is removed |
 
 **Track 2: the elaboration units already designed** (they come before most of T01–T14 read as
@@ -823,7 +823,7 @@ fn reconcile(name: i32, want: i32) -> i32 with Async, Api =
 ```
 
 It gives `op-e.bc:99:42: type mismatch: expected `mut 'fx_gl60 (…) * i32`, but this has type `U (nu
-X. F[4.0 aff 1 ~> 1, 4.1 aff i32 ~> 1] (…) & F[…] 1)``.
+X. F[4.0 cancel 1 ~> 1, 4.1 cancel i32 ~> 1] (…) & F[…] 1)``.
 
 **`op-d.bc`: the service as control operations handled outside the scheduler.** `op-a.bc`'s
 reconcile, with
@@ -883,7 +883,7 @@ main -> List[i32] * List[Obj] =
   (counts, cluster)
 ```
 
-It gives `op-d.bc:45:50: this computation performs the operations `[3.0 aff i32 ~> i32, 3.1 aff
+It gives `op-d.bc:45:50: this computation performs the operations `[3.0 cancel i32 ~> i32, 3.1 cancel
 i32 * i32 ~> 1 + 1]`, which are not within the row `[]` here` (the position is in `lib/async.bc`,
 printed under the user's file, #479's B11). The same with `spawn_in` under a unit cell's lend
 (`op-c.bc`) gives the R1 message "the row of a relaxed lend's body has only operations that resume
@@ -1536,11 +1536,11 @@ main -> (i32 * (i32 * bool)) * (i32 * i32) =
 -- (`with h(&mut c)`), and the blocks perform its operations (SPEC §32): a `let mut` written in a
 -- block is lost when the block only writes it (#586: `x * 10 + a` is 12) and refused when it also
 -- reads it ("`!thunk` promotes only over `!` types, but `x`, of type `i32`, is used inside").
--- (3) is an `Aff` over its own cell (SPEC §22) called through `aff_call`; its close answers `1`,
+-- (3) is a `Clo` over its own cell (SPEC §22) called through `clo_call`; its close answers `1`,
 -- so the residual count is the last call's answer.
 include buf
 include rec
-include aff
+include clo
 include io
 include slice
 
@@ -1558,8 +1558,8 @@ fn walk(lo: i32, hi: i32, f: !(i32 => 1)) -> 1 with Exhausted =
   if lo < hi { let m = (lo + hi) / 2; walk(lo, m, f); f(m); walk(m + 1, hi, f) } else { () }
 
 -- A counter from `start` by `step`: each call answers the new count.
-fn aff_counter<'c>(start: i32, step: i32) -> box 'c Aff[1, i32]<'c> =
-  aff_new_boxed[ref (i32 * i32), 1, i32]['c](alloc((start, step)), !thunkv fun (s : ref (i32 * i32)) ->
+fn clo_counter<'c>(start: i32, step: i32) -> box 'c Clo[1, i32]<'c> =
+  clo_new_boxed[ref (i32 * i32), 1, i32]['c](alloc((start, step)), !thunkv fun (s : ref (i32 * i32)) ->
     < fun (a : 1) ->
         cx <- return (swap[i32 * i32, i32 * i32] s (0, 0));
         let (c, x) = cx;
@@ -1582,10 +1582,10 @@ main -> i32 * (i32 * (i32 * i32)) =
   for i in 0..k { let e = at(&arr, i, 0); print_dec(e); print_byte(b' ') };
   print_byte(b'\n');
   -- (3)
-  let tick = aff_counter(0, 3);
-  let (t1, tick) = aff_call(tick, ());
-  let (t2, tick) = aff_call(tick, ());
-  aff_close(tick);
+  let tick = clo_counter(0, 3);
+  let (t1, tick) = clo_call(tick, ());
+  let (t2, tick) = clo_call(tick, ());
+  clo_close(tick);
   (x * 10 + a, (sum, (t1 + t2, t2)))
 ```
 
@@ -2130,7 +2130,7 @@ is written naturally only after it).
 | # | unit | removes | acceptance | done when |
 |---|---|---|---|---|
 | B-1 | **`handle_general`** (#564, on S0 and `Div` in the kernel, landed) and the surface's §21 restriction lifted | B2 | `op-e.bc` as `corpus/operator-one-task.bc`; `yaml-indent.bc` with one `on_exhausted` around its loop over the input; `async-fanout` | those run, and SPEC §21 *Open*'s "a handler around a div computation" is removed |
-| B-2 | **spike S-B**: yes/no — is the per-turn task type `box 'd U(νX. (Mut 'x S ⊸ F(Mut 'x S ⊗ (A + box 'd U X))) & F 1)` derivable from §22's affine closure with an argument and §32's threading, with no new compatibility lemma? | B1 (its form) | `operator-reconcile.bc` against a hand-written `spawn_with` | **yes**: B-3 builds the per-turn lend. **Kill**: B-3 builds the port instead, as a library: a scheduler that serves the shared state through control operations, which already runs (`conc/worker-pool-port.bc`) |
+| B-2 | **spike S-B**: yes/no — is the per-turn task type `box 'd U(νX. (Mut 'x S ⊸ F(Mut 'x S ⊗ (A + box 'd U X))) & F 1)` derivable from §22's `Clo` closure with an argument and §32's threading, with no new compatibility lemma? | B1 (its form) | `operator-reconcile.bc` against a hand-written `spawn_with` | **yes**: B-3 builds the per-turn lend. **Kill**: B-3 builds the port instead, as a library: a scheduler that serves the shared state through control operations, which already runs (`conc/worker-pool-port.bc`) |
 | B-3 | **the shared service**: per-turn lend (or the port), with the surface `with h(&mut s) { … with spawn { … } … }` elaborating to it | B1 | `operator-reconcile.bc` (golden `[3, 4, 2]` and the converged cluster); `io-two-tasks`, `async-channel`, `conc/worker-pool.bc`, `conc/pipeline-tasks.bc`, `ns/informer-cache.bc` | `operator-reconcile.bc` moves to `corpus/`, and SPEC §34 *Open*'s "concurrent writers" is removed |
 | B-4 | **data declarations** (#489 part 1, #54 stage 8): records, variants, newtypes, patterns, field update through `mut` | B3 | T07, T09, T11; `data-box-tree`; union-find, the arena and the B-tree with distinct `Id` types; n-body's bodies as records | they run as written (spellings aside) and n-body's bench row is no slower |
 | B-5 | **spike S-D**: yes/no — does a declaration whose variant holds `List[Self]` elaborate to one `mu`, the list's functions specialised at it, accepted by today's checker? | B3 (nesting) | `data Json = … Arr(List[Json]) \| Obj(List[string * Json])` | **yes**: B-7 uses it. **Kill**: kernel nested `mu` (#182) as its own SPEC entry before B-7 |
@@ -2336,7 +2336,7 @@ measured one unless marked *est*.
 | T07 | 1/0 | 0/0 | the owned copy is avoidable: the loop over the literal's view runs inside a function (0 allocations) | ceremony, within reach (B-4, A1) |
 | T08 | 7/0 | 2/0 | +1 state cell (E1+N5); +4 map layout and growth | cost + ceremony, within reach (E1, N5, library; C-8, A2) |
 | T10, T11 | 0/0, 2/0 | 0/0, 2/0 | none | ceremony, within reach (A1, B-4, C-5) |
-| T12 | 4/0 | 1/0 | +2 handler cells (A2+N5); +1 box for the stored counter's state, where Rust's closure holds it inline | cost + ceremony, **out of reach** for the stored counter (an `Aff` with its state by value; no unit) |
+| T12 | 4/0 | 1/0 | +2 handler cells (A2+N5); +1 box for the stored counter's state, where Rust's closure holds it inline | cost + ceremony, **out of reach** for the stored counter (a `Clo` with its state by value; no unit) |
 | T13 | 30/6 | 3/≈10 | +27: user cells (E1+N5), 3 objects per `await` (N3), list-based queue (library) | cost + ceremony, within reach (N3, E1, library; A2) |
 | T14 | 3/0 | 0/0 | +2 handler cells (E1+N5); +1 buffer (NEW-a) | cost + ceremony, within reach (E1, N5, NEW-a; C-7) |
 
@@ -2423,7 +2423,7 @@ matches). Indirect calls and copies are 0 on both sides.
 | category | zero cost | within reach | out of reach |
 |---|---|---|---|
 | bench rows (24) | 4 | 18 | 2 (quicksort, sort-generic: #174) |
-| T01–T14 (14) | 0 | 11 | 3 (T03, T04: B5/#174; T12: `Aff` state) |
+| T01–T14 (14) | 0 | 11 | 3 (T03, T04: B5/#174; T12: `Clo` state) |
 | Are We Fast Yet (14) | 1 | 11 | 2 (Json, Storage: B14) |
 | Benchmarks Game (10) | 1 | 8 | 1 (k-nucleotide: SPEC §36) |
 | Advent of Code (14) | 0 | 13 | 1 (2023-07: #9) |
@@ -2453,7 +2453,7 @@ become acceptance rows on the units in §19.
 | 10 | **SPEC §36's constant** lookup by a key at another lifetime | no | k-nucleotide, hash map | 2 |
 | 11 | **B12** OS threads | no | parallel map-reduce (and a worker pool on several cores) | 1 |
 | 12 | **#9** a `!` closure capturing a persistent value | no | 2023-07 | 1 |
-| 13 | an `Aff` closure with its state by value | no | T12's stored counter | 1 |
+| 13 | a `Clo` closure with its state by value | no | T12's stored counter | 1 |
 
 **Within reach, by the units that reach them.**
 - **Backend:** N1 (layouts, checks by typing, NEW-c), N2 (L-1, L-5, L-7), N3 (per-`await`
@@ -2521,7 +2521,7 @@ acceptance of the units that reach them.
 | # | unit | removes | these programs reach zero cost |
 |---|---|---|---|
 | 1 | **`handle_general`** (#564) and the surface's §21 restriction lifted | B2 | `operator-one-task` (`op-e.bc`); `timer-cancel` and `async-workers-scoped` with `while` in their tasks; YAML with one `on_exhausted` around its input loop; `async-fanout` (task-loop ceremony gone; their remaining counts go to units 15 and 18) |
-| 2 | **spike S-B**: yes/no — is the per-turn task type derivable from §22's affine closure with an argument and §32's threading, with no new compatibility lemma? Kill path: the port as a library (it runs today, `conc/worker-pool-port.bc`) | B1 (form) | — |
+| 2 | **spike S-B**: yes/no — is the per-turn task type derivable from §22's `Clo` closure with an argument and §32's threading, with no new compatibility lemma? Kill path: the port as a library (it runs today, `conc/worker-pool-port.bc`) | B1 (form) | — |
 | 3 | **the shared service** (the per-turn lend, or the port) | B1 | `operator-reconcile.bc` with three tasks; the worker pool and the task pipeline over channels; `informer-cache`; `io-two-tasks`. Each within Rust's executor counts after unit 18 (allocations) and N3 (indirect) |
 | 4 | **data declarations** (#489 part 1) | B3 | T07, T09, T10, T11; Richards, DeltaBlue, CD (records, with C-5's view copies); union-find, the arena allocator, the LRU cache's nodes; n-body's bodies |
 | 5 | **spike S-H**: yes/no — is a destructor and fold for `mu` with `X` under `array` one more `FShape` case of `foldOwn`? Kill path: kernel nested `mu` and arrays of it as their own SPEC entry (#182), because B14 is out of reach without one of them | B14 | — |
@@ -2546,7 +2546,7 @@ acceptance of the units that reach them.
 | 19 | **SPEC §36's shortened family**: lookup by a key at another lifetime | §36 | k-nucleotide, the hash map with `&str`-style lookups |
 | 20 | **fork-join** (#212): `join`/`par_for` over a split context, sound by a named assumption (`ParLaw`) at first | B12 | parallel map-reduce (`thread::scope` reference, 5 allocations); parallel quicksort |
 | 21 | **#9**: promotion over persistent contexts (SPEC §10 *Open*) | #9 | 2023-07 without threading its rank |
-| 22 | **an `Aff` closure with its state by value** (the mutation report's D6, with `aff {}` sugar) | — | T12's stored counter at Rust's 1 allocation |
+| 22 | **a `Clo` closure with its state by value** (the mutation report's D6, with `clo {}` sugar) | — | T12's stored counter at Rust's 1 allocation |
 
 **Track 3: the within-reach elaboration units** (the ceremony of most programs; already planned).
 

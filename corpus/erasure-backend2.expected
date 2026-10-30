@@ -1,11 +1,5 @@
 # The effect erasure per program the new backend compiles (scripts/compile-backend2.sh, bcc lir --erasure; SPEC §47, §49): name, the handle, perform and raise nodes erased, the handle nodes compiled as drives and the performs as suspensions of state machines (machines, suspends), and the handle nodes left (stored-continuation sites, other).
 13-2-sum-prog erased handles 0 performs 0 raises 0 left 0 0
-aff-capture erased handles 0 performs 0 raises 0 left 0 0
-aff-coerce erased handles 0 performs 0 raises 0 left 0 0
-aff-counter erased handles 0 performs 0 raises 0 left 0 0
-aff-depth erased handles 0 performs 0 raises 0 left 0 0
-aff-drop erased handles 0 performs 0 raises 0 left 0 0
-aff-higher erased handles 0 performs 0 raises 0 left 0 0
 answers-two-types erased handles 0 performs 1 raises 0 machines 2 suspends 1 left 0 0
 aoc/2020-08 erased handles 0 performs 0 raises 0 left 0 0
 aoc/2021-06 erased handles 0 performs 0 raises 0 left 0 0
@@ -80,6 +74,12 @@ capture-store-raise erased handles 0 performs 0 raises 1 machines 2 suspends 1 l
 capture-take-hand erased handles 0 performs 0 raises 0 machines 1 suspends 3 left 0 0
 capture-tick-hand erased handles 0 performs 0 raises 0 left 0 0
 clause-captures erased handles 2 performs 0 raises 2 machines 1 suspends 2 left 0 0
+clo-capture erased handles 0 performs 0 raises 0 left 0 0
+clo-coerce erased handles 0 performs 0 raises 0 left 0 0
+clo-counter erased handles 0 performs 0 raises 0 left 0 0
+clo-depth erased handles 0 performs 0 raises 0 left 0 0
+clo-drop erased handles 0 performs 0 raises 0 left 0 0
+clo-higher erased handles 0 performs 0 raises 0 left 0 0
 clone-reuse erased handles 0 performs 0 raises 0 left 0 0
 comp-param erased handles 6 performs 0 raises 4 left 0 0
 core-callback-dead erased handles 0 performs 0 raises 0 left 0 0

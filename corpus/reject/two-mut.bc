@@ -15,4 +15,4 @@ main : F 1 =
   let () = u;
   x <- return (free[B] r2);
   return ()
--- expect: 9:25: `m` is used twice here, and its type `mut 'x (1 + 1)` is not persistent
+-- expect: 9:25: `m` is used twice here, and its type `mut 'x (1 + 1)` is linear

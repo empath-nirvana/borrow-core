@@ -22,7 +22,7 @@ is an encoding, not a change.
 **Definition D1.1 (modes).** A *mode* is a subset of the structural rules `{W, C}` (weakening,
 contraction):
 
-    lin = ∅      aff = {W}      rel = {C}      unr = {W, C}
+    lin = ∅      cancel = {W}      rel = {C}      unr = {W, C}
 
 `m ≥ k` iff `m ⊇ k`. `m ⊓ k = m ∩ k` (the rules a pair or a sum admits); `m ⊔ k = m ∪ k`.
 
@@ -43,8 +43,8 @@ Operation arguments and answers, and capability states, are ground. This is phas
   *continuation qualifier*;
 - abortive operations `a : A_a ↠ 0`, with `A_a` ground.
 
-By convention an abortive operation has qualifier `q_a = aff` (phase A, `docs/effect-model.md`
-§1.2: "an abortive operation counts as affine"). An operation `o` is *fallible* when `W ∈ q_o`; a
+By convention an abortive operation has qualifier `q_a = cancel` (phase A, `docs/effect-model.md`
+§1.2: "an abortive operation counts as cancellable"). An operation `o` is *fallible* when `W ∈ q_o`; a
 co-operation may fail only at a fallible operation (D1.9, §8.2).
 
 The signature contains one built-in effect, `Res`, with one resuming operation
@@ -62,7 +62,7 @@ The signature contains one built-in effect, `Res`, with one resuming operation
     b ⊔ b' = (b.req ⊔ b'.req, b.susp ∨ b'.susp)
     b ⊑ b'  iff  b'.req ≥ b.req  ∧  (b.susp ⇒ b'.susp)
 
-The *declared bound* of an effect is `bnd(E) = ⨆_o (q_o, true) ⊔ ⨆_a (aff, false)`, starting from
+The *declared bound* of an effect is `bnd(E) = ⨆_o (q_o, true) ⊔ ⨆_a (cancel, false)`, starting from
 `none`. The *runner bound* of an effect is `rbnd(E) = (⨆_o q_o, false)`. [PA `Bound`,
 `Bound.le`, `boundOf`; `rbnd` is phase A's `Bound.none` refined by §8.2.]
 
@@ -108,9 +108,10 @@ operation `o` receives, in a handler into `C` whose outer row is `ρ'`:
     K(q, B, ρ', C) = U_q^∅ ( B ⇒^{ρ'} C )                                if W ∉ q
 
 writing `q.c` for `C ∈ q`. The first component resumes; the second, `cancel`, runs the
-continuation's destructors and answers `()`. An affine continuation is a **linear** thunk of the
-pair, so the clause consumes it exactly once, by one of the two entries: the `A & 1` encoding of
-an affine type (Munch-Maccagnoni, *Resource Polymorphism*, 2018 [recalled]; SPEC §19's `κ`). A
+continuation's destructors and answers `()`. A cancellable continuation is a **linear** thunk of the
+pair, so the clause consumes it exactly once, by one of the two entries: the `A & 1` encoding
+(SPEC §19's `κ`), which Munch-Maccagnoni reads as an affine type in his system (*Resource
+Polymorphism*, 2018 [recalled]). A
 continuation that may be both dropped and copied (`unr`) is an unrestricted thunk of the pair:
 its captures are persistent (Lemma L5.6), so dropping it runs nothing. [PB `ktyB`, `kty`; PA
 `kty` in `clauses` (without the cancel entry).]
@@ -147,7 +148,7 @@ its captures are persistent (Lemma L5.6), so dropping it runs nothing. [PB `ktyB
 - **Co-operations.** `N_o` is closed: `p : A_o, s : S ⊢ N_o : F ((B_o ⊗ S) ⊕ (E_o ⊗ S))` with
   empty row, where `E_o = int` if `o` is fallible and `E_o = 0` otherwise. `inl (w, s')` answers
   `w` and leaves state `s'`; `inr (e, s')` fails with code `e`, leaving `s'` (§8.2). A capability
-  exists only for an effect with no abortive operation and with every `q_o ∈ {lin, aff}` (a
+  exists only for an effect with no abortive operation and with every `q_o ∈ {lin, cancel}` (a
   runner answers in place; it neither duplicates a continuation nor answers a constant, §2 rule
   [newcap]). [PB `coRes`, with `int` for every operation; here `0` at a non-fallible one.]
 - **`lend V as x in M`** consumes the capability `V` and answers

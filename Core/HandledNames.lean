@@ -1861,7 +1861,7 @@ theorem kappaAt_le {V : HIn} (t : UInt32) {H : Val} {K : Kont} {x : Expr} (hx : 
         hin_close
       · exact le_trans (fl_le_hin _) (hin_app_of (empty_le _) (empty_le _))
   · split
-    · -- affine
+    · -- cancellable
       refine ⟨hin_app_of ?_ (hin_app_of (empty_le _) (empty_le _)), ?_⟩
       · show (Expr.case _ _ _).hin ≤ V
         simp only [Expr.val, Val.lam, Expr.hin, append_le_iff, hin_freeE, hin_hndE, hin_ccatchE, if_true]

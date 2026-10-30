@@ -202,7 +202,7 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
       let e := match exp.bind effRow? with | some (_, A) => some A | _ => none
       let a ← inferV n E Δ T e V
       pure (node (a.ty.v?.map .ret) [a])
-    | .bind _ x oA M N _ => do
+    | .bind _ x oA M N => do
       let A' := oA.bind fun A => (E.elabV Δ A).toOption
       let hd ← inferC n E Δ T (A'.map (effOf (E.row.getD []))) M
       let A := A' <|> (match hd.ty.c?.bind effRow? with | some (_, A) => some A | _ => none)

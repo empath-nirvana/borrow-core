@@ -31,12 +31,13 @@ open BoCa
 open BoCa.Fig16
 open BoCa.Lifetime (LSub LifeCtx LifeVar LSubst)
 
-/-- The structural qualifier of a control operation's continuation: linear (resumed exactly
-once), affine (resumed at most once, or cancelled), unrestricted (resumed any number of times, or
-cancelled).  `[spec §19]` -/
+/-- The structural qualifier of a control operation's continuation: `lin`, must resume (resumed
+exactly once); `cancel`, cancellable (resumed at most once, or cancelled); `unr`, unrestricted
+(resumed any number of times, or cancelled). At `lin` and `cancel` the continuation is a linear
+value.  `[spec §19]` -/
 inductive Qual where
   | lin
-  | aff
+  | cancel
   | unr
   deriving DecidableEq, Repr
 
@@ -1133,7 +1134,7 @@ In `νX. C` the value type `U X` is the type variable `0` of `C`'s value types. 
 maps a state to the rest. -/
 
 /-- `X` occurs in `A` only under `⊗`, `⊕` and `[@a]`: a variable, or `⊗`/`⊕`/`[@a]` of such
-types, or a type in which `X` does not occur.  `[spec §22]`: the rest of an affine closure that
+types, or a type in which `X` does not occur.  `[spec §22]`: the rest of a closure that
 outlives `@a` is `[@a] U X`. -/
 def VTy.Poly : VTy → Prop
   | .tensor A B => A.Poly ∧ B.Poly
@@ -1170,7 +1171,7 @@ def EffLeaf : CTy → Prop
   | _ => False
 
 /-- A `&`-tree of observations `F A` and `F_Σ A`, each `A` polynomial in `X`, and observations
-with an argument `A ⊸ D` over such a tree, the argument type closed (the affine closure's
+with an argument `A ⊸ D` over such a tree, the argument type closed (the closure's
 `call`).  `[spec §7, §19, §22]` -/
 def NuLeaf : CTy → Prop
   | .ret A => A.Poly

@@ -31,9 +31,9 @@ hand* means a run of D3.6 or an evaluation of D3.13 written out, and not machine
 | fact | binary (laws) | unary, own fragment (§5) | unary, kernel lift |
 |---|---|---|---|
 | β | T13.2: each step mechanised (phase B); composite here | L5.14, the *resume* bullet | needs the re-stratification lemma L14.4, **open (O5)** |
-| η | T13.8: proved here at the level of its cases, under conditions; with a new frame (D13.7) at affine operations; in general **open (O6)** | L13.9 for the new frame, proved here | typing at a suspending outer operation reduces to O5 (§14.3) |
+| η | T13.8: proved here at the level of its cases, under conditions; with a new frame (D13.7) at cancellable operations; in general **open (O6)** | L13.9 for the new frame, proved here | typing at a suspending outer operation reduces to O5 (§14.3) |
 | hiding | not expressible in the binary relation; **open (O7)**; no law of §7 or §13 needs it | L5.15's (★), quantified over every state | `wpTS_M_antiFrameX` (pure), `ewpTS_M_antiFrameU` (abortive), mechanised; at a suspending table **open (part of O8)** |
-| interaction law | T13.13: proved here in a special case; **fails at affine operations** (P13.14); general linear case **open (O6)** | — | — |
+| interaction law | T13.13: proved here in a special case; **fails at cancellable operations** (P13.14); general linear case **open (O6)** | — | — |
 
 The claim (§13.6): it is **partly** true. Two of the four follow from β and η: the cancellation
 laws and the tensor of pure handlers. The other two come from facts the TR already uses and
@@ -155,7 +155,7 @@ uses only `q_o ≤ b.req` and then the protocol at `q_o`. Its two bullets would 
 `r_M ∈ ⟦q_o⟧` in place of `r_M ∈ ⟦b.req⟧`. A premise at `q_o` would type `Fwd_x` at the linear
 operations of an effect that also has abortive ones. §2 is not changed here.
 
-**Property P13.6 (why the affine case fails, in the trees).** Leave typing aside. On an
+**Property P13.6 (why the cancellable case fails, in the trees).** Leave typing aside. On an
 operation `op i o v k d` of the handled name, the left side's fold is the clause, which builds
 `op i o v (λy. hnd(k y)) []`. The right side is `op i o v k d`. The re-performed operation carries
 the destructor list `[]`, where the original carried `d`, the destructors of the segment. An
@@ -191,7 +191,7 @@ The pieces it needs:
 
 - **(a) linear operations:** `Fwd_x` types (L13.5), and every operation of `M` on `x` carries an
   empty destructor list, i.e. it crosses no `using` or `lend` frame of `M`;
-- **(b) affine operations:** the clause at each `o` with `W ∈ q_o` is written with D13.7,
+- **(b) cancellable operations:** the clause at each `o` with `W ∈ q_o` is written with D13.7,
   `o(p, k). (op x.o(p; y. ret y)) to^k y. resume k y`. This holds for every `M`;
 - **(c) abortive operations:** every `M`.
 
@@ -260,7 +260,7 @@ So η holds only at the same instance. It needs generativity in exactly the sens
 (new-ν): a fresh name differs from every name in scope.
 
 **What η needs.** The binary relation (T13.8 is a `TreeRel` induction), and generativity through
-P13.10. At affine operations it also needs a frame that holds a continuation (D13.7). It does not
+P13.10. At cancellable operations it also needs a frame that holds a continuation (D13.7). It does not
 need rebasing: the binary relation erases lifetimes. At the lift, the forwarding clause holds
 `k` across an outer operation. If that operation suspends, `k` is a continuation held inside
 another continuation. When `k` holds a borrow, that is §14's case. Its typing then rests on L14.4
@@ -339,10 +339,10 @@ recorded and the state unchanged. Since `o` is linear, `N` uses `k` exactly once
 performs `a`, moving `s` to `s₁`. Both sides then continue with `hnd(⟦M⟧ y)` at `s₁`, and anything
 `N` does after `k` returns is at the same state on both sides. ∎
 
-**Property P13.14 (it fails at an affine operation).** Take
+**Property P13.14 (it fails at a cancellable operation).** Take
 
 - `Ctr` with `inc : 1 ↠^{lin} 1`, run by `co_inc(p, s) = ret (inl ((), s + 1))`;
-- `Stop` with `stop : 1 ↠^{aff} 1`, handled by `H_drop = (ret z. ret z ; stop(p, k). cancel k ; ret 0)`;
+- `Stop` with `stop : 1 ↠^{cancel} 1`, handled by `H_drop = (ret z. ret z ; stop(p, k). cancel k ; ret 0)`;
 - `P(body) ≜ newcap_Ctr int co_inc 0 to c. lend c as x in (handle h : Stop with H_drop in body) to z. split z as (c', r). getcap c'`.
 
 Then:
@@ -394,9 +394,9 @@ answering operations are atomic with respect to freeze. What remains is T13.13 a
 |---|---|---|
 | **tensor of pure models** (two handlers with pure clauses; T7.11) | **yes** | T13.2(1)–(2) at each handler, then the two state updates commute on disjoint components (frame). This is T7.11's proof as written. `PureClause` is a hypothesis on the handlers, not a law. |
 | **tensor of runners** (T7.8) | **only up to destructors** | It would need the identification of a `lend` with a tail-resumptive state-passing handler. The two have equal denotations except for the `wb` destructors `runL` records (D3.12), so they are not `LR`-related (as in §13.5). T7.8's direct proof (`runL_pair`) stays. |
-| **model ⊗ comodel** (a handler's operation against a runner's) | **no** | It needs the interaction law, a fourth fact. That law holds at linear operations in the case of T13.13, fails at affine ones (P13.14), and is open in general (O6). |
+| **model ⊗ comodel** (a handler's operation against a runner's) | **no** | It needs the interaction law, a fourth fact. That law holds at linear operations in the case of T13.13, fails at cancellable ones (P13.14), and is open in general (O6). |
 | **instance parametricity** (T7.16) | **no** | It uses generativity: a fresh name is garbage (`gL`), so the fold never fires on it. A route through η exists: handlers that agree on `M`'s operations are equal, then T13.8. But "agree on `M`'s operations" is itself generativity, and the TR's proof does not use η. |
-| **cancellation: the destructor form** (T7.3) | **yes, with one rule** | β's cancel half, T13.2(3), gives `cancel κ = K^fin`. An abort is an affine operation at answer `0` whose handler cancels first (SPEC §19 encodes `raise` this way). The binary relation still needs the cancel to be eager at answer `0`, which is the rule `TreeRel.abE`. |
+| **cancellation: the destructor form** (T7.3) | **yes, with one rule** | β's cancel half, T13.2(3), gives `cancel κ = K^fin`. An abort is a cancellable operation at answer `0` whose handler cancels first (SPEC §19 encodes `raise` this way). The binary relation still needs the cancel to be eager at answer `0`, which is the rule `TreeRel.abE`. |
 | **cancellation: forwarding a cancel** | **it is η's cancel half** | T13.8(b), which needs the new frame of D13.7. |
 | **cancellation: exactly once** (T5.2.3–4) | **no** | It is unary: a one-shot continuation is a heap cell its one use frees (D4.4). |
 | **contraction** (a continuation copied) | **no** | Independence (L5.4) and the mode algebra (L4.2.4): a copyable continuation holds only `Pers`. In the adjunction reading, a copyable value is under `!`, and `!` is not one of the three facts. Out of scope (#245: multi-shot only if free). |

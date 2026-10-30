@@ -34,7 +34,7 @@
 --     to its lender (`bad`, lent by `&bad` inside the `try`) so that `len(&bad)` can use it.
 -- The principled semantics unwinds by the implicit destructors (SPEC §12): each abandoned
 -- owned value runs its destructor, each borrow ends. A resource with no destructor (a
--- capability, a thunk: SPEC §12 class 3) cannot be unwound, so `raise` would be illegal where
+-- capability, a thunk: SPEC §12 group 3) cannot be unwound, so `raise` would be illegal where
 -- one is live, or the handler would receive it back with the error, as a div loop's `close`
 -- hands back its residual (SPEC §14). Which, is open.
 --

@@ -1,20 +1,20 @@
-rule	Core.AffRules	BoCa.Fig16.LogRel.Core.CDerives.affIn	0		0	
-rule	Core.AffRules	BoCa.Fig16.LogRel.Core.CDerives.affOut	0		0	
-rule	Core.AffRules	BoCa.Fig16.LogRel.Core.CDerives.affUnfold	0		0	
-rule	Core.AffRules	BoCa.Fig16.LogRel.Core.d_callAff	0		0	
-rule	Core.AffRules	BoCa.Fig16.LogRel.Core.d_callMut	0		0	
-rule	Core.AffRules	BoCa.Fig16.LogRel.Core.d_close	0		0	
-rule	Core.AffRules	BoCa.Fig16.LogRel.Core.d_closeBox	0		0	
-rule	Core.AffRules	BoCa.Fig16.LogRel.Core.d_mk	0		0	
-rule	Core.AffRules	BoCa.Fig16.LogRel.Core.d_mkBox	0		0	
-rule	Core.AffRules	BoCa.Fig16.LogRel.Core.d_mkBox'	0		0	
-rule	Core.AffRules	BoCa.Fig16.LogRel.Core.d_mkPrefix	0		0	
-rule	Core.AffRules	BoCa.Fig16.LogRel.Core.d_ofFn	0		0	
-rule	Core.AffRules	BoCa.Fig16.LogRel.Core.d_ofFnStep	0		0	
-rule	Core.AffRules	BoCa.Fig16.LogRel.Core.d_once	0		0	
-rule	Core.AffRules	BoCa.Fig16.LogRel.Core.d_pack	0		0	
-rule	Core.AffRules	BoCa.Fig16.LogRel.Core.d_packBox	0		0	
-rule	Core.AffRules	BoCa.Fig16.LogRel.Core.d_unbox	0		0	
+rule	Core.CloRules	BoCa.Fig16.LogRel.Core.CDerives.cloIn	0		0	
+rule	Core.CloRules	BoCa.Fig16.LogRel.Core.CDerives.cloOut	0		0	
+rule	Core.CloRules	BoCa.Fig16.LogRel.Core.CDerives.cloUnfold	0		0	
+rule	Core.CloRules	BoCa.Fig16.LogRel.Core.d_callClo	0		0	
+rule	Core.CloRules	BoCa.Fig16.LogRel.Core.d_callMut	0		0	
+rule	Core.CloRules	BoCa.Fig16.LogRel.Core.d_close	0		0	
+rule	Core.CloRules	BoCa.Fig16.LogRel.Core.d_closeBox	0		0	
+rule	Core.CloRules	BoCa.Fig16.LogRel.Core.d_mk	0		0	
+rule	Core.CloRules	BoCa.Fig16.LogRel.Core.d_mkBox	0		0	
+rule	Core.CloRules	BoCa.Fig16.LogRel.Core.d_mkBox'	0		0	
+rule	Core.CloRules	BoCa.Fig16.LogRel.Core.d_mkPrefix	0		0	
+rule	Core.CloRules	BoCa.Fig16.LogRel.Core.d_ofFn	0		0	
+rule	Core.CloRules	BoCa.Fig16.LogRel.Core.d_ofFnStep	0		0	
+rule	Core.CloRules	BoCa.Fig16.LogRel.Core.d_once	0		0	
+rule	Core.CloRules	BoCa.Fig16.LogRel.Core.d_pack	0		0	
+rule	Core.CloRules	BoCa.Fig16.LogRel.Core.d_packBox	0		0	
+rule	Core.CloRules	BoCa.Fig16.LogRel.Core.d_unbox	0		0	
 rule	Core.BlockBorrow	BoCa.Fig16.LogRel.Core.shortenE_wf	0		0	
 rule	Core.BlockBorrow	BoCa.Fig16.LogRel.Core.withborSI_wf	2	BoCa.Fig16.LogRel.Core.Check.TDerivesAt.erase BoCa.Fig16.LogRel.Core.Check.TDerivesP.erase	0	
 rule	Core.BlockBorrow	BoCa.Fig16.LogRel.Core.withborSM_wf	2	BoCa.Fig16.LogRel.Core.Check.TDerivesAt.erase BoCa.Fig16.LogRel.Core.Check.TDerivesP.erase	0	
@@ -157,7 +157,7 @@ rule	Core.Records	BoCa.Fig16.LogRel.Core.CDerives.lamV	0		0
 rule	Core.Records	BoCa.Fig16.LogRel.Core.CDerives.letpairV	0		0	
 rule	Core.Records	BoCa.Fig16.LogRel.Core.CDerives.seqV	0		0	
 rule	Core.Records	BoCa.Fig16.LogRel.Core.allI_fresh	0		0	
-rule	Core.Records	BoCa.Fig16.LogRel.Core.dropT_wf	0		0	
+rule	Core.Records	BoCa.Fig16.LogRel.Core.forgetT_wf	0		0	
 rule	Core.Records	BoCa.Fig16.LogRel.Core.getAt_wf	0		0	
 rule	Core.Records	BoCa.Fig16.LogRel.Core.injAt_wf	0		0	
 rule	Core.Records	BoCa.Fig16.LogRel.Core.loadCase_wf	0		0	
@@ -206,15 +206,15 @@ rule	Core.Stdio	BoCa.Fig16.LogRel.Core.d_writeAll	0		0
 rule	Core.Stdio	BoCa.Fig16.LogRel.Core.d_writeByte	0		0	
 rule	Core.Tied	BoCa.Fig16.LogRel.Core.CDerivesAt.toCDerives	1	Frontend.Check.Checked.deriv	0	
 rule	Core.Weaken	BoCa.Fig16.LogRel.Core.CDerives.append_dead	0		0	
-term	Core.AffRules	BoCa.Fig16.LogRel.Core.affUnfoldV	0		0	
-term	Core.AffRules	BoCa.Fig16.LogRel.Core.callE	0		0	
-term	Core.AffRules	BoCa.Fig16.LogRel.Core.callMutE	0		0	
-term	Core.AffRules	BoCa.Fig16.LogRel.Core.closeE	0		0	
-term	Core.AffRules	BoCa.Fig16.LogRel.Core.kMutE	0		0	
-term	Core.AffRules	BoCa.Fig16.LogRel.Core.mkE	0		0	
-term	Core.AffRules	BoCa.Fig16.LogRel.Core.ofFnStep	0		0	
-term	Core.AffRules	BoCa.Fig16.LogRel.Core.onceE	0		0	
-term	Core.AffRules	BoCa.Fig16.LogRel.Core.packE	0		0	
+term	Core.CloRules	BoCa.Fig16.LogRel.Core.cloUnfoldV	0		0	
+term	Core.CloRules	BoCa.Fig16.LogRel.Core.callE	0		0	
+term	Core.CloRules	BoCa.Fig16.LogRel.Core.callMutE	0		0	
+term	Core.CloRules	BoCa.Fig16.LogRel.Core.closeE	0		0	
+term	Core.CloRules	BoCa.Fig16.LogRel.Core.kMutE	0		0	
+term	Core.CloRules	BoCa.Fig16.LogRel.Core.mkE	0		0	
+term	Core.CloRules	BoCa.Fig16.LogRel.Core.ofFnStep	0		0	
+term	Core.CloRules	BoCa.Fig16.LogRel.Core.onceE	0		0	
+term	Core.CloRules	BoCa.Fig16.LogRel.Core.packE	0		0	
 term	Core.Arrays	BoCa.Fig16.LogRel.Core.arrLenV	9	BoCa.Fig16.LogRel.Core.Check.TExpr.erase._unsafe_rec BoCa.Fig16.LogRel.Core.Check.TExpr.erase._f BoCa.Fig16.LogRel.Core.Check.TExpr.isLam._f	0	
 term	Core.Arrays	BoCa.Fig16.LogRel.Core.copyV	9	BoCa.Fig16.LogRel.Core.Check.TExpr.erase._unsafe_rec BoCa.Fig16.LogRel.Core.Check.TExpr.erase._f BoCa.Fig16.LogRel.Core.Check.TExpr.isLam._f	0	
 term	Core.Arrays	BoCa.Fig16.LogRel.Core.forgetV	9	BoCa.Fig16.LogRel.Core.Check.TExpr.erase._unsafe_rec BoCa.Fig16.LogRel.Core.Check.TExpr.erase.eq_49 BoCa.Fig16.LogRel.Core.Check.TExpr.erase._f	0	
@@ -517,7 +517,7 @@ term	Core.PinDerives	BoCa.Fig16.LogRel.Core.lendLoopApp	9	BoCa.Fig16.LogRel.Core
 term	Core.PinDerives	BoCa.Fig16.LogRel.Core.lendLoopE	0		0	
 term	Core.PinDerives	BoCa.Fig16.LogRel.Core.lendStepE	0		0	
 term	Core.PinDerives	BoCa.Fig16.LogRel.Core.wbInl	0		0	
-term	Core.Records	BoCa.Fig16.LogRel.Core.dropT	0		0	
+term	Core.Records	BoCa.Fig16.LogRel.Core.forgetT	0		0	
 term	Core.Records	BoCa.Fig16.LogRel.Core.getAt	0		0	
 term	Core.Records	BoCa.Fig16.LogRel.Core.injAt	0		0	
 term	Core.Records	BoCa.Fig16.LogRel.Core.loadCase	0		0	
@@ -574,15 +574,15 @@ term	Core.Stdio	BoCa.Fig16.LogRel.Core.writeAllB	0		0
 term	Core.Stdio	BoCa.Fig16.LogRel.Core.writeAllV	0		0	
 term	Core.Stdio	BoCa.Fig16.LogRel.Core.writeByteV	0		0	
 term	Core.Steps	BoCa.Fig16.LogRel.Core.opE	0		0	
-type	Core.Aff	BoCa.Fig16.LogRel.Core.affBody	0		0	
-type	Core.Aff	BoCa.Fig16.LogRel.Core.affBox	0		0	
-type	Core.Aff	BoCa.Fig16.LogRel.Core.affC	0		0	
-type	Core.Aff	BoCa.Fig16.LogRel.Core.affEffBody	0		0	
-type	Core.Aff	BoCa.Fig16.LogRel.Core.affStepC	0		0	
-type	Core.Aff	BoCa.Fig16.LogRel.Core.affT	0		0	
-type	Core.Aff	BoCa.Fig16.LogRel.Core.affUnroll	0		0	
-type	Core.AffRules	BoCa.Fig16.LogRel.Core.affCodeT	0		0	
-type	Core.AffRules	BoCa.Fig16.LogRel.Core.affUnfoldTy	0		0	
+type	Core.Clo	BoCa.Fig16.LogRel.Core.cloBody	0		0	
+type	Core.Clo	BoCa.Fig16.LogRel.Core.cloBox	0		0	
+type	Core.Clo	BoCa.Fig16.LogRel.Core.cloC	0		0	
+type	Core.Clo	BoCa.Fig16.LogRel.Core.cloEffBody	0		0	
+type	Core.Clo	BoCa.Fig16.LogRel.Core.cloStepC	0		0	
+type	Core.Clo	BoCa.Fig16.LogRel.Core.cloT	0		0	
+type	Core.Clo	BoCa.Fig16.LogRel.Core.cloUnroll	0		0	
+type	Core.CloRules	BoCa.Fig16.LogRel.Core.cloCodeT	0		0	
+type	Core.CloRules	BoCa.Fig16.LogRel.Core.cloUnfoldTy	0		0	
 type	Core.Arrays	BoCa.Fig16.LogRel.Core.VTy.array	39	BoCa.Fig16.LogRel.Core.Check.TDerivesAt.casesOn BoCa.Fig16.LogRel.Core.Check.TDerivesP.jdg_eq BoCa.Fig16.LogRel.Core.Check.TDerivesP.weaken	0	
 type	Core.Arrays	BoCa.Fig16.LogRel.Core.VTy.arrayImm	34	BoCa.Fig16.LogRel.Core.Check.TDerivesAt.casesOn BoCa.Fig16.LogRel.Core.Check.TDerivesP.jdg_eq BoCa.Fig16.LogRel.Core.Check.TDerivesP.weaken	0	
 type	Core.Arrays	BoCa.Fig16.LogRel.Core.arrCopyTy	34	BoCa.Fig16.LogRel.Core.Check.TDerivesAt.casesOn BoCa.Fig16.LogRel.Core.Check.TDerivesP.jdg_eq BoCa.Fig16.LogRel.Core.Check.TDerivesP.weaken	0	

@@ -1,4 +1,4 @@
--- expect: 6:6: the field `next` of `Node`, of type `imm 'a Chain<'a>`, holds `Chain` under a borrow (`imm`, `mut`, a view): outside §6's class `P`, the recursive types a destructor is defined at (SPEC §61)
+-- expect: 6:6: the field `next` of `Node`, of type `imm 'a Chain<'a>`, holds `Chain` under a borrow (`imm`, `mut`, a view): outside §6's class `P`, the recursive types a derived drop is defined at (SPEC §61)
 -- A recursive field under a borrow (SPEC §42, §61): a field's recursion positions are accepted
 -- exactly where the declaration's `μ` body is in §6's class `P` (`FoldP.PB`), and `P` holds no
 -- variable under `imm`.

@@ -20,7 +20,7 @@ Each typed program is derived (`d_…`) and its run computed (`…_run`):
 |---|---|---|
 | `progT` | `{2}`, typed at a row holding `2`, and at no row without `2` (`not_der_progT`) | a raise of `2` no handler catches |
 | `progOutT` | `{2}`, the outer `2` live | `inj₂ ()` |
-| `progOutTA` | `{2}` at an affine raise of `2` (tied, `Core/EffCancelRuns.lean`) | `inj₂ ()` |
+| `progOutTA` | `{2}` at a cancellable raise of `2` (tied, `Core/EffCancelRuns.lean`) | `inj₂ ()` |
 | `cancelKeptT` | `{3}`, `H₃` outside | `inj₂ ()` |
 | `progReT` | `{3}`: `f ()` at `{1}`, the region re-entering the site `3` | `inj₂ ()` |
 | `progFinOpT` | `{4}`: the finaliser performs `4`, the outer `4` resumes it | `inj₁ ()` |
@@ -145,28 +145,28 @@ and its clause `c`.  At `q = unr` it is `hU n hr c`. -/
 def hQ (n : UInt32) (q : Qual) (hr c : Val) : Val :=
   hndVal n (qualsVal [q]) hr (Val.pair c Val.unit)
 
-/-- `progT`'s region with its handler of `2` at an affine operation:
-`hnd (2, H₂) (ubind (id, λ_. raise m) [·])`, `H₂`'s tag `aff`. -/
-def KA (m : UInt32) : Kont := hF (hQ 2 .aff idV (constC Val.unit)) (uF (raiseU m) .hole)
+/-- `progT`'s region with its handler of `2` at a cancellable operation:
+`hnd (2, H₂) (ubind (id, λ_. raise m) [·])`, `H₂`'s tag `cancel`. -/
+def KA (m : UInt32) : Kont := hF (hQ 2 .cancel idV (constC Val.unit)) (uF (raiseU m) .hole)
 
-/-- `progT` with its raise of `2` affine: the region `KA 2`. -/
+/-- `progT` with its raise of `2` cancellable: the region `KA 2`. -/
 def progTA : Expr := hndE H₁T ((KA 2).plug (performU 1))
 
-/-- `progOutT` with its raise of `2` affine: every handler of `2` has the tag `aff`. -/
-def progOutTA : Expr := hndE (hQ 2 .aff injlV (constC (Val.inj₂ Val.unit))) progTA
+/-- `progOutT` with its raise of `2` cancellable: every handler of `2` has the tag `cancel`. -/
+def progOutTA : Expr := hndE (hQ 2 .cancel injlV (constC (Val.inj₂ Val.unit))) progTA
 
 /-- **`progOutTA`** runs as `progOutT`: a raise is caught whatever its handler's tag
 (`[unwind]`), so the dead inner `2` catches nothing, the finaliser's error is kept, re-raised at the
 canceller, and caught by the live outer `2`. -/
 theorem progOutTA_run (μ : Heap) : Steps (ℍ := ℍ) μ progOutTA μ (.val (Val.inj₂ Val.unit)) := by
-  let H₂ₒ : Val := hQ 2 .aff injlV (constC (Val.inj₂ Val.unit))
+  let H₂ₒ : Val := hQ 2 .cancel injlV (constC (Val.inj₂ Val.unit))
   refine (Steps.plug (hF H₂ₒ .hole) (cancelT_start μ 1 idV (KA 2) rfl)).trans ?_
   show Steps μ ((hF H₂ₒ (ccF .hole)).plug
     (ubindE (Val.pair idV (finV (raiseU 2))) (raiseE (.val (cancelVal none))))) μ _
   refine (Steps.plug (hF H₂ₒ (ccF .hole)) (fin_cancel μ (raiseU 2) none)).trans ?_
   refine .more (st (hF H₂ₒ (ccF .hole)) (Head.cferr μ none 2 0 Val.unit .hole (by decide) rfl)) ?_
   refine .more (st (hF H₂ₒ .hole) (Head.creraise μ (opPayload 2 0 Val.unit) .hole rfl)) ?_
-  refine .more (st .hole (Head.hunwind μ 2 0 (qualsVal [.aff]) injlV
+  refine .more (st .hole (Head.hunwind μ 2 0 (qualsVal [.cancel]) injlV
     (Val.pair (constC (Val.inj₂ Val.unit)) Val.unit) (constC (Val.inj₂ Val.unit)) Val.unit .hole
     (hcl _) rfl)) ?_
   refine .more (st .hole (Head.beta μ _ Val.unit)) ?_
@@ -183,13 +183,13 @@ def pSig (n : UInt32) (F : CTy) : OpSig := ⟨n, 0, .unr, .unit, .unit, F⟩
 /-- The cancel row of a raise of `m`. -/
 abbrev finR (m : UInt32) : CTy := CTy.effOf [rSig m] .unit
 
-/-- The operation `0` of the name `n`, affine and abortive: `raise : 1 ↠^aff 0`. -/
-def rSigA (n : UInt32) : OpSig := ⟨n, 0, .aff, .unit, .zero, .ret .unit⟩
+/-- The operation `0` of the name `n`, cancellable and abortive: `raise : 1 ↠^cancel 0`. -/
+def rSigA (n : UInt32) : OpSig := ⟨n, 0, .cancel, .unit, .zero, .ret .unit⟩
 
-/-- The cancel row of an affine raise of `m`. -/
+/-- The cancel row of a cancellable raise of `m`. -/
 abbrev finRA (m : UInt32) : CTy := CTy.effOf [rSigA m] .unit
 
-/-- An abortive operation's clause type does not read its qualifier, at an affine or unrestricted
+/-- An abortive operation's clause type does not read its qualifier, at a cancellable or unrestricted
 one: `!U(A ⊸ F_Σ R)`. -/
 theorem clauseTy_abortive {S : Row} {R A : VTy} {q : Qual} {F : CTy} (hq : q ≠ .lin) :
     clauseTy S R (q, A, .zero) F = .bang (.thunk (.arr A (CTy.effOf S R))) := by
@@ -1367,7 +1367,7 @@ end Rejections
 
 /-! ### E7c: a finaliser's raise handled only inside the cancelled region (D3)
 
-`e7c nw ni qi = timeout (handle exnᵢ {…} (body (raise exnᵢ ())))`.  `timeout` handles an affine
+`e7c nw ni qi = timeout (handle exnᵢ {…} (body (raise exnᵢ ())))`.  `timeout` handles a cancellable
 `wait : 1 ↠ 1` of the name `nw`, and its clause cancels `κ` (`timeoutCl`); the body performs `wait`
 under a finaliser that raises `exnᵢ : 1 ↠ 0`, of the name `ni`, which `toResult` handles inside the
 cancelled region.  `[then]` puts `exnᵢ` in `wait`'s cancel row, and the clause applies `κ`'s cancel
@@ -1380,9 +1380,9 @@ is read at (`not_der_e7c`).  At the row of `exnᵢ` the program is typed (`dAt_e
 def timeoutCl : Val :=
   Val.lam (.letpair (.var 0) (bindE (Inversions.cancelE (.var 0)) (.inj₂ .unit)))
 
-/-- `timeout`, the handler of an affine `wait : 1 ↠ 1` of the name `nw`: `return x ⇒ inl x`, and
+/-- `timeout`, the handler of a cancellable `wait : 1 ↠ 1` of the name `nw`: `return x ⇒ inl x`, and
 `timeoutCl`. -/
-def timeoutH (nw : UInt32) : Val := hQ nw .aff injlV timeoutCl
+def timeoutH (nw : UInt32) : Val := hQ nw .cancel injlV timeoutCl
 
 /-- `toResult`, the handler of an abortive `exn : 1 ↠ 0` of the name `ne` at the qualifier `q`:
 `return x ⇒ inl x`, `raise _ ⇒ inr ()`. -/
@@ -1399,30 +1399,30 @@ def e7c (nw ni : UInt32) (qi : Qual) : Expr :=
 section Rejections
 open BoCa.Fig16.LogRel.Core.Inversions
 
-/-- **`timeout`'s clause reads `κ`'s cancel at its row**: at the clause type of an affine `A ↠ B`,
+/-- **`timeout`'s clause reads `κ`'s cancel at its row**: at the clause type of a cancellable `A ↠ B`,
 `B` no `0`, at the cancel row `F`, the clause applies `κ`'s cancel branch, at `cancelTy Σ F`, which
 the same-term rules read at the clause's row `Σ` or below: `F` is no `⊤`, and `Σ` finds each
 operation `F` finds. -/
 theorem timeoutCl_finds {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F : CTy}
     {ob : Option Lifetime.Life} (hB : B.isZero = false)
-    (h : CDerives Δ Γ (.val timeoutCl) (.val (clauseTyO S R ob (.aff, A, B) F))) :
+    (h : CDerives Δ Γ (.val timeoutCl) (.val (clauseTyO S R ob (.cancel, A, B) F))) :
     F.isTop = false ∧ ∀ n i o, Row.find F.rowOf n i = some o → ∃ o', Row.find S n i = some o' := by
   rw [clauseTyO_cap S R ob F hB] at h
   obtain ⟨-, hb⟩ := lam_bang h (fun h => by cases h) (by not_withPair) (by not_const)
   obtain ⟨Γ₁, Γ₂, A', B', C, hs, hV, hB₂, hr⟩ := der_letpair hb _ _ rfl
-  have hslotP : (⟨.tensor A (kBoxO ob (kTy S R .aff B F)), true⟩ :: Γ : Ctx VTy)[0]? =
-      some ⟨.tensor A (kBoxO ob (kTy S R .aff B F)), true⟩ := rfl
+  have hslotP : (⟨.tensor A (kBoxO ob (kTy S R .cancel B F)), true⟩ :: Γ : Ctx VTy)[0]? =
+      some ⟨.tensor A (kBoxO ob (kTy S R .cancel B F)), true⟩ := rfl
   rcases varCls_of_le hslotP (splitP_le_left hs) hV with hc | ⟨_, hT, -, -⟩
   swap
   · cases hT
   obtain ⟨rfl, rfl⟩ := vview_tensor hc
-  have hslotK : (⟨kBoxO ob (kTy S R .aff B F), true⟩ :: ⟨A, true⟩ :: Γ₂ : Ctx VTy)[0]? =
+  have hslotK : (⟨kBoxO ob (kTy S R .cancel B F), true⟩ :: ⟨A, true⟩ :: Γ₂ : Ctx VTy)[0]? =
       some ⟨kBoxO ob (.thunk (.amp (.arr B (CTy.effOf S R)) (cancelTy S F))), true⟩ := rfl
   rcases der_letJ hB₂ (.inj₂ .unit) (cancelE (.var 0)) rfl (fun _ h => by cases h)
       (fun _ h => by cases h) (fun h => by cases h) (fun h => by cases h) (fun h => by cases h) with
     ⟨j₁, ⟨Γ₃, S₅, X, hle₃, hM, hS₅⟩, hr₁⟩ | ⟨Γ₃, X, hle₃, hM⟩
   · -- `bind` or `[let]`: `cancel k` at a row below the clause's
-    have hkj := kcancel_jr_aff hslotK hle₃ hM
+    have hkj := kcancel_jr_cancellable hslotK hle₃ hM
     have hS₅S : RowLe S₅ S := by
       rcases hS₅ with rfl | ⟨B', rfl⟩
       · exact RowLe.nil S
@@ -1438,7 +1438,7 @@ theorem timeoutCl_finds {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F
       simp only [Jdg.comp.injEq] at this
       exact (effOf_ne_top S₅ X this).elim
   · -- `⊸E`: `cancel k` at a value judgement
-    have hkj := kcancel_jr_aff hslotK hle₃ hM
+    have hkj := kcancel_jr_cancellable hslotK hle₃ hM
     cases hF : F.isTop
     · rw [show cancelTy S F = CTy.effOf (F.rowOf ++ S) .unit by simp [cancelTy, hF]] at hkj
       obtain ⟨hle, -⟩ := RowCls.reach hkj (S := F.rowOf ++ S) (Y := .unit)
@@ -1461,11 +1461,11 @@ theorem not_der_e7c {Δ : LifeCtx} {Γ : Ctx VTy} {nw ni : UInt32} {qi : Qual} (
   intro h
   -- `[handle] wait`
   obtain ⟨j₁, ⟨Γ₁, Γ₂, S, E, fs, A, R, _, -, hQ, hH, hM, -, rfl⟩, hr₁⟩ :=
-    der_hndJ₁ (n := nw) (Q := (qualsVal [.aff]).1)
+    der_hndJ₁ (n := nw) (Q := (qualsVal [.cancel]).1)
       (H := (.pair (.val injlV) (.pair (.val timeoutCl) (.val Val.unit))))
       (M := (hndE (toResultH ni qi) (bodyF nw (raiseU ni)))) h (by not_tail [timeoutCl, constC, bindE, Inversions.cancelE])
   have hSS' : RowLe S S' := JR.rowLe hr₁
-  have hE : [Qual.aff] = E.map Prod.fst := qualsVal_inj hQ
+  have hE : [Qual.cancel] = E.map Prod.fst := qualsVal_inj hQ
   obtain ⟨⟨q₁, A₁, B₁⟩, rfl⟩ : ∃ e, E = [e] := by
     rcases E with _ | ⟨e, _ | ⟨e', E'⟩⟩
     · simp at hE
@@ -1478,7 +1478,7 @@ theorem not_der_e7c {Δ : LifeCtx} {Γ : Ctx VTy} {nw ni : UInt32} {qi : Qual} (
     der_hndJ₁ (n := ni) (Q := (qualsVal [qi]).1)
       (H := (.pair (.val injlV) (.pair (.val (constC (Val.inj₂ Val.unit))) (.val Val.unit))))
       (M := (bodyF nw (raiseU ni))) hM (by not_tail [timeoutCl, constC, bindE, Inversions.cancelE])
-  have hS₂ : RowLe S₂ (Row.ofEff nw [(.aff, A₁, B₁)] 0 fs ++ S) := JR.rowLe hr₂
+  have hS₂ : RowLe S₂ (Row.ofEff nw [(.cancel, A₁, B₁)] 0 fs ++ S) := JR.rowLe hr₂
   obtain ⟨j₃, ⟨Γ₅, Γ₆, A₃, B₃, S₃, SM, SD, -, hMS, -, hfin, hMp, hDr, rfl⟩, hr₃⟩ :=
     der_thenJ hM₂ (.var 0) (raiseU ni) (bindE (performU nw) (.inj₂ .unit)) rfl
   have hS₃ : RowLe S₃ (Row.ofEff ni E₂ 0 fs₂ ++ S₂) := JR.rowLe hr₃
@@ -1508,10 +1508,10 @@ theorem not_der_e7c {Δ : LifeCtx} {Γ : Ctx VTy} {nw ni : UInt32} {qi : Qual} (
   obtain ⟨o₄, hf₄', hle₄⟩ := hS₃ nw 0 o₃ hf₃
   rw [Row.find_append, Row.find_ofEff_ne ni E₂ 0 fs₂ nw 0 hne, Option.none_or] at hf₄'
   obtain ⟨o₅, hf₅', hle₅⟩ := hS₂ nw 0 o₄ hf₄'
-  rw [Row.find_append, show Row.find (Row.ofEff nw [(.aff, A₁, B₁)] 0 fs) nw 0 =
-    some ⟨nw, 0, .aff, A₁, B₁, fs 0⟩ by simp [Row.ofEff, Row.find], Option.some_or] at hf₅'
+  rw [Row.find_append, show Row.find (Row.ofEff nw [(.cancel, A₁, B₁)] 0 fs) nw 0 =
+    some ⟨nw, 0, .cancel, A₁, B₁, fs 0⟩ by simp [Row.ofEff, Row.find], Option.some_or] at hf₅'
   cases hf₅'
-  have hsig : oM₀.Sig ⟨nw, 0, .aff, A₁, B₁, fs 0⟩ :=
+  have hsig : oM₀.Sig ⟨nw, 0, .cancel, A₁, B₁, fs 0⟩ :=
     hleM.1.trans (hle₃.1.trans (hle₄.1.trans hle₅.1))
   have hB₁ : B₁.isZero = false := by
     have := hsig.abort_eq
@@ -1559,8 +1559,8 @@ end Rejections
 /-- `exn`'s row: its one abortive operation `1 ↠ 0`, of the name `n` at the qualifier `q`. -/
 abbrev exnRow (n : UInt32) (q : Qual) : Row := Row.ofEff n [(q, .unit, .zero)] 0
 
-/-- `wait`'s row: its one affine operation `1 ↠ 1`, of the name `n`, at the cancel row `F`. -/
-abbrev waitRow (n : UInt32) (F : CTy) : Row := Row.ofEff n [(.aff, .unit, .unit)] 0 (fun _ => F)
+/-- `wait`'s row: its one cancellable operation `1 ↠ 1`, of the name `n`, at the cancel row `F`. -/
+abbrev waitRow (n : UInt32) (F : CTy) : Row := Row.ofEff n [(.cancel, .unit, .unit)] 0 (fun _ => F)
 
 /-- The cancel row of a raise of `exn`. -/
 abbrev finExn (n : UInt32) (q : Qual) : CTy := CTy.effOf (exnRow n q) .unit
@@ -1575,7 +1575,7 @@ theorem find_ofEff_one {n : UInt32} {e : Qual × VTy × VTy} {fs : Nat → CTy} 
 
 /-- `wait`'s operation, as the handled row of a `timeout` finds it. -/
 theorem find_wait (nw : UInt32) (F : CTy) (S : Row) :
-    Row.find (waitRow nw F ++ S) nw 0 = some ⟨nw, 0, .aff, .unit, .unit, F⟩ := by
+    Row.find (waitRow nw F ++ S) nw 0 = some ⟨nw, 0, .cancel, .unit, .unit, F⟩ := by
   simp [Row.ofEff, Row.find]
 
 /-- A row is below itself followed by another. -/
@@ -1614,11 +1614,11 @@ theorem thenLe_exn (n : UInt32) (q : Qual) : ThenLe (.ret .unit) (exnRow n q) (f
   rw [CTy.rowOf_effOf]
   exact hf
 
-/-- **`timeout`'s clause** at an affine `1 ↠ 1` whose cancel row `F` holds operations of the
+/-- **`timeout`'s clause** at a cancellable `1 ↠ 1` whose cancel row `F` holds operations of the
 clause's row `S`: `κ`'s cancel at `F_{F ⊕ Σ} 1`, read at `Σ` (`[sub]`, D3's check). -/
 theorem d_timeoutCl {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} {X : VTy} {F : CTy}
     (hF : F.isTop = false) (hFS : RowLe (F.rowOf ++ S) S) :
-    CDerives Δ Γ (.val timeoutCl) (.val (clauseTy S (.sum X .unit) (.aff, .unit, .unit) F)) := by
+    CDerives Δ Γ (.val timeoutCl) (.val (clauseTy S (.sum X .unit) (.cancel, .unit, .unit) F)) := by
   rw [Inversions.clauseTy_resuming rfl]
   refine .bangThunkV (dead_noLive hΓ) rfl (.lam ?_)
   refine .tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_
@@ -1629,7 +1629,7 @@ theorem d_timeoutCl {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} 
     · cases hl
     · cases hl
     · cases hl
-    · exact dead_noLive (P := fun s => s.ty.Drop) hΓ s hs hl
+    · exact dead_noLive (P := fun s => s.ty.OwnFree) hΓ s hs hl
   · simp only [List.mem_cons] at hs
     rcases hs with rfl | rfl | rfl | hs
     · cases hl
@@ -1648,22 +1648,22 @@ variable {Ξ : EffCtx}
 
 /-- **`timeout M`**, tied: at the row `S`, `M` at `wait`'s row before `S`, `wait`'s cancel row `F`
 holding operations of `S`. -/
-theorem dAt_timeout {Δ : LifeCtx} {nw : UInt32} (hw : Ξ nw = [(.aff, .unit, .unit)])
+theorem dAt_timeout {Δ : LifeCtx} {nw : UInt32} (hw : Ξ nw = [(.cancel, .unit, .unit)])
     (hnw : nw ≠ 0) {S : Row} (hS : RowAt Ξ S) (hnS : ∀ o ∈ S, o.n ≠ nw) {X : VTy} {F : CTy}
     (hF : F.isTop = false) (hFS : RowLe (F.rowOf ++ S) S) {M : Expr}
     (hM : CDerivesAt Ξ Δ [] M (.comp (CTy.effOf (waitRow nw F ++ S) X)))
     (hdv : Row.divB (waitRow nw F ++ S) = false := by div_free) :
     CDerivesAt Ξ Δ [] (hndE (timeoutH nw) M) (.comp (CTy.effOf S (.sum X .unit))) := by
-  show CDerivesAt Ξ Δ [] (hndExpr nw [.aff] (.pair (.val injlV) (.pair (.val timeoutCl)
+  show CDerivesAt Ξ Δ [] (hndExpr nw [.cancel] (.pair (.val injlV) (.pair (.val timeoutCl)
     (.val Val.unit))) M) _
-  exact .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.aff, .unit, .unit)]) (fs := fun _ => F)
+  exact .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.cancel, .unit, .unit)]) (fs := fun _ => F)
     (rowAt_ofEff_fs (rowAt_ofEff_append hw hnw (by simp) hS)) .nil .nil
     (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_injlV _ X .unit)
       (.tensorI .nil (d_timeoutCl .nil hF hFS) (.unitI .nil))) rfl)
     hnw hnS (by simp) hdv hM
 
-/-- **`toResult M`**, tied: at the row `S`, `M` at `exn`'s row before `S`, `exn` affine or
+/-- **`toResult M`**, tied: at the row `S`, `M` at `exn`'s row before `S`, `exn` cancellable or
 unrestricted. -/
 theorem dAt_toResult {Δ : LifeCtx} {ne : UInt32} {q : Qual} (he : Ξ ne = [(q, .unit, .zero)])
     (hne : ne ≠ 0) (hq : q ≠ .lin) {S : Row} (hS : RowAt Ξ S) (hnS : ∀ o ∈ S, o.n ≠ ne) {A : VTy}
@@ -1694,23 +1694,23 @@ theorem dAt_raiseU {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) {n : UInt3
 /-- **`(wait (); return tt) then x. x unwind D`**, tied, at the handled row `wait⟨F⟩ ⊙ S` of a
 `timeout`: the finaliser at a row `SD` below it, and `F` above what the finaliser may do when
 `wait`'s continuation is cancelled (`[] ⋈ SD ≤ F`). -/
-theorem dAt_bodyF {Δ : LifeCtx} {nw : UInt32} (hw : Ξ nw = [(.aff, .unit, .unit)]) (hnw : nw ≠ 0)
+theorem dAt_bodyF {Δ : LifeCtx} {nw : UInt32} (hw : Ξ nw = [(.cancel, .unit, .unit)]) (hnw : nw ≠ 0)
     {S SD : Row} {F : CTy} (hNZ : (waitRow nw F ++ S).NZ) (hUq : (waitRow nw F ++ S).Uniq)
     (hDS : RowLe SD (waitRow nw F ++ S)) (hfin : ThenLe (.ret .unit) SD F) {D : Expr}
     (hD : CDerivesAt Ξ Δ [⟨.unit, false⟩] D (.comp (CTy.effOf SD .unit)))
     (hSD : Row.divB SD = false := by div_free) :
     CDerivesAt Ξ Δ [] (bodyF nw D) (.comp (CTy.effOf (waitRow nw F ++ S) (.sum .unit .unit))) := by
-  have hW : RowAt Ξ (Row.ofEff nw [(.aff, .unit, .unit)] 0) :=
+  have hW : RowAt Ξ (Row.ofEff nw [(.cancel, .unit, .unit)] 0) :=
     rowAt_left (S' := []) (rowAt_ofEff_append hw hnw (by simp) (rowAt_nil Ξ))
   have hM : CDerivesAt Ξ Δ [] (bindE (performU nw) (.inj₂ .unit))
-      (.comp (CTy.effOf (Row.ofEff nw [(.aff, .unit, .unit)] 0) (.sum .unit .unit))) :=
+      (.comp (CTy.effOf (Row.ofEff nw [(.cancel, .unit, .unit)] 0) (.sum .unit .unit))) :=
     .effLet (A := .unit) .nil (fun _ => fun _ h => absurd h List.not_mem_nil)
       (fun _ => fun _ h => absurd h List.not_mem_nil)
-      (.effPerform (o := ⟨nw, 0, .aff, .unit, .unit, .ret .unit⟩) hW
+      (.effPerform (o := ⟨nw, 0, .cancel, .unit, .unit, .ret .unit⟩) hW
         (by simp [Row.ofEff, Row.find]) rfl (.unitI .nil))
       (.effSub (RowLe.nil _) (.ret (.sumI₂ (.unitI (.drop rfl .nil)))))
   show CDerivesAt Ξ Δ [] (thenE (.var 0) D (bindE (performU nw) (.inj₂ .unit))) _
-  refine .effThen (SM := Row.ofEff nw [(.aff, .unit, .unit)] 0) (SD := SD) .nil hNZ hUq
+  refine .effThen (SM := Row.ofEff nw [(.cancel, .unit, .unit)] 0) (SD := SD) .nil hNZ hUq
     (fun _ => fun _ h => absurd h List.not_mem_nil) ?_ hDS ?_ ?_ hSD hM
     (.effSub (RowLe.nil _) (.ret (.var (.here .nil)))) hD
   · intro n i o hf
@@ -1731,7 +1731,7 @@ theorem dAt_bodyF {Δ : LifeCtx} {nw : UInt32} (hw : Ξ nw = [(.aff, .unit, .uni
 instance of `exnᵢ`, recorded in `wait`'s cancel row and live at the `timeout` clause's row.
 `[spec §27]` -/
 theorem dAt_e7c_lift {Δ : LifeCtx} {nw ni : UInt32} {qi : Qual}
-    (hw : Ξ nw = [(.aff, .unit, .unit)]) (hi : Ξ ni = [(qi, .unit, .zero)]) (hqi : qi ≠ .lin)
+    (hw : Ξ nw = [(.cancel, .unit, .unit)]) (hi : Ξ ni = [(qi, .unit, .zero)]) (hqi : qi ≠ .lin)
     (hnw : nw ≠ 0) (hni : ni ≠ 0) (hne : nw ≠ ni) :
     CDerivesAt Ξ Δ [] (e7c nw ni qi)
       (.comp (CTy.effOf (exnRow ni qi) (.sum (.sum (.sum .unit .unit) .unit) .unit))) := by
@@ -1774,10 +1774,10 @@ theorem dAt_e7c_lift {Δ : LifeCtx} {nw ni : UInt32} {qi : Qual}
 
 end Tied
 
-/-- The effect context of `e7c`: `wait : 1 ↠ 1` affine at `nw`, and `exnᵢ : 1 ↠ 0` at the
+/-- The effect context of `e7c`: `wait : 1 ↠ 1` cancellable at `nw`, and `exnᵢ : 1 ↠ 0` at the
 qualifier `qi` at `ni`. -/
 def Ξe7c (nw ni : UInt32) (qi : Qual) : EffCtx := fun n =>
-  if n = nw then [(.aff, .unit, .unit)] else if n = ni then [(qi, .unit, .zero)] else []
+  if n = nw then [(.cancel, .unit, .unit)] else if n = ni then [(qi, .unit, .zero)] else []
 
 /-- At an `exnᵢ` that is not unrestricted, `e7c`'s effect context has no unrestricted abortive
 operation (decision 63's restriction), as the context of every program the checker accepts has
@@ -1792,7 +1792,7 @@ theorem noUnrExn_Ξe7c {nw ni : UInt32} {qi : Qual} (hqi : qi ≠ .unr) :
     · simp only [List.mem_singleton] at hp; subst hp; exact absurd hq hqi
     · cases hp
 
-/-- **`e7c` is typed at the row of `exnᵢ`** (decision D1), at an affine or unrestricted `exnᵢ`:
+/-- **`e7c` is typed at the row of `exnᵢ`** (decision D1), at a cancellable or unrestricted `exnᵢ`:
 the rejection `not_der_e7c` is at the rows without `exnᵢ`, and at no other.  `[spec §27]` -/
 theorem d_e7c_lift {Δ : LifeCtx} {nw ni : UInt32} {qi : Qual} (hqi : qi ≠ .lin) (hnw : nw ≠ 0)
     (hni : ni ≠ 0) (hne : nw ≠ ni) :

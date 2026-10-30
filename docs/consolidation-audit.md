@@ -214,7 +214,7 @@ Sizes are source lines of the code to port or write, measured with `wc -l`.
 | 2 | Re-port `Embedding.lean` and `EmbeddingExamples.lean` (§2.3) | mechanical **[unverified]** | 329 + 58 |
 | 3 | Decide `Relaxed` (§2.1). If kept: the edits at the sites in §2.1's table | design decision, then mechanical | ~20 |
 | 4 | Decide the record encoding (§2.5), the meaning of `Ref (A ⊗ B)` (one cell or block), and the names in §2.2 | design decision | — |
-| 5 | Records at `VTy` in `CDerives`: `recI`, `recE`, `getAt`, `injAt`, `vcase`, `loadField`, `loadCase`, `swapField`, `Splits`. Semantic facts as instances of `CBPVMu`'s `reborrow_vShape`/`vC_outlives`. `Affine`/`dropT` at `μ` is new work (§5) | mostly mechanical; real at `Affine` | `Encoding` 381 + `Borrows` 250 + `Splits` 94; programs 413 optional |
+| 5 | Records at `VTy` in `CDerives`: `recI`, `recE`, `getAt`, `injAt`, `vcase`, `loadField`, `loadCase`, `swapField`, `Splits`. Semantic facts as instances of `CBPVMu`'s `reborrow_vShape`/`vC_outlives`. `Forgettable`/`forgetT` at `μ` is new work (§5) | mostly mechanical; real at `Forgettable` | `Encoding` 381 + `Borrows` 250 + `Splits` 94; programs 413 optional |
 | 6 | Places' family borrow in `CDerives` at `VTy`, with `VOutlives` side conditions | real (re-derivation, same proof shape) | `Family.lean` 310; programs 562 optional |
 | 7 | LeafPlaces' `famTy`, `shortenE`, `withborS`, `withborS_wf` and `append_dead` in `CDerives`. Port `Steps.lean`/`Track.lean` (they mention no types; only `Shape`'s leaf type changes) for `withborS_ret`. Port `withborS_packed`/`wpTS_allocBorrow` by `fundamentalC` | `Steps`/`Track` mechanical; typing and `packed` real | `Terms` 270 + `Typing` 223 + `Weaken` 98 + `Steps` 296 + `Track` 168 + rest of `Packed` ~150; programs 400 optional |
 | 8 | Resolved in SPEC 0.7 (§7): a general `νX. C`, with `D` and `Stream` as abbreviations. ν: a general `νX. B : CTy` with `CTy` variables, or `stream` as a second fixed former. Port `Nu.lean`'s `stRel`, `unfold_sem` and `take2Close` accordingly | design decision, then real | `Nu.lean` 414 to port as a fixed former; a general `ν` is larger and **[not estimated]** |
@@ -251,8 +251,8 @@ adequacy through `embed` (`adequacy_of_derivesWf`), and FP only as `fundamentalC
 - **Variants in place.** `Ref` does not distribute over `⊕`, because the leaf layout depends on
   the tag (`CBPVMu/README.md`, *The common list shape*; `LeafPlaces/README.md` §4). Borrowing a
   payload place while the tag is fixed is open (`docs/dream-properties.md` P6).
-- **`Affine` at `μ` and `U`.** `Affine` (`Records/Encoding.lean:228-235`) has no `μ` or `U`
-  case. `affine_immReborrow` holds at BoLo's `Ty`, but `Imm̲ 'b N = μY. 1 ⊕ Y` needs a recursive
+- **`Forgettable` at `μ` and `U`.** `Forgettable` (`Records/Encoding.lean:228-235`) has no `μ` or `U`
+  case. `forgettable_immReborrow` holds at BoLo's `Ty`, but `Imm̲ 'b N = μY. 1 ⊕ Y` needs a recursive
   drop (a `foldOwn`). So "project one field of an `Imm` record" at μ-typed fields needs a new
   lemma. **[unverified]**: not attempted.
 - **Reuse tokens.**

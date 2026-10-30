@@ -102,7 +102,7 @@ So the choice is largely one of presentation. The intuitionistic (provider) view
 **Proof status.** Paper proofs only.
 
 **How it maps onto us. This is the direct answer to "it's just adjoint".**
-- Our three qualifiers (linear, affine, unrestricted) are three of their four modes.
+- Our three qualifiers (must resume, cancellable, unrestricted) line up with three of their four modes (linear, affine, unrestricted).
 - CBPV's F/U is itself an adjunction.
 - Their affine mode is what gives cancellation. That matters for handlers that discard continuations.
 - Seax/SAX shows the same logic read as either message passing or shared memory, which bears on a sequential CBPV host.

@@ -85,12 +85,12 @@ Counts are occurrences, with files in parentheses (measured, `ergo.py count`, §
 | `modify m { … }`, any | 46 (24) | 0 | 1 | 7 | `corpus/async-bank-inbox.bc:46`, `corpus/async-cancel.bc:30` |
 | … a write, `modify m { v -> e }` | 20 (17) | 0 | 0 | 2 | `corpus/async-logged.bc:33`, `corpus/async-lend-slots.bc:26` |
 | … a write that answers a result, `{ v -> (new, r) }` | 4 | 0 | 1 | 5 | `corpus/async-cancel.bc:30`, `bench/prefix/main.bc:16` |
-| `alloc(…)` | 93 (62) | 0 | 4 | 19 | `corpus/aff-capture.bc:27`, `corpus/aff-counter.bc:19` |
-| `free(…)` | 74 (47) | 0 | 4 | 15 | `corpus/aff-capture.bc:37`, `corpus/aff-depth.bc:43` |
+| `alloc(…)` | 93 (62) | 0 | 4 | 19 | `corpus/clo-capture.bc:27`, `corpus/clo-counter.bc:19` |
+| `free(…)` | 74 (47) | 0 | 4 | 15 | `corpus/clo-capture.bc:37`, `corpus/clo-depth.bc:43` |
 | `let _ = free(c)` | 22 (17) | 0 | 0 | 0 | `corpus/async-logged.bc:38`, `corpus/async-cancel.bc:32` |
-| a value handed back, `let (x, r) = f(x, …)` | 173 (54) | 130 (9) | 4 | 2 | `corpus/aff-counter.bc:29`, `corpus/div-unhandled.bc:24` |
+| a value handed back, `let (x, r) = f(x, …)` | 173 (54) | 130 (9) | 4 | 2 | `corpus/clo-counter.bc:29`, `corpus/div-unhandled.bc:24` |
 | `host[op](…)` outside the kernel text | 42 (18) | 177 (7) | 27 (16) | 1 | `corpus/aoc/2021-10.bc:88`, `bench/handlers-di/main.bc:35` |
-| a typed literal `i64[0]`, `u8[…]` | 376 (48) | 149 (7) | 46 (17) | 94 (30) | `corpus/aff-coerce.bc:19`, `bench/handlers-di/main.bc:31` |
+| a typed literal `i64[0]`, `u8[…]` | 376 (48) | 149 (7) | 46 (17) | 94 (30) | `corpus/clo-coerce.bc:19`, `bench/handlers-di/main.bc:31` |
 | an ascribed injection `(inl e : A + B)` | 45 (19) | 21 (4) | 0 | 4 | `corpus/gen-adapters-fail.bc:34`, `corpus/async-timers.bc:63` |
 | `else { () }` | 88 (45) | 23 (7) | 21 (13) | 12 (9) | `corpus/async-logged.bc:32`, `corpus/aoc/2020-08.bc:41` |
 | `inl`/`inr` written | 1416 (140) | 647 (18) | 24 (7) | 110 (23) | `corpus/13-1-library.bc:11` |
@@ -119,12 +119,12 @@ The last row includes deliberate uses: `div_s32` traps where `/` raises (SPEC §
 | an update assignment `x = x + e` | 197 (93) | 23 (6) | 57 (21) | 35 (23) | `corpus/gen-pipeline-pipe.bc:26`, `bench/handlers-di/main.bc:36` |
 | `0 - x`: no unary minus | 85 (55) | 33 (6) | 2 | 12 (11) | `corpus/async-logged.bc:36`, `lib/slice.bc:27` |
 | an explicit borrow block | 187 (86) | 24 (5) | 27 (24) | 15 (11) | `corpus/async-logged.bc:23`, `corpus/aoc/2024-01.bc:33` |
-| … naming its lifetime `{ 'x, v -> … }` | 116 (60) | 14 (2) | 0 | 1 | `corpus/aff-capture.bc:29` |
+| … naming its lifetime `{ 'x, v -> … }` | 116 (60) | 14 (2) | 0 | 1 | `corpus/clo-capture.bc:29` |
 | … whose body is one call of the borrow | 53 | 15 | 1 | 4 | `corpus/aoc/2024-01.bc:33`, `bench/handlers-di/main.bc:13` |
 | `let r = &x` / `&mut x` | 1 | 0 | 0 | 1 | `corpus/lend-config.bc:38` |
 | `&mut x` / `&x` at a call | 206 / 95 | 12 / 25 | 10 / 55 | 37 / 7 | `corpus/div-unhandled.bc:21` |
 | explicit type arguments at a call `f[A](…)` | 360 (120) | 236 (12) | 18 (11) | 24 (19) | `corpus/async-logged.bc:42`, `corpus/aoc/2020-08.bc:60` |
-| a signature with lifetime parameters | 114 (53) | 107 (10) | 9 (5) | 11 (8) | `corpus/aff-coerce.bc:16` |
+| a signature with lifetime parameters | 114 (53) | 107 (10) | 9 (5) | 11 (8) | `corpus/clo-coerce.bc:16` |
 | … with exactly one | 100 | 91 | 9 | 11 | — |
 | a CBPV type written at the surface `U (…)` | 137 (47) | 105 (9) | 0 | 7 (5) | `corpus/gen-adapters-fail.bc:66` |
 | … a generator stored by ascription `let g : U (pull …) = …; g` | 36 (18) | 15 | 0 | 1 | `corpus/gen-adapters-fail.bc:66`, `corpus/async-r1-cancel.bc:28` |

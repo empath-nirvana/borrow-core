@@ -19,16 +19,16 @@ covers it.
 |---|---|---|
 | `{eᵢ}` | `tuple` | `recI` |
 | `let {xᵢ} = e in b` | `recLet` | `recE` |
-| `e.p`, the other fields affine | `getAt` | `getAt_wf` |
+| `e.p`, the other fields forgettable | `getAt` | `getAt_wf` |
 | `p e` | `injAt` | `injAt_wf` |
 | `case e {p x ⇒ bₚ}` | `vcase` | `vcase_wf` (premises `Branches`) |
 | read field `p` of `Imm @a {…}` | `loadField` = `withload` + `getAt` | `loadField_wf`, `loadField_sem` |
 | match on `Imm @a ⟨…⟩` | `loadCase` = `withload` + `vcase` | `loadCase_wf` |
 | run `g : A ⊸ A ⊗ B` on field `p` of `Mut @a {…}` | `swapField` = `withswap` + `modAt` | `swapField_wf`, `swapField_sem` |
 
-`Affine` is the set of value types a closed term consumes (`dropT`).  `Imm̲ 'b A` is affine
+`Forgettable` is the set of value types a closed term consumes (`forgetT`).  `Imm̲ 'b A` is forgettable
 when `A`'s spine of `⊗`, `⊕` and `[@a]` holds no `μ` or type variable
-(`affine_immReborrow`).  The reborrowing facts are `Imm̲`, outlives, 6.131 (`reborrow_vShape`)
+(`forgettable_immReborrow`).  The reborrowing facts are `Imm̲`, outlives, 6.131 (`reborrow_vShape`)
 and 6.60 (`vC_outlives`) at `valTy`/`sumTy`, each the binary clause iterated.
 -/
 
@@ -282,32 +282,32 @@ theorem recEV {Δ : LifeCtx} {T : VTy} (σ : Shape) {Γ Γp Γb : Ctx VTy} {e bo
     CDerives Δ Γ (recLet σ e body) (.val T) :=
   .ofRet (recE σ hs he (.ret hb))
 
-/-! ### Affine types -/
+/-! ### Forgettable types -/
 
 /-- The value types a closed term consumes: `1`, `0`, `⊗`, `⊕`, `Imm`, `Mut`, `Unk`, `!A`. -/
-inductive Affine : VTy → Prop where
-  | unit : Affine .unit
-  | zero : Affine .zero
-  | tensor {A B} : Affine A → Affine B → Affine (.tensor A B)
-  | sum {A B} : Affine A → Affine B → Affine (.sum A B)
-  | imm {a A} : Affine (.imm a A)
-  | «mut» {a A} : Affine (.mut a A)
-  | unk : Affine .unk
-  | bang {A} : Affine (.bang A)
+inductive Forgettable : VTy → Prop where
+  | unit : Forgettable .unit
+  | zero : Forgettable .zero
+  | tensor {A B} : Forgettable A → Forgettable B → Forgettable (.tensor A B)
+  | sum {A B} : Forgettable A → Forgettable B → Forgettable (.sum A B)
+  | imm {a A} : Forgettable (.imm a A)
+  | «mut» {a A} : Forgettable (.mut a A)
+  | unk : Forgettable .unk
+  | bang {A} : Forgettable (.bang A)
   /-- `I32`, `I64`, dropped as persistent slots.  `[spec §8]` -/
-  | int {w} : Affine (.int w)
+  | int {w} : Forgettable (.int w)
 
-/-- The closed consumer of an affine type. -/
-def dropT : VTy → Expr
+/-- The closed consumer of a forgettable type. -/
+def forgetT : VTy → Expr
   | .unit => .val (.lam (.var 0))
   | .zero => .val (.lam (absurdE (.var 0)))
   | .tensor A B => .val (.lam (.letpair (.var 0)
-      (.seq (.app (dropT A) (.var 1)) (.app (dropT B) (.var 0)))))
-  | .sum A B => .val (.lam (.case (.var 0) (.app (dropT A) (.var 0)) (.app (dropT B) (.var 0))))
+      (.seq (.app (forgetT A) (.var 1)) (.app (forgetT B) (.var 0)))))
+  | .sum A B => .val (.lam (.case (.var 0) (.app (forgetT A) (.var 0)) (.app (forgetT B) (.var 0))))
   | _ => forget
 
-theorem dropT_wf {Δ : LifeCtx} {A : VTy} (hA : Affine A) :
-    ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ Γ (dropT A) (.val (.lolli A .unit)) := by
+theorem forgetT_wf {Δ : LifeCtx} {A : VTy} (hA : Forgettable A) :
+    ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ Γ (forgetT A) (.val (.lolli A .unit)) := by
   induction hA with
   | unit => intro Γ hΓ; exact .lamV (.var (.here hΓ))
   | zero =>
@@ -342,43 +342,43 @@ def VTy.SpineMuFree : VTy → Prop
   | .fam _ => False
   | _ => True
 
-/-- `Imm̲ 'b A` is affine at a `μ`-free spine: `Imm̲` sends `Ref` and `Mut` to `Imm`, `U C` to
+/-- `Imm̲ 'b A` is forgettable at a `μ`-free spine: `Imm̲` sends `Ref` and `Mut` to `Imm`, `U C` to
 `Unk`, and strips `[@a]`. -/
-theorem affine_immReborrow (b : Lifetime.Life) : ∀ A : VTy, A.SpineMuFree →
-    Affine (A.immReborrow b)
+theorem forgettable_immReborrow (b : Lifetime.Life) : ∀ A : VTy, A.SpineMuFree →
+    Forgettable (A.immReborrow b)
   | .unit, _ => .unit
   | .int _, _ => .int
   | .zero, _ => .zero
-  | .tensor A B, ⟨h₁, h₂⟩ => .tensor (affine_immReborrow b A h₁) (affine_immReborrow b B h₂)
-  | .sum A B, ⟨h₁, h₂⟩ => .sum (affine_immReborrow b A h₁) (affine_immReborrow b B h₂)
+  | .tensor A B, ⟨h₁, h₂⟩ => .tensor (forgettable_immReborrow b A h₁) (forgettable_immReborrow b B h₂)
+  | .sum A B, ⟨h₁, h₂⟩ => .sum (forgettable_immReborrow b A h₁) (forgettable_immReborrow b B h₂)
   | .thunk _, _ => .unk
   | .opq _, _ => .unk
   | .ref _, _ => .imm
   | .imm _ _, _ => .imm
   | .mut _ _, _ => .imm
-  | .box _ A, h => affine_immReborrow b A h
+  | .box _ A, h => forgettable_immReborrow b A h
   | .bang _, _ => .bang
   | .unk, _ => .unk
   | .fam _, h => h.elim
 
-theorem affine_valTy : ∀ σ : Shape, σ.All Affine → Affine σ.valTy
+theorem forgettable_valTy : ∀ σ : Shape, σ.All Forgettable → Forgettable σ.valTy
   | .leaf _, h => h
-  | .node s₁ s₂, ⟨h₁, h₂⟩ => .tensor (affine_valTy s₁ h₁) (affine_valTy s₂ h₂)
+  | .node s₁ s₂, ⟨h₁, h₂⟩ => .tensor (forgettable_valTy s₁ h₁) (forgettable_valTy s₂ h₂)
 
 /-! ### Projection -/
 
 /-- `e.p`: the field at `p`, every other field consumed. -/
 def getAt : Shape → FPath → Expr → Expr
   | .node s₁ s₂, false :: p, e =>
-      .letpair e (.seq (.app (dropT s₂.valTy) (.var 0)) (getAt s₁ p (.var 1)))
+      .letpair e (.seq (.app (forgetT s₂.valTy) (.var 0)) (getAt s₁ p (.var 1)))
   | .node s₁ s₂, true :: p, e =>
-      .letpair e (.seq (.app (dropT s₁.valTy) (.var 1)) (getAt s₂ p (.var 0)))
+      .letpair e (.seq (.app (forgetT s₁.valTy) (.var 1)) (getAt s₂ p (.var 0)))
   | _, _, e => e
 
-/-- Projection, for a record whose fields are affine.  `[spec §5]` -/
+/-- Projection, for a record whose fields are forgettable.  `[spec §5]` -/
 theorem getAt_wf {Δ : LifeCtx} :
     ∀ (σ : Shape) (p : FPath) {A : VTy} {Γ : Ctx VTy} {e : Expr},
-      σ.get? p = some A → σ.All Affine → CDerives Δ Γ e (.val σ.valTy) →
+      σ.get? p = some A → σ.All Forgettable → CDerives Δ Γ e (.val σ.valTy) →
       CDerives Δ Γ (getAt σ p e) (.val A)
   | .leaf _, [], _, _, _, hp, _, he => by
       simp only [Shape.get?, Option.some.injEq] at hp; subst hp; exact he
@@ -389,14 +389,14 @@ theorem getAt_wf {Δ : LifeCtx} :
       exact .letpairV (split_kill' Γ) he
         (.seqV (.left (.right (deadSplit kd)))
           (.lolliE (.left (.dead (deadSplit kd))) (.var (.here (.cons kd)))
-            (dropT_wf (affine_valTy s₂ ha₂) (.cons (.cons kd))))
+            (forgetT_wf (forgettable_valTy s₂ ha₂) (.cons (.cons kd))))
           (getAt_wf s₁ p hp ha₁ (.var (.there (.here kd)))))
   | .node s₁ s₂, true :: p, _, Γ, _, hp, ⟨ha₁, ha₂⟩, he => by
       have kd := kill_dead Γ
       exact .letpairV (split_kill' Γ) he
         (.seqV (.right (.left (deadSplit kd)))
           (.lolliE (.dead (.left (deadSplit kd))) (.var (.there (.here kd)))
-            (dropT_wf (affine_valTy s₁ ha₁) (.cons (.cons kd))))
+            (forgetT_wf (forgettable_valTy s₁ ha₁) (.cons (.cons kd))))
           (getAt_wf s₂ p hp ha₂ (.var (.here (.cons kd)))))
 
 /-! ### Variants -/
@@ -459,11 +459,11 @@ theorem allI_fresh {Δ : LifeCtx} {Γ : Ctx VTy} {S : VTy} {M : Expr} {y : LifeV
 
 /-- Reading field `p` of `e : Imm @a {…}`.  The body runs at `'y ⊏ ⊓Δ` with the field's image
 `Imm̲ 'y A` at index 0 and returns `['y] B`; the other fields' images are consumed by
-`getAt`, which needs them affine.  `[spec §5]` -/
+`getAt`, which needs them forgettable.  `[spec §5]` -/
 theorem loadField_wf {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {σ : Shape} {p : FPath}
     {A : VTy} {y : LifeVar} {e body : Expr} {B : VTy} (hΔ : Δ.Ok)
     (he : CDerives Δ Γ e (.val (.imm a σ.valTy))) (hp : σ.get? p = some A)
-    (haff : (σ.map (VTy.immReborrow (.var y))).All Affine)
+    (hforget : (σ.map (VTy.immReborrow (.var y))).All Forgettable)
     (hy : Δ.find? y = none) (hf₁ : ¬ VFree y σ.valTy) (hf₂ : ¬ VFree y B)
     (hb : CDerives (Δ.extend y Δ.meetOfDom)
       (⟨A.immReborrow (.var y), true⟩ :: ⟨σ.valTy.immReborrow (.var y), false⟩ ::
@@ -473,7 +473,7 @@ theorem loadField_wf {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {σ : Sha
   refine .lolliE (split_kill Γ).toP ?_ (.lolliE (split_kill' Γ).toP he (.withload y kd.toP hy hf₁ hf₂))
   refine .thunkV rfl (allI_fresh (S := .unit) hΔ hy kd (.ret (.lamV ?_)))
   refine .eletV (.left (.dead (deadSplit kd))) ?_ hb
-  refine getAt_wf _ p (Shape.get?_map _ σ p hp) haff ?_
+  refine getAt_wf _ p (Shape.get?_map _ σ p hp) hforget ?_
   rw [← immReborrow_valTy]
   exact .var (.here (.cons kd))
 
@@ -560,13 +560,13 @@ theorem swapField_wf {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {σ : Sha
 theorem loadField_sem {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {σ : Shape} {p : FPath}
     {A : VTy} {y : LifeVar} {e body : Expr} {B : VTy} (hΔ : Δ.Ok)
     (he : CDerives Δ Γ e (.val (.imm a σ.valTy))) (hp : σ.get? p = some A)
-    (haff : (σ.map (VTy.immReborrow (.var y))).All Affine)
+    (hforget : (σ.map (VTy.immReborrow (.var y))).All Forgettable)
     (hy : Δ.find? y = none) (hf₁ : ¬ VFree y σ.valTy) (hf₂ : ¬ VFree y B)
     (hb : CDerives (Δ.extend y Δ.meetOfDom)
       (⟨A.immReborrow (.var y), true⟩ :: ⟨σ.valTy.immReborrow (.var y), false⟩ ::
         ⟨.unit, false⟩ :: kill Γ) body (.val (.box (.var y) B))) :
     SemV Δ Γ (loadField σ p y e body) B :=
-  fundamentalC (loadField_wf hΔ he hp haff hy hf₁ hf₂ hb)
+  fundamentalC (loadField_wf hΔ he hp hforget hy hf₁ hf₂ hb)
 
 theorem swapField_sem {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {σ : Shape} {p : FPath}
     {A : VTy} {m g : Expr} {B : VTy}

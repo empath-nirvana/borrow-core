@@ -1,8 +1,0 @@
--- A `linear` binder opts out of implicit destructors (SPEC §12): the cell `r` has a destructor,
--- but it is declared `linear`, so leaving it unused is an error.
-type B = 1 + 1
-
-main : F 1 =
-  linear r <- return (alloc[B] (inl ()));
-  return ()
--- expect: 6:10: `r` is declared `linear` and is not consumed in its scope

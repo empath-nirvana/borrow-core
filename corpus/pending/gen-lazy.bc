@@ -1,4 +1,4 @@
--- pending: a continuation that holds a capability across an affine operation (SPEC §19, kernel)
+-- pending: a continuation that holds a capability across a cancellable operation (SPEC §19, kernel)
 -- A generator that writes: `ticks` writes `>` before its first `yield` and each number before
 -- yielding it, through the output capability it is given, and hands it back. With it, a stored
 -- generator's laziness is observable: one stored and closed at once writes nothing, one observed
@@ -9,7 +9,7 @@
 -- generator's `close` cancels the continuation, which answers `()`, so the capability could not
 -- come back.
 --
--- now: 22:5: `o`, of type `ref output`, is live across a computation that may abort, and its type has no destructor: an abortive operation of the bound computation would abandon it
+-- now: 22:5: `o`, of type `ref output`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell
 
 include yield
 

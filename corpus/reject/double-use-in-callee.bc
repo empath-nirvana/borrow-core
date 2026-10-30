@@ -1,4 +1,4 @@
--- expect: 8:3: `v` is used twice here, and its type `array_imm 'a i32` is not persistent
+-- expect: 8:3: `v` is used twice here, and its type `array_imm 'a i32` is linear
 -- A view used twice inside a callee called from a borrow block (#145, #167): the double use is
 -- reported where it is, in `survey`, not at the block that calls it.
 

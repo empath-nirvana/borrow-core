@@ -62,7 +62,7 @@ The programs are in `experiments/AsyncCap/bc/`. Each is marked pending and recor
 `bcc check` message (they do not parse: the surface is provisional). A1 and A4 run, and are in the
 corpus (`corpus/async-scheduler.bc`, `corpus/async-map.bc`; U2, SPEC §30), and so do A5 and A6
 (`corpus/async-logged.bc`, `corpus/async-cancel.bc`; SPEC §32). `lib/async.bc` EXISTS
-(U2, SPEC §30). `effect Async { ctl await() }` declares `await : 1 ↠^aff 1`. The scheduler is, per
+(U2, SPEC §30). `effect Async { ctl await() }` declares `await : 1 ↠^cancel 1`. The scheduler is, per
 task, a handler of `Async` whose clause stores the task's continuation as the task's rest
 (`with spawn { … }`), and across tasks a loop that resumes the queued tasks until none is pending
 (`run_until_empty`). The spelling `async::run { s -> s.spawn { … } }` below is the designed one;
@@ -151,14 +151,14 @@ so today a stored `κ` cannot be given a `[@d]` type.
   proved. This is established for the extended judgment by composition: `handle_compatCB` takes
   the handled computation's *semantic* judgment, which `fundamentalC_pin` supplies (PROVED once
   ported, by adding one case; no new obligation).
-- **A stored block or closure** is `[]I` at its captures' bound, `[@c] U(Aff^c A B)` for one that
-  is called many times. EXISTS (`boxI_compatC`; SPEC §22's affine closure).
+- **A stored block or closure** is `[]I` at its captures' bound, `[@c] U(Clo^c A B)` for one that
+  is called many times. EXISTS (`boxI_compatC`; SPEC §22's `Clo` closure).
 
 ### 2.4 What of (c) FnMut-shaped blocks and (d) aliasing the acceptance programs need
 
-- **(c)** A block called many times while capturing a `Mut` is SPEC §22's affine closure
-  `Aff^c A B = νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`, with an effectful variant positive at closed
-  operation types (`affEffBody_nuOk`). EXISTS. A2's `bump` and A6's `peek` are such closures over
+- **(c)** A block called many times while capturing a `Mut` is SPEC §22's `Clo` closure
+  `Clo^c A B = νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`, with an effectful variant positive at closed
+  operation types (`cloEffBody_nuOk`). EXISTS. A2's `bump` and A6's `peek` are such closures over
   a view, held across `await`: that is what makes them need R1, not what makes them typable.
 - **(d)** Not needed. A5 shares a stateful capability between tasks by making it an operation of
   the scheduler's handler (`log`), whose state the handler owns and serialises: state behind
@@ -284,7 +284,7 @@ a negative program (§6.2).
    anything holding it is handed to a handler (`n5`, `n9`).
 4. **What leaves a relaxed lend.** Its answer `[@x] B` has `B` free of `'x`, as for every lend.
 5. **Continuations are used at most once** (`refuses_R_clauses`, `not_der_at08`): EXISTS. Every
-   affine continuation is resumed or cancelled, so a task's finalisers run (A6).
+   cancellable continuation is resumed or cancelled, so a task's finalisers run (A6).
 
 **Developer-facing annotation: none is needed.** The programmer writes `borrow`, `&x`, `&mut x`,
 `await`, `spawn` and `cancel` as ordinary code. The elaborator chooses L0 where it applies, R1
@@ -391,13 +391,13 @@ proof route can be wrong where the rule is not, and then every theorem resting o
   91 cases, **59 proved, 6 proved at part of their instances, 26 not derived** (each its own
   `sorry`, `fl_…`; README table). At the fragment of proved rules there is no open step
   (`law2_frag`, `law2_depth1_frag`). GhostEnd PROVES it for straight-line, branching, looping and
-  closure-holding borrowers instance by instance (§3.2), and at affine yields for straight-line
+  closure-holding borrowers instance by instance (§3.2), and at cancellable yields for straight-line
   borrowers (`relendO_chain`). No rule failed in a machine-checked configuration (Law2's kill
   criterion, not met).
 - **What that route leaves open:** Law 2's 26 rules not derived (the inner
   lends, `[]I` at a type that does not outlive, `∀` with `U` in the context, `μ`/`ν`, writes
   through a `mut` leaf of a family, `[raise]`/`[then]`, `[handle]` of the lenders' name); the
-  affine (cancel) path for every borrower, not only straight-line ones; and nested relaxed lends,
+  cancel path for every borrower, not only straight-line ones; and nested relaxed lends,
   which Law 2 covers on the lender side (`fold_mixed`, every mixed stack) but not inside
   `PDerives`. At the cancel path the route's table must re-lend the place for the borrower's own
   finalisers before the owner returns: `[then]` gives a finaliser the body's context, so it may

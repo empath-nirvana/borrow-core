@@ -1,15 +1,15 @@
--- pending: a continuation that holds a capability across an affine operation (SPEC §19, kernel)
+-- pending: a continuation that holds a capability across a cancellable operation (SPEC §19, kernel)
 -- A generator over the input: `digits` reads the bytes of the input it is given and yields each
 -- decimal digit, then hands the input back. `main` reads the number.
 --
--- Blocked by the kernel: `yield` is affine (`ctl`), so its continuation may be cancelled, and
+-- Blocked by the kernel: `yield` is cancellable (`ctl`), so its continuation may be cancelled, and
 -- what is live across it must drop (§19's `[let]` side condition, or a `[then]` finaliser). The
--- input's iterator holds the input capability, `ref input`, which has no destructor (§12): it must
+-- input's iterator holds the input capability, `ref input`, which is linear with no derived drop (§12): it must
 -- be handed back, and a cancel answers `()`, with no residual. A `linear ctl` operation would
 -- allow it, without `break` (its continuation cannot be cancelled). What is missing is a
 -- continuation whose cancel hands back a residual, or a capability with a destructor.
 --
--- now: 18:27: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abort, and its type has no destructor: an abortive operation of the bound computation would abandon it
+-- now: 18:27: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell
 
 include yield
 

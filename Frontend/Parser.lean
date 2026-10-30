@@ -759,7 +759,7 @@ def opNameNI (what : String) : P (Nat × Nat) := do
     | none => expected what
   | _ => expected what
 
-/-- The entries of a row up to its `]`: `n.i q A ~> B`, separated by `,`; `q` is `lin`, `aff` or
+/-- The entries of a row up to its `]`: `n.i q A ~> B`, separated by `,`; `q` is `lin`, `cancel` or
 `unr`, read as a name here and nowhere else. -/
 def rowEntries : Nat → P Row
   | 0 => outOfFuel
@@ -769,9 +769,9 @@ def rowEntries : Nat → P Row
     let tq ← peek
     let q ← match tq.tok with
       | .ident "lin" => discard bump; pure Qual.lin
-      | .ident "aff" => discard bump; pure Qual.aff
+      | .ident "cancel" => discard bump; pure Qual.cancel
       | .ident "unr" => discard bump; pure Qual.unr
-      | _ => expected "a qualifier `lin`, `aff` or `unr`"
+      | _ => expected "a qualifier `lin`, `cancel` or `unr`"
     let A ← rvty n
     expectSym "~>"
     let B ← rvty n
@@ -957,9 +957,9 @@ end
 /-- `let p = V; M`, the value `V` already bound or a value without a lent capability. -/
 def bindPat (sp : Span) : Nat → Pat → Val → Comp → P Comp
   | 0, _, _, M => pure M
-  | _ + 1, .var x, V, M => pure (.bind sp x none (.ret sp V) M false)
+  | _ + 1, .var x, V, M => pure (.bind sp x none (.ret sp V) M)
   | _ + 1, .wild sp', V, M => do
-    pure (.bind sp ⟨← freshName "io_d", sp'⟩ none (.ret sp V) M false)
+    pure (.bind sp ⟨← freshName "io_d", sp'⟩ none (.ret sp V) M)
   | _ + 1, .unit _, V, M => pure (.letUnit sp V M)
   | n + 1, .pair _ p q, V, M => do
     let x : Ident := match p with
@@ -1009,7 +1009,7 @@ def Val.lentNames (vars : Bool := false) : Val → List String
 names too. -/
 def Comp.lentNames (vars : Bool := false) : Comp → List String
   | .ret _ V | .absurd _ V => V.lentNames vars
-  | .bind _ _ _ M N _ => M.lentNames vars ++ N.lentNames vars
+  | .bind _ _ _ M N => M.lentNames vars ++ N.lentNames vars
   | .letUnit _ V M | .letPair _ _ _ V M => V.lentNames vars ++ M.lentNames vars
   | .case _ V _ M _ N | .loop _ _ _ V M N => V.lentNames vars ++ M.lentNames vars ++ N.lentNames vars
   | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M => M.lentNames vars
@@ -1038,7 +1038,7 @@ def Val.withPlaces (loc : List String) : Val → List String
 /-- `Val.withPlaces` of a computation. -/
 def Comp.withPlaces (loc : List String) : Comp → List String
   | .ret _ V | .absurd _ V => V.withPlaces loc
-  | .bind _ x _ M N _ => M.withPlaces loc ++ N.withPlaces (x.name :: loc)
+  | .bind _ x _ M N => M.withPlaces loc ++ N.withPlaces (x.name :: loc)
   | .letUnit _ V M => V.withPlaces loc ++ M.withPlaces loc
   | .letPair _ x y V M => V.withPlaces loc ++ M.withPlaces (x.name :: y.name :: loc)
   | .case _ V x M y N =>
@@ -1053,7 +1053,7 @@ end
 
 /-- The names a computation binds, outside nested closures. -/
 def Comp.boundNames : Comp → List String
-  | .bind _ x _ M N _ => x.name :: (M.boundNames ++ N.boundNames)
+  | .bind _ x _ M N => x.name :: (M.boundNames ++ N.boundNames)
   | .letPair _ x y _ M => x.name :: y.name :: M.boundNames
   | .case _ _ x M y N => x.name :: y.name :: (M.boundNames ++ N.boundNames)
   | .loop _ _ src _ M N => src.bound ++ (M.boundNames ++ N.boundNames)
@@ -1115,21 +1115,21 @@ def letVal (sp : Span) (n : Nat) (p : Pat) (A : Option VTy) (V : Val) (M : Comp)
     let b ← freshName "io_b"
     -- The variables the block hands back beside its result are rebound too.
     let p := if thr.isEmpty then p else .pair sp p (varPat sp thr)
-    return .bind sp ⟨b, sp⟩ none (.ret sp V) (← bindPat sp n (.pair sp place p) (.var sp b) M) false
+    return .bind sp ⟨b, sp⟩ none (.ret sp V) (← bindPat sp n (.pair sp place p) (.var sp b) M)
   -- `run M` and `modify &mut x { … }` hand back what they write beside their value.
   if !thr.isEmpty && V.handsBack then
     let b ← freshName "io_b"
-    return .bind sp ⟨b, sp⟩ none (.ret sp V) (← bindPat sp n (.pair sp p (varPat sp thr)) (.var sp b) M) false
+    return .bind sp ⟨b, sp⟩ none (.ret sp V) (← bindPat sp n (.pair sp p (varPat sp thr)) (.var sp b) M)
   match p, A with
-  | .var x, _ => pure (.bind sp x A (.ret sp V) M false)
-  | .wild sp', _ => pure (.bind sp ⟨← freshName "io_d", sp'⟩ A (.ret sp V) M false)
+  | .var x, _ => pure (.bind sp x A (.ret sp V) M)
+  | .wild sp', _ => pure (.bind sp ⟨← freshName "io_d", sp'⟩ A (.ret sp V) M)
   | .unit _, none => if V.lends then viaBind else bindPat sp n p V M
   | .pair _ (.var _) (.var _), none => if V.lends then viaBind else bindPat sp n p V M
   | _, _ => viaBind
 where
   viaBind : P Comp := do
     let t ← freshName "io_t"
-    pure (.bind sp ⟨t, sp⟩ A (.ret sp V) (← bindPat sp n p (.var sp t) M) false)
+    pure (.bind sp ⟨t, sp⟩ A (.ret sp V) (← bindPat sp n p (.var sp t) M))
 
 /-- The constant keyword of a token, if it is one. -/
 def constKw? : Tok → Option CKw
@@ -1192,7 +1192,7 @@ def nest (sp : Span) : List Val → Val
 
 /-- A computation with `f` applied at each terminal reached through tail positions. -/
 def wrapTerms (f : Comp → Comp) : Comp → Comp
-  | .bind sp x A M N lin => .bind sp x A M (wrapTerms f N) lin
+  | .bind sp x A M N => .bind sp x A M (wrapTerms f N)
   | .letUnit sp V M => .letUnit sp V (wrapTerms f M)
   | .letPair sp x y V M => .letPair sp x y V (wrapTerms f M)
   | .case sp V x M y N => .case sp V x (wrapTerms f M) y (wrapTerms f N)
@@ -1234,7 +1234,7 @@ def handOn (h : HandOn) (xs : List String) (M : Comp) : Comp :=
   let bound (T : Comp) : Comp :=
     .bind T.span ⟨h.t, T.span⟩ h.A T
       (.ret T.span (if h.keep then .pair T.span (.var T.span h.t) (varTuple T.span xs)
-        else varTuple T.span xs)) false
+        else varTuple T.span xs))
   wrapTerms (fun T => match h.direct, h.keep, h.A, T with
     | true, true, none, .ret sp V =>
       -- An exit (`break`, `continue`, `return e` in a loop) stays a terminal of its own.
@@ -1250,7 +1250,7 @@ def joinBind (sp : Span) (n : Nat) (xs : List String) (p : Option Pat) (M : Comp
   let q := match p with
     | some p => .pair sp p (varPat sp xs)
     | none => varPat sp xs
-  return .bind sp ⟨j, sp⟩ none M (← bindPat sp n q (.var sp j) N) false
+  return .bind sp ⟨j, sp⟩ none M (← bindPat sp n q (.var sp j) N)
 
 /-- A `match`'s or `if`'s arms handing on the variables `xs` alone (a statement's join). -/
 def handArms (xs : List String) : Comp → Comp
@@ -1262,14 +1262,14 @@ def handArms (xs : List String) : Comp → Comp
     handOn { t := "io_ju", keep := false, direct := true } xs M
   | M => M
 
-/-- `x <- M; N`, `x : A <- M; N` or `linear x <- M; N`, with the finaliser `unwind (D)` when it has
-one. A head that writes the enclosing `let mut` variables `xs` hands them on beside its value, and
-`x` is bound to the value. -/
+/-- `x <- M; N` or `x : A <- M; N`, with the finaliser `unwind (D)` when it has one. A head that
+writes the enclosing `let mut` variables `xs` hands them on beside its value, and `x` is bound to
+the value. -/
 def bindForm (sp : Span) (n : Nat) (x : Ident) (A : Option VTy) (M : Comp) (D : Option Comp)
-    (N : Comp) (lin : Bool) (xs : List String) : P Comp := do
+    (N : Comp) (xs : List String) : P Comp := do
   let mk (M : Comp) : Comp := match D with
     | some D => .unwind sp x A M D N
-    | none => .bind sp x A M N lin
+    | none => .bind sp x A M N
   if xs.isEmpty then return mk M
   let v ← freshName "io_jv"
   joinBind sp n xs (some (.var ⟨v, sp⟩)) (handOn { t := "io_jr", A, direct := true } xs M)
@@ -2002,8 +2002,8 @@ def comp : Nat → P Comp
   | 0 => outOfFuel
   | n + 1 => compG n false
 
-/-- A computation: a binding form (`x <- M; N`, `x : A <- M; N`, `linear x <- M; N`, `let`,
-    `fun`, `Fun`, `for`), which extends as far right as possible, or a statement. In the head `M`
+/-- A computation: a binding form (`x <- M; N`, `x : A <- M; N`, `let`, `fun`, `Fun`, `for`),
+    which extends as far right as possible, or a statement. In the head `M`
     of `x <- M; N` (`head`), a statement is not followed by `; N`: the `;` is the binding's. -/
 def compG : Nat → Bool → P Comp
   | 0, _ => outOfFuel
@@ -2022,7 +2022,7 @@ def compG : Nat → Bool → P Comp
       let x ← bindOrAssign ⟨x, t.span⟩
       let N ← comp n
       let sp ← spanFrom st
-      bindForm sp n x none M D N false xs
+      bindForm sp n x none M D N xs
     | .ident x, .sym ":" =>
       discard bump; discard bump
       let A ← vty n
@@ -2034,7 +2034,7 @@ def compG : Nat → Bool → P Comp
       let x ← bindOrAssign ⟨x, t.span⟩
       let N ← comp n
       let sp ← spanFrom st
-      bindForm sp n x (some A) M D N false xs
+      bindForm sp n x (some A) M D N xs
     | .ident x₀, .sym "=" =>
       -- `x = e`: a `let mut` variable rebound (typed elaboration §5.2), the variable the name
       -- resolves to (SPEC §41, rule R2).
@@ -2053,22 +2053,11 @@ def compG : Nat → Bool → P Comp
         let sp ← spanFrom st
         -- A frame's value is rebound as `let x = …` binds it (`letVal`).
         if isFrame then return ← letVal sp n (.var ⟨x, t.span⟩) none V N thr
-        pure (.bind sp ⟨x, t.span⟩ none (.ret V.span V) N false)
+        pure (.bind sp ⟨x, t.span⟩ none (.ret V.span V) N)
       else
         let sp ← spanFrom st
         if isFrame then return ← letVal sp n (.var ⟨x, t.span⟩) none V (.ret sp (.unit sp)) thr
-        pure (.bind sp ⟨x, t.span⟩ none (.ret V.span V) (.ret sp (.unit sp)) false)
-    | .kw "linear", .ident x =>
-      discard bump
-      let xt ← bump
-      let A ← if ← isSym ":" then do discard bump; pure (some (← vty n)) else pure none
-      expectSym "<-"
-      let (M, xs) ← frame (compG n true)
-      expectSym ";"
-      withScope do
-      let x ← bindOrAssign ⟨x, xt.span⟩
-      let N ← comp n
-      bindForm (← spanFrom st) n x A M none N true xs
+        pure (.bind sp ⟨x, t.span⟩ none (.ret V.span V) (.ret sp (.unit sp)))
     | .kw "for", _ | .kw "while", _ | .kw "loop", .sym "{" => loopC n st none
     | .life l, .sym ":" =>
       -- `'ℓ: for …`, `'ℓ: while …`, `'ℓ: loop …`: a labelled loop.
@@ -2145,7 +2134,7 @@ def compG : Nat → Bool → P Comp
           | _ => failAt (← spanFrom st) "`let … = for …` binds a name"
         let N ← comp n
         let sp ← spanFrom st
-        return .loop sp ℓ (.each x) V M (.bind sp r A (.ret sp (forResOf sp els)) N false)
+        return .loop sp ℓ (.each x) V M (.bind sp r A (.ret sp (forResOf sp els)) N)
       if (← peek).tok == .kw "match" || (← peek).tok == .kw "if" then
         let (M, xs) ← frame (compPrefix n)
         expectSym ";"
@@ -2156,10 +2145,10 @@ def compG : Nat → Bool → P Comp
         unless xs.isEmpty do
           return ← joinBind sp n xs (some p) (handOn { t := "io_jr", A, direct := true } xs M) N
         match p with
-        | .var x => return .bind sp x A M N false
+        | .var x => return .bind sp x A M N
         | p =>
           let tv ← freshName "io_t"
-          return .bind sp ⟨tv, sp⟩ A M (← bindPat sp n p (.var sp tv) N) false
+          return .bind sp ⟨tv, sp⟩ A M (← bindPat sp n p (.var sp tv) N)
       modify fun s => { s with blockThreads := [], pendingRun := none }
       let V ← val n
       -- `let y = x.f;`: the place `x` lent for the read, and rebound (SPEC §42, E5).
@@ -2282,8 +2271,7 @@ def statement : Nat → Pos → Bool → P Comp
           let V ← valAtom n
           let sp ← spanFrom st
           let a ← freshName "io_a"
-          pure (Comp.bind sp ⟨a, sp⟩ none (.ret sp V) (.app sp (.force t.span ⟨f, t.span⟩) ⟨a, sp⟩)
-            false, none)
+          pure (Comp.bind sp ⟨a, sp⟩ none (.ret sp V) (.app sp (.force t.span ⟨f, t.span⟩) ⟨a, sp⟩), none)
         else pure (Comp.force (← spanFrom st) ⟨f, t.span⟩, none)
       | tok, _ =>
         if startsComp tok then pure (← compPrefix n, none)
@@ -2325,7 +2313,7 @@ def statement : Nat → Pos → Bool → P Comp
       | some V => letVal sp n (.wild sp) none V N thr
       | none =>
         let d ← freshName "io_s"
-        pure (.bind sp ⟨d, sp⟩ none S N false)
+        pure (.bind sp ⟨d, sp⟩ none S N)
     else
       match frameV with
       | some V =>
@@ -2490,11 +2478,11 @@ def loopC : Nat → Pos → Option Ident → P Comp
         let N ← comp n
         let sp ← spanFrom st
         pure (.loop sp ℓ (.each x) V M (match els with
-          | some d => .bind sp ⟨r, sp⟩ none (.ret sp (forResOf sp (some d))) N false
+          | some d => .bind sp ⟨r, sp⟩ none (.ret sp (forResOf sp (some d))) N
           | none => N))
       else
         pure (.loop sp₀ ℓ (.each x) V M (match els with
-          | some d => .bind sp₀ ⟨r, sp₀⟩ none (.ret sp₀ (forResOf sp₀ (some d))) (.ret sp₀ (.var sp₀ r)) false
+          | some d => .bind sp₀ ⟨r, sp₀⟩ none (.ret sp₀ (forResOf sp₀ (some d))) (.ret sp₀ (.var sp₀ r))
           | none => .ret sp₀ (.unit sp₀)))
     | .kw "while" =>
       -- `while c { M }; N`: the condition is tested before each turn.
@@ -2829,7 +2817,7 @@ def decl (n : Nat) : P Decl := do
     pure (.data (← spanFrom st) d)
   | .kw "effect" =>
     -- `effect E[T, …] { fn op(x: A, …) -> B; ctl op(…) -> B; … }` (SPEC §18, §19); `-> B` left
-    -- out is `-> 1`. `ctl` is affine; `linear ctl` linear, `multi ctl` unrestricted.
+    -- out is `-> 1`. `ctl` is cancellable; `linear ctl` must resume, `multi ctl` unrestricted.
     discard bump
     let x ← uident "an effect name"
     let tps ← if ← isSym "[" then do
@@ -2847,7 +2835,7 @@ def decl (n : Nat) : P Decl := do
           let q ← if ← isKw "linear" then do discard bump; pure Qual.lin
             else match (← peek).tok with
               | .ident "multi" => do discard bump; pure Qual.unr
-              | _ => pure Qual.aff
+              | _ => pure Qual.cancel
           match (← peek).tok with
           | .ident "ctl" => do discard bump; pure (OpKind.ctl q)
           | _ => expected "`fn` or `ctl` (an operation)"
@@ -3169,7 +3157,7 @@ where
   again. -/
   bindParams (sp : Span) (p : String) : List Ident → Comp → P Comp
     | [], M => pure (.letUnit sp (.var sp p) M)
-    | [x], M => pure (if x.name == p then M else .bind sp x none (.ret sp (.var sp p)) M false)
+    | [x], M => pure (if x.name == p then M else .bind sp x none (.ret sp (.var sp p)) M)
     | [x, y], M => pure (.letPair sp x y (.var sp p) M)
     | x :: xs, M => do
       let r ← freshName "io_p"

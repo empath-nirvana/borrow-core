@@ -1,7 +1,7 @@
 -- SPEC §29, R1, in the core text (docs/async-capabilities.md §6.2 row 16,
 -- `experiments/AsyncCap/bc/accept/m4-cancel-finaliser-writes.bc`): a task cancelled inside a
 -- relaxed lend whose own finaliser writes through the view. `withbor2r` lends `c` as `m`; the
--- body performs `1.0` (affine, resuming) under `[then]`, whose finaliser writes 99 through `m`.
+-- body performs `1.0` (cancellable, resuming) under `[then]`, whose finaliser writes 99 through `m`.
 -- The handler's clause cancels the continuation at the operation: the borrower's finaliser runs
 -- first, with the lend still open, then the lend ends and the owner's finaliser frees `c`.
 -- `bcc interp --check tags` checks that order: a write through `m` after the lend ended is
@@ -19,7 +19,7 @@ main : F (i32 + i32) =
         let (c, v) = p; w <- return (free[i32] c); return (inr (plus (v, w)))) : !U (ref i32 * i32 -o F (i32 + i32))),
       (((!thunkv fun (q : i32 * U ((1 -o F (i32 + i32)) & F 1)) ->
         let (x, k) = q; u <- (force k).2; return (inl x)), ()) : !U (i32 * U ((1 -o F (i32 + i32)) & F 1) -o F (i32 + i32)) * 1)) (
-    withbor2r['x, dom, i32, i32, [1.0 aff i32 ~> 1]](c, m) (
+    withbor2r['x, dom, i32, i32, [1.0 cancel i32 ~> 1]](c, m) (
       u <- perform[1.0] i32[1] unwind (
         q <- return (withswap['x, i32, 1] m (thunkv fun (v : i32) -> return (i32[99], ())));
         let (m, z) = q;

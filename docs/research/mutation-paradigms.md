@@ -6,7 +6,7 @@
   1. **Loop-carried values** cover accumulators, counters, trackers, flags, state machines and rotations (C1–C4, C8, C11). That is 30 of the 51 Rust bench sites and most of the corpus sites.
   2. **Lends at the call** (`f(&mut x)`, SPEC §11 / ergonomics A4) and **place update** cover collections (C6, C7, C10, C16).
   3. **Answering handlers with state** cover injected services and memo tables (C9, C14).
-  4. **Affine closures (`Aff`) with state** cover stateful closures that escape (C13, the counter case).
+  4. **`Clo` closures (`Clo`) with state** cover stateful closures that escape (C13, the counter case).
   5. **Generators** cover callbacks we can invert (C13 visitors).
 - **The trap the user describes is real, but it sits in the plumbing, not in the binder.** About a quarter of corpus `let mut` sites (C16: 333 of 1201 by mechanical bucket, 9 of 45 in the hand sample) do nothing that Rust's `let mut` does. They exist to rebind a linear value that a consuming call hands back: `let (v2, x) = peek(v, j); v = v2` and `let mut x = x`. Rust writes these as `&mut` calls. Removing this plumbing is the largest available win, and most of the mechanism for it already exists: `f(&mut x)` rewrote 149 of 177 sites with the same output.
 - **"Mutability is a state effect" is right as theory and wrong as an elaboration target.** Koka implements `var` with a state handler (verified). Our `handle_fold` reads handler state as state passing. But elaborating a variable as `borrow mut (alloc e) { … }` over the rest of its scope fails to type wherever a resuming operation occurs: `await`, `yield`, and every `while` once B2 makes it a Div loop. The reasons are T1 (#172) and Row.Unwind (SPEC §14). `handle_fold` is a one-way `Steps` fact about one cell, so it does not justify choosing between a register and a cell per site. So: use the State laws to say what an assignment means, and keep today's threading as how it runs.
@@ -77,7 +77,7 @@ Key:
 | T09 particles | X today | A | A | X | A | W |
 | T10 swap / rotate / gcd | N | N | N | W (stream seeds) | N | N |
 | T11 config builder | N | W (#141) | W (#141) | W (#141) | N (#141) | W |
-| T12 closures (#586) | C (vars as capabilities, unbuilt) | X | A | (2)(3) N, (1) C | X ((2) only) | C (`aff {}`, N1) |
+| T12 closures (#586) | C (vars as capabilities, unbuilt) | X | A | (2)(3) N, (1) C | X ((2) only) | C (`clo {}`, N1) |
 | T13 async tellers | X (R1) | W? | X (blocked pending/async-bank shape) | X | A, unverified | X |
 | T14 RNG + logger + buffer | X (§18 rows) | A | W | X (§18 rows) | A | N\* (`for slot in` a view parameter is a reborrow) |
 
@@ -110,7 +110,7 @@ There are seven parts, D1–D7, and one invariant. Spellings are provisional thr
   | Same frame: body, arms, heads | Join points (#581 / PR #585, U3) |
   | Inside an in-place `run` | ANF into the enclosing sequence, then joined |
   | Inside a closure written at a block parameter `!(A => B)` of a declared function (§30) | `x` is threaded into the block and handed back, exactly as §32 threads a capability ("takes them first and hands them back first", `!U(C ⊗ A ⊸ F_r (C ⊗ B))`). `corpus/block-capability.bc` is #586's shape for handler state and gives 6 today. |
-  | Stored thunk, stored or let-bound closure, a `!` value that is not a block, or anything escaping | **Refused**: "`x` is written inside a closure that outlives this statement; return the value, pass the closure as a block, or put the state in a cell / `Aff`" |
+  | Stored thunk, stored or let-bound closure, a `!` value that is not a block, or anything escaping | **Refused**: "`x` is written inside a closure that outlives this statement; return the value, pass the closure as a block, or put the state in a cell / `Clo`" |
 
 - **Laws.** In place, the global-state laws for one location (get-get, put-get, put-put, get-put; Plotkin–Power, equation list unverified) make threading equal to a cell. The refusal covers exactly the places where threading would not equal a cell. None of these laws is a Core theorem today, so stating them is a proof task.
 - **Status.** Elaborator only, with no kernel change. It needs a SPEC entry because it changes which programs are accepted. Extending §32's block rule from capabilities to `let mut` values is new elaborator work. **Hypothesis:** it is the same derivation with the value in place of the capability. That is unchecked.
@@ -156,10 +156,10 @@ There are seven parts, D1–D7, and one invariant. Spellings are provisional thr
 
 ### D6. Escaping stateful closures (C13 counter, visitors you do not own)
 
-- **Surface.** An affine closure over its own state, called through `Mut` (`aff_call_mut`). Its close hands the residual state back.
-- **Elaborates to.** SPEC §22 `Aff` (`corpus/aff-counter.bc`, `logProg` in docs/fnmut.md).
-- **Cost.** `aff-counter` measures 2 allocations and 0 indirect calls. `aff-higher` measures 6 indirect calls once closures built at two sites reach one function (monovariant flow).
-- **Gaps.** `aff { }` sugar and its checker rule are not built (fnmut.md §9). A borrow-capturing `Aff` must be boxed at a shorter lifetime under a scope of its own.
+- **Surface.** a `Clo` closure over its own state, called through `Mut` (`clo_call_mut`). Its close hands the residual state back.
+- **Elaborates to.** SPEC §22 `Clo` (`corpus/clo-counter.bc`, `logProg` in docs/fnmut.md).
+- **Cost.** `clo-counter` measures 2 allocations and 0 indirect calls. `clo-higher` measures 6 indirect calls once closures built at two sites reach one function (monovariant flow).
+- **Gaps.** `clo { }` sugar and its checker rule are not built (fnmut.md §9). A borrow-capturing `Clo` must be boxed at a shorter lifetime under a scope of its own.
 
 ### D7. Callback inversion and stream seeds (C13 visitors, C11 alternatives)
 
@@ -173,7 +173,7 @@ A callee we own is rewritten as a generator consumed by `for`: `bench/gen-tree-c
 | D2 | Elaborator plus SPEC entry; no kernel change |
 | D3 (a)(b), D5 gaps | Elaboration rules around capabilities. SPEC entries; proof status to be checked against §18 |
 | D4 reads through `mut` views, imm-of-mut reborrow | **Borrow-calculus change**: SPEC entry plus proof, subject to "nothing breaks the borrow calculus" |
-| Native handler state parameter (§21), `aff { }` checker rule, polyvariant closure flow | Effect side and compiler |
+| Native handler state parameter (§21), `clo { }` checker rule, polyvariant closure flow | Effect side and compiler |
 | State laws as Core theorems | Proof work. Independence needs a side condition excluding an instance and its own reborrow |
 
 ### All 14 test programs in the recommended surface (provisional syntax)
@@ -321,11 +321,11 @@ main =
   let mut sum = 0; let mut seen = buf_new(8);
   walk(0, 6, { k -> sum += k; push(&mut seen, k) });     -- block passed to its own recursion (§30)
   -- (3) stored counter: refused under D2 unless O3 adopts second-class closures; today:
-  let tick = aff_counter(0, 3);                          -- Aff over its own state (D6)
+  let tick = clo_counter(0, 3);                          -- Clo over its own state (D6)
   let (t1, tick) = call(tick); let (t2, tick) = call(tick); let n = close(tick);
   println(x * 10 + a, sum, seen, t1 + t2, n)             -- 52 15 [0..5] 9 6
 ```
-In (3), the `call` rethreading is the cost of `Aff` without `aff_call_mut` sugar. `let t = { x = 5; 2 }` followed by a later force is refused by D2.
+In (3), the `call` rethreading is the cost of `Clo` without `clo_call_mut` sugar. `let t = { x = 5; 2 }` followed by a later force is refused by D2.
 
 **T13** (unchanged corpus shape, `async-bank-inbox.bc`: each task owns its account cell and lends it inside itself; the Rust shape, `&mut` from outside plus reads of `txs`, is refused by R1)
 ```
@@ -357,7 +357,7 @@ main = let lg = alloc((0, 0));
 | `let a = ap(!{ u -> x = 5; u + 1 }); x*10+a` | 12 (write lost) | 52: block threading, as `corpus/block-capability.bc` does for capabilities |
 | `g(run if x == 1 { x = 5; 2 } else { 3 })` | 1102 (per the issue) | 5102: ANF, joined like #581 |
 | `let t = { x = 5; 2 }; … t! …` | write lost | compile error with a suggestion |
-| stored or escaping counter closure | write lost | compile error; use `Aff` (D6) or, under O3, a second-class local closure |
+| stored or escaping counter closure | write lost | compile error; use `Clo` (D6) or, under O3, a second-class local closure |
 
 **Why the bug class becomes impossible.** #586 happens because the elaborator copies a `let mut` into a frame it cannot thread back out of, and the rebinding inside that frame is dead. Under D2 the elaborator decides **per assignment node** whether the node lies on a path it threads: same frame, in-place `run`, or block argument. If it does not, the node is an error. No assignment can elaborate to a dead rebinding. This is checkable as an elaborator property, and it can be pinned with corpus cases: the 52 and 5102 programs in corpus, and the stored thunk in `corpus/reject/`.
 
@@ -377,10 +377,10 @@ Precedents: Koka accepts writes from local closures and rejects a `var` captured
 | Copy-in/copy-out as an equivalence (L1) | Rejected as stated | Fails under abort: value threading drops `x` on `raise`. Now open choice O5. |
 | Mandatory `carry` heads on loops | Deferred | Frame rule forbids the mixed bind/assign tuples its own examples use. Undecided whether the body value or its assignments give the next state. `break e` with linear carried state is unaddressed. #493 is already fixed by U3. |
 | Step-synchronous `next` with staged place writes | Rejected (scalar `carry`/`next` stays an option) | Staging extends place borrows past `yield` (T1). It is inconsistent with in-place inner-loop writes without a copy. A `next` through a captured lend has no step to land at. |
-| Promoting a closure-assigned `let mut` to `alloc` + lexical `mut` lend with `once`/`aff` closures | Deferred | Needs mode-carrying closure literals and retyping of every `!(A => B)` HOF in lib. A let-bound thunk is refused under lexical lends (`lendLet`). §32 block threading is cheaper for the non-escaping case. |
+| Promoting a closure-assigned `let mut` to `alloc` + lexical `mut` lend with `once`/`cancel` closures | Deferred | Needs mode-carrying closure literals and retyping of every `!(A => B)` HOF in lib. A let-bound thunk is refused under lexical lends (`lendLet`). §32 block threading is cheaper for the non-escaping case. |
 | Fold-combinator pipelines (`folds`, `count`, `position`, …) as the primary form | Deferred to library | Banana-split is ill-typed for linear sources. There is no sized `scan`. Adapters over borrowed views are §7 Open. |
 | Generator cursor holding a lend across `yield` (T03) | Rejected | T1 (#172), or R1 under PinLaw with a closed body. |
-| `pull X 0 X` with a `close` that returns its carry | Rejected | Not producible; close answers R = 1 (§15). `Aff` already covers this (D6). |
+| `pull X 0 X` with a `close` that returns its carry | Rejected | Not producible; close answers R = 1 (§15). `Clo` already covers this (D6). |
 | `entry_or` returning `(map, mut slot)` | Rejected | The owner cannot be moved while lent. |
 | Inout address ABI for large value-threaded records | Deferred | Needed only if large records are value-threaded. Unbuilt. |
 
@@ -408,7 +408,7 @@ Precedents: Koka accepts writes from local closures and rejects a `var` captured
 - SE-0035 (the MVS critic did not fetch it).
 - Hylo subscripts and inout.
 
-**In-repo (read this session by the agents):** SPEC §9, §11, §14, §15, §16, §18, §19, §21, §22, §29, §30, §32, §35, §38; docs/ergonomics.md (A4, N1–N12); docs/loops.md; docs/compiler.md §3.2–3.3; docs/fnmut.md; corpus/block-capability.bc; corpus/aff-counter.bc; corpus/reject/lend-div-two.bc; corpus/pending/async-bank.bc; corpus/counts.expected.
+**In-repo (read this session by the agents):** SPEC §9, §11, §14, §15, §16, §18, §19, §21, §22, §29, §30, §32, §35, §38; docs/ergonomics.md (A4, N1–N12); docs/loops.md; docs/compiler.md §3.2–3.3; docs/fnmut.md; corpus/block-capability.bc; corpus/clo-counter.bc; corpus/reject/lend-div-two.bc; corpus/pending/async-bank.bc; corpus/counts.expected.
 
 ## 8. Open choices for the user
 
@@ -416,13 +416,13 @@ Precedents: Koka accepts writes from local closures and rejects a `var` captured
 |---|---|---|---|
 | O1 | The binder | (a) keep `let mut`; (b) respell it in our own words; (c) drop the marker | Keep **a** marker (it is enforced local reasoning). Its meaning becomes "a threaded local under D2". Spelling deferred. |
 | O2 | How loop state is declared | (a) inferred, as today, with U3; (b) optional `carry` head; (c) mandatory `carry` | (a) now. Revisit (b) after U4 gives loops values. |
-| O3 | A let-bound closure that writes a captured local | (a) refuse (Lean, Roc); (b) second-class local closure, callable as a block in scope and refused if stored or returned (Koka); (c) promote to cell + `Aff` | (a) now with an `Aff` hint. (b) as the next elaborator rule; it needs a SPEC entry. |
+| O3 | A let-bound closure that writes a captured local | (a) refuse (Lean, Roc); (b) second-class local closure, callable as a block in scope and refused if stored or returned (Koka); (c) promote to cell + `Clo` | (a) now with a `Clo` hint. (b) as the next elaborator rule; it needs a SPEC entry. |
 | O4 | Method-call syntax over a `&mut` first argument | (a) none, keep `f(&mut x)`; (b) `x.m()` with a resolution rule against §38; (c) `|>` | Defer to the data-declarations work, where "methods are codata" will be decided. |
 | O5 | A value lent by A4 when the callee raises | (a) dropped (value threading); (b) kept (cell) | Decide before extending A4. (b) matches Rust/Swift and the "errors are one model" rule. |
 | O6 | Reads through a `mut` view | (a) library `peek` (two swaps); (b) a kernel read / imm-of-mut reborrow with a SPEC entry and proof | (b). It is the main cost gap for C7/C10, but it is a borrow-calculus change and must be proved first. |
 | O7 | §18 not-provided rows (`&mut` in a capability-threading call; capability through `for … in &a`) | lift / keep | Lift. They block the service-injection shape (T04, T09, T14) that the k8s north star needs. |
 | O8 | The one-borrow limit on looping callees (lend-div-two) | accept / lift via the spanning lend K1 (#172) | Accept for now and document it. Lifting it is borrow-calculus work. |
-| O9 | Hidden-state objects | (a) answering handlers for injected services plus `Aff` for escaping state; (b) an `object` declaration over ν | (a) now. Revisit (b) with records (#141) and "methods are codata". |
+| O9 | Hidden-state objects | (a) answering handlers for injected services plus `Clo` for escaping state; (b) an `object` declaration over ν | (a) now. Revisit (b) with records (#141) and "methods are codata". |
 
 ---
 
@@ -456,7 +456,7 @@ The draft is right that no single mechanism replaces `let mut`. Five gaps should
 **G4. Interior mutability is missing as a paradigm (#119, and the user's codata suggestion).**
 - Issue #119 is an open design: branded indices into a region owned by a handler, with `get`/`set` as operations. It is Rust's `Cell` discipline enforced at the effect boundary, compiled to base plus offset.
 - The context says the user just suggested interior mutability via codata. The draft treats "codata objects" only as a fit-matrix column and defers it in O9. It never evaluates #119 or a codata-cell design against T08, T12(3) or T14.
-- This is the strongest candidate for "a more natural way than `let mut`" for shared, hidden state: memo tables, loggers, counters captured by stored closures. Today the draft sends that state to `Aff` plus call rethreading, which is visibly worse in T12(3).
+- This is the strongest candidate for "a more natural way than `let mut`" for shared, hidden state: memo tables, loggers, counters captured by stored closures. Today the draft sends that state to `Clo` plus call rethreading, which is visibly worse in T12(3).
 - Fix: add a column (region cells or codata cells), with #119's laws (copy-in/copy-out, no interior reference) and the Kripke region-length invariant. Then re-grade T08, T12(3) and T14.
 - Per the user's standing direction, interior mutability is still open, so present this as an option with trade-offs, not as rejected.
 
@@ -487,7 +487,7 @@ The draft is right that no single mechanism replaces `let mut`. Five gaps should
   - Granule graded state or graded uniqueness (unverified). Memory says grades should follow Granule.
   - Tofte–Talpin regions (unverified), relevant to #119 and arenas.
 - **G9. Swap of two places has no design.** The draft covers `mem::swap` of locals by tuple assignment. Swapping two places, such as two fields of a borrowed record, or two elements of different arrays (Rust's `mem::swap(&mut a[i], &mut b[j])`), needs `withborF2` (SPEC §5) plus `swap`. `mem::replace` and `take` through `mut` are also missing. Add a row to D4.
-- **G10. Mutating a borrowed record's field needs a precondition.** D4 uses `swapField`, but SPEC §5 says projecting one field of a borrowed record drops the other fields' views, which must be `Affine`, and that "variants in place" is open (`Ref` does not distribute over `⊕`). So `p.v = -p.v` in T09 is only safe for all-affine field types, and assigning a variant field through `mut` is not available today. Grade T09 and T11 against this.
+- **G10. Mutating a borrowed record's field needs a precondition.** D4 uses `swapField`, but SPEC §5 says projecting one field of a borrowed record drops the other fields' views, which must be `Forgettable`, and that "variants in place" is open (`Ref` does not distribute over `⊕`). So `p.v = -p.v` in T09 is only safe when every field type is `Forgettable`, and assigning a variant field through `mut` is not available today. Grade T09 and T11 against this.
 - **G11. Finalisers and cancel.** Finalisers may perform operations (SPEC §27, cancel rows). The draft does not say whether a `let mut` assigned before a generator's `close`, or before `break` cancels the continuation (SPEC line 1823), is seen by its finaliser, or by code after the loop. One D2 row is needed.
 - **G12. Unchecked claims.**
   - "149 of 177 sites with the same output" is not in the repo. #582's 66/41 figures are, so reconcile the two.
@@ -500,7 +500,7 @@ The draft is right that no single mechanism replaces `let mut`. Five gaps should
   - T04 uses `len_of(v)` in a `for` bound, which needs #174.
   - No program covers G2 (a write before a raise) or G1 (shadowing).
 - **G14. Small drifts from the user's rules.**
-  - D2's error message suggests "put the state in a cell / `Aff`". A cell needs `alloc`, which is an effect, so check that the hint does not push programs into allocation where Rust would not allocate (the zero-cost target).
+  - D2's error message suggests "put the state in a cell / `Clo`". A cell needs `alloc`, which is an effect, so check that the hint does not push programs into allocation where Rust would not allocate (the zero-cost target).
   - O5's recommendation (b), keeping the value on raise, is a semantics change to A4 that the draft calls "the critic's reading". It must come from SPEC §11, not from a critic.
 
 **Effect on the recommendation**

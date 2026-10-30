@@ -136,10 +136,10 @@ it (T7.15, *On Staton's law*).
   B proved, in Lean; T7.3 and T7.11 on paper.
 - Phase A's 11 refusals: each is still refused, by the same rule, except T1's two
   (`t1Lend`, `t1Callback`), which are refused by independence at the `run` frame (`Yield` is
-  affine, so `bound(ρ).req ≠ lin` in [lend]) rather than by T1; and `t1Harm`, refused by grades
+  cancellable, so `bound(ρ).req ≠ lin` in [lend]) rather than by T1; and `t1Harm`, refused by grades
   (T9.1).
 - Phase A's 10 programs: each types under §2 after mechanical rewrites: the lend's rebinding
-  (10.1); an explicit `cancel k` where a clause drops an affine continuation, and `hStream`'s
+  (10.1); an explicit `cancel k` where a clause drops a cancellable continuation, and `hStream`'s
   stream built as `fold (thunk_lin ⟨resume k (), cancel k⟩)` (§8.1); and each `fix` (`retry`,
   `retryPolN`, `countdown`, `pullAll`) as `bfix_n` under a handler of an exhaustion effect (§9.4,
   SPEC §20). Every lend in them has a body whose row, after erasing the lent instance, holds only

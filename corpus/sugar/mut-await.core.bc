@@ -1,7 +1,7 @@
 -- `mut-await.bc` as its elaboration should read: written by hand in core.
 -- The clause binds its parameters (none) from the payload, and the resume's argument `()` is
 -- bound, as `M x` applies to a variable.
-def ticker__n1 : !U (i32 -o F[1.0 aff 1 ~> 1] i32) =
+def ticker__n1 : !U (i32 -o F[1.0 cancel 1 ~> 1] i32) =
   !thunkv fun (tag : i32) ->
     acc <- return tag;
     u <- perform[1.0] ();

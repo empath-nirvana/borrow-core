@@ -56,12 +56,24 @@ Each entry: the decision, and why. Newest last.
     (`experiments/Optics`), but they do not explain why borrows are safe: every law that matters
     needs a frame fact that comes from lifetimes and typing. The search for the underlying
     abstraction continues at the frame guarantee (lifetime parametricity).
-23. **Implicit destructors, not affine types.** An owned value that goes unused is consumed by its
-    derived destructor, which the checker inserts (SPEC §12), so the elaborated program stays
-    linear and leak freedom is `adequacyC` on it. Only the forgettable types, whose destructor
-    does nothing, are affine. A destructor that frees or closes is an action whose placement can
-    be observed. It goes at the end of each path, never earlier than an effect, and the opt-out is
-    a `linear` binder rather than a grade on types. Types without a destructor stay linear.
+23. **Implicit destructors are derived drops of linear values (revised by #746).** The kernel has
+    two classes of value type: unrestricted (`VTy.Persistent`, where contraction and weakening are
+    rules) and linear (every other type). An owned value that goes unused is consumed by its
+    derived destructor, which the checker inserts (SPEC §12, `drop_derives`), so the elaborated
+    program stays linear and leak freedom is `adequacyC` on it. A derived drop is a property of a
+    linear type (`DerivedDrop A := Linear A ∧ HasDtor A`), not a third class. A destructor that
+    frees or closes is an action whose placement can be observed: it goes at the end of each path,
+    never earlier than an effect. Four decisions of #746 (2026-10-29) fix the rest:
+    1. **A derived drop is pure at the row** (`dtorE_effFree`). The cancel of a continuation whose
+       cancel row is not empty is a use, written or emitted as `(force κ).2`, not a derived drop.
+    2. **An abort's abandonment is not a drop.** `⊤`, `absurd` and an abort absorb a context; an
+       abort abandons only slots that hold no owned cell (`VTy.OwnFree`, which is not narrowed), so
+       nothing leaks. Opaque host types are linear and may be abandoned there.
+    3. **`Imm` is linear, with a derived copy** (`DerivedCopy`, `copy_derives` over the kernel's
+       `copy` constant). No site inserts one today.
+    4. **A declared type may have no derived drop.** Its payload is paired with a token of the
+       opaque kind `tok` (`A ⊗ Tok`, minted at construction and burned at a written `match`), so
+       `HasDtor` fails at it and the checker cannot drop it; borrows of it still have a derived drop.
 24. **Recursion is the fixed point of a generator, called directly (revised twice; first read
     "recursion is always structured, no general direct recursion", then "recursion is an
     effect").** A recursive function is written as ordinary self-calls. A mutually recursive group
@@ -662,7 +674,7 @@ Each entry: the decision, and why. Newest last.
       in tail position is the call's own sum. So a fallible program is the sum program a user
       would write by hand (`corpus/effects-fold.bc`, `effects-fold-sum.bc`).
     - **An abort cannot abandon a value with no destructor**; the checker's error names the
-      abort (SPEC §12's class 3). The residual form, handing it to the handler, is later (E9).
+      abort (SPEC §12's group 3). The residual form, handing it to the handler, is later (E9).
     - **Errors are raised** in the library: decision 46's "errors are sums (provisional until the
       error effect)" is withdrawn for errors; a search that finds nothing still answers a sum.
     - **K4 is open**: a `raise` in a kernel fold's algebra is rejected where the algebra is passed.
@@ -691,7 +703,7 @@ Each entry: the decision, and why. Newest last.
     - *Added 2026-10-17 (#489):* **the bounds layer comes later, as its own unit**: bounds checked at the call (`given Key[K]`), grouping and associated types, additive (a program with none behaves as today); preferred spelling `ability`, provisional. Until then a missing case is an error at the instance. The working default of no traits stays tentative.
 55. **Provisional (surface effects on the kernel, #188 stage 1, SPEC §18–§19; the user's spelling guidance of 2026-10-01, to be settled after rewriting a sample of the corpus).**
     - **An effect is a signature; a handler is a value implementing it.** `effect E[T, …] { fn op(x: A) -> B; ctl op(x: A) -> B; … }`: `fn` is answering, `ctl` control. An effect has one kind of operation. `never` is the empty type `0`; a `ctl` operation answering `never` is abortive.
-    - **The qualifier is on the operation**: `ctl` is affine, `linear ctl` linear, `multi ctl` unrestricted. Open: whether `ctl` is inferred from a clause's `k`, and whether the qualifier belongs on the handler.
+    - **The qualifier is on the operation**: `ctl` is cancellable, `linear ctl` must resume, `multi ctl` is unrestricted. The continuation of both `ctl` and `linear ctl` is linear; a cancellable one also has a cancel branch. Open: whether `ctl` is inferred from a clause's `k`, and whether the qualifier belongs on the handler.
     - **Handlers**: `handler h(mut s: S): E = { op(x) = e; … }` for an answering effect (its state a `mut` parameter); `handler h[T, …](p: A, …): E[…], A -> R with E₂[…] = { return(x) = M; op(x, …, k) = N; … }` for a control effect, naming the type `A` of the body it handles and its answer `R`, with the row its clauses perform after `with`. An abortive operation's clause takes no `k`. Open: the form of the handler's type annotation.
     - **A clause is `!` code** (§19's `[handle]`). Revised by decision 59: what a clause uses is passed to it, the clauses of a handler whose operations are all abortive run after it (`default` takes an owned fallback), and a handler whose operations resume has a state.
     - **`with h[A, …](e, …) { M }`** installs a handler; its type arguments are written only when the body does not determine them. A control `with` answers the handler's answer alone; an answering `with h(&mut c)` rebinds `c`.
@@ -701,15 +713,15 @@ Each entry: the decision, and why. Newest last.
     - **Drop glue is the checker's**, as §12's destructors are: a binding whose head may abort gets a `[then]` finaliser of the destructors of what the rest uses.
     - Not taken from the guidance yet: `run() |> to_result |> stderr_log` (`|>` at a computation parameter waits for #161) and named instances `with a: Kube = …` (#155).
 56. **Provisional (generators on the iteration effect, #188 stage 2, SPEC §15; the user's binding decisions of 2026-10-01 — effects are core, iteration is `Yield` with no iterator trait, the old generator system goes — and the spellings below, to be settled after rewriting a sample of the corpus).** Revises decisions 41 and 42 where they name `gen fn`, `gen { }`, `yield from` and the generator machine.
-    - **`Yield[T]` is a library effect**, `effect Yield[T] { ctl yield(x: T) }` in `lib/yield.bc` (`include yield`), affine. A generator is a function that performs it and writes it in its row, `fn range(lo: i32, hi: i32) -> 1 with Yield[i32]`; `yield(x)` is an operation call (no keyword, decision 49).
+    - **`Yield[T]` is a library effect**, `effect Yield[T] { ctl yield(x: T) }` in `lib/yield.bc` (`include yield`), cancellable. A generator is a function that performs it and writes it in its row, `fn range(lo: i32, hi: i32) -> 1 with Yield[i32]`; `yield(x)` is an operation call (no keyword, decision 49).
     - **The elaborator knows an iteration effect by its structure**: one control operation that resumes and answers `()`. No effect's name appears in `Frontend/`.
     - **`for x in g(e) { M }` is a handler site** (push). The loop's variables are threaded through the operation (the generator's copy for the site takes their tuple first and hands it back first, generic in its type), so the body is the clause; `break` and `return` cancel the continuation. Alternative not taken: a state-passing answer type (`W ⊸ F (R ⊗ W)`), which allocates closures per `yield`.
-    - **A `for` whose body performs a control operation, or may loop** (a `while`, a `loop`, a `for` over anything but a count), drains the generator's stored generator instead: an affine continuation has no destructor, so a clause cannot hold one across an operation, and a clause is total. So a generator that maps another (`for x in range(…) { yield(x * x) }`) runs as a loop over the stored source.
+    - **A `for` whose body performs a control operation, or may loop** (a `while`, a `loop`, a `for` over anything but a count), drains the generator's stored generator instead: a cancellable continuation has no destructor, so a clause cannot hold one across an operation, and a clause is total. So a generator that maps another (`for x in range(…) { yield(x * x) }`) runs as a loop over the stored source.
     - **The stored generator** of a call is its pull view, codata `pull A B R = νX. F((A ⊗ U X) ⊕ (B ⊕ U X)) & F R`; `pull` is read in a type only, not reserved. A call is stored where that type is written to be expected: an argument at a parameter of that type, or `let g : U (pull A B R) = g(e)`. Nothing else stores a call, so a call of a generator in any other position performs its operations where it stands (delegation is a call; `yield from` is withdrawn). Its `close` cancels the continuation, so `R = 1`.
     - **A generator's loops are a div body's at its row** (`Loop_Σ`), which runs nothing when called; `while` and `loop` are loops of any div body, and a loop's body may loop, except a counted loop's and a clause.
     - **Adapters** (`lib/adapters.bc`) are generic generators over stored generators, with the names of decision 41 but `from_iter` (an iterator over the input holds a capability, below). Alternative not taken: adapters as handlers over a computation, which need a handler's state threaded through the operation and functions over computations (#161).
     - **Withdrawn**: `gen fn`, `gen { }`, `yield from`, the `gen` type, callbacks that yield (they need effectful callbacks, #161; `corpus/pending/yield-callback.bc`), the generator machine and the fallback to nested binds (`gen_bind`, `lib/gen.bc`): a body the machine does not cover is an error that names it.
-    - **A generator cannot hold a capability across `yield`** (`corpus/pending/gen-digits.bc`): the kernel's `[let]` asks what is live across an affine operation to drop, and a capability has no destructor; a cancel answers `()`, with no residual. Not taken: a `linear ctl` iteration effect, which allows it but not `break`.
+    - **A generator cannot hold a capability across `yield`** (`corpus/pending/gen-digits.bc`): the kernel's `[let]` asks what is live across a cancellable operation to drop, and a capability has no destructor; a cancel answers `()`, with no residual. Not taken: a `linear ctl` iteration effect, which allows it but not `break`.
 57. **Effect polymorphism and functions over computations (#161, `docs/effect-polymorphism.md`; the user's decisions of 2026-10-01; spellings provisional).**
     - *Superseded by decision 62: the kernel has row variables.* **No row variables in the kernel (Option 2).** A function type states only what the callee provides. The kernel stays first-order in rows: no new `CTy` former, relation clause or `CDerives` rule.
     - **Provided and tunneled rows.** A computation parameter's written row is what the callee serves; its control effects are at **ports**, static names fixed by the parameter's declaration. Every other effect of the argument tunnels to the handlers in scope where the argument was written.
@@ -777,17 +789,17 @@ Each entry: the decision, and why. Newest last.
       (decision 57's parser: a site per level, L2, #173) and through values (#161).
     - **Spellings (provisional):** `with L { … }` of a layer; `call` as a layer's first parameter by
       convention only; `k(v)` to resume; `mut` parameters of a control handler.
-60. **Provisional (the affine closure, SPEC §22, #239; spellings to be confirmed by the user).**
-    - **The name `Aff`.** The affine closure is `type Aff[A, B]<'c>` in `lib/aff.bc`, after the
-      `aff` mode of the three kinds of function (linear `A => B`, affine `Aff`, persistent
-      `!(A => B)`), with operations `aff_new`, `aff_call`, `aff_call_mut`, `aff_close`,
-      `aff_of_fn` and `aff_once`. Rust's names (`FnOnce`, `FnMut`, `Fn`) appear only as
-      comparisons. The Lean names follow (`affT`, `affBox`, `d_callMut`, `d_ofFn`, `d_once`).
+60. **Provisional (the closure `Clo`, SPEC §22, #239; spellings to be confirmed by the user).**
+    - **The name `Clo`.** The closure `Clo` is `type Clo[A, B]<'c>` in `lib/clo.bc`, a closure with
+      a `close` observation, the middle one of the three kinds of function (linear with no derived
+      drop `A => B`; linear with a derived drop, `Clo`; unrestricted `!(A => B)`), with operations `clo_new`, `clo_call`, `clo_call_mut`, `clo_close`,
+      `clo_of_fn` and `clo_once`. Rust's names (`FnOnce`, `FnMut`, `Fn`) appear only as
+      comparisons. The Lean names follow (`cloT`, `cloBox`, `d_callMut`, `d_ofFn`, `d_once`).
     - **Parameterised `type`.** `type N[T, …]<'a, …> = A`, used as `N[A, …]<'b, …>`, is
       substitution at each use (`docs/type-declarations-design.md` §4.1–4.2): the piece of #141's
       stage D2 the declaration needs. No regularity check is made, since a `type` cannot mention
       itself; `data`/`codata` declarations stay #141's.
-    - **`aff_new` returns the closure unboxed**, and the caller writes `boxed['c] aff_new(…)`: a
+    - **`clo_new` returns the closure unboxed**, and the caller writes `boxed['c] clo_new(…)`: a
       template's lifetime parameters are unrelated to the lifetimes in its type arguments, so the
       outlives `[]I` needs is checked where the state's type is known.
 61. **Non-strict outlives where the model allows it; provisional spellings (SPEC §23, #243, from
@@ -803,8 +815,8 @@ Each entry: the decision, and why. Newest last.
       lifetime costs nothing. Chosen over instances at `top` (one instance per function reached
       at `top`).
     - **Spellings (provisional):** `where S: 'c` after a function's result type (and its row) for
-      a lifetime bound on a type parameter; `'main` for `main`'s lifetime; `aff_new_boxed` for the
-      bounded constructor of `lib/aff.bc`. Rust's `T: 'a` is the comparison only.
+      a lifetime bound on a type parameter; `'main` for `main`'s lifetime; `clo_new_boxed` for the
+      bounded constructor of `lib/clo.bc`. Rust's `T: 'a` is the comparison only.
 62. **The effect calculus (the user's decisions of 2026-10-03, #290).**
     - **Nothing can break the borrow calculus.** In the user's words: "NOTHING CAN BREAK THE BORROW CALCULUS."
       - This is about the guarantees. The user: "There is a big difference between doesn't break the borrow calculus and doesn't change bolo. You can't add an effect system without changing it. They interact."
@@ -821,7 +833,7 @@ Each entry: the decision, and why. Newest last.
     - Where the `unr` qualifier or `multi ctl` causes friction, it is restricted or removed.
     - Applied on 2026-10-12, among the user's decisions of that day listed in the tier-1 landing
       inventory (`experiments/Targets/LANDING.md` on `tier1-effects`): "E5 and E9 at an `unr`
-      `exn` signature are **restricted out**". An abortive operation is affine: `multi ctl op(…) ->
+      `exn` signature are **restricted out**". An abortive operation is cancellable: `multi ctl op(…) ->
       never` is rejected, and so is an unrestricted operation answering `0` in a core row (SPEC
       §18, 0.47).
 64. **E3's direction is built (effect instances, SPEC §38, #519; spellings provisional).**

@@ -98,7 +98,7 @@ theorem d_emptyChain (hΓ : Ctx.DeadP Γ) : CDerives LifeCtx.empty Γ emptyChain
 
 theorem d_emptyGen (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ (.val emptyGenV) (.val (.bang (.lolli .i32 chainT))) :=
-  .bangThunkV (persistent_dead hΓ) rfl (.lam (.ret (d_emptyChain (.drop rfl hΓ.toP))))
+  .bangThunkV (banged_dead hΓ) rfl (.lam (.ret (d_emptyChain (.drop rfl hΓ.toP))))
 
 /-- `tab (0, λi. inj₁ ())`, at a dead context. -/
 theorem d_emptyKids (hΓ : Ctx.Dead Γ) :
@@ -128,7 +128,7 @@ theorem d_oneChain {A : VTy} {t : Expr} (hΓ : Ctx.Dead Γ)
 
 theorem d_childGen (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ (.val childGenV) (.val (.bang (.lolli .i32 chainT))) := by
-  refine .bangThunkV (persistent_dead hΓ) rfl (.lam (.ret ?_))
+  refine .bangThunkV (banged_dead hΓ) rfl (.lam (.ret ?_))
   refine d_oneChain hΓ (d_leaf hΓ ?_)
   exact .lolliE (.left (deadSplit hΓ))
     (.tensorI (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) (d_i32 10 (Ctx.Dead.cons hΓ).toP))

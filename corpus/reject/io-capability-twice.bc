@@ -1,4 +1,4 @@
--- expect: 5:52: `stdout` is used twice here, and its type `ref output` is not persistent
+-- expect: 5:52: `stdout` is used twice here, and its type `ref output` is linear
 extern stdout : ref output
 
 -- A capability is linear: it cannot be handed back twice.

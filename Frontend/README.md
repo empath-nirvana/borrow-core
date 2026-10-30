@@ -75,7 +75,7 @@ Where draft 1 is silent or ambiguous about parsing, the parser does the followin
     separate them (`force f s .1`).
 11. **`<>`** is the tokens `<` `>`; whitespace may separate them.
 12. **Reserved words.** All keywords of types, terms and declarations (including `linear`,
-    SPEC §12), every constant and
+    for `linear ctl`), every constant and
     derived-form keyword (`alloc`, `free`, `copy`, `swap`, `host`, …), `val`, `block`, `leaf`,
     `node`, `str`, and `main` are reserved as lower-case names; `U`, `F`, `Fun` as upper-case
     names. `main` has to be reserved: a `def` body ends where the next declaration begins.
@@ -106,9 +106,9 @@ Where draft 1 is silent or ambiguous about parsing, the parser does the followin
 17. **Lexical details.** `-o` is one token even before a letter; `--` starts a comment
     everywhere; `⊓Δ` is `dom` and `⊓` alone is `/\`; `Imm̲` (with U+0332) is `view`. Only the
     Unicode spellings of the §2 table are accepted (no `→`, `⇒`).
-18. **Effects (SPEC §19).** A row is written after `F`: `F[3.0 aff A ~> B, 3.1 lin 1 ~> i32] T`,
+18. **Effects (SPEC §19).** A row is written after `F`: `F[3.0 cancel A ~> B, 3.1 lin 1 ~> i32] T`,
     each entry the operation `i` of the name `n` (`n.i`), its qualifier and `A ~> B`; `F[] T` is
-    read as `F T`, and the printer writes an empty row so. `lin`, `aff` and `unr` are read as
+    read as `F T`, and the printer writes an empty row so. `lin`, `cancel` and `unr` are read as
     qualifiers inside a row only, and are not reserved; `~>` is a token. The computations are
     `perform[n.i] V` and `abort[n.i] V` (prefix forms, operands as `return`'s),
     `handle_with[n](V, W) M` (`V` and `W` values, `M` an operand: a binding form is parenthesized) and the binding
@@ -260,8 +260,8 @@ chosen by the enclosing rule instead of threaded.
 
 **Implicit destructors** (SPEC §12). `Env.own` marks the slots **owed** to the computation
 being checked: variables bound by `x <- M; N`, `let (x, y) = V; M`, a `case` arm or `fun` whose
-type has a destructor (`hasDtorB`, sound for `HasDtor` by `dtorB_sound`), is not persistent, and
-whose binder is not `linear`. What is owed flows into tail positions: the body of `<-` and `let`
+type is linear with a derived drop (`hasDtorB`, which decides `HasDtor`: `hasDtorB_iff`; the
+owed slot is exactly `DerivedDrop A`, `Env.pushOwn_own`). What is owed flows into tail positions: the body of `<-` and `let`
 (less what the head or `V` used), both `case` arms, both `<,>` components, `fun`/`Fun` bodies,
 `nu_in` and ascriptions. The head `M` of `x <- M; N` is owed the owed variables it
 mentions by name (`mentionsC`). A value, and so every computation inside one, starts with
@@ -271,9 +271,9 @@ absorbed, the lowest index outermost (`dropOwed`). Each wrap is `rDrop`, which a
 `drop_derives` (`Core/Dtor.lean`: `unitE` over `lolliE` of the variable and `dtor_wf`) to a split
 of the variable leaf and the computation, so the result is still a `Res`, and
 `checkProgram_sound` is unchanged. The erasure contains the calls, and the backend compiles them
-as ordinary code. A binder whose variable is left unconsumed is reported with its reason: `linear`,
-or a type with no destructor. A `case` or `<,>` whose parts differ in a variable with no
-destructor names that type.
+as ordinary code. A binder whose variable is left unconsumed is reported with its type, linear with no
+derived drop. A `case` or `<,>` whose parts differ in a variable with no derived drop names that
+type.
 
 **Cross-check.** `CrossCheck.lean` proves by `decide +kernel` that the ten `def`s of §13.1
 erase to `countAlgV`, `natCopyE`, `freeLAlgV`, `freeNatE`, `addAlgV`, `addE`, `sumAlgV`,
@@ -323,7 +323,7 @@ of the search; none is a change to `CDerives`.
 The checker applies §19's rules (`Core/Fundamental.lean`) through the builders `rEffSub`,
 `rPerform`, `rRaise`, `rEffLet`, `rEffThen` and `rEffHandle` (`Rules.lean`) and the six unwinding
 borrows (`synConstU`, `Consts.lean`); their side conditions are decided by `rowLeB`, `Row.nzB`,
-`Row.uniqB`, `Row.weakB`, `Row.unrB`, `Row.unwindB`, `dropB` and `CTy.effLeafB`
+`Row.uniqB`, `Row.cancelsB`, `Row.unrB`, `Row.unwindB`, `dropB` and `CTy.effLeafB`
 (`Decide.lean`), each with its soundness lemma.
 
 * **The current row.** `Env.row` is the row of the returner chain `F_Σ B` a computation is checked
@@ -344,8 +344,8 @@ borrows (`synConstU`, `Consts.lean`); their side conditions are decided by `rowL
 * **Handlers.** `handle_with[n](hr, hc) M` checks the pair `(hr, hc)` of values, a value form
   over slots that are persistent (`valFormB`, `rEffHandle`), reads `A`, `Σ` and `R` off
   `hr : !U(A -o F_Σ R)` (`retRead`) and the operations `E` off the clauses' type (`clausesRead`,
-  checked equal to `clausesTy Σ R E`); an abortive clause `!U(A -o F_Σ R)` is read as the affine operation
-  `A ↠^aff 0` (`aff` and `unr` give it the same clause type). `M` is checked at
+  checked equal to `clausesTy Σ R E`); an abortive clause `!U(A -o F_Σ R)` is read as the cancellable operation
+  `A ↠^cancel 0` (`cancel` and `unr` give it the same clause type). `M` is checked at
   `F_{ofEff n E 0 ++ Σ} A`. When a clause's argument is `A ⊗ [@d] κ`, `κ` a continuation's type,
   the clauses are read as BOXED-κ's first (`clausesReadBoxed`, `clausesTyB Σ R d E`; SPEC §28):
   then `@d` must be defined, every non-abortive answer type of the handled row must outlive it
@@ -357,7 +357,7 @@ borrows (`synConstU`, `Consts.lean`); their side conditions are decided by `rowL
 * **One signature per operation** (decision R). `rPerform` and `rRaise` read their row, and
   `rEffHandle` its handled row, into the result's `sigs`; `checkMain` rejects a `main` whose rows
   give one operation two signatures, or an operation of the name `0` (`sigsOkB`, `sigsErr`).
-* **Abortive operations are affine** (SPEC §18, decision 63). A row entry `n.i unr A ~> 0` is
+* **Abortive operations are cancellable** (SPEC §18, decision 63). A row entry `n.i unr A ~> 0` is
   rejected where it is written (`elabRow`), and so is an unrestricted operation answering `0` among
   `main`'s rows.
 * **Effectful blocks and stored continuations** (SPEC §30). A block's copy has its parameter at

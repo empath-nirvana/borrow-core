@@ -128,7 +128,7 @@ loss.
 |---|---|---|---|---|
 | B1 | the operations each code may suspend with or raise | least solution over the flow, iterated (`SFacts.of`, `Capture.lean:469–519`; `UFacts`, `Unwind.lean`). SPEC.md:3204: "the rows' information, recovered after erasure" | the derivation's `F_Σ` types | — |
 | B2 | layout types | unification (`Types.lean`); on failure `capture` runs again with answers as variants (`Driver.lean:93–101`) | the checker | u8 (the re-injection is the identity on one sum type) |
-| B3 | the qualifier `lin`/`aff`/`unr` | discarded at conversion (`Convert.lean:737–739`); `κ`'s cancel arm built for every qualifier (`kapBody`, `Capture.lean:259–266`) | the term: `hnd (n, (qs, H))` | — |
+| B3 | the qualifier `lin`/`cancel`/`unr` | discarded at conversion (`Convert.lean:737–739`); `κ`'s cancel arm built for every qualifier (`kapBody`, `Capture.lean:259–266`) | the term: `hnd (n, (qs, H))` | — |
 | B4 | abortive or control | read off `raise` against `perform` (`Ops.of`, `Capture.lean:178–194`) | kept: correct as is | — |
 | B5 | the site of an operation | kept: the name is a literal (`Convert.lean:737`, `:755`) | — | — |
 | B6 | each name's signature, the effect context | `Checked.sigs` reaches `CheckedProg.main` (`Driver.lean:47–51`), and nothing in `Backend/` reads it | the checker (`Checked.Ξ`, `Program.lean:49`) | — |
@@ -182,7 +182,7 @@ loss.
   driven `while` of `range`.
 - **The frontend knew the kinds.** `bcc check bench/chain-gen/main.bc` reports `for over filter
   (Yield): … the body is its clause`, and `stored generator of map (Yield): … its clause keeps the
-  continuation (affine) as the rest`, at elaboration, before any backend pass.
+  continuation as the rest`, at elaboration, before any backend pass.
 
 ### 1.4 The principle
 
@@ -428,8 +428,8 @@ computation that ticks forever is not in it. That is why today's div is `ν` cod
   `reify` and `div_fuel`, and any borrow frame at a `Div` row would have to be indexed. None is
   needed while `tick` obeys T1. It is used only if the greatest fixed point fails at items 1–5.
 
-**Unknown 2: the residual.** A loop closed early hands back what has no destructor (SPEC §14). An
-affine cancel answers `()`, and a cancel that answered the residual would change "the canceller
+**Unknown 2: the residual.** A loop closed early hands back what has no destructor (SPEC §14). The
+cancel of a cancellable continuation answers `()`, and a cancel that answered the residual would change "the canceller
 sees `()`" (algebra, *Cancel*).
 - **Candidate** (hypothesis): `tick`'s continuation is linear, so closing is `κ close`, a resume.
   The code after the tick returns `inr` of the residual by name (§3.2).
@@ -514,7 +514,7 @@ Only the site table remains in M (N3: user clause kinds' codes, copy groups, con
 - *Typing*: `[handle]`'s premise that the clauses' context is persistent holds where the clause
   is graded ω. Where it is graded 1, the context drops.
 - *Law*: a clause graded 1 runs at most once per instance of its handler (`catch_abort`).
-- *Proofs*: `handle_compatC`'s abortive case with an affine environment.
+- *Proofs*: `handle_compatC`'s abortive case with an environment that holds no owned cell (`Ctx.OwnFree`).
 - *Borrows*: none.
 - Its own unit, after unit 9.
 

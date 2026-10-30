@@ -387,7 +387,7 @@ theorem ofV_persistent {ms : MachSet} : ∀ {A : VTy} {t : LTy}, A.persistent = 
   | .mut _ _, _, hp, _ | .fam _, _, hp, _ => by simp [VTy.persistent] at hp
 
 /-- The LIR type of a `VTy.Drop` type drops. -/
-theorem ofV_drops {ms : MachSet} {A : VTy} (hA : A.Drop) : ∀ {t : LTy}, ofV ms A = .ok t →
+theorem ofV_drops {ms : MachSet} {A : VTy} (hA : A.OwnFree) : ∀ {t : LTy}, ofV ms A = .ok t →
     t.drops = true := by
   induction hA with
   | unit | zero | int | unk | opq | imm | «mut» =>

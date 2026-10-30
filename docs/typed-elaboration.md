@@ -278,7 +278,7 @@ a destructor is dropped by the checker, on the close path, like any unused value
 has no destructor (a capability, a `ref` of an opaque type) must be handed back. So:
 
 > The residual of a div function with result `B` is `K ⊗ 1`, where `K` is the tuple of the
-> components of `B` that have no destructor (SPEC §12, class 3), in their order in `B`; or `1`
+> components of `B` that have no destructor (SPEC §12, group 3), in their order in `B`; or `1`
 > when there are none.
 
 This is decided by the `HasDtor` classes, not by the names `In`/`Out`. It gives today's answer on

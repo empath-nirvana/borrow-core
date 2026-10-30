@@ -2,7 +2,7 @@
 -- across an `await`, interleaved by a scheduler that keeps the tasks as handler continuations in
 -- a queue lent `mut` at a fresh `'q` on each observation.
 --
--- * `spawn` handles the task code's `await` (the site 1, `1.0 aff 1 ~> 1`) with a clause that
+-- * `spawn` handles the task code's `await` (the site 1, `1.0 cancel 1 ~> 1`) with a clause that
 --   receives `κ` boxed at `top`, `κ : box top U ((1 -o F E) & F 1)`, and answers the task
 --   `E = box top Task`: a `nu` value whose next observation resumes `κ` and whose `close` cancels
 --   it, boxed at `top` over the clause's context `{bk}`. The checker types the `handle_with` by
@@ -33,7 +33,7 @@ type Task = U (nu X. F (i32 + box top U X) & F 1)
 type E = box top Task
 type L = mu Y. 1 + (E * Y)
 type Q = (L * L) * (1 + 1)
-type Code = U (1 -o F[1.0 aff 1 ~> 1] i32)
+type Code = U (1 -o F[1.0 cancel 1 ~> 1] i32)
 type Sp = !U (box top Code -o F E)
 type ULp = U (loop i32 1)
 
@@ -60,7 +60,7 @@ def bump : !(ref i32 => ref i32 * i32) =
            return (boxed['x] old))));
     return q
 
-def task1 : !U (1 -o F[1.0 aff 1 ~> 1] i32) =
+def task1 : !U (1 -o F[1.0 cancel 1 ~> 1] i32) =
   !thunkv fun (u : 1) ->
     let () = u;
     c <- return (alloc[i32] i32[10]);
@@ -77,7 +77,7 @@ def task1 : !U (1 -o F[1.0 aff 1 ~> 1] i32) =
     x <- return (free[i32] c);
     return (plus (plus (plus (v1, v2), plus (v3, x)), i32[90]))
 
-def task2 : !U (1 -o F[1.0 aff 1 ~> 1] i32) =
+def task2 : !U (1 -o F[1.0 cancel 1 ~> 1] i32) =
   !thunkv fun (u : 1) ->
     let () = u;
     c <- return (alloc[i32] i32[20]);
