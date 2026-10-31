@@ -44,59 +44,102 @@ are violated. The citations are also incomplete (section 3a, M1).
 
 ## 1. Termination: is "a Div-free computation terminates" a kernel theorem?
 
-**For a closed program, yes. For a single function call, which is what `willreturn` is about, it
-is not derived.**
+**Yes, at the semantic level, and per call. Each statement below is a short corollary of
+`fundamentalC` and the run lemmas on main. Each was elaborated against main's built `Core`
+(`lake env lean` on a scratch file importing `Core.Totality`; `#print axioms` ⊆ `[propext,
+Classical.choice, Quot.sound]`; no `sorry`). None is in the tree yet: adding them is a kernel
+change, made in its own unit.** What remains for `willreturn` is the bridge to the native call, not
+termination.
 
-- **Closed programs: derived.** `Core/Totality.lean`, at `CDerives LifeCtx.empty [] e (.comp (.ret
-  A))`:
-  - `total_every_alloc` says that under every allocator, from every count, the run reaches a value;
-  - `total_run_prefix` and `total_every_run` say every run continues to a value;
-  - `total_no_infinite_run` says there is no infinite run.
+- **Closed programs (on main).** `Core/Totality.lean`, at `CDerives LifeCtx.empty [] e (.comp
+  (.ret A))`:
+  - `total_every_alloc`: under every allocator, from every count, the run reaches a value;
+  - `total_run_prefix` and `total_every_run`: every run continues to a value;
+  - `total_no_infinite_run`: there is no infinite run.
 
-  SPEC §14 states "a closed div-free program terminates on every run". `.ret A` carries no row,
-  so the program is at the empty row. A program whose `main` loops is covered one prefix at a
-  time (`externs_loop_every_run`), and is not total.
-- **A function call: not derived.** `willreturn` is a per-function attribute: "a call of this
-  function will either exhibit undefined behavior or comes back and continues execution at a point
-  in the existing call stack that includes the current invocation". In a program whose `main` holds
-  `Div`, the closed theorem says nothing about a Div-free function called inside it. The fact
-  needed is:
+  `.ret A` carries no row (`CTy.eff` stacks over it), so this is the empty row. A program whose
+  `main` loops is covered one prefix at a time (`externs_loop_every_run`, at `ioLoopE N bs n`).
+- **`total_open` (elaborated; `fundamentalC` and then `total_every_alloc`'s unpacking).**
+  Statement:
 
-  > **`total_call` (not derived).** For `CDerives Δ Γ f (.val (U (A ⊸ F_Σ B)))` with `Σ` holding
-  > no `Div` (`¬ Row.divB Σ`) and no operation at all (`Σ` empty), and every argument in the
-  > relation at `A` at a world the memory models, every run of `f v` under every allocator
-  > reaches a value.
+  ```lean
+  theorem total_open {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {B : VTy}
+      (h : CDerives Δ Γ e (.comp (.ret B)))
+      {δ : LSub} {γ : List Val} {ls : List SRec} {ρ ρf fρ : WRes} {ps : List FrameRec} {μ : Heap}
+      (hδ : Δ.Models δ) (hγ : gDenC ls δ Γ γ ρ)
+      (h1 : ResU.Hash ρf ρ) (h2 : ResU.CompS ρf ρ fρ) (h3 : TW fρ ps (rsOf ls))
+      (h4 : Tagged fρ ps ls) (hμ : ResU.Lower fρ μ) (Al : Alloc) (k : Nat) :
+      ∃ (k' : Nat) (μ' : Heap) (v : Val), ARun (ℍ := ℍ) Al k μ (substAll γ e) k' μ' (.val v)
+  ```
 
-  This is the `wpTS` content of `fundamentalC` at a function type, unfolded the way
-  `total_every_alloc` unfolds it at a closed program. It is plausibly short, but it is not on
-  main. (`fuel_total`, `Core/DivFuel.lean`, is an open-term termination result at `ewpTS` for a
-  fuelled loop. It does not give `total_call`.) The empty row is required, not only the absence of `Div`. A Div-free `Σ` with an
-  operation `op` is erased into a call of `op`'s clause, inside `f`'s native invocation (resume
-  once is a call, SPEC §47). That clause runs at its handler's outer row, which may hold `Div`. So
-  `f`'s LLVM call need not return even though `f`'s row has no `Div`.
-- **What the native target adds, beyond `total_call`.** Each of these is outside the kernel model,
-  and a `willreturn` function has to avoid all of them:
-  1. `bc_alloc` calls `abort()` when `malloc` fails (`Backend/Native/Runtime.lean`). The kernel's
-     allocator always answers.
-  2. `bc_getc`/`bc_getv` block in `read(2)` and `bc_sleep` sleeps. In the model, host operations
-     answer (`Host`).
-  3. The machine stack is finite. Recursion is bounded only where the program bounds it.
-  4. The `trap` blocks: `unreachable`, `absurd`, a `switch`'s default, the end of a body. They are
-     unreachable only through `adequacyD` (no run is stuck) together with the lowering's
-     faithfulness, which is not proved (SPEC §50: the facts' differential run is a test).
-- **Decision for `willreturn` / `mustprogress`.** Neither is emitted in this unit. The minimal
-  sound rule would need all of the following, and the LIR carries none of the row information
-  (`Backend2.Fn` has no row, and `LCTy` has none):
-  - `total_call` derived in the kernel (a kernel candidate, not built here);
-  - the source row carried into the LIR per function, through the machine conversion that splits
-    one source function into several LIR functions;
-  - a named compiler assumption `HostReturns` for (1)–(3), or else the rule excludes every
-    function that reaches an extern, an allocation or unbounded recursion.
+  Proof: `fundamentalC h δ γ ls ρ hδ hγ` is `wpTS`, which is instantiated at the frame
+  `ρf, fρ, ps` and `Al k`. Its `Lower fρ μ₀` is identified with `hμ` by `ResU.Lower.functional`.
+  The `ARun` conjunct is then the answer. It takes six lines.
 
-  `mustprogress` is implied by `willreturn` ("Note that ``willreturn`` implies ``mustprogress``").
-  On its own it is wrong for a `Div` function: a `Div` loop may run forever without I/O, and
-  `mustprogress` makes that undefined. **This may need the user:** whether `total_call` is worth
-  its kernel unit when the gain is informational.
+  **`total_call`** is the instance `Γ = [⟨A, true⟩]`, `γ = [x]`: a computation of `F B` at the
+  empty row over one argument `x` in the relation at `A`. That includes the call `f x` of a closed
+  `f : U(A ⊸ F B)`. From a memory that lowers a tagged typed world modelling `x`, it returns
+  under every allocator. The empty row is essential, not only the absence of `Div`. A Div-free
+  row with an operation `op` is erased into a call of `op`'s clause, inside the function's native
+  invocation (resume once is a call, SPEC §47), and that clause runs at its handler's outer row,
+  which may hold `Div`.
+- **`total_subrun` (elaborated; `total_every_run` and `steps_plug_inv`).** Statement:
+
+  ```lean
+  theorem total_subrun {e : Expr} {A : VTy} (h : CDerives LifeCtx.empty [] e (.comp (.ret A)))
+      {μ₁ : Heap} (K : Kont) (hK : K.Plain = true) {a : Expr}
+      (hs : Steps (ℍ := ℍ) Adequacy.emptyMem e μ₁ (K.plug a)) :
+      ∃ (μm : Heap) (v : Val), Steps (ℍ := ℍ) μ₁ a μm (.val v)
+  ```
+
+  Every redex a closed Div-free program reaches in a plain context runs to a value. This is
+  "every call returns" for the run itself, with no relation premise to discharge. The proof is
+  three lines: `total_every_run` from the reached configuration, then `steps_plug_inv`
+  (`Core/Steps.lean`) to split off `a`'s run.
+
+**What is left between these and `willreturn`.** It is not termination. `willreturn` is about every
+native invocation, so these steps remain:
+
+1. **From a native call to a kernel configuration (not derived; the exact step).** `total_call`
+   needs its relation premises (`hγ`, `TW`, `Tagged`, `Lower`) at the call. Nothing on main says
+   that a configuration reached mid-run satisfies them. The relation is compositional inside
+   `fundamentalC`'s proof, not as a statement about reached configurations. `total_subrun` avoids
+   the premises, but only:
+   - for a **closed Div-free** program;
+   - at a **plain** context `K`. A call under a `handle` or a catch frame is not covered. Covering
+     it needs `steps_plug_inv` at a non-plain `K` for an `a` that performs and raises nothing,
+     which would come from preservation at the empty row. That is not on main.
+
+   For a program whose `main` loops, the kernel covers each finite observation `ioLoopE N bs n`.
+   An observation is closed over the externs (`ExternsMeet`), not over `[]`. So it needs
+   `total_subrun` at an extern closing substitution, from `fundamentalC` with `gDenC_of_meets`
+   in place of `gDenC_nil`, as `externs_loop_every_run` uses. It also needs the backend
+   correspondence that a native run up to a call is a prefix of the run of `ioLoopE N bs n` for
+   some `n`. A call at the empty row consumes no fuel (it performs no `tick`), so the call returns
+   within that observation. The correspondence is the LIR's faithfulness, which is unproved,
+   tested, and the same assumption every native fact rests on.
+2. **The row in the LIR.** `Backend2.Fn` and `LCTy` carry no row. A per-function "empty row" bit
+   is needed from the source function, through the machine conversion. A function at the empty
+   row becomes no machine, but it may be called from one.
+3. **`HostReturns` (named compiler assumption).** It covers four things outside the model:
+   - `bc_alloc` aborts when `malloc` fails;
+   - `bc_getc`/`bc_getv` block in `read(2)`, and `bc_sleep` sleeps (capabilities are `mut`
+     arguments, so an empty-row function can reach them);
+   - the machine stack is finite;
+   - the `trap` blocks are unreachable only by `adequacyD` together with the lowering's
+     faithfulness.
+
+   Or the rule excludes every function that reaches an extern, an allocation or unbounded
+   recursion.
+
+**Decision.** `willreturn` is still not emitted in this unit. The termination fact exists, as
+`total_open`/`total_call`/`total_subrun`. Steps 1–3 are the work, and step 1 is the only one that
+asks for kernel statements: the non-plain context split and the extern-closed `total_subrun`.
+`mustprogress` is implied by `willreturn` ("Note that ``willreturn`` implies ``mustprogress``").
+On its own it is wrong for a `Div` function, because a `Div` loop may run forever without I/O.
+`fuel_total` (`Core/DivFuel.lean`) is a termination result for a fuelled loop at `ewpTS`, and is
+not needed here. **For the user:** whether to land the three corollaries now (they are cheap), and
+whether `willreturn`'s informational gain is worth steps 1–3.
 
 ## 2. The candidates
 
@@ -107,7 +150,7 @@ Wasm impact; the test; and whether it is an improvement candidate, with any gain
 | # | annotation | LangRef (quoted) | licence | read from | kind | Wasm | test | decision (improvement candidate: section 7) |
 |---|---|---|---|---|---|---|---|---|
 | A | `memory(none)` / `memory(argmem: read)` | "`memory(none)`: Does not access any memory." / "`argmem`: … accesses that are based on pointer arguments"; "`read`: … Writing to the location is immediate undefined behavior." | **none today.** The row does not track allocation (alloc is not yet an effect), and every allocating function writes `bc_alloc`'s globals and arena. Capabilities are `mut` arguments, not row entries. | n/a | informational | none | n/a | **not emitted.** Licence would be: an allocation effect in the row (the decided alloc-is-an-effect direction) and the function's parameter types (no `mut`, no capability), read off `LTy`. Recorded as a candidate behind alloc-as-effect. |
-| B | `willreturn` (+`mustprogress`) | "a call of this function will either exhibit undefined behavior or comes back …" | `total_call`: **not derived** (section 1) | would be a source row per LIR function (not carried) | informational | none | n/a | **not emitted** (section 1). Kernel candidate `total_call`. |
+| B | `willreturn` (+`mustprogress`) | "a call of this function will either exhibit undefined behavior or comes back …" | termination: `total_open`/`total_call`/`total_subrun`, **elaborated, not yet in the tree** (section 1); the bridge from a native call to their premises is **not derived** (section 1, step 1), and `HostReturns` is needed | would be an empty-row bit per LIR function (not carried) | informational | none | n/a | **not emitted** (section 1, steps 1–3). |
 | N | `nounwind` (already emitted) | "the function never raises an exception. … functions marked nounwind may still trap" | **named compiler assumption `NoUnwind`**: the emitted IR has no `invoke`, `landingpad` or `resume`; errors and cancels are branches (SPEC §47, and the erasure count `corpus/erasure-backend2.expected` shows no `handle`/`perform` left); every extern is a C function of `Backend/Native/Runtime.lean`, and C does not unwind. `abort` and `llvm.trap` are traps, which LangRef permits. The runtime
 runs the entry on a pthread and never calls `pthread_cancel`, so the forced unwinding at a
 cancellation point (`read`, `write`, `nanosleep`) does not arise. That is part of `NoUnwind`. | the emitter (no unwinding instruction exists in `Backend/Native/Lower.lean`), and the runtime's source | informational | none | a grep of the emitted IR for `invoke`/`landingpad`/`resume` (none), in `native-facts.sh` | **keep; cite it** above each definition, and list `NoUnwind` in `bcc trusted`. |
@@ -359,7 +402,7 @@ in place of "no performance target rests on LLVM's use of them".
 Not done in this unit:
 
 - no change to Core, `CDerives`, the checker, the elaboration or the language;
-- no `willreturn`/`mustprogress` until `total_call` exists and the rows reach the LIR (section 1);
+- no `willreturn`/`mustprogress` until section 1's steps 1–3 are done;
 - no `captures(none)` until lifetimes reach the LIR and the parametricity lemma exists (section 4);
 - no vectorised lowering, no SSA emission and no handler-state register (section 6: candidates);
 - no gate in phase 1.
