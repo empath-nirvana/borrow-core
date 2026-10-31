@@ -283,8 +283,9 @@ effect).
   and `nilDead`; `PinLaw` (`PinLaw.lean`) is two schemas, `LendFrame` over the lend forms (R1 is
   `ref`) and `LoopFrame` (R2), a hypothesis; `fundamentalC_pin`, `adequacyC_pin`, `adequacyD_pin`,
   `adequacyD_pin_safe` and `CDerivesP.ofC` are in `PinFundamental.lean`, with `PinLaw.stop` and
-  `PinLaw.loop`, which derive R1's and R2's compatibility lemmas, and `pinLaw_iff`. Both generated files come from
-  `Fundamental.lean` by `scripts/gen-pin.py`: edit its templates (`scripts/pin/`), not them.
+  `PinLaw.loop`, which derive R1's and R2's compatibility lemmas, and `pinLaw_iff`. Both
+  generated files come from `Fundamental.lean` by `scripts/gen-pin.py`: edit its templates
+  (`scripts/pin/`), not them.
 
 ### Derived rules
 

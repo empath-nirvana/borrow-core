@@ -313,9 +313,8 @@ held borrow (`n4`). Both are design limits with open questions (OQ-3, OQ-1), not
 
 ### 4.1 The statement
 
-`Core/PinLaw.lean` (first drafted in `experiments/AsyncCap/AsyncCap/PinLaw.lean` over `PDerives`,
-which is Core's `CDerivesP`). `PinLaw` is a `structure … : Prop` with two fields, each a schema.
-It is never an axiom: it is a hypothesis of the theorems that use it.
+`Core/PinLaw.lean`, over `CDerivesP` (this document's `PDerives`). `PinLaw` is a
+`structure … : Prop` with two fields, each a schema. It is never an axiom: it is a hypothesis of the theorems that use it.
 
 ```lean
 /-- The lend forms of the relaxed `withborUV` lend. `ref` is R1: `Ref T` lent as `Mut 'x T`. -/
@@ -623,8 +622,8 @@ Ordered; each unit is one PR and turns the programs named green. No unit but U1 
 > **OQ-2. `imm` relaxed lends, `withload` and folds whose algebra suspends.** Needed by
 > `corpus/pending/async-borrow.bc` (a yield inside `fold_imm`'s algebra, under the fold's own
 > loads). GhostEnd has the lender side (`RelendI`, `ewpTS_I_frameR`); the unwinding form and a
-> relaxed `foldImm` are not built. Each would add one `LendForm` case, widening `LendFrame`,
-> not a field.
+> relaxed `foldImm` are not built. Each would be a case of the schema of its rule shape (a
+> `LendForm` case for a lend), not a field.
 
 > **OQ-3. A `mut` lend over a loop whose state holds the view.** R2 hands a fresh view at every
 > observation, which is unsound beside a stale `mut` one. A `mut` R2 needs the interface
