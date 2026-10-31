@@ -6,8 +6,8 @@ import Frontend.Check.Pin
 `Imm @a A` and `[Imm @a A]` are linear with a **derived copy** (`DerivedCopy`, `Core/Classes.lean`):
 the kernel's constant `copy` (`CDerives.copy`, at `axCopyTy`) or `array_copy` (`CDerives.arrCopy`,
 under `bangE`) makes two of one. A second use of such a variable is its derived copy, which the
-checker inserts, as it inserts a derived drop (SPEC §12); the split itself is unchanged, and still
-refuses a slot both parts use at any type that is not persistent.
+checker inserts, as it inserts a derived drop (SPEC §12); the split admits a slot both parts use
+only at a persistent type.
 
 **The rule** (`docs/scope/746-imm-copy.md` §1). At a node whose context the checker splits between
 two parts, each variable both parts mention free whose slot is `DerivedCopy` (`derivedCopyB`) is
@@ -47,11 +47,16 @@ theorem derivedCopyB_iff (A : CVTy) : derivedCopyB A = true ↔ DerivedCopy A :=
 /-- The variables a split copies: each named, unshadowed variable both parts mention (`m₁`, `m₂`)
 whose slot is `DerivedCopy`, outermost slot first. -/
 def Env.copyVars (E : Env) (T : List CVTy) (m₁ m₂ : String → Bool) : List String :=
-  ((List.range E.vars.length).filterMap fun i =>
-    match E.vars[i]?, T[i]? with
-    | some (some x), some A =>
-      if lookupVar x E.vars == some i && derivedCopyB A && m₁ x && m₂ x then some x else none
-    | _, _ => none).reverse
+  go E.vars T 0 []
+where
+  /-- The slots from `i` on, innermost first: the slot's type is tested first, so the scans for
+  shadowing and mentions run only at `DerivedCopy` slots. -/
+  go : List (Option String) → List CVTy → Nat → List String → List String
+    | some x :: vs, A :: As, i, acc =>
+      go vs As (i + 1)
+        (if derivedCopyB A && lookupVar x E.vars == some i && m₁ x && m₂ x then x :: acc else acc)
+    | _ :: vs, _ :: As, i, acc => go vs As (i + 1) acc
+    | _, _, _, acc => acc
 
 /-- The environment of a copy's body, where the part sees copy `fst` (slot `1`) or the other
 (slot `0`) as `x`: the copied slot `i` no longer owed, the pair's slot dead, the part's copy owed as
@@ -99,9 +104,10 @@ def copyIt (E : Env) (sp : Span) (x : String) (i : Nat) (A : CVTy) (hi : T[i]? =
     else throw ⟨sp, "internal error: a derived copy's variable"⟩
   else throw ⟨sp, "internal error: a derived copy's pair"⟩
 
-/-- **The inserted copy is `copy_derives`'s term**: `copyIt`'s erasure is `copyE A i e` at the
-erasure `e` of a body that does not mention the pair's slot (`e.shift 1 2` is the body's erasure).
--/
+/-- **The inserted copy has `copy_derives`'s shape**: `copyIt`'s erasure is `copyE`'s, the kernel's
+`copyC A` applied to `xᵢ` and its pair taken apart around the body. (`copyE` states the body as
+`e.shift 1 2`, past the pair's slot; here the body is checked with that slot already in its
+context.) -/
 theorem copyIt_erase {E : Env} {sp : Span} {x : String} {i : Nat} {A : CVTy}
     {hi : T[i]? = some A} {hc : derivedCopyB A = true} {C : CCTy}
     {r : Res Δ (A :: A :: .tensor A A :: T) (.comp C)} {r' : Res Δ T (.comp C)}
@@ -209,6 +215,7 @@ def withCopies {m : Type → Type} [Monad m] [MonadExceptOf Error m] {Δ : LifeC
 def withCopiesC {m : Type → Type} [Monad m] [MonadExceptOf Error m] {Δ : LifeCtx} (sp : Span) (xs : List String) (E : Env) (T : List CVTy) (C : CCTy)
     (k : Env → Env → (T' : List CVTy) → m (Res Δ T' (.comp C))) :
     m (Res Δ T (.comp C)) := do
+  if xs.isEmpty then k E E T else
   let ⟨C', r⟩ ← withCopies sp xs E E T fun E₁ E₂ T' => do pure ⟨C, ← k E₁ E₂ T'⟩
   if h : C' = C then pure (h ▸ r) else throw ⟨sp, "internal error: a derived copy's type"⟩
 
@@ -229,6 +236,7 @@ def withCopiesV {m : Type → Type} [Monad m] [MonadExceptOf Error m] {Δ : Life
 def withCopiesVC {m : Type → Type} [Monad m] [MonadExceptOf Error m] {Δ : LifeCtx} (sp : Span) (xs : List String) (E : Env) (T : List CVTy) (A : CVTy)
     (k : Env → Env → (T' : List CVTy) → m (Res Δ T' (.val A))) :
     m (Res Δ T (.val A)) := do
+  if xs.isEmpty then k E E T else
   let ⟨A', r⟩ ← withCopiesV sp xs E T fun E₁ E₂ T' => do pure ⟨A, ← k E₁ E₂ T'⟩
   if h : A' = A then pure (h ▸ r) else throw ⟨sp, "internal error: a derived copy's type"⟩
 

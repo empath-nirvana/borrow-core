@@ -1362,8 +1362,8 @@ the constant `copy` (`CDerives.copy`, at `axCopyTy`) or `array_copy` (`CDerives.
 both copies. A use of such a variable beyond its first is its derived copy, which the checker
 inserts as it inserts a derived drop. The split is unchanged (`overlapOK`, `Ctx.SplitP`): a slot
 both parts use is admitted at a persistent type only, so `imm` stays linear, and a second use of a
-`mut` borrow, an owned value, a declared value or a capability is refused there as before
-("`x` is used twice here, and its type `…` is linear").
+`mut` borrow, an owned value, a declared value or a capability is refused there ("`x` is used
+twice here, and its type `…` is linear").
 
 - **Where.** At a node whose context the checker splits between two parts that run in sequence,
   each variable both parts mention free (`mentionsV`, `mentionsC`, which respect binders) whose
@@ -1381,21 +1381,23 @@ both parts use is admitted at a persistent type only, so `imm` stays linear, and
   those rules' messages. Inside a thunk, a clause's body, a loop's or a fold's generated function
   or a `def`, the rule applies at the splits there.
 - **The kernel rule.** `copyIt` builds the term from `rVar`, the constant's node, `rLolliE`,
-  `rRet`, `rTensorE` and `rBind`; its erasure is `copyE`'s shape (`copyIt_erase`). A `copy`
+  `rRet`, `rTensorE` and `rBind`; its erasure has `copyE`'s shape with the kernel's `copyC A`
+  (`copyIt_erase`). A `copy`
   node is typed only at `axCopyTy a A` and an `array_copy` node only at `arrCopyTy a A`
   (`TDerivesP.copy_at`, `TDerivesP.arrCopy_at`), each `DerivedCopy`, so no inserted copy is at
   another type whatever decides where it goes.
 - **Mention is use.** A part mentions a variable only at `var` leaves, which its masks keep, and
   the checker drops only slots a part owns, so a part uses a slot exactly when it mentions its
-  variable: the rule is the split's own masks, read before the parts are checked, and every
-  program accepted before checks to the same term. `copyUsed` checks at every insertion that each
+  variable: the rule is the split's own masks, read before the parts are checked, so it fires
+  only where the split would refuse a `DerivedCopy` slot. `copyUsed` checks at every insertion that each
   copy is used or dropped by its part (one neither is an internal error).
 - **Not covered.** A tuple of borrows is not `DerivedCopy` (a kernel change would widen it). The
   elaboration's own `array_copy` in its templates is unchanged (below). `clone(x)` stays the written
   copy of an unrestricted value.
 - **Pinned.** The copy constant's node records the variable and that the checker inserted it
   (`TInfo.inserted`); `bcc copies <file>` prints each, and `corpus/copies/<name>.txt` pins them for
-  `corpus/<name>.bc` (`scripts/check-corpus.sh`).
+  `corpus/<name>.bc` (`scripts/check-corpus.sh`): what `main` reaches, a `def`'s body once per
+  use.
 
 ### Every insertion site cites its rule
 
