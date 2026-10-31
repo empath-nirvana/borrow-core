@@ -235,136 +235,181 @@ back-edge ticks (§14), and no others. `b2-div`'s forward placement (a tick at e
 plus one before a terminal reached before any point, #644 step 0) existed to match the old machine's
 observation counts, and it is not ported. Section 4.5 lists the measured effect on outputs.
 
-**World (box Q2): the checker infers it** (§2.3). The elaborator emits operations with no world.
-A `[sub]` at a node does not suffice: `op` must be written on every row from a lend to its handler,
-and the checker's inference does that.
+**World (box Q2): one component of the elaborator's row inference** (§2.3). The elaborator writes
+every operation's world in the core text; the checker reads it and the kernel re-checks it.
 
-### 2.3 World inference (Q2 resolved)
+### 2.3 World inference (Q2 resolved: route 4)
 
-**Decided (user, 2026-10-31): option (A).** The checker infers every operation's world in
-`{op ⊑ top}`.
+**Decided (user, 2026-10-31, route 4).** The world is a component of the elaborator's existing
+effect-row inference: SPEC §18 (a function's inferred row; a written row is a promise checked
+against it) and §38 (rows inferred with types). It is solved with the rest of the row. The
+inference decides no guarantee: the kernel re-checks every world. `Div` in rows (B2) and `Alloc`
+(#763) are to be inferred the same way, so the world is designed as one more row component, not a
+world-specific mechanism. This reverses option (A) of box Q2: inference inside the checker. That
+checker's `CRow` is the kernel `Row` at a closed `World`, so it can hold no metavariables.
 
-A `[sub]` moves only `top → op` (`OpSig.LeF`), so `op` cannot come back out to an enclosing `top`
-row. Every row from a lend out to whatever handles its operation must therefore be `op`. That is a
-whole-term question, and it is answered by inference inside the checker. It is not a pre-pass, and
-the checker does not keep a second copy of the typing rules.
+**What the row inference is today** (`Frontend/Elab/Effects.lean`).
 
-**Where it runs.**
+- A function's row is a `List Inst`, one entry per effect instance (effect, type arguments, name).
+  It is computed by a bottom-up walk over the surface term (`rowV`/`rowC`, `:727`–`:820`), with
+  union (`Env.addInst`/`Env.union`, `:577`–`:607`). There are no row variables and no unification.
+  It runs per definition, in declaration order, and per recursive group (`defineGroup`).
+- A written row is a membership check (`Env.checkWritten`, `Env.slotOf`, `:3464`–`:3505`,
+  `:3986`–`:4010`).
+- **Rows are polymorphic by copies, not schemes.** A function with a row is elaborated once per
+  assignment of its slots to what serves them (`copyFor`, `:2950`). A copy is keyed by the static
+  site names that serve it (`copyName f ["n3", …]`), and a block by its sites (`blockKeys`,
+  `:1472`). This is `[let-poly]`'s premise term (SPEC §24): terms carry no rows.
+- The copy's kernel row is written as `Row.cons n i q A B` (`Env.rowOf`, `:504`;
+  `Frontend/Syntax.lean:190`–`:192`). Core text has no `wld`, `fin` or `rc` field: `elabRow`
+  (`Frontend/Check/Elab.lean:401`–`:412`) fills in `fin = ret unit`, `rc = false`, `wld = top`.
 
-1. `CRow` carries world metavariables (`OpSig.wld` at a `?ω`).
-2. The elaborator emits every operation with no world. A written world in core text is optional,
-   and is used only in hand-written kernel text. The elaborator never chooses one.
-3. As the checker builds a derivation, every row it computes or reads gets its operations'
-   metavariables: synthesized rows, `convC`/`liftRow` targets, `ansesTy`/`kTy`/`cancelTy`, and loop
-   types. The checker collects the constraints below as it goes.
-4. When the definition (or its group) has been checked, the checker solves and substitutes the
-   solution into the `TExpr`. The derivation (`CDerivesAt`/`TDerivesP`) is produced from the
-   substituted term, so the kernel re-checks every world.
+**The world is one attribute per site.** Every kernel premise that fixes a world fixes it for a
+whole site:
 
-**`[sub]` decides the order, not equality.** `rowLeB` (`Frontend/Check/Decide.lean:857`), which
-`convC` and `liftRow` call (`Frontend/Check/Steps.lean:764`, `:1032`), compares
-`Row.find … == some o` exactly, `wld` included. It becomes a decision procedure for `OpSig.LeF`:
-the same signature, `FinLe` on the cancel row, and the world implication. It is proved sound
-(`rowLeB_sound : rowLeB S S' = true → RowLe S S'`). At metavariables it emits the edge
-`ω_{o′} ⊑ ω_o` instead of failing.
+- `Row.ofEff n E 0 fs rcsNil c` gives every operation of the site `n` the one world `c`;
+- `effHandleV`/`VB`/`L`'s handled rows are at `top`;
+- `Row.Lend` leaves an abortive operation free (`entWld`).
 
-**Identification is structural unification** at every type equality the checker makes. Among them:
+Sites are fresh static names (`freshSite`, `Effects.lean:333`), and copies are already keyed by
+site. So the world rides on the per-site copies, and **control sites need no schemes**.
+`for_each(f)`, used once under a lend served by site 3 and once under a `handle_last` at site 5,
+gives the copies `for_each__n3` and `for_each__n5`, each at its own site's world.
 
-- `convV` everywhere, including thunks nested inside tensors, sums, refs and records;
-- the constants' types `withbor1UTy`/`withbor2UTy`, `iterTy`, `divFuelTy`, `reifyTy`/`resTy`,
-  `Loop_Σ`, `nuOut`/`unfoldN`, and `boundedFix`'s `C`;
-- the handler types `retTy`, `ansesTy`, `clausesTy`, `worksTy`, `exitsTy`, and `kTy`'s `cancelTy`.
+**The constraint table, keyed by the form the elaborator emits.** `world(n)` is the world of the
+site `n`, under the order `op ⊑ top`.
 
-Each operation in an `OpSig`'s `fin` cancel row has its own variable. **Decision R** (`sigsOkB`,
-`Frontend/Check/Tied.lean:691`): worlds nested in an operation's `A`/`B` are identified across every
-occurrence of `n.i`.
+| form emitted (where) | kernel premise | constraint |
+|---|---|---|
+| an unwinding lend `withbor1U`/`withbor2U` at the row `r` (`Const.unwinding`, `Frontend/Sugar.lean:3144`; emitted at `:3804` and the other `cbRowed` sites `:3793`–`:4007`; `r` set at `:4225`–`:4262`) | `Row.Lend r x` | `world(n) = op` for each site `n` with a non-abortive operation in `r`, by the kernel's `OpSig.abort` on the `CRow` the elaborator holds |
+| the relaxed lend `withbor2r` (R1, `Sugar.lean:3184`–`:3191`) | R1's row (`ResumeOC` after #750 A) | none of its own: the row's own premises, unchanged |
+| `withbor3U`, `withloadU`, the slice borrows | `Row.Unwind` (every operation abortive) | none: a resuming operation is refused whatever its world |
+| `handle` with plain or boxed `κ` (`effHandleV`/`VB`; `boxK`, `Effects.lean:2525`; assembled by `hndCtlC`, `Sugar.lean:4445`) | the handled row at `top` | `world(n) = top` for the site `n` |
+| `handle_last` (`effHandleL`; D5, to be built) | the handled row at `top` | `world(n) = top` |
+| `handle_tail` (`effHandleT`; D5, to be built) | the handled row at `c`; `hCN : c = op → ∀ o ∈ SN, o.wld = op` | `world(n)` free; the edge `world(n) = op ⇒ world(m) = op` for each site `m` of `SN` (what the clauses perform) |
+| `reify` (D7, to be built) | `tickSig` at `top` | the `Div` server is `top` |
+| `main`'s runtime, `div_fuel` (D8) | `tickSigW c`, `divFuelTy … c` | the `Div` server is free |
+| everything else | — | none |
 
-**Constraint rules, one per construct.** `ω_o` is the variable of operation `o`, under the order
-`op ⊑ top`.
+Abortive operations of a site take `world(n)` too. Every rule is unconditional or keyed by a
+syntactic fact (the form, `OpSig.abort`), so the system is Horn. `[sub]` needs no edges: every
+occurrence of a site carries one world, so `rowLeB`'s exact comparison
+(`Frontend/Check/Decide.lean:857`) stays correct. The cancel-row edges (`FinLe`, `ThenLe`,
+`LastFinOK`) are vacuous here: core text writes no cancel row, and the checker builds only
+`finsNil`.
 
-| construct (kernel rule) | constraint |
-|---|---|
-| `withbor1U`, `withbor2U`, callback row `S` (`Row.Lend`) | `ω_o = op` for each `o ∈ S` with `o.abort = false`. An abortive `o`'s variable is free (`entWld`) and never takes part in a conflict |
-| `[sub]` (`effSub`), every `RowLe S S′` premise (`hSN`, `hMS`, `hDS`, a callee's row into its caller's), and `FinLe` inside `RowLe` | `ω_{o′} ⊑ ω_o` for `o` of `S` and `o′` of `S′` at its key; the same edge on each pair of operations `FinLe` matches in the cancel rows. It is applied when `capB`/`finRead` holds, which the signature fixes syntactically |
-| `[then]`, `effThenDiv` (`ThenLe`, `EffFin.lean:390`) | the same edge on each pair `ThenLe` matches, under its syntactic `capB` guards |
-| `effHandleL` (`LastFinOK`, `DivHandleLast.lean:356`) | the same edge on each pair `LastFinOK` matches |
-| `effHandleT`, handled row `Row.ofEff n E 0 fs rcsNil c ++ S` | the handled operations' world is the node's `ω_c`. `hCN`: `ω_o ⊑ ω_c` for each `o ∈ SN`. It accepts `ω_c = op` |
-| `effHandleV`, `effHandleVB`, `effHandleL` | `ω = top` for each handled operation |
-| `reify` | `ω_tick = top` |
-| the runtime (`main` at `[tickSigW c]`), `div_fuel` | `ω_tick` free: both worlds are accepted |
-| every other construct, `iterate`, `withbor3U`, `withloadU` and the slice borrows included | no constraint of its own; variables pass by identification |
+**The solve.** It runs once, after Sugar, over the program:
 
-Every edge is unconditional or guarded by a syntactic fact of the signature, so the system stays
-Horn.
+1. the forced set: every site some lend forces to `op`;
+2. closed along the `hCN` edges;
+3. each forced site checked against its server's form: a site whose form requires `top` is a
+   conflict (below);
+4. every `Row.cons n …` in the core text rewritten with `world(n)`; every other site is `top`.
 
-**The solve.** The minimal set of variables forced to `op`:
+This is principal for control sites, by this argument: only a site's own handler (or `reify`'s
+tick) forces `top`, and `[sub]` moves only `top → op`. So a uniform world per site is accepted
+exactly when the kernel's minimal solve is (phase-2 check, below).
 
-1. the forced `op`s;
-2. closed along the `⊑` edges (if `ω` is `op`, so is `ω′`).
+**The conflict.** A site forced to `op` whose server requires `top`. The refusal is the
+elaborator's, at the solve. It names the propagation path: the lend, each copy hop (from the
+`.copy` keys: "through `f`, called at L3"), each `hCN` edge ("through the clauses of `g` at L4"),
+and the handler or `reify`.
 
-Every other variable is `top`. This is principal: `[sub]` moves only `top → op`, so a solution with
-fewer `op`s accepts every program this one accepts. The solve is linear in the number of
-constraints.
+- **W-L**, forced `top` by `effHandleV`/`VB`/`L`: "the lend of `x` at L1 is held across `op` at L2
+  (the site of `h`), whose handler is a general handler or works before it resumes (`[handle]`,
+  `[handle-last]`): end the borrow before `op`, move it inside the handled body below `op`, or
+  resume in tail position in `h`." Fix **(a)**.
+- **W-R**, forced `top` by `reify`: "the lend of `x` at L1 is held across the loop's turns at L2,
+  whose stop is stored by `reify`: lend inside each turn, where the consumer drives the loop." Fix
+  **(a)**; **(b)**, recovered by B7, for a stored generator's self-borrow.
+- **R**, a lend across a resuming operation that is not `lin`, is not a world conflict.
+  `Row.Lend` asks `q = lin`, and the refusal stays the checker's (4.6's message R).
 
-**World-polymorphic schemes.** A definition's type is generalised at `letPoly` and at top level,
-HM(X)-style. Its scheme is its interface world variables plus the Horn implications among them.
-Each use instantiates the scheme with fresh variables. So `for_each(f)`, used once with a lending
-callback (its row's operations forced `op`) and once under `handle_last` (forced `top`), does not
-conflict. Each `makeInst` instance of a generic definition is solved separately.
+The checker emits only `effHandleV`/`VB` at a `handle` node today (`Frontend/Check/Checker.lean:440`–`:531`).
+So until D5's `handle_tail` producer exists, every lend across a `must_resume` operation is W-L.
 
-**The conflict.** A variable forced to `op` by a lend that is also forced to `top`. The refusal
-reports the **propagation path**: the lend, the chain of `⊑` edges (through `hCN`, `RowLe` and
-identification), and the operation that reaches the handler or `reify` that forces `top`. It gives
-the fix where one exists:
+**`Div` (option (a), component-generic).** The tick is one fixed name (`divEff`) served by
+different servers: the runtime (either world) and each `reify` (`top`). With one world per name, a
+div function called both inside a `reify` and across a lend in `main` would conflict where the
+kernel accepts. So `Div` becomes a row slot like any control effect: §2.2's `div ∈ row(·)` table
+is its entry inference, and its servers are named in the copy keys (`rt`, `reify#k`). Its world is
+then `world(server)`, as for a site. If this turns out to be more than a slot in the copy keys
+(the D6 call, D9's residual and D7's `res` keyed per server), it is reported as such before it is
+built, with option (b) beside it: a world per definition, with `rowLeB` deciding `OpSig.LeF`
+(`rowLeB_sound`) and `[sub]` at the call.
 
-- **W-L**, forced `top` by `effHandleV`/`VB`/`L`. Fix **(a)**: end the borrow before the operation
-  (borrow at each use), move the borrow inside the handled body below the operation, or make the
-  handler resume in tail position.
-- **W-R**, forced `top` by `reify`. Fix **(a)**, lend inside each turn, where the consumer drives
-  the loop. It is **(b)**, recovered by B7, for a stored generator's self-borrow.
-- **R**, a lend across a resuming operation that is not `lin` (a cancellable `ctl`). This is not a
-  world conflict: `Row.Lend` asks `q = lin`. It is 4.6's message R.
+**The form condition.** T and L stay distinct core-text forms that the elaborator writes
+(`tailTuple`/`lastTuple`, SPEC §51), as `reify` and the lend constants are. The elaborator never
+predicts which kernel rule types a node: it reads the form it emitted. If the checker ever has to
+classify T or L out of a plain `handle`, the elaborator would have to re-derive it, and that is a
+STOP.
+
+**The generic part.** B2's `Div` and #763's `Alloc` take the same shape:
+
+- an attribute slot on core-text `Row.cons`;
+- attribute = f(server), so it rides on the existing per-server copies;
+- a constraint table keyed by emitted form;
+- one Horn solve per program, with span paths;
+- the rewrite by server.
+
+Only the order `op ⊑ top` and the forcing table are world-specific. `Div`'s presence in a row is an
+entry, inferred by `rowV`/`rowC` (§2.2), not an attribute. Whether `Alloc`'s operations reach kernel
+rows (control) or stay capabilities (answering) is not checked; if control, the world rule applies
+unchanged.
 
 **The kernel re-checks every world.** The inference decides no guarantee, and a wrong solve is a
 refusal, never unsoundness. These rules catch it:
 
-- `Row.Lend`;
-- `OpSig.LeF`/`RowLe` (in `[sub]`, `hSN`, `hMS`, `hDS`), and `FinLe`, `ThenLe` and `LastFinOK`;
+- `Row.Lend` at `withbor1U`/`withbor2U`;
 - `effHandleT`'s `hCN`;
-- `reify`'s `tickSig`;
 - `effHandleV`/`VB`/`L` at `c = top`;
-- the runtime and `div_fuel` theorems, stated for both worlds.
+- `reify`'s `tickSig`;
+- the runtime and `div_fuel` theorems, stated for both worlds;
+- `RowLe` in `[sub]`, `hSN`, `hMS`, `hDS`, and decision R (`sigsOkB`, `Frontend/Check/Tied.lean:691`)
+  on worlds nested in signatures.
 
-**Cost and files.**
+**Cost and files** (about 400–550 lines).
 
 | file | change |
 |---|---|
-| `Frontend/Check/World.lean` (new, about 500–700 lines) | metavariables, the constraint store, edges, schemes (generalise/instantiate), the solve, substitution into `TExpr`, and path reporting |
-| `Frontend/Check/Decide.lean` | `rowLeB` decides `OpSig.LeF`, with `rowLeB_sound`; `Row.lendB`, `Row.lendB_sound` |
-| `Frontend/Check/Steps.lean` | `convC`/`liftRow` emit edges at metavariables; `convV` unifies structurally |
-| `Frontend/Check/Consts.lean` | `lendRow` (`Row.Lend`) at `withbor1U/2U`; the constants' types unify |
-| `Frontend/Check/Checker.lean`, `Frontend/Check/Elab.lean` | generalisation at definitions and `letPoly`, the solve per group, substitution before the derivation is built |
-| `Frontend/{Parser,Syntax,Print}.lean` | the optional written world; `bcc desugar` prints the solved worlds |
+| `Frontend/Syntax.lean:190`–`:192`, `:919`; `Frontend/Parser.lean:780`–`:790`; `Frontend/Print.lean:133`–`:134`; `Frontend/Elab/{Subst:66,Respan:76,RenameLife:74}.lean` | a world on `Row.cons` (written `@op`; absent = `top`), with its parse, print and traversals |
+| `Frontend/Elab/Effects.lean:504`–`:507`; `Frontend/Sugar.lean:3137`–`:3141` (`surfRow` drops `wld`) | carry the world |
+| `Frontend/Check/Elab.lean:401`–`:412` | `elabRow` reads the written world instead of `top` |
+| `Frontend/Check/Steps.lean:541` | **trap:** `effRow?` rebuilds each `OpSig` with `.top` and drops `wd`; it must keep it, or the world is lost silently |
+| `Frontend/Sugar.lean` (the `unwinding` sites, `hndCtlC`; D5/D7/D8's emission) | record each constraint at the form it emits: about 80–120 lines |
+| `Frontend/Elab/Worlds.lean` (new, about 250–350 lines) | the store, the `hCN` closure, the top checks, the W-L/W-R messages with their paths, and the rewrite over the program (no generic Row traversal exists; `Subst.lean` is the model) |
 | `corpus/reject/` | `world-lend-handleL.bc` (W-L), `world-lend-reify.bc` (W-R), `world-lend-cancel.bc` (R) |
-| `corpus/` | `world-poly-for-each.bc`: the scheme case, accepted |
+| `corpus/` | `world-poly-for-each.bc`: the copies case, accepted |
 
 **Tempting shortcuts, and the STOP each raises.**
 
 | shortcut | STOP |
 |---|---|
-| Default every operation to `op` | **PRINCIPLED**: not principal; refuses every `effHandleV`/`VB`/`L` and `reify` program |
+| Default every operation to `op` | **PRINCIPLED**: refuses every `effHandleV`/`VB`/`L` and `reify` program |
 | A per-handler or per-effect special case | **KERNEL WORK** |
-| Infer or write worlds in the elaborator, or in a pre-pass with its own typing rules | **Q2**: the inference runs inside the checker |
+| Predict which kernel rule types a node (T vs L from a plain `handle`) | **FORM**: a second copy of a typing rule |
+| A pre-pass with its own typing rules, or worlds inferred inside the checker | **Q2**: route 4; the world is a row component |
 | A retry or fallback solve | **PRINCIPLED**: one principal solve |
 | Skip the kernel re-check | **KERNEL WORK** |
-| Solve per definition only, without schemes | **PRINCIPLED**: a lend inside a higher-order callback conflicts spuriously |
-| Keep `rowLeB` exact and special-case worlds | **PRINCIPLED**: `[sub]` decides `OpSig.LeF` |
+| One world per `divEff` name | **PRINCIPLED**: spurious conflicts between `reify` and the runtime; `Div`'s servers are keyed |
 
-**Effect on the acceptance list (section 4).** None predicted, schemes included. The schemes only
-remove spurious conflicts. Section 4 predicted the outcomes the kernel's rules give; it did not
-assume a monomorphic solve. K-last's message becomes W-L, and class 2's at a `reify` becomes W-R,
-with the same fixes as before. Phase 2 measures every program in 4.1–4.4 again and lists any
-difference.
+**Effect on the acceptance list (section 4).** None predicted. Section 4 predicted the outcomes the
+kernel's rules give, and route 4 writes the same minimal worlds the checker inference would have
+solved for. `world-poly-for-each` is accepted by copies. K-last's message becomes W-L, and class 2's
+at a `reify` becomes W-R, with the same fixes as before. Phase 2 measures every program in 4.1–4.4
+again and lists any difference.
+
+**Phase 2 checks these first** (not verified in the feasibility check):
+
+1. Site names are unique across all copies in one run (one `St.site` counter).
+2. The lend's row `r` at `Sugar.lean:4225`–`:4262` is the enclosing row narrowed to the sites the
+   body performs (`opsC`). Confirm that at every lend site, and that no lend is emitted at the full
+   enclosing row.
+3. Narrowing: that a lend never forces a site its callback does not perform.
+4. How D5–D8 emit `handle_tail`, `handle_last`, `reify` and `main`: distinct forms (the form
+   condition).
+5. Principality: that a uniform world per site is accepted exactly when the kernel's minimal solve
+   is.
 
 ### 2.4 What it reads
 
@@ -637,7 +682,8 @@ class1-revive's unmodified core gives the same result.
 
 ### 4.6 Refusal messages that name the fix
 
-Each message is the checker's text at the refusal it reports. It decides nothing.
+Each message is the checker's text at the refusal it reports, except W-L and W-R, which are the
+elaborator's at the world solve (§2.3). None decides anything: the kernel re-checks every world.
 
 - **U** (K-unwind, a slice, buffer, `withbor3` or `withload` lend whose callback ticks): "`a` is lent
   at L1 and the lend is still open at the loop's next turn (L2): a {slice | buffer view | reborrow}
@@ -719,7 +765,7 @@ Each message is the checker's text at the refusal it reports. It decides nothing
 |---|---|
 | Keep LoopLend's per-observation lend for the programs `Div` refuses (`lend-copy`, P2, P4) | **KERNEL WORK.** It decides a lend's extent in the elaborator. The programs go to `pending/` with the lend and the tick, as #646's amendment says |
 | A checker copy where the copy rule does not apply: copying the pair in `lend-escape`, copying the state wholesale, or a copy for a non-`DerivedCopy` slot | **LINEARITY.** Refused and listed, never repaired |
-| A grade special case for one handler (`count` in P1), or a world chosen per program or by the elaborator | **KERNEL WORK.** The checker decides the world, by `[sub]` and the kernel's premises; one rule for every `effHandleT` |
+| A grade special case for one handler (`count` in P1), or a world chosen per program | **KERNEL WORK.** The world is solved as a row component by one constraint table (§2.3), re-checked by the kernel; one rule for every `effHandleT` |
 | Collapse the world to `{op, top}` when a lifetime-carrier proof is hard | **DECISION.** M1's world is a lifetime bound; name the failing step and STOP |
 | Meet the named risk in `lendM_frame` by an added premise (restricting `A`'s lifetimes inside `r`) | **PRINTED-RULES.** No premise beyond 1.3's; STOP and report the step |
 | Thread the owner instead of the borrow through a generator's operation to avoid decision R (`lend-pipeline`) | **KERNEL WORK.** That is the per-observation lend; the refusal stands with its fix (a) |
@@ -808,6 +854,7 @@ send `outside` or lower. If B5 needs any Lint rule change, STOP and report.
 | `Frontend/{Parser,Syntax,Print}.lean`, `Frontend/Check/TTied.lean` | core text `iterate[…]`, `reify[…](res)`, `div` row; the checker emits `iterate`/`reify`/`handle_tail`/`handle_last` | 2.1 |
 | `Frontend/Sugar.lean` | D0–D12; delete the loop machine, `forDataDiv`, `io_hwf`, S1 | 2.2, 2.4 |
 | `Frontend/Check/` (the refusal sites) | messages U, S, C, R naming the fix | 4.6 |
+| `Frontend/{Syntax,Parser,Print}.lean`, `Frontend/Elab/{Subst,Respan,RenameLife,Effects}.lean`, `Frontend/Sugar.lean`, `Frontend/Check/Elab.lean` (`elabRow`), `Frontend/Check/Steps.lean:541` (`effRow?`), `Frontend/Elab/Worlds.lean` (new) | the world on `Row.cons`, the constraints at each emitted form, the solve, W-L/W-R; about 400–550 lines | 2.3 |
 | `Frontend/Elab/LoopLend.lean` | delete `lendBind`, `lentDef`, `lendCall`, `iterError` | 2.4 |
 | `Backend2/Convert.lean`, `Backend2/Driver.lean`, `scripts/PinSites.lean` | section 7 | lowering |
 | `SPEC.md` | a new entry (version after #750 A's, 1.22 if A lands first, fixed at merge); §14's per-observation lend and machine sections rewritten; §29: `LendFrame`'s domain grows with `CDerivesP`'s rules, B5's included (Q3) | spec-first |
@@ -871,12 +918,14 @@ it is trivial and gives today's rule; it is non-vacuous at `c = op`, where P1's 
 > **Q1. World carrier: DECIDED, two points `{op ⊑ top}`** (user, 2026-10-22, #673 review item 4;
 > decision 71). A lifetime bound collapses to these two points (spike 21363bd9).
 
-> **Q2. Who decides the world: RESOLVED (user, 2026-10-31, option A): the checker infers it** (§2.3).
-> The elaborator emits operations with no world. The checker gives each a variable, solves the
-> per-construct constraints by least-fixed-point propagation (`top` unless a lend forces `op`), and
-> writes the solved world back into the term. The kernel re-checks every world. A `[sub]` at a node
-> was not enough: `op` cannot be moved back out to a `top` row, so every row from a lend to its
-> handler must be `op`.
+> **Q2. Who decides the world: RESOLVED (user, 2026-10-31, route 4): the elaborator's row
+> inference, as one more row component** (§2.3). Option (A), inference inside the checker, was
+> decided earlier the same day and is reversed. The reason: rows are already inferred in the
+> elaborator (SPEC §18, §38), and `Div` (B2) and `Alloc` (#763) are to be inferred there the same
+> way, so the world is one more component of that inference, not a mechanism of its own. The
+> checker's `CRow` is the kernel `Row` at a closed `World` and can hold no metavariables. The world
+> is one attribute per site, riding on the per-site copies. The elaborator writes it into the core
+> text, and the kernel re-checks every world, so the inference decides no guarantee.
 
 > **Q3. `CDerivesP` mirrors `S.Lend`: DECIDED by the top foreman,** answering from the across-loops
 > decision (2026-10-29/30: PinLaw's schemas are uniform in depth and holder, so a class-1 lend nested
@@ -963,9 +1012,12 @@ it is trivial and gives today's rule; it is non-vacuous at `c = op`, where P1's 
 - **Q3:** the falsifier on nested lends (check 7) breaks a run.
 - **Q4:** `PinLaw.lean` needs more than the literal arity.
 - **S2:** a written fix (a) fails when measured. It becomes (b) and is raised with the user.
-- **2.3:** the world inference cannot be made principal inside the checker, or a construct's
+- **2.3:** a uniform world per site is not principal (phase-2 check 5 of §2.3), or a construct's
   constraint is not Horn.
-- **Q2:** the world is chosen by the elaborator.
+- **2.3, form condition:** the checker has to classify `handle_tail`/`handle_last` out of a plain
+  `handle`, so the elaborator would have to predict a kernel rule.
+- **2.3, `Div`:** keying `Div`'s servers in the copy keys is more than a slot in the keys; report
+  it with option (b) before building.
 - A class-1 port that needs a changed `fundamentalC`/adequacy statement, or a new hypothesis on
   them.
 - A program accepted only with a copy that #756's rule does not insert.
