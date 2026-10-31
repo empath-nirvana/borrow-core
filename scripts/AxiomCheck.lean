@@ -122,6 +122,9 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.total_run_prefix
 #print axioms BoCa.Fig16.LogRel.Core.total_every_run
 #print axioms BoCa.Fig16.LogRel.Core.total_no_infinite_run
+#print axioms BoCa.Fig16.LogRel.Core.total_open
+#print axioms BoCa.Fig16.LogRel.Core.total_call
+#print axioms BoCa.Fig16.LogRel.Core.total_subrun
 #print axioms BoCa.Fig16.LogRel.Core.mapProgC_every_run
 #print axioms BoCa.Fig16.LogRel.Core.staleL_angelic
 #print axioms BoCa.Fig16.LogRel.Core.staleCall_angelic
@@ -647,6 +650,7 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.adequacyC_pin
 #print axioms BoCa.Fig16.LogRel.Core.adequacyD_pin
 #print axioms BoCa.Fig16.LogRel.Core.adequacyD_pin_safe
+#print axioms BoCa.Fig16.LogRel.Core.total_open_pin
 #print axioms BoCa.Fig16.LogRel.Core.PinLaw.stop
 #print axioms BoCa.Fig16.LogRel.Core.PinLaw.loop
 #print axioms BoCa.Fig16.LogRel.Core.PinLaw.of_stop_loop

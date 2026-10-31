@@ -363,6 +363,7 @@ mut-name-capture 5 0 0 12 11 8
 mut-run 0 0 0 0 0 0
 mut-shadow-arms 0 0 0 0 0 0
 name-clash 0 0 0 0 0 0
+native-willreturn 8 0 0 22 12 6
 nats-sum 0 0 0 0 0 0
 needs-stdout 3 0 0 9 3 0 # nothing: the stdout cell is a word of the program's data
 operator-rounds 166 0 24 1551 823 0 # the cluster's and the desired state's list nodes, rebuilt per update; the copies are the written `clone`s of the cluster and the spec

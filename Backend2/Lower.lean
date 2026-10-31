@@ -1103,16 +1103,26 @@ def citeEncl : String :=
   "the lend encloses this function and its owner is not a parameter " ++
   "(a source function's lend bit, `Fn.lendEncl`: `LendEnclosesFn`, `bcc trusted`)"
 
+/-- Why a live borrow's cell is live and as wide as `dereferenceable` says (SPEC §50): no run is
+stuck, by the safety theorem the program's typing reaches (`adequacyD`; `adequacyD_pin` under
+`PinLaw` at a relaxed lend; `externs_main_safe` with externs: `bcc trusted` says which), and the
+cell was allocated at its width class's widest bytes (`WidthClass`, `bcc trusted`). -/
+def citeLive : String :=
+  "a live borrow points at a live cell (no run stuck: `adequacyD`, or `adequacyD_pin` under " ++
+  "`PinLaw`, or `externs_main_safe`, as `bcc trusted` reports; SPEC §13) of its class's widest " ++
+  "bytes (`WidthClass`, `bcc trusted`); "
+
 /-- The cited guarantee of a `mut` borrow's facts (SPEC §50). -/
 def citeMut : String :=
-  "a `mut` lend is unique (`●` joins `imm` cells only: `CellU.CompatS.kinds`); " ++
-  "a live borrow points at a live cell (every run safe: `adequacyD`, SPEC §13); " ++ citeEncl
+  "a `mut` lend is unique (`●` is defined where `▶◀` holds, `CellU.CompS.compat`, and `▶◀` " ++
+  "relates `imm` cells only, `CellU.CompatS.kinds`); " ++
+  citeLive ++ citeEncl
 
 /-- The cited guarantee of an `imm` borrow's facts (SPEC §50). -/
 def citeImm : String :=
   "an `imm` lend is not written while live (`▶◀` relates `imm` cells at one value: " ++
   "`CellU.CompatS`; the LIR's writes take a `mut` borrow or the owner); " ++
-  "a live borrow points at a live cell (every run safe: `adequacyD`, SPEC §13); " ++ citeEncl
+  citeLive ++ citeEncl
 
 /-- The cited guarantee of a borrowed family's base (SPEC §50): its leaves' mode; the base may be
 `0` (an empty family) or in the program's data, so it is neither `nonnull` nor `dereferenceable`. -/
@@ -1206,6 +1216,68 @@ def entryFn (fMain : Nat) (exits : Bool) : LM Backend.Flat.Fn := do
       outStr "\n" ++ (if (← read).counts then countsReport else []) ++ status ++ [.ret []])
   pure { name := "entry", params := 0, results := 0, locals := nloc, body, ptrs }
 
+/-! ### The `willreturn` class  `[spec §50]` -/
+
+/-- The cited reason a function of the class returns to its caller (SPEC §50). -/
+def citeWillreturn : String :=
+  "the body is at the empty row (`Fn.emptyRow`, from the checked type): at related arguments it " ++
+  "returns under every allocator (`total_open`; `total_open_pin` under `PinLaw`; SPEC §14), " ++
+  "and the word IR is the LIR's lowering " ++
+  "(the faithfulness every native fact rests on); it calls no runtime function but `bc_free` " ++
+  "(no allocation, which aborts when `malloc` fails; no I/O, which may block) and only " ++
+  "functions of the class; the stack does not overflow (`HostStack`, `bcc trusted`)"
+
+mutual
+/-- An expression calls a runtime function: an allocation (`bc_alloc`, which aborts when `malloc`
+fails), a read (`bc_getc`, `bc_getv`, which may block) or the clock (`bc_now`). -/
+def expRt : Exp → Bool
+  | .alloc _ | .getc _ | .getv _ _ _ | .now _ => true
+  | .load a _ | .load8 a | .load32 a => expRt a
+  | .op _ as => expsRt as
+  | .gep a b => expRt a || expRt b
+  | _ => false
+def expsRt : List Exp → Bool
+  | [] => false
+  | e :: es => expRt e || expsRt es
+end
+
+mutual
+/-- A statement stays in the class `C`: it calls no runtime function but `bc_free` (no write,
+which may block, no sleep, no exit status) and calls only functions of `C`. -/
+def stmtIn (C : Std.HashSet Nat) : Stmt → Bool
+  | .set _ e | .free e | .unslot e => !expRt e
+  | .store a _ v | .store8 a v | .store32 a v => !expRt a && !expRt v
+  | .out _ | .putc _ _ | .putv _ _ _ | .sleep _ _ | .status _ => false
+  | .ite c t e => !expRt c && blockIn C t && blockIn C e
+  | .switch e cs d => !expRt e && casesIn C cs && blockIn C d
+  | .call _ f as | .tailCall f as => C.contains f && !expsRt as
+  | .ret es => !expsRt es
+  | .tick | .tickCopy | .tickBound | .trap => true
+def blockIn (C : Std.HashSet Nat) : List Stmt → Bool
+  | [] => true
+  | s :: ss => stmtIn C s && blockIn C ss
+def casesIn (C : Std.HashSet Nat) : List (List Stmt) → Bool
+  | [] => true
+  | c :: cs => blockIn C c && casesIn C cs
+end
+
+/-- **The `willreturn` class** (SPEC §50): the word IR's functions that are an LIR function whose
+body is at the empty row (`Fn.emptyRow`, set from the checked type where the conversion makes the
+function; every function the conversion makes for itself leaves it cleared), less every one that
+calls a runtime function but `bc_free` or a function outside the class: the greatest such set,
+by removing violators until none is left. The word IR's `i + 1` is the LIR's `i` (`printDec` is
+the first). -/
+def willreturnClass (p : Prog) (fns : Array Backend.Flat.Fn) : Std.HashSet Nat := Id.run do
+  let mut C : Std.HashSet Nat := {}
+  for (d, i) in p.fns.toList.zipIdx do
+    if d.emptyRow then C := C.insert (i + 1)
+  for _ in [0:fns.size + 1] do
+    let bad := C.toList.filter fun j =>
+      !((fns[j]?).map (blockIn C ·.body)).getD false
+    if bad.isEmpty then break
+    C := bad.foldl (·.erase ·) C
+  return C
+
 /-- The word IR of a program at its layouts; with `counts`, the counting build. -/
 def lowerProg (p : Prog) (L : Layouts) (known : Std.HashMap Var Nat)
     (codes : Std.HashMap Var (Std.HashSet Nat)) (counts : Bool) : Except String Backend.Flat.Prog := do
@@ -1236,7 +1308,10 @@ def lowerProg (p : Prog) (L : Layouts) (known : Std.HashMap Var Nat)
       else break
     pure ([printDecFn] ++ fns ++ [main, entry] ++ gen.toList)
   let (fns, _) ← (act.run ctx).run {}
+  let fns := fns.toArray
+  let C := willreturnClass p fns
+  let fns := fns.mapIdx fun j f => if C.contains j then { f with willreturn := some citeWillreturn } else f
   let data := p.data ++ Array.replicate (pad + 8 * words.foldl (· + ·) 0) 0
-  pure { fns := fns.toArray, entry := fMain + 1, data }
+  pure { fns, entry := fMain + 1, data }
 
 end Backend2.Low

@@ -42,3 +42,10 @@ backend: LendEnclosesFn (Backend2/Driver.lean), the native borrow facts' lends e
   f49 (lam)
   f50 (lam)
   f51 (lam)
+backend (native): HostStack (Backend2/Driver.lean, nativeAssumptions), no stack overflow in a willreturn function (total_open): 3 functions
+  f19 (lam)
+  f26 (lam)
+  f28 (lam)
+backend (native): NoUnwind (Backend2/Driver.lean, nativeAssumptions), every function nounwind: no invoke, landingpad or resume is emitted; the runtime is C and cancels no thread
+backend (native): WidthClass (Backend2/Lower.lean, .alloc), a cell holds only its width class's types, so its class's widest bytes hold them (dereferenceable)
+backend (native): the runtime (Backend/Native/Runtime.lean) and clang

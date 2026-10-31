@@ -17,6 +17,11 @@ whose run is taken under every allocator, so:
   chose at the step of that count (`Alloc.ofRun`).  Under an allocator the machine is
   deterministic (`AStep1.deterministic`), so that run would pass through the value run of
   `total_every_alloc`, and a value takes no step.
+* **One call** (`total_open`, `total_call`): a computation at the empty row over arguments in the
+  relation reaches a value under every allocator: `fundamentalC` at the closing substitution,
+  unpacked as `total_every_alloc`. **A reached redex** (`total_subrun`): in a closed program's run,
+  a redex in a plain context runs to a value. These are what the native `willreturn` cites
+  (SPEC §50).
 
 A computation of `U (Loop A B)`, which may diverge, is observed through `F`: `driveE n` makes it
 a closed `F (A ⊕ B)` program for every `n` (SPEC §7), and these theorems apply to that program.
@@ -230,5 +235,50 @@ theorem total_no_infinite_run {e : Expr} {A : VTy}
   · simp [InfRun.cnt, countTrue, h0]
   · intro n
     exact InfRun.astep hf n
+
+/-! ### One call
+
+`willreturn` (SPEC §50) is about one call, not a closed program. A computation at the empty row
+over related arguments terminates under every allocator (`total_open`, `total_call`). A closed
+program's run lets each redex it reaches in a plain context return (`total_subrun`). -/
+
+/-- **Totality of an open computation.**  A computation of `F B` (the empty row) in a context `Γ`,
+closed by values `γ` in the relation at a tagged typed world whose completion lowers to `μ`,
+reaches a value under every allocator from every count.  `[spec §14]` -/
+theorem total_open {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {B : VTy}
+    (h : CDerives Δ Γ e (.comp (.ret B)))
+    {δ : LSub} {γ : List Val} {ls : List SRec} {ρ ρf fρ : WRes} {ps : List FrameRec} {μ : Heap}
+    (hδ : Δ.Models δ) (hγ : gDenC ls δ Γ γ ρ)
+    (h1 : ResU.Hash ρf ρ) (h2 : ResU.CompS ρf ρ fρ) (h3 : TW fρ ps (rsOf ls))
+    (h4 : Tagged fρ ps ls) (hμ : ResU.Lower fρ μ) (Al : Alloc) (k : Nat) :
+    ∃ (k' : Nat) (μ' : Heap) (v : Val), ARun (ℍ := ℍ) Al k μ (substAll γ e) k' μ' (.val v) := by
+  have hwp := fundamentalC (ℍ := ℍ) h δ γ ls ρ hδ hγ
+  obtain ⟨-, -, -, -, -, v, μ₀, μ', -, -, -, -, -, h0, -, -, ⟨k', hrun⟩, -⟩ :=
+    hwp ρf fρ ps h1 h2 h3 h4 Al k
+  obtain rfl : μ₀ = μ := ResU.Lower.functional h0 hμ
+  exact ⟨k', μ', v, hrun⟩
+
+/-- **A call returns.**  A computation of `F B` at the empty row over one argument `x : A` (a
+function's body, or the call `f x` of a closed `f : U(A ⊸ F B)`), at an argument in the
+relation, returns under every allocator: `total_open` at `[x]`.  `[spec §14]` -/
+theorem total_call {Δ : LifeCtx} {A B : VTy} {e : Expr}
+    (h : CDerives Δ [⟨A, true⟩] e (.comp (.ret B)))
+    {δ : LSub} {x : Val} {ls : List SRec} {ρ ρf fρ : WRes} {ps : List FrameRec} {μ : Heap}
+    (hδ : Δ.Models δ) (hx : gDenC ls δ [⟨A, true⟩] [x] ρ)
+    (h1 : ResU.Hash ρf ρ) (h2 : ResU.CompS ρf ρ fρ) (h3 : TW fρ ps (rsOf ls))
+    (h4 : Tagged fρ ps ls) (hμ : ResU.Lower fρ μ) (Al : Alloc) (k : Nat) :
+    ∃ (k' : Nat) (μ' : Heap) (v : Val), ARun (ℍ := ℍ) Al k μ (substAll [x] e) k' μ' (.val v) :=
+  total_open (ℍ := ℍ) h hδ hx h1 h2 h3 h4 hμ Al k
+
+/-- **Every redex a closed program reaches in a plain context returns.**  A configuration reached
+from a closed computation of `F A`, whose next redex `a` sits in a plain context `K` (no handler
+or catch frame), runs `a` to a value: `total_every_run`, then `steps_plug_inv`.  `[spec §14]` -/
+theorem total_subrun {e : Expr} {A : VTy} (h : CDerives LifeCtx.empty [] e (.comp (.ret A)))
+    {μ₁ : Heap} (K : Kont) (hK : K.Plain = true) {a : Expr}
+    (hs : Steps (ℍ := ℍ) Adequacy.emptyMem e μ₁ (K.plug a)) :
+    ∃ (μm : Heap) (v : Val), Steps (ℍ := ℍ) μ₁ a μm (.val v) := by
+  obtain ⟨μ', w, hw⟩ := total_every_run (ℍ := ℍ) h hs
+  obtain ⟨μm, v, hv, -⟩ := steps_plug_inv K hK hw rfl (w := w) rfl
+  exact ⟨μm, v, hv⟩
 
 end BoCa.Fig16.LogRel.Core

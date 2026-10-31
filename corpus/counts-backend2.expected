@@ -361,6 +361,7 @@ mut-name-capture 5 0 0 12 11 0
 mut-run 0 0 0 0 0 0
 mut-shadow-arms 0 0 0 0 0 0
 name-clash 0 0 0 0 0 0
+native-willreturn 8 0 0 22 12 0
 nats-sum 0 0 0 0 0 0
 needs-stdout 3 0 0 9 3 0
 operator-rounds 90 0 24 803 519 0

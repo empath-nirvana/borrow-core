@@ -16,7 +16,12 @@
 #     word IR's `Fn.facts` (`bcc trusted`'s `LendEnclosesFn` lines), not the emitted attributes,
 #     which the tail-call classes filter. The regression pair (`async-r1-cancel-finaliser-writes`,
 #     `async-r1-step-lend`) each has a function the conversion makes that takes a `mut` borrow
-#     beside its owner (`cancel 1.0`, `step`), and it has no fact.
+#     beside its owner (`cancel 1.0`, `step`), and it has no fact;
+#   * the `willreturn` class (`Fn.willreturn`): read off the word IR (`bcc trusted`'s `HostStack`
+#     lines), every function in it a source function, and exactly the functions the emitted IR
+#     marks `willreturn mustprogress`; each calls no runtime function but `bc_free` and only
+#     functions of the class, checked on the emitted IR. `native-willreturn.bc` keeps a function in
+#     the class and an allocating and a writing one outside it.
 #
 #     scripts/native-facts.sh [file.bc…]
 set -euo pipefail
@@ -106,7 +111,45 @@ program() {
     fi
     if grep -q "($pair)\$" "$w/facted"; then echo "$f: \`$pair\` has a borrow fact"; return 1; fi
   fi
-  echo "$f: ok${new:+ (frame slots $new, old $old)}${fns:+ (inlined $(echo $fns | wc -w | tr -d ' '))} (facts at $(wc -l < "$w/facted" | tr -d ' ') functions)"
+  # The `willreturn` class: read off the word IR (`bcc trusted`'s `HostStack` lines), every one a
+  # source function, and exactly the functions the emitted IR marks. Each marked function calls no
+  # runtime function but `bc_free` and only marked functions, checked on the emitted IR.
+  awk '/^backend \(native\): HostStack/ { on = 1; next } on && /^  / { print; next } { on = 0 }' \
+    "$w/trusted" > "$w/wr"
+  left=$(sed -n 's/^  f[0-9]* (\(.*\))$/\1/p' "$w/wr" | grep -vxE 'lam|thunk|with' || true)
+  if [ -n "$left" ]; then
+    echo "$f: willreturn at a function the conversion makes: $(echo $left)"; return 1
+  fi
+  want=$(sed -n 's/^  f\([0-9]*\) .*/\1/p' "$w/wr" | while read -r i; do echo "f$((i + 1))"; done | sort)
+  have=$(sed -n 's/^define internal .* @\(f[0-9]*\)(.*) nounwind.* willreturn mustprogress .*/\1/p' \
+    "$w/on.ll" | sort)
+  if [ "$want" != "$have" ]; then
+    echo "$f: the emitted willreturn functions ($(echo $have)) are not the word IR's class ($(echo $want))"
+    return 1
+  fi
+  bad=$(awk -v set="$(echo $have)" '
+    BEGIN { n = split(set, a, " "); for (i = 1; i <= n; i++) wr["@" a[i]] = 1 }
+    /^define / { fn = $0; sub(/\(.*/, "", fn); sub(/.*@/, "@", fn); inwr = (fn in wr); next }
+    /^}/ { inwr = 0; next }
+    inwr && /call / {
+      c = $0; sub(/^.*call [^@]*/, "", c); sub(/\(.*/, "", c)
+      if (c ~ /^@bc_/ && c != "@bc_free") print fn " calls " c
+      else if (c ~ /^@f[0-9]+$/ && !(c in wr)) print fn " calls " c
+    }' "$w/on.ll")
+  if [ -n "$bad" ]; then echo "$f: a willreturn function leaves the class: $(echo $bad)"; return 1; fi
+  if [ "$f" = corpus/native-willreturn.bc ]; then
+    # The pair: a function in the class, and an allocating and a writing function outside it.
+    out=$(awk -v set="$(echo $have)" '
+      BEGIN { n = split(set, a, " "); for (i = 1; i <= n; i++) wr["@" a[i]] = 1 }
+      /^define / { fn = $0; sub(/\(.*/, "", fn); sub(/.*@/, "@", fn); next }
+      /call .*@bc_alloc\(/ && !(fn in wr) { al = 1 }
+      /call .*@bc_putv\(/ && !(fn in wr) { pu = 1 }
+      END { print (al ? "alloc" : "") (pu ? " put" : "") }' "$w/on.ll")
+    if [ -z "$have" ] || [ "$out" != "alloc put" ]; then
+      echo "$f: the willreturn pair is gone (class '$(echo $have)', outside: '$out')"; return 1
+    fi
+  fi
+  echo "$f: ok${new:+ (frame slots $new, old $old)}${fns:+ (inlined $(echo $fns | wc -w | tr -d ' '))} (facts at $(wc -l < "$w/facted" | tr -d ' ') functions, willreturn at $(wc -l < "$w/wr" | tr -d ' '))"
 }
 export -f program argsOf statusOf
 par program "${files[@]}"

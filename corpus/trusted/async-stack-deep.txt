@@ -21,3 +21,17 @@ backend: StackKHandOver (Backend2/Driver.lean), the stack machines' hand-over of
   f130 (suspend 1.0)
   f133 (suspend 1.0)
   f140 (stack step)
+backend (native): HostStack (Backend2/Driver.lean, nativeAssumptions), no stack overflow in a willreturn function (total_open): 10 functions
+  f13 (lam)
+  f55 (with)
+  f56 (with)
+  f67 (lam)
+  f108 (with)
+  f109 (with)
+  f120 (lam)
+  f159 (with)
+  f160 (with)
+  f179 (lam)
+backend (native): NoUnwind (Backend2/Driver.lean, nativeAssumptions), every function nounwind: no invoke, landingpad or resume is emitted; the runtime is C and cancels no thread
+backend (native): WidthClass (Backend2/Lower.lean, .alloc), a cell holds only its width class's types, so its class's widest bytes hold them (dereferenceable)
+backend (native): the runtime (Backend/Native/Runtime.lean) and clang
