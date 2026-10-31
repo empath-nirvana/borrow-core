@@ -272,12 +272,12 @@ least fixed point, so a borrow callback that performs `await` forever is not in 
 Unbounded loops are codata (SPEC §14, §19 *Divergence*), so a borrow held across a loop's
 iterations is held across observations, not stops.
 
-**L0, segmenting (no relaxed rule).** When the only value whose type mentions `'x` live across a
+**L0, segmenting (no relaxed rule; tombstoned, decision 71).** When the only value whose type mentions `'x` live across a
 resuming operation is the borrow itself, the elaborator splits the block at the operation into
 ordinary lends of the same place. This is ADD-5's degenerate case
 (`research/effects/src/b-package-typing.md` on `nominal-lifetimes`; P5 and P6 there are checked
 by hand-segmenting with today's `bcc`), and `LoopLend`'s mechanism moved from an observation
-boundary to a suspension. It is DESIGNED (U3) and needs no `PinLaw`: the elaborated program is
+boundary to a suspension. It was DESIGNED (U3, tombstoned by decision 71) and needs no `PinLaw`: the elaborated program is
 `CDerives`. `corpus/reject/gen-self-borrow.bc` moves to the corpus under it.
 
 ### 3.4 What the checker still enforces
@@ -301,8 +301,8 @@ a negative program (§6.2).
    cancellable continuation is resumed or cancelled, so a task's finalisers run (A6).
 
 **Developer-facing annotation: none is needed.** The programmer writes `borrow`, `&x`, `&mut x`,
-`await`, `spawn` and `cancel` as ordinary code. The elaborator chooses L0 where it applies, R1
-otherwise, and R2 for a shared borrow over a loop. The one place a programmer sees the design is
+`await`, `spawn` and `cancel` as ordinary code. The elaborator chooses R1 where it applies (L0 and
+R2 were planned and are tombstoned, decision 71). The one place a programmer sees the design is
 a rejection: a `mut` borrow held by a loop's state (`n6`), or an abortive operation crossing a
 held borrow (`n4`). Both are design limits with open questions (OQ-3, OQ-1), not annotations.
 `bcc trusted` (EXISTS as a subcommand) reports which blocks rely on `PinLaw` (§5).

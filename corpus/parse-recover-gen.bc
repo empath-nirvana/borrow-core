@@ -1,7 +1,7 @@
 -- `parse-recover.bc` with its tokenizer written as a generator: `tokens` yields each token of the
 -- source, and `token_list` collects them with a `for`, as a user would: `for t in tokens(src) { … }`.
 -- The `for` pushes onto a buffer: a list threaded through a `for` over a generator is not yet
--- elaborated (the message is an internal error in the `for`'s core), so the list is built from the
+-- elaborated (`corpus/pending/gen-list-thread.bc`), so the list is built from the
 -- buffer after the loop.
 --
 -- Idiom: a generator over data it owns, read by index (decision 71). A generator that holds a

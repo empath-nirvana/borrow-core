@@ -1,5 +1,9 @@
 # Effects: the shared starting brief
 
+**Closed by decision 71 (2026-10-31).** No lend stays open across a suspension handled outside it; lifting T1 is tombstoned,
+and the open items here about lends across suspensions are closed:
+`docs/tombstones/lends-across-suspensions.md`. The text is kept as the record.
+
 Every agent working on the effect calculus gets this file in full. It says:
 - what exists;
 - what works;

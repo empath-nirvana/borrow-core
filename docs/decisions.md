@@ -904,7 +904,9 @@ Each entry: the decision, and why. Newest last.
       last, with its cancel as the clause's unwind finaliser (`effHandleL`)". A clause that stores
       `κ`, or uses it before its last step, around a body that ticks stays restricted:
       `handle_general` (R-4) is not proved.
-    - No program that runs today is rejected: the frontend writes no `Div` in any row until B2, and
+    - No program that runs today is rejected: the frontend writes no `Div` in any row until B2 (#644
+      B2, loops as the kernel's `Div`; still open after decision 71, which closes only its route to
+      a lend across a tick), and
       every kernel program's handled rows are without `Div`. `operator-reconcile.bc` is already
       pending.
 69. **Finalisers are total: a finaliser always terminates (#563; the user's decisions of 2026-10-18).**
@@ -929,18 +931,21 @@ Each entry: the decision, and why. Newest last.
       language: the growth is in that code, and `push`'s row carries the effect.
     - Not built: the effect in rows, its inference, and the handlers. SPEC §35 introduced none of
       it on purpose and points to it (§35 *Open*).
-71. **Owned across suspensions, borrowed within: T1 is the permanent rule; R1 is frozen; lifting
-    T1 is tombstoned (the user's decision of 2026-10-31; `docs/tombstones/lends-across-suspensions.md`).**
+71. **Owned across suspensions, borrowed within: T1 is the permanent rule; R1 is frozen for now
+    (the user's words); lifting T1 is tombstoned (the user's decision of 2026-10-31; `docs/tombstones/lends-across-suspensions.md`).**
     - In the user's words: "Freeze r1 for now. Keep looplend. Rewrite the corpus and spec and plan.
       Tombstone the abandoned path so we don't bring it up again unless we have some brilliant
       breakthrough." It answers the user's question "What if we just gate this path off
       permanently. What do we lose if we just narrow it to what we can prove _easily_ or already
       have proved."
-    - **The rule.** No borrow is held across a suspension: a resuming effect operation, `await`,
-      `yield`, or a loop's tick (`Div` is handled, decision 67, so each step of a loop that is not
-      counted resumes). Data that crosses a suspension is owned, moved in and moved back out. This
-      is T1 (`Row.Unwind` on the borrow constants, SPEC §19) as the design, not a temporary
-      restriction. No kernel rule is added or changed.
+    - **The rule.** No lend stays open across a suspension whose handler is outside the lend: a
+      resuming effect operation, `await`, `yield`, or a loop's tick (`Div` is handled, decision 67,
+      so each step of a loop that is not counted resumes). Data that crosses such a suspension is
+      owned, moved in and moved back out. A suspension handled inside the lend's scope does not
+      cross it: a borrow lent from outside a scheduler that runs inside the borrow (`spawn_in`/
+      `run_in`) is held by its tasks while the lend closes within one run. The one exception is R1,
+      frozen. This is T1 (`Row.Unwind` on the borrow constants, SPEC §19) as the design, not a
+      temporary restriction. No kernel rule is added or changed.
     - **The fixes** a refusal of the rule names: end the borrow before suspending; move ownership
       in and out; iterate by index or with a counted `for`; copy the value out.
     - **Kept:** lexical lends; borrows across abortive operations (an error unwinds through the
@@ -951,7 +956,8 @@ Each entry: the decision, and why. Newest last.
       extents", and so kernel work (`CLAUDE.md`, *The elaborator never does the kernel's work*),
       is overruled for LoopLend by this decision: it rewrites into ordinary `withbor`s that the
       kernel checks, and no replacement is planned.
-    - **Frozen:** R1 (SPEC §29: a task's own cell lent `mut` across resuming operations, under
+    - **Frozen for now** (the user's "Freeze r1 for now"; unlike T1, not declared permanent): R1
+      (SPEC §29: a task's own cell lent `mut` across resuming operations, under
       `PinLaw`'s `LendFrame`), with #750's cancel-path widening (SPEC §29a), exactly as on `main`.
       `PinLaw` (`Core/PinLaw.lean`, `lendFrame`, `loopFrame`) gets no new field, case or premise.
       R2 (`lendLoopR`, `LoopFrame`) stays in the judgment, unemitted: frozen, not future work.
@@ -960,6 +966,8 @@ Each entry: the decision, and why. Newest last.
       shrinking `PinLaw` (U8) of `docs/async-capabilities.md`; OQ-1 beyond the cancel path, OQ-2,
       OQ-3 and OQ-5 beyond cancellable waits; spike S-T, "T1 at tail-resumptive operations" (#601);
       steps B2–B7 of the #743 plan. The tombstone lists every approach tried and why it stopped.
+      Loops elaborated to the kernel's `Div` (#644 B2, #745) are not decided here: only their
+      route to lending across a tick is closed.
     - **Reopen condition:** only a breakthrough the user brings, "a paper with a complete proof we
       can import or a direct example in a working language we can port over".
     - Supersedes, where they point at lifting T1: decision 40's "O1 step 1" framing (the

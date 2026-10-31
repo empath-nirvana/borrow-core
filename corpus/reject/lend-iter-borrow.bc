@@ -1,4 +1,4 @@
--- expect: 28:5: the iterator of this `for` holds the borrow of `b`: a borrow block over a loop lends its place again at each step, so what the loop holds between steps must not hold the borrow (SPEC §14, borrow scopes over loops; decision 71). Give the iterator data it owns and hands back, or iterate by index with a counted `for`
+-- expect: 28:5: the iterator of this `for` holds the borrow of `b`: a borrow block over a loop lends its place again at each step, so what the loop holds between steps must not hold the borrow (SPEC §14, borrow scopes over loops). Give the iterator data it owns and hands back, or iterate the place itself by index; a counted `for` over a view lent inside the block is read as such an iterator, before its source has a type (#501)
 -- A borrow block over a loop whose iterator holds the borrow (SPEC §14, borrow scopes over loops).
 -- The generator `over` reads the table through the borrow it is given, so its loop holds the
 -- borrow between turns. The block lends the table again at each step, so what the loop holds

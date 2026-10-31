@@ -92,8 +92,9 @@ book lists what isn't built yet.
 - A program can't set its exit status.
 - Async is cooperative and single-threaded, with no event loop over real I/O, platform timers or
   wakers yet ([#52](https://github.com/empath-nirvana/borrow-core/issues/52)).
-- A task can hold a `mut` borrow of its own cell across `await`, but no other borrow: what
-  crosses an `await` is owned, by design ([Async tasks](guide/async.md#borrows-across-await)).
+- A task can hold a `mut` borrow of its own cell across `await`, and a task of `spawn_in` a
+  borrow lent from outside its scheduler, but no other borrow: what crosses an `await` is owned,
+  by design ([Async tasks](guide/async.md#borrows-across-await)).
   Two tasks can't share one output stream.
 
 **Performance**

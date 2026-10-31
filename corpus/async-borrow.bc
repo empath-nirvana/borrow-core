@@ -7,8 +7,8 @@
 -- Idiom: owned across suspensions, borrowed within (decision 71), with the borrow lent from
 -- outside the scheduler, and the data read by index. `main` owns the array and lends it `imm`
 -- around the whole scheduler; the tasks are spawned with `spawn_in` and run by `run_in` (SPEC §32)
--- inside that borrow, so every `await` is handled inside the borrow's scope and no lend is held
--- across a suspension. `sum` reads the view with a counted `for`, one element per turn. A `fold_imm`
+-- inside that borrow, so every `await` is handled inside the borrow's scope: the tasks hold the
+-- view across their `await`s, but no lend stays open across a suspension handled outside it. `sum` reads the view with a counted `for`, one element per turn. A `fold_imm`
 -- whose algebra awaits (an `imm` relaxed lend, OQ-2 of `docs/async-capabilities.md`) is closed by
 -- decision 71, and so is a task of `spawn` holding the borrow. The array replaces the earlier
 -- draft's list: a `for` over a view is a counted loop, a list has no left-to-right `for` (#57).

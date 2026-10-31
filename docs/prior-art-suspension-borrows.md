@@ -1,5 +1,9 @@
 # Prior art: borrows across suspension points
 
+**Closed by decision 71 (2026-10-31).** No lend stays open across a suspension handled outside it; lifting T1 is tombstoned,
+and the open items here about lends across suspensions are closed:
+`docs/tombstones/lends-across-suspensions.md`. The text is kept as the record.
+
 A literature and prior-art survey for #270. It changes no code and proposes no kernel rule; §6 is
 a recommendation for the design decision #269 asks for.
 

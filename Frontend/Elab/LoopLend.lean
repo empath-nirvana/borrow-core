@@ -293,7 +293,8 @@ def escapeError (sp : Span) (x T : String) : Error :=
     s!"nothing borrowed at `'{x}` outlives the block. When the body loops, each step borrows the " ++
     "place again, so the loop cannot keep what is borrowed before it (SPEC §14, borrow scopes " ++
     "over loops; decision 71). Copy the value out of the borrow before the loop, or end the " ++
-    "borrow inside each step"⟩
+    "borrow inside each step; when the borrow is a handler's capability, use a counted `for`, " ++
+    "or keep the state in the loop's variables"⟩
 
 /-- The error for an iterator that holds the borrow. -/
 def iterError (E : Env) (src : LoopSrc) (sp : Span) : Error :=
@@ -301,8 +302,9 @@ def iterError (E : Env) (src : LoopSrc) (sp : Span) : Error :=
   | .each _ =>
     ⟨sp, s!"the iterator of this `for` holds the borrow of `{E.B.b.name}`: a borrow block over a " ++
       "loop lends its place again at each step, so what the loop holds between steps must not " ++
-      "hold the borrow (SPEC §14, borrow scopes over loops; decision 71). Give the iterator " ++
-      "data it owns and hands back, or iterate by index with a counted `for`"⟩
+      "hold the borrow (SPEC §14, borrow scopes over loops). Give the iterator data it owns " ++
+      "and hands back, or iterate the place itself by index; a counted `for` over a view lent " ++
+      "inside the block is read as such an iterator, before its source has a type (#501)"⟩
   | _ =>
     ⟨sp, s!"the condition of this {src.what} uses the borrow of `{E.B.b.name}`: a borrow block " ++
       "over a loop lends its place again at each step, to the loop's body only, not to its " ++
@@ -522,8 +524,9 @@ def lentDef (c : TCx) (fin' : TCx → Finite) : Decl → Except Error (Option De
       | throw ⟨lsp, s!"`{n.name}` loops, so it is called in direct style one step at a time, and " ++
           s!"a borrow at `'{y.name}` cannot stay open across its steps: it may take one borrow " ++
           s!"of a cell at `'{y.name}`, `imm '{y.name} A` or `mut '{y.name} A`, which it borrows " ++
-          "again at each step (SPEC §14, borrow scopes over loops; decision 71). Pass the " ++
-          "other borrowed values as owned copies, or iterate by index with a counted `for`"⟩
+          "again at each step (SPEC §14, borrow scopes over loops). Pass the other borrowed " ++
+          "values as owned copies; a counted `for` over a view bound in its body is read as a " ++
+          "loop here, before its source has a type (#491)"⟩
     let some (names, M) := if ps.length == 1 then some ([x], M)
         else spinePattern fuel ps.length x.name M
       | throw ⟨lamsp, s!"`{n.name}` loops and takes a borrow in a tuple: destructure its " ++

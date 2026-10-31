@@ -4572,7 +4572,7 @@ def forData : Nat → TCx → Option CCTy → Span → Ident → Val → Val →
       | .owned _ => throw ⟨sp, "the body of this `for` performs an operation that resumes, and a " ++
           "`for` over an owned array lends it around the whole loop: an operation that resumes " ++
           "cannot cross a borrow (T1, decision 71). Iterate by index over a view the function " ++
-          "is given, or copy the elements out before the loop"⟩
+          "is given, or read each element by index inside the step (`for i in 0..n`)"⟩
       | _ => pure ()
     -- The loop's value: `let r = for …` with or without `else { d }`, or `for … else { d }`.
     let (keep, els, N) : Option (Ident × Option VTy) × Option Comp × Comp :=
@@ -5019,8 +5019,8 @@ force io_hole_rest"
       | .lend a m _ => throw ⟨sp, s!"the body of this `for` performs an operation that resumes " ++
           s!"(the operation {k}.{i}), and its source `&{if m then "mut " else ""}{a.name}` lends " ++
           s!"`{a.name}` around the whole loop: an operation that resumes cannot cross a borrow " ++
-          "(T1, decision 71). Iterate an owned array, or a view the function is given, or copy " ++
-          "the elements out before the loop"⟩
+          "(T1, decision 71). Iterate an owned array, or a view the function is given, or read " ++
+          "each element by index inside the step (`for i in 0..n`)"⟩
     let (lo, hi) := match V with
       | .app _ (.sugar _ .count) (.pair _ a b) => (some a, some b)
       | _ => (none, none)

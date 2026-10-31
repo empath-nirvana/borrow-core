@@ -1,5 +1,7 @@
 -- pending: concurrent writers (SPEC §34 *Open*)
--- now: 22:11: two tasks spawned in this block are given the capability of `Stdout`: a capability is lent to one task at a time, which holds it until it ends (SPEC §34 *Open*)
+-- now: 24:11: two tasks spawned in this block are given the capability of `Stdout`: a capability is lent to one task at a time, which holds it until it ends (SPEC §34 *Open*)
+-- Decision 71 permits this shape: threading the capability through `await` is moving ownership in
+-- and out. What blocks it is that mechanism, not built (SPEC §34 *Open*), not the rule.
 -- Two tasks that both write to standard output, their lines interleaved by the scheduler.
 --
 -- Blocked by: a capability is a `mut` borrow, lent to one task, which holds it across its

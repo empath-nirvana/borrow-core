@@ -1,5 +1,5 @@
 -- pending: refused #491, #492 (the map it keys by views of the input is SPEC §36's)
--- now: 34:1: `words` loops, so it is called in direct style one step at a time, and a borrow at `'t` cannot stay open across its steps: it may take one borrow of a cell at `'t`, `imm 't A` or `mut 't A`, which it borrows again at each step (SPEC §14, borrow scopes over loops; decision 71). Pass the other borrowed values as owned copies, or iterate by index with a counted `for`
+-- now: 34:1: `words` loops, so it is called in direct style one step at a time, and a borrow at `'t` cannot stay open across its steps: it may take one borrow of a cell at `'t`, `imm 't A` or `mut 't A`, which it borrows again at each step (SPEC §14, borrow scopes over loops). Pass the other borrowed values as owned copies; a counted `for` over a view bound in its body is read as a loop here, before its source has a type (#491)
 --
 -- Advent of Code 2020, day 7, ported from `src/year2020/day07.rs` of
 -- maneatingape/advent-of-code-rust. Copyright © 2023-2026 maneatingape. MIT License:

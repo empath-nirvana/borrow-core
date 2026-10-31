@@ -6,11 +6,14 @@ brings a breakthrough (*Reopen condition*).
 
 ## The rule
 
-**Owned across suspensions, borrowed within.** No borrow is held across a suspension: a
-resuming effect operation, `await`, `yield`, or a loop's tick (`Div` is a handled effect, so every
-iteration of a loop that is not counted is a resuming operation, decision 67). Data that crosses a
-suspension is owned: it is moved into the suspended code and moved back out. Inside one stretch
-between suspensions, borrow freely. This is T1 (`Row.Unwind` on the borrow constants, SPEC §19),
+**Owned across suspensions, borrowed within.** No lend stays open across a suspension whose
+handler is outside the lend: a resuming effect operation, `await`, `yield`, or a loop's tick
+(`Div` is a handled effect, so every iteration of a loop that is not counted is a resuming
+operation, decision 67). Data that crosses such a suspension is owned: it is moved into the
+suspended code and moved back out. Inside one stretch between suspensions, borrow freely. A
+suspension handled inside the lend's scope does not cross it: a borrow lent from outside a
+scheduler that runs inside the borrow (`spawn_in`/`run_in`) is held by its tasks while the lend
+closes within one run. The one exception is R1, frozen (below). This is T1 (`Row.Unwind` on the borrow constants, SPEC §19),
 made the permanent design rule. The kernel already enforces it, and no rule is added.
 
 The fixes a refusal names:
@@ -35,7 +38,7 @@ Kept, all of it on `main` and unchanged:
   scheduler, which runs inside that borrow's scope;
 - capabilities as borrows (SPEC §11, §34).
 
-Frozen: R1 (SPEC §29: a task's own cell lent `mut` across resuming operations, under `PinLaw`'s
+Frozen for now (the user's "Freeze r1 for now"): R1 (SPEC §29: a task's own cell lent `mut` across resuming operations, under `PinLaw`'s
 `LendFrame`), with #750's cancel-path widening (SPEC §29a), exactly as on `main` at `d418de4c`.
 `PinLaw` (`Core/PinLaw.lean`) gets no new field, case or premise. R2 (`lendLoopR`, `LoopFrame`)
 stays in the judgment and is not emitted; that is frozen too, not future work.
@@ -54,7 +57,24 @@ side. Every widening was paid for in assertions, not proofs (`PinLaw` was restat
 nearly every step, history §7 item 6), and every
 attempt to retire LoopLend lost programs it carried. No literature pass found a complete proof to
 import or a working language to port for the general problem. Narrowing to what is proved costs a
-known, small set of program shapes, each with a written idiom (*The rule*).
+known set of program shapes, each with a written idiom (*What this gives up*).
+
+## What this gives up
+
+| shape | the idiom instead |
+|---|---|
+| `for l in lines(t)` over a lent input (P2, the common CLI loop) | lend the input per turn and read one line (`case_at` in the leetcode ports), or own the input |
+| a `while`, or a `for` over a generator, whose body performs an operation of an answering handler declared outside it (P1, #736; the book's fake-`Stdout` testing pattern) | a counted `for` (`corpus/state-machine-audit.bc`), or the state kept in the loop's variables (`corpus/state-machine.bc`) |
+| `for x in &v` whose body resumes; nested loops over one borrow (P3, P4) | iterate by index over a view the function is given, or copy the elements out |
+| a generator holding a borrow across `yield` (P5, P6) | the generator owns its data or reads by index (`corpus/parse-recover-gen.bc`), or is pulled by hand inside the borrow (`corpus/gen-tokenize-parse.bc`) |
+| external iteration over a borrowed list (#57) | copy the list out (`corpus/print-borrowed-list.bc`), or use an array |
+| an `imm` borrow across `await` (P8, OQ-2); a task's `mut` borrow block reading its other variables (`async-bank`) | end the borrow before each `await` (`corpus/async-bank.bc`), or lend from outside to tasks of `spawn_in` (`corpus/async-borrow.bc`) |
+| a reborrow of R1's view across a loop with `await`, nested lends to depth 3, a task walking its own tree (P9–P11) | owned data in the task, borrowed between `await`s |
+| tasks of `spawn` reading an outer borrow (P12) | `spawn_in`/`run_in` (`corpus/async-workers-scoped.bc`), or copies (`corpus/async-worker-pool.bc`) |
+| a server loop with a `mut` local across `await` (OQ-3) | the local owned by the task and lent per turn |
+| an error raised inside a held lend and handled outside it, beyond the cancel path (OQ-1) | handle it inside the block, or end the borrow before the `await` |
+| a nursery over borrowed request data (#750 item 3) | the request data owned by, or copied into, each task |
+| operator O1: tasks borrowing `&cfg` across the scheduler loop | `spawn_in`/`run_in` inside the borrow, or copies |
 
 ## Abandoned approaches
 
@@ -83,7 +103,7 @@ One line each; dates are 2026. The full record is the history (*Sources*).
 | R2, the `imm` loop lend (10-14) | in the judgment, never emitted (U6); now frozen |
 | per-site unsafe assertions, option D (10-15/16) | never merged |
 | #644 B2 per-turn lend in the elaborator (10-21) | reverted: the elaborator doing kernel work |
-| #644 B2, loops elaborated to `Div` (10-21, PR #646) | moved 12 lend programs to pending; closed |
+| #644 B2, loops elaborated to `Div` (10-21, PR #646) | moved 12 lend programs to pending; closed. Only its route to a lend across a tick is tombstoned: loops as the kernel's `Div` are not decided by decision 71 |
 | #645 SuspSpike, operation classes (10-21, PR #648) | class 1 proved; classes 2 and 3 had no technique for a stored `κ` |
 | class 1 as a `Bool` grade (10-21, PR #654) | "needs a proper algebra"; closed |
 | #564 R-1, direct `for`, handle-last (10-22, PR #665) | superseded by the hybrid |
@@ -98,6 +118,8 @@ One line each; dates are 2026. The full record is the history (*Sources*).
 | stackK spikes (10-31) | neither typeable nor a `LendFrame` instance; asserted |
 | #743-B5, loops as `Div` with class 1 and a two-point world (10-31) | kernel green, the surface hit four stops; parked |
 | unit R, Koka rows with a Granule world solve (10-31, #766) | design only: "the same swamp" |
+| the regress analysis (10-02, #269, PR #272, `docs/effects-tr/16-regress.md`) | proposed GFP as the bottom; fed the tier-2 attempts above |
+| #682 B, a scoped scheduler with cached views (10-23, branch `e2-spike` `b0e046d`) | core arenas work; the cache is wrong under mutation; pointer trees need E5 |
 | "loops asserted", round 6: port the relaxed rules, open callbacks (10-31) | approved, nothing built: "an endless pile of assertions" |
 
 Also closed with them, as designs on the way to lifting T1: L0, segmenting a borrow block at an
@@ -115,7 +137,9 @@ All read-only. Most branches are local and unpushed.
 | #743-B5 kernel (two-point world, class 1) | branch `743-b5-loops`, head `58ca551b`; `~/repos/borrow-core-743b5` |
 | #743 plan, log, charter, world history and literature, B5 evidence | `~/repos/scratch-archive/743/` |
 | spike rounds 1–6 | branches `spike-743-pinlaw`, `spike-743-natural`, `spike-743-natural2`, `spike-743-r5`, `spike-743-r6` (`c7ef41c8`); reports in `~/repos/scratch-archive/spike743/` |
-| #750 spikes | `spike-cancel-resume`, `spike-trio-cancel`; reports in `~/repos/scratch-archive/linear-types/` |
+| #750 spikes | `spike-cancel-resume` (`db5f5737`, `1294661b`), `spike-trio-cancel` (`4df2a9e7`), `750a-kernel`; reports in `~/repos/scratch-archive/linear-types/` |
+| GhostEnd follow-ups | PRs #285, #287 (closed unmerged) |
+| prior art on the restriction | `origin/targets:research/effects/src/prior-art/no-borrows-across-suspension.md`; `docs/prior-art-suspension-borrows.md` |
 | stackK spikes | `spike-stackk-ref` (`5bcb5c97`), `spike-stackk-lend` (`70cb3123`) |
 | #644 B2, class 1, R-1 | branches `b2-div`, `call-grade`, `b2-main`; PRs #646, #654, #665 |
 | class1-revive | `~/repos/borrow-core-class1`; reports in `~/repos/scratch-archive/across-743/` |
@@ -128,6 +152,22 @@ All read-only. Most branches are local and unpushed.
 | unit R design | `~/repos/scratch-archive/row-inference/design.md` |
 | hard-problem corpus, P1–P12 probes | `~/repos/borrow-core-across/scratch-743/` |
 | on `main` | `experiments/LoopBorrow`, `experiments/GhostEnd`, `docs/effects-tr/15-mut-cell.md`, `16-regress.md`, `17-borrow-callbacks.md`, `docs/prior-art-suspension-borrows.md` |
+
+## Known, unchecked candidate
+
+The literature passes found no source that meets either reopen prong for the general problem
+(history §9). The closest for a restricted class, found on 2026-10-12 and never checked against
+our rules or ported: Swift's `_read`/`_modify` yield-once accessors (SE-0474), Rust's
+`AsyncFnMut`, and Hylo's projections, in all of which the code that resumes holds the suspension
+exclusively for the length of the lend. It is recorded here so that it is not later taken for a
+new breakthrough; checking it is itself reopening, and needs the user.
+
+## Issues
+
+The issues this decision closes in substance: #172 (T1/K1), #286 (the Kripke-extension reading),
+#601 (spike S-T), #602 (the lend split and lending cursor), #743 (B2–B7), and #57's
+borrowed-iterator route. Whether each is closed or labelled "tombstoned" on GitHub is the user's
+call; this unit changes no issue.
 
 ## Reopen condition
 

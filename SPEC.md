@@ -2423,8 +2423,9 @@ the backend's layout inference no type of their own.
 
 ### Open
 
-- `for` over `μ` data (lists): a borrowed list in order is open (§7 Open; #57), and an owned list's
-  rest is a cursor but its drain to the end has no count.
+- `for` over `μ` data (lists): an owned list's rest is a cursor but its drain to the end has no
+  count. A borrowed list in order is copied out first (`corpus/print-borrowed-list.bc`): an
+  iterator holding the borrow across its steps is closed by decision 71.
 - A `for` over data whose body performs a resuming operation (a `yield`) or loops (a drain, a div
   call, or a `for` over a generator that loops) is rejected: the step of `count_try` is total
   (`corpus/reject/for-data-gen-loop.bc`). A generator over a view pulls it with
@@ -2935,32 +2936,26 @@ of three continuation types:
   **not** cross a borrow's scope, since a stored `κ` would hold a lend across a suspension. That
   is T1 (#172).
 
-**T1 is the permanent rule: owned across suspensions, borrowed within** (decision 71). No borrow is
-held across a suspension: a resuming operation, `await`, `yield`, or a loop's tick (`Div` is a
-handled effect, §14, so each step of a loop that is not counted resumes). Data that crosses a
-suspension is owned, moved into the suspended code and moved back out; between suspensions,
-borrow freely. `Row.Unwind`, the row of every borrow callback (*Typing*), is how the kernel
-enforces it, and it is not a temporary restriction. A refusal under it names its fix: end the
-borrow before suspending; move ownership in and out; iterate by index or with a counted `for`
-(§16); or copy the value out. Kept beside it: borrows across abortive operations (above), the
-per-observation lend over loops (§14), BOXED-κ (§28), scoped tasks (`spawn_in`/`run_in`, §32) and
-capabilities as borrows. R1 (§29) is frozen as it is. Lifting T1 is closed: the approaches tried
-and the reopen condition are `docs/tombstones/lends-across-suspensions.md`.
-- **Any cancellable or unrestricted continuation a handler holds can be unwound instead of
-  resumed.** `κ` has two entries, `resume w` and `cancel ()`. Cancelling runs `κ`'s frames'
-  finalisers innermost first, ends every lend inside `κ`, and answers `()`, or re-raises at the
-  canceller an error a finaliser raised (*Cancels*, below). This covers every cancellation:
-  - a timeout cancelling its body;
-  - a scheduler cancelling a parked task;
-  - `take(n)` closing a producer early;
-  - `break` out of a loop, and `return` from inside a fold;
-  - `requeue` abandoning a reconcile attempt;
-  - shutdown.
-
   A cancellable `κ` is consumed by exactly one of its two entries. So "a continuation cannot be
   dropped" (#185, `forget_not_lolli`) is answered by the destructor `cancel`, not by a `forget`:
   in Core, `forget κ` has no derivation at `1` (`not_forget_kappa`, *Laws* item 4).
   A must-resume `κ` has no `cancel`, for must-complete computations.
+
+**T1 is the permanent rule: owned across suspensions, borrowed within** (decision 71). No lend
+stays open across a suspension whose handler is outside the lend: a resuming operation, `await`,
+`yield`, or a loop's tick (`Div` is a handled effect, §14, so each step of a loop that is not
+counted resumes). Data that crosses such a suspension is owned, moved into the suspended code and
+moved back out; between suspensions, borrow freely. A suspension handled *inside* the lend's scope
+does not cross it: a borrow lent from outside a scheduler that runs inside the borrow (scoped tasks,
+`spawn_in`/`run_in`, §32), or around a generator pulled by hand inside it, is held by the suspended
+code, and the lend still closes within one run. The one exception is R1 (§29), frozen as it is: a
+`mut` lend of a task's own cell, its callback at `Row.ResumeOC` under `PinLaw`. Every other borrow
+callback's row is `Row.Unwind` (*Typing*), which is how the kernel enforces the rule; it is not a
+temporary restriction. A refusal under it names its fix: end the borrow before suspending; move
+ownership in and out; iterate by index or with a counted `for` (§16); or copy the value out. Kept
+beside it: borrows across abortive operations (above), the per-observation lend over loops (§14),
+BOXED-κ (§28) and capabilities as borrows. Lifting T1 is closed: the approaches tried and the
+reopen condition are `docs/tombstones/lends-across-suspensions.md`.
 
 ### Names: which handler handles an operation
 
@@ -5247,8 +5242,8 @@ R1 of `docs/async-capabilities.md` §3.3 as a rule of an extended judgment besid
 states its soundness as `PinLaw`. `CDerives` and its theorems are unchanged; a program that does not
 use R1 keeps them unconditionally.
 
-**Frozen (decision 71).** R1, with §29a's cancel-path widening, stays exactly as this entry states
-it, and `PinLaw` (`Core/PinLaw.lean`: `lendFrame`, `loopFrame`) gets no new field, case or premise.
+**Frozen for now (decision 71, the user's "Freeze r1 for now").** R1, with §29a's cancel-path
+widening, stays exactly as this entry states it, and `PinLaw` (`Core/PinLaw.lean`: `lendFrame`, `loopFrame`) gets no new field, case or premise.
 R2 is in the judgment and is not emitted, and that is frozen too. T1 is the permanent rule (§19);
 nothing here is a step toward lifting it (`docs/tombstones/lends-across-suspensions.md`).
 
@@ -5505,8 +5500,8 @@ state; its `await` clause reads it.
 ### Not built
 
 The surface `await` and `complete`, `lib/async.bc`'s `cancelled` clause and a suspending scheduler's
-typing, `run_in`, the checker emitting `effAwait` or `effThenDiv`, the nursery (#743, which also
-needs `hdv` relaxed for task handlers), cancel scopes inside a task, and the lowering of a
+typing, `run_in`, the checker emitting `effAwait` or `effThenDiv`, the nursery over owned or copied request data
+(over borrowed data it needed #743, closed by decision 71), cancel scopes inside a task, and the lowering of a
 suspending finaliser.
 
 ### Open
@@ -10629,7 +10624,8 @@ relation or the machine.
   R1's limits, LoopLend's refused shapes) name their fix; only their text changes. Six pending
   programs are rewritten in the rule's idioms and run: `corpus/async-bank.bc`,
   `async-borrow.bc`, `async-worker-pool.bc`, `parse-recover-gen.bc`, `print-borrowed-list.bc`,
-  `state-machine-audit.bc`. No change to the kernel, `PinLaw`, the checker's acceptance or
+  `state-machine-audit.bc`; `corpus/pending/gen-list-thread.bc` records an elaboration error
+  one rewrite goes around (a list threaded through a `for` over a generator). No change to the kernel, `PinLaw`, the checker's acceptance or
   LoopLend's behaviour.
 - **1.24** (2026-10-31) — §50, §14 (#760 phase 2): `willreturn` and `mustprogress` on the
   willreturn class: functions whose body is at the empty row (`Fn.emptyRow`, set from the checked
