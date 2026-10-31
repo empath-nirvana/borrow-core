@@ -71,7 +71,7 @@ step() {
 steps=(
   "hygiene + axioms" "scripts/check-hygiene.sh"
   "axiom report"     "lake env lean scripts/AxiomCheck.lean"
-  "insertion pins"   "lake env lean scripts/PinSites.lean"
+  "insertion pins"   "scripts/check-pins.sh"
   "parse corpus"     "scripts/parse-corpus.sh"
   "check corpus"     "scripts/check-corpus.sh"
   "clause kinds"     "scripts/check-kinds.sh"
