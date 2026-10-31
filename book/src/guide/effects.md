@@ -138,10 +138,10 @@ main -> 1 =
 
 The two `ask`s read 5 and 6, and the return clause adds the cell's last content, 7.
 
-An abort unwinds: whatever the abandoned code owned is dropped, and any borrow it was inside
-ends, so the place goes back to its owner. A value with no destructor (a closure that must be
-called, a capability) can't be live where an abort may leave, and the checker tells you which one
-it is.
+An abort unwinds: whatever the code it leaves owned is freed by its derived drops, and any borrow
+it was inside ends, so the place goes back to its owner. A value with no derived drop (a closure
+that must be called, a capability, a `must_close` value) can't be live where an abort may leave,
+and the checker tells you which one it is ([What an abort does](linear.md#what-an-abort-does)).
 
 Each operation goes to the innermost handler around it, decided at compile time.
 

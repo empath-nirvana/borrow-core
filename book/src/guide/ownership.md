@@ -1,21 +1,22 @@
 # Ownership and borrows
 
 Every value is either **unrestricted** or **linear**. An unrestricted value holds no resource,
-and may be copied and used any number of times or not at all. A linear value owns something
-(memory, a capability, a suspended computation) and is used exactly once: passed on, taken
-apart, or consumed by its drop. Most linear types have a drop that the compiler derives from
-their structure, and the checker inserts it where a value goes unused, so an owned cell behaves
-much as it does in Rust. The difference is that Rust lets any value go unused, while here a value
-goes unused only through its derived drop, and some types have none ([Linear values](linear.md)).
-Borrowing lends a value for a while without giving it up. A program that type-checks has no use
-after free, no double free and no leak ([Safety guarantees](../safety.md)).
+and may be copied and used any number of times or not at all. A linear value is used exactly
+once: passed on, taken apart, or consumed by its drop. Most linear values own something (memory,
+a capability, a suspended computation), and a borrow is linear too. Most linear types have a drop
+that the compiler derives from their structure, and the checker inserts it where a value goes
+unused, so an owned cell behaves much as it does in Rust. The difference is that Rust lets any
+value go unused, while here a value goes unused only through its derived drop, and some types
+have none ([Linear values](linear.md)). Borrowing lends a value for a while without giving it up.
+A program that type-checks has no use after free, no double free and no leak
+([Safety guarantees](../safety.md)).
 
-## Copyable and owned values
+## Unrestricted and linear values
 
-These types are unrestricted, so copyable: the numbers, `bool`, `1`, `!` functions, and tuples
-and sums of copyable types. Everything else is linear, and owns something:
+These types are unrestricted: the numbers, `bool`, `1`, `!` functions, and tuples and sums of
+unrestricted types. Everything else is linear:
 
-| type | what it owns |
+| type | what it is |
 |---|---|
 | `ref A` | a heap cell holding an `A` |
 | `array A`, `buf A`, `string` | a run of cells (next chapter) |

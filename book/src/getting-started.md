@@ -71,6 +71,7 @@ the program.
 | `bcc interp file.bc [-- arg…]` | run in the reference interpreter, without compiling |
 | `bcc compile file.bc -o out.wat` | write the WebAssembly text |
 | `bcc compile --target native file.bc -o out.ll` | write the LLVM IR |
+| `bcc copies file.bc` | list the copies of `imm` borrows the checker inserted, a function's once per call |
 
 A program reads standard input and writes standard output as usual, and takes arguments after
 the file name: `bcc run tool.bc a b < input`.
