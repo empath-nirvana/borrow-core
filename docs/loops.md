@@ -9,6 +9,11 @@ kinds is elaborated. It changes no code. Each claim is marked:
 - **by inspection**: read off the code or SPEC, with no run behind it;
 - **hypothesis**: argued here, not checked.
 
+**Decision 71 (2026-10-31).** T1 is the permanent rule: no borrow is held across a loop's tick
+or any other suspension. A loop that is not counted keeps its data owned in its state and
+borrows within one step (§14's per-observation lend, kept). The spanning lend, K1, is closed:
+[`docs/tombstones/lends-across-suspensions.md`](tombstones/lends-across-suspensions.md).
+
 The hard requirements are #545's: a counted loop over finite data stays total, and a nest is div
 only when something in it is div; every borrow guarantee holds (T1, close on every exit); an exit
 is a branch and a loop stays a loop in the IR; every decided law holds
@@ -113,7 +118,7 @@ Each row was measured with the matrix of #545 (§7.1), its `return` variant (§7
 | S9 | `loopsAt` (`:454`) | "`spin` is declared `total`, but it has a `for` over an unbounded source (a drain)" | #527 item 1, a `while` | `while` is a `.for_` |
 | S10 | `forYield` | "the loop's value has type `i32`, and `gen` returns `1`" | `let r : i32 = for i in gen(10) { … break v … }` (§7.3 `i134d`) | a `for` over a generator has no `else`, so its value must be the generator's result |
 | S11 | parser | "expected a value, found `loop`" | `let r = loop { … break v }` (`i134b`) | `loop` and `while` are not expressions |
-| S12 | `forData`, `forDataDiv` (kept) | "…performs an operation that resumes, and its source `&a` lends `a` around the whole loop…" | `corpus/reject/for-lend-resumes.bc` | T1, #172. Kept |
+| S12 | `forData`, `forDataDiv` (kept) | "…performs an operation that resumes, and its source `&a` lends `a` around the whole loop…" | `corpus/reject/for-lend-resumes.bc` | T1, permanent (decision 71). Kept |
 | S13 | `LoopLend` | "`count` loops, so it is called in direct style one step at a time…"; "the iterator of this `for` holds the borrow of `v`" | #491, #501 | §1.2: decided before the source has a type |
 
 **The matrix** (measured): 19 of 25 print 241. The 6 refused are RW, RL, RG, AW, AL, AG (S1, S2).
@@ -212,8 +217,9 @@ is the per-observation lend of §14:
   inside the stretch that uses it;
 - what the body keeps across a point (an element borrow live after an inner `while`) is refused,
   with §14's message ("a stretch before the loop that hands on something with `'x` in its type").
-  That is the spanning lend, K1 (#172), which no unit here adds;
-- a resuming operation under a lend stays refused (S12, T1).
+  That is the spanning lend, K1 (#172), closed for good by decision 71; the program copies the
+  value out before the inner loop;
+- a resuming operation under a lend stays refused (S12, T1, permanent by decision 71).
 
 So AW and AL run (`let i = *ip` copies before the inner loop). A variant that reads `*ip` after
 the inner loop is refused by the existing rule, by design. `LoopLend` must read the class in the

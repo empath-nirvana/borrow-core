@@ -23,7 +23,9 @@ array-refs 5 0 0 8 8 1
 array-replace 2 0 0 12 12 5
 array-sum 1 0 0 3000 3000 2024
 ascii-upper 4 0 0 4286 4179 4292 # the string the input is read into; the stdin and stdout cells are words of the program's data
+async-bank 14 6 0 479 471 16
 async-bank-inbox 24 6 0 643 575 16 # the two accounts' cells and inboxes, the scheduler's list nodes; one indirect call per resume of a stored task; a bounds check per slot visit; the slots an array resumed in place (§52): no list node per await; the array's fill, its slot moves and a bounds check per slot visit
+async-borrow 29 5 0 498 495 3
 async-cancel 8 3 0 228 225 6 # the victim's `buf` and `extra`, freed by its cancel, and the scheduler's list nodes; an indirect call per resume or cancel of a stored task; a bounds check per slot visit; the slots an array resumed in place (§52): no list node per await; the array's fill, its slot moves and a bounds check per slot visit
 async-lend-slots 10 6 0 357 345 16 # the scheduler's list nodes and the result list's: every scoped cell is a frame slot; an indirect call per resume of a stored task; a bounds check per slot visit; the slots an array resumed in place (§52): no list node per await; the array's fill, its slot moves and a bounds check per slot visit
 async-logged 25 4 0 233 215 0 # the two tasks' cells, and the scheduler's and the log's list nodes; an indirect call per resume of a stored task
@@ -46,6 +48,7 @@ async-stack-nested 27 46 0 1033 1101 40
 async-timers 40 5 0 440 422 0 # the pending and finished lists' nodes; one indirect call per wake or cancel of a stored task
 async-try-join 28 17 0 498 492 0 # the groups' list nodes and the jobs' cells; one indirect call per resume or cancel of a task
 async-unr-site 13 11 0 403 420 18
+async-worker-pool 11 7 1 513 499 20
 async-workers-scoped 43 7 1 792 776 0
 axes/borrow-across-loop 5 0 0 32 15 4
 axes/codata-coeffects 2 0 0 27 10 16
@@ -369,10 +372,12 @@ needs-stdout 3 0 0 9 3 0 # nothing: the stdout cell is a word of the program's d
 operator-rounds 166 0 24 1551 823 0 # the cluster's and the desired state's list nodes, rebuilt per update; the copies are the written `clone`s of the cluster and the spec
 parse-int 4 0 0 240 80 137 # the line buffer, reused; literal views read-only data
 parse-recover 246 0 31 1808 984 28 # the token list's nodes and the lists rebuilt per statement; the copies are the written `clone(rest)` per statement
+parse-recover-gen 227 0 31 1943 1147 108
 pipe-handlers 0 0 0 0 0 0
 poly-operators 0 0 0 0 0 0 # a case of an operator is a direct call; nothing is allocated
 poly-providers 2 0 0 90 48 69 # the two strings; the comparisons read views and allocate nothing
 print-borrowed-array 4 0 0 19 6 3
+print-borrowed-list 19 4 0 85 60 0
 quicksort 5 0 0 96891 88845 94775 # the data and the range stack; the output capability's cell is a word of the program's data
 rec-await-exhausted 2 0 0 9 6 0 # the two list cells; the one `await`'s clause resumes in tail position, a direct call
 rec-deep 30043 0 0 2169491 2169491 436560 # the tree, one object per node (its payload, boxed at the sum), and each group's buffer of frames growing by doubling
@@ -405,6 +410,7 @@ sort-lines 5 0 0 4466 4273 4370 # the input string and the buffer of line views
 sort-numbers 4 0 0 167 133 137
 split-at-mut 4 0 0 133 93 51
 state-machine 0 0 0 0 0 0 # the generator's yields are direct calls of the loop's body
+state-machine-audit 1 0 0 15 15 0
 storage-array 5461 0 0 71560 55180 10920 # one array per node of the tree of arrays (Rust's count, storage.rs)
 sum-i32 7 0 0 39 24 0
 sum-prog-exact 37 9 0 153 111 0

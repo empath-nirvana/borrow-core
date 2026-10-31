@@ -20,7 +20,9 @@ array-refs 5 0 0 8 8 1
 array-replace 2 0 0 12 12 5
 array-sum 1 0 0 3000 3000 2024
 ascii-upper 4 0 0 4286 4179 192
+async-bank 14 0 0 439 431 16
 async-bank-inbox 14 0 0 453 445 16 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
+async-borrow 29 5 0 402 399 3
 async-cancel 8 0 0 140 137 6 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
 async-lend-slots 10 0 0 337 325 16 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
 async-logged 25 0 0 209 191 0
@@ -43,6 +45,7 @@ async-stack-nested 16 0 0 1254 1090 40 # SPEC §52 stress: the inner tasks' stac
 async-timers 40 5 0 398 380 0
 async-try-join 28 0 0 378 372 0
 async-unr-site 7 0 0 411 331 18 # SPEC §52: an unr site does not switch stacks
+async-worker-pool 11 0 1 489 475 20
 async-workers-scoped 43 0 1 756 740 0
 axes/borrow-across-loop 5 0 0 32 15 4
 axes/codata-coeffects 2 0 0 27 10 16
@@ -367,10 +370,12 @@ needs-stdout 3 0 0 9 3 0
 operator-rounds 90 0 24 803 519 0
 parse-int 4 0 0 240 80 105
 parse-recover 259 0 31 1848 1036 0
+parse-recover-gen 240 0 31 1983 1199 108
 pipe-handlers 0 0 0 0 0 0
 poly-operators 0 0 0 0 0 0
 poly-providers 2 0 0 90 48 22
 print-borrowed-array 4 0 0 19 6 0
+print-borrowed-list 19 4 0 67 42 0
 quicksort 5 0 0 92301 84255 94774
 rec-await-exhausted 2 0 0 9 6 0
 rec-deep 30043 0 0 2169443 2169443 436560
@@ -403,6 +408,7 @@ sort-lines 5 0 0 4466 4273 272
 sort-numbers 4 0 0 167 133 136
 split-at-mut 4 0 0 133 93 41
 state-machine 0 0 0 0 0 0
+state-machine-audit 1 0 0 15 15 0
 storage-array 5461 0 0 55180 55180 5460
 sum-i32 7 0 0 30 15 0
 sum-prog-exact 37 9 3 120 78 0

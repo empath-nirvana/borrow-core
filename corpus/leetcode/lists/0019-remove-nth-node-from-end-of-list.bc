@@ -7,8 +7,8 @@
 -- `n` apart through the one list, which over `Option<Box<ListNode>>` is a shared and a `mut`
 -- reference into one structure at once, refused by Rust too; Rust solutions count the nodes and
 -- then walk a `&mut` cursor to the node before, a `mut` borrow carried from one turn of a loop to
--- the next (the spanning lend, T1, #172). The recursion needs neither, at a depth of the list's
--- length under `bounded` (`lib/rec.bc`).
+-- the next (a borrow across a loop's tick, which decision 71 rules out). The recursion needs
+-- neither, at a depth of the list's length under `bounded` (`lib/rec.bc`).
 --
 -- Allocations per case: one cell per node, made by `list_of` (the removed node's cell is freed),
 -- and the line's buffer of numbers.

@@ -304,4 +304,7 @@ main -> 1 =
 A borrow block around a loop is free: the loop body can use the borrow at every step. What the
 loop carries from one step to the next can't hold the borrow, though, so a generator that takes
 the borrow as an argument can't run in a `for` inside the block; the checker says which iterator
-holds it.
+holds it. This is the language's rule, not a gap to be filled: what crosses a step or a `yield`
+is owned, and borrows live within one step. Give the generator the data it owns (a literal is
+persistent, so it can simply be passed), have it hand the data back when it finishes, or iterate
+by index with a counted `for`.

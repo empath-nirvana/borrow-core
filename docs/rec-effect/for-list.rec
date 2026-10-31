@@ -15,7 +15,7 @@ fn digits(l: List<i32>) -> i32 =
 --     (b) `fold_own`: total, but a right fold, so the order is reversed (4321, not 1234);
 --     (c) `fold_own` into a function of the accumulator: total and in order, one closure per
 --         element (4 allocations and 5 dispatched calls for 4 elements).
---   Over a borrowed list, `for x in &l`, nothing runs today (`corpus/pending/print-borrowed-list.bc`;
+--   Over a borrowed list, `for x in &l`, nothing runs (`corpus/print-borrowed-list.bc` copies it out;
 --   `fold_imm`'s result must outlive every lifetime, so it cannot fold into a function).
 --
 -- CHECKER REPORTS (intended)

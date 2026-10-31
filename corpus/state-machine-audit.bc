@@ -1,7 +1,5 @@
--- pending: SPEC §14 (an answering handler around a loop of one turn per observation, whose body performs its operations)
--- now: 72:1: this borrow block's result has type `mut 'fx_l_audit (i32 * i32 * i32) * i32`, which has the block's lifetime `'fx_l_audit`: nothing borrowed at `'fx_l_audit` outlives the block. When the body loops, each step borrows the place again, so the loop cannot keep what is borrowed before it (SPEC §14, borrow scopes over loops)
--- A connection's state machine driven by a stream of events. The events come from a generator
--- (`script`, `Yield`); a `for` feeds each to `step`, which answers the next state or raises
+-- A connection's state machine driven by a script of events. A counted `for` reads each event of
+-- the script by its index and feeds it to `step`, which answers the next state or raises
 -- `Fail[i32]` for an event the current state does not accept. The driver handles the error per
 -- event: it reports the rejected event through `Audit`, an answering effect whose handler keeps
 -- the last rejected event and the count, and stays in the same state. The data received while
@@ -10,24 +8,23 @@
 -- States: 0 closed, 1 listening, 2 established, 3 closing. Events: 10 open, 11 connect,
 -- 12 data (its payload in the next event), 13 fin, 14 ack, 15 reset.
 --
--- Exercises: a generator consumed by a `for` whose body handles an error per element and
--- performs an answering effect handled outside the loop, a state machine over `i32` constants,
--- and `break` out of the generator once the machine is closed for good.
+-- Idiom: iterate by index with a counted `for` (decision 71). `audit`'s capability is a `mut`
+-- borrow of its state, lent to `drive`'s body. A `for` over a generator is a loop of one turn per
+-- observation, and no borrow is held across a loop's tick, so that loop could not perform
+-- `rejected` or `received` (SPEC §14). A counted `for` over the script's indices is a total fold
+-- with no tick, and the capability is used inside it as in any call. `corpus/state-machine.bc` is
+-- the generator form, with the records kept in the loop's variables.
 --
--- Blocked by: an answering handler around a loop that is not counted. `drive`'s `for` over the
--- generator `script` is a loop of one turn per observation, and its body performs `rejected` and
--- `received` of the `audit` handler around `drive`: the handler's capability, a `mut` borrow of
--- its state, is lent per step and cannot be kept by the loop (SPEC §14, borrow scopes over loops).
--- The same holds for a `while` whose body performs an answering operation. The message is about
--- an internal borrow block (`'fx_l_audit`) and points at `fn drive`. `corpus/state-machine.bc`
--- keeps the records in the loop's variables, and runs.
+-- Exercises: a counted loop whose body handles an error per element and performs an answering
+-- effect handled outside the loop, a state machine over `i32` constants, and `break` out of the
+-- loop once the machine is closed for good.
 --
--- Once it lands: `(i32[0], (i32[2], (i32[11], i32[12])))`: the machine ends closed; two events were
+-- Answer: `(i32[0], (i32[2], (i32[11], i32[12])))`: the machine ends closed; two events were
 -- rejected (`data` while only listening, and `connect` while established), the last being
 -- `connect` (11); 12 bytes were received (5 and 7). `live 0`. A driver that stopped at the first
--- rejected event ends listening; one that lost the payload counts 0 bytes.
+-- rejected event ends listening; one that lost the payload counts 0 bytes; one that read past the
+-- final `ack` ends listening.
 
-include yield
 include fail
 
 def s_closed : i32 = 0
@@ -61,19 +58,21 @@ fn step(s: i32, ev: i32) -> i32 with Fail[i32] =
 
 -- A session: open, a stray data event, connect, two payloads, a stray connect, fin, ack; then
 -- events that must not be read.
-fn script() -> 1 with Yield[i32] =
-  yield(e_open); yield(e_data); yield(e_connect);
-  yield(e_data); yield(5); yield(e_data); yield(7);
-  yield(e_connect); yield(e_fin); yield(e_ack);
-  yield(e_open); yield(e_connect);
-  ()
+def n_events : i32 = 12
+
+fn event(i: i32) -> i32 =
+  if i == 0 { e_open } else { if i == 1 { e_data } else { if i == 2 { e_connect } else {
+  if i == 3 { e_data } else { if i == 4 { 5 } else { if i == 5 { e_data } else {
+  if i == 6 { 7 } else { if i == 7 { e_connect } else { if i == 8 { e_fin } else {
+  if i == 9 { e_ack } else { if i == 10 { e_open } else { e_connect } } } } } } } } } } }
 
 -- Runs the machine until it closes after having been established.
 fn drive() -> i32 =
   let mut s = s_closed;
   let mut payload = false;
   let mut was_up = false;
-  for ev in script() {
+  for i in 0..n_events {
+    let ev = event(i);
     if payload { received(ev); payload = false }
     else {
       match with to_result { step(s, ev) } {

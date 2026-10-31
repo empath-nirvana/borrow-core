@@ -7,8 +7,8 @@
 -- Each line of the input is a case, and its answer is printed on a line of its own. `cases` holds
 -- the input and the offset of the next line; each turn lends the input to read one line
 -- (`case_at`), and the case is solved on what was read, outside the lend. A loop over the lines of
--- the lent input, `for l in lines(t)`, would hold the borrow across its turns, the spanning lend
--- (#172, SPEC §14 *Not covered*), and a `fold_lines` callback cannot print (#161).
+-- the lent input, `for l in lines(t)`, would hold the borrow across its turns, which
+-- decision 71 rules out (SPEC §14 *Not covered*), and a `fold_lines` callback cannot print (#161).
 --
 -- Answer on `0153-find-minimum-in-rotated-sorted-array.in`: `1 0 11 1 1 1 1`, one per line, then
 -- `i32[7]`, the number of cases.

@@ -4236,7 +4236,9 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
                   if let some a := r.find? (·.abort) then
                     throw ⟨V.span, s!"this borrow block's body performs the operation {o.n}.{o.i}, " ++
                       s!"which resumes, and the abortive operation {a.n}.{a.i}: an abortive " ++
-                      "operation does not cross a borrow held across a resumption (R1, SPEC §29)"⟩
+                      "operation does not cross a borrow held across a resumption (R1, SPEC §29). " ++
+                      "Handle it inside the block, or end the borrow before the operation that " ++
+                      "resumes (decision 71)"⟩
                   let saved := (← get).cbRow
                   modify fun st => { st with cbRow := some r }
                   let V' ← surfV n c none V
@@ -4251,12 +4253,16 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
                     if let some y := outer.head? then
                       throw ⟨V.span, s!"this borrow block's body uses `{y}`, which is outside " ++
                         s!"it, and performs the operation {o.n}.{o.i}, which resumes: a borrow held " ++
-                        "across a resumption sees only its view (R1, SPEC §29)"⟩
+                        "across a resumption sees only its view (R1, SPEC §29). End the borrow " ++
+                        "before the operation that resumes, with a borrow block around each " ++
+                        s!"stretch between suspensions, or move what it reads of `{y}` into the " ++
+                        "lent cell (decision 71)"⟩
                     return M'
                   | none => pure ()
               throw ⟨V.span, s!"this borrow block's body performs the operation {o.n}.{o.i}, which " ++
                 "resumes: only an abortive operation crosses a borrow's scope (a continuation " ++
-                "held across a lend is T1, #172)"⟩
+                "held across a lend is T1, decision 71). End the borrow before the operation, " ++
+                "or move the value into the code that suspends and have it handed back"⟩
             let saved := (← get).cbRow
             modify fun st => { st with cbRow := some r }
             let V' ← surfV n c none V
@@ -4561,11 +4567,12 @@ def forData : Nat → TCx → Option CCTy → Span → Ident → Val → Val →
       match src with
       | .lend a m _ => throw ⟨sp, s!"the body of this `for` performs an operation that resumes, " ++
           s!"and its source `&{if m then "mut " else ""}{a.name}` lends `{a.name}` around the whole " ++
-          "loop: an operation that resumes cannot cross a borrow (T1, #172). Iterate a view the " ++
-          "function is given"⟩
+          "loop: an operation that resumes cannot cross a borrow (T1, decision 71). Iterate by " ++
+          "index over a view the function is given, or copy the elements out before the loop"⟩
       | .owned _ => throw ⟨sp, "the body of this `for` performs an operation that resumes, and a " ++
           "`for` over an owned array lends it around the whole loop: an operation that resumes " ++
-          "cannot cross a borrow (T1, #172). Iterate a view the function is given"⟩
+          "cannot cross a borrow (T1, decision 71). Iterate by index over a view the function " ++
+          "is given, or copy the elements out before the loop"⟩
       | _ => pure ()
     -- The loop's value: `let r = for …` with or without `else { d }`, or `for … else { d }`.
     let (keep, els, N) : Option (Ident × Option VTy) × Option Comp × Comp :=
@@ -4931,7 +4938,7 @@ continuation of such an operation, so the loop is a `while` over the source's cu
 the body's machine (SPEC §14, §15), one turn per element: a count's index, a view's index or rest,
 an owned array's index (each element copied out under a borrow of one turn), a sized iterator's
 data and state. `&a` and `&mut a` lend `a` around the whole loop, and an operation that resumes
-cannot cross a borrow (T1, #172): they are rejected. The loop has no value (`else`, `break e`). -/
+cannot cross a borrow (T1, decision 71): they are rejected. The loop has no value (`else`, `break e`). -/
 def forDataDiv : Nat → TCx → Option CCTy → Span → Ident → Val → DataSrc → Comp → Comp → Nat → Nat →
     DM Comp
   | 0, _, _, sp, _, _, _, _, _, _, _ => throw ⟨sp, "internal error: a loop nested too deeply"⟩
@@ -5012,7 +5019,8 @@ force io_hole_rest"
       | .lend a m _ => throw ⟨sp, s!"the body of this `for` performs an operation that resumes " ++
           s!"(the operation {k}.{i}), and its source `&{if m then "mut " else ""}{a.name}` lends " ++
           s!"`{a.name}` around the whole loop: an operation that resumes cannot cross a borrow " ++
-          "(T1, #172). Iterate an owned array, or a view the function is given"⟩
+          "(T1, decision 71). Iterate an owned array, or a view the function is given, or copy " ++
+          "the elements out before the loop"⟩
     let (lo, hi) := match V with
       | .app _ (.sugar _ .count) (.pair _ a b) => (some a, some b)
       | _ => (none, none)

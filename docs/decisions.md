@@ -295,6 +295,9 @@ Each entry: the decision, and why. Newest last.
       case in the corpus (`corpus/axes/free-monad.bc`) needs the copy.
 40. **Provisional (SPEC §14, borrow scopes over loops, per observation; O1 step 1; to be confirmed
     by the user).**
+    - *Kept and confirmed by decision 71* (2026-10-31): the per-observation lend is the design,
+      not a step toward a spanning lend, and the objection that it is the elaborator deciding lend
+      extents is overruled.
     - **Per observation, not spanning.** A borrow scope around a loop lends its owner again at
       each observation (`experiments/LoopBorrow`); no rule lends across observations. The
       elaboration is `Frontend/Elab/LoopLend.lean`, with two hooks in `Sugar.lean` (a binding
@@ -631,7 +634,8 @@ Each entry: the decision, and why. Newest last.
       - S2: named capabilities and platform bundles;
       - S3: `rec`, drivers, layers and `|>`;
       - S4: `Yield`, projections and stored callbacks;
-      - S5: with #52, suspension with input and cancellation (K1–K3).
+      - S5: with #52, suspension with input and cancellation (K1–K3; K1, the spanning lend, is
+        tombstoned by decision 71).
     - **Syntax (provisional):** Effekt's semantics with a `with` clause. Capabilities are implicit
       and lexical, and a name is required only when two instances are in scope. The cost
       vocabulary is Koka's (`fun`, `ctl`, `final ctl`), plus `finally`.
@@ -758,7 +762,7 @@ Each entry: the decision, and why. Newest last.
       operation, made per group, is withdrawn by decision 59: a group is the fixed point of its
       generator, called directly.
     - **A `for` over data whose body performs an operation that resumes is a div loop** over the
-      source's cursor; `&a` and `&mut a` stay rejected there (T1, #172).
+      source's cursor; `&a` and `&mut a` stay rejected there (T1, permanent by decision 71).
     - **Spellings (provisional):** `include rec`; `with deep { … }`; `on_exhausted(!{ u -> d })`;
       `exhausted_to_option`; the reports' `row … (a recursive group …)` lines. Decision 57's
       pattern, a per-level handler around the recursive call, is rejected (recursion through a
@@ -925,3 +929,40 @@ Each entry: the decision, and why. Newest last.
       language: the growth is in that code, and `push`'s row carries the effect.
     - Not built: the effect in rows, its inference, and the handlers. SPEC §35 introduced none of
       it on purpose and points to it (§35 *Open*).
+71. **Owned across suspensions, borrowed within: T1 is the permanent rule; R1 is frozen; lifting
+    T1 is tombstoned (the user's decision of 2026-10-31; `docs/tombstones/lends-across-suspensions.md`).**
+    - In the user's words: "Freeze r1 for now. Keep looplend. Rewrite the corpus and spec and plan.
+      Tombstone the abandoned path so we don't bring it up again unless we have some brilliant
+      breakthrough." It answers the user's question "What if we just gate this path off
+      permanently. What do we lose if we just narrow it to what we can prove _easily_ or already
+      have proved."
+    - **The rule.** No borrow is held across a suspension: a resuming effect operation, `await`,
+      `yield`, or a loop's tick (`Div` is handled, decision 67, so each step of a loop that is not
+      counted resumes). Data that crosses a suspension is owned, moved in and moved back out. This
+      is T1 (`Row.Unwind` on the borrow constants, SPEC §19) as the design, not a temporary
+      restriction. No kernel rule is added or changed.
+    - **The fixes** a refusal of the rule names: end the borrow before suspending; move ownership
+      in and out; iterate by index or with a counted `for`; copy the value out.
+    - **Kept:** lexical lends; borrows across abortive operations (an error unwinds through the
+      lend); counted `for` over data (`count_try`, decision 47); LoopLend (decision 40), whose
+      output is core the kernel checks; BOXED-κ (SPEC §28); scoped tasks, `spawn_in`/`run_in`
+      (SPEC §32); capabilities as borrows.
+    - **LoopLend stays.** The objection of 2026-10-21 that it is "the elaborator deciding lend
+      extents", and so kernel work (`CLAUDE.md`, *The elaborator never does the kernel's work*),
+      is overruled for LoopLend by this decision: it rewrites into ordinary `withbor`s that the
+      kernel checks, and no replacement is planned.
+    - **Frozen:** R1 (SPEC §29: a task's own cell lent `mut` across resuming operations, under
+      `PinLaw`'s `LendFrame`), with #750's cancel-path widening (SPEC §29a), exactly as on `main`.
+      `PinLaw` (`Core/PinLaw.lean`, `lendFrame`, `loopFrame`) gets no new field, case or premise.
+      R2 (`lendLoopR`, `LoopFrame`) stays in the judgment, unemitted: frozen, not future work.
+    - **Tombstoned:** every route to lifting T1 or widening `PinLaw`, with its open questions: the
+      spanning lend K1 (#172, `docs/theory-index.md` T1); L0 (U3), R2's emission (U6) and
+      shrinking `PinLaw` (U8) of `docs/async-capabilities.md`; OQ-1 beyond the cancel path, OQ-2,
+      OQ-3 and OQ-5 beyond cancellable waits; spike S-T, "T1 at tail-resumptive operations" (#601);
+      steps B2–B7 of the #743 plan. The tombstone lists every approach tried and why it stopped.
+    - **Reopen condition:** only a breakthrough the user brings, "a paper with a complete proof we
+      can import or a direct example in a working language we can port over".
+    - Supersedes, where they point at lifting T1: decision 40's "O1 step 1" framing (the
+      per-observation lend is the design, not a first step toward the spanning one); the
+      provisional "T1 at tail-resumptive operations" of `docs/expressiveness.md` §16 and its
+      units 13–14; and the #743 build plan (`~/repos/scratch-archive/743/plan.md`, closed).

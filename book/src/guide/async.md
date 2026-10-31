@@ -160,6 +160,10 @@ main -> 1 =
 ```
 
 Each task holds a `mut` borrow of its own cell while it's suspended, and the compiler checks it
-like any other borrow. A task spawned with `spawn_in` inside a borrow block can also hold that
+like any other borrow. That one form, a `mut` borrow block of the task's own cell whose body uses
+only the borrow, is the only borrow a task keeps across an `await` from inside. Anything else
+follows the language's rule: what crosses an `await` is owned. End the borrow before the `await`
+(put the borrow block around the work between two `await`s), or move the value into the task and
+have the task hand it back. A task spawned with `spawn_in` inside a borrow block can also hold that
 outer borrow across its `await`s, and use effects such as standard output that the surrounding
 block gives it.

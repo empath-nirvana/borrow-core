@@ -1,6 +1,16 @@
 # Async with capabilities, and borrows held across a suspension
 
-**Status: a spec entry draft, for approval.** It becomes a SPEC.md section once approved; SPEC.md
+**Closed by decision 71 (2026-10-31).** T1 is the permanent rule: no borrow is held across a
+suspension, and data that crosses one is owned, moved in and back out (SPEC §19). What this
+document built stays and is frozen: R1 under `PinLaw` (SPEC §29, with §29a's cancel-path
+widening), BOXED-κ (U1, SPEC §28), `lib/async.bc` (U2, SPEC §30), the falsifier (U4) and the
+adversarial programs already in the corpus. `PinLaw` gets no new field, case or premise, and R2
+stays unemitted. The remaining units (U3, U6, U7's stress generator, U8) and the open questions
+OQ-1 to OQ-5, as routes to wider borrows across suspensions, are tombstoned:
+[`docs/tombstones/lends-across-suspensions.md`](tombstones/lends-across-suspensions.md). The
+text below is the design record as it stood.
+
+**Status (as drafted): a spec entry draft, for approval.** It becomes a SPEC.md section once approved; SPEC.md
 is not edited here. Tracking issue: #52. Lean: `experiments/AsyncCap/` (`lake build AsyncCap`).
 Surface spellings are provisional throughout. Each says so where it appears.
 
@@ -237,7 +247,7 @@ contain another). Neither adds a machine step.
 - Its compatibility lemma is `PinLaw.stop`, derived from `LendFrame` at `ref` (§4).
 - R1 lends `mut` only. A shared borrow of a task-local place is lent `mut` and read: the place is
   owned by the task, so exclusivity costs nothing. An `imm` R1 (and `withload`, and a fold whose
-  algebra suspends, `corpus/pending/async-borrow.bc`) is OQ-2.
+  algebra suspends, `corpus/pending/async-borrow.bc`, since rewritten as `corpus/async-borrow.bc`) is OQ-2.
 
 **R2, `lendLoopR`: a shared borrow over a loop whose state holds the borrow.**
 
@@ -603,16 +613,22 @@ Ordered; each unit is one PR and turns the programs named green. No unit but U1 
 | **U0** | this entry; `experiments/AsyncCap` (the statements, `fundamentalC_pin`, adequacy) | — |
 | **U1** | port BOXED-κ from `nominal-lifetimes` as a `CDerives` rule (`effHandleVB`), its case `handleV_compatCB`, one case per inversion; the checker emits it | `BoxedKappa`'s `sched-a.bc`, `sched-b.bc` in the corpus |
 | **U2** | `lib/async.bc` (`Async`, `run`, `run_until_empty`, `run_logged`, task handles, `cancel`), and effectful blocks at the surface (#161, `docs/surface-callbacks.md` E2–E8: a block's row, its call, copies per use; a counted loop at a resuming row). EXISTS (SPEC §30): `Async`, `spawn`, `resume`, `cancel`, `queue`, `push`, `run_until_empty`; `spawn_logged` and `run_logged` (A5), `spawn_in` and `run_in` (tasks over an outer borrow) are SPEC §32 | A1, A4, A5, A6 (and E1, E6 from source) |
-| **U3** | L0: segmenting a borrow block at a resuming operation when only the borrow crosses it (ADD-5's degenerate case), in `Frontend/Elab` beside `LoopLend` | A2's `reader`; `gen-self-borrow.bc` moves to the corpus |
+| **U3** (tombstoned, decision 71) | L0: segmenting a borrow block at a resuming operation when only the borrow crosses it (ADD-5's degenerate case), in `Frontend/Elab` beside `LoopLend` | A2's `reader`; `gen-self-borrow.bc` moves to the corpus |
 | **U4** | the falsifier: never-reuse allocator and tagged interpreter in `bcc interp`; a script that runs every program three ways (§6.1) | the harness, run on A1, A2 (`reader`), A4 and the corpus |
 | **U5** (built, SPEC §29) | R1 in Core: `CDerivesP` (AsyncCap's `PDerives`), `fundamentalC_pin`, `adequacyD_pin`; the checker's R1 (callback row `Row.ResumeO`, emitted only when L0 does not apply); `bcc check`/`bcc trusted` report `PinLaw`; the lowering keeps a cell lent across a suspension out of line, or the task record unmoved (§3.5) | A2, A5, A6; `n2`, `n4`, `n5`, `n7`, `n9` |
-| **U6** | R2: `LoopLend` keeps its rewrite when the loop's state holds an `imm` view, emitting `lendLoopR` | A3; `n6`, `n1`, `n3`, `n8` (with U1) |
-| **U7** | the adversarial suite (§6.2) in `corpus/reject` and the corpus, with the stress generator | §6.2 rows 1–15 |
-| **U8** | proof track, independent of the others, not on the async path: prove R1's compatibility lemma (for example through Law 2's re-lendable reading, at a cancel table that re-lends for the borrower's finalisers, §4.3); a lender-side lemma at observation boundaries for R2 | shrinks `PinLaw`; no program changes |
+| **U6** (tombstoned, decision 71: R2 frozen, unemitted) | R2: `LoopLend` keeps its rewrite when the loop's state holds an `imm` view, emitting `lendLoopR` | A3; `n6`, `n1`, `n3`, `n8` (with U1) |
+| **U7** (the programs in the corpus stay; the stress generator is tombstoned, decision 71) | the adversarial suite (§6.2) in `corpus/reject` and the corpus, with the stress generator | §6.2 rows 1–15 |
+| **U8** (tombstoned, decision 71: `PinLaw` is frozen, neither widened nor shrunk) | proof track, independent of the others, not on the async path: prove R1's compatibility lemma (for example through Law 2's re-lendable reading, at a cancel table that re-lends for the borrower's finalisers, §4.3); a lender-side lemma at observation boundaries for R2 | shrinks `PinLaw`; no program changes |
 
 ---
 
 ## 8. Open questions
+
+> **Closed by decision 71 (tombstoned).** OQ-1 to OQ-5 are closed: R1 stays as SPEC §29 and §29a
+> state it (OQ-1 taken for the cancel path only, OQ-5 relaxed for cancellable waits only), and
+> no further widening is open work. A program that needs more ends its borrow before the
+> suspension, or moves the value in and out
+> ([tombstone](tombstones/lends-across-suspensions.md)). The questions are kept as asked.
 
 > Since #750 (SPEC §29a) R1's row premise is `Row.ResumeOC`, which widens `Row.ResumeO` for the
 > cancel path only (OQ-1, OQ-5 below). The statements quoted
@@ -629,7 +645,7 @@ Ordered; each unit is one PR and turns the programs named green. No unit but U1 
 > is still refused.
 
 > **OQ-2. `imm` relaxed lends, `withload` and folds whose algebra suspends.** Needed by
-> `corpus/pending/async-borrow.bc` (a yield inside `fold_imm`'s algebra, under the fold's own
+> `corpus/pending/async-borrow.bc`, since rewritten under decision 71 (a yield inside `fold_imm`'s algebra, under the fold's own
 > loads). GhostEnd has the lender side (`RelendI`, `ewpTS_I_frameR`); the unwinding form and a
 > relaxed `foldImm` are not built. Each would be a case of the schema of its rule shape (a
 > `LendForm` case for a lend), not a field.

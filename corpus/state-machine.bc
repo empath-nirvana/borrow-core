@@ -2,8 +2,8 @@
 -- (`script`, `Yield`); a `for` feeds each to `step`, which answers the next state or raises
 -- `Fail[i32]` for an event the current state does not accept. The driver handles the error per
 -- event: it records the rejected event and stays in the same state. It also counts the data
--- received while established. (`corpus/pending/state-machine-audit.bc` is this program with the
--- records kept by an answering effect's handler instead of the loop's variables.)
+-- received while established. (`corpus/state-machine-audit.bc` is this program with the
+-- records kept by an answering effect's handler, and the events read by index in a counted loop.)
 --
 -- States: 0 closed, 1 listening, 2 established, 3 closing. Events: 10 open, 11 connect,
 -- 12 data (its payload in the next event), 13 fin, 14 ack, 15 reset.

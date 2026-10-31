@@ -39,7 +39,7 @@ cost-parity counts (§1.2).
 
 | kernel or semantics item | needed by | existing thread |
 |---|---|---|
-| K1. a borrow held across a suspension (a spanning lend) | async tasks that borrow; a `yield` under a borrow; projection ops across a `yield` | O1, `experiments/LoopBorrow`, #52 phase 5 |
+| K1. a borrow held across a suspension (a spanning lend; closed by decision 71, `docs/tombstones/lends-across-suspensions.md`) | async tasks that borrow; a `yield` under a borrow; projection ops across a `yield` | O1, `experiments/LoopBorrow`, #52 phase 5 |
 | K2. codata observations that take input (resume *with a value*, later) | `await` that answers data; several tasks sharing one `Mut` capability | #96, operator O2 |
 | K3. destructors that perform I/O or can fail | finalising abandoned continuations that hold host handles | SPEC §12 Open, platform §2.3 |
 | K4. early exit out of a kernel fold (`fold_own`/`fold_imm`) | `raise` inside a fold over `μ` data | operator O5, matrix C2 |
@@ -1226,7 +1226,7 @@ handler" (§4.11).
   "`let r = &x` lends `x` for the rest of the block", applied to an operation.
 - While `v` is live, another operation on `m` is a borrow conflict if `m` was lent `mut` (one
   `get_mut` at a time), and allowed if `imm`.
-- `v` held across a `yield` or `wait` is K1, rejected until the spanning lend exists, with the
+- `v` held across a `yield` or `wait` is K1, rejected for good (decision 71, `docs/tombstones/lends-across-suspensions.md`), with the
   same message as §15's `yield` inside a borrow block.
 - The copy-out form (`get` answers a value; #119's discipline) stays available and is what S1
   ships.
@@ -1347,7 +1347,8 @@ under decision 17.
     observations (O3), effectful fold algebras (O4), lifetime-bounded capture; depends on #9 and
     #58.
 11. **Design note: suspension with input and cancellation (K1, K2, K3), for #52.** Scope #96 and
-    the spanning lend against the operator's `timeout` and the controller loop (targets 5, 6).
+    the spanning lend against the operator's `timeout` and the controller loop (targets 5, 6). The
+    spanning lend is closed by decision 71 (`docs/tombstones/lends-across-suspensions.md`).
 
 ---
 

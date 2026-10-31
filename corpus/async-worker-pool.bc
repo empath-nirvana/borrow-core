@@ -1,0 +1,40 @@
+-- A worker pool whose workers share a read-only configuration. `main` owns the configuration
+-- (a scale and an offset); each worker processes its jobs with it, awaiting between jobs. The
+-- tasks run under `lib/async.bc`'s scheduler, interleaved, and the configuration is freed after.
+--
+-- Idiom: copy the value out (decision 71). The configuration is plain data, so `main` reads it
+-- out of its cell once, inside one borrow that ends before any task runs, and gives each task of
+-- `spawn` its own copy: no borrow is held across an `await`. A task of `spawn` cannot hold an
+-- outer borrow (its continuation is boxed at `top`, SPEC §30). `corpus/async-workers-scoped.bc`
+-- is the other idiom: the borrow lent from outside the scheduler to tasks of `spawn_in`.
+--
+-- Exercises: tasks given owned copies of shared data, a counted loop at the row `Async`, a
+-- generic `fold` over the results.
+--
+-- Answer: the workers' totals `[63, 92]` (jobs 1, 2, 3 at scale 10 plus offset 1:
+-- 10 + 20 + 30 + 3; jobs 4, 5: 40 + 50 + 2) and their sum 155; `live 0`.
+
+include async
+
+type Config = i32 * i32
+
+-- `jobs` consecutive job numbers from `first`, each scaled and offset, awaiting after each.
+fn worker(cfg: Config, first: i32, jobs: i32) -> i32 with Async =
+  let (scale, offset) = cfg;
+  let mut sum = 0;
+  for i in 0..jobs {
+    sum = sum + (first + i) * scale + offset;
+    await()
+  };
+  sum
+
+main -> List[i32] * i32 =
+  let cfg = alloc((10, 1));
+  let c = borrow imm cfg { r -> *r };
+  let q = queue[i32]();
+  let q = push(q, with spawn { worker(c, 1, 3) });
+  let q = push(q, with spawn { worker(c, 4, 2) });
+  let totals = run_until_empty(q);
+  let _ = free(cfg);
+  let sum = with on_exhausted(!{ u -> 0 }) { fold(clone(totals), 0, !{ (a, x) -> a + x }) };
+  (totals, sum)

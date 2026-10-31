@@ -1,22 +1,24 @@
--- pending: SPEC §14 (a for over a generator that holds a borrow, inside that borrow's block)
--- now: 136:7: the iterator of this `for` holds the borrow of `v`: a borrow block over a loop lends its place again at each step, so what the loop holds between steps must not hold the borrow (SPEC §14, borrow scopes over loops)
--- `parse-recover.bc` with its tokenizer written as a generator: `tokens` yields each token of a
--- borrowed view of the source literal, and `main` collects them with a `for` inside the borrow
--- block of the literal, as a user would: `borrow imm "…" { v -> for t in tokens(v) { … } }`.
+-- `parse-recover.bc` with its tokenizer written as a generator: `tokens` yields each token of the
+-- source, and `token_list` collects them with a `for`, as a user would: `for t in tokens(src) { … }`.
+-- The `for` pushes onto a buffer: a list threaded through a `for` over a generator is not yet
+-- elaborated (the message is an internal error in the `for`'s core), so the list is built from the
+-- buffer after the loop.
 --
--- Blocked by: a `for` over a generator that holds a borrow, inside that borrow's block. The
--- generator's loop is a div loop (its `for` over the view yields), so the `for` that drives it is
--- one too, and a borrow block over a loop lends its place per step (SPEC §14): the stored
--- iterator holds the view between steps. `corpus/gen-borrowed.bc` and
--- `corpus/gen-tokenize-parse.bc` pull such a generator by hand instead. `parse-recover.bc` is
--- this program with the tokenizer a counted loop that builds a list.
+-- Idiom: a generator over data it owns, read by index (decision 71). A generator that holds a
+-- borrowed view of the source across its `yield`s, driven by a `for` inside that borrow's block,
+-- would hold the borrow across the loop's ticks, which no rule allows (SPEC §14, §19). Here the
+-- generator is given the literal itself: a literal is persistent (its length and a `!` function
+-- from an index to its byte, SPEC §17), so `tokens` owns it and reads byte `i` at each step of a
+-- counted loop, and no borrow crosses a `yield`. `corpus/gen-borrowed.bc` and
+-- `corpus/gen-tokenize-parse.bc` keep the view and pull the generator by hand inside the borrow.
 --
--- Once it lands: as `parse-recover.bc`, `([3, 6, 77, 8], [(3, 1), (5, 2)])`.
+-- Answer: as `parse-recover.bc`, `([3, 6, 77, 8], [(3, 1), (5, 2)])`; `live 0`.
 
 include text
 include yield
 include rec
 include list
+include buf
 
 -- A token: its kind and its value. Kinds: 0 a number, 1 `+`, 2 `*`, 3 `(`, 4 `)`, 5 `;`.
 type Tok = i32 * i32
@@ -27,13 +29,14 @@ fn kind_of(b: u8) -> i32 =
   if b == b'+' { 1 } else { if b == b'*' { 2 } else { if b == b'(' { 3 } else {
   if b == b')' { 4 } else { if b == b';' { 5 } else { 0 - 1 } } } } }
 
--- The tokens of a view: numbers, operators and `;`; blanks are skipped. A trailing statement is
+-- The tokens of a literal: numbers, operators and `;`; blanks are skipped. A trailing statement is
 -- closed with a `;`.
-fn tokens<'a>(v: text 'a) -> 1 with Yield[Tok] =
+fn tokens(src: lit) -> 1 with Yield[Tok] =
+  let (n, byte) = src;
   let mut num = 0;
   let mut in_num = false;
-  for p in v {
-    let b = *p;
+  for i in 0..n {
+    let b = byte(i);
     if is_digit(b) { num = num * 10 + to_i32(b) - 48; in_num = true }
     else {
       if in_num { yield((0, num)); num = 0; in_num = false } else { () };
@@ -129,13 +132,23 @@ fn run_all(ts: Toks) -> List[i32] =
   };
   fold(vals, nil[i32](), !{ (acc, v) -> cons(v, acc) })
 
+-- The tokens of the source, in order: collected into a buffer by a `for` over the generator, then
+-- moved into a list from the buffer's end.
+fn token_list(src: lit) -> Toks =
+  let mut b = buf_new[Tok](16);
+  for t in tokens(src) { let (b2, _) = push(b, t); b = b2 };
+  let (b, n) = len_of(b);
+  let mut ts = nil[Tok]();
+  for _ in 0..n {
+    let (b2, o) = pop(b);
+    b = b2;
+    match o { inl t -> ts = cons(t, ts) | inr u -> () }
+  };
+  ts
+
 main -> List[i32] * List[i32 * i32] =
+  let ts = token_list("1+2; 2*3; 4*; 7*(5+6); (8; 8");
   with on_exhausted(!{ u -> (nil(), nil()) }) {
-    let mut toks = nil[Tok]();
-    borrow imm "1+2; 2*3; 4*; 7*(5+6); (8; 8" { v ->
-      for t in tokens(v) { toks = cons(t, toks) }
-    };
-    let ts = fold(toks, nil[Tok](), !{ (acc, t) -> cons(t, acc) });
     let reports = alloc(nil[i32 * i32]());
     let vals = with collect(&mut reports) { run_all(ts) };
     let rs = free(reports);

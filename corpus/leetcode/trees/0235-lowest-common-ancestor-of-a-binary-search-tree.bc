@@ -5,8 +5,8 @@
 -- while both are larger, and stop at the first node between them. The descent is a recursion in
 -- tail position that consumes the tree: at each node the subtree not taken is dropped by its
 -- destructor. The Rust walks a `&TreeNode` cursor down in a loop, a borrow carried from one turn
--- to the next and moved into a subtree at the tree's lifetime (the spanning lend, T1, #172, and
--- views through owned pointers, #219). Here the tree is not needed afterwards; a caller that
+-- to the next and moved into a subtree at the tree's lifetime (a borrow across a loop's tick,
+-- which decision 71 rules out, and views through owned pointers, #219). Here the tree is not needed afterwards; a caller that
 -- kept it would hand it back rebuilt (`0572-subtree-of-another-tree.bc`). Depth the tree's height
 -- under `bounded` (`lib/rec.bc`).
 --

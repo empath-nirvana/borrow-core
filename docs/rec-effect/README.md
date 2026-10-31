@@ -316,7 +316,7 @@ be free per use.**
 
 **R9. Borrowed descent at one lifetime.**
 
-- Forced by: 13 and 12; `corpus/pending/print-borrowed-list.bc`.
+- Forced by: 13 and 12; `corpus/print-borrowed-list.bc` (which copies the list out, decision 71).
 - `sum(&t)` by `rec` needs a request type `&'a Tree` whose children are again `&'a Tree`. Today
   a view cannot be unrolled (13).
 - `fold_imm` runs (12), but only for results that outlive every lifetime, and on the host stack.

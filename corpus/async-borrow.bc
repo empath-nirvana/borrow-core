@@ -1,0 +1,42 @@
+-- An async task that holds a borrow: two tasks read one borrowed array, one of them awaiting
+-- between elements, and `main` runs both before the borrow ends.
+--
+-- Axes: codata × effects × scope. A task is a suspended computation over `Async`; it holds an
+-- `imm` view of the array (scope) across its `await`s.
+--
+-- Idiom: owned across suspensions, borrowed within (decision 71), with the borrow lent from
+-- outside the scheduler, and the data read by index. `main` owns the array and lends it `imm`
+-- around the whole scheduler; the tasks are spawned with `spawn_in` and run by `run_in` (SPEC §32)
+-- inside that borrow, so every `await` is handled inside the borrow's scope and no lend is held
+-- across a suspension. `sum` reads the view with a counted `for`, one element per turn. A `fold_imm`
+-- whose algebra awaits (an `imm` relaxed lend, OQ-2 of `docs/async-capabilities.md`) is closed by
+-- decision 71, and so is a task of `spawn` holding the borrow. The array replaces the earlier
+-- draft's list: a `for` over a view is a counted loop, a list has no left-to-right `for` (#57).
+--
+-- Answer: the tasks compute 6 (the sum of 1, 2, 3) and 3 (the length): `i32[9]`, `live 0`.
+
+include async
+include slice
+
+-- The sum of the view, awaiting after each element.
+fn sum<'a>(xs: array_imm 'a i32) -> i32 with Async =
+  let mut s = 0;
+  for x in xs { s = s + *x; await() };
+  s
+
+-- The length of the view, with no `await`.
+fn count<'a>(xs: array_imm 'a i32) -> i32 with Async = len(xs)
+
+main -> i32 =
+  let a = array_new[i32] (3, !{ i -> i + 1 });
+  let d = alloc(());
+  let (d, v) = borrow imm a { 'r, xs ->
+    let v = borrow mut d { 'd, e ->
+      let (x1, x2) = array_copy['r, i32] xs;
+      let q = queue_in[i32]();
+      let q = push_in(q, with spawn_in { sum(x1) });
+      let q = push_in(q, with spawn_in { count(x2) });
+      with on_exhausted(!{ u -> nil() }) { run_in(q, 5) } };
+    (d, v) };
+  let _ = free(d);
+  with on_exhausted(!{ u -> 0 }) { fold(v, 0, !{ (s, x) -> s + x }) }

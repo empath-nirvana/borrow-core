@@ -1,7 +1,8 @@
--- expect: 14:3: the body of this `for` performs an operation that resumes (the operation 1.0), and its source `&a` lends `a` around the whole loop: an operation that resumes cannot cross a borrow (T1, #172). Iterate an owned array, or a view the function is given
+-- expect: 15:3: the body of this `for` performs an operation that resumes (the operation 1.0), and its source `&a` lends `a` around the whole loop: an operation that resumes cannot cross a borrow (T1, decision 71). Iterate an owned array, or a view the function is given, or copy the elements out before the loop
 -- A `for` over `&a`, whose body performs `yield`. `&a` lends `a` for the whole loop (SPEC §9,
 -- §16), and the loop is div because its body performs an operation that resumes: the
--- continuation of `yield` would hold the lend across a suspension, which is T1 (#172). Over the
+-- continuation of `yield` would hold the lend across a suspension, which T1 rules out for good
+-- (decision 71, `docs/tombstones/lends-across-suspensions.md`). Over the
 -- owned array, or over a view the generator is given, the same loop runs
 -- (`corpus/for-data-div.bc`).
 
