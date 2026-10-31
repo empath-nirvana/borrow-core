@@ -41,15 +41,15 @@ open BoCa.Lifetime (LSub)
 /-- `Next = 1 ⊕ 1`.  `[spec §14]` -/
 abbrev nextTy : VTy := .sum .unit .unit
 
-/-- `tick : 1 ↠ Next` at the world `w`, the operation `0` of `Div`, must resume: its continuation
-has no cancel.  At the runtime and `div_fuel`, whose clauses resume `κ` at once, the world is a
-bound (`some ℓ`); at `reify`, whose loop value stores `κ`, it is unbounded.  `[spec §14, §63]` -/
-def tickSigW (w : Option Lifetime.Life) : OpSig := ⟨divEff, 0, .lin, .unit, nextTy, .ret .unit, w⟩
+/-- `tick : 1 ↠ Next`, the operation `0` of `Div`, must resume: its continuation has no cancel.
+`[spec §14]` -/
+def tickSig : OpSig := ⟨divEff, 0, .lin, .unit, nextTy, .ret .unit, .top⟩
 
-/-- `tick` at the unbounded world.  `[spec §14]` -/
-def tickSig : OpSig := tickSigW none
+/-- `tick` at the grade `c`: call-graded at the runtime and `div_fuel`, whose clauses resume `κ` in
+tail position; ungraded at `reify`, whose loop value stores `κ`.  `[spec §14, §48]` -/
+def tickSigW (c : World) : OpSig := ⟨divEff, 0, .lin, .unit, nextTy, .ret .unit, c⟩
 
-theorem tickSigW_none : tickSigW none = tickSig := rfl
+theorem tickSigW_top : tickSigW .top = tickSig := rfl
 
 /-- `A` is `1`. -/
 def VTy.isUnitB : VTy → Bool

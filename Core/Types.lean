@@ -41,6 +41,66 @@ inductive Qual where
   | unr
   deriving DecidableEq, Repr
 
+/-- **The world axis of M1** (decision 71): the worlds a continuation captured at an operation is
+owed at. `op`, resumed in the stop's own world (every record kept), below `top`, every extension
+of it. `top` is the default and Core's convention.  `[spec §63]` -/
+inductive World where
+  | top
+  | op
+  deriving DecidableEq, Repr
+
+namespace World
+
+/-- `op ⊑ top`. -/
+def Le : World → World → Prop
+  | .op, _ => True
+  | .top, .top => True
+  | .top, .op => False
+
+instance : LE World := ⟨Le⟩
+
+instance (a b : World) : Decidable (a ≤ b) := by
+  cases a <;> cases b <;> simp only [LE.le, Le] <;> infer_instance
+
+theorem le_refl (a : World) : a ≤ a := by cases a <;> trivial
+
+theorem le_trans {a b c : World} (h : a ≤ b) (h' : b ≤ c) : a ≤ c := by
+  cases a <;> cases b <;> cases c <;> first | trivial | exact h.elim | exact h'.elim
+
+theorem le_antisymm {a b : World} (h : a ≤ b) (h' : b ≤ a) : a = b := by
+  cases a <;> cases b <;> first | rfl | exact h.elim | exact h'.elim
+
+theorem op_le (a : World) : World.op ≤ a := trivial
+
+theorem le_top (a : World) : a ≤ World.top := by cases a <;> trivial
+
+/-- `a ⊑ b` is "`b` at `op` forces `a` at `op`": the form the rules' premises take. -/
+theorem le_iff {a b : World} : a ≤ b ↔ (b = .op → a = .op) := by
+  cases a <;> cases b <;> simp [LE.le, Le]
+
+/-- The meet: `op` when either is. -/
+def meet : World → World → World
+  | .op, _ => .op
+  | .top, b => b
+
+theorem meet_le_left (a b : World) : meet a b ≤ a := by cases a <;> cases b <;> trivial
+theorem meet_le_right (a b : World) : meet a b ≤ b := by cases a <;> cases b <;> trivial
+theorem le_meet {a b c : World} (h : c ≤ a) (h' : c ≤ b) : c ≤ meet a b := by
+  cases a <;> cases b <;> cases c <;> first | trivial | exact h.elim | exact h'.elim
+theorem meet_comm (a b : World) : meet a b = meet b a := by cases a <;> cases b <;> rfl
+theorem meet_assoc (a b c : World) : meet (meet a b) c = meet a (meet b c) := by
+  cases a <;> cases b <;> cases c <;> rfl
+theorem meet_self (a : World) : meet a a = a := by cases a <;> rfl
+
+end World
+
+/-- **No world for an abortive operation**: its continuation is never resumed, so it is owed at
+no list, and its world is `top` whatever is written.  `[spec §63]` -/
+def entWld (abort : Bool) (w : World) : World := if abort then .top else w
+
+theorem entWld_abort (w : World) : entWld true w = .top := rfl
+theorem entWld_resume (w : World) : entWld false w = w := rfl
+
 mutual
 /-- Value types.  `[spec §3]` -/
 inductive VTy where
@@ -91,11 +151,10 @@ inductive CTy where
   /-- One operation of an effect row: `C` extended by the operation `i` of the name `n`,
   `A ↠^q B`, with its cancel row `fin`: what cancelling a continuation captured at the operation
   may raise or perform, `⊤` when it cannot be cancelled, otherwise the operations of `fin`'s layers
-  (`CTy.rowOf`); and its world `wld`, M1's world axis: `none`, a continuation captured here is
-  owed at every extension of the stop's world; `some ℓ`, only at the extensions that keep every
-  record strictly inside `ℓ`.  `F_Σ R` is a stack of these over `F R` (`CTy.effOf`).
+  (`CTy.rowOf`); and its world `wld` (`World`): at `op` a continuation captured here is resumed
+  only at a list with the stop's members.  `F_Σ R` is a stack of these over `F R` (`CTy.effOf`).
   `[spec §19, §27, §63]` -/
-  | eff (n i : UInt32) (q : Qual) (A B : VTy) (fin : CTy) (wld : Option Lifetime.Life) (C : CTy)
+  | eff (n i : UInt32) (q : Qual) (A B : VTy) (fin : CTy) (wld : World) (C : CTy)
 end
 
 /-- The value-type eliminator with `U C` a leaf. -/
@@ -150,8 +209,8 @@ def CTy.EffFree : CTy → Prop
   | .eff _ _ _ _ _ _ _ _ => False
 
 /-- An operation of an effect row: the operation `i` of the name `n`, `A ↠^q B`, its cancel
-row `fin` (`CTy.eff`), the empty row `F 1` by default, and its world `wld`, unbounded (`none`) by
-default: the bound of the worlds a continuation captured here is resumed in.
+row `fin` (`CTy.eff`), the empty row `F 1` by default, and its world `wld`, `top` by default: at
+`op` a continuation captured here is resumed only at a list with the stop's members.
 `[spec §19, §27, §63]` -/
 structure OpSig where
   n : UInt32
@@ -160,7 +219,7 @@ structure OpSig where
   A : VTy
   B : VTy
   fin : CTy := .ret .unit
-  wld : Option Lifetime.Life := none
+  wld : World := .top
 
 /-- An operation `A ↠^q B` is capturable: not must-resume, and not abortive (its answer type is not
 `0`), so a continuation captured at it has a cancel branch, and its cancel row is read.
@@ -177,7 +236,7 @@ def CTy.effOf : List OpSig → VTy → CTy
 
 /-- The operations a cancel row holds: its layers, `[]` at any other former.  `[spec §27]` -/
 def CTy.rowOf : CTy → List OpSig
-  | .eff n i q A B fin w C => ⟨n, i, q, A, B, fin, w⟩ :: CTy.rowOf C
+  | .eff n i q A B fin cg C => ⟨n, i, q, A, B, fin, cg⟩ :: CTy.rowOf C
   | _ => []
 
 /-- The cancel row `⊤`: a continuation captured there cannot be cancelled.  `[spec §27]` -/
@@ -224,8 +283,7 @@ def CFree (x : LifeVar) : CTy → Prop
   | .top => False
   | .all y b C => b.mentions x = true ∨ (x ≠ y ∧ CFree x C)
   | .nu C => CFree x C
-  | .eff _ _ _ A B fin w C =>
-      VFree x A ∨ VFree x B ∨ CFree x fin ∨ w.any (·.mentions x) = true ∨ CFree x C
+  | .eff _ _ _ A B fin _ C => VFree x A ∨ VFree x B ∨ CFree x fin ∨ CFree x C
 end
 
 /-! ### Type variables: renaming, substitution, closedness
@@ -1166,7 +1224,7 @@ each `F_Σ A`, whose operation types are closed.  `[spec §7, §19]` -/
 def instT (S : VTy) : CTy → CTy
   | .ret A => .ret (VTy.inst S A)
   | .amp C D => .amp (instT S C) (instT S D)
-  | .eff n i q A B fin w C => .eff n i q A B fin w (instT S C)
+  | .eff n i q A B fin cg C => .eff n i q A B fin cg (instT S C)
   | .arr A C => .arr A (instT S C)
   | C => C
 
@@ -1183,7 +1241,7 @@ with an argument `A ⊸ D` over such a tree, the argument type closed (the closu
 def NuLeaf : CTy → Prop
   | .ret A => A.Poly
   | .amp C D => NuLeaf C ∧ NuLeaf D
-  | .eff n i q A B fin w C => EffLeaf (.eff n i q A B fin w C)
+  | .eff n i q A B fin cg C => EffLeaf (.eff n i q A B fin cg C)
   | .arr A D => A.Cl 0 ∧ NuLeaf D
   | _ => False
 
@@ -1581,9 +1639,7 @@ def CTy.lifeBound : CTy → Nat
   | .top => 0
   | .all x b C => max (x + 1) (max b.varBound C.lifeBound)
   | .nu C => C.lifeBound
-  | .eff _ _ _ A B fin w C =>
-      max A.lifeBound (max B.lifeBound (max fin.lifeBound (max ((w.map (·.varBound)).getD 0)
-        C.lifeBound)))
+  | .eff _ _ _ A B fin _ C => max A.lifeBound (max B.lifeBound (max fin.lifeBound C.lifeBound))
 end
 
 mutual
@@ -1620,9 +1676,8 @@ def CTy.applyLSub (σ : LSubst) : CTy → CTy
       else
         .all y (b.applySub σ) (C.applyLSub (lsubDrop σ y))
   | .nu C => .nu (C.applyLSub σ)
-  | .eff n i q A B fin w C =>
-      .eff n i q (A.applyLSub σ) (B.applyLSub σ) (fin.applyLSub σ) (w.map (·.applySub σ))
-        (C.applyLSub σ)
+  | .eff n i q A B fin cg C =>
+      .eff n i q (A.applyLSub σ) (B.applyLSub σ) (fin.applyLSub σ) cg (C.applyLSub σ)
 end
 
 /-- `A[@a/'x]`. -/
@@ -1697,25 +1752,17 @@ theorem lt_cLifeBound {x : LifeVar} : ∀ {C : CTy}, CFree x C → x < C.lifeBou
       · exact Nat.lt_of_lt_of_le (lt_cLifeBound h)
           (Nat.le_trans (Nat.le_max_right _ _) (Nat.le_max_right _ _))
   | .nu C, h => lt_cLifeBound (C := C) h
-  | .eff _ _ _ A B fin w C, h => by
-      simp only [CTy.lifeBound]
-      rcases h with h | h | h | h | h
+  | .eff _ _ _ A B fin cg C, h => by
+      rcases h with h | h | h | h
       · exact Nat.lt_of_lt_of_le (lt_vLifeBound h) (Nat.le_max_left _ _)
       · exact Nat.lt_of_lt_of_le (lt_vLifeBound h)
           (Nat.le_trans (Nat.le_max_left _ _) (Nat.le_max_right _ _))
       · exact Nat.lt_of_lt_of_le (lt_cLifeBound h)
           (Nat.le_trans (Nat.le_max_left _ _)
             (Nat.le_trans (Nat.le_max_right _ _) (Nat.le_max_right _ _)))
-      · cases w with
-        | none => simp at h
-        | some r =>
-          simp only [Option.any_some] at h
-          exact Nat.lt_of_lt_of_le (lt_varBound h)
-            (Nat.le_trans (Nat.le_max_left _ _) (Nat.le_trans (Nat.le_max_right _ _)
-              (Nat.le_trans (Nat.le_max_right _ _) (Nat.le_max_right _ _))))
       · exact Nat.lt_of_lt_of_le (lt_cLifeBound h)
-          (Nat.le_trans (Nat.le_max_right _ _) (Nat.le_trans (Nat.le_max_right _ _)
-            (Nat.le_trans (Nat.le_max_right _ _) (Nat.le_max_right _ _))))
+          (Nat.le_trans (Nat.le_max_right _ _)
+            (Nat.le_trans (Nat.le_max_right _ _) (Nat.le_max_right _ _)))
 end
 
 /-- `Imm̲` introduces only its index. -/

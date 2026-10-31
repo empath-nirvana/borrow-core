@@ -154,7 +154,7 @@ theorem dAt_divResidual : CDerivesAt ΞDiv Δ [] divResidual (.comp (.ret I)) :=
     (.ret (.tensorI (.left .nil) (.thunkV rfl (.lamDead dAt_loopB)) (.lit (.i32 3) (.cons .nil))))
     ?_
   refine .bind (.right (.dead .nil))
-    (.ret (.bangE (.divFuel (c := none) [] Ans (by simpa [tickSigW_none] using rowAt_Sg) (fun _ h => absurd h List.not_mem_nil)
+    (.ret (.bangE (.divFuel (c := .top) [] Ans (by simpa [tickSigW_top] using rowAt_Sg) (fun _ h => absurd h List.not_mem_nil)
       (.cons (.cons .nil))))) ?_
   refine .bind (.left (.left (.dead .nil)))
     (.app (.left (.right (.dead .nil)))
@@ -187,7 +187,7 @@ def fuelRun (t : Expr) (k : UInt32) : Expr :=
 alone, `tick` at either grade, and every budget `k`, every run of `div_fuel (t, k)` from the empty memory continues to a
 value.  The relation at `t ()`'s row is `cwp` (`effWp`); `div_fuel`'s rule and the Fundamental
 Property carry it to `F A`, and `total_every_run` reads it there.  `[spec §14]` -/
-theorem divFuel_every_run {t : Expr} {A : VTy} {c : Option Lifetime.Life}
+theorem divFuel_every_run {t : Expr} {A : VTy} {c : World}
     (ht : CDerives LifeCtx.empty [] t (.val (.thunk (.arr .unit (CTy.effOf [tickSigW c] A)))))
     (k : UInt32) {μ₁ : BoCa.BoLo.Heap} {e₁ : Expr}
     (hs : BoCa.BoLo.Steps (ℍ := ℍ) Adequacy.emptyMem (fuelRun t k) μ₁ e₁) :

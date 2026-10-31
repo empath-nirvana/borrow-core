@@ -249,7 +249,7 @@ theorem fuel_tick_succ {Tb : Table} (hTb : Tb.Mono) {k : UInt32} (hk : k ≠ 0) 
 /-! ### Totality -/
 
 section
-variable (c : Option Lifetime.Life) {S : Row} (hS : ∀ o ∈ S, o.n ≠ divEff) (δ : LSub) {Q : List SRec → Val → WProp}
+variable (c : World) {S : Row} (hS : ∀ o ∈ S, o.n ≠ divEff) (δ : LSub) {Q : List SRec → Val → WProp}
 
 include hS in
 /-- **An operation of another name passes `div_fuel`**, under its frame. -/
@@ -286,7 +286,7 @@ theorem fuel_closing {ls : List SRec} {e : Expr} {ρ : WRes}
     by_cases hk : m = divEff ∧ i = 0
     · -- a tick, answered *close*
       obtain ⟨rfl, rfl⟩ := hk
-      rw [OpTab.closeAt_key, Row.tab_tickG_key c] at hT
+      rw [OpTab.closeAt_key, Row.tab_tickW_key c] at hT
       cases hT
       have ht := tickSigW_isTick c δ
       obtain ⟨rfl, rfl⟩ := (ht.2.2.1 ls' v ρa).mp hA
@@ -295,7 +295,7 @@ theorem fuel_closing {ls : List SRec} {e : Expr} {ρ : WRes}
       exact (hcont ls' (Owed.refl _ ls' _)).1 closeV PMap.empty _
         ⟨(ht.2.2.2 ls' closeV _).mpr ⟨Or.inr rfl, rfl⟩, rfl⟩ (ResU.comp_empty_right _) _
         spentK_frame
-    · rw [OpTab.closeAt_ne hk, Row.tab_tickG_ne c S δ hk] at hT
+    · rw [OpTab.closeAt_ne hk, Row.tab_tickW_ne c S δ hk] at hT
       refine wpG_here _ _ _ σ (Or.inr (fuel_fwd hS δ hK (Φ := fun ls e ρ => ∀ (K : Kont),
         FuelFrame 0 K → ewpTS ls (K.plug (hndE fuelH e)) (opTable (Row.tab S δ)) Q ρ) ?_
         (Or.inl ⟨K₁, m, i, v, en, pure_sep_mk ⟨rfl, hK₁, hT, ha⟩
@@ -304,10 +304,10 @@ theorem fuel_closing {ls : List SRec} {e : Expr} {ρ : WRes}
   · obtain ⟨⟨rfl, hK₁, hT, ha⟩, hrest⟩ := pure_sep_iff.mp hp'
     by_cases hk : m = divEff ∧ i = 0
     · obtain ⟨rfl, rfl⟩ := hk
-      rw [OpTab.closeAt_key, Row.tab_tickG_key c] at hT
+      rw [OpTab.closeAt_key, Row.tab_tickW_key c] at hT
       cases hT
       exact absurd ha (by simp [OpEnt.closeOnly, OpSig.ent, OpSig.abort, tickSigW, VTy.isZero])
-    · rw [OpTab.closeAt_ne hk, Row.tab_tickG_ne c S δ hk] at hT
+    · rw [OpTab.closeAt_ne hk, Row.tab_tickW_ne c S δ hk] at hT
       refine wpG_here _ _ _ σ (Or.inr (fuel_fwd hS δ hK (Φ := fun ls e ρ => ∀ (K : Kont),
         FuelFrame 0 K → ewpTS ls (K.plug (hndE fuelH e)) (opTable (Row.tab S δ)) Q ρ) ?_
         (Or.inr ⟨K₁, m, i, v, en, pure_sep_mk ⟨rfl, hK₁, hT, ha⟩ hrest⟩)))
@@ -353,7 +353,7 @@ theorem fuel_total : ∀ (n : ℕ) (k : UInt32), k.toNat = n → ∀ {K : Kont},
           unfold OpTab.erase0 at h'
           split at h'
           · cases h'
-          · rwa [Row.tab_tickG_ne c S δ (by assumption)] at h'
+          · rwa [Row.tab_tickW_ne c S δ (by assumption)] at h'
         refine wpG_here _ _ _ σ (Or.inr (fuel_fwd hS δ hK (Φ := fun ls e ρ => ∀ (K : Kont),
           FuelFrame k K → ewpTS ls (K.plug (hndE fuelH e)) (opTable (Row.tab S δ)) Q ρ) ?_
           (opTable_le (fun n i en h' => ⟨en, hT' n i en h', OpEnt.Le.refl en⟩) ht)))
@@ -369,8 +369,8 @@ end
 /-! ### The constant -/
 
 /-- `div_fuel : !U(U(1 ⊸ F_{tick, Σ} A) ⊗ I32 ⊸ F_Σ A)`, the computation a callback
-`U(1 ⊸ F_{tick, Σ} A)`, `tick` at the world `c` (unbounded by default).  `[spec §14, §63]` -/
-abbrev divFuelTy (S : Row) (A : VTy) (c : Option Lifetime.Life := none) : VTy :=
+`U(1 ⊸ F_{tick, Σ} A)`, `tick` at the grade `c` (ungraded by default).  `[spec §14, §48]` -/
+abbrev divFuelTy (S : Row) (A : VTy) (c : World := .top) : VTy :=
   .bang (.thunk (.arr (.tensor (.thunk (.arr .unit (CTy.effOf (tickSigW c :: S) A))) (.int .w32))
     (CTy.effOf S A)))
 
@@ -389,7 +389,7 @@ theorem divFuel_steps (t : Val) (k : UInt32) :
   exact .refl
 
 /-- **`div_fuel` is sound**: total at the rest of the row.  `[spec §14]` -/
-theorem divFuel_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} {c : Option Lifetime.Life}
+theorem divFuel_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} {c : World}
     (hS : ∀ o ∈ S, o.n ≠ divEff) (hΓ : Ctx.DeadP Γ) :
     SemV Δ Γ (.val divFuelV) (divFuelTy S A c) := by
   refine sem_const hΓ divFuelV_closed fun δ ls _ => ⟨rfl, ?_⟩

@@ -345,11 +345,10 @@ theorem reify_next {ls : List SRec} {x : Expr} {ρ : WRes}
     refine ewp_unfold hM (hnd_tick hM reifyR (reifyC res) .hole K₁ hK₁ fun ℓ σ₁ σ₂ hp hc => ?_)
     refine ewp_pureSteps hM (reifyC_steps res hres _) _ _ σ₂ (ewp_val hM (nuAns_inr ?_))
     -- `reify`'s premise: the tick is ungraded, so the loop value owes `κ` at every extension
-    have hc0 : en.wld = none := by
-      rw [Row.tab_tick_key] at hT0; cases hT0; exact entWld_none tickSig.abort δ
+    have hc0 : en.wld = .top := by rw [Row.tab_tick_key] at hT0; cases hT0; rfl
     intro ls'' he
     exact Or.inl ⟨ℓ, K₁, σ₁, σ, rfl, ResU.CompS.comm hc, hp, fun ls₃ he₃ w hw =>
-      hcont ls₃ ((owed_unbounded hc0).mpr ((he.right (ResU.CompS.comm hc)).trans he₃)) w hw⟩
+      hcont ls₃ ((owed_ungraded hc0).mpr ((he.right (ResU.CompS.comm hc)).trans he₃)) w hw⟩
 
 include hS hres hresR in
 /-- **The *close* observation**: a computation of `Closing` under `reify`'s handler and the
@@ -397,7 +396,7 @@ theorem reify_close {ls : List SRec} {x : Expr} {ρ : WRes}
       refine ewp_pureSteps hM (closeKV_inr res hres _) _ _ σ₂ ?_
       refine ewp_pureSteps hM (tickLoop_close res hres _) _ _ σ₂ ?_
       exact ewp_kappaC_resume_in hM _ false ℓ _ K₁ closeV
-        ⟨σ₁, ρk, ResU.CompS.comm hc, hp, (hcont ls' (Owed.refl _ ls' ρk)).1 closeV PMap.empty ρk
+        ⟨σ₁, ρk, ResU.CompS.comm hc, hp, (hcont ls' (Ext.refl ls' ρk)).1 closeV PMap.empty ρk
           ⟨(ht.2.2.2 ls' closeV _).mpr ⟨Or.inr rfl, rfl⟩, rfl⟩ (ResU.comp_empty_right ρk)⟩
     · rw [OpTab.closeAt_ne hk, Row.tab_tick_ne S δ hk] at hT
       exact wpG_here _ _ _ σ (Or.inr (hnd_fwd hTd hPC (closeK res) (closeK_plain res).1
@@ -410,7 +409,7 @@ theorem reify_close {ls : List SRec} {x : Expr} {ρ : WRes}
     · obtain ⟨rfl, rfl⟩ := hk
       rw [OpTab.closeAt_key, Row.tab_tick_key] at hT
       cases hT
-      exact absurd ha (by simp [OpEnt.closeOnly, OpSig.ent, OpSig.abort, tickSig, tickSigW, VTy.isZero])
+      exact absurd ha (by simp [OpEnt.closeOnly, OpSig.ent, OpSig.abort, tickSig, VTy.isZero])
     · rw [OpTab.closeAt_ne hk, Row.tab_tick_ne S δ hk] at hT
       exact wpG_here _ _ _ σ (Or.inr (hnd_fwd hTd hPC (closeK res) (closeK_plain res).1
         (closeK_plain res).2 (closeK_dead res) _ _ _ (fun _ _ _ h => by rw [Kont.plug_comp]; exact h)

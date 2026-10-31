@@ -452,8 +452,7 @@ theorem node_ok (C : CTy) (g : Val) (S : VTy) (δ : LSub) :
       show effWp _ _ (effRetE _ D δ) ls _ ρ
       have hM' : effWp (CTy.eff n i q A B fin cg D).divAt (OpTab.ext n i
           ⟨q, B.isZero && q != .lin, fun ls v => vC true A ls δ v, fun ls v => vC true B ls δ v,
-            if capB q B then finObl fin δ else none,
-              entWld (B.isZero && q != .lin) δ cg⟩
+            if capB q B then finObl fin δ else none, cg⟩
             (effTab D δ)) (fun ls v => vC true (VTy.inst S (effAns D)) ls δ v) ls M ρ := by
         have h' := hM
         have e := CTy.divAt_instT S (.eff n i q A B fin cg D)
@@ -464,8 +463,7 @@ theorem node_ok (C : CTy) (g : Val) (S : VTy) (δ : LSub) :
       rw [effRetE_ans _ δ hD.2.2]
       have hTk : (CTy.eff n i q A B fin cg D).divAt = true → (OpTab.ext n i
           ⟨q, B.isZero && q != .lin, fun ls v => vC true A ls δ v, fun ls v => vC true B ls δ v,
-            if capB q B then finObl fin δ else none,
-              entWld (B.isZero && q != .lin) δ cg⟩ (effTab D δ)).DivOK := by
+            if capB q B then finObl fin δ else none, cg⟩ (effTab D δ)).DivOK := by
         intro hb
         have hT : effTab (.eff n i q A B fin cg D) δ = Row.tab (CTy.eff n i q A B fin cg D).rowOf δ :=
           effTab_rowOf δ _
@@ -474,8 +472,7 @@ theorem node_ok (C : CTy) (g : Val) (S : VTy) (δ : LSub) :
         exact Row.divOK_of_divB (by rw [CTy.divB_rowOf]; exact hb) δ
       have hK : ∀ (n' i' : UInt32) (en : OpEnt), OpTab.ext n i
           ⟨q, B.isZero && q != .lin, fun ls v => vC true A ls δ v, fun ls v => vC true B ls δ v,
-            if capB q B then finObl fin δ else none,
-              entWld (B.isZero && q != .lin) δ cg⟩ (effTab D δ) n' i' = some en →
+            if capB q B then finObl fin δ else none, cg⟩ (effTab D δ) n' i' = some en →
           en.abort = false → en.q ≠ .lin →
           ∀ (ls₁ : List SRec) (K₁ : Kont) (ρ₁ σ ρ₁' : WRes), cancelOK en ls₁ K₁ ρ₁ →
             (fun _ => emp : List SRec → WProp) ls₁ σ → ResU.CompS ρ₁ σ ρ₁' →
@@ -493,8 +490,7 @@ theorem node_ok (C : CTy) (g : Val) (S : VTy) (δ : LSub) :
           Entails ((fun ls v => vC true (VTy.inst S (effAns D)) ls δ v) ls' w ⋆ emp)
             (effWp (CTy.eff n i q A B fin cg D).divAt (OpTab.ext n i
               ⟨q, B.isZero && q != .lin, fun ls v => vC true A ls δ v, fun ls v => vC true B ls δ v,
-                if capB q B then finObl fin δ else none,
-              entWld (B.isZero && q != .lin) δ cg⟩ (effTab D δ))
+                if capB q B then finObl fin δ else none, cg⟩ (effTab D δ))
               (fun ls v => vCE (some (nuEnv C (candN C g S δ))) true (effAns D) ls δ v) ls'
               ((Kont.appR (.val (.lam (.app (.app (.val (mapV (effAns D))) (.val ((hN C g).shift 1 0)))
                 (.var 0)))) .hole).plug (.val w))) := by

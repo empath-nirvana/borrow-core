@@ -165,28 +165,25 @@ def cC : CTy → List SRec → LSub → Expr → WProp
       ∀ α, (⌜LtLife δ c α⌝ ─⋆ cC C ls (δ.extend x α) (.app e (.val .unit))) ρ
   | .nu C, ls, δ, e => fun ρ => C.NuOk →
       ∃ R : CPred, R.Le (fun ls' e' => cB (some (nuEnv C R)) C ls' δ e') ∧ R ls e ρ
-  | .eff n i q A B fin wd C, ls, δ, e =>
-      effWp (CTy.eff n i q A B fin wd C).divAt (OpTab.ext n i
+  | .eff n i q A B fin cg C, ls, δ, e =>
+      effWp (CTy.eff n i q A B fin cg C).divAt (OpTab.ext n i
         ⟨q, B.isZero && q != .lin, fun ls v => vCE none true A ls δ v,
-          fun ls v => vCE none true B ls δ v, if capB q B then finObl fin δ else none,
-          entWld (B.isZero && q != .lin) δ wd⟩
+          fun ls v => vCE none true B ls δ v, if capB q B then finObl fin δ else none, cg⟩
           (effTab C δ)) (effRet C δ) ls e
 /-- The operation table of a row `F_Σ R`'s layers, each capturable entry with its cancel row's
 obligation.  `[spec §19, §27]` -/
 def effTab : CTy → LSub → OpTab
-  | .eff n i q A B fin wd C, δ => OpTab.ext n i
+  | .eff n i q A B fin cg C, δ => OpTab.ext n i
       ⟨q, B.isZero && q != .lin, fun ls v => vCE none true A ls δ v,
-        fun ls v => vCE none true B ls δ v, if capB q B then finObl fin δ else none,
-          entWld (B.isZero && q != .lin) δ wd⟩ (effTab C δ)
+        fun ls v => vCE none true B ls δ v, if capB q B then finObl fin δ else none, cg⟩ (effTab C δ)
   | _, _ => OpTab.empty
 /-- The cancel obligation of a cancel row: `none` at `⊤`; otherwise the cancel run at the table
 of the row's layers (`cancelObl (effTab F δ)`, `finObl_eq`).  `[spec §27]` -/
 def finObl : CTy → LSub → Option (List SRec → Expr → WProp)
   | .top, _ => none
-  | .eff n i q A B fin wd C, δ => some (cancelObl (OpTab.ext n i
+  | .eff n i q A B fin cg C, δ => some (cancelObl (OpTab.ext n i
       ⟨q, B.isZero && q != .lin, fun ls v => vCE none true A ls δ v,
-        fun ls v => vCE none true B ls δ v, if capB q B then finObl fin δ else none,
-          entWld (B.isZero && q != .lin) δ wd⟩
+        fun ls v => vCE none true B ls δ v, if capB q B then finObl fin δ else none, cg⟩
         (effTab C δ)))
   | _, _ => some (cancelObl OpTab.empty)
 /-- The answer relation of a row `F_Σ R`: `𝒱⟦R⟧`.  `[spec §19]` -/
@@ -210,11 +207,10 @@ def cB : Option (Nat → TEnt) → CTy → List SRec → LSub → Expr → WProp
   | η, .ret A, ls, δ, e => wpTS ls e (fun ls'' => vCE η true A ls'' δ)
   | η, .amp C D, ls, δ, e => fun ρ =>
       cB η C ls δ (.app e (.val (.inj₁ .unit))) ρ ∧ cB η D ls δ (.app e (.val (.inj₂ .unit))) ρ
-  | η, .eff n i q A B fin wd C, ls, δ, e =>
-      effWp (CTy.eff n i q A B fin wd C).divAt (OpTab.ext n i
+  | η, .eff n i q A B fin cg C, ls, δ, e =>
+      effWp (CTy.eff n i q A B fin cg C).divAt (OpTab.ext n i
         ⟨q, B.isZero && q != .lin, fun ls v => vCE none true A ls δ v,
-          fun ls v => vCE none true B ls δ v, if capB q B then finObl fin δ else none,
-          entWld (B.isZero && q != .lin) δ wd⟩
+          fun ls v => vCE none true B ls δ v, if capB q B then finObl fin δ else none, cg⟩
           (effTab C δ)) (effRetE η C δ) ls e
   | η, .arr A D, ls, δ, e => fun ρ =>
       ∀ v, (vCE none true A ls δ v ─⋆ cB η D ls δ (.app e (.val v))) ρ

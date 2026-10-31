@@ -162,7 +162,7 @@ theorem Row.Unwind.tab_extend {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LS
       obtain ⟨ha, -, hx, -⟩ := hS o (Row.find_mem hf).1
       have hB : ¬ VFree x o.B := by rw [OpSig.B_zero ha]; exact id
       have hc : capB o.q o.B = false := by simp [capB, OpSig.B_zero ha, VTy.isZero]
-      simp only [Option.map_some, OpSig.ent, entWld, ha, if_true, vC_extend_of_not_free hx,
+      simp only [Option.map_some, OpSig.ent, vC_extend_of_not_free hx,
         vC_extend_of_not_free hB, hc, Bool.false_eq_true, if_false]
 
 /-- An argument of the row outlives every lifetime. -/
@@ -176,42 +176,51 @@ theorem Row.Unwind.out {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) (α
   exact vC_outlives (Δ := LifeCtx.empty) (a := .var x) (models_empty_any _)
     (interp_ext_self δ x α) (hO _ _) true ls v ρ h'
 
-/-- **The row of a lend's callback** `'x`, at the lifetime context `Δ` of the lend: every operation
-is of a nonzero name, its argument closed data (free of `'x` and outliving every lifetime); and
-each is either abortive, so a stop abandons its continuation (§19), or must-resume with an answer
-that is closed data too and a world bounding `'x`: its continuation is resumed in a world that
-keeps every record inside the bound, the lend's included (§63).  `[spec §19, §63]` -/
-def Row.Lend (Δ : Lifetime.LifeCtx) (S : Row) (x : LifeVar) : Prop :=
+/-- **The row of a lend's callback** `'x`: every operation is of a nonzero name, its argument
+closed data (free of `'x` and outliving every lifetime); and each is either abortive, so a stop
+abandons its continuation (§19), or call-graded and linear with an answer that is closed data too,
+so its continuation is resumed in the scope of the stop (§48).  `[spec §19, §48]` -/
+def Row.Lend (S : Row) (x : LifeVar) : Prop :=
   ∀ o ∈ S, o.n ≠ 0 ∧ ¬ VFree x o.A ∧ (∀ Δ a, VOutlives Δ a o.A) ∧
-    (o.abort = true ∨
-      (o.q = .lin ∧ ¬ VFree x o.B ∧ (∀ Δ a, VOutlives Δ a o.B) ∧
-        ∃ r, o.wld = some r ∧ r.mentions x = false ∧
-          (Δ.extend x Δ.meetOfDom).EntailsLt (.var x) r))
+    (o.abort = true ∨ (o.wld = .op ∧ o.q = .lin ∧ ¬ VFree x o.B ∧ ∀ Δ a, VOutlives Δ a o.B))
 
-/-- An unwind-only row is a lend's row.  `[spec §63]` -/
-theorem Row.Unwind.lend {Δ : Lifetime.LifeCtx} {S : Row} {x : LifeVar} (hS : S.Unwind x) :
-    S.Lend Δ x :=
+/-- An unwind-only row is a lend's row with no graded operation.  `[spec §48]` -/
+theorem Row.Unwind.lend {S : Row} {x : LifeVar} (hS : S.Unwind x) : S.Lend x :=
   fun o ho => ⟨(hS o ho).2.1, (hS o ho).2.2.1, (hS o ho).2.2.2, Or.inl (hS o ho).1⟩
 
-/-- **An operation of a lend's row that resumes is must-resume and bounded**: an operation that
-resumes with a weakening qualifier (a generator's `yield`, whose continuation may be cancelled), or
-at the unbounded world, is not in the row of a lend's callback.  `[spec §63]` -/
-theorem Row.Lend.resumes {Δ : Lifetime.LifeCtx} {S : Row} {x : LifeVar} (hS : S.Lend Δ x)
-    {o : OpSig} (ho : o ∈ S) (ha : o.abort = false) :
-    o.q = .lin ∧ ∃ r, o.wld = some r ∧ r.mentions x = false ∧
-      (Δ.extend x Δ.meetOfDom).EntailsLt (.var x) r := by
-  rcases (hS o ho).2.2.2 with h | ⟨hq, -, -, hr⟩
+/-- **An operation of a lend's row that resumes is call-graded and linear**: an operation that
+resumes with a weakening qualifier (a generator's `aff` `yield`, whose continuation may be
+cancelled), or that is not graded, is not in the row of a lend's callback.  `[spec §48]` -/
+theorem Row.Lend.resumes {S : Row} {x : LifeVar} (hS : S.Lend x) {o : OpSig} (ho : o ∈ S)
+    (ha : o.abort = false) : o.wld = .op ∧ o.q = .lin := by
+  rcases (hS o ho).2.2.2 with h | ⟨hc, hq, -⟩
   · rw [ha] at h; cases h
-  · exact ⟨hq, hr⟩
+  · exact ⟨hc, hq⟩
 
-/-- A lend's row with no bounded operation is unwind-only.  `[spec §63]` -/
-theorem Row.Lend.unwind {Δ : Lifetime.LifeCtx} {S : Row} {x : LifeVar} (hS : S.Lend Δ x)
-    (hg : ∀ o ∈ S, o.wld = none) : S.Unwind x := by
+/-- **No world for an abortive operation, `op` for every other** in a lend's row: the world a
+lend's row reads is `entWld`'s.  `[spec §63]` -/
+theorem Row.Lend.entWld {S : Row} {x : LifeVar} (hS : S.Lend x) {o : OpSig} (ho : o ∈ S) :
+    entWld o.abort o.wld = .top ∨ entWld o.abort o.wld = .op := by
+  cases ha : o.abort
+  · exact Or.inr (by rw [entWld_resume]; exact (hS.resumes ho ha).1)
+  · exact Or.inl (entWld_abort _)
+
+/-- **Meet at nesting**: `hCN`, the clauses' row at `op` wherever the handled operations are, is
+the clauses' worlds below the handled one.  `[spec §63]` -/
+theorem hCN_iff_le {c : World} {SN : Row} :
+    (c = .op → ∀ o ∈ SN, o.wld = .op) ↔ ∀ o ∈ SN, o.wld ≤ c := by
+  constructor
+  · intro h o ho; exact World.le_iff.mpr fun hc => h hc o ho
+  · intro h hc o ho; exact World.le_iff.mp (h o ho) hc
+
+/-- A lend's row with no graded operation is unwind-only.  `[spec §48]` -/
+theorem Row.Lend.unwind {S : Row} {x : LifeVar} (hS : S.Lend x) (hg : ∀ o ∈ S, o.wld = .top) :
+    S.Unwind x := by
   intro o ho
   obtain ⟨hn, hx, hA, hk⟩ := hS o ho
-  rcases hk with ha | ⟨-, -, -, r, hr, -⟩
+  rcases hk with ha | ⟨hc, -⟩
   · exact ⟨ha, hn, hx, hA⟩
-  · rw [hg o ho] at hr; cases hr
+  · rw [hg o ho] at hc; cases hc
 
 /-! ### The constants -/
 

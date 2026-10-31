@@ -172,119 +172,112 @@ theorem dead_plain : ∀ K : Kont, (∀ n, K.HasHnd n = false) → K.Catches 0 =
 /-! ### Operation tables  `[spec §19]` -/
 
 /-- An operation's entry: its continuation's qualifier, whether it is abortive (answer `0` at a
-qualifier with weakening), the relations of its argument and answer types, and its cancel
+qualifier with weakening), the relations of its argument and answer types, its cancel
 obligation: `none` at the cancel row `⊤`, otherwise the run a cancel of a continuation captured
-at the operation owes from the dead region's start (`cancelObl` of the cancel row's table).
-`[spec §19, §27]`  Its world `wld` (M1's world axis, at `δ`): `none`, the continuation is owed at
-every `Ext`-extension of the stop's list; `some r`, only at those that also keep every record
-strictly inside `r` (`Owed`).  `[spec §63]` -/
+at the operation owes from the dead region's start (`cancelObl` of the cancel row's table); and
+its grade: a call-graded operation's continuation is owed only at lists with the stop's members.
+`[spec §19, §27, §48]` -/
 structure OpEnt where
   q : Qual
   abort : Bool
   PA : List SRec → Val → WProp
   PB : List SRec → Val → WProp
   fin : Option (List SRec → Expr → WProp)
-  wld : Option Life := none
-
-/-- The order of worlds: the unbounded world is below every bound, and a bound below every
-bound at least as long-lived.  `[spec §63]` -/
-def WldLe (w w' : Option Life) : Prop :=
-  ∀ r, w = some r → ∃ r', w' = some r' ∧ (r' ⊐ r ∨ r' = r)
-
-theorem WldLe.refl (w : Option Life) : WldLe w w := fun r h => ⟨r, h, Or.inr rfl⟩
-
-theorem WldLe.trans {w w' w'' : Option Life} (h : WldLe w w') (h' : WldLe w' w'') :
-    WldLe w w'' := by
-  intro r hr
-  obtain ⟨r', hr', hle⟩ := h r hr
-  obtain ⟨r'', hr'', hle'⟩ := h' r' hr'
-  refine ⟨r'', hr'', ?_⟩
-  rcases hle with h1 | rfl <;> rcases hle' with h2 | rfl
-  · exact Or.inl (lt_trans h1 h2)
-  · exact Or.inl h1
-  · exact Or.inl h2
-  · exact Or.inr rfl
-
-theorem WldLe.none_left (w : Option Life) : WldLe none w := fun _ h => by cases h
+  wld : World := .top
 
 /-- **What a stop owes.**  The lists at which the continuation of a stop at the operation `en`
-is owed, from the stop's list `ls`: every `Ext`-extension that, at a bounded world `some r`, also
-keeps every record strictly inside `r`.  `[spec §63]` -/
+is owed, from the stop's list `ls`: every `Ext`-extension, and at a call-graded operation every
+list with the stop's members.  At an ungraded entry it is `Ext`, by definition.  `[spec §48]` -/
 def Owed (en : OpEnt) (ls ls' : List SRec) (ρ : WRes) : Prop :=
-  Ext ls ls' ρ ∧ ∀ r, en.wld = some r → ∀ x : SRec, r ⊐ x.2 → (x ∈ ls ↔ x ∈ ls')
+  match en.wld with
+  | .top => Ext ls ls' ρ
+  | .op => ∀ x, x ∈ ls' ↔ x ∈ ls
 
-/-- At the unbounded world a stop is owed at every `Ext`-extension: Core's convention.
-`[spec §63]` -/
-theorem owed_unbounded {en : OpEnt} (h : en.wld = none) {ls ls' : List SRec} {ρ : WRes} :
-    Owed en ls ls' ρ ↔ Ext ls ls' ρ :=
-  ⟨fun h' => h'.1, fun h' => ⟨h', fun r hr => by rw [h] at hr; cases hr⟩⟩
+/-- At an ungraded entry a stop is owed at every `Ext`-extension: Core's convention.
+`[spec §48]` -/
+theorem owed_ungraded {en : OpEnt} (h : en.wld = .top) {ls ls' : List SRec} {ρ : WRes} :
+    Owed en ls ls' ρ ↔ Ext ls ls' ρ := by
+  unfold Owed; rw [h]
 
-/-- A list a stop is owed at is an `Ext`-extension of the stop's.  `[spec §63]` -/
+/-- A list a stop is owed at is an `Ext`-extension of the stop's.  `[spec §48]` -/
 theorem Owed.ext {en : OpEnt} {ls ls' : List SRec} {ρ : WRes} (h : Owed en ls ls' ρ) :
-    Ext ls ls' ρ := h.1
+    Ext ls ls' ρ := by
+  unfold Owed at h
+  split at h
+  · exact h
+  · exact ext_of_same h ρ
 
-/-- A list with the stop's members is owed at.  `[spec §63]` -/
+/-- A list with the stop's members is owed at.  `[spec §48]` -/
 theorem owed_of_same (en : OpEnt) {ls ls' : List SRec} (h : ∀ x, x ∈ ls' ↔ x ∈ ls) (ρ : WRes) :
-    Owed en ls ls' ρ :=
-  ⟨ext_of_same h ρ, fun _ _ x _ => (h x).symm⟩
+    Owed en ls ls' ρ := by
+  unfold Owed
+  split
+  · exact ext_of_same h ρ
+  · exact h
 
 theorem Owed.refl (en : OpEnt) (ls : List SRec) (ρ : WRes) : Owed en ls ls ρ :=
   owed_of_same en (fun _ => Iff.rfl) ρ
 
 theorem Owed.left {en : OpEnt} {ls ls' : List SRec} {ρ₁ ρ₂ ρ : WRes} (h : Owed en ls ls' ρ)
-    (hc : ResU.CompS ρ₁ ρ₂ ρ) : Owed en ls ls' ρ₁ := ⟨Ext.left hc h.1, h.2⟩
+    (hc : ResU.CompS ρ₁ ρ₂ ρ) : Owed en ls ls' ρ₁ := by
+  unfold Owed at h ⊢
+  cases hg : en.wld <;> rw [hg] at h
+  · exact Ext.left hc h
+  · exact h
 
 theorem Owed.right {en : OpEnt} {ls ls' : List SRec} {ρ₁ ρ₂ ρ : WRes} (h : Owed en ls ls' ρ)
-    (hc : ResU.CompS ρ₁ ρ₂ ρ) : Owed en ls ls' ρ₂ := ⟨Ext.right hc h.1, h.2⟩
+    (hc : ResU.CompS ρ₁ ρ₂ ρ) : Owed en ls ls' ρ₂ := by
+  unfold Owed at h ⊢
+  cases hg : en.wld <;> rw [hg] at h
+  · exact Ext.right hc h
+  · exact h
 
-/-- Owed is the same for two entries of one world. -/
+/-- Owed is the same for two entries of one grade. -/
 theorem Owed.congr {en en' : OpEnt} (hc : en.wld = en'.wld) {ls ls' : List SRec} {ρ : WRes}
-    (h : Owed en ls ls' ρ) : Owed en' ls ls' ρ := ⟨h.1, fun r hr => h.2 r (hc ▸ hr)⟩
+    (h : Owed en ls ls' ρ) : Owed en' ls ls' ρ := by
+  unfold Owed at h ⊢; rw [← hc]; exact h
 
-/-- Owed at a resource is owed at any other where `Ext` carries over. -/
+/-- Owed at a resource is owed at any other where the stop is ungraded and `Ext` carries over. -/
 theorem Owed.of_ext {en : OpEnt} {ls ls' : List SRec} {ρ ρ' : WRes} (h : Owed en ls ls' ρ)
-    (hx : Ext ls ls' ρ → Ext ls ls' ρ') : Owed en ls ls' ρ' := ⟨hx h.1, h.2⟩
+    (hx : Ext ls ls' ρ → Ext ls ls' ρ') : Owed en ls ls' ρ' := by
+  unfold Owed at h ⊢
+  cases hg : en.wld <;> rw [hg] at h
+  · exact hx h
+  · exact h
 
-/-- Owed from `ls`, then owed again: owed from `ls`.  `[spec §63]` -/
-theorem Owed.trans {en : OpEnt} {ls ls' ls'' : List SRec} {ρ : WRes} (h : Owed en ls ls' ρ)
-    (h' : Owed en ls' ls'' ρ) : Owed en ls ls'' ρ :=
-  ⟨h.1.trans h'.1, fun r hr x hx => (h.2 r hr x hx).trans (h'.2 r hr x hx)⟩
-
-/-- Owed from `ls`, then the same members: owed from `ls`.  `[spec §63]` -/
+/-- Owed from `ls`, then the same members: owed from `ls`.  `[spec §48]` -/
 theorem Owed.trans_same {en : OpEnt} {ls ls' ls'' : List SRec} {ρ : WRes} (h : Owed en ls ls' ρ)
-    (h' : ∀ x, x ∈ ls'' ↔ x ∈ ls') : Owed en ls ls'' ρ := h.trans (owed_of_same en h' ρ)
+    (h' : ∀ x, x ∈ ls'' ↔ x ∈ ls') : Owed en ls ls'' ρ := by
+  unfold Owed at h ⊢
+  cases hc : en.wld <;> rw [hc] at h
+  · exact h.trans (ext_of_same h' ρ)
+  · exact fun x => (h' x).trans (h x)
 
-/-- The same members, then owed: owed.  `[spec §63]` -/
+/-- The same members, then owed: owed.  `[spec §48]` -/
 theorem Owed.same_trans {en : OpEnt} {ls ls' ls'' : List SRec} {ρ : WRes}
-    (h' : ∀ x, x ∈ ls' ↔ x ∈ ls) (h : Owed en ls' ls'' ρ) : Owed en ls ls'' ρ :=
-  (owed_of_same en h' ρ).trans h
+    (h' : ∀ x, x ∈ ls' ↔ x ∈ ls) (h : Owed en ls' ls'' ρ) : Owed en ls ls'' ρ := by
+  unfold Owed at h ⊢
+  cases hc : en.wld <;> rw [hc] at h
+  · exact (ext_of_same h' ρ).trans h
+  · exact fun x => (h x).trans (h' x)
 
-/-- An `Ext`-step, then owed, is owed at the unbounded world.  `[spec §63]` -/
-theorem Owed.ext_trans {en : OpEnt} (hc : en.wld = none) {ls ls' ls'' : List SRec} {ρ : WRes}
+/-- An `Ext`-step, then owed, is owed at an ungraded entry.  `[spec §48]` -/
+theorem Owed.ext_trans {en : OpEnt} (hc : en.wld = .top) {ls ls' ls'' : List SRec} {ρ : WRes}
     (he : Ext ls ls' ρ) (h : Owed en ls' ls'' ρ) : Owed en ls ls'' ρ :=
-  (owed_unbounded hc).mpr (he.trans h.1)
+  (owed_ungraded hc).mpr (he.trans ((owed_ungraded hc).mp h))
 
-/-- Owed at a wider world is owed at a narrower one.  `[spec §63]` -/
-theorem Owed.of_le {en en' : OpEnt} (hc : WldLe en.wld en'.wld)
+/-- **The world is independent of the resumption count**: what a stop owes depends on its world
+alone, not on its qualifier.  `[spec §63]` -/
+theorem owed_q_indep (en : OpEnt) (q : Qual) : Owed { en with q := q } = Owed en := rfl
+
+/-- Owed at a larger grade: an `Ext`-extension owed by the ungraded entry, a list with the same
+members owed by the graded one.  `[spec §48]` -/
+theorem Owed.of_le {en en' : OpEnt} (hc : en.wld = .op → en'.wld = .op)
     {ls ls' : List SRec} {ρ : WRes} (h : Owed en' ls ls' ρ) : Owed en ls ls' ρ := by
-  refine ⟨h.1, fun r hr x hx => ?_⟩
-  obtain ⟨r', hr', hle⟩ := hc r hr
-  refine h.2 r' hr' x ?_
-  rcases hle with h1 | rfl
-  · exact lt_trans hx h1
-  · exact hx
-
-/-- **At a bounded world, beside a borrow cell inside the bound, owed is the same members.**
-`Ext` keeps every record strictly longer-lived than the cell, and the bound every record strictly
-inside it; the order of lifetimes leaves no other record.  `[spec §63]` -/
-theorem Owed.same_of_cell {en : OpEnt} {r b : Life} (hw : en.wld = some r) {ρ : WRes}
-    (hb : CellIn ρ b) (hbr : r ⊐ b) {ls ls' : List SRec} (h : Owed en ls ls' ρ) :
-    ∀ x, x ∈ ls' ↔ x ∈ ls := by
-  intro x
-  rcases lt_trichotomy x.2 r with hx | hx | hx
-  · exact (h.2 r hw x hx).symm
-  · exact (h.1.2 b hb x (hx ▸ hbr)).symm
-  · exact (h.1.2 b hb x (lt_trans hbr hx)).symm
+  cases h₁ : en.wld
+  · exact (owed_ungraded h₁).mpr h.ext
+  · have h₂ := hc h₁
+    unfold Owed at h ⊢; rw [h₁]; rw [h₂] at h; exact h
 
 /-- An operation table: the entry of the operation `i` of the name `n`, if the row has it. -/
 abbrev OpTab := UInt32 → UInt32 → Option OpEnt
@@ -311,9 +304,10 @@ def errOk (T : OpTab) (ls : List SRec) : Option Val → WProp
 def cancelOK (en : OpEnt) (ls : List SRec) (K : Kont) : WProp := fun ρ =>
   ∀ P, en.fin = some P → P ls (K.dead.plug (raiseE (.val (cancelVal none)))) ρ
 
-/-- The continuation's share at a stopped operation: `∅` at `unr`; at every extension of the
-list, resumed at every answer in `PB`; and, with weakening, cancelled (`cancelOK`).
-`[spec §19, §27]` -/
+/-- The continuation's share at a stopped operation: `∅` at `unr`; at every list it is owed at
+(`Owed`: every extension of the list, or at a call-graded operation every list with its members),
+resumed at every answer in `PB`; and, with weakening, cancelled (`cancelOK`).
+`[spec §19, §27, §48]` -/
 def contShare (en : OpEnt) (ls : List SRec) (K : Kont) (Φ : List SRec → Expr → WProp) : WProp :=
   fun ρ =>
     (en.q = .unr → ρ = PMap.empty) ∧
@@ -321,18 +315,16 @@ def contShare (en : OpEnt) (ls : List SRec) (K : Kont) (Φ : List SRec → Expr 
       (∀ w : Val, (en.PB ls' w ─⋆ Φ ls' (K.plug (.val w))) ρ) ∧
       (en.q ≠ .lin → cancelOK en ls' K ρ)
 
-/-- **Conservativity of the world at a stop**: at the unbounded world the continuation's share is
-owed at every `Ext`-extension, Core's share before §63.  `[spec §63]` -/
-theorem contShare_unbounded {en : OpEnt} (h : en.wld = none) (ls : List SRec) (K : Kont)
+/-- **Conservativity of the grade at a stop**: at an ungraded entry the continuation's share is
+owed at every `Ext`-extension, Core's share before §48.  `[spec §48]` -/
+theorem contShare_ungraded {en : OpEnt} (h : en.wld = .top) (ls : List SRec) (K : Kont)
     (Φ : List SRec → Expr → WProp) :
     contShare en ls K Φ = fun ρ =>
       (en.q = .unr → ρ = PMap.empty) ∧
       ∀ ls', Ext ls ls' ρ →
         (∀ w : Val, (en.PB ls' w ─⋆ Φ ls' (K.plug (.val w))) ρ) ∧
         (en.q ≠ .lin → cancelOK en ls' K ρ) := by
-  funext ρ
-  unfold contShare
-  simp only [owed_unbounded h]
+  unfold contShare Owed; rw [h]
 
 /-- A stop at a non-abortive operation of `T`, `perform (n, (i, v))` under a context free of `n`:
 the argument, and the continuation's share.  `[spec §19]` -/

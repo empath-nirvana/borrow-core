@@ -56,19 +56,19 @@ def rtC : Val := .lam (.letpair (.var 0) (.app (.app (.var 0) (.val (Val.inj₁ 
 def rtH : Val := hndVal divEff (qualsVal [.lin]) rtR (Val.pair rtC .unit)
 
 /-- The table of the row of `Div` alone, at the grade `c`. -/
-abbrev T0 (c : Option Lifetime.Life) : OpTab := Row.tab [tickSigW c] LSub.empty
+abbrev T0 (c : World) : OpTab := Row.tab [tickSigW c] LSub.empty
 
-theorem T0_erase0 (c : Option Lifetime.Life) : (T0 c).erase0 = OpTab.empty := by
+theorem T0_erase0 (c : World) : (T0 c).erase0 = OpTab.empty := by
   funext n i
   simp only [OpTab.erase0]
   split
   · rfl
   · rename_i h
     show Row.tab [tickSigW c] LSub.empty n i = _
-    rw [Row.tab_tickG_ne c [] LSub.empty h]
+    rw [Row.tab_tickW_ne c [] LSub.empty h]
     simp [Row.tab, Row.find, OpTab.empty]
 
-theorem T0_divOK (c : Option Lifetime.Life) : (T0 c).DivOK := Row.divOK_of_divB (Row.divB_tickW c []) LSub.empty
+theorem T0_divOK (c : World) : (T0 c).DivOK := Row.divOK_of_divB (Row.divB_tickW c []) LSub.empty
 
 /-! ### A run of a segment continues to its stop -/
 
@@ -88,7 +88,7 @@ theorem ARun.rest_final {A : Alloc} {i j j₁ : Nat} {μ μ' μ₁ : Heap} {e e�
           exact ih t
 
 section
-variable (c : Option Lifetime.Life) (Q : List SRec → Val → WProp)
+variable (c : World) (Q : List SRec → Val → WProp)
 
 /-- A configuration a segment's `wp` holds at: `x` in `cwp`, its frame, world and memory. -/
 def Good (μ : Heap) (x : Expr) : Prop :=
@@ -234,7 +234,7 @@ end chain
 /-! ### The invariant -/
 
 section inv
-variable (c : Option Lifetime.Life) (Q : List SRec → Val → WProp)
+variable (c : World) (Q : List SRec → Val → WProp)
 
 /-- The handler's configurations after a tick of `K₁` at the memory `μt`. -/
 def HS (K₁ : Kont) (μt μ : Heap) (e : Expr) : Prop :=
@@ -367,7 +367,7 @@ open DivRuntime in
 at the table of `Div` alone, at either grade, at the empty resource and list, under
 `hnd_Div H_rt`, from the empty memory: every configuration a run reaches is an answer or takes a
 step.  `[spec §14, §48]` -/
-theorem runtime_every_run_cwp (c : Option Lifetime.Life) {M : Expr} {Q : List SRec → Val → WProp}
+theorem runtime_every_run_cwp (c : World) {M : Expr} {Q : List SRec → Val → WProp}
     (hc : cwp (T0 c) Q [] M PMap.empty) {μ₁ : Heap} {e₁ : Expr}
     (hs : Steps (ℍ := ℍ) Adequacy.emptyMem (hndE rtH M) μ₁ e₁) :
     IsVal e₁ ∨ ∃ μ₂ e₂, Step1 (ℍ := ℍ) μ₁ e₁ μ₂ e₂ := by
@@ -389,7 +389,7 @@ open DivRuntime in
 `tick` at either grade, under `hnd_Div H_rt`, from the empty memory: every configuration a run
 reaches is an answer or takes a step.  The relation at `M`'s row is `cwp` (`effWp`), by the
 Fundamental Property.  `[spec §14, §48]` -/
-theorem runtime_every_run (c : Option Lifetime.Life) {M : Expr} {A : VTy}
+theorem runtime_every_run (c : World) {M : Expr} {A : VTy}
     (h : CDerives LifeCtx.empty [] M (.comp (CTy.effOf [tickSigW c] A))) {μ₁ : Heap} {e₁ : Expr}
     (hs : Steps (ℍ := ℍ) Adequacy.emptyMem (hndE rtH M) μ₁ e₁) :
     IsVal e₁ ∨ ∃ μ₂ e₂, Step1 (ℍ := ℍ) μ₁ e₁ μ₂ e₂ := by
@@ -438,7 +438,7 @@ theorem ans_case₂ (μ : Heap) (b : Val) :
   simpa [omegaE, Expr.subst, Kont.plug] using h
 
 section wrap
-variable (c : Option Lifetime.Life) (Q : List SRec → Val → WProp)
+variable (c : World) (Q : List SRec → Val → WProp)
 
 /-- The invariant of a run of `rtMain M`: under the reading-off, `RT`; the reading-off of an
 answer; a value; `Ω`. -/
@@ -496,7 +496,7 @@ open DivRuntime in
 a computation in `cwp` at the table of `Div` alone, at either grade, whose answers are
 injections: every configuration a run of `rtMain M` from the empty memory reaches is a value or
 takes a step.  `[spec §14, §48]` -/
-theorem runtime_main_every_run_cwp (c : Option Lifetime.Life) {M : Expr} {Q : List SRec → Val → WProp}
+theorem runtime_main_every_run_cwp (c : World) {M : Expr} {Q : List SRec → Val → WProp}
     (hQ : ∀ ls v ρ, Q ls v ρ → (∃ a, v = Val.inj₁ a) ∨ (∃ b, v = Val.inj₂ b))
     (hc : cwp (T0 c) Q [] M PMap.empty) {μ₁ : Heap} {e₁ : Expr}
     (hs : Steps (ℍ := ℍ) Adequacy.emptyMem (rtMain M) μ₁ e₁) :
@@ -519,7 +519,7 @@ open DivRuntime in
 /-- **Every prefix of every run of a closed `main` under the runtime's clause, its answer read
 off**: a closed `M` typed at `F_{Div}(A ⊕ B)`, `tick` at either grade: every configuration a run
 of `rtMain M` from the empty memory reaches is a value or takes a step.  `[spec §14, §48]` -/
-theorem runtime_main_every_run (c : Option Lifetime.Life) {M : Expr} {A B : VTy}
+theorem runtime_main_every_run (c : World) {M : Expr} {A B : VTy}
     (h : CDerives LifeCtx.empty [] M (.comp (CTy.effOf [tickSigW c] (.sum A B))))
     {μ₁ : Heap} {e₁ : Expr}
     (hs : Steps (ℍ := ℍ) Adequacy.emptyMem (rtMain M) μ₁ e₁) :
@@ -539,7 +539,7 @@ open DivRuntime in
 either grade, checked at a context of externs that meet their contracts (`ExternsMeet`): for
 every input byte list, every configuration a run of `rtMain (run_io[γ] inp)` from the empty
 memory reaches is a value or takes a step.  `[spec §11, §14, §48]` -/
-theorem io_rt_every_run (c : Option Lifetime.Life) {Γ : Ctx VTy} {e : Expr} {R R' : VTy}
+theorem io_rt_every_run (c : World) {Γ : Ctx VTy} {e : Expr} {R R' : VTy}
     (h : CDerives LifeCtx.empty Γ e
       (.comp (.arr bytesTy (CTy.effOf [tickSigW c] (.sum R R')))))
     {γ : List Val} (hγ : ExternsMeet Γ γ) {inp : Val} (hin : BytesV inp)

@@ -132,12 +132,6 @@ theorem owner_same {l : BoCa.Loc} {T : VTy} {δ : LSub} {ls ls' : List SRec}
   obtain ⟨w, ρ₁, ρ₂, hc, ho, hv⟩ := h
   exact ⟨w, ρ₁, ρ₂, hc, ho, vC_local true T (ext_of_same hs ρ₂) hv⟩
 
-/-- The owner along an extension of its resource. -/
-theorem owner_ext {l : BoCa.Loc} {T : VTy} {δ : LSub} {ls ls' : List SRec} {ρ : WRes}
-    (he : Ext ls ls' ρ) (h : owner l T δ ls ρ) : owner l T δ ls' ρ := by
-  obtain ⟨w, ρ₁, ρ₂, hc, ho, hv⟩ := h
-  exact ⟨w, ρ₁, ρ₂, hc, ho, vC_local true T (he.right hc) hv⟩
-
 /-- The owner is `ℓ`'s relation at `Ref T`. -/
 theorem owner_iff {l : BoCa.Loc} {T : VTy} {δ : LSub} {ls : List SRec} {ρ : WRes} :
     owner l T δ ls ρ ↔ vC true (.ref T) ls δ (.loc l) ρ := by
@@ -182,12 +176,11 @@ theorem compS_exists_swap {ρk₁ W kS τ₁ τ₂ ρk : WRes} {l : BoCa.Loc}
 /-! ### A lend's tables -/
 
 /-- **A lend's table at `α`**: each entry of a nonzero name, its arguments in `Res_α`, and either
-abortive, or must-resume at a world bounding `α`, with its answers in `Res_α` (closed data,
-`Row.Lend`).  `[spec §63]` -/
+abortive, or call-graded and linear with its answers in `Res_α` (closed data, `Row.Lend`).
+`[spec §48]` -/
 def OpTab.LendAt (α : Life) (T : OpTab) : Prop :=
   ∀ n i en, T n i = some en → n ≠ 0 ∧ (∀ ls w τ, en.PA ls w τ → τ.InStratum α) ∧
-    (en.abort = true ∨ (en.q = .lin ∧ (∃ r, en.wld = some r ∧ r ⊐ α) ∧
-      ∀ ls w τ, en.PB ls w τ → τ.InStratum α))
+    (en.abort = true ∨ (en.wld = .op ∧ en.q = .lin ∧ ∀ ls w τ, en.PB ls w τ → τ.InStratum α))
 
 /-- The table of a lend's segment: the row's stops, and a tick's stop owing `Ψ`, whatever the
 run would owe (`T0` empty at a row without `Div`).  `[spec §48]` -/
@@ -197,44 +190,35 @@ abbrev LTab (T₁ T0 : OpTab) (Ψ : List SRec → Expr → WProp) : Table :=
 theorem LTab_mono (T₁ T0 : OpTab) (Ψ : List SRec → Expr → WProp) : (LTab T₁ T0 Ψ).Mono :=
   orTab_mono (opTable_mono T₁) (Table.Const.mono fun _ _ _ _ _ h => h)
 
-/-- A must-resume stop, its share owed at the lists its world keeps. -/
+/-- A graded, linear stop, its share owed at the lists with the stop's members. -/
 theorem performStop_graded_mk {T : OpTab} {ls : List SRec} {Φ : List SRec → Expr → WProp}
     {K : Kont} {n i : UInt32} {v : Val} {en : OpEnt} {ρa ρk ρ : WRes}
     (hK : K.HasHnd n = false) (hT : T n i = some en) (ha : en.abort = false)
-    (hq : en.q = .lin) (hcp : ResU.CompS ρa ρk ρ) (hA : en.PA ls v ρa)
-    (hk : ∀ ls', Owed en ls ls' ρk → ∀ w : Val,
+    (hc : en.wld = .op) (hq : en.q = .lin) (hcp : ResU.CompS ρa ρk ρ) (hA : en.PA ls v ρa)
+    (hk : ∀ ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → ∀ w : Val,
       (en.PB ls' w ─⋆ Φ ls' (K.plug (.val w))) ρk) :
     performStop T ls (K.plug (performE (.val (opPayload n i v)))) Φ ρ := by
   refine ⟨K, n, i, v, en, pure_sep_mk ⟨rfl, hK, hT, ha⟩ ⟨ρa, ρk, hcp, hA, fun hu => ?_, ?_⟩⟩
   · rw [hq] at hu; cases hu
   · intro ls' ho
+    unfold Owed at ho; rw [hc] at ho
     exact ⟨hk ls' ho, fun hq' => absurd hq hq'⟩
 
-/-- A stop of a lend's table, unpacked: its argument, its world bounding `α`, and its share owed at
-the lists its world keeps. -/
+/-- A graded stop, unpacked: its argument, and its share owed at the lists with its members. -/
 theorem performStop_graded_inv {T : OpTab} {α : Life} (hT : T.LendAt α) {ls : List SRec}
     {Φ : List SRec → Expr → WProp} {t : Expr} {ρ : WRes} (h : performStop T ls t Φ ρ) :
     ∃ (K : Kont) (n i : UInt32) (v : Val) (en : OpEnt) (ρa ρk : WRes),
       t = K.plug (performE (.val (opPayload n i v))) ∧ K.HasHnd n = false ∧ T n i = some en ∧
-      en.abort = false ∧ (∃ r, en.wld = some r ∧ r ⊐ α) ∧ en.q = .lin ∧ ResU.CompS ρa ρk ρ ∧
-      en.PA ls v ρa ∧ ρa.InStratum α ∧ (∀ ls w τ, en.PB ls w τ → τ.InStratum α) ∧
-      ∀ ls', Owed en ls ls' ρk → ∀ w : Val,
+      en.abort = false ∧ en.wld = .op ∧ en.q = .lin ∧ ResU.CompS ρa ρk ρ ∧ en.PA ls v ρa ∧
+      ρa.InStratum α ∧ (∀ ls w τ, en.PB ls w τ → τ.InStratum α) ∧
+      ∀ ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → ∀ w : Val,
         (en.PB ls' w ─⋆ Φ ls' (K.plug (.val w))) ρk := by
   obtain ⟨K, n, i, v, en, hp⟩ := h
   obtain ⟨⟨rfl, hK, hTn, ha⟩, ρa, ρk, hcp, hA, -, hcont⟩ := pure_sep_iff.mp hp
-  obtain ⟨-, harg, hab | ⟨hq, hc, hans⟩⟩ := hT n i en hTn
+  obtain ⟨-, harg, hab | ⟨hc, hq, hans⟩⟩ := hT n i en hTn
   · rw [hab] at ha; cases ha
   refine ⟨K, n, i, v, en, ρa, ρk, rfl, hK, hTn, ha, hc, hq, hcp, hA, harg ls v ρa hA, hans,
-    fun ls' hs w => (hcont ls' hs).1 w⟩
-
-/-- **At a stop of a lend's table whose share holds a borrow cell at `α`, the lists it is owed at
-are the stop's**: `Ext` keeps every record longer-lived than the cell, the world every record
-inside its bound, and the bound outlives `α`.  `[spec §63]` -/
-theorem owed_same_of_lendAt {en : OpEnt} {α : Life} (hc : ∃ r, en.wld = some r ∧ r ⊐ α)
-    {ρ : WRes} (hb : CellIn ρ α) {ls ls' : List SRec} (h : Owed en ls ls' ρ) :
-    ∀ x, x ∈ ls' ↔ x ∈ ls := by
-  obtain ⟨r, hr, hrα⟩ := hc
-  exact Owed.same_of_cell hr hb hrα h
+    fun ls' hs w => (hcont ls' (owed_of_same en hs ρk)).1 w⟩
 
 /-- An end of a lend's callback: an answer, a graded stop, a tick's stop, or a `raise` held by its
 argument alone, the abandoned continuation left behind (it holds nothing owned). -/
@@ -350,7 +334,7 @@ theorem lendM_owner
       fun ls'' hs'' w τ₁ τ₂ hB hcτ => ?_))))
     obtain ⟨z, hz, hcz⟩ := compS_exch hk' hcτ
     rw [Kont.plug_comp]
-    exact hcont ls'' (hs''.left hk') w τ₁ z hB hz (owner_ext (hs''.right hk').ext ho') hcz
+    exact hcont ls'' hs'' w τ₁ z hB hz (owner_same hs'' ho') hcz
   · -- a tick's stop: the owner joins its obligation
     obtain ⟨K₁, n, i, v, en, ρa, ρk, rfl, hK₁, hT, ha, hgc, hq, hck, hA, -, -, hcont⟩ :=
       performStop_graded_inv hT0 hp
@@ -361,8 +345,7 @@ theorem lendM_owner
       fun ls'' hs'' w τ₁ τ₂ hB hcτ => ?_)))
     obtain ⟨z, hz, hcz⟩ := compS_exch hk' hcτ
     rw [Kont.plug_comp]
-    exact hΨB ls'' _ z σ₂ τ₂ (hcont ls'' (hs''.left hk') w τ₁ z hB hz)
-      (owner_ext (hs''.right hk').ext ho') hcz
+    exact hΨB ls'' _ z σ₂ τ₂ (hcont ls'' hs'' w τ₁ z hB hz) (owner_same hs'' ho') hcz
   · -- a `raise`: the finaliser runs on the owner, and the `raise` goes on
     exact ewp_unfold hM (ewp_ubind_raise hL h0 (Table.Const.mono fun _ _ _ _ _ h => h) Nv Dv
       (owner l Tt δ) hQd hD hT ha hK₁ hcσ
@@ -1204,6 +1187,11 @@ theorem cwp_lendI {lsO : List SRec} {x : Expr} {ρ : WRes}
 end
 
 /-! ### `withbor` (1) at a lend's row -/
+
+theorem owner_ext {l : BoCa.Loc} {T : VTy} {δ : LSub} {ls ls' : List SRec} {ρ : WRes}
+    (he : Ext ls ls' ρ) (h : owner l T δ ls ρ) : owner l T δ ls' ρ := by
+  obtain ⟨w, ρ₁, ρ₂, hc, ho, hv⟩ := h
+  exact ⟨w, ρ₁, ρ₂, hc, ho, vC_local true T (Ext.right hc he) hv⟩
 
 /-- **6.64's entry**: H4 chooses the lend's lifetime `A` below every tag and the callback's
 `fresh` bound, and the callback runs at the frame's list from `ℓ ↦ imm({A}, v, ρ_P)` beside

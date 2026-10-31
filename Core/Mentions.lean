@@ -287,7 +287,7 @@ theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
       rcases hk with hk | hk
       · exact hs.liveAt_left (ihc k hk)
       · exact hs.liveAt_right (ihe k hk)
-  | effHandleT hs _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
+  | effHandleT hs _ _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
       intro k hk
       simp only [hndExpr, mentions, Expr.val, Val.prim, Val.i32, Bool.false_or,
         Bool.or_eq_true, mentions_of_closed (closedAt_qualsVal 0 _)] at hk
