@@ -442,8 +442,11 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
     | .perform sp k i V => do
       let ⟨_, o, hf⟩ ← findOp E sp "perform" k i
       if hna : o.abort = false then
-        let rV ← chkV n E Δ T V o.A
-        pure ⟨_, rPerform (at_ sp) hf hna rV⟩
+        if hac : o.rc = false then
+          let rV ← chkV n E Δ T V o.A
+          pure ⟨_, rPerform (at_ sp) hf hna hac rV⟩
+        else err sp (s!"the operation {k}.{i} is a cancellable wait: it is performed only as " ++
+          s!"`await`, which raises the cancel on `inr` ([await-c], SPEC §29a)")
       else err sp s!"the operation {k}.{i} is abortive: write `abort[{k}.{i}]`"
     | .abort sp k i V => do
       let ⟨_, r⟩ ← abortIt n E Δ T sp k i V .zero
@@ -659,7 +662,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
             if hbx : bl.mentions v = false then
               if hΔx : boundsAvoidB Δ v = true then
                 let ⟨hside⟩ ← outlivesWitness sp bl A'
-                if hS : Row.resumeOB S v = true then
+                if hS : Row.resumeOCB S v = true then
                   if hBn : noThunkB B' = true then
                     let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A')
                     let E' : Env :=
@@ -673,7 +676,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                           if h : overlapOK T (Fam.deadStrict T).u (oneL T i) = true then
                             pure ⟨_, rLendR (at_ sp) ⟨"R1", sp.start.line, sp.start.col⟩ v bl i (hA ▸ hi)
                               (defines_of_wf hwf) hx hbx (boundsAvoidB_sound hΔx) hT hB
-                              (noThunkB_sound hBn) hside (Row.resumeOB_sound hS) hdt hdc hde rM hL hM1
+                              (noThunkB_sound hBn) hside (Row.resumeOCB_sound hS) hdt hdc hde rM hL hM1
                               hcb h⟩
                           else err sp "internal error: a relaxed lend's place"
                         else err sp "internal error: a relaxed lend's body is not closed"
@@ -724,10 +727,13 @@ def abortIt : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → Na
   | n + 1, E, Δ, T, sp, k, i, V, B => do
     let ⟨S, o, hf⟩ ← findOp E sp "abort" k i
     if ha : o.abort = true then
-      if hd : ownFreeB o.A = true then
-        let rV ← chkV n E Δ T V o.A
-        pure ⟨S, rRaise (at_ sp) B hf ha hd rV⟩
-      else err sp s!"the argument of the abortive operation {k}.{i}, of type `{E.ppV o.A}`, does not drop"
+      if hrc : o.rc = false then
+        if hd : ownFreeB o.A = true then
+          let rV ← chkV n E Δ T V o.A
+          pure ⟨S, rRaise (at_ sp) B hf ha hrc hd rV⟩
+        else err sp s!"the argument of the abortive operation {k}.{i}, of type `{E.ppV o.A}`, does not drop"
+      else err sp (s!"the operation {k}.{i} is a cancel target: only `await` raises it, on a " ++
+        s!"cancel ([await-c], SPEC §29a)")
     else err sp s!"the operation {k}.{i} is not abortive: write `perform[{k}.{i}]`"
 
 /-- Check a computation against a type. -/

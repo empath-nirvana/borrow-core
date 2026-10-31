@@ -16,7 +16,7 @@ slots its term is `(λp. withborU d p (Λ. λm. M)) p`, the λ at the empty cont
 
 namespace BoCa.Fig16.LogRel.Core.Check
 open BoCa BoCa.Lifetime
-open BoCa.Fig16.LogRel.Core (NoThunkT Row.ResumeO)
+open BoCa.Fig16.LogRel.Core (NoThunkT Row.ResumeO Row.ResumeOC)
 
 /-- `NoThunkT`, decided.  `[spec §29]` -/
 def noThunkB : VTy → Bool
@@ -52,12 +52,45 @@ theorem Row.resumeOB_sound {S : Row} {x : LifeVar} (h : Row.resumeOB S x = true)
   obtain ⟨⟨⟨⟨⟨⟨⟨h₁, h₂⟩, h₃⟩, h₄⟩, h₅⟩, h₆⟩, h₇⟩, h₈⟩ := this
   exact ⟨h₁, h₂, h₃, h₄, h₅, not_vfree_of_vfreeB h₆, outlivesAllB_sound _ h₇, noThunkB_sound h₈⟩
 
+/-- `Row.ResumeOC`, decided: each operation is one `Row.resumeOB` admits, a cancellable wait of a
+nonzero name taking closed data, or the cancel target at operation `1` of a name whose operation
+`0` is a cancellable wait; and the row does not hold `Div`.  `[spec §29, §29a]` -/
+def Row.resumeOCB (S : Row) (x : LifeVar) : Bool :=
+  (S.all fun o =>
+    (!o.abort && o.q != .unr && decide (o.fin = .ret .unit) && decide (o.B = .unit) &&
+      o.n != 0 && !vfreeB x o.A && outlivesAllB o.A && noThunkB o.A) ||
+    (o.cancellableB && o.n != 0 && !vfreeB x o.A && outlivesAllB o.A && noThunkB o.A) ||
+    (o.cancelTargetB && o.i == 1 && o.q == .cancel && o.n != 0 &&
+      (match Row.find S o.n 0 with
+        | some a => a.cancellableB
+        | none => false))) &&
+  !Row.divB S
+
+theorem Row.resumeOCB_sound {S : Row} {x : LifeVar} (h : Row.resumeOCB S x = true) :
+    Row.ResumeOC S x := by
+  simp only [Row.resumeOCB, Bool.and_eq_true, Bool.not_eq_true'] at h
+  refine ⟨fun o ho => ?_, h.2⟩
+  have := List.all_eq_true.mp h.1 o ho
+  simp only [Bool.or_eq_true, Bool.and_eq_true, bne_iff_ne, ne_eq, Bool.not_eq_true',
+    decide_eq_true_eq, beq_iff_eq] at this
+  rcases this with (⟨⟨⟨⟨⟨⟨⟨h₁, h₂⟩, h₃⟩, h₄⟩, h₅⟩, h₆⟩, h₇⟩, h₈⟩ | ⟨⟨⟨⟨h₁, h₂⟩, h₃⟩, h₄⟩, h₅⟩) |
+      ⟨⟨⟨⟨h₁, h₂⟩, h₃⟩, h₄⟩, h₅⟩
+  · exact .inl ⟨h₁, h₂, h₃, h₄, h₅, not_vfree_of_vfreeB h₆, outlivesAllB_sound _ h₇,
+      noThunkB_sound h₈⟩
+  · exact .inr (.inl ⟨(OpSig.cancellableB_iff o).mp h₁, h₂, not_vfree_of_vfreeB h₃,
+      outlivesAllB_sound _ h₄, noThunkB_sound h₅⟩)
+  · refine .inr (.inr ⟨(OpSig.cancelTargetB_iff o).mp h₁, h₂, h₃, h₄, ?_⟩)
+    revert h₅
+    cases hf : Row.find S o.n 0 with
+    | none => simp
+    | some a => intro h₅; exact ⟨a, rfl, (OpSig.cancellableB_iff a).mp h₅⟩
+
 end BoCa.Fig16.LogRel.Core.Check
 
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (CDerivesP Jdg NoThunkT Row.ResumeO VFree VOutlivesLe HasDtor dtorE
+open BoCa.Fig16.LogRel.Core (CDerivesP Jdg NoThunkT Row.ResumeO Row.ResumeOC VFree VOutlivesLe HasDtor dtorE
   dtor_wf withborUV lendCb closedAt)
 
 /-- A derivation that uses a relaxed rule: its tie is not claimed. -/
@@ -79,7 +112,7 @@ def rLendR (i : TInfo) {A B : CVTy} {S : CRow} (q : Pin) (x : LifeVar) (b : CLif
     (hk : T[k]? = some (.ref A)) (hb : Δ.Defines b) (hx : Δ.find? x = none)
     (hbx : b.mentions x = false) (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
     (hT : ¬ VFree x A) (hB : ¬ VFree x B) (hBn : NoThunkT B)
-    (hside : ∃ b', Δ.Defines b' ∧ VOutlivesLe Δ b' A) (hS : Row.ResumeO S x)
+    (hside : ∃ b', Δ.Defines b' ∧ VOutlivesLe Δ b' A) (hS : Row.ResumeOC S x)
     (hdt : HasDtor (.ref A)) (hdc : closedAt 0 (dtorE (.ref A)) = true)
     (hde : (dtorE (.ref A)).effFree = true)
     (rM : Res (Δ.extend x b) [.mut (.var x) A] (.comp (effOf S (.box (.var x) B))))

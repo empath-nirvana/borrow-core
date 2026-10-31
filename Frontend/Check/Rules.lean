@@ -523,19 +523,22 @@ def rEffSub {S S' : CRow} {A : CVTy} (hle : rowLeB S S' = true) (r : Res Δ T (.
   ⟨.effSub i (.comp (effOf S' A)) S S' A r.t, r.sigs, r.pins,
     r.F.map fun _ h => TTied.effSub i (rowLeB_sound hle) h⟩
 
-/-- `[perform]`: a non-abortive operation of the row, at its argument; it reads the row. -/
+/-- `[perform]`: a non-abortive, unmarked operation of the row, at its argument; it reads the
+row. -/
 def rPerform {S : CRow} {o : COpSig} (hf : BoCa.Fig16.LogRel.Core.Row.find S o.n o.i = some o)
-    (hna : o.abort = false) (r : Res Δ T (.val o.A)) : Res Δ T (.comp (effOf S o.B)) :=
+    (hna : o.abort = false) (hac : o.rc = false) (r : Res Δ T (.val o.A)) :
+    Res Δ T (.comp (effOf S o.B)) :=
   ⟨.effPerform i (.comp (effOf S o.B)) S o r.t, S ∪ r.sigs, r.pins,
-    r.F.map fun _ h => TTied.effPerform i hf hna h⟩
+    r.F.map fun _ h => TTied.effPerform i hf hna hac h⟩
 
 /-- The abortive rule (SPEC §19): an abortive operation of the row, at any answer `B`; its argument
 drops. It reads the row. -/
 def rRaise {S : CRow} {o : COpSig} (B : CVTy)
     (hf : BoCa.Fig16.LogRel.Core.Row.find S o.n o.i = some o) (ha : o.abort = true)
-    (hd : ownFreeB o.A = true) (r : Res Δ T (.val o.A)) : Res Δ T (.comp (effOf S B)) :=
+    (hrc : o.rc = false) (hd : ownFreeB o.A = true) (r : Res Δ T (.val o.A)) :
+    Res Δ T (.comp (effOf S B)) :=
   ⟨.effRaise i (.comp (effOf S B)) S o B r.t, S ∪ r.sigs, r.pins,
-    r.F.map fun _ h => TTied.effRaise i hf ha (ownFreeB_sound _ hd) h⟩
+    r.F.map fun _ h => TTied.effRaise i hf ha hrc (ownFreeB_sound _ hd) h⟩
 
 /-- `[let]`: `M to x. N` at a row, `N`'s context dropping at a row with weakening and persistent
 at an unrestricted row. -/
@@ -643,7 +646,7 @@ def rEffHandle {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R T
     (rM : Res Δ T (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A)))
     (h : overlapOK T rH.F.u rM.F.u = true) : Res Δ T (.comp (effOf S R)) :=
   have hlu : rH.F.u.length = rM.F.u.length := rH.F.hu.trans rM.F.hu.symm
-  ⟨.effHandleV i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R (Masks.of rH.F.u rM.F.u) ks site
+  ⟨.effHandleV i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil BoCa.Fig16.LogRel.Core.rcsNil n A R (Masks.of rH.F.u rM.F.u) ks site
       rM.t.erase.hin rH.t rM.t,
     (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ (rH.sigs ∪ rM.sigs), rH.pins ++ rM.pins,
     ((rH.F.restrict BoCa.Fig16.LogRel.Core.VTy.persistent hp).withUse.split rM.F h).map
@@ -668,7 +671,7 @@ def rEffHandleB {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R 
     (hso : usedSat (outlivesB Δ d) T rM.F.u = true)
     (h : overlapOK T rH.F.u rM.F.u = true) : Res Δ T (.comp (effOf S R)) :=
   have hlu : rH.F.u.length = rM.F.u.length := rH.F.hu.trans rM.F.hu.symm
-  ⟨.effHandleVB i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R d (Masks.of rH.F.u rM.F.u) ks site
+  ⟨.effHandleVB i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil BoCa.Fig16.LogRel.Core.rcsNil n A R d (Masks.of rH.F.u rM.F.u) ks site
       rM.t.erase.hin rH.t rM.t,
     (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ (rH.sigs ∪ rM.sigs), rH.pins ++ rM.pins,
     ((rH.F.restrict BoCa.Fig16.LogRel.Core.VTy.persistent hp).withUse.split (rM.F.restrict (outlivesB Δ d) hso) h).map
