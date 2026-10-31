@@ -552,6 +552,8 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   is a resume and reaches it on the ordinary unwind of the cancel target's raise, at `Σ`, which
   holds `Div` with `Σ_D`. At a `Div`-free `Σ_D` it is `then_compatC`, at a `Div` row
   `then_compatC_div`. Decision 69 ("finalisers are total") holds for `effThen`, not for this rule.
+  The proof reads neither `hfin` nor `hUq`: `hfin` records `Σ_D`, `Div` included, in each
+  cancellable wait's cancel row, where `Row.CancelTotal`/`Row.CancelEnds` read it.
   `[spec §14, §27, §29a]` -/
   | effThenDiv {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
       (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)

@@ -544,3 +544,18 @@ cancel run reaches the finaliser.
 uses it, and every program in `Core/AwaitCancel.lean` types its finalisers with `effThen` or
 `effThenA` at `Div`-free rows. Only the two constructed witnesses use it: `d_thenTickAwait` and
 `d_thenDivFuel` (whose run is `thenDivFuel_runs`, unconditional).
+
+**Review of the proof:** no Fatal. It follows `cwp_then` / `cwp_bind` piece by piece, and no
+hypothesis assumes the result: `hR` is discharged by `seq_raise_cwp`, and `hYc` by `Or.inr`.
+- **Major, for the user.** Moving `effThenDiv` into `CDerives` crosses this scope's §4 STOP ("adding
+  `effThenDiv` to `CDerives` … would end decision 69 for the unconditional fragment"). I read "becomes
+  a proved rule" as that. Decision 69 now holds for `effThen` derivations only, and SPEC §14's text
+  says so. If the rule should stay in `CDerivesP` instead, so that the unconditional fragment keeps
+  decision 69, the move is one constructor's place; the proof is unchanged.
+- §1.5 and §4 above describe the earlier asserted design; §10 supersedes them.
+- **Minor, not done.** `ewp_frame_then_orR` duplicates `ewp_frame_then_or` (about 80 lines), and
+  `cwp_bind` is `cwp_bind_le` at equal tables. Either could become one lemma with instances.
+- **Unspent hypotheses:**
+  - `hUq`;
+  - `hfin`, which is semantically unspent but kept, because it records `Σ_D`, `Div` included, in a
+    cancellable wait's cancel row for `CancelTotal` / `CancelEnds`.
