@@ -1,18 +1,22 @@
 # Ownership and borrows
 
-Every value is either **copyable** or **owned**. A copyable value holds no resource, and may be
-used any number of times or not at all. An owned value holds memory (or a capability, or a
-suspended computation), and is used exactly once: passed on, taken apart, or freed. Borrowing
-lends an owned value for a while without giving it up. If you know Rust, this is its model, and
-a program that type-checks has no use after free, no double free and no leak
+Every value is either **unrestricted** or **linear**. An unrestricted value holds no resource,
+and may be copied and used any number of times or not at all. A linear value is used exactly
+once: passed on, taken apart, or consumed by its drop. Most linear values own something (memory,
+a capability, a suspended computation), and a borrow is linear too. Most linear types have a drop
+that the compiler derives from their structure, and the checker inserts it where a value goes
+unused, so an owned cell behaves much as it does in Rust. The difference is that Rust lets any
+value go unused, while here a value goes unused only through its derived drop, and some types
+have none ([Linear values](linear.md)). Borrowing lends a value for a while without giving it up.
+A program that type-checks has no use after free, no double free and no leak
 ([Safety guarantees](../safety.md)).
 
-## Copyable and owned values
+## Unrestricted and linear values
 
-These types are copyable: the numbers, `bool`, `1`, `!` functions, and tuples and sums of
-copyable types. Everything else is owned:
+These types are unrestricted: the numbers, `bool`, `1`, `!` functions, tuples and sums of
+unrestricted types, and recursive data of these (copied with `clone`). Everything else is linear:
 
-| type | what it owns |
+| type | what it is |
 |---|---|
 | `ref A` | a heap cell holding an `A` |
 | `array A`, `buf A`, `string` | a run of cells (next chapter) |
@@ -46,7 +50,8 @@ main -> i32 =
 ```
 
 The second use is an error, so there is no use after free and no double free. A value that is
-never used is not an error: the compiler frees it where its scope ends, as Rust drops it.
+never used is not an error: the checker inserts its derived drop where its scope ends, which
+frees it, much as Rust drops it.
 
 ```bc
 include textio
@@ -59,9 +64,9 @@ main -> 1 =
 -- output: 42
 ```
 
-The run ends with `live 0`: both cells were freed. A value that can't be dropped this way,
-because dropping it would need an argument (a capability, or a one-shot closure that must be
-called), must be used, and leaving it unused is an error that names it.
+The run ends with `live 0`: both cells were freed. A value whose type has no derived drop (a
+capability, a one-shot closure that must be called, a declared type that must be closed) must be
+used, and leaving it unused is an error that names it ([Linear values](linear.md)).
 
 ## Borrowing for one call
 

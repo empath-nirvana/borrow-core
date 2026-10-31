@@ -18,7 +18,7 @@ The library's scheduler is cooperative and single-threaded.
 | `effect Async { ctl await(); ctl log(x: i32) }` | the operations: let other tasks run, and record an entry with the scheduler |
 | `with spawn { e }` | runs `e` to its first `await` and answers the task, a `Task[A]` |
 | `resume(t)` | runs a task to its next `await`: `inl` its value if it finished, else `inr` the rest |
-| `cancel(t)` | abandons a task, running what it must finalise |
+| `cancel(t)` | cancels a task, running what it must finalise |
 | `queue[A]()`, `push(q, t)` | a queue of tasks |
 | `run_until_empty(q)` | resumes the queued tasks round robin; their values, in the order queued |
 | `with spawn_logged { e }`, `lqueue[A]()`, `lpush(q, t)` | the same for tasks whose `log` entries are kept |

@@ -155,7 +155,7 @@ main -> 1 =
 | `A * B`, `A * B * C` | tuples | [Tuples and sums](guide/basics.md#tuples-and-sums) |
 | `A + B` | `inl a` or `inr b` | [Tuples and sums](guide/basics.md#tuples-and-sums) |
 | `N`, `N[A, …]`, `N[…]<'a, …>` | a `data` or `type` declaration, applied | [Data and generics](guide/data.md) |
-| `ref A` | a heap cell holding an `A` | [Ownership](guide/ownership.md#copyable-and-owned-values) |
+| `ref A` | a heap cell holding an `A` | [Ownership](guide/ownership.md#unrestricted-and-linear-values) |
 | `box A` | a `data` field on the heap: `ref A` | [Recursive data](guide/data.md#recursive-data) |
 | `array A` | `n` cells, `n` fixed when it is made | [Arrays](guide/data.md#arrays) |
 | `array_imm 'a A`, `array_mut 'a A` | a shared or exclusive view of an array's elements | [Arrays](guide/data.md#arrays) |
@@ -218,7 +218,7 @@ The expressions are:
 | `borrow imm x { r -> … }`, `borrow mut x { m -> … }` | lend `x` for a block; `{ 'b, r -> … }` names the lifetime | [Borrow blocks](guide/ownership.md#borrow-blocks) |
 | `*r` | copy out the contents of a borrow | [Borrowing for one call](guide/ownership.md#borrowing-for-one-call) |
 | `modify m { v -> e }` | replace the contents of a `mut` borrow; with `e = (new, r)`, answer `r` | [Borrowing for one call](guide/ownership.md#borrowing-for-one-call) |
-| `alloc(e)`, `free(c)`, `swap(c, e)` | make a cell, take its contents out and free it, or exchange its contents (`(cell, old)`) | [Ownership](guide/ownership.md#copyable-and-owned-values) |
+| `alloc(e)`, `free(c)`, `swap(c, e)` | make a cell, take its contents out and free it, or exchange its contents (`(cell, old)`) | [Ownership](guide/ownership.md#unrestricted-and-linear-values) |
 | `clone(x)` | copy recursive data | [Ownership](guide/ownership.md#recursive-data-is-copied-only-when-you-say-so) |
 | `!{ p -> … }` | a closure called any number of times, which captures nothing | [Functions as values](guide/basics.md#functions-as-values) |
 | `{ p -> … }` | a closure called once, which may capture anything | [Functions as values](guide/basics.md#functions-as-values) |
