@@ -72,7 +72,8 @@ holder. The Lean derivations here do not check that their proofs use `LifeNatura
 re-lend: that is the structure of `GhostEnd.withbor_relend` (`Relend` is the continuation re-lent at
 a fresh lifetime) and of `Spike743.r2_next_obs`.
 
-Nothing here proves `LifeNatural`, `LendFrame` or `LoopFrame`.
+Nothing here proves `LifeNatural`, `LendFrame` or `LoopFrame`. `LifeNatural` as stated does not
+hold (`Spike743.NaturalK2.not_lifeNatural`): `W` is not tied to the context `Γ`.
 -/
 
 noncomputable section
@@ -414,6 +415,8 @@ theorem fundamentalC_of_frames (hN : LifeNatural (ℍ := ℍ)) (hF : LendFrame (
   | forgetMut hΓ => exact forgetMut_compatX hΓ
   | forgetUnk hΓ => exact forgetUnk_compatX hΓ
   | lit c hΓ => exact lit_compatX c hΓ
+  | tokMint hΓ => exact tokMint_compatX hΓ
+  | tokBurn hΓ => exact tokBurn_compatX hΓ
   | hostOp op hΓ => exact hostOp_compatX op hΓ
   | arrNew _ hΓ => exact arrNew_compatX hΓ
   | arrFree _ hΓ => exact arrFree_compatX hΓ

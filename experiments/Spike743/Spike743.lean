@@ -2,3 +2,6 @@ import Spike743.R2Lender
 import Spike743.Round3
 import Spike743.Round4
 import Spike743.Natural
+import Spike743.NaturalK2
+import Spike743.NaturalWorld
+import Spike743.Natural2
