@@ -43,11 +43,11 @@ abbrev nextTy : VTy := .sum .unit .unit
 
 /-- `tick : 1 ↠ Next`, the operation `0` of `Div`, must resume: its continuation has no cancel.
 `[spec §14]` -/
-def tickSig : OpSig := ⟨divEff, 0, .lin, .unit, nextTy, .ret .unit, .top⟩
+def tickSig : OpSig := ⟨divEff, 0, .lin, .unit, nextTy, .ret .unit, false, .top⟩
 
 /-- `tick` at the grade `c`: call-graded at the runtime and `div_fuel`, whose clauses resume `κ` in
 tail position; ungraded at `reify`, whose loop value stores `κ`.  `[spec §14, §48]` -/
-def tickSigW (c : World) : OpSig := ⟨divEff, 0, .lin, .unit, nextTy, .ret .unit, c⟩
+def tickSigW (c : World) : OpSig := ⟨divEff, 0, .lin, .unit, nextTy, .ret .unit, false, c⟩
 
 theorem tickSigW_top : tickSigW .top = tickSig := rfl
 
@@ -66,7 +66,7 @@ def tickB (q : Qual) (A B : VTy) : Bool := q == .lin && A.isUnitB && B.isNextB
 
 /-- **The row holds `Div`**: the operation it finds at `(divEff, 0)` is `tick`.  `[spec §14]` -/
 def CTy.divAt : CTy → Bool
-  | .eff n i q A B _ _ C => if n = divEff ∧ i = 0 then tickB q A B else C.divAt
+  | .eff n i q A B _ _ _ C => if n = divEff ∧ i = 0 then tickB q A B else C.divAt
   | _ => false
 
 /-! ### The tables -/

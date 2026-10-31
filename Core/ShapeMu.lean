@@ -546,7 +546,7 @@ theorem cTyEq_symm : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ'
   | .nu C, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h ⊢
       exact cTyEq_symm C h
-  | .eff _ _ _ A B fin _ C, C', _, _, h => by
+  | .eff _ _ _ A B fin _ _ C, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h ⊢
       obtain ⟨h₁, h₂, h₃, h₄, hA, hB, hf, hC⟩ := h
       exact ⟨h₁.symm, h₂.symm, h₃.symm, h₄.symm, tyEq_symm A hA, tyEq_symm B hB,
@@ -631,7 +631,7 @@ theorem cTyEq_trans : ∀ (C : CTy) {C' C'' : CTy} {δ δ' δ'' : LSub}, CTyEq C
       cases C' <;> simp only [CTyEq] at h
       cases C'' <;> simp only [CTyEq] at h' ⊢
       exact cTyEq_trans C h h'
-  | .eff _ _ _ A B fin _ C, C', C'', _, _, _, h, h' => by
+  | .eff _ _ _ A B fin _ _ C, C', C'', _, _, _, h, h' => by
       cases C' <;> simp only [CTyEq] at h
       cases C'' <;> simp only [CTyEq] at h' ⊢
       obtain ⟨h₁, h₂, h₃, h₄, hA, hB, hf, hC⟩ := h
@@ -686,7 +686,7 @@ theorem CTyEq.of_agree : ∀ (C : CTy) {δ₁ δ₂ : LSub},
       · rw [find?_extend_ne _ _ hxy, find?_extend_ne _ _ hxy]
         exact h y (Or.inr ⟨Ne.symm hxy, hy⟩)
   | .nu C, _, _, h => CTyEq.of_agree C h
-  | .eff _ _ _ A B fin _ C, _, _, h => ⟨rfl, rfl, rfl, rfl, TyEq.of_agree A (fun y hy => h y (Or.inl hy)),
+  | .eff _ _ _ A B fin _ _ C, _, _, h => ⟨rfl, rfl, rfl, rfl, TyEq.of_agree A (fun y hy => h y (Or.inl hy)),
       TyEq.of_agree B (fun y hy => h y (Or.inr (Or.inl hy))),
       CTyEq.of_agree fin (fun y hy => h y (Or.inr (Or.inr (Or.inl hy)))),
       CTyEq.of_agree C (fun y hy => h y (Or.inr (Or.inr (Or.inr hy))))⟩

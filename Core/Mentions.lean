@@ -268,11 +268,12 @@ theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
   | unfoldN => intro k hk; rw [mentions_of_closed (unfoldV_closed _)] at hk; cases hk
   | divFuel => intro k hk; rw [mentions_of_closed divFuelV_closed] at hk; cases hk
   | reify _ _ _ _ _ hcl => intro k hk; rw [mentions_of_closed (reifyV_closed hcl)] at hk; cases hk
-  | effPerform _ _ _ ih | effRaise _ _ _ _ ih =>
+  | effPerform _ _ _ _ ih | effRaise _ _ _ _ _ ih =>
       intro k hk
       simp [BoCa.BoLo.performE, BoCa.BoLo.raiseE, opArgE, mentions, Expr.val, Val.prim, Val.i32] at hk
       exact ih k hk
-  | effThen hs _ _ _ _ _ _ _ _ _ _ _ ihM ihN ihD =>
+  | effThen hs _ _ _ _ _ _ _ _ _ _ _ ihM ihN ihD
+  | effThenDiv hs _ _ _ _ _ _ _ _ _ _ _ ihM ihN ihD =>
       intro k hk
       simp only [thenE, mentions, Expr.val, Val.prim, Val.lam, Bool.false_or,
         Bool.or_eq_true] at hk
@@ -342,6 +343,10 @@ theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
         simp only [lendLoopApp, bindE, mentions, Expr.val, Val.lam] at hk h2 h3
         simp [h1, h2, h3, h4] at hk
   | nilDead _ _ ih => intro k hk; exact absurd (ih k hk) (Ctx.liveAt_nil k)
+  | effAwait =>
+      intro k hk
+      rw [mentions_of_closed (by simp [awaitE, closedAt, opArgE, BoCa.BoLo.performE,
+        BoCa.BoLo.raiseE, Expr.val, Val.prim, Val.i32, Val.lam, Val.unit])] at hk; cases hk
   | _ =>
       intro k hk
       rw [mentions_of_closed rfl] at hk; cases hk

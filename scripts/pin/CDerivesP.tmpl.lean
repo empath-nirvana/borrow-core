@@ -53,6 +53,31 @@ def Row.ResumeO (S : Row) (x : LifeVar) : Prop :=
   ∀ o ∈ S, o.abort = false ∧ o.q ≠ .unr ∧ o.fin = .ret .unit ∧ o.B = .unit ∧ o.n ≠ 0 ∧
     ¬ VFree x o.A ∧ (∀ Δ a, VOutlives Δ a o.A) ∧ NoThunkT o.A
 
+/-- **The row a relaxed lend's callback may stop at, widened for the cancel path only.** Each
+operation is one `Row.ResumeO` admits; or a cancellable wait (`OpSig.Cancellable`: marked, linear,
+answering `1 ⊕ 1`) at operation `0` of a nonzero name, taking closed data, at any cancel row; or the
+cancel target
+(`OpSig.CancelTarget`) at operation `1` of a name whose operation `0` is a cancellable wait, which
+`[await-c]` raises on `inr ()`. No other abortive operation is admitted, and the row does not hold
+`Div`.  `[spec §29, §29a]` -/
+def Row.ResumeOC (S : Row) (x : LifeVar) : Prop :=
+  (∀ o ∈ S,
+    (o.abort = false ∧ o.q ≠ .unr ∧ o.fin = .ret .unit ∧ o.B = .unit ∧ o.n ≠ 0 ∧
+      ¬ VFree x o.A ∧ (∀ Δ a, VOutlives Δ a o.A) ∧ NoThunkT o.A) ∨
+    (o.Cancellable ∧ o.i = 0 ∧ o.n ≠ 0 ∧ ¬ VFree x o.A ∧ (∀ Δ a, VOutlives Δ a o.A) ∧ NoThunkT o.A) ∨
+    (o.CancelTarget ∧ o.i = 1 ∧ o.q = .cancel ∧ o.n ≠ 0 ∧
+      ∃ a, Row.find S o.n 0 = some a ∧ a.Cancellable)) ∧
+  Row.divB S = false
+
+/-- `Row.ResumeO` admits no `Div`: every entry answers `1`, and `tick` answers `1 ⊕ 1`. -/
+theorem Row.ResumeO.divB {S : Row} {x : LifeVar} (h : Row.ResumeO S x) : Row.divB S = false :=
+  Row.divB_of_noTick fun o ho => by
+    simp [tickB, (h o ho).2.2.2.1, VTy.isNextB]
+
+/-- `Row.ResumeOC` widens `Row.ResumeO`: every row R1 admitted it still admits. -/
+theorem Row.ResumeO.toC {S : Row} {x : LifeVar} (h : Row.ResumeO S x) : Row.ResumeOC S x :=
+  ⟨fun o ho => .inl (h o ho), h.divB⟩
+
 /-- A lend's callback `Λ. λm. M`. -/
 def lendCb (M : Expr) : Val := ⟨.lam (.lam M), .lam⟩
 
@@ -97,7 +122,8 @@ def lendLoopApp (A B R : VTy) (N K s0 : Expr) : Expr :=
 inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
 --@CORE_RULES@
   /-- **R1, the relaxed lend.** `r : Ref T ⊢ withborU d r (Λ. λm. M) : F_Σ (Ref T ⊗ B)`, the
-  callback `M` at a row `Σ` of resuming operations (`Row.ResumeO`), typed in `CDerivesP` with the
+  callback `M` at a row `Σ` of resuming operations and the cancel path's cancellable wait and cancel
+  target (`Row.ResumeOC`), typed in `CDerivesP` with the
   view `m : Mut 'x T` alone in its context. `d : Ref T ⊸ 1` is the owner's finaliser, run when a
   continuation captured inside the callback is cancelled. The side conditions are
   `withbor2U`'s, with the callback's row resuming instead of unwinding. -/
@@ -106,7 +132,7 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
       (hT : ¬ VFree x T) (hB : ¬ VFree x B) (hBn : NoThunkT B)
       (hside : ∃ b', Δ.Defines b' ∧ VOutlivesLe Δ b' T)
-      (hS : Row.ResumeO S x) (hM1 : closedAt 1 M = true) (hcb : closedAt 0 (lendCb M).1 = true)
+      (hS : Row.ResumeOC S x) (hM1 : closedAt 1 M = true) (hcb : closedAt 0 (lendCb M).1 = true)
       (hdc : closedAt 0 d = true) (hd : CDerivesP Δ [] d (.val (.lolli (.ref T) .unit)))
       (hM : CDerivesP (Δ.extend x b) [⟨.mut (.var x) T, true⟩] M
         (.comp (CTy.effOf S (.box (.var x) B)))) :

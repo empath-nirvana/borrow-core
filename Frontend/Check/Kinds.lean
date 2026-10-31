@@ -263,9 +263,9 @@ def TExpr.handleSites : Nat → TExpr → List HandleSite
   | 0, _ => []
   | f + 1, t =>
     let here : List HandleSite := match t with
-      | .effHandleV i _ S E _ n _ _ _ ks st ins tc _ =>
+      | .effHandleV i _ S E _ _ n _ _ _ ks st ins tc _ =>
           [⟨i.sp, n, ks, false, st, (S.map (·.n)).eraseDups, ins, handlerNames E tc.erase⟩]
-      | .effHandleVB i _ S E _ n _ _ _ _ ks st ins tc _ =>
+      | .effHandleVB i _ S E _ _ n _ _ _ _ ks st ins tc _ =>
           [⟨i.sp, n, ks, true, st, (S.map (·.n)).eraseDups, ins, handlerNames E tc.erase⟩]
       -- `effHandleT`'s clauses are tail-resumptive by its rule (`tailClause_premise`).
       | .effHandleT i _ S _ E _ n _ _ _ st ins tc _ =>

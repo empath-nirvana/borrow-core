@@ -56,7 +56,7 @@ as the frames of its handled computation's erasure.  `[spec §19]` -/
 theorem TDerivesAt.inside_eq {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J J' : Jdg}
     {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
     {u : Masks} {ks : List ClauseKinds.HKind} {site : Option HSite} {ins : HIn} {tc te : TExpr}
-    (h : TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs n A R u ks site ins tc te) J') :
+    (h : TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs cs n A R u ks site ins tc te) J') :
     ins = te.erase.hin := by
   cases h with
   | effHandleV _ _ _ _ _ _ _ _ _ _ _ _ hins => exact hins
@@ -65,7 +65,7 @@ theorem TDerivesAt.inside_eqB {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : T
     {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
     {d : Lifetime.Life} {u : Masks} {ks : List ClauseKinds.HKind} {site : Option HSite}
     {ins : HIn} {tc te : TExpr}
-    (h : TDerivesAt Ξ Δ Γ (.effHandleVB i J S E fs n A R d u ks site ins tc te) J') :
+    (h : TDerivesAt Ξ Δ Γ (.effHandleVB i J S E fs cs n A R d u ks site ins tc te) J') :
     ins = te.erase.hin := by
   cases h with
   | effHandleVB _ _ _ _ _ _ _ _ _ _ _ _ _ _ hins => exact hins
@@ -81,7 +81,7 @@ theorem TDerivesAt.inside_eqT {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : T
 theorem TDerivesP.inside_eq {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J J' : Jdg}
     {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
     {u : Masks} {ks : List ClauseKinds.HKind} {site : Option HSite} {ins : HIn} {tc te : TExpr}
-    (h : TDerivesP Δ Γ (.effHandleV i J S E fs n A R u ks site ins tc te) J') :
+    (h : TDerivesP Δ Γ (.effHandleV i J S E fs cs n A R u ks site ins tc te) J') :
     ins = te.erase.hin := by
   cases h with
   | effHandleV _ _ _ _ _ _ _ _ _ _ _ hins => exact hins
@@ -90,7 +90,7 @@ theorem TDerivesP.inside_eqB {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J J' : J
     {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
     {d : Lifetime.Life} {u : Masks} {ks : List ClauseKinds.HKind} {site : Option HSite}
     {ins : HIn} {tc te : TExpr}
-    (h : TDerivesP Δ Γ (.effHandleVB i J S E fs n A R d u ks site ins tc te) J') :
+    (h : TDerivesP Δ Γ (.effHandleVB i J S E fs cs n A R d u ks site ins tc te) J') :
     ins = te.erase.hin := by
   cases h with
   | effHandleVB _ _ _ _ _ _ _ _ _ _ _ _ _ hins => exact hins

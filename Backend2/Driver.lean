@@ -58,8 +58,8 @@ def hnodes : Nat → TExpr → List HNode
   | 0, _ => []
   | f + 1, t =>
     let here : List HNode := match t with
-      | .effHandleV _ _ S E _ n _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, false⟩]
-      | .effHandleVB _ _ S E _ n _ _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, true⟩]
+      | .effHandleV _ _ S E _ _ n _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, false⟩]
+      | .effHandleVB _ _ S E _ _ n _ _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, true⟩]
       | _ => []
     here ++ t.children.flatMap fun (_, c) => hnodes f c
 

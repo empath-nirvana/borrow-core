@@ -450,8 +450,11 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
     | .perform sp k i V => do
       let ⟨_, o, hf⟩ ← findOp E sp "perform" k i
       if hna : o.abort = false then
-        let rV ← chkV n E Δ T V o.A
-        pure ⟨_, rPerform (at_ sp) hf hna rV⟩
+        if hac : o.rc = false then
+          let rV ← chkV n E Δ T V o.A
+          pure ⟨_, rPerform (at_ sp) hf hna hac rV⟩
+        else err sp (s!"the operation {k}.{i} is marked as cancelled by a resume: only `await` " ++
+          s!"performs it, raising the cancel on `inr` ([await-c], SPEC §29a)")
       else err sp s!"the operation {k}.{i} is abortive: write `abort[{k}.{i}]`"
     | .abort sp k i V => do
       let ⟨_, r⟩ ← abortIt n E Δ T sp k i V .zero
@@ -673,7 +676,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
             if hbx : bl.mentions v = false then
               if hΔx : boundsAvoidB Δ v = true then
                 let ⟨hside⟩ ← outlivesWitness sp bl A'
-                if hS : Row.resumeOB S v = true then
+                if hS : Row.resumeOCB S v = true then
                   if hBn : noThunkB B' = true then
                     let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A')
                     let E' : Env :=
@@ -687,7 +690,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                           if h : overlapOK T (Fam.deadStrict T).u (oneL T i) = true then
                             pure ⟨_, rLendR (at_ sp) ⟨"R1", sp.start.line, sp.start.col⟩ v bl i (hA ▸ hi)
                               (defines_of_wf hwf) hx hbx (boundsAvoidB_sound hΔx) hT hB
-                              (noThunkB_sound hBn) hside (Row.resumeOB_sound hS) hdt hdc hde rM hL hM1
+                              (noThunkB_sound hBn) hside (Row.resumeOCB_sound hS) hdt hdc hde rM hL hM1
                               hcb h⟩
                           else err sp "internal error: a relaxed lend's place"
                         else err sp "internal error: a relaxed lend's body is not closed"
@@ -696,8 +699,8 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                   else err sp s!"a relaxed lend's result `{E.ppV B'}` holds a `U`: its value is read back after the lend is re-lent (R1, SPEC §29)"
                 else err sp ("the row of a relaxed lend's body has only operations that resume " ++
                   "at most once (cancellable or must-resume), of names other than 0, answering " ++
-                  "`1` with the empty cancel row, whose arguments are closed data with no `U` " ++
-                  "(R1, SPEC §29)")
+                  "`1` with the empty cancel row, whose arguments are closed data with no `U`, " ++
+                  "or a cancellable wait and its cancel target, and no `Div` (R1, SPEC §29, §29a)")
               else err sp s!"`withbor2r`: its number {ppLVar v} occurs in a bound of the lifetime context"
             else err sp s!"`withbor2r`: its bound mentions its own number {ppLVar v}"
           else err sp s!"`withbor2r`: the bound `{E.ppL bl}` is not defined here"
@@ -738,10 +741,13 @@ def abortIt : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → Na
   | n + 1, E, Δ, T, sp, k, i, V, B => do
     let ⟨S, o, hf⟩ ← findOp E sp "abort" k i
     if ha : o.abort = true then
-      if hd : ownFreeB o.A = true then
-        let rV ← chkV n E Δ T V o.A
-        pure ⟨S, rRaise (at_ sp) B hf ha hd rV⟩
-      else err sp s!"the argument of the abortive operation {k}.{i}, of type `{E.ppV o.A}`, does not drop"
+      if hrc : o.rc = false then
+        if hd : ownFreeB o.A = true then
+          let rV ← chkV n E Δ T V o.A
+          pure ⟨S, rRaise (at_ sp) B hf ha hrc hd rV⟩
+        else err sp s!"the argument of the abortive operation {k}.{i}, of type `{E.ppV o.A}`, does not drop"
+      else err sp (s!"the operation {k}.{i} is a cancel target: only `await` raises it, on a " ++
+        s!"cancel ([await-c], SPEC §29a)")
     else err sp s!"the operation {k}.{i} is not abortive: write `perform[{k}.{i}]`"
 
 /-- Check a computation against a type. -/

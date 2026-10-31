@@ -91,7 +91,7 @@ new constructor: there are none. Every changed rule is listed below with its new
 `op ⊑ top`. The user approved `{ℓ_op, ⊤}` on 2026-10-22, in #673's consolidated review (comment
 6350336829, item 4: "Yeah sounds good"). "M1 world = a lifetime bound" was a stale note, not a user
 decision. The phase-2 spike (21363bd9) found that a lifetime bound collapses to the same two
-points: decision 70, `docs/decisions.md`.
+points: decision 71, `docs/decisions.md`.
 
 - `World` (`Core/Types.lean`) has its laws proved: the order is reflexive, transitive and
   antisymmetric with `op` least; the meet; `World.le_iff`.
