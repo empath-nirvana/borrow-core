@@ -24,7 +24,11 @@ checker only translates.
   persistent, so today `*r + *r` at `r : imm 'a i32` is refused there.
 - Backend2 reads a `copy`/`array_copy` constant as `CopyRule.const`, and `Lint.copiesAt` admits it
   at `DerivedCopy` only (F4). The old backend compiles the erased constant, under its licence.
-- No site inserts a derived copy today (SPEC §12, *Every insertion site cites its rule*).
+- The checker inserts no derived copy today. The elaboration writes `array_copy` itself at
+  `array_imm` in its templates (SPEC §12, *Every insertion site cites its rule*): `boundSrc`
+  (`Frontend/Sugar.lean:2684`), the `for` over a shared view (`:4652`, `:4656`), the counted walk
+  (`:4960`, `:4964`) and `lit_view` (`:3895`), each inside a marked scheme
+  (`SchemeMark.walk`/`walkGet`) whose shape `markIt` checks. They stay (section 4).
 
 ## 1. The insertion rule
 
@@ -43,18 +47,22 @@ The rule is stated once, for every node at which the checker splits its context 
 > any binder of a type with a derived drop is (`Env.pushOwn`, SPEC §12). Several such variables
 > nest, in slot order.
 
-"Mention" is the checker's existing `mentionsV`/`mentionsC`, which respects binders. A variable
-both parts mention is one the split would otherwise give to both, so the rule fires exactly where
-`splitErr` would fire at a `DerivedCopy` slot, with two exceptions, both harmless:
+"Mention" is the checker's existing `mentionsV`/`mentionsC`, which respects binders (the same test
+`Env.ownIn` already decides ownership by). **A part uses slot `i` exactly when it mentions `x`**:
 
-- a part may mention `x` where the derivation absorbs it instead (under `<>`, `absurd`): that
-  copy is then unused, owed, and dropped by its derived drop (`forget`, `HasDtor.imm`) at the end
-  of its path, or, in a value, refused as unconsumed. No program the checker accepts today has
-  such a split (a split at a non-persistent slot both parts use is refused today), so nothing
-  accepted today changes;
-- the rule is decided before the parts are checked (from the syntax and the slot's type), so each
-  part is checked once. Inserting on failure would check a part again at each enclosing split,
-  exponentially in the nesting.
+- *mention ⊆ use*: every occurrence is a `var` leaf, whose mask is `oneL i`; `Fam.merge` takes the
+  union of the parts' masks, and `⊤` (`Fam.top`) absorbs only slots no one mentions;
+- *use ⊆ mention*: the checker inserts drops only for slots a part owns (`ownIn` at a binding's
+  head, `E.minus` for a second part, nothing owed at a terminal `M x` or in a value), so no part
+  uses a slot it does not mention.
+
+So the rule is the split's own masks, read before the parts are checked: it fires exactly where
+`overlapOK` would refuse a `DerivedCopy` slot, and nowhere else, so every program accepted today
+checks to the same term. `copyUsed` enforces the first half on every insertion: a copy its part
+does not use is an internal error, not a silent drop. The second half needs no check: a missed
+copy is refused by the split, as today. Deciding before the parts are checked means each is
+checked once; inserting after a failure would check a part again at each enclosing split,
+exponentially in the nesting.
 
 A use that is not a split part (a merge: both `case` arms, both `<M, N>` components, `[then]`'s
 continuation and finaliser) needs no copy: each side of a merge uses the variable once.
@@ -72,14 +80,24 @@ continuation and finaliser) needs no copy: each side of a merge uses the variabl
 | `case V { … }` | `V`, the arms (one merged part) | before it | `V`: `x₁`, both arms: `x₂` |
 | `M y` | `M`, the variable `y` | before it | `M`: `x₁`, `y`: `x₂` |
 
+`thenIt` and `effBind` (`Steps.lean`) are reached through the `bind` and `unwind` rows; `caseIt`
+and `appIt` through `case` and `M y`. The other `overlapOK` sites are `dropOne` (a drop's own
+split), the relaxed lend's (its body sees only its view), `absurd` (absorbs) and `handle` below.
+
 A value split cannot hold a binding, so its copy is under `run` (`[ret]`'s elimination `ofRet`), a
 value. `run` is a value form everywhere a value is allowed except a handler's clauses
 (`valFormB`), and those use only unrestricted slots, so no `imm` reaches them.
 
-**Not split nodes**, so no rule: `<M, N>` (merge), `absurd V` and `<>` (absorb), a handler's
-answer clause and clauses against its body (`[handle]`'s `Γ₁` is persistent only: an `imm` there
-is refused with the existing message "a handler's clauses use only unrestricted variables"), the
-relaxed lend (its body sees only the view), `!thunk` (every live slot must be `!`).
+**No rule:** `<M, N>` (merge), `absurd V` and `<>` (absorb); `handle`, a split whose clause side
+is persistent only (`[handle]`'s `Γ₁`: an `imm` there is refused with "a handler's clauses use only
+unrestricted variables", so none reaches both sides); the relaxed lend (its body sees only the
+view); `!thunk` (every live slot must be `!`). A marked scheme's value (`markIt`) is checked by its
+shape: the elaboration writes its copies explicitly, so its parts never mention one `imm` twice
+(section 4).
+
+A generic body checked at an `imm` instantiation is checked per instantiation, so
+`gen[A](x: A) -> A * A = (x, x)` at `imm 'a i32` copies `x`, as it already duplicates at `i32`;
+at `mut` it is refused at the use.
 
 **Inside** a thunk, a clause body, a loop's or a fold's generated function, or a `def`, the rule
 applies to the splits there, like everywhere: a closure capturing `r` and a later use of `r` is the
@@ -117,7 +135,8 @@ only at `axCopyTy a A`: an inserted copy is at `Imm`, whatever the checker does.
 The copy constant's node carries `TInfo.name` = the variable and a flag `TInfo.inserted`, so the
 typed term says which copies the checker inserted (written `copy[…]` constants have neither).
 `bcc copies <file>` prints them, and `corpus/copies/<name>.txt` pins them for `corpus/<name>.bc`
-(`scripts/check-corpus.sh`), as `corpus/reports/` pins the effects lines.
+(`scripts/check-corpus.sh`), as `corpus/reports/` pins the effects lines. It reads `main`'s typed
+term, so it pins what `main` reaches, a `def`'s body once per use; past the depth bound it fails.
 
 Nothing in `Core/`, `CDerives`, `TDerives`, the relation, the machine, Backend2 or the old backend
 changes. Backend2 sees `copy` constants, `CopyRule.const`, which `Lint` checks at `DerivedCopy`.
@@ -128,14 +147,21 @@ Accepted, each with its `corpus/copies/` pin showing the copy at `r`, and a gold
 
 - `*r + *r` at `r : imm 'a i32`;
 - an `imm` captured by a closure and used after it;
-- an `imm` used twice inside a handler's clause (an argument or the state);
+- an `imm` used twice inside a handler's clause body (a lend the clause makes). An operation
+  argument or a handler state at `imm` cannot be written in the surface today (an effect's
+  signature takes no lifetime parameter, and a handler parameter's lifetime is the meet at its
+  `with`), so those are not tested;
 - an `imm` used twice in a loop body, and in a `fold_imm`/`for` body;
 - `array_imm` used twice (`len(v)` twice).
+
+Kernel statements: `derivedCopyB_iff`, `copyIt_erase`, `TDerivesP.copy_at`,
+`TDerivesP.arrCopy_at`, with `checkProgram_sound` unchanged.
 
 Refused with the existing message (`corpus/reject/`): a second use of a `mut` borrow
 (`two-mut.bc`, `async-r1-two-mut.bc`), of an owned value (`use-after-free.bc`, `double-free.bc`,
 `array-use-after-free.bc`), of a closure (`clo-copy.bc`), of a capability
-(`io-capability-twice.bc`), plus a new `reject/linear-mut-twice.bc` at `*r + *r` with `r : mut`.
+(`io-capability-twice.bc`), plus a new `reject/linear-mut-twice.bc`: a `mut` borrow passed twice (`*r` at `mut` is refused
+earlier, by `*`'s own rule, so it would not reach the split).
 
 `reject/double-use-in-callee.bc` uses an `array_imm` twice: it now checks. It tests that the
 refusal is reported in the callee, so it moves to an `array_mut` view (still refused, same message
@@ -154,6 +180,14 @@ shape) and the `array_imm` program joins the corpus.
 - No insertion in the sugar (`Frontend/Sugar.lean`, `Frontend/Elab/`): it does not know the
   kernel's slot types.
 - No copy at `!A`: it is unrestricted, the split's `dup` already applies.
+- No copy of a tuple of borrows (`imm 'a A * imm 'a B`): `DerivedCopy` has two cases, and a pair is
+  not one. Widening it is a kernel change (`DerivedCopy`, `copyC`, `copy_derives`), not a checker
+  one.
+- No change to the elaboration's own `array_copy` in its templates (section 0): they are fixed
+  schemes SPEC §12 cites, and moving them onto the checker's rule changes the marked schemes'
+  shapes. Follow-up, not this unit.
+- No change to `clone(x)`: it stays the written copy of an unrestricted value (SPEC §10), refused
+  by the sugar at `imm`; a second use of an `imm` is written as a use.
 - No change to `*e`'s content rule (an unrestricted content only) or to `for` over owned arrays.
 - `book/src/guide/linear.md` is on the unmerged `linear-book` branch: not touched; section 6 lists
   what it needs.
@@ -207,7 +241,10 @@ holding `Tok` has neither (`decl_not_ownFree`, `decl_linear`). So the kernel ref
 checker agrees with the kernel. The SPEC sentence is wrong as stated.
 
 *(run)* The refusal is at the clause's resume `k(())` of the state handler: the clause passes the
-state on to the rest of the body, which may raise. The message is the existing one ("`t`, of type
+state on to the rest of the body, which may raise. With a clause that never resumes, it is at the
+`with`, the binding that supplies the initial state. Whatever the encoding, an abort that passes
+the handler discards its frame, and its state with it. (A finaliser a handler runs for its own
+state would be a different design; this does not rule it out.) The message is the existing one ("`t`, of type
 `i32 * i32 * tok`, is live across a computation that may abort, …").
 
 What the kernel does accept *(run)*: a handler that holds the value as its state **and handles the
