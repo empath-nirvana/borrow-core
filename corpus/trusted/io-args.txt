@@ -34,3 +34,11 @@ extern take_args : !(ref args => (mu X. 1 + u8 * X))
 typing: unconditional: a CDerives derivation (fundamentalC, adequacyD)
 unproved boundaries: 11 (write_byte, write_all, read_arg, stdout, args, mk_input, mk_output, take_input, take_output, mk_args, take_args)
 always trusted: the allocator and runtime (Backend/Wasm/Runtime.lean), the WAT printer, wasmtime
+backend: LendEnclosesFn (Backend2/Driver.lean), the native borrow facts' lends enclose their functions: 7 functions
+  f24 (lam)
+  f41 (lam)
+  f46 (lam)
+  f47 (lam)
+  f49 (lam)
+  f50 (lam)
+  f51 (lam)

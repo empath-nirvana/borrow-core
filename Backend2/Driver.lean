@@ -499,17 +499,19 @@ function `d` on arguments `as`:
 - no borrow a parameter whose lend bit is set (`Fn.lendEncl`) holds is beside its cell's owner
   among the parameters, the same one included, or beside another borrow of the cell unless both
   are `imm` (`EnclosesAt`);
-- each such parameter's cell is live at every configuration the call's body reaches
-  (`enclCells`).
+- each cell such a parameter borrows, a pair's fields among them, is live at every configuration
+  the call's body reaches (`enclCells`).
 
 This is an assumption. The bit is set only at a source function, the code of a source `λ`,
 thunk or `&` (`Convert.sourceEncl`); every function the conversion makes clears it. A source
 function is entered where the source term forces or applies its closure, inside every lend whose
 borrow it receives, and the lend's owner is not in the source term's context there: the kernel's
 lexical lends. That the conversion keeps this is not proved: the LIR's types carry no lifetimes.
-What it does not state, an owner reached other than as a parameter's word (in a closure's
-environment, in a cell), rests on the conversion's faithfulness to the checked term, as the rest of
-the backend does. The interpreter checks it at every call of every run (`enclosesB`, sound for
+The assumption also covers what the Prop does not state: that the function reaches no owner of
+the cell other than as a parameter's word (in a closure's environment, in a cell), which
+`noalias` asks too. That part is checked only through its effect, the cell's liveness at the
+call's return (`enclCells`), not at entry: `ownersIn` does not look into a closure's
+environment. The interpreter checks it at every call of every run (`enclosesB`, sound for
 `EnclosesAt`, and the cells at the call's return); `Backend2/LintTests.lean` gives a program
 `Lint` accepts whose run fails it, so it is a fact about the code `Convert` generates. -/
 def LendEnclosesFn : Prop :=
@@ -547,11 +549,12 @@ def trustedReport (k : Backend.CheckedProg) : List String :=
       [s!"backend: StackKHandOver (Backend2/Driver.lean), the stack machines' hand-over of a " ++
         s!"level's k: {fs.length} site{if fs.length == 1 then "" else "s"}"] ++
       fs.map ("  " ++ ·)
-    let ffs := (factsFns k).toOption.getD []
-    let encl := if ffs.isEmpty then [] else
+    let encl := match factsFns k with
+      | .error e => [s!"backend: the word IR of the program failed, its borrow facts unread: {e}"]
+      | .ok ffs => if ffs.isEmpty then [] else
       [s!"backend: LendEnclosesFn (Backend2/Driver.lean), the native borrow facts' lends enclose " ++
         s!"their functions: {ffs.length} function{if ffs.length == 1 then "" else "s"}"] ++
-      ffs.map ("  " ++ ·)
+        ffs.map ("  " ++ ·)
     hand ++ encl
 
 end Backend2

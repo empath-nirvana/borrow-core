@@ -8982,8 +8982,9 @@ facts), `bcc lir --frames` and `bcc-counts --frames`.
     it. The LIR interpreter checks it at every call of every run (`enclosesB`, sound for
     `EnclosesAt`, and the cell at the return); `Backend2/LintTests.lean` gives a program `Lint`
     accepts whose run fails it at a set bit. An owner reached other than as a parameter's word
-    (in a closure's environment, in a cell) is not stated; it rests on the conversion's
-    faithfulness to the checked term. `bcc trusted` lists `LendEnclosesFn` at every function with
+    (in a closure's environment, in a cell), which `noalias` also forbids, is part of the
+    assumption but not of its statement; the interpreter sees it only through the cell's liveness
+    at the call's return. `bcc trusted` lists `LendEnclosesFn` at every function with
     a borrow fact, read off the word IR's `Fn.facts`.
 - **`musttail`** on every tail call, as §40; LLVM's verifier rejects one it cannot honour, and the
   native stage of `scripts/compile-backend2.sh` builds every program.

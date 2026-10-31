@@ -697,16 +697,23 @@ theorem enclosesB_sound {p : Prog} {d : Fn} {as : List LV} (h : enclosesB p d as
     · exact absurd he h
     · exact h
 
-/-- The cells of `d`'s parameters whose lend bit is set, at the arguments `as`, outside the data
-and the static cells: each is live until the call returns. -/
+/-- The cells a value of type `t` holds borrows of, through `!` and pairs (`borrowsIn`'s walk; a
+family's base is not a cell). -/
+def cellsIn : Nat → LTy → LV → List Nat
+  | 0, _, _ => []
+  | f + 1, t, v => match t.unbang, v with
+    | .mut _, .loc a | .imm _, .loc a => [a]
+    | .pair ta tb, .pair x y => cellsIn f ta x ++ cellsIn f tb y
+    | _, _ => []
+
+/-- The cells of the borrows of `d`'s parameters whose lend bit is set, at the arguments `as`,
+outside the data and the static cells: each is live until the call returns. -/
 def enclCells (p : Prog) (d : Fn) (as : List LV) : List Nat :=
   (List.range d.params.length).flatMap fun i =>
     if d.lendEncl[i]? == some true then
       match paramAt p d as i with
-      | some (t, .loc a) => match t.unbang with
-        | .mut _ | .imm _ => if a < dataAt then [a] else []
-        | _ => []
-      | _ => []
+      | some (t, v) => (cellsIn 64 t v).filter (· < dataAt)
+      | none => []
     else []
 
 mutual
