@@ -257,7 +257,11 @@ rework is this.
 | graded `divFuel`, `runtime_every_run`, `divFuel_every_run` | `DivFuel.lean:373`, `DivRuntime.lean:392`, `DivPrograms.lean:190` | **port** | `div_fuel` and the runtime answer at once and open nothing, so `Owed (some r)` is met by list equality (`owed_of_same`) |
 | `rtMain`, `runtime_main_every_run`, `io_rt_every_run`, `IORun.rt_every_run` | `DivRuntime.lean:418`, `:522`, `:542`; `Externs.lean:511` | **rework** | main's `IORun` has `loops`, not `rt` |
 | callers of `withbor1U`/`withbor2U` | — | **edit** | `DeclLend.lean:202`: `Sf_unwind.lend` |
-| every `.eff` pattern (7 → 8 arguments) | — | **mechanical** | about 123 sites, plus main-only `Classes.lean:245`, `Dtor.lean:190`, `DivHandleLast` |
+| `CTy.applyLSub` (`Types.lean:1601`), `VFree`/`CFree` (`:196`, `:214`), `VScoped`/`CScoped` (`:1894`), `Life.mentions` | — | **rework** | `wld` is a lifetime inside `CTy.eff`, so substitution, freeness and scoping each gain a clause for it (`.eff n i q A B fin w C` ↦ `… (w.map (·.applySub σ)) …`; `VFree x` includes `w.mentions x`) |
+| the substitution lemmas behind ∀E/`CTy.all` (`applyLSub` of `vC`/`cC`, `CFree` after substitution, `Scoped` after extension) | `Core/Relation*.lean`, `Core/Compat*.lean` | **rework** | each `.eff` case gains the `wld` component. The interpretation of `wld` at `δ` must commute with `applyLSub` as `CTy.all`'s bound does |
+| wf of rows carried in value types (`withbor1UTy x … S`, `withbor2UTy`, `divFuelTy … w`, `reifyTy`) | `Core/EffBorrow.lean`, `DivFuel.lean` | **rework** | a row in a value type now carries lifetimes, so `VScoped`, `VFree` and the `δ`-interpretation of these types read them |
+| `sigsOkB` (`Frontend/Check/Tied.lean:691`), `Ξ`/`RowAt`/`SigsAt` (`Core/Tied.lean:6`–`:27`) | — | **no change, stated** | they compare `(q, A, B)` only, and ignore `wld` as they ignore `fin`. So a world never makes one operation two signatures |
+| every `.eff` pattern (7 → 8 arguments) | — | **mechanical** | re-estimated: about **220** occurrences of `.eff`/`\| eff` over **36** files on main (grep), plus the generated pin files, plus main-only `Classes.lean:245`, `Dtor.lean:190`, `DivHandleLast` |
 
 The renames `aff`→`cancel`, `Persistent`→`Ctx.Banged`, `Drop`→`OwnFree` and `Weak`→`Cancels` do not
 occur in `EffLend.lean`. They hit #654's edits to `DivHandle`, `EffFin` and `EffRules`.
@@ -307,19 +311,35 @@ places its sub-terms by the rules for their own constructs and decides nothing a
 There is no fallback and no trial elaboration.
 
 `b2-div` decided whether a body performs `Div` by elaborating it once with a `machine` flag and
-restoring the state, and `forYield` did the same with a `tryCatch`. Both are **replaced** by the
-predicate `performsDiv`, read from the syntax and the inferred types. The `tryCatch` is a fallback,
-and is not ported.
+restoring the state, and `forYield` did the same with a `tryCatch`. Both are **replaced** by one
+judgement, and the `tryCatch` fallback is not ported.
+
+**`div ∈ row(M)`** is read off the row that inference assigns to the body (§14 *Inference and
+markers*), computed bottom-up with one clause per construct over the whole grammar:
+
+| construct | `div ∈ row(·)` |
+|---|---|
+| `while`, `loop` | always |
+| `for x in it`, a drain | always |
+| `for x in D`, data | `div ∈ row(body)` |
+| `for x in g(e)` | `div` is in `g`'s row, or in the clause's work |
+| an application `f V` | `div` is in the row of `f`'s inferred type |
+| `x <- M; N`, `let`, `case`, `(V, W)`, a borrow block, `[then]` | the union over the parts |
+| `with h { M }` | `row(M)` less what `h` handles; no surface handler handles `Div` |
+| `λ`, a thunk, a stored generator | `∅`: `div` stays in the value's type |
+| a terminal, a variable, a literal | `∅` |
+
+The shapes listed in D0 are examples of this judgement, not its definition.
 
 | # | construct | kernel form | reads |
 |---|---|---|---|
-| D0 | a div body (`performsDiv`: a `while`/`loop`, a drain, a `for` over a looping generator, or a direct-style call whose type is at a row holding `Div`) | the body at `F_{tick, Σ}(B ⊕ R)`; a terminal `return v` is `inl v` | syntax, inferred callee types |
+| D0 | a div body: `div ∈ row(M)` (above; e.g. a `while`, a drain, a looping generator's `for`, a call at a row holding `Div`) | the body at `F_{tick, Σ}(B ⊕ R)`; a terminal `return v` is `inl v` | syntax, inferred callee types |
 | D1 | `while c { M }; N` | `iterate(step, s₀)`. The step is `<turn & close>`. The turn is `case c { false → inl (inl j) \| true → M; inr s′ }`. The close hands back the residual. The state is the variables of `c`, `M` and `N` by name, plus the held sources and capabilities | names in scope, their inferred types |
 | D2 | `loop { M }; N` | D1 without the test. The join type is `0` when there is no `break` | as D1 |
 | D3 | `for x in it`, over an iterator or a stored generator (a drain) | `iterate` holding `it`; the turn observes `it.1`, the close is `it.2` | the source's inferred type |
-| D4 | `for x in D`, over data: a count, a view `fam (imm/mut)`, `&a`, an owned array of a persistent type, a sized iterator, or `imm 'a (array A)` / `mut 'a (array A)` (see D4′) | body not `performsDiv`: today's total counted loop (§16), unchanged. Body `performsDiv`: `bounded_fix` at the row `div, Σ` (#646 amendment: "a counted loop with `Div` in its body is `bounded_fix` at the row"). A lend around the source is held across the ticks, and the kernel decides | the source's type |
+| D4 | `for x in D`, over data: a count, a view `fam (imm/mut)`, `&a`, an owned array of a persistent type, a sized iterator, or `imm 'a (array A)` / `mut 'a (array A)` (see D4′) | body with `div ∉ row(body)`: today's total counted loop (§16), unchanged. Body with `div ∈ row(body)`: `bounded_fix` at the row `div, Σ` (#646 amendment: "a counted loop with `Div` in its body is `bounded_fix` at the row"). A lend around the source is held across the ticks, and the kernel decides | the source's type |
 | D4′ | `for x in v` with `v : imm 'a (array A)` (or `mut`) | a reborrow through `withload` (the existing `borrow imm *v { 'y, w -> … }` sugar, `Sugar.lean:3760`) to the view `array_imm 'y A`, then D4 over the view. When the body does not tick, no lend crosses a tick. When it ticks, `withloadU` stays `Row.Unwind` and the kernel refuses | the source's type |
-| D5 | `for x in g(e)`, over a generator | `handle_tail` (`effHandleT`) when every exit resumes and nothing raises; otherwise `handle_last` (`effHandleL`, §51), around `g`'s direct call. A clause whose work is `performsDiv` is a div body of its own (D0). The loop's state is threaded through the clause's answer, so **the operation's signature carries the state**. When the state holds a borrow, that signature mentions a lifetime, and decision R (one closed signature per operation, `Core/Tied.lean`) refuses it. That refusal is the kernel's and is listed in 4.2. D5 never threads the owner in place of the borrow: that is the per-observation lend | the clause's exits (syntax) |
+| D5 | `for x in g(e)`, over a generator | `handle_tail` (`effHandleT`) when every exit resumes and nothing raises; otherwise `handle_last` (`effHandleL`, §51), around `g`'s direct call. A clause whose work has `div` in its row is a div body of its own (D0). The loop's state is threaded through the clause's answer, so **the operation's signature carries the consumer's state** (`x × ws ~> ws`). This choice is forced by the kernel rule, not by the language: `effHandleT`'s clauses are closed values (`Hr.ValFormIn Γ₁`, `Hc.ValFormIn Γ₁`, `Ctx.DeadP Γ₁`), so the loop's live variables can reach the clause only through the operation. A generator's signature therefore depends on its consumer, which is why `makeInst` makes one instance per use, with or without borrows (box Q8). When the state holds a borrow, that signature mentions a lifetime, and decision R (one closed signature per operation, `Core/Tied.lean`) refuses it. That refusal is the kernel's and is listed in 4.2. D5 never threads the owner in place of the borrow: that is the per-observation lend | the clause's exits (syntax) |
 | D6 | a direct-style call of a div function | inlined at the caller's row: the call, then `case inl/inr`. On `inr`, close what is held and leave with the residual (D9) | the callee's type |
 | D7 | a loop used as a value (`U(Loop B R)` expected) | `reify_res[B, R, Σ](res)(thunk M)`, with `res` the closed residual function | the expected type |
 | D8 | `main` that loops | `reify` of the body, driven by the runtime (`rtMain`). When the runtime is the only `Div` handler, the body runs in place, and the checker types it at the runtime's world `some .top` | `main`'s inferred row |
@@ -411,7 +431,8 @@ of the step, used again at each turn. It is threaded in the state, D12:
    `copyE`. The result is a `CDerives.copy` node at `Imm @a A` (or `CDerives.arrCopy` under
    `bangE` at `[Imm @a A]`) in `copy_derives`' shape (`Core/Classes.lean:342`).
 4. The close component shares the turn's context: `&` is additive, so there is no split there. It
-   drops the borrow by its derived drop.
+   drops the borrow by its derived drop: `imm` is `Forgettable`, `OwnFree ∧ HasDtor`
+   (`forgettable_iff`, `Core/Classes.lean:390`).
 
 So every copy is a rule node that `CDerives` licenses. The checker decides where it goes, by the
 split's masks, and the elaborator inserts none.
@@ -491,9 +512,9 @@ measured each of the seven on main's file.
 
 | program | main | class1-revive | B5 | why | fix | recovered by |
 |---|---|---|---|---|---|---|
-| `corpus/lend-copy` | runs | refused 37:3: `borrow mut a { … while … }` over an owned array holds its lend across the tick | **refused** → `pending/` | K-unwind (slice) | **(a)** lend inside each turn: `while c { borrow mut a { 'x, v -> … } }` (message U) | **B2** W-tick (`lendRT`) at `LendForm` fam |
+| `corpus/lend-copy` ⚑ | runs | refused 37:3: `borrow mut a { … while … }` over an owned array holds its lend across the tick | **refused** → `pending/` | K-unwind (slice) | **(a)** lend inside each turn: `while c { borrow mut a { 'x, v -> … } }` (message U) | **B2** W-tick (`lendRT`) at `LendForm` fam |
 | `corpus/lend-pipeline` | i32[361] | refused 39:1: "operation 1.0 has two signatures" | **refused** → `pending/` | K-sig; cause below | **(a)** move the borrow into the body: `let v = borrow imm t { b -> get(b, x) }`. **Measured**: `lp-r1.bc` prints i32[361], `live 0`, on main's and class1-revive's binaries (message S) | no plan step; needs lifetime-polymorphic `Ξ` (box Q8) |
-| `corpus/lend-config` | runs | refused 40:3: "`stdin` is not consumed in its scope" | **at risk** | class1-revive's close did not hand back the lent capability. Under D9 (hand back by name) it is expected to run | if refused: **(a)** hand the capability back by name at the loop's exit | B5 itself, by D9 as a rule; otherwise a listed refusal |
+| `corpus/lend-config` | runs | refused 40:3: "`stdin` is not consumed in its scope" | **at risk** | class1-revive's close did not hand back the lent capability. Under D9 (hand back by name) it is expected to run | if refused: **(a)** borrow at each use instead of once: `for c in bytes(&mut stdin) { acc = scale(&config, …) }; cap(&config, acc)` (message U′) | B5 itself, by D9 as a rule; otherwise a listed refusal |
 | `corpus/lend-div`, `corpus/sugar/lend-div` | runs / accepted | refused 42:7: "expected `i32`, but this has type `i32 + 1`" | **at risk** | class1-revive §62: a borrow block whose body is a direct div call was not typed at `B ⊕ R`. D10 composed with D6 places it at `B ⊕ R` | if refused: **(a)** bind the call's result inside the block, then return it | B5 itself, by D6/D10; otherwise a listed refusal |
 
 **lend-pipeline's cause** (diagnosed from class1-revive's `bcc desugar`; the scratchpad files are
@@ -537,21 +558,38 @@ it, it either moves to the corpus or the kernel refuses it, and the result is li
 
 | program | main | B5 (predicted, from class1-revive) | why | fix | recovered by |
 |---|---|---|---|---|---|
-| **P2** `p02-lines-print`, `x02-lines-noprint`, `x02b` | refused 4:1 (`lentDef`); `x02b` 8:14 (`iterError`) | **refused**: `s`'s view is lent across `main`'s ticks | K-unwind (buffer view); see below | **(a)** lend inside each turn: `echo` takes the owner and borrows per line, or uses `lib/lend.bc`'s `loop_lend_imm` (message U) | **B2** W-tick (`lendRT`) at `LendForm` fam; **B6** for the finite-observation shape only |
-| **P4** `p06`, `p06b` ⚑-shape | refused 8:5, 9:5 (S1) | **refused** 6:3: `&a`'s slice lend crosses the inner `while`'s ticks | K-unwind (slice) | **(a)** index in each turn: `for i in 0..n { let x = a[i]; while … ; … a[i] … }` (message U) | **B2** at `fam` |
+| **P2** ⚑ `p02-lines-print`, `x02-lines-noprint`, `x02b` | refused 4:1 (`lentDef`); `x02b` 8:14 (`iterError`) | **refused**: `s`'s view is lent across `main`'s ticks | K-unwind (buffer view); see below | **(a)** the loop is inside a callee: `echo` takes the owner `s` and walks it with a cursor, borrowing inside each turn (`borrow imm s { t -> print_str(line_at(t, i)); next_line(t, i) }`), or uses `lib/lend.bc`'s `loop_lend_imm` (message U′) | **B2** W-tick (`lendRT`) at `LendForm` fam; **B6** for the finite-observation shape only |
+| **P4** ⚑ `p06`, `p06b` | refused 8:5, 9:5 (S1) | **refused** 6:3: `&a`'s slice lend crosses the inner `while`'s ticks | K-unwind (slice) | **(a)** index in each turn: `for i in 0..n { let x = a[i]; while … ; … a[i] … }` (message U) | **B2** at `fam` |
 | #545 matrix AW, AL, AG | refused (S1, S2) | refused 9:3, the same as P4 | K-unwind | **(a)** as P4 | **B2** |
-| `pending/for-buf-borrow` (#501) | refused 16:55 (`iterError`) | refused 16:11 (buffer view) | K-unwind | **(a)** as P2 | **B2** at `fam` |
+| `pending/for-buf-borrow` (#501) ⚑ | refused 16:55 (`iterError`) | refused 16:11 (buffer view) | K-unwind | **(a)** as P2 | **B2** at `fam` |
 | `pending/parse-recover-gen` | refused 136:7 (`iterError`) | refused 136:5 (a literal's view held by a generator) | K-unwind, and class 2 (the generator is stored) | **(b) ⚑** | **B7** (generator holding a view), with B2 |
 | `pending/state-machine-audit` | refused 72:1 (`escapeError`) | refused 91:1: "operation 1.0 has two signatures" | K-sig (4.2) | **(a)** `drive` owns the state and runs `with audit(&mut st) { … }` per event. **Measured**: `sma-r1.bc` prints the expected tuple, `live 0`, on both binaries (message S) | as `lend-pipeline` (box Q8) |
 | `pending/aoc-2020-07` | refused 34:1 (`lentDef`) | refused 91:27: "`memo` consumed in one arm" | #492, not a lend | **(a)** consume `memo` in both arms; #492's message | #492 |
 | `reject/lend-escape` | refused 20:11 (`escapeError`) | refused 23:34: "`q` used twice … `imm 'x array i32 * i32` is not persistent" | a pair is not `DerivedCopy` | **(a)** take the pair apart before the loop, `let (v, n) = q` (message C). After that the block's escape is refused, as the reject intends | stays a reject |
 | `reject/lend-shadow` | refused (the rename check) | refused 23:53 on a type error the old check hid | — | stays a reject; `-- expect:` changes | — |
-| `reject/for-lend-resumes` (P5) ⚑-shape | refused | unchanged: `for x in &a { yield(*x) }` in a generator | class 2 | **(a)** index in each turn, `for i in 0..n { yield(a[i]) }`: each read's lend ends before the `yield` (message R) | **B7** |
+| `reject/for-lend-resumes` (P5) ⚑ | refused | unchanged: `for x in &a { yield(*x) }` in a generator | class 2 | **(a)** index in each turn, `for i in 0..n { yield(a[i]) }`: each read's lend ends before the `yield` (message R) | **B7** |
 | `reject/gen-self-borrow` | refused | unchanged | class 2 (a self-borrow across `yield`) | **(b)** | **B7** |
 
-⚑-shape marks an ordinary-looking loop. Both ⚑ programs have a written fix (a). The one (b) that is
-ordinary-looking is `parse-recover-gen`: a generator over a literal's lines, which is ordinary in
-Rust.
+⚑ marks an ordinary-looking loop. Every ⚑ program has a written fix (a), still to be measured
+(check 6). The one (b) that is ordinary-looking is `parse-recover-gen` ⚑: a generator over a
+literal's lines, which is ordinary in Rust.
+
+**Two refusal classes beyond these programs.** Each is listed because ordinary programs fall into
+it:
+
+- **D4′ with a ticking body** ⚑: `for x in v` over `imm 'a (array A)` whose body has `div` in its
+  row. The `withload` reborrow is `Row.Unwind`, so the kernel refuses (K-unwind).
+  **(a)** index in each turn, `for i in 0..len(v) { … v[i] … }` (message U). Recovered by **B3**
+  (the view case) or **B2**.
+- **K-last**: a lend held across an operation handled by `effHandleL` (`[handle-last]`, a clause
+  that works, then resumes or cancels). Its row has world `none`, so the continuation is owed at
+  every extension and `Row.Lend` fails. **(a)** end the lend before the operation, or write the
+  handler so that it resumes in tail position (message L). Recovered by **B2** (a `LendForm` at a
+  cancellable row).
+
+**A new reject test:** `reject/loop-linear-owner-each-turn.bc`. A declared (`Tok`-owning, linear)
+owner is used by value at every turn of a `while`. It is refused at the turn's split, because its
+type is not `DerivedCopy`. This pins that B5 never copies a linear value.
 
 **P2 reconciled with spike round 4.**
 `spike743/experiments/Spike743/bc/reify/p2-shape-iterator-over-view.bc` checks `unconditional`.
@@ -605,6 +643,13 @@ Each message is the checker's text at the refusal it reports. It decides nothing
   at L1 and the lend is still open at the loop's next turn (L2): a {slice | buffer view | reborrow}
   lend is held only across operations that abort. Borrow inside each turn instead, so that the lend
   ends before the turn does: index `a[i]` in the body, or put the borrow block inside the loop."
+- **U′** (K-unwind or K-lend, where the loop is inside a callee): "`t` is lent to `echo` at L1, and
+  `echo` loops (L2), so the lend is held across its turns: pass the owner `s` to `echo`, and borrow
+  it inside each turn of the loop there; or borrow at each use (`f(&s)`) instead of once before the
+  loop."
+- **L** (K-last): "the lend of `x` at L1 is held across `op` at L2, whose handler works before it
+  resumes, or may cancel (`[handle-last]`): end the borrow before `op`, or resume in tail position
+  in the handler."
 - **S** (K-sig at a threaded loop state): "operation `n.i` would carry the loop's borrow of `t` in
   its signature (`'l0` here, `'l1` at L2), and an operation has one closed signature: borrow `t`
   inside the loop's body (`let v = borrow imm t { b -> … }`) so that the loop holds the owner."
@@ -623,7 +668,7 @@ Each message is the checker's text at the refusal it reports. It decides nothing
 | firm new refusals | 2 (`lend-copy`, `lend-pipeline`), each with a fix (a) |
 | at risk | 3, plus `reject/lend-div-two` |
 | newly accepted | P1, P3, 3 rejects, 1 pending, 3 matrix cells |
-| new programs | 6 |
+| new programs | 6, plus the reject `loop-linear-owner-each-turn` |
 | still refused | P2, P4, AW/AL/AG and 7 corpus programs; all but `parse-recover-gen` and `gen-self-borrow` have a fix (a) |
 | outputs changed | 0 (one comment) |
 
@@ -662,6 +707,9 @@ Each message is the checker's text at the refusal it reports. It decides nothing
 - **No two-point world.** The world is a lifetime bound (`Option Lifetime.Life`). If a proof does
   not go through at the lifetime carrier, the step is named and the work stops (1.4).
 - **No grading of user effects beyond what `effHandleT`'s `hCN` checks.** #654 Open.
+- **No premise beyond 1.3's** on `withbor1U`, `withbor2U` or `effHandleT`. The named-risk STOP
+  (1.4) is not met by restricting the lend's lifetimes to inside `r`, or by any other added
+  premise.
 - **Not resumed, merged or cherry-picked:** `class1-revive`, `b2-div`, `call-grade`. `750a-kernel`
   is not touched.
 
@@ -673,6 +721,7 @@ Each message is the checker's text at the refusal it reports. It decides nothing
 | A checker copy where the copy rule does not apply: copying the pair in `lend-escape`, copying the state wholesale, or a copy for a non-`DerivedCopy` slot | **LINEARITY.** Refused and listed, never repaired |
 | A grade special case for one handler (`count` in P1), or a world chosen per program or by the elaborator | **KERNEL WORK.** The checker decides the world, by `[sub]` and the kernel's premises; one rule for every `effHandleT` |
 | Collapse the world to `{op, top}` when a lifetime-carrier proof is hard | **DECISION.** M1's world is a lifetime bound; name the failing step and STOP |
+| Meet the named risk in `lendM_frame` by an added premise (restricting `A`'s lifetimes inside `r`) | **PRINTED-RULES.** No premise beyond 1.3's; STOP and report the step |
 | Thread the owner instead of the borrow through a generator's operation to avoid decision R (`lend-pipeline`) | **KERNEL WORK.** That is the per-observation lend; the refusal stands with its fix (a) |
 | Fold B2's W-tick (`lendRT`) in early to recover P4, `lend-copy` or AW/AL/AG | **SCOPE.** B2 waits on #750 and is asserted under `LendFrame`; B5 asserts nothing |
 | Give `sliceBorrowMU/IU` or `withbor3U` `Row.Lend` "since the proof is the same" | **SCOPE plus a new proof.** #654 left them Open; frames for them are not proved. Stop, report, do not assert |
@@ -705,16 +754,22 @@ looping program leaves Backend2's fragment ("compiler never stale").
   `[handle-last]` as §51's lowering, already on main for non-ticking bodies).
 - `withbor1U`/`withbor2U` at a `Row.Lend` row are §29 *Lowering*: the lent cell is never moved
   (`genLendU` gains the row).
-- A **stored loop** (a `reify` that is not `main`'s) is a state machine (`genIterK`). This is the
-  sanctioned fallback where the program keeps the loop (§49).
+- A `reify` whose loop value is **stored** (it escapes into data or a cell, or is held and stepped
+  by hand) is a state machine (`genIterK`, §49). That is the sanctioned fallback where the program
+  keeps the loop.
+- A `reify` whose observer sites are static (a `for` over it, a direct drain) goes through the
+  erasure pass (§47): no machine.
 - `div_fuel`'s kernel constant stays outside Backend2. The elaboration never emits it; the
   library's `div_fuel` over loop codata (`lib/div.bc`) is ordinary code.
 
 **Replaced:** the per-body `unfold` machine lowering at elaborated loops (§45 `nuEta` and §49's
 drive at `main`'s loop). Both remain for hand-written `unfold` and `pull`.
 
-**The old backend:** `iterate` stays `expandIter` (`Backend/Clos/Convert.lean:894`). Each loop gains
-one indirect call (`counts.expected`).
+**The old backend:** `iterate` stays `expandIter` (`Backend/Clos/Convert.lean:894`). Each looping
+program gains one indirect call (`counts.expected`). The zero-cost target ("allocate or indirect only
+where C/Rust would", measured by corpus counts) is held on Backend2, which has none of these calls.
+Whether the old backend, retired at N6, is still held to it is **marked for the user**. If it is, B5
+must lower `iterate` natively there too.
 
 **Lint and StackK.** B5 changes neither `Backend2/Lint.lean` nor StackK:
 
@@ -747,7 +802,8 @@ send `outside` or lower. If B5 needs any Lint rule change, STOP and report.
 | `Core/PinLaw.lean` | **only** `pinAwaitSig`/`pinYieldSig`/`pinRaiseSig`'s anonymous-constructor arity | box Q4 |
 | `Core/PinDerives.lean:17`, `:531` (via the template) | the doc comments that tie R2 to LoopLend; the `CDerivesP` docstring on `Row.Unwind` | stale under B5 |
 | `Core/DeclLend.lean:202` | `Sf_unwind.lend` | premise change |
-| every `.eff` pattern (Core, Frontend/Check, Backend2) | one more argument | arity |
+| every `.eff` pattern (Core, Frontend/Check, Backend2; ~220 occurrences in 36 files) | one more argument | arity |
+| `Core/Types.lean` (`CTy.applyLSub`, `VFree`, `CFree`, `VScoped`), the substitution lemmas, the row-in-type wf | the `wld` clause | a lifetime inside `CTy.eff` (1.4) |
 | `Frontend/Check/Externs.lean` | `IORun.rt`, `IORun.rt_every_run` | D8 |
 | `Frontend/{Parser,Syntax,Print}.lean`, `Frontend/Check/TTied.lean` | core text `iterate[…]`, `reify[…](res)`, `div` row; the checker emits `iterate`/`reify`/`handle_tail`/`handle_last` | 2.1 |
 | `Frontend/Sugar.lean` | D0–D12; delete the loop machine, `forDataDiv`, `io_hwf`, S1 | 2.2, 2.4 |
@@ -755,7 +811,7 @@ send `outside` or lower. If B5 needs any Lint rule change, STOP and report.
 | `Frontend/Elab/LoopLend.lean` | delete `lendBind`, `lentDef`, `lendCall`, `iterError` | 2.4 |
 | `Backend2/Convert.lean`, `Backend2/Driver.lean`, `scripts/PinSites.lean` | section 7 | lowering |
 | `SPEC.md` | a new entry (version after #750 A's, 1.22 if A lands first, fixed at merge); §14's per-observation lend and machine sections rewritten; §29: `LendFrame`'s domain grows with `CDerivesP`'s rules, B5's included (Q3) | spec-first |
-| `corpus/` | section 4's moves; 6 new programs; the falsifier's nested-lend programs (check 7); `io-fuel.bc`'s comment (4.5); the 12 programs' comments; `axes/README.md`; `-- expect:` and `-- now:` lines | section 4 |
+| `corpus/` | section 4's moves; 6 new programs; the falsifier's nested-lend programs (check 7); `reject/loop-linear-owner-each-turn.bc`; the measured (a) rewrites (check 6); `io-fuel.bc`'s comment (4.5); the 12 programs' comments; `axes/README.md`; `-- expect:` and `-- now:` lines | section 4 |
 | `corpus/*.expected` | `counts` (+1 indirect per loop, old backend); `counts-backend2` (rows for 4.2 out, 4.3 in); `erasure-backend2`; `handled` (`main` gains the `Div` name); `kinds` | measured diffs on `class1-revive` |
 | `corpus/sugar/*.core.bc` | up to 22 pairs; `lend-div.core.bc` deleted | the emitted core changes. Each pair is re-checked, not just regenerated |
 | `docs/kernel-usage/census.tsv`, `docs/kernel-usage.md`, `scripts/AxiomCheck.lean` | the new lemmas | census |
@@ -782,7 +838,11 @@ not of any theorem. At `w = none` both are trivial and give today's rule; they a
    `runtime_main_every_run` and `io_rt_every_run` (`scripts/AxiomCheck.lean`).
 5. The golden and corpus checks: `scripts/check-corpus.sh`, sugar pairs, clause kinds, handled
    names, cell classes, both `counts` files, erasure, the Backend2 corpus, and native.
-6. P1–P4 run by hand against section 4's table.
+6. P1–P4 run by hand against section 4's table. **Every (a) fix is written out and measured**, on
+   main's binary and on B5's, and recorded in the PR with its output: `lend-copy`, `lend-config`
+   (if refused), `lend-div` (if refused), P2/`x02`, P4/AW/AL/AG, `for-buf-borrow`, the D4′-with-tick
+   class, K-last, `aoc-2020-07`, `lend-escape` and `for-lend-resumes`. `lp-r1.bc` and `sma-r1.bc`
+   are already measured. **STOP:** an (a) that fails becomes (b) and is raised with the user.
 7. **The falsifier on nested lends (condition of Q3; results go in B5's PR).** Programs, each run
    under `--check tags`, `--check fresh` and `--alloc least`, and the stress generator (several
    hundred seeds per mode, as in the 743 spike):
@@ -795,11 +855,15 @@ not of any theorem. At `w = none` both are trivial and give today's rule; they a
    - `nest-cancel`: `nest-c1-in-r1` with the task cancelled while the class-1 lend is open, and with
      an abortive operation raised inside the inner lend.
    - `nest-imm`: the `imm` variants, the re-read at each turn through #756's copy.
+   - `nest-fin` (after #750 A): a `[then]` whose finaliser's row holds `Div` (`effThenDiv`), and
+     whose finaliser holds a class-1 lend across a `while`'s ticks, run on the raise path and the
+     normal path.
 
    Kill: a run that gets stuck, leaks, gives a wrong answer or trips the tag check. That is a hard
    stop, reported before the PR.
 8. **`bcc trusted`** shows `LendFrame` at every R1 site whose callback contains a class-1 lend
-   (`nest-c1-in-r1`, `nest-c1-r1-c1`), and nothing new at class-1-only sites (`lend-mut`, P1).
+   (`nest-c1-in-r1`, `nest-c1-r1-c1`), `PinFin` at `nest-fin`, and nothing new at class-1-only sites
+   (`lend-mut`, P1).
 9. One `make gate`, run only as `~/repos/scripts-local/gate-serial.sh gate` from the worktree,
    once, at the end.
 
@@ -817,9 +881,10 @@ not of any theorem. At `w = none` both are trivial and give today's rule; they a
 > checker reaches `some r` by `[sub]` at lends, `effHandleT` nodes and `main`. The kernel re-checks.
 > STOP if the elaborator would have to choose.
 
-> **Q3. `CDerivesP` mirrors `S.Lend`: DECIDED** (top foreman, on the standing decision that PinLaw's
-> schemas are uniform in depth and holder; a class-1 lend nested in an R1 callback is more depth and
-> holders under the same schema, not a new assumption).
+> **Q3. `CDerivesP` mirrors `S.Lend`: DECIDED by the top foreman,** answering from the across-loops
+> decision (2026-10-29/30: PinLaw's schemas are uniform in depth and holder, so a class-1 lend nested
+> in an R1 callback is more depth and holders under the same schema, not a new assumption), with the
+> conditions below. **The user is being told.**
 > **Exactly what widens:**
 > - `LendFrame` (`PinLaw.lean:91`) quantifies over callbacks `M` with
 >   `CDerivesP Δb [⟨V, true⟩] M (.comp (CTy.effOf S (.box (.var x) B)))`.
@@ -830,14 +895,28 @@ not of any theorem. At `w = none` both are trivial and give today's rule; they a
 >   `some r` with `'y ⊏ r`. These are tail-resumptive handler operations, and `Div` ticks driven by
 >   an in-scope `div_fuel`. The R1 row itself is `ResumeO`, which holds no `tick`.
 >
-> Those derivations are the new members of `LendFrame`'s domain. Nothing else in `CDerivesP` changes,
-> and `LoopFrame`'s callbacks gain the same nested nodes.
+> Those derivations are the new members of `LendFrame`'s domain. Nothing else in `CDerivesP` changes.
+> `LoopFrame`'s steps `N`, `K` and `s0` gain the same nested nodes inside handlers they contain: their
+> own rows are `.ret`.
+>
+> **The same growth after #750 A** (`750a-kernel`'s `Core/PinLaw.lean`). There, `PinLaw` has three
+> schemas:
+> - `LendFrame` is over `LendForm` at `Row.ResumeOC S x` (SPEC §29a). Its `M` gains the same
+>   class-1 nodes. `ResumeOC` holds no `tick` either.
+> - `LoopFrame`: as on main.
+> - `PinFin` (`:138`) is over `[then]` with `Row.divB SD = true` (`CDerivesP.effThenDiv`), and
+>   quantifies over `CDerivesP` derivations of `M`, `N` and the finaliser `D`. After B5, `D` may hold
+>   a class-1 lend across its own ticks (`Div` is in `SD`), and so may `M` and `N`. Those are new
+>   members of `PinFin`'s domain.
+>
+> The statement in SPEC names all three.
 > **Conditions:**
 > - Phase 2's check 7: the falsifier on nested lends, with the results in the PR.
 > - SPEC's B5 entry, and §29, say plainly: "`LendFrame`'s domain is every `CDerivesP` derivation of
 >   the callback; it grows with the rules `CDerivesP` admits, and B5's class-1 premises are such
 >   rules."
-> - `bcc trusted` reports `LendFrame` at those sites (check 8).
+> - `bcc trusted` reports `LendFrame` at those sites, and `PinFin` at the `effThenDiv` sites with a
+>   class-1 lend inside (check 8; `nest-fin` in check 7).
 
 > **Q4. `PinLaw.lean`: DECIDED, the literals' arity only.** B5 adds `wld` after `fin` on main and
 > takes #750 A's layout at merge (`wld` after `rc`). The textual merge covers every `.eff` pattern,
@@ -851,18 +930,32 @@ not of any theorem. At `w = none` both are trivial and give today's rule; they a
 > **Q6. The residual at an exit (D9): hand back by name.** This is as written. `lend-config` and
 > `lend-div` test it; a program it cannot express is a listed refusal with a fix (a).
 
-> **Q7. "Reads checked facts": DECIDED.** The elaborator reads syntax and inferred types, and
-> decides no guarantee.
+> **Q7. "Reads checked facts": an interpretation, for the user.** The foreman confirmed the reading:
+> the elaborator reads syntax and inferred types, and decides no guarantee. It is an interpretation of
+> "checked facts only": no pipeline gives the elaborator checker output. It is **marked for the user**
+> to confirm.
 
-> **Q8. Refusals with no step in #743's plan.**
-> - **K-sig** (`lend-pipeline`, `state-machine-audit`): a loop state holding a borrow, threaded
->   through a generator's operation, mentions a lifetime, and decision R needs one closed signature.
->   Both have a measured fix (a). Accepting them as written needs an effect context instantiable per
->   lifetime context. That is a kernel change to `Core/Tied`'s tie, outside B5 and outside #743's
->   plan. *Recommendation:* the foreman files it as its own unit; B5 parks both in `pending/` with
->   message S.
-> - **P2's buffer view** is recovered by B2 (`lendRT` at fam), not B3 or B6 (4.4).
-> - `aoc-2020-07`: #492.
+> **Q8. K-sig: a generator's signature depends on its consumer. A menu.** The diagnosis (4.2) shows
+> the root. D5 threads the consumer's loop state through the producer's operation (`x × ws ~> ws`),
+> because `effHandleT`'s clauses are closed. So a generator's signature depends on whoever consumes
+> it, and `makeInst` makes one instance per use, with or without borrows. A borrow in `ws` only makes
+> the dependence visible, as a lifetime that decision R refuses.
+>
+> | option | kernel change | what it fixes | cost |
+> |---|---|---|---|
+> | **(i)** a lifetime-polymorphic `Ξ` | `Core/Tied` (1008 lines): `Ξ` indexed by the lifetime context, or signatures closed under `∀'l`; `RowAt`/`SigsAt` and `sig_prefix_of_rowAt` instantiate it. `Frontend/Check/Tied.lean`'s `sigsOkB` compares up to lifetime instantiation | `lend-pipeline` and `state-machine-audit` as written | the symptom only. Signatures still depend on the consumer, and `makeInst`'s per-use instances stay. Unestimated; it touches decision R |
+> | **(ii)** handler-owned state on `effHandleT`: a parameterised tail clause `Hc : P × A → F(P × B)` | `effHandleT` gains a state type `P` and an initial state; the handler threads `P` from clause to clause and returns it with the result. `handleT_compatC` is restated with `P` in `KapRelT`'s answer. The erasure law (§47) becomes "resume-once = call with the state passed" | the root: operation signatures are the user's declared ones (`Yield[i32]: i32 ~> 1`), closed and independent of the consumer. `makeInst` needs one instance per generator, not per use. A borrow in the loop state lives in `P`, typed under the handler's `Δ`, never in a signature | a new rule's proof, about the size of `DivHandle.lean`'s `effHandleT` part (`DivHandle.lean` is 875 lines; `DivHandleLast.lean` 975), plus D5's emission, Backend2's lowering of `P` as a loop-carried variable, and the same for `effHandleL`. Parameterised handlers are the literature's standard form (Plotkin–Pretnar) [recalled] |
+>
+> **Is (ii) in B5's scope?** Not as B5 stands: it is a new kernel rule, with its proof and lowering,
+> and B5's acceptance does not depend on it. *Recommendation:* (ii), as its own unit after B5, because
+> it removes the cause, and (i) leaves it. **The user's call**, raised through the foreman.
+>
+> **What B5 does meanwhile:** D5 as written. `lend-pipeline` and `state-machine-audit` go to
+> `pending/` with message S and their measured fix (a). D5 states that its state-in-signature choice
+> is forced by closed clauses (2.2).
+>
+> **Other refusals with no step in the plan:** P2's buffer view is recovered by B2 (`lendRT` at fam),
+> not B3 or B6 (4.4); `aoc-2020-07` is #492.
 
 > **Q9. D4′: DECIDED, in scope,** as a rule by type, with copies only through #756's rule.
 
@@ -870,6 +963,7 @@ not of any theorem. At `w = none` both are trivial and give today's rule; they a
 
 - **Q3:** the falsifier on nested lends (check 7) breaks a run.
 - **Q4:** `PinLaw.lean` needs more than the literal arity.
+- **S2:** a written fix (a) fails when measured. It becomes (b) and is raised with the user.
 - **1.4:** a class-1 proof does not go through at the lifetime carrier (the named risk:
   `lendM_frame`'s `hΨA` re-entry, where the view cell reads a record tagged at or outside `r`).
   The step is named and the work stops; it does not fall back to two points.
