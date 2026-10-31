@@ -127,95 +127,114 @@ and `D` as `CDerivesP` derivations together with their relations, imply the rela
   checker does not emit `effThenDiv` in this unit: finalisers at the surface are typed at `F 1`
   (`effThenA`). Emitting it is unit B.
 
-### 1.6 `Row.CancelTotal`
+### 1.6 `Row.CancelTotal` and `Row.CancelEnds`
 
     CancelTotalC F ≜ F.isTop = false ∧ Row.divB F.rowOf = false ∧ ∀ o ∈ F.rowOf, o.finRead → CancelTotalC o.fin
     Row.CancelTotal Σ ≜ ∀ o ∈ Σ, o.finRead → CancelTotalC o.fin
+    Row.CancelEnds Σ ≜ Row.CancelTotal Σ ∧ ((∃ o ∈ Σ, o.Cancellable) → Row.divB Σ = false)
 
-This is recursive over nested cancel rows, by the same recursion as `FinLe`. It is a typing-only predicate,
-since the relation does not read `fin` at a marked operation.
+These are recursive over nested cancel rows, by the same recursion as `FinLe`, and typing-only: the
+relation does not read `fin` at a marked operation. Each is decided (`cancelTotalB`, `cancelEndsB`) with an
+`_iff`.
 
-This is the premise that termination-sensitive code (a bounded scheduler's cancel-at-budget, `run_in`)
-asks of its tasks' row. Unit A defines it, decides it (`Row.cancelTotalB` and `_iff`), and shows it is
-non-vacuous. There are two examples:
-- a row whose marked `await` has cancel row `F 1`;
-- a row whose cancel row holds `Div`, which is refused.
+Under level-triggered cancellation (§1.7), a marked operation's cancel row lists the finalisers between a
+wait and the next catch. It does not list everything a cancel runs, so `CancelTotal` alone does not bound
+a cancel. Code after a catch may tick. `Row.CancelEnds` adds "no `Div` where the row has a cancellable
+wait".
 
-No consumer exists in unit A. `run_in` is unit B. That a `CancelTotal` cancel terminates stays open, as
-decision 69's "finalisers are total" does.
+**`CancelEnds` is a theorem target, not a typing restriction.** No rule asks for it.
 
-### 1.7 A cancel cannot be intercepted (decision D3 under cancel-by-resume)
+- The target (`cancelEnds_ends`): at a row with `Row.CancelEnds`, a cancelled task ends.
+  - It finishes, or it reaches a cancellable wait, which raises `cancelled`.
+  - It does so through finitely many stops, under every scheduler answer.
+  - The reason: at a `Div`-free row the relation is `ewpTS`, a least fixed point (`effWp false`). Its
+    induction principle bounds every path through the stops.
+- It is proved if that is tractable inside the unit. Otherwise it is recorded as unproved, with no
+  assertion.
+- Rows with `Div` carry no termination guarantee, which is what `Div` means. That is not a finding.
+- `run_in` (unit B) may cite the theorem only once it is proved.
 
-> **PENDING the Trio spike (2026-10-31).** The user is considering replacing this route (refusing
-> interception) with Trio-style level-triggered cancellation. Under that design the cancelled state belongs
-> to the task's scope, every cancellable wait in a cancelled scope raises `cancelled`, and shielded waits
-> work normally. This section stands only if the spike's answer keeps route (i). Nothing in it has been
-> built.
->
-> **The targeted check found holes in this section as written.** They are recorded here and not
-> applied, since the section may be replaced.
->
-> **Fatal**
-> 1. **A `⊤` cancel row makes `hRC` vacuous.** `ThenLe _ _ ⊤` always holds, and `⊤.rowOf = []`.
->    Fix: `AvoidsD m F` requires `F.isTop = false` at every depth.
-> 2. **`effHandleL`'s work frame is an unwind finaliser, and `finRead` does not reach it.**
->    `LastFinOK`'s `hfin`-like conjunct (`Core/DivHandleLast.lean` ~358) is gated at `capB`. Fix: read it
->    at `finRead`, and state the completeness argument over every frame that runs code on the unwind:
->    - `[then]`;
->    - handle-last's work;
->    - the lend's `d`, which is pure.
->
-> **Major**
-> 3. **`divFuel` and `reify` handle `Div` and carry no `hRC`.** Fix: the same premise at `divEff`, and
->    list all six places where a name becomes handled.
->
-> **Minor**
-> 4. **`AvoidsD`/`CancelTotal` recurse where `ThenLe`/`PendLe` (still at `capB`) write nothing.**
->    Either extend `finRead` there, or argue at the top level and call the recursion conservative.
-> 5. **Gate `hRC` at `o.Cancellable`, not `o.rc`.**
-> 9. **`hRC` also refuses resuming handlers inside a task.** Unit B's message must name the fix: move
->    the handler outside the scheduler, or move the effect out of the finaliser.
+Non-vacuity:
+- `CancelTotal`: holds where the marked `await` has cancel row `F 1`; fails where the cancel row holds
+  `Div`;
+- `CancelEnds`: holds at the swallowing row; fails at the swallowing row with a `tick` (`CancelTotal`
+  still holds there).
 
-The rule is decision D3 of 2026-10-08 (SPEC §27): a finaliser may not raise or perform a name that is
-handled only inside the cancelled region. Under κ.2, the region's frames are dead, and D3 is checked by
-`[sub]` from `κ`'s cancel row to the row of the code that cancels. Under cancel-by-resume, the region is
-live. A finaliser on the cancel's unwind runs inside it, so a handler inside the task would catch that
-finaliser's raise, or abandon its continuation, and the pending `cancelled` would be lost.
+### 1.7 Level-triggered cancellation (user decision, 2026-10-31)
 
-The kernel states the rule at the place where a name becomes "handled inside": the handler rules.
+The user chose Trio-style level-triggered cancellation, without refusal (i) on top. The Trio spike
+(`spike-trio-cancel` @4df2a9e7, `experiments/spike750/Spike750/Trio.lean`) found that it needs **no new
+kernel rule, step or premise**. The cancelled state belongs to the task's handler, not to the kernel.
 
-    [handle] at name m, body row Row.ofEff m E 0 fs cs ++ Σ:
-        ∀ o ∈ Σ, o.rc = true → Row.AvoidsD m o.fin                    (hRC)
-    Row.AvoidsD m F ≜ ∀ o' ∈ F.rowOf, o'.n ≠ m ∧ (o'.finRead → Row.AvoidsD m o'.fin)
+- **The mechanism.**
+  - The task handler of name `n` carries the cancelled flag as its state.
+  - `await`'s clause (operation `0`) reads the flag:
+    - live: it hands `κ` to the scheduler;
+    - cancelled: it resumes `κ` with `inr ()` at once, and `[await-c]` raises `cancelled`.
+  - The canceller sets the flag, then resumes the stopped `κ` with `inr ()` (round 2's cancel).
+  - No clause clears the flag, so every later cancellable wait in the scope raises again.
+- **Shielded waits.** An unmarked operation of the same name, `complete : 1 ↠^lin 1`, whose clause does
+  not read the flag. Finalisers that wait use it. An `await` in a finaliser of a cancelled task raises
+  at once. Round 2's rollback target is written with `complete`.
+- **What a cancel row means now.** A marked operation's cancel row, recorded by `[then]`'s `hfin`, lists
+  the finalisers between the wait and the next catch. Typing is unchanged (`ResumeOC`'s `await` branch
+  admits any cancel row). Only the reading changes (§1.6).
+- **No refusal of interception.** A handler inside the task may catch a finaliser's raise that
+  supersedes `cancelled`. The cancel is then deferred to the next cancellable wait, not lost.
+  - `cancelled_n` itself is never caught inside the task: `[op]` needs the context free of `n`, and
+    `hnS` makes any inner handler of `n` a nested scheduler of its own body.
+  - Route (i)'s premise `hRC` is dropped. The targeted check's two Fatals, its `divFuel`/`reify` Major
+    and its `hRC` Minors (4, 5, 9) were findings against `hRC`, and they are moot.
 
-This premise goes on `effHandleV`, `effHandleVB`, `effHandleT` and `effHandleL`, in `CDerives`,
-`CDerivesAt`, `CDerivesP` and `TDerives`. `Row.avoidsDB` decides it, with an `_iff`. It is a typing-only
-premise, so the compatibility lemmas ignore it.
+**Ported onto main and rebuilt** (not merged), in `Core/AwaitCancel.lean`:
 
-**Why it is complete.**
-- An `await` that reaches a handler outside `handle_m` is an entry `o` of `handle_m`'s outer row `Σ`.
-- Every `[then]` between that `await` and `handle_m` has recorded its finaliser's row in `o.fin`, via
-  `hfin` at `finRead`. `[sub]` and function types only grow that record.
-- So every operation that such a finaliser may raise or perform is a name of `o.fin`. A handler of one of
-  those names inside the region is refused.
-- A finaliser outside `handle_m` is not caught by it. It is checked at any handler further out that is
-  still inside the region, against the record as grown by then.
+- `stickyAwait`, the level-triggered clause, together with the laws:
+  - `await_cancelled`: at a memory where the flag holds `inr ()`, `hnd (n, H) K[await_n]` steps to
+    `hnd (n, H) K[raise_n (1, ())]`, with the memory unchanged, for every `K` free of `n` and every
+    `K₀`;
+  - `await_cancelled_inst`: its premises are satisfiable;
+  - `shield_catch` and `shield_catch_inst`: a shielded wait's catch does not read the flag.
+- The swallowing example
+  `handle_3 (await_1 then x. x unwind raise_3) with {3 _ → ()}; await_1`:
+  - typed at main's rules (`d_swallow`);
+  - in the relation (`sem_swallow`);
+  - its row admitted by `ResumeOC` (`resumeOC_swallow`).
+- **The scheduler's clause, typed by passing the state along** (as `take n` does), not by capturing a
+  cell:
+  - The handler's answer is `U(Flag ⊸ F R)`. `await`'s clause is
+    `λ(_, κ). return (λc. case c {inl _ ⇒ resume κ (inl ()) to g. g c | inr _ ⇒ resume κ (inr ()) to g. g c})`,
+    `lin` at `1 ↠ 1 ⊕ 1`.
+  - `d_stickyScope`: a closed `CDerives` derivation of that handler around the swallowing example, run
+    from the cancelled flag. By `adequacyC`/`adequacyD` it ends at the `cancelled` answer with every cell
+    freed.
+  - `stickyScope_eval`: `Support`'s `eval` agrees.
+  - The cell-reading `stickyAwait` is the spike's machine-level form. The typed form passes the flag.
+- **Runs**, by `decide` on `eval`, with `live 0` where the spike had it:
+  - the swallowing example;
+  - retry-inside-the-task;
+  - a finaliser closing a `must_close` cell on the cancel exit;
+  - a shielded `complete` in a cancelled task's finaliser, which completes;
+  - the same finaliser with `await`, which raises at once.
 
-**The second route** is a finaliser that performs `p` at a name `m` whose inner handler returns without
-resuming. `p` is in `Σ_D`, and `ThenLe` puts each entry of `Σ_D` into `o.fin`, so `m` is a name of
-`o.fin` and `hRC` refuses `handle_m`. `hRC` checks names, whatever the operation's qualifier or answer,
-so raise, perform-and-abandon and perform-and-resume are all refused alike. That is D3's own over-
-approximation ("a raise or operation of a name with no live instance there is a type error").
+**Not built**:
+- cancel scopes inside a task, which need a forwarding rule (spike §5);
+- a timeout that sets a suspended scope's flag.
 
-**Non-vacuity.** In `Core/AwaitCancel.lean`, for the program
-`handle_m ((await_n then x. return x unwind raise_m e)) with …`:
-- `hRC` is refuted when the handler is inside the region;
-- `hRC` holds for the same body with `handle_m` outside the scheduler's handler of `n`;
-- the perform-and-abandon variant is refused.
+### 1.7a Laws
 
-**What a task can still do.** A task can still handle its own effects inside, around code that does not
-await. It cannot raise `cancelled` itself (`[raise]` refuses marked operations); self-cancel is a
-scheduler operation.
+- **Laws 5 and 6** (non-interceptable, dead frames; first error kept) stay as they are for κ.2 cancels
+  of `cancel` operations: generators, `deadline`, `take`.
+- **Law 5c, for cancellable waits.** It replaces 5 and 6 there: *a cancel is not lost*. In a cancelled
+  scope every cancellable wait is `raise cancelled` (`await_cancelled`).
+- **A finaliser's raise supersedes the cancel**, by law 6's ordinary unwind clause. The canceller learns
+  how the task ended, not which errors its finalisers raised.
+- **Text to update:**
+  - SPEC §19 *Laws* items 5 and 6: scope them to κ.2, and add 5c;
+  - SPEC §29a: the mechanism, the shielded wait, the laws and termination;
+  - `docs/effect-lowering.md` §2.4 and the §2.8 row. For cancellable operations, the excluded variant
+    ("a cancel lowered as an ordinary raise") is now the semantics: the cancel is a call that resumes
+    the task's state machine with `inr ()`, and the raise is ordinary. The exclusion stays for κ.2
+    cancels.
 
 ### 1.8 A value with no derived drop must be closed on every exit, the cancel included
 
@@ -231,14 +250,19 @@ The kernel already has the rule, and cancel-by-resume reaches it with no new pre
   `OwnFree` (`decl_not_ownFree`).
 - The way out is a `[then]` whose finaliser consumes the value (`finally close(f)`). `Γ₂` goes to both `N`
   and `D`, so the value is closed on the normal exit and on the `cancelled` unwind.
-- A clause that handles `cancelled` is not available inside the task. The reason is not §1.7: `hnS`
-  (a `handle_n` inside a task handles its own body's awaits, which makes it a nested scheduler)
-  together with `[raise]`'s `hrc`.
+- A clause that handles `cancelled` is not available inside the task: `hnS` (a `handle_n` inside a task
+  handles its own body's awaits, which makes it a nested scheduler) together with `[raise]`'s `hrc`. A
+  handler that catches a superseding finaliser raise exits through that handler's clause, which is an
+  ordinary exit typed by the same `hW`.
+- **Only values with no derived drop need written code.** An owned `Ref`, `Array` or thunk held across an
+  `await` gets its derived drop as a finaliser on the cancel unwind, exactly as for errors. The checker
+  inserts that drop at a `dtor` node (`TDerivesP.dtor_hasDtor`), and nothing new is needed: the cancel
+  unwind is an ordinary raise. A value with no derived drop (`declTy`, `must_close`, a borrowing task
+  under route (a)) has no `dtor` node, so the program must close it.
 - The lend frame is also an exit. Under the widened `ResumeOC`, `cancelled` unwinds through `lendR`, and
   its `d` closes the lent place.
-- **Scope.** `hW` refuses every value that is not `OwnFree` held across an `await`: `Ref`, `Array`, thunks,
-  and not only `declTy`. This is unchanged from κ.2, where `await` at `.cancel` already made the row
-  `Cancels`.
+- **Scope.** `hW` asks every value held across an `await` to be `OwnFree`, or to be under a finaliser.
+  This is unchanged from κ.2, where `await` at `.cancel` already made the row `Cancels`.
 
 Unit A proves this:
 - `Row.cancels_of_await`: a row that admits `[await-c]` at some name `Cancels`;
@@ -253,6 +277,8 @@ Unit A proves this:
 - `corpus/reject/async-close-on-cancel.bc` is the refused version, its `expect` line naming the fix.
 
 ### 1.9 Non-vacuity
+
+(The §1.7 runs and laws are listed there.)
 
 In `Core/AwaitCancel.lean`:
 - a derivation of `await_n` at a row `{await⟨rc⟩, cancelled}`;
@@ -276,7 +302,9 @@ Each comes with `#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
 | `effThenDiv` at `Div`-free finaliser rows | proved (`pinFin_divFree`) |
 | `effThenDiv` at `Div` finaliser rows | proof attempted first; otherwise asserted as `PinLaw.fin : PinFin` |
 | `Row.CancelTotal`, `cancelTotalB_iff` | definition plus proved decision |
-| `hRC` on the handler rules (§1.7), `avoidsDB_iff` | typing premise; proved decision |
+| level-triggered laws `await_cancelled`, `shield_catch`, `d_swallow`, `d_stickyScope` (§1.7) | proved (machine and typing at main's rules) |
+| `Row.CancelEnds`, `cancelEndsB_iff` | definition plus proved decision |
+| `cancelEnds_ends` (§1.6) | theorem target: proved if tractable, else recorded unproved (no assertion) |
 
 ## 3. NOT in this unit
 
@@ -295,9 +323,13 @@ Each comes with `#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
 
 ## 4. Tempting shortcuts (each a STOP)
 
-- **A handler inside a task's region whose name is in a marked operation's cancel row** (§1.7). Any
-  rule that lets it through is a STOP. So is stating D3 twice, once at `[then]` and once at the
-  handler.
+- **Adding a refusal of interception on top of level-triggered cancellation** (route (i), `hRC`). The
+  user chose level-triggered alone. STOP.
+- **Making `Row.CancelEnds` (or `CancelTotal`) a premise of any rule, or asserting `cancelEnds_ends`.**
+  STOP.
+- **Typing the scheduler by capturing the flag cell in a clause.** `[handle]`'s `DeadP` refuses it, and
+  the typed form passes the state. Any workaround is a STOP.
+- **An `await` in a target's finaliser where a shielded `complete` is meant.** STOP.
 - **Routes (b) and (c) of §6.1, or keeping the κ.2 drop as a fallback.** STOP.
 
 - **Keeping the shape test** (`lin ∧ i = 0 ∧ B = 1 ⊕ 1 ∧ n ≠ divEff`) and calling it a marker. STOP.
@@ -330,8 +362,7 @@ Each comes with `#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
 - Every `.effPerform` and `.effRaise` call site gains `rfl` for `hac`/`hrc`.
 - The inversions: `AppBase` gains an `[await-c]` disjunct, `der_letJ` gains a premise that excludes
   `await`'s body, and `der_bind_split` needs a witness for `await`'s term. All are as in the spike.
-- The handler rules gain `{cs}` and `hRC`. `hRC` is `rfl`-like (`Row.avoidsDB`) at every existing
-  derivation, since nothing is marked. The checker and every existing derivation use the default.
+- The handler rules gain `{cs}`. The checker and every existing derivation use the default.
 - `CDerivesP.lendR`, `PinStop` and `LendFrame` are stronger in what they admit. `PinLaw` gains `fin`
   if `PinFin` is asserted.
 - Two corpus rejects, `async-r1-spawn-captures.bc` and `async-r1-unr.bc`, change their `expect` line,
@@ -365,14 +396,15 @@ whatever."
    - **Unit B obligation:** each refusal message names its fix (await it, or cancel it), so every refused
      program has a written fix.
    - The nursery (#750 item 3, via #743) is the later convenience and is not built.
-2. **A cancel cannot be intercepted**, kept by refusal (D3 under a live region, §1.7). **Pending the
-   Trio spike**, which may replace this with level-triggered cancellation.
-3. **`await` inside a finaliser.** Once §1.7 holds, a finaliser's `await` reaches only the scheduler, and
-   its second `cancelled` propagates there, which is "finaliser raises propagate". No further premise is
-   added.
-4. **OQ-1(a) is taken for the cancel path only** (§1.4), under the kernel target's line "`Row.ResumeOC`
+2. **Level-triggered cancellation** (§1.7), without refusal (i). A cancel is not lost: it is re-raised
+   at every cancellable wait in the cancelled scope.
+3. **Waiting inside a finaliser.** Finalisers that wait use the shielded `complete`. An `await` there
+   raises at once in a cancelled scope. No premise is added.
+4. **Termination.** "It is sort of obv that we can't make guarantees about div functions."
+   `Row.CancelEnds` is a theorem target (§1.6), not a typing restriction.
+5. **OQ-1(a) is taken for the cancel path only** (§1.4), under the kernel target's line "`Row.ResumeOC`
    as PinStop's premise". This is a trusted-base change.
-5. **Where the marker is declared.** `cs` is chosen per handler (sound: marking only restricts). Unit B's
+6. **Where the marker is declared.** `cs` is chosen per handler (sound: marking only restricts). Unit B's
    checker reads it from the effect declaration and never chooses it (STOP).
 
 ## 7. Review record
@@ -387,6 +419,7 @@ whatever."
    - `rowLeB` is noted;
    - self-cancel is noted;
    - the sections are renumbered.
-3. **Targeted check** (§1.7, §1.8, §6). It found 2 Fatal, 1 Major and 5 Minor findings in §1.7. They are
-   recorded there and not applied, pending the Trio spike. Its Minors on §1.8, §1.4 and §3 are applied.
-   Under the exit rule, a further full review is due once §1.7's route is settled.
+3. **Targeted check** (§1.7, §1.8, §6). It found 2 Fatal, 1 Major and 5 Minor findings against
+   route (i)'s `hRC`. They are moot now that §1.7 is level-triggered and `hRC` is dropped. Its Minors on
+   §1.8, §1.4 and §3 are applied.
+4. **Full review of the level-triggered scope.** Below.
