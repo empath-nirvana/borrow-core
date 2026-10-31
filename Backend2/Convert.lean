@@ -322,7 +322,7 @@ def formersC (acc : List String) : CTy → List String
   | .amp C D => formersC (formersC ("C.amp" :: acc) C) D
   | .all _ _ C => formersC ("C.all" :: acc) C
   | .nu C => formersC ("C.nu" :: acc) C
-  | .eff _ _ _ A B fin C => formersC (formersC (formersV (formersV ("C.eff" :: acc) A) B) fin) C
+  | .eff _ _ _ A B fin _ C => formersC (formersC (formersV (formersV ("C.eff" :: acc) A) B) fin) C
   | .top => "C.top" :: acc
 end
 
@@ -713,7 +713,7 @@ def outInfo? (r : LTy) (S : Row) : CM (Option OutInfo) := do
 
 /-- The row and value type of `F_Σ R`, through `∀`s. -/
 def effParts : CTy → Option (Row × VTy)
-  | .eff n i q A B fin C => (effParts C).map fun (S, R) => (⟨n, i, q, A, B, fin⟩ :: S, R)
+  | .eff n i q A B fin rc C => (effParts C).map fun (S, R) => (⟨n, i, q, A, B, fin, rc⟩ :: S, R)
   | .ret R => some ([], R)
   | .all _ _ C => effParts C
   | _ => none

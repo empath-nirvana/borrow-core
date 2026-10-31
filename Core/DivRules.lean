@@ -73,7 +73,7 @@ theorem vC_next_iff {ls : List SRec} {δ : LSub} {w : Val} {ρ : WRes} :
 /-- `tick`'s signature gives `tick`'s entry. -/
 theorem OpSig.isTick_ent {o : OpSig} (δ : LSub) (h : tickB o.q o.A o.B = true) :
     (o.ent δ).IsTick := by
-  obtain ⟨n, i, q, A, B, fin⟩ := o
+  obtain ⟨n, i, q, A, B, fin, rc⟩ := o
   simp only [tickB, Bool.and_eq_true, beq_iff_eq] at h
   obtain ⟨⟨rfl, hA⟩, hB⟩ := h
   cases A <;> simp [VTy.isUnitB] at hA
@@ -140,7 +140,7 @@ macro "div_free" : tactic => `(tactic| first
 theorem Row.divB_of_abort {S : Row} (h : ∀ o ∈ S, o.abort = true) : Row.divB S = false := by
   refine Row.divB_false_of_find fun o hf => ?_
   have ha := h o (Row.find_mem hf).1
-  obtain ⟨n, i, q, A, B, fin⟩ := o
+  obtain ⟨n, i, q, A, B, fin, rc⟩ := o
   simp only [OpSig.abort, Bool.and_eq_true, bne_iff_ne, ne_eq] at ha
   simp [tickB, ha.2]
 
@@ -149,7 +149,7 @@ theorem Row.divB_of_find_abort {S : Row} (h : ∀ n i o, Row.find S n i = some o
     Row.divB S = false := by
   refine Row.divB_false_of_find fun o hf => ?_
   have ha := h _ _ o hf
-  obtain ⟨n, i, q, A, B, fin⟩ := o
+  obtain ⟨n, i, q, A, B, fin, rc⟩ := o
   simp only [OpSig.abort, Bool.and_eq_true, bne_iff_ne, ne_eq] at ha
   simp [tickB, ha.2]
 

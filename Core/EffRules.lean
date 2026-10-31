@@ -963,7 +963,7 @@ def Row.Unr (S : Row) : Prop := ∃ o ∈ S, o.q = .unr
 /-- A cancel row may perform an unrestricted operation, at some depth: a layer at `unr`, or one in
 the cancel row of a capturable layer.  `[spec §27]` -/
 def CTy.FinUnr : CTy → Prop
-  | .eff _ _ q _ B f C => q = .unr ∨ (capB q B = true ∧ f.FinUnr) ∨ C.FinUnr
+  | .eff _ _ q _ B f _ C => q = .unr ∨ (capB q B = true ∧ f.FinUnr) ∨ C.FinUnr
   | _ => False
 
 /-- A row has an unrestricted operation at its top, or in the cancel row of a capturable operation
@@ -1130,13 +1130,18 @@ def thenE (N D M : Expr) : Expr :=
 /-- The cancel rows of an effect whose operations' cancel rows are all empty.  `[spec §27]` -/
 abbrev finsNil : Nat → CTy := fun _ => .ret .unit
 
+/-- The markers of an effect none of whose operations is cancelled by resuming it.
+`[spec §29a]` -/
+abbrev rcsNil : Nat → Bool := fun _ => false
+
 /-- An effect's operations, as a row of the name `n`: the `j`-th at index `k + j`, with the
-cancel row `fs j`.  `[spec §19, §27]` -/
-def Row.ofEff (n : UInt32) (E : List (Qual × VTy × VTy)) (k : Nat) (fs : Nat → CTy := finsNil) :
-    Row :=
+cancel row `fs j` and the marker `cs j` (`OpSig.rc`).  `[spec §19, §27, §29a]` -/
+def Row.ofEff (n : UInt32) (E : List (Qual × VTy × VTy)) (k : Nat) (fs : Nat → CTy := finsNil)
+    (cs : Nat → Bool := rcsNil) : Row :=
   match E with
   | [] => []
-  | (q, A, B) :: E => ⟨n, UInt32.ofNat k, q, A, B, fs 0⟩ :: Row.ofEff n E (k + 1) (fun j => fs (j + 1))
+  | (q, A, B) :: E => ⟨n, UInt32.ofNat k, q, A, B, fs 0, cs 0⟩ ::
+      Row.ofEff n E (k + 1) (fun j => fs (j + 1)) (fun j => cs (j + 1))
 
 /-- The type of `κ`'s cancel branch at a handler whose outer row is `Σ`, for an operation whose
 cancel row is `F`: `F_{F ⊕ Σ} 1`, the cancel row's operations ahead of `Σ`, or `⊤` when `F` is
@@ -1180,7 +1185,7 @@ def hndTerm (n : UInt32) (qs : List Qual) (ir ic : Nat) (e : Expr) : Expr :=
 theorem Row.find_ofEff (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k : Nat) (fs : Nat → CTy)
     (m i : UInt32) (o : OpSig), Row.find (Row.ofEff n E k fs) m i = some o →
       m = n ∧ ∃ j, ∃ h : j < E.length, i = UInt32.ofNat (k + j) ∧
-        o = ⟨n, UInt32.ofNat (k + j), E[j].1, E[j].2.1, E[j].2.2, fs j⟩
+        o = ⟨n, UInt32.ofNat (k + j), E[j].1, E[j].2.1, E[j].2.2, fs j, false⟩
   | [], _, _, _, _, _, h => by simp [Row.ofEff, Row.find] at h
   | (q, A, B) :: E, k, fs, m, i, o, h => by
       unfold Row.find at h
@@ -1254,7 +1259,7 @@ theorem Row.tab_ofEff_self {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat �
     {δ : LSub} (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) {i : UInt32} {en : OpEnt}
     (hT : Row.tab (Row.ofEff n E 0 fs ++ S) δ n i = some en) :
     ∃ j, ∃ hj : j < E.length, i.toNat = j ∧ i = UInt32.ofNat (0 + j) ∧
-      en = OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j⟩ := by
+      en = OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j, false⟩ := by
   obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
   have hfo : Row.find (Row.ofEff n E 0 fs) n i = some o := by
     rw [Row.find_append] at hf

@@ -649,7 +649,7 @@ theorem rowAt_of_le {Ξ : EffCtx} {S S' : Row} (hle : RowLe S S') (h : RowAt Ξ 
   intro n i o hf
   obtain ⟨o', hf', hs⟩ := RowLe.sig hle hf
   obtain ⟨h₁, h₂, h₃⟩ := h n i o' hf'
-  exact ⟨h₁, h₂, by rw [hs.2.2.1, hs.2.2.2.1, hs.2.2.2.2]; exact h₃⟩
+  exact ⟨h₁, h₂, by rw [hs.2.2.1, hs.2.2.2.1, hs.2.2.2.2.1]; exact h₃⟩
 
 /-- The front of a row tied to `Ξ` is tied to `Ξ`. -/
 theorem rowAt_left {Ξ : EffCtx} {S S' : Row} (h : RowAt Ξ (S ++ S')) : RowAt Ξ S :=
@@ -692,7 +692,7 @@ theorem find_ofEff_isSome (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k 
 theorem find_ofEff_at (n : UInt32) (E : List (Qual × VTy × VTy)) (j : Nat) (hj : j < E.length)
     (hlen : E.length ≤ 2 ^ 32) :
     Row.find (Row.ofEff n E 0) n (UInt32.ofNat j) =
-      some ⟨n, UInt32.ofNat j, E[j].1, E[j].2.1, E[j].2.2, .ret .unit⟩ := by
+      some ⟨n, UInt32.ofNat j, E[j].1, E[j].2.1, E[j].2.2, .ret .unit, false⟩ := by
   have hj' : j < 2 ^ 32 := by omega
   have hi : (UInt32.ofNat j).toNat = 0 + j := by
     rw [Nat.zero_add]; exact UInt32.toNat_ofNat_of_lt' (by simp [UInt32.size]; omega)
@@ -722,13 +722,13 @@ theorem find_ofEff_sig (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k : N
   | (q, A, B) :: E, k, fs, fs', m, i, o, h => by
       by_cases hk : m = n ∧ i = UInt32.ofNat k
       · have h₁ : Row.find (Row.ofEff n ((q, A, B) :: E) k fs) m i =
-            some ⟨n, UInt32.ofNat k, q, A, B, fs 0⟩ := by
+            some ⟨n, UInt32.ofNat k, q, A, B, fs 0, false⟩ := by
           simp [Row.ofEff, Row.find, hk]
         have h₂ : Row.find (Row.ofEff n ((q, A, B) :: E) k fs') m i =
-            some ⟨n, UInt32.ofNat k, q, A, B, fs' 0⟩ := by
+            some ⟨n, UInt32.ofNat k, q, A, B, fs' 0, false⟩ := by
           simp [Row.ofEff, Row.find, hk]
         rw [h₁] at h; cases h
-        exact ⟨_, h₂, rfl, rfl, rfl, rfl, rfl⟩
+        exact ⟨_, h₂, rfl, rfl, rfl, rfl, rfl, rfl⟩
       · have hd : decide (m = n ∧ i = UInt32.ofNat k) = false := decide_eq_false hk
         have h₁ : Row.find (Row.ofEff n ((q, A, B) :: E) k fs) m i =
             Row.find (Row.ofEff n E (k + 1) (fun j => fs (j + 1))) m i := by
@@ -754,7 +754,7 @@ theorem rowAt_ofEff_fs {Ξ : EffCtx} {n : UInt32} {E : List (Qual × VTy × VTy)
       obtain ⟨o', hf', hsig⟩ := find_ofEff_sig n E 0 fs' fs m i o₁ hA
       obtain ⟨h₁, h₂, h₃⟩ := h m i o' (by rw [Row.find_append, hf', Option.some_or])
       refine ⟨h₁, h₂, ?_⟩
-      rw [h₃, hsig.2.2.1, hsig.2.2.2.1, hsig.2.2.2.2]
+      rw [h₃, hsig.2.2.1, hsig.2.2.2.1, hsig.2.2.2.2.1]
   | none =>
       rw [hA, Option.none_or] at hf
       have hB : Row.find (Row.ofEff n E 0 fs) m i = none := by
@@ -774,7 +774,7 @@ theorem sig_prefix_of_rowAt {Ξ : EffCtx} {n : UInt32} {E : List (Qual × VTy ×
   intro j
   by_cases hj : j < E.length
   · have hf : Row.find (Row.ofEff n E 0 ++ S) n (UInt32.ofNat j) =
-        some ⟨n, UInt32.ofNat j, E[j].1, E[j].2.1, E[j].2.2, .ret .unit⟩ := by
+        some ⟨n, UInt32.ofNat j, E[j].1, E[j].2.1, E[j].2.2, .ret .unit, false⟩ := by
       rw [Row.find_append, find_ofEff_at n E j hj hlen, Option.some_or]
     obtain ⟨-, -, hg⟩ := h n _ _ hf
     rw [UInt32.toNat_ofNat_of_lt' (by simp [UInt32.size]; omega)] at hg

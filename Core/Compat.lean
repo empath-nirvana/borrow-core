@@ -93,7 +93,7 @@ theorem sumI₂_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A B : VTy}
 
 /-- `C` is an `F A` or an `F_Σ A`: its thunks are `λ_. M`. -/
 def CTy.isRet : CTy → Bool
-  | .ret _ | .eff _ _ _ _ _ _ _ => true
+  | .ret _ | .eff _ _ _ _ _ _ _ _ => true
   | _ => false
 
 theorem forceE_of_not_ret {C : CTy} (h : C.isRet = false) (e : Expr) : forceE C e = e := by

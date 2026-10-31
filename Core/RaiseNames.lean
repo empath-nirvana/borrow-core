@@ -1341,7 +1341,7 @@ theorem rcE_mapV : ∀ A : VTy, rcE q (mapV A).1 = true
 theorem rcE_nodeV : ∀ C : CTy, rcE q (nodeV C).1 = true
   | .ret A => by simp [nodeV, bindE, rcE, rcE_app, rcE_mapV]
   | .amp C D => by simp [nodeV, rcE, rcE_app, rcE_nodeV C, rcE_nodeV D]
-  | .eff _ _ _ _ _ _ C => by simp [nodeV, bindE, rcE, rcE_app, rcE_mapV]
+  | .eff _ _ _ _ _ _ _ C => by simp [nodeV, bindE, rcE, rcE_app, rcE_mapV]
   | .arr _ D => by simp [nodeV, rcE, rcE_app, rcE_nodeV D]
   | .top | .all _ _ _ | .nu _ => rfl
 

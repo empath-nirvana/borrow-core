@@ -175,16 +175,16 @@ theorem progOutTA_run (μ : Heap) : Steps (ℍ := ℍ) μ progOutTA μ (.val (Va
 /-! ### Typing -/
 
 /-- The operation `0` of the name `n`, unrestricted and abortive: `raise : 1 ↠^unr 0`. -/
-def rSig (n : UInt32) : OpSig := ⟨n, 0, .unr, .unit, .zero, .ret .unit⟩
+def rSig (n : UInt32) : OpSig := ⟨n, 0, .unr, .unit, .zero, .ret .unit, false⟩
 
 /-- The operation `0` of the name `n`, unrestricted, `1 ↠ 1`, at the cancel row `F`. -/
-def pSig (n : UInt32) (F : CTy) : OpSig := ⟨n, 0, .unr, .unit, .unit, F⟩
+def pSig (n : UInt32) (F : CTy) : OpSig := ⟨n, 0, .unr, .unit, .unit, F, false⟩
 
 /-- The cancel row of a raise of `m`. -/
 abbrev finR (m : UInt32) : CTy := CTy.effOf [rSig m] .unit
 
 /-- The operation `0` of the name `n`, cancellable and abortive: `raise : 1 ↠^cancel 0`. -/
-def rSigA (n : UInt32) : OpSig := ⟨n, 0, .cancel, .unit, .zero, .ret .unit⟩
+def rSigA (n : UInt32) : OpSig := ⟨n, 0, .cancel, .unit, .zero, .ret .unit, false⟩
 
 /-- The cancel row of a cancellable raise of `m`. -/
 abbrev finRA (m : UInt32) : CTy := CTy.effOf [rSigA m] .unit
@@ -284,7 +284,7 @@ theorem d_then₂ {Δ : LifeCtx} :
   · refine RowLe.of_mem fun o ho => ?_
     simp only [List.mem_singleton] at ho
     subst ho
-    refine ⟨pSig 1 (finR 2), rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
+    refine ⟨pSig 1 (finR 2), rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
     exact (finLe_iff _ _).mpr (Or.inr ⟨rfl, RowLe.nil _⟩)
   · refine RowLe.of_mem fun o ho => ?_
     simp only [List.mem_singleton] at ho
@@ -300,7 +300,7 @@ theorem d_then₂ {Δ : LifeCtx} :
     obtain ⟨hm, rfl, rfl⟩ := Row.find_mem h
     simp only [List.mem_singleton] at hm
     subst hm
-    exact ⟨rSig 2, rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun hc => by simp [capB, rSig, VTy.isZero] at hc⟩
+    exact ⟨rSig 2, rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun hc => by simp [capB, rSig, VTy.isZero] at hc⟩
   · intro _ o ho
     simp only [List.mem_singleton] at ho
     subst ho
@@ -478,9 +478,9 @@ theorem not_der_progT {Δ : LifeCtx} {Γ : Ctx VTy} {S' : Row} {Y : VTy}
   rw [Row.find_append, Row.find_ofEff_ne 2 E₂ 0 fs₂ 1 0 (by decide), Option.none_or] at hf₄'
   obtain ⟨o₅, hf₅', hle₅⟩ := hS₂ 1 0 o₄ hf₄'
   rw [Row.find_append, show Row.find (Row.ofEff 1 [(.unr, A₁, B₁)] 0 fs) 1 0 =
-    some ⟨1, 0, .unr, A₁, B₁, fs 0⟩ from rfl, Option.some_or] at hf₅'
+    some ⟨1, 0, .unr, A₁, B₁, fs 0, false⟩ from rfl, Option.some_or] at hf₅'
   cases hf₅'
-  have hsig : oM₀.Sig ⟨1, 0, .unr, A₁, B₁, fs 0⟩ :=
+  have hsig : oM₀.Sig ⟨1, 0, .unr, A₁, B₁, fs 0, false⟩ :=
     hleM.1.trans (hle₃.1.trans (hle₄.1.trans hle₅.1))
   have hB₁ : B₁.isZero = false := by
     have := hsig.abort_eq
@@ -631,7 +631,7 @@ theorem d_thenP {Δ : LifeCtx} :
   · refine RowLe.of_mem fun o ho => ?_
     simp only [List.mem_singleton] at ho
     subst ho
-    refine ⟨pSig 1 (finP 4), rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
+    refine ⟨pSig 1 (finP 4), rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
     exact (finLe_iff _ _).mpr (Or.inr ⟨rfl, RowLe.nil _⟩)
   · refine RowLe.of_mem fun o ho => ?_
     simp only [List.mem_singleton] at ho
@@ -647,7 +647,7 @@ theorem d_thenP {Δ : LifeCtx} :
     obtain ⟨hm, rfl, rfl⟩ := Row.find_mem h
     simp only [List.mem_singleton] at hm
     subst hm
-    refine ⟨pSig 4 (.ret .unit), rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
+    refine ⟨pSig 4 (.ret .unit), rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
     rw [PendLe]
     exact Or.inr ⟨rfl, fun n i o h => by simp [Row.find, CTy.rowOf, pSig] at h,
       fun n i o h => by simp [Row.find, CTy.rowOf, pSig] at h⟩
@@ -796,7 +796,7 @@ theorem d_thenK₁ {Δ : LifeCtx} :
   · refine RowLe.of_mem fun o ho => ?_
     simp only [List.mem_singleton] at ho
     subst ho
-    refine ⟨pSig 1 (finR 2), rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
+    refine ⟨pSig 1 (finR 2), rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
     exact (finLe_iff _ _).mpr (Or.inr ⟨rfl, RowLe.nil _⟩)
   · refine RowLe.of_mem fun o ho => ?_
     simp only [List.mem_singleton] at ho
@@ -812,7 +812,7 @@ theorem d_thenK₁ {Δ : LifeCtx} :
     obtain ⟨hm, rfl, rfl⟩ := Row.find_mem h
     simp only [List.mem_singleton] at hm
     subst hm
-    exact ⟨rSig 2, rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun hc => by simp [capB, rSig, VTy.isZero] at hc⟩
+    exact ⟨rSig 2, rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun hc => by simp [capB, rSig, VTy.isZero] at hc⟩
   · intro _ o ho
     simp only [List.mem_singleton] at ho
     subst ho
@@ -837,7 +837,7 @@ theorem d_thenK₂ {Δ : LifeCtx} :
   · refine RowLe.of_mem fun o ho => ?_
     simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
     rcases ho with rfl | rfl
-    · refine ⟨pSig 1 finKD, rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
+    · refine ⟨pSig 1 finKD, rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
       refine (finLe_iff _ _).mpr (Or.inr ⟨rfl, RowLe.of_mem fun o ho => ?_⟩)
       rw [show (pSig 1 (finR 2)).fin.rowOf = [rSig 2] from rfl, List.mem_singleton] at ho
       subst ho
@@ -846,7 +846,7 @@ theorem d_thenK₂ {Δ : LifeCtx} :
   · refine RowLe.of_mem fun o ho => ?_
     simp only [List.mem_singleton] at ho
     subst ho
-    refine ⟨pSig 4 (finR 2), rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
+    refine ⟨pSig 4 (finR 2), rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
     exact (finLe_iff _ _).mpr (Or.inr ⟨rfl, RowLe.nil _⟩)
   · intro n i o o' hf hf' hc
     obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf
@@ -860,18 +860,18 @@ theorem d_thenK₂ {Δ : LifeCtx} :
     · obtain ⟨hm, rfl, rfl⟩ := Row.find_mem h
       rw [show (pSig 1 (finR 2)).fin.rowOf = [rSig 2] from rfl, List.mem_singleton] at hm
       subst hm
-      exact ⟨rSig 2, rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun hc => absurd hc (by decide)⟩
+      exact ⟨rSig 2, rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun hc => absurd hc (by decide)⟩
     · obtain ⟨hm, rfl, rfl⟩ := Row.find_mem h
       simp only [List.mem_singleton] at hm
       subst hm
-      refine ⟨pSig 4 (finR 2), rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
+      refine ⟨pSig 4 (finR 2), rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
       rw [PendLe]
       refine Or.inr ⟨rfl, fun n i o h => by simp [Row.find, CTy.rowOf, pSig] at h,
         fun n i o h ha => ?_⟩
       obtain ⟨hm, rfl, rfl⟩ := Row.find_mem h
       rw [show (pSig 1 (finR 2)).fin.rowOf = [rSig 2] from rfl, List.mem_singleton] at hm
       subst hm
-      exact ⟨rSig 2, rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩⟩
+      exact ⟨rSig 2, rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
   · intro _ o ho
     simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
     rcases ho with rfl | rfl
@@ -968,7 +968,7 @@ theorem d_then₃ {Δ : LifeCtx} :
   · refine RowLe.of_mem fun o ho => ?_
     simp only [List.mem_singleton] at ho
     subst ho
-    refine ⟨pSig 1 (finR 3), rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
+    refine ⟨pSig 1 (finR 3), rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
     exact (finLe_iff _ _).mpr (Or.inr ⟨rfl, RowLe.nil _⟩)
   · refine RowLe.of_mem fun o ho => ?_
     simp only [List.mem_singleton] at ho
@@ -984,7 +984,7 @@ theorem d_then₃ {Δ : LifeCtx} :
     obtain ⟨hm, rfl, rfl⟩ := Row.find_mem h
     simp only [List.mem_singleton] at hm
     subst hm
-    exact ⟨rSig 3, rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun hc => absurd hc (by decide)⟩
+    exact ⟨rSig 3, rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun hc => absurd hc (by decide)⟩
   · intro _ o ho
     simp only [List.mem_singleton] at ho
     subst ho
@@ -1081,7 +1081,7 @@ theorem d_thenRe {Δ : LifeCtx} :
   · refine RowLe.of_mem fun o ho => ?_
     simp only [List.mem_singleton] at ho
     subst ho
-    refine ⟨pSig 1 (finR 3), rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
+    refine ⟨pSig 1 (finR 3), rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
     exact (finLe_iff _ _).mpr (Or.inr ⟨rfl, RowLe.nil _⟩)
   · refine RowLe.of_mem fun o ho => ?_
     simp only [List.mem_singleton] at ho
@@ -1097,7 +1097,7 @@ theorem d_thenRe {Δ : LifeCtx} :
     obtain ⟨hm, rfl, rfl⟩ := Row.find_mem h
     simp only [List.mem_singleton] at hm
     subst hm
-    exact ⟨rSig 3, rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun hc => absurd hc (by decide)⟩
+    exact ⟨rSig 3, rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun hc => absurd hc (by decide)⟩
   · intro _ o ho
     simp only [List.mem_singleton] at ho
     subst ho
@@ -1303,9 +1303,9 @@ theorem not_der_progNCrecT {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives
   rw [Row.find_append, Row.find_ofEff_ne 4 _ 0 fs₂ 1 0 (by decide), Option.none_or] at hf₂₁'
   obtain ⟨o₁, hf₁, hle₁⟩ := hS₂ 1 0 o₂₁' hf₂₁'
   rw [Row.find_append, show Row.find (Row.ofEff 1 [(.unr, A₁, B₁)] 0 fs₁) 1 0 =
-    some ⟨1, 0, .unr, A₁, B₁, fs₁ 0⟩ from rfl, Option.some_or] at hf₁
+    some ⟨1, 0, .unr, A₁, B₁, fs₁ 0, false⟩ from rfl, Option.some_or] at hf₁
   cases hf₁
-  have hsig₁ : oP₀.Sig ⟨1, 0, .unr, A₁, B₁, fs₁ 0⟩ :=
+  have hsig₁ : oP₀.Sig ⟨1, 0, .unr, A₁, B₁, fs₁ 0, false⟩ :=
     hleP.1.trans (hle₄₁.1.trans (hle₃₁.1.trans (hle₂₁.1.trans (hle₂₁'.1.trans hle₁.1))))
   have hB₁ : B₁.isZero = false := by
     have := hsig₁.abort_eq
@@ -1323,9 +1323,9 @@ theorem not_der_progNCrecT {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives
   obtain ⟨d₂, hfd₂, hled₂⟩ := hMS₃ 4 0 d₃ hfd₃
   obtain ⟨d₁, hfd₁, hled₁⟩ := hS₃ 4 0 d₂ hfd₂
   rw [Row.find_append, show Row.find (Row.ofEff 4 [(.unr, A₂', B₂')] 0 fs₂) 4 0 =
-    some ⟨4, 0, .unr, A₂', B₂', fs₂ 0⟩ from rfl, Option.some_or] at hfd₁
+    some ⟨4, 0, .unr, A₂', B₂', fs₂ 0, false⟩ from rfl, Option.some_or] at hfd₁
   cases hfd₁
-  have hsigD : oD₀.Sig ⟨4, 0, .unr, A₂', B₂', fs₂ 0⟩ :=
+  have hsigD : oD₀.Sig ⟨4, 0, .unr, A₂', B₂', fs₂ 0, false⟩ :=
     hleD.1.trans (hled₄.1.trans (hled₃.1.trans (hled₂.1.trans hled₁.1)))
   have hB₂ : B₂'.isZero = false := by
     have := hsigD.abort_eq
@@ -1349,7 +1349,7 @@ theorem not_der_progNCrecT {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives
   -- so does the outer handler of `4`'s clause row, its own outer row
   obtain ⟨y₀, hy₀, hley₀⟩ := hS₁ 4 0 x₀ hx₀
   rw [Row.find_append, show Row.find (Row.ofEff 4 [(.unr, A₀, B₀)] 0 fs₀) 4 0 =
-    some ⟨4, 0, .unr, A₀, B₀, fs₀ 0⟩ from rfl, Option.some_or] at hy₀
+    some ⟨4, 0, .unr, A₀, B₀, fs₀ 0, false⟩ from rfl, Option.some_or] at hy₀
   cases hy₀
   have hB₀ : B₀.isZero = false := by
     have := hley₀.1.capB_eq ▸ hcx₀
@@ -1509,9 +1509,9 @@ theorem not_der_e7c {Δ : LifeCtx} {Γ : Ctx VTy} {nw ni : UInt32} {qi : Qual} (
   rw [Row.find_append, Row.find_ofEff_ne ni E₂ 0 fs₂ nw 0 hne, Option.none_or] at hf₄'
   obtain ⟨o₅, hf₅', hle₅⟩ := hS₂ nw 0 o₄ hf₄'
   rw [Row.find_append, show Row.find (Row.ofEff nw [(.cancel, A₁, B₁)] 0 fs) nw 0 =
-    some ⟨nw, 0, .cancel, A₁, B₁, fs 0⟩ by simp [Row.ofEff, Row.find], Option.some_or] at hf₅'
+    some ⟨nw, 0, .cancel, A₁, B₁, fs 0, false⟩ by simp [Row.ofEff, Row.find], Option.some_or] at hf₅'
   cases hf₅'
-  have hsig : oM₀.Sig ⟨nw, 0, .cancel, A₁, B₁, fs 0⟩ :=
+  have hsig : oM₀.Sig ⟨nw, 0, .cancel, A₁, B₁, fs 0, false⟩ :=
     hleM.1.trans (hle₃.1.trans (hle₄.1.trans hle₅.1))
   have hB₁ : B₁.isZero = false := by
     have := hsig.abort_eq
@@ -1568,14 +1568,14 @@ abbrev finExn (n : UInt32) (q : Qual) : CTy := CTy.effOf (exnRow n q) .unit
 /-- A one-operation row finds its operation at its key alone. -/
 theorem find_ofEff_one {n : UInt32} {e : Qual × VTy × VTy} {fs : Nat → CTy} {m i : UInt32}
     {o : OpSig} (h : Row.find (Row.ofEff n [e] 0 fs) m i = some o) :
-    m = n ∧ i = 0 ∧ o = ⟨n, 0, e.1, e.2.1, e.2.2, fs 0⟩ := by
+    m = n ∧ i = 0 ∧ o = ⟨n, 0, e.1, e.2.1, e.2.2, fs 0, false⟩ := by
   obtain ⟨rfl, j, hj, rfl, rfl⟩ := Row.find_ofEff n [e] 0 fs m i o h
   obtain rfl : j = 0 := by simp at hj; omega
   exact ⟨rfl, rfl, rfl⟩
 
 /-- `wait`'s operation, as the handled row of a `timeout` finds it. -/
 theorem find_wait (nw : UInt32) (F : CTy) (S : Row) :
-    Row.find (waitRow nw F ++ S) nw 0 = some ⟨nw, 0, .cancel, .unit, .unit, F⟩ := by
+    Row.find (waitRow nw F ++ S) nw 0 = some ⟨nw, 0, .cancel, .unit, .unit, F, false⟩ := by
   simp [Row.ofEff, Row.find]
 
 /-- A row is below itself followed by another. -/
@@ -1686,7 +1686,7 @@ theorem dAt_toResult {Δ : LifeCtx} {ne : UInt32} {q : Qual} (he : Ξ ne = [(q, 
 theorem dAt_raiseU {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) {n : UInt32} {q : Qual}
     (hn : Ξ n = [(q, .unit, .zero)]) (hn0 : n ≠ 0) (hq : q ≠ .lin) (B : VTy) :
     CDerivesAt Ξ Δ Γ (raiseU n) (.comp (CTy.effOf (exnRow n q) B)) :=
-  .effRaise (o := ⟨n, 0, q, .unit, .zero, .ret .unit⟩)
+  .effRaise (o := ⟨n, 0, q, .unit, .zero, .ret .unit, false⟩)
     (rowAt_left (S' := []) (rowAt_ofEff_append hn hn0 (by simp) (rowAt_nil Ξ)))
     (by simp [Row.ofEff, Row.find]) (by cases q <;> simp_all [OpSig.abort, VTy.isZero]) .unit
     (.unitI hΓ)
@@ -1706,7 +1706,7 @@ theorem dAt_bodyF {Δ : LifeCtx} {nw : UInt32} (hw : Ξ nw = [(.cancel, .unit, .
       (.comp (CTy.effOf (Row.ofEff nw [(.cancel, .unit, .unit)] 0) (.sum .unit .unit))) :=
     .effLet (A := .unit) .nil (fun _ => fun _ h => absurd h List.not_mem_nil)
       (fun _ => fun _ h => absurd h List.not_mem_nil)
-      (.effPerform (o := ⟨nw, 0, .cancel, .unit, .unit, .ret .unit⟩) hW
+      (.effPerform (o := ⟨nw, 0, .cancel, .unit, .unit, .ret .unit, false⟩) hW
         (by simp [Row.ofEff, Row.find]) rfl (.unitI .nil))
       (.effSub (RowLe.nil _) (.ret (.sumI₂ (.unitI (.drop rfl .nil)))))
   show CDerivesAt Ξ Δ [] (thenE (.var 0) D (bindE (performU nw) (.inj₂ .unit))) _
@@ -1715,7 +1715,7 @@ theorem dAt_bodyF {Δ : LifeCtx} {nw : UInt32} (hw : Ξ nw = [(.cancel, .unit, .
     (.effSub (RowLe.nil _) (.ret (.var (.here .nil)))) hD
   · intro n i o hf
     obtain ⟨rfl, rfl, rfl⟩ := find_ofEff_one hf
-    refine ⟨_, find_wait n F S, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
+    refine ⟨_, find_wait n F S, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
     exact (finLe_iff _ _).mpr (.inr ⟨rfl, RowLe.nil _⟩)
   · intro n i o o' hf hf' _
     obtain ⟨rfl, rfl, rfl⟩ := find_ofEff_one hf

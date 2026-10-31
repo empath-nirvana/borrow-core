@@ -59,7 +59,7 @@ def _root_.BoCa.Fig16.LogRel.Core.CTy.eraseLife : CTy → CTy
   | .top => .top
   | .all _ _ C => .all 0 .top C.eraseLife
   | .nu C => .nu C.eraseLife
-  | .eff n i q A B fin C => .eff n i q A.eraseLife B.eraseLife fin.eraseLife C.eraseLife
+  | .eff n i q A B fin rc C => .eff n i q A.eraseLife B.eraseLife fin.eraseLife rc C.eraseLife
 end
 
 /-- The fields of a fold's shape at `Ref X`. -/

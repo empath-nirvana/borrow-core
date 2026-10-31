@@ -139,13 +139,13 @@ scheduler's `await : 1 ↠^cancel 1` and the generator's `yield : i32 ↠^cancel
 operation is outside it. -/
 
 /-- `await : 1 ↠^cancel 1` at the name `1`. -/
-def pinAwaitSig : OpSig := ⟨1, 0, .cancel, .unit, .unit, .ret .unit⟩
+def pinAwaitSig : OpSig := ⟨1, 0, .cancel, .unit, .unit, .ret .unit, false⟩
 
 /-- `yield : i32 ↠^cancel 1` at the name `2`. -/
-def pinYieldSig : OpSig := ⟨2, 0, .cancel, .int .w32, .unit, .ret .unit⟩
+def pinYieldSig : OpSig := ⟨2, 0, .cancel, .int .w32, .unit, .ret .unit, false⟩
 
 /-- `raise : i32 ↠^cancel 0`, abortive. -/
-def pinRaiseSig : OpSig := ⟨3, 0, .cancel, .int .w32, .zero, .ret .unit⟩
+def pinRaiseSig : OpSig := ⟨3, 0, .cancel, .int .w32, .zero, .ret .unit, false⟩
 
 theorem resumeO_await_yield (x : LifeVar) : Row.ResumeO [pinAwaitSig, pinYieldSig] x := by
   intro o ho

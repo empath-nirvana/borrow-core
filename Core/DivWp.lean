@@ -23,7 +23,7 @@ open BoCa.Lifetime (LSub)
 /-! ### Rows that hold `Div` -/
 
 theorem CTy.divAt_instT (S : VTy) : ∀ D : CTy, (D.instT S).divAt = D.divAt
-  | .eff n i q A B fin D => by
+  | .eff n i q A B fin _ D => by
       simp only [CTy.instT, CTy.divAt, CTy.divAt_instT S D]
   | .ret _ | .amp _ _ | .arr _ _ | .top | .all _ _ _ | .nu _ => by
       simp [CTy.instT, CTy.divAt]

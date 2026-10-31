@@ -296,7 +296,7 @@ def ofC (ms : MachSet) : CTy → Except String LCTy
   | .top => pure .top
   | .all _ _ C => ofC ms C
   | .nu C => return .nu (← ofC ms C)
-  | .eff n i q A B fin C => do
+  | .eff n i q A B fin _ C => do
     -- `F_Σ R`: `R`, `R ⊕ P` with the payload of `Σ`'s abortive operations (SPEC §47), or the
     -- outcome at its machine operations (SPEC §49).
     if n == divName then
@@ -314,7 +314,7 @@ def ofEff (ms : MachSet) : CTy →
     Except String (List ((UInt32 × UInt32) × LTy) ×
       List ((UInt32 × UInt32) × LTy × LTy × Option (List ((UInt32 × UInt32) × LTy))) × LTy)
   | .ret R => return ([], [], ← ofV ms R)
-  | .eff n i q A B fin C => do
+  | .eff n i q A B fin _ C => do
     if n == divName then
       throw s!"an operation ({n}, {i}) in a computation type: outside the pure fragment"
     let (ps, qs, r) ← ofEff ms C
@@ -328,7 +328,7 @@ finaliser that may suspend) is outside the fragment.  [spec §27, §49] -/
 def ofFin (ms : MachSet) : CTy → Except String (Option (List ((UInt32 × UInt32) × LTy)))
   | .top => pure none
   | .ret _ => pure (some [])
-  | .eff n i q A B _ C => do
+  | .eff n i q A B _ _ C => do
     let rest ← ofFin ms C
     if abortB q B then return rest.map (((n, i), ← ofV ms A) :: ·)
     else if ms.contains (n, i) then

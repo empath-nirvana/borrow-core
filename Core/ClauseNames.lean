@@ -87,7 +87,7 @@ theorem d_perform₁ {Δ : LifeCtx} :
     (.effPerform (S := [pSig 1 (.ret .unit)]) (o := pSig 1 (.ret .unit)) rfl rfl (.unitI .nil))
   simp only [List.mem_singleton] at ho
   subst ho
-  refine ⟨pSig 1 (finR 2), rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
+  refine ⟨pSig 1 (finR 2), rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
   exact (finLe_iff _ _).mpr (Or.inr ⟨rfl, RowLe.nil _⟩)
 
 /-- `hnd (2, H₂) (perform 1 then x. x unwind raise 2)`, at the handled row of `hRes`. -/

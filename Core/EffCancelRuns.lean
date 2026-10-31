@@ -1981,7 +1981,7 @@ theorem dAt_then₂ {Δ : LifeCtx} :
   · refine RowLe.of_mem fun o ho => ?_
     simp only [List.mem_singleton] at ho
     subst ho
-    refine ⟨pSig 1 (finR 2), rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
+    refine ⟨pSig 1 (finR 2), rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
     exact (finLe_iff _ _).mpr (Or.inr ⟨rfl, RowLe.nil _⟩)
   · refine RowLe.of_mem fun o ho => ?_
     simp only [List.mem_singleton] at ho
@@ -1997,7 +1997,7 @@ theorem dAt_then₂ {Δ : LifeCtx} :
     obtain ⟨hm, rfl, rfl⟩ := Row.find_mem h
     simp only [List.mem_singleton] at hm
     subst hm
-    exact ⟨rSig 2, rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun hc => by simp [capB, rSig, VTy.isZero] at hc⟩
+    exact ⟨rSig 2, rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun hc => by simp [capB, rSig, VTy.isZero] at hc⟩
   · intro _ o ho
     simp only [List.mem_singleton] at ho
     subst ho
@@ -2147,7 +2147,7 @@ theorem dAt_then₂A {Δ : LifeCtx} :
   · refine RowLe.of_mem fun o ho => ?_
     simp only [List.mem_singleton] at ho
     subst ho
-    refine ⟨pSig 1 (finRA 2), rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
+    refine ⟨pSig 1 (finRA 2), rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
     exact (finLe_iff _ _).mpr (Or.inr ⟨rfl, RowLe.nil _⟩)
   · refine RowLe.of_mem fun o ho => ?_
     simp only [List.mem_singleton] at ho
@@ -2163,7 +2163,7 @@ theorem dAt_then₂A {Δ : LifeCtx} :
     obtain ⟨hm, rfl, rfl⟩ := Row.find_mem h
     simp only [List.mem_singleton] at hm
     subst hm
-    exact ⟨rSigA 2, rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩,
+    exact ⟨rSigA 2, rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩,
       fun hc => by simp [capB, rSigA, VTy.isZero] at hc⟩
   · intro _ o ho
     simp only [List.mem_singleton] at ho
