@@ -865,6 +865,200 @@ def reify_program(seed):
     L.append("\n".join(M) + "\n")
     return "\n".join(L), total
 
+# ---------------------------------------------------------------------------------------------
+# DEPTH=d (round 5): R1 lends nested to depth d (d = 1..5, or `mix` for a random depth per task),
+# each level a cell holding the view of the level above lent again (a view of a view …), awaits,
+# writes, pairs and closures across awaits at every level, an independent sibling lend at some
+# levels, an error raised at a random level and point, and a random schedule of steps and
+# cancellations from `main`. ESCAPE (default): the error's handler is outside the outermost lend,
+# so the error crosses every lend between (error escape, `Row.ResumeOCE`). WORK=1: the workaround
+# with no new rule: each lend's body is under its own `to_result`, its error returned as data
+# (`i32 + i32`) and re-raised after the lend ends, so no abortive operation crosses a lend.
+
+DSTATS = {'programs': 0, 'tasks': 0, 'depth': {}, 'raise_depth': {}, 'raises': 0, 'cancels': 0,
+          'cancel_depth': {}, 'unfinished': 0, 'awaits_depth': {}, 'siblings': 0}
+
+
+def _bump(d, k):
+    d[k] = d.get(k, 0) + 1
+
+
+def depth_program(seed, D, work=False):
+    r = random.Random(seed)
+    g = Gen(r)
+    nt = r.randint(2, 4)
+    out = [f"-- Stress (round 5, DEPTH={D}{', WORK=1' if work else ''}, seed {seed}): nested R1 lends "
+           "with error escape; see gen.py.", "include async", "include fail", "",
+           "fn done(v: i32) -> Task[i32] = with spawn { v }",
+           "fn step(t: Task[i32]) -> Task[i32] = match resume(t) { inl v -> done(v) | inr t2 -> t2 }",
+           "fn fin(t: Task[i32]) -> i32 = match resume(t) { inl v -> v | inr t2 -> cancel(t2); 0 - 1 }", ""]
+    DSTATS['programs'] += 1
+    awaits, vals, adepth = [], [], []
+    for ti in range(nt):
+        d = D if D > 0 else r.randint(1, 5)
+        DSTATS['tasks'] += 1
+        _bump(DSTATS['depth'], d)
+        init = r.randint(1, 100)
+        st = [init]
+        ev = []                      # execution order: ('a', level) for an await, ('r', e, level)
+        dead = [False]
+        rl = r.choice([None, None, r.randrange(d)])         # the level that raises
+        rpos = r.choice(['pre', 'post'])
+        e_val = r.randint(1, 9)
+
+        def ops(view, j):
+            """Straight-line operations at level j (awaits, writes, pairs, closures)."""
+            budget = [r.randint(1, 4)]
+            b, a, v = g.body(view, j, st if not dead[0] else [0], budget, 0)
+            if not dead[0]:
+                ev.extend([('a', j)] * a)
+            return b, v
+
+        def raise_here(j):
+            if dead[0]:
+                return []
+            dead[0] = True
+            ev.append(('r', e_val, j))
+            return [f"if true {{ raise({e_val}) }} else {{ () }};"]
+
+        def level(view, j):
+            L, v = ops(view, j)
+            if rl == j and rpos == 'pre':
+                L += raise_here(j)
+            if j < d - 1:
+                dd, w, v2, inner = g.fresh("d"), g.fresh("w"), g.fresh("v"), g.fresh("n")
+                saved = st[0]
+                IB, iv = level(inner, j + 1)
+                if work:
+                    IB = IB + [g.read(iv, j + 1)]
+                    L.append(f"let {dd} = alloc({v});")
+                    L.append(f"let {w} : i32 + i32 = borrow mut {dd} {{ {inner} -> with to_result[i32, i32] {{")
+                    L += ["  " + l for l in IB]
+                    L.append("} };")
+                    L.append(f"let {v2} = free({dd});")
+                    w2 = g.fresh("w")
+                    L.append(f"let {w2} = match {w} {{ inl x -> x | inr e -> raise(e) }};")
+                    L.append(g.update(v2, j, "+", w2) + ";")
+                else:
+                    L.append(f"let {dd} = alloc({v});")
+                    L.append(f"let {w} : i32 = borrow mut {dd} {{ {inner} ->")
+                    L += ["  " + l for l in IB]
+                    L.append("  " + g.read(iv, j + 1))
+                    L.append("};")
+                    L.append(f"let {v2} = free({dd});")
+                    L.append(g.update(v2, j, "+", w) + ";")
+                if not dead[0]:
+                    st[0] = (st[0] + st[0]) % M32
+                v = v2
+            if r.random() < 0.3:
+                # an independent sibling lend of a fresh integer cell at this level
+                DSTATS['siblings'] += 1
+                sd, sw, se, sn = g.fresh("d"), g.fresh("w"), g.fresh("e"), g.fresh("n")
+                si = r.randint(1, 50)
+                sub = [si]
+                sb, sa, sv = g.body(sn, 0, sub if not dead[0] else [0], [r.randint(1, 3)], 0)
+                L.append(f"let {sd} = alloc({si});")
+                L.append(f"let {sw} : i32 = borrow mut {sd} {{ {sn} ->")
+                L += ["  " + l for l in sb]
+                L.append("  " + g.read(sv, 0))
+                L.append("};")
+                L.append(f"let {se} = free({sd});")
+                L.append(g.update(v, j, "+", f"{sw} + {se}") + ";")
+                if not dead[0]:
+                    ev.extend([('a', j + 1)] * sa)
+                    st[0] = (st[0] + 2 * sub[0]) % M32
+            L2, v = ops(v, j)
+            L += L2
+            if rl == j and rpos == 'post':
+                L += raise_here(j)
+            return L, v
+
+        m = g.fresh("m")
+        B, v = level(m, 0)
+        row = "Async" if work else "Async, Fail[i32]"
+        out.append(f"fn body{ti}() -> i32 with {row} =")
+        out.append(f"  let c = alloc({init});")
+        if work:
+            out.append(f"  let r : i32 + i32 = borrow mut c {{ {m} -> with to_result[i32, i32] {{")
+            out += ["    " + l for l in B]
+            out.append("    " + g.read(v, 0))
+            out.append("  } };")
+            out.append("  let _ = free(c);")
+            out.append("  match r { inl x -> x | inr e -> 0 - e }")
+            out.append("")
+            out.append(f"fn task{ti}() -> i32 with Async = body{ti}()")
+        else:
+            out.append(f"  let r : i32 = borrow mut c {{ {m} ->")
+            out += ["    " + l for l in B]
+            out.append("    " + g.read(v, 0))
+            out.append("  };")
+            out.append("  let _ = free(c);")
+            out.append("  r")
+            out.append("")
+            out.append(f"fn task{ti}() -> i32 with Async = match with to_result[i32, i32] {{ body{ti}() }} {{ inl v -> v | inr e -> 0 - e }}")
+        out.append("")
+        na = sum(1 for x in ev if x[0] == 'a')
+        rs = [x for x in ev if x[0] == 'r']
+        if rs:
+            DSTATS['raises'] += 1
+            _bump(DSTATS['raise_depth'], rs[0][2] + 1)
+            vals.append((-rs[0][1]) % M32)
+        else:
+            vals.append(st[0])
+        awaits.append(na)
+        adepth.append([x[1] + 1 for x in ev if x[0] == 'a'])
+        for x in ev:
+            if x[0] == 'a':
+                _bump(DSTATS['awaits_depth'], x[1] + 1)
+    main = ["main -> i32 ="]
+    for i in range(nt):
+        main.append(f"  let t{i} = with spawn {{ task{i}() }};")
+    pos = [0] * nt
+    live = [True] * nt
+    result = [0] * nt
+    for _ in range(r.randint(nt, 6 * nt)):
+        i = r.randrange(nt)
+        if not live[i]:
+            continue
+        if r.random() < 0.12:
+            main.append(f"  cancel(t{i});")
+            live[i] = False
+            DSTATS['cancels'] += 1
+            # the depth the task is stopped at: its pos-th await's level (or done)
+            if pos[i] < awaits[i]:
+                _bump(DSTATS['cancel_depth'], adepth[i][pos[i]])
+            else:
+                _bump(DSTATS['cancel_depth'], 0)
+        else:
+            main.append(f"  let t{i} = step(t{i});")
+            pos[i] += 1
+    for i in range(nt):
+        if not live[i]:
+            continue
+        if r.random() < 0.3:
+            main.append(f"  let v{i} = fin(t{i});")
+            if pos[i] >= awaits[i]:
+                result[i] = vals[i]
+            else:
+                result[i] = (-1) % M32
+                DSTATS['unfinished'] += 1
+                _bump(DSTATS['cancel_depth'], adepth[i][pos[i]])
+        else:
+            for _ in range(max(0, awaits[i] - pos[i])):
+                main.append(f"  let t{i} = step(t{i});")
+            main.append(f"  let v{i} = fin(t{i});")
+            result[i] = vals[i]
+        live[i] = None
+    terms, total = [], 0
+    for i in range(nt):
+        if live[i] is None:
+            terms.append(f"v{i} * {i + 1}")
+            total = (total + result[i] * (i + 1)) % M32
+    main.append("  " + (" + ".join(terms) if terms else "0"))
+    out += main
+    return "\n".join(out) + "\n", total
+
+
 def main():
     outdir, first, count = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
     os.makedirs(outdir, exist_ok=True)
@@ -875,6 +1069,9 @@ def main():
             src, total = tick_program(s)
         elif os.environ.get("REIFY") == "1":
             src, total = reify_program(s)
+        elif os.environ.get("DEPTH"):
+            dv = os.environ["DEPTH"]
+            src, total = depth_program(s, 0 if dv == "mix" else int(dv), os.environ.get("WORK") == "1")
         else:
             src, total = program(s, os.environ.get("WIDE") == "1")
         with open(os.path.join(outdir, f"s{s:04d}.bc"), "w") as f:
@@ -885,6 +1082,8 @@ def main():
         print("nursery stats:", STATS)
     if os.environ.get("REIFY") == "1":
         print("reify stats:", RSTATS)
+    if os.environ.get("DEPTH"):
+        print("depth stats:", DSTATS)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,57 @@
+-- Round 5, error escape at depth 3 (surface, R1 at `Row.ResumeOCE`): a task lends `c`; inside, a
+-- cell holding the view is lent again, twice (views of views of views), each level awaiting.
+-- The innermost body writes through all three levels, awaits, and raises `Fail` when the value
+-- is 13; the handler `to_result` is outside the outermost lend, so the error crosses three lends
+-- held across awaits. Each lend's finaliser returns its place to its owner's destructor.
+-- Task 0 raises at 10 + 1 + 2 = 13 after its third await; task 1 (12 + 3 = 15, four awaits) is
+-- cancelled by `fin` at its fourth, inside the middle lend.
+-- Answer: i32[4294967281] (-13 + 2 * -1); live 0.
+include async
+include fail
+
+fn body(k: i32) -> i32 with Async, Fail[i32] =
+  let c = alloc(k);
+  let v = borrow mut c { m ->
+    await();
+    let d = alloc(m);
+    let w : i32 = borrow mut d { n ->
+      await();
+      let e = alloc(n);
+      let u : i32 = borrow mut e { o ->
+        modify o { y -> modify y { z -> modify z { x -> x + 1 }; z }; y };
+        await();
+        modify o { y -> modify y { z -> modify z { x -> x + 2 }; z }; y };
+        let x = modify o { y -> let r = modify y { z -> let s = modify z { x -> (x, x) }; (z, s) }; (y, r) };
+        if x == 13 { raise(x) } else { () };
+        x
+      };
+      let n2 = free(e);
+      await();
+      let _ = modify n2 { z -> modify z { x -> x + 0 }; z };
+      u
+    };
+    let m2 = free(d);
+    let _ = modify m2 { x -> x + 0 };
+    w
+  };
+  let _ = free(c);
+  v
+
+fn guarded(k: i32) -> i32 with Async = match with to_result[i32, i32] { body(k) } { inl v -> v | inr e -> 0 - e }
+
+fn done(v: i32) -> Task[i32] = with spawn { v }
+fn step(t: Task[i32]) -> Task[i32] = match resume(t) { inl v -> done(v) | inr t2 -> t2 }
+fn fin(t: Task[i32]) -> i32 = match resume(t) { inl v -> v | inr t2 -> cancel(t2); 0 - 1 }
+
+main -> i32 =
+  let t0 = with spawn { guarded(10) };
+  let t1 = with spawn { guarded(12) };
+  let t0 = step(t0);
+  let t1 = step(t1);
+  let t0 = step(t0);
+  let t1 = step(t1);
+  let t0 = step(t0);
+  let t1 = step(t1);
+  let v0 = fin(t0);
+  let v1 = fin(t1);
+  v0 * 1 + v1 * 2

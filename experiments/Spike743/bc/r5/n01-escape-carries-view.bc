@@ -1,0 +1,28 @@
+-- Round 5, refused: an error that would carry a view out of a relaxed lend. `body` lends `c`
+-- across an `await` and raises `Fail[imm 'p i32]` with an outer view `v` as its argument; the
+-- handler is outside the lend. Refused before error escape is asked: the body sees only its view.
+-- The lend's own view cannot be an error's argument either: the row is elaborated outside `'x`,
+-- and `OpSig.EscapeO` asks closed data (`Round5.not_escapeO_view`).
+-- expect: 11:17: this borrow block's body uses `v`, which is outside it, and performs the
+-- operation 1.0, which resumes: a borrow held across a resumption sees only its view (R1, SPEC §29)
+include async
+include fail
+
+fn body<'p>(v: imm 'p i32) -> i32 with Async, Fail[imm 'p i32] =
+  let c = alloc(1);
+  let r : i32 = borrow mut c { m ->
+    await();
+    raise(v);
+    modify m { x -> (x, x) }
+  };
+  let _ = free(c);
+  r
+
+fn g<'p>(v: imm 'p i32) -> i32 with Async =
+  match with to_result[imm 'p i32, i32] { body(v) } { inl x -> x | inr e -> *e }
+
+main -> i32 =
+  let c0 = alloc(5);
+  let w = borrow imm c0 { v -> let t = with spawn { g(v) }; match resume(t) { inl x -> x | inr t2 -> cancel(t2); 0 } };
+  let _ = free(c0);
+  w
