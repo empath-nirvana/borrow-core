@@ -96,6 +96,7 @@ import Core.InsertDead
 import Core.PinDerives
 import Core.PinLaw
 import Core.PinFundamental
+import Core.AwaitCancel
 import Core.LetCopy
 import Core.RaiseNames
 import Core.EffCancelRuns
