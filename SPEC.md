@@ -2987,7 +2987,9 @@ below and the cancel steps (*Cancels*) do not allocate:
 
 ### Cancels
 
-A cancel is not interceptable. The cancelled region `K` is torn down: nothing in it resumes, and
+A cancel is not interceptable. (This is the κ.2 cancel of a `cancel` operation. A cancellable wait's
+cancel, §29a, is a resume with `inr ()` and an ordinary raise, re-raised at every later wait of the
+cancelled scope: law 5c.) The cancelled region `K` is torn down: nothing in it resumes, and
 **its handler frames are dead**. Deadness is a property of frames, not names: `κ`'s cancel branch
 runs the region with its handler frames and its cancel delimiters removed (`K†`), so a dead frame
 catches nothing, neither a raise nor an operation, and a finaliser's effects reach the nearest
@@ -3418,7 +3420,8 @@ does not hold. Safety is stated of the runs of typed programs (`Core/EffSafety.l
 
    An unrestricted `κ` is `!`, and a clause may use it any number of times. That every run of a
    typed program uses each must-resume or cancellable `κ` it catches once (S6) is §25 *Open*.
-5. **A cancel is not interceptable, and the cancelled region's frames are dead.** `κ`'s cancel
+5. **A cancel is not interceptable, and the cancelled region's frames are dead** (for κ.2
+   cancels; a cancellable wait's cancel is a resume, law 5c of §29a). `κ`'s cancel
    branch runs the region with its handler frames and cancel delimiters removed (`Kont.dead`), so
    a dead frame catches nothing (`hasHnd_dead`, `catches_dead`, `noCC_dead`). Read prefix-closed
    (`cancel_prefix`, `Core/EffCancelRuns.lean`): take a run of a term a tied derivation types,
@@ -3429,7 +3432,8 @@ does not hold. Safety is stated of the runs of typed programs (`Core/EffSafety.l
      alone under `cfin`, to `[cfin-ret]` or `[cfin-raise]`;
    - a running finaliser's `cfin` frame is passed by `[cfin-cancel]`, its error first;
    - the first kept error wins, and the canceller gets `()` or the kept error re-raised, an error of
-     a name of the effect context (`CancelsNamed`).
+     a name of the effect context (`CancelsNamed`). At a cancellable wait (§29a) the cancel is a
+     raise of the cancel target, and law 6's *Unwinding* governs it: a finaliser's raise supersedes.
 
    The hypothesis is that each of `K`'s finalisers is a closed computation at a row of abortive
    operations of the context's names (`FinRow`). Typing then gives that it runs alone from every
@@ -4847,11 +4851,13 @@ cancel is invoked.
 
 - **Cancel rows.** A row entry is `⟨n, i, q, A, B, F⟩` (`OpSig.fin`), and `F_Σ A`'s layers are
   `CTy.eff n i q A B F C`. An entry is *capturable* when it is not abortive and `q ≠ lin`
-  (`capB`): its `κ` has a cancel branch, and `F` is read only there. A cancel row is `⊤`
+  (`capB`): its `κ` has a cancel branch, and `F` is read only there. Typing also reads it at a
+  cancellable wait (§29a, `OpSig.finRead`), whose cancel unwinds through the finalisers around it. A cancel row is `⊤`
   (`CTy.top`) or a row, its layers `F.rowOf`, whose capturable entries carry cancel rows in turn:
   a finite tree. The default is the empty row (`F 1`), and every existing derivation uses it.
 - **Order** (`FinLe`, `OpSig.LeF`, `RowLe`). `F ≤ ⊤`; `R ≤ R′` when each entry `R` finds is the
-  one `R′` finds at its key (`n i q A B` equal), with its cancel row `≤` at a capturable entry.
+  one `R′` finds at its key (`n i q A B` and the marker `rc` equal), with its cancel row `≤` at an
+  entry `finRead` reads.
   `[sub]` is this order: an entry's cancel row only grows outward.
 - **`F ⋈ E ≤ T`** (`ThenLe`), where `F` is the cancel row of a continuation captured below a
   finaliser whose row is `E`: `T = ⊤`, or `F ≠ ⊤` and
@@ -5172,7 +5178,7 @@ use R1 keeps them unconditionally.
 
 ### Typing
 
-    Δ ⊨ b defined   x fresh   T, B free of 'x   B has no U   Δ ⊢ T ⊒ @b'   Row.ResumeO Σ 'x
+    Δ ⊨ b defined   x fresh   T, B free of 'x   B has no U   Δ ⊢ T ⊒ @b'   Row.ResumeOC Σ 'x
     M closed but for m   ·  ⊢ d : Ref T ⊸ 1        Δ, 'x ⊏ b ; m : Mut 'x T ⊢ M : F_Σ ([@x] B)
     ─────────────────────────────────────────────────────────────────────────────── [lend-R]
               r : Ref T ⊢ withborU d r (Λ. λm. M) : F_Σ (Ref T ⊗ B)
@@ -5184,7 +5190,9 @@ use R1 keeps them unconditionally.
 - `Row.ResumeO Σ 'x`: every operation of `Σ` resumes (none abortive), none is unrestricted, its
   cancel row is empty, it answers `1`, its name is not `0`, and its argument is closed data: free
   of `'x`, outliving every lifetime, with no `U` (`NoThunkT`). `await` and `yield` are such
-  operations (`resumeO_await_yield`); `raise` is not (`not_resumeO_raise`).
+  operations (`resumeO_await_yield`); `raise` is not (`not_resumeO_raise`). The rule's premise is
+  `Row.ResumeOC`, which also admits a cancellable wait and its cancel target (§29a), and every row
+  `Row.ResumeO` admits (`Row.ResumeO.toC`).
 - The term is §19's unwinding `withbor` (`withborUV d`); only the callback's row differs. `d` is the
   owner's finaliser, the source's destructor: it runs when a continuation captured inside the
   callback is cancelled.
@@ -5206,13 +5214,31 @@ in `CDerivesP`, plus `lendR`, `lendLoopR` and `nilDead`. It is generated from
 files are stale. §28's BOXED-κ (`effHandleVB`) is in it so, its case in `fundamentalC_pin`
 `handleV_compatCB`, as in `fundamentalC`.
 
-**`PinLaw`** (`Core/PinLaw.lean`) is a `structure … : Prop` of two schemas: `LendFrame`, the
-relaxed `withborUV` lend's compatibility lemma at every `LendForm` (R1 is the form `ref`), and
-`LoopFrame`, the per-observation lend's (R2). Each is stated at its rule's own premises plus the
+**`PinLaw`** (`Core/PinLaw.lean`) is a `structure … : Prop` of three schemas: `LendFrame`, the
+relaxed `withborUV` lend's compatibility lemma at every `LendForm` (R1 is the form `ref`),
+`LoopFrame`, the per-observation lend's (R2), and `PinFin`, `[then]`'s with a finaliser whose row
+holds `Div` (§29a). Each is stated at its rule's own premises plus the
 callback's (steps') `SemC`, mentions no depth or holder, and has every quantifier over code a
 quantifier over `CDerivesP` derivations. It is a hypothesis of the theorems that use it. `PinStop`
 and `PinLoop`, the compatibility lemmas of R1 and R2 at the rules' premises alone, are derived
-(`PinLaw.stop`, `PinLaw.loop`), and `pinLaw_iff` shows the two schemas say what they say together.
+(`PinLaw.stop`, `PinLaw.loop`), and `pinLaw_iff : PinLaw ↔ PinStop ∧ PinLoop ∧ PinFin` shows the
+schemas say what the lemmas say together.
+
+`LendFrame`'s row premise is `Row.ResumeOC` (§29a), which widens `Row.ResumeO` for the cancel path
+in three ways, and these widen the asserted domain:
+1. the marked abortive cancel target is admitted at operation `1` of a name whose operation `0` is a
+   cancellable wait. This is OQ-1 option (a) of `docs/async-capabilities.md`, taken for the cancel
+   path only: an abort at an operation handled outside the lend, after a suspension inside it. The
+   evidence is OQ-1(a)'s: the LIFO frame lemmas (`wpTS_M_frameU`) with GhostEnd's `Drop` are proved;
+   that they compose across the suspension is not checked;
+2. the cancellable wait answers `1 ⊕ 1`, not `1`. This is OQ-5's restriction, relaxed for marked
+   waits. The answer is read only by `[await-c]`'s `case`, since `[perform]` refuses a marked
+   operation;
+3. the wait's cancel row is any cancel row.
+
+The relation does not read the marker. Until the effect context carries it (§29a *Open*), a kernel
+handler chooses its markers, so the domain is lends across any marked `lin 1 ↠ 1 ⊕ 1` operation and
+its marked abortive partner.
 `LendFrame`'s premise is the body's `CDerivesP` derivation, so what it covers is every body that
 judgment types: bodies holding a nested relaxed lend (through `nilDead`), and bodies using §28's
 BOXED-κ rule (`effHandleVB`), as well as every rule of `CDerives`. What a named assertion of this
@@ -5239,7 +5265,7 @@ borrow block over a loop is §14's per-observation lend. Segmenting a block at a
 only the borrow crosses it (L0) is not built (U3).
 
 The checker types `withbor2r` by `[lend-R]` at the slot of `p`: it checks `M` at `Δ, 'x ⊏ @b` and the
-context `m : mut 'x A` alone, and decides `Row.ResumeO` (`Row.resumeOB`), `NoThunkT` (`noThunkB`)
+context `m : mut 'x A` alone, and decides `Row.ResumeOC` (`Row.resumeOCB`, sound), `NoThunkT` (`noThunkB`)
 and the closedness of `M` (`rLendR`, `Frontend/Check/Pin.lean`).
 
 ### Semantics
@@ -5277,12 +5303,13 @@ with the counts of `corpus/counts.expected`.
     adequacyC_pin, adequacyD_pin, adequacyD_pin_safe (hPin : PinLaw)
     CDerivesP.ofC : CDerives Δ Γ e j → CDerivesP Δ Γ e j
     PinLaw.stop : PinLaw → PinStop          PinLaw.loop : PinLaw → PinLoop
-    pinLaw_iff : PinLaw ↔ PinStop ∧ PinLoop
+    pinLaw_iff : PinLaw ↔ PinStop ∧ PinLoop ∧ PinFin
 
 `fundamentalC_pin` is `fundamentalC`'s induction, case for case, with `hPin.lendFrame` at `lendR`
 (form `ref`) and `hPin.loopFrame` at `lendLoopR`, each at the induction hypothesis of its callback
-(steps), and `semC_dead` at `nilDead` (`Core/PinFundamental.lean`, generated). `PinLaw.stop` and
-`PinLaw.loop` follow from it; `PinLaw.of_stop_loop` is the converse.
+(steps), `pinFin_divFree` and `hPin.fin` at `effThenDiv` (§29a), and `semC_dead` at `nilDead`
+(`Core/PinFundamental.lean`, generated). `PinLaw.stop` and `PinLaw.loop` follow from it;
+`PinLaw.of_stop_loop` is the converse.
 At the checker: `checkProgram_soundP` (every checked `main` has a `CDerivesP` derivation),
 `checked_sem_pin` and `checked_runs_pin`; `checkProgram_sound`, `checkProgram_tied`,
 `checkProgram_tiedAt`, `checkProgram_letPoly`, `checked_sem`, `checked_runs`,
@@ -5317,6 +5344,98 @@ another), `async-r1-generator.bc` and `async-r1-drain.bc` (§15's self-referenti
   built.
 - Shrinking `PinLaw` (U8).
 - What `LendFrame` ranges over (above): kind R of `docs/unsafe.md`.
+
+---
+
+## 29a. Entry 28a — cancellable waits: a cancel as a resume with a raise (#750)
+
+### Motivation
+
+#750 (plan agreed in comment 6528120064, user decisions of 2026-10-31). A task's cancel is a resume
+of its stopped `await` with `inr ()`, which the task re-raises as `cancelled`; finalisers run with
+the task's region live. Cancellation is level-triggered (Trio-style): the cancelled state belongs to
+the task's scope, and every cancellable wait in a cancelled scope raises `cancelled`. Shielded
+waits ignore it. The kernel gains a marker and one proved rule, and `PinLaw` one schema.
+
+### Typing
+
+- **The marker.** `OpSig.rc : Bool` (default `false`), mirrored in `CTy.eff n i q A B fin rc C` and
+  compared by `OpSig.Sig`, so `[sub]` neither adds nor drops it. Neither the relation nor the
+  machine reads it (`semC_effOf_rc`: the relation at `F_Σ A` reads `Σ` up to markers). A
+  *cancellable wait* is `OpSig.Cancellable`: marked, `lin`, answering `1 ⊕ 1`; its *cancel target*
+  is `OpSig.CancelTarget`: marked, abortive, at `1`. Both are decided (`cancellableB_iff`,
+  `cancelTargetB_iff`). The handler rules `effHandleV`/`effHandleVB` take the body's row as
+  `Row.ofEff n E 0 fs cs ++ Σ`, `cs j` the `j`-th operation's marker (`CDerives.effHandleCs`).
+- **`[await-c]`** (`CDerives.effAwait`, in `CDerivesAt`, `CDerivesP` and `TDerives` too):
+
+      Γ consumed   Σ(n, 0) = a Cancellable   a.A = 1   Σ(n, 1) = c CancelTarget
+      ────────────────────────────────────────────────────────────────── [await-c]
+      Γ ⊢ await_n ≜ perform_n (0, ()) to r. case r {inl u. return u | inr u. raise_n (1, u)} : F_Σ 1
+
+  `[perform]` gains `hac : o.rc = false` and `[raise]` `hrc : o.rc = false`: only `[await-c]`
+  performs a cancellable wait or raises its cancel target, on `inr ()`. `await_compatC` proves it
+  from `[perform]`, `case`, `[raise]` and `[let]`; `fundamentalC` keeps no hypothesis.
+- **Cancel rows** (§27) are read at `OpSig.finRead o := capB o.q o.B || (o.rc && !o.abort)`: `FinLe`,
+  `OpSig.LeF` and `[then]`'s `hfin` record a finaliser's row in a cancellable wait's cancel row.
+  The relation reads `fin` only at `capB`, as before.
+- **`[lend-R]`** takes `Row.ResumeOC Σ 'x` (§29): each entry `Row.ResumeO` admits, a cancellable wait
+  of a nonzero name taking closed data at any cancel row, or a cancel target at `(n, 1)` whose
+  `(n, 0)` is a cancellable wait; and `Row.divB Σ = false` (a marked `tick` is refused,
+  `not_resumeOC_markedTick`). No other abortive operation is admitted (`not_resumeOC_raise`).
+- **`[then]` with a finaliser that may loop** (`CDerivesP.effThenDiv`): `effThen` without
+  `Row.divB Σ_D = false`, at a body with no capturable operation. At a `Div`-free `Σ_D` it is
+  `then_compatC` (`pinFin_divFree`); at a `Div` row it is `PinLaw.fin : PinFin`, asserted. It is
+  reached under `div_fuel` (`d_thenDivFuel`); inside a task `effHandleV`'s `hdv` refuses a `Div`
+  row. `CDerives.effThen` keeps decision 69.
+- **A value with no derived drop is closed on every exit, the cancel included.** No new premise:
+  `[await-c]`'s cancel target is abortive, so the row `Cancels` (`Row.cancels_of_await`), and
+  `[let]`'s `hW` refuses a value that is not `OwnFree` held across the wait
+  (`let_refuses_decl_across_await`). A finaliser that consumes it is the way out
+  (`d_closeOnCancel`). A value with a derived drop gets it on the cancel unwind, as on an error's:
+  only values with no derived drop need written code.
+- **`Row.CancelTotal` / `Row.CancelEnds`** (`Core/AwaitCancel.lean`), decided with `_iff`s, are
+  typing-only predicates and premises of no rule. `CancelEnds` (`CancelTotal` and no `Div` where the
+  row has a cancellable wait) is the termination target: a cancelled task ends at a `Div`-free row.
+  It is proved at the closed instance `stickyScope_ends` (by `adequacyD`); the general statement is
+  open. A row with `Div` carries no termination guarantee.
+
+### Semantics: level-triggered cancellation
+
+No machine step, relation clause or primitive is added. The cancelled state is the task handler's
+state; its `await` clause reads it.
+- **Law 5c** (`await_cancelled`): with the flag at `inr ()`, `hnd (n, H) K[await_n]` steps to
+  `hnd (n, H) K[raise_n (1, ())]`, `K` free of `n`, the memory unchanged; so every later wait in the
+  scope raises again. `cancelled_n` is not caught inside the task (`cancelled_not_caught`). A shielded
+  wait (an unmarked `complete`) reads no flag (`shield_catch`): a finaliser that must wait uses it.
+- **Laws 5 and 6** (§19) stay for κ.2 cancels; for cancellable waits 5c replaces law 5 and law 6's
+  *first error kept*, while law 6's *Finally* and *Unwinding* apply to the `cancelled` raise: a
+  finaliser's raise supersedes it. A handler inside the task may catch that raise; the cancel is
+  then raised again at the next cancellable wait, not lost (`d_swallow`, `sem_swallow`,
+  `swallow_sticky`, `retry_sticky`).
+- **The scheduler's clause is typed by passing the state**: `d_stickyScope`, an immediate scheduler
+  at the answer `U(Flag ⊸ F Flag)` whose `await` clause resumes `κ` with the flag
+  (`stickyScope_eval`).
+
+### Not built
+
+The surface `await` and `complete`, `lib/async.bc`'s `cancelled` clause and a suspending scheduler's
+typing, `run_in`, the checker emitting `effAwait` or `effThenDiv`, the nursery (#743, which also
+needs `hdv` relaxed for task handlers), cancel scopes inside a task, and the lowering of a
+suspending finaliser.
+
+### Open
+
+- **The effect context carries the marker.** `RowAt` compares `(q, A, B)` only. Before the surface
+  declares a cancellable wait, `EffCtx` carries `rc`, `RowAt` compares it, and the tied handler rules
+  derive `cs` from `Ξ`.
+- `PinFin` at `Div` rows: not derived, obstruction not verified. The route: `ewp_frame_then_or`'s
+  raise branch taking the finaliser's run at `cwp` (`cwp_bind` with the seq-raise frame), a
+  `closing_then` at `closeSig :: Σ_D`, and `cwp_then`'s coinduction over both.
+- The general `CancelEnds` termination theorem.
+- `finRead` and `CancelTotal` have no semantic consumer under level-triggered cancellation; whether to
+  keep them is the user's.
+- Route (a) for derived drops: a task holding borrows has no derived drop and is awaited or
+  cancelled explicitly; each refusal names its fix (unit B).
 
 ---
 
