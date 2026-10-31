@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.19 · 2026-10-31
+Version 1.20 · 2026-10-31
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -10299,7 +10299,7 @@ relation or the machine.
 
 ## Changelog
 
-- **1.19** (2026-10-31) — §42 (#746): a declared value lent across a computation that may
+- **1.20** (2026-10-31) — §42 (#746): a declared value lent across a computation that may
   abort, stated as the kernel decides it (`Core/DeclLend.lean`). The loan holds no owned cell
   (`decl_loan_ownFree`), so an abort handled inside the loan is admitted at the pure `withbor`
   (`d_declInside`; `corpus/decl-lend.bc`). An abort that crosses the loan needs the unwinding
