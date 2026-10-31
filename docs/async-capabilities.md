@@ -579,7 +579,7 @@ Rejections are by the rules of §3.4; acceptances must run cleanly under §6.1's
 | 7 | nested handlers inside tasks: a generator over a borrowed array, inside a relaxed lend, awaiting between elements (`accept/m2`) | **accept**, runs `[60]` | `yield` is caught inside the borrower and crosses no lend (Law 2's `InStop`); `await` crosses it (R1) |
 | 8 | an awaiting callback passed to a HOF and **stored** (`n8`) | **reject** when it captures a task-local borrow | storing is `[]I`, whose context premise fails; passed and only called, it is accepted (A4) |
 | 9 | recursion inside a task (`accept/m3`) | **accept**, runs `[1, 6]` | `bounded_fix` at every row (`boundedFix_compatX`); one heap object per level |
-| 10 | spawn inside a task, the spawned block capturing a held borrow (`n9`) | **reject** | the view would leave the lend through an operation argument (`Row.ResumeO`) and outlive it (BOXED-κ). Spawning with no lend open is accepted (OQ-61 of the draft spec) |
+| 10 | spawn inside a task, the spawned block capturing a held borrow (`n9`) | **reject** | the view would leave the lend through an operation argument (`Row.ResumeO`, now `Row.ResumeOC`) and outlive it (BOXED-κ). Spawning with no lend open is accepted (OQ-61 of the draft spec) |
 | 11 | an abortive operation crossing a relaxed lend (`n4`) | **reject (v1)** | `Row.ResumeOC`; OQ-1, taken as (a) for the cancel target alone (SPEC §29a) |
 | 12 | the view handed to a handler as an operation argument (`n5`) | **reject** | `Row.ResumeO`: arguments are closed data |
 | 13 | a loop state holding a `mut` view (`n6`) | **reject** | R2 is `imm` only; `LoopLend` reports it today |
@@ -612,6 +612,10 @@ Ordered; each unit is one PR and turns the programs named green. No unit but U1 
 ---
 
 ## 8. Open questions
+
+> Since #750 (SPEC §29a) R1's row premise is `Row.ResumeOC`, which widens `Row.ResumeO` for the
+> cancel path only (OQ-1, OQ-5 below); `PinLaw` has a third schema, `PinFin`. The statements quoted
+> in §3.3 and §4 are the R1 of #52, before that widening.
 
 > **OQ-1. An abortive operation crossing a relaxed lend.** `borrow mut b { … await(); …?… }`
 > with the error handled outside the block is rejected in v1 (`n4`). Options: (a) extend

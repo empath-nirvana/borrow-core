@@ -5,25 +5,30 @@ import Core.PinDerives
 
 `docs/async-capabilities.md` §4. A borrow held across a suspension is believed sound because the
 place does not move: the suspension may be read as ending the lend and the resumption as lending
-the place again at a fresh lifetime. `PinLaw` asserts two schemas, one per shape of relaxed rule
-that relies on this, and nothing more:
+the place again at a fresh lifetime. `PinLaw` asserts three schemas, two per shape of relaxed lend
+that relies on this and one for a finaliser that may loop, and nothing more:
 
 * `LendFrame`: the relaxed `withborUV` lend at every `LendForm`, whose callback is typed and in
-  the relation at a row of resuming operations (`Row.ResumeO`), is in the kernel's relation at
-  `F_Σ (P ⊗ B)`. Its one form is `ref`, R1 (`lendR`): `Ref T` lent as `Mut 'x T`.
+  the relation at a row of resuming operations and the cancel path's cancellable wait and cancel
+  target (`Row.ResumeOC`, SPEC §29a), is in the kernel's relation at `F_Σ (P ⊗ B)`. Its one form is
+  `ref`, R1 (`lendR`): `Ref T` lent as `Mut 'x T`.
 * `LoopFrame`: R2 (`lendLoopR`), the per-observation `imm` lend whose state may hold views of the
   place, its steps typed and in the relation, is in the kernel's relation at
   `U(Loop (Ref A ⊗ B) (Ref A ⊗ R))`.
+* `PinFin`: `[then]` with a finaliser whose row holds `Div` (`CDerivesP.effThenDiv`), its body with
+  no capturable operation, the derivations typed and in the relation, is in the relation. At a
+  `Div`-free finaliser row it is `then_compatC` (`pinFin_divFree`).
 
-Neither mentions a depth or a holder: a lend nested in a callback is part of the callback's
-derivation. Both are stated at the rules' own premises plus the callback's (steps') relation,
+None mentions a depth or a holder: a lend nested in a callback is part of the callback's
+derivation. Each is stated at its rule's own premises plus the relations of its premises' code,
 with every quantifier over code a quantifier over `CDerivesP` derivations: no statement here is
 pointwise over configurations. The hypothesis is tested by running programs that use the rules
 (`docs/async-capabilities.md` §6), not proved.
 
 `PinStop` and `PinLoop`, R1's and R2's compatibility lemmas at the rules' premises alone, are
 stated here and derived from the schemas in `Core/PinFundamental.lean` (`PinLaw.stop`,
-`PinLaw.loop`), where `pinLaw_iff` shows the two schemas say what the two lemmas say together.
+`PinLaw.loop`), where `pinLaw_iff` shows the schemas say what `PinStop`, `PinLoop` and `PinFin`
+say together.
 -/
 
 noncomputable section
@@ -74,7 +79,7 @@ def PinLoop : Prop :=
     SemC (ℍ := ℍ) Δ [⟨.ref A, true⟩] (lendLoopApp A B R N K s0)
       (CTy.loop (.tensor (.ref A) B) (.tensor (.ref A) R))
 
-/-! ### The two schemas -/
+/-! ### The lend schemas -/
 
 /-- The lend forms of the relaxed `withborUV` lend: the place's type `P`, the view `V` the
 callback is typed at, the answer `B`, and the callback's lifetime context `Δb`. `ref` is R1

@@ -59,7 +59,7 @@ def Row.resumeOCB (S : Row) (x : LifeVar) : Bool :=
   (S.all fun o =>
     (!o.abort && o.q != .unr && decide (o.fin = .ret .unit) && decide (o.B = .unit) &&
       o.n != 0 && !vfreeB x o.A && outlivesAllB o.A && noThunkB o.A) ||
-    (o.cancellableB && o.n != 0 && !vfreeB x o.A && outlivesAllB o.A && noThunkB o.A) ||
+    (o.cancellableB && o.i == 0 && o.n != 0 && !vfreeB x o.A && outlivesAllB o.A && noThunkB o.A) ||
     (o.cancelTargetB && o.i == 1 && o.q == .cancel && o.n != 0 &&
       (match Row.find S o.n 0 with
         | some a => a.cancellableB
@@ -73,11 +73,11 @@ theorem Row.resumeOCB_sound {S : Row} {x : LifeVar} (h : Row.resumeOCB S x = tru
   have := List.all_eq_true.mp h.1 o ho
   simp only [Bool.or_eq_true, Bool.and_eq_true, bne_iff_ne, ne_eq, Bool.not_eq_true',
     decide_eq_true_eq, beq_iff_eq] at this
-  rcases this with (⟨⟨⟨⟨⟨⟨⟨h₁, h₂⟩, h₃⟩, h₄⟩, h₅⟩, h₆⟩, h₇⟩, h₈⟩ | ⟨⟨⟨⟨h₁, h₂⟩, h₃⟩, h₄⟩, h₅⟩) |
+  rcases this with (⟨⟨⟨⟨⟨⟨⟨h₁, h₂⟩, h₃⟩, h₄⟩, h₅⟩, h₆⟩, h₇⟩, h₈⟩ | ⟨⟨⟨⟨⟨h₁, h₀⟩, h₂⟩, h₃⟩, h₄⟩, h₅⟩) |
       ⟨⟨⟨⟨h₁, h₂⟩, h₃⟩, h₄⟩, h₅⟩
   · exact .inl ⟨h₁, h₂, h₃, h₄, h₅, not_vfree_of_vfreeB h₆, outlivesAllB_sound _ h₇,
       noThunkB_sound h₈⟩
-  · exact .inr (.inl ⟨(OpSig.cancellableB_iff o).mp h₁, h₂, not_vfree_of_vfreeB h₃,
+  · exact .inr (.inl ⟨(OpSig.cancellableB_iff o).mp h₁, h₀, h₂, not_vfree_of_vfreeB h₃,
       outlivesAllB_sound _ h₄, noThunkB_sound h₅⟩)
   · refine .inr (.inr ⟨(OpSig.cancelTargetB_iff o).mp h₁, h₂, h₃, h₄, ?_⟩)
     revert h₅

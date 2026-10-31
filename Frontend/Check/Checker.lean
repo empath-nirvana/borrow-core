@@ -453,8 +453,8 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
         if hac : o.rc = false then
           let rV ← chkV n E Δ T V o.A
           pure ⟨_, rPerform (at_ sp) hf hna hac rV⟩
-        else err sp (s!"the operation {k}.{i} is a cancellable wait: it is performed only as " ++
-          s!"`await`, which raises the cancel on `inr` ([await-c], SPEC §29a)")
+        else err sp (s!"the operation {k}.{i} is marked as cancelled by a resume: only `await` " ++
+          s!"performs it, raising the cancel on `inr` ([await-c], SPEC §29a)")
       else err sp s!"the operation {k}.{i} is abortive: write `abort[{k}.{i}]`"
     | .abort sp k i V => do
       let ⟨_, r⟩ ← abortIt n E Δ T sp k i V .zero

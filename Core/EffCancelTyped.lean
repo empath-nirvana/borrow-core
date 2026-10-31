@@ -469,9 +469,9 @@ theorem not_der_progT {Δ : LifeCtx} {Γ : Ctx VTy} {S' : Row} {Y : VTy}
     der_thenJ hM₂ (.var 0) (raiseU 2) (performU 1) rfl
   have hS₃ : RowLe S₃ (Row.ofEff 2 E₂ 0 fs₂ cs₂ ++ S₂) := JR.rowLe hr₃
   -- `perform 1`'s row finds `1`, the finaliser's row finds `2`
-  obtain ⟨j₄, ⟨S₄, oM₀, hf₄, ha₄, rfl⟩, hr₄⟩ := der_performJ hMp 1 0 (.val Val.unit) rfl
+  obtain ⟨j₄, ⟨S₄, oM₀, hf₄, ha₄, -, rfl⟩, hr₄⟩ := der_performJ hMp 1 0 (.val Val.unit) rfl
   obtain ⟨oM, hfM, hleM⟩ := JR.rowLe hr₄ 1 0 oM₀ hf₄
-  obtain ⟨j₅, ⟨S₅, oD₀, B₅, hf₅, -, rfl⟩, hr₅⟩ := der_raiseJ hDr 2 0 (.val Val.unit) rfl
+  obtain ⟨j₅, ⟨S₅, oD₀, B₅, hf₅, -, -, rfl⟩, hr₅⟩ := der_raiseJ hDr 2 0 (.val Val.unit) rfl
   obtain ⟨oD, hfD, -⟩ := JR.rowLe hr₅ 2 0 oD₀ hf₅
   -- `1` from the `[then]` up to `[handle] 1`'s body
   obtain ⟨o₃, hf₃, hle₃⟩ := hMS 1 0 oM hfM
@@ -1290,11 +1290,11 @@ theorem not_der_progNCrecT {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives
     der_thenJ hM₃ (.var 0) (performU 4) (performU 1) rfl
   have hS₄ : RowLe S₄ SM₃ := JR.rowLe hr₄
   -- the operations the three `perform`s find
-  obtain ⟨j₅, ⟨S₅, oP₀, hf₅, ha₅, rfl⟩, hr₅⟩ := der_performJ hM₄ 1 0 (.val Val.unit) rfl
+  obtain ⟨j₅, ⟨S₅, oP₀, hf₅, ha₅, -, rfl⟩, hr₅⟩ := der_performJ hM₄ 1 0 (.val Val.unit) rfl
   obtain ⟨oP, hfP, hleP⟩ := JR.rowLe hr₅ 1 0 oP₀ hf₅
-  obtain ⟨j₆, ⟨S₆, oD₀, hf₆, ha₆, rfl⟩, hr₆⟩ := der_performJ hD₄ 4 0 (.val Val.unit) rfl
+  obtain ⟨j₆, ⟨S₆, oD₀, hf₆, ha₆, -, rfl⟩, hr₆⟩ := der_performJ hD₄ 4 0 (.val Val.unit) rfl
   obtain ⟨oD, hfD, hleD⟩ := JR.rowLe hr₆ 4 0 oD₀ hf₆
-  obtain ⟨j₇, ⟨S₇, oE₀, hf₇, ha₇, rfl⟩, hr₇⟩ := der_performJ hD₃ 4 0 (.val Val.unit) rfl
+  obtain ⟨j₇, ⟨S₇, oE₀, hf₇, ha₇, -, rfl⟩, hr₇⟩ := der_performJ hD₃ 4 0 (.val Val.unit) rfl
   obtain ⟨oE, hfE, -⟩ := JR.rowLe hr₇ 4 0 oE₀ hf₇
   -- `1` from `perform 1` up to `[handle] 1`'s body: unrestricted, its answer no `0`
   obtain ⟨o₄₁, hf₄₁, hle₄₁⟩ := hMS₄ 1 0 oP hfP
@@ -1491,19 +1491,19 @@ theorem not_der_e7c {Δ : LifeCtx} {Γ : Ctx VTy} {nw ni : UInt32} {qi : Qual} (
         (fun _ h => by cases h) (fun h => by cases h) (fun h => by cases h)
         (fun h => by cases h) (fun _ h => by cases h) with
       ⟨j₄, ⟨Γ₇, S₇, X₇, -, hP, hS₇⟩, hr₄⟩ | ⟨Γ₇, X₇, -, hP⟩
-    · obtain ⟨j₅, ⟨S₅, oM₀, hf₅, ha₅, rfl⟩, hr₅⟩ := der_performJ hP nw 0 (.val Val.unit) rfl
+    · obtain ⟨j₅, ⟨S₅, oM₀, hf₅, ha₅, -, rfl⟩, hr₅⟩ := der_performJ hP nw 0 (.val Val.unit) rfl
       have h57 : RowLe S₅ S₇ := JR.rowLe hr₅
       rcases hS₇ with rfl | ⟨B₇, rfl⟩
       · obtain ⟨o', hf', -⟩ := h57 nw 0 oM₀ hf₅
         simp [Row.find] at hf'
       · exact ⟨S₅, oM₀, hf₅, ha₅, h57.trans (JR.rowLe hr₄)⟩
-    · obtain ⟨j₅, ⟨S₅, oM₀, hf₅, -, rfl⟩, hr₅⟩ := der_performJ hP nw 0 (.val Val.unit) rfl
+    · obtain ⟨j₅, ⟨S₅, oM₀, hf₅, -, -, rfl⟩, hr₅⟩ := der_performJ hP nw 0 (.val Val.unit) rfl
       obtain ⟨hle, -⟩ := RowCls.reach hr₅ (S := S₅) (Y := oM₀.B) ⟨_, _, rfl, RowLe.refl _, .refl⟩
       obtain ⟨o', hf', -⟩ := hle nw 0 oM₀ hf₅
       simp [Row.find] at hf'
   obtain ⟨oM, hfM, hleM⟩ := hS₄M nw 0 oM₀ hf₄
   -- the finaliser's row finds `exnᵢ`
-  obtain ⟨j₆, ⟨S₆, oD₀, B₆, hf₆, -, rfl⟩, hr₆⟩ := der_raiseJ hDr ni 0 (.val Val.unit) rfl
+  obtain ⟨j₆, ⟨S₆, oD₀, B₆, hf₆, -, -, rfl⟩, hr₆⟩ := der_raiseJ hDr ni 0 (.val Val.unit) rfl
   obtain ⟨oD, hfD, -⟩ := JR.rowLe hr₆ ni 0 oD₀ hf₆
   -- `wait` from the `[then]` up to `[handle] wait`'s body
   obtain ⟨o₃, hf₃, hle₃⟩ := hMS nw 0 oM hfM

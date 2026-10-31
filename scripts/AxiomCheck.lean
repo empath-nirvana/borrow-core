@@ -689,9 +689,13 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.AwaitCancel.unshielded_sticky
 #print axioms BoCa.Fig16.LogRel.Core.CDerives.effHandleCs
 #print axioms BoCa.Fig16.LogRel.Core.AwaitCancel.d_stickyScope
-#print axioms BoCa.Fig16.LogRel.Core.AwaitCancel.stickyScope_ends
+#print axioms BoCa.Fig16.LogRel.Core.AwaitCancel.stickyScope_runs
 #print axioms BoCa.Fig16.LogRel.Core.AwaitCancel.stickyScope_eval
 #print axioms BoCa.Fig16.LogRel.Core.AwaitCancel.d_thenDivFuel
+#print axioms BoCa.Fig16.LogRel.Core.AwaitCancel.d_thenTickAwait
+#print axioms BoCa.Fig16.LogRel.Core.AwaitCancel.not_der_perform_await
+#print axioms BoCa.Fig16.LogRel.Core.AwaitCancel.not_der_raise_cancelled
+#print axioms BoCa.Fig16.LogRel.Core.seq_raise_cwp
 #print axioms BoCa.Fig16.LogRel.Core.AwaitCancel.thenDivFuel_runs
 #print axioms Frontend.Check.checkProgram_soundP
 #print axioms Frontend.Check.checked_sem_pin

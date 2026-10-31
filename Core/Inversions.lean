@@ -2403,19 +2403,19 @@ theorem der_thenJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeriv
 
 /-- `[perform]`'s premises, at its conclusion `j₀`. -/
 def PerfBase (n i : UInt32) (j₀ : Jdg) : Prop :=
-  ∃ (S : Row) (o : OpSig), Row.find S n i = some o ∧ o.abort = false ∧
+  ∃ (S : Row) (o : OpSig), Row.find S n i = some o ∧ o.abort = false ∧ o.rc = false ∧
     j₀ = .comp (CTy.effOf S o.B)
 
 /-- **A `perform` is `[perform]`'s, then the same-term rules**: its row finds the operation. -/
 theorem der_performJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ n i V, e = BoCa.BoLo.performE (opArgE n i V) → ∃ j₀, PerfBase n i j₀ ∧ JR j₀ j := by
   induction h with
-  | effPerform hf hna _ _ =>
+  | effPerform hf hna hac _ =>
       intro n i V he
       simp only [BoCa.BoLo.performE, opArgE, Expr.val, Val.prim, Val.i32, Expr.app.injEq,
         Expr.pair.injEq, Expr.prim.injEq, Prim.lit.injEq, IntLit.i32.injEq] at he
       obtain ⟨-, rfl, rfl, -⟩ := he
-      exact ⟨_, ⟨_, _, hf, hna, rfl⟩, .refl⟩
+      exact ⟨_, ⟨_, _, hf, hna, hac, rfl⟩, .refl⟩
   | force => intro n i V he; rcases forceE_var he with h | h <;> cd_at h
   | lolliE _ _ hf =>
       intro n i V he; simp only [BoCa.BoLo.performE, Expr.app.injEq] at he
@@ -2466,19 +2466,19 @@ theorem der_performJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDe
 
 /-- `[raise]`'s premises, at its conclusion `j₀`. -/
 def RaiseBase (n i : UInt32) (j₀ : Jdg) : Prop :=
-  ∃ (S : Row) (o : OpSig) (B : VTy), Row.find S n i = some o ∧ o.abort = true ∧
+  ∃ (S : Row) (o : OpSig) (B : VTy), Row.find S n i = some o ∧ o.abort = true ∧ o.rc = false ∧
     j₀ = .comp (CTy.effOf S B)
 
 /-- **A `raise` is `[raise]`'s, then the same-term rules**: its row finds the operation. -/
 theorem der_raiseJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ n i V, e = BoCa.BoLo.raiseE (opArgE n i V) → ∃ j₀, RaiseBase n i j₀ ∧ JR j₀ j := by
   induction h with
-  | effRaise hf ha _ _ =>
+  | effRaise hf ha hrc _ _ =>
       intro n i V he
       simp only [BoCa.BoLo.raiseE, opArgE, Expr.val, Val.prim, Val.i32, Expr.app.injEq,
         Expr.pair.injEq, Expr.prim.injEq, Prim.lit.injEq, IntLit.i32.injEq] at he
       obtain ⟨-, rfl, rfl, -⟩ := he
-      exact ⟨_, ⟨_, _, _, hf, ha, rfl⟩, .refl⟩
+      exact ⟨_, ⟨_, _, _, hf, ha, hrc, rfl⟩, .refl⟩
   | force => intro n i V he; rcases forceE_var he with h | h <;> cd_at h
   | lolliE _ _ hf =>
       intro n i V he; simp only [BoCa.BoLo.raiseE, Expr.app.injEq] at he

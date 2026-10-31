@@ -809,6 +809,41 @@ theorem seq_raise_run (δ : LSub) (S E : Row) (hES : RowLe E S) (er : Bool)
           noOwn_compS hz hnn hp'.2⟩⟩
     rw [catches_comp, hK₁]; rfl
 
+/-- **A raise's finaliser run at `cwp`, then the raise** (`PinFin`'s first step, #750): a finaliser
+`d` in the greatest fixed point at `Σ`'s table, the raise of an abortive operation of `Σ` pending
+after it, is in the greatest fixed point: `cwp_bind` at the seq-raise frame, whose hole's `()`
+steps to the raise, a stop of `Σ`. The pending payload holds nothing owned, and nothing at all where
+`Σ` has an unrestricted operation.  `[spec §14, §27, §29a]` -/
+theorem seq_raise_cwp (δ : LSub) (S : Row) (hSd : Row.divB S = true) {n i : UInt32} {v : Val}
+    {en : OpEnt} (hTn : Row.tab S δ n i = some en) (ha : en.abort = true)
+    {Qd : List SRec → Val → WProp} (hQd : ∀ ls v ρ, Qd ls v ρ → v = .unit ∧ NoOwn ρ)
+    {Q : List SRec → Val → WProp} {ls : List SRec} {d : Expr} {ρ : WRes}
+    (h : cwp (Row.tab S δ) Qd ls d ρ) {σp ρ' : WRes} (hp : en.PA ls v σp ∧ NoOwn σp)
+    (hu : S.Unr → σp = PMap.empty) (hc : ResU.CompS ρ σp ρ') :
+    cwp (Row.tab S δ) Q ls (.seq d (raiseE (.val (opPayload n i v)))) ρ' := by
+  have hT := Row.divOK_of_divB hSd δ
+  let Fr : List SRec → WProp := fun ls τ => τ = σp ∧ en.PA ls v τ ∧ NoOwn τ
+  refine cwp_bind hT (seqRaiseK (opPayload n i v)) (seqRaiseK_hasHnd _)
+    (seqRaiseK_catches _) Fr ?_ ?_ ?_ ?_ ?_ Qd Q ?_ h (ρ₂ := σp) ⟨rfl, hp⟩ hc
+  · intro ls₁ ls₂ hs τ hF
+    exact ⟨hF.1, (Row.tab_local S δ n i en hTn _ ls₂ v τ (ext_of_same hs τ)).1 hF.2.1, hF.2.2⟩
+  · intro ls₁ ls₂ τ he hF
+    exact ⟨hF.1, (Row.tab_local S δ n i en hTn _ ls₂ v τ he).1 hF.2.1, hF.2.2⟩
+  · intro _ _ _ _ _ _ τ hF; exact hF.2.2
+  · intro m j en' hT' hq _ τ hF
+    obtain ⟨o, hf, rfl⟩ := Row.tab_some hT'
+    rw [hF.1]; exact hu ⟨o, (Row.find_mem hf).1, hq⟩
+  · intro m j en' hT' _ _ ls₁ K₁ τ τ' τ'' hcan hF hcτ
+    obtain ⟨o, -, rfl⟩ := Row.tab_some hT'
+    exact ent_plain δ (seqRaiseK (opPayload n i v)) (seqRaiseK_hasHnd _) (seqRaiseK_catches _ 0)
+      hF.2.2 o hcan hcτ
+  · rintro ls₁ w τ ⟨τ₁, τ₂, hcτ, hw, hF⟩
+    obtain ⟨rfl, hnw⟩ := hQd _ _ _ hw
+    refine cwp_of_ewp hT.keyNA ?_
+    refine ewp_fold (opTable_mono _) (wpG_head (fun μ => Head.seq μ _) rfl _ _ τ ?_)
+    exact wpG_here _ _ _ τ (Or.inr (Or.inr ⟨.hole, n, i, v, en, pure_sep_mk ⟨rfl, rfl, hTn, ha⟩
+      ⟨τ₂, τ₁, ResU.CompS.comm hcτ, hF.2, hnw⟩⟩))
+
 /-- **The finaliser frame around an effectful computation** (`M then x. N unwind D`), at the rows
 of `[then]` (SPEC §27): `M` at `Σ_M ≤ Σ`, `D` at `Σ_D ≤ Σ`, each capturable operation's cancel row
 `Σ(o).fin ≥ Σ_M(o).fin ⋈ Σ_D`.  A stop of `M` at an operation keeps the frame in its continuation;

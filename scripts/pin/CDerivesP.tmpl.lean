@@ -57,7 +57,8 @@ def Row.ResumeO (S : Row) (x : LifeVar) : Prop :=
 
 /-- **The row a relaxed lend's callback may stop at, widened for the cancel path only.** Each
 operation is one `Row.ResumeO` admits; or a cancellable wait (`OpSig.Cancellable`: marked, linear,
-answering `1 ⊕ 1`) of a nonzero name, taking closed data, at any cancel row; or the cancel target
+answering `1 ⊕ 1`) at operation `0` of a nonzero name, taking closed data, at any cancel row; or the
+cancel target
 (`OpSig.CancelTarget`) at operation `1` of a name whose operation `0` is a cancellable wait, which
 `[await-c]` raises on `inr ()`. No other abortive operation is admitted, and the row does not hold
 `Div`.  `[spec §29, §29a]` -/
@@ -65,7 +66,7 @@ def Row.ResumeOC (S : Row) (x : LifeVar) : Prop :=
   (∀ o ∈ S,
     (o.abort = false ∧ o.q ≠ .unr ∧ o.fin = .ret .unit ∧ o.B = .unit ∧ o.n ≠ 0 ∧
       ¬ VFree x o.A ∧ (∀ Δ a, VOutlives Δ a o.A) ∧ NoThunkT o.A) ∨
-    (o.Cancellable ∧ o.n ≠ 0 ∧ ¬ VFree x o.A ∧ (∀ Δ a, VOutlives Δ a o.A) ∧ NoThunkT o.A) ∨
+    (o.Cancellable ∧ o.i = 0 ∧ o.n ≠ 0 ∧ ¬ VFree x o.A ∧ (∀ Δ a, VOutlives Δ a o.A) ∧ NoThunkT o.A) ∨
     (o.CancelTarget ∧ o.i = 1 ∧ o.q = .cancel ∧ o.n ≠ 0 ∧
       ∃ a, Row.find S o.n 0 = some a ∧ a.Cancellable)) ∧
   Row.divB S = false

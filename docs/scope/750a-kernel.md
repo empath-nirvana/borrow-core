@@ -497,3 +497,26 @@ whatever."
   `CancelEnds` theorem is not proved, and nothing is asserted in its place.
 - **The `effHandleT`/`effHandleL` rules have no `cs`.** A marked operation reaches a handler only through
   `effHandleV`/`effHandleVB`, which are the rules the state-passing scheduler fits.
+
+## 9. Final review (no Fatal; applied)
+
+- **`PinFin`.** Its first step is now proved in Lean: `seq_raise_cwp` (`Core/EffFin.lean`), a raise's
+  finaliser run at `cwp` followed by the raise, through `cwp_bind` at the seq-raise frame. The
+  assembly is not built: `ewp_frame_then_or`'s raise branch, `closing_then` at `closeSig :: Σ_D`, and
+  the coinduction. `PinLaw.fin` stays asserted: not derived, obstruction not verified.
+- **Reachability, corrected.**
+  - A task body reaches `effThenDiv` under `div_fuel`, whose callback row puts `tick` ahead of the
+    task's row. `hdv` constrains only the task handler's own row, so §1.5 and §1.6's "`Div` beside a
+    marked wait only under `effHandleT`" is wrong.
+  - The witness `d_thenTickAwait` is a cancel unwinding through a ticking finaliser.
+  - The closed program `d_thenDivFuel` stays.
+- **`stickyScope_ends`** is renamed `stickyScope_runs`. SPEC no longer says `CancelEnds` is proved.
+- **Judgment-level refusals.** `PerfBase` and `RaiseBase` carry `rc = false`, which gives
+  `not_der_perform_await` and `not_der_raise_cancelled`.
+- **`let_refuses_decl_across_await`** now covers any `Γ₂` holding a `declTy`. Still missing: a
+  `Tok`/`burn` close-on-cancel example. The `Ref` cell example `d_closeOnCancel` stands for it, since
+  the typing is the same.
+- **`Row.ResumeOC`'s wait disjunct** fixes `o.i = 0`.
+- **Stale text fixed:** the `PinLaw.lean` header; `docs/async-capabilities.md` (a note on §3.3/§4
+  quoting the old R1); SPEC 1.21 with its changelog entry.
+- **`effHandleT`/`effHandleL`** take no `cs` (see §8).

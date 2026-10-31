@@ -21,6 +21,8 @@ The cancelled state is the task handler's: level-triggered cancellation needs no
 | R1's cancel-path row | `resumeOC_await`; a marked `tick` is refused (`not_resumeOC_markedTick`), so is another abortive operation (`not_resumeOC_raise`) |
 | an `await` row cancels | `Row.cancels_of_await` |
 | a value with no derived drop is not held across an `await` by `[let]` | `let_refuses_decl_across_await` |
+| `[perform]`/`[raise]` refuse the marked pair at every row that finds it | `not_der_perform_await`, `not_der_raise_cancelled` |
+| `effThenDiv` reached: a cancel unwinding through a ticking finaliser; a closed program | `d_thenTickAwait`, `d_thenDivFuel` |
 | a cell held across an `await` under a finaliser that frees it is typed | `d_closeOnCancel` |
 | in a cancelled scope `await = raise cancelled`, memory unchanged | `await_cancelled`, `await_cancelled_inst` |
 | a shielded wait reads no flag | `shield_catch`, `shield_catch_inst` |
@@ -44,6 +46,7 @@ open BoCa.Lifetime (LifeVar LifeCtx)
 open BoCa.Fig16.LogRel.Core.CancelIntercept (idV constC raiseU rSig finR d_idV d_constC_raise)
 open BoCa.Fig16.LogRel.Core.EffPrograms (Flag)
 open BoCa.Programs (alloc' free')
+open BoCa.Fig16.LogRel.Core.Inversions (der_performJ der_raiseJ JR.rowLe)
 
 /-! ### The marked pair at the name `1` -/
 
@@ -77,6 +80,41 @@ theorem perform_refuses_await (F : CTy) : ¬ (awaitF F).rc = false := by simp [a
 /-- `[raise]`'s premise `hrc` fails at the cancel target. -/
 theorem raise_refuses_cancelled : ¬ cancelled.rc = false := by simp [cancelled]
 
+/-- **`[perform]` refuses the cancellable wait at every row it is read at**: a plain `perform` of
+`(1, 0)` has no derivation at a row whose `(1, 0)` is the marked `await`, at any answer. `[sub]`
+keeps the marker (`OpSig.Sig`), and `[perform]` asks for none.  `[spec §29a]` -/
+theorem not_der_perform_await {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {B : VTy}
+    (hS : Row.find S 1 0 = some (awaitF (.ret .unit)) ∨ ∃ F, Row.find S 1 0 = some (awaitF F)) :
+    ¬ CDerives Δ Γ (performE (opArgE 1 0 V)) (.comp (CTy.effOf S B)) := by
+  intro h
+  obtain ⟨j₀, ⟨S₀, o, hf, -, hrc, rfl⟩, hr⟩ := der_performJ h 1 0 V rfl
+  obtain ⟨o', hf', hle⟩ := JR.rowLe hr 1 0 o hf
+  have hF : ∃ F, Row.find S 1 0 = some (awaitF F) := hS.elim (fun h => ⟨_, h⟩) id
+  obtain ⟨F, hF⟩ := hF
+  rw [hF] at hf'; cases hf'
+  have := hle.1.rc_eq
+  rw [hrc] at this; cases this
+
+/-- **`[raise]` refuses the cancel target at every row it is read at**: a plain `raise` of `(1, 1)`
+has no derivation at a row whose `(1, 1)` is the marked `cancelled`.  `[spec §29a]` -/
+theorem not_der_raise_cancelled {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {B : VTy}
+    (hS : Row.find S 1 1 = some cancelled) :
+    ¬ CDerives Δ Γ (raiseE (opArgE 1 1 V)) (.comp (CTy.effOf S B)) := by
+  intro h
+  obtain ⟨j₀, ⟨S₀, o, B₀, hf, -, hrc, rfl⟩, hr⟩ := der_raiseJ h 1 1 V rfl
+  obtain ⟨o', hf', hle⟩ := JR.rowLe hr 1 1 o hf
+  rw [hS] at hf'; cases hf'
+  have := hle.1.rc_eq
+  rw [hrc] at this; cases this
+
+theorem not_der_perform_rowAwait {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {B : VTy} :
+    ¬ CDerives Δ Γ (performE (opArgE 1 0 V)) (.comp (CTy.effOf rowAwait B)) :=
+  not_der_perform_await (.inl rfl)
+
+theorem not_der_raise_rowAwait {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {B : VTy} :
+    ¬ CDerives Δ Γ (raiseE (opArgE 1 1 V)) (.comp (CTy.effOf rowAwait B)) :=
+  not_der_raise_cancelled rfl
+
 /-- The shielded wait is performed by `[perform]`. -/
 theorem d_complete {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) :
     CDerives Δ Γ (performE (opArgE 1 2 (.val .unit))) (.comp (CTy.effOf [complete] .unit)) :=
@@ -89,7 +127,7 @@ theorem resumeOC_await (x : LifeVar) (F : CTy) : Row.ResumeOC [awaitF F, cancell
   refine ⟨fun o ho => ?_, rfl⟩
   simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
   rcases ho with rfl | rfl
-  · exact .inr (.inl ⟨cancellable_await F, by simp [awaitF], fun h => by simp [awaitF, VFree] at h,
+  · exact .inr (.inl ⟨cancellable_await F, rfl, by simp [awaitF], fun h => by simp [awaitF, VFree] at h,
       fun _ _ => .unit, trivial⟩)
   · exact .inr (.inr ⟨cancelTarget_cancelled, rfl, rfl, by decide, awaitF F, rfl,
       cancellable_await F⟩)
@@ -135,9 +173,9 @@ a cancel target, `hW` asks for `OwnFree`, which a declared type with no derived 
 (`decl_not_ownFree`). The way out is a finaliser that consumes it, on every exit, the cancel
 included (`d_closeOnCancel` for a cell).  `[spec §29a]` -/
 theorem let_refuses_decl_across_await {S : Row} {n : UInt32} {c : OpSig}
-    (hfc : Row.find S n 1 = some c) (hc : c.CancelTarget) (A : VTy) :
-    ¬ (S.Cancels → Ctx.OwnFree [⟨declTy A, true⟩]) := fun hW =>
-  decl_not_ownFree A (hW (Row.cancels_of_await hfc hc) _ (List.mem_singleton.mpr rfl) rfl)
+    (hfc : Row.find S n 1 = some c) (hc : c.CancelTarget) {A : VTy} {Γ₂ : Ctx VTy}
+    (hm : ⟨declTy A, true⟩ ∈ Γ₂) : ¬ (S.Cancels → Γ₂.OwnFree) := fun hW =>
+  decl_not_ownFree A (hW (Row.cancels_of_await hfc hc) _ hm rfl)
 
 /-- A cell is not `OwnFree` either: `[let]` refuses it across the wait in the same way. -/
 theorem let_refuses_ref_across_await {S : Row} {n : UInt32} {c : OpSig}
@@ -342,9 +380,10 @@ theorem shield_catch {μ : Heap} {ℓ : Loc} (hℓ : μ ℓ = none) {n : UInt32}
   catch_cell (ℍ := ℍ) hℓ Val.unit (q := .lin) (by decide)
     (show clauseAt hs'.1 (2 : UInt32).toNat = some clauseOut from hc) hK htag K₀
 
-/-- **`cancelled_n` is not caught inside the task.** `[await-c]` raises it in the same context `K`
-as the wait, and the wait was caught by the handler of `n` only because `K` is free of `n`
-(`catch_step`): the raise is caught by that same handler (`catch_abort`). -/
+/-- **No handler of `n` sits between `await_n`'s raise and the wait's handler**: `[await-c]` raises
+in the same context `K` as the wait, and `K` (so `K` around `await_n`'s `case`) is free of `n`, as
+`catch_step` required of the wait. With `catch_abort`, the raise is caught by the handler that
+caught the wait; that step lemma is not restated here. -/
 theorem cancelled_not_caught {K : Kont} {n : UInt32} (hK : K.HasHnd n = false) :
     (K.comp (awaitK n)).HasHnd n = false := by
   rw [hasHnd_comp, hK]; rfl
@@ -727,9 +766,10 @@ theorem d_stickyScope : CDerives LifeCtx.empty [] stickyScope (.comp (.ret Flag)
   exact .app (.right (.left (.dead (.dead .nil)))) (.force (.there (.here (by cdead))))
     (.here (by cdead))
 
-/-- **A cancel ends** at the closed instance: every run of the immediate scheduler around the
-swallowing example from the cancelled flag continues to a value (`adequacyD_obs`). -/
-theorem stickyScope_ends {μ₁ : Heap} {e₁ : Expr}
+/-- Every run of the immediate scheduler around the swallowing example from the cancelled flag
+continues to a value (`adequacyD_obs`): the closed instance ends by adequacy. It does not read
+`Row.CancelEnds`; the general termination target is open (SPEC §29a). -/
+theorem stickyScope_runs {μ₁ : Heap} {e₁ : Expr}
     (hs : Steps Adequacy.emptyMem stickyScope μ₁ e₁) :
     ∃ v, BoCa.BoLo.Steps μ₁ e₁ Adequacy.emptyMem (.val v) := by
   obtain ⟨v, hv, -⟩ := adequacyD_obs (by decide) d_stickyScope hs
@@ -744,11 +784,14 @@ theorem stickyScope_eval :
 
 /-! ### `effThenDiv` reached: a finaliser that ticks, under `div_fuel`
 
-`PinLaw.fin` is asserted only at a configuration a closed program reaches. Here
-`return () then x. x unwind (tick; ())` is at the row of `Div` alone, its finaliser's row holding
-`Div`, typed by `CDerivesP.effThenDiv`; `div_fuel` handles the row, so the closed program is at
-`F 1`. Inside a task, `effHandleV`'s `hdv` refuses a `Div` row, so no task body reaches the rule
-(the nursery, #743, needs that relaxed). -/
+`PinLaw.fin` is asserted only at configurations programs reach.
+- `d_thenDivFuel`: a closed program at `F 1`, `return () then x. x unwind (tick; ())` under
+  `div_fuel`. Its body does not stop, so the finaliser never runs.
+- `d_thenTickAwait`: `await_1 then x. x unwind (tick; ())` at the row `{tick, await⟨{tick}⟩,
+  cancelled}`. A cancel at the wait unwinds through a finaliser that ticks: the configuration
+  `PinFin` asserts. A task body reaches it under `div_fuel`, whose callback is typed at `tick` ahead
+  of any `Div`-free row (`divFuelTy`), the task's `await` included; `effHandleV`'s `hdv` only keeps
+  `Div` out of the task handler's own row. -/
 
 /-- `tick; ()`. -/
 def tickUnit : Expr := .app (.val (.lam (.val .unit))) (performE (opArgE divEff 0 (.val .unit)))
@@ -785,6 +828,60 @@ theorem d_thenTick {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     (fun _ h => absurd h List.not_mem_nil) (.effSub (RowLe.nil _) (.ret (.unitI hΓ.toP))) ?_ ?_
   · exact .effSub (RowLe.nil _) (.ret (.var (.here hΓ.toP)))
   · exact d_tickUnit (Ctx.Dead.cons hΓ)
+
+/-- `await_1 then x. x unwind (tick; ())`. -/
+def thenTickAwait : Expr := thenE (.var 0) tickUnit (awaitE 1)
+
+/-- The row: `tick`, the wait whose cancel row records the ticking finaliser, its cancel target. -/
+abbrev rowTickAwait : Row := [tickSig, awaitF (CTy.effOf [tickSig] .unit), cancelled]
+
+/-- **A cancel unwinds through a finaliser that ticks**, typed by `effThenDiv`: the wait is not
+capturable (it is `lin`), so `hcap` holds, and `hfin` records `{tick}` in its cancel row. -/
+theorem d_thenTickAwait {Δ : LifeCtx} :
+    CDerivesP Δ [] thenTickAwait (.comp (CTy.effOf rowTickAwait .unit)) := by
+  refine .effThenDiv (Γ₁ := []) (Γ₂ := []) (A := .unit) (SM := [await0, cancelled])
+    (SD := [tickSig]) .nil ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
+  · intro o ho
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
+    rcases ho with rfl | rfl | rfl <;> decide
+  · simp [Row.Uniq, tickSig, awaitF, cancelled, divEff]
+  · intro _ s hs; simp at hs
+  · refine RowLe.of_mem fun o ho => ?_
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
+    have hF : ∀ X, FinLe (.ret .unit) X := fun X => by
+      rw [FinLe]; right; exact ⟨rfl, fun n i o h => by simp [Row.find, CTy.rowOf] at h⟩
+    rcases ho with rfl | rfl
+    · exact ⟨awaitF (CTy.effOf [tickSig] .unit), rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩,
+        fun _ => hF _⟩
+    · exact ⟨cancelled, rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun _ => hF _⟩
+  · refine RowLe.of_mem fun o ho => ?_
+    simp only [List.mem_singleton] at ho
+    subst ho
+    exact ⟨tickSig, rfl, OpSig.LeF.refl _⟩
+  · intro n i o o' hf hf' hr
+    obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hm
+    rcases hm with rfl | rfl
+    · obtain rfl : o' = awaitF (CTy.effOf [tickSig] .unit) :=
+        Option.some.inj (hf'.symm.trans rfl)
+      rw [ThenLe]
+      refine Or.inr ⟨rfl, fun n i o h => by simp [Row.find, CTy.rowOf, awaitF] at h,
+        fun n i o h => ?_⟩
+      obtain ⟨hm, rfl, rfl⟩ := Row.find_mem h
+      simp only [List.mem_singleton] at hm
+      subst hm
+      exact ⟨tickSig, rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩,
+        fun hc => by simp [capB, tickSig] at hc⟩
+    · rw [not_finRead_cancelled] at hr; cases hr
+  · intro hu; exact absurd hu not_unrD_tick
+  · intro o ho
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
+    rcases ho with rfl | rfl
+    · simp [capB, awaitF]
+    · simp [capB, cancelled, VTy.isZero]
+  · exact .effAwait .nil rfl (cancellable_await _) rfl rfl cancelTarget_cancelled
+  · exact .effSub (RowLe.nil _) (.ret (.var (.here .nil)))
+  · exact d_tickUnit (.cons .nil)
 
 /-- `df ← div_fuel; df (thenTickCb, k)`. -/
 def thenDivFuel (k : UInt32) : Expr :=
