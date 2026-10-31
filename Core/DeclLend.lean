@@ -15,7 +15,9 @@ decides what the kernel asks for:
 | crosses the loan | `withbor1U`, the unwinding form | a closed finaliser `d : Ref N ⊸ 1`, run on the source when the lend unwinds | `declAcross` |
 
 At the unwinding form any closed `d` of that type is accepted, and one that consumes the value is
-derived: `declFin` frees the cell and burns the token (`d_declFin`). The checker passes the
+derived: `declFin` frees the cell and burns the token (`d_declFin`, at payload `1`), and at any
+payload with a derived drop `declFinOf` drops the payload by its destructor and burns the token
+(`d_declFinOf`). The checker passes the
 source's derived destructor `dtorE (Ref N)` (`Frontend/Check/Consts.lean`, `finaliser`), which a
 declared type has none of (`decl_ref_no_dtor`).
 
@@ -39,7 +41,8 @@ open BoCa.Programs (alloc' free' app2)
 /-! ### The kernel facts -/
 
 /-- **A loan of a declared value holds no owned cell**: `[let]`'s `hW` admits it across an
-abort.  `[spec §19, §42]` -/
+abort. It is `VTy.OwnFree.imm`/`.mut`, which hold at every payload; stated here at a declared
+one.  `[spec §19, §42]` -/
 theorem decl_loan_ownFree (a : Lifetime.Life) (A : VTy) :
     (VTy.imm a (declTy A)).OwnFree ∧ (VTy.mut a (declTy A)).OwnFree :=
   ⟨.imm a _, .mut a _⟩
@@ -148,6 +151,23 @@ theorem d_declFin {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ declFin (.val (.lolli (.ref N₁) .unit)) :=
   .thunkV rfl (.lam (.ret (letW (appW (.var (by csolo)) (.free (by cdead)))
     (seqW (.var (by csolo)) (appW (.var (by csolo)) (.tokBurn (by cdead)))))))
+
+/-- The written finaliser at a payload `A` with a derived drop:
+`λr. let (a, t) = free r; dtor a; burn t`. -/
+def declFinOf (A : VTy) : Expr :=
+  .val (.lam (.letpair (.app free' (.var 0)) (.seq (.app (dtorE A) (.var 1)) (.app burnE (.var 0)))))
+
+/-- **A finaliser that consumes a declared value whose payload has a derived drop**: the payload
+by its destructor, the token by `burn`. -/
+theorem d_declFinOf {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hA : HasDtor A) (hΓ : Ctx.Dead Γ) :
+    CDerives Δ Γ (declFinOf A) (.val (.lolli (.ref (declTy A)) .unit)) :=
+  .thunkV rfl (.lam (.ret (letW (appW (.var (by csolo)) (.free (by cdead)))
+    (.seqV (.right (.left (deadSplit (by cdead))))
+      (.lolliE (.dead (.left (deadSplit (by cdead)))) (.var (by csolo)) (dtor_wf hA (by cdead)))
+      (appW (.var (by csolo)) (.tokBurn (by cdead)))))))
+
+theorem declFinOf_closed {A : VTy} (hA : HasDtor A) : closedAt 0 (declFinOf A) = true :=
+  closedAt_of_derives (d_declFinOf (Δ := default) hA (Γ := []) .nil)
 
 /-- `Λ. λv. forget v; raise ()`, at the unwinding row. -/
 def declRaiseCb : Expr := .val (.lam (.val (.lam (.seq (.app forget (.var 0)) raiseU))))

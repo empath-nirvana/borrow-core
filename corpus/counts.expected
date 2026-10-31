@@ -120,7 +120,7 @@ data-rose 14 0 0 56 56 0 # one cell per `box Forest` field and one per forest's 
 data-rose-vec 5 0 0 284 220 31 # the buffer of each node with children, two per tree, and `[1, [], 2]`'s; an empty buffer allocates nothing
 data-turnstile 4 0 0 53 21 36
 decl-guard 0 0 0 0 0 0
-decl-lend 0 0 0 12 6 0
+decl-lend 0 0 0 15 6 0
 decl-promise 6 0 0 24 24 0
 decl-txn 0 0 0 0 0 0
 decl-view 0 0 0 6 3 0

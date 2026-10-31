@@ -1,9 +1,10 @@
 -- A declared value (SPEC §42, *Declared types with no derived drop*) lent into a computation that
 -- may abort, the abort handled inside the loan: `&t` lends the transaction to `guarded`, whose body
--- is the `with to_result`. The computation holds only the loan `imm 'a Txn`, which holds no owned
--- cell (`decl_loan_ownFree`), so `[let]`'s `hW` admits it across the raise; the callee returns, the
+-- is the `with to_result`. Its body reads `t.id` again after the call of `check` that may raise, so the
+-- loan `imm 'a Txn` is live across the raise; it holds no owned cell (`decl_loan_ownFree`), so
+-- `[let]`'s `hW` admits it. The `with` catches the raise inside the callee, which returns; the
 -- lend is the pure `withbor`, and the owner gets `t` back. `settle` commits on an answer and rolls
--- back on an error, each a `match` that burns the token. The kernel term is
+-- back on an error, each a `match` that burns the token. Its kernel counterpart is
 -- `Core/DeclLend.lean`'s `declInside`. A lend the abort crosses is refused
 -- (`corpus/reject/decl-lend-abort.bc`).
 --
@@ -21,7 +22,7 @@ fn roll_back(t: Txn) -> i32 = match t { Txn { id, log } -> id }
 
 fn check(x: i32) -> i32 with Fail[i32] = if x > 3 { raise(x) } else { x }
 
-fn guarded<'a>(t: imm 'a Txn) -> i32 + i32 = with to_result[i32, i32] { check(t.id) }
+fn guarded<'a>(t: imm 'a Txn) -> i32 + i32 = with to_result[i32, i32] { let y = check(t.id); y + t.id }
 
 fn settle(id: i32) -> i32 =
   let mut t = begin(id);

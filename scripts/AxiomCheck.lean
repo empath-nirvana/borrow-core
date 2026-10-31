@@ -736,6 +736,8 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.DeclLend.decl_ref_no_dtor
 #print axioms BoCa.Fig16.LogRel.Core.DeclLend.d_declInside
 #print axioms BoCa.Fig16.LogRel.Core.DeclLend.declInside_runs
+#print axioms BoCa.Fig16.LogRel.Core.DeclLend.d_declFin
+#print axioms BoCa.Fig16.LogRel.Core.DeclLend.d_declFinOf
 #print axioms BoCa.Fig16.LogRel.Core.DeclLend.d_declAcross
 #print axioms BoCa.Fig16.LogRel.Core.DeclLend.declAcross_answers
 #print axioms BoCa.Fig16.LogRel.Core.Check.neitherAbsorbed_of

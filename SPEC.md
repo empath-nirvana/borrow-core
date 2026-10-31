@@ -8009,11 +8009,14 @@ is refused by a kernel fact, not by a check of the elaborator:
     the owner gets the value back (`d_declInside`, `declInside_runs`). At the surface, `&t` passed
     to a function whose body is the `with` (`corpus/decl-lend.bc`: commit on an answer, roll back
     on an error). A `with` whose body lends a place declared outside it, or a call whose `&`
-    argument threads a capability, is refused at the surface for any type, not for this one.
+    argument threads a capability, is refused at the surface for any type, not for this one
+    (`corpus/reject/effect-try-lend.bc`, `corpus/reject/effect-lend-capability-call.bc`).
   - *the abort crossing the loan*: the lend is the unwinding form (§19 *Borrows*), whose
     finaliser `d : Ref N ⊸ 1` runs on the source when the abort ends the lend. The kernel admits
-    any closed `d` of that type, one that consumes the value among them (`declFin`, frees the
-    cell and burns the token: `d_declAcross`, `declAcross_answers`). The checker passes the
+    any closed `d` of that type. One that consumes the value is derived at every payload with a
+    derived drop (`declFinOf`: frees the cell, drops the payload by its destructor, burns the
+    token; `d_declFinOf`), and the whole program runs at payload `1` (`d_declAcross`,
+    `declAcross_answers`). The checker passes the
     source's derived destructor, which `Ref N` has none of (`decl_ref_no_dtor`), and the surface
     has no form that writes `d`; so the lend is refused
     (`corpus/reject/decl-lend-abort.bc`). A written finaliser for a lend is *Open*.
@@ -8080,7 +8083,10 @@ message reads the declarations (`Data.Table`); the refusal is the kernel's.
   (`Frontend/Check/Consts.lean`, `finaliser`), so at a declared type the lend is refused. A
   surface form would name the consumer for the unwind, say `borrow imm c { v -> S } unwind f`,
   and the checker would type `f`'s closed body at `Ref N ⊸ 1` (pure: a `lolli`) in place of
-  `dtorE`. Not in this entry: until then, handle the abort inside the loan or use `finally`.
+  `dtorE`. The same unit needs a lend of a record or a place at an aborting row: `borrow` takes
+  only a cell or an array, and `&` in the arguments of a call that threads a capability is
+  refused for any type, so `let mut t = begin(…); … raise …` stays refused with the finaliser
+  alone. Not in this entry: until then, handle the abort inside the loan or use `finally`.
 
 ### Programs
 
@@ -8104,7 +8110,8 @@ message reads the declarations (`Data.Table`); the refusal is the kernel's.
 | `corpus/decl-guard.bc` | a guard stored in a record beside data, released by a `finally` on a `with` | the guard released on the normal exit |
 | `corpus/reject/decl-txn-raise.bc`, `decl-promise-raise.bc`, `decl-guard-raise.bc` | each of the three with the value live across a `raise` and no finaliser | refused: `[let]`'s `hW` (`decl_not_ownFree`) |
 | `corpus/decl-view.bc` | `t.id` read through `imm 'a Txn`, the token's view dropped by its derived drop, the transaction committed after | i32[712] |
-| `corpus/decl-lend.bc` | a transaction lent by `&t` to a function whose body is a `with to_result` around a `raise`: the abort handled inside the loan, then committed on an answer or rolled back on an error | `(i32[203], i32[7])` |
+| `corpus/decl-lend.bc` | a transaction lent by `&t` to a function whose body is a `with to_result` around a `raise`, the loan read again after it: the abort handled inside the loan, then committed on an answer or rolled back on an error | `(i32[203], i32[7])` |
+| `corpus/reject/effect-lend-capability-call.bc` | a record with a derived drop lent by `&` in the arguments of a call that threads `Fail`'s capability | refused at the surface, for any type |
 | `corpus/reject/decl-lend-abort.bc` | a transaction's cell lent to a borrow block whose body may raise, the abort crossing the lend | refused: the unwinding lend's finaliser is the derived destructor, which `Ref N` has none of (`decl_ref_no_dtor`) |
 | `corpus/fail/decl-burn-written.bc` | a program that takes a record apart as a tuple and writes `tok_burn` | refused by the parser: `tok`, `tok_mint` and `tok_burn` are read only in the elaboration's own source, so a printed elaboration reads back the same |
 
@@ -10338,7 +10345,7 @@ relation or the machine.
   (`decl_loan_ownFree`), so an abort handled inside the loan is admitted at the pure `withbor`
   (`d_declInside`; `corpus/decl-lend.bc`). An abort that crosses the loan needs the unwinding
   lend's finaliser `Ref N ⊸ 1`: the kernel admits a closed one that consumes the value
-  (`d_declAcross`), the checker passes only the derived destructor, which a declared type has none
+  (`d_declFinOf`, `d_declAcross`), the checker passes only the derived destructor, which a declared type has none
   of (`decl_ref_no_dtor`; `corpus/reject/decl-lend-abort.bc`), and a written finaliser for a lend
   is *Open*. No rule, relation or machine changes; `fundamentalC`, `adequacyC`, `adequacyD` keep
   their statements.
