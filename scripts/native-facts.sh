@@ -10,7 +10,13 @@
 #     `clang -O2` IR of the build with its facts;
 #   * the frame slots: the cells the new backend places in a frame slot per run are at least the
 #     old backend's, in every program where the old backend has a scoped cell (`bcc-counts
-#     --sites`' `scoped-cells`): `bcc-counts --frames`, the frame slots a run starts at the flat IR.
+#     --sites`' `scoped-cells`): `bcc-counts --frames`, the frame slots a run starts at the flat IR;
+#   * the lend bits (`Fn.lendEncl`): every function with a borrow fact is a source function, the
+#     code of a source `λ`, thunk or `&` (`lam`, `thunk`, `with`). The functions are read off the
+#     word IR's `Fn.facts` (`bcc trusted`'s `LendEnclosesFn` lines), not the emitted attributes,
+#     which the tail-call classes filter. The regression pair (`async-r1-cancel-finaliser-writes`,
+#     `async-r1-step-lend`) each has a function the conversion makes that takes a `mut` borrow
+#     beside its owner (`cancel 1.0`, `step`), and it has no fact.
 #
 #     scripts/native-facts.sh [file.bc…]
 set -euo pipefail
@@ -79,7 +85,28 @@ program() {
       return 1
     fi
   fi
-  echo "$f: ok${new:+ (frame slots $new, old $old)}${fns:+ (inlined $(echo $fns | wc -w | tr -d ' '))}"
+  # The lend bits: the functions with a borrow fact, from the word IR (`bcc trusted`).
+  "$bcc" trusted "$f" > "$w/trusted" 2>/dev/null || { echo "$f: bcc trusted failed"; return 1; }
+  awk '/^backend: LendEnclosesFn/ { on = 1; next } on && /^  / { print; next } { on = 0 }' \
+    "$w/trusted" > "$w/facted"
+  left=$(sed -n 's/^  f[0-9]* (\(.*\))$/\1/p' "$w/facted" | grep -vxE 'lam|thunk|with' || true)
+  if [ -n "$left" ]; then
+    echo "$f: a borrow fact at a function the conversion makes: $(echo $left)"; return 1
+  fi
+  case "$f" in
+    corpus/async-r1-cancel-finaliser-writes.bc) pair="cancel 1.0" ;;
+    corpus/async-r1-step-lend.bc) pair="step" ;;
+    *) pair="" ;;
+  esac
+  if [ -n "$pair" ]; then
+    "$bcc" lir "$f" > "$w/lir" 2>/dev/null || { echo "$f: bcc lir failed"; return 1; }
+    if ! grep -E "^f[0-9]+ $pair\(" "$w/lir" | grep -q "mut i32" ||
+       ! grep -E "^f[0-9]+ $pair\(" "$w/lir" | grep -q "ref i32"; then
+      echo "$f: the regression's \`$pair\` no longer takes a mut borrow beside its owner"; return 1
+    fi
+    if grep -q "($pair)\$" "$w/facted"; then echo "$f: \`$pair\` has a borrow fact"; return 1; fi
+  fi
+  echo "$f: ok${new:+ (frame slots $new, old $old)}${fns:+ (inlined $(echo $fns | wc -w | tr -d ' '))} (facts at $(wc -l < "$w/facted" | tr -d ' ') functions)"
 }
 export -f program argsOf statusOf
 par program "${files[@]}"
