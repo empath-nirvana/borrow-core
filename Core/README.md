@@ -280,8 +280,9 @@ effect).
   `checkProgram_letPoly`).
 - **A borrow held across a suspension, under `PinLaw`** (`SPEC.md` §29). `CDerivesP`
   (`PinDerives.lean`) is `CDerives` with every premise in it, plus R1 (`lendR`), R2 (`lendLoopR`)
-  and `nilDead`; `PinLaw` (`PinLaw.lean`) is two schemas, `LendFrame` over the lend forms (R1 is
-  `ref`) and `LoopFrame` (R2), a hypothesis; `fundamentalC_pin`, `adequacyC_pin`, `adequacyD_pin`,
+  `effThenDiv` and `nilDead`; `PinLaw` (`PinLaw.lean`) is three schemas, `LendFrame` over the lend
+  forms (R1 is `ref`), `LoopFrame` (R2) and `PinFin` (a finaliser whose row holds `Div`, §29a), a
+  hypothesis; `fundamentalC_pin`, `adequacyC_pin`, `adequacyD_pin`,
   `adequacyD_pin_safe` and `CDerivesP.ofC` are in `PinFundamental.lean`, with `PinLaw.stop` and
   `PinLaw.loop`, which derive R1's and R2's compatibility lemmas, and `pinLaw_iff`. Both
   generated files come from `Fundamental.lean` by `scripts/gen-pin.py`: edit its templates

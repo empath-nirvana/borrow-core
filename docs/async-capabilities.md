@@ -35,7 +35,8 @@ taken as an escape hatch in the proof; then a test suite that tries to break it.
 - **The assertion is `PinLaw`** (§4). It is a `Prop` over **typed programs**: every quantifier
   over code ranges over derivations of the extended judgment `PDerives`. In one sentence:
   *code that Core's rules (plus R1 and R2) type, suspended while it holds views of a lend, is
-  again in the relation when the place is lent afresh.* It is stated as two schemas, the
+  again in the relation when the place is lent afresh.* It was stated as two schemas (#750 adds a
+third, `PinFin`, and widens R1's row for the cancel path: SPEC §29a, §8 below), the
   compatibility lemmas of the relaxed lend at each lend form (`LendFrame`; R1 is `ref`) and of
   the per-observation lend (`LoopFrame`; R2). `PinStop` and `PinLoop` are derived from them. It is
   tested by programs (§6), not proved.

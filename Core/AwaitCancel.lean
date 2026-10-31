@@ -789,9 +789,10 @@ theorem stickyScope_eval :
   `div_fuel`. Its body does not stop, so the finaliser never runs.
 - `d_thenTickAwait`: `await_1 then x. x unwind (tick; ())` at the row `{tick, await⟨{tick}⟩,
   cancelled}`. A cancel at the wait unwinds through a finaliser that ticks: the configuration
-  `PinFin` asserts. A task body reaches it under `div_fuel`, whose callback is typed at `tick` ahead
-  of any `Div`-free row (`divFuelTy`), the task's `await` included; `effHandleV`'s `hdv` only keeps
-  `Div` out of the task handler's own row. -/
+  `PinFin` asserts. By typing, a task body would reach it under `div_fuel`, whose callback is
+  typed at `tick` ahead of any `Div`-free row (`divFuelTy`), the task's `await` included;
+  `effHandleV`'s `hdv` only keeps `Div` out of the task handler's own row. No derivation here
+  composes `div_fuel` and a task handler around it. -/
 
 /-- `tick; ()`. -/
 def tickUnit : Expr := .app (.val (.lam (.val .unit))) (performE (opArgE divEff 0 (.val .unit)))

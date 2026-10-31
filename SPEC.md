@@ -5434,8 +5434,9 @@ waits ignore it. The kernel gains a marker and one proved rule, and `PinLaw` one
 - **`[then]` with a finaliser that may loop** (`CDerivesP.effThenDiv`): `effThen` without
   `Row.divB Σ_D = false`, at a body with no capturable operation. At a `Div`-free `Σ_D` it is
   `then_compatC` (`pinFin_divFree`); at a `Div` row it is `PinLaw.fin : PinFin`, asserted. A cancel
-  unwinding through a ticking finaliser is typed by it (`d_thenTickAwait`), and a task body reaches
-  that under `div_fuel`, whose callback is at `tick` ahead of the task's row; `effHandleV`'s `hdv`
+  unwinding through a ticking finaliser is typed by it (`d_thenTickAwait`), and by typing a task body
+  would reach that under `div_fuel`, whose callback is at `tick` ahead of the task's row (no
+  derivation here composes the two); `effHandleV`'s `hdv`
   keeps `Div` out of the task handler's own row only. A closed program uses it (`d_thenDivFuel`).
   `CDerives.effThen` keeps decision 69.
 - **A value with no derived drop is closed on every exit, the cancel included.** No new premise:

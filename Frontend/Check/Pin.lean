@@ -53,7 +53,7 @@ theorem Row.resumeOB_sound {S : Row} {x : LifeVar} (h : Row.resumeOB S x = true)
   exact ⟨h₁, h₂, h₃, h₄, h₅, not_vfree_of_vfreeB h₆, outlivesAllB_sound _ h₇, noThunkB_sound h₈⟩
 
 /-- `Row.ResumeOC`, decided: each operation is one `Row.resumeOB` admits, a cancellable wait of a
-nonzero name taking closed data, or the cancel target at operation `1` of a name whose operation
+nonzero name at operation `0` taking closed data, or the cancel target at operation `1` of a name whose operation
 `0` is a cancellable wait; and the row does not hold `Div`.  `[spec §29, §29a]` -/
 def Row.resumeOCB (S : Row) (x : LifeVar) : Bool :=
   (S.all fun o =>
