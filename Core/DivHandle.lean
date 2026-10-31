@@ -375,7 +375,7 @@ include hnS hlen hVc in
 theorem tail_clause_of {i : UInt32} {en : OpEnt}
     (hT : Row.tab (Row.ofEff n E 0 fs ++ S) δ n i = some en) :
     ∃ j, ∃ hj : j < E.length, en = OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1,
-      E[j].2.2, fs j⟩ ∧
+      E[j].2.2, fs j, false⟩ ∧
       clauseAt (tailTuple E 0 (.val vc)) i.toNat =
         some ⟨tailClause j en.abort (.val vc), isVal_tailClause _ _ _⟩ ∧
       ∃ g, PureSteps (pickE j (.val vc)) (.val g) ∧
@@ -432,7 +432,7 @@ theorem tail_closing (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {ρ :
         · exact closing_of_cwp hy'
       obtain ⟨hW, hU, hK'⟩ := lin_conds (fun _ _ _ h => Row.tab_lin hLin δ h) (resK κ)
         (fun ls => KapRelT (opTable (Row.tab S δ).closeAt) (fun ls v => vC true R ls δ v)
-          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j⟩) none ls κ)
+          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j, false⟩) none ls κ)
       exact closing_frame hSNle (resK κ) (resK_plain κ).1 (resK_plain κ).2 _ KapRelT.same
         KapRelT.ext hW hU hK' _ _ (fun ls w τ hτ => kapRelT_resume (opTable_mono _) hτ) hyc hK
         hck
@@ -585,7 +585,7 @@ theorem cwp_handle_tail (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {�
         refine ewp_pureSteps (divTab_mono _ _ _) (tailClause_steps j vc g v κ hg) _ _ σ ?_
         have hy := (hVg.2 ls' (ext_empty' ls₀ ls')) v σa σa hA'' (compS_empty_left σa)
         have hy' := (cC_effOf_wp SN B' ls' δ _ σa).mp hy
-        have hyc : cwp (Row.tab SN δ) (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j⟩).PB ls'
+        have hyc : cwp (Row.tab SN δ) (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j, false⟩).PB ls'
             (.app (.val g) (.val v)) σa := by
           cases hb : Row.divB SN <;> rw [hb] at hy'
           · exact cwp_of_ewp hTN.keyNA hy'
@@ -651,11 +651,11 @@ theorem ewp_handle_tail (hSd : Row.divB S = false) {ls : List SRec} {e : Expr} {
       refine ewp_pureSteps (opTable_mono _) (tailClause_steps j vc g v κ hg) _ _ σ ?_
       have hy := (hVg.2 ls' (ext_empty' ls₀ ls')) v σa σa hA'' (compS_empty_left σa)
       have hy' : ewpTS ls' (.app (.val g) (.val v)) (opTable (Row.tab SN δ))
-          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j⟩).PB σa :=
+          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j, false⟩).PB σa :=
         (cC_effOf SN B' ls' δ _ σa hSNd).mp hy
       obtain ⟨hW, hU, hK'⟩ := lin_conds (fun _ _ _ h => Row.tab_lin hLin δ h) (resK κ)
         (fun ls => KapRel (Row.tab S δ) (fun ls v => vC true R ls δ v)
-          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j⟩) none ls κ)
+          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j, false⟩) none ls κ)
       exact (ewp_orBot (opTable_mono _)).mp (ewp_frame_plain_or _ _ hSNle Table.bot Table.bot
         Table.bot_const.mono (resK κ) (resK_plain κ).1 (resK_plain κ).2 _ KapRelT.same KapRelT.ext
         hW hU hK' (fun _ _ _ _ _ _ _ h => h.elim) _ _

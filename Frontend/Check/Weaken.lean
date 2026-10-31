@@ -686,15 +686,16 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
       exact ⟨.effSub hle d, e⟩
-  | effPerform hf₀ hna _ ih =>
+  | effAwait => intro _ _ _ _ _ hf; simp [TExpr.absF] at hf
+  | effPerform hf₀ hna hac _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.effPerform hf₀ hna d, by
+      exact ⟨.effPerform hf₀ hna hac d, by
         simp only [TExpr.shift, TExpr.erase, BoCa.BoLo.performE, opArgE, Expr.shift, e]; rfl⟩
-  | effRaise hf₀ ha hd _ ih =>
+  | effRaise hf₀ ha hrc hd _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.effRaise hf₀ ha hd d, by
+      exact ⟨.effRaise hf₀ ha hrc hd d, by
         simp only [TExpr.shift, TExpr.erase, BoCa.BoLo.raiseE, opArgE, Expr.shift, e]; rfl⟩
   | effLet hs hm hcv hW hU _ _ ihM ihN =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
@@ -722,6 +723,22 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
       exact ⟨.effThen hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [eM]; rfl), hcv.2.1.ins₂ (by rw [eN]), hcv.2.2.ins₂ (by rw [eD])⟩ hNZ hUq (fun hu => banged_ins (hc.imp fun A hA => by
           rw [if_pos (Row.unrDB_iff.mpr hu), AbsF.eval_atom] at hA; exact hA) (hU hu))
           hMS hDS hfin hP hSD dM dN dD, by
+        simp only [TExpr.shift, TExpr.erase, thenE, Expr.shift, Expr.val, Val.lam, Val.prim, eM,
+          eN, eD]⟩
+  | effThenDiv hs hm hcv hNZ hUq hU hMS hDS hfin hP hcap _ _ _ ihM ihN ihD =>
+      intro Γa Γb Γp f hΓ hf hp; subst hΓ
+      obtain ⟨f₁, f₂, hf₁, hf₂, hp'⟩ := live_orO hf hp
+      obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, Γp₁, Γp₂, rfl, rfl, ha₁, ha₂, hl₁, hl₂, q₁, q₂, hs', pm⟩ :=
+        splitP_route hp' Γa hs
+      obtain ⟨f', hf', hc, q₂'⟩ := live_withO hf₂ q₂
+      obtain ⟨k₁, k₂, hk₁, hk₂, w₁, w₂⟩ := live_andO hf' q₂'
+      obtain ⟨dM, eM⟩ := ihM Γa₁ Γb₁ Γp₁ f₁ rfl hf₁ q₁
+      obtain ⟨dN, eN⟩ := ihN (_ :: Γa₂) Γb₂ Γp₂ k₁ rfl hk₁ w₁
+      obtain ⟨dD, eD⟩ := ihD (_ :: Γa₂) Γb₂ Γp₂ k₂ rfl hk₂ w₂
+      rw [ha₁, hl₁] at dM eM; rw [List.length_cons, ha₂, hl₂] at dN eN dD eD
+      exact ⟨.effThenDiv hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [eM]; rfl), hcv.2.1.ins₂ (by rw [eN]), hcv.2.2.ins₂ (by rw [eD])⟩ hNZ hUq (fun hu => banged_ins (hc.imp fun A hA => by
+          rw [if_pos (Row.unrDB_iff.mpr hu), AbsF.eval_atom] at hA; exact hA) (hU hu))
+          hMS hDS hfin hP hcap dM dN dD, by
         simp only [TExpr.shift, TExpr.erase, thenE, Expr.shift, Expr.val, Val.lam, Val.prim, eM,
           eN, eD]⟩
   | effHandleV hs hm hcv hdd hH _ hn0 hnS hlen hdv _ hins ihc ihe =>
@@ -1260,15 +1277,16 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
       exact ⟨.effSub hle d, e⟩
-  | effPerform hAt hf₀ hna _ ih =>
+  | effAwait => intro _ _ _ _ _ hf; simp [TExpr.absF] at hf
+  | effPerform hAt hf₀ hna hac _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.effPerform hAt hf₀ hna d, by
+      exact ⟨.effPerform hAt hf₀ hna hac d, by
         simp only [TExpr.shift, TExpr.erase, BoCa.BoLo.performE, opArgE, Expr.shift, e]; rfl⟩
-  | effRaise hAt hf₀ ha hd _ ih =>
+  | effRaise hAt hf₀ ha hrc hd _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.effRaise hAt hf₀ ha hd d, by
+      exact ⟨.effRaise hAt hf₀ ha hrc hd d, by
         simp only [TExpr.shift, TExpr.erase, BoCa.BoLo.raiseE, opArgE, Expr.shift, e]; rfl⟩
   | effLet hs hm hcv hW hU _ _ ihM ihN =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
@@ -1296,6 +1314,22 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
       exact ⟨.effThen hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [eM]; rfl), hcv.2.1.ins₂ (by rw [eN]), hcv.2.2.ins₂ (by rw [eD])⟩ hNZ hUq (fun hu => banged_ins (hc.imp fun A hA => by
           rw [if_pos (Row.unrDB_iff.mpr hu), AbsF.eval_atom] at hA; exact hA) (hU hu))
           hMS hDS hfin hP hSD dM dN dD, by
+        simp only [TExpr.shift, TExpr.erase, thenE, Expr.shift, Expr.val, Val.lam, Val.prim, eM,
+          eN, eD]⟩
+  | effThenDiv hs hm hcv hNZ hUq hU hMS hDS hfin hP hcap _ _ _ ihM ihN ihD =>
+      intro Γa Γb Γp f hΓ hf hp; subst hΓ
+      obtain ⟨f₁, f₂, hf₁, hf₂, hp'⟩ := live_orO hf hp
+      obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, Γp₁, Γp₂, rfl, rfl, ha₁, ha₂, hl₁, hl₂, q₁, q₂, hs', pm⟩ :=
+        splitP_route hp' Γa hs
+      obtain ⟨f', hf', hc, q₂'⟩ := live_withO hf₂ q₂
+      obtain ⟨k₁, k₂, hk₁, hk₂, w₁, w₂⟩ := live_andO hf' q₂'
+      obtain ⟨dM, eM⟩ := ihM Γa₁ Γb₁ Γp₁ f₁ rfl hf₁ q₁
+      obtain ⟨dN, eN⟩ := ihN (_ :: Γa₂) Γb₂ Γp₂ k₁ rfl hk₁ w₁
+      obtain ⟨dD, eD⟩ := ihD (_ :: Γa₂) Γb₂ Γp₂ k₂ rfl hk₂ w₂
+      rw [ha₁, hl₁] at dM eM; rw [List.length_cons, ha₂, hl₂] at dN eN dD eD
+      exact ⟨.effThenDiv hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [eM]; rfl), hcv.2.1.ins₂ (by rw [eN]), hcv.2.2.ins₂ (by rw [eD])⟩ hNZ hUq (fun hu => banged_ins (hc.imp fun A hA => by
+          rw [if_pos (Row.unrDB_iff.mpr hu), AbsF.eval_atom] at hA; exact hA) (hU hu))
+          hMS hDS hfin hP hcap dM dN dD, by
         simp only [TExpr.shift, TExpr.erase, thenE, Expr.shift, Expr.val, Val.lam, Val.prim, eM,
           eN, eD]⟩
   | effHandleV hAt hs hm hcv hdd hH _ hn0 hnS hlen hdv _ hins ihc ihe =>

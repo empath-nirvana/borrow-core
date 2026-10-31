@@ -19,3 +19,7 @@ extern take_output : !(ref output => i32 * (mu X. 1 + u8 * X))
 typing: unconditional: a CDerives derivation (fundamentalC, adequacyD)
 unproved boundaries: 6 (write_all, stdout, mk_input, mk_output, take_input, take_output)
 always trusted: the allocator and runtime (Backend/Wasm/Runtime.lean), the WAT printer, wasmtime
+backend: LendEnclosesFn (Backend2/Driver.lean), the native borrow facts' lends enclose their functions: 3 functions
+  f13 (lam)
+  f14 (lam)
+  f15 (lam)

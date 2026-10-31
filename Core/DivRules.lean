@@ -73,7 +73,7 @@ theorem vC_next_iff {ls : List SRec} {δ : LSub} {w : Val} {ρ : WRes} :
 /-- `tick`'s signature gives `tick`'s entry. -/
 theorem OpSig.isTick_ent {o : OpSig} (δ : LSub) (h : tickB o.q o.A o.B = true) :
     (o.ent δ).IsTick := by
-  obtain ⟨n, i, q, A, B, fin⟩ := o
+  obtain ⟨n, i, q, A, B, fin, rc⟩ := o
   simp only [tickB, Bool.and_eq_true, beq_iff_eq] at h
   obtain ⟨⟨rfl, hA⟩, hB⟩ := h
   cases A <;> simp [VTy.isUnitB] at hA
@@ -140,7 +140,7 @@ macro "div_free" : tactic => `(tactic| first
 theorem Row.divB_of_abort {S : Row} (h : ∀ o ∈ S, o.abort = true) : Row.divB S = false := by
   refine Row.divB_false_of_find fun o hf => ?_
   have ha := h o (Row.find_mem hf).1
-  obtain ⟨n, i, q, A, B, fin⟩ := o
+  obtain ⟨n, i, q, A, B, fin, rc⟩ := o
   simp only [OpSig.abort, Bool.and_eq_true, bne_iff_ne, ne_eq] at ha
   simp [tickB, ha.2]
 
@@ -149,7 +149,7 @@ theorem Row.divB_of_find_abort {S : Row} (h : ∀ n i o, Row.find S n i = some o
     Row.divB S = false := by
   refine Row.divB_false_of_find fun o hf => ?_
   have ha := h _ _ o hf
-  obtain ⟨n, i, q, A, B, fin⟩ := o
+  obtain ⟨n, i, q, A, B, fin, rc⟩ := o
   simp only [OpSig.abort, Bool.and_eq_true, bne_iff_ne, ne_eq] at ha
   simp [tickB, ha.2]
 
@@ -403,6 +403,35 @@ theorem cwp_bind {T : OpTab} (hT : T.DivOK) (K : Kont) (hH : ∀ n, K.HasHnd n =
       cwpF T Q (fun ls e ρ => W ls e ρ ∨ cwp T Q ls e ρ) ls x ρ := by
     rintro ls x ρ' ⟨e, ρ, ρ₂, rfl, he, hF, hc⟩
     exact cwpF_frame hT hT (OpTab.Le.refl T) K hH hC Fr hFs hFe hW hU hK Q₁ Q _
+      (fun ls e ρ ρ₂ ρ' he hF hc => Or.inl ⟨e, ρ, ρ₂, rfl, he, hF, hc⟩)
+      (fun ls v σ hσ => cwpF_mono (fun _ _ _ h => Or.inr h) (cwp_out (hk ls v σ hσ)))
+      (fun ls v σ hσ => closing_of_cwp (hk ls v σ hσ)) he hF hc
+  intro ls e ρ he ρ₂ ρ' hF hc
+  exact cwp_coind_up hW' ⟨e, ρ, ρ₂, rfl, he, hF, hc⟩
+
+/-- **Bind at `cwp`, the frame's table above the computation's.** `cwp_bind` with the computation
+at `T` and its frame at `T' ≥ T`: `cwpF_frame` at the two tables, by the same coinduction.
+`[spec §14, §19]` -/
+theorem cwp_bind_le {T T' : OpTab} (hT : T.DivOK) (hT' : T'.DivOK) (hTT : T.Le T') (K : Kont)
+    (hH : ∀ n, K.HasHnd n = false)
+    (hC : ∀ n, K.Catches n = false) (Fr : List SRec → WProp)
+    (hFs : ∀ ls ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (Fr ls) (Fr ls'))
+    (hFe : ∀ ls ls' ρ, Ext ls ls' ρ → Fr ls ρ → Fr ls' ρ)
+    (hW : ∀ n i en, T n i = some en → en.abort = true → ∀ ls ρ, Fr ls ρ → NoOwn ρ)
+    (hU : ∀ n i en, T n i = some en → en.q = .unr → ∀ ls ρ, Fr ls ρ → ρ = PMap.empty)
+    (hK : ∀ n i en, T n i = some en → en.abort = false → en.q ≠ .lin →
+      ∀ ls K₁ ρ σ ρ', cancelOK en ls K₁ ρ → Fr ls σ → ResU.CompS ρ σ ρ' →
+        cancelOK en ls (K.comp K₁) ρ')
+    (Q₁ Q : List SRec → Val → WProp)
+    (hk : ∀ ls v, Entails (Q₁ ls v ⋆ Fr ls) (cwp T' Q ls (K.plug (.val v)))) :
+    ∀ {ls : List SRec} {e : Expr} {ρ : WRes}, cwp T Q₁ ls e ρ →
+      ∀ {ρ₂ ρ' : WRes}, Fr ls ρ₂ → ResU.CompS ρ ρ₂ ρ' → cwp T' Q ls (K.plug e) ρ' := by
+  let W : List SRec → Expr → WProp := fun ls x ρ' => ∃ e ρ ρ₂, x = K.plug e ∧
+    cwp T Q₁ ls e ρ ∧ Fr ls ρ₂ ∧ ResU.CompS ρ ρ₂ ρ'
+  have hW' : ∀ ls x ρ, W ls x ρ →
+      cwpF T' Q (fun ls e ρ => W ls e ρ ∨ cwp T' Q ls e ρ) ls x ρ := by
+    rintro ls x ρ' ⟨e, ρ, ρ₂, rfl, he, hF, hc⟩
+    exact cwpF_frame hT hT' hTT K hH hC Fr hFs hFe hW hU hK Q₁ Q _
       (fun ls e ρ ρ₂ ρ' he hF hc => Or.inl ⟨e, ρ, ρ₂, rfl, he, hF, hc⟩)
       (fun ls v σ hσ => cwpF_mono (fun _ _ _ h => Or.inr h) (cwp_out (hk ls v σ hσ)))
       (fun ls v σ hσ => closing_of_cwp (hk ls v σ hσ)) he hF hc

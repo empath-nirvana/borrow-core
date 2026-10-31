@@ -33,6 +33,7 @@ async-r1-effects erased handles 0 performs 0 raises 2 machines 4 suspends 4 left
 async-r1-generator erased handles 0 performs 0 raises 0 machines 1 suspends 2 left 0 0
 async-r1-local-borrows erased handles 0 performs 0 raises 0 machines 2 suspends 2 left 0 0
 async-r1-nested erased handles 0 performs 0 raises 0 machines 1 suspends 2 left 0 0
+async-r1-step-lend erased handles 0 performs 0 raises 0 machines 1 suspends 1 left 0 0
 async-race erased handles 1 performs 0 raises 2 machines 4 suspends 4 left 0 0
 async-scheduler erased handles 0 performs 0 raises 0 machines 2 suspends 2 left 0 0
 async-scoped erased handles 1 performs 0 raises 1 machines 2 suspends 2 left 0 0

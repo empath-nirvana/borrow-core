@@ -1,5 +1,8 @@
 import Backend2.Lint
 import Backend2.Interp
+import Backend2.Lower
+import Backend2.LayoutCheck
+import Backend2.Flow
 
 /-!
 # Backend2 — the lint's negative tests  `[docs/compiler.md §5.2]`
@@ -212,5 +215,82 @@ def runFails (p : Prog) (word : String) : Bool :=
 -- (`handOverB`). So the hand-over is a fact about the code `Convert` generates
 -- (`StackKHandOver`), not about every program `Lint` accepts.
 #guard runFails (handProg handsOverTo) "at the rule stack k, where the hand-over does not hold"
+
+/-- **A function whose lend bit is set, entered beside the owner** (SPEC §50, `LendEnclosesFn`):
+`main` allocates a cell `x2`, lends it (`x3`, the owner `x4`, the borrow `x5`) and calls
+`f0 (x4, x5)`, which ends the lend and frees the cell, as a machine's cancel step does. With `bits`,
+`f0`'s parameter has its lend bit set. -/
+def enclProg (bits : List Bool) : Prog where
+  fns := #[{ name := "cancel", params := [0], ret := .unit, lendEncl := bits,
+             body := .letpair 6 7 0 (.drop .forget 6 (.letv 9 (.prim .free [7]) (.drop .dead 9 .unit))) }]
+  codes := #[]
+  main := .letv 1 (.lit (.i32 3)) (.letv 2 (.prim (.alloc [i32T]) [1]) (.letv 3 (.prim (.lend true) [2])
+    (.letpair 4 5 3 (.letv 8 (.pair 5 4) (.call 0 [8])))))
+  mainTy := .unit
+  ty := [(0, .pair (.mut i32T) (.ref i32T)), (1, i32T), (2, .ref i32T), (3, .pair (.ref i32T) (.mut i32T)),
+    (4, .ref i32T), (5, .mut i32T), (6, .mut i32T), (7, .ref i32T),
+    (8, .pair (.mut i32T) (.ref i32T)), (9, i32T)].foldl (fun m (x, t) => m.insert x t) {}
+
+-- `Lint` accepts the program at either bit; it reads no lifetimes. Its run is refused only where the
+-- bit is set: the borrow is beside its owner (`enclosesB`). So the bit's setting is a fact about the
+-- code `Convert` generates (`LendEnclosesFn`): set only at a source function.
+#guard accepts (enclProg [])
+#guard accepts (enclProg [true])
+#guard refuses (enclProg [true, true]) "2 lend bits for 1 parameters"
+#guard runFails (enclProg [true]) "beside its cell's owner or another borrow of it (LendEnclosesFn)"
+#guard !runFails (enclProg []) "LendEnclosesFn"
+#guard !runFails (enclProg [false]) "LendEnclosesFn"
+
+/-- **A function whose lend bit is set, whose callee frees the cell through an owner it captured**:
+`main` lends the cell `x4` (the owner `x6`, the borrow `x7`), closes `c0` over the owner, and calls
+`f0 (x7, x8)`; `f0` forgets the borrow and forces the closure, whose `f1` frees the cell. No
+parameter of `f0` is the owner (`ownersIn` does not look into a closure's environment), so the
+entry check passes; the cell is gone when `f0` returns. -/
+def enclClosProg (bits : List Bool) : Prog where
+  fns := #[{ name := "user", params := [0, 1], ret := .unit, lendEncl := bits,
+             body := .drop .forget 0 (.app0 1) },
+           { name := "free", params := [2], ret := .unit,
+             body := .letv 9 (.prim .free [2]) (.drop .dead 9 .unit) }]
+  codes := #[{ kind := .unit, fns := [1], ty := .ret .unit }]
+  main := .letv 3 (.lit (.i32 3)) (.letv 4 (.prim (.alloc [i32T]) [3]) (.letv 5 (.prim (.lend true) [4])
+    (.letpair 6 7 5 (.letv 8 (.clos 0 [6]) (.call 0 [7, 8])))))
+  mainTy := .unit
+  ty := [(0, .mut i32T), (1, .thunk (.ret .unit)), (2, .ref i32T), (3, i32T), (4, .ref i32T),
+    (5, .pair (.ref i32T) (.mut i32T)), (6, .ref i32T), (7, .mut i32T),
+    (8, .thunk (.ret .unit)), (9, i32T)].foldl (fun m (x, t) => m.insert x t) {}
+
+#guard accepts (enclClosProg [true, true])
+#guard runFails (enclClosProg [true, true]) "returns with the cell of a parameter whose lend bit is set freed"
+#guard !runFails (enclClosProg []) "LendEnclosesFn"
+
+/-- `f0 (x0 : mut i32) = forget x0`, called on a borrow of a cell `main` lends and then frees;
+`f0`'s lend bits are `bits`. -/
+def borrowProg (bits : List Bool) : Prog where
+  fns := #[{ name := "user", params := [0], ret := .unit, lendEncl := bits,
+             body := .drop .forget 0 .unit }]
+  codes := #[]
+  main := .letv 1 (.lit (.i32 3)) (.letv 2 (.prim (.alloc [i32T]) [1]) (.letv 3 (.prim (.lend true) [2])
+    (.letpair 4 5 3 (.letv 6 (.call 0 [5]) (.drop .dead 6 (.letv 7 (.prim .free [4]) (.drop .dead 7 .unit)))))))
+  mainTy := .unit
+  ty := [(0, .mut i32T), (1, i32T), (2, .ref i32T), (3, .pair (.ref i32T) (.mut i32T)),
+    (4, .ref i32T), (5, .mut i32T), (6, .unit), (7, i32T)].foldl (fun m (x, t) => m.insert x t) {}
+
+/-- The number of `p`'s `f0`'s facts in the word IR (its `f1`), lowered as `Driver.flatOf` lowers:
+the layouts, the closure flow, each checked, then the word IR. -/
+def f0Facts (p : Prog) : Except String Nat := do
+  let (g, m) ← Lay.places p
+  let L := Lay.resolve p g m
+  LayCheck.check p L
+  let fs := Flow.solution p L
+  let kn := Flow.known p L fs
+  LayCheck.checkFlow p L fs.sets kn
+  let fp ← Low.lowerProg p L kn fs.sets false
+  pure (((fp.fns[1]?).map (·.facts.length)).getD 0)
+
+-- `paramFacts` reads the bit: the `mut` borrow has its facts only where its bit is set.
+#guard accepts (borrowProg [true])
+#guard f0Facts (borrowProg [true]) == .ok 1
+#guard f0Facts (borrowProg []) == .ok 0
+#guard f0Facts (borrowProg [false]) == .ok 0
 
 end Backend2.LintTests

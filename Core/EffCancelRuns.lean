@@ -1815,7 +1815,7 @@ theorem finRow_raiseU2 : FinRow (· = 2) (finV (raiseU 2)).1 := by
     subst hm
     exact ⟨rfl, by decide, rfl⟩
   · show CDerives LifeCtx.empty [] (raiseU 2) (.comp (CTy.effOf [rSig 2] .unit))
-    exact .effRaise (o := rSig 2) rfl rfl .unit (.unitI .nil)
+    exact .effRaise (o := rSig 2) rfl rfl rfl .unit (.unitI .nil)
 
 /-- The finalisers of `K m`, the region of `progT`: the one finaliser `λ_. raise m`. -/
 theorem fins_K (m : UInt32) : (K m).fins = [(finV (raiseU m)).1] := rfl
@@ -1981,7 +1981,7 @@ theorem dAt_then₂ {Δ : LifeCtx} :
   · refine RowLe.of_mem fun o ho => ?_
     simp only [List.mem_singleton] at ho
     subst ho
-    refine ⟨pSig 1 (finR 2), rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
+    refine ⟨pSig 1 (finR 2), rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
     exact (finLe_iff _ _).mpr (Or.inr ⟨rfl, RowLe.nil _⟩)
   · refine RowLe.of_mem fun o ho => ?_
     simp only [List.mem_singleton] at ho
@@ -1997,21 +1997,21 @@ theorem dAt_then₂ {Δ : LifeCtx} :
     obtain ⟨hm, rfl, rfl⟩ := Row.find_mem h
     simp only [List.mem_singleton] at hm
     subst hm
-    exact ⟨rSig 2, rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun hc => by simp [capB, rSig, VTy.isZero] at hc⟩
+    exact ⟨rSig 2, rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun hc => by simp [capB, rSig, VTy.isZero] at hc⟩
   · intro _ o ho
     simp only [List.mem_singleton] at ho
     subst ho
     exact ⟨fun h => by simp [OpSig.abort, pSig, VTy.isZero] at h, fun _ => trivial⟩
-  · exact .effPerform (o := pSig 1 (.ret .unit)) (rowAt_p1 _) rfl rfl (.unitI .nil)
+  · exact .effPerform (o := pSig 1 (.ret .unit)) (rowAt_p1 _) rfl rfl rfl (.unitI .nil)
   · exact .effSub (RowLe.nil _) (.ret (.var (.here .nil)))
-  · exact .effRaise (o := rSig 2) rowAt_r2 rfl rfl .unit (.unitI (.cons .nil))
+  · exact .effRaise (o := rSig 2) rowAt_r2 rfl rfl rfl .unit (.unitI (.cons .nil))
 
 /-- `hnd (2, H₂) [·]` around `progT`'s `[then]`, tied (`d_inner₂`). -/
 theorem dAt_inner₂ {Δ : LifeCtx} :
     CDerivesAt Ξ₁₂ Δ [] ((K 2).plug (performU 1)) (.comp (CTy.effOf [pSig 1 (finR 2)] .unit)) := by
   show CDerivesAt Ξ₁₂ Δ [] (hndExpr 2 [.unr] (.pair (.val idV) (.pair (.val (constC Val.unit))
     (.val Val.unit))) ((uF (raiseU 2) .hole).plug (performU 1))) _
-  exact .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.unr, .unit, .zero)]) (fs := finsNil)
+  exact .effHandleV (cs := rcsNil) (Γ₁ := []) (Γ₂ := []) (E := [(.unr, .unit, .zero)]) (fs := finsNil)
     (rowAt_two _) .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_idV _ .unit)
       (.tensorI .nil (d_constC_raise _ (.unitI (.cons .nil))) (.unitI .nil))) rfl)
@@ -2021,7 +2021,7 @@ theorem dAt_inner₂ {Δ : LifeCtx} :
 theorem dAt_progT {Δ : LifeCtx} : CDerivesAt Ξ₁₂ Δ [] progT (.comp (CTy.effOf [rSig 2] .unit)) := by
   show CDerivesAt Ξ₁₂ Δ [] (hndExpr 1 [.unr] (.pair (.val idV) (.pair (.val cancelCT)
     (.val Val.unit))) ((K 2).plug (performU 1))) _
-  refine .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.unr, .unit, .unit)]) (fs := fun _ => finR 2)
+  refine .effHandleV (cs := rcsNil) (Γ₁ := []) (Γ₂ := []) (E := [(.unr, .unit, .unit)]) (fs := fun _ => finR 2)
     (rowAt_two' _) .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_idV _ .unit)
       (.tensorI .nil (d_cancelCT rfl ?_) (.unitI .nil))) rfl)
@@ -2042,7 +2042,7 @@ theorem dAt_progOutT {Δ : LifeCtx} :
   show CDerivesAt Ξ₁₂ Δ [] (hndExpr 2 [.unr] (.pair (.val injlV)
     (.pair (.val (constC (Val.inj₂ Val.unit))) (.val Val.unit))) progT)
     (.comp (CTy.effOf [] (.sum .unit .unit)))
-  exact .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.unr, .unit, .zero)]) (fs := finsNil)
+  exact .effHandleV (cs := rcsNil) (Γ₁ := []) (Γ₂ := []) (E := [(.unr, .unit, .zero)]) (fs := finsNil)
     rowAt_r2 .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_injlV _ .unit .unit)
       (.tensorI .nil (d_constC_raise _ (.sumI₂ (.unitI (.cons .nil)))) (.unitI .nil))) rfl)
@@ -2147,7 +2147,7 @@ theorem dAt_then₂A {Δ : LifeCtx} :
   · refine RowLe.of_mem fun o ho => ?_
     simp only [List.mem_singleton] at ho
     subst ho
-    refine ⟨pSig 1 (finRA 2), rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
+    refine ⟨pSig 1 (finRA 2), rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
     exact (finLe_iff _ _).mpr (Or.inr ⟨rfl, RowLe.nil _⟩)
   · refine RowLe.of_mem fun o ho => ?_
     simp only [List.mem_singleton] at ho
@@ -2163,15 +2163,15 @@ theorem dAt_then₂A {Δ : LifeCtx} :
     obtain ⟨hm, rfl, rfl⟩ := Row.find_mem h
     simp only [List.mem_singleton] at hm
     subst hm
-    exact ⟨rSigA 2, rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩,
+    exact ⟨rSigA 2, rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩,
       fun hc => by simp [capB, rSigA, VTy.isZero] at hc⟩
   · intro _ o ho
     simp only [List.mem_singleton] at ho
     subst ho
     exact ⟨fun h => by simp [OpSig.abort, pSig, VTy.isZero] at h, fun _ => trivial⟩
-  · exact .effPerform (o := pSig 1 (.ret .unit)) (rowAt_p1A _) rfl rfl (.unitI .nil)
+  · exact .effPerform (o := pSig 1 (.ret .unit)) (rowAt_p1A _) rfl rfl rfl (.unitI .nil)
   · exact .effSub (RowLe.nil _) (.ret (.var (.here .nil)))
-  · exact .effRaise (o := rSigA 2) rowAt_r2A rfl rfl .unit (.unitI (.cons .nil))
+  · exact .effRaise (o := rSigA 2) rowAt_r2A rfl rfl rfl .unit (.unitI (.cons .nil))
 
 /-- `hnd (2, H₂) [·]` around `progTA`'s `[then]`, tied, `H₂`'s tag `cancel`. -/
 theorem dAt_inner₂A {Δ : LifeCtx} :
@@ -2179,7 +2179,7 @@ theorem dAt_inner₂A {Δ : LifeCtx} :
       (.comp (CTy.effOf [pSig 1 (finRA 2)] .unit)) := by
   show CDerivesAt Ξ₁₂A Δ [] (hndExpr 2 [.cancel] (.pair (.val idV) (.pair (.val (constC Val.unit))
     (.val Val.unit))) ((uF (raiseU 2) .hole).plug (performU 1))) _
-  exact .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.cancel, .unit, .zero)]) (fs := finsNil)
+  exact .effHandleV (cs := rcsNil) (Γ₁ := []) (Γ₂ := []) (E := [(.cancel, .unit, .zero)]) (fs := finsNil)
     (rowAt_twoA _) .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_idV _ .unit)
       (.tensorI .nil (d_constC_raise _ (.unitI (.cons .nil))) (.unitI .nil))) rfl)
@@ -2190,7 +2190,7 @@ theorem dAt_progTA {Δ : LifeCtx} :
     CDerivesAt Ξ₁₂A Δ [] progTA (.comp (CTy.effOf [rSigA 2] .unit)) := by
   show CDerivesAt Ξ₁₂A Δ [] (hndExpr 1 [.unr] (.pair (.val idV) (.pair (.val cancelCT)
     (.val Val.unit))) ((KA 2).plug (performU 1))) _
-  refine .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.unr, .unit, .unit)]) (fs := fun _ => finRA 2)
+  refine .effHandleV (cs := rcsNil) (Γ₁ := []) (Γ₂ := []) (E := [(.unr, .unit, .unit)]) (fs := fun _ => finRA 2)
     (rowAt_twoA' _) .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_idV _ .unit)
       (.tensorI .nil (d_cancelCT rfl ?_) (.unitI .nil))) rfl)
@@ -2211,7 +2211,7 @@ theorem dAt_progOutTA {Δ : LifeCtx} :
   show CDerivesAt Ξ₁₂A Δ [] (hndExpr 2 [.cancel] (.pair (.val injlV)
     (.pair (.val (constC (Val.inj₂ Val.unit))) (.val Val.unit))) progTA)
     (.comp (CTy.effOf [] (.sum .unit .unit)))
-  exact .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.cancel, .unit, .zero)]) (fs := finsNil)
+  exact .effHandleV (cs := rcsNil) (Γ₁ := []) (Γ₂ := []) (E := [(.cancel, .unit, .zero)]) (fs := finsNil)
     rowAt_r2A .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_injlV _ .unit .unit)
       (.tensorI .nil (d_constC_raise _ (.sumI₂ (.unitI (.cons .nil)))) (.unitI .nil))) rfl)

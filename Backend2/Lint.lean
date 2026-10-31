@@ -21,6 +21,7 @@ verifies and never fills in:
   destructor function (`Prog.dtorFns`), a `stackK` one only as a stack machine's hand-over, its
   premise read from the node (`handsOver`); no rule drops a type owning an opaque value;
 - no `&` is observed at a `⊤` component (`⊤` has no elimination);
+- a function's lend bits (`Fn.lendEncl`, SPEC §50) are none, or one per parameter;
 - every `abandon` meets the premise of the rule the node carries (`abandonable`): at a `[let]`'s
   abort, `effLet`'s `hW` (the variable's type holds no owned cell, `VTy.Drop`); at a superseded
   raise payload, `effRaise`'s `hd`, the same; at `⊤`, `topI`'s, which has none. It is the only
@@ -239,6 +240,8 @@ def lint (p : Prog) : Except String Unit := do
   let act : LM Unit := do
     for (d, i) in p.fns.toList.zipIdx do
       let w := s!"f{i} ({d.name})"
+      if !d.lendEncl.isEmpty && d.lendEncl.length != d.params.length then
+        bad w s!"{d.lendEncl.length} lend bits for {d.params.length} parameters"
       let mut env : Std.HashSet Var := {}
       for x in d.params do env ← bindNew w p env x
       match ← lintTm w p (p.dtorFns.contains i) (1 <<< 22) env d.body with

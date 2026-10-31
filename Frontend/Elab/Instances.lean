@@ -74,7 +74,7 @@ def hasPhC : CCTy → Bool
   | .amp C D => hasPhC C || hasPhC D
   | .nu C | .all _ _ C => hasPhC C
   | .top => false
-  | .eff _ _ _ A B fin C => hasPhV A || hasPhV B || hasPhC fin || hasPhC C
+  | .eff _ _ _ A B fin _ C => hasPhV A || hasPhV B || hasPhC fin || hasPhC C
 end
 
 /-- A type of the frame of a declaration with type parameters `names`, as surface syntax: each

@@ -320,10 +320,14 @@ code outside the site: `timeout`'s `deadline`, `scaled` in `div-infer` and
   semantics: a key no frame in `K` catches (`⊥`), first error kept, re-raised at site `n`, and
   then `N` there. This is `Capture`'s cancel arm (`cancelArm`, `reraise`) run where the
   operation stands, with no `κ` built.
-- **The excluded variant.** Lowering the cancel as an ordinary raise of the clause's error,
+- **The excluded variant.** Lowering a κ.2 cancel as an ordinary raise of the clause's error,
   through `K`, would let a finaliser's raise supersede, where a cancel keeps the first error. It
   would also let `K`'s handlers catch it, where a cancelled region's handlers are dead. That
   changes laws 5 and 6. It is not proposed.
+- **Cancellable waits** (SPEC §29a) are the other way round: their cancel *is* a resume with
+  `inr ()` and an ordinary raise of the cancel target (law 5c), so the lowering is a call that
+  resumes the task's state machine with `inr ()`, then the raise lowered as §2.2's. No `⊥` key, no
+  dead frames, no kept-error slot.
 - **Needed.** As §2.3, and the clause's split into a deciding part and the rest.
 
 ### 2.5 Cancellable and must-resume continuations that are stored
@@ -404,7 +408,7 @@ and each is excluded where it applies:
 
 | candidate | law it would break | excluded by |
 |---|---|---|
-| a cancel lowered as an ordinary raise (§2.4) | 5 (cancel not interceptable, dead frames), 6 (first error kept) | the cancel runs with `⊥`'s semantics |
+| a κ.2 cancel lowered as an ordinary raise (§2.4) | 5 (cancel not interceptable, dead frames), 6 (first error kept) | the cancel runs with `⊥`'s semantics; a cancellable wait's cancel is an ordinary raise by law 5c (SPEC §29a) and is not excluded |
 | merging copies whose regions may nest (§2.5) | 3 (static names, no accidental handling) | the static non-nesting condition |
 | fusing turns under `div_fuel` (§2.7) | `div_fuel = driveE` (§14), the observation count | only at a complete driver; #540's pass changes no observation |
 
