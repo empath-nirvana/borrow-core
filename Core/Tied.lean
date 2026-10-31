@@ -374,8 +374,14 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       (h : CDerivesAt Ξ Δ Γ e (.comp (CTy.effOf S A))) : CDerivesAt Ξ Δ Γ e (.comp (CTy.effOf S' A))
   /-- `[perform]`: a non-abortive operation of the row, the row tied to `Ξ`.  `[spec §19]` -/
   | effPerform {Δ Γ V} {S : Row} {o : OpSig} (hAt : RowAt Ξ S) (hf : Row.find S o.n o.i = some o)
-      (hna : o.abort = false) (h : CDerivesAt Ξ Δ Γ V (.val o.A)) :
+      (hna : o.abort = false) (hac : o.awaitB = false) (h : CDerivesAt Ξ Δ Γ V (.val o.A)) :
       CDerivesAt Ξ Δ Γ (BoCa.BoLo.performE (opArgE o.n o.i V)) (.comp (CTy.effOf S o.B))
+  /-- `[await-c]`, the row tied to `Ξ`.  `[spec §29a]` -/
+  | effAwait {Δ Γ} {S : Row} {n : UInt32} {a c : OpSig} (hAt : RowAt Ξ S)
+      (hΓ : Ctx.Dead Γ)
+      (hfa : Row.find S n 0 = some a) (ha : a.awaitB = true) (haA : a.A = .unit)
+      (hfc : Row.find S n 1 = some c) (hc : c.abort = true) (hcA : c.A = .unit) :
+      CDerivesAt Ξ Δ Γ (awaitE n) (.comp (CTy.effOf S .unit))
   /-- `[raise]`: an abortive operation of the row, at any answer, its argument dropping, the row
   tied to `Ξ`.  `[spec §19]` -/
   | effRaise {Δ Γ V} {S : Row} {o : OpSig} {B : VTy} (hAt : RowAt Ξ S)
@@ -399,7 +405,7 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
   | effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
       (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)
       (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
-        capB o.q o.B = true → ThenLe o.fin SD o'.fin)
+        o.finRead = true → ThenLe o.fin SD o'.fin)
       (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false)
       (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf SM A)))
       (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
@@ -561,7 +567,8 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | nuOut hC _ ih1 => exact .nuOut hC ih1
   | unfoldN C S hC hΓ => exact .unfoldN C S hC hΓ
   | effSub hle _ ih1 => exact .effSub hle ih1
-  | effPerform _ hf hna _ ih1 => exact .effPerform hf hna ih1
+  | effPerform _ hf hna hac _ ih1 => exact .effPerform hf hna hac ih1
+  | effAwait _ hΓ hfa ha haA hfc hc hcA => exact .effAwait hΓ hfa ha haA hfc hc hcA
   | effRaise _ hf ha hd _ ih1 => exact .effRaise hf ha hd ih1
   | effLet hs hW hU _ _ ih1 ih2 => exact .effLet hs hW hU ih1 ih2
   | effThen hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ih1 ih2 ih3 =>
@@ -941,6 +948,8 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | unfoldN C S hC hΓ => exact .unfoldN C S hC hΓ
   | effSub hle _ ih1 => exact .effSub hle (ih1 he)
   | effPerform => simp [BoCa.BoLo.performE, Expr.effFree, Expr.val, Val.prim] at he
+  | effAwait => simp [awaitE, BoCa.BoLo.performE, BoCa.BoLo.raiseE, Expr.effFree, Expr.val,
+      Val.prim] at he
   | effRaise => simp [BoCa.BoLo.raiseE, Expr.effFree, Expr.val, Val.prim] at he
   | effLet hs hW hU _ _ ih1 ih2 => exact .effLet hs hW hU (ih1 (by eff_free)) (ih2 (by eff_free))
   | effThen hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ih1 ih2 ih3 =>

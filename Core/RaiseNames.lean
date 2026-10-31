@@ -1561,6 +1561,10 @@ theorem rcE_of_derivesAt {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} 
       simp only [BoCa.BoLo.raiseE, opArgE, Expr.val, Val.prim, Val.i32, rcE, ih,
         names_of_rowAt hAt hf, Bool.and_true, Bool.true_and]
       rfl
+  | @effAwait _ _ S n a c hAt _ _ _ _ hfc _ _ =>
+      have hn := names_of_rowAt hAt hfc
+      simp [awaitE, BoCa.BoLo.raiseE, BoCa.BoLo.performE, opArgE, Expr.val, Val.prim, Val.i32,
+        Val.lam, rcE, rcE_app, hn]
   | effHandleV _ _ _ _ _ _ _ _ _ _ ihc ihe | effHandleVB _ _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
       simp [hndExpr, Val.i32, rcE, rcE_app, rcE_qualsVal, ihc, ihe]
   | effHandleT _ _ _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>

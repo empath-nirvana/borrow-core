@@ -16,7 +16,7 @@ slots its term is `(λp. withborU d p (Λ. λm. M)) p`, the λ at the empty cont
 
 namespace BoCa.Fig16.LogRel.Core.Check
 open BoCa BoCa.Lifetime
-open BoCa.Fig16.LogRel.Core (NoThunkT Row.ResumeO)
+open BoCa.Fig16.LogRel.Core (NoThunkT Row.ResumeO Row.ResumeOC)
 
 /-- `NoThunkT`, decided.  `[spec §29]` -/
 def noThunkB : VTy → Bool
@@ -66,13 +66,75 @@ theorem Row.resumeOTB_sound {S : Row} {x : LifeVar} (h : Row.resumeOTB S x = tru
   · exact .inl h
   · exact .inr (Row.resumeOB_sound h o (List.mem_singleton.mpr rfl))
 
+/-- `Row.ResumeOC`, decided: each operation is one `Row.resumeOB` admits, a cancellable `await`
+of a nonzero name taking closed data, or the abortive `cancelled` of an `await`'s name.
+`[spec §29, §29a]` -/
+def Row.resumeOCB (S : Row) (x : LifeVar) : Bool :=
+  S.all fun o =>
+    (!o.abort && o.q != .unr && decide (o.fin = .ret .unit) && decide (o.B = .unit) &&
+      o.n != 0 && !vfreeB x o.A && outlivesAllB o.A && noThunkB o.A) ||
+    (o.awaitB && o.n != 0 && !vfreeB x o.A && outlivesAllB o.A && noThunkB o.A) ||
+    (o.abort && o.i == 1 && o.q == .cancel && decide (o.A = .unit) && o.n != 0 &&
+      S.any fun a => a.n == o.n && a.awaitB)
+
+theorem Row.resumeOCB_sound {S : Row} {x : LifeVar} (h : Row.resumeOCB S x = true) :
+    Row.ResumeOC S x := by
+  intro o ho
+  have := List.all_eq_true.mp h o ho
+  simp only [Bool.or_eq_true, Bool.and_eq_true, bne_iff_ne, ne_eq, Bool.not_eq_true',
+    decide_eq_true_eq, beq_iff_eq, List.any_eq_true] at this
+  rcases this with (⟨⟨⟨⟨⟨⟨⟨h₁, h₂⟩, h₃⟩, h₄⟩, h₅⟩, h₆⟩, h₇⟩, h₈⟩ | ⟨⟨⟨⟨h₁, h₂⟩, h₃⟩, h₄⟩, h₅⟩) |
+      ⟨⟨⟨⟨⟨h₁, h₂⟩, h₃⟩, h₄⟩, h₅⟩, a, ha, han, haw⟩
+  · exact .inl ⟨h₁, h₂, h₃, h₄, h₅, not_vfree_of_vfreeB h₆, outlivesAllB_sound _ h₇,
+      noThunkB_sound h₈⟩
+  · exact .inr (.inl ⟨h₁, h₂, not_vfree_of_vfreeB h₃, outlivesAllB_sound _ h₄, noThunkB_sound h₅⟩)
+  · exact .inr (.inr ⟨h₁, h₂, h₃, h₄, h₅, a, ha, han, haw⟩)
+
+/-- `OpSig.LendO`, decided.  `[spec §29, §29a]` -/
+def OpSig.lendOB (x : LifeVar) (o : OpSig) : Bool :=
+  (!o.abort && o.q != .unr && decide (o.fin = .ret .unit) && decide (o.B = .unit) &&
+    o.n != 0 && !vfreeB x o.A && outlivesAllB o.A && noThunkB o.A) ||
+  (o.awaitB && o.n != 0 && !vfreeB x o.A && outlivesAllB o.A && noThunkB o.A) ||
+  (o.abort && o.n != 0 && !vfreeB x o.A && outlivesAllB o.A && noThunkB o.A)
+
+theorem OpSig.lendOB_sound {x : LifeVar} {o : OpSig} (h : OpSig.lendOB x o = true) :
+    BoCa.Fig16.LogRel.Core.OpSig.LendO x o := by
+  simp only [OpSig.lendOB, Bool.or_eq_true, Bool.and_eq_true, bne_iff_ne, ne_eq,
+    Bool.not_eq_true', decide_eq_true_eq] at h
+  rcases h with (⟨⟨⟨⟨⟨⟨⟨h₁, h₂⟩, h₃⟩, h₄⟩, h₅⟩, h₆⟩, h₇⟩, h₈⟩ | ⟨⟨⟨⟨h₁, h₂⟩, h₃⟩, h₄⟩, h₅⟩) |
+      ⟨⟨⟨⟨h₁, h₂⟩, h₃⟩, h₄⟩, h₅⟩
+  · exact .inl ⟨h₁, h₂, h₃, h₄, h₅, not_vfree_of_vfreeB h₆, outlivesAllB_sound _ h₇,
+      noThunkB_sound h₈⟩
+  · exact .inr (.inl ⟨h₁, h₂, not_vfree_of_vfreeB h₃, outlivesAllB_sound _ h₄, noThunkB_sound h₅⟩)
+  · exact .inr (.inr ⟨h₁, h₂, not_vfree_of_vfreeB h₃, outlivesAllB_sound _ h₄, noThunkB_sound h₅⟩)
+
+/-- `Row.ResumeOCE` (R1 with error escape), decided. -/
+def Row.resumeOCEB (S : Row) (x : LifeVar) : Bool := S.all (OpSig.lendOB x)
+
+theorem Row.resumeOCEB_sound {S : Row} {x : LifeVar} (h : Row.resumeOCEB S x = true) :
+    BoCa.Fig16.LogRel.Core.Row.ResumeOCE S x :=
+  fun o ho => OpSig.lendOB_sound (List.all_eq_true.mp h o ho)
+
+/-- `Row.ResumeOE` (W-tick and W-hold with the cancel path and error escape), decided. -/
+def Row.resumeOEB (S : Row) (x : LifeVar) : Bool :=
+  S.all fun o => decide (o = BoCa.Fig16.LogRel.Core.tickSig) || OpSig.lendOB x o
+
+theorem Row.resumeOEB_sound {S : Row} {x : LifeVar} (h : Row.resumeOEB S x = true) :
+    BoCa.Fig16.LogRel.Core.Row.ResumeOE S x := by
+  intro o ho
+  have := List.all_eq_true.mp h o ho
+  simp only [Bool.or_eq_true, decide_eq_true_eq] at this
+  rcases this with h | h
+  · exact .inl h
+  · exact .inr (OpSig.lendOB_sound h)
+
 end BoCa.Fig16.LogRel.Core.Check
 
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (CDerivesP Jdg NoThunkT Row.ResumeO Row.ResumeOT VFree VOutlivesLe HasDtor dtorE
-  dtor_wf withborUV lendCb closedAt lendView LendSide)
+open BoCa.Fig16.LogRel.Core (CDerivesP Jdg NoThunkT Row.ResumeO Row.ResumeOT Row.ResumeOC VFree VOutlivesLe
+  HasDtor dtorE dtor_wf withborUV lendCb closedAt lendView LendSide)
 
 /-- A derivation that uses a relaxed rule: its tie is not claimed. -/
 theorem TiedDer.pinned {p : Pins} {s : CRow} {Δ : LifeCtx} {Γ : Ctx CVTy} {e : BoCa.Expr}
@@ -93,7 +155,7 @@ def rLendR (i : TInfo) {A B : CVTy} {S : CRow} (q : Pin) (x : LifeVar) (b : CLif
     (hk : T[k]? = some (.ref A)) (hb : Δ.Defines b) (hx : Δ.find? x = none)
     (hbx : b.mentions x = false) (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
     (hT : ¬ VFree x A) (hB : ¬ VFree x B) (hBn : NoThunkT B)
-    (hside : ∃ b', Δ.Defines b' ∧ VOutlivesLe Δ b' A) (hS : Row.ResumeO S x)
+    (hside : ∃ b', Δ.Defines b' ∧ VOutlivesLe Δ b' A) (hS : BoCa.Fig16.LogRel.Core.Row.ResumeOCE S x)
     (hdt : HasDtor (.ref A)) (hdc : closedAt 0 (dtorE (.ref A)) = true)
     (hde : (dtorE (.ref A)).effFree = true)
     (rM : Res (Δ.extend x b) [.mut (.var x) A] (.comp (effOf S (.box (.var x) B))))
@@ -179,7 +241,7 @@ def rLendRT (i : TInfo) {A B : CVTy} {S : CRow} (q : Pin) (kv : Bool) (x : LifeV
     (k : Nat) (hk : T[k]? = some (.ref A)) (hb : Δ.Defines b) (hx : Δ.find? x = none)
     (hbx : b.mentions x = false) (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
     (hT : ¬ VFree x A) (hB : ¬ VFree x B) (hBn : NoThunkT B) (hside : LendSide kv Δ A)
-    (hS : Row.ResumeOT S x)
+    (hS : BoCa.Fig16.LogRel.Core.Row.ResumeOE S x)
     (hdt : HasDtor (.ref A)) (hdc : closedAt 0 (dtorE (.ref A)) = true)
     (hde : (dtorE (.ref A)).effFree = true)
     (rM : Res (Δ.extend x b) [lendView kv x A] (.comp (effOf S (.box (.var x) B))))
@@ -206,7 +268,7 @@ def rLendRH (i : TInfo) {A B : CVTy} {S : CRow} (q : Pin) (kv : Bool) (x y : Lif
     (hy : (Δ.extend x b).find? y = none)
     (hΔy : ∀ z u, (Δ.extend x b).find? z = some u → u.mentions y = false)
     (hT : ¬ VFree x A) (hB : ¬ VFree x B) (hyT : ¬ VFree y A) (hyB : ¬ VFree y B)
-    (hBn : NoThunkT B) (hside : LendSide kv Δ A) (hS : Row.ResumeOT S x)
+    (hBn : NoThunkT B) (hside : LendSide kv Δ A) (hS : BoCa.Fig16.LogRel.Core.Row.ResumeOE S x)
     (hdt : HasDtor (.ref A)) (hdc : closedAt 0 (dtorE (.ref A)) = true)
     (hde : (dtorE (.ref A)).effFree = true)
     (rM : Res ((Δ.extend x b).extend y (.var x)) [lendView kv x A]

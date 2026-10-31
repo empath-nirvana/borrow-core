@@ -83,7 +83,7 @@ def PinStopD : Prop :=
 /-- `PinStop` gives `PinStopD`. -/
 theorem pinStopD_of_pinStop (h : PinStop (ℍ := ℍ)) : PinStopD (ℍ := ℍ) :=
   fun Δ x b T B d M S hb hx hbx hΔx hT hB hBn hside hS _ hM1 hcb hdc hd hM =>
-    h Δ x b T B d M S hb hx hbx hΔx hT hB hBn hside hS hM1 hcb hdc hd hM
+    h Δ x b T B d M S hb hx hbx hΔx hT hB hBn hside hS.toCE hM1 hcb hdc hd hM
 
 /-! ### The route's reduction: GhostEnd's resumption premise -/
 
@@ -380,8 +380,8 @@ induction, case for case; each relaxed rule's case is a frame at the induction h
 callback (and steps). A relaxed lend nested in another at any depth is a case of the inner
 derivation: no clause is per depth. -/
 theorem fundamentalC_of_framesV (hN : LifeNaturalV (ℍ := ℍ)) (hF : LendFrameV (ℍ := ℍ))
-    (hL : LoopFrameV (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr}
-    {j : Jdg} (h : CDerivesP Δ Γ e j) : SemJ (ℍ := ℍ) Δ Γ e j := by
+    (hL : LoopFrameV (ℍ := ℍ)) (hFin : PinFin (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx VTy}
+    {e : Expr} {j : Jdg} (h : CDerivesP Δ Γ e j) : SemJ (ℍ := ℍ) Δ Γ e j := by
   induction h with
   | var h => exact var_compatC h
   | unitI h => exact unitI_compatC h
@@ -479,11 +479,15 @@ theorem fundamentalC_of_framesV (hN : LifeNaturalV (ℍ := ℍ)) (hF : LendFrame
   | nuOut hC _ ih => exact nuOut_compatX hC ih
   | unfoldN C S hC hΓ => exact unfold_compatX hC S hΓ
   | effSub hle _ ih => exact sub_compatC hle ih
-  | effPerform hf hna _ ih => exact perform_compatC hf hna ih
+  | effPerform hf hna _ _ ih => exact perform_compatC hf hna ih
+  | effAwait hΓ hfa ha haA hfc hc hcA => exact semC_dead .nil hΓ (await_compatC hfa ha haA hfc hc hcA)
   | effRaise hf ha hd _ ih => exact raise_compatC hf ha (fun _ _ _ _ h => vC_noOwn_of_ownFree hd h) ih
   | effLet hs hW hU _ _ ihM ihN => exact let_compatC hs hW hU ihM ihN
   | effThen hs hNZ _ hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
-      exact then_compatC hs hNZ hU hMS hDS hfin hP hSD ihM ihN ihD
+      exact then_compatC hs hNZ hU hMS hDS (fun n i o o' h₁ h₂ hc => hfin n i o o' h₁ h₂
+        (by simp [OpSig.finRead, hc])) hP hSD ihM ihN ihD
+  | effThenDiv hs hNZ _ hU hMS hDS hfin hP hcap _ _ _ ihM ihN ihD =>
+      exact hFin _ _ _ _ _ _ _ _ _ _ _ _ hs hNZ hU hMS hDS hfin hP hcap ihM ihN ihD
   | effHandleV hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
       exact handleV_compatC hs hd hH ihc hn0 hnS hlen hdv ihe
   | effHandleVB hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
@@ -495,11 +499,11 @@ theorem fundamentalC_of_framesV (hN : LifeNaturalV (ℍ := ℍ)) (hF : LendFrame
   | letPoly b hcl _ _ _ ihN => exact letPoly_compatC (Val.lam b) hcl ihN
   | lendR hb hx hbx hΔx hT hB hBn hside hS hM1 hcb hdc _ hM ihd ihM =>
       exact hF hN _ _ _ _ _ _ _ _ _ _ _ (.ref false hT (by simpa [LendSide] using hside))
-        hb hx hbx hΔx hB hBn (by simpa [RowOf] using hS.toT) hM1 hcb hdc ihd
+        hb hx hbx hΔx hB hBn (by simpa [RowOf] using hS.toE) hM1 hcb hdc ihd
         (by simpa [lendView] using hM) (by simpa [lendView, SemJ] using ihM)
   | lendRI hb hx hbx hΔx hT hB hBn hsc hS hM1 hcb hdc _ hM ihd ihM =>
       exact hF hN _ _ _ _ _ _ _ _ _ _ _ (.ref true hT (by simpa [LendSide] using hsc))
-        hb hx hbx hΔx hB hBn (by simpa [RowOf] using hS.toT) hM1 hcb hdc ihd
+        hb hx hbx hΔx hB hBn (by simpa [RowOf] using hS.toCE.toE) hM1 hcb hdc ihd
         (by simpa [lendView] using hM) (by simpa [lendView, SemJ] using ihM)
   | lendRF hb hx hbx hΔx hA hB hBn hsideA hsideB hS hM1 hcb hdc _ hM ihd ihM =>
       exact hF hN _ _ _ _ _ _ _ _ _ _ _ (.fam hA hsideA hsideB)
@@ -519,49 +523,51 @@ theorem fundamentalC_of_framesV (hN : LifeNaturalV (ℍ := ℍ)) (hF : LendFrame
 
 section FieldsV
 variable (hN : LifeNaturalV (ℍ := ℍ)) (hF : LendFrameV (ℍ := ℍ)) (hL : LoopFrameV (ℍ := ℍ))
-include hN hF hL
+  (hFin : PinFin (ℍ := ℍ))
+include hN hF hL hFin
 
 /-- **W-tick from `LifeNatural`** (and `LendFrameV` at `ref k`). -/
 theorem field_of_natural_tickV : PinStopTick (ℍ := ℍ) :=
   fun Δ x b T B d M S k hb hx hbx hΔx hT hB hBn hside hS hM1 hcb hdc hd hM =>
     hF hN _ _ _ _ _ _ _ _ _ _ _ (.ref k hT hside) hb hx hbx hΔx hB hBn
-      (by simpa [RowOf] using hS) hM1 hcb hdc hd hM (fundamentalC_of_framesV hN hF hL hM)
+      (by simpa [RowOf] using hS) hM1 hcb hdc hd hM (fundamentalC_of_framesV hN hF hL hFin hM)
 
 /-- **R1 from `LifeNatural`**: W-tick at `k = false` (`Round3.pinStop_of_tick`). -/
 theorem field_of_natural_stopV : PinStop (ℍ := ℍ) :=
-  Spike743.Round3.pinStop_of_tick (field_of_natural_tickV hN hF hL)
+  Spike743.Round3.pinStop_of_tick (field_of_natural_tickV hN hF hL hFin)
 
 /-- **W-imm from `LifeNatural`**: W-tick at `k = true` (`Round3.pinStopImm_of_tick`). -/
 theorem field_of_natural_stopImmV : PinStopImm (ℍ := ℍ) :=
-  Spike743.Round3.pinStopImm_of_tick (field_of_natural_tickV hN hF hL)
+  Spike743.Round3.pinStopImm_of_tick (field_of_natural_tickV hN hF hL hFin)
 
 /-- **W-nest from `LifeNatural`** (and `LendFrameV` at `fam`). -/
 theorem field_of_natural_nestV : PinNest (ℍ := ℍ) :=
   fun Δ x b A B d M S hb hx hbx hΔx hA hB hBn hsideA hsideB hS hM1 hcb hdc hd hM =>
     hF hN _ _ _ _ _ _ _ _ _ _ _ (.fam hA hsideA hsideB) hb hx hbx hΔx hB hBn
-      (by simpa [RowOf] using hS) hM1 hcb hdc hd hM (fundamentalC_of_framesV hN hF hL hM)
+      (by simpa [RowOf] using hS) hM1 hcb hdc hd hM (fundamentalC_of_framesV hN hF hL hFin hM)
 
 /-- **W-hold from `LifeNatural`** (and `LendFrameV` at `hold k y`). -/
 theorem field_of_natural_holdV : PinStopHold (ℍ := ℍ) :=
   fun Δ x y b T B d M S k hb hx hbx hΔx hy hΔy hT hB hyT hyB hBn hside hS hM1 hcb hdc hd hM =>
     hF hN _ _ _ _ _ _ _ _ _ _ _ (.hold k y hT hyT hyB hside hy hΔy) hb hx hbx hΔx hB hBn
-      (by simpa [RowOf] using hS) hM1 hcb hdc hd hM (fundamentalC_of_framesV hN hF hL hM)
+      (by simpa [RowOf] using hS) hM1 hcb hdc hd hM (fundamentalC_of_framesV hN hF hL hFin hM)
 
 /-- **R2 from `LifeNatural`** (and `LoopFrameV`). -/
 theorem field_of_natural_loopV : PinLoop (ℍ := ℍ) :=
   fun Δ x A S B R N K s0 hx hbx hΔx hA hB hR hBn hRn hsc hN1 hK1 hs0c hN' hK hs0 =>
     hL hN Δ x A S B R N K s0 hx hbx hΔx hA hB hR hBn hRn hsc hN1 hK1 hs0c hN' hK hs0
-      (fundamentalC_of_framesV hN hF hL hN') (fundamentalC_of_framesV hN hF hL hK)
-      (fundamentalC_of_framesV hN hF hL hs0)
+      (fundamentalC_of_framesV hN hF hL hFin hN') (fundamentalC_of_framesV hN hF hL hFin hK)
+      (fundamentalC_of_framesV hN hF hL hFin hs0)
 
 /-- **`PinLaw` from `LifeNatural`** and the two frames. -/
 theorem pinLaw_of_naturalV : PinLaw (ℍ := ℍ) where
-  stop := field_of_natural_stopV hN hF hL
-  loop := field_of_natural_loopV hN hF hL
-  stopImm := field_of_natural_stopImmV hN hF hL
-  nest := field_of_natural_nestV hN hF hL
-  tick := field_of_natural_tickV hN hF hL
-  hold := field_of_natural_holdV hN hF hL
+  stop := field_of_natural_stopV hN hF hL hFin
+  loop := field_of_natural_loopV hN hF hL hFin
+  stopImm := field_of_natural_stopImmV hN hF hL hFin
+  nest := field_of_natural_nestV hN hF hL hFin
+  tick := field_of_natural_tickV hN hF hL hFin
+  hold := field_of_natural_holdV hN hF hL hFin
+  fin := hFin
 
 end FieldsV
 

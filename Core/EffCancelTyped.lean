@@ -305,7 +305,7 @@ theorem d_then₂ {Δ : LifeCtx} :
     simp only [List.mem_singleton] at ho
     subst ho
     exact ⟨fun h => by simp [OpSig.abort, pSig, VTy.isZero] at h, fun _ => trivial⟩
-  · exact .effPerform (o := pSig 1 (.ret .unit)) rfl rfl (.unitI .nil)
+  · exact .effPerform (o := pSig 1 (.ret .unit)) rfl rfl rfl (.unitI .nil)
   · exact .effSub (RowLe.nil _) (.ret (.var (.here .nil)))
   · exact .effRaise (o := rSig 2) rfl rfl .unit (.unitI (.cons .nil))
 
@@ -396,7 +396,7 @@ theorem cancelCT_jr {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F : C
   refine Relation.ReflTransGen.trans (Relation.ReflTransGen.trans ?_ hr₁) hr
   rcases hb₁ with ⟨Γ₃, Γ₄, A₀, B₀, hs', hY, hX, rfl⟩ | ⟨Γ₃, Γ₄, i, A₀, C₀, hi, hs', hX, hx, rfl⟩ |
     ⟨N', Γ₃, Γ₄, A₀, S₀, C₀, hXe, hs', hM, hN, rfl⟩ | ⟨_, _, _, _, he, -⟩ | ⟨_, _, _, _, he, -⟩ |
-    ⟨_, _, _, _, he, -⟩ | ⟨_, _, he, -⟩ | ⟨_, _, he, -⟩ | ⟨he, -⟩ | he | he | ⟨_, he⟩ | ⟨_, he⟩
+    ⟨_, _, _, _, he, -⟩ | ⟨_, _, he, -⟩ | ⟨_, _, he, -⟩ | ⟨he, -⟩ | he | he | ⟨_, he⟩ | ⟨_, he⟩ | ⟨_, he, -⟩
   · -- `⊸E`: the λ at a `⊸`, its body at `F B₀`
     rcases varCls_of_le hslotK (splitP_le_left hs') hY with hc | ⟨_, hT, -, -⟩
     swap
@@ -492,8 +492,8 @@ theorem not_der_progT {Δ : LifeCtx} {Γ : Ctx VTy} {S' : Row} {Y : VTy}
   have hcap₃ : capB o₃.q o₃.B = true := hle₃.1.capB_eq ▸ hcapM
   have hcap₄ : capB o₄.q o₄.B = true := hle₄.1.capB_eq ▸ hcap₃
   -- `2` in the cancel row of `1`, or the cancel row `⊤`
-  have h₃₄ : FinLe o₃.fin o₄.fin := hle₄.2 hcap₃
-  have h₄₅ : FinLe o₄.fin (fs 0) := hle₅.2 hcap₄
+  have h₃₄ : FinLe o₃.fin o₄.fin := hle₄.2 (OpSig.finRead_of_capB hcap₃)
+  have h₄₅ : FinLe o₄.fin (fs 0) := hle₅.2 (OpSig.finRead_of_capB hcap₄)
   have hfs : (fs 0).isTop = true ∨ ∃ o₆, Row.find (fs 0).rowOf 2 0 = some o₆ := by
     have hT := hfin 1 0 oM o₃ hfM hf₃ hcapM
     rw [ThenLe] at hT
@@ -655,9 +655,9 @@ theorem d_thenP {Δ : LifeCtx} :
     simp only [List.mem_singleton] at ho
     subst ho
     exact ⟨fun h => by simp [OpSig.abort, pSig, VTy.isZero] at h, fun _ => trivial⟩
-  · exact .effPerform (o := pSig 1 (.ret .unit)) rfl rfl (.unitI .nil)
+  · exact .effPerform (o := pSig 1 (.ret .unit)) rfl rfl rfl (.unitI .nil)
   · exact .effSub (RowLe.nil _) (.ret (.var (.here .nil)))
-  · exact .effPerform (o := pSig 4 (.ret .unit)) rfl rfl (.unitI (.cons .nil))
+  · exact .effPerform (o := pSig 4 (.ret .unit)) rfl rfl rfl (.unitI (.cons .nil))
 
 /-- `hnd (4, H₄ᵢ) [·]` around `progFinT`'s `[then]`, at the outer row `{1⟨{4}⟩}`. -/
 theorem d_innerP {Δ : LifeCtx} :
@@ -817,7 +817,7 @@ theorem d_thenK₁ {Δ : LifeCtx} :
     simp only [List.mem_singleton] at ho
     subst ho
     exact ⟨fun h => by simp [OpSig.abort, pSig, VTy.isZero] at h, fun _ => trivial⟩
-  · exact .effPerform (o := pSig 1 (.ret .unit)) rfl rfl (.unitI .nil)
+  · exact .effPerform (o := pSig 1 (.ret .unit)) rfl rfl rfl (.unitI .nil)
   · exact .effSub (RowLe.nil _) (.ret (.var (.here .nil)))
   · exact .effRaise (o := rSig 2) rfl rfl .unit (.unitI (.cons .nil))
 
@@ -853,7 +853,7 @@ theorem d_thenK₂ {Δ : LifeCtx} :
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hm
     rcases hm with rfl | rfl
     swap
-    · simp [capB, rSig, VTy.isZero] at hc
+    · simp [capB, rSig, VTy.isZero, OpSig.finRead, OpSig.awaitB] at hc
     obtain rfl : o' = pSig 1 finKD := Option.some.inj (hf'.symm.trans rfl)
     rw [ThenLe]
     refine Or.inr ⟨rfl, fun n i o h => ?_, fun n i o h => ?_⟩
@@ -879,7 +879,7 @@ theorem d_thenK₂ {Δ : LifeCtx} :
       exact ⟨fun _ => rfl, fun h => absurd h (by decide), trivial⟩
     · exact ⟨fun _ => rfl, fun h => absurd h (by decide)⟩
   · exact .effSub (RowLe.nil _) (.ret (.var (.here .nil)))
-  · exact .effPerform (o := pSig 4 (.ret .unit)) rfl rfl (.unitI (.cons .nil))
+  · exact .effPerform (o := pSig 4 (.ret .unit)) rfl rfl rfl (.unitI (.cons .nil))
 
 /-- `hnd (1, H₁T) …` in `progKDT`, at the outer row `{2, 4⟨{2}⟩}`: `H₁`'s clause reads `κ`'s cancel
 at `F_{{2, 4⟨{2}⟩} ⊕ Σ} 1` at `Σ = {2, 4⟨{2}⟩}`. -/
@@ -989,7 +989,7 @@ theorem d_then₃ {Δ : LifeCtx} :
     simp only [List.mem_singleton] at ho
     subst ho
     exact ⟨fun h => by simp [OpSig.abort, pSig, VTy.isZero] at h, fun _ => trivial⟩
-  · exact .effPerform (o := pSig 1 (.ret .unit)) rfl rfl (.unitI .nil)
+  · exact .effPerform (o := pSig 1 (.ret .unit)) rfl rfl rfl (.unitI .nil)
   · exact .effSub (RowLe.nil _) (.ret (.var (.here .nil)))
   · exact .effRaise (o := rSig 3) rfl rfl .unit (.unitI (.cons .nil))
 
@@ -1064,7 +1064,7 @@ theorem d_fRe {Δ : LifeCtx} :
       (.tensorI (.dead .nil) (d_constC_raiseΓ (.cons .nil) _ (.unitI (.cons (.cons .nil))))
         (.unitI (.cons .nil))))
     (by decide) (by simp [pSig]) (by simp) rfl
-    (.effPerform (o := pSig 1 (.ret .unit)) rfl rfl (.unitI (.drop rfl .nil)))
+    (.effPerform (o := pSig 1 (.ret .unit)) rfl rfl rfl (.unitI (.drop rfl .nil)))
 
 /-- **The `[then]` of `progReT`**: `f () then x. x unwind raise 3` at `{1⟨{3}⟩, 3}`. -/
 theorem d_thenRe {Δ : LifeCtx} :
@@ -1202,7 +1202,7 @@ theorem FindsRec.mono {m : UInt32} {G G' : CTy} (h : FinLe G G') (hG : FindsRec 
   · rcases (finLe_iff G G').mp h with h | ⟨-, hle⟩
     · exact .inl h
     · obtain ⟨x', hx₁, hle'⟩ := hle m 0 x hx
-      exact .inr ⟨x', hx₁, hle'.1.capB_eq ▸ hc, hx'.mono (hle'.2 hc)⟩
+      exact .inr ⟨x', hx₁, hle'.1.capB_eq ▸ hc, hx'.mono (hle'.2 (OpSig.finRead_of_capB hc))⟩
 
 /-- **The finaliser below a cancel row**: a capturable operation of `m` in `E` puts one in
 `F ⋈ E`. -/
@@ -1336,15 +1336,15 @@ theorem not_der_progNCrecT {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives
   -- the first finaliser puts `4` in the cancel row of `1`; the second, a leftover of that `4`'s
   -- cancel, puts `4` in its cancel row in turn
   have h₄ : FindsCap 4 o₄₁.fin := thenLe_findsCap (hfin₄ 1 0 oP o₄₁ hfP hf₄₁ hcapP) hfD hcapD
-  have h₃ : FindsCap 4 o₃₁.fin := h₄.mono (hle₃₁.2 hcap₄₁)
+  have h₃ : FindsCap 4 o₃₁.fin := h₄.mono (hle₃₁.2 (OpSig.finRead_of_capB hcap₄₁))
   have h₂ : FindsRec 4 o₂₁.fin := thenLe_findsRec (hfin₃ 1 0 o₃₁ o₂₁ hf₃₁ hf₂₁ hcap₃₁) h₃ hfE
-  have h₁ : FindsRec 4 (fs₁ 0) := (h₂.mono (hle₂₁'.2 hcap₂₁)).mono (hle₁.2 hcap₂₁')
+  have h₁ : FindsRec 4 (fs₁ 0) := (h₂.mono (hle₂₁'.2 (OpSig.finRead_of_capB hcap₂₁))).mono (hle₁.2 (OpSig.finRead_of_capB hcap₂₁'))
   -- `H₁`'s clause row holds a `4` whose cancel row holds `4`
   obtain ⟨hnt₁, hle₁'⟩ := cancelTy_rowLe (cancelPair_jr hB₁ hH₁)
   rcases h₁ with ht | ⟨x₁, hx₁, hcx₁, hfx₁⟩
   · rw [ht] at hnt₁; cases hnt₁
   obtain ⟨x₀, hx₀, hlex₀⟩ := hle₁' 4 0 x₁ (by rw [Row.find_append, hx₁]; rfl)
-  have hfx₀ : FindsAt 4 x₀.fin := hfx₁.mono (hlex₀.2 hcx₁)
+  have hfx₀ : FindsAt 4 x₀.fin := hfx₁.mono (hlex₀.2 (OpSig.finRead_of_capB hcx₁))
   have hcx₀ : capB x₀.q x₀.B = true := hlex₀.1.capB_eq ▸ hcx₁
   -- so does the outer handler of `4`'s clause row, its own outer row
   obtain ⟨y₀, hy₀, hley₀⟩ := hS₁ 4 0 x₀ hx₀
@@ -1355,7 +1355,7 @@ theorem not_der_progNCrecT {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives
     have := hley₀.1.capB_eq ▸ hcx₀
     simp only [capB, Bool.and_eq_true, bne_iff_ne, ne_eq, Bool.not_eq_true'] at this
     exact this.2
-  have hfs₀ : FindsAt 4 (fs₀ 0) := hfx₀.mono (hley₀.2 hcx₀)
+  have hfs₀ : FindsAt 4 (fs₀ 0) := hfx₀.mono (hley₀.2 (OpSig.finRead_of_capB hcx₀))
   obtain ⟨hnt₀, hle₀⟩ := cancelTy_rowLe (cancelPair_jr hB₀ hH₀)
   rcases hfs₀ with ht | ⟨y, hy⟩
   · rw [ht] at hnt₀; cases hnt₀
@@ -1419,7 +1419,8 @@ theorem timeoutCl_finds {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F
   have hslotK : (⟨kBoxO ob (kTy S R .cancel B F), true⟩ :: ⟨A, true⟩ :: Γ₂ : Ctx VTy)[0]? =
       some ⟨kBoxO ob (.thunk (.amp (.arr B (CTy.effOf S R)) (cancelTy S F))), true⟩ := rfl
   rcases der_letJ hB₂ (.inj₂ .unit) (cancelE (.var 0)) rfl (fun _ h => by cases h)
-      (fun _ h => by cases h) (fun h => by cases h) (fun h => by cases h) (fun h => by cases h) with
+      (fun _ h => by cases h) (fun h => by cases h) (fun h => by cases h) (fun h => by cases h)
+      (fun _ h => by cases h) with
     ⟨j₁, ⟨Γ₃, S₅, X, hle₃, hM, hS₅⟩, hr₁⟩ | ⟨Γ₃, X, hle₃, hM⟩
   · -- `bind` or `[let]`: `cancel k` at a row below the clause's
     have hkj := kcancel_jr_cancellable hslotK hle₃ hM
@@ -1487,7 +1488,7 @@ theorem not_der_e7c {Δ : LifeCtx} {Γ : Ctx VTy} {nw ni : UInt32} {qi : Qual} (
       oM₀.abort = false ∧ RowLe S₄ SM := by
     rcases der_letJ hMp (.inj₂ .unit) (performU nw) rfl (fun _ h => by cases h)
         (fun _ h => by cases h) (fun h => by cases h) (fun h => by cases h)
-        (fun h => by cases h) with
+        (fun h => by cases h) (fun _ h => by cases h) with
       ⟨j₄, ⟨Γ₇, S₇, X₇, -, hP, hS₇⟩, hr₄⟩ | ⟨Γ₇, X₇, -, hP⟩
     · obtain ⟨j₅, ⟨S₅, oM₀, hf₅, ha₅, rfl⟩, hr₅⟩ := der_performJ hP nw 0 (.val Val.unit) rfl
       have h57 : RowLe S₅ S₇ := JR.rowLe hr₅
@@ -1523,8 +1524,8 @@ theorem not_der_e7c {Δ : LifeCtx} {Γ : Ctx VTy} {nw ni : UInt32} {qi : Qual} (
   have hcap₃ : capB o₃.q o₃.B = true := hle₃.1.capB_eq ▸ hcapM
   have hcap₄ : capB o₄.q o₄.B = true := hle₄.1.capB_eq ▸ hcap₃
   -- `exnᵢ` in the cancel row of `wait`, or that cancel row `⊤`
-  have h₃₄ : FinLe o₃.fin o₄.fin := hle₄.2 hcap₃
-  have h₄₅ : FinLe o₄.fin (fs 0) := hle₅.2 hcap₄
+  have h₃₄ : FinLe o₃.fin o₄.fin := hle₄.2 (OpSig.finRead_of_capB hcap₃)
+  have h₄₅ : FinLe o₄.fin (fs 0) := hle₅.2 (OpSig.finRead_of_capB hcap₄)
   have hfs : (fs 0).isTop = true ∨ ∃ o₆, Row.find (fs 0).rowOf ni 0 = some o₆ := by
     have hT := hfin nw 0 oM o₃ hfM hf₃ hcapM
     rw [ThenLe] at hT
@@ -1707,7 +1708,7 @@ theorem dAt_bodyF {Δ : LifeCtx} {nw : UInt32} (hw : Ξ nw = [(.cancel, .unit, .
     .effLet (A := .unit) .nil (fun _ => fun _ h => absurd h List.not_mem_nil)
       (fun _ => fun _ h => absurd h List.not_mem_nil)
       (.effPerform (o := ⟨nw, 0, .cancel, .unit, .unit, .ret .unit⟩) hW
-        (by simp [Row.ofEff, Row.find]) rfl (.unitI .nil))
+        (by simp [Row.ofEff, Row.find]) rfl rfl (.unitI .nil))
       (.effSub (RowLe.nil _) (.ret (.sumI₂ (.unitI (.drop rfl .nil)))))
   show CDerivesAt Ξ Δ [] (thenE (.var 0) D (bindE (performU nw) (.inj₂ .unit))) _
   refine .effThen (SM := Row.ofEff nw [(.cancel, .unit, .unit)] 0) (SD := SD) .nil hNZ hUq

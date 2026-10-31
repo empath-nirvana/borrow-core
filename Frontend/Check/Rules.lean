@@ -525,9 +525,19 @@ def rEffSub {S S' : CRow} {A : CVTy} (hle : rowLeB S S' = true) (r : Res Δ T (.
 
 /-- `[perform]`: a non-abortive operation of the row, at its argument; it reads the row. -/
 def rPerform {S : CRow} {o : COpSig} (hf : BoCa.Fig16.LogRel.Core.Row.find S o.n o.i = some o)
-    (hna : o.abort = false) (r : Res Δ T (.val o.A)) : Res Δ T (.comp (effOf S o.B)) :=
+    (hna : o.abort = false) (hac : o.awaitB = false) (r : Res Δ T (.val o.A)) :
+    Res Δ T (.comp (effOf S o.B)) :=
   ⟨.effPerform i (.comp (effOf S o.B)) S o r.t, S ∪ r.sigs, r.pins,
-    r.F.map fun _ h => TTied.effPerform i hf hna h⟩
+    r.F.map fun _ h => TTied.effPerform i hf hna hac h⟩
+
+/-- `[await-c]`: `await_n`, the cancellable operation `n.0` of the row performed and its `inr`
+raised as `n.1`, at a dead context; it reads the row.  `[spec §29a]` -/
+def rAwait {S : CRow} {n : UInt32} {a c : COpSig}
+    (hfa : BoCa.Fig16.LogRel.Core.Row.find S n 0 = some a) (ha : a.awaitB = true)
+    (haA : a.A = .unit) (hfc : BoCa.Fig16.LogRel.Core.Row.find S n 1 = some c)
+    (hc : c.abort = true) (hcA : c.A = .unit) : Res Δ T (.comp (effOf S .unit)) :=
+  ⟨.effAwait i (.comp (effOf S .unit)) S n a c, S ∪ [], [],
+    (Fam.deadStrict T).map fun _ hd => TTied.effAwait i hd hfa ha haA hfc hc hcA⟩
 
 /-- The abortive rule (SPEC §19): an abortive operation of the row, at any answer `B`; its argument
 drops. It reads the row. -/

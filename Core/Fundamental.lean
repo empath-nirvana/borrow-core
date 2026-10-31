@@ -84,6 +84,38 @@ inductive Jdg where
   | val (A : VTy)
   | comp (C : CTy)
 
+/-- **`[await-c]`'s compatibility**: `await_n` is `[perform]` of the cancellable `a`, then a
+`case` whose `inl` arm returns and whose `inr` arm raises the abortive `c`, each by its own
+compatibility lemma.  `[spec §29a]` -/
+theorem await_compatC {Δ : LifeCtx} {S : Row} {n : UInt32} {a c : OpSig}
+    (hfa : Row.find S n 0 = some a) (ha : a.awaitB = true) (haA : a.A = .unit)
+    (hfc : Row.find S n 1 = some c) (hc : c.abort = true) (hcA : c.A = .unit) :
+    SemC Δ [] (awaitE n) (CTy.effOf S .unit) := by
+  obtain ⟨-, han, hai⟩ := Row.find_mem hfa
+  obtain ⟨-, hcn, hci⟩ := Row.find_mem hfc
+  have hq : a.q = .lin := by
+    simp only [OpSig.awaitB, Bool.and_eq_true, beq_iff_eq] at ha; exact ha.1.1.1
+  have hB : a.B = .sum .unit .unit := by
+    simp only [OpSig.awaitB, Bool.and_eq_true] at ha; exact VTy.eq_of_isNext ha.1.2
+  have hna : a.abort = false := by simp [OpSig.abort, hq]
+  have hP : SemC Δ [] (BoCa.BoLo.performE (opArgE n 0 .unit))
+      (CTy.effOf S (.sum .unit .unit)) := by
+    have h := perform_compatC (Δ := Δ) (Γ := []) (V := .unit) (o := a)
+      (by rw [han, hai]; exact hfa) hna (by rw [haA]; exact unitI_compatC .nil)
+    rw [han, hai, hB] at h; exact h
+  have h₁ : SemC Δ [⟨.unit, true⟩, ⟨.sum .unit .unit, false⟩] (.var 0) (CTy.effOf S .unit) :=
+    sub_compatC (S := []) (RowLe.nil S) (ret_compatC (var_compatC (.here (.cons .nil))))
+  have h₂ : SemC Δ [⟨.unit, true⟩, ⟨.sum .unit .unit, false⟩]
+      (BoCa.BoLo.raiseE (opArgE n 1 (.var 0))) (CTy.effOf S .unit) := by
+    have h := raise_compatC (Δ := Δ) (Γ := [⟨.unit, true⟩, ⟨.sum .unit .unit, false⟩])
+      (V := .var 0) (o := c) (B := .unit) (by rw [hcn, hci]; exact hfc) hc
+      (fun _ _ _ _ h => vC_noOwn_of_ownFree (by rw [hcA]; exact .unit) h)
+      (by rw [hcA]; exact var_compatC (.here (.cons .nil)))
+    rw [hcn, hci] at h; exact h
+  exact let_compatC .nil (fun _ s hs => absurd hs List.not_mem_nil)
+    (fun _ s hs => absurd hs List.not_mem_nil) hP
+    (sumE_compatC (.left .nil) (var_compatC (.here .nil)) h₁ h₂)
+
 /-- The CBPV typing judgment.  Its context premises are `Ctx.SplitP`, `Ctx.DeadP` and
 `Ctx.SoloP`: a live slot of persistent type may be duplicated and dropped.  `[spec §3, §10]` -/
 inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
@@ -403,8 +435,17 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (h : CDerives Δ Γ e (.comp (CTy.effOf S A))) : CDerives Δ Γ e (.comp (CTy.effOf S' A))
   /-- `[perform]`: a non-abortive operation of the row.  `[spec §19]` -/
   | effPerform {Δ Γ V} {S : Row} {o : OpSig} (hf : Row.find S o.n o.i = some o)
-      (hna : o.abort = false) (h : CDerives Δ Γ V (.val o.A)) :
+      (hna : o.abort = false) (hac : o.awaitB = false) (h : CDerives Δ Γ V (.val o.A)) :
       CDerives Δ Γ (BoCa.BoLo.performE (opArgE o.n o.i V)) (.comp (CTy.effOf S o.B))
+  /-- `[await-c]`: a cancellable operation `a` (`OpSig.awaitB`) is performed only as `await_n`,
+  which raises the abortive `c` at the same name, operation `1`, on the answer `inr ()`: a
+  cancel, a resume with `inr ()`, is not a value the body may ignore. `[perform]` refuses `a`.
+  `[spec §29a]` -/
+  | effAwait {Δ Γ} {S : Row} {n : UInt32} {a c : OpSig} (hΓ : Ctx.Dead Γ)
+      (hfa : Row.find S n 0 = some a)
+      (ha : a.awaitB = true) (haA : a.A = .unit) (hfc : Row.find S n 1 = some c)
+      (hc : c.abort = true) (hcA : c.A = .unit) :
+      CDerives Δ Γ (awaitE n) (.comp (CTy.effOf S .unit))
   /-- `[raise]`: an abortive operation of the row, at any answer, its argument dropping.
   `[spec §19]` -/
   | effRaise {Δ Γ V} {S : Row} {o : OpSig} {B : VTy} (hf : Row.find S o.n o.i = some o)
@@ -420,7 +461,8 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- `[then]`: `M then x. N unwind D`, `M` at `Σ_M ≤ Σ` and the finaliser at `Σ_D ≤ Σ`, each
   capturable operation of `Σ_M` with `Σ(o).fin ≥ Σ_M(o).fin ⋈ Σ_D`: what the finaliser may raise or
   perform when a continuation captured in `M` is cancelled is recorded in that operation's cancel
-  row.  `Γ₂` is persistent where `Σ` has an unrestricted operation at some depth of its cancel
+  row, and so it is at each cancellable operation of `Σ_M` (`OpSig.finRead`), whose cancel is a
+  resume with `inr ()` that unwinds through this finaliser.  `Γ₂` is persistent where `Σ` has an unrestricted operation at some depth of its cancel
   rows (`Row.UnrD`), since the finaliser runs in the cancels below it, and the errors pending at the
   finaliser are persistent where `Σ_D` has one.  The finaliser's row does not hold `Div`: a
   finaliser must terminate (decision 69).  `[then]` at option A, the finaliser at `F 1`, is `CDerives.effThenA`.
@@ -428,7 +470,7 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   | effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
       (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)
       (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
-        capB o.q o.B = true → ThenLe o.fin SD o'.fin)
+        o.finRead = true → ThenLe o.fin SD o'.fin)
       (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false)
       (hM : CDerives Δ Γ₁ M (.comp (CTy.effOf SM A)))
       (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
@@ -689,11 +731,13 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | nuOut hC _ ih => exact nuOut_compatX hC ih
   | unfoldN C S hC hΓ => exact unfold_compatX hC S hΓ
   | effSub hle _ ih => exact sub_compatC hle ih
-  | effPerform hf hna _ ih => exact perform_compatC hf hna ih
+  | effPerform hf hna _ _ ih => exact perform_compatC hf hna ih
+  | effAwait hΓ hfa ha haA hfc hc hcA => exact semC_dead .nil hΓ (await_compatC hfa ha haA hfc hc hcA)
   | effRaise hf ha hd _ ih => exact raise_compatC hf ha (fun _ _ _ _ h => vC_noOwn_of_ownFree hd h) ih
   | effLet hs hW hU _ _ ihM ihN => exact let_compatC hs hW hU ihM ihN
   | effThen hs hNZ _ hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
-      exact then_compatC hs hNZ hU hMS hDS hfin hP hSD ihM ihN ihD
+      exact then_compatC hs hNZ hU hMS hDS (fun n i o o' h₁ h₂ hc => hfin n i o o' h₁ h₂
+        (by simp [OpSig.finRead, hc])) hP hSD ihM ihN ihD
   | effHandleV hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
       exact handleV_compatC hs hd hH ihc hn0 hnS hlen hdv ihe
   | effHandleVB hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>

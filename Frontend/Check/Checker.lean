@@ -464,10 +464,35 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let FN ← popL E x.span x.name rN.F
       pure ⟨_, ← thenIt E sp x.name rM' FN rD⟩
     | .perform sp k i V => do
-      let ⟨_, o, hf⟩ ← findOp E sp "perform" k i
+      let ⟨S, o, hf⟩ ← findOp E sp "perform" k i
       if hna : o.abort = false then
-        let rV ← chkV n E Δ T V o.A
-        pure ⟨_, rPerform (at_ sp) hf hna rV⟩
+        if hac : o.awaitB = false then
+          let rV ← chkV n E Δ T V o.A
+          pure ⟨_, rPerform (at_ sp) hf hna hac rV⟩
+        else
+          -- `[await-c]` (SPEC §29a): a cancellable operation is performed only as `await_n`,
+          -- at `()`, its `inr` raised as `n.1`, which the row has abortive at `1`.
+          match V with
+          | .unit _ =>
+            match hfc : BoCa.Fig16.LogRel.Core.Row.find S o.n 1 with
+            | some c =>
+              if hc : c.abort = true then
+                if hcA : c.A = .unit then
+                  if haA : o.A = .unit then
+                    have ha : o.awaitB = true := by simpa using hac
+                    have hi0 : o.i = 0 := by
+                      have h := ha
+                      simp only [BoCa.Fig16.LogRel.Core.OpSig.awaitB, Bool.and_eq_true,
+                        beq_iff_eq, bne_iff_ne] at h
+                      exact h.1.1.2
+                    have hfa : BoCa.Fig16.LogRel.Core.Row.find S o.n 0 = some o := hi0 ▸ hf
+                    pure ⟨_, rAwait (at_ sp) hfa ha haA hfc hc hcA⟩
+                  else err sp s!"the cancellable operation {k}.{i} takes `1` ([await-c], SPEC §29a)"
+                else err sp s!"`await` at {k}.{i} raises `{k}.1` on `inr`, which takes `1` ([await-c], SPEC §29a)"
+              else err sp s!"`await` at {k}.{i} raises `{k}.1` on `inr`, which is not abortive ([await-c], SPEC §29a)"
+            | none => err sp s!"`await` at {k}.{i} raises `{k}.1` on `inr`, which is not in the row ([await-c], SPEC §29a)"
+          | _ => err sp (s!"the operation {k}.{i} is cancellable (linear, answering `1 + 1`): it is " ++
+              s!"performed only as `await`, at `()`, which raises `{k}.1` on `inr` ([await-c], SPEC §29a)")
       else err sp s!"the operation {k}.{i} is abortive: write `abort[{k}.{i}]`"
     | .abort sp k i V => do
       let ⟨_, r⟩ ← abortIt n E Δ T sp k i V .zero
@@ -848,7 +873,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
             if hbx : bl.mentions v = false then
               if hΔx : boundsAvoidB Δ v = true then
                 let ⟨hside⟩ ← lendSideW (Δ := Δ) sp kv bl A'
-                if hS : Row.resumeOTB S v = true then
+                if hS : Row.resumeOEB S v = true then
                   if hBn : noThunkB B' = true then
                     let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A')
                     let V := BoCa.Fig16.LogRel.Core.lendView kv v A'
@@ -870,7 +895,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                                 pure ⟨_, rLendRH (at_ sp) ⟨rule, sp.start.line, sp.start.col⟩ kv v y bl i
                                   (hA ▸ hi) (defines_of_wf hwf) hx hbx (boundsAvoidB_sound hΔx) hy
                                   (boundsAvoidB_sound hΔy) hT hB hyT hyB (noThunkB_sound hBn) hside
-                                  (Row.resumeOTB_sound hS) hdt hdc hde rM hL hM1 hcb h⟩
+                                  (Row.resumeOEB_sound hS) hdt hdc hde rM hL hM1 hcb h⟩
                               else err sp "internal error: a relaxed lend's place"
                             else err sp "internal error: a relaxed lend's body is not closed"
                           else err sp "internal error: a relaxed lend's body is not closed"
@@ -888,7 +913,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                             if h : overlapOK T (Fam.deadStrict T).u (oneL T i) = true then
                               pure ⟨_, rLendRT (at_ sp) ⟨rule, sp.start.line, sp.start.col⟩ kv v bl i
                                 (hA ▸ hi) (defines_of_wf hwf) hx hbx (boundsAvoidB_sound hΔx) hT hB
-                                (noThunkB_sound hBn) hside (Row.resumeOTB_sound hS) hdt hdc hde rM hL
+                                (noThunkB_sound hBn) hside (Row.resumeOEB_sound hS) hdt hdc hde rM hL
                                 hM1 hcb h⟩
                             else err sp "internal error: a relaxed lend's place"
                           else err sp "internal error: a relaxed lend's body is not closed"
@@ -897,8 +922,9 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                   else err sp s!"a relaxed lend's result `{E.ppV B'}` holds a `U` (R1, SPEC §29)"
                 else err sp (s!"`{rule}`: the row of a relaxed lend's body has only `Div`'s " ++
                   "`tick` and operations that resume at most once, of names other than 0, " ++
-                  "answering `1` with the empty cancel row, whose arguments are closed data " ++
-                  "with no `U` (SPEC §29, the #743 spike)")
+                  "answering `1` with the empty cancel row, cancellable `await`s, or abortive " ++
+                  "operations, whose arguments are closed data with no `U` (SPEC §29, the #743 " ++
+                  "spike)")
               else err sp s!"`{rule}`: its number {ppLVar v} occurs in a bound of the lifetime context"
             else err sp s!"`{rule}`: its bound mentions its own number {ppLVar v}"
           else err sp s!"`{rule}`: the bound `{E.ppL bl}` is not defined here"
@@ -923,7 +949,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
             if hbx : bl.mentions v = false then
               if hΔx : boundsAvoidB Δ v = true then
                 let ⟨hside⟩ ← outlivesWitness sp bl A'
-                if hS : Row.resumeOB S v = true then
+                if hS : Row.resumeOCEB S v = true then
                   if hBn : noThunkB B' = true then
                     let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A')
                     let E' : Env :=
@@ -937,7 +963,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                           if h : overlapOK T (Fam.deadStrict T).u (oneL T i) = true then
                             pure ⟨_, rLendR (at_ sp) ⟨"R1", sp.start.line, sp.start.col⟩ v bl i (hA ▸ hi)
                               (defines_of_wf hwf) hx hbx (boundsAvoidB_sound hΔx) hT hB
-                              (noThunkB_sound hBn) hside (Row.resumeOB_sound hS) hdt hdc hde rM hL hM1
+                              (noThunkB_sound hBn) hside (Row.resumeOCEB_sound hS) hdt hdc hde rM hL hM1
                               hcb h⟩
                           else err sp "internal error: a relaxed lend's place"
                         else err sp "internal error: a relaxed lend's body is not closed"
@@ -946,8 +972,8 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                   else err sp s!"a relaxed lend's result `{E.ppV B'}` holds a `U`: its value is read back after the lend is re-lent (R1, SPEC §29)"
                 else err sp ("the row of a relaxed lend's body has only operations that resume " ++
                   "at most once (cancellable or must-resume), of names other than 0, answering " ++
-                  "`1` with the empty cancel row, whose arguments are closed data with no `U` " ++
-                  "(R1, SPEC §29)")
+                  "`1` with the empty cancel row, cancellable `await`s, or abortive operations, " ++
+                  "whose arguments are closed data with no `U` (R1, SPEC §29, §29a)")
               else err sp s!"`withbor2r`: its number {ppLVar v} occurs in a bound of the lifetime context"
             else err sp s!"`withbor2r`: its bound mentions its own number {ppLVar v}"
           else err sp s!"`withbor2r`: the bound `{E.ppL bl}` is not defined here"

@@ -2002,7 +2002,7 @@ theorem dAt_then₂ {Δ : LifeCtx} :
     simp only [List.mem_singleton] at ho
     subst ho
     exact ⟨fun h => by simp [OpSig.abort, pSig, VTy.isZero] at h, fun _ => trivial⟩
-  · exact .effPerform (o := pSig 1 (.ret .unit)) (rowAt_p1 _) rfl rfl (.unitI .nil)
+  · exact .effPerform (o := pSig 1 (.ret .unit)) (rowAt_p1 _) rfl rfl rfl (.unitI .nil)
   · exact .effSub (RowLe.nil _) (.ret (.var (.here .nil)))
   · exact .effRaise (o := rSig 2) rowAt_r2 rfl rfl .unit (.unitI (.cons .nil))
 
@@ -2169,7 +2169,7 @@ theorem dAt_then₂A {Δ : LifeCtx} :
     simp only [List.mem_singleton] at ho
     subst ho
     exact ⟨fun h => by simp [OpSig.abort, pSig, VTy.isZero] at h, fun _ => trivial⟩
-  · exact .effPerform (o := pSig 1 (.ret .unit)) (rowAt_p1A _) rfl rfl (.unitI .nil)
+  · exact .effPerform (o := pSig 1 (.ret .unit)) (rowAt_p1A _) rfl rfl rfl (.unitI .nil)
   · exact .effSub (RowLe.nil _) (.ret (.var (.here .nil)))
   · exact .effRaise (o := rSigA 2) rowAt_r2A rfl rfl .unit (.unitI (.cons .nil))
 

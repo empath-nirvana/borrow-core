@@ -435,7 +435,7 @@ theorem fundamentalL {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | unfoldN C S hC hΓ => exact unfold_compatX hC S hΓ
   | effSub hle _ ih => exact sub_compatC hle ih
   | effPerform hf hna _ ih => exact perform_compatC hf hna ih
-  | effRaise hf ha hd _ ih => exact raise_compatC hf ha (fun _ _ _ _ h => vC_noOwn_of_drop hd h) ih
+  | effRaise hf ha hd _ ih => exact raise_compatC hf ha (fun _ _ _ _ h => vC_noOwn_of_ownFree hd h) ih
   | effLet hs hW hU _ _ ihM ihN => exact let_compatC hs hW hU ihM ihN
   | effThen hs hNZ hUq hU _ _ _ ihM ihN ihD => exact then_compatC hs hNZ hUq hU ihM ihN ihD
   | effHandle hs hs₁ hr hc hn0 hnS hlen _ ih => exact handle_compatC hs hs₁ hr hc hn0 hnS hlen ih

@@ -110,6 +110,12 @@ theorem OpSig.Sig.trans {o o' o'' : OpSig} (h : o.Sig o') (h' : o'.Sig o'') : o.
 theorem OpSig.Sig.capB_eq {o o' : OpSig} (h : o.Sig o') : capB o.q o.B = capB o'.q o'.B := by
   rw [h.2.2.1, h.2.2.2.2]
 
+theorem OpSig.Sig.finRead_eq {o o' : OpSig} (h : o.Sig o') : o.finRead = o'.finRead := by
+  simp only [OpSig.finRead, OpSig.awaitB, h.1, h.2.1, h.2.2.1, h.2.2.2.2]
+
+theorem OpSig.finRead_of_capB {o : OpSig} (h : capB o.q o.B = true) : o.finRead = true := by
+  simp [OpSig.finRead, h]
+
 theorem OpSig.Sig.abort_eq {o o' : OpSig} (h : o.Sig o') : o.abort = o'.abort := by
   simp only [OpSig.abort, h.2.2.1, h.2.2.2.2]
 
@@ -121,13 +127,13 @@ the one `F′` finds at its key, with, at a capturable operation, a cancel row b
 def FinLe (F F' : CTy) : Prop :=
   F'.isTop = true ∨ (F.isTop = false ∧ ∀ n i o, Row.find F.rowOf n i = some o →
     ∃ o', Row.find F'.rowOf n i = some o' ∧ o.Sig o' ∧
-      (capB o.q o.B = true → FinLe o.fin o'.fin))
+      (o.finRead = true → FinLe o.fin o'.fin))
 termination_by sizeOf F
 decreasing_by exact rowOf_fin_lt F (Row.find_mem (by assumption)).1
 
-/-- `o ≤ o′`: the same operation, its cancel row grown at a capturable operation.
+/-- `o ≤ o′`: the same operation, its cancel row grown at a capturable or cancellable operation.
 `[spec §27]` -/
-def OpSig.LeF (o o' : OpSig) : Prop := o.Sig o' ∧ (capB o.q o.B = true → FinLe o.fin o'.fin)
+def OpSig.LeF (o o' : OpSig) : Prop := o.Sig o' ∧ (o.finRead = true → FinLe o.fin o'.fin)
 
 /-- **`Σ ⊆ Σ′` as rows** (`[sub]`): every operation `Σ` finds is below the one `Σ′` finds at its
 key; an entry's cancel row may only grow.  `[spec §19, §27]` -/
@@ -159,14 +165,14 @@ theorem FinLe.trans (F : CTy) : ∀ {F' F'' : CTy}, FinLe F F' → FinLe F' F'' 
   obtain ⟨o', hf', hs, hle⟩ := h n i o hf
   obtain ⟨o'', hf'', hs', hle'⟩ := h' n i o' hf'
   exact ⟨o'', hf'', hs.trans hs', fun hc =>
-    FinLe.trans o.fin (hle hc) (hle' (hs.capB_eq ▸ hc))⟩
+    FinLe.trans o.fin (hle hc) (hle' (hs.finRead_eq ▸ hc))⟩
 termination_by sizeOf F
 decreasing_by exact rowOf_fin_lt F (Row.find_mem (by assumption)).1
 
 theorem OpSig.LeF.refl (o : OpSig) : o.LeF o := ⟨OpSig.Sig.refl o, fun _ => FinLe.refl o.fin⟩
 
 theorem OpSig.LeF.trans {o o' o'' : OpSig} (h : o.LeF o') (h' : o'.LeF o'') : o.LeF o'' :=
-  ⟨h.1.trans h'.1, fun hc => FinLe.trans o.fin (h.2 hc) (h'.2 (h.1.capB_eq ▸ hc))⟩
+  ⟨h.1.trans h'.1, fun hc => FinLe.trans o.fin (h.2 hc) (h'.2 (h.1.finRead_eq ▸ hc))⟩
 
 theorem RowLe.refl (S : Row) : RowLe S S := fun _ _ o hf => ⟨o, hf, OpSig.LeF.refl o⟩
 
@@ -236,7 +242,7 @@ theorem finObl_mono (δ : LSub) (F : CTy) :
       · simp only [OpSig.ent, hs.2.2.2.2]
       · have hc := capB_of_ent ha hq
         rw [OpSig.ent_fin, OpSig.ent_fin, if_pos hc, if_pos (hs.capB_eq ▸ hc)]
-        exact finObl_mono δ o.fin (hle hc)
+        exact finObl_mono δ o.fin (hle (OpSig.finRead_of_capB hc))
     · simp only [if_true]; exact trivial
 termination_by sizeOf F
 decreasing_by exact rowOf_fin_lt F (Row.find_mem hf).1
@@ -255,7 +261,7 @@ theorem OpSig.ent_le (δ : LSub) {o o' : OpSig} (h : o.LeF o') : (o.ent δ).Le (
   · simp only [OpSig.ent, h.1.2.2.2.2]
   · have hc := capB_of_ent ha hq
     rw [OpSig.ent_fin, OpSig.ent_fin, if_pos hc, if_pos (h.1.capB_eq ▸ hc)]
-    exact finObl_mono δ o.fin (h.2 hc)
+    exact finObl_mono δ o.fin (h.2 (OpSig.finRead_of_capB hc))
 
 /-- **A row's table grows with the row** (`[sub]`).  `[spec §19, §27]` -/
 theorem Row.tab_le {S S' : Row} (δ : LSub) (h : RowLe S S') : (Row.tab S δ).Le (Row.tab S' δ) := by

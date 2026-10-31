@@ -190,3 +190,9 @@ roots = ["NestedFold"]
 name = "Spike743"
 srcDir = "experiments/Spike743"
 roots = ["Spike743"]
+
+# #750 spike: cancel as a resume with a raise (not a default target).
+[[lean_lib]]
+name = "Spike750"
+srcDir = "experiments/spike750"
+roots = ["Spike750"]

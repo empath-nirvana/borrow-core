@@ -4236,10 +4236,8 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
                 | _ => false
               if let some (_, _) := borrowKind? V then
                 if relaxedOK then
-                  if let some a := r.find? (·.abort) then
-                    throw ⟨V.span, s!"this borrow block's body performs the operation {o.n}.{o.i}, " ++
-                      s!"which resumes, and the abortive operation {a.n}.{a.i}: an abortive " ++
-                      "operation does not cross a borrow held across a resumption (R1, SPEC §29)"⟩
+                  -- An abortive operation of the body crosses the lend (error escape, the #743
+                  -- spike): the checker's `Row.ResumeOCE` decides it.
                   let saved := (← get).cbRow
                   modify fun st => { st with cbRow := some r }
                   let V' ← surfV n c none V

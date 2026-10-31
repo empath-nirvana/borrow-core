@@ -36,12 +36,12 @@ theorem not_resumeO_tick_await (x : LifeVar) : ¬ Row.ResumeO [tickSig, pinAwait
 
 theorem pinStop_of_tick (h : PinStopTick (ℍ := ℍ)) : PinStop (ℍ := ℍ) :=
   fun Δ x b T B d M S hb hx hbx hΔx hT hB hBn hside hS hM1 hcb hdc hd hM =>
-    h Δ x b T B d M S false hb hx hbx hΔx hT hB hBn (by simpa [LendSide] using hside) hS.toT hM1 hcb
+    h Δ x b T B d M S false hb hx hbx hΔx hT hB hBn (by simpa [LendSide] using hside) hS.toE hM1 hcb
       hdc hd (by simpa [lendView] using hM)
 
 theorem pinStopImm_of_tick (h : PinStopTick (ℍ := ℍ)) : PinStopImm (ℍ := ℍ) :=
   fun Δ x b T B d M S hb hx hbx hΔx hT hB hBn hsc hS hM1 hcb hdc hd hM =>
-    h Δ x b T B d M S true hb hx hbx hΔx hT hB hBn (by simpa [LendSide] using hsc) hS.toT hM1 hcb
+    h Δ x b T B d M S true hb hx hbx hΔx hT hB hBn (by simpa [LendSide] using hsc) hS.toCE.toE hM1 hcb
       hdc hd (by simpa [lendView] using hM)
 
 end Spike743.Round3
