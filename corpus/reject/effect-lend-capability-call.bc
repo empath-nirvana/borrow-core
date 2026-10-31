@@ -1,0 +1,17 @@
+-- A place lent by `&` in the arguments of a call that threads a capability: `chk` may raise
+-- `Fail`, so its call carries the handler's capability, and `&t` lends `t` in the same call. The
+-- record has a derived drop, so the refusal is the surface's for any type, not a declared type's
+-- (SPEC §42, *Lent across a computation that may abort*).
+include fail
+
+data P = { id: i32, log: i32 }
+
+fn chk<'a>(t: imm 'a P) -> i32 with Fail[i32] = if t.id > 3 { raise(t.id) } else { t.id }
+
+main -> i32 + i32 =
+  with to_result[i32, i32] {
+    let mut t = P { id: 7, log: 5 };
+    let r = chk(&t);
+    r
+  }
+-- expect: 14:13: a place is lent (`&mut x`) in the arguments of `chk`, which also threads a capability: lend it in a call of its own
