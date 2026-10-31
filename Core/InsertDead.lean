@@ -534,7 +534,7 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       rw [shift_hndExpr]
       exact .effHandleVB hs' (deadP_insert hd Γa₁ hdd) hH' ec hn0 hnS hlen hdv ee
         ⟨hΓd.1, live_insert hd hΓd.2⟩ hSd
-  | effHandleT hs hdd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
+  | effHandleT hs hdd hHr hHc _ hn0 hnd hnS hlen hSN hLin hCN _ ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
       have ec := ihc Γa₁ Γb₁ rfl
@@ -544,7 +544,7 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       rw [h₁] at ec hHr' hHc'; rw [h₂] at ee
       rw [shift_hndExpr]
       simp only [Expr.shift, tailTuple_shift]
-      exact .effHandleT hs' (deadP_insert hd Γa₁ hdd) hHr' hHc' ec hn0 hnd hnS hlen hSN hLin ee
+      exact .effHandleT hs' (deadP_insert hd Γa₁ hdd) hHr' hHc' ec hn0 hnd hnS hlen hSN hLin hCN ee
   | effHandleL hs hdd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
@@ -900,7 +900,7 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
       rw [shift_hndExpr]
       exact .effHandleVB hAt hs' (deadP_insert hd Γa₁ hdd) hH' ec hn0 hnS hlen hdv ee
         ⟨hΓd.1, live_insert hd hΓd.2⟩ hSd
-  | effHandleT hAt hs hdd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
+  | effHandleT hAt hs hdd hHr hHc _ hn0 hnd hnS hlen hSN hLin hCN _ ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
       have ec := ihc Γa₁ Γb₁ rfl
@@ -911,7 +911,7 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
       rw [shift_hndExpr]
       simp only [Expr.shift, tailTuple_shift]
       exact .effHandleT hAt hs' (deadP_insert hd Γa₁ hdd) hHr' hHc' ec hn0 hnd hnS hlen hSN hLin
-        ee
+        hCN ee
   | effHandleL hAt hs hdd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs

@@ -50,7 +50,7 @@ theorem prog_derives : CDerives LifeCtx.empty [] prog (.comp (.ret .unit)) := by
   exact .effHandle (S := []) (E := E₁) (A := .unit) (R := .unit)
     (.left (.left .nil)) (.left (.right .nil)) (.here (.cons .nil)) (.there (.here .nil))
     (by decide) (by simp) (by simp) rfl
-    (.effPerform (o := ⟨1, 0, .lin, .unit, .unit, .ret .unit⟩) (by rfl) rfl (.unitI (.cons (.cons .nil))))
+    (.effPerform (o := ⟨1, 0, .lin, .unit, .unit, .ret .unit, false⟩) (by rfl) rfl (.unitI (.cons (.cons .nil))))
 
 /-- **Every run of the handled program reaches `()` at the empty memory.** -/
 theorem prog_runs {μ₁ : Heap} {e₁ : Expr} (hs : Steps Adequacy.emptyMem prog μ₁ e₁) :

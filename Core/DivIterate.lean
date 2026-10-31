@@ -114,7 +114,7 @@ theorem emp_conds {T : OpTab} (hPC : T.PlainCancel) (K : Kont) (hH : ∀ n, K.Ha
 theorem cwpF_tickK {T : OpTab} {en : OpEnt} (hT0 : T divEff 0 = some en) (ht : en.IsTick)
     {Q : List SRec → Val → WProp} {Y : List SRec → Expr → WProp}
     (K : Kont) (hK : K.HasHnd divEff = false) {ls : List SRec} {ρ : WRes}
-    (h : ∀ ls', Ext ls ls' ρ → ∀ w : Val, w = nextV ∨ w = closeV →
+    (h : ∀ ls', Owed en ls ls' ρ → ∀ w : Val, w = nextV ∨ w = closeV →
       owe T Q Y ls' (K.plug (.val w)) ρ) :
     cwpF T Q Y ls (K.plug tickE) ρ :=
   ewp_fold (divTab_mono _ _ _) (wpG_here _ _ _ _ (Or.inr (Or.inr (tickStop_mk hT0 ht K hK h))))
@@ -122,7 +122,7 @@ theorem cwpF_tickK {T : OpTab} {en : OpEnt} (hT0 : T divEff 0 = some en) (ht : e
 /-- **A tick in a frame `K`**, closing: the stop owes `K` at *close*. -/
 theorem closing_tickK {T : OpTab} {en : OpEnt} (hT0 : T divEff 0 = some en) (ht : en.IsTick)
     {Q : List SRec → Val → WProp} (K : Kont) (hK : K.HasHnd divEff = false) {ls : List SRec}
-    {ρ : WRes} (h : ∀ ls', Ext ls ls' ρ → Closing T Q ls' (K.plug (.val closeV)) ρ) :
+    {ρ : WRes} (h : ∀ ls', Owed en ls ls' ρ → Closing T Q ls' (K.plug (.val closeV)) ρ) :
     Closing T Q ls (K.plug tickE) ρ := by
   have hcs : contShare en.closeOnly ls K (fun ls e => Closing T Q ls e) ρ := by
     refine ⟨fun h => ?_, fun ls' he => ⟨fun w τ₁ τ₂ hB hc => ?_, fun h => absurd ht.1 h⟩⟩
@@ -188,7 +188,7 @@ theorem closing_iterate
   · refine ewp_pureSteps (opTable_mono _) (iterK_inr f s') _ _ σ
       (closing_tickK hT0 (hT en hT0) _ (turnK_hasHnd f s' divEff) fun ls'' he => ?_)
     exact ewp_pureSteps (opTable_mono _) (turnK_close f s') _ _ σ (closing_of_cwp
-      (cwp_closePath hT hPC f QB QR (hstep ls'' s' σ (hVS _ _ _ _ he hs')).2))
+      (cwp_closePath hT hPC f QB QR (hstep ls'' s' σ (hVS _ _ _ _ he.ext hs')).2))
 
 include hT hT0 hPC in
 /-- **`iterate`'s compatibility**, by coinduction up to `cwp`.  The candidate: `iterate (f, s)`
@@ -227,7 +227,7 @@ theorem cwp_iterate
           (ewp_val (divTab_mono _ _ _) (Or.inl ⟨b, rfl, hb⟩))
       · refine ewp_pureSteps (divTab_mono _ _ _) (iterK_inr f s') _ _ σ
           (cwpF_tickK hT0 ht _ (turnK_hasHnd f s' divEff) fun ls'' he w hw => ?_)
-        have hs'' := hVS _ _ _ _ he hs'
+        have hs'' := hVS _ _ _ _ he.ext hs'
         rcases hw with rfl | rfl
         · exact ⟨Or.inl (Or.inl ⟨s', Or.inr rfl, hs''⟩),
             ewp_pureSteps (opTable_mono _) (turnK_next f s') _ _ σ
@@ -242,7 +242,7 @@ theorem cwp_iterate
       · refine ewp_pureSteps (opTable_mono _) (iterK_inr f s') _ _ σ
           (closing_tickK hT0 ht _ (turnK_hasHnd f s' divEff) fun ls'' he => ?_)
         exact ewp_pureSteps (opTable_mono _) (turnK_close f s') _ _ σ (closing_of_cwp
-          (cwp_closePath hT hPC f QB QR (hstep ls'' s' σ (hVS _ _ _ _ he hs')).2))
+          (cwp_closePath hT hPC f QB QR (hstep ls'' s' σ (hVS _ _ _ _ he.ext hs')).2))
   have hW' : ∀ ls x ρ, W ls x ρ → cwpF T (stepPost QB QR) Y ls x ρ := by
     rintro ls x ρ (⟨s, hx, hs⟩ | ⟨e, rfl, he⟩)
     · have h := ewp_pureSteps (divTab_mono _ _ _) (iter_step f s) _ _ ρ

@@ -190,6 +190,18 @@ def FrameLife (W : WRes) (p : FrameRec) (α : Life) : Prop :=
   (∀ a, AgW W a → ∀ m, LinLoc p m → ∀ (ψ : CellU Loc Val) s, a.get m = some ψ →
     ψ.lsOf = some s → ∀ x, s.mem x → x ⊑ α)
 
+/-- An operation's world at `δ`: its bound interpreted, `none` when unbounded (or when the bound
+is outside `δ`'s domain).  `[spec §63]` -/
+def wldAt (δ : LSub) (w : Option Lifetime.Life) : Option Life := w.bind (·.interp δ)
+
+/-- An entry's world: an abortive operation's continuation is never resumed, so it has none.
+`[spec §63]` -/
+def entWld (abort : Bool) (δ : LSub) (w : Option Lifetime.Life) : Option Life :=
+  if abort then none else wldAt δ w
+
+theorem entWld_none (a : Bool) (δ : LSub) : entWld a δ none = none := by
+  cases a <;> rfl
+
 mutual
 /-- `S` at `δ` and `S′` at `δ′` are one value type.  `[about ours]` -/
 def TyEq : VTy → LSub → VTy → LSub → Prop
@@ -219,9 +231,9 @@ def CTyEq : CTy → LSub → CTy → LSub → Prop
   | .all x b C, δ, .all x' b' C', δ' =>
       b.interp δ = b'.interp δ' ∧ ∀ α : Life, CTyEq C (δ.extend x α) C' (δ'.extend x' α)
   | .nu C, δ, .nu C', δ' => CTyEq C δ C' δ'
-  | .eff n i q A B fin C, δ, .eff n' i' q' A' B' fin' C', δ' =>
+  | .eff n i q A B fin w C, δ, .eff n' i' q' A' B' fin' w' C', δ' =>
       n = n' ∧ i = i' ∧ q = q' ∧ TyEq A δ A' δ' ∧ TyEq B δ B' δ' ∧ CTyEq fin δ fin' δ' ∧
-        CTyEq C δ C' δ'
+        wldAt δ w = wldAt δ' w' ∧ CTyEq C δ C' δ'
   | _, _, _, _ => False
 end
 

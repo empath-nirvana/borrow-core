@@ -35,6 +35,7 @@ import Core.Compat
 import Core.EffRules
 import Core.EffBorrow
 import Core.EffBoxed
+import Core.EffLend
 import Core.Sized
 import Core.FoldImm
 import Core.FoldOwn

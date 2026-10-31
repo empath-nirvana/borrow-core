@@ -301,7 +301,7 @@ theorem d_failOutsideBody :
   refine .bind (.right (.right (.dead (.dead .nil))))
     (.ret (.withbor2U (A := Flag) (B := .zero) (S := Sf) 0 (by cdead) rfl
       ⟨.top, LifeCtx.defines_of_wf rfl, (outlives_of_dataB rfl).toLe⟩ (by simp [VFree]) (by simp [VFree])
-      (Sf_unwind 0) dFlag_closed (dtor_wf (.ref (.sum .unit .unit)) (by cdead)))) ?_
+      (Sf_unwind 0).lend dFlag_closed (dtor_wf (.ref (.sum .unit .unit)) (by cdead)))) ?_
   refine .effLet (A := .tensor (.ref Flag) .zero) (.left (.left (.left (.dead (.dead .nil)))))
     (fun _ => Ctx.Dead.drops (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
   · refine .app (.left (.right (.left (.dead (.dead .nil))))) ?_ (.there (.here (by cdead)))
@@ -388,7 +388,7 @@ theorem d_reborrowRaiseBody :
   refine .bind (.right (.right (.dead (.dead .nil))))
     (.ret (.withbor2U (A := Flag) (B := .zero) (S := Sf) 0 (by cdead) rfl
       ⟨.top, LifeCtx.defines_of_wf rfl, (outlives_of_dataB rfl).toLe⟩ (by simp [VFree]) (by simp [VFree])
-      (Sf_unwind 0) dFlag_closed (dtor_wf (.ref (.sum .unit .unit)) (by cdead)))) ?_
+      (Sf_unwind 0).lend dFlag_closed (dtor_wf (.ref (.sum .unit .unit)) (by cdead)))) ?_
   refine .effLet (A := .tensor (.ref Flag) .zero) (.left (.left (.left (.dead (.dead .nil)))))
     (fun _ => Ctx.Dead.drops (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
   · refine .app (.left (.right (.left (.dead (.dead .nil))))) ?_ (.there (.here (by cdead)))

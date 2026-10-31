@@ -124,19 +124,29 @@ theorem hnd_fwd {d : UInt32} {T : OpTab} (hTd : ∀ i, T d i = none) (hPC : T.Pl
 
 /-! ### The rows of `Div`'s handlers -/
 
+/-- The row `tick, Σ` at either grade, `Σ` without `Div`'s name: it holds `Div`.
+`[spec §14, §48]` -/
+theorem Row.divB_tickW (c : Option Lifetime.Life) (S : Row) : Row.divB (tickSigW c :: S) = true := by
+  simp [Row.divB, CTy.effOf, CTy.divAt, tickSigW, tickB, VTy.isUnitB, VTy.isNextB]
+
+theorem Row.tab_tickG_key (c : Option Lifetime.Life) (S : Row) (δ : LSub) :
+    Row.tab (tickSigW c :: S) δ divEff 0 = some ((tickSigW c).ent δ) :=
+  Row.tab_find (by simp [Row.find, List.find?, tickSigW])
+
+theorem Row.tab_tickG_ne (c : Option Lifetime.Life) (S : Row) (δ : LSub) {n i : UInt32}
+    (h : ¬ (n = divEff ∧ i = 0)) : Row.tab (tickSigW c :: S) δ n i = Row.tab S δ n i := by
+  have : decide (n = (tickSigW c).n ∧ i = (tickSigW c).i) = false := by
+    simp only [tickSigW]; exact decide_eq_false h
+  simp [Row.tab, Row.find, List.find?, this]
+
 /-- The row `tick, Σ`, `Σ` without `Div`'s name: it holds `Div`. -/
-theorem Row.divB_tick (S : Row) : Row.divB (tickSig :: S) = true := by
-  simp [Row.divB, CTy.effOf, CTy.divAt, tickSig, tickB, VTy.isUnitB, VTy.isNextB]
+theorem Row.divB_tick (S : Row) : Row.divB (tickSig :: S) = true := Row.divB_tickW none S
 
 theorem Row.tab_tick_key (S : Row) (δ : LSub) :
-    Row.tab (tickSig :: S) δ divEff 0 = some (tickSig.ent δ) :=
-  Row.tab_find (by simp [Row.find, List.find?, tickSig])
+    Row.tab (tickSig :: S) δ divEff 0 = some (tickSig.ent δ) := Row.tab_tickG_key none S δ
 
 theorem Row.tab_tick_ne (S : Row) (δ : LSub) {n i : UInt32} (h : ¬ (n = divEff ∧ i = 0)) :
-    Row.tab (tickSig :: S) δ n i = Row.tab S δ n i := by
-  have : decide (n = tickSig.n ∧ i = tickSig.i) = false := by
-    simp only [tickSig]; exact decide_eq_false h
-  simp [Row.tab, Row.find, List.find?, this]
+    Row.tab (tickSig :: S) δ n i = Row.tab S δ n i := Row.tab_tickG_ne none S δ h
 
 /-- A row without `Div`'s name has nothing at it. -/
 theorem Row.tab_without {S : Row} (h : ∀ o ∈ S, o.n ≠ divEff) (δ : LSub) (i : UInt32) :
@@ -147,8 +157,10 @@ theorem Row.tab_without {S : Row} (h : ∀ o ∈ S, o.n ≠ divEff) (δ : LSub) 
       obtain ⟨hm, hn, -⟩ := Row.find_mem hf
       exact absurd hn (h o hm)
 
-theorem tickSig_isTick (δ : LSub) : (tickSig.ent δ).IsTick :=
-  OpSig.isTick_ent δ (by simp [tickSig, tickB, VTy.isUnitB, VTy.isNextB])
+theorem tickSigW_isTick (c : Option Lifetime.Life) (δ : LSub) : ((tickSigW c).ent δ).IsTick :=
+  OpSig.isTick_ent δ (by simp [tickSigW, tickB, VTy.isUnitB, VTy.isNextB])
+
+theorem tickSig_isTick (δ : LSub) : (tickSig.ent δ).IsTick := tickSigW_isTick none δ
 
 end BoCa.Fig16.LogRel.Core
 

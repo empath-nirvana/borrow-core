@@ -269,8 +269,8 @@ theorem effOf_inj : ∀ {S S' : Row} {Y Y' : VTy}, CTy.effOf S Y = CTy.effOf S' 
   | _ :: _, [], _, _, h => by simp [CTy.effOf] at h
   | o :: S, o' :: S', _, _, h => by
       simp only [CTy.effOf, CTy.eff.injEq] at h
-      obtain ⟨h1, h2, h3, h4, h5, h6, h7⟩ := h
-      obtain ⟨rfl, rfl⟩ := effOf_inj h7
+      obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8⟩ := h
+      obtain ⟨rfl, rfl⟩ := effOf_inj h8
       cases o; cases o'
       simp_all
 
@@ -793,7 +793,7 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       · exact absurd hk (qualsVal_noVar _)
       · obtain ⟨T, hT⟩ := ihc k hk; exact ⟨T, splitP_le_left hs k T hT⟩
       · obtain ⟨T, hT⟩ := ihe k hk; exact ⟨T, splitP_le_right hs k T hT⟩
-  | effHandleT hs _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
+  | effHandleT hs _ _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
       intro k hk
       simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.HasVar, false_or] at hk
       rcases hk with (hk | hk | hk) | hk
@@ -2170,11 +2170,11 @@ def HndBase (Δ : LifeCtx) (Γ : Ctx VTy) (n : UInt32) (Q H M : Expr) (j₀ : Jd
     CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyO S R ob E fs))) ∧
     CDerives Δ Γ₂ M (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)) ∧
     (∀ o ∈ S, o.n ≠ n) ∧ j₀ = .comp (CTy.effOf S R)) ∨
-  (∃ (Γ₁ Γ₂ : Ctx VTy) (S SN : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (A R : VTy)
-    (Hr Hc : Expr),
+  (∃ (Γ₁ Γ₂ : Ctx VTy) (S SN : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (c : Bool)
+    (A R : VTy) (Hr Hc : Expr),
     Ctx.SplitP Γ Γ₁ Γ₂ ∧ Q = (qualsVal (E.map Prod.fst)).1 ∧ H = .pair Hr (tailTuple E 0 Hc) ∧
     CDerives Δ Γ₁ (.pair Hr Hc) (.val (.tensor (retTy S A R) (ansesTy S SN R E))) ∧
-    CDerives Δ Γ₂ M (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)) ∧
+    CDerives Δ Γ₂ M (.comp (CTy.effOf (Row.ofEff n E 0 fs c ++ S) A)) ∧
     (∀ o ∈ S, o.n ≠ n) ∧ j₀ = .comp (CTy.effOf S R)) ∨
   (∃ (Γ₁ Γ₂ : Ctx VTy) (S SW : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy)
     (Xs : Nat → VTy) (A R : VTy) (Hr Hw Hn : Expr),

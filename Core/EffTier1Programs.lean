@@ -373,9 +373,9 @@ theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' 
   | effHandleVB hAt hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
       exact .effHandleVB hAt (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen
         hdv ihe (ctxOutlives_append h' hΓd) hSd
-  | effHandleT hAt hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
+  | effHandleT hAt hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin hCN _ ihc ihe =>
       exact .effHandleT hAt (splitP_append h' hs) (deadP_append h' hd) hHr.append hHc.append ihc
-        hn0 hnd hnS hlen hSN hLin ihe
+        hn0 hnd hnS hlen hSN hLin hCN ihe
   | effHandleL hAt hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
       exact .effHandleL hAt (splitP_append h' hs) (deadP_append h' hd) hHr.append hHw.append
         hHn.append ihc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin ihe
@@ -536,14 +536,14 @@ abbrev rowBA : Row := exnRow 6 .cancel ++ (exnRow 1 .cancel ++ [])
 
 /-- A row whose first entry's cancel row grows is below the row with the larger one. -/
 theorem rowLe_cons_fin {n i : UInt32} {q : Qual} {A B : VTy} {F F' : CTy} (hF : FinLe F F')
-    (T : Row) : RowLe (⟨n, i, q, A, B, F⟩ :: T) (⟨n, i, q, A, B, F'⟩ :: T) := by
+    (T : Row) : RowLe (⟨n, i, q, A, B, F, false⟩ :: T) (⟨n, i, q, A, B, F', false⟩ :: T) := by
   intro m j o hf
   unfold Row.find at hf ⊢
   rw [List.find?_cons] at hf ⊢
   by_cases hk : m = n ∧ j = i
   · rw [decide_eq_true hk] at hf ⊢
     cases hf
-    exact ⟨_, rfl, OpSig.Sig.refl _, fun _ => hF⟩
+    exact ⟨_, rfl, OpSig.Sig.refl _, fun _ => hF, id⟩
   · rw [decide_eq_false hk] at hf ⊢
     exact ⟨o, hf, OpSig.LeF.refl o⟩
 
@@ -555,10 +555,10 @@ theorem thenLe_finExn2 : ThenLe (finExn 1 .cancel) (exnRow 6 .cancel) finExn2 :=
   · rw [CTy.rowOf_effOf] at hf
     obtain ⟨rfl, rfl, rfl⟩ := find_ofEff_one hf
     exact ⟨_, by simp [CTy.rowOf_effOf, Row.ofEff, Row.find], OpSig.Sig.refl _,
-      fun h => by simp [capB, VTy.isZero] at h⟩
+      fun h => by simp [capB, VTy.isZero] at h, id⟩
   · obtain ⟨rfl, rfl, rfl⟩ := find_ofEff_one hf
     exact ⟨_, by simp [CTy.rowOf_effOf, Row.ofEff, Row.find], OpSig.Sig.refl _,
-      fun h => by simp [capB, VTy.isZero] at h⟩
+      fun h => by simp [capB, VTy.isZero] at h, id⟩
 
 /-- **E7d is typed**: the inner `[then]` puts `exn_a` in `wait`'s cancel row and the outer one adds
 `exn_b`; both are handled outside the `timeout`. -/
@@ -1006,7 +1006,7 @@ theorem dAt_tickingCl {Δ : LifeCtx} :
   refine .bangThunkV (dead_noLive .nil) rfl (.lam (.tensorE (.left .nil) (.var (.here .nil)) ?_))
   refine .effLet (.right (.left (.dead .nil))) (fun h => absurd h not_cancels_tick)
     (fun h => absurd h not_unr_tick)
-    (.effPerform (o := ⟨5, 0, .lin, .unit, .unit, .ret .unit⟩) rowAt_tick
+    (.effPerform (o := ⟨5, 0, .lin, .unit, .unit, .ret .unit, false⟩) rowAt_tick
       (by simp [Row.ofEff, Row.find]) rfl (.unitI (.cons (.drop rfl (.cons .nil))))) ?_
   refine .bind (.left (.right (.dead (.dead .nil))))
     (.ret (.unitI (.drop rfl (.cons (.cons (.cons .nil)))))) ?_

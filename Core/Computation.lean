@@ -56,7 +56,7 @@ def sS : CTy → List SRec → LSub → List Val → (List SRec → Val → WPro
 theorem cB_iff_stacks (η : Option (Nat → TEnt)) : ∀ (C : CTy), C.EffFree → ∀ (ls : List SRec)
     (δ : LSub) (e : Expr) (ρ : WRes),
     cB η C ls δ e ρ ↔ ∀ S Q, (sSB η C ls δ S Q ─⋆ wpTS ls (plugS S e) Q) ρ
-  | .eff _ _ _ _ _ _ _, hC, _, _, _, _ => hC.elim
+  | .eff _ _ _ _ _ _ _ _, hC, _, _, _, _ => hC.elim
   | .ret A, _, ls, δ, e, ρ => by
       constructor
       · intro hw S Q ρ₁ ρ₂ hs hc
@@ -106,7 +106,7 @@ theorem cB_iff_stacks (η : Option (Nat → TEnt)) : ∀ (C : CTy), C.EffFree �
 /-- `cC` is the stack semantics, at a type with no effect row. -/
 theorem cC_iff_stacks : ∀ (C : CTy), C.EffFree → ∀ (ls : List SRec) (δ : LSub) (e : Expr)
     (ρ : WRes), cC C ls δ e ρ ↔ ∀ S Q, (sS C ls δ S Q ─⋆ wpTS ls (plugS S e) Q) ρ
-  | .eff _ _ _ _ _ _ _, hC, _, _, _, _ => hC.elim
+  | .eff _ _ _ _ _ _ _ _, hC, _, _, _, _ => hC.elim
   | .ret A, _, ls, δ, e, ρ => by
       constructor
       · intro hw S Q ρ₁ ρ₂ hs hc
@@ -203,7 +203,7 @@ theorem cB_step (η : Option (Nat → TEnt)) : ∀ (C : CTy) {e e' : Expr},
   | .amp C D, _, _, h, ls, δ => fun _ ⟨h₁, h₂⟩ =>
       ⟨cB_step η C (fun μ => (h μ).plug (Kont.appL .hole _)) ls δ _ h₁,
        cB_step η D (fun μ => (h μ).plug (Kont.appL .hole _)) ls δ _ h₂⟩
-  | .eff _ _ _ _ _ _ _, _, _, h, ls, _ => effWp_step h ls
+  | .eff _ _ _ _ _ _ _ _, _, _, h, ls, _ => effWp_step h ls
   | .arr _ C, _, _, h, ls, δ => fun _ h' v ρ₁ ρ₂ hv hc =>
       cB_step η C (fun μ => (h μ).plug (Kont.appL .hole v)) ls δ _ (h' v ρ₁ ρ₂ hv hc)
   | .top, _, _, _, _, _ | .all _ _ _, _, _, _, _, _
@@ -224,7 +224,7 @@ theorem cC_step : ∀ (C : CTy) {e e' : Expr}, (∀ μ : Heap, Step1N μ e μ e'
         (h' α ρ₁ ρ₂ hp hc)
   | .nu C, _, _, h, ls, δ => fun ρ h' hC =>
       ((cC_nu_unfold hC ls δ _ ρ).mpr (cB_step _ C h ls δ ρ ((cC_nu_unfold hC ls δ _ ρ).mp h'))) hC
-  | .eff _ _ _ _ _ _ _, _, _, h, ls, _ => effWp_step h ls
+  | .eff _ _ _ _ _ _ _ _, _, _, h, ls, _ => effWp_step h ls
 
 /-- One head step in front of `𝒞⟦C⟧`. -/
 theorem cC_head (C : CTy) {e e' : Expr} (h : ∀ μ : Heap, Head μ e μ e') (hn : e.allocs = false)
@@ -243,7 +243,7 @@ theorem cB_bind (η : Option (Nat → TEnt)) : ∀ (C : CTy) (K : Kont) (M : Exp
   | .amp C D, K, M, ls, δ, P, R, hR, h => fun ρ hρ =>
       ⟨cB_bind η C (.appL K _) M ls δ P R hR (fun ls' hls w σ hσ => (h ls' hls w σ hσ).1) ρ hρ,
        cB_bind η D (.appL K _) M ls δ P R hR (fun ls' hls w σ hσ => (h ls' hls w σ hσ).2) ρ hρ⟩
-  | .eff _ _ _ _ _ _ _, K, M, ls, _, P, R, hR, h =>
+  | .eff _ _ _ _ _ _ _ _, K, M, ls, _, P, R, hR, h =>
       effWp_bind_pure_frame K M ls P R hR h
   | .arr A C, K, M, ls, δ, P, R, hR, h => by
       rintro ρ ⟨ρ₁, ρ₂, hc, hw, hr⟩ v a x ha hx
@@ -292,7 +292,7 @@ theorem cC_bind : ∀ (C : CTy) (K : Kont) (M : Expr) (ls : List SRec) (δ : LSu
   | .nu C, K, M, ls, δ, P, R, hR, h => fun ρ hρ hC =>
       ((cC_nu_unfold hC ls δ _ ρ).mpr (cB_bind _ C K M ls δ P R hR
         (fun ls' hls w σ hσ => (cC_nu_unfold hC ls' δ _ σ).mp (h ls' hls w σ hσ)) ρ hρ)) hC
-  | .eff _ _ _ _ _ _ _, K, M, ls, _, P, R, hR, h =>
+  | .eff _ _ _ _ _ _ _ _, K, M, ls, _, P, R, hR, h =>
       effWp_bind_pure_frame K M ls P R hR h
 
 /-- A dead slot contributes nothing. -/
