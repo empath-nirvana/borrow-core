@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.17 · 2026-10-31
+Version 1.18 · 2026-10-31
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1354,6 +1354,51 @@ which carries `HasDtor` (`TDerivesP.dtor_hasDtor`), so it inserts none at such a
 one, `Imm @a N` or `Mut @a N`, is linear with a derived drop (`decl_imm_drop`, `decl_mut_drop`): the
 loan ends, the value is not consumed.
 
+### The derived copy at `imm`
+
+`Imm @a A` and `[Imm @a A]` are linear with a **derived copy** (`DerivedCopy`, `Core/Classes.lean`):
+the constant `copy` (`CDerives.copy`, at `axCopyTy`) or `array_copy` (`CDerives.arrCopy`, under
+`bangE`) makes two of one, and `copy_derives` types `copyE A i e`, the copy of `xᵢ` with `e` under
+both copies. A use of such a variable beyond its first is its derived copy, which the checker
+inserts as it inserts a derived drop. The split is unchanged (`overlapOK`, `Ctx.SplitP`): a slot
+both parts use is admitted at a persistent type only, so `imm` stays linear, and a second use of a
+`mut` borrow, an owned value, a declared value or a capability is refused there ("`x` is used
+twice here, and its type `…` is linear").
+
+- **Where.** At a node whose context the checker splits between two parts that run in sequence,
+  each variable both parts mention free (`mentionsV`, `mentionsC`, which respect binders) whose
+  slot is `DerivedCopy` (`derivedCopyB_iff`) is copied before the node:
+  `p <- return (copy xᵢ); let (x₁, x₂) = p; node`, the first part checked where `x` names `x₁`,
+  the second where it names `x₂`; the copies are owed as any binder's (above). The nodes and their
+  parts: `(V, W)`; `V W` (`W`, then `V`); `x <- M; N` (`M`, `N`, at `[let]` and `[then]` too);
+  `x <- M unwind (D); N` (`M`, then `N` and `D`); `let () = V; M` and `let (y, z) = V; M` (`V`,
+  `M`); `case V {…}` (`V`, then both arms); `M y` (`M`, `y`). A value split holds no binding, so its
+  copy is under `run` (`ofRet`). Several variables nest, in slot order. The rule is decided before
+  the parts are checked, so each is checked once (`Frontend/Check/DerivedCopy.lean`).
+- **Not here.** A merge (`case` arms, `<M, N>`, `[then]`'s continuation and finaliser) uses a
+  variable once per side. A handler's clauses use only unrestricted slots (`[handle]`'s `Γ₁`),
+  `!thunk` only `!` slots, and a relaxed lend's body only its view: an `imm` there is refused with
+  those rules' messages. Inside a thunk, a clause's body, a loop's or a fold's generated function
+  or a `def`, the rule applies at the splits there.
+- **The kernel rule.** `copyIt` builds the term from `rVar`, the constant's node, `rLolliE`,
+  `rRet`, `rTensorE` and `rBind`; its erasure has `copyE`'s shape with the kernel's `copyC A`
+  (`copyIt_erase`). A `copy`
+  node is typed only at `axCopyTy a A` and an `array_copy` node only at `arrCopyTy a A`
+  (`TDerivesP.copy_at`, `TDerivesP.arrCopy_at`), each `DerivedCopy`, so no inserted copy is at
+  another type whatever decides where it goes.
+- **Mention is use.** A part mentions a variable only at `var` leaves, which its masks keep, and
+  the checker drops only slots a part owns, so a part uses a slot exactly when it mentions its
+  variable: the rule is the split's own masks, read before the parts are checked, so it fires
+  only where the split would refuse a `DerivedCopy` slot. `copyUsed` checks at every insertion that each
+  copy is used or dropped by its part (one neither is an internal error).
+- **Not covered.** A tuple of borrows is not `DerivedCopy` (a kernel change would widen it). The
+  elaboration's own `array_copy` in its templates is unchanged (below). `clone(x)` stays the written
+  copy of an unrestricted value.
+- **Pinned.** The copy constant's node records the variable and that the checker inserted it
+  (`TInfo.inserted`); `bcc copies <file>` prints each, and `corpus/copies/<name>.txt` pins them for
+  `corpus/<name>.bc` (`scripts/check-corpus.sh`): what `main` reaches, a `def`'s body once per
+  use.
+
 ### Every insertion site cites its rule
 
 Every stage that inserts a drop, a copy or an abandonment names the kernel rule it emits.
@@ -1366,7 +1411,9 @@ chosen in a definition of its own) must be refused (#746):
 
 - **The checker** inserts a drop only as a `dtor` node (`rDrop`, `finNode`), typed by
   `TDerivesP.dtor`, which carries `HasDtor`; erased, it is `drop_derives`. Every checked program
-  projects to `CDerivesP` (`checkProgram_soundP`), so the checker needs no table of sites.
+  projects to `CDerivesP` (`checkProgram_soundP`), so the checker needs no table of sites. It
+  inserts a copy only as a `copy` or `array_copy` node (`copyIt`), typed only at `DerivedCopy`
+  (`TDerivesP.copy_at`, `TDerivesP.arrCopy_at`); `bcc copies` lists them (above).
 - **The elaboration** emits `tok_burn` only where it compiles a written `match` (`Data.compile`,
   through `Data.burnBind`), `array_copy` only in a template's view (`CDerives.arrCopy`), and no
   other copy or drop of its own: a field read, `*e` and a `for` over an owned array copy only at an
@@ -7948,8 +7995,12 @@ is refused by a kernel fact, not by a check of the elaborator:
   (`TDerivesP.dtor_hasDtor`).
 - **Live across a computation that may abort or cancel**: `[let]`'s `hW` asks the rest of the
   context to be `VTy.OwnFree` (§19), and a type holding `Tok` is not (`decl_not_ownFree`). The
-  program is accepted when the value is consumed before, lent into the computation, held as a
-  handler's state, or under a `[then]` whose written finaliser consumes it (`finally`, below).
+  program is accepted when the value is consumed before, lent into the computation, held as the
+  state of a handler that handles the abortive operation itself, its clause consuming the state
+  (`corpus/decl-handler-state.bc`), or under a `[then]` whose written finaliser consumes it
+  (`finally`, below). A handler's state does not carry it across an abort the handler does not
+  handle: the state is passed on at each resume, live across the rest of the body, which may
+  abort (`corpus/reject/decl-handler-state-abort.bc`).
 - **Copied**: it is not persistent, so no split duplicates it (`Ctx.SplitP.both_live_iff`).
 - **A field read that discards it** (E5's projection): `getAt` asks the discarded fields to be
   `Forgettable` (§5); a field read of a record that holds one at another field consumes it.
@@ -7990,7 +8041,8 @@ reads `[then]`'s parts for their rows and elaborates a `with` inside them. The h
 and the finaliser thread no capability, so a finaliser does no I/O yet: see *Open*. It is decision 2's "cleanup goes
 in a finaliser", made readable, and not a drop: `D` is a call the program wrote. `[then]` gives `M`
 and `D` disjoint contexts, so a value `D` consumes is not used in `M`: "commit in the body, roll
-back on an abort" lends the value into `M` or holds it as a handler's state.
+back on an abort" lends the value into `M`, or holds it as the state of a handler that handles
+the abort and rolls back in that clause.
 
 **Errors name the consumer.** A value whose type holds a marked field, unused at the end of its
 scope or live across an abort, is refused with one message that names the value and its type
@@ -10222,6 +10274,19 @@ relation or the machine.
 ---
 
 ## Changelog
+
+- **1.18** (2026-10-31) — §12, §42 (#746): the derived copy at `imm`. A use of an `imm` borrow
+  or an `array_imm` view beyond its first is its derived copy, which the checker inserts at a split
+  whose two parts both mention it, as the `copy` or `array_copy` constant in `copy_derives`'s shape
+  (`Frontend/Check/DerivedCopy.lean`; `TDerivesP.copy_at`, `arrCopy_at`). The split, `overlapOK` and
+  `VTy.persistent` are unchanged: `mut` borrows and owned values are refused on a second use as
+  before. `bcc copies` and `corpus/copies/` pin the inserted copies.
+  `corpus/reject/double-use-in-callee.bc` uses an `array_mut` view (its `array_imm` program now
+  checks, `corpus/imm-copy-view.bc`). §42: a declared value is carried across an abort by a
+  handler's state only when that handler handles the abort; SPEC said any handler's state, and
+  the kernel's `[let]` refuses that (`corpus/reject/decl-handler-state-abort.bc`). No kernel
+  change; `fundamentalC`, `adequacyC` and `adequacyD` keep their statements; every program accepted
+  before is accepted with the same output.
 
 - **1.17** (2026-10-31) — §29 (#743, B1): `PinLaw` as two schemas, `LendFrame` over `LendForm`
   (one form, `ref`, which is R1) and `LoopFrame` (R2). `PinStop` and `PinLoop` are derived

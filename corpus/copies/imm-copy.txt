@@ -1,0 +1,7 @@
+10:38: copy of `r` : imm 'l1 i32
+14:41: copy of `r` : imm 'l1 i32
+19:19: copy of `r` : imm 'l1 i32
+19:23: copy of `r` : imm 'l1 i32
+24:49: copy of `v` : imm 'l2 i32
+30:75: copy of `v` : imm 'l3 i32
+30:75: copy of `v` : imm 'l3 i32
