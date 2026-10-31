@@ -44,7 +44,7 @@ def Class.of (A : CVTy) : Class :=
 def Class.name : Class → String
   | .unrestricted => "unrestricted"
   | .linear true => "linear, with a derived drop"
-  | .linear false => "linear"
+  | .linear false => "linear, with no derived drop"
 
 open BoCa.Fig16.LogRel.Core (Unrestricted Linear HasDtor) in
 /-- `Class.of` computes the unrestricted class. -/
