@@ -85,98 +85,30 @@ new constructor: there are none. Every changed rule is listed below with its new
 - `effHandleL` (§51);
 - `runtime_every_run` and `divFuel_every_run` at `[tickSig]`.
 
-### 1.2 The grade under M1: the world axis, as a lifetime bound
+### 1.2 The grade under M1: the world axis, two points
 
-This section follows the M1 decision (user, 2026-10-22): "world as a lifetime bound `ℓ_r` on `eff`,
-in `CTy.all` form. This replaces #654's `c : Bool`; no new carrier." The world's order is the
-lifetime order. The world is the bound on the worlds a stop's continuation is resumed in.
+**Amended (2026-10-31).** The world axis is the two-element lattice `World := op | top` with
+`op ⊑ top`. The user approved `{ℓ_op, ⊤}` on 2026-10-22, in #673's consolidated review (comment
+6350336829, item 4: "Yeah sounds good"). "M1 world = a lifetime bound" was a stale note, not a user
+decision. The phase-2 spike (21363bd9) found that a lifetime bound collapses to the same two
+points: decision 70, `docs/decisions.md`.
 
-**Scope.** B5 builds the world axis only. M1's other axes, count, position, storage and pending
-finalisers, are not in B5's scope and stay as they are on main (`Qual`, `B = 0`, `fin`). Class 1
-reads count only as `o.q = .lin` (must resume, which is count 1).
+- `World` (`Core/Types.lean`) has its laws proved: the order is reflexive, transitive and
+  antisymmetric with `op` least; the meet; `World.le_iff`.
+- `OpSig.wld : World := .top`, and `CTy.eff … (wld : World) C`.
+- `Owed en ls ls' ρ` is `Ext ls ls' ρ` at `top`, and the same members at `op`.
+- The laws stated with the kernel:
+  - the meet a handler's clauses take (`hCN_iff_le`);
+  - independence from the count axis (`owed_q_indep`);
+  - no world at an abortive operation (`entWld`, `Row.Lend.entWld`).
+- `Row.Lend S x`: every non-abortive operation is `op`, `lin`, with closed-data answers.
+- B5 builds the world axis only. The count, position, storage and pending-finaliser axes are not
+  in its scope.
 
-**Reading.** A stop at an operation whose world is `some ℓ_r` owes its continuation only at
-`Ext`-extensions that keep every record tagged strictly inside `ℓ_r`. A resumer whose own world is
-`ℓ_r` can therefore resume it: whatever the resumer opens before resuming, it closes again.
-
-A lend at `'x` survives such a stop whenever `'x` is strictly inside `ℓ_r`. This is M1's
-implication "holds ℓ ⇒ ℓ_r bounds ℓ". `ℓ_r` is a lifetime that the handler names (one in its `Δ`),
-and every lend the handled computation opens is inside every such lifetime (`'x ⊏ Δ.meetOfDom`). So
-the bound is satisfiable exactly by a handler in scope. This is what #673 v3's review item S4 noted
-("a handler can never name an inner lend's lifetime"); here it is a property of the order, not a
-reason to collapse the carrier.
-
-**The unbounded element.** Today's convention, owed at every `Ext`-extension, is the world that
-constrains nothing. Under this reading that is a lifetime with nothing strictly inside it. The
-syntax `Lifetime.Life` (`var | top | join | meet`, `Paper/S1_Syntax/Definitions.lean:276`, a
-transcribed grammar) has no such element, and B5 does not add one to a printed grammar. So the field
-is `Option Lifetime.Life`:
-
-- `none` is unbounded, today's.
-- `some ℓ` is the bound `ℓ`.
-- `some .top` keeps every record (all are inside `⊤`), which is #654's `c = true`.
-
-#654's Bool is therefore two points of this carrier (`none` and `some .top`), not the carrier. Every
-lifetime in between, `some 'h` for a handler at `'h`, is new.
-
-```lean
--- Core/Types.lean
-structure OpSig where
-  n : UInt32
-  i : UInt32
-  q : Qual
-  A : VTy
-  B : VTy
-  fin : CTy := .ret .unit
-  /-- M1's world: the bound of the worlds a continuation captured here is resumed in. `none`:
-  every `Ext`-extension (unbounded). Placed after #750 A's `rc` if A lands first (box Q4). -/
-  wld : Option Lifetime.Life := none
-
-inductive CTy
-  | eff (n i : UInt32) (q : Qual) (A B : VTy) (fin : CTy) (wld : Option Lifetime.Life) (C : CTy)
-  -- …
-```
-
-```lean
--- Core/EffDefs.lean. `OpEnt.wld : Option Life` is the bound interpreted at `δ` (in
--- `OpSig.ent`), by the interpretation `CTy.all`'s bound uses.
-def Owed (en : OpEnt) (ls ls' : List SRec) (ρ : WRes) : Prop :=
-  Ext ls ls' ρ ∧ ∀ r, en.wld = some r → ∀ x : SRec, x.2 ⊏ r → (x ∈ ls ↔ x ∈ ls')
--- contShare and KapRelT (EffRules.lean): `∀ ls', Ext ls ls' ρ →` becomes `∀ ls', Owed en ls ls' ρ →`
-theorem owed_unbounded {en : OpEnt} (h : en.wld = none) {ls ls' ρ} : Owed en ls ls' ρ ↔ Ext ls ls' ρ
-theorem Owed.ext {en ls ls' ρ} : Owed en ls ls' ρ → Ext ls ls' ρ
-theorem Owed.anti {en en' ls ls' ρ} : en.wld ≼ en'.wld → Owed en' ls ls' ρ → Owed en ls ls' ρ
--- `w ≼ w'`: `w = none`, or `w = some r ∧ w' = some r' ∧ r ⊑ r'` (inside-or-equal, the lifetime order)
-```
-
-```lean
--- Core/EffBorrow.lean. `Row.Lend` now reads the lifetime context; `LifeLt` is the lifetime-order
--- judgement `CTy.all`'s rules use (its name on main fixed in phase 2).
-def Row.Lend (Δ : LifeCtx) (S : Row) (x : LifeVar) : Prop :=
-  ∀ o ∈ S, o.n ≠ 0 ∧ ¬ VFree x o.A ∧ (∀ Δ a, VOutlives Δ a o.A) ∧
-    (o.abort = true ∨
-      (o.q = .lin ∧ ¬ VFree x o.B ∧ (∀ Δ a, VOutlives Δ a o.B) ∧
-        ∃ r, o.wld = some r ∧ r.mentions x = false ∧ LifeLt (Δ.extend x Δ.meetOfDom) (.var x) r))
-theorem Row.Unwind.lend {Δ S x} : S.Unwind x → S.Lend Δ x
-```
-
-```lean
--- Core/EffFin.lean. `[sub]` moves along the order: `none` to any bound, and a bound to a wider one.
--- The order needs a lifetime context, so `LeF` takes `Δ` (rework, 1.4).
-def OpSig.LeF (Δ : LifeCtx) (o o' : OpSig) : Prop :=
-  o.Sig o' ∧ (capB o.q o.B = true → FinLe o.fin o'.fin) ∧
-    (∀ r, o.wld = some r → ∃ r', o'.wld = some r' ∧ LifeLe Δ r r')
-```
-
-```lean
--- Core/DivDefs.lean, Core/DivFuel.lean
-def tickSigW (w : Option Lifetime.Life) : OpSig := ⟨divEff, 0, .lin, .unit, nextTy, .ret .unit, w⟩
-abbrev tickSig : OpSig := tickSigW none
-abbrev divFuelTy (S : Row) (A : VTy) (w : Option Lifetime.Life := none) : VTy  -- inner row `tickSigW w :: S`
-```
-
-The runtime handles `[tickSigW (some .top)]`. It opens nothing before it resumes, so it keeps every
-record. `reify`'s tick stays `tickSigW none`.
+The text of 1.3–1.5 below reads `some r`/`none` as `op`/`top`. `hw` is dropped, since a two-point
+world mentions no lifetime, and `hCN` is `c = .op → ∀ o ∈ SN, o.wld = .op`. The ports are
+`call-grade`'s, with `call : Bool` replaced by `wld : World`. 1.4's named risk does not arise: at
+`op` a stop is owed only at its own members.
 
 ### 1.3 The changed rules, verbatim
 
