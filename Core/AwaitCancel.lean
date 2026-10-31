@@ -583,6 +583,8 @@ open BoCa.BoLo (Heap Steps Step1 Head Kont hndE hndVal raiseE performE opPayload
   kappaC)
 open BoCa.Lifetime (LifeVar LifeCtx)
 open BoCa.Fig16.LogRel.Core.CancelIntercept (idV constC raiseU rSig finR d_idV d_constC_raise)
+open BoCa.Fig16.LogRel.Core.EffPrograms (Flag adequacyD_obs)
+open BoCa.Programs (alloc' free')
 
 theorem cancelTotalC_nil : CancelTotalC (.ret .unit) := by
   rw [CancelTotalC]; exact ⟨rfl, rfl, fun o ho => by simp [CTy.rowOf] at ho⟩
@@ -641,6 +643,104 @@ theorem not_cancelEnds_swallowLoop : ¬ Row.CancelEnds rowSwLoop := by
   revert this
   simp [Row.divB, CTy.effOf, CTy.divAt, tickSig, tickB, VTy.isUnitB, VTy.isNextB, awaitF,
     cancelled, finR, rSig, divEff]
+
+/-! ### The scheduler's clause, typed by passing the state along
+
+The immediate scheduler: the handler's answer is `U(Flag ⊸ F Flag)`, the cancelled flag passed in
+as the state, as `take n` passes its count (`EffPrograms.takeProg`). Its `await` clause reads the
+flag and resumes `κ` with it at once: `inl ()` goes on, `inr ()` cancels. The answer `inl ()` is
+"finished", `inr ()` "cancelled". Started at the cancelled flag around the swallowing example, every
+`await` raises `cancelled`: the run ends at `inr ()`. -/
+
+/-- The scheduler's answer, the flag passed in: `U(Flag ⊸ F Flag)`. -/
+abbrev StR : VTy := .thunk (.arr Flag (.ret Flag))
+
+/-- The handled effect: `await` and its cancel target. -/
+abbrev Esched : List (Qual × VTy × VTy) := [(.lin, .unit, .sum .unit .unit), (.cancel, .unit, .zero)]
+
+/-- The cancel rows: `{3}` at `await`, the swallowing finaliser's raise. -/
+def fsSched : Nat → CTy := fun j => if j = 0 then finR 3 else .ret .unit
+
+/-- Both operations marked. -/
+def csSched : Nat → Bool := fun _ => true
+
+theorem ofEff_sched : Row.ofEff 1 Esched 0 fsSched csSched ++ [] = rowSw := rfl
+
+/-- The answer clause: `λx. return (λc. inj₁ x)`. -/
+def hrS : Expr := .val (.lam (.val (.lam (.inj₁ (.var 1)))))
+
+/-- The `await` clause: `λ(v, κ). return (λc. κ.resume c to g. g c)`: the flag is the answer,
+`inl ()` going on, `inr ()` the cancel. -/
+def clS : Expr :=
+  .val (.lam (.letpair (.var 0) (.val (.lam
+    (bindE (.app (.app (.var 1) (.val (.inj₁ .unit))) (.var 0)) (.app (.var 0) (.var 1)))))))
+
+/-- The cancel target's clause: `λ_. return (λc. inj₂ ())`. -/
+def ccS : Expr := .val (.lam (.val (.lam (.inj₂ unit'))))
+
+def clsS : Expr := .pair clS (.pair ccS (.val .unit))
+
+/-- **The immediate scheduler around the swallowing example, from the cancelled flag.** -/
+def stickyScope : Expr :=
+  bindE clsS (bindE hrS (bindE (hndTerm 1 [.lin, .cancel] 0 1 swallowBody)
+    (bindE (.val (.inj₂ .unit)) (.app (.var 1) (.var 0)))))
+
+theorem flag_persistent : Flag.Persistent := rfl
+
+theorem d_hrS {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
+    CDerives LifeCtx.empty Γ hrS (.val (retTy [] .unit StR)) :=
+  .bangThunkV (banged_dead hΓ) rfl (.lam (.ret (.thunkV rfl (.lam (.ret (.sumI₁
+    (.var (.skip flag_persistent (.here hΓ.toP)))))))))
+
+theorem d_ccS {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
+    CDerives LifeCtx.empty Γ ccS (.val (clauseTy [] StR (.cancel, .unit, .zero))) :=
+  .bangThunkV (banged_dead hΓ) rfl (.lam (.ret (.thunkV rfl (.lam (.ret (.sumI₂
+    (.unitI (.drop rfl (.drop rfl hΓ.toP)))))))))
+
+theorem d_clS {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
+    CDerives LifeCtx.empty Γ clS
+      (.val (clauseTy [] StR (.lin, .unit, .sum .unit .unit) (finR 3))) := by
+  refine .bangThunkV (banged_dead hΓ) rfl (.lam ?_)
+  refine .tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_
+  refine .ret (.thunkV rfl (.lam ?_))
+  refine .bind (.dup rfl (.left (.right (.dead (deadSplit hΓ)))))
+    (.app (.right (.left (.dead (.dead (deadSplit hΓ)))))
+      (.proj₁ (.force (C := .amp (.arr (.sum .unit .unit) (CTy.effOf [] StR)) .top)
+        (.there (.here (by cdead)))))
+      (.here (by cdead))) ?_
+  exact .app (.left (.right (.dead (.right (.dead (deadSplit hΓ))))))
+    (.force (.here (by cdead))) (.there (.here (.cons (.drop rfl (.cons hΓ.toP)))))
+
+/-- **The immediate scheduler is typed**: a closed `CDerives` derivation at `F Flag`, its handler
+at the marked pair (`csSched`). -/
+theorem d_stickyScope : CDerives LifeCtx.empty [] stickyScope (.comp (.ret Flag)) := by
+  refine .bind .nil (.ret (.tensorI .nil (d_clS .nil)
+    (.tensorI .nil (d_ccS .nil) (.unitI .nil)))) ?_
+  refine .bind (.right .nil) (.ret (d_hrS (.cons .nil))) ?_
+  refine .bind (.left (.left .nil))
+    (CDerives.effHandleCs (S := []) (E := Esched) (n := 1) (A := .unit) (R := StR) fsSched csSched
+      (.left (.left .nil)) (.left (.right .nil)) (.here (.cons .nil)) (.there (.here .nil))
+      (by decide) (by simp) (by simp) rfl
+      (by rw [ofEff_sched]
+          exact CDerives.append_dead (Γ := []) (Ctx.Dead.cons (Ctx.Dead.cons .nil)) d_swallow)) ?_
+  refine .bind (A := Flag) (.right (.dead (.dead .nil))) (.ret (.sumI₂ (.unitI (by cdead)))) ?_
+  exact .app (.right (.left (.dead (.dead .nil)))) (.force (.there (.here (by cdead))))
+    (.here (by cdead))
+
+/-- **A cancel ends** at the closed instance: every run of the immediate scheduler around the
+swallowing example from the cancelled flag continues to a value (`adequacyD_obs`). -/
+theorem stickyScope_ends {μ₁ : Heap} {e₁ : Expr}
+    (hs : Steps Adequacy.emptyMem stickyScope μ₁ e₁) :
+    ∃ v, BoCa.BoLo.Steps μ₁ e₁ Adequacy.emptyMem (.val v) := by
+  obtain ⟨v, hv, -⟩ := adequacyD_obs (by decide) d_stickyScope hs
+  exact ⟨v, hv⟩
+
+/-- `Support`'s `eval` agrees: the run ends at `inr ()`, "cancelled", no cell left. -/
+theorem stickyScope_eval :
+    (match eval stickyScope with
+      | .value ⟨.inj₂ .unit, _⟩ false => true
+      | _ => false) = true := by
+  decide
 
 /-! ### Runs
 
