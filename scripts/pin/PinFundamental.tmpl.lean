@@ -104,6 +104,23 @@ theorem adequacyD_pin (hPin : PinLaw (ℍ := ℍ)) {e : Expr}
   obtain ⟨v, hsteps, rfl⟩ := theorem32D e (· = Val.unit) hwp' hs
   exact hsteps
 
+/-- **Totality of an open computation, under `PinLaw`**: `total_open` at a `CDerivesP`
+derivation. A computation of `F B` (the empty row) in a context `Γ`, closed by values `γ` in the
+relation at a tagged typed world whose completion lowers to `μ`, reaches a value under every
+allocator from every count.  `[spec §14, §50]` -/
+theorem total_open_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {B : VTy}
+    (h : CDerivesP Δ Γ e (.comp (.ret B)))
+    {δ : LSub} {γ : List Val} {ls : List SRec} {ρ ρf fρ : WRes} {ps : List FrameRec} {μ : Heap}
+    (hδ : Δ.Models δ) (hγ : gDenC ls δ Γ γ ρ)
+    (h1 : ResU.Hash ρf ρ) (h2 : ResU.CompS ρf ρ fρ) (h3 : TW fρ ps (rsOf ls))
+    (h4 : Tagged fρ ps ls) (hμ : ResU.Lower fρ μ) (Al : BoCa.BoLo.Alloc) (k : Nat) :
+    ∃ (k' : Nat) (μ' : Heap) (v : Val), BoCa.BoLo.ARun (ℍ := ℍ) Al k μ (substAll γ e) k' μ' (.val v) := by
+  have hwp := fundamentalC_pin (ℍ := ℍ) hPin h δ γ ls ρ hδ hγ
+  obtain ⟨-, -, -, -, -, v, μ₀, μ', -, -, -, -, -, h0, -, -, ⟨k', hrun⟩, -⟩ :=
+    hwp ρf fρ ps h1 h2 h3 h4 Al k
+  obtain rfl : μ₀ = μ := ResU.Lower.functional h0 hμ
+  exact ⟨k', μ', v, hrun⟩
+
 /-- **No stuck state, under `PinLaw`.** -/
 theorem adequacyD_pin_safe (hPin : PinLaw (ℍ := ℍ)) {e : Expr}
     (h : CDerivesP LifeCtx.empty [] e (.comp (.ret .unit)))

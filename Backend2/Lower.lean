@@ -1104,12 +1104,14 @@ def citeEncl : String :=
   "(a source function's lend bit, `Fn.lendEncl`: `LendEnclosesFn`, `bcc trusted`)"
 
 /-- Why a live borrow's cell is live and as wide as `dereferenceable` says (SPEC §50): no run is
-stuck, by the safety theorem the program's typing reaches (`adequacyD`; `adequacyD_pin` under
-`PinLaw` at a relaxed lend; `externs_main_safe` with externs: `bcc trusted` says which), and the
+stuck, by the safety theorem the program's form reaches (`adequacyD`; `adequacyD_pin` under
+`PinLaw` at a relaxed lend, as `bcc trusted`'s typing line says; `externs_every_run` or
+`io_every_run` with externs), and the
 cell was allocated at its width class's widest bytes (`WidthClass`, `bcc trusted`). -/
 def citeLive : String :=
   "a live borrow points at a live cell (no run stuck: `adequacyD`, or `adequacyD_pin` under " ++
-  "`PinLaw`, or `externs_main_safe`, as `bcc trusted` reports; SPEC §13) of its class's widest " ++
+  "`PinLaw`, as `bcc trusted`'s typing line reports, or `externs_every_run`/`io_every_run` " ++
+  "with externs; SPEC §13) of its class's widest " ++
   "bytes (`WidthClass`, `bcc trusted`); "
 
 /-- The cited guarantee of a `mut` borrow's facts (SPEC §50). -/
@@ -1221,8 +1223,9 @@ def entryFn (fMain : Nat) (exits : Bool) : LM Backend.Flat.Fn := do
 /-- The cited reason a function of the class returns to its caller (SPEC §50). -/
 def citeWillreturn : String :=
   "the body is at the empty row (`Fn.emptyRow`, from the checked type): at related arguments it " ++
-  "returns under every allocator (`total_open`; `total_open_pin` under `PinLaw`; SPEC §14), " ++
-  "and the word IR is the LIR's lowering " ++
+  "returns under every allocator (`total_open`; `total_open_pin` under `PinLaw`; SPEC §14); " ++
+  "a reached call is at related arguments (`total_subrun` at a closed program's plain context; " ++
+  "`CallRelated`, `bcc trusted`, otherwise), and the word IR is the LIR's lowering " ++
   "(the faithfulness every native fact rests on); it calls no runtime function but `bc_free` " ++
   "(no allocation, which aborts when `malloc` fails; no I/O, which may block) and only " ++
   "functions of the class; the stack does not overflow (`HostStack`, `bcc trusted`)"

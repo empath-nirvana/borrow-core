@@ -552,9 +552,18 @@ def willreturnFns (k : Backend.CheckedProg) : Except String (List String) := do
 - `WidthClass`: a cell holds, over its life, only types of the width class its allocation carries,
   so the class's widest bytes (`Layouts.clsBytes`) hold every value it is given; a borrow's
   `dereferenceable(b)` rests on it (`Low` `.alloc`, UNPROVED there).
+- `CallRelated`: a call of a `willreturn` function that a run reaches is at arguments in the
+  relation, at a tagged typed world whose completion lowers to the memory: the premises of
+  `total_open` (`total_open_pin` under `PinLaw`). Proved for a closed `CDerives` program at a
+  plain context (`total_subrun`); assumed under a handler or catch frame, under `PinLaw`, with
+  externs (`externs_every_run`, `io_every_run`) and for a `main` that loops. It is not the
+  lowering's faithfulness, which says the native call is the LIR's.
 - `HostStack`: the machine stack does not overflow in a call of a `willreturn` function. The
   kernel's machine has no stack bound; `total_open` says the call returns, and an overflow would
   not return to the caller.
+
+`CallRelated` and `HostStack` are listed at each `willreturn` function (`willreturnFns`), the
+others at every program the new backend compiles.
 - The native runtime (`Backend/Native/Runtime.lean`) meets its contracts, and `clang` compiles the
   emitted IR by LangRef. -/
 def nativeAssumptions : List String :=
@@ -567,9 +576,10 @@ def nativeAssumptions : List String :=
 /-- **What the new backend's code rests on beyond the kernel** (`bcc trusted`, SPEC §29, §50,
 §52): the hand-over `StackKHandOver` at each function of the program's LIR with a `stackK` drop,
 as `typingReport` lists `PinLaw` at each relaxed rule; `LendEnclosesFn` at each function whose
-parameters have borrow facts (`factsFns`); `HostStack` at each `willreturn` function
-(`willreturnFns`); and the native target's other assumptions (`nativeAssumptions`). No line when there is none, one line when the new
-backend does not compile the program. Sites are named by function index and name. -/
+parameters have borrow facts (`factsFns`); `CallRelated` and `HostStack` at each `willreturn`
+function (`willreturnFns`); and the native target's other assumptions (`nativeAssumptions`) at
+every program the new backend compiles. A site's line is left out when it has no site; one line
+when the new backend does not compile the program. Sites are named by function index and name. -/
 def trustedReport (k : Backend.CheckedProg) : List String :=
   match lirOf k with
   | .error _ => ["backend: the new backend does not compile the program"]
@@ -590,8 +600,10 @@ def trustedReport (k : Backend.CheckedProg) : List String :=
     let wr := match willreturnFns k with
       | .error e => [s!"backend: the word IR of the program failed, its willreturn class unread: {e}"]
       | .ok ws => if ws.isEmpty then [] else
-      [s!"backend (native): HostStack (Backend2/Driver.lean, nativeAssumptions), no stack overflow in " ++
-        s!"a willreturn function (total_open): {ws.length} function{if ws.length == 1 then "" else "s"}"] ++
+      [s!"backend (native): CallRelated and HostStack (Backend2/Driver.lean, nativeAssumptions' " ++
+        s!"list), a willreturn function returns (total_open; total_open_pin under PinLaw) at a " ++
+        s!"reached call at related arguments (total_subrun at a closed program's plain context) " ++
+        s!"with no stack overflow: {ws.length} function{if ws.length == 1 then "" else "s"}"] ++
         ws.map ("  " ++ ·)
     hand ++ encl ++ wr ++ nativeAssumptions
 

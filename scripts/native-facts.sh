@@ -17,7 +17,7 @@
 #     which the tail-call classes filter. The regression pair (`async-r1-cancel-finaliser-writes`,
 #     `async-r1-step-lend`) each has a function the conversion makes that takes a `mut` borrow
 #     beside its owner (`cancel 1.0`, `step`), and it has no fact;
-#   * the `willreturn` class (`Fn.willreturn`): read off the word IR (`bcc trusted`'s `HostStack`
+#   * the `willreturn` class (`Fn.willreturn`): read off the word IR (`bcc trusted`'s `CallRelated and HostStack`
 #     lines), every function in it a source function, and exactly the functions the emitted IR
 #     marks `willreturn mustprogress`; each calls no runtime function but `bc_free` and only
 #     functions of the class, checked on the emitted IR. `native-willreturn.bc` keeps a function in
@@ -111,10 +111,10 @@ program() {
     fi
     if grep -q "($pair)\$" "$w/facted"; then echo "$f: \`$pair\` has a borrow fact"; return 1; fi
   fi
-  # The `willreturn` class: read off the word IR (`bcc trusted`'s `HostStack` lines), every one a
+  # The `willreturn` class: read off the word IR (`bcc trusted`'s `CallRelated and HostStack` lines), every one a
   # source function, and exactly the functions the emitted IR marks. Each marked function calls no
   # runtime function but `bc_free` and only marked functions, checked on the emitted IR.
-  awk '/^backend \(native\): HostStack/ { on = 1; next } on && /^  / { print; next } { on = 0 }' \
+  awk '/^backend \(native\): CallRelated and HostStack/ { on = 1; next } on && /^  / { print; next } { on = 0 }' \
     "$w/trusted" > "$w/wr"
   left=$(sed -n 's/^  f[0-9]* (\(.*\))$/\1/p' "$w/wr" | grep -vxE 'lam|thunk|with' || true)
   if [ -n "$left" ]; then
@@ -138,15 +138,27 @@ program() {
     }' "$w/on.ll")
   if [ -n "$bad" ]; then echo "$f: a willreturn function leaves the class: $(echo $bad)"; return 1; fi
   if [ "$f" = corpus/native-willreturn.bc ]; then
-    # The pair: a function in the class, and an allocating and a writing function outside it.
-    out=$(awk -v set="$(echo $have)" '
-      BEGIN { n = split(set, a, " "); for (i = 1; i <= n; i++) wr["@" a[i]] = 1 }
+    # The pair, by function: a source `λ` in the class that adds (`twice`); a source `λ` outside it
+    # that calls `bc_alloc` itself (`through`); and a source `λ` outside it that calls a function
+    # that calls `bc_putv` (the library's writing closures). Source `λ`s are read off `bcc lir`.
+    "$bcc" lir "$f" > "$w/lir" 2>/dev/null || { echo "$f: bcc lir failed"; return 1; }
+    lams=$(sed -n 's/^f\([0-9]*\) lam(.*/\1/p' "$w/lir" | while read -r i; do echo "f$((i + 1))"; done)
+    out=$(awk -v set="$(echo $have)" -v lams="$(echo $lams)" '
+      BEGIN { n = split(set, a, " "); for (i = 1; i <= n; i++) wr["@" a[i]] = 1
+              n = split(lams, b, " "); for (i = 1; i <= n; i++) lam["@" b[i]] = 1 }
       /^define / { fn = $0; sub(/\(.*/, "", fn); sub(/.*@/, "@", fn); next }
-      /call .*@bc_alloc\(/ && !(fn in wr) { al = 1 }
-      /call .*@bc_putv\(/ && !(fn in wr) { pu = 1 }
-      END { print (al ? "alloc" : "") (pu ? " put" : "") }' "$w/on.ll")
-    if [ -z "$have" ] || [ "$out" != "alloc put" ]; then
-      echo "$f: the willreturn pair is gone (class '$(echo $have)', outside: '$out')"; return 1
+      /^}/ { fn = ""; next }
+      fn != "" && / = add i(32|64) / { adds[fn] = 1 }
+      fn != "" && /call .*@bc_alloc\(/ { allocs[fn] = 1 }
+      fn != "" && /call .*@bc_putv\(/ { puts[fn] = 1 }
+      fn != "" && /call / { c = $0; sub(/^.*call [^@]*/, "", c); sub(/\(.*/, "", c); calls[fn, c] = 1 }
+      END {
+        for (g in wr) if ((g in lam) && (g in adds)) pos = 1
+        for (g in lam) if (!(g in wr) && (g in allocs)) al = 1
+        for (k in calls) { split(k, kc, SUBSEP); if ((kc[1] in lam) && !(kc[1] in wr) && (kc[2] in puts)) pu = 1 }
+        print (pos ? "in" : "") (al ? " alloc" : "") (pu ? " put" : "") }' "$w/on.ll")
+    if [ "$out" != "in alloc put" ]; then
+      echo "$f: the willreturn pair is gone (class '$(echo $have)', found '$out')"; return 1
     fi
   fi
   echo "$f: ok${new:+ (frame slots $new, old $old)}${fns:+ (inlined $(echo $fns | wc -w | tr -d ' '))} (facts at $(wc -l < "$w/facted" | tr -d ' ') functions, willreturn at $(wc -l < "$w/wr" | tr -d ' '))"

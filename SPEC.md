@@ -8964,7 +8964,7 @@ facts), `bcc lir --frames` and `bcc-counts --frames`.
 
   | parameter word | attributes | the guarantee it cites |
   |---|---|---|
-  | a `mut` borrow of a cell with words | `noalias nonnull dereferenceable(b)` | a `mut` lend is unique: `●` is defined where `▶◀` holds (`CellU.CompS.compat`) and `▶◀` relates `imm` cells only (`CellU.CompatS.kinds`, `Support/Model/Composition.lean`); a live borrow points at a live cell: no run is stuck (`adequacyD`; `adequacyD_pin` under `PinLaw` at a relaxed lend; `externs_main_safe` with externs: the one `bcc trusted` reports, §13), so a load through it succeeds, and the cell was allocated at its width class's widest bytes (`WidthClass`, `bcc trusted`) |
+  | a `mut` borrow of a cell with words | `noalias nonnull dereferenceable(b)` | a `mut` lend is unique: `●` is defined where `▶◀` holds (`CellU.CompS.compat`) and `▶◀` relates `imm` cells only (`CellU.CompatS.kinds`, `Support/Model/Composition.lean`); a live borrow points at a live cell: no run is stuck (`adequacyD`; `adequacyD_pin` under `PinLaw` at a relaxed lend, as `bcc trusted`'s typing line reports; `externs_every_run` or `io_every_run` with externs, §13), so a load through it succeeds, and the cell was allocated at its width class's widest bytes (`WidthClass`, `bcc trusted`) |
   | an `imm` borrow of a cell with words | `noalias readonly nonnull dereferenceable(b)` | an `imm` lend is not written while live: `▶◀` relates `imm` cells at one value (`CellU.CompatS`), and the LIR's writes (`put`, `swap`, `slotPut`, `replace`) take a `mut` borrow or the owner; a live borrow points at a live cell, as above |
   | the base of a borrowed family | `noalias`, and `readonly` at `imm` leaves | its leaves' mode, as above; the base is `0` for an empty family or in the program's data, so it is neither `nonnull` nor `dereferenceable` |
 
@@ -9024,10 +9024,15 @@ facts), `bcc lir --frames` and `bcc-counts --frames`.
     (#763), the body's calls stand in for it: the class grows when the row says it.
   - **The citation.** At related arguments a computation at the empty row returns under every
     allocator: `total_open` (`Core/Totality.lean`, §14), or `total_open_pin` under `PinLaw`
-    (`Core/PinFundamental.lean`). That the native call is the LIR's call, at related arguments, is
-    the lowering's faithfulness, which every native fact rests on. The machine stack does not
-    overflow in such a call: the named host assumption `HostStack`, which `bcc trusted` lists at
-    each function of the class, read off the word IR's `Fn.willreturn`. A `trap` block in such a
+    (`Core/PinFundamental.lean`). That the native call is the LIR's call is the lowering's
+    faithfulness, which every native fact rests on. That a call a run reaches is at related
+    arguments, at a tagged typed world the memory lowers, is `total_open`'s premise and is not
+    faithfulness: it is proved for a closed `CDerives` program at a plain context
+    (`total_subrun`, which needs no relation premise), and is the named assumption
+    `CallRelated` otherwise (under a handler or catch frame, under `PinLaw`, with externs, for a
+    `main` that loops). The machine stack does not overflow in such a call: the named host
+    assumption `HostStack`. `bcc trusted` lists both at each function of the class, read off the
+    word IR's `Fn.willreturn`. A `trap` block in such a
     function is unreachable by `adequacyD` and faithfulness, as everywhere; LLVM may now treat it
     as such.
 - **`nounwind`** on every function, as before, now cited: the named assumption `NoUnwind`
@@ -9076,11 +9081,14 @@ facts), `bcc lir --frames` and `bcc-counts --frames`.
   callback calls a yielding function: the call point's `step`), each has a function the
   conversion makes that takes a `mut` borrow beside its owner, and it has no fact.
 - **The willreturn class.** The functions of the word IR's `Fn.willreturn` (`bcc trusted`'s
-  `HostStack` lines) are source functions, and exactly the functions the emitted IR marks
+  `CallRelated and HostStack` lines) are source functions, and exactly the functions the emitted IR marks
   `willreturn mustprogress`; each marked function calls no runtime function but `bc_free` and
-  only marked functions, checked on the emitted IR. `corpus/native-willreturn.bc` keeps the pair:
-  `twice` in the class, `through` (it allocates) and the library's writing closures outside it,
-  pinned by `corpus/trusted/native-willreturn.txt`.
+  only marked functions, checked on the emitted IR. `corpus/native-willreturn.bc` keeps the pair,
+  by function: a source `λ` in the class that adds (`twice`), a source `λ` outside it that calls
+  `bc_alloc` (`through`), and a source `λ` outside it that calls a writer (the library's
+  closures), and `corpus/trusted/native-willreturn.txt` pins the class. The empty-row bit itself
+  is checked only through the class it starts: a bit set at an `F_Σ` body that calls no runtime
+  function would pass the script and change the trusted goldens.
 
 ### Facts read
 
@@ -10590,10 +10598,11 @@ relation or the machine.
   willreturn class: functions whose body is at the empty row (`Fn.emptyRow`, set from the checked
   type where the function is made) and that reach no runtime call but `bc_free`, citing
   `total_open` (new in `Core/Totality.lean` with `total_call` and `total_subrun`;
-  `total_open_pin` in `Core/PinFundamental.lean`), the lowering's faithfulness and the host
-  assumption `HostStack`. `nounwind` cited (`NoUnwind`). `bcc trusted` lists `HostStack`,
+  `total_open_pin` in `Core/PinFundamental.lean`), the lowering's faithfulness, the named
+  assumption `CallRelated` (proved at a closed program's plain context, `total_subrun`) and the
+  host assumption `HostStack`. `nounwind` cited (`NoUnwind`). `bcc trusted` lists `CallRelated`, `HostStack`,
   `NoUnwind`, `WidthClass` and the native runtime and `clang`. The borrow facts' cite names
-  `CellU.CompS.compat`, `adequacyD_pin`/`externs_main_safe` and `WidthClass`. The informational
+  `CellU.CompS.compat`, `adequacyD_pin`, `externs_every_run`/`io_every_run` and `WidthClass`. The informational
   attributes are "informational, relied on for now, improvement candidate", with the candidates
   listed. New program `corpus/native-willreturn.bc`. No change to the language, the checker or a
   program's output.

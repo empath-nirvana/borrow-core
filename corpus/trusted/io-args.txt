@@ -42,7 +42,7 @@ backend: LendEnclosesFn (Backend2/Driver.lean), the native borrow facts' lends e
   f49 (lam)
   f50 (lam)
   f51 (lam)
-backend (native): HostStack (Backend2/Driver.lean, nativeAssumptions), no stack overflow in a willreturn function (total_open): 3 functions
+backend (native): CallRelated and HostStack (Backend2/Driver.lean, nativeAssumptions' list), a willreturn function returns (total_open; total_open_pin under PinLaw) at a reached call at related arguments (total_subrun at a closed program's plain context) with no stack overflow: 3 functions
   f19 (lam)
   f26 (lam)
   f28 (lam)

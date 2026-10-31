@@ -21,7 +21,7 @@ backend: StackKHandOver (Backend2/Driver.lean), the stack machines' hand-over of
   f130 (suspend 1.0)
   f133 (suspend 1.0)
   f140 (stack step)
-backend (native): HostStack (Backend2/Driver.lean, nativeAssumptions), no stack overflow in a willreturn function (total_open): 10 functions
+backend (native): CallRelated and HostStack (Backend2/Driver.lean, nativeAssumptions' list), a willreturn function returns (total_open; total_open_pin under PinLaw) at a reached call at related arguments (total_subrun at a closed program's plain context) with no stack overflow: 10 functions
   f13 (lam)
   f55 (with)
   f56 (with)
