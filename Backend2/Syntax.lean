@@ -201,8 +201,12 @@ inductive DropRule where
   at a type that is not persistent. `UNPROVED:` that no checked program has one
   (`Check.SplitMasks.NeitherAbsorbed`). -/
   | unused
-  /-- A level's suspended computation a stack machine drops (`Prog.stackKs`). `UNPROVED:` no
-  kernel rule; #746 item 5 (F3) states the one that would license it. -/
+  /-- A stack machine's hand-over (`genStackMach`): a level's suspended computation, a closure
+  `clos kc [a]` of the machine's code over a frame's address, dropped for `clos kc [base]`, which
+  the node's body binds first (`let k₂ = clos kc [base] in …`). `Lint.handsOver` checks that shape
+  from the node. `UNPROVED:` that `base` is at or below `a` on the task stack, so that `k₂` takes
+  over the frames the dropped `k` stands for (`Backend2.StackKHandOver`; #755 is the route to a
+  proof). -/
   | stackK
   deriving Inhabited, BEq, Repr
 
@@ -297,10 +301,6 @@ structure Prog where
   /-- `main` is served `Fail[DivError]` by the platform's handler (`Checked.exitsOnDivError`,
   SPEC §39): its value is `inl v`, whose `v` is reported, or `inr ()`, the exit status `1`. -/
   exits : Bool := false
-  /-- The variables whose `drop` no type licenses: the callees' suspended computations a stack
-  machine's points drop, their state being on the task stack (SPEC §52; `genStackMach`, an
-  `UNPROVED:` site). `Lint` checks every other drop by its type. -/
-  stackKs : Std.HashSet Var := {}
   /-- The functions that drop a leaf of a `dtor` node's destructor (`Convert.leafDtor`): the only
   functions where `Lint` admits a `drop` at the rule `dtor`. -/
   dtorFns : Std.HashSet Nat := {}

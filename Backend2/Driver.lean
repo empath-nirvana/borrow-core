@@ -459,24 +459,49 @@ def interpStage (stage : String) (k : Except String Backend.CheckedProg) (input 
   | "lflat-counts" => Backend.Flat.interp Backend.runFuel (← flatOf (← k) true) input args
   | _ => throw s!"unknown stage `{stage}`"
 
-/-- Whether a node of `t` drops at the rule `stackK`. -/
-def Tm.dropsStackK : Tm → Bool
-  | .drop r _ b => r == .stackK || b.dropsStackK
-  | .copy _ _ _ b | .abandon _ _ b => b.dropsStackK
-  | .letv _ e b => e.dropsStackK || b.dropsStackK
-  | .letpair _ _ _ b => b.dropsStackK
-  | .case _ _ b₁ _ b₂ => b₁.dropsStackK || b₂.dropsStackK
+/-- `UNPROVED:` (#746 item 5, F3) **the stack machine's hand-over**: at every configuration of
+the LIR interpreter that a run of a converted program reaches at a `stackK` drop of `x`, whose
+body binds `clos kc [base]` first, `x` is `clos kc [a]` and `base` is at or below `a` on the
+current task stack, the frames from the top down to `a` written (`HandOver`). The `k` that takes
+over then stands for every frame the dropped one does (`TakesOver.suffix`), and the drop's own
+step changes no object, cell, stack or region (`enter_stackK_keeps`): the drop frees nothing and
+leaks nothing.
+
+This is an assumption. It rests on the stack machine's construction (`genStackMach`): each
+level's `mk` answers `clos kc [a]` at its own frame, and its call points call levels of the
+machine itself, whose frames are above it (`stackedOf`). The kernel does not see the task stack,
+so no kernel rule licenses the drop; #755 (task stacks in the kernel) is the route to proving
+it. It is about the code `Convert` generates: an LIR program can carry a `stackK` node that `Lint`
+accepts whose run fails the hand-over (`Backend2/LintTests.lean`), which the interpreter refuses
+(`handOverB`, checked at every `stackK` drop of every run). -/
+def StackKHandOver : Prop :=
+  ∀ (k : Backend.CheckedProg) (p : Prog) (c : CState), lirOf k = .ok (p, c) →
+    ∀ (input args : List UInt8) (s : St) (x : Var) (b : Tm),
+      Visits p (St.init p input args) p.main s (.drop .stackK x b) → HandOver s x b
+
+/-- Whether a node of `t` is a stack machine's hand-over, a drop at the rule `stackK`. -/
+def Tm.handsOver : Tm → Bool
+  | .drop r _ b => r == .stackK || b.handsOver
+  | .copy _ _ _ b | .abandon _ _ b => b.handsOver
+  | .letv _ e b => e.handsOver || b.handsOver
+  | .letpair _ _ _ b => b.handsOver
+  | .case _ _ b₁ _ b₂ => b₁.handsOver || b₂.handsOver
   | _ => false
 
-/-- `UNPROVED:` (#746 item 5, F3) **a stack machine's drop of a level's suspended computation**
-leaks nothing: every checked program with no externs whose `main` is a closed `CDerives`
-computation of `F 1`, and whose LIR drops at the rule `stackK`, runs at the LIR to `()` with no
-object left, as the source does (`adequacyD`). Its kernel statement is step 4's. -/
-def StackKSound : Prop :=
-  ∀ (k : Backend.CheckedProg) (p : Prog) (s : CState) (fuel : Nat) (o : Backend.Output),
-    k.io = none → CDerives BoCa.Lifetime.LifeCtx.empty [] k.main.e (.comp (.ret .unit)) →
-    lirOf k = .ok (p, s) → (p.main.dropsStackK || p.fns.any (·.body.dropsStackK)) = true →
-    runLIR p fuel [] = .ok o →
-    o = Backend.Output.mk' ByteArray.empty ByteArray.empty (Backend.report .unit 0)
+/-- **What the new backend's code rests on beyond the kernel** (`bcc trusted`, SPEC §29, §52): the
+hand-over `StackKHandOver` at each function of the program's LIR with a `stackK` drop, as
+`typingReport` lists `PinLaw` at each relaxed rule. No lines when there is none, or when the new
+backend does not compile the program. -/
+def trustedReport (k : Backend.CheckedProg) : List String :=
+  match lirOf k with
+  | .error _ => []
+  | .ok (p, _) =>
+    let fs := (p.fns.toList.zipIdx.filter fun (d, _) => d.body.handsOver).map
+      fun (d, i) => s!"f{i} ({d.name})"
+    let fs := if p.main.handsOver then "main" :: fs else fs
+    if fs.isEmpty then [] else
+      [s!"backend: StackKHandOver (Backend2/Driver.lean), the stack machines' hand-over of a " ++
+        s!"level's k: {fs.length} site{if fs.length == 1 then "" else "s"}"] ++
+      fs.map ("  " ++ ·)
 
 end Backend2

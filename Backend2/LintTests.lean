@@ -1,4 +1,5 @@
 import Backend2.Lint
+import Backend2.Interp
 
 /-!
 # Backend2 — the lint's negative tests  `[docs/compiler.md §5.2]`
@@ -159,10 +160,57 @@ def letArms (ok : Tm) : Prog where
 #guard refuses (letArms (.drop .dead 2 (.drop .unused 1 (.letv 4 (.lit (.i32 0)) (.inj true 4)))))
   "x1 dropped at Output (unused), where the rule's premise does not hold"
 
--- A drop no type licenses, of a stack machine's level (`Prog.stackKs`): accepted at the rule
--- `stackK` alone, and that rule admits no other variable.
-#guard accepts { dropProg closT .stackK with stackKs := ({} : Std.HashSet Var).insert 0 }
-#guard refuses { dropProg closT with stackKs := ({} : Std.HashSet Var).insert 0 } "(dead)"
+-- A drop no type licenses, of a stack machine's level: refused at every rule but `stackK`, which
+-- admits only a hand-over (`handsOver`, below).
+#guard refuses (dropProg closT) "(dead)"
 #guard refuses (dropProg i32T .stackK) "(stack k), where the rule's premise does not hold"
+#guard refuses (dropProg closT .stackK) "(stack k), where the rule's premise does not hold"
+
+def addrT : LTy := .int .w64
+/-- A stack machine's `k`: a closure of a `&` code, resumed with `()` or cancelled. -/
+def kT : LTy := .thunk (.amp (.arr .unit (.ret .unit)) (.ret .unit))
+
+/-- **A hand-over's shape**: `c0`, a code of kind `kind` whose functions `f1`, `f2` take one
+address each (`x10`, `x11` at `entryT`), at the closure type `kT`; `f0 (x0 : t, x1 : baseT) =
+body`, answering `kT`; `main` makes `x0 = clos c0 [5]` and calls `f0 x0 7`, no task stack. -/
+def handProg (body : Tm) (t : LTy := kT) (baseT : LTy := addrT) (kind : CodeKind := .amp)
+    (entryT : LTy := addrT) : Prog where
+  fns := #[{ name := "hands over", params := [0, 1], ret := kT, body },
+           { name := "resume entry", params := [10], ret := .unit, body := .drop .dead 10 .unit },
+           { name := "cancel entry", params := [11], ret := .unit, body := .drop .dead 11 .unit }]
+  codes := #[{ kind, fns := [1, 2], ty := .amp (.arr .unit (.ret .unit)) (.ret .unit) }]
+  main := .letv 3 (.lit (.i64 5)) (.letv 4 (.clos 0 [3]) (.letv 5 (.lit (.i64 7))
+    (.call 0 [4, 5])))
+  mainTy := kT
+  ty := [(0, t), (1, baseT), (2, kT), (3, addrT), (4, kT), (5, addrT), (10, entryT),
+    (11, entryT), (12, .unit)].foldl (fun m (x, t) => m.insert x t) {}
+
+/-- `drop x0 (stack k); let x2 = clos c0 [x1]; x2`: `x0` handed over to `clos c0 [x1]`. -/
+def handsOverTo : Tm := .drop .stackK 0 (.letv 2 (.clos 0 [1]) (.var 2))
+
+#guard accepts (handProg handsOverTo)
+-- The premise fails: the body does not first bind the `k` taking over; `x0` is not of the code's
+-- closure type; the base is not an address; the code is not a `&`; its entries do not take an
+-- address.
+#guard refuses (handProg (.drop .stackK 0 (.letv 2 (.var 1) (.letv 12 (.drop .dead 2 .unit)
+    (.drop .dead 12 (.clos 0 [1]))))))
+  "does not first bind the k it hands over to"
+#guard refuses (handProg handsOverTo (t := .thunk (.amp (.arr i32T (.ret .unit)) (.ret .unit))))
+  "x0 is not of c0's closure type"
+#guard refuses (handProg handsOverTo (baseT := i32T)) "x1, the base, is not an address"
+#guard refuses (handProg handsOverTo (kind := .unit)) "is not a `&` code"
+#guard refuses (handProg handsOverTo (entryT := i32T)) "does not take one address"
+
+/-- The LIR interpreter's run of `p` fails, its message holding `word`. -/
+def runFails (p : Prog) (word : String) : Bool :=
+  match runLIR p 1000 [] with
+  | .error e => (e.splitOn word).length > 1
+  | .ok _ => false
+
+-- `Lint` reads the hand-over's shape only. `handProg handsOverTo` passes it, but its `x0` is a
+-- closure over no frame of a task stack: the interpreter refuses the run at the drop
+-- (`handOverB`). So the hand-over is a fact about the code `Convert` generates
+-- (`StackKHandOver`), not about every program `Lint` accepts.
+#guard runFails (handProg handsOverTo) "at the rule stack k, where the hand-over does not hold"
 
 end Backend2.LintTests

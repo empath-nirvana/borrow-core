@@ -55,7 +55,7 @@ def cites : List Cite := [
     ``Check.TDerivesP.dtor_hasDtor], none⟩,
   ⟨``Backend2.DropRule.unused, [``Ctx.DeadP.drop, ``vP_empty_of_persistent,
     ``Check.neitherAbsorbed_of], some ``Check.SplitMasks.NeitherAbsorbed⟩,
-  ⟨``Backend2.DropRule.stackK, [], some ``Backend2.StackKSound⟩,
+  ⟨``Backend2.DropRule.stackK, [], some ``Backend2.StackKHandOver⟩,
   -- Backend2: the LIR's `copy` (`Backend2.CopyRule`).
   ⟨``Backend2.CopyRule.dup, [``Ctx.SplitP.dup, ``Check.SplitMasks.both_persistent], none⟩,
   ⟨``Backend2.CopyRule.const, [``CDerives.copy, ``CDerives.arrCopy], none⟩,
@@ -126,8 +126,10 @@ def sites : List (Name × List Name) := [
   (``Backend2.unitThen, [``Backend2.DropRule.dead]),
   (``Backend2.untuple, [``Backend2.DropRule.dead]),
   -- Readers of a rule, which build no node: the lint, and the statements of the `UNPROVED:` ones.
-  (``Backend2.Lint.lintTm, [``Backend2.DropRule.dtor]),
-  (``Backend2.Tm.dropsStackK, [``Backend2.DropRule.stackK]),
+  (``Backend2.Lint.lintTm, [``Backend2.DropRule.dtor, ``Backend2.DropRule.stackK]),
+  (``Backend2.enter, [``Backend2.DropRule.stackK]),
+  (``Backend2.Tm.handsOver, [``Backend2.DropRule.stackK]),
+  (``Backend2.StackKHandOver, [``Backend2.DropRule.stackK]),
   (``Backend.Clos.WordSound, [``Backend.Clos.Licence.word]),
   (``Backend.Clos.ClausesSound, [``Backend.Clos.Licence.clauses]),
   (``Backend.Clos.ConstSound, [``Backend.Clos.Licence.const]),

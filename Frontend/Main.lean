@@ -40,7 +40,9 @@ import Backend2.Driver
                                 print the program with every variable renamed to a name of its
                                 own (`alphaRename`), or with `--map` the renaming
     lake exe bcc trusted <file> list the program's externs with their contracts, host
-                                implementations and assurance levels (SPEC §11)
+                                implementations and assurance levels (SPEC §11), what its
+                                typing rests on (SPEC §29), and the stack machines' hand-overs
+                                the new backend's code rests on (SPEC §52)
     lake exe bcc hostops (flat | native)
                                 every host operation on a table of operands, at the flat-IR
                                 interpreter or built natively (`Backend.Native.Tests.lean`)
@@ -166,8 +168,14 @@ def lirDump (file : String) : IO UInt32 := do
 /-- Print `file`'s trusted boundaries. -/
 def trusted (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
+  let backend := match Backend.checkedOf file src with
+    | .ok k => Backend2.trustedReport k
+    | .error _ => []
   match Backend.trusted file src with
-  | .ok s => IO.print s; return 0
+  | .ok s =>
+    IO.print s
+    for l in backend do IO.println l
+    return 0
   | .error e => IO.eprintln e; return 1
 
 /-- Each `handle` node of `file`'s checked terms, with its clauses' kinds (SPEC §19). -/

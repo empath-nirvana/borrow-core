@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.17 · 2026-10-31
+Version 1.18 · 2026-10-31
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1391,7 +1391,8 @@ chosen in a definition of its own) must be refused (#746):
   `Check.UnmentionedAbsorbed`). A must-resume `κ`'s cancel component is `⊤`, which has no
   elimination: `Lint` refuses an observation of it, and its cancel entry is unreachable (`kTy_lin`).
   `[nil-dead]` is at a context with no live slot. A stack machine's drop of a level's suspended
-  computation is the rule `stackK`, `UNPROVED:` (`Backend2.StackKSound`, F3).
+  computation is the rule `stackK`, a hand-over (§52, *The hand-over*): `Lint` reads its premise
+  from the node (`Lint.handsOver`), and the rest is `UNPROVED:` (`Backend2.StackKHandOver`, F3).
 - **The old backend** converts the erased term, so its `copy` and `drop` carry a licence
   (`Backend.Clos.Licence`) naming the rule each site relies on. None is read from the typed term:
   each is `UNPROVED:`, its statement `Clos.LicenceSound` at it (a checked program whose closure IR
@@ -9051,6 +9052,36 @@ One rule per construct:
   benchmarks it costs nothing measurable (CPU time, median of 9: 302.7 against 303.4 ms, 105.2
   against 105.5, 45.7 against 46.7).
 
+### The hand-over
+
+A level's `k` is `clos kc [a]`, a closure of the machine's code over its frame's address `a`. Two
+nodes drop one, each for `clos kc [base]`, a `k` lower on the stack: the step, at a suspension of
+the level at `a`, for the machine's own `k` over the base; a call point's `mk`, the callee's `k`
+for the level's own over its frame. The drop is the rule `stackK`, and its body binds the `k` that
+takes over first:
+
+    drop x (stack k); let k₂ = clos kc [base] in …
+
+No type licenses it: the dropped value is a closure, and the kernel does not see the task stack.
+It rests on one named assertion, `UNPROVED:` (`Backend2.StackKHandOver`, `Backend2/Driver.lean`):
+at every configuration of the LIR interpreter that a run of a converted program reaches at a
+`stackK` drop (`Visits`), `x` is `clos kc [a]` and `base` is at or below `a` on the current task
+stack, the frames from the top down to `a` written (`HandOver`, `TakesOver`). From it, proved: the
+frames the dropped `k` stands for are a suffix of those `k₂` stands for (`TakesOver.suffix`), and
+the drop's step changes no object, cell, stack or region (`enter_stackK_keeps`), so the drop frees
+nothing and leaks nothing. #755 (task stacks in the kernel) is the route to proving it.
+
+- **Lint** checks the premise the node shows (`Lint.handsOver`): the body binds `clos kc [base]`
+  first, `kc` is a `&` code each of whose functions takes one address, `x` and `k₂` are of `kc`'s
+  closure type, and `base` is an address. It reads no list of variables.
+- **The LIR interpreter** checks the hand-over at every `stackK` drop of every run
+  (`handOverB`, sound for `HandOver`: `handOverB_sound`), so the gate checks it on every program
+  the new backend runs.
+- **Its scope is the code `Convert` generates.** `Backend2/LintTests.lean` has a program `Lint`
+  accepts whose drop is not a hand-over; the interpreter refuses its run.
+- **`bcc trusted`** lists `StackKHandOver` at each function of a program's LIR with a `stackK`
+  drop.
+
 ### Checked, tested, trusted
 
 - **Checked** in the conversion's facts: one recursion's machine per stack (`stackedOf`: every call
@@ -9070,7 +9101,8 @@ One rule per construct:
   frees, and one cancelled at its first `await`), `async-stack-nested` (a recursive task that
   spawns and drives a recursive task at each level, two stacks switched at different depths) and
   `async-unr-site` (above).
-- **Trusted**: the native and Wasm code does not check the frame stack at run time. That every
+- **Trusted**: the hand-over at each `stackK` drop (`StackKHandOver`, *The hand-over*). The
+  native and Wasm code does not check the frame stack at run time. That every
   frame it touches is live, of the right machine, and taken by the `k` it belongs to rests on the
   conversion emitting code with the shape the invariant above assumes, as the rest of the backend's
   lowering is trusted (no compiler proof, decision #15). A proof of the invariant over an abstract
@@ -9396,7 +9428,7 @@ type; this entry carries it to the LIR and has `Lint` read it.
 
 No change to a type, rule, term, typing, elaboration, semantics or erasure. Backend2's LIR
 changes (`Backend2/Types.lean`, `Syntax.lean`): `LTy` gains `bang`, `!A`, which `ofV` keeps
-(`ofV_bang`); a program carries the variables whose drop no type licenses (`Prog.stackKs`).
+(`ofV_bang`).
 
 ### The reading
 
@@ -9419,9 +9451,9 @@ changes (`Backend2/Types.lean`, `Syntax.lean`): `LTy` gains `bang`, `!A`, which 
   slot no mask holds at a persistent type (the weakening its part applies at its leaves). A
   superseded raise payload is abandoned, not dropped, at a type with no owned cell (`LTy.drops`,
   `VTy.OwnFree`'s image; `ofV_drops`). The one exception is a stack machine's drop
-  of a level's suspended computation, whose state is on the task stack (SPEC §52): a closure,
-  which no type lets a term discard, at the rule `stackK`, which admits only `Prog.stackKs`, and
-  marked `UNPROVED:` at the conversion.
+  of a level's suspended computation, whose state is on the task stack: a closure, which no type
+  lets a term discard, at the rule `stackK`, a hand-over whose premise `Lint` reads from the node
+  (§52, *The hand-over*).
 - **`trivial`.** A copy or a drop the conversion makes is `Lint`-checked by the variable's type,
   so an owned `Ref` or array is never copied or dropped by `copy`/`drop` outside a `!` (which owns
   nothing, `bang_owns_nothing`) on a program that compiles.
@@ -9443,8 +9475,8 @@ unchanged.
 
 - That the LIR type of a variable the conversion makes is the image of its node's checked type is
   by construction, not proved; `Lint` checks each program it compiles, not the conversion.
-- A stack machine's drop of a level's suspended computation (`Prog.stackKs`) is not checked by a
-  type.
+- A stack machine's drop of a level's suspended computation is not checked by a type (§52, *The
+  hand-over*).
 
 ---
 
@@ -10223,6 +10255,13 @@ relation or the machine.
 
 ## Changelog
 
+- **1.18** (2026-10-31) — §12, §52, §59 (#746, step 4, F3): a stack machine's drop of a level's
+  `k` is a hand-over. The node's body binds the `k` that takes over, `clos kc [base]`, and `Lint`
+  reads the premise from the node (`Lint.handsOver`); the relation the node cannot show is one
+  named assertion over the LIR interpreter's configurations, `Backend2.StackKHandOver`, which the
+  interpreter checks at every run and `bcc trusted` lists at each site. `Prog.stackKs` and
+  `Backend2.StackKSound` are removed. No change to the language, the kernel, the checker, or a
+  program's acceptance or output.
 - **1.17** (2026-10-31) — §29 (#743, B1): `PinLaw` as two schemas, `LendFrame` over `LendForm`
   (one form, `ref`, which is R1) and `LoopFrame` (R2). `PinStop` and `PinLoop` are derived
   (`PinLaw.stop`, `PinLaw.loop`), and `pinLaw_iff : PinLaw ↔ PinStop ∧ PinLoop`. `bcc trusted`
