@@ -87,6 +87,10 @@ callers pass `OpSig.finRead_of_capB`. The relation still reads `fin` only at `ca
   3. any cancel row is allowed (`o.fin` free).
 
   SPEC §29's trusted base lists all three. `docs/async-capabilities.md` OQ-1 and OQ-5 are updated.
+  Until unit B ties `rc` to `Ξ` (§6.6), a kernel handler chooses `cs` freely. So the domain entering the
+  trusted base is lends across any marked `lin 1 ↠ 1 ⊕ 1` operation and its marked abortive partner,
+  whether or not the surface declares it a cancellable wait. The relation is the same either way, since it
+  ignores `rc`.
 - Semantically, the relation ignores `rc`. So the widened domain is OQ-1 option (a)'s belief
   (`docs/async-capabilities.md` §8): an abort, at an operation handled outside the lend, after a
   suspension inside the lend. The evidence is the evidence already cited for OQ-1(a). The LIFO frame
@@ -180,7 +184,8 @@ Non-vacuity:
 
 The user chose Trio-style level-triggered cancellation, without refusal (i) on top. The Trio spike
 (`spike-trio-cancel` @4df2a9e7, `experiments/spike750/Spike750/Trio.lean`) found that it needs **no new
-kernel rule, step or premise**. The cancelled state belongs to the task's handler, not to the kernel.
+kernel rule, step or premise** for the immediate scheduler typed here; the suspending scheduler's typing
+is unit B's (below). The cancelled state belongs to the task's handler, not to the kernel.
 
 - **The mechanism.**
   - The task handler of name `n` carries the cancelled flag as its state.
@@ -332,11 +337,12 @@ Each comes with `#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
 | `finRead` in `FinLe`/`LeF`/`hfin` | proved (then_compatC unchanged) |
 | `Row.ResumeOC` in `lendR`/`PinStop`/`LendFrame` | asserted: inside `LendFrame` (widened domain) |
 | `effThenDiv` at `Div`-free finaliser rows | proved (`pinFin_divFree`) |
-| `effThenDiv` at `Div` finaliser rows | proof attempted first; otherwise asserted as `PinLaw.fin : PinFin` |
+| `effThenDiv` at `Div` finaliser rows | proof attempted first; otherwise asserted as `PinLaw.fin : PinFin`, only after the reachability witness `d_thenDivFuel` |
 | `Row.CancelTotal`, `cancelTotalB_iff` | definition plus proved decision |
 | level-triggered laws `await_cancelled`, `shield_catch`, `d_swallow`, `d_stickyScope` (§1.7) | proved (machine and typing at main's rules) |
 | `Row.CancelEnds`, `cancelEndsB_iff` | definition plus proved decision |
-| `cancelEnds_ends` (§1.6) | theorem target: proved if tractable, else recorded unproved (no assertion) |
+| `stickyScope_ends` (§1.6) | closed instance proved via adequacy; general form proved if tractable, else recorded unproved (no assertion) |
+| `cancelled_not_caught` (§1.7a) | proved |
 
 ## 3. NOT in this unit
 
@@ -357,7 +363,7 @@ Each comes with `#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
 
 - **Adding a refusal of interception on top of level-triggered cancellation** (route (i), `hRC`). The
   user chose level-triggered alone. STOP.
-- **Making `Row.CancelEnds` (or `CancelTotal`) a premise of any rule, or asserting `cancelEnds_ends`.**
+- **Making `Row.CancelEnds` (or `CancelTotal`) a premise of any rule, or asserting `stickyScope_ends`.**
   STOP.
 - **Typing the scheduler by capturing the flag cell in a clause.** `[handle]`'s `DeadP` refuses it, and
   the typed form passes the state. Any workaround is a STOP.
@@ -440,8 +446,8 @@ whatever."
 6. **Where the marker is declared.** In the kernel judgment, `cs` is chosen per handler. Marking restricts
    `[perform]`/`[raise]` and widens what `ResumeOC` (so `LendFrame`) admits.
    - The tied judgment does not tie `rc` today: `RowAt` compares `(q, A, B)` with `Ξ`.
-   - In unit A no effect context declares a marked operation, and the checker emits none, so nothing
-     depends on the tie yet.
+   - In unit A no effect context declares a marked operation, and the checker emits none, so no checked
+     program depends on the tie yet. The asserted `LendFrame` domain is the untied one (§1.4).
    - **Unit B obligation (STOP until done):** before the surface declares a cancellable wait, `EffCtx`
      carries the marker (`Ξ n` giving `(q, A, B, rc)`), `RowAt` compares it, and the tied handler rules
      derive `cs` from `Ξ`. Then the marker is never correct by convention.
@@ -469,3 +475,8 @@ whatever."
    restated (§1.6). The `finRead`/`CancelTotal` question goes to the user (§6.7). `PinFin` gets a
    reachability witness (§1.5). The trusted base lists three relaxations (§1.4). The `Ξ` tie is unit
    B's STOP (§6.6). The Minors are applied.
+5. **Targeted fix check.** All 7 fixes are adequate; there is no new Fatal. The cleanups it named are applied:
+   - the opening claim of §1.7 is limited to the immediate scheduler;
+   - the stale theorem name is replaced;
+   - the §2 rows are added;
+   - the untied domain is stated in §1.4 and §6.6.
