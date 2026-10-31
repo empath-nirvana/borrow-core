@@ -117,6 +117,7 @@ data-rose 14 0 0 56 56 0
 data-rose-vec 5 0 0 220 220 15
 data-turnstile 4 0 0 53 21 18
 decl-guard 0 0 0 0 0 0
+decl-handler-state 0 4 0 0 0 0
 decl-promise 6 0 0 15 15 0
 decl-txn 0 0 0 0 0 0
 decl-view 0 0 0 6 3 0
@@ -204,6 +205,8 @@ hygiene-handler-param 0 0 0 0 0 0
 hygiene-handler-resume 0 0 0 0 0 0
 hygiene-handler-state 0 2 0 0 0 0
 hygiene-local-fn 2 0 0 2 2 0
+imm-copy 11 0 0 87 39 0
+imm-copy-view 1 0 0 3 3 0
 implicit-drops 9 0 0 16 16 0
 int-arith 0 0 0 0 0 0
 int-ops 0 0 0 0 0 0

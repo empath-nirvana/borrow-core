@@ -71,6 +71,9 @@ structure TInfo where
   binders : List String := []
   /-- At a `use` of a `def` the elaboration generates, its key (`Frontend.DefKey`). -/
   key : Option Frontend.DefKey := none
+  /-- At a `copy` or `array_copy` constant the checker inserted as a derived copy of the variable
+  `name` (SPEC §12, `Frontend/Check/DerivedCopy.lean`). -/
+  inserted : Bool := false
   deriving Inhabited
 
 /-- What an unused live slot of a type must satisfy for a derivation to be given it: one atom of a

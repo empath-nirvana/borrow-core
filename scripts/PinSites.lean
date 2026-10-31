@@ -28,7 +28,9 @@ type at every node of every program it compiles (`Lint.copiesAt`, `Lint.dropsAt`
 its licences against: the licence names the rule the site relies on, and each names its `UNPROVED:`
 statement (`Backend.Clos.LicenceSound`). The checker's drops are typed nodes: a `dtor` node's derivation carries
 `HasDtor` (`TDerivesP.dtor_hasDtor`), and `checkProgram_soundP` projects every checked program to
-`CDerivesP`, so the checker inserts no drop no kernel rule licenses; no table of its sites is kept.
+`CDerivesP`, so the checker inserts no drop no kernel rule licenses; no table of its sites is kept. Its copies
+are the `copy` and `array_copy` constants' nodes (`Frontend/Check/DerivedCopy.lean`), typed only at
+`DerivedCopy` (`TDerivesP.copy_at`, `TDerivesP.arrCopy_at`), so the same holds of them.
 
     lake env lean scripts/PinSites.lean
 -/

@@ -717,6 +717,10 @@ import Backend2.Lint
 #print axioms BoCa.Fig16.LogRel.Core.burn_step
 #print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesP.dtor_hasDtor
 #print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.dtor_hasDtor
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesP.copy_at
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesP.arrCopy_at
+#print axioms Frontend.Check.derivedCopyB_iff
+#print axioms Frontend.Check.copyIt_erase
 #print axioms BoCa.Fig16.LogRel.Core.entry_derives
 #print axioms BoCa.Fig16.LogRel.Core.entry_runs
 #print axioms BoCa.Fig16.LogRel.Core.entry_decl_no_drop

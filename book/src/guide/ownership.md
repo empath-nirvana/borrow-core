@@ -149,6 +149,22 @@ that takes a `mut` borrow and is meant to be called more than once hands it back
 `fn f<'a>(m: mut 'a A) -> mut 'a A * B`, and the caller binds it again, `let (m, r) = f(m);`.
 The view functions of the next chapter work this way.
 
+An `imm` borrow is linear too, but it has a derived copy: a second use of it is a copy, which the
+compiler inserts, and which costs nothing at run time (the copy is the same pointer). So an `imm`
+borrow, or an `array_imm` view, can be read as often as you like:
+
+```bc
+fn twice<'a>(r: imm 'a i32) -> i32 = *r + *r
+
+main -> i32 =
+  let c = alloc(21);
+  let n = twice(&c);
+  free(c) * 0 + n
+-- answer: i32[42]
+```
+
+A `mut` borrow has no derived copy, so a second use of one is refused, as for an owned value.
+
 ## What the checker refuses
 
 The owner can't be used while it is lent:

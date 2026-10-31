@@ -1,0 +1,43 @@
+-- An `imm` borrow is linear with a derived copy (SPEC §12): each use beyond the first is the
+-- kernel's `copy` at `imm`, which the checker inserts where a split's two parts both use it
+-- (`Frontend/Check/DerivedCopy.lean`). `corpus/copies/imm-copy.txt` pins each copy.
+
+data Tree = Leaf | Node(left: Tree, val: i32, right: Tree)
+
+fn branch(l: Tree, v: i32, r: Tree) -> Tree = box Node(l, v, r)
+
+-- Two reads of one borrow.
+fn twice<'a>(r: imm 'a i32) -> i32 = *r + *r
+
+-- A closure captures the borrow, and the function reads it after.
+fn apply_once(f: i32 => i32, x: i32) -> i32 = f(x)
+fn captured<'a>(r: imm 'a i32) -> i32 = apply_once({ x -> x + *r }, 1) + *r
+
+-- A loop body reads it twice, and hands it on to the next iteration.
+fn looped<'a>(r: imm 'a i32) -> i32 =
+  let mut s = 0;
+  for i in 0..3 { s = s + *r + *r };
+  s
+
+-- A fold's arm reads a field's borrow twice.
+fn squares<'a>(t: imm 'a Tree) -> i32 =
+  fold_imm t { Leaf -> 0 | Node(l, v, r) -> l + *v * *v + r }
+
+effect Ask { fn ask(x: i32) -> i32 }
+
+-- A handler's clause reads its own borrow twice.
+handler sq(mut n: i32): Ask = {
+  ask(x) = { n = n + 1; let c = alloc(x); let s = borrow imm c { 'y, v -> *v * *v }; free(c) * 0 + s }
+}
+
+fn asked(x: i32) -> i32 with Ask = ask(x) + ask(1)
+
+main -> i32 * (i32 * (i32 * (i32 * i32))) =
+  let mut k = 21;
+  let a = twice(&k);
+  let b = captured(&k);
+  let c = looped(&k);
+  let t = branch(branch(Leaf, 1, Leaf), 2, branch(Leaf, 3, Leaf));
+  let d = squares(&t);
+  let e = with sq(0) { asked(3) };
+  (a, (b, (c, (d, e))))
