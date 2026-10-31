@@ -449,6 +449,14 @@ Also retired:
   loop is a term, not a machine state.
 - The refusal of `&a` or an owned array with a resuming body (`:4566`–`:4574`, `:4931`), now D4 and
   D10: the kernel decides.
+- The refusal of a borrow block whose body performs a resuming operation ("only an abortive
+  operation crosses a borrow's scope", #172; `Sugar.lean:4257`–`:4259`). It is an elaborator refusal
+  on borrow grounds, and `Row.Lend` with the world (§2.3) now decides it. The block takes the
+  unwinding form at its row, as an abortive-only one does. R1's own refusals (`:4236`–`:4239`,
+  `:4251`–`:4254`) are §29's rule and stay. Programs whose acceptance or message changes:
+  `reject/state-across-borrow` (still refused, by W-L: `must_resume` `get`/`put` of a general
+  handler) and `reject/gen-self-borrow` (still refused, by R: `yield` is cancellable). Both are in
+  4.4. P1's acceptance (4.3) depends on this retirement, through D10.
 
 **Docs made stale and edited:**
 
@@ -613,7 +621,8 @@ it, it either moves to the corpus or the kernel refuses it, and the result is li
 | `reject/lend-escape` | refused 20:11 (`escapeError`) | refused 23:34: "`q` used twice … `imm 'x array i32 * i32` is not persistent" | a pair is not `DerivedCopy` | **(a)** take the pair apart before the loop, `let (v, n) = q` (message C). After that the block's escape is refused, as the reject intends | stays a reject |
 | `reject/lend-shadow` | refused (the rename check) | refused 23:53 on a type error the old check hid | — | stays a reject; `-- expect:` changes | — |
 | `reject/for-lend-resumes` (P5) ⚑ | refused | unchanged: `for x in &a { yield(*x) }` in a generator | class 2 | **(a)** index in each turn, `for i in 0..n { yield(a[i]) }`: each read's lend ends before the `yield` (message R) | **B7** |
-| `reject/gen-self-borrow` | refused | unchanged | class 2 (a self-borrow across `yield`) | **(b)** | **B7** |
+| `reject/gen-self-borrow` | refused 12:3 (the #172 refusal, retired in 2.5) | **refused**, message R: `yield` is cancellable, and `Row.Lend` asks `lin`; `-- expect:` changes | class 2 (a self-borrow across `yield`) | **(b)** | **B7** |
+| `reject/state-across-borrow` | refused 19:5 (the #172 refusal, retired in 2.5) | **refused**, predicted W-L: `must_resume` `get`/`put` of the stateful handler `state`, a general `[handle]` at `top`; `-- expect:` changes | the world (§2.3); not verified that `state` is emitted as `effHandleV` | **(a)** end the borrow before the operation: `let n = sum.get(); borrow imm line { v -> () }; sum.put(n + 1)` (message W-L) | — |
 
 ⚑ marks an ordinary-looking loop. Every ⚑ program has a written fix (a), still to be measured
 (check 6). The one (b) that is ordinary-looking is `parse-recover-gen` ⚑: a generator over a
@@ -766,7 +775,7 @@ elaborator's at the world solve (§2.3). None decides anything: the kernel re-ch
 | Keep LoopLend's per-observation lend for the programs `Div` refuses (`lend-copy`, P2, P4) | **KERNEL WORK.** It decides a lend's extent in the elaborator. The programs go to `pending/` with the lend and the tick, as #646's amendment says |
 | A checker copy where the copy rule does not apply: copying the pair in `lend-escape`, copying the state wholesale, or a copy for a non-`DerivedCopy` slot | **LINEARITY.** Refused and listed, never repaired |
 | A grade special case for one handler (`count` in P1), or a world chosen per program | **KERNEL WORK.** The world is solved as a row component by one constraint table (§2.3), re-checked by the kernel; one rule for every `effHandleT` |
-| Collapse the world to `{op, top}` when a lifetime-carrier proof is hard | **DECISION.** M1's world is a lifetime bound; name the failing step and STOP |
+| Add a third world, or a lifetime-valued world, to recover a program `{op ⊑ top}` refuses | **DECISION.** The world is `{op ⊑ top}` (decision 71); a lifetime bound collapses to these two points (spike 21363bd9). Name the program and STOP |
 | Meet the named risk in `lendM_frame` by an added premise (restricting `A`'s lifetimes inside `r`) | **PRINTED-RULES.** No premise beyond 1.3's; STOP and report the step |
 | Thread the owner instead of the borrow through a generator's operation to avoid decision R (`lend-pipeline`) | **KERNEL WORK.** That is the per-observation lend; the refusal stands with its fix (a) |
 | Fold B2's W-tick (`lendRT`) in early to recover P4, `lend-copy` or AW/AL/AG | **SCOPE.** B2 waits on #750 and is asserted under `LendFrame`; B5 asserts nothing |
@@ -856,6 +865,7 @@ send `outside` or lower. If B5 needs any Lint rule change, STOP and report.
 | `Frontend/Check/` (the refusal sites) | messages U, S, C, R naming the fix | 4.6 |
 | `Frontend/{Syntax,Parser,Print}.lean`, `Frontend/Elab/{Subst,Respan,RenameLife,Effects}.lean`, `Frontend/Sugar.lean`, `Frontend/Check/Elab.lean` (`elabRow`), `Frontend/Check/Steps.lean:541` (`effRow?`), `Frontend/Elab/Worlds.lean` (new) | the world on `Row.cons`, the constraints at each emitted form, the solve, W-L/W-R; about 400–550 lines | 2.3 |
 | `Frontend/Elab/LoopLend.lean` | delete `lendBind`, `lentDef`, `lendCall`, `iterError` | 2.4 |
+| `Frontend/Sugar.lean:4257`–`:4259` | delete the #172 refusal of a borrow block with a resuming body; `corpus/reject/state-across-borrow.bc` and `gen-self-borrow.bc` get their new `-- expect:` lines (W-L, R); `docs/expressiveness.md`'s quote of the message | 2.5 |
 | `Backend2/Convert.lean`, `Backend2/Driver.lean`, `scripts/PinSites.lean` | section 7 | lowering |
 | `SPEC.md` | a new entry (version after #750 A's, 1.22 if A lands first, fixed at merge); §14's per-observation lend and machine sections rewritten; §29: `LendFrame`'s domain grows with `CDerivesP`'s rules, B5's included (Q3) | spec-first |
 | `corpus/` | section 4's moves; 6 new programs; the falsifier's nested-lend programs (check 7); `reject/loop-linear-owner-each-turn.bc`; the measured (a) rewrites (check 6); `io-fuel.bc`'s comment (4.5); the 12 programs' comments; `axes/README.md`; `-- expect:` and `-- now:` lines | section 4 |
