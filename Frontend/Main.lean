@@ -229,6 +229,21 @@ def handled (file : String) : IO UInt32 := do
         IO.println s!"{h.sp.start.render}: handle {h.n}: inside {renderHIn h.inside}; row {row}; ops {", ".intercalate ops}; names {", ".intercalate nms}; condition 2 {c2}"
       return 0
 
+/-- Each derived copy the checker inserted in `file`'s checked `main` (SPEC §12): the copy's
+source, the variable copied and its type, in the order of the typed term (a `def`'s body once per
+use). -/
+def copies (file : String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  match Backend.checkedOf file src with
+  | .error e => IO.eprintln e; return 1
+  | .ok k =>
+    match k.main.t.insertedCopies Check.copiesFuel with
+    | none => IO.eprintln s!"{file}: the typed term is deeper than the bound"; return 1
+    | some cs =>
+      for (sp, x, A) in cs do
+        IO.println s!"{sp.start.render}: copy of `{x}` : {Check.ppVTy A}"
+      return 0
+
 /-- What the elaboration of effects records of each `handle` node's site (`HSite`), with the
 clause kinds: `sp: handle n: kind eff[args] by handler (as slot), state (x: A, …); kinds`. -/
 def sites (file : String) : IO UInt32 := do
@@ -584,6 +599,7 @@ def main (argv : List String) : IO UInt32 := do
   | ["kinds", file] => kinds file
   | ["handled", file] => handled file
   | ["sites", file] => sites file
+  | ["copies", file] => copies file
   | ["desugar", file] => desugar file
   | ["erase", file] => erase file
   | ["lir", "--typed", file] => typedDump file
