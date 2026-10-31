@@ -110,9 +110,11 @@ inductive Op where
 
 /-- **The kernel rule an inserted `copy` or `drop` stands for.** This backend converts the erased
 term (`Backend/Driver.lean`), so it does not read the typed term's rule: it inserts each copy and
-drop from free indices and occurrences, and the licence names the rule the site relies on. Where
-that reliance is not proved, the licence's `UNPROVED:` names the statement it needs (#746 §5.4).
-`scripts/PinSites.lean` checks every licence against its citation. -/
+drop from free indices and occurrences, and the licence names the rule the site relies on. No
+licence is proved: each is `UNPROVED:`, its statement `Clos.LicenceSound` at it
+(`Backend/Driver.lean`: `Clos.WordSound`, …). `scripts/PinSites.lean` checks that every licence
+names its statement and that each site builds nodes only at the licences its entry lists; it
+checks no licence against the program. -/
 inductive Licence where
   /-- The backend's own value of an unrestricted type (a unit, a tag, an index, a byte list):
   `Ctx.DeadP.drop`, `Ctx.SplitP.dup`. -/

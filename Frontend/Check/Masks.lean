@@ -346,9 +346,9 @@ end SplitMasks
 
 A stage that follows the typed term's masks (Backend2's `splitCtx`) drops, at a split, a live slot
 neither part's mask holds. The kernel does not drop it there: the part that receives it weakens it
-at its leaves (`Ctx.DeadP.drop`, persistent), abandons it at an abort (`effLet`'s `hW`,
-`VTy.OwnFree`), or absorbs it in `⊤` (`topI`) or `absurd` (`zeroE`), which type the term at every
-type of that slot. `UnmentionedAbsorbed` states that these are the only cases; it is not proved.
+at its leaves (`Ctx.DeadP.drop`, persistent), or absorbs it in `⊤` (`topI`) or `absurd` (`zeroE`),
+which type the term at every type of that slot. An abort (`effLet`'s `hW`) is not a third case: it
+abandons `N`'s context, and `N` still weakens or absorbs the slot itself. `UnmentionedAbsorbed` states that these are the only cases; it is not proved.
 `neitherAbsorbed_of` reduces the split's form (`SplitMasks.NeitherAbsorbed`) to it. -/
 
 /-- A derivation **absorbs** slot `k` of its context: it is a derivation at every type of that slot,
@@ -357,25 +357,25 @@ def AbsorbsAt (Δ : Lifetime.LifeCtx) (Γ : Ctx VTy) (e : Expr) (j : Jdg) (k : N
   ∀ T : VTy, CDerives Δ (Γ.set k ⟨T, true⟩) e j
 
 /-- `UNPROVED:` (#746 §5.5, F5) **a live slot a typed term does not mention** is unrestricted, or
-holds no owned cell (an abort abandons it), or the derivation absorbs it. By induction on
+the derivation absorbs it (`⊤`, `absurd`). By induction on
 `CDerives`, as `CDerivesP.mentions_live`, with the absorption carried through every rule; not
 attempted. -/
 def UnmentionedAbsorbed : Prop :=
   ∀ {Δ : Lifetime.LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} {k : Nat} {s : Slot VTy},
     CDerives Δ Γ e j → Γ[k]? = some s → s.live = true → ClauseKinds.mentions k e = false →
-      s.ty.Persistent ∨ s.ty.OwnFree ∨ AbsorbsAt Δ Γ e j k
+      s.ty.Persistent ∨ AbsorbsAt Δ Γ e j k
 
 /-- `UNPROVED:` (F5, at a split) **a live slot of a split's context that neither part's mask holds**
-is unrestricted, or holds no owned cell, or the part that receives it absorbs it. Backend2 drops
+is unrestricted, or the part that receives it absorbs it (`⊤`, `absurd`). Backend2 drops
 such a slot at the rule `unused` (`splitCtx`, `leaf`, the frames of `abortK`/`cancelK`) when it is
 persistent, the weakening the part applies at its leaves, and refuses it otherwise; this states
 which other cases a checked program may have. -/
 def SplitMasks.NeitherAbsorbed : Prop :=
   ∀ {Δ : Lifetime.LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {e₁ e₂ : Expr} {j₁ j₂ : Jdg} {m : Masks} {k : Nat}
-    {s : Slot VTy}, Ctx.SplitP Γ Γ₁ Γ₂ → m.Rel Γ₁ Γ₂ → CDerives Δ Γ₁ e₁ j₁ → CDerives Δ Γ₂ e₂ j₂ →
+    {s : Slot VTy}, Ctx.SplitP Γ Γ₁ Γ₂ → CDerives Δ Γ₁ e₁ j₁ → CDerives Δ Γ₂ e₂ j₂ →
     Covers m.u₁ 0 e₁ → Covers m.u₂ 0 e₂ → Γ[k]? = some s → s.live = true →
     m.u₁.getD k false = false → m.u₂.getD k false = false →
-      s.ty.Persistent ∨ s.ty.OwnFree ∨ AbsorbsAt Δ Γ₁ e₁ j₁ k ∨ AbsorbsAt Δ Γ₂ e₂ j₂ k
+      s.ty.Persistent ∨ AbsorbsAt Δ Γ₁ e₁ j₁ k ∨ AbsorbsAt Δ Γ₂ e₂ j₂ k
 
 /-- A live slot of a split's context goes to one part, live, or to both at a persistent type. -/
 theorem _root_.BoCa.Fig16.LogRel.Core.Ctx.SplitP.live_cases {Γ Γ₁ Γ₂ : Ctx VTy}
@@ -407,7 +407,7 @@ theorem _root_.BoCa.Fig16.LogRel.Core.Ctx.SplitP.live_cases {Γ Γ₁ Γ₂ : Ct
 /-- **F5 at a split reduces to `UnmentionedAbsorbed`**: a slot neither mask holds is one neither
 part's term mentions (`Covers`), and it is live in the part the split gives it. -/
 theorem neitherAbsorbed_of (h : UnmentionedAbsorbed) : SplitMasks.NeitherAbsorbed := by
-  intro Δ Γ Γ₁ Γ₂ e₁ e₂ j₁ j₂ m k s hs _ h₁ h₂ c₁ c₂ hk hl u₁ u₂
+  intro Δ Γ Γ₁ Γ₂ e₁ e₂ j₁ j₂ m k s hs h₁ h₂ c₁ c₂ hk hl u₁ u₂
   have n₁ : ClauseKinds.mentions k e₁ = false := by
     cases hm : ClauseKinds.mentions k e₁
     · rfl
@@ -417,14 +417,12 @@ theorem neitherAbsorbed_of (h : UnmentionedAbsorbed) : SplitMasks.NeitherAbsorbe
     · rfl
     · have := c₂ k (by simpa using hm); rw [u₂] at this; cases this
   rcases hs.live_cases hk hl with g | g | g
-  · rcases h h₁ g hl n₁ with p | p | p
+  · rcases h h₁ g hl n₁ with p | p
     · exact .inl p
     · exact .inr (.inl p)
-    · exact .inr (.inr (.inl p))
-  · rcases h h₂ g hl n₂ with p | p | p
+  · rcases h h₂ g hl n₂ with p | p
     · exact .inl p
-    · exact .inr (.inl p)
-    · exact .inr (.inr (.inr p))
+    · exact .inr (.inr p)
   · exact .inl g
 
 end BoCa.Fig16.LogRel.Core.Check
