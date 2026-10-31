@@ -421,7 +421,9 @@ def typingReport (c : Frontend.Check.Checked) : String :=
   | ps =>
     let ps := ps.eraseDups
     let field (r : String) : String :=
-      if r == "R2" then "LoopFrame (PinLaw.loopFrame)" else "LendFrame at ref (PinLaw.lendFrame)"
+      if r == "R2" then "LoopFrame (PinLaw.loopFrame)"
+      else if r == "Fin" then "PinFin (PinLaw.fin)"
+      else "LendFrame at ref (PinLaw.lendFrame)"
     "typing: PinLaw (Core/PinLaw.lean), the hypothesis of fundamentalC_pin and adequacyD_pin: " ++
       s!"{ps.length} site{if ps.length == 1 then "" else "s"}" ++
       String.join (ps.map fun q => s!"\n  {q.rule} at {q.line}:{q.col}: {field q.rule}")

@@ -685,8 +685,8 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                   else err sp s!"a relaxed lend's result `{E.ppV B'}` holds a `U`: its value is read back after the lend is re-lent (R1, SPEC §29)"
                 else err sp ("the row of a relaxed lend's body has only operations that resume " ++
                   "at most once (cancellable or must-resume), of names other than 0, answering " ++
-                  "`1` with the empty cancel row, whose arguments are closed data with no `U` " ++
-                  "(R1, SPEC §29)")
+                  "`1` with the empty cancel row, whose arguments are closed data with no `U`, " ++
+                  "or a cancellable wait and its cancel target, and no `Div` (R1, SPEC §29, §29a)")
               else err sp s!"`withbor2r`: its number {ppLVar v} occurs in a bound of the lifetime context"
             else err sp s!"`withbor2r`: its bound mentions its own number {ppLVar v}"
           else err sp s!"`withbor2r`: the bound `{E.ppL bl}` is not defined here"
