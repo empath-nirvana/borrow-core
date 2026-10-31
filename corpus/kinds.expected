@@ -11,6 +11,18 @@ corpus/async-bank-inbox.bc 3.0 cancellable stored: machine: a path of the clause
 corpus/async-bank-inbox.bc 3.1 cancellable tail: -; agree
 corpus/async-bank-inbox.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/async-bank-inbox.bc 2.1 cancellable tail: -; agree
+corpus/async-bank.bc 2.0 cancellable abortive: branch; agree
+corpus/async-bank.bc 4.0 cancellable abortive: branch; agree
+corpus/async-bank.bc 3.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/async-bank.bc 3.1 cancellable tail: -; agree
+corpus/async-bank.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/async-bank.bc 1.1 cancellable tail: -; agree
+corpus/async-borrow.bc 4.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/async-borrow.bc 4.1 cancellable tail: -; agree
+corpus/async-borrow.bc 3.0 cancellable stored: -; agree
+corpus/async-borrow.bc 3.1 cancellable tail: -; agree
+corpus/async-borrow.bc 2.0 cancellable abortive: branch; agree
+corpus/async-borrow.bc 1.0 cancellable abortive: branch; agree
 corpus/async-cancel.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/async-cancel.bc 2.1 cancellable tail: -; agree
 corpus/async-cancel.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
@@ -104,6 +116,11 @@ corpus/async-unr-site.bc 2.0 cancellable abortive: branch; agree
 corpus/async-unr-site.bc 3.0 unrestricted stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/async-unr-site.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/async-unr-site.bc 1.1 cancellable tail: -; agree
+corpus/async-worker-pool.bc 1.0 cancellable abortive: branch; agree
+corpus/async-worker-pool.bc 3.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/async-worker-pool.bc 3.1 cancellable tail: -; agree
+corpus/async-worker-pool.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/async-worker-pool.bc 2.1 cancellable tail: -; agree
 corpus/async-workers-scoped.bc 4.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/async-workers-scoped.bc 4.1 cancellable tail: -; agree
 corpus/async-workers-scoped.bc 3.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
@@ -399,6 +416,9 @@ corpus/operator-rounds.bc 3.0 cancellable abortive: branch; agree
 corpus/parse-int.bc 1.0 cancellable abortive: branch; agree
 corpus/parse-int.bc 3.0 cancellable abortive: branch; agree
 corpus/parse-int.bc 2.0 cancellable abortive: branch; agree
+corpus/parse-recover-gen.bc 1.0 cancellable tail: direct; agree
+corpus/parse-recover-gen.bc 2.0 cancellable abortive: branch; agree
+corpus/parse-recover-gen.bc 3.0 cancellable abortive: branch; agree
 corpus/parse-recover.bc 1.0 cancellable abortive: branch; agree
 corpus/parse-recover.bc 2.0 cancellable abortive: branch; agree
 corpus/pipe-handlers.bc 6.0 cancellable once: machine: a path of the clause does not end in one resume in tail position; agree
@@ -472,6 +492,7 @@ corpus/sched-a-div.bc 1.0 cancellable stored: machine: the handlers of the name 
 corpus/sched-a.bc 1.0 cancellable stored: machine: the handlers of the name have 2 clauses for it; agree
 corpus/sched-b.bc 1.0 cancellable stored: machine: the handlers of the name have 2 clauses for it; agree
 corpus/sort-lines.bc 1.0 cancellable abortive: branch; agree
+corpus/state-machine-audit.bc 1.0 cancellable abortive: branch; agree
 corpus/state-machine.bc 2.0 cancellable abortive: branch; agree
 corpus/state-machine.bc 1.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/storage-array.bc 1.0 cancellable abortive: branch; agree
