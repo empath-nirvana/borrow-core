@@ -18,8 +18,8 @@ verifies and never fills in:
   persistent type, `!` read off the LIR type (`Types.ofV` keeps it); the `copy` constants and
   `copy_derives` at an `imm` borrow;
 - every `drop` meets the premise of the rule the node carries (`dropsAt`), a `dtor` one only in a
-  destructor function (`Prog.dtorFns`); the callees' suspended computations a stack machine drops
-  are the rule `stackK` (`Prog.stackKs`); no rule drops a type owning an opaque value;
+  destructor function (`Prog.dtorFns`), a `stackK` one only as a stack machine's hand-over, its
+  premise read from the node (`handsOver`); no rule drops a type owning an opaque value;
 - no `&` is observed at a `⊤` component (`⊤` has no elimination);
 - every `abandon` meets the premise of the rule the node carries (`abandonable`): at a `[let]`'s
   abort, `effLet`'s `hW` (the variable's type holds no owned cell, `VTy.Drop`); at a superseded
@@ -83,9 +83,10 @@ def copiesAt : CopyRule → LTy → Bool
   (`vP_empty_of_persistent`), so dropping it at the split is the same. A slot the part absorbs
   instead (`⊤`, `absurd`) is refused here, not dropped: that no checked program has one of a type
   that is not persistent is `UNPROVED:` (`Check.SplitMasks.NeitherAbsorbed` states the cases);
-- `stackK` (`UNPROVED:`, F3): the variable is one of `Prog.stackKs`.
+- `stackK` (`UNPROVED:`, F3, `StackKHandOver`): a closure of a `&` code, the rest of its
+  premise read from the node (`handsOver`, checked by `lintTm`).
 No rule drops a value that owns an opaque value: an abort abandons it (`abandon`). -/
-def dropsAt (p : Prog) (x : Var) : DropRule → LTy → Bool
+def dropsAt : DropRule → LTy → Bool
   | .dead, t => t.persistent
   | .forget, t => match t.unbang with
     | .imm _ | .mut _ | .unk | .fam (.imm _) => true
@@ -94,7 +95,33 @@ def dropsAt (p : Prog) (x : Var) : DropRule → LTy → Bool
     | .imm _ | .mut _ | .unk | .fam (.imm _) | .fam (.mut _) => true
     | _ => false
   | .unused, t => t.persistent
-  | .stackK, _ => p.stackKs.contains x
+  | .stackK, t => match t with
+    | .thunk (.amp _ _) => true
+    | _ => false
+
+/-- **A `stackK` drop's premise, read from the node**: the stack machine's hand-over of `x`, a
+level's suspended computation, to the `k` the drop's body binds first, `let k₂ = clos kc [base]`:
+`x` and `k₂` are both of `kc`'s closure type, and `base` is a frame's address (`LTy.addr`). The
+check that `kc` is a `&` code each of whose functions takes one address is not part of the rule's
+premise: it confines the rule to codes of a stack machine's shape (a resume and a cancel entry
+over a base), so that the assertion is not taken at any other closure. What the node cannot show,
+that `x` is `clos kc [a]` with `base` at or below `a` on the task stack and the frames from the
+top down to `a` written, is `UNPROVED:` (`Backend2.StackKHandOver`); the LIR interpreter checks it
+on every run (`Backend2.handOverB`). `none` when the premise holds, else what fails. -/
+def handsOver (p : Prog) (x : Var) : Tm → Option String
+  | .letv k₂ (.clos kc [base]) _ => Id.run do
+    let some code := p.codes[kc]? | return some s!"no code c{kc}"
+    if code.kind != .amp then return some s!"c{kc}, the code of the k it hands over to, is not a `&` code"
+    for fn in code.fns do
+      let some d := p.fns[fn]? | return some s!"no function f{fn}"
+      unless d.params.length == 1 && d.params.all (p.ty[·]? == some LTy.addr) do
+        return some s!"f{fn} ({d.name}), an entry of c{kc}, does not take one address"
+    let kT := LTy.thunk code.ty
+    if p.ty[x]? != some kT then return some s!"x{x} is not of c{kc}'s closure type"
+    if p.ty[k₂]? != some kT then return some s!"x{k₂}, the k it hands over to, is not of c{kc}'s closure type"
+    if p.ty[base]? != some LTy.addr then return some s!"x{base}, the base, is not an address"
+    return none
+  | _ => some "its body does not first bind the k it hands over to, `clos kc [base]`"
 
 /-- A type whose values an `abandon` node at the rule `r` may discard: the premise of `r`, read
 on the LIR type. At a `[let]`'s abort, `CDerives.effLet`'s `hW : S.Weak → Γ₂.Drops`: each slot
@@ -114,8 +141,8 @@ theorem copyable_ofV {ms : MachSet} {A : VTy} {t : LTy} (hA : A.persistent = tru
   simp [copiesAt, ofV_persistent hA h]
 
 /-- A slot a leaf drops (`Ctx.DeadP.drop`: of persistent type) is `droppable` at its LIR type. -/
-theorem droppable_ofV_persistent {ms : MachSet} {A : VTy} {t : LTy} (p : Prog) (x : Var)
-    (hA : A.persistent = true) (h : ofV ms A = .ok t) : dropsAt p x .dead t = true := by
+theorem droppable_ofV_persistent {ms : MachSet} {A : VTy} {t : LTy}
+    (hA : A.persistent = true) (h : ofV ms A = .ok t) : dropsAt .dead t = true := by
   simp [dropsAt, ofV_persistent hA h]
 
 /-- A slot an abort abandons (`Ctx.Drops`: of a `VTy.OwnFree` type) is `abandonable` at its LIR
@@ -191,8 +218,10 @@ def lintTm (w : String) (p : Prog) (inDtor : Bool) : Nat → Std.HashSet Var →
     | .drop r x b => do
       match p.ty[x]? with
       | some t =>
-        if !dropsAt p x r t then
+        if !dropsAt r t then
           bad w s!"x{x} dropped at {t} ({r.name}), where the rule's premise does not hold"
+        if r == .stackK then
+          if let some e := handsOver p x b then bad w s!"x{x} dropped at the rule stack k: {e}"
         if r == .dtor && !inDtor then
           bad w s!"x{x} dropped at the rule dtor outside a destructor function"
       | none => bad w s!"x{x} has no type"

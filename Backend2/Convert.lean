@@ -251,9 +251,6 @@ structure CState where
   stacked : Std.HashMap Nat LTy := {}
   /-- The static word that holds the current stack, once a stack machine or a site uses it. -/
   stackReg : Option Nat := none
-  /-- The callees' suspended computations a stack machine's points drop (`genStackMach`,
-  `Prog.stackKs`). -/
-  stackKs : Std.HashSet Var := {}
 
 abbrev CM := StateT CState (Except String)
 
@@ -1280,7 +1277,7 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
   unless stTy.sameRep S do throw "LIR: a stack machine's frame differs from the first conversion's"
   let reg ← stackRegister
   let fT : LTy := .ref stTy
-  let aT : LTy := .int .w64
+  let aT : LTy := .addr
   let cT := cancelResTy cp
   readFact "machine:stack frame"
   let rres ← reserveFn s!"stack resume {op.1}.{op.2}"
@@ -1350,9 +1347,8 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
     let some (key, _, _, _) := F.ms[j]? | throw "LIR: a suspension's summand"
     letpairM pv fun v k' => do
       let k₂ ← fresh (F.kTy b cp)
-      -- A level's suspended computation, dropped for the machine's own over the base: as at a
-      -- point's `mk` below (`Prog.stackKs`).
-      modify fun st => { st with stackKs := st.stackKs.insert k' }
+      -- The hand-over: the level's suspended computation, dropped for the machine's own over the
+      -- base, which the drop's body binds first (`DropRule.stackK`, as at a point's `mk` below).
       return .drop .dead a₃ (.drop .dead base₃' (.drop .stackK k' (.letv k₂ (.clos kc [base₃]) (← outSusp F key v k₂))))
   let exits ← match pF? with
     | none => suspArms ex
@@ -1401,20 +1397,22 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
     let kv? ← p.kTy.mapM fresh
     let xs ← p.argTys.mapM fresh
     let f ← fresh fT; let a ← fresh aT
+    -- At a call point, the callee's `k` is handed over to this level's, once the state is in the
+    -- frame: `kv`, a closure of `kc` over the callee's frame, above this one, is dropped for
+    -- `clos kc [a]`, which takes over that frame with this one (`DropRule.stackK`).
+    -- UNPROVED: `Backend2.StackKHandOver`, here and at the step's drop above: that the dropped
+    -- `k` is a closure of `kc` over a frame at or above `a` (here) or the base (in the step), the
+    -- frames from the top down to it written. It rests on the call points calling a level of
+    -- the machine itself (`stackedOf`). If it fails, the level's state is leaked. `Lint` checks
+    -- the node's shape (`Lint.handsOver`), and the LIR interpreter the relation, on every run.
     let body ← mkTuple xs fun t => injectPay stPay i t fun sv => do
       let u ← fresh .unit
-      return .letv u (.prim .framePut [f, sv]) (.drop .dead u (.clos kc [a]))
-    -- UNPROVED: that dropping a level's suspended computation (`kv` here, `k'` in the step) leaks
-    -- nothing. Its type is a closure, which no typing rule lets a term discard; the drop rests on
-    -- the stack machine's call points calling a level of the machine itself (`stackedOf`), so that
-    -- it is a closure of this machine's `kc` over a stack address alone, the state it stands for
-    -- being in the level's frame on the task stack. `Lint` checks every other drop by its type,
-    -- and lets these through by `Prog.stackKs`. If it fails, the level's state is leaked.
-    let body ← match kv? with
-      | some kv => do
-        modify fun st => { st with stackKs := st.stackKs.insert kv }
-        pure (Tm.drop .stackK kv body)
-      | none => pure body
+      let k ← match kv? with
+        | some kv => do
+          let k₂ ← fresh (F.kTy b cp)
+          pure (Tm.drop .stackK kv (.letv k₂ (.clos kc [a]) (.var k₂)))
+        | none => pure (.clos kc [a])
+      return .letv u (.prim .framePut [f, sv]) (.drop .dead u k)
     setFn p.mkFn { name := s!"suspend {op.1}.{op.2}", params := kv?.toList ++ xs ++ [f, a], body,
                    ret := F.kTy b cp }
   readFact "machine:state"
@@ -3839,7 +3837,7 @@ def tailPass (s : CState) (loop : Nat × Var × OutInfo × Nat → Bool) : Excep
         setFn fn { name := "tail", params := [oP], body := .var oP, ret := M.ty }
   let ((), s') ← act.run s
   return ({ fns := s'.fns, codes := s'.codes, main := default, mainTy := default, ty := s'.ty,
-            data := s'.data, statics := s'.statics, lits := s'.lits, stackKs := s'.stackKs, dtorFns := s'.dtorFns }, s')
+            data := s'.data, statics := s'.statics, lits := s'.lits, dtorFns := s'.dtorFns }, s')
 
 /-- **State cells** (SPEC §49): each machine operation whose suspended computation's closure class
 holds itself (`recursive`, the layouts' classes that keep their environment on the heap, §35)
@@ -3852,7 +3850,7 @@ def cellPass (s : CState) (recursive : Nat → Bool) : Except String (Prog × CS
         let _ ← genMach m ops
   let ((), s') ← act.run s
   return ({ fns := s'.fns, codes := s'.codes, main := default, mainTy := default, ty := s'.ty,
-            data := s'.data, statics := s'.statics, lits := s'.lits, stackKs := s'.stackKs, dtorFns := s'.dtorFns }, s')
+            data := s'.data, statics := s'.statics, lits := s'.lits, dtorFns := s'.dtorFns }, s')
 
 /-- **The levels whose state cell is passed on** (SPEC §50), from a conversion's machines and the
 layouts' recursive classes (`recursive`, as `cellPass` reads them): each machine whose body takes
@@ -3915,6 +3913,6 @@ def convertProg (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CT
   let ((m, mT), s) ← (convMain exts ctx t C arg loops).run
     { census, direct, mach, threaded, stacked, classes }
   return ({ fns := s.fns, codes := s.codes, main := m, mainTy := mT, ty := s.ty, data := s.data,
-            statics := s.statics, lits := s.lits, stackKs := s.stackKs, dtorFns := s.dtorFns }, s)
+            statics := s.statics, lits := s.lits, dtorFns := s.dtorFns }, s)
 
 end Backend2

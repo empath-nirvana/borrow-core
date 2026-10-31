@@ -8,6 +8,7 @@ import Frontend.Check.Handled
 import Frontend.Check.TFacts
 import Frontend.Check.Derived
 import Backend2.Lint
+import Backend2.Interp
 /-! The theorems `SPEC.md` names, with their axioms. -/
 #print axioms BoCa.Fig16.LogRel.Typed.fundamentalProperty
 #print axioms BoCa.Fig16.LogRel.Typed.adequacy
@@ -692,6 +693,9 @@ import Backend2.Lint
 #print axioms Backend2.Lint.copyable_ofV
 #print axioms Backend2.Lint.droppable_ofV_persistent
 #print axioms Backend2.Lint.abandonable_ofV_drop
+#print axioms Backend2.TakesOver.suffix
+#print axioms Backend2.handOverB_sound
+#print axioms Backend2.enter_stackK_keeps
 #print axioms BoCa.Fig16.LogRel.Core.tokMint_compatX
 #print axioms BoCa.Fig16.LogRel.Core.tokBurn_compatX
 #print axioms BoCa.Fig16.LogRel.Core.tok_linear

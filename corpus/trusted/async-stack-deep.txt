@@ -1,0 +1,23 @@
+extern mk_input : !((mu X. 1 + u8 * X) => ref input)
+  contract: model proved (7), mkInput_meets
+  host: a fresh heap cell holding fd 0, the platform's standard input; its argument, a byte list, dropped whatever it holds; assumed (1)
+extern mk_output : !(i32 => ref output)
+  contract: model proved (7), mkOutput_meets
+  host: a fresh heap cell holding its argument, the descriptor; assumed (1)
+extern take_input : !(ref input => (mu X. 1 + u8 * X))
+  contract: model proved (7), takeInput_meets
+  host: the cell freed, answering the empty list; assumed (1)
+extern take_output : !(ref output => i32 * (mu X. 1 + u8 * X))
+  contract: model proved (7), takeOutput_meets
+  host: the cell freed, answering the descriptor and the empty list (each byte went to the descriptor when it was written); assumed (1)
+typing: unconditional: a CDerives derivation (fundamentalC, adequacyD)
+unproved boundaries: 4 (mk_input, mk_output, take_input, take_output)
+always trusted: the allocator and runtime (Backend/Wasm/Runtime.lean), the WAT printer, wasmtime
+backend: StackKHandOver (Backend2/Driver.lean), the stack machines' hand-over of a level's k: 7 sites
+  f27 (suspend 5.0)
+  f36 (stack step)
+  f80 (suspend 3.0)
+  f89 (stack step)
+  f130 (suspend 1.0)
+  f133 (suspend 1.0)
+  f140 (stack step)

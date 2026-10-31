@@ -17,7 +17,8 @@ scripted standard input, the arguments' stream, and collected standard output an
 - a cell or slot is read only when written, and written by `put` and `slotPut` only when
   unwritten (the moves of `take`, `replace` and `withswap`), and an array is freed only when
   every slot is unwritten;
-- every heap access is to a live object.
+- every heap access is to a live object;
+- every `stackK` drop is a stack machine's hand-over (`handOverB`, `HandOver`).
 
 Its report is the stages' (`Backend.report`): `main`'s value, then the objects live at the end.
 Host operations are `wasmHostAt .negative`'s, as the closure IR's interpreter's, so that output
@@ -460,7 +461,7 @@ def evalOp (ty : Var → IM LTy) (op : Op) (args : List Var) (resTy : LTy) : IM 
   | op, vs => bad s!"the operation {reprStr op |>.take 40} on {vs.length} values {reprStr vs |>.take 200}"
 
 
-/-! ### Terms -/
+/-! ### Literals and types -/
 
 def litV : IntLit → LV
   | .i32 n => .int n.toUInt64
@@ -479,6 +480,124 @@ def peekV (x : Var) : IM LV := do
   | some v => pure v
   | none => bad s!"variable x{x} copied after it was consumed, or unbound"
 
+/-! ### The stack machine's hand-over (#746 F3)
+
+A stack machine's `stackK` drop (`DropRule.stackK`) hands a level's suspended computation over
+to the machine's `k` at a lower frame: the node is `drop x (let k₂ = clos kc [base] in …)`. -/
+
+/-- The frames of the current task stack, the bottom first. -/
+def St.curFrames (s : St) : List Nat := (s.taskStacks.getD s.cur #[]).toList
+
+/-- **The frames a stack machine's `k` over the `i`-th frame of the current stack stands for**:
+that frame and those above it, to the top. -/
+def St.framesFrom (s : St) (i : Nat) : List Nat := s.curFrames.drop i
+
+/-- **`base` is at or below `a` on the current task stack**, and the frames from the top down to
+`a` are written: the frames `clos kc [a]` stands for, each holding a level's state. -/
+def TakesOver (s : St) (base a : Nat) : Prop :=
+  ∃ i j, i ≤ j ∧ s.curFrames[i]? = some base ∧ s.curFrames[j]? = some a ∧
+    ∀ f ∈ s.framesFrom j, ∃ v, s.mem[f]? = some (some v)
+
+/-- **The hand-over at a `stackK` drop of `x` whose body is `b`**, at the state `s`: `b` binds
+`clos kc [base]` first, `x` is `clos kc [a]` of the same code, and `base` is at or below `a`
+on the current task stack, the frames from the top down to `a` written (`TakesOver`). -/
+def HandOver (s : St) (x : Var) : Tm → Prop
+  | .letv _ (.clos kc [base]) _ => ∃ a b, s.frame[x]? = some (.clos kc [.int a]) ∧
+      s.frame[base]? = some (.int b) ∧ TakesOver s b.toNat a.toNat
+  | _ => False
+
+/-- `HandOver`, decided: the LIR interpreter's check at every `stackK` drop. -/
+def handOverB (s : St) (x : Var) : Tm → Bool
+  | .letv _ (.clos kc [base]) _ =>
+    match s.frame[x]?, s.frame[base]? with
+    | some (.clos kc' [.int a]), some (.int b) =>
+      kc' == kc && match s.curFrames.findIdx? (· == b.toNat), s.curFrames.findIdx? (· == a.toNat) with
+        | some i, some j => decide (i ≤ j) && (s.framesFrom j).all fun f => match s.mem[f]? with
+          | some (some _) => true
+          | _ => false
+        | _, _ => false
+    | _, _ => false
+  | _ => false
+
+/-! ### Terms -/
+
+/-- **A node's own step**: at a `letpair`, `case`, `copy`, `drop` or `abandon`, what `eval` does
+before it continues, in tail position, with the sub-term this answers; `none` at any other node.
+At a `stackK` drop it checks the hand-over (`handOverB`). -/
+def enter (p : Prog) (t : Tm) : IM (Option Tm) := match t with
+  | .letpair x y q b => do
+    match ← takeV q with
+    | .pair a c => bindV x a; bindV y c; pure (some b)
+    | v => bad s!"letpair of {reprStr v |>.take 80}"
+  | .case sv x b₁ y b₂ => do
+    match ← takeV sv with
+    | .inj false v => bindV x v; pure (some b₁)
+    | .inj true v => bindV y v; pure (some b₂)
+    | v => bad s!"case of {reprStr v |>.take 80}"
+  | .copy _ x x' b => do
+    let t ← tyIn p x
+    if t.ownsN true 64 then bad s!"a copy of x{x} at {t}, which owns a cell or holds a mut borrow"
+    bindV x' (← peekV x)
+    pure (some b)
+  | .drop r x b => do
+    let t ← tyIn p x
+    if t.ownsN false 64 then bad s!"a drop of x{x} at {t}, which owns a cell"
+    if r == .stackK && !handOverB (← get) x b then
+      bad s!"a drop of x{x} at the rule stack k, where the hand-over does not hold"
+    let _ ← takeV x
+    pure (some b)
+  | .abandon _ x b => do
+    let t ← tyIn p x
+    if t.ownsN false 64 then bad s!"a drop of x{x} at {t}, which owns a cell"
+    let _ ← takeV x
+    pure (some b)
+  | _ => pure none
+
+/-- The function a closure's call enters, and its arguments. -/
+def closEntry (p : Prog) (g : LV) (arg : Option LV) (j : Nat) : IM (Nat × List LV) := do
+  let .clos c env := g | bad s!"a call of a non-closure {reprStr g |>.take 80}"
+  let some code := p.codes[c]? | bad s!"no code c{c}"
+  match code.kind, arg with
+  | .lam, some a => pure (code.fns.headD 0, env ++ [a])
+  | .unit, none => pure (code.fns.headD 0, env)
+  | .amp, none =>
+    let some fn := code.fns[j]? | bad s!"no component {j} of c{c}"
+    pure (fn, env)
+  | k, _ => bad s!"a call of the {reprStr k} code c{c} the wrong way"
+
+/-- **A call node's own step**: at an `app`, `app0`, `sel`, `call` or tabulation, the function it
+enters and the arguments (`inr`), or the value at once (`inl`, a literal's table); `none` at any
+other node. -/
+def callEntry (p : Prog) (t : Tm) : IM (Option (LV ⊕ (Nat × List LV))) := match t with
+  | .app g a => do
+    let vg ← takeV g
+    let va ← takeV a
+    return some (.inr (← closEntry p vg (some va) 0))
+  | .app0 g => do return some (.inr (← closEntry p (← takeV g) none 0))
+  | .sel g j => do return some (.inr (← closEntry p (← takeV g) none j))
+  | .call fn as => do return some (.inr (fn, ← takeAll as))
+  | .prim (.tab fi) [g, n] => do
+    let vg ← takeV g
+    let .int k ← takeV n | bad "tab of a non-integer"
+    let arr ← if k.toUInt32 == 0 then pure (LV.fam 0 0) else
+      pure (LV.fam (← newObj k.toUInt32.toNat) k.toUInt32)
+    return some (.inr (fi, [vg, arr, .int 0, .int k]))
+  | .prim (.tabLit fi) [g, n] => do
+    let vg ← takeV g
+    let .int k ← takeV n | bad "tab of a non-integer"
+    -- The literal's bytes, where the tabulator is a literal's table (`Prog.lits`) long enough.
+    if let .clos c [.int off, .int len] := vg then
+      if p.lits == some c && k.toNat ≤ len.toUInt32.toNat then
+        return some (.inl (.fam (dataAt + off.toUInt32.toNat) k.toUInt32))
+    let arr ← if k.toUInt32 == 0 then pure (LV.fam 0 0) else
+      pure (LV.fam (← newObj k.toUInt32.toNat) k.toUInt32)
+    return some (.inr (fi, [vg, arr, .int 0, .int k]))
+  | _ => pure none
+
+/-- A function's frame on entry: its parameters bound to the arguments. -/
+def entryFrame (d : Fn) (args : List LV) : Std.HashMap Var LV :=
+  (d.params.zip args).foldl (fun m (x, v) => m.insert x v) {}
+
 mutual
 def eval (p : Prog) : Nat → LTy → Tm → IM LV
   | 0, _, _ => bad "out of fuel"
@@ -492,85 +611,170 @@ def eval (p : Prog) : Nat → LTy → Tm → IM LV
       pure (.pair va vb)
     | .inj r a => return .inj r (← takeV a)
     | .clos c env => return .clos c (← takeAll env)
-    | .app g a => do
-      let vg ← takeV g
-      let va ← takeV a
-      callClos p f vg (some va) 0
-    | .app0 g => do callClos p f (← takeV g) none 0
-    | .sel g j => do callClos p f (← takeV g) none j
-    | .call fn as => do callFn p f fn (← takeAll as)
-    | .prim (.tab fi) [g, n] => do
-      let vg ← takeV g
-      let .int k ← takeV n | bad "tab of a non-integer"
-      let arr ← if k.toUInt32 == 0 then pure (LV.fam 0 0) else
-        pure (LV.fam (← newObj k.toUInt32.toNat) k.toUInt32)
-      callFn p f fi [vg, arr, .int 0, .int k]
-    | .prim (.tabLit fi) [g, n] => do
-      let vg ← takeV g
-      let .int k ← takeV n | bad "tab of a non-integer"
-      -- The literal's bytes, where the tabulator is a literal's table (`Prog.lits`) long enough.
-      if let .clos c [.int off, .int len] := vg then
-        if p.lits == some c && k.toNat ≤ len.toUInt32.toNat then
-          return .fam (dataAt + off.toUInt32.toNat) k.toUInt32
-      let arr ← if k.toUInt32 == 0 then pure (LV.fam 0 0) else
-        pure (LV.fam (← newObj k.toUInt32.toNat) k.toUInt32)
-      callFn p f fi [vg, arr, .int 0, .int k]
+    | .app .. | .app0 .. | .sel .. | .call .. | .prim (.tab _) [_, _] | .prim (.tabLit _) [_, _] => do
+      match ← callEntry p t with
+      | some (.inl v) => pure v
+      | some (.inr (fn, args)) => callFn p f fn args
+      | none => bad "a call node with no entry"
     | .prim op as => evalOp (tyIn p) op as rt
     | .letv x e b => do
       let v ← eval p f (← tyIn p x) e
       bindV x v
       eval p f rt b
-    | .letpair x y q b => do
-      match ← takeV q with
-      | .pair a c => bindV x a; bindV y c; eval p f rt b
-      | v => bad s!"letpair of {reprStr v |>.take 80}"
-    | .case sv x b₁ y b₂ => do
-      match ← takeV sv with
-      | .inj false v => bindV x v; eval p f rt b₁
-      | .inj true v => bindV y v; eval p f rt b₂
-      | v => bad s!"case of {reprStr v |>.take 80}"
+    | .letpair .. | .case .. | .copy .. | .drop .. | .abandon .. => do
+      match ← enter p t with
+      | some b => eval p f rt b
+      | none => bad "a node with no step"
     | .absurd _ => bad "absurd reached"
-    | .copy _ x x' b => do
-      let t ← tyIn p x
-      if t.ownsN true 64 then bad s!"a copy of x{x} at {t}, which owns a cell or holds a mut borrow"
-      bindV x' (← peekV x)
-      eval p f rt b
-    | .drop _ x b | .abandon _ x b => do
-      let t ← tyIn p x
-      if t.ownsN false 64 then bad s!"a drop of x{x} at {t}, which owns a cell"
-      let _ ← takeV x
-      eval p f rt b
 
 def callFn (p : Prog) (fuel : Nat) (fn : Nat) (args : List LV) : IM LV := do
   let some d := p.fns[fn]? | bad s!"no function f{fn}"
   if d.params.length != args.length then
     bad s!"f{fn} ({d.name}) of {d.params.length} parameters called on {args.length}"
   let saved := (← get).frame
-  modify fun s => { s with frame := (d.params.zip args).foldl (fun m (x, v) => m.insert x v) {} }
+  modify fun s => { s with frame := entryFrame d args }
   let r ← eval p fuel d.ret d.body
   let rest := (← get).frame
   if !rest.isEmpty then
     bad s!"f{fn} ({d.name}) returns with {rest.toList.map (s!"x{·.1}")} unconsumed"
   modify fun s => { s with frame := saved }
   pure r
-
-def callClos (p : Prog) (fuel : Nat) (g : LV) (arg : Option LV) (j : Nat) : IM LV := do
-  let .clos c env := g | bad s!"a call of a non-closure {reprStr g |>.take 80}"
-  let some code := p.codes[c]? | bad s!"no code c{c}"
-  match code.kind, arg with
-  | .lam, some a => callFn p fuel (code.fns.headD 0) (env ++ [a])
-  | .unit, none => callFn p fuel (code.fns.headD 0) env
-  | .amp, none =>
-    let some fn := code.fns[j]? | bad s!"no component {j} of c{c}"
-    callFn p fuel fn env
-  | k, _ => bad s!"a call of the {reprStr k} code c{c} the wrong way"
 end
+
+/-- **The configurations a run reaches**: `Visits p s t s' u` when `eval`, evaluating `t` at the
+state `s`, evaluates `u` at `s'` on the way: after a node's own step (`enter`), the bound term
+of a `letv`, then its body with the value bound, and a call's function body on its arguments
+(`callEntry`, `callFn`). -/
+inductive Visits (p : Prog) : St → Tm → St → Tm → Prop
+  | here : Visits p s t s t
+  | step : (enter p t).run s = .ok (some b, s₁) → Visits p s₁ b s' u → Visits p s t s' u
+  | bound : Visits p s e s' u → Visits p s (.letv x e b) s' u
+  | body : p.ty[x]? = some tx → (eval p f tx e).run s = .ok (v, s₁) →
+      Visits p { s₁ with frame := s₁.frame.insert x v } b s' u → Visits p s (.letv x e b) s' u
+  | call : (callEntry p t).run s = .ok (some (.inr (fn, args)), s₁) → p.fns[fn]? = some d →
+      d.params.length = args.length →
+      Visits p { s₁ with frame := entryFrame d args } d.body s' u → Visits p s t s' u
+
+/-! ### What the hand-over gives
+
+Two facts, and only these: under `HandOver` the frame range of the `k` that takes over contains
+the dropped `k`'s (`TakesOver.suffix`, from the order alone); and a `stackK` drop's step, as every
+drop's, touches no heap (`enter_stackK_keeps`, with no hypothesis). That every configuration a
+converted program reaches at a `stackK` drop is a hand-over, and that the `k` taking over then
+releases those frames, is `UNPROVED:` (`Backend2.StackKHandOver`). -/
+
+/-- The frames `clos kc [a]` stands for are a suffix of those `clos kc [base]` stands for. -/
+theorem TakesOver.suffix {s : St} {base a : Nat} (h : TakesOver s base a) :
+    ∃ i j, s.curFrames[i]? = some base ∧ s.curFrames[j]? = some a ∧
+      s.framesFrom j <:+ s.framesFrom i := by
+  obtain ⟨i, j, hij, hi, hj, -⟩ := h
+  refine ⟨i, j, hi, hj, ?_⟩
+  have e : s.framesFrom j = (s.framesFrom i).drop (j - i) := by
+    simp only [St.framesFrom, List.drop_drop]; congr 1; omega
+  rw [e]; exact List.drop_suffix _ _
+
+/-- The interpreter's check is sound for the hand-over. -/
+theorem handOverB_sound {s : St} {x : Var} {b : Tm} (h : handOverB s x b = true) :
+    HandOver s x b := by
+  unfold handOverB at h
+  split at h
+  · rename_i kc base _
+    unfold HandOver
+    split at h
+    · rename_i kc' a vb hx hb
+      simp only [Bool.and_eq_true, beq_iff_eq] at h
+      obtain ⟨rfl, h⟩ := h
+      refine ⟨a, vb, hx, hb, ?_⟩
+      split at h
+      · rename_i i j hi hj
+        simp only [Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true] at h
+        obtain ⟨hij, hw⟩ := h
+        obtain ⟨hi', hpi, -⟩ := List.findIdx?_eq_some_iff_getElem.mp hi
+        obtain ⟨hj', hpj, -⟩ := List.findIdx?_eq_some_iff_getElem.mp hj
+        refine ⟨i, j, hij, ?_, ?_, ?_⟩
+        · simp only [beq_iff_eq] at hpi; simp [List.getElem?_eq_getElem hi', hpi]
+        · simp only [beq_iff_eq] at hpj; simp [List.getElem?_eq_getElem hj', hpj]
+        · intro f hf
+          have := hw f hf
+          split at this
+          · exact ⟨_, by assumption⟩
+          · exact absurd this (by simp)
+      · exact absurd h (by simp)
+    · exact absurd h (by simp)
+  · exact absurd h (by simp)
+
+/-- The heap, the task stacks and the regions of `s'` are those of `s`. -/
+def St.SameHeap (s s' : St) : Prop :=
+  s'.mem = s.mem ∧ s'.objs = s.objs ∧ s'.taskStacks = s.taskStacks ∧ s'.regions = s.regions
+
+/-- An action that changes no object, cell, task stack or region when it succeeds. -/
+def Keeps (m : IM α) : Prop := ∀ s a s', m.run s = .ok (a, s') → St.SameHeap s s'
+
+theorem Keeps.pure' (a : α) : Keeps (pure a : IM α) := by
+  intro s a' s' h; cases h; exact ⟨rfl, rfl, rfl, rfl⟩
+
+theorem Keeps.bind' {m : IM α} {f : α → IM β} (hm : Keeps m) (hf : ∀ a, Keeps (f a)) :
+    Keeps (m >>= f) := by
+  intro s b s' h
+  simp only [StateT.run, bind, StateT.bind, Except.bind] at h
+  split at h
+  · cases h
+  · rename_i a s₁ e
+    obtain ⟨h1, h2, h3, h4⟩ := hm s _ _ e
+    obtain ⟨g1, g2, g3, g4⟩ := hf _ _ _ _ h
+    exact ⟨g1.trans h1, g2.trans h2, g3.trans h3, g4.trans h4⟩
+
+theorem Keeps.bad' (m : String) : Keeps (bad m : IM α) := by
+  intro s a s' h
+  simp [bad, StateT.run, throw, throwThe, MonadExceptOf.throw, StateT.lift, bind, Except.bind] at h
+
+theorem Keeps.get' : Keeps (get : IM St) := by
+  intro s a s' h
+  simp [StateT.run, get, getThe, MonadStateOf.get, StateT.get, pure, Except.pure] at h
+  obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl, rfl, rfl⟩
+
+theorem Keeps.modify' (f : St → St) (hf : ∀ s, St.SameHeap s (f s)) :
+    Keeps (modify f : IM Unit) := by
+  intro s a s' h
+  simp [StateT.run, modify, modifyGet, MonadStateOf.modifyGet, StateT.modifyGet, pure,
+    Except.pure] at h
+  obtain ⟨-, rfl⟩ := h; exact hf s
+
+theorem Keeps.tyIn' (p : Prog) (x : Var) : Keeps (tyIn p x) := by
+  unfold tyIn; split
+  · exact Keeps.pure' _
+  · exact Keeps.bad' _
+
+theorem Keeps.takeV' (x : Var) : Keeps (takeV x) := by
+  unfold takeV
+  refine Keeps.bind' Keeps.get' fun st => ?_
+  split
+  · exact Keeps.bind' (Keeps.modify' _ fun _ => ⟨rfl, rfl, rfl, rfl⟩) fun _ => Keeps.pure' _
+  · exact Keeps.bad' _
+
+/-- The step of a `stackK` drop changes no object, cell, task stack or region; it consumes the
+variable alone. It needs no hand-over: the interpreter's every drop is the same step. -/
+theorem enter_stackK_keeps {p : Prog} {x : Var} {b : Tm} :
+    Keeps (enter p (.drop .stackK x b)) := by
+  have tail : Keeps (do let _ ← takeV x; pure (some b) : IM (Option Tm)) :=
+    Keeps.bind' (Keeps.takeV' x) fun _ => Keeps.pure' _
+  unfold enter
+  refine Keeps.bind' (Keeps.tyIn' p x) fun t => ?_
+  simp only
+  split
+  · refine Keeps.bind' (Keeps.bad' _) fun _ => ?_
+    exact Keeps.bind' Keeps.get' fun st => by
+      split; exact Keeps.bind' (Keeps.bad' _) fun _ => tail; exact tail
+  · exact Keeps.bind' Keeps.get' fun st => by
+      split; exact Keeps.bind' (Keeps.bad' _) fun _ => tail; exact tail
+
+/-- The state a run of `p` starts at. -/
+def St.init (p : Prog) (input args : List UInt8) : St := { input, args, data := p.data }
 
 /-- Run a program: its output and report (`Backend.report`). -/
 def runLIR (p : Prog) (fuel : Nat) (input : List UInt8) (args : List UInt8 := []) :
     Except String Backend.Output := do
-  let s₀ : St := { input, args, data := p.data }
-  let (v, s) ← (eval p fuel p.mainTy p.main).run s₀
+  let (v, s) ← (eval p fuel p.mainTy p.main).run (St.init p input args)
   if !s.frame.isEmpty then
     throw s!"LIR interpreter: main leaves {s.frame.toList.map (s!"x{·.1}")} unconsumed"
   let pv ← pvOf 4096 p.mainTy v
