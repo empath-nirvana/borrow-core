@@ -8,6 +8,7 @@
 
 - [Values, functions and numbers](guide/basics.md)
 - [Ownership and borrows](guide/ownership.md)
+- [Linear values](guide/linear.md)
 - [Data and generics](guide/data.md)
 - [Errors](guide/errors.md)
 - [Input and output](guide/io.md)
