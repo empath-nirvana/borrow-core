@@ -14,6 +14,7 @@
 - [Iteration](guide/iteration.md)
 - [Effects and handlers](guide/effects.md)
 - [Async tasks](guide/async.md)
+- [Linear values](guide/linear.md)
 - [Recipes](recipes.md)
 
 # Reference

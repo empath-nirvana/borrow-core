@@ -79,6 +79,7 @@ import Core.Dtor
 import Core.Classes
 import Core.Tok
 import Core.Decl
+import Core.DeclLend
 import Core.ArrayWp
 import Core.Arrays
 import Core.SliceFrames

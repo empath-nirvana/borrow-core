@@ -71,7 +71,8 @@ Each entry: the decision, and why. Newest last.
        abort abandons only slots that hold no owned cell (`VTy.OwnFree`, which is not narrowed), so
        nothing leaks. Opaque host types are linear and may be abandoned there.
     3. **`Imm` is linear, with a derived copy** (`DerivedCopy`, `copy_derives` over the kernel's
-       `copy` constant). No site inserts one today.
+       `copy` constant). The checker inserts it at a split whose two parts both use the borrow
+       (SPEC §12, *The derived copy at `imm`*; #746).
     4. **A declared type may have no derived drop.** Its payload is paired with a token of the
        opaque kind `tok` (`A ⊗ Tok`, minted at construction and burned at a written `match`), so
        `HasDtor` fails at it and the checker cannot drop it; borrows of it still have a derived

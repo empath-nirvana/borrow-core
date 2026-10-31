@@ -8,6 +8,7 @@ import Frontend.Check.Handled
 import Frontend.Check.TFacts
 import Frontend.Check.Derived
 import Backend2.Lint
+import Backend2.Interp
 /-! The theorems `SPEC.md` names, with their axioms. -/
 #print axioms BoCa.Fig16.LogRel.Typed.fundamentalProperty
 #print axioms BoCa.Fig16.LogRel.Typed.adequacy
@@ -730,6 +731,9 @@ import Backend2.Lint
 #print axioms Backend2.Lint.copyable_ofV
 #print axioms Backend2.Lint.droppable_ofV_persistent
 #print axioms Backend2.Lint.abandonable_ofV_drop
+#print axioms Backend2.TakesOver.suffix
+#print axioms Backend2.handOverB_sound
+#print axioms Backend2.enter_stackK_keeps
 #print axioms BoCa.Fig16.LogRel.Core.tokMint_compatX
 #print axioms BoCa.Fig16.LogRel.Core.tokBurn_compatX
 #print axioms BoCa.Fig16.LogRel.Core.tok_linear
@@ -759,8 +763,20 @@ import Backend2.Lint
 #print axioms BoCa.Fig16.LogRel.Core.burn_step
 #print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesP.dtor_hasDtor
 #print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.dtor_hasDtor
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesP.copy_at
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesP.arrCopy_at
+#print axioms Frontend.Check.derivedCopyB_iff
+#print axioms Frontend.Check.copyIt_erase
 #print axioms BoCa.Fig16.LogRel.Core.entry_derives
 #print axioms BoCa.Fig16.LogRel.Core.entry_runs
 #print axioms BoCa.Fig16.LogRel.Core.entry_decl_no_drop
+#print axioms BoCa.Fig16.LogRel.Core.DeclLend.decl_loan_ownFree
+#print axioms BoCa.Fig16.LogRel.Core.DeclLend.decl_ref_no_dtor
+#print axioms BoCa.Fig16.LogRel.Core.DeclLend.d_declInside
+#print axioms BoCa.Fig16.LogRel.Core.DeclLend.declInside_runs
+#print axioms BoCa.Fig16.LogRel.Core.DeclLend.d_declFin
+#print axioms BoCa.Fig16.LogRel.Core.DeclLend.d_declFinOf
+#print axioms BoCa.Fig16.LogRel.Core.DeclLend.d_declAcross
+#print axioms BoCa.Fig16.LogRel.Core.DeclLend.declAcross_answers
 #print axioms BoCa.Fig16.LogRel.Core.Check.neitherAbsorbed_of
 #print axioms BoCa.Fig16.LogRel.Core.copy_derives

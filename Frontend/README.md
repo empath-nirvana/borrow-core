@@ -274,6 +274,16 @@ as ordinary code. A binder whose variable is left unconsumed is reported with it
 no derived drop. A `case` or `<,>` whose parts differ in a variable with no derived drop names that
 type.
 
+**The derived copy at `imm`** (SPEC §12, `Check/DerivedCopy.lean`). At a node whose context is
+split between two sequential parts, each variable both parts mention whose slot is `DerivedCopy`
+(`imm`, `array_imm`: `derivedCopyB_iff`) is copied before the node, `p <- return (copy xᵢ);
+let (x₁, x₂) = p; node`, the first part checked where the name resolves to `x₁` and the second
+where it resolves to `x₂` (`Env.copyAt`; `withCopies` around each split site of `Checker.lean`,
+under `run` at a value). `copyIt` builds it from the rule builders, its erasure has `copy_derives`'s
+`copyE` shape (`copyIt_erase`), and the constant's node is typed only at a `DerivedCopy` type
+(`TDerivesP.copy_at`, `arrCopy_at`). The split itself is unchanged: `overlapOK` admits a slot both
+parts use at a persistent type only. `bcc copies` prints the inserted copies (`TInfo.inserted`).
+
 **Cross-check.** `CrossCheck.lean` proves by `decide +kernel` that the ten `def`s of §13.1
 erase to `countAlgV`, `natCopyE`, `freeLAlgV`, `freeNatE`, `addAlgV`, `addE`, `sumAlgV`,
 `sumCE`, `freeCAlgV` and `freeCE`, and that `corpus/sum-prog-exact.bc` and

@@ -1,4 +1,4 @@
-import Frontend.Check.Pin
+import Frontend.Check.DerivedCopy
 import Frontend.Check.Kinds
 
 /-!
@@ -215,11 +215,12 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
           useDef n E Δ T sp x d ((d.params.map (·.name)).zip targs) targs
         else err sp s!"`{x}` takes {d.params.length} type argument(s), not {args.length}"
     | .unit sp => pure ⟨.unit, rUnit (at_ sp)⟩
-    | .pair sp V W => do
-      let ⟨_, r₁⟩ ← synV n E Δ T V
-      let ⟨_, r₂⟩ ← synV n E Δ T W
-      if h : overlapOK T r₁.F.u r₂.F.u = true then pure ⟨_, rPair (at_ sp) r₁ r₂ h⟩
-      else throw (splitErr E T sp r₁.F.u r₂.F.u)
+    | .pair sp V W =>
+      withCopiesV sp (E.copyVars T (mentionsV · V) (mentionsV · W)) E T fun E₁ E₂ T => do
+        let ⟨_, r₁⟩ ← synV n E₁ Δ T V
+        let ⟨_, r₂⟩ ← synV n E₂ Δ T W
+        if h : overlapOK T r₁.F.u r₂.F.u = true then pure ⟨_, rPair (at_ sp) r₁ r₂ h⟩
+        else throw (splitErr E₁ T sp r₁.F.u r₂.F.u)
     | .inl sp _ => err sp "the type of `inl V` cannot be synthesized: ascribe it, `(inl V : A + B)`"
     | .inr sp _ => err sp "the type of `inr V` cannot be synthesized: ascribe it, `(inr V : A + B)`"
     | .thunk sp M => do
@@ -286,14 +287,15 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
       match C, r with
       | .ret _, r => pure ⟨_, rOfRet (at_ sp) r⟩
       | C, _ => err sp s!"`run M` needs `M : F A`, but `M : {E.ppC C}`"
-    | .app sp V W => do
-      let ⟨A, rf⟩ ← synV n E Δ T V
-      match A, rf with
-      | .thunk (.arr A (.ret _)), rf => do
-        let ra ← chkV n E Δ T W A
-        if h : overlapOK T ra.F.u rf.F.u = true then pure ⟨_, rLolliE (at_ sp) rf ra h⟩
-        else throw (splitErr E T sp ra.F.u rf.F.u)
-      | A, _ => err V.span s!"this is applied, so it must have a type `A => B`, but it has type `{E.ppV A}`"
+    | .app sp V W =>
+      withCopiesV sp (E.copyVars T (mentionsV · W) (mentionsV · V)) E T fun E₁ E₂ T => do
+        let ⟨A, rf⟩ ← synV n E₂ Δ T V
+        match A, rf with
+        | .thunk (.arr A (.ret _)), rf => do
+          let ra ← chkV n E₁ Δ T W A
+          if h : overlapOK T ra.F.u rf.F.u = true then pure ⟨_, rLolliE (at_ sp) rf ra h⟩
+          else throw (splitErr E₁ T sp ra.F.u rf.F.u)
+        | A, _ => err V.span s!"this is applied, so it must have a type `A => B`, but it has type `{E.ppV A}`"
     | .inst sp V a => do
       let al ← E.elabL Δ a
       let ⟨A, r⟩ ← synV n E Δ T V
@@ -326,11 +328,13 @@ def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : C
   | n + 1, E, Δ, T, v, A => let E := E.forVal; match v with
     | .pair sp V W =>
       match A with
-      | .tensor A B => do
-        let r₁ ← chkV n E Δ T V A
-        let r₂ ← chkV n E Δ T W B
-        if h : overlapOK T r₁.F.u r₂.F.u = true then pure (rPair (at_ sp) r₁ r₂ h)
-        else throw (splitErr E T sp r₁.F.u r₂.F.u)
+      | .tensor A B =>
+        withCopiesVC sp (E.copyVars T (mentionsV · V) (mentionsV · W)) E T (.tensor A B)
+          fun E₁ E₂ T => do
+            let r₁ ← chkV n E₁ Δ T V A
+            let r₂ ← chkV n E₂ Δ T W B
+            if h : overlapOK T r₁.F.u r₂.F.u = true then pure (rPair (at_ sp) r₁ r₂ h)
+            else throw (splitErr E₁ T sp r₁.F.u r₂.F.u)
       | A => err sp s!"a pair is checked against `{E.ppV A}`, which is not a `*` type"
     | .inl sp V =>
       match A with
@@ -411,8 +415,10 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
     | .ret sp V => do
       let ⟨_, r⟩ ← synV n E Δ T V
       pure ⟨_, rRet (at_ sp) r⟩
-    | .bind sp x oA M N => do
-      let ⟨A, S', rM⟩ ← bindHead n (E.ownIn (mentionsC · M)) Δ T sp oA M
+    | .bind sp x oA M N =>
+      withCopies sp (E.copyVars T (mentionsC · M) (fun z => x.name != z && mentionsC z N)) E E T
+        fun E₁ E T => do
+      let ⟨A, S', rM⟩ ← bindHead n (E₁.ownIn (mentionsC · M)) Δ T sp oA M
       match S', rM with
       | [], rM =>
         let rM := rUnfoldStep (at_ sp) rM
@@ -428,8 +434,10 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
         let ⟨_, rN⟩ ← atRow E N.span S
           (← synC n { (E.minus rM.F.u).pushOwn x.name A with row := some S } Δ (A :: T) N)
         pure ⟨_, ← effBind E sp x rM' rN⟩
-    | .unwind sp x oA M D N => do
-      let ⟨A, S', rM⟩ ← bindHead n (E.ownIn (mentionsC · M)) Δ T sp oA M
+    | .unwind sp x oA M D N =>
+      withCopies sp (E.copyVars T (mentionsC · M)
+          (fun z => mentionsC z D || (x.name != z && mentionsC z N))) E E T fun E₁ E T => do
+      let ⟨A, S', rM⟩ ← bindHead n (E₁.ownIn (mentionsC · M)) Δ T sp oA M
       let S := E.row.getD S'
       let rM' ← liftRow E M.span S rM
       let ⟨_, rN⟩ ← atRow E N.span S
@@ -547,8 +555,9 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let A' ← E.elabV Δ A
       let ⟨_, rM⟩ ← synC n (E.pushOwn x.name A') Δ (A' :: T) M
       pure ⟨_, ← lamIt E sp x rM⟩
-    | .app sp M x => do
-      let ⟨C, rM⟩ ← synC n E Δ T M
+    | .app sp M x =>
+      withCopies sp (E.copyVars T (mentionsC · M) (· == x.name)) E E T fun E₁ E T => do
+      let ⟨C, rM⟩ ← synC n E₁ Δ T M
       match C, rM with
       | .arr _ _, rM => do pure ⟨_, ← appIt E T sp x rM⟩
       | C, _ => err M.span s!"this is applied, so it must have a type `A -o C`, but it has type `{E.ppC C}`"
@@ -562,13 +571,16 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       | .amp _ _, r => if i then pure ⟨_, rProj₁ (at_ sp) r⟩ else pure ⟨_, rProj₂ (at_ sp) r⟩
       | C, _ => err sp s!"a projection needs a `&` type, but this has type `{E.ppC C}`"
     | .top sp => pure ⟨.top, rTop (at_ sp)⟩
-    | .letUnit sp V M => do
-      let rV ← chkV n E Δ T V .unit
+    | .letUnit sp V M =>
+      withCopies sp (E.copyVars T (mentionsV · V) (mentionsC · M)) E E T fun E₁ E T => do
+      let rV ← chkV n E₁ Δ T V .unit
       let ⟨C, rM⟩ ← synC n (E.minus rV.F.u) Δ T M
       if h : overlapOK T rV.F.u rM.F.u = true then pure ⟨C, rUnitE (at_ sp) rV rM h⟩
       else throw (splitErr E T sp rV.F.u rM.F.u)
-    | .letPair sp x y V M => do
-      let ⟨A, rV⟩ ← synV n E Δ T V
+    | .letPair sp x y V M =>
+      withCopies sp (E.copyVars T (mentionsV · V)
+          (fun z => x.name != z && y.name != z && mentionsC z M)) E E T fun E₁ E T => do
+      let ⟨A, rV⟩ ← synV n E₁ Δ T V
       match A, rV with
       | .tensor A B, rV => do
         let ⟨C, rM⟩ ← synC n ((E.minus rV.F.u).pushOwn x.name A |>.pushOwn y.name B) Δ
@@ -579,8 +591,10 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
         if h : overlapOK T rV.F.u F₂.u = true then pure ⟨C, rScope (at_ sp) (rTensorE (atB sp [x.name, y.name]) rV F₂ h)⟩
         else throw (splitErr E T sp rV.F.u F₂.u)
       | A, _ => err V.span s!"`let (x, y) = V` needs a `*` type, but `V : {E.ppV A}`"
-    | .case sp V x M y N => do
-      let ⟨A, rV⟩ ← synV n E Δ T V
+    | .case sp V x M y N =>
+      withCopies sp (E.copyVars T (mentionsV · V)
+          (fun z => (x.name != z && mentionsC z M) || (y.name != z && mentionsC z N))) E E T fun E₁ E T => do
+      let ⟨A, rV⟩ ← synV n E₁ Δ T V
       match A, rV with
       | .sum A B, rV => do
         let E' := E.minus rV.F.u
@@ -757,8 +771,10 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
             pure (hC ▸ rEffSub (at_ sp) (S := []) rfl r)
           else err sp "internal error: a returner chain"
         | none => err sp s!"`return V` is checked against `{E.ppC C}`, which is not an `F` type"
-    | .bind sp x oA M N => do
-      let ⟨A, S', rM⟩ ← bindHead n (E.ownIn (mentionsC · M)) Δ T sp oA M
+    | .bind sp x oA M N =>
+      withCopiesC sp (E.copyVars T (mentionsC · M) (fun z => x.name != z && mentionsC z N)) E T C
+        fun E₁ E T => do
+      let ⟨A, S', rM⟩ ← bindHead n (E₁.ownIn (mentionsC · M)) Δ T sp oA M
       match S', rM with
       | [], rM =>
         let rM := rUnfoldStep (at_ sp) rM
@@ -781,8 +797,10 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
     | .unwind sp x oA M D N =>
       match effRow? C with
       | some (S, B) =>
-        if hC : effOf S B = C then do
-          let ⟨A, _, rM⟩ ← bindHead n (E.ownIn (mentionsC · M)) Δ T sp oA M
+        if hC : effOf S B = C then
+          withCopiesC sp (E.copyVars T (mentionsC · M)
+              (fun z => mentionsC z D || (x.name != z && mentionsC z N))) E T C fun E₁ E T => do
+          let ⟨A, _, rM⟩ ← bindHead n (E₁.ownIn (mentionsC · M)) Δ T sp oA M
           let rM' ← liftRow E M.span S rM
           let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A) Δ (A :: T) N (effOf S B)
           let rD ← chkC n ((E.minus rM.F.u).push none) Δ (.unit :: T) D
@@ -819,13 +837,16 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
       match C with
       | .top => pure (rTop (at_ sp))
       | C => err sp s!"`<>` has type `top`, but `{E.ppC C}` is expected"
-    | .letUnit sp V M => do
-      let rV ← chkV n E Δ T V .unit
+    | .letUnit sp V M =>
+      withCopiesC sp (E.copyVars T (mentionsV · V) (mentionsC · M)) E T C fun E₁ E T => do
+      let rV ← chkV n E₁ Δ T V .unit
       let rM ← chkC n (E.minus rV.F.u) Δ T M C
       if h : overlapOK T rV.F.u rM.F.u = true then pure (rUnitE (at_ sp) rV rM h)
       else throw (splitErr E T sp rV.F.u rM.F.u)
-    | .letPair sp x y V M => do
-      let ⟨A, rV⟩ ← synV n E Δ T V
+    | .letPair sp x y V M =>
+      withCopiesC sp (E.copyVars T (mentionsV · V)
+          (fun z => x.name != z && y.name != z && mentionsC z M)) E T C fun E₁ E T => do
+      let ⟨A, rV⟩ ← synV n E₁ Δ T V
       match A, rV with
       | .tensor A B, rV => do
         let rM ← chkC n ((E.minus rV.F.u).pushOwn x.name A |>.pushOwn y.name B) Δ
@@ -836,8 +857,10 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
         if h : overlapOK T rV.F.u F₂.u = true then pure (rScope (at_ sp) (rTensorE (atB sp [x.name, y.name]) rV F₂ h))
         else throw (splitErr E T sp rV.F.u F₂.u)
       | A, _ => err V.span s!"`let (x, y) = V` needs a `*` type, but `V : {E.ppV A}`"
-    | .case sp V x M y N => do
-      let ⟨A, rV⟩ ← synV n E Δ T V
+    | .case sp V x M y N =>
+      withCopiesC sp (E.copyVars T (mentionsV · V)
+          (fun z => (x.name != z && mentionsC z M) || (y.name != z && mentionsC z N))) E T C fun E₁ E T => do
+      let ⟨A, rV⟩ ← synV n E₁ Δ T V
       match A, rV with
       | .sum A B, rV => do
         let E' := E.minus rV.F.u

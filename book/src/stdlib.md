@@ -598,7 +598,7 @@ them.
 | `Async` | `effect Async { ctl await(); ctl log(x: i32) }` | let other tasks run; record an entry |
 | `spawn` | `with spawn { e }`, a `Task[A]` | `e` run to its first `await` |
 | `resume` | `resume[A](t: Task[A]) -> A + Task[A]` | run to the next `await`: `inl` the value, or `inr` the rest |
-| `cancel` | `cancel[A](t: Task[A]) -> 1` | a task abandoned, what it owns freed |
+| `cancel` | `cancel[A](t: Task[A]) -> 1` | a task cancelled, what it owns freed |
 | `queue` | `queue[A]() -> Queue[A]` | an empty queue |
 | `push` | `push[A](q: Queue[A], t: Task[A]) -> Queue[A]` | a task queued |
 | `run_until_empty` | `run_until_empty[A](q: Queue[A]) -> List[A]` | the tasks' values, in the order queued |

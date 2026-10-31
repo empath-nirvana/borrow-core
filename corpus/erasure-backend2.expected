@@ -117,6 +117,8 @@ data-rose erased handles 1 performs 0 raises 3 left 0 0
 data-rose-vec erased handles 3 performs 0 raises 4 left 0 0
 data-turnstile erased handles 0 performs 0 raises 0 left 0 0
 decl-guard erased handles 2 performs 0 raises 1 left 0 0
+decl-handler-state erased handles 0 performs 0 raises 2 machines 2 suspends 2 left 0 0
+decl-lend erased handles 1 performs 0 raises 1 left 0 0
 decl-promise erased handles 0 performs 0 raises 0 left 0 0
 decl-txn erased handles 0 performs 0 raises 0 left 0 0
 decl-view erased handles 0 performs 0 raises 0 left 0 0
@@ -204,6 +206,8 @@ hygiene-handler-param erased handles 1 performs 0 raises 0 left 0 0
 hygiene-handler-resume erased handles 1 performs 0 raises 1 machines 1 suspends 1 left 0 0
 hygiene-handler-state erased handles 0 performs 0 raises 0 machines 1 suspends 1 left 0 0
 hygiene-local-fn erased handles 0 performs 0 raises 0 left 0 0
+imm-copy erased handles 0 performs 0 raises 0 left 0 0
+imm-copy-view erased handles 0 performs 0 raises 0 left 0 0
 implicit-drops erased handles 0 performs 0 raises 0 left 0 0
 int-arith erased handles 0 performs 0 raises 0 left 0 0
 int-ops erased handles 0 performs 0 raises 0 left 0 0

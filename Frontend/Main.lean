@@ -40,7 +40,9 @@ import Backend2.Driver
                                 print the program with every variable renamed to a name of its
                                 own (`alphaRename`), or with `--map` the renaming
     lake exe bcc trusted <file> list the program's externs with their contracts, host
-                                implementations and assurance levels (SPEC §11)
+                                implementations and assurance levels (SPEC §11), what its
+                                typing rests on (SPEC §29), and the stack machines' hand-overs
+                                the new backend's code rests on (SPEC §52)
     lake exe bcc hostops (flat | native)
                                 every host operation on a table of operands, at the flat-IR
                                 interpreter or built natively (`Backend.Native.Tests.lean`)
@@ -166,8 +168,14 @@ def lirDump (file : String) : IO UInt32 := do
 /-- Print `file`'s trusted boundaries. -/
 def trusted (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
+  let backend := match Backend.checkedOf file src with
+    | .ok k => Backend2.trustedReport k
+    | .error _ => []
   match Backend.trusted file src with
-  | .ok s => IO.print s; return 0
+  | .ok s =>
+    IO.print s
+    for l in backend do IO.println l
+    return 0
   | .error e => IO.eprintln e; return 1
 
 /-- Each `handle` node of `file`'s checked terms, with its clauses' kinds (SPEC §19). -/
@@ -219,6 +227,21 @@ def handled (file : String) : IO UInt32 := do
           s!"fails at {", ".intercalate (caught.map toString)}"
         let row := s!"[{", ".intercalate (h.row.map toString)}]"
         IO.println s!"{h.sp.start.render}: handle {h.n}: inside {renderHIn h.inside}; row {row}; ops {", ".intercalate ops}; names {", ".intercalate nms}; condition 2 {c2}"
+      return 0
+
+/-- Each derived copy the checker inserted in `file`'s checked `main` (SPEC §12): the copy's
+source, the variable copied and its type, in the order of the typed term (a `def`'s body once per
+use). -/
+def copies (file : String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  match Backend.checkedOf file src with
+  | .error e => IO.eprintln e; return 1
+  | .ok k =>
+    match k.main.t.insertedCopies Check.copiesFuel with
+    | none => IO.eprintln s!"{file}: the typed term is deeper than the bound"; return 1
+    | some cs =>
+      for (sp, x, A) in cs do
+        IO.println s!"{sp.start.render}: copy of `{x}` : {Check.ppVTy A}"
       return 0
 
 /-- What the elaboration of effects records of each `handle` node's site (`HSite`), with the
@@ -576,6 +599,7 @@ def main (argv : List String) : IO UInt32 := do
   | ["kinds", file] => kinds file
   | ["handled", file] => handled file
   | ["sites", file] => sites file
+  | ["copies", file] => copies file
   | ["desugar", file] => desugar file
   | ["erase", file] => erase file
   | ["lir", "--typed", file] => typedDump file

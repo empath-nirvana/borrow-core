@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.17 · 2026-10-31
+Version 1.20 · 2026-10-31
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1354,6 +1354,51 @@ which carries `HasDtor` (`TDerivesP.dtor_hasDtor`), so it inserts none at such a
 one, `Imm @a N` or `Mut @a N`, is linear with a derived drop (`decl_imm_drop`, `decl_mut_drop`): the
 loan ends, the value is not consumed.
 
+### The derived copy at `imm`
+
+`Imm @a A` and `[Imm @a A]` are linear with a **derived copy** (`DerivedCopy`, `Core/Classes.lean`):
+the constant `copy` (`CDerives.copy`, at `axCopyTy`) or `array_copy` (`CDerives.arrCopy`, under
+`bangE`) makes two of one, and `copy_derives` types `copyE A i e`, the copy of `xᵢ` with `e` under
+both copies. A use of such a variable beyond its first is its derived copy, which the checker
+inserts as it inserts a derived drop. The split is unchanged (`overlapOK`, `Ctx.SplitP`): a slot
+both parts use is admitted at a persistent type only, so `imm` stays linear, and a second use of a
+`mut` borrow, an owned value, a declared value or a capability is refused there ("`x` is used
+twice here, and its type `…` is linear").
+
+- **Where.** At a node whose context the checker splits between two parts that run in sequence,
+  each variable both parts mention free (`mentionsV`, `mentionsC`, which respect binders) whose
+  slot is `DerivedCopy` (`derivedCopyB_iff`) is copied before the node:
+  `p <- return (copy xᵢ); let (x₁, x₂) = p; node`, the first part checked where `x` names `x₁`,
+  the second where it names `x₂`; the copies are owed as any binder's (above). The nodes and their
+  parts: `(V, W)`; `V W` (`W`, then `V`); `x <- M; N` (`M`, `N`, at `[let]` and `[then]` too);
+  `x <- M unwind (D); N` (`M`, then `N` and `D`); `let () = V; M` and `let (y, z) = V; M` (`V`,
+  `M`); `case V {…}` (`V`, then both arms); `M y` (`M`, `y`). A value split holds no binding, so its
+  copy is under `run` (`ofRet`). Several variables nest, in slot order. The rule is decided before
+  the parts are checked, so each is checked once (`Frontend/Check/DerivedCopy.lean`).
+- **Not here.** A merge (`case` arms, `<M, N>`, `[then]`'s continuation and finaliser) uses a
+  variable once per side. A handler's clauses use only unrestricted slots (`[handle]`'s `Γ₁`),
+  `!thunk` only `!` slots, and a relaxed lend's body only its view: an `imm` there is refused with
+  those rules' messages. Inside a thunk, a clause's body, a loop's or a fold's generated function
+  or a `def`, the rule applies at the splits there.
+- **The kernel rule.** `copyIt` builds the term from `rVar`, the constant's node, `rLolliE`,
+  `rRet`, `rTensorE` and `rBind`; its erasure has `copyE`'s shape with the kernel's `copyC A`
+  (`copyIt_erase`). A `copy`
+  node is typed only at `axCopyTy a A` and an `array_copy` node only at `arrCopyTy a A`
+  (`TDerivesP.copy_at`, `TDerivesP.arrCopy_at`), each `DerivedCopy`, so no inserted copy is at
+  another type whatever decides where it goes.
+- **Mention is use.** A part mentions a variable only at `var` leaves, which its masks keep, and
+  the checker drops only slots a part owns, so a part uses a slot exactly when it mentions its
+  variable: the rule is the split's own masks, read before the parts are checked, so it fires
+  only where the split would refuse a `DerivedCopy` slot. `copyUsed` checks at every insertion that each
+  copy is used or dropped by its part (one neither is an internal error).
+- **Not covered.** A tuple of borrows is not `DerivedCopy` (a kernel change would widen it). The
+  elaboration's own `array_copy` in its templates is unchanged (below). `clone(x)` stays the written
+  copy of an unrestricted value.
+- **Pinned.** The copy constant's node records the variable and that the checker inserted it
+  (`TInfo.inserted`); `bcc copies <file>` prints each, and `corpus/copies/<name>.txt` pins them for
+  `corpus/<name>.bc` (`scripts/check-corpus.sh`): what `main` reaches, a `def`'s body once per
+  use.
+
 ### Every insertion site cites its rule
 
 Every stage that inserts a drop, a copy or an abandonment names the kernel rule it emits.
@@ -1366,7 +1411,9 @@ chosen in a definition of its own) must be refused (#746):
 
 - **The checker** inserts a drop only as a `dtor` node (`rDrop`, `finNode`), typed by
   `TDerivesP.dtor`, which carries `HasDtor`; erased, it is `drop_derives`. Every checked program
-  projects to `CDerivesP` (`checkProgram_soundP`), so the checker needs no table of sites.
+  projects to `CDerivesP` (`checkProgram_soundP`), so the checker needs no table of sites. It
+  inserts a copy only as a `copy` or `array_copy` node (`copyIt`), typed only at `DerivedCopy`
+  (`TDerivesP.copy_at`, `TDerivesP.arrCopy_at`); `bcc copies` lists them (above).
 - **The elaboration** emits `tok_burn` only where it compiles a written `match` (`Data.compile`,
   through `Data.burnBind`), `array_copy` only in a template's view (`CDerives.arrCopy`), and no
   other copy or drop of its own: a field read, `*e` and a `for` over an owned array copy only at an
@@ -1391,7 +1438,8 @@ chosen in a definition of its own) must be refused (#746):
   `Check.UnmentionedAbsorbed`). A must-resume `κ`'s cancel component is `⊤`, which has no
   elimination: `Lint` refuses an observation of it, and its cancel entry is unreachable (`kTy_lin`).
   `[nil-dead]` is at a context with no live slot. A stack machine's drop of a level's suspended
-  computation is the rule `stackK`, `UNPROVED:` (`Backend2.StackKSound`, F3).
+  computation is the rule `stackK`, a hand-over (§52, *The hand-over*): `Lint` reads its premise
+  from the node (`Lint.handsOver`), and the rest is `UNPROVED:` (`Backend2.StackKHandOver`, F3).
 - **The old backend** converts the erased term, so its `copy` and `drop` carry a licence
   (`Backend.Clos.Licence`) naming the rule each site relies on. None is read from the typed term:
   each is `UNPROVED:`, its statement `Clos.LicenceSound` at it (a checked program whose closure IR
@@ -8067,8 +8115,30 @@ is refused by a kernel fact, not by a check of the elaborator:
   (`TDerivesP.dtor_hasDtor`).
 - **Live across a computation that may abort or cancel**: `[let]`'s `hW` asks the rest of the
   context to be `VTy.OwnFree` (§19), and a type holding `Tok` is not (`decl_not_ownFree`). The
-  program is accepted when the value is consumed before, lent into the computation, held as a
-  handler's state, or under a `[then]` whose written finaliser consumes it (`finally`, below).
+  program is accepted when the value is consumed before, lent to a computation that handles the
+  abort inside the loan, held as the state of a handler that handles the abortive operation
+  itself, its clause consuming the state (`corpus/decl-handler-state.bc`), or under a `[then]`
+  whose written finaliser consumes it (`finally`, below). A handler's state does not carry it
+  across an abort the handler does not handle: the state is passed on at each resume, live across
+  the rest of the body, which may abort (`corpus/reject/decl-handler-state-abort.bc`).
+- **Lent across a computation that may abort** (`Core/DeclLend.lean`): the lend consumes the
+  owner's cell `Ref N`, and the computation holds only the loan, which holds no owned cell at any
+  payload (`decl_loan_ownFree`), so `hW` admits it. Where the lend ends decides the rest:
+  - *the abort handled inside the loan*: the callback returns, the lend is the pure `withbor`, and
+    the owner gets the value back (`d_declInside`, `declInside_runs`). At the surface, `&t` passed
+    to a function whose body is the `with` (`corpus/decl-lend.bc`: commit on an answer, roll back
+    on an error). A `with` whose body lends a place declared outside it, or a call whose `&`
+    argument threads a capability, is refused at the surface for any type, not for this one
+    (`corpus/reject/effect-try-lend.bc`, `corpus/reject/effect-lend-capability-call.bc`).
+  - *the abort crossing the loan*: the lend is the unwinding form (§19 *Borrows*), whose
+    finaliser `d : Ref N ⊸ 1` runs on the source when the abort ends the lend. The kernel admits
+    any closed `d` of that type. One that consumes the value is derived at every payload with a
+    derived drop (`declFinOf`: frees the cell, drops the payload by its destructor, burns the
+    token; `d_declFinOf`), and the whole program runs at payload `1` (`d_declAcross`,
+    `declAcross_answers`). The checker passes the
+    source's derived destructor, which `Ref N` has none of (`decl_ref_no_dtor`), and the surface
+    has no form that writes `d`; so the lend is refused
+    (`corpus/reject/decl-lend-abort.bc`). A written finaliser for a lend is *Open*.
 - **Copied**: it is not persistent, so no split duplicates it (`Ctx.SplitP.both_live_iff`).
 - **A field read that discards it** (E5's projection): `getAt` asks the discarded fields to be
   `Forgettable` (§5); a field read of a record that holds one at another field consumes it.
@@ -8109,7 +8179,9 @@ reads `[then]`'s parts for their rows and elaborates a `with` inside them. The h
 and the finaliser thread no capability, so a finaliser does no I/O yet: see *Open*. It is decision 2's "cleanup goes
 in a finaliser", made readable, and not a drop: `D` is a call the program wrote. `[then]` gives `M`
 and `D` disjoint contexts, so a value `D` consumes is not used in `M`: "commit in the body, roll
-back on an abort" lends the value into `M` or holds it as a handler's state.
+back on an abort" lends the value to a computation that handles the abort inside the loan and
+then commits or rolls back on its answer (`corpus/decl-lend.bc`), or holds it as the state of a
+handler that handles the abort and rolls back in that clause.
 
 **Errors name the consumer.** A value whose type holds a marked field, unused at the end of its
 scope or live across an abort, is refused with one message that names the value and its type
@@ -8125,6 +8197,15 @@ message reads the declarations (`Data.Table`); the refusal is the kernel's.
   effects pass threads into `D` would be consumed there and not handed back. Capabilities as
   borrows held across `[then]` (§29's relaxed lend, `PinLaw`), or a finaliser that hands its
   capabilities back, would carry it; neither is in this entry.
+- *A written finaliser for a lend the abort crosses.* The kernel's unwinding lend takes any closed
+  `d : Ref N ⊸ 1` (`d_declAcross`); the checker passes only the source's derived destructor
+  (`Frontend/Check/Consts.lean`, `finaliser`), so at a declared type the lend is refused. A
+  surface form would name the consumer for the unwind, say `borrow imm c { v -> S } unwind f`,
+  and the checker would type `f`'s closed body at `Ref N ⊸ 1` (pure: a `lolli`) in place of
+  `dtorE`. The same unit needs a lend of a record or a place at an aborting row: `borrow` takes
+  only a cell or an array, and `&` in the arguments of a call that threads a capability is
+  refused for any type, so `let mut t = begin(…); … raise …` stays refused with the finaliser
+  alone. Not in this entry: until then, handle the abort inside the loan or use `finally`.
 
 ### Programs
 
@@ -8148,6 +8229,9 @@ message reads the declarations (`Data.Table`); the refusal is the kernel's.
 | `corpus/decl-guard.bc` | a guard stored in a record beside data, released by a `finally` on a `with` | the guard released on the normal exit |
 | `corpus/reject/decl-txn-raise.bc`, `decl-promise-raise.bc`, `decl-guard-raise.bc` | each of the three with the value live across a `raise` and no finaliser | refused: `[let]`'s `hW` (`decl_not_ownFree`) |
 | `corpus/decl-view.bc` | `t.id` read through `imm 'a Txn`, the token's view dropped by its derived drop, the transaction committed after | i32[712] |
+| `corpus/decl-lend.bc` | a transaction lent by `&t` to a function whose body is a `with to_result` around a `raise`, the loan read again after it: the abort handled inside the loan, then committed on an answer or rolled back on an error | `(i32[203], i32[7])` |
+| `corpus/reject/effect-lend-capability-call.bc` | a record with a derived drop lent by `&` in the arguments of a call that threads `Fail`'s capability | refused at the surface, for any type |
+| `corpus/reject/decl-lend-abort.bc` | a transaction's cell lent to a borrow block whose body may raise, the abort crossing the lend | refused: the unwinding lend's finaliser is the derived destructor, which `Ref N` has none of (`decl_ref_no_dtor`) |
 | `corpus/fail/decl-burn-written.bc` | a program that takes a record apart as a tuple and writes `tok_burn` | refused by the parser: `tok`, `tok_mint` and `tok_burn` are read only in the elaboration's own source, so a printed elaboration reads back the same |
 
 Each rule is pinned beside its elaboration written by hand (`scripts/check-sugar.sh`):
@@ -9170,6 +9254,38 @@ One rule per construct:
   benchmarks it costs nothing measurable (CPU time, median of 9: 302.7 against 303.4 ms, 105.2
   against 105.5, 45.7 against 46.7).
 
+### The hand-over
+
+A level's `k` is `clos kc [a]`, a closure of the machine's code over its frame's address `a`. Two
+nodes drop one, each for `clos kc [base]`, a `k` lower on the stack: the step, at a suspension of
+the level at `a`, for the machine's own `k` over the base; a call point's `mk`, the callee's `k`
+for the level's own over its frame. The drop is the rule `stackK`, and its body binds the `k` that
+takes over first:
+
+    drop x (stack k); let k₂ = clos kc [base] in …
+
+No type licenses it: the dropped value is a closure, and the kernel does not see the task stack.
+It rests on one named assertion, `UNPROVED:` (`Backend2.StackKHandOver`, `Backend2/Driver.lean`):
+at every configuration of the LIR interpreter that a run of a converted program reaches at a
+`stackK` drop (`Visits`), `x` is `clos kc [a]` and `base` is at or below `a` on the current task
+stack, the frames from the top down to `a` written (`HandOver`, `TakesOver`). That `k₂`, resumed
+or cancelled as its type requires, then releases the frames the dropped `k` stood for, so that the
+drop leaks nothing, is part of the assumption. Proved beside it, and only this: `k₂`'s frame range
+contains the dropped `k`'s (`TakesOver.suffix`), and a `stackK` drop's step, as every drop's,
+touches no heap (`enter_stackK_keeps`). #755 (task stacks in the kernel) is the route to proving
+it.
+
+- **Lint** checks the premise the node shows (`Lint.handsOver`): the body binds `clos kc [base]`
+  first, `kc` is a `&` code each of whose functions takes one address, `x` and `k₂` are of `kc`'s
+  closure type, and `base` is an address. It reads no list of variables.
+- **The LIR interpreter** checks the hand-over at every `stackK` drop of every run
+  (`handOverB`, sound for `HandOver`: `handOverB_sound`), so the gate checks it on every program
+  the new backend runs.
+- **Its scope is the code `Convert` generates.** `Backend2/LintTests.lean` has a program `Lint`
+  accepts whose drop is not a hand-over; the interpreter refuses its run.
+- **`bcc trusted`** lists `StackKHandOver` at each function of a program's LIR with a `stackK`
+  drop.
+
 ### Checked, tested, trusted
 
 - **Checked** in the conversion's facts: one recursion's machine per stack (`stackedOf`: every call
@@ -9189,7 +9305,8 @@ One rule per construct:
   frees, and one cancelled at its first `await`), `async-stack-nested` (a recursive task that
   spawns and drives a recursive task at each level, two stacks switched at different depths) and
   `async-unr-site` (above).
-- **Trusted**: the native and Wasm code does not check the frame stack at run time. That every
+- **Trusted**: the hand-over at each `stackK` drop (`StackKHandOver`, *The hand-over*). The
+  native and Wasm code does not check the frame stack at run time. That every
   frame it touches is live, of the right machine, and taken by the `k` it belongs to rests on the
   conversion emitting code with the shape the invariant above assumes, as the rest of the backend's
   lowering is trusted (no compiler proof, decision #15). A proof of the invariant over an abstract
@@ -9515,7 +9632,7 @@ type; this entry carries it to the LIR and has `Lint` read it.
 
 No change to a type, rule, term, typing, elaboration, semantics or erasure. Backend2's LIR
 changes (`Backend2/Types.lean`, `Syntax.lean`): `LTy` gains `bang`, `!A`, which `ofV` keeps
-(`ofV_bang`); a program carries the variables whose drop no type licenses (`Prog.stackKs`).
+(`ofV_bang`).
 
 ### The reading
 
@@ -9538,9 +9655,9 @@ changes (`Backend2/Types.lean`, `Syntax.lean`): `LTy` gains `bang`, `!A`, which 
   slot no mask holds at a persistent type (the weakening its part applies at its leaves). A
   superseded raise payload is abandoned, not dropped, at a type with no owned cell (`LTy.drops`,
   `VTy.OwnFree`'s image; `ofV_drops`). The one exception is a stack machine's drop
-  of a level's suspended computation, whose state is on the task stack (SPEC §52): a closure,
-  which no type lets a term discard, at the rule `stackK`, which admits only `Prog.stackKs`, and
-  marked `UNPROVED:` at the conversion.
+  of a level's suspended computation, whose state is on the task stack: a closure, which no type
+  lets a term discard, at the rule `stackK`, a hand-over whose premise `Lint` reads from the node
+  (§52, *The hand-over*).
 - **`trivial`.** A copy or a drop the conversion makes is `Lint`-checked by the variable's type,
   so an owned `Ref` or array is never copied or dropped by `copy`/`drop` outside a `!` (which owns
   nothing, `bang_owns_nothing`) on a program that compiles.
@@ -9562,8 +9679,8 @@ unchanged.
 
 - That the LIR type of a variable the conversion makes is the image of its node's checked type is
   by construction, not proved; `Lint` checks each program it compiles, not the conversion.
-- A stack machine's drop of a level's suspended computation (`Prog.stackKs`) is not checked by a
-  type.
+- A stack machine's drop of a level's suspended computation is not checked by a type (§52, *The
+  hand-over*).
 
 ---
 
@@ -10341,6 +10458,35 @@ relation or the machine.
 ---
 
 ## Changelog
+
+- **1.20** (2026-10-31) — §42 (#746): a declared value lent across a computation that may
+  abort, stated as the kernel decides it (`Core/DeclLend.lean`). The loan holds no owned cell
+  (`decl_loan_ownFree`), so an abort handled inside the loan is admitted at the pure `withbor`
+  (`d_declInside`; `corpus/decl-lend.bc`). An abort that crosses the loan needs the unwinding
+  lend's finaliser `Ref N ⊸ 1`: the kernel admits a closed one that consumes the value
+  (`d_declFinOf`, `d_declAcross`), the checker passes only the derived destructor, which a declared type has none
+  of (`decl_ref_no_dtor`; `corpus/reject/decl-lend-abort.bc`), and a written finaliser for a lend
+  is *Open*. No rule, relation or machine changes; `fundamentalC`, `adequacyC`, `adequacyD` keep
+  their statements.
+- **1.19** (2026-10-31) — §12, §52, §59 (#746, step 4, F3): a stack machine's drop of a level's
+  `k` is a hand-over. The node's body binds the `k` that takes over, `clos kc [base]`, and `Lint`
+  reads the premise from the node (`Lint.handsOver`); the relation the node cannot show is one
+  named assertion over the LIR interpreter's configurations, `Backend2.StackKHandOver`, which the
+  interpreter checks at every run and `bcc trusted` lists at each site. `Prog.stackKs` and
+  `Backend2.StackKSound` are removed. No change to the language, the kernel, the checker, or a
+  program's acceptance or output.
+- **1.18** (2026-10-31) — §12, §42 (#746): the derived copy at `imm`. A use of an `imm` borrow
+  or an `array_imm` view beyond its first is its derived copy, which the checker inserts at a split
+  whose two parts both mention it, as the `copy` or `array_copy` constant in `copy_derives`'s shape
+  (`Frontend/Check/DerivedCopy.lean`; `TDerivesP.copy_at`, `arrCopy_at`). The split, `overlapOK` and
+  `VTy.persistent` are unchanged: `mut` borrows and owned values are refused on a second use as
+  before. `bcc copies` and `corpus/copies/` pin the inserted copies.
+  `corpus/reject/double-use-in-callee.bc` uses an `array_mut` view (its `array_imm` program now
+  checks, `corpus/imm-copy-view.bc`). §42: a declared value is carried across an abort by a
+  handler's state only when that handler handles the abort; SPEC said any handler's state, and
+  the kernel's `[let]` refuses that (`corpus/reject/decl-handler-state-abort.bc`). No kernel
+  change; `fundamentalC`, `adequacyC` and `adequacyD` keep their statements; every program accepted
+  before is accepted with the same output.
 
 - **1.17** (2026-10-31) — §29 (#743, B1): `PinLaw` as two schemas, `LendFrame` over `LendForm`
   (one form, `ref`, which is R1) and `LoopFrame` (R2). `PinStop` and `PinLoop` are derived

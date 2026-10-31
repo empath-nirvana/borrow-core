@@ -154,6 +154,11 @@ corpus/data-rose-vec.bc 1.0 cancellable abortive: branch; agree
 corpus/data-rose.bc 1.0 cancellable abortive: branch; agree
 corpus/decl-guard.bc 1.0 cancellable abortive: branch; agree
 corpus/decl-guard.bc 2.0 cancellable abortive: -; agree
+corpus/decl-handler-state.bc 2.0 must-resume tail+state: error: capture: the name 2 has both control and abortive operations, which is not lowered; disagree
+corpus/decl-handler-state.bc 2.1 cancellable abortive: error: capture: the name 2 has both control and abortive operations, which is not lowered; disagree
+corpus/decl-handler-state.bc 1.0 must-resume tail+state: error: capture: the name 2 has both control and abortive operations, which is not lowered; disagree
+corpus/decl-handler-state.bc 1.1 cancellable abortive: error: capture: the name 2 has both control and abortive operations, which is not lowered; disagree
+corpus/decl-lend.bc 1.0 cancellable abortive: branch; agree
 corpus/div-abstraction.bc 2.0 cancellable abortive: branch; agree
 corpus/div-abstraction.bc 1.0 cancellable abortive: branch; agree
 corpus/div-abstraction.bc 3.0 cancellable abortive: branch; agree
