@@ -177,8 +177,8 @@ theorem TDerivesAt.kinds_free {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : T
     {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
     {u : Masks} {ks : List ClauseKinds.HKind} (ks' : List ClauseKinds.HKind)
     {site : Option HSite} {ins : ClauseKinds.HIn} {tc te : TExpr}
-    (h : TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs n A R u ks site ins tc te) J) :
-    TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs n A R u ks' site ins tc te) J := by
+    (h : TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs cs n A R u ks site ins tc te) J) :
+    TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs cs n A R u ks' site ins tc te) J := by
   cases h with
   | effHandleV hAt hs hm hcv hd hH hc hn0 hnS hlen hdv he hins =>
       exact .effHandleV hAt hs hm hcv hd hH hc hn0 hnS hlen hdv he hins
@@ -189,8 +189,8 @@ theorem TDerivesAt.site_free {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TI
     {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
     {u : Masks} {ks : List ClauseKinds.HKind} {site : Option HSite} (site' : Option HSite)
     {ins : ClauseKinds.HIn} {tc te : TExpr}
-    (h : TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs n A R u ks site ins tc te) J) :
-    TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs n A R u ks site' ins tc te) J := by
+    (h : TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs cs n A R u ks site ins tc te) J) :
+    TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs cs n A R u ks site' ins tc te) J := by
   cases h with
   | effHandleV hAt hs hm hcv hd hH hc hn0 hnS hlen hdv he hins =>
       exact .effHandleV hAt hs hm hcv hd hH hc hn0 hnS hlen hdv he hins

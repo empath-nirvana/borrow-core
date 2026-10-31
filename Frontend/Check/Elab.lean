@@ -195,13 +195,13 @@ def ppC (nm : List (String × LifeVar)) (p : Nat) : CCTy → String
   | .nu (.amp (.ret (.sum (.tensor A (.tvar 0)) R)) (.ret R')) =>
       parenIf (p > 5) s!"iter {ppV nm 0 6 A} {ppV nm 0 6 R} {ppV nm 0 6 R'}"
   | .nu C => parenIf (p > 0) s!"nu {tvName 0}. {ppC nm 0 C}"
-  | .eff n i q A B fin C =>
+  | .eff n i q A B fin _ C =>
       let (es, r) := ppEff nm C
       parenIf (p > 5)
         s!"F[{", ".intercalate (s!"{n}.{i} {qualStr q} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es)}] {r}"
 /-- The entries of a row's layers `F_Σ`, and what is under them. -/
 def ppEff (nm : List (String × LifeVar)) : CCTy → List String × String
-  | .eff n i q A B fin C =>
+  | .eff n i q A B fin _ C =>
       let (es, r) := ppEff nm C
       (s!"{n}.{i} {qualStr q} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es, r)
   | .ret A => ([], ppV nm 0 6 A)
@@ -405,7 +405,7 @@ def elabRow : Nat → TyEnv → Span → Row → Except Error CRow
     | .cons k i q A B r => do
         if k < 2 ^ 32 ∧ i < 2 ^ 32 then
           let o : COpSig :=
-            ⟨UInt32.ofNat k, UInt32.ofNat i, q.toCore, ← elabV n E A, ← elabV n E B, .ret .unit⟩
+            ⟨UInt32.ofNat k, UInt32.ofNat i, q.toCore, ← elabV n E A, ← elabV n E B, .ret .unit, false⟩
           if o.q == .unr && o.B.isZero then
             err sp (s!"the operation {k}.{i} is unrestricted and answers `0`: an abortive " ++
               s!"operation is cancellable, `{k}.{i} cancel … ~> 0` (decision 63)")

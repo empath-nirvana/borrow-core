@@ -128,7 +128,7 @@ theorem dAt_loopB :
   refine .effLet (A := nextTy) (.dead (.right .nil))
     (fun ⟨o, ho, hq⟩ => by simp [tickSig] at ho; subst ho; exact absurd rfl hq)
     (fun ⟨o, ho, hq⟩ => by simp [tickSig] at ho; subst ho; cases hq)
-    (.effPerform (o := tickSig) rowAt_Sg find_Sg rfl (.unitI (.cons (.cons .nil)))) ?_
+    (.effPerform (o := tickSig) rowAt_Sg find_Sg rfl rfl (.unitI (.cons (.cons .nil)))) ?_
   refine .sumE (.left (.dead (.right .nil))) (.var (.here (.cons (.cons .nil)))) ?_ ?_
   · -- *next*: `iterate (f, c)`
     refine .bind (.right (.dead (.dead (.right .nil))))

@@ -410,7 +410,7 @@ def ThenAbortCompat : Prop :=
 
 /-- The row of `prog`'s `[then]`: the abortive `2` and the cancellable `1`. -/
 def S₁₂ : Row :=
-  [⟨2, 0, .cancel, .unit, .zero, .ret .unit⟩, ⟨1, 0, .cancel, .unit, .unit, .ret .unit⟩]
+  [⟨2, 0, .cancel, .unit, .zero, .ret .unit, false⟩, ⟨1, 0, .cancel, .unit, .unit, .ret .unit, false⟩]
 
 /-- `prog`'s `[then]`: `perform 1 then x. x unwind raise 2`. -/
 def thenProg : Expr := thenE (.var 0) (raiseU 2) (performU 1)
@@ -425,12 +425,12 @@ theorem semC_thenProg (h : ThenAbortCompat (ℍ := ℍ)) :
     SemC (ℍ := ℍ) LifeCtx.empty [] thenProg (CTy.effOf S₁₂ .unit) := by
   have hM : CDerives LifeCtx.empty [] (performE (opArgE 1 0 (.val .unit)))
       (.comp (CTy.effOf S₁₂ .unit)) :=
-    .effPerform (o := ⟨1, 0, .cancel, .unit, .unit, .ret .unit⟩) (by rfl) rfl (.unitI .nil)
+    .effPerform (o := ⟨1, 0, .cancel, .unit, .unit, .ret .unit, false⟩) (by rfl) rfl rfl (.unitI .nil)
   have hN : CDerives LifeCtx.empty [⟨.unit, true⟩] (.var 0) (.comp (CTy.effOf S₁₂ .unit)) :=
     .effSub (S := []) (fun _ _ _ h => by simp [Row.find] at h) (.ret (.var (.here .nil)))
   have hD : CDerives LifeCtx.empty [⟨.unit, false⟩] (raiseE (opArgE 2 0 (.val .unit)))
       (.comp (CTy.effOf S₁₂.abortOnly .unit)) :=
-    .effRaise (o := ⟨2, 0, .cancel, .unit, .zero, .ret .unit⟩) (by rfl) rfl .unit
+    .effRaise (o := ⟨2, 0, .cancel, .unit, .zero, .ret .unit, false⟩) (by rfl) rfl rfl .unit
       (.unitI (.cons .nil))
   exact h .nil (by intro o ho; simp [S₁₂] at ho; rcases ho with rfl | rfl <;> decide)
     (by simp [Row.Uniq, S₁₂]) (fun _ s hs => absurd hs List.not_mem_nil)
@@ -513,7 +513,7 @@ theorem not_thenAbort_compatC : ¬ ThenAbortCompat (ℍ := ℍ) := by
   obtain ⟨⟨hK, -, hT, -⟩, ρa, ρk, hcak, hPA, hcont⟩ := pure_sep_iff.mp hp
   obtain ⟨rfl, hpay⟩ := plug_perform_inj (thenProg_eq.symm.trans hK)
   obtain ⟨rfl, rfl, rfl⟩ := opPayload_inj hpay
-  have hen : en = OpSig.ent LSub.empty ⟨1, 0, .cancel, .unit, .unit, .ret .unit⟩ := by
+  have hen : en = OpSig.ent LSub.empty ⟨1, 0, .cancel, .unit, .unit, .ret .unit, false⟩ := by
     simp [Row.tab, Row.find, S₁₂] at hT; exact hT.symm
   subst hen
   have hρa : ρa = PMap.empty := hPA.1

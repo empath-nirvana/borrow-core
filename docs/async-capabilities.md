@@ -35,7 +35,8 @@ taken as an escape hatch in the proof; then a test suite that tries to break it.
 - **The assertion is `PinLaw`** (§4). It is a `Prop` over **typed programs**: every quantifier
   over code ranges over derivations of the extended judgment `PDerives`. In one sentence:
   *code that Core's rules (plus R1 and R2) type, suspended while it holds views of a lend, is
-  again in the relation when the place is lent afresh.* It is stated as two schemas, the
+  again in the relation when the place is lent afresh.* It is stated as two schemas (#750 widens
+R1's row for the cancel path: SPEC §29a, §8 below), the
   compatibility lemmas of the relaxed lend at each lend form (`LendFrame`; R1 is `ref`) and of
   the per-observation lend (`LoopFrame`; R2). `PinStop` and `PinLoop` are derived from them. It is
   tested by programs (§6), not proved.
@@ -281,9 +282,10 @@ a negative program (§6.2).
    outliving `@d` (BOXED-κ); a stored callback is `[@c] U …` by `[]I`. A task holding a borrow
    from outside cannot outlive it (`n1`, `n3`, `n8`). Lends opened inside the task impose nothing
    (§2.3).
-3. **What crosses a relaxed lend's stop.** Only operations of `Row.ResumeO`: no abortive operation
-   (`n4`; OQ-1), no unrestricted one (`n7`), and arguments of closed data, so neither the view nor
-   anything holding it is handed to a handler (`n5`, `n9`).
+3. **What crosses a relaxed lend's stop.** Only operations of `Row.ResumeOC` (SPEC §29a): no
+   abortive operation (`n4`; OQ-1) but the cancel target that `[await-c]` raises on a cancel, no
+   unrestricted one (`n7`), and arguments of closed data, so neither the view nor anything holding
+   it is handed to a handler (`n5`, `n9`).
 4. **What leaves a relaxed lend.** Its answer `[@x] B` has `B` free of `'x`, as for every lend.
 5. **Continuations are used at most once** (`refuses_R_clauses`, `not_der_at08`): EXISTS. Every
    cancellable continuation is resumed or cancelled, so a task's finalisers run (A6).
@@ -578,8 +580,8 @@ Rejections are by the rules of §3.4; acceptances must run cleanly under §6.1's
 | 7 | nested handlers inside tasks: a generator over a borrowed array, inside a relaxed lend, awaiting between elements (`accept/m2`) | **accept**, runs `[60]` | `yield` is caught inside the borrower and crosses no lend (Law 2's `InStop`); `await` crosses it (R1) |
 | 8 | an awaiting callback passed to a HOF and **stored** (`n8`) | **reject** when it captures a task-local borrow | storing is `[]I`, whose context premise fails; passed and only called, it is accepted (A4) |
 | 9 | recursion inside a task (`accept/m3`) | **accept**, runs `[1, 6]` | `bounded_fix` at every row (`boundedFix_compatX`); one heap object per level |
-| 10 | spawn inside a task, the spawned block capturing a held borrow (`n9`) | **reject** | the view would leave the lend through an operation argument (`Row.ResumeO`) and outlive it (BOXED-κ). Spawning with no lend open is accepted (OQ-61 of the draft spec) |
-| 11 | an abortive operation crossing a relaxed lend (`n4`) | **reject (v1)** | `Row.ResumeO`; OQ-1 |
+| 10 | spawn inside a task, the spawned block capturing a held borrow (`n9`) | **reject** | the view would leave the lend through an operation argument (`Row.ResumeO`, now `Row.ResumeOC`) and outlive it (BOXED-κ). Spawning with no lend open is accepted (OQ-61 of the draft spec) |
+| 11 | an abortive operation crossing a relaxed lend (`n4`) | **reject (v1)** | `Row.ResumeOC`; OQ-1, taken as (a) for the cancel target alone (SPEC §29a) |
 | 12 | the view handed to a handler as an operation argument (`n5`) | **reject** | `Row.ResumeO`: arguments are closed data |
 | 13 | a loop state holding a `mut` view (`n6`) | **reject** | R2 is `imm` only; `LoopLend` reports it today |
 | 14 | an unrestricted (multi-shot) operation inside a relaxed lend (`n7`) | **reject** | `Row.ResumeO` excludes `unr` |
@@ -612,12 +614,19 @@ Ordered; each unit is one PR and turns the programs named green. No unit but U1 
 
 ## 8. Open questions
 
+> Since #750 (SPEC §29a) R1's row premise is `Row.ResumeOC`, which widens `Row.ResumeO` for the
+> cancel path only (OQ-1, OQ-5 below). The statements quoted
+> in §3.3 and §4 are the R1 of #52, before that widening.
+
 > **OQ-1. An abortive operation crossing a relaxed lend.** `borrow mut b { … await(); …?… }`
 > with the error handled outside the block is rejected in v1 (`n4`). Options: (a) extend
 > `Row.ResumeO` to rows mixing resuming and abortive operations, widening `LendFrame`'s row
 > (believed by the LIFO frame lemmas `wpTS_M_frameU` with GhostEnd's `Drop`; not checked); (b)
 > keep v1 and have the elaborator move the handler inside the block where the error's type
-> allows. (a) grows `PinLaw`; (b) costs programs.
+> allows. (a) grows `PinLaw`; (b) costs programs. **Taken as (a) for the cancel path only**
+> (#750, SPEC §29a): `Row.ResumeOC` admits the marked cancel target that `[await-c]` raises on a
+> cancel, and `LendFrame`'s asserted domain widens by exactly that. Every other abortive operation
+> is still refused.
 
 > **OQ-2. `imm` relaxed lends, `withload` and folds whose algebra suspends.** Needed by
 > `corpus/pending/async-borrow.bc` (a yield inside `fold_imm`'s algebra, under the fold's own
@@ -636,7 +645,9 @@ Ordered; each unit is one PR and turns the programs named green. No unit but U1 
 
 > **OQ-5. `await` answering data inside a relaxed lend.** `Row.ResumeO` asks `o.B = 1`, as
 > GhostEnd and Law 2 do. A join that returns the joined task's value is outside it while a lend
-> is held; outside a lend it is ordinary.
+> is held; outside a lend it is ordinary. **Relaxed for cancellable waits** (#750, SPEC §29a):
+> `Row.ResumeOC` admits a marked wait answering `1 ⊕ 1`, the answer read only by `[await-c]`'s
+> `case`.
 
 ---
 

@@ -51,7 +51,7 @@ theorem effRetE_mono (C : CTy) {R R' : CPred} (h : R.Le R') :
           | zero => exact absurd rfl hn
           | succ n => rfl)
         (nuP_mono h) true ls δ v
-  | .eff _ _ _ _ _ _ D, hD, δ, ls, v => effRetE_mono C h (D := D) hD.2.2 δ ls v
+  | .eff _ _ _ _ _ _ _ D, hD, δ, ls, v => effRetE_mono C h (D := D) hD.2.2 δ ls v
 
 /-- One unfolding of an observation tree is monotone in the candidate. -/
 theorem cB_mono (C : CTy) {R R' : CPred} (h : R.Le R') :
@@ -66,7 +66,7 @@ theorem cB_mono (C : CTy) {R R' : CPred} (h : R.Le R') :
         (nuP_mono h) true ls' δ w)
   | .amp D₁ D₂, hD, ls, δ, e => fun ρ ⟨h₁, h₂⟩ =>
       ⟨cB_mono C h hD.1 ls δ _ ρ h₁, cB_mono C h hD.2 ls δ _ ρ h₂⟩
-  | .eff n i q A B fin D, hD, ls, δ, e => fun ρ h' =>
+  | .eff n i q A B fin _ D, hD, ls, δ, e => fun ρ h' =>
       effWp_post (fun ls' v σ hv => effRetE_mono C h (D := D) hD.2.2 δ ls' v σ hv) h'
   | .arr _ D, hD, ls, δ, e => fun ρ h' v ρ₁ ρ₂ hv hc =>
       cB_mono C h (D := D) hD.2 ls δ _ ρ₂ (h' v ρ₁ ρ₂ hv hc)
@@ -113,7 +113,7 @@ theorem vCE_nuEnv (C : CTy) (δ : LSub) (b : Bool) (A : VTy) (ls : List SRec) :
   | succ n => rfl
 
 theorem effTab_instT (S : VTy) (δ : LSub) : ∀ D : CTy, effTab (D.instT S) δ = effTab D δ
-  | .eff n i q A B fin D => by simp only [CTy.instT, effTab, effTab_instT S δ D]
+  | .eff n i q A B fin _ D => by simp only [CTy.instT, effTab, effTab_instT S δ D]
   | .ret _ | .amp _ _ | .arr _ _ | .top | .all _ _ _ | .nu _ => by simp [CTy.instT, effTab]
 
 /-- The answer of an effectful observation at `cC (νX. C)` is `𝒱⟦·⟧` at the unrolling. -/
@@ -123,7 +123,7 @@ theorem effRetE_unroll (C : CTy) (δ : LSub) : ∀ {D : CTy}, D.EffLeaf →
   | .ret A, _ => by
       funext ls v
       simp only [effRetE, effRet, CTy.instT, vCE_nuEnv]
-  | .eff _ _ _ _ _ _ D, hD => by
+  | .eff _ _ _ _ _ _ _ D, hD => by
       simp only [effRetE, effRet, CTy.instT]
       exact effRetE_unroll C δ (D := D) hD.2.2
 
@@ -141,11 +141,11 @@ theorem cB_unroll (C : CTy) (δ : LSub) : ∀ {D : CTy}, D.NuLeaf → ∀ (ls : 
       show (cB _ D₁ ls δ _ ρ ∧ cB _ D₂ ls δ _ ρ)
         = (cC (D₁.instT _) ls δ _ ρ ∧ cC (D₂.instT _) ls δ _ ρ)
       rw [cB_unroll C δ hD.1, cB_unroll C δ hD.2]
-  | .eff n i q A B fin D, hD, ls => by
+  | .eff n i q A B fin rc D, hD, ls => by
       funext e
       show effWp _ _ _ ls e = effWp _ _ _ ls e
       rw [effRetE_unroll C δ (D := D) hD.2.2, ← effTab_instT (.thunk (.nu C)) δ D,
-        ← CTy.divAt_instT (.thunk (.nu C)) (.eff n i q A B fin D)]
+        ← CTy.divAt_instT (.thunk (.nu C)) (.eff n i q A B fin rc D)]
       rfl
   | .arr A D, hD, ls => by
       funext e ρ
