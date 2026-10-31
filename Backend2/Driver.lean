@@ -161,7 +161,7 @@ def freeUses : Nat → Tm → List (Var × Bool)
     | .letpair _ _ p b => (p, false) :: freeUses f b
     | .case s _ b₁ _ b₂ => (s, false) :: (freeUses f b₁ ++ freeUses f b₂)
     | .absurd s => [(s, false)]
-    | .copy x _ b | .drop x b | .abandon _ x b => (x, false) :: freeUses f b
+    | .copy _ x _ b | .drop _ x b | .abandon _ x b => (x, false) :: freeUses f b
 
 /-- The lend scopes a term allocates cells for, and the variables its `letpair`s bind first. -/
 def scopesIn : Nat → Tm → List Nat × List Var
@@ -179,7 +179,7 @@ def scopesIn : Nat → Tm → List Nat × List Var
       let (s₁, x₁) := scopesIn f b₁
       let (s₂, x₂) := scopesIn f b₂
       (s₁ ++ s₂, x₁ ++ x₂)
-    | .copy _ _ b | .drop _ b | .abandon _ _ b => scopesIn f b
+    | .copy _ _ _ b | .drop _ _ b | .abandon _ _ b => scopesIn f b
     | _ => ([], [])
 
 -- UNPROVED: that a variable its function uses only as the operand of `free` is freed on every
@@ -458,5 +458,25 @@ def interpStage (stage : String) (k : Except String Backend.CheckedProg) (input 
   | "lflat" => Backend.Flat.interp Backend.runFuel (← flatOf (← k)) input args
   | "lflat-counts" => Backend.Flat.interp Backend.runFuel (← flatOf (← k) true) input args
   | _ => throw s!"unknown stage `{stage}`"
+
+/-- Whether a node of `t` drops at the rule `stackK`. -/
+def Tm.dropsStackK : Tm → Bool
+  | .drop r _ b => r == .stackK || b.dropsStackK
+  | .copy _ _ _ b | .abandon _ _ b => b.dropsStackK
+  | .letv _ e b => e.dropsStackK || b.dropsStackK
+  | .letpair _ _ _ b => b.dropsStackK
+  | .case _ _ b₁ _ b₂ => b₁.dropsStackK || b₂.dropsStackK
+  | _ => false
+
+/-- `UNPROVED:` (#746 item 5, F3) **a stack machine's drop of a level's suspended computation**
+leaks nothing: every checked program with no externs whose `main` is a closed `CDerives`
+computation of `F 1`, and whose LIR drops at the rule `stackK`, runs at the LIR to `()` with no
+object left, as the source does (`adequacyD`). Its kernel statement is step 4's. -/
+def StackKSound : Prop :=
+  ∀ (k : Backend.CheckedProg) (p : Prog) (s : CState) (fuel : Nat) (o : Backend.Output),
+    k.io = none → CDerives BoCa.Lifetime.LifeCtx.empty [] k.main.e (.comp (.ret .unit)) →
+    lirOf k = .ok (p, s) → (p.main.dropsStackK || p.fns.any (·.body.dropsStackK)) = true →
+    runLIR p fuel [] = .ok o →
+    o = Backend.Output.mk' ByteArray.empty ByteArray.empty (Backend.report .unit 0)
 
 end Backend2

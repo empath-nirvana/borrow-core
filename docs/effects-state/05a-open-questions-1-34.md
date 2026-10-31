@@ -552,7 +552,7 @@ erasable; excluded, or an explicit opt-in with a visible cost".
 *Class.* **MOOT.**
 
 *Basis.* No program needs it. The draft's own trigger is "when a program needs it". Decision 55's
-qualifiers are `ctl`, `linear ctl` and `multi ctl`, with no relevant one. Its only appearance is
+qualifiers are `ctl`, `must_resume ctl` and `multi ctl`, with no relevant one. Its only appearance is
 phase A's `Again` counterexample (TR §10.3), which was fixed by scaling, not by adding the
 qualifier.
 

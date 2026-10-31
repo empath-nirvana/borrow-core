@@ -827,11 +827,11 @@ def lowerTm (fuel : Nat) (t : Tm) (n : Nat) (d : Dest) : LM (List Stmt) := do
     let t₂ ← lowerTm f b₂ n d
     return [.ite (eqz64 (.loc (ls.headD 0))) (s₁ ++ t₁) (s₂ ++ t₂)]
   | .absurd _ => return [.trap]
-  | .copy x x' b => do
+  | .copy _ x x' b => do
     let (s, ls) ← copyVals (← nodeV x) (← vals x) (tick := true)
     bindVals x' ls
     return s ++ (← lowerTm f b n d)
-  | .drop x b | .abandon _ x b => do
+  | .drop _ x b | .abandon _ x b => do
     let s ← dropVals (← nodeV x) (← vals x)
     return s ++ (← lowerTm f b n d)
 

@@ -205,7 +205,7 @@ def tyVar (x : Var) : TM Nat := do
 def selOf : Tm → TM (Option Bool)
   | .inj r _ => pure (some r)
   | .var y => return (← get).sel[y]?
-  | .letv _ _ b | .copy _ _ b | .drop _ b => selOf b
+  | .letv _ _ b | .copy _ _ _ b | .drop _ _ b => selOf b
   | _ => pure none
 
 def int32 : TM Nat := newNode (.int .w32)
@@ -366,11 +366,11 @@ def infer (codeTy : Array Nat) (codes : Array Code) : Tm → TM Nat
       let n₂ ← infer codeTy codes b₂
       unify n₁ n₂
       pure n₁
-  | .copy x x' b => do
+  | .copy _ x x' b => do
       unify (← tyVar x') (← tyVar x)
       if let some r := (← get).sel[x]? then modify fun s => { s with sel := s.sel.insert x' r }
       infer codeTy codes b
-  | .drop _ b => infer codeTy codes b
+  | .drop _ _ b => infer codeTy codes b
   | .con k n a => do
       let fs ← (List.range n).mapM fun i => if i == k then tyVar a else newNode .any
       let t ← newNode (.sumN fs)
@@ -757,7 +757,7 @@ def resolve (s : TState) (codeTy : Array Nat) (codeEnv : Array (List Nat)) (main
 def Tm.builds : Tm → List Nat
   | .clos c _ => [c]
   | .letv _ e b => e.builds ++ b.builds
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b | .hnd _ _ _ b | .ubind _ _ b | .catch _ b
+  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b | .hnd _ _ _ b | .ubind _ _ b | .catch _ b
   | .fin _ _ b | .catchAll b => b.builds
   | .case _ _ b₁ _ b₂ => b₁.builds ++ b₂.builds
   | .when _ _ _ _ b r => b.builds ++ r.builds

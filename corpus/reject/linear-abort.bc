@@ -1,0 +1,22 @@
+-- A declared value held in a pair, live across a `raise`. `[let]`'s `hW` abandons only a context
+-- that holds no owned cell, and `Txn` holds its token's cell (`decl_not_ownFree`); the `[then]`
+-- the checker would build instead needs `Txn`'s derived drop, which it has none of
+-- (`decl_linear`). Refused.
+include fail
+
+data Txn = { id: i32, must_close(commit) log: i32 }
+
+fn begin(id: i32) -> Txn = Txn { id: id, log: 0 }
+
+fn commit(t: Txn) -> i32 = match t { Txn { id, log } -> id * 100 + log }
+
+fn check(x: i32) -> i32 with Fail[i32] = if x > 3 { raise(x) } else { x }
+
+fn hold(x: i32) -> i32 with Fail[i32] =
+  let p = (begin(x), x);
+  let y = check(x);
+  let (t, z) = p;
+  commit(t) + y + z
+
+main -> i32 + i32 = with to_result[i32, i32] { hold(5) }
+-- expect: 17:11: `p`, of type `(i32 * i32 * tok) * i32`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell: `Txn` holds the field `log`, marked `must_close`; pass it to `commit` before the computation that may abort, or close it in a `finally`

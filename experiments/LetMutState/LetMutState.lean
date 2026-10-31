@@ -4,7 +4,7 @@ import Core.PinDerives
 /-!
 # `let mut` as a `State` handler: the borrow boundary (#611)
 
-`effect State[T] { linear ctl get() -> T; linear ctl put(v: T) }` is the effect a `let mut x : T`
+`effect State[T] { must_resume ctl get() -> T; must_resume ctl put(v: T) }` is the effect a `let mut x : T`
 would be an instance of, with the state the handler's parameter and no cell. As a row of the
 name `n` it is `stateRow n A`: `get : 1 ↠^lin A` at index 0 and `put : A ↠^lin 1` at index 1,
 each with the empty cancel row.

@@ -769,7 +769,7 @@ inductive Mark where
   deriving DecidableEq, Repr, Inhabited
 
 /-- The kind of an operation (SPEC §19): answering (`fn`), or control (`ctl`) with the structural
-qualifier of its continuation (`ctl` cancellable, `linear ctl` must resume, `multi ctl`
+qualifier of its continuation (`ctl` cancellable, `must_resume ctl` must resume, `multi ctl`
 unrestricted). -/
 inductive OpKind where
   | fn

@@ -802,12 +802,12 @@ def lowerTm : Tm → Dest → LM (List Stmt)
   | .absurd _, d => do
       if let .bind z := d then discard (bindFresh z)
       return [.trap]
-  | .copy x x' b, d => do
+  | .copy _ x x' b, d => do
       let (s, ls) ← copyVals (← vty x) (← vals x)
       bindVals x' ls
       let tk : List Stmt := if s.isEmpty then [] else [.tickCopy]
       return tk ++ s ++ (← lowerTm b d)
-  | .drop x b, d => do
+  | .drop _ x b, d => do
       let s ← dropVals (← vty x) (← vals x)
       return s ++ (← lowerTm b d)
   | .raise _, _ | .hnd .., _ | .ubind .., _ | .perform _, _ | .catch .., _ | .fin .., _
@@ -896,7 +896,7 @@ where
   callsOf : Tm → List Var
     | .app f _ => [f]
     | .letv _ e b => callsOf e ++ callsOf b
-    | .letpair _ _ _ b | .copy _ _ b | .drop _ b => callsOf b
+    | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b => callsOf b
     | .case _ _ b₁ _ b₂ => callsOf b₁ ++ callsOf b₂
     | _ => []
 
@@ -1477,7 +1477,7 @@ def genHelper (h : Helper) : LM Fn := do
 def callsOf : Tm → List Var
   | .app f _ => [f]
   | .letv _ e b => callsOf e ++ callsOf b
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b => callsOf b
+  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b => callsOf b
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => callsOf b₁ ++ callsOf b₂
   | _ => []
 
@@ -1540,7 +1540,7 @@ def scopesOf : Tm → List (Nat × Bool)
   | .prim (.scopedAlloc k) _ => [(k, true)]
   | .prim (.scopedFree k) _ => [(k, false)]
   | .letv _ e b => scopesOf e ++ scopesOf b
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b | .catch _ b | .fin _ _ b | .catchAll b
+  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b | .catch _ b | .fin _ _ b | .catchAll b
   | .hnd _ _ _ b | .ubind _ _ b => scopesOf b
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => scopesOf b₁ ++ scopesOf b₂
   | _ => []

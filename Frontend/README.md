@@ -74,8 +74,7 @@ Where draft 1 is silent or ambiguous about parsing, the parser does the followin
 10. **`.1` / `.2`** are the token `.` followed by the integer `1` or `2`; whitespace may
     separate them (`force f s .1`).
 11. **`<>`** is the tokens `<` `>`; whitespace may separate them.
-12. **Reserved words.** All keywords of types, terms and declarations (including `linear`,
-    for `linear ctl`), every constant and
+12. **Reserved words.** All keywords of types, terms and declarations, every constant and
     derived-form keyword (`alloc`, `free`, `copy`, `swap`, `host`, …), `val`, `block`, `leaf`,
     `node`, `str`, and `main` are reserved as lower-case names; `U`, `F`, `Fun` as upper-case
     names. `main` has to be reserved: a `def` body ends where the next declaration begins.

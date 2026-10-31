@@ -2,7 +2,7 @@
 -- A `let mut` as an instance of `State` (#611) inside a function served by an answering handler
 -- (`Log`): the state-passing site's answer, a function of the state, is used inside the boxed
 -- result of the capability's borrow and does not outlive it.
-effect State[T] { linear ctl get() -> T; linear ctl put(v: T) }
+effect State[T] { must_resume ctl get() -> T; must_resume ctl put(v: T) }
 
 handler state[T, A](mut s: T): State[T], A -> A * T = {
   return(a) = (a, s);

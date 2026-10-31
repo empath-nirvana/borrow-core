@@ -370,7 +370,7 @@ def Decl.pp : Decl → String
     let op (o : OpDecl) : String :=
       (match o.kind with
         | .fn => "fn "
-        | .ctl .lin => "linear ctl "
+        | .ctl .lin => "must_resume ctl "
         | .ctl .cancel => "ctl "
         | .ctl .unr => "multi ctl ") ++
       o.name.name ++

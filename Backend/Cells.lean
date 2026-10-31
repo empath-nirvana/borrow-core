@@ -47,7 +47,7 @@ def vWords : Nat → VTy → Option Nat
 def allocs (T : Types) (t : Tm) : List (Nat × Nat) :=
   here ++ match t with
     | .letv _ e b => allocs T e ++ allocs T b
-    | .letpair _ _ _ b | .copy _ _ b | .drop _ b | .hnd _ _ _ b | .ubind _ _ b | .catch _ b
+    | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b | .hnd _ _ _ b | .ubind _ _ b | .catch _ b
     | .fin _ _ b | .catchAll b => allocs T b
     | .case _ _ b₁ _ b₂ => allocs T b₁ ++ allocs T b₂
     | .when _ _ _ _ b r => allocs T b ++ allocs T r

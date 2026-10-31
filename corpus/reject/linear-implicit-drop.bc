@@ -1,0 +1,13 @@
+-- A declared type with no derived drop (SPEC §42), left unused at the end of its scope. The
+-- checker inserts a drop only as a `dtor` node, whose derivation carries `HasDtor`
+-- (`TDerivesP.dtor_hasDtor`, `drop_derives`), and `Txn` has none (`decl_linear`). Refused.
+data Txn = { id: i32, must_close(commit) log: i32 }
+
+fn begin(id: i32) -> Txn = Txn { id: id, log: 0 }
+
+fn commit(t: Txn) -> i32 = match t { Txn { id, log } -> id * 100 + log }
+
+main -> i32 =
+  let t = begin(7);
+  5
+-- expect: 11:7: `t` is not consumed in its scope, and its type `i32 * i32 * tok` is linear and has no derived drop: `Txn` holds the field `log`, marked `must_close`; pass it to `commit` before its scope ends

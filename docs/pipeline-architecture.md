@@ -271,7 +271,7 @@ Two kinds of recogniser look alike and are not.
 
 ### 3.2 `Div`
 
-**The effect.** `effect Div { linear ctl tick() -> Next }`, with `Next = 1 + 1` (`inl ()` next,
+**The effect.** `effect Div { must_resume ctl tick() -> Next }`, with `Next = 1 + 1` (`inl ()` next,
 `inr ()` close), in the library. Spellings are provisional. The continuation is **linear**: it
 has no cancel, so closing a loop is a *resume* with `close`, never a cancel (§4.1, unknown 2).
 

@@ -233,8 +233,9 @@ become one `out`, and observation names come from the codata declaration (`Iter`
 
 ### 2.10 Implicit destructors
 
-Unchanged from SPEC §12: an unused owned value is dropped at the end of its path, and `linear`
-opts out. The surface adds only `_` patterns and `linear let`. A drop of codata runs its
+Unchanged from SPEC §12: an unused owned value is dropped at the end of its path, by its derived
+drop. No binder opts out: a value that must not be dropped has a type with no derived drop (SPEC
+§42, a field marked `must_close`). The surface adds only `_` patterns. A drop of codata runs its
 `close`, which is a force of a live object that the programmer does not write; open question Q6
 asks whether that needs a mark.
 

@@ -530,12 +530,12 @@ def eval (p : Prog) : Nat → LTy → Tm → IM LV
       | .inj true v => bindV y v; eval p f rt b₂
       | v => bad s!"case of {reprStr v |>.take 80}"
     | .absurd _ => bad "absurd reached"
-    | .copy x x' b => do
+    | .copy _ x x' b => do
       let t ← tyIn p x
       if t.ownsN true 64 then bad s!"a copy of x{x} at {t}, which owns a cell or holds a mut borrow"
       bindV x' (← peekV x)
       eval p f rt b
-    | .drop x b | .abandon _ x b => do
+    | .drop _ x b | .abandon _ x b => do
       let t ← tyIn p x
       if t.ownsN false 64 then bad s!"a drop of x{x} at {t}, which owns a cell"
       let _ ← takeV x

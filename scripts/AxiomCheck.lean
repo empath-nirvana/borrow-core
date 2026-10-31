@@ -724,3 +724,5 @@ import Backend2.Lint
 #print axioms BoCa.Fig16.LogRel.Core.entry_derives
 #print axioms BoCa.Fig16.LogRel.Core.entry_runs
 #print axioms BoCa.Fig16.LogRel.Core.entry_decl_no_drop
+#print axioms BoCa.Fig16.LogRel.Core.Check.neitherAbsorbed_of
+#print axioms BoCa.Fig16.LogRel.Core.copy_derives

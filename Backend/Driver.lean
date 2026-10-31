@@ -227,7 +227,7 @@ on the program each stage receives. -/
 /-- The nodes of a closure-IR term. -/
 def Clos.Tm.size : Clos.Tm → Nat
   | .letv _ e b => 1 + e.size + b.size
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b => 1 + b.size
+  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b => 1 + b.size
   | .case _ _ b₁ _ b₂ => 1 + b₁.size + b₂.size
   | _ => 1
 
@@ -466,5 +466,62 @@ def trusted (file src : String) : Except String String := do
     (if unproved.isEmpty then "" else s!" ({", ".intercalate (unproved.map (·.1))})") ++
     "\nalways trusted: the allocator and runtime (Backend/Wasm/Runtime.lean), the WAT printer, " ++
     "wasmtime\n")
+
+/-! ### The old backend's licences, as statements  (#746 §5.4)
+
+The closure IR's `copy` and `drop` carry a `Clos.Licence`. The conversion reads the erased term,
+so no licence is read from the typed term's rule: each is a statement about the conversion of a
+checked term, stated here and not proved. -/
+
+/-- Whether a node of `t` is at the licence `l`. -/
+def Clos.Tm.atLicence (l : Clos.Licence) : Clos.Tm → Bool
+  | .copy l' _ _ b | .drop l' _ b => l' == l || b.atLicence l
+  | .letv _ e b => e.atLicence l || b.atLicence l
+  | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => b₁.atLicence l || b₂.atLicence l
+  | .letpair _ _ _ b | .hnd _ _ _ b | .ubind _ _ b | .catch _ b | .fin _ _ b | .catchAll b =>
+    b.atLicence l
+  | _ => false
+
+/-- Whether the program has a node at the licence `l`. -/
+def Clos.Prog.atLicence (p : Clos.Prog) (l : Clos.Licence) : Bool :=
+  p.main.atLicence l || p.codes.any (·.body.atLicence l)
+
+/-- **A licence's statement**: every checked program with no externs whose `main` is a closed
+`CDerives` computation of `F 1`, and whose closure IR (`CheckedProg.clos`) has a node at `l`, runs
+in the closure IR to `()` with no object left, as the source does (`adequacyD`): the copies and
+drops at `l` alias and leak nothing. -/
+def Clos.LicenceSound (l : Clos.Licence) : Prop :=
+  ∀ (k : CheckedProg) (p : Clos.Prog) (fuel : Nat) (o : Output), k.io = none →
+    BoCa.Fig16.LogRel.Core.CDerives BoCa.Lifetime.LifeCtx.empty [] k.main.e
+      (.comp (.ret .unit)) →
+    k.clos = .ok p → p.atLicence l = true → Clos.interp fuel p [] = .ok o →
+    o = Output.mk' ByteArray.empty ByteArray.empty (report .unit 0)
+
+/-- `UNPROVED:` the licence `word`: what the conversion drops or copies as its own word is of an
+unrestricted type (`Ctx.DeadP.drop`, `Ctx.SplitP.dup`). -/
+def Clos.WordSound : Prop := Clos.LicenceSound .word
+/-- `UNPROVED:` the licence `clauses`: a clause tuple or answer clause is `!`
+(`clausesTy_persistent`). -/
+def Clos.ClausesSound : Prop := Clos.LicenceSound .clauses
+/-- `UNPROVED:` the licence `const`: an erased constant's body consumes what the constant's
+type does. -/
+def Clos.ConstSound : Prop := Clos.LicenceSound .const
+/-- `UNPROVED:` the licence `payload`: a superseded payload holds no owned cell (`effRaise`'s
+`hd`). -/
+def Clos.PayloadSound : Prop := Clos.LicenceSound .payload
+/-- `UNPROVED:` the licence `split`: a variable free in two sequential parts is unrestricted, or
+copied by a `copy` constant (`Ctx.SplitP.dup`, `CDerives.copy`). -/
+def Clos.SplitSound : Prop := Clos.LicenceSound .split
+/-- `UNPROVED:` the licence `unused`: a variable that does not occur is weakened or absorbed
+(`Check.UnmentionedAbsorbed`). -/
+def Clos.UnusedSound : Prop := Clos.LicenceSound .unused
+/-- `UNPROVED:` the licence `abort`: a level's variables at a raise or a cancel are abandoned by
+`effLet`'s `hW` or weakened. -/
+def Clos.AbortSound : Prop := Clos.LicenceSound .abort
+/-- `UNPROVED:` the licence `kappa`: a continuation dropped at its tail resume is unrestricted or
+has its derived drop (`kTy_unr`, `kTy_cancel_hasDtor_iff`). -/
+def Clos.KappaSound : Prop := Clos.LicenceSound .kappa
+/-- `UNPROVED:` the licence `step`: a step closure copied for the next step is `!`. -/
+def Clos.StepSound : Prop := Clos.LicenceSound .step
 
 end Backend

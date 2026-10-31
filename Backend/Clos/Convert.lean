@@ -190,10 +190,10 @@ def sizeAt (id : Nat) : CM Nat := return (← get).pre.size[id]?.getD 0
 def fvsAt (id : Nat) (d : Nat) : CM (List Nat) := return (fvUnder d (← get).pre.fv[id]!).toList
 
 def wrapCopies (cs : List (Var × Var)) (t : Tm) : Tm :=
-  cs.foldr (fun (x, x') t => .copy x x' t) t
+  cs.foldr (fun (x, x') t => .copy .split x x' t) t
 
 def wrapDrops (xs : List Var) (t : Tm) : Tm :=
-  xs.foldr (fun x t => .drop x t) t
+  xs.foldr (fun x t => .drop .unused x t) t
 
 /-- Copies for two sequential parts using the indices `f₁` and `f₂`: every index in both is
     copied for the first part. The contexts the two parts are converted in. -/
@@ -252,12 +252,12 @@ def fixValue : CM Tm := do
   let k' ← fresh; let b ← fresh; let u₁ ← fresh; let u₂ ← fresh
   let s' ← fresh; let one ← fresh; let q ← fresh; let j ← fresh; let cl ← fresh
   let sf₁ ← fresh; let pr₁ ← fresh; let un ← fresh; let sf₂ ← fresh; let pr₂ ← fresh
-  let more : Tm := .drop u₁ (.copy sv s' (.letv one (.lit (.i32 1)) (.letv q (.pair k one)
+  let more : Tm := .drop .word u₁ (.copy .step sv s' (.letv one (.lit (.i32 1)) (.letv q (.pair k one)
     (.letv j (.prim (.host (.bin .w32 .sub)) [q]) (.letv cl (.clos cS [s', j])
       (.letv sf₁ (.inj true cl) (.letv pr₁ (.pair sf₁ a) (.app sv pr₁))))))))
-  let spent : Tm := .drop u₂ (.drop k (.letv un .unit (.letv sf₂ (.inj false un)
+  let spent : Tm := .drop .word u₂ (.drop .word k (.letv un .unit (.letv sf₂ (.inj false un)
     (.letv pr₂ (.pair sf₂ a) (.app sv pr₂)))))
-  let body : Tm := .letpair sv r p (.letpair k a r (.copy k k'
+  let body : Tm := .letpair sv r p (.letpair k a r (.copy .word k k'
     (.letv b (.prim (.host (.eqz .w32)) [k']) (.case b u₁ more u₂ spent))))
   modify fun st => { st with codes := st.codes.set! cF ⟨[], p, body⟩ }
   return .clos cF []
@@ -674,7 +674,7 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
       let u ← fresh
       let t₁ ← conv c₁ e₁ k₁
       let t₂ ← conv c₂ e₂ k₂
-      return wrapCopies cs (.letv u t₁ (.drop u t₂))
+      return wrapCopies cs (.letv u t₁ (.drop .word u t₂))
   | .letpair e₁ e₂ => do
       let (cs, c₁, c₂) ← plan2 ctx (← fvsAt k₁ 0) (← fvsAt k₂ 2)
       let p ← fresh; let x ← fresh; let y ← fresh
@@ -811,7 +811,7 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
               let tx ← conv (cx.push dummy) xE (id + 7)
               let lc ← lookup cl j
               return wrapCopies cs (.letv xv tx (.letv lv (.var lc) (.letv pr (.prim .swapSlot [lv, xv])
-                (.letpair c' old pr (.drop c' (.var old))))))
+                (.letpair c' old pr (.drop .const c' (.var old))))))
           | _ => pure ()
         | _ => pure ()
         if !isSwap f && (fixBody? f).isNone then
@@ -821,7 +821,7 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
           let x ← fresh
           let ta ← conv ca a k₂
           let tb ← conv (cb.push x) b kb
-          let tb := if 0 ∈ (← fvsAt kb 0) then tb else .drop x tb
+          let tb := if 0 ∈ (← fvsAt kb 0) then tb else .drop .unused x tb
           return wrapCopies cs (.letv x ta tb)
       | _ => pure ()
       match f, Op.ofPrim? (match f with | .prim p => p | _ => .store) with
@@ -854,7 +854,7 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
           if let (some (reuse, shape), .clos cu xs) := (foldShape? B, body) then
             if let some i := xs.idxOf? x then
               modify fun st => { st with folds := ⟨cu, reuse, shape, i⟩ :: st.folds }
-          let body := if 0 ∈ (← fvsAt kB 0) then body else .drop x body
+          let body := if 0 ∈ (← fvsAt kB 0) then body else .drop .unused x body
           setCode c ⟨[], x, body⟩
           return .clos c []
       | _ => pure ()
@@ -869,7 +869,7 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
       let inner := (fv.zip es).foldl (fun c (i, x) => c.set i x) inner
       let inner ← selfs.foldlM (fun c i => return c.set i (← lookup ctx i)) inner
       let body ← conv (inner.push p) b k₁
-      let body := if 0 ∈ (← fvsAt k₁ 0) then body else .drop p body
+      let body := if 0 ∈ (← fvsAt k₁ 0) then body else .drop .unused p body
       let c ← register ⟨es, p, body⟩
       return .clos c xs
 
@@ -942,7 +942,7 @@ def ioValue (k : IOOp) : CM Tm := do
   let mut c ← register ⟨[], m, .prim (.io k) [m]⟩
   for _ in [0:k.lifes] do
     let u ← fresh
-    c ← register ⟨[], u, .drop u (.clos c [])⟩
+    c ← register ⟨[], u, .drop .word u (.clos c [])⟩
   pure (.clos c [])
 
 /-- `[]`, the empty byte list. -/
@@ -964,9 +964,9 @@ extern's contract (`mkInput_meets`, …) holds at every call, with no condition 
 def mkValue (s : CapStream) : CM Tm := do
   let m ← fresh
   let body ← match s with
-    | .input => pure <| .drop m (← capCell (.i32 0))
-    | .args => pure <| .drop m (← capCell (.i32 0xFFFFFFFF))
-    | .clock => pure <| .drop m (← capCell (.i64 0))
+    | .input => pure <| .drop .word m (← capCell (.i32 0))
+    | .args => pure <| .drop .word m (← capCell (.i32 0xFFFFFFFF))
+    | .clock => pure <| .drop .word m (← capCell (.i64 0))
     | .output => pure <| .prim .alloc [m]
   pure (.clos (← register ⟨[], m, body⟩) [])
 
@@ -984,7 +984,7 @@ byte list. -/
 def takeValue (s : CapStream) : CM Tm := do
   let m ← fresh; let w ← fresh
   let body ← match s with
-    | .input | .args => pure <| .letv w (.prim .free [m]) (.drop w (← nilTm))
+    | .input | .args => pure <| .letv w (.prim .free [m]) (.drop .word w (← nilTm))
     | .output =>
       let n ← fresh
       pure <| .letv w (.prim .free [m]) (.letv n (← nilTm) (.pair w n))
