@@ -52,7 +52,8 @@ operation's signature.
 
 ### 1.3 The cancel row of a marked operation is read by typing
 
-`OpSig.finRead o := capB o.q o.B || o.rc`. `FinLe`, `OpSig.LeF` and `[then]`'s `hfin` read the cancel row at
+`OpSig.finRead o := capB o.q o.B || (o.rc && !o.abort)`. The marked `cancelled` is abortive and has no
+continuation, so its cancel row is not read. `FinLe`, `OpSig.LeF` and `[then]`'s `hfin` read the cancel row at
 `finRead` instead of `capB`, so `[then]` records its finaliser's row in a marked operation's cancel row. The
 cancel unwinds through that finaliser, as a raise of `c`. `then_compatC` still takes `capB`, and the
 callers pass `OpSig.finRead_of_capB`. The relation still reads `fin` only at `capB` (`OpSig.ent`).
@@ -80,6 +81,13 @@ callers pass `OpSig.finRead_of_capB`. The relation still reads `fin` only at `ca
   premise". It is raised explicitly on #750 and recorded in SPEC §29's trusted base, with exactly the
   domain it admits: a lend held across a marked `await` and across `[await-c]`'s raise of `cancelled` on
   a cancel. No field is added for it.
+- Semantically, the relation ignores `rc`. So the widened domain is OQ-1 option (a)'s belief
+  (`docs/async-capabilities.md` §8): an abort, at an operation handled outside the lend, after a
+  suspension inside the lend. The evidence is the evidence already cited for OQ-1(a): the LIFO frame
+  lemmas (`wpTS_M_frameU`) with GhostEnd's `Drop`, which are not checked. It is restricted syntactically
+  to `[await-c]`'s raise of the marked `cancelled`. SPEC §29's trusted base says this, and
+  `docs/async-capabilities.md` §8 OQ-1, §3.4 item 3 and row `n4` are updated to say that OQ-1(a) is now
+  taken for the cancel path only. SPEC §29's "none abortive" is amended in the same way.
 - No other abortive operation is admitted, so OQ-1 stays closed except for `cancelled`.
 - The checker: `Row.resumeOCB` with `Row.resumeOCB_sound`. It is sound only, not `_iff`, because
   `outlivesAllB` is sound only, exactly as for `Row.resumeOB` today.
@@ -135,12 +143,91 @@ non-vacuous. There are two examples:
 No consumer exists in unit A. `run_in` is unit B. That a `CancelTotal` cancel terminates stays open, as
 decision 69's "finalisers are total" does.
 
-### 1.7 Non-vacuity
+### 1.7 A cancel cannot be intercepted (decision D3 under cancel-by-resume)
+
+> **PENDING the Trio spike (2026-10-31).** The user is considering replacing this route (refusing
+> interception) with Trio-style level-triggered cancellation. Under that design the cancelled state belongs
+> to the task's scope, every cancellable wait in a cancelled scope raises `cancelled`, and shielded waits
+> work normally. This section stands only if the spike's answer keeps route (i). Nothing in it has been
+> built.
+
+The rule is decision D3 of 2026-10-08 (SPEC §27): a finaliser may not raise or perform a name that is
+handled only inside the cancelled region. Under κ.2, the region's frames are dead, and D3 is checked by
+`[sub]` from `κ`'s cancel row to the row of the code that cancels. Under cancel-by-resume, the region is
+live. A finaliser on the cancel's unwind runs inside it, so a handler inside the task would catch that
+finaliser's raise, or abandon its continuation, and the pending `cancelled` would be lost.
+
+The kernel states the rule at the place where a name becomes "handled inside": the handler rules.
+
+    [handle] at name m, body row Row.ofEff m E 0 fs cs ++ Σ:
+        ∀ o ∈ Σ, o.rc = true → Row.AvoidsD m o.fin                    (hRC)
+    Row.AvoidsD m F ≜ ∀ o' ∈ F.rowOf, o'.n ≠ m ∧ (o'.finRead → Row.AvoidsD m o'.fin)
+
+This premise goes on `effHandleV`, `effHandleVB`, `effHandleT` and `effHandleL`, in `CDerives`,
+`CDerivesAt`, `CDerivesP` and `TDerives`. `Row.avoidsDB` decides it, with an `_iff`. It is a typing-only
+premise, so the compatibility lemmas ignore it.
+
+**Why it is complete.**
+- An `await` that reaches a handler outside `handle_m` is an entry `o` of `handle_m`'s outer row `Σ`.
+- Every `[then]` between that `await` and `handle_m` has recorded its finaliser's row in `o.fin`, via
+  `hfin` at `finRead`. `[sub]` and function types only grow that record.
+- So every operation that such a finaliser may raise or perform is a name of `o.fin`. A handler of one of
+  those names inside the region is refused.
+- A finaliser outside `handle_m` is not caught by it. It is checked at any handler further out that is
+  still inside the region, against the record as grown by then.
+
+**The second route** is a finaliser that performs `p` at a name `m` whose inner handler returns without
+resuming. `p` is in `Σ_D`, and `ThenLe` puts each entry of `Σ_D` into `o.fin`, so `m` is a name of
+`o.fin` and `hRC` refuses `handle_m`. `hRC` checks names, whatever the operation's qualifier or answer,
+so raise, perform-and-abandon and perform-and-resume are all refused alike. That is D3's own over-
+approximation ("a raise or operation of a name with no live instance there is a type error").
+
+**Non-vacuity.** In `Core/AwaitCancel.lean`, for the program
+`handle_m ((await_n then x. return x unwind raise_m e)) with …`:
+- `hRC` is refuted when the handler is inside the region;
+- `hRC` holds for the same body with `handle_m` outside the scheduler's handler of `n`;
+- the perform-and-abandon variant is refused.
+
+**What a task can still do.** A task can still handle its own effects inside, around code that does not
+await. It cannot raise `cancelled` itself (`[raise]` refuses marked operations); self-cancel is a
+scheduler operation.
+
+### 1.8 A value with no derived drop must be closed on every exit, the cancel included
+
+The user's requirement (2026-10-31): a function holds a file handle that must be closed, and it can be
+cancelled. It must close the handle on every exit, including the cancel ("not everything needs to be
+automatic/derived").
+
+The kernel already has the rule, and cancel-by-resume reaches it with no new premise.
+- `[await-c]` needs the abortive `cancelled` in the row, and an abortive operation has `q ≠ .lin`
+  (`OpSig.abort`). So the row `Row.Cancels`.
+- `[let]`'s `hW : Σ.Cancels → Γ₂.OwnFree` then refuses any value live across the `await` that is not
+  `OwnFree`. A declared type with no derived drop (`declTy`, a `must_close` field: `A ⊗ Tok`) is not
+  `OwnFree` (`decl_not_ownFree`).
+- The way out is a `[then]` whose finaliser consumes the value (`finally close(f)`). `Γ₂` goes to both `N`
+  and `D`, so the value is closed on the normal exit and on the `cancelled` unwind. A clause that handles
+  `cancelled` is not available inside the task, because §1.7 refuses it.
+
+Unit A proves this:
+- `Row.cancels_of_await`: a row that admits `[await-c]` at some name `Cancels`;
+- `not_ownFree_live_across_await`: at such a row, `[let]` refuses a `declTy` in `Γ₂`, through
+  `decl_not_ownFree`;
+- non-vacuity: `Tok` live across `await_n` under `[then]` with `burn` as the finaliser is derivable.
+
+**Unit B's done-when**, since the surface `await` is not built here:
+- the refusal message names the fix ("close or consume it on every exit, including cancel, e.g.
+  `finally close(f)`");
+- `corpus/async-close-on-cancel.bc` runs the fixed version with `live 0`;
+- `corpus/reject/async-close-on-cancel.bc` is the refused version, its `expect` line naming the fix.
+
+### 1.9 Non-vacuity
 
 In `Core/AwaitCancel.lean`:
 - a derivation of `await_n` at a row `{await⟨rc⟩, cancelled}`;
 - `[perform]` refusing the marked operation (`hac` cannot be met);
-- `ResumeOC` admitting `{await, cancelled}` and refusing a row with any other abortive operation;
+- `ResumeOC` admitting `{await, cancelled}`, and refusing a row with any other abortive operation and a
+  row with a marked `tick` (`{tickSig with rc := true}`);
+- `[raise]` refusing the marked `cancelled` (`hrc` cannot be met);
 - `effThenDiv` at a finaliser row holding `Div`;
 - the two `CancelTotal` examples.
 
@@ -157,6 +244,7 @@ Each comes with `#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
 | `effThenDiv` at `Div`-free finaliser rows | proved (`pinFin_divFree`) |
 | `effThenDiv` at `Div` finaliser rows | proof attempted first; otherwise asserted as `PinLaw.fin : PinFin` |
 | `Row.CancelTotal`, `cancelTotalB_iff` | definition plus proved decision |
+| `hRC` on the handler rules (§1.7), `avoidsDB_iff` | typing premise; proved decision |
 
 ## 3. NOT in this unit
 
@@ -173,28 +261,12 @@ Each comes with `#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
 - A premise refusing marked operations in a finaliser's row (`∀ o ∈ SD, o.rc = false`). See §6, open
   decision 2.
 
-## 6. Open, for the user (not decided here)
-
-1. **Forward cross-flag: a task's derived drop.** Today `await : 1 ↠^cancel 1` is capturable, and a
-   task's derived drop is `κ.2`, which the leak-freedom of borrowing tasks rests on. When unit B moves
-   `await` to the marked `1 ↠^lin 1 ⊕ 1`, the task's `κ` becomes `U((1 ⊕ 1 ⊸ …) & ⊤)`, which has no
-   derived drop (the spike found the same: `not_hasDtor_task`). The five accepted leak shapes would
-   become refusals unless the kernel gains a drop `κ.1 (inr ())` at a `Cancellable` operation. That drop
-   runs finalisers, so it is effectful, which collides with "derived drops are pure at the row".
-   **Unit A changes no derived drop.** Unit B's switch of `await` is a STOP until this is decided.
-2. **`await` inside a finaliser.** A second cancel raises `cancelled` from inside the finaliser and skips
-   the rest of the cleanup. That fits "finaliser raises propagate", but it makes cleanup cancellable,
-   which is the reason for plan item 4. One option is a premise on `[then]` refusing marked operations in
-   `Σ_D`. It costs nothing today, but it is a design choice, so it is not made here.
-3. **Where the marker is declared.** `cs` is chosen at each handler, as `fs` is, and `RowAt` does not tie
-   it to `Ξ`. The kernel has no declarations, so the handler is the declaration. Soundness does not
-   depend on it: an unmarked operation is an ordinary `lin` operation. The alternative is a fourth
-   component of `E` (`Qual × VTy × VTy`), read by `Row.ofEff` and tied by `RowAt`. That would rewrite
-   every clause list and the machine's tuple handling, and it is not done here. Unit B's checker must read
-   `cs` from the effect declaration and never choose it (STOP).
-
-
 ## 4. Tempting shortcuts (each a STOP)
+
+- **A handler inside a task's region whose name is in a marked operation's cancel row** (§1.7). Any
+  rule that lets it through is a STOP. So is stating D3 twice, once at `[then]` and once at the
+  handler.
+- **Routes (b) and (c) of §6.1, or keeping the κ.2 drop as a fallback.** STOP.
 
 - **Keeping the shape test** (`lin ∧ i = 0 ∧ B = 1 ⊕ 1 ∧ n ≠ divEff`) and calling it a marker. STOP.
 - **Putting the marker in `OpSig` but not in `CTy`.** `[sub]` could then forget it. STOP.
@@ -226,7 +298,8 @@ Each comes with `#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
 - Every `.effPerform` and `.effRaise` call site gains `rfl` for `hac`/`hrc`.
 - The inversions: `AppBase` gains an `[await-c]` disjunct, `der_letJ` gains a premise that excludes
   `await`'s body, and `der_bind_split` needs a witness for `await`'s term. All are as in the spike.
-- The handler rules gain `{cs}`. The checker and every existing derivation use the default.
+- The handler rules gain `{cs}` and `hRC`. `hRC` is `rfl`-like (`Row.avoidsDB`) at every existing
+  derivation, since nothing is marked. The checker and every existing derivation use the default.
 - `CDerivesP.lendR`, `PinStop` and `LendFrame` are stronger in what they admit. `PinLaw` gains `fin`
   if `PinFin` is asserted.
 - Two corpus rejects, `async-r1-spawn-captures.bc` and `async-r1-unr.bc`, change their `expect` line,
@@ -237,52 +310,47 @@ Each comes with `#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
   - §24: `[then]`'s `hfin`;
   - §29a, new;
   - §29's trusted base: the widened `LendFrame` domain, `PinLaw.fin`, `pinLaw_iff`.
+- `Decide.rowLeB` tests exact entry equality, so it compares `rc` already. It is sound only, so no `_iff`
+  is at stake.
+- `docs/async-capabilities.md` §8 OQ-1, §3.4 and row `n4` (§1.4).
 - Frontend/Check/Pin.lean: `resumeOB` → `resumeOCB` at the R1 site. The gen-pin.py templates. The
   `KernelCensus`/kernel-counts goldens if they enumerate rules. `corpus/*.out` for `bcc trusted` only
   if a program's pins change, and none do.
 - Experiments are not built by the gate. Their `OpSig` literals will break, and they are left alone.
 
-## 7. Scope review outcome: STOP before the build
 
-There were two full reviews. Each found a Fatal issue.
+## 6. Decisions (user, 2026-10-31)
 
-The first was that `ResumeOC` admitted a marked `Div` `tick`. That is fixed above with the explicit
-`Row.divB Σ = false`. The same review's Major and Minor findings are applied in §1–§6.
+General principle: "I am okay with the type checker refusing linearity violations for programs that
+should work as long as there is a way to fix it, even if it involves explicitly handling a match or
+whatever."
 
-The second review found two problems, and the brief makes both of them STOPs.
+1. **The derived drop: route (a).**
+   - Under cancel-by-resume, a task that holds borrows has no derived drop. It must be awaited or
+     cancelled explicitly, and the five accepted leak shapes become refusals.
+   - Decision 1 (derived drops are pure) stands. The κ.2 drop does not stay as a fallback.
+   - `Cancellable`'s `q = .lin` is therefore as intended. Unit A changes no derived drop.
+   - **Unit B obligation:** each refusal message names its fix (await it, or cancel it), so every refused
+     program has a written fix.
+   - The nursery (#750 item 3, via #743) is the later convenience and is not built.
+2. **A cancel cannot be intercepted**, kept by refusal (D3 under a live region, §1.7). **Pending the
+   Trio spike**, which may replace this with level-triggered cancellation.
+3. **`await` inside a finaliser.** Once §1.7 holds, a finaliser's `await` reaches only the scheduler, and
+   its second `cancelled` propagates there, which is "finaliser raises propagate". No further premise is
+   added.
+4. **Where the marker is declared.** `cs` is chosen per handler (sound: marking only restricts). Unit B's
+   checker reads it from the effect declaration and never chooses it (STOP).
 
-1. **Fatal: drift from the decided finaliser algebra ("cancel can't be intercepted").** Under
-   cancel-by-resume, the task's region stays live, and the cancel is an ordinary raise of `cancelled`.
-   A finaliser on that unwind can raise (or abort) to a handler *inside* the task, and that handler then
-   discards the pending `cancelled`. For example:
+## 7. Review record
 
-       handle_m ((await_n then x. return x unwind raise_m e)) with {m e → return v}
-
-   This types under §1's rules. On a cancel it continues as if the task had finished normally. Today's
-   κ.2 cancel runs in a dead region, and D3 makes this a type error. Nothing in §1 refuses it.
-
-   The reviewer proposes a fix: every handler rule for a name `m` asks
-   `∀ o ∈ S, o.rc → ∀ o' ∈ o.fin.rowOf, o'.n ≠ m`, which carries D3's typing to live regions. That is a
-   new kernel premise on all four handler rules. It is a design choice, and it has not been checked to be
-   sufficient (a finaliser that performs an operation whose inner handler returns without resuming
-   is the second route). So it is raised for the user, not adopted here.
-2. **Cross-flag (derived drop).** `OpSig.Cancellable` fixes `q = .lin`, and that conjunct is what removes a
-   task's derived drop (`κ` at a `lin` operation is `U((B ⊸ …) & ⊤)`, which has no `κ.2`). "Derived drops
-   pure at the row" is DECIDED (decision 1, kept 2026-10-30). Unit A's definitions therefore already
-   choose between three routes:
-   - accept the five leak shapes as refusals;
-   - reopen decision 1 (an effectful drop `κ.1 (inr ())`);
-   - a capturable marked `await` (`q = .cancel`, answering `1 ⊕ 1`, with a κ.2 fallback). On this route,
-     `Cancellable`, `ResumeOC`'s second disjunct and `finRead` all change.
-
-Also recorded:
-- **Major.** `LendFrame`'s widened domain is semantically OQ-1(a)'s belief (an abort at an operation
-  handled outside the lend, after a suspension inside it). SPEC §29 and `docs/async-capabilities.md` §8
-  OQ-1, §3.4 and row `n4` must say so.
-- **Minor.** `finRead` should be `capB || (rc && !abort)`. The non-vacuity tests should cover a marked
-  `tick` and `[raise]` of a marked `cancelled`. `rowLeB`'s change is semantic (it reads `finRead`).
-  A task cannot raise `cancelled` itself.
-
-The mechanical marker plumbing (`OpSig.rc`, `CTy.eff`'s argument, `Sig`, `Row.ofEff … cs`) was started and
-does not build yet. It is saved as `scratch-archive/linear-types/750a-wip-marker-plumbing.patch` and is not
-committed.
+1. **Review 1.** One Fatal: `ResumeOC` admitted a marked `tick`. Fixed in §1.4. Its Majors and Minors
+   are applied.
+2. **Review 2 (full).** Its Fatal was interception through a live region. Fixed in §1.7, after the user's
+   decision 2. Its derived-drop finding is closed by decision 1. Its Major (OQ-1(a)) is in §1.4 and §5.
+   Its Minors are applied:
+   - `finRead` skips abortive operations;
+   - the non-vacuity tests cover a marked `tick` and `[raise]`;
+   - `rowLeB` is noted;
+   - self-cancel is noted;
+   - the sections are renumbered.
+3. **Targeted check of the changes above.** See below.
