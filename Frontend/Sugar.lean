@@ -535,7 +535,8 @@ def varsFor (A : CVTy) : Val → Option (List (String × CVTy))
     | (some (.var _ x), T) | (some (.clone _ x), T) => some (x, T)
     | _ => none
 
-def isLinear (A : CVTy) : Bool := Class.of A == .linear false
+/-- `A` is linear with no derived drop (`Class.of`): the checker inserts no drop of it. -/
+def noDerivedDrop (A : CVTy) : Bool := Class.of A == .linear false
 
 /-- The variables a terminal `return V` of the body puts in each component of the result that
 has no destructor, as the loops' states hold them: a variable the terminal names by a copy made
@@ -550,7 +551,7 @@ def termParts (parts : List CVTy) (ρ : List (String × String)) :
   | .bind _ _ _ _ N | .letUnit _ _ N | .letPair _ _ _ _ N => termParts parts ρ N
   | .case _ _ _ M _ N => (termParts parts ρ M).orElse fun _ => termParts parts ρ N
   | .ret _ (.app _ (.sugar _ .retE) V) | .ret _ V =>
-    ((parts.zip (alignV parts V)).filter (isLinear ·.1)).mapM fun (A, v) =>
+    ((parts.zip (alignV parts V)).filter (noDerivedDrop ·.1)).mapM fun (A, v) =>
       (v.bind (varsFor A)).map (·.map fun (z, T) => ((ρ.lookup z).getD z, T))
   | _ => none
 
@@ -587,7 +588,7 @@ def destructParts (v : String) (parts : List (List (String × CVTy))) : String :
 its residual is `K`.  `[spec §14, §15]` -/
 def loopCxOf (sp : Span) (B : CVTy) (M : Comp) (bare : Bool := false) : Except Error LoopCx := do
   let parts := spineT B
-  let lin := parts.filter isLinear
+  let lin := parts.filter noDerivedDrop
   if lin.isEmpty then return ⟨B, .unit, .unit, [], true⟩
   let K := tupleT lin
   match termParts parts [] M with
@@ -610,6 +611,9 @@ inductive Origin where
   /-- The field `g` of the declaration `n` is marked `must_close`, consumed by `f` when it names
   one: read by the checker's messages (SPEC §42). -/
   | closes (n g : String) (f : Option String)
+  /-- The binder `x` the elaboration made stands for `what` in the source: a message that names
+  `x` names `what` instead. -/
+  | shown (x what : String)
   deriving BEq, Inhabited
 
 /-- Where generated code came from, and what the elaboration reports: per span, its origins. -/
@@ -803,7 +807,7 @@ its first observation; closed instead, it hands back the components of `io_v` th
 destructor, and the checker drops the others. -/
 def dret (cx : LoopCx) (T : Comp) : SM Comp := do
   let parts := spineT cx.B
-  let lin := parts.map isLinear
+  let lin := parts.map noDerivedDrop
   let last := (lin.zip (List.range lin.length)).foldl (fun a (b, i) => if b then i + 1 else a) 0
   let close := if last == 0 then "return ()" else
     let ns := (List.range last).map (s!"io_w{·}") ++ (if last < parts.length then ["io_wr"] else [])
@@ -1225,7 +1229,7 @@ def mAbort (m : MCx) (sp : Span) (lend : Option Ident) (Rf : CVTy) : MM (String 
       let (src, leaves) := destructLeaves divFuel "io_r" Rf capOf
       let caps := leaves.filterMap (·.1)
       if !caps.isEmpty && caps.eraseDups.length == caps.length &&
-          leaves.all (fun (p, T) => !isLinear T || p.isSome) then
+          leaves.all (fun (p, T) => !noDerivedDrop T || p.isSome) then
         pure (src, caps)
       else throw ⟨sp, s!"a call whose loop hands back `{ppT Rf}` when closed, which is neither " ++
           s!"nothing, a capability it was lent, one capability of the body, nor what the body " ++
@@ -2453,7 +2457,14 @@ def fieldRead (c : TCx) (sp fsp : Span) (f : String) (j k : Nat) (rolls : Bool) 
         body))
     | none => match R with
       | .var .. => throw (bindIt "a linear value")
-      | R => pure (.run sp (projectField fsp rolls j k R fun v => .ret fsp v))
+      | R => do
+        -- The other fields, which the projection leaves unused, named by the receiver.
+        let pre := s!"io_fp{fsp.start.line}_{fsp.start.col}_"
+        for (x, i) in (Data.fieldVars pre k).zipIdx do
+          if i != j then
+            liftM (m := SM) (modify (· ++ [(sp, .shown x
+              s!"a field of `{spanMark R.span}` that `.{f}` leaves unused")]))
+        pure (.run sp (projectField fsp rolls j k R fun v => .ret fsp v))
 
 /-- An owned array `x : array A` lent as its view (`array_mut 'l A` with `&mut x`, `array_imm 'l A`
 with `&x`) to the call `call l v`, whose result has type `Q` with the parameter's lifetime `v`:

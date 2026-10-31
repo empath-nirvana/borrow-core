@@ -21,4 +21,4 @@ main -> i32 =
   let mut s = 0;
   for x in gen() { s = s + x };
   s
--- expect: 16:3: `t`, of type `i32 * i32 * tok`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell: `Txn` holds the field `log`, marked `must_close`; pass it to `commit` before the computation that may abort, or close it in a `finally`
+-- expect: 16:3: `t`, of type `i32 * i32 * tok`, is live across an operation that may be cancelled: the cancel runs a finaliser (`[then]`) that consumes it by its derived drop, and its type is linear with no derived drop: `Txn` holds the field `log`, marked `must_close`; pass it to `commit` before the computation that may abort, or close it in a `finally`

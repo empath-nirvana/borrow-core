@@ -9,4 +9,4 @@ fn commit(t: Txn) -> i32 = match t { Txn { id, log } -> id * 100 + log }
 
 main -> i32 =
   (begin(7)).id
--- expect: 11:14: `io_fp11_14_1` is not consumed in its scope, and its type `i32 * tok` is linear and has no derived drop
+-- expect: 11:14: a field of `begin(7)` that `.id` leaves unused is not consumed in its scope, and its type `i32 * tok` is linear and has no derived drop

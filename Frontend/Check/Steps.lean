@@ -1048,8 +1048,11 @@ def atRow (E : Env) (sp : Span) (S : CRow) :
 slots the rest of the computation uses), under the binder's dead slot, at the pure row (SPEC §24:
 a finaliser lets no raise escape). It runs when an abortive operation of the bound computation
 stops the rest. SPEC §19's drop glue: `[then]`'s `D`, inserted as SPEC §12 inserts destructors. -/
-def finalOf (E : Env) (sp : Span) (_S : CRow) (u : List Bool) :
+def finalOf (E : Env) (sp : Span) (S : CRow) (u : List Bool) :
     Except Error (Res Δ (.unit :: T) (.comp (effOf [] .unit))) := do
+  -- The row has an operation that resumes and may be cancelled (`capB`): the finaliser runs at
+  -- its cancel. Otherwise only an abort stops the rest.
+  let cancels := S.any fun o => BoCa.Fig16.LogRel.Core.capB o.q o.B
   let idx := (List.range T.length).filter fun i =>
     u.getD i false && !((T[i]?.map (·.persistent)).getD true)
   let r0 : Res Δ (.unit :: T) (.comp (.ret .unit)) := rRet (at_ sp) (rUnit (at_ sp))
@@ -1057,6 +1060,10 @@ def finalOf (E : Env) (sp : Span) (_S : CRow) (u : List Bool) :
     match T[i]? with
     | some A =>
       if hasDtorB A then dropOne sp (i + 1) r
+      else if cancels then
+        throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across an operation that " ++
+          "may be cancelled: the cancel runs a finaliser (`[then]`) that consumes it by its " ++
+          "derived drop, and its type is linear with no derived drop" ++ E.closeHint A true⟩
       else throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across a computation " ++
         "that may abort, and its type is linear with no derived drop, and an abort abandons " ++
         "only a value that holds no owned cell" ++ E.closeHint A true⟩
