@@ -170,34 +170,37 @@ inductive Abandon where
   | letAbort
   /-- `⊤`'s introduction (`CDerives.topI`): the whole context. -/
   | top
+  /-- A raise's payload superseded by a finaliser's (`then_fin`, `unwind_prefix`): the payload
+  of a raise holds no owned cell (`CDerives.effRaise`'s `hd : o.A.Drop`). -/
+  | superseded
   deriving Inhabited, BEq, Repr
 
 def Abandon.name : Abandon → String
   | .letAbort => "let abort"
   | .top => "top"
+  | .superseded => "superseded"
 
 /-- **The rule a `drop` node is at**: the kernel rule that discards the value there. `Lint.dropsAt`
 checks each rule's premise on the variable's LIR type. -/
 inductive DropRule where
-  /-- Weakening at an unrestricted type (`Ctx.DeadP.drop`, `Ctx.SoloP.skip`): a persistent value,
-  among them the machine's own words (a unit, a counter). -/
+  /-- Weakening at an unrestricted type (`Ctx.DeadP.drop`, `Ctx.SoloP.skip`): a leaf's other slots,
+  a `use`'s slots it does not read, a handler's values (`effHandleV`'s `DeadP`), a pure frame's
+  arguments at an abort, and the machine's own words (a unit, a counter). -/
   | dead
   /-- A `forget` constant applied (`CDerives.forgetImm`, `forgetMut`, `forgetUnk`, `arrForget`):
   a borrow, `Unk`, or a family of `imm` borrows. -/
   | forget
   /-- A piece of the destructor of a `dtor` node's type (`drop_derives` over `dtor_wf`): each leaf
   the type's `HasDtor` derivation forgets, among them a family of `mut` borrows
-  (`HasDtor.arrayMut`, whose `dtorAt` is `idx` then `forget`). -/
+  (`HasDtor.arrayMut`, whose `dtorAt` is `idx` then `forget`). Only in a destructor function
+  (`Prog.dtorFns`). -/
   | dtor
-  /-- A live slot of a split's context that neither part's mask holds, or one a leaf or a frame
-  leaves: weakened (`Ctx.DeadP.drop`), at a persistent type, where the kernel weakens it at the
-  leaves of the part that receives it. The kernel may instead absorb it (`⊤`, `absurd`, an
-  abort); `Lint` refuses such a drop at a type that is not persistent. `UNPROVED:` that no checked
-  program has one (`Check.SplitMasks.NeitherAbsorbed` states the cases). -/
+  /-- A live slot of a split's context that neither part's mask holds: weakened
+  (`Ctx.DeadP.drop`), at a persistent type, where the kernel weakens it at the leaves of the part
+  that receives it. The kernel may instead absorb it (`⊤`, `absurd`); `Lint` refuses such a drop
+  at a type that is not persistent. `UNPROVED:` that no checked program has one
+  (`Check.SplitMasks.NeitherAbsorbed`). -/
   | unused
-  /-- A raise's payload superseded by a finaliser's (`then_fin`, `unwind_prefix`): at a type that
-  holds no owned cell (`CDerives.effRaise`'s `hd : o.A.Drop`), and owns no opaque value. -/
-  | superseded
   /-- A level's suspended computation a stack machine drops (`Prog.stackKs`). `UNPROVED:` no
   kernel rule; #746 item 5 (F3) states the one that would license it. -/
   | stackK
@@ -205,7 +208,7 @@ inductive DropRule where
 
 def DropRule.name : DropRule → String
   | .dead => "dead" | .forget => "forget" | .dtor => "dtor" | .unused => "unused"
-  | .superseded => "superseded" | .stackK => "stack k"
+  | .stackK => "stack k"
 
 /-- **The rule a `copy` node is at.** `Lint.copiesAt` checks each rule's premise on the LIR type. -/
 inductive CopyRule where
@@ -298,6 +301,9 @@ structure Prog where
   machine's points drop, their state being on the task stack (SPEC §52; `genStackMach`, an
   `UNPROVED:` site). `Lint` checks every other drop by its type. -/
   stackKs : Std.HashSet Var := {}
+  /-- The functions that drop a leaf of a `dtor` node's destructor (`Convert.leafDtor`): the only
+  functions where `Lint` admits a `drop` at the rule `dtor`. -/
+  dtorFns : Std.HashSet Nat := {}
   deriving Inhabited
 
 end Backend2

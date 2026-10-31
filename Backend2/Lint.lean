@@ -17,13 +17,14 @@ verifies and never fills in:
 - every `copy` meets the premise of the rule the node carries (`copiesAt`): `Ctx.SplitP.dup` at a
   persistent type, `!` read off the LIR type (`Types.ofV` keeps it); the `copy` constants and
   `copy_derives` at an `imm` borrow;
-- every `drop` meets the premise of the rule the node carries (`dropsAt`); the callees' suspended
-  computations a stack machine drops are the rule `stackK` (`Prog.stackKs`); no rule drops a
-  type owning an opaque value;
+- every `drop` meets the premise of the rule the node carries (`dropsAt`), a `dtor` one only in a
+  destructor function (`Prog.dtorFns`); the callees' suspended computations a stack machine drops
+  are the rule `stackK` (`Prog.stackKs`); no rule drops a type owning an opaque value;
+- no `&` is observed at a `⊤` component (`⊤` has no elimination);
 - every `abandon` meets the premise of the rule the node carries (`abandonable`): at a `[let]`'s
-  abort, `effLet`'s `hW` (the variable's type holds no owned cell, `VTy.Drop`); at `⊤`, `topI`'s,
-  which has none. It is the only node at which an opaque value is discarded, and `Convert` emits
-  it only at those rules' sites.
+  abort, `effLet`'s `hW` (the variable's type holds no owned cell, `VTy.Drop`); at a superseded
+  raise payload, `effRaise`'s `hd`, the same; at `⊤`, `topI`'s, which has none. It is the only
+  node at which an opaque value is discarded, and `Convert` emits it only at those rules' sites.
 -/
 
 namespace Backend2.Lint
@@ -71,22 +72,17 @@ def copiesAt : CopyRule → LTy → Bool
     | .imm _ | .fam (.imm _) => true
     | _ => false
 
-/-- A type whose values `copy` may duplicate at some rule. -/
-def copyable (t : LTy) : Bool := copiesAt .dup t || copiesAt .derived t
-
 /-- **A drop at the rule `r`**, its premise read on the LIR type:
 - `dead` (`Ctx.DeadP.drop`, `Ctx.SoloP.skip`): an unrestricted type;
 - `forget` (the `forget` constants, `arrForget`): `Imm`, `Mut`, `Unk`, `[Imm A]`;
-- `dtor` (`drop_derives`): a leaf the destructor forgets: an unrestricted type, a borrow, `Unk`,
-  or a family of borrows (`HasDtor.arrayMut` at `[Mut A]`: `dtorAt` is `idx` then `forget`);
+- `dtor` (`drop_derives`): only in a destructor function (`Prog.dtorFns`, checked by `lintTm`), a
+  leaf the destructor forgets: an unrestricted type, a borrow, `Unk`, or a family of borrows
+  (`HasDtor.arrayMut` at `[Mut A]`: `dtorAt` is `idx` then `forget`);
 - `unused`: an unrestricted type, the premise of the weakening the part that receives the slot
   applies at its leaves (`Ctx.DeadP.drop`); a persistent value holds no resource
   (`vP_empty_of_persistent`), so dropping it at the split is the same. A slot the part absorbs
-  instead (`⊤`, `absurd`, an abort) is refused here, not dropped: that no checked program has one
-  of a type that is not persistent is `UNPROVED:` (`Check.SplitMasks.NeitherAbsorbed` states the
-  cases);
-- `superseded` (`effRaise`'s `hd`): an unrestricted type, or one that holds no owned cell and no
-  opaque value (`LTy.drops` without `LTy.ownsOpq`), or a family of `imm` borrows;
+  instead (`⊤`, `absurd`) is refused here, not dropped: that no checked program has one of a type
+  that is not persistent is `UNPROVED:` (`Check.SplitMasks.NeitherAbsorbed` states the cases);
 - `stackK` (`UNPROVED:`, F3): the variable is one of `Prog.stackKs`.
 No rule drops a value that owns an opaque value: an abort abandons it (`abandon`). -/
 def dropsAt (p : Prog) (x : Var) : DropRule → LTy → Bool
@@ -98,18 +94,17 @@ def dropsAt (p : Prog) (x : Var) : DropRule → LTy → Bool
     | .imm _ | .mut _ | .unk | .fam (.imm _) | .fam (.mut _) => true
     | _ => false
   | .unused, t => t.persistent
-  | .superseded, t => t.persistent || (t.drops && !t.ownsOpq) || match t with
-    | .fam (.imm _) => true
-    | _ => false
   | .stackK, _ => p.stackKs.contains x
 
 /-- A type whose values an `abandon` node at the rule `r` may discard: the premise of `r`, read
 on the LIR type. At a `[let]`'s abort, `CDerives.effLet`'s `hW : S.Weak → Γ₂.Drops`: each slot
 of `N`'s context is at a `VTy.Drop` type, which `LTy.drops` reads (`ofV_drops`), an opaque value
 among them. At `⊤`, `CDerives.topI`, which has no premise: `⊤` absorbs its whole context at every
-type. No other rule discards an opaque value: no constant forgets it and it has no destructor. -/
+type. A raise's payload superseded by a finaliser's: `CDerives.effRaise`'s `hd : o.A.Drop`,
+`LTy.drops` again. No other rule discards an opaque value: no constant forgets it and it has no
+destructor. -/
 def abandonable : Abandon → LTy → Bool
-  | .letAbort, t => t.drops
+  | .letAbort, t | .superseded, t => t.drops
   | .top, _ => true
 
 /-- A slot a split duplicates (`Ctx.SplitP.dup`: of persistent type) is `copyable` at its LIR
@@ -130,7 +125,7 @@ theorem abandonable_ofV_drop {ms : MachSet} {A : VTy} {t : LTy} (hA : A.OwnFree)
   simp [abandonable, ofV_drops hA h]
 
 /-- The variables left after `t`, its value consumed by its context. -/
-def lintTm (w : String) (p : Prog) : Nat → Std.HashSet Var → Tm → LM Left
+def lintTm (w : String) (p : Prog) (inDtor : Bool) : Nat → Std.HashSet Var → Tm → LM Left
   | 0, _, _ => bad w "a term too deep"
   | f + 1, env, t => match t with
     | .var x => return some (← use w env x)
@@ -145,7 +140,15 @@ def lintTm (w : String) (p : Prog) : Nat → Std.HashSet Var → Tm → LM Left
         if k != xs.length then bad w s!"c{c}'s closure of {xs.length} values for {k}"
       return some (← useAll w env xs)
     | .app g a => return some (← useAll w env [g, a])
-    | .app0 g | .sel g _ => return some (← use w env g)
+    | .app0 g => return some (← use w env g)
+    -- `⊤` has no elimination: a `&` whose second component is `⊤` (a must-resume `κ`'s cancel,
+    -- `kTy`) is never observed at it.
+    | .sel g j => do
+      if j == 1 then
+        if let some t := p.ty[g]? then
+          if let .thunk (.amp _ .top) := t.peel then
+            bad w s!"x{g} observed at `⊤` (its type {t}), which has no elimination"
+      return some (← use w env g)
     | .call fn as => do
       let some d := p.fns[fn]? | bad w s!"no function f{fn}"
       if d.params.length != as.length then
@@ -160,17 +163,17 @@ def lintTm (w : String) (p : Prog) : Nat → Std.HashSet Var → Tm → LM Left
         | some (.pair _ bT) =>
           if borrowMode bT != some m then bad w s!"x{x}: a lend of kind {m} answers a borrow at {bT}"
         | t => bad w s!"x{x}: a lend answers {t.map (·.pp)}"
-      match ← lintTm w p f env e with
+      match ← lintTm w p inDtor f env e with
       | none => return none
-      | some env' => lintTm w p f (← bindNew w p env' x) b
+      | some env' => lintTm w p inDtor f (← bindNew w p env' x) b
     | .letpair x y q b => do
       let env ← use w env q
       let env ← bindNew w p env x
-      lintTm w p f (← bindNew w p env y) b
+      lintTm w p inDtor f (← bindNew w p env y) b
     | .case sv x b₁ y b₂ => do
       let env ← use w env sv
-      let l₁ ← lintTm w p f (← bindNew w p env x) b₁
-      let l₂ ← lintTm w p f (← bindNew w p env y) b₂
+      let l₁ ← lintTm w p inDtor f (← bindNew w p env x) b₁
+      let l₂ ← lintTm w p inDtor f (← bindNew w p env y) b₂
       match l₁, l₂ with
       | none, l | l, none => return l
       | some a, some b =>
@@ -184,21 +187,23 @@ def lintTm (w : String) (p : Prog) : Nat → Std.HashSet Var → Tm → LM Left
       | some t =>
         if !copiesAt r t then bad w s!"x{x} copied at {t} ({r.name}), where the rule's premise does not hold"
       | none => bad w s!"x{x} has no type"
-      lintTm w p f (← bindNew w p env x') b
+      lintTm w p inDtor f (← bindNew w p env x') b
     | .drop r x b => do
       match p.ty[x]? with
       | some t =>
         if !dropsAt p x r t then
           bad w s!"x{x} dropped at {t} ({r.name}), where the rule's premise does not hold"
+        if r == .dtor && !inDtor then
+          bad w s!"x{x} dropped at the rule dtor outside a destructor function"
       | none => bad w s!"x{x} has no type"
-      lintTm w p f (← use w env x) b
+      lintTm w p inDtor f (← use w env x) b
     | .abandon r x b => do
       match p.ty[x]? with
       | some t =>
         if !abandonable r t then
           bad w s!"x{x} abandoned at {t} ({r.name}), where the rule's premise does not hold"
       | none => bad w s!"x{x} has no type"
-      lintTm w p f (← use w env x) b
+      lintTm w p inDtor f (← use w env x) b
 
 /-- Lint a program. -/
 def lint (p : Prog) : Except String Unit := do
@@ -207,10 +212,10 @@ def lint (p : Prog) : Except String Unit := do
       let w := s!"f{i} ({d.name})"
       let mut env : Std.HashSet Var := {}
       for x in d.params do env ← bindNew w p env x
-      match ← lintTm w p (1 <<< 22) env d.body with
+      match ← lintTm w p (p.dtorFns.contains i) (1 <<< 22) env d.body with
       | some rest => if !rest.isEmpty then bad w s!"ends with {rest.toList.map (s!"x{·}")} unconsumed"
       | none => pure ()
-    match ← lintTm "main" p (1 <<< 22) {} p.main with
+    match ← lintTm "main" p false (1 <<< 22) {} p.main with
     | some rest => if !rest.isEmpty then bad "main" s!"ends with {rest.toList.map (s!"x{·}")} unconsumed"
     | none => pure ()
   let _ ← act.run {}

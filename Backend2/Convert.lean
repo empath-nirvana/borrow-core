@@ -204,6 +204,8 @@ structure CState where
   census : Bool := false
   /-- The destructors of `μ` types, generated once per type (`genDtor`). -/
   dtors : Std.HashMap String Nat := {}
+  /-- The functions that drop a destructor's leaf (`leafDtor`, `Prog.dtorFns`). -/
+  dtorFns : Std.HashSet Nat := {}
   /-- The variables bound to `unfold step` (a `bind` whose bound computation is an `unfoldStep`
   node, SPEC §57), and their copies and captures: the `f` a `nuEta` node may call (SPEC §45). -/
   unfolds : Std.HashSet Var := {}
@@ -364,13 +366,11 @@ def abandons (r : Abandon) (xs : List Var) (b : Tm) : Tm := xs.foldr (fun x b =>
 
 def live (ctx : Ctx) : List Var := ctx.filterMap id
 
-/-- At a leaf that reads the slot `keep` (or none): every other live slot dropped. The kernel's
-leaf weakens them (`Ctx.SoloP.skip`, `Ctx.DeadP.drop`: persistent), or `⊤`/`absurd` absorbs them:
-the rule `unused`, at a persistent type (`UNPROVED:` that no absorbed slot of another type reaches
-here, `Check.SplitMasks.NeitherAbsorbed`). -/
+/-- At a leaf that reads the slot `keep` (or none): every other live slot dropped, as the kernel's
+leaf weakens them (`Ctx.SoloP.skip`, `Ctx.DeadP.drop`: persistent). -/
 def leaf (ctx : Ctx) (keep : Option Nat) (b : Tm) : Tm :=
   let others := (ctx.zipIdx.filter fun (_, i) => some i != keep).filterMap (·.1)
-  drops .unused others b
+  drops .dead others b
 
 /-- The context at a split, by its masks: the parts' contexts and the copies and drops made at the
 split. -/
@@ -860,9 +860,9 @@ def abortK (F : OutInfo) : Kont → List Var → Var → CM Tm
         let some pF := payTy F.pay | throw "LIR: a finaliser's abort where the row holds none"
         let e' ← fresh pF; let u ← fresh .unit; let e₂ ← fresh pdT
         let sup ← coercePay pd F.pay e₂ fun v => pure (.var v)
-        -- The superseded payload `e` is dropped: a raise's payload is at a type that drops
+        -- The superseded payload `e` is abandoned: a raise's payload holds no owned cell
         -- (`CDerives.effRaise`'s `hd : o.A.Drop`).
-        return .letv d (.call fnD own) (.letv e' (.case d u (.drop .dead u (.var e)) e₂ (.drop .superseded e sup))
+        return .letv d (.call fnD own) (.letv e' (.case d u (.drop .dead u (.var e)) e₂ (.abandon .superseded e sup))
           (← abortK F rest more e'))
     | .cellF => match own with
       | [c] => releaseOpt c (← abortK F rest more e)
@@ -874,7 +874,7 @@ def abortK (F : OutInfo) : Kont → List Var → Var → CM Tm
       | [h] => freeStackThen h (← abortK F rest more e)
       | _ => throw "LIR: a site's stack frame without its stack"
     | .letF _ _ (some r) => return abandons r own (← abortK F rest more e)
-    | _ => return drops .unused own (← abortK F rest more e)
+    | _ => return drops .dead own (← abortK F rest more e)
 
 /-- The cancel of `K`, `err` the error kept so far (`1 ⊕ P`, `cp` the cancel row's payload `P`):
 each frame's arguments abandoned at the frame's rule (a `[let]`'s, `hW`) or dropped, a finaliser
@@ -897,10 +897,10 @@ def cancelK (cp : Pay) : Kont → List Var → Var → CM Tm
         let u₁ ← fresh .unit; let e₁ ← fresh pdT; let u₂ ← fresh .unit; let e₂ ← fresh pdT
         let sup ← coercePay pd cp e₁ fun v => pure (.inj true v)
         -- The error not kept (`e₀` superseded, or the finaliser's `e₂` after a kept one) is
-        -- dropped: a raise's payload is at a type that drops (`CDerives.effRaise`'s
+        -- abandoned: a raise's payload holds no owned cell (`CDerives.effRaise`'s
         -- `hd : o.A.Drop`).
         let kept : Tm := .case err u₀ (.case d u₁ (.drop .dead u₁ (.inj false u₀)) e₁ (.drop .dead u₀ sup))
-          e₀ (.case d u₂ (.drop .dead u₂ (.inj true e₀)) e₂ (.drop .superseded e₂ (.inj true e₀)))
+          e₀ (.case d u₂ (.drop .dead u₂ (.inj true e₀)) e₂ (.abandon .superseded e₂ (.inj true e₀)))
         return .letv d (.call fnD own) (.letv err' kept (← cancelK cp rest more err'))
     | .cellF => match own with
       | [c] => releaseOpt c (← cancelK cp rest more err)
@@ -912,7 +912,7 @@ def cancelK (cp : Pay) : Kont → List Var → Var → CM Tm
       | [h] => freeStackThen h (← cancelK cp rest more err)
       | _ => throw "LIR: a site's stack frame without its stack"
     | .letF _ _ (some r) => return abandons r own (← cancelK cp rest more err)
-    | _ => return drops .unused own (← cancelK cp rest more err)
+    | _ => return drops .dead own (← cancelK cp rest more err)
 
 /-! #### Resumption points -/
 
@@ -1905,6 +1905,21 @@ unrolls to (memoized by the type, so a binder nested in another, which names the
 its own function calling the outer's), and an array of recursive data one loop function that
 destroys each element and then frees the buffer once (`freeArr`), as Rust drops a `Vec`. -/
 
+/-- **A leaf of a destructor** (`dtorAt`'s `forget`, `drop_derives`) on `x`: a call of a function
+that drops it, one per LIR type, registered in `Prog.dtorFns`, the only functions where `Lint`
+admits a drop at the rule `dtor`. -/
+def leafDtor (x : Var) : CM Tm := do
+  let xT ← tyOf x
+  let key := s!"leaf {xT}"
+  match (← get).dtors[key]? with
+  | some fi => return .call fi [x]
+  | none =>
+    let fi ← reserveFn "dtor leaf"
+    modify fun s => { s with dtors := s.dtors.insert key fi, dtorFns := s.dtorFns.insert fi }
+    let u ← fresh xT
+    setFn fi { name := "dtor leaf", params := [u], ret := .unit, body := .drop .dtor u .unit }
+    return .call fi [x]
+
 mutual
 /-- The destructor of `A` on `x`: a term of type `1`. -/
 def genDtor (fuel : Nat) (A : VTy) (x : Var) : CM Tm := do
@@ -1914,7 +1929,7 @@ def genDtor (fuel : Nat) (A : VTy) (x : Var) : CM Tm := do
   match A with
   | .tensor A B => letpairM x fun a b => do
       let u ← fresh .unit
-      return .letv u (← genDtor f A a) (.drop .dtor u (← genDtor f B b))
+      return .letv u (← genDtor f A a) (.drop .dead u (← genDtor f B b))
   | .sum A B => do
     let .sum aT bT := (← tyOf x).peel | throw "LIR: a destructor's sum"
     let a ← fresh aT; let b ← fresh bT
@@ -1969,7 +1984,7 @@ def genDtor (fuel : Nat) (A : VTy) (x : Var) : CM Tm := do
     let pr ← fresh (.pair aT i32T)
     let a' ← fresh aT; let n' ← fresh i32T
     return .letv pr (.prim .size [x]) (.letpair a' n' pr (← lit32 0 fun z => pure (.call fi [a', z, n'])))
-  | _ => return .drop .dtor x .unit
+  | _ => leafDtor x
 
 /-- The destructor at a `μ` body's shape, recursive positions by the type's own destructor `fi`. -/
 def dtorShape (fuel : Nat) (fi : Nat) (F : FShape) (T : VTy) (w : Var) : CM Tm := do
@@ -1984,7 +1999,7 @@ def dtorShape (fuel : Nat) (fi : Nat) (F : FShape) (T : VTy) (w : Var) : CM Tm :
   | .varX => return .call fi [w]
   | .tensor F G => letpairM w fun a b => do
       let u ← fresh .unit
-      return .letv u (← dtorShape f fi F T a) (.drop .dtor u (← dtorShape f fi G T b))
+      return .letv u (← dtorShape f fi F T a) (.drop .dead u (← dtorShape f fi G T b))
   | .sum F G => do
     let .sum aT bT := (← tyOf w).peel | throw "LIR: a destructor's sum"
     let a ← fresh aT; let b ← fresh bT
@@ -2369,7 +2384,7 @@ def genKap (n : UInt32) (idx : Nat) (kT : LTy) (T : OutInfo) (outTy : LTy) (driv
       let cv ← fresh (cancelResTy cpIn)
       let body ← toResult .unit (cpIn.getD []) cM cPay cv
       aroundK hv (fun t => .letv cv (.sel k 1) t) fun hv sh => do
-        freeSh sh (drops .unused hv body)
+        freeSh sh (drops .dead hv body)
     setFn kcan { name := s!"kappa {n}.{idx} cancel", params := ps₂, body := b₂, ret := cT' }
   | k => throw s!"LIR: κ's cancel branch at {k}"
   return kc
@@ -2593,7 +2608,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
         | some pdT => do
           let w ← fresh .unit; let e₂ ← fresh pdT
           pure (Tm.letv d dTm (.case d w (.drop .dead w pass) e₂
-            (.drop .superseded e (← coercePay pd ps e₂ fun e' => pure (.inj true e')))))
+            (.abandon .superseded e (← coercePay pd ps e₂ fun e' => pure (.inj true e')))))
       return pre (.letv m (← conv fuel c₁ tM) (.case m x (← conv fuel (some x :: c₂) tN) e fin))
   | .effHandleV _ _ S E fs n A R u ks site _ tc te =>
     convHandle fuel ctx S E fs n A R u ks site tc te
@@ -2697,7 +2712,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
         if (← get).unfolds.contains fv then
           readFact "nuEta:unfold call"
           let others := (ctx.zipIdx.filter fun (_, k) => k != f && k != si).filterMap (·.1)
-          return drops .unused others (.app fv sv)
+          return drops .dead others (.app fv sv)
         else conv fuel ctx c
       | _ => conv fuel ctx c
     | _, _ => conv fuel ctx c
@@ -2919,7 +2934,7 @@ def convWorkK (fuel : Nat) (k : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : 
     | .app _ _ y _ _ u _ => do
       let (pre, c₁, c₂) ← splitCtx ctx u "app"
       let some (some yv) := c₂[y]? | throw "LIR: a resume's answer is not live"
-      return pre (drops .unused (live c₁) (leaf c₂ (some y) (← applyK F K args yv)))
+      return pre (drops .dead (live c₁) (leaf c₂ (some y) (← applyK F K args yv)))
     | _ => throw "LIR: a resume"
   match t with
   | .bind _ _ A _ u tM tN | .effLet _ _ A _ _ u tM tN =>
@@ -3053,7 +3068,7 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
   let siteTag ← fresh .unit
   if cellAt.isSome then readFact "effHandleV:kappa region"
   let dropAll (keep : Option Nat) (b : Tm) : Tm :=
-    drops .unused ((ctxs'.zipIdx.filter fun (_, i) => some i != keep).flatMap fun (c, _) => live c) b
+    drops .dead ((ctxs'.zipIdx.filter fun (_, i) => some i != keep).flatMap fun (c, _) => live c) b
   let clauseApp (cc : Ctx) (c : TExpr) (a : Var) : CM Tm :=
     match outM with
     | some _ => applyToK fuel cc c a
@@ -3256,7 +3271,7 @@ def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Qual × VTy × VTy)
         (← convDrive fuel S E fs n R ks site c₂ te T cR tR parts [some tv] (some parts.size) boxed))
   let ctxs : List Ctx := cR :: parts.toList.map (·.1) ++ [tailCtx]
   let dropAll (keep : Option Nat) (b : Tm) : Tm :=
-    drops .unused ((ctxs.zipIdx.filter fun (_, i) => some i != keep).flatMap fun (c, _) => live c) b
+    drops .dead ((ctxs.zipIdx.filter fun (_, i) => some i != keep).flatMap fun (c, _) => live c) b
   let pt ← rowPay (Row.ofEff n E 0 fs ++ S)
   let ps ← rowPay S
   let aT ← vty A
@@ -3334,7 +3349,7 @@ def convWork (fuel : Nat) (k : Nat) (ph : Pay) (ctx : Ctx) (t : TExpr) : CM Tm :
     | .app _ _ y _ _ u _ => do
       let (pre, c₁, c₂) ← splitCtx ctx u "app"
       let some (some yv) := c₂[y]? | throw "LIR: a resume's answer is not live"
-      return pre (drops .unused (live c₁) (leaf c₂ (some y) (← answer yv)))
+      return pre (drops .dead (live c₁) (leaf c₂ (some y) (← answer yv)))
     | _ => throw "LIR: a resume"
   match t with
   | .bind _ _ A _ u tM tN | .effLet _ _ A _ _ u tM tN =>
@@ -3506,7 +3521,7 @@ def convUse (fuel : Nat) (ctx : Ctx) (info : TInfo) (j : Jdg) (decl : Nat) (targ
       let kept := tp.slots.map (·.1)
       let extra := slots.filter fun (i, _) => !kept.contains i
       modify fun st => { st with scopeCopy := {} }
-      return drops .unused (extra.map (·.2)) (← renameTm m tp.tm)
+      return drops .dead (extra.map (·.2)) (← renameTm m tp.tm)
     conv fuel ctx body
   | none =>
     let tm ← conv fuel ctx body
@@ -3824,7 +3839,7 @@ def tailPass (s : CState) (loop : Nat × Var × OutInfo × Nat → Bool) : Excep
         setFn fn { name := "tail", params := [oP], body := .var oP, ret := M.ty }
   let ((), s') ← act.run s
   return ({ fns := s'.fns, codes := s'.codes, main := default, mainTy := default, ty := s'.ty,
-            data := s'.data, statics := s'.statics, lits := s'.lits, stackKs := s'.stackKs }, s')
+            data := s'.data, statics := s'.statics, lits := s'.lits, stackKs := s'.stackKs, dtorFns := s'.dtorFns }, s')
 
 /-- **State cells** (SPEC §49): each machine operation whose suspended computation's closure class
 holds itself (`recursive`, the layouts' classes that keep their environment on the heap, §35)
@@ -3837,7 +3852,7 @@ def cellPass (s : CState) (recursive : Nat → Bool) : Except String (Prog × CS
         let _ ← genMach m ops
   let ((), s') ← act.run s
   return ({ fns := s'.fns, codes := s'.codes, main := default, mainTy := default, ty := s'.ty,
-            data := s'.data, statics := s'.statics, lits := s'.lits, stackKs := s'.stackKs }, s')
+            data := s'.data, statics := s'.statics, lits := s'.lits, stackKs := s'.stackKs, dtorFns := s'.dtorFns }, s')
 
 /-- **The levels whose state cell is passed on** (SPEC §50), from a conversion's machines and the
 layouts' recursive classes (`recursive`, as `cellPass` reads them): each machine whose body takes
@@ -3900,6 +3915,6 @@ def convertProg (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CT
   let ((m, mT), s) ← (convMain exts ctx t C arg loops).run
     { census, direct, mach, threaded, stacked, classes }
   return ({ fns := s.fns, codes := s.codes, main := m, mainTy := mT, ty := s.ty, data := s.data,
-            statics := s.statics, lits := s.lits, stackKs := s.stackKs }, s)
+            statics := s.statics, lits := s.lits, stackKs := s.stackKs, dtorFns := s.dtorFns }, s)
 
 end Backend2

@@ -459,4 +459,24 @@ def interpStage (stage : String) (k : Except String Backend.CheckedProg) (input 
   | "lflat-counts" => Backend.Flat.interp Backend.runFuel (← flatOf (← k) true) input args
   | _ => throw s!"unknown stage `{stage}`"
 
+/-- Whether a node of `t` drops at the rule `stackK`. -/
+def Tm.dropsStackK : Tm → Bool
+  | .drop r _ b => r == .stackK || b.dropsStackK
+  | .copy _ _ _ b | .abandon _ _ b => b.dropsStackK
+  | .letv _ e b => e.dropsStackK || b.dropsStackK
+  | .letpair _ _ _ b => b.dropsStackK
+  | .case _ _ b₁ _ b₂ => b₁.dropsStackK || b₂.dropsStackK
+  | _ => false
+
+/-- `UNPROVED:` (#746 item 5, F3) **a stack machine's drop of a level's suspended computation**
+leaks nothing: every checked program with no externs whose `main` is a closed `CDerives`
+computation of `F 1`, and whose LIR drops at the rule `stackK`, runs at the LIR to `()` with no
+object left, as the source does (`adequacyD`). Its kernel statement is step 4's. -/
+def StackKSound : Prop :=
+  ∀ (k : Backend.CheckedProg) (p : Prog) (s : CState) (fuel : Nat) (o : Backend.Output),
+    k.io = none → CDerives BoCa.Lifetime.LifeCtx.empty [] k.main.e (.comp (.ret .unit)) →
+    lirOf k = .ok (p, s) → (p.main.dropsStackK || p.fns.any (·.body.dropsStackK)) = true →
+    runLIR p fuel [] = .ok o →
+    o = Backend.Output.mk' ByteArray.empty ByteArray.empty (Backend.report .unit 0)
+
 end Backend2
