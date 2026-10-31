@@ -742,6 +742,73 @@ theorem stickyScope_eval :
       | _ => false) = true := by
   decide
 
+/-! ### `effThenDiv` reached: a finaliser that ticks, under `div_fuel`
+
+`PinLaw.fin` is asserted only at a configuration a closed program reaches. Here
+`return () then x. x unwind (tick; ())` is at the row of `Div` alone, its finaliser's row holding
+`Div`, typed by `CDerivesP.effThenDiv`; `div_fuel` handles the row, so the closed program is at
+`F 1`. Inside a task, `effHandleV`'s `hdv` refuses a `Div` row, so no task body reaches the rule
+(the nursery, #743, needs that relaxed). -/
+
+/-- `tick; ()`. -/
+def tickUnit : Expr := .app (.val (.lam (.val .unit))) (performE (opArgE divEff 0 (.val .unit)))
+
+/-- `return () then x. x unwind (tick; ())`. -/
+def thenTick : Expr := thenE (.var 0) tickUnit (.val .unit)
+
+/-- The callback `λ_. thenTick`. -/
+def thenTickCb : Expr := .val (.lam thenTick)
+
+theorem not_unrD_tick : ¬ Row.UnrD [tickSig] := by
+  rintro ⟨o, ho, hu⟩
+  simp only [List.mem_singleton] at ho
+  subst ho
+  rcases hu with hu | ⟨hc, -⟩
+  · cases hu
+  · simp [capB, tickSig] at hc
+
+theorem d_tickUnit {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
+    CDerivesP Δ Γ tickUnit (.comp (CTy.effOf [tickSig] .unit)) := by
+  refine .effLet (A := nextTy) (deadSplit hΓ) (fun ⟨o, ho, hq⟩ => ?_) (fun ⟨o, ho, hq⟩ => ?_)
+    (.effPerform (o := tickSig) rfl rfl rfl (.unitI hΓ.toP)) ?_
+  · simp [tickSig] at ho; subst ho; exact absurd rfl hq
+  · simp [tickSig] at ho; subst ho; cases hq
+  · exact .effSub (RowLe.nil _) (.ret (.unitI (.drop rfl hΓ.toP)))
+
+/-- **`[then]` with a ticking finaliser is typed**, by `effThenDiv`. -/
+theorem d_thenTick {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
+    CDerivesP Δ Γ thenTick (.comp (CTy.effOf [tickSig] .unit)) := by
+  refine .effThenDiv (A := .unit) (SM := []) (SD := [tickSig]) (deadSplit hΓ)
+    (by intro o ho; simp at ho; subst ho; decide) (by simp [Row.Uniq])
+    (fun h => absurd h not_unrD_tick) (RowLe.nil _) (RowLe.refl _)
+    (fun _ _ _ _ h => by simp [Row.find] at h) (fun _ _ h => absurd h List.not_mem_nil)
+    (fun _ h => absurd h List.not_mem_nil) (.effSub (RowLe.nil _) (.ret (.unitI hΓ.toP))) ?_ ?_
+  · exact .effSub (RowLe.nil _) (.ret (.var (.here hΓ.toP)))
+  · exact d_tickUnit (Ctx.Dead.cons hΓ)
+
+/-- `df ← div_fuel; df (thenTickCb, k)`. -/
+def thenDivFuel (k : UInt32) : Expr :=
+  bindE (.pair thenTickCb (.val (Val.i32 k))) (bindE (.val divFuelV) (.app (.var 0) (.var 1)))
+
+/-- **The witness**: a closed `CDerivesP` derivation at `F 1`, `div_fuel` handling the row, that
+uses `effThenDiv` at a finaliser row holding `Div`. -/
+theorem d_thenDivFuel (k : UInt32) :
+    CDerivesP LifeCtx.empty [] (thenDivFuel k) (.comp (.ret .unit)) := by
+  refine .bind .nil (.ret (.tensorI .nil (.thunkV rfl (.lamDead (d_thenTick (.cons .nil))))
+    (.lit (.i32 k) .nil))) ?_
+  refine .bind (.right .nil)
+    (.ret (.bangE (.divFuel [] .unit (fun _ h => absurd h List.not_mem_nil) (.cons .nil)))) ?_
+  exact .app (.left (.right .nil))
+    (.force (C := .arr (.tensor (.thunk (.arr .unit (CTy.effOf (tickSig :: []) .unit))) (.int .w32))
+      (CTy.effOf [] .unit)) (.here (.cons .nil)))
+    (.there (.here .nil))
+
+/-- Under `PinLaw`, every run of the witness continues to `()` at the empty memory. -/
+theorem thenDivFuel_runs (hPin : PinLaw (ℍ := ℍ)) (k : UInt32) {μ₁ : Heap} {e₁ : Expr}
+    (hs : Steps (ℍ := ℍ) Adequacy.emptyMem (thenDivFuel k) μ₁ e₁) :
+    Steps (ℍ := ℍ) μ₁ e₁ Adequacy.emptyMem (.val .unit) :=
+  adequacyD_pin hPin (d_thenDivFuel k) hs
+
 /-! ### Runs
 
 Memory: the flag at `0`, a log cell at `1` (both allocated first), then the lend's cell. The program

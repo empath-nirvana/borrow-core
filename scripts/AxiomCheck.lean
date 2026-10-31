@@ -690,6 +690,8 @@ import Backend2.Lint
 #print axioms BoCa.Fig16.LogRel.Core.AwaitCancel.d_stickyScope
 #print axioms BoCa.Fig16.LogRel.Core.AwaitCancel.stickyScope_ends
 #print axioms BoCa.Fig16.LogRel.Core.AwaitCancel.stickyScope_eval
+#print axioms BoCa.Fig16.LogRel.Core.AwaitCancel.d_thenDivFuel
+#print axioms BoCa.Fig16.LogRel.Core.AwaitCancel.thenDivFuel_runs
 #print axioms Frontend.Check.checkProgram_soundP
 #print axioms Frontend.Check.checked_sem_pin
 #print axioms Frontend.Check.checked_runs_pin
