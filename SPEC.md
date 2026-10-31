@@ -5239,6 +5239,19 @@ from `[perform]`, `case`, `[raise]` and `[let]`. `PinLaw` gains a field and wide
 - The surface: no `await` form, and `lib/async.bc`'s tasks are `νX. F(A + Task) & F 1`.
 - The lowering of a finaliser that suspends (§27 *Lowering*).
 
+### Round 3: level-triggered cancellation (spike only)
+
+The cancelled state is the task handler's state, a flag the `await` clause reads. In a cancelled
+scope `await_n` runs to `raise_n (1, ())` in every context, and the memory is unchanged
+(`experiments/spike750/Spike750/Trio.lean`, `await_cancelled`). A shielded wait is an operation
+whose clause reads no flag. The swallowing example is typed by the rules above with no new
+premise. A caught cancel is raised again at the next cancellable wait.
+
+- `Row.CancelTotal` stops being the reading of termination: code after a catch is in no cancel
+  row.
+- The replacement asks for no `Div` where the row has a cancellable wait (`Row.CancelEnds`). That
+  it implies a cancel ends is open.
+
 ## 30. Entry 29 — effectful blocks and async tasks at the surface
 
 ### Motivation

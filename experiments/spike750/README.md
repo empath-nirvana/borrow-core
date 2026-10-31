@@ -161,3 +161,48 @@ run.
      nothing consumes them: a task is not `VTy.Drop` (`not_drops_task`), so `hW` refuses them
      across `exhausted()`. The only other rule that absorbs a context is `absurd` after a pure
      `F 0`, which is a `Div` loop or a halting primitive that the kernel does not have.
+
+# Round 3: level-triggered cancellation
+
+`Spike750/Trio.lean`. The cancelled state is the task handler's state: a flag cell that the
+`await` clause reads (`stickyAwait`). Live, the clause hands `κ` out. Cancelled, it resumes `κ`
+with `inr ()` at once. The canceller sets the flag, then resumes the stopped `κ` with `inr ()`.
+No clause clears the flag. A shielded wait is `complete` (operation `2`), whose clause reads no
+flag. No rule, step, primitive or `PinLaw` field is added.
+
+- **The law** (`await_cancelled`). In every context, at a memory where the flag is cancelled,
+  `hnd (n, H) K[await_n]` runs to `hnd (n, H) K[raise_n (1, ())]`, and the memory afterwards is
+  the memory before. The next wait therefore raises again. Its premises hold together
+  (`await_cancelled_inst`). A shielded wait's catch does not depend on the flag (`shield_catch`,
+  `shield_catch_inst`).
+- **Typing.**
+  - The swallowing example `handle_3 (await_1 then x. x unwind raise_3) with {3 _ → ()}; await_1`
+    is typed by the existing rules (`d_swallow`). It is in the relation by `fundamentalC` as it
+    stands (`sem_swallow`), and its row is one `Row.ResumeOC` admits (`resumeOC_swallow`).
+  - The relation quantifies over every answer at every stop. So `ResumeOC`, `PinStop`,
+    `[await-c]` and the cancel rows need no change for a continuation that catches the cancel and
+    reaches another wait.
+- **Runs.** Each answers `(task answer, log)`. `inl 7` is the `cancelled` clause. For the swallowing,
+  retry and shield runs, the falsifier with lend tags reports `live 0`.
+
+  | program | level-triggered | one-shot (round 2) |
+  |---|---|---|
+  | swallowing example | `swallow_sticky`: `inl 7`, re-raised at the second wait | `swallow_oneShot`: `inl 5`, the cancel lost |
+  | retry, two attempts, then give up and wait | `retry_sticky`: `inl 7`, log 3 (each wait raised) | `retry_oneShot`: `inl 5`, log 1 |
+  | `must_close` closed by the finaliser | `close_sticky`: `inl 7`, no cell left | |
+  | finaliser waits, then closes | `closeLate_sticky`: a cell left. Typing refuses it (`not_drops_ref`, `rowSw_weak`) | |
+  | shielded completion wait in the finaliser | `shield_sticky`: completes, log 42 | |
+  | the same finaliser with `await` | `unshielded_sticky`: raises at once, log 0 | |
+
+- **Termination.**
+  - `Row.CancelTotal` reads only the finalisers between a wait and the `cancelled` clause.
+    Code after a catch is in no cancel row: `cancelTotal_swallowLoop` holds at a row with `Div`
+    (`divB_swallowLoop`).
+  - The replacement, `Row.CancelEnds`, asks in addition for no `Div` where there is a
+    cancellable wait (`cancelEnds_swallow`, `not_cancelEnds_swallowLoop`).
+  - That `CancelEnds` implies a cancel ends is read off `ewpTS`, a least fixed point at rows
+    without `Div`. It is not proved here.
+- **Not built.**
+  - The scheduler's typing. A clause that reads a cell captures a non-persistent value, which
+    `[handle]`'s `DeadP` does not admit. The typed form would be state-passing, as `take n`'s is.
+  - The swallowing example's typing inside a lend: the view must be threaded through `d_swallow`.
