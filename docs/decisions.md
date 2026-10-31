@@ -913,3 +913,15 @@ Each entry: the decision, and why. Newest last.
       #564 does not lift it.
     - The theorem that every run of a finaliser terminates, the handler clauses its operations
       reach included, is open (SPEC §14 *Open*).
+70. **Allocation is an effect (the user's decisions of 2026-09-28, 2026-10-20 and 2026-10-29; #763; not built).**
+    - Every heap allocation is written in the program. The marker need not be `box`: `box`,
+      `buf_new`, `array_tab` and any allocator a library writes all count. No elaboration rule
+      inserts an allocation the program did not write, and recursive data that needs no
+      allocation is a goal.
+    - Allocation is an effect. The heap is its outermost handler, a linear state handler, and
+      arenas are nested handlers.
+    - Rows carry it, inferred as `Div` is (decision 67), and it is visible in signatures.
+    - A buffer's growth inside `push` is written allocation once the buffer is library code in the
+      language: the growth is in that code, and `push`'s row carries the effect.
+    - Not built: the effect in rows, its inference, and the handlers. SPEC §35 introduced none of
+      it on purpose and points to it (§35 *Open*).

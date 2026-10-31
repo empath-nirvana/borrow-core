@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.22 · 2026-10-31
+Version 1.23 · 2026-10-31
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -6571,6 +6571,14 @@ the falsifier passes on the corpus.
 - An owned fold over a tree still recurses natively (Backend README, *Stack*).
 - Placing the objects that remain by escape analysis (stack, frame arena or heap): the scoped
   cells are placed by the elaborator's scope, not by an analysis.
+- **Allocation is an effect (decision 70, #763): decided, not built.** Every heap allocation is
+  written in the program (not necessarily as `box`). The heap is the outermost handler of the
+  effect, a linear state handler, and arenas are nested handlers. Rows carry the effect, inferred
+  as `Div` is, and it is visible in signatures. This entry introduces none of it. Until rows carry
+  it, nothing downstream can read from a function's type whether it allocates.
+- A buffer's growth inside `push` is an allocation the source does not write while `push` is a
+  primitive. When the buffer is library code written in the language, the growth is a written
+  allocation there, and `push`'s row carries the effect (#763).
 
 ---
 
@@ -10510,7 +10518,7 @@ relation or the machine.
 
 ## Changelog
 
-- **1.22** (2026-10-31) — §50 (#760): no borrow fact at a function the machine conversion makes.
+- **1.23** (2026-10-31) — §50 (#760): no borrow fact at a function the machine conversion makes.
   The cancel step of `corpus/async-r1-cancel-finaliser-writes.bc` took its `mut` borrow as
   `ptr noalias nonnull dereferenceable(4)` beside a `ptr` to its owner, one cell; it wrote through
   the borrow and then freed the cell through the owner, which is `noalias` undefined behaviour
@@ -10524,6 +10532,8 @@ relation or the machine.
   and `bcc trusted` lists at each function with a fact; `scripts/native-facts.sh` reads `Fn.facts`
   per function. The helpers' facts are cleared too (*Open*). No change to the language, the
   kernel, the checker or a program's output.
+- **1.22** (2026-10-31) — §35 *Open* (#763): records decision 70, allocation as an effect, as decided
+  and not built, and where a buffer's growth in `push` stands under it. No change to the language.
 - **1.21** (2026-10-31) — §29a new, §29, §19, §27 (#750, unit A): cancellable waits. The marker
   `OpSig.rc` (in `CTy.eff`, compared by `OpSig.Sig`, read by neither the relation nor the machine,
   `semC_effOf_rc`); `[await-c]` (`CDerives.effAwait`, proved by `await_compatC`), with `[perform]`
