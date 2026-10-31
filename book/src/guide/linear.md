@@ -31,21 +31,30 @@ main -> 1 =
 cell in `body`, and the run ends with nothing allocated.
 
 A shared borrow `imm 'a A` is linear too. Its derived drop ends the loan, and it also has a
-**derived copy**: one shared borrow can be split into two, which is how the library's view
-functions read a view twice. The checker doesn't insert copies, so a body that uses a borrow
-twice is refused:
+**derived copy**: one shared borrow can be split into two. A use of a borrow after its first is
+its derived copy, which the checker inserts the way it inserts a derived drop:
 
-```bc,reject
+```bc
+include textio
+
+-- Reads one borrow twice.
 fn twice<'a>(r: imm 'a i32) -> i32 = *r + *r
 
-main -> i32 =
-  let c = alloc(21);
-  let n = twice(&c);
-  n + free(c)
--- expect: 1:38: `r` is used twice here, and its type `imm 'a i32` is linear
+-- Passes one borrow on to two calls.
+fn both<'a>(r: imm 'a i32) -> i32 = twice(r) + twice(r)
+
+main -> 1 =
+  let c = alloc(5);
+  let n = both(&c);
+  print_dec(n + free(c));
+  print_byte(b'\n')
+-- output: 25
 ```
 
-Read the contents once instead: `let v = *r; v + v`.
+In `twice`, the checker copies `r` before the addition, so each `*r` reads through its own copy;
+in `both`, it copies `r` before the two calls. `bcc copies <file>` lists every copy it inserted.
+The copy is the borrow's alone: a second use of a `mut` borrow, an owned value or a declared
+value is still an error, "`x` is used twice here, and its type `…` is linear".
 
 ## Linear types with no derived drop
 
@@ -302,9 +311,43 @@ main -> i32 = match guarded(7) { inl v -> v | inr e -> 0 }
 -- expect: 12:13: `g`, of type `i32 * tok`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell: `Guard` holds the field `lock`, marked `must_close`; pass it to `release` before the computation that may abort, or close it in a `finally`
 ```
 
-The `finally` version is the one in the previous section. Holding the value in a handler's
-state doesn't carry it across an error either: an error that passes the handler would leave its
-state behind, and the checker refuses that too.
+The `finally` version is the one in the previous section.
+
+A handler's state can carry a declared value across an abort only when the handler handles the
+abort itself and consumes the state in that clause. Here `abort_txn` is one of the handler's own
+operations, and its clause rolls the transaction back:
+
+```bc,check
+data Txn = { id: i32, must_close(commit) log: i32 }
+
+fn write(t: Txn, x: i32) -> Txn = match t { Txn { id, log } -> Txn { id: id, log: log + x } }
+
+fn commit(t: Txn) -> i32 = match t { Txn { id, log } -> id * 100 + log }
+
+fn roll_back(t: Txn) -> 1 = match t { Txn { id, log } -> () }
+
+effect Log { must_resume ctl log(x: i32) -> 1; ctl abort_txn(e: i32) -> never }
+
+-- Commits the transaction when the block answers, and rolls it back when it aborts.
+handler in_txn(mut t: Txn): Log, i32 -> i32 = {
+  return(a) = a + commit(t);
+  log(x, k) = { t = write(t, x); k(()) };
+  abort_txn(e) = { roll_back(t); 0 - e }
+}
+
+fn work(x: i32) -> i32 with Log =
+  log(x);
+  if x > 100 { abort_txn(x) } else { x * 6 }
+
+main -> i32 * i32 =
+  let a = with in_txn(Txn { id: 7, log: 0 }) { work(5) };
+  let b = with in_txn(Txn { id: 8, log: 0 }) { work(500) };
+  (a, b)
+```
+
+An abort that passes through the handler to one further out would leave the state behind, and
+the checker refuses it with the message above. That is `in_txn` from the previous section with
+`work` raising a `Fail[i32]` that only an outer `to_result` handles.
 
 ## Compared with Rust
 
