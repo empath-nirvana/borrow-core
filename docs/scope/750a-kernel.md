@@ -480,3 +480,20 @@ whatever."
    - the stale theorem name is replaced;
    - the §2 rows are added;
    - the untied domain is stated in §1.4 and §6.6.
+
+## 8. Build outcome
+
+- **`PinFin` at `Div` rows is asserted as `PinLaw.fin`. It is not derived, and no obstruction has been
+  verified.** What was done is reading, not a Lean attempt. The route found, which stays open:
+  - the raise branch of `ewp_frame_then_or` takes the finaliser's run as a hypothesis;
+  - the finaliser's run at `cwp (Row.tab Σ_D)` is moved to `Σ` by `effWp_sub`, then framed by
+    `cwp_bind` at the seq-raise frame (whose value is a stop of `Σ`), then `cwp_out`;
+  - a `closing_then` at `closeSig :: Σ_D` carries the finaliser's `Closing`;
+  - `cwp_then`'s coinduction then runs over both.
+
+  This was judged to be more than the budget (about 300–400 lines in `EffFin.lean`). The reachability
+  witness `d_thenDivFuel` exists, as §1.5 required.
+- **`stickyScope_ends`** is proved at the closed instance, through `adequacyD_obs`. The general
+  `CancelEnds` theorem is not proved, and nothing is asserted in its place.
+- **The `effHandleT`/`effHandleL` rules have no `cs`.** A marked operation reaches a handler only through
+  `effHandleV`/`effHandleVB`, which are the rules the state-passing scheduler fits.
