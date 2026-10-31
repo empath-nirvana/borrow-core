@@ -1356,33 +1356,47 @@ loan ends, the value is not consumed.
 
 ### Every insertion site cites its rule
 
-Every stage that inserts a drop, a copy or an abandonment names the kernel rule it emits, and
-`scripts/PinSites.lean` (a gate step) checks the names (#746):
+Every stage that inserts a drop, a copy or an abandonment names the kernel rule it emits.
+`scripts/check-pins.sh` (a gate step) runs `scripts/PinSites.lean`, which checks that every rule
+names declarations that exist and, where it is not proved, a `def … : Prop` stating what it needs;
+that each backend site builds nodes at exactly the rules its entry lists, and no definition chooses
+a rule apart from the node it builds; and that the elaboration emits the copy, forget and burn
+constants only at the sites it lists. The script's negative tests (a site the table omits, a rule
+chosen in a definition of its own) must be refused (#746):
 
 - **The checker** inserts a drop only as a `dtor` node (`rDrop`, `finNode`), typed by
-  `TDerivesP.dtor`, which carries `HasDtor`; erased, it is `drop_derives`.
+  `TDerivesP.dtor`, which carries `HasDtor`; erased, it is `drop_derives`. Every checked program
+  projects to `CDerivesP` (`checkProgram_soundP`), so the checker needs no table of sites.
 - **The elaboration** emits `tok_burn` only where it compiles a written `match` (`Data.compile`,
-  through `Data.burnBind`), and no copy or drop of its own: a field read, `*e` and a `for` over an
-  owned array copy only at an unrestricted type (`Class.of`), and the checker inserts every drop.
-  An operation is abortive by the kernel's `isAbortive` (`OpDecl.abortive`, `Sugar`'s clause
-  types).
+  through `Data.burnBind`), `array_copy` only in a template's view (`CDerives.arrCopy`), and no
+  other copy or drop of its own: a field read, `*e` and a `for` over an owned array copy only at an
+  unrestricted type (`Class.of`), and the checker inserts every drop. An operation is abortive by
+  the kernel's `isAbortive` (`OpDecl.abortive`, `Sugar`'s clause types).
 - **Backend2**'s `drop`, `copy` and `abandon` nodes carry their rule (`Backend2.DropRule`,
   `CopyRule`, `Abandon`), and `Lint` checks each rule's premise on the variable's type at every
-  node: weakening and a split's `dup` at an unrestricted type; the `forget` constants at a borrow,
-  `Unk` or `[Imm A]`; a destructor's leaves, `[Mut A]` among them (`HasDtor.arrayMut`), only inside
-  a `dtor` node's destructor; the `copy` constants and the derived copy (`copy_derives`) at
-  `DerivedCopy`; a superseded raise payload at a type with no owned cell (`effRaise`'s `hd`);
-  `[let]`'s abort (`hW`) and `⊤` at `abandon`. A live slot no part's mask holds is dropped at the
-  rule `unused`, at a persistent type only: the weakening its part applies at its leaves
-  (`Ctx.DeadP.drop`). A slot the kernel absorbs instead (`⊤`, `absurd`, an abort) at another type
-  is refused by `Lint`, not dropped; that no checked program has one is `UNPROVED:`
-  (`Check.SplitMasks.NeitherAbsorbed`, which `neitherAbsorbed_of` reduces to
-  `Check.UnmentionedAbsorbed`). The cancel of a must-resume `κ`
-  (cancel row `⊤`) is unreachable: it has no derived drop (`kTy_lin`). `[nil-dead]` is at a context
-  with no live slot.
+  node:
+  - weakening (`dead`: a leaf's other slots, a `use`'s unread slots, a handler's values by
+    `effHandleV`'s `DeadP`, a pure frame's arguments at an abort, the machine's own words) and a
+    split's `dup`, at an unrestricted type;
+  - the `forget` constants at a borrow, `Unk` or `[Imm A]`;
+  - a destructor's leaves, `[Mut A]` among them (`HasDtor.arrayMut`), only in a function the
+    destructor calls to drop one (`Prog.dtorFns`, checked per function);
+  - the `copy` constants and the derived copy (`copy_derives`) at `DerivedCopy`;
+  - `abandon` at `[let]`'s abort (`hW`) and at a superseded raise payload (`effRaise`'s `hd`), at a
+    type with no owned cell; at `⊤`, anything.
+  A live slot no part's mask holds is dropped at the rule `unused`, at a persistent type only: the
+  weakening its part applies at its leaves (`Ctx.DeadP.drop`). A slot the kernel absorbs instead
+  (`⊤`, `absurd`) at another type is refused by `Lint`, not dropped; that no checked program has one
+  is `UNPROVED:` (`Check.SplitMasks.NeitherAbsorbed`, which `neitherAbsorbed_of` reduces to
+  `Check.UnmentionedAbsorbed`). A must-resume `κ`'s cancel component is `⊤`, which has no
+  elimination: `Lint` refuses an observation of it, and its cancel entry is unreachable (`kTy_lin`).
+  `[nil-dead]` is at a context with no live slot. A stack machine's drop of a level's suspended
+  computation is the rule `stackK`, `UNPROVED:` (`Backend2.StackKSound`, F3).
 - **The old backend** converts the erased term, so its `copy` and `drop` carry a licence
-  (`Backend.Clos.Licence`) naming the rule each site relies on; those rebuilt from occurrences are
-  marked `UNPROVED:` with what is not read.
+  (`Backend.Clos.Licence`) naming the rule each site relies on. None is read from the typed term:
+  each is `UNPROVED:`, its statement `Clos.LicenceSound` at it (a checked program whose closure IR
+  has a node at the licence runs there to `()` with no object left). The licences are not checked
+  against the program.
 
 ### Soundness
 
@@ -9392,10 +9406,10 @@ changes (`Backend2/Types.lean`, `Syntax.lean`): `LTy` gains `bang`, `!A`, which 
 - **Drops.** Every `drop` carries its rule (`DropRule`), and `Lint.dropsAt` checks its premise
   (§12, *Every insertion site cites its rule*): weakening at a persistent type
   (`Ctx.DeadP.drop`); a `forget` constant at a borrow, `Unk` or `[Imm A]`; a destructor's leaves,
-  `[Mut A]` among them (`HasDtor.arrayMut`), inside a `dtor` node's destructor only; a live slot no
-  mask holds at a persistent type (the weakening its part applies at its leaves); a superseded
-  raise payload at a type with no owned cell and no opaque value (`LTy.drops`, `VTy.OwnFree`'s
-  image; `ofV_drops`). The one exception is a stack machine's drop
+  `[Mut A]` among them (`HasDtor.arrayMut`), in a destructor function only (`Prog.dtorFns`); a live
+  slot no mask holds at a persistent type (the weakening its part applies at its leaves). A
+  superseded raise payload is abandoned, not dropped, at a type with no owned cell (`LTy.drops`,
+  `VTy.OwnFree`'s image; `ofV_drops`). The one exception is a stack machine's drop
   of a level's suspended computation, whose state is on the task stack (SPEC §52): a closure,
   which no type lets a term discard, at the rule `stackK`, which admits only `Prog.stackKs`, and
   marked `UNPROVED:` at the conversion.
@@ -10199,13 +10213,16 @@ relation or the machine.
 ## Changelog
 
 - **1.16** (2026-10-30) — §12, §19, §59 (#746, step 3): every site that inserts a drop, a copy or
-  an abandonment cites its kernel rule, checked by `scripts/PinSites.lean`. Backend2's `drop` and
+  an abandonment cites its kernel rule, checked by `scripts/check-pins.sh`. Backend2's `drop` and
   `copy` carry their rule (`DropRule`, `CopyRule`) and `Lint` checks each premise: an `imm` copy
-  only at the constants or `copy_derives`, a `[Mut A]` drop only inside a destructor
-  (`HasDtor.arrayMut`), a live slot no mask holds at the rule `unused` at a persistent type only
-  (that no checked program absorbs one of another type is `UNPROVED:`,
-  `Check.SplitMasks.NeitherAbsorbed`); a must-resume `κ`'s cancel is unreachable; `[nil-dead]`
-  is at a context with no live slot. The old backend's `copy` and `drop` carry a licence. The
+  only at the constants or `copy_derives`, a `[Mut A]` drop only in a destructor function
+  (`HasDtor.arrayMut`, `Prog.dtorFns`, which a destructor calls to drop each leaf), a live slot no mask
+  holds at the rule `unused` at a persistent type only (that no checked program absorbs one of
+  another type is `UNPROVED:`, `Check.SplitMasks.NeitherAbsorbed`); a superseded raise payload is
+  abandoned (`Abandon.superseded`, `effRaise`'s `hd`); no `⊤` component is observed, and a
+  must-resume `κ`'s cancel is unreachable; `[nil-dead]` is at a context with no live slot. The old
+  backend's `copy` and `drop` carry a licence, each `UNPROVED:` with its statement
+  (`Clos.LicenceSound`). The
   elaboration reads abortive operations by the kernel's `isAbortive`. The qualifier `linear ctl` is
   spelled `must_resume ctl`, and `linear` is no longer a keyword. `corpus/reject/linear-*`: a
   declared type at each construct that inserts an operation, each refused by a kernel fact.
