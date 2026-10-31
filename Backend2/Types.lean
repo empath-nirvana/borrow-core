@@ -140,6 +140,9 @@ types for a representation compares them with `!` erased throughout (`unbang`, `
 reads `!` itself, and the conversion's keys keep it (a `use` body's, a destructor's: a key fixes
 the LIR types of what it converts). -/
 
+/-- The address of a task stack's frame (SPEC §52): one word. -/
+def LTy.addr : LTy := .int .w64
+
 /-- The type with its top-level `!`s removed: what the value is represented as. -/
 def LTy.peel : LTy → LTy
   | .bang a => a.peel

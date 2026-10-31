@@ -697,9 +697,9 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
           -- holds no resource (`vP_empty_of_persistent`), a `VTy.OwnFree` one no owned cell
           -- (`vC_noOwn_of_ownFree`), a family of borrows none.
           -- UNPROVED: that a variable's LIR type is the image of its node's checked type (by
-          -- construction in `Convert`, not proved), and the stack machines' drops of a level's
-          -- suspended computation, which no type licenses (`Prog.stackKs`, at `genStackMach`). If
-          -- either fails, an owned cell is aliased (freed twice) or leaks.
+          -- construction in `Convert`, not proved), and the stack machines' hand-over of a level's
+          -- suspended computation, which no type licenses (`StackKHandOver`, at `genStackMach`).
+          -- If either fails, an owned cell is aliased (freed twice) or leaks.
           let (wv, tv) := match shape[v]! with
             | .unit | .zero | .unk => (0, true)
             | .int _ | .opq | .ref _ | .imm _ | .mut _ => (1, true)
