@@ -35,8 +35,10 @@ taken as an escape hatch in the proof; then a test suite that tries to break it.
 - **The assertion is `PinLaw`** (§4). It is a `Prop` over **typed programs**: every quantifier
   over code ranges over derivations of the extended judgment `PDerives`. In one sentence:
   *code that Core's rules (plus R1 and R2) type, suspended while it holds views of a lend, is
-  again in the relation when the place is lent afresh.* It is stated as the compatibility lemmas
-  of R1 (`PinStop`) and R2 (`PinLoop`) themselves, and is tested by programs (§6), not proved.
+  again in the relation when the place is lent afresh.* It is stated as two schemas, the
+  compatibility lemmas of the relaxed lend at each lend form (`LendFrame`; R1 is `ref`) and of
+  the per-observation lend (`LoopFrame`; R2). `PinStop` and `PinLoop` are derived from them. It is
+  tested by programs (§6), not proved.
 - **PROVED from `PinLaw`, with no `sorry`:** `fundamentalC_pin`, `adequacyC_pin`,
   `adequacyD_pin`, `adequacyD_pin_safe` (no run is stuck). Programs that use neither relaxed rule keep `fundamentalC` and `adequacyD`
   unconditionally (`PDerives.ofC`).
@@ -231,7 +233,7 @@ contain another). Neither adds a machine step.
   changes: `Row.ResumeO` (resuming, not unrestricted, empty cancel row, answering `1`, argument
   closed data with no `U`) instead of `Row.Unwind`.
 - Its premise is the callback's **derivation**, in `PDerives`.
-- Its compatibility lemma is `PinLaw.stop` (§4).
+- Its compatibility lemma is `PinLaw.stop`, derived from `LendFrame` at `ref` (§4).
 - R1 lends `mut` only. A shared borrow of a task-local place is lent `mut` and read: the place is
   owned by the task, so exclusivity costs nothing. An `imm` R1 (and `withload`, and a fold whose
   algebra suspends, `corpus/pending/async-borrow.bc`) is OQ-2.
@@ -252,7 +254,7 @@ contain another). Neither adds a machine step.
 - **`imm` only.** Each observation hands the step a fresh view beside the state's. Two `imm`
   views of one place are sound together; two `mut` views are not (`reject/n6`). A `mut` R2 needs
   an interface that hands no fresh view once the state holds one (OQ-3).
-- Its compatibility lemma is `PinLaw.loop`, ASSERTED (§4.3).
+- Its compatibility lemma is `PinLaw.loop`, derived from `LoopFrame`, ASSERTED (§4.3).
 
 **R2 is what makes "unbounded loops" fit.** A computation of `F_Σ A` is total: `ewpTS` is a
 least fixed point, so a borrow callback that performs `await` forever is not in the relation.
@@ -311,8 +313,59 @@ held borrow (`n4`). Both are design limits with open questions (OQ-3, OQ-1), not
 
 ### 4.1 The statement
 
-`experiments/AsyncCap/AsyncCap/PinLaw.lean`. `PinLaw` is a `structure … : Prop` with two fields.
+`Core/PinLaw.lean` (first drafted in `experiments/AsyncCap/AsyncCap/PinLaw.lean` over `PDerives`,
+which is Core's `CDerivesP`). `PinLaw` is a `structure … : Prop` with two fields, each a schema.
 It is never an axiom: it is a hypothesis of the theorems that use it.
+
+```lean
+/-- The lend forms of the relaxed `withborUV` lend. `ref` is R1: `Ref T` lent as `Mut 'x T`. -/
+inductive LendForm (Δ : LifeCtx) (x : LifeVar) (b : Lifetime.Life) :
+    VTy → VTy → VTy → LifeCtx → Prop
+  | ref {T B : VTy} : ¬ VFree x T → (∃ b', Δ.Defines b' ∧ VOutlivesLe Δ b' T) →
+      LendForm Δ x b (.ref T) (.mut (.var x) T) B (Δ.extend x b)
+
+/-- The relaxed lend's compatibility lemma at every lend form. -/
+def LendFrame : Prop :=
+  ∀ (Δ : LifeCtx) (x : LifeVar) (b : Lifetime.Life) (P V B : VTy) (Δb : LifeCtx)
+    (d M : Expr) (S : Row),
+    LendForm Δ x b P V B Δb →
+    Δ.Defines b → Δ.find? x = none → b.mentions x = false →
+    (∀ y u, Δ.find? y = some u → u.mentions x = false) →
+    ¬ VFree x B → NoThunkT B → Row.ResumeO S x →
+    closedAt 1 M = true → closedAt 0 (lendCb M).1 = true → closedAt 0 d = true →
+    SemV Δ [] d (.lolli P .unit) →
+    CDerivesP Δb [⟨V, true⟩] M (.comp (CTy.effOf S (.box (.var x) B))) →
+    SemC Δb [⟨V, true⟩] M (CTy.effOf S (.box (.var x) B)) →
+    SemC Δ [⟨P, true⟩]
+      (.app (.app (.val (withborUV d)) (.var 0)) (.val (lendCb M)))
+      (CTy.effOf S (.tensor P B))
+
+/-- The per-observation lend's compatibility lemma (R2). -/
+def LoopFrame : Prop :=
+  ∀ (Δ : LifeCtx) (x : LifeVar) (A S B R : VTy) (N K s0 : Expr),
+    Δ.find? x = none → Δ.meetOfDom.mentions x = false →
+    (∀ y u, Δ.find? y = some u → u.mentions x = false) →
+    ¬ VFree x A → ¬ VFree x B → ¬ VFree x R → NoThunkT B → NoThunkT R → VScoped Δ A →
+    closedAt 1 N = true → closedAt 1 K = true → closedAt 0 s0 = true →
+    CDerivesP (Δ.extend x Δ.meetOfDom) [⟨.tensor (.imm (.var x) A) S, true⟩] N
+      (.comp (.ret (.sum B S))) →
+    CDerivesP (Δ.extend x Δ.meetOfDom) [⟨.tensor (.imm (.var x) A) S, true⟩] K (.comp (.ret R)) →
+    CDerivesP (Δ.extend x Δ.meetOfDom) [] s0 (.val S) →
+    SemC (Δ.extend x Δ.meetOfDom) [⟨.tensor (.imm (.var x) A) S, true⟩] N (.ret (.sum B S)) →
+    SemC (Δ.extend x Δ.meetOfDom) [⟨.tensor (.imm (.var x) A) S, true⟩] K (.ret R) →
+    SemV (Δ.extend x Δ.meetOfDom) [] s0 S →
+    SemC Δ [⟨.ref A, true⟩] (lendLoopApp A B R N K s0)
+      (CTy.loop (.tensor (.ref A) B) (.tensor (.ref A) R))
+
+structure PinLaw : Prop where
+  lendFrame : LendFrame
+  loopFrame : LoopFrame
+```
+
+R1's and R2's compatibility lemmas at the rules' premises alone, `PinStop` and `PinLoop`, are
+derived: `PinLaw.stop : PinLaw → PinStop` and `PinLaw.loop : PinLaw → PinLoop` supply the
+callback's (steps') `SemC` by `fundamentalC_pin`. Conversely `PinLaw.of_stop_loop`, so
+`pinLaw_iff : PinLaw ↔ PinStop ∧ PinLoop`.
 
 ```lean
 /-- R1's compatibility lemma: the lend held across resuming operations is in the relation. -/
@@ -324,36 +377,22 @@ def PinStop : Prop :=
     (∃ b', Δ.Defines b' ∧ VOutlivesLe Δ b' T) →
     Row.ResumeO S x → closedAt 1 M = true → closedAt 0 (lendCb M).1 = true →
     closedAt 0 d = true → SemV Δ [] d (.lolli (.ref T) .unit) →
-    PDerives (Δ.extend x b) [⟨.mut (.var x) T, true⟩] M
+    CDerivesP (Δ.extend x b) [⟨.mut (.var x) T, true⟩] M
       (.comp (CTy.effOf S (.box (.var x) B))) →
     SemC Δ [⟨.ref T, true⟩]
       (.app (.app (.val (withborUV d)) (.var 0)) (.val (lendCb M)))
       (CTy.effOf S (.tensor (.ref T) B))
-
-/-- R2's compatibility lemma: the shared lend over a loop whose state holds the borrow. -/
-def PinLoop : Prop :=
-  ∀ (Δ : LifeCtx) (x : LifeVar) (A S B R : VTy) (N K s0 : Expr),
-    Δ.find? x = none → Δ.meetOfDom.mentions x = false →
-    (∀ y u, Δ.find? y = some u → u.mentions x = false) →
-    ¬ VFree x A → ¬ VFree x B → ¬ VFree x R → NoThunkT B → NoThunkT R → VScoped Δ A →
-    closedAt 1 N = true → closedAt 1 K = true → closedAt 0 s0 = true →
-    PDerives (Δ.extend x Δ.meetOfDom) [⟨.tensor (.imm (.var x) A) S, true⟩] N
-      (.comp (.ret (.sum B S))) →
-    PDerives (Δ.extend x Δ.meetOfDom) [⟨.tensor (.imm (.var x) A) S, true⟩] K (.comp (.ret R)) →
-    PDerives (Δ.extend x Δ.meetOfDom) [] s0 (.val S) →
-    SemC Δ [⟨.ref A, true⟩] (lendLoopApp A B R N K s0)
-      (CTy.loop (.tensor (.ref A) B) (.tensor (.ref A) R))
-
-structure PinLaw : Prop where
-  stop : PinStop
-  loop : PinLoop
 ```
+
+`PinLoop` is `LoopFrame` without its three `SemC`/`SemV` premises.
 
 **In one sentence:** code typed by Core's rules plus R1 and R2, suspended (at an operation, or
 between a loop's observations) while it holds views of a lend, is again in the relation when the
 place is lent afresh at a new lifetime.
 
-Each field is the compatibility lemma of its rule, at the rule's own premises. Nothing in it
+Each schema is the compatibility lemma of one rule shape, at the rule's own premises plus the
+callback's relation. Neither mentions a depth or a holder: a lend nested in a callback is part of
+the callback's derivation. Nothing in it
 says *why* the rule is sound (ghost end, a re-lendable reading, a frame lemma): an assertion of a
 proof route can be wrong where the rule is not, and then every theorem resting on it is vacuous.
 
@@ -373,16 +412,18 @@ proof route can be wrong where the rule is not, and then every theorem resting o
 
 | result | statement | status |
 |---|---|---|
-| `fundamentalC_pin (hPin : PinLaw) : PDerives Δ Γ e j → SemJ Δ Γ e j` | the Fundamental Property for the extended judgment: `fundamentalC`'s induction, case for case, plus `hPin.stop` and `hPin.loop` | PROVED |
+| `fundamentalC_pin (hPin : PinLaw) : PDerives Δ Γ e j → SemJ Δ Γ e j` | the Fundamental Property for the extended judgment: `fundamentalC`'s induction, case for case, plus `hPin.lendFrame` and `hPin.loopFrame` | PROVED |
 | `adequacyC_pin (hPin : PinLaw)` | a closed `PDerives` program of `F 1` runs to `()` at the empty memory | PROVED |
 | `adequacyD_pin`, `adequacyD_pin_safe` | every run continues to `()` at the empty memory; no run is stuck | PROVED |
 | `PDerives.ofC` | every `CDerives` derivation is a `PDerives` one | PROVED |
 | `lendLoopE_is_checked` | R2's term is `bcc`'s erasure of the checked `lend_loop_imm`/`lend_loop_mut` | PROVED |
+| `PinLaw.stop`, `PinLaw.loop` | R1's and R2's compatibility lemmas (`PinStop`, `PinLoop`), from the schemas | PROVED |
+| `pinLaw_iff` | `PinLaw ↔ PinStop ∧ PinLoop`: the schemas say what the two lemmas say | PROVED |
 | `resumeO_await_yield`, `not_resumeO_raise` | `Row.ResumeO` admits `await` and `yield`, and refuses an abortive operation | PROVED |
 
 ### 4.3 Why I believe it, how much is proved elsewhere, and what would falsify it
 
-**`PinStop`.**
+**`LendFrame` (at `ref`: `PinStop`).**
 
 - **Evidence** (for one route to proving it; none of it is asserted). Law 2 (branch
   `law2-typed-world`, `experiments/Law2`) proves the borrower's re-lendability
@@ -411,7 +452,7 @@ proof route can be wrong where the rule is not, and then every theorem resting o
   value outside its type, or trips §6.1's tag check, on some run (by `adequacyD_pin`, any of the
   first three refutes `PinLaw`). The test is programs (§6); no Lean refutation is attempted.
 
-**`PinLoop`.**
+**`LoopFrame` (`PinLoop`).**
 
 - **Evidence: less.** No lender-side lemma at an observation boundary exists; GhostEnd's are at
   stops. LoopBorrow showed the *refold* route fails (`refoldKripke_false`: the Kripke order of the
@@ -574,7 +615,7 @@ Ordered; each unit is one PR and turns the programs named green. No unit but U1 
 
 > **OQ-1. An abortive operation crossing a relaxed lend.** `borrow mut b { … await(); …?… }`
 > with the error handled outside the block is rejected in v1 (`n4`). Options: (a) extend
-> `Row.ResumeO` to rows mixing resuming and abortive operations, adding them to `PinStop`'s row
+> `Row.ResumeO` to rows mixing resuming and abortive operations, widening `LendFrame`'s row
 > (believed by the LIFO frame lemmas `wpTS_M_frameU` with GhostEnd's `Drop`; not checked); (b)
 > keep v1 and have the elaborator move the handler inside the block where the error's type
 > allows. (a) grows `PinLaw`; (b) costs programs.
@@ -582,7 +623,8 @@ Ordered; each unit is one PR and turns the programs named green. No unit but U1 
 > **OQ-2. `imm` relaxed lends, `withload` and folds whose algebra suspends.** Needed by
 > `corpus/pending/async-borrow.bc` (a yield inside `fold_imm`'s algebra, under the fold's own
 > loads). GhostEnd has the lender side (`RelendI`, `ewpTS_I_frameR`); the unwinding form and a
-> relaxed `foldImm` are not built. Each would add one field to `PinLaw`.
+> relaxed `foldImm` are not built. Each would add one `LendForm` case, widening `LendFrame`,
+> not a field.
 
 > **OQ-3. A `mut` lend over a loop whose state holds the view.** R2 hands a fresh view at every
 > observation, which is unsound beside a stale `mut` one. A `mut` R2 needs the interface

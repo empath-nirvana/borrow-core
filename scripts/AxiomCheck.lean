@@ -646,6 +646,10 @@ import Backend2.Lint
 #print axioms BoCa.Fig16.LogRel.Core.adequacyC_pin
 #print axioms BoCa.Fig16.LogRel.Core.adequacyD_pin
 #print axioms BoCa.Fig16.LogRel.Core.adequacyD_pin_safe
+#print axioms BoCa.Fig16.LogRel.Core.PinLaw.stop
+#print axioms BoCa.Fig16.LogRel.Core.PinLaw.loop
+#print axioms BoCa.Fig16.LogRel.Core.PinLaw.of_stop_loop
+#print axioms BoCa.Fig16.LogRel.Core.pinLaw_iff
 #print axioms BoCa.Fig16.LogRel.Core.resumeO_await_yield
 #print axioms BoCa.Fig16.LogRel.Core.not_resumeO_raise
 #print axioms BoCa.Fig16.LogRel.Core.Check.Row.resumeOB_sound

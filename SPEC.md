@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.15 · 2026-10-30
+Version 1.16 · 2026-10-30
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -5150,10 +5150,10 @@ use R1 keeps them unconditionally.
   context and placed at any consumed one. `[nil-dead]` is admissible for `CDerives`
   (`CDerives.append_dead`, §26) and sound by `semC_dead`; it is in the extended judgment because
   `[lend-R]` concludes at one fixed context. It also lets a relaxed lend sit under binders inside
-  another's body, so `PinLaw.stop`'s premise ranges over those derivations too.
+  another's body, so `LendFrame`'s premise ranges over those derivations too.
 - R2 (`lendLoopR`, the `imm` lend over a loop whose state holds the borrow,
-  `docs/async-capabilities.md` §3.3) is in the judgment as well, with its compatibility lemma
-  `PinLaw.loop`; the checker does not emit it (U6).
+  `docs/async-capabilities.md` §3.3) is in the judgment as well, an instance of `LoopFrame`;
+  `PinLaw.loop` derives its compatibility lemma. The checker does not emit it (U6).
 
 **The extended judgment.** `CDerivesP` (`Core/PinDerives.lean`) is `CDerives` with every premise
 in `CDerivesP`, plus `lendR`, `lendLoopR` and `nilDead`. It is generated from
@@ -5162,10 +5162,14 @@ in `CDerivesP`, plus `lendR`, `lendLoopR` and `nilDead`. It is generated from
 files are stale. §28's BOXED-κ (`effHandleVB`) is in it so, its case in `fundamentalC_pin`
 `handleV_compatCB`, as in `fundamentalC`.
 
-**`PinLaw`** (`Core/PinLaw.lean`) is a `structure … : Prop` of two fields, the compatibility lemmas
-of R1 (`PinStop`) and R2 (`PinLoop`) at the rules' own premises, with every quantifier over code a
-quantifier over `CDerivesP` derivations. It is a hypothesis of the theorems that use it.
-`PinStop`'s premise is the body's `CDerivesP` derivation, so what it covers is every body that
+**`PinLaw`** (`Core/PinLaw.lean`) is a `structure … : Prop` of two schemas: `LendFrame`, the
+relaxed `withborUV` lend's compatibility lemma at every `LendForm` (R1 is the form `ref`), and
+`LoopFrame`, the per-observation lend's (R2). Each is stated at its rule's own premises plus the
+callback's (steps') `SemC`, mentions no depth or holder, and has every quantifier over code a
+quantifier over `CDerivesP` derivations. It is a hypothesis of the theorems that use it. `PinStop`
+and `PinLoop`, the compatibility lemmas of R1 and R2 at the rules' premises alone, are derived
+(`PinLaw.stop`, `PinLaw.loop`), and `pinLaw_iff` shows the two schemas say what they say together.
+`LendFrame`'s premise is the body's `CDerivesP` derivation, so what it covers is every body that
 judgment types: bodies holding a nested relaxed lend (through `nilDead`), and bodies using §28's
 BOXED-κ rule (`effHandleVB`), as well as every rule of `CDerives`. What a named assertion of this
 kind ranges over is an open question of the design of assertions (kind R of `docs/unsafe.md`, on
@@ -5211,7 +5215,8 @@ carries the list `p` of the relaxed rules used, with where each is used, and is 
     assurance: unconditional
     assurance: PinLaw (R1 at 22:11, 34:11)
 
-`bcc trusted` lists the same under `typing:`, each site with the field of `PinLaw` it rests on.
+`bcc trusted` lists the same under `typing:`, each site with the schema of `PinLaw` it instantiates
+(`LendFrame` at its form, or `LoopFrame`).
 The programmer writes nothing.
 
 ### Lowering
@@ -5227,9 +5232,13 @@ with the counts of `corpus/counts.expected`.
     fundamentalC_pin (hPin : PinLaw) : CDerivesP Δ Γ e j → SemJ Δ Γ e j
     adequacyC_pin, adequacyD_pin, adequacyD_pin_safe (hPin : PinLaw)
     CDerivesP.ofC : CDerives Δ Γ e j → CDerivesP Δ Γ e j
+    PinLaw.stop : PinLaw → PinStop          PinLaw.loop : PinLaw → PinLoop
+    pinLaw_iff : PinLaw ↔ PinStop ∧ PinLoop
 
-`fundamentalC_pin` is `fundamentalC`'s induction, case for case, with `hPin.stop` at `lendR`,
-`hPin.loop` at `lendLoopR` and `semC_dead` at `nilDead` (`Core/PinFundamental.lean`, generated).
+`fundamentalC_pin` is `fundamentalC`'s induction, case for case, with `hPin.lendFrame` at `lendR`
+(form `ref`) and `hPin.loopFrame` at `lendLoopR`, each at the induction hypothesis of its callback
+(steps), and `semC_dead` at `nilDead` (`Core/PinFundamental.lean`, generated). `PinLaw.stop` and
+`PinLaw.loop` follow from it; `PinLaw.of_stop_loop` is the converse.
 At the checker: `checkProgram_soundP` (every checked `main` has a `CDerivesP` derivation),
 `checked_sem_pin` and `checked_runs_pin`; `checkProgram_sound`, `checkProgram_tied`,
 `checkProgram_tiedAt`, `checkProgram_letPoly`, `checked_sem`, `checked_runs`,
@@ -5263,7 +5272,7 @@ another), `async-r1-generator.bc` and `async-r1-drain.bc` (§15's self-referenti
 - A derivation that uses a relaxed rule is not claimed tied (decision R): a tied `CDerivesP` is not
   built.
 - Shrinking `PinLaw` (U8).
-- What `PinStop` ranges over (above): kind R of `docs/unsafe.md`.
+- What `LendFrame` ranges over (above): kind R of `docs/unsafe.md`.
 
 ---
 
@@ -9921,7 +9930,9 @@ over either; the inversions at `clausesTyO` (`Core/Inversions.lean`); the checke
 
 Entry 28 (§29) is implemented: `Core/PinDerives.lean` and `Core/PinFundamental.lean`, generated by
 `scripts/gen-pin.py` (`CDerivesP`, `fundamentalC_pin`, `adequacyC_pin`, `adequacyD_pin`,
-`adequacyD_pin_safe`, `CDerivesP.ofC`), `Core/PinLaw.lean` (`PinStop`, `PinLoop`, `PinLaw`); the
+`adequacyD_pin_safe`, `CDerivesP.ofC`, `PinLaw.stop`, `PinLaw.loop`, `PinLaw.of_stop_loop`,
+`pinLaw_iff`), `Core/PinLaw.lean` (`LendForm`, `LendFrame`, `LoopFrame`, `PinLaw`, `PinStop`,
+`PinLoop`); the
 checker's derivations (`TiedDer`, `Frontend/Check/Tied.lean`), R1 (`Frontend/Check/Pin.lean`,
 `withbor2r` in `Frontend/Check/Checker.lean`), the sugar (`relaxedC?`, `Frontend/Sugar.lean`), the
 core form (`Frontend/Syntax.lean`, `Frontend/Parser.lean`, `Frontend/Print.lean`), and the reports
@@ -10165,6 +10176,12 @@ relation or the machine.
 
 ## Changelog
 
+- **1.16** (2026-10-30) — §29 (#743, B1): `PinLaw` as two schemas, `LendFrame` over `LendForm`
+  (one form, `ref`, which is R1) and `LoopFrame` (R2). `PinStop` and `PinLoop` are derived
+  (`PinLaw.stop`, `PinLaw.loop`), and `pinLaw_iff : PinLaw ↔ PinStop ∧ PinLoop`. `bcc trusted`
+  names the schema at each site. No change to `CDerivesP`, the relation, the machine, the
+  checker's acceptance, the statements of `fundamentalC_pin` and adequacy, the `bcc check` line,
+  or a program's output or count.
 - **1.15** (2026-10-30) — §11, §12, §42 (#746, step 2): declared types with no derived drop, L-D
   over L-T. The opaque kind `Tok` (`VTy.opq .tok`, not a host type) is a location owning a unit
   cell, its relation `Ref 1`'s; `VTy.OwnFree` holds at the host kinds only. Two constants,
