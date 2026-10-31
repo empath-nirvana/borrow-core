@@ -1,6 +1,8 @@
 import Backend2.Lint
 import Backend2.Interp
-import Backend2.Driver
+import Backend2.Lower
+import Backend2.LayoutCheck
+import Backend2.Flow
 
 /-!
 # Backend2 — the lint's negative tests  `[docs/compiler.md §5.2]`
@@ -273,10 +275,15 @@ def borrowProg (bits : List Bool) : Prog where
   ty := [(0, .mut i32T), (1, i32T), (2, .ref i32T), (3, .pair (.ref i32T) (.mut i32T)),
     (4, .ref i32T), (5, .mut i32T), (6, .unit), (7, i32T)].foldl (fun m (x, t) => m.insert x t) {}
 
-/-- The number of `p`'s `f0`'s facts in the word IR (its `f1`), lowered as `Driver.flatOf` lowers. -/
+/-- The number of `p`'s `f0`'s facts in the word IR (its `f1`), lowered as `Driver.flatOf` lowers:
+the layouts, the closure flow, each checked, then the word IR. -/
 def f0Facts (p : Prog) : Except String Nat := do
-  let L ← checkedLayouts p
-  let (fs, kn) ← checkedFlow p L
+  let (g, m) ← Lay.places p
+  let L := Lay.resolve p g m
+  LayCheck.check p L
+  let fs := Flow.solution p L
+  let kn := Flow.known p L fs
+  LayCheck.checkFlow p L fs.sets kn
   let fp ← Low.lowerProg p L kn fs.sets false
   pure (((fp.fns[1]?).map (·.facts.length)).getD 0)
 
