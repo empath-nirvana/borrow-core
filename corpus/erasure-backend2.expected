@@ -118,6 +118,7 @@ data-rose-vec erased handles 3 performs 0 raises 4 left 0 0
 data-turnstile erased handles 0 performs 0 raises 0 left 0 0
 decl-guard erased handles 2 performs 0 raises 1 left 0 0
 decl-handler-state erased handles 0 performs 0 raises 2 machines 2 suspends 2 left 0 0
+decl-lend erased handles 2 performs 0 raises 1 left 0 0
 decl-promise erased handles 0 performs 0 raises 0 left 0 0
 decl-txn erased handles 0 performs 0 raises 0 left 0 0
 decl-view erased handles 0 performs 0 raises 0 left 0 0

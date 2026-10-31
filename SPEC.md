@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.18 · 2026-10-31
+Version 1.19 · 2026-10-31
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -7995,12 +7995,27 @@ is refused by a kernel fact, not by a check of the elaborator:
   (`TDerivesP.dtor_hasDtor`).
 - **Live across a computation that may abort or cancel**: `[let]`'s `hW` asks the rest of the
   context to be `VTy.OwnFree` (§19), and a type holding `Tok` is not (`decl_not_ownFree`). The
-  program is accepted when the value is consumed before, lent into the computation, held as the
-  state of a handler that handles the abortive operation itself, its clause consuming the state
-  (`corpus/decl-handler-state.bc`), or under a `[then]` whose written finaliser consumes it
-  (`finally`, below). A handler's state does not carry it across an abort the handler does not
-  handle: the state is passed on at each resume, live across the rest of the body, which may
-  abort (`corpus/reject/decl-handler-state-abort.bc`).
+  program is accepted when the value is consumed before, lent to a computation that handles the
+  abort inside the loan, held as the state of a handler that handles the abortive operation
+  itself, its clause consuming the state (`corpus/decl-handler-state.bc`), or under a `[then]`
+  whose written finaliser consumes it (`finally`, below). A handler's state does not carry it
+  across an abort the handler does not handle: the state is passed on at each resume, live across
+  the rest of the body, which may abort (`corpus/reject/decl-handler-state-abort.bc`).
+- **Lent across a computation that may abort** (`Core/DeclLend.lean`): the lend consumes the
+  owner's cell `Ref N`, and the computation holds only the loan, which holds no owned cell at any
+  payload (`decl_loan_ownFree`), so `hW` admits it. Where the lend ends decides the rest:
+  - *the abort handled inside the loan*: the callback returns, the lend is the pure `withbor`, and
+    the owner gets the value back (`d_declInside`, `declInside_runs`). At the surface, `&t` passed
+    to a function whose body is the `with` (`corpus/decl-lend.bc`: commit on an answer, roll back
+    on an error). A `with` whose body lends a place declared outside it, or a call whose `&`
+    argument threads a capability, is refused at the surface for any type, not for this one.
+  - *the abort crossing the loan*: the lend is the unwinding form (§19 *Borrows*), whose
+    finaliser `d : Ref N ⊸ 1` runs on the source when the abort ends the lend. The kernel admits
+    any closed `d` of that type, one that consumes the value among them (`declFin`, frees the
+    cell and burns the token: `d_declAcross`, `declAcross_answers`). The checker passes the
+    source's derived destructor, which `Ref N` has none of (`decl_ref_no_dtor`), and the surface
+    has no form that writes `d`; so the lend is refused
+    (`corpus/reject/decl-lend-abort.bc`). A written finaliser for a lend is *Open*.
 - **Copied**: it is not persistent, so no split duplicates it (`Ctx.SplitP.both_live_iff`).
 - **A field read that discards it** (E5's projection): `getAt` asks the discarded fields to be
   `Forgettable` (§5); a field read of a record that holds one at another field consumes it.
@@ -8041,8 +8056,9 @@ reads `[then]`'s parts for their rows and elaborates a `with` inside them. The h
 and the finaliser thread no capability, so a finaliser does no I/O yet: see *Open*. It is decision 2's "cleanup goes
 in a finaliser", made readable, and not a drop: `D` is a call the program wrote. `[then]` gives `M`
 and `D` disjoint contexts, so a value `D` consumes is not used in `M`: "commit in the body, roll
-back on an abort" lends the value into `M`, or holds it as the state of a handler that handles
-the abort and rolls back in that clause.
+back on an abort" lends the value to a computation that handles the abort inside the loan and
+then commits or rolls back on its answer (`corpus/decl-lend.bc`), or holds it as the state of a
+handler that handles the abort and rolls back in that clause.
 
 **Errors name the consumer.** A value whose type holds a marked field, unused at the end of its
 scope or live across an abort, is refused with one message that names the value and its type
@@ -8058,6 +8074,12 @@ message reads the declarations (`Data.Table`); the refusal is the kernel's.
   effects pass threads into `D` would be consumed there and not handed back. Capabilities as
   borrows held across `[then]` (§29's relaxed lend, `PinLaw`), or a finaliser that hands its
   capabilities back, would carry it; neither is in this entry.
+- *A written finaliser for a lend the abort crosses.* The kernel's unwinding lend takes any closed
+  `d : Ref N ⊸ 1` (`d_declAcross`); the checker passes only the source's derived destructor
+  (`Frontend/Check/Consts.lean`, `finaliser`), so at a declared type the lend is refused. A
+  surface form would name the consumer for the unwind, say `borrow imm c { v -> S } unwind f`,
+  and the checker would type `f`'s closed body at `Ref N ⊸ 1` (pure: a `lolli`) in place of
+  `dtorE`. Not in this entry: until then, handle the abort inside the loan or use `finally`.
 
 ### Programs
 
@@ -8081,6 +8103,8 @@ message reads the declarations (`Data.Table`); the refusal is the kernel's.
 | `corpus/decl-guard.bc` | a guard stored in a record beside data, released by a `finally` on a `with` | the guard released on the normal exit |
 | `corpus/reject/decl-txn-raise.bc`, `decl-promise-raise.bc`, `decl-guard-raise.bc` | each of the three with the value live across a `raise` and no finaliser | refused: `[let]`'s `hW` (`decl_not_ownFree`) |
 | `corpus/decl-view.bc` | `t.id` read through `imm 'a Txn`, the token's view dropped by its derived drop, the transaction committed after | i32[712] |
+| `corpus/decl-lend.bc` | a transaction lent by `&t` to a function whose body is a `with to_result` around a `raise`: the abort handled inside the loan, then committed on an answer or rolled back on an error | `(i32[203], i32[7])` |
+| `corpus/reject/decl-lend-abort.bc` | a transaction's cell lent to a borrow block whose body may raise, the abort crossing the lend | refused: the unwinding lend's finaliser is the derived destructor, which `Ref N` has none of (`decl_ref_no_dtor`) |
 | `corpus/fail/decl-burn-written.bc` | a program that takes a record apart as a tuple and writes `tok_burn` | refused by the parser: `tok`, `tok_mint` and `tok_burn` are read only in the elaboration's own source, so a printed elaboration reads back the same |
 
 Each rule is pinned beside its elaboration written by hand (`scripts/check-sugar.sh`):
@@ -10275,6 +10299,15 @@ relation or the machine.
 
 ## Changelog
 
+- **1.19** (2026-10-31) — §42 (#746): a declared value lent across a computation that may
+  abort, stated as the kernel decides it (`Core/DeclLend.lean`). The loan holds no owned cell
+  (`decl_loan_ownFree`), so an abort handled inside the loan is admitted at the pure `withbor`
+  (`d_declInside`; `corpus/decl-lend.bc`). An abort that crosses the loan needs the unwinding
+  lend's finaliser `Ref N ⊸ 1`: the kernel admits a closed one that consumes the value
+  (`d_declAcross`), the checker passes only the derived destructor, which a declared type has none
+  of (`decl_ref_no_dtor`; `corpus/reject/decl-lend-abort.bc`), and a written finaliser for a lend
+  is *Open*. No rule, relation or machine changes; `fundamentalC`, `adequacyC`, `adequacyD` keep
+  their statements.
 - **1.18** (2026-10-31) — §12, §42 (#746): the derived copy at `imm`. A use of an `imm` borrow
   or an `array_imm` view beyond its first is its derived copy, which the checker inserts at a split
   whose two parts both mention it, as the `copy` or `array_copy` constant in `copy_derives`'s shape

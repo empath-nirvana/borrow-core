@@ -1,0 +1,34 @@
+-- A declared value (SPEC §42, *Declared types with no derived drop*) lent into a computation that
+-- may abort, the abort handled inside the loan: `&t` lends the transaction to `guarded`, whose body
+-- is the `with to_result`. The computation holds only the loan `imm 'a Txn`, which holds no owned
+-- cell (`decl_loan_ownFree`), so `[let]`'s `hW` admits it across the raise; the callee returns, the
+-- lend is the pure `withbor`, and the owner gets `t` back. `settle` commits on an answer and rolls
+-- back on an error, each a `match` that burns the token. The kernel term is
+-- `Core/DeclLend.lean`'s `declInside`. A lend the abort crosses is refused
+-- (`corpus/reject/decl-lend-abort.bc`).
+--
+-- Answer: (i32[203], i32[7]): the transaction 2 committed with its log 3, the transaction 7
+-- rolled back on the error, answering its id; `live 0`: every token burned.
+include fail
+
+data Txn = { id: i32, must_close(commit) log: i32 }
+
+fn begin(id: i32) -> Txn = Txn { id: id, log: 3 }
+
+fn commit(t: Txn) -> i32 = match t { Txn { id, log } -> id * 100 + log }
+
+fn roll_back(t: Txn) -> i32 = match t { Txn { id, log } -> id }
+
+fn check(x: i32) -> i32 with Fail[i32] = if x > 3 { raise(x) } else { x }
+
+fn guarded<'a>(t: imm 'a Txn) -> i32 + i32 = with to_result[i32, i32] { check(t.id) }
+
+fn settle(id: i32) -> i32 =
+  let mut t = begin(id);
+  let r = guarded(&t);
+  match r {
+    inl x -> commit(t)
+  | inr e -> roll_back(t)
+  }
+
+main -> i32 * i32 = (settle(2), settle(7))

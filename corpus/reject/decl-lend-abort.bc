@@ -1,0 +1,22 @@
+-- `corpus/decl-lend.bc` with the abort crossing the lend: `peek` lends the transaction's cell to a
+-- borrow block whose body may raise, and does not handle it. The unwinding lend (`withbor1U`, SPEC
+-- §19 *Borrows*) runs a finaliser on the source when the abort ends the lend. The kernel admits any
+-- closed finaliser `Ref Txn ⊸ 1`, one that consumes the value among them
+-- (`Core/DeclLend.lean`, `declAcross`), but the checker passes the source's derived destructor,
+-- and a declared type has none (`decl_ref_no_dtor`). Refused.
+include fail
+
+data Txn = { id: i32, must_close(commit) log: i32 }
+
+fn commit(t: Txn) -> i32 = match t { Txn { id, log } -> id * 100 + log }
+
+fn check(x: i32) -> i32 with Fail[i32] = if x > 3 { raise(x) } else { x }
+
+fn peek(c: ref Txn, k: i32) -> ref Txn with Fail[i32] =
+  borrow imm c { v -> let y = check(k); () };
+  c
+
+main -> i32 + i32 =
+  let c = alloc(Txn { id: 7, log: 5 });
+  with to_result[i32, i32] { let c = peek(c, 5); commit(free(c)) }
+-- expect: 16:3: the source `ref (i32 * i32 * tok)` has no destructor, so it cannot be finalised when the callback aborts
