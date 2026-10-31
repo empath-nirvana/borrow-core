@@ -156,11 +156,10 @@ text.
 ## What is not claimed
 
 - A program that holds a borrow across a suspension (a task that lends its own cell across
-  `await`, the relaxed lend of SPEC §29) is covered under `PinLaw`, three schemas stated in Lean
+  `await`, the relaxed lend of SPEC §29) is covered under `PinLaw`, two schemas stated in Lean
   ([`Core/PinLaw.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/PinLaw.lean):
   `LendFrame`, a relaxed lend's compatibility lemma, whose row now admits a cancellable wait and its
-  cancel target (SPEC §29a); `LoopFrame`, the per-observation lend's; and `PinFin`, `[then]`'s with a
-  finaliser that may loop) and not yet proved: `fundamentalC_pin` and `adequacyD_pin` assume it.
+  cancel target (SPEC §29a), and `LoopFrame`, the per-observation lend's) and not yet proved: `fundamentalC_pin` and `adequacyD_pin` assume it.
   [`docs/async-capabilities.md`](https://github.com/empath-nirvana/borrow-core/blob/main/docs/async-capabilities.md)
   §4 gives the evidence for it, and the corpus has programs that try to break it. `bcc check`
   prints `assurance: PinLaw (R1 at L:C)` for such a program and `assurance: unconditional`

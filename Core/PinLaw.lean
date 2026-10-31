@@ -5,8 +5,8 @@ import Core.PinDerives
 
 `docs/async-capabilities.md` §4. A borrow held across a suspension is believed sound because the
 place does not move: the suspension may be read as ending the lend and the resumption as lending
-the place again at a fresh lifetime. `PinLaw` asserts three schemas, two per shape of relaxed lend
-that relies on this and one for a finaliser that may loop, and nothing more:
+the place again at a fresh lifetime. `PinLaw` asserts two schemas, one per shape of relaxed rule
+that relies on this, and nothing more:
 
 * `LendFrame`: the relaxed `withborUV` lend at every `LendForm`, whose callback is typed and in
   the relation at a row of resuming operations and the cancel path's cancellable wait and cancel
@@ -15,11 +15,7 @@ that relies on this and one for a finaliser that may loop, and nothing more:
 * `LoopFrame`: R2 (`lendLoopR`), the per-observation `imm` lend whose state may hold views of the
   place, its steps typed and in the relation, is in the kernel's relation at
   `U(Loop (Ref A ⊗ B) (Ref A ⊗ R))`.
-* `PinFin`: `[then]` with a finaliser whose row holds `Div` (`CDerivesP.effThenDiv`), its body with
-  no capturable operation, the derivations typed and in the relation, is in the relation. At a
-  `Div`-free finaliser row it is `then_compatC` (`pinFin_divFree`).
-
-None mentions a depth or a holder: a lend nested in a callback is part of the callback's
+Neither mentions a depth or a holder: a lend nested in a callback is part of the callback's
 derivation. Each is stated at its rule's own premises plus the relations of its premises' code,
 with every quantifier over code a quantifier over `CDerivesP` derivations: no statement here is
 pointwise over configurations. The hypothesis is tested by running programs that use the rules
@@ -27,8 +23,7 @@ pointwise over configurations. The hypothesis is tested by running programs that
 
 `PinStop` and `PinLoop`, R1's and R2's compatibility lemmas at the rules' premises alone, are
 stated here and derived from the schemas in `Core/PinFundamental.lean` (`PinLaw.stop`,
-`PinLaw.loop`), where `pinLaw_iff` shows the schemas say what `PinStop`, `PinLoop` and `PinFin`
-say together.
+`PinLaw.loop`), where `pinLaw_iff` shows the two schemas say what the two lemmas say together.
 -/
 
 noncomputable section
@@ -129,50 +124,13 @@ def LoopFrame : Prop :=
     SemC (ℍ := ℍ) Δ [⟨.ref A, true⟩] (lendLoopApp A B R N K s0)
       (CTy.loop (.tensor (.ref A) B) (.tensor (.ref A) R))
 
-/-- **PinFin.** `[then]`'s compatibility lemma with `Div` in the finaliser's row
-(`CDerivesP.effThenDiv`), at the rule's premises with `Row.divB Σ_D = true`, plus the derivations
-of `M`, `N` and `D` in `CDerivesP` and their relations: the configuration `then_compatC` does not
-cover. `Σ` holds `Div` with `Σ_D`, so the relation at `Σ` is `cwp`, and the finaliser's run on a
-raise's unwind spans segments of it. `hcap` keeps every finaliser off a cancel run (`κ.2`, a
-least fixed point). At a `Div`-free `Σ_D` the lemma is `then_compatC` (`pinFin_divFree`). -/
-def PinFin : Prop :=
-  ∀ (Δ : LifeCtx) (Γ Γ₁ Γ₂ : Ctx VTy) (M N D : Expr) (A B : VTy) (S SM SD : Row),
-    Ctx.SplitP Γ Γ₁ Γ₂ → S.NZ → S.Uniq → (S.UnrD → Ctx.Banged Γ₂) → RowLe SM S → RowLe SD S →
-    (∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
-      o.finRead = true → ThenLe o.fin SD o'.fin) →
-    (SD.UnrD → SM.PendPers) → (∀ o ∈ SM, capB o.q o.B = false) → Row.divB SD = true →
-    CDerivesP Δ Γ₁ M (.comp (CTy.effOf SM A)) →
-    CDerivesP Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)) →
-    CDerivesP Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit)) →
-    SemC (ℍ := ℍ) Δ Γ₁ M (CTy.effOf SM A) →
-    SemC (ℍ := ℍ) Δ (⟨A, true⟩ :: Γ₂) N (CTy.effOf S B) →
-    SemC (ℍ := ℍ) Δ (⟨.unit, false⟩ :: Γ₂) D (CTy.effOf SD .unit) →
-    SemC (ℍ := ℍ) Δ Γ (thenE N D M) (CTy.effOf S B)
-
-/-- **`effThenDiv` at a finaliser row without `Div` is `then_compatC`**: `PinFin` asserts only the
-rows that hold `Div`. -/
-theorem pinFin_divFree {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A B : VTy}
-    {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hU : S.UnrD → Ctx.Banged Γ₂)
-    (hMS : RowLe SM S) (hDS : RowLe SD S)
-    (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
-      o.finRead = true → ThenLe o.fin SD o'.fin)
-    (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false)
-    (hM : SemC (ℍ := ℍ) Δ Γ₁ M (CTy.effOf SM A))
-    (hN : SemC (ℍ := ℍ) Δ (⟨A, true⟩ :: Γ₂) N (CTy.effOf S B))
-    (hD : SemC (ℍ := ℍ) Δ (⟨.unit, false⟩ :: Γ₂) D (CTy.effOf SD .unit)) :
-    SemC (ℍ := ℍ) Δ Γ (thenE N D M) (CTy.effOf S B) :=
-  then_compatC hs hNZ hU hMS hDS (fun n i o o' h₁ h₂ hc => hfin n i o o' h₁ h₂
-    (OpSig.finRead_of_capB hc)) hP hSD hM hN hD
-
-/-- **PinLaw**: the one named assumption, three schemas. Each is stated over `CDerivesP`
+/-- **PinLaw**: the one named assumption, two schemas. Each is stated over `CDerivesP`
 derivations and their relations only. -/
 structure PinLaw : Prop where
   /-- The relaxed lend, at every `LendForm`, is in the relation. -/
   lendFrame : LendFrame (ℍ := ℍ)
   /-- The per-observation lend over a loop whose state holds the borrow is in the relation. -/
   loopFrame : LoopFrame (ℍ := ℍ)
-  /-- `[then]` with a finaliser whose row holds `Div` is in the relation. -/
-  fin : PinFin (ℍ := ℍ)
 
 /-! ### The rows a relaxed lend admits
 

@@ -412,6 +412,17 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
       (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
       CDerivesAt Ξ Δ Γ (thenE N D M) (.comp (CTy.effOf S B))
+  /-- `[then]` with a finaliser whose row may hold `Div`, its body with no capturable operation
+  (`CDerives.effThenDiv`).  `[spec §27, §29a]` -/
+  | effThenDiv {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
+      (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)
+      (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
+        o.finRead = true → ThenLe o.fin SD o'.fin)
+      (hP : SD.UnrD → SM.PendPers) (hcap : ∀ o ∈ SM, capB o.q o.B = false)
+      (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf SM A)))
+      (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
+      (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
+      CDerivesAt Ξ Δ Γ (thenE N D M) (.comp (CTy.effOf S B))
   /-- `[handle]`: `handle_n e with H`, the handler's pair `H = (h_ret, hs)` a value form over a
   part of the context whose live slots are persistent, `n` not in `Σ`, the handled row tied to
   `Ξ`.  The `j`-th operation's cancel row is `fs j`, and its clause's `κ` has its cancel branch at
@@ -576,6 +587,8 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | effLet hs hW hU _ _ ih1 ih2 => exact .effLet hs hW hU ih1 ih2
   | effThen hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ih1 ih2 ih3 =>
       exact .effThen hs hNZ hUq hU hMS hDS hfin hP hSD ih1 ih2 ih3
+  | effThenDiv hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ih1 ih2 ih3 =>
+      exact .effThenDiv hs hNZ hUq hU hMS hDS hfin hP hSD ih1 ih2 ih3
   | effHandleV _ hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
       exact .effHandleV hs hd hH ihc hn0 hnS hlen hdv ihe
   | effHandleVB _ hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
@@ -957,6 +970,9 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | effLet hs hW hU _ _ ih1 ih2 => exact .effLet hs hW hU (ih1 (by eff_free)) (ih2 (by eff_free))
   | effThen hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ih1 ih2 ih3 =>
       exact .effThen hs hNZ hUq hU hMS hDS hfin hP hSD (ih1 (by eff_free)) (ih2 (by eff_free))
+        (ih3 (by eff_free))
+  | effThenDiv hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ih1 ih2 ih3 =>
+      exact .effThenDiv hs hNZ hUq hU hMS hDS hfin hP hSD (ih1 (by eff_free)) (ih2 (by eff_free))
         (ih3 (by eff_free))
   | effHandleV | effHandleVB | effHandleT | effHandleL =>
       simp [hndExpr, Expr.effFree, Expr.val, Val.prim] at he

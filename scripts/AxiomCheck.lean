@@ -656,7 +656,9 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Check.Row.resumeOB_sound
 #print axioms BoCa.Fig16.LogRel.Core.Check.noThunkB_sound
 #print axioms BoCa.Fig16.LogRel.Core.Check.Row.resumeOCB_sound
-#print axioms BoCa.Fig16.LogRel.Core.pinFin_divFree
+#print axioms BoCa.Fig16.LogRel.Core.then_compatC_div
+#print axioms BoCa.Fig16.LogRel.Core.cwp_then_div
+#print axioms BoCa.Fig16.LogRel.Core.cwp_bind_le
 -- SPEC §29a: cancellable waits and level-triggered cancellation
 #print axioms BoCa.Fig16.LogRel.Core.await_compatC
 #print axioms BoCa.Fig16.LogRel.Core.semC_effOf_rc

@@ -520,3 +520,27 @@ whatever."
 - **Stale text fixed:** the `PinLaw.lean` header; `docs/async-capabilities.md` (a note on §3.3/§4
   quoting the old R1); SPEC 1.21 with its changelog entry.
 - **`effHandleT`/`effHandleL`** take no `cs` (see §8).
+
+## 10. `PinFin` proved, and `effThenDiv` is a rule of `CDerives` (user request, 2026-10-31)
+
+"Let's take a shot at proving it first." Done, following `cwp_then` piece by piece:
+- `cwp_bind_le` (`DivRules`): `cwp_bind` with the frame's table above the computation's (`cwpF_frame` at two tables);
+- `seq_raise_cwp`: a raise's finaliser run at `cwp` at `Σ_D`, then the raise, is at `cwp` at `Σ`;
+- `ewp_frame_then_orR`: the segment lemma `ewp_frame_then_or`, with the raise's `D (); raise` as a
+  premise and `hcap` making the cancel branch vacuous;
+- `closing_then_div`: `closing_then` with `D`'s own `Closing` at `closeSig :: Σ_D`;
+- `cwpF_frame_then_div` and `cwp_then_div`: `cwp_then`'s segment and coinduction, the raise landing in
+  `cwp` itself;
+- `then_compatC_div`: the compatibility lemma.
+
+So `effThenDiv` is a rule of `CDerives` (and `CDerivesAt`), proved by `then_compatC` /
+`then_compatC_div`. `PinLaw` is back to `{lendFrame, loopFrame}`, `pinLaw_iff` is restored, and
+`bcc trusted` has no `Fin` pin.
+
+`hfin` (the cancel-row record) and `hUq` are premises of the rule that the proof does not read: no
+cancel run reaches the finaliser.
+
+**Unit A's own targets that reach `effThenDiv`: none.** The checker does not emit it, no corpus program
+uses it, and every program in `Core/AwaitCancel.lean` types its finalisers with `effThen` or
+`effThenA` at `Div`-free rows. Only the two constructed witnesses use it: `d_thenTickAwait` and
+`d_thenDivFuel` (whose run is `thenDivFuel_runs`, unconditional).

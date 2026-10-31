@@ -22,7 +22,7 @@ The cancelled state is the task handler's: level-triggered cancellation needs no
 | an `await` row cancels | `Row.cancels_of_await` |
 | a value with no derived drop is not held across an `await` by `[let]` | `let_refuses_decl_across_await` |
 | `[perform]`/`[raise]` refuse the marked pair at every row that finds it | `not_der_perform_await`, `not_der_raise_cancelled` |
-| `effThenDiv` reached: a cancel unwinding through a ticking finaliser; a closed program | `d_thenTickAwait`, `d_thenDivFuel` |
+| `effThenDiv`, proved: a cancel unwinding through a ticking finaliser; a closed program that runs | `d_thenTickAwait`, `d_thenDivFuel`, `thenDivFuel_runs` |
 | a cell held across an `await` under a finaliser that frees it is typed | `d_closeOnCancel` |
 | in a cancelled scope `await = raise cancelled`, memory unchanged | `await_cancelled`, `await_cancelled_inst` |
 | a shielded wait reads no flag | `shield_catch`, `shield_catch_inst` |
@@ -784,12 +784,12 @@ theorem stickyScope_eval :
 
 /-! ### `effThenDiv` reached: a finaliser that ticks, under `div_fuel`
 
-`PinLaw.fin` is asserted only at configurations programs reach.
+`effThenDiv` is a rule of `CDerives`, proved by `then_compatC_div`. Two derivations use it.
 - `d_thenDivFuel`: a closed program at `F 1`, `return () then x. x unwind (tick; ())` under
   `div_fuel`. Its body does not stop, so the finaliser never runs.
 - `d_thenTickAwait`: `await_1 then x. x unwind (tick; ())` at the row `{tick, await⟨{tick}⟩,
   cancelled}`. A cancel at the wait unwinds through a finaliser that ticks: the configuration
-  `PinFin` asserts. By typing, a task body would reach it under `div_fuel`, whose callback is
+  `then_compatC_div` covers at `cwp`. By typing, a task body would reach it under `div_fuel`, whose callback is
   typed at `tick` ahead of any `Div`-free row (`divFuelTy`), the task's `await` included;
   `effHandleV`'s `hdv` only keeps `Div` out of the task handler's own row. No derivation here
   composes `div_fuel` and a task handler around it. -/
@@ -812,7 +812,7 @@ theorem not_unrD_tick : ¬ Row.UnrD [tickSig] := by
   · simp [capB, tickSig] at hc
 
 theorem d_tickUnit {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerivesP Δ Γ tickUnit (.comp (CTy.effOf [tickSig] .unit)) := by
+    CDerives Δ Γ tickUnit (.comp (CTy.effOf [tickSig] .unit)) := by
   refine .effLet (A := nextTy) (deadSplit hΓ) (fun ⟨o, ho, hq⟩ => ?_) (fun ⟨o, ho, hq⟩ => ?_)
     (.effPerform (o := tickSig) rfl rfl rfl (.unitI hΓ.toP)) ?_
   · simp [tickSig] at ho; subst ho; exact absurd rfl hq
@@ -821,7 +821,7 @@ theorem d_tickUnit {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
 
 /-- **`[then]` with a ticking finaliser is typed**, by `effThenDiv`. -/
 theorem d_thenTick {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerivesP Δ Γ thenTick (.comp (CTy.effOf [tickSig] .unit)) := by
+    CDerives Δ Γ thenTick (.comp (CTy.effOf [tickSig] .unit)) := by
   refine .effThenDiv (A := .unit) (SM := []) (SD := [tickSig]) (deadSplit hΓ)
     (by intro o ho; simp at ho; subst ho; decide) (by simp [Row.Uniq])
     (fun h => absurd h not_unrD_tick) (RowLe.nil _) (RowLe.refl _)
@@ -839,7 +839,7 @@ abbrev rowTickAwait : Row := [tickSig, awaitF (CTy.effOf [tickSig] .unit), cance
 /-- **A cancel unwinds through a finaliser that ticks**, typed by `effThenDiv`: the wait is not
 capturable (it is `lin`), so `hcap` holds, and `hfin` records `{tick}` in its cancel row. -/
 theorem d_thenTickAwait {Δ : LifeCtx} :
-    CDerivesP Δ [] thenTickAwait (.comp (CTy.effOf rowTickAwait .unit)) := by
+    CDerives Δ [] thenTickAwait (.comp (CTy.effOf rowTickAwait .unit)) := by
   refine .effThenDiv (Γ₁ := []) (Γ₂ := []) (A := .unit) (SM := [await0, cancelled])
     (SD := [tickSig]) .nil ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
   · intro o ho
@@ -891,7 +891,7 @@ def thenDivFuel (k : UInt32) : Expr :=
 /-- **The witness**: a closed `CDerivesP` derivation at `F 1`, `div_fuel` handling the row, that
 uses `effThenDiv` at a finaliser row holding `Div`. -/
 theorem d_thenDivFuel (k : UInt32) :
-    CDerivesP LifeCtx.empty [] (thenDivFuel k) (.comp (.ret .unit)) := by
+    CDerives LifeCtx.empty [] (thenDivFuel k) (.comp (.ret .unit)) := by
   refine .bind .nil (.ret (.tensorI .nil (.thunkV rfl (.lamDead (d_thenTick (.cons .nil))))
     (.lit (.i32 k) .nil))) ?_
   refine .bind (.right .nil)
@@ -901,11 +901,12 @@ theorem d_thenDivFuel (k : UInt32) :
       (CTy.effOf [] .unit)) (.here (.cons .nil)))
     (.there (.here .nil))
 
-/-- Under `PinLaw`, every run of the witness continues to `()` at the empty memory. -/
-theorem thenDivFuel_runs (hPin : PinLaw (ℍ := ℍ)) (k : UInt32) {μ₁ : Heap} {e₁ : Expr}
+/-- Every run of the witness continues to `()` at the empty memory: `effThenDiv` is a rule of
+`CDerives`, sound by `then_compatC_div`, so `adequacyD` applies with no hypothesis. -/
+theorem thenDivFuel_runs (k : UInt32) {μ₁ : Heap} {e₁ : Expr}
     (hs : Steps (ℍ := ℍ) Adequacy.emptyMem (thenDivFuel k) μ₁ e₁) :
     Steps (ℍ := ℍ) μ₁ e₁ Adequacy.emptyMem (.val .unit) :=
-  adequacyD_pin hPin (d_thenDivFuel k) hs
+  adequacyD (d_thenDivFuel k) hs
 
 /-! ### Runs
 

@@ -546,6 +546,22 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
       (hD : CDerives Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
       CDerives Δ Γ (thenE N D M) (.comp (CTy.effOf S B))
+  /-- **`[then]` with a finaliser that may loop.** `effThen` with `Div` admitted in the
+  finaliser's row `Σ_D`: no `hSD`. `M`'s row has no capturable operation (`hcap`), so no cancel
+  run (`κ.2`, a least fixed point) reaches the finaliser; a cancel at a cancellable wait of `Σ_M`
+  is a resume and reaches it on the ordinary unwind of the cancel target's raise, at `Σ`, which
+  holds `Div` with `Σ_D`. At a `Div`-free `Σ_D` it is `then_compatC`, at a `Div` row
+  `then_compatC_div`. Decision 69 ("finalisers are total") holds for `effThen`, not for this rule.
+  `[spec §14, §27, §29a]` -/
+  | effThenDiv {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
+      (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)
+      (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
+        o.finRead = true → ThenLe o.fin SD o'.fin)
+      (hP : SD.UnrD → SM.PendPers) (hcap : ∀ o ∈ SM, capB o.q o.B = false)
+      (hM : CDerives Δ Γ₁ M (.comp (CTy.effOf SM A)))
+      (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
+      (hD : CDerives Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
+      CDerives Δ Γ (thenE N D M) (.comp (CTy.effOf S B))
   /-- `[handle]`: `handle_n e with H`, the handler's pair `H = (h_ret, hs)` a value form over a
   part of the context whose live slots are persistent, `n` not in `Σ`.  The `j`-th operation's
   cancel row is `fs j`, and its clause's `κ` has its cancel branch at `cancelTy Σ (fs j)`.  The
@@ -828,6 +844,11 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | effThen hs hNZ _ hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
       exact then_compatC hs hNZ hU hMS hDS
         (fun n i o o' h₁ h₂ hc => hfin n i o o' h₁ h₂ (OpSig.finRead_of_capB hc)) hP hSD ihM ihN ihD
+  | @effThenDiv _ _ _ _ _ _ _ _ _ _ SM SD hs hNZ _ hU hMS hDS hfin hP hcap _ _ _ ihM ihN ihD =>
+      cases hSD : Row.divB SD
+      · exact then_compatC hs hNZ hU hMS hDS
+          (fun n i o o' h₁ h₂ hc => hfin n i o o' h₁ h₂ (OpSig.finRead_of_capB hc)) hP hSD ihM ihN ihD
+      · exact then_compatC_div hs hNZ hU hMS hDS hP hcap hSD ihM ihN ihD
   | effHandleV hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
       exact handleV_compatC hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
         (semC_effOf_rc (Row.unmark_ofEff_append _ _ _ _ _ _) ihe)

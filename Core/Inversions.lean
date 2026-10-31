@@ -786,6 +786,13 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       · obtain ⟨T, hT⟩ := ihN (k + 1) hk; exact ⟨T, splitP_le_right hs k T (slot_succ hT)⟩
       · obtain ⟨T, hT⟩ := ihD (k + 1) hk; exact ⟨T, splitP_le_right hs k T (slot_succ hT)⟩
       · obtain ⟨T, hT⟩ := ihM k hk; exact ⟨T, splitP_le_left hs k T hT⟩
+  | effThenDiv hs _ _ _ _ _ _ _ _ _ _ _ ihM ihN ihD =>
+      intro k hk
+      simp only [thenE, Expr.val, Val.prim, Val.lam, Expr.HasVar, false_or] at hk
+      rcases hk with (hk | hk) | hk
+      · obtain ⟨T, hT⟩ := ihN (k + 1) hk; exact ⟨T, splitP_le_right hs k T (slot_succ hT)⟩
+      · obtain ⟨T, hT⟩ := ihD (k + 1) hk; exact ⟨T, splitP_le_right hs k T (slot_succ hT)⟩
+      · obtain ⟨T, hT⟩ := ihM k hk; exact ⟨T, splitP_le_left hs k T hT⟩
   | effHandleV hs _ _ _ _ _ _ _ _ ihc ihe | effHandleVB hs _ _ _ _ _ _ _ _ _ _ ihc ihe =>
       intro k hk
       simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.HasVar, false_or] at hk
@@ -1206,6 +1213,10 @@ theorem der_app {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       intro X Y he; cases he
       exact ⟨_, .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
         (.inl ⟨_, rfl⟩))))))))))), .refl⟩
+  | effThenDiv =>
+      intro X Y he; cases he
+      exact ⟨_, .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
+        (.inl ⟨_, rfl⟩))))))))))), .refl⟩
   | effHandleV | effHandleVB | effHandleT | effHandleL =>
       intro X Y he; cases he
       exact ⟨_, .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
@@ -1342,6 +1353,7 @@ theorem der_then {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       CDerives Δ (⟨A, true⟩ :: Γ₂) N j₂ := by
   induction h with
   | effThen hs _ _ _ _ _ _ _ _ hM hN _ => intro N D M he; cases he; exact ⟨_, _, _, _, _, hs, hM, hN⟩
+  | effThenDiv hs _ _ _ _ _ _ _ _ hM hN _ => intro N D M he; cases he; exact ⟨_, _, _, _, _, hs, hM, hN⟩
   | force => intro N D M he; rcases forceE_var he with h | h <;> simp [thenE] at h
   | lolliE _ _ hf =>
       intro N D M he; simp only [thenE, Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
@@ -2350,6 +2362,10 @@ theorem der_thenJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeriv
     ∀ N D M, e = thenE N D M → ∃ j₀, ThenBase Δ Γ D M j₀ ∧ JR j₀ j := by
   induction h with
   | effThen hs _ _ _ hMS hDS hfin _ _ hM _ hD _ _ _ =>
+      intro N D M he; cases he
+      exact ⟨_, ⟨_, _, _, _, _, _, _, hs, hMS, hDS,
+        fun n i o o' h₁ h₂ hc => hfin n i o o' h₁ h₂ (OpSig.finRead_of_capB hc), hM, hD, rfl⟩, .refl⟩
+  | effThenDiv hs _ _ _ hMS hDS hfin _ _ hM _ hD _ _ _ =>
       intro N D M he; cases he
       exact ⟨_, ⟨_, _, _, _, _, _, _, hs, hMS, hDS,
         fun n i o o' h₁ h₂ hc => hfin n i o o' h₁ h₂ (OpSig.finRead_of_capB hc), hM, hD, rfl⟩, .refl⟩
