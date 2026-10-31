@@ -551,7 +551,8 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   run (`κ.2`, a least fixed point) reaches the finaliser; a cancel at a cancellable wait of `Σ_M`
   is a resume and reaches it on the ordinary unwind of the cancel target's raise, at `Σ`, which
   holds `Div` with `Σ_D`. At a `Div`-free `Σ_D` it is `then_compatC`, at a `Div` row
-  `then_compatC_div`. Decision 69 ("finalisers are total") holds for `effThen`, not for this rule.
+  `then_compatC_div`. A finaliser whose row holds `Div` puts `Div` in `Σ`, which must be handled
+  before the program is a closed `F A`; one whose row is `Div`-free terminates by totality.
   The proof reads neither `hfin` nor `hUq`: `hfin` records `Σ_D`, `Div` included, in each
   cancellable wait's cancel row, where `Row.CancelTotal`/`Row.CancelEnds` read it.
   `[spec §14, §27, §29a]` -/

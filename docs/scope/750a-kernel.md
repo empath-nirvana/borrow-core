@@ -109,7 +109,8 @@ callers pass `OpSig.finRead_of_capB`. The relation still reads `fin` only at `ca
 adds `hcap : ∀ o ∈ SM, capB o.q o.B = false`: the body has no capturable operation, so no cancel run
 (`κ.2`, which is a least fixed point) reaches the finaliser. A cancel at a marked operation does reach it,
 on the ordinary unwind of the `cancelled` raise. It lives in `CDerivesP` and not in `CDerives`, and
-decision 69 ("finalisers are total") still holds for `CDerives.effThen`.
+a finaliser whose row holds `Div` puts `Div` in the enclosing row, which must be handled (superseded by
+§10).
 
 `PinFin` is `effThenDiv`'s compatibility lemma, stated as a B1 schema: the rule's premises, plus `M`, `N`
 and `D` as `CDerivesP` derivations together with their relations, imply the relation at `F_Σ B`.
@@ -547,11 +548,11 @@ uses it, and every program in `Core/AwaitCancel.lean` types its finalisers with 
 
 **Review of the proof:** no Fatal. It follows `cwp_then` / `cwp_bind` piece by piece, and no
 hypothesis assumes the result: `hR` is discharged by `seq_raise_cwp`, and `hYc` by `Or.inr`.
-- **Major, for the user.** Moving `effThenDiv` into `CDerives` crosses this scope's §4 STOP ("adding
-  `effThenDiv` to `CDerives` … would end decision 69 for the unconditional fragment"). I read "becomes
-  a proved rule" as that. Decision 69 now holds for `effThen` derivations only, and SPEC §14's text
-  says so. If the rule should stay in `CDerivesP` instead, so that the unconditional fragment keeps
-  decision 69, the move is one constructor's place; the proof is unchanged.
+- **`effThenDiv` stays in `CDerives`** (user, 2026-10-31). Finaliser termination follows from the row
+  and totality: a finaliser whose row is `Div`-free terminates by totality, and one whose row holds
+  `Div` puts `Div` in the enclosing row, which must be handled (`div_fuel`, `driveE n`) before the
+  program is a closed `F A`. No separate rule is involved. The §4 STOP on this placement is
+  superseded.
 - §1.5 and §4 above describe the earlier asserted design; §10 supersedes them.
 - **Minor, not done.** `ewp_frame_then_orR` duplicates `ewp_frame_then_or` (about 80 lines), and
   `cwp_bind` is `cwp_bind_le` at equal tables. Either could become one lemma with instances.
