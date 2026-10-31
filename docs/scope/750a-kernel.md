@@ -8,7 +8,7 @@ Kernel target: on `main`, each rule below as a proved rule or as a named schema 
 
 ## 1. The rules
 
-### 1.1 The cancellable marker (replaces the shape test `OpSig.awaitB`)
+### 1.1 The cancellable marker (replaces the spike's shape test `OpSig.awaitB`, never on main and not ported)
 
 The spike decided "cancellable" by shape: operation `0`, `lin`, answering `1 ⊕ 1`, at a name other than
 `Div`'s. That shape is also `Div`'s `tick` (`tickB`), and it is also any user operation `1 ↠^lin 1 ⊕ 1`
@@ -60,11 +60,11 @@ callers pass `OpSig.finRead_of_capB`. The relation still reads `fin` only at `ca
 
 ### 1.4 `Row.ResumeOC`, `[lend-R]`'s premise (PinStop's premise)
 
-    Row.ResumeOC Σ 'x ≜ ∀ o ∈ Σ,
+    Row.ResumeOC Σ 'x ≜ (∀ o ∈ Σ,
         (Row.ResumeO's conjuncts at o)
       ∨ (o.Cancellable ∧ o.n ≠ 0 ∧ ¬ VFree x o.A ∧ (∀ Δ a, VOutlives Δ a o.A) ∧ NoThunkT o.A)
-      ∨ (o.CancelTarget ∧ o.i = 1 ∧ o.q = .cancel ∧ o.n ≠ 0 ∧ ∃ a, Row.find Σ o.n 0 = some a ∧ a.Cancellable)
-    ∧ Row.divB Σ = false
+      ∨ (o.CancelTarget ∧ o.i = 1 ∧ o.q = .cancel ∧ o.n ≠ 0 ∧ ∃ a, Row.find Σ o.n 0 = some a ∧ a.Cancellable))
+    ∧ Row.divB Σ = false          -- outside the ∀ and the disjunction
 
 - The conjunct `Row.divB Σ = false` is explicit. `divAt` ignores `rc`, so a marked `tick` at
   `(divEff, 0)` would otherwise pass the second disjunct. `Row.ResumeO` excludes `tick` only through
@@ -79,8 +79,14 @@ callers pass `OpSig.finRead_of_capB`. The relation still reads `fin` only at `ca
   `LendFrame`'s asserted domain by the same amount. **This strengthens an existing assertion, so it is a
   trusted-base change.** It is authorised only by the kernel target's line "`Row.ResumeOC` as PinStop's
   premise". It is raised explicitly on #750 and recorded in SPEC §29's trusted base, with exactly the
-  domain it admits: a lend held across a marked `await` and across `[await-c]`'s raise of `cancelled` on
-  a cancel. No field is added for it.
+  domain it admits. No field is added for it. It relaxes `Row.ResumeO` in three ways:
+  1. the abortive `cancelled` is admitted (OQ-1(a), cancel path only);
+  2. the `await` answers `1 ⊕ 1`, not `1`. This is OQ-5's restriction ("as GhostEnd and Law 2 do"),
+     relaxed for marked waits. The answer is reached only through `[await-c]`'s `case`, since `hac`
+     refuses a plain `perform`;
+  3. any cancel row is allowed (`o.fin` free).
+
+  SPEC §29's trusted base lists all three. `docs/async-capabilities.md` OQ-1 and OQ-5 are updated.
 - Semantically, the relation ignores `rc`. So the widened domain is OQ-1 option (a)'s belief
   (`docs/async-capabilities.md` §8): an abort, at an operation handled outside the lend, after a
   suspension inside the lend. The evidence is the evidence already cited for OQ-1(a). The LIFO frame
@@ -123,6 +129,12 @@ and `D` as `CDerivesP` derivations together with their relations, imply the rela
   unless a named `def … : Prop` is built.
 - `pinLaw_iff : PinLaw ↔ PinStop ∧ PinLoop ∧ PinFin` (when asserted), and `PinLaw.of_stop_loop` gains
   the third argument.
+- **Reachability.** `effThenDiv` at a `Div` finaliser forces `Row.divB Σ = true`, so `effHandleV`/`VB`'s
+  `hdv` refuses it inside a task body. The term is reachable under `divFuel`/`reify` (the handlers of
+  `Div`). Before `PinLaw.fin` is asserted, one closed `CDerivesP` derivation that uses `effThenDiv` at a
+  `Div` finaliser under `divFuel` is given (`d_thenDivFuel`). Without it the schema is not added.
+- **The nursery** (a finaliser that loops awaiting children) also needs `hdv` (decision 68) relaxed for
+  task handlers. That is #743's widening, not this unit.
 - `bcc trusted` (`Backend/Driver.lean` `typingReport`) maps a `Fin` pin to `PinFin (PinLaw.fin)`. The
   checker does not emit `effThenDiv` in this unit: finalisers at the surface are typed at `F 1`
   (`effThenA`). Emitting it is unit B.
@@ -137,20 +149,24 @@ These are recursive over nested cancel rows, by the same recursion as `FinLe`, a
 relation does not read `fin` at a marked operation. Each is decided (`cancelTotalB`, `cancelEndsB`) with an
 `_iff`.
 
-Under level-triggered cancellation (§1.7), a marked operation's cancel row lists the finalisers between a
-wait and the next catch. It does not list everything a cancel runs, so `CancelTotal` alone does not bound
-a cancel. Code after a catch may tick. `Row.CancelEnds` adds "no `Div` where the row has a cancellable
-wait".
+Under level-triggered cancellation (§1.7), a marked operation's cancel row does not cover code that runs
+after a catch, so `CancelTotal` alone does not bound a cancel. `Row.CancelEnds` adds "no `Div` where the
+row has a cancellable wait".
+- A task handled by `effHandleV`/`VB` already has a `Div`-free row (`hdv`), and those are the rules the
+  state-passing scheduler fits. So at a task row `CancelEnds` reduces to `CancelTotal ∧ Div-free`.
+  `Div` can sit beside a marked wait only under `effHandleT`.
+- The relation never reads a marked operation's cancel row. So `CancelTotal` and §1.3's `finRead`
+  bookkeeping have no semantic consumer under level-triggered cancellation. They are kept because the
+  kernel target names them. This is raised with the user (§6.7).
 
 **`CancelEnds` is a theorem target, not a typing restriction.** No rule asks for it.
 
-- The target (`cancelEnds_ends`): at a row with `Row.CancelEnds`, a cancelled task ends.
-  - It finishes, or it reaches a cancellable wait, which raises `cancelled`.
-  - It does so through finitely many stops, under every scheduler answer.
-  - The reason: at a `Div`-free row the relation is `ewpTS`, a least fixed point (`effWp false`). Its
-    induction principle bounds every path through the stops.
-- It is proved if that is tractable inside the unit. Otherwise it is recorded as unproved, with no
-  assertion.
+- **The target** (`stickyScope_ends`): `hnd (n, H_sticky) e` at the cancelled flag, typed under
+  `effHandleV` (so `hdv` holds). Every run reaches the handler's answer, through finitely many stops of
+  `Σ`, with no suspension at a marked wait.
+  - The closed instance (`d_stickyScope`) follows from `adequacyC`/`adequacyD`, and is proved.
+  - The general statement over every task body `e` is proved if that is tractable. Otherwise it is
+    recorded as unproved, with no assertion.
 - Rows with `Div` carry no termination guarantee, which is what `Div` means. That is not a finding.
 - `run_in` (unit B) may cite the theorem only once it is proved.
 
@@ -176,8 +192,9 @@ kernel rule, step or premise**. The cancelled state belongs to the task's handle
 - **Shielded waits.** An unmarked operation of the same name, `complete : 1 ↠^lin 1`, whose clause does
   not read the flag. Finalisers that wait use it. An `await` in a finaliser of a cancelled task raises
   at once. Round 2's rollback target is written with `complete`.
-- **What a cancel row means now.** A marked operation's cancel row, recorded by `[then]`'s `hfin`, lists
-  the finalisers between the wait and the next catch. Typing is unchanged (`ResumeOC`'s `await` branch
+- **What a cancel row means now.** A marked operation's cancel row, recorded by `[then]`'s `hfin`,
+  accumulates every finaliser around the wait out to the task handler, including ones whose raises are
+  caught inside. It does not cover code that runs after a catch. Typing is unchanged (`ResumeOC`'s `await` branch
   admits any cancel row). Only the reading changes (§1.6).
 - **No refusal of interception.** A handler inside the task may catch a finaliser's raise that
   supersedes `cancelled`. The cancel is then deferred to the next cancellable wait, not lost.
@@ -186,7 +203,8 @@ kernel rule, step or premise**. The cancelled state belongs to the task's handle
   - Route (i)'s premise `hRC` is dropped. The targeted check's two Fatals, its `divFuel`/`reify` Major
     and its `hRC` Minors (4, 5, 9) were findings against `hRC`, and they are moot.
 
-**Ported onto main and rebuilt** (not merged), in `Core/AwaitCancel.lean`:
+**To be ported onto main and rebuilt** (not merged), in `Core/AwaitCancel.lean`. Typed terms:
+`d_swallow`, `sem_swallow`, `d_stickyScope`. The rest are machine runs.
 
 - `stickyAwait`, the level-triggered clause, together with the laws:
   - `await_cancelled`: at a memory where the flag holds `inr ()`, `hnd (n, H) K[await_n]` steps to
@@ -200,7 +218,12 @@ kernel rule, step or premise**. The cancelled state belongs to the task's handle
   - in the relation (`sem_swallow`);
   - its row admitted by `ResumeOC` (`resumeOC_swallow`).
 - **The scheduler's clause, typed by passing the state along** (as `take n` does), not by capturing a
-  cell:
+  cell. This is the *immediate* scheduler: the flag is passed in and not changed between suspensions.
+  It shows the clause's typing and the start-cancelled scope. A *suspending* scheduler (live: hand `κ`
+  out; the driver sets the flag and resumes) needs an answer holding the suspended `κ`, such as
+  `μX. R ⊕ U(Flag ⊸ F X)`. Its typing under main's rules is not verified here. It is unit B's
+  (lib/async's rewrite), and the claim "no new kernel rule" is made only for the immediate scheduler.
+  The cell-reading `stickyAwait` laws cover the suspend-then-cancel run at the machine level only.
   - The handler's answer is `U(Flag ⊸ F R)`. `await`'s clause is
     `λ(_, κ). return (λc. case c {inl _ ⇒ resume κ (inl ()) to g. g c | inr _ ⇒ resume κ (inr ()) to g. g c})`,
     `lin` at `1 ↠ 1 ⊕ 1`.
@@ -222,19 +245,28 @@ kernel rule, step or premise**. The cancelled state belongs to the task's handle
 
 ### 1.7a Laws
 
-- **Laws 5 and 6** (non-interceptable, dead frames; first error kept) stay as they are for κ.2 cancels
-  of `cancel` operations: generators, `deadline`, `take`.
-- **Law 5c, for cancellable waits.** It replaces 5 and 6 there: *a cancel is not lost*. In a cancelled
-  scope every cancellable wait is `raise cancelled` (`await_cancelled`).
-- **A finaliser's raise supersedes the cancel**, by law 6's ordinary unwind clause. The canceller learns
-  how the task ended, not which errors its finalisers raised.
+- **Law 5** (a cancel is not interceptable; the cancelled region's frames are dead) and the
+  *first error kept* sentence of law 6 (`CancelRun`) stay as they are for κ.2 cancels of `cancel`
+  operations: generators, `deadline`, `take`.
+- **Law 5c, for cancellable waits.** It replaces law 5 and the `CancelRun` sentence there: *a cancel is
+  not lost*. In a cancelled scope every cancellable wait is `raise cancelled` (`await_cancelled`).
+  - 5c is a law of the task handler's clause (lib/async, unit B), not of the kernel.
+  - The kernel's part is that `cancelled_n` is raised only by `[await-c]`, and only on `inr ()`
+    (`[perform]`'s `hac`, `[raise]`'s `hrc`).
+  - It is never caught inside the task: the raise happens in the same `K` as the wait, and the catch
+    needs `K` free of `n` (`catch_step`, `catch_abort`). Stated as `cancelled_not_caught`.
+- **Law 6's *Finally* and *Unwinding* clauses apply unchanged to the `cancelled` raise.** A finaliser's
+  raise supersedes it. The canceller learns how the task ended, not which errors its finalisers raised.
 - **Text to update:**
-  - SPEC §19 *Laws* items 5 and 6: scope them to κ.2, and add 5c;
-  - SPEC §29a: the mechanism, the shielded wait, the laws and termination;
-  - `docs/effect-lowering.md` §2.4 and the §2.8 row. For cancellable operations, the excluded variant
-    ("a cancel lowered as an ordinary raise") is now the semantics: the cancel is a call that resumes
-    the task's state machine with `inr ()`, and the raise is ordinary. The exclusion stays for κ.2
-    cancels.
+  - SPEC §19 *Cancels*' opening sentence (~line 2990) and *Laws* item 5 and law 6's `CancelRun`
+    sentence: scope them to κ.2, and add 5c;
+  - SPEC §29a;
+  - `docs/effect-lowering.md` §2.4 and the §2.8 row. For cancellable waits, "a cancel lowered as an
+    ordinary raise" is now the semantics: a call that resumes the task's state machine with `inr ()`,
+    then an ordinary raise. The exclusion stays for κ.2 cancels.
+- **Decision 2 overrides the brief's "cancel can't be intercepted" for marked waits.** A handler inside
+  the task may catch a finaliser's raise that supersedes `cancelled`. It cannot catch `cancelled_n`
+  itself.
 
 ### 1.8 A value with no derived drop must be closed on every exit, the cancel included
 
@@ -345,8 +377,8 @@ Each comes with `#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
 - **Any `PinLaw` change other than the third field.** STOP. The `ResumeOC` widening of `LendFrame` is the
   kernel target's own and is listed in §1.4; a widening beyond §1.4's domain is a STOP.
 - **Admitting abortive operations other than `cancelled` in `ResumeOC`** (OQ-1). STOP.
-- **Letting finalisers intercept a cancel**, or letting a finaliser's raise be swallowed (the finaliser
-  algebra). STOP.
+- **A seal or `[then]` frame swallowing a finaliser's raise, or a handler inside the task catching
+  `cancelled_n` itself.** STOP. Catching a finaliser's superseding raise is allowed (decision 2).
 - **Touching a task's derived drop** (cross-flag). STOP and report. See §6.1 for unit B.
 - **`ResumeOC` admitting a row with `Row.divB = true`.** STOP.
 - **`[raise]` admitting a marked operation.** STOP.
@@ -376,7 +408,8 @@ Each comes with `#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
 - `Decide.rowLeB` tests exact entry equality, so it compares `rc` already. It is sound only, so no `_iff`
   is at stake.
 - `docs/async-capabilities.md` §8 OQ-1, §3.4 and row `n4` (§1.4).
-- Frontend/Check/Pin.lean: `resumeOB` → `resumeOCB` at the R1 site. The gen-pin.py templates. The
+- `resumeOB` → `resumeOCB`: defined in Frontend/Check/Pin.lean; the R1 call site is
+  Frontend/Check/Checker.lean (~662/676); `scripts/AxiomCheck.lean` prints `resumeOB_sound`. The gen-pin.py templates. The
   `KernelCensus`/kernel-counts goldens if they enumerate rules. `corpus/*.out` for `bcc trusted` only
   if a program's pins change, and none do.
 - Experiments are not built by the gate. Their `OpSig` literals will break, and they are left alone.
@@ -404,15 +437,24 @@ whatever."
    `Row.CancelEnds` is a theorem target (§1.6), not a typing restriction.
 5. **OQ-1(a) is taken for the cancel path only** (§1.4), under the kernel target's line "`Row.ResumeOC`
    as PinStop's premise". This is a trusted-base change.
-6. **Where the marker is declared.** `cs` is chosen per handler (sound: marking only restricts). Unit B's
-   checker reads it from the effect declaration and never chooses it (STOP).
+6. **Where the marker is declared.** In the kernel judgment, `cs` is chosen per handler. Marking restricts
+   `[perform]`/`[raise]` and widens what `ResumeOC` (so `LendFrame`) admits.
+   - The tied judgment does not tie `rc` today: `RowAt` compares `(q, A, B)` with `Ξ`.
+   - In unit A no effect context declares a marked operation, and the checker emits none, so nothing
+     depends on the tie yet.
+   - **Unit B obligation (STOP until done):** before the surface declares a cancellable wait, `EffCtx`
+     carries the marker (`Ξ n` giving `(q, A, B, rc)`), `RowAt` compares it, and the tied handler rules
+     derive `cs` from `Ξ`. Then the marker is never correct by convention.
+7. **For the user:** under level-triggered cancellation, `finRead` (§1.3) and `Row.CancelTotal` (§1.6)
+   have no semantic consumer. They are kept because the kernel target names them. Whether to drop them
+   is a question for the user.
 
 ## 7. Review record
 
 1. **Review 1.** One Fatal: `ResumeOC` admitted a marked `tick`. Fixed in §1.4. Its Majors and Minors
    are applied.
-2. **Review 2 (full).** Its Fatal was interception through a live region. Fixed in §1.7, after the user's
-   decision 2. Its derived-drop finding is closed by decision 1. Its Major (OQ-1(a)) is in §1.4 and §5.
+2. **Review 2 (full).** Its Fatal was interception through a live region. It is addressed by the user's
+   decision 2 (level-triggered: the cancel is deferred, not lost). Its derived-drop finding is closed by decision 1. Its Major (OQ-1(a)) is in §1.4 and §5.
    Its Minors are applied:
    - `finRead` skips abortive operations;
    - the non-vacuity tests cover a marked `tick` and `[raise]`;
@@ -422,4 +464,8 @@ whatever."
 3. **Targeted check** (§1.7, §1.8, §6). It found 2 Fatal, 1 Major and 5 Minor findings against
    route (i)'s `hRC`. They are moot now that §1.7 is level-triggered and `hRC` is dropped. Its Minors on
    §1.8, §1.4 and §3 are applied.
-4. **Full review of the level-triggered scope.** Below.
+4. **Full review of the level-triggered scope.** No Fatal; 7 Major and 7 Minor findings, all applied.
+   The scheduler claim is limited (§1.7). The laws text is fixed (§1.7a). The termination target is
+   restated (§1.6). The `finRead`/`CancelTotal` question goes to the user (§6.7). `PinFin` gets a
+   reachability witness (§1.5). The trusted base lists three relaxations (§1.4). The `Ξ` tie is unit
+   B's STOP (§6.6). The Minors are applied.
