@@ -913,3 +913,33 @@ Each entry: the decision, and why. Newest last.
       #564 does not lift it.
     - The theorem that every run of a finaliser terminates, the handler clauses its operations
       reach included, is open (SPEC §14 *Open*).
+70. **Grades take the M1 shape; the world axis has two points, `op ⊑ top` (#743 B5).**
+    - Grades are a product of small per-axis lattices with cross-axis implications (M1): count,
+      position, storage, pending finalisers, and world. In the user's words (2026-10-22): "I think
+      M1 for grades otherwise we'll have to do that later anyway."
+    - The world axis is `World := op | top`, with `op ⊑ top` (`Core/Types.lean`). `top` is Core's
+      convention: a continuation captured at the operation is owed at every extension of the stop's
+      list. At `op` it is owed only at lists with the stop's members (`Owed`, `Core/EffDefs.lean`).
+      The laws are proved: the order (reflexive, transitive, antisymmetric, `op` least), the meet a
+      handler's clauses take (`hCN_iff_le`), independence from the count axis (`owed_q_indep`),
+      and no world at an abortive operation (`entWld`).
+    - Two points, for two reasons:
+      - the user approved `{ℓ_op, ⊤}` on 2026-10-22, in #673's consolidated review (comment
+        6350336829, item 4: "Yeah sounds good");
+      - a lifetime-valued bound collapses to these two points. The B5 spike (commit 21363bd9,
+        `Core/EffLendWorld.lean`, removed with the carrier) gave `owedBound_stratum_config`: a
+        configuration in which `Owed (some r)` holds at a stop's share and `Ext` fails at a resource
+        of `Res_α`. It also gave `owed_same_of_keepsAbove`: the premise that would carry the view
+        cell's predicate (`OwedKeepsAbove`) makes every bound keep every record. A view cell's
+        predicate reads the records longer-lived than the cell; a bound keeps those shorter-lived
+        than it.
+    - This is the shape of Dreyer, Neis and Birkedal's result (ICFP 2010; JFP 2012). Under control
+      capture, the private transitions of a Kripke world merge into the public ones: a captured
+      continuation is related only at public futures. Region-indexed effect systems (Thamsborg and
+      Birkedal, ICFP 2011; Krogh-Jespersen, Svendsen and Birkedal, POPL 2017) bound *which*
+      regions may change, with predicates local to their region. Our predicates are not local in
+      that sense.
+    - B5 builds the world axis only. The count, position, storage and pending-finaliser axes are
+      later units.
+    - A third world would need predicates local to a tree-shaped lifetime order
+      (`scratch-archive/743/world-lit.md`). That is unverified and not pursued.
