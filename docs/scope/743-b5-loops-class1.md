@@ -298,7 +298,106 @@ A wrong world makes the checker refuse the term. It never makes the checker acce
 not. Phase 2 reads `call-grade`'s `Row.lendB` first. If the checker cannot decide the world without
 the elaborator choosing it, STOP.
 
-### 2.3 What it reads
+### 2.3 World inference (Q2 resolved)
+
+**Decided (user, 2026-10-31): option (A).** The checker infers every operation's world in
+`{op ⊑ top}`. Core rows are written in the core text and read by the checker (`E.elabRow`). A
+`[sub]` moves only `top → op` (`OpSig.LeF`), so `op` cannot come back out to an enclosing `top`
+row. Every row from a lend out to whatever handles its operation must therefore be `op`. That is
+a whole-term question, and the checker answers it by inference.
+
+**Variables.** The elaborator emits every operation of every row annotation with no world. The
+core-text spelling is the one used today; a written world is optional and only used in hand-written
+kernel text. The checker gives each occurrence a world variable `ω`. Where a typing rule makes two
+rows the same row, their variables are identified by unification: the premises and conclusion of
+`[let]`/bind, `case`, `[then]`, `λ`/application, thunk/force, and a definition's type at its uses.
+Definitions' types carry variables too, solved with the rest of the program.
+
+**One constraint rule per construct.** Write `ω_o` for the variable of operation `o` in a row.
+The order is `op ⊑ top`.
+
+| construct (kernel rule) | constraint |
+|---|---|
+| `withbor1U`, `withbor2U`, callback row `S` (`Row.Lend`) | `ω_o = op` for every `o ∈ S` with `o.abort = false`; nothing for an abortive `o` (`entWld`) |
+| `[sub]` (`effSub`), and every `RowLe S S′` premise (`hSN`, `hMS`, `hDS`, a call's row into its caller's) | `ω_{o′} ⊑ ω_o` for each `o` of `S` and the `o′` of `S′` at its key: `op` is carried outward |
+| `effHandleT`, handled row `Row.ofEff n E 0 fs cs c ++ S` | the handled operations take the node's `ω_c`. `hCN`: `ω_o ⊑ ω_c` for every `o ∈ SN`. It accepts `ω_c = op` |
+| `effHandleV`, `effHandleVB`, `effHandleL` | `ω = top` for every handled operation, the row `Row.ofEff … ` at `c = top` |
+| `reify` | `ω_tick = top` (`reifyTy` at `tickSig`) |
+| the runtime (`main` at `[tickSigW c]`), `div_fuel` | `ω_tick` free: both worlds are accepted (`runtime_main_every_run c`, `divFuel c`) |
+| `iterate`, `withbor3U`, `withloadU`, `sliceBorrowMU/IU`, and every other construct | no constraint of its own; variables are passed through by identification |
+
+The rules are compositional: each is local to its node, and the program's system is their union.
+
+**The solve.** Two points and constraints of three forms (`ω = op`, `ω = top`, `ω′ ⊑ ω`) make
+this Horn satisfiability over one bit.
+
+1. Set every variable forced `op` to `op`.
+2. Propagate along the `⊑` edges: if `ω` is `op`, `ω′` is `op`.
+3. Every other variable is `top`.
+
+That is the least fixed point. It takes the strictest world that works: `top`, Core's convention,
+unless a lend forces `op`. It is unique and linear in the number of constraints.
+
+It runs in the checker (`Frontend/Check/World.lean`), on the core text the elaborator emits, before
+the existing check. The elaborator never chooses a world. The solved world is written back into the
+row annotations; the existing checker then runs on the solved term unchanged, and builds the typed
+term and its `CDerivesAt`/`TDerivesP` derivation.
+
+**The conflict.** A variable is forced `op` by a lend and forced `top` by a handler or a `reify`.
+The refusal names the lend's site, the operation, and the handler's or `reify`'s site, with the fix
+where one exists:
+
+- **message W-L** (forced `top` by `effHandleV`/`VB`/`L`): "the lend of `x` at L1 is held across
+  `op` at L2, and `op` is handled at L3 by a handler that does not resume in tail position, so its
+  continuation is owed at every extension: end the borrow before `op` (borrow at each use), or
+  move the borrow inside the handled body below `op`, or make the handler resume in tail position."
+  This is fix **(a)**. It subsumes 4.6's message L.
+- **message W-R** (forced `top` by `reify`): "the lend of `x` at L1 is held across the ticks of a
+  loop that is stored at L2 (`reify`): lend inside each turn instead." This is **(a)** where the
+  loop is driven by its consumer, as 4.4's `for-lend-resumes` is. It is **(b)** (B7) for a
+  self-borrow held by a stored generator (`gen-self-borrow`).
+
+**The kernel re-checks every world, so the inference decides no guarantee.** A wrong solve is a
+refusal, never unsoundness. The rules that catch it:
+
+- `Row.Lend` (the `hS` premise of `withbor1U`/`withbor2U`);
+- `OpSig.LeF`/`RowLe` in `[sub]` and in every `RowLe` premise;
+- `effHandleT`'s `hCN`;
+- `reify`'s `tickSig`;
+- `effHandleV`/`VB`/`L`'s `Row.ofEff` at `c = top`;
+- the runtime and `div_fuel` theorems, stated for both worlds.
+
+The inference is not proved, and need not be: like the rest of the checker it only proposes a
+derivation.
+
+**Cost and files.**
+
+| file | change |
+|---|---|
+| `Frontend/Check/World.lean` (new, about 600–900 lines) | variables per row occurrence, the per-construct constraints, unification, the solve, write-back, and the W-L/W-R refusals |
+| `Frontend/Check/Checker.lean` | run the pass before checking |
+| `Frontend/Check/Elab.lean`, `Frontend/Check/Consts.lean` | read solved worlds; `Row.lendB` and `lendRow` decide `Row.Lend` (call-grade's, at `World`) in place of `unwindRow` at `withbor1U/2U` |
+| `Frontend/{Parser,Syntax,Print}.lean` | an optional written world on an operation in core text; printing solved worlds (`bcc desugar`) |
+| `corpus/reject/` | `world-lend-handleL.bc` (W-L) and `world-lend-reify.bc` (W-R), the two conflicts |
+
+**Tempting shortcuts, and the STOP each raises.**
+
+| shortcut | STOP |
+|---|---|
+| Default every operation to `op` | **PRINCIPLED**: it is not the strictest that works. It refuses every `effHandleV`/`VB`/`L` and `reify` program that holds no lend |
+| A per-handler or per-effect special case (`count` is `op`) | **KERNEL WORK**: one rule per construct |
+| Infer, or write, worlds in the elaborator | **Q2**: the elaborator never chooses a world |
+| Retry a refused program at `top`, or any fallback solve | **PRINCIPLED**: there is one solve, the least fixed point |
+| Skip the kernel re-check because "the solve is right" | **KERNEL WORK**: the derivation is always rebuilt and re-checked |
+| Solve per definition and stop at its boundary | **PRINCIPLED**: definitions' types carry variables solved with the program, or a lend inside a callback conflicts spuriously |
+
+**Effect on the acceptance list (section 4).** None predicted. The inference realises exactly
+the mechanism 4.1–4.4 assumed (K-lend at the runtime and at `effHandleT`; K-last and class 2
+refused). K-last's message becomes W-L, and class 2's at a `reify` becomes W-R; both carry the same
+fixes as before. Phase 2 measures every program in 4.1–4.4 again, and lists any difference
+against this prediction.
+
+### 2.4 What it reads
 
 The elaboration reads the syntax and the types that inference gives (`TCx`). It reads no borrow,
 lifetime or linearity judgement, and makes none. Every such judgement is the checker's, made on the
@@ -307,7 +406,7 @@ core term that the elaboration emits.
 The brief says "checked facts only". No pipeline exports checker facts to the elaboration: inference
 runs before checking, on every branch. Box Q7 covers how this scope reads that requirement.
 
-### 2.4 What retires
+### 2.5 What retires
 
 The per-observation lend in `Frontend/Elab/LoopLend.lean` retires. That code is kernel work done in
 the elaborator: it decides each lend's extent per turn.
@@ -809,9 +908,12 @@ not of any theorem. At `w = none` both are trivial and give today's rule; they a
 > **Still open for the reviewer:** whether `none` is acceptable as the unbounded element. The
 > alternative is a bottom lifetime, which would edit a printed grammar and is not proposed.
 
-> **Q2. Who decides the world: DECIDED, the checker.** The elaborator writes `none` throughout. The
-> checker reaches `some r` by `[sub]` at lends, `effHandleT` nodes and `main`. The kernel re-checks.
-> STOP if the elaborator would have to choose.
+> **Q2. Who decides the world: RESOLVED (user, 2026-10-31, option A): the checker infers it** (§2.3).
+> The elaborator emits operations with no world. The checker gives each a variable, solves the
+> per-construct constraints by least-fixed-point propagation (`top` unless a lend forces `op`), and
+> writes the solved world back into the term. The kernel re-checks every world. A `[sub]` at a node
+> was not enough: `op` cannot be moved back out to a `top` row, so every row from a lend to its
+> handler must be `op`.
 
 > **Q3. `CDerivesP` mirrors `S.Lend`: DECIDED by the top foreman,** answering from the across-loops
 > decision (2026-10-29/30: PinLaw's schemas are uniform in depth and holder, so a class-1 lend nested
