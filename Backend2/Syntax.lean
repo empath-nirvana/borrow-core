@@ -289,6 +289,12 @@ structure Fn where
   joins, resumes, cancels and finalisers, the stack machine's functions, the helpers) leaves it
   empty, and a missing bit is a cleared one: such a function carries no borrow fact. -/
   lendEncl : List Bool := []
+  /-- **The function's body is at the empty row** (SPEC §50): it is the code of a source `λ`,
+  thunk or `&` component whose computation type is `F B`, with no operation and so no `Div`
+  (`Convert.mkClos`/`mkAmp`, from the checked term's type). The kernel's `total_open` then says it
+  returns at related arguments. Every function the conversion makes leaves it cleared. The native
+  `willreturn` class (`Low.willreturnClass`) starts from it. -/
+  emptyRow : Bool := false
   deriving Inhabited
 
 /-- A program: its functions, its codes, `main`'s term and every variable's type. -/

@@ -361,6 +361,7 @@ mut-name-capture erased handles 0 performs 0 raises 0 left 0 0
 mut-run erased handles 0 performs 0 raises 0 left 0 0
 mut-shadow-arms erased handles 0 performs 0 raises 0 left 0 0
 name-clash erased handles 0 performs 0 raises 0 left 0 0
+native-willreturn erased handles 0 performs 0 raises 0 left 0 0
 nats-sum erased handles 0 performs 0 raises 0 left 0 0
 needs-stdout erased handles 0 performs 0 raises 0 left 0 0
 operator-rounds erased handles 5 performs 0 raises 5 left 0 0

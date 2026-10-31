@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.23 · 2026-10-31
+Version 1.24 · 2026-10-31
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1840,6 +1840,13 @@ A closed div-free program terminates on every run (`Core/Totality.lean`). For
   run (`Alloc.ofRun`: at count `k`, the location the run chose at its allocation of count `k`),
   under which every prefix of it is an allocator run; `total_every_alloc` and determinism
   (`AStep1.deterministic`) then put a value on it, which cannot step.
+
+One call (§50's `willreturn`): `total_open`, a computation of `F B` (the empty row) in a context
+`Γ`, closed by values in the relation at a tagged typed world whose completion lowers to `μ`,
+reaches a value under every allocator (`fundamentalC` at the closing substitution, unpacked as
+`total_every_alloc`); `total_call`, its instance at one argument; `total_open_pin`, the same under
+`PinLaw`; and `total_subrun`, every redex a closed program's run reaches in a plain context runs
+to a value (`total_every_run`, then `steps_plug_inv`).
 
 "Div-free" is the type: a closed computation of `F A` is total, whatever it calls inside, since
 a loop it holds is observed a finite number of times (by `div_fuel`, or not at all). A program
@@ -8957,14 +8964,17 @@ facts), `bcc lir --frames` and `bcc-counts --frames`.
 
   | parameter word | attributes | the guarantee it cites |
   |---|---|---|
-  | a `mut` borrow of a cell with words | `noalias nonnull dereferenceable(b)` | a `mut` lend is unique: `●` joins `imm` cells only (`CellU.CompatS.kinds`, `Support/Model/Composition.lean`); a live borrow points at a live cell: no run is stuck (`adequacyD`, §13), so a load through it succeeds |
+  | a `mut` borrow of a cell with words | `noalias nonnull dereferenceable(b)` | a `mut` lend is unique: `●` is defined where `▶◀` holds (`CellU.CompS.compat`) and `▶◀` relates `imm` cells only (`CellU.CompatS.kinds`, `Support/Model/Composition.lean`); a live borrow points at a live cell: no run is stuck (`adequacyD`; `adequacyD_pin` under `PinLaw` at a relaxed lend, as `bcc trusted`'s typing line reports; `externs_every_run` or `io_every_run` with externs, §13), so a load through it succeeds, and the cell was allocated at its width class's widest bytes (`WidthClass`, `bcc trusted`) |
   | an `imm` borrow of a cell with words | `noalias readonly nonnull dereferenceable(b)` | an `imm` lend is not written while live: `▶◀` relates `imm` cells at one value (`CellU.CompatS`), and the LIR's writes (`put`, `swap`, `slotPut`, `replace`) take a `mut` borrow or the owner; a live borrow points at a live cell, as above |
   | the base of a borrowed family | `noalias`, and `readonly` at `imm` leaves | its leaves' mode, as above; the base is `0` for an empty family or in the program's data, so it is neither `nonnull` nor `dereferenceable` |
 
-  `b` is the cell's bytes (its class's widest, §35). A cell of no words (its borrow is `0`) gets
-  none. A pair's fields are its words in order; a sum's depend on its arm and get none. These are
-  facts, not forcing annotations: no performance target rests on LLVM's use of them
-  (`docs/compiler.md` choice 6).
+  `b` is the cell's bytes (its class's widest, §35), which rests on the width-class assumption
+  marked UNPROVED at `Low`'s `.alloc` (`WidthClass`, listed by `bcc trusted`). A cell of no words
+  (its borrow is `0`) gets none. A pair's fields are its words in order; a sum's depend on its
+  arm and get none. These attributes are **informational, relied on for now, improvement
+  candidates** (*Improvement candidates* below): LLVM may use them and is not made to, and what
+  a target or count gains from them is to be moved into our compiler or forced where gains remain
+  (`docs/compiler.md` choice 6; measured in `docs/scope/760-native-facts.md` §7).
 - **The lend encloses the function.** The kernel's facts hold while the lend is live; LLVM's
   attributes speak of the whole of the function's execution (`noalias`: no access during it to
   memory modified through the pointer except through pointers based on it). The step between
@@ -8994,6 +9004,42 @@ facts), `bcc lir --frames` and `bcc-counts --frames`.
     assumption but not of its statement; the interpreter sees it only through the cell's liveness
     at the call's return. `bcc trusted` lists `LendEnclosesFn` at every function with
     a borrow fact, read off the word IR's `Fn.facts`.
+- **`willreturn` and `mustprogress`** on the functions of the *willreturn class*
+  (`Low.willreturnClass`, `Flat.Fn.willreturn`, with the facts only). LangRef: "a call of this
+  function will either exhibit undefined behavior or comes back and continues execution at a
+  point in the existing call stack that includes the current invocation", and `willreturn`
+  implies `mustprogress`. The class is held to the bar the borrow facts meet: a kernel fact plus
+  the lowering's faithfulness.
+  - **The empty-row bit.** Each LIR function carries `Fn.emptyRow`, set where the function is made
+    from the checked type: at a source `λ` whose body is at `F B` (`CTy.atEmptyRow`), a dead `λ`
+    at the empty row, a thunk (its body is at `F A`), and each `F B` component of a source `&`.
+    Every function the conversion makes for itself leaves it cleared; a cleared bit keeps a
+    function out of the class.
+  - **The class** is the greatest set of word-IR functions with the bit set whose bodies call no
+    runtime function but `bc_free` and call only functions of the set. So a function in it
+    reaches no allocation (`bc_alloc` aborts when `malloc` fails, which does not return), no
+    read or write (`bc_getc`, `bc_getv`, `bc_putc`, `bc_putv`: each may block without end, and a
+    capability is a `mut` argument, and `print_lit`'s writes take none, so the row does not
+    exclude them), no sleep, no clock and no exit status. Until allocation is tracked in rows
+    (#763), the body's calls stand in for it: the class grows when the row says it.
+  - **The citation.** At related arguments a computation at the empty row returns under every
+    allocator: `total_open` (`Core/Totality.lean`, §14), or `total_open_pin` under `PinLaw`
+    (`Core/PinFundamental.lean`). That the native call is the LIR's call is the lowering's
+    faithfulness, which every native fact rests on. That a call a run reaches is at related
+    arguments, at a tagged typed world the memory lowers, is `total_open`'s premise and is not
+    faithfulness: it is proved for a closed `CDerives` program at a plain context
+    (`total_subrun`, which needs no relation premise), and is the named assumption
+    `CallRelated` otherwise (under a handler or catch frame, under `PinLaw`, with externs, for a
+    `main` that loops). The machine stack does not overflow in such a call: the named host
+    assumption `HostStack`. `bcc trusted` lists both at each function of the class, read off the
+    word IR's `Fn.willreturn`. A `trap` block in such a
+    function is unreachable by `adequacyD` and faithfulness, as everywhere; LLVM may now treat it
+    as such.
+- **`nounwind`** on every function, as before, now cited: the named assumption `NoUnwind`
+  (`Backend2.nativeAssumptions`, `bcc trusted`): no `invoke`, `landingpad` or `resume` is emitted;
+  errors and cancels are branches (§47); every extern is a C function of
+  `Backend/Native/Runtime.lean`, C does not unwind, and the runtime cancels no thread. `abort` and
+  `llvm.trap` are traps, which LangRef's `nounwind` permits.
 - **`musttail`** on every tail call, as §40; LLVM's verifier rejects one it cannot honour, and the
   native stage of `scripts/compile-backend2.sh` builds every program.
 - **`alwaysinline`** where the LIR asks for it (`Fn.inline`, with its reason): a call point's
@@ -9034,11 +9080,21 @@ facts), `bcc lir --frames` and `bcc-counts --frames`.
   (the cancel step `cancel 1.0`) and `corpus/async-r1-step-lend.bc` (a relaxed lend whose
   callback calls a yielding function: the call point's `step`), each has a function the
   conversion makes that takes a `mut` borrow beside its owner, and it has no fact.
+- **The willreturn class.** The functions of the word IR's `Fn.willreturn` (`bcc trusted`'s
+  `CallRelated and HostStack` lines) are source functions, and exactly the functions the emitted IR marks
+  `willreturn mustprogress`; each marked function calls no runtime function but `bc_free` and
+  only marked functions, checked on the emitted IR. `corpus/native-willreturn.bc` keeps the pair,
+  by function: a source `λ` in the class that adds (`twice`), a source `λ` outside it that calls
+  `bc_alloc` (`through`), and a source `λ` outside it that calls a writer (the library's
+  closures), and `corpus/trusted/native-willreturn.txt` pins the class. The empty-row bit itself
+  is checked only through the class it starts: a bit set at an `F_Σ` body that calls no runtime
+  function would pass the script and change the trusted goldens.
 
 ### Facts read
 
 Each parameter's type (the borrow modes of `imm`, `mut` and a family's leaves) and lend bit
-(`Fn.lendEncl`, set where the function is made), the layouts (an
+(`Fn.lendEncl`, set where the function is made), each function's empty-row bit (`Fn.emptyRow`,
+from the checked type where it is made) and its word-IR body's calls, the layouts (an
 address's words, a cell's bytes, a class's agreement), the LIR's step functions, and a first
 conversion's machines and layouts for the levels' cells.
 
@@ -9077,6 +9133,26 @@ IR's interpreter counts the frame slots a run starts.
   `dtor leaf` 679, `count_fold` 430, `count_try` 88, `observe`, `unfold` and `const` 25, and the
   machines' functions 65.
 - **`LendEnclosesFn` proved** needs lifetimes in the LIR's types (#760's scope, §3a).
+
+### Improvement candidates
+
+The informational attributes are relied on for now. Each place a target or count leans on one,
+or a fact left unemitted, is a candidate, to be moved into our compiler or forced where gains
+remain (measured: `docs/scope/760-native-facts.md` §7):
+
+- **#537's vectorised walk.** A counted walk over a borrowed family as vector operations from our
+  lowering; `llvm.loop.vectorize.enable` is a hint, not forcing.
+- **Handler state as an LIR local** (#537 fix 9), so that handlers-di's clock is SSA from our
+  lowering rather than from LLVM's use of the borrow facts.
+- **SSA emitted directly.** Every local is an `alloca` that SROA/mem2reg recovers; emitting `phi`s
+  from the LIR removes the reliance.
+- **The conversion helpers' lend bits** (*Open*, above): the facts of `extern`, `dtor leaf`,
+  `count_fold`, `count_try` and the others, each once its step is stated.
+- **`memory(...)`** once allocation is in rows (#763): a function's parameter types and row then
+  license `memory(argmem: read)` and `memory(none)`.
+- **The willreturn class widened**: from the row once #763 tracks allocation; to the helpers the
+  conversion makes, each with its own termination stated; and through closure calls, whose
+  `apply` is outside the class today.
 
 ---
 
@@ -10518,6 +10594,18 @@ relation or the machine.
 
 ## Changelog
 
+- **1.24** (2026-10-31) — §50, §14 (#760 phase 2): `willreturn` and `mustprogress` on the
+  willreturn class: functions whose body is at the empty row (`Fn.emptyRow`, set from the checked
+  type where the function is made) and that reach no runtime call but `bc_free`, citing
+  `total_open` (new in `Core/Totality.lean` with `total_call` and `total_subrun`;
+  `total_open_pin` in `Core/PinFundamental.lean`), the lowering's faithfulness, the named
+  assumption `CallRelated` (proved at a closed program's plain context, `total_subrun`) and the
+  host assumption `HostStack`. `nounwind` cited (`NoUnwind`). `bcc trusted` lists `CallRelated`, `HostStack`,
+  `NoUnwind`, `WidthClass` and the native runtime and `clang`. The borrow facts' cite names
+  `CellU.CompS.compat`, `adequacyD_pin`, `externs_every_run`/`io_every_run` and `WidthClass`. The informational
+  attributes are "informational, relied on for now, improvement candidate", with the candidates
+  listed. New program `corpus/native-willreturn.bc`. No change to the language, the checker or a
+  program's output.
 - **1.23** (2026-10-31) — §50 (#760): no borrow fact at a function the machine conversion makes.
   The cancel step of `corpus/async-r1-cancel-finaliser-writes.bc` took its `mut` borrow as
   `ptr noalias nonnull dereferenceable(4)` beside a `ptr` to its owner, one cell; it wrote through

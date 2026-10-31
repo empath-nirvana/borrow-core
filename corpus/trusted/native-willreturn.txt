@@ -1,0 +1,38 @@
+extern write_all : !(all 'l0 < top. all 'l1 < top. mut 'l0 output * array_imm 'l1 u8 => mut 'l0 output)
+  contract: model proved (7), writeAll_meets
+  host: WASI fd_write of the view (libc write(2)); interpreter-checked (2)
+extern stdout : ref output
+  contract: model proved (7), vC_outRep (a cell holding (1, nil))
+  host: the heap cell run_io makes by mk_output, holding fd 1; assumed (1)
+extern mk_input : !((mu X. 1 + u8 * X) => ref input)
+  contract: model proved (7), mkInput_meets
+  host: a fresh heap cell holding fd 0, the platform's standard input; its argument, a byte list, dropped whatever it holds; assumed (1)
+extern mk_output : !(i32 => ref output)
+  contract: model proved (7), mkOutput_meets
+  host: a fresh heap cell holding its argument, the descriptor; assumed (1)
+extern take_input : !(ref input => (mu X. 1 + u8 * X))
+  contract: model proved (7), takeInput_meets
+  host: the cell freed, answering the empty list; assumed (1)
+extern take_output : !(ref output => i32 * (mu X. 1 + u8 * X))
+  contract: model proved (7), takeOutput_meets
+  host: the cell freed, answering the descriptor and the empty list (each byte went to the descriptor when it was written); assumed (1)
+typing: unconditional: a CDerives derivation (fundamentalC, adequacyD)
+unproved boundaries: 6 (write_all, stdout, mk_input, mk_output, take_input, take_output)
+always trusted: the allocator and runtime (Backend/Wasm/Runtime.lean), the WAT printer, wasmtime
+backend: LendEnclosesFn (Backend2/Driver.lean), the native borrow facts' lends enclose their functions: 7 functions
+  f13 (lam)
+  f14 (lam)
+  f15 (lam)
+  f24 (lam)
+  f25 (lam)
+  f29 (lam)
+  f30 (lam)
+backend (native): CallRelated and HostStack (Backend2/Driver.lean, nativeAssumptions' list), a willreturn function returns (total_open; total_open_pin under PinLaw) at a reached call at related arguments (total_subrun at a closed program's plain context) with no stack overflow: 5 functions
+  f20 (lam)
+  f25 (lam)
+  f26 (lam)
+  f30 (lam)
+  f31 (lam)
+backend (native): NoUnwind (Backend2/Driver.lean, nativeAssumptions), every function nounwind: no invoke, landingpad or resume is emitted; the runtime is C and cancels no thread
+backend (native): WidthClass (Backend2/Lower.lean, .alloc), a cell holds only its width class's types, so its class's widest bytes hold them (dereferenceable)
+backend (native): the runtime (Backend/Native/Runtime.lean) and clang

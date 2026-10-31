@@ -453,6 +453,12 @@ def closOf (c : Nat) (k : LCTy) (outer : List Var) (inner : List (List LTy × St
     return .call mk outer
   | none => return .clos c outer
 
+/-- `C` is `F B`: a computation at the empty row, with no operation and so no `Div` (SPEC §50,
+`Fn.emptyRow`). An `F_Σ B` (`.eff`), a function type, a `&`, `⊤`, a `∀` or a `ν` is not. -/
+def _root_.BoCa.Fig16.LogRel.Core.CTy.atEmptyRow : CTy → Bool
+  | .ret _ => true
+  | _ => false
+
 /-- **The lend bits of a source function's parameters** (`Fn.lendEncl`, SPEC §50): every one set.
 The function is the code of a source `λ`, thunk or `&`, entered only where the source term
 forces or applies its closure, inside every lend whose borrow it receives as an argument or in
@@ -470,7 +476,7 @@ context (its argument's slot pushed when it has one). With `source`, the closure
 term's (a `λ` or a thunk) and its function's lend bits are set (`sourceEncl`); otherwise the
 conversion makes it, and they are cleared. -/
 def mkClos (name : String) (ctx : Ctx) (k : LCTy) (param : Option LTy) (ret : LTy)
-    (body : Ctx → CM Tm) (source : Bool := false) : CM Tm := do
+    (body : Ctx → CM Tm) (source : Bool := false) (emptyRow : Bool := false) : CM Tm := do
   let (outer, inner, ctx') ← envOf ctx
   let fi ← reserveFn name
   let encl (ps : List Var) := if source then sourceEncl ps else []
@@ -479,29 +485,33 @@ def mkClos (name : String) (ctx : Ctx) (k : LCTy) (param : Option LTy) (ret : LT
     let p ← fresh pt
     let (b, sites) ← outsideSite (body (some p :: ctx'))
     let params := inner ++ [p]
-    setFn fi { name, params, body := b, ret, lendEncl := encl params }
+    setFn fi { name, params, body := b, ret, lendEncl := encl params,
+               emptyRow := source && emptyRow }
     let c ← addCode { kind := .lam, fns := [fi], ty := k }
     closOf c k outer sites
   | none =>
     let (b, sites) ← outsideSite (body ctx')
-    setFn fi { name, params := inner, body := b, ret, lendEncl := encl inner }
+    setFn fi { name, params := inner, body := b, ret, lendEncl := encl inner,
+               emptyRow := source && emptyRow }
     let c ← addCode { kind := .unit, fns := [fi], ty := k }
     closOf c k outer sites
 
 /-- A closure of a `&`: one function per component over one environment. With `source`, a source
 `&`'s, whose functions' lend bits are set (`sourceEncl`). -/
 def mkAmp (name : String) (ctx : Ctx) (k : LCTy) (rets : List LTy)
-    (bodies : List (Ctx → CM Tm)) (source : Bool := false) : CM Tm := do
+    (bodies : List (Ctx → CM Tm)) (source : Bool := false) (emptyRows : List Bool := []) :
+    CM Tm := do
   let (outer, _, _) ← envOf ctx
   let mut fis : Array Nat := #[]
   let mut sites : List (List LTy × String) := []
-  for (b, r) in bodies.zip rets do
+  for ((b, r), j) in (bodies.zip rets).zipIdx do
     let (_, inner, ctx') ← envOf ctx
     let fi ← reserveFn name
     let (t, ss) ← outsideSite (b ctx')
     sites := sites ++ ss
     setFn fi { name, params := inner, body := t, ret := r,
-               lendEncl := if source then sourceEncl inner else [] }
+               lendEncl := if source then sourceEncl inner else [],
+               emptyRow := source && emptyRows.getD j false }
     fis := fis.push fi
   let c ← addCode { kind := .amp, fns := fis.toList, ty := k }
   closOf c k outer sites
@@ -2537,15 +2547,20 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     bindTm (← conv fuel ctx c) bT fun a => pure (.inj true a)
   | .thunkF _ j _ c | .bangThunkF _ j _ c => do
     let .thunk k := (← repJ j).peel | throw "LIR: a thunk at a non-closure type"
+    -- A thunk's body is at `F A` (`thunkF`, `bangThunkF`): the empty row.  [spec §50]
     mkClos "thunk" ctx k none (← repK k) (fun ctx' => convBody fuel (none :: ctx') c) (source := true)
-  | .lam _ j A _ c => do
+      (emptyRow := true)
+  | .lam _ j A C c => do
     let .thunk k := (← repJ j).peel | throw "LIR: a λ at a non-closure type"
     let (_, r) ← answerOf (.thunk k)
+    -- The body at `C`: the empty row exactly when `C` is `F B`.  [spec §50]
     mkClos "lam" ctx k (some (← vty A)) r (fun ctx' => convBody fuel ctx' c) (source := true)
-  | .lamDead _ j _ _ c => do
+      (emptyRow := C.atEmptyRow)
+  | .lamDead _ j S _ c => do
     let .thunk k := (← repJ j).peel | throw "LIR: a λ at a non-closure type"
     let (_, r) ← answerOf (.thunk k)
-    mkClos "lam" ctx k (some .unit) r (source := true) fun ctx' => do
+    -- The body at `F_S B`: the empty row exactly when `S` is.  [spec §50]
+    mkClos "lam" ctx k (some .unit) r (source := true) (emptyRow := S.isEmpty) fun ctx' => do
       match ctx' with
       | some p :: rest => return .drop .dead p (← convBody fuel (none :: rest) c)
       | _ => throw "LIR: a dead λ's parameter"
@@ -2555,12 +2570,12 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     unless c.isLam do throw "outside the pure fragment: a Λ whose body is not a λ-value (SPEC §44)"
     readFact "allI:body a λ-value"
     conv fuel (none :: ctx) c
-  | .withI _ j _ _ tM tN => do
+  | .withI _ j C D tM tN => do
     let .thunk k := (← repJ j).peel | throw "LIR: a `&` at a non-closure type"
     let r₁ ← selTy (.thunk k) 0
     let r₂ ← selTy (.thunk k) 1
     readFact "withI:code kind"
-    mkAmp "with" ctx k [r₁, r₂] (source := true) [fun ctx' => convBody fuel (none :: none :: ctx') tM,
+    mkAmp "with" ctx k [r₁, r₂] (source := true) (emptyRows := [C.atEmptyRow, D.atEmptyRow]) [fun ctx' => convBody fuel (none :: none :: ctx') tM,
       fun ctx' => convBody fuel (none :: none :: ctx') tN]
   | .effLet _ _ A B S u tM tN => do
     match payTy (← rowPay S) with

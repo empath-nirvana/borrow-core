@@ -837,10 +837,16 @@ def tlowerFn (k : Nat) (f : Fn) : EM (List String) := do
   -- Frame pointers kept, so that a profiler's backtraces reach past the first frame (#664: without
   -- the attribute LLVM omits them in IR that does not ask; on these benchmarks they cost nothing
   -- measurable).
-  let fattrs := (if f.inline.isSome then " alwaysinline" else "") ++ " \"frame-pointer\"=\"all\""
-  let why := match f.inline with
+  -- `willreturn` and `mustprogress` where the word IR puts the function in its class (SPEC §50),
+  -- with the facts only.
+  let wr := if attrs then f.willreturn else none
+  let fattrs := (if f.inline.isSome then " alwaysinline" else "") ++
+    (if wr.isSome then " willreturn mustprogress" else "") ++ " \"frame-pointer\"=\"all\""
+  let why := (match f.inline with
     | some r => [s!"; alwaysinline — {r}"]
-    | none => []
+    | none => []) ++ (match wr with
+    | some r => [s!"; willreturn mustprogress — {r}"]
+    | none => [])
   pure ([s!"; {f.name}"] ++ why ++ cites ++
     [s!"define internal {resTy wide f.results} @f{k}({", ".intercalate ps}) nounwind{fattrs} \{",
     "entry:"] ++ locals ++ frame ++ rslots ++ st.allocas.toList ++ ["  br label %body", "body:"] ++
@@ -961,7 +967,10 @@ def printProg (p : Prog) (triple : String) (cnt : Bool := false) (typed : Bool :
     s!"  call void @f{p.entry}({", ".intercalate ((List.range (ctx.arity.getD p.entry 0)).map fun i =>
       s!"{tyName ((ctx.ptrParams[p.entry]?.getD #[]).getD i false)} poison")})",
     "  ret void", "}"]
-  let lines := ["; borrow-core: native code from the flat IR (Backend/Native/Lower.lean)", data] ++
+  let lines := ["; borrow-core: native code from the flat IR (Backend/Native/Lower.lean)",
+    "; nounwind (every function) — no `invoke`, `landingpad` or `resume` is emitted; errors and " ++
+      "cancels are branches (SPEC §47); the runtime is C, which does not unwind, and cancels no " ++
+      "thread (`NoUnwind`, `bcc trusted`)", data] ++
     runtimeDecls ++ intrinsics ++ [""] ++ fns ++ entry
   pure ("\n".intercalate lines ++ "\n")
 

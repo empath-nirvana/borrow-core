@@ -144,6 +144,9 @@ structure Fn where
   facts : List ParamFacts := []
   /-- The function is to be inlined at every call (LLVM's `alwaysinline`), with the reason. -/
   inline : Option String := none
+  /-- The function returns to its caller (LLVM's `willreturn` and `mustprogress`), with the cited
+  reason (SPEC §50, `Backend2.Low.willreturnClass`). -/
+  willreturn : Option String := none
   deriving Repr, Inhabited
 
 structure Prog where

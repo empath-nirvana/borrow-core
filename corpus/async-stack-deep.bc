@@ -1,3 +1,4 @@
+-- check: no-source: the source interpreter takes more than 10 minutes at this recursion depth
 -- SPEC §52 stress: a recursive task whose levels run past its stack's first chunk. `down(n)` awaits
 -- on the way down and on the way back, so its frames grow into new chunks and shrink out of them
 -- many times; two such tasks of different depths and a recursive tree task interleave in one queue.

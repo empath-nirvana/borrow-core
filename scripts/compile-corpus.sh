@@ -34,8 +34,12 @@
 # here, and the old backend must still refuse it; the new backend runs it at every stage
 # (scripts/compile-backend2.sh).
 #
-# A program marked `-- check: no-source` is too large for the source interpreter
-# (`corpus/deep-list.bc`): its golden is written by hand, and it is run at every other stage.
+# A program marked `-- check: no-source` is too large or too slow for the source interpreter
+# (`corpus/deep-list.bc`; `corpus/async-stack-deep.bc`, which takes minutes there): its golden is
+# written by hand, and it is run at every other stage. The mark may give its reason after a colon
+# (`-- check: no-source: <reason>`), and every run prints the program as not run at the source
+# stage, with the reason, so none is skipped silently. A program found to take minutes at the
+# source stage is marked the same way.
 #
 # No I/O program has a bound on its input: `corpus/io-cat.bc` also copies a generated input of
 # 4860 bytes, at every stage (at the source stage when the source stage runs on io-cat.bc).
@@ -207,7 +211,10 @@ program() {
       echo "$f: marked old-backend-refuses, but the old backend runs it: remove the mark"; return 1
     fi
   fi
-  if grep -q '^-- check: no-source' "$f"; then :
+  if grep -q '^-- check: no-source' "$f"; then
+    local why
+    why=$(sed -n 's/^-- check: no-source: *//p' "$f" | head -1)
+    note=" (no-source: not run at the source stage: ${why:-too large for the source interpreter})"
   elif withSource "$f"; then
     stages="source $stages"
     [ "$BCC_SOURCE" = 1 ] || note=" (unverified since $source_base, so at the source stage too)"
