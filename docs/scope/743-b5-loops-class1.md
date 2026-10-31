@@ -105,113 +105,63 @@ points: decision 71, `docs/decisions.md`.
 - B5 builds the world axis only. The count, position, storage and pending-finaliser axes are not
   in its scope.
 
-The text of 1.3–1.5 below reads `some r`/`none` as `op`/`top`. `hw` is dropped, since a two-point
-world mentions no lifetime, and `hCN` is `c = .op → ∀ o ∈ SN, o.wld = .op`. The ports are
-`call-grade`'s, with `call : Bool` replaced by `wld : World`. 1.4's named risk does not arise: at
-`op` a stop is owed only at its own members.
 
-### 1.3 The changed rules, verbatim
+### 1.3 The changed rules, as built (two-point world)
 
-The rules differ from main only in the marked premises. `Life.wf Δ` is the existing
-well-formedness (`Support/Lifetimes/Terms.lean:82`).
+These are on the branch (`5c2b17b7`, merged with main in `0b9034a0`). The rules differ from main
+only in the marked premises.
 
 ```lean
-  | divFuel {Δ Γ} {w : Option Lifetime.Life} (S : Row) (A : VTy) (hS : ∀ o ∈ S, o.n ≠ divEff)
-      (hw : ∀ r, w = some r → r.wf Δ = true)                                             -- new
-      (hΓ : Ctx.DeadP Γ) :
-      CDerives Δ Γ (.val divFuelV) (.val (divFuelTy S A w))                               -- w: new
-  | withbor1U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
-      (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
-      (hS : S.Lend Δ x)                                                                   -- was S.Unwind x
-      (hdc : closedAt 0 d = true) (hd : CDerives Δ Γ d (.val (.lolli (.ref A) .unit))) :
-      CDerives Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S))
-  | withbor2U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
-      (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
-      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
-      (hS : S.Lend Δ x)                                                                   -- was S.Unwind x
-      (hdc : closedAt 0 d = true) (hd : CDerives Δ Γ d (.val (.lolli (.ref A) .unit))) :
-      CDerives Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S))
-  | effHandleT {Δ Γ Γ₁ Γ₂} {Hr Hc e : Expr} {S SN : Row} {E : List (Qual × VTy × VTy)}
-      {fs : Nat → CTy} {n : UInt32} {w : Option Lifetime.Life} {A R : VTy}                 -- w: new
-      (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁)
-      (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)
-      (hc : CDerives Δ Γ₁ (.pair Hr Hc) (.val (.tensor (retTy S A R) (ansesTy S SN R E))))
-      (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
-      (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false)
-      (hw : ∀ r, w = some r → r.wf Δ = true)                                             -- new
-      (hCN : ∀ r, w = some r → ∀ o ∈ SN, ∃ r', o.wld = some r' ∧ LifeLe Δ r r')            -- new
-      (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs w ++ S) A))) :            -- w: new
-      CDerives Δ Γ (hndExpr n (E.map Prod.fst) (.pair Hr (tailTuple E 0 Hc)) e)
-        (.comp (CTy.effOf S R))
-```
+def Row.Lend (S : Row) (x : LifeVar) : Prop :=
+  ∀ o ∈ S, o.n ≠ 0 ∧ ¬ VFree x o.A ∧ (∀ Δ a, VOutlives Δ a o.A) ∧
+    (o.abort = true ∨ (o.wld = .op ∧ o.q = .lin ∧ ¬ VFree x o.B ∧ ∀ Δ a, VOutlives Δ a o.B))
 
-`hCN` says that a tail clause's own stops are resumed in a world at least as wide as the one it
-promises. So the clause, which runs to its resume before `κ` is resumed, keeps every record inside
-`r`.
+  | divFuel {Δ Γ} {c : World} (S : Row) (A : VTy) (hS : ∀ o ∈ S, o.n ≠ divEff)
+      (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val divFuelV) (.val (divFuelTy S A c))                              -- c: new
+  | withbor1U … (hS : S.Lend x) …        -- was S.Unwind x
+  | withbor2U … (hS : S.Lend x) …        -- was S.Unwind x
+  | effHandleT … {c : World} …
+      (hCN : c = .op → ∀ o ∈ SN, o.wld = .op)                                             -- new
+      (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs rcsNil c ++ S) A))) : …   -- c: new
+```
 
 **Rules that do not change:**
 
-- `reify`: its tick stays `none`. A stored loop owes its continuation at every extension, so no
-  class-1 lend crosses a `reify`. This keeps class 2 (`gen-self-borrow`, `for-lend-resumes`) out.
-- `effHandleL`, `effHandleV` and `effHandleVB` handle `none` rows. `Row.ofEff`'s world defaults to
-  `none`.
+- `reify`: its tick is `tickSig`, world `top`.
+- `effHandleL`, `effHandleV` and `effHandleVB`: their handled rows are at `top` (`Row.ofEff`'s
+  default).
 - `iterate`.
-- `withbor3U`, `withloadU`, `sliceBorrowMU` and `sliceBorrowIU` **keep `S.Unwind x`** (#654's own
-  Open). Section 4 lists what this leaves refused.
+- `withbor3U`, `withloadU`, `sliceBorrowMU` and `sliceBorrowIU`: they keep `S.Unwind x`.
 
-**`CDerivesP` and `CDerivesAt` carry the same premises** (decided, box Q3). They are generated from
-`scripts/pin/CDerivesP.tmpl.lean` by `scripts/gen-pin.py`, and in `Core/Tied.lean` respectively.
+**The extended judgments.** `CDerivesP` and `CDerivesAt` carry the same premises. They are
+regenerated by `gen-pin.py`; check-hygiene reports them up to date.
 
-### 1.4 Each rule's proof at the lifetime carrier: port or rework
+### 1.4 The proofs: what was ported
 
-On main, `EffWp.lean`, `EffDefs.lean`, `EffBorrow.lean`, `Wp.lean`, `DivRuntime.lean`,
-`DivPrograms.lean` and `DivIterate.lean` are unchanged since #654's merge-base 8dbe5892. `wpG`,
-`contShare`, `OpEnt`, `KapRelT`, `effWp`, `cwp`, `Closing`, `RowLe` and `Ext` are byte-identical.
+`call-grade`'s proofs were ported with `call : Bool` replaced by `wld : World` (`false ↦ top`,
+`true ↦ op`):
 
-What changes is the carrier. #654's graded `Owed` was **list equality** (`∀ x, x ∈ ls' ↔ x ∈ ls`).
-At a lifetime bound it is **`Ext` plus equality of the records inside `r`**. Every proof that used
-the equality must now rebuild what it held at the stop's list from `Ext` (the Kripke monotonicity of
-`vC`, `RelationFacts.lean:269`), together with the kept records inside `r`. The accepted larger
-rework is this.
+- `Owed` (`Ext` at `top`, the same members at `op`), `contShare`/`KapRelT` over it, and the
+  conservativity lemmas;
+- `OpSig.LeF`/`OpEnt.Le` with `o.wld = .op → o'.wld = .op`, and `FinLe`/`PendLe`/`ThenLe` with the
+  same edge;
+- `wpG_*_frameAt`;
+- `Core/EffLend.lean`: `lendM_frame`, `lendI_frame`, `cwp_lendM/I`, `withbor1L/2L_compatX`;
+- `KapRelT.owed` and the graded `handleT_compatC`;
+- `divFuel`, `runtime_every_run c`, `runtime_main_every_run`, `io_rt_every_run`.
 
-| rule / lemma | source (`call-grade`) | at the lifetime carrier | the step that changes |
-|---|---|---|---|
-| `wpG_M_frameAt`, `wpG_I_frameAt`; `wpG_*_frameX` re-derived | `EffWp.lean:616`, `:267` | **port as is** | none: they mention no world |
-| `Owed`, `owed_unbounded`, `Owed.ext`, `Owed.anti`, `owed_of_same` | `EffDefs.lean:191` | **rework** (new definition) | `Owed.anti` is the order's monotonicity; `owed_of_same` still holds (equality implies both conjuncts) |
-| `contShare_ungraded`, `kapRelT_ungraded` | `EffDefs.lean:316`, `EffRules.lean:736` | **port**, at `wld = none` | — |
-| `KapRelT.owed` | `DivHandle.lean:341` | **rework** | `hg : en.call → en'.call` becomes `en.wld ≼ en'.wld`, through `Owed.anti` |
-| `lendM_frame` | `EffLend.lean:365` | **rework** | `hΨA` assumes `∀ x, x ∈ ls ↔ x ∈ ls₀` and rebuilds `viewCell l Tt δ ls₀ α v'' χ hχ hw₀` at `ls`. Now `ls` is only `Owed (some r)` from `ls₀`: `vC true Tt ls₀ δ v''` moves to `ls` by `Ext`, and the lend's own records (`frameList`/`lineageOf` at `α`, with `α ⊏ r`) are kept by the second conjunct. **The named risk:** every record the view cell's coherence reads is tagged inside `r`. If one is tagged at or outside `r`, this step does not go through as stated, and that is the STOP |
-| `lendI_frame` | `EffLend.lean:973` | **rework** | as `lendM_frame`: `lsI = immL l Tt δ A v ρP lsO`, with the `immL` records at `A ⊏ r` |
-| `cwp_lendM`, `cwp_lendI` | `EffLend.lean:733`, `:1167` | **rework**, through the two above | `OpTab.LendAt α` (`:181`) changes from `call = true ∧ q = .lin` to `q = .lin ∧ ∃ r, wld = some r ∧ α ⊏ r` |
-| `withbor1L_compatX`, `withbor2L_compatX` | `EffLend.lean:1264`, `:788` | **rework** | `Row.Lend Δ` interpreted at `δ`: the syntactic `LifeLt Δx 'x r` gives `δ'x ⊏ δr` by the existing soundness of the order judgement (the one `CTy.all`'s case uses) |
-| `OpSig.LeF`, `OpEnt.Le`, `Row.gradeAt`, `rowLe_gradeAt`, `effWp_gradeAt` | `EffFin.lean:130`, `:996`–`:1017` | **rework** | `LeF` takes `Δ`. `RowLe` and the `[sub]` rule's use of it gain the lifetime context. `gradeAt g S` grades to `some ℓ` for a given `ℓ` |
-| `handleT_compatC` with `hw`, `hCN` | `DivHandle.lean:711` | **rework** | the clause keeps records inside `r`: its run is a `wpG` run whose stops are at `SN` (`hCN`: worlds `⊒ r`), and its own lends close before it resumes (`wpG`'s `↭`). Plus `effHandleL`/`DivHandleLast.lean`'s mechanical edits (`Ext.refl` → `Owed.refl`, `KapRelT.ext` with `none`) |
-| graded `divFuel`, `runtime_every_run`, `divFuel_every_run` | `DivFuel.lean:373`, `DivRuntime.lean:392`, `DivPrograms.lean:190` | **port** | `div_fuel` and the runtime answer at once and open nothing, so `Owed (some r)` is met by list equality (`owed_of_same`) |
-| `rtMain`, `runtime_main_every_run`, `io_rt_every_run`, `IORun.rt_every_run` | `DivRuntime.lean:418`, `:522`, `:542`; `Externs.lean:511` | **rework** | main's `IORun` has `loops`, not `rt` |
-| callers of `withbor1U`/`withbor2U` | — | **edit** | `DeclLend.lean:202`: `Sf_unwind.lend` |
-| `CTy.applyLSub` (`Types.lean:1601`), `VFree`/`CFree` (`:196`, `:214`), `VScoped`/`CScoped` (`:1894`), `Life.mentions` | — | **rework** | `wld` is a lifetime inside `CTy.eff`, so substitution, freeness and scoping each gain a clause for it (`.eff n i q A B fin w C` ↦ `… (w.map (·.applySub σ)) …`; `VFree x` includes `w.mentions x`) |
-| the substitution lemmas behind ∀E/`CTy.all` (`applyLSub` of `vC`/`cC`, `CFree` after substitution, `Scoped` after extension) | `Core/Relation*.lean`, `Core/Compat*.lean` | **rework** | each `.eff` case gains the `wld` component. The interpretation of `wld` at `δ` must commute with `applyLSub` as `CTy.all`'s bound does |
-| wf of rows carried in value types (`withbor1UTy x … S`, `withbor2UTy`, `divFuelTy … w`, `reifyTy`) | `Core/EffBorrow.lean`, `DivFuel.lean` | **rework** | a row in a value type now carries lifetimes, so `VScoped`, `VFree` and the `δ`-interpretation of these types read them |
-| `sigsOkB` (`Frontend/Check/Tied.lean:691`), `Ξ`/`RowAt`/`SigsAt` (`Core/Tied.lean:6`–`:27`) | — | **no change, stated** | they compare `(q, A, B)` only, and ignore `wld` as they ignore `fin`. So a world never makes one operation two signatures |
-| every `.eff` pattern (7 → 8 arguments) | — | **mechanical** | re-estimated: about **220** occurrences of `.eff`/`\| eff` over **36** files on main (grep), plus the generated pin files, plus main-only `Classes.lean:245`, `Dtor.lean:190`, `DivHandleLast` |
-
-The renames `aff`→`cancel`, `Persistent`→`Ctx.Banged`, `Drop`→`OwnFree` and `Weak`→`Cancels` do not
-occur in `EffLend.lean`. They hit #654's edits to `DivHandle`, `EffFin` and `EffRules`.
-
-#746's `Tok`/`OwnFree`, `DerivedCopy`, StackK and the §42 lend do not enter the class-1 semantics.
-
-If a lifetime carrier proves infeasible for a specific proof, the step is named and the work
-stops. It does not fall back to two points.
+Main-only users received mechanical edits: `DivHandleLast`, `DeclLend`'s `Sf_unwind.lend`,
+`AwaitCancel`, `Classes`, and #750's `then` lemmas. At `op` a stop is owed only at its own
+members, so the re-lend in `lendM_frame` needs no locality argument.
 
 ### 1.5 The theorems
 
-| theorem | statement |
-|---|---|
-| `fundamentalC` (`Fundamental.lean:593`), `adequacyC` (`:776`), `adequacyD` (`Demonic.lean:312`), `fundamentalD`, `total_every_run` | **unchanged**. The new cases are `withbor1L_compatX`, `withbor2L_compatX`, graded `handleT_compatC` and graded `divFuel` |
-| `fundamentalC_pin`, `adequacyD_pin` | statements unchanged; their `CDerivesP` grows (box Q3) |
-| `runtime_every_run`, `divFuel_every_run` | each gains `w`; the old statement is kept as the `none` instance |
-| `runtime_main_every_run`, `io_rt_every_run`, `IORun.rt_every_run` | new: `main`'s loop, driven by the runtime at `some .top`, never gets stuck |
-| `contShare_ungraded`, `kapRelT_ungraded`, `owed_unbounded`, `rowLe_gradeAt`, `effWp_gradeAt` | new: conservativity. At `wld = none` the relation is today's |
+- `fundamentalC`, `adequacyC`, `adequacyD`, `fundamentalD` and `total_every_run` are textually
+  unchanged, and `fundamentalC_pin` keeps its statement.
+- `#print axioms` gives `[propext, Classical.choice, Quot.sound]` for each of them and for every
+  ported lemma.
+- `runtime_every_run`, `divFuel_every_run` and `runtime_main_every_run` take the world `c`.
 
 ---
 
@@ -274,7 +224,7 @@ The shapes listed in D0 are examples of this judgement, not its definition.
 | D5 | `for x in g(e)`, over a generator | `handle_tail` (`effHandleT`) when every exit resumes and nothing raises; otherwise `handle_last` (`effHandleL`, §51), around `g`'s direct call. A clause whose work has `div` in its row is a div body of its own (D0). The loop's state is threaded through the clause's answer, so **the operation's signature carries the consumer's state** (`x × ws ~> ws`). This choice is forced by the kernel rule, not by the language: `effHandleT`'s clauses are closed values (`Hr.ValFormIn Γ₁`, `Hc.ValFormIn Γ₁`, `Ctx.DeadP Γ₁`), so the loop's live variables can reach the clause only through the operation. A generator's signature therefore depends on its consumer, which is why `makeInst` makes one instance per use, with or without borrows (box Q8). When the state holds a borrow, that signature mentions a lifetime, and decision R (one closed signature per operation, `Core/Tied.lean`) refuses it. That refusal is the kernel's and is listed in 4.2. D5 never threads the owner in place of the borrow: that is the per-observation lend | the clause's exits (syntax) |
 | D6 | a direct-style call of a div function | inlined at the caller's row: the call, then `case inl/inr`. On `inr`, close what is held and leave with the residual (D9) | the callee's type |
 | D7 | a loop used as a value (`U(Loop B R)` expected) | `reify_res[B, R, Σ](res)(thunk M)`, with `res` the closed residual function | the expected type |
-| D8 | `main` that loops | `reify` of the body, driven by the runtime (`rtMain`). When the runtime is the only `Div` handler, the body runs in place, and the checker types it at the runtime's world `some .top` | `main`'s inferred row |
+| D8 | `main` that loops | `reify` of the body, driven by the runtime (`rtMain`). When the runtime is the only `Div` handler, the body runs in place, and the checker types it at whichever world the inference solves for its `tick` (the runtime accepts both) | `main`'s inferred row |
 | D9 | `break`, `continue`, `return` | `inl (inl j)`, `inr s′`, `inl (inr a)`, each after closing the held sources, innermost first. The residual hands back **exactly what the loop holds, by name**. `b2-div`'s `eAbort` matched capabilities by type (`capOf`); that is not ported (box Q6) | names |
 | D10 | a borrow block whose body is a div body; `let r = &x` before a loop; a lend at a direct-style call of a div function | the kernel's lend (`withbor1U`/`withbor2U`, or the slice/`withbor3U`/`withload` forms) with its callback a div body at the enclosing row. The elaborator neither splits it per turn nor refuses it. The kernel accepts (`Row.Lend`, class 1) or refuses (`Row.Unwind`) | the place's type |
 | D11 | loops inside handler clauses and effect bodies | D0–D10 at the clause's row. A `[handle]` around a ticking computation is `effHandleT`/`effHandleL` only (§14) | — |
@@ -285,117 +235,136 @@ back-edge ticks (§14), and no others. `b2-div`'s forward placement (a tick at e
 plus one before a terminal reached before any point, #644 step 0) existed to match the old machine's
 observation counts, and it is not ported. Section 4.5 lists the measured effect on outputs.
 
-**World (decided, box Q2): the checker decides it, never the elaborator.**
-
-- The elaborator writes every row with `tick` and every operation at world `none`.
-- The checker types a lend's callback at `Row.Lend Δ x`, an `effHandleT` node's handled row at
-  `some r` (with `hw` and `hCN`), and `main`'s row at the runtime's `some .top`. It reaches all of
-  these only through `[sub]` (`none → some r`, `OpSig.LeF Δ`), choosing `r` as the handler's own
-  innermost lifetime (`Δ.meetOfDom` at the node).
-- The kernel re-checks every premise: `Row.Lend`, `hw`, `hCN`, and `reify`'s `none` tick.
-
-A wrong world makes the checker refuse the term. It never makes the checker accept one it should
-not. Phase 2 reads `call-grade`'s `Row.lendB` first. If the checker cannot decide the world without
-the elaborator choosing it, STOP.
+**World (box Q2): the checker infers it** (§2.3). The elaborator emits operations with no world.
+A `[sub]` at a node does not suffice: `op` must be written on every row from a lend to its handler,
+and the checker's inference does that.
 
 ### 2.3 World inference (Q2 resolved)
 
 **Decided (user, 2026-10-31): option (A).** The checker infers every operation's world in
-`{op ⊑ top}`. Core rows are written in the core text and read by the checker (`E.elabRow`). A
-`[sub]` moves only `top → op` (`OpSig.LeF`), so `op` cannot come back out to an enclosing `top`
-row. Every row from a lend out to whatever handles its operation must therefore be `op`. That is
-a whole-term question, and the checker answers it by inference.
+`{op ⊑ top}`.
 
-**Variables.** The elaborator emits every operation of every row annotation with no world. The
-core-text spelling is the one used today; a written world is optional and only used in hand-written
-kernel text. The checker gives each occurrence a world variable `ω`. Where a typing rule makes two
-rows the same row, their variables are identified by unification: the premises and conclusion of
-`[let]`/bind, `case`, `[then]`, `λ`/application, thunk/force, and a definition's type at its uses.
-Definitions' types carry variables too, solved with the rest of the program.
+A `[sub]` moves only `top → op` (`OpSig.LeF`), so `op` cannot come back out to an enclosing `top`
+row. Every row from a lend out to whatever handles its operation must therefore be `op`. That is a
+whole-term question, and it is answered by inference inside the checker. It is not a pre-pass, and
+the checker does not keep a second copy of the typing rules.
 
-**One constraint rule per construct.** Write `ω_o` for the variable of operation `o` in a row.
-The order is `op ⊑ top`.
+**Where it runs.**
+
+1. `CRow` carries world metavariables (`OpSig.wld` at a `?ω`).
+2. The elaborator emits every operation with no world. A written world in core text is optional,
+   and is used only in hand-written kernel text. The elaborator never chooses one.
+3. As the checker builds a derivation, every row it computes or reads gets its operations'
+   metavariables: synthesized rows, `convC`/`liftRow` targets, `ansesTy`/`kTy`/`cancelTy`, and loop
+   types. The checker collects the constraints below as it goes.
+4. When the definition (or its group) has been checked, the checker solves and substitutes the
+   solution into the `TExpr`. The derivation (`CDerivesAt`/`TDerivesP`) is produced from the
+   substituted term, so the kernel re-checks every world.
+
+**`[sub]` decides the order, not equality.** `rowLeB` (`Frontend/Check/Decide.lean:857`), which
+`convC` and `liftRow` call (`Frontend/Check/Steps.lean:764`, `:1032`), compares
+`Row.find … == some o` exactly, `wld` included. It becomes a decision procedure for `OpSig.LeF`:
+the same signature, `FinLe` on the cancel row, and the world implication. It is proved sound
+(`rowLeB_sound : rowLeB S S' = true → RowLe S S'`). At metavariables it emits the edge
+`ω_{o′} ⊑ ω_o` instead of failing.
+
+**Identification is structural unification** at every type equality the checker makes. Among them:
+
+- `convV` everywhere, including thunks nested inside tensors, sums, refs and records;
+- the constants' types `withbor1UTy`/`withbor2UTy`, `iterTy`, `divFuelTy`, `reifyTy`/`resTy`,
+  `Loop_Σ`, `nuOut`/`unfoldN`, and `boundedFix`'s `C`;
+- the handler types `retTy`, `ansesTy`, `clausesTy`, `worksTy`, `exitsTy`, and `kTy`'s `cancelTy`.
+
+Each operation in an `OpSig`'s `fin` cancel row has its own variable. **Decision R** (`sigsOkB`,
+`Frontend/Check/Tied.lean:691`): worlds nested in an operation's `A`/`B` are identified across every
+occurrence of `n.i`.
+
+**Constraint rules, one per construct.** `ω_o` is the variable of operation `o`, under the order
+`op ⊑ top`.
 
 | construct (kernel rule) | constraint |
 |---|---|
-| `withbor1U`, `withbor2U`, callback row `S` (`Row.Lend`) | `ω_o = op` for every `o ∈ S` with `o.abort = false`; nothing for an abortive `o` (`entWld`) |
-| `[sub]` (`effSub`), and every `RowLe S S′` premise (`hSN`, `hMS`, `hDS`, a call's row into its caller's) | `ω_{o′} ⊑ ω_o` for each `o` of `S` and the `o′` of `S′` at its key: `op` is carried outward |
-| `effHandleT`, handled row `Row.ofEff n E 0 fs cs c ++ S` | the handled operations take the node's `ω_c`. `hCN`: `ω_o ⊑ ω_c` for every `o ∈ SN`. It accepts `ω_c = op` |
-| `effHandleV`, `effHandleVB`, `effHandleL` | `ω = top` for every handled operation, the row `Row.ofEff … ` at `c = top` |
-| `reify` | `ω_tick = top` (`reifyTy` at `tickSig`) |
-| the runtime (`main` at `[tickSigW c]`), `div_fuel` | `ω_tick` free: both worlds are accepted (`runtime_main_every_run c`, `divFuel c`) |
-| `iterate`, `withbor3U`, `withloadU`, `sliceBorrowMU/IU`, and every other construct | no constraint of its own; variables are passed through by identification |
+| `withbor1U`, `withbor2U`, callback row `S` (`Row.Lend`) | `ω_o = op` for each `o ∈ S` with `o.abort = false`. An abortive `o`'s variable is free (`entWld`) and never takes part in a conflict |
+| `[sub]` (`effSub`), every `RowLe S S′` premise (`hSN`, `hMS`, `hDS`, a callee's row into its caller's), and `FinLe` inside `RowLe` | `ω_{o′} ⊑ ω_o` for `o` of `S` and `o′` of `S′` at its key; the same edge on each pair of operations `FinLe` matches in the cancel rows. It is applied when `capB`/`finRead` holds, which the signature fixes syntactically |
+| `[then]`, `effThenDiv` (`ThenLe`, `EffFin.lean:390`) | the same edge on each pair `ThenLe` matches, under its syntactic `capB` guards |
+| `effHandleL` (`LastFinOK`, `DivHandleLast.lean:356`) | the same edge on each pair `LastFinOK` matches |
+| `effHandleT`, handled row `Row.ofEff n E 0 fs rcsNil c ++ S` | the handled operations' world is the node's `ω_c`. `hCN`: `ω_o ⊑ ω_c` for each `o ∈ SN`. It accepts `ω_c = op` |
+| `effHandleV`, `effHandleVB`, `effHandleL` | `ω = top` for each handled operation |
+| `reify` | `ω_tick = top` |
+| the runtime (`main` at `[tickSigW c]`), `div_fuel` | `ω_tick` free: both worlds are accepted |
+| every other construct, `iterate`, `withbor3U`, `withloadU` and the slice borrows included | no constraint of its own; variables pass by identification |
 
-The rules are compositional: each is local to its node, and the program's system is their union.
+Every edge is unconditional or guarded by a syntactic fact of the signature, so the system stays
+Horn.
 
-**The solve.** Two points and constraints of three forms (`ω = op`, `ω = top`, `ω′ ⊑ ω`) make
-this Horn satisfiability over one bit.
+**The solve.** The minimal set of variables forced to `op`:
 
-1. Set every variable forced `op` to `op`.
-2. Propagate along the `⊑` edges: if `ω` is `op`, `ω′` is `op`.
-3. Every other variable is `top`.
+1. the forced `op`s;
+2. closed along the `⊑` edges (if `ω` is `op`, so is `ω′`).
 
-That is the least fixed point. It takes the strictest world that works: `top`, Core's convention,
-unless a lend forces `op`. It is unique and linear in the number of constraints.
+Every other variable is `top`. This is principal: `[sub]` moves only `top → op`, so a solution with
+fewer `op`s accepts every program this one accepts. The solve is linear in the number of
+constraints.
 
-It runs in the checker (`Frontend/Check/World.lean`), on the core text the elaborator emits, before
-the existing check. The elaborator never chooses a world. The solved world is written back into the
-row annotations; the existing checker then runs on the solved term unchanged, and builds the typed
-term and its `CDerivesAt`/`TDerivesP` derivation.
+**World-polymorphic schemes.** A definition's type is generalised at `letPoly` and at top level,
+HM(X)-style. Its scheme is its interface world variables plus the Horn implications among them.
+Each use instantiates the scheme with fresh variables. So `for_each(f)`, used once with a lending
+callback (its row's operations forced `op`) and once under `handle_last` (forced `top`), does not
+conflict. Each `makeInst` instance of a generic definition is solved separately.
 
-**The conflict.** A variable is forced `op` by a lend and forced `top` by a handler or a `reify`.
-The refusal names the lend's site, the operation, and the handler's or `reify`'s site, with the fix
-where one exists:
+**The conflict.** A variable forced to `op` by a lend that is also forced to `top`. The refusal
+reports the **propagation path**: the lend, the chain of `⊑` edges (through `hCN`, `RowLe` and
+identification), and the operation that reaches the handler or `reify` that forces `top`. It gives
+the fix where one exists:
 
-- **message W-L** (forced `top` by `effHandleV`/`VB`/`L`): "the lend of `x` at L1 is held across
-  `op` at L2, and `op` is handled at L3 by a handler that does not resume in tail position, so its
-  continuation is owed at every extension: end the borrow before `op` (borrow at each use), or
-  move the borrow inside the handled body below `op`, or make the handler resume in tail position."
-  This is fix **(a)**. It subsumes 4.6's message L.
-- **message W-R** (forced `top` by `reify`): "the lend of `x` at L1 is held across the ticks of a
-  loop that is stored at L2 (`reify`): lend inside each turn instead." This is **(a)** where the
-  loop is driven by its consumer, as 4.4's `for-lend-resumes` is. It is **(b)** (B7) for a
-  self-borrow held by a stored generator (`gen-self-borrow`).
+- **W-L**, forced `top` by `effHandleV`/`VB`/`L`. Fix **(a)**: end the borrow before the operation
+  (borrow at each use), move the borrow inside the handled body below the operation, or make the
+  handler resume in tail position.
+- **W-R**, forced `top` by `reify`. Fix **(a)**, lend inside each turn, where the consumer drives
+  the loop. It is **(b)**, recovered by B7, for a stored generator's self-borrow.
+- **R**, a lend across a resuming operation that is not `lin` (a cancellable `ctl`). This is not a
+  world conflict: `Row.Lend` asks `q = lin`. It is 4.6's message R.
 
-**The kernel re-checks every world, so the inference decides no guarantee.** A wrong solve is a
-refusal, never unsoundness. The rules that catch it:
+**The kernel re-checks every world.** The inference decides no guarantee, and a wrong solve is a
+refusal, never unsoundness. These rules catch it:
 
-- `Row.Lend` (the `hS` premise of `withbor1U`/`withbor2U`);
-- `OpSig.LeF`/`RowLe` in `[sub]` and in every `RowLe` premise;
+- `Row.Lend`;
+- `OpSig.LeF`/`RowLe` (in `[sub]`, `hSN`, `hMS`, `hDS`), and `FinLe`, `ThenLe` and `LastFinOK`;
 - `effHandleT`'s `hCN`;
 - `reify`'s `tickSig`;
-- `effHandleV`/`VB`/`L`'s `Row.ofEff` at `c = top`;
+- `effHandleV`/`VB`/`L` at `c = top`;
 - the runtime and `div_fuel` theorems, stated for both worlds.
-
-The inference is not proved, and need not be: like the rest of the checker it only proposes a
-derivation.
 
 **Cost and files.**
 
 | file | change |
 |---|---|
-| `Frontend/Check/World.lean` (new, about 600–900 lines) | variables per row occurrence, the per-construct constraints, unification, the solve, write-back, and the W-L/W-R refusals |
-| `Frontend/Check/Checker.lean` | run the pass before checking |
-| `Frontend/Check/Elab.lean`, `Frontend/Check/Consts.lean` | read solved worlds; `Row.lendB` and `lendRow` decide `Row.Lend` (call-grade's, at `World`) in place of `unwindRow` at `withbor1U/2U` |
-| `Frontend/{Parser,Syntax,Print}.lean` | an optional written world on an operation in core text; printing solved worlds (`bcc desugar`) |
-| `corpus/reject/` | `world-lend-handleL.bc` (W-L) and `world-lend-reify.bc` (W-R), the two conflicts |
+| `Frontend/Check/World.lean` (new, about 500–700 lines) | metavariables, the constraint store, edges, schemes (generalise/instantiate), the solve, substitution into `TExpr`, and path reporting |
+| `Frontend/Check/Decide.lean` | `rowLeB` decides `OpSig.LeF`, with `rowLeB_sound`; `Row.lendB`, `Row.lendB_sound` |
+| `Frontend/Check/Steps.lean` | `convC`/`liftRow` emit edges at metavariables; `convV` unifies structurally |
+| `Frontend/Check/Consts.lean` | `lendRow` (`Row.Lend`) at `withbor1U/2U`; the constants' types unify |
+| `Frontend/Check/Checker.lean`, `Frontend/Check/Elab.lean` | generalisation at definitions and `letPoly`, the solve per group, substitution before the derivation is built |
+| `Frontend/{Parser,Syntax,Print}.lean` | the optional written world; `bcc desugar` prints the solved worlds |
+| `corpus/reject/` | `world-lend-handleL.bc` (W-L), `world-lend-reify.bc` (W-R), `world-lend-cancel.bc` (R) |
+| `corpus/` | `world-poly-for-each.bc`: the scheme case, accepted |
 
 **Tempting shortcuts, and the STOP each raises.**
 
 | shortcut | STOP |
 |---|---|
-| Default every operation to `op` | **PRINCIPLED**: it is not the strictest that works. It refuses every `effHandleV`/`VB`/`L` and `reify` program that holds no lend |
-| A per-handler or per-effect special case (`count` is `op`) | **KERNEL WORK**: one rule per construct |
-| Infer, or write, worlds in the elaborator | **Q2**: the elaborator never chooses a world |
-| Retry a refused program at `top`, or any fallback solve | **PRINCIPLED**: there is one solve, the least fixed point |
-| Skip the kernel re-check because "the solve is right" | **KERNEL WORK**: the derivation is always rebuilt and re-checked |
-| Solve per definition and stop at its boundary | **PRINCIPLED**: definitions' types carry variables solved with the program, or a lend inside a callback conflicts spuriously |
+| Default every operation to `op` | **PRINCIPLED**: not principal; refuses every `effHandleV`/`VB`/`L` and `reify` program |
+| A per-handler or per-effect special case | **KERNEL WORK** |
+| Infer or write worlds in the elaborator, or in a pre-pass with its own typing rules | **Q2**: the inference runs inside the checker |
+| A retry or fallback solve | **PRINCIPLED**: one principal solve |
+| Skip the kernel re-check | **KERNEL WORK** |
+| Solve per definition only, without schemes | **PRINCIPLED**: a lend inside a higher-order callback conflicts spuriously |
+| Keep `rowLeB` exact and special-case worlds | **PRINCIPLED**: `[sub]` decides `OpSig.LeF` |
 
-**Effect on the acceptance list (section 4).** None predicted. The inference realises exactly
-the mechanism 4.1–4.4 assumed (K-lend at the runtime and at `effHandleT`; K-last and class 2
-refused). K-last's message becomes W-L, and class 2's at a `reify` becomes W-R; both carry the same
-fixes as before. Phase 2 measures every program in 4.1–4.4 again, and lists any difference
-against this prediction.
+**Effect on the acceptance list (section 4).** None predicted, schemes included. The schemes only
+remove spurious conflicts. Section 4 predicted the outcomes the kernel's rules give; it did not
+assume a monomorphic solve. K-last's message becomes W-L, and class 2's at a `reify` becomes W-R,
+with the same fixes as before. Phase 2 measures every program in 4.1–4.4 again and lists any
+difference.
 
 ### 2.4 What it reads
 
@@ -571,7 +540,7 @@ at 91:1.
 
 | program | main | branches | B5 | mechanism |
 |---|---|---|---|---|
-| **P1** `scratch-743/t/p01-while-handler-op` | refused 3:1 (`escapeError`, the per-observation rewrite) | class1-revive: i32[20], Backend2 native | **accepted** | K-lend: `&mut c` is lent across `walk`'s ticks (the runtime, `some .top`) and `count`'s tail-resumptive `tick()` (`effHandleT`, `some r`) |
+| **P1** `scratch-743/t/p01-while-handler-op` | refused 3:1 (`escapeError`, the per-observation rewrite) | class1-revive: i32[20], Backend2 native | **accepted** | K-lend: `&mut c` is lent across `walk`'s ticks (the runtime, at `op`) and `count`'s tail-resumptive `tick()` (`effHandleT`, `c = op`) |
 | **P3** `scratch-743/t/p05-iter-borrowed-vec` | refused 20:12 (`iterError`) | class1-revive: refused 20:24, "`*` … has type `1`" | **accepted**, i32[6] | D4′ (decided in scope): `imm 'a (array i32)` was not data (`dataSrcOf`, `Sugar.lean:2633`), so it fell to the drain path and `x` got type `1`. The loop is total, so no tick crosses the lend; copies go only through #756's rule |
 | `reject/lend-iter-borrow` | refused 28:5 (`iterError`) | class1-revive: i32[60] | → corpus | K-lend + K-copy |
 | `reject/while-in-counted-for` | refused 10:5 (S1) | all three: i32[4] | → corpus | D-elab (S1 retired) |
@@ -735,8 +704,8 @@ Each message is the checker's text at the refusal it reports. It decides nothing
 - **No Backend lowering that decides ownership.** Every Backend2 drop and copy names its
   `DropRule`/`CopyRule` and passes Lint's premise check (#746 step 3).
 - **No count, position, storage or finaliser axis of M1.** B5 builds the world axis only.
-- **No two-point world.** The world is a lifetime bound (`Option Lifetime.Life`). If a proof does
-  not go through at the lifetime carrier, the step is named and the work stops (1.4).
+- **No third world.** The world is `{op ⊑ top}` (decision 71). A third point needs predicates local
+  to a tree-shaped lifetime order, which is unverified and not pursued.
 - **No grading of user effects beyond what `effHandleT`'s `hCN` checks.** #654 Open.
 - **No premise beyond 1.3's** on `withbor1U`, `withbor2U` or `effHandleT`. The named-risk STOP
   (1.4) is not met by restricting the lend's lifetimes to inside `r`, or by any other added
@@ -779,7 +748,7 @@ looping program leaves Backend2's fragment ("compiler never stale").
 - `tick` under the runtime clause is erased and answered *next* (`tickTm`). That is the handler law
   for a tail-resumptive clause, read from the `effHandleT`/runtime node in the typed term.
 - `main`'s `reify`, with the runtime as its only `Div` handler, runs in place (`convMain`). Its row
-  is `F[div]` with `tick` at `some .top`. The world is erased with the row; nothing in Backend2
+  is `F[div]` with `tick` at the solved world. The world is erased with the row; nothing in Backend2
   reads it.
 - `effHandleT`/`effHandleL` around a ticking computation use §47's erasure (`handle_tail` → call;
   `[handle-last]` as §51's lowering, already on main for non-ticking bodies).
@@ -820,9 +789,9 @@ send `outside` or lower. If B5 needs any Lint rule change, STOP and report.
 
 | file(s) | change | reason |
 |---|---|---|
-| `Core/Types.lean` | `OpSig.wld : Option Lifetime.Life`; `CTy.eff … wld …` | M1 world axis, a lifetime bound (1.2) |
+| `Core/Types.lean` | `World`, its laws; `OpSig.wld : World`; `CTy.eff … rc wld …` | M1 world axis, two points (1.2) |
 | `Core/EffDefs.lean`, `Core/EffRules.lean` | `OpEnt.wld`, `Owed` (`Ext` + records inside the bound), `Owed.anti`, `owed_unbounded`, `contShare`/`KapRelT` over `Owed`, `OpSig.ent`, `Row.ofEff … w`, `contShare_ungraded`, `kapRelT_ungraded` | 1.2, 1.4 |
-| `Core/EffFin.lean` | `OpSig.LeF`, `OpEnt.Le`, `Row.gradeAt`, `rowLe_gradeAt`, `effWp_gradeAt` | `[sub]` along the lifetime order (`none` → `some r` → wider) |
+| `Core/EffFin.lean` | `OpSig.LeF`, `OpEnt.Le`, `Row.gradeAt`, `rowLe_gradeAt`, `effWp_gradeAt` | `[sub]`: `top → op` (`OpSig.LeF`) |
 | `Core/EffBorrow.lean` | `Row.Lend Δ`, `Row.Unwind.lend`, `Row.Lend.resumes/unwind` | 1.2 |
 | `Core/EffWp.lean` | `wpG_M_frameAt`, `wpG_I_frameAt`; `frameX` re-derived, statements unchanged | 1.4 |
 | `Core/EffLend.lean` (new) | `lendM_frame`, `lendI_frame`, `cwp_lendM`, `cwp_lendI`, `withbor1L_compatX`, `withbor2L_compatX` | 1.4 |
@@ -849,11 +818,10 @@ send `outside` or lower. If B5 needs any Lint rule change, STOP and report.
 | `book/src/guide/iteration.md` ("Borrows and loops"), `book/src/elaboration/divergence.md`, `docs/internals/elaboration/divergence.md` | prose | docs |
 
 **Theorem statements changed:** `runtime_every_run` and `divFuel_every_run` gain `w`, with the old
-statements kept as the `none` instances. `handleT_compatC` gains `w`, `hw` and `hCN`.
+statements kept as the `top` instances. `handleT_compatC` gains `c` and `hCN`.
 
-**Hypotheses added:** `hw` and `hCN`, premises of the `effHandleT` rule (and `hw` of `divFuel`),
-not of any theorem. At `w = none` both are trivial and give today's rule; they are non-vacuous at
-`w = some r`, where P1's `count` meets them.
+**Hypotheses added:** `hCN`, a premise of the `effHandleT` rule, not of any theorem. At `c = top`
+it is trivial and gives today's rule; it is non-vacuous at `c = op`, where P1's `count` meets it.
 
 **Not changed:** any `fundamentalC`/adequacy statement, `PinLaw`'s fields, `LendFrame`,
 `LoopFrame`, `fundamentalC_pin`, `adequacyD_pin`.
@@ -900,13 +868,8 @@ not of any theorem. At `w = none` both are trivial and give today's rule; they a
 
 ## 10. Questions: decided, and still open
 
-> **Q1. World carrier: DECIDED, a lifetime bound** (M1, user, 2026-10-22: "world as a lifetime bound
-> ℓ_r on eff, in CTy.all form … no new carrier"; reconfirmed for B5 with the larger rework
-> accepted). Section 1.2 gives the Lean form. The field is `Option Lifetime.Life`, because the
-> unbounded element ("owed at every extension") has nothing strictly inside it, and the transcribed
-> `Lifetime.Life` has no such lifetime. #654's Bool is two of its points.
-> **Still open for the reviewer:** whether `none` is acceptable as the unbounded element. The
-> alternative is a bottom lifetime, which would edit a printed grammar and is not proposed.
+> **Q1. World carrier: DECIDED, two points `{op ⊑ top}`** (user, 2026-10-22, #673 review item 4;
+> decision 71). A lifetime bound collapses to these two points (spike 21363bd9).
 
 > **Q2. Who decides the world: RESOLVED (user, 2026-10-31, option A): the checker infers it** (§2.3).
 > The elaborator emits operations with no world. The checker gives each a variable, solves the
@@ -924,10 +887,10 @@ not of any theorem. At `w = none` both are trivial and give today's rule; they a
 >   `CDerivesP Δb [⟨V, true⟩] M (.comp (CTy.effOf S (.box (.var x) B)))`.
 > - Before B5, every `withbor1U`/`withbor2U` node inside such an `M` had a row of abortive
 >   operations only (`S'.Unwind y`).
-> - After B5, `M` may contain a `withbor1U`/`withbor2U` node at `S'.Lend Δ' y`: a lend of a local
->   `y`, inside the R1 callback, whose own callback performs non-abortive linear operations of world
->   `some r` with `'y ⊏ r`. These are tail-resumptive handler operations, and `Div` ticks driven by
->   an in-scope `div_fuel`. The R1 row itself is `ResumeO`, which holds no `tick`.
+> - After B5, `M` may contain a `withbor1U`/`withbor2U` node at `S'.Lend y`: a lend of a local
+>   `y`, inside the R1 callback, whose own callback performs non-abortive linear operations at world
+>   `op`. These are tail-resumptive handler operations, and `Div` ticks driven by an in-scope
+>   `div_fuel`. The R1 row itself is `ResumeOC` after #750 A, which holds no `tick`.
 >
 > Those derivations are the new members of `LendFrame`'s domain. Nothing else in `CDerivesP` changes.
 > `LoopFrame`'s steps `N`, `K` and `s0` gain the same nested nodes inside handlers they contain: their
@@ -1000,9 +963,8 @@ not of any theorem. At `w = none` both are trivial and give today's rule; they a
 - **Q3:** the falsifier on nested lends (check 7) breaks a run.
 - **Q4:** `PinLaw.lean` needs more than the literal arity.
 - **S2:** a written fix (a) fails when measured. It becomes (b) and is raised with the user.
-- **1.4:** a class-1 proof does not go through at the lifetime carrier (the named risk:
-  `lendM_frame`'s `hΨA` re-entry, where the view cell reads a record tagged at or outside `r`).
-  The step is named and the work stops; it does not fall back to two points.
+- **2.3:** the world inference cannot be made principal inside the checker, or a construct's
+  constraint is not Horn.
 - **Q2:** the world is chosen by the elaborator.
 - A class-1 port that needs a changed `fundamentalC`/adequacy statement, or a new hypothesis on
   them.
