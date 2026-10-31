@@ -36,6 +36,7 @@ async-r1-effects 2 6 0 8 8 0 # the two tasks' cells
 async-r1-generator 1 3 0 4 4 0 # the lent cell
 async-r1-local-borrows 2 4 0 7 7 0 # the two tasks' cells, each lent across its task's suspension and out of line
 async-r1-nested 2 3 0 4 4 0 # the two lent cells
+async-r1-step-lend 1 2 0 3 3 0 # the lent cell; the calls through the stored generator are dispatched
 async-race 3 15 0 3 3 0 # the three tasks' buffers; one indirect call per resume or cancel of a task, whose code `race` does not know
 async-scheduler 8 6 0 473 467 20 # the scheduler's list nodes, four per round of `run_until_empty`; one indirect call per resume of a stored task, whose code the queue does not know; a bounds check per slot visit; the slots an array resumed in place (§52): no list node per await; the array's fill, its slot moves and a bounds check per slot visit
 async-scoped 25 4 0 283 273 0 # the read cell `cfg`, the scheduler's list nodes, rebuilt at each round, and the result list's; the scope's unit cell `d` takes no words; an indirect call per resume of a stored task

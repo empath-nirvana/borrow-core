@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.20 · 2026-10-31
+Version 1.21 · 2026-10-31
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -8832,6 +8832,34 @@ facts), `bcc lir --frames` and `bcc-counts --frames`.
   none. A pair's fields are its words in order; a sum's depend on its arm and get none. These are
   facts, not forcing annotations: no performance target rests on LLVM's use of them
   (`docs/compiler.md` choice 6).
+- **The lend encloses the function.** The kernel's facts hold while the lend is live; LLVM's
+  attributes speak of the whole of the function's execution (`noalias`: no access during it to
+  memory modified through the pointer except through pointers based on it). The step between
+  them is that the borrow's lend is open from the function's entry to its return, and that the
+  function reaches the cell only through borrows of that lend: its owner is not among the
+  parameters. It holds at a source function, the code of a source `λ`, thunk or `&`: the source
+  term forces or applies its closure inside every lend whose borrow it receives, and the lend's
+  owner is not in the source term's context there. It does not hold at the functions the machine
+  conversion makes (§49): a cancel step, a call point's step, a join, a resume, a finaliser or a
+  stack-machine function can take a borrow beside its owner, and a cancel step ends the lend and
+  frees the cell. So:
+  - **The rule.** Each LIR function carries one bit per parameter (`Fn.lendEncl`): its lends
+    enclose the function. The bit is set where the function is made, at a source `λ`, thunk or
+    `&` (`Convert.mkClos`, `Convert.mkAmp` with `source`, `Convert.sourceEncl`); every other
+    function the conversion makes leaves it empty, and a missing bit is a cleared one, so a
+    function added later carries no fact unless its maker sets the bit. `paramFacts` emits a
+    parameter's facts only when its bit is set, and every fact's cite names the step.
+  - **The step is an assumption,** `Backend2.LendEnclosesFn` (`Backend2/Driver.lean`), over the LIR
+    interpreter's configurations: at every call a run makes, a borrow at a parameter whose bit is
+    set is not beside its cell's owner among the parameters (the same parameter included), nor
+    beside another borrow of the cell unless both are `imm`, and its cell is live at every
+    configuration the call reaches. The LIR's types carry no lifetimes, so the LIR does not show
+    it. The LIR interpreter checks it at every call of every run (`enclosesB`, sound for
+    `EnclosesAt`, and the cell at the return); `Backend2/LintTests.lean` gives a program `Lint`
+    accepts whose run fails it at a set bit. An owner reached other than as a parameter's word
+    (in a closure's environment, in a cell) is not stated; it rests on the conversion's
+    faithfulness to the checked term. `bcc trusted` lists `LendEnclosesFn` at every function with
+    a borrow fact, read off the word IR's `Fn.facts`.
 - **`musttail`** on every tail call, as §40; LLVM's verifier rejects one it cannot honour, and the
   native stage of `scripts/compile-backend2.sh` builds every program.
 - **`alwaysinline`** where the LIR asks for it (`Fn.inline`, with its reason): a call point's
@@ -8866,10 +8894,17 @@ facts), `bcc lir --frames` and `bcc-counts --frames`.
 - **Frame slots.** Where the old backend has a scoped cell, the slots a run starts at the new
   backend's word IR are at least the old backend's (the static sites differ: one `use` body is
   one site of the new backend's and a site per copy of the old's).
+- **The lend bits.** Every function with a borrow fact in the word IR's `Fn.facts` (`bcc
+  trusted`), not in the emitted attributes, which `classPtrs` filters, is a source function
+  (`lam`, `thunk`, `with`). The regression pair, `corpus/async-r1-cancel-finaliser-writes.bc`
+  (the cancel step `cancel 1.0`) and `corpus/async-r1-step-lend.bc` (a relaxed lend whose
+  callback calls a yielding function: the call point's `step`), each has a function the
+  conversion makes that takes a `mut` borrow beside its owner, and it has no fact.
 
 ### Facts read
 
-Each parameter's type (the borrow modes of `imm`, `mut` and a family's leaves), the layouts (an
+Each parameter's type (the borrow modes of `imm`, `mut` and a family's leaves) and lend bit
+(`Fn.lendEncl`, set where the function is made), the layouts (an
 address's words, a cell's bytes, a class's agreement), the LIR's step functions, and a first
 conversion's machines and layouts for the levels' cells.
 
@@ -8899,6 +8934,15 @@ IR's interpreter counts the frame slots a run starts.
   `κ`'s environment is by value, and a level's cell lives as long as its level. It would matter
   where a box's contents are allocated, to place them in the scope the lifetime names.
 - **`!noalias` and `!alias.scope`** (#531), where a parameter attribute is too coarse; Alive2.
+- **The lend bits of the helpers.** The helpers the conversion makes (`extern`, `dtor leaf`,
+  `count_fold`, `count_try`, `observe`, `unfold`, `const`, `fold`) are entered as direct calls,
+  and with every function's bits set the interpreter refused no helper on the corpus (it refused
+  a machine's `suspend` in 9 programs), but their bits are cleared: each needs the step stated for
+  it before it is set. Clearing the bits takes the facts from 2850 of the 6852 attributed
+  parameter words of the corpus's native builds: the functions that lose them are `extern` 1183,
+  `dtor leaf` 679, `count_fold` 430, `count_try` 88, `observe`, `unfold` and `const` 25, and the
+  machines' functions 65.
+- **`LendEnclosesFn` proved** needs lifetimes in the LIR's types (#760's scope, §3a).
 
 ---
 
@@ -10340,6 +10384,20 @@ relation or the machine.
 
 ## Changelog
 
+- **1.21** (2026-10-31) — §50 (#760): no borrow fact at a function the machine conversion makes.
+  The cancel step of `corpus/async-r1-cancel-finaliser-writes.bc` took its `mut` borrow as
+  `ptr noalias nonnull dereferenceable(4)` beside a `ptr` to its owner, one cell; it wrote through
+  the borrow and then freed the cell through the owner, which is `noalias` undefined behaviour
+  under LangRef, with the cell freed while `dereferenceable`. Other machine-made functions take a
+  borrow beside its owner too (`corpus/async-r1-step-lend.bc`'s call point step), and escaped the
+  facts only because `classPtrs` typed those words as `i64`. The kernel's facts were not in
+  question; the step from "the lend is live" to "for the whole of this function" was stated
+  nowhere. Now each LIR function has a lend bit per parameter (`Fn.lendEncl`), set only where a
+  source `λ`, thunk or `&` is made; `paramFacts` emits a borrow's facts only at a set bit; the step
+  is the named assumption `Backend2.LendEnclosesFn`, which the LIR interpreter checks at every call
+  and `bcc trusted` lists at each function with a fact; `scripts/native-facts.sh` reads `Fn.facts`
+  per function. The helpers' facts are cleared too (*Open*). No change to the language, the
+  kernel, the checker or a program's output.
 - **1.20** (2026-10-31) — §42 (#746): a declared value lent across a computation that may
   abort, stated as the kernel decides it (`Core/DeclLend.lean`). The loan holds no owned cell
   (`decl_loan_ownFree`), so an abort handled inside the loan is admitted at the pure `withbor`

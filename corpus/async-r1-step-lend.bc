@@ -1,0 +1,47 @@
+-- SPEC §50, the lend bits: a relaxed lend whose callback calls a yielding function. `withbor2r`
+-- (`borrow mut`, R1: the pair `p` derived from the borrow crosses the suspension) lends `c` as
+-- `m`; the body calls `tick`, which yields. The machine conversion makes a call point's step for
+-- the code after the call, and the step takes the borrow `m` (in `p`) beside its owner `c`: one
+-- cell. A function the conversion makes has no lend bit set (`Fn.lendEncl`), so the step's
+-- parameters carry no borrow fact (`noalias`, `dereferenceable`); `bcc trusted` lists no step,
+-- and the LIR interpreter refuses a run in which a parameter whose bit is set is entered beside
+-- its cell's owner (`LendEnclosesFn`). The pair of `async-r1-cancel-finaliser-writes`, whose
+-- cancel step takes the borrow beside its owner and frees the cell.
+--
+-- `assurance: PinLaw (R1 at 22:11)`.
+--
+-- Answer: i32[109]: the task yields 1, then answers 3 + 4 + 2; `live 0`.
+include yield
+
+fn tick() -> i32 with Yield[i32] =
+  yield(1);
+  2
+
+fn task() -> i32 with Yield[i32] =
+  let c = alloc(3);
+  let v = borrow mut c { m ->
+    let p = (m, 4);
+    let n = tick();
+    let (m2, k) = p;
+    modify m2 { x -> x + k + n };
+    modify m2 { x -> (x, x) }
+  };
+  let _ = free(c);
+  v
+
+fn step(it: U (pull i32 i32 1)) -> (i32 * U (pull i32 i32 1)) + i32 =
+  o <- (nu_out (force it)).1;
+  match o {
+    inl (x, it) -> inl (x, it)
+  | inr d -> match d { inl r -> inr r | inr it -> inl (0, it) }
+  }
+
+main -> i32 =
+  let a : U (pull i32 i32 1) = task();
+  match step(a) {
+    inl (x, a) -> match step(a) {
+      inl (y, a) -> (nu_out (force a)).2; 0
+    | inr r -> x * 100 + r
+    }
+  | inr r -> r
+  }

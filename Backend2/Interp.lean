@@ -18,7 +18,11 @@ scripted standard input, the arguments' stream, and collected standard output an
   unwritten (the moves of `take`, `replace` and `withswap`), and an array is freed only when
   every slot is unwritten;
 - every heap access is to a live object;
-- every `stackK` drop is a stack machine's hand-over (`handOverB`, `HandOver`).
+- every `stackK` drop is a stack machine's hand-over (`handOverB`, `HandOver`);
+- at every call, a borrow a parameter whose lend bit is set (`Fn.lendEncl`) holds is not beside
+  its cell's owner among the parameters, nor beside another borrow of the cell but an `imm` one
+  beside an `imm` one (`enclosesB`, `EnclosesAt`), and its cell is live when the call returns:
+  what a call shows of `LendEnclosesFn`.
 
 Its report is the stages' (`Backend.report`): `main`'s value, then the objects live at the end.
 Host operations are `wasmHostAt .negative`'s, as the closure IR's interpreter's, so that output
@@ -598,6 +602,113 @@ def callEntry (p : Prog) (t : Tm) : IM (Option (LV ⊕ (Nat × List LV))) := mat
 def entryFrame (d : Fn) (args : List LV) : Std.HashMap Var LV :=
   (d.params.zip args).foldl (fun m (x, v) => m.insert x v) {}
 
+/-! ### The lend bits
+
+A parameter whose lend bit is set (`Fn.lendEncl`) carries the borrow facts (SPEC §50), which ask
+that its lends enclose the function: the named assumption `LendEnclosesFn`
+(`Backend2/Driver.lean`). The interpreter checks, at every call, the part of it that a call's
+arguments and its return show (`EnclosesAt`, `enclosesB`). -/
+
+/-- The borrows a value of type `t` holds, through `!` and pairs, as the facts are read
+(`Low.paramFacts`): each one's address (a cell's, or a family's base) and whether it is `mut`. -/
+def borrowsIn : Nat → LTy → LV → List (Nat × Bool)
+  | 0, _, _ => []
+  | f + 1, t, v => match t.unbang, v with
+    | .mut _, .loc a => [(a, true)]
+    | .imm _, .loc a => [(a, false)]
+    | .fam (.mut _), .fam b _ => [(b, true)]
+    | .fam (.imm _), .fam b _ => [(b, false)]
+    | .pair ta tb, .pair x y => borrowsIn f ta x ++ borrowsIn f tb y
+    | _, _ => []
+
+/-- The cells a value of type `t` owns (a `ref`'s address, an owned family's base), through `!`,
+`μ`, pairs and sums. -/
+def ownersIn : Nat → LTy → LV → List Nat
+  | 0, _, _ => []
+  | f + 1, t, v => match t, v with
+    | .ref _, .loc a => [a]
+    | .fam (.ref _), .fam b _ => [b]
+    | .pair ta tb, .pair x y => ownersIn f ta x ++ ownersIn f tb y
+    | .sum a _, .inj false x => ownersIn f a x
+    | .sum _ b, .inj true x => ownersIn f b x
+    | .mu a, v => ownersIn f (LTy.subst 0 (.mu a) a) v
+    | .bang a, v => ownersIn f a v
+    | _, _ => []
+
+/-- The `i`-th parameter of `d`'s type and argument, where it has both. -/
+def paramAt (p : Prog) (d : Fn) (as : List LV) (i : Nat) : Option (LTy × LV) := do
+  let x ← d.params[i]?
+  let t ← p.ty[x]?
+  let v ← as[i]?
+  pure (t, v)
+
+/-- The borrows of `d`'s parameters whose lend bit is set, at the arguments `as`. -/
+def enclBorrows (p : Prog) (d : Fn) (as : List LV) : List (Nat × Bool) :=
+  (List.range d.params.length).flatMap fun i =>
+    if d.lendEncl[i]? == some true then
+      match paramAt p d as i with
+      | some (t, v) => borrowsIn 64 t v
+      | none => []
+    else []
+
+/-- Every borrow `d`'s parameters hold, at the arguments `as`. -/
+def allBorrows (p : Prog) (d : Fn) (as : List LV) : List (Nat × Bool) :=
+  (List.range d.params.length).flatMap fun i =>
+    match paramAt p d as i with
+    | some (t, v) => borrowsIn 64 t v
+    | none => []
+
+/-- Every cell `d`'s parameters own, at the arguments `as`. -/
+def allOwners (p : Prog) (d : Fn) (as : List LV) : List Nat :=
+  (List.range d.params.length).flatMap fun i =>
+    match paramAt p d as i with
+    | some (t, v) => ownersIn 64 t v
+    | none => []
+
+/-- **What a call's arguments show of `LendEnclosesFn`**: a borrow of the cell `a` that a parameter
+whose lend bit is set holds is not beside the cell's owner in any parameter, the same one included;
+at `mut` it is the only borrow of `a` among the parameters; at `imm`, every borrow of `a` among
+them is `imm`. -/
+def EnclosesAt (p : Prog) (d : Fn) (as : List LV) : Prop :=
+  ∀ b ∈ enclBorrows p d as, b.1 ∉ allOwners p d as ∧
+    (b.2 = true → ((allBorrows p d as).filter (·.1 == b.1)).length = 1) ∧
+    (b.2 = false → ∀ c ∈ allBorrows p d as, c.1 = b.1 → c.2 = false)
+
+/-- `EnclosesAt`, decided: the LIR interpreter's check at every call. -/
+def enclosesB (p : Prog) (d : Fn) (as : List LV) : Bool :=
+  let os := allOwners p d as
+  let bs := allBorrows p d as
+  (enclBorrows p d as).all fun b => !os.contains b.1 &&
+    (if b.2 then (bs.filter (·.1 == b.1)).length == 1 else bs.all fun c => c.1 != b.1 || !c.2)
+
+/-- The interpreter's check is sound for `EnclosesAt`. -/
+theorem enclosesB_sound {p : Prog} {d : Fn} {as : List LV} (h : enclosesB p d as = true) :
+    EnclosesAt p d as := by
+  intro b hb
+  unfold enclosesB at h
+  have h := (List.all_eq_true.mp h) b hb
+  simp only [Bool.and_eq_true, Bool.not_eq_true'] at h
+  obtain ⟨h₁, h₂⟩ := h
+  refine ⟨fun hm => by simp [hm] at h₁, fun hm => ?_, fun hi c hc he => ?_⟩
+  · simpa [hm] using h₂
+  · simp only [hi, Bool.false_eq_true, ↓reduceIte, List.all_eq_true, Bool.or_eq_true,
+      bne_iff_ne, ne_eq, Bool.not_eq_true'] at h₂
+    rcases h₂ c hc with h | h
+    · exact absurd he h
+    · exact h
+
+/-- The cells of `d`'s parameters whose lend bit is set, at the arguments `as`, outside the data
+and the static cells: each is live until the call returns. -/
+def enclCells (p : Prog) (d : Fn) (as : List LV) : List Nat :=
+  (List.range d.params.length).flatMap fun i =>
+    if d.lendEncl[i]? == some true then
+      match paramAt p d as i with
+      | some (t, .loc a) => match t.unbang with
+        | .mut _ | .imm _ => if a < dataAt then [a] else []
+        | _ => []
+      | _ => []
+    else []
+
 mutual
 def eval (p : Prog) : Nat → LTy → Tm → IM LV
   | 0, _, _ => bad "out of fuel"
@@ -631,12 +742,17 @@ def callFn (p : Prog) (fuel : Nat) (fn : Nat) (args : List LV) : IM LV := do
   let some d := p.fns[fn]? | bad s!"no function f{fn}"
   if d.params.length != args.length then
     bad s!"f{fn} ({d.name}) of {d.params.length} parameters called on {args.length}"
+  if !enclosesB p d args then
+    bad s!"f{fn} ({d.name}) is entered with a borrow whose lend bit is set beside its cell's owner or another borrow of it (LendEnclosesFn)"
   let saved := (← get).frame
   modify fun s => { s with frame := entryFrame d args }
   let r ← eval p fuel d.ret d.body
   let rest := (← get).frame
   if !rest.isEmpty then
     bad s!"f{fn} ({d.name}) returns with {rest.toList.map (s!"x{·.1}")} unconsumed"
+  let mem := (← get).mem
+  if !(enclCells p d args).all mem.contains then
+    bad s!"f{fn} ({d.name}) returns with the cell of a parameter whose lend bit is set freed (LendEnclosesFn)"
   modify fun s => { s with frame := saved }
   pure r
 end

@@ -279,6 +279,16 @@ structure Fn where
   /-- The function is part of its caller's code and is to be inlined at every call, with the
   reason (the native target's `alwaysinline`, checked: SPEC §50). -/
   inline : Option String := none
+  /-- **Whether each parameter's lends enclose the function** (SPEC §50), one bit per parameter:
+  every lend whose borrow the parameter holds is open when the function is entered and stays
+  open until it returns, and the function reaches the cell only through borrows of that lend:
+  the lend's owner is not among its parameters (`LendEnclosesFn`, `Backend2/Driver.lean`). The borrow facts
+  (`Low.paramFacts`) are emitted at a parameter only when its bit is set. The bit is set where
+  the function is made, and only at the code of a source `λ`, thunk or `&` (`Convert.mkClos` and
+  `Convert.mkAmp` with `source`). Every other function the conversion makes (a machine's steps,
+  joins, resumes, cancels and finalisers, the stack machine's functions, the helpers) leaves it
+  empty, and a missing bit is a cleared one: such a function carries no borrow fact. -/
+  lendEncl : List Bool := []
   deriving Inhabited
 
 /-- A program: its functions, its codes, `main`'s term and every variable's type. -/

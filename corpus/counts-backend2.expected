@@ -33,6 +33,7 @@ async-r1-effects 2 0 0 8 8 0
 async-r1-generator 1 0 0 4 4 0
 async-r1-local-borrows 2 0 0 7 7 0
 async-r1-nested 2 0 0 4 4 0
+async-r1-step-lend 1 0 0 3 3 0
 async-race 3 0 0 3 3 0
 async-scheduler 8 0 0 449 443 20 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
 async-scoped 25 0 0 263 253 0

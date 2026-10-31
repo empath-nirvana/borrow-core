@@ -213,4 +213,29 @@ def runFails (p : Prog) (word : String) : Bool :=
 -- (`StackKHandOver`), not about every program `Lint` accepts.
 #guard runFails (handProg handsOverTo) "at the rule stack k, where the hand-over does not hold"
 
+/-- **A function whose lend bit is set, entered beside the owner** (SPEC §50, `LendEnclosesFn`):
+`main` allocates a cell `x2`, lends it (`x3`, the owner `x4`, the borrow `x5`) and calls
+`f0 (x4, x5)`, which ends the lend and frees the cell, as a machine's cancel step does. With `bits`,
+`f0`'s parameter has its lend bit set. -/
+def enclProg (bits : List Bool) : Prog where
+  fns := #[{ name := "cancel", params := [0], ret := .unit, lendEncl := bits,
+             body := .letpair 6 7 0 (.drop .forget 6 (.prim .free [7])) }]
+  codes := #[]
+  main := .letv 1 (.lit (.i32 3)) (.letv 2 (.prim (.alloc [i32T]) [1]) (.letv 3 (.prim (.lend true) [2])
+    (.letpair 4 5 3 (.letv 8 (.pair 5 4) (.call 0 [8])))))
+  mainTy := .unit
+  ty := [(0, .pair (.mut i32T) (.ref i32T)), (1, i32T), (2, .ref i32T), (3, .pair (.ref i32T) (.mut i32T)),
+    (4, .ref i32T), (5, .mut i32T), (6, .mut i32T), (7, .ref i32T),
+    (8, .pair (.mut i32T) (.ref i32T))].foldl (fun m (x, t) => m.insert x t) {}
+
+-- `Lint` accepts the program at either bit; it reads no lifetimes. Its run is refused only where the
+-- bit is set: the borrow is beside its owner (`enclosesB`). So the bit's setting is a fact about the
+-- code `Convert` generates (`LendEnclosesFn`): set only at a source function.
+#guard accepts (enclProg [])
+#guard accepts (enclProg [true])
+#guard refuses (enclProg [true, true]) "2 lend bits for 1 parameters"
+#guard runFails (enclProg [true]) "beside its cell's owner or another borrow of it (LendEnclosesFn)"
+#guard !runFails (enclProg []) "LendEnclosesFn"
+#guard !runFails (enclProg [false]) "LendEnclosesFn"
+
 end Backend2.LintTests

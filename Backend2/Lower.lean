@@ -1096,16 +1096,23 @@ where
 
 /-! ### Functions and the program -/
 
+/-- The step from "the lend is live" to "the lend is live for the whole of this function", which
+every borrow fact cites (SPEC §50): the parameter's lend bit (`Fn.lendEncl`), set only at a source
+function, under the named assumption `LendEnclosesFn`. -/
+def citeEncl : String :=
+  "the lend encloses this function and its owner is not a parameter " ++
+  "(a source function's lend bit, `Fn.lendEncl`: `LendEnclosesFn`, `bcc trusted`)"
+
 /-- The cited guarantee of a `mut` borrow's facts (SPEC §50). -/
 def citeMut : String :=
   "a `mut` lend is unique (`●` joins `imm` cells only: `CellU.CompatS.kinds`); " ++
-  "a live borrow points at a live cell (every run safe: `adequacyD`, SPEC §13)"
+  "a live borrow points at a live cell (every run safe: `adequacyD`, SPEC §13); " ++ citeEncl
 
 /-- The cited guarantee of an `imm` borrow's facts (SPEC §50). -/
 def citeImm : String :=
   "an `imm` lend is not written while live (`▶◀` relates `imm` cells at one value: " ++
   "`CellU.CompatS`; the LIR's writes take a `mut` borrow or the owner); " ++
-  "a live borrow points at a live cell (every run safe: `adequacyD`, SPEC §13)"
+  "a live borrow points at a live cell (every run safe: `adequacyD`, SPEC §13); " ++ citeEncl
 
 /-- The cited guarantee of a borrowed family's base (SPEC §50): its leaves' mode; the base may be
 `0` (an empty family) or in the program's data, so it is neither `nonnull` nor `dereferenceable`. -/
@@ -1119,7 +1126,12 @@ does not give the mode): a word that is an `imm` or `mut` borrow of a cell with 
 `noalias`, `nonnull` and `dereferenceable` by the cell's bytes, and `readonly` at `imm`; a
 borrowed family's base is `noalias`, and `readonly` at `imm` leaves. A pair's fields are its words
 in order (a boxed field one pointer, given none); a sum's words depend on its arm and are given
-none. A `!` is read through (`LTy.unbang`): `!A` is represented as `A`. -/
+none. A `!` is read through (`LTy.unbang`): `!A` is represented as `A`.
+
+The kernel's facts hold while the lend is live; LLVM's attributes speak of the whole of the
+function's execution. So a parameter gets facts only when its lend bit is set (`Fn.lendEncl`): the
+lend encloses the function and its owner is not a parameter. A function the conversion makes has no
+bit set, and none of its parameters gets a fact. -/
 def paramFacts (fd : Backend2.Fn) : LM (List Backend.Flat.ParamFacts) := do
   let L ← L
   let cellBytes (n : Nat) : Option Nat :=
@@ -1145,9 +1157,10 @@ def paramFacts (fd : Backend2.Fn) : LM (List Backend.Flat.ParamFacts) := do
     | _, _ => []
   let mut out : List Backend.Flat.ParamFacts := []
   let mut off := 0
-  for x in fd.params do
+  for (x, i) in fd.params.zipIdx do
     let n := L.node x
-    if let some t := (← read).p.ty[x]? then out := out ++ walk 64 off n t.unbang
+    if fd.lendEncl[i]? == some true then
+      if let some t := (← read).p.ty[x]? then out := out ++ walk 64 off n t.unbang
     off := off + L.w n
   return out
 

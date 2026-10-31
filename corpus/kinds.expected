@@ -46,6 +46,7 @@ corpus/async-r1-generator.bc 1.0 cancellable stored: machine: a path of the clau
 corpus/async-r1-local-borrows.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/async-r1-local-borrows.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/async-r1-nested.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/async-r1-step-lend.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/async-race.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/async-race.bc 1.1 cancellable tail: -; agree
 corpus/async-race.bc 5.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree

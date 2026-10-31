@@ -453,29 +453,45 @@ def closOf (c : Nat) (k : LCTy) (outer : List Var) (inner : List (List LTy × St
     return .call mk outer
   | none => return .clos c outer
 
+/-- **The lend bits of a source function's parameters** (`Fn.lendEncl`, SPEC §50): every one set.
+The function is the code of a source `λ`, thunk or `&`, entered only where the source term
+forces or applies its closure, inside every lend whose borrow it receives as an argument or in
+its environment; the lend's owner is not in the source term's context there, so it is not among
+the function's parameters.
+`UNPROVED:` that the conversion keeps this (`LendEnclosesFn`, `Backend2/Driver.lean`, listed by
+`bcc trusted`): the LIR's types carry no lifetimes, so the LIR alone does not show it. If it fails,
+a function's `noalias` borrow is accessed through its owner while the function runs, or its
+`dereferenceable` cell is freed. -/
+def sourceEncl (params : List Var) : List Bool := params.map fun _ => true
+
 /-- A closure of the closure type `k`, made in `ctx`, of a code of one function: `lam` when
 `param` gives its argument's type, `unit` otherwise; `body` converts its body at the code's
-context (its argument's slot pushed when it has one). -/
+context (its argument's slot pushed when it has one). With `source`, the closure is a source
+term's (a `λ` or a thunk) and its function's lend bits are set (`sourceEncl`); otherwise the
+conversion makes it, and they are cleared. -/
 def mkClos (name : String) (ctx : Ctx) (k : LCTy) (param : Option LTy) (ret : LTy)
-    (body : Ctx → CM Tm) : CM Tm := do
+    (body : Ctx → CM Tm) (source : Bool := false) : CM Tm := do
   let (outer, inner, ctx') ← envOf ctx
   let fi ← reserveFn name
+  let encl (ps : List Var) := if source then sourceEncl ps else []
   match param with
   | some pt =>
     let p ← fresh pt
     let (b, sites) ← outsideSite (body (some p :: ctx'))
-    setFn fi { name, params := inner ++ [p], body := b, ret }
+    let params := inner ++ [p]
+    setFn fi { name, params, body := b, ret, lendEncl := encl params }
     let c ← addCode { kind := .lam, fns := [fi], ty := k }
     closOf c k outer sites
   | none =>
     let (b, sites) ← outsideSite (body ctx')
-    setFn fi { name, params := inner, body := b, ret }
+    setFn fi { name, params := inner, body := b, ret, lendEncl := encl inner }
     let c ← addCode { kind := .unit, fns := [fi], ty := k }
     closOf c k outer sites
 
-/-- A closure of a `&`: one function per component over one environment. -/
+/-- A closure of a `&`: one function per component over one environment. With `source`, a source
+`&`'s, whose functions' lend bits are set (`sourceEncl`). -/
 def mkAmp (name : String) (ctx : Ctx) (k : LCTy) (rets : List LTy)
-    (bodies : List (Ctx → CM Tm)) : CM Tm := do
+    (bodies : List (Ctx → CM Tm)) (source : Bool := false) : CM Tm := do
   let (outer, _, _) ← envOf ctx
   let mut fis : Array Nat := #[]
   let mut sites : List (List LTy × String) := []
@@ -484,7 +500,8 @@ def mkAmp (name : String) (ctx : Ctx) (k : LCTy) (rets : List LTy)
     let fi ← reserveFn name
     let (t, ss) ← outsideSite (b ctx')
     sites := sites ++ ss
-    setFn fi { name, params := inner, body := t, ret := r }
+    setFn fi { name, params := inner, body := t, ret := r,
+               lendEncl := if source then sourceEncl inner else [] }
     fis := fis.push fi
   let c ← addCode { kind := .amp, fns := fis.toList, ty := k }
   closOf c k outer sites
@@ -2520,15 +2537,15 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     bindTm (← conv fuel ctx c) bT fun a => pure (.inj true a)
   | .thunkF _ j _ c | .bangThunkF _ j _ c => do
     let .thunk k := (← repJ j).peel | throw "LIR: a thunk at a non-closure type"
-    mkClos "thunk" ctx k none (← repK k) fun ctx' => convBody fuel (none :: ctx') c
+    mkClos "thunk" ctx k none (← repK k) (fun ctx' => convBody fuel (none :: ctx') c) (source := true)
   | .lam _ j A _ c => do
     let .thunk k := (← repJ j).peel | throw "LIR: a λ at a non-closure type"
     let (_, r) ← answerOf (.thunk k)
-    mkClos "lam" ctx k (some (← vty A)) r fun ctx' => convBody fuel ctx' c
+    mkClos "lam" ctx k (some (← vty A)) r (fun ctx' => convBody fuel ctx' c) (source := true)
   | .lamDead _ j _ _ c => do
     let .thunk k := (← repJ j).peel | throw "LIR: a λ at a non-closure type"
     let (_, r) ← answerOf (.thunk k)
-    mkClos "lam" ctx k (some .unit) r fun ctx' => do
+    mkClos "lam" ctx k (some .unit) r (source := true) fun ctx' => do
       match ctx' with
       | some p :: rest => return .drop .dead p (← convBody fuel (none :: rest) c)
       | _ => throw "LIR: a dead λ's parameter"
@@ -2543,7 +2560,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     let r₁ ← selTy (.thunk k) 0
     let r₂ ← selTy (.thunk k) 1
     readFact "withI:code kind"
-    mkAmp "with" ctx k [r₁, r₂] [fun ctx' => convBody fuel (none :: none :: ctx') tM,
+    mkAmp "with" ctx k [r₁, r₂] (source := true) [fun ctx' => convBody fuel (none :: none :: ctx') tM,
       fun ctx' => convBody fuel (none :: none :: ctx') tN]
   | .effLet _ _ A B S u tM tN => do
     match payTy (← rowPay S) with

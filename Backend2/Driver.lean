@@ -490,10 +490,52 @@ def Tm.hasHandOver : Tm → Bool
   | .case _ _ b₁ _ b₂ => b₁.hasHandOver || b₂.hasHandOver
   | _ => false
 
-/-- **What the new backend's code rests on beyond the kernel** (`bcc trusted`, SPEC §29, §52): the
-hand-over `StackKHandOver` at each function of the program's LIR with a `stackK` drop, as
-`typingReport` lists `PinLaw` at each relaxed rule; no line when there is none, one line when the
-new backend does not compile the program. Sites are named by function index and name. -/
+/-- **The lend encloses the function** (SPEC §50): the step from the kernel's "the lend is live" to
+"the lend is live for the whole of this LIR function", which the borrow facts (`noalias`,
+`readonly`, `nonnull`, `dereferenceable`: `Low.paramFacts`) need, since LLVM's attributes speak of
+the whole of a function's execution. At every call a run of a converted program makes, of a
+function `d` on arguments `as`:
+
+- no borrow a parameter whose lend bit is set (`Fn.lendEncl`) holds is beside its cell's owner
+  among the parameters, the same one included, or beside another borrow of the cell unless both
+  are `imm` (`EnclosesAt`);
+- each such parameter's cell is live at every configuration the call's body reaches
+  (`enclCells`).
+
+This is an assumption. The bit is set only at a source function, the code of a source `λ`,
+thunk or `&` (`Convert.sourceEncl`); every function the conversion makes clears it. A source
+function is entered where the source term forces or applies its closure, inside every lend whose
+borrow it receives, and the lend's owner is not in the source term's context there: the kernel's
+lexical lends. That the conversion keeps this is not proved: the LIR's types carry no lifetimes.
+What it does not state, an owner reached other than as a parameter's word (in a closure's
+environment, in a cell), rests on the conversion's faithfulness to the checked term, as the rest of
+the backend does. The interpreter checks it at every call of every run (`enclosesB`, sound for
+`EnclosesAt`, and the cells at the call's return); `Backend2/LintTests.lean` gives a program
+`Lint` accepts whose run fails it, so it is a fact about the code `Convert` generates. -/
+def LendEnclosesFn : Prop :=
+  ∀ (k : Backend.CheckedProg) (p : Prog) (c : CState), lirOf k = .ok (p, c) →
+    ∀ (input args : List UInt8) (s s₁ s' : St) (t u : Tm) (fn : Nat) (as : List LV) (d : Fn),
+      Visits p (St.init p input args) p.main s t →
+      (callEntry p t).run s = .ok (some (.inr (fn, as)), s₁) → p.fns[fn]? = some d →
+      EnclosesAt p d as ∧
+        (Visits p { s₁ with frame := entryFrame d as } d.body s' u →
+          ∀ a ∈ enclCells p d as, s'.mem.contains a)
+
+/-- **The functions with borrow facts** (SPEC §50), read off the word IR's `Fn.facts`, not the
+emitted attributes: each LIR function (by index and name) whose word IR function has a fact. The
+word IR's functions are `printDec`, then the LIR's, so the LIR's `f i` is the word IR's `i + 1`. -/
+def factsFns (k : Backend.CheckedProg) : Except String (List String) := do
+  let (p, _) ← lirOf k
+  let fp ← flatOf k
+  pure <| (p.fns.toList.zipIdx.filter fun (_, i) =>
+      ((fp.fns[i + 1]?).map (!·.facts.isEmpty)).getD false).map
+    fun (d, i) => s!"f{i} ({d.name})"
+
+/-- **What the new backend's code rests on beyond the kernel** (`bcc trusted`, SPEC §29, §50,
+§52): the hand-over `StackKHandOver` at each function of the program's LIR with a `stackK` drop,
+as `typingReport` lists `PinLaw` at each relaxed rule; `LendEnclosesFn` at each function whose
+parameters have borrow facts (`factsFns`). No line when there is none, one line when the new
+backend does not compile the program. Sites are named by function index and name. -/
 def trustedReport (k : Backend.CheckedProg) : List String :=
   match lirOf k with
   | .error _ => ["backend: the new backend does not compile the program"]
@@ -501,9 +543,15 @@ def trustedReport (k : Backend.CheckedProg) : List String :=
     let fs := (p.fns.toList.zipIdx.filter fun (d, _) => d.body.hasHandOver).map
       fun (d, i) => s!"f{i} ({d.name})"
     let fs := if p.main.hasHandOver then "main" :: fs else fs
-    if fs.isEmpty then [] else
+    let hand := if fs.isEmpty then [] else
       [s!"backend: StackKHandOver (Backend2/Driver.lean), the stack machines' hand-over of a " ++
         s!"level's k: {fs.length} site{if fs.length == 1 then "" else "s"}"] ++
       fs.map ("  " ++ ·)
+    let ffs := (factsFns k).toOption.getD []
+    let encl := if ffs.isEmpty then [] else
+      [s!"backend: LendEnclosesFn (Backend2/Driver.lean), the native borrow facts' lends enclose " ++
+        s!"their functions: {ffs.length} function{if ffs.length == 1 then "" else "s"}"] ++
+      ffs.map ("  " ++ ·)
+    hand ++ encl
 
 end Backend2
