@@ -935,6 +935,8 @@ not of any theorem. At `w = none` both are trivial and give today's rule; they a
 > "checked facts only": no pipeline gives the elaborator checker output. It is **marked for the user**
 > to confirm.
 
+> **Decided (user, 2026-10-31): route (ii), handler-owned state on `effHandleT`, as its own unit after B5.**
+>
 > **Q8. K-sig: a generator's signature depends on its consumer. A menu.** The diagnosis (4.2) shows
 > the root. D5 threads the consumer's loop state through the producer's operation (`x × ws ~> ws`),
 > because `effHandleT`'s clauses are closed. So a generator's signature depends on whoever consumes
