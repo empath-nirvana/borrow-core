@@ -15,8 +15,7 @@ copied before the node:
 
     p <- return (copy xᵢ); let (x₁, x₂) = p; node
 
-the first part checked where `x` names `x₁`, the second where it names `x₂` (`Env.copyFst`,
-`Env.copySnd`). `copyIt` builds it from the rule builders `rVar`, the constant's node, `rLolliE`,
+the first part checked where `x` names `x₁`, the second where it names `x₂` (`Env.copyAt`). `copyIt` builds it from the rule builders `rVar`, the constant's node, `rLolliE`,
 `rRet`, `rTensorE` and `rBind`, so its erasure is `copy_derives`'s `copyE` (`copyIt_erase`) and its
 derivations are the kernel's rules. The copy constant's node records the variable and that the
 checker inserted it (`TInfo.inserted`), which `bcc copies` prints.
@@ -133,7 +132,8 @@ theorem copyIt_erase {E : Env} {sp : Span} {x : String} {i : Nat} {A : CVTy}
           · simp [throw, throwThe, MonadExceptOf.throw] at h
       · simp [throw, throwThe, MonadExceptOf.throw] at h
 
-/-- `copyIt` where each part uses its copy, an internal error otherwise. A part mentions `x` only
+/-- `copyIt` where each copy is used or dropped by its part, an internal error otherwise (a copy
+absorbed and never dropped). A part mentions `x` only
 at `var` leaves, each a use its masks keep, so the rule fires exactly where the split would give
 the slot to both parts: the trigger is the split's own masks, read before the parts are checked.
 -/

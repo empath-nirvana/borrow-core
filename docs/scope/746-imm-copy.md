@@ -58,8 +58,9 @@ The rule is stated once, for every node at which the checker splits its context 
 
 So the rule is the split's own masks, read before the parts are checked: it fires exactly where
 `overlapOK` would refuse a `DerivedCopy` slot, and nowhere else, so every program accepted today
-checks to the same term. `copyUsed` enforces the first half on every insertion: a copy its part
-does not use is an internal error, not a silent drop. The second half needs no check: a missed
+checks to the same term. `copyUsed` checks on every insertion that each copy is used or dropped
+by its part: a copy neither used nor dropped is an internal error. A dropped unused copy cannot
+arise, since a part drops only what it mentions. The second half needs no check: a missed
 copy is refused by the split, as today. Deciding before the parts are checked means each is
 checked once; inserting after a failure would check a part again at each enclosing split,
 exponentially in the nesting.

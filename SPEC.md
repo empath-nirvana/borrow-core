@@ -1388,8 +1388,8 @@ both parts use is admitted at a persistent type only, so `imm` stays linear, and
 - **Mention is use.** A part mentions a variable only at `var` leaves, which its masks keep, and
   the checker drops only slots a part owns, so a part uses a slot exactly when it mentions its
   variable: the rule is the split's own masks, read before the parts are checked, and every
-  program accepted before checks to the same term. `copyUsed` checks the first half at every
-  insertion (an unused copy is an internal error).
+  program accepted before checks to the same term. `copyUsed` checks at every insertion that each
+  copy is used or dropped by its part (one neither is an internal error).
 - **Not covered.** A tuple of borrows is not `DerivedCopy` (a kernel change would widen it). The
   elaboration's own `array_copy` in its templates is unchanged (below). `clone(x)` stays the written
   copy of an unrestricted value.

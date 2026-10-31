@@ -69,7 +69,8 @@ program() {
   # Frame slots: the cells the new backend places in a frame slot per run at least the old
   # backend's, where the old backend has a scoped cell (`--sites`); counted at the flat IR.
   old=""; new=""
-  if [ "$("$bccCounts" --sites "$f" 2>/dev/null | sed -n 's/.*scoped-cells framed \([0-9]*\).*/\1/p')" != 0 ]; then
+  # A program the old backend refuses (`-- check: old-backend-refuses`) has no old count to compare.
+  if ! grep -q '^-- check: old-backend-refuses' "$f" && [ "$("$bccCounts" --sites "$f" 2>/dev/null | sed -n 's/.*scoped-cells framed \([0-9]*\).*/\1/p')" != 0 ]; then
     old=$("$bccCounts" --frames "$f" -- "${args[@]+"${args[@]}"}" < "$in" 2>/dev/null | sed -n 's/^slots //p')
     new=$("$bccCounts" --backend new --frames "$f" -- "${args[@]+"${args[@]}"}" < "$in" 2>/dev/null | sed -n 's/^slots //p')
     if [ -z "$old" ] || [ -z "$new" ]; then echo "$f: no frame slot counts (old '$old', new '$new')"; return 1; fi
