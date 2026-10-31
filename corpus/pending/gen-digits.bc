@@ -9,7 +9,7 @@
 -- operation would allow it, without `break` (its continuation cannot be cancelled). What is missing
 -- is a continuation whose cancel hands back a residual, or a capability with a destructor.
 --
--- now: 18:27: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell
+-- now: 18:27: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across an operation that may be cancelled: the cancel runs a finaliser (`[then]`) that consumes it by its derived drop, and its type is linear with no derived drop
 
 include yield
 
