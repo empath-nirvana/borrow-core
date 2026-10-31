@@ -9066,10 +9066,12 @@ No type licenses it: the dropped value is a closure, and the kernel does not see
 It rests on one named assertion, `UNPROVED:` (`Backend2.StackKHandOver`, `Backend2/Driver.lean`):
 at every configuration of the LIR interpreter that a run of a converted program reaches at a
 `stackK` drop (`Visits`), `x` is `clos kc [a]` and `base` is at or below `a` on the current task
-stack, the frames from the top down to `a` written (`HandOver`, `TakesOver`). From it, proved: the
-frames the dropped `k` stands for are a suffix of those `k₂` stands for (`TakesOver.suffix`), and
-the drop's step changes no object, cell, stack or region (`enter_stackK_keeps`), so the drop frees
-nothing and leaks nothing. #755 (task stacks in the kernel) is the route to proving it.
+stack, the frames from the top down to `a` written (`HandOver`, `TakesOver`). That `k₂`, resumed
+or cancelled as its type requires, then releases the frames the dropped `k` stood for, so that the
+drop leaks nothing, is part of the assumption. Proved beside it, and only this: `k₂`'s frame range
+contains the dropped `k`'s (`TakesOver.suffix`), and a `stackK` drop's step, as every drop's,
+touches no heap (`enter_stackK_keeps`). #755 (task stacks in the kernel) is the route to proving
+it.
 
 - **Lint** checks the premise the node shows (`Lint.handsOver`): the body binds `clos kc [base]`
   first, `kc` is a `&` code each of whose functions takes one address, `x` and `k₂` are of `kc`'s

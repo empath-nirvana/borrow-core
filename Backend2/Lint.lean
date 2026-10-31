@@ -100,25 +100,26 @@ def dropsAt : DropRule → LTy → Bool
     | _ => false
 
 /-- **A `stackK` drop's premise, read from the node**: the stack machine's hand-over of `x`, a
-level's suspended computation, to the `k` the drop's body binds first, `let k₂ = clos kc [base]`.
-`kc` is a `&` code each of whose functions takes one address (the machine's resume and cancel
-entries over its base), `x` and `k₂` are both of `kc`'s closure type, and `base` is an address.
-What the node cannot show, that `x` is `clos kc [a]` with `base` at or below `a` on the task stack
-and the frames from the top down to `a` written, is `UNPROVED:` (`Backend2.StackKHandOver`); the
-LIR interpreter checks it on every run (`Backend2.handOverB`). `none` when the premise holds, else
-what fails. -/
+level's suspended computation, to the `k` the drop's body binds first, `let k₂ = clos kc [base]`:
+`x` and `k₂` are both of `kc`'s closure type, and `base` is a frame's address (`LTy.addr`). The
+check that `kc` is a `&` code each of whose functions takes one address is not part of the rule's
+premise: it confines the rule to codes of a stack machine's shape (a resume and a cancel entry
+over a base), so that the assertion is not taken at any other closure. What the node cannot show,
+that `x` is `clos kc [a]` with `base` at or below `a` on the task stack and the frames from the
+top down to `a` written, is `UNPROVED:` (`Backend2.StackKHandOver`); the LIR interpreter checks it
+on every run (`Backend2.handOverB`). `none` when the premise holds, else what fails. -/
 def handsOver (p : Prog) (x : Var) : Tm → Option String
   | .letv k₂ (.clos kc [base]) _ => Id.run do
     let some code := p.codes[kc]? | return some s!"no code c{kc}"
     if code.kind != .amp then return some s!"c{kc}, the code of the k it hands over to, is not a `&` code"
     for fn in code.fns do
       let some d := p.fns[fn]? | return some s!"no function f{fn}"
-      unless d.params.length == 1 && d.params.all (p.ty[·]? == some (.int .w64)) do
+      unless d.params.length == 1 && d.params.all (p.ty[·]? == some LTy.addr) do
         return some s!"f{fn} ({d.name}), an entry of c{kc}, does not take one address"
     let kT := LTy.thunk code.ty
     if p.ty[x]? != some kT then return some s!"x{x} is not of c{kc}'s closure type"
     if p.ty[k₂]? != some kT then return some s!"x{k₂}, the k it hands over to, is not of c{kc}'s closure type"
-    if p.ty[base]? != some (.int .w64) then return some s!"x{base}, the base, is not an address"
+    if p.ty[base]? != some LTy.addr then return some s!"x{base}, the base, is not an address"
     return none
   | _ => some "its body does not first bind the k it hands over to, `clos kc [base]`"
 

@@ -166,7 +166,7 @@ def letArms (ok : Tm) : Prog where
 #guard refuses (dropProg i32T .stackK) "(stack k), where the rule's premise does not hold"
 #guard refuses (dropProg closT .stackK) "(stack k), where the rule's premise does not hold"
 
-def addrT : LTy := .int .w64
+def addrT : LTy := .addr
 /-- A stack machine's `k`: a closure of a `&` code, resumed with `()` or cancelled. -/
 def kT : LTy := .thunk (.amp (.arr .unit (.ret .unit)) (.ret .unit))
 

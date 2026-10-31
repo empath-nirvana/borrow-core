@@ -1277,7 +1277,7 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
   unless stTy.sameRep S do throw "LIR: a stack machine's frame differs from the first conversion's"
   let reg ← stackRegister
   let fT : LTy := .ref stTy
-  let aT : LTy := .int .w64
+  let aT : LTy := .addr
   let cT := cancelResTy cp
   readFact "machine:stack frame"
   let rres ← reserveFn s!"stack resume {op.1}.{op.2}"

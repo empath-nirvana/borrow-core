@@ -128,7 +128,7 @@ def sites : List (Name × List Name) := [
   -- Readers of a rule, which build no node: the lint, and the statements of the `UNPROVED:` ones.
   (``Backend2.Lint.lintTm, [``Backend2.DropRule.dtor, ``Backend2.DropRule.stackK]),
   (``Backend2.enter, [``Backend2.DropRule.stackK]),
-  (``Backend2.Tm.handsOver, [``Backend2.DropRule.stackK]),
+  (``Backend2.Tm.hasHandOver, [``Backend2.DropRule.stackK]),
   (``Backend2.StackKHandOver, [``Backend2.DropRule.stackK]),
   (``Backend.Clos.WordSound, [``Backend.Clos.Licence.word]),
   (``Backend.Clos.ClausesSound, [``Backend.Clos.Licence.clauses]),

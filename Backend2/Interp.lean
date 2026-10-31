@@ -657,10 +657,11 @@ inductive Visits (p : Prog) : St → Tm → St → Tm → Prop
 
 /-! ### What the hand-over gives
 
-Under `HandOver`, the drop frees nothing and leaks nothing: the frames the dropped `k` stands for
-are among those of the `k` that takes over (`TakesOver.suffix`), and the drop's own step changes
-no object, cell, stack or region (`enter_stackK_keeps`). That every configuration a converted
-program reaches at a `stackK` drop is a hand-over is `UNPROVED:` (`Backend2.StackKHandOver`). -/
+Two facts, and only these: under `HandOver` the frame range of the `k` that takes over contains
+the dropped `k`'s (`TakesOver.suffix`, from the order alone); and a `stackK` drop's step, as every
+drop's, touches no heap (`enter_stackK_keeps`, with no hypothesis). That every configuration a
+converted program reaches at a `stackK` drop is a hand-over, and that the `k` taking over then
+releases those frames, is `UNPROVED:` (`Backend2.StackKHandOver`). -/
 
 /-- The frames `clos kc [a]` stands for are a suffix of those `clos kc [base]` stands for. -/
 theorem TakesOver.suffix {s : St} {base a : Nat} (h : TakesOver s base a) :
@@ -751,8 +752,8 @@ theorem Keeps.takeV' (x : Var) : Keeps (takeV x) := by
   · exact Keeps.bind' (Keeps.modify' _ fun _ => ⟨rfl, rfl, rfl, rfl⟩) fun _ => Keeps.pure' _
   · exact Keeps.bad' _
 
-/-- **The drop frees nothing**: the step of a `stackK` drop changes no object, cell, task stack
-or region; it consumes the variable alone. -/
+/-- The step of a `stackK` drop changes no object, cell, task stack or region; it consumes the
+variable alone. It needs no hand-over: the interpreter's every drop is the same step. -/
 theorem enter_stackK_keeps {p : Prog} {x : Var} {b : Tm} :
     Keeps (enter p (.drop .stackK x b)) := by
   have tail : Keeps (do let _ ← takeV x; pure (some b) : IM (Option Tm)) :=

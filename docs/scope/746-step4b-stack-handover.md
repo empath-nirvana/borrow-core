@@ -23,8 +23,9 @@ proof.
    shape, that `kc` is a `&` code each of whose functions takes one address, that the dropped
    variable and `k₂` are both at `kc`'s closure type, and that `base` is an address. No variable
    set is read.
-4. **What follows is proved.** Under the hand-over, the frames the dropped `k` stands for are
-   among those `k₂` stands for, and the drop's own step changes no object, cell or stack.
+4. **What is proved beside it.** Under the hand-over, `k₂`'s frame range contains the dropped
+   `k`'s; and a `stackK` drop's step, as every drop's, touches no heap. That `k₂` then releases
+   those frames (nothing leaks) is part of the assumption.
 5. **The interpreter checks the hand-over on every run** at each `stackK` drop, and refuses a run
    that fails it, so the gate's LIR stage checks it on every program it runs.
 6. **Trust reporting.** `bcc trusted` lists `StackKHandOver` at each function with a `stackK`
