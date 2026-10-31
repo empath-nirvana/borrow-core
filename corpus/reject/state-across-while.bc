@@ -3,7 +3,7 @@
 -- value observed one turn at a time (SPEC §14), and no handler wraps a div computation (§21 *Open*;
 -- in the kernel, a handler around ticking code has the stateless clauses of `effHandleT`, decision
 -- 68). The handler is installed per observation, with its state in the loop's state (§19).
-effect State[T] { linear ctl get() -> T; linear ctl put(v: T) }
+effect State[T] { must_resume ctl get() -> T; must_resume ctl put(v: T) }
 
 handler state[T, A](mut s: T): State[T], A -> A * T = {
   return(a) = (a, s);

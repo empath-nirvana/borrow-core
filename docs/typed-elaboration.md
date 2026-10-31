@@ -837,7 +837,7 @@ so far, so a div function has its loop type and a call of it in direct style bin
 `B`. The syntactic `isCapTy`, `capPart`, `capNorm`, `residual`, `termCaps`, `callee`, `divCall`,
 `divCallAt`, `fnTy`, `pairTypes` and the `bytes` pattern are deleted:
 
-- **The residual** is the destructor-less components of the result (`isLinear`, `loopCxOf`),
+- **The residual** is the destructor-less components of the result (`noDerivedDrop`, `loopCxOf`),
   named by the terminal's variables (`termParts`) (`corpus/sugar/residual-alias.bc`).
 - **A call in direct style** is any application of loop type where that loop is not expected
   (`directCall`, `callIn`), and nested calls are lifted in evaluation order (`liftApps`)

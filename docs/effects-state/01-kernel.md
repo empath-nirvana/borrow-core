@@ -328,7 +328,7 @@ The frontend inventory was gathered by a delegated read of the tree. I spot-chec
 
 | feature | SPEC | issue / PR | where |
 |---|---|---|---|
-| effect declarations `fn`/`ctl`/`linear ctl`/`multi ctl` | §18 | #214, dec. 55 | `Frontend/Parser.lean:1884-1916`; checks `Frontend/Elab/Effects.lean:2222-2240`. No corpus program uses `linear ctl` or `multi ctl`; multi-shot is exercised only by the kernel program `multi-shot` |
+| effect declarations `fn`/`ctl`/`must_resume ctl`/`multi ctl` | §18 | #214, dec. 55 | `Frontend/Parser.lean:1884-1916`; checks `Frontend/Elab/Effects.lean:2222-2240`. No corpus program uses `must_resume ctl` or `multi ctl`; multi-shot is exercised only by the kernel program `multi-shot` |
 | answering handlers, `with h(e)`, `with h(&mut c)` | §18 | S1a #152/#164, kept by #214 | `clauseDef` Effects.lean:2055, `withBlk` :1363, `opCall` :1292. Elaborate to `withbor` + `withswap` |
 | control handlers, static name per `with` site | §18–§19 | #214 | `withCtl` :1398, `ctlCall` :1311, `hndCtlC` `Frontend/Sugar.lean:3437` |
 | clauses with state; abortive clauses after the handler | §21 | #232 (#216, #229), dec. 59 | `resumeCall` Effects.lean:1238; `HInfo.after` Sugar.lean:3478-3483 |

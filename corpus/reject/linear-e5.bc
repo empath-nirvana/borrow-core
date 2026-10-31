@@ -1,0 +1,12 @@
+-- E5's projection of a value that is not a place: the record is taken apart and its other fields
+-- are left unused. The field marked `must_close` has no derived drop (`tok_linear`,
+-- `TDerivesP.dtor_hasDtor`), so nothing discards it. Refused.
+data Txn = { id: i32, must_close(commit) log: i32 }
+
+fn begin(id: i32) -> Txn = Txn { id: id, log: 0 }
+
+fn commit(t: Txn) -> i32 = match t { Txn { id, log } -> id * 100 + log }
+
+main -> i32 =
+  (begin(7)).id
+-- expect: 11:14: a field of `begin(7)` that `.id` leaves unused is not consumed in its scope, and its type `i32 * tok` is linear and has no derived drop

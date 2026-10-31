@@ -22,7 +22,7 @@ and fails on any difference or refusal.
 import argparse, os, random, subprocess, sys, tempfile
 from concurrent.futures import ThreadPoolExecutor
 
-HEAD = '''effect State[T] { linear ctl get() -> T; linear ctl put(v: T) }
+HEAD = '''effect State[T] { must_resume ctl get() -> T; must_resume ctl put(v: T) }
 
 handler state[T, A](mut s: T): State[T], A -> A * T = {
   return(a) = (a, s);

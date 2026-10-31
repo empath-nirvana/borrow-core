@@ -204,7 +204,7 @@ def genPrim : Op → List Var → GM Key
 def gselOf : Tm → GM (Option Bool)
   | .inj r _ => pure (some r)
   | .var y => return (← get).sel[y]?
-  | .letv _ _ b | .copy _ _ b | .drop _ b => gselOf b
+  | .letv _ _ b | .copy _ _ _ b | .drop _ _ b => gselOf b
   | _ => pure none
 
 /-- The constraints of a term; the key of its value. -/
@@ -239,11 +239,11 @@ def gen (codes : Array Code) : Tm → GM Key
       emit (.sub k₁ k)
       emit (.sub k₂ k)
       pure k
-  | .copy x x' b => do
+  | .copy _ x x' b => do
       emit (.sub (.var x) (.var x'))
       if let some r := (← get).sel[x]? then modify fun s => { s with sel := s.sel.insert x' r }
       gen codes b
-  | .drop _ b => gen codes b
+  | .drop _ _ b => gen codes b
   | .raise p => do
       emit (.sub (.var p) .raised)
       pure .none

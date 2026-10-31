@@ -71,6 +71,7 @@ step() {
 steps=(
   "hygiene + axioms" "scripts/check-hygiene.sh"
   "axiom report"     "lake env lean scripts/AxiomCheck.lean"
+  "insertion pins"   "scripts/check-pins.sh"
   "parse corpus"     "scripts/parse-corpus.sh"
   "check corpus"     "scripts/check-corpus.sh"
   "clause kinds"     "scripts/check-kinds.sh"
@@ -142,7 +143,7 @@ fi
 # Hygiene and the axioms read only Lean sources: they run exactly when every step does.
 wanted() {
   [ "$all" = 1 ] && return 0
-  case "$1" in "hygiene + axioms"|"axiom report") return 1 ;; esac
+  case "$1" in "hygiene + axioms"|"axiom report"|"insertion pins") return 1 ;; esac
   case "$run" in *"|$1|"*) return 0 ;; *) return 1 ;; esac
 }
 

@@ -9,7 +9,7 @@
 -- generator's `close` cancels the continuation, which answers `()`, so the capability could not
 -- come back.
 --
--- now: 22:5: `o`, of type `ref output`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell
+-- now: 22:5: `o`, of type `ref output`, is live across an operation that may be cancelled: the cancel runs a finaliser (`[then]`) that consumes it by its derived drop, and its type is linear with no derived drop
 
 include yield
 

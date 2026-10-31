@@ -371,10 +371,10 @@ def walk (p : Prog) (w : String) : Nat → Tm → Nat → CM Unit
       eq s!"x{sv}'s right payload" r (← nv y)
       walk p w f b₁ dst
       walk p w f b₂ dst
-    | .copy x x' b => do
+    | .copy _ x x' b => do
       eq s!"a copy of x{x}" (← nv x) (← nv x')
       walk p w f b dst
-    | .drop x b | .abandon _ x b => do
+    | .drop _ x b | .abandon _ x b => do
       let _ ← nv x
       walk p w f b dst
 
@@ -776,10 +776,10 @@ def go (w : String) : Nat → Tm → Option Var → Except String Unit
       F.coarse w y
       go w f b₁ dst
       go w f b₂ dst
-    | .copy x x' b => do
+    | .copy _ x x' b => do
       F.sub w x x'
       go w f b dst
-    | .drop _ b | .abandon _ _ b => go w f b dst
+    | .drop _ _ b | .abandon _ _ b => go w f b dst
     | .unit | .lit _ | .pair .. | .inj .. | .absurd _ => pure ()
 
 end FCtx
@@ -870,7 +870,7 @@ def binds : Nat → Tm → List (Var × Tm)
   | 0, _ => []
   | f + 1, t => match t with
     | .letv x e b => (x, e) :: (binds f e ++ binds f b)
-    | .letpair _ _ _ b | .copy _ _ b | .drop _ b | .abandon _ _ b => binds f b
+    | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b | .abandon _ _ b => binds f b
     | .case _ _ b₁ _ b₂ => binds f b₁ ++ binds f b₂
     | _ => []
 

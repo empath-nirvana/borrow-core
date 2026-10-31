@@ -108,6 +108,42 @@ inductive Op where
   | litTab
   deriving Repr, DecidableEq
 
+/-- **The kernel rule an inserted `copy` or `drop` stands for.** This backend converts the erased
+term (`Backend/Driver.lean`), so it does not read the typed term's rule: it inserts each copy and
+drop from free indices and occurrences, and the licence names the rule the site relies on. No
+licence is proved: each is `UNPROVED:`, its statement `Clos.LicenceSound` at it
+(`Backend/Driver.lean`: `Clos.WordSound`, …). `scripts/PinSites.lean` checks that every licence
+names its statement and that each site builds nodes only at the licences its entry lists; it
+checks no licence against the program. -/
+inductive Licence where
+  /-- The backend's own value of an unrestricted type (a unit, a tag, an index, a byte list):
+  `Ctx.DeadP.drop`, `Ctx.SplitP.dup`. -/
+  | word
+  /-- A handler's answer clause or clause tuple: `!` (`clausesTy_persistent`), weakened or
+  duplicated. -/
+  | clauses
+  /-- The erased body of a kernel constant, which consumes what its rule's type does
+  (`swapSlot` is `swap`'s). -/
+  | const
+  /-- A raise's payload superseded by a finaliser's: `CDerives.effRaise`'s `hd : o.A.Drop`. -/
+  | payload
+  /-- A variable free in two sequential parts (`plan2`), copied for the first: `Ctx.SplitP.dup`, a
+  `copy` constant, or an axiom's erased body. `UNPROVED:` rebuilt from free indices; the typed
+  term's split is not read. -/
+  | split
+  /-- A variable that does not occur in what follows (an unused binder, a one-armed variable, an
+  unused extern). `UNPROVED:` `Check.UnmentionedAbsorbed`. -/
+  | unused
+  /-- A level's live variables at a raise or a cancel, a finaliser frame's closure on its normal
+  end. `UNPROVED:` `effLet`'s `hW` (`Ctx.Drops`) and the cancel's premises are not read. -/
+  | abort
+  /-- A continuation dropped where its resume is the tail call (`dropResume`). `UNPROVED:` the
+  operation's qualifier is not read; only an `unr` continuation is unrestricted (`kTy_unr`). -/
+  | kappa
+  /-- A step closure copied for the next step (`bounded_fix`). `UNPROVED:` the step is `!`. -/
+  | step
+  deriving Repr, DecidableEq, Inhabited
+
 inductive Tm where
   | var (x : Var)
   | unit
@@ -124,10 +160,10 @@ inductive Tm where
   | letpair (x y p : Var) (body : Tm)
   /-- `case s {inl x. b₁ | inr y. b₂}`, freeing the injection `s`. -/
   | case (s x : Var) (b₁ : Tm) (y : Var) (b₂ : Tm)
-  /-- `x'` is a deep copy of `x`; `x` stays owned. -/
-  | copy (x x' : Var) (body : Tm)
-  /-- `x` is deep-freed. -/
-  | drop (x : Var) (body : Tm)
+  /-- `x'` is a deep copy of `x`, by the licence `l`; `x` stays owned. -/
+  | copy (l : Licence) (x x' : Var) (body : Tm)
+  /-- `x` is deep-freed, by the licence `l`. -/
+  | drop (l : Licence) (x : Var) (body : Tm)
   /-- `raise p`: the abortive operation of spec §19, `p = (n, (i, v))`. `Unwind` lowers it. -/
   | raise (p : Var)
   /-- `hnd n (hr, cls) body`: a handler of the name `n` (§19), `hr` its answer clause and `cls`

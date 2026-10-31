@@ -56,7 +56,7 @@ def keywords : List String :=
     "type", "shape", "def", "extern", "main", "total", "div", "fn", "include", "effect", "handler",
     "with", "poly",
     -- terms
-    "return", "force", "fun", "let", "linear", "case", "match", "borrow", "modify", "inl", "inr",
+    "return", "force", "fun", "let", "case", "match", "borrow", "modify", "inl", "inr",
     "if", "else", "while", "break", "continue", "clone",
     "thunk", "thunkv", "unbang",
     "boxed", "unbox", "roll", "unroll", "run", "absurd",

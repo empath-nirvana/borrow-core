@@ -204,6 +204,8 @@ structure CState where
   census : Bool := false
   /-- The destructors of `μ` types, generated once per type (`genDtor`). -/
   dtors : Std.HashMap String Nat := {}
+  /-- The functions that drop a destructor's leaf (`leafDtor`, `Prog.dtorFns`). -/
+  dtorFns : Std.HashSet Nat := {}
   /-- The variables bound to `unfold step` (a `bind` whose bound computation is an `unfoldStep`
   node, SPEC §57), and their copies and captures: the `f` a `nuEta` node may call (SPEC §45). -/
   unfolds : Std.HashSet Var := {}
@@ -355,7 +357,7 @@ def bindTm (e : Tm) (t : LTy) (k : Var → CM Tm) : CM Tm := do
     let x ← fresh t
     return .letv x e (← k x)
 
-def drops (xs : List Var) (b : Tm) : Tm := xs.foldr (fun x b => .drop x b) b
+def drops (r : DropRule) (xs : List Var) (b : Tm) : Tm := xs.foldr (fun x b => .drop r x b) b
 
 /-- `xs` abandoned at the rule `r` the typed term applies here (`Tm.abandon`): the context a
 `[let]`'s abort absorbs (`hW`, `Ctx.Drops`), at its abort branch or a frame's (`abortK`), or the
@@ -364,10 +366,11 @@ def abandons (r : Abandon) (xs : List Var) (b : Tm) : Tm := xs.foldr (fun x b =>
 
 def live (ctx : Ctx) : List Var := ctx.filterMap id
 
-/-- At a leaf that reads the slot `keep` (or none): every other live slot dropped. -/
+/-- At a leaf that reads the slot `keep` (or none): every other live slot dropped, as the kernel's
+leaf weakens them (`Ctx.SoloP.skip`, `Ctx.DeadP.drop`: persistent). -/
 def leaf (ctx : Ctx) (keep : Option Nat) (b : Tm) : Tm :=
   let others := (ctx.zipIdx.filter fun (_, i) => some i != keep).filterMap (·.1)
-  drops others b
+  drops .dead others b
 
 /-- The context at a split, by its masks: the parts' contexts and the copies and drops made at the
 split. -/
@@ -384,12 +387,14 @@ def splitCtx (ctx : Ctx) (m : Masks) (rule : String := "?") : CM ((Tm → Tm) ×
     | some x, true, true =>
       let x' ← freshLike x
       if (← get).unfolds.contains x then modify fun st => { st with unfolds := st.unfolds.insert x' }
-      pre := (fun t => .copy x x' t) :: pre
+      pre := (fun t => .copy .dup x x' t) :: pre
       c₁ := c₁.push (some x); c₂ := c₂.push (some x')
     | some x, true, false => c₁ := c₁.push (some x); c₂ := c₂.push none
     | some x, false, true => c₁ := c₁.push none; c₂ := c₂.push (some x)
     | some x, false, false =>
-      pre := (fun t => .drop x t) :: pre
+      -- F5: weakened here, at a persistent type (`Lint` checks it); a slot the part absorbs
+      -- instead is refused. `UNPROVED:` that none reaches here (`Check.SplitMasks.NeitherAbsorbed`).
+      pre := (fun t => .drop .unused x t) :: pre
       c₁ := c₁.push none; c₂ := c₂.push none
   readFact s!"{rule}:masks"
   return (fun t => pre.foldl (fun t f => f t) t, c₁.toList, c₂.toList)
@@ -527,9 +532,9 @@ def lit32 (n : UInt32) (k : Var → CM Tm) : CM Tm := do
   return .letv x (.lit (.i32 n)) (← k x)
 
 /-- `x` copied: `k x x'`. -/
-def dup (x : Var) (k : Var → Var → CM Tm) : CM Tm := do
+def dup (r : CopyRule) (x : Var) (k : Var → Var → CM Tm) : CM Tm := do
   let x' ← freshLike x
-  return .copy x x' (← k x x')
+  return .copy r x x' (← k x x')
 
 /-- The host operation `op` on the pair `(a, b)`, its answer of type `t`. -/
 def bin (op : HostOp) (a b : Var) (t : LTy) (k : Var → CM Tm) : CM Tm := do
@@ -542,7 +547,7 @@ def ifLt (a b : Var) (yes no : CM Tm) : CM Tm := do
   let c ← fresh boolT
   let u₁ ← fresh .unit
   let u₂ ← fresh .unit
-  return .letv c (.prim .cntLt [a, b]) (.case c u₁ (.drop u₁ (← no)) u₂ (.drop u₂ (← yes)))
+  return .letv c (.prim .cntLt [a, b]) (.case c u₁ (.drop .dead u₁ (← no)) u₂ (.drop .dead u₂ (← yes)))
 
 def add1 (i : Var) (k : Var → CM Tm) : CM Tm := do
   let j ← fresh i32T
@@ -558,7 +563,7 @@ def letpairM (p : Var) (k : Var → Var → CM Tm) : CM Tm := do
 
 def unitThen (b : Tm) : CM Tm := do
   let u ← fresh .unit
-  return .letv u b (.drop u .unit)
+  return .letv u b (.drop .dead u .unit)
 
 /-! ### Rows and their payloads  `[spec §47]`
 
@@ -792,7 +797,7 @@ def toResult (a : LTy) (p : Pay) (target : Option OutInfo) (q : Pay) (r : Var) :
 def releaseOpt (s : Var) (b : Tm) : CM Tm := do
   let .sum uT cT := (← tyOf s).peel | throw "LIR: a level's cell that is not `1 + ref S`"
   let u ← fresh uT; let c ← fresh cT; let r ← fresh .unit
-  return .letv r (.case s u (.var u) c (.prim .release [c])) (.drop r b)
+  return .letv r (.case s u (.var u) c (.prim .release [c])) (.drop .dead r b)
 
 /-- `K` and its arguments without the level's cell (`Frame.cellF`) or frame (`Frame.stackF`), at
 the bottom, and that frame's arguments. -/
@@ -817,12 +822,12 @@ def stackRegister : CM Nat := do
 def popThen (f d : Var) (b : Tm) : CM Tm := do
   let k ← stackRegister
   let u ← fresh .unit
-  return .letv u (.prim (.framePop k) [f]) (.drop u (.drop d b))
+  return .letv u (.prim (.framePop k) [f]) (.drop .dead u (.drop .dead d b))
 
 /-- A stored site's stack `h` freed, then `b`. -/
 def freeStackThen (h : Var) (b : Tm) : CM Tm := do
   let u ← fresh .unit
-  return .letv u (.prim .stackFree [h]) (.drop u b)
+  return .letv u (.prim .stackFree [h]) (.drop .dead u b)
 
 /-- The value `x` handed to the continuation `K` over its arguments: the innermost frame's join,
 or the machine's answer (its cell released, or its frame popped, first). -/
@@ -850,14 +855,14 @@ def abortK (F : OutInfo) : Kont → List Var → Var → CM Tm
     | .thenF _ fnD _ pd =>
       let d ← fresh (resTy .unit pd)
       match payTy pd with
-      | none => return .letv d (.call fnD own) (.drop d (← abortK F rest more e))
+      | none => return .letv d (.call fnD own) (.drop .dead d (← abortK F rest more e))
       | some pdT =>
         let some pF := payTy F.pay | throw "LIR: a finaliser's abort where the row holds none"
         let e' ← fresh pF; let u ← fresh .unit; let e₂ ← fresh pdT
         let sup ← coercePay pd F.pay e₂ fun v => pure (.var v)
-        -- The superseded payload `e` is dropped: a raise's payload is at a type that drops
+        -- The superseded payload `e` is abandoned: a raise's payload holds no owned cell
         -- (`CDerives.effRaise`'s `hd : o.A.Drop`).
-        return .letv d (.call fnD own) (.letv e' (.case d u (.drop u (.var e)) e₂ (.drop e sup))
+        return .letv d (.call fnD own) (.letv e' (.case d u (.drop .dead u (.var e)) e₂ (.abandon .superseded e sup))
           (← abortK F rest more e'))
     | .cellF => match own with
       | [c] => releaseOpt c (← abortK F rest more e)
@@ -869,7 +874,7 @@ def abortK (F : OutInfo) : Kont → List Var → Var → CM Tm
       | [h] => freeStackThen h (← abortK F rest more e)
       | _ => throw "LIR: a site's stack frame without its stack"
     | .letF _ _ (some r) => return abandons r own (← abortK F rest more e)
-    | _ => return drops own (← abortK F rest more e)
+    | _ => return drops .dead own (← abortK F rest more e)
 
 /-- The cancel of `K`, `err` the error kept so far (`1 ⊕ P`, `cp` the cancel row's payload `P`):
 each frame's arguments abandoned at the frame's rule (a `[let]`'s, `hW`) or dropped, a finaliser
@@ -884,7 +889,7 @@ def cancelK (cp : Pay) : Kont → List Var → Var → CM Tm
     | .thenF _ fnD _ pd =>
       let d ← fresh (resTy .unit pd)
       match payTy cp, payTy pd with
-      | _, none => return .letv d (.call fnD own) (.drop d (← cancelK cp rest more err))
+      | _, none => return .letv d (.call fnD own) (.drop .dead d (← cancelK cp rest more err))
       | none, some _ => throw "LIR: a finaliser's error outside its operation's cancel row"
       | some pF, some pdT =>
         let err' ← fresh (resTy .unit cp)
@@ -892,10 +897,10 @@ def cancelK (cp : Pay) : Kont → List Var → Var → CM Tm
         let u₁ ← fresh .unit; let e₁ ← fresh pdT; let u₂ ← fresh .unit; let e₂ ← fresh pdT
         let sup ← coercePay pd cp e₁ fun v => pure (.inj true v)
         -- The error not kept (`e₀` superseded, or the finaliser's `e₂` after a kept one) is
-        -- dropped: a raise's payload is at a type that drops (`CDerives.effRaise`'s
+        -- abandoned: a raise's payload holds no owned cell (`CDerives.effRaise`'s
         -- `hd : o.A.Drop`).
-        let kept : Tm := .case err u₀ (.case d u₁ (.drop u₁ (.inj false u₀)) e₁ (.drop u₀ sup))
-          e₀ (.case d u₂ (.drop u₂ (.inj true e₀)) e₂ (.drop e₂ (.inj true e₀)))
+        let kept : Tm := .case err u₀ (.case d u₁ (.drop .dead u₁ (.inj false u₀)) e₁ (.drop .dead u₀ sup))
+          e₀ (.case d u₂ (.drop .dead u₂ (.inj true e₀)) e₂ (.abandon .superseded e₂ (.inj true e₀)))
         return .letv d (.call fnD own) (.letv err' kept (← cancelK cp rest more err'))
     | .cellF => match own with
       | [c] => releaseOpt c (← cancelK cp rest more err)
@@ -907,7 +912,7 @@ def cancelK (cp : Pay) : Kont → List Var → Var → CM Tm
       | [h] => freeStackThen h (← cancelK cp rest more err)
       | _ => throw "LIR: a site's stack frame without its stack"
     | .letF _ _ (some r) => return abandons r own (← cancelK cp rest more err)
-    | _ => return drops own (← cancelK cp rest more err)
+    | _ => return drops .dead own (← cancelK cp rest more err)
 
 /-! #### Resumption points -/
 
@@ -956,7 +961,7 @@ def performK (K : Kont) (args : List Var) (op : Key) (v : Var) : CM Tm := do
 /-- The cell `c` released, then `b`. -/
 def releaseThen (c : Var) (b : Tm) : CM Tm := do
   let u ← fresh .unit
-  return .letv u (.prim .release [c]) (.drop u b)
+  return .letv u (.prim .release [c]) (.drop .dead u b)
 
 /-- A step's reuse of its machine's state cell (SPEC §49): the cell `cell`, its contents taken,
 of the operation `op`; the points of the machine, each with the function that builds its
@@ -1066,7 +1071,7 @@ def mkTuple : List Var → (Var → CM Tm) → CM Tm
 
 /-- A right-nested tuple of the types `tys` taken apart. -/
 def untuple (v : Var) : List LTy → (List Var → CM Tm) → CM Tm
-  | [], k => do return .drop v (← k [])
+  | [], k => do return .drop .dead v (← k [])
   | [_], k => k [v]
   | _ :: ts, k => letpairM v fun x r => untuple r ts fun xs => k (x :: xs)
 
@@ -1209,7 +1214,7 @@ def genMach (m : Mach) (cellOps : List Key := []) : CM (List (Key × Nat)) := do
     let s₂ ← fresh envTy
     -- At a cancel row `⊤` (a must-resume operation) the cancel entry is never run.
     let cb ← match cp with
-      | none => pure (.drop s₂ .unit)
+      | none => pure (.prim .unreachable [s₂])
       | some cp => withState s₂ fun c st => do
         let arms ← casePay stPay st fun i fv => do
           let some p := ps[i]? | throw "LIR: a machine's point"
@@ -1226,7 +1231,7 @@ def genMach (m : Mach) (cellOps : List Key := []) : CM (List (Key × Nat)) := do
       let body ← mkTuple xs fun t => injectPay stPay i t fun st => do
         if threaded then
           let u ← fresh .unit; let c ← fresh envTy; let c₁ ← fresh envTy; let c₂ ← fresh envTy
-          return .case sl u (.drop u (.letv c₁ (.prim (.alloc []) [st]) (.clos kc [c₁])))
+          return .case sl u (.drop .dead u (.letv c₁ (.prim (.alloc []) [st]) (.clos kc [c₁])))
             c (.letv c₂ (.prim .put [c, st]) (.clos kc [c₂]))
         else if cellMode then
           let c ← fresh envTy
@@ -1296,7 +1301,7 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
   let ifBase (a base : Var) (yes no : CM Tm) : CM Tm := do
     let pr ← fresh (.pair aT aT); let c ← fresh boolT; let u₁ ← fresh .unit; let u₂ ← fresh .unit
     return .letv pr (.pair a base) (.letv c (.prim (.host (.rel .w64 .eq)) [pr])
-      (.case c u₁ (.drop u₁ (← no)) u₂ (.drop u₂ (← yes))))
+      (.case c u₁ (.drop .dead u₁ (← no)) u₂ (.drop .dead u₂ (← yes))))
   let never (t : LTy) : CM Tm := do
     let u ← fresh t
     return .letv u (.prim .unreachable []) (.var u)
@@ -1336,10 +1341,10 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
   let w ← fresh F.body; let x ← fresh F.r; let ex ← fresh F.xTy
   let base₃' ← fresh aT
   let below (arm : Var → Var → CM Tm) (here : CM Tm) : CM Tm :=
-    ifBase a₃ base₃' (do return .drop base₃ (← here)) (top fun f a => do
+    ifBase a₃ base₃' (do return .drop .dead base₃ (← here)) (top fun f a => do
       let o' ← fresh F.ty
       let a' ← fresh aT
-      return .copy a a' (.letv o' (← arm f a) (.call rstep [base₃, a', o'])))
+      return .copy .dup a a' (.letv o' (← arm f a) (.call rstep [base₃, a', o'])))
   let valArm ← below (fun f a => pure (.call contV [f, a, x])) (outValue F x)
   let suspArms (sv : Var) : CM Tm := casePay F.sPay sv fun j pv => do
     let some (key, _, _, _) := F.ms[j]? | throw "LIR: a suspension's summand"
@@ -1348,7 +1353,7 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
       -- A level's suspended computation, dropped for the machine's own over the base: as at a
       -- point's `mk` below (`Prog.stackKs`).
       modify fun st => { st with stackKs := st.stackKs.insert k' }
-      return .drop a₃ (.drop base₃' (.drop k' (.letv k₂ (.clos kc [base₃]) (← outSusp F key v k₂))))
+      return .drop .dead a₃ (.drop .dead base₃' (.drop .stackK k' (.letv k₂ (.clos kc [base₃]) (← outSusp F key v k₂))))
   let exits ← match pF? with
     | none => suspArms ex
     | some pT => do
@@ -1356,7 +1361,7 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
       pure (Tm.case ex e (← below (fun f a => pure (.call contA [f, a, e])) (outAbort F e)) sv
         (← suspArms sv))
   setFn rstep { name := "stack step", params := [base₃, a₃, o₃],
-                body := .copy base₃ base₃' (.letv w (.prim .unroll [o₃]) (.case w x valArm ex exits)),
+                body := .copy .dup base₃ base₃' (.letv w (.prim .unroll [o₃]) (.case w x valArm ex exits)),
                 ret := F.ty }
   -- `k` at its base: its resume entry, and its resume.
   let base₄ ← fresh aT
@@ -1365,13 +1370,13 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
   let base₅ ← fresh aT; let y₅ ← fresh b; let o₅ ← fresh F.ty
   let b₅ ← top fun f a => do
     let a' ← fresh aT
-    return .copy a a' (.letv o₅ (.call contY [f, a, y₅]) (.call rstep [base₅, a', o₅]))
+    return .copy .dup a a' (.letv o₅ (.call contY [f, a, y₅]) (.call rstep [base₅, a', o₅]))
   setFn rres { name := s!"stack resume {op.1}.{op.2}", params := [base₅, y₅], body := b₅, ret := F.ty }
   -- The cancel: the frames from the top down to the base, each unwound under the cancel.
   let base₆ ← fresh aT
   match cp with
   | none =>
-    setFn kcan { name := s!"stack cancel {op.1}.{op.2}", params := [base₆], body := .drop base₆ .unit,
+    setFn kcan { name := s!"stack cancel {op.1}.{op.2}", params := [base₆], body := .drop .dead base₆ .unit,
                  ret := cT }
     setFn cstep { name := "stack cancel step", params := [], body := ← never cT, ret := cT }
   | some cpP =>
@@ -1381,9 +1386,9 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
       let err' ← fresh errT; let a' ← fresh aT
       let arms ← atFrame f fun p f' args =>
         cancelK cpP (p.kont ++ [.stackF]) (args ++ [f', a']) err₇
-      return .copy a a' (.letv err' arms
-        (← ifBase a base₇' (do return .drop base₇ (.var err')) (pure (.call cstep [base₇, err']))))
-    setFn cstep { name := "stack cancel step", params := [base₇, err₇], body := .copy base₇ base₇' bC,
+      return .copy .dup a a' (.letv err' arms
+        (← ifBase a base₇' (do return .drop .dead base₇ (.var err')) (pure (.call cstep [base₇, err']))))
+    setFn cstep { name := "stack cancel step", params := [base₇, err₇], body := .copy .dup base₇ base₇' bC,
                   ret := errT }
     let u ← fresh .unit; let err₀ ← fresh errT
     let start : Tm := match payTy cpP with
@@ -1398,7 +1403,7 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
     let f ← fresh fT; let a ← fresh aT
     let body ← mkTuple xs fun t => injectPay stPay i t fun sv => do
       let u ← fresh .unit
-      return .letv u (.prim .framePut [f, sv]) (.drop u (.clos kc [a]))
+      return .letv u (.prim .framePut [f, sv]) (.drop .dead u (.clos kc [a]))
     -- UNPROVED: that dropping a level's suspended computation (`kv` here, `k'` in the step) leaks
     -- nothing. Its type is a closure, which no typing rule lets a term discard; the drop rests on
     -- the stack machine's call points calling a level of the machine itself (`stackedOf`), so that
@@ -1408,7 +1413,7 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
     let body ← match kv? with
       | some kv => do
         modify fun st => { st with stackKs := st.stackKs.insert kv }
-        pure (Tm.drop kv body)
+        pure (Tm.drop .stackK kv body)
       | none => pure body
     setFn p.mkFn { name := s!"suspend {op.1}.{op.2}", params := kv?.toList ++ xs ++ [f, a], body,
                    ret := F.kTy b cp }
@@ -1486,14 +1491,14 @@ def withMachineK (F : OutInfo) (act : Kont → List Var → CM Tm) : CM Tm := do
 def genTab (aT fT : LTy) (p : Var) : CM Tm := do
   let fi ← reserveFn "tab"
   let f ← fresh fT; let a ← fresh aT; let i ← fresh i32T; let n ← fresh i32T
-  let body ← dup i fun i i₁ => dup n fun n n₁ =>
+  let body ← dup .dup i fun i i₁ => dup .dup n fun n n₁ =>
     ifLt i₁ n₁
-      (dup f fun f f' => dup i fun i i' => do
+      (dup .dup f fun f f' => dup .dup i fun i i' => do
         let (_, eT) ← answerOf fT
-        bindTm (.app f' i') eT fun v => dup i fun i i'' => do
+        bindTm (.app f' i') eT fun v => dup .dup i fun i i'' => do
           let a' ← fresh aT
           return .letv a' (.prim .slotPut [a, i'', v]) (← add1 i fun i₂ => pure (.call fi [f, a', i₂, n])))
-      (pure (.drop f (.drop i (.drop n (.var a)))))
+      (pure (.drop .dead f (.drop .dead i (.drop .dead n (.var a)))))
   setFn fi { name := "tab", params := [f, a, i, n], body, ret := aT }
   letpairM p fun c f => do
     let n ← fresh i32T
@@ -1507,15 +1512,15 @@ def genArrFree (fT aT : LTy) (p : Var) : CM Tm := do
   let fi ← reserveFn "array_free"
   let f ← fresh fT; let a ← fresh aT; let i ← fresh i32T; let n ← fresh i32T
   let (some eT, _) ← answerOf fT | throw "LIR: array_free's consumer takes no argument"
-  let body ← dup i fun i i₁ => dup n fun n n₁ =>
+  let body ← dup .dup i fun i i₁ => dup .dup n fun n n₁ =>
     ifLt i₁ n₁
-      (dup i fun i i' => do
+      (dup .dup i fun i i' => do
         let pr ← fresh (.pair aT eT)
         let a' ← fresh aT; let v ← fresh eT
-        return .letv pr (.prim .slotTake [a, i']) (.letpair a' v pr (← dup f fun f f' => do
+        return .letv pr (.prim .slotTake [a, i']) (.letpair a' v pr (← dup .dup f fun f f' => do
           let u ← fresh .unit
-          return .letv u (.app f' v) (.drop u (← add1 i fun i₂ => pure (.call fi [f, a', i₂, n]))))))
-      (do return .drop f (.drop i (.drop n (← unitThen (.prim .freeArr [a])))))
+          return .letv u (.app f' v) (.drop .dead u (← add1 i fun i₂ => pure (.call fi [f, a', i₂, n]))))))
+      (do return .drop .dead f (.drop .dead i (.drop .dead n (← unitThen (.prim .freeArr [a])))))
   setFn fi { name := "array_free", params := [f, a, i, n], body, ret := .unit }
   letpairM p fun f a => do
     let pr ← fresh (.pair aT i32T)
@@ -1526,14 +1531,14 @@ def genArrFree (fT aT : LTy) (p : Var) : CM Tm := do
 def genCount (fT sT : LTy) (p : Var) : CM Tm := do
   let fi ← reserveFn "count_fold"
   let f ← fresh fT; let n ← fresh i32T; let i ← fresh i32T; let st ← fresh sT
-  let body ← dup i fun i i₁ => dup n fun n n₁ =>
+  let body ← dup .dup i fun i i₁ => dup .dup n fun n n₁ =>
     ifLt i₁ n₁
-      (dup f fun f f' => dup i fun i i' => do
+      (dup .dup f fun f f' => dup .dup i fun i i' => do
         let q ← fresh (.pair i32T sT)
         let st' ← fresh sT
         return .letv q (.pair i' st) (.letv st' (.app f' q)
           (← add1 i fun i₂ => pure (.call fi [f, n, i₂, st']))))
-      (pure (.drop f (.drop n (.drop i (.var st)))))
+      (pure (.drop .dead f (.drop .dead n (.drop .dead i (.var st)))))
   setFn fi { name := "count_fold", params := [f, n, i, st], body, ret := sT }
   letpairM p fun f r => letpairM r fun c r₂ => letpairM r₂ fun i st => do
     let n ← fresh i32T
@@ -1545,16 +1550,16 @@ def genCountTry (fT sT eT : LTy) (p : Var) : CM Tm := do
   let fi ← reserveFn "count_try"
   let f ← fresh fT; let n ← fresh i32T; let i ← fresh i32T; let st ← fresh sT
   let rT : LTy := .sum sT eT
-  let body ← dup i fun i i₁ => dup n fun n n₁ =>
+  let body ← dup .dup i fun i i₁ => dup .dup n fun n n₁ =>
     ifLt i₁ n₁
-      (dup f fun f f' => dup i fun i i' => do
+      (dup .dup f fun f f' => dup .dup i fun i i' => do
         let q ← fresh (.pair i32T sT)
         let r ← fresh rT
         let s' ← fresh sT; let e ← fresh eT
         return .letv q (.pair i' st) (.letv r (.app f' q)
           (.case r s' (← add1 i fun i₂ => pure (.call fi [f, n, i₂, s']))
-            e (.drop f (.drop n (.drop i (.inj true e)))))))
-      (pure (.drop f (.drop n (.drop i (.inj false st)))))
+            e (.drop .dead f (.drop .dead n (.drop .dead i (.inj true e)))))))
+      (pure (.drop .dead f (.drop .dead n (.drop .dead i (.inj false st)))))
   setFn fi { name := "count_try", params := [f, n, i, st], body, ret := rT }
   letpairM p fun f r => letpairM r fun c r₂ => letpairM r₂ fun i st => do
     let n ← fresh i32T
@@ -1615,20 +1620,20 @@ def travF (k : FoldKind) (recV recL : Nat) (g : Var) : FShape → Var → CM (Tm
     | .own => do
       let .ref cT := (← tyOf w).peel | throw "LIR: fold_own at a `Ref X` that is not a cell"
       let c ← fresh cT
-      return (.copy g g' (.letv c (.prim .free [w]) (.call recV [g', c])), rT)
+      return (.copy .dup g g' (.letv c (.prim .free [w]) (.call recV [g', c])), rT)
     | .reuse => do
       let .ref cT := (← tyOf w).peel | throw "LIR: fold_reuse at a `Ref X` that is not a cell"
       let u ← fresh .unit
       let pr ← fresh (.pair (.ref .unit) cT)
       let c ← fresh (.ref .unit); let v ← fresh cT
       let r ← fresh rT
-      return (.copy g g' (.letv u .unit (.letv pr (.prim .swap [w, u]) (.letpair c v pr
+      return (.copy .dup g g' (.letv u .unit (.letv pr (.prim .swap [w, u]) (.letpair c v pr
         (.letv r (.call recV [g', v]) (.pair c r))))), .pair (.ref .unit) rT)
-    | .imm => return (.copy g g' (.call recL [g', w]), rT)
+    | .imm => return (.copy .dup g g' (.call recL [g', w]), rT)
   | .varX, w => do
     let (_, rT) ← answerOf' (← tyOf g)
     let g' ← freshLike g
-    return (.copy g g' (.call recV [g', w]), rT)
+    return (.copy .dup g g' (.call recV [g', w]), rT)
   | .tensor F G, w => do
     let .pair aT bT := (← tyOf w).peel | throw "LIR: a fold's shape `⊗` at a non-pair"
     let a ← fresh aT; let b ← fresh bT
@@ -1743,10 +1748,10 @@ def nodeAt (fuel : Nat) (obs : Nat) (C : LCTy) (Cv : CTy) (steps : List PathStep
                         ret := F.ty }
           readFact "unfoldN:machine"
           pointK [.letF fnMap 1 none] [g] (.var r) M
-        return .copy g g' (.letv st (.app g' s) t)
+        return .copy .dup g g' (.letv st (.app g' s) t)
     | none =>
       let t ← runPath fuel st steps fun r => mapStates fuel obs A g r
-      return .copy g g' (.letv st (.app g' s) t)
+      return .copy .dup g g' (.letv st (.app g' s) t)
   | .amp C₁ C₂, Cv' => do
     let (Cv₁, Cv₂) ← match Cv' with
       | .amp a b => pure (a, b)
@@ -1806,23 +1811,23 @@ def mapStates (fuel : Nat) (obs : Nat) (A : LTy) (g w : Var) : CM Tm := do
   | .tvar 0 => return .clos obs [g, w]
   | .bang a => mapStates fuel obs a g w
   | .pair a b => do
-    if !(occ0 a || occ0 b) then return .drop g (.var w)
-    letpairM w fun x y => dup g fun g g' => do
+    if !(occ0 a || occ0 b) then return .drop .dead g (.var w)
+    letpairM w fun x y => dup .dup g fun g g' => do
       let x' ← fresh (← mappedTy obs x a)
       let y' ← fresh (← mappedTy obs y b)
       return .letv x' (← mapStates fuel obs a g x) (.letv y' (← mapStates fuel obs b g' y) (.pair x' y'))
   | .sum a b => do
-    if !(occ0 a || occ0 b) then return .drop g (.var w)
+    if !(occ0 a || occ0 b) then return .drop .dead g (.var w)
     let .sum xT yT := (← tyOf w).peel | throw "LIR: a codata answer's sum"
     let x ← fresh xT; let y ← fresh yT
     let x' ← fresh (← mappedTy obs x a)
     let y' ← fresh (← mappedTy obs y b)
     let g₁ ← freshLike g
     let g₂ ← freshLike g
-    return .copy g g₁ (.copy g g₂ (.drop g (.case w
-      x (.letv x' (← mapStates fuel obs a g₁ x) (.drop g₂ (.inj false x')))
-      y (.letv y' (← mapStates fuel obs b g₂ y) (.drop g₁ (.inj true y'))))))
-  | _ => return .drop g (.var w)
+    return .copy .dup g g₁ (.copy .dup g g₂ (.drop .dead g (.case w
+      x (.letv x' (← mapStates fuel obs a g₁ x) (.drop .dead g₂ (.inj false x')))
+      y (.letv y' (← mapStates fuel obs b g₂ y) (.drop .dead g₁ (.inj true y'))))))
+  | _ => return .drop .dead g (.var w)
 /-- The closure type of the codata of the code `obs`. -/
 def nuTyOf (obs : Nat) : CM LTy := do
   match (← get).codes[obs]? with
@@ -1878,12 +1883,12 @@ def genFix (sT : LTy) (p : Var) : CM Tm := do
              ret := rT }
   let c ← addCode { kind := .lam, fns := [si], ty := selfK }
   let s ← fresh sT; let k ← fresh i32T; let a ← fresh aT
-  let body ← dup s fun s s' => dup k fun k k' => lit32 0 fun z => do
+  let body ← dup .dup s fun s s' => dup .dup k fun k k' => lit32 0 fun z => do
     let self ← fresh selfOT
     let k₂ ← fresh i32T; let cl ← fresh selfT
     let yes : Tm := .letv k₂ (.prim .cntPred [k]) (.letv cl (.clos c [s', k₂]) (.inj true cl))
     let u ← fresh .unit
-    let no : Tm := .drop s' (.drop k (.letv u .unit (.inj false u)))
+    let no : Tm := .drop .dead s' (.drop .dead k (.letv u .unit (.inj false u)))
     let test ← ifLt z k' (pure yes) (pure no)
     let q ← fresh qT
     return .letv self test (.letv q (.pair self a) (.app s q))
@@ -1900,6 +1905,21 @@ unrolls to (memoized by the type, so a binder nested in another, which names the
 its own function calling the outer's), and an array of recursive data one loop function that
 destroys each element and then frees the buffer once (`freeArr`), as Rust drops a `Vec`. -/
 
+/-- **A leaf of a destructor** (`dtorAt`'s `forget`, `drop_derives`) on `x`: a call of a function
+that drops it, one per LIR type, registered in `Prog.dtorFns`, the only functions where `Lint`
+admits a drop at the rule `dtor`. -/
+def leafDtor (x : Var) : CM Tm := do
+  let xT ← tyOf x
+  let key := s!"leaf {xT}"
+  match (← get).dtors[key]? with
+  | some fi => return .call fi [x]
+  | none =>
+    let fi ← reserveFn "dtor leaf"
+    modify fun s => { s with dtors := s.dtors.insert key fi, dtorFns := s.dtorFns.insert fi }
+    let u ← fresh xT
+    setFn fi { name := "dtor leaf", params := [u], ret := .unit, body := .drop .dtor u .unit }
+    return .call fi [x]
+
 mutual
 /-- The destructor of `A` on `x`: a term of type `1`. -/
 def genDtor (fuel : Nat) (A : VTy) (x : Var) : CM Tm := do
@@ -1909,7 +1929,7 @@ def genDtor (fuel : Nat) (A : VTy) (x : Var) : CM Tm := do
   match A with
   | .tensor A B => letpairM x fun a b => do
       let u ← fresh .unit
-      return .letv u (← genDtor f A a) (.drop u (← genDtor f B b))
+      return .letv u (← genDtor f A a) (.drop .dead u (← genDtor f B b))
   | .sum A B => do
     let .sum aT bT := (← tyOf x).peel | throw "LIR: a destructor's sum"
     let a ← fresh aT; let b ← fresh bT
@@ -1951,20 +1971,20 @@ def genDtor (fuel : Nat) (A : VTy) (x : Var) : CM Tm := do
     let .fam (.ref eT) := aT.peel | throw "LIR: an array's destructor"
     let fi ← reserveFn "array_dtor"
     let a ← fresh aT; let i ← fresh i32T; let n ← fresh i32T
-    let body ← dup i fun i i₁ => dup n fun n n₁ =>
+    let body ← dup .dup i fun i i₁ => dup .dup n fun n n₁ =>
       ifLt i₁ n₁
-        (dup i fun i i' => do
+        (dup .dup i fun i i' => do
           let pr ← fresh (.pair aT eT)
           let a' ← fresh aT; let v' ← fresh eT
           let u ← fresh .unit
           return .letv pr (.prim .slotTake [a, i']) (.letpair a' v' pr
-            (.letv u (← genDtor f A v') (.drop u (← add1 i fun i₂ => pure (.call fi [a', i₂, n]))))))
-        (do return .drop i (.drop n (.prim .freeArr [a])))
+            (.letv u (← genDtor f A v') (.drop .dead u (← add1 i fun i₂ => pure (.call fi [a', i₂, n]))))))
+        (do return .drop .dead i (.drop .dead n (.prim .freeArr [a])))
     setFn fi { name := "array_dtor", params := [a, i, n], body, ret := .unit }
     let pr ← fresh (.pair aT i32T)
     let a' ← fresh aT; let n' ← fresh i32T
     return .letv pr (.prim .size [x]) (.letpair a' n' pr (← lit32 0 fun z => pure (.call fi [a', z, n'])))
-  | _ => return .drop x .unit
+  | _ => leafDtor x
 
 /-- The destructor at a `μ` body's shape, recursive positions by the type's own destructor `fi`. -/
 def dtorShape (fuel : Nat) (fi : Nat) (F : FShape) (T : VTy) (w : Var) : CM Tm := do
@@ -1979,7 +1999,7 @@ def dtorShape (fuel : Nat) (fi : Nat) (F : FShape) (T : VTy) (w : Var) : CM Tm :
   | .varX => return .call fi [w]
   | .tensor F G => letpairM w fun a b => do
       let u ← fresh .unit
-      return .letv u (← dtorShape f fi F T a) (.drop u (← dtorShape f fi G T b))
+      return .letv u (← dtorShape f fi F T a) (.drop .dead u (← dtorShape f fi G T b))
   | .sum F G => do
     let .sum aT bT := (← tyOf w).peel | throw "LIR: a destructor's sum"
     let a ← fresh aT; let b ← fresh bT
@@ -2068,9 +2088,9 @@ def mkClosOf (s : CapStream) (B : VTy) (t : LTy) : CM Tm := do
   mkClos "extern" [] (.arr a (.ret b)) (some a) b fun ctx => do
     let some p :: _ := ctx | throw "LIR: an extern's argument"
     match s with
-    | .input => return .drop p (← cell (.i32 0) .w32)
-    | .args => return .drop p (← cell (.i32 0xFFFFFFFF) .w32)
-    | .clock => return .drop p (← cell (.i64 0) .w64)
+    | .input => return .drop .dead p (← cell (.i32 0) .w32)
+    | .args => return .drop .dead p (← cell (.i32 0xFFFFFFFF) .w32)
+    | .clock => return .drop .dead p (← cell (.i64 0) .w64)
     | .output => return .prim (.alloc cls) [p]
 
 /-- **The host function of a harness take** (SPEC §11, §34), as the extern's closure at its type
@@ -2092,7 +2112,7 @@ def takeClosOf (s : CapStream) (t : LTy) : CM Tm := do
     | .clock => return .prim .free [p]
     | .input | .args =>
       let w ← fresh i32T
-      return .letv w (.prim .free [p]) (.drop w (← nilOf b))
+      return .letv w (.prim .free [p]) (.drop .dead w (← nilOf b))
     | .output =>
       let .pair _ bT := b.peel | throw s!"LIR: take_output answers {b}"
       let w ← fresh i32T; let n ← fresh bT
@@ -2276,10 +2296,10 @@ def renameTm (m : Std.HashMap Var Var) : Tm → CM Tm
     let x' ← freshLike x; let y' ← freshLike y
     return .case (m.getD s s) x' (← renameTm (m.insert x x') b₁) y' (← renameTm (m.insert y y') b₂)
   | .absurd s => return .absurd (m.getD s s)
-  | .copy x x' b => do
+  | .copy r x x' b => do
     let x'' ← freshLike x'
-    return .copy (m.getD x x) x'' (← renameTm (m.insert x' x'') b)
-  | .drop x b => return .drop (m.getD x x) (← renameTm m b)
+    return .copy r (m.getD x x) x'' (← renameTm (m.insert x' x'') b)
+  | .drop r x b => return .drop r (m.getD x x) (← renameTm m b)
   | .abandon r x b => return .abandon r (m.getD x x) (← renameTm m b)
 
 /-- **`κ`'s code** at the clause `idx` of a drive (SPEC §49): a `&` closure over the handled
@@ -2350,8 +2370,10 @@ def genKap (n : UInt32) (idx : Nat) (kT : LTy) (T : OutInfo) (outTy : LTy) (driv
     let (ps₂, b₂) ← envOf fun k hv => do
       if swap then
         let some sh := hv.getLast? | throw "LIR: κ's stack"
-        freeStackThen sh (Tm.drop k (drops hv.dropLast .unit))
-      else pure (Tm.drop k (drops hv .unit))
+        -- A must-resume `κ` (cancel row `⊤`) has no derived drop (`kTy_lin`): its cancel is
+        -- never called.
+        freeStackThen sh (.prim .unreachable (k :: hv.dropLast))
+      else pure (.prim .unreachable (k :: hv))
     setFn kcan { name := s!"kappa {n}.{idx} cancel", params := ps₂, body := b₂, ret := .unit }
   | .ret cT' =>
     let want := match cM with
@@ -2362,7 +2384,7 @@ def genKap (n : UInt32) (idx : Nat) (kT : LTy) (T : OutInfo) (outTy : LTy) (driv
       let cv ← fresh (cancelResTy cpIn)
       let body ← toResult .unit (cpIn.getD []) cM cPay cv
       aroundK hv (fun t => .letv cv (.sel k 1) t) fun hv sh => do
-        freeSh sh (drops hv body)
+        freeSh sh (drops .dead hv body)
     setFn kcan { name := s!"kappa {n}.{idx} cancel", params := ps₂, body := b₂, ret := cT' }
   | k => throw s!"LIR: κ's cancel branch at {k}"
   return kc
@@ -2510,7 +2532,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     let (_, r) ← answerOf (.thunk k)
     mkClos "lam" ctx k (some .unit) r fun ctx' => do
       match ctx' with
-      | some p :: rest => return .drop p (← convBody fuel (none :: rest) c)
+      | some p :: rest => return .drop .dead p (← convBody fuel (none :: rest) c)
       | _ => throw "LIR: a dead λ's parameter"
   | .allI _ _ _ _ _ _ c => do
     -- `Λ. M` is `M` (`allI_inst`)  [spec §44]: its body erases to a λ-value, so the binder's slot
@@ -2582,11 +2604,11 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
       let dTm ← conv fuel (none :: c₂) tD
       let pass ← coercePay pm ps e fun e' => pure (.inj true e')
       let fin ← match payTy pd with
-        | none => pure (Tm.letv d dTm (.drop d pass))
+        | none => pure (Tm.letv d dTm (.drop .dead d pass))
         | some pdT => do
           let w ← fresh .unit; let e₂ ← fresh pdT
-          pure (Tm.letv d dTm (.case d w (.drop w pass) e₂
-            (.drop e (← coercePay pd ps e₂ fun e' => pure (.inj true e')))))
+          pure (Tm.letv d dTm (.case d w (.drop .dead w pass) e₂
+            (.abandon .superseded e (← coercePay pd ps e₂ fun e' => pure (.inj true e')))))
       return pre (.letv m (← conv fuel c₁ tM) (.case m x (← conv fuel (some x :: c₂) tN) e fin))
   | .effHandleV _ _ S E fs n A R u ks site _ tc te =>
     convHandle fuel ctx S E fs n A R u ks site tc te
@@ -2615,7 +2637,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     bindTm (← conv fuel ctx c) fT fun f => pure (.sel f j)
   | .unitE _ _ _ u tV tM => do
     let (pre, c₁, c₂) ← splitCtx ctx u "unitE"
-    return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .drop v (← conv fuel c₂ tM))
+    return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .drop .dead v (← conv fuel c₂ tM))
   | .tensorE _ _ A B _ u tV tM => do
     let (pre, c₁, c₂) ← splitCtx ctx u "tensorE"
     let aT ← vty A
@@ -2690,14 +2712,15 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
         if (← get).unfolds.contains fv then
           readFact "nuEta:unfold call"
           let others := (ctx.zipIdx.filter fun (_, k) => k != f && k != si).filterMap (·.1)
-          return drops others (.app fv sv)
+          return drops .dead others (.app fv sv)
         else conv fuel ctx c
       | _ => conv fuel ctx c
     | _, _ => conv fuel ctx c
   | .nilDead _ _ _ c => do
     -- `[nil-dead]` (SPEC §29): the term at the empty context, the context's slots consumed.
     readFact "nilDead:context"
-    return drops (live ctx) (← conv fuel [] c)
+    unless (live ctx).isEmpty do throw "LIR: `[nil-dead]` at a context with a live slot"
+    conv fuel [] c
   | .effHandleT .. | .lendR .. | .lendLoopR .. | .iterate .. | .divFuel ..
   | .reify .. | .letPoly .. => outside t
   | t =>
@@ -2800,7 +2823,7 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
       return .letpair x y p (← convK fuel (some y :: some x :: c₂) tM K args))
   | .unitE _ _ _ u tV tM => do
     let (pre, c₁, c₂) ← splitCtx ctx u "unitE"
-    return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .drop v (← convK fuel c₂ tM K args))
+    return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .drop .dead v (← convK fuel c₂ tM K args))
   | .zeroE _ _ _ u tV => do
     let (pre, c₁, _) ← splitCtx ctx u "zeroE"
     return pre (← bindTm (← conv fuel c₁ tV) .zero fun v => pure (.absurd v))
@@ -2829,7 +2852,8 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
         | none => resultK K args (.call fi [v]) bT ph
   | .nilDead _ _ _ c => do
     readFact "nilDead:context"
-    return drops (live ctx) (← convK fuel [] c K args)
+    unless (live ctx).isEmpty do throw "LIR: `[nil-dead]` at a context with a live slot"
+    convK fuel [] c K args
   | .lendR _ _ _ _ T _ _ td tM => do
     -- `[lend-R]` (SPEC §29): §19's unwinding borrow at a resuming row. The owner is lent as the
     -- callback's view; the callback's value `b` gives `(r, b)`; a cancel of the machine inside the
@@ -2910,13 +2934,13 @@ def convWorkK (fuel : Nat) (k : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : 
     | .app _ _ y _ _ u _ => do
       let (pre, c₁, c₂) ← splitCtx ctx u "app"
       let some (some yv) := c₂[y]? | throw "LIR: a resume's answer is not live"
-      return pre (drops (live c₁) (leaf c₂ (some y) (← applyK F K args yv)))
+      return pre (drops .dead (live c₁) (leaf c₂ (some y) (← applyK F K args yv)))
     | _ => throw "LIR: a resume"
   match t with
   | .bind _ _ A _ u tM tN | .effLet _ _ A _ _ u tM tN =>
     if tailLeafB k tM && returns0B tN then
       let (pre, c₁, c₂) ← splitCtx ctx u "bind"
-      return pre (drops (live c₂) (← convWorkK fuel k c₁ tM K args))
+      return pre (drops .unused (live c₂) (← convWorkK fuel k c₁ tM K args))
     else if aliasOf 64 tM == some k then
       let (pre, c₁, c₂) ← splitCtx ctx u "bind"
       let some (some kv) := c₁[k]? | throw "LIR: an alias of a continuation that is not live"
@@ -2944,7 +2968,7 @@ def convWorkK (fuel : Nat) (k : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : 
       return .letpair x y pv (← convWorkK fuel (k + 2) (some y :: some x :: c₂) tM K args))
   | .unitE _ _ _ u tV tM => do
     let (pre, c₁, c₂) ← splitCtx ctx u "unitE"
-    return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .drop v (← convWorkK fuel k c₂ tM K args))
+    return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .drop .dead v (← convWorkK fuel k c₂ tM K args))
   | .effSub _ _ _ _ _ c => convWorkK fuel k ctx c K args
   | .lendScope _ _ _ c | .litView _ _ c | .unfoldStep _ _ c => convWorkK fuel k ctx c K args
   | _ => throw s!"LIR: a tail-resumptive clause's path at `{ruleName t}` ends in no resume"
@@ -3044,7 +3068,7 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
   let siteTag ← fresh .unit
   if cellAt.isSome then readFact "effHandleV:kappa region"
   let dropAll (keep : Option Nat) (b : Tm) : Tm :=
-    drops ((ctxs'.zipIdx.filter fun (_, i) => some i != keep).flatMap fun (c, _) => live c) b
+    drops .dead ((ctxs'.zipIdx.filter fun (_, i) => some i != keep).flatMap fun (c, _) => live c) b
   let clauseApp (cc : Ctx) (c : TExpr) (a : Var) : CM Tm :=
     match outM with
     | some _ => applyToK fuel cc c a
@@ -3063,8 +3087,8 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
             match (← tyOf v).peel with
             | .pair cT rT =>
               let x ← fresh cT; let y ← fresh rT
-              if i == 0 then return .letpair x y v (.drop y (.app x a))
-              else return .letpair x y v (.drop x (← proj f (i - 1) y))
+              if i == 0 then return .letpair x y v (.drop .dead y (.app x a))
+              else return .letpair x y v (.drop .dead x (← proj f (i - 1) y))
             | t => throw s!"LIR: a clause of the clauses' value at {t}"
         return dropAll (some keep) (← proj 64 (idx - s₀) tv)
       else pure ()
@@ -3106,7 +3130,7 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
           let mut hvC : List Var := []
           for x in hvAll do
             let x' ← freshLike x
-            copies := copies ++ [fun (t : Tm) => Tm.copy x x' t]
+            copies := copies ++ [fun (t : Tm) => Tm.copy .dup x x' t]
             hvC := hvC ++ [x']
           let kv ← fresh kT
           let pr ← fresh (.pair (← tyOf v) kT)
@@ -3117,8 +3141,8 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
               -- The environment written into the stack's region; `κ` is the stack.
               mkTuple (k :: hvC) fun st => do
                 let sh' ← fresh (.int .w64); let u ← fresh .unit
-                return .copy sh sh' (.letv u (.prim (.kappaPut siteTag) [sh', st])
-                  (.drop u (.letv kv (.clos kap [sh]) (.letv pr (.pair v kv) body))))
+                return .copy .dup sh sh' (.letv u (.prim (.kappaPut siteTag) [sh', st])
+                  (.drop .dead u (.letv kv (.clos kap [sh]) (.letv pr (.pair v kv) body))))
             | _, _ => pure (.letv kv (.clos kap (k :: hvC ++ shP?.toList)) (.letv pr (.pair v kv) body))
           return copies.foldr (fun (f : Tm → Tm) (t : Tm) => f t) t
         else
@@ -3247,7 +3271,7 @@ def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Qual × VTy × VTy)
         (← convDrive fuel S E fs n R ks site c₂ te T cR tR parts [some tv] (some parts.size) boxed))
   let ctxs : List Ctx := cR :: parts.toList.map (·.1) ++ [tailCtx]
   let dropAll (keep : Option Nat) (b : Tm) : Tm :=
-    drops ((ctxs.zipIdx.filter fun (_, i) => some i != keep).flatMap fun (c, _) => live c) b
+    drops .dead ((ctxs.zipIdx.filter fun (_, i) => some i != keep).flatMap fun (c, _) => live c) b
   let pt ← rowPay (Row.ofEff n E 0 fs ++ S)
   let ps ← rowPay S
   let aT ← vty A
@@ -3325,7 +3349,7 @@ def convWork (fuel : Nat) (k : Nat) (ph : Pay) (ctx : Ctx) (t : TExpr) : CM Tm :
     | .app _ _ y _ _ u _ => do
       let (pre, c₁, c₂) ← splitCtx ctx u "app"
       let some (some yv) := c₂[y]? | throw "LIR: a resume's answer is not live"
-      return pre (drops (live c₁) (leaf c₂ (some y) (← answer yv)))
+      return pre (drops .dead (live c₁) (leaf c₂ (some y) (← answer yv)))
     | _ => throw "LIR: a resume"
   match t with
   | .bind _ _ A _ u tM tN | .effLet _ _ A _ _ u tM tN =>
@@ -3333,7 +3357,7 @@ def convWork (fuel : Nat) (k : Nat) (ph : Pay) (ctx : Ctx) (t : TExpr) : CM Tm :
     if tailLeafB k tM && returns0B tN then
       -- The right unit: the resume's answer is the clause's.
       let (pre, c₁, c₂) ← splitCtx ctx u "bind"
-      return pre (drops (live c₂) (← convWork fuel k ph c₁ tM))
+      return pre (drops .unused (live c₂) (← convWork fuel k ph c₁ tM))
     else if aliasOf 64 tM == some k then
       -- `κ' <- return κ`: the alias's slot holds `κ`.
       let (pre, c₁, c₂) ← splitCtx ctx u "bind"
@@ -3367,7 +3391,7 @@ def convWork (fuel : Nat) (k : Nat) (ph : Pay) (ctx : Ctx) (t : TExpr) : CM Tm :
       return .letpair x y pv (← convWork fuel (k + 2) ph (some y :: some x :: c₂) tM))
   | .unitE _ _ _ u tV tM => do
     let (pre, c₁, c₂) ← splitCtx ctx u "unitE"
-    return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .drop v (← convWork fuel k ph c₂ tM))
+    return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .drop .dead v (← convWork fuel k ph c₂ tM))
   | .effSub _ _ _ _ _ c => convWork fuel k ph ctx c
   | .lendScope _ _ _ c | .litView _ _ c | .unfoldStep _ _ c => convWork fuel k ph ctx c
   | _ => throw s!"LIR: a tail-resumptive clause's path at `{ruleName t}` ends in no resume"
@@ -3497,7 +3521,7 @@ def convUse (fuel : Nat) (ctx : Ctx) (info : TInfo) (j : Jdg) (decl : Nat) (targ
       let kept := tp.slots.map (·.1)
       let extra := slots.filter fun (i, _) => !kept.contains i
       modify fun st => { st with scopeCopy := {} }
-      return drops (extra.map (·.2)) (← renameTm m tp.tm)
+      return drops .dead (extra.map (·.2)) (← renameTm m tp.tm)
     conv fuel ctx body
   | none =>
     let tm ← conv fuel ctx body
@@ -3565,7 +3589,7 @@ def genLendU (fuel : Nat) (op : Op) (src : Var) (cbT : LTy) (call : Var → CM T
       | some 1 => expand fuel (headOf 64 td) [o] .unit
       | _ => throw "LIR: an unwinding borrow's finaliser that is not a constant is outside the pure fragment"
     return .letv pr (.prim op [src]) (.letpair o b pr (.letv r (← call b)
-      (.case r v (.letv q (.pair o v) (.inj false q)) e (.letv u fin (.drop u (.inj true e))))))
+      (.case r v (.letv q (.pair o v) (.inj false q)) e (.letv u fin (.drop .dead u (.inj true e))))))
   | _ => genLend op src cbT call
 
 /-- A borrowing constant applied to its first argument `x`, its callback's call given by `call`. -/
@@ -3595,9 +3619,9 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
   | .free .., [x] | .tokBurn .., [x] => return .prim .free [x]
   | .tokMint .., [v] => return .prim (.alloc (← classOf .unit)) [v]
   | .swap .., [x, v] => return .prim .swap [x, v]
-  | .copy .., [x] | .arrCopy .., [x] => dup x fun x x' => pure (.pair x x')
+  | .copy .., [x] | .arrCopy .., [x] => dup .const x fun x x' => pure (.pair x x')
   | .forgetImm .., [x] | .forgetMut .., [x] | .forgetUnk .., [x] | .arrForget .., [x] =>
-    return .drop x .unit
+    return .drop .forget x .unit
   | .dtor _ _ A, [x] => do readFact "dtor:type"; genDtor 64 A x
   | .hostOp _ _ op, [x] => return .prim (.host op) [x]
   | .arrNew _ j _, [p] => do
@@ -3815,7 +3839,7 @@ def tailPass (s : CState) (loop : Nat × Var × OutInfo × Nat → Bool) : Excep
         setFn fn { name := "tail", params := [oP], body := .var oP, ret := M.ty }
   let ((), s') ← act.run s
   return ({ fns := s'.fns, codes := s'.codes, main := default, mainTy := default, ty := s'.ty,
-            data := s'.data, statics := s'.statics, lits := s'.lits, stackKs := s'.stackKs }, s')
+            data := s'.data, statics := s'.statics, lits := s'.lits, stackKs := s'.stackKs, dtorFns := s'.dtorFns }, s')
 
 /-- **State cells** (SPEC §49): each machine operation whose suspended computation's closure class
 holds itself (`recursive`, the layouts' classes that keep their environment on the heap, §35)
@@ -3828,7 +3852,7 @@ def cellPass (s : CState) (recursive : Nat → Bool) : Except String (Prog × CS
         let _ ← genMach m ops
   let ((), s') ← act.run s
   return ({ fns := s'.fns, codes := s'.codes, main := default, mainTy := default, ty := s'.ty,
-            data := s'.data, statics := s'.statics, lits := s'.lits, stackKs := s'.stackKs }, s')
+            data := s'.data, statics := s'.statics, lits := s'.lits, stackKs := s'.stackKs, dtorFns := s'.dtorFns }, s')
 
 /-- **The levels whose state cell is passed on** (SPEC §50), from a conversion's machines and the
 layouts' recursive classes (`recursive`, as `cellPass` reads them): each machine whose body takes
@@ -3891,6 +3915,6 @@ def convertProg (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CT
   let ((m, mT), s) ← (convMain exts ctx t C arg loops).run
     { census, direct, mach, threaded, stacked, classes }
   return ({ fns := s.fns, codes := s.codes, main := m, mainTy := mT, ty := s.ty, data := s.data,
-            statics := s.statics, lits := s.lits, stackKs := s.stackKs }, s)
+            statics := s.statics, lits := s.lits, stackKs := s.stackKs, dtorFns := s.dtorFns }, s)
 
 end Backend2

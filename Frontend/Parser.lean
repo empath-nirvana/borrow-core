@@ -2857,7 +2857,7 @@ def decl (n : Nat) : P Decl := do
     pure (.data (← spanFrom st) d)
   | .kw "effect" =>
     -- `effect E[T, …] { fn op(x: A, …) -> B; ctl op(…) -> B; … }` (SPEC §18, §19); `-> B` left
-    -- out is `-> 1`. `ctl` is cancellable; `linear ctl` must resume, `multi ctl` unrestricted.
+    -- out is `-> 1`. `ctl` is cancellable; `must_resume ctl` must resume, `multi ctl` unrestricted.
     discard bump
     let x ← uident "an effect name"
     let tps ← if ← isSym "[" then do
@@ -2872,8 +2872,8 @@ def decl (n : Nat) : P Decl := do
       if ← isSym "}" then break
       let kind ← if ← isKw "fn" then do discard bump; pure OpKind.fn
         else do
-          let q ← if ← isKw "linear" then do discard bump; pure Qual.lin
-            else match (← peek).tok with
+          let q ← match (← peek).tok with
+              | .ident "must_resume" => do discard bump; pure Qual.lin
               | .ident "multi" => do discard bump; pure Qual.unr
               | _ => pure Qual.cancel
           match (← peek).tok with
@@ -3350,10 +3350,37 @@ def unrename (rs : List (String × String)) (s : String) : String :=
     if isW c then (c :: w, out) else ([], c :: flush w out)) ([], [])
   String.ofList (flush w out).reverse
 
+/-- The source text of the span `sp` of `src` (lines and columns from 1). -/
+def srcText (src : String) (sp : Span) : String :=
+  let ls := src.splitOn "\n"
+  if sp.start.line == sp.stop.line then
+    let l := (ls[sp.start.line - 1]?).getD ""
+    String.ofList ((l.toList.drop (sp.start.col - 1)).take (sp.stop.col - sp.start.col))
+  else
+    let first := (ls[sp.start.line - 1]?).getD ""
+    String.ofList (first.toList.drop (sp.start.col - 1)) ++ " …"
+
+/-- A marker a message holds for the source text of a span (`Error.renderIn` writes it out). -/
+def spanMark (sp : Span) : String :=
+  s!"⟦{sp.start.line}:{sp.start.col}:{sp.stop.line}:{sp.stop.col}⟧"
+
+/-- Each span marker of `msg` replaced by the span's source text. -/
+def unmark (src : String) (msg : String) : String :=
+  match msg.splitOn "⟦" with
+  | [] => msg
+  | first :: rest => rest.foldl (fun acc piece =>
+      match piece.splitOn "⟧" with
+      | m :: after =>
+        match (m.splitOn ":").map String.toNat? with
+        | [some a, some b, some c, some d] =>
+          acc ++ srcText src ⟨⟨a, b⟩, ⟨c, d⟩⟩ ++ "⟧".intercalate after
+        | _ => acc ++ "⟦" ++ piece
+      | [] => acc ++ "⟦" ++ piece) first
+
 /-- An error about the program `src`, rendered with each renamed binder named as the source writes
-it (`unrename`). -/
+it (`unrename`), and each span marker as its source text (`unmark`). -/
 def Error.renderIn (src : String) (e : Error) (lib : String → Option String := fun _ => none) :
     String :=
-  { e with msg := unrename (renamesOf src lib) e.msg }.render
+  { e with msg := unmark src (unrename (renamesOf src lib) e.msg) }.render
 
 end Frontend

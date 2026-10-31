@@ -1,0 +1,17 @@
+-- A `for` over an owned array copies each element out of its `imm` view (`*e`), and a copy is a
+-- split's `dup`, a rule at unrestricted types only (`Ctx.SplitP.both_live_iff`); `Txn` is linear
+-- (`decl_linear`). Refused.
+data Txn = { id: i32, must_close(commit) log: i32 }
+
+fn begin(id: i32) -> Txn = Txn { id: id, log: 0 }
+
+fn commit(t: Txn) -> i32 = match t { Txn { id, log } -> id * 100 + log }
+
+fn mk(i: i32) -> Txn = begin(i)
+
+main -> i32 =
+  let ts = array_new[Txn] (2, !{ i -> mk(i) });
+  let mut s = 0;
+  for x in ts { s = s + commit(x) };
+  s
+-- expect: 15:12: a `for` over an owned array copies each element, and `i32 * i32 * tok` is linear: iterate `&a` or `&mut a`
