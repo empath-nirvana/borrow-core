@@ -9,14 +9,14 @@ the place again at a fresh lifetime. `PinLaw` asserts two schemas, one per shape
 that relies on this, and nothing more:
 
 * `LendFrame`: the relaxed `withborUV` lend at every `LendForm`, whose callback is typed and in
-  the relation at a row of resuming operations (`Row.ResumeO`), is in the kernel's relation at
-  `F_Σ (P ⊗ B)`. Its one form is `ref`, R1 (`lendR`): `Ref T` lent as `Mut 'x T`.
+  the relation at a row of resuming operations and the cancel path's cancellable wait and cancel
+  target (`Row.ResumeOC`, SPEC §29a), is in the kernel's relation at `F_Σ (P ⊗ B)`. Its one form is
+  `ref`, R1 (`lendR`): `Ref T` lent as `Mut 'x T`.
 * `LoopFrame`: R2 (`lendLoopR`), the per-observation `imm` lend whose state may hold views of the
   place, its steps typed and in the relation, is in the kernel's relation at
   `U(Loop (Ref A ⊗ B) (Ref A ⊗ R))`.
-
 Neither mentions a depth or a holder: a lend nested in a callback is part of the callback's
-derivation. Both are stated at the rules' own premises plus the callback's (steps') relation,
+derivation. Each is stated at its rule's own premises plus the relations of its premises' code,
 with every quantifier over code a quantifier over `CDerivesP` derivations: no statement here is
 pointwise over configurations. The hypothesis is tested by running programs that use the rules
 (`docs/async-capabilities.md` §6), not proved.
@@ -46,7 +46,7 @@ def PinStop : Prop :=
     (∀ y u, Δ.find? y = some u → u.mentions x = false) →
     ¬ VFree x T → ¬ VFree x B → NoThunkT B →
     (∃ b', Δ.Defines b' ∧ VOutlivesLe Δ b' T) →
-    Row.ResumeO S x → closedAt 1 M = true → closedAt 0 (lendCb M).1 = true →
+    Row.ResumeOC S x → closedAt 1 M = true → closedAt 0 (lendCb M).1 = true →
     closedAt 0 d = true → SemV (ℍ := ℍ) Δ [] d (.lolli (.ref T) .unit) →
     CDerivesP (Δ.extend x b) [⟨.mut (.var x) T, true⟩] M
       (.comp (CTy.effOf S (.box (.var x) B))) →
@@ -74,7 +74,7 @@ def PinLoop : Prop :=
     SemC (ℍ := ℍ) Δ [⟨.ref A, true⟩] (lendLoopApp A B R N K s0)
       (CTy.loop (.tensor (.ref A) B) (.tensor (.ref A) R))
 
-/-! ### The two schemas -/
+/-! ### The lend schemas -/
 
 /-- The lend forms of the relaxed `withborUV` lend: the place's type `P`, the view `V` the
 callback is typed at, the answer `B`, and the callback's lifetime context `Δb`. `ref` is R1
@@ -94,7 +94,7 @@ def LendFrame : Prop :=
     LendForm Δ x b P V B Δb →
     Δ.Defines b → Δ.find? x = none → b.mentions x = false →
     (∀ y u, Δ.find? y = some u → u.mentions x = false) →
-    ¬ VFree x B → NoThunkT B → Row.ResumeO S x →
+    ¬ VFree x B → NoThunkT B → Row.ResumeOC S x →
     closedAt 1 M = true → closedAt 0 (lendCb M).1 = true → closedAt 0 d = true →
     SemV (ℍ := ℍ) Δ [] d (.lolli P .unit) →
     CDerivesP Δb [⟨V, true⟩] M (.comp (CTy.effOf S (.box (.var x) B))) →
@@ -125,7 +125,7 @@ def LoopFrame : Prop :=
       (CTy.loop (.tensor (.ref A) B) (.tensor (.ref A) R))
 
 /-- **PinLaw**: the one named assumption, two schemas. Each is stated over `CDerivesP`
-derivations only. -/
+derivations and their relations only. -/
 structure PinLaw : Prop where
   /-- The relaxed lend, at every `LendForm`, is in the relation. -/
   lendFrame : LendFrame (ℍ := ℍ)
@@ -139,13 +139,13 @@ scheduler's `await : 1 ↠^cancel 1` and the generator's `yield : i32 ↠^cancel
 operation is outside it. -/
 
 /-- `await : 1 ↠^cancel 1` at the name `1`. -/
-def pinAwaitSig : OpSig := ⟨1, 0, .cancel, .unit, .unit, .ret .unit⟩
+def pinAwaitSig : OpSig := ⟨1, 0, .cancel, .unit, .unit, .ret .unit, false⟩
 
 /-- `yield : i32 ↠^cancel 1` at the name `2`. -/
-def pinYieldSig : OpSig := ⟨2, 0, .cancel, .int .w32, .unit, .ret .unit⟩
+def pinYieldSig : OpSig := ⟨2, 0, .cancel, .int .w32, .unit, .ret .unit, false⟩
 
 /-- `raise : i32 ↠^cancel 0`, abortive. -/
-def pinRaiseSig : OpSig := ⟨3, 0, .cancel, .int .w32, .zero, .ret .unit⟩
+def pinRaiseSig : OpSig := ⟨3, 0, .cancel, .int .w32, .zero, .ret .unit, false⟩
 
 theorem resumeO_await_yield (x : LifeVar) : Row.ResumeO [pinAwaitSig, pinYieldSig] x := by
   intro o ho

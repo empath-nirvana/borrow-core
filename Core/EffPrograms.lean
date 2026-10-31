@@ -80,7 +80,7 @@ theorem vP_zero_sum {ls : List SRec} {δ : LSub} {v : Val} {ρ : BoCa.Fig16.BoLo
 abbrev Flag : VTy := .sum .unit .unit
 
 /-- `raise : 1 ↠^cancel 0`, the operation `0` of the name `1`. -/
-def failSig : OpSig := ⟨1, 0, .cancel, .unit, .zero, .ret .unit⟩
+def failSig : OpSig := ⟨1, 0, .cancel, .unit, .zero, .ret .unit, false⟩
 
 /-- The row `{Fail}`. -/
 abbrev Sf : Row := [failSig]
@@ -96,7 +96,7 @@ def raiseU : Expr := raiseE (opArgE 1 0 (.val .unit))
 theorem d_raiseU {Δ : LifeCtx} {Γ : Ctx VTy} {B : VTy} {S : Row}
     (hf : Row.find S 1 0 = some failSig) (hΓ : Ctx.DeadP Γ) :
     CDerives Δ Γ raiseU (.comp (CTy.effOf S B)) :=
-  .effRaise (o := failSig) hf rfl .unit (.unitI hΓ)
+  .effRaise (o := failSig) hf rfl rfl .unit (.unitI hΓ)
 
 theorem Sf_unwind (x : LifeVar) : Sf.Unwind x := by
   intro o ho
@@ -429,7 +429,7 @@ The body `log (); raise ()` runs at the row `{Fail, Log}`.
 Both rows hold both names, in the two orders. -/
 
 /-- `log : 1 ↠^cancel 1`, the operation `0` of the name `2`. -/
-def logSig : OpSig := ⟨2, 0, .cancel, .unit, .unit, .ret .unit⟩
+def logSig : OpSig := ⟨2, 0, .cancel, .unit, .unit, .ret .unit, false⟩
 
 /-- `Log`'s operations. -/
 abbrev El : List (Qual × VTy × VTy) := [(.cancel, .unit, .unit)]
@@ -493,7 +493,7 @@ theorem d_logThenRaise {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {B : VTy}
     (hU : ¬ S.Unr) (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ logThenRaise (.comp (CTy.effOf S B)) :=
   .effLet (A := .unit) (deadSplit hΓ) (fun _ => Ctx.Dead.drops hΓ) (fun h => absurd h hU)
-    (.effPerform (o := logSig) hl rfl (.unitI hΓ.toP))
+    (.effPerform (o := logSig) hl rfl rfl (.unitI hΓ.toP))
     (d_raiseU hf (.drop rfl hΓ.toP))
 
 /-- **Program 1 with a native `log`, `Log` outside `Fail`.** -/
@@ -688,7 +688,7 @@ theorem d_tickStep {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
   · refine .effLet (A := .unit) (.dead (.dead (.right (deadSplit hΓ))))
       (fun _ s hs hl => ?_) (fun h => by
         obtain ⟨o, ho, h⟩ := h; simp at ho; subst ho; cases h)
-      (.effPerform (o := logSig) rfl rfl (.unitI (by cdead)))
+      (.effPerform (o := logSig) rfl rfl rfl (.unitI (by cdead)))
       (.effSub (S := []) (fun _ _ _ h => by simp [Row.find] at h)
         (.ret (.sumI₂ (.var (.skip rfl (.there (.there (.here hΓ.toP))))))))
     simp only [List.mem_cons] at hs
@@ -770,7 +770,7 @@ run, under every allocator, ends at the empty memory (`takeProg_runs`): when `ta
 producer early, the cell it held is freed. -/
 
 /-- `yield : 1 ↠^cancel 1`. -/
-def yieldSig : OpSig := ⟨3, 0, .cancel, .unit, .unit, .ret .unit⟩
+def yieldSig : OpSig := ⟨3, 0, .cancel, .unit, .unit, .ret .unit, false⟩
 
 /-- `Yield`'s operations. -/
 abbrev Ey : List (Qual × VTy × VTy) := [(.cancel, .unit, .unit)]
@@ -806,7 +806,7 @@ def takeProg (n : ℕ) : Expr :=
 
 theorem d_yieldE {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) :
     CDerives Δ Γ yieldE (.comp (CTy.effOf [yieldSig] .unit)) :=
-  .effPerform (o := yieldSig) rfl rfl (.unitI hΓ)
+  .effPerform (o := yieldSig) rfl rfl rfl (.unitI hΓ)
 
 theorem yield_not_unr : ¬ Row.Unr [yieldSig] := by
   rintro ⟨o, ho, h⟩; simp at ho; subst ho; cases h
@@ -898,7 +898,7 @@ computation of `F 1`, so every run, under every allocator, ends at `()` with the
 (`storeCancel_runs`). -/
 
 /-- `susp : 1 ↠^cancel 1`. -/
-def suspSig : OpSig := ⟨4, 0, .cancel, .unit, .unit, .ret .unit⟩
+def suspSig : OpSig := ⟨4, 0, .cancel, .unit, .unit, .ret .unit, false⟩
 
 /-- `Susp`'s operations. -/
 abbrev Es : List (Qual × VTy × VTy) := [(.cancel, .unit, .unit)]
@@ -935,7 +935,7 @@ theorem d_performer {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     (.ret (appW (.sumI₁ (.unitI (by cdead))) (.alloc (by cdead)))) ?_
   refine CDerives.effThenA (A := .unit) (.right (deadSplit hΓ)) (by simp [Row.NZ, suspSig])
     (by simp [Row.Uniq]) (fun h => absurd h susp_not_unrD)
-    (.effPerform (o := suspSig) rfl rfl (.unitI (Ctx.Dead.cons hΓ).toP)) ?_ ?_
+    (.effPerform (o := suspSig) rfl rfl rfl (.unitI (Ctx.Dead.cons hΓ).toP)) ?_ ?_
   · refine .unitE (.right (.left (deadSplit hΓ)))
       (d_dropB (appW (.var (by csolo)) (.free (by cdead))) (by cdead)) ?_
     exact .effSub (S := []) (fun _ _ _ h => by simp [Row.find] at h) (.ret (.var (by csolo)))

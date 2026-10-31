@@ -75,17 +75,17 @@ def dtorB : Bool → CVTy → Bool
 /-- At a thunk `dtorB` does not depend on the mode. -/
 theorem dtorB_thunk : ∀ (b : Bool) (C : CCTy), dtorB b (.thunk C) = dtorB false (.thunk C)
   | _, .amp _ (.ret .unit) | _, .nu (.amp _ (.ret _)) | _, .nu (.ret _) | _, .nu (.arr _ _)
-  | _, .nu .top | _, .nu (.all _ _ _) | _, .nu (.nu _) | _, .nu (.eff _ _ _ _ _ _ _)
+  | _, .nu .top | _, .nu (.all _ _ _) | _, .nu (.nu _) | _, .nu (.eff _ _ _ _ _ _ _ _)
   | _, .nu (.amp _ (.arr _ _)) | _, .nu (.amp _ (.amp _ _)) | _, .nu (.amp _ .top)
-  | _, .nu (.amp _ (.all _ _ _)) | _, .nu (.amp _ (.nu _)) | _, .nu (.amp _ (.eff _ _ _ _ _ _ _))
-  | _, .ret _ | _, .arr _ _ | _, .top | _, .all _ _ _ | _, .eff _ _ _ _ _ _ _
+  | _, .nu (.amp _ (.all _ _ _)) | _, .nu (.amp _ (.nu _)) | _, .nu (.amp _ (.eff _ _ _ _ _ _ _ _))
+  | _, .ret _ | _, .arr _ _ | _, .top | _, .all _ _ _ | _, .eff _ _ _ _ _ _ _ _
   | _, .amp _ (.ret (.tensor _ _)) | _, .amp _ (.ret .zero) | _, .amp _ (.ret (.sum _ _))
   | _, .amp _ (.ret (.thunk _)) | _, .amp _ (.ret (.ref _)) | _, .amp _ (.ret (.imm _ _))
   | _, .amp _ (.ret (.mut _ _)) | _, .amp _ (.ret (.box _ _)) | _, .amp _ (.ret (.bang _))
   | _, .amp _ (.ret .unk) | _, .amp _ (.ret (.tvar _)) | _, .amp _ (.ret (.mu _))
   | _, .amp _ (.ret (.int _)) | _, .amp _ (.ret (.fam _)) | _, .amp _ (.ret (.opq _))
   | _, .amp _ (.arr _ _) | _, .amp _ (.amp _ _) | _, .amp _ .top | _, .amp _ (.all _ _ _)
-  | _, .amp _ (.nu _) | _, .amp _ (.eff _ _ _ _ _ _ _) => rfl
+  | _, .amp _ (.nu _) | _, .amp _ (.eff _ _ _ _ _ _ _ _) => rfl
 
 open BoCa.Fig16.LogRel.Core.FoldP (clB) in
 /-- At a closed type the two modes agree. -/
@@ -330,12 +330,12 @@ theorem dtorB_complete : ∀ A : CVTy, HasDtor A → dtorB false A = true
       | nu hC hRc h =>
           simp [dtorB, CTy.nuOkB_complete _ hC, VTy.clB_complete 0 R hRc, dtorB_complete R h]
   | .thunk (.nu (.ret _)), h | .thunk (.nu (.arr _ _)), h | .thunk (.nu .top), h
-  | .thunk (.nu (.all _ _ _)), h | .thunk (.nu (.nu _)), h | .thunk (.nu (.eff _ _ _ _ _ _ _)), h
+  | .thunk (.nu (.all _ _ _)), h | .thunk (.nu (.nu _)), h | .thunk (.nu (.eff _ _ _ _ _ _ _ _)), h
   | .thunk (.nu (.amp _ (.arr _ _))), h | .thunk (.nu (.amp _ (.amp _ _))), h
   | .thunk (.nu (.amp _ .top)), h | .thunk (.nu (.amp _ (.all _ _ _))), h
-  | .thunk (.nu (.amp _ (.nu _))), h | .thunk (.nu (.amp _ (.eff _ _ _ _ _ _ _))), h
+  | .thunk (.nu (.amp _ (.nu _))), h | .thunk (.nu (.amp _ (.eff _ _ _ _ _ _ _ _))), h
   | .thunk (.ret _), h | .thunk (.arr _ _), h | .thunk .top, h
-  | .thunk (.all _ _ _), h | .thunk (.eff _ _ _ _ _ _ _), h
+  | .thunk (.all _ _ _), h | .thunk (.eff _ _ _ _ _ _ _ _), h
   | .thunk (.amp _ (.ret (.tensor _ _))), h | .thunk (.amp _ (.ret .zero)), h
   | .thunk (.amp _ (.ret (.sum _ _))), h | .thunk (.amp _ (.ret (.thunk _))), h
   | .thunk (.amp _ (.ret (.ref _))), h | .thunk (.amp _ (.ret (.imm _ _))), h
@@ -347,7 +347,7 @@ theorem dtorB_complete : ∀ A : CVTy, HasDtor A → dtorB false A = true
   | .thunk (.amp _ (.arr _ _)), h
   | .thunk (.amp _ (.amp _ _)), h | .thunk (.amp _ .top), h
   | .thunk (.amp _ (.all _ _ _)), h | .thunk (.amp _ (.nu _)), h
-  | .thunk (.amp _ (.eff _ _ _ _ _ _ _)), h => by cases h
+  | .thunk (.amp _ (.eff _ _ _ _ _ _ _ _)), h => by cases h
   | .unit, _ | .zero, _ | .int _, _ | .unk, _ | .bang _, _ | .imm _ _, _ | .mut _ _, _ => rfl
   | .opq _, h => by cases h
   | .fam (.ref A), h => by
@@ -438,12 +438,12 @@ theorem dtorB_completeA : ∀ (A : CVTy) (Bs : Stack), AlgDtor Bs A → dtorB tr
           simp [dtorB, CTy.nuOkB_complete _ hC, VTy.clB_complete 0 R hRc, dtorB_complete R h]
   | .thunk (.nu (.ret _)), _, h | .thunk (.nu (.arr _ _)), _, h | .thunk (.nu .top), _, h
   | .thunk (.nu (.all _ _ _)), _, h | .thunk (.nu (.nu _)), _, h
-  | .thunk (.nu (.eff _ _ _ _ _ _ _)), _, h
+  | .thunk (.nu (.eff _ _ _ _ _ _ _ _)), _, h
   | .thunk (.nu (.amp _ (.arr _ _))), _, h | .thunk (.nu (.amp _ (.amp _ _))), _, h
   | .thunk (.nu (.amp _ .top)), _, h | .thunk (.nu (.amp _ (.all _ _ _))), _, h
-  | .thunk (.nu (.amp _ (.nu _))), _, h | .thunk (.nu (.amp _ (.eff _ _ _ _ _ _ _))), _, h
+  | .thunk (.nu (.amp _ (.nu _))), _, h | .thunk (.nu (.amp _ (.eff _ _ _ _ _ _ _ _))), _, h
   | .thunk (.ret _), _, h | .thunk (.arr _ _), _, h | .thunk .top, _, h
-  | .thunk (.all _ _ _), _, h | .thunk (.eff _ _ _ _ _ _ _), _, h
+  | .thunk (.all _ _ _), _, h | .thunk (.eff _ _ _ _ _ _ _ _), _, h
   | .thunk (.amp _ (.ret (.tensor _ _))), _, h | .thunk (.amp _ (.ret .zero)), _, h
   | .thunk (.amp _ (.ret (.sum _ _))), _, h | .thunk (.amp _ (.ret (.thunk _))), _, h
   | .thunk (.amp _ (.ret (.ref _))), _, h | .thunk (.amp _ (.ret (.imm _ _))), _, h
@@ -455,7 +455,7 @@ theorem dtorB_completeA : ∀ (A : CVTy) (Bs : Stack), AlgDtor Bs A → dtorB tr
   | .thunk (.amp _ (.arr _ _)), _, h
   | .thunk (.amp _ (.amp _ _)), _, h | .thunk (.amp _ .top), _, h
   | .thunk (.amp _ (.all _ _ _)), _, h | .thunk (.amp _ (.nu _)), _, h
-  | .thunk (.amp _ (.eff _ _ _ _ _ _ _)), _, h => by
+  | .thunk (.amp _ (.eff _ _ _ _ _ _ _ _)), _, h => by
       have h₁ := h.1
       simp only [BoCa.Fig16.LogRel.Core.FoldP.resO] at h₁
       cases h₁
@@ -538,7 +538,7 @@ def Env.ppL (E : Env) (a : CLife) : String := ppLifeP E.lenv 1 a
 /-- `C` as a returner chain `F_Σ A`: its row and answer. -/
 def effRow? : CCTy → Option (CRow × CVTy)
   | .ret A => some ([], A)
-  | .eff n i q A B fin C => (effRow? C).map fun (S, R) => (⟨n, i, q, A, B, fin⟩ :: S, R)
+  | .eff n i q A B fin rc C => (effRow? C).map fun (S, R) => (⟨n, i, q, A, B, fin, rc⟩ :: S, R)
   | _ => none
 
 /-- The environment of a computation checked against `C`: the row of `C` when it is a returner

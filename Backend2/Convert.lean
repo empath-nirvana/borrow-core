@@ -319,7 +319,7 @@ def formersC (acc : List String) : CTy → List String
   | .amp C D => formersC (formersC ("C.amp" :: acc) C) D
   | .all _ _ C => formersC ("C.all" :: acc) C
   | .nu C => formersC ("C.nu" :: acc) C
-  | .eff _ _ _ A B fin C => formersC (formersC (formersV (formersV ("C.eff" :: acc) A) B) fin) C
+  | .eff _ _ _ A B fin _ C => formersC (formersC (formersV (formersV ("C.eff" :: acc) A) B) fin) C
   | .top => "C.top" :: acc
 end
 
@@ -727,7 +727,7 @@ def outInfo? (r : LTy) (S : Row) : CM (Option OutInfo) := do
 
 /-- The row and value type of `F_Σ R`, through `∀`s. -/
 def effParts : CTy → Option (Row × VTy)
-  | .eff n i q A B fin C => (effParts C).map fun (S, R) => (⟨n, i, q, A, B, fin⟩ :: S, R)
+  | .eff n i q A B fin rc C => (effParts C).map fun (S, R) => (⟨n, i, q, A, B, fin, rc⟩ :: S, R)
   | .ret R => some ([], R)
   | .all _ _ C => effParts C
   | _ => none
@@ -2625,9 +2625,9 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
           pure (Tm.letv d dTm (.case d w (.drop .dead w pass) e₂
             (.abandon .superseded e (← coercePay pd ps e₂ fun e' => pure (.inj true e')))))
       return pre (.letv m (← conv fuel c₁ tM) (.case m x (← conv fuel (some x :: c₂) tN) e fin))
-  | .effHandleV _ _ S E fs n A R u ks site _ tc te =>
+  | .effHandleV _ _ S E fs _ n A R u ks site _ tc te =>
     convHandle fuel ctx S E fs n A R u ks site tc te
-  | .effHandleVB _ _ S E fs n A R _ u ks site _ tc te =>
+  | .effHandleVB _ _ S E fs _ n A R _ u ks site _ tc te =>
     convHandle fuel ctx S E fs n A R u ks site tc te (boxed := true)
   | .bind _ _ A _ u tM tN => convBind fuel ctx A u tM tN
   | .force _ j i C => do
@@ -3743,8 +3743,8 @@ def prepWorks (fuel : Nat) (depth : Nat) (t : TExpr) : CM Unit := do
   | fuel + 1 =>
   let here : Option (Row × List (Qual × VTy × VTy) × UInt32 × List ClauseKinds.HKind × TExpr) :=
     match t with
-    | .effHandleV _ _ S E _ n _ _ _ ks _ _ tc _ => some (S, E, n, ks, tc)
-    | .effHandleVB _ _ S E _ n _ _ _ _ ks _ _ tc _ => some (S, E, n, ks, tc)
+    | .effHandleV _ _ S E _ _ n _ _ _ ks _ _ tc _ => some (S, E, n, ks, tc)
+    | .effHandleVB _ _ S E _ _ n _ _ _ _ ks _ _ tc _ => some (S, E, n, ks, tc)
     | _ => none
   if let some (S, E, n, ks, .tensorI _ _ _ _ _ _ tCs) := here then
     let direct := (← get).direct.getD n []

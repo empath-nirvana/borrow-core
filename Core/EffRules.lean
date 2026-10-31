@@ -40,6 +40,42 @@ def Row.find (S : Row) (n i : UInt32) : Option OpSig :=
 /-- An operation is abortive: answer `0` at a qualifier with weakening. -/
 def OpSig.abort (o : OpSig) : Bool := o.B.isZero && o.q != .lin
 
+/-- **A cancellable wait** (`[await-c]`): a marked (`OpSig.rc`) must-resume operation answering
+`1 ⊕ 1`, "go on" or "cancelled". A cancel is a resume with `inr ()`.  `[spec §29a]` -/
+def OpSig.Cancellable (o : OpSig) : Prop :=
+  o.rc = true ∧ o.q = .lin ∧ o.B = .sum .unit .unit
+
+/-- `OpSig.Cancellable`, decided. -/
+def OpSig.cancellableB (o : OpSig) : Bool := o.rc && o.q == .lin && o.B.isNextB
+
+theorem VTy.isUnitB_iff (A : VTy) : A.isUnitB = true ↔ A = .unit := by
+  cases A <;> simp [VTy.isUnitB]
+
+theorem VTy.isNextB_iff (B : VTy) : B.isNextB = true ↔ B = .sum .unit .unit := by
+  cases B <;> simp [VTy.isNextB, VTy.isUnitB_iff]
+
+theorem OpSig.cancellableB_iff (o : OpSig) : o.cancellableB = true ↔ o.Cancellable := by
+  simp [OpSig.cancellableB, OpSig.Cancellable, VTy.isNextB_iff, and_assoc]
+
+/-- **The cancel target** of a cancellable wait: the marked abortive `cancelled : 1 ↠ 0` that
+`[await-c]` raises on the answer `inr ()`.  `[spec §29a]` -/
+def OpSig.CancelTarget (o : OpSig) : Prop :=
+  o.rc = true ∧ o.abort = true ∧ o.A = .unit
+
+/-- `OpSig.CancelTarget`, decided. -/
+def OpSig.cancelTargetB (o : OpSig) : Bool := o.rc && o.abort && o.A.isUnitB
+
+theorem OpSig.cancelTargetB_iff (o : OpSig) : o.cancelTargetB = true ↔ o.CancelTarget := by
+  simp [OpSig.cancelTargetB, OpSig.CancelTarget, VTy.isUnitB_iff, and_assoc]
+
+/-- An entry whose cancel row typing reads: a capturable one (§27), or a marked one that is not
+abortive (a cancellable wait), whose cancel is a resume with `inr ()` that unwinds through the
+finalisers between it and its handler.  `[spec §27, §29a]` -/
+def OpSig.finRead (o : OpSig) : Bool := capB o.q o.B || (o.rc && !o.abort)
+
+theorem OpSig.finRead_of_capB {o : OpSig} (h : capB o.q o.B = true) : o.finRead = true := by
+  simp [OpSig.finRead, h]
+
 /-- The entry of an operation at `δ`, with its cancel row's obligation at a capturable operation.
 -/
 def OpSig.ent (δ : LSub) (o : OpSig) : OpEnt :=
@@ -951,6 +987,12 @@ theorem ext_empty' (ls ls' : List SRec) : Ext ls ls' PMap.empty :=
 /-- The payload expression `(n, (i, V))`. -/
 def opArgE (n i : UInt32) (V : Expr) : Expr := .pair (.val (Val.i32 n)) (.pair (.val (Val.i32 i)) V)
 
+/-- `await_n ≜ perform_n (0, ()) to r. case r {inl u. return u | inr u. raise_n (1, u)}`: the
+only form in which a cancellable wait is performed (`[await-c]`).  `[spec §29a]` -/
+def awaitE (n : UInt32) : Expr :=
+  .app (.val (.lam (.case (.var 0) (.var 0) (raiseE (opArgE n 1 (.var 0))))))
+    (performE (opArgE n 0 (.val .unit)))
+
 /-- A row's names are not the reserved `0`. -/
 def Row.NZ (S : Row) : Prop := ∀ o ∈ S, o.n ≠ 0
 
@@ -963,7 +1005,7 @@ def Row.Unr (S : Row) : Prop := ∃ o ∈ S, o.q = .unr
 /-- A cancel row may perform an unrestricted operation, at some depth: a layer at `unr`, or one in
 the cancel row of a capturable layer.  `[spec §27]` -/
 def CTy.FinUnr : CTy → Prop
-  | .eff _ _ q _ B f C => q = .unr ∨ (capB q B = true ∧ f.FinUnr) ∨ C.FinUnr
+  | .eff _ _ q _ B f _ C => q = .unr ∨ (capB q B = true ∧ f.FinUnr) ∨ C.FinUnr
   | _ => False
 
 /-- A row has an unrestricted operation at its top, or in the cancel row of a capturable operation
@@ -1130,13 +1172,18 @@ def thenE (N D M : Expr) : Expr :=
 /-- The cancel rows of an effect whose operations' cancel rows are all empty.  `[spec §27]` -/
 abbrev finsNil : Nat → CTy := fun _ => .ret .unit
 
+/-- The markers of an effect none of whose operations is cancelled by resuming it.
+`[spec §29a]` -/
+abbrev rcsNil : Nat → Bool := fun _ => false
+
 /-- An effect's operations, as a row of the name `n`: the `j`-th at index `k + j`, with the
-cancel row `fs j`.  `[spec §19, §27]` -/
-def Row.ofEff (n : UInt32) (E : List (Qual × VTy × VTy)) (k : Nat) (fs : Nat → CTy := finsNil) :
-    Row :=
+cancel row `fs j` and the marker `cs j` (`OpSig.rc`).  `[spec §19, §27, §29a]` -/
+def Row.ofEff (n : UInt32) (E : List (Qual × VTy × VTy)) (k : Nat) (fs : Nat → CTy := finsNil)
+    (cs : Nat → Bool := rcsNil) : Row :=
   match E with
   | [] => []
-  | (q, A, B) :: E => ⟨n, UInt32.ofNat k, q, A, B, fs 0⟩ :: Row.ofEff n E (k + 1) (fun j => fs (j + 1))
+  | (q, A, B) :: E => ⟨n, UInt32.ofNat k, q, A, B, fs 0, cs 0⟩ ::
+      Row.ofEff n E (k + 1) (fun j => fs (j + 1)) (fun j => cs (j + 1))
 
 /-- The type of `κ`'s cancel branch at a handler whose outer row is `Σ`, for an operation whose
 cancel row is `F`: `F_{F ⊕ Σ} 1`, the cancel row's operations ahead of `Σ`, or `⊤` when `F` is
@@ -1180,7 +1227,7 @@ def hndTerm (n : UInt32) (qs : List Qual) (ir ic : Nat) (e : Expr) : Expr :=
 theorem Row.find_ofEff (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k : Nat) (fs : Nat → CTy)
     (m i : UInt32) (o : OpSig), Row.find (Row.ofEff n E k fs) m i = some o →
       m = n ∧ ∃ j, ∃ h : j < E.length, i = UInt32.ofNat (k + j) ∧
-        o = ⟨n, UInt32.ofNat (k + j), E[j].1, E[j].2.1, E[j].2.2, fs j⟩
+        o = ⟨n, UInt32.ofNat (k + j), E[j].1, E[j].2.1, E[j].2.2, fs j, false⟩
   | [], _, _, _, _, _, h => by simp [Row.ofEff, Row.find] at h
   | (q, A, B) :: E, k, fs, m, i, o, h => by
       unfold Row.find at h
@@ -1195,15 +1242,20 @@ theorem Row.find_ofEff (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k : N
         exact ⟨hm, j + 1, by simp; omega, by rw [hi]; congr 1; omega,
           by rw [ho]; simp [show k + 1 + j = k + (j + 1) by omega]⟩
 
-theorem Row.find_ofEff_ne (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k : Nat)
-    (fs : Nat → CTy) (m i : UInt32), m ≠ n → Row.find (Row.ofEff n E k fs) m i = none
-  | [], _, _, _, _, _ => by simp [Row.ofEff, Row.find]
-  | (q, A, B) :: E, k, fs, m, i, hm => by
+theorem Row.find_ofEff_neC (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k : Nat)
+    (fs : Nat → CTy) (cs : Nat → Bool) (m i : UInt32), m ≠ n →
+    Row.find (Row.ofEff n E k fs cs) m i = none
+  | [], _, _, _, _, _, _ => by simp [Row.ofEff, Row.find]
+  | (q, A, B) :: E, k, fs, cs, m, i, hm => by
       unfold Row.find
       simp only [Row.ofEff, List.find?_cons]
       have hd : decide (m = n ∧ i = UInt32.ofNat k) = false := by simp [hm]
       rw [hd]
-      exact Row.find_ofEff_ne n E (k + 1) (fun j => fs (j + 1)) m i hm
+      exact Row.find_ofEff_neC n E (k + 1) (fun j => fs (j + 1)) (fun j => cs (j + 1)) m i hm
+
+theorem Row.find_ofEff_ne (n : UInt32) {cs : Nat → Bool} (E : List (Qual × VTy × VTy)) (k : Nat)
+    (fs : Nat → CTy) (m i : UInt32) (hm : m ≠ n) : Row.find (Row.ofEff n E k fs cs) m i = none :=
+  Row.find_ofEff_neC n E k fs cs m i hm
 
 theorem Row.find_append (S S' : Row) (m i : UInt32) :
     Row.find (S ++ S') m i = (Row.find S m i).or (Row.find S' m i) := by
@@ -1254,7 +1306,7 @@ theorem Row.tab_ofEff_self {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat �
     {δ : LSub} (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) {i : UInt32} {en : OpEnt}
     (hT : Row.tab (Row.ofEff n E 0 fs ++ S) δ n i = some en) :
     ∃ j, ∃ hj : j < E.length, i.toNat = j ∧ i = UInt32.ofNat (0 + j) ∧
-      en = OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j⟩ := by
+      en = OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j, false⟩ := by
   obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
   have hfo : Row.find (Row.ofEff n E 0 fs) n i = some o := by
     rw [Row.find_append] at hf

@@ -242,8 +242,8 @@ theorem dtorAt_effFree : ∀ (b : Bool) (A : VTy), (dtorAt b A).effFree = true
       match C with
       | .nu (.amp _ (.ret R)) => simp [dtorAt, bindE, Expr.effFree, dtorAt_effFree false R]
       | .nu (.amp _ (.arr _ _)) | .nu (.amp _ (.amp _ _)) | .nu (.amp _ .top)
-      | .nu (.amp _ (.all _ _ _)) | .nu (.amp _ (.nu _)) | .nu (.amp _ (.eff _ _ _ _ _ _ _))
-      | .nu (.eff _ _ _ _ _ _ _) | .eff _ _ _ _ _ _ _ | .nu (.ret _) | .nu (.arr _ _) | .nu .top
+      | .nu (.amp _ (.all _ _ _)) | .nu (.amp _ (.nu _)) | .nu (.amp _ (.eff _ _ _ _ _ _ _ _))
+      | .nu (.eff _ _ _ _ _ _ _ _) | .eff _ _ _ _ _ _ _ _ | .nu (.ret _) | .nu (.arr _ _) | .nu .top
       | .nu (.all _ _ _) | .nu (.nu _) | .ret _ | .arr _ _ | .amp _ _ | .top | .all _ _ _ => rfl
   | b, .fam (.ref A) => by
       simp only [dtorAt]; split

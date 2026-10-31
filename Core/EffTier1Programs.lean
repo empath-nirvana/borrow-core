@@ -358,14 +358,19 @@ theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' 
   | nuOut hC _ ih => exact .nuOut hC ih
   | unfoldN C S hC hΓ => exact .unfoldN C S hC (deadP_append h' hΓ)
   | effSub hle _ ih => exact .effSub hle ih
-  | effPerform hAt hf hna _ ih => exact .effPerform hAt hf hna ih
-  | effRaise hAt hf ha hd _ ih => exact .effRaise hAt hf ha hd ih
+  | effPerform hAt hf hna hac _ ih => exact .effPerform hAt hf hna hac ih
+  | effAwait hAt hΓ hfa ha haA hfc hc =>
+      exact .effAwait hAt (dead_append_dead hΓ h') hfa ha haA hfc hc
+  | effRaise hAt hf ha hrc hd _ ih => exact .effRaise hAt hf ha hrc hd ih
   | effLet hs hW hU _ _ ihM ihN =>
       exact .effLet (splitP_append h' hs)
         (fun hw => live_append (P := fun s => s.ty.OwnFree) h' (hW hw))
         (fun hu => banged_append h' (hU hu)) ihM ihN
   | effThen hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
       exact .effThen (splitP_append h' hs) hNZ hUq (fun hu => banged_append h' (hU hu))
+        hMS hDS hfin hP hSD ihM ihN ihD
+  | effThenDiv hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
+      exact .effThenDiv (splitP_append h' hs) hNZ hUq (fun hu => banged_append h' (hU hu))
         hMS hDS hfin hP hSD ihM ihN ihD
   | effHandleV hAt hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
       exact .effHandleV hAt (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen
@@ -432,7 +437,7 @@ theorem dAt_hQ {Δ : LifeCtx} {Γ Γ₁ : Ctx VTy} (hs : Ctx.SplitP Γ Γ₁ Γ)
     CDerivesAt Ξ Δ Γ (hndE (hQ n q hr c) M) (.comp (CTy.effOf S R)) := by
   show CDerivesAt Ξ Δ Γ (hndExpr n [q] (.pair (.val hr) (.pair (.val c) (.val Val.unit))) M) _
   have hAt := rowAt_ofEff_fs (fs' := fun _ => F) (rowAt_ofEff_append hn hn0 (by simp) hS)
-  exact .effHandleV (E := [(q, A, B)]) (fs := fun _ => F) hAt hs hΓ₁.toP
+  exact .effHandleV (cs := rcsNil) (E := [(q, A, B)]) (fs := fun _ => F) hAt hs hΓ₁.toP
     (.pair (.val _) (.pair (.val _) (.val _)))
     ((CDerivesAt.tensorI .nil hhr (.tensorI .nil hc (.unitI .nil))).append_dead hΓ₁)
     hn0 hnS (by simp) (Row.divB_of_rowAt hAt hΞ) hM
@@ -500,6 +505,12 @@ theorem not_capB_exnRow {n : UInt32} {o : OpSig} (ho : o ∈ exnRow n .cancel) :
   subst ho
   rfl
 
+theorem not_finRead_exnRow {n : UInt32} {o : OpSig} (ho : o ∈ exnRow n .cancel) :
+    o.finRead = false := by
+  simp only [Row.ofEff, List.mem_cons, List.not_mem_nil, or_false] at ho
+  subst ho
+  rfl
+
 /-- **E8b is typed**: the `[then]` at `exn_b`'s row before `exn_a`'s, its finaliser at `exn_b`'s
 row (`Σ_D ≤ Σ`), handled by the inner `toResult`. -/
 theorem dAt_e8b {Δ : LifeCtx} :
@@ -521,7 +532,7 @@ theorem dAt_e8b {Δ : LifeCtx} :
     rcases ho with rfl | rfl <;> decide
   · exact (rowLe_append_right _ []).trans (rowLe_ofEff_cons _ _ hn)
   · intro n i o o' hf _ hc
-    rw [not_capB_exnRow (Row.find_mem hf).1] at hc
+    rw [not_finRead_exnRow (Row.find_mem hf).1] at hc
     cases hc
   · intro _ o ho
     simp only [Row.ofEff, List.mem_cons, List.not_mem_nil, or_false] at ho
@@ -536,7 +547,7 @@ abbrev rowBA : Row := exnRow 6 .cancel ++ (exnRow 1 .cancel ++ [])
 
 /-- A row whose first entry's cancel row grows is below the row with the larger one. -/
 theorem rowLe_cons_fin {n i : UInt32} {q : Qual} {A B : VTy} {F F' : CTy} (hF : FinLe F F')
-    (T : Row) : RowLe (⟨n, i, q, A, B, F⟩ :: T) (⟨n, i, q, A, B, F'⟩ :: T) := by
+    (T : Row) : RowLe (⟨n, i, q, A, B, F, false⟩ :: T) (⟨n, i, q, A, B, F', false⟩ :: T) := by
   intro m j o hf
   unfold Row.find at hf ⊢
   rw [List.find?_cons] at hf ⊢
@@ -596,8 +607,8 @@ theorem dAt_e7d {Δ : LifeCtx} :
     (.effSub (RowLe.nil _) (.ret (.var (.here .nil))))
     (dAt_raiseU (.cons .nil) ΞE_6 (by decide) (by decide) .unit)
   · -- `M`'s row is below the `[then]`'s: `wait`'s cancel row grows to hold `exn_b`
-    show RowLe (⟨2, UInt32.ofNat 0, .cancel, .unit, .unit, finExn 1 .cancel⟩ :: rowBA)
-      (⟨2, UInt32.ofNat 0, .cancel, .unit, .unit, finExn2⟩ :: rowBA)
+    show RowLe (⟨2, UInt32.ofNat 0, .cancel, .unit, .unit, finExn 1 .cancel, false⟩ :: rowBA)
+      (⟨2, UInt32.ofNat 0, .cancel, .unit, .unit, finExn2, false⟩ :: rowBA)
     refine rowLe_cons_fin
       ((finLe_iff _ _).mpr (.inr ⟨rfl, RowLe.of_find fun n i o hf => ?_⟩)) rowBA
     rw [CTy.rowOf_effOf] at hf
@@ -617,8 +628,8 @@ theorem dAt_e7d {Δ : LifeCtx} :
       rw [find_wait] at h'
       cases h'
       exact thenLe_finExn2
-    · exact absurd hc (by simp [capB, VTy.isZero])
-    · exact absurd hc (by simp [capB, VTy.isZero])
+    · exact absurd hc (by simp [OpSig.finRead, OpSig.abort, capB, VTy.isZero])
+    · exact absurd hc (by simp [OpSig.finRead, OpSig.abort, capB, VTy.isZero])
   · -- the finaliser's row has no unrestricted operation at any depth
     rintro ⟨o, ho, h⟩
     simp only [Row.ofEff, List.mem_cons, List.not_mem_nil, or_false] at ho
@@ -762,13 +773,13 @@ theorem dAt_withLog {Δ : LifeCtx} {S : Row} (hS : RowAt ΞE S) (hnS : ∀ o ∈
 
 /-- `log tt; raise exn ()` at a row that finds `log` and holds `exn`. -/
 theorem dAt_body5 {Δ : LifeCtx} {T : Row} (hT : RowAt ΞE T)
-    (hf : Row.find T 4 0 = some ⟨4, 0, .lin, boolT, .unit, .ret .unit⟩)
+    (hf : Row.find T 4 0 = some ⟨4, 0, .lin, boolT, .unit, .ret .unit, false⟩)
     (hE : RowLe (exnRow 1 .cancel) T) :
     CDerivesAt ΞE Δ [] body5E (.comp (CTy.effOf T .unit)) :=
   .effLet (A := .unit) .nil (fun _ => fun _ h => absurd h List.not_mem_nil)
     (fun _ => fun _ h => absurd h List.not_mem_nil)
-    (.effPerform (o := ⟨4, 0, .lin, boolT, .unit, .ret .unit⟩) hT hf rfl
-      (.sumI₂ (.unitI .nil)))
+    (.effPerform (o := ⟨4, 0, .lin, boolT, .unit, .ret .unit, false⟩) hT hf rfl
+      rfl (.sumI₂ (.unitI .nil)))
     (.effSub hE (dAt_raiseU (.drop rfl .nil) ΞE_1 (by decide) (by decide) .unit))
 
 theorem rowAt_log : RowAt ΞE (logRow ++ []) :=
@@ -898,10 +909,10 @@ theorem rowAt_yield : RowAt ΞE yieldRow :=
 theorem dAt_gen9 {Δ : LifeCtx} : CDerivesAt ΞE Δ [] gen9E (.comp (CTy.effOf yieldRow .unit)) :=
   .effLet (A := .unit) .nil (fun _ => fun _ h => absurd h List.not_mem_nil)
     (fun _ => fun _ h => absurd h List.not_mem_nil)
-    (.effPerform (o := ⟨3, 0, .cancel, boolT, .unit, .ret .unit⟩) rowAt_yield
-      (by simp [Row.ofEff, Row.find]) rfl (.sumI₂ (.unitI .nil)))
-    (.effPerform (o := ⟨3, 0, .cancel, boolT, .unit, .ret .unit⟩) rowAt_yield
-      (by simp [Row.ofEff, Row.find]) rfl (.sumI₁ (.unitI (.drop rfl .nil))))
+    (.effPerform (o := ⟨3, 0, .cancel, boolT, .unit, .ret .unit, false⟩) rowAt_yield
+      (by simp [Row.ofEff, Row.find]) rfl rfl (.sumI₂ (.unitI .nil)))
+    (.effPerform (o := ⟨3, 0, .cancel, boolT, .unit, .ret .unit, false⟩) rowAt_yield
+      (by simp [Row.ofEff, Row.find]) rfl rfl (.sumI₁ (.unitI (.drop rfl .nil))))
 
 theorem not_unr_nil : ¬ Row.Unr ([] : Row) := fun ⟨_, h, _⟩ => absurd h List.not_mem_nil
 
@@ -954,8 +965,8 @@ theorem dAt_storedKFin {Δ : LifeCtx} :
     rcases ho with rfl | rfl <;> decide
   · intro n i o hf
     obtain ⟨rfl, rfl, rfl⟩ := find_ofEff_one hf
-    refine ⟨⟨3, 0, .cancel, boolT, .unit, finExn 1 .cancel⟩, by simp [Row.ofEff, Row.find],
-      ⟨rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
+    refine ⟨⟨3, 0, .cancel, boolT, .unit, finExn 1 .cancel, false⟩, by simp [Row.ofEff, Row.find],
+      ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
     exact (finLe_iff _ _).mpr (.inr ⟨rfl, RowLe.nil _⟩)
   · exact (rowLe_append_right _ []).trans (rowLe_ofEff_cons _ _ hn)
   · intro n i o o' hf hf' _
@@ -1006,8 +1017,8 @@ theorem dAt_tickingCl {Δ : LifeCtx} :
   refine .bangThunkV (dead_noLive .nil) rfl (.lam (.tensorE (.left .nil) (.var (.here .nil)) ?_))
   refine .effLet (.right (.left (.dead .nil))) (fun h => absurd h not_cancels_tick)
     (fun h => absurd h not_unr_tick)
-    (.effPerform (o := ⟨5, 0, .lin, .unit, .unit, .ret .unit⟩) rowAt_tick
-      (by simp [Row.ofEff, Row.find]) rfl (.unitI (.cons (.drop rfl (.cons .nil))))) ?_
+    (.effPerform (o := ⟨5, 0, .lin, .unit, .unit, .ret .unit, false⟩) rowAt_tick
+      (by simp [Row.ofEff, Row.find]) rfl rfl (.unitI (.cons (.drop rfl (.cons .nil))))) ?_
   refine .bind (.left (.right (.dead (.dead .nil))))
     (.ret (.unitI (.drop rfl (.cons (.cons (.cons .nil)))))) ?_
   exact .app (.right (.dead (.left (.dead (.dead .nil)))))
@@ -1029,10 +1040,10 @@ theorem dAt_deepGenE {Δ : LifeCtx} :
       (.lam (.effSub (RowLe.nil _) (.ret (.unitI (.drop rfl .nil)))))
   · exact .effLet (A := .unit) .nil (fun _ => fun _ h => absurd h List.not_mem_nil)
       (fun _ => fun _ h => absurd h List.not_mem_nil)
-      (.effPerform (o := ⟨3, 0, .cancel, boolT, .unit, .ret .unit⟩) hY
-        (by simp [Row.ofEff, Row.find]) rfl (.sumI₂ (.unitI .nil)))
-      (.effPerform (o := ⟨3, 0, .cancel, boolT, .unit, .ret .unit⟩) hY
-        (by simp [Row.ofEff, Row.find]) rfl (.sumI₁ (.unitI (.drop rfl .nil))))
+      (.effPerform (o := ⟨3, 0, .cancel, boolT, .unit, .ret .unit, false⟩) hY
+        (by simp [Row.ofEff, Row.find]) rfl rfl (.sumI₂ (.unitI .nil)))
+      (.effPerform (o := ⟨3, 0, .cancel, boolT, .unit, .ret .unit, false⟩) hY
+        (by simp [Row.ofEff, Row.find]) rfl rfl (.sumI₁ (.unitI (.drop rfl .nil))))
 
 /-- **`tick (_, k) ⇒ λc. resume k () to g. g (c + 1)`** at the must-resume `1 ↠ 1`, at the pure row:
 the count is held across the resume. -/
@@ -1085,11 +1096,11 @@ abbrev waitRow0 : Row := Row.ofEff 2 [(.cancel, .unit, .unit)] 0
 
 /-- `wait (); return tt` at a row that finds `wait`. -/
 theorem dAt_waitBody {Δ : LifeCtx} {S : Row} (hS : RowAt ΞE S)
-    (hf : Row.find S 2 0 = some ⟨2, 0, .cancel, .unit, .unit, .ret .unit⟩) :
+    (hf : Row.find S 2 0 = some ⟨2, 0, .cancel, .unit, .unit, .ret .unit, false⟩) :
     CDerivesAt ΞE Δ [] (bindE (performU 2) (.inj₂ .unit)) (.comp (CTy.effOf S boolT)) :=
   .effLet (A := .unit) .nil (fun _ => fun _ h => absurd h List.not_mem_nil)
     (fun _ => fun _ h => absurd h List.not_mem_nil)
-    (.effPerform (o := ⟨2, 0, .cancel, .unit, .unit, .ret .unit⟩) hS hf rfl (.unitI .nil))
+    (.effPerform (o := ⟨2, 0, .cancel, .unit, .unit, .ret .unit, false⟩) hS hf rfl rfl (.unitI .nil))
     (.effSub (RowLe.nil _) (.ret (.sumI₂ (.unitI (.drop rfl .nil)))))
 
 theorem rowAt_wait : RowAt ΞE (waitRow0 ++ []) :=
@@ -1233,10 +1244,10 @@ theorem dAt_sumGenUsesW {Δ : LifeCtx} :
     (dAt_sumGen (rowAt_nil ΞE) (by simp) (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil))
     (dAt_cb hΓ₀ (.effLet (A := .unit) .nil (fun _ => fun _ h => absurd h List.not_mem_nil)
       (fun _ => fun _ h => absurd h List.not_mem_nil)
-      (.effPerform (o := ⟨3, 0, .cancel, boolT, .unit, .ret .unit⟩) hY₀
-        (by simp [Row.ofEff, Row.find]) rfl (.sumI₁ (.unitI .nil)))
-      (.effPerform (o := ⟨3, 0, .cancel, boolT, .unit, .ret .unit⟩) hY₀
-        (by simp [Row.ofEff, Row.find]) rfl (.sumI₂ (.unitI (.drop rfl .nil))))))) ?_
+      (.effPerform (o := ⟨3, 0, .cancel, boolT, .unit, .ret .unit, false⟩) hY₀
+        (by simp [Row.ofEff, Row.find]) rfl rfl (.sumI₁ (.unitI .nil)))
+      (.effPerform (o := ⟨3, 0, .cancel, boolT, .unit, .ret .unit, false⟩) hY₀
+        (by simp [Row.ofEff, Row.find]) rfl rfl (.sumI₂ (.unitI (.drop rfl .nil))))))) ?_
   refine .bind (A := .sum boolT .unit) (.right (deadSplit hΓ₀)) ?_ ?_
   · refine dAt_dead (.cons hΓ₀) (dAt_toResult ΞE_1 (by decide) (by decide) (S := [])
       (rowAt_nil ΞE) (by simp) ?_)
@@ -1244,8 +1255,8 @@ theorem dAt_sumGenUsesW {Δ : LifeCtx} :
       (dAt_cb .nil ?_)
     exact .effLet (A := .unit) .nil (fun _ => fun _ h => absurd h List.not_mem_nil)
       (fun _ => fun _ h => absurd h List.not_mem_nil)
-      (.effPerform (o := ⟨3, 0, .cancel, boolT, .unit, .ret .unit⟩) hY₁
-        (by simp [Row.ofEff, Row.find]) rfl (.sumI₁ (.unitI .nil)))
+      (.effPerform (o := ⟨3, 0, .cancel, boolT, .unit, .ret .unit, false⟩) hY₁
+        (by simp [Row.ofEff, Row.find]) rfl rfl (.sumI₁ (.unitI .nil)))
       (.effSub ((rowLe_append_right _ []).trans
           (rowLe_ofEff_cons _ _ (names_exn1 (by decide))))
         (dAt_raiseU (.drop rfl .nil) ΞE_1 (by decide) (by decide) .unit))
