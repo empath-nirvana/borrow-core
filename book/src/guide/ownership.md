@@ -13,8 +13,8 @@ A program that type-checks has no use after free, no double free and no leak
 
 ## Unrestricted and linear values
 
-These types are unrestricted: the numbers, `bool`, `1`, `!` functions, and tuples and sums of
-unrestricted types. Everything else is linear:
+These types are unrestricted: the numbers, `bool`, `1`, `!` functions, tuples and sums of
+unrestricted types, and recursive data of these (copied with `clone`). Everything else is linear:
 
 | type | what it is |
 |---|---|

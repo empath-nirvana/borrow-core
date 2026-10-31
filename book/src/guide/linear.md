@@ -63,8 +63,8 @@ Some linear types have no derived drop. Consuming a value of one means doing som
 program has to say: calling it, resuming it, closing it. They are:
 
 - **Capabilities**: standard input, standard output and the other host capabilities (the clock,
-  the arguments). Your program
-  never holds one: the platform's handlers keep them as their state ([Input and output](io.md)).
+  the arguments). Your program never holds one: the platform's handlers keep them as their state
+  ([Input and output](io.md)).
 - **Continuations of `must_resume ctl` operations**, which a handler must resume.
 - **One-shot functions** `A => B`, which can be disposed of only by calling them.
 - **Declared types**: a data declaration whose field is marked `must_close`.
