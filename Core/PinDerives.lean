@@ -636,6 +636,23 @@ theorem CDerivesP.effHandle {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Q
     (hs₁.deadP (hr.deadP (retTy_persistent S A R)) (hc.deadP (clausesTy_persistent S R E finsNil)))
     (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen hdv he
 
+/-- `[handle]` at two variables with cancel rows `fs` and markers `cs`.  `[spec §19, §27, §29a]` -/
+theorem CDerivesP.effHandleCs {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Qual × VTy × VTy)}
+    (fs : Nat → CTy) (cs : Nat → Bool)
+    {n : UInt32} {A R : VTy} {ir ic : Nat} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₁ : Ctx.SplitP Γ₁ Γr Γc)
+    (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E fs))
+    (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false)
+    (he : CDerivesP Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A))) :
+    CDerivesP Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R)) := by
+  obtain ⟨sr, hsr, hlr⟩ := hr.live
+  obtain ⟨sc, hsc, hlc⟩ := hc.live
+  obtain ⟨sr', hsr', hlr'⟩ := hs₁.live_left hsr hlr
+  obtain ⟨sc', hsc', hlc'⟩ := hs₁.live_right hsc hlc
+  exact .effHandleV (cs := cs) hs
+    (hs₁.deadP (hr.deadP (retTy_persistent S A R)) (hc.deadP (clausesTy_persistent S R E fs)))
+    (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen hdv he
+
 end BoCa.Fig16.LogRel.Core
 
 end
