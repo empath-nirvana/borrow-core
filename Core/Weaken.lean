@@ -60,6 +60,12 @@ theorem banged_append (h' : Ctx.Dead Γ') {Γ : Ctx VTy} (h : Ctx.Banged Γ) :
     Ctx.Banged (Γ ++ Γ') :=
   live_append (P := fun s => ∃ A, s.ty = .bang A) h' h
 
+theorem dead_append_dead {Γ Γ' : Ctx VTy} (h : Ctx.Dead Γ) (h' : Ctx.Dead Γ') :
+    Ctx.Dead (Γ ++ Γ') := by
+  induction h with
+  | nil => exact h'
+  | cons _ ih => exact .cons ih
+
 /-- **Weakening** by consumed slots at the end. -/
 theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerives Δ Γ e j) : CDerives Δ (Γ ++ Γ') e j := by
@@ -163,8 +169,9 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | nuOut hC _ ih => exact .nuOut hC ih
   | unfoldN C S hC hΓ => exact .unfoldN C S hC (deadP_append h' hΓ)
   | effSub hle _ ih => exact .effSub hle ih
-  | effPerform hf hna _ ih => exact .effPerform hf hna ih
-  | effRaise hf ha hd _ ih => exact .effRaise hf ha hd ih
+  | effPerform hf hna hac _ ih => exact .effPerform hf hna hac ih
+  | effAwait hΓ hfa ha haA hfc hc => exact .effAwait (dead_append_dead hΓ h') hfa ha haA hfc hc
+  | effRaise hf ha hrc hd _ ih => exact .effRaise hf ha hrc hd ih
   | effLet hs hW hU _ _ ihM ihN =>
       exact .effLet (splitP_append h' hs)
         (fun hw => live_append (P := fun s => s.ty.OwnFree) h' (hW hw))

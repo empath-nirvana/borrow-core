@@ -79,6 +79,109 @@ theorem lamDead_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy}
     (h : SemC Δ (⟨.unit, false⟩ :: Γ) M C) : SemC Δ Γ (.val (.lam M)) (.arr .unit C) :=
   lam_compatC fun δ γ ls ρ hδ hg => h δ γ ls ρ hδ (gDenC_unit_dead hg)
 
+/-! ### The cancellable marker is read by typing only  `[spec §29a]` -/
+
+/-- An operation without its marker. -/
+def OpSig.unmark (o : OpSig) : OpSig := { o with rc := false }
+
+theorem Row.unmark_ofEff (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k : Nat) (fs : Nat → CTy)
+    (cs : Nat → Bool), (Row.ofEff n E k fs cs).map OpSig.unmark = (Row.ofEff n E k fs).map OpSig.unmark
+  | [], _, _, _ => rfl
+  | _ :: E, k, fs, cs => by
+      simp only [Row.ofEff, List.map_cons, OpSig.unmark]
+      exact congrArg _ (Row.unmark_ofEff n E (k + 1) _ _)
+
+theorem Row.unmark_ofEff_append (n : UInt32) (E : List (Qual × VTy × VTy)) (k : Nat)
+    (fs : Nat → CTy) (cs : Nat → Bool) (S : Row) :
+    (Row.ofEff n E k fs cs ++ S).map OpSig.unmark = (Row.ofEff n E k fs ++ S).map OpSig.unmark := by
+  rw [List.map_append, List.map_append, Row.unmark_ofEff]
+
+/-- Rows equal up to their markers are `CTyEq` at every answer: `CTyEq` does not read `rc`. -/
+theorem CTyEq.effOf_unmark : ∀ {S S' : Row} (A : VTy) (δ : LSub),
+    S.map OpSig.unmark = S'.map OpSig.unmark → CTyEq (CTy.effOf S A) δ (CTy.effOf S' A) δ
+  | [], [], A, δ, _ => CTyEq.refl _ δ
+  | [], _ :: _, _, _, h => by simp at h
+  | _ :: _, [], _, _, h => by simp at h
+  | o :: S, o' :: S', A, δ, h => by
+      simp only [List.map_cons, List.cons.injEq, OpSig.unmark, OpSig.mk.injEq] at h
+      obtain ⟨⟨h1, h2, h3, h4, h5, h6, -⟩, hS⟩ := h
+      simp only [CTy.effOf, CTyEq]
+      refine ⟨h1, h2, h3, ?_, ?_, ?_, CTyEq.effOf_unmark A δ hS⟩
+      · rw [h4]; exact TyEq.refl _ δ
+      · rw [h5]; exact TyEq.refl _ δ
+      · rw [h6]; exact CTyEq.refl _ δ
+
+/-- **The relation at `F_Σ A` does not read the markers.**  `[spec §29a]` -/
+theorem semC_effOf_rc {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {S S' : Row} {A : VTy}
+    (h : S.map OpSig.unmark = S'.map OpSig.unmark) (hS : SemC Δ Γ e (CTy.effOf S A)) :
+    SemC Δ Γ e (CTy.effOf S' A) := by
+  intro δ γ ls ρ hδ hg
+  rw [← cC_tyEq (CTyEq.effOf_unmark A δ h) ls]
+  exact hS δ γ ls ρ hδ hg
+
+theorem Row.divB_unmark : ∀ {S S' : Row}, S.map OpSig.unmark = S'.map OpSig.unmark →
+    Row.divB S = Row.divB S'
+  | [], [], _ => rfl
+  | [], _ :: _, h => by simp at h
+  | _ :: _, [], h => by simp at h
+  | o :: S, o' :: S', h => by
+      have h' := h
+      simp only [List.map_cons, List.cons.injEq, OpSig.unmark, OpSig.mk.injEq] at h'
+      obtain ⟨⟨h1, h2, h3, h4, h5, -, -⟩, hS⟩ := h'
+      have ih := Row.divB_unmark hS
+      simp only [Row.divB, CTy.effOf, CTy.divAt] at ih ⊢
+      rw [h1, h2, h3, h4, h5, divAt_effOf, divAt_effOf]
+      rw [divAt_effOf, divAt_effOf] at ih
+      rw [ih]
+
+theorem Row.divB_ofEff_rc {n : UInt32} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
+    {cs : Nat → Bool} {S : Row} :
+    Row.divB (Row.ofEff n E 0 fs cs ++ S) = Row.divB (Row.ofEff n E 0 fs ++ S) :=
+  Row.divB_unmark (Row.unmark_ofEff_append n E 0 fs cs S)
+
+theorem Row.ansOutlives_ofEff_rc {Δ : LifeCtx} {d : Lifetime.Life} {n : UInt32}
+    {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {cs : Nat → Bool} {S : Row}
+    (h : Row.AnsOutlives Δ d (Row.ofEff n E 0 fs cs ++ S)) :
+    Row.AnsOutlives Δ d (Row.ofEff n E 0 fs ++ S) := by
+  intro o' ho' ha
+  have hm : o'.unmark ∈ (Row.ofEff n E 0 fs cs ++ S).map OpSig.unmark := by
+    rw [Row.unmark_ofEff_append]; exact List.mem_map_of_mem ho'
+  obtain ⟨o, ho, heq⟩ := List.mem_map.mp hm
+  simp only [OpSig.unmark, OpSig.mk.injEq] at heq
+  obtain ⟨-, -, hq, -, hB, -, -⟩ := heq
+  have ha' : o.abort = false := by simp only [OpSig.abort, hq, hB]; exact ha
+  rw [← hB]; exact h o ho ha'
+
+/-- **`[await-c]`'s compatibility**: `await_n` is `[perform]` of the cancellable `a`, then a `case`
+whose `inl` arm returns and whose `inr` arm raises the cancel target `c`, each by its own
+compatibility lemma.  `[spec §29a]` -/
+theorem await_compatC {Δ : LifeCtx} {S : Row} {n : UInt32} {a c : OpSig}
+    (hfa : Row.find S n 0 = some a) (ha : a.Cancellable) (haA : a.A = .unit)
+    (hfc : Row.find S n 1 = some c) (hc : c.CancelTarget) :
+    SemC Δ [] (awaitE n) (CTy.effOf S .unit) := by
+  obtain ⟨-, han, hai⟩ := Row.find_mem hfa
+  obtain ⟨-, hcn, hci⟩ := Row.find_mem hfc
+  obtain ⟨-, hq, hB⟩ := ha
+  obtain ⟨-, hcab, hcA⟩ := hc
+  have hna : a.abort = false := by simp [OpSig.abort, hq]
+  have hP : SemC Δ [] (BoCa.BoLo.performE (opArgE n 0 (.val .unit)))
+      (CTy.effOf S (.sum .unit .unit)) := by
+    have h := perform_compatC (Δ := Δ) (Γ := []) (V := .val .unit) (o := a)
+      (by rw [han, hai]; exact hfa) hna (by rw [haA]; exact unitI_compatC .nil)
+    rw [han, hai, hB] at h; exact h
+  have h₁ : SemC Δ [⟨.unit, true⟩, ⟨.sum .unit .unit, false⟩] (.var 0) (CTy.effOf S .unit) :=
+    sub_compatC (S := []) (RowLe.nil S) (ret_compatC (var_compatC (.here (.cons .nil))))
+  have h₂ : SemC Δ [⟨.unit, true⟩, ⟨.sum .unit .unit, false⟩]
+      (BoCa.BoLo.raiseE (opArgE n 1 (.var 0))) (CTy.effOf S .unit) := by
+    have h := raise_compatC (Δ := Δ) (Γ := [⟨.unit, true⟩, ⟨.sum .unit .unit, false⟩])
+      (V := .var 0) (o := c) (B := .unit) (by rw [hcn, hci]; exact hfc) hcab
+      (fun _ _ _ _ h => vC_noOwn_of_ownFree (by rw [hcA]; exact .unit) h)
+      (by rw [hcA]; exact var_compatC (.here (.cons .nil)))
+    rw [hcn, hci] at h; exact h
+  exact let_compatC .nil (fun _ s hs => absurd hs List.not_mem_nil)
+    (fun _ s hs => absurd hs List.not_mem_nil) hP
+    (sumE_compatC (.left .nil) (var_compatC (.here .nil)) h₁ h₂)
+
 /-- A judgment form: a value at `A`, or a computation at `C`.  `[spec §3]` -/
 inductive Jdg where
   | val (A : VTy)
@@ -401,14 +504,22 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- `[sub]`: `F_Σ A ≤ F_Σ′ A` for `Σ ⊆ Σ′`; `F A = F_∅ A`.  `[spec §19]` -/
   | effSub {Δ Γ e} {S S' : Row} {A : VTy} (hle : RowLe S S')
       (h : CDerives Δ Γ e (.comp (CTy.effOf S A))) : CDerives Δ Γ e (.comp (CTy.effOf S' A))
-  /-- `[perform]`: a non-abortive operation of the row.  `[spec §19]` -/
+  /-- `[perform]`: a non-abortive, unmarked operation of the row: a marked one is performed only
+  by `[await-c]`.  `[spec §19, §29a]` -/
   | effPerform {Δ Γ V} {S : Row} {o : OpSig} (hf : Row.find S o.n o.i = some o)
-      (hna : o.abort = false) (h : CDerives Δ Γ V (.val o.A)) :
+      (hna : o.abort = false) (hac : o.rc = false) (h : CDerives Δ Γ V (.val o.A)) :
       CDerives Δ Γ (BoCa.BoLo.performE (opArgE o.n o.i V)) (.comp (CTy.effOf S o.B))
-  /-- `[raise]`: an abortive operation of the row, at any answer, its argument dropping.
-  `[spec §19]` -/
+  /-- `[await-c]`: a cancellable wait `a` (`OpSig.Cancellable`) is performed only as `await_n`,
+  which raises the cancel target `c` at the same name, operation `1`, on the answer `inr ()`: a
+  cancel, a resume with `inr ()`, is not a value the body may ignore.  `[spec §29a]` -/
+  | effAwait {Δ Γ} {S : Row} {n : UInt32} {a c : OpSig} (hΓ : Ctx.Dead Γ)
+      (hfa : Row.find S n 0 = some a) (ha : a.Cancellable) (haA : a.A = .unit)
+      (hfc : Row.find S n 1 = some c) (hc : c.CancelTarget) :
+      CDerives Δ Γ (awaitE n) (.comp (CTy.effOf S .unit))
+  /-- `[raise]`: an abortive, unmarked operation of the row, at any answer, its argument dropping:
+  a marked one, a cancel target, is raised only by `[await-c]`.  `[spec §19, §29a]` -/
   | effRaise {Δ Γ V} {S : Row} {o : OpSig} {B : VTy} (hf : Row.find S o.n o.i = some o)
-      (ha : o.abort = true) (hd : o.A.OwnFree) (h : CDerives Δ Γ V (.val o.A)) :
+      (ha : o.abort = true) (hrc : o.rc = false) (hd : o.A.OwnFree) (h : CDerives Δ Γ V (.val o.A)) :
       CDerives Δ Γ (BoCa.BoLo.raiseE (opArgE o.n o.i V)) (.comp (CTy.effOf S B))
   /-- `[let]`: `M to x. N` at a row; `N`'s context drops at a row with weakening and is
   persistent at an unrestricted row.  `[spec §19]` -/
@@ -420,15 +531,16 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- `[then]`: `M then x. N unwind D`, `M` at `Σ_M ≤ Σ` and the finaliser at `Σ_D ≤ Σ`, each
   capturable operation of `Σ_M` with `Σ(o).fin ≥ Σ_M(o).fin ⋈ Σ_D`: what the finaliser may raise or
   perform when a continuation captured in `M` is cancelled is recorded in that operation's cancel
-  row.  `Γ₂` is persistent where `Σ` has an unrestricted operation at some depth of its cancel
-  rows (`Row.UnrD`), since the finaliser runs in the cancels below it, and the errors pending at the
-  finaliser are persistent where `Σ_D` has one.  The finaliser's row does not hold `Div`: a
-  finaliser must terminate (decision 69).  `[then]` at option A, the finaliser at `F 1`, is `CDerives.effThenA`.
-  `[spec §14, §19, §24, §27]` -/
+  row, and so it is at each cancellable wait of `Σ_M` (`OpSig.finRead`), whose cancel is a resume
+  that unwinds through this finaliser.  `Γ₂` is persistent where `Σ` has an unrestricted operation
+  at some depth of its cancel rows (`Row.UnrD`), since the finaliser runs in the cancels below it,
+  and the errors pending at the finaliser are persistent where `Σ_D` has one.  The finaliser's row
+  does not hold `Div`: a finaliser must terminate (decision 69).  `[then]` at option A, the
+  finaliser at `F 1`, is `CDerives.effThenA`.  `[spec §14, §19, §24, §27, §29a]` -/
   | effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
       (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)
       (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
-        capB o.q o.B = true → ThenLe o.fin SD o'.fin)
+        o.finRead = true → ThenLe o.fin SD o'.fin)
       (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false)
       (hM : CDerives Δ Γ₁ M (.comp (CTy.effOf SM A)))
       (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
@@ -438,27 +550,30 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   part of the context whose live slots are persistent, `n` not in `Σ`.  The `j`-th operation's
   cancel row is `fs j`, and its clause's `κ` has its cancel branch at `cancelTy Σ (fs j)`.  The
   handled row does not hold `Div`: a handler of `Div`, or of another name around a computation
-  that ticks, is `effHandleT` (decision 68).  At two variables and empty cancel rows it is
-  `hndTerm` (`CDerives.effHandle`).  `[spec §14, §19, §24, §27]` -/
+  that ticks, is `effHandleT` (decision 68).  The `j`-th operation's marker is `cs j`
+  (`OpSig.rc`), which only the typing reads.  At two variables, empty cancel rows and no markers it is
+  `hndTerm` (`CDerives.effHandle`).  `[spec §14, §19, §24, §27, §29a]` -/
   | effHandleV {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
+      {cs : Nat → Bool}
       {n : UInt32} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁)
       (hc : CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs))))
       (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
-      (hdv : Row.divB (Row.ofEff n E 0 fs ++ S) = false)
-      (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
+      (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false)
+      (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A))) :
       CDerives Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
   /-- BOXED-κ: `[handle]` whose capturing clauses receive their continuation boxed, `κ : [@d] K`
   (the clauses at `clausesTyB Σ R d E fs`). The handled computation's context outlives `@d`, and
   so does the answer type of every non-abortive operation of its row, handled or forwarded.
   `[spec §28]` -/
   | effHandleVB {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
+      {cs : Nat → Bool}
       {n : UInt32} {A R : VTy} {d : Lifetime.Life} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁)
       (hH : H.ValFormIn Γ₁)
       (hc : CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyB S R d E fs))))
       (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
-      (hdv : Row.divB (Row.ofEff n E 0 fs ++ S) = false)
-      (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)))
-      (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 fs ++ S)) :
+      (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false)
+      (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A)))
+      (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 fs cs ++ S)) :
       CDerives Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
   /-- `[handle]` at clauses that resume `κ` in tail position: `handle_n e with (h_ret, gs)`, the
   clauses written out from a tuple `gs` of answering functions (`tailTuple`), each at a row `Σ_N`
@@ -526,7 +641,7 @@ theorem CDerives.effHandle {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Qu
   obtain ⟨sc, hsc, hlc⟩ := hc.live
   obtain ⟨sr', hsr', hlr'⟩ := hs₁.live_left hsr hlr
   obtain ⟨sc', hsc', hlc'⟩ := hs₁.live_right hsc hlc
-  exact .effHandleV hs
+  exact .effHandleV (cs := rcsNil) hs
     (hs₁.deadP (hr.deadP (retTy_persistent S A R)) (hc.deadP (clausesTy_persistent S R E finsNil)))
     (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen hdv he
 
@@ -689,15 +804,20 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | nuOut hC _ ih => exact nuOut_compatX hC ih
   | unfoldN C S hC hΓ => exact unfold_compatX hC S hΓ
   | effSub hle _ ih => exact sub_compatC hle ih
-  | effPerform hf hna _ ih => exact perform_compatC hf hna ih
-  | effRaise hf ha hd _ ih => exact raise_compatC hf ha (fun _ _ _ _ h => vC_noOwn_of_ownFree hd h) ih
+  | effPerform hf hna _ _ ih => exact perform_compatC hf hna ih
+  | effAwait hΓ hfa ha haA hfc hc => exact semC_dead .nil hΓ (await_compatC hfa ha haA hfc hc)
+  | effRaise hf ha _ hd _ ih => exact raise_compatC hf ha (fun _ _ _ _ h => vC_noOwn_of_ownFree hd h) ih
   | effLet hs hW hU _ _ ihM ihN => exact let_compatC hs hW hU ihM ihN
   | effThen hs hNZ _ hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
-      exact then_compatC hs hNZ hU hMS hDS hfin hP hSD ihM ihN ihD
+      exact then_compatC hs hNZ hU hMS hDS
+        (fun n i o o' h₁ h₂ hc => hfin n i o o' h₁ h₂ (OpSig.finRead_of_capB hc)) hP hSD ihM ihN ihD
   | effHandleV hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
-      exact handleV_compatC hs hd hH ihc hn0 hnS hlen hdv ihe
+      exact handleV_compatC hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
+        (semC_effOf_rc (Row.unmark_ofEff_append _ _ _ _ _ _) ihe)
   | effHandleVB hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
-      exact handleV_compatCB hs hd hH ihc hn0 hnS hlen hdv ihe hΓd hSd
+      exact handleV_compatCB hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
+        (semC_effOf_rc (Row.unmark_ofEff_append _ _ _ _ _ _) ihe) hΓd
+        (Row.ansOutlives_ofEff_rc hSd)
   | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
       exact handleT_compatC hs hd hHr hHc ihc hn0 hnd hnS hlen hSN hLin ihe
   | effHandleL hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>

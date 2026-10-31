@@ -425,12 +425,12 @@ theorem semC_thenProg (h : ThenAbortCompat (ℍ := ℍ)) :
     SemC (ℍ := ℍ) LifeCtx.empty [] thenProg (CTy.effOf S₁₂ .unit) := by
   have hM : CDerives LifeCtx.empty [] (performE (opArgE 1 0 (.val .unit)))
       (.comp (CTy.effOf S₁₂ .unit)) :=
-    .effPerform (o := ⟨1, 0, .cancel, .unit, .unit, .ret .unit, false⟩) (by rfl) rfl (.unitI .nil)
+    .effPerform (o := ⟨1, 0, .cancel, .unit, .unit, .ret .unit, false⟩) (by rfl) rfl rfl (.unitI .nil)
   have hN : CDerives LifeCtx.empty [⟨.unit, true⟩] (.var 0) (.comp (CTy.effOf S₁₂ .unit)) :=
     .effSub (S := []) (fun _ _ _ h => by simp [Row.find] at h) (.ret (.var (.here .nil)))
   have hD : CDerives LifeCtx.empty [⟨.unit, false⟩] (raiseE (opArgE 2 0 (.val .unit)))
       (.comp (CTy.effOf S₁₂.abortOnly .unit)) :=
-    .effRaise (o := ⟨2, 0, .cancel, .unit, .zero, .ret .unit, false⟩) (by rfl) rfl .unit
+    .effRaise (o := ⟨2, 0, .cancel, .unit, .zero, .ret .unit, false⟩) (by rfl) rfl rfl .unit
       (.unitI (.cons .nil))
   exact h .nil (by intro o ho; simp [S₁₂] at ho; rcases ho with rfl | rfl <;> decide)
     (by simp [Row.Uniq, S₁₂]) (fun _ s hs => absurd hs List.not_mem_nil)

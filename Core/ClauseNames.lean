@@ -84,7 +84,7 @@ theorem d_perform₁ {Δ : LifeCtx} :
     CDerives Δ [] (Kont.hole.plug (performU 1))
       (.comp (CTy.effOf [pSig 1 (finR 2), rSig 2] .unit)) := by
   refine .effSub (RowLe.of_mem fun o ho => ?_)
-    (.effPerform (S := [pSig 1 (.ret .unit)]) (o := pSig 1 (.ret .unit)) rfl rfl (.unitI .nil))
+    (.effPerform (S := [pSig 1 (.ret .unit)]) (o := pSig 1 (.ret .unit)) rfl rfl rfl (.unitI .nil))
   simp only [List.mem_singleton] at ho
   subst ho
   refine ⟨pSig 1 (finR 2), rfl, ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
@@ -103,7 +103,7 @@ theorem d_inner₁ {Δ : LifeCtx} :
 theorem d_hRes {Δ : LifeCtx} {e : Expr}
     (he : CDerives Δ [] e (.comp (CTy.effOf [pSig 1 (finR 2), rSig 2] .unit))) :
     CDerives Δ [] (hndE hRes e) (.comp (CTy.effOf [rSig 2] .unit)) :=
-  .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.unr, .unit, .unit)]) (fs := fun _ => finR 2)
+  .effHandleV (cs := rcsNil) (Γ₁ := []) (Γ₂ := []) (E := [(.unr, .unit, .unit)]) (fs := fun _ => finR 2)
     .nil .nil (.pair (.val _) (.pair (.val _) (.val _))) d_hRes_clauses
     (by decide) (by simp [rSig]) (by simp) rfl he
 
