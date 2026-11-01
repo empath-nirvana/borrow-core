@@ -127,10 +127,17 @@ theorem inStratum_ownP {l : Loc} {v : Val} {ρP ρlP : WRes} {α : Life}
 
 /-- **The lender's side of an Imm Frame at any final term**, at a lifetime `α` fixed by the
 caller (`[TR]` 6.64's proof from the entry on, at `rwpG`). The entry is the printed one at `α`:
-`TWNC.immFrame` and the frame list
-`frameList p ds α ls` with `ds` the record's lineage. At the end, at whatever final term: 6.29,
-6.38 at `ρ′ := π/ℓ`, `ρ⁺ := ρᵢ`, 6.39, the memory, `TWNC.immEnd` and the tags, as printed; `hpost`
-splits `π/ℓ ● ρ_ℓ ● ρ_P̂(v)` for the caller's postcondition, given `ext_drop` for its parts. -/
+`TWNC.immFrame` and the frame list `frameList p ds α ls` with `ds` the record's lineage. At the
+end, at whatever final term: 6.29, 6.38 at `ρ′ := π/ℓ`, `ρ⁺ := ρᵢ`, 6.39, the memory and
+`TWNC.immEnd`, as printed; `hpost` splits `π/ℓ ● ρ_ℓ ● ρ_P̂(v)` for the caller's postcondition,
+given `ext_drop` for its parts and that no record of the caller's list names an exclusive
+location of `ℓ ↦ own(v) ● ρ_P̂(v)` (`not_relAt_xex` at the entry world).
+
+**Forced change at the exit's tags.** The printed proof takes `α` fresh (6.112's `⋔`: every record
+longer than `α`), so a record of the caller's list is not tagged by the frame. At a resume the list
+is the handler's and `α` the first entry's, so freshness is not available; the exit reads instead
+that no record of the caller's list is in the frame's lineage (`notDesc_frame`, from the entry
+world). The printed freshness technique is not used here. -/
 theorem rwpG_I_frameG {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmWf T δ) (v : Val)
     {A : Life} {ρP ρlP ρb ρ : WRes} (houtP : ρP.InStratum A) (houtb : ρb.InStratum A)
     (hclP : ResU.CompS (ResU.single l (CellU.ownOf v)) ρP ρlP) (hcρ : ResU.CompS ρlP ρb ρ)
