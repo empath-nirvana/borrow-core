@@ -465,6 +465,24 @@ theorem erwp_dump {Φ : LocFam} {Tb : TableN} (hL : Tb.Local) {Q : PostN} :
     simp only [erwpC, show k' < n by omega, if_true] at hΨ ⊢
     exact ih k' (by omega) _ _ _ hΨ
 
+/-- `erwp_mono` with the postcondition and the table read at the indices up to `N`. -/
+theorem erwp_mono_le {Φ : LocFam} {Tb Tb' : TableN} {Q Q' : PostN} (N : Nat)
+    (hQ : ∀ k, k ≤ N → ∀ ls v ρ, Q k ls v ρ → Q' k ls v ρ)
+    (hT : ∀ k, k ≤ N → ∀ ls t (Ψ Ψ' : ContN) ρ,
+      (∀ k', k' < k → ∀ ls e ρ, Ψ k' ls e ρ → Ψ' k' ls e ρ) → Tb k ls t Ψ ρ → Tb' k ls t Ψ' ρ) :
+    ∀ n, n ≤ N → ∀ ls e ρ, erwp (ℍ := ℍ) Φ Tb Q n ls e ρ → erwp (ℍ := ℍ) Φ Tb' Q' n ls e ρ := by
+  intro n
+  induction n using Nat.strong_induction_on with
+  | _ n ih =>
+  intro hnN ls e ρ h
+  rw [erwp_eq] at h ⊢
+  refine rwpG_mono_le (fun k hk ls' t σ ht => ?_) h
+  rcases ht with ⟨v, hv, hq⟩ | ht
+  · exact Or.inl ⟨v, hv, hQ _ (by omega) _ _ _ hq⟩
+  · refine Or.inr (hT k (by omega) ls' t _ _ σ (fun k' hk' ls'' e'' ρ'' hΨ => ?_) ht)
+    simp only [erwpC, show k' < n by omega, if_true] at hΨ ⊢
+    exact ih k' (by omega) (by omega) _ _ _ hΨ
+
 end BoCa.Fig16.LogRel.Core.DtorUnwind.SI
 
 end

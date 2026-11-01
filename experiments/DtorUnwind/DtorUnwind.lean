@@ -62,3 +62,5 @@ import DtorUnwind.SI.RebCancelC
 import DtorUnwind.SI.RebDropProg
 import DtorUnwind.SI.AntiStopN
 import DtorUnwind.SI.AntiLendProg
+import DtorUnwind.SI.IStopF
+import DtorUnwind.SI.AntiRebProg
