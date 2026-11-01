@@ -17,3 +17,4 @@ import DtorUnwind.SI.Adequacy
 import DtorUnwind.SI.Programs
 import DtorUnwind.SI.Transfer
 import DtorUnwind.SI.Sem
+import DtorUnwind.SI.MutWorld
