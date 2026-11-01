@@ -75,3 +75,5 @@ import DtorUnwind.SI.FinCancelN
 import DtorUnwind.SI.FinCancelProg
 import DtorUnwind.SI.TabLeN
 import DtorUnwind.SI.HandlerLendProg
+import DtorUnwind.SI.ResumeWorldsG
+import DtorUnwind.SI.HandlerLendAll
