@@ -256,6 +256,15 @@ corpus/for-never.bc 2.0 cancellable tail: -; agree
 corpus/for-yield-branch.bc 2.0 cancellable tail: direct; agree
 corpus/for-yield-branch.bc 3.0 cancellable resume-or-cancel,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/for-yield-branch.bc 1.0 cancellable tail: direct; agree
+corpus/fs-cat.bc 1.0 cancellable abortive: branch; agree
+corpus/fs-copy.bc 1.0 cancellable abortive: branch; agree
+corpus/fs-fake.bc 4.0 cancellable abortive: branch; agree
+corpus/fs-fake.bc 7.0 cancellable abortive: branch; agree
+corpus/fs-fake.bc 6.0 cancellable abortive: branch; agree
+corpus/fs-fake.bc 5.0 cancellable abortive: branch; agree
+corpus/fs-fake.bc 2.0 cancellable abortive: branch; agree
+corpus/fs-fake.bc 3.0 cancellable abortive: branch; agree
+corpus/fs-fake.bc 1.0 cancellable abortive: branch; agree
 corpus/gen-adapters-fail.bc 4.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-adapters-fail.bc 3.0 cancellable tail: direct; agree
 corpus/gen-adapters-fail.bc 6.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
@@ -357,6 +366,7 @@ corpus/io-task.bc 3.1 cancellable tail: -; agree
 corpus/io-task.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/io-task.bc 2.1 cancellable tail: -; agree
 corpus/io-task.bc 1.0 cancellable abortive: branch; agree
+corpus/json-field.bc 1.0 cancellable abortive: branch; agree
 corpus/key-value.bc 1.0 cancellable abortive: branch; agree
 corpus/leetcode/dp/0039-combination-sum.bc 1.0 cancellable abortive: branch; agree
 corpus/leetcode/dp/0070-climbing-stairs.bc 1.0 cancellable abortive: branch; agree
