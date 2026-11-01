@@ -19,3 +19,4 @@ import DtorUnwind.SI.Transfer
 import DtorUnwind.SI.Sem
 import DtorUnwind.SI.MutWorld
 import DtorUnwind.SI.UpdN
+import DtorUnwind.SI.WpN
