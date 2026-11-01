@@ -70,3 +70,4 @@ import DtorUnwind.SI.CanonDeep
 import DtorUnwind.SI.RebStopD
 import DtorUnwind.SI.DeepRebProg
 import DtorUnwind.SI.FinCancelN
+import DtorUnwind.SI.FinCancelProg
