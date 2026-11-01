@@ -421,7 +421,7 @@ theorem body_ok (A : Life) (n : Nat) :
     simp [Expr.subst, Kont.plug, iterateE, Val.pair, Val.loc, Expr.val, Val.prim,
       subst_closedAt _ _ (show closedAt 0 fT.1 = true from rfl) (Nat.zero_le _)]
   rw [e]
-  exact erwp_iterate Φ₀_down T2_down T2_fin QZ_down rfl (I := IL) (en := tickEnt)
+  exact erwp_iterate Φ₀_down T2_down (OpTabN.ctxClosed_of_fin T2_fin _) QZ_down rfl (I := IL) (en := tickEnt)
     (by simp [T2, T1, Stage1.divEff_ne6]) rfl rfl
     (fun _ _ => ⟨rfl, rfl⟩) (fun _ _ _ _ h => h) IL_closed
     (fun k s ls ρ hI => turn_ok Φ₀_down A k s ls ρ hI) _ _ _ _ ⟨l, Val.i32 1, rfl, hcell⟩

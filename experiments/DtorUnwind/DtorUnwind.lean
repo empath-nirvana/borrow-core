@@ -35,3 +35,4 @@ import DtorUnwind.SI.LendProg
 import DtorUnwind.SI.MutSemN
 import DtorUnwind.SI.StopCancelN
 import DtorUnwind.SI.UbindN
+import DtorUnwind.SI.LendDropProg

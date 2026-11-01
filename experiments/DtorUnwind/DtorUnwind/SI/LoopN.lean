@@ -95,8 +95,8 @@ theorem OpTabN.ctxClosed_of_fin {T : OpTabN} (h : ∀ m i en, T m i = some en �
 
 /-- **The loop rule at `erwp`**, for a tick the runtime always answers *next*. -/
 theorem erwp_iterate {Φ : LocFam} (hΦ : Φ.Down) {T : OpTabN} (hTD : T.Down)
-    (hTfin : ∀ m i en, T m i = some en → en.fin = none) {QL : PostN} (hQL : QL.Down)
-    {f : Val} (hf : closedAt 0 f.1 = true) {I : Val → WProp} {en : OpEntN}
+    {f : Val} (hK : T.CtxClosed (iterK f)) {QL : PostN} (hQL : QL.Down)
+    (hf : closedAt 0 f.1 = true) {I : Val → WProp} {en : OpEntN}
     (htick : T divEff 0 = some en) (hab : en.abort = false) (hq : en.q = .lin)
     (hta : ∀ k ls, en.PA k ls Val.unit PMap.empty)
     (htb : ∀ k ls w (ρ : WRes), en.PB k ls w ρ → w = nextV ∧ ρ = PMap.empty)
@@ -114,7 +114,7 @@ theorem erwp_iterate {Φ : LocFam} (hΦ : Φ.Down) {T : OpTabN} (hTD : T.Down)
   simp only [Kont.plug_hole]
   rw [iterNext_eq]
   refine erwp_bind_le hΦ (iterK f) (fun m => by simp [iterK, Kont.HasHnd])
-    (fun m => by simp [iterK, Kont.Catches]) (OpTabN.ctxClosed_of_fin hTfin _) n ?_ n le_rfl
+    (fun m => by simp [iterK, Kont.Catches]) hK n ?_ n le_rfl
     ls _ ρ (hturn n s ls ρ hI)
   rintro k ls' v σ hk (⟨x, rfl, hx⟩ | ⟨s', rfl, hs'⟩)
   · refine erwp_det hΦ hD hQL (fun μ => step1Only_plug (Head.case₁ μ x _ _) rfl .hole) ?_
