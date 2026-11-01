@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.25 · 2026-10-31
+Version 1.26 · 2026-10-31
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1241,9 +1241,9 @@ elaborate to the same term.
 ### Designed, not built
 
 - **More capabilities, one pattern.** Each is a cell with opaque content, a model and externs
-  taking a `Mut` borrow: `Env` (lookup by name into a borrowed array), `Fs` (open yields an
-  `Input`/`Output`, close consumes it), `Net`, `Random`. `Clock` and `Args` are built, as
-  effects (§34).
+  taking a `Mut` borrow: `Env` (lookup by name into a borrowed array), `Net`, `Random`. `Clock`,
+  `Args` and `Fs` are built, as effects (§34); `Fs`'s file is a descriptor under the capability,
+  a declared type, not an `Input`/`Output` cell (§34 *Files*).
 - **Exit.** The exit status is `main`'s result at `A = I32`; not yet passed to the host.
 - **Handlers.** A capability's meaning is its model and its operations are externs, not rules,
   so a capability can be served by any value meeting the extern's type: the host, the model
@@ -6488,7 +6488,102 @@ reports change only where a message changed (`corpus/reject/include-unknown.bc` 
 - A capability used by a computation parameter's argument under the callee's handler (#487): the
   reconcilers' services and journals are control effects because of it.
 - Choosing the platform module at build time; `posix`.
-- `Env`, `Fs`, `Net`, `Random`, the exit status (§11 *Designed, not built*). I/O errors (§11 *Open*).
+- `Env`, `Net`, `Random`, the exit status (§11 *Designed, not built*). I/O errors of the streams
+  (§11 *Open*); a file's errors are *Files*'.
+
+### Files (#769)
+
+`Fs`, the platform's file system, on this entry's pattern: a capability cell, a model, externs
+meeting their contracts, the platform's handler, a library (`lib/fs.bc`, `include fs`). The scope,
+with its two reviews, is `docs/scope/769-fs.md`.
+
+    data File = { must_close(close) fd: i32 }
+    data Mode = Reading | Writing
+    data FsError = NotFound | Denied | IsDir | BadFile | TooBig | Other(i32)
+    effect Fs {
+      fn fs_open(path: string, mode: Mode) -> string * (File + FsError);
+      fn fs_read(f: File, b: string) -> File * (string * (i32 + FsError));
+      fn fs_write(f: File, b: string) -> File * (string * (1 + FsError));
+      fn fs_size(f: File) -> File * (i32 + FsError);
+      fn fs_close(f: File) -> 1 + FsError
+    }
+
+- **A file is a declared type with no derived drop** (§42): `fd` is marked `must_close(close)`. So
+  a `File` value is used exactly once: never copied, never dropped by the checker, never live
+  across a computation that may abort. Every operation takes the file and hands it back, but
+  `fs_close`, which consumes it; an error does not lose it.
+- **Owned buffers** (decision 71): the buffer of a read or a write, and the path of an open, are a
+  `string` moved into the operation and handed back with the answer, error or not. No operation's
+  signature takes a borrow, so a handler that suspends (#750 unit B) serves the same signatures.
+  The platform's clause lends the buffer to its extern for the one call inside the clause.
+- **The descriptor is an `i32`**, not a cell: no allocation a file, and a fake handler can make
+  one. The constructor is public (a declared type has no private constructor yet), so a program
+  can build a `File` from any `i32`, or two from one descriptor; the guarantee is per `File` value,
+  not per descriptor. The platform refuses the descriptors `0`, `1`, `2` (`BadFile`).
+- **The laws.** Every operation may answer an error instead. `fs_open(p, Reading)` opens the
+  existing file at `p`; `fs_open(p, Writing)` creates or truncates it. `fs_read(f, b)` reads into
+  `b`'s spare capacity, appending, at most the room and at least one byte while the file has more:
+  `0` only at the end or with no room (then no system call). `fs_write(f, b)` writes every byte of
+  `b`. `fs_size(f)` is the size when asked (`TooBig` from `2^31 − 1`). `fs_close(f)` ends the file,
+  an error there too. Each hands back what it was given, but for what it does to the buffer.
+- **The library** raises `Fail[FsError]`: `open`, `read` (clears the buffer and reads into it),
+  `read_all` (one buffer of the size plus one, read until a read answers `0`, grown when full;
+  `TooBig` before it would pass `2^31 − 1` bytes), `write`, `close`. Each closes the file before it
+  raises (`close_raise`), so a caller that threads one file through them never holds it across a
+  raise. With two files open, the raising forms are called under a local handler, or the
+  operations' sums are matched (`corpus/fs-fake.bc`'s `copy_file`); unhandled, the second file is
+  live across the raise, refused (`corpus/reject/fs-two-files.bc`). `finally` does not serve: a
+  finaliser does no I/O (§42 *Open*).
+- **A loop over a file is counted.** A `loop` is codata whose close branch discards its state, and a
+  `File` has none of a drop, so it is refused there (`corpus/reject/fs-loop.bc`). A loop over a
+  file is `for _ in 0..fs_max_reads { … } else { … }`, with `fs_max_reads = 2^31 − 1` reads as fuel;
+  its `else` arm (a pipe or a device that never ends) closes the file and raises `TooBig`.
+
+**The externs.** `fs : ref fs`, a new opaque kind, `Opaque.Holds .fs v ⇔ ∃ n, v = i32[n]`,
+representation `I32` (`vC_fsRep`). Each answers an `i32`: the result when `≥ 0`, else `-1` not
+found, `-2` denied, `-3` a directory, `-4` a bad file, `-5` too big, `-(16 + c)` the host's error
+`c`, which `Other(c)` carries (it differs between hosts).
+
+| extern | type | model (an empty file system) |
+|---|---|---|
+| `file_open` | `!(all 'a < top. all 'b < top. mut 'a fs * (array_imm 'b u8 * i32) => mut 'a fs * i32)` | the view forgotten; `-1` |
+| `file_read` | `!(all 'a < top. all 'b < top. mut 'a fs * (i32 * array_mut 'b u8) => mut 'a fs * (array_mut 'b u8 * i32))` | the view back; `-4` |
+| `file_write` | `!(all 'a < top. all 'b < top. mut 'a fs * (i32 * array_imm 'b u8) => mut 'a fs * i32)` | the view forgotten; `-4` |
+| `file_size`, `file_close` | `!(all 'a < top. mut 'a fs * i32 => mut 'a fs * i32)` | `-4` |
+| `mk_fs`, `take_fs` | `!(1 => ref fs)`, `!(ref fs => i32)` | `alloc i32[0]`, `free` |
+
+`fileOpen_meets`, `fileRead_meets`, `fileWrite_meets`, `fileFd_meets` (size and close share a
+type, so a model and a proof), `mkFs_meets`, `takeFs_meets` (`Core/Stdio.lean`): each model is a
+`CDerives` derivation at the representation, and `stdModel` gains them, so `io_every_run` and
+`IORun.every_run` cover a program that uses `Fs`. The model is lawful because every law allows an
+error (an open for writing answers not found, as `open(2)` with `O_CREAT` does where the directory
+is not there). The interpreters run it: no interpreter reads a host file.
+
+**The hosts** (`bcc trusted`, each assumed (1); the claimed contract is the type's relation):
+native `bc_file` (`Backend/Native/Runtime.lean`): `open(2)` (`O_RDONLY`, or `O_WRONLY | O_CREAT |
+O_TRUNC`, `0644`; `O_CLOEXEC`; the path copied with its `NUL` into a stack buffer of `PATH_MAX`),
+one `read(2)`, `write(2)` again after a short write, `fstat(2)`, `close(2)`; `EINTR` retried but by
+`close`. Wasm `$file` (`Backend/Wasm/Runtime.lean`): `path_open` under the preopened directory
+whose name is the longest prefix of the path ending at a `/` or its end (`.` the empty prefix of a
+relative path), found by `fd_prestat_get`/`fd_prestat_dir_name` at each open (none: `NotFound`);
+one `fd_read`, `fd_write`s, `fd_filestat_get`, `fd_close`; a read of a directory (`EBADF` in
+WASI) is `IsDir`, as natively, by one `fd_filestat_get` on that error. `bcc run --dir <dir>` preopens
+a host directory. One system call per operation but the Wasm open's preopen walk and a short
+write's next write. The closure, flat and new backend's IRs carry one primitive for the five
+(`Exp.file`), interpreted as the model.
+
+**Programs.** `corpus/fs-cat.bc` (a file printed in chunks of one 64 KiB buffer), `corpus/json-field.bc`
+(#67 milestone 1: a JSON file read whole by `read_all`, the value of a top-level key printed,
+`corpus/json-tokens.bc`'s tokenizer), whose goldens are the error path (`corpus/no-such-file`, not
+found at every stage), and `scripts/check-fs.sh` (the gate's `fs files`), which writes files to a
+temporary directory and runs both on them in Wasm and natively, by both backends. `corpus/fs-fake.bc`
+runs the same reads, a two-file copy and the errors under `fake_fs`, a handler of `Fs` alone, at
+every stage. `corpus/trusted/fs-cat.txt` and `json-field.txt` pin the trust reports.
+
+**Found here.** The Wasm runtime's `$reserve` (the arguments' memory) left the heap's next size word
+inside the reserved bytes, so an allocation after the arguments were read overwrote their last
+word: a program reading two short arguments read the second as empty. `$reserve` now ends the
+heap at the reserved bytes' end.
 
 ---
 
@@ -10613,6 +10708,14 @@ relation or the machine.
 ---
 
 ## Changelog
+
+- **1.26** (2026-10-31) — §34 *Files* (#769): `Fs`, the platform's file system, as an effect on
+  the capability pattern; `File` a declared type with no derived drop; owned buffers; the opaque
+  kind `fs` and five externs whose models (an empty file system) meet their contracts in
+  `stdModel`; `lib/fs.bc`; native `bc_file`, Wasm `$file` with preopens, `bcc run --dir`;
+  `corpus/fs-cat.bc`, `json-field.bc`, `fs-fake.bc`, two rejects, `scripts/check-fs.sh`. §11's
+  *Designed, not built* amended. The Wasm runtime's `$reserve` no longer overlaps the next size
+  word.
 
 - **1.25** (2026-10-31) — §19, §29, §14, §15, §16, §30, §32, §34 (decision 71): T1 is the
   permanent rule, "owned across suspensions, borrowed within", stated in §19; R1 and `PinLaw` are

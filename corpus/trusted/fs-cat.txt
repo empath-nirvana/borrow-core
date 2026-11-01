@@ -1,0 +1,97 @@
+extern write_all : !(all 'l0 < top. all 'l1 < top. mut 'l0 output * array_imm 'l1 u8 => mut 'l0 output)
+  contract: model proved (7), writeAll_meets
+  host: WASI fd_write of the view (libc write(2)); interpreter-checked (2)
+extern read_arg : !(all 'l0 < top. mut 'l0 args => mut 'l0 args * (u8 + 1))
+  contract: model proved (7), readArg_meets
+  host: the arguments read once into memory (WASI args_sizes_get, args_get; libc argv); interpreter-checked (2)
+extern file_open : !(all 'l0 < top. all 'l1 < top. mut 'l0 fs * array_imm 'l1 u8 * i32 => mut 'l0 fs * i32)
+  contract: model proved (7), fileOpen_meets
+  host: libc open(2) (O_RDONLY, or O_WRONLY|O_CREAT|O_TRUNC 0644; O_CLOEXEC); WASI path_open under the preopened directory that is the path's longest prefix; assumed (1)
+extern file_read : !(all 'l0 < top. all 'l1 < top. mut 'l0 fs * i32 * array_mut 'l1 u8 => mut 'l0 fs * array_mut 'l1 u8 * i32)
+  contract: model proved (7), fileRead_meets
+  host: one read(2) into the view (WASI fd_read); assumed (1)
+extern file_close : !(all 'l0 < top. mut 'l0 fs * i32 => mut 'l0 fs * i32)
+  contract: model proved (7), fileFd_meets (file_size and file_close share their type and model)
+  host: close(2) (WASI fd_close); assumed (1)
+extern stdout : ref output
+  contract: model proved (7), vC_outRep (a cell holding (1, nil))
+  host: the heap cell run_io makes by mk_output, holding fd 1; assumed (1)
+extern stderr : ref output
+  contract: model proved (7), vC_outRep (a cell holding (2, nil))
+  host: the heap cell run_io makes by mk_output, holding fd 2; assumed (1)
+extern args : ref args
+  contract: model proved (7), vC_argsRep (a cell holding the arguments, each followed by 0)
+  host: the heap cell run_io makes by mk_args, over the arguments, read once (WASI args_get; libc argv); interpreter-checked (2)
+extern fs : ref fs
+  contract: model proved (7), vC_fsRep (a cell holding i32[0])
+  host: the heap cell run_io makes by mk_fs; the file system is the host's; assumed (1)
+extern mk_input : !((mu X. 1 + u8 * X) => ref input)
+  contract: model proved (7), mkInput_meets
+  host: a fresh heap cell holding fd 0, the platform's standard input; its argument, a byte list, dropped whatever it holds; assumed (1)
+extern mk_output : !(i32 => ref output)
+  contract: model proved (7), mkOutput_meets
+  host: a fresh heap cell holding its argument, the descriptor; assumed (1)
+extern take_input : !(ref input => (mu X. 1 + u8 * X))
+  contract: model proved (7), takeInput_meets
+  host: the cell freed, answering the empty list; assumed (1)
+extern take_output : !(ref output => i32 * (mu X. 1 + u8 * X))
+  contract: model proved (7), takeOutput_meets
+  host: the cell freed, answering the descriptor and the empty list (each byte went to the descriptor when it was written); assumed (1)
+extern mk_args : !((mu X. 1 + u8 * X) => ref args)
+  contract: model proved (7), mkArgs_meets
+  host: a fresh heap cell holding the stream 0xFFFFFFFF, the host's arguments; its argument, a byte list, dropped whatever it holds; assumed (1)
+extern take_args : !(ref args => (mu X. 1 + u8 * X))
+  contract: model proved (7), takeArgs_meets
+  host: the cell freed, answering the empty list; assumed (1)
+extern mk_fs : !(1 => ref fs)
+  contract: model proved (7), mkFs_meets
+  host: a fresh heap cell holding i32[0] (the file system is the host's); assumed (1)
+extern take_fs : !(ref fs => i32)
+  contract: model proved (7), takeFs_meets
+  host: the cell freed, answering its contents; assumed (1)
+typing: unconditional: a CDerives derivation (fundamentalC, adequacyD)
+unproved boundaries: 17 (write_all, read_arg, file_open, file_read, file_close, stdout, stderr, args, fs, mk_input, mk_output, take_input, take_output, mk_args, take_args, mk_fs, take_fs)
+always trusted: the allocator and runtime (Backend/Wasm/Runtime.lean), the WAT printer, wasmtime
+backend: LendEnclosesFn (Backend2/Driver.lean), the native borrow facts' lends enclose their functions: 31 functions
+  f22 (lam)
+  f23 (lam)
+  f24 (lam)
+  f27 (lam)
+  f28 (lam)
+  f29 (lam)
+  f32 (lam)
+  f33 (lam)
+  f40 (lam)
+  f41 (lam)
+  f43 (lam)
+  f46 (lam)
+  f47 (lam)
+  f51 (lam)
+  f54 (lam)
+  f59 (lam)
+  f60 (lam)
+  f61 (lam)
+  f63 (lam)
+  f64 (lam)
+  f65 (lam)
+  f67 (lam)
+  f68 (lam)
+  f69 (lam)
+  f73 (lam)
+  f74 (lam)
+  f75 (lam)
+  f78 (lam)
+  f79 (lam)
+  f80 (lam)
+  f89 (lam)
+backend (native): CallRelated and HostStack (Backend2/Driver.lean, nativeAssumptions' list), a willreturn function returns (total_open; total_open_pin under PinLaw) at a reached call at related arguments (total_subrun at a closed program's plain context) with no stack overflow: 7 functions
+  f30 (lam)
+  f34 (lam)
+  f36 (lam)
+  f71 (lam)
+  f84 (lam)
+  f91 (lam)
+  f93 (lam)
+backend (native): NoUnwind (Backend2/Driver.lean, nativeAssumptions), every function nounwind: no invoke, landingpad or resume is emitted; the runtime is C and cancels no thread
+backend (native): WidthClass (Backend2/Lower.lean, .alloc), a cell holds only its width class's types, so its class's widest bytes hold them (dereferenceable)
+backend (native): the runtime (Backend/Native/Runtime.lean) and clang

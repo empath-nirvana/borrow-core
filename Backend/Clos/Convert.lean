@@ -927,6 +927,7 @@ inductive CapStream where
   | output
   | clock
   | args
+  | fs
 
 /-- The host implementation of an extern: an I/O operation, or the harness's make or take of a
 stream's capability cell. -/
@@ -967,6 +968,7 @@ def mkValue (s : CapStream) : CM Tm := do
     | .input => pure <| .drop .word m (← capCell (.i32 0))
     | .args => pure <| .drop .word m (← capCell (.i32 0xFFFFFFFF))
     | .clock => pure <| .drop .word m (← capCell (.i64 0))
+    | .fs => pure <| .drop .word m (← capCell (.i32 0))
     | .output => pure <| .prim .alloc [m]
   pure (.clos (← register ⟨[], m, body⟩) [])
 
@@ -988,7 +990,7 @@ def takeValue (s : CapStream) : CM Tm := do
     | .output =>
       let n ← fresh
       pure <| .letv w (.prim .free [m]) (.letv n (← nilTm) (.pair w n))
-    | .clock => pure <| .prim .free [m]
+    | .clock | .fs => pure <| .prim .free [m]
   pure (.clos (← register ⟨[], m, body⟩) [])
 
 /-- **Closure-convert `run_io`** (SPEC §11): the term `IORun.expr r []` of the checked wrapper

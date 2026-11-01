@@ -230,11 +230,11 @@ def checkDecl (ds : Array Decl) (k : Nat) (keys : List DefKey)
 `run_io`'s wrapper (`Frontend.Check.ioWrapper`) declares. -/
 def harnessExterns : List String :=
   ["mk_input", "mk_output", "take_input", "take_output", "mk_clock", "take_clock", "mk_args",
-   "take_args"]
+   "take_args", "mk_fs", "take_fs"]
 
 /-- **The capabilities** (SPEC §11, §34): each is declared only as an extern, which `run_io`'s
 wrapper replaces by a binder of the same name around `main`'s body. -/
-def capabilityNames : List String := ["stdin", "stdout", "stderr", "clock", "args"]
+def capabilityNames : List String := ["stdin", "stdout", "stderr", "clock", "args", "fs"]
 
 /-- **The wrapper's names around `main`'s body** (`Frontend.Check.wrapperSrc`): its parameter, and
 the hole the body is put at. -/

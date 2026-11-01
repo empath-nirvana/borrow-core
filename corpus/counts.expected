@@ -178,6 +178,8 @@ for-return 1 0 0 9 5 4
 for-view-effect-copy 4 0 0 13 7 9 # the string the view lends
 for-yield-branch 3 0 0 3 3 0
 format 4 0 0 40 33 37 # the string, built at its capacity
+fs-cat 7 0 0 133 88 85
+fs-fake 21 0 0 957 683 661
 gen-adapters 8 0 0 33 33 0 # the nodes of the lists `chunks` builds; each generator one state machine, each stored generator one handler site, each `yield` to a `for` a direct call
 gen-adapters-fail 11 0 0 51 51 0 # the nodes of the lists `chunks` and `lines` build
 gen-borrowed 2 0 0 11 7 2
@@ -251,6 +253,7 @@ join-let-loop 3 0 0 3 3 0
 join-let-match 0 0 0 0 0 0
 join-let-nested 0 0 0 0 0 0
 join-let-with 0 0 0 2 2 0
+json-field 8 0 0 162 108 105
 json-tokens 4 0 0 5276 4099 5090 # the input string; tokens are views, literal views read-only data
 key-value 5 0 0 4548 4163 4529 # the input string and the buffer of view pairs
 labels-json 5 0 0 361 161 339 # the output string and the one escaped string (the owned side of the sum)

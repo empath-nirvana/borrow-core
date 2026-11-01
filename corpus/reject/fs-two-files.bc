@@ -1,0 +1,20 @@
+-- `corpus/fs-fake.bc`'s `copy_file` with the raising forms (SPEC §34, *Files*): `read` may raise
+-- while `dst` is open, and an error would abandon `dst` (its `File` has no derived drop, and no
+-- abort may abandon a value that holds a token: `decl_not_ownFree`). Refused, naming `close`. The
+-- accepted form uses the operations and matches their sums, or calls the raising form under a
+-- local handler (`with to_result { … }`).
+include fs
+
+fn copy_file() -> i32 with Fs, Fail[FsError] =
+  let (p, src) = open(string_of_lit("in.txt"), Reading);
+  let (q, dst) = open(string_of_lit("out.txt"), Writing);
+  let (src, (b, n)) = read(src, string_new(4));
+  let (dst, b) = write(dst, b);
+  close(src);
+  close(dst);
+  n
+
+main -> i32 + FsError =
+  let r = with to_result { copy_file() };
+  r
+-- expect: 13:3: `dst`, of type `i32 * tok`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell: `File` holds the field `fd`, marked `must_close`; pass it to `close` before the computation that may abort, or close it in a `finally`

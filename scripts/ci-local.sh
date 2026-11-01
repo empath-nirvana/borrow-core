@@ -84,6 +84,7 @@ steps=(
   "layout rejects"   "scripts/check-layout-reject.sh"
   "native facts"     "scripts/native-facts.sh"
   "native"           "scripts/compile-native.sh"
+  "fs files"         "scripts/check-fs.sh"
   "sugar pairs"      "scripts/check-sugar.sh"
   "let mut combos"   "scripts/mut-combos.py --gate --count 400"
   "renaming"         "scripts/alpha-check.py"
@@ -109,7 +110,7 @@ if [ "$changed" = 1 ]; then
   done
   if [ "$lean" = 0 ]; then
     all=0
-    corpus=("parse corpus" "check corpus" "clause kinds" "handled names" "cell classes" "compile corpus" "backend2 corpus" "layout rejects" "native facts" "sugar pairs" "native" "renaming")
+    corpus=("parse corpus" "check corpus" "clause kinds" "handled names" "cell classes" "compile corpus" "backend2 corpus" "layout rejects" "native facts" "sugar pairs" "native" "renaming" "fs files")
     for f in $files; do
       case "$f" in
         corpus/kernel-counts.expected) add "compile kernel" ;;
@@ -129,6 +130,7 @@ if [ "$changed" = 1 ]; then
         scripts/native-facts.sh) add "native facts" ;;
         scripts/check-backend2.sh) add "backend2 fence" ;;
         scripts/compile-native.sh) add "native" ;;
+        scripts/check-fs.sh) add "fs files" ;;
         scripts/compile-scaling.sh) add "compile scaling" ;;
         scripts/check-sugar.sh) add "sugar pairs" ;;
         scripts/mut-combos.py) add "let mut combos" ;;

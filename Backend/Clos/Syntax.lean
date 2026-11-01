@@ -44,12 +44,24 @@ inductive IOOp where
   /-- `clock_sleep (m, ns)`: wait at least `max(ns, 0)` nanoseconds on the clock in the cell `m`;
   the result is `m` (SPEC §34). -/
   | clockSleep
+  /-- `file_open (m, ((p, n), mode))`: `(m, r)`, the file at the path's bytes opened, `r` its
+  descriptor or a negative error (SPEC §34). -/
+  | fileOpen
+  /-- `file_read (m, (fd, (p, n)))`: `(m, ((p, n), r))`, one read into the view, `r` the count or
+  a negative error. -/
+  | fileRead
+  /-- `file_write (m, (fd, (p, n)))`: `(m, r)`, the view written, `r` `0` or a negative error. -/
+  | fileWrite
+  /-- `file_size (m, fd)`: `(m, r)`, the file's size or a negative error. -/
+  | fileSize
+  /-- `file_close (m, fd)`: `(m, r)`, `0` or a negative error; the descriptor is released. -/
+  | fileClose
   deriving Repr, DecidableEq
 
 /-- The lifetime parameters of an operation's extern: the `Λ`s before its argument. -/
 def IOOp.lifes : IOOp → Nat
-  | .readByte | .writeByte | .clockNow | .clockSleep => 1
-  | .writeAll | .readInto => 2
+  | .readByte | .writeByte | .clockNow | .clockSleep | .fileSize | .fileClose => 1
+  | .writeAll | .readInto | .fileOpen | .fileRead | .fileWrite => 2
 
 /-- The primitives of `[TR]` §1, §8 and §9, saturated, and the I/O operations of §11. -/
 inductive Op where

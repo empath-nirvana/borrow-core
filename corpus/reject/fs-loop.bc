@@ -1,0 +1,24 @@
+-- A `File` in an unbounded `loop` (SPEC §34, *Files*): a `loop` is codata whose close branch
+-- discards its state, and a `File` has no derived drop, so the loop cannot hold it. Refused. A
+-- loop over a file is counted, `for _ in 0..fs_max_reads { … } else { … }` (`corpus/fs-cat.bc`).
+include fs
+
+fn count(f: File) -> i32 with Fs, Fail[FsError] =
+  let mut f = f;
+  let mut b = string_new(16);
+  let mut sum = 0;
+  loop {
+    let (f2, (b2, n)) = read(f, b);
+    f = f2;
+    b = b2;
+    sum = sum + n;
+    if n == 0 { break } else { () }
+  };
+  close(f);
+  sum
+
+main -> i32 + FsError = with to_result {
+  let (p, f) = open(string_of_lit("in.txt"), Reading);
+  count(f)
+}
+-- expect: 7:11: `f` is not consumed in its scope, and its type `i32 * tok` is linear and has no derived drop: `File` holds the field `fd`, marked `must_close`; pass it to `close` before its scope ends

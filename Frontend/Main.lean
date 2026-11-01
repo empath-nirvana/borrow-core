@@ -21,6 +21,9 @@ import Backend2.Driver
     lake exe bcc run <file> [arg…]
                                 compile, and run under `wasmtime` with the arguments: `main`'s
                                 value, then the number of live objects after it is dropped
+    lake exe bcc run --dir <dir> <file> [arg…]
+                                as `run`, with the host directory `dir` preopened for the
+                                program's files (`wasmtime --dir`, SPEC §34)
     lake exe bcc run --native <file> [arg…]
                                 compile to LLVM IR, build it with `clang` beside the native
                                 runtime, and run it with the arguments
@@ -285,7 +288,7 @@ def compileTimed (file out : String) : IO UInt32 := do
 
 /-- Compile `file` and run it under `wasmtime` (with tail calls), with this process's standard
 input, output and error. -/
-def run (file : String) (args : List String) : IO UInt32 := do
+def run (file : String) (args : List String) (dirs : Array String := #[]) : IO UInt32 := do
   let src ← IO.FS.readFile file
   match Backend.compileWat file src with
   | .error e => IO.eprintln e; return 1
@@ -294,7 +297,8 @@ def run (file : String) (args : List String) : IO UInt32 := do
     let out := dir / "main.wat"
     IO.FS.writeFile out wat
     let child ← IO.Process.spawn
-      { cmd := "wasmtime", args := Backend.wasmtimeArgs.push out.toString ++ args.toArray,
+      { cmd := "wasmtime",
+        args := (Backend.wasmtimeArgs ++ dirs.flatMap (#["--dir", ·])).push out.toString ++ args.toArray,
         stdin := .inherit, stdout := .inherit, stderr := .inherit }
     let code ← child.wait
     IO.FS.removeDirAll dir
@@ -308,7 +312,7 @@ def compile2 (native : Bool) (file : String) (facts : Bool := true) : IO (Except
     if native then Backend2.llOf k (facts := facts) else Backend2.watOf k
 
 /-- Compile `file` by the new backend and run it under `wasmtime`. -/
-def run2 (file : String) (args : List String) : IO UInt32 := do
+def run2 (file : String) (args : List String) (dirs : Array String := #[]) : IO UInt32 := do
   match ← compile2 false file with
   | .error e => IO.eprintln e; return 1
   | .ok wat =>
@@ -316,7 +320,8 @@ def run2 (file : String) (args : List String) : IO UInt32 := do
     let out := dir / "main.wat"
     IO.FS.writeFile out wat
     let child ← IO.Process.spawn
-      { cmd := "wasmtime", args := Backend.wasmtimeArgs.push out.toString ++ args.toArray,
+      { cmd := "wasmtime",
+        args := (Backend.wasmtimeArgs ++ dirs.flatMap (#["--dir", ·])).push out.toString ++ args.toArray,
         stdin := .inherit, stdout := .inherit, stderr := .inherit }
     let code ← child.wait
     IO.FS.removeDirAll dir
@@ -569,6 +574,7 @@ def main (argv : List String) : IO UInt32 := do
     runLL (← compile2 true file (facts := false)) args
   | "run" :: "--backend" :: "new" :: "--native" :: file :: args => do
     runLL (← compile2 true file) args
+  | "run" :: "--backend" :: "new" :: "--dir" :: d :: file :: args => run2 file args #[d]
   | "run" :: "--backend" :: "new" :: file :: args => run2 file args
   | "run" :: "--backend" :: "old" :: file :: args => run file args
   | ["compile", file, "-o", out] => compile file out
@@ -576,6 +582,7 @@ def main (argv : List String) : IO UInt32 := do
   | ["compile", "--target", "native", file, "-o", out] => compileNative file out
   | ["compile", "--target", "wasm", file, "-o", out] => compile file out
   | "run" :: "--native" :: file :: args => runNative file args
+  | "run" :: "--dir" :: d :: file :: args => run file args #[d]
   | "run" :: file :: args => run file args
   | "interp" :: rest =>
     match parseInterpArgs rest {} with

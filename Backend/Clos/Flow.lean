@@ -191,6 +191,18 @@ def genPrim : Op → List Var → GM Key
       let m ← freshKey
       emit (.proj (.var p) 0 m)
       pure m
+  | .io .fileOpen, [p] | .io .fileWrite, [p] | .io .fileSize, [p] | .io .fileClose, [p] => do
+      let m ← freshKey
+      emit (.proj (.var p) 0 m)
+      holding (.pair m .none)
+  | .io .fileRead, [p] => do
+      let m ← freshKey
+      emit (.proj (.var p) 0 m)
+      let r ← freshKey
+      emit (.proj (.var p) 1 r)
+      let f ← freshKey
+      emit (.proj r 1 f)
+      holding (.pair m (← holding (.pair f .none)))
   | .io .readInto, [p] => do
       let m ← freshKey
       emit (.proj (.var p) 0 m)

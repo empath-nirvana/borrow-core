@@ -1,0 +1,207 @@
+-- `Fs` served by a fake (SPEC §34, *Files*): the functions of `fs-cat` and `json-field`'s read, a
+-- copy between two files, and the errors, each written over `Fs` and given it by its row, run
+-- under `fake_fs`, a handler of `Fs` alone: no host file is read, so every stage runs it, the
+-- source stage included. Nothing else differs from a run under the platform's handler.
+--
+-- `fake_fs` holds one readable file, `in.txt` (descriptor 3), its bytes and the read position,
+-- and one writable file, `out.txt` (descriptor 4), the bytes written to it. It is lawful by
+-- construction (`lib/fs.bc`'s laws): `fs_read` copies at most 5 of the next bytes into the
+-- buffer's spare room (at least one while there are more, `0` at the end or with no room),
+-- `fs_write` appends every byte, and any other path is not found, any other read or write a bad
+-- file.
+--
+-- * `cat`, `fs-cat`'s loop: the file printed in chunks of one reused buffer.
+-- * `slurp`: `read_all`, `json-field`'s read, sized by `fs_size`.
+-- * `copy_file`: two files open at once. A raising form may not be called with the other file open
+--   (it would be live across the raise: `corpus/reject/fs-two-files.bc`), so `copy_file` uses the
+--   operations, matches their sums, closes both files, and then raises the first error.
+-- * `ran_out`: a counted loop over a file whose fuel runs out first (2 reads of a 21-byte file in
+--   chunks of 5) takes its `else` arm: the file closed, `TooBig` raised, nothing cut short.
+-- * an open of an unknown path (`NotFound`), and a read of the writable file (`BadFile`, the file
+--   closed by `read` before the raise).
+--
+-- Answer: `in.txt` printed by `cat`, then by `slurp`; `too big`, `not found`, `bad file`; then
+-- `out.txt`, the copy; and `(((i32[21], i32[21]), i32[21]), i32[3])`, the three byte counts and
+-- the errors seen.
+include fs
+include textio
+
+type FakeFs = (string * i32) * string
+
+-- `k` bytes of `v` from `pos` appended to `b`.
+fn fill<'a>(b: string, v: text 'a, pos: i32, k: i32) -> string =
+  let mut b = b;
+  let mut v = v;
+  for i in 0..k {
+    let (v2, w) = array_copy['a, u8] v;
+    v = v2;
+    let (b2, _) = push_byte(b, at(w, pos + i, b'?'));
+    b = b2
+  };
+  array_forget['a, u8](v);
+  b
+
+handler fake_fs(mut st: FakeFs): Fs = {
+  fs_open(p, m) = {
+    let is_in = borrow imm p { v -> eq_lit(v, "in.txt") };
+    let is_out = borrow imm p { v -> eq_lit(v, "out.txt") };
+    -- An open of `in.txt` reads it from its start.
+    let ((src, pos), out) = st;
+    let pos = if is_in { 0 } else { pos };
+    st = ((src, pos), out);
+    let r = match m {
+      Reading -> if is_in { (inl File { fd: 3 } : File + FsError) } else { (inr NotFound : File + FsError) }
+    | Writing -> if is_out { (inl File { fd: 4 } : File + FsError) } else { (inr NotFound : File + FsError) }
+    };
+    (p, r)
+  };
+  fs_read(f, b) = {
+    match f { File { fd } ->
+      if fd == 3 {
+        let ((src, pos), out) = st;
+        let (src, fsize) = len_of(src);
+        let (a, n) = b;
+        let (a, room) = array_size[u8](a);
+        let left = fsize - pos;
+        let k0 = if room - n < left { room - n } else { left };
+        let k = if k0 > 5 { 5 } else { k0 };
+        let b = borrow imm src { v -> fill((a, n), v, pos, k) };
+        st = ((src, pos + k), out);
+        (File { fd: fd }, (b, (inl k : i32 + FsError)))
+      } else { (File { fd: fd }, (b, (inr BadFile : i32 + FsError))) }
+    }
+  };
+  fs_write(f, b) = {
+    match f { File { fd } ->
+      if fd == 4 {
+        let (src, out) = st;
+        let mut out = out;
+        borrow imm b { v -> let (o2, _) = push_str(out, v); out = o2 };
+        st = (src, out);
+        (File { fd: fd }, (b, (inl () : 1 + FsError)))
+      } else { (File { fd: fd }, (b, (inr BadFile : 1 + FsError))) }
+    }
+  };
+  fs_size(f) = {
+    match f { File { fd } ->
+      let ((src, pos), out) = st;
+      let (src, fsize) = len_of(src);
+      st = ((src, pos), out);
+      let n = if fd == 3 { fsize } else { 0 };
+      (File { fd: fd }, (inl n : i32 + FsError))
+    }
+  };
+  fs_close(f) = { match f { File { fd } -> (inl () : 1 + FsError) } }
+}
+
+-- `fs-cat`'s loop: the file printed, its size answered.
+fn cat(f: File) -> i32 with Fs, Stdout, Fail[FsError] =
+  let mut f = f;
+  let mut b = string_new(8);
+  let mut sum = 0;
+  let r = for _ in 0..fs_max_reads {
+    let (f2, (b2, n)) = read(f, b);
+    f = f2;
+    b = print_string(b2);
+    sum = sum + n;
+    if n == 0 { break (inl () : 1 + 1) } else { () }
+  } else { (inr () : 1 + 1) };
+  match r {
+    inl u -> close(f); sum
+  | inr u -> close_raise[i32](f, TooBig)
+  }
+
+-- `json-field`'s read: the file whole, printed; its length.
+fn slurp() -> i32 with Fs, Stdout, Fail[FsError] =
+  let (p, f) = open(string_of_lit("in.txt"), Reading);
+  let (f, s) = read_all(f);
+  close(f);
+  let s = print_string(s);
+  let (s, n) = len_of(s);
+  n
+
+-- `in.txt` copied to `out.txt` in chunks of 4 bytes, over the operations: the bytes copied.
+fn copy_file() -> i32 with Fs, Fail[FsError] =
+  let (p, src) = open(string_of_lit("in.txt"), Reading);
+  let (q, opened) = fs_open(string_of_lit("out.txt"), Writing);
+  match opened {
+    inr e -> close_raise[i32](src, e)
+  | inl dst ->
+      let mut src = src;
+      let mut dst = dst;
+      let mut b = string_new(4);
+      let mut n = 0;
+      let r = for _ in 0..fs_max_reads {
+        let (s2, (b2, x)) = fs_read(src, clear_str(b));
+        src = s2;
+        match x {
+          inr e -> b = b2; break (inr e : 1 + FsError)
+        | inl k ->
+            if k == 0 { b = b2; break (inl () : 1 + FsError) } else {
+              let (d2, (b3, y)) = fs_write(dst, b2);
+              dst = d2;
+              b = b3;
+              n = n + k;
+              match y { inr e -> break (inr e : 1 + FsError) | inl u -> () }
+            }
+        }
+      } else { (inr TooBig : 1 + FsError) };
+      let c1 = fs_close(src);
+      let c2 = fs_close(dst);
+      match r {
+        inr e -> raise(e)
+      | inl u -> match c1 {
+          inr e -> raise(e)
+        | inl u -> match c2 { inr e -> raise(e) | inl u -> n }
+        }
+      }
+  }
+
+-- A loop over `in.txt` with fuel for two reads of 5 bytes: it runs out.
+fn ran_out() -> i32 with Fs, Fail[FsError] =
+  let (p, f) = open(string_of_lit("in.txt"), Reading);
+  let mut f = f;
+  let mut b = string_new(5);
+  let mut sum = 0;
+  let r = for _ in 0..2 {
+    let (f2, (b2, n)) = read(f, b);
+    f = f2;
+    b = b2;
+    sum = sum + n;
+    if n == 0 { break (inl () : 1 + 1) } else { () }
+  } else { (inr () : 1 + 1) };
+  match r {
+    inl u -> close(f); sum
+  | inr u -> close_raise[i32](f, TooBig)
+  }
+
+-- The error's name on a line, and one more error seen.
+fn seen(e: FsError, k: i32) -> i32 with Stdout = print_lit(fs_error_name(e)); print_lit("\n"); k + 1
+
+-- `out.txt` opened, then read: a bad file.
+fn read_out() -> i32 with Fs, Fail[FsError] =
+  let (p, f) = open(string_of_lit("out.txt"), Writing);
+  let (f, (b, n)) = read(f, string_new(4));
+  close(f);
+  n
+
+fn run_all() -> ((i32 * i32) * i32) * i32 with Fs, Stdout =
+  let a = with default(0) { let (p, f) = open(string_of_lit("in.txt"), Reading); cat(f) };
+  let b = with default(0) { slurp() };
+  let c = with default(0) { copy_file() };
+  let mut errs = 0;
+  match with to_result { ran_out() } { inl n -> () | inr e -> errs = seen(e, errs) };
+  match with to_result { open(string_of_lit("nope"), Reading) } {
+    inl (p, f) -> let _ = with to_result { close(f) }; ()
+  | inr e -> errs = seen(e, errs)
+  };
+  match with to_result { read_out() } { inl n -> () | inr e -> errs = seen(e, errs) };
+  (((a, b), c), errs)
+
+main -> ((i32 * i32) * i32) * i32 =
+  let st : FakeFs = ((string_of_lit("{\"name\": \"fake\"}\nend\n"), 0), string_new(0));
+  let cell = alloc(st);
+  let counts = with fake_fs(&mut cell) { run_all() };
+  let (src, out) = free(cell);
+  let out = print_string(out);
+  counts

@@ -310,6 +310,25 @@ def primTy : Op → List Var → TM Nat
       let f ← newNode (.pair (← newLoc (← newNode (.int .w8))) (← int32))
       unify (← tyVar p) (← newNode (.pair l f))
       pure l
+  | .io .fileOpen, [p] => do
+      let l ← newLoc (← int32)
+      let f ← newNode (.pair (← newLoc (← newNode (.int .w8))) (← int32))
+      unify (← tyVar p) (← newNode (.pair l (← newNode (.pair f (← int32)))))
+      newNode (.pair l (← int32))
+  | .io .fileRead, [p] => do
+      let l ← newLoc (← int32)
+      let f ← newNode (.pair (← newLoc (← newNode (.int .w8))) (← int32))
+      unify (← tyVar p) (← newNode (.pair l (← newNode (.pair (← int32) f))))
+      newNode (.pair l (← newNode (.pair f (← int32))))
+  | .io .fileWrite, [p] => do
+      let l ← newLoc (← int32)
+      let f ← newNode (.pair (← newLoc (← newNode (.int .w8))) (← int32))
+      unify (← tyVar p) (← newNode (.pair l (← newNode (.pair (← int32) f))))
+      newNode (.pair l (← int32))
+  | .io .fileSize, [p] | .io .fileClose, [p] => do
+      let l ← newLoc (← int32)
+      unify (← tyVar p) (← newNode (.pair l (← int32)))
+      newNode (.pair l (← int32))
   | .io .readInto, [p] => do
       let l ← newLoc (← int32)
       let f ← newNode (.pair (← newLoc (← newNode (.int .w8))) (← int32))
