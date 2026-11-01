@@ -73,8 +73,11 @@ theorem imageShape_rT (δ : LSub) (x : LifeVar) (β : Life) (d : Loc) (v : Val) 
   simp [BoCa.Lifetime.Life.interp, find?_extend_self]
   rfl
 
+/-- The record of a lend of `c ↦ own(d)` at `ref S`. -/
+def recRS (S : VTy) (c d : Loc) (R₀ : WRes) : FrameRec := ⟨c, .loc d, R₀, .ref S, δ₀⟩
+
 /-- The record of the turn's lend. -/
-def recR (c d : Loc) (R₀ : WRes) : FrameRec := ⟨c, .loc d, R₀, rT, δ₀⟩
+def recR (c d : Loc) (R₀ : WRes) : FrameRec := recRS (.thunk .top) c d R₀
 
 /-- **The template exists** for the escrow `d ↦ own(u₀) ● e ↦ own(())`: the image with witness
 `∅` is typed. -/
@@ -111,8 +114,8 @@ def useR (d : Loc) : Expr := .app (.val dropV) (ldR d)
 in its continuation's share; after the resume the image reads `d` (6.143 at the index), the
 thunk read is discarded, and the image is dropped. -/
 theorem rebBody_ok {Φ : LocFam} (hΦ : Φ.Down) (c d : Loc) (R₀ : WRes) (A β : Life) (k : Nat)
-    (ls : List SRec) (Bχ : WRes)
-    (hpto : ptoImm d β (fun _ _ => True) Bχ) :
+    (ls : List SRec) (Bχ : WRes) (P : Val → WProp)
+    (hpto : ptoImm d β P Bχ) :
     erwp (ℍ := ℍ) Φ (opTableN T2) (RebPost β (IFPost c (.loc d) (PR d R₀) A (Qt c d R₀))) k ls
       (.seq Stage1.yE (useR d)) Bχ := by
   refine erwp_perform (T := T2) (en := yEnt) (K := .seq .hole (useR d)) (by simp [Kont.HasHnd])
@@ -126,7 +129,7 @@ theorem rebBody_ok {Φ : LocFam} (hΦ : Φ.Down) (c d : Loc) (R₀ : WRes) (A β
   refine erwp_step (opTableN_local T2) (fun μ => step1Only_plug (Head.seq μ _) rfl .hole) ?_
   have hplug : useR d = (Kont.appR (.val dropV) .hole).plug (ldR d) := rfl
   rw [hplug]
-  refine erwp_bindR hΦ (opTableN_local T2) (Kont.appR (.val dropV) .hole) (rwp_load_I ls' d β (fun _ _ => True) _
+  refine erwp_bindR hΦ (opTableN_local T2) (Kont.appR (.val dropV) .hole) (rwp_load_I ls' d β P _
     ⟨_, PMap.empty, ResU.comp_empty_right _, hpto, fun v ρc X hc hX => ?_⟩)
   obtain rfl := eq_of_compS_empty_left hX
   obtain ⟨s, u', σ, hs, rfl, -, -⟩ := hc
@@ -151,18 +154,22 @@ def lamX : Val := Val.lam (.seq Stage1.yE (.app (.val dropV) (.app (.val (.prim 
 /-- The lent computation: `(λx. y (); (λz. ()) (!x)) (!c)`. -/
 def lendRE (c : Loc) : Expr := .app (.val lamX) (ldR c)
 
-/-- **The lent computation**: loads `d` through the `imm` lend (6.143 at the index), then
-reborrows the field at `β = ↓A` across `y` (`erwp_reborrow`, at the canonical image). -/
-theorem lendR_ok {Φ : LocFam} (hΦ : Φ.Down) (c d e : Loc) (R₀ : WRes)
-    (hR₀ : ResU.CompS (ResU.single d (CellU.ownOf u₀)) (ResU.single e (CellU.ownOf .unit)) R₀)
+/-- **The lent computation, at every payload type**: loads `d` through the `imm` lend (6.143 at
+the index), then reborrows the field at `β = ↓A` across `y` (`erwp_reborrow`, at the canonical
+image). The record is at `ref S` for any closed `S` (a thunk, an opaque type, the type a type
+variable was instantiated at); the template exists once one image is handed (`hex`, as
+`tmpl_exists` gives it at the first entry). -/
+theorem lendRG_ok {Φ : LocFam} (hΦ : Φ.Down) (S : VTy) (hSc : ∀ x, ¬ VFree x S) (c d : Loc)
+    (u : Val) (RS R₀ : WRes) (hR₀ : ResU.CompS (ResU.single d (CellU.ownOf u)) RS R₀)
+    (hex : ∃ χ, TmplSpec (recRS S c d R₀) χ)
     (A : Life) (houtP : R₀.InStratum A) (k : Nat) (ls : List SRec) (hA : ∀ x ∈ ls, x.2 ⊐ A)
     (ds : List FrameRec) (BI : WRes)
     (hBI : ResU.CompS PMap.empty
       (ResU.single c (CellU.immOf (LSet.singleton A) (.loc d) R₀ houtP)) BI) :
     erwp (ℍ := ℍ) Φ (opTableN T2) (IFPost c (.loc d) (PR d R₀) A (Qt c d R₀)) k
-      (frameList (recR c d R₀) ds A ls) (lendRE c) BI := by
+      (frameList (recRS S c d R₀) ds A ls) (lendRE c) BI := by
   obtain rfl := eq_of_compS_empty_left hBI
-  set lsF := frameList (recR c d R₀) ds A ls with hlsF
+  set lsF := frameList (recRS S c d R₀) ds A ls with hlsF
   have hplug : lendRE c = (Kont.appR (.val lamX) .hole).plug (ldR c) := rfl
   rw [hplug]
   refine erwp_bindR hΦ (opTableN_local T2) _ (rwp_load_I lsF c A
@@ -186,12 +193,14 @@ theorem lendR_ok {Φ : LocFam} (hΦ : Φ.Down) (c d e : Loc) (R₀ : WRes)
       Val.i32, Val.unit, Val.loc, Expr.val, Val.prim, Val.lam]
   rw [e₁]
   -- the reborrow of the field, at `β = ↓A`
-  have hS := recR_tmpl (c := c) hR₀
-  have hRβ := R₀_inStratum (↓A) hR₀
-  have hshape := canon_ref (r := recR c d R₀) (S := .thunk .top) rfl
-    (x := 0) (by simp [VFree, CFree]) hS hRβ
-    (fun ℓ h => ⟨u₀, by rw [show ℓ = d from (BoCa.Val.loc_inj.mp h).symm]; exact pair_get_left hR₀⟩)
-  have hr : recR c d R₀ ∈ rsOf lsF := by rw [hlsF, rsOf_frameList]; exact List.mem_cons_self
+  have hS := tmpl_spec hex
+  have hRβ : R₀.InStratum (↓A) := fun m ψ e =>
+    CellU.InStratum.mono (Life.down_sqsubset A).le (houtP m ψ e)
+  have hshape := canon_ref (r := recRS S c d R₀) (S := S) rfl (x := 0) (hSc 0) hS hRβ
+    (fun ℓ h => ⟨u, by
+      rw [show ℓ = d from (BoCa.Val.loc_inj.mp h).symm]
+      exact (ResU.CompS.get_left_of_ne_imm hR₀ (ResU.single_get_self _ _) (by simp)).2⟩)
+  have hr : recRS S c d R₀ ∈ rsOf lsF := by rw [hlsF, rsOf_frameList]; exact List.mem_cons_self
   have hβls : ∀ y ∈ lsF, y.2 ⊐ ↓A := by
     intro y hy
     simp only [hlsF, frameList, List.mem_cons, List.mem_append, List.mem_map] at hy
@@ -199,7 +208,7 @@ theorem lendR_ok {Φ : LocFam} (hΦ : Φ.Down) (c d e : Loc) (R₀ : WRes)
     · exact Life.down_sqsubset A
     · exact Life.down_sqsubset A
     · exact lt_trans (Life.down_sqsubset A) (hA y hy)
-  refine erwp_reborrow (recR c d R₀) 0 (rT_free 0) hS hRβ hshape (T2_rebOK (↓A)) k₀ lsF _
+  refine erwp_reborrow (recRS S c d R₀) 0 (hSc 0) hS hRβ hshape (T2_rebOK (↓A)) k₀ lsF _
     PMap.empty _ (ResU.comp_empty_right _) (inStratum_empty _) hr hβls (fun Bχ hBχ => ?_)
   obtain rfl := eq_of_compS_empty_left hBχ
   obtain ⟨β', hint, ℓ, hk⟩ := hshape
@@ -210,7 +219,20 @@ theorem lendR_ok {Φ : LocFam} (hΦ : Φ.Down) (c d e : Loc) (R₀ : WRes)
     simp [BoCa.Lifetime.Life.interp, find?_extend_self] at hint
     exact (Option.some.inj hint).symm
   subst hβ'
-  exact rebBody_ok hΦ c d R₀ A _ k₀ lsF _ hpto
+  exact rebBody_ok hΦ c d R₀ A _ k₀ lsF _ _ hpto
+
+/-- **The lent computation** at the thunk payload: `lendRG_ok` at `S := thunk ⊤`, the template
+from the image with witness `∅` (`recR_tmpl`). -/
+theorem lendR_ok {Φ : LocFam} (hΦ : Φ.Down) (c d e : Loc) (R₀ : WRes)
+    (hR₀ : ResU.CompS (ResU.single d (CellU.ownOf u₀)) (ResU.single e (CellU.ownOf .unit)) R₀)
+    (A : Life) (houtP : R₀.InStratum A) (k : Nat) (ls : List SRec) (hA : ∀ x ∈ ls, x.2 ⊐ A)
+    (ds : List FrameRec) (BI : WRes)
+    (hBI : ResU.CompS PMap.empty
+      (ResU.single c (CellU.immOf (LSet.singleton A) (.loc d) R₀ houtP)) BI) :
+    erwp (ℍ := ℍ) Φ (opTableN T2) (IFPost c (.loc d) (PR d R₀) A (Qt c d R₀)) k
+      (frameList (recR c d R₀) ds A ls) (lendRE c) BI :=
+  lendRG_ok hΦ (.thunk .top) (fun x => by simp [VFree, CFree]) c d u₀ _ R₀ hR₀
+    ⟨_, recR_tmpl (c := c) hR₀⟩ A houtP k ls hA ds BI hBI
 
 /-! ### The turn -/
 
