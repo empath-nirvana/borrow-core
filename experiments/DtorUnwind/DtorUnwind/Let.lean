@@ -45,6 +45,8 @@ persistent type, needs none (`none`). A live slot of type `T` gets a λ-value `�
 `C/TI` with `T` the ambient row `Σ_D`. -/
 inductive Dtors (Δ : LifeCtx) (SD : Row) : Ctx VTy → List (Option Expr) → Prop where
   | nil : Dtors Δ SD [] []
+  /-- A consumed rest of the context needs no destructors. -/
+  | tail {Γ : Ctx VTy} (h : Ctx.Dead Γ) : Dtors Δ SD Γ []
   | dead {T : VTy} {Γ : Ctx VTy} {ds : List (Option Expr)} :
       Dtors Δ SD Γ ds → Dtors Δ SD (⟨T, false⟩ :: Γ) (none :: ds)
   | pers {T : VTy} {Γ : Ctx VTy} {ds : List (Option Expr)} (hT : T.Persistent) :
@@ -125,6 +127,9 @@ theorem dropCtx_derives {Δ : LifeCtx} {SD : Row} (hSD : ¬ SD.Cancels) :
   | _, _, .nil, P, hP => by
       simp only [List.append_nil, dropCtxE]
       exact .effSub (RowLe.nil SD) (.ret (.unitI hP))
+  | _, _, .tail h, P, hP => by
+      simp only [dropCtxE]
+      exact .effSub (RowLe.nil SD) (.ret (.unitI (deadP_append' hP h.toP)))
   | ⟨T, false⟩ :: Γ, none :: ds, .dead hd, P, hP => by
       have ih := dropCtx_derives hSD hd (P := P ++ [⟨T, false⟩]) (deadP_snoc hP (.inl rfl))
       simpa [dropCtxE, List.append_assoc] using ih

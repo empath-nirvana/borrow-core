@@ -6,3 +6,4 @@ import DtorUnwind.Loop
 import DtorUnwind.Lend
 import DtorUnwind.Suspend
 import DtorUnwind.Await
+import DtorUnwind.LoopAwait
