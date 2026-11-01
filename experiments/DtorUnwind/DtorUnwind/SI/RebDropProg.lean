@@ -301,6 +301,97 @@ theorem D3_ok (c d e : Loc) (R₀ : WRes)
     d u₀ (ResU.CompS.comm hcd) (fun k₂ => ?_) k₁
   exact rwp_free ls c (.loc d) _ ⟨_, PMap.empty, ResU.comp_empty_right _, rfl, rfl⟩
 
+/-! ### The program -/
+
+/-- The finaliser frame and the loop over `c`, given the destructor. -/
+def bodyCF (D : Val) : Expr :=
+  .app (.app (.val (.prim .ubind)) (.pair (.val D) (.val D)))
+    (.app (.val (.prim .iterate)) (.pair (.val fR) (.var 0)))
+
+/-- The destructor under `λe. λd. λc`. -/
+def D3var : Val :=
+  Val.lam (.app (.val (Val.lam (.app (.val (Val.lam (freeE (.var 3)))) (freeE (.var 3)))))
+    (freeE (.var 3)))
+
+/-- …once `e` is known. -/
+def D3e (e : Loc) : Val :=
+  Val.lam (.app (.val (Val.lam (.app (.val (Val.lam (freeE (.var 3)))) (freeE (.var 3)))))
+    (freeE (.val (Val.loc e))))
+
+/-- …once `d` and `e` are known. -/
+def D3de (d e : Loc) : Val :=
+  Val.lam (.app (.val (Val.lam (.app (.val (Val.lam (freeE (.var 3))))
+    (freeE (.val (Val.loc d)))))) (freeE (.val (Val.loc e))))
+
+/-- `λd. (λc. bodyCF D) (alloc d)`. -/
+def lamDC (D : Val) : Val := Val.lam (.app (.val (Val.lam (bodyCF D))) (.app (.val (.prim .alloc)) (.var 0)))
+
+/-- `(λe. lamDC D3var (alloc u₀)) (alloc ())`. -/
+def bodyRC : Expr :=
+  .app (.val (Val.lam (.app (.val (lamDC D3var)) (.app (.val (.prim .alloc)) (.val u₀)))))
+    (.app (.val (.prim .alloc)) (.val Val.unit))
+
+/-- `hnd_Div rtH (hnd_Y yDrop bodyRC)`. -/
+def progRebDrop : Expr := hndE DivRuntime.rtH (hndE yHC bodyRC)
+
+theorem bodyRC_ok (n : Nat) :
+    erwp (ℍ := ℍ) Φ₀ (opTableN (T2C (ℍ := ℍ))) QZ n [] bodyRC (PMap.empty : WRes) := by
+  have hD := opTableN_down (T2C_down (ℍ := ℍ))
+  have hL := opTableN_local (T2C (ℍ := ℍ))
+  refine erwp_alloc Φ₀_down hL (.appR (.val (Val.lam (.app (.val (lamDC D3var))
+    (.app (.val (.prim .alloc)) (.val u₀))))) .hole) Val.unit (fun e σ₁ σ₂ hcell hc => ?_)
+  obtain rfl := eq_of_compS_empty_left hc
+  refine erwp_det Φ₀_down hD QZ_down (fun μ => step1Only_plug (Head.beta μ _ _) rfl .hole) ?_
+  have h₁ : Kont.hole.plug (Expr.subst 0 (Val.loc e)
+      (.app (.val (lamDC D3var)) (.app (.val (.prim .alloc)) (.val u₀)))) =
+      (Kont.appR (.val (lamDC (D3e e))) .hole).plug (.app (.val (.prim .alloc)) (.val u₀)) := by
+    simp [Expr.subst, Expr.shift, Kont.plug, lamDC, bodyCF, D3var, D3e, fR, lamX, dropV, u₀, Stage1.idV,
+      Stage1.yE, performE, opPayload, freeE, Val.pair, Val.i32, Val.unit, Val.loc, Expr.val,
+      Val.prim, Val.lam]
+  rw [h₁]
+  refine erwp_alloc Φ₀_down hL (.appR (.val (lamDC (D3e e))) .hole) u₀
+    (fun d τ₁ τ₂ hcd hcd' => ?_)
+  refine erwp_det Φ₀_down hD QZ_down (fun μ => step1Only_plug (Head.beta μ _ _) rfl .hole) ?_
+  have h₂ : Kont.hole.plug (Expr.subst 0 (Val.loc d)
+      (.app (.val (Val.lam (bodyCF (D3e e)))) (.app (.val (.prim .alloc)) (.var 0)))) =
+      (Kont.appR (.val (Val.lam (bodyCF (D3de d e)))) .hole).plug
+        (.app (.val (.prim .alloc)) (.val (Val.loc d))) := by
+    simp [Expr.subst, Expr.shift, Kont.plug, bodyCF, D3e, D3de, fR, lamX, dropV, Stage1.yE, performE,
+      opPayload, freeE, Val.pair, Val.i32, Val.unit, Val.loc, Expr.val, Val.prim, Val.lam]
+  rw [h₂]
+  refine erwp_alloc Φ₀_down hL (.appR (.val (Val.lam (bodyCF (D3de d e)))) .hole) (Val.loc d)
+    (fun c υ₁ υ₂ hcc hcc' => ?_)
+  refine erwp_det Φ₀_down hD QZ_down (fun μ => step1Only_plug (Head.beta μ _ _) rfl .hole) ?_
+  have h₃ : Kont.hole.plug (Expr.subst 0 (Val.loc c) (bodyCF (D3de d e))) =
+      ubindE (Val.pair (D3v c d e) (D3v c d e)) (iterateE fR (Val.loc c)) := by
+    simp [Expr.subst, Kont.plug, bodyCF, D3de, D3v, ubindE, iterateE, freeE, Val.pair, Val.lam,
+      Val.loc, Expr.val, Val.prim, Expr.shift,
+      subst_closedAt _ _ (show closedAt 0 fR.1 = true from rfl) (Nat.zero_le _)]
+  rw [h₃]
+  subst hcell hcd hcc
+  have hR₀ := ResU.CompS.comm hcd'
+  refine erwp_ubindClaim Φ₀_down T2C_down empty_down (fun _ _ _ h => by cases h) T2C_e T2C_fin
+    (D3v c d e) (D3v c d e) (D3_ok c d e _ hR₀) QZ_down (Qin := QF) (fun _ _ _ _ h => h.elim)
+    _ _ _ _ ?_
+  refine erwp_iterate Φ₀_down (T2R_down c d _)
+    (T2R_ctxClosed c d _ _ (fun m => by simp [iterK, Kont.HasHnd])
+      (fun m => by simp [iterK, Kont.Catches])) QF_down rfl (I := IRf c d _) (en := tickEnt)
+    (by simp [OpTabN.claimT, T2C, T1, tickEnt, Stage1.divEff_ne6]) rfl rfl
+    (fun _ _ => ⟨rfl, rfl⟩) (fun _ _ _ _ h => h) (fun s ρ ⟨hs, _⟩ => by subst hs; rfl)
+    (fun k s ls ρ hI => turnRC_ok c d e _ hR₀ k s ls ρ hI) _ _ _ _
+    ⟨rfl, ResU.CompS.comm hcc'⟩
+
+theorem progRebDrop_ok (n : Nat) :
+    erwp (ℍ := ℍ) Φ₀ (opTableN OpTabN.empty) QZ n [] progRebDrop (PMap.empty : WRes) :=
+  erwp_rtH Φ₀_down n [] _ _ (erwp_yHC n [] _ _ (bodyRC_ok n))
+
+/-- **The reborrow drop test.** As `progReb_orDiverges`, with `y` cancellable and the scheduler
+dropping the stored `κ`: the cancel unwinds through the live reborrow and the `imm` lend to the
+finaliser frame, whose destructor frees the three cells. Every configuration a run reaches is a
+value or steps, a value only at the empty memory, and every `free` finds its cell. No fuel. -/
+theorem progRebDrop_orDiverges : LoopAwait.OrDiverges (ℍ := ℍ) progRebDrop :=
+  erwp_adequacy (Φ := Φ₀) (fun _ _ _ _ h => h) progRebDrop_ok
+
 end BoCa.Fig16.LogRel.Core.DtorUnwind.SI.RebProg
 
 end
