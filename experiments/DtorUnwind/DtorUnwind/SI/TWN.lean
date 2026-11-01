@@ -92,7 +92,8 @@ inductive TWN : WRes → List FrameRec → List FrameRec → Prop
       TWN W ps rs → r ∈ rs → Chain r.R r.T r.v p l₀ S₀ u₀ →
       W.get l₀ = some (CellU.immOf s u₀ w₀ hs) → ¬ VFree x S₀ → ResU.Reb β w₀ c →
       vShape (S₀.immReborrow (.var x)) (r.δ.extend x β) u₀ c →
-      W.InStratum β → ResU.CompS W c W' → ResU.Valid W' → TWN W' ps rs
+      (CellU.immOf s u₀ w₀ hs).InStratum β → RebRecLe W ps w₀ β →
+      ResU.CompS W c W' → ResU.Valid W' → TWN W' ps rs
   | mutFold {W X Z ρ W' : WRes} {ps rs : List FrameRec} {l : Loc} {v : Val} {b : Life}
       {hstr : ρ.InStratum b} {P : Val → SPropS Loc Val b} {hw : P v ⟨ρ, hstr⟩} :
       TWN W ps rs → ResU.CompS (ResU.single l (CellU.ownOf v)) ρ X → ResU.CompS X Z W →
@@ -125,7 +126,7 @@ inductive TWN : WRes → List FrameRec → List FrameRec → Prop
       {β : Life} :
       TWN W ps rs → r ∈ rs → Chain r.R r.T r.v p l₀ S₀ u₀ →
       W'.get l₀ = some (CellU.immOf s u₀ w₀ hs) → ResU.Reb β w₀ c →
-      ResU.CompS W' (c.restrictDom w₀.exclPart) W → W'.InStratum β → TWN W' ps rs
+      ResU.CompS W' (c.restrictDom w₀.exclPart) W → RebEndRec W' rs w₀ β → TWN W' ps rs
 
 theorem TWN.valid {W : WRes} {ps rs : List FrameRec} (h : TWN W ps rs) : ResU.Valid W := by
   induction h with
@@ -133,7 +134,7 @@ theorem TWN.valid {W : WRes} {ps rs : List FrameRec} (h : TWN W ps rs) : ResU.Va
   | alloc _ _ _ _ hv _ => exact hv
   | immFrame _ _ _ _ _ _ _ _ _ hv _ _ => exact hv
   | reb _ _ _ _ _ _ _ _ _ _ hv _ => exact hv
-  | rebDeep _ _ _ _ _ _ _ _ _ _ _ hv _ => exact hv
+  | rebDeep _ _ _ _ _ _ _ _ _ _ _ _ hv _ => exact hv
   | mutFold _ _ _ _ hv _ => exact hv
   | mutUnfold _ _ _ _ hv _ => exact hv
   | free _ _ hv _ => exact hv
@@ -320,6 +321,58 @@ theorem frameLife_reb_rec {W W' c w₀ : WRes} {le : Loc} {s : LSet} {v : Val}
     · exact h.2 aW haW m hm ζ' t' e' ht' x hx'
     · exact hβα ⟨m, hm, ζ', e', k'⟩
 
+/-- `ti_rebDeep` with `W ∈ Res_β` read where it is used: at the view's own cell, which is longer
+than `β`. -/
+theorem ti_rebDeepN {W W' c : WRes} {ps rs : List FrameRec} {r₀ : FrameRec} {p₀ : Option Loc}
+    {l₁ : Loc} {S₀ : VTy} {u₀ : Val} {s : LSet} {w₀ : WRes} {hs : w₀.InStratum s.join}
+    {β : Life} {x : LifeVar}
+    (hvW : ResU.Valid W) (hr₀ : r₀ ∈ rs) (hch₀ : Chain r₀.R r₀.T r₀.v p₀ l₁ S₀ u₀)
+    (hcell : W.get l₁ = some (CellU.immOf s u₀ w₀ hs)) (hx : ¬ VFree x S₀)
+    (hreb : ResU.Reb β w₀ c) (hden : vShape (S₀.immReborrow (.var x)) (r₀.δ.extend x β) u₀ c)
+    (hβc : (CellU.immOf s u₀ w₀ hs).InStratum β) (hW : ResU.CompS W c W') (hv : ResU.Valid W') (h : TI W ps rs) :
+    TI W' ps rs := by
+  obtain ⟨h3, hl, hid, hio, hN, hM, hmem, hC⟩ := h
+  have hR₀ := (h3.2.2.2.1 r₀ hr₀).1
+  obtain ⟨aW, haW⟩ := agW_of_valid hvW
+  obtain ⟨χ, eχ, kχ, -, wχ⟩ := AgW.get_imm haW hcell (CellU.kind_immOf _ _ _ _)
+  rw [CellU.wit_immOf] at wχ
+  obtain ⟨-, hw₀den, hw₀own, -, -⟩ :=
+    h3.1 r₀ hr₀ p₀ l₁ S₀ u₀ hch₀ aW haW χ eχ (by rw [kχ]; simp)
+  rw [wχ] at hw₀den hw₀own
+  have hl' := leInv_of_reb hvW hW hl
+  obtain ⟨hN', hM'⟩ := nm_reb_like hvW hcell hreb hW hN hM
+    (fun aW₁ haW₁ a' ha' r hr l₀ m S u hc u' hown hφ => by
+      rw [AgW.functional haW₁ haW] at *
+      have e₁ : r = r₀ := h3.2.2.1 r hr r₀ hr₀ m u u' hc.own (hw₀own m u' hown)
+      subst e₁
+      obtain ⟨φ, eφ⟩ := hφ
+      obtain ⟨ζ, eζ, hpos⟩ := image_dom S₀ hden hw₀den eφ
+      rw [hown] at eζ; cases Option.some.inj eζ
+      obtain ⟨S', hS'⟩ := hpos rfl
+      have hl := (chain_unique_rec hR₀ hc (hch₀.snoc hS' (hw₀own m u' hown))).1
+      have hl' : l₀ = l₁ := Option.some.inj hl
+      subst hl'
+      obtain ⟨aW', ac, haW', -, hcomp⟩ := (AgW.split hW).mp ha'
+      rw [AgW.functional haW' haW] at hcomp
+      obtain ⟨ξ, t, eξ, ht, hy⟩ :=
+        (icp_trans (icpAt_agW haW l₀ _ hcell) (icpAt_left hcomp l₀)).ls
+          (CellU.lsOf_immOf _ _ _ _) s.meet_mem
+      exact ⟨ξ, t, s.meet, eξ, ht, hy, hβc⟩)
+  refine ⟨chainInv_rebDeep hvW hr₀ hch₀ hcell hx hreb hden hW hv h3, hl', hid, hio, hN', hM', hmem,
+    ?_⟩
+  refine cov_reb_like hvW hcell hreb hW hC (leInvW_of hl' hmem) (fun m u eζ ⟨ψ, ec⟩ => ?_)
+    (fun m ζ eζ kζ ⟨ψ, ec⟩ => ?_)
+  · obtain ⟨ζ', eζ', hpos⟩ := image_dom S₀ hden hw₀den ec
+    rw [eζ] at eζ'; cases Option.some.inj eζ'
+    obtain ⟨S, hS⟩ := hpos rfl
+    exact ⟨r₀, hr₀, some l₁, S, u, hch₀.snoc hS (hw₀own m u eζ)⟩
+  · obtain ⟨S, hS⟩ := image_dom_mut S₀ hden hw₀den ec eζ kζ
+    have hg : GPos r₀.R r₀.T r₀.v m S := GPos.of_chain hch₀ hS
+    obtain ⟨ζ', eζ', kζ', -⟩ := gpos_mut_cell hg hR₀ (fun _ _ e => e)
+    obtain ⟨p, hp, hpr⟩ := (hmem r₀).mp hr₀
+    refine ⟨⟨m, ζ'.erase, ζ'.wit, S, r₀.δ⟩, (hmem _).mpr ⟨p, hp, hpr.sub ?_⟩, rfl⟩
+    exact ⟨rfl, hg, ζ', eζ', kζ', rfl, rfl⟩
+
 /-- Every `TWN` world satisfies `TI`. -/
 theorem TWN.inv {W : WRes} {ps rs : List FrameRec} (h : TWN W ps rs) : TI W ps rs := by
   induction h with
@@ -343,8 +396,8 @@ theorem TWN.inv {W : WRes} {ps rs : List FrameRec} (h : TWN W ps rs) : TI W ps r
       exact ti_frame hW₀.valid hadm hX hW hden hW' hv hds ih
   | reb r x hW₀ hr hle hx hreb hden _ hW hv ih =>
       exact ti_reb hW₀.valid hr hle hx hreb hden hW hv ih
-  | rebDeep r x hW₀ hr hch hcell hx hreb hden hβ hW hv ih =>
-      exact ti_rebDeep hW₀.valid hr hch hcell hx hreb hden hβ hW hv ih
+  | rebDeep r x hW₀ hr hch hcell hx hreb hden hβc _ hW hv ih =>
+      exact ti_rebDeepN hW₀.valid hr hch hcell hx hreb hden hβc hW hv ih
   | mutFold hW₀ hX hW hW' _ ih => exact ti_mutFold hW₀.valid hX hW hW' ih
   | mutUnfold hW₀ hW hX hW' _ ih =>
       refine ti_of_ag (fun a ha => (mut_fold_ag hX hW' hW a).mp ha) (fun x hm => ?_) ih
@@ -380,7 +433,7 @@ theorem TWN.inv {W : WRes} {ps rs : List FrameRec} (h : TWN W ps rs) : TI W ps r
         obtain ⟨-, -, o, -, -⟩ := ih.1.1 r hr p l₀ S₀ u₀ hch aW haW ψ₀ e₀ k₀
         rw [w₀', wχ, CellU.wit_immOf] at o
         exact ih.2.2.2.1 r' hr' r hr u (o _ u hu)
-      exact ti_endReb hvW hle hreb hW hβ hexcl ih
+      exact ti_endRebN hvW hle hreb hW hβ hexcl ih
 
 
 /-- Every `TWN` world satisfies `LinLife`. -/
@@ -400,7 +453,7 @@ theorem TWN.linLife {W : WRes} {ps rs : List FrameRec} (h : TWN W ps rs) : LinLi
       · exact (hTI.2.2.2.1 p hpR r hr u e).elim
       · exact CellU.kind_immOf _ _ _ _
       · exact (hTI.2.2.2.2.2.1.1 p hp (mutAt_of_cell hle (MutAt.top e (by simp)))).elim
-  | @rebDeep W W' c ps rs r p₀ l₁ S₀ u₀ s w₀ hs β x hW₀ hr hch hcell hx hreb hden hβ hW hv
+  | @rebDeep W W' c ps rs r p₀ l₁ S₀ u₀ s w₀ hs β x hW₀ hr hch hcell hx hreb hden _ hβ hW hv
       ih =>
       have hTI := hW₀.inv
       have hvW := hW₀.valid
@@ -413,8 +466,7 @@ theorem TWN.linLife {W : WRes} {ps rs : List FrameRec} (h : TWN W ps rs) : LinLi
       intro p hp
       obtain ⟨α, hα⟩ := ih p hp
       have hpR : p ∈ rs := (hTI.2.2.2.2.2.2.1 p).mpr ⟨p, hp, DescR.refl p⟩
-      refine ⟨α, frameLife_reb_like hvW hcell hreb hW (stratumLe_of_inStratum hβ) (fun ζ e => ?_)
-        (fun a ha => by obtain ⟨ψ, e, k, -⟩ := hTI.2.1 p hp a ha; exact ⟨ψ, e, k⟩) hα⟩
+      refine ⟨α, frameLife_reb_rec hvW hcell hreb hW (fun ζ e => ?_) (hβ p hp α hα) hα⟩
       rcases CellU.rep ζ with ⟨u, rfl⟩ | ⟨s₁, v₁, χ₁, h₁, rfl⟩ | ⟨b₁, v₁, χ₁, h₁, P, hw, rfl⟩
       · exact (hTI.2.2.2.1 p hpR r hr u (hw₀own _ u e)).elim
       · exact CellU.kind_immOf _ _ _ _
@@ -531,7 +583,7 @@ theorem TWN.properRoot {W : WRes} {ps rs : List FrameRec} (h : TWN W ps rs) : Pr
       exact fun p hp p' hp' hd => ih p ((hps p).mp hp).1 p' ((hps p').mp hp').1 hd
   | alloc _ _ _ _ _ ih => exact ih
   | reb _ _ _ _ _ _ _ _ _ _ _ ih => exact ih
-  | rebDeep _ _ _ _ _ _ _ _ _ _ _ _ ih => exact ih
+  | rebDeep _ _ _ _ _ _ _ _ _ _ _ _ _ ih => exact ih
   | mutFold _ _ _ _ _ ih => exact ih
   | mutUnfold _ _ _ _ _ ih => exact ih
   | free _ _ _ ih => exact ih
@@ -582,8 +634,9 @@ theorem twN_of_tw {W : WRes} {ps rs : List FrameRec} (h : TW W ps rs) : TWN W ps
       exact .immFrame T δ hα ih hadm hX hW hden hW' hv hds
   | reb r x hW₀ hr hle hx hreb hden hβ hW hv ih =>
       exact .reb r x ih hr hle hx hreb hden (rebRecLe_of_stratumLe hW₀ _ hβ) hW hv
-  | rebDeep r x _ hr hch hcell hx hreb hden hβ hW hv ih =>
-      exact .rebDeep r x ih hr hch hcell hx hreb hden hβ hW hv
+  | rebDeep r x hW₀ hr hch hcell hx hreb hden hβ hW hv ih =>
+      exact .rebDeep r x ih hr hch hcell hx hreb hden (hβ _ _ hcell)
+        (rebRecLe_of_stratumLe hW₀ _ (stratumLe_of_inStratum hβ)) hW hv
   | mutFold _ hX hW hW' hv ih => exact .mutFold ih hX hW hW' hv
   | mutUnfold _ hW hX hW' hv ih => exact .mutUnfold ih hW hX hW' hv
   | free _ hW hv ih => exact .free ih hW hv
@@ -591,7 +644,8 @@ theorem twN_of_tw {W : WRes} {ps rs : List FrameRec} (h : TW W ps rs) : TWN W ps
   | immEnd r _ hr hc hX' hW' hv hps hrs ih => exact .immEnd r ih hr hc hX' hW' hv hps hrs
   | rebEnd r _ hr hle hreb hW hβ ih =>
       exact .rebEnd r ih hr hle hreb hW (rebEndRec_of_inStratum hβ)
-  | rebEndDeep r _ hr hch hle hreb hW hβ ih => exact .rebEndDeep r ih hr hch hle hreb hW hβ
+  | rebEndDeep r _ hr hch hle hreb hW hβ ih =>
+      exact .rebEndDeep r ih hr hch hle hreb hW (rebEndRec_of_inStratum hβ)
 
 end BoCa.Fig16.LogRel.Core.DtorUnwind.SI
 

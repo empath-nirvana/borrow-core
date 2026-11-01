@@ -70,8 +70,35 @@ theorem canon_reb {r : FrameRec} {β : Life} (hS : TmplSpec r (tmpl r)) (hRβ : 
   obtain ⟨β₀, -, -, hreb, -⟩ := hS
   exact relabel_reb hRβ hreb
 
+/-- A typed image of a chain view's escrow `w₀` (the view at a position of type `S₀` holding
+`u₀`), with `ag` defined: what `TW.rebDeep` asks of an image. -/
+def TmplSpecD (r : FrameRec) (S₀ : VTy) (u₀ : Val) (w₀ c : WRes) : Prop :=
+  ∃ (β : Life) (x : LifeVar), ¬ VFree x S₀ ∧ ResU.Reb β w₀ c ∧
+    vShape (S₀.immReborrow (.var x)) (r.δ.extend x β) u₀ c ∧ ∃ A, AgW c A
+
+open Classical in
+/-- **A chain view's template**: one typed image of the view's escrow, fixed for the record,
+the position's type and value, and the escrow. -/
+def tmplD (r : FrameRec) (S₀ : VTy) (u₀ : Val) (w₀ : WRes) : WRes :=
+  if h : ∃ c, TmplSpecD r S₀ u₀ w₀ c then Classical.choose h else PMap.empty
+
+theorem tmplD_spec {r : FrameRec} {S₀ : VTy} {u₀ : Val} {w₀ : WRes}
+    (h : ∃ c, TmplSpecD r S₀ u₀ w₀ c) : TmplSpecD r S₀ u₀ w₀ (tmplD r S₀ u₀ w₀) := by
+  unfold tmplD; rw [dif_pos h]; exact Classical.choose_spec h
+
+/-- **The canonical image of a chain view at `β`**: the view's template re-taken at `β`. -/
+def canonD (r : FrameRec) (S₀ : VTy) (u₀ : Val) (w₀ : WRes) (β : Life) : WRes :=
+  relRes w₀ β (tmplD r S₀ u₀ w₀)
+
+theorem canonD_get {r : FrameRec} {S₀ : VTy} {u₀ : Val} {w₀ : WRes} {β : Life} {m : Loc}
+    {ψ : CellU Loc Val} (e : (canonD r S₀ u₀ w₀ β).get m = some ψ) :
+    ∃ ζ, (tmplD r S₀ u₀ w₀).get m = some ζ ∧ ψ.wit = ζ.wit := by
+  rw [canonD, relRes_get] at e
+  obtain ⟨ζ, eζ, rfl⟩ := Option.map_eq_some_iff.mp e
+  exact ⟨ζ, eζ, (relCell_props w₀ β m ζ).2.1⟩
+
 /-- The typed world with canonical images: `TWN` with `reb`'s image required to be
-`canon r β`.  `[about ours: new design beside TWN; SI/CanonN.lean's header]` -/
+`canon r β` and `rebDeep`'s `canonD r S₀ u₀ w₀ β`.  `[about ours: new design beside TWN; SI/CanonN.lean's header]` -/
 inductive TWNC : WRes → List FrameRec → List FrameRec → Prop
   | empty : TWNC PMap.empty [] []
   | alloc {W W' : WRes} {ps rs : List FrameRec} {μ : BoCa.BoLo.Heap} {l : Loc} {v : Val} :
@@ -96,7 +123,8 @@ inductive TWNC : WRes → List FrameRec → List FrameRec → Prop
       TWNC W ps rs → r ∈ rs → Chain r.R r.T r.v p l₀ S₀ u₀ →
       W.get l₀ = some (CellU.immOf s u₀ w₀ hs) → ¬ VFree x S₀ → ResU.Reb β w₀ c →
       vShape (S₀.immReborrow (.var x)) (r.δ.extend x β) u₀ c →
-      W.InStratum β → ResU.CompS W c W' → ResU.Valid W' → TWNC W' ps rs
+      (CellU.immOf s u₀ w₀ hs).InStratum β → RebRecLe W ps w₀ β → c = canonD r S₀ u₀ w₀ β →
+      ResU.CompS W c W' → ResU.Valid W' → TWNC W' ps rs
   | mutFold {W X Z ρ W' : WRes} {ps rs : List FrameRec} {l : Loc} {v : Val} {b : Life}
       {hstr : ρ.InStratum b} {P : Val → SPropS Loc Val b} {hw : P v ⟨ρ, hstr⟩} :
       TWNC W ps rs → ResU.CompS (ResU.single l (CellU.ownOf v)) ρ X → ResU.CompS X Z W →
@@ -129,7 +157,7 @@ inductive TWNC : WRes → List FrameRec → List FrameRec → Prop
       {β : Life} :
       TWNC W ps rs → r ∈ rs → Chain r.R r.T r.v p l₀ S₀ u₀ →
       W'.get l₀ = some (CellU.immOf s u₀ w₀ hs) → ResU.Reb β w₀ c →
-      ResU.CompS W' (c.restrictDom w₀.exclPart) W → W'.InStratum β → TWNC W' ps rs
+      ResU.CompS W' (c.restrictDom w₀.exclPart) W → RebEndRec W' rs w₀ β → TWNC W' ps rs
 
 /-- Every `TWNC` world is a `TWN` world: `TWN`'s invariants (`TI`, `LinLife`, `ProperRoot`)
 hold of it. -/
@@ -141,8 +169,8 @@ theorem TWNC.toN {W : WRes} {ps rs : List FrameRec} (h : TWNC W ps rs) : TWN W p
       exact .immFrame T δ hα ih hadm hX hW hden hW' hv hds
   | reb r x _ hr hle hx hreb hden hβ _ hW hv ih =>
       exact .reb r x ih hr hle hx hreb hden hβ hW hv
-  | rebDeep r x _ hr hch hcell hx hreb hden hβ hW hv ih =>
-      exact .rebDeep r x ih hr hch hcell hx hreb hden hβ hW hv
+  | rebDeep r x _ hr hch hcell hx hreb hden hβc hrec _ hW hv ih =>
+      exact .rebDeep r x ih hr hch hcell hx hreb hden hβc hrec hW hv
   | mutFold _ hX hW hW' hv ih => exact .mutFold ih hX hW hW' hv
   | mutUnfold _ hW hX hW' hv ih => exact .mutUnfold ih hW hX hW' hv
   | free _ hW hv ih => exact .free ih hW hv
@@ -236,8 +264,8 @@ theorem TWNC.templ {W : WRes} {ps rs : List FrameRec} (h : TWNC W ps rs) :
         obtain ⟨ζ, eζ, wζ⟩ := canon_get hcl
         rw [CellU.wit_immOf] at wζ
         exact ⟨ζ, eζ, hw.trans wζ⟩
-  | @rebDeep W W' c ps rs r₀ p₀ l₀ S₀ u₀ s w₀ hs β x hW₀ hr₀ hch₀ hcell hx hreb hden hβ hW hv
-      ih =>
+  | @rebDeep W W' c ps rs r₀ p₀ l₀ S₀ u₀ s w₀ hs β x hW₀ hr₀ hch₀ hcell hx hreb hden hβ _ _ hW
+      hv ih =>
       intro r hr
       have hTI := hW₀.toN.inv
       obtain ⟨⟨h1, -, h3, h4, -, -⟩, -⟩ := hTI
