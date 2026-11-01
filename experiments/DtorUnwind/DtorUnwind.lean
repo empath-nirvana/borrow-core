@@ -38,3 +38,4 @@ import DtorUnwind.SI.UbindN
 import DtorUnwind.SI.LendDropProg
 import DtorUnwind.SI.UbindGN
 import DtorUnwind.SI.IStopN
+import DtorUnwind.SI.ILendProg
