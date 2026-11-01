@@ -15,8 +15,10 @@ hypothesis covers since `k′ < k ≤ n`: the stop's continuation is owed only a
 no `hdv` (guardedness) premise is needed.
 
 Scope of this file: the handler's non-abortive operations are unrestricted (`unr`, `κ` the plain
-`kappa` and its share empty, `hunr`); a must-resume or cancellable `κ` owns a cell
-(`kappaCell`), and its resumption and its cancel run are not yet transcribed at the index.
+`kappa`, its share empty) or must resume (`lin`, `κ` owning its cell, `kappaCell`, whose
+resumption frees the cell). A cancellable operation (`cancel`) is excluded (`hnc`): its `κ`'s
+cancel branch runs `ccatch (K†[raise …])` at the cancel row's table (`ewp_ccatch`), which is not
+yet transcribed at the index.
 -/
 
 noncomputable section
@@ -83,15 +85,88 @@ theorem final_opPlug {K : Kont} {r : Bool} {p : Val} {n : UInt32}
     Final (ℍ := ℍ) μ (K.plug (opE r p)) :=
   fun _ _ h => opPlug_no_step hn hK h
 
+/-! ### The capture cell at the index -/
+
+/-- An allocation at an evaluation position, in front of an `erwp` (`ewp_alloc`): `rwp_alloc`
+(6.141 at the index) and bind; the rest of the run at the index the step left. -/
+theorem erwp_alloc {Φ : LocFam} (hΦ : Φ.Down) {Tb : TableN} (hL : Tb.Local) {Q : PostN}
+    (Kc : Kont) (v : Val) {n : Nat} {ls : List SRec} {ρ : WRes}
+    (h : ∀ ℓ : Loc, (ptoOwn ℓ v ─⋆
+      erwp (ℍ := ℍ) Φ Tb Q (n - 1) ls (Kc.plug (.val (Val.loc ℓ)))) ρ) :
+    erwp (ℍ := ℍ) Φ Tb Q n ls (Kc.plug (.app (.val (.prim .alloc)) (.val v))) ρ := by
+  rw [erwp_eq]
+  refine rwpG_bind hΦ Kc ?_
+  have ha := rwp_alloc (ℍ := ℍ) (Φ := Φ) ls v
+    (fun k ls' w => rwpG (ℍ := ℍ) Φ (erwpPost Tb Q (erwpC (ℍ := ℍ) Φ Tb Q n)) k ls'
+      (Kc.plug w.1)) (n := n) (ρ := ρ)
+    (fun ℓ σ₁ σ₂ hp hc => erwp_unfold_at hL (Nat.sub_le n 1) (h ℓ σ₁ σ₂ hp hc))
+  rw [rwp_iff_rwpG] at ha
+  exact rwpG_mono (fun _ _ _ _ ⟨w, hw, hq⟩ => hw ▸ hq) ha
+
+/-- A release of an owned cell at an evaluation position, in front of an `erwp` (`ewp_free`). -/
+theorem erwp_free {Φ : LocFam} (hΦ : Φ.Down) {Tb : TableN} (hL : Tb.Local) {Q : PostN}
+    (Kc : Kont) (ℓ : Loc) (v : Val) {n : Nat} {ls : List SRec} {ρ : WRes}
+    (h : (ptoOwn ℓ v ⋆ erwp (ℍ := ℍ) Φ Tb Q (n - 1) ls (Kc.plug (.val v))) ρ) :
+    erwp (ℍ := ℍ) Φ Tb Q n ls (Kc.plug (BoLo.freeE (.val (Val.loc ℓ)))) ρ := by
+  rw [erwp_eq]
+  refine rwpG_bind hΦ Kc ?_
+  obtain ⟨ρ₁, ρ₂, hc, hp, hq⟩ := h
+  have hf := rwp_free (ℍ := ℍ) (Φ := Φ) ls ℓ v
+    (fun k ls' w => rwpG (ℍ := ℍ) Φ (erwpPost Tb Q (erwpC (ℍ := ℍ) Φ Tb Q n)) k ls'
+      (Kc.plug w.1)) (n := n) (ρ := ρ)
+    ⟨ρ₁, ρ₂, hc, hp, erwp_unfold_at hL (Nat.sub_le n 1) hq⟩
+  rw [rwp_iff_rwpG] at hf
+  exact rwpG_mono (fun _ _ _ _ ⟨w, hw, hq⟩ => hw ▸ hq) hf
+
+/-- **The capture cell's allocation at the index** (`ewp_kappaCell`). -/
+theorem erwp_kappaCell {Φ : LocFam} (hΦ : Φ.Down) {Tb : TableN} (hL : Tb.Local)
+    (hTd : Tb.Down) {Q : PostN} (hQ : Q.Down) (hasCancel : Bool) (H : Val) (K : Kont)
+    (Kc : Kont) {n : Nat} {ls : List SRec} {ρ : WRes}
+    (h : ∀ ℓ : Loc, (ptoOwn ℓ Val.unit ─⋆
+      erwp (ℍ := ℍ) Φ Tb Q (n - 1) ls (Kc.plug (kappaC hasCancel ℓ H K))) ρ) :
+    erwp (ℍ := ℍ) Φ Tb Q n ls (Kc.plug (kappaCell hasCancel H K)) ρ := by
+  have e : Kc.plug (kappaCell hasCancel H K) =
+      (Kc.comp (.appR (.val (.lam (BoLo.kappaCBody hasCancel H K))) .hole)).plug
+        (.app (.val (.prim .alloc)) (.val Val.unit)) := by
+    rw [Kont.plug_comp]; rfl
+  rw [e]
+  refine erwp_alloc hΦ hL _ Val.unit (fun ℓ σ₁ σ₂ hp hc => ?_)
+  rw [Kont.plug_comp]
+  refine erwp_det hΦ hTd hQ (fun μ => step1Only_plug (Head.beta μ _ (Val.loc ℓ)) rfl Kc) ?_
+  rw [kappaCBody_subst]
+  exact h ℓ σ₁ σ₂ hp hc
+
+/-- **Resuming a `κ` that owns a cell, at the index** (`ewp_kappaC_resume`): the cell is freed,
+one step, and `hnd H K[w]` runs at the index left. -/
+theorem erwp_kappaC_resume {Φ : LocFam} (hΦ : Φ.Down) {Tb : TableN} (hL : Tb.Local)
+    (hTd : Tb.Down) {Q : PostN} (hQ : Q.Down) (hasCancel : Bool) (ℓ : Loc) (H : Val) (K : Kont)
+    (w : Val) {k : Nat} {ls : List SRec} {ρ : WRes}
+    (h : (ptoOwn ℓ Val.unit ⋆ erwp (ℍ := ℍ) Φ Tb Q (k - 1) ls (hndE H (K.plug (.val w)))) ρ) :
+    erwp (ℍ := ℍ) Φ Tb Q k ls
+      (.app (.app (kappaC hasCancel ℓ H K) (.val (Val.inj₁ .unit))) (.val w)) ρ := by
+  refine erwp_det hΦ hTd hQ (fun μ => step1Only_plug (Head.beta μ _ _) rfl (Kont.appL .hole w)) ?_
+  refine erwp_det hΦ hTd hQ
+    (fun μ => step1Only_plug (Head.case₁ μ Val.unit _ _) rfl (Kont.appL .hole w)) ?_
+  refine erwp_det hΦ hTd hQ
+    (fun μ => step1Only_plug (Head.seq μ _) rfl (Kont.appL .hole w)) ?_
+  refine erwp_free hΦ hL (Kont.appL (Kont.seq .hole _) w) ℓ Val.unit ?_
+  obtain ⟨ρ₁, ρ₂, hc, hp, hq⟩ := h
+  refine ⟨ρ₁, ρ₂, hc, hp, ?_⟩
+  refine erwp_det hΦ hTd hQ
+    (fun μ => step1Only_plug (Head.seq μ _) rfl (Kont.appL .hole w)) ?_
+  refine erwp_det hΦ hTd hQ (fun μ => step1Only_plug (Head.beta μ _ w) rfl .hole) ?_
+  rw [show (0 + 1 : Nat) = 1 from rfl, show (0 + 1 + 1 : Nat) = 2 from rfl, kappa_resume_subst]
+  exact hq
+
 /-! ### The handler -/
 
 /-- **A handler at the step index** (`[handle]`), by induction on the index; `ewp_handle_or`'s
 cases at the end of the handled run. -/
-theorem erwp_handle {Φ : LocFam} (hΦ : Φ.Down) (Tin Tout : OpTabN) (hTout : Tout.Down)
+theorem erwp_handle {Φ : LocFam} (hΦ : Φ.Down) (Tin Tout : OpTabN) (hTinD : Tin.Down) (hTout : Tout.Down)
     (n₀ : UInt32) (hTin : ∀ m i, m ≠ n₀ → Tin m i = Tout m i) (qs hr hs : Val)
     (Qin Qout : PostN) (hQout : Qout.Down)
     (hq : ∀ i en, Tin n₀ i = some en → en.abort = false → capTag qs.1 i.toNat = en.q.tag)
-    (hunr : ∀ i en, Tin n₀ i = some en → en.abort = false → en.q = .unr)
+    (hnc : ∀ i en, Tin n₀ i = some en → en.abort = false → en.q ≠ .cancel)
     (hret : ∀ k ls v ρ, Qin k ls v ρ →
       erwp (ℍ := ℍ) Φ (opTableN Tout) Qout k ls (.app (.val hr) (.val v)) ρ)
     (hop : ∀ i en, Tin n₀ i = some en → ∃ c, clauseAt hs.1 i.toNat = some c ∧
@@ -133,16 +208,37 @@ theorem erwp_handle {Φ : LocFam} (hΦ : Φ.Down) (Tin Tout : OpTabN) (hTout : T
     · -- `[op]` at the handler's name: the clause, with `κ`
       subst hm
       obtain ⟨c, hc, hna, -⟩ := hop i en hT
-      have hqu := hunr i en hT ha
       refine rwpG_det hΦ (hPD _)
         (fun μ => step1Only_plug (Head.hop μ m i qs hr hs c v K₁ hc hK₁) rfl .hole) ?_
-      rw [hq i en hT ha, kappaAt_tag, hqu]
-      refine erwp_unfold_at hLout hk (hna ha k ls' v
-        ⟨kappa H K₁, by unfold kappa; exact .lam⟩ σ ⟨ρa, ρk, hcak, hA, hu, ?_⟩)
-      intro ls'' he k' hk' w τ₁ τ₂ hB hcτ
-      have h₁ := hcontIH k' hk' _ _ _ ((hcont ls'' he).1 k' hk' w τ₁ τ₂ hB hcτ)
-      simp only [erwpC, show k' < n by omega, if_true] at h₁
-      exact erwp_kappa_resume hΦ hDout hQout H K₁ w h₁
+      rw [hq i en hT ha, kappaAt_tag]
+      cases hqq : en.q with
+      | unr =>
+          refine erwp_unfold_at hLout hk (hna ha k ls' v
+            ⟨kappa H K₁, by unfold kappa; exact .lam⟩ σ ⟨ρa, ρk, hcak, hA, hu, ?_⟩)
+          intro ls'' he k' hk' w τ₁ τ₂ hB hcτ
+          have h₁ := hcontIH k' hk' _ _ _ ((hcont ls'' he).1 k' hk' w τ₁ τ₂ hB hcτ)
+          simp only [erwpC, show k' < n by omega, if_true] at h₁
+          exact erwp_kappa_resume hΦ hDout hQout H K₁ w h₁
+      | cancel => exact absurd hqq (hnc i en hT ha)
+      | lin =>
+          -- the cell is allocated, one step; `κ` is `kappaC` at it, owning the cell and the share
+          refine erwp_unfold_at hLout hk (erwp_kappaCell hΦ hLout hDout hQout false H K₁
+            (.appR (.val c) (.pairR v .hole)) (fun ℓ σ₁ σ₂ hcell hc₂ => ?_))
+          obtain ⟨y, hy₁, hy₂⟩ := compS_reassoc hcak hc₂
+          have hA' : en.PA (k - 1) ls' v ρa := by
+            cases k with
+            | zero => exact hA
+            | succ k₀ => exact hTinD.pa _ _ _ hT _ _ _ _ hA
+          refine hna ha (k - 1) ls' v ⟨_, isVal_kappaC _ ℓ H K₁⟩ σ₂
+            ⟨ρa, y, hy₂, hA', fun hq' => absurd (hqq.symm.trans hq') (by simp), ?_⟩
+          intro ls'' he k' hk' w τ₁ τ₂ hB hcτ
+          obtain ⟨z, hz, hzτ⟩ := compS_exch hy₁ hcτ
+          have h₁ := hcontIH k' (by omega) _ _ _
+            ((hcont ls'' (Ext.left hy₁ he)).1 k' (by omega) w τ₁ z hB hz)
+          simp only [erwpC, show k' < n by omega, if_true] at h₁
+          exact erwp_kappaC_resume hΦ hLout hDout hQout false ℓ H K₁ w
+            ⟨σ₁, z, ResU.CompS.comm hzτ, hcell,
+              erwp_le hΦ hLout hDout hQout (Nat.sub_le k' 1) h₁⟩
     · -- an operation of another name passes outward
       have hKo : ((hndK H).comp K₁).HasHnd m = false := by
         rw [hasHnd_comp, hndK_hasHnd, hK₁]; simpa using Ne.symm hm
