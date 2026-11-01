@@ -9,8 +9,8 @@ replaced, and every other constructor copied unchanged:
 * `reb`'s `StratumLe W β` becomes `RebRecLe W ps r.R β`: every record proper whose lineage meets
   an exclusive location of the reborrowed escrow has its frame no shorter than `β`;
 * `rebEnd`'s `W′.InStratum β` becomes `RebEndRec W′ rs r.R β`: at every chain position of a record
-  whose parent is an exclusive location of the reborrowed escrow, the views of `ag(W′)` are in
-  `Res_β`.
+  whose parent is an exclusive location of the reborrowed escrow, a view of `ag(W′)` shorter than
+  `β` has a longer view at the parent.
 
 ## Soundness argument
 
@@ -18,7 +18,8 @@ replaced, and every other constructor copied unchanged:
 `frameLife_reb_like` as `β ⊑ α` at a record proper whose lineage meets an exclusive location of
 the escrow (`frameLife_reb_rec` takes it there only); `W′.InStratum β` is read in `ti_endReb`
 for `NestLife`, at a chain position whose parent lost the lifetime `β`, and that parent is an
-exclusive location of the escrow (`ti_endRebN`). So `TWN` keeps `TI` (`TWN.inv`) and `LinLife`
+exclusive location of the escrow; there it rules out a child view shorter than `β` whose only
+longer parent view was at `β`, and `RebEndRec` asks exactly that (`ti_endRebN`). So `TWN` keeps `TI` (`TWN.inv`) and `LinLife`
 (`TWN.linLife`), the facts the development reads of a typed world.
 
 `twN_of_tw` is the conservativity: every `TW` world is a `TWN` world (`rebRecLe_of_stratumLe`,
@@ -45,17 +46,24 @@ def RebRecLe (W : WRes) (ps : List FrameRec) (w₀ : WRes) (β : Life) : Prop :=
   ∀ p ∈ ps, ∀ α, FrameLife W p α →
     (∃ m, LinLoc p m ∧ ∃ ζ : CellU Loc Val, w₀.get m = some ζ ∧ ζ.kind ≠ Kind.imm) → β ⊑ α
 
-/-- **The chain-positions premise of `rebEnd`.** At every chain position of a record whose parent
-is an exclusive location of the reborrowed escrow `w₀`, the views of `ag(W′)` are in `Res_β`. -/
+/-- **The chain-positions premise of `rebEnd`.** At a chain position of a record whose parent is
+an exclusive location of the reborrowed escrow `w₀`, every view of `ag(W′)` shorter than `β` has a
+longer view at the parent: the nesting of chain views survives the loss of `β` at the parent. -/
 def RebEndRec (W' : WRes) (rs : List FrameRec) (w₀ : WRes) (β : Life) : Prop :=
   ∀ r ∈ rs, ∀ l₀ m S u, Chain r.R r.T r.v (some l₀) m S u →
     (∃ ζ : CellU Loc Val, w₀.get l₀ = some ζ ∧ ζ.kind ≠ Kind.imm) →
-    ∀ a', AgW W' a' → ∀ ψ : CellU Loc Val, a'.get m = some ψ → ψ.InStratum β
+    ∀ a', AgW W' a' → ∀ (ψ : CellU Loc Val) s, a'.get m = some ψ → ψ.lsOf = some s →
+      ∀ x, s.mem x → x ⊏ β →
+      ∃ (ζ : CellU Loc Val) (t : LSet) (y : Life), a'.get l₀ = some ζ ∧ ζ.lsOf = some t ∧
+        t.mem y ∧ x ⊏ y
 
-/-- `W′ ∈ Res_β` gives the chain-positions premise. -/
+/-- `W′ ∈ Res_β` gives the chain-positions premise: no view of `ag(W′)` is shorter than `β`. -/
 theorem rebEndRec_of_inStratum {W' : WRes} {rs : List FrameRec} {w₀ : WRes} {β : Life}
-    (h : W'.InStratum β) : RebEndRec W' rs w₀ β :=
-  fun _ _ _ m _ _ _ _ _ ha' ψ e => BoCa.Fig16.BoLo.AgW.inStratum ha' β h m ψ e
+    (h : W'.InStratum β) : RebEndRec W' rs w₀ β := by
+  intro _ _ _ m _ _ _ _ a' ha' ψ s e hs x hx hxβ
+  have hin : β < s.meet := (Life.sqsupset_iff _ _).mp
+    (CellU.sqsupset_of_lsOf hs (BoCa.Fig16.BoLo.AgW.inStratum ha' β h m ψ e))
+  exact (lt_asymm (lt_of_lt_of_le hin (s.meet_least x hx)) hxβ).elim
 
 /-- The typed world with records-only reborrow premises: `TW` with `reb`'s `StratumLe W β`
 replaced by `RebRecLe W ps r.R β` and `rebEnd`'s `W′.InStratum β` by `RebEndRec W′ rs r.R β`.
@@ -203,10 +211,7 @@ theorem ti_endRebN {W W' c w₀ : WRes} {ps rs : List FrameRec} {le : Loc} {s : 
     rcases R4 l₀ ζ₀ t₀ y e₀ ht₀ hy with ⟨ζ', t', e', ht', hy'⟩ | hβy
     · exact ⟨ζ', t', y, e', ht', hy', hxy⟩
     · obtain ⟨rfl, hex⟩ := hβy
-      exfalso
-      have hin : y < s'.meet := (Life.sqsupset_iff _ _).mp
-        (CellU.sqsupset_of_lsOf hs' (hβ r hr l₀ m S u hc hex a' ha' ψ e))
-      exact lt_asymm (lt_of_lt_of_le hin (s'.meet_least x hx)) hxy
+      exact hβ r hr l₀ m S u hc hex a' ha' ψ s' e hs' x hx hxy
   have parent : ∀ r ∈ rs, ∀ l₀ m S u, Chain r.R r.T r.v (some l₀) m S u →
       ∀ ψ : CellU Loc Val, a'.get m = some ψ → ψ.kind ≠ Kind.own →
       ∃ ζ : CellU Loc Val, a'.get l₀ = some ζ ∧ ζ.kind ≠ Kind.own := by
@@ -462,6 +467,110 @@ theorem rebRecLe_of_stratumLe {W : WRes} {ps rs : List FrameRec} (hT : TW W ps r
   have h₁ : t.meet ⊐ α := CellU.sqsupset_of_lsOf ht (AgW.inStratum haW α (hβ α hlt) _ ζ e)
   rw [h.1 aW haW ζ t e ht t.meet t.meet_mem] at h₁
   exact lt_irrefl _ h₁
+
+
+/-! ### The records proper are roots, and `RebRecLe` from the tags -/
+
+/-- No record proper is a proper sub-record of another. -/
+def ProperRoot (ps : List FrameRec) : Prop := ∀ p ∈ ps, ∀ p' ∈ ps, DescR p' p → p' = p
+
+theorem mutAt_of_xpath {A σ : WRes} {q : List Loc} (h : XPath A q σ) {l : Loc}
+    (hm : MutAt σ l) : MutAt A l := by
+  induction h with
+  | nil => exact hm
+  | cons e k _ ih => exact MutAt.nest e (by rw [k]; simp) (ih hm)
+
+/-- `immFrame` keeps `ProperRoot`: the new record's location is `own` at the top of `W`, so no
+record's escrow is `mut` there (`ag(W)` misses it, `ExIn` would put it there); an old record
+proper below the new one would sit at a `mut` cell of the new escrow, `MutAt W`, which `NoMut`
+excludes. -/
+theorem properRoot_frame {W X Z R : WRes} {ps rs : List FrameRec} {l : Loc} {v : Val}
+    {T : VTy} {δ : BoCa.Lifetime.LSub} (hvW : ResU.Valid W) (hTI : TI W ps rs)
+    (hX : ResU.CompS (ResU.single l (CellU.ownOf v)) R X) (hW : ResU.CompS X Z W)
+    (h : ProperRoot ps) :
+    ProperRoot (⟨l, v, R, T, δ⟩ :: ps) := by
+  obtain ⟨aW, haW⟩ := agW_of_valid hvW
+  have hWl : W.get l = some (CellU.ownOf v) :=
+    (ResU.CompS.get_left_of_ne_imm hW
+      (ResU.CompS.get_left_of_ne_imm hX (ResU.single_get_self _ _) (by simp)).2 (by simp)).2
+  have hagl : aW.get l = none := ag_none_of_top hvW haW hWl (by simp)
+  -- no old record proper is above the new one
+  have up : ∀ p' ∈ ps, ¬ Desc p' ⟨l, v, R, T, δ⟩ := by
+    rintro p' hp' ⟨q, hq, hpath⟩
+    obtain ⟨d', hd', -, -, ζ, eζ, kζ, -⟩ := hpath.last hq
+    have hd'R : d' ∈ rs := (hTI.2.2.2.2.2.2.1 d').mpr ⟨p', hp', hd'⟩
+    obtain ⟨e, he, hlift⟩ := hTI.exIn hd'R aW haW
+    obtain ⟨ζ₁, e₁, -⟩ := exR_cell he eζ (by rw [kζ]; simp)
+    obtain ⟨ζ₂, e₂, -⟩ := hlift l ζ₁ e₁
+    rw [hagl] at e₂; cases e₂
+  -- and no old record proper is below it
+  have down : ∀ p ∈ ps, ¬ Desc ⟨l, v, R, T, δ⟩ p := by
+    rintro p hp ⟨q, hq, hpath⟩
+    obtain ⟨d', ⟨q', hq'⟩, -, -, ζ, eζ, kζ, -⟩ := hpath.last hq
+    have hR : MutAt R p.le := mutAt_of_xpath hq'.xpath (MutAt.top eζ kζ)
+    have hX' : MutAt X p.le := MutAt.of_compS_right hX hR
+    exact hTI.2.2.2.2.2.1.1 p hp (MutAt.of_compS_left hW hX')
+  intro p hp p' hp' hd
+  rcases List.mem_cons.mp hp with rfl | hp <;> rcases List.mem_cons.mp hp' with rfl | hp'
+  · rfl
+  · rcases hd.cases with rfl | hd
+    · rfl
+    · exact (up p' hp' hd).elim
+  · rcases hd.cases with h' | hd
+    · exact h'.symm
+    · exact (down p hp hd).elim
+  · exact h p hp p' hp' hd
+
+/-- Every `TWN` world's records proper are roots. -/
+theorem TWN.properRoot {W : WRes} {ps rs : List FrameRec} (h : TWN W ps rs) : ProperRoot ps := by
+  induction h with
+  | empty => intro p hp; exact absurd hp (by simp)
+  | immFrame T δ _ hW₀ _ hX hW _ _ _ _ ih =>
+      exact properRoot_frame hW₀.valid hW₀.inv hX hW ih
+  | immEnd r _ _ _ _ _ _ hps _ ih =>
+      exact fun p hp p' hp' hd => ih p ((hps p).mp hp).1 p' ((hps p').mp hp').1 hd
+  | alloc _ _ _ _ _ ih => exact ih
+  | reb _ _ _ _ _ _ _ _ _ _ _ ih => exact ih
+  | rebDeep _ _ _ _ _ _ _ _ _ _ _ _ ih => exact ih
+  | mutFold _ _ _ _ _ ih => exact ih
+  | mutUnfold _ _ _ _ _ ih => exact ih
+  | free _ _ _ ih => exact ih
+  | store _ _ _ _ ih => exact ih
+  | rebEnd _ _ _ _ _ _ _ ih => exact ih
+  | rebEndDeep _ _ _ _ _ _ _ _ ih => exact ih
+
+/-- `tags_above` at `TWN`: a lifetime below the world is below every tag. -/
+theorem tags_aboveN {W : WRes} {ps : List FrameRec} {ls : List SRec} {β : Life}
+    (hTW : TWN W ps (rsOf ls)) (htag : Tagged W ps ls) (hβ : W.InStratum β) :
+    ∀ y ∈ ls, y.2 ⊐ β := by
+  intro y hy
+  obtain ⟨p, hp, -, hFL⟩ := htag y hy
+  obtain ⟨aW, haW⟩ := agW_of_valid hTW.valid
+  obtain ⟨ψ, e, k, -, -⟩ := hTW.inv.2.1 p hp aW haW
+  obtain ⟨t, ht⟩ := lsOf_of_imm k
+  have h₁ : t.meet ⊐ β := CellU.sqsupset_of_lsOf ht (AgW.inStratum haW β hβ _ ψ e)
+  rw [hFL.1 aW haW ψ t e ht t.meet t.meet_mem] at h₁
+  exact h₁
+
+/-- **`RebRecLe` from the tags.** At a tagged `TWN` world whose tags are all longer than `β`,
+every record proper has its frame longer than `β`: the record is tagged (`TI`'s membership), the
+tag's record proper is the record itself (`ProperRoot`), and `FrameLife` names one lifetime. -/
+theorem rebRecLe_of_tags {W : WRes} {ps : List FrameRec} {ls : List SRec} {β : Life}
+    (hT : TWN W ps (rsOf ls)) (htg : Tagged W ps ls) (hβ : ∀ y ∈ ls, y.2 ⊐ β) (w₀ : WRes) :
+    RebRecLe W ps w₀ β := by
+  intro p hp α hα _
+  have hTI := hT.inv
+  obtain ⟨t, ht⟩ := mem_rsOf.mp ((hTI.2.2.2.2.2.2.1 p).mpr ⟨p, hp, DescR.refl p⟩)
+  obtain ⟨p', hp', hd, hFL⟩ := htg _ ht
+  obtain rfl : p' = p := hT.properRoot p hp p' hp' hd
+  obtain ⟨aW, haW⟩ := agW_of_valid hT.valid
+  obtain ⟨ψ, e, k, -, -⟩ := hTI.2.1 p' hp' aW haW
+  obtain ⟨s, hs⟩ := lsOf_of_imm k
+  have h₁ := hα.1 aW haW ψ s e hs s.meet s.meet_mem
+  have h₂ : s.meet = t := hFL.1 aW haW ψ s e hs s.meet s.meet_mem
+  have hβt : β ⊏ t := hβ _ ht
+  rw [← h₂, h₁] at hβt
+  exact le_of_lt hβt
 
 /-- `W′ ∈ Res_β` gives `rebEnd`'s premise at `TWN`; with `rebRecLe_of_stratumLe`, every `TW`
 world is a `TWN` world. -/

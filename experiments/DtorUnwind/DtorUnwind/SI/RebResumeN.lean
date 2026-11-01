@@ -1,4 +1,5 @@
 import DtorUnwind.SI.RebStopN
+import DtorUnwind.SI.StopFrameN
 
 /-!
 # 6.150 across a stop: what bounds the resume frame
@@ -86,6 +87,30 @@ theorem resume_frame_not_stratumLe {W : WRes} {A β : Life} (hA : A ⊏ β)
 theorem resume_frame_not_inStratum {W : WRes} {A β : Life} (hA : A ⊏ β)
     (h : ¬ W.InStratum A) : ¬ W.InStratum β :=
   fun hs => h (fun m ψ e => CellU.InStratum.mono hA.le (hs m ψ e))
+
+
+/-! ### `RebRecLe` at every resume under `sameW` -/
+
+/-- **`RebRecLe` at a resume.** A reborrow chosen at `β` below a tagged world (`tags_aboveN`)
+has `β` below every tag of the list; a continuation resumed under `sameW` is resumed at a list
+with the same members, so `rebRecLe_of_tags` gives the re-entry's premise at the resume world,
+whatever the frame. -/
+theorem rebRecLe_resume {W₀ W : WRes} {ps₀ ps : List FrameRec} {ls ls' : List SRec} {β : Life}
+    (hT₀ : TWN W₀ ps₀ (rsOf ls)) (htg₀ : Tagged W₀ ps₀ ls) (hβ₀ : W₀.InStratum β)
+    (hsame : sameW ls ls' PMap.empty)
+    (hT : TWN W ps (rsOf ls')) (htg : Tagged W ps ls') (w₀ : WRes) : RebRecLe W ps w₀ β :=
+  rebRecLe_of_tags hT htg (fun y hy => tags_aboveN hT₀ htg₀ hβ₀ y ((hsame y).mp hy)) w₀
+
+/-- **The handler's lend, at `TWN`.** At `resume_frame_short`'s world, whose frame holds the
+handler's `mut` cell at `A ⊏ β`, `TW.reb`'s premise fails and `TWN.reb`'s holds. -/
+theorem resume_frame_rebRecLe {W : WRes} {ps : List FrameRec} {ls : List SRec} {μ : Heap}
+    {l : Loc} {β A : Life} (hT : TWN W ps (rsOf ls)) (htg : Tagged W ps ls)
+    (hL : ResU.Lower W μ) (hμ : μ l = none) (hβ : ∀ y ∈ ls, y.2 ⊐ β) (hA : A ⊏ β) (v : Val)
+    (w₀ : WRes) :
+    ∃ W', ResU.CompS W (ResU.single l (shortCell A v)) W' ∧ TWN W' ps (rsOf ls) ∧
+      Tagged W' ps ls ∧ ¬ StratumLe W' β ∧ RebRecLe W' ps w₀ β := by
+  obtain ⟨W', hc, hT', htg', -, hnA⟩ := resume_frame_short hT htg hL hμ v A
+  exact ⟨W', hc, hT', htg', resume_frame_not_stratumLe hA hnA, rebRecLe_of_tags hT' htg' hβ w₀⟩
 
 end BoCa.Fig16.LogRel.Core.DtorUnwind.SI
 
