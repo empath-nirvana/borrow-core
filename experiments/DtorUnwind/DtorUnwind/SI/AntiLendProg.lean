@@ -256,6 +256,16 @@ the empty memory, and every `free` finds its cell. No fuel. -/
 theorem progAnti_orDiverges : LoopAwait.OrDiverges (ℍ := ℍ) progAnti :=
   erwp_adequacy (Φ := Φ₀) (fun _ _ _ _ h => h) progAnti_ok
 
+/-- `erwp_withbor3`'s added hypotheses hold together: at `T2`, with the integer family at both
+lifetimes. -/
+theorem withbor3_hyps (α β : Life) :
+    T2.LendOK α ∧ T2.AFOK ∧ ∀ k v χ (h : χ.InStratum α), famF α k v ⟨χ, h⟩ →
+      ∃ h' : χ.InStratum β, famF β k v ⟨χ, h'⟩ := by
+  refine ⟨T2_lendOK α, T2_afOK, fun k v χ h hF => ?_⟩
+  have hχ : χ = PMap.empty := hF
+  subst hχ
+  exact ⟨inStratum_empty β, rfl⟩
+
 end BoCa.Fig16.LogRel.Core.DtorUnwind.SI.AntiLendProg
 
 end
