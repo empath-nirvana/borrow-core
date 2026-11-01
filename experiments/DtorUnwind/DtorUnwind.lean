@@ -60,3 +60,4 @@ import DtorUnwind.SI.RebProg
 import DtorUnwind.SI.CanonAdv
 import DtorUnwind.SI.RebCancelC
 import DtorUnwind.SI.RebDropProg
+import DtorUnwind.SI.AntiStopN
