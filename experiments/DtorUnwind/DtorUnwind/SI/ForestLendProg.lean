@@ -70,7 +70,7 @@ theorem T2K_fin (A : Life) : ∀ m i en, T2K A m i = some en → en.fin = none :
 `ExtK A`. -/
 theorem T2K_lendOKK (A : Life) : (T2K A).LendOKK A where
   entry := fun _ _ en h => by
-    rcases entK_cases h with rfl | rfl <;> exact ⟨rfl, rfl, A, le_rfl, rfl⟩
+    rcases entK_cases h with rfl | rfl <;> exact ⟨rfl, rfl, wcUnfold_extK le_rfl⟩
   pa := fun _ _ en h _ _ _ ρ hA => by
     rcases entK_cases h with rfl | rfl <;>
     · obtain ⟨-, rfl⟩ := hA

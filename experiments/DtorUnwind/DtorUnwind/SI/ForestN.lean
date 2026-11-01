@@ -28,7 +28,8 @@ every `TI` invariant is stated per record lineage (`LeInv`, `NestLife`, `ChainIn
   (`tfOf_single`). Round 7's configuration is a forest world (`round7_forest`).
 * `ExtK A`: `Ext` at the share a continuation carries with its stack's lend at `A`
   (`extK_iff_ext_cell`: exactly `Ext` at the share with the `mut` cell at `A` added).
-* `erwp_M_frameK`: `erwp_M_frame` with `wc = ExtK B`, `B ⊑ A`, in place of `sameW`.
+* `erwp_M_frameK`: `erwp_M_frame` with any world condition read at the carried share
+  (`WcUnfold`: `sameW`, or `ExtK B` at `B ⊑ A`) in place of `sameW`.
 * `extK_add`: a resumer that opens a frame of its own at a lifetime `α ⊑ A` and resumes inside
   it meets `ExtK A`, and `sameW` fails there (`not_sameW_add`).
 -/
@@ -222,17 +223,31 @@ theorem extK_unfold {A B : Life} (hBA : B ⊑ A) {ls ls' : List SRec} {ρk ρp Z
       exact h.2 x (lt_of_le_of_lt (hBA.trans (hat ▸ hm)) hx)
     · exact h.1.2 b (CellIn.of_left hkL ⟨m, φ, by rw [ResU.del_get_ne _ hml]; exact e, k, hm⟩) x hx
 
-/-- `LendOK` with the continuation's world condition `ExtK B` at some `B ⊑ A`, in place of
-`sameW`. -/
+/-- **The world condition is read at the share the continuation carries.** Whatever the
+condition grants at the lender's share `Z/ℓ ● W″` (the lend at `A` accounted by its ancestor
+`ℓ ↦ own ● χ`), it grants at the borrowed share `ρk`, part of `Z`, which holds the lend itself.
+`sameW` reads no share (`wcUnfold_sameW`); `ExtK B`, `B ⊑ A`, reads the carried lend
+(`wcUnfold_extK`); `Ext` does not (`not_extFoldTransfer`). -/
+def WcUnfold (A : Life) (wc : List SRec → List SRec → WRes → Prop) : Prop :=
+  ∀ ls ls' (ρk ρp Z ρkL W'' : WRes) (l : Loc) (ψ : CellU Loc Val), ResU.CompS ρk ρp Z →
+    Z.get l = some ψ → ψ.kind ≠ Kind.imm → ψ.at = A → ResU.CompS (Z.del l) W'' ρkL →
+    wc ls ls' ρkL → wc ls ls' ρk
+
+theorem wcUnfold_sameW (A : Life) : WcUnfold A sameW :=
+  fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ h => h
+
+theorem wcUnfold_extK {A B : Life} (hBA : B ⊑ A) : WcUnfold A (ExtK B) :=
+  fun _ _ _ _ _ _ _ _ _ hZ hZl hψ hat hkL h => extK_unfold hBA hZ hZl hψ hat hkL h
+
+/-- `LendOK` with the continuation's world condition any `WcUnfold` one, in place of `sameW`. -/
 structure OpTabN.LendOKK (T : OpTabN) (A : Life) : Prop where
-  entry : ∀ m i en, T m i = some en → en.abort = false ∧ en.q = .lin ∧
-    ∃ B, B ⊑ A ∧ en.wc = ExtK B
+  entry : ∀ m i en, T m i = some en → en.abort = false ∧ en.q = .lin ∧ WcUnfold A en.wc
   pa : ∀ m i en, T m i = some en → ∀ k ls v (ρ : WRes), en.PA k ls v ρ → ρ.InStratum A
   pb : ∀ m i en, T m i = some en → ∀ k ls w (ρ : WRes), en.PB k ls w ρ → ρ.InStratum (↓A)
 
 /-- **Mut Frame at `erwp`, across stops, with the continuation resumed at `ExtK`.**
 `erwp_M_frame`'s proof, with the one step that read `sameW` (the borrowed continuation's world
-condition from the lender's) taken by `extK_unfold`. -/
+condition from the lender's) taken by `WcUnfold`. -/
 theorem erwp_M_frameK {Φ : LocFam} {l : Loc} {A : Life} {F : Nat → Val → SPropS Loc Val A}
     (hF : DownFam A F) {T : OpTabN} (hT : T.LendOKK A) {Q : PostN} :
     ∀ n j, n ≤ j → ∀ ls e (v : Val) (ρP ρlP ρb ρ : WRes) (houtP : ρP.InStratum A),
@@ -274,7 +289,7 @@ theorem erwp_M_frameK {Φ : LocFam} {l : Loc} {A : Life} {F : Nat → Val → SP
     exact ⟨R, ρp.del l, hRY, noOwn_del hnoρp l,
       Or.inl ⟨w, rfl, hwand v'' y hy₁ χ (hPk v'' χ ⟨hχ, hw''⟩) R hy₂⟩⟩
   · obtain ⟨⟨rfl, hK, hTe, ha⟩, ρa, ρk, hcak, hPA, -, hcont⟩ := pure_sep_iff.mp hp
-    obtain ⟨-, hq, B, hBA, hwc⟩ := hT.entry m i en hTe
+    obtain ⟨-, hq, hwu⟩ := hT.entry m i en hTe
     have hρa := hT.pa m i en hTe _ _ _ _ hPA
     obtain ⟨Z, hZ, haZ⟩ := (ResU.CompS.assoc ρa ρk ρp X).mpr ⟨ρ', hcak, h9⟩
     rcases ResU.CompS.get_split_of_ne_imm haZ hXl hkm'' with ⟨hg, -⟩ | ⟨-, hZl⟩
@@ -301,9 +316,7 @@ theorem erwp_M_frameK {Φ : LocFam} {l : Loc} {A : Life} {F : Nat → Val → SP
     refine ih k' (by omega) k (le_of_lt hk') ls'' _ v'' χ W'' ρbB XB hχ hdB P'' hPk hw''
       (ResU.CompS.comm hW'') hWXB (fun BM' hBM' => ?_)
     -- the borrowed continuation's world condition, from the lender's: `extK_unfold`
-    have he' : en.wc ls' ls'' ρk := by
-      rw [hwc] at he ⊢
-      exact extK_unfold hBA hZ hZl hkm'' (by simp) hkL he
+    have he' : en.wc ls' ls'' ρk := hwu ls' ls'' ρk ρp Z ρkL W'' l _ hZ hZl hkm'' rfl hkL he
     obtain ⟨s1, hs1, hZds1⟩ := (ResU.CompS.assoc (Z.del l) σB
       (ResU.single l (CellU.mutOf A v'' χ hχ P'' hw'')) BM').mpr ⟨ρbB, hρbB, hBM'⟩
     obtain ⟨Z', hZ', hZ'σ⟩ := (ResU.CompS.assoc (Z.del l)
