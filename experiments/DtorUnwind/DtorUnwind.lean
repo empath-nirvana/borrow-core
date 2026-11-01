@@ -21,3 +21,7 @@ import DtorUnwind.SI.MutWorld
 import DtorUnwind.SI.UpdN
 import DtorUnwind.SI.WpN
 import DtorUnwind.SI.RebN
+import DtorUnwind.SI.FrameResN
+import DtorUnwind.SI.IFrameN
+import DtorUnwind.SI.RebRuleN
+import DtorUnwind.SI.HeapN
