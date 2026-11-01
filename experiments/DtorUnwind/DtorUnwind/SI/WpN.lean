@@ -23,8 +23,9 @@ the frame `ρ_f ● ρ⁺`, and the two updates are composed by `updVN_frame` (6
 (6.49) down the index. `rwp_frame` is 6.146 with a frame that holds at every index
 (`wpTS_ramify`), again through `updVN_frame`.
 
-`Φ` is fixed through a run here. A rule that creates a `mut` borrow (`[TR]` 6.65) has to extend it
-at the borrowed location; not done.
+`Φ` is a parameter of a run. The Mut Frame (`[TR]` 6.65) proves the borrowed run at
+`Φ[ℓ ↦ (A, F)]` and the lender's run at `Φ` (`rwp_M_frame`); the Mut Anti-Frame (6.66) writes the
+cell back at the member of the index left (`rwp_M_antiFrame`).
 -/
 
 noncomputable section
