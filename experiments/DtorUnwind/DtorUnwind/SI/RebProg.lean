@@ -96,20 +96,26 @@ def PR (d : Loc) (R₀ : WRes) : List SRec → Val → WProp := fun _ v ρ => v 
 
 /-- The lend's end: the turn's resource. -/
 def Qt (c d : Loc) (R₀ : WRes) : PostN :=
-  fun _ _ _ ρ => ResU.CompS (ResU.single c (CellU.ownOf (.loc d))) R₀ ρ
+  fun _ _ w ρ => w = Val.unit ∧ ResU.CompS (ResU.single c (CellU.ownOf (.loc d))) R₀ ρ
 
 /-- `!ℓ`. -/
 def ldR (l : Loc) : Expr := .app (.val (.prim .load)) (.val (Val.loc l))
 
+/-- `λz. ()`: the loaded thunk is discarded. -/
+def dropV : Val := Val.lam (.val .unit)
+
+/-- `(λz. ()) (!d)`. -/
+def useR (d : Loc) : Expr := .app (.val dropV) (ldR d)
+
 /-- **The reborrowed computation**: from the canonical image alone, `y ()` stops with the image
-in its continuation's share; after the resume the image reads `d` (6.143 at the index) and is
-dropped. -/
-theorem rebBody_ok {Φ : LocFam} (c d : Loc) (R₀ : WRes) (A β : Life) (k : Nat)
+in its continuation's share; after the resume the image reads `d` (6.143 at the index), the
+thunk read is discarded, and the image is dropped. -/
+theorem rebBody_ok {Φ : LocFam} (hΦ : Φ.Down) (c d : Loc) (R₀ : WRes) (A β : Life) (k : Nat)
     (ls : List SRec) (Bχ : WRes)
     (hpto : ptoImm d β (fun _ _ => True) Bχ) :
     erwp (ℍ := ℍ) Φ (opTableN T2) (RebPost β (IFPost c (.loc d) (PR d R₀) A (Qt c d R₀))) k ls
-      (.seq Stage1.yE (ldR d)) Bχ := by
-  refine erwp_perform (T := T2) (en := yEnt) (K := .seq .hole (ldR d)) (by simp [Kont.HasHnd])
+      (.seq Stage1.yE (useR d)) Bχ := by
+  refine erwp_perform (T := T2) (en := yEnt) (K := .seq .hole (useR d)) (by simp [Kont.HasHnd])
     (by simp [T2]) rfl rfl (compS_empty_left _) ⟨rfl, rfl⟩
     (fun ls' _ k' hk' w σB XB hB hXB => ?_)
   obtain ⟨rfl, rfl⟩ := hB
@@ -118,21 +124,31 @@ theorem rebBody_ok {Φ : LocFam} (c d : Loc) (R₀ : WRes) (A β : Life) (k : Na
   | zero => exact erwp_zero
   | succ k₀ =>
   refine erwp_step (opTableN_local T2) (fun μ => step1Only_plug (Head.seq μ _) rfl .hole) ?_
-  refine erwp_of_rwp (rwp_dump (rwp_load_I ls' d β (fun _ _ => True) _ ⟨_, PMap.empty,
-    ResU.comp_empty_right _, hpto, fun v ρc X hc hX => ?_⟩))
+  have hplug : useR d = (Kont.appR (.val dropV) .hole).plug (ldR d) := rfl
+  rw [hplug]
+  refine erwp_bindR hΦ (opTableN_local T2) (Kont.appR (.val dropV) .hole) (rwp_load_I ls' d β (fun _ _ => True) _
+    ⟨_, PMap.empty, ResU.comp_empty_right _, hpto, fun v ρc X hc hX => ?_⟩)
   obtain rfl := eq_of_compS_empty_left hX
   obtain ⟨s, u', σ, hs, rfl, -, -⟩ := hc
-  refine ⟨noOwn_single_imm d _ _ _ _, ⟨⟨fun ρl Y hl hY ρv Z hv hZ => ?_, inStratum_empty A⟩,
-    inStratum_empty β⟩⟩
+  generalize k₀ - 1 = k₁
+  cases k₁ with
+  | zero => exact erwp_zero
+  | succ k₂ =>
+  refine erwp_step (opTableN_local T2) (fun μ => step1Only_plug (Head.beta μ _ v) rfl .hole) ?_
+  have e₁ : Kont.hole.plug (Expr.subst 0 v (.val Val.unit)) = (Val.unit).1 := by
+    simp [Expr.subst, Kont.plug, Val.unit, Expr.val]
+  rw [e₁]
+  refine erwp_garbage (compS_empty_left _) (noOwn_single_imm d _ _ _ _) (erwp_val ?_)
+  refine ⟨⟨fun ρl Y hl hY ρv Z hv hZ => ?_, inStratum_empty A⟩, inStratum_empty β⟩
   obtain ⟨-, rfl⟩ := hv
   subst hl
   obtain rfl := eq_of_compS_empty_left hY
-  exact hZ
+  exact ⟨rfl, hZ⟩
 
-/-- `λx. y (); !x`. -/
-def lamX : Val := Val.lam (.seq Stage1.yE (.app (.val (.prim .load)) (.var 0)))
+/-- `λx. y (); (λz. ()) (!x)`. -/
+def lamX : Val := Val.lam (.seq Stage1.yE (.app (.val dropV) (.app (.val (.prim .load)) (.var 0))))
 
-/-- The lent computation: `(λx. y (); !x) (!c)`. -/
+/-- The lent computation: `(λx. y (); (λz. ()) (!x)) (!c)`. -/
 def lendRE (c : Loc) : Expr := .app (.val lamX) (ldR c)
 
 /-- **The lent computation**: loads `d` through the `imm` lend (6.143 at the index), then
@@ -164,9 +180,10 @@ theorem lendR_ok {Φ : LocFam} (hΦ : Φ.Down) (c d e : Loc) (R₀ : WRes)
   refine erwp_step (opTableN_local T2)
     (fun μ => step1Only_plug (Head.beta μ _ (Val.loc d)) rfl .hole) ?_
   have e₁ : Kont.hole.plug (Expr.subst 0 (Val.loc d)
-      (.seq Stage1.yE (.app (.val (.prim .load)) (.var 0)))) = .seq Stage1.yE (ldR d) := by
-    simp [Expr.subst, Kont.plug, Stage1.yE, ldR, performE, opPayload, Val.pair, Val.i32,
-      Val.unit, Val.loc, Expr.val, Val.prim]
+      (.seq Stage1.yE (.app (.val dropV) (.app (.val (.prim .load)) (.var 0))))) =
+      .seq Stage1.yE (useR d) := by
+    simp [Expr.subst, Kont.plug, Stage1.yE, useR, dropV, ldR, performE, opPayload, Val.pair,
+      Val.i32, Val.unit, Val.loc, Expr.val, Val.prim, Val.lam]
   rw [e₁]
   -- the reborrow of the field, at `β = ↓A`
   have hS := recR_tmpl (c := c) hR₀
@@ -193,7 +210,150 @@ theorem lendR_ok {Φ : LocFam} (hΦ : Φ.Down) (c d e : Loc) (R₀ : WRes)
     simp [BoCa.Lifetime.Life.interp, find?_extend_self] at hint
     exact (Option.some.inj hint).symm
   subst hβ'
-  exact rebBody_ok c d R₀ A _ k₀ lsF _ hpto
+  exact rebBody_ok hΦ c d R₀ A _ k₀ lsF _ hpto
+
+/-! ### The turn -/
+
+/-- The loop's invariant: the state is `c ↦ own(d)` with `d ↦ own(u₀) ● e ↦ own(())`. -/
+def IR : Val → WProp := fun s ρ => ∃ (c d e : Loc) (R₀ : WRes), s = Val.loc c ∧
+  ResU.CompS (ResU.single d (CellU.ownOf u₀)) (ResU.single e (CellU.ownOf .unit)) R₀ ∧
+  ResU.CompS (ResU.single c (CellU.ownOf (.loc d))) R₀ ρ
+
+theorem IR_closed : ∀ s ρ, IR s ρ → closedAt 0 s.1 = true := by
+  rintro s ρ ⟨c, -, -, -, rfl, -⟩
+  rfl
+
+/-- `λs. λb. case b {next → (λx. y (); !x) (!s); inr s | close → ()}`. -/
+def fR : Val :=
+  Val.lam (.lam (.case (.var 0) (.seq (.app (.val lamX) (.app (.val (.prim .load)) (.var 2)))
+    (.inj₂ (.var 2))) (.val .unit)))
+
+/-- **A turn**: three steps to `(λx. y (); !x) (!c); inr c`, the lend of `c` by `erwp_I_frame`
+at a lifetime below the list's records, inside it the reborrow of the field, then `inr c`. -/
+theorem turnR_ok {Φ : LocFam} (hΦ : Φ.Down) (k : Nat) (s : Val) (ls : List SRec)
+    (ρ : WRes) (hI : IR s ρ) :
+    erwp (ℍ := ℍ) Φ (opTableN T2) (turnPostN IR QZ) k ls
+      (.app (.app (.val fR) (.val s)) (.val nextV)) ρ := by
+  obtain ⟨c, d, e, R₀, rfl, hR₀, hρ⟩ := hI
+  have hD := opTableN_down T2_down
+  have hTP : (turnPostN IR QZ).Down := fun _ _ _ _ h => by
+    rcases h with ⟨x, hx, hq⟩ | h
+    · exact .inl ⟨x, hx, hq⟩
+    · exact .inr h
+  refine erwp_det hΦ hD hTP
+    (fun μ => step1Only_plug (Head.beta μ _ (Val.loc c)) rfl (.appL .hole nextV)) ?_
+  have e₁ : (Kont.appL .hole nextV).plug (Expr.subst 0 (Val.loc c)
+      (.lam (.case (.var 0) (.seq (.app (.val lamX) (.app (.val (.prim .load)) (.var 2)))
+        (.inj₂ (.var 2))) (.val .unit)))) =
+      Kont.hole.plug (.app (.val (Val.lam (.case (.var 0)
+        (.seq (lendRE c) (.inj₂ (.val (Val.loc c)))) (.val .unit)))) (.val nextV)) := by
+    simp [Expr.subst, Expr.shift, Kont.plug, lamX, dropV, lendRE, ldR, Stage1.yE, performE, opPayload,
+      Val.pair, Val.i32, Val.unit, Val.lam, Val.loc, Expr.val, Val.prim, Val.shift]
+  rw [e₁]
+  refine erwp_det hΦ hD hTP (fun μ => step1Only_plug (Head.beta μ _ nextV) rfl .hole) ?_
+  have e₂ : Kont.hole.plug (Expr.subst 0 nextV (.case (.var 0)
+        (.seq (lendRE c) (.inj₂ (.val (Val.loc c)))) (.val .unit))) =
+      Kont.hole.plug (.case (.val (Val.inj₁ Val.unit))
+        (.seq (lendRE c) (.inj₂ (.val (Val.loc c)))) (.val .unit)) := by
+    simp [Expr.subst, Kont.plug, lamX, dropV, lendRE, ldR, Stage1.yE, performE, opPayload, Val.pair,
+      Val.i32, Val.unit, nextV, Val.inj₁, Val.loc, Expr.val, Val.prim, Val.lam]
+  rw [e₂]
+  refine erwp_det hΦ hD hTP (fun μ => step1Only_plug (Head.case₁ μ Val.unit _ _) rfl .hole) ?_
+  have e₃ : Kont.hole.plug (Expr.subst 0 Val.unit
+        (.seq (lendRE c) (.inj₂ (.val (Val.loc c))))) =
+      (Kont.seq .hole (.inj₂ (.val (Val.loc c)))).plug (lendRE c) := by
+    simp [Expr.subst, Kont.plug, lamX, dropV, lendRE, ldR, Stage1.yE, performE, opPayload, Val.pair,
+      Val.i32, Val.unit, Val.loc, Expr.val, Val.prim, Val.lam]
+  rw [e₃]
+  refine erwp_bind_le (Q' := Qt c d R₀) hΦ _ (fun m => by simp [Kont.HasHnd])
+    (fun m => by simp [Kont.Catches]) (OpTabN.ctxClosed_of_fin T2_fin _) k ?_ k le_rfl ls _ _ ?_
+  · rintro k' ls' v σ - ⟨hv, hσ⟩
+    obtain rfl : v = Val.unit := hv
+    refine erwp_det hΦ hD hTP (fun μ => step1Only_plug (Head.seq μ _) rfl .hole) ?_
+    exact erwp_val (v := Val.inj₂ (Val.loc c)) (.inr ⟨Val.loc c, rfl, c, d, e, R₀, rfl, hR₀, hσ⟩)
+  · -- the lend of `c`, at a lifetime below every record of the list
+    obtain ⟨A, hA⟩ := exists_fresh ls
+    have hshape : vShape rT δ₀ (.loc d) R₀ :=
+      ⟨d, u₀, pure_sep_mk rfl ⟨_, _, hR₀, rfl, trivial⟩⟩
+    have hadm : AdmWf rT δ₀ := fun y hy => by simp [rT, VFree, CFree] at hy
+    have hex : ExS R₀ R₀ := (ExS.split hR₀).mpr ⟨_, _, ExW.single_own d u₀,
+      ExW.single_own e Val.unit, hR₀⟩
+    obtain ⟨ds, hds⟩ := lineage_list (r := recR c d R₀) hshape hadm hex
+    have houtP : R₀.InStratum A := R₀_inStratum A hR₀
+    exact erwp_I_frame c rT δ₀ hadm (.loc d) (PR d R₀)
+      (fun _ ρ' h => by obtain ⟨-, rfl⟩ := h; exact hshape)
+      (fun _ _ _ _ h => h) (T2_ilendOK A) (fun _ _ _ _ _ _ h => h) k ls (lendRE c)
+      R₀ _ PMap.empty ρ houtP (inStratum_empty A) ⟨rfl, rfl⟩ hρ
+      (ResU.comp_empty_right _) hA ds hds
+      (lendR_ok hΦ c d e R₀ hR₀ A houtP k ls hA ds)
+
+/-! ### The program -/
+
+/-- `(λc. iterate (fR, c))`. -/
+def lamC : Val := Val.lam (.app (.val (.prim .iterate)) (.pair (.val fR) (.var 0)))
+
+/-- `(λd. lamC (alloc d))`. -/
+def lamD : Val := Val.lam (.app (.val lamC) (.app (.val (.prim .alloc)) (.var 0)))
+
+/-- `(λe. lamD (alloc u₀))`. -/
+def lamE : Val := Val.lam (.app (.val lamD) (.app (.val (.prim .alloc)) (.val u₀)))
+
+/-- `lamE (alloc ())`. -/
+def bodyR : Expr := .app (.val lamE) (.app (.val (.prim .alloc)) (.val Val.unit))
+
+/-- `hnd_Div rtH (hnd_Y yStore bodyR)`. -/
+def progReb : Expr := hndE DivRuntime.rtH (hndE yH bodyR)
+
+theorem bodyR_ok (n : Nat) :
+    erwp (ℍ := ℍ) Φ₀ (opTableN T2) QZ n [] bodyR (PMap.empty : WRes) := by
+  have hD := opTableN_down T2_down
+  have hL := opTableN_local T2
+  -- `e`
+  refine erwp_alloc Φ₀_down hL (.appR (.val lamE) .hole) Val.unit (fun e σ₁ σ₂ hcell hc => ?_)
+  obtain rfl := eq_of_compS_empty_left hc
+  refine erwp_det Φ₀_down hD QZ_down (fun μ => step1Only_plug (Head.beta μ _ _) rfl .hole) ?_
+  have h₁ : Kont.hole.plug (Expr.subst 0 (Val.loc e)
+      (.app (.val lamD) (.app (.val (.prim .alloc)) (.val u₀)))) =
+      (Kont.appR (.val lamD) .hole).plug (.app (.val (.prim .alloc)) (.val u₀)) := by
+    simp [Expr.subst, Kont.plug, lamD, lamC, fR, lamX, dropV, u₀, Stage1.idV, Stage1.yE,
+      performE, opPayload, Val.pair, Val.i32, Val.unit, Val.loc, Expr.val, Val.prim, Val.lam]
+  rw [h₁]
+  -- `d`
+  refine erwp_alloc Φ₀_down hL (.appR (.val lamD) .hole) u₀ (fun d τ₁ τ₂ hcd hcd' => ?_)
+  refine erwp_det Φ₀_down hD QZ_down (fun μ => step1Only_plug (Head.beta μ _ _) rfl .hole) ?_
+  have h₂ : Kont.hole.plug (Expr.subst 0 (Val.loc d)
+      (.app (.val lamC) (.app (.val (.prim .alloc)) (.var 0)))) =
+      (Kont.appR (.val lamC) .hole).plug (.app (.val (.prim .alloc)) (.val (Val.loc d))) := by
+    simp [Expr.subst, Kont.plug, lamC, fR, lamX, dropV, Stage1.yE, performE, opPayload,
+      Val.pair, Val.i32, Val.unit, Val.loc, Expr.val, Val.prim, Val.lam]
+  rw [h₂]
+  -- `c`
+  refine erwp_alloc Φ₀_down hL (.appR (.val lamC) .hole) (Val.loc d)
+    (fun c υ₁ υ₂ hcc hcc' => ?_)
+  refine erwp_det Φ₀_down hD QZ_down (fun μ => step1Only_plug (Head.beta μ _ _) rfl .hole) ?_
+  have h₃ : Kont.hole.plug (Expr.subst 0 (Val.loc c)
+      (.app (.val (.prim .iterate)) (.pair (.val fR) (.var 0)))) = iterateE fR (Val.loc c) := by
+    simp [Expr.subst, Kont.plug, iterateE, Val.pair, Val.loc, Expr.val, Val.prim,
+      subst_closedAt _ _ (show closedAt 0 fR.1 = true from rfl) (Nat.zero_le _)]
+  rw [h₃]
+  subst hcell hcd hcc
+  exact erwp_iterate Φ₀_down T2_down (OpTabN.ctxClosed_of_fin T2_fin _) QZ_down rfl (I := IR)
+    (en := tickEnt) (by simp [T2, T1, Stage1.divEff_ne6]) rfl rfl
+    (fun _ _ => ⟨rfl, rfl⟩) (fun _ _ _ _ h => h) IR_closed
+    (fun k s ls ρ hI => turnR_ok Φ₀_down k s ls ρ hI) _ _ _ _
+    ⟨c, d, e, _, rfl, ResU.CompS.comm hcd', ResU.CompS.comm hcc'⟩
+
+theorem progReb_ok (n : Nat) :
+    erwp (ℍ := ℍ) Φ₀ (opTableN OpTabN.empty) QZ n [] progReb (PMap.empty : WRes) :=
+  erwp_rtH Φ₀_down n [] _ _ (erwp_yH Φ₀_down n [] _ _ (bodyR_ok n))
+
+/-- **The reborrow test.** On every turn of a loop with no bound, a cell is lent `imm`, a field
+of it (a `ref` to a thunk, whose escrow holds a cell of the thunk's) is reborrowed at a shorter
+lifetime, and the reborrow is live across `y`, under a scheduler that stores the continuation in
+a cell and resumes it, under the runtime's `Div` handler: every configuration a run reaches is a
+value or steps, a value only at the empty memory, and every `free` finds its cell. No fuel. -/
+theorem progReb_orDiverges : LoopAwait.OrDiverges (ℍ := ℍ) progReb :=
+  erwp_adequacy (Φ := Φ₀) (fun _ _ _ _ h => h) progReb_ok
 
 end BoCa.Fig16.LogRel.Core.DtorUnwind.SI.RebProg
 

@@ -55,3 +55,5 @@ import DtorUnwind.SI.CanonN
 import DtorUnwind.SI.RebChooseC
 import DtorUnwind.SI.RebStopC
 import DtorUnwind.SI.RebAcrossC
+import DtorUnwind.SI.CanonRef
+import DtorUnwind.SI.RebProg
