@@ -8,3 +8,10 @@ import DtorUnwind.Suspend
 import DtorUnwind.Await
 import DtorUnwind.LoopAwait
 import DtorUnwind.Partial
+import DtorUnwind.SI.Frag
+import DtorUnwind.SI.Ewp
+import DtorUnwind.SI.Handle
+import DtorUnwind.SI.Fin
+import DtorUnwind.SI.Loop
+import DtorUnwind.SI.Adequacy
+import DtorUnwind.SI.Programs
