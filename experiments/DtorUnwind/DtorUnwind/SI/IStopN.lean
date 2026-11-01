@@ -105,18 +105,6 @@ theorem compS_imm_dup (l : Loc) (s : LSet) (v : Val) (χ : WRes) (h : χ.InStrat
   rw [e] at hcomp
   exact hcomp
 
-/-- A list with the same members is `Ext` at every resource. -/
-theorem ext_of_iff {ls ls' : List SRec} (h : ∀ x, x ∈ ls' ↔ x ∈ ls) (ρ : WRes) :
-    Ext ls ls' ρ := by
-  refine ⟨fun r hr _ => ?_, fun _ _ x _ => (h x).symm⟩
-  obtain ⟨t, ht⟩ := mem_rsOf.mp hr
-  exact mem_rsOf.mpr ⟨t, (h _).mpr ht⟩
-
-theorem mem_frameList_iff {p : FrameRec} {ds : List FrameRec} {α : Life} {ls ls' : List SRec}
-    (h : ∀ x, x ∈ ls' ↔ x ∈ ls) (x : SRec) :
-    x ∈ frameList p ds α ls' ↔ x ∈ frameList p ds α ls := by
-  simp only [frameList, List.mem_cons, List.mem_append, h x]
-
 /-- The own cell and a payload in `Res_α` are in `Res_α`. -/
 theorem inStratum_ownP {l : Loc} {v : Val} {ρP ρlP : WRes} {α : Life}
     (hclP : ResU.CompS (ResU.single l (CellU.ownOf v)) ρP ρlP) (hP : ρP.InStratum α) :

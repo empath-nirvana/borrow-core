@@ -22,7 +22,8 @@ handler frame's record stays on the list.
   lifetime, the clause lends at `xTop`, longer than the task's live lend at `A₀`; otherwise at a
   lifetime below the share (`ResU.exists_stratum`, 6.64's H11). In the first case the list `κ` is
   resumed at carries a record longer than `A₀` that the stop's list lacks: `Ext` at the borrowed
-  continuation's share refuses it (`resume_not_ext`), `sameW` refuses it, and `extF` allows it
+  continuation's share refuses it (`resume_not_ext`), a list with the stop's members cannot
+  carry it, and `extF` allows it
   (`extF_of_addAt`).
 * **(b) The borrow as the answer.** In the first case the clause passes the `imm` cell of `d` to
   `κ` with the location (`yAns`'s second disjunct): the capability crosses into the task's live
