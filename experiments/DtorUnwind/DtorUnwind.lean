@@ -44,3 +44,4 @@ import DtorUnwind.SI.ILendDropProg
 import DtorUnwind.SI.StopRaiseN
 import DtorUnwind.SI.RaiseLendProg
 import DtorUnwind.SI.RebStopN
+import DtorUnwind.SI.IStopRaiseN
