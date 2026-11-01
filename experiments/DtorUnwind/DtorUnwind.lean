@@ -28,3 +28,5 @@ import DtorUnwind.SI.HeapN
 import DtorUnwind.SI.RwpG
 import DtorUnwind.SI.ErwpN
 import DtorUnwind.SI.HandleN
+import DtorUnwind.SI.BindN
+import DtorUnwind.SI.StopFrameN

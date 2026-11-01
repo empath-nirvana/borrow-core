@@ -76,7 +76,7 @@ weakening, cancelled at `opTableN Tk` at every `k′ < k` when its cancel branch
 def KapRelN (Φ : LocFam) (Tb : TableN) (Q : PostN) (en : OpEntN) (Tc : Option OpTabN) (k : Nat)
     (ls : List SRec) (κ : Val) : WProp := fun ρ =>
   (en.q = .unr → ρ = PMap.empty) ∧
-  ∀ ls', Ext ls ls' ρ → ∀ k', k' < k →
+  ∀ ls', en.wc ls ls' ρ → ∀ k', k' < k →
     (∀ w : Val, (en.PB k' ls' w ─⋆
       erwp (ℍ := ℍ) Φ Tb Q k' ls' (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val w))) ρ) ∧
     (en.q ≠ .lin → ∀ Tk, Tc = some Tk →
@@ -352,7 +352,7 @@ theorem erwp_handle {Φ : LocFam} (hΦ : Φ.Down) (Tin Tout : OpTabN) (hTinD : T
       refine rwpG_det hΦ (hPD _)
         (fun μ => step1Only_plug (Head.hop μ m i qs hr hs c v K₁ hc hK₁) rfl .hole) ?_
       -- the cancel run of the continuation, at the cancel row's table, at every `k″ ≤ k`
-      have hcan : ∀ ls'', Ext ls' ls'' ρk → en.q ≠ .lin → ∀ Tk, Tc i = some Tk → ∀ k'', k'' ≤ k →
+      have hcan : ∀ ls'', en.wc ls' ls'' ρk → en.q ≠ .lin → ∀ Tk, Tc i = some Tk → ∀ k'', k'' ≤ k →
           erwp (ℍ := ℍ) Φ (opTableN Tk) unitPost k'' ls''
             (ccatchE (K₁.dead.plug (raiseE (.val (cancelVal none))))) ρk := by
         intro ls'' he hq' Tk hTk k'' hk''
@@ -390,7 +390,7 @@ theorem erwp_handle {Φ : LocFam} (hΦ : Φ.Down) (Tin Tout : OpTabN) (hTinD : T
           refine ⟨fun w τ₁ τ₂ hB hcτ => ?_, fun hq' Tk hTk => ?_⟩
           · obtain ⟨z, hz, hzτ⟩ := compS_exch hy₁ hcτ
             have h₁ := hcontIH k' (by omega) _ _ _
-              ((hcont ls'' (Ext.left hy₁ he)).1 k' (by omega) w τ₁ z hB hz)
+              ((hcont ls'' (hTinD.wcl _ _ _ hT _ _ _ _ _ hy₁ he)).1 k' (by omega) w τ₁ z hB hz)
             simp only [erwpC, show k' < n by omega, if_true] at h₁
             exact erwp_kappaC_resume hΦ hLout hDout hQout _ ℓ H K₁ w
               ⟨σ₁, z, ResU.CompS.comm hzτ, hcell,
@@ -399,7 +399,7 @@ theorem erwp_handle {Φ : LocFam} (hΦ : Φ.Down) (Tin Tout : OpTabN) (hTinD : T
               | exact absurd hqq hq'
               | exact erwp_kappaC_cancel hΦ (opTableN_local Tk) (hDk Tk hTk hq') unitPost_down
                   ℓ H K₁ ⟨σ₁, ρk, ResU.CompS.comm hy₁, hcell,
-                    hcan ls'' (Ext.left hy₁ he) hq' Tk hTk (k' - 1) (by omega)⟩
+                    hcan ls'' (hTinD.wcl _ _ _ hT _ _ _ _ _ hy₁ he) hq' Tk hTk (k' - 1) (by omega)⟩
     · -- an operation of another name passes outward
       have hKo : ((hndK H).comp K₁).HasHnd m = false := by
         rw [hasHnd_comp, hndK_hasHnd, hK₁]; simpa using Ne.symm hm

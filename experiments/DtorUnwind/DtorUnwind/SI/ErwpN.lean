@@ -37,6 +37,10 @@ structure OpEntN where
   PA : Nat → List SRec → Val → WProp
   PB : Nat → List SRec → Val → WProp
   fin : Option (Nat → List SRec → Expr → WProp)
+  /-- The worlds the continuation may be resumed at: `ls′` from the stop's `ls`, at the
+  continuation's share. `Ext` is `contShare`'s; an operation performed under a live lend has
+  `sameW` (`SI/StopFrameN.lean`). -/
+  wc : List SRec → List SRec → WRes → Prop
 
 abbrev OpTabN := UInt32 → UInt32 → Option OpEntN
 
@@ -50,11 +54,12 @@ abbrev TableN := Nat → List SRec → Expr → ContN → WProp
 def cancelOKN (en : OpEntN) (k : Nat) (ls : List SRec) (K : Kont) : WProp := fun ρ =>
   ∀ P, en.fin = some P → P k ls (K.dead.plug (raiseE (.val (cancelVal none)))) ρ
 
-/-- `contShare` at the index: resumed at every answer in `PB` at every `k′ < k`. -/
+/-- `contShare` at the index: resumed at every answer in `PB` at every `k′ < k`, at every world
+the entry's `wc` allows. -/
 def contShareN (en : OpEntN) (k : Nat) (ls : List SRec) (K : Kont) (Ψ : ContN) : WProp :=
   fun ρ =>
     (en.q = .unr → ρ = PMap.empty) ∧
-    ∀ ls', Ext ls ls' ρ →
+    ∀ ls', en.wc ls ls' ρ →
       (∀ k', k' < k → ∀ w : Val, (en.PB k' ls' w ─⋆ Ψ k' ls' (K.plug (.val w))) ρ) ∧
       (en.q ≠ .lin → cancelOKN en k ls' K ρ)
 
@@ -90,6 +95,9 @@ def TableN.Down (Tb : TableN) : Prop :=
 structure OpTabN.Down (T : OpTabN) : Prop where
   pa : ∀ n i en, T n i = some en → ∀ k ls v ρ, en.PA (k + 1) ls v ρ → en.PA k ls v ρ
   fin : ∀ n i en P, T n i = some en → en.fin = some P → ∀ k ls e ρ, P (k + 1) ls e ρ → P k ls e ρ
+  /-- The world condition passes to a part of the share (`Ext.left`). -/
+  wcl : ∀ n i en, T n i = some en → ∀ ls ls' (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ →
+    en.wc ls ls' ρ → en.wc ls ls' ρ₁
 
 theorem opTableN_local (T : OpTabN) : (opTableN T).Local := by
   intro k ls t Ψ Ψ' ρ hΨ h
