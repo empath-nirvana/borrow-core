@@ -47,3 +47,4 @@ import DtorUnwind.SI.RebStopN
 import DtorUnwind.SI.IStopRaiseN
 import DtorUnwind.SI.FinPerformN
 import DtorUnwind.SI.RaiseFinProg
+import DtorUnwind.SI.RebResumeN
