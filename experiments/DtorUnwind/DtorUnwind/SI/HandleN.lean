@@ -14,11 +14,12 @@ raise of another name, which passes outward with the handler reinstalled in its 
 hypothesis covers since `k′ < k ≤ n`: the stop's continuation is owed only at lower indices, so
 no `hdv` (guardedness) premise is needed.
 
-Scope of this file: the handler's non-abortive operations are unrestricted (`unr`, `κ` the plain
-`kappa`, its share empty) or must resume (`lin`, `κ` owning its cell, `kappaCell`, whose
-resumption frees the cell). A cancellable operation (`cancel`) is excluded (`hnc`): its `κ`'s
-cancel branch runs `ccatch (K†[raise …])` at the cancel row's table (`ewp_ccatch`), which is not
-yet transcribed at the index.
+All three qualifiers of a non-abortive operation are covered: unrestricted (`unr`, `κ` the plain
+`kappa`, its share empty), must-resume (`lin`) and cancellable (`cancel`), where `κ` owns its cell
+(`kappaCell`); a cancel of `κ` runs `ccatch (K†[raise …])` at the cancel row's table
+(`erwp_ccatch`, by induction on the index). Two narrowings from `ewp_handle_or`: the cancel row's
+table contains the entry's cancel obligation's table entry for entry (`OpTabN.Sub`, for `OpTab.Le`),
+and there is no table beside the operation table (`Px`, a tick at a `Div` row).
 -/
 
 noncomputable section
@@ -32,6 +33,15 @@ open BoCa.Fig16.BoLo
 open BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Step1 Head Kont performE raiseE cancelVal opPayload hndE kappa kappaC
   kappaCell kappaAt capTag clauseAt hndVal ccatchE)
+
+/-- `OpTabN.Down`'s cancel obligations, down any distance. -/
+theorem OpTabN.Down.fin_le {T : OpTabN} (hT : T.Down) {n i : UInt32} {en : OpEntN}
+    (hn : T n i = some en) {P : Nat → List SRec → Expr → WProp} (hP : en.fin = some P)
+    {m k : Nat} (h : m ≤ k) {ls : List SRec} {e : Expr} {ρ : WRes} (hk : P k ls e ρ) :
+    P m ls e ρ := by
+  induction h with
+  | refl => exact hk
+  | step _ ih => exact ih (hT.fin _ _ _ _ hn hP _ _ _ _ hk)
 
 /-! ### Garbage -/
 
@@ -55,14 +65,22 @@ theorem rwpG_garbage {Φ : LocFam} {Q : PostG} {n : Nat} {ls : List SRec} {e : E
 
 /-! ### `κ` -/
 
-/-- `KapRelT` at the index, its resume branch: resumed at every answer in `PB` at every
-`k′ < k`. -/
-def KapRelN (Φ : LocFam) (Tb : TableN) (Q : PostN) (en : OpEntN) (k : Nat) (ls : List SRec)
-    (κ : Val) : WProp := fun ρ =>
+/-- The postcondition of a cancel run caught at `ccatch`: `()`, owning nothing. -/
+def unitPost : PostN := fun _ _ v => ⌜v = Val.unit⌝
+
+theorem unitPost_down : unitPost.Down := fun _ _ _ _ h => h
+
+/-- `KapRelT` at the index: resumed at every answer in `PB` at every `k′ < k`, and, with
+weakening, cancelled at `opTableN Tk` at every `k′ < k` when its cancel branch has the table
+`Tk`. -/
+def KapRelN (Φ : LocFam) (Tb : TableN) (Q : PostN) (en : OpEntN) (Tc : Option OpTabN) (k : Nat)
+    (ls : List SRec) (κ : Val) : WProp := fun ρ =>
   (en.q = .unr → ρ = PMap.empty) ∧
-  ∀ ls', Ext ls ls' ρ → ∀ k', k' < k → ∀ w : Val,
-    (en.PB k' ls' w ─⋆
-      erwp (ℍ := ℍ) Φ Tb Q k' ls' (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val w))) ρ
+  ∀ ls', Ext ls ls' ρ → ∀ k', k' < k →
+    (∀ w : Val, (en.PB k' ls' w ─⋆
+      erwp (ℍ := ℍ) Φ Tb Q k' ls' (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val w))) ρ) ∧
+    (en.q ≠ .lin → ∀ Tk, Tc = some Tk →
+      erwp (ℍ := ℍ) Φ (opTableN Tk) unitPost k' ls' (.app κ.1 (.val (Val.inj₂ .unit))) ρ)
 
 /-- Resuming `κ` at `w` runs `hnd H K[w]` (`ewp_kappa_resume`): four deterministic steps, for
 free. -/
@@ -158,20 +176,143 @@ theorem erwp_kappaC_resume {Φ : LocFam} (hΦ : Φ.Down) {Tb : TableN} (hL : Tb.
   rw [show (0 + 1 : Nat) = 1 from rfl, show (0 + 1 + 1 : Nat) = 2 from rfl, kappa_resume_subst]
   exact hq
 
+/-! ### Cancel runs at the index -/
+
+/-- `errOk` at the index. -/
+def errOkN (T : OpTabN) (k : Nat) (ls : List SRec) : Option Val → WProp
+  | none => BoLo.emp
+  | some E => ex fun (m : UInt32) => ex fun (j : UInt32) => ex fun (w : Val) =>
+      ex fun (en : OpEntN) =>
+        ⌜E = opPayload m j w ∧ T m j = some en ∧ en.abort = true⌝ ⋆
+          fun ρ => en.PA k ls w ρ ∧ NoOwn ρ
+
+/-- `cancelTab` at the index. -/
+def cancelTabN (T : OpTabN) : TableN := fun k ls t Ψ =>
+  BoLo.or
+    (ex fun (K : Kont) => ex fun (err : Option Val) =>
+      ⌜t = K.plug (raiseE (.val (cancelVal err))) ∧ K.Catches 0 = false⌝ ⋆
+        (errOkN T k ls err ⋆ fun ρ => NoOwn ρ))
+    (performStopN T k ls t Ψ)
+
+/-- `cancelObl` at the index: the cancel run at `cancelTabN T`. -/
+def cancelOblN (Φ : LocFam) (T : OpTabN) : Nat → List SRec → Expr → WProp :=
+  fun k ls e => erwp (ℍ := ℍ) Φ (cancelTabN T) (fun _ _ _ _ => False) k ls e
+
+theorem cancelTabN_local (T : OpTabN) : (cancelTabN T).Local := by
+  intro k ls t Ψ Ψ' ρ hΨ h
+  rcases h with h | ⟨K, n, i, v, en, h⟩
+  · exact Or.inl h
+  · obtain ⟨hp, ρa, ρk, hc, hA, hu, hcont⟩ := pure_sep_iff.mp h
+    exact Or.inr ⟨K, n, i, v, en, pure_sep_mk hp ⟨ρa, ρk, hc, hA, hu, fun ls' he =>
+      ⟨fun k' hk w σ₁ σ₂ hB hcσ => hΨ k' hk _ _ _ ((hcont ls' he).1 k' hk w σ₁ σ₂ hB hcσ),
+        (hcont ls' he).2⟩⟩⟩
+
+/-- `T` is part of `T′`: every entry of `T` is `T′`'s at its key. -/
+def OpTabN.Sub (T T' : OpTabN) : Prop := ∀ n i en, T n i = some en → T' n i = some en
+
+/-- **A cancel run caught at `ccatch`, at the index** (`ewp_ccatch`), by induction on the
+index. -/
+theorem erwp_ccatch {Φ : LocFam} (hΦ : Φ.Down) {T Tout : OpTabN} (hT : T.Sub Tout)
+    (hToutD : Tout.Down) :
+    ∀ n ls e ρ, cancelOblN (ℍ := ℍ) Φ T n ls e ρ →
+      erwp (ℍ := ℍ) Φ (opTableN Tout) unitPost n ls (ccatchE e) ρ := by
+  have hLin := cancelTabN_local T
+  have hPD := erwpPost_down (opTableN_down hToutD) unitPost_down
+  intro n
+  induction n using Nat.strong_induction_on with
+  | _ n ih =>
+  intro ls e ρ h
+  rw [erwp_eq]
+  show rwpG (ℍ := ℍ) Φ _ n ls (ccatchK.plug e) ρ
+  refine rwpG_bind hΦ ccatchK ?_
+  refine rwpG_mono_le (fun k hk ls' t σ ht => ?_) (erwp_unfold_at hLin le_rfl h)
+  rcases ht with ⟨_, _, hv⟩ | ht
+  · exact hv.elim
+  rcases ht with ⟨K', err, hs'⟩ | ⟨K₁, m, i, v, en, hp⟩
+  · obtain ⟨⟨rfl, hK'⟩, τa, τb, hcab, he, hnb⟩ := pure_sep_iff.mp hs'
+    cases err with
+    | none =>
+        refine rwpG_det hΦ (hPD _) (fun μ => step1Only_plug (Head.cancel μ K' hK') rfl .hole) ?_
+        have hτa : τa = PMap.empty := he.1
+        subst hτa
+        rw [← eq_of_compS_empty_left hcab] at hnb
+        refine rwpG_garbage (rwpG_here (fun μ => final_val μ Val.unit)
+          ⟨PMap.empty, σ, compS_empty_left σ, hnb, Or.inl ⟨Val.unit, rfl, rfl, rfl⟩⟩)
+    | some E =>
+        refine rwpG_det hΦ (hPD _) (fun μ => step1Only_plug (Head.creraise μ E K' hK') rfl .hole) ?_
+        obtain ⟨m, j, w, en, he⟩ := he
+        obtain ⟨⟨rfl, hTe, ha⟩, hPA, hnA⟩ := pure_sep_iff.mp he
+        have hfin : ∀ μ, Final (ℍ := ℍ) μ (Kont.hole.plug (opE true (opPayload m j w))) :=
+          final_opPlug (payloadName_opPayload m j w) (by simp [OpFree, Kont.Catches])
+        exact rwpG_here hfin (Or.inr (Or.inr ⟨.hole, m, j, w, en,
+          pure_sep_mk ⟨rfl, rfl, hT _ _ _ hTe, ha⟩ ⟨τa, τb, hcab, ⟨hPA, hnA⟩, hnb⟩⟩))
+  · -- an operation of a finaliser passes `ccatch`
+    obtain ⟨⟨rfl, hK₁, hT₁, ha⟩, ρa, ρk, hcak, hA, hu, hcont⟩ := pure_sep_iff.mp hp
+    have hKo : (ccatchK.comp K₁).HasHnd m = false := by
+      rw [hasHnd_comp, hK₁]; simp [Kont.HasHnd, Expr.val]
+    have ht' : ccatchK.plug (K₁.plug (performE (.val (opPayload m i v)))) =
+        (ccatchK.comp K₁).plug (opE false (opPayload m i v)) := by
+      rw [Kont.plug_comp]; rfl
+    rw [ht']
+    refine rwpG_here (final_opPlug (payloadName_opPayload m i v) hKo) (Or.inr (Or.inl
+      ⟨ccatchK.comp K₁, m, i, v, en, pure_sep_mk ⟨rfl, hKo, hT _ _ _ hT₁, ha⟩
+        ⟨ρa, ρk, hcak, hA, hu, fun ls'' he => ⟨fun k' hk' w τ₁ τ₂ hB hcτ => ?_,
+          fun hq' => ?_⟩⟩⟩))
+    · rw [Kont.plug_comp]
+      have hc := (hcont ls'' he).1 k' hk' w τ₁ τ₂ hB hcτ
+      simp only [erwpC, show k' < n by omega, if_true] at hc ⊢
+      exact ih k' (by omega) _ _ _ hc
+    · intro P hP
+      show P k ls'' ((ccatchK.comp K₁).dead.plug _) ρk
+      rw [dead_comp, dead_ccatchK]
+      exact (hcont ls'' he).2 hq' P hP
+
+/-- Cancelling `κ` runs `ccatch (K†[raise …])` (`ewp_kappa_cancel`): three deterministic steps,
+for free. -/
+theorem erwp_kappa_cancel {Φ : LocFam} (hΦ : Φ.Down) {Tb : TableN} (hTd : Tb.Down) {Q : PostN}
+    (hQ : Q.Down) (H : Val) (K : Kont) {k : Nat} {ls : List SRec} {ρ : WRes}
+    (h : erwp (ℍ := ℍ) Φ Tb Q k ls (ccatchE (K.dead.plug (raiseE (.val (cancelVal none))))) ρ) :
+    erwp (ℍ := ℍ) Φ Tb Q k ls (.app (kappa H K) (.val (Val.inj₂ .unit))) ρ := by
+  refine erwp_det hΦ hTd hQ (fun μ => step1Only_plug (Head.beta μ _ _) rfl .hole) ?_
+  refine erwp_det hΦ hTd hQ (fun μ => step1Only_plug (Head.case₂ μ Val.unit _ _) rfl .hole) ?_
+  refine erwp_det hΦ hTd hQ (fun μ => step1Only_plug (Head.seq μ _) rfl .hole) ?_
+  rw [show (0 + 1 : Nat) = 1 from rfl, kappa_cancel_subst]
+  exact h
+
+/-- **Cancelling a cancellable `κ`** frees its cell, then runs `ccatch (K†[raise …])`
+(`ewp_kappaC_cancel`). -/
+theorem erwp_kappaC_cancel {Φ : LocFam} (hΦ : Φ.Down) {Tb : TableN} (hL : Tb.Local)
+    (hTd : Tb.Down) {Q : PostN} (hQ : Q.Down) (ℓ : Loc) (H : Val) (K : Kont) {k : Nat}
+    {ls : List SRec} {ρ : WRes}
+    (h : (ptoOwn ℓ Val.unit ⋆ erwp (ℍ := ℍ) Φ Tb Q (k - 1) ls
+      (ccatchE (K.dead.plug (raiseE (.val (cancelVal none)))))) ρ) :
+    erwp (ℍ := ℍ) Φ Tb Q k ls (.app (kappaC true ℓ H K) (.val (Val.inj₂ .unit))) ρ := by
+  refine erwp_det hΦ hTd hQ (fun μ => step1Only_plug (Head.beta μ _ _) rfl .hole) ?_
+  refine erwp_det hΦ hTd hQ (fun μ => step1Only_plug (Head.case₂ μ Val.unit _ _) rfl .hole) ?_
+  refine erwp_det hΦ hTd hQ (fun μ => step1Only_plug (Head.seq μ _) rfl .hole) ?_
+  refine erwp_free hΦ hL (Kont.seq .hole _) ℓ Val.unit ?_
+  obtain ⟨ρ₁, ρ₂, hc, hp, hq⟩ := h
+  refine ⟨ρ₁, ρ₂, hc, hp, ?_⟩
+  refine erwp_det hΦ hTd hQ (fun μ => step1Only_plug (Head.seq μ _) rfl .hole) ?_
+  rw [show (0 + 1 : Nat) = 1 from rfl, kappa_cancel_subst]
+  exact hq
+
 /-! ### The handler -/
 
 /-- **A handler at the step index** (`[handle]`), by induction on the index; `ewp_handle_or`'s
 cases at the end of the handled run. -/
-theorem erwp_handle {Φ : LocFam} (hΦ : Φ.Down) (Tin Tout : OpTabN) (hTinD : Tin.Down) (hTout : Tout.Down)
-    (n₀ : UInt32) (hTin : ∀ m i, m ≠ n₀ → Tin m i = Tout m i) (qs hr hs : Val)
+theorem erwp_handle {Φ : LocFam} (hΦ : Φ.Down) (Tin Tout : OpTabN) (hTinD : Tin.Down)
+    (hTout : Tout.Down) (n₀ : UInt32) (hTin : ∀ m i, m ≠ n₀ → Tin m i = Tout m i) (qs hr hs : Val)
     (Qin Qout : PostN) (hQout : Qout.Down)
     (hq : ∀ i en, Tin n₀ i = some en → en.abort = false → capTag qs.1 i.toNat = en.q.tag)
-    (hnc : ∀ i en, Tin n₀ i = some en → en.abort = false → en.q ≠ .cancel)
+    (Tc : UInt32 → Option OpTabN)
+    (hTc : ∀ i en, Tin n₀ i = some en → en.abort = false → en.q ≠ .lin → ∀ Tk, Tc i = some Tk →
+      ∃ T₁, en.fin = some (cancelOblN (ℍ := ℍ) Φ T₁) ∧ T₁.Sub Tk ∧ Tk.Down)
     (hret : ∀ k ls v ρ, Qin k ls v ρ →
       erwp (ℍ := ℍ) Φ (opTableN Tout) Qout k ls (.app (.val hr) (.val v)) ρ)
     (hop : ∀ i en, Tin n₀ i = some en → ∃ c, clauseAt hs.1 i.toNat = some c ∧
       (en.abort = false → ∀ k ls v (κ : Val) ρ,
-        (en.PA k ls v ⋆ KapRelN (ℍ := ℍ) Φ (opTableN Tout) Qout en k ls κ) ρ →
+        (en.PA k ls v ⋆ KapRelN (ℍ := ℍ) Φ (opTableN Tout) Qout en (Tc i) k ls κ) ρ →
         erwp (ℍ := ℍ) Φ (opTableN Tout) Qout k ls (.app (.val c) (.pair (.val v) κ.1)) ρ) ∧
       (en.abort = true → ∀ k ls v ρ, en.PA k ls v ρ →
         erwp (ℍ := ℍ) Φ (opTableN Tout) Qout k ls (.app (.val c) (.val v)) ρ)) :
@@ -210,19 +351,33 @@ theorem erwp_handle {Φ : LocFam} (hΦ : Φ.Down) (Tin Tout : OpTabN) (hTinD : T
       obtain ⟨c, hc, hna, -⟩ := hop i en hT
       refine rwpG_det hΦ (hPD _)
         (fun μ => step1Only_plug (Head.hop μ m i qs hr hs c v K₁ hc hK₁) rfl .hole) ?_
+      -- the cancel run of the continuation, at the cancel row's table, at every `k″ ≤ k`
+      have hcan : ∀ ls'', Ext ls' ls'' ρk → en.q ≠ .lin → ∀ Tk, Tc i = some Tk → ∀ k'', k'' ≤ k →
+          erwp (ℍ := ℍ) Φ (opTableN Tk) unitPost k'' ls''
+            (ccatchE (K₁.dead.plug (raiseE (.val (cancelVal none))))) ρk := by
+        intro ls'' he hq' Tk hTk k'' hk''
+        obtain ⟨T₁, hf, hsub, hTkD⟩ := hTc i en hT ha hq' Tk hTk
+        have hP := (hcont ls'' he).2 hq' _ hf
+        exact erwp_ccatch hΦ hsub hTkD k'' ls'' _ ρk (hTinD.fin_le hT hf hk'' hP)
+      have hDk : ∀ Tk : OpTabN, Tc i = some Tk → en.q ≠ .lin → (opTableN Tk).Down := by
+        intro Tk hTk hq'
+        obtain ⟨-, -, -, hTkD⟩ := hTc i en hT ha hq' Tk hTk
+        exact opTableN_down hTkD
       rw [hq i en hT ha, kappaAt_tag]
       cases hqq : en.q with
       | unr =>
           refine erwp_unfold_at hLout hk (hna ha k ls' v
             ⟨kappa H K₁, by unfold kappa; exact .lam⟩ σ ⟨ρa, ρk, hcak, hA, hu, ?_⟩)
-          intro ls'' he k' hk' w τ₁ τ₂ hB hcτ
-          have h₁ := hcontIH k' hk' _ _ _ ((hcont ls'' he).1 k' hk' w τ₁ τ₂ hB hcτ)
-          simp only [erwpC, show k' < n by omega, if_true] at h₁
-          exact erwp_kappa_resume hΦ hDout hQout H K₁ w h₁
-      | cancel => exact absurd hqq (hnc i en hT ha)
-      | lin =>
+          intro ls'' he k' hk'
+          refine ⟨fun w τ₁ τ₂ hB hcτ => ?_, fun hq' Tk hTk => ?_⟩
+          · have h₁ := hcontIH k' hk' _ _ _ ((hcont ls'' he).1 k' hk' w τ₁ τ₂ hB hcτ)
+            simp only [erwpC, show k' < n by omega, if_true] at h₁
+            exact erwp_kappa_resume hΦ hDout hQout H K₁ w h₁
+          · exact erwp_kappa_cancel hΦ (hDk Tk hTk hq') unitPost_down H K₁
+              (hcan ls'' he hq' Tk hTk k' (by omega))
+      | lin | cancel =>
           -- the cell is allocated, one step; `κ` is `kappaC` at it, owning the cell and the share
-          refine erwp_unfold_at hLout hk (erwp_kappaCell hΦ hLout hDout hQout false H K₁
+          refine erwp_unfold_at hLout hk (erwp_kappaCell hΦ hLout hDout hQout _ H K₁
             (.appR (.val c) (.pairR v .hole)) (fun ℓ σ₁ σ₂ hcell hc₂ => ?_))
           obtain ⟨y, hy₁, hy₂⟩ := compS_reassoc hcak hc₂
           have hA' : en.PA (k - 1) ls' v ρa := by
@@ -231,14 +386,20 @@ theorem erwp_handle {Φ : LocFam} (hΦ : Φ.Down) (Tin Tout : OpTabN) (hTinD : T
             | succ k₀ => exact hTinD.pa _ _ _ hT _ _ _ _ hA
           refine hna ha (k - 1) ls' v ⟨_, isVal_kappaC _ ℓ H K₁⟩ σ₂
             ⟨ρa, y, hy₂, hA', fun hq' => absurd (hqq.symm.trans hq') (by simp), ?_⟩
-          intro ls'' he k' hk' w τ₁ τ₂ hB hcτ
-          obtain ⟨z, hz, hzτ⟩ := compS_exch hy₁ hcτ
-          have h₁ := hcontIH k' (by omega) _ _ _
-            ((hcont ls'' (Ext.left hy₁ he)).1 k' (by omega) w τ₁ z hB hz)
-          simp only [erwpC, show k' < n by omega, if_true] at h₁
-          exact erwp_kappaC_resume hΦ hLout hDout hQout false ℓ H K₁ w
-            ⟨σ₁, z, ResU.CompS.comm hzτ, hcell,
-              erwp_le hΦ hLout hDout hQout (Nat.sub_le k' 1) h₁⟩
+          intro ls'' he k' hk'
+          refine ⟨fun w τ₁ τ₂ hB hcτ => ?_, fun hq' Tk hTk => ?_⟩
+          · obtain ⟨z, hz, hzτ⟩ := compS_exch hy₁ hcτ
+            have h₁ := hcontIH k' (by omega) _ _ _
+              ((hcont ls'' (Ext.left hy₁ he)).1 k' (by omega) w τ₁ z hB hz)
+            simp only [erwpC, show k' < n by omega, if_true] at h₁
+            exact erwp_kappaC_resume hΦ hLout hDout hQout _ ℓ H K₁ w
+              ⟨σ₁, z, ResU.CompS.comm hzτ, hcell,
+                erwp_le hΦ hLout hDout hQout (Nat.sub_le k' 1) h₁⟩
+          · first
+              | exact absurd hqq hq'
+              | exact erwp_kappaC_cancel hΦ (opTableN_local Tk) (hDk Tk hTk hq') unitPost_down
+                  ℓ H K₁ ⟨σ₁, ρk, ResU.CompS.comm hy₁, hcell,
+                    hcan ls'' (Ext.left hy₁ he) hq' Tk hTk (k' - 1) (by omega)⟩
     · -- an operation of another name passes outward
       have hKo : ((hndK H).comp K₁).HasHnd m = false := by
         rw [hasHnd_comp, hndK_hasHnd, hK₁]; simpa using Ne.symm hm
