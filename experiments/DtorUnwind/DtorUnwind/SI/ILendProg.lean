@@ -68,7 +68,7 @@ def lendIE (l : Loc) : Expr := .seq Stage1.yE (ldL l)
 
 /-- **The borrowed computation**: from the borrow alone, `y ()` stops with the borrow in its
 continuation's share; after the resume the borrow reads (6.143 at the index) and is dropped. -/
-theorem lendI_ok {Φ : LocFam} (hΦ : Φ.Down) (l : Loc) (A : Life) (k : Nat)
+theorem lendI_ok {Φ : LocFam} (l : Loc) (A : Life) (k : Nat)
     (ls : List SRec) (BI : WRes)
     (hBI : ResU.CompS PMap.empty (ResU.single l (CellU.immOf (LSet.singleton A) Val.unit PMap.empty
       (inStratum_empty A))) BI) :
@@ -155,7 +155,7 @@ theorem turnI_ok {Φ : LocFam} (hΦ : Φ.Down) (k : Nat) (s : Val) (ls : List SR
       (fun _ _ _ _ h => h) (T2_ilendOK A) (fun _ _ _ _ _ _ h => h) k ls (lendIE l)
       PMap.empty _ PMap.empty _ (inStratum_empty A) (inStratum_empty A) rfl
       (ResU.comp_empty_right _) (ResU.comp_empty_right _) hA ds hds
-      (lendI_ok hΦ l A k _)
+      (lendI_ok l A k _)
 
 /-! ### The program -/
 
