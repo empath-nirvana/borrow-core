@@ -22,9 +22,8 @@ clause (`ResU.UpdMut`), not the stratification: every member of a family over `R
 `n ≤ k′`. It is reflexive and transitive, and a write at a lower index meets it
 (`updMutSI_write`). It is a new definition beside the printed one; nothing printed is edited.
 
-Not derived: that BoLo's proofs that read `P̂`'s identity (the aliasable walk's account of a `mut`
-cell by its immutable ancestor, `[TR]` 6.48; `ptoMutX_write`'s reuse of the stored predicate in
-the anti-frame rule, `Core/FrameRules.lean`) go through at `UpdMutSI`. No obstruction verified.
+`UpdMutSI` does not carry `[TR]` 6.48's `mut ○ mut` step, and bounds the new member only from
+above (`SI/UpdN.lean`, `not_mutMutMemberStep`). The clause the relation uses is `UpdMutN` there.
 -/
 
 noncomputable section
