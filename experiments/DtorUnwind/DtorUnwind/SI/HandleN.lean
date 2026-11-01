@@ -442,4 +442,40 @@ theorem erwp_handle {Φ : LocFam} (hΦ : Φ.Down) (Tin Tout : OpTabN) (hTinD : T
 
 end BoCa.Fig16.LogRel.Core.DtorUnwind.SI
 
+namespace BoCa.Fig16.LogRel.Core.DtorUnwind.SI
+open BoCa
+open BoCa.Fig16
+open BoCa.Fig16.BoLo
+open BoCa.Fig16.LogRel.Core
+
+/-- The empty operation table: nothing may stop. -/
+def OpTabN.empty : OpTabN := fun _ _ => none
+
+/-- **Safety of a closed program at `erwp`**: at the empty table, at the empty world, at every
+index, every configuration a run reaches is a value or steps. -/
+theorem erwp_safe {Φ : LocFam} {Q : PostN} {e : Expr}
+    (hall : ∀ n, erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) Q n [] e (PMap.empty : WRes))
+    {j : Nat} {μ' : BoCa.BoLo.Heap} {e' : Expr}
+    (hrun : StepsN (ℍ := ℍ) j (fun _ => none) e μ' e') :
+    IsVal e' ∨ ∃ μ'' e'', BoCa.BoLo.Step1 (ℍ := ℍ) μ' e' μ'' e'' := by
+  refine rwpG_safe (Φ := Φ) (Q := erwpPost (opTableN OpTabN.empty) Q
+    (erwpC (ℍ := ℍ) Φ (opTableN OpTabN.empty) Q (j + 1))) ?_
+    (fun n => ?_) hrun
+  · intro k ls t ρ h
+    rcases h with ⟨v, rfl, -⟩ | ⟨_, _, _, _, _, h⟩ | ⟨_, _, _, _, _, h⟩
+    · exact v.2
+    · exact absurd (pure_sep_iff.mp h).1.2.2.1 (by simp [OpTabN.empty])
+    · exact absurd (pure_sep_iff.mp h).1.2.2.1 (by simp [OpTabN.empty])
+  · rcases Nat.le_total n (j + 1) with h | h
+    · exact erwp_unfold_at (opTableN_local _) h (hall n)
+    · have := erwp_unfold_at (opTableN_local _) le_rfl (hall n)
+      refine rwpG_mono_le (fun k hk ls t ρ ht => ?_) this
+      rcases ht with ht | ht
+      · exact Or.inl ht
+      · rcases ht with ⟨_, _, _, _, _, h'⟩ | ⟨_, _, _, _, _, h'⟩
+        · exact absurd (pure_sep_iff.mp h').1.2.2.1 (by simp [OpTabN.empty])
+        · exact absurd (pure_sep_iff.mp h').1.2.2.1 (by simp [OpTabN.empty])
+
+end BoCa.Fig16.LogRel.Core.DtorUnwind.SI
+
 end
