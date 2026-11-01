@@ -40,3 +40,4 @@ import DtorUnwind.SI.UbindGN
 import DtorUnwind.SI.IStopN
 import DtorUnwind.SI.ILendProg
 import DtorUnwind.SI.IStopCancelN
+import DtorUnwind.SI.ILendDropProg
