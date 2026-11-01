@@ -25,3 +25,5 @@ import DtorUnwind.SI.FrameResN
 import DtorUnwind.SI.IFrameN
 import DtorUnwind.SI.RebRuleN
 import DtorUnwind.SI.HeapN
+import DtorUnwind.SI.RwpG
+import DtorUnwind.SI.ErwpN
