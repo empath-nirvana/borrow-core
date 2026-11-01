@@ -4,3 +4,4 @@ import DtorUnwind.Safety
 import DtorUnwind.Cancel
 import DtorUnwind.Loop
 import DtorUnwind.Lend
+import DtorUnwind.Suspend
