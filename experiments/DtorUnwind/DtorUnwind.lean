@@ -51,3 +51,4 @@ import DtorUnwind.SI.RebResumeN
 import DtorUnwind.SI.RebAcrossN
 import DtorUnwind.SI.RebAgreeCex
 import DtorUnwind.SI.RebRechooseN
+import DtorUnwind.SI.CanonN
