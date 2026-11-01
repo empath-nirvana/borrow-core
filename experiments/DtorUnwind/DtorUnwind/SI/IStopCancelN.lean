@@ -84,7 +84,7 @@ theorem iFold {l : Loc} {A : Life} {v : Val} {ρP ρlP ρa ρk ρp ρ' π Y : WR
   obtain ⟨Xk, hXk, hXkp⟩ :=
     (ResU.CompS.assoc ρk σB ρp Xσ).mp ⟨s3, ResU.CompS.comm hs3, hks3⟩
   obtain ⟨g, hg, hXkg⟩ := (ResU.CompS.assoc Xk ρp ρi BI').mpr ⟨Xσ, hXkp, hXσi⟩
-  exact ⟨Xk, g, hXk, hXkg, noOwn_compS hg hnoρp (noOwn_single_imm l)⟩
+  exact ⟨Xk, g, hXk, hXkg, noOwn_compS hg hnoρp (noOwn_single_imm l _ _ _ _)⟩
 
 /-! ### The Imm Frame over a cancel run -/
 
@@ -316,7 +316,7 @@ theorem claimIT_can {Φ : LocFam} (l : Loc) (Ty : VTy) (δ : LSub) (hadm : AdmWf
     hshape hclP (ResU.CompS.comm hkL) hAtag ds hds (fun BI hBI => ?_)
   obtain rfl := ResU.CompS.functional hBI hXid
   obtain ⟨g, hg, hkg⟩ := (ResU.CompS.assoc ρk ρp _ _).mpr ⟨X, hX, hXi⟩
-  exact erwp_garbage hkg (noOwn_compS hg hno (noOwn_single_imm l)) hin
+  exact erwp_garbage hkg (noOwn_compS hg hno (noOwn_single_imm l _ _ _ _)) hin
 
 /-- **Imm Frame at `erwp` across stops, cancellable stops included**: the lender's stops are at
 `claimT`, whose cancel runs end carrying the lend's claim `ρ_ℓ ● ρ_P̂(v)`. -/

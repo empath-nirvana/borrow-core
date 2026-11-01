@@ -79,18 +79,6 @@ theorem eq_del_of_compS_single {G π : WRes} {l : Loc} {ψ : CellU Loc Val}
   · subst hm; rw [hG, ResU.del_get_self]
   · rw [ResU.del_get_ne _ hm, ResU.Comp.get_of_right_none h (ResU.single_get_ne ψ hm)]
 
-/-- One `imm` cell owns nothing. -/
-theorem noOwn_single_imm (l : Loc) {s : LSet} {v : Val} {χ : WRes} {h : χ.InStratum s.join} :
-    NoOwn (ResU.single l (CellU.immOf s v χ h)) := by
-  refine noOwn_iff.mpr fun m ψ hm => ?_
-  by_cases hml : m = l
-  · subst hml
-    rw [ResU.single_get_self] at hm
-    cases Option.some.inj hm
-    rw [CellU.kind_immOf]
-    exact fun h => Kind.noConfusion h
-  · rw [ResU.single_get_ne _ hml] at hm; exact absurd hm (by simp)
-
 /-- `[TR]` 6.116 (`I-dup`) at a cell: `ρᵢ = ρᵢ ● ρᵢ`. -/
 theorem compS_imm_dup (l : Loc) (s : LSet) (v : Val) (χ : WRes) (h : χ.InStratum s.join) :
     ResU.CompS (ResU.single l (CellU.immOf s v χ h)) (ResU.single l (CellU.immOf s v χ h))
@@ -226,7 +214,7 @@ theorem rwpG_I_frameG {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmW
     · subst hml; rw [ResU.del_get_self]; rfl
     · rw [ResU.del_get_ne _ hml, ResU.single_get_ne _ hml]; rfl
   obtain ⟨G₀, hG₀, hGW⟩ := six38N (ρ' := π.del l) (ρp := ρi) hlPcell hH12
-    ⟨hGc.1, π, hGc, ⟨σπ, hσπ⟩⟩ houtb hπdA (noOwn_single_imm l) hBI hGc h10
+    ⟨hGc.1, π, hGc, ⟨σπ, hσπ⟩⟩ houtb hπdA (noOwn_single_imm l _ _ _ _) hBI hGc h10
   rw [hidel] at hG₀
   obtain rfl : π.del l = G₀ := ResU.CompS.functional (ResU.comp_empty_right _) hG₀
   -- 6.39: `ρ ↭ π/ℓ ● ρ_ℓ ● ρ_P̂(v)`
@@ -476,7 +464,7 @@ theorem erwp_I_frame {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmWf
       (ResU.CompS.assoc ρk σB ρp Xσ).mp ⟨s3, ResU.CompS.comm hs3, hks3⟩
     have hc := (hcont _ he'').1 k' hk' w σB Xk hB' hXk
     simp only [erwpC, show k' < n by omega, if_true] at hc
-    exact erwp_garbage hXσi (noOwn_single_imm l) (erwp_garbage hXkp hnoρp hc)
+    exact erwp_garbage hXσi (noOwn_single_imm l _ _ _ _) (erwp_garbage hXkp hnoρp hc)
   · obtain ⟨⟨-, -, hTe, ha⟩, -⟩ := pure_sep_iff.mp hp
     exact absurd ha (by rw [(hT.entry m i en hTe).1]; simp)
 

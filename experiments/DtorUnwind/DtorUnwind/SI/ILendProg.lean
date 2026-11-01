@@ -88,7 +88,7 @@ theorem lendI_ok {Φ : LocFam} (hΦ : Φ.Down) (l : Loc) (A : Life) (k : Nat)
       le_refl _⟩, fun w ρc X hc hX => ?_⟩))
   obtain rfl := eq_of_compS_empty_left hX
   obtain ⟨s, u', σ, hs, rfl, ⟨-, -, -, -, hw⟩, -⟩ := hc
-  refine ⟨noOwn_single_imm l, fun ρl Y hl hY ρv Z hv hZ => ?_, inStratum_empty A⟩
+  refine ⟨noOwn_single_imm l _ _ _ _, fun ρl Y hl hY ρv Z hv hZ => ?_, inStratum_empty A⟩
   subst hl
   obtain rfl := eq_of_compS_empty_left hY
   have hv' : ρv = PMap.empty := hv

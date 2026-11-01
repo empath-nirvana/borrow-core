@@ -98,7 +98,7 @@ theorem lendI_okC (l : Loc) (A : Life) (k : Nat) (ls : List SRec) (BI : WRes)
         rfl, le_refl _⟩, fun w ρc X hc hX => ?_⟩))
     obtain rfl := eq_of_compS_empty_left hX
     obtain ⟨s, u', σ, hs, rfl, ⟨-, -, -, -, hw⟩, -⟩ := hc
-    refine ⟨noOwn_single_imm l, fun ρl Y hl hY ρv Z hv hZ => ?_, inStratum_empty A⟩
+    refine ⟨noOwn_single_imm l _ _ _ _, fun ρl Y hl hY ρv Z hv hZ => ?_, inStratum_empty A⟩
     subst hl
     obtain rfl := eq_of_compS_empty_left hY
     have hv' : ρv = PMap.empty := hv
@@ -111,7 +111,7 @@ theorem lendI_okC (l : Loc) (A : Life) (k : Nat) (ls : List SRec) (BI : WRes)
     rw [dead_plain _ hKH (hKC 0), erwp_eq]
     exact rwpG_here (final_opPlug (r := true) (payloadName_cancelVal none) (hKC 0))
       (Or.inr (Or.inl ⟨_, none, pure_sep_mk ⟨rfl, hKC 0⟩
-        ⟨PMap.empty, _, compS_empty_left _, emp_empty, noOwn_single_imm l⟩⟩))
+        ⟨PMap.empty, _, compS_empty_left _, emp_empty, noOwn_single_imm l _ _ _ _⟩⟩))
 
 /-- The loop's invariant over a fixed cell holding `()`. -/
 def ILu (l : Loc) : Val → WProp := fun s ρ => s = Val.loc l ∧ ptoOwn l Val.unit ρ
