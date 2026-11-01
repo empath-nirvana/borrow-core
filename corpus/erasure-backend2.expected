@@ -177,6 +177,7 @@ for-view-effect-copy erased handles 0 performs 0 raises 0 left 0 0
 for-yield-branch erased handles 0 performs 0 raises 0 machines 6 suspends 3 left 0 0
 format erased handles 0 performs 0 raises 0 left 0 0
 fs-cat erased handles 2 performs 0 raises 4 left 0 0
+fs-copy erased handles 1 performs 0 raises 3 left 0 0
 fs-fake erased handles 9 performs 0 raises 23 left 0 0
 gen-adapters erased handles 0 performs 0 raises 0 machines 38 suspends 22 left 0 0
 gen-adapters-fail erased handles 0 performs 0 raises 0 machines 46 suspends 27 left 0 0

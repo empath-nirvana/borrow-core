@@ -6519,7 +6519,8 @@ with its two reviews, is `docs/scope/769-fs.md`.
 - **The descriptor is an `i32`**, not a cell: no allocation a file, and a fake handler can make
   one. The constructor is public (a declared type has no private constructor yet), so a program
   can build a `File` from any `i32`, or two from one descriptor; the guarantee is per `File` value,
-  not per descriptor. The platform refuses the descriptors `0`, `1`, `2` (`BadFile`).
+  not per descriptor. No descriptor is special-cased: constructor privacy closes the gap, and is
+  *Open* (Wasm's preopens, like any descriptor, can be closed through a forged file).
 - **The laws.** Every operation may answer an error instead. `fs_open(p, Reading)` opens the
   existing file at `p`; `fs_open(p, Writing)` creates or truncates it. `fs_read(f, b)` reads into
   `b`'s spare capacity, appending, at most the room and at least one byte while the file has more:
@@ -6574,9 +6575,12 @@ write's next write. The closure, flat and new backend's IRs carry one primitive 
 
 **Programs.** `corpus/fs-cat.bc` (a file printed in chunks of one 64 KiB buffer), `corpus/json-field.bc`
 (#67 milestone 1: a JSON file read whole by `read_all`, the value of a top-level key printed,
-`corpus/json-tokens.bc`'s tokenizer), whose goldens are the error path (`corpus/no-such-file`, not
-found at every stage), and `scripts/check-fs.sh` (the gate's `fs files`), which writes files to a
-temporary directory and runs both on them in Wasm and natively, by both backends. `corpus/fs-fake.bc`
+`corpus/json-tokens.bc`'s tokenizer) and `corpus/fs-copy.bc` (two files open, over the operations'
+sums), whose goldens are the error path (`corpus/no-such-file`, not found at every stage), and
+`scripts/check-fs.sh` (the gate's `fs files`), which writes files to a temporary directory and
+runs the three on them in Wasm and natively, by both backends: reads, an open for writing that
+truncates a longer file and the copy read back, the errors, and natively a FIFO, whose size reads
+`0`, so that `read_all` grows its buffer. `corpus/fs-fake.bc`
 runs the same reads, a two-file copy and the errors under `fake_fs`, a handler of `Fs` alone, at
 every stage. `corpus/trusted/fs-cat.txt` and `json-field.txt` pin the trust reports.
 

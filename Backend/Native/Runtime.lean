@@ -34,9 +34,9 @@ allocator), so that `live` and the counts agree:
   `n` bytes at `p` to `x`, calling `write(2)` again after a short write; `3` is `fstat(2)`'s size;
   `4` is `close(2)`. Each answers an `i32`, zero-extended: the result, or `-1` not found
   (`ENOENT`, `ENOTDIR`), `-2` denied (`EACCES`, `EPERM`, `EROFS`), `-3` a directory (`EISDIR`),
-  `-4` a bad file (`EBADF`, or a descriptor below `3`, refused without a call), `-5` too big (a
-  size past `2^31 − 2`, a path past `PATH_MAX`), `-(16 + errno)` any other. `EINTR` is retried by
-  all but `close`, which releases the descriptor whatever it answers.
+  `-4` a bad file (`EBADF`), `-5` too big (a size past `2^31 − 2`, a path past `PATH_MAX`), `-(16 + errno)` any other. `EINTR` is retried by
+  all but `close`, which releases the descriptor whatever it answers. A path holding a `NUL` byte
+  names no file (`-1`): `open(2)` would read a shorter one.
 - `bc_status code` is the exit status the run ends with once the entry returns (SPEC §39).
 
 `main` runs the program's entry on a thread whose stack is 512 MiB (reserved, not committed),
@@ -237,6 +237,7 @@ int64_t bc_file(int64_t op, int64_t x, int64_t p, int64_t n) {
   if (op == 0) {
     char path[PATH_MAX];
     if (n < 0 || n >= PATH_MAX) return fs_ans(-5);
+    if (memchr(a, 0, (size_t)n)) return fs_ans(-1);
     memcpy(path, a, (size_t)n);
     path[n] = 0;
     int fl = x == 0 ? O_RDONLY : (O_WRONLY | O_CREAT | O_TRUNC);
@@ -244,7 +245,7 @@ int64_t bc_file(int64_t op, int64_t x, int64_t p, int64_t n) {
     while ((fd = open(path, fl | O_CLOEXEC, 0644)) < 0 && errno == EINTR) {}
     return fd < 0 ? fs_err(errno) : fs_ans(fd);
   }
-  if (x < 3 || x > INT32_MAX) return fs_ans(-4);
+  if (x < 0 || x > INT32_MAX) return fs_ans(-4);
   int fd = (int)x;
   if (op == 1) {
     ssize_t r;

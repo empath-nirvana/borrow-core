@@ -177,6 +177,7 @@ for-view-effect-copy 4 0 0 13 7 5
 for-yield-branch 3 0 0 3 3 0
 format 4 0 0 40 33 21
 fs-cat 7 0 0 133 88 21
+fs-copy 8 0 0 231 168 37
 fs-fake 21 0 0 957 683 495
 gen-adapters 8 0 0 18 18 0
 gen-adapters-fail 11 0 0 27 27 0

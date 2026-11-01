@@ -14,21 +14,19 @@
 include fs
 include textio
 
--- The file's bytes to standard output: the number of bytes.
-fn cat(f: File) -> i32 with Fs, Stdout, Fail[FsError] =
+-- The file's bytes to standard output.
+fn cat(f: File) -> 1 with Fs, Stdout, Fail[FsError] =
   let mut f = f;
   let mut b = string_new(65536);
-  let mut sum = 0;
   let r = for _ in 0..fs_max_reads {
     let (f2, (b2, n)) = read(f, b);
     f = f2;
     b = print_string(b2);
-    sum = sum + n;
     if n == 0 { break (inl () : 1 + 1) } else { () }
   } else { (inr () : 1 + 1) };
   match r {
-    inl u -> close(f); sum
-  | inr u -> close_raise[i32](f, TooBig)
+    inl u -> close(f)
+  | inr u -> close_raise[1](f, TooBig)
   }
 
 main -> i32 =
@@ -40,7 +38,7 @@ main -> i32 =
   | inr e -> inr e
   };
   match r {
-    inl n -> 0
+    inl u -> 0
   | inr e ->
       eprint_lit("fs-cat: ");
       borrow imm path { v -> eprint_bytes(v) };

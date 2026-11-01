@@ -45,8 +45,8 @@ in `Backend/README.md`:
   `/` or at its end (a name `.` is the empty prefix of every relative path), and opening the rest
   of the path under it; no preopen covers it: `-1`, not found. `1` is one `fd_read`, `2`
   `fd_write`s until the view is written, `3` `fd_filestat_get`'s size, `4` `fd_close`. The
-  answers and the kinds are `bc_file`'s, from WASI's error numbers; a descriptor below `3` is
-  `-4` without a call. A read of a directory, which WASI answers with `EBADF`, is `-3` (a
+  answers and the kinds are `bc_file`'s, from WASI's error numbers. An empty path names no
+  file (`-1`), as natively. A read of a directory, which WASI answers with `EBADF`, is `-3` (a
   directory) as natively: on that error, one `fd_filestat_get` tells it.
 
 Layout: bytes `0–31` hold `$putfd`'s and `$putv`'s I/O vector and byte, bytes `32–63` `$getc`'s
@@ -284,6 +284,7 @@ def runtimeWat : String := "
   (func $fs_open (param $mode i32) (param $a i32) (param $k i32) (result i64)
     (local $d i32) (local $best i32) (local $blen i32) (local $nl i32) (local $abs i32)
     (local $i i32) (local $ok i32) (local $r i32) (local $rl i32) (local $e i32)
+    (if (i32.eqz (local.get $k)) (then (return (call $fs_ans (i32.const -1)))))
     (local.set $best (i32.const -1))
     (local.set $blen (i32.const -1))
     (local.set $abs (i32.and (i32.gt_u (local.get $k) (i32.const 0))
@@ -375,7 +376,7 @@ def runtimeWat : String := "
     (local.set $k (i32.wrap_i64 (local.get $n)))
     (if (i64.eqz (local.get $op))
       (then (return (call $fs_open (i32.wrap_i64 (local.get $x)) (local.get $a) (local.get $k)))))
-    (if (i32.or (i64.lt_u (local.get $x) (i64.const 3)) (i64.gt_u (local.get $x) (i64.const 2147483647)))
+    (if (i64.gt_u (local.get $x) (i64.const 2147483647))
       (then (return (call $fs_ans (i32.const -4)))))
     (local.set $fd (i32.wrap_i64 (local.get $x)))
     (if (i64.eq (local.get $op) (i64.const 1))
