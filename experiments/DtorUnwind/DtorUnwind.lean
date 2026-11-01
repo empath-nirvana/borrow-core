@@ -68,3 +68,4 @@ import DtorUnwind.SI.AntiDropN
 import DtorUnwind.SI.AntiDropProg
 import DtorUnwind.SI.CanonDeep
 import DtorUnwind.SI.RebStopD
+import DtorUnwind.SI.DeepRebProg
