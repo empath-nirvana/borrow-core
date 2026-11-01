@@ -176,9 +176,9 @@ theorem rwpG_M_frameG {Φ : LocFam} {l : Loc} {A : Life}
   obtain ⟨FB₂, hFB₂, hFBl⟩ :=
     (ResU.CompS.assoc ρf ρb ρlP sρ).mp ⟨ρ, ResU.CompS.comm hcρ, hsρ⟩
   obtain rfl : FB = FB₂ := ResU.CompS.functional hFB hFB₂
-  -- entry: `TWN.mutFold`, and the same memory (6.25 under a frame)
-  have hTin : TWN fρ ps (rsOf ls) :=
-    TWN.mutFold hT hclP (ResU.CompS.comm hFBl) (ResU.CompS.comm hFBm) hvfρ
+  -- entry: `TWNC.mutFold`, and the same memory (6.25 under a frame)
+  have hTin : TWNC fρ ps (rsOf ls) :=
+    TWNC.mutFold hT hclP (ResU.CompS.comm hFBl) (ResU.CompS.comm hFBm) hvfρ
   have htgin : Tagged fρ ps ls := tagged_of_ag (fun a ha =>
     (mut_fold_ag hclP (ResU.CompS.comm hFBl) (ResU.CompS.comm hFBm) a).mpr ha) htg
   have hvlP : ResU.Valid ρlP := by
@@ -247,9 +247,9 @@ theorem rwpG_M_frameG {Φ : LocFam} {l : Loc} {A : Life}
   have hupd : UpdN Φ (n - jr) ρ Y :=
     six28N_fwd (Φ.set_agree l A F) hlPcell hW'' hBM hsplit'' (ResU.CompS.comm hcρ) hY
       hvBM hvπ hvρ hvY h10.1
-  -- exit: `TWN.mutUnfold`
-  have hTout : TWN FY ps'' (rsOf ls'') :=
-    TWN.mutUnfold hT'' (ResU.CompS.comm hFPm) (ResU.CompS.comm hW'')
+  -- exit: `TWNC.mutUnfold`
+  have hTout : TWNC FY ps'' (rsOf ls'') :=
+    TWNC.mutUnfold hT'' (ResU.CompS.comm hFPm) (ResU.CompS.comm hW'')
       (ResU.CompS.comm hFPW) hvFY
   have htgout : Tagged FY ps'' ls'' := tagged_of_ag (fun a ha =>
     (mut_fold_ag (ResU.CompS.comm hW'') (ResU.CompS.comm hFPW) (ResU.CompS.comm hFPm) a).mp

@@ -42,13 +42,13 @@ def EndOKG (Φ : LocFam) (Q : PostG) (k : Nat) (ls : List SRec) (ρ ρf : WRes)
     ResU.Hash ρ' ρf ∧ ResU.CompS ρf ρ' fρ' ∧ ResU.Hash ρp fρ' ∧
     ResU.CompS fρ' ρp fρ'p ∧ ResU.Lower fρ'p μ' ∧
     ResU.CompS ρ' ρp π ∧ UpdVN Φ k ρ π ∧ NoOwn ρp ∧
-    TWN fρ'p ps' (rsOf ls') ∧ Tagged fρ'p ps' ls' ∧
+    TWNC fρ'p ps' (rsOf ls') ∧ Tagged fρ'p ps' ls' ∧
     (∀ p, p ∈ ps' ↔ p ∈ ps) ∧ (∀ x, x ∈ ls' ↔ x ∈ ls) ∧ Q k ls' t ρ'
 
 /-- **`wpG` at the step index.** -/
 def rwpG (Φ : LocFam) (Q : PostG) (n : Nat) (ls : List SRec) (e : Expr) : WProp := fun ρ =>
   ∀ (ρf fρ : WRes) (ps : List FrameRec) (μ : Heap),
-    ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ → TWN fρ ps (rsOf ls) → Tagged fρ ps ls →
+    ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ → TWNC fρ ps (rsOf ls) → Tagged fρ ps ls →
     ResU.Lower fρ μ → FinDom μ →
     ∀ j μ' e', j < n → StepsN (ℍ := ℍ) j μ e μ' e' → Final (ℍ := ℍ) μ' e' →
       EndOKG Φ Q (n - j) ls ρ ρf ps μ' e'
@@ -268,7 +268,7 @@ theorem rwpG_safe {Φ : LocFam} {Q : PostG} {e : Expr}
   · have hfin : Final (ℍ := ℍ) μ' e' := fun μ'' e'' h => hs ⟨μ'', e'', h⟩
     have htg : Tagged (PMap.empty : WRes) [] [] := fun x hx => absurd hx (by simp)
     have h := hall (j + 1) PMap.empty PMap.empty [] (fun _ => none)
-      Fig16.LogRel.hash_empty (ResU.comp_empty_right _) TWN.empty htg Fig16.BoLo.lower_empty
+      Fig16.LogRel.hash_empty (ResU.comp_empty_right _) TWNC.empty htg Fig16.BoLo.lower_empty
       fd_empty j μ' e' (by omega) hrun hfin
     obtain ⟨_, _, _, _, _, _, _, -, -, -, -, -, -, -, -, -, -, -, -, hq⟩ := h
     exact .inl (hQ _ _ _ _ hq)

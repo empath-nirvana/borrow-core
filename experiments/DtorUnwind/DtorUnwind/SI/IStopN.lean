@@ -22,7 +22,7 @@ The printed proof's steps after the run do not read the term the run ends at:
 * **6.38** (`six38N`) at `ρ′ := π/ℓ`, `ρ⁺ := ρᵢ`: H1–H6 hold (H4 by the line above, H5 since
   `ρᵢ` is one `imm` cell), and G1 is `π/ℓ # ρ_ℓ ● ρ_P̂(v)`.
 * **6.39** (`six39N`): `ρ ↭ π/ℓ ● ρ_ℓ ● ρ_P̂(v)`.
-* the memory (6.26 under a frame), `TWN.immEnd`, the tags, and `ext_drop` for any part of the
+* the memory (6.26 under a frame), `TWNC.immEnd`, the tags, and `ext_drop` for any part of the
   lender's resource in `Res_α` with no `imm` cell at `ℓ`.
 
 At a return the printed proof applies 6.38 at `ρ′ :=` the returned resource and `ρ⁺ :=` the
@@ -112,9 +112,9 @@ theorem inStratum_ownP {l : Loc} {v : Val} {ρP ρlP : WRes} {α : Life}
 
 /-- **The lender's side of an Imm Frame at any final term**, at a lifetime `α` fixed by the
 caller (`[TR]` 6.64's proof from the entry on, at `rwpG`). The entry is the printed one at `α`:
-`TWN.immFrame`, the tags of the caller's list longer than `α` (`hAtag`), and the frame list
+`TWNC.immFrame`, the tags of the caller's list longer than `α` (`hAtag`), and the frame list
 `frameList p ds α ls` with `ds` the record's lineage. At the end, at whatever final term: 6.29,
-6.38 at `ρ′ := π/ℓ`, `ρ⁺ := ρᵢ`, 6.39, the memory, `TWN.immEnd` and the tags, as printed; `hpost`
+6.38 at `ρ′ := π/ℓ`, `ρ⁺ := ρᵢ`, 6.39, the memory, `TWNC.immEnd` and the tags, as printed; `hpost`
 splits `π/ℓ ● ρ_ℓ ● ρ_P̂(v)` for the caller's postcondition, given `ext_drop` for its parts. -/
 theorem rwpG_I_frameG {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmWf T δ) (v : Val)
     {A : Life} {ρP ρlP ρb ρ : WRes} (houtP : ρP.InStratum A) (houtb : ρb.InStratum A)
@@ -163,9 +163,9 @@ theorem rwpG_I_frameG {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmW
   obtain ⟨σ₀, eW, aW, heW, haW, -⟩ := id hvsρ
   set ls' : List SRec := frameList p ds A ls with hls'def
   have hadd : AddAt ls ls' A := addAt_frameList p ds A ls
-  have hTin : TWN fρ (p :: ps) (rsOf ls') := by
+  have hTin : TWNC fρ (p :: ps) (rsOf ls') := by
     rw [hls'def, rsOf_frameList]
-    exact TWN.immFrame T δ houtP hT hadm hclP (ResU.CompS.comm hFBl) hshape
+    exact TWNC.immFrame T δ houtP hT hadm hclP (ResU.CompS.comm hFBl) hshape
       (ResU.CompS.comm hFBi) hvfρ hds
   obtain ⟨hFLnew, hFLold⟩ :=
     frameLife_frame T δ hvsρ hclP (ResU.CompS.comm hFBl) (ResU.CompS.comm hFBi) hTI
@@ -288,9 +288,9 @@ theorem rwpG_I_frameG {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmW
       obtain ⟨q, hq, hqd⟩ := (hds _).mp hd
       exact (not_rel_lineage hα' haF hicpR hRα hRl ⟨q, hqd⟩ hrel).elim
     · exact mem_rsOf.mpr ⟨t, h⟩
-  -- exit: `TWN.immEnd` at `p`, back to the caller's records
-  have hTout : TWN FY ps (rsOf ls) :=
-    TWN.immEnd p hT'' hp'' (ResU.CompS.comm hFPi) hclP (ResU.CompS.comm hFPlP) hvFY
+  -- exit: `TWNC.immEnd` at `p`, back to the caller's records
+  have hTout : TWNC FY ps (rsOf ls) :=
+    TWNC.immEnd p hT'' hp'' (ResU.CompS.comm hFPi) hclP (ResU.CompS.comm hFPlP) hvFY
       (fun r' => ⟨fun h => ⟨(hps'' r').mpr (List.mem_cons_of_mem _ h),
         fun e => hpps (e ▸ h)⟩, fun ⟨h, hne⟩ => by
           rcases List.mem_cons.mp ((hps'' r').mp h) with e | h'

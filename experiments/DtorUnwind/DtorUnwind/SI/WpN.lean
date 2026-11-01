@@ -1,6 +1,6 @@
 import DtorUnwind.SI.UpdN
 import DtorUnwind.SI.Frag
-import DtorUnwind.SI.TWN
+import DtorUnwind.SI.TWNC
 import Core.Wp
 
 /-!
@@ -8,7 +8,7 @@ import Core.Wp
 
 `rwp Φ Q n ls e ρ`: `wpTS` (`Core/World.lean`, `[TR]` p. 6's `wp`, row 5.33's repair) cut at the
 step index `n`, as Ahmed's expression relation cuts a run: under every frame `ρ_f # ρ` whose
-completion `ρ_f ● ρ` is a tagged `TWN` world lowering to the memory `μ`, every run of `j < n`
+completion `ρ_f ● ρ` is a tagged `TWNC` world lowering to the memory `μ`, every run of `j < n`
 steps either ends at a value, and then the printed post-configuration exists (`EndOK`, `wpTS`'s
 conjuncts verbatim, with `ρ ↭ₙ₋ⱼ ρ′ ● ρ⁺` (`UpdVN`) for `ρ ↭ ρ′ ● ρ⁺` and the postcondition at
 `n − j`), or the term it reached steps again.
@@ -89,13 +89,13 @@ def EndOK (Φ : LocFam) (Q : PostN) (k : Nat) (ls : List SRec) (ρ ρf : WRes)
     ResU.Hash ρ' ρf ∧ ResU.CompS ρf ρ' fρ' ∧ ResU.Hash ρp fρ' ∧
     ResU.CompS fρ' ρp fρ'p ∧ ResU.Lower fρ'p μ' ∧
     ResU.CompS ρ' ρp π ∧ UpdVN Φ k ρ π ∧ NoOwn ρp ∧
-    TWN fρ'p ps' (rsOf ls') ∧ Tagged fρ'p ps' ls' ∧
+    TWNC fρ'p ps' (rsOf ls') ∧ Tagged fρ'p ps' ls' ∧
     (∀ p, p ∈ ps' ↔ p ∈ ps) ∧ (∀ x, x ∈ ls' ↔ x ∈ ls) ∧ Q k ls' v ρ'
 
 /-- **The step-indexed `wp` at a tagged typed world.** -/
 def rwp (Φ : LocFam) (Q : PostN) (n : Nat) (ls : List SRec) (e : Expr) : WProp := fun ρ =>
   ∀ (ρf fρ : WRes) (ps : List FrameRec) (μ : Heap),
-    ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ → TWN fρ ps (rsOf ls) → Tagged fρ ps ls →
+    ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ → TWNC fρ ps (rsOf ls) → Tagged fρ ps ls →
     ResU.Lower fρ μ → FinDom μ →
     ∀ j μ' e', j < n → StepsN (ℍ := ℍ) j μ e μ' e' →
       (∀ v : Val, e' = v.1 → EndOK Φ Q (n - j) ls ρ ρf ps μ' v) ∧
@@ -288,7 +288,7 @@ theorem rwp_safe {Φ : LocFam} {Q : PostN} {e : Expr}
     IsVal e' ∨ ∃ μ'' e'', Step1 (ℍ := ℍ) μ' e' μ'' e'' := by
   have htg : Tagged (PMap.empty : WRes) [] [] := fun x hx => absurd hx (by simp)
   obtain ⟨-, hprog⟩ := hall (j + 1) PMap.empty PMap.empty [] (fun _ => none)
-    Fig16.LogRel.hash_empty (ResU.comp_empty_right _) TWN.empty htg Fig16.BoLo.lower_empty
+    Fig16.LogRel.hash_empty (ResU.comp_empty_right _) TWNC.empty htg Fig16.BoLo.lower_empty
     fd_empty j μ' e' (by omega) hrun
   by_cases hv : IsVal e'
   · exact .inl hv
@@ -349,9 +349,9 @@ theorem rwp_M_antiFrame {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {β : Life}
   have hFAW : ResU.Hash FA W :=
     ResU.hash_symm (ResU.hash_of_pairwise (ResU.hash_symm hfW) (ResU.hash_symm haf)
       (ResU.hash_symm haW) hFA)
-  -- entry: `TWN.mutUnfold`, and the same memory (6.25 under a frame)
-  have hTin : TWN fρ ps (rsOf ls) :=
-    TWN.mutUnfold hT (ResU.CompS.comm hFAmc) (ResU.CompS.comm hW) (ResU.CompS.comm hFAWc) hvfρ
+  -- entry: `TWNC.mutUnfold`, and the same memory (6.25 under a frame)
+  have hTin : TWNC fρ ps (rsOf ls) :=
+    TWNC.mutUnfold hT (ResU.CompS.comm hFAmc) (ResU.CompS.comm hW) (ResU.CompS.comm hFAWc) hvfρ
   have htgin : Tagged fρ ps ls := tagged_of_ag (fun a ha =>
     (mut_fold_ag (ResU.CompS.comm hW) (ResU.CompS.comm hFAWc) (ResU.CompS.comm hFAmc) a).mp
       ha) htg
@@ -434,10 +434,10 @@ theorem rwp_M_antiFrame {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {β : Life}
   have hupd : UpdN Φ (n - jr) ρ π' :=
     six28N hΦ hF le_rfl hW hW'' (ResU.CompS.comm hsplit) hBPm hX (ResU.CompS.comm hBPW₂)
       hvρ hvπ' h10.2.1 h10.2.2 h10.1
-  -- exit: `TWN.mutFold`
+  -- exit: `TWNC.mutFold`
   have hvFRBp : ResU.Valid FRBp := by obtain ⟨σ, hσ, -⟩ := hmem₂; exact ⟨σ, hσ⟩
-  have hTout : TWN FRBp ps'' (rsOf ls'') :=
-    TWN.mutFold hT'' hW''₁ (ResU.CompS.comm hFBW) (ResU.CompS.comm hFBm) hvFRBp
+  have hTout : TWNC FRBp ps'' (rsOf ls'') :=
+    TWNC.mutFold hT'' hW''₁ (ResU.CompS.comm hFBW) (ResU.CompS.comm hFBm) hvFRBp
   have htgout : Tagged FRBp ps'' ls'' := tagged_of_ag (fun a ha =>
     (mut_fold_ag hW''₁ (ResU.CompS.comm hFBW) (ResU.CompS.comm hFBm) a).mpr ha) htg''
   exact ⟨RB, ρp, FRB, FRBp, π', ps'', ls'', ResU.hash_symm hfRB, hFRB, hpFRB, hFRBp, hmem₂,
@@ -641,9 +641,9 @@ theorem rwp_M_frame {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {A : Life}
   obtain ⟨FB₂, hFB₂, hFBl⟩ :=
     (ResU.CompS.assoc ρf ρb ρlP sρ).mp ⟨ρ, ResU.CompS.comm hcρ, hsρ⟩
   obtain rfl : FB = FB₂ := ResU.CompS.functional hFB hFB₂
-  -- entry: `TWN.mutFold`, and the same memory (6.25 under a frame)
-  have hTin : TWN fρ ps (rsOf ls) :=
-    TWN.mutFold hT hclP (ResU.CompS.comm hFBl) (ResU.CompS.comm hFBm) hvfρ
+  -- entry: `TWNC.mutFold`, and the same memory (6.25 under a frame)
+  have hTin : TWNC fρ ps (rsOf ls) :=
+    TWNC.mutFold hT hclP (ResU.CompS.comm hFBl) (ResU.CompS.comm hFBm) hvfρ
   have htgin : Tagged fρ ps ls := tagged_of_ag (fun a ha =>
     (mut_fold_ag hclP (ResU.CompS.comm hFBl) (ResU.CompS.comm hFBm) a).mpr ha) htg
   have hvlP : ResU.Valid ρlP := by
@@ -755,9 +755,9 @@ theorem rwp_M_frame {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {A : Life}
             ResU.restrict_eq_some.mpr ⟨hdd, hk⟩
           rw [h11] at hcc
           simp at hcc
-  -- exit: `TWN.mutUnfold`
-  have hTout : TWN FRP ps'' (rsOf ls'') :=
-    TWN.mutUnfold hT'' (ResU.CompS.comm hFPm) (ResU.CompS.comm hW'')
+  -- exit: `TWNC.mutUnfold`
+  have hTout : TWNC FRP ps'' (rsOf ls'') :=
+    TWNC.mutUnfold hT'' (ResU.CompS.comm hFPm) (ResU.CompS.comm hW'')
       (ResU.CompS.comm hFPDW) hvFRP
   have htgout : Tagged FRP ps'' ls'' := tagged_of_ag (fun a ha =>
     (mut_fold_ag (ResU.CompS.comm hW'') (ResU.CompS.comm hFPDW) (ResU.CompS.comm hFPm) a).mp

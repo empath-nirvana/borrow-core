@@ -99,10 +99,10 @@ theorem rwp_I_frame {Φ : LocFam} (l : BoCa.Loc) (T : VTy) (δ : LSub)
   obtain ⟨ds, hds⟩ := lineage_list (r := p) hshape hadm heR
   set ls' : List SRec := frameList p ds A ls with hls'def
   have hadd : AddAt ls ls' A := addAt_frameList p ds A ls
-  -- entry: `TWN.immFrame`, and the tags
-  have hTin : TWN fρ (p :: ps) (rsOf ls') := by
+  -- entry: `TWNC.immFrame`, and the tags
+  have hTin : TWNC fρ (p :: ps) (rsOf ls') := by
     rw [hls'def, rsOf_frameList]
-    exact TWN.immFrame T δ houtP hT hadm hclP (ResU.CompS.comm hFBl) hshape
+    exact TWNC.immFrame T δ houtP hT hadm hclP (ResU.CompS.comm hFBl) hshape
       (ResU.CompS.comm hFBi) hvfρ hds
   obtain ⟨hFLnew, hFLold⟩ :=
     frameLife_frame T δ hvsρ hclP (ResU.CompS.comm hFBl) (ResU.CompS.comm hFBi) hTI
@@ -284,9 +284,9 @@ theorem rwp_I_frame {Φ : LocFam} (l : BoCa.Loc) (T : VTy) (δ : LSub)
       exact (not_rel_lineage hα' haF hicpR hRα hRl ⟨q, hqd⟩ hrel).elim
     · exact mem_rsOf.mpr ⟨t, h⟩
   have hQls : Q (n - jr) ls v' R := hQ (n - jr) ls'' ls v' R (ext_drop hls''add hRα hkeep) hQ''
-  -- exit: `TWN.immEnd` at `p`, back to the caller's records
-  have hTout : TWN FRP ps (rsOf ls) :=
-    TWN.immEnd p hT'' hp'' (ResU.CompS.comm hFPi) hclP (ResU.CompS.comm hFPDlP) hvFRP
+  -- exit: `TWNC.immEnd` at `p`, back to the caller's records
+  have hTout : TWNC FRP ps (rsOf ls) :=
+    TWNC.immEnd p hT'' hp'' (ResU.CompS.comm hFPi) hclP (ResU.CompS.comm hFPDlP) hvFRP
       (fun r' => ⟨fun h => ⟨(hps'' r').mpr (List.mem_cons_of_mem _ h),
         fun e => hpps (e ▸ h)⟩, fun ⟨h, hne⟩ => by
           rcases List.mem_cons.mp ((hps'' r').mp h) with e | h'
