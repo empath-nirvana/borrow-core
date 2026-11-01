@@ -483,6 +483,38 @@ theorem erwp_mono_le {Φ : LocFam} {Tb Tb' : TableN} {Q Q' : PostN} (N : Nat)
     simp only [erwpC, show k' < n by omega, if_true] at hΨ ⊢
     exact ih k' (by omega) (by omega) _ _ _ hΨ
 
+/-! ### `[TR]` 6.174 (`withbor3`) across stops -/
+
+/-- **`[TR]` 6.174's proof at `erwp`, across stops**: the Mut Anti-Frame at `ℓ ↦ mut(β, v, ρ_v, F_o j)`,
+then the Mut Frame of the opened cell at `α` with the family `F_i`, the callback holding the
+reborrow `ℓ ↦ mut(α, …)` across stops. At a stop the Mut Frame folds the cell back to `own` with
+its content in `F_i k` (`erwp_M_frameF`), which is in `F_o k` (`hoi`): the anti-frame's guard.
+
+`hstrα`, `hwi` and `hoi` are what the printed proof reads off the borrow in hand: Core's
+`withbor3_compatX` takes `MutFrame`'s stratum from the `Mut` value (`hunif`), and both families
+are `𝒱⟦T₁⟧δ`, so the content opened is in the inner family and the content handed back is in the
+outer one. -/
+theorem erwp_withbor3 {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {β : Life}
+    {Fo : Nat → Val → SPropS Loc Val β} (hF : Φ l = some ⟨β, Fo⟩) {α : Life}
+    {Fi : Nat → Val → SPropS Loc Val α} (hFi : DownFam α Fi) {T : OpTabN} (hTl : T.LendOK α)
+    (hTa : T.AFOK)
+    (hoi : ∀ k v χ (h : χ.InStratum α), Fi k v ⟨χ, h⟩ → ∃ h' : χ.InStratum β, Fo k v ⟨χ, h'⟩)
+    {Q : PostN} (n : Nat) (ls : List SRec) (e : Expr) (v : Val) (σP : WRes)
+    (hstr : σP.InStratum β) (j : Nat) (hjn : n ≤ j) (hwit : Fo j v ⟨σP, hstr⟩)
+    (hstrα : σP.InStratum α) (hwi : Fi j v ⟨σP, hstrα⟩) (ρa ρ : WRes)
+    (hρa : ρa.InStratum (↓α))
+    (hsplit : ResU.CompS (ResU.single l (CellU.mutOf β v σP hstr (Fo j) hwit)) ρa ρ)
+    (hA : ∀ BM, ResU.CompS ρa (ResU.single l (CellU.mutOf α v σP hstrα (Fi j) hwi)) BM →
+      erwp (ℍ := ℍ) (Φ.set l α Fi) (opTableN T) (MFPost l α Fi (AFPost l β Fo Q)) n ls e BM) :
+    erwp (ℍ := ℍ) Φ (opTableN T) Q n ls e ρ := by
+  refine erwp_M_antiFrame hΦ hF hTa n ls e v σP hstr j hwit ρa ρ hsplit fun W X hW hX => ?_
+  refine erwp_mono (fun _ _ _ _ h => h) (opTableG_mono fun k ls' ρ' h => ?_) _ _ _ _
+    (erwp_M_frameF hFi hTl n j hjn ls e v σP W ρa X hstrα hρa (Fi j) (fun _ _ h => h) hwi
+      (ResU.CompS.comm hW) (ResU.CompS.comm hX) hA)
+  obtain ⟨w, χ, h, hw, R, rest, h1, h2⟩ := h
+  obtain ⟨h', hw'⟩ := hoi k w χ h hw
+  exact ⟨w, χ, h', hw', R, rest, h1, h2⟩
+
 end BoCa.Fig16.LogRel.Core.DtorUnwind.SI
 
 end

@@ -64,3 +64,4 @@ import DtorUnwind.SI.AntiStopN
 import DtorUnwind.SI.AntiLendProg
 import DtorUnwind.SI.IStopF
 import DtorUnwind.SI.AntiRebProg
+import DtorUnwind.SI.AntiDropN
