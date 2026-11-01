@@ -22,6 +22,30 @@ open BoCa.Fig16.BoLo
 open BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Step1 Kont)
 
+/-- `RebChooseTW` at `TWN`: 6.150's reborrow, chosen at the tagged world.  Given the handed `χ₀ ∈ reb_β(ρ′)` with
+`P̂₀(β)(w)(χ₀)` (H16/H17), a world `W` holding the cell `ℓ ↦ imm(s̄, w, ρ′)` with frame `F`,
+and `β` below `W`: some `χ ∈ reb_β(ρ′)` with `P̂(β)(w)(χ)`, the two inputs `[TR]` 6.55 adds
+(`ag(χ)` defined and `EscrowAgree` at `F` and at the cell), the world `W ● χ` typed (entry), and
+every world `W″` with `W″ ● χ|dom(ρ′|mut,own)` typed, holding the cell and in `Res_β`, typed
+(exit).  `[about ours: our chooser at the typed world]` -/
+def RebChooseTWN (ls : List SRec) (l : Loc) (R : Val → WRes → Prop)
+    (P₀ P : Life → Val → WProp) : Prop :=
+  ∀ (W F χ₀ σ : WRes) (ps : List FrameRec) (β : Life) (w : Val) (s : LSet)
+    (hs : σ.InStratum s.join),
+    TWN W ps (rsOf ls) → Tagged W ps ls → W.InStratum β →
+    ResU.CompS (ResU.single l (CellU.immOf s w σ hs)) F W → R w σ →
+    ResU.Reb β σ χ₀ → P₀ β w χ₀ →
+    ∃ χ, ResU.Reb β σ χ ∧ P β w χ ∧ (∃ A, AgW χ A) ∧
+      (∀ a, AgW F a → EscrowAgree σ χ a) ∧
+      (∀ a, AgW (ResU.single l (CellU.immOf s w σ hs)) a → EscrowAgree σ χ a) ∧
+      (∀ W', ResU.CompS W χ W' → ResU.Valid W' → TWN W' ps (rsOf ls) ∧ Tagged W' ps ls) ∧
+      (∀ (ps' : List FrameRec) (ls' : List SRec) (Wp W'' : WRes),
+        (∀ p, p ∈ ps' ↔ p ∈ ps) → (∀ x, x ∈ ls' ↔ x ∈ ls) →
+        TWN Wp ps' (rsOf ls') → Tagged Wp ps' ls' →
+        (∃ (s' : LSet) (hs' : σ.InStratum s'.join), W''.get l = some (CellU.immOf s' w σ hs')) →
+        ResU.CompS W'' (χ.restrictDom σ.exclPart) Wp → W''.InStratum β →
+        TWN W'' ps' (rsOf ls') ∧ Tagged W'' ps' ls')
+
 /-- `ResU.six52_keep` at the step index. -/
 theorem six52_keepN {Φ : LocFam} {n : Nat} {α : Life}
     {ρ'i ρ ρe ρ'' ρp ρρe ρ'p : WRes}
@@ -43,10 +67,10 @@ theorem six52_keepN {Φ : LocFam} {n : Nat} {α : Life}
 
     ℓ ↦ Imm α (R ∧ Иβ. ↺_β P̂₀) ⋆ (Иβ. ∀v. P̂(v) ─⋆ rwpₙ(e){[β]Q̂}) ⊧ rwpₙ(e){Q̂}
 
-with the chooser `RebChooseTW` as at `wpG_reborrow`. -/
+with the chooser `RebChooseTWN`, `RebChooseTW` at `TWN`. -/
 theorem rwp_reborrow {Φ : LocFam} (ls : List SRec) (l : BoCa.Loc) (α : Life)
     (R : Val → WRes → Prop) (P₀ P : Life → BoCa.Val → WProp) (e : Expr) (Q : PostN) {n : Nat}
-    (hesc : RebChooseTW ls l R P₀ P) {ρ : WRes}
+    (hesc : RebChooseTWN ls l R P₀ P) {ρ : WRes}
     (hH : (ptoImm l α (fun v σ => R v σ ∧ fresh (fun b => reborrow b (P₀ b v)) σ) ⋆
         (fresh fun b => all fun v => P b v ─⋆
           rwp (ℍ := ℍ) Φ (fun k ls' v' => box b (Q k ls' v')) n ls e)) ρ) :

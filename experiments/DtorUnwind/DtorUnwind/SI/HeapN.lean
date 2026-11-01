@@ -67,7 +67,7 @@ theorem step1_head {μ₀ μ₀' : Heap} {a a₀ : Expr} (hred : Head (ℍ := �
 theorem rwp_head1 {Φ : LocFam} {Q : PostN} {n : Nat} {ls : List SRec} {e : Expr} {ρ : WRes}
     {μ₀ μ₀' : Heap} {a₀ : Expr} (hred : Head (ℍ := ℍ) μ₀ e μ₀' a₀)
     (hstep : ∀ (ρf fρ : WRes) (ps : List FrameRec) (μ : Heap),
-      ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ → TW fρ ps (rsOf ls) → Tagged fρ ps ls →
+      ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ → TWN fρ ps (rsOf ls) → Tagged fρ ps ls →
       ResU.Lower fρ μ → FinDom μ →
       (∃ μ₁ e₁, Head (ℍ := ℍ) μ e μ₁ e₁) ∧
       ∀ μ₁ e₁, Head (ℍ := ℍ) μ e μ₁ e₁ →
@@ -111,7 +111,7 @@ theorem rwp_alloc {Φ : LocFam} (ls : List SRec) (v : Val) (Q : PostN) {n : Nat}
   obtain ⟨y, hy, hyσ'⟩ := (ResU.CompS.assoc ρf ρ (ResU.single l (CellU.ownOf v)) σ').mp
     ⟨x, hx, hσ'x⟩
   cases ResU.CompS.functional hy hσ
-  have hT' : TW σ' ps (rsOf ls) := TW.alloc hT hμ hμl hyσ' (hash_valid_comp hfx hσ'x)
+  have hT' : TWN σ' ps (rsOf ls) := TWN.alloc hT hμ hμl hyσ' (hash_valid_comp hfx hσ'x)
   exact ⟨⟨.loc l, (Val.loc l).2⟩, rfl, x, PMap.empty, σ', σ', x, ps, ls,
     ResU.hash_symm hfx, hσ'x,
     ResU.hash_symm (ResU.hash_empty_right (hash_valid_comp hfx hσ'x)),
@@ -142,8 +142,8 @@ theorem rwp_free {Φ : LocFam} (ls : List SRec) (l : BoCa.Loc) (v : Val) (Q : Po
   obtain ⟨u, hu, rfl, rfl⟩ := head_free_inv (ℍ := ℍ) hh
   rw [hlv] at hu
   cases hu
-  have hT' : TW σ₂ ps (rsOf ls) :=
-    TW.free hT (ResU.CompS.comm hσ₂σ) (hash_valid_comp h₂ hσ₂)
+  have hT' : TWN σ₂ ps (rsOf ls) :=
+    TWN.free hT (ResU.CompS.comm hσ₂σ) (hash_valid_comp h₂ hσ₂)
   refine ⟨v, rfl, ρ₂, PMap.empty, σ₂, σ₂, ρ₂, ps, ls,
     ResU.hash_symm h₂, hσ₂,
     ResU.hash_symm (ResU.hash_empty_right (hash_valid_comp h₂ hσ₂)),
@@ -265,8 +265,8 @@ theorem rwp_store {Φ : LocFam} (ls : List SRec) (l : BoCa.Loc) (v₁ v₂ : Val
   cases ResU.CompS.functional hy hσ₂
   refine ⟨⟨_, _, Head.store μ l v₂ v₁ hlv⟩, fun μ₁ e₁ hh => ?_⟩
   obtain ⟨-, rfl, rfl⟩ := head_store_inv hh
-  have hT' : TW σ' ps (rsOf ls) :=
-    TW.store hT (ResU.CompS.comm hσ₂σ) (ResU.CompS.comm hyσ') (hash_valid_comp hfx hσ'x)
+  have hT' : TWN σ' ps (rsOf ls) :=
+    TWN.store hT (ResU.CompS.comm hσ₂σ) (ResU.CompS.comm hyσ') (hash_valid_comp hfx hσ'x)
   refine ⟨⟨.unit, Val.unit.2⟩, rfl, x, PMap.empty, σ', σ', x, ps, ls,
     ResU.hash_symm hfx, hσ'x,
     ResU.hash_symm (ResU.hash_empty_right (hash_valid_comp hfx hσ'x)),

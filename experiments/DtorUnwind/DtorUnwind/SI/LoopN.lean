@@ -183,7 +183,7 @@ theorem erwp_adequacy {Φ : LocFam} {Q : PostN} {P₀ : Expr}
   · have htg : Tagged (PMap.empty : WRes) [] [] := fun x hx => absurd hx (by simp)
     have h := erwp_unfold_at (opTableN_local _) le_rfl (hall (j + 1))
     have hE := h PMap.empty PMap.empty [] (fun _ => none) Fig16.LogRel.hash_empty
-        (ResU.comp_empty_right _) TW.empty htg Fig16.BoLo.lower_empty fd_empty j μ e
+        (ResU.comp_empty_right _) TWN.empty htg Fig16.BoLo.lower_empty fd_empty j μ e
         (by omega) hrun (final_val μ ⟨e, hv⟩)
     obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h1, h2, h3, h6, h7, h9, h10, h11, hT', htg', hps,
       hls, hq⟩ := hE
