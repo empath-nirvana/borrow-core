@@ -86,12 +86,20 @@ def vMut (a : Life) (τ : SemT) : SemT where
   P := vMutP a τ
   down := fun _ _ _ ⟨l, w, χ, hχ, j, hw, hkj, hv, hρ⟩ => ⟨l, w, χ, hχ, j, hw, by omega, hv, hρ⟩
 
+/-- `Φ` types every top-level `mut` cell of `ρ` with a family the cell's predicate is a member
+of: what a computation holding `ρ` needs of the location typing it runs at, to open those
+cells (6.66 at the index asks `Φ ℓ = (β, F)` with the cell at a member of `F`). -/
+def Covers (Φ : LocFam) (ρ : WRes) : Prop :=
+  ∀ l ψ, ρ.get l = some ψ → ψ.kind = Kind.mut →
+    ∃ F : Nat → Val → SPropS Loc Val ψ.at, Φ l = some ⟨ψ.at, F⟩ ∧
+      ∃ j, ∀ v r, cellPred ψ v r ↔ SPropS.toU (F j v) r
+
 /-- **`𝒱ₖ⟦U C⟧`** for a computation relation `C Φ k v ρ` downward closed in `k`: `C` at every
-location typing. -/
+location typing that covers the thunk's resource. -/
 def vThunk (C : LocFam → Nat → Val → WRes → Prop)
     (hC : ∀ Φ, Φ.Down → ∀ k v ρ, C Φ (k + 1) v ρ → C Φ k v ρ) : SemT where
-  P := fun k v ρ => ∀ Φ', Φ'.Down → C Φ' k v ρ
-  down := fun k v ρ h Φ' hΦ' => hC Φ' hΦ' k v ρ (h Φ' hΦ')
+  P := fun k v ρ => ∀ Φ', Φ'.Down → Covers Φ' ρ → C Φ' k v ρ
+  down := fun k v ρ h Φ' hΦ' hc => hC Φ' hΦ' k v ρ (h Φ' hΦ' hc)
 
 /-- The thunk of a computation at `erwp`: forced, in `erwp` at the table `T` and `Q`. -/
 def vThunkE (T : OpTabN) (hT : T.Down) (Q : PostN) (hQ : Q.Down) : SemT :=
@@ -158,6 +166,12 @@ theorem UpdVN.extΦ {Φ Φ' : LocFam} (hE : Φ.Ext Φ') {n : Nat} {ρ₁ ρ₂ :
     exact ⟨ψ', h', hs.extΦ hE⟩
   · obtain ⟨ψ, h', hs⟩ := h.1.2.2 l ψ' hg hk
     exact ⟨ψ, h', hs.extΦ hE⟩
+
+/-- Covering is kept by world extension. -/
+theorem Covers.extΦ {Φ Φ' : LocFam} (hE : Φ.Ext Φ') {ρ : WRes} (h : Covers Φ ρ) :
+    Covers Φ' ρ := fun l ψ hg hk => by
+  obtain ⟨F, hF, hj⟩ := h l ψ hg hk
+  exact ⟨F, hE l _ hF, hj⟩
 
 theorem rwpG_extΦ {Φ Φ' : LocFam} (hE : Φ.Ext Φ') {Q : PostG} {n : Nat} {ls : List SRec}
     {e : Expr} {ρ : WRes} (h : rwpG (ℍ := ℍ) Φ Q n ls e ρ) : rwpG (ℍ := ℍ) Φ' Q n ls e ρ := by
@@ -248,7 +262,8 @@ theorem written_mutMut {b A₀ : Life} (τ : SemT) (hb : A₀ < b) {k : Nat} {w 
 the lend, whatever `Φ′` the write happens at. -/
 theorem written_thunk (T : OpTabN) (hT : T.Down) (Q : PostN) (hQ : Q.Down) (A₀ : Life)
     {k : Nat} {w : Val} {σ : WRes} (hσ : σ.InStratum A₀)
-    (h : ∀ Φ', Φ'.Down → erwp (ℍ := ℍ) Φ' (opTableN T) Q k [] (.app (.val w) (.val .unit)) σ) :
+    (h : ∀ Φ', Φ'.Down → Covers Φ' σ →
+      erwp (ℍ := ℍ) Φ' (opTableN T) Q k [] (.app (.val w) (.val .unit)) σ) :
     (vThunkE (ℍ := ℍ) T hT Q hQ).fam A₀ k w ⟨σ, hσ⟩ := h
 
 /-- **The Mut Frame for `Mut @a (Mut @b τ)`**: a cell holding a `Mut @b τ` value, lent at
