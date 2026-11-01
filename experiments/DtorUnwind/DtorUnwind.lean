@@ -48,3 +48,5 @@ import DtorUnwind.SI.IStopRaiseN
 import DtorUnwind.SI.FinPerformN
 import DtorUnwind.SI.RaiseFinProg
 import DtorUnwind.SI.RebResumeN
+import DtorUnwind.SI.RebAcrossN
+import DtorUnwind.SI.RebAgreeCex
