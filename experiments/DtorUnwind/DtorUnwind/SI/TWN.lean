@@ -57,6 +57,12 @@ def RebEndRec (W' : WRes) (rs : List FrameRec) (w₀ : WRes) (β : Life) : Prop 
       ∃ (ζ : CellU Loc Val) (t : LSet) (y : Life), a'.get l₀ = some ζ ∧ ζ.lsOf = some t ∧
         t.mem y ∧ x ⊏ y
 
+/-- **The view premise of `rebDeep`.** The view of `ag(W)` at the reborrowed chain view has a
+lifetime longer than `β`: the new views below it are nested in it. -/
+def RebCellLe (W : WRes) (l₀ : Loc) (β : Life) : Prop :=
+  ∀ a, AgW W a → ∃ (ψ : CellU Loc Val) (t : LSet) (y : Life), a.get l₀ = some ψ ∧
+    ψ.lsOf = some t ∧ t.mem y ∧ β ⊏ y
+
 /-- `W′ ∈ Res_β` gives the chain-positions premise: no view of `ag(W′)` is shorter than `β`. -/
 theorem rebEndRec_of_inStratum {W' : WRes} {rs : List FrameRec} {w₀ : WRes} {β : Life}
     (h : W'.InStratum β) : RebEndRec W' rs w₀ β := by
@@ -92,7 +98,7 @@ inductive TWN : WRes → List FrameRec → List FrameRec → Prop
       TWN W ps rs → r ∈ rs → Chain r.R r.T r.v p l₀ S₀ u₀ →
       W.get l₀ = some (CellU.immOf s u₀ w₀ hs) → ¬ VFree x S₀ → ResU.Reb β w₀ c →
       vShape (S₀.immReborrow (.var x)) (r.δ.extend x β) u₀ c →
-      (CellU.immOf s u₀ w₀ hs).InStratum β → RebRecLe W ps w₀ β →
+      RebCellLe W l₀ β → RebRecLe W ps w₀ β →
       ResU.CompS W c W' → ResU.Valid W' → TWN W' ps rs
   | mutFold {W X Z ρ W' : WRes} {ps rs : List FrameRec} {l : Loc} {v : Val} {b : Life}
       {hstr : ρ.InStratum b} {P : Val → SPropS Loc Val b} {hw : P v ⟨ρ, hstr⟩} :
@@ -329,7 +335,7 @@ theorem ti_rebDeepN {W W' c : WRes} {ps rs : List FrameRec} {r₀ : FrameRec} {p
     (hvW : ResU.Valid W) (hr₀ : r₀ ∈ rs) (hch₀ : Chain r₀.R r₀.T r₀.v p₀ l₁ S₀ u₀)
     (hcell : W.get l₁ = some (CellU.immOf s u₀ w₀ hs)) (hx : ¬ VFree x S₀)
     (hreb : ResU.Reb β w₀ c) (hden : vShape (S₀.immReborrow (.var x)) (r₀.δ.extend x β) u₀ c)
-    (hβc : (CellU.immOf s u₀ w₀ hs).InStratum β) (hW : ResU.CompS W c W') (hv : ResU.Valid W') (h : TI W ps rs) :
+    (hβc : RebCellLe W l₁ β) (hW : ResU.CompS W c W') (hv : ResU.Valid W') (h : TI W ps rs) :
     TI W' ps rs := by
   obtain ⟨h3, hl, hid, hio, hN, hM, hmem, hC⟩ := h
   have hR₀ := (h3.2.2.2.1 r₀ hr₀).1
@@ -354,10 +360,9 @@ theorem ti_rebDeepN {W W' c : WRes} {ps rs : List FrameRec} {r₀ : FrameRec} {p
       subst hl'
       obtain ⟨aW', ac, haW', -, hcomp⟩ := (AgW.split hW).mp ha'
       rw [AgW.functional haW' haW] at hcomp
-      obtain ⟨ξ, t, eξ, ht, hy⟩ :=
-        (icp_trans (icpAt_agW haW l₀ _ hcell) (icpAt_left hcomp l₀)).ls
-          (CellU.lsOf_immOf _ _ _ _) s.meet_mem
-      exact ⟨ξ, t, s.meet, eξ, ht, hy, hβc⟩)
+      obtain ⟨ψ₁, t₁, y, e₁, ht₁, hy₁, hβy⟩ := hβc aW haW
+      obtain ⟨ξ, t, eξ, ht, hy⟩ := (icpAt_left hcomp l₀ ψ₁ e₁).ls ht₁ hy₁
+      exact ⟨ξ, t, y, eξ, ht, hy, hβy⟩)
   refine ⟨chainInv_rebDeep hvW hr₀ hch₀ hcell hx hreb hden hW hv h3, hl', hid, hio, hN', hM', hmem,
     ?_⟩
   refine cov_reb_like hvW hcell hreb hW hC (leInvW_of hl' hmem) (fun m u eζ ⟨ψ, ec⟩ => ?_)
@@ -635,8 +640,12 @@ theorem twN_of_tw {W : WRes} {ps rs : List FrameRec} (h : TW W ps rs) : TWN W ps
   | reb r x hW₀ hr hle hx hreb hden hβ hW hv ih =>
       exact .reb r x ih hr hle hx hreb hden (rebRecLe_of_stratumLe hW₀ _ hβ) hW hv
   | rebDeep r x hW₀ hr hch hcell hx hreb hden hβ hW hv ih =>
-      exact .rebDeep r x ih hr hch hcell hx hreb hden (hβ _ _ hcell)
+      refine .rebDeep r x ih hr hch hcell hx hreb hden (fun a ha => ?_)
         (rebRecLe_of_stratumLe hW₀ _ (stratumLe_of_inStratum hβ)) hW hv
+      obtain ⟨ξ, t, eξ, ht, hy⟩ :=
+        (icpAt_agW ha _ _ hcell).ls (CellU.lsOf_immOf _ _ _ _) (LSet.meet_mem _)
+      exact ⟨ξ, t, _, eξ, ht, hy,
+        CellU.sqsupset_of_lsOf (CellU.lsOf_immOf _ _ _ _) (hβ _ _ hcell)⟩
   | mutFold _ hX hW hW' hv ih => exact .mutFold ih hX hW hW' hv
   | mutUnfold _ hW hX hW' hv ih => exact .mutUnfold ih hW hX hW' hv
   | free _ hW hv ih => exact .free ih hW hv

@@ -123,7 +123,7 @@ inductive TWNC : WRes → List FrameRec → List FrameRec → Prop
       TWNC W ps rs → r ∈ rs → Chain r.R r.T r.v p l₀ S₀ u₀ →
       W.get l₀ = some (CellU.immOf s u₀ w₀ hs) → ¬ VFree x S₀ → ResU.Reb β w₀ c →
       vShape (S₀.immReborrow (.var x)) (r.δ.extend x β) u₀ c →
-      (CellU.immOf s u₀ w₀ hs).InStratum β → RebRecLe W ps w₀ β → c = canonD r S₀ u₀ w₀ β →
+      RebCellLe W l₀ β → RebRecLe W ps w₀ β → c = canonD r S₀ u₀ w₀ β →
       ResU.CompS W c W' → ResU.Valid W' → TWNC W' ps rs
   | mutFold {W X Z ρ W' : WRes} {ps rs : List FrameRec} {l : Loc} {v : Val} {b : Life}
       {hstr : ρ.InStratum b} {P : Val → SPropS Loc Val b} {hw : P v ⟨ρ, hstr⟩} :
