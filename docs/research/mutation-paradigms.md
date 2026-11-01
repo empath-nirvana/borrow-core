@@ -421,7 +421,7 @@ Precedents: Koka accepts writes from local closures and rejects a `var` captured
 | O5 | A value lent by A4 when the callee raises | (a) dropped (value threading); (b) kept (cell) | Decide before extending A4. (b) matches Rust/Swift and the "errors are one model" rule. |
 | O6 | Reads through a `mut` view | (a) library `peek` (two swaps); (b) a kernel read / imm-of-mut reborrow with a SPEC entry and proof | (b). It is the main cost gap for C7/C10, but it is a borrow-calculus change and must be proved first. |
 | O7 | §18 not-provided rows (`&mut` in a capability-threading call; capability through `for … in &a`) | lift / keep | Lift. They block the service-injection shape (T04, T09, T14) that the k8s north star needs. |
-| O8 | The one-borrow limit on looping callees (lend-div-two) | accept / lift via the spanning lend K1 (#172) | Accept for now and document it. Lifting it is borrow-calculus work. |
+| O8 | The one-borrow limit on looping callees (lend-div-two) | accept (lifting via the spanning lend K1, #172, is closed by decision 71) | Accepted. Lifting it is closed (decision 71). |
 | O9 | Hidden-state objects | (a) answering handlers for injected services plus `Clo` for escaping state; (b) an `object` declaration over ν | (a) now. Revisit (b) with records (#141) and "methods are codata". |
 
 ---

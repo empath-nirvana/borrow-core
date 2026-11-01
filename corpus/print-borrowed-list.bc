@@ -1,0 +1,50 @@
+-- Print each element of a borrowed list, in order, then return the sum.
+--
+-- Axes: data × effects × coeffects × scope: a borrowed list (an `imm` demand) whose elements are
+-- written one by one, with an effect at each element.
+--
+-- Idiom: copy the value out (decision 71). An iterator over the borrowed list, whose state is a
+-- view of the rest, would hold the borrow across its steps, and no borrow is held across a loop's
+-- tick; a `fold_imm` cannot write either, since its algebra is `!` code and its result outlives
+-- every lifetime. So the borrowed list is copied out by a `fold_imm` into an owned list, inside
+-- one lend of the cell, and the copy is consumed by a `fold_own` into a writer
+-- (`corpus/axes/data-effects.bc`), which writes each element, head first, and answers the sum.
+-- The borrowed list is never consumed; its destructor frees it at the end of `main`.
+--
+-- Answer: the line `100 20 3 `, then `i32[123]`; `live 0`. A writer that ran the tail before the
+-- head prints `3 20 100 `; a copy that dropped a node prints two numbers and a smaller sum.
+
+type List = mu X. 1 + (ref i32 * ref X)
+shape Node = node (leaf i32) (leaf List)
+
+def nil : List = roll inl ()
+fn cons(x: i32, t: List) -> List = roll inr alloc_s[Node] (x, t)
+
+-- The copy: each element read through its view, each tail already copied.
+def copy_alg : !(all 'y < top. 1 + (imm 'y i32 * List) => List) =
+  !thunkv Fun 'y < top. return (thunkv fun (r : 1 + (imm 'y i32 * List)) ->
+    match r { inl _ -> nil | inr (b, t) -> cons(*b, t) })
+def copy_out : !(all 'a < top. imm 'a List => List) = fold_imm[1 + (ref i32 * ref X), 'a, top, List] copy_alg
+
+-- A computation that writes to an output it is given, hands it back, and answers a sum.
+type Run = U (Out -o F (Out * i32))
+
+-- The writer: the empty list writes nothing; a node writes its element and a space, then runs
+-- the tail's.
+fn run_alg(r: 1 + ref i32 * Run) -> Run =
+  match r {
+    inl _ -> { o -> (o, 0) }
+  | inr (c, k) ->
+      let x = free(c);
+      { o -> let (o, _) = put_dec(o, x); let (o, _) = putb(o, 32); r <- k!(o); let (o, s) = r; (o, x + s) }
+  }
+def run_list : !(List => Run) = fold_own[1 + ref i32 * ref X, Run] run_alg
+
+main -> i32 =
+  let l = alloc(cons(100, cons(20, cons(3, nil))));
+  let c = copy_out(&l);
+  let w = run_list(c);
+  r <- w!(stdout);
+  let (stdout, s) = r;
+  putb(&mut stdout, 10);
+  s

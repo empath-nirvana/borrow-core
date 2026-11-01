@@ -4,6 +4,8 @@
 
 Capture, which freezes a computation at an operation, and resume both preserve the global invariant (`TW.inv`, extended to W), including lends that span the suspension.
 
+**Closed in part by decision 71 (`docs/decisions.md`).** No borrow is held across a suspension, so the clause for lends that span it is not a target: `docs/tombstones/lends-across-suspensions.md`.
+
 As a binder: the relation and the invariant are equivariant under bijections of locations and instances and under order-respecting renamings of lifetimes. Resume and placement are instantiations.
 
 **Lean target:** not yet stated. It goes in the targets library with an enumerated `sorry`.

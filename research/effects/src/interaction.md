@@ -6,7 +6,7 @@ The interaction is the only place System A and System B touch. It consists of ru
 
 **The interface:**
 - [I1](properties/i1-suspension-value.md): a suspension is a value of the resource world.
-- [I2](properties/i2-capture-resume.md): capture and resume preserve the invariant, including spanning lends. This is a preservation statement. Read through [freeze as a binder](foundations/freeze-binder.md), it is equivariance.
+- [I2](properties/i2-capture-resume.md): capture and resume preserve the invariant, including spanning lends (the spanning-lend part is closed by decision 71 of `docs/decisions.md`: no borrow is held across a suspension; `docs/tombstones/lends-across-suspensions.md`). This is a preservation statement. Read through [freeze as a binder](foundations/freeze-binder.md), it is equivariance.
 - [I3](properties/i3-drop.md): drop finalises exactly once.
 - [I4](properties/i4-answering-borrows.md): answering effects are borrows. This is one place where the two systems may overlap.
 - [I5](properties/i5-capture-laws.md): the capture laws β, η and hiding.

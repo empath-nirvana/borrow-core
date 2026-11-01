@@ -1,5 +1,5 @@
 -- A worker pool whose workers share a read-only configuration (SPEC §32; #479's
--- `corpus/pending/async-worker-pool.bc`, on `spawn_in`). `main` owns the configuration (a scale
+-- worker pool, on `spawn_in`; `corpus/async-worker-pool.bc` copies the configuration out instead). `main` owns the configuration (a scale
 -- and an offset) and lends it `imm`; each worker holds a copy of the borrow across its `await`s,
 -- reads the configuration through it once and processes its jobs, awaiting after each. The tasks
 -- are spawned by `spawn_in` inside a unit cell's scope `'d` below the borrow, so their

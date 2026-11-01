@@ -284,14 +284,17 @@ where
     ⟨sp, s!"this call of a div function takes the borrow of `{E.B.b.name}` other than as an " ++
       "argument of its own: a borrow block over a loop lends its place again at each step, and " ++
       s!"the call's loop can take the place only as a lend, `&{E.placeNames.headD "x"}` " ++
-      "(SPEC §14, borrow scopes over loops)"⟩
+      "(SPEC §14, borrow scopes over loops; decision 71). Pass it so, or copy what the call " ++
+      "needs out of the borrow before the call"⟩
 
 /-- The error for a borrow block whose result has the block's lifetime `'x` in its type `T`. -/
 def escapeError (sp : Span) (x T : String) : Error :=
   ⟨sp, s!"this borrow block's result has type `{T}`, which has the block's lifetime `'{x}`: " ++
     s!"nothing borrowed at `'{x}` outlives the block. When the body loops, each step borrows the " ++
     "place again, so the loop cannot keep what is borrowed before it (SPEC §14, borrow scopes " ++
-    "over loops)"⟩
+    "over loops; decision 71). Copy the value out of the borrow before the loop, or end the " ++
+    "borrow inside each step; when the borrow is a handler's capability, use a counted `for`, " ++
+    "or keep the state in the loop's variables"⟩
 
 /-- The error for an iterator that holds the borrow. -/
 def iterError (E : Env) (src : LoopSrc) (sp : Span) : Error :=
@@ -299,11 +302,14 @@ def iterError (E : Env) (src : LoopSrc) (sp : Span) : Error :=
   | .each _ =>
     ⟨sp, s!"the iterator of this `for` holds the borrow of `{E.B.b.name}`: a borrow block over a " ++
       "loop lends its place again at each step, so what the loop holds between steps must not " ++
-      "hold the borrow (SPEC §14, borrow scopes over loops)"⟩
+      "hold the borrow (SPEC §14, borrow scopes over loops). Give the iterator data it owns " ++
+      "and hands back, or iterate the place itself by index; a counted `for` over a view lent " ++
+      "inside the block is read as such an iterator, before its source has a type (#501)"⟩
   | _ =>
     ⟨sp, s!"the condition of this {src.what} uses the borrow of `{E.B.b.name}`: a borrow block " ++
       "over a loop lends its place again at each step, to the loop's body only, not to its " ++
-      "condition (SPEC §14, borrow scopes over loops)"⟩
+      "condition (SPEC §14, borrow scopes over loops; decision 71). Copy what the condition " ++
+      "reads out of the borrow into a variable the loop carries, or use a counted `for`"⟩
 
 mutual
 /-- The block's body, rewritten: each stretch that uses the borrow in a block of its own, each
@@ -518,7 +524,9 @@ def lentDef (c : TCx) (fin' : TCx → Finite) : Decl → Except Error (Option De
       | throw ⟨lsp, s!"`{n.name}` loops, so it is called in direct style one step at a time, and " ++
           s!"a borrow at `'{y.name}` cannot stay open across its steps: it may take one borrow " ++
           s!"of a cell at `'{y.name}`, `imm '{y.name} A` or `mut '{y.name} A`, which it borrows " ++
-          "again at each step (SPEC §14, borrow scopes over loops)"⟩
+          "again at each step (SPEC §14, borrow scopes over loops). Pass the other borrowed " ++
+          "values as owned copies; a counted `for` over a view bound in its body is read as a " ++
+          "loop here, before its source has a type (#491)"⟩
     let some (names, M) := if ps.length == 1 then some ([x], M)
         else spinePattern fuel ps.length x.name M
       | throw ⟨lamsp, s!"`{n.name}` loops and takes a borrow in a tuple: destructure its " ++

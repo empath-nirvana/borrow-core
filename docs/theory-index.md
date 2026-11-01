@@ -305,8 +305,8 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
   borrow that `↭` lets outlive the run that opens it. That change is not verified sound, and
   nothing here shows the spanning lend unsound." "**A lending yield in pull form … is excluded
   in every route here.**"
-- **Status:** partial: per-observation lend proved and landed (SPEC §5, §14); the spanning lend
-  open.
+- **Status:** per-observation lend proved and landed (SPEC §5, §14), kept as the design; the
+  spanning lend closed by decision 71 ([tombstone](tombstones/lends-across-suspensions.md)).
 - **Key results:** `not_upd_of_new_mut`, `not_upd_of_ended_mut`, `not_upd_of_new_imm`,
   `ext_of_cellIn`, `refoldKripke_false`, `refold_fails_at_consumer_frame`, `wpTS_M_refold`,
   `refoldKripkeD`, `not_markerInstallable`, `upd_borrow_top`, `borrowFree_after_run`,
@@ -627,7 +627,7 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
   an experiment." Its §9 lists what it has "not established", including "That the projection
   form of §7.3 has a derived type in the core" and the handler laws beyond one effect.
 - **Status:** design; S1 built (SPEC §18).
-- **Open kernel items:** K1 → [T1](#t1-the-spanning-lend-k1); K2 → [T8](#t8-observations-that-take-input-k2);
+- **Open kernel items:** K1 → [T1](#t1-the-spanning-lend-k1) (closed, decision 71); K2 → [T8](#t8-observations-that-take-input-k2);
   K3 → [T9](#t9-destructors-that-perform-io-or-fail-k3); K4 → [T10](#t10-early-exit-from-a-kernel-fold-k4);
   K5 → [T11](#t11-structural-and-borrowed-descent-for-rec-k5); projection operations →
   [T21](#t21-the-derived-type-of-projection-operations).
@@ -653,7 +653,7 @@ obstruction exist unless a Lean name is given.
 
 | # | Problem | Issue |
 |---|---|---|
-| T1 | The spanning lend (K1) | [#172] |
+| T1 | The spanning lend (K1): **closed, tombstoned** (decision 71) | [#172] |
 | T2 | An outlives rule for thunks `U C` | [#173] |
 | T3 | Lending a `Mut` as an `Imm` (strings K2′) | [#174] |
 | T4 | Same-lifetime views through a pointer | [#175] |
@@ -677,6 +677,12 @@ obstruction exist unless a Lean name is given.
 
 ### T1. The spanning lend (K1)
 
+- **Closed by decision 71 (tombstoned, 2026-10-31).** T1, "no borrow is held across a
+  suspension", is the permanent rule (SPEC §19): data that crosses a suspension is owned, moved
+  in and moved back out. Lifting it is not open work. Every approach tried, why each stopped,
+  where the artefacts are, and the reopen condition (only a breakthrough the user brings) are in
+  [`docs/tombstones/lends-across-suspensions.md`](tombstones/lends-across-suspensions.md). The
+  entry below is kept as the record of the problem.
 - **Statement.** A rule that lends a place across observations of codata, e.g. `withborLoop :
   Ref A ⊸ (∀'x ⊏ ⊓Δ. Mut 'x A ⊸ F(U(Loop (['x] B) R))) ⊸ F(U(Loop (Ref A ⊗ B) (Ref A ⊗ R)))`,
   sound with FP and adequacy. Equivalently: a borrow held across a suspension (a `yield`,

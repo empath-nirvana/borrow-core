@@ -6,8 +6,8 @@
 -- and with it the part of the tree not yet walked, which its destructor frees. The traversal is a
 -- push generator over an owned tree, so it consumes the tree; the Rust walks `&TreeNode` with an
 -- explicit stack of references, and an iterator over a borrowed tree, whose state is views of
--- the subtrees still to walk, is the open case (the spanning lend, T1, #172, and views through
--- owned pointers, #219). A recursion of depth the tree's height under `bounded` (`lib/rec.bc`).
+-- the subtrees still to walk, holds borrows across the loop's ticks, which decision 71 rules out
+-- (and needs views through owned pointers, #219). A recursion of depth the tree's height under `bounded` (`lib/rec.bc`).
 --
 -- The generator costs allocations the walk does not need: 107 here, against 66 for the same walk
 -- written as a plain recursion that threads a counter and stops at the `k`-th value; the Rust

@@ -20,7 +20,9 @@ array-refs erased handles 0 performs 0 raises 0 left 0 0
 array-replace erased handles 0 performs 0 raises 0 left 0 0
 array-sum erased handles 0 performs 0 raises 0 left 0 0
 ascii-upper erased handles 1 performs 0 raises 1 left 0 0
+async-bank erased handles 2 performs 0 raises 2 machines 2 suspends 2 left 0 0
 async-bank-inbox erased handles 2 performs 0 raises 1 machines 2 suspends 2 left 0 0
+async-borrow erased handles 2 performs 0 raises 2 machines 2 suspends 1 left 0 0
 async-cancel erased handles 0 performs 0 raises 0 machines 2 suspends 3 left 0 0
 async-lend-slots erased handles 0 performs 0 raises 0 machines 2 suspends 4 left 0 0
 async-logged erased handles 0 performs 0 raises 2 machines 4 suspends 6 left 0 0
@@ -43,6 +45,7 @@ async-stack-nested erased handles 0 performs 0 raises 3 machines 6 suspends 6 le
 async-timers erased handles 2 performs 0 raises 5 machines 3 suspends 3 left 0 0
 async-try-join erased handles 4 performs 0 raises 31 machines 2 suspends 1 left 0 0
 async-unr-site erased handles 0 performs 0 raises 2 machines 3 suspends 2 left 0 0
+async-worker-pool erased handles 1 performs 0 raises 1 machines 2 suspends 2 left 0 0
 async-workers-scoped erased handles 2 performs 0 raises 2 machines 2 suspends 2 left 0 0
 axes/borrow-across-loop erased handles 0 performs 0 raises 0 left 0 0
 axes/codata-coeffects erased handles 0 performs 0 raises 0 left 0 0
@@ -367,10 +370,12 @@ needs-stdout erased handles 0 performs 0 raises 0 left 0 0
 operator-rounds erased handles 5 performs 0 raises 5 left 0 0
 parse-int erased handles 4 performs 0 raises 7 left 0 0
 parse-recover erased handles 3 performs 0 raises 20 left 0 0
+parse-recover-gen erased handles 3 performs 0 raises 19 machines 2 suspends 4 left 0 0
 pipe-handlers erased handles 2 performs 0 raises 4 machines 8 suspends 9 left 0 0
 poly-operators erased handles 0 performs 0 raises 0 left 0 0
 poly-providers erased handles 0 performs 0 raises 0 left 0 0
 print-borrowed-array erased handles 0 performs 0 raises 0 left 0 0
+print-borrowed-list erased handles 0 performs 0 raises 0 left 0 0
 quicksort erased handles 0 performs 0 raises 0 left 0 0
 rec-await-exhausted erased handles 2 performs 1 raises 1 left 0 0
 rec-deep erased handles 0 performs 0 raises 0 left 0 0
@@ -403,6 +408,7 @@ sort-lines erased handles 1 performs 0 raises 1 left 0 0
 sort-numbers erased handles 0 performs 0 raises 0 left 0 0
 split-at-mut erased handles 0 performs 0 raises 0 left 0 0
 state-machine erased handles 1 performs 0 raises 4 machines 1 suspends 12 left 0 0
+state-machine-audit erased handles 1 performs 0 raises 4 left 0 0
 storage-array erased handles 2 performs 0 raises 2 left 0 0
 sum-i32 erased handles 0 performs 0 raises 0 left 0 0
 sum-prog-exact erased handles 0 performs 0 raises 0 left 0 0

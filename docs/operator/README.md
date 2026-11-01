@@ -497,7 +497,10 @@ Each obstacle names what blocks it and how the operator meets it.
     move-and-rebind lend of decision 38 and the residual of SPEC §14.
   - The sequential operator: it lends `&cfg` per reconcile, which works today
     (`scope-loop-lend.bc`).
-- **The question.** Should the kernel have a borrow block at loop type, whose frame spans every
+- **Closed by decision 71** (`docs/tombstones/lends-across-suspensions.md`): no borrow block spans
+  observations. The tasks are lent `&cfg` from outside a scheduler that runs inside the borrow
+  (`spawn_in`/`run_in`, SPEC §32), or get copies; the sequential operator lends per reconcile.
+- **The question (as asked).** Should the kernel have a borrow block at loop type, whose frame spans every
   observation? The pending file sketches its type:
   `Ref A ⊸ (∀'x. Mut 'x A ⊸ U (Loop (['x] B) R)) ⊸ U (Loop (Ref A ⊗ B) (Ref A ⊗ R))`.
   Its soundness is the frame (6.64) held across a sequence of observations, which the typed

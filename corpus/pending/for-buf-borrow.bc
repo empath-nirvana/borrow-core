@@ -1,5 +1,5 @@
 -- pending: refused #501
--- now: 16:55: the iterator of this `for` holds the borrow of `v`: a borrow block over a loop lends its place again at each step, so what the loop holds between steps must not hold the borrow (SPEC §14, borrow scopes over loops)
+-- now: 16:55: the iterator of this `for` holds the borrow of `v`: a borrow block over a loop lends its place again at each step, so what the loop holds between steps must not hold the borrow (SPEC §14, borrow scopes over loops). Give the iterator data it owns and hands back, or iterate the place itself by index; a counted `for` over a view lent inside the block is read as such an iterator, before its source has a type (#501)
 --
 -- A counted `for` over the view that a borrow of a buffer lends, written inline in the borrow
 -- block. The loop is total, bounded by the view's length (SPEC §16), as the same block over an

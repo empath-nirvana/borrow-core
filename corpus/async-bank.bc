@@ -1,0 +1,49 @@
+-- A bank simulation: each teller task owns an account and works through its queue of
+-- transactions, awaiting after each. A withdrawal that would overdraw is refused: it raises
+-- `Fail[i32]`, handled inside the borrow, and the teller counts it. The tellers run under
+-- `lib/async.bc`'s scheduler, interleaved.
+--
+-- Idiom: owned across suspensions, borrowed within (decision 71). The teller owns the account
+-- across its `await`s and lends it `mut` for one transaction at a time: the borrow block is inside
+-- the loop's body and ends before the `await`. A borrow block held across the `await`s, reading
+-- the teller's other variables, is refused (no borrow is held across a suspension; R1, SPEC §29,
+-- is frozen and admits a body that sees only its view). The answer is the one the block form
+-- would give.
+--
+-- Exercises: a task that owns a cell across its `await`s and borrows it between them, `modify`
+-- through the borrow, `Fail` handled inside the borrow block, a counted loop over a generic list
+-- of transactions, and the scheduler's interleaving.
+--
+-- Answer: `[(130, 0), (20, 1)]`: teller 1 deposits 50 and withdraws 20 from 100; teller 2
+-- withdraws 30 from 50, and its second withdrawal of 40 is refused. `live 0`.
+
+include async
+include fail
+
+-- A transaction: a deposit (positive) or a withdrawal (negative).
+type Txn = i32
+
+fn apply(balance: i32, t: Txn) -> i32 with Fail[i32] =
+  if balance + t < 0 { raise(t) } else { balance + t }
+
+fn teller(start: i32, txns: List[Txn], n: i32) -> i32 * i32 with Async =
+  let acct = alloc(start);
+  let mut refused = 0;
+  let mut rest = txns;
+  for _ in 0..n {
+    match unroll rest {
+      inl u -> rest = nil[Txn]()
+    | inr (t, more) ->
+        rest = more;
+        let ok = borrow mut acct { a -> modify a { b -> match with to_result { apply(b, t) } { inl b2 -> (b2, true) | inr e -> (b, false) } } };
+        if ok { () } else { refused = refused + 1 };
+        await()
+    }
+  };
+  (free(acct), refused)
+
+main -> List[i32 * i32] =
+  let q = queue[i32 * i32]();
+  let q = push(q, with spawn { teller(100, cons(50, cons(0 - 20, nil())), 2) });
+  let q = push(q, with spawn { teller(50, cons(0 - 30, cons(0 - 40, nil())), 2) });
+  run_until_empty(q)

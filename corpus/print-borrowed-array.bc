@@ -1,9 +1,9 @@
--- The array analogue of `corpus/pending/print-borrowed-list.bc`: each element of a borrowed
+-- The array analogue of `corpus/print-borrowed-list.bc`: each element of a borrowed
 -- array printed, in order, then the sum returned (S4 of `docs/strings-slices-design.md`). `&a`
 -- lends the array as its view for the whole loop, which lends one `imm` leaf per element, and
 -- the body writes to the output capability it is given: `print_sum` takes `Out` and hands it
--- back, and is `total`, since its `for` is over data (SPEC §16). The list version waits for a
--- borrowed list iterator (#57).
+-- back, and is `total`, since its `for` is over data (SPEC §16). The list version copies the
+-- list out first: an iterator over a borrowed list would hold the borrow across its steps.
 --
 -- Answer: the line `100 20 3 `, then `i32[123]`. One allocation besides the capability's cell:
 -- the array.
