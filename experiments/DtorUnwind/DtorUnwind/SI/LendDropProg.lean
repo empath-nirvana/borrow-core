@@ -121,7 +121,7 @@ theorem erwp_of_empty {Φ : LocFam} {T : OpTabN} {Q : PostN} {n : Nat} {ls : Lis
 /-- `y : 1 ↠^cancel 1`, its cancel run releasing every cell of the cancelled region, no
 finaliser performing anything. -/
 def yCEnt : OpEntN :=
-  ⟨.cancel, false, unitP, unitP, some (cancelOblN (ℍ := ℍ) Φ₀ OpTabN.empty), sameW⟩
+  ⟨.cancel, false, unitP, unitP, some (cancelOblN (ℍ := ℍ) Φ₀ OpTabN.empty), extF⟩
 
 /-- Under both handlers: the cancellable `y` and the tick. -/
 def T2C : OpTabN := fun m i => if m = 6 ∧ i = 0 then some (yCEnt (ℍ := ℍ)) else T1 m i
@@ -150,7 +150,7 @@ theorem T2C_down : (T2C (ℍ := ℍ)).Down where
     rcases T2C_ent h with rfl | rfl
     · cases hP; exact cancelOblN_down Φ₀_down empty_down
     · cases hP
-  wcl := fun _ _ en h => by rcases T2C_ent h with rfl | rfl <;> exact sameW_left
+  wcl := fun _ _ en h => by rcases T2C_ent h with rfl | rfl <;> exact extF_left
 
 theorem T2C_lendOKC (A : Life) : (T2C (ℍ := ℍ)).LendOKC A where
   entry := fun _ _ en h => by
@@ -451,7 +451,7 @@ theorem erwp_yHC :
       obtain ⟨ρa, ρk, hc, ⟨-, rfl⟩, -, hK⟩ := hsep
       obtain rfl : ρ = ρk := eq_of_compS_empty_left hc
       refine erwp_clDrop Φ₀_down T1_down fun k' hk' => ?_
-      exact (hK ls (fun _ => Iff.rfl) k' hk').2 (by simp [yCEnt]) _ rfl
+      exact (hK ls (extF_refl ls _) k' hk').2 (by simp [yCEnt]) _ rfl
     · exact absurd h6.symm Stage1.divEff_ne6
 
 /-- `hnd_Div rtH (hnd_Y yDrop bodyC)`. -/

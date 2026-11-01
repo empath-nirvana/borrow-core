@@ -29,6 +29,7 @@ import DtorUnwind.SI.RwpG
 import DtorUnwind.SI.ErwpN
 import DtorUnwind.SI.HandleN
 import DtorUnwind.SI.BindN
+import DtorUnwind.SI.ExtF
 import DtorUnwind.SI.StopFrameN
 import DtorUnwind.SI.LoopN
 import DtorUnwind.SI.LendProg
@@ -53,6 +54,7 @@ import DtorUnwind.SI.RebAgreeCex
 import DtorUnwind.SI.RebRechooseN
 import DtorUnwind.SI.CanonN
 import DtorUnwind.SI.RebChooseC
+import DtorUnwind.SI.LinDisj
 import DtorUnwind.SI.RebStopC
 import DtorUnwind.SI.RebAcrossC
 import DtorUnwind.SI.CanonRef

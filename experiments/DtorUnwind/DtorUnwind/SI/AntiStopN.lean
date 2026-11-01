@@ -30,7 +30,7 @@ the opened cell framed (`erwpG_frame`).
 
 ## Conditions
 
-The table's non-abortive entries are must-resume and resumed at the same world (`AFOK`): an
+The table's non-abortive entries are must-resume and resumed under `extF` (`AFOK`): an
 abortive stop returns nothing to the anti-frame, a dropped continuation never gives the sealed
 cell back to the lender, and the world condition is read at the share before and after the seal.
 -/
@@ -230,9 +230,23 @@ theorem cellFold_down {l : Loc} {β : Life} {F : Nat → Val → SPropS Loc Val 
   fun _ _ _ ⟨w, χ, h, hw, R, rest, h1, h2⟩ => ⟨w, χ, h, hF _ w _ hw, R, rest, h1, h2⟩
 
 /-- **The tables an anti-frame may stop at**: every non-abortive entry is must-resume and
-resumed at the same world. -/
+resumed under `extF`. -/
 def OpTabN.AFOK (T : OpTabN) : Prop :=
-  ∀ m i en, T m i = some en → en.abort = false → en.q = .lin ∧ en.wc = sameW
+  ∀ m i en, T m i = some en → en.abort = false → en.q = .lin ∧ en.wc = extF
+
+/-- **`extF` across the seal.** The callback's share is `ℓ ↦ own(w) ● σ′ ● R`; the sealed share is
+`R ● ℓ ↦ mut(β, w, σ′)`. A location frozen in `σ′` is frozen in the sealed cell's witness. -/
+theorem extF_seal {ls ls' : List SRec} {l : Loc} {w : Val} {rest σ' R ρk ρk' : WRes}
+    {ψ : CellU Loc Val} (hk1 : ResU.CompS (ResU.single l (CellU.ownOf w)) rest ρk)
+    (hk2 : ResU.CompS σ' R rest) (hRk : ResU.CompS R (ResU.single l ψ) ρk')
+    (hψ : ψ.kind = Kind.mut) (hwit : ψ.wit = σ') (h : extF ls ls' ρk') : extF ls ls' ρk := by
+  intro r hr ⟨m, hf, hm⟩
+  refine h r hr ⟨m, ?_, hm⟩
+  rcases hf.split hk1 with hf | hf
+  · exact absurd hf not_frz_single_own
+  rcases hf.split hk2 with hf | hf
+  · exact Frz.of_compS_right hRk (Frz.inMut (ResU.single_get_self _ _) hψ (hwit ▸ hf))
+  · exact Frz.of_compS_left hRk hf
 
 /-! ### The anti-frame across stops -/
 
@@ -273,7 +287,9 @@ theorem erwp_M_antiFrame {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {β : Life}
     fun hu => absurd (hq.symm.trans hu) (by simp), fun ls'' he =>
       ⟨fun k' hk' w' σB XB hB hXB => ?_, fun hq' => absurd hq hq'⟩⟩⟩)
   simp only [erwpC, show k' < n by omega, if_true]
-  have he' : en.wc ls' ls'' ρk := by rw [hwc] at he ⊢; exact he
+  have he' : en.wc ls' ls'' ρk := by
+    rw [hwc] at he ⊢
+    exact extF_seal hk1 hk2 hRk (CellU.kind_mutOf _ _ _ _ _ _) (CellU.wit_mutOf _ _ _ _ _ _) he
   obtain ⟨ac, hac, hacX⟩ := compS_exch hRk hXB
   refine ih k' (by omega) ls'' _ w σ' h' k hw' ac XB (ResU.CompS.comm hacX)
     fun W X₀ hW hX₀ => ?_
@@ -368,7 +384,9 @@ theorem erwp_M_frameF {Φ : LocFam} {l : Loc} {A : Life} {F : Nat → Val → SP
     refine ih k' (by omega) k (le_of_lt hk') ls'' _ v'' χ W'' ρbB XB hχ hdB P'' hPk hw''
       (ResU.CompS.comm hW'') hWXB (fun BM' hBM' => ?_)
     -- the borrowed continuation, at the frame, with the garbage `ρ⁺` added
-    have he' : en.wc ls' ls'' ρk := by rw [hwc] at he ⊢; exact he
+    have he' : en.wc ls' ls'' ρk := by
+      rw [hwc] at he ⊢
+      exact extF_fold hZ hZl (CellU.kind_mutOf _ _ _ _ _ _) (CellU.wit_mutOf _ _ _ _ _ _) hW'' hkL he
     obtain ⟨s1, hs1, hZds1⟩ := (ResU.CompS.assoc (Z.del l) σB
       (ResU.single l (CellU.mutOf A v'' χ hχ P'' hw'')) BM').mpr ⟨ρbB, hρbB, hBM'⟩
     obtain ⟨Z', hZ', hZ'σ⟩ := (ResU.CompS.assoc (Z.del l)
@@ -421,7 +439,7 @@ def ShareG.sep (G : ShareG) (R : List SRec → WProp) : ShareG := fun k ls ρ =>
 is taken back at the resume. A guarded table has no `raise` stop, so the frame may own. -/
 theorem erwpG_frame {Φ : LocFam} {T : OpTabN} (hT : T.AFOK) {G : ShareG} {Q : PostN}
     (R : List SRec → WProp)
-    (hR : ∀ ls ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → ∀ ρ, R ls ρ → R ls' ρ) :
+    (hR : ∀ ls ls' ρ, extF ls ls' ρ → R ls ρ → R ls' ρ) :
     ∀ n ls e (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ → R ls ρ₂ →
       erwp (ℍ := ℍ) Φ (opTableG T G) Q n ls e ρ₁ →
       erwp (ℍ := ℍ) Φ (opTableG T (G.sep R)) (fun k ls' v => Q k ls' v ⋆ R ls') n ls e ρ := by
@@ -431,7 +449,7 @@ theorem erwpG_frame {Φ : LocFam} {T : OpTabN} (hT : T.AFOK) {G : ShareG} {Q : P
   intro ls e ρ₁ ρ₂ ρ hc hR₂ h
   rw [erwp_eq] at h ⊢
   refine rwpG_mono_le (fun k hk ls' t σ ⟨σ₁, σ₂, hσ, ht, hσ₂⟩ => ?_)
-    (rwpG_frame R hR hc h hR₂)
+    (rwpG_frame R (fun ls ls' hs ρ => hR ls ls' ρ (extF_of_same hs ρ)) hc h hR₂)
   rcases ht with ⟨v, rfl, hv⟩ | ⟨K, m, i, v, en, hp⟩
   · exact Or.inl ⟨v, rfl, σ₁, σ₂, hσ, hv, hσ₂⟩
   obtain ⟨⟨rfl, hK, hTe, ha⟩, ρa, ρk, hcak, hA, hG, -, hcont⟩ := pure_sep_iff.mp hp
@@ -440,12 +458,12 @@ theorem erwpG_frame {Φ : LocFam} {T : OpTabN} (hT : T.AFOK) {G : ShareG} {Q : P
   refine Or.inr ⟨K, m, i, v, en, pure_sep_mk ⟨rfl, hK, hTe, ha⟩ ⟨ρa, ρk₂, haσ, hA,
     ⟨ρk, σ₂, hk₂, hG, hσ₂⟩, fun hu' => absurd (hql.symm.trans hu') (by simp), fun ls'' he =>
       ⟨fun k' hk' w τ₁ τ₂ hB hcτ => ?_, fun hq' => absurd hql hq'⟩⟩⟩
-  have he' : en.wc ls' ls'' ρk := by rw [hwc] at he ⊢; exact he
-  have hls : ∀ x, x ∈ ls'' ↔ x ∈ ls' := by rw [hwc] at he; exact he
+  have he' : en.wc ls' ls'' ρk := by rw [hwc] at he ⊢; exact extF_left _ _ _ _ _ hk₂ he
+  have hls : extF ls' ls'' σ₂ := by rw [hwc] at he; exact extF_right hk₂ he
   obtain ⟨y, hy, hyτ⟩ := compS_exch hk₂ hcτ
   have hc' := (hcont ls'' he').1 k' hk' w τ₁ y hB hy
   simp only [erwpC, show k' < n by omega, if_true] at hc' ⊢
-  exact ih k' (by omega) ls'' _ y σ₂ τ₂ hyτ (hR ls' ls'' hls σ₂ hσ₂) hc'
+  exact ih k' (by omega) ls'' _ y σ₂ τ₂ hyτ (hR ls' ls'' σ₂ hls hσ₂) hc'
 
 /-- **The final resource dropped as garbage at `erwp`** when it owns nothing (`rwpG_garbage`, at
 every value the run returns). -/

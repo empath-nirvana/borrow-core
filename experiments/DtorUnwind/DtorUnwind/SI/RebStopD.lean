@@ -88,7 +88,7 @@ theorem rwpG_rebDeepG {Φ : LocFam} (r : FrameRec) {p₀ : Option Loc} {l₀ : L
     (hRβ : w₀.InStratum β) (hβc : (CellU.immOf s u₀ w₀ hs).InStratum β)
     (hshape : vShape (S₀.immReborrow (.var x)) (r.δ.extend x β) u₀ (canonD r S₀ u₀ w₀ β))
     {ρb ρ : WRes} (hc : ResU.CompS (ResU.single l₀ (CellU.immOf s u₀ w₀ hs)) ρb ρ)
-    (h15 : ρb.InStratum β) {ls : List SRec} (hr : r ∈ rsOf ls) (hβls : ∀ y ∈ ls, y.2 ⊐ β)
+    (h15 : ρb.InStratum β) {ls : List SRec} (hr : r ∈ rsOf ls)
     {Qin Qout : PostG} {n : Nat} {e : Expr}
     (hpost : ∀ k, k ≤ n → ∀ ls'' t (ρ' : WRes), Qin k ls'' t ρ' → (∀ y, y ∈ ls'' ↔ y ∈ ls) →
       ∃ ρo ρk, ResU.CompS ρo ρk ρ' ∧ ρo.InStratum β ∧
@@ -139,7 +139,8 @@ theorem rwpG_rebDeepG {Φ : LocFam} (r : FrameRec) {p₀ : Option Loc} {l₀ : L
     rwa [ResU.CompS.functional hab hFb] at hab'
   -- entry: `TWNC.reb` at the canonical image, `RebRecLe` from the tags
   obtain ⟨s', hs', hle⟩ := cell_of_compS_single hWcell
-  have hrebLe := rebRecLe_of_tags hT.toN htg hβls w₀
+  have hrebLe := rebRecLe_globalD hT hr hch₀ ⟨ρbf, hWcell⟩
+    (le_of_lt (CellU.sqsupset_of_lsOf (CellU.lsOf_immOf _ _ _ _) hβc))
   have hcellLe : RebCellLe fρ l₀ β := fun a ha => by
     obtain ⟨a1, a2, h1, -, hcomp⟩ := (AgW.split hWcell).mp ha
     obtain ⟨ξ, t, eξ, ht, hy⟩ := (icp_trans (icpAt_agW h1 l₀ _ (ResU.single_get_self _ _))
@@ -264,14 +265,14 @@ theorem erwp_reborrowDeep {Φ : LocFam} (r : FrameRec) {p₀ : Option Loc} {l₀
     {Tb : OpTabN} (hT : Tb.RebOK β) {Q : PostN} :
     ∀ n ls e (ρb ρ : WRes),
       ResU.CompS (ResU.single l₀ (CellU.immOf s u₀ w₀ hs)) ρb ρ → ρb.InStratum β →
-      r ∈ rsOf ls → (∀ y ∈ ls, y.2 ⊐ β) →
+      r ∈ rsOf ls →
       (∀ Bχ, ResU.CompS ρb (canonD r S₀ u₀ w₀ β) Bχ →
         erwp (ℍ := ℍ) Φ (opTableN Tb) (RebPost β Q) n ls e Bχ) →
       erwp (ℍ := ℍ) Φ (opTableN Tb) Q n ls e ρ := by
   intro n
   induction n using Nat.strong_induction_on with
   | _ n ih =>
-  intro ls e ρb ρ hc hb hr hβls hA
+  intro ls e ρb ρ hc hb hr hA
   set χ : WRes := canonD r S₀ u₀ w₀ β with hχdef
   set ρi : WRes := ResU.single l₀ (CellU.immOf s u₀ w₀ hs) with hρidef
   have hreb : ResU.Reb β w₀ χ := canonD_reb hS hRβ
@@ -280,7 +281,7 @@ theorem erwp_reborrowDeep {Φ : LocFam} (r : FrameRec) {p₀ : Option Loc} {l₀
   have hχimm : NoOwn (χ.restrictDom (w₀.restrict Kind.imm)) :=
     noOwn_of_imm fun m ψ e => ResU.reb_imm_image hreb (ResU.restrictDom_get_inv e)
   rw [erwp_eq]
-  refine rwpG_rebDeepG r hch₀ x hx hS hRβ hβc hshape hc hb hr hβls ?_ (fun Bχ hBχ => by
+  refine rwpG_rebDeepG r hch₀ x hx hS hRβ hβc hshape hc hb hr ?_ (fun Bχ hBχ => by
     have h := hA Bχ hBχ
     rw [erwp_eq] at h
     exact h)
@@ -305,23 +306,25 @@ theorem erwp_reborrowDeep {Φ : LocFam} (r : FrameRec) {p₀ : Option Loc} {l₀
         fun hu' => absurd (hq.symm.trans hu') (by simp), fun lsO he =>
           ⟨fun k' hk' w σB XB hB hXB => ?_, fun hq' => absurd hq hq'⟩⟩⟩)⟩
     simp only [erwpC, show k' < n by omega, if_true]
-    have he' : ∀ y, y ∈ lsO ↔ y ∈ ls'' := by rw [hwc] at he; exact he
+    have he' : extF ls'' lsO Ks := by rw [hwc] at he; exact he
     have hσBβ : σB.InStratum β := hT.pb m i en hTe _ _ _ _ hB
     -- the lender's next segment: `ρᵢ ● (ψ ● σ_B)`
     obtain ⟨ρb', hψσ, hXB'⟩ := compS_reassoc (ResU.CompS.comm hKs) hXB
     have hb' : ρb'.InStratum β := inStratum_compS hψσ hψβ hσBβ
-    have hmem : ∀ y, y ∈ lsO ↔ y ∈ ls := fun y => (he' y).trans (hls'' y)
+    -- the record is kept: the lender's share holds a view at one of its chain positions
     have hr' : r ∈ rsOf lsO := by
-      obtain ⟨t', ht⟩ := mem_rsOf.mp hr; exact mem_rsOf.mpr ⟨t', (hmem _).mpr ht⟩
-    refine ih k' (by omega) lsO _ ρb' XB hXB' hb' hr'
-      (fun y hy => hβls y ((hmem y).mp hy)) (fun Bχ hBχ => ?_)
+      obtain ⟨t', ht⟩ := mem_rsOf.mp hr
+      exact he' r (mem_rsOf.mpr ⟨t', (hls'' _).mpr ht⟩)
+        ⟨l₀, Frz.of_compS_right hKs (Frz.imm (ResU.single_get_self _ _) (by simp)),
+          Or.inr ⟨p₀, S₀, u₀, hch₀⟩⟩
+    refine ih k' (by omega) lsO _ ρb' XB hXB' hb' hr' (fun Bχ hBχ => ?_)
     -- the borrowed continuation at `ρₖ ● σ_B`, with the garbage `ρ⁺ ● χ|imm`
     obtain ⟨ψχ, hψχ, hψχσ⟩ := compS_exch hψσ hBχ
     obtain ⟨w₁, hw₁, hw₁χ⟩ := compS_reassoc' (ResU.CompS.comm hχsplit) hψχ
     obtain rfl : w₁ = w' := ResU.CompS.functional hw₁ hsplit
     obtain ⟨g, hg, hkg⟩ := compS_reassoc hkw hw₁χ
     obtain ⟨Xk, hXk, hXkg⟩ := compS_exch hkg hψχσ
-    have hwc' : en.wc ls'' lsO ρk := by rw [hwc]; exact he'
+    have hwc' : en.wc ls'' lsO ρk := by rw [hwc]; exact extF_reb hkw hsplit hreb hKs he'
     have hc := (hcont lsO hwc').1 k' hk' w σB Xk hB hXk
     simp only [erwpC, show k' < n by omega, if_true] at hc
     exact erwp_garbage hXkg (noOwn_compS hg hnp hχimm) hc

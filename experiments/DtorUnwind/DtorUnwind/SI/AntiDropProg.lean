@@ -39,7 +39,7 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 
 /-- `y : 1 ↠^cancel 1`, its cancel run at `Φ`. -/
 def yCEntΦ (Φ : LocFam) : OpEntN :=
-  ⟨.cancel, false, unitP, unitP, some (cancelOblN (ℍ := ℍ) Φ OpTabN.empty), sameW⟩
+  ⟨.cancel, false, unitP, unitP, some (cancelOblN (ℍ := ℍ) Φ OpTabN.empty), extF⟩
 
 /-- `T2C` with `y`'s cancel run at `Φ`. -/
 def T2CΦ (Φ : LocFam) : OpTabN :=
@@ -65,7 +65,7 @@ theorem T2CΦ_lendOKC (Φ : LocFam) (A : Life) : (T2CΦ (ℍ := ℍ) Φ).LendOKC
       exact inStratum_empty _
 
 theorem T2CΦ_e (Φ : LocFam) : ∀ m i en, T2CΦ (ℍ := ℍ) Φ m i = some en → en.abort = false →
-    en.q ≠ .unr ∧ en.wc = sameW := fun _ _ en h _ => by
+    en.q ≠ .unr ∧ en.wc = extF := fun _ _ en h _ => by
   rcases T2CΦ_ent h with rfl | rfl <;> exact ⟨by simp [yCEntΦ, tickEnt], rfl⟩
 
 theorem T2CΦ_fin (Φ : LocFam) : ∀ m i en, T2CΦ (ℍ := ℍ) Φ m i = some en → en.q = .cancel →
@@ -208,7 +208,7 @@ theorem openC_ok {Φ : LocFam} (hΦ : Φ.Down) (c d : Loc) (u : Val) (A : Life) 
       k₀ k₀ le_rfl ls (lendE d) u PMap.empty _ PMap.empty _ (inStratum_empty A)
       (inStratum_empty _) (famF A k₀) (fun _ _ h => h) rfl (ResU.comp_empty_right _)
       (ResU.comp_empty_right _) (lend_okCΦ hΦ d A u k₀ ls)
-  have hT'e : ∀ m i en, T' m i = some en → en.abort = false → en.q ≠ .unr ∧ en.wc = sameW := by
+  have hT'e : ∀ m i en, T' m i = some en → en.abort = false → en.q ≠ .unr ∧ en.wc = extF := by
     intro m i en h ha
     obtain ⟨en₀, h₀, rfl⟩ := claimT_some h
     by_cases hq : en₀.q = .cancel

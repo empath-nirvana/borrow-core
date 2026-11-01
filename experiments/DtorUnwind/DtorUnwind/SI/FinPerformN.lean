@@ -70,10 +70,10 @@ theorem erwp_frameL {Φ : LocFam} {T : OpTabN} (hTD : T.Down)
 resource rides along `D ()` (`erwp_frameL`), and the `raise` goes on when `D ()` answers `()`
 owning nothing. -/
 theorem erwp_ubindRaiseF {Φ : LocFam} (hΦ : Φ.Down) {T : OpTabN} (hTD : T.Down)
-    (hTe : ∀ m i en, T m i = some en → en.abort = false → en.q = .lin ∧ en.wc = sameW)
+    (hTe : ∀ m i en, T m i = some en → en.abort = false → en.q = .lin ∧ en.wc = extF)
     (hfinN : ∀ m i en, T m i = some en → en.fin = none)
     (hTr : ∀ m i en, T m i = some en → en.abort = true → m ≠ 0)
-    (hPAls : ∀ m i en, T m i = some en → ∀ k ls ls' v ρ, (∀ x, x ∈ ls' ↔ x ∈ ls) →
+    (hPAls : ∀ m i en, T m i = some en → ∀ k ls ls' v ρ, extF ls ls' ρ →
       en.PA k ls v ρ → en.PA k ls' v ρ)
     {R : Nat → WProp} (N D : Val)
     (hD : ∀ k ls ρ, R k ρ → erwp (ℍ := ℍ) Φ (opTableN T)
@@ -121,20 +121,22 @@ theorem erwp_ubindRaiseF {Φ : LocFam} (hΦ : Φ.Down) {T : OpTabN} (hTD : T.Dow
       (fun μ => (then_fin (ℍ := ℍ) (μ := μ) (i := i) N D v hm0 hK₁ .hole).1) ?_
     rw [Kont.plug_hole]
     refine erwp_unfold_at (opTableN_local T) hk ?_
-    set Fr : List SRec → WProp := fun ls₀ τ => (∀ x, x ∈ ls₀ ↔ x ∈ ls') ∧
-      ((fun ρ => en.PA k ls' v ρ ∧ NoOwn ρ) ⋆ (fun ρ => NoOwn ρ)) τ with hFr
+    set Fr : List SRec → WProp := fun ls₀ τ =>
+      ((fun ρ => en.PA k ls₀ v ρ ∧ NoOwn ρ) ⋆ (fun ρ => NoOwn ρ)) τ with hFr
     have hDr := erwp_frameL hTD (fun m i en h ha => (hTe m i en h ha).1) Fr
-      (fun _ _ hs _ ⟨h₁, h₂⟩ => ⟨fun x => (hs x).trans (h₁ x), h₂⟩)
-      (fun m' i' en' h ha' ls₁ ls₂ ρk ρ₂ ρ₃ _ he ⟨h₁, h₂⟩ => by
+      (fun _ _ hs _ ⟨τa, τn, hcτ, ⟨hPAτ, hn⟩, hnn⟩ =>
+        ⟨τa, τn, hcτ, ⟨hPAls _ _ _ hT _ _ _ _ _ (extF_of_same hs τa) hPAτ, hn⟩, hnn⟩)
+      (fun m' i' en' h ha' ls₁ ls₂ ρk ρ₂ ρ₃ hc₃ he ⟨τa, τn, hcτ, ⟨hPAτ, hn⟩, hnn⟩ => by
         rw [(hTe m' i' en' h ha').2] at he
-        exact ⟨fun x => (he x).trans (h₁ x), h₂⟩)
-      (fun _ _ ⟨_, τa, τn, hcτ, ⟨_, hnA'⟩, hnn'⟩ => noOwn_compS hcτ hnA' hnn')
-      k ls' _ ρR σ₁ σ (ResU.CompS.comm hcσ) ⟨fun _ => Iff.rfl, ρa, ρn, hcan, ⟨hPA, hnA⟩, hnn⟩
+        exact ⟨τa, τn, hcτ, ⟨hPAls _ _ _ hT _ _ _ _ _
+          (extF_left _ _ _ _ _ hcτ (extF_right hc₃ he)) hPAτ, hn⟩, hnn⟩)
+      (fun _ _ ⟨τa, τn, hcτ, ⟨_, hnA'⟩, hnn'⟩ => noOwn_compS hcτ hnA' hnn')
+      k ls' _ ρR σ₁ σ (ResU.CompS.comm hcσ) ⟨ρa, ρn, hcan, ⟨hPA, hnA⟩, hnn⟩
       (hD k ls' ρR hR)
     refine erwp_bind_le hΦ _ (fun m => by simp [Kont.HasHnd])
       (then_fin (ℍ := ℍ) (μ := fun _ => none) (i := i) N D v hm0 hK₁ .hole).2.1
       (OpTabN.ctxClosed_of_fin hfinN _) k ?_ k le_rfl ls' _ σ hDr
-    rintro k₂ ls₂ w σ₂ hk₂ ⟨σa, σb, hcσ', ⟨rfl, rfl⟩, hls₂, ⟨τa, τn, hcτ, ⟨hPAτ, hnτ⟩, hnn'⟩⟩
+    rintro k₂ ls₂ w σ₂ hk₂ ⟨σa, σb, hcσ', ⟨rfl, rfl⟩, τa, τn, hcτ, ⟨hPAτ, hnτ⟩, hnn'⟩
     obtain rfl := eq_of_compS_empty_left hcσ'
     refine erwp_det hΦ (opTableN_down hTD) hQout
       (fun μ => (then_fin (ℍ := ℍ) (μ := μ) (i := i) N D v hm0 hK₁ .hole).2.2) ?_
@@ -142,7 +144,7 @@ theorem erwp_ubindRaiseF {Φ : LocFam} (hΦ : Φ.Down) {T : OpTabN} (hTD : T.Dow
     exact rwpG_here (final_opPlug (K := .hole) (r := true) (payloadName_opPayload m i v)
       (by simp [OpFree, Kont.Catches])) (Or.inr (Or.inr ⟨.hole, m, i, v, en,
         pure_sep_mk ⟨rfl, rfl, hT, ha⟩ ⟨τa, τn, hcτ, ⟨hTD.pa_le hT hk₂
-          (hPAls _ _ _ hT _ _ _ _ _ hls₂ hPAτ), hnτ⟩, hnn'⟩⟩))
+          hPAτ, hnτ⟩, hnn'⟩⟩))
 
 end BoCa.Fig16.LogRel.Core.DtorUnwind.SI
 

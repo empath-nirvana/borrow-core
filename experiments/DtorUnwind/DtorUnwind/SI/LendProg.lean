@@ -39,11 +39,11 @@ def unitP : Nat → List SRec → Val → WProp := fun _ _ v ρ => v = Val.unit 
 /-- *next*, owning nothing: the runtime never closes the loop. -/
 def nextP : Nat → List SRec → Val → WProp := fun _ _ w ρ => w = nextV ∧ ρ = PMap.empty
 
-/-- `tick : 1 ↠^lin Next`, resumed at the same world. -/
-def tickEnt : OpEntN := ⟨.lin, false, unitP, nextP, none, sameW⟩
+/-- `tick : 1 ↠^lin Next`, resumed under `extF`. -/
+def tickEnt : OpEntN := ⟨.lin, false, unitP, nextP, none, extF⟩
 
-/-- `y : 1 ↠^lin 1`, resumed at the same world. -/
-def yEnt : OpEntN := ⟨.lin, false, unitP, unitP, none, sameW⟩
+/-- `y : 1 ↠^lin 1`, resumed under `extF`. -/
+def yEnt : OpEntN := ⟨.lin, false, unitP, unitP, none, extF⟩
 
 /-- Under the scheduler: the tick. -/
 def T1 : OpTabN := fun m i => if m = divEff ∧ i = 0 then some tickEnt else none
@@ -78,12 +78,12 @@ theorem T2_down : T2.Down where
   pa := fun _ _ en h _ _ _ _ hA => by rcases ent_cases h with he | he <;> subst he <;> exact hA
   fin := fun _ _ en P h hP => by
     rcases ent_cases h with rfl | rfl <;> cases hP
-  wcl := fun _ _ en h => by rcases ent_cases h with rfl | rfl <;> exact sameW_left
+  wcl := fun _ _ en h => by rcases ent_cases h with rfl | rfl <;> exact extF_left
 
 theorem T1_down : T1.Down where
   pa := fun _ _ en h _ _ _ _ hA => by obtain ⟨-, -, rfl⟩ := T1_cases h; exact hA
   fin := fun _ _ en P h hP => by rw [(T1_cases h).2.2] at hP; cases hP
-  wcl := fun _ _ en h => by rw [(T1_cases h).2.2]; exact sameW_left
+  wcl := fun _ _ en h => by rw [(T1_cases h).2.2]; exact extF_left
 
 theorem empty_down : OpTabN.empty.Down where
   pa := fun _ _ _ h => by cases h
@@ -94,7 +94,7 @@ theorem T2_fin : ∀ m i en, T2 m i = some en → en.fin = none := fun _ _ en h 
   rcases ent_cases h with rfl | rfl <;> rfl
 
 /-- **`T2` may be stopped at under a live lend at any lifetime**: both operations are
-must-resume, resumed at the same world, and pass nothing in or out. -/
+must-resume, resumed under `extF`, and pass nothing in or out. -/
 theorem T2_lendOK (A : Life) : T2.LendOK A where
   entry := fun _ _ en h => by rcases ent_cases h with rfl | rfl <;> exact ⟨rfl, rfl, rfl⟩
   pa := fun _ _ en h _ _ _ ρ hA => by
@@ -229,7 +229,7 @@ theorem erwp_yH {Φ : LocFam} (hΦ : Φ.Down) :
       obtain ⟨ρa, ρk, hc, ⟨-, rfl⟩, -, hK⟩ := hsep
       obtain rfl : ρ = ρk := eq_of_compS_empty_left hc
       refine erwp_clStore hΦ T1_down QZ_down fun k' hk' => ?_
-      exact (hK ls (fun _ => Iff.rfl) k' hk').1 Val.unit PMap.empty ρ ⟨rfl, rfl⟩
+      exact (hK ls (extF_refl ls _) k' hk').1 Val.unit PMap.empty ρ ⟨rfl, rfl⟩
         (ResU.comp_empty_right ρ)
     · exact absurd h6.symm Stage1.divEff_ne6
 
@@ -253,7 +253,7 @@ theorem erwp_rtH {Φ : LocFam} (hΦ : Φ.Down) :
     obtain rfl : ρ = ρk := eq_of_compS_empty_left hc
     rw [Stage1.rtC_eq]
     refine erwp_resumeCl hΦ empty_down QZ_down nextV_closed fun k' hk' => ?_
-    exact (hK ls (fun _ => Iff.rfl) k' hk').1 nextV PMap.empty ρ ⟨rfl, rfl⟩
+    exact (hK ls (extF_refl ls _) k' hk').1 nextV PMap.empty ρ ⟨rfl, rfl⟩
       (ResU.comp_empty_right ρ)
 
 /-! ### The turn: a `mut` lend across `y` -/

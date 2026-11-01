@@ -129,7 +129,7 @@ cell's claim; the anti-frame's stops, at `T`, owe the cancel run `T` asks
 (`erwp_M_antiFrame_cancelRun`). -/
 theorem erwp_M_antiFrameC {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {β : Life}
     {F : Nat → Val → SPropS Loc Val β} (hF : Φ l = some ⟨β, F⟩) {T : OpTabN}
-    (hT : ∀ m i en, T m i = some en → en.abort = false → en.q ≠ .unr ∧ en.wc = sameW)
+    (hT : ∀ m i en, T m i = some en → en.abort = false → en.q ≠ .unr ∧ en.wc = extF)
     (hfin : ∀ m i en, T m i = some en → en.q = .cancel →
       en.fin = some (cancelOblN (ℍ := ℍ) Φ OpTabN.empty))
     {Q : PostN} :
@@ -180,7 +180,9 @@ theorem erwp_M_antiFrameC {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {β : Life}
     hPA' ▸ hPA, fun hu => absurd hu hqu, fun ls'' he => ⟨fun k' hk' w' σB XB hB hXB => ?_,
       fun hql P hP => ?_⟩⟩⟩)
   · simp only [erwpC, show k' < n by omega, if_true]
-    have he' : en'.wc ls' ls'' ρk := by rw [hwc', hwc]; rw [hwc] at he; exact he
+    have he' : en'.wc ls' ls'' ρk := by
+      rw [hwc', hwc]; rw [hwc] at he
+      exact extF_seal hk1 hk2 hRk (CellU.kind_mutOf _ _ _ _ _ _) (CellU.wit_mutOf _ _ _ _ _ _) he
     obtain ⟨ac, hac, hacX⟩ := compS_exch hRk hXB
     refine ih k' (by omega) ls'' _ w σ' h' k hw' ac XB (ResU.CompS.comm hacX)
       fun W X₀ hW hX₀ => ?_
@@ -191,7 +193,9 @@ theorem erwp_M_antiFrameC {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {β : Life}
     have hqc : en.q = .cancel := by cases h : en.q <;> simp_all
     rw [hfin m i en hTe hqc] at hP
     cases hP
-    have he' : en'.wc ls' ls'' ρk := by rw [hwc', hwc]; rw [hwc] at he; exact he
+    have he' : en'.wc ls' ls'' ρk := by
+      rw [hwc', hwc]; rw [hwc] at he
+      exact extF_seal hk1 hk2 hRk (CellU.kind_mutOf _ _ _ _ _ _) (CellU.wit_mutOf _ _ _ _ _ _) he
     have hcan := (hcont ls'' he').2 (hq' ▸ hql)
     subst hen
     simp only [hqc, if_true] at hcan
@@ -290,7 +294,7 @@ theorem erwp_M_frameTF {Φ : LocFam} {l : Loc} {A : Life} {F : Nat → Val → S
         inStratum_compS hρbB hdZd (hT.pb m i en hTe _ _ _ _ hB)
       refine ih k' (by omega) k (le_of_lt hk') ls'' _ v'' χ W'' ρbB XB hχ hdB P'' hPk hw''
         (ResU.CompS.comm hW'') hWXB (fun BM' hBM' => ?_)
-      have he' : en.wc ls' ls'' ρk := by rw [hwc', hwc] at he; rw [hwc]; exact he
+      have he' : en.wc ls' ls'' ρk := by rw [hwc', hwc] at he; rw [hwc]; exact extF_fold hZ hZl (CellU.kind_mutOf _ _ _ _ _ _) (CellU.wit_mutOf _ _ _ _ _ _) hW'' hkL he
       obtain ⟨s1, hs1, hZds1⟩ := (ResU.CompS.assoc (Z.del l) σB
         (ResU.single l (CellU.mutOf A v'' χ hχ P'' hw'')) BM').mpr ⟨ρbB, hρbB, hBM'⟩
       obtain ⟨Z', hZ', hZ'σ⟩ := (ResU.CompS.assoc (Z.del l)
@@ -303,7 +307,7 @@ theorem erwp_M_frameTF {Φ : LocFam} {l : Loc} {A : Life} {F : Nat → Val → S
       have hc := (hcont ls'' he').1 k' hk' w σB Xk hB hXk
       simp only [erwpC, show k' < n by omega, if_true] at hc
       exact erwp_garbage hXkp hnoρp hc
-    · have he' : en.wc ls' ls'' ρk := by rw [hwc', hwc] at he; rw [hwc]; exact he
+    · have he' : en.wc ls' ls'' ρk := by rw [hwc', hwc] at he; rw [hwc]; exact extF_fold hZ hZl (CellU.kind_mutOf _ _ _ _ _ _) (CellU.wit_mutOf _ _ _ _ _ _) hW'' hkL he
       have hql' : en.q ≠ .lin := hq' ▸ hql
       exact hcan m i en en' hTe hTe' hql' k ls'' K ρk ρp Z ρkL W'' v'' χ hχ P'' hw'' hnoρp hZ
         hZd hdZd hPk hW'' hkL ((hcont ls'' he').2 hql')
@@ -350,7 +354,7 @@ theorem claimT_canS {Φ : LocFam} {l : Loc} {A : Life}
 /-- **The frame at `erwp` at a guarded table, across cancellable stops**: `erwpG_frame` with the
 twin `T′`, whose cancel obligations are `T`'s with the frame added (`hcan`). -/
 theorem erwpG_frameT {Φ : LocFam} {T T' : OpTabN}
-    (hT : ∀ m i en, T m i = some en → en.abort = false → en.q ≠ .unr ∧ en.wc = sameW)
+    (hT : ∀ m i en, T m i = some en → en.abort = false → en.q ≠ .unr ∧ en.wc = extF)
     (hTT' : T.Twin T') (R₂ : WProp)
     (hcan : ∀ m i en en', T m i = some en → T' m i = some en' → en.q ≠ .lin →
       ∀ k ls (K : Kont) (ρk σ₂ ρk₂ : WRes), ResU.CompS ρk σ₂ ρk₂ → R₂ σ₂ →
@@ -376,12 +380,12 @@ theorem erwpG_frameT {Φ : LocFam} {T T' : OpTabN}
   refine Or.inr ⟨K, m, i, v, en', pure_sep_mk ⟨rfl, hK, hTe', hab'.trans ha⟩ ⟨ρa, ρk₂, haσ,
     hPA' ▸ hA, ⟨ρk, σ₂, hk₂, hG, hσ₂⟩, fun hu' => absurd (hq' ▸ hu') hqu, fun ls'' he =>
       ⟨fun k' hk' w τ₁ τ₂ hB hcτ => ?_, fun hql => ?_⟩⟩⟩
-  · have he' : en.wc ls' ls'' ρk := by rw [hwc]; rw [hwc', hwc] at he; exact he
+  · have he' : en.wc ls' ls'' ρk := by rw [hwc]; rw [hwc', hwc] at he; exact extF_left _ _ _ _ _ hk₂ he
     obtain ⟨y, hy, hyτ⟩ := compS_exch hk₂ hcτ
     have hc' := (hcont ls'' he').1 k' hk' w τ₁ y (hPB' ▸ hB) hy
     simp only [erwpC, show k' < n by omega, if_true] at hc' ⊢
     exact ih k' (by omega) ls'' _ y σ₂ τ₂ hyτ hσ₂ hc'
-  · have he' : en.wc ls' ls'' ρk := by rw [hwc]; rw [hwc', hwc] at he; exact he
+  · have he' : en.wc ls' ls'' ρk := by rw [hwc]; rw [hwc', hwc] at he; exact extF_left _ _ _ _ _ hk₂ he
     exact hcan m i en en' hTe hTe' (hq' ▸ hql) k ls'' K ρk σ₂ ρk₂ hk₂ hσ₂
       ((hcont ls'' he').2 (hq' ▸ hql))
 

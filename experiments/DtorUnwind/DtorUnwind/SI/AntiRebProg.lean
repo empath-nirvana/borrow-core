@@ -62,7 +62,7 @@ theorem openR_ok {Φ : LocFam} (hΦ : Φ.Down) (c d e : Loc) (R₀ : WRes)
     (hX : ResU.CompS R₀ (ResU.single c (CellU.ownOf (.loc d))) X) :
     erwp (ℍ := ℍ) Φ (opTableG T2 (CellFold c Ao (famR Ao)))
       (AFPost c Ao (famR Ao) (QDR c Ao)) k ls (lendRE c) X := by
-  obtain ⟨A, hA⟩ := exists_fresh ls
+  obtain ⟨A, -⟩ := exists_fresh ls
   have hshape : vShape rT δ₀ (.loc d) R₀ :=
     ⟨d, u₀, pure_sep_mk rfl ⟨_, _, hR₀, rfl, trivial⟩⟩
   have hadm : AdmWf rT δ₀ := fun y hy => by simp [rT, VFree, CFree] at hy
@@ -74,8 +74,8 @@ theorem openR_ok {Φ : LocFam} (hΦ : Φ.Down) (c d e : Loc) (R₀ : WRes)
     (fun _ ρ' h => by obtain ⟨-, rfl⟩ := h; exact hshape)
     (fun _ _ _ _ h => h) (T2_ilendOK A) (fun _ _ _ _ _ _ h => h) k ls (lendRE c)
     R₀ X PMap.empty X houtP (inStratum_empty A) ⟨rfl, rfl⟩ (ResU.CompS.comm hX)
-    (ResU.comp_empty_right _) hA ds hds
-    (lendR_ok hΦ c d e R₀ hR₀ A houtP k ls hA ds)
+    (ResU.comp_empty_right _) ds hds
+    (lendR_ok hΦ c d e R₀ hR₀ A houtP k ls ds)
   refine erwp_mono (fun k ls' v ρ h => ?_) (opTableG_mono fun k ls' ρ h => ?_) _ _ _ _ hI
   · -- the return: `c` and its content handed back, sealed
     obtain ⟨rfl, hρ⟩ := h

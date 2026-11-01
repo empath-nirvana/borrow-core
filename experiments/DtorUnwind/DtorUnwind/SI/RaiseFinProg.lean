@@ -29,8 +29,8 @@ open BoCa.BoLo (Heap Step1 Steps Head Kont performE raiseE cancelVal opPayload f
 
 variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 
-/-- `close : 1 ↠^lin 1`, resumed at the same world. -/
-def cEnt : OpEntN := ⟨.lin, false, unitP, unitP, none, sameW⟩
+/-- `close : 1 ↠^lin 1`, resumed under `extF`. -/
+def cEnt : OpEntN := ⟨.lin, false, unitP, unitP, none, extF⟩
 
 /-- Under both handlers: `close` and `E`. -/
 def TEC : OpTabN := fun m i => if m = 8 ∧ i = 0 then some cEnt else TE m i
@@ -50,7 +50,7 @@ theorem TEC_ent {m i : UInt32} {en : OpEntN} (h : TEC m i = some en) : en = cEnt
 theorem TEC_down : TEC.Down where
   pa := fun _ _ en h _ _ _ _ hA => by rcases TEC_ent h with rfl | rfl <;> exact hA
   fin := fun _ _ en P h hP => by rcases TEC_ent h with rfl | rfl <;> cases hP
-  wcl := fun _ _ en h => by rcases TEC_ent h with rfl | rfl <;> exact sameW_left
+  wcl := fun _ _ en h => by rcases TEC_ent h with rfl | rfl <;> exact extF_left
 
 theorem TEC_lendOKR (A : Life) : TEC.LendOKR A where
   entry := fun _ _ en h ha => by
@@ -183,7 +183,7 @@ theorem erwp_cH :
       obtain ⟨ρa, ρk, hc, ⟨-, rfl⟩, -, hK⟩ := hsep
       obtain rfl : ρ = ρk := eq_of_compS_empty_left hc
       refine erwp_resumeCl Φ₀_down TE_down QZ_down rfl fun k' hk' => ?_
-      exact (hK ls (fun _ => Iff.rfl) k' hk').1 Val.unit PMap.empty ρ ⟨rfl, rfl⟩
+      exact (hK ls (extF_refl ls _) k' hk').1 Val.unit PMap.empty ρ ⟨rfl, rfl⟩
         (ResU.comp_empty_right ρ)
     · exact absurd h7 (by decide)
 

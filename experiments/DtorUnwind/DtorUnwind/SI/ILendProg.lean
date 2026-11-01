@@ -146,7 +146,7 @@ theorem turnI_ok {Φ : LocFam} (hΦ : Φ.Down) (k : Nat) (s : Val) (ls : List SR
     refine erwp_det hΦ hD hTP (fun μ => step1Only_plug (Head.seq μ _) rfl .hole) ?_
     exact erwp_val (v := Val.inj₂ (Val.loc l)) (.inr ⟨Val.loc l, rfl, l, rfl, rfl⟩)
   · -- the lend, at a lifetime below every record of the list
-    obtain ⟨A, hA⟩ := exists_fresh ls
+    obtain ⟨A, -⟩ := exists_fresh ls
     have hshape : vShape .unk δ₀ u (PMap.empty : WRes) := ⟨rfl, trivial⟩
     have hadm : AdmWf .unk δ₀ := fun _ h => h.elim
     obtain ⟨ds, hds⟩ := lineage_list (r := ⟨l, u, PMap.empty, .unk, δ₀⟩) hshape hadm
@@ -154,7 +154,7 @@ theorem turnI_ok {Φ : LocFam} (hΦ : Φ.Down) (k : Nat) (s : Val) (ls : List SR
     exact erwp_I_frame l .unk δ₀ hadm u PU (fun _ ρ h => ⟨h, trivial⟩)
       (fun _ _ _ _ h => h) (T2_ilendOK A) (fun _ _ _ _ _ _ h => h) k ls (lendIE l)
       PMap.empty _ PMap.empty _ (inStratum_empty A) (inStratum_empty A) rfl
-      (ResU.comp_empty_right _) (ResU.comp_empty_right _) hA ds hds
+      (ResU.comp_empty_right _) (ResU.comp_empty_right _) ds hds
       (lendI_ok l A k _)
 
 /-! ### The program -/

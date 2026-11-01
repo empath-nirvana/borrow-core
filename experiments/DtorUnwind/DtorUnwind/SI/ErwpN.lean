@@ -39,7 +39,7 @@ structure OpEntN where
   fin : Option (Nat → List SRec → Expr → WProp)
   /-- The worlds the continuation may be resumed at: `ls′` from the stop's `ls`, at the
   continuation's share. `Ext` is `contShare`'s; an operation performed under a live lend has
-  `sameW` (`SI/StopFrameN.lean`). -/
+  `extF` (`SI/ExtF.lean`), which every lend's fold keeps. -/
   wc : List SRec → List SRec → WRes → Prop
 
 abbrev OpTabN := UInt32 → UInt32 → Option OpEntN

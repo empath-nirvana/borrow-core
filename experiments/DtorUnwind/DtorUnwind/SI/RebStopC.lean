@@ -1,5 +1,6 @@
 import DtorUnwind.SI.RebChooseC
 import DtorUnwind.SI.IStopN
+import DtorUnwind.SI.LinDisj
 
 /-!
 # `[TR]` 6.150 at any final term, at a canonical image
@@ -10,13 +11,14 @@ import DtorUnwind.SI.IStopN
 * **The image is the canonical one** (`SI/TWNC.lean`): `χ := canon r β`, and the agreement 6.55
   needs is `canon_escrowAgree` at the entry world, lifted to the frame and to the cell. The
   chooser's other outputs are read off the template (`canon_reb`, `agW_relRes`), and the entry is
-  `TWNC.reb` with `RebRecLe` from the tags (`rebRecLe_of_tags`).
+  `TWNC.reb` with `RebRecLe` read off the world (`rebRecLe_global`).
 * **`β` is not below the frame.** H11 chooses `β` below the world `ρ_f ● ρ`; here `β` is fixed
-  before the frame is known (at a resume the frame is whatever the handler holds). H11 is read in
-  two places in `rwp_reborrow`: the chooser's entry premise, replaced by `RebRecLe` from the tags
-  (`hβls`, which the caller keeps across a resume by `sameW`), and the exit's `W″ ∈ Res_β`,
-  replaced by `RebEndRec` from 6.59 and 6.48 (`rebEndRec_of_updImm`): the entry world and the exit
-  world are related by the `imm` clause of `↭`, which is what `rebEnd`'s premise reads.
+  before the frame is known (at a resume the frame, and the list, are whatever the handler
+  holds). H11 is read in two places in `rwp_reborrow`: the chooser's entry premise, replaced by
+  `RebRecLe` from `β ⊑ s` (`hβs`, the part of H11 that reads the record's cell) and the
+  disjointness of lineages (`rebRecLe_global`), and the exit's `W″ ∈ Res_β`, replaced by
+  `RebEndRec` from 6.59 and 6.48 (`rebEndRec_of_updImm`): the entry world and the exit world are
+  related by the `imm` clause of `↭`, which is what `rebEnd`'s premise reads.
 * **6.52 and 6.59 at a split the caller names.** The printed proof applies 6.52 at `ρ″ :=` the
   returned resource and `ρ⁺ :=` the garbage. `hpost` splits the inner run's final resource
   `ρ′ = ρₒ ● ρₖ` with `ρₒ ∈ Res_β`; 6.52 and 6.59 are applied at `ρ″ := ρₒ`, `ρ⁺ := ρₖ ● ρ⁺`. At a
@@ -70,7 +72,7 @@ theorem rwpG_rebG {Φ : LocFam} (r : FrameRec) (x : LifeVar) (hx : ¬ VFree x r.
     (hRβ : r.R.InStratum β)
     (hshape : vShape (r.T.immReborrow (.var x)) (r.δ.extend x β) r.v (canon r β))
     {ρb ρ : WRes} (hc : ResU.CompS (ResU.single r.le (CellU.immOf s r.v r.R hs)) ρb ρ)
-    (h15 : ρb.InStratum β) {ls : List SRec} (hr : r ∈ rsOf ls) (hβls : ∀ y ∈ ls, y.2 ⊐ β)
+    (h15 : ρb.InStratum β) {ls : List SRec} (hr : r ∈ rsOf ls) (hβs : ∀ y, s.mem y → β ⊑ y)
     {Qin Qout : PostG} {n : Nat} {e : Expr}
     (hpost : ∀ k, k ≤ n → ∀ ls'' t (ρ' : WRes), Qin k ls'' t ρ' → (∀ y, y ∈ ls'' ↔ y ∈ ls) →
       ∃ ρo ρk, ResU.CompS ρo ρk ρ' ∧ ρo.InStratum β ∧
@@ -119,9 +121,9 @@ theorem rwpG_rebG {Φ : LocFam} (r : FrameRec) (x : LifeVar) (hx : ¬ VFree x r.
   have hfχ : ResU.CompS fρ χ Win := by
     obtain ⟨ab, hab, hab'⟩ := compS_reassoc' hbχ hWin
     rwa [ResU.CompS.functional hab hFb] at hab'
-  -- entry: `TWNC.reb` at the canonical image, `RebRecLe` from the tags
+  -- entry: `TWNC.reb` at the canonical image, `RebRecLe` read off the world
   obtain ⟨s', hs', hle⟩ := cell_of_compS_single hWcell
-  have hrebLe := rebRecLe_of_tags hT.toN htg hβls r.R
+  have hrebLe := rebRecLe_global hT hr ⟨ρbf, hWcell⟩ hβs
   have hTin : TWNC Win ps (rsOf ls) :=
     TWNC.reb r x hT hr hle hx hreb hshape hrebLe rfl hfχ hvWin
   have htgin : Tagged Win ps ls := tagged_rebN hT.toN hr hle hreb hrebLe hfχ htg

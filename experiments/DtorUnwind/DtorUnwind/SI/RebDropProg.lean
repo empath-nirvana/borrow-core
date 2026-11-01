@@ -104,7 +104,7 @@ theorem rebBodyC_ok (c d : Loc) (R₀ : WRes) (A β : Life) (k : Nat)
 /-- **The lent computation, `y` cancellable**: `lendRG_ok`'s steps, with `erwp_reborrowT`. -/
 theorem lendRC_ok (c d e : Loc) (R₀ : WRes)
     (hR₀ : ResU.CompS (ResU.single d (CellU.ownOf u₀)) (ResU.single e (CellU.ownOf .unit)) R₀)
-    (A : Life) (houtP : R₀.InStratum A) (k : Nat) (ls : List SRec) (hA : ∀ x ∈ ls, x.2 ⊐ A)
+    (A : Life) (houtP : R₀.InStratum A) (k : Nat) (ls : List SRec)
     (ds : List FrameRec) (BI : WRes)
     (hBI : ResU.CompS PMap.empty
       (ResU.single c (CellU.immOf (LSet.singleton A) (.loc d) R₀ houtP)) BI) :
@@ -119,7 +119,7 @@ theorem lendRC_ok (c d e : Loc) (R₀ : WRes)
       ⟨LSet.singleton A, .loc d, R₀, houtP, rfl, ⟨rfl, rfl⟩, le_refl _⟩,
       fun v ρc X hc hX => ?_⟩)
   obtain rfl := eq_of_compS_empty_left hX
-  obtain ⟨s, v', σ, hs, rfl, hsep, -⟩ := hc
+  obtain ⟨s, v', σ, hs, rfl, hsep, hAs⟩ := hc
   obtain ⟨rfl, ⟨rfl, hσ⟩⟩ := pure_sep_iff.mp hsep
   subst σ
   generalize k - 1 = k'
@@ -140,16 +140,9 @@ theorem lendRC_ok (c d e : Loc) (R₀ : WRes)
     (x := 0) (by simp [VFree, CFree]) hS hRβ
     (fun ℓ h => ⟨u₀, by rw [show ℓ = d from (BoCa.Val.loc_inj.mp h).symm]; exact pair_get_left hR₀⟩)
   have hr : recR c d R₀ ∈ rsOf lsF := by rw [hlsF, rsOf_frameList]; exact List.mem_cons_self
-  have hβls : ∀ y ∈ lsF, y.2 ⊐ ↓A := by
-    intro y hy
-    simp only [hlsF, frameList, List.mem_cons, List.mem_append, List.mem_map] at hy
-    rcases hy with rfl | ⟨d', -, rfl⟩ | hy
-    · exact Life.down_sqsubset A
-    · exact Life.down_sqsubset A
-    · exact lt_trans (Life.down_sqsubset A) (hA y hy)
   refine erwp_reborrowT (recR c d R₀) 0 (rT_free 0) hS hRβ hshape (T2C_rebOKC (↓A))
-    (empty_rebOK (↓A)) T2C_fin k₀ lsF _ PMap.empty _ (ResU.comp_empty_right _)
-    (inStratum_empty _) hr hβls (fun Bχ hBχ => ?_)
+    (empty_rebOK (↓A)) T2C_fin (down_le_of_meet hAs) k₀ lsF _ PMap.empty _
+    (ResU.comp_empty_right _) (inStratum_empty _) hr (fun Bχ hBχ => ?_)
   obtain rfl := eq_of_compS_empty_left hBχ
   obtain ⟨β', hint, ℓ, hk⟩ := hshape
   obtain ⟨hv, hpto⟩ := pure_sep_iff.mp hk
@@ -242,7 +235,7 @@ theorem turnRC_ok (c d e : Loc) (R₀ : WRes)
     obtain rfl : v = Val.unit := hv
     refine erwp_det Φ₀_down hD hTP (fun μ => step1Only_plug (Head.seq μ _) rfl .hole) ?_
     exact erwp_val (v := Val.inj₂ (Val.loc c)) (.inr ⟨Val.loc c, rfl, rfl, hσ⟩)
-  · obtain ⟨A, hA⟩ := exists_fresh ls
+  · obtain ⟨A, -⟩ := exists_fresh ls
     have hshape : vShape rT δ₀ (.loc d) R₀ :=
       ⟨d, u₀, pure_sep_mk rfl ⟨_, _, hR₀, rfl, trivial⟩⟩
     have hadm : AdmWf rT δ₀ := fun y hy => by simp [rT, VFree, CFree] at hy
@@ -254,7 +247,7 @@ theorem turnRC_ok (c d e : Loc) (R₀ : WRes)
       (fun _ ρ' h => by obtain ⟨-, rfl⟩ := h; exact hshape)
       (fun _ _ _ _ h => h) (T2C_ilendOKC A) (empty_ilendOK A) T2C_fin houtP hshape hρ hds
       (fun _ _ _ _ _ _ h => h) k ls (lendRE c) PMap.empty ρ (inStratum_empty A) ⟨rfl, rfl⟩
-      (ResU.comp_empty_right _) hA (lendRC_ok c d e R₀ hR₀ A houtP k ls hA ds)
+      (ResU.comp_empty_right _) (lendRC_ok c d e R₀ hR₀ A houtP k ls ds)
 
 /-! ### The destructor -/
 

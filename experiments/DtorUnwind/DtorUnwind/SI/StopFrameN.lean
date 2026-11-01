@@ -1,4 +1,5 @@
 import DtorUnwind.SI.BindN
+import DtorUnwind.SI.ExtF
 
 /-!
 # Unknown 1: a `mut` lend live across a stop, at `erwp`
@@ -33,10 +34,12 @@ and the lend's lifetime `A` is the same in every segment.
 * The payload passed out does not hold the borrow (`PA` in `Res_A`), and the answer passed in
   holds nothing shorter than the lend (`PB` in `Res_{↓A}`): what crosses a lend's boundary
   outlives the lend, as the returned value does in 6.65 (`[α]`).
-* The world condition of the continuation (`OpEntN.wc`) is `sameW`: a continuation is resumed at
-  a world with the records it stopped at. `contShare`'s `Ext` is read at the continuation's
-  share, and the folded share has no cell at `A`, so `Ext` at it does not keep the records
-  longer than `A` that the borrowed continuation's `Ext` keeps.
+* The world condition of the continuation (`OpEntN.wc`) is `extF` (`SI/ExtF.lean`): the
+  continuation is resumed at any list that keeps the records its share's frozen locations name.
+  The fold moves the borrow's content `χ` from the cell's witness to the top of the share, so it
+  keeps every frozen location (`extF_fold`): what the handler keeps at the lender's share, the
+  borrowed continuation's share needs. `Core`'s `Ext` would not do: its lifetime clause reads
+  the share's cells, and the folded share has no cell at `A` (`not_extFoldTransfer`).
 
 ## Soundness
 
@@ -44,7 +47,8 @@ The lender's post-configuration at a stop is `wpTS`'s, unchanged: its resource l
 memory, `ρ ↭ π` holds, and the stop is the table's at the lender's resource. The only resource
 moved is the lent cell, from `mut` back to `own`, and that move is the one 6.65 makes at a
 return. What the borrowed continuation needs at its resume is exactly what the lender supplies
-again: the same `mut` cell, at a frame whose other cells outlive `A`, at the same world.
+again: the same `mut` cell, at a frame whose other cells outlive `A`, at a list keeping every
+record the borrowed continuation's views name.
 -/
 
 noncomputable section
@@ -265,18 +269,30 @@ theorem rwpG_M_frameG {Φ : LocFam} {l : Loc} {A : Life}
 
 /-! ### The frame rule across stops -/
 
-/-- The world condition of an operation that may be performed under a live lend: the
-continuation is resumed at a world with the records it stopped at. -/
-def sameW : List SRec → List SRec → WRes → Prop := fun ls ls' _ => ∀ x, x ∈ ls' ↔ x ∈ ls
-
-theorem sameW_left : ∀ ls ls' (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ →
-    sameW ls ls' ρ → sameW ls ls' ρ₁ := fun _ _ _ _ _ _ h => h
+/-- **`extF` across the fold.** The continuation's share `ρ_k` is a part of `Z`, whose cell at
+`ℓ` is the borrow `ℓ ↦ mut(A, v″, χ)`; the lender's share is `Z/ℓ ● W″`, `W″ = χ ● ℓ ↦ own(v″)`. A
+location frozen in `ρ_k` is frozen in `Z/ℓ` or in `χ` (`Frz.del_or`), so in the lender's share:
+what the lender's resumption keeps, the borrowed continuation's does. -/
+theorem extF_fold {ls ls' : List SRec} {ρk ρp Z W'' ρkL χ : WRes} {l : Loc} {v : Val}
+    {ψ : CellU Loc Val} (hZ : ResU.CompS ρk ρp Z) (hZl : Z.get l = some ψ)
+    (hk : ψ.kind = Kind.mut) (hwit : ψ.wit = χ)
+    (hW'' : ResU.CompS χ (ResU.single l (CellU.ownOf v)) W'')
+    (hkL : ResU.CompS (Z.del l) W'' ρkL) (h : extF ls ls' ρkL) : extF ls ls' ρk := by
+  intro r hr ⟨m, hf, hm⟩
+  refine h r hr ⟨m, ?_, hm⟩
+  rcases (hf.of_compS_left hZ).del_or (l := l) with hd | ⟨φ, eφ, hφ⟩
+  · exact hd.of_compS_left hkL
+  · rw [hZl] at eφ; cases Option.some.inj eφ
+    rcases hφ with ⟨ki, -⟩ | ⟨-, hw⟩
+    · rw [hk] at ki; cases ki
+    · rw [hwit] at hw
+      exact (hw.of_compS_left hW'').of_compS_right hkL
 
 /-- **A table whose stops may be taken under a live `mut` lend at `A`.** Every entry is
-non-abortive and must-resume, resumed at the same world; what it passes out outlives `A`, and
+non-abortive and must-resume, resumed under `extF`; what it passes out outlives `A`, and
 what it passes in holds nothing shorter than `A`. -/
 structure OpTabN.LendOK (T : OpTabN) (A : Life) : Prop where
-  entry : ∀ m i en, T m i = some en → en.abort = false ∧ en.q = .lin ∧ en.wc = sameW
+  entry : ∀ m i en, T m i = some en → en.abort = false ∧ en.q = .lin ∧ en.wc = extF
   pa : ∀ m i en, T m i = some en → ∀ k ls v (ρ : WRes), en.PA k ls v ρ → ρ.InStratum A
   pb : ∀ m i en, T m i = some en → ∀ k ls w (ρ : WRes), en.PB k ls w ρ → ρ.InStratum (↓A)
 
@@ -372,7 +388,9 @@ theorem erwp_M_frame {Φ : LocFam} {l : Loc} {A : Life} {F : Nat → Val → SPr
     refine ih k' (by omega) k (le_of_lt hk') ls'' _ v'' χ W'' ρbB XB hχ hdB P'' hPk hw''
       (ResU.CompS.comm hW'') hWXB (fun BM' hBM' => ?_)
     -- the borrowed continuation, at the frame, with the garbage `ρ⁺` added
-    have he' : en.wc ls' ls'' ρk := by rw [hwc] at he ⊢; exact he
+    have he' : en.wc ls' ls'' ρk := by
+      rw [hwc] at he ⊢
+      exact extF_fold hZ hZl (CellU.kind_mutOf _ _ _ _ _ _) (CellU.wit_mutOf _ _ _ _ _ _) hW'' hkL he
     obtain ⟨s1, hs1, hZds1⟩ := (ResU.CompS.assoc (Z.del l) σB
       (ResU.single l (CellU.mutOf A v'' χ hχ P'' hw'')) BM').mpr ⟨ρbB, hρbB, hBM'⟩
     obtain ⟨Z', hZ', hZ'σ⟩ := (ResU.CompS.assoc (Z.del l)

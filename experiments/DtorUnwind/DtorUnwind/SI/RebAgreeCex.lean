@@ -13,7 +13,7 @@ configuration built from `TWN`'s constructors, every hypothesis discharged:
   is the first entry's world. The continuation's image is `rebA`, `0 ↦ imm({β}, v, 1 ↦ own(u))`;
   it agrees with `ag(W₀)`, where `0` is `own`.
 * `W = W₀ ● 0 ↦ imm({β}, v, ∅)`: `TWN.reb` of the same record with the other choice of witness
-  (`DeepReborrow.comp`), at the same records and tags (`sameW`). A handler holding an alias of the
+  (`DeepReborrow.comp`), at the same records and tags. A handler holding an alias of the
   record's cell does this while the continuation is stored, its image folded.
 * At `W` the view at `0` has witness `∅` and `rebA`'s has `1 ↦ own(u)`: `EscrowAgree` fails, and
   `W ● rebA` is not defined (`DeepReborrow.noCompat`).

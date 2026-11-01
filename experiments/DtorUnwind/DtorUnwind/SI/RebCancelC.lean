@@ -51,23 +51,23 @@ theorem erwp_reborrow_cancelRun {Φ : LocFam} (r : FrameRec) (x : LifeVar) (hx :
     {β : Life} {s : LSet} {hs : r.R.InStratum s.join} (hS : TmplSpec r (tmpl r))
     (hRβ : r.R.InStratum β)
     (hshape : vShape (r.T.immReborrow (.var x)) (r.δ.extend x β) r.v (canon r β))
-    {T₁ : OpTabN} (hT : T₁.RebOK β) :
+    (hβs : ∀ y, s.mem y → β ⊑ y) {T₁ : OpTabN} (hT : T₁.RebOK β) :
     ∀ n ls e (ρb ρ : WRes),
       ResU.CompS (ResU.single r.le (CellU.immOf s r.v r.R hs)) ρb ρ → ρb.InStratum β →
-      r ∈ rsOf ls → (∀ y ∈ ls, y.2 ⊐ β) →
+      r ∈ rsOf ls →
       (∀ Bχ, ResU.CompS ρb (canon r β) Bχ →
         erwp (ℍ := ℍ) Φ (cancelTabN T₁) (fun _ _ _ _ => False) n ls e Bχ) →
       erwp (ℍ := ℍ) Φ (cancelTabN T₁) (fun _ _ _ _ => False) n ls e ρ := by
   intro n
   induction n using Nat.strong_induction_on with
   | _ n ih =>
-  intro ls e ρb ρ hc hb hr hβls hA
+  intro ls e ρb ρ hc hb hr hA
   have hreb : ResU.Reb β r.R (canon r β) := canon_reb hS hRβ
   have hχsplit := ResU.restrictDom_split hreb
   have hχimm : NoOwn ((canon r β).restrictDom (r.R.restrict Kind.imm)) :=
     noOwn_of_imm fun m ψ e => ResU.reb_imm_image hreb (ResU.restrictDom_get_inv e)
   rw [erwp_eq]
-  refine rwpG_rebG r x hx hS hRβ hshape hc hb hr hβls ?_ (fun Bχ hBχ => by
+  refine rwpG_rebG r x hx hS hRβ hshape hc hb hr hβs ?_ (fun Bχ hBχ => by
     have h := hA Bχ hBχ
     rw [erwp_eq] at h
     exact h)
@@ -102,17 +102,15 @@ theorem erwp_reborrow_cancelRun {Φ : LocFam} (r : FrameRec) (x : LifeVar) (hx :
         fun hu' => absurd (hq.symm.trans hu') (by simp), fun lsO he =>
           ⟨fun k' hk' w σB XB hB hXB => ?_, fun hq' => absurd hq hq'⟩⟩⟩)⟩
     simp only [erwpC, show k' < n by omega, if_true]
-    have he' : ∀ y, y ∈ lsO ↔ y ∈ ls'' := by rw [hwc] at he; exact he
+    have he' : extF ls'' lsO Ks := by rw [hwc] at he; exact he
     have hσBβ : σB.InStratum β := hT.pb m i en hTe _ _ _ _ hB
     obtain ⟨ρb', hψσ, hXB'⟩ := compS_reassoc (ResU.CompS.comm hKs) hXB
-    have hmem : ∀ y, y ∈ lsO ↔ y ∈ ls := fun y => (he' y).trans (hls'' y)
-    have hr' : r ∈ rsOf lsO := by
-      obtain ⟨t', ht⟩ := mem_rsOf.mp hr; exact mem_rsOf.mpr ⟨t', (hmem _).mpr ht⟩
+    have hr' : r ∈ rsOf lsO := rec_kept hr hls'' hKs he'
     refine ih k' (by omega) lsO _ ρb' XB hXB' (inStratum_compS hψσ hψβ hσBβ) hr'
-      (fun y hy => hβls y ((hmem y).mp hy)) (fun Bχ hBχ => ?_)
+      (fun Bχ hBχ => ?_)
     obtain ⟨Xk, g, hXk, hXkg, hg⟩ :=
       rebReentry_split hψσ hBχ hχsplit hsplit hkw hnp hχimm
-    have hwc' : en.wc ls'' lsO ρk := by rw [hwc]; exact he'
+    have hwc' : en.wc ls'' lsO ρk := by rw [hwc]; exact extF_reb hkw hsplit hreb hKs he'
     have hc := (hcont lsO hwc').1 k' hk' w σB Xk hB hXk
     simp only [erwpC, show k' < n by omega, if_true] at hc
     exact erwp_garbage hXkg hg hc
@@ -120,7 +118,7 @@ theorem erwp_reborrow_cancelRun {Φ : LocFam} (r : FrameRec) (x : LifeVar) (hx :
 /-- **A table whose stops may be taken under a live reborrow at `β`, cancellable entries
 included.** -/
 structure OpTabN.RebOKC (T : OpTabN) (β : Life) : Prop where
-  entry : ∀ m i en, T m i = some en → en.abort = false ∧ en.q ≠ .unr ∧ en.wc = sameW
+  entry : ∀ m i en, T m i = some en → en.abort = false ∧ en.q ≠ .unr ∧ en.wc = extF
   pa : ∀ m i en, T m i = some en → ∀ k ls v (ρ : WRes), en.PA k ls v ρ → ρ.InStratum β
   pb : ∀ m i en, T m i = some en → ∀ k ls w (ρ : WRes), en.PB k ls w ρ → ρ.InStratum β
 
@@ -134,24 +132,24 @@ theorem erwp_reborrowT {Φ : LocFam} (r : FrameRec) (x : LifeVar) (hx : ¬ VFree
     (hshape : vShape (r.T.immReborrow (.var x)) (r.δ.extend x β) r.v (canon r β))
     {Tb T₁ : OpTabN} (hT : Tb.RebOKC β) (hT₁ : T₁.RebOK β)
     (hfin : ∀ m i en, Tb m i = some en → en.q = .cancel →
-      en.fin = some (cancelOblN (ℍ := ℍ) Φ T₁)) {Q : PostN} :
+      en.fin = some (cancelOblN (ℍ := ℍ) Φ T₁)) (hβs : ∀ y, s.mem y → β ⊑ y) {Q : PostN} :
     ∀ n ls e (ρb ρ : WRes),
       ResU.CompS (ResU.single r.le (CellU.immOf s r.v r.R hs)) ρb ρ → ρb.InStratum β →
-      r ∈ rsOf ls → (∀ y ∈ ls, y.2 ⊐ β) →
+      r ∈ rsOf ls →
       (∀ Bχ, ResU.CompS ρb (canon r β) Bχ →
         erwp (ℍ := ℍ) Φ (opTableN Tb) (RebPost β Q) n ls e Bχ) →
       erwp (ℍ := ℍ) Φ (opTableN Tb) Q n ls e ρ := by
   intro n
   induction n using Nat.strong_induction_on with
   | _ n ih =>
-  intro ls e ρb ρ hc hb hr hβls hA
+  intro ls e ρb ρ hc hb hr hA
   set χ : WRes := canon r β with hχdef
   have hreb : ResU.Reb β r.R χ := canon_reb hS hRβ
   have hχsplit := ResU.restrictDom_split hreb
   have hχimm : NoOwn (χ.restrictDom (r.R.restrict Kind.imm)) :=
     noOwn_of_imm fun m ψ e => ResU.reb_imm_image hreb (ResU.restrictDom_get_inv e)
   rw [erwp_eq]
-  refine rwpG_rebG r x hx hS hRβ hshape hc hb hr hβls ?_ (fun Bχ hBχ => by
+  refine rwpG_rebG r x hx hS hRβ hshape hc hb hr hβs ?_ (fun Bχ hBχ => by
     have h := hA Bχ hBχ
     rw [erwp_eq] at h
     exact h)
@@ -174,33 +172,29 @@ theorem erwp_reborrowT {Φ : LocFam} (r : FrameRec) (x : LifeVar) (hx : ¬ VFree
         fun hu' => absurd hu' hq, fun lsO he =>
           ⟨fun k' hk' w σB XB hB hXB => ?_, fun hql => ?_⟩⟩⟩)⟩
     · simp only [erwpC, show k' < n by omega, if_true]
-      have he' : ∀ y, y ∈ lsO ↔ y ∈ ls'' := by rw [hwc] at he; exact he
+      have he' : extF ls'' lsO Ks := by rw [hwc] at he; exact he
       have hσBβ : σB.InStratum β := hT.pb m i en hTe _ _ _ _ hB
       obtain ⟨ρb', hψσ, hXB'⟩ := compS_reassoc (ResU.CompS.comm hKs) hXB
-      have hmem : ∀ y, y ∈ lsO ↔ y ∈ ls := fun y => (he' y).trans (hls'' y)
-      have hr' : r ∈ rsOf lsO := by
-        obtain ⟨t', ht⟩ := mem_rsOf.mp hr; exact mem_rsOf.mpr ⟨t', (hmem _).mpr ht⟩
+      have hr' : r ∈ rsOf lsO := rec_kept hr hls'' hKs he'
       refine ih k' (by omega) lsO _ ρb' XB hXB' (inStratum_compS hψσ hψβ hσBβ) hr'
-        (fun y hy => hβls y ((hmem y).mp hy)) (fun Bχ hBχ => ?_)
+        (fun Bχ hBχ => ?_)
       obtain ⟨Xk, g, hXk, hXkg, hg⟩ :=
         rebReentry_split hψσ hBχ hχsplit hsplit hkw hnp hχimm
-      have hwc' : en.wc ls'' lsO ρk := by rw [hwc]; exact he'
+      have hwc' : en.wc ls'' lsO ρk := by rw [hwc]; exact extF_reb hkw hsplit hreb hKs he'
       have hc := (hcont lsO hwc').1 k' hk' w σB Xk hB hXk
       simp only [erwpC, show k' < n by omega, if_true] at hc
       exact erwp_garbage hXkg hg hc
     · -- the cancel obligation at the folded share: the borrowed continuation's, re-entered
-      have he' : ∀ y, y ∈ lsO ↔ y ∈ ls'' := by rw [hwc] at he; exact he
-      have hmem : ∀ y, y ∈ lsO ↔ y ∈ ls := fun y => (he' y).trans (hls'' y)
-      have hr' : r ∈ rsOf lsO := by
-        obtain ⟨t', ht⟩ := mem_rsOf.mp hr; exact mem_rsOf.mpr ⟨t', (hmem _).mpr ht⟩
+      have he' : extF ls'' lsO Ks := by rw [hwc] at he; exact he
+      have hr' : r ∈ rsOf lsO := rec_kept hr hls'' hKs he'
       have hqc : en.q = .cancel := by cases h : en.q <;> simp_all
-      have hwc' : en.wc ls'' lsO ρk := by rw [hwc]; exact he'
+      have hwc' : en.wc ls'' lsO ρk := by rw [hwc]; exact extF_reb hkw hsplit hreb hKs he'
       intro P hP
       rw [hfin m i en hTe hqc] at hP
       cases hP
       have hin := (hcont lsO hwc').2 hql _ (hfin m i en hTe hqc)
-      refine erwp_reborrow_cancelRun r x hx hS hRβ hshape hT₁ k lsO _ ψ Ks
-        (ResU.CompS.comm hKs) hψβ hr' (fun y hy => hβls y ((hmem y).mp hy)) (fun Bχ hBχ => ?_)
+      refine erwp_reborrow_cancelRun r x hx hS hRβ hshape hβs hT₁ k lsO _ ψ Ks
+        (ResU.CompS.comm hKs) hψβ hr' (fun Bχ hBχ => ?_)
       obtain ⟨Xk, g, hXk, hXkg, hg⟩ :=
         rebReentry_split (σB := PMap.empty) (ResU.comp_empty_right ψ) hBχ hχsplit hsplit hkw hnp
           hχimm

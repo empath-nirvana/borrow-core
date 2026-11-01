@@ -40,7 +40,7 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 def TCl : OpTabN := fun m i => if m = 8 ∧ i = 0 then some cEnt else none
 
 /-- `y : 1 ↠^cancel 1`, its cancel run at `TCl`. -/
-def yCC : OpEntN := ⟨.cancel, false, unitP, unitP, some (cancelOblN (ℍ := ℍ) Φ₀ TCl), sameW⟩
+def yCC : OpEntN := ⟨.cancel, false, unitP, unitP, some (cancelOblN (ℍ := ℍ) Φ₀ TCl), extF⟩
 
 /-- Under `cH`: `close` and the tick. -/
 def T1C : OpTabN := fun m i => if m = 8 ∧ i = 0 then some cEnt else T1 m i
@@ -85,12 +85,12 @@ theorem T1C_ent {m i : UInt32} {en : OpEntN} (h : T1C m i = some en) :
 theorem TCl_down : TCl.Down where
   pa := fun _ _ en h _ _ _ _ hA => by obtain ⟨-, -, rfl⟩ := TCl_ent h; exact hA
   fin := fun _ _ en P h hP => by rw [(TCl_ent h).2.2] at hP; cases hP
-  wcl := fun _ _ en h => by rw [(TCl_ent h).2.2]; exact sameW_left
+  wcl := fun _ _ en h => by rw [(TCl_ent h).2.2]; exact extF_left
 
 theorem T1C_down : T1C.Down where
   pa := fun _ _ en h _ _ _ _ hA => by rcases T1C_ent h with rfl | rfl <;> exact hA
   fin := fun _ _ en P h hP => by rcases T1C_ent h with rfl | rfl <;> cases hP
-  wcl := fun _ _ en h => by rcases T1C_ent h with rfl | rfl <;> exact sameW_left
+  wcl := fun _ _ en h => by rcases T1C_ent h with rfl | rfl <;> exact extF_left
 
 theorem T2CC_down : (T2CC (ℍ := ℍ)).Down where
   pa := fun _ _ en h _ _ _ _ hA => by
@@ -100,7 +100,7 @@ theorem T2CC_down : (T2CC (ℍ := ℍ)).Down where
     · cases hP; exact cancelOblN_down Φ₀_down TCl_down
     · cases hP
     · cases hP
-  wcl := fun _ _ en h => by rcases T2CC_ent h with rfl | rfl | rfl <;> exact sameW_left
+  wcl := fun _ _ en h => by rcases T2CC_ent h with rfl | rfl | rfl <;> exact extF_left
 
 theorem TCl_lin : ∀ m i en, TCl m i = some en → en.abort = false ∧ en.q = .lin :=
   fun _ _ en h => by rw [(TCl_ent h).2.2]; exact ⟨rfl, rfl⟩
@@ -375,7 +375,7 @@ theorem erwp_yHCC :
       obtain ⟨ρa, ρk, hc, ⟨-, rfl⟩, -, hK⟩ := hsep
       obtain rfl : ρ = ρk := eq_of_compS_empty_left hc
       refine erwp_clDropT Φ₀_down T1C_down fun k' hk' => ?_
-      exact (hK ls (fun _ => Iff.rfl) k' hk').2 (by simp [yCC]) _ rfl
+      exact (hK ls (extF_refl ls _) k' hk').2 (by simp [yCC]) _ rfl
     · exact absurd h8 (by decide)
     · exact absurd h6.symm Stage1.divEff_ne6
 
@@ -397,7 +397,7 @@ theorem erwp_cHT :
       obtain ⟨ρa, ρk, hc, ⟨-, rfl⟩, -, hK⟩ := hsep
       obtain rfl : ρ = ρk := eq_of_compS_empty_left hc
       refine erwp_resumeCl Φ₀_down T1_down QZ_down rfl fun k' hk' => ?_
-      exact (hK ls (fun _ => Iff.rfl) k' hk').1 Val.unit PMap.empty ρ ⟨rfl, rfl⟩
+      exact (hK ls (extF_refl ls _) k' hk').1 Val.unit PMap.empty ρ ⟨rfl, rfl⟩
         (ResU.comp_empty_right ρ)
     · exact absurd h8.symm (by simp [divEff])
 

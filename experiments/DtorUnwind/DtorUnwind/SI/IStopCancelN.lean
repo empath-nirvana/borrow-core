@@ -99,7 +99,7 @@ theorem erwp_I_frame_cancelRun {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (ha
     (v : Val) {A : Life} {Tb : OpTabN} (hT : Tb.ILendOK A) :
     ∀ n ls e (ρP ρlP ρb ρ : WRes) (houtP : ρP.InStratum A), ρb.InStratum A →
       vShape T δ v ρP → ResU.CompS (ResU.single l (CellU.ownOf v)) ρP ρlP →
-      ResU.CompS ρlP ρb ρ → (∀ x ∈ ls, x.2 ⊐ A) → ∀ ds,
+      ResU.CompS ρlP ρb ρ → ∀ ds,
       (∀ d, d ∈ ds ↔ Desc ⟨l, v, ρP, T, δ⟩ d) →
       (∀ BI, ResU.CompS ρb (ResU.single l (CellU.immOf (LSet.singleton A) v ρP houtP)) BI →
         erwp (ℍ := ℍ) Φ (cancelTabN Tb) (fun _ _ _ _ => False) n
@@ -108,14 +108,14 @@ theorem erwp_I_frame_cancelRun {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (ha
   intro n
   induction n using Nat.strong_induction_on with
   | _ n ih =>
-  intro ls e ρP ρlP ρb ρ houtP houtb hshape hclP hcρ hAtag ds hds hA
+  intro ls e ρP ρlP ρb ρ houtP houtb hshape hclP hcρ ds hds hA
   rw [erwp_eq]
-  refine rwpG_I_frameG l T δ hadm v houtP houtb hclP hcρ hshape hAtag hds ?_
+  refine rwpG_I_frameG l T δ hadm v houtP houtb hclP hcρ hshape hds ?_
     (fun BI hBI => by
       have h := hA BI hBI
       rw [erwp_eq] at h
       exact h)
-  intro k hk ls'' t ρ' ρp π Y hQin hnoρp h9 hls'' hGc hπdA hY hext
+  intro k hk ls'' t ρ' ρp π Y hQin hnoρp h9 hls'' hGc hπdA hY hext hNX
   rcases hQin with ⟨w, -, hf⟩ | ⟨K, err, hp⟩ | ⟨K, m, i, v₀, en, hp⟩
   · exact hf.elim
   · -- the cancel's `raise`: the borrow garbage, the cell and payload the claim
@@ -136,7 +136,7 @@ theorem erwp_I_frame_cancelRun {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (ha
     obtain ⟨⟨rfl, hK, hTe, ha⟩, ρa, ρk, hcak, hPA, -, hcont⟩ := pure_sep_iff.mp hp
     obtain ⟨-, hq, hwc⟩ := hT.entry m i en hTe
     have hρa := hT.pa m i en hTe _ _ _ _ hPA
-    obtain ⟨X, Xi, ρkL, hρal, haY, hkL, hXdA, -, -, -, hre⟩ :=
+    obtain ⟨X, Xi, ρkL, hρal, haY, hkL, hXdA, hX, hXi, hXid, hre⟩ :=
       iFold hρa hcak h9 hnoρp hGc hπdA hY
     have hPA' : en.PA k ls v₀ ρa := hT.paExt m i en hTe k ls'' ls v₀ ρa
       (hext ρa ρkL haY hρa (fun ψ h => by rw [hρal] at h; cases h)) hPA
@@ -145,16 +145,15 @@ theorem erwp_I_frame_cancelRun {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (ha
         fun hu' => absurd (hq.symm.trans hu') (by simp), fun lsO he =>
           ⟨fun k' hk' w σB XB hB hXB => ?_, fun hq' => absurd hq hq'⟩⟩⟩)⟩
     simp only [erwpC, show k' < n by omega, if_true]
-    have he' : ∀ x, x ∈ lsO ↔ x ∈ ls := by rw [hwc] at he; exact he
+    have he' : extF ls lsO ρkL := by rw [hwc] at he; exact he
     obtain ⟨ρbB, hρbB, hWXB⟩ :=
       (ResU.CompS.assoc ρlP (Xi.del l) σB XB).mpr ⟨ρkL, ResU.CompS.comm hkL, hXB⟩
     have hσBA : σB.InStratum A := hT.pb m i en hTe _ _ _ _ hB
     refine ih k' (by omega) lsO _ ρP ρlP ρbB XB houtP (inStratum_compS hρbB hXdA hσBA) hshape
-      hclP hWXB (fun x hx => hAtag x ((he' x).mp hx)) ds hds (fun BI' hBI' => ?_)
+      hclP hWXB ds hds (fun BI' hBI' => ?_)
     have he'' : en.wc ls'' (frameList ⟨l, v, ρP, T, δ⟩ ds A lsO) ρk := by
       rw [hwc]
-      intro x
-      exact (mem_frameList_iff he' x).trans (hls'' x).symm
+      exact extF_ifold hX hXi (ResU.compS_single_get_self (ResU.CompS.comm hXid) (ResU.del_get_self _ _)) hkL hclP hNX hls'' he'
     have hB' : en.PB k' (frameList ⟨l, v, ρP, T, δ⟩ ds A lsO) w σB :=
       hT.pbExt m i en hTe k' lsO _ w σB (ext_add (addAt_frameList _ ds A lsO) hσBA) hB
     obtain ⟨Xk, g, hXk, hXkg, hg⟩ := hre σB ρbB BI' hρbB hBI'
@@ -167,7 +166,7 @@ theorem erwp_I_frame_cancelRun {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (ha
 /-- **A table whose stops may be taken under a live `imm` lend at `A`, cancellable entries
 included.** `OpTabN.ILendOK` with `q ≠ unr` for `q = lin`. -/
 structure OpTabN.ILendOKC (T : OpTabN) (A : Life) : Prop where
-  entry : ∀ m i en, T m i = some en → en.abort = false ∧ en.q ≠ .unr ∧ en.wc = sameW
+  entry : ∀ m i en, T m i = some en → en.abort = false ∧ en.q ≠ .unr ∧ en.wc = extF
   pa : ∀ m i en, T m i = some en → ∀ k ls v (ρ : WRes), en.PA k ls v ρ → ρ.InStratum A
   pb : ∀ m i en, T m i = some en → ∀ k ls w (ρ : WRes), en.PB k ls w ρ → ρ.InStratum A
   paExt : ∀ m i en, T m i = some en → ∀ k ls₁ ls₂ v (ρ : WRes), Ext ls₁ ls₂ ρ →
@@ -180,7 +179,7 @@ the frame's list, its own at the caller's list, from the folded share. -/
 def ICan (T T' : OpTabN) (l : Loc) (Ty : VTy) (δ : LSub) (A : Life) (v : Val) (ρP ρlP : WRes)
     (houtP : ρP.InStratum A) (ds : List FrameRec) : Prop :=
   ∀ m i en en', T m i = some en → T' m i = some en' → en.q ≠ .lin →
-    ∀ k lsO (K : Kont) (ρk ρp X Xi ρkL : WRes), (∀ x ∈ lsO, x.2 ⊐ A) →
+    ∀ k lsO (K : Kont) (ρk ρp X Xi ρkL : WRes),
       NoOwn ρp → ResU.CompS ρk ρp X →
       ResU.CompS X (ResU.single l (CellU.immOf (LSet.singleton A) v ρP houtP)) Xi →
       ResU.CompS (Xi.del l) (ResU.single l (CellU.immOf (LSet.singleton A) v ρP houtP)) Xi →
@@ -192,14 +191,13 @@ the twin table `T′`, whose cancel obligations it meets from the borrowed conti
 the borrow folded (`hcan`). -/
 theorem erwp_I_frameT {Φ : LocFam} (l : Loc) (Ty : VTy) (δ : LSub) (hadm : AdmWf Ty δ) (v : Val)
     (P : List SRec → Val → WProp) (hPshape : ∀ ls ρ, P ls v ρ → vShape Ty δ v ρ)
-    (hPloc : ∀ ls₁ ls₂ ρ, Ext ls₁ ls₂ ρ → P ls₁ v ρ → P ls₂ v ρ)
+    (hPloc : ∀ ls₁ ls₂ ρ, extF ls₁ ls₂ ρ → P ls₁ v ρ → P ls₂ v ρ)
     {A : Life} {T T' : OpTabN} (hT : T.ILendOKC A) (hTT' : T.Twin T') {ρP ρlP : WRes}
     (houtP : ρP.InStratum A) (hclP : ResU.CompS (ResU.single l (CellU.ownOf v)) ρP ρlP)
     {ds : List FrameRec} (hds : ∀ d, d ∈ ds ↔ Desc ⟨l, v, ρP, Ty, δ⟩ d)
     (hcan : ICan T T' l Ty δ A v ρP ρlP houtP ds) {Q : PostN}
     (hQ : ∀ k ls₁ ls₂ w ρ, Ext ls₁ ls₂ ρ → Q k ls₁ w ρ → Q k ls₂ w ρ) :
     ∀ n ls e (ρb ρ : WRes), ρb.InStratum A → P ls v ρP → ResU.CompS ρlP ρb ρ →
-      (∀ x ∈ ls, x.2 ⊐ A) →
       (∀ BI, ResU.CompS ρb (ResU.single l (CellU.immOf (LSet.singleton A) v ρP houtP)) BI →
         erwp (ℍ := ℍ) Φ (opTableN T) (IFPost l v P A Q) n (frameList ⟨l, v, ρP, Ty, δ⟩ ds A ls)
           e BI) →
@@ -207,17 +205,17 @@ theorem erwp_I_frameT {Φ : LocFam} (l : Loc) (Ty : VTy) (δ : LSub) (hadm : Adm
   intro n
   induction n using Nat.strong_induction_on with
   | _ n ih =>
-  intro ls e ρb ρ houtb hPv hcρ hAtag hA
+  intro ls e ρb ρ houtb hPv hcρ hA
   set ρi : ResU BoCa.Loc BoCa.Val :=
     ResU.single l (CellU.immOf (LSet.singleton A) v ρP houtP) with hρidef
   have houtlP : ρlP.InStratum A := inStratum_ownP hclP houtP
   rw [erwp_eq]
-  refine rwpG_I_frameG l Ty δ hadm v houtP houtb hclP hcρ (hPshape ls ρP hPv) hAtag hds ?_
+  refine rwpG_I_frameG l Ty δ hadm v houtP houtb hclP hcρ (hPshape ls ρP hPv) hds ?_
     (fun BI hBI => by
       have h := hA BI hBI
       rw [erwp_eq] at h
       exact h)
-  intro k hk ls'' t ρ' ρp π Y hQin hnoρp h9 hls'' hGc hπdA hY hext
+  intro k hk ls'' t ρ' ρp π Y hQin hnoρp h9 hls'' hGc hπdA hY hext hNX
   have hπl : π.get l = some (CellU.immOf (LSet.singleton A) v ρP houtP) :=
     ResU.compS_single_get_self (ResU.CompS.comm hGc) (ResU.del_get_self _ _)
   have hls''add : AddAt ls ls'' A :=
@@ -238,7 +236,7 @@ theorem erwp_I_frameT {Φ : LocFam} (l : Loc) (Ty : VTy) (δ : LSub) (hadm : Adm
       (ResU.CompS.assoc ρ' ρlP (ρp.del l) Y).mp ⟨Z1, ResU.CompS.comm hZ1, hρ'Z1⟩
     obtain ⟨X, hX, hXR⟩ :=
       (ResU.CompS.assoc ρ' (ResU.single l (CellU.ownOf v)) ρP R).mp ⟨ρlP, hclP, hR⟩
-    have hPv'' : P ls'' v ρP := hPloc ls ls'' ρP (ext_add hls''add houtP) hPv
+    have hPv'' : P ls'' v ρP := hPloc ls ls'' ρP (extF_of_addAt hls''add ρP) hPv
     have hQ'' : Q k ls'' w R := (hwand' _ X rfl hX) ρP R hPv'' hXR
     have hRα : R.InStratum A := inStratum_compS hR houtρ' houtlP
     have hRl : ∀ ψ : CellU Loc Val, R.get l = some ψ → ψ.kind ≠ Kind.imm := by
@@ -258,14 +256,13 @@ theorem erwp_I_frameT {Φ : LocFam} (l : Loc) (Ty : VTy) (δ : LSub) (hadm : Adm
       iFold hρa hcak h9 hnoρp hGc hπdA hY
     have hPAo : en.PA k ls v₀ ρa := hT.paExt m i en hTe k ls'' ls v₀ ρa
       (hext ρa ρkL haY hρa (fun ψ h => by rw [hρal] at h; cases h)) hPA
-    have hwcl : ∀ lsO, en'.wc ls lsO ρkL → ∀ x, x ∈ lsO ↔ x ∈ ls := by
+    have hwcl : ∀ lsO, en'.wc ls lsO ρkL → extF ls lsO ρkL := by
       intro lsO he; rw [hwc', hwc] at he; exact he
-    have hwcI : ∀ lsO, (∀ x, x ∈ lsO ↔ x ∈ ls) →
+    have hwcI : ∀ lsO, extF ls lsO ρkL →
         en.wc ls'' (frameList ⟨l, v, ρP, Ty, δ⟩ ds A lsO) ρk := by
       intro lsO he'
       rw [hwc]
-      intro x
-      exact (mem_frameList_iff he' x).trans (hls'' x).symm
+      exact extF_ifold hX hXi (ResU.compS_single_get_self (ResU.CompS.comm hXid) (ResU.del_get_self _ _)) hkL hclP hNX hls'' he'
     refine ⟨Y, PMap.empty, ResU.comp_empty_right _, noOwn_empty, Or.inr (Or.inl
       ⟨K, m, i, v₀, en', pure_sep_mk ⟨rfl, hK, hTe', hab'.trans ha⟩ ⟨ρa, ρkL, haY,
         hPA' ▸ hPAo, fun hu' => absurd (hq'.symm.trans hu') hq, fun lsO he =>
@@ -277,8 +274,8 @@ theorem erwp_I_frameT {Φ : LocFam} (l : Loc) (Ty : VTy) (δ : LSub) (hadm : Adm
         (ResU.CompS.assoc ρlP (Xi.del l) σB XB).mpr ⟨ρkL, ResU.CompS.comm hkL, hXB⟩
       have hσBA : σB.InStratum A := hT.pb m i en hTe _ _ _ _ hB
       refine ih k' (by omega) lsO _ ρbB XB (inStratum_compS hρbB hXdA hσBA)
-        (hPloc ls lsO ρP (ext_of_iff he' ρP) hPv) hWXB
-        (fun x hx => hAtag x ((he' x).mp hx)) (fun BI' hBI' => ?_)
+        (hPloc ls lsO ρP (extF_right hclP (extF_right hkL he')) hPv) hWXB
+        (fun BI' hBI' => ?_)
       have hB' : en.PB k' (frameList ⟨l, v, ρP, Ty, δ⟩ ds A lsO) w σB :=
         hT.pbExt m i en hTe k' lsO _ w σB (ext_add (addAt_frameList _ ds A lsO) hσBA) hB
       obtain ⟨Xk, g, hXk, hXkg, hg⟩ := hre σB ρbB BI' hρbB hBI'
@@ -288,7 +285,7 @@ theorem erwp_I_frameT {Φ : LocFam} (l : Loc) (Ty : VTy) (δ : LSub) (hadm : Adm
     · have he' := hwcl lsO he
       have hql' : en.q ≠ .lin := hq' ▸ hql
       exact hcan m i en en' hTe hTe' hql' k lsO K ρk ρp X Xi ρkL
-        (fun x hx => hAtag x ((he' x).mp hx)) hnoρp hX hXi hXid hXdA hkL
+        hnoρp hX hXi hXid hXdA hkL
         ((hcont _ (hwcI lsO he')).2 hql')
   · obtain ⟨⟨-, -, hTe, ha⟩, -⟩ := pure_sep_iff.mp hp
     exact absurd ha (by rw [(hT.entry m i en hTe).1]; simp)
@@ -302,7 +299,7 @@ theorem claimIT_can {Φ : LocFam} (l : Loc) (Ty : VTy) (δ : LSub) (hadm : AdmWf
     (hshape : vShape Ty δ v ρP) (hclP : ResU.CompS (ResU.single l (CellU.ownOf v)) ρP ρlP)
     {ds : List FrameRec} (hds : ∀ d, d ∈ ds ↔ Desc ⟨l, v, ρP, Ty, δ⟩ d) :
     ICan T (@OpTabN.claimT ℍ _ T Φ T₁ (claimI l v ρP)) l Ty δ A v ρP ρlP houtP ds := by
-  intro m i en en' hT hT' hql k lsO K ρk ρp X Xi ρkL hAtag hno hX hXi hXid hXdA hkL hc
+  intro m i en en' hT hT' hql k lsO K ρk ρp X Xi ρkL hno hX hXi hXid hXdA hkL hc
   have hqc : en.q = .cancel := by
     have := hq m i en hT
     cases h : en.q <;> simp_all
@@ -313,7 +310,7 @@ theorem claimIT_can {Φ : LocFam} (l : Loc) (Ty : VTy) (δ : LSub) (hadm : AdmWf
   subst hP'
   have hin := hc _ (hfin m i en hT hqc)
   refine erwp_I_frame_cancelRun l Ty δ hadm v hT₁ k lsO _ ρP ρlP (Xi.del l) ρkL houtP hXdA
-    hshape hclP (ResU.CompS.comm hkL) hAtag ds hds (fun BI hBI => ?_)
+    hshape hclP (ResU.CompS.comm hkL) ds hds (fun BI hBI => ?_)
   obtain rfl := ResU.CompS.functional hBI hXid
   obtain ⟨g, hg, hkg⟩ := (ResU.CompS.assoc ρk ρp _ _).mpr ⟨X, hX, hXi⟩
   exact erwp_garbage hkg (noOwn_compS hg hno (noOwn_single_imm l _ _ _ _)) hin
@@ -322,7 +319,7 @@ theorem claimIT_can {Φ : LocFam} (l : Loc) (Ty : VTy) (δ : LSub) (hadm : AdmWf
 `claimT`, whose cancel runs end carrying the lend's claim `ρ_ℓ ● ρ_P̂(v)`. -/
 theorem erwp_I_frameC {Φ : LocFam} (l : Loc) (Ty : VTy) (δ : LSub) (hadm : AdmWf Ty δ) (v : Val)
     (P : List SRec → Val → WProp) (hPshape : ∀ ls ρ, P ls v ρ → vShape Ty δ v ρ)
-    (hPloc : ∀ ls₁ ls₂ ρ, Ext ls₁ ls₂ ρ → P ls₁ v ρ → P ls₂ v ρ)
+    (hPloc : ∀ ls₁ ls₂ ρ, extF ls₁ ls₂ ρ → P ls₁ v ρ → P ls₂ v ρ)
     {A : Life} {T T₁ : OpTabN} (hT : T.ILendOKC A) (hT₁ : T₁.ILendOK A)
     (hfin : ∀ m i en, T m i = some en → en.q = .cancel → en.fin = some (cancelOblN (ℍ := ℍ) Φ T₁))
     {ρP ρlP : WRes} (houtP : ρP.InStratum A) (hshape : vShape Ty δ v ρP)
@@ -330,7 +327,6 @@ theorem erwp_I_frameC {Φ : LocFam} (l : Loc) (Ty : VTy) (δ : LSub) (hadm : Adm
     {ds : List FrameRec} (hds : ∀ d, d ∈ ds ↔ Desc ⟨l, v, ρP, Ty, δ⟩ d) {Q : PostN}
     (hQ : ∀ k ls₁ ls₂ w ρ, Ext ls₁ ls₂ ρ → Q k ls₁ w ρ → Q k ls₂ w ρ) :
     ∀ n ls e (ρb ρ : WRes), ρb.InStratum A → P ls v ρP → ResU.CompS ρlP ρb ρ →
-      (∀ x ∈ ls, x.2 ⊐ A) →
       (∀ BI, ResU.CompS ρb (ResU.single l (CellU.immOf (LSet.singleton A) v ρP houtP)) BI →
         erwp (ℍ := ℍ) Φ (opTableN T) (IFPost l v P A Q) n (frameList ⟨l, v, ρP, Ty, δ⟩ ds A ls)
           e BI) →

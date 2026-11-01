@@ -30,7 +30,7 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 /-! ### The table -/
 
 /-- `E : 1 ↠ 0`, abortive, carrying `()`. -/
-def eEnt : OpEntN := ⟨.lin, true, unitP, unitP, none, sameW⟩
+def eEnt : OpEntN := ⟨.lin, true, unitP, unitP, none, extF⟩
 
 /-- Under the handler: `E`. -/
 def TE : OpTabN := fun m i => if m = 7 ∧ i = 0 then some eEnt else none
@@ -44,7 +44,7 @@ theorem TE_cases {m i : UInt32} {en : OpEntN} (h : TE m i = some en) :
 theorem TE_down : TE.Down where
   pa := fun _ _ en h _ _ _ _ hA => by obtain ⟨-, -, rfl⟩ := TE_cases h; exact hA
   fin := fun _ _ en P h hP => by rw [(TE_cases h).2.2] at hP; cases hP
-  wcl := fun _ _ en h => by rw [(TE_cases h).2.2]; exact sameW_left
+  wcl := fun _ _ en h => by rw [(TE_cases h).2.2]; exact extF_left
 
 theorem TE_lendOKR (A : Life) : TE.LendOKR A where
   entry := fun _ _ en h ha => by rw [(TE_cases h).2.2] at ha; cases ha

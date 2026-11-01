@@ -165,7 +165,7 @@ theorem turnI_okC (l : Loc) (k : Nat) (s : Val) (ls : List SRec) (ρ : WRes) (hI
     obtain rfl : v = Val.unit := hv
     refine erwp_det Φ₀_down hD hTP (fun μ => step1Only_plug (Head.seq μ _) rfl .hole) ?_
     exact erwp_val (v := Val.inj₂ (Val.loc l)) (.inr ⟨Val.loc l, rfl, rfl, rfl⟩)
-  · obtain ⟨A, hA⟩ := exists_fresh ls
+  · obtain ⟨A, -⟩ := exists_fresh ls
     have hshape : vShape .unk δ₀ Val.unit (PMap.empty : WRes) := ⟨rfl, trivial⟩
     have hadm : AdmWf .unk δ₀ := fun _ h => h.elim
     obtain ⟨ds, hds⟩ := lineage_list (r := ⟨l, Val.unit, PMap.empty, .unk, δ₀⟩) hshape hadm
@@ -173,7 +173,7 @@ theorem turnI_okC (l : Loc) (k : Nat) (s : Val) (ls : List SRec) (ρ : WRes) (hI
     exact erwp_I_frameC (Φ := Φ₀) l .unk δ₀ hadm Val.unit PU (fun _ ρ h => ⟨h, trivial⟩)
       (fun _ _ _ _ h => h) (T2C_ilendOKC A) (empty_ilendOK A) T2C_fin (inStratum_empty A) hshape
       (ResU.comp_empty_right _) hds (fun _ _ _ _ _ _ h => h) k ls (lendIE l) PMap.empty _
-      (inStratum_empty A) rfl (ResU.comp_empty_right _) hA (lendI_okC l A k _)
+      (inStratum_empty A) rfl (ResU.comp_empty_right _) (lendI_okC l A k _)
 
 /-! ### The body: the cell, its destructor, the loop -/
 

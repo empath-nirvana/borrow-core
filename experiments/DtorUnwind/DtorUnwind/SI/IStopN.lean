@@ -36,10 +36,24 @@ At a stop `π = ρ_a ● ρ_k ● ρ⁺`, with `ρ_a` the payload and `ρ_k` the
 borrow can be at the top of `ρ_k` and of `ρ⁺` and, if the payload is in `Res_α`, not of `ρ_a`.
 **6.116** (`I-dup`, `ρᵢ = ρᵢ ● ρᵢ`) makes the arrangement irrelevant: `X ● ρᵢ`, `X = ρ_k ● ρ⁺`, is
 defined and is `(X ● ρᵢ)/ℓ ● ρᵢ`, whatever `X` held at `ℓ`. The lender keeps
-`(X ● ρᵢ)/ℓ ● ρ_ℓ ● ρ_P̂(v)` as the continuation's share. At the resume it lends the cell again
-at the **same** `α` and the same record, so the frame list is the one the continuation stopped
-at; the body gets `(X ● ρᵢ)/ℓ ● σ_B ● ρᵢ = ρ_k ● σ_B ● (ρ⁺ ● ρᵢ)`, the continuation's resource and
-garbage that owns nothing. The fresh choice of `α` (6.112's `⋔`) is made once, at the first entry.
+`(X ● ρᵢ)/ℓ ● ρ_ℓ ● ρ_P̂(v)` as the continuation's share. At the resume, at whatever list the
+handler resumes at, it lends the cell again at the **same** `α` and the same record, pushed onto
+that list; the body gets `(X ● ρᵢ)/ℓ ● σ_B ● ρᵢ = ρ_k ● σ_B ● (ρ⁺ ● ρᵢ)`, the continuation's
+resource and garbage that owns nothing.
+
+## The resume list
+
+The handler resumes at any list `extF` allows at the lender's share (`SI/ExtF.lean`). Two facts
+make that enough, and neither reads the list's tags:
+
+* **The borrowed continuation's `extF`** (`extF_ifold`): a location frozen in its share is frozen
+  in the lender's share, or is `ℓ` or an exclusive location of `ρ_P̂(v)`. Those the frame's own
+  records name, which the re-entry pushes again; no record of the caller's list names them,
+  since at the frame's entry they are exclusive in the world (`not_relAt_xex`).
+* **The exit's tags**: a record of the caller's list is not in the frame's lineage
+  (`notDesc_frame`), so its tag is not the frame's. 6.64's freshness of `α` (6.112's `⋔`, every
+  record longer than `α`) is not read: a handler's own frame, at any lifetime, may sit in the list
+  the lend is re-entered at.
 
 ## The conditions (`OpTabN.ILendOK`)
 
@@ -48,13 +62,14 @@ As `OpTabN.LendOK`, with two changes the Imm Frame forces:
 * `PB` in `Res_α` rather than `Res_{↓α}`: the frame of a 6.64 entry is in `Res_α` (H11).
 * `PA` and `PB` stable along `Ext`: 6.64 changes the list (`frameList`), so what crosses the
   frame's boundary is read at both lists, as `Q` is in the printed statement (`hQ`).
+* The payload predicate `P̂` stable along `extF` (`hPloc`): it is read again at the resume list.
 
 ## Soundness
 
 The lender's post-configuration at a stop is the one 6.64's proof builds at a return, at the
 resource the run ended at. The only change of resource is the borrow `ρᵢ` replaced by
 `ρ_ℓ ● ρ_P̂(v)` — the move 6.64 makes at a return. At the resume the lender re-enters with the
-same `α`, `ρ_P̂(v)` and record, which is the entry 6.64 makes, at a list with the same members.
+same `α`, `ρ_P̂(v)` and record, which is the entry 6.64 makes, at the list the handler chose.
 -/
 
 noncomputable section
@@ -112,14 +127,14 @@ theorem inStratum_ownP {l : Loc} {v : Val} {ρP ρlP : WRes} {α : Life}
 
 /-- **The lender's side of an Imm Frame at any final term**, at a lifetime `α` fixed by the
 caller (`[TR]` 6.64's proof from the entry on, at `rwpG`). The entry is the printed one at `α`:
-`TWNC.immFrame`, the tags of the caller's list longer than `α` (`hAtag`), and the frame list
+`TWNC.immFrame` and the frame list
 `frameList p ds α ls` with `ds` the record's lineage. At the end, at whatever final term: 6.29,
 6.38 at `ρ′ := π/ℓ`, `ρ⁺ := ρᵢ`, 6.39, the memory, `TWNC.immEnd` and the tags, as printed; `hpost`
 splits `π/ℓ ● ρ_ℓ ● ρ_P̂(v)` for the caller's postcondition, given `ext_drop` for its parts. -/
 theorem rwpG_I_frameG {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmWf T δ) (v : Val)
     {A : Life} {ρP ρlP ρb ρ : WRes} (houtP : ρP.InStratum A) (houtb : ρb.InStratum A)
     (hclP : ResU.CompS (ResU.single l (CellU.ownOf v)) ρP ρlP) (hcρ : ResU.CompS ρlP ρb ρ)
-    (hshape : vShape T δ v ρP) {ls : List SRec} (hAtag : ∀ x ∈ ls, x.2 ⊐ A)
+    (hshape : vShape T δ v ρP) {ls : List SRec}
     {ds : List FrameRec} (hds : ∀ d, d ∈ ds ↔ Desc ⟨l, v, ρP, T, δ⟩ d)
     {Qin Qout : PostG} {n : Nat} {e : Expr}
     (hpost : ∀ k, k ≤ n → ∀ ls'' t (ρ' ρp π Y : WRes), Qin k ls'' t ρ' → NoOwn ρp →
@@ -128,6 +143,7 @@ theorem rwpG_I_frameG {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmW
       (π.del l).InStratum A → ResU.CompS (π.del l) ρlP Y →
       (∀ R Z, ResU.CompS R Z Y → R.InStratum A →
         (∀ ψ : CellU Loc Val, R.get l = some ψ → ψ.kind ≠ Kind.imm) → Ext ls'' ls R) →
+      (∀ r ∈ rsOf ls, ∀ m, XEx ρlP m → ¬ RelAt r m) →
       ∃ ρ'L ρpL, ResU.CompS ρ'L ρpL Y ∧ NoOwn ρpL ∧ Qout k ls t ρ'L)
     (hA : ∀ BI, ResU.CompS ρb (ResU.single l (CellU.immOf (LSet.singleton A) v ρP houtP)) BI →
       rwpG (ℍ := ℍ) Φ Qin n (frameList ⟨l, v, ρP, T, δ⟩ ds A ls) e BI) :
@@ -308,10 +324,7 @@ theorem rwpG_I_frameG {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmW
     obtain ⟨q, hq, hqd, hfq⟩ := htg'' x ((hls'' x).mpr (hadd.1 x hx))
     have hqp : q ≠ p := by
       rintro rfl
-      have := frameLife_eq hfq haF eζl htl hAl
-      have hxA := hAtag x hx
-      rw [← this] at hxA
-      exact lt_irrefl _ hxA
+      exact notDesc_frame hvsρ hTI hclP ⟨FB, ResU.CompS.comm hFBl⟩ (mem_rsOf.mpr ⟨_, hx⟩) hqd
     have hq' : q ∈ ps := by
       rcases List.mem_cons.mp ((hps'' q).mp hq) with e | h
       · exact absurd e hqp
@@ -321,6 +334,7 @@ theorem rwpG_I_frameG {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmW
   -- the lender's post-configuration
   obtain ⟨ρ'L, ρpL, hLY, hnoL, hQ⟩ :=
     hpost (n - jr) (by omega) ls'' e' ρ' ρp π Y h12 h11 h9 hls'' hGc hπdA hY hext
+      (fun r hr m hx => not_relAt_xex hvsρ hTI ⟨FB, ResU.CompS.comm hFBl⟩ hr hx)
   obtain ⟨fL, hf1, hf2⟩ := (ResU.CompS.assoc ρf ρ'L ρpL FY).mp ⟨Y, hLY, hFY⟩
   have hvfL : ResU.Valid fL := (ResU.Valid.split hf2 hvFY).1
   exact ⟨ρ'L, ρpL, fL, FY, Y, ps, ls,
@@ -330,11 +344,52 @@ theorem rwpG_I_frameG {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmW
 
 /-! ### The Imm Frame across stops -/
 
+/-- **`extF` across the Imm Frame's fold.** The continuation's share `ρ_k` is a part of `X`, and
+`X ● ρᵢ = Xᵢ` holds `ℓ ↦ imm(s, v, ρ_P)`; the lender's share is `Xᵢ/ℓ ● ℓ ↦ own(v) ● ρ_P`. A
+location frozen in `ρ_k` is frozen in `Xᵢ/ℓ`, is `ℓ`, or lies in `ρ_P`, where it is frozen or
+exclusive. Exclusive locations of `ℓ ↦ own(v) ● ρ_P` are named by no record of the caller's list
+(`not_relAt_xex` at the frame's entry); the frame's own records are taken again at the resume. -/
+theorem extF_ifold {ls lsO ls'' : List SRec} {p : FrameRec} {ds : List FrameRec} {A : Life}
+    {ρk ρp X ρi Xi ρkL ρlP ρP : WRes} {l : Loc} {v : Val} {s : LSet} {hs : ρP.InStratum s.join}
+    (hX : ResU.CompS ρk ρp X) (hXi : ResU.CompS X ρi Xi)
+    (hXil : Xi.get l = some (CellU.immOf s v ρP hs))
+    (hkL : ResU.CompS (Xi.del l) ρlP ρkL)
+    (hclP : ResU.CompS (ResU.single l (CellU.ownOf v)) ρP ρlP)
+    (hNX : ∀ r ∈ rsOf ls, ∀ m, XEx ρlP m → ¬ RelAt r m)
+    (hls'' : ∀ x, x ∈ ls'' ↔ x ∈ frameList p ds A ls)
+    (h : extF ls lsO ρkL) : extF ls'' (frameList p ds A lsO) ρk := by
+  intro r hr ⟨m, hf, hm⟩
+  obtain ⟨t, ht⟩ := mem_rsOf.mp hr
+  have ht' := (hls'' _).mp ht
+  rw [rsOf_frameList]
+  have hr' : r = p ∨ r ∈ ds ∨ r ∈ rsOf ls := by
+    simp only [frameList, List.mem_cons, List.mem_append, List.mem_map] at ht'
+    rcases ht' with h1 | ⟨d, hd, h2⟩ | h3
+    · exact Or.inl (Prod.mk.inj h1).1
+    · exact Or.inr (Or.inl ((Prod.mk.inj h2).1 ▸ hd))
+    · exact Or.inr (Or.inr (mem_rsOf.mpr ⟨t, h3⟩))
+  rcases hr' with rfl | hd | hro
+  · exact List.mem_cons_self
+  · exact List.mem_cons_of_mem _ (List.mem_append_left _ hd)
+  · refine List.mem_cons_of_mem _ (List.mem_append_right _ (h r hro ⟨m, ?_, hm⟩))
+    have hlP : XEx ρlP l := ⟨[], ρlP, _, XPath.nil _,
+      (ResU.CompS.get_left_of_ne_imm hclP (ResU.single_get_self _ _) (by simp)).2, by simp⟩
+    rcases ((hf.of_compS_left hX).of_compS_left hXi).del_or (l := l) with hd | ⟨φ, eφ, hφ⟩
+    · exact hd.of_compS_left hkL
+    · rw [hXil] at eφ; cases Option.some.inj eφ
+      rcases hφ with ⟨-, hml | hin⟩ | ⟨k, -⟩
+      · subst hml; exact absurd hm (hNX r hro _ hlP)
+      · rw [CellU.wit_immOf] at hin
+        rcases hin.frz_or_xex with hfz | hxx
+        · exact (hfz.of_compS_right hclP).of_compS_right hkL
+        · exact absurd hm (hNX r hro m (hxx.of_compS_right hclP))
+      · simp at k
+
 /-- **A table whose stops may be taken under a live `imm` lend at `A`.** As `OpTabN.LendOK`, with
 `PB` in `Res_A` (6.64's H11: the frame outlives the lend) and both payload predicates stable
 along `Ext` (6.64 changes the list; the printed statement asks the same of `Q`, `hQ`). -/
 structure OpTabN.ILendOK (T : OpTabN) (A : Life) : Prop where
-  entry : ∀ m i en, T m i = some en → en.abort = false ∧ en.q = .lin ∧ en.wc = sameW
+  entry : ∀ m i en, T m i = some en → en.abort = false ∧ en.q = .lin ∧ en.wc = extF
   pa : ∀ m i en, T m i = some en → ∀ k ls v (ρ : WRes), en.PA k ls v ρ → ρ.InStratum A
   pb : ∀ m i en, T m i = some en → ∀ k ls w (ρ : WRes), en.PB k ls w ρ → ρ.InStratum A
   paExt : ∀ m i en, T m i = some en → ∀ k ls₁ ls₂ v (ρ : WRes), Ext ls₁ ls₂ ρ →
@@ -354,12 +409,12 @@ borrow folded into the continuation's share (6.116); at the resume, lent again a
 induction on the index. -/
 theorem erwp_I_frame {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmWf T δ) (v : Val)
     (P : List SRec → Val → WProp) (hPshape : ∀ ls ρ, P ls v ρ → vShape T δ v ρ)
-    (hPloc : ∀ ls₁ ls₂ ρ, Ext ls₁ ls₂ ρ → P ls₁ v ρ → P ls₂ v ρ)
+    (hPloc : ∀ ls₁ ls₂ ρ, extF ls₁ ls₂ ρ → P ls₁ v ρ → P ls₂ v ρ)
     {A : Life} {Tb : OpTabN} (hT : Tb.ILendOK A) {Q : PostN}
     (hQ : ∀ k ls₁ ls₂ w ρ, Ext ls₁ ls₂ ρ → Q k ls₁ w ρ → Q k ls₂ w ρ) :
     ∀ n ls e (ρP ρlP ρb ρ : WRes) (houtP : ρP.InStratum A), ρb.InStratum A →
       P ls v ρP → ResU.CompS (ResU.single l (CellU.ownOf v)) ρP ρlP → ResU.CompS ρlP ρb ρ →
-      (∀ x ∈ ls, x.2 ⊐ A) → ∀ ds, (∀ d, d ∈ ds ↔ Desc ⟨l, v, ρP, T, δ⟩ d) →
+      ∀ ds, (∀ d, d ∈ ds ↔ Desc ⟨l, v, ρP, T, δ⟩ d) →
       (∀ BI, ResU.CompS ρb (ResU.single l (CellU.immOf (LSet.singleton A) v ρP houtP)) BI →
         erwp (ℍ := ℍ) Φ (opTableN Tb) (IFPost l v P A Q) n (frameList ⟨l, v, ρP, T, δ⟩ ds A ls)
           e BI) →
@@ -367,17 +422,17 @@ theorem erwp_I_frame {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmWf
   intro n
   induction n using Nat.strong_induction_on with
   | _ n ih =>
-  intro ls e ρP ρlP ρb ρ houtP houtb hPv hclP hcρ hAtag ds hds hA
+  intro ls e ρP ρlP ρb ρ houtP houtb hPv hclP hcρ ds hds hA
   set ρi : ResU BoCa.Loc BoCa.Val :=
     ResU.single l (CellU.immOf (LSet.singleton A) v ρP houtP) with hρidef
   have houtlP : ρlP.InStratum A := inStratum_ownP hclP houtP
   rw [erwp_eq]
-  refine rwpG_I_frameG l T δ hadm v houtP houtb hclP hcρ (hPshape ls ρP hPv) hAtag hds ?_
+  refine rwpG_I_frameG l T δ hadm v houtP houtb hclP hcρ (hPshape ls ρP hPv) hds ?_
     (fun BI hBI => by
       have h := hA BI hBI
       rw [erwp_eq] at h
       exact h)
-  intro k hk ls'' t ρ' ρp π Y hQin hnoρp h9 hls'' hGc hπdA hY hext
+  intro k hk ls'' t ρ' ρp π Y hQin hnoρp h9 hls'' hGc hπdA hY hext hNX
   have hπl : π.get l = some (CellU.immOf (LSet.singleton A) v ρP houtP) :=
     ResU.compS_single_get_self (ResU.CompS.comm hGc) (ResU.del_get_self _ _)
   have hls''add : AddAt ls ls'' A :=
@@ -398,7 +453,7 @@ theorem erwp_I_frame {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmWf
       (ResU.CompS.assoc ρ' ρlP (ρp.del l) Y).mp ⟨Z1, ResU.CompS.comm hZ1, hρ'Z1⟩
     obtain ⟨X, hX, hXR⟩ :=
       (ResU.CompS.assoc ρ' (ResU.single l (CellU.ownOf v)) ρP R).mp ⟨ρlP, hclP, hR⟩
-    have hPv'' : P ls'' v ρP := hPloc ls ls'' ρP (ext_add hls''add houtP) hPv
+    have hPv'' : P ls'' v ρP := hPloc ls ls'' ρP (extF_of_addAt hls''add ρP) hPv
     have hQ'' : Q k ls'' w R := (hwand' _ X rfl hX) ρP R hPv'' hXR
     have hRα : R.InStratum A := inStratum_compS hR houtρ' houtlP
     have hRl : ∀ ψ : CellU Loc Val, R.get l = some ψ → ψ.kind ≠ Kind.imm := by
@@ -436,20 +491,19 @@ theorem erwp_I_frame {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmWf
         fun hu' => absurd (hq.symm.trans hu') (by simp), fun lsO he =>
           ⟨fun k' hk' w σB XB hB hXB => ?_, fun hq' => absurd hq hq'⟩⟩⟩)⟩
     simp only [erwpC, show k' < n by omega, if_true]
-    have he' : ∀ x, x ∈ lsO ↔ x ∈ ls := by rw [hwc] at he; exact he
+    have he' : extF ls lsO ρkL := by rw [hwc] at he; exact he
     -- the frame of the next segment: `(X ● ρᵢ)/ℓ ● σ_B`
     obtain ⟨ρbB, hρbB, hWXB⟩ :=
       (ResU.CompS.assoc ρlP (Xi.del l) σB XB).mpr ⟨ρkL, ResU.CompS.comm hkL, hXB⟩
     have hσBA : σB.InStratum A := hT.pb m i en hTe _ _ _ _ hB
     have hdB : ρbB.InStratum A := inStratum_compS hρbB hXdA hσBA
     refine ih k' (by omega) lsO _ ρP ρlP ρbB XB houtP hdB
-      (hPloc ls lsO ρP (ext_of_iff he' ρP) hPv) hclP hWXB
-      (fun x hx => hAtag x ((he' x).mp hx)) ds hds (fun BI' hBI' => ?_)
+      (hPloc ls lsO ρP (extF_right hclP (extF_right hkL he')) hPv) hclP hWXB
+      ds hds (fun BI' hBI' => ?_)
     -- the borrowed continuation, at the list it stopped at, with the garbage `ρ⁺ ● ρᵢ`
     have he'' : en.wc ls'' (frameList ⟨l, v, ρP, T, δ⟩ ds A lsO) ρk := by
       rw [hwc]
-      intro x
-      exact (mem_frameList_iff he' x).trans (hls'' x).symm
+      exact extF_ifold hX hXi hXil hkL hclP hNX hls'' he'
     have hB' : en.PB k' (frameList ⟨l, v, ρP, T, δ⟩ ds A lsO) w σB :=
       hT.pbExt m i en hTe k' lsO _ w σB (ext_add (addAt_frameList _ ds A lsO) hσBA) hB
     obtain ⟨s1, hs1, h1'⟩ := (ResU.CompS.assoc (Xi.del l) σB ρi BI').mpr ⟨ρbB, hρbB, hBI'⟩

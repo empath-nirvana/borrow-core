@@ -162,7 +162,7 @@ variable was instantiated at); the template exists once one image is handed (`he
 theorem lendRG_ok {Φ : LocFam} (hΦ : Φ.Down) (S : VTy) (hSc : ∀ x, ¬ VFree x S) (c d : Loc)
     (u : Val) (RS R₀ : WRes) (hR₀ : ResU.CompS (ResU.single d (CellU.ownOf u)) RS R₀)
     (hex : ∃ χ, TmplSpec (recRS S c d R₀) χ)
-    (A : Life) (houtP : R₀.InStratum A) (k : Nat) (ls : List SRec) (hA : ∀ x ∈ ls, x.2 ⊐ A)
+    (A : Life) (houtP : R₀.InStratum A) (k : Nat) (ls : List SRec)
     (ds : List FrameRec) (BI : WRes)
     (hBI : ResU.CompS PMap.empty
       (ResU.single c (CellU.immOf (LSet.singleton A) (.loc d) R₀ houtP)) BI) :
@@ -177,7 +177,7 @@ theorem lendRG_ok {Φ : LocFam} (hΦ : Φ.Down) (S : VTy) (hSc : ∀ x, ¬ VFree
       ⟨LSet.singleton A, .loc d, R₀, houtP, rfl, ⟨rfl, rfl⟩, le_refl _⟩,
       fun v ρc X hc hX => ?_⟩)
   obtain rfl := eq_of_compS_empty_left hX
-  obtain ⟨s, v', σ, hs, rfl, hsep, -⟩ := hc
+  obtain ⟨s, v', σ, hs, rfl, hsep, hAs⟩ := hc
   obtain ⟨rfl, ⟨rfl, hσ⟩⟩ := pure_sep_iff.mp hsep
   subst σ
   generalize k - 1 = k'
@@ -201,15 +201,9 @@ theorem lendRG_ok {Φ : LocFam} (hΦ : Φ.Down) (S : VTy) (hSc : ∀ x, ¬ VFree
       rw [show ℓ = d from (BoCa.Val.loc_inj.mp h).symm]
       exact (ResU.CompS.get_left_of_ne_imm hR₀ (ResU.single_get_self _ _) (by simp)).2⟩)
   have hr : recRS S c d R₀ ∈ rsOf lsF := by rw [hlsF, rsOf_frameList]; exact List.mem_cons_self
-  have hβls : ∀ y ∈ lsF, y.2 ⊐ ↓A := by
-    intro y hy
-    simp only [hlsF, frameList, List.mem_cons, List.mem_append, List.mem_map] at hy
-    rcases hy with rfl | ⟨d', -, rfl⟩ | hy
-    · exact Life.down_sqsubset A
-    · exact Life.down_sqsubset A
-    · exact lt_trans (Life.down_sqsubset A) (hA y hy)
-  refine erwp_reborrow (recRS S c d R₀) 0 (hSc 0) hS hRβ hshape (T2_rebOK (↓A)) k₀ lsF _
-    PMap.empty _ (ResU.comp_empty_right _) (inStratum_empty _) hr hβls (fun Bχ hBχ => ?_)
+  refine erwp_reborrow (recRS S c d R₀) 0 (hSc 0) hS hRβ hshape (down_le_of_meet hAs)
+    (T2_rebOK (↓A)) k₀ lsF _ PMap.empty _ (ResU.comp_empty_right _) (inStratum_empty _) hr
+    (fun Bχ hBχ => ?_)
   obtain rfl := eq_of_compS_empty_left hBχ
   obtain ⟨β', hint, ℓ, hk⟩ := hshape
   obtain ⟨hv, hpto⟩ := pure_sep_iff.mp hk
@@ -225,14 +219,14 @@ theorem lendRG_ok {Φ : LocFam} (hΦ : Φ.Down) (S : VTy) (hSc : ∀ x, ¬ VFree
 from the image with witness `∅` (`recR_tmpl`). -/
 theorem lendR_ok {Φ : LocFam} (hΦ : Φ.Down) (c d e : Loc) (R₀ : WRes)
     (hR₀ : ResU.CompS (ResU.single d (CellU.ownOf u₀)) (ResU.single e (CellU.ownOf .unit)) R₀)
-    (A : Life) (houtP : R₀.InStratum A) (k : Nat) (ls : List SRec) (hA : ∀ x ∈ ls, x.2 ⊐ A)
+    (A : Life) (houtP : R₀.InStratum A) (k : Nat) (ls : List SRec)
     (ds : List FrameRec) (BI : WRes)
     (hBI : ResU.CompS PMap.empty
       (ResU.single c (CellU.immOf (LSet.singleton A) (.loc d) R₀ houtP)) BI) :
     erwp (ℍ := ℍ) Φ (opTableN T2) (IFPost c (.loc d) (PR d R₀) A (Qt c d R₀)) k
       (frameList (recR c d R₀) ds A ls) (lendRE c) BI :=
   lendRG_ok hΦ (.thunk .top) (fun x => by simp [VFree, CFree]) c d u₀ _ R₀ hR₀
-    ⟨_, recR_tmpl (c := c) hR₀⟩ A houtP k ls hA ds BI hBI
+    ⟨_, recR_tmpl (c := c) hR₀⟩ A houtP k ls ds BI hBI
 
 /-! ### The turn -/
 
@@ -294,7 +288,7 @@ theorem turnR_ok {Φ : LocFam} (hΦ : Φ.Down) (k : Nat) (s : Val) (ls : List SR
     refine erwp_det hΦ hD hTP (fun μ => step1Only_plug (Head.seq μ _) rfl .hole) ?_
     exact erwp_val (v := Val.inj₂ (Val.loc c)) (.inr ⟨Val.loc c, rfl, c, d, e, R₀, rfl, hR₀, hσ⟩)
   · -- the lend of `c`, at a lifetime below every record of the list
-    obtain ⟨A, hA⟩ := exists_fresh ls
+    obtain ⟨A, -⟩ := exists_fresh ls
     have hshape : vShape rT δ₀ (.loc d) R₀ :=
       ⟨d, u₀, pure_sep_mk rfl ⟨_, _, hR₀, rfl, trivial⟩⟩
     have hadm : AdmWf rT δ₀ := fun y hy => by simp [rT, VFree, CFree] at hy
@@ -306,8 +300,8 @@ theorem turnR_ok {Φ : LocFam} (hΦ : Φ.Down) (k : Nat) (s : Val) (ls : List SR
       (fun _ ρ' h => by obtain ⟨-, rfl⟩ := h; exact hshape)
       (fun _ _ _ _ h => h) (T2_ilendOK A) (fun _ _ _ _ _ _ h => h) k ls (lendRE c)
       R₀ _ PMap.empty ρ houtP (inStratum_empty A) ⟨rfl, rfl⟩ hρ
-      (ResU.comp_empty_right _) hA ds hds
-      (lendR_ok hΦ c d e R₀ hR₀ A houtP k ls hA ds)
+      (ResU.comp_empty_right _) ds hds
+      (lendR_ok hΦ c d e R₀ hR₀ A houtP k ls ds)
 
 /-! ### The program -/
 

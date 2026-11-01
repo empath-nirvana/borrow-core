@@ -260,8 +260,8 @@ reborrows the item at the chain view `d` at `↓β`, across `y` (`erwp_reborrowD
 theorem fieldBody_ok {Φ : LocFam} (hΦ : Φ.Down) (c d e : Loc) (hed : e ≠ d) (R₀ : WRes)
     (hR₀ : ResU.CompS (ResU.single d (CellU.ownOf (.loc e)))
       (ResU.single e (CellU.ownOf Val.unit)) R₀)
-    (A β : Life) (hβA : β ⊏ A) (k : Nat) (ls : List SRec) (hr : recD c d R₀ ∈ rsOf ls)
-    (hβls : ∀ y ∈ ls, y.2 ⊐ β) (Bχ : WRes)
+    (A β : Life) (k : Nat) (ls : List SRec) (hr : recD c d R₀ ∈ rsOf ls)
+    (Bχ : WRes)
     (hBχ : ResU.CompS PMap.empty (canon (recD c d R₀) β) Bχ) :
     erwp (ℍ := ℍ) Φ (opTableN T2) (RebPost β (QL c d R₀ A)) k ls (lendRE d) Bχ := by
   obtain rfl := eq_of_compS_empty_left hBχ
@@ -300,8 +300,7 @@ theorem fieldBody_ok {Φ : LocFam} (hΦ : Φ.Down) (c d e : Loc) (hed : e ≠ d)
   refine erwp_reborrowDeep (recD c d R₀) hch₀ 0 (S₂_free 0) (item_tmpl _ e)
     (inStratum_single_own _ e _)
     ((CellU.inStratum_immOf _ _ _ _ _).mpr hβ₂) hshape (T2_rebOK (↓β)) k₀ ls _
-    PMap.empty _ (ResU.comp_empty_right _) (inStratum_empty _) hr
-    (fun y hy => lt_trans (Life.down_sqsubset β) (hβls y hy)) (fun Bχ hBχ => ?_)
+    PMap.empty _ (ResU.comp_empty_right _) (inStratum_empty _) hr (fun Bχ hBχ => ?_)
   obtain rfl := eq_of_compS_empty_left hBχ
   rw [hcanonD]
   exact itemBody_ok hΦ e (↓β) (QL_unit c d R₀ A β) k₀ ls _
@@ -319,7 +318,7 @@ def lendDE (c : Loc) : Expr := .app (.val lamXD) (ldR c)
 theorem lendD_ok {Φ : LocFam} (hΦ : Φ.Down) (c d e : Loc) (hed : e ≠ d) (R₀ : WRes)
     (hR₀ : ResU.CompS (ResU.single d (CellU.ownOf (.loc e)))
       (ResU.single e (CellU.ownOf Val.unit)) R₀)
-    (A : Life) (houtP : R₀.InStratum A) (k : Nat) (ls : List SRec) (hA : ∀ x ∈ ls, x.2 ⊐ A)
+    (A : Life) (houtP : R₀.InStratum A) (k : Nat) (ls : List SRec)
     (ds : List FrameRec) (BI : WRes)
     (hBI : ResU.CompS PMap.empty
       (ResU.single c (CellU.immOf (LSet.singleton A) (.loc d) R₀ houtP)) BI) :
@@ -334,7 +333,7 @@ theorem lendD_ok {Φ : LocFam} (hΦ : Φ.Down) (c d e : Loc) (hed : e ≠ d) (R�
       ⟨LSet.singleton A, .loc d, R₀, houtP, rfl, ⟨rfl, rfl⟩, le_refl _⟩,
       fun v ρc X hc hX => ?_⟩)
   obtain rfl := eq_of_compS_empty_left hX
-  obtain ⟨s, v', σ, hs, rfl, hsep, -⟩ := hc
+  obtain ⟨s, v', σ, hs, rfl, hsep, hAs⟩ := hc
   obtain ⟨rfl, ⟨rfl, hσ⟩⟩ := pure_sep_iff.mp hsep
   subst σ
   generalize k - 1 = k'
@@ -356,16 +355,10 @@ theorem lendD_ok {Φ : LocFam} (hΦ : Φ.Down) (c d e : Loc) (hed : e ≠ d) (R�
       rw [show ℓ = d from (BoCa.Val.loc_inj.mp h).symm]
       exact pair_get_left hR₀⟩)
   have hr : recD c d R₀ ∈ rsOf lsF := by rw [hlsF, rsOf_frameList]; exact List.mem_cons_self
-  have hβls : ∀ y ∈ lsF, y.2 ⊐ ↓A := by
-    intro y hy
-    simp only [hlsF, frameList, List.mem_cons, List.mem_append, List.mem_map] at hy
-    rcases hy with rfl | ⟨d', -, rfl⟩ | hy
-    · exact Life.down_sqsubset A
-    · exact Life.down_sqsubset A
-    · exact lt_trans (Life.down_sqsubset A) (hA y hy)
   exact erwp_reborrow (recD c d R₀) 0 (by simp [recD, recRS, S₂, VFree]) hS hRβ hshape
-    (T2_rebOK (↓A)) k₀ lsF _ PMap.empty _ (ResU.comp_empty_right _) (inStratum_empty _) hr hβls
-    (fun Bχ hBχ => fieldBody_ok hΦ c d e hed R₀ hR₀ A (↓A) (Life.down_sqsubset A) k₀ lsF hr hβls
+    (down_le_of_meet hAs) (T2_rebOK (↓A)) k₀ lsF _ PMap.empty _ (ResU.comp_empty_right _)
+    (inStratum_empty _) hr
+    (fun Bχ hBχ => fieldBody_ok hΦ c d e hed R₀ hR₀ A (↓A) k₀ lsF hr
       Bχ hBχ)
 
 /-- The loop's invariant: `c ↦ own(d) ● d ↦ own(e) ● e ↦ own(())`. -/
@@ -437,7 +430,7 @@ theorem turnD_ok {Φ : LocFam} (hΦ : Φ.Down) (k : Nat) (s : Val) (ls : List SR
     obtain rfl : v = Val.unit := hv
     refine erwp_det hΦ hD hTP (fun μ => step1Only_plug (Head.seq μ _) rfl .hole) ?_
     exact erwp_val (v := Val.inj₂ (Val.loc c)) (.inr ⟨Val.loc c, rfl, c, d, e, R₀, rfl, hR₀, hσ⟩)
-  · obtain ⟨A, hA⟩ := exists_fresh ls
+  · obtain ⟨A, -⟩ := exists_fresh ls
     have hshape : vShape rT2 δ₀ (.loc d) R₀ :=
       ⟨d, .loc e, pure_sep_mk rfl ⟨_, _, hR₀, rfl,
         ⟨e, Val.unit, pure_sep_mk rfl ⟨_, PMap.empty, ResU.comp_empty_right _, rfl, rfl, rfl⟩⟩⟩⟩
@@ -450,8 +443,8 @@ theorem turnD_ok {Φ : LocFam} (hΦ : Φ.Down) (k : Nat) (s : Val) (ls : List SR
       (fun _ ρ' h => by obtain ⟨-, rfl⟩ := h; exact hshape)
       (fun _ _ _ _ h => h) (T2_ilendOK A) (fun _ _ _ _ _ _ h => h) k ls (lendDE c)
       R₀ _ PMap.empty ρ houtP (inStratum_empty A) ⟨rfl, rfl⟩ hρ
-      (ResU.comp_empty_right _) hA ds hds
-      (lendD_ok hΦ c d e hed R₀ hR₀ A houtP k ls hA ds)
+      (ResU.comp_empty_right _) ds hds
+      (lendD_ok hΦ c d e hed R₀ hR₀ A houtP k ls ds)
 
 /-- `(λc. iterate (fD, c))`. -/
 def lamCD : Val := Val.lam (.app (.val (.prim .iterate)) (.pair (.val fD) (.var 0)))

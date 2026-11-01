@@ -26,7 +26,7 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 /-- **A table whose stops may be taken under a live `imm` lend at `A`, raises included.**
 `OpTabN.ILendOK` with abortive entries admitted. -/
 structure OpTabN.ILendOKR (T : OpTabN) (A : Life) : Prop where
-  entry : ∀ m i en, T m i = some en → en.abort = false → en.q = .lin ∧ en.wc = sameW
+  entry : ∀ m i en, T m i = some en → en.abort = false → en.q = .lin ∧ en.wc = extF
   pa : ∀ m i en, T m i = some en → ∀ k ls v (ρ : WRes), en.PA k ls v ρ → ρ.InStratum A
   pb : ∀ m i en, T m i = some en → ∀ k ls w (ρ : WRes), en.PB k ls w ρ → ρ.InStratum A
   paExt : ∀ m i en, T m i = some en → ∀ k ls₁ ls₂ v (ρ : WRes), Ext ls₁ ls₂ ρ →
@@ -38,12 +38,12 @@ structure OpTabN.ILendOKR (T : OpTabN) (A : Life) : Prop where
 lender's resource is the claim beside what owns nothing. -/
 theorem erwp_I_frameR {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmWf T δ) (v : Val)
     (P : List SRec → Val → WProp) (hPshape : ∀ ls ρ, P ls v ρ → vShape T δ v ρ)
-    (hPloc : ∀ ls₁ ls₂ ρ, Ext ls₁ ls₂ ρ → P ls₁ v ρ → P ls₂ v ρ)
+    (hPloc : ∀ ls₁ ls₂ ρ, extF ls₁ ls₂ ρ → P ls₁ v ρ → P ls₂ v ρ)
     {A : Life} {Tb : OpTabN} (hT : Tb.ILendOKR A) {Q : PostN}
     (hQ : ∀ k ls₁ ls₂ w ρ, Ext ls₁ ls₂ ρ → Q k ls₁ w ρ → Q k ls₂ w ρ) :
     ∀ n ls e (ρP ρlP ρb ρ : WRes) (houtP : ρP.InStratum A), ρb.InStratum A →
       P ls v ρP → ResU.CompS (ResU.single l (CellU.ownOf v)) ρP ρlP → ResU.CompS ρlP ρb ρ →
-      (∀ x ∈ ls, x.2 ⊐ A) → ∀ ds, (∀ d, d ∈ ds ↔ Desc ⟨l, v, ρP, T, δ⟩ d) →
+      ∀ ds, (∀ d, d ∈ ds ↔ Desc ⟨l, v, ρP, T, δ⟩ d) →
       (∀ BI, ResU.CompS ρb (ResU.single l (CellU.immOf (LSet.singleton A) v ρP houtP)) BI →
         erwp (ℍ := ℍ) Φ (opTableN Tb) (IFPost l v P A Q) n (frameList ⟨l, v, ρP, T, δ⟩ ds A ls)
           e BI) →
@@ -51,17 +51,17 @@ theorem erwp_I_frameR {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmW
   intro n
   induction n using Nat.strong_induction_on with
   | _ n ih =>
-  intro ls e ρP ρlP ρb ρ houtP houtb hPv hclP hcρ hAtag ds hds hA
+  intro ls e ρP ρlP ρb ρ houtP houtb hPv hclP hcρ ds hds hA
   set ρi : ResU BoCa.Loc BoCa.Val :=
     ResU.single l (CellU.immOf (LSet.singleton A) v ρP houtP) with hρidef
   have houtlP : ρlP.InStratum A := inStratum_ownP hclP houtP
   rw [erwp_eq]
-  refine rwpG_I_frameG l T δ hadm v houtP houtb hclP hcρ (hPshape ls ρP hPv) hAtag hds ?_
+  refine rwpG_I_frameG l T δ hadm v houtP houtb hclP hcρ (hPshape ls ρP hPv) hds ?_
     (fun BI hBI => by
       have h := hA BI hBI
       rw [erwp_eq] at h
       exact h)
-  intro k hk ls'' t ρ' ρp π Y hQin hnoρp h9 hls'' hGc hπdA hY hext
+  intro k hk ls'' t ρ' ρp π Y hQin hnoρp h9 hls'' hGc hπdA hY hext hNX
   have hπl : π.get l = some (CellU.immOf (LSet.singleton A) v ρP houtP) :=
     ResU.compS_single_get_self (ResU.CompS.comm hGc) (ResU.del_get_self _ _)
   have hls''add : AddAt ls ls'' A :=
@@ -82,7 +82,7 @@ theorem erwp_I_frameR {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmW
       (ResU.CompS.assoc ρ' ρlP (ρp.del l) Y).mp ⟨Z1, ResU.CompS.comm hZ1, hρ'Z1⟩
     obtain ⟨X, hX, hXR⟩ :=
       (ResU.CompS.assoc ρ' (ResU.single l (CellU.ownOf v)) ρP R).mp ⟨ρlP, hclP, hR⟩
-    have hPv'' : P ls'' v ρP := hPloc ls ls'' ρP (ext_add hls''add houtP) hPv
+    have hPv'' : P ls'' v ρP := hPloc ls ls'' ρP (extF_of_addAt hls''add ρP) hPv
     have hQ'' : Q k ls'' w R := (hwand' _ X rfl hX) ρP R hPv'' hXR
     have hRα : R.InStratum A := inStratum_compS hR houtρ' houtlP
     have hRl : ∀ ψ : CellU Loc Val, R.get l = some ψ → ψ.kind ≠ Kind.imm := by
@@ -120,20 +120,19 @@ theorem erwp_I_frameR {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmW
         fun hu' => absurd (hq.symm.trans hu') (by simp), fun lsO he =>
           ⟨fun k' hk' w σB XB hB hXB => ?_, fun hq' => absurd hq hq'⟩⟩⟩)⟩
     simp only [erwpC, show k' < n by omega, if_true]
-    have he' : ∀ x, x ∈ lsO ↔ x ∈ ls := by rw [hwc] at he; exact he
+    have he' : extF ls lsO ρkL := by rw [hwc] at he; exact he
     -- the frame of the next segment: `(X ● ρᵢ)/ℓ ● σ_B`
     obtain ⟨ρbB, hρbB, hWXB⟩ :=
       (ResU.CompS.assoc ρlP (Xi.del l) σB XB).mpr ⟨ρkL, ResU.CompS.comm hkL, hXB⟩
     have hσBA : σB.InStratum A := hT.pb m i en hTe _ _ _ _ hB
     have hdB : ρbB.InStratum A := inStratum_compS hρbB hXdA hσBA
     refine ih k' (by omega) lsO _ ρP ρlP ρbB XB houtP hdB
-      (hPloc ls lsO ρP (ext_of_iff he' ρP) hPv) hclP hWXB
-      (fun x hx => hAtag x ((he' x).mp hx)) ds hds (fun BI' hBI' => ?_)
+      (hPloc ls lsO ρP (extF_right hclP (extF_right hkL he')) hPv) hclP hWXB
+      ds hds (fun BI' hBI' => ?_)
     -- the borrowed continuation, at the list it stopped at, with the garbage `ρ⁺ ● ρᵢ`
     have he'' : en.wc ls'' (frameList ⟨l, v, ρP, T, δ⟩ ds A lsO) ρk := by
       rw [hwc]
-      intro x
-      exact (mem_frameList_iff he' x).trans (hls'' x).symm
+      exact extF_ifold hX hXi hXil hkL hclP hNX hls'' he'
     have hB' : en.PB k' (frameList ⟨l, v, ρP, T, δ⟩ ds A lsO) w σB :=
       hT.pbExt m i en hTe k' lsO _ w σB (ext_add (addAt_frameList _ ds A lsO) hσBA) hB
     obtain ⟨s1, hs1, h1'⟩ := (ResU.CompS.assoc (Xi.del l) σB ρi BI').mpr ⟨ρbB, hρbB, hBI'⟩

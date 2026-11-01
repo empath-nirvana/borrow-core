@@ -73,7 +73,7 @@ theorem opTableR_local (T : OpTabN) (R : Nat → WProp) : (opTableR T R).Local :
 /-- **A table whose stops may be taken under a live `mut` lend at `A`, raises included.**
 `OpTabN.LendOK` with abortive entries admitted; their payload, as every payload, outlives `A`. -/
 structure OpTabN.LendOKR (T : OpTabN) (A : Life) : Prop where
-  entry : ∀ m i en, T m i = some en → en.abort = false → en.q = .lin ∧ en.wc = sameW
+  entry : ∀ m i en, T m i = some en → en.abort = false → en.q = .lin ∧ en.wc = extF
   pa : ∀ m i en, T m i = some en → ∀ k ls v (ρ : WRes), en.PA k ls v ρ → ρ.InStratum A
   pb : ∀ m i en, T m i = some en → ∀ k ls w (ρ : WRes), en.PB k ls w ρ → ρ.InStratum (↓A)
 
@@ -148,7 +148,7 @@ theorem erwp_M_frameR {Φ : LocFam} {l : Loc} {A : Life} {F : Nat → Val → SP
       inStratum_compS hρbB hdZd (hT.pb m i en hTe _ _ _ _ hB)
     refine ih k' (by omega) k (le_of_lt hk') ls'' _ v'' χ W'' ρbB XB hχ hdB P'' hPk hw''
       (ResU.CompS.comm hW'') hWXB (fun BM' hBM' => ?_)
-    have he' : en.wc ls' ls'' ρk := by rw [hwc] at he ⊢; exact he
+    have he' : en.wc ls' ls'' ρk := by rw [hwc] at he ⊢; exact extF_fold hZ hZl (CellU.kind_mutOf _ _ _ _ _ _) (CellU.wit_mutOf _ _ _ _ _ _) hW'' hkL he
     obtain ⟨s1, hs1, hZds1⟩ := (ResU.CompS.assoc (Z.del l) σB
       (ResU.single l (CellU.mutOf A v'' χ hχ P'' hw'')) BM').mpr ⟨ρbB, hρbB, hBM'⟩
     obtain ⟨Z', hZ', hZ'σ⟩ := (ResU.CompS.assoc (Z.del l)

@@ -4,9 +4,9 @@ import DtorUnwind.SI.StopFrameN
 /-!
 # 6.150 across a stop: what bounds the resume frame
 
-`OpEntN.wc = sameW` fixes the list of tagged records the continuation is resumed at. It reads
-nothing of the frame. `resume_frame_short` builds, from any typed world at any list, a typed world
-at the same records and the same list (so `sameW` holds) whose frame holds one more cell
+A condition on the list of tagged records a continuation is resumed at reads nothing of the
+frame. `resume_frame_short` builds, from any typed world at any list, a typed world at the same
+records and the same list whose frame holds one more cell
 `ℓ ↦ mut(A′, v, ∅, ⊤)`, at any `A′`: a handler that lends a cell of its own at a fresh
 `A′ ⊏ β` and resumes `κ` inside the lend. A `mut` lend adds no record (`TWN.mutFold`), so no
 condition on the list can see it. At that world both of `TW`'s stratum premises of the reborrow
@@ -88,18 +88,6 @@ theorem resume_frame_not_inStratum {W : WRes} {A β : Life} (hA : A ⊏ β)
     (h : ¬ W.InStratum A) : ¬ W.InStratum β :=
   fun hs => h (fun m ψ e => CellU.InStratum.mono hA.le (hs m ψ e))
 
-
-/-! ### `RebRecLe` at every resume under `sameW` -/
-
-/-- **`RebRecLe` at a resume.** A reborrow chosen at `β` below a tagged world (`tags_aboveN`)
-has `β` below every tag of the list; a continuation resumed under `sameW` is resumed at a list
-with the same members, so `rebRecLe_of_tags` gives the re-entry's premise at the resume world,
-whatever the frame. -/
-theorem rebRecLe_resume {W₀ W : WRes} {ps₀ ps : List FrameRec} {ls ls' : List SRec} {β : Life}
-    (hT₀ : TWN W₀ ps₀ (rsOf ls)) (htg₀ : Tagged W₀ ps₀ ls) (hβ₀ : W₀.InStratum β)
-    (hsame : sameW ls ls' PMap.empty)
-    (hT : TWN W ps (rsOf ls')) (htg : Tagged W ps ls') (w₀ : WRes) : RebRecLe W ps w₀ β :=
-  rebRecLe_of_tags hT htg (fun y hy => tags_aboveN hT₀ htg₀ hβ₀ y ((hsame y).mp hy)) w₀
 
 /-- **The handler's lend, at `TWN`.** At `resume_frame_short`'s world, whose frame holds the
 handler's `mut` cell at `A ⊏ β`, `TW.reb`'s premise fails and `TWN.reb`'s holds. -/
