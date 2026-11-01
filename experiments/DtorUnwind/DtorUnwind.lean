@@ -32,3 +32,4 @@ import DtorUnwind.SI.BindN
 import DtorUnwind.SI.StopFrameN
 import DtorUnwind.SI.LoopN
 import DtorUnwind.SI.LendProg
+import DtorUnwind.SI.MutSemN
