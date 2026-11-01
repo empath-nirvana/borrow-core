@@ -58,3 +58,4 @@ import DtorUnwind.SI.RebAcrossC
 import DtorUnwind.SI.CanonRef
 import DtorUnwind.SI.RebProg
 import DtorUnwind.SI.CanonAdv
+import DtorUnwind.SI.RebCancelC
