@@ -447,6 +447,24 @@ theorem erwpG_frame {Φ : LocFam} {T : OpTabN} (hT : T.AFOK) {G : ShareG} {Q : P
   simp only [erwpC, show k' < n by omega, if_true] at hc' ⊢
   exact ih k' (by omega) ls'' _ y σ₂ τ₂ hyτ (hR ls' ls'' hls σ₂ hσ₂) hc'
 
+/-- **The final resource dropped as garbage at `erwp`** when it owns nothing (`rwpG_garbage`, at
+every value the run returns). -/
+theorem erwp_dump {Φ : LocFam} {Tb : TableN} (hL : Tb.Local) {Q : PostN} :
+    ∀ n ls e ρ, erwp (ℍ := ℍ) Φ Tb (fun k ls' v X => NoOwn X ∧ Q k ls' v PMap.empty) n ls e ρ →
+      erwp (ℍ := ℍ) Φ Tb Q n ls e ρ := by
+  intro n
+  induction n using Nat.strong_induction_on with
+  | _ n ih =>
+  intro ls e ρ h
+  rw [erwp_eq] at h ⊢
+  refine rwpG_garbage (rwpG_mono_le (fun k hk ls' t X ht => ?_) h)
+  rcases ht with ⟨v, hv, hno, hq⟩ | ht
+  · exact ⟨PMap.empty, X, compS_empty_left X, hno, Or.inl ⟨v, hv, hq⟩⟩
+  · refine ⟨X, PMap.empty, ResU.comp_empty_right X, noOwn_empty,
+      Or.inr (hL k ls' t _ _ X (fun k' hk' ls'' e'' ρ'' hΨ => ?_) ht)⟩
+    simp only [erwpC, show k' < n by omega, if_true] at hΨ ⊢
+    exact ih k' (by omega) _ _ _ hΨ
+
 end BoCa.Fig16.LogRel.Core.DtorUnwind.SI
 
 end
