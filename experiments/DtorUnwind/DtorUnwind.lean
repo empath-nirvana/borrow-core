@@ -5,3 +5,4 @@ import DtorUnwind.Cancel
 import DtorUnwind.Loop
 import DtorUnwind.Lend
 import DtorUnwind.Suspend
+import DtorUnwind.Await
