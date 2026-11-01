@@ -41,3 +41,5 @@ import DtorUnwind.SI.IStopN
 import DtorUnwind.SI.ILendProg
 import DtorUnwind.SI.IStopCancelN
 import DtorUnwind.SI.ILendDropProg
+import DtorUnwind.SI.StopRaiseN
+import DtorUnwind.SI.RaiseLendProg
