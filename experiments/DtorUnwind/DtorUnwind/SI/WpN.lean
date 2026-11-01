@@ -292,6 +292,155 @@ theorem rwp_safe {Φ : LocFam} {Q : PostN} {e : Expr}
   · exact .inl hv
   · exact .inr (hprog hv)
 
+/-! ### Mut Anti-Frame (`[TR]` 6.66) at the step index
+
+`wpTS_M_antiFrameX`'s proof with the cell's member stepped at the write: the callback runs on
+`ρ_a ● ℓ ↦ own(v) ● ρ_v` and ends, at the index `k` left, with `ℓ ↦ own(w) ● ρ′_v ● R`, `ρ′_v` in
+`F k`; the cell is written back at the member `F k` (not the stored `F j`: the content is known at
+`k`, `StepGap`), and `ρ ↭ₖ R ● ℓ ↦ mut(β, w, ρ′_v, F k) ● ρ⁺` by `six28N` where the printed proof
+has `ResU.six28`. Everything else is the printed proof's. -/
+
+/-- The callback's postcondition: the cell's content handed back, at the index's member, and the
+borrow it is folded into handed on. -/
+def AFPost (l : Loc) (β : Life) (F : Nat → Val → SPropS Loc Val β) (Q : PostN) : PostN :=
+  fun k ls' v' ρ' => ∃ (w : Val) (σ' : WRes) (h' : σ'.InStratum β) (hw' : F k w ⟨σ', h'⟩)
+    (R rest : WRes), ResU.CompS (ResU.single l (CellU.ownOf w)) rest ρ' ∧
+    ResU.CompS σ' R rest ∧
+    ∀ X, ResU.CompS R (ResU.single l (CellU.mutOf β w σ' h' (F k) hw')) X → Q k ls' v' X
+
+/-- **Mut Anti-Frame at the step index.** -/
+theorem rwp_M_antiFrame {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {β : Life}
+    {F : Nat → Val → SPropS Loc Val β} (hF : Φ l = some ⟨β, F⟩) {Q : PostN} {n : Nat}
+    {ls : List SRec} {e : Expr} {v : Val} {σP : WRes} {hstr : σP.InStratum β} {j : Nat}
+    {hwit : F j v ⟨σP, hstr⟩} {ρa ρ : WRes}
+    (hsplit : ResU.CompS (ResU.single l (CellU.mutOf β v σP hstr (F j) hwit)) ρa ρ)
+    (hA : ∀ W X, ResU.CompS σP (ResU.single l (CellU.ownOf v)) W → ResU.CompS ρa W X →
+      rwp (ℍ := ℍ) Φ (AFPost l β F Q) n ls e X) :
+    rwp (ℍ := ℍ) Φ Q n ls e ρ := by
+  classical
+  intro ρf sρ ps μ hH2 hsρ hT htg hlow hfd jr μ' e' hj hrun
+  have hvsρ : ResU.Valid sρ := hash_valid_comp hH2 hsρ
+  have hvρ : ResU.Valid ρ := (ResU.Valid.split hsρ hvsρ).2
+  obtain ⟨hvm, hva⟩ := ResU.Valid.split hsplit hvρ
+  obtain ⟨W, hW⟩ := ResU.compS_own_of_valid_mut hvm
+  have hmaH : ResU.Hash (ResU.single l (CellU.mutOf β v σP hstr (F j) hwit)) ρa :=
+    ⟨hsplit.1, ρ, hsplit, hvρ⟩
+  have haW : ResU.Hash ρa W := (ResU.six24 hW).mp (ResU.hash_symm hmaH)
+  have hvW : ResU.Valid W := by
+    obtain ⟨-, s, hs, hv⟩ := haW; exact (ResU.Valid.split hs hv).2
+  obtain ⟨hmf, haf⟩ := ResU.Hash.split hsplit (ResU.hash_symm hH2)
+  have hfW : ResU.Hash ρf W := (ResU.six24 hW).mp (ResU.hash_symm hmf)
+  obtain ⟨X, hX⟩ := (ResU.compS_defined_iff ρa W).mpr haW.1
+  have hfX : ResU.Hash ρf X := ResU.hash_of_pairwise (ResU.hash_symm haf) haW hfW hX
+  have hwpX := hA W X hW hX
+  obtain ⟨fρ, h4, hvfρ⟩ := hfX.2
+  -- the frame `ρ_f ● ρ_a` the first memory is read over
+  obtain ⟨FA, hFA⟩ := (ResU.compS_defined_iff ρf ρa).mpr (ResU.hash_symm haf).1
+  obtain ⟨FA₁, hFA₁, hFAmc⟩ :=
+    (ResU.CompS.assoc ρf ρa (ResU.single l (CellU.mutOf β v σP hstr (F j) hwit)) sρ).mp
+      ⟨ρ, ResU.CompS.comm hsplit, hsρ⟩
+  obtain rfl : FA = FA₁ := ResU.CompS.functional hFA hFA₁
+  obtain ⟨FA₂, hFA₂, hFAWc⟩ := (ResU.CompS.assoc ρf ρa W fρ).mp ⟨X, hX, h4⟩
+  obtain rfl : FA = FA₂ := ResU.CompS.functional hFA hFA₂
+  have hFAm : ResU.Hash FA (ResU.single l (CellU.mutOf β v σP hstr (F j) hwit)) :=
+    ResU.hash_symm (ResU.hash_of_pairwise hmf (ResU.hash_symm haf) hmaH hFA)
+  have hFAW : ResU.Hash FA W :=
+    ResU.hash_symm (ResU.hash_of_pairwise (ResU.hash_symm hfW) (ResU.hash_symm haf)
+      (ResU.hash_symm haW) hFA)
+  -- entry: `TW.mutUnfold`, and the same memory (6.25 under a frame)
+  have hTin : TW fρ ps (rsOf ls) :=
+    TW.mutUnfold hT (ResU.CompS.comm hFAmc) (ResU.CompS.comm hW) (ResU.CompS.comm hFAWc) hvfρ
+  have htgin : Tagged fρ ps ls := tagged_of_ag (fun a ha =>
+    (mut_fold_ag (ResU.CompS.comm hW) (ResU.CompS.comm hFAWc) (ResU.CompS.comm hFAmc) a).mp
+      ha) htg
+  have hlowin : ResU.Lower fρ μ :=
+    (ResU.lower_swap_mut_own hW hvm hvW hFAmc hFAm hFAWc hFAW).mp hlow
+  obtain ⟨hval, hprog⟩ := hwpX ρf fρ ps μ hfX h4 hTin htgin hlowin hfd jr μ' e' hj hrun
+  refine ⟨fun v' hv' => ?_, hprog⟩
+  obtain ⟨ρ', ρp, fρ', fρ'p, π, ps'', ls'', h1, h2, h3, h6, h7, h9, h10, h11, hT'', htg'',
+    hps'', hls'', h12⟩ := hval v' hv'
+  obtain ⟨w, σ', h', hw', ρb, rest, hcr, hcr2, hb⟩ := h12
+  -- the content handed back, written into the cell at the member `F k`
+  obtain ⟨W'', hW''₁, hW''₂⟩ :=
+    (ResU.CompS.assoc (ResU.single l (CellU.ownOf w)) σ' ρb ρ').mp ⟨rest, hcr2, hcr⟩
+  have hW'' : ResU.CompS σ' (ResU.single l (CellU.ownOf w)) W'' := ResU.CompS.comm hW''₁
+  have hvρ' : ResU.Valid ρ' := by
+    obtain ⟨-, s, hs, hv⟩ := h1; exact (ResU.Valid.split hs hv).1
+  have hvW'' : ResU.Valid W'' := (ResU.Valid.split hW''₂ hvρ').1
+  have hvm'' : ResU.Valid (ResU.single l (CellU.mutOf β w σ' h' (F (n - jr)) hw')) :=
+    ResU.valid_single_mut_of_wit hW'' hvW''
+  -- the compatibility results for the borrowed resource after the run
+  have hW''b : ResU.Hash W'' ρb := ⟨hW''₂.1, ρ', hW''₂, hvρ'⟩
+  have hbm'' : ResU.Hash ρb (ResU.single l (CellU.mutOf β w σ' h' (F (n - jr)) hw')) :=
+    (ResU.six24 hW'').mpr (ResU.hash_symm hW''b)
+  obtain ⟨RB, hRB⟩ := (ResU.compS_defined_iff ρb
+    (ResU.single l (CellU.mutOf β w σ' h' (F (n - jr)) hw'))).mpr hbm''.1
+  obtain ⟨hfp, hρ'p⟩ := ResU.Hash.split h2 (ResU.hash_symm h3)
+  obtain ⟨hW''p, hbp⟩ := ResU.Hash.split hW''₂ hρ'p
+  obtain ⟨hW''f, hbf⟩ := ResU.Hash.split hW''₂ h1
+  have hpm'' : ResU.Hash ρp (ResU.single l (CellU.mutOf β w σ' h' (F (n - jr)) hw')) :=
+    (ResU.six24 hW'').mpr (ResU.hash_symm hW''p)
+  have hfm'' : ResU.Hash ρf (ResU.single l (CellU.mutOf β w σ' h' (F (n - jr)) hw')) :=
+    (ResU.six24 hW'').mpr (ResU.hash_symm hW''f)
+  have hfRB : ResU.Hash ρf RB :=
+    ResU.hash_of_pairwise (ResU.hash_symm hbf) hbm'' hfm'' hRB
+  obtain ⟨FRB, hFRB⟩ := (ResU.compS_defined_iff ρf RB).mpr hfRB.1
+  obtain ⟨BP, hBP⟩ := (ResU.compS_defined_iff ρb ρp).mpr hbp.1
+  have hpRB : ResU.Hash ρp RB :=
+    ResU.hash_of_pairwise (ResU.hash_symm hbp) hbm'' hpm'' hRB
+  have hpFRB : ResU.Hash ρp FRB :=
+    ResU.hash_of_pairwise (ResU.hash_symm hfp) hfRB hpRB hFRB
+  obtain ⟨FRBp, hFRBp⟩ := (ResU.compS_defined_iff FRB ρp).mpr (ResU.hash_symm hpFRB).1
+  obtain ⟨π', hπ'⟩ := (ResU.compS_defined_iff RB ρp).mpr (ResU.hash_symm hpRB).1
+  obtain ⟨FW, hFW, hFWb⟩ := (ResU.CompS.assoc ρf W'' ρb fρ').mp ⟨ρ', hW''₂, h2⟩
+  obtain ⟨BP₁, hBP₁, hFWBP⟩ := (ResU.CompS.assoc FW ρb ρp fρ'p).mpr ⟨fρ', hFWb, h6⟩
+  obtain rfl : BP = BP₁ := ResU.CompS.functional hBP hBP₁
+  obtain ⟨WBP, hWBP, hfWBP⟩ := (ResU.CompS.assoc ρf W'' BP fρ'p).mpr ⟨FW, hFW, hFWBP⟩
+  obtain ⟨FB, hFB, hFBW⟩ :=
+    (ResU.CompS.assoc ρf BP W'' fρ'p).mp ⟨WBP, ResU.CompS.comm hWBP, hfWBP⟩
+  obtain ⟨π'₁, hπ'₁, hfπ'⟩ := (ResU.CompS.assoc ρf RB ρp FRBp).mpr ⟨FRB, hFRB, hFRBp⟩
+  obtain rfl : π' = π'₁ := ResU.CompS.functional hπ' hπ'₁
+  obtain ⟨MP, hMP, hbMP⟩ := (ResU.CompS.assoc ρb (ResU.single l
+    (CellU.mutOf β w σ' h' (F (n - jr)) hw')) ρp π').mpr ⟨RB, hRB, hπ'⟩
+  obtain ⟨BP₂, hBP₂, hBPm⟩ := (ResU.CompS.assoc ρb ρp
+    (ResU.single l (CellU.mutOf β w σ' h' (F (n - jr)) hw')) π').mp
+      ⟨MP, ResU.CompS.comm hMP, hbMP⟩
+  obtain rfl : BP = BP₂ := ResU.CompS.functional hBP hBP₂
+  obtain ⟨FB₁, hFB₁, hFBm⟩ :=
+    (ResU.CompS.assoc ρf BP (ResU.single l
+      (CellU.mutOf β w σ' h' (F (n - jr)) hw')) FRBp).mp ⟨π', hBPm, hfπ'⟩
+  obtain rfl : FB = FB₁ := ResU.CompS.functional hFB hFB₁
+  have hfBP : ResU.Hash ρf BP :=
+    ResU.hash_of_pairwise (ResU.hash_symm hbf) hbp hfp hBP
+  have hmBP : ResU.Hash (ResU.single l (CellU.mutOf β w σ' h' (F (n - jr)) hw')) BP :=
+    ResU.hash_of_pairwise (ResU.hash_symm hbm'') hbp
+      (ResU.hash_symm hpm'') hBP
+  have hFBm' : ResU.Hash FB (ResU.single l (CellU.mutOf β w σ' h' (F (n - jr)) hw')) :=
+    ResU.hash_symm (ResU.hash_of_pairwise
+      (ResU.hash_symm hfm'') hfBP hmBP hFB)
+  have hvfρ'p : ResU.Valid fρ'p := by obtain ⟨σ, hσ, -⟩ := h7; exact ⟨σ, hσ⟩
+  have hFBW' : ResU.Hash FB W'' := ⟨hFBW.1, fρ'p, hFBW, hvfρ'p⟩
+  -- the second memory, by 6.25 under a frame
+  have hmem₂ : ResU.Lower FRBp μ' :=
+    (ResU.lower_swap_mut_own hW'' hvm'' hvW'' hFBm hFBm' hFBW hFBW').mpr h7
+  -- `ρ ↭ₖ ρ_b ● ρ''_m ● ρ_p`, by 6.28 at the index with the stepped member
+  obtain ⟨BPW, hBPW₁, hBPW₂⟩ := (ResU.CompS.assoc W'' ρb ρp π).mpr ⟨ρ', hW''₂, h9⟩
+  obtain rfl : BP = BPW := ResU.CompS.functional hBP hBPW₁
+  have hvπ' : ResU.Valid π' := by
+    obtain ⟨-, s, hs, hv⟩ := ResU.hash_symm hpRB
+    exact ResU.CompS.functional hs hπ' ▸ hv
+  have hupd : UpdN Φ (n - jr) ρ π' :=
+    six28N hΦ hF le_rfl hW hW'' (ResU.CompS.comm hsplit) hBPm hX (ResU.CompS.comm hBPW₂)
+      hvρ hvπ' h10.2.1 h10.2.2 h10.1
+  -- exit: `TW.mutFold`
+  have hvFRBp : ResU.Valid FRBp := by obtain ⟨σ, hσ, -⟩ := hmem₂; exact ⟨σ, hσ⟩
+  have hTout : TW FRBp ps'' (rsOf ls'') :=
+    TW.mutFold hT'' hW''₁ (ResU.CompS.comm hFBW) (ResU.CompS.comm hFBm) hvFRBp
+  have htgout : Tagged FRBp ps'' ls'' := tagged_of_ag (fun a ha =>
+    (mut_fold_ag hW''₁ (ResU.CompS.comm hFBW) (ResU.CompS.comm hFBm) a).mpr ha) htg''
+  exact ⟨RB, ρp, FRB, FRBp, π', ps'', ls'', ResU.hash_symm hfRB, hFRB, hpFRB, hFRBp, hmem₂,
+    hπ', ⟨hupd, hvρ, hvπ'⟩, h11, hTout, htgout, hps'', hls'', hb RB hRB⟩
+
 end BoCa.Fig16.LogRel.Core.DtorUnwind.SI
 
 end
