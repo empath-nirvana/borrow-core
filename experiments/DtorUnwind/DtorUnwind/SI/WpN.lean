@@ -441,6 +441,338 @@ theorem rwp_M_antiFrame {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {β : Life}
   exact ⟨RB, ρp, FRB, FRBp, π', ps'', ls'', ResU.hash_symm hfRB, hFRB, hpFRB, hFRBp, hmem₂,
     hπ', ⟨hupd, hvρ, hvπ'⟩, h11, hTout, htgout, hps'', hls'', hb RB hRB⟩
 
+/-! ### Mut Frame (`[TR]` 6.65) at the step index
+
+The lender's side. The borrow is created at a lifetime `A` and a family `F` over `Res_A` that
+`Φ` takes on at `ℓ` for the inner run (`Φ′ = Φ[ℓ ↦ (A, F)]`; outside the run `ℓ` is owned, so no
+`mut` cell of the outer resources is at `ℓ`). The stored member is `F j`, `j ≥ n`. At the end
+`[TR]` 6.27 finds the borrow still at the top level, now with a predicate `UpdVN` relates to
+`F j` (`six27N`), so its content is in `F k` at the index `k` left (`predStep_read`): the lender
+reads back what `F k` allows, and `ρ ↭ₖ ρ′ ● …` by 6.28's left-to-right half at the index
+(`six28N_fwd`). -/
+
+/-- `UpdN` keeps the strata: `ResU.updV_inStratum`, the `mut` clause read through `MutStep`'s
+equal lifetimes. -/
+theorem updVN_inStratum {Φ : LocFam} {k : Nat} {ρ ρ' : WRes} {α : Life}
+    (hd : ρ.InStratum α) (hu : UpdVN Φ k ρ ρ') : ρ'.InStratum α := by
+  obtain ⟨σ, hσ⟩ := hu.2.1
+  obtain ⟨σ', hσ'⟩ := hu.2.2
+  have hσα : σ.InStratum α := BoLo.flat_inStratum hσ hd
+  refine BoLo.flat_inStratum_inv hσ' ?_
+  intro m χ hχ
+  rcases CellU.rep χ with ⟨w, rfl⟩ | ⟨s, w, ξ, hξ, rfl⟩ | ⟨b, w, ξ, hξ, P, hP, rfl⟩
+  · exact trivial
+  · obtain ⟨τ, hτ, hgg⟩ := (hu.1.1 m s w ξ hξ).mpr ⟨σ', hσ', hχ⟩
+    cases ResU.Flat.functional hτ hσ
+    exact hσα m _ hgg
+  · obtain ⟨ψ, ⟨τ, hτ, hgg⟩, hs⟩ := hu.1.2.2 m _ ⟨σ', hσ', hχ⟩ rfl
+    cases ResU.Flat.functional hτ hσ
+    have hat : ψ.at = b := hs.2.2.1
+    have := hσα m ψ hgg
+    rcases CellU.rep ψ with ⟨w', rfl⟩ | ⟨s', w', ξ', hξ', rfl⟩ | ⟨b', w', ξ', hξ', P', hP', rfl⟩
+    · exact absurd hs.1 (by simp)
+    · exact absurd hs.1 (by simp)
+    · simp only [CellU.at_mutOf] at hat
+      subst hat
+      exact this
+
+/-- **`[TR]` 6.27 at the step index**: if `@ρ ⊐ α` and `ρ ● ℓ ↦ mut(α, v, ρ_v, P̂) ↭ₖ ρ′`, then
+`ρ′ = ρ′/ℓ ● ℓ ↦ mut(α, v′, ρ′_v, P̂′)` with `P̂′` related to `P̂` by the step. The printed proof,
+with the `mut` clause's `MutStep` for the printed `P̂`. -/
+theorem six27N {Φ : LocFam} {k : Nat} {l : Loc} {α : Life} {v : Val} {ρ ρv M ρ' : WRes}
+    {h : ResU.InStratum α ρv} {P : Val → SPropS Loc Val α} {hw : P v ⟨ρv, h⟩}
+    (hout : ResU.InStratum α ρ)
+    (hM : ResU.CompS ρ (ResU.single l (CellU.mutOf α v ρv h P hw)) M)
+    (hu : UpdVN Φ k M ρ') :
+    ∃ (v' : Val) (χ : WRes) (h' : ResU.InStratum α χ) (P' : Val → SPropS Loc Val α)
+      (hw' : P' v' ⟨χ, h'⟩),
+      MutStep Φ k l (CellU.mutOf α v ρv h P hw) (CellU.mutOf α v' χ h' P' hw') ∧
+      ResU.CompS (ρ'.del l) (ResU.single l (CellU.mutOf α v' χ h' P' hw')) ρ' := by
+  classical
+  have hkm : (CellU.mutOf α v ρv h P hw).kind ≠ Kind.imm := by
+    rw [CellU.kind_mutOf]; exact fun c => Kind.noConfusion c
+  obtain ⟨σ, hσ⟩ := hu.2.1
+  obtain ⟨σ', hσ'⟩ := hu.2.2
+  have hMl : M.get l = some (CellU.mutOf α v ρv h P hw) :=
+    (ResU.CompS.get_left_of_ne_imm (ResU.CompS.comm hM)
+      (ResU.single_get_self _ _) hkm).2
+  have hσl : σ.get l = some (CellU.mutOf α v ρv h P hw) :=
+    ResU.flat_get_of_ne_imm hσ hMl hkm
+  obtain ⟨ψ', hfa', hs⟩ := hu.1.2.1 l _ ⟨σ, hσ, hσl⟩ rfl
+  rcases CellU.rep ψ' with ⟨u, rfl⟩ | ⟨s', u, τ, m, rfl⟩ | ⟨b', v', χ, h', P', hw', rfl⟩
+  · exact absurd hs.2.1 (by simp)
+  · exact absurd hs.2.1 (by simp)
+  have hb' : α = b' := hs.2.2.1
+  subst hb'
+  have hflat := (ResU.flatAt_iff hσ' _ _).mp hfa'
+  have hdM : M.InStratum (↓α) :=
+    BoLo.inStratum_comp (BoLo.compS_hC (↓α)) hM
+      (fun m ψ e => CellU.InStratum.mono (le_of_lt (Life.down_sqsubset α)) (hout m ψ e))
+      (ResU.inStratum_single l ((CellU.inStratum_mutOf (↓α) α v ρv h P hw).mpr
+        (Life.down_sqsubset α)))
+  have hd' : ρ'.InStratum (↓α) := updVN_inStratum hdM hu
+  have hρ'l : ρ'.get l ≠ none := by
+    intro hnone
+    have hcon := ResU.flat_inStratum_at hσ' hd'
+      (fun φ e => absurd (hnone ▸ e) (by simp)) hflat
+    rw [CellU.inStratum_mutOf] at hcon
+    exact absurd hcon (lt_irrefl _)
+  obtain ⟨φ, hφ⟩ : ∃ φ, ρ'.get l = some φ := by
+    cases hg : ρ'.get l with
+    | none => exact absurd hg hρ'l
+    | some φ => exact ⟨φ, rfl⟩
+  obtain ⟨χ₀, hχ₀, hk₀, -, -⟩ := ResU.Flat.get hσ' hφ
+  rw [hflat] at hχ₀
+  obtain rfl : χ₀ = CellU.mutOf α v' χ h' P' hw' := (Option.some.inj hχ₀).symm
+  have hkφ : φ.kind ≠ Kind.imm := by
+    rw [← hk₀, CellU.kind_mutOf]; exact fun c => Kind.noConfusion c
+  have hgg : σ'.get l = some φ := ResU.flat_get_of_ne_imm hσ' hφ hkφ
+  rw [hflat] at hgg
+  obtain rfl : φ = CellU.mutOf α v' χ h' P' hw' := (Option.some.inj hgg).symm
+  exact ⟨v', χ, h', P', hw', hs, ResU.del_compS hφ⟩
+
+/-- `Φ′` agrees with `Φ` off `ℓ`. -/
+def LocFam.AgreeOff (Φ Φ' : LocFam) (l : Loc) : Prop := ∀ x, x ≠ l → Φ' x = Φ x
+
+theorem mutStep_agree {Φ Φ' : LocFam} {n : Nat} {x : Loc} (he : Φ' x = Φ x)
+    {ψ ψ' : CellU Loc Val} (h : MutStep Φ' n x ψ ψ') : MutStep Φ n x ψ ψ' := by
+  refine ⟨h.1, h.2.1, h.2.2.1, fun hn => h.2.2.2.1 (he.trans hn), fun b F hF => ?_⟩
+  exact h.2.2.2.2 b F (he.trans hF)
+
+/-- **`[TR]` 6.28, left to right, at the step index**: an update of the `mut` side at `Φ′` is an
+update of the `own` side at `Φ`, `Φ′` agreeing with `Φ` off `ℓ`. Off `ℓ` as printed; at `ℓ` the
+`own` side has no borrow. -/
+theorem six28N_fwd {Φ Φ' : LocFam} (hag : Φ.AgreeOff Φ' l) {k : Nat} {b : Life}
+    {v v' : Val} {ρ ρ' ρv ρv' W W' M M' O O' : WRes}
+    {hs : ResU.InStratum b ρv} {hs' : ResU.InStratum b ρv'}
+    {P P' : Val → SPropS Loc Val b} {hw : P v ⟨ρv, hs⟩} {hw' : P' v' ⟨ρv', hs'⟩}
+    (hW : ResU.CompS ρv (ResU.single l (CellU.ownOf v)) W)
+    (hW' : ResU.CompS ρv' (ResU.single l (CellU.ownOf v')) W')
+    (hM : ResU.CompS ρ (ResU.single l (CellU.mutOf b v ρv hs P hw)) M)
+    (hM' : ResU.CompS ρ' (ResU.single l (CellU.mutOf b v' ρv' hs' P' hw')) M')
+    (hO : ResU.CompS ρ W O) (hO' : ResU.CompS ρ' W' O')
+    (hvM : ResU.Valid M) (hvM' : ResU.Valid M')
+    (hvO : ResU.Valid O) (hvO' : ResU.Valid O')
+    (h : UpdN Φ' k M M') : UpdN Φ k O O' := by
+  classical
+  obtain ⟨σM, hσM⟩ := hvM
+  obtain ⟨σM', hσM'⟩ := hvM'
+  obtain ⟨σO, hσO⟩ := hvO
+  obtain ⟨σO', hσO'⟩ := hvO'
+  obtain ⟨hoff, -, hOl⟩ := ResU.flat_mut_own_agree_off hW hM hO hσM hσO
+  obtain ⟨hoff', -, hOl'⟩ := ResU.flat_mut_own_agree_off hW' hM' hO' hσM' hσO'
+  refine updN_of_flat hσO hσO' (fun x => ?_)
+  by_cases hx : x = l
+  · subst hx
+    rw [hOl, hOl']
+    refine ⟨fun s w χ hh => ⟨fun e => ?_, fun e => ?_⟩, fun ψ e hk => ?_, fun ψ e hk => ?_⟩
+    · exact absurd (Option.some.inj e) CellU.ownOf_ne_immOf
+    · exact absurd (Option.some.inj e) CellU.ownOf_ne_immOf
+    · cases e; simp at hk
+    · cases e; simp at hk
+  · rw [hoff x hx, hoff' x hx]
+    obtain ⟨hi, hf, hb⟩ := cellUpdN_of_updN h hσM hσM' x
+    refine ⟨hi, fun ψ e hk => ?_, fun ψ e hk => ?_⟩
+    · obtain ⟨ψ', e', hs⟩ := hf ψ e hk
+      exact ⟨ψ', e', mutStep_agree (hag x hx) hs⟩
+    · obtain ⟨ψ₀, e', hs⟩ := hb ψ e hk
+      exact ⟨ψ₀, e', mutStep_agree (hag x hx) hs⟩
+
+/-- `Φ[ℓ ↦ (A, F)]`. -/
+def LocFam.set (Φ : LocFam) (l : Loc) (A : Life) (F : Nat → Val → SPropS Loc Val A) : LocFam :=
+  fun x => if x = l then some ⟨A, F⟩ else Φ x
+
+theorem LocFam.set_down {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {A : Life}
+    {F : Nat → Val → SPropS Loc Val A} (hF : DownFam A F) : (Φ.set l A F).Down := by
+  intro x b G hx
+  by_cases h : x = l
+  · subst h
+    simp only [LocFam.set] at hx
+    cases hx
+    exact hF
+  · simp only [LocFam.set, if_neg h] at hx
+    exact hΦ x b G hx
+
+theorem LocFam.set_agree (Φ : LocFam) (l : Loc) (A : Life)
+    (F : Nat → Val → SPropS Loc Val A) : Φ.AgreeOff (Φ.set l A F) l :=
+  fun x hx => by simp [LocFam.set, hx]
+
+/-- The lender's postcondition for the borrowed run: the result outlives `A`, and handed the
+cell back at `w` with content in `F k`, `Q`. -/
+def MFPost (l : Loc) (A : Life) (F : Nat → Val → SPropS Loc Val A) (Q : PostN) : PostN :=
+  fun k ls' v' ρ' => ρ'.InStratum A ∧
+    ∀ w Y, ResU.CompS ρ' (ResU.single l (CellU.ownOf w)) Y →
+      ∀ σ, (∃ hσ : σ.InStratum A, F k w ⟨σ, hσ⟩) → ∀ Z, ResU.CompS Y σ Z → Q k ls' v' Z
+
+/-- **Mut Frame at the step index.** `ℓ ↦ v ⋆ ρ_P ⋆ ρ_b`, `ρ_P` the content in `F j`, `j ≥ n`,
+lent at `A` for a run proved at `Φ[ℓ ↦ (A, F)]` from the borrow: the run is in `rwp` at `Φ`. -/
+theorem rwp_M_frame {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {A : Life}
+    {F : Nat → Val → SPropS Loc Val A} (hF : DownFam A F) {Q : PostN} {n j : Nat}
+    (hjn : n ≤ j) {ls : List SRec} {e : Expr} {v : Val} {ρP ρlP ρb ρ : WRes}
+    (houtP : ρP.InStratum A) (houtb : ρb.InStratum A) (hwit : F j v ⟨ρP, houtP⟩)
+    (hclP : ResU.CompS (ResU.single l (CellU.ownOf v)) ρP ρlP) (hcρ : ResU.CompS ρlP ρb ρ)
+    (hA : ∀ BM, ResU.CompS ρb (ResU.single l (CellU.mutOf A v ρP houtP (F j) hwit)) BM →
+      rwp (ℍ := ℍ) (Φ.set l A F) (MFPost l A F Q) n ls e BM) :
+    rwp (ℍ := ℍ) Φ Q n ls e ρ := by
+  classical
+  intro ρf sρ ps μ hH3 hsρ hT htg hlow hfd jr μ' e' hj hrun
+  have hvsρ : ResU.Valid sρ := hash_valid_comp hH3 hsρ
+  set ρm : ResU BoCa.Loc BoCa.Val :=
+    ResU.single l (CellU.mutOf A v ρP houtP (F j) hwit) with hρm
+  have hvρ : ResU.Valid ρ := (ResU.Valid.split hsρ hvsρ).2
+  -- H12-H17: the compatibility block
+  have hlPcell : ResU.CompS ρP (ResU.single l (CellU.ownOf v)) ρlP :=
+    ResU.CompS.comm hclP
+  have hH12 : ResU.Hash ρb ρlP :=
+    ⟨ResU.CompatS.symm hcρ.1, ρ, ResU.CompS.comm hcρ, hvρ⟩
+  have hH13 : ResU.Hash ρb ρm := (ResU.six24 hlPcell).mpr hH12
+  obtain ⟨hlPf, hbf⟩ := ResU.Hash.split hcρ (ResU.hash_symm hH3)
+  have hH15 : ResU.Hash ρf ρm :=
+    (ResU.six24 hlPcell).mpr (ResU.hash_symm hlPf)
+  obtain ⟨BM, hBM⟩ := (ResU.compS_defined_iff ρb ρm).mpr hH13.1
+  have hH17 : ResU.Hash ρf BM :=
+    ResU.hash_of_pairwise (ResU.hash_symm hbf) hH13 hH15 hBM
+  obtain ⟨fρ, h4, hvfρ⟩ := hH17.2
+  obtain ⟨FB, hFB⟩ := (ResU.compS_defined_iff ρf ρb).mpr (ResU.hash_symm hbf).1
+  obtain ⟨FB₁, hFB₁, hFBm⟩ := (ResU.CompS.assoc ρf ρb ρm fρ).mp ⟨BM, hBM, h4⟩
+  obtain rfl : FB = FB₁ := ResU.CompS.functional hFB hFB₁
+  obtain ⟨FB₂, hFB₂, hFBl⟩ :=
+    (ResU.CompS.assoc ρf ρb ρlP sρ).mp ⟨ρ, ResU.CompS.comm hcρ, hsρ⟩
+  obtain rfl : FB = FB₂ := ResU.CompS.functional hFB hFB₂
+  -- entry: `TW.mutFold`, and the same memory (6.25 under a frame)
+  have hTin : TW fρ ps (rsOf ls) :=
+    TW.mutFold hT hclP (ResU.CompS.comm hFBl) (ResU.CompS.comm hFBm) hvfρ
+  have htgin : Tagged fρ ps ls := tagged_of_ag (fun a ha =>
+    (mut_fold_ag hclP (ResU.CompS.comm hFBl) (ResU.CompS.comm hFBm) a).mpr ha) htg
+  have hvlP : ResU.Valid ρlP := by
+    obtain ⟨-, s, hs, hv⟩ := hH12; exact (ResU.Valid.split hs hv).2
+  have hvBM : ResU.Valid BM := by
+    obtain ⟨-, s, hs, hv⟩ := hH17; exact (ResU.Valid.split hs hv).2
+  have hvmm : ResU.Valid ρm := (ResU.Valid.split hBM hvBM).2
+  have hFBmH : ResU.Hash FB ρm :=
+    ResU.hash_symm (ResU.hash_of_pairwise (ResU.hash_symm hH15)
+      (ResU.hash_symm hbf) (ResU.hash_symm hH13) hFB)
+  have hFBlH : ResU.Hash FB ρlP :=
+    ResU.hash_symm (ResU.hash_of_pairwise hlPf (ResU.hash_symm hbf) (ResU.hash_symm hH12) hFB)
+  have hlowin : ResU.Lower fρ μ :=
+    (ResU.lower_swap_mut_own hlPcell hvmm hvlP hFBm hFBmH hFBl hFBlH).mpr hlow
+  -- H18: the borrowed run, at `Φ[ℓ ↦ (A, F)]`
+  obtain ⟨hval, hprog⟩ :=
+    hA BM hBM ρf fρ ps μ hH17 h4 hTin htgin hlowin hfd jr μ' e' hj hrun
+  refine ⟨fun v' hv' => ?_, hprog⟩
+  obtain ⟨ρ', ρp, fρ', fρ'p, π, ps'', ls'', h1, h2, h3, h6, h7, h9, h10, h11, hT'', htg'',
+    hps'', hls'', h12⟩ := hval v' hv'
+  -- H24 and H25: unfolding `[α]`
+  obtain ⟨houtρ', hwand'⟩ := h12
+  -- H26: 6.27 at the index -- the borrow is still at the top level of `ρ′ ● ρ⁺`
+  obtain ⟨v'', χ, hχ, P'', hwit'', hstep, hsplit''⟩ := six27N houtb hBM h10
+  have hπl : π.get l = some (CellU.mutOf A v'' χ hχ P'' hwit'') := by
+    rw [ResU.Comp.get_of_left_none hsplit'' (ResU.del_get_self _ _)]
+    exact ResU.single_get_self _ _
+  have hkm'' : (CellU.mutOf A v'' χ hχ P'' hwit'').kind ≠ Kind.imm := by
+    rw [CellU.kind_mutOf]; exact fun c => Kind.noConfusion c
+  obtain ⟨hρ'ln, hppl⟩ :
+      ρ'.get l = none ∧ ρp.get l = some (CellU.mutOf A v'' χ hχ P'' hwit'') := by
+    rcases ResU.CompS.get_split_of_ne_imm h9 hπl hkm'' with ⟨hg, -⟩ | ⟨hg, hp⟩
+    · exfalso
+      have hcon := houtρ' l _ hg
+      rw [CellU.inStratum_mutOf] at hcon
+      exact absurd hcon (lt_irrefl _)
+    · exact ⟨hg, hp⟩
+  have hpd : ResU.CompS (ρp.del l)
+      (ResU.single l (CellU.mutOf A v'' χ hχ P'' hwit'')) ρp := ResU.del_compS hppl
+  obtain ⟨RPD, hRPD, hRPDm⟩ :=
+    (ResU.CompS.assoc ρ' (ρp.del l)
+      (ResU.single l (CellU.mutOf A v'' χ hχ P'' hwit'')) π).mp ⟨ρp, hpd, h9⟩
+  have hvπ : ResU.Valid π := h10.2.2
+  have hvm'' : ResU.Valid (ResU.single l (CellU.mutOf A v'' χ hχ P'' hwit'')) :=
+    (ResU.Valid.split hRPDm hvπ).2
+  obtain ⟨W'', hW''⟩ := ResU.compS_own_of_valid_mut hvm''
+  have hRPDmH : ResU.Hash RPD (ResU.single l (CellU.mutOf A v'' χ hχ P'' hwit'')) :=
+    ⟨hRPDm.1, π, hRPDm, hvπ⟩
+  have hH27 : ResU.Hash RPD W'' := (ResU.six24 hW'').mp hRPDmH
+  obtain ⟨hfρ', hρ'p⟩ := ResU.Hash.split h2 (ResU.hash_symm h3)
+  obtain ⟨hPDf, -⟩ := ResU.Hash.split hpd (ResU.hash_symm hfρ')
+  obtain ⟨hρ'PD, -⟩ := ResU.Hash.split hpd (ResU.hash_symm hρ'p)
+  obtain ⟨hρ'W'', hPDW''⟩ := ResU.Hash.split hRPD hH27
+  have hfm'' : ResU.Hash ρf W'' :=
+    (ResU.six24 hW'').mp (ResU.hash_symm (ResU.Hash.split hpd (ResU.hash_symm hfρ')).2)
+  obtain ⟨R, hR⟩ := (ResU.compS_defined_iff ρ' W'').mpr hρ'W''.1
+  have hfR : ResU.Hash ρf R :=
+    ResU.hash_of_pairwise (ResU.hash_symm h1) hρ'W'' hfm'' hR
+  obtain ⟨FR, hFR⟩ := (ResU.compS_defined_iff ρf R).mpr hfR.1
+  have hPDR : ResU.Hash (ρp.del l) R :=
+    ResU.hash_of_pairwise hρ'PD hρ'W'' hPDW'' hR
+  have hPDFR : ResU.Hash (ρp.del l) FR :=
+    ResU.hash_of_pairwise hPDf hfR hPDR hFR
+  obtain ⟨FRP, hFRP⟩ := (ResU.compS_defined_iff FR (ρp.del l)).mpr (ResU.hash_symm hPDFR).1
+  obtain ⟨RP, hRP⟩ := (ResU.compS_defined_iff R (ρp.del l)).mpr (ResU.hash_symm hPDR).1
+  -- H33: the second memory, by 6.25 under a frame (6.8)
+  obtain ⟨FP, hFP, hFPm⟩ := (ResU.CompS.assoc fρ' (ρp.del l)
+    (ResU.single l (CellU.mutOf A v'' χ hχ P'' hwit'')) fρ'p).mp ⟨ρp, hpd, h6⟩
+  obtain ⟨RP₁, hRP₁, hfRP⟩ := (ResU.CompS.assoc ρf R (ρp.del l) FRP).mpr ⟨FR, hFR, hFRP⟩
+  obtain rfl : RP = RP₁ := ResU.CompS.functional hRP hRP₁
+  obtain ⟨WP, hWP, hρ'WP⟩ := (ResU.CompS.assoc ρ' W'' (ρp.del l) RP).mpr ⟨R, hR, hRP⟩
+  obtain ⟨RPD₁, hRPD₁, hRPDW⟩ :=
+    (ResU.CompS.assoc ρ' (ρp.del l) W'' RP).mp ⟨WP, ResU.CompS.comm hWP, hρ'WP⟩
+  obtain rfl : RPD = RPD₁ := ResU.CompS.functional hRPD hRPD₁
+  obtain ⟨FPD, hFPD, hFPDW⟩ :=
+    (ResU.CompS.assoc ρf RPD W'' FRP).mp ⟨RP, hRPDW, hfRP⟩
+  obtain ⟨FP₁, hFP₁, hFPρ'⟩ := (ResU.CompS.assoc ρf ρ' (ρp.del l) FP).mpr ⟨fρ', h2, hFP⟩
+  obtain rfl : RPD = FP₁ := ResU.CompS.functional hRPD hFP₁
+  obtain rfl : FP = FPD := ResU.CompS.functional hFPρ' hFPD
+  have hvfρ'p : ResU.Valid fρ'p := by obtain ⟨σ, hσ, -⟩ := h7; exact ⟨σ, hσ⟩
+  have hvFRP : ResU.Valid FRP := by
+    obtain ⟨-, s, hs, hv⟩ := ResU.hash_symm hPDFR
+    exact ResU.CompS.functional hs hFRP ▸ hv
+  have hvW'' : ResU.Valid W'' := by
+    obtain ⟨-, s, hs, hv⟩ := hH27; exact (ResU.Valid.split hs hv).2
+  have hFPmH : ResU.Hash FP (ResU.single l (CellU.mutOf A v'' χ hχ P'' hwit'')) :=
+    ⟨hFPm.1, fρ'p, hFPm, hvfρ'p⟩
+  have hFPWH : ResU.Hash FP W'' := ⟨hFPDW.1, FRP, hFPDW, hvFRP⟩
+  have hmem₂ : ResU.Lower FRP μ' :=
+    (ResU.lower_swap_mut_own hW'' hvm'' hvW'' hFPm hFPmH hFPDW hFPWH).mp h7
+  -- H34: `ρ ↭ₖ ρ′ ● ρ''_v ● ℓ ↦ own(v'') ● ρ⁺/ℓ`, by 6.28 at the index
+  have hvRP : ResU.Valid RP := by
+    obtain ⟨-, s, hs, hv⟩ := hH27
+    exact ResU.CompS.functional hs hRPDW ▸ hv
+  have hupd : UpdN Φ (n - jr) ρ RP :=
+    six28N_fwd (Φ.set_agree l A F) hlPcell hW'' hBM hRPDm (ResU.CompS.comm hcρ) hRPDW
+      hvBM hvπ hvρ hvRP h10.1
+  have hno : BoLo.NoOwn (ρp.del l) := by
+    refine PMap.ext fun x => ?_
+    cases hgg : ((ρp.del l).restrict Kind.own).get x with
+    | none => simp
+    | some ψ =>
+        exfalso
+        obtain ⟨hdd, hk⟩ := ResU.restrict_eq_some.mp hgg
+        by_cases hx : x = l
+        · subst hx; rw [ResU.del_get_self] at hdd; simp at hdd
+        · rw [ResU.del_get_ne _ hx] at hdd
+          have hcc : (ρp.restrict Kind.own).get x = some ψ :=
+            ResU.restrict_eq_some.mpr ⟨hdd, hk⟩
+          rw [h11] at hcc
+          simp at hcc
+  -- exit: `TW.mutUnfold`
+  have hTout : TW FRP ps'' (rsOf ls'') :=
+    TW.mutUnfold hT'' (ResU.CompS.comm hFPm) (ResU.CompS.comm hW'')
+      (ResU.CompS.comm hFPDW) hvFRP
+  have htgout : Tagged FRP ps'' ls'' := tagged_of_ag (fun a ha =>
+    (mut_fold_ag (ResU.CompS.comm hW'') (ResU.CompS.comm hFPDW) (ResU.CompS.comm hFPm) a).mp
+      ha) htg''
+  -- H35: the lender's read-back, the content in `F k` by the step from `F j`
+  have hFl : Φ.set l A F l = some ⟨A, F⟩ := by simp [LocFam.set]
+  have hχv : SPropS.toU (F (n - jr) v'') χ :=
+    predStep_read (LocFam.set_down hΦ hF) hFl (k := j) (by omega)
+      (fun u r hp => (mpred_mutOf u r).mp hp) hstep.2.2.2 v'' χ
+      ((mpred_mutOf v'' χ).mpr ⟨hχ, hwit''⟩)
+  obtain ⟨y, hy₁, hy₂⟩ :=
+    (ResU.CompS.assoc ρ' (ResU.single l (CellU.ownOf v'')) χ R).mp
+      ⟨W'', ResU.CompS.comm hW'', hR⟩
+  have hQ := hwand' v'' y hy₁ χ hχv R hy₂
+  exact ⟨R, ρp.del l, FR, FRP, RP, ps'', ls'', ResU.hash_symm hfR, hFR, hPDFR, hFRP, hmem₂,
+    hRP, ⟨hupd, hvρ, hvRP⟩, hno, hTout, htgout, hps'', hls'', hQ⟩
+
 end BoCa.Fig16.LogRel.Core.DtorUnwind.SI
 
 end
