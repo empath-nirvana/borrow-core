@@ -91,3 +91,7 @@ import DtorUnwind.SI.CactusInv
 import DtorUnwind.SI.FdTypes
 import DtorUnwind.SI.CaptureScopeM
 import DtorUnwind.SI.CrossProgM
+import DtorUnwind.Tree.Order
+import DtorUnwind.Tree.Rel
+import DtorUnwind.Tree.FdTree
+import DtorUnwind.Tree.Scan
