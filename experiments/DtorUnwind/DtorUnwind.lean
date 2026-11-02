@@ -139,6 +139,7 @@ import DtorUnwind.Tree.Port.SurgeryB
 import DtorUnwind.Tree.Port.Six28to29
 import DtorUnwind.Tree.Port.SurgeryC
 import DtorUnwind.Tree.Port.Six34to39
+import DtorUnwind.Tree.Port.ClosingSentence
 import DtorUnwind.Tree.CarrierSim
 import DtorUnwind.Tree.KSem
 import DtorUnwind.Tree.KSemGraft

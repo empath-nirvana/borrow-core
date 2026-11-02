@@ -97,3 +97,6 @@ if name == 'ReborrowFrame': drop('ResUT.del_compS')
 if name == 'Subtraction': subprocess.run(['python3', S+'subfix.py', f], check=True)
 if name == 'Six28to29': subprocess.run(['python3', S+'six28fix.py', f], check=True)
 if name in ('SurgeryC', 'Six34to39'): subprocess.run(['python3', S+'surgcfix.py', name, f], check=True)
+if name == 'ClosingSentence':
+    subprocess.run(['python3', S+'lifefix.py', f], check=True)
+    subprocess.run(['python3', S+'closfix.py', f], check=True)
