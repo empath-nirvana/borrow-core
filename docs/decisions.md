@@ -19,6 +19,8 @@ Each entry: the decision, and why. Newest last.
 7. **Recursion without step-indexing.** Inductive types by least fixed points, codata by greatest
    fixed points with a mandatory `close`, loops by `fixD` over explicit state; divergence shows in
    the type.
+   *Status (decision 72):* SPEC §62's safety relation is step-indexed; the total relation keeps
+   this reading for derivations that use none of §62's new rules.
 8. **Monomorphization, no type `∀` in the core.** Generics are definitions re-checked at each use.
 9. **A structural core.** Names are abbreviations; nominal types and abstraction are a surface or
    module concern, via opaque types.
@@ -77,6 +79,10 @@ Each entry: the decision, and why. Newest last.
        opaque kind `tok` (`A ⊗ Tok`, minted at construction and burned at a written `match`), so
        `HasDtor` fails at it and the checker cannot drop it; borrows of it still have a derived
        drop.
+
+    *Status (decision 72):* these choices on linearity and drops are released as design; SPEC
+    §62's destructors may perform operations, replacing item 1, and `must_close` (item 4) is void.
+    What is built stays the checker's behaviour until §62's PRs land.
 24. **Recursion is the fixed point of a generator, called directly (revised twice; first read
     "recursion is always structured, no general direct recursion", then "recursion is an
     effect").** A recursive function is written as ordinary self-calls. A mutually recursive group
@@ -834,6 +840,8 @@ Each entry: the decision, and why. Newest last.
     - **Handlers are deep**, as SPEC §19 builds them. This revises decision 15.
     - **Cancellation is what SPEC §19 and the unwinding effects do as built.** In the user's words: "Whatever they do is what we decided."
     - **No hard-stop phase while planning.** The tier-2 hard-stop rule is not in force. In the user's words: "There's no hard stop phase now we are just planning."
+    - *Status (decision 72):* the cancellation bullet is released as a fixed design; in SPEC §62 a
+      cancel is one of the exits that run the live destructors. The other bullets stand.
 63. **Multi-shot continuations are not a design goal (the user's decision of 2026-10-04).**
     - In the user's words: "TOTALLY IGNORE MULTISHOT AS A DESIGN GOAL. If it works it works, if it doesn't, it doesn't, I don't care either way."
     - It supersedes "we also don't need multishot unless we get it for free" (2026-10-02).
@@ -909,6 +917,8 @@ Each entry: the decision, and why. Newest last.
       a lend across a tick), and
       every kernel program's handled rows are without `Div`. `operator-reconcile.bc` is already
       pending.
+    - *Status (decision 72):* superseded as design by SPEC §62's `[handle]` without `hdv`. The
+      restriction stays the checker's rule until §62's PRs land.
 69. **Finalisers are total: a finaliser always terminates (#563; the user's decisions of 2026-10-18).**
     - In the user's words: "I think no div in a finalizer is a feature not a bug", refined to "I
       think what we really want is 'finalizers are total'".
@@ -919,6 +929,8 @@ Each entry: the decision, and why. Newest last.
       #564 does not lift it.
     - The theorem that every run of a finaliser terminates, the handler clauses its operations
       reach included, is open (SPEC §14 *Open*).
+    - *Status (decision 72):* released as a fixed design. SPEC §62's `[let-dtor]` keeps
+      `hSDd` (no `Div` in the destructors' row) as a premise for now; relaxing it is §62 *Open*.
 70. **Allocation is an effect (the user's decisions of 2026-09-28, 2026-10-20 and 2026-10-29; #763; not built).**
     - Every heap allocation is written in the program. The marker need not be `box`: `box`,
       `buf_new`, `array_tab` and any allocator a library writes all count. No elaboration rule
@@ -974,3 +986,23 @@ Each entry: the decision, and why. Newest last.
       per-observation lend is the design, not a first step toward the spanning one); the
       provisional "T1 at tail-resumptive operations" of `docs/expressiveness.md` §16 and its
       units 13–14; and the #743 build plan (`~/repos/scratch-archive/743/plan.md`, closed).
+72. **The reset of 2026-11-01: decision 71 and its tombstone are void; the new Core (SPEC §62,
+    #771) replaces them.**
+    - In the user's words: "forget all of our language design decisions that relate to this. The
+      language is broken fundamentally and we need a new approach."
+    - Void: decision 71 (owned across suspensions, borrowed within; R1 frozen; lifting T1
+      tombstoned), `docs/tombstones/lends-across-suspensions.md`, and the decisions on linearity,
+      drops and resource cleanup they rested on: decision 23's #746 items (derived drops pure at
+      the row, `must_close`), decision 62's cancellation as built, and the finaliser algebra as
+      fixed (decision 69's total finalisers and the algebra it keeps). Decision 68's tail-resuming
+      restriction is superseded as design by SPEC §62's `[handle]` without `hdv`.
+    - The kernel's theorems stand. Only the design choices are released.
+    - The rules decision 71 made are still what the checker enforces today, and change only as
+      SPEC §62's PRs land: T1 (`Row.Unwind` on the borrow constants), R1 and `PinLaw` as on
+      `main`, R2 unemitted, and LoopLend's per-observation lend over loops. What decision 71
+      superseded (decision 40's "O1 step 1" framing, "T1 at tail-resumptive operations" of
+      `docs/expressiveness.md` §16, the #743 build plan) is not restored by voiding it; SPEC §62 is
+      the design in their place.
+    - The goal, in the user's words: a destructor and "a guarantee that it runs it every exit but
+      no guarantee that it ever exits". The target theorem is SPEC §62's: every reachable state
+      steps or is final with an empty heap.

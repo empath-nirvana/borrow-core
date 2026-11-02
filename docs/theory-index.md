@@ -653,7 +653,7 @@ obstruction exist unless a Lean name is given.
 
 | # | Problem | Issue |
 |---|---|---|
-| T1 | The spanning lend (K1): **closed, tombstoned** (decision 71) | [#172] |
+| T1 | The spanning lend (K1): closed by decision 71, which decision 72 voids; SPEC §62 | [#172] |
 | T2 | An outlives rule for thunks `U C` | [#173] |
 | T3 | Lending a `Mut` as an `Imm` (strings K2′) | [#174] |
 | T4 | Same-lifetime views through a pointer | [#175] |
@@ -676,6 +676,8 @@ obstruction exist unless a Lean name is given.
 | T21 | The derived type of projection operations | [#160] |
 
 ### T1. The spanning lend (K1)
+
+*Decision 71 is void (decision 72, 2026-11-01); this is the checker's rule today, until SPEC §62's PRs land.* SPEC §62 is the design that lifts T1.
 
 - **Closed by decision 71 (tombstoned, 2026-10-31).** T1, "no borrow is held across a
   suspension", is the permanent rule (SPEC §19): data that crosses a suspension is owned, moved

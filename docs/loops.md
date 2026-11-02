@@ -9,6 +9,8 @@ kinds is elaborated. It changes no code. Each claim is marked:
 - **by inspection**: read off the code or SPEC, with no run behind it;
 - **hypothesis**: argued here, not checked.
 
+*Decision 71 is void (decision 72, 2026-11-01); this is the checker's rule today, until SPEC §62's PRs land.*
+
 **Decision 71 (2026-10-31).** T1 is the permanent rule: no borrow is held across a loop's tick
 or any other suspension. A loop that is not counted keeps its data owned in its state and
 borrows within one step (§14's per-observation lend, kept). The spanning lend, K1, is closed:
@@ -118,7 +120,7 @@ Each row was measured with the matrix of #545 (§7.1), its `return` variant (§7
 | S9 | `loopsAt` (`:454`) | "`spin` is declared `total`, but it has a `for` over an unbounded source (a drain)" | #527 item 1, a `while` | `while` is a `.for_` |
 | S10 | `forYield` | "the loop's value has type `i32`, and `gen` returns `1`" | `let r : i32 = for i in gen(10) { … break v … }` (§7.3 `i134d`) | a `for` over a generator has no `else`, so its value must be the generator's result |
 | S11 | parser | "expected a value, found `loop`" | `let r = loop { … break v }` (`i134b`) | `loop` and `while` are not expressions |
-| S12 | `forData`, `forDataDiv` (kept) | "…performs an operation that resumes, and its source `&a` lends `a` around the whole loop…" | `corpus/reject/for-lend-resumes.bc` | T1, permanent (decision 71). Kept |
+| S12 | `forData`, `forDataDiv` (kept) | "…performs an operation that resumes, and its source `&a` lends `a` around the whole loop…" | `corpus/reject/for-lend-resumes.bc` | T1 (decision 71, void by decision 72; the checker's rule until SPEC §62's PRs land). Kept |
 | S13 | `LoopLend` | "`count` loops, so it is called in direct style one step at a time…"; "the iterator of this `for` holds the borrow of `v`" | #491, #501 | §1.2: decided before the source has a type |
 
 **The matrix** (measured): 19 of 25 print 241. The 6 refused are RW, RL, RG, AW, AL, AG (S1, S2).

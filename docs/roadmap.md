@@ -2,6 +2,8 @@
 
 ## Async and generators under decision 71
 
+*Decision 71 is void (decision 72, 2026-11-01); this is the checker's rule today, until SPEC §62's PRs land.*
+
 T1 is the permanent rule (decision 71, SPEC §19): owned across suspensions, borrowed within. No
 lend stays open across an `await`, a `yield`, a resuming operation or a loop's tick handled
 outside it; a borrow lent from outside a scheduler that runs inside it (`spawn_in`/`run_in`) is
