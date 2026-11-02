@@ -259,16 +259,6 @@ theorem OwnUnder.rr_back {Θ : LocTy} {K' : WCactus} {ρ : TRes K} {ρ' : TRes K
   obtain ⟨ψ, e, hc⟩ := hr.get_some' e'
   exact ⟨m, ψ, e, hc.kind ▸ hk, hw.rr_back hc.wit⟩
 
-theorem forall₂_mem_right {α β : Type} {R : α → β → Prop} {xs : List α} {ys : List β}
-    (h : List.Forall₂ R xs ys) {y : β} (hy : y ∈ ys) : ∃ x ∈ xs, R x y := by
-  induction h with
-  | nil => cases hy
-  | cons hxy _ ih =>
-      rcases List.mem_cons.mp hy with rfl | hy
-      · exact ⟨_, List.mem_cons_self, hxy⟩
-      · obtain ⟨x, hx, hr⟩ := ih hy
-        exact ⟨x, List.mem_cons_of_mem _ hx, hr⟩
-
 /-! ### The invariant -/
 
 /-- `LeInv` gives `own_not_at_view`'s hypothesis at every record proper. -/

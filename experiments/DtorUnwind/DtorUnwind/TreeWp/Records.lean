@@ -354,6 +354,104 @@ theorem TWNT.reread_refl {Θ : CodeTy} {W : TRes K} {ps rs : List (FrameRecT K)}
     (List.forall₂_same.mpr fun r hr => RecRR.refl (hps r hr))
     (List.forall₂_same.mpr fun r hr => RecRR.refl (hrs r hr))
 
+/-! ### Coverage -/
+
+theorem forall₂_mem_right {α β : Type} {R : α → β → Prop} {xs : List α} {ys : List β}
+    (h : List.Forall₂ R xs ys) {y : β} (hy : y ∈ ys) : ∃ x ∈ xs, R x y := by
+  induction h with
+  | nil => cases hy
+  | cons hxy _ ih =>
+      rcases List.mem_cons.mp hy with rfl | hy
+      · exact ⟨_, List.mem_cons_self, hxy⟩
+      · obtain ⟨x, hx, hr⟩ := ih hy
+        exact ⟨x, List.mem_cons_of_mem _ hx, hr⟩
+
+
+/-- **A value of a code is held by a covered resource**: every `mut` cell the code's meaning
+asks for stores its location's code read at the tree, and its payload is a value of that code. -/
+theorem interp_cov {Θ : CodeTy} (A : KTy) :
+    ∀ {K : WCactus} {v : BoCa.Val} {ρ : TRes K}, (A.interp Θ).P K v ρ → CovR (sem Θ) K ρ := by
+  induction A with
+  | unit => rintro K v ρ ⟨-, rfl⟩ l ψ e; simp at e
+  | sum A B ihA ihB =>
+      rintro K v ρ (⟨v₁, -, h⟩ | ⟨v₂, -, h⟩)
+      · exact ihA h
+      · exact ihB h
+  | imm a A ih =>
+      rintro K v ρ ⟨l, i, -, rfl, -, hP⟩ m ψ e
+      rw [PMap.sng_get] at e
+      split_ifs at e with hm
+      cases e
+      exact .imm _ i fun k χ ek => ih hP k χ ek
+  | «mut» a A ih =>
+      rintro K v ρ ⟨l, m, -, rfl, hΘ, -, hP⟩ k ψ e
+      rw [PMap.sng_get] at e
+      split_ifs at e with hk
+      cases e
+      subst hk
+      exact .mut _ m _ (sem_of hΘ) hP fun j χ ej => ih ((hP m.v m.ρ).mp m.hw) j χ ej
+  | box a A ih => rintro K v ρ ⟨hP, -⟩; exact ih hP
+  | ref A ih =>
+      classical
+      rintro K v ρ ⟨l, w, ρ₁, -, hl, rfl, hP⟩ m ψ e
+      rw [PMap.ins_get] at e
+      split_ifs at e with hm
+      · cases e; exact .own _ _
+      · exact ih hP m ψ e
+
+/-- A lineage member's escrow is covered when the root's is: it is the witness of a `mut` cell
+of its parent's escrow. -/
+theorem LinPathT.cov {Θ : CodeTy} {r d : FrameRecT K} {p : List BoCa.Loc} (h : LinPathT r p d)
+    (hr : CovR (sem Θ) K r.R) : CovR (sem Θ) K d.R := by
+  induction h with
+  | nil => exact hr
+  | cons hs _ ih =>
+      obtain ⟨-, ζ, eζ, kζ, -, wζ⟩ := hs
+      refine ih fun m χ e => ?_
+      have hc := hr _ ζ eζ
+      cases hc with
+      | own => simp [CellUT.kind] at kζ
+      | imm => simp [CellUT.kind] at kζ
+      | «mut» _ m₀ _ _ _ hw => exact hw m χ (by rw [← wζ] at e; exact e)
+
+/-- **Every record of a `TWNT` world is covered.** -/
+theorem TWNT.cov_recs {Θ : CodeTy} {W : TRes K} {ps rs : List (FrameRecT K)}
+    (h : TWNT K Θ W ps rs) :
+    (∀ r ∈ ps, CovR (sem Θ) K r.R) ∧ (∀ r ∈ rs, CovR (sem Θ) K r.R) := by
+  induction h with
+  | empty => exact ⟨fun r hr => by simp at hr, fun r hr => by simp at hr⟩
+  | alloc _ _ _ _ _ ih => exact ih
+  | @immFrame K Θ W X Z R W' ps rs ds l v α T hα _ _ _ hden _ _ hds ih =>
+      have hR : CovR (sem Θ) K R := interp_cov T hden
+      refine ⟨fun r hr => ?_, fun r hr => ?_⟩
+      · rcases List.mem_cons.mp hr with rfl | hr
+        · exact hR
+        · exact ih.1 r hr
+      · rcases List.mem_cons.mp hr with rfl | hr
+        · exact hR
+        · rcases List.mem_append.mp hr with hr | hr
+          · obtain ⟨p, -, hp⟩ := (hds r).mp hr
+            exact hp.cov hR
+          · exact ih.2 r hr
+  | reb _ _ _ _ _ _ _ _ _ _ ih => exact ih
+  | rebDeep _ _ _ _ _ _ _ _ _ _ _ _ ih => exact ih
+  | mutFold _ _ _ _ _ ih => exact ih
+  | mutUnfold _ _ _ _ _ ih => exact ih
+  | free _ _ _ ih => exact ih
+  | store _ _ _ _ ih => exact ih
+  | immEnd r _ _ _ _ _ _ hps hrs ih =>
+      refine ⟨fun r' hr' => ih.1 r' ((hps r').mp hr').1, fun d hd => ?_⟩
+      obtain ⟨p, hp, q, hq⟩ := (hrs d).mp hd
+      exact hq.cov (ih.1 p ((hps p).mp hp).1)
+  | rebEnd _ _ _ _ _ _ _ ih => exact ih
+  | rebEndDeep _ _ _ _ _ _ _ _ ih => exact ih
+  | reread _ _ _ _ hps hrs _ =>
+      refine ⟨fun r' hr' => ?_, fun r' hr' => ?_⟩
+      · obtain ⟨r, -, -, -, -, hrr⟩ := forall₂_mem_right hps hr'
+        exact hrr.cov
+      · obtain ⟨r, -, -, -, -, hrr⟩ := forall₂_mem_right hrs hr'
+        exact hrr.cov
+
 end BoCa.Fig16.Tree.Wp
 
 end
