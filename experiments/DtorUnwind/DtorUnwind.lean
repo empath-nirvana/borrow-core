@@ -78,3 +78,6 @@ import DtorUnwind.SI.HandlerLendProg
 import DtorUnwind.SI.ResumeWorldsG
 import DtorUnwind.SI.HandlerLendAll
 import DtorUnwind.SI.ExtExtF
+import DtorUnwind.SI.Capture
+import DtorUnwind.SI.CaptureE
+import DtorUnwind.SI.CaptureGen
