@@ -20,19 +20,18 @@ carrier's names (`CellUT`, `TSet`, `K.le`), and with the record's type a code:
 * **Reborrow premises** (`RebRecLeT`, `RebEndRecT`, `RebCellLeT`): `SI/TWN.lean`'s, with `⊑`, `⊏`
   read in `K`.
 * **Templates and canonical images** (`TmplSpecT`, `tmplT`, `canonT`, and the deep ones):
-  `SI/TWNC.lean`'s, the typing read through `interp`. One forced change: **the template is
-  chosen when the record is made and carried with it** (`FrameRecT.tm`). The tree grows under a
-  record; a template re-chosen at the grown tree is a different choice, and the point of a
-  template is one choice per record. At `immFrame` the template is `tmplT` (the `Classical`
-  choice of `SI/TWNC.lean`), so where nothing grows `canonT r β` is `canon`'s
-  `relRes r.R β (tmpl r)` (`canonT_def`). A template is covered (`TmplSpecT`'s last clause), so
-  it is re-read with the world.
+  `SI/TWNC.lean`'s, the typing read through `interp`, the choice made at the current tree and
+  code typing. A template is covered (`TmplSpecT`'s last clause).
 * **`TWNT`**: `TWNC`'s constructors over `TRes K`, and one more, `reread`: the tree grows or a
   location no `mut` cell is at is re-typed, the world and every record re-read (`RecRR`). At no
   growth the re-reading is the identity (`TWNT.reread_refl`).
 
-Deep templates are chosen at the current tree (`tmplDT`), as in `SI/TWNC.lean`: they are not
-carried across a re-reading.
+**Open: templates across a re-reading.** A template is the `Classical` choice at `(K, Θ)`; after
+`reread` the choice at `(K′, Θ′)` need not be the re-reading of the one at `(K, Θ)`, so `TWNC`'s
+template invariant (`TemplAt`: every view at a record's roots carries the template's witness) is
+not carried by `reread` as stated. Carrying the template with the record fixes it for records
+proper but leaves sub-records' templates undetermined (a sub-record is named by its lineage,
+which fixes location, value, escrow and code only). Not derived, obstruction not verified.
 -/
 
 noncomputable section
@@ -57,13 +56,12 @@ def KTy.immReborrow (b : Life) : KTy → KTy
 /-! ### Records -/
 
 /-- A frame record over the tree carrier: the location `le`, the value `v` it held, the escrow
-`R`, the code `T` with `R ∈ ⟦T⟧`, and the record's template `tm`. -/
+`R`, and the code `T` with `R ∈ ⟦T⟧`. -/
 structure FrameRecT (K : WCactus) where
   le : BoCa.Loc
   v : BoCa.Val
   R : TRes K
   T : KTy
-  tm : TRes K
 
 variable {K : WCactus}
 
@@ -204,25 +202,24 @@ theorem tmplT_spec {Θ : CodeTy} {R : TRes K} {T : KTy} {v : BoCa.Val}
     (h : ∃ c, TmplSpecT K Θ R T v c) : TmplSpecT K Θ R T v (tmplT K Θ R T v) := by
   unfold tmplT; rw [dif_pos h]; exact Classical.choose_spec h
 
-/-- **The canonical image at `β`**: the record's template re-taken at `β`. -/
-def canonT (r : FrameRecT K) (β : Life) : TRes K := relResT r.R β r.tm
+/-- The record's template (`tmpl r`). -/
+def tmplR (K : WCactus) (Θ : CodeTy) (r : FrameRecT K) : TRes K := tmplT K Θ r.R r.T r.v
 
-/-- At a record made by `immFrame`, whose template is `tmplT`, `canonT` is `canon`'s
-`relRes r.R β (tmpl r)`. -/
-theorem canonT_def {Θ : CodeTy} (l : BoCa.Loc) (v : BoCa.Val) (R : TRes K) (T : KTy)
-    (β : Life) :
-    canonT (⟨l, v, R, T, tmplT K Θ R T v⟩ : FrameRecT K) β = relResT R β (tmplT K Θ R T v) :=
-  rfl
+/-- **The canonical image at `β`** (`canon`): the record's template re-taken at `β`. -/
+def canonT (K : WCactus) (Θ : CodeTy) (r : FrameRecT K) (β : Life) : TRes K :=
+  relResT r.R β (tmplR K Θ r)
 
-theorem canonT_get {r : FrameRecT K} {β : Life} {m : BoCa.Loc} {ψ : TCell K}
-    (e : (canonT r β).get m = some ψ) : ∃ ζ, r.tm.get m = some ζ ∧ ψ.wit = ζ.wit := by
+theorem canonT_get {Θ : CodeTy} {r : FrameRecT K} {β : Life} {m : BoCa.Loc} {ψ : TCell K}
+    (e : (canonT K Θ r β).get m = some ψ) :
+    ∃ ζ, (tmplR K Θ r).get m = some ζ ∧ ψ.wit = ζ.wit := by
   rw [canonT, relResT_get] at e
   obtain ⟨ζ, eζ, rfl⟩ := Option.map_eq_some_iff.mp e
   exact ⟨ζ, eζ, (relCellT_props r.R β m ζ).2.1⟩
 
 /-- Two canonical images of one record carry the same witness at every location both hold. -/
-theorem canonT_wit {r : FrameRecT K} {β β' : Life} {m : BoCa.Loc} {ψ ψ' : TCell K}
-    (e : (canonT r β).get m = some ψ) (e' : (canonT r β').get m = some ψ') : ψ.wit = ψ'.wit := by
+theorem canonT_wit {Θ : CodeTy} {r : FrameRecT K} {β β' : Life} {m : BoCa.Loc} {ψ ψ' : TCell K}
+    (e : (canonT K Θ r β).get m = some ψ) (e' : (canonT K Θ r β').get m = some ψ') :
+    ψ.wit = ψ'.wit := by
   obtain ⟨ζ, eζ, w⟩ := canonT_get e
   obtain ⟨ζ', eζ', w'⟩ := canonT_get e'
   rw [eζ] at eζ'; cases Option.some.inj eζ'
@@ -240,10 +237,9 @@ def canonDT (K : WCactus) (Θ : CodeTy) (S₀ : KTy) (u₀ : BoCa.Val) (w₀ : T
 
 /-! ### Records re-read -/
 
-/-- **A record re-read** at a grown tree: location, value, code kept; escrow and template
-re-read. -/
+/-- **A record re-read** at a grown tree: location, value, code kept; escrow re-read. -/
 def RecRR {K K' : WCactus} (Θ' : CodeTy) (r : FrameRecT K) (r' : FrameRecT K') : Prop :=
-  r'.le = r.le ∧ r'.v = r.v ∧ r'.T = r.T ∧ RR (sem Θ') r.R r'.R ∧ RR (sem Θ') r.tm r'.tm
+  r'.le = r.le ∧ r'.v = r.v ∧ r'.T = r.T ∧ RR (sem Θ') r.R r'.R
 
 /-! ### The typed world over the tree -/
 
@@ -262,14 +258,13 @@ inductive TWNT : (K : WCactus) → CodeTy → TRes K → List (FrameRecT K) → 
       TWNT K Θ W ps rs → ResUT.CompS (ResUT.single l (CellUT.ownOf v)) R X →
       ResUT.CompS X Z W → (T.interp Θ).P K v R →
       ResUT.CompS (ResUT.single l (CellUT.immOf (TSet.single α) v R h)) Z W' →
-      ResUT.Valid W' → (∀ d, d ∈ ds ↔ DescT ⟨l, v, R, T, tmplT K Θ R T v⟩ d) →
-      TWNT K Θ W' (⟨l, v, R, T, tmplT K Θ R T v⟩ :: ps)
-        (⟨l, v, R, T, tmplT K Θ R T v⟩ :: (ds ++ rs))
+      ResUT.Valid W' → (∀ d, d ∈ ds ↔ DescT ⟨l, v, R, T⟩ d) →
+      TWNT K Θ W' (⟨l, v, R, T⟩ :: ps) (⟨l, v, R, T⟩ :: (ds ++ rs))
   | reb {K : WCactus} {Θ : CodeTy} {W W' c : TRes K} {ps rs : List (FrameRecT K)}
       (r : FrameRecT K) {le : BoCa.Loc} {s : TSet} {β : Life} {hs : r.R.InStratum s} :
       TWNT K Θ W ps rs → r ∈ rs → W.get le = some (CellUT.immOf s r.v r.R hs) →
       ResUT.Reb β r.R c → ((r.T.immReborrow β).interp Θ).P K r.v c →
-      RebRecLeT K W ps r.R β → c = canonT r β → ResUT.CompS W c W' → ResUT.Valid W' →
+      RebRecLeT K W ps r.R β → c = canonT K Θ r β → ResUT.CompS W c W' → ResUT.Valid W' →
       TWNT K Θ W' ps rs
   | rebDeep {K : WCactus} {Θ : CodeTy} {W W' c : TRes K} {ps rs : List (FrameRecT K)}
       (r : FrameRecT K) {p : Option BoCa.Loc} {l₀ : BoCa.Loc} {S₀ : KTy} {u₀ : BoCa.Val}
@@ -345,19 +340,19 @@ theorem TWNT.valid {K : WCactus} {Θ : CodeTy} {W : TRes K} {ps rs : List (Frame
   | reread _ _ _ hr _ _ ih => exact WitRel.ResUT.Valid.sim ih hr.rsim
 
 /-- A covered record is its own re-reading where nothing grows. -/
-theorem RecRR.refl {Θ : CodeTy} {r : FrameRecT K} (hR : CovR (sem Θ) K r.R)
-    (hT : CovR (sem Θ) K r.tm) : RecRR (K' := K) Θ r r :=
-  ⟨rfl, rfl, rfl, RR.refl hR, RR.refl hT⟩
+theorem RecRR.refl {Θ : CodeTy} {r : FrameRecT K} (hR : CovR (sem Θ) K r.R) :
+    RecRR (K' := K) Θ r r :=
+  ⟨rfl, rfl, rfl, RR.refl hR⟩
 
 /-- **Nothing changes where nothing grows**: `reread` at `K' = K`, `Θ' = Θ` is the world itself,
 by `RR.refl`. -/
 theorem TWNT.reread_refl {Θ : CodeTy} {W : TRes K} {ps rs : List (FrameRecT K)}
     (h : TWNT K Θ W ps rs) (hW : CovR (sem Θ) K W)
-    (hps : ∀ r ∈ ps, CovR (sem Θ) K r.R ∧ CovR (sem Θ) K r.tm)
-    (hrs : ∀ r ∈ rs, CovR (sem Θ) K r.R ∧ CovR (sem Θ) K r.tm) : TWNT K Θ W ps rs :=
+    (hps : ∀ r ∈ ps, CovR (sem Θ) K r.R) (hrs : ∀ r ∈ rs, CovR (sem Θ) K r.R) :
+    TWNT K Θ W ps rs :=
   .reread h (WCactus.Ext.refl K) (AgreeOn.refl Θ W) (RR.refl hW)
-    (List.forall₂_same.mpr fun r hr => RecRR.refl (hps r hr).1 (hps r hr).2)
-    (List.forall₂_same.mpr fun r hr => RecRR.refl (hrs r hr).1 (hrs r hr).2)
+    (List.forall₂_same.mpr fun r hr => RecRR.refl (hps r hr))
+    (List.forall₂_same.mpr fun r hr => RecRR.refl (hrs r hr))
 
 end BoCa.Fig16.Tree.Wp
 
