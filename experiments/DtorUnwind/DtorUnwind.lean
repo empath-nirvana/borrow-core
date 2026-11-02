@@ -87,3 +87,4 @@ import DtorUnwind.SI.CaptureScope
 import DtorUnwind.SI.CaptureHeap
 import DtorUnwind.SI.CaptureAdequacy
 import DtorUnwind.SI.CrossProg
+import DtorUnwind.SI.CactusInv
