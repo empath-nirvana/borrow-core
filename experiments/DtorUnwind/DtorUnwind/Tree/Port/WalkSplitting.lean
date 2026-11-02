@@ -96,7 +96,7 @@ theorem ResUT.CompS.get_split_of_ne_imm {ρ₁ ρ₂ ρ : ResUT Loc Val K} (h : 
 
 /-- `ρ|ι` is undefined where `ρ` is. -/
 theorem ResUT.restrict_get_none {ρ : ResUT Loc Val K} {k : Kind} {l : Loc}
-    (e : ρ.get l = none) : (ρ.restrict k).get l = none := by
+    (e : ρ.get l = none) : (G.restrict CellUT.kind ρ k).get l = none := by
   show (ρ.get l).bind _ = none
   rw [e]
   rfl
@@ -104,13 +104,13 @@ theorem ResUT.restrict_get_none {ρ : ResUT Loc Val K} {k : Kind} {l : Loc}
 /-- `ρ|ι` keeps a cell of tag `ι`. -/
 theorem ResUT.restrict_get_some {ρ : ResUT Loc Val K} {k : Kind} {l : Loc}
     {ψ : CellUT Loc Val K} (e : ρ.get l = some ψ) (hk : ψ.kind = k) :
-    (ρ.restrict k).get l = some ψ :=
+    (G.restrict CellUT.kind ρ k).get l = some ψ :=
   ResUT.restrict_eq_some.mpr ⟨e, hk⟩
 
 /-- `ρ|ι` drops a cell of any other tag. -/
 theorem ResUT.restrict_get_ne {ρ : ResUT Loc Val K} {k : Kind} {l : Loc}
     {ψ : CellUT Loc Val K} (e : ρ.get l = some ψ) (hk : ψ.kind ≠ k) :
-    (ρ.restrict k).get l = none := by
+    (G.restrict CellUT.kind ρ k).get l = none := by
   show (ρ.get l).bind _ = none
   rw [e]
   exact if_neg hk
@@ -119,7 +119,7 @@ theorem ResUT.restrict_get_ne {ρ : ResUT Loc Val K} {k : Kind} {l : Loc}
 `[about ours: a step inside 6.18's and 6.20's proofs]` -/
 theorem ResUT.CompS.restrict {ρ₁ ρ₂ ρ : ResUT Loc Val K} (h : ResUT.CompS ρ₁ ρ₂ ρ)
     (k : Kind) :
-    ResUT.CompS (ρ₁.restrict k) (ρ₂.restrict k) (ρ.restrict k) := by
+    ResUT.CompS (G.restrict CellUT.kind ρ₁ k) (G.restrict CellUT.kind ρ₂ k) (G.restrict CellUT.kind ρ k) := by
   refine ⟨fun l χ₁ χ₂ f₁ f₂ => h.1 l χ₁ χ₂ (ResUT.restrict_eq_some.mp f₁).1
     (ResUT.restrict_eq_some.mp f₂).1, fun l => ?_⟩
   rcases ResUT.Comp.get h l with ⟨f₁, f₂, f⟩ | ⟨χ, f₁, f₂, f⟩ | ⟨χ, f₁, f₂, f⟩ |

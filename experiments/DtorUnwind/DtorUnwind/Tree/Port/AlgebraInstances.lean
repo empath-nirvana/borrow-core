@@ -27,7 +27,6 @@ theorem ResUT.compatS_single_not_imm {l : Loc} {ψ : CellUT Loc Val K} {ρ : Res
 
 end BoCa.Fig16.Tree
 
-
 namespace BoCa.Fig16.Tree
 open BoCa.Fig16
 variable {Loc Val : Type} {K : WCactus}

@@ -75,7 +75,7 @@ theorem ResUT.comp_empty_left {R : CellUT Loc Val K → CellUT Loc Val K → Pro
   | some ψ => rfl
 
 theorem ResUT.restrict_single_self {l : Loc} {ψ : CellUT Loc Val K} {k : Kind}
-    (h : ψ.kind = k) : (ResUT.single l ψ).restrict k = ResUT.single l ψ := by
+    (h : ψ.kind = k) : (G.restrict CellUT.kind (ResUT.single l ψ) k) = ResUT.single l ψ := by
   classical
   refine PMap.ext fun l' => ?_
   by_cases e : l' = l
@@ -83,16 +83,16 @@ theorem ResUT.restrict_single_self {l : Loc} {ψ : CellUT Loc Val K} {k : Kind}
     rw [ResUT.single_get_self]
     exact ResUT.restrict_eq_some.mpr ⟨ResUT.single_get_self _ _, h⟩
   · rw [ResUT.single_get_ne _ e]
-    cases f : ((ResUT.single l ψ).restrict k).get l' with
+    cases f : (G.restrict CellUT.kind (ResUT.single l ψ) k).get l' with
     | none => rfl
     | some χ =>
         obtain ⟨hg, -⟩ := ResUT.restrict_eq_some.mp f
         exact absurd (hg.symm.trans (ResUT.single_get_ne _ e)) (by simp)
 
 theorem ResUT.restrict_single_other {l : Loc} {ψ : CellUT Loc Val K} {k : Kind}
-    (h : ψ.kind ≠ k) : (ResUT.single l ψ).restrict k = PMap.empty := by
+    (h : ψ.kind ≠ k) : (G.restrict CellUT.kind (ResUT.single l ψ) k) = PMap.empty := by
   refine PMap.ext fun l' => ?_
-  cases f : ((ResUT.single l ψ).restrict k).get l' with
+  cases f : (G.restrict CellUT.kind (ResUT.single l ψ) k).get l' with
   | none => rfl
   | some χ =>
       obtain ⟨hg, hk⟩ := ResUT.restrict_eq_some.mp f
@@ -120,9 +120,8 @@ theorem ExWT.single_own {R : CellUT Loc Val K → CellUT Loc Val K → Prop}
   refine G.ExW.mk (w := []) (b := PMap.empty) (nm := ResUT.single l (CellUT.ownOf v))
     (ResUT.sites_single_other (fun e => Kind.noConfusion e))
     G.ExWits.nil G.BigComp.nil ?_ (ResUT.comp_empty_right _)
-  simp only [ResUT.restrict_single_self (l := l) (ψ := CellUT.ownOf v) (k := Kind.own) rfl,
-    ResUT.restrict_single_other (l := l) (ψ := CellUT.ownOf v) (k := Kind.mut)
-      (fun e => Kind.noConfusion e)]
+  rw [ResUT.restrict_single_self (k := Kind.own) rfl,
+    ResUT.restrict_single_other (k := Kind.mut) (fun e => Kind.noConfusion e)]
   exact ResUT.comp_empty_right _
 
 /-- `ag(ℓ↦own(v)) = ∅`. -/
@@ -133,8 +132,7 @@ theorem AgWT.single_own (l : Loc) (v : Val) :
     (ResUT.sites_single_other (fun e => Kind.noConfusion e))
     (ResUT.sites_single_other (fun e => Kind.noConfusion e))
     G.AgWitsM.nil G.AgWitsI.nil G.BigComp.nil G.BigComp.nil ?_ (ResUT.comp_empty_right _)
-  simp only [ResUT.restrict_single_other (l := l) (ψ := CellUT.ownOf v) (k := Kind.imm)
-    (fun e => Kind.noConfusion e)]
+  rw [ResUT.restrict_single_other (k := Kind.imm) (fun e => Kind.noConfusion e)]
   exact ResUT.comp_empty_right _
 
 /-- `⦇ℓ ↦ own(v)⦈ = ℓ ↦ own(v)`, hence `✓(ℓ ↦ own(v))`. -/

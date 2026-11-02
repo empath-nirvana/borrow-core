@@ -96,8 +96,8 @@ open Classical in
 
 theorem ResUT.restrict_eq_some {ρ : ResUT Loc Val K} {k : Kind} {l : Loc}
     {ψ : CellUT Loc Val K} :
-    (ρ.restrict k).get l = some ψ ↔ (ρ.get l = some ψ ∧ ψ.kind = k) := by
-  have hdef : (ρ.restrict k).get l
+    (G.restrict CellUT.kind ρ k).get l = some ψ ↔ (ρ.get l = some ψ ∧ ψ.kind = k) := by
+  have hdef : (G.restrict CellUT.kind ρ k).get l
       = (ρ.get l).bind (fun ψ => if ψ.kind = k then some ψ else none) := rfl
   rw [hdef]
   cases hf : ρ.get l with
@@ -142,6 +142,18 @@ def ResUT.Lower (ρ : ResUT Loc Val K) (m : Loc → Option Val) : Prop :=
 theorem ResUT.comp_self_R (ρ : ResUT Loc Val K) : ResUT.CompR ρ ρ ρ := ResUT.compR_self ρ
 
 /-! ### The schema's laws under the printed names -/
+
+/-- A cell relation that is symmetric: `▶◀` and `⋈`. -/
+class G.SymmRel {X : Type} (C : X → X → Prop) : Prop where
+  symm : ∀ a b, C a b → C b a
+
+instance : G.SymmRel (CellUT.CompatS (Loc := Loc) (Val := Val) (K := K)) := ⟨fun _ _ h => h.symm⟩
+instance : G.SymmRel (CellUT.CompatR (Loc := Loc) (Val := Val) (K := K)) := ⟨fun _ _ h => h.symm⟩
+
+/-- `ρ₁ ▸◁ ρ₂` is symmetric (Lemma 6.1), for dot notation on the unfolded form. -/
+theorem G.Compat.symm {X : Type} {C : X → X → Prop} [G.SymmRel C] {ρ₁ ρ₂ : PMap Loc X}
+    (h : G.Compat C ρ₁ ρ₂) : G.Compat C ρ₂ ρ₁ :=
+  G.Compat.comm (fun a b => G.SymmRel.symm a b) h
 
 section
 variable {R : CellUT Loc Val K → CellUT Loc Val K → Prop}

@@ -289,7 +289,7 @@ theorem ResUT.CompS.toCompR {ρ₁ ρ₂ ρ : ResUT Loc Val K} (h : ResUT.CompS 
 `[about ours: the printed `ρ|ι` and `●`, composed at `○` by 6.31]` -/
 theorem ResUT.CompS.restrictR {ρ₁ ρ₂ ρ : ResUT Loc Val K} (h : ResUT.CompS ρ₁ ρ₂ ρ)
     (k : Kind) :
-    ResUT.CompR (ρ₁.restrict k) (ρ₂.restrict k) (ρ.restrict k) :=
+    ResUT.CompR (G.restrict CellUT.kind ρ₁ k) (G.restrict CellUT.kind ρ₂ k) (G.restrict CellUT.kind ρ k) :=
   ResUT.CompS.toCompR (ResUT.CompS.restrict h k)
 
 end BoCa.Fig16.Tree
@@ -504,10 +504,10 @@ theorem ExST.split {ρ₁ ρ₂ ρ₁₂ w : ResUT Loc Val K} (h₁₂ : ResUT.C
   have hR : ∀ ψ₁ ψ₂ ψ : CellUT Loc Val K, CellUT.CompS ψ₁ ψ₂ ψ → CellUT.CompatS ψ₁ ψ₂ :=
     fun _ _ _ hc => CellUT.CompS.compat hc
   -- The printed second line, at `own` and at `mut`.
-  have hown : ResUT.CompS (ρ₁.restrict Kind.own) (ρ₂.restrict Kind.own)
-      (ρ₁₂.restrict Kind.own) := ResUT.CompS.restrict h₁₂ Kind.own
-  have hmut : ResUT.CompS (ρ₁.restrict Kind.mut) (ρ₂.restrict Kind.mut)
-      (ρ₁₂.restrict Kind.mut) := ResUT.CompS.restrict h₁₂ Kind.mut
+  have hown : ResUT.CompS (G.restrict CellUT.kind ρ₁ Kind.own) (G.restrict CellUT.kind ρ₂ Kind.own)
+      (G.restrict CellUT.kind ρ₁₂ Kind.own) := ResUT.CompS.restrict h₁₂ Kind.own
+  have hmut : ResUT.CompS (G.restrict CellUT.kind ρ₁ Kind.mut) (G.restrict CellUT.kind ρ₂ Kind.mut)
+      (G.restrict CellUT.kind ρ₁₂ Kind.mut) := ResUT.CompS.restrict h₁₂ Kind.mut
   constructor
   · -- `ex(ρ₁₂)_●` is defined: cut its index set, its family and its fold in two,
     -- then exchange twice.
@@ -549,8 +549,8 @@ theorem ExST.split {ρ₁ ρ₂ ρ₁₂ w : ResUT Loc Val K} (h₁₂ : ResUT.C
             -- produces are `ρ₁₂|own` and `ρ₁₂|mut` by single-valuedness of `●`.
             obtain ⟨O, M, hO, hM, hOM⟩ :=
               (ResUT.CompS.exchange₄ _ _ _ _ nm).mpr ⟨_, _, hnm₁, hnm₂, hnmc⟩
-            obtain rfl : O = ρ₁₂.restrict Kind.own := ResUT.CompS.functional hO hown
-            obtain rfl : M = ρ₁₂.restrict Kind.mut := ResUT.CompS.functional hM hmut
+            obtain rfl : O = (G.restrict CellUT.kind ρ₁₂ Kind.own) := ResUT.CompS.functional hO hown
+            obtain rfl : M = (G.restrict CellUT.kind ρ₁₂ Kind.mut) := ResUT.CompS.functional hM hmut
             refine G.ExW.mk (w := u₁ ++ u₂) ?_
               (ExWitsT.append (ExWitsT.of_compS_left h₁₂ hw₁)
                 (ExWitsT.of_compS_right h₁₂ hw₂)) ?_ hOM hσ
@@ -875,8 +875,8 @@ theorem AgWT.split {ρ₁ ρ₂ ρ₁₂ w : ResUT Loc Val K} (h₁₂ : ResUT.C
     AgWT ρ₁₂ w ↔ ∃ σ₁ σ₂, AgWT ρ₁ σ₁ ∧ AgWT ρ₂ σ₂ ∧ ResUT.CompR σ₁ σ₂ w := by
   have hR : ∀ ψ₁ ψ₂ ψ : CellUT Loc Val K, CellUT.CompR ψ₁ ψ₂ ψ → CellUT.CompatR ψ₁ ψ₂ :=
     fun _ _ ψ hc => ⟨ψ, hc⟩
-  have himm : ResUT.CompR (ρ₁.restrict Kind.imm) (ρ₂.restrict Kind.imm)
-      (ρ₁₂.restrict Kind.imm) := ResUT.CompS.restrictR h₁₂ Kind.imm
+  have himm : ResUT.CompR (G.restrict CellUT.kind ρ₁ Kind.imm) (G.restrict CellUT.kind ρ₂ Kind.imm)
+      (G.restrict CellUT.kind ρ₁₂ Kind.imm) := ResUT.CompS.restrictR h₁₂ Kind.imm
   constructor
   · intro h
     cases h with
@@ -942,7 +942,7 @@ theorem AgWT.split {ρ₁ ρ₂ ρ₁₂ w : ResUT Loc Val K} (h₁₂ : ResUT.C
               (ResUT.CompR.exchange₄ _ _ _ _ w).mpr ⟨σ₁, σ₂, hσ₁, hσ₂, hc⟩
             obtain ⟨I, bm, hI, hbmc, ha⟩ :=
               (ResUT.CompR.exchange₄ _ _ _ _ a).mpr ⟨_, _, ha₁, ha₂, hac⟩
-            obtain rfl : I = ρ₁₂.restrict Kind.imm := ResUT.CompR.functional hI himm
+            obtain rfl : I = (G.restrict CellUT.kind ρ₁₂ Kind.imm) := ResUT.CompR.functional hI himm
             -- The composite's `imm` family, assembled with its shared block named.
             obtain ⟨w₂a, w₂c, w₁r, w₁c, hperm2, hperm1, hcperm, hsi, hwi⟩ :=
               AgWitsIT.assemble h₁₂ hsi₁ hwi₁ hsi₂ hwi₂
@@ -1014,7 +1014,7 @@ Printed in §6.2 (p. 11); its record and alias are in `Paper/S6_2_NonStandardLem
 `ResUT.restrict` against `PMap.empty`.
 `[as printed]` (the printed `ρ₁ ○ ρ₂` appears as its graph — G4) -/
 theorem ResUT.CompatS.of_compR_left {ρ ρ₁ ρ₂ r : ResUT Loc Val K}
-    (himm : ρ.restrict Kind.imm = PMap.empty)
+    (himm : (G.restrict CellUT.kind ρ Kind.imm) = PMap.empty)
     (hr : ResUT.CompR ρ₁ ρ₂ r) (h : ResUT.CompatS ρ r) :
     ResUT.CompatS ρ ρ₁ ∧ ResUT.CompatS ρ ρ₂ := by
   have hfree : ρ.ImmFree := (ResUT.restrict_imm_empty_iff ρ).mp himm

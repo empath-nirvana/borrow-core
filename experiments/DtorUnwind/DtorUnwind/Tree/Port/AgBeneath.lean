@@ -76,7 +76,7 @@ theorem AgWT.nonimm_beneath_imm {ρ σ : ResUT Loc Val K} (h : AgWT ρ σ) :
       · obtain ⟨s'', h'', hσm⟩ := ResUT.CompR.imm_left_get hy₁ hqm
         exact ⟨m, s'', u, χ, h'', ev, av, pp, ξ, hσm, hex, hag, hc, hpn, hkξ,
           hwξ.trans (w'.trans wb), heξ.trans (er'.trans erb)⟩
-      · have hri : (ResUT.restrict ρ' Kind.imm).get q.1 = some (CellUT.immOf s u χ hh) :=
+      · have hri : (G.restrict CellUT.kind ρ' Kind.imm).get q.1 = some (CellUT.immOf s u χ hh) :=
           ResUT.restrict_get_some hρm (CellUT.kind_immOf _ _ _ _)
         obtain ⟨s₁, h₁, ham⟩ := ResUT.CompR.imm_left_get ha hri
         obtain ⟨s'', h'', hσm⟩ := ResUT.CompR.imm_left_get hσ ham

@@ -18,15 +18,15 @@ def ResUT.ImmFree (ρ : ResUT Loc Val K) : Prop :=
   ∀ l ψ, ρ.get l = some ψ → ψ.kind ≠ Kind.imm
 
 theorem ResUT.restrict_imm_empty_iff (ρ : ResUT Loc Val K) :
-    ρ.restrict Kind.imm = PMap.empty ↔ ρ.ImmFree := by
+    (G.restrict CellUT.kind ρ Kind.imm) = PMap.empty ↔ ρ.ImmFree := by
   constructor
   · intro h l ψ hl hk
-    have : (ρ.restrict Kind.imm).get l = some ψ := ResUT.restrict_eq_some.mpr ⟨hl, hk⟩
+    have : (G.restrict CellUT.kind ρ Kind.imm).get l = some ψ := ResUT.restrict_eq_some.mpr ⟨hl, hk⟩
     rw [h] at this
     exact absurd this (by simp)
   · intro h
     refine PMap.ext fun l => ?_
-    cases e : (ρ.restrict Kind.imm).get l with
+    cases e : (G.restrict CellUT.kind ρ Kind.imm).get l with
     | none => rfl
     | some ψ =>
         obtain ⟨hl, hk⟩ := ResUT.restrict_eq_some.mp e
@@ -36,7 +36,7 @@ theorem ResUT.immFree_empty : ResUT.ImmFree (PMap.empty : ResUT Loc Val K) := by
   intro l ψ h; exact absurd h (by simp)
 
 theorem ResUT.immFree_restrict {ρ : ResUT Loc Val K} {k : Kind} (hk : k ≠ Kind.imm) :
-    (ρ.restrict k).ImmFree := by
+    ResUT.ImmFree (ρ := (G.restrict CellUT.kind ρ k)) := by
   intro l ψ h
   exact fun e => hk (((ResUT.restrict_eq_some.mp h).2).symm.trans e)
 
