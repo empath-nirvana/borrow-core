@@ -125,3 +125,6 @@ import DtorUnwind.Tree.Port.AgBeneath
 import DtorUnwind.Tree.Port.Six48
 import DtorUnwind.Tree.Port.SurgeryA
 import DtorUnwind.Tree.Port.Six16to24
+import DtorUnwind.Tree.Port.Strata
+import DtorUnwind.Tree.Port.Down
+import DtorUnwind.Tree.Port.Six27
