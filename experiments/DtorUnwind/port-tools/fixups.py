@@ -54,9 +54,44 @@ end BoCa.Fig16.Tree.BoLo
 """)
     rep("  ⟨fun _ _ _ _ _ => Iff.rfl, fun _ _ _ => Iff.rfl⟩", "  ⟨fun _ _ _ _ _ => Iff.rfl, fun _ _ _ _ => Iff.rfl⟩")
     rep("    (fun l b P => ?_), ⟨τ₁₂, hτ₁₂⟩, ⟨τ₁₃, hτ₁₃⟩⟩", "    (fun l b _ P => ?_), ⟨τ₁₂, hτ₁₂⟩, ⟨τ₁₃, hτ₁₃⟩⟩")
+if name == 'Reborrow':
+    s = s.replace('{α : TSet}', '{α : Life}')
+    s = s.replace('(LSet.singleton α).join', '(TSet.single α)').replace('LSet.singleton α', 'TSet.single α')
+    rep('h.get l with', 'ResUT.Comp.get h l with')
+    rep('hc.dom_left hg', 'ResUT.Comp.dom_left hc hg')
+    rep("hc.dom_right hζ'", "ResUT.Comp.dom_right hc hζ'")
+    rep("hτ.dom_left hζ'", "ResUT.Comp.dom_left hτ hζ'")
+    rep('(∀ x, t.mem x → s.mem x)', 't.set ⊆ s.set')
+    rep('  exact lt_of_lt_of_le hx (LSet.meet_mono_of_subset hts)', '  exact fun a ha c hc => hx a ha c (hts hc)')
+if name == 'ReborrowFrame':
+    s = s.replace('{α : TSet}', '{α : Life}')
+    s = s.replace('(LSet.singleton α).join', '(TSet.single α)').replace('LSet.singleton α', 'TSet.single α')
+    s = s.replace('(∀ x, t.mem x → s.mem x)', 't.set ⊆ s.set')
+    s = re.sub(r'(\w+)\.dom_left ', r'ResUT.Comp.dom_left \1 ', s)
+    s = re.sub(r'(\w+)\.dom_right ', r'ResUT.Comp.dom_right \1 ', s)
+    for n in ['ag_cell_of_reb', 'ag_dom_of_reb', 'frame_compatS_ag', 'frame_compatR_ag']:
+        rep('theorem ResUT.%s {β : TSet}' % n, 'theorem ResUT.%s {β : Life}' % n)
+    rep('    {α : Life} (h₁ : ρ₁.InStratum α) (h₂ : ρ₂.InStratum α) : ρ.InStratum α := by',
+        '    {α : TSet} (h₁ : ρ₁.InStratum α) (h₂ : ρ₂.InStratum α) : ρ.InStratum α := by')
+    rep('    exact ⟨t, ht, fun x hx => Or.inl (hts x hx), e⟩',
+        '    exact ⟨t, ht, fun x hx => Finset.mem_union.mpr (Or.inl (hts hx)), e⟩')
+    rep('    exact ⟨t₁ ∪ t₂, k₃, fun x hx => hx.elim (hts₁ x) (hts₂ x), f⟩',
+        '    exact ⟨t₁ ∪ t₂, k₃, fun x hx => (Finset.mem_union.mp hx).elim (fun h => hts₁ h) (fun h => hts₂ h), f⟩')
+if name == 'ReborrowLowering':
+    s = s.replace('{α : TSet}', '{α : Life}').replace('{β : TSet}', '{β : Life}')
+    s = s.replace('(LSet.singleton α).join', '(TSet.single α)').replace('LSet.singleton α', 'TSet.single α')
+    s = re.sub(r'(\w+)\.dom_left ', r'ResUT.Comp.dom_left \1 ', s)
+    s = re.sub(r'(\w+)\.dom_right ', r'ResUT.Comp.dom_right \1 ', s)
+    rep('    (hts : ∀ x, t.mem x → s.mem x) :\n    CellUT.CompR (CellUT.immOf t v χ ht)',
+        '    (hts : t.set ⊆ s.set) :\n    CellUT.CompR (CellUT.immOf t v χ ht)')
+    rep('  have e : t ∪ s = s := LSet.ext fun x => ⟨fun h => h.elim (hts x) id, Or.inr⟩\n  have h₃ : χ.InStratum (t ∪ s).join := by rw [e]; exact hs',
+        '  have e : t ∪ s = s := TSet.ext (Finset.union_eq_right.mpr hts)\n  have h₃ : χ.InStratum (t ∪ s) := by rw [e]; exact hs')
 open(f, 'w').write(s)
 if name == 'WalkSplitting': drop('CellUT.CompS.kind', 'CellUT.CompS.wit')
 if name == 'Compatibility': drop('CellUT.compatS_iff')
 if name == 'Split': drop('ResUT.CompS.assoc', 'CellUT.compatR_iff')
 if name == 'AlgebraInstances': drop('ResUT.CompR.comm', 'ResUT.CompR.assoc', 'CellUT.CompS.at', 'CellUT.CompS.inStratum')
 if name == 'UpdateFrame': drop('wandAll')
+if name == 'Reborrow': drop('ResUT.sites_nil_of_none', 'ResUT.sites_singleton_of', 'BigCompT.nil_inv')
+if name == 'ReborrowFrame': drop('ResUT.del_compS')
+if name == 'Subtraction': subprocess.run(['python3', S+'subfix.py', f], check=True)

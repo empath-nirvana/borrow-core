@@ -128,6 +128,12 @@ import DtorUnwind.Tree.Port.Six16to24
 import DtorUnwind.Tree.Port.Strata
 import DtorUnwind.Tree.Port.Down
 import DtorUnwind.Tree.Port.Six27
+import DtorUnwind.Tree.Port.RebDef
+import DtorUnwind.Tree.Port.Reborrow
+import DtorUnwind.Tree.Port.ReborrowFrame
+import DtorUnwind.Tree.Port.ReborrowLowering
+import DtorUnwind.Tree.Port.SubDef
+import DtorUnwind.Tree.Port.Subtraction
 import DtorUnwind.Tree.CarrierSim
 import DtorUnwind.Tree.KSem
 import DtorUnwind.Tree.KSemGraft

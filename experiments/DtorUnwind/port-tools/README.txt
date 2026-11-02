@@ -7,3 +7,5 @@ drop.py   removes declarations by name (duplicates of carrier lemmas).
 regen.sh  regenerates the ported files in dependency order: ./regen.sh [FIRST]
 *.lean.txt  source fragments some ports are assembled from.
 Strata, Down, Six27, SurgeryA, Six16to24 were translated and then edited by hand.
+RebDef and SubDef (rows 5.28, 5.47, 5.64, 5.66) are written by hand.
+subfix.py and sub_lset*.lean.txt: the lifetime-set lemmas of the Subtraction port, on TSet.
