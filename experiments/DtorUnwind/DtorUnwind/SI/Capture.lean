@@ -14,9 +14,11 @@ folded back: the other task holds it.
 
 * **Records are owned.** A run starts owning the records `O` and ends owning `O′`; the frame's
   records `psF` are kept (`Split ps O psF` before, `Split ps′ O′ psF` after). A frame opened and
-  left open at a stop is a record the stop's continuation owns; ending it needs the record to be
-  a record proper at the resume, which no list condition says (a typed world can hold the same
-  record as a sub-record of another one). Ownership is what the resumer hands back.
+  left open at a stop is a record the stop's continuation owns; ending it (`TWNC.immEnd`) needs
+  the record to be a record proper at the resume. The list conditions used so far (`extF`,
+  `Tagged`) give that the record is in the lineage of a record proper, not that it is one; I have
+  not derived the stronger fact from them and have not verified that it fails. Ownership is what
+  the resumer hands back.
 * **No garbage.** The post-configuration has no `ρ⁺`: everything the run holds at the end is in
   the postcondition's resource. A borrow dropped into `ρ⁺` at a stop would sit in every later
   frame, and the lender, at a later segment, could not take it back; at a return `ρ⁺` is the
