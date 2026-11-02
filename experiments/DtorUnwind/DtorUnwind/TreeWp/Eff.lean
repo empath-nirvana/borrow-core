@@ -68,7 +68,7 @@ the share's re-reading there, resumed at every answer at every `k′ < k` under 
 def contShareT (en : OpEntT) (F : TFrame) (k : Nat) (w : TWd) (K : Kont) (v : Val) (Ψ : ContT) :
     TRes w.K → Prop := fun ρ =>
   (en.q = .unr → ρ = PMap.empty) ∧
-  ∀ (w' : TWd) (ρ' : TRes w'.K), w.Ext w' → RRw (w := w) (w' := w') ρ ρ' →
+  ∀ (w' : TWd) (ρ' : TRes w'.K), w.Ext w' ρ → RRw (w := w) (w' := w') ρ ρ' →
     (∀ k', k' < k → ∀ (a : Val) (σ σ' : TRes w'.K), en.PBv v k' w' a σ →
       ResUT.CompS ρ' σ σ' → Ψ (fun w'' ρf => F w'' ρf ∧ en.fd v w'' ρf) k' w'
         (K.plug (.val a)) σ') ∧
@@ -146,7 +146,7 @@ theorem cerwpT_zero {Tb : TableT} {Q : TPostV} {F : TFrame} {w : TWd} {e : Expr}
 
 /-- **`cerwpT` is monotone along world extension.** -/
 theorem cerwpT_kripke {Tb : TableT} {Q : TPostV} {F : TFrame} {n : Nat} {w w₁ : TWd}
-    {e : Expr} {ρ : TRes w.K} {ρ₁ : TRes w₁.K} (hE : w.Ext w₁)
+    {e : Expr} {ρ : TRes w.K} {ρ₁ : TRes w₁.K} (hE : w.Ext w₁ ρ)
     (hr : RRw (w := w) (w' := w₁) ρ ρ₁) (h : cerwpT (ℍ := ℍ) Tb Q F n w e ρ) :
     cerwpT (ℍ := ℍ) Tb Q F n w₁ e ρ₁ := by
   rw [cerwpT_eq] at h ⊢
@@ -161,21 +161,21 @@ theorem cerwpT_step {Tb : TableT} (hL : Tb.Local) {Q : TPostV} {F : TFrame} {n :
 /-- A value in the postcondition, at every extension. -/
 theorem cerwpT_val {Tb : TableT} {Q : TPostV} {F : TFrame} {n : Nat} {w : TWd} {v : Val}
     {ρ : TRes w.K}
-    (h : ∀ (w₀ : TWd) (ρ₀ : TRes w₀.K), w.Ext w₀ → RRw (w := w) (w' := w₀) ρ ρ₀ → Q n w₀ v ρ₀) :
+    (h : ∀ (w₀ : TWd) (ρ₀ : TRes w₀.K), w.Ext w₀ ρ → RRw (w := w) (w' := w₀) ρ ρ₀ → Q n w₀ v ρ₀) :
     cerwpT (ℍ := ℍ) Tb Q F n w v.1 ρ := by
   rw [cerwpT_eq]
   exact twp_here (fun μ => final_val μ v) fun w₀ ρ₀ hE hr => Or.inl ⟨v, rfl, h w₀ ρ₀ hE hr⟩
 
 /-- A table carried along re-reading. -/
 def TableT.Mono (Tb : TableT) : Prop :=
-  ∀ F k (w w' : TWd) t Ψ (ρ : TRes w.K) (ρ' : TRes w'.K), w.Ext w' →
+  ∀ F k (w w' : TWd) t Ψ (ρ : TRes w.K) (ρ' : TRes w'.K), w.Ext w' ρ →
     RRw (w := w) (w' := w') ρ ρ' → Tb F k w t Ψ ρ → Tb F k w' t Ψ ρ'
 
 /-- **A stop at a non-abortive operation the table allows**, at every extension of the world. -/
 theorem cerwpT_perform {T : OpTabT} {Q : TPostV} {F : TFrame} (K : Kont) {m i : UInt32}
     {v : Val} {en : OpEntT} (hK : K.HasHnd m = false) (hT : T m i = some en)
     (ha : en.abort = false) {n : Nat} {w : TWd} {ρ : TRes w.K}
-    (h : ∀ (w₀ : TWd) (ρ₀ : TRes w₀.K), w.Ext w₀ → RRw (w := w) (w' := w₀) ρ ρ₀ →
+    (h : ∀ (w₀ : TWd) (ρ₀ : TRes w₀.K), w.Ext w₀ ρ → RRw (w := w) (w' := w₀) ρ ρ₀ →
       ∃ ρa ρk : TRes w₀.K, ResUT.CompS ρa ρk ρ₀ ∧ en.PA n w₀ v ρa ∧
         contShareT en F n w₀ K v (cerwpTC (ℍ := ℍ) (opTableT T) Q n) ρk) :
     cerwpT (ℍ := ℍ) (opTableT T) Q F n w (K.plug (performE (.val (opPayload m i v)))) ρ := by
@@ -193,7 +193,7 @@ child, a grown store typing), resumed with an answer in `PBv` beside it, is the 
 `w′` under the frame condition extended by the entry's `fd`. -/
 theorem contShareT_resume {en : OpEntT} {F : TFrame} {k : Nat} {w w' : TWd} {K : Kont}
     {v : Val} {Ψ : ContT} {ρ : TRes w.K} {ρ' : TRes w'.K} (h : contShareT en F k w K v Ψ ρ)
-    (hE : w.Ext w') (hr : RRw (w := w) (w' := w') ρ ρ') {k' : Nat} (hk : k' < k) {a : Val}
+    (hE : w.Ext w' ρ) (hr : RRw (w := w) (w' := w') ρ ρ') {k' : Nat} (hk : k' < k) {a : Val}
     {σ σ' : TRes w'.K} (hB : en.PBv v k' w' a σ) (hc : ResUT.CompS ρ' σ σ') :
     Ψ (fun w'' ρf => F w'' ρf ∧ en.fd v w'' ρf) k' w' (K.plug (.val a)) σ' :=
   (h.2 w' ρ' hE hr).1 k' hk a σ σ' hB hc
@@ -201,17 +201,17 @@ theorem contShareT_resume {en : OpEntT} {F : TFrame} {k : Nat} {w w' : TWd} {K :
 /-- **The share is carried along re-reading**: a stored share is a resource in the scheduler's
 frame, re-read whenever the world grows. -/
 theorem contShareT_mono {en : OpEntT} {F : TFrame} {k : Nat} {K : Kont} {v : Val} {Ψ : ContT} :
-    TRProp.Mono (fun w ρ => ∃ w₀ : TWd, ∃ ρ₀ : TRes w₀.K, w₀.Ext w ∧
+    TRProp.Mono (fun w ρ => ∃ w₀ : TWd, ∃ ρ₀ : TRes w₀.K, w₀.Ext w ρ₀ ∧
       RRw (w := w₀) (w' := w) ρ₀ ρ ∧ contShareT en F k w₀ K v Ψ ρ₀) := by
   intro w w' ρ ρ' hE hr ⟨w₀, ρ₀, hE₀, hr₀, hs⟩
-  exact ⟨w₀, ρ₀, hE₀.trans hE, RRw.trans hE hr₀ hr, hs⟩
+  exact ⟨w₀, ρ₀, hE₀.trans hr₀ hE, RRw.trans hE.1 hr₀ hr, hs⟩
 
 /-- A share captured at `w` is a share at every extension of `w` on its re-reading. -/
 theorem contShareT_kripke {en : OpEntT} {F : TFrame} {k : Nat} {w w₁ : TWd} {K : Kont}
     {v : Val} {Ψ : ContT} {ρ : TRes w.K} {ρ₁ : TRes w₁.K} (h : contShareT en F k w K v Ψ ρ)
-    (hE : w.Ext w₁) (hr : RRw (w := w) (w' := w₁) ρ ρ₁) (hu : en.q = .unr → ρ₁ = PMap.empty) :
+    (hE : w.Ext w₁ ρ) (hr : RRw (w := w) (w' := w₁) ρ ρ₁) (hu : en.q = .unr → ρ₁ = PMap.empty) :
     contShareT en F k w₁ K v Ψ ρ₁ :=
-  ⟨hu, fun w' ρ' hE' hr' => h.2 w' ρ' (hE.trans hE') (RRw.trans hE' hr hr')⟩
+  ⟨hu, fun w' ρ' hE' hr' => h.2 w' ρ' (hE.trans hr hE') (RRw.trans hE'.1 hr hr')⟩
 
 end BoCa.Fig16.Tree.Wp
 

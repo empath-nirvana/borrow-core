@@ -15,8 +15,8 @@ The operations, each proved to keep the invariant:
 * **step** (`cactusT_step`): the running branch at `twp` under the frame of the others ends at a
   world extending the start, the others **re-read** there (in `SI/` they were untouched; the
   tree grew under them);
-* **grow** (`cactusT_extend`): a fresh child or a graft extends the world, every branch re-read
-  (`CompAllT.reread`);
+* **grow** (`cactusT_extend`): a fresh child, a graft or a re-typing of a location no `mut` cell
+  is at extends the world, every branch re-read (`CompAllT.reread`) and carried;
 * **capture / move** (`cactusT_move`): a part leaves one branch for another (a continuation's
   share stored by the scheduler, a borrow handed to a joiner); world and memory unchanged;
 * **unwind** is a step of the cancelled branch's `fin` obligation at `twp`, so it is
@@ -60,11 +60,13 @@ theorem compAllT_functional {K : WCactus} {ρs : List (TRes K)} {W W' : TRes K}
           cases ih hr'
           exact ResUT.CompS.functional hc hc'
 
-/-- **The re-reading of the world is the branches' re-readings composed.** -/
-theorem CompAllT.reread {w w' : TWd} (hE : w.Ext w') (hM : MonoΘ w'.Θ) {bs : List (TRes w.K)}
-    {W : TRes w.K} (h : CompAllT bs W) (hc : CovR w.Θ w.K W) {W' : TRes w'.K}
+/-- **The re-reading of the world is the branches' re-readings composed**, each branch carried
+by the extension. -/
+theorem CompAllT.reread {w w' : TWd} {bs : List (TRes w.K)} {W : TRes w.K}
+    (h : CompAllT bs W) (hE : w.Ext w' W) (hc : CovR (sem w.Θ) w.K W) {W' : TRes w'.K}
     (hr : RRw (w := w) (w' := w') W W') :
-    ∃ bs' : List (TRes w'.K), List.Forall₂ (fun a b => RRw (w := w) (w' := w') a b) bs bs' ∧
+    ∃ bs' : List (TRes w'.K),
+      List.Forall₂ (fun a b => w.Ext w' a ∧ RRw (w := w) (w' := w') a b) bs bs' ∧
       CompAllT bs' W' := by
   induction h generalizing W' with
   | nil =>
@@ -72,9 +74,9 @@ theorem CompAllT.reread {w w' : TWd} (hE : w.Ext w') (hM : MonoΘ w'.Θ) {bs : L
       obtain rfl := RR.of_empty hr
       exact .nil
   | @cons ρ W₀ W₁ ρs hr₁ hc₁ ih =>
-      obtain ⟨a', b', ha, hb, hab⟩ := RR.split hE.1 hM hc₁ (hc.mono hE.2) hr
-      obtain ⟨bs', h₂, h₃⟩ := ih (CovR.of_compS_right hc₁ hc) hb
-      exact ⟨a' :: bs', .cons ha h₂, .cons h₃ hab⟩
+      obtain ⟨a', b', ha, hb, hab⟩ := RR.split_retype hE.1 hc₁ hc hE.2 hr
+      obtain ⟨bs', h₂, h₃⟩ := ih (hE.of_compS_right hc₁) (CovR.of_compS_right hc₁ hc) hb
+      exact ⟨a' :: bs', .cons ⟨hE.of_compS_left hc₁, ha⟩ h₂, .cons h₃ hab⟩
 
 /-- **The running branch and its frame.** -/
 theorem cactusT_frame {w : TWd} {ρ : TRes w.K} {rest : List (TRes w.K)} {W : TRes w.K}
@@ -95,24 +97,25 @@ theorem cactusT_step {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {e : Expr} {ρ
     (hF : ∀ ρf, CompAllT rest ρf → F w ρf) (hfd : FinDom μ)
     {j : Nat} {μ' : Heap} {e' : Expr} (hj : j < n) (hrun : StepsN (ℍ := ℍ) j μ e μ' e')
     (hfin : Final (ℍ := ℍ) μ' e') :
-    ∃ (w' : TWd) (ρ' W' : TRes w'.K) (rest' : List (TRes w'.K)), w.Ext w' ∧
-      List.Forall₂ (fun a b => RRw (w := w) (w' := w') a b) rest rest' ∧
+    ∃ (w' : TWd) (ρ' W' : TRes w'.K) (rest' : List (TRes w'.K)), w.K.Ext w'.K ∧
+      List.Forall₂ (fun a b => w.Ext w' a ∧ RRw (w := w) (w' := w') a b) rest rest' ∧
       CactusInvT w' (ρ' :: rest') W' μ' ∧ Q (n - j) w' e' ρ' := by
   obtain ⟨ρf, hr, hf, hc, hI'⟩ := cactusT_frame hI
-  have hcov : CovR w.Θ w.K ρ := cov_of_comp hc hI'
+  have hcov : CovR (sem w.Θ) w.K ρ := cov_of_comp hc hI'
   obtain ⟨w', ρf', ρ', fρ', g₀, g₁, g₂, g₃, g₄, g₅⟩ :=
-    h w ρ ρf W μ (TWd.Ext.refl _) (RR.refl hcov) (hF ρf hr) hf hc hI' hfd j μ' e' hj hrun hfin
-  obtain ⟨rest', h₁, h₂⟩ := CompAllT.reread g₀ g₄.2.1.monoΘ hr (covf_of_comp hc hI') g₁
-  exact ⟨w', ρ', fρ', rest', g₀, h₁, ⟨.cons h₂ (ResUT.CompS.comm g₃), g₄⟩, g₅⟩
+    h w ρ ρf W μ (TWd.Ext.refl _ _) (RR.refl hcov) (hF ρf hr) hf hc hI' hfd j μ' e' hj hrun hfin
+  obtain ⟨rest', h₁, h₂⟩ := CompAllT.reread hr g₀ (covf_of_comp hc hI') g₁
+  exact ⟨w', ρ', fρ', rest', g₀.1, h₁, ⟨.cons h₂ (ResUT.CompS.comm g₃), g₄⟩, g₅⟩
 
-/-- **The tree grows under every branch**: a fresh child or a graft, the world re-read, every
-branch re-read. -/
-theorem cactusT_extend {w w' : TWd} (hE : w.Ext w') (hM : MonoUp w'.Θ) {bs : List (TRes w.K)}
-    {W : TRes w.K} {μ : Heap} (h : CactusInvT w bs W μ) :
+/-- **The world changes under every branch**: a fresh child, a graft, a location no `mut` cell
+is at re-typed; the world re-read, every branch re-read. -/
+theorem cactusT_extend {w w' : TWd} {bs : List (TRes w.K)} {W : TRes w.K} (hE : w.Ext w' W)
+    {μ : Heap} (h : CactusInvT w bs W μ) :
     ∃ (bs' : List (TRes w'.K)) (W' : TRes w'.K),
-      List.Forall₂ (fun a b => RRw (w := w) (w' := w') a b) bs bs' ∧ CactusInvT w' bs' W' μ := by
-  obtain ⟨W', hr, hI'⟩ := h.2.reread hE hM
-  obtain ⟨bs', h₁, h₂⟩ := CompAllT.reread hE hM.monoΘ h.1 h.2.1 hr
+      List.Forall₂ (fun a b => w.Ext w' a ∧ RRw (w := w) (w' := w') a b) bs bs' ∧
+      CactusInvT w' bs' W' μ := by
+  obtain ⟨W', hr, hI'⟩ := h.2.reread hE
+  obtain ⟨bs', h₁, h₂⟩ := CompAllT.reread h.1 hE h.2.1 hr
   exact ⟨bs', W', h₁, h₂, hI'⟩
 
 /-- **The scheduler moves a part between branches**: `σ` leaves the first branch for the second;
@@ -142,7 +145,7 @@ theorem lower_emptyT {K : WCactus} :
 /-- The empty world at any tree and the empty store typing. -/
 theorem winv_empty (P : ParentFn) :
     WInv ⟨P, fun _ => none⟩ (PMap.empty : TRes (WCactus.ofParent P)) (fun _ => none) :=
-  ⟨fun _ _ e => by simp at e, fun _ _ e => by simp at e, lower_emptyT⟩
+  ⟨fun _ _ e => by simp at e, lower_emptyT⟩
 
 /-- Nothing stops at the empty table. -/
 def OpTabT.empty : OpTabT := fun _ _ => none
@@ -177,7 +180,7 @@ theorem cerwpT_adequacy (P : ParentFn) {Q : TPostV} {P₀ : Expr}
       | cons hr hc =>
           cases hr
           obtain rfl := ResUT.CompS.functional hc (ResUT.compS_empty_right _)
-          exact ⟨v, rfl, ResUT.Lower.functional hI'.2.2 lower_emptyT⟩
+          exact ⟨v, rfl, ResUT.Lower.functional hI'.2 lower_emptyT⟩
     · exact (opTableT_empty_false ht).elim
   have hp : IsVal e ∨ ∃ μ' e', Step1 (ℍ := ℍ) μ e μ' e' := by
     by_cases hst : ∃ μ' e', Step1 (ℍ := ℍ) μ e μ' e'

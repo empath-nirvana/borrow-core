@@ -1,17 +1,19 @@
-import DtorUnwind.TreeWp.Clause3
+import DtorUnwind.Tree.KSem
+import DtorUnwind.Tree.Port.WalkSplitting
 
 /-!
 # Store types as syntactic codes read at the tree
 
 `Tree/KSem.lean`'s store typing `Θ : Loc → Option KSem` gives each location a semantic type, and
 `𝒱⟦Mut @a τ⟧` (`vMut`) compares `Θ ℓ` with `τ` as semantic values. A location's type is then
-fixed for the run (`LocTy.Le` is growth only). Here, as Core's `FrameRec.T` is a syntactic type
+fixed for the run. Here, as Core's `FrameRec.T` is a syntactic type
 read at a substitution, a store type is a code (`KTy`) and its meaning is read at the tree and at
 the code typing (`KTy.interp`). The `Mut` clause reads `Θ ℓ = A` syntactically and stores `A`'s
 meaning, so `interp` is structural in the code: there is no circularity to resolve.
 
-* **The semantic typing is `sem Θ`** (`ℓ ↦ ⟦Θ ℓ⟧_Θ`); `Cov`, `RC`, `RR`, `WInv` are read at it
-  unchanged, so every result of `Tree/KSem.lean` and `TreeWp/World.lean` applies.
+* **The semantic typing is `sem Θ`** (`ℓ ↦ ⟦Θ ℓ⟧_Θ`); `Cov`, `RC`, `RR` are read at it unchanged,
+  so every result of `Tree/KSem.lean` applies. The tree world (`TreeWp/World.lean`) carries a
+  code typing and reads its cells at `sem`.
 * **Every code is monotone** (`interp_retype` at `Θ' = Θ`, `monoΘ_sem`): the hypothesis
   `MonoΘ` holds of every code typing.
 * **A location may be re-typed** when no `mut` cell at it is held (`RR.exists_retype`): a world
@@ -19,6 +21,10 @@ meaning, so `interp` is structural in the code: there is no circularity to resol
   agreeing with `Θ` on the locations the world holds a `mut` cell at (`HoldsMut`, at any depth).
   A freed location holds no cell, so it is re-typed by a re-reading. At `Θ' = Θ` and `K' = K` the
   re-reading is the identity (`RR.refl`).
+* **Re-readings compose across re-typings** (`RR.trans_retype`): `RC` constrains only the
+  re-read cell's invariant, so a re-reading at `sem Θ₁` followed by one at `sem Θ₂` is one at
+  `sem Θ₂`. The held `mut` locations are kept by re-reading (`HoldsMut.rr`) and are those of the
+  parts of a composite (`HoldsMut.of_compS_left`), so agreement passes along both.
 
 The codes are the formers whose meaning `Tree/KSem.lean` builds at the tree (`1`, `+`, `Imm`,
 `Mut`, `[a]`); `ref` and thunks are not coded here.
@@ -220,6 +226,82 @@ theorem agreeOn_set {K : WCactus} (Θ : CodeTy) {l₀ : BoCa.Loc} (B : Option KT
   intro l hl
   have : l ≠ l₀ := fun e => h (e ▸ hl)
   simp [this]
+
+/-! ### Held `mut` locations along re-reading and composition -/
+
+/-- **A re-reading keeps the held `mut` locations.** -/
+theorem HoldsMut.rr {Θ : LocTy} {K K' : WCactus} {ρ : TRes K} {l : BoCa.Loc} (h : HoldsMut ρ l) :
+    ∀ {ρ' : TRes K'}, RR Θ ρ ρ' → HoldsMut ρ' l := by
+  induction h with
+  | top e =>
+      intro ρ' hr
+      obtain ⟨ψ', e', hc⟩ := hr.get_some e
+      cases hc with
+      | «mut» _ _ m' => exact .top e'
+  | deep e _ ih =>
+      intro ρ' hr
+      obtain ⟨ψ', e', hc⟩ := hr.get_some e
+      exact .deep e' (ih hc.wit)
+
+/-- A `mut` cell held by a part is held by the composite. -/
+theorem HoldsMut.of_compS_left {K : WCactus} {a b y : TRes K} (hc : ResUT.CompS a b y)
+    {l : BoCa.Loc} (h : HoldsMut a l) : HoldsMut y l := by
+  cases h with
+  | top e => exact .top (hc.get_left_of_ne_imm e (by simp [CellUT.kind])).2
+  | deep e h =>
+      obtain ⟨ψ, e', -, hw⟩ := hc.get_left e
+      exact .deep e' (hw ▸ h)
+
+theorem HoldsMut.of_compS_right {K : WCactus} {a b y : TRes K} (hc : ResUT.CompS a b y)
+    {l : BoCa.Loc} (h : HoldsMut b l) : HoldsMut y l :=
+  HoldsMut.of_compS_left (ResUT.CompS.comm hc) h
+
+theorem AgreeOn.of_compS_left {K : WCactus} {Θ Θ' : CodeTy} {a b y : TRes K}
+    (hc : ResUT.CompS a b y) (h : AgreeOn Θ Θ' y) : AgreeOn Θ Θ' a :=
+  fun l hl => h l (hl.of_compS_left hc)
+
+theorem AgreeOn.of_compS_right {K : WCactus} {Θ Θ' : CodeTy} {a b y : TRes K}
+    (hc : ResUT.CompS a b y) (h : AgreeOn Θ Θ' y) : AgreeOn Θ Θ' b :=
+  fun l hl => h l (hl.of_compS_right hc)
+
+/-- **Agreement composes along a re-reading.** -/
+theorem AgreeOn.trans {Θ : LocTy} {K K' : WCactus} {Θ₁ Θ₂ Θ₃ : CodeTy} {ρ : TRes K}
+    {ρ' : TRes K'} (h₁ : AgreeOn Θ₁ Θ₂ ρ) (hr : RR Θ ρ ρ') (h₂ : AgreeOn Θ₂ Θ₃ ρ') :
+    AgreeOn Θ₁ Θ₃ ρ :=
+  fun l hl => (h₂ l (hl.rr hr)).trans (h₁ l hl)
+
+/-! ### Re-readings across re-typings compose -/
+
+/-- `RC.trans`'s proof, the second re-reading at another typing: `RC` constrains only the
+re-read cell's invariant, so the composite is read at the second typing. -/
+theorem RC.trans_retype {Θ₁ Θ₂ : LocTy} {K K' K'' : WCactus} (hE' : K'.Ext K'') {l : BoCa.Loc}
+    {ψ : TCell K} {ψ' : TCell K'} (h : RC Θ₁ l ψ ψ') :
+    ∀ {ψ'' : TCell K''}, RC Θ₂ l ψ' ψ'' → RC Θ₂ l ψ ψ'' := by
+  induction h with
+  | own l v => intro ψ'' h'; cases h'; exact .own l v
+  | imm l i i' hs hv hdom hw ih =>
+      intro ψ'' h'
+      cases h' with
+      | imm _ _ i'' hs' hv' hdom' hw' =>
+          refine .imm l i i'' (hs'.trans hs) (hv'.trans hv) (fun k => (hdom k).trans (hdom' k))
+            fun k ψ ψ'' e e'' => ?_
+          obtain ⟨ψ', e', hr⟩ := RR.get_some (Θ := Θ₁) ⟨hdom, hw⟩ e
+          exact ih k ψ ψ' e e' (hw' k ψ' ψ'' e' e'')
+  | «mut» l m m' τ hΘ hs hv hdom hw hP ih =>
+      intro ψ'' h'
+      cases h' with
+      | «mut» _ _ m'' τ' hΘ' hs' hv' hdom' hw' hP' =>
+          refine .mut l m m'' τ' hΘ' (by rw [hs', hs, WCactus.minS_minS hE']) (hv'.trans hv)
+            (fun k => (hdom k).trans (hdom' k)) (fun k ψ ψ'' e e'' => ?_) hP'
+          obtain ⟨ψ', e', hr⟩ := RR.get_some (Θ := Θ₁) ⟨hdom, hw⟩ e
+          exact ih k ψ ψ' e e' (hw' k ψ' ψ'' e' e'')
+
+/-- **Re-readings across re-typings compose.** At `Θ₁ = Θ₂` this is `RR.trans`. -/
+theorem RR.trans_retype {Θ₁ Θ₂ : LocTy} {K K' K'' : WCactus} (hE' : K'.Ext K'') {ρ : TRes K}
+    {ρ' : TRes K'} {ρ'' : TRes K''} (h : RR Θ₁ ρ ρ') (h' : RR Θ₂ ρ' ρ'') : RR Θ₂ ρ ρ'' := by
+  refine ⟨fun k => (h.1 k).trans (h'.1 k), fun k ψ ψ'' e e'' => ?_⟩
+  obtain ⟨ψ', e', hr⟩ := h.get_some e
+  exact RC.trans_retype hE' hr (h'.2 k ψ' ψ'' e' e'')
 
 end BoCa.Fig16.Tree.Wp
 

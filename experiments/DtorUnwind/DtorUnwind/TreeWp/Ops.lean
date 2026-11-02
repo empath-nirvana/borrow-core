@@ -12,16 +12,16 @@ tree-stratified carrier (`Tree/Port/`):
 
 * **fresh lend, `imm`**: `ℓ ↦ own(v) ● ρ_v` becomes `ℓ ↦ imm({α}, v, ρ_v)`: `#` by 6.34, `⟦·⟧`
   by 6.26 and 6.8 (`immLend_world`);
-* **fresh lend, `mut`**: `ℓ ↦ mut({α}, v, ρ_v, 𝒱⟦Θ ℓ⟧_K)`: `#` by 6.23, `⟦·⟧` by 6.25; the cell
-  is covered because its invariant is `Θ ℓ` read at the current tree (`mutLend_world`);
+* **fresh lend, `mut`**: `ℓ ↦ mut({α}, v, ρ_v, ⟦Θ ℓ⟧_K)`: `#` by 6.23, `⟦·⟧` by 6.25; the cell
+  is covered because its invariant is the code `Θ ℓ` read at the current tree (`mutLend_world`);
 * **end of a `mut` lend**: back to `own(v) ● ρ_v`: `#` by 6.22, `⟦·⟧` by 6.25 (`mutEnd_world`);
 * **fresh child, graft**: `ParentFn.graftOf` moves a subtree's root under a new parent; when the
   old parent is above the new one the tree is extended (`TWd.graft_ext`), and `cactusT_extend`
   re-reads every branch. A fresh child is the graft of an unused leaf from `⊤`
   (`TWd.fresh_ext`).
-* **the store typing grows** at a `mut` lend of a location it does not type (`TWd.addTy`,
-  `TWd.addTy_ext`); `Cov`, `RC`, `RR` read at the old typing hold at the new (`Cov.mono`,
-  `RR.mono`). A location keeps its type for the whole run: `LocTy.Le` is growth only.
+* **a location re-typed** (`TWd.setTy`): the world extends carrying any resource that holds no
+  `mut` cell there (`TWd.setTy_ext`, from `agreeOn_set`), so a fresh or freed location takes a
+  new code, and `cactusT_extend` re-reads every branch.
 * **capture** is `cactusT_move`.
 
 `winv_swap` is the shape all resource changes share: a part `A` of the world replaced by `B`,
@@ -61,7 +61,7 @@ theorem winv_swap {w : TWd} {X A B fρ : TRes w.K} {μ : BoCa.Loc → Option BoC
     (hc : ResUT.CompS X A fρ) (hI : WInv w fρ μ) (hh : ResUT.Hash X A → ResUT.Hash X B)
     (hl : ResUT.Valid B → ResUT.Valid A →
       ∀ m, ResUT.Lower B m ↔ ResUT.Lower A m)
-    (hcov : CovR w.Θ w.K A → CovR w.Θ w.K B) :
+    (hcov : CovR (sem w.Θ) w.K A → CovR (sem w.Θ) w.K B) :
     ∃ fρ', ResUT.CompS X B fρ' ∧ WInv w fρ' μ ∧ ResUT.Hash X B := by
   have hXA : ResUT.Hash X A := hash_of_inv hc hI
   have hXB := hh hXA
@@ -69,8 +69,8 @@ theorem winv_swap {w : TWd} {X A B fρ : TRes w.K} {μ : BoCa.Loc → Option BoC
   have hvA := (ResUT.Valid.split hc hI.valid).2
   have hvB := (ResUT.Valid.split hc' hv').2
   have hL := ResUT.lower_congr_iff (fun m => (hl hvB hvA m).symm) hc hXA hc' hXB
-  refine ⟨fρ', hc', ⟨CovR.compS (covf_of_comp hc hI) (hcov (cov_of_comp hc hI)) hc', hI.2.1,
-    (hL μ).mp hI.2.2⟩, hXB⟩
+  refine ⟨fρ', hc', ⟨CovR.compS (covf_of_comp hc hI) (hcov (cov_of_comp hc hI)) hc',
+    (hL μ).mp hI.2⟩, hXB⟩
 
 /-! ### Lends -/
 
@@ -85,7 +85,7 @@ theorem immLend_world {w : TWd} {X W fρ ρv : TRes w.K} {μ : BoCa.Loc → Opti
   refine winv_swap hc hI (fun h => ResUT.six34 hW h) (fun hvB hvA m => ResUT.six26 hW hvB hvA)
     fun hcW => ?_
   intro m ψ e
-  have hcv : CovR w.Θ w.K ρv := CovR.of_compS_left hW hcW
+  have hcv : CovR (sem w.Θ) w.K ρv := CovR.of_compS_left hW hcW
   rw [ResUT.single, PMap.sng_get] at e
   split_ifs at e with hm
   cases e
@@ -96,26 +96,27 @@ def tyPred (τ : KSem) (K : WCactus) (s : TSet) : BoCa.Val → SPropST BoCa.Loc 
   fun v r => τ.P K v r.val
 
 /-- **A fresh `mut` lend at the world**: `ℓ ↦ own(v)` beside `ρ_v` becomes
-`ℓ ↦ mut(s, v, ρ_v, 𝒱⟦τ⟧_K)` where `Θ ℓ = τ` (6.23, 6.25, 6.8). The payload is in `τ` at the
+`ℓ ↦ mut(s, v, ρ_v, ⟦A⟧_K)` where `Θ ℓ = A` (6.23, 6.25, 6.8). The payload is in `A` at the
 current tree (`hτ`): that is the lender's obligation. -/
 theorem mutLend_world {w : TWd} {X W fρ ρv : TRes w.K} {μ : BoCa.Loc → Option BoCa.Val}
-    {l : BoCa.Loc} {s : TSet} [Fact (w.K.Anti s)] {v : BoCa.Val} {τ : KSem} (hΘ : w.Θ l = some τ)
-    (hs : ρv.InStratum s) (hτ : τ.P w.K v ρv)
+    {l : BoCa.Loc} {s : TSet} [Fact (w.K.Anti s)] {v : BoCa.Val} {A : KTy} (hΘ : w.Θ l = some A)
+    (hs : ρv.InStratum s) (hτ : (A.interp w.Θ).P w.K v ρv)
     (hW : ResUT.CompS ρv (ResUT.single l (CellUT.ownOf v)) W) (hc : ResUT.CompS X W fρ)
     (hI : WInv w fρ μ) :
     ∃ fρ', ResUT.CompS X (ResUT.single l
-        (CellUT.mutOf s v ρv hs (tyPred τ w.K s) hτ)) fρ' ∧ WInv w fρ' μ ∧
-      ResUT.Hash X (ResUT.single l (CellUT.mutOf s v ρv hs (tyPred τ w.K s) hτ)) := by
+        (CellUT.mutOf s v ρv hs (tyPred (A.interp w.Θ) w.K s) hτ)) fρ' ∧ WInv w fρ' μ ∧
+      ResUT.Hash X (ResUT.single l
+        (CellUT.mutOf s v ρv hs (tyPred (A.interp w.Θ) w.K s) hτ)) := by
   refine winv_swap hc hI (fun h => ResUT.six23 hW h) (fun hvB hvA m => ResUT.six25 hW hvB hvA)
     fun hcW => ?_
   intro m ψ e
-  have hcv : CovR w.Θ w.K ρv := CovR.of_compS_left hW hcW
+  have hcv : CovR (sem w.Θ) w.K ρv := CovR.of_compS_left hW hcW
   rw [ResUT.single, PMap.sng_get] at e
   split_ifs at e with hm
   cases e
   subst hm
-  refine .mut _ _ τ hΘ (fun w' r => ?_) (fun k ψ e => hcv k ψ ?_)
-  · show tyPred τ w.K s w' r.toS ↔ τ.P w.K w' r.toU
+  refine .mut _ _ _ (sem_of hΘ) (fun w' r => ?_) (fun k ψ e => hcv k ψ ?_)
+  · show tyPred (A.interp w.Θ) w.K s w' r.toS ↔ (A.interp w.Θ).P w.K w' r.toU
     rfl
   · simpa [MutT.res, ResST.toU_toRes] using e
 
@@ -129,7 +130,7 @@ theorem mutEnd_world {w : TWd} {X W fρ ρv : TRes w.K} {μ : BoCa.Loc → Optio
     ∃ fρ', ResUT.CompS X W fρ' ∧ WInv w fρ' μ ∧ ResUT.Hash X W := by
   refine winv_swap hc hI (fun h => ResUT.six22 hW h)
     (fun hvB hvA m => (ResUT.six25 hW hvA hvB).symm) fun hcm => ?_
-  have hcv : CovR w.Θ w.K ρv := by
+  have hcv : CovR (sem w.Θ) w.K ρv := by
     intro k ψ e
     have h := hcm l _ (by rw [ResUT.single, PMap.sng_get, if_pos rfl])
     cases h with
@@ -142,6 +143,7 @@ theorem mutEnd_world {w : TWd} {X W fρ ρv : TRes w.K} {μ : BoCa.Loc → Optio
 end BoCa.Fig16.Tree.Wp
 
 namespace BoCa.Fig16.Tree
+open BoCa.Fig16.Tree.Wp
 
 /-! ### The tree grows: a graft, a fresh child -/
 
@@ -178,11 +180,12 @@ theorem ParentFn.graftOf_graft (P : ParentFn) {r t : Nat} (hr : r ≠ 0) (ht : �
 def TWd.graft (w : TWd) (r t : Nat) (hr : r ≠ 0) (ht : ¬ w.P.Anc t r) : TWd :=
   ⟨w.P.graftOf r t hr ht, w.Θ⟩
 
-/-- **A graft whose capture point is above the resume point extends the world** (`graft_mono`). -/
+/-- **A graft whose capture point is above the resume point extends the world**, carrying every
+resource (`graft_mono`). -/
 theorem TWd.graft_ext (w : TWd) {r t : Nat} (hr : r ≠ 0) (ht : ¬ w.P.Anc t r)
-    (hc : w.P.Anc t (w.P.par r)) : w.Ext (w.graft r t hr ht) :=
+    (hc : w.P.Anc t (w.P.par r)) (ρ : TRes w.K) : w.Ext (w.graft r t hr ht) ρ :=
   ⟨fun {_ _} h => ⟨ParentFn.graft_mono (w.P.graftOf_graft hr ht) hc ht h.1, h.2⟩,
-    LocTy.Le.refl _⟩
+    AgreeOn.refl _ _⟩
 
 /-- After the graft, `r` is nested in `t`. -/
 theorem TWd.graft_lt (w : TWd) {r t : Nat} (hr : r ≠ 0) (ht : ¬ w.P.Anc t r) (hrt : r ≠ t) :
@@ -194,41 +197,36 @@ theorem TWd.graft_lt (w : TWd) {r t : Nat} (hr : r ≠ 0) (ht : ¬ w.P.Anc t r) 
 def TWd.Unused (w : TWd) (a : Nat) : Prop :=
   a ≠ 0 ∧ w.P.par a = 0 ∧ ∀ x, w.P.Anc x a → x = a
 
-/-- **A fresh child of `n`**: an unused leaf grafted under `n` extends the world, and is nested
-in `n` after. -/
+/-- **A fresh child of `n`**: an unused leaf grafted under `n` extends the world, carrying every
+resource, and is nested in `n` after. -/
 theorem TWd.fresh_ext (w : TWd) {a n : Nat} (hu : w.Unused a) (hn : n ≠ a) :
-    ∃ (ht : ¬ w.P.Anc n a), w.Ext (w.graft a n hu.1 ht) ∧
+    ∃ (ht : ¬ w.P.Anc n a), (∀ ρ : TRes w.K, w.Ext (w.graft a n hu.1 ht) ρ) ∧
       (w.graft a n hu.1 ht).K.lt (OrderDual.toDual a) (OrderDual.toDual n) := by
   have ht : ¬ w.P.Anc n a := fun h => hn (hu.2.2 n h)
   refine ⟨ht, w.graft_ext hu.1 ht ?_, w.graft_lt hu.1 ht (Ne.symm hn)⟩
   rw [hu.2.1]
   exact w.P.anc_zero n
 
-/-! ### The store typing grows -/
+/-! ### A location re-typed -/
 
 open Classical in
-/-- `Θ[ℓ ↦ τ]`, at a location `Θ` does not type. -/
-def TWd.addTy (w : TWd) (l : BoCa.Loc) (τ : KSem) : TWd :=
-  ⟨w.P, fun m => if m = l then some τ else w.Θ m⟩
+/-- `Θ[ℓ ↦ B]`. -/
+def TWd.setTy (w : TWd) (l : BoCa.Loc) (B : Option KTy) : TWd :=
+  ⟨w.P, fun m => if m = l then B else w.Θ m⟩
 
-theorem TWd.addTy_ext (w : TWd) {l : BoCa.Loc} {τ : KSem} (hl : w.Θ l = none) :
-    w.Ext (w.addTy l τ) := by
-  refine ⟨WCactus.Ext.refl _, fun m τ' e => ?_⟩
-  show (if m = l then some τ else w.Θ m) = some τ'
-  rw [if_neg (fun h => by subst h; rw [hl] at e; cases e)]
-  exact e
+/-- **Re-typing a location no `mut` cell of `ρ` is at extends the world carrying `ρ`.** -/
+theorem TWd.setTy_ext (w : TWd) {l : BoCa.Loc} (B : Option KTy) {ρ : TRes w.K}
+    (h : ¬ HoldsMut ρ l) : w.Ext (w.setTy l B) ρ :=
+  ⟨WCactus.Ext.refl _, agreeOn_set w.Θ B h⟩
 
-/-- **The types stay carried** when the new one is. -/
-theorem TWd.addTy_monoUp (w : TWd) {l : BoCa.Loc} {τ : KSem} (hl : w.Θ l = none)
-    (hM : MonoUp w.Θ) (hτ : KMonoUp (w.addTy l τ).Θ τ) : MonoUp (w.addTy l τ).Θ := by
-  intro m τ' e Θ'' hΘ
-  by_cases hm : m = l
-  · subst hm
-    have : τ' = τ := by simpa [TWd.addTy] using e.symm
-    subst this
-    exact hτ Θ'' hΘ
-  · have e' : w.Θ m = some τ' := by simpa [TWd.addTy, hm] using e
-    exact hM m τ' e' Θ'' ((w.addTy_ext hl).2.trans hΘ)
+/-- Re-typing a location to the code it has is the identity. -/
+theorem TWd.setTy_self (w : TWd) (l : BoCa.Loc) : w.setTy l (w.Θ l) = w := by
+  obtain ⟨P, Θ⟩ := w
+  simp only [TWd.setTy, TWd.mk.injEq, true_and]
+  funext m
+  by_cases h : m = l
+  · subst h; simp
+  · simp [h]
 
 end BoCa.Fig16.Tree
 

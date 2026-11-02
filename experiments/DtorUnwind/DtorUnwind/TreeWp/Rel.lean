@@ -21,8 +21,12 @@ changes, each forced by the world growing:
   holds nothing at the lent location, and that is the frame condition `F` (as `cerwp`'s `fd`
   already reads it at a join). `Split`, `TWNC`, `Tagged` and the list `ls` go; the tags' role
   (which lifetime a record is at) is `K` itself.
-* **The world invariant** is `WInv` (covered by `Θ`, types carried along growth, lowering to the
-  memory) in place of `TWNC ∧ Tagged ∧ Lower`.
+* **The world invariant** is `WInv` (covered by `sem Θ`, lowering to the memory) in place of
+  `TWNC ∧ Tagged ∧ Lower`.
+* **Each extension carries a resource**: the run's start extends `w` carrying the run's resource,
+  the end extends the start carrying the frame (`TWd.Ext`). A location only the run holds a
+  `mut` cell at, or none does, may be re-typed: the run may free a location and allocate it at
+  another code.
 
 What the rules ask in exchange: a frame condition and a resource framed beside a run must be
 carried along re-reading (`TFrame.Mono`, `TRProp.Mono`). At `RR.refl` (no growth) both are
@@ -53,7 +57,7 @@ abbrev TPost : Type := Nat → (w : TWd) → Expr → TRes w.K → Prop
 
 /-- Carried along re-reading. -/
 def TRProp.Mono (R : TRProp) : Prop :=
-  ∀ (w w' : TWd) (ρ : TRes w.K) (ρ' : TRes w'.K), w.Ext w' → RRw (w := w) (w' := w') ρ ρ' →
+  ∀ (w w' : TWd) (ρ : TRes w.K) (ρ' : TRes w'.K), w.Ext w' ρ → RRw (w := w) (w' := w') ρ ρ' →
     R w ρ → R w' ρ'
 
 /-- A frame condition carried along re-reading. -/
@@ -62,12 +66,12 @@ abbrev TFrame.Mono (F : TFrame) : Prop := TRProp.Mono F
 /-- **The post-configuration**: a world `w′` extending the run's world `w₀`, the frame `ρ_f`
 re-read there, the run's resource beside it, the world invariant. -/
 def EndT (Q : TPost) (k : Nat) (w₀ : TWd) (ρf : TRes w₀.K) (μ' : Heap) (t : Expr) : Prop :=
-  ∃ (w' : TWd) (ρf' ρ' fρ' : TRes w'.K), w₀.Ext w' ∧ RRw (w := w₀) (w' := w') ρf ρf' ∧
+  ∃ (w' : TWd) (ρf' ρ' fρ' : TRes w'.K), w₀.Ext w' ρf ∧ RRw (w := w₀) (w' := w') ρf ρf' ∧
     ResUT.Hash ρ' ρf' ∧ ResUT.CompS ρf' ρ' fρ' ∧ WInv w' fρ' μ' ∧ Q k w' t ρ'
 
 /-- **`crwpG` over the tree world.** -/
 def twp (F : TFrame) (Q : TPost) (n : Nat) (w : TWd) (e : Expr) (ρ : TRes w.K) : Prop :=
-  ∀ (w₀ : TWd) (ρ₀ ρf fρ : TRes w₀.K) (μ : Heap), w.Ext w₀ → RRw (w := w) (w' := w₀) ρ ρ₀ →
+  ∀ (w₀ : TWd) (ρ₀ ρf fρ : TRes w₀.K) (μ : Heap), w.Ext w₀ ρ → RRw (w := w) (w' := w₀) ρ ρ₀ →
     F w₀ ρf → ResUT.Hash ρf ρ₀ → ResUT.CompS ρf ρ₀ fρ → WInv w₀ fρ μ → FinDom μ →
     ∀ j μ' e', j < n → StepsN (ℍ := ℍ) j μ e μ' e' → Final (ℍ := ℍ) μ' e' →
       EndT Q (n - j) w₀ ρf μ' e'
@@ -122,30 +126,30 @@ theorem twp_le {F : TFrame} {Q : TPost} (hQ : Q.Down) {m n : Nat} (hmn : m ≤ n
 /-- **`twp` is monotone along world extension**: by construction, the frame being quantified
 over the extensions. -/
 theorem twp_kripke {F : TFrame} {Q : TPost} {n : Nat} {w w₁ : TWd} {e : Expr} {ρ : TRes w.K}
-    {ρ₁ : TRes w₁.K} (hE : w.Ext w₁) (hr : RRw (w := w) (w' := w₁) ρ ρ₁)
+    {ρ₁ : TRes w₁.K} (hE : w.Ext w₁ ρ) (hr : RRw (w := w) (w' := w₁) ρ ρ₁)
     (h : twp (ℍ := ℍ) F Q n w e ρ) : twp (ℍ := ℍ) F Q n w₁ e ρ₁ := by
   intro w₀ ρ₀ ρf fρ μ hE₀ hr₀
-  exact h w₀ ρ₀ ρf fρ μ (hE.trans hE₀) (RRw.trans hE₀ hr hr₀)
+  exact h w₀ ρ₀ ρf fρ μ (hE.trans hr hE₀) (RRw.trans hE₀.1 hr hr₀)
 
 /-- The resource of a run, part of a world in the invariant, is covered. -/
 theorem cov_of_comp {w : TWd} {ρf ρ fρ : TRes w.K} {μ : Heap} (hc : ResUT.CompS ρf ρ fρ)
-    (hI : WInv w fρ μ) : CovR w.Θ w.K ρ :=
+    (hI : WInv w fρ μ) : CovR (sem w.Θ) w.K ρ :=
   CovR.of_compS_right hc hI.1
 
 theorem covf_of_comp {w : TWd} {ρf ρ fρ : TRes w.K} {μ : Heap} (hc : ResUT.CompS ρf ρ fρ)
-    (hI : WInv w fρ μ) : CovR w.Θ w.K ρf :=
+    (hI : WInv w fρ μ) : CovR (sem w.Θ) w.K ρf :=
   CovR.of_compS_left hc hI.1
 
 /-- **A final term in the postcondition**, at every extension of the world. -/
 theorem twp_here {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {e : Expr} {ρ : TRes w.K}
     (hfin : ∀ μ, Final (ℍ := ℍ) μ e)
-    (h : ∀ (w₀ : TWd) (ρ₀ : TRes w₀.K), w.Ext w₀ → RRw (w := w) (w' := w₀) ρ ρ₀ → Q n w₀ e ρ₀) :
+    (h : ∀ (w₀ : TWd) (ρ₀ : TRes w₀.K), w.Ext w₀ ρ → RRw (w := w) (w' := w₀) ρ ρ₀ → Q n w₀ e ρ₀) :
     twp (ℍ := ℍ) F Q n w e ρ := by
   intro w₀ ρ₀ ρf fρ μ hE hr _ hf hc hI _ j μ' e' hj hrun _
   cases hrun with
   | more hs _ => exact absurd hs (hfin _ _ _)
   | refl =>
-  exact ⟨w₀, ρf, ρ₀, fρ, TWd.Ext.refl _, RR.refl ((covf_of_comp hc hI).mono (LocTy.Le.refl _)),
+  exact ⟨w₀, ρf, ρ₀, fρ, TWd.Ext.refl _ _, RR.refl (covf_of_comp hc hI),
     ResUT.hash_symm hf, hc, hI, by simpa using h w₀ ρ₀ hE hr⟩
 
 /-- **A step that is its configuration's only one, for free.** -/
@@ -188,11 +192,11 @@ theorem twp_bind {F : TFrame} (hFm : F.Mono) {Q : TPost} (K : Kont) {n : Nat} {w
     intro j₁ j₂ μ₁ t hjj hrun₁ hfin₁ hrun₂
     obtain ⟨w₁, ρf₁, ρ₁, fρ₁, g₀, g₁, g₂, g₃, g₄, g₅⟩ :=
       hw w₀ ρ₀ ρf fρ μ hE hr hF hf hc hI hfd j₁ μ₁ t (by omega) hrun₁ hfin₁
-    have hcov : CovR w₁.Θ w₁.K ρ₁ := cov_of_comp g₃ g₄
+    have hcov : CovR (sem w₁.Θ) w₁.K ρ₁ := cov_of_comp g₃ g₄
     obtain ⟨w₂, ρf₂, ρ₂, fρ₂, k₀, k₁, k₂, k₃, k₄, k₅⟩ :=
-      g₅ w₁ ρ₁ ρf₁ fρ₁ μ₁ (TWd.Ext.refl _) (RR.refl hcov) (hFm _ _ _ _ g₀ g₁ hF)
+      g₅ w₁ ρ₁ ρf₁ fρ₁ μ₁ (TWd.Ext.refl _ _) (RR.refl hcov) (hFm _ _ _ _ g₀ g₁ hF)
         (ResUT.hash_symm g₂) g₃ g₄ (fd_stepsN hrun₁ hfd) j₂ μ' E (by omega) hrun₂ hfin
-    refine ⟨w₂, ρf₂, ρ₂, fρ₂, g₀.trans k₀, RRw.trans k₀ g₁ k₁, k₂, k₃, k₄, ?_⟩
+    refine ⟨w₂, ρf₂, ρ₂, fρ₂, g₀.trans g₁ k₀, RRw.trans k₀.1 g₁ k₁, k₂, k₃, k₄, ?_⟩
     rwa [show n - j₁ - j₂ = n - j by omega] at k₅
   rcases stepsN_plug_split K hrun with ⟨e', rfl, hrun'⟩ |
     ⟨j₁, j₂, μ₁, t, hjj, hrun₁, hirr, hrun₂⟩
@@ -224,59 +228,62 @@ def TPost.sep (P : TPost) (R : TRProp) : TPost := fun k w t ρ =>
 
 /-- **The frame**: a resource `ρ₂` in `R` kept beside the run. Forced beside `crwpG_frame`: `R`
 is carried along re-reading (`hR`), and the framed resource is covered at its world (`hcov`), so
-that its parts have re-readings at every extension. -/
+that its parts have re-readings at every extension carrying it. -/
 theorem twp_frame {F F₁ : TFrame} {P : TPost} {R : TRProp} (hR : R.Mono) {n : Nat} {w : TWd}
-    {e : Expr} {ρ₁ ρ₂ ρ : TRes w.K} (hcρ : ResUT.CompS ρ₁ ρ₂ ρ) (hcov : CovR w.Θ w.K ρ)
-    (hF : ∀ (w₀ : TWd) (ρf ρ₂₀ y : TRes w₀.K), w.Ext w₀ → RRw (w := w) (w' := w₀) ρ₂ ρ₂₀ →
+    {e : Expr} {ρ₁ ρ₂ ρ : TRes w.K} (hcρ : ResUT.CompS ρ₁ ρ₂ ρ) (hcov : CovR (sem w.Θ) w.K ρ)
+    (hF : ∀ (w₀ : TWd) (ρf ρ₂₀ y : TRes w₀.K), w.Ext w₀ ρ₂ → RRw (w := w) (w' := w₀) ρ₂ ρ₂₀ →
       F w₀ ρf → ResUT.CompS ρf ρ₂₀ y → F₁ w₀ y)
     (hwp : twp (ℍ := ℍ) F₁ P n w e ρ₁) (hR₂ : R w ρ₂) :
     twp (ℍ := ℍ) F (P.sep R) n w e ρ := by
   intro w₀ ρ₀ ρf fρ μ hE hr hFρ hf hc hI hfd j μ' e' hj hrun hfin
-  have hM₀ : MonoΘ w₀.Θ := hI.2.1.monoΘ
-  obtain ⟨ρ₁₀, ρ₂₀, h₁₀, h₂₀, hc₀⟩ := RR.split hE.1 hM₀ hcρ (hcov.mono hE.2) hr
+  obtain ⟨ρ₁₀, ρ₂₀, h₁₀, h₂₀, hc₀⟩ := RR.split_retype hE.1 hcρ hcov hE.2 hr
+  have hE₁ := hE.of_compS_left hcρ
+  have hE₂ := hE.of_compS_right hcρ
   obtain ⟨y, hy, hyf⟩ := reassoc_out hc hc₀
   obtain ⟨w', y', ρ₁', fρ', g₀, g₁, g₂, g₃, g₄, g₅⟩ :=
-    hwp w₀ ρ₁₀ y fρ μ hE h₁₀ (hF w₀ ρf ρ₂₀ y hE h₂₀ hFρ hy) (hash_of_inv hyf hI) hyf hI hfd
+    hwp w₀ ρ₁₀ y fρ μ hE₁ h₁₀ (hF w₀ ρf ρ₂₀ y hE₂ h₂₀ hFρ hy) (hash_of_inv hyf hI) hyf hI hfd
       j μ' e' hj hrun hfin
-  have hM' : MonoΘ w'.Θ := g₄.2.1.monoΘ
   obtain ⟨ρf', ρ₂', hf', h₂', hy'⟩ :=
-    RR.split g₀.1 hM' hy ((covf_of_comp hyf hI).mono g₀.2) g₁
+    RR.split_retype g₀.1 hy (covf_of_comp hyf hI) g₀.2 g₁
   obtain ⟨ρ', hρ', hfρ'⟩ := reassoc_in hy' g₃
-  have hR₂₀ : R w₀ ρ₂₀ := hR _ _ _ _ hE h₂₀ hR₂
-  exact ⟨w', ρf', ρ', fρ', g₀, hf', ResUT.hash_symm (hash_of_inv hfρ' g₄), hfρ', g₄,
-    ρ₁', ρ₂', hρ', g₅, hR _ _ _ _ g₀ h₂' hR₂₀⟩
+  have hR₂₀ : R w₀ ρ₂₀ := hR _ _ _ _ hE₂ h₂₀ hR₂
+  exact ⟨w', ρf', ρ', fρ', g₀.of_compS_left hy, hf', ResUT.hash_symm (hash_of_inv hfρ' g₄), hfρ',
+    g₄, ρ₁', ρ₂', hρ', g₅, hR _ _ _ _ (g₀.of_compS_right hy) h₂' hR₂₀⟩
 
 /-! ### World changes at the start of a run -/
 
-/-- **The tree grows at the start of a segment**: at whichever extension the run starts at, the
-world may be extended further (a fresh child, a graft), and the run continues there from the
-re-reading. The frame condition is carried along. -/
+/-- **The world changes at the start of a segment**: at whichever extension the run starts at,
+the world may be extended further carrying the whole world (a fresh child, a graft, a location
+no `mut` cell is at re-typed), and the run continues there from the re-reading. The frame
+condition is carried along. -/
 theorem twp_extend {F : TFrame} (hFm : F.Mono) {Q : TPost} {n : Nat} {w : TWd} {e : Expr}
     {ρ : TRes w.K}
-    (h : ∀ (w₀ : TWd) (ρ₀ : TRes w₀.K), w.Ext w₀ → RRw (w := w) (w' := w₀) ρ ρ₀ →
-      ∃ w₁ : TWd, w₀.Ext w₁ ∧ MonoUp w₁.Θ ∧
+    (h : ∀ (w₀ : TWd) (ρ₀ ρf fρ : TRes w₀.K) (μ : Heap), w.Ext w₀ ρ →
+      RRw (w := w) (w' := w₀) ρ ρ₀ → F w₀ ρf → ResUT.CompS ρf ρ₀ fρ → WInv w₀ fρ μ →
+      ∃ w₁ : TWd, w₀.Ext w₁ fρ ∧
         ∀ ρ₁ : TRes w₁.K, RRw (w := w₀) (w' := w₁) ρ₀ ρ₁ → twp (ℍ := ℍ) F Q n w₁ e ρ₁) :
     twp (ℍ := ℍ) F Q n w e ρ := by
   intro w₀ ρ₀ ρf fρ μ hE hr hFρ hf hc hI hfd j μ' e' hj hrun hfin
-  obtain ⟨w₁, hE₁, hM₁, hw₁⟩ := h w₀ ρ₀ hE hr
-  obtain ⟨fρ₁, hfr, hI₁⟩ := hI.reread hE₁ hM₁
-  obtain ⟨ρf₁, ρ₀₁, hf₁, h₀₁, hc₁⟩ := RR.split hE₁.1 hM₁.monoΘ hc (hI.1.mono hE₁.2) hfr
+  obtain ⟨w₁, hE₁, hw₁⟩ := h w₀ ρ₀ ρf fρ μ hE hr hFρ hc hI
+  obtain ⟨fρ₁, hfr, hI₁⟩ := hI.reread hE₁
+  obtain ⟨ρf₁, ρ₀₁, hf₁, h₀₁, hc₁⟩ := RR.split_retype hE₁.1 hc hI.1 hE₁.2 hfr
+  have hEf := hE₁.of_compS_left hc
   obtain ⟨w', ρf', ρ', fρ', g₀, g₁, g₂, g₃, g₄, g₅⟩ :=
-    hw₁ ρ₀₁ h₀₁ w₁ ρ₀₁ ρf₁ fρ₁ μ (TWd.Ext.refl _) (RR.refl (cov_of_comp hc₁ hI₁))
-      (hFm _ _ _ _ hE₁ hf₁ hFρ) (hash_of_inv hc₁ hI₁) hc₁ hI₁ hfd j μ' e' hj hrun hfin
-  exact ⟨w', ρf', ρ', fρ', hE₁.trans g₀, RRw.trans g₀ hf₁ g₁, g₂, g₃, g₄, g₅⟩
+    hw₁ ρ₀₁ h₀₁ w₁ ρ₀₁ ρf₁ fρ₁ μ (TWd.Ext.refl _ _) (RR.refl (cov_of_comp hc₁ hI₁))
+      (hFm _ _ _ _ hEf hf₁ hFρ) (hash_of_inv hc₁ hI₁) hc₁ hI₁ hfd j μ' e' hj hrun hfin
+  exact ⟨w', ρf', ρ', fρ', hEf.trans hf₁ g₀, RRw.trans g₀.1 hf₁ g₁, g₂, g₃, g₄, g₅⟩
 
 /-- **The resource changes at the start of a segment**, under every frame meeting `F`, keeping
 the world invariant and the memory: a lend opened, a lend ended. -/
 theorem twp_update {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {e : Expr} {ρ ρ₁ : TRes w.K}
-    (hup : ∀ (w₀ : TWd) (ρ₀ ρf fρ : TRes w₀.K) (μ : Heap), w.Ext w₀ →
+    (hup : ∀ (w₀ : TWd) (ρ₀ ρf fρ : TRes w₀.K) (μ : Heap), w.Ext w₀ ρ →
       RRw (w := w) (w' := w₀) ρ ρ₀ → F w₀ ρf → ResUT.Hash ρf ρ₀ → ResUT.CompS ρf ρ₀ fρ →
-      WInv w₀ fρ μ → ∃ ρ₁₀ fρ₁ : TRes w₀.K, RRw (w := w) (w' := w₀) ρ₁ ρ₁₀ ∧
+      WInv w₀ fρ μ → ∃ ρ₁₀ fρ₁ : TRes w₀.K, w.Ext w₀ ρ₁ ∧ RRw (w := w) (w' := w₀) ρ₁ ρ₁₀ ∧
         ResUT.Hash ρf ρ₁₀ ∧ ResUT.CompS ρf ρ₁₀ fρ₁ ∧ WInv w₀ fρ₁ μ)
     (h : twp (ℍ := ℍ) F Q n w e ρ₁) : twp (ℍ := ℍ) F Q n w e ρ := by
   intro w₀ ρ₀ ρf fρ μ hE hr hFρ hf hc hI hfd j μ' e' hj hrun hfin
-  obtain ⟨ρ₁₀, fρ₁, h₁, h₂, h₃, h₄⟩ := hup w₀ ρ₀ ρf fρ μ hE hr hFρ hf hc hI
-  exact h w₀ ρ₁₀ ρf fρ₁ μ hE h₁ hFρ h₂ h₃ h₄ hfd j μ' e' hj hrun hfin
+  obtain ⟨ρ₁₀, fρ₁, h₀, h₁, h₂, h₃, h₄⟩ := hup w₀ ρ₀ ρf fρ μ hE hr hFρ hf hc hI
+  exact h w₀ ρ₁₀ ρf fρ₁ μ h₀ h₁ hFρ h₂ h₃ h₄ hfd j μ' e' hj hrun hfin
 
 end BoCa.Fig16.Tree.Wp
 

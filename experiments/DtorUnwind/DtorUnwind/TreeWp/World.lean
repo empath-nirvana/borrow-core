@@ -1,4 +1,4 @@
-import DtorUnwind.Tree.KSem
+import DtorUnwind.TreeWp.Codes
 import DtorUnwind.Tree.Port.Base
 
 /-!
@@ -10,87 +10,35 @@ world `fρ` with records proper `ps`, a list `ls`, `TWNC fρ ps (rsOf ls)`, `Tag
 
 * **`K`**, the lifetime tree, as a parent function `P` (`Tree/Parent.lean`): a fresh lend and a
   graft are both `ParentFn.Graft`s, so both extend `K` (`WCactus.Ext`) by `graft_mono`.
-* **`Θ`**, the store typing: the semantic type, read at the current tree, every `mut` cell at a
-  location stores (`Tree/KSem.lean`'s `Cov`). It grows (`LocTy.Le`).
-* **the resource**, a `TRes K`, covered by `Θ` at `K`, lowering to the memory (`WInv`).
+* **`Θ`**, the store typing, a code per location (`TreeWp/Codes.lean`); its cells are read at
+  the semantic typing `sem Θ` (`Tree/KSem.lean`'s `Cov`).
+* **the resource**, a `TRes K`, covered by `sem Θ` at `K`, lowering to the memory (`WInv`).
 
-`TWd.Ext` is the extension of worlds: `K` keeps every nesting, `Θ` keeps every location's type.
-Along it a resource is carried by `RR`, read at the new `Θ`. What this file proves of it:
+`TWd.Ext w w′ ρ` is the extension of worlds carrying `ρ`: `K` keeps every nesting, and `Θ′`
+agrees with `Θ` wherever `ρ` holds a `mut` cell (`AgreeOn`). A location no `mut` cell of `ρ` is
+at may be re-typed (a freed location re-allocated). Along it `ρ` is carried by `RR`, read at
+`sem Θ′` (`RRw`). What this file proves of it:
 
-* **`Θ` grows**: `Cov`, `RC` and `RR` read at `Θ` hold at every `Θ′ ⊒ Θ` (`Cov.mono`,
-  `RC.mono`, `RR.mono`). `KSem` held `Θ` fixed; a type is carried along a growing `Θ` when it is
-  monotone at every larger store typing (`MonoUp`).
-* **`●` commutes with re-reading** (`RR.compS`, `RR.split`): the re-reading of a composite is the
-  composite of the re-readings. `●` composes only `imm` cells, and two `imm` cells that compose
-  agree on their witness, whose re-reading is unique (`RR.func`).
+* **`Ext` composes** along the re-reading (`TWd.Ext.trans`) and passes to the parts of a
+  composite (`TWd.Ext.of_compS_left`).
+* **`●` commutes with re-reading** (`RR.compS`, `RR.split_retype`): the re-reading of a composite
+  is the composite of the re-readings. `●` composes only `imm` cells, and two `imm` cells that
+  compose agree on their witness, whose re-reading is unique (`RR.func`).
 * **`⟦·⟧` is kept** (`ResUT.Lower.rr`): the walks are carried along `RR` with tags and values
   kept (`Tree/CarrierSim.lean`), so the flattening lowers to the same memory.
-* **The world is re-read** at every extension (`WInv.reread`): covered, lowering to the same
-  memory.
+* **The world is re-read** at every extension carrying it (`WInv.reread`, from
+  `RR.exists_retype`): covered, lowering to the same memory. Every code is monotone
+  (`monoΘ_sem`), so no monotonicity is asked of the world.
 
-`RR.refl` is the identity when the world does not grow, so at `TWd.Ext w w` every statement here
-is the one without re-reading.
+At `w′ = w` the re-reading is the identity (`RR.refl`), and `TWd.Ext w w ρ` holds
+(`TWd.Ext.refl`), so every statement here is the one without re-reading.
 -/
 
 noncomputable section
 
 namespace BoCa.Fig16.Tree
 open BoCa.Fig16
-
-/-! ### The store typing grows -/
-
-/-- `Θ′` keeps every location's type. -/
-def LocTy.Le (Θ Θ' : LocTy) : Prop := ∀ l τ, Θ l = some τ → Θ' l = some τ
-
-theorem LocTy.Le.refl (Θ : LocTy) : Θ.Le Θ := fun _ _ h => h
-
-theorem LocTy.Le.trans {Θ₁ Θ₂ Θ₃ : LocTy} (h₁ : Θ₁.Le Θ₂) (h₂ : Θ₂.Le Θ₃) : Θ₁.Le Θ₃ :=
-  fun l τ h => h₂ l τ (h₁ l τ h)
-
-theorem Cov.mono {Θ Θ' : LocTy} (hΘ : Θ.Le Θ') {K : WCactus} {l : BoCa.Loc} {ψ : TCell K}
-    (h : Cov Θ K l ψ) : Cov Θ' K l ψ := by
-  induction h with
-  | own l v => exact .own l v
-  | imm l i _ ih => exact .imm l i ih
-  | «mut» l m τ hτ hP _ ih => exact .mut l m τ (hΘ l τ hτ) hP ih
-
-theorem CovR.mono {Θ Θ' : LocTy} (hΘ : Θ.Le Θ') {K : WCactus} {ρ : TRes K}
-    (h : CovR Θ K ρ) : CovR Θ' K ρ :=
-  fun l ψ e => (h l ψ e).mono hΘ
-
-theorem RC.mono {Θ Θ' : LocTy} (hΘ : Θ.Le Θ') {K K' : WCactus} {l : BoCa.Loc} {ψ : TCell K}
-    {ψ' : TCell K'} (h : RC Θ l ψ ψ') : RC Θ' l ψ ψ' := by
-  induction h with
-  | own l v => exact .own l v
-  | imm l i i' hs hv hdom _ ih => exact .imm l i i' hs hv hdom ih
-  | «mut» l m m' τ hτ hs hv hdom _ hP ih => exact .mut l m m' τ (hΘ l τ hτ) hs hv hdom ih hP
-
-theorem RR.mono {Θ Θ' : LocTy} (hΘ : Θ.Le Θ') {K K' : WCactus} {ρ : TRes K} {ρ' : TRes K'}
-    (h : RR Θ ρ ρ') : RR Θ' ρ ρ' :=
-  ⟨h.1, fun m ψ ψ' e e' => (h.2 m ψ ψ' e e').mono hΘ⟩
-
-/-- **A type carried along every growth of the store typing**: monotone along tree extension at
-every store typing keeping `Θ`'s types. -/
-def KMonoUp (Θ : LocTy) (τ : KSem) : Prop := ∀ Θ', Θ.Le Θ' → KMono Θ' τ
-
-/-- Every type `Θ` assigns is carried along every growth. -/
-def MonoUp (Θ : LocTy) : Prop := ∀ l τ, Θ l = some τ → KMonoUp Θ τ
-
-theorem MonoUp.monoΘ {Θ : LocTy} (h : MonoUp Θ) : MonoΘ Θ :=
-  fun l τ e => h l τ e Θ (LocTy.Le.refl Θ)
-
-theorem MonoUp.mono {Θ Θ' : LocTy} (h : MonoUp Θ') (hΘ : Θ.Le Θ') : ∀ l τ, Θ l = some τ →
-    KMono Θ' τ :=
-  fun l τ e => h l τ (hΘ l τ e) Θ' (LocTy.Le.refl Θ')
-
-/-- The types of `1`, `+` and `Imm` carried along every growth. -/
-theorem kmonoUp_unit (Θ : LocTy) : KMonoUp Θ vUnit := fun _ _ => kmono_unit
-
-theorem kmonoUp_sum {Θ : LocTy} {τ₁ τ₂ : KSem} (h₁ : KMonoUp Θ τ₁) (h₂ : KMonoUp Θ τ₂) :
-    KMonoUp Θ (vSum τ₁ τ₂) := fun Θ' hΘ => kmono_sum (h₁ Θ' hΘ) (h₂ Θ' hΘ)
-
-theorem kmonoUp_imm {Θ : LocTy} {a : Life} {τ : KSem} (h : KMonoUp Θ τ) :
-    KMonoUp Θ (vImm a τ) := fun Θ' hΘ => kmono_imm (h Θ' hΘ)
+open BoCa.Fig16.Tree.Wp
 
 /-! ### The world -/
 
@@ -98,37 +46,50 @@ theorem kmonoUp_imm {Θ : LocTy} {a : Life} {τ : KSem} (h : KMonoUp Θ τ) :
 structure TWd where
   /-- The lifetime tree, as a parent function. -/
   P : ParentFn
-  /-- The store typing. -/
-  Θ : LocTy
+  /-- The store typing, a code per location. -/
+  Θ : CodeTy
 
 /-- The lifetime tree. -/
 abbrev TWd.K (w : TWd) : WCactus := WCactus.ofParent w.P
 
-/-- **The extension of worlds**: every nesting of the tree kept, every location's type kept. -/
-def TWd.Ext (w w' : TWd) : Prop := w.K.Ext w'.K ∧ w.Θ.Le w'.Θ
+/-- **The extension of worlds carrying `ρ`**: every nesting of the tree kept, the store typing
+kept wherever `ρ` holds a `mut` cell. -/
+def TWd.Ext (w w' : TWd) (ρ : TRes w.K) : Prop := w.K.Ext w'.K ∧ AgreeOn w.Θ w'.Θ ρ
 
-theorem TWd.Ext.refl (w : TWd) : w.Ext w := ⟨WCactus.Ext.refl _, LocTy.Le.refl _⟩
+theorem TWd.Ext.refl (w : TWd) (ρ : TRes w.K) : w.Ext w ρ :=
+  ⟨WCactus.Ext.refl _, AgreeOn.refl _ _⟩
 
-theorem TWd.Ext.trans {w₁ w₂ w₃ : TWd} (h₁ : w₁.Ext w₂) (h₂ : w₂.Ext w₃) : w₁.Ext w₃ :=
-  ⟨WCactus.Ext.trans h₁.1 h₂.1, LocTy.Le.trans h₁.2 h₂.2⟩
+/-- **Re-reading along a world extension**: `RR` at the new semantic typing. -/
+abbrev RRw {w w' : TWd} (ρ : TRes w.K) (ρ' : TRes w'.K) : Prop := RR (sem w'.Θ) ρ ρ'
 
-/-- **Re-reading along a world extension**: `RR` at the new store typing. -/
-abbrev RRw {w w' : TWd} (ρ : TRes w.K) (ρ' : TRes w'.K) : Prop := RR w'.Θ ρ ρ'
+/-- Extensions compose along the re-reading of what they carry. -/
+theorem TWd.Ext.trans {w₁ w₂ w₃ : TWd} {ρ₁ : TRes w₁.K} {ρ₂ : TRes w₂.K}
+    (h₁ : w₁.Ext w₂ ρ₁) (hr : RRw (w := w₁) (w' := w₂) ρ₁ ρ₂) (h₂ : w₂.Ext w₃ ρ₂) :
+    w₁.Ext w₃ ρ₁ :=
+  ⟨WCactus.Ext.trans h₁.1 h₂.1, AgreeOn.trans h₁.2 hr h₂.2⟩
+
+theorem TWd.Ext.of_compS_left {w w' : TWd} {a b y : TRes w.K} (hc : ResUT.CompS a b y)
+    (h : w.Ext w' y) : w.Ext w' a :=
+  ⟨h.1, h.2.of_compS_left hc⟩
+
+theorem TWd.Ext.of_compS_right {w w' : TWd} {a b y : TRes w.K} (hc : ResUT.CompS a b y)
+    (h : w.Ext w' y) : w.Ext w' b :=
+  ⟨h.1, h.2.of_compS_right hc⟩
 
 /-- Re-readings compose along world extensions. -/
-theorem RRw.trans {w₁ w₂ w₃ : TWd} (h₂₃ : w₂.Ext w₃) {ρ₁ : TRes w₁.K} {ρ₂ : TRes w₂.K}
+theorem RRw.trans {w₁ w₂ w₃ : TWd} (h₂₃ : w₂.K.Ext w₃.K) {ρ₁ : TRes w₁.K} {ρ₂ : TRes w₂.K}
     {ρ₃ : TRes w₃.K} (h : RRw (w' := w₂) ρ₁ ρ₂) (h' : RRw (w' := w₃) ρ₂ ρ₃) :
     RRw (w' := w₃) ρ₁ ρ₃ :=
-  RR.trans h₂₃.1 (h.mono h₂₃.2) h'
+  RR.trans_retype h₂₃ h h'
 
-/-- **The world invariant**: the world covered at the tree by the store typing, its types carried
-along every growth, its lowering the memory. -/
+/-- **The world invariant**: the world covered at the tree by the store typing, its lowering
+the memory. -/
 def WInv (w : TWd) (fρ : TRes w.K) (μ : BoCa.Loc → Option BoCa.Val) : Prop :=
-  CovR w.Θ w.K fρ ∧ MonoUp w.Θ ∧ ResUT.Lower fρ μ
+  CovR (sem w.Θ) w.K fρ ∧ ResUT.Lower fρ μ
 
 theorem WInv.valid {w : TWd} {fρ : TRes w.K} {μ : BoCa.Loc → Option BoCa.Val}
     (h : WInv w fρ μ) : ResUT.Valid fρ := by
-  obtain ⟨σ, hσ, -⟩ := h.2.2
+  obtain ⟨σ, hσ, -⟩ := h.2
   exact ⟨σ, hσ⟩
 
 /-! ### `imm` cells under re-reading -/
@@ -272,6 +233,18 @@ theorem RR.split {Θ : LocTy} {K K' : WCactus} (hE : K.Ext K') (hM : MonoΘ Θ) 
   obtain rfl := RR.func hr hr'
   exact ⟨a', b', ha, hb, hy''⟩
 
+/-- **The re-reading of a composite across a re-typing splits** into its parts' re-readings.
+At `Θ' = Θ` it is `RR.split` at `sem Θ`. -/
+theorem RR.split_retype {Θ Θ' : CodeTy} {K K' : WCactus} (hE : K.Ext K') {a b y : TRes K}
+    {y' : TRes K'} (hc : ResUT.CompS a b y) (hy : CovR (sem Θ) K y) (hag : AgreeOn Θ Θ' y)
+    (hr : RR (sem Θ') y y') :
+    ∃ a' b', RR (sem Θ') a a' ∧ RR (sem Θ') b b' ∧ ResUT.CompS a' b' y' := by
+  obtain ⟨a', ha, -⟩ := RR.exists_retype hE (hy.of_compS_left hc) (hag.of_compS_left hc)
+  obtain ⟨b', hb, -⟩ := RR.exists_retype hE (hy.of_compS_right hc) (hag.of_compS_right hc)
+  obtain ⟨y'', hy'', hr'⟩ := RR.compS ha hb hc
+  obtain rfl := RR.func hr hr'
+  exact ⟨a', b', ha, hb, hy''⟩
+
 /-! ### `⟦·⟧` along re-reading -/
 
 /-- **The flattening carried along `RR`**, related cell by cell. -/
@@ -305,14 +278,12 @@ theorem ResUT.Lower.rr {Θ : LocTy} {K K' : WCactus} {ρ : TRes K} {ρ' : TRes K
   · rfl
   · rename_i a b h; simp [h.2.1]
 
-/-- **The world re-read at an extension**: covered, its types carried, lowering to the same
-memory. -/
-theorem WInv.reread {w w' : TWd} (hE : w.Ext w') {fρ : TRes w.K} {μ : BoCa.Loc → Option BoCa.Val}
-    (h : WInv w fρ μ) (hM : MonoUp w'.Θ) :
+/-- **The world re-read at an extension carrying it**: covered, lowering to the same memory. -/
+theorem WInv.reread {w w' : TWd} {fρ : TRes w.K} (hE : w.Ext w' fρ)
+    {μ : BoCa.Loc → Option BoCa.Val} (h : WInv w fρ μ) :
     ∃ fρ' : TRes w'.K, RRw (w := w) (w' := w') fρ fρ' ∧ WInv w' fρ' μ := by
-  have hM' : MonoΘ w'.Θ := hM.monoΘ
-  obtain ⟨fρ', hr⟩ := RR.exists hE.1 hM' (h.1.mono hE.2)
-  exact ⟨fρ', hr, hr.cov, hM, h.2.2.rr hr⟩
+  obtain ⟨fρ', hr, hc⟩ := RR.exists_retype hE.1 h.1 hE.2
+  exact ⟨fρ', hr, hc, h.2.rr hr⟩
 
 /-- `#` along re-reading: the composite re-read is valid. -/
 theorem ResUT.Hash.of_compS {K : WCactus} {a b y : TRes K} (hc : ResUT.CompS a b y)
