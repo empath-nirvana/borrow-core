@@ -90,3 +90,15 @@ import DtorUnwind.SI.CrossProg
 import DtorUnwind.SI.CactusInv
 import DtorUnwind.SI.CaptureScopeM
 import DtorUnwind.SI.CrossProgM
+import DtorUnwind.CoreC.Fundamental
+import DtorUnwind.CoreC.AwaitCancel
+import DtorUnwind.CoreC.BlockPrograms
+import DtorUnwind.CoreC.CloPrograms
+import DtorUnwind.CoreC.DeclLend
+import DtorUnwind.CoreC.DelayNaive
+import DtorUnwind.CoreC.DivRuntime
+import DtorUnwind.CoreC.EffCancelRuns
+import DtorUnwind.CoreC.NestedPrograms
+import DtorUnwind.CoreC.Rejections
+import DtorUnwind.CoreC.ReuseList
+import DtorUnwind.CoreC.StreamPrograms
