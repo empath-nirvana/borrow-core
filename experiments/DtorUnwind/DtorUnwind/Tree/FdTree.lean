@@ -1,5 +1,6 @@
 import DtorUnwind.SI.FdTypes
 import DtorUnwind.Tree.Rel
+import DtorUnwind.Tree.Frame
 
 /-!
 # The join's frame condition from the resumer's types, in the tree order
@@ -23,6 +24,13 @@ member `x`; so a copy at `ℓ` would put `β` inside `α`.
 `star`, `β = 2` and `α = 1` are siblings), while `old_config_vCE` restates that the printed
 relation admits it. `fdFromLifetimeTypesT_nonvacuous`: every hypothesis is met at that world
 with the resumer holding its own view of its own lend instead.
+
+**Types alone do not supply it.** A closure type names no lifetime. `not_fdFromThunkTypesT`:
+the same statement with the resumer's value at `U (F 1)` is false in `star`, every hypothesis
+met; the closure `λ_. ()` holds a copy of the task's view (`thunk_holds_view`, in every
+cactus). What supplies the view half of `joinFd` at every type is the cactus invariant: every
+cell of the resumer's flattening is on the resumer's branch (`fdFromBranch_views`, its
+hypotheses met by `fdFromBranch_views_hyps`).
 -/
 
 noncomputable section
@@ -280,6 +288,111 @@ theorem fdFromLifetimeTypesT_nonvacuous : ∃ (W : WRes) (μ : Heap),
     ⟨_, ResU.single_get_self _ _⟩, h1, by simp, by simp [pT, qR, cexRecF], hFLq, rfl, h2, h3,
     resumer_view_vCT⟩
 
+
+/-! ### A closure type names no lifetime -/
+
+/-- `FdFromLifetimeTypesT` with the resumer's value at `U (F 1)`, a closure type that names no
+lifetime. -/
+def FdFromThunkTypesT (K : Cactus) : Prop :=
+  ∀ (W ρf ρS ρk ρrest : WRes) (ps : List FrameRec) (ls : List SRec) (μ : Heap)
+    (p q : FrameRec) (α β a : Life) (δ : LSub) (r : LifeVar) (v : Val),
+    TWNC W ps (rsOf ls) → Tagged W ps ls → ResU.Lower W μ →
+    ResU.CompS ρf ρS W → ResU.CompS ρk ρrest ρS →
+    p ∈ ps → FrameLife W p α → (∃ ψ, ρk.get p.le = some ψ) → K.lt α a →
+    q ∈ ps → q ≠ p → FrameLife W q β → (BoCa.Lifetime.Life.var r).interp δ = some β → K.lt β a →
+    ¬ K.le β α →
+    vCT (ℍ := ℍ) K none true (.thunk (.ret .unit)) ls δ v ρrest →
+    joinFd (Val.loc p.le) ρrest
+
+/-- A closure that ignores its argument and returns `()`, holding the task's view: a value of
+`U (F 1)` in every cactus. Its run drops the view, which owns nothing. -/
+theorem thunk_holds_view (K : Cactus) (ls : List SRec) (δ : LSub) :
+    vCT (ℍ := ℍ) K none true (.thunk (.ret .unit)) ls δ (Val.lam (.val Val.unit))
+      (viewA 0 Val.unit (OrderDual.toDual 1)) := by
+  intro ls' _
+  show wpTS ls' (.app (.val (Val.lam (.val Val.unit))) (.val Val.unit)) _ _
+  apply wpTS_lolli
+  refine wpTS_drop (noOwn_single_imm _ _ _ _ _) (ResU.comp_empty_right _)
+    (wpTS_val ls' Val.unit _ PMap.empty ?_)
+  exact ⟨rfl, rfl⟩
+
+/-- **The type of a closure the resumer holds does not supply the join's frame condition, in
+any cactus.** At the world of `not_fdFromLifetimeTypes`, in `star`, with every hypothesis met,
+the resumer's closure of type `U (F 1)` holds a copy of the task's view. -/
+theorem not_fdFromThunkTypesT : ¬ FdFromThunkTypesT (ℍ := ℍ) Cactus.star := by
+  intro H
+  obtain ⟨W, μ, hT, htg, hlow, hc, hFLp, hFLq⟩ := fdWorld
+  obtain ⟨h1, h2, h3, -⟩ := star_config
+  have hj := H W (viewA 1 Val.unit (OrderDual.toDual 2)) (viewA 0 Val.unit (OrderDual.toDual 1))
+    (viewA 0 Val.unit (OrderDual.toDual 1)) (viewA 0 Val.unit (OrderDual.toDual 1)) [qR, pT] lsW μ
+    pT qR (OrderDual.toDual 1) (OrderDual.toDual 2) ⊤ δ₀ 0 (Val.lam (.val Val.unit)) hT htg hlow
+    (ResU.CompS.comm hc) (compS_imm_dup 0 _ Val.unit _ _) (by simp) hFLp
+    ⟨_, ResU.single_get_self _ _⟩ h1 (by simp) (by simp [pT, qR, cexRecF]) hFLq rfl h2 h3
+    (thunk_holds_view _ _ _)
+  obtain ⟨m, hm, hfree⟩ := hj
+  cases hm
+  obtain ⟨σ, hσ⟩ := (ResU.Valid.split hc hT.valid).1
+  have e := flat_single_imm_empty_eq hσ
+  have := hfree σ hσ
+  rw [e] at this
+  simp [pT, cexRecF, ResU.single_get_self] at this
+
+/-! ### What does supply it: the resumer's resources on its own branch -/
+
+/-- **No view of the task's lent location in the resumer's flattening**, from the cactus
+invariant instead of types: every cell of the resumer's flattening, closures' resources
+included, is on the resumer's branch through `n`, and the task's lend `α` is not on it. The
+`own`/`mut` half of `joinFd` reads ownership, not lifetimes, and is not derived here. -/
+theorem fdFromBranch_views (K : Cactus) {W ρf ρS ρk ρrest : WRes} {ps rs : List FrameRec}
+    {p : FrameRec} {α n : Life} (hT : TWNC W ps rs) (hW : ResU.CompS ρf ρS W)
+    (hS : ResU.CompS ρk ρrest ρS) (hFLp : FrameLife W p α)
+    (hbr : ∀ τ, ResU.Flat ρrest τ → OnBranchRes K n τ) (hnα : ¬ K.le n α) :
+    ∀ τ, ResU.Flat ρrest τ → ∀ χ : CellU Loc Val, τ.get p.le = some χ → χ.kind ≠ Kind.imm := by
+  intro τ hτ χ hχ hk
+  obtain ⟨er, ar, her, har, hcr⟩ := hτ
+  -- the view comes from `ag(ρrest)`: `ex(ρrest)` holds no `imm` cell
+  have har_get : ar.get p.le = some χ := by
+    rcases hcr.get p.le with ⟨-, -, f⟩ | ⟨ψ, f₁, -, f⟩ | ⟨ψ, -, f₂, f⟩ |
+        ⟨ψ₁, ψ₂, ψ, f₁, -, f, hC⟩
+    · rw [hχ] at f; exact absurd f (by simp)
+    · rw [hχ] at f; cases Option.some.inj f; exact absurd hk (ExS.immFree her _ _ f₁)
+    · rw [hχ] at f; cases Option.some.inj f; exact f₂
+    · obtain ⟨s₁, _, _, _, _, _, _, e₁, -, -⟩ := hC
+      exact absurd (by rw [e₁]; rfl) (ExS.immFree her _ _ f₁)
+  obtain ⟨s, hs, hη⟩ := CellU.imm_eta hk
+  rw [hη] at har_get
+  -- its lifetimes are on `n`'s branch
+  have hbrχ := hbr τ ⟨er, ar, her, har, hcr⟩ p.le χ hχ
+  rw [hη] at hbrχ
+  -- and inside `ag(W)`'s view at `p.le`, whose lifetimes are `α`
+  have hvS : ResU.Valid ρS := (ResU.Valid.split hW hT.valid).2
+  obtain ⟨τS, hτS⟩ := hvS
+  obtain ⟨-, -, -, ak, ar', aS, -, -, -, hak, har', hacS, -⟩ := (ResU.Flat.split hS).mp hτS
+  rw [AgW.functional har' har] at hacS
+  obtain ⟨s₁, _, _, _, e₁, hs₁⟩ := compR_imm_right_ls hacS har_get
+  obtain ⟨τW, hτW⟩ := hT.valid
+  obtain ⟨-, -, -, af, aS', aW, -, -, -, haf, haS', hacW, -⟩ := (ResU.Flat.split hW).mp hτW
+  have haS : AgW ρS aS := (AgW.split hS).mpr ⟨ak, ar, hak, har, hacS⟩
+  rw [AgW.functional haS' haS] at hacW
+  obtain ⟨s₂, _, _, _, e₂, hs₂⟩ := compR_imm_right_ls hacW e₁
+  have haW : AgW W aW := (AgW.split hW).mpr ⟨af, aS, haf, haS, hacW⟩
+  have hj : s.join = α :=
+    hFLp.1 aW haW _ s₂ e₂ (CellU.lsOf_immOf _ _ _ _) _ (hs₂ _ (hs₁ _ s.join_mem))
+  exact hnα (hj ▸ hbrχ _ s.join_mem)
+
+/-- The hypotheses of `fdFromBranch_views` are met at the world of `not_fdFromLifetimeTypes`,
+the resumer holding its own view, its branch point its lend `β = 2`. -/
+theorem fdFromBranch_views_hyps :
+    (∀ τ, ResU.Flat (viewA 1 Val.unit (OrderDual.toDual 2)) τ →
+      OnBranchRes Cactus.star (OrderDual.toDual 2) τ) ∧
+    ¬ Cactus.star.le (OrderDual.toDual 2) (OrderDual.toDual 1) := by
+  refine ⟨fun τ hτ => ?_, star_config.2.2.1⟩
+  obtain rfl := flat_single_imm_empty_eq hτ
+  intro l ψ e
+  obtain ⟨-, rfl⟩ := ResU.single_get_eq_some e
+  intro x hx
+  cases hx
+  exact Cactus.star.refl _
 
 end BoCa.Fig16.LogRel.Core.Tree
 
