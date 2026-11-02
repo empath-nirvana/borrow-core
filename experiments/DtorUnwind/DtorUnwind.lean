@@ -84,3 +84,5 @@ import DtorUnwind.SI.CaptureGen
 import DtorUnwind.SI.Erwp0
 import DtorUnwind.SI.Uncapture
 import DtorUnwind.SI.CaptureScope
+import DtorUnwind.SI.CaptureHeap
+import DtorUnwind.SI.CaptureAdequacy
