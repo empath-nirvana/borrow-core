@@ -411,11 +411,11 @@ theorem mainM_ok (n : Nat) :
     refine cerwp_det hDE Qmain_down
       (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
     simp (config := { decide := true }) only [Expr.subst, if_true, if_false, Nat.reduceAdd,
-      inj₁_shift, pair_shift, loc_shift, Kont.plug, omegaE_subst]
+      Kont.plug]
     refine cerwp_det hDE Qmain_down
       (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
     simp (config := { decide := true }) only [Expr.subst, if_true, if_false, Nat.reduceAdd,
-      inj₁_shift, pair_shift, loc_shift, Kont.plug, omegaE_subst]
+      inj₁_shift, pair_shift, loc_shift, Kont.plug]
     refine cerwp_det hDE Qmain_down
       (fun μ => step1Only_plug (Head.letpair μ (Val.loc ℓf) (Val.loc ℓκ) _) rfl .hole) ?_
     simp (config := { decide := true }) only [M2, M3, M4, M5, Expr.subst, if_true, if_false,
@@ -473,9 +473,8 @@ theorem mainM_ok (n : Nat) :
       unitV_subst, inj₁unitV_subst]
     refine cerwp_det hDE Qmain_down
       (fun μ => step1Only_plug (Head.case₂ μ _ _ _) rfl .hole) ?_
-    simp (config := { decide := true }) only [Expr.subst, if_true, if_false, Nat.reduceAdd,
-      Nat.reduceSub, loc_shift, Kont.plug, omegaE_subst, prim_subst, locV_subst,
-      unitV_subst, inj₁unitV_subst]
+    simp (config := { decide := true }) only [Expr.subst, Nat.reduceAdd, Kont.plug, omegaE_subst,
+      prim_subst, locV_subst, unitV_subst, inj₁unitV_subst]
     -- r₄: the child resumed, `κ′_p` kept beside it
     rw [List.append_nil]
     refine cerwp_frameBindE (Q₁ := QCM (ℍ := ℍ) ℓ (fun ρf => True ∧ True))
@@ -496,9 +495,8 @@ theorem mainM_ok (n : Nat) :
     subst hO₄
     refine cerwp_det hDE Qmain_down
       (fun μ => step1Only_plug (Head.case₂ μ _ _ _) rfl .hole) ?_
-    simp (config := { decide := true }) only [Expr.subst, if_true, if_false, Nat.reduceAdd,
-      Nat.reduceSub, loc_shift, Kont.plug, omegaE_subst, prim_subst, locV_subst,
-      unitV_subst, inj₁unitV_subst]
+    simp (config := { decide := true }) only [Expr.subst, Nat.reduceAdd, Kont.plug, omegaE_subst,
+      prim_subst, locV_subst, unitV_subst, inj₁unitV_subst]
     -- r₅: the parent resumed from the join, with the borrow back
     obtain ⟨uc, rfl⟩ := hleft
     rw [show ([] : List FrameRec) ++ O₃ = O₃ ++ [] by simp]
@@ -568,11 +566,11 @@ theorem mainDM_ok (n : Nat) :
     refine cerwp_det hDE Qmain_down
       (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
     simp (config := { decide := true }) only [Expr.subst, if_true, if_false, Nat.reduceAdd,
-      inj₁_shift, pair_shift, loc_shift, Kont.plug, omegaE_subst]
+      Kont.plug]
     refine cerwp_det hDE Qmain_down
       (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
     simp (config := { decide := true }) only [Expr.subst, if_true, if_false, Nat.reduceAdd,
-      inj₁_shift, pair_shift, loc_shift, Kont.plug, omegaE_subst]
+      inj₁_shift, pair_shift, loc_shift, Kont.plug]
     refine cerwp_det hDE Qmain_down
       (fun μ => step1Only_plug (Head.letpair μ (Val.loc ℓf) (Val.loc ℓκ) _) rfl .hole) ?_
     simp (config := { decide := true }) only [M2d, M3d, M4d, Expr.subst, if_true, if_false,
@@ -631,9 +629,8 @@ theorem mainDM_ok (n : Nat) :
       unitV_subst, inj₁unitV_subst]
     refine cerwp_det hDE Qmain_down
       (fun μ => step1Only_plug (Head.case₂ μ _ _ _) rfl .hole) ?_
-    simp (config := { decide := true }) only [Expr.subst, if_true, if_false, Nat.reduceAdd,
-      Nat.reduceSub, loc_shift, Kont.plug, omegaE_subst, prim_subst, locV_subst,
-      unitV_subst, inj₁unitV_subst]
+    simp (config := { decide := true }) only [Expr.subst, Nat.reduceAdd, Kont.plug, omegaE_subst,
+      prim_subst, locV_subst, unitV_subst, inj₁unitV_subst]
     -- r₄: the child cancelled while the lend is live, `κ′_p` kept beside it; the cancel run
     -- unwinds the child and returns its borrow
     rw [List.append_nil]
