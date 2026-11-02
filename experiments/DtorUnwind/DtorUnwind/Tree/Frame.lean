@@ -25,7 +25,7 @@ than it is infinite"*, is `hchild`: the branch point has a child.
 
 Every other step is the printed one: 6.104, 6.10, 6.11, 6.15, 6.34, 6.29, 6.38, 6.26, 6.8,
 6.39 are applied unchanged. They read only the carrier's strata, which a tree stratum implies
-(`ResU.InStratumT.toChain`).
+when the tree sits inside the chain (`ResU.InStratumT.toChain`, `Cactus.InChain`).
 -/
 
 noncomputable section
@@ -155,8 +155,10 @@ open BoCa.BoLo (Heap Steps Step1 Head Kont eLoad eStore)
 
 /-- **`[TR]` Theorem 6.64 (`Imm Frame`) in the tree order**, by the printed proof. Added
 hypotheses: `hchild`, H4's *"such an `α` always exists"* at the branch point; `hbr`, the lent
-payload lies on the branch (what 6.112's `⊓` reads). -/
-theorem wp_I_frameT (K : Cactus) (n : Life) (hchild : ∃ c, K.lt c n) (l : BoCa.Loc)
+payload lies on the branch (what 6.112's `⊓` reads). The order sits inside the chain (`hK`),
+so the carrier's strata hold the tree's. -/
+theorem wp_I_frameT (K : Cactus) (hK : K.InChain) (n : Life) (hchild : ∃ c, K.lt c n)
+    (l : BoCa.Loc)
     (P : Val → WProp) (v : Val) (e : Expr) (Q : Val → WProp)
     (hbr : ∀ ρ, P v ρ → OnBranchRes K n ρ) :
     Entails
@@ -184,8 +186,8 @@ theorem wp_I_frameT (K : Cactus) (n : Life) (hchild : ∃ c, K.lt c n) (l : BoCa
   -- H10 and H11, in `K`, and in the carrier's stratum
   have houtPT : ResU.InStratumT K A ρP := ((inStratumT_comp hclP).mp houtlP).2
   have houtbT : ResU.InStratumT K A ρb := ((inStratumT_comp hcρ).mp houtρ).2
-  have houtP : ResU.InStratum A ρP := houtPT.toChain
-  have houtb : ResU.InStratum A ρb := houtbT.toChain
+  have houtP : ResU.InStratum A ρP := houtPT.toChain hK
+  have houtb : ResU.InStratum A ρb := houtbT.toChain hK
   -- the "fictional" `ρᵢ = ℓ ↦ imm({α}, v, ρ_P̂(v))`, well formed by H10
   set ρi : ResU BoCa.Loc BoCa.Val :=
     ResU.single l (CellU.immOf (LSet.singleton A) v ρP houtP) with hρidef
@@ -211,7 +213,7 @@ theorem wp_I_frameT (K : Cactus) (n : Life) (hchild : ∃ c, K.lt c n) (l : BoCa
     h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12⟩ := hwpBI ρf hH17
   -- H24 and H25
   obtain ⟨hwand', houtρ'T⟩ := h12
-  have houtρ' : ResU.InStratum A ρ' := houtρ'T.toChain
+  have houtρ' : ResU.InStratum A ρ' := houtρ'T.toChain hK
   -- H27
   obtain ⟨hfρp, hρ'p⟩ := ResU.Hash.split h2 (ResU.hash_symm h3)
   -- H26: 6.29 with H11 and H12 and H21, then "by H24, `ℓ ∉ dom(ρ′)`"
@@ -315,10 +317,10 @@ theorem wp_I_frameT (K : Cactus) (n : Life) (hchild : ∃ c, K.lt c n) (l : BoCa
     hupdw, hno, hQ⟩
 /-- The added hypotheses are met: in `star` at the branch point `⊤`, with a payload that holds
 no borrow. -/
-theorem wp_I_frameT_hyps (v : Val) :
+theorem wp_I_frameT_hyps (v : Val) : Cactus.star.InChain ∧
     (∃ c, Cactus.star.lt c ⊤) ∧
       ∀ ρ, (fun _ : Val => (emp : WProp)) v ρ → OnBranchRes Cactus.star ⊤ ρ := by
-  refine ⟨⟨_, Cactus.star_lt_top (n := 1) (by decide)⟩, ?_⟩
+  refine ⟨Cactus.star_inChain, ⟨_, Cactus.star_lt_top (n := 1) (by decide)⟩, ?_⟩
   rintro ρ ⟨rfl, -⟩ l ψ e
   simp at e
 

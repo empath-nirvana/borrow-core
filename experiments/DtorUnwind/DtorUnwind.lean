@@ -96,3 +96,7 @@ import DtorUnwind.Tree.Rel
 import DtorUnwind.Tree.FdTree
 import DtorUnwind.Tree.Scan
 import DtorUnwind.Tree.Frame
+import DtorUnwind.Tree.Parent
+import DtorUnwind.Tree.Comparability
+import DtorUnwind.Tree.Graft
+import DtorUnwind.Tree.ChainUses

@@ -35,8 +35,8 @@ Contents:
 * The meet of a lifetime set as it is read: `α ⊑ ⊓ᾱ ↔ ∀ x ∈ ᾱ. α ⊑ x` and
   `⊓ᾱ ⊏ x ↔ ∃ y ∈ ᾱ. y ⊏ x` in the chain (`LSet.le_meet_iff`, `LSet.meet_lt_iff`); the tree
   reading takes the right-hand sides.
-* Strata in the tree order: `CellU.InStratumT`/`ResU.InStratumT`, implied by the printed
-  stratum (`ResU.InStratumT.toChain`) and equal to it in the chain (`ResU.inStratumT_chainC`);
+* Strata in the tree order: `CellU.InStratumT`/`ResU.InStratumT`, inside the printed
+  stratum when the order sits inside the chain (`ResU.InStratumT.toChain`) and equal to it in the chain (`ResU.inStratumT_chainC`);
   `Res_{⊔ᾱ}` read as `⋂_{x ∈ ᾱ} Res_x` (`ResU.InStratumAll`), equal to the printed one in the
   chain (`ResU.inStratumAll_chainC`).
 -/
@@ -47,14 +47,12 @@ namespace BoCa.Fig16.Tree
 open BoCa.Fig16
 
 /-- **A lifetime order that is a tree.** `le a b`: `a` is `b` or nested inside it. The
-lifetimes above any one form a chain (`up_chain`); the order sits inside the printed chain,
-which is the order lifetimes are opened in (`sub`). -/
+lifetimes above any one form a chain (`up_chain`), and `⊤` is above every lifetime. -/
 structure Cactus where
   le : Life → Life → Prop
   refl : ∀ a, le a a
   trans : ∀ {a b c}, le a b → le b c → le a c
   antisymm : ∀ {a b}, le a b → le b a → a = b
-  sub : ∀ {a b}, le a b → a ≤ b
   top : ∀ a, le a ⊤
   up_chain : ∀ {a b c}, le a b → le a c → le b c ∨ le c b
 
@@ -65,8 +63,12 @@ def lt (C : Cactus) (a b : Life) : Prop := C.le a b ∧ a ≠ b
 
 theorem lt.le {C : Cactus} {a b : Life} (h : C.lt a b) : C.le a b := h.1
 
-theorem lt.sub {C : Cactus} {a b : Life} (h : C.lt a b) : a < b :=
-  lt_of_le_of_ne (C.sub h.1) h.2
+/-- **The order sits inside the printed chain**: a lifetime nested inside another was opened
+after it. -/
+def InChain (C : Cactus) : Prop := ∀ {a b : Life}, C.le a b → a ≤ b
+
+theorem lt.sub {C : Cactus} (hC : C.InChain) {a b : Life} (h : C.lt a b) : a < b :=
+  lt_of_le_of_ne (hC h.1) h.2
 
 theorem lt_irrefl (C : Cactus) (a : Life) : ¬ C.lt a a := fun h => h.2 rfl
 
@@ -84,11 +86,12 @@ def chainC : Cactus where
   refl a := le_refl a
   trans h₁ h₂ := le_trans h₁ h₂
   antisymm h₁ h₂ := le_antisymm h₁ h₂
-  sub h := h
   top _ := le_top
   up_chain {_ b c} _ _ := le_total b c
 
 @[simp] theorem chainC_le (a b : Life) : chainC.le a b ↔ a ≤ b := Iff.rfl
+
+theorem chainC_inChain : chainC.InChain := fun h => h
 
 theorem chainC_lt (a b : Life) : chainC.lt a b ↔ a < b :=
   ⟨fun h => lt_of_le_of_ne h.1 h.2, fun h => ⟨h.le, ne_of_lt h⟩⟩
@@ -107,10 +110,6 @@ def star : Cactus where
     · rcases h₂ with h | h
       · exact h.symm
       · exact h
-  sub {a b} h := by
-    rcases h with rfl | rfl
-    · exact le_refl _
-    · exact le_top
   top a := Or.inr rfl
   up_chain {a b c} h₁ h₂ := by
     rcases h₁ with rfl | rfl
@@ -118,6 +117,12 @@ def star : Cactus where
     · rcases h₂ with rfl | rfl
       · exact Or.inr (Or.inr rfl)
       · exact Or.inl (Or.inl rfl)
+
+theorem star_inChain : star.InChain := by
+  intro a b h
+  rcases h with rfl | rfl
+  · exact le_refl _
+  · exact le_top
 
 /-- `n ≠ 0` is a child of `⊤` in `star`. -/
 theorem star_lt_top {n : Nat} (hn : n ≠ 0) : star.lt (OrderDual.toDual n) ⊤ :=
@@ -165,10 +170,10 @@ theorem onBranch_comparable (C : Cactus) {n a b : Life} (ha : C.OnBranch n a)
 def IsSup (C : Cactus) (a b j : Life) : Prop :=
   C.le a j ∧ C.le b j ∧ ∀ x, C.le a x → C.le b x → C.le j x
 
-/-- **`⊔` exists in a tree**: the nearest common ancestor. The common ancestors of `a` are
-among the finitely many lifetimes opened before it; the one opened last is below every other,
-because they are all above `a` and so form a chain. -/
-theorem exists_sup (C : Cactus) (a b : Life) : ∃ j, C.IsSup a b j := by
+/-- **`⊔` exists in a tree inside the chain**: the nearest common ancestor. The common
+ancestors of `a` are among the finitely many lifetimes opened before it; the one opened last is
+below every other, because they are all above `a` and so form a chain. -/
+theorem exists_sup (C : Cactus) (hC : C.InChain) (a b : Life) : ∃ j, C.IsSup a b j := by
   classical
   let P : Nat → Prop := fun k => C.le a (OrderDual.toDual k) ∧ C.le b (OrderDual.toDual k)
   have hP0 : P 0 := ⟨C.top a, C.top b⟩
@@ -177,10 +182,10 @@ theorem exists_sup (C : Cactus) (a b : Life) : ∃ j, C.IsSup a b j := by
   refine ⟨OrderDual.toDual k, hk.1, hk.2, fun x hax hbx => ?_⟩
   rcases C.up_chain hk.1 hax with h | h
   · exact h
-  · have hx : OrderDual.ofDual x ≤ OrderDual.ofDual a := C.sub hax
+  · have hx : OrderDual.ofDual x ≤ OrderDual.ofDual a := hC hax
     have hle : OrderDual.ofDual x ≤ k :=
       Nat.le_findGreatest (P := P) hx ⟨hax, hbx⟩
-    have hge : k ≤ OrderDual.ofDual x := C.sub h
+    have hge : k ≤ OrderDual.ofDual x := hC h
     have : x = OrderDual.toDual k := by
       apply OrderDual.ofDual.injective; simp only [OrderDual.ofDual_toDual]; omega
     subst this
@@ -250,17 +255,17 @@ def CellU.InStratumT (C : Cactus) (α : Life) : CellU Loc Val → Prop
 def ResU.InStratumT (C : Cactus) (α : Life) (ρ : ResU Loc Val) : Prop :=
   ∀ l ψ, ρ.get l = some ψ → CellU.InStratumT C α ψ
 
-theorem CellU.InStratumT.toChain {C : Cactus} {α : Life} {ψ : CellU Loc Val}
+theorem CellU.InStratumT.toChain {C : Cactus} (hC : C.InChain) {α : Life} {ψ : CellU Loc Val}
     (h : CellU.InStratumT C α ψ) : ψ.InStratum α := by
   cases ψ with
   | own _ => trivial
-  | imm i => exact (h _ i.ls.meet_mem).sub
-  | «mut» m => exact Cactus.lt.sub h
+  | imm i => exact (h _ i.ls.meet_mem).sub hC
+  | «mut» m => exact Cactus.lt.sub hC h
 
-/-- The tree stratum is inside the printed one. -/
-theorem ResU.InStratumT.toChain {C : Cactus} {α : Life} {ρ : ResU Loc Val}
+/-- The tree stratum is inside the printed one, when the order sits inside the chain. -/
+theorem ResU.InStratumT.toChain {C : Cactus} (hC : C.InChain) {α : Life} {ρ : ResU Loc Val}
     (h : ResU.InStratumT C α ρ) : ρ.InStratum α :=
-  fun l ψ e => CellU.InStratumT.toChain (h l ψ e)
+  fun l ψ e => CellU.InStratumT.toChain hC (h l ψ e)
 
 theorem CellU.inStratumT_chainC (α : Life) (ψ : CellU Loc Val) :
     CellU.InStratumT Cactus.chainC α ψ ↔ ψ.InStratum α := by
