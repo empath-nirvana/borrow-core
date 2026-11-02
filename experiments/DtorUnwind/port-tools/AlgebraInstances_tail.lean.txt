@@ -1,0 +1,23 @@
+
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+variable {Loc Val : Type} {K : WCactus}
+
+/-- The lifetime set of a `●` composite is the union: where the printed `CellU.CompS.at` has
+`@(ψ₁ ● ψ₂) = @ψ₁ ⊓ @ψ₂`. -/
+theorem CellUT.CompS.lsOf {ψ₁ ψ₂ ψ : CellUT Loc Val K} (h : CellUT.CompS ψ₁ ψ₂ ψ) :
+    ∃ s₁ s₂, ψ₁.lsOfI = some s₁ ∧ ψ₂.lsOfI = some s₂ ∧ ψ.lsOfI = some (s₁ ∪ s₂) := by
+  obtain ⟨s₁, s₂, v, ρ, k₁, k₂, k₃, e₁, e₂, e₃⟩ := h
+  subst e₁; subst e₂; subst e₃
+  exact ⟨s₁, s₂, rfl, rfl, rfl⟩
+
+/-- `Res_S` is preserved and reflected by `●` at a cell. -/
+theorem CellUT.CompS.inStratum {ψ₁ ψ₂ ψ : CellUT Loc Val K} (hC : CellUT.CompS ψ₁ ψ₂ ψ)
+    (α : TSet) : ψ.InStratum α ↔ (ψ₁.InStratum α ∧ ψ₂.InStratum α) := by
+  obtain ⟨s₁, s₂, v, σ, k₁, k₂, k₃, e₁, e₂, e₃⟩ := hC
+  subst e₁; subst e₂; subst e₃
+  exact K.above_union_iff
+
+end BoCa.Fig16.Tree
+
+end

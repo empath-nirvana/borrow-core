@@ -1,0 +1,30 @@
+namespace BoCa.Fig16
+variable {Loc Val : Type}
+
+theorem ResU.sites_nil_of_none {ρ : ResU Loc Val} {k : Kind} {d : List Loc}
+    (h : ResU.Sites ρ k d) (hno : ∀ l ψ, ρ.get l = some ψ → ψ.kind ≠ k) : d = [] := by
+  cases d with
+  | nil => rfl
+  | cons a t =>
+      obtain ⟨ψ, hg, hk⟩ := (h.2 a).mp List.mem_cons_self
+      exact absurd hk (hno a ψ hg)
+
+theorem ResU.sites_singleton_of {ρ : ResU Loc Val} {k : Kind} {d : List Loc} {l : Loc}
+    (hs : ResU.Sites ρ k d)
+    (hchar : ∀ x, (∃ ψ, ρ.get x = some ψ ∧ ψ.kind = k) ↔ x = l) : d = [l] := by
+  have hm : ∀ x, x ∈ d ↔ x = l := fun x => (hs.2 x).trans (hchar x)
+  cases d with
+  | nil => exact absurd ((hm l).mpr rfl) (by simp)
+  | cons a t =>
+      obtain rfl : a = l := (hm a).mp List.mem_cons_self
+      cases t with
+      | nil => rfl
+      | cons b t' =>
+          obtain rfl : b = a := (hm b).mp (List.mem_cons_of_mem _ List.mem_cons_self)
+          exact absurd List.mem_cons_self (List.nodup_cons.mp hs.1).1
+
+theorem BigComp.nil_inv {R : CellU Loc Val → CellU Loc Val → Prop}
+    {C : CellU Loc Val → CellU Loc Val → CellU Loc Val → Prop} {b : ResU Loc Val}
+    (h : BigComp R C [] b) : b = PMap.empty := by cases h; rfl
+
+end BoCa.Fig16

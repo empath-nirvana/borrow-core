@@ -1,0 +1,53 @@
+namespace BoCa.Fig16
+variable {Loc Val : Type}
+
+/-- `↭` keeps the stratum.
+`[about ours: `[TR]` Lemma 6.50 read as a statement about `Res_α`]` -/
+theorem ResU.updV_inStratum {ρ ρ' : ResU BoCa.Loc BoCa.Val} {α : Life}
+    (hd : ρ.InStratum α) (hu : ResU.UpdV ρ ρ') : ρ'.InStratum α := by
+  obtain ⟨σ, hσ⟩ := hu.2.1
+  obtain ⟨σ', hσ'⟩ := hu.2.2
+  have hσα : σ.InStratum α := BoLo.flat_inStratum hσ hd
+  refine BoLo.flat_inStratum_inv hσ' ?_
+  intro m χ hχ
+  rcases CellU.rep χ with ⟨w, rfl⟩ | ⟨s, w, ξ, hξ, rfl⟩ | ⟨b, w, ξ, hξ, P, hP, rfl⟩
+  · exact trivial
+  · obtain ⟨τ, hτ, hgg⟩ := (hu.1.1 m s w ξ hξ).mpr ⟨σ', hσ', hχ⟩
+    cases ResU.Flat.functional hτ hσ
+    exact hσα m _ hgg
+  · obtain ⟨w₀, ξ₀, hξ₀, hP₀, τ, hτ, hgg⟩ :=
+      (hu.1.2 m b P).mpr ⟨w, ξ, hξ, hP, ⟨σ', hσ', hχ⟩⟩
+    cases ResU.Flat.functional hτ hσ
+    exact (hσα m _ hgg : b ⊐ α)
+
+/-- An `own` or a `mut` cell sits in its own flattening unchanged.  `[about ours:
+the step `[TR]` 6.27's proof reads off `⦇−⦈` at an exclusive cell]` -/
+theorem ResU.flat_get_of_ne_imm {Loc Val : Type} {ρ σ : ResU Loc Val}
+    (h : ρ.Flat σ) {l : Loc} {ψ : CellU Loc Val}
+    (hg : ρ.get l = some ψ) (hk : ψ.kind ≠ Kind.imm) : σ.get l = some ψ := by
+  obtain ⟨e, a, he, ha, hc⟩ := h
+  exact (ResU.CompS.get_left_of_ne_imm hc (ExS.get_of_ne_imm he hg hk) hk).2
+
+
+/-- `ρ = ρ/ℓ ● ℓ ↦ ρ(ℓ)`.
+`[about ours: `[TR]` p. 5's `/` against `●`, at one location]` -/
+theorem ResU.del_compS {ρ : ResU Loc Val} {l : Loc} {ψ : CellU Loc Val}
+    (hg : ρ.get l = some ψ) : ResU.CompS (ρ.del l) (ResU.single l ψ) ρ := by
+  classical
+  refine ⟨ResU.Compat.of_disjoint (fun m => ?_), fun m => ?_⟩
+  · by_cases hm : m = l
+    · exact Or.inl (by rw [hm]; exact ResU.del_get_self ρ l)
+    · exact Or.inr (ResU.single_get_ne ψ hm)
+  · by_cases hm : m = l
+    · subst hm
+      show OptComp CellU.CompS ((ρ.del m).get m) ((ResU.single m ψ).get m) (ρ.get m)
+      rw [ResU.del_get_self, ResU.single_get_self]
+      exact hg
+    · show OptComp CellU.CompS ((ρ.del l).get m) ((ResU.single l ψ).get m) (ρ.get m)
+      rw [ResU.del_get_ne ρ hm, ResU.single_get_ne ψ hm]
+      cases e : ρ.get m with
+      | none => rfl
+      | some χ => rfl
+
+
+end BoCa.Fig16
