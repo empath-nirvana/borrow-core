@@ -128,10 +128,10 @@ def LinLocT (p : FrameRecT K) (m : BoCa.Loc) : Prop :=
 
 /-- `FrameLife` read in `K`: `p`'s frame is at `α`, and its lineage's views are no longer. -/
 def FrameLifeT (K : WCactus) (W : TRes K) (p : FrameRecT K) (α : Life) : Prop :=
-  (∀ a, AgWT W a → ∀ (ζ : TCell K) t, a.get p.le = some ζ → ζ.lsOf = some t →
+  (∀ a, AgWT W a → ∀ (ζ : TCell K) t, a.get p.le = some ζ → ζ.lsOfI = some t →
     ∀ y ∈ t.set, y = α) ∧
   (∀ a, AgWT W a → ∀ m, LinLocT p m → ∀ (ψ : TCell K) s, a.get m = some ψ →
-    ψ.lsOf = some s → ∀ x ∈ s.set, K.le x α)
+    ψ.lsOfI = some s → ∀ x ∈ s.set, K.le x α)
 
 /-! ### The reborrow premises -/
 
@@ -146,15 +146,15 @@ def RebEndRecT (K : WCactus) (W' : TRes K) (rs : List (FrameRecT K)) (w₀ : TRe
     Prop :=
   ∀ r ∈ rs, ∀ l₀ m S u, ChainT r.R r.T r.v (some l₀) m S u →
     (∃ ζ : TCell K, w₀.get l₀ = some ζ ∧ ζ.kind ≠ Kind.imm) →
-    ∀ a', AgWT W' a' → ∀ (ψ : TCell K) s, a'.get m = some ψ → ψ.lsOf = some s →
+    ∀ a', AgWT W' a' → ∀ (ψ : TCell K) s, a'.get m = some ψ → ψ.lsOfI = some s →
       ∀ x ∈ s.set, K.lt x β →
-      ∃ (ζ : TCell K) (t : TSet) (y : Life), a'.get l₀ = some ζ ∧ ζ.lsOf = some t ∧
+      ∃ (ζ : TCell K) (t : TSet) (y : Life), a'.get l₀ = some ζ ∧ ζ.lsOfI = some t ∧
         y ∈ t.set ∧ K.lt x y
 
 /-- `RebCellLe` read in `K`. -/
 def RebCellLeT (K : WCactus) (W : TRes K) (l₀ : BoCa.Loc) (β : Life) : Prop :=
   ∀ a, AgWT W a → ∃ (ψ : TCell K) (t : TSet) (y : Life), a.get l₀ = some ψ ∧
-    ψ.lsOf = some t ∧ y ∈ t.set ∧ K.lt β y
+    ψ.lsOfI = some t ∧ y ∈ t.set ∧ K.lt β y
 
 /-! ### Re-taking an image at `β` -/
 
