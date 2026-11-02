@@ -173,12 +173,12 @@ theorem uncapture_world {l : Loc} {v : Val} {T : VTy} {δ : LSub} {s : LSet}
     (hW : ResU.CompS ρf ρres W) (hT : TWNC W ps (rsOf ls)) (htg : Tagged W ps ls)
     (hlow : ResU.Lower W μ)
     (hfo : ResU.Hash ρf (ResU.single l (CellU.ownOf v)))
-    (hSo : ResU.Hash S (ResU.single l (CellU.ownOf v))) :
-    ∃ (ρres' W' : WRes) (ps' : List FrameRec) (ls' : List SRec),
+    (hSo : ResU.Hash S (ResU.single l (CellU.ownOf v))) (ls' : List SRec)
+    (hls' : ∀ x, x ∈ ls' ↔ x ∈ ls ∧ x.1 ≠ ⟨l, v, PMap.empty, T, δ⟩) :
+    ∃ (ρres' W' : WRes) (ps' : List FrameRec),
       ResU.CompS S (ResU.single l (CellU.ownOf v)) ρres' ∧ ResU.Hash ρf ρres' ∧
       ResU.CompS ρf ρres' W' ∧
       (∀ q, q ∈ ps' ↔ q ∈ ps ∧ q ≠ ⟨l, v, PMap.empty, T, δ⟩) ∧
-      (∀ x, x ∈ ls' ↔ x ∈ ls ∧ x.1 ≠ ⟨l, v, PMap.empty, T, δ⟩) ∧
       TWNC W' ps' (rsOf ls') ∧ Tagged W' ps' ls' ∧ ResU.Lower W' μ := by
   classical
   set p : FrameRec := ⟨l, v, PMap.empty, T, δ⟩ with hpdef
@@ -200,8 +200,6 @@ theorem uncapture_world {l : Loc} {v : Val} {T : VTy} {δ : LSub} {s : LSet}
   -- the records and the list after the end
   obtain ⟨ps', hps'⟩ : ∃ ps' : List FrameRec, ∀ q, q ∈ ps' ↔ q ∈ ps ∧ q ≠ p :=
     ⟨ps.filter (fun q => decide (q ≠ p)), fun q => by simp⟩
-  obtain ⟨ls', hls'⟩ : ∃ ls' : List SRec, ∀ x, x ∈ ls' ↔ x ∈ ls ∧ x.1 ≠ p :=
-    ⟨ls.filter (fun x => decide (x.1 ≠ p)), fun x => by simp⟩
   have hR : p.R = PMap.empty := rfl
   have hrs' : ∀ d, d ∈ rsOf ls' ↔ ∃ q ∈ ps', DescR q d := by
     intro d
@@ -253,7 +251,7 @@ theorem uncapture_world {l : Loc} {v : Val} {T : VTy} {δ : LSub} {s : LSet}
   obtain ⟨ρres', hρres'⟩ := (ResU.compS_defined_iff S ρo).mpr hSo.1
   obtain ⟨x, hx, hW''⟩ := (ResU.CompS.assoc ρf S ρo W').mpr ⟨Y, hY, hW'c⟩
   cases ResU.CompS.functional hx hρres'
-  refine ⟨ρres', W', ps', ls', hρres', ⟨hW''.1, W', hW'', hvW'⟩, hW'', hps', hls', hTout,
+  refine ⟨ρres', W', ps', hρres', ⟨hW''.1, W', hW'', hvW'⟩, hW'', hps', hTout,
     htgout, hlow'⟩
 
 end BoCa.Fig16.LogRel.Core.DtorUnwind.SI

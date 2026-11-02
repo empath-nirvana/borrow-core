@@ -83,3 +83,4 @@ import DtorUnwind.SI.CaptureE
 import DtorUnwind.SI.CaptureGen
 import DtorUnwind.SI.Erwp0
 import DtorUnwind.SI.Uncapture
+import DtorUnwind.SI.CaptureScope
