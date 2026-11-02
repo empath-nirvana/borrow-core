@@ -221,9 +221,11 @@ theorem cerwp_scopeK {Φ : LocFam} (l : Loc) (v : Val) (T : VTy) (δ : LSub)
     (A : Life) (nJ iJ : UInt32) {Tin : OpTabN} {Tout : OpTabC} (hToutD : Tout.Down)
     (hTabs : ScopeTabs Tin Tout nJ iJ) {Q₀ : PostN} {Qout : PostCV} (hQout : Qout.Down)
     (hQ₀u : ∀ k ls (w : Val) ρ, Q₀ k ls w ρ → w = Val.unit)
+    (O : List FrameRec)
     (hpost : ∀ k k₀ ls₀ ls' O' (w₀ : Val) π ρout, k ≤ k₀ → Q₀ k₀ ls₀ w₀ π →
+      (∀ q, q ∈ O' ↔ q ∈ O ∧ q ≠ recP l v T δ) →
       ResU.CompS (π.del l) (ResU.single l (CellU.ownOf v)) ρout → Qout k ls' O' Val.unit ρout) :
-    ∀ n (F : WRes → Prop) ls (O : List FrameRec) e (ρin ρo : WRes), recP l v T δ ∈ O →
+    ∀ n (F : WRes → Prop) ls e (ρin ρo : WRes), recP l v T δ ∈ O →
       ResU.CompS ρin (viewA l v A) ρo → ScopeInv l v A ρo →
       erwp0 (ℍ := ℍ) Φ (opTableN Tin) Q₀ n ls e ρin →
       cerwp (ℍ := ℍ) (opTableC Tout) Qout F n ls O ((seqK nJ iJ l).plug e) ρo := by
@@ -231,7 +233,7 @@ theorem cerwp_scopeK {Φ : LocFam} (l : Loc) (v : Val) (T : VTy) (δ : LSub)
   intro n
   induction n using Nat.strong_induction_on with
   | _ n ih =>
-  intro F ls O e ρin ρo hpO hcin hinv h
+  intro F ls e ρin ρo hpO hcin hinv h
   obtain ⟨Y, hY, hYA, hYo⟩ := hinv
   have hLout := opTableC_local Tout
   have hDout := opTableC_down hToutD
@@ -311,7 +313,7 @@ theorem cerwp_scopeK {Φ : LocFam} (l : Loc) (v : Val) (T : VTy) (δ : LSub)
     rw [cerwp_eq]
     refine crwpG_update (ρ₁ := ρout) (O₁ := OF) (ls₁ := lsF) (fun ρf fρ ps psF μ hFf hf hcf hSp
       hT htg hlow => ?_) (crwpG_here (fun μ => final_val μ Val.unit)
-        (Or.inl ⟨Val.unit, rfl, hpost k' k ls' lsF OF Val.unit π ρout (by omega) hq₀
+        (Or.inl ⟨Val.unit, rfl, hpost k' k ls' lsF OF Val.unit π ρout (by omega) hq₀ hOF
           (hSπ ▸ hρout)⟩))
     obtain ⟨-, m'', hm'', hfree⟩ := hFf
     obtain rfl : l = m'' := by
@@ -355,7 +357,7 @@ theorem cerwp_scopeK {Φ : LocFam} (l : Loc) (v : Val) (T : VTy) (δ : LSub)
     have hc := (hcont ls_r he').1 k' hk' w PMap.empty ρk hB (ResU.comp_empty_right _)
     simp only [erwp0C, show k' < n by omega, if_true] at hc
     have hdel := ResU.CompS.del has l
-    refine ih k' (by omega) _ ls_r O (K₁.plug (.val w)) ρk ρs hpO hks
+    refine ih k' (by omega) _ ls_r (K₁.plug (.val w)) ρk ρs hpO hks
       ⟨ρs.del l, ResU.del_compS (share_cell has hks hρ'l),
         ResU.CompS.inStratum_right hdel hπdA, (ResU.Hash.split hdel hGW).2⟩ hc
   · obtain ⟨⟨-, -, hT, ha⟩, -⟩ := pure_sep_iff.mp hpp
@@ -370,9 +372,11 @@ theorem cerwp_scope {Φ : LocFam} (l : Loc) (v : Val) (T : VTy) (δ : LSub) (had
     (hshape : vShape T δ v PMap.empty) (A : Life) (nJ iJ : UInt32) {Tin : OpTabN}
     {Tout : OpTabC} (hToutD : Tout.Down) (hTabs : ScopeTabs Tin Tout nJ iJ) {Q₀ : PostN}
     {Qout : PostCV} (hQout : Qout.Down) (hQ₀u : ∀ k ls (w : Val) ρ, Q₀ k ls w ρ → w = Val.unit)
+    (O : List FrameRec)
     (hpost : ∀ k k₀ ls₀ ls' O' (w₀ : Val) π ρout, k ≤ k₀ → Q₀ k₀ ls₀ w₀ π →
+      (∀ q, q ∈ O' ↔ q ∈ recP l v T δ :: O ∧ q ≠ recP l v T δ) →
       ResU.CompS (π.del l) (ResU.single l (CellU.ownOf v)) ρout → Qout k ls' O' Val.unit ρout)
-    (n : Nat) (F : WRes → Prop) (ls : List SRec) (O : List FrameRec) (e : Expr) (ρb ρ : WRes)
+    (n : Nat) (F : WRes → Prop) (ls : List SRec) (e : Expr) (ρb ρ : WRes)
     (houtb : ρb.InStratum A) (hcρ : ResU.CompS (ResU.single l (CellU.ownOf v)) ρb ρ)
     (hvρ : ResU.Valid ρ) (ds : List FrameRec) (hds : ∀ d, d ∈ ds ↔ Desc (recP l v T δ) d)
     (h : ∀ BI, ResU.CompS ρb (viewA l v A) BI →
@@ -399,7 +403,7 @@ theorem cerwp_scope {Φ : LocFam} (l : Loc) (v : Val) (T : VTy) (δ : LSub) (had
     subst e
     exact ⟨fρ', _, hfB, hcB, hS', hT', htg', hlow'⟩
   · rw [← cerwp_eq]
-    exact cerwp_scopeK l v T δ A nJ iJ hToutD hTabs hQout hQ₀u hpost n F _ _ e BI BI
+    exact cerwp_scopeK l v T δ A nJ iJ hToutD hTabs hQout hQ₀u _ hpost n F _ e BI BI
       List.mem_cons_self hdup ⟨ρb, hBI, houtb, hbo⟩ (h BI hBI)
 
 
