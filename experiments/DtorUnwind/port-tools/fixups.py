@@ -100,3 +100,6 @@ if name in ('SurgeryC', 'Six34to39'): subprocess.run(['python3', S+'surgcfix.py'
 if name == 'ClosingSentence':
     subprocess.run(['python3', S+'lifefix.py', f], check=True)
     subprocess.run(['python3', S+'closfix.py', f], check=True)
+if name == 'Six49to52':
+    subprocess.run(['python3', S+'lifefix.py', f], check=True)
+    subprocess.run(['python3', S+'six52fix.py', f], check=True)

@@ -8,6 +8,7 @@ regen.sh  regenerates the ported files in dependency order: ./regen.sh [FIRST]
 *.lean.txt  source fragments some ports are assembled from.
 Strata, Down, Six27, SurgeryA, SurgeryB, Six16to24 were translated and then edited by hand
 (SurgeryB: Support/Model/Surgery.lean:41-156).
+OutlivesB (Support/Model/Outlives.lean:257-414, 625-690) is written by hand.
 RebDef and SubDef (rows 5.28, 5.47, 5.64, 5.66) are written by hand.
-subfix.py, six28fix.py, surgcfix.py, lifefix.py, closfix.py: recorded fixes run by fixups.py.
+subfix.py, six28fix.py, surgcfix.py, lifefix.py, closfix.py, six52fix.py: recorded fixes run by fixups.py.
 sub_lset*.lean.txt: the lifetime-set lemmas of the Subtraction port, on TSet.
