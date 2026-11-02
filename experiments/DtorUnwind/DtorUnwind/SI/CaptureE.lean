@@ -35,9 +35,12 @@ open BoCa.BoLo (Heap Step1 Head Kont performE raiseE cancelVal opPayload)
 
 /-! ### Tables -/
 
-/-- `OpEntN` with a frame condition the resumer meets, read at the payload. -/
+/-- `OpEntN` with a frame condition the resumer meets and an answer predicate, both read at the
+payload: a join names the location whose borrows it waits for, and gets back the borrows of
+that location the joined tasks held. -/
 structure OpEntC extends OpEntN where
   fd : Val → WRes → Prop
+  PBv : Val → Nat → List SRec → Val → WProp
 
 abbrev OpTabC := UInt32 → UInt32 → Option OpEntC
 
@@ -52,13 +55,14 @@ abbrev TableC := (WRes → Prop) → Nat → List SRec → List FrameRec → Exp
 /-- A postcondition over values. -/
 abbrev PostCV : Type := Nat → List SRec → List FrameRec → Val → WProp
 
-/-- The continuation's share: resumed at every answer in `PB` at every `k′ < k`, at every list
-`wc` allows, owning `O`, under a frame meeting `F` and the entry's `fd` at the payload. -/
+/-- The continuation's share: resumed at every answer in `PBv` at the payload, at every `k′ < k`,
+at every list `wc` allows, owning `O`, under a frame meeting `F` and the entry's `fd` at the
+payload. -/
 def contShareC (en : OpEntC) (F : WRes → Prop) (k : Nat) (ls : List SRec) (O : List FrameRec)
     (K : Kont) (v : Val) (Ψ : ContC) : WProp := fun ρ =>
   (en.q = .unr → ρ = PMap.empty) ∧
   ∀ ls', en.wc ls ls' ρ →
-    (∀ k', k' < k → ∀ w : Val, (en.PB k' ls' w ─⋆
+    (∀ k', k' < k → ∀ w : Val, (en.PBv v k' ls' w ─⋆
       Ψ (fun ρf => F ρf ∧ en.fd v ρf) O k' ls' (K.plug (.val w))) ρ) ∧
     (en.q ≠ .lin → cancelOKN en.toOpEntN k ls' K ρ)
 
@@ -209,7 +213,7 @@ theorem cerwp_perform {T : OpTabC} {Q : PostCV} {F : WRes → Prop} (K : Kont) {
     (hc : ResU.CompS ρa ρk ρ) (hA : en.PA n ls v ρa)
     (hu : en.q = .unr → ρk = PMap.empty)
     (hk : ∀ ls', en.wc ls ls' ρk → ∀ k', k' < n → ∀ w : Val,
-      (en.PB k' ls' w ─⋆ cerwp (ℍ := ℍ) (opTableC T) Q (fun ρf => F ρf ∧ en.fd v ρf) k' ls' O
+      (en.PBv v k' ls' w ─⋆ cerwp (ℍ := ℍ) (opTableC T) Q (fun ρf => F ρf ∧ en.fd v ρf) k' ls' O
         (K.plug (.val w))) ρk)
     (hcan : ∀ ls', en.wc ls ls' ρk → en.q ≠ .lin → cancelOKN en.toOpEntN n ls' K ρk) :
     cerwp (ℍ := ℍ) (opTableC T) Q F n ls O (K.plug (performE (.val (opPayload m i v)))) ρ := by
@@ -267,8 +271,9 @@ theorem cerwp_free {Φ : LocFam} {Tb : TableC} (hL : Tb.Local) {Q : PostCV}
 
 /-! ### `erwp` lifts -/
 
-/-- An `erwp` entry asks nothing of the resumer's frame. -/
-def liftEnt (en : OpEntN) : OpEntC := { en with fd := fun _ _ => True }
+/-- An `erwp` entry asks nothing of the resumer's frame, and its answer does not read the
+payload. -/
+def liftEnt (en : OpEntN) : OpEntC := { en with fd := fun _ _ => True, PBv := fun _ => en.PB }
 
 def liftTab (T : OpTabN) : OpTabC := fun m i => (T m i).map liftEnt
 

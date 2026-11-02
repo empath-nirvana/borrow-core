@@ -81,3 +81,5 @@ import DtorUnwind.SI.ExtExtF
 import DtorUnwind.SI.Capture
 import DtorUnwind.SI.CaptureE
 import DtorUnwind.SI.CaptureGen
+import DtorUnwind.SI.Erwp0
+import DtorUnwind.SI.Uncapture
