@@ -357,6 +357,36 @@ theorem graftWorld_valid_after {l₁ l₂ : Loc} (hl : l₁ ≠ l₂) (v u : Val
         (trU graftExt)) :=
   ResUT.Valid.graft graftExt (graftWorld_valid_before hl v u P hw)
 
+/-- **A predicate carried across the graft does not see the new borrow.** No resource of `α`'s
+stratum before the graft carries to the witness holding the borrow at `β`. The predicate of a
+`mut` cell created before the graft is carried as an image (`trU`, row 5.57's extension by
+falsity), so it is false at that witness: storing the handler's borrow into such a cell needs
+its invariant re-read at `K₁`, which `trU` does not do. -/
+theorem graft_carried_refuses (l₂ : Loc) (u : Val) (r₀ : ResUT Loc Val K₀)
+    (h : r₀.InStratum (TSet.single αL)) : r₀.map (trU graftExt) ≠ borrowAt K₁ l₂ u := by
+  classical
+  intro e
+  have hg := congrArg (fun r : ResUT Loc Val K₁ => r.get l₂) e
+  simp only [PMap.map_get, borrowAt, PMap.sng_get] at hg
+  rw [if_pos trivial] at hg
+  cases hc : r₀.get l₂ with
+  | none => rw [hc] at hg; cases hg
+  | some c =>
+      rw [hc] at hg
+      simp only [Option.map_some] at hg
+      replace hg := Option.some.inj hg
+      have hs := h l₂ c hc
+      cases c with
+      | own v => cases hg
+      | «mut» m => cases hg
+      | imm i =>
+          have hls : i.ls = TSet.single βL := by
+            have := congrArg CellUT.lsOf hg
+            simpa [trU, leafImm] using this
+          have hab : K₀.Above (TSet.single αL) i.ls := hs
+          rw [hls] at hab
+          exact K₀_not_lt (hab αL (by simp) βL (by simp))
+
 end BoCa.Fig16.Tree
 
 end
