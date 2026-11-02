@@ -12,3 +12,4 @@ These are raw research reports, kept so later design work can cite them. They ar
 Citations marked (unverified) were not confirmed when the report was written.
 
 The premise the user set afterwards (2026-10-19): the goal is not to rebuild Rust's borrow checker; a more limited, lexical, mostly second-class borrow checker with linearity may be enough.
+- [`let-mut-as-place.md`](let-mut-as-place.md): `let mut` as a place through the borrow calculus, prototyped and measured (#626; code on branch `mut-place`).
