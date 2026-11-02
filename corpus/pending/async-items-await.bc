@@ -1,0 +1,30 @@
+-- pending: #770 (`for item in` a borrowed array of boxed items, awaiting per item, in a task of `spawn`)
+-- now: 19:26: `*` copies the content, and `ref i32` is linear
+-- `for item in &self.items { item.process().await }`: a task borrows an array of boxed items
+-- `imm`, and for each item reborrows its box and awaits while that reborrow is live. Two such
+-- tasks run under `run_until_empty`, which stores them between turns.
+--
+-- Blocked by: decision 71's rule, as `async-field-await.bc`; each item is a deep reborrow live
+-- across the `await` (#770, `erwp_reborrowDeep`, canonical deep images).
+--
+-- What fails first today is earlier than #770: reading a boxed item through an `imm` view (`**x`)
+-- copies a linear `ref`; the read needs `withload` (a reborrow) in the surface.
+--
+-- Once it lands: `[6, 6]`.
+include async
+include slice
+
+fn add_up<'a>(xs: array_imm 'a (box i32)) -> i32 with Async =
+  let mut s = 0;
+  for x in xs { let v = **x; await(); s = s + v };
+  s
+
+main -> List[i32] =
+  let a = array_new[box i32] (3, !{ i -> alloc(i + 1) });
+  let r = borrow imm a { 'r, xs ->
+    let (x1, x2) = array_copy['r, box i32] xs;
+    let q = queue[i32]();
+    let q = push(q, with spawn { add_up(x1) });
+    let q = push(q, with spawn { add_up(x2) });
+    run_until_empty(q) };
+  r

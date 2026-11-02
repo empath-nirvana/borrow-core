@@ -1,0 +1,36 @@
+-- pending: #770 (a borrow of a boxed field of borrowed data, live across `await`, in a task of `spawn`)
+-- now: 24:22: `*` copies the content, and `ref i32 * i32` is linear
+-- A task reads a counter through an `imm` borrow of a boxed field of a borrowed record, awaiting
+-- between reads in an unbounded loop that ends when the counter says so. The task is a task of
+-- `spawn`, run by `run_until_empty`, a scheduler outside the borrow that stores it between turns.
+--
+-- Blocked by: decision 71's rule, owned across suspensions and borrowed within, refuses a task of
+-- `spawn` that holds a borrow (`corpus/async-borrow.bc` runs its scheduler inside the borrow
+-- instead). Wanted: a borrow live across a suspension whose handler stores the continuation
+-- (#770: the fold at the stop, canonical images for the field's reborrow).
+--
+-- What fails first today is earlier than #770: no surface form reads a boxed field through an `imm`
+-- borrow of the record (`*` copies the whole record, which holds a box). Core has no projection of
+-- an `Imm` onto a component (#770's route C), so the read needs `withload` by hand.
+--
+-- Once it lands: `[3]`.
+include async
+
+data Conf = Conf(limit: box i32, name: i32)
+
+fn ticks<'a>(c: imm 'a Conf) -> i32 with Async =
+  let mut n = 0;
+  loop {
+    let stop = match *c { Conf(l, _) -> n >= *l };
+    if stop { break } else { await(); n = n + 1 }
+  };
+  n
+
+main -> List[i32] =
+  let c = alloc(Conf(alloc(3), 7));
+  let r = borrow imm c { 'a, v ->
+    let q = queue[i32]();
+    let q = push(q, with spawn { ticks(v) });
+    run_until_empty(q) };
+  let _ = free(c);
+  r

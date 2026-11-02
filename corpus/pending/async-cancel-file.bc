@@ -1,0 +1,32 @@
+-- pending: #770 (a task cancelled while it holds a file and a borrow: its destructors run, `close` among them)
+-- now: 18:10: `f`, of type `i32 * tok`, is live across an operation that may be cancelled: the cancel runs a finaliser (`[then]`) that consumes it by its derived drop, and its type is linear with no derived drop: `File` holds the field `fd`, marked `must_close`; pass it to `close` before the computation that may abort, or close it in a `finally`
+-- A task opens a file, borrows a counter, and awaits in an unbounded loop. The scheduler runs it
+-- for two turns and cancels it. The cancel unwinds the task: the borrow ends, and the file's
+-- destructor performs `close`, which the platform's `Fs` handler outside the scheduler answers.
+--
+-- Blocked by: no `File` may be live across a computation that may abort, and no task of `spawn`
+-- holds a borrow (decision 71). Wanted: cancellation as an unwind through destructors that
+-- perform effects (#770, `erwp_ubind_cancelRunF`, `progCancelC_orDiverges`).
+--
+-- Once it lands: `0` (no file left open).
+include async
+include fs
+
+fn reader<'a>(n: imm 'a i32) -> i32 with Async, Fs, Fail[FsError] =
+  let (p, f) = open(string_of_lit("corpus/fs-cat.bc"), Reading);
+  let mut f = f;
+  loop { await(); let (f2, (b, k)) = read(f, string_new(16)); f = f2 };
+  close(f);
+  *n
+
+main -> i32 + FsError = with to_result {
+  let c = alloc(5);
+  let r = borrow imm c { 'a, v ->
+    let t = with spawn { reader(v) };
+    match resume(t) {
+      inl x -> x
+    | inr t -> match resume(t) { inl x -> x | inr t -> let _ = cancel(t); 0 }
+    } };
+  let _ = free(c);
+  r
+}

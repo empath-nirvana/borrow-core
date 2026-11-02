@@ -1,0 +1,33 @@
+-- pending: #770 (children of `spawn` share a parent's lend; the parent is cancelled with the scope open)
+-- now: 18:11: this borrow block's body performs the operation 1.0, which resumes: only an abortive operation crosses a borrow's scope (a continuation held across a lend is T1, decision 71). End the borrow before the operation, or move the value into the code that suspends and have it handed back
+-- A parent task lends a record `imm` to two children it spawns onto the outer scheduler, which
+-- stores all three. Each child holds the borrow across `await`s; the parent joins both before the
+-- lend ends. A second run cancels the parent while its children are still pending: the cancel
+-- ends the children first, then the parent's lend.
+--
+-- Blocked by: no task of `spawn` holds a borrow (decision 71), and there is no join that ends a
+-- lend shared across tasks (#770: scoped spawn, the cactus invariant, `cerwp_scope`).
+--
+-- Once it lands: `([[12, 12]], [])`.
+include async
+
+fn child<'a>(x: imm 'a i32) -> i32 with Async = await(); await(); *x + 2
+
+fn parent() -> List[i32] with Async =
+  let c = alloc(10);
+  let r = borrow imm c { 'a, v ->
+    let q = queue[i32]();
+    let q = push(q, with spawn { child(v) });
+    let q = push(q, with spawn { child(v) });
+    await();
+    run_until_empty(q) };
+  let _ = free(c);
+  r
+
+main -> List[List[i32]] * List[i32] =
+  let q = queue[List[i32]]();
+  let q = push(q, with spawn { parent() });
+  let a = run_until_empty(q);
+  let t = with spawn { parent() };
+  let b = match resume(t) { inl x -> x | inr t -> let _ = cancel(t); nil() };
+  (a, b)

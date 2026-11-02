@@ -1,0 +1,32 @@
+-- pending: #770 (a handler that resumes a task inside a borrow of its own, and answers it a borrow)
+-- now: 23:22: this borrow block's place has type `mut 'l0 i32`: `borrow imm`/`borrow mut` take a cell `ref A` or an array (a pair of cells for a family), `modify` a `mut` borrow
+-- A scheduler with a configuration cell of its own. At each `ask`, it borrows the cell `imm` and
+-- resumes the task inside that borrow, answering it the borrow; the task holds a borrow of its own
+-- data, live across the `ask`, and reads both.
+--
+-- Blocked by: an operation's answer cannot be a borrow the handler opened after it was installed,
+-- and no stored task holds a borrow across its suspension (decision 71). Wanted: resumption at any
+-- extension of the task's world (#770, `extF`, `HandlerLendProg`), with the lifetimes ordered as
+-- the cactus of the program's lends (#770, tree-ordered lifetimes).
+--
+-- What fails first today: a handler's state is a `mut` borrow, and no surface form reborrows it
+-- `imm` inside a clause to answer with.
+--
+-- Once it lands: `13`.
+effect Ask { fn ask<'h>() -> imm 'h i32 }
+
+fn task<'a>(mine: imm 'a i32) -> i32 with Ask =
+  let theirs = ask();
+  *mine + *theirs
+
+handler lender(&mut cfg: i32): Ask = {
+  ask() = borrow imm cfg { 'h, v -> v }
+}
+
+main -> i32 =
+  let mine = alloc(3);
+  let cfg = alloc(10);
+  let r = borrow imm mine { 'a, m -> with lender(cfg) { task(m) } };
+  let _ = free(mine);
+  let _ = free(cfg);
+  r

@@ -1,0 +1,24 @@
+-- pending: #770 (a raise with two files open: each file's destructor closes it on the unwind)
+-- now: 20:3: `a`, of type `i32 * tok`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell: `File` holds the field `fd`, marked `must_close`; pass it to `close` before the computation that may abort, or close it in a `finally`
+-- Two files opened with the raising forms, then a third that does not exist. The open of the
+-- third raises while the first two are live; each is closed by its destructor on the unwind, the
+-- second before the first, and the error reaches the handler.
+--
+-- Blocked by: a `File` has no derived drop and no value without one may be live across a
+-- computation that may abort (`decl_not_ownFree`, `corpus/reject/fs-two-files.bc`). Wanted: a
+-- destructor that may perform `Fs`, run in reverse order on every exit (#770, the destructor
+-- spike's `[let-dtor]`).
+--
+-- Once it lands: `inr NotFound`.
+include fs
+
+fn three() -> i32 with Fs, Fail[FsError] =
+  let (p, a) = open(string_of_lit("corpus/fs-cat.bc"), Reading);
+  let (q, b) = open(string_of_lit("corpus/fs-copy.bc"), Reading);
+  let (r, c) = open(string_of_lit("corpus/no-such-file"), Reading);
+  close(c);
+  close(b);
+  close(a);
+  0
+
+main -> i32 + FsError = with to_result { three() }

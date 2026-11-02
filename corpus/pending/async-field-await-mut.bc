@@ -1,0 +1,35 @@
+-- pending: #770 (a `mut` borrow of a boxed field, written after each `await`, in a task of `spawn`)
+-- now: 32:18: this argument of `push` has type `i32 * (mu X. 1 + (i32 + box top U (nu X. F (i32 + box top U X) & F 1)) * X)`, which is not `array A * i32`
+-- The `&mut self` form of `async-field-await.bc`: the task holds a `mut` borrow of the record,
+-- reborrows its boxed field mutably, and increments it after each `await`, in an unbounded loop
+-- that ends at a bound. The scheduler outside the borrow stores the task between turns.
+--
+-- Blocked by: as `async-field-await.bc`; the write needs the Anti-Frame across a suspension
+-- (#770, `erwp_M_antiFrame`).
+--
+-- What fails first today is the unbounded loop: a task of `spawn` cannot wrap a `div`
+-- computation (SPEC §21 *Open*, as `async-fanout.bc`), and `push` falls back to `lib/buf.bc`'s.
+--
+-- Once it lands: `[4]`, and the field reads `4` after the borrow ends.
+include async
+
+data Acc = Acc(count: box i32, cap: i32)
+
+fn bump<'a>(c: mut 'a Acc) -> i32 with Async =
+  let mut n = 0;
+  loop {
+    await();
+    let done = modify c { a -> match a { Acc(k, cap) -> let v = free(k) + 1; (Acc(alloc(v), cap), v >= cap) } };
+    n = n + 1;
+    if done { break } else { () }
+  };
+  n
+
+main -> List[i32] =
+  let c = alloc(Acc(alloc(0), 4));
+  let r = borrow mut c { 'a, v ->
+    let q = queue[i32]();
+    let q = push(q, with spawn { bump(v) });
+    run_until_empty(q) };
+  let _ = free(c);
+  r
