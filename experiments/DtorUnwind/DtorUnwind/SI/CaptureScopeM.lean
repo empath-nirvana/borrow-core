@@ -149,10 +149,10 @@ theorem uncapture_worldM {l : Loc} {A : Life} {u : Val} {χ : WRes} {hχ : χ.In
 
 /-! ### The scope -/
 
-/-- **The join of a `mut` scope**: must-resume, a location as payload, answered with the borrow
-of that location back, at the scope's lifetime and predicate. -/
-def joinEntM (A : Life) (P : Val → SPropS Loc Val A) : OpEntC :=
-  { q := .lin, abort := false, PA := fun _ _ v ρ => (∃ m, v = Val.loc m) ∧ ρ = PMap.empty,
+/-- **The join of a `mut` scope**: must-resume, the lent location as payload, answered with the
+borrow of that location back, at the scope's lifetime and predicate. -/
+def joinEntM (l : Loc) (A : Life) (P : Val → SPropS Loc Val A) : OpEntC :=
+  { q := .lin, abort := false, PA := fun _ _ v ρ => v = Val.loc l ∧ ρ = PMap.empty,
     PB := fun _ _ _ _ => False, fin := none, wc := fun _ _ _ => True, fd := fun _ _ => True,
     PBv := fun v _ _ w σ => ∃ m, v = Val.loc m ∧ w = Val.unit ∧
       ∃ (u : Val) (χ : WRes) (hχ : χ.InStratum A) (hu : P u ⟨χ, hχ⟩),
@@ -166,7 +166,7 @@ P̂)`, at a table of must-resume operations with the scope's join: the scope `e;
 theorem cerwp_scopeM (l : Loc) (v : Val) (A : Life) (P : Val → SPropS Loc Val A) {ρP : WRes}
     (houtP : ρP.InStratum A) (hwit : P v ⟨ρP, houtP⟩) (nJ iJ : UInt32) {Tout : OpTabC}
     (hToutD : Tout.Down) (hlin : ∀ m i en, Tout m i = some en → en.q = .lin)
-    (hJ : Tout nJ iJ = some (joinEntM A P))
+    (hJ : Tout nJ iJ = some (joinEntM l A P))
     {Q₀ Qout : PostCV} (hQout : Qout.Down)
     (hQ₀u : ∀ k ls O (w : Val) ρ, Q₀ k ls O w ρ → w = Val.unit)
     (hpost : ∀ k k₀ ls₀ ls' O (w₀ : Val) ρ₀ (u : Val) (χ : WRes) (hχ : χ.InStratum A),
@@ -199,8 +199,8 @@ theorem cerwp_scopeM (l : Loc) (v : Val) (A : Life) (P : Val → SPropS Loc Val 
   refine cerwp_det (opTableC_down hToutD) hQout
     (fun μ => step1Only_plug (Head.seq μ _) rfl .hole) ?_
   refine cerwp_perform (T := Tout) (F := F') .hole (m := nJ) (i := iJ) (v := Val.loc l)
-    (en := joinEntM A P) (by simp [Kont.HasHnd]) hJ rfl trivial (compS_empty_left ρ₀)
-    ⟨⟨l, rfl⟩, rfl⟩ (fun h => by simp [joinEntM] at h)
+    (en := joinEntM l A P) (by simp [Kont.HasHnd]) hJ rfl trivial (compS_empty_left ρ₀)
+    ⟨rfl, rfl⟩ (fun h => by simp [joinEntM] at h)
     (fun ls_r _ k' hk' w σB X hB hX => ?_) (fun _ _ hq => absurd rfl hq)
   obtain ⟨m', hm', rfl, u, χ, hχ, hu, rfl⟩ := hB
   obtain rfl : l = m' := by
