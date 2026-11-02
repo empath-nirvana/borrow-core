@@ -19,10 +19,14 @@ that mention it (`○` clause 3, `mut(α ⊓ β, v, ρ, P̂ ∧ Q̂)`, row 5.16;
 composite as a `⊓`); `Life.meet_*`.
   * `○` clause 3 needs a stratum holding both cells' strata. In a tree-stratified carrier it
     exists for siblings (same parent) but not for cousins: `cousins_no_common_stratum`. So a
-    carrier stratified by the tree **needs comparability at `○` clause 3**. The carrier here
-    keeps the printed chain, read as the order lifetimes are opened in; when the tree sits
-    inside it (`Cactus.InChain`) every tree stratum is inside the carrier's
-    (`ResU.InStratumT.toChain`).
+    carrier stratified by the tree, with clause 3 as printed (one stratum `α ⊓ β`), **needs
+    comparability there**. A composite `mut` cell carrying the set of its lifetimes, as an
+    `imm` cell does, would not need it; not built. The carrier here keeps the printed chain,
+    read as the order lifetimes are opened in; when the tree sits inside it
+    (`Cactus.InChain`) every tree stratum is inside the carrier's
+    (`ResU.InStratumT.toChain`). A graft under a lend opened later leaves the chain
+    (`Tree/Graft.lean`), so the two routes are a tree-stratified carrier with clause 3
+    restated, or renaming on graft.
   * `Res_{⊔ᾱ}` fails in a tree (`Cactus.star_sup_lt_fails`) and is restated as `⋂_{x ∈ ᾱ} Res_x`
     (`ResU.InStratumAll`, equal to the printed at the chain); `⊓ᾱ` is read universally
     (`LSet.le_meet_iff`, `LSet.meet_lt_iff`). `ptoImmT`, `ptoImmK` and `ResU.InStratumT` do so.
