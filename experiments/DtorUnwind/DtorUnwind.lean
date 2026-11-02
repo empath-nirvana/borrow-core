@@ -134,6 +134,9 @@ import DtorUnwind.Tree.Port.ReborrowFrame
 import DtorUnwind.Tree.Port.ReborrowLowering
 import DtorUnwind.Tree.Port.SubDef
 import DtorUnwind.Tree.Port.Subtraction
+import DtorUnwind.Tree.Port.Six25to33
+import DtorUnwind.Tree.Port.SurgeryB
+import DtorUnwind.Tree.Port.Six28to29
 import DtorUnwind.Tree.CarrierSim
 import DtorUnwind.Tree.KSem
 import DtorUnwind.Tree.KSemGraft

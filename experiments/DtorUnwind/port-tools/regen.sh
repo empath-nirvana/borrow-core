@@ -39,6 +39,8 @@ STEPS=(
 "ReborrowFrame|DtorUnwind.Tree.Port.Reborrow|Support/Model/ReborrowFrame.lean"
 "ReborrowLowering|DtorUnwind.Tree.Port.ReborrowFrame|Support/Model/Restriction.lean Support/Model/ReborrowLowering.lean"
 "Subtraction|DtorUnwind.Tree.Port.SubDef|Support/Model/Subtraction.lean"
+"Six25to33|DtorUnwind.Tree.Port.Subtraction|Support/Model/Surgery.lean:30-40 $S/end_fig16.lean.txt Paper/S6_2_NonStandardLemmas/Lemmas.lean:395-585"
+"Six28to29|DtorUnwind.Tree.Port.SurgeryB|Paper/S6_2_NonStandardLemmas/Lemmas.lean:673-998"
 )
 for st in "${STEPS[@]}"; do
   IFS='|' read -r name imps srcs <<< "$st"
