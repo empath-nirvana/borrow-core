@@ -144,6 +144,7 @@ import DtorUnwind.Tree.Port.OutlivesB
 import DtorUnwind.Tree.Port.Six49to52
 import DtorUnwind.Tree.Port.Six43to46
 import DtorUnwind.Tree.Port.Six53to59
+import DtorUnwind.Tree.JoinFd
 import DtorUnwind.Tree.CarrierSim
 import DtorUnwind.Tree.KSem
 import DtorUnwind.Tree.KSemGraft
