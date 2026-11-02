@@ -974,3 +974,17 @@ Each entry: the decision, and why. Newest last.
       per-observation lend is the design, not a first step toward the spanning one); the
       provisional "T1 at tail-resumptive operations" of `docs/expressiveness.md` §16 and its
       units 13–14; and the #743 build plan (`~/repos/scratch-archive/743/plan.md`, closed).
+72. **The reset of 2026-11-01: decision 71 and its tombstone are void; the new Core (SPEC §62,
+    #771) replaces them.**
+    - In the user's words: "forget all of our language design decisions that relate to this. The
+      language is broken fundamentally and we need a new approach."
+    - Void: decision 71 (owned across suspensions, borrowed within; R1 frozen; lifting T1
+      tombstoned), `docs/tombstones/lends-across-suspensions.md`, and the decisions on linearity,
+      drops and resource cleanup they rested on (#746's derived drops pure at the row and
+      `must_close`, the finaliser algebra as fixed, `finally`-only cleanup).
+    - The kernel's theorems stand. Only the design choices are released.
+    - The rules decision 71 made are still what the checker enforces today. They change only as
+      SPEC §62's PRs land.
+    - The goal, in the user's words: a destructor and "a guarantee that it runs it every exit but
+      no guarantee that it ever exits". The target theorem is SPEC §62's: every reachable state
+      steps or is final with an empty heap.

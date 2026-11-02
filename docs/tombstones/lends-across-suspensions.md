@@ -1,4 +1,7 @@
-# Tombstone: lends held across suspensions
+# Tombstone: lends held across suspensions (VOID)
+
+**Void by decision 72 (2026-11-01).** The line this page closed was reopened by the reset and is
+now SPEC §62 (#771). Kept as history only.
 
 **Closed by decision 71 (`docs/decisions.md`), 2026-10-31.** This page records a research line
 that is closed. Do not propose reopening it, or any of the approaches below, unless the user

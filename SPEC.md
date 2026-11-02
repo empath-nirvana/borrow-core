@@ -10179,6 +10179,141 @@ in `P` and runs (`corpus/data-option-block.bc`); the reject is now a field under
 
 ---
 
+## 62. Entry 61 — the new Core: linear resources and borrows across exits and suspensions (#771)
+
+**Status: design, not built.** This entry is the target of the series #771–#775 (and its later
+issues). Each part names the PR that lands it. Nothing here changes `CDerives` until those PRs
+land. Evidence for each part comes from the #770 spikes and is cited by the name of the Lean result.
+
+### Motivation
+
+Linear resources meeting non-local exits and suspensions broke the language (#769, #743):
+- `finally` cannot close a file, because `[then]` gives the body and the finaliser disjoint contexts.
+- An error with two files open abandons one, because `[let]`'s side condition `hW` refuses an
+  owned value without a derived drop that is live across an abortive point.
+- A `File` cannot live in a loop that is closed early.
+- No borrow may be held across a suspension whose handler stores the continuation (decision 71,
+  voided by decision 72).
+
+The cause is structural. Core's lifetimes form a single chain and its frames nest last-in-first-out.
+A stored continuation, resumed later under frames its handler opened in the meantime, makes the
+program's lends nest as a tree (#770: `resume_frame_short`, `not_fdFromLifetimeTypes`).
+
+### The target theorem
+
+For every closed, well-typed program `P`:
+
+> every configuration a run of `P` reaches is a value or steps; a value is reached only at the
+> empty memory; every `free` finds its cell.
+
+Divergence is allowed, and termination is not claimed. This is LinearActris's adequacy shape
+(Jacobs, Hinrichsen, Krebbers, POPL 2024). It is stated today as `OrDiverges`
+(`experiments/DtorUnwind`, stage 7). Proved by `fundamentalC` over every typing rule and adequacy, at
+one step-indexed safety relation. The existing total relation keeps the termination results
+(`total_every_run`, `Closing`, `total_open`/`total_call`/`total_subrun`) for derivations that use
+none of the new rules.
+
+### Lifetimes ordered as a tree (#773)
+
+Lifetimes form a well-founded cactus. A fresh lifetime is a child of the current branch's
+innermost one. Siblings are incomparable, and grafting a stored computation's branch under a
+newer lend makes its lifetimes descendants of that lend (`graftEx_lt`). Today's single chain is the
+case with one branch.
+- Where the model used that every two lifetimes are comparable (83 declarations,
+  `Tree/Comparability.lean`), each use is either restated or confined to a branch:
+  - the meet of a set of lifetimes is read at every member;
+  - `↓α` is a covering child;
+  - choosing a lifetime below two bounds happens on a branch.
+- No printed lemma ported so far (6.1–6.59 but 6.40 and 6.45) needs comparability.
+
+### The carrier (#773)
+
+Strata are indexed by finite sets of lifetimes, and `Res_S` is the intersection of the members'
+strata. A combined `mut` cell carries an antichain: `mut(β̄₁) ○ mut(β̄₂) = mut(min(β̄₁ ∪ β̄₂), …)`.
+`○`'s laws hold (`compLawsRT`). The chain instance is today's carrier (`chainEquiv`, with strata,
+`●` and `○` preserved and reflected); that `✓` and `#` agree along it is *Open*. A world valid
+before a graft is valid, carried, after it (`ResUT.Valid.graft`).
+
+### Typed worlds with canonical images (#774)
+
+Each reborrow's image is the canonical one for its frame record and lifetime (one template per
+record, relabelled in lifetimes only), for root and deep reborrows. Two readers of the same frozen
+data then share witnesses. Every route that kept the choice was refuted
+(`not_rebReentryAgreeN`, `not_witSwapIWN`). All of Core holds over canonical worlds
+(`canon-core` branch: `fundamentalC`, `adequacyC`, with only the two choosers proved by hand).
+
+### Effectful destructors (#775)
+
+An owned value may carry a destructor that performs operations. Every exit runs the live
+context's destructors in reverse order: return, raise, cancel, and early close of a loop. `[let-dtor]`
+replaces `hW`. Evidence: `CDerives.effLetD`, `resourceSafety`, the cancellation corollary,
+`d_stepD`/`loopProg_safe`, `d_lendD`, `d_kDtor`. *Open*: a destructor that can fail (an ignored
+error, or a constraint).
+
+### The safety relation
+
+A step-indexed linear weakest precondition with the following parts:
+- **Exact ownership.** Each term owns an exact fragment of memory.
+- **Capture is its own operation.** A stop is not read as a return: the stopped continuation's
+  share keeps its branch's real cells and frame records (`crwpG`/`cerwp`).
+- **The cactus invariant over all computations** (running, stored in a κ, spawned). Each owns its
+  resources and frame records, pairwise disjoint. It is preserved by step, capture, graft, unwind,
+  spawn and join, and adequacy is derived from that preservation.
+- **`[handle]` without `hdv`.** The handler rule is proved by induction on the index, with stored
+  continuations around loops that never end (`ewp_handle`, `erwp_handle`).
+- **Where κ resumes.** κ may resume at any extension Core's `Ext` allows (`extF`, `ext_extF`).
+
+Evidence: `progStore_orDiverges`; borrows live across stops for `mut`/`imm` lends, reborrows,
+deep reborrows, and the Anti-Frame (`erwp_M_frame`, `erwp_I_frame`, `erwp_reborrow(Deep)`,
+`erwp_M_antiFrame`); a handler that lends its own cell and resumes κ inside it
+(`HandlerLendProg`); cross-task scopes (`cerwp_scope`, `CactusInv`). *Open*: one relation with
+abortive stops and forwarding (the two relations `erwp`/`cerwp` merge); the integration over the
+tree carrier.
+
+### Semantic types read at the tree
+
+The relation's types are read at the current tree and are monotone along its extension. A `mut`
+cell's invariant is its store type, re-read when the tree grows, not a fixed predicate. Carried
+unchanged, a cell leaves `Mut`'s meaning (`trU_not_kmono`). Re-read, a stored task may write the
+handler's newer borrow into a cell it made before the graft (`round7_write`). *Open*: the store
+typing growing with allocation, and one type per location against a combined `mut` cell.
+
+### Typing: suspension, scoped spawn, join
+
+- **Operations** carry their qualifier (`lin`, `cancel`, `unr`) and what payload and answer own.
+  An operation that may resume more than once is excluded while a borrow or owned resource is
+  live, because κ owns the folded cells (`unr_share_no_own`).
+- **Lends shared across tasks** end only at a join: scoped spawn.
+- **The resume condition** (nothing outside a resumed segment holds a location whose lend it
+  ends) holds at borrow types in the tree (`fdFromLifetimeTypesT`) and at every type from the
+  branch invariant (`joinFd_of_branch`). One ownership fact about `own` cells beneath a borrow
+  (`hown`) is *Open*.
+- Lifetimes on continuation and task types alone do not supply it in a single chain
+  (`not_fdFromLifetimeTypes`).
+- *Open*: the typing rules and their compatibility lemmas.
+
+### Not claimed
+
+- Termination for programs that use the new rules.
+- Threads: the invariant is per computation, so a concurrent reading stays possible. The two
+  places that rely on sequential scheduling are named in the cross-task spike.
+- Lowering: per-task state machines, self-reference, per-state drop glue. Tracked as the series'
+  last issue.
+
+### Target programs
+
+Eight programs (`corpus/pending/`, on `fs-769`, held) illustrate the theorem; they are not the
+goal. A rule shaped to one program is refused. When one starts to pass, a variation must pass as
+well (#771). Three fail first on earlier gaps:
+- no read of a boxed field through an `imm` borrow;
+- no unbounded loop in a task of `spawn`;
+- no `imm` reborrow of a handler's `mut` state.
+
+### Design record
+
+`docs/new-core/structure.md` (target structure and its rules), `docs/new-core/conditions.md` (every
+condition and gap, classified), `docs/new-core/evidence.md` (the spikes' results by Lean name).
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
