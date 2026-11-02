@@ -15,13 +15,12 @@ This file supplies the rest, cell kind by cell kind of the flattening `⦇ρ_res
   depth of `ρ_rest` (`agW_mut`), so `MutAt W ℓ`, which `NoMut` refuses at a record's location.
 * **`own` in `ag(ρ_rest)`**: `ag` raises an `own` cell only from one beneath a borrow of
   `ρ_rest` (`agW_own`, `OwnUnder`), hence of `W`. That no `own` cell of a lent location sits
-  beneath a borrow of the world is not an invariant `TWNC` records (`TI` has `NoMut`, and an
-  `own` clause only at the top of escrows). It is taken as the hypothesis `hown`. Not derived,
-  obstruction not verified.
+  beneath a borrow of the world is the hypothesis `hown` here; it is an invariant of `TWNC`
+  (`TWNC.noOwnUnder`, `Tree/NoOwnUnder.lean`).
 
-`joinFd_of_branch`: `joinFd` at every type of the resumer's other resources, from
+`joinFd_of_branch_of_noOwn`: `joinFd` at every type of the resumer's other resources, from
 `fdFromBranch_views`'s hypotheses, `p ∈ ps`, and `hown`. No type of `ρ_rest` is read.
-`noOwnUnder_viewA`: `hown` holds at a world of one view with an empty witness.
+`Tree/NoOwnUnder.lean`'s `joinFd_of_branch` discharges `hown`.
 -/
 
 noncomputable section
@@ -228,7 +227,7 @@ theorem fd_ag_own {W ρf ρS ρk ρrest ar : WRes} {l : Loc} (hW : ResU.CompS ρ
 /-- **The join's frame condition at every type.** With `fdFromBranch_views`'s hypotheses, the
 record `p` proper, and no `own` cell of `p`'s location beneath a borrow of the world (`hown`),
 the resumer's other resources hold nothing at `p`'s location at any depth. -/
-theorem joinFd_of_branch (K : Cactus) {W ρf ρS ρk ρrest : WRes} {ps rs : List FrameRec}
+theorem joinFd_of_branch_of_noOwn (K : Cactus) {W ρf ρS ρk ρrest : WRes} {ps rs : List FrameRec}
     {p : FrameRec} {α n : Life} (hT : TWNC W ps rs) (hp : p ∈ ps)
     (hW : ResU.CompS ρf ρS W) (hS : ResU.CompS ρk ρrest ρS) (hFLp : FrameLife W p α)
     (hbr : ∀ τ, ResU.Flat ρrest τ → OnBranchRes K n τ) (hnα : ¬ K.le n α)
@@ -247,18 +246,6 @@ theorem joinFd_of_branch (K : Cactus) {W ρf ρS ρk ρrest : WRes} {ps rs : Lis
         | imm => exact himm hk
         | «mut» => exact fd_ag_not_mut hT hp hW hS har ha hk
         | own => exact hown (fd_ag_own hW hS har ha hk)
-
-/-- `hown` is met at a world of one view with an empty witness. -/
-theorem noOwnUnder_viewA (l : Loc) (v : Val) (A : Life) (m : Loc) :
-    ¬ OwnUnder (viewA l v A) m := by
-  rintro ⟨x, ψ, e, -, hw⟩
-  obtain ⟨-, rfl⟩ := ResU.single_get_eq_some e
-  have hw0 : (CellU.immOf (LSet.singleton A) v (PMap.empty : WRes) (inStratumE A)).wit =
-      PMap.empty := CellU.wit_immOf _ _ _ _
-  rw [hw0] at hw
-  cases hw with
-  | top e' _ => simp at e'
-  | nest e' _ _ => simp at e'
 
 end BoCa.Fig16.LogRel.Core.Tree
 
