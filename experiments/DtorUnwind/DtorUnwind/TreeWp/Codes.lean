@@ -27,7 +27,8 @@ meaning, so `interp` is structural in the code: there is no circularity to resol
   parts of a composite (`HoldsMut.of_compS_left`), so agreement passes along both.
 
 The codes are the formers whose meaning `Tree/KSem.lean` builds at the tree (`1`, `+`, `Imm`,
-`Mut`, `[a]`); `ref` and thunks are not coded here.
+`Mut`, `[a]`, `ref`); thunks are not coded here. `ref` is the position a frame record's chain
+steps through (`TreeWp/Records.lean`).
 -/
 
 noncomputable section
@@ -44,6 +45,7 @@ inductive KTy : Type where
   | imm (a : Life) (A : KTy)
   | mut (a : Life) (A : KTy)
   | box (a : Life) (A : KTy)
+  | ref (A : KTy)
 
 /-- A code typing of locations. -/
 abbrev CodeTy : Type := BoCa.Loc → Option KTy
@@ -57,6 +59,7 @@ def KTy.interp (Θ : CodeTy) : KTy → KSem
       ρ = PMap.sng l (.mut m) ∧ Θ l = some A ∧ (∀ x ∈ m.ls.set, K.le a x) ∧
       ∀ w r, m.P w r ↔ (A.interp Θ).P K w r.toU⟩
   | .box a A => vBox a (A.interp Θ)
+  | .ref A => vRef (A.interp Θ)
 
 /-- **The semantic store typing of a code typing.** -/
 def sem (Θ : CodeTy) : LocTy := fun l => (Θ l).map (KTy.interp Θ)
@@ -132,6 +135,40 @@ theorem interp_retype {Θ Θ' : CodeTy} (A : KTy) :
   | box a A ih =>
       rintro K K' hE v ρ ρ' hc hr hag ⟨hP, hS⟩
       exact ⟨ih hE v ρ ρ' hc hr hag hP, hr.inStratum hE hS⟩
+  | ref A ih =>
+      classical
+      rintro K K' hE v ρ ρ' hc hr hag ⟨l, w, ρ₁, rfl, hl, rfl, hP⟩
+      obtain ⟨ψ', e', hrc⟩ := hr.get_some (m := l) (ψ := .own w) (by simp [PMap.ins_get])
+      cases hrc
+      have hr₁ : RR (sem Θ') ρ₁ (PMap.del ρ' l) := by
+        refine ⟨fun m => ?_, fun m χ χ' e e'' => ?_⟩
+        · rw [PMap.del_get]
+          by_cases e : m = l
+          · subst e; simp [hl]
+          · rw [if_neg e]
+            have := hr.1 m
+            simp only [PMap.ins_get, if_neg e] at this
+            exact this
+        · rw [PMap.del_get] at e''
+          by_cases em : m = l
+          · rw [if_pos em] at e''; cases e''
+          · rw [if_neg em] at e''
+            exact hr.2 m χ χ' (by simp [PMap.ins_get, em, e]) e''
+      have hne : ∀ m χ, ρ₁.get m = some χ → m ≠ l := fun m χ e h => by
+        subst h; rw [hl] at e; cases e
+      have hc₁ : CovR (sem Θ) K ρ₁ := fun m χ e => hc m χ (by simp [PMap.ins_get, hne m χ e, e])
+      have hag₁ : AgreeOn Θ Θ' ρ₁ := fun m hm => hag m (by
+        cases hm with
+        | @top _ _ m₀ e =>
+            exact HoldsMut.top (l := m) (m := m₀) (by simp [PMap.ins_get, hne _ _ e, e])
+        | @deep _ k _ ψ e h =>
+            exact HoldsMut.deep (k := k) (ψ := ψ) (by simp [PMap.ins_get, hne _ _ e, e]) h)
+      refine ⟨l, w, PMap.del ρ' l, rfl, by simp [PMap.del_get], PMap.ext fun m => ?_,
+        ih hE w ρ₁ _ hc₁ hr₁ hag₁ hP⟩
+      rw [PMap.ins_get, PMap.del_get]
+      by_cases e : m = l
+      · subst e; simp [e']
+      · simp [e]
 
 /-- **Every code typing's types are monotone.** -/
 theorem monoΘ_sem (Θ : CodeTy) : MonoΘ (sem Θ) := by
