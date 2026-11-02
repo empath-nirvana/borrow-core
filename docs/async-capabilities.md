@@ -1,5 +1,7 @@
 # Async with capabilities, and borrows held across a suspension
 
+*Decision 71 is void (decision 72, 2026-11-01); this is the checker's rule today, until SPEC §62's PRs land.*
+
 **Closed by decision 71 (2026-10-31).** T1 is the permanent rule: no borrow is held across a
 suspension, and data that crosses one is owned, moved in and back out (SPEC §19). What this
 document built stays and is frozen: R1 under `PinLaw` (SPEC §29, with §29a's cancel-path

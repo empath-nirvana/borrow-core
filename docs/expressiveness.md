@@ -40,6 +40,8 @@ kill criterion.
 
 ## 0. Summary
 
+*Decision 71 is void (decision 72, 2026-11-01); this is the checker's rule today, until SPEC §62's PRs land.*
+
 **B5 is closed by decision 71 (2026-10-31).** T1 is the permanent rule: no borrow is held across
 a suspension, and data that crosses one is owned, moved in and back out. The routes below that
 lift T1 or elaborate around it (the spanning lend K1, "T1 at tail-resumptive operations" and spike
@@ -459,6 +461,8 @@ exit hands back to the lender. *Checked by:* the residual close S0 proved (`Resi
 none.
 
 ### 4.6 B5: a borrow held across a resuming operation
+
+*Decision 71 is void (decision 72, 2026-11-01); this is the checker's rule today, until SPEC §62's PRs land.*
 
 **Closed by decision 71 (tombstoned).** T1 stays; the forms that run are the ones a programmer
 writes: the borrow ended before each `await` (as `corpus/async-bank.bc` now is), the owned value

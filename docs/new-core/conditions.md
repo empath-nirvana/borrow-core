@@ -1,23 +1,34 @@
-# #770: every condition and gap introduced so far (2026-11-01)
+# The new Core: conditions and gaps
 
-Classes: SEMANTIC (programs genuinely need it; justified) · PROOF (added to make a proof close; must be removed or justified) · GAP (unbuilt) · RISK (could break later).
+Every side condition the design of SPEC §62 carries, and every gap it has, classified. Lean names
+are in `evidence.md`.
+
+Classes: SEMANTIC (programs need it; justified) · PROOF (needed to make a proof close; to be
+derived or justified) · DESIGN (a choice the design makes) · GAP (not built) · RISK (could fail
+later).
 
 | # | Item | Class | Status |
 |---|---|---|---|
-| 1 | No unrestricted (multi-shot-capable) ops under a live borrow/owned resource | SEMANTIC | Justified: κ owns the folded cell; copying lends twice, dropping leaks (`unr_share_no_own`). Restricted multi-shot over duplicable state is a separate opening. |
-| 2 | `wc = sameW`: κ resumed at same frame records | PROOF | REMOVED (reb-canon 75b298b8): replaced by `extF` (records named by frozen locations kept) + global `LinDisj`; all frame rules, imm answer and handler-lends-and-resumes tests pass. `Ext → extF` at typed worlds PROVED (`ext_extF`, 5cc03032): no restriction relative to Core. |
+| 1 | No unrestricted (multi-shot-capable) operation while a borrow or owned resource is live | SEMANTIC | Justified: the continuation share of an unrestricted operation owns nothing (`unr_share_no_own`), and a lend live across a stop puts the lender's exclusive cell in that share; resumed twice it would lend twice, dropped it would leak. Multi-shot continuations over duplicable state are a hypothesis, not a rule. |
+| 2 | Where κ resumes | PROOF | Discharged: `extF` (the records named by frozen locations are kept) with the global `LinDisj`; every frame rule across stops holds at it, and `ext_extF` shows it refuses no resumption Core's `Ext` allows at typed worlds. |
 | 3 | PA ∈ Res_A, PB ∈ Res_{↓A} (mut lend); PB ∈ Res_A (imm lend, 6.64 H11) | PROOF? | Expected from closed operation types; not derived. |
-| 4 | PA/PB stable along Ext (imm lend) | PROOF? | Printed 6.64 asks the same of Q; not derived for ops. |
-| 5 | Anti-Frame guard (CellFold): withswap with a callback that suspends | PROOF/GAP | Supplied for withbor3; withswap-with-stop not derived. |
-| 6 | Finalisers that raise (cancel error only `none`; cferr/creraise) | GAP | Not covered since stage 1. |
-| 7 | `[handle]` without hdv needs ops must-resume or cancellable (hE) | SEMANTIC? | Same reason as 1; check against unrestricted ops with nothing live. |
-| 8 | Canonical images: TW → TWNC conservativity lost | RISK | All of Core must be re-proved at TWNC; 4 world-building sites without counterparts. |
-| 9 | Div tick table (Px) mapping | GAP | Ticks are ordinary must-resume entries. |
-| 10 | Termination: step-indexed relation proves safety only; totality results only for derivations not using the new [handle] | DESIGN | Matches target (progress-or-no-leaks); needs a stated story. |
-| 11 | 𝒱/𝒞 for every type, fundamentalC, adequacy | GAP | Not started. The real test of 3, 4, 7, 8. |
-| 12 | Core gaps found: inline-field projection rule; value-type polymorphism; arrays/foldImm across stops | GAP | Separate from #770 but needed for the field-borrow use case. |
+| 4 | PA/PB stable along `Ext` (imm lend) | PROOF? | Printed 6.64 asks the same of Q; not derived for operations. |
+| 5 | Anti-Frame guard (`CellFold`): `withswap` with a callback that suspends | PROOF/GAP | Supplied for `withbor3`; `withswap` with a stop not derived. |
+| 6 | Finalisers that raise (cancel error only `none`; `cferr`/`creraise`) | GAP | Not covered. |
+| 7 | `[handle]` without `hdv` needs its operations must-resume or cancellable (`hE`) | SEMANTIC? | Same reason as 1; to be checked against unrestricted operations with nothing live. |
+| 8 | Canonical images: Core's results over `TWNC` | RISK | Every result of the generated copy `Core.C` builds over canonical worlds (`fundamentalC`, `adequacyC`, demonic, pin, the `Div` runtime, cancel-runs); the two image choosers are proved by hand. `Core.Stdio` is not covered. The copy is regenerated from the library, so a library change must be regenerated and rebuilt. |
+| 9 | The `Div` tick table (`Px`) mapping | GAP | Ticks are ordinary must-resume entries. |
+| 10 | Termination: the step-indexed relation proves safety only; the totality results cover only derivations that do not use the new `[handle]` | DESIGN | Matches the target theorem (progress or no leaks). |
+| 11 | 𝒱/𝒞 for every type, `fundamentalC` and adequacy at the one relation | GAP | Not started. The real test of 3, 4, 7, 8. Monotonicity along the tree is proved for `1`, `+`, `Imm`, `Mut`, `ref`, `[a]`, thunks; open for μ, ν, ∀, ⊗ and families. |
+| 12 | Core gaps: inline-field projection rule; value-type polymorphism; arrays and `foldImm` across stops | GAP | Separate from §62 but needed for the field-borrow use case. |
 | 13 | Recorded unreconciled point on 6.150 (`wp_reborrow_unreconciled_at_split_view`) | RISK | Untouched. |
-| 14 | Lowering: self-referential state machines (Pin/movability), per-state drop glue | GAP | Scope doc not written. |
-
-## Parked idea (not in any brief)
-Lifetimes on continuation/task types (`Task@a`; stores of `@a` continuations must stay within `a`), as Rust's `Future + 'a` and Schuster et al.'s region-typed continuations. Hypothesis: may subsume `sameW`/`ExtK` and the PA/PB conditions as one typing rule, and give scoped spawn for cross-task. Kept out of the stops-redesign spike on purpose; revisit after it reports.
+| 14 | Lowering: self-referential state machines (pinning or a movability mode), per-state drop glue | GAP | Scope doc not written. |
+| 15 | `✓` and `#` along `chainEquiv` | PROOF | Discharged: `chain_valid_iff`, `chain_hash_iff`, `chain_flat_iff`. |
+| 16 | Store typing growth | DESIGN/GAP | Ruling: store types are syntactic codes read at the tree. Growth at a `mut` lend of an untyped location, each location keeping its type, is proved over semantic types (`TWd.addTy_ext`, `Cov.mono`, `RR.mono`); store types as codes are not built. |
+| 17 | One type per location against a combined `mut` cell | RISK | `○` clause 3 joins two `mut` cells' invariants, while coverage reads one store type per location. A candidate configuration (the conjunction `τ ∧ Res_b` refusing a value of `τ` at `a ⊏ c ⊏ b`) is being tested on `tree-wp`; not built. |
+| 18 | Comparability uses outside `Tree/ChainUses.lean`'s scan | GAP | The interpretation of lifetime terms (row 2.54, `⊓`/`⊔` as `max`/`min` on `ℕ`) and `LifeCtx.Models` (row 2.52). Not restated. |
+| 19 | Sequential dependence: a run's frame fixed for its segment (`EndC`'s `ρ_f`); `JoinReady` read at the resume | DESIGN | Kept separate from the invariant, which is per branch, so a concurrent separation logic reading can replace them. |
+| 20 | The cactus invariant carries the proofs | GAP | `CactusInv` is stated, not yet used. Open: adequacy derived from its preservation at the relation the typing rules use; preservation at spawn and join; the frame rules as instances of capture. Over the tree world, `cerwpT_adequacy` is derived from `CactusInvT`, with no programs. |
+| 21 | The tree world without frame records | GAP | The tree-world relation carries no frame records, `TWNC` or `Tagged`, so no canonical images and no reborrows there yet. |
+| 22 | `[let-dtor]`'s destructor row: no cancelling operation (`hSDc`), no `Div` (`hSDd`), recorded in cancel rows (`hfin`) | DESIGN | Premises of `[let-dtor]` for now. `effLetDDiv` drops `hSDd` when the bound computation captures nothing. Relaxing `hSDc` and `hSDd` is open. |
+| 23 | The resume condition at every type | PROOF | Discharged: `joinFd_of_branch`, its ownership premise an invariant of canonical worlds (`TWNC.noOwnUnder`). |

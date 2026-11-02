@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.25 · 2026-10-31
+Version 1.26 · 2026-11-02
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1771,7 +1771,7 @@ A `while` or a `loop` is a loop of any div body.
 A borrow block's body is the callback of `withbor`, one computation that returns before the block
 ends; a loop is codata, observed one step at a time. So no borrow stays open while a loop runs:
 `↭` brackets every borrow cell inside one run (`experiments/LoopBorrow`), and a lend that spans
-observations is closed for good (decision 71, `docs/tombstones/lends-across-suspensions.md`). The
+observations is refused (decision 71, void by decision 72; the checker's rule until §62's PRs land). The
 design is to **lend again at each observation**, with no new rule: the owner lives in the loop's state, and each step borrows it by an
 ordinary `withbor` inside that step, so the state between steps holds the owner, never a borrow.
 
@@ -1811,8 +1811,8 @@ with `'x` in its type; a div call that takes the borrow other than as its own ar
 function with more than one borrow at its lifetime; a name the block binds again and that is read
 after it (the rewrite puts the block's bindings in the enclosing body).
 
-**Not covered** (each would hold a borrow across a loop's tick, which T1 rules out for good,
-decision 71, or needs a construct not built): a pipeline whose source holds the borrow, `for x in map(filter(iter(xs), p), f)` inside `borrow imm v { xs -> … }`. The
+**Not covered** (each would hold a borrow across a loop's tick, which T1 rules out
+(decision 71, void by decision 72; the checker's rule until §62's PRs land), or needs a construct not built): a pipeline whose source holds the borrow, `for x in map(filter(iter(xs), p), f)` inside `borrow imm v { xs -> … }`. The
 source could be rewritten to hold the owner, but the owner would come back only through the
 pipeline's finishing value and residual: each adapter would pass them on, the `for` would bind
 the finishing value, and the residual would have to hand back an owner that has a destructor. A
@@ -1825,8 +1825,8 @@ Programs: `corpus/axes/borrow-across-loop.bc`, `corpus/lend-mut.bc`, `lend-confi
 `lend-server.bc`, `lend-div.bc`, and the library's `lend-lib-loop.bc`, `lend-lib-gen.bc`,
 `lend-lib-each.bc`; pairs `corpus/sugar/lend-block.bc`, `lend-let.bc`, `lend-div.bc`; rejects
 `corpus/reject/lend-*.bc`. Every elaborated program is checked core, so `fundamentalC` and
-`adequacyC` cover it. The per-observation lend is kept as the design (decision 71): its output is
-core the kernel checks, and no replacement is planned. Each refusal above names its fix: iterate
+`adequacyC` cover it. The per-observation lend is kept (decision 71, void by decision 72; it stays until §62's PRs
+land): its output is core the kernel checks. Each refusal above names its fix: iterate
 by index or with a counted `for`, copy the value out, or end the borrow before the loop.
 
 ### The totality theorem
@@ -2095,8 +2095,7 @@ allocates nothing and dispatches no call (`corpus/gen-pipeline-adapters.bc`: 0, 
 
 A generator may not hold a borrow of its own local across a `yield` (Rust's generators forbid
 it, and its `async` needs `Pin` for it). A borrow block's body may perform only abortive
-operations (§19: a non-abortive operation crossing a borrow is T1, the permanent rule of
-decision 71), so a `yield` inside a borrow block is rejected (`corpus/reject/gen-self-borrow.bc`).
+operations (§19: a non-abortive operation crossing a borrow is T1 (decision 71, void by decision 72; the checker's rule until §62's PRs land)), so a `yield` inside a borrow block is rejected (`corpus/reject/gen-self-borrow.bc`).
 A generator owns its data, or iterates by index, and borrows within one step. A stored generator that holds a
 borrow of outside data cannot leave that borrow's scope, by the outlives rule of the boxed result
 (`corpus/reject/gen-escape.bc`). What is allowed is to own the cell in the generator's state and
@@ -2391,7 +2390,7 @@ count, which a handler wraps (§30, *Counted loops at a resuming row*, proposed)
 | a view `array_mut @a A` | the rest of the view, split at `1` each turn |
 | an owned array `array A`, `A` persistent | the index, the element copied out under a borrow of one turn |
 | a sized iterator | its data and state, one step each turn |
-| `&a`, `&mut a` | rejected: the lend spans the loop, and an operation that resumes cannot cross a borrow (T1, decision 71); iterate by index, or copy the elements out |
+| `&a`, `&mut a` | rejected: the lend spans the loop, and an operation that resumes cannot cross a borrow (T1; decision 71, void by decision 72; the checker's rule until §62's PRs land); iterate by index, or copy the elements out |
 
 The loop has no value there (`break e`, `else`). `corpus/for-data-div.bc` runs each source that
 a program can reach; `corpus/reject/for-lend-resumes.bc` is the lend. A `mut` view reaches such a
@@ -2425,7 +2424,7 @@ the backend's layout inference no type of their own.
 
 - `for` over `μ` data (lists): an owned list's rest is a cursor but its drain to the end has no
   count. A borrowed list in order is copied out first (`corpus/print-borrowed-list.bc`): an
-  iterator holding the borrow across its steps is closed by decision 71.
+  iterator holding the borrow across its steps is refused by T1 (decision 71, void by decision 72; the checker's rule until §62's PRs land).
 - A `for` over data whose body performs a resuming operation (a `yield`) or loops (a drain, a div
   call, or a `for` over a generator that loops) is rejected: the step of `count_try` is total
   (`corpus/reject/for-data-gen-loop.bc`). A generator over a view pulls it with
@@ -2941,7 +2940,9 @@ of three continuation types:
   in Core, `forget κ` has no derivation at `1` (`not_forget_kappa`, *Laws* item 4).
   A must-resume `κ` has no `cancel`, for must-complete computations.
 
-**T1 is the permanent rule: owned across suspensions, borrowed within** (decision 71). No lend
+*Decision 71 is void (decision 72). T1 below is the checker's rule today, until §62's PRs land.*
+
+**T1: owned across suspensions, borrowed within** (decision 71). No lend
 stays open across a suspension whose handler is outside the lend: a resuming operation, `await`,
 `yield`, or a loop's tick (`Div` is a handled effect, §14, so each step of a loop that is not
 counted resumes). Data that crosses such a suspension is owned, moved into the suspended code and
@@ -2950,12 +2951,11 @@ does not cross it: a borrow lent from outside a scheduler that runs inside the b
 `spawn_in`/`run_in`, §32), or around a generator pulled by hand inside it, is held by the suspended
 code, and the lend still closes within one run. The one exception is R1 (§29), frozen as it is: a
 `mut` lend of a task's own cell, its callback at `Row.ResumeOC` under `PinLaw`. Every other borrow
-callback's row is `Row.Unwind` (*Typing*), which is how the kernel enforces the rule; it is not a
-temporary restriction. A refusal under it names its fix: end the borrow before suspending; move
+callback's row is `Row.Unwind` (*Typing*), which is how the kernel enforces the rule. A refusal under it names its fix: end the borrow before suspending; move
 ownership in and out; iterate by index or with a counted `for` (§16); or copy the value out. Kept
 beside it: borrows across abortive operations (above), the per-observation lend over loops (§14),
-BOXED-κ (§28) and capabilities as borrows. Lifting T1 is closed: the approaches tried and the
-reopen condition are `docs/tombstones/lends-across-suspensions.md`.
+BOXED-κ (§28) and capabilities as borrows. Lifting T1 is §62's design; the approaches tried
+before are in `docs/tombstones/lends-across-suspensions.md` (void).
 
 ### Names: which handler handles an operation
 
@@ -3410,8 +3410,8 @@ Richer policies are K3 (#162), and *Open*:
      (`cancelOwed`, `ewp_ccatch`). Its obligations are the frame lemmas above; `ccatch`'s
      compatibility is `[unwind]`'s, and `cfin`'s is `[finalise]`'s, with the finaliser at the pure
      row (`then_cancel`, `cfin_run`). So cancelling a stored continuation needs nothing beyond what
-     storing it needed. A continuation stored while it captures borrows is what T1 rules out, for
-     good (decision 71). Non-abortive control operations cannot cross a borrow, so no stored `κ`
+     storing it needed. A continuation stored while it captures borrows is what T1 rules out
+     (decision 71, void by decision 72; the checker's rule until §62's PRs land). Non-abortive control operations cannot cross a borrow, so no stored `κ`
      captures a lend, and `cancel` needs only the unwinding forms of the borrows *inside* `κ`.
    - **`ubind`**: `then_compatC`, from `ewp_ubind`. The finaliser's context is framed off while
      `M` runs, and consumed by `D` at an unwind.
@@ -3947,9 +3947,9 @@ own: its handler answers one of two closures. The lowering adds neither.
   scope (T2, #173).
 - A tail-resumptive clause that captures values, compiled as a direct call with its captures
   passed to the operation as evidence (*Lowering*); it is a state machine now.
-- *Closed by decision 71 (tombstoned):* a non-abortive control operation crossing a borrow's
-  scope (T1, #172). T1 is the permanent rule (*Which operations cross a borrow's scope*);
-  `docs/tombstones/lends-across-suspensions.md`.
+- A non-abortive control operation crossing a borrow's scope (T1, #172): closed by decision 71,
+  which decision 72 voids. T1 is the checker's rule until §62's PRs land (*Which operations
+  cross a borrow's scope*); §62 is the design that lifts it.
 - Finaliser policies beyond "a new unwind supersedes" and "a cancel keeps the first error"
   (K3, #162): richer reporting of finaliser errors that lose to the first.
 - The typing of finalisers that raise to live handlers and perform operations (decisions D2, D3
@@ -5242,10 +5242,12 @@ R1 of `docs/async-capabilities.md` §3.3 as a rule of an extended judgment besid
 states its soundness as `PinLaw`. `CDerives` and its theorems are unchanged; a program that does not
 use R1 keeps them unconditionally.
 
+*Decision 71 is void (decision 72); R1 and `PinLaw` stay as stated here until §62's PRs land.*
+
 **Frozen for now (decision 71, the user's "Freeze r1 for now").** R1, with §29a's cancel-path
 widening, stays exactly as this entry states it, and `PinLaw` (`Core/PinLaw.lean`: `lendFrame`, `loopFrame`) gets no new field, case or premise.
-R2 is in the judgment and is not emitted, and that is frozen too. T1 is the permanent rule (§19);
-nothing here is a step toward lifting it (`docs/tombstones/lends-across-suspensions.md`).
+R2 is in the judgment and is not emitted, and that is frozen too. T1 is §19's rule until §62's
+PRs land.
 
 ### Typing
 
@@ -5277,7 +5279,7 @@ nothing here is a step toward lifting it (`docs/tombstones/lends-across-suspensi
 - R2 (`lendLoopR`, the `imm` lend over a loop whose state holds the borrow,
   `docs/async-capabilities.md` §3.3) is in the judgment as well, an instance of `LoopFrame`;
   `PinLaw.loop` derives its compatibility lemma. The checker does not emit it, and that is frozen
-  (decision 71; U6 is tombstoned).
+  (decision 71, void by decision 72; the checker's rule until §62's PRs land).
 
 **The extended judgment.** `CDerivesP` (`Core/PinDerives.lean`) is `CDerives` with every premise
 in `CDerivesP`, plus `lendR`, `lendLoopR` and `nilDead`. It is generated from
@@ -5332,7 +5334,7 @@ operation and an abortive one, the abortive one's handler outside the block, is 
 rejected as before (§15 *Self-reference*; OQ-2). R1 is chosen only where no ordinary rule
 applies: a block whose body performs only abortive operations is §19's unwinding borrow, and a
 borrow block over a loop is §14's per-observation lend. Segmenting a block at a suspension when
-only the borrow crosses it (L0, U3) is tombstoned (decision 71): the program ends the borrow
+only the borrow crosses it (L0, U3) is refused (decision 71, void by decision 72; the checker's rule until §62's PRs land): the program ends the borrow
 before the `await` itself. Each refusal names that fix, or moving the value in and out.
 
 The checker types `withbor2r` by `[lend-R]` at the slot of `p`: it checks `M` at `Δ, 'x ⊏ @b` and the
@@ -5411,8 +5413,9 @@ another), `async-r1-generator.bc` and `async-r1-drain.bc` (§15's self-referenti
 - A derivation that uses a relaxed rule is not claimed tied (decision R): a tied `CDerivesP` is not
   built.
 - What `LendFrame` ranges over (above): kind R of `docs/unsafe.md`.
-- *Closed by decision 71 (tombstoned):* L0 (U3), R2 at the checker (U6), shrinking `PinLaw` (U8),
-  and `docs/async-capabilities.md` OQ-1 to OQ-5 as routes to wider relaxed lends. BOXED-κ (U1,
+- *Closed by decision 71, which decision 72 voids (§62 is the new design):* L0 (U3), R2 at the
+  checker (U6), shrinking `PinLaw` (U8), and `docs/async-capabilities.md` OQ-1 to OQ-5 as routes
+  to wider relaxed lends. BOXED-κ (U1,
   §28) and `lib/async.bc` (U2, §30) are built.
 
 ---
@@ -5501,7 +5504,7 @@ state; its `await` clause reads it.
 
 The surface `await` and `complete`, `lib/async.bc`'s `cancelled` clause and a suspending scheduler's
 typing, `run_in`, the checker emitting `effAwait` or `effThenDiv`, the nursery over owned or copied request data
-(over borrowed data it needed #743, closed by decision 71), cancel scopes inside a task, and the lowering of a
+(over borrowed data it needed #743, closed by decision 71, which decision 72 voids; §62), cancel scopes inside a task, and the lowering of a
 suspending finaliser.
 
 ### Open
@@ -5693,7 +5696,7 @@ fails at its block).
   them apart.
 - **Tasks that hold a borrow across `await`** under `lib/async.bc`'s scheduler: a task of `spawn`
   holding a relaxed lend, `cancel` of one (A6) and a scheduler that logs (A5) are §32's; L0 (U3)
-  is closed by decision 71 (tombstoned): a task ends its borrow before each `await`, or is lent
+  is refused (decision 71, void by decision 72; the checker's rule until §62's PRs land): a task ends its borrow before each `await`, or is lent
   the place from outside its scheduler (`spawn_in`, §32).
 
 ## 31. Entry 30 — generic recursion, blocks to generic callees, and the inference gaps
@@ -5923,7 +5926,8 @@ existing corpus and kernel program keeps its output and counts; the reports of
 - **`div` callbacks in data and in a fold's algebra** (`corpus/pending/callbacks-in-data.bc`,
   `map-div-fold.bc`): a fold whose algebra is div (the children's loops sequenced, then the
   algebra run as a div body), and a data type at the join of its elements' effects; unchanged.
-- *Closed by decision 71 (tombstoned):* **an `imm` relaxed lend** (OQ-2), a fold whose algebra
+- *Closed by decision 71, which decision 72 voids (§62 is the new design):* **an `imm` relaxed
+  lend** (OQ-2), a fold whose algebra
   suspends under its borrow. `corpus/async-borrow.bc` is that program rewritten: the list is an
   array lent from outside the scheduler to tasks of `spawn_in`, read by index.
 - **A function with a row passed as a value**: at a parameter of function type it is the block
@@ -6534,7 +6538,7 @@ is the one it was, and every program's output. Only the backend changes, below t
   its own (§19 *Lowering*); a slot open at the point would be held in the state past its frame.
   Such a scope keeps a heap cell (`Clos.Prog.suspendedScopes`). No program has one: the typing
   refuses a resuming operation across a borrow block's body (a continuation held across a lend is
-  T1, the permanent rule of decision 71), and a lend in the arguments of a function that threads
+  T1, by decision 71, void by decision 72; the checker's rule until §62's PRs land), and a lend in the arguments of a function that threads
   a capability. A scope between
   two suspensions is framed in each code that runs it: `corpus/async-lend-slots.bc`.
 - **Capability cells are heap cells.** `stdin`, `stdout`, `stderr`, `args` and `clock` (§11,
@@ -10183,7 +10187,9 @@ in `P` and runs (`corpus/data-option-block.bc`); the reject is now a field under
 
 **Status: design, not built.** This entry is the target of the series #771–#775 (and its later
 issues). Each part names the PR that lands it. Nothing here changes `CDerives` until those PRs
-land. Evidence for each part comes from the #770 spikes and is cited by the name of the Lean result.
+land; until then the checker enforces the rules of §14, §19 (T1), §29 and §32 as stated there.
+Evidence for each part comes from the #770 spikes and is cited by the name of the Lean result
+(`docs/new-core/evidence.md`).
 
 ### Motivation
 
@@ -10192,8 +10198,7 @@ Linear resources meeting non-local exits and suspensions broke the language (#76
 - An error with two files open abandons one, because `[let]`'s side condition `hW` refuses an
   owned value without a derived drop that is live across an abortive point.
 - A `File` cannot live in a loop that is closed early.
-- No borrow may be held across a suspension whose handler stores the continuation (decision 71,
-  voided by decision 72).
+- No borrow may be held across a suspension whose handler stores the continuation (T1, §19).
 
 The cause is structural. Core's lifetimes form a single chain and its frames nest last-in-first-out.
 A stored continuation, resumed later under frames its handler opened in the meantime, makes the
@@ -10208,47 +10213,74 @@ For every closed, well-typed program `P`:
 
 Divergence is allowed, and termination is not claimed. This is LinearActris's adequacy shape
 (Jacobs, Hinrichsen, Krebbers, POPL 2024). It is stated today as `OrDiverges`
-(`experiments/DtorUnwind`, stage 7). Proved by `fundamentalC` over every typing rule and adequacy, at
-one step-indexed safety relation. The existing total relation keeps the termination results
-(`total_every_run`, `Closing`, `total_open`/`total_call`/`total_subrun`) for derivations that use
-none of the new rules.
+(`experiments/DtorUnwind`, stage 7). To be proved by `fundamentalC` over every typing rule and
+adequacy, at one step-indexed safety relation. The existing total relation keeps the termination
+results (`total_every_run`, `Closing`, `total_open`/`total_call`/`total_subrun`) for derivations
+that use none of the new rules.
 
 ### Lifetimes ordered as a tree (#773)
 
 Lifetimes form a well-founded cactus. A fresh lifetime is a child of the current branch's
-innermost one. Siblings are incomparable, and grafting a stored computation's branch under a
-newer lend makes its lifetimes descendants of that lend (`graftEx_lt`). Today's single chain is the
-case with one branch.
-- Where the model used that every two lifetimes are comparable (83 declarations,
-  `Tree/Comparability.lean`), each use is either restated or confined to a branch:
-  - the meet of a set of lifetimes is read at every member;
-  - `↓α` is a covering child;
-  - choosing a lifetime below two bounds happens on a branch.
-- No printed lemma ported so far (6.1–6.59 but 6.40 and 6.45) needs comparability.
+innermost one, and siblings are incomparable. A graft whose capture point is above its resume
+point adds order facts and removes none (`graft_mono`), so grafting a stored computation's branch
+under a newer lend makes its lifetimes descendants of that lend (for example `graftEx_lt`).
+Today's single chain is the case with one branch.
+
+Every use of comparability in the closure scanned by `Tree/ChainUses.lean` (the printed lemmas
+#770 asks about, `TW`'s and `TWNC`'s invariants, the relation's resource clauses) falls into one of
+five classes (`Tree/Comparability.lean`), each with its Lean evidence:
+1. **The carrier: strata and the cell operations.** `○` clause 3 needs one stratum holding both
+   cells' strata, which cousins do not have (`cousins_no_common_stratum`); the antichain carrier
+   below replaces it. `Res_{⊔ᾱ}` is read as the intersection of the members' strata, and `⊓ᾱ` at
+   every member.
+2. **A fresh lifetime `↓α`** is read as a covering child (`Cactus.Covers.le_of_lt`).
+3. **A lifetime chosen below two bounds** exists on a branch (`exists_below_two`, `fresh_frameT`,
+   `wp_I_frameT`).
+4. **A lifetime below the whole world** (`TW.reb`'s `StratumLe W β` and its kin) does not exist
+   for a world holding two siblings (`no_stratum_below_siblings`). These are replaced by premises
+   read at one record (`RebRecLe`, `RebEndRec`, `RebCellLe` of `TWN`/`TWNC`).
+5. **`⊓ᾱ ∈ ᾱ` used to get a member**: any member serves, and the use is read unchanged.
+
+No printed lemma ported to the tree carrier (6.1–6.59 but 6.40 and 6.45) needs comparability. *Open*: two
+uses outside the scan, neither restated: the interpretation of lifetime terms (row 2.54,
+`@b₁ ⊓ @b₂` and `@b₁ ⊔ @b₂` as `max`/`min` on `ℕ`) and `LifeCtx.Models` (row 2.52).
 
 ### The carrier (#773)
 
 Strata are indexed by finite sets of lifetimes, and `Res_S` is the intersection of the members'
 strata. A combined `mut` cell carries an antichain: `mut(β̄₁) ○ mut(β̄₂) = mut(min(β̄₁ ∪ β̄₂), …)`.
-`○`'s laws hold (`compLawsRT`). The chain instance is today's carrier (`chainEquiv`, with strata,
-`●` and `○` preserved and reflected); that `✓` and `#` agree along it is *Open*. A world valid
-before a graft is valid, carried, after it (`ResUT.Valid.graft`).
+`○`'s laws hold (`compLawsRT`). The chain instance is today's carrier: `chainEquiv` preserves and
+reflects strata, `●` and `○`, and along it `✓`, `#` and flattening are the printed ones
+(`chain_valid_iff`, `chain_hash_iff`, `chain_flat_iff`). A world valid before a graft is valid,
+carried, after it (`ResUT.Valid.graft`).
 
 ### Typed worlds with canonical images (#774)
 
 Each reborrow's image is the canonical one for its frame record and lifetime (one template per
 record, relabelled in lifetimes only), for root and deep reborrows. Two readers of the same frozen
-data then share witnesses. Every route that kept the choice was refuted
-(`not_rebReentryAgreeN`, `not_witSwapIWN`). All of Core holds over canonical worlds
-(`canon-core` branch: `fundamentalC`, `adequacyC`, with only the two choosers proved by hand).
+data then share witnesses. Each route tried that kept the choice (re-entry at the same image,
+re-choosing the image, worlds by invariants) was refuted (`not_rebReentryAgreeN`,
+`not_rebRelabelAgreeN`, `not_witSwapIWN`).
+
+Every result of the generated copy of Core builds over canonical worlds (`canon-core` branch,
+namespace `Core.C`): `fundamentalC`, `adequacyC`, and the demonic, pin, `Div` runtime and
+cancel-runs results. The two places the library chooses a reborrow's image are the only proofs
+written by hand. `Core.Stdio` is not covered. *Open*: canonical images over the tree carrier.
 
 ### Effectful destructors (#775)
 
 An owned value may carry a destructor that performs operations. Every exit runs the live
-context's destructors in reverse order: return, raise, cancel, and early close of a loop. `[let-dtor]`
-replaces `hW`. Evidence: `CDerives.effLetD`, `resourceSafety`, the cancellation corollary,
-`d_stepD`/`loopProg_safe`, `d_lendD`, `d_kDtor`. *Open*: a destructor that can fail (an ignored
-error, or a constraint).
+context's destructors in reverse order: return, raise, cancel, and early close of a loop.
+`[let-dtor]` replaces `hW`. Its side conditions, as `CDerives.effLetD` carries them, stay premises
+of `[let-dtor]` for now:
+- the destructors' row `Σ_D ≤ Σ` has no operation that cancels (`hSDc`: a destructor does not fail);
+- `Σ_D` does not hold `Div` (`hSDd`);
+- the cancel row of each capturable operation and cancellable wait of `Σ` records `Σ_D` (`hfin`).
+
+`effLetDDiv` drops `hSDd` when the bound computation's row has no capturable operation. Evidence:
+`CDerives.effLetD`, `resourceSafety`, the cancellation corollary, `d_stepD`/`loopProg_safe`,
+`d_lendD`, `d_kDtor`. *Open*: relaxing `hSDc` and `hSDd` (a destructor that can fail, as an
+ignored error or a constraint, or that loops).
 
 ### The safety relation
 
@@ -10257,8 +10289,9 @@ A step-indexed linear weakest precondition with the following parts:
 - **Capture is its own operation.** A stop is not read as a return: the stopped continuation's
   share keeps its branch's real cells and frame records (`crwpG`/`cerwp`).
 - **The cactus invariant over all computations** (running, stored in a κ, spawned). Each owns its
-  resources and frame records, pairwise disjoint. It is preserved by step, capture, graft, unwind,
-  spawn and join, and adequacy is derived from that preservation.
+  resources and frame records, pairwise disjoint. The design: it is preserved by step, capture,
+  graft, unwind, spawn and join; adequacy is derived from that preservation; and the frame rules
+  are instances of capture.
 - **`[handle]` without `hdv`.** The handler rule is proved by induction on the index, with stored
   continuations around loops that never end (`ewp_handle`, `erwp_handle`).
 - **Where κ resumes.** κ may resume at any extension Core's `Ext` allows (`extF`, `ext_extF`).
@@ -10266,45 +10299,69 @@ A step-indexed linear weakest precondition with the following parts:
 Evidence: `progStore_orDiverges`; borrows live across stops for `mut`/`imm` lends, reborrows,
 deep reborrows, and the Anti-Frame (`erwp_M_frame`, `erwp_I_frame`, `erwp_reborrow(Deep)`,
 `erwp_M_antiFrame`); a handler that lends its own cell and resumes κ inside it
-(`HandlerLendProg`); cross-task scopes (`cerwp_scope`, `CactusInv`). *Open*: one relation with
-abortive stops and forwarding (the two relations `erwp`/`cerwp` merge); the integration over the
-tree carrier.
+(`HandlerLendProg`); cross-task scopes with one child and a fixed order of events (`cerwp_scope`,
+`cerwp_scopeM`). `CactusInv` (`reb-canon`) is stated, with `cactus_step`, `cactus_move` and
+`joinReady_fd`, and not yet used: the cross-task programs are proved without it. Over the tree
+world (`tree-wp`), `CactusInvT` is kept by a step, by tree growth and by moving a part between
+branches (`cactusT_step`, `cactusT_extend`, `cactusT_move`), and `cerwpT_adequacy` is derived from
+it; no program is proved there yet, and that world carries no frame records or canonical images.
+
+*Open*:
+- adequacy derived from invariant preservation, at the relation the typing rules use;
+- preservation at spawn and join;
+- the frame rules as instances of capture;
+- one relation with abortive stops and forwarding (the two relations `erwp`/`cerwp` merge);
+- the integration over the tree carrier with frame records and canonical images.
 
 ### Semantic types read at the tree
 
-The relation's types are read at the current tree and are monotone along its extension. A `mut`
-cell's invariant is its store type, re-read when the tree grows, not a fixed predicate. Carried
-unchanged, a cell leaves `Mut`'s meaning (`trU_not_kmono`). Re-read, a stored task may write the
-handler's newer borrow into a cell it made before the graft (`round7_write`). *Open*: the store
-typing growing with allocation, and one type per location against a combined `mut` cell.
+The relation's types are read at the current tree and are monotone along its extension. This is
+proved for `1`, `+`, `Imm`, `Mut`, `ref`, `[a]` (box) and thunks, each from its components'
+(`kmono_unit`, `kmono_sum`, `kmono_imm`, `kmono_mut`, `kmono_ref`, `kmono_box`, `kmono_thunk`).
+A `mut` cell's invariant is its store type, re-read when the tree grows (`reread`), not a fixed
+predicate. Carried unchanged, a cell leaves `Mut`'s meaning (`trU_not_kmono`). Re-read, a stored
+task may write the handler's newer borrow into a cell it made before the graft (for example
+`round7_write`). Store types are syntactic codes read at the tree. The store typing grows at a
+`mut` lend of a location it does not type, and a location keeps its type for the run
+(`TWd.addTy_ext`, `Cov.mono`, `RR.mono` on `tree-wp`, over semantic types).
+
+*Open*: monotonicity at μ, ν, ∀, ⊗ and families; store types as syntactic codes; one type per
+location against a combined `mut` cell.
 
 ### Typing: suspension, scoped spawn, join
 
 - **Operations** carry their qualifier (`lin`, `cancel`, `unr`) and what payload and answer own.
-  An operation that may resume more than once is excluded while a borrow or owned resource is
-  live, because κ owns the folded cells (`unr_share_no_own`).
-- **Lends shared across tasks** end only at a join: scoped spawn.
+  The continuation share of an unrestricted operation (one that may resume more than once) owns
+  nothing (`unr_share_no_own`), and a lend live across a stop puts the lender's exclusive cell in
+  that share. So an unrestricted operation is excluded while a borrow or owned resource is live.
+  Multi-shot continuations over duplicable state are a hypothesis, not a rule.
+- **Lends shared across tasks end only at a join**: scoped spawn. A branch resumed from a join
+  asks that no other branch's flattening hold the joined location (`JoinReady`), which gives the
+  resumer's frame condition (`joinFd`, `joinReady_fd`). The scheduler establishes it by finishing
+  or cancelling every branch that held a borrow of the location and handing their borrows to the
+  joiner, which is what a join does.
 - **The resume condition** (nothing outside a resumed segment holds a location whose lend it
   ends) holds at borrow types in the tree (`fdFromLifetimeTypesT`) and at every type from the
-  branch invariant (`joinFd_of_branch`). One ownership fact about `own` cells beneath a borrow
-  (`hown`) is *Open*.
-- Lifetimes on continuation and task types alone do not supply it in a single chain
-  (`not_fdFromLifetimeTypes`).
+  branch invariant (`joinFd_of_branch`; its ownership premise is an invariant of canonical-image
+  worlds, `TWNC.noOwnUnder`).
+- Lifetimes on continuation and task types alone do not supply it: not in a single chain
+  (`not_fdFromLifetimeTypes`), and not at closure types in the tree (`not_fdFromThunkTypesT`).
 - *Open*: the typing rules and their compatibility lemmas.
 
 ### Not claimed
 
 - Termination for programs that use the new rules.
-- Threads: the invariant is per computation, so a concurrent reading stays possible. The two
-  places that rely on sequential scheduling are named in the cross-task spike.
+- Threads: the invariant is per computation, so a concurrent reading stays possible. Two places
+  rely on sequential scheduling: the frame of a run is fixed for the whole segment, and
+  `JoinReady` is read at the resume (`SI/CactusInv.lean`).
 - Lowering: per-task state machines, self-reference, per-state drop glue. Tracked as the series'
   last issue.
 
 ### Target programs
 
-Eight programs (`corpus/pending/`, on `fs-769`, held) illustrate the theorem; they are not the
-goal. A rule shaped to one program is refused. When one starts to pass, a variation must pass as
-well (#771). Three fail first on earlier gaps:
+Eight programs (`corpus/pending/`, on the local branch `pending-770`, stacked on `fs-769`; held)
+illustrate the theorem; they are not the goal. A rule shaped to one program is refused. When one
+starts to pass, a variation must pass as well (#771). Three fail first on earlier gaps:
 - no read of a boxed field through an `imm` borrow;
 - no unbounded loop in a task of `spawn`;
 - no `imm` reborrow of a handler's `mut` state.
@@ -10749,6 +10806,13 @@ relation or the machine.
 
 ## Changelog
 
+- **1.26** (2026-11-02) — §62 (decision 72, #771–#775): the new Core, as a design not yet built.
+  Lifetimes ordered as a tree, the tree-stratified carrier, canonical images, effectful
+  destructors, a step-indexed safety relation with capture as its own operation and a cactus
+  invariant, semantic types read at the tree, and scoped spawn; the target theorem is that every
+  reachable state steps or is final with an empty heap. Decision 72 voids decision 71: §14, §15,
+  §16, §19, §29, §30, §32 and §34 note that their T1, R1 and `PinLaw` rules stay the checker's
+  until §62's PRs land. No change to the kernel, the checker or the corpus.
 - **1.25** (2026-10-31) — §19, §29, §14, §15, §16, §30, §32, §34 (decision 71): T1 is the
   permanent rule, "owned across suspensions, borrowed within", stated in §19; R1 and `PinLaw` are
   frozen (§29: no field, case or premise is added; R2 stays unemitted); LoopLend is kept as the
