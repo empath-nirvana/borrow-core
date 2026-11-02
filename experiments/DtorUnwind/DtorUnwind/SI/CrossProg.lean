@@ -830,6 +830,181 @@ cell. No fuel. -/
 theorem prog_orDiverges : LoopAwait.OrDiverges (ℍ := ℍ) mainE :=
   cerwp_adequacy (fun _ _ _ _ _ h => h) main_ok
 
+
+/-! ### The drop: the scheduler cancels the child while the lend is live -/
+
+/-- `κ_c` cancelled; then `r₅ = κ′_p ()` and `free c`. -/
+def M4d : Expr :=
+  .seq (.app (freeE (.var 2)) (.val (Val.inj₂ Val.unit)))
+    (.case (resumeT (.var 0)) omegaE (freeE (.var 8)))
+def M3d : Expr := .case (resumeT (.var 1)) (.case (.var 0) omegaE M4d) omegaE
+def M2d : Expr := .case (hndE HC (.app (freeE (.var 1)) (.val Val.unit))) M3d omegaE
+def M1d : Expr :=
+  .case (hndE HP parentT) (.case (.var 0) (.letpair (.var 0) M2d) omegaE) omegaE
+/-- **The program with the drop.** -/
+def mainD : Expr := .app (.val (Val.lam M1d)) (allocE (.val Val.unit))
+
+theorem mainD_ok (n : Nat) :
+    cerwp (ℍ := ℍ) (opTableC OpTabC.emptyC) Qmain (fun ρf => ρf = PMap.empty) n [] [] mainD
+      (PMap.empty : WRes) := by
+  have hLE := opTableC_local OpTabC.emptyC
+  have hDE := opTableC_down opTabC_emptyC_down
+  refine cerwp_allocX hLE (.appR (.val (Val.lam M1d)) .hole) Val.unit (fun ℓ ρ' hc => ?_)
+  obtain rfl := eq_of_compS_empty_left hc
+  refine cerwp_det hDE Qmain_down (fun μ => step1Only_plug (Head.beta μ M1d (Val.loc ℓ)) rfl .hole) ?_
+  simp only [M1d, Expr.subst, HP_subst, omegaE_subst, hndE, Kont.plug, parentT_subst, loc_shift,
+    prim_subst]
+  simp (config := { decide := true }) only [if_false, Nat.reduceAdd]
+  -- r₁: the parent, under `HP`, the cell its only resource
+  refine cerwp_frameBindE (Q₁ := QP (ℍ := ℍ) ℓ (fun _ => True)) (F₁ := fun _ => True)
+    (fun ρ => ρ = PMap.empty) (.case .hole _ omegaE) (O₁ := []) (O₂ := [])
+    (fun _ h => by simp at h) (ResU.comp_empty_right _) (fun _ _ _ _ _ => trivial)
+    (genP ℓ _ _ [] [] (parentE ℓ) _ (parent_ok ℓ 0 _ _ [])) rfl
+    (fun k ls₁ O₁ v ρa ρb ρ' hk hq hR hc => ?_)
+  subst hR
+  obtain rfl := ResU.CompS.functional hc (ResU.comp_empty_right _)
+  rcases hq with ⟨v₀, rfl, -⟩ | ⟨ℓf, ℓκ, f, ρ₁, ρv, ρ₂, rfl, h₁, hPA, h₁₂, hks⟩ | ⟨ℓκ, m, rfl, -⟩
+  · refine cerwp_det hDE Qmain_down
+      (fun μ => step1Only_plug (Head.case₂ μ v₀ _ _) rfl .hole) ?_
+    rw [omegaE_subst]
+    exact cerwp_omega hLE _ _ _ _
+  · -- the spawn: `(f, κ_p)` in their cells
+    refine cerwp_det hDE Qmain_down
+      (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
+    simp (config := { decide := true }) only [Expr.subst, if_true, if_false, Nat.reduceAdd,
+      inj₁_shift, pair_shift, loc_shift, Kont.plug, omegaE_subst]
+    refine cerwp_det hDE Qmain_down
+      (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
+    simp (config := { decide := true }) only [Expr.subst, if_true, if_false, Nat.reduceAdd,
+      inj₁_shift, pair_shift, loc_shift, Kont.plug, omegaE_subst]
+    refine cerwp_det hDE Qmain_down
+      (fun μ => step1Only_plug (Head.letpair μ (Val.loc ℓf) (Val.loc ℓκ) _) rfl .hole) ?_
+    simp (config := { decide := true }) only [M2d, M3d, M4d, Expr.subst, if_true, if_false,
+      Nat.reduceAdd, Nat.reduceSub, inj₁_shift, pair_shift, loc_shift, Kont.plug, omegaE_subst,
+      HC_subst, prim_subst, resumeT, hndE, freeE, locV_subst, unitV_subst, inj₁unitV_subst,
+      inj₂unitV_subst]
+    rw [List.append_nil]
+    -- r₂: the child, from the stored closure and its borrow; `κ_p` kept beside it
+    obtain ⟨mv, sv, uv, hsv, rfl, hchild⟩ := hPA
+    refine cerwp_frameBindE (Q₁ := QC (ℍ := ℍ) (fun _ => True)) (F₁ := fun _ => True)
+      (KapStored (ℍ := ℍ) (TP (ℍ := ℍ)) (Qsc ℓ) HP (liftEnt (spawnEnt (ℍ := ℍ))) (fun _ => True)
+        k ls₁ O₁ f ℓκ)
+      (.case .hole _ omegaE) (O₁ := []) (O₂ := O₁) (fun _ h => by simp at h) h₁₂
+      (fun _ _ _ _ _ => trivial) ?_ hks (fun k₂ ls₂ O₂ v ρa ρb ρ'' hk₂ hq hR hc₂ => ?_)
+    · refine genC _ _ _ _ _ _ ?_
+      exact cerwp_freeX (opTableC_local _) (.appL .hole Val.unit) ℓf f h₁
+        (hchild (k - 1) (by omega) ls₁ _)
+    rcases hq with ⟨v₀, rfl, -⟩ | ⟨ℓκc, rfl, rfl, hkc⟩
+    · refine cerwp_det hDE Qmain_down
+        (fun μ => step1Only_plug (Head.case₂ μ v₀ _ _) rfl .hole) ?_
+      rw [omegaE_subst]
+      exact cerwp_omega hLE _ _ _ _
+    refine cerwp_det hDE Qmain_down
+      (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
+    simp (config := { decide := true }) only [Expr.subst, if_true, if_false, Nat.reduceAdd,
+      Nat.reduceSub, loc_shift, Kont.plug, omegaE_subst, prim_subst, locV_subst, unitV_subst,
+      inj₁unitV_subst]
+    -- r₃: the parent resumed, `κ_c` kept beside it
+    rw [show ([] : List FrameRec) ++ O₁ = O₁ ++ [] by simp]
+    refine cerwp_frameBindE (Q₁ := QP (ℍ := ℍ) ℓ (fun ρf => True ∧ True))
+      (F₁ := fun ρf => True ∧ True)
+      (KapStored (ℍ := ℍ) (TC (ℍ := ℍ)) Qchild HC (yEnt (ℍ := ℍ)) (fun _ => True) k₂ ls₂ []
+        Val.unit ℓκc)
+      (.case .hole _ omegaE) (O₁ := O₁) (O₂ := []) (fun _ _ h => by simp at h)
+      (ResU.CompS.comm hc₂) (fun _ _ _ _ _ => ⟨trivial, trivial⟩)
+      (cerwp_resumeStored (σ := PMap.empty) (QP_down ℓ _) (genP ℓ _) (kapStored_le hk₂ hR)
+        (fun _ _ => ⟨rfl, rfl⟩) (ResU.comp_empty_right _) le_rfl (fun _ => trivial))
+      hkc (fun k₃ ls₃ O₃ v ρa₃ ρb₃ ρ₃ hk₃ hq hR₃ hc₃ => ?_)
+    rcases hq with ⟨v₀, rfl, -⟩ | ⟨ℓf', ℓκ', f', -, -, -, rfl, -⟩ | ⟨ℓκp, m, rfl, hkp⟩
+    · refine cerwp_det hDE Qmain_down
+        (fun μ => step1Only_plug (Head.case₂ μ v₀ _ _) rfl .hole) ?_
+      rw [omegaE_subst]
+      exact cerwp_omega hLE _ _ _ _
+    · refine cerwp_det hDE Qmain_down
+        (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
+      simp (config := { decide := true }) only [Expr.subst, if_true, if_false, Nat.reduceAdd,
+        Kont.plug, omegaE_subst]
+      refine cerwp_det hDE Qmain_down
+        (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
+      rw [omegaE_subst]
+      exact cerwp_omega hLE _ _ _ _
+    refine cerwp_det hDE Qmain_down
+      (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
+    simp (config := { decide := true }) only [Expr.subst, if_true, if_false, Nat.reduceAdd,
+      Nat.reduceSub, inj₂_shift, loc_shift, Kont.plug, omegaE_subst, prim_subst, locV_subst,
+      unitV_subst, inj₁unitV_subst]
+    refine cerwp_det hDE Qmain_down
+      (fun μ => step1Only_plug (Head.case₂ μ _ _ _) rfl .hole) ?_
+    simp (config := { decide := true }) only [Expr.subst, if_true, if_false, Nat.reduceAdd,
+      Nat.reduceSub, loc_shift, Kont.plug, omegaE_subst, prim_subst, locV_subst,
+      unitV_subst, inj₁unitV_subst]
+    -- r₄: the child cancelled while the lend is live, `κ′_p` kept beside it; the cancel run
+    -- unwinds the child and returns its borrow
+    rw [List.append_nil]
+    refine cerwp_frameBindE (Q₁ := Qleft) (F₁ := fun _ => True)
+      (KapStored (ℍ := ℍ) (TP (ℍ := ℍ)) (Qsc ℓ) HP joinEnt (fun ρf => True ∧ True) k₃ ls₃ O₃
+        (Val.loc m) ℓκp)
+      (.seq .hole _) (O₁ := []) (O₂ := O₃) (fun _ h => by simp at h)
+      (ResU.CompS.comm hc₃) (fun _ _ _ _ _ => trivial)
+      (cerwp_cancelStored (Qin := Qchild) Qleft_down rfl (fun _ _ _ _ h => h (Pcan (ℍ := ℍ)) rfl _)
+        (kapStored_le hk₃ hR₃) le_rfl (fun _ => trivial)
+        (fun P hP j k' ls' e' ρ'' hj h => by
+          cases hP
+          exact fun F => cerwp_le (opTableC_local _) (opTableC_down opTabC_emptyC_down)
+            Qleft_down hj (h F)))
+      hkp (fun k₄ ls₄ O₄ v ρa₄ ρb₄ ρ₄ hk₄ hq hR₄ hc₄ => ?_)
+    obtain ⟨hO₄, rfl, hleft⟩ := hq
+    subst hO₄
+    refine cerwp_det hDE Qmain_down (fun μ => step1Only_plug (Head.seq μ _) rfl .hole) ?_
+    -- r₅: the parent resumed from the join, with the child's borrow of the joined location; the
+    -- scheduler keeps nothing at it
+    obtain ⟨σB, junk, hsj, hσB, hfree, himm⟩ := leftV_split hleft m
+    obtain ⟨ρs, hsσ, hsj'⟩ := compS_exch hsj hc₄
+    rw [show ([] : List FrameRec) ++ O₃ = O₃ ++ [] by simp]
+    refine cerwp_frameBindE (Q₁ := QP (ℍ := ℍ) ℓ (fun ρf => (True ∧ True) ∧ joinFd (Val.loc m) ρf))
+      (F₁ := fun ρf => (True ∧ True) ∧ joinFd (Val.loc m) ρf) (fun ρ => ρ = junk)
+      (.case .hole omegaE _) (O₁ := O₃) (O₂ := []) (fun _ _ h => by simp at h) hsj'
+      (fun ρf y hρf _ hy => by
+        have hρf' : ρf = PMap.empty := hρf
+        subst hρf'
+        obtain rfl := eq_of_compS_empty_left hy
+        exact ⟨⟨trivial, trivial⟩, m, rfl, hfree⟩)
+      (cerwp_resumeStored (σ := σB) (QP_down ℓ _) (genP ℓ _) (kapStored_le hk₄ hR₄)
+        (fun _ _ => ⟨m, rfl, rfl, hσB⟩) (ResU.CompS.comm hsσ) le_rfl (fun _ => trivial))
+      rfl (fun k₅ ls₅ O₅ v ρa₅ ρb₅ ρ₅ hk₅ hq hR₅ hc₅ => ?_)
+    subst hR₅
+    rcases hq with ⟨v₀, rfl, -, rfl, hO₅⟩ | ⟨-, -, -, -, -, -, rfl, -⟩ | ⟨-, -, rfl, -⟩
+    · -- the parent finished: the cell owned again, freed; the scheduler's result
+      refine cerwp_det hDE Qmain_down
+        (fun μ => step1Only_plug (Head.case₂ μ _ _ _) rfl .hole) ?_
+      simp only [Expr.subst, prim_subst, locV_subst, Kont.plug]
+      have hO : O₅ = [] := List.eq_nil_iff_forall_not_mem.mpr hO₅
+      subst hO
+      exact cerwp_freeX hLE .hole ℓ Val.unit hc₅ (cerwp_val ⟨rfl, himm⟩)
+    · refine cerwp_det hDE Qmain_down
+        (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
+      rw [omegaE_subst]
+      exact cerwp_omega hLE _ _ _ _
+    · refine cerwp_det hDE Qmain_down
+        (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
+      rw [omegaE_subst]
+      exact cerwp_omega hLE _ _ _ _
+  · refine cerwp_det hDE Qmain_down
+      (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
+    simp (config := { decide := true }) only [Expr.subst, if_true, if_false, Nat.reduceAdd,
+      inj₂_shift, loc_shift, Kont.plug, omegaE_subst]
+    refine cerwp_det hDE Qmain_down
+      (fun μ => step1Only_plug (Head.case₂ μ _ _ _) rfl .hole) ?_
+    rw [omegaE_subst]
+    exact cerwp_omega hLE _ _ _ _
+
+
+/-- **The cross-task test, the drop.** As `prog_orDiverges`, but the scheduler cancels the child
+while the parent's lend is live: the cancel unwinds the child's frames and returns the borrow the
+child held, which the scheduler hands to the parent at the join. No fuel. -/
+theorem progD_orDiverges : LoopAwait.OrDiverges (ℍ := ℍ) mainD :=
+  cerwp_adequacy (fun _ _ _ _ _ h => h) mainD_ok
+
 end BoCa.Fig16.LogRel.Core.DtorUnwind.SI.CrossProg
 
 end
