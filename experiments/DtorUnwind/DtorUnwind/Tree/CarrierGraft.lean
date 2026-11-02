@@ -54,7 +54,7 @@ def trLayer (S : TSet) (rec : ∀ T, K.Above S T → TrM Loc Val K K' T) :
   | .imm s hs v ρ =>
       CellUT.immOf s v (ρ.map (rec s hs).1) (ResUT.inStratum_map _ (rec s hs).2 ρ)
   | .mut s hs _ v ρ P hw =>
-      CellUT.mutOf (K'.minS s) (K'.minS_anti s) v (ρ.map (rec s hs).1)
+      CellUT.mutOf (K'.minS s) v (ρ.map (rec s hs).1)
         (ResUT.inStratum_map _ (rec s hs).2 ρ).minS
         (fun w r => ∃ r₀ : ResT Loc Val K s, r₀.map (rec s hs).1 = r.val ∧ P w r₀)
         ⟨ρ, rfl, hw⟩
@@ -84,7 +84,7 @@ def trU (hE : K.Ext K') : CellUT Loc Val K → CellUT Loc Val K'
   | .own v => .own v
   | .imm i => CellUT.immOf i.ls i.v (i.ρ.map (Tr hE i.ls).1)
       (ResUT.inStratum_map _ (Tr hE i.ls).2 i.ρ)
-  | .mut m => CellUT.mutOf (K'.minS m.ls) (K'.minS_anti m.ls) m.v (m.ρ.map (Tr hE m.ls).1)
+  | .mut m => CellUT.mutOf (K'.minS m.ls) m.v (m.ρ.map (Tr hE m.ls).1)
       (ResUT.inStratum_map _ (Tr hE m.ls).2 m.ρ).minS
       (fun w r => ∃ r₀ : ResT Loc Val K m.ls, r₀.map (Tr hE m.ls).1 = r.val ∧ m.P w r₀)
       ⟨m.ρ, rfl, m.hw⟩
@@ -127,7 +127,7 @@ theorem trU_wit (hE : K.Ext K') (ψ : CellUT Loc Val K) :
       show (CellUT.immOf i.ls i.v (i.ρ.map (Tr hE i.ls).1) _).wit = _
       rw [CellUT.wit_immOf, Tr_map]; rfl
   | «mut» m =>
-      show (CellUT.mutOf (K'.minS m.ls) (K'.minS_anti m.ls) m.v (m.ρ.map (Tr hE m.ls).1) _
+      show (CellUT.mutOf (K'.minS m.ls) m.v (m.ρ.map (Tr hE m.ls).1) _
         (fun w r => ∃ r₀ : ResT Loc Val K m.ls, r₀.map (Tr hE m.ls).1 = r.val ∧ m.P w r₀)
         ⟨m.ρ, rfl, m.hw⟩).wit = _
       rw [CellUT.wit_mutOf, Tr_map]; rfl

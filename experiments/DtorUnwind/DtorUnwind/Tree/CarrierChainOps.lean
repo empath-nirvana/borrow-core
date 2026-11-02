@@ -37,7 +37,7 @@ theorem CellUT.compatR_iff {K : WCactus} {ψ₁ ψ₂ : CellUT Loc Val K} :
       subst hv
     · exact ⟨_, CellUT.CompR.same _⟩
     · exact ⟨_, CellUT.CompR.ownImm s₂ _ τ₂ m₂⟩
-    · exact ⟨_, CellUT.CompR.ownMut b₂ a₂ _ τ₂ m₂ P₂ w₂⟩
+    · exact ⟨_, CellUT.CompR.ownMut b₂ _ τ₂ m₂ P₂ w₂⟩
     · exact ⟨_, CellUT.CompR.immOwn s₁ _ τ₁ m₁⟩
     · have hτ : τ₁ = τ₂ := by
         have hww := hw (by simp) (by simp)
@@ -48,18 +48,18 @@ theorem CellUT.compatR_iff {K : WCactus} {ψ₁ ψ₂ : CellUT Loc Val K} :
         have hww := hw (by simp) (by simp)
         rwa [CellUT.wit_immOf, CellUT.wit_mutOf] at hww
       subst hτ
-      exact ⟨_, CellUT.CompR.immMut s₁ _ τ₁ m₁ b₂ a₂ m₂ P₂ w₂⟩
-    · exact ⟨_, CellUT.CompR.mutOwn b₁ a₁ _ τ₁ m₁ P₁ w₁⟩
+      exact ⟨_, CellUT.CompR.immMut s₁ _ τ₁ m₁ b₂ m₂ P₂ w₂⟩
+    · exact ⟨_, CellUT.CompR.mutOwn b₁ _ τ₁ m₁ P₁ w₁⟩
     · have hτ : τ₁ = τ₂ := by
         have hww := hw (by simp) (by simp)
         rwa [CellUT.wit_mutOf, CellUT.wit_immOf] at hww
       subst hτ
-      exact ⟨_, CellUT.CompR.mutImm s₂ _ τ₁ m₂ b₁ a₁ m₁ P₁ w₁⟩
+      exact ⟨_, CellUT.CompR.mutImm s₂ _ τ₁ m₂ b₁ m₁ P₁ w₁⟩
     · have hτ : τ₁ = τ₂ := by
         have hww := hw (by simp) (by simp)
         rwa [CellUT.wit_mutOf, CellUT.wit_mutOf] at hww
       subst hτ
-      exact ⟨_, CellUT.CompR.mutMut b₁ b₂ a₁ a₂ _ τ₁ m₁ m₂ P₁ P₂ w₁ w₂⟩
+      exact ⟨_, CellUT.CompR.mutMut b₁ b₂ _ τ₁ m₁ m₂ P₁ P₂ w₁ w₂⟩
 
 /-- `▶◀` holds exactly of two `imm` cells sharing a value and a witness. -/
 theorem CellUT.compatS_iff {K : WCactus} {ψ₁ ψ₂ : CellUT Loc Val K} :
@@ -172,17 +172,17 @@ theorem chain_compS_iff {ψ₁ ψ₂ ψ : CellUT Loc Val chain} :
 
 /-- Clause 3 at the chain: the tree's `mut(min(β̄₁ ∪ β̄₂), v, ρ, P̂ ∧ Q̂)` is the printed
 `mut(α ⊓ β, v, ρ, P̂ ∧ Q̂)`. -/
-theorem chain_mutMut (s t : TSet) (as : chain.Anti s) (at_ : chain.Anti t) (v : Val)
+theorem chain_mutMut (s t : TSet) [as : Fact (chain.Anti s)] [at_ : Fact (chain.Anti t)] (v : Val)
     (ρ : ResUT Loc Val chain) (hs : ρ.InStratum s) (ht : ρ.InStratum t)
     (P : Val → SPropST Loc Val chain s) (Q : Val → SPropST Loc Val chain t)
     (hP : P v ⟨ρ, hs⟩) (hQ : Q v ⟨ρ, ht⟩) :
-    CellU.CompR (ΦU (CellUT.mutOf s as v ρ hs P hP)) (ΦU (CellUT.mutOf t at_ v ρ ht Q hQ))
-      (ΦU (CellUT.mutOf (chain.minS (s ∪ t)) (chain.minS_anti _) v ρ (hs.minUnion ht)
+    CellU.CompR (ΦU (CellUT.mutOf s v ρ hs P hP)) (ΦU (CellUT.mutOf t v ρ ht Q hQ))
+      (ΦU (CellUT.mutOf (chain.minS (s ∪ t)) v ρ (hs.minUnion ht)
         (SPropST.conj P Q) (SPropST.conj_holds hs ht hP hQ))) := by
   rw [ΦU_mutOf, ΦU_mutOf, ΦU_mutOf]
   have hst : (chain.minS (s ∪ t)).jn = s.jn ⊓ t.jn := by
-    rw [chain_anti_iff.mp as, chain_anti_iff.mp at_, chain_minS_single, TSet.jn_single,
-      ← chain_anti_iff.mp as, ← chain_anti_iff.mp at_]
+    rw [chain_anti_iff.mp as.out, chain_anti_iff.mp at_.out, chain_minS_single, TSet.jn_single,
+      ← chain_anti_iff.mp as.out, ← chain_anti_iff.mp at_.out]
   have H := CellU.CompR.mutMut s.jn t.jn v (ρ.map ΦU) (ΦU_map_inStratum hs)
     (ΦU_map_inStratum ht)
     (fun w r => ∃ (r₀ : ResUT Loc Val chain) (h₀ : r₀.InStratum s),
@@ -208,18 +208,18 @@ theorem chain_compR_of {ψ₁ ψ₂ ψ : CellUT Loc Val chain} (h : CellUT.CompR
       have hs := chain_compS_of (CellUT.compS_spec _ _ k)
       have e := CellU.CompS.functional (CellU.compS_spec _ _ hs.compat) hs
       exact e ▸ CellU.CompR.strict hs.compat
-  | mutMut s t as at_ v ρ hs ht P Q hP hQ => exact chain_mutMut s t as at_ v ρ hs ht P Q hP hQ
-  | mutOwn s as v ρ hs P hP =>
+  | mutMut s t v ρ hs ht P Q hP hQ => exact chain_mutMut s t v ρ hs ht P Q hP hQ
+  | mutOwn s v ρ hs P hP =>
       rw [ΦU_mutOf]; exact CellU.CompR.mutOwn _ _ _ _ _ _
-  | ownMut s as v ρ hs P hP =>
+  | ownMut s v ρ hs P hP =>
       rw [ΦU_mutOf]; exact CellU.CompR.ownMut _ _ _ _ _ _
   | immOwn s v ρ h =>
       rw [ΦU_immOf]; exact CellU.CompR.immOwn _ _ _ _
   | ownImm s v ρ h =>
       rw [ΦU_immOf]; exact CellU.CompR.ownImm _ _ _ _
-  | immMut s v ρ h b ab hb P hP =>
+  | immMut s v ρ h b hb P hP =>
       rw [ΦU_immOf, ΦU_mutOf]; exact CellU.CompR.immMut _ _ _ _ _ _ _ _
-  | mutImm s v ρ h b ab hb P hP =>
+  | mutImm s v ρ h b hb P hP =>
       rw [ΦU_immOf, ΦU_mutOf]; exact CellU.CompR.mutImm _ _ _ _ _ _ _ _
 
 /-- **At the chain, `○` is the printed `○`.** -/

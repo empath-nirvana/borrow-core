@@ -559,10 +559,20 @@ def CellUT.immOf (s : TSet) (v : Val) (ρ : ResUT Loc Val K) (h : ρ.InStratum s
     CellUT Loc Val K :=
   .imm ⟨s, v, ResST.toRes ⟨ρ, h⟩⟩
 
-/-- `mut(β̄, v, ρ, P̂)`, with `h` the row's `ρ : Res_β̄` and `hw` the refinement. -/
-def CellUT.mutOf (s : TSet) (a : K.Anti s) (v : Val) (ρ : ResUT Loc Val K) (h : ρ.InStratum s)
+instance WCactus.anti_single_fact (K : WCactus) (a : Life) : Fact (K.Anti (TSet.single a)) :=
+  ⟨fun x hx y hy hxy => by
+    simp only [TSet.single_set, Finset.mem_singleton] at hx hy
+    subst hx; subst hy
+    exact Cactus.lt_irrefl _ _ hxy⟩
+
+instance WCactus.minS_anti_fact (K : WCactus) (s : TSet) : Fact (K.Anti (K.minS s)) :=
+  ⟨K.minS_anti s⟩
+
+/-- `mut(β̄, v, ρ, P̂)`, with `h` the row's `ρ : Res_β̄` and `hw` the refinement; `β̄`'s
+antichain fact is found by instance, so the constructor has the printed shape. -/
+def CellUT.mutOf (s : TSet) [a : Fact (K.Anti s)] (v : Val) (ρ : ResUT Loc Val K) (h : ρ.InStratum s)
     (P : Val → SPropST Loc Val K s) (hw : P v ⟨ρ, h⟩) : CellUT Loc Val K :=
-  .mut ⟨s, a, v, ResST.toRes ⟨ρ, h⟩, fun v r => P v r.toS, by
+  .mut ⟨s, a.out, v, ResST.toRes ⟨ρ, h⟩, fun v r => P v r.toS, by
     show P v (ResST.toRes ⟨ρ, h⟩).toS
     rw [ResST.toS_toRes]
     exact hw⟩
@@ -571,37 +581,37 @@ def CellUT.mutOf (s : TSet) (a : K.Anti s) (v : Val) (ρ : ResUT Loc Val K) (h :
   rfl
 @[simp] theorem CellUT.kind_immOf (s : TSet) (v : Val) (ρ : ResUT Loc Val K) (h : ρ.InStratum s) :
     (CellUT.immOf s v ρ h).kind = .imm := rfl
-@[simp] theorem CellUT.kind_mutOf (s : TSet) (a : K.Anti s) (v : Val) (ρ : ResUT Loc Val K)
+@[simp] theorem CellUT.kind_mutOf (s : TSet) [Fact (K.Anti s)] (v : Val) (ρ : ResUT Loc Val K)
     (h : ρ.InStratum s) (P : Val → SPropST Loc Val K s) (hw : P v ⟨ρ, h⟩) :
-    (CellUT.mutOf s a v ρ h P hw).kind = .mut := rfl
+    (CellUT.mutOf s v ρ h P hw).kind = .mut := rfl
 
 @[simp] theorem CellUT.erase_ownOf (v : Val) : (CellUT.ownOf (K := K) (Loc := Loc) v).erase = v :=
   rfl
 @[simp] theorem CellUT.erase_immOf (s : TSet) (v : Val) (ρ : ResUT Loc Val K) (h : ρ.InStratum s) :
     (CellUT.immOf s v ρ h).erase = v := rfl
-@[simp] theorem CellUT.erase_mutOf (s : TSet) (a : K.Anti s) (v : Val) (ρ : ResUT Loc Val K)
+@[simp] theorem CellUT.erase_mutOf (s : TSet) [Fact (K.Anti s)] (v : Val) (ρ : ResUT Loc Val K)
     (h : ρ.InStratum s) (P : Val → SPropST Loc Val K s) (hw : P v ⟨ρ, h⟩) :
-    (CellUT.mutOf s a v ρ h P hw).erase = v := rfl
+    (CellUT.mutOf s v ρ h P hw).erase = v := rfl
 
 @[simp] theorem CellUT.wit_ownOf (v : Val) :
     (CellUT.ownOf (K := K) (Loc := Loc) v).wit = PMap.empty := rfl
 @[simp] theorem CellUT.wit_immOf (s : TSet) (v : Val) (ρ : ResUT Loc Val K) (h : ρ.InStratum s) :
     (CellUT.immOf s v ρ h).wit = ρ := ResST.toU_toRes ⟨ρ, h⟩
-@[simp] theorem CellUT.wit_mutOf (s : TSet) (a : K.Anti s) (v : Val) (ρ : ResUT Loc Val K)
+@[simp] theorem CellUT.wit_mutOf (s : TSet) [Fact (K.Anti s)] (v : Val) (ρ : ResUT Loc Val K)
     (h : ρ.InStratum s) (P : Val → SPropST Loc Val K s) (hw : P v ⟨ρ, h⟩) :
-    (CellUT.mutOf s a v ρ h P hw).wit = ρ := ResST.toU_toRes ⟨ρ, h⟩
+    (CellUT.mutOf s v ρ h P hw).wit = ρ := ResST.toU_toRes ⟨ρ, h⟩
 
 @[simp] theorem CellUT.lsOf_immOf (s : TSet) (v : Val) (ρ : ResUT Loc Val K) (h : ρ.InStratum s) :
     (CellUT.immOf s v ρ h).lsOf = some s := rfl
-@[simp] theorem CellUT.lsOf_mutOf (s : TSet) (a : K.Anti s) (v : Val) (ρ : ResUT Loc Val K)
+@[simp] theorem CellUT.lsOf_mutOf (s : TSet) [Fact (K.Anti s)] (v : Val) (ρ : ResUT Loc Val K)
     (h : ρ.InStratum s) (P : Val → SPropST Loc Val K s) (hw : P v ⟨ρ, h⟩) :
-    (CellUT.mutOf s a v ρ h P hw).lsOf = some s := rfl
+    (CellUT.mutOf s v ρ h P hw).lsOf = some s := rfl
 
 @[simp] theorem CellUT.inStratum_immOf (S s : TSet) (v : Val) (ρ : ResUT Loc Val K)
     (h : ρ.InStratum s) : (CellUT.immOf s v ρ h).InStratum S ↔ K.Above S s := Iff.rfl
-@[simp] theorem CellUT.inStratum_mutOf (S s : TSet) (a : K.Anti s) (v : Val)
+@[simp] theorem CellUT.inStratum_mutOf (S s : TSet) [Fact (K.Anti s)] (v : Val)
     (ρ : ResUT Loc Val K) (h : ρ.InStratum s) (P : Val → SPropST Loc Val K s)
-    (hw : P v ⟨ρ, h⟩) : (CellUT.mutOf s a v ρ h P hw).InStratum S ↔ K.Above S s := Iff.rfl
+    (hw : P v ⟨ρ, h⟩) : (CellUT.mutOf s v ρ h P hw).InStratum S ↔ K.Above S s := Iff.rfl
 
 theorem ImmT.ext' {i j : ImmT Loc Val K} (hs : i.ls = j.ls) (hv : i.v = j.v)
     (hρ : i.ρ ≍ j.ρ) : i = j := by
@@ -636,13 +646,13 @@ theorem CellUT.immOf_congr {s s' : TSet} {v v' : Val} {ρ ρ' : ResUT Loc Val K}
     CellUT.immOf s v ρ h = CellUT.immOf s' v' ρ' h' := by
   subst hs; subst hv; subst hρ; rfl
 
-theorem CellUT.mutOf_congr {s s' : TSet} (e : s = s') (a : K.Anti s) (a' : K.Anti s') (v : Val)
+theorem CellUT.mutOf_congr {s s' : TSet} (e : s = s') [Fact (K.Anti s)] [Fact (K.Anti s')] (v : Val)
     (ρ : ResUT Loc Val K) (h : ρ.InStratum s) (h' : ρ.InStratum s')
     (P : Val → SPropST Loc Val K s) (P' : Val → SPropST Loc Val K s')
     (hP : P v ⟨ρ, h⟩) (hP' : P' v ⟨ρ, h'⟩)
     (eP : ∀ (r : ResUT Loc Val K) (hr : r.InStratum s) (hr' : r.InStratum s') (w : Val),
         P w ⟨r, hr⟩ ↔ P' w ⟨r, hr'⟩) :
-    CellUT.mutOf s a v ρ h P hP = CellUT.mutOf s' a' v ρ h' P' hP' := by
+    CellUT.mutOf s v ρ h P hP = CellUT.mutOf s' v ρ h' P' hP' := by
   subst e
   have hPP : P = P' := by
     funext w r
@@ -650,11 +660,11 @@ theorem CellUT.mutOf_congr {s s' : TSet} (e : s = s') (a : K.Anti s) (a' : K.Ant
   subst hPP
   rfl
 
-theorem CellUT.mutOf_inj {s₁ s₂ : TSet} {a₁ : K.Anti s₁} {a₂ : K.Anti s₂} {v₁ v₂ : Val}
+theorem CellUT.mutOf_injSet {s₁ s₂ : TSet} [Fact (K.Anti s₁)] [Fact (K.Anti s₂)] {v₁ v₂ : Val}
     {ρ₁ ρ₂ : ResUT Loc Val K} {h₁ : ρ₁.InStratum s₁} {h₂ : ρ₂.InStratum s₂}
     {P₁ : Val → SPropST Loc Val K s₁} {P₂ : Val → SPropST Loc Val K s₂}
     {w₁ : P₁ v₁ ⟨ρ₁, h₁⟩} {w₂ : P₂ v₂ ⟨ρ₂, h₂⟩}
-    (e : CellUT.mutOf s₁ a₁ v₁ ρ₁ h₁ P₁ w₁ = CellUT.mutOf s₂ a₂ v₂ ρ₂ h₂ P₂ w₂) :
+    (e : CellUT.mutOf s₁ v₁ ρ₁ h₁ P₁ w₁ = CellUT.mutOf s₂ v₂ ρ₂ h₂ P₂ w₂) :
     s₁ = s₂ ∧ v₁ = v₂ ∧ ρ₁ = ρ₂ ∧
       ∀ (r : ResUT Loc Val K) (hr₁ : r.InStratum s₁) (hr₂ : r.InStratum s₂) (w : Val),
         P₁ w ⟨r, hr₁⟩ ↔ P₂ w ⟨r, hr₂⟩ := by
@@ -676,8 +686,8 @@ theorem CellUT.rep (ψ : CellUT Loc Val K) :
     (∃ v : Val, ψ = CellUT.ownOf v) ∨
     (∃ (s : TSet) (v : Val) (ρ : ResUT Loc Val K) (h : ρ.InStratum s),
         ψ = CellUT.immOf s v ρ h) ∨
-    (∃ (s : TSet) (a : K.Anti s) (v : Val) (ρ : ResUT Loc Val K) (h : ρ.InStratum s)
-        (P : Val → SPropST Loc Val K s) (hw : P v ⟨ρ, h⟩), ψ = CellUT.mutOf s a v ρ h P hw) := by
+    (∃ (s : TSet) (_ : Fact (K.Anti s)) (v : Val) (ρ : ResUT Loc Val K) (h : ρ.InStratum s)
+        (P : Val → SPropST Loc Val K s) (hw : P v ⟨ρ, h⟩), ψ = CellUT.mutOf s v ρ h P hw) := by
   cases ψ with
   | own v => exact Or.inl ⟨v, rfl⟩
   | imm i =>
@@ -687,7 +697,7 @@ theorem CellUT.rep (ψ : CellUT Loc Val K) :
         simp only [heq_eq_eq]
         exact (ResT.toRes_toS i.ρ).symm))
   | «mut» m =>
-      refine Or.inr (Or.inr ⟨m.ls, m.anti, m.v, m.ρ.toU, m.ρ.toU_inStratum,
+      refine Or.inr (Or.inr ⟨m.ls, ⟨m.anti⟩, m.v, m.ρ.toU, m.ρ.toU_inStratum,
         fun v r => m.P v r.toRes, ?_, ?_⟩)
       · show m.P m.v (ResST.toRes ⟨m.ρ.toU, m.ρ.toU_inStratum⟩)
         rw [show ResST.toRes ⟨m.ρ.toU, m.ρ.toU_inStratum⟩ = m.ρ from ResT.toRes_toS m.ρ]

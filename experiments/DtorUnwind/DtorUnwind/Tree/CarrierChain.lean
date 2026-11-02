@@ -276,7 +276,7 @@ def psiLayer (a : Life) (rec : ∀ b, a < b → PsiM Loc Val b) :
         (ResUT.inStratum_map _ (fun c => inStratum_toTSet_of_join
           ((rec i.ls.join (lt_of_lt_of_le i.hls i.ls.meet_le_join)).2 c)) i.ρ)
   | .mut m =>
-      CellUT.mutOf (TSet.single m.β) (chain_anti_single m.β) m.v (m.ρ.map (rec m.β m.hβ).1)
+      CellUT.mutOf (TSet.single m.β) m.v (m.ρ.map (rec m.β m.hβ).1)
         (ResUT.inStratum_map _ (rec m.β m.hβ).2 m.ρ)
         (fun w r => ∃ r₀ : Res Loc Val m.β, r₀.map (rec m.β m.hβ).1 = r.val ∧ m.P w r₀)
         ⟨m.ρ, rfl, m.hw⟩
@@ -306,7 +306,7 @@ def ΨU : CellU Loc Val → CellUT Loc Val chain
       CellUT.immOf (TSet.ofLSet i.ls) i.v (i.ρ.map (Psi i.ls.join).1)
         (ResUT.inStratum_map _ (fun c => inStratum_toTSet_of_join ((Psi i.ls.join).2 c)) i.ρ)
   | .mut m =>
-      CellUT.mutOf (TSet.single m.β) (chain_anti_single m.β) m.v (m.ρ.map (Psi m.β).1)
+      CellUT.mutOf (TSet.single m.β) m.v (m.ρ.map (Psi m.β).1)
         (ResUT.inStratum_map _ (Psi m.β).2 m.ρ)
         (fun w r => ∃ r₀ : Res Loc Val m.β, r₀.map (Psi m.β).1 = r.val ∧ m.P w r₀)
         ⟨m.ρ, rfl, m.hw⟩
@@ -325,7 +325,7 @@ theorem Psi_map {a : Life} (ρ : Res Loc Val a) : ρ.map (Psi a).1 = ρ.toU.map 
 /-! ### `ΦU` and `ΨU` on the constructors -/
 
 theorem MutT.mutOf_eta {K : WCactus} (m : MutT Loc Val K) :
-    CellUT.mutOf m.ls m.anti m.v m.res CellUT.wit_inStratum_mut (fun w r => m.P w r.toRes)
+    @CellUT.mutOf _ _ _ m.ls ⟨m.anti⟩ m.v m.res CellUT.wit_inStratum_mut (fun w r => m.P w r.toRes)
       (by show m.P m.v (ResST.toRes ⟨m.ρ.toU, m.ρ.toU_inStratum⟩)
           rw [show ResST.toRes ⟨m.ρ.toU, m.ρ.toU_inStratum⟩ = m.ρ from ResT.toRes_toS m.ρ]
           exact m.hw) = .mut m := by
@@ -432,20 +432,20 @@ theorem CellU.mutOf_congr' {b b' : Life} (e : b = b') {v : Val} {ρ ρ' : ResU L
   exact CellU.mutOf_congr e v ρ h h' P P' hP hP' eP
 
 /-- `mut` congruence in the tree carrier, with the witness rewritten too. -/
-theorem CellUT.mutOf_congr' {K : WCactus} {s s' : TSet} (e : s = s') (a : K.Anti s)
-    (a' : K.Anti s') {v : Val} {ρ ρ' : ResUT Loc Val K} (eρ : ρ = ρ') (h : ρ.InStratum s)
+theorem CellUT.mutOf_congr' {K : WCactus} {s s' : TSet} (e : s = s') [Fact (K.Anti s)]
+    [Fact (K.Anti s')] {v : Val} {ρ ρ' : ResUT Loc Val K} (eρ : ρ = ρ') (h : ρ.InStratum s)
     (h' : ρ'.InStratum s') (P : Val → SPropST Loc Val K s) (P' : Val → SPropST Loc Val K s')
     (hP : P v ⟨ρ, h⟩) (hP' : P' v ⟨ρ', h'⟩)
     (eP : ∀ (r : ResUT Loc Val K) (hr : r.InStratum s) (hr' : r.InStratum s') (w : Val),
         P w ⟨r, hr⟩ ↔ P' w ⟨r, hr'⟩) :
-    CellUT.mutOf s a v ρ h P hP = CellUT.mutOf s' a' v ρ' h' P' hP' := by
+    CellUT.mutOf s v ρ h P hP = CellUT.mutOf s' v ρ' h' P' hP' := by
   subst eρ
-  exact CellUT.mutOf_congr e a a' v ρ h h' P P' hP hP' eP
+  exact CellUT.mutOf_congr e v ρ h h' P P' hP hP' eP
 
 /-- `ΦU(mut(β̄, v, ρ, P̂)) = mut(⊔β̄, v, ΦU ρ, P̂ ∘ ΦU⁻¹)`. -/
-theorem ΦU_mutOf (s : TSet) (a : chain.Anti s) (v : Val) (ρ : ResUT Loc Val chain)
+theorem ΦU_mutOf (s : TSet) [Fact (chain.Anti s)] (v : Val) (ρ : ResUT Loc Val chain)
     (h : ρ.InStratum s) (P : Val → SPropST Loc Val chain s) (hw : P v ⟨ρ, h⟩) :
-    ΦU (CellUT.mutOf s a v ρ h P hw) =
+    ΦU (CellUT.mutOf s v ρ h P hw) =
       CellU.mutOf s.jn v (ρ.map ΦU) (ΦU_map_inStratum h)
         (fun w r => ∃ (r₀ : ResUT Loc Val chain) (h₀ : r₀.InStratum s),
           r₀.map ΦU = r.val ∧ P w ⟨r₀, h₀⟩) ⟨ρ, h, rfl, hw⟩ := by
@@ -487,7 +487,7 @@ theorem ΨU_immOf (L : LSet) (v : Val) (ρ : ResU Loc Val) (h : ρ.InStratum L.j
 theorem ΨU_mutOf (b : Life) (v : Val) (ρ : ResU Loc Val) (h : ρ.InStratum b)
     (P : Val → SPropS Loc Val b) (hw : P v ⟨ρ, h⟩) :
     ΨU (CellU.mutOf b v ρ h P hw) =
-      CellUT.mutOf (TSet.single b) (chain_anti_single b) v (ρ.map ΨU) (ΨU_map_inStratum h)
+      CellUT.mutOf (TSet.single b) v (ρ.map ΨU) (ΨU_map_inStratum h)
         (fun w r => ∃ (r₀ : ResU Loc Val) (h₀ : r₀.InStratum b),
           r₀.map ΨU = r.val ∧ P w ⟨r₀, h₀⟩) ⟨ρ, h, rfl, hw⟩ := by
   have eρ : (ResS.toRes ⟨ρ, h⟩).map (Psi b).1 = ρ.map ΨU := by
@@ -503,8 +503,7 @@ theorem ΨU_mutOf (b : Life) (v : Val) (ρ : ResU Loc Val) (h : ρ.InStratum b)
       refine ⟨ResS.toRes ⟨r₀, h₀⟩, ?_, ?_⟩
       · rw [Psi_map, ResS.toU_toRes]; exact e
       · rw [ResS.toS_toRes]; exact hP
-  exact CellUT.mutOf_congr' (s := TSet.single b) (s' := TSet.single b) rfl
-    (chain_anti_single b) (chain_anti_single b) (v := v)
+  exact CellUT.mutOf_congr' (s := TSet.single b) (s' := TSet.single b) rfl (v := v)
     (ρ := (ResS.toRes ⟨ρ, h⟩).map (Psi b).1) (ρ' := ρ.map ΨU) eρ
     (ResUT.inStratum_map _ (Psi b).2 _) (ΨU_map_inStratum h)
     (fun w r => ∃ r₀ : Res Loc Val b, r₀.map (Psi b).1 = r.val ∧ P w r₀.toS)
@@ -541,8 +540,9 @@ theorem ΨU_ΦU_of (ψ : CellUT Loc Val chain)
         (roundT i.ρ.toU_inStratum Hi) _ _
   | «mut» m =>
       have Hm := H m.ls rfl
+      haveI : Fact (chain.Anti m.ls) := ⟨m.anti⟩
       rw [← MutT.mutOf_eta m, ΦU_mutOf, ΨU_mutOf]
-      refine CellUT.mutOf_congr' (chain_anti_iff.mp m.anti).symm _ _
+      refine CellUT.mutOf_congr' (chain_anti_iff.mp m.anti).symm
         (roundT m.ρ.toU_inStratum Hm) _ _ _ _ _ _ ?_
       intro r hr hr' w
       constructor

@@ -223,23 +223,23 @@ inductive CellUT.CompR : CellUT Loc Val K → CellUT Loc Val K → CellUT Loc Va
   | strict {ψ₁ ψ₂ : CellUT Loc Val K} (h : ψ₁.CompatS ψ₂) :
       CellUT.CompR ψ₁ ψ₂ (CellUT.compS ψ₁ ψ₂ h)
   /-- (3) `mut(min(β̄₁ ∪ β̄₂), v, ρ, P̂ ∧ Q̂)`. -/
-  | mutMut (s t : TSet) (as : K.Anti s) (at_ : K.Anti t) (v : Val) (ρ : ResUT Loc Val K)
+  | mutMut (s t : TSet) [Fact (K.Anti s)] [Fact (K.Anti t)] (v : Val) (ρ : ResUT Loc Val K)
       (hs : ρ.InStratum s) (ht : ρ.InStratum t)
       (P : Val → SPropST Loc Val K s) (Q : Val → SPropST Loc Val K t)
       (hP : P v ⟨ρ, hs⟩) (hQ : Q v ⟨ρ, ht⟩) :
-      CellUT.CompR (CellUT.mutOf s as v ρ hs P hP) (CellUT.mutOf t at_ v ρ ht Q hQ)
-        (CellUT.mutOf (K.minS (s ∪ t)) (K.minS_anti _) v ρ (hs.minUnion ht) (SPropST.conj P Q)
+      CellUT.CompR (CellUT.mutOf s v ρ hs P hP) (CellUT.mutOf t v ρ ht Q hQ)
+        (CellUT.mutOf (K.minS (s ∪ t)) v ρ (hs.minUnion ht) (SPropST.conj P Q)
           (SPropST.conj_holds hs ht hP hQ))
   /-- (4), `i = 1`. -/
-  | mutOwn (s : TSet) (as : K.Anti s) (v : Val) (ρ : ResUT Loc Val K) (hs : ρ.InStratum s)
+  | mutOwn (s : TSet) [Fact (K.Anti s)] (v : Val) (ρ : ResUT Loc Val K) (hs : ρ.InStratum s)
       (P : Val → SPropST Loc Val K s) (hP : P v ⟨ρ, hs⟩) :
-      CellUT.CompR (CellUT.mutOf s as v ρ hs P hP) (CellUT.ownOf v)
-        (CellUT.mutOf s as v ρ hs P hP)
+      CellUT.CompR (CellUT.mutOf s v ρ hs P hP) (CellUT.ownOf v)
+        (CellUT.mutOf s v ρ hs P hP)
   /-- (4), `i = 2`. -/
-  | ownMut (s : TSet) (as : K.Anti s) (v : Val) (ρ : ResUT Loc Val K) (hs : ρ.InStratum s)
+  | ownMut (s : TSet) [Fact (K.Anti s)] (v : Val) (ρ : ResUT Loc Val K) (hs : ρ.InStratum s)
       (P : Val → SPropST Loc Val K s) (hP : P v ⟨ρ, hs⟩) :
-      CellUT.CompR (CellUT.ownOf v) (CellUT.mutOf s as v ρ hs P hP)
-        (CellUT.mutOf s as v ρ hs P hP)
+      CellUT.CompR (CellUT.ownOf v) (CellUT.mutOf s v ρ hs P hP)
+        (CellUT.mutOf s v ρ hs P hP)
   /-- (5), `i = 1`, against `own(v)`. -/
   | immOwn (s : TSet) (v : Val) (ρ : ResUT Loc Val K) (h : ρ.InStratum s) :
       CellUT.CompR (CellUT.immOf s v ρ h) (CellUT.ownOf v) (CellUT.immOf s v ρ h)
@@ -248,15 +248,15 @@ inductive CellUT.CompR : CellUT Loc Val K → CellUT Loc Val K → CellUT Loc Va
       CellUT.CompR (CellUT.ownOf v) (CellUT.immOf s v ρ h) (CellUT.immOf s v ρ h)
   /-- (5), `i = 1`, against `mut(β̄, v, ρ, P̂)`. -/
   | immMut (s : TSet) (v : Val) (ρ : ResUT Loc Val K) (h : ρ.InStratum s)
-      (b : TSet) (ab : K.Anti b) (hb : ρ.InStratum b) (P : Val → SPropST Loc Val K b)
+      (b : TSet) [Fact (K.Anti b)] (hb : ρ.InStratum b) (P : Val → SPropST Loc Val K b)
       (hP : P v ⟨ρ, hb⟩) :
-      CellUT.CompR (CellUT.immOf s v ρ h) (CellUT.mutOf b ab v ρ hb P hP)
+      CellUT.CompR (CellUT.immOf s v ρ h) (CellUT.mutOf b v ρ hb P hP)
         (CellUT.immOf s v ρ h)
   /-- (5), `i = 2`, against `mut(β̄, v, ρ, P̂)`. -/
   | mutImm (s : TSet) (v : Val) (ρ : ResUT Loc Val K) (h : ρ.InStratum s)
-      (b : TSet) (ab : K.Anti b) (hb : ρ.InStratum b) (P : Val → SPropST Loc Val K b)
+      (b : TSet) [Fact (K.Anti b)] (hb : ρ.InStratum b) (P : Val → SPropST Loc Val K b)
       (hP : P v ⟨ρ, hb⟩) :
-      CellUT.CompR (CellUT.mutOf b ab v ρ hb P hP) (CellUT.immOf s v ρ h)
+      CellUT.CompR (CellUT.mutOf b v ρ hb P hP) (CellUT.immOf s v ρ h)
         (CellUT.immOf s v ρ h)
 
 /-- `ψ₁ ⋈ ψ₂`, the domain of `○` (row 5.14, read as in the printed carrier). -/
@@ -264,12 +264,12 @@ def CellUT.CompatR (ψ₁ ψ₂ : CellUT Loc Val K) : Prop := ∃ ψ, CellUT.Com
 
 /-- Clauses (1) and (3) agree at two equal `mut` cells: `min(β̄ ∪ β̄) = β̄` for an antichain,
 where the printed proof has `α ⊓ α = α`. -/
-theorem CellUT.compR_same_mutMut (s : TSet) (as : K.Anti s) (v : Val) (ρ : ResUT Loc Val K)
+theorem CellUT.compR_same_mutMut (s : TSet) [Fact (K.Anti s)] (v : Val) (ρ : ResUT Loc Val K)
     (hs : ρ.InStratum s) (P : Val → SPropST Loc Val K s) (hP : P v ⟨ρ, hs⟩) :
-    CellUT.mutOf (K.minS (s ∪ s)) (K.minS_anti _) v ρ (hs.minUnion hs) (SPropST.conj P P)
+    CellUT.mutOf (K.minS (s ∪ s)) v ρ (hs.minUnion hs) (SPropST.conj P P)
         (SPropST.conj_holds hs hs hP hP)
-      = CellUT.mutOf s as v ρ hs P hP := by
-  refine CellUT.mutOf_congr (K.minS_self as) _ _ v ρ _ _ _ _ _ _ ?_
+      = CellUT.mutOf s v ρ hs P hP := by
+  refine CellUT.mutOf_congr (K.minS_self Fact.out) v ρ _ _ _ _ _ _ ?_
   intro r hr hr' w
   constructor
   · rintro ⟨⟨k, hk⟩, -⟩; exact hk
@@ -279,12 +279,12 @@ theorem CellUT.compR_same_mutMut (s : TSet) (as : K.Anti s) (v : Val) (ρ : ResU
 theorem CellUT.CompR.inv {ψ₁ ψ₂ ψ : CellUT Loc Val K} (h : CellUT.CompR ψ₁ ψ₂ ψ) :
     (ψ₁ = ψ₂ ∧ ψ = ψ₁)
     ∨ (∃ k : ψ₁.CompatS ψ₂, ψ = CellUT.compS ψ₁ ψ₂ k)
-    ∨ (∃ (s t : TSet) (as : K.Anti s) (at_ : K.Anti t) (v : Val) (ρ : ResUT Loc Val K)
+    ∨ (∃ (s t : TSet) (_ : Fact (K.Anti s)) (_ : Fact (K.Anti t)) (v : Val) (ρ : ResUT Loc Val K)
         (hs : ρ.InStratum s) (ht : ρ.InStratum t)
         (P : Val → SPropST Loc Val K s) (Q : Val → SPropST Loc Val K t)
         (hP : P v ⟨ρ, hs⟩) (hQ : Q v ⟨ρ, ht⟩),
-        ψ₁ = CellUT.mutOf s as v ρ hs P hP ∧ ψ₂ = CellUT.mutOf t at_ v ρ ht Q hQ ∧
-        ψ = CellUT.mutOf (K.minS (s ∪ t)) (K.minS_anti _) v ρ (hs.minUnion ht)
+        ψ₁ = CellUT.mutOf s v ρ hs P hP ∧ ψ₂ = CellUT.mutOf t v ρ ht Q hQ ∧
+        ψ = CellUT.mutOf (K.minS (s ∪ t)) v ρ (hs.minUnion ht)
               (SPropST.conj P Q) (SPropST.conj_holds hs ht hP hQ))
     ∨ (ψ = ψ₁ ∧ ψ₂.kind = Kind.own ∧ ψ₁.kind ≠ Kind.own)
     ∨ (ψ = ψ₂ ∧ ψ₁.kind = Kind.own ∧ ψ₂.kind ≠ Kind.own)
@@ -293,8 +293,9 @@ theorem CellUT.CompR.inv {ψ₁ ψ₂ ψ : CellUT Loc Val K} (h : CellUT.CompR �
   cases h with
   | same χ => exact Or.inl ⟨rfl, rfl⟩
   | strict k => exact Or.inr (Or.inl ⟨k, rfl⟩)
-  | mutMut s t as at_ v ρ hs ht P Q hP hQ =>
-      exact Or.inr (Or.inr (Or.inl ⟨s, t, as, at_, v, ρ, hs, ht, P, Q, hP, hQ, rfl, rfl, rfl⟩))
+  | mutMut s t v ρ hs ht P Q hP hQ =>
+      exact Or.inr (Or.inr (Or.inl ⟨s, t, inferInstance, inferInstance, v, ρ, hs, ht, P, Q, hP, hQ,
+        rfl, rfl, rfl⟩))
   | mutOwn =>
       exact Or.inr (Or.inr (Or.inr (Or.inl ⟨rfl, rfl, by simp⟩)))
   | ownMut =>
@@ -309,39 +310,39 @@ theorem CellUT.CompR.inv {ψ₁ ψ₂ ψ : CellUT Loc Val K} (h : CellUT.CompR �
       exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr ⟨rfl, rfl, rfl⟩)))))
 
 /-- Clause (3) applied to two cells that clause (1) also matches. -/
-theorem CellUT.compR_mutMut_of_eq {s t : TSet} {as : K.Anti s} {at_ : K.Anti t} {v : Val}
+theorem CellUT.compR_mutMut_of_eq {s t : TSet} [Fact (K.Anti s)] [Fact (K.Anti t)] {v : Val}
     {ρ : ResUT Loc Val K} {hs : ρ.InStratum s} {ht : ρ.InStratum t}
     {P : Val → SPropST Loc Val K s} {Q : Val → SPropST Loc Val K t}
     {hP : P v ⟨ρ, hs⟩} {hQ : Q v ⟨ρ, ht⟩}
-    (e : CellUT.mutOf s as v ρ hs P hP = CellUT.mutOf t at_ v ρ ht Q hQ) :
-    CellUT.mutOf (K.minS (s ∪ t)) (K.minS_anti _) v ρ (hs.minUnion ht) (SPropST.conj P Q)
+    (e : CellUT.mutOf s v ρ hs P hP = CellUT.mutOf t v ρ ht Q hQ) :
+    CellUT.mutOf (K.minS (s ∪ t)) v ρ (hs.minUnion ht) (SPropST.conj P Q)
         (SPropST.conj_holds hs ht hP hQ)
-      = CellUT.mutOf t at_ v ρ ht Q hQ := by
-  obtain ⟨hst, -, -, hPQ⟩ := CellUT.mutOf_inj e
+      = CellUT.mutOf t v ρ ht Q hQ := by
+  obtain ⟨hst, -, -, hPQ⟩ := CellUT.mutOf_injSet e
   subst hst
   have hPQ' : P = Q := funext fun w => funext fun r => propext (hPQ r.val r.property r.property w)
   subst hPQ'
-  exact CellUT.compR_same_mutMut s at_ v ρ ht P hQ
+  exact CellUT.compR_same_mutMut s v ρ ht P hQ
 
 /-- Clause (3) is determined by its two operands. -/
-theorem CellUT.compR_mutMut_det {s t s' t' : TSet} {as : K.Anti s} {at_ : K.Anti t}
-    {as' : K.Anti s'} {at' : K.Anti t'} {v v' : Val} {ρ ρ' : ResUT Loc Val K}
+theorem CellUT.compR_mutMut_det {s t s' t' : TSet} [Fact (K.Anti s)] [Fact (K.Anti t)]
+    [Fact (K.Anti s')] [Fact (K.Anti t')] {v v' : Val} {ρ ρ' : ResUT Loc Val K}
     {hs : ρ.InStratum s} {ht : ρ.InStratum t} {hs' : ρ'.InStratum s'} {ht' : ρ'.InStratum t'}
     {P : Val → SPropST Loc Val K s} {Q : Val → SPropST Loc Val K t}
     {P' : Val → SPropST Loc Val K s'} {Q' : Val → SPropST Loc Val K t'}
     {hP : P v ⟨ρ, hs⟩} {hQ : Q v ⟨ρ, ht⟩} {hP' : P' v' ⟨ρ', hs'⟩} {hQ' : Q' v' ⟨ρ', ht'⟩}
-    (e1 : CellUT.mutOf s as v ρ hs P hP = CellUT.mutOf s' as' v' ρ' hs' P' hP')
-    (e2 : CellUT.mutOf t at_ v ρ ht Q hQ = CellUT.mutOf t' at' v' ρ' ht' Q' hQ') :
-    CellUT.mutOf (K.minS (s ∪ t)) (K.minS_anti _) v ρ (hs.minUnion ht) (SPropST.conj P Q)
+    (e1 : CellUT.mutOf s v ρ hs P hP = CellUT.mutOf s' v' ρ' hs' P' hP')
+    (e2 : CellUT.mutOf t v ρ ht Q hQ = CellUT.mutOf t' v' ρ' ht' Q' hQ') :
+    CellUT.mutOf (K.minS (s ∪ t)) v ρ (hs.minUnion ht) (SPropST.conj P Q)
         (SPropST.conj_holds hs ht hP hQ)
-      = CellUT.mutOf (K.minS (s' ∪ t')) (K.minS_anti _) v' ρ' (hs'.minUnion ht')
+      = CellUT.mutOf (K.minS (s' ∪ t')) v' ρ' (hs'.minUnion ht')
           (SPropST.conj P' Q') (SPropST.conj_holds hs' ht' hP' hQ') := by
-  obtain ⟨hss, hv, hρ, hPP⟩ := CellUT.mutOf_inj e1
+  obtain ⟨hss, hv, hρ, hPP⟩ := CellUT.mutOf_injSet e1
   subst hss; subst hv; subst hρ
   have hPP' : P = P' :=
     funext fun w => funext fun r => propext (hPP r.val r.property r.property w)
   subst hPP'
-  obtain ⟨htt, -, -, hQQ⟩ := CellUT.mutOf_inj e2
+  obtain ⟨htt, -, -, hQQ⟩ := CellUT.mutOf_injSet e2
   subst htt
   have hQQ' : Q = Q' :=
     funext fun w => funext fun r => propext (hQQ r.val r.property r.property w)
@@ -398,19 +399,19 @@ theorem CellUT.CompR.comm {ψ₁ ψ₂ ψ : CellUT Loc Val K} (h : CellUT.CompR 
   cases h with
   | same => exact CellUT.CompR.same _
   | strict k => exact (CellUT.compS_comm _ _ k) ▸ CellUT.CompR.strict k.symm
-  | mutMut s t as at_ v ρ hs ht P Q hP hQ =>
-      have := CellUT.CompR.mutMut t s at_ as v ρ ht hs Q P hQ hP
-      refine (?_ : CellUT.mutOf (K.minS (t ∪ s)) _ v ρ _ (SPropST.conj Q P) _
-        = CellUT.mutOf (K.minS (s ∪ t)) _ v ρ _ (SPropST.conj P Q) _) ▸ this
-      refine CellUT.mutOf_congr (K.minS_union_comm t s) _ _ v ρ _ _ _ _ _ _ ?_
+  | mutMut s t v ρ hs ht P Q hP hQ =>
+      have := CellUT.CompR.mutMut t s v ρ ht hs Q P hQ hP
+      refine (?_ : CellUT.mutOf (K.minS (t ∪ s)) v ρ _ (SPropST.conj Q P) _
+        = CellUT.mutOf (K.minS (s ∪ t)) v ρ _ (SPropST.conj P Q) _) ▸ this
+      refine CellUT.mutOf_congr (K.minS_union_comm t s) v ρ _ _ _ _ _ _ ?_
       intro r hr hr' w
       exact SPropST.conj_comm Q P r hr hr' w
-  | mutOwn s as v ρ hs P hP => exact .ownMut s as v ρ hs P hP
-  | ownMut s as v ρ hs P hP => exact .mutOwn s as v ρ hs P hP
+  | mutOwn s v ρ hs P hP => exact .ownMut s v ρ hs P hP
+  | ownMut s v ρ hs P hP => exact .mutOwn s v ρ hs P hP
   | immOwn s v ρ hs => exact .ownImm s v ρ hs
   | ownImm s v ρ hs => exact .immOwn s v ρ hs
-  | immMut s v ρ hs b ab hb P hP => exact .mutImm s v ρ hs b ab hb P hP
-  | mutImm s v ρ hs b ab hb P hP => exact .immMut s v ρ hs b ab hb P hP
+  | immMut s v ρ hs b hb P hP => exact .mutImm s v ρ hs b hb P hP
+  | mutImm s v ρ hs b hb P hP => exact .immMut s v ρ hs b hb P hP
 
 theorem CellUT.CompatR.symm {ψ₁ ψ₂ : CellUT Loc Val K} (h : ψ₁.CompatR ψ₂) : ψ₂.CompatR ψ₁ :=
   ⟨h.choose, h.choose_spec.comm⟩
@@ -483,7 +484,7 @@ theorem CellUT.compR_own_left_of_erase {v : Val} {ψ : CellUT Loc Val K}
     simp only [CellUT.erase_ownOf, CellUT.erase_immOf, CellUT.erase_mutOf] at h <;> subst h
   · exact CellUT.CompR.same _
   · exact CellUT.CompR.ownImm _ _ _ _
-  · exact CellUT.CompR.ownMut _ _ _ _ _ _ _
+  · exact CellUT.CompR.ownMut _ _ _ _ _ _
 
 theorem CellUT.compR_own_right_of_erase {v : Val} {ψ : CellUT Loc Val K}
     (h : ψ.erase = v) : CellUT.CompR ψ (CellUT.ownOf v) ψ := by
@@ -491,7 +492,7 @@ theorem CellUT.compR_own_right_of_erase {v : Val} {ψ : CellUT Loc Val K}
     simp only [CellUT.erase_ownOf, CellUT.erase_immOf, CellUT.erase_mutOf] at h <;> subst h
   · exact CellUT.CompR.same _
   · exact CellUT.CompR.immOwn _ _ _ _
-  · exact CellUT.CompR.mutOwn _ _ _ _ _ _ _
+  · exact CellUT.CompR.mutOwn _ _ _ _ _ _
 
 /-- `[TR]` p. 7, the `○` case at `ψ₁ = own(v)`. -/
 theorem CellUT.compR_assoc_own_left {v : Val} {ψ₂ ψ₃ χ ω : CellUT Loc Val K}
@@ -534,9 +535,9 @@ theorem CellUT.kind_immOf_ne_own {s : TSet} {v : Val} {ρ : ResUT Loc Val K}
     {h : ρ.InStratum s} : (CellUT.immOf s v ρ h).kind ≠ Kind.own :=
   fun hk => Kind.noConfusion hk
 
-theorem CellUT.kind_mutOf_ne_own {s : TSet} {as : K.Anti s} {v : Val} {ρ : ResUT Loc Val K}
+theorem CellUT.kind_mutOf_ne_own {s : TSet} [Fact (K.Anti s)] {v : Val} {ρ : ResUT Loc Val K}
     {h : ρ.InStratum s} {P : Val → SPropST Loc Val K s} {hw : P v ⟨ρ, h⟩} :
-    (CellUT.mutOf s as v ρ h P hw).kind ≠ Kind.own :=
+    (CellUT.mutOf s v ρ h P hw).kind ≠ Kind.own :=
   fun hk => Kind.noConfusion hk
 
 /-- The `○` case of `[TR]` Lemma 6.3 (pp. 6–7) at the cell level, left to right, by the
@@ -583,7 +584,7 @@ theorem CellUT.compR_assoc_forward {ψ₁ ψ₂ ψ₃ χ ω : CellUT Loc Val K}
         simp only [CellUT.wit_immOf, CellUT.wit_mutOf] at ew
         subst ev; subst ew
         have hχ : χ = CellUT.immOf t v₂ ρ kt :=
-          CellUT.CompR.functional h₂₃ (CellUT.CompR.immMut t v₂ ρ kt c ac kc T hT)
+          CellUT.CompR.functional h₂₃ (CellUT.CompR.immMut t v₂ ρ kt c kc T hT)
         subst hχ
         have ev' := ((CellUT.CompR.erase h₁χ).1).symm
         have ew' :=
@@ -596,7 +597,7 @@ theorem CellUT.compR_assoc_forward {ψ₁ ψ₂ ψ₃ χ ω : CellUT Loc Val K}
           CellUT.CompR.functional h₁χ (CellUT.compR_immImm s t v₂ ρ ks kt kst)
         subst hω
         exact ⟨CellUT.immOf (s ∪ t) v₂ ρ kst, CellUT.compR_immImm s t v₂ ρ ks kt kst,
-          CellUT.CompR.immMut (s ∪ t) v₂ ρ kst c ac kc T hT⟩
+          CellUT.CompR.immMut (s ∪ t) v₂ ρ kst c kc T hT⟩
     · rcases CellUT.rep ψ₃ with ⟨v₃, rfl⟩ | ⟨u, v₃, τ, ku, rfl⟩ |
           ⟨c, ac, v₃, τ, kc, T, hT, rfl⟩
       · exact CellUT.compR_assoc_own_right h₂₃ h₁χ
@@ -607,7 +608,7 @@ theorem CellUT.compR_assoc_forward {ψ₁ ψ₂ ψ₃ χ ω : CellUT Loc Val K}
         simp only [CellUT.wit_immOf, CellUT.wit_mutOf] at ew
         subst ev; subst ew
         have hχ : χ = CellUT.immOf u v₂ ρ ku :=
-          CellUT.CompR.functional h₂₃ (CellUT.CompR.mutImm u v₂ ρ ku b ab kb Q hQ)
+          CellUT.CompR.functional h₂₃ (CellUT.CompR.mutImm u v₂ ρ ku b kb Q hQ)
         subst hχ
         have ev' := ((CellUT.CompR.erase h₁χ).1).symm
         have ew' :=
@@ -619,7 +620,7 @@ theorem CellUT.compR_assoc_forward {ψ₁ ψ₂ ψ₃ χ ω : CellUT Loc Val K}
         have hω : ω = CellUT.immOf (s ∪ u) v₂ ρ ksu :=
           CellUT.CompR.functional h₁χ (CellUT.compR_immImm s u v₂ ρ ks ku ksu)
         subst hω
-        exact ⟨CellUT.immOf s v₂ ρ ks, CellUT.CompR.immMut s v₂ ρ ks b ab kb Q hQ,
+        exact ⟨CellUT.immOf s v₂ ρ ks, CellUT.CompR.immMut s v₂ ρ ks b kb Q hQ,
           CellUT.compR_immImm s u v₂ ρ ks ku ksu⟩
       · -- `imm ○ (mut ○ mut)`: the `imm` is the result either way.
         have ev := (CellUT.CompR.erase h₂₃).1
@@ -629,9 +630,9 @@ theorem CellUT.compR_assoc_forward {ψ₁ ψ₂ ψ₃ χ ω : CellUT Loc Val K}
         subst ev; subst ew
         have kbc : ρ.InStratum (K.minS (b ∪ c)) := kb.minUnion kc
         have hQT : SPropST.conj Q T v₂ ⟨ρ, kbc⟩ := SPropST.conj_holds kb kc hQ hT
-        have hχ : χ = CellUT.mutOf (K.minS (b ∪ c)) (K.minS_anti _) v₂ ρ kbc
+        have hχ : χ = CellUT.mutOf (K.minS (b ∪ c)) v₂ ρ kbc
             (SPropST.conj Q T) hQT :=
-          CellUT.CompR.functional h₂₃ (CellUT.CompR.mutMut b c ab ac v₂ ρ kb kc Q T hQ hT)
+          CellUT.CompR.functional h₂₃ (CellUT.CompR.mutMut b c v₂ ρ kb kc Q T hQ hT)
         subst hχ
         have ev' := ((CellUT.CompR.erase h₁χ).1).symm
         have ew' :=
@@ -641,10 +642,10 @@ theorem CellUT.compR_assoc_forward {ψ₁ ψ₂ ψ₃ χ ω : CellUT Loc Val K}
         subst ev'; subst ew'
         have hω : ω = CellUT.immOf s v₂ ρ ks :=
           CellUT.CompR.functional h₁χ
-            (CellUT.CompR.immMut s v₂ ρ ks _ (K.minS_anti _) kbc (SPropST.conj Q T) hQT)
+            (CellUT.CompR.immMut s v₂ ρ ks _ kbc (SPropST.conj Q T) hQT)
         subst hω
-        exact ⟨CellUT.immOf s v₂ ρ ks, CellUT.CompR.immMut s v₂ ρ ks b ab kb Q hQ,
-          CellUT.CompR.immMut s v₂ ρ ks c ac kc T hT⟩
+        exact ⟨CellUT.immOf s v₂ ρ ks, CellUT.CompR.immMut s v₂ ρ ks b kb Q hQ,
+          CellUT.CompR.immMut s v₂ ρ ks c kc T hT⟩
   · rcases CellUT.rep ψ₂ with ⟨v₂, rfl⟩ | ⟨t, v₂, ρ, kt, rfl⟩ | ⟨b, ab, v₂, ρ, kb, Q, hQ, rfl⟩
     · exact CellUT.compR_assoc_own_mid h₂₃ h₁χ
     · rcases CellUT.rep ψ₃ with ⟨v₃, rfl⟩ | ⟨u, v₃, τ, ku, rfl⟩ |
@@ -667,9 +668,9 @@ theorem CellUT.compR_assoc_forward {ψ₁ ψ₂ ψ₃ χ ω : CellUT Loc Val K}
         simp only [CellUT.wit_immOf, CellUT.wit_mutOf] at ew'
         subst ev'; subst ew'
         have hω : ω = CellUT.immOf (t ∪ u) v₂ ρ ktu :=
-          CellUT.CompR.functional h₁χ (CellUT.CompR.mutImm (t ∪ u) v₂ ρ ktu a aa ka P hP)
+          CellUT.CompR.functional h₁χ (CellUT.CompR.mutImm (t ∪ u) v₂ ρ ktu a ka P hP)
         subst hω
-        exact ⟨CellUT.immOf t v₂ ρ kt, CellUT.CompR.mutImm t v₂ ρ kt a aa ka P hP,
+        exact ⟨CellUT.immOf t v₂ ρ kt, CellUT.CompR.mutImm t v₂ ρ kt a ka P hP,
           CellUT.compR_immImm t u v₂ ρ kt ku ktu⟩
       · -- `mut ○ (imm ○ mut)`: the `imm` is the result either way.
         have ev := (CellUT.CompR.erase h₂₃).1
@@ -678,7 +679,7 @@ theorem CellUT.compR_assoc_forward {ψ₁ ψ₂ ψ₃ χ ω : CellUT Loc Val K}
         simp only [CellUT.wit_immOf, CellUT.wit_mutOf] at ew
         subst ev; subst ew
         have hχ : χ = CellUT.immOf t v₂ ρ kt :=
-          CellUT.CompR.functional h₂₃ (CellUT.CompR.immMut t v₂ ρ kt c ac kc T hT)
+          CellUT.CompR.functional h₂₃ (CellUT.CompR.immMut t v₂ ρ kt c kc T hT)
         subst hχ
         have ev' := ((CellUT.CompR.erase h₁χ).1).symm
         have ew' :=
@@ -687,10 +688,10 @@ theorem CellUT.compR_assoc_forward {ψ₁ ψ₂ ψ₃ χ ω : CellUT Loc Val K}
         simp only [CellUT.wit_immOf, CellUT.wit_mutOf] at ew'
         subst ev'; subst ew'
         have hω : ω = CellUT.immOf t v₂ ρ kt :=
-          CellUT.CompR.functional h₁χ (CellUT.CompR.mutImm t v₂ ρ kt a aa ka P hP)
+          CellUT.CompR.functional h₁χ (CellUT.CompR.mutImm t v₂ ρ kt a ka P hP)
         subst hω
-        exact ⟨CellUT.immOf t v₂ ρ kt, CellUT.CompR.mutImm t v₂ ρ kt a aa ka P hP,
-          CellUT.CompR.immMut t v₂ ρ kt c ac kc T hT⟩
+        exact ⟨CellUT.immOf t v₂ ρ kt, CellUT.CompR.mutImm t v₂ ρ kt a ka P hP,
+          CellUT.CompR.immMut t v₂ ρ kt c kc T hT⟩
     · rcases CellUT.rep ψ₃ with ⟨v₃, rfl⟩ | ⟨u, v₃, τ, ku, rfl⟩ |
           ⟨c, ac, v₃, τ, kc, T, hT, rfl⟩
       · exact CellUT.compR_assoc_own_right h₂₃ h₁χ
@@ -701,7 +702,7 @@ theorem CellUT.compR_assoc_forward {ψ₁ ψ₂ ψ₃ χ ω : CellUT Loc Val K}
         simp only [CellUT.wit_immOf, CellUT.wit_mutOf] at ew
         subst ev; subst ew
         have hχ : χ = CellUT.immOf u v₂ ρ ku :=
-          CellUT.CompR.functional h₂₃ (CellUT.CompR.mutImm u v₂ ρ ku b ab kb Q hQ)
+          CellUT.CompR.functional h₂₃ (CellUT.CompR.mutImm u v₂ ρ ku b kb Q hQ)
         subst hχ
         have ev' := ((CellUT.CompR.erase h₁χ).1).symm
         have ew' :=
@@ -710,12 +711,12 @@ theorem CellUT.compR_assoc_forward {ψ₁ ψ₂ ψ₃ χ ω : CellUT Loc Val K}
         simp only [CellUT.wit_immOf, CellUT.wit_mutOf] at ew'
         subst ev'; subst ew'
         have hω : ω = CellUT.immOf u v₂ ρ ku :=
-          CellUT.CompR.functional h₁χ (CellUT.CompR.mutImm u v₂ ρ ku a aa ka P hP)
+          CellUT.CompR.functional h₁χ (CellUT.CompR.mutImm u v₂ ρ ku a ka P hP)
         subst hω
-        exact ⟨CellUT.mutOf (K.minS (a ∪ b)) (K.minS_anti _) v₂ ρ (ka.minUnion kb)
+        exact ⟨CellUT.mutOf (K.minS (a ∪ b)) v₂ ρ (ka.minUnion kb)
             (SPropST.conj P Q) (SPropST.conj_holds ka kb hP hQ),
-          CellUT.CompR.mutMut a b aa ab v₂ ρ ka kb P Q hP hQ,
-          CellUT.CompR.mutImm u v₂ ρ ku _ (K.minS_anti _) (ka.minUnion kb) (SPropST.conj P Q)
+          CellUT.CompR.mutMut a b v₂ ρ ka kb P Q hP hQ,
+          CellUT.CompR.mutImm u v₂ ρ ku _ (ka.minUnion kb) (SPropST.conj P Q)
             (SPropST.conj_holds ka kb hP hQ)⟩
       · -- `mut ○ (mut ○ mut)`: associativity of `min ∘ ∪` (the printed `⊓`) and of `∧`.
         have ev := (CellUT.CompR.erase h₂₃).1
@@ -725,9 +726,9 @@ theorem CellUT.compR_assoc_forward {ψ₁ ψ₂ ψ₃ χ ω : CellUT Loc Val K}
         subst ev; subst ew
         have kbc : ρ.InStratum (K.minS (b ∪ c)) := kb.minUnion kc
         have hQT : SPropST.conj Q T v₂ ⟨ρ, kbc⟩ := SPropST.conj_holds kb kc hQ hT
-        have hχ : χ = CellUT.mutOf (K.minS (b ∪ c)) (K.minS_anti _) v₂ ρ kbc
+        have hχ : χ = CellUT.mutOf (K.minS (b ∪ c)) v₂ ρ kbc
             (SPropST.conj Q T) hQT :=
-          CellUT.CompR.functional h₂₃ (CellUT.CompR.mutMut b c ab ac v₂ ρ kb kc Q T hQ hT)
+          CellUT.CompR.functional h₂₃ (CellUT.CompR.mutMut b c v₂ ρ kb kc Q T hQ hT)
         subst hχ
         have ev' := ((CellUT.CompR.erase h₁χ).1).symm
         have ew' :=
@@ -738,21 +739,21 @@ theorem CellUT.compR_assoc_forward {ψ₁ ψ₂ ψ₃ χ ω : CellUT Loc Val K}
         have kabc : ρ.InStratum (K.minS (a ∪ K.minS (b ∪ c))) := ka.minUnion kbc
         have hPQT : SPropST.conj P (SPropST.conj Q T) v₂ ⟨ρ, kabc⟩ :=
           SPropST.conj_holds ka kbc hP hQT
-        have hω : ω = CellUT.mutOf (K.minS (a ∪ K.minS (b ∪ c))) (K.minS_anti _) v₂ ρ kabc
+        have hω : ω = CellUT.mutOf (K.minS (a ∪ K.minS (b ∪ c))) v₂ ρ kabc
             (SPropST.conj P (SPropST.conj Q T)) hPQT :=
           CellUT.CompR.functional h₁χ
-            (CellUT.CompR.mutMut a _ aa (K.minS_anti _) v₂ ρ ka kbc P (SPropST.conj Q T) hP hQT)
+            (CellUT.CompR.mutMut a _ v₂ ρ ka kbc P (SPropST.conj Q T) hP hQT)
         subst hω
         have kab : ρ.InStratum (K.minS (a ∪ b)) := ka.minUnion kb
         have hPQ : SPropST.conj P Q v₂ ⟨ρ, kab⟩ := SPropST.conj_holds ka kb hP hQ
-        refine ⟨CellUT.mutOf (K.minS (a ∪ b)) (K.minS_anti _) v₂ ρ kab (SPropST.conj P Q) hPQ,
-          CellUT.CompR.mutMut a b aa ab v₂ ρ ka kb P Q hP hQ, ?_⟩
+        refine ⟨CellUT.mutOf (K.minS (a ∪ b)) v₂ ρ kab (SPropST.conj P Q) hPQ,
+          CellUT.CompR.mutMut a b v₂ ρ ka kb P Q hP hQ, ?_⟩
         have kabc' : ρ.InStratum (K.minS (K.minS (a ∪ b) ∪ c)) := kab.minUnion kc
         have hPQT' : SPropST.conj (SPropST.conj P Q) T v₂ ⟨ρ, kabc'⟩ :=
           SPropST.conj_holds kab kc hPQ hT
-        have h := CellUT.CompR.mutMut _ c (K.minS_anti _) ac v₂ ρ kab kc (SPropST.conj P Q) T
+        have h := CellUT.CompR.mutMut _ c v₂ ρ kab kc (SPropST.conj P Q) T
           hPQ hT
-        rwa [CellUT.mutOf_congr (K.minS_assoc a b c) _ _ v₂ ρ kabc' kabc
+        rwa [CellUT.mutOf_congr (K.minS_assoc a b c) v₂ ρ kabc' kabc
           (SPropST.conj (SPropST.conj P Q) T) (SPropST.conj P (SPropST.conj Q T)) hPQT' hPQT
           (fun r hr hr' w => SPropST.conj_assoc P Q T r hr hr' w)] at h
 

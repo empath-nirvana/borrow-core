@@ -41,9 +41,9 @@ theorem CellUT.CompR.wit_of_ne_own {ψ₁ ψ₂ ψ : CellUT Loc Val K} (h : Cell
   | strict k =>
       exact Or.inl ⟨by rw [(CellUT.CompatS.kinds k).1]; simp,
         (CellUT.CompS.wit (CellUT.compS_spec _ _ k)).1⟩
-  | mutMut a b aa ab v τ ha hb P Q hP hQ =>
+  | mutMut a b v τ ha hb P Q hP hQ =>
       exact Or.inl ⟨by simp,
-        (CellUT.wit_mutOf _ _ _ _ _ _ _).trans (CellUT.wit_mutOf a aa v τ ha P hP).symm⟩
+        (CellUT.wit_mutOf _ _ _ _ _ _).trans (CellUT.wit_mutOf a v τ ha P hP).symm⟩
   | mutOwn => exact Or.inl ⟨by simp, rfl⟩
   | ownMut => exact Or.inr ⟨by simp, rfl⟩
   | immOwn => exact Or.inl ⟨by simp, rfl⟩

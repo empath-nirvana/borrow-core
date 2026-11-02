@@ -330,29 +330,29 @@ lifetime is renamed. -/
 theorem graftCell_admitted {l₁ l₂ : Loc} (hl : l₁ ≠ l₂) (v u : Val)
     (P : Val → SPropST Loc Val K₁ (TSet.single αL))
     (hw : P v ⟨borrowAt K₁ l₂ u, (borrowAt_inStratum_iff K₁ l₂ u).mpr K₁_lt⟩) :
-    let M := CellUT.mutOf (TSet.single αL) (anti_single K₁ αL) v (borrowAt K₁ l₂ u)
+    let M := CellUT.mutOf (TSet.single αL) v (borrowAt K₁ l₂ u)
       ((borrowAt_inStratum_iff K₁ l₂ u).mpr K₁_lt) P hw
     ResUT.InStratum (TSet.single αL) (borrowAt (Loc := Loc) (Val := Val) K₁ l₂ u) ∧
       M.lsOf = some (TSet.single αL) ∧ M.wit = borrowAt K₁ l₂ u ∧
       ResUT.Valid (PMap.pair l₁ M l₂ (leafImm (TSet.single βL) u)) := by
   intro M
-  exact ⟨(borrowAt_inStratum_iff K₁ l₂ u).mpr K₁_lt, rfl, CellUT.wit_mutOf _ _ _ _ _ _ _,
-    valid_pair hl M rfl _ u (Or.inr (CellUT.wit_mutOf _ _ _ _ _ _ _))⟩
+  exact ⟨(borrowAt_inStratum_iff K₁ l₂ u).mpr K₁_lt, rfl, CellUT.wit_mutOf _ _ _ _ _ _,
+    valid_pair hl M rfl _ u (Or.inr (CellUT.wit_mutOf _ _ _ _ _ _))⟩
 
 /-- The world before the graft: the task's `mut` cell at `α` with an empty witness, beside the
 handler's view at `β`. Valid in `K₀`. -/
 theorem graftWorld_valid_before {l₁ l₂ : Loc} (hl : l₁ ≠ l₂) (v u : Val)
     (P : Val → SPropST Loc Val K₀ (TSet.single αL))
     (hw : P v ⟨PMap.empty, fun _ _ e => by simp at e⟩) :
-    ResUT.Valid (PMap.pair l₁ (CellUT.mutOf (TSet.single αL) (anti_single K₀ αL) v PMap.empty
+    ResUT.Valid (PMap.pair l₁ (CellUT.mutOf (TSet.single αL) v PMap.empty
       (fun _ _ e => by simp at e) P hw) l₂ (leafImm (TSet.single βL) u)) :=
-  valid_pair hl _ rfl _ u (Or.inl (CellUT.wit_mutOf _ _ _ _ _ _ _))
+  valid_pair hl _ rfl _ u (Or.inl (CellUT.wit_mutOf _ _ _ _ _ _))
 
 /-- **The world before the graft, carried to the tree after it, is valid**; every name kept. -/
 theorem graftWorld_valid_after {l₁ l₂ : Loc} (hl : l₁ ≠ l₂) (v u : Val)
     (P : Val → SPropST Loc Val K₀ (TSet.single αL))
     (hw : P v ⟨PMap.empty, fun _ _ e => by simp at e⟩) :
-    ResUT.Valid ((PMap.pair l₁ (CellUT.mutOf (TSet.single αL) (anti_single K₀ αL) v PMap.empty
+    ResUT.Valid ((PMap.pair l₁ (CellUT.mutOf (TSet.single αL) v PMap.empty
       (fun _ _ e => by simp at e) P hw) l₂ (leafImm (TSet.single βL) u)).map
         (trU graftExt)) :=
   ResUT.Valid.graft graftExt (graftWorld_valid_before hl v u P hw)
