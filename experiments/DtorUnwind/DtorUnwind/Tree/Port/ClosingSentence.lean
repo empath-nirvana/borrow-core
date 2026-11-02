@@ -775,8 +775,8 @@ by `ResUT.SubKeep` (§12.58).
 `[about ours]` -/
 def ResUT.SixFiftyNineResidualKeep : Prop :=
   ∀ (β : Life) (ρ'i ρ ρb ρ' ρp χ ρρb ρ'p Xi Y σX σY : ResUT BoCa.Loc BoCa.Val K)
-    (l₀ : BoCa.Loc) (s : TSet) (v : BoCa.Val) (hs : ρ'i.InStratum s),
-    ResUT.Reb β ρ'i ρ →
+    (l₀ : BoCa.Loc) (s : TSet) (v : BoCa.Val) (hs : ρ'i.InStratum s) (D : TSet),
+    K.DownOf D (TSet.single β) → ResUT.Reb β ρ'i ρ →
     ResUT.CompS ρ ρb ρρb →
     ResUT.CompS ρ' ρp ρ'p →
     ResUT.UpdV ρρb ρ'p →
@@ -816,8 +816,8 @@ theorem ResUT.single_imm_immOnly {ρ'i : ResUT BoCa.Loc BoCa.Val K} {l₀ : BoCa
 `[about ours]` -/
 def ResUT.SixFiftyNineOffRebKeep : Prop :=
   ∀ (β : Life) (ρ'i ρ ρb ρ' ρp χ ρρb ρ'p Xi Y σX σY : ResUT BoCa.Loc BoCa.Val K)
-    (l₀ : BoCa.Loc) (s : TSet) (v : BoCa.Val) (hs : ρ'i.InStratum s),
-    ResUT.Reb β ρ'i ρ →
+    (l₀ : BoCa.Loc) (s : TSet) (v : BoCa.Val) (hs : ρ'i.InStratum s) (D : TSet),
+    K.DownOf D (TSet.single β) → ResUT.Reb β ρ'i ρ →
     ResUT.CompS ρ ρb ρρb →
     ResUT.CompS ρ' ρp ρ'p →
     ResUT.UpdV ρρb ρ'p →

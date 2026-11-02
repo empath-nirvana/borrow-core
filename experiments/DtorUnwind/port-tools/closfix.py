@@ -68,4 +68,8 @@ rep('''theorem LSet.union_singleton_le_cancel {s t : TSet} {b : TSet} (hs : ¬ s
 s = s.replace('LSet.union_singleton_le_cancel', 'TSet.union_singleton_le_cancel')
 s = s.replace('¬ a.mem β', 'β ∉ a.set')
 s = s.replace('∀ (β : TSet) (ρ\'i', '∀ (β : Life) (ρ\'i')
+# 6.59's residuals carry 6.52's reading of `↓β`.
+s = s.replace("""    (l₀ : BoCa.Loc) (s : TSet) (v : BoCa.Val) (hs : ρ'i.InStratum s),
+    ResUT.Reb β ρ'i ρ →""", """    (l₀ : BoCa.Loc) (s : TSet) (v : BoCa.Val) (hs : ρ'i.InStratum s) (D : TSet),
+    K.DownOf D (TSet.single β) → ResUT.Reb β ρ'i ρ →""")
 open(p, 'w').write(s)

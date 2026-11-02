@@ -45,6 +45,8 @@ STEPS=(
 "Six34to39|DtorUnwind.Tree.Port.SurgeryC|Paper/S6_2_NonStandardLemmas/Remarks.lean:17-115 Paper/S6_2_NonStandardLemmas/Lemmas.lean:1024-1155 Paper/S6_2_NonStandardLemmas/Lemmas.lean:1159-1160 Paper/S6_2_NonStandardLemmas/Lemmas.lean:1263-1776"
 "ClosingSentence|DtorUnwind.Tree.Port.Six34to39|Support/Model/ClosingSentence.lean"
 "Six49to52|DtorUnwind.Tree.Port.OutlivesB|Paper/S6_2_NonStandardLemmas/Lemmas.lean:2372-2690"
+"Six43to46|DtorUnwind.Tree.Port.Six49to52|Paper/S6_2_NonStandardLemmas/Lemmas.lean:1790-1850 Paper/S6_2_NonStandardLemmas/Lemmas.lean:1918-1943"
+"Six53to59|DtorUnwind.Tree.Port.Six43to46|Paper/S6_2_NonStandardLemmas/Lemmas.lean:2694-3598"
 )
 for st in "${STEPS[@]}"; do
   IFS='|' read -r name imps srcs <<< "$st"

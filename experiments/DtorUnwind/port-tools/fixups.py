@@ -103,3 +103,8 @@ if name == 'ClosingSentence':
 if name == 'Six49to52':
     subprocess.run(['python3', S+'lifefix.py', f], check=True)
     subprocess.run(['python3', S+'six52fix.py', f], check=True)
+if name == 'Six43to46':
+    subprocess.run(['python3', S+'lifefix.py', f], check=True)
+if name == 'Six53to59':
+    subprocess.run(['python3', S+'lifefix.py', f], check=True)
+    subprocess.run(['python3', S+'six59fix.py', f], check=True)
