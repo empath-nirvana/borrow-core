@@ -9,10 +9,11 @@ read in a `Cactus` `K` instead of the printed chain. The places, all in definiti
 restates beside the printed ones:
 
 * `ptoImmS` → `ptoImmT`: `α ⊑ ⊓β̄` is `α ⊑ x` at every member `x` of `β̄`; the payload's list
-  `ls₀` has the records strictly above some member (`⊓β̄ ⊏ x.2`, `LSet.meet_lt_iff`).
-* `ptoMutS` → `ptoMutT`: `α ⊑ b`, and `ls₀` the records strictly above `b`, in `K`. The stored
-  predicate's domain stays the printed stratum `Res_b`: it is the carrier's, and the carrier
-  keeps the printed chain as its allocation order (`Tree/Order.lean`).
+  `ls₀` has the records strictly above some member (`⊓β̄ ⊏ x.2`, `LSet.meet_lt_iff`); the
+  witness lies in the tree stratum of every member (`Res_{⊔β̄}` read as `⋂_{x ∈ β̄} Res_x`,
+  `ResU.InStratumAll`), beside the carrier's `Res_{⊔β̄}`.
+* `ptoMutS` → `ptoMutT`: `α ⊑ b`, and `ls₀` the records strictly above `b`, in `K`; the stored
+  predicate holds only in the tree stratum `Res_b`, beside the carrier's.
 * `box` (`[α]`, row 5.32) → `boxT`: every borrow cell strictly above `α` in `K`.
 * `Ext` → `ExtT`: "a borrow cell no longer-lived than `b`" and "strictly longer-lived than
   `b`" read in `K`.
@@ -47,13 +48,14 @@ def ptoMutT (l : Loc) (α : Life) (ls : List SRec) (P : List SRec → Val → WP
   fun ρ => ∃ (b : Life) (u : Val) (σ : WRes) (h : σ.InStratum b)
       (Q : Val → SPropS Loc Val b) (hw : Q u ⟨σ, h⟩) (ls₀ : List SRec),
     K.le α b ∧ ρ = ResU.single l (CellU.mutOf b u σ h Q hw) ∧ ofS Q = P ls₀ ∧
-    (∀ x, x ∈ ls₀ ↔ (x ∈ ls ∧ K.lt b x.2)) ∧ ∀ ls' u' σ', P ls' u' σ' → σ'.InStratum b
+    (∀ x, x ∈ ls₀ ↔ (x ∈ ls ∧ K.lt b x.2)) ∧
+    ∀ ls' u' σ', P ls' u' σ' → ResU.InStratumT K b σ'
 
 /-- `ℓ ↦ I_α 𝒱⟦S⟧(ls|⊐⊓β̄)δ` in `K`: `α` is below every member of `β̄`. -/
 def ptoImmT (l : Loc) (α : Life) (ls : List SRec) (P : List SRec → Val → WProp) : WProp :=
   fun ρ => ∃ (s : LSet) (u : Val) (σ : WRes) (h : σ.InStratum s.join) (ls₀ : List SRec),
-    ρ = ResU.single l (CellU.immOf s u σ h) ∧ P ls₀ u σ ∧ (∀ x, s.mem x → K.le α x) ∧
-    ∀ x, x ∈ ls₀ ↔ (x ∈ ls ∧ ∃ y, s.mem y ∧ K.lt y x.2)
+    ρ = ResU.single l (CellU.immOf s u σ h) ∧ ResU.InStratumAll K s σ ∧ P ls₀ u σ ∧
+    (∀ x, s.mem x → K.le α x) ∧ ∀ x, x ∈ ls₀ ↔ (x ∈ ls ∧ ∃ y, s.mem y ∧ K.lt y x.2)
 
 /-- `[α] P` in `K`. -/
 def boxT (α : Life) (P : WProp) : WProp := fun ρ => P ρ ∧ ResU.InStratumT K α ρ
@@ -204,18 +206,19 @@ theorem ptoImmT_chainC (l : Loc) (α : Life) (ls : List SRec) (P : List SRec →
   apply propext
   simp only [ptoImmT, ptoImmS, Cactus.chainC_le, Cactus.chainC_lt]
   constructor
-  · rintro ⟨s, u, σ, h, ls₀, e, hP, hα, hls⟩
+  · rintro ⟨s, u, σ, h, ls₀, e, -, hP, hα, hls⟩
     refine ⟨s, u, σ, h, ls₀, e, hP, (LSet.le_meet_iff s α).mpr hα, fun x => ?_⟩
     rw [hls x]; exact and_congr_right fun _ => (LSet.meet_lt_iff s x.2).symm
   · rintro ⟨s, u, σ, h, ls₀, e, hP, hα, hls⟩
-    refine ⟨s, u, σ, h, ls₀, e, hP, (LSet.le_meet_iff s α).mp hα, fun x => ?_⟩
+    refine ⟨s, u, σ, h, ls₀, e, (ResU.inStratumAll_chainC s σ).mpr h, hP,
+      (LSet.le_meet_iff s α).mp hα, fun x => ?_⟩
     rw [hls x]; exact and_congr_right fun _ => LSet.meet_lt_iff s x.2
 
 theorem ptoMutT_chainC (l : Loc) (α : Life) (ls : List SRec) (P : List SRec → Val → WProp) :
     ptoMutT Cactus.chainC l α ls P = ptoMutS l α ls P := by
   funext ρ
   apply propext
-  simp only [ptoMutT, ptoMutS, Cactus.chainC_le, Cactus.chainC_lt]
+  simp only [ptoMutT, ptoMutS, Cactus.chainC_le, Cactus.chainC_lt, ResU.inStratumT_chainC]
 
 theorem boxT_chainC (α : Life) (P : WProp) : boxT Cactus.chainC α P = box α P := by
   funext ρ

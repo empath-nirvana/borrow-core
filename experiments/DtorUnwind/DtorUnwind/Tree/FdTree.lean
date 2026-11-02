@@ -87,7 +87,7 @@ theorem agW_imm_ls {ρ a : WRes} (hag : AgW ρ a) {l : Loc} {s : LSet} {v : Val}
 /-- **The join's frame condition follows from the resumer's types in the tree order.** -/
 theorem fdFromLifetimeTypesT (K : Cactus) : FdFromLifetimeTypesT (ℍ := ℍ) K := by
   intro W ρf ρS ρk ρrest ps ls μ p q α β a δ r v hT _ _ hW hS _ hFLp _ _ _ _ _ hδ _ hnest hv
-  obtain ⟨β', hβ', ℓ, ρ₁, ρ₂, hc, ⟨rfl, -, -⟩, s, u, σ, hσ, ls₀, rfl, hpay, hle, -⟩ := hv
+  obtain ⟨β', hβ', ℓ, ρ₁, ρ₂, hc, ⟨rfl, -, -⟩, s, u, σ, hσ, ls₀, rfl, -, hpay, hle, -⟩ := hv
   have eβ : β' = β := Option.some.inj (hβ'.symm.trans hδ)
   subst eβ
   obtain ⟨rfl, -⟩ : σ = PMap.empty ∧ u = Val.unit := hpay
@@ -121,7 +121,7 @@ theorem star_config :
 theorem old_config_not_vCT (ls : List SRec) :
     ¬ vCT (ℍ := ℍ) Cactus.star none true (.imm (.var 0) .unit) ls ⟨[(0, 2)]⟩ (Val.loc 0)
       (viewA 0 Val.unit (OrderDual.toDual 1)) := by
-  rintro ⟨β', hβ', ℓ, ρ₁, ρ₂, hc, ⟨rfl, hl, -⟩, s, u, σ, hσ, ls₀, e, -, hle, -⟩
+  rintro ⟨β', hβ', ℓ, ρ₁, ρ₂, hc, ⟨rfl, hl, -⟩, s, u, σ, hσ, ls₀, e, -, -, hle, -⟩
   have eβ : β' = OrderDual.toDual 2 := Option.some.inj hβ'.symm
   subst eβ
   obtain rfl := eq_of_compS_empty_left hc
@@ -243,7 +243,8 @@ theorem resumer_view_vCT : vCT (ℍ := ℍ) Cactus.star none true (.imm (.var 0)
   refine ⟨OrderDual.toDual 2, rfl, 1, PMap.empty, _, compS_empty_left _, ⟨rfl, ⟨rfl, ?_⟩⟩, ?_⟩
   · refine ⟨.unit, δ₀, TyEq.refl _ _, Or.inl ⟨qR, by simp [rsOf, frameList], rfl, rfl, ?_⟩⟩
     intro y hy; cases hy
-  · refine ⟨LSet.singleton _, Val.unit, PMap.empty, inStratumE _, [], rfl, ⟨rfl, rfl⟩, ?_, ?_⟩
+  · refine ⟨LSet.singleton _, Val.unit, PMap.empty, inStratumE _, [], rfl,
+      fun _ _ _ _ e => by simp at e, ⟨rfl, rfl⟩, ?_, ?_⟩
     · intro x hx
       cases hx
       exact Cactus.star.refl _
