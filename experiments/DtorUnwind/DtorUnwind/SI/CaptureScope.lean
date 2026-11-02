@@ -127,7 +127,7 @@ def joinPBv : Val → Nat → List SRec → Val → WProp := fun v _ _ w σ =>
 def joinEnt : OpEntC :=
   { q := .lin, abort := false, PA := fun _ _ v ρ => (∃ m, v = Val.loc m) ∧ ρ = PMap.empty,
     PB := fun _ _ _ _ => False, fin := none, wc := fun _ _ _ => True,
-    fd := joinFd, PBv := joinPBv }
+    fd := joinFd, PBv := joinPBv, oc := fun _ => True }
 
 /-- What the lender carries from one segment to the next. -/
 def ScopeInv (l : Loc) (v : Val) (A : Life) (ρo : WRes) : Prop :=
@@ -200,10 +200,12 @@ theorem share_cell {ρa ρs ρ' ρk : WRes} {l : Loc} {v : Val} {A : Life}
 
 /-! ### The scope -/
 
-/-- The scope's tables: the borrowed run's operations are must-resume, resumed under `extF`, with
-empty answers, and the lender's table has them lifted and the join at `(n_J, i_J)`. -/
+/-- The scope's tables: the borrowed run's operations are must-resume, with empty answers, their
+world condition passing to a part of the share (`OpTabN.Down.wcl`), and the lender's table has
+them lifted and the join at `(n_J, i_J)`. -/
 structure ScopeTabs (Tin : OpTabN) (Tout : OpTabC) (nJ iJ : UInt32) : Prop where
-  inner : ∀ m i en, Tin m i = some en → en.abort = false ∧ en.q = .lin ∧ en.wc = extF ∧
+  inner : ∀ m i en, Tin m i = some en → en.abort = false ∧ en.q = .lin ∧
+    (∀ ls ls' (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ → en.wc ls ls' ρ → en.wc ls ls' ρ₁) ∧
     (∀ k ls w σ, en.PB k ls w σ → σ = PMap.empty) ∧ Tout m i = some (liftEnt en)
   join : Tout nJ iJ = some joinEnt
 
@@ -270,7 +272,7 @@ theorem cerwp_scopeK {Φ : LocFam} (l : Loc) (v : Val) (T : VTy) (δ : LSub)
     refine cerwp_unfold_at hLout hk ?_
     refine cerwp_det hDout hQout (fun μ => step1Only_plug (Head.seq μ _) rfl .hole) ?_
     refine cerwp_perform (T := Tout) (F := F) .hole (m := nJ) (i := iJ) (v := Val.loc l)
-      (en := joinEnt) (by simp [Kont.HasHnd]) hTabs.join rfl (compS_empty_left ρ')
+      (en := joinEnt) (by simp [Kont.HasHnd]) hTabs.join rfl trivial (compS_empty_left ρ')
       ⟨⟨l, rfl⟩, rfl⟩ (fun h => by simp [joinEnt] at h)
       (fun ls_r _ k' hk' w σB X hB hX => ?_) (fun _ _ hq => absurd rfl hq)
     -- the join's resume: the lend ends
@@ -343,7 +345,7 @@ theorem cerwp_scopeK {Φ : LocFam} (l : Loc) (v : Val) (T : VTy) (δ : LSub)
       rw [hasHnd_comp]; simp [seqK, Kont.HasHnd, hK₁]
     rw [← Kont.plug_comp]
     refine crwpG_here (final_opPlug (r := false) (payloadName_opPayload m i v₀) hK) (Or.inr
-      ⟨(seqK nJ iJ l).comp K₁, m, i, v₀, liftEnt en, pure_sep_mk ⟨rfl, hK, hTo, ha⟩
+      ⟨(seqK nJ iJ l).comp K₁, m, i, v₀, liftEnt en, pure_sep_mk ⟨rfl, hK, hTo, ha, trivial⟩
         ⟨ρa, ρs, has, hA, fun hu => absurd hu (by simp [liftEnt, hq]), fun ls_r he =>
           ⟨fun k' hk' w σ₁ σ₂ hB hcσ => ?_, fun hq' => absurd hq hq'⟩⟩⟩)
     have hσ₁ : σ₁ = PMap.empty := hPB _ _ _ _ hB
@@ -352,8 +354,7 @@ theorem cerwp_scopeK {Φ : LocFam} (l : Loc) (v : Val) (T : VTy) (δ : LSub)
     subst σ₂
     simp only [cerwpC, show k' < n by omega, if_true]
     rw [Kont.plug_comp]
-    have he' : en.wc ls' ls_r ρk := by
-      rw [hwc]; exact extF_left _ _ _ _ _ hks (show extF ls' ls_r ρs from hwc ▸ he)
+    have he' : en.wc ls' ls_r ρk := hwc _ _ _ _ _ hks he
     have hc := (hcont ls_r he').1 k' hk' w PMap.empty ρk hB (ResU.comp_empty_right _)
     simp only [erwp0C, show k' < n by omega, if_true] at hc
     have hdel := ResU.CompS.del has l

@@ -65,12 +65,12 @@ def Qchild : PostCV := fun _ _ O _ ρ => O = [] ∧ LeftV ρ
 def Pcan : Nat → List SRec → Expr → WProp := fun k ls e ρ =>
   ∀ F, cerwp (ℍ := ℍ) (opTableC OpTabC.emptyC) Qleft F k ls [] (ccatchE e) ρ
 
-/-- `y : 1 ↠^cancel 1`. -/
+/-- `y : 1 ↠^cancel 1`, resumed at any list. -/
 def yEnt : OpEntC :=
   { q := .cancel, abort := false, PA := fun _ _ v ρ => v = Val.unit ∧ ρ = PMap.empty,
     PB := fun _ _ w ρ => w = Val.unit ∧ ρ = PMap.empty, fin := some (Pcan (ℍ := ℍ)),
-    wc := extF, fd := fun _ _ => True,
-    PBv := fun _ _ _ w ρ => w = Val.unit ∧ ρ = PMap.empty }
+    wc := fun _ _ _ => True, fd := fun _ _ => True,
+    PBv := fun _ _ _ w ρ => w = Val.unit ∧ ρ = PMap.empty, oc := fun O => O = [] }
 
 /-- The child's table. -/
 def TC : OpTabC := fun m i => if m = 8 ∧ i = 0 then some (yEnt (ℍ := ℍ)) else none
@@ -111,7 +111,7 @@ theorem child_ok (l : Loc) {s : LSet} {u : Val} {h : ResU.InStratum s.join (PMap
       Val.loc, Expr.val, Val.prim]
   rw [e]
   refine cerwp_perform (T := TC (ℍ := ℍ)) (en := yEnt (ℍ := ℍ)) (Kont.seq .hole (ldL l))
-    (by simp [Kont.HasHnd]) (by simp [TC]) rfl (compS_empty_left _) ⟨rfl, rfl⟩
+    (by simp [Kont.HasHnd]) (by simp [TC]) rfl rfl (compS_empty_left _) ⟨rfl, rfl⟩
     (fun hq => by simp [yEnt] at hq) (fun ls' _ k' hk' w σ₁ σ₂ hB hc => ?_)
     (fun ls' _ _ P hP => ?_)
   · obtain ⟨rfl, rfl⟩ := hB
@@ -137,10 +137,10 @@ def PAspawn : Nat → List SRec → Val → WProp := fun k _ f ρ =>
     ∀ k', k' ≤ k → ∀ ls' F, cerwp (ℍ := ℍ) (opTableC (TC (ℍ := ℍ))) Qchild F k' ls' []
       (.app (.val f) (.val Val.unit)) ρ
 
-/-- `spawn : (1 → 1) ↠^lin 1`, the borrow passed out. -/
+/-- `spawn : (1 → 1) ↠^lin 1`, the borrow passed out, resumed at any list. -/
 def spawnEnt : OpEntN :=
   { q := .lin, abort := false, PA := PAspawn (ℍ := ℍ),
-    PB := fun _ _ w ρ => w = Val.unit ∧ ρ = PMap.empty, fin := none, wc := extF }
+    PB := fun _ _ w ρ => w = Val.unit ∧ ρ = PMap.empty, fin := none, wc := fun _ _ _ => True }
 
 /-- The body's table. -/
 def TPin : OpTabN := fun m i => if m = 7 ∧ i = 0 then some (spawnEnt (ℍ := ℍ)) else none
@@ -166,7 +166,7 @@ theorem TP_some {m i : UInt32} {en : OpEntC} (h : TP (ℍ := ℍ) m i = some en)
 theorem TP_tabs : ScopeTabs (TPin (ℍ := ℍ)) (TP (ℍ := ℍ)) 7 1 where
   inner := fun m i en h => by
     obtain ⟨rfl, rfl, rfl⟩ := TPin_some h
-    exact ⟨rfl, rfl, rfl, fun _ _ _ _ hB => hB.2, by simp [TP]⟩
+    exact ⟨rfl, rfl, fun _ _ _ _ _ _ _ => trivial, fun _ _ _ _ hB => hB.2, by simp [TP]⟩
   join := by simp [TP]
 
 theorem TP_down : (TP (ℍ := ℍ)).Down where
@@ -301,7 +301,7 @@ def QP (l : Loc) (F : WRes → Prop) : PostCV := fun k ls O r ρ =>
 /-- What a run of the child under `HC` hands the scheduler. -/
 def QC (F : WRes → Prop) : PostCV := fun k ls O r ρ =>
   (∃ v : Val, r = Val.inj₂ v ∧ Qchild k ls O v ρ) ∨
-  (∃ ℓκ : Loc, r = Val.inj₁ (Val.loc ℓκ) ∧
+  (∃ ℓκ : Loc, r = Val.inj₁ (Val.loc ℓκ) ∧ O = [] ∧
     KapStored (ℍ := ℍ) (TC (ℍ := ℍ)) Qchild HC (yEnt (ℍ := ℍ)) F k ls O Val.unit ℓκ ρ)
 
 theorem kapStored_down {Tin : OpTabC} {Qin : PostCV} {H : Val} {en : OpEntC}
@@ -321,9 +321,9 @@ theorem QP_down (l : Loc) (F : WRes → Prop) : (QP (ℍ := ℍ) l F).Down := by
 
 theorem QC_down (F : WRes → Prop) : (QC (ℍ := ℍ) F).Down := by
   intro k ls O r ρ h
-  rcases h with h | ⟨ℓκ, e, h⟩
+  rcases h with h | ⟨ℓκ, e, hO, h⟩
   · exact .inl h
-  · exact .inr ⟨ℓκ, e, kapStored_down h⟩
+  · exact .inr ⟨ℓκ, e, hO, kapStored_down h⟩
 
 theorem clauseAt0 (c r : Val) : clauseAt (Val.pair c r).1 (0 : UInt32).toNat = some c := by
   simp [clauseAt, Val.pair, c.2]
@@ -451,7 +451,7 @@ theorem joinCl_ok (l : Loc) (F : WRes → Prop) {k : Nat} {ls : List SRec} {O : 
 
 /-- **`y`'s clause**: `κ` stored in a fresh cell. -/
 theorem yCl_ok (F : WRes → Prop) {k : Nat} {ls : List SRec} {O : List FrameRec}
-    {v : Val} {ℓc : Loc} {K : Kont} {ρa ρk ρak ρ : WRes}
+    {v : Val} {ℓc : Loc} {K : Kont} {ρa ρk ρak ρ : WRes} (hO : O = [])
     (hA : (yEnt (ℍ := ℍ)).PA k ls v ρa)
     (hsh : contShareC (yEnt (ℍ := ℍ)) F k ls O K v
       (cerwpC (ℍ := ℍ) (opTableC (TC (ℍ := ℍ))) Qchild k) ρk)
@@ -482,7 +482,7 @@ theorem yCl_ok (F : WRes → Prop) {k : Nat} {ls : List SRec} {O : List FrameRec
   have e₃ : (Kont.inj₁ .hole).plug (.val (Val.loc ℓκ)) = (Val.inj₁ (Val.loc ℓκ)).1 := rfl
   rw [e₃]
   obtain ⟨ρ₃, h₃, h₂⟩ := rearr4 hak hc hc₁
-  exact cerwp_val (.inr ⟨ℓκ, rfl, ⟨ℓc, K, ρk, ρ₃, k, by omega, h₃, h₂, hsh⟩⟩)
+  exact cerwp_val (.inr ⟨ℓκ, rfl, hO, ⟨ℓc, K, ρk, ρ₃, k, by omega, h₃, h₂, hsh⟩⟩)
 
 /-- **A run of the parent under `HP`** (`cerwp_gen`): whatever it stops at, the scheduler gets
 the event. -/
@@ -498,9 +498,9 @@ theorem genP (l : Loc) (F : WRes → Prop) :
     · exact ⟨rfl, by simp [joinEnt], by simp [capTag, qualsVal, Val.pair, Val.i32, Qual.tag,
         joinEnt]⟩
   · rcases TP_some h with ⟨-, rfl, rfl⟩ | ⟨-, rfl, rfl⟩
-    · exact ⟨c₀, clauseAt0 _ _, fun k ls O v ℓ K ρa ρk ρak ρ hA hsh hak hc =>
+    · exact ⟨c₀, clauseAt0 _ _, fun k ls O v ℓ K ρa ρk ρak ρ _ hA hsh hak hc =>
         spawnCl_ok l F hA hsh hak hc⟩
-    · exact ⟨c₁, clauseAt1 _ _ _, fun k ls O v ℓ K ρa ρk ρak ρ hA hsh hak hc =>
+    · exact ⟨c₁, clauseAt1 _ _ _, fun k ls O v ℓ K ρa ρk ρak ρ _ hA hsh hak hc =>
         joinCl_ok l F hA hsh hak hc⟩
 
 /-- **A run of the child under `HC`.** -/
@@ -513,8 +513,322 @@ theorem genC (F : WRes → Prop) :
   · obtain ⟨rfl, rfl, rfl⟩ := TC_some h
     exact ⟨rfl, by simp [yEnt], by simp [capTag, qualsVal, Val.pair, Val.i32, Qual.tag, yEnt]⟩
   · obtain ⟨-, rfl, rfl⟩ := TC_some h
-    exact ⟨cy, clauseAt0 _ _, fun k ls O v ℓ K ρa ρk ρak ρ hA hsh hak hc =>
-      yCl_ok F hA hsh hak hc⟩
+    exact ⟨cy, clauseAt0 _ _, fun k ls O v ℓ K ρa ρk ρak ρ hoc hA hsh hak hc => by
+      exact yCl_ok F hoc hA hsh hak hc⟩
+
+/-! ### The scheduler -/
+
+/-- `(free κ) (inj₁ ()) ()`: take a stored continuation and resume it at `()`. -/
+def resumeT (κ : Expr) : Expr := .app (.app (freeE κ) (.val (Val.inj₁ Val.unit))) (.val Val.unit)
+
+theorem kapStored_le {Tin : OpTabC} {Qin : PostCV} {H : Val} {en : OpEntC}
+    {F : WRes → Prop} {k k' : Nat} (hk : k' ≤ k) {ls : List SRec} {O : List FrameRec} {v : Val}
+    {ℓκ : Loc} {ρ : WRes} (h : KapStored (ℍ := ℍ) Tin Qin H en F k ls O v ℓκ ρ) :
+    KapStored (ℍ := ℍ) Tin Qin H en F k' ls O v ℓκ ρ := by
+  obtain ⟨ℓc, K, ρk, ρ₁, k₀, hk₀, h₁, h₂, h₃⟩ := h
+  exact ⟨ℓc, K, ρk, ρ₁, k₀, by omega, h₁, h₂, h₃⟩
+
+/-- **Resuming a stored continuation at `()`**: the cell taken, `κ` resumed, the handled
+computation run again under its handler, from the share and the answer `σ`. -/
+theorem cerwp_resumeStored {Tin : OpTabC} {Qin Qout : PostCV} (hQout : Qout.Down) {H : Val}
+    {en : OpEntC} {F : WRes → Prop} {k₁ : Nat} {ls₀ : List SRec} {O : List FrameRec} {v : Val}
+    {ℓκ : Loc} {ρ σ ρσ : WRes}
+    (hgen : ∀ n ls O e ρ, cerwp (ℍ := ℍ) (opTableC Tin) Qin (fun ρf => F ρf ∧ en.fd v ρf) n ls O
+      e ρ → cerwp (ℍ := ℍ) (opTableC OpTabC.emptyC) Qout (fun ρf => F ρf ∧ en.fd v ρf) n ls O
+        (hndE H e) ρ)
+    (hst : KapStored (ℍ := ℍ) Tin Qin H en F k₁ ls₀ O v ℓκ ρ)
+    (hσ : ∀ k' ls', en.PBv v k' ls' Val.unit σ) (hc : ResU.CompS ρ σ ρσ) {k : Nat} (hk : k ≤ k₁)
+    {ls : List SRec} (hwc : ∀ ρk, en.wc ls₀ ls ρk) :
+    cerwp (ℍ := ℍ) (opTableC OpTabC.emptyC) Qout (fun ρf => F ρf ∧ en.fd v ρf) k ls O
+      (resumeT (.val (Val.loc ℓκ))) ρσ := by
+  have hLE := opTableC_local OpTabC.emptyC
+  have hDE := opTableC_down opTabC_emptyC_down
+  obtain ⟨ℓc, K, ρk, ρ₁, k₀, hk₀, h₁, h₂, hsh⟩ := hst
+  obtain ⟨x, hx, hxσ⟩ := compS_reassoc h₂ hc
+  obtain ⟨y, hy, hyσ⟩ := compS_reassoc h₁ hxσ
+  refine cerwp_freeX hLE (.appL (.appL .hole (Val.inj₁ Val.unit)) Val.unit) ℓκ _ hyσ ?_
+  refine cerwp_kappaC_resume hLE hDE hQout _ ℓc H K Val.unit hy ?_
+  by_cases hk2 : k - 1 - 1 = 0
+  · rw [hk2]; exact cerwp_zero
+  · refine hgen _ _ _ _ _ ?_
+    have hcont := (hsh.2 ls (hwc ρk)).1 (k - 1 - 1) (by omega) Val.unit σ x (hσ _ _) hx
+    simp only [cerwpC, show k - 1 - 1 < k₀ by omega, if_true] at hcont
+    exact hcont
+
+/-- **Cancelling a stored continuation**: the cell taken, `κ` cancelled, its cancel obligation
+run. -/
+theorem cerwp_cancelStored {Tin : OpTabC} {Qin Qc : PostCV} (hQc : Qc.Down) {H : Val}
+    {en : OpEntC} {F F' : WRes → Prop} {k₁ : Nat} {ls₀ : List SRec} {O : List FrameRec}
+    {v : Val} {ℓκ : Loc} {ρ : WRes} (hcan : en.q = .cancel)
+    (hfin : ∀ k ls e ρ, (∀ P, en.fin = some P → P k ls e ρ) →
+      cerwp (ℍ := ℍ) (opTableC OpTabC.emptyC) Qc F' k ls O (ccatchE e) ρ)
+    (hst : KapStored (ℍ := ℍ) Tin Qin H en F k₁ ls₀ O v ℓκ ρ) {k : Nat} (hk : k ≤ k₁)
+    {ls : List SRec} (hwc : ∀ ρk, en.wc ls₀ ls ρk)
+    (hdown : ∀ P, en.fin = some P → ∀ m k ls e ρ, m ≤ k → P k ls e ρ → P m ls e ρ) :
+    cerwp (ℍ := ℍ) (opTableC OpTabC.emptyC) Qc F' k ls O
+      (.app (freeE (.val (Val.loc ℓκ))) (.val (Val.inj₂ Val.unit))) ρ := by
+  have hLE := opTableC_local OpTabC.emptyC
+  have hDE := opTableC_down opTabC_emptyC_down
+  obtain ⟨ℓc, K, ρk, ρ₁, k₀, hk₀, h₁, h₂, hsh⟩ := hst
+  obtain ⟨x, hx, hxσ⟩ := compS_reassoc h₁ h₂
+  have hcc : cellCancel en.q = true := by rw [hcan]; rfl
+  refine cerwp_freeX hLE (.appL .hole (Val.inj₂ Val.unit)) ℓκ _ hxσ ?_
+  rw [show kV (cellCancel en.q) ℓc H K = kV true ℓc H K by rw [hcc]]
+  refine cerwp_kappaC_cancel hLE hDE hQc ℓc H K hx ?_
+  refine hfin _ _ _ _ (fun P hP => ?_)
+  exact hdown P hP _ _ _ _ _ (by omega) ((hsh.2 ls (hwc ρk)).2 (by rw [hcan]; simp) P hP)
+
+
+/-- The parent, the cell a variable. -/
+def parentT : Expr :=
+  .seq (performE (.pair (.val (Val.i32 7)) (.pair (.val (Val.i32 0))
+      (.lam (.seq yE (.app (.val (.prim .load)) (.var 1)))))))
+    (performE (.pair (.val (Val.i32 7)) (.pair (.val (Val.i32 1)) (.var 0))))
+
+/-- `r₅ = κ′_p ()`, then `free c`. -/
+def M5 : Expr := .case (resumeT (.var 1)) omegaE (freeE (.var 9))
+/-- `r₄ = κ_c ()`. -/
+def M4 : Expr := .case (resumeT (.var 2)) omegaE M5
+/-- `r₃ = κ_p ()`, expecting the join. -/
+def M3 : Expr := .case (resumeT (.var 1)) (.case (.var 0) omegaE M4) omegaE
+/-- `r₂ = hnd_C (f ())`. -/
+def M2 : Expr := .case (hndE HC (.app (freeE (.var 1)) (.val Val.unit))) M3 omegaE
+/-- `r₁ = hnd_P parent`, expecting the spawn. -/
+def M1 : Expr :=
+  .case (hndE HP parentT) (.case (.var 0) (.letpair (.var 0) M2) omegaE) omegaE
+/-- **The program.** -/
+def mainE : Expr := .app (.val (Val.lam M1)) (allocE (.val Val.unit))
+
+/-- The scheduler's result: no records, only `imm` cells. -/
+def Qmain : PostCV := fun _ _ O _ ρ => O = [] ∧ AllImm ρ
+
+theorem Qmain_down : Qmain.Down := fun _ _ _ _ _ h => h
+
+theorem HP_closed : closedAt 0 HP.1 = true := by decide
+theorem HC_closed : closedAt 0 HC.1 = true := by decide
+theorem omegaE_closed : closedAt 0 omegaE = true := by decide
+
+@[simp] theorem HP_subst (j : Nat) (s : Val) : Expr.subst j s HP.1 = HP.1 :=
+  subst_closedAt _ s HP_closed (Nat.zero_le _)
+@[simp] theorem HC_subst (j : Nat) (s : Val) : Expr.subst j s HC.1 = HC.1 :=
+  subst_closedAt _ s HC_closed (Nat.zero_le _)
+@[simp] theorem omegaE_subst (j : Nat) (s : Val) : Expr.subst j s omegaE = omegaE :=
+  subst_closedAt _ s omegaE_closed (Nat.zero_le _)
+
+@[simp] theorem loc_shift (d c : Nat) (l : Loc) : Val.shift d c (Val.loc l) = Val.loc l := rfl
+
+@[simp] theorem prim_subst (j : Nat) (s : Val) (p : BoCa.Prim) :
+    Expr.subst j s (Expr.val (Val.prim p)) = Expr.val (Val.prim p) := rfl
+
+@[simp] theorem inj₁_shift (d c : Nat) (v : Val) :
+    Val.shift d c (Val.inj₁ v) = Val.inj₁ (Val.shift d c v) := rfl
+@[simp] theorem inj₂_shift (d c : Nat) (v : Val) :
+    Val.shift d c (Val.inj₂ v) = Val.inj₂ (Val.shift d c v) := rfl
+@[simp] theorem pair_shift (d c : Nat) (v w : Val) :
+    Val.shift d c (Val.pair v w) = Val.pair (Val.shift d c v) (Val.shift d c w) := rfl
+@[simp] theorem unit_shift (d c : Nat) : Val.shift d c Val.unit = Val.unit := rfl
+
+@[simp] theorem locV_subst (j : Nat) (s : Val) (l : Loc) :
+    Expr.subst j s (Expr.val (Val.loc l)) = Expr.val (Val.loc l) := rfl
+@[simp] theorem unitV_subst (j : Nat) (s : Val) :
+    Expr.subst j s (Expr.val Val.unit) = Expr.val Val.unit := rfl
+@[simp] theorem inj₁unitV_subst (j : Nat) (s : Val) :
+    Expr.subst j s (Expr.val (Val.inj₁ Val.unit)) = Expr.val (Val.inj₁ Val.unit) := rfl
+@[simp] theorem inj₂unitV_subst (j : Nat) (s : Val) :
+    Expr.subst j s (Expr.val (Val.inj₂ Val.unit)) = Expr.val (Val.inj₂ Val.unit) := rfl
+
+theorem parentT_subst (l : Loc) : Expr.subst 0 (Val.loc l) parentT = parentE l := by
+  simp [parentT, parentE, seqK, spawnE, joinE, fchild, yE, ldL, Expr.subst, Kont.plug, performE,
+    opPayload, Val.pair, Val.i32, Val.unit, Val.loc, Val.lam, Val.shift, Expr.shift, Expr.val,
+    Val.prim]
+
+/-- The child's borrows split into what the join hands back (those at the joined location) and the
+rest, which the scheduler keeps: nothing at the joined location at any depth, only `imm` cells. -/
+theorem leftV_split {ρ : WRes} (h : LeftV ρ) (m : Loc) :
+    ∃ σB junk, ResU.CompS σB junk ρ ∧
+      (σB = PMap.empty ∨ ∃ (s : LSet) (u : Val) (hs : ResU.InStratum s.join (PMap.empty : WRes)),
+        σB = ResU.single m (CellU.immOf s u PMap.empty hs)) ∧
+      (∀ τ, ResU.Flat junk τ → τ.get m = none) ∧ AllImm junk := by
+  rcases h with rfl | ⟨m', s, u, hs, rfl⟩
+  · refine ⟨PMap.empty, PMap.empty, ResU.comp_empty_right _, .inl rfl, fun τ hτ => ?_,
+      fun _ _ h => by simp at h⟩
+    rw [flat_empty_eq hτ]; rfl
+  · by_cases hm : m' = m
+    · subst hm
+      refine ⟨_, PMap.empty, ResU.comp_empty_right _, .inr ⟨s, u, hs, rfl⟩, fun τ hτ => ?_,
+        fun _ _ h => by simp at h⟩
+      rw [flat_empty_eq hτ]; rfl
+    · refine ⟨PMap.empty, _, compS_empty_left _, .inl rfl,
+        fun τ hτ => flat_single_imm_empty hτ m (Ne.symm hm), fun x ψ hx => ?_⟩
+      obtain ⟨-, rfl⟩ := ResU.single_get_eq_some hx
+      rfl
+
+theorem main_ok (n : Nat) :
+    cerwp (ℍ := ℍ) (opTableC OpTabC.emptyC) Qmain (fun ρf => ρf = PMap.empty) n [] [] mainE
+      (PMap.empty : WRes) := by
+  have hLE := opTableC_local OpTabC.emptyC
+  have hDE := opTableC_down opTabC_emptyC_down
+  refine cerwp_allocX hLE (.appR (.val (Val.lam M1)) .hole) Val.unit (fun ℓ ρ' hc => ?_)
+  obtain rfl := eq_of_compS_empty_left hc
+  refine cerwp_det hDE Qmain_down (fun μ => step1Only_plug (Head.beta μ M1 (Val.loc ℓ)) rfl .hole) ?_
+  simp only [M1, Expr.subst, HP_subst, omegaE_subst, hndE, Kont.plug, parentT_subst, loc_shift,
+    prim_subst]
+  simp (config := { decide := true }) only [if_false, Nat.reduceAdd]
+  -- r₁: the parent, under `HP`, the cell its only resource
+  refine cerwp_frameBindE (Q₁ := QP (ℍ := ℍ) ℓ (fun _ => True)) (F₁ := fun _ => True)
+    (fun ρ => ρ = PMap.empty) (.case .hole _ omegaE) (O₁ := []) (O₂ := [])
+    (fun _ h => by simp at h) (ResU.comp_empty_right _) (fun _ _ _ _ _ => trivial)
+    (genP ℓ _ _ [] [] (parentE ℓ) _ (parent_ok ℓ 0 _ _ [])) rfl
+    (fun k ls₁ O₁ v ρa ρb ρ' hk hq hR hc => ?_)
+  subst hR
+  obtain rfl := ResU.CompS.functional hc (ResU.comp_empty_right _)
+  rcases hq with ⟨v₀, rfl, -⟩ | ⟨ℓf, ℓκ, f, ρ₁, ρv, ρ₂, rfl, h₁, hPA, h₁₂, hks⟩ | ⟨ℓκ, m, rfl, -⟩
+  · refine cerwp_det hDE Qmain_down
+      (fun μ => step1Only_plug (Head.case₂ μ v₀ _ _) rfl .hole) ?_
+    rw [omegaE_subst]
+    exact cerwp_omega hLE _ _ _ _
+  · -- the spawn: `(f, κ_p)` in their cells
+    refine cerwp_det hDE Qmain_down
+      (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
+    simp (config := { decide := true }) only [Expr.subst, if_true, if_false, Nat.reduceAdd,
+      inj₁_shift, pair_shift, loc_shift, Kont.plug, omegaE_subst]
+    refine cerwp_det hDE Qmain_down
+      (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
+    simp (config := { decide := true }) only [Expr.subst, if_true, if_false, Nat.reduceAdd,
+      inj₁_shift, pair_shift, loc_shift, Kont.plug, omegaE_subst]
+    refine cerwp_det hDE Qmain_down
+      (fun μ => step1Only_plug (Head.letpair μ (Val.loc ℓf) (Val.loc ℓκ) _) rfl .hole) ?_
+    simp (config := { decide := true }) only [M2, M3, M4, M5, Expr.subst, if_true, if_false,
+      Nat.reduceAdd, Nat.reduceSub, inj₁_shift, pair_shift, loc_shift, Kont.plug, omegaE_subst,
+      HC_subst, prim_subst, resumeT, hndE, freeE, locV_subst, unitV_subst, inj₁unitV_subst]
+    rw [List.append_nil]
+    -- r₂: the child, from the stored closure and its borrow; `κ_p` kept beside it
+    obtain ⟨mv, sv, uv, hsv, rfl, hchild⟩ := hPA
+    refine cerwp_frameBindE (Q₁ := QC (ℍ := ℍ) (fun _ => True)) (F₁ := fun _ => True)
+      (KapStored (ℍ := ℍ) (TP (ℍ := ℍ)) (Qsc ℓ) HP (liftEnt (spawnEnt (ℍ := ℍ))) (fun _ => True)
+        k ls₁ O₁ f ℓκ)
+      (.case .hole _ omegaE) (O₁ := []) (O₂ := O₁) (fun _ h => by simp at h) h₁₂
+      (fun _ _ _ _ _ => trivial) ?_ hks (fun k₂ ls₂ O₂ v ρa ρb ρ'' hk₂ hq hR hc₂ => ?_)
+    · refine genC _ _ _ _ _ _ ?_
+      exact cerwp_freeX (opTableC_local _) (.appL .hole Val.unit) ℓf f h₁
+        (hchild (k - 1) (by omega) ls₁ _)
+    rcases hq with ⟨v₀, rfl, -⟩ | ⟨ℓκc, rfl, rfl, hkc⟩
+    · refine cerwp_det hDE Qmain_down
+        (fun μ => step1Only_plug (Head.case₂ μ v₀ _ _) rfl .hole) ?_
+      rw [omegaE_subst]
+      exact cerwp_omega hLE _ _ _ _
+    refine cerwp_det hDE Qmain_down
+      (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
+    simp (config := { decide := true }) only [Expr.subst, if_true, if_false, Nat.reduceAdd,
+      Nat.reduceSub, loc_shift, Kont.plug, omegaE_subst, prim_subst, locV_subst, unitV_subst,
+      inj₁unitV_subst]
+    -- r₃: the parent resumed, `κ_c` kept beside it
+    rw [show ([] : List FrameRec) ++ O₁ = O₁ ++ [] by simp]
+    refine cerwp_frameBindE (Q₁ := QP (ℍ := ℍ) ℓ (fun ρf => True ∧ True))
+      (F₁ := fun ρf => True ∧ True)
+      (KapStored (ℍ := ℍ) (TC (ℍ := ℍ)) Qchild HC (yEnt (ℍ := ℍ)) (fun _ => True) k₂ ls₂ []
+        Val.unit ℓκc)
+      (.case .hole _ omegaE) (O₁ := O₁) (O₂ := []) (fun _ _ h => by simp at h)
+      (ResU.CompS.comm hc₂) (fun _ _ _ _ _ => ⟨trivial, trivial⟩)
+      (cerwp_resumeStored (σ := PMap.empty) (QP_down ℓ _) (genP ℓ _) (kapStored_le hk₂ hR)
+        (fun _ _ => ⟨rfl, rfl⟩) (ResU.comp_empty_right _) le_rfl (fun _ => trivial))
+      hkc (fun k₃ ls₃ O₃ v ρa₃ ρb₃ ρ₃ hk₃ hq hR₃ hc₃ => ?_)
+    rcases hq with ⟨v₀, rfl, -⟩ | ⟨ℓf', ℓκ', f', -, -, -, rfl, -⟩ | ⟨ℓκp, m, rfl, hkp⟩
+    · refine cerwp_det hDE Qmain_down
+        (fun μ => step1Only_plug (Head.case₂ μ v₀ _ _) rfl .hole) ?_
+      rw [omegaE_subst]
+      exact cerwp_omega hLE _ _ _ _
+    · refine cerwp_det hDE Qmain_down
+        (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
+      simp (config := { decide := true }) only [Expr.subst, if_true, if_false, Nat.reduceAdd,
+        Kont.plug, omegaE_subst]
+      refine cerwp_det hDE Qmain_down
+        (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
+      rw [omegaE_subst]
+      exact cerwp_omega hLE _ _ _ _
+    refine cerwp_det hDE Qmain_down
+      (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
+    simp (config := { decide := true }) only [Expr.subst, if_true, if_false, Nat.reduceAdd,
+      Nat.reduceSub, inj₂_shift, loc_shift, Kont.plug, omegaE_subst, prim_subst, locV_subst,
+      unitV_subst, inj₁unitV_subst]
+    refine cerwp_det hDE Qmain_down
+      (fun μ => step1Only_plug (Head.case₂ μ _ _ _) rfl .hole) ?_
+    simp (config := { decide := true }) only [Expr.subst, if_true, if_false, Nat.reduceAdd,
+      Nat.reduceSub, loc_shift, Kont.plug, omegaE_subst, prim_subst, locV_subst,
+      unitV_subst, inj₁unitV_subst]
+    -- r₄: the child resumed, `κ′_p` kept beside it
+    rw [List.append_nil]
+    refine cerwp_frameBindE (Q₁ := QC (ℍ := ℍ) (fun ρf => True ∧ True))
+      (F₁ := fun ρf => True ∧ True)
+      (KapStored (ℍ := ℍ) (TP (ℍ := ℍ)) (Qsc ℓ) HP joinEnt (fun ρf => True ∧ True) k₃ ls₃ O₃
+        (Val.loc m) ℓκp)
+      (.case .hole omegaE _) (O₁ := []) (O₂ := O₃) (fun _ h => by simp at h)
+      (ResU.CompS.comm hc₃) (fun _ _ _ _ _ => ⟨trivial, trivial⟩)
+      (cerwp_resumeStored (σ := PMap.empty) (QC_down _) (genC _) (kapStored_le hk₃ hR₃)
+        (fun _ _ => ⟨rfl, rfl⟩) (ResU.comp_empty_right _) le_rfl (fun _ => trivial))
+      hkp (fun k₄ ls₄ O₄ v ρa₄ ρb₄ ρ₄ hk₄ hq hR₄ hc₄ => ?_)
+    rcases hq with ⟨v₀, rfl, hO₄, hleft⟩ | ⟨ℓκ', rfl, -, -⟩
+    swap
+    · refine cerwp_det hDE Qmain_down
+        (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
+      rw [omegaE_subst]
+      exact cerwp_omega hLE _ _ _ _
+    subst hO₄
+    refine cerwp_det hDE Qmain_down
+      (fun μ => step1Only_plug (Head.case₂ μ _ _ _) rfl .hole) ?_
+    simp (config := { decide := true }) only [Expr.subst, if_true, if_false, Nat.reduceAdd,
+      Nat.reduceSub, loc_shift, Kont.plug, omegaE_subst, prim_subst, locV_subst,
+      unitV_subst, inj₁unitV_subst]
+    -- r₅: the parent resumed from the join, with the child's borrow of the joined location; the
+    -- scheduler keeps nothing at it
+    obtain ⟨σB, junk, hsj, hσB, hfree, himm⟩ := leftV_split hleft m
+    obtain ⟨ρs, hsσ, hsj'⟩ := compS_exch hsj hc₄
+    rw [show ([] : List FrameRec) ++ O₃ = O₃ ++ [] by simp]
+    refine cerwp_frameBindE (Q₁ := QP (ℍ := ℍ) ℓ (fun ρf => (True ∧ True) ∧ joinFd (Val.loc m) ρf))
+      (F₁ := fun ρf => (True ∧ True) ∧ joinFd (Val.loc m) ρf) (fun ρ => ρ = junk)
+      (.case .hole omegaE _) (O₁ := O₃) (O₂ := []) (fun _ _ h => by simp at h) hsj'
+      (fun ρf y hρf _ hy => by
+        have hρf' : ρf = PMap.empty := hρf
+        subst hρf'
+        obtain rfl := eq_of_compS_empty_left hy
+        exact ⟨⟨trivial, trivial⟩, m, rfl, hfree⟩)
+      (cerwp_resumeStored (σ := σB) (QP_down ℓ _) (genP ℓ _) (kapStored_le hk₄ hR₄)
+        (fun _ _ => ⟨m, rfl, rfl, hσB⟩) (ResU.CompS.comm hsσ) le_rfl (fun _ => trivial))
+      rfl (fun k₅ ls₅ O₅ v ρa₅ ρb₅ ρ₅ hk₅ hq hR₅ hc₅ => ?_)
+    subst hR₅
+    rcases hq with ⟨v₀, rfl, -, rfl, hO₅⟩ | ⟨-, -, -, -, -, -, rfl, -⟩ | ⟨-, -, rfl, -⟩
+    · -- the parent finished: the cell owned again, freed; the scheduler's result
+      refine cerwp_det hDE Qmain_down
+        (fun μ => step1Only_plug (Head.case₂ μ _ _ _) rfl .hole) ?_
+      simp only [Expr.subst, prim_subst, locV_subst, Kont.plug]
+      have hO : O₅ = [] := List.eq_nil_iff_forall_not_mem.mpr hO₅
+      subst hO
+      exact cerwp_freeX hLE .hole ℓ Val.unit hc₅ (cerwp_val ⟨rfl, himm⟩)
+    · refine cerwp_det hDE Qmain_down
+        (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
+      rw [omegaE_subst]
+      exact cerwp_omega hLE _ _ _ _
+    · refine cerwp_det hDE Qmain_down
+        (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
+      rw [omegaE_subst]
+      exact cerwp_omega hLE _ _ _ _
+  · refine cerwp_det hDE Qmain_down
+      (fun μ => step1Only_plug (Head.case₁ μ _ _ _) rfl .hole) ?_
+    simp (config := { decide := true }) only [Expr.subst, if_true, if_false, Nat.reduceAdd,
+      inj₂_shift, loc_shift, Kont.plug, omegaE_subst]
+    refine cerwp_det hDE Qmain_down
+      (fun μ => step1Only_plug (Head.case₂ μ _ _ _) rfl .hole) ?_
+    rw [omegaE_subst]
+    exact cerwp_omega hLE _ _ _ _
+
+/-- **The cross-task test.** A parent lends `c` `imm` around `spawn (λ_. y (); !c); join(c)`; the
+child holds the borrow across its `y`; the scheduler stores the parent's continuation (the lend
+open in it) and the child's, resumes the parent to the join, then the child to its end, then the
+parent with the child's borrow handed back; the lend ends and `c` is freed. Every configuration
+a run reaches is a value or steps, a value only at the empty memory, and every `free` finds its
+cell. No fuel. -/
+theorem prog_orDiverges : LoopAwait.OrDiverges (ℍ := ℍ) mainE :=
+  cerwp_adequacy (fun _ _ _ _ _ h => h) main_ok
 
 end BoCa.Fig16.LogRel.Core.DtorUnwind.SI.CrossProg
 

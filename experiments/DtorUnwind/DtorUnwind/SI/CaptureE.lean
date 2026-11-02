@@ -41,6 +41,9 @@ that location the joined tasks held. -/
 structure OpEntC extends OpEntN where
   fd : Val → WRes → Prop
   PBv : Val → Nat → List SRec → Val → WProp
+  /-- What the stopped branch may own at the stop: the resumer reads it to keep the records of
+  the branches it holds apart. -/
+  oc : List FrameRec → Prop
 
 abbrev OpTabC := UInt32 → UInt32 → Option OpEntC
 
@@ -71,7 +74,8 @@ def opTableC (T : OpTabC) : TableC := fun F k ls O t Ψ =>
   ex fun (K : Kont) => ex fun (n : UInt32) => ex fun (i : UInt32) => ex fun (v : Val) =>
     ex fun (en : OpEntC) =>
       ⌜t = K.plug (performE (.val (opPayload n i v))) ∧ K.HasHnd n = false ∧
-        T n i = some en ∧ en.abort = false⌝ ⋆ (en.PA k ls v ⋆ contShareC en F k ls O K v Ψ)
+        T n i = some en ∧ en.abort = false ∧ en.oc O⌝ ⋆
+        (en.PA k ls v ⋆ contShareC en F k ls O K v Ψ)
 
 /-- A table reads what is owed only below the index it stops at. -/
 def TableC.Local (Tb : TableC) : Prop :=
@@ -99,8 +103,8 @@ structure OpTabC.Down (T : OpTabC) : Prop where
 theorem opTableC_down {T : OpTabC} (hT : T.Down) : (opTableC T).Down := by
   intro F k ls O t Ψ ρ h
   obtain ⟨K, n, i, v, en, h⟩ := h
-  obtain ⟨⟨h₁, h₂, h₃, h₄⟩, ρa, ρk, hc, hA, hu, hcont⟩ := pure_sep_iff.mp h
-  exact ⟨K, n, i, v, en, pure_sep_mk ⟨h₁, h₂, h₃, h₄⟩ ⟨ρa, ρk, hc,
+  obtain ⟨⟨h₁, h₂, h₃, h₄, h₅⟩, ρa, ρk, hc, hA, hu, hcont⟩ := pure_sep_iff.mp h
+  exact ⟨K, n, i, v, en, pure_sep_mk ⟨h₁, h₂, h₃, h₄, h₅⟩ ⟨ρa, ρk, hc,
     hT.pa _ _ _ h₃ _ _ _ _ hA, hu, fun ls' he =>
     ⟨fun k' hk => (hcont ls' he).1 k' (by omega), fun hq P hP =>
       hT.fin _ _ _ _ h₃ hP _ _ _ _ ((hcont ls' he).2 hq P hP)⟩⟩⟩
@@ -210,7 +214,7 @@ theorem cerwp_val {Tb : TableC} {Q : PostCV} {F : WRes → Prop} {n : Nat} {ls :
 theorem cerwp_perform {T : OpTabC} {Q : PostCV} {F : WRes → Prop} (K : Kont) {m i : UInt32}
     {v : Val} {en : OpEntC} (hK : K.HasHnd m = false) (hT : T m i = some en)
     (ha : en.abort = false) {n : Nat} {ls : List SRec} {O : List FrameRec} {ρa ρk ρ : WRes}
-    (hc : ResU.CompS ρa ρk ρ) (hA : en.PA n ls v ρa)
+    (hoc : en.oc O) (hc : ResU.CompS ρa ρk ρ) (hA : en.PA n ls v ρa)
     (hu : en.q = .unr → ρk = PMap.empty)
     (hk : ∀ ls', en.wc ls ls' ρk → ∀ k', k' < n → ∀ w : Val,
       (en.PBv v k' ls' w ─⋆ cerwp (ℍ := ℍ) (opTableC T) Q (fun ρf => F ρf ∧ en.fd v ρf) k' ls' O
@@ -219,7 +223,7 @@ theorem cerwp_perform {T : OpTabC} {Q : PostCV} {F : WRes → Prop} (K : Kont) {
     cerwp (ℍ := ℍ) (opTableC T) Q F n ls O (K.plug (performE (.val (opPayload m i v)))) ρ := by
   rw [cerwp_eq]
   refine crwpG_here (final_opPlug (r := false) (payloadName_opPayload m i v) hK) (Or.inr
-    ⟨K, m, i, v, en, pure_sep_mk ⟨rfl, hK, hT, ha⟩ ⟨ρa, ρk, hc, hA, hu,
+    ⟨K, m, i, v, en, pure_sep_mk ⟨rfl, hK, hT, ha, hoc⟩ ⟨ρa, ρk, hc, hA, hu,
       fun ls' he => ⟨fun k' hk' w τ₁ τ₂ hB hcτ => ?_, hcan ls' he⟩⟩⟩)
   simp only [cerwpC, hk', if_true]
   exact hk ls' he k' hk' w τ₁ τ₂ hB hcτ
@@ -273,7 +277,8 @@ theorem cerwp_free {Φ : LocFam} {Tb : TableC} (hL : Tb.Local) {Q : PostCV}
 
 /-- An `erwp` entry asks nothing of the resumer's frame, and its answer does not read the
 payload. -/
-def liftEnt (en : OpEntN) : OpEntC := { en with fd := fun _ _ => True, PBv := fun _ => en.PB }
+def liftEnt (en : OpEntN) : OpEntC :=
+  { en with fd := fun _ _ => True, PBv := fun _ => en.PB, oc := fun _ => True }
 
 def liftTab (T : OpTabN) : OpTabC := fun m i => (T m i).map liftEnt
 
@@ -314,7 +319,7 @@ theorem cerwp_of_erwp {Φ : LocFam} {T : OpTabN} (hTD : T.Down)
   · exact Or.inl ⟨v, rfl, rfl, ρ₁, ρ₂, hc, hno, hv⟩
   · obtain ⟨⟨rfl, hK, hT, ha⟩, ρa, ρk, hcak, hA, -, hcont⟩ := pure_sep_iff.mp hp
     obtain ⟨y, hy, hay⟩ := compS_reassoc hcak hc
-    refine Or.inr ⟨K, m, i, v, liftEnt en, pure_sep_mk ⟨rfl, hK, by simp [liftTab, hT], ha⟩
+    refine Or.inr ⟨K, m, i, v, liftEnt en, pure_sep_mk ⟨rfl, hK, by simp [liftTab, hT], ha, trivial⟩
       ⟨ρa, y, hay, hA, fun hu => absurd hu (hunr m i en hT), fun ls'' he => ⟨?_, ?_⟩⟩⟩
     · have he' : en.wc ls' ls'' ρk := hTD.wcl _ _ _ hT _ _ _ _ _ hy he
       intro k' hk' w τ₁ τ₂ hB hcτ

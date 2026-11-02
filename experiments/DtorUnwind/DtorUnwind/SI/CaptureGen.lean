@@ -105,7 +105,7 @@ theorem cerwp_gen {Tin : OpTabC} {Qin Qout : PostCV} (hQout : Qout.Down)
     (hret : ∀ k ls O (v : Val) ρ, Qin k ls O v ρ →
       cerwp (ℍ := ℍ) (opTableC OpTabC.emptyC) Qout F k ls O (.app (.val hr) (.val v)) ρ)
     (hop : ∀ i en, Tin n₀ i = some en → ∃ c, clauseAt hs.1 i.toNat = some c ∧
-      ∀ k ls O (v : Val) (ℓ : Loc) (K : Kont) (ρa ρk ρak ρ : WRes),
+      ∀ k ls O (v : Val) (ℓ : Loc) (K : Kont) (ρa ρk ρak ρ : WRes), en.oc O →
         en.PA k ls v ρa → contShareC en F k ls O K v (cerwpC (ℍ := ℍ) (opTableC Tin) Qin k) ρk →
         ResU.CompS ρa ρk ρak → ResU.CompS ρak (ResU.single ℓ (CellU.ownOf Val.unit)) ρ →
         cerwp (ℍ := ℍ) (opTableC OpTabC.emptyC) Qout F (k - 1) ls O
@@ -126,7 +126,7 @@ theorem cerwp_gen {Tin : OpTabC} {Qin Qout : PostCV} (hQout : Qout.Down)
   rcases ht with ⟨v, rfl, hv⟩ | ⟨K₁, m, i, v, en, hp⟩
   · exact crwpG_det (hPD _ F) (fun μ => step1Only_plug (Head.hret μ n₀ qs hr hs v) rfl .hole)
       (cerwp_unfold_at hLout hk (hret k ls' O' v σ hv))
-  · obtain ⟨⟨rfl, hK₁, hT, -⟩, ρa, ρk, hcak, hA, -, hcont⟩ := pure_sep_iff.mp hp
+  · obtain ⟨⟨rfl, hK₁, hT, -, hoc⟩, ρa, ρk, hcak, hA, -, hcont⟩ := pure_sep_iff.mp hp
     obtain ⟨rfl, hq, htag⟩ := hTin m i en hT
     obtain ⟨c, hc, hob⟩ := hop i en hT
     refine crwpG_det (hPD _ F)
@@ -134,7 +134,7 @@ theorem cerwp_gen {Tin : OpTabC} {Qin Qout : PostCV} (hQout : Qout.Down)
     rw [htag, kappaAt_cell hq]
     refine cerwp_unfold_at hLout hk (cerwp_kappaCell hLout hDout hQout _ H K₁
       (.appR (.val c) (.pairR v .hole)) (fun ℓ ρ' hc₂ => ?_))
-    refine hob k ls' O' v ℓ K₁ ρa ρk σ ρ' hA ⟨fun hu => absurd hu hq, fun ls'' he =>
+    refine hob k ls' O' v ℓ K₁ ρa ρk σ ρ' hoc hA ⟨fun hu => absurd hu hq, fun ls'' he =>
       ⟨fun k' hk' w τ₁ τ₂ hB hcτ => ?_, (hcont ls'' he).2⟩⟩ hcak hc₂
     have h₁ := (hcont ls'' he).1 k' hk' w τ₁ τ₂ hB hcτ
     simp only [cerwpC, show k' < n by omega, show k' < k by omega, if_true] at h₁ ⊢

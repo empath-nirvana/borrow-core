@@ -86,3 +86,4 @@ import DtorUnwind.SI.Uncapture
 import DtorUnwind.SI.CaptureScope
 import DtorUnwind.SI.CaptureHeap
 import DtorUnwind.SI.CaptureAdequacy
+import DtorUnwind.SI.CrossProg
