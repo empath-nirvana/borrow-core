@@ -96,3 +96,4 @@ if name == 'Reborrow': drop('ResUT.sites_nil_of_none', 'ResUT.sites_singleton_of
 if name == 'ReborrowFrame': drop('ResUT.del_compS')
 if name == 'Subtraction': subprocess.run(['python3', S+'subfix.py', f], check=True)
 if name == 'Six28to29': subprocess.run(['python3', S+'six28fix.py', f], check=True)
+if name in ('SurgeryC', 'Six34to39'): subprocess.run(['python3', S+'surgcfix.py', name, f], check=True)
