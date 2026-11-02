@@ -200,6 +200,84 @@ theorem twp_bind {F : TFrame} (hFm : F.Mono) {Q : TPost} (K : Kont) {n : Nat} {w
     exact go j 0 μ' e' (by omega) hrun' hfin' (.refl _ _)
   · exact go j₁ j₂ μ₁ t hjj hrun₁ hirr hrun₂
 
+/-! ### Reassociation -/
+
+theorem reassoc_out {K : WCactus} {ρf ρ₀ fρ ρ₁ ρ₂ : TRes K} (hc : ResUT.CompS ρf ρ₀ fρ)
+    (h₀ : ResUT.CompS ρ₁ ρ₂ ρ₀) : ∃ y, ResUT.CompS ρf ρ₂ y ∧ ResUT.CompS y ρ₁ fρ :=
+  (ResUT.CompS.assoc ρf ρ₂ ρ₁ fρ).mp ⟨ρ₀, ResUT.CompS.comm h₀, hc⟩
+
+theorem reassoc_in {K : WCactus} {ρf ρ₂ y ρ₁ fρ : TRes K} (hy : ResUT.CompS ρf ρ₂ y)
+    (hc : ResUT.CompS y ρ₁ fρ) : ∃ ρ', ResUT.CompS ρ₁ ρ₂ ρ' ∧ ResUT.CompS ρf ρ' fρ := by
+  obtain ⟨x, hx, hfx⟩ := (ResUT.CompS.assoc ρf ρ₂ ρ₁ fρ).mpr ⟨y, hy, hc⟩
+  exact ⟨x, ResUT.CompS.comm hx, hfx⟩
+
+/-- A composite of a valid world's parts is `#`. -/
+theorem hash_of_inv {w : TWd} {a b y : TRes w.K} {μ : Heap} (hc : ResUT.CompS a b y)
+    (hI : WInv w y μ) : ResUT.Hash a b :=
+  ResUT.Hash.of_compS hc hI.valid
+
+/-! ### The frame -/
+
+/-- `P ⋆ R` over terms, at a world. -/
+def TPost.sep (P : TPost) (R : TRProp) : TPost := fun k w t ρ =>
+  ∃ a b, ResUT.CompS a b ρ ∧ P k w t a ∧ R w b
+
+/-- **The frame**: a resource `ρ₂` in `R` kept beside the run. Forced beside `crwpG_frame`: `R`
+is carried along re-reading (`hR`), and the framed resource is covered at its world (`hcov`), so
+that its parts have re-readings at every extension. -/
+theorem twp_frame {F F₁ : TFrame} {P : TPost} {R : TRProp} (hR : R.Mono) {n : Nat} {w : TWd}
+    {e : Expr} {ρ₁ ρ₂ ρ : TRes w.K} (hcρ : ResUT.CompS ρ₁ ρ₂ ρ) (hcov : CovR w.Θ w.K ρ)
+    (hF : ∀ (w₀ : TWd) (ρf ρ₂₀ y : TRes w₀.K), w.Ext w₀ → RRw (w := w) (w' := w₀) ρ₂ ρ₂₀ →
+      F w₀ ρf → ResUT.CompS ρf ρ₂₀ y → F₁ w₀ y)
+    (hwp : twp (ℍ := ℍ) F₁ P n w e ρ₁) (hR₂ : R w ρ₂) :
+    twp (ℍ := ℍ) F (P.sep R) n w e ρ := by
+  intro w₀ ρ₀ ρf fρ μ hE hr hFρ hf hc hI hfd j μ' e' hj hrun hfin
+  have hM₀ : MonoΘ w₀.Θ := hI.2.1.monoΘ
+  obtain ⟨ρ₁₀, ρ₂₀, h₁₀, h₂₀, hc₀⟩ := RR.split hE.1 hM₀ hcρ (hcov.mono hE.2) hr
+  obtain ⟨y, hy, hyf⟩ := reassoc_out hc hc₀
+  obtain ⟨w', y', ρ₁', fρ', g₀, g₁, g₂, g₃, g₄, g₅⟩ :=
+    hwp w₀ ρ₁₀ y fρ μ hE h₁₀ (hF w₀ ρf ρ₂₀ y hE h₂₀ hFρ hy) (hash_of_inv hyf hI) hyf hI hfd
+      j μ' e' hj hrun hfin
+  have hM' : MonoΘ w'.Θ := g₄.2.1.monoΘ
+  obtain ⟨ρf', ρ₂', hf', h₂', hy'⟩ :=
+    RR.split g₀.1 hM' hy ((covf_of_comp hyf hI).mono g₀.2) g₁
+  obtain ⟨ρ', hρ', hfρ'⟩ := reassoc_in hy' g₃
+  have hR₂₀ : R w₀ ρ₂₀ := hR _ _ _ _ hE h₂₀ hR₂
+  exact ⟨w', ρf', ρ', fρ', g₀, hf', ResUT.hash_symm (hash_of_inv hfρ' g₄), hfρ', g₄,
+    ρ₁', ρ₂', hρ', g₅, hR _ _ _ _ g₀ h₂' hR₂₀⟩
+
+/-! ### World changes at the start of a run -/
+
+/-- **The tree grows at the start of a segment**: at whichever extension the run starts at, the
+world may be extended further (a fresh child, a graft), and the run continues there from the
+re-reading. The frame condition is carried along. -/
+theorem twp_extend {F : TFrame} (hFm : F.Mono) {Q : TPost} {n : Nat} {w : TWd} {e : Expr}
+    {ρ : TRes w.K}
+    (h : ∀ (w₀ : TWd) (ρ₀ : TRes w₀.K), w.Ext w₀ → RRw (w := w) (w' := w₀) ρ ρ₀ →
+      ∃ w₁ : TWd, w₀.Ext w₁ ∧ MonoUp w₁.Θ ∧
+        ∀ ρ₁ : TRes w₁.K, RRw (w := w₀) (w' := w₁) ρ₀ ρ₁ → twp (ℍ := ℍ) F Q n w₁ e ρ₁) :
+    twp (ℍ := ℍ) F Q n w e ρ := by
+  intro w₀ ρ₀ ρf fρ μ hE hr hFρ hf hc hI hfd j μ' e' hj hrun hfin
+  obtain ⟨w₁, hE₁, hM₁, hw₁⟩ := h w₀ ρ₀ hE hr
+  obtain ⟨fρ₁, hfr, hI₁⟩ := hI.reread hE₁ hM₁
+  obtain ⟨ρf₁, ρ₀₁, hf₁, h₀₁, hc₁⟩ := RR.split hE₁.1 hM₁.monoΘ hc (hI.1.mono hE₁.2) hfr
+  obtain ⟨w', ρf', ρ', fρ', g₀, g₁, g₂, g₃, g₄, g₅⟩ :=
+    hw₁ ρ₀₁ h₀₁ w₁ ρ₀₁ ρf₁ fρ₁ μ (TWd.Ext.refl _) (RR.refl (cov_of_comp hc₁ hI₁))
+      (hFm _ _ _ _ hE₁ hf₁ hFρ) (hash_of_inv hc₁ hI₁) hc₁ hI₁ hfd j μ' e' hj hrun hfin
+  exact ⟨w', ρf', ρ', fρ', hE₁.trans g₀, RRw.trans g₀ hf₁ g₁, g₂, g₃, g₄, g₅⟩
+
+/-- **The resource changes at the start of a segment**, under every frame meeting `F`, keeping
+the world invariant and the memory: a lend opened, a lend ended. -/
+theorem twp_update {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {e : Expr} {ρ ρ₁ : TRes w.K}
+    (hup : ∀ (w₀ : TWd) (ρ₀ ρf fρ : TRes w₀.K) (μ : Heap), w.Ext w₀ →
+      RRw (w := w) (w' := w₀) ρ ρ₀ → F w₀ ρf → ResUT.Hash ρf ρ₀ → ResUT.CompS ρf ρ₀ fρ →
+      WInv w₀ fρ μ → ∃ ρ₁₀ fρ₁ : TRes w₀.K, RRw (w := w) (w' := w₀) ρ₁ ρ₁₀ ∧
+        ResUT.Hash ρf ρ₁₀ ∧ ResUT.CompS ρf ρ₁₀ fρ₁ ∧ WInv w₀ fρ₁ μ)
+    (h : twp (ℍ := ℍ) F Q n w e ρ₁) : twp (ℍ := ℍ) F Q n w e ρ := by
+  intro w₀ ρ₀ ρf fρ μ hE hr hFρ hf hc hI hfd j μ' e' hj hrun hfin
+  obtain ⟨ρ₁₀, fρ₁, h₁, h₂, h₃, h₄⟩ := hup w₀ ρ₀ ρf fρ μ hE hr hFρ hf hc hI
+  exact h w₀ ρ₁₀ ρf fρ₁ μ hE h₁ hFρ h₂ h₃ h₄ hfd j μ' e' hj hrun hfin
+
 end BoCa.Fig16.Tree.Wp
 
 end
