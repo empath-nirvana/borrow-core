@@ -17,7 +17,8 @@ continuation below the index. What changes:
   `SI/CaptureE.lean`'s `wc` at its `extF` instance.
 * **Owned records** (`O`, `oc`): as `cerwp`'s; `oc` is read at the stop's world.
 * The resumer's guarantee `fd` and the payload-dependent answer `PBv` are `OpEntC`'s, read at the
-  resume world.
+  resume world; `fd` also reads the records the resumed run owns (`fdAt`), re-read at the world
+  the frame is checked at, one list by `RecsRR.func`.
 
 Resuming a stored continuation inside a lend opened after the stop (round 7's graft) is a resume
 at the grafted world: `contShareT_resume` is that step, by the definition of the share.
@@ -50,8 +51,9 @@ structure OpEntT where
   PBv : Val → TVProp
   /-- The cancel obligation, at a world and list. -/
   fin : Option (Nat → (w : TWd) → List (SRecT w.K) → Expr → TRes w.K → Prop)
-  /-- What the resumer guarantees of the frame at the resume, read at the payload. -/
-  fd : Val → TFrame
+  /-- What the resumer guarantees of the frame at the resume, read at the payload and at the
+  records the resumed run owns there. -/
+  fd : Val → (w : TWd) → List (FrameRecT w.K) → TRes w.K → Prop
   /-- What the stopped branch may own at the stop. -/
   oc : (w : TWd) → List (FrameRecT w.K) → Prop
 
@@ -72,6 +74,30 @@ abbrev TableT : Type :=
 abbrev TPostV : Type :=
   Nat → (w : TWd) → List (SRecT w.K) → List (FrameRecT w.K) → Val → TRes w.K → Prop
 
+/-- A record list's re-reading is single-valued. -/
+theorem RecsRR.func {K K' : WCactus} {Θ' : CodeTy} {O : List (FrameRecT K)} :
+    ∀ {O₁ O₂ : List (FrameRecT K')}, RecsRR Θ' O O₁ → RecsRR Θ' O O₂ → O₁ = O₂ := by
+  induction O with
+  | nil => intro O₁ O₂ h₁ h₂; cases h₁; cases h₂; rfl
+  | cons r O ih =>
+      intro O₁ O₂ h₁ h₂
+      cases h₁ with
+      | cons a₁ t₁ =>
+      cases h₂ with
+      | cons a₂ t₂ => rw [RecRR.func a₁ a₂, ih t₁ t₂]
+
+/-- **The frame condition at a resume**: `F`, and the resumer's guarantee read at the resumed run's
+own records `O′`, re-read at the frame's world. -/
+def fdAt (en : OpEntT) (v : Val) (F : TFrame) {w' : TWd} (O' : List (FrameRecT w'.K)) : TFrame :=
+  fun w'' ρf => F w'' ρf ∧ ∀ O'' : List (FrameRecT w''.K), RecsRR w''.Θ O' O'' → en.fd v w'' O'' ρf
+
+/-- **At the run's re-read records, `fdAt` is the guarantee at them**: the re-reading is
+single-valued (`RecsRR.func`). -/
+theorem fdAt_iff {en : OpEntT} {v : Val} {F : TFrame} {w' w'' : TWd}
+    {O' : List (FrameRecT w'.K)} {O'' : List (FrameRecT w''.K)} (hO : RecsRR w''.Θ O' O'')
+    (ρf : TRes w''.K) : fdAt en v F O' w'' ρf ↔ F w'' ρf ∧ en.fd v w'' O'' ρf :=
+  ⟨fun ⟨hF, h⟩ => ⟨hF, h O'' hO⟩, fun ⟨hF, h⟩ => ⟨hF, fun O₂ h₂ => RecsRR.func hO h₂ ▸ h⟩⟩
+
 /-- **The continuation's share at the tree world**: at every extension of the stop's world, on
 the share's and the owned records' re-readings there, at every list `ls′` keeping the records of
 the stop's re-read list `lsR` the re-read share names (`extFT`), resumed at every answer at every
@@ -83,7 +109,7 @@ def contShareT (en : OpEntT) (F : TFrame) (k : Nat) (w : TWd) (ls : List (SRecT 
     w.Ext w' ρ → RRw (w := w) (w' := w') ρ ρ' → SRecsRR w'.Θ ls lsR → extFT lsR ls' ρ' →
     RecsRR w'.Θ O O' →
     (∀ k', k' < k → ∀ (a : Val) (σ σ' : TRes w'.K), en.PBv v k' w' ls' a σ →
-      ResUT.CompS ρ' σ σ' → Ψ (fun w'' ρf => F w'' ρf ∧ en.fd v w'' ρf) w' O' k' ls'
+      ResUT.CompS ρ' σ σ' → Ψ (fdAt en v F O') w' O' k' ls'
         (K.plug (.val a)) σ') ∧
     (en.q ≠ .lin → ∀ P, en.fin = some P →
       P k w' ls' (K.dead.plug (raiseE (.val (cancelVal none)))) ρ')
@@ -220,7 +246,7 @@ theorem contShareT_resume {en : OpEntT} {F : TFrame} {k : Nat} {w w' : TWd}
     (hr : RRw (w := w) (w' := w') ρ ρ') (hl : SRecsRR w'.Θ ls lsR) (hx : extFT lsR ls' ρ')
     (hO : RecsRR w'.Θ O O') {k' : Nat} (hk : k' < k) {a : Val} {σ σ' : TRes w'.K}
     (hB : en.PBv v k' w' ls' a σ) (hc : ResUT.CompS ρ' σ σ') :
-    Ψ (fun w'' ρf => F w'' ρf ∧ en.fd v w'' ρf) w' O' k' ls' (K.plug (.val a)) σ' :=
+    Ψ (fdAt en v F O') w' O' k' ls' (K.plug (.val a)) σ' :=
   (h.2 w' ρ' lsR ls' O' hE hr hl hx hO).1 k' hk a σ σ' hB hc
 
 /-- A share captured at `w` is a share at every extension of `w`, on its re-reading. -/
@@ -243,7 +269,7 @@ theorem contShareT_resume_rr {en : OpEntT} {F : TFrame} {k : Nat} {w w' : TWd}
     (hr : RRw (w := w) (w' := w') ρ ρ') (hl : SRecsRR w'.Θ ls ls') (hO : RecsRR w'.Θ O O')
     {k' : Nat} (hk : k' < k) {a : Val} {σ σ' : TRes w'.K} (hB : en.PBv v k' w' ls' a σ)
     (hc : ResUT.CompS ρ' σ σ') :
-    Ψ (fun w'' ρf => F w'' ρf ∧ en.fd v w'' ρf) w' O' k' ls' (K.plug (.val a)) σ' :=
+    Ψ (fdAt en v F O') w' O' k' ls' (K.plug (.val a)) σ' :=
   contShareT_resume h hE hr hl (extFT_refl ls' ρ') hO hk hB hc
 
 end BoCa.Fig16.Tree.Wp
