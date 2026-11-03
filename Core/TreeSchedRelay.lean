@@ -364,6 +364,26 @@ theorem drive_twp {Qt : TPostV} (hQt : Qt.Down) (hst : QtStable Qt) :
     rw [Kont.plug, e]
     exact poolPost_here hst hx hP hc hb ha hap hcov hv
 
+/-- `κ` held at `w` (`KapAtT`) is `KapSchedT` at `w`, its list and its records. -/
+theorem KapAtT.sched {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {H : Val} {k : Nat}
+    {v κ : Val} {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {ρ : TRes w.K}
+    (h : KapAtT (ℍ := ℍ) Qout M en H k v κ w ls O ρ) :
+    KapSchedT (ℍ := ℍ) Qout M en H k w ls O v κ ρ := by
+  obtain ⟨w₁, ls₁, O₁, ρ₁, hK, hE, hr, hO, hl⟩ := h
+  exact hK.kripke hE hr hl hO
+
+/-- **A pool's parked head, taken out to drive**: its answer `inj₁ κ` under the park stepper
+(`QP`), beside the rest of the pool. -/
+theorem poolT_head_QP {Qt : TPostV} {k : Nat} {M : BoCa.Loc → Prop} {κ : Val}
+    {ts : List StoredT} {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)}
+    {ρ : TRes w.K} (hP : PoolT (ℍ := ℍ) (parkedT Qt k M κ :: ts) w ls O ρ) :
+    ∃ (Ot Os : List (FrameRecT w.K)) (a b : TRes w.K), O = Ot ++ Os ∧ ResUT.CompS a b ρ ∧
+      QP (ℍ := ℍ) Qt k w ls Ot (Val.inj₁ κ) a ∧ PoolT (ℍ := ℍ) ts w ls Os b ∧
+      NoneAt (recMask Ot) b ∧ NoneAt (recMask Os) a ∧ ∀ p ∈ Ot, ∀ q ∈ Os, p.le ≠ q.le := by
+  obtain ⟨Ot, Os, a, b, hO, hc, hκ, hM, hPs, hb, ha, hap⟩ := hP
+  exact ⟨Ot, Os, a, b, hO, hc, QP_iff.mpr (Or.inl ⟨κ, rfl,
+    KapSchedT.mask_mono (fun x hx => (hM x).mp hx) (KapAtT.sched hκ)⟩), hPs, hb, ha, hap⟩
+
 end BoCa.Fig16.Tree.Wp.SchedProgs.Park
 
 end
