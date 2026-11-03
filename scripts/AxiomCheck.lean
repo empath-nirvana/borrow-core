@@ -946,6 +946,12 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.KapAtT.of_stop
 #print axioms BoCa.Fig16.Tree.Wp.KapAtT.resume
 #print axioms BoCa.Fig16.Tree.Wp.KapAtT.kripke
+#print axioms BoCa.Fig16.Tree.Wp.FrzT.flat
+#print axioms BoCa.Fig16.Tree.Wp.relFT_not_fdEsc
+#print axioms BoCa.Fig16.Tree.Wp.noneAt_recMask
+#print axioms BoCa.Fig16.Tree.Wp.fdEsc_of_noneAt
+#print axioms BoCa.Fig16.Tree.Wp.twp_frame_keep
+#print axioms BoCa.Fig16.Tree.Wp.twp_keepsKap_sep
 #print axioms BoCa.Fig16.Tree.Wp.twp_keepsKap
 #print axioms BoCa.Fig16.Tree.Wp.kapStored_end_refused
 #print axioms BoCa.Fig16.Tree.Wp.twp_keepsList_apart
