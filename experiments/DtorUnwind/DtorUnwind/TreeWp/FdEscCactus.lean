@@ -5,30 +5,28 @@ import DtorUnwind.Tree.CarrierGraftEx
 # The escrow's frame condition and the cactus invariant
 
 `FdEsc ℓ R Y` (`TreeWp/ImmEndEsc.lean`) is what `immEnd` asks of the rest of the world: `Y`'s
-flattening holds nothing at the lent location `ℓ` nor at any location of `ex(R)`. At a resume of
-the task owning the record, `Y` is the other branches.
+flattening holds nothing at the lent location `ℓ` nor at any location of `ex(R)`. At a join's
+resume of the task owning the record, `Y` is the other branches.
 
-**`CactusInvT` does not give it** (`cactusT_not_fdEsc`). Two branches: the parent holds
-`ℓ ↦ imm({α}, loc m, m ↦ own(()))` and owns the record; a child holds the record's canonical
-image at `β ⊏ α`, `m ↦ imm({β}, (), ∅)`, and owns nothing. Every clause of `CactusInvT` holds
-(`cactusT_config`): the world is the branches' composition, the records proper are the parent's,
-`RecInv` (the configuration is a `TWNT` world at the world's choice, tagged at `α`) and `WInv`
-(covered, lowering to the memory `ℓ ↦ loc m, m ↦ ()`). The child's resource fails `FdEsc` at `m`,
-so the join's condition at the escrow (`JoinReadyEscT`) fails at the parent's resume. This is the
-state of program (b) after a child reborrows the parent's `imm` lend and before the join.
+**The configuration** (`cactusT_config`). Two branches: the parent, at its lend `α`, holds
+`ℓ ↦ imm({α}, loc m, m ↦ own(()))` and owns the record; a child, at `β ⊏ α`, holds the record's
+canonical image `m ↦ imm({β}, (), ∅)` and owns nothing. Every clause of `CactusInvT` holds: the
+world is the branches' composition, the records proper are the parent's, `RecInv` (a `TWNT`
+world at the world's choice, tagged at `α`), `WInv` (covered, lowering to the memory
+`ℓ ↦ loc m, m ↦ ()`), and each branch is at its point. The child fails `FdEsc` at `m`
+(`cactusT_not_fdEsc`). This is program (b) after a child reborrows the parent's `imm` lend and
+before the join.
 
-**What separates it is the branch.** `CactusInvT` records no branch point. The join's frame
-condition at `ℓ` was derived on `tree-life` (`joinFd_of_branch`) from two hypotheses beside
-`TWNC`: every cell of the other branches' flattening is on their branch `n` (`hbr`), and `n` is
-not inside the lend (`¬ n ⊑ α`, `hnα`). In the configuration the child's branch is inside the
-lend for every branch point its flattening sits on (`config_branch_inside`): its image is at
-`β ⊑ α`, as `RebRecLeT` makes every image of a lineage location. So at the configuration `hnα`
-fails (`config_branch_hyps`: `hbr` holds at the child's point `β`, and `β ⊑ α`), and nothing in
-`CactusInvT` carries `hbr`.
+**What excludes it at a join is the points.** A join resuming the parent reads `JoinPtT`: no
+other branch's point is inside the parent's lend. The child's point is `β ⊑ α`
+(`config_not_joinPt`), and every point the child's resource sits on is inside `α`
+(`config_branch_inside`): its image is at `β ⊑ α`, as `RebRecLeT` makes every image of a lineage
+location. Without points (`CactusInvT` before this round) nothing excluded the configuration.
 
-`FdEscOfBranchT` states `FdEsc` from `TWNT`, the frame's lifetime and the two branch hypotheses:
-the statement a cactus invariant carrying branch points, with the join read as `¬ n ⊑ α`, would
-give. It is not derived here.
+`FdEscOfBranchT` states `FdEsc` from `TWNT`, the frame's lifetime, a branch point the rest's top
+cells sit on, and that point not inside the frame: `joinFd_of_branch`'s hypotheses
+(`tree-life`) read at `FdEsc` and at the top cells (the strata carry a top cell's branch to every
+cell beneath it).
 -/
 
 noncomputable section
@@ -37,17 +35,6 @@ namespace BoCa.Fig16.Tree.Wp
 open BoCa
 open BoCa.Fig16
 open BoCa.Fig16.Tree
-
-/-! ### Branches -/
-
-/-- A cell is on `n`'s branch: every lifetime it carries is `n` or nested above it
-(`Tree/Frame.lean`'s `CellAbove`, over the tree carrier). -/
-def CellAboveT (K : WCactus) (n : Life) (ψ : TCell K) : Prop :=
-  ∀ s, ψ.lsOf = some s → ∀ x ∈ s.set, K.le n x
-
-/-- Every cell of `ρ` is on `n`'s branch (`OnBranchRes` over the tree carrier). -/
-def OnBranchResT (K : WCactus) (n : Life) (ρ : TRes K) : Prop :=
-  ∀ l ψ, ρ.get l = some ψ → CellAboveT K n ψ
 
 /-! ### The configuration -/
 
@@ -79,6 +66,9 @@ def childRes : TRes KC := viewRes βC mC
 
 /-- The branches: the parent owning the record, the child owning nothing. -/
 def bsC : List (TBranch wC.K) := [(parentRes, [recE ℓC mC]), (childRes, [])]
+
+/-- The points: the parent at its lend `α`, the child at `β`. -/
+def nsC : List Life := [αC, βC]
 
 /-- The list: the record, tagged at `α`. -/
 def lsC : List (SRecT wC.K) := [(recE ℓC mC, αC)]
@@ -143,10 +133,11 @@ theorem cov_imm_of_wit {Θ : LocTy} {K : WCactus} {l : BoCa.Loc} {ψ : TCell K}
 theorem cactusT_config :
     ∃ (W : TRes wC.K) (μ : BoCa.Loc → Option BoCa.Val),
       ResUT.CompS parentRes childRes W ∧
-      CactusInvT wC bsC W [recE ℓC mC] lsC μ := by
+      CactusInvT wC bsC nsC W [recE ℓC mC] lsC μ := by
   obtain ⟨W, hW, hT⟩ := twnt_config (K := KC) (fun _ => none) βC_lt_αC ℓC_ne_mC
   obtain ⟨σ, hσ⟩ := hT.valid
-  refine ⟨W, fun x => (σ.get x).map CellUT.erase, hW, ?_, ?_, ?_, ⟨hT, ?_⟩, ?_, ⟨σ, hσ, fun _ => rfl⟩⟩
+  refine ⟨W, fun x => (σ.get x).map CellUT.erase, hW, ?_, ?_, ?_, ⟨hT, ?_⟩, ⟨?_, ⟨σ, hσ, fun _ => rfl⟩⟩,
+    .cons ?_ (.cons ?_ .nil)⟩
   · exact .cons (.cons .nil (ResUT.compS_empty_right _)) hW
   · intro p; simp [bsC]
   · simp [bsC, Apart]
@@ -172,56 +163,50 @@ theorem cactusT_config :
       have ew : (viewCell (K := KC) βC).wit = PMap.empty := CellUT.wit_immOf _ _ _ _
       rw [← w₀, ew] at ey
       simp at ey
+  · intro l ψ e t ht x hx
+    obtain ⟨-, rfl⟩ := ResUT.single_get_eq_some e
+    change some (TSet.single αC) = some t at ht
+    cases Option.some.inj ht
+    simp only [TSet.single_set, Finset.mem_singleton] at hx
+    subst hx; exact KC.refl _
+  · intro l ψ e t ht x hx
+    obtain ⟨-, rfl⟩ := ResUT.single_get_eq_some e
+    change some (TSet.single βC) = some t at ht
+    cases Option.some.inj ht
+    simp only [TSet.single_set, Finset.mem_singleton] at hx
+    subst hx; exact KC.refl _
 
-/-- **`CactusInvT` does not give the escrow's frame condition at a resume**: at a configuration
-meeting every clause of `CactusInvT`, the parent's other branch (the child) fails `FdEsc` at the
-record's location and escrow, so `JoinReadyEscT` fails. -/
+/-- **At the configuration the parent's other branch fails the escrow's frame condition**: the
+child fails `FdEsc` at the record's location and escrow, so `JoinReadyEscT` fails. -/
 theorem cactusT_not_fdEsc :
     ∃ (W : TRes wC.K) (μ : BoCa.Loc → Option BoCa.Val),
-      CactusInvT wC bsC W [recE ℓC mC] lsC μ ∧
+      CactusInvT wC bsC nsC W [recE ℓC mC] lsC μ ∧
       ¬ FdEsc (recE (K := KC) ℓC mC).le (recE (K := KC) ℓC mC).R childRes ∧
       ¬ JoinReadyEscT (bsC.drop 1) (recE (K := KC) ℓC mC).le (recE (K := KC) ℓC mC).R := by
   obtain ⟨W, μ, -, hI⟩ := cactusT_config
   refine ⟨W, μ, hI, config_not_fdEsc, fun hJ => config_not_fdEsc (hJ childRes ?_)⟩
   exact .cons .nil (ResUT.compS_empty_right _)
 
-/-- **The child's branch is inside the lend**: for every branch point `n` the child's flattening
-sits on, `n ⊑ α`. So `joinFd_of_branch`'s `¬ n ⊑ α` is what fails at the configuration. -/
-theorem config_branch_inside {n : Life}
-    (hbr : ∀ τ, ResUT.Flat childRes τ → OnBranchResT KC n τ) : KC.le n αC := by
-  obtain ⟨τ, hτ⟩ := valid_view (K := KC) βC mC
-  have hf := hτ
-  rw [flat_view hτ] at hf
-  have := hbr _ hf mC (viewCell βC) (ResUT.single_get_self _ _) (TSet.single βC)
-    (by rw [viewCell]; rfl) βC (by simp [TSet.single_set])
-  exact KC.trans this βC_lt_αC.1
+/-- **A join cannot resume the parent here**: the child's point is inside the parent's lend. -/
+theorem config_not_joinPt : ¬ JoinPtT (K := KC) (nsC.drop 1) αC :=
+  fun h => h βC (by simp [nsC]) βC_lt_αC.1
+
+/-- **The child's branch is inside the lend**: every point the child's resource sits on is
+inside `α`. -/
+theorem config_branch_inside {n : Life} (hbr : OnBranchResT KC n childRes) : KC.le n αC :=
+  KC.trans (hbr mC (viewCell βC) (ResUT.single_get_self _ _) (TSet.single βC) rfl βC
+    (by simp [TSet.single_set])) βC_lt_αC.1
 
 /-! ### The statement with branch points -/
 
-/-- **The escrow's frame condition from branch points**, the statement that closes `FdEsc` once
-the cactus records each branch's point: at a `TWNT` world, for a record proper `p` whose frame is
-at `α`, a part `ρ_rest` of the world whose flattening is on a branch `n` not inside `α` holds
-nothing at `p`'s location nor at its escrow's exclusive locations. `joinFd_of_branch`'s
-hypotheses (`tree-life`), read at `FdEsc`. Not derived here. -/
+/-- **The escrow's frame condition from branch points**: at a `TWNT` world, for a record proper
+`p` whose frame is at `α`, a part `ρ_rest` of the world whose top cells are on a branch `n` not
+inside `α` holds nothing at `p`'s location nor at its escrow's exclusive locations. -/
 def FdEscOfBranchT : Prop :=
   ∀ (K : WCactus) (Θ : CodeTy) (tc : TChoice K) (W ρo ρrest : TRes K)
     (ps rs : List (FrameRecT K)) (p : FrameRecT K) (α n : Life),
     TWNT K Θ tc W ps rs → p ∈ ps → ResUT.CompS ρo ρrest W → FrameLifeT K W p α →
-    (∀ τ, ResUT.Flat ρrest τ → OnBranchResT K n τ) → ¬ K.le n α → FdEsc p.le p.R ρrest
-
-/-- At the configuration, `FdEscOfBranchT`'s hypotheses hold but for `¬ n ⊑ α`, at the child's
-own branch point `β`. -/
-theorem config_branch_hyps :
-    (∀ τ, ResUT.Flat childRes τ → OnBranchResT KC βC τ) ∧ KC.le βC αC := by
-  refine ⟨fun τ hτ => ?_, βC_lt_αC.1⟩
-  obtain rfl := flat_view hτ
-  intro l ψ e s hs x hx
-  obtain ⟨-, rfl⟩ := ResUT.single_get_eq_some e
-  change some (TSet.single βC) = some s at hs
-  cases Option.some.inj hs
-  simp only [TSet.single_set, Finset.mem_singleton] at hx
-  subst hx
-  exact KC.refl _
+    OnBranchResT K n ρrest → ¬ K.le n α → FdEsc p.le p.R ρrest
 
 end BoCa.Fig16.Tree.Wp
 
