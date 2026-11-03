@@ -40,9 +40,6 @@ proved at that part's rules, not a result of its own. Every other name is a Lean
 | Semantic types re-read along the tree (`kmono_mut` holds for every `τ` and `kmono_thunk` for every computation predicate, by the definitions of `vMut` and `vThunk`) | `reread`, `kmono_unit`, `kmono_sum`, `kmono_imm`, `kmono_mut`, `kmono_ref`, `kmono_box`, `kmono_thunk`, `trU_not_kmono`; for example `round7_write` | `tree-life` ea57fa14 |
 | BoLo 6.25–6.59 over the tree carrier | `ResUT.six52`, `ResUT.six59` and the `Tree/Port` files | `tree-life` 01ac9316–9fdb1c7b |
 | The resume condition at every type, from the branch hypotheses (`hbr`, `hnα`) | `joinFd_of_branch`, `TWNC.noOwnUnder` | `tree-life` bfe33dab, c4addc10 |
-| The cactus invariant over the tree world; adequacy derived through `cactusT_step` at one branch, the branch clauses and spawn, join and move unused (no programs yet) | `CactusInvT`, `cactusT_step`, `cactusT_extend`, `cactusT_move`, `cerwpT_adequacy` | `tree-wp` 89c0f8a7 |
-| The resume condition at the escrow's exclusive locations, at a join, from the cactus invariant and the other branches' points | `fdEsc_at_join` (`twnt_invHolds`, `escBeneathT` are in the library, below) | `tree-inv` 4447bc6c |
-| Other branches' steps keeping that condition at the current `twp`, whose end does not ask the printed `↭` (refuted) | `not_stepKeepsFdEsc`, `copy_config` | `tree-inv` 5d637286 |
 | Re-reading: semantic types read at the tree, `mut` cells re-read as it grows | `RR`, `RR.func`, `RR.refl`, `RR.inStratum`, `RR.exists_of` | library: `Support/Model/Tree/Reread.lean` |
 | Store types as codes; re-typing where no `mut` cell is held | `KTy`, `KTy.interp`, `interp_retype`, `RR.exists_retype`, `RR.trans_retype` | library: `Support/Model/Tree/World/Codes.lean` |
 | The tree world; its extension carries a resource, `●` commutes with re-reading, the world is re-read | `TWd`, `TWd.Ext.trans`, `RR.split_retype`, `WInv.reread` | library: `Support/Model/Tree/World/World.lean` |
@@ -54,6 +51,14 @@ proved at that part's rules, not a result of its own. Every other name is a Lean
 | The end of an `imm` lend from the condition at the escrow's exclusive locations; the condition at `ℓ` alone is not enough | `FdEsc`, `immEnd_valid_of_fdEsc`; `twnt_config`, `immEnd_esc_config`, `immEnd_esc_chain`, `config_not_fdEsc` | library: `Support/Model/Tree/World/FdEsc.lean` |
 | The condition from branch points; kept across a masked update | `escBeneathT`, `fdEscOfBranch`, `fdEsc_of_points`, `fdEsc_of_updX` | library: `Support/Model/Tree/World/EscBeneath.lean`, `StepKeep.lean` |
 | Where κ resumes, over the tree carrier | `extFT`, `extFT.rr`, `extFT.trans`, `extFT_comp` | library: `Support/Model/Tree/World/ExtF.lean` |
+| Runs of a counted length; final configurations; safe or divergent | `StepsN`, `stepsN_of_steps`, `stepsN_plug_split`, `Final`, `final_opPlug`, `OrDiverges` | library: `Core/StepsN.lean` |
+| The step-indexed relation over the tree world, and its rules | `twp`, `EndT`, `twp_kripke`, `twp_bind`, `twp_frame`, `twp_frame_w`, `twp_extend`, `twp_update`, `endT_inv` | library: `Core/TreeWp.lean` |
+| Operations over the tree world: the continuation's share keeps the entry's qualifier | `cerwpT`, `contShareT`, `opTableT`, `fdAt_iff`, `cerwpT_perform`, `contShareT_resume`, `contShareT_resume_rr` | library: `Core/TreeWpEff.lean` |
+| The cactus invariant over the tree world: kept by step, growth, move, spawn and join; adequacy derived through `cactusT_step` at one branch (no programs yet) | `CactusInvT`, `cactusT_step`, `cactusT_extend`, `cactusT_move`, `cactusT_spawn`, `cactusT_join`, `cerwpT_adequacy` | library: `Core/TreeCactus.lean` |
+| The resume condition at the escrow's exclusive locations, at a join, from the cactus invariant and the other branches' points; without points it fails | `fdEsc_at_join`; `cactusT_config`, `cactusT_not_fdEsc`, `config_not_joinPt` | library: `Core/TreeCactus.lean` |
+| Other branches' steps keep that condition; without the printed `↭` at `twp`'s end they need not (refuted) | `stepKeepsFdEsc`; `not_stepKeepsFdEscNoUpd`, `copy_end_refused`, `copy_config` | library: `Core/TreeStepKeep.lean` |
+| Headlines at one branch: adequacy; a step keeps others' open lends (R1); a lend is not ended while a stored branch holds part of it (R2); a join's valid end leaves the others nothing of the lend (R3) | `topAdequacyT`, `r1_stepKeepsFdEsc`, `r2_endBlockedByHolder`, `r3_joinEndNeedsFdEsc`, `fdEsc_of_end_valid`, `config_end_refused` | library: `Core/TreeHeadlines.lean` |
+| A must-resume `κ` is strictly linear: not persistent, no destructor | `kappa_lin_strict` | library: `Core/LetDtorSuspend.lean` |
 | World operations over the tree world; store typing growth | `TWd.addTy_ext`, `Cov.mono`, `RR.mono`, `winv_swap` | `tree-wp` fc49ed48, 44667d04 |
 
 The target programs are in `corpus/pending/` on the local branch `pending-770`, stacked on
