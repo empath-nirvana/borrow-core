@@ -172,6 +172,52 @@ def DefEntry.lift? (e : DefEntry) (decl : Nat) (targs : List CVTy) (Δ : LifeCtx
     else none
   else none
 
+/-! ### The program's destructors  `[spec §62]` -/
+
+/-- The destructors declared in the program (`dtor k : C = M`), each with the position of its
+declaration. -/
+def Env.dtorDecls (E : Env) : List (Span × CTy × Comp × Nat) :=
+  E.scope.decls.toList.zipIdx.filterMap fun (d, j) => match d with
+    | .dtor sp _ C M => some (sp, C, M, j)
+    | _ => none
+
+/-- An environment in which no name of the context is in scope: a destructor is closed. -/
+def Env.closed (E : Env) : Env :=
+  { E with vars := [], own := [], row := none, nExt := 0, inDtor := true }
+
+/-- **The program's destructors within the row `S`** (SPEC §62): each declared destructor whose
+row is within `S`, all checked closed at the union of their rows, `Σ_D`, which must have no
+cancelling operation and no `Div`. `none` when there is none. `chk` checks a closed computation
+against a type. -/
+def dtorsAt (E : Env) (Δ : LifeCtx) (S : CRow)
+    (chk : (C : CCTy) → Comp → CheckM (Res Δ [] (.comp C))) : CheckM (Option (Dtors Δ)) := do
+  let ds := E.dtorDecls
+  if ds.isEmpty || E.inDtor then return none
+  let mut es : List (Span × BoCa.Fig16.LogRel.Core.Opaque × CRow × Comp) := []
+  for (sp, C, M, j) in ds do
+    let C' ← ({ E with scope := { E.scope with upto := j } } : Env).elabC LifeCtx.empty C
+    match C' with
+    | .arr (.opq k) C'' =>
+      match effRow? C'' with
+      | some (SDk, .unit) => if rowLeB SDk S then es := es ++ [(sp, k, SDk, M)]
+      | _ => err sp "a destructor's type is `k -o F[…] 1`"
+    | _ => err sp "a destructor's type is `k -o F[…] 1`, at a host handle type `k`"
+  if es.isEmpty then return none
+  let SD : CRow := es.foldl (fun acc (_, _, SDk, _) =>
+    acc ++ SDk.filter fun o => !acc.any fun o' => o'.n == o.n && o'.i == o.i) []
+  if hc : Row.cancelsB SD = false then
+    if hd : BoCa.Fig16.LogRel.Core.Row.divB SD = false then
+      let mut dts : List (DtorAt Δ SD) := []
+      for (sp, k, _, M) in es do
+        let r ← chk (.arr (.opq k) (effOf SD .unit)) M
+        match h : r.t.absF Δ with
+        | some f => dts := dts ++ [⟨k, r, f, h⟩]
+        | none => err sp "internal error: a destructor's absorption"
+      pure (some ⟨SD, hc, hd, dts⟩)
+    else err ((es.head?.map (·.1)).getD .none) "a destructor diverges: its row holds `Div` (SPEC §62, `hSDd`)"
+  else err ((es.head?.map (·.1)).getD .none) ("a destructor may fail: its row has an operation " ++
+    "that does not resume (SPEC §62, `hSDc`)")
+
 /-! ### The checker -/
 
 set_option maxHeartbeats 400000 in
@@ -433,7 +479,8 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
         let rM' ← liftRow E M.span S rM
         let ⟨_, rN⟩ ← atRow E N.span S
           (← synC n { (E.minus rM.F.u).pushOwn x.name A with row := some S } Δ (A :: T) N)
-        pure ⟨_, ← effBind E sp x rM' rN⟩
+        let D ← dtorsAt E Δ S fun C M => chkC n E.closed Δ [] M C
+        pure ⟨_, ← effBind E sp x D rM' rN⟩
     | .unwind sp x oA M D N =>
       withCopies sp (E.copyVars T (mentionsC · M)
           (fun z => mentionsC z D || (x.name != z && mentionsC z N))) E E T fun E₁ E T => do
@@ -792,7 +839,8 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
           if hC : effOf S B = C then do
             let rM' ← liftRow E M.span S rM
             let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A) Δ (A :: T) N (effOf S B)
-            pure (hC ▸ (← effBind E sp x rM' rN))
+            let D ← dtorsAt E Δ S fun C M => chkC n E.closed Δ [] M C
+            pure (hC ▸ (← effBind E sp x D rM' rN))
           else err sp "internal error: a returner chain"
         | none => err sp (s!"the bound computation performs the operations " ++
             s!"`{ppRow E (o :: os)}`, so this must have a type `F[…] B`, but `{E.ppC C}` is expected")

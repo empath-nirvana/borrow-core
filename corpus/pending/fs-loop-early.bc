@@ -1,0 +1,33 @@
+-- pending: #771 row 7 (a file held by a loop that ends early: the state is closed by its destructor on every exit)
+-- now: 19:11: `f` is not consumed in its scope, and its type `file` is linear and has no derived drop
+-- Blocked by: the checker drops an unconsumed value at the end of its scope only by a derived
+-- drop (SPEC §12, `dropOwed`); a `File` has none, and its declared destructor (`dtor file =
+-- fs_close`) is used only on the unwind (`[let-dtor]`, SPEC §62), not on the normal exit.
+--
+-- A `loop` that holds a file and reads it until a read answers fewer bytes than asked, then
+-- breaks. The file is closed after the loop. When a read raises, the loop is left early and the
+-- file it holds is closed by its destructor on the unwind.
+--
+-- Blocked by: a `loop` is codata whose close branch discards its state, and a `File` has no
+-- derived drop (`corpus/reject/fs-loop.bc`). Wanted: closing a loop early runs its state's
+-- destructor (#770, the destructor spike's stage 3).
+--
+-- Once it lands: `inl 2` (this file read in blocks of 4096).
+include fs
+
+fn blocks(f: File) -> i32 with Fs, Fail[FsError] =
+  let mut f = f;
+  let mut n = 0;
+  loop {
+    let (f2, (b, k)) = read(f, string_new(4096));
+    f = f2;
+    n = n + 1;
+    if k < 4096 { break } else { () }
+  };
+  close(f);
+  n
+
+main -> i32 + FsError = with to_result {
+  let (p, f) = open(string_of_lit("corpus/pending/fs-loop-early.bc"), Reading);
+  blocks(f)
+}

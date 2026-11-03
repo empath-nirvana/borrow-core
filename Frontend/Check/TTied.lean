@@ -1,6 +1,7 @@
 import Frontend.Check.Tied
 import Frontend.Check.Weaken
 import Frontend.Check.TLife
+import Core.LetDtor
 
 /-!
 # Frontend — Check — tied derivations of the typed term  `[spec §19, §29]`
@@ -324,6 +325,31 @@ theorem effThenA (u : Masks) {p₁ p₂ p₃ : Pins} {s₁ s₂ s₃ : CRow} {Γ
       (hD.1 (nilR (nilR hn)) Ξ (sigsAt_union_right (sigsAt_union_right h))),
     .effThen hs hm hcv hNZ hUq hU (BoCa.Fig16.LogRel.Core.RowLe.refl S)
       (BoCa.Fig16.LogRel.Core.RowLe.nil S) hfin hP rfl hM.2 hN.2 hD.2⟩
+
+/-- **`[then]` with its finaliser at a row of destructors** `Σ_D ≤ Σ` (`[let-dtor]`,
+`CDerives.effLetD`): `Σ_M = Σ`, no operation of `Σ` whose cancel row the finaliser would have to
+be recorded in (`hnr`), and destructors that never fail (`hSDc`) and do not diverge (`hSD`).
+`[spec §27, §62]` -/
+theorem effThenD (u : Masks) {p₁ p₂ p₃ : Pins} {s₁ s₂ s₃ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tM tN tD : TExpr}
+    {A B : CVTy} {S SD : CRow} (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
+    (hcv : Covers u.u₁ 0 tM.erase ∧ Covers u.u₂ 1 tN.erase ∧ Covers u.u₂ 1 tD.erase) (hNZ : S.NZ)
+    (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hDS : BoCa.Fig16.LogRel.Core.RowLe SD S)
+    (hnr : ∀ o ∈ S, o.finRead = false) (hSDc : ¬ SD.Cancels)
+    (hSD : BoCa.Fig16.LogRel.Core.Row.divB SD = false)
+    (hM : TTied p₁ s₁ Δ Γ₁ tM (.comp (effOf S A)))
+    (hN : TTied p₂ s₂ Δ (⟨A, true⟩ :: Γ₂) tN (.comp (effOf S B)))
+    (hD : TTied p₃ s₃ Δ (⟨.unit, false⟩ :: Γ₂) tD (.comp (effOf SD .unit))) :
+    TTied (p₁ ++ (p₂ ++ p₃)) (s₁ ∪ (s₂ ∪ s₃)) Δ Γ
+      (.effThen i (.comp (effOf S B)) A B S S SD u tM tN tD) (.comp (effOf S B)) :=
+  have hfin := BoCa.Fig16.LogRel.Core.hfin_of_noRead (S := S) (SD := SD) hnr
+  have hP : BoCa.Fig16.LogRel.Core.Row.UnrD SD → S.PendPers :=
+    fun h => absurd h (BoCa.Fig16.LogRel.Core.Row.not_unrD_of_not_cancels hSDc)
+  ⟨fun hn Ξ h => .effThen hs hm hcv hNZ hUq hU (BoCa.Fig16.LogRel.Core.RowLe.refl S)
+      hDS hfin hP hSD (hM.1 (nilL hn) Ξ (sigsAt_union_left h))
+      (hN.1 (nilL (nilR hn)) Ξ (sigsAt_union_left (sigsAt_union_right h)))
+      (hD.1 (nilR (nilR hn)) Ξ (sigsAt_union_right (sigsAt_union_right h))),
+    .effThen hs hm hcv hNZ hUq hU (BoCa.Fig16.LogRel.Core.RowLe.refl S)
+      hDS hfin hP hSD hM.2 hN.2 hD.2⟩
 
 /-- `[handle]` reads its handled row, as `CDerivesAt.effHandleV`: the handler's pair `tc` a value
 form over a part `Γ₁` of the context whose live slots are persistent.  `[spec §19]` -/

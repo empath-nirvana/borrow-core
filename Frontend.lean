@@ -7,6 +7,7 @@ import Frontend.Tests
 import Frontend.Check.Decide
 import Frontend.Check.Masks
 import Frontend.Check.Fam
+import Frontend.Check.LetDtor
 import Frontend.Check.Elab
 import Frontend.Check.Tied
 import Frontend.Check.TExpr

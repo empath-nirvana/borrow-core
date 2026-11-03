@@ -124,7 +124,7 @@ def checkFuel : Nat := 1 <<< 20
 elaboration generates (`DefKey`). -/
 def Env.top (ds : Array Decl) (k : Nat) (keys : List DefKey := [])
     (closes : List (String × String × Option String) := []) : Env :=
-  ⟨⟨ds, k, keys, closes⟩, [], [], [], [], 0, none⟩
+  ⟨⟨ds, k, keys, closes⟩, [], [], [], [], 0, none, false⟩
 
 /-- The externs, in declaration order, each elaborated in the declarations before it. -/
 def externs (ds : Array Decl) : Except Error (List (String × CVTy)) :=
@@ -217,6 +217,24 @@ def checkDecl (ds : Array Decl) (k : Nat) (keys : List DefKey)
   | .chandler sp h => throw ⟨sp, s!"internal error: `handler {h.name.name}` was not elaborated"⟩
   | .poly sp n _ _ _ _ _ => throw ⟨sp, s!"internal error: `poly {n.name}` was not elaborated"⟩
   | .data sp d => throw ⟨sp, s!"internal error: `data {d.name.name}` was not elaborated"⟩
+  | .dtorOp sp k _ => throw ⟨sp, s!"internal error: `dtor {k.name}` was not elaborated"⟩
+  | .dtor sp kk C M => do
+      -- A destructor is closed: checked at the empty context, at its own row (SPEC §62).
+      let E := { Env.top ds k keys closes with inDtor := true }
+      let C' ← E.elabC LifeCtx.empty C
+      let _ ← chkC checkFuel E LifeCtx.empty [] M C'
+      match C' with
+      | .arr (.opq _) R =>
+        match effRow? R with
+        | some (SD, .unit) =>
+          if Row.cancelsB SD then
+            throw ⟨sp, s!"`dtor {kk.name}`: a destructor may not fail, and its row has an " ++
+              "operation that does not resume (SPEC §62, `hSDc`)"⟩
+          else if BoCa.Fig16.LogRel.Core.Row.divB SD then
+            throw ⟨sp, s!"`dtor {kk.name}`: a destructor's row may not hold `Div` (SPEC §62)"⟩
+          else pure (s!"dtor {kk.name} : {ppCTy C'}", none, [])
+        | _ => throw ⟨sp, s!"`dtor {kk.name}`: a destructor's type is `{kk.name} -o F[…] 1`"⟩
+      | _ => throw ⟨sp, s!"`dtor {kk.name}`: a destructor's type is `{kk.name} -o F[…] 1`"⟩
   | .extern _ n A => do
       let A' ← (Env.top ds k).elabV LifeCtx.empty A
       pure (s!"extern {n.name} : {ppVTy A'}", none, [])
@@ -246,7 +264,7 @@ def _root_.Frontend.Decl.declared : Decl → List Ident
   | .effect _ n _ ops => n :: ops.map (·.name)
   | .chandler _ h => [h.name]
   | .data _ d => d.name :: d.cons.map (·.name)
-  | .main .. | .include .. => []
+  | .main .. | .include .. | .dtorOp .. | .dtor .. => []
 
 /-- **A declaration of a name `run_io` reserves** (SPEC §11): a harness extern, or a wrapper's
 binder, declared at all; a capability declared other than as an extern. A program that declared a

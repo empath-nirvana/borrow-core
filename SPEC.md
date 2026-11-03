@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.29 · 2026-11-03
+Version 1.30 · 2026-11-03
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -10428,10 +10428,47 @@ programs, `d_stepD`, `d_lendD` and `d_kDtor` typing lemmas:
 proved in the total relation only (`then_compatC`); at the step-indexed relation it is unproved,
 the step-indexed relation PR's obligation (`erwp_ubind*`).
 
-**What the checker needs** (issue 7 of #771; the next PR is issue 4): where `[let]`'s `hW` fails,
-elaborate to `letDT`, with `decl` the program's declared destructors at its opaque types, a
-destructor row `Σ_D ≤ Σ` with no cancelling operation and no `Div`, and `hfin` at the cancel rows
-of `Σ_M`.
+**In the checker** (#771 row 7, partly built). A program declares a destructor at an opaque type:
+`dtor k : k -o F[Σ_D] 1 = fun (x : k) -> M`, a closed function whose row has no operation that
+does not resume (`hSDc`) and no `Div` (`hSDd`), checked once at its declaration
+(`Frontend/Check/Program.lean`). The surface form names an operation, `dtor file = fs_close`; the
+elaboration gives the core form at each handler site of the operation's effect, which performs it
+at that site and drops its answer (`Frontend/Elab/Effects.lean`). Where an effectful binding holds
+a slot with no derived drop across a computation whose row cancels, and the program's destructors
+within the row are given (`dtorsAt`: each declared destructor whose row is within `Σ`, all
+checked at the union of their rows, `Σ_D`), the binding is `[let-dtor]`'s
+(`Frontend/Check/Steps.lean`, `thenItD`): `[then]` at `Σ_M = Σ` and the finaliser `drop_ctx` of the
+slots the rest uses, each by the destructor of its type, built former by former as `dropOf`
+(`dfnOf`, `dropChainD`). The rule's premises are discharged by the builders: `Σ_D ≤ Σ` (`rowLeB`),
+`hSDc`, `hSDd`, and `hfin` by `hfin_of_noRead` where no operation of `Σ` has a cancel row the
+finaliser must be recorded in; a row with such an operation is refused. Every frame it emits is
+checked against **the certificate** (`frameCert`, `Frontend/Check/LetDtor.lean`): its finaliser's
+erasure is `dropCtxE (ctxDrops decl Γ₂) 1`, with `decl` read off the checked destructors (`declOf`)
+and `Γ₂` the slots the rest uses, and each destructor is closed. A frame that passes is
+`letDT decl Γ₂ N M` (`frameCert_letDT`), so its derivation is one of `CDerives.effLetD`'s
+conclusion, and on a raise or a cancel of `M` it runs every slot's destructor, the slot bound last
+first, before the error goes on (`certFrame_raise`, `certFrame_cancel`, from `letDE_raise_exit`,
+`letDE_cancel_exit`). Where every such slot has a derived drop, the binding is §19's `[then]` with
+the pure finaliser `finalOf`, as before.
+
+*Not built*: the normal exit, where a slot with a declared destructor and no derived drop that is
+not consumed by name is refused at the end of its scope (§12's drop is a derived drop's only), so a
+loop that holds a file and ends early is refused (`corpus/pending/fs-loop-early.bc`); and the
+lowering of a finaliser that performs an operation compiled as a state machine: Backend2 refuses
+it ("a finaliser that may suspend is outside the fragment", `Backend2/Convert.lean`, `effThen`),
+as the old backend does (§27), so a program whose frame closes a file is checked and runs at the
+source stage only.
+
+**The file handle in the language** (§34). `File` is the opaque `file`: a location owning a cell
+that holds its descriptor, `Ref I32` with the rules taken away (`vCE_file_eq_ref`), so it is not
+own-free, has no derived drop and is not persistent. `file_mk : I32 ⊸ F File` and
+`file_take : File ⊸ F I32` (models `λx. alloc x`, `λc. free c`; `fileMk_meets`, `fileTake_meets`)
+are its only eliminator and introduction, used by the platform's handler; no Core constant takes
+one apart. `Fs` is a control effect whose operations must resume (`lib/fs.bc`), so a destructor
+may perform `fs_close`; `main`'s body is served by `files` from its first statement that performs
+`Fs` (`filesMain`), whose clauses perform `FsHost`, the answering effect the platform serves on
+the capability `fs` with the file externs. A destructor is closed, so it reaches the file system
+only through an operation of the row, as `Core/LetDtorFiles.lean`'s model does.
 
 *Open*: a destructor that can fail (above); relaxing `hSDd` (a destructor that loops); following
 a destructor's run through its operations' capture and resume; the order of releases as a
@@ -11065,12 +11102,26 @@ corpus. The typed tree world (#781) is in `Support/Model/Tree/World/`, and the s
 relation over it in `Core/StepsN.lean`, `Core/TreeWp.lean`, `Core/TreeWpEff.lean`,
 `Core/TreeCactus.lean`, `Core/TreeStepKeep.lean` and `Core/TreeHeadlines.lean` (adequacy and R1–R4
 at one branch); `kappa_lin_strict` is in `Core/LetDtorSuspend.lean`. No relation the typing rules use
-reads them yet. The rest of §62 is design.
+reads them yet. The checker's `[let-dtor]` (#771 row 7) is in `Frontend/Check/Steps.lean`
+(`thenItD`, `finalOfD`, `dfnOf`, `dropChainD`, `frameCert`), `Frontend/Check/Checker.lean`
+(`dtorsAt`), `Frontend/Check/Rules.lean` (`rEffThenD`, `rClosed`, `rDtorV`),
+`Frontend/Check/TTied.lean` (`TTied.effThenD`) and `Frontend/Check/LetDtor.lean` (the certificate's
+theorems); `dtor` declarations in `Frontend/Syntax.lean`, `Frontend/Parser.lean`,
+`Frontend/Elab/Effects.lean`; the file handle in `Core/Opaque.lean` and `Core/Stdio.lean`; `Fs` in
+`lib/fs.bc`. The rest of §62 is design.
 
 ---
 
 ## Changelog
 
+- **1.30** (2026-11-03) — §62 (#771 row 7, partly): `dtor` declarations at opaque types; the
+  checker's `[let-dtor]` frames where a slot with no derived drop is held across a computation that
+  may abort, each checked against `frameCert` (`frameCert_letDT`, `certFrame_raise`,
+  `certFrame_cancel`); the opaque `file` (`vCE_file_eq_ref`, `fileMk_meets`, `fileTake_meets`); `Fs`
+  as a control effect served by `files` in `main`, over the platform's `FsHost` and the file
+  externs of #769. Not built: the normal exit's destructor and the lowering of a finaliser that
+  performs a state machine's operation. No change to `CDerives`, `fundamentalC`, `adequacyC` or
+  `adequacyD`.
 - **1.29** (2026-11-03) — §62 (#781, slice (c)): R4 at the tree world (`r4_extExtFT`,
   `ext_extFT`), with `RelT`, `KeepsT`, `CellInT`, `ExtLT` and the examples of what `ExtLT` admits
   and refuses. No change to `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the checker, the

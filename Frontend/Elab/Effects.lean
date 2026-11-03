@@ -208,6 +208,9 @@ structure Env where
   `[spec §38]` -/
   owner : String := ""
   ownerTps : List String := []
+  /-- The destructors declared by an operation, `dtor k = op` (SPEC §62): the opaque type, the
+  operation's name and where it is declared. -/
+  dtorOps : List (HostKind × String × Span) := []
 
 /-- A capability in scope: the answering effect it serves, the variable holding its `mut 'l S`
 borrow, the lifetime `'l`, and the handler. Or the variable a `for`'s site of an iteration effect
@@ -323,6 +326,10 @@ structure St where
   exits : Bool := false
   /-- The key of each copy made (`DefKey`), for the checker's `use` nodes. -/
   keys : Array DefKey := #[]
+  /-- The destructors given at the handler sites (SPEC §62): for each site of an effect that has
+  an operation some `dtor k = op` names, `dtor k : k -o F[n.i q A ~> B] 1 = fun (x : k) ->
+  r <- perform[n.i] x; return ()`. -/
+  dtors : Array Decl := #[]
 
 abbrev EM := StateT St (Except Error)
 
@@ -2608,6 +2615,17 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
     let site : Site := { eff := e, n, args := effArgs, sp := ksp, name := nm,
                          what := s!"`with {((nm.map (· ++ " = ")).getD "")}{ch.name.name}`" }
     let ents := cx.env.siteOps site
+    -- The destructors this site gives (SPEC §62): each `dtor k = op` with `op` an operation of
+    -- the effect, performed at this site.
+    for (k, op, dsp) in cx.env.dtorOps do
+      if let some i := eff.ops.findIdx? (·.name.name == op) then
+        if let some (q, A, B) := ents[i]? then
+          let x : Ident := ⟨"fx_dtor_x", dsp⟩
+          let C : CTy := .arr dsp (.handle dsp k) (.eff dsp (.cons n i q A B .nil) (.unit dsp))
+          let M : Comp := .lam dsp x (.handle dsp k)
+            (.bind dsp ⟨"fx_dtor_r", dsp⟩ none (.perform dsp n i (.var dsp x.name))
+              (.ret dsp (.unit dsp)))
+          modify fun s => { s with dtors := s.dtors.push (.dtor dsp k C M) }
     -- `main`'s handler of a division's error is reported by `divMain`, as the platform's handlers
     -- of the system interface are by `platformMain`.
     let plat := ch.name.name == mainDivHandler
@@ -3702,7 +3720,7 @@ capability's cell. -/
 def platformEffects : List (String × String × String) :=
   [("Stdin", "stdin", "wasi_stdin"), ("Stdout", "stdout", "wasi_stdout"),
    ("Stderr", "stderr", "wasi_stderr"), ("Clock", "clock", "wasi_clock"),
-   ("Args", "args", "wasi_args"), ("Fs", "fs", "wasi_fs")]
+   ("Args", "args", "wasi_args"), ("FsHost", "fs", "wasi_fs")]
 
 /-- The capabilities of the system interface, in `main`'s order. -/
 def platformCaps : List String := platformEffects.map (·.2.1)
@@ -3738,11 +3756,11 @@ def Env.isDivInst (env : Env) (i : Inst) : Bool :=
 statements before it, as a context, and the rest. A call in that statement whose argument is a
 call that performs none (`f(read_input())`) has its argument bound before it, in the context: the
 argument is evaluated first either way. -/
-def splitDiv (env : Env) : Nat → Comp → (Comp → Comp) × Comp
+def splitBy (env : Env) (isI : Inst → Bool) : Nat → Comp → (Comp → Comp) × Comp
   | 0, M => (id, M)
   | k + 1, M =>
-    let perf (M : Comp) : Bool := (rowC env fuel M).any env.isDivInst
-    let perfV (V : Val) : Bool := (rowV env fuel V).any env.isDivInst
+    let perf (M : Comp) : Bool := (rowC env fuel M).any isI
+    let perfV (V : Val) : Bool := (rowV env fuel V).any isI
     -- The argument of the statement's call, bound first.
     let lift (V : Val) (rest : Val → Comp) : Option ((Comp → Comp) × Comp) :=
       match V with
@@ -3758,21 +3776,45 @@ def splitDiv (env : Env) : Nat → Comp → (Comp → Comp) × Comp
         | .ret rsp V => (lift V fun V' => .bind sp x A (.ret rsp V') N).getD (id, M)
         | _ => (id, M)
       else
-        let (K, R) := splitDiv env k N
+        let (K, R) := splitBy env isI k N
         (fun H => .bind sp x A M₁ (K H), R)
     | .letPair sp x y V N =>
       if perfV V then (lift V fun V' => .letPair sp x y V' N).getD (id, M) else
-        let (K, R) := splitDiv env k N
+        let (K, R) := splitBy env isI k N
         (fun H => .letPair sp x y V (K H), R)
     | .letUnit sp V N =>
       if perfV V then (id, M) else
-        let (K, R) := splitDiv env k N
+        let (K, R) := splitBy env isI k N
         (fun H => .letUnit sp V (K H), R)
     | .loop sp ℓ src V M₁ N =>
       if perfV V || perf M₁ then (id, M) else
-        let (K, R) := splitDiv env k N
+        let (K, R) := splitBy env isI k N
         (fun H => .loop sp ℓ src V M₁ (K H), R)
     | M => (id, M)
+
+/-- `splitBy` at a division's error. -/
+def splitDiv (env : Env) : Nat → Comp → (Comp → Comp) × Comp := splitBy env env.isDivInst
+
+/-! ### Files at `main`  `[spec §34, §62]` -/
+
+/-- The library's handler of `Fs` over the platform (`lib/fs.bc`). -/
+def filesHandler : String := "files"
+
+/-- `main`'s files (SPEC §34, §62): a body that performs `Fs`, and handles it nowhere, is served
+by `files` around the rest of it from its first statement that performs `Fs` (`splitBy`), whose
+clauses perform the platform's `FsHost`. A file's destructor performs `Fs`'s `fs_close` at that
+site, so every frame inside `main` that holds a file reaches it. -/
+def filesMain (env : Env) (sp : Span) (M : Comp) : EM Comp := do
+  unless (rowC env fuel M).any (·.eff == "Fs") do return M
+  let some _ := env.chandler? filesHandler | return M
+  report sp "lowering" (s!"main: `Fs` is served by `{filesHandler}` around the rest of the body, " ++
+    "from its first statement that performs `Fs`")
+  let (K, M) := splitBy env (·.eff == "Fs") fuel M
+  let x ← fresh "fx_l"
+  let b ← fresh "fx_c"
+  let W : Val := .app sp (.app sp (.sugar sp (.handle filesHandler x [] none)) (.unit sp))
+    (.thunkv sp (.lam sp ⟨b, sp⟩ (.name sp "_") M))
+  pure (K (.ret sp W))
 
 /-- `main` with `main_div_error` (`lib/arith.bc`) around its body when the body performs
 `Fail[DivError]` and handles it nowhere (SPEC §39), as the platform's handlers serve the system
@@ -4033,11 +4075,17 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
         modify fun s => { s with quiet := false }
         let before := (← get).made.size
         let (C, M) ← divMain env sp C M
+        let M ← filesMain env sp M
         let pcs ← platformMain env sp M
         modify fun s => { s with platform := pcs.map (·.var) }
         let M' ← trC fuel { env, caps := pcs } [] false M
         out := out ++ ((← get).made.extract before).map (·.2)
+        out := out ++ (← get).dtors
         out := out.push (.main sp C M')
+      | .dtorOp sp k op =>
+        unless env.ops.any (·.decl.name.name == op.name) do
+          throw ⟨op.span, s!"`dtor {k.name} = {op.name}`: `{op.name}` is not an operation"⟩
+        env := { env with dtorOps := env.dtorOps ++ [(k, op.name, sp)] }
       | d => out := out.push d
     pure (out.toList, spliced)
   match go.run {} with

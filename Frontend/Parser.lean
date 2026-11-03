@@ -3014,6 +3014,24 @@ def decl (n : Nat) : P Decl := do
     expectSym ":"
     let A ← vty n
     pure (.extern (← spanFrom st) x A)
+  -- `dtor k = op` (an operation's name) or `dtor k = fun (x : k) -> M` (SPEC §62).
+  | .kw "dtor" =>
+    discard bump
+    let ksp := (← peek).span
+    let k ← match ← vty n with
+      | .handle _ k => pure k
+      | _ => failAt ksp "a destructor is declared at a host handle type (`file`)"
+    if ← isSym ":" then
+      discard bump
+      let C ← liftSort (← rty n).toC
+      expectSym "="
+      modify fun s => { s with muts := [], assigned := [], scope := [] }
+      let M ← comp n
+      pure (.dtor (← spanFrom st) k C M)
+    else
+      expectSym "="
+      let op ← ident "the name of the destructor's operation"
+      pure (.dtorOp (← spanFrom st) k op)
   | .kw "main" =>
     discard bump
     -- `main -> T = S` (draft 0): the result is `F T` when `T` is a value type.

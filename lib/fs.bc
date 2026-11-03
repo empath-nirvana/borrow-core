@@ -1,15 +1,16 @@
--- Files (SPEC §34, *Files*): the effect `Fs`, the WASI platform's handler of it, and the raising
--- library over it. `include fs` puts it in scope; a `main` that performs `Fs` is given it by the
--- platform, as the standard streams (`lib/wasi.bc`), on the capability `fs`.
+-- Files (SPEC §34, *Files*; SPEC §62): the effect `Fs`, its handler over the platform, and the
+-- raising library over it. `include fs` puts it in scope; a `main` that performs `Fs` is served by
+-- `files` around its body, whose clauses perform `FsHost`, which the platform serves on the
+-- capability `fs`, as the standard streams (`lib/wasi.bc`).
 --
--- A `File` is a declared type with no derived drop (SPEC §42): its field is marked
--- `must_close(close)`, so a file is used exactly once, is never dropped by the checker and is never
--- live across a computation that may abort. Every operation takes the file and hands it back, but
--- `fs_close`, which consumes it.
+-- A `File` is the opaque `file`: a handle owning a cell that holds its descriptor. It has no
+-- derived drop and holds an owned cell, so it is never dropped silently; its destructor is
+-- `fs_close` (`dtor file = fs_close`). A `File` live across a computation that may abort, or whose
+-- continuation may be cancelled, is closed by that destructor on the unwind, the one bound last
+-- first (`[let-dtor]`, SPEC §62); on the normal exit the program closes it.
 --
--- Every buffer is owned (decision 71): a read or a write moves the `string` into the operation and
--- gets it back with the answer, error or not, so no borrow of it is held while an operation is
--- pending. The path is moved in and handed back the same way.
+-- Every buffer is owned: a read or a write moves the `string` into the operation and gets it back
+-- with the answer, error or not. The path is moved in and handed back the same way.
 --
 -- The laws, which every handler of `Fs` keeps (every operation may answer an error instead):
 -- * `fs_open(p, Reading)` opens the existing file at `p` for reading; `fs_open(p, Writing)`
@@ -27,8 +28,8 @@
 include text
 include io
 
--- A file's handle: its descriptor, open until a `match` takes the file apart.
-data File = { must_close(close) fd: i32 }
+-- An open file's handle.
+type File = file
 
 -- How a file is opened: to read it (it must exist), or to write it (created, or truncated).
 data Mode = Reading | Writing
@@ -38,19 +39,45 @@ data Mode = Reading | Writing
 -- differs between hosts.
 data FsError = NotFound | Denied | IsDir | BadFile | TooBig | Other(i32)
 
+-- The operations on files. Each must resume: none of them ends the computation that performs it,
+-- so a destructor may perform one (`hSDc`, SPEC §62).
 effect Fs {
-  fn fs_open(path: string, mode: Mode) -> string * (File + FsError);
-  fn fs_read(f: File, b: string) -> File * (string * (i32 + FsError));
-  fn fs_write(f: File, b: string) -> File * (string * (1 + FsError));
-  fn fs_size(f: File) -> File * (i32 + FsError);
-  fn fs_close(f: File) -> 1 + FsError
+  must_resume ctl fs_open(path: string, mode: Mode) -> string * (File + FsError);
+  must_resume ctl fs_read(f: File, b: string) -> File * (string * (i32 + FsError));
+  must_resume ctl fs_write(f: File, b: string) -> File * (string * (1 + FsError));
+  must_resume ctl fs_size(f: File) -> File * (i32 + FsError);
+  must_resume ctl fs_close(f: File) -> 1 + FsError
+}
+
+-- A file's destructor: `fs_close`, its answer dropped.
+dtor file = fs_close
+
+-- The platform's side of files: the same operations, answering, served on the capability `fs`.
+effect FsHost {
+  fn host_open(path: string, mode: Mode) -> string * (File + FsError);
+  fn host_read(f: File, b: string) -> File * (string * (i32 + FsError));
+  fn host_write(f: File, b: string) -> File * (string * (1 + FsError));
+  fn host_size(f: File) -> File * (i32 + FsError);
+  fn host_close(f: File) -> 1 + FsError
+}
+
+-- `Fs` over the platform: each clause performs the platform's operation and resumes with its
+-- answer.
+handler files[A]: Fs, A -> A = {
+  return(a) = a;
+  fs_open(p, m, k) = { k(host_open(p, m)) };
+  fs_read(f, b, k) = { k(host_read(f, b)) };
+  fs_write(f, b, k) = { k(host_write(f, b)) };
+  fs_size(f, k) = { k(host_size(f)) };
+  fs_close(f, k) = { k(host_close(f)) }
 }
 
 -- ### The WASI platform's handler
 
 -- The externs answer `n >= 0`, or an error: `-1` not found, `-2` denied, `-3` a directory, `-4` a
 -- bad file, `-5` too big, `-(16 + c)` any other with the host's number `c`. Their contracts are
--- `Core/Stdio.lean`'s; `bcc trusted` lists them.
+-- `Core/Stdio.lean`'s; `bcc trusted` lists them. `file_mk` puts a descriptor in a fresh handle and
+-- `file_take` frees the handle, answering its descriptor.
 extern file_open : !(all 'a < top. all 'b < top.
   mut 'a fs * (array_imm 'b u8 * i32) => mut 'a fs * i32)
 extern file_read : !(all 'a < top. all 'b < top.
@@ -59,6 +86,8 @@ extern file_write : !(all 'a < top. all 'b < top.
   mut 'a fs * (i32 * array_imm 'b u8) => mut 'a fs * i32)
 extern file_size : !(all 'a < top. mut 'a fs * i32 => mut 'a fs * i32)
 extern file_close : !(all 'a < top. mut 'a fs * i32 => mut 'a fs * i32)
+extern file_mk : !(i32 => file)
+extern file_take : !(file => i32)
 
 -- An extern's negative answer as the error it names.
 fn fs_error(n: i32) -> FsError =
@@ -72,73 +101,65 @@ fn fs_error(n: i32) -> FsError =
 -- An extern's answer as the operation's.
 fn fs_answer(n: i32) -> i32 + FsError = if n < 0 { inr fs_error(n) } else { inl n }
 
--- Each clause takes the file apart, lends the buffer or the path to its extern for the one call,
--- and builds the file again from its descriptor.
-handler wasi_fs(&mut c: fs): Fs = {
-  fs_open(p, m) = {
+-- Each clause takes the handle's descriptor, lends the buffer or the path to its extern for the one
+-- call, and puts the descriptor in a handle again.
+handler wasi_fs(&mut c: fs): FsHost = {
+  host_open(p, m) = {
     let code = match m { Reading -> 0 | Writing -> 1 };
     let r = borrow imm p { v -> let (d, r) = file_open(c, v, code); c = d; r };
-    if r < 0 { (p, inr fs_error(r)) } else { (p, inl File { fd: r }) }
+    if r < 0 { (p, inr fs_error(r)) } else { (p, inl file_mk(r)) }
   };
-  fs_read(f, b) = {
-    match f { File { fd } ->
-      let (a, n) = b;
-      let (a, room) = array_size[u8](a);
-      -- No room: nothing read, and no call.
-      let r = borrow mut a { v ->
-        if n < room {
-          match split_at_mut(v, n) {
-            inl (h, t) -> let (d, (t, k)) = file_read(c, fd, t); c = d; k
-          | inr v -> 0
-          }
-        } else { 0 } };
-      let k = if r > 0 { r } else { 0 };
-      (File { fd: fd }, ((a, n + k), fs_answer(r)))
-    }
+  host_read(f, b) = {
+    let fd = file_take(f);
+    let (a, n) = b;
+    let (a, room) = array_size[u8](a);
+    -- No room: nothing read, and no call.
+    let r = borrow mut a { v ->
+      if n < room {
+        match split_at_mut(v, n) {
+          inl (h, t) -> let (d, (t, k)) = file_read(c, fd, t); c = d; k
+        | inr v -> 0
+        }
+      } else { 0 } };
+    let k = if r > 0 { r } else { 0 };
+    (file_mk(fd), ((a, n + k), fs_answer(r)))
   };
-  fs_write(f, b) = {
-    match f { File { fd } ->
-      let r = borrow imm b { v -> let (d, r) = file_write(c, fd, v); c = d; r };
-      let u = if r < 0 { (inr fs_error(r) : 1 + FsError) } else { (inl () : 1 + FsError) };
-      (File { fd: fd }, (b, u))
-    }
+  host_write(f, b) = {
+    let fd = file_take(f);
+    let r = borrow imm b { v -> let (d, r) = file_write(c, fd, v); c = d; r };
+    let u = if r < 0 { (inr fs_error(r) : 1 + FsError) } else { (inl () : 1 + FsError) };
+    (file_mk(fd), (b, u))
   };
-  fs_size(f) = {
-    match f { File { fd } ->
-      let (d, r) = file_size(c, fd);
-      c = d;
-      (File { fd: fd }, fs_answer(r))
-    }
+  host_size(f) = {
+    let fd = file_take(f);
+    let (d, r) = file_size(c, fd);
+    c = d;
+    (file_mk(fd), fs_answer(r))
   };
-  fs_close(f) = {
-    match f { File { fd } ->
-      let (d, r) = file_close(c, fd);
-      c = d;
-      if r < 0 { inr fs_error(r) } else { inl () }
-    }
+  host_close(f) = {
+    let fd = file_take(f);
+    let (d, r) = file_close(c, fd);
+    c = d;
+    if r < 0 { inr fs_error(r) } else { inl () }
   }
 }
 
 -- ### The library: each raises the operation's error, `Fail[FsError]`
 
+-- An operation's answer, or its error raised. A file the caller holds across it is closed by its
+-- destructor on the unwind.
+fn or_raise[T](r: T + FsError) -> T with Fail[FsError] =
+  match r { inl x -> x | inr e -> raise(e) }
+
 -- The file at `path`, opened in `mode`, and the path back.
 fn open(path: string, mode: Mode) -> string * File with Fs, Fail[FsError] =
   let (p, r) = fs_open(path, mode);
-  match r { inl f -> (p, f) | inr e -> raise(e) }
+  let f = or_raise[File](r);
+  (p, f)
 
 -- The file ended. Its error, if any, is raised after the file has ended.
 fn close(f: File) -> 1 with Fs, Fail[FsError] =
-  match fs_close(f) { inl u -> () | inr e -> raise(e) }
-
--- `f` ended, its own error ignored, then `e` raised: what every raising form does on an error, so
--- that no file is held across the raise.
-fn close_raise[A](f: File, e: FsError) -> A with Fs, Fail[FsError] =
-  let _ = fs_close(f);
-  raise(e)
-
--- The most reads a loop over a file makes: fuel, so that the loop is counted. A loop that runs out
--- raises `TooBig` (a device or a pipe that never ends), and nothing is cut short silently.
-def fs_max_reads : i32 = 2147483647
+  or_raise[1](fs_close(f))
 
 -- `b` cleared, and bytes of `f` read into it, up to its capacity (4096 when it has none): the
 -- file, the buffer and the count, `0` at the end.
@@ -147,17 +168,19 @@ fn read(f: File, b: string) -> File * (string * i32) with Fs, Fail[FsError] =
   let (a, room) = array_size[u8](a);
   let b = if room == 0 { reserve((a, 0), 4096) } else { (a, 0) };
   let (f, (b, r)) = fs_read(f, b);
-  match r { inl k -> (f, (b, k)) | inr e -> close_raise[File * (string * i32)](f, e) }
+  let k = or_raise[i32](r);
+  (f, (b, k))
 
 -- The rest of `f`, into one buffer of its size plus one (the room that sees the end), read until a
 -- read answers `0`. A full buffer grows (twice, and 4096 more), so a file that grew, or one whose
 -- size reads `0`, is read to its end; a buffer that would pass `2^31 - 1` bytes raises `TooBig`.
 fn read_all(f: File) -> File * string with Fs, Fail[FsError] =
   let (f, sz) = fs_size(f);
-  match sz {
-    inr e -> close_raise[File * string](f, e)
-  | inl size -> read_rest(f, string_new(size + 1))
-  }
+  let size = or_raise[i32](sz);
+  read_rest(f, string_new(size + 1))
+
+-- The most reads `read_rest` makes: a device or a pipe that never ends raises `TooBig`.
+def fs_max_reads : i32 = 2147483647
 
 -- The rest of `f` appended to `s`, read until a read answers `0`, growing `s` when it is full.
 fn read_rest(f: File, s: string) -> File * string with Fs, Fail[FsError] =
@@ -180,12 +203,14 @@ fn read_rest(f: File, s: string) -> File * string with Fs, Fail[FsError] =
     | inr e -> break (inr e : 1 + FsError)
     }
   } else { (inr TooBig : 1 + FsError) };
-  match r { inl u -> (f, s) | inr e -> close_raise[File * string](f, e) }
+  let u = or_raise[1](r);
+  (f, s)
 
 -- Every byte of `b` written to `f`: the file and the buffer back.
 fn write(f: File, b: string) -> File * string with Fs, Fail[FsError] =
   let (f, (b, r)) = fs_write(f, b);
-  match r { inl u -> (f, b) | inr e -> close_raise[File * string](f, e) }
+  let u = or_raise[1](r);
+  (f, b)
 
 -- The error's name, for a message.
 fn fs_error_name(e: FsError) -> lit =

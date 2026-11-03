@@ -1,5 +1,7 @@
 import Frontend.Check.Rules
 import Core.Classes
+import Core.LetDtor
+import Core.LetCopy
 
 /-!
 # Frontend — Check — steps shared by the checker's cases
@@ -492,6 +494,39 @@ end
 theorem hasDtorB_iff (A : CVTy) : hasDtorB A = true ↔ HasDtor A :=
   ⟨dtorB_sound A, dtorB_complete A⟩
 
+/-! ### `[let-dtor]`'s finaliser by type, computed  `[spec §62]` -/
+
+section
+open BoCa.Fig16.LogRel.Core (Opaque dropOf ctxDrops tensorDropB sumDropB closeDropB derivedDropB dropCtxE)
+
+/-- `dropOf`, computed: `hasDtorB` decides the derived drop.  `[spec §62]` -/
+def dropOfB (decl : Opaque → Option BoCa.Expr) : CVTy → Option BoCa.Expr
+  | .tensor A B =>
+      match dropOfB decl A, dropOfB decl B with
+      | some a, some b => some (tensorDropB a b)
+      | _, _ => none
+  | .sum A B =>
+      match dropOfB decl A, dropOfB decl B with
+      | some a, some b => some (sumDropB a b)
+      | _, _ => none
+  | .opq k => decl k
+  | .thunk (.amp _ _) => some closeDropB
+  | T => if hasDtorB T then some (derivedDropB T) else none
+
+/-- `ctxDrops`, computed.  `[spec §62]` -/
+def ctxDropsB (decl : Opaque → Option BoCa.Expr) (Γ : Ctx CVTy) : List (Option BoCa.Expr) :=
+  Γ.map fun s => if s.live && !s.ty.persistent then dropOfB decl s.ty else none
+
+/-- **The check of a `[let-dtor]` frame**: its finaliser `D` is `drop_ctx` of `Γ₂` by type, and
+each destructor is closed under its binder.  `[spec §62]` -/
+def frameCert (decl : Opaque → Option BoCa.Expr) (Γ₂ : Ctx CVTy) (D : BoCa.Expr) : Bool :=
+  D == dropCtxE (ctxDropsB decl Γ₂) 1 &&
+    (ctxDropsB decl Γ₂).all fun b => match b with
+      | some b => BoCa.Fig16.LogRel.Core.closedAt 1 b
+      | none => true
+
+end
+
 instance : DecidablePred HasDtor := fun A => decidable_of_iff _ (hasDtorB_iff A)
 
 instance : DecidablePred DerivedDrop := fun A =>
@@ -515,6 +550,8 @@ structure Env where
   checked has, set where a computation is checked against one; `none` in a value, where a
   computation is synthesized with no type expected. `[spec §19]` -/
   row : Option CRow
+  /-- Checking a destructor (SPEC §62): its own frames use no declared destructor. -/
+  inDtor : Bool := false
 
 /-- The depth bound for elaborating a type. -/
 def tyFuel : Nat := 65536
@@ -831,7 +868,7 @@ def Env.forDef (E : Env) (T : List CVTy) (d : DefInfo) (tps : List (String × CV
   let n := E.vars.length
   let vars := (List.range n).map fun i =>
     if n ≤ i + E.nExt && (T[i]?.map (·.persistent)).getD false then E.vars.getD i none else none
-  ⟨d.scope, vars, [], tps, [], E.nExt, none⟩
+  ⟨d.scope, vars, [], tps, [], E.nExt, none, E.inDtor⟩
 
 def inDef (x : String) (sp : Span) (e : Error) : Error :=
   { e with msg := s!"{e.msg}\n  in the body of `{x}`, used at {sp.start.render}" }
@@ -1076,6 +1113,173 @@ def markIt {j : Jdg} (sp : Span) (k : SchemeMark) (r : Res Δ T j) : Except Erro
   | some r' => pure r'
   | none => err sp s!"internal error: a marked scheme ({repr k}) is not the scheme's term"
 
+/-! ### Destructors by type: `[let-dtor]`  `[spec §62]`
+
+Where a slot live across a computation that may abort has no derived drop, the frame is
+`[let-dtor]`'s (`CDerives.effLetD`): `[then]` at the finaliser `drop_ctx` (`dropCtxE`), each live
+slot that is not persistent dropped by the destructor of its type (`dropOf`), the slot bound last
+first, at a row of destructors `Σ_D ≤ Σ`. The builders follow `dropOf` former by former, so the
+finaliser's erasure is `dropCtxE (ctxDrops decl Γ₂) 1` (`Frontend/Check/LetDtor.lean`,
+`frameCert`), with `decl` the program's destructors at its opaque types. -/
+
+/-- A destructor of `A` at the row `SD`, placed at any context: `λx. drop_A x`. -/
+abbrev DFn (Δ : LifeCtx) (SD : CRow) (A : CVTy) :=
+  (Tc : List CVTy) → Except Error (Res Δ Tc (.comp (.arr A (effOf SD .unit))))
+
+/-- A program's destructor at an opaque type (`dtor k : … = fun (x : k) -> M`), checked closed at
+the frame's row of destructors `SD`, with its absorption, so that it is placed at any context
+(`rClosed`). -/
+structure DtorAt (Δ : LifeCtx) (SD : CRow) where
+  k : BoCa.Fig16.LogRel.Core.Opaque
+  r : Res Δ [] (.comp (.arr (.opq k) (effOf SD .unit)))
+  f : AbsF
+  hf : r.t.absF Δ = some f
+
+/-- **The program's declaration** `decl` at the opaque types, read off the checked destructors:
+`decl k` is the body `b` of the destructor `λx. b` of `k`.  `[spec §62]` -/
+def declOf {SD : CRow} (dts : List (DtorAt Δ SD)) : BoCa.Fig16.LogRel.Core.Opaque → Option BoCa.Expr :=
+  fun k => (dts.find? (·.k == k)).bind fun d => match d.r.t.erase with
+    | .val (.lam b) => some b
+    | _ => none
+
+/-- `M; N` at a row with no cancelling operation: `[let]`, the unit binder of `N` closed, whose
+side conditions hold there. -/
+def letAtD (sp : Span) {SD : CRow} {A : CVTy} {Tc : List CVTy} (hc : Row.cancelsB SD = false)
+    (rM : Res Δ Tc (.comp (effOf SD A))) (rN : Res Δ (A :: Tc) (.comp (effOf SD .unit))) :
+    Except Error (Res Δ Tc (.comp (effOf SD .unit))) := do
+  let some FN := rN.F.popLive | throw ⟨sp, "internal error: a destructor's unit is not absorbed"⟩
+  let FN' := FN.map fun _ h =>
+    (⟨h, fun hW => absurd (Row.cancelsB_iff.mpr hW) (by simp [hc]),
+      fun hU => absurd (Row.cancelsB_iff.mpr (Row.cancels_of_unr hU)) (by simp [hc])⟩ :
+      TTied rN.pins rN.sigs Δ (mkCtx (A :: Tc) (true :: _)) rN.t (.comp (effOf SD .unit)) ∧
+        (SD.Cancels → (mkCtx Tc _).OwnFree) ∧
+        (SD.Unr → BoCa.Fig16.LogRel.Core.Ctx.Banged (mkCtx Tc _)))
+  if h : overlapOK Tc rM.F.u FN'.u = true then pure (rEffLet (at_ sp) rM FN' h)
+  else throw ⟨sp, "internal error: a destructor's split"⟩
+
+/-- `f k` for the destructor `f` of the slot `k`. -/
+def appD (sp : Span) {SD : CRow} {A : CVTy} {Tc : List CVTy} (f : DFn Δ SD A) (k : Nat) :
+    Except Error (Res Δ Tc (.comp (effOf SD .unit))) := do
+  let rf ← f Tc
+  if hk : Tc[k]? = some A then
+    if h : overlapOK Tc rf.F.u (oneL Tc k) = true then pure (rApp (at_ sp) rf k hk h)
+    else throw ⟨sp, "internal error: a destructor's argument"⟩
+  else throw ⟨sp, "internal error: a destructor's slot"⟩
+
+/-- `λx. M`, the binder used. -/
+def lamD (sp : Span) {SD : CRow} {A : CVTy} {Tc : List CVTy}
+    (r : Res Δ (A :: Tc) (.comp (effOf SD .unit))) :
+    Except Error (Res Δ Tc (.comp (.arr A (effOf SD .unit)))) := do
+  let some F := r.F.popLive | throw ⟨sp, "internal error: a destructor's binder"⟩
+  pure (rLam (at_ sp) F)
+
+/-- `drop_{A⊗B} = λp. let (x, y) = p in drop_B y; drop_A x` (`tensorDropB`). -/
+def tensorD (sp : Span) {SD : CRow} {A B : CVTy} (hc : Row.cancelsB SD = false)
+    (fa : DFn Δ SD A) (fb : DFn Δ SD B) : DFn Δ SD (.tensor A B) := fun Tc => do
+  let rM ← appD (Tc := B :: A :: .tensor A B :: Tc) sp fb 0
+  let rN ← appD (Tc := .unit :: B :: A :: .tensor A B :: Tc) sp fa 2
+  let rB ← letAtD sp hc rM rN
+  let some F₁ := rB.F.popLive | throw ⟨sp, "internal error: a pair's destructor"⟩
+  let some F₂ := F₁.popLive | throw ⟨sp, "internal error: a pair's destructor"⟩
+  let rV : Res Δ (.tensor A B :: Tc) (.val (.tensor A B)) := rVar (at_ sp) 0 _ rfl
+  if h : overlapOK (.tensor A B :: Tc) rV.F.u F₂.u = true then
+    lamD sp (rTensorE (atB sp []) rV F₂ h)
+  else throw ⟨sp, "internal error: a pair's destructor"⟩
+
+/-- `drop_{A⊕B} = λs. case s {inl x → drop_A x | inr y → drop_B y}` (`sumDropB`). -/
+def sumD (sp : Span) {SD : CRow} {A B : CVTy} (fa : DFn Δ SD A) (fb : DFn Δ SD B) :
+    DFn Δ SD (.sum A B) := fun Tc => do
+  let r₁ ← appD (Tc := A :: .sum A B :: Tc) sp fa 0
+  let r₂ ← appD (Tc := B :: .sum A B :: Tc) sp fb 0
+  let some F₁ := r₁.F.popLive | throw ⟨sp, "internal error: a sum's destructor"⟩
+  let some F₂ := r₂.F.popLive | throw ⟨sp, "internal error: a sum's destructor"⟩
+  let rV : Res Δ (.sum A B :: Tc) (.val (.sum A B)) := rVar (at_ sp) 0 _ rfl
+  if s₁ : subL F₁.u (orL F₂.u F₂.w) = true then
+    if s₂ : subL F₂.u (orL F₁.u F₁.w) = true then
+      let F := F₁.merge F₂ s₁ s₂
+      if h : overlapOK (.sum A B :: Tc) rV.F.u F.u = true then lamD sp (rSumE (atB sp []) rV F h)
+      else throw ⟨sp, "internal error: a sum's destructor"⟩
+    else throw ⟨sp, "internal error: a sum's destructor"⟩
+  else throw ⟨sp, "internal error: a sum's destructor"⟩
+
+/-- `drop_{U(C & F_{Σ_F} 1)} = λk. k.2` (`closeDropB`), at `Σ_F ≤ Σ_D`. -/
+def closeD (sp : Span) {SD SF : CRow} {C : CCTy} (hF : rowLeB SF SD = true) :
+    DFn Δ SD (.thunk (.amp C (effOf SF .unit))) := fun Tc =>
+  let rk : Res Δ (.thunk (.amp C (effOf SF .unit)) :: Tc) (.comp (.amp C (effOf SF .unit))) :=
+    rForce (at_ sp) 0 _ rfl
+  lamD sp (rEffSub (at_ sp) hF (rProj₂ (at_ sp) rk))
+
+/-- `drop_T = λx. dtorE T x` (`derivedDropB`), the derived drop of §12, at any row. -/
+def derivedD (sp : Span) {SD : CRow} (A : CVTy) (hA : hasDtorB A = true) : DFn Δ SD A := fun Tc => do
+  let ra : Res Δ (A :: Tc) (.val A) := rVar (at_ sp) 0 _ rfl
+  let rf : Res Δ (A :: Tc) (.val (.lolli A .unit)) :=
+    rDtorV (at_ sp) A (hasDtorB_sound hA) (BoCa.Fig16.LogRel.Core.dtorE_closed (hasDtorB_sound hA))
+      (BoCa.Fig16.LogRel.Core.dtorE_effFree A)
+  if h : overlapOK (A :: Tc) ra.F.u rf.F.u = true then
+    let r : Res Δ (A :: Tc) (.comp (effOf [] .unit)) := rRet (at_ sp) (rLolliE (at_ sp) rf ra h)
+    lamD sp (rEffSub (at_ sp) (show rowLeB [] SD = true from rfl) r)
+  else throw ⟨sp, "internal error: a derived drop's argument"⟩
+
+/-- The program's destructor at the opaque type `k`, placed at the context. -/
+def opqD {SD : CRow} (k : BoCa.Fig16.LogRel.Core.Opaque) (d : DtorAt Δ SD) (hk : d.k = k) :
+    DFn Δ SD (.opq k) := fun _ => pure (hk ▸ rClosed d.r d.f d.hf)
+
+/-- **The destructor of a type**, by its former as `dropOf`: `none` where it has none.
+`[spec §62]` -/
+def dfnOf (sp : Span) {SD : CRow} (hc : Row.cancelsB SD = false) (dts : List (DtorAt Δ SD)) :
+    (A : CVTy) → Option (DFn Δ SD A)
+  | .tensor A B => do
+      let fa ← dfnOf sp hc dts A
+      let fb ← dfnOf sp hc dts B
+      some (tensorD sp hc fa fb)
+  | .sum A B => do
+      let fa ← dfnOf sp hc dts A
+      let fb ← dfnOf sp hc dts B
+      some (sumD sp fa fb)
+  | .opq k => match dts.find? (·.k == k) with
+      | some d => if hk : d.k = k then some (opqD k d hk) else none
+      | none => none
+  | .thunk (.amp C D) => match effRow? D with
+      | some (SF, .unit) =>
+        if hD : effOf SF .unit = D then
+          if hF : rowLeB SF SD = true then some (hD ▸ closeD sp (C := C) hF) else none
+        else none
+      | _ => none
+  | A => if hA : hasDtorB A = true then some (derivedD sp A hA) else none
+
+/-- **`drop_ctx`** (`dropCtxE ds k`): the destructor of each entry applied to its slot, from `k`
+on, the slot `k` first, each bound by `[let]` at `SD`; the unit it answers is a new slot, so the
+next is at `k + 2`.  `[spec §62]` -/
+def dropChainD (sp : Span) {SD : CRow} (hc : Row.cancelsB SD = false) :
+    (Tc : List CVTy) → Nat → List (Option (Σ A : CVTy, DFn Δ SD A)) →
+      Except Error (Res Δ Tc (.comp (effOf SD .unit)))
+  | _, _, [] => pure (rEffSub (at_ sp) (show rowLeB [] SD = true from rfl)
+      (rRet (at_ sp) (rUnit (at_ sp)) : Res Δ _ (.comp (effOf [] .unit))))
+  | Tc, k, none :: ds => dropChainD sp hc Tc (k + 1) ds
+  | Tc, k, some ⟨_, f⟩ :: ds => do
+      let rM ← appD (Tc := Tc) sp f k
+      let rN ← dropChainD sp hc (.unit :: Tc) (k + 2) ds
+      letAtD sp hc rM rN
+
+/-- The finaliser of a `[let-dtor]` frame: `drop_ctx` of the slots `u` (those the rest of the
+computation uses), each that is not persistent by the destructor of its type, under the binder's
+dead slot.  `[spec §62]` -/
+def finalOfD (E : Env) (sp : Span) {SD : CRow} (hc : Row.cancelsB SD = false)
+    (dts : List (DtorAt Δ SD)) (u : List Bool) :
+    Except Error (Res Δ (.unit :: T) (.comp (effOf SD .unit))) := do
+  let ds ← (List.range T.length).mapM fun i => do
+    match T[i]? with
+    | some A =>
+      if u.getD i false && !A.persistent then
+        match dfnOf sp hc dts A with
+        | some f => pure (some ⟨A, f⟩)
+        | none => throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across a " ++
+            "computation that may abort, and its type has no destructor: no derived drop, and no " ++
+            "`dtor` declared within the row here" ++ E.closeHint A true⟩
+      else pure none
+    | none => pure none
+  dropChainD sp hc (.unit :: T) 1 ds
+
 /-- `[then]` at the row `S`: `N` (its binder `x` closed) and the finaliser `D` at one context. -/
 def thenIt (E : Env) (sp : Span) (x : String) {S : CRow} {A B : CVTy} {tN : TExpr} {sN : CRow} {pN : Pins}
     (rM : Res Δ T (.comp (effOf S A)))
@@ -1111,11 +1315,72 @@ def thenIt (E : Env) (sp : Span) (x : String) {S : CRow} {A B : CVTy} {tN : TExp
     else throw ⟨sp, s!"the row `{ppRow E S}` has an operation twice"⟩
   else throw ⟨sp, s!"the row `{ppRow E S}` has an operation of the reserved name 0"⟩
 
+/-- The program's destructors within a frame's row: their row `Σ_D`, which has no cancelling
+operation and no `Div`, and each destructor checked closed at `F_{Σ_D} 1`.  `[spec §62]` -/
+structure Dtors (Δ : LifeCtx) where
+  SD : CRow
+  hc : Row.cancelsB SD = false
+  hd : BoCa.Fig16.LogRel.Core.Row.divB SD = false
+  dts : List (DtorAt Δ SD)
+
+/-- **`[let-dtor]`** at the row `S` (`CDerives.effLetD`): `N` (its binder `x` closed) and the
+finaliser `drop_ctx` at one context, the finaliser at the destructors' row `Σ_D ≤ Σ`. `Σ` has no
+operation whose cancel row the finaliser would have to be recorded in (`hfin_of_noRead`).
+`[spec §62]` -/
+def thenItD (E : Env) (sp : Span) (x : String) {S : CRow} {A B : CVTy} {tN : TExpr} {sN : CRow}
+    {pN : Pins} (D : Dtors Δ)
+    (rM : Res Δ T (.comp (effOf S A)))
+    (FN : Fam T (fun L => TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp (effOf S B)))) :
+    Except Error (Res Δ T (.comp (effOf S B))) := do
+  if hNZ : Row.nzB S = true then
+    if hUq : Row.uniqB S = true then
+      if hDS : rowLeB D.SD S = true then
+        if hnr : (S.all fun o => !o.finRead) = true then
+          let rD ← finalOfD E sp D.hc D.dts FN.u
+          -- The certificate (`Frontend/Check/LetDtor.lean`): the finaliser is `drop_ctx` of the
+          -- slots the rest uses, by type, so the frame is `letDT (declOf D.dts) Γ₂ N M`.
+          unless frameCert (declOf D.dts) (mkCtx T FN.u) rD.t.erase do
+            throw ⟨sp, "internal error: a frame's finaliser is not `drop_ctx` by type (SPEC §62)"⟩
+          let FD ← popD sp rD.F
+          if s₁ : subL FN.u (orL FD.u FD.w) = true then
+            if s₂ : subL FD.u (orL FN.u FN.w) = true then
+              let F := FN.merge FD s₁ s₂
+              let F' : Fam T (fun L => (TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp (effOf S B)) ∧
+                  TTied rD.pins rD.sigs Δ (mkCtx (.unit :: T) (false :: L)) rD.t
+                    (.comp (effOf D.SD .unit))) ∧
+                  (S.UnrD → BoCa.Fig16.LogRel.Core.Ctx.Banged (mkCtx T L))) ←
+                if hu : Row.unrDB S = true then
+                  if hs : usedSat isBangB T F.u = true then
+                    pure ((F.restrict isBangB hs).map fun _ ⟨h, hp⟩ => ⟨h, fun _ => persistent_of hp⟩)
+                  else match firstBad isBangB T F.u with
+                    | some i => throw ⟨sp, s!"{E.slotName i}, of type `{E.slotTy T i}`, is used " ++
+                        s!"after an operation of the row `{ppRow E S}`, which may resume more than " ++
+                        "once: it must be a `!` type"⟩
+                    | none => throw ⟨sp, "internal error: an unrestricted row"⟩
+                else pure (F.map fun _ h => ⟨h, fun hU => absurd (Row.unrDB_iff.mpr hU) (by simp [hu])⟩)
+              if h : overlapOK T rM.F.u F'.u = true then
+                pure (rEffThenD (atB sp [x]) (Row.nzB_sound hNZ) (Row.uniqB_sound hUq)
+                  (rowLeB_sound hDS)
+                  (fun o ho => by simpa using List.all_eq_true.mp hnr o ho)
+                  (fun hC => absurd (Row.cancelsB_iff.mpr hC) (by simp [D.hc])) D.hd rM F' h)
+              else throw (splitErr E T sp rM.F.u F'.u)
+            else throw (mergeErr E T sp "the destructors" "the rest" "after this computation, "
+              FD.u FD.w FN.u FN.w)
+          else throw (mergeErr E T sp "the rest" "the destructors" "after this computation, "
+            FN.u FN.w FD.u FD.w)
+        else throw ⟨sp, s!"a value with a declared destructor is live across an operation of " ++
+          s!"the row `{ppRow E S}` that may be cancelled: the cancel's row does not record the " ++
+          "destructors' (SPEC §62, `hfin`)"⟩
+      else throw ⟨sp, s!"the destructors' row `{ppRow E D.SD}` is not within the row " ++
+        s!"`{ppRow E S}` here"⟩
+    else throw ⟨sp, s!"the row `{ppRow E S}` has an operation twice"⟩
+  else throw ⟨sp, s!"the row `{ppRow E S}` has an operation of the reserved name 0"⟩
+
 /-- `x <- M; N` whose head `M` performs operations, at the row `S` (SPEC §19). At a row with no
 cancellable or unrestricted operation, or when every slot `N` uses holds no owned cell (and is `!`
 at an unrestricted row), `[let]`; otherwise `[then]`, with the finaliser `finalOf`: the
 destructors of the slots `N` uses. -/
-def effBind (E : Env) (sp : Span) (x : Ident) {S : CRow} {A B : CVTy}
+def effBind (E : Env) (sp : Span) (x : Ident) {S : CRow} {A B : CVTy} (D : Option (Dtors Δ))
     (rM : Res Δ T (.comp (effOf S A))) (rN : Res Δ (A :: T) (.comp (effOf S B))) :
     Except Error (Res Δ T (.comp (effOf S B))) := do
   let rN ← dropStuck x.span 1 rN
@@ -1140,8 +1405,17 @@ def effBind (E : Env) (sp : Span) (x : Ident) {S : CRow} {A B : CVTy}
       if h : overlapOK T rM.F.u FN'.u = true then pure (rScope (at_ sp) (rEffLet (atB sp [x.name]) rM FN' h))
       else throw (splitErr E T sp rM.F.u FN'.u)
     else
-      let rD ← finalOf E sp S FN.u
-      thenIt E sp x.name rM FN rD
+      -- A slot with no derived drop that the program's destructors cover: `[let-dtor]`.
+      let derived : CVTy → Bool := fun A => A.persistent || hasDtorB A
+      match D with
+      | some D =>
+        if usedSat derived T FN.u then
+          let rD ← finalOf E sp S FN.u
+          thenIt E sp x.name rM FN rD
+        else thenItD E sp x.name D rM FN
+      | none =>
+        let rD ← finalOf E sp S FN.u
+        thenIt E sp x.name rM FN rD
   else
     let FN' := FN.map fun _ h =>
       (⟨h, fun hW => absurd (Row.cancelsB_iff.mpr hW) (by simp [hw]),

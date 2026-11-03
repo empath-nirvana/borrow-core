@@ -484,6 +484,12 @@ def rDrop (ix : TInfo) {C : CCTy} (k : Nat) (A : CVTy) (hk : T[k]? = some A) (hA
     r.sigs, r.pins, ((Fam.var T k A hk).split r.F h).map fun _ ⟨_, _, hs, hm, hx, hM⟩ =>
       TTied.drop i ix (oneL T k) r.F.u hs hm ⟨Covers.var (oneL_getD hk), r.covers⟩ hx hA hc hE hM⟩
 
+/-- The derived drop of `A` as a value, `dtorE A : A ⊸ 1`, at a consumed context (SPEC §12). -/
+def rDtorV (A : CVTy) (hA : HasDtor A) (hc : BoCa.Fig16.LogRel.Core.closedAt 0 (dtorE A) = true)
+    (hE : (dtorE A).effFree = true) : Res Δ T (.val (.lolli A .unit)) :=
+  ⟨.dtor i (.val (.lolli A .unit)) A, [], [],
+    (Fam.deadStrict T).map fun _ h => TTied.ofAt fun _ => .dtor hA hc hE h⟩
+
 /-- `absurd V`: the rest of the context is absorbed. -/
 def rZeroE (C : CCTy) (rV : Res Δ T (.val .zero)) (h : overlapOK T rV.F.u (Fam.top T).u = true) :
     Res Δ T (.comp C) :=
@@ -566,6 +572,44 @@ def rEffThen {S : CRow} {A B : CVTy} {tN tD : TExpr} {sN sD : CRow} {pN pD : Pin
     fun _ ⟨_, _, hs, hm, h₁, ⟨hN, hD⟩, hU⟩ => TTied.effThenA i _ hs hm.rel_of
       ⟨rM.covers.of₁ hl, (F.covers fun _ h => h.1.1.covers fun _ hl => liveAt_mkCtx₁ hl).of₂ hl,
         (F.covers fun _ h => h.1.2.covers fun _ hl => liveAt_mkCtx₁ hl).of₂ hl⟩ hNZ hUq hU h₁ hN hD⟩
+
+/-- `[then]` at a row of destructors `Σ_D ≤ Σ` (`[let-dtor]`): `N` and the finaliser `D` at one
+context, `D` at `F_{Σ_D} 1`.  `[spec §62]` -/
+def rEffThenD {S SD : CRow} {A B : CVTy} {tN tD : TExpr} {sN sD : CRow} {pN pD : Pins} (hNZ : S.NZ)
+    (hUq : S.Uniq) (hDS : BoCa.Fig16.LogRel.Core.RowLe SD S) (hnr : ∀ o ∈ S, o.finRead = false)
+    (hSDc : ¬ SD.Cancels) (hSD : BoCa.Fig16.LogRel.Core.Row.divB SD = false)
+    (rM : Res Δ T (.comp (effOf S A)))
+    (F : Fam T (fun L => (TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp (effOf S B)) ∧
+      TTied pD sD Δ (mkCtx (.unit :: T) (false :: L)) tD
+        (.comp (effOf SD .unit))) ∧
+      (S.UnrD → Ctx.Banged (mkCtx T L))))
+    (h : overlapOK T rM.F.u F.u = true) : Res Δ T (.comp (effOf S B)) :=
+  have hl : rM.F.u.length = F.u.length := rM.F.hu.trans F.hu.symm
+  ⟨.effThen i (.comp (effOf S B)) A B S S SD (Masks.of rM.F.u F.u) rM.t tN tD, rM.sigs ∪ (sN ∪ sD),
+    rM.pins ++ (pN ++ pD), (rM.F.split F h).map
+    fun _ ⟨_, _, hs, hm, h₁, ⟨hN, hD⟩, hU⟩ => TTied.effThenD i _ hs hm.rel_of
+      ⟨rM.covers.of₁ hl, (F.covers fun _ h => h.1.1.covers fun _ hl => liveAt_mkCtx₁ hl).of₂ hl,
+        (F.covers fun _ h => h.1.2.covers fun _ hl => liveAt_mkCtx₁ hl).of₂ hl⟩ hNZ hUq hU hDS
+        hnr hSDc hSD h₁ hN hD⟩
+
+/-- **A closed result at any context**: `r`, checked at the empty context, at `T`, every slot of
+`T` unused and absorbed where `r`'s absorption `f` holds (`TTied.weaken`). A destructor is checked
+once, closed, and placed at each frame that runs it.  `[spec §62]` -/
+def rClosed {j : Jdg} (r : Res Δ [] j) (f : AbsF) (hf : r.t.absF Δ = some f) : Res Δ T j :=
+  have hl : (noneL T).length = (T.map f.eval).length := by simp [noneL]
+  ⟨r.t.shift T.length 0, r.sigs, r.pins,
+    ⟨noneL T ++ r.F.u, T.map f.eval ++ r.F.w,
+      by simp [noneL, r.F.hu], by simp [r.F.hw],
+      fun L hb => by
+        obtain ⟨L₁, L₂, rfl, hl₁, b₁, b₂⟩ := btw_append hl hb
+        rw [noneL_length] at hl₁
+        have hw := TTied.weaken (Γa := []) (Γp := mkCtx T L₁) (r.F.d L₂ b₂) hf
+          (liveP_of_btw f.eval b₁)
+        rw [mkCtx_length hl₁] at hw
+        have hm : mkCtx T (L₁ ++ L₂) = mkCtx T L₁ := by
+          simpa [mkCtx] using mkCtx_append (T₁ := T) [] L₂ hl₁
+        rw [hm]
+        simpa using hw⟩⟩
 
 /-! ### `[handle]`  `[spec §19]` -/
 

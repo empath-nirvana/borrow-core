@@ -856,6 +856,15 @@ inductive Decl where
   /-- A `data` declaration (SPEC §42): elaborated to `type` and `shape` declarations
   (`Frontend.Data.typeDecls`) after the program's modules are in. -/
   | data (sp : Span) (d : DataDecl)
+  /-- `dtor k = op`: the destructor of the opaque type `k` is the operation `op` of a control
+  effect, its answer dropped (SPEC §62). Elaborated, at each handler site of the effect, to a
+  `dtor k = M`. -/
+  | dtorOp (sp : Span) (k : HostKind) (op : Ident)
+  /-- `dtor k : k -o F[Σ_D] 1 = fun (x : k) -> M`: the destructor of the opaque type `k`, a
+  closed function, which `[let-dtor]` runs on a value of `k` that an exit abandons (SPEC §62). A
+  program may give several, at different rows: a frame uses the first whose row is within its
+  own. -/
+  | dtor (sp : Span) (k : HostKind) (C : CTy) (M : Comp)
   deriving DecidableEq, Repr
 
 /-- A source file: its declarations in order. -/
@@ -1093,6 +1102,8 @@ def Decl.strip : Decl → Decl
         lps := h.lps.map fun (a, b) => (a.strip, b.strip) }
   | .poly _ n tps lps H A V => .poly .none n.strip (tps.map Ident.strip) (lps.map Ident.strip)
       (H.map VTy.strip) A.strip V.strip
+  | .dtorOp _ k op => .dtorOp .none k op.strip
+  | .dtor _ k C M => .dtor .none k C.strip M.strip
   | .data _ d => .data .none (DataDecl.mk d.name.strip (d.tps.map Ident.strip) (d.lps.map Ident.strip)
       d.record (d.cons.map fun c => DCon.mk c.name.strip (c.fields.map fun f => DField.mk (f.name.map Ident.strip) f.ty.strip (f.close.map (·.map Ident.strip)))))
 

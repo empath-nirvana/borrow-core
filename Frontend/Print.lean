@@ -364,6 +364,8 @@ def Decl.pp : Decl → String
     let mk := mk m
     mk ++ "def " ++ n.name ++ params ++ bounds ++ " : " ++ A.pp ++ " =" ++ nl 2 ++ V.pp 0 2
   | .extern _ n A => "extern " ++ n.name ++ " : " ++ A.pp
+  | .dtorOp _ k op => "dtor " ++ k.name ++ " = " ++ op.name
+  | .dtor _ k C M => "dtor " ++ k.name ++ " : " ++ C.pp ++ " =" ++ nl 2 ++ M.pp 0 2
   | .main _ C M => "main : " ++ C.pp ++ " =" ++ nl 2 ++ M.pp 0 2
   | .include _ n => "include " ++ n.name
   | .effect _ n tps ops =>

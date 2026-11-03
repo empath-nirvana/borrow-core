@@ -1,3 +1,10 @@
+-- pending: #769 (a JSON field from a file, #67 milestone 1)
+-- now: 191:3: in this `case`, `stdout` is consumed in the `inl` arm but not in the `inr` arm
+-- Blocked by: `main` is served `Fs` by `files` around the rest of its body (`filesMain`), and the
+-- capabilities that body uses are threaded through the handler site; a `match` whose arms
+-- consume `stdout` differently is refused there. Run with the arguments `corpus/no-such-file`
+-- and a key.
+--
 -- A JSON field from a file (#67, milestone 1; SPEC §34, *Files*): the file named by the first
 -- argument read whole (`read_all`: one buffer of the file's size), its tokens scanned, and the value
 -- of the top-level key named by the second argument printed: a string's body, a number, or a word
