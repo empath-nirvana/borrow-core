@@ -10,8 +10,8 @@ world `w′` and the list `ls′` the run ends in, through `KapSchedT`'s own res
 (`contShareT_resume` for a bare share). The only condition on the run is that **it owns no record
 when it starts** (`twp … ls [] e ρ`): every record it ends is one it opened during the run. The
 resume premises are all derived: the share and `κ`'s records re-read by the frame
-(`twp_frame`), the stop list re-read and kept by the run's end list (`twp_keepsList`), and
-`extFT` at that re-reading because it keeps every record (`extFT_of_sub`).
+(`twp_frame`), and the stop list re-read and kept by the run's end list (`twp_keepsList`), which
+keeps every record the share reads (`KeepRel.of_srecsIn`).
 
 **The key step, `twp_keepsList`**: a run that owns no record at its start ends at a list holding
 the re-reading of every record of its start list (`SRecsIn`). Each record of the start list is in
@@ -21,24 +21,22 @@ proper (`RecsRR psF psF′`, `SplitT ps′ O′ psF′`); a lineage path is re-r
 (`LinPathT.rr_fwd`); and the end list is the lineage closure of the end's records proper (`TIT`
 at the end). No case split on what the run did: it may open, end and re-type anything of its own.
 
-**Why the whole list and not only the records the share reads.** `contShareT` and `KapSchedT`
-resume at a re-reading of the *whole* stop list (`SRecsRR ls₁ lsR`). A record of `ls₁` that the
-run owns may be ended and its escrow's `mut` locations re-typed, and then no re-reading of `ls₁`
-exists at the end at all; so the ownership condition is on every record of the list, not on those
-`κ`'s share reads (`ExtLT`, R4). With every record kept, `extFT lsR ls′` holds at every share
-(`extFT_of_sub`), so R4 is not needed for this theorem.
+**The whole list kept, here.** `contShareT` and `KapSchedT` resume at any list keeping the
+records of the stop list the share reads (`KeepRel`, D13). A run owning no record keeps every
+record of its start list, so `KeepRel` holds at every share (`KeepRel.of_srecsIn`). A runner that
+owns records and ends lends of its own, those open at `κ`'s stop included, is
+`Core/TreePool.lean`'s `twp_keepsKap_sep`: only the records the share reads are kept there.
 
 **Runners that own records** (`twp_keepsList_apart`, `twp_keepsKap_apart`): the same holds when
 the runner owns records at its start, provided no record in their lineage is at the location of a
 record of `κ`'s stop list (`ApartLin`); the runner's own lends, opened after `κ`'s stop, are free.
 The record-free form is the case `Or = []`.
 
-**What the condition rules out.** A runner whose lineage holds a record of `κ`'s stop list: in
-particular the lender of a lend `κ`'s share holds a view of, and any runner with a record open at
-`κ`'s stop (the stop list is the configuration's whole list). Whether such a run leaves `κ` resumable is not
-derived here, and no obstruction is verified. What is derived (`kapStored_end_refused`, R2 at the
-stored branch): in a configuration of the cactus invariant, such a runner cannot validly end a lend
-while `κ`'s share holds part of it.
+**What the condition rules out.** A runner whose lineage holds a record of `κ`'s stop list. Such
+a runner is covered by `twp_keepsKap_sep` when it and `κ`'s share hold nothing of each other's
+lends; when `κ`'s share holds part of the runner's lend, R2 at the stored branch
+(`kapStored_end_refused`) refuses the runner's end of it in a configuration of the cactus
+invariant.
 
 **Existence of re-readings** (`RecRR.exists_retype`, `RecsRR.exists_retype`,
 `SRecsRR.exists_retype`): a record list covered at a world has a re-reading at every extension

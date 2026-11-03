@@ -266,6 +266,35 @@ theorem twp_keepsKap_sep {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {
   obtain ⟨Oa, Ob, a, b, hO', hc, hP, ⟨hEb, hrb, hOb⟩, hkeep, hb, ha⟩ := hp
   exact ⟨Oa, Ob, a, b, hO', hc, hP, hκ.kripke hEb hrb hOb hkeep, hb, ha⟩
 
+/-- **One stored task resumed beside another, the other kept resumable.** The scheduler holds
+`κB` and `κA` (`KapAtT` at the present world and list). It resumes `κB` at an answer its entry
+accepts, under frames avoiding `κB`'s mask history `MB`, with `κA`'s share beside it. At every end
+of `κB`'s run, `κA` is held at the end world and list, and the two are apart at the masks of the
+records each ends with. The premises are separation: `κA`'s share holds nothing at `MB` (which
+holds `κB`'s records' masks), and `κB`'s resumed resource holds nothing at `κA`'s records' masks.
+`κB`'s run may end any lend of its own, those open when `κA` stopped included. -/
+theorem kapAtT_resume_keep {QB QA : TPostV} {MB MA : BoCa.Loc → Prop} {enB enA : OpEntT}
+    {kB kA : Nat} {vB vA κB κA : Val} {w : TWd} {ls : List (SRecT w.K)}
+    {OB OA : List (FrameRecT w.K)} {ρB ρA σ σ' ρ : TRes w.K}
+    (hκB : KapAtT (ℍ := ℍ) QB MB enB kB vB κB w ls OB ρB)
+    (hκA : KapAtT (ℍ := ℍ) QA MA enA kA vA κA w ls OA ρA) {F : TFrame}
+    (hFM : ∀ w' ρf, F w' ρf → fdMask MB w' ρf) {k' : Nat} (hk' : k' < kB) {a : Val}
+    (hPB : enB.PBv vB k' w ls a σ) (hcσ : ResUT.CompS ρB σ σ') (hcρ : ResUT.CompS σ' ρA ρ)
+    (hcov : CovR (sem w.Θ) w.K ρ) (hv : ResUT.Valid ρ) (hap : ∀ p ∈ OB, ∀ q ∈ OA, p.le ≠ q.le)
+    (hMA : NoneAt MB ρA) (hOBM : ∀ x, recMask OB x → MB x) (hesc₂ : NoneAt (recMask OA) σ') :
+    twp (ℍ := ℍ) F (fun k₁ w' ls' O' t ρ' => ∃ (Oa Ob : List (FrameRecT w'.K)) (a b : TRes w'.K),
+      O' = Oa ++ Ob ∧ ResUT.CompS a b ρ' ∧ valPost QB k₁ w' ls' Oa t a ∧
+        KapAtT (ℍ := ℍ) QA MA enA kA vA κA w' ls' Ob b ∧ NoneAt (recMask Oa) b ∧
+        NoneAt (recMask Ob) a) k' w ls (OB ++ OA)
+      (.app (.app κB.1 (.val (Val.inj₁ .unit))) (.val a)) ρ := by
+  have h := cerwpTE_iff.mp (hκB.resume hk' hPB hcσ (fdMask_mono MB) (fun _ _ h => h))
+  have hvA : ResUT.Valid ρA := (ResUT.Valid.split hcρ hv).2
+  refine twp_keepsKap_sep hcρ hcov hv hap (hMA.mono hOBM) hesc₂ ?_ h hκA
+  intro w₀ ρf ρ₁₀ ρ₂₀ y fρ O₁₀ O₂₀ ps psF ls₀ μ hE h₂₀ _ _ hFρ hy hyf _ _ _ hI
+  have hvy : ResUT.Valid y := (ResUT.Valid.split hyf hI.valid).1
+  have hvf := ResUT.Valid.split hy hvy
+  exact ⟨hvy, NoneAt.compS hy hvf.1 hvf.2 (hFM w₀ ρf hFρ).2 (NoneAt.rr hE.1 hvA h₂₀ hMA)⟩
+
 end BoCa.Fig16.Tree.Wp
 
 end

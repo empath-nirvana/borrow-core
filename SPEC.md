@@ -10467,8 +10467,8 @@ re-read there and the start and end related by row 5.27's `↭` masked at the ru
 `twp_frame_w`, whose frame obligation also reads the start world's invariants), world and resource
 changes at a segment's start (`twp_extend`, `twp_update`), and row 5.27's `mut` clause at every end
 (`endT_inv`). `cerwpT` adds operations: a stop at a non-abortive entry of the table leaves a
-continuation share (`contShareT`), a Kripke wand resumed at any extension and any list `extFT`
-allows (`contShareT_resume`). `CactusInvT` is kept by a step, by tree growth, by moving a part
+continuation share (`contShareT`), a Kripke wand resumed at any extension and any list keeping
+the records it reads (`KeepRel`, `contShareT_resume`). `CactusInvT` is kept by a step, by tree growth, by moving a part
 between branches, by spawn and by join (`cactusT_step`, `cactusT_extend`, `cactusT_move`,
 `cactusT_spawn`, `cactusT_join`). Proved at one branch (`Core/TreeHeadlines.lean`):
 - **adequacy** (`topAdequacyT`, `cerwpT_adequacy`): a closed program at `cerwpT` at the empty table,
@@ -10512,21 +10512,28 @@ a state of its own, its cells owned rather than borrowed. For `pingpong-mut` the
 runs under meets `SchedOKT` (`schedS_ok`, its answers a step-indexed fixpoint) and both tasks are
 proved; the relay is not (below).
 
-**A stored continuation across another branch's run** (`Core/TreeResume.lean`): a run that owns no
-record at its start ends at a list holding the re-reading of every record of its start list
-(`twp_keepsList`): each such record is in the lineage of a frame record, which `EndT` re-reads into
-the end's records proper, and the end list is their lineage closure. So a `κ` held beside such a
-run (`KapAtT`: captured at its stop, share and records re-read, stop list carried into the current
-list) is held at the run's end world and list (`twp_keepsKap`), and resumed there
-(`KapAtT.resume`, `kapAtT_resume_beside`; `contShareT_resume_in` for a bare share): the stop list's
-re-reading is built from the carried records, and `extFT` admits a list keeping all of them. The
-runner may open, end and re-type anything of its own. A runner owning records is admitted when none
-of their lineage is at a location of a record of `κ`'s stop list (`twp_keepsList_apart`,
-`twp_keepsKap_apart`); a runner whose lineage holds a record of the stop list is outside the theorem; R2 at the stored branch (`kapStored_end_refused`) refuses its end of a lend
-`κ`'s share holds part of. `config_resumable_after_open`: at `World/Config.lean`'s world, a
-record-free branch lending a fresh location keeps the child's share, a view of the parent's lend,
-resumable. Record lists have re-readings wherever the code typing agrees on their escrows
-(`SRecsRR.exists_retype`; `RecsRR.exists_held` when the lend cells are held by a carried resource).
+**The resume condition reads only the share's own lineage** (D13): `contShareT` and `KapSchedT`
+resume at any list keeping the re-readings of the stop list's records the share is relevant to
+(`KeepRel`, `Support/Model/Tree/World/ExtF.lean`); the whole-list condition implies it
+(`keepRel_of_extFT`, `contShareT_resume_ext`), and a share is carried along `KeepRel`
+(`contShareT_kripke`, `KapSchedT.kripke`).
+
+**A stored continuation across another branch's run** (`Core/TreeResume.lean`,
+`Core/TreePool.lean`): a run that owns no record at its start ends at a list holding the
+re-reading of every record of its start list (`twp_keepsList`), so a `κ` held beside it
+(`KapAtT`: captured at its stop, share and records re-read, the records its share reads kept) is
+held at the run's end (`twp_keepsKap`) and resumed there (`KapAtT.resume`,
+`kapAtT_resume_beside`). A runner that owns records, opens lends and ends lends of its own, those
+open at `κ`'s stop included, keeps `κ` held when the two hold nothing at each other's record masks
+(`twp_frame_keep`, `twp_keepsKap_sep`): a record `κ`'s share reads is in the lineage of a record
+proper (`TIT`); not the runner's, since the share would then hold part of the runner's lend
+(`relFT_not_fdEsc`), so the frame's, which `EndT` re-reads. The separation is kept both ways at the
+end (`MaskDiff`; R1 by `fdEsc_of_updX`). At the scheduler's interface: `kapAtT_resume_keep`, one
+stored task resumed beside another, the other held at the end. Where `κ`'s share holds part of the
+runner's lend, R2 at the stored branch (`kapStored_end_refused`) refuses the runner's end of it.
+`config_resumable_after_open`: at `World/Config.lean`'s world, a record-free branch lending a fresh
+location keeps the child's share, a view of the parent's lend, resumable. Record lists have
+re-readings wherever the code typing agrees on their escrows (`SRecsRR.exists_retype`).
 
 *Open*:
 - adequacy derived from invariant preservation, at the relation the typing rules use;
@@ -10535,9 +10542,9 @@ resumable. Record lists have re-readings wherever the code typing agrees on thei
 - one relation with abortive stops and forwarding (the two relations `erwp`/`cerwp` merge);
 - the lend rules at `twp` over the tree (opening and ending a record), and multi-branch programs
   with lends;
-- a stored continuation carried across a run of a branch that owns a record of its stop list
-  (above: derived when the runner owns none); `pingpong-mut`'s relay, whose runner owns none, is not
-  yet written through `twp_keepsKap`;
+- a program through the headline in which a parked task holds a view of a lend while another
+  ends a lend of its own (`twp_keepsKap_sep` carries it; the lend rules above are missing);
+  `pingpong-mut`'s relay is not yet written through `twp_keepsKap`;
 - a scheduler that keeps state beside a branch that owned records at an earlier stop: `contShareT`
   resumes at `fdAt en v F O′`, `F` the stop's own frame condition, so the conditions accumulate and
   the state must hold nothing at every record mask the branch has had (`MaskHist`).
