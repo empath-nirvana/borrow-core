@@ -166,6 +166,115 @@ theorem gpos_mut_cellT (Θ : CodeTy) {R : TRes K} {T : KTy} {v : BoCa.Val} {m : 
       obtain ⟨τ, hτ⟩ := hleQ
       exact ⟨ζ, (ResUT.CompS.get_left_of_ne_imm hτ eζ (by rw [kζ]; simp)).2, kζ, dζ⟩
 
+/-! ### Sub-records -/
+
+/-- A `Mut` position is one position: the codes have no `⊗`. -/
+theorem MutPosT.unique {T : KTy} {v : BoCa.Val} {l₁ l₂ : BoCa.Loc} {S₁ S₂ : KTy}
+    (h₁ : MutPosT T v l₁ S₁) (h₂ : MutPosT T v l₂ S₂) : l₁ = l₂ ∧ S₁ = S₂ := by
+  induction h₁ generalizing l₂ S₂ with
+  | «mut» a S l => cases h₂; exact ⟨rfl, rfl⟩
+  | @sumL T₁ T₂ v₁ l S _ ih =>
+      generalize hv : BoCa.Val.inj₁ v₁ = w at h₂
+      cases h₂ with
+      | sumL h => cases Val.inj₁_inj' hv; exact ih h
+      | sumR _ => exact (Val.inj₁_ne_inj₂ hv).elim
+  | @sumR T₁ T₂ v₂ l S _ ih =>
+      generalize hv : BoCa.Val.inj₂ v₂ = w at h₂
+      cases h₂ with
+      | sumL _ => exact (Val.inj₁_ne_inj₂ hv.symm).elim
+      | sumR h => cases Val.inj₂_inj' hv; exact ih h
+  | box _ ih => cases h₂ with
+      | box h => exact ih h
+
+/-- A `Mut` position and a `ref` position of one value are not both: at the codes a value's
+positions follow one path through `+` and `[a]`. -/
+theorem MutPosT.not_refPos {T : KTy} {v : BoCa.Val} {m l : BoCa.Loc} {S S' : KTy}
+    (h₁ : MutPosT T v m S) (h₂ : RefPosT T v l S') : False := by
+  induction h₁ generalizing l S' with
+  | «mut» a S l => cases h₂
+  | @sumL T₁ T₂ v₁ l S _ ih =>
+      generalize hv : BoCa.Val.inj₁ v₁ = w at h₂
+      cases h₂ with
+      | sumL h => cases Val.inj₁_inj' hv; exact ih h
+      | sumR _ => exact (Val.inj₁_ne_inj₂ hv).elim
+  | @sumR T₁ T₂ v₂ l S _ ih =>
+      generalize hv : BoCa.Val.inj₂ v₂ = w at h₂
+      cases h₂ with
+      | sumL _ => exact (Val.inj₁_ne_inj₂ hv.symm).elim
+      | sumR h => cases Val.inj₂_inj' hv; exact ih h
+  | box _ ih => cases h₂ with
+      | box h => exact ih h
+
+/-- **`gpos_unique` at the codes.** The printed proof's two crossing cases (`gpos_cross`) and
+`refPos_blocks`'s second disjunct do not arise: a value's `Mut` and `ref` positions are one path
+(`MutPosT.not_refPos`, `RefPosT.unique`). -/
+theorem gpos_uniqueT (Θ : CodeTy) {R : TRes K} {T : KTy} {v : BoCa.Val} {m : BoCa.Loc}
+    {S₁ : KTy} (h₁ : GPosT R T v m S₁) :
+    ∀ {P : TRes K}, (T.interp Θ).P K v P →
+      (∀ x w, P.get x = some (CellUT.ownOf w) → R.get x = some (CellUT.ownOf w)) →
+      ∀ {S₂ : KTy}, GPosT R T v m S₂ → S₁ = S₂ := by
+  induction h₁ with
+  | @here T v m S₁ hp₁ =>
+      intro P hP hag S₂ h₂
+      cases h₂ with
+      | here hp₂ => exact (MutPosT.unique hp₁ hp₂).2
+      | step hr _ _ => exact (MutPosT.not_refPos hp₁ hr).elim
+  | @step T v l₁ S₀ u₀ m S₁ hp₁ e₁ t₁ ih =>
+      intro P hP hag S₂ h₂
+      cases h₂ with
+      | here hp₂ => exact (MutPosT.not_refPos hp₂ hp₁).elim
+      | @step _ _ l₂ S₀' u₀' _ _ hp₂ e₂ t₂ =>
+          obtain ⟨rfl, rfl⟩ := RefPosT.unique hp₁ hp₂
+          rw [e₁] at e₂; cases Option.some.inj e₂
+          obtain ⟨w, Q, B, hB, hQ, hle⟩ := own_splitT Θ hp₁ hP
+          have eP := own_of_le hle
+            (ResUT.CompS.get_left_of_ne_imm hB (ResUT.single_get_self _ _) (by simp)).2
+          rw [hag l₁ w eP] at e₁; cases Option.some.inj e₁
+          have hleQ : ResUT.Le Q P := ResUT.Le.trans (le_of_compS_right hB) hle
+          exact ih hQ (fun x w e' => hag x w (own_of_le hleQ e')) t₂
+
+/-- A sub-record of a typed record is typed: the `mut` cell's witness at the pointee's code. -/
+theorem SubRecT.typed {Θ : CodeTy} {r d : FrameRecT K} (h : SubRecT r d)
+    (hR : (r.T.interp Θ).P K r.v r.R) : (d.T.interp Θ).P K d.v d.R := by
+  obtain ⟨hg, ζ, eζ, -, rζ, wζ⟩ := h
+  obtain ⟨ζ', eζ', -, dζ'⟩ := gpos_mut_cellT Θ hg hR (fun _ _ e => e)
+  rw [eζ] at eζ'; cases Option.some.inj eζ'
+  rw [← rζ, ← wζ]; exact dζ'
+
+theorem LinPathT.typed {Θ : CodeTy} {r d : FrameRecT K} {p : List BoCa.Loc} (h : LinPathT r p d)
+    (hR : (r.T.interp Θ).P K r.v r.R) : (d.T.interp Θ).P K d.v d.R := by
+  induction h with
+  | nil r => exact hR
+  | cons hs _ ih => exact ih (hs.typed hR)
+
+theorem FrameRecT.ext' {a b : FrameRecT K} (h₁ : a.le = b.le) (h₂ : a.v = b.v) (h₃ : a.R = b.R)
+    (h₄ : a.T = b.T) : a = b := by
+  cases a; cases b; simp_all
+
+/-- Two sub-records of a typed record at one location are one. -/
+theorem SubRecT.functional {Θ : CodeTy} {r d₁ d₂ : FrameRecT K}
+    (hR : (r.T.interp Θ).P K r.v r.R) (h₁ : SubRecT r d₁) (h₂ : SubRecT r d₂)
+    (he : d₁.le = d₂.le) : d₁ = d₂ := by
+  obtain ⟨hg₁, ζ₁, e₁, -, r₁, w₁⟩ := h₁
+  obtain ⟨hg₂, ζ₂, e₂, -, r₂, w₂⟩ := h₂
+  rw [he, e₂] at e₁; cases Option.some.inj e₁
+  rw [he] at hg₁
+  exact FrameRecT.ext' he (r₁.symm.trans r₂) (w₁.symm.trans w₂)
+    (gpos_uniqueT Θ hg₁ hR (fun _ _ e => e) hg₂)
+
+/-- A lineage path names one record. -/
+theorem LinPathT.functional {Θ : CodeTy} {r d₁ : FrameRecT K} {p : List BoCa.Loc}
+    (h₁ : LinPathT r p d₁) :
+    (r.T.interp Θ).P K r.v r.R → ∀ {d₂ : FrameRecT K}, LinPathT r p d₂ → d₁ = d₂ := by
+  induction h₁ with
+  | nil r => intro _ d₂ h₂; exact (h₂.inv_nil).symm
+  | @cons r d e p hs _ ih =>
+      intro hR d₂ h₂
+      obtain ⟨d', hs', hle, t'⟩ := h₂.inv_cons
+      have hdd : d = d' := SubRecT.functional hR hs hs' hle.symm
+      subst hdd
+      exact ih (hs.typed hR) t'
+
 end BoCa.Fig16.Tree.Wp
 
 end
