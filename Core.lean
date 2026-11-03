@@ -126,6 +126,8 @@ import Core.LetDtorLet
 import Core.StepsN
 import Core.TreeWp
 import Core.TreeWpEff
+import Core.TreeSem
+import Core.TreeSemC
 import Core.TreeCactus
 import Core.TreeStepKeep
 import Core.TreeHeadlines
