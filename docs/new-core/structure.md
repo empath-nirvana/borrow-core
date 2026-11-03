@@ -48,8 +48,8 @@ For that the relation must:
 4. **Keep handler forwarding** (operations passing outward through `[handle]`).
 5. Restore `↭` at stops where a lender needs it, or show that no lender does.
 
-The relation is read over the tree world of §4 (`cerwpT` on `tree-wp`), which does not yet carry
-frame records, `TWNC` or `Tagged` (condition 21).
+The relation is read over the tree world of §4 (`cerwpT`, `Core/TreeWpEff.lean`), with frame
+records, `TWNT` and `TaggedT` (condition 21).
 
 Open: are the table fields `fd` (resumer guarantee), `PBv` (payload-dependent answer) and `oc`
 (owned records) principled? Each must be supplied by a typing rule (§6) or removed.
@@ -97,10 +97,10 @@ The operations, each to be proved to preserve it:
 instances of these operations. A proof that goes around the invariant is not the target.
 
 Status: `CactusInv` is stated with `cactus_step`, `cactus_move`, `joinReady_fd`, and not yet used.
-Over the tree world, `CactusInvT` is kept by step, growth and move, and `cerwpT_adequacy` is derived
-through `cactusT_step` at one branch (the branch clauses and spawn, join and move unused), with no
-programs. Open: preservation at spawn and join; adequacy from preservation at the
-relation the typing rules use; the frame rules as instances of capture (condition 20).
+Over the tree world (`Core/TreeCactus.lean`), `CactusInvT` is kept by step, growth, move, spawn and
+join, and `cerwpT_adequacy` is derived through `cactusT_step` at one branch, with no programs. Open:
+adequacy over several branches from preservation; adequacy at the relation the typing rules use;
+the frame rules as instances of capture (condition 20).
 
 Threads: the invariant is per computation. The two dependencies on sequential scheduling (a frame
 fixed for a whole segment; `JoinReady` read at the resume) are kept separate, so a concurrent
@@ -119,7 +119,8 @@ children end). They reach the typing rules as local facts, or are carried by the
   (`not_fdFromLifetimeTypes`), and not at closure types, which name no lifetime
   (`not_fdFromThunkTypesT`). At every type it is reduced to the branch hypotheses
   (`joinFd_of_branch`, with `TWNC.noOwnUnder`); over the tree world it holds at a join
-  (`fdEsc_at_join`), and that other branches' steps keep it is open (condition 23).
+  (`fdEsc_at_join`), other branches' steps keep it (`stepKeepsFdEsc`), and a lend's end is valid
+  only when it holds (`r2_endBlockedByHolder`, `r3_joinEndNeedsFdEsc`) (condition 23).
 - **Scoped spawn.** A lend shared across tasks ends only at a join. A branch resumed from a join
   asks that no other branch's flattening hold the joined location (`JoinReady`), which gives the
   resumer's frame condition (`joinFd`, `joinReady_fd`); it holds once every branch that held a

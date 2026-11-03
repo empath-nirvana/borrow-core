@@ -129,11 +129,11 @@ becomes `Core/TreeHeadlines.lean`, with the namespaces of §1.
 
 | Statement | Status |
 |---|---|
-| `TopAdequacyT` | proved (`cerwpT_adequacy`); one branch at the top |
+| `TopAdequacyT` | proved (`topAdequacyT`, from `cerwpT_adequacy`); one branch at the top |
 | `MultiBranchAdequacyT` | **open**; `SchedOKT` not defined (a parameter only so the text elaborates; it becomes a definition, see §5) |
-| `R1_StepKeepsFdEsc` | proved (`stepKeepsFdEsc`) |
-| `R2_EndBlockedByHolder` | **open**; not derived, no obstruction checked |
-| `R3_JoinEndNeedsFdEsc` | **open** (the converse direction is `fdEsc_at_join` + `immEnd_valid_of_fdEsc`) |
+| `R1_StepKeepsFdEsc` | proved (`r1_stepKeepsFdEsc`, `stepKeepsFdEsc`) |
+| `R2_EndBlockedByHolder` | proved (`r2_endBlockedByHolder`, from `fdEsc_of_end_valid`) |
+| `R3_JoinEndNeedsFdEsc` | proved (`r3_joinEndNeedsFdEsc`, from `fdEsc_of_end_valid`; the converse direction is `fdEsc_at_join` + `immEnd_valid_of_fdEsc`) |
 | `R4_ExtExtFT` | **open**; `RelT`, `KeepsT`, `CellInT`, `ExtLT` are new definitions (Core's `Rel`, `Keeps`, `CellIn`, `Ext` over the tree carrier) |
 
 Names that do not exist yet anywhere: `SchedOKT`, `RelT`, `KeepsT`, `CellInT`, `ExtLT` (the last

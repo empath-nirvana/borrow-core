@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.27 · 2026-11-02
+Version 1.28 · 2026-11-03
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -10216,8 +10216,8 @@ For every closed, well-typed program `P`:
 The theorem sees memory only: a host resource counts as closed only if its handle owns a cell
 and its type is linear with `close` its only eliminator. Divergence is allowed, and termination is
 not claimed. This is LinearActris's adequacy shape
-(Jacobs, Hinrichsen, Krebbers, POPL 2024). It is stated today as `OrDiverges`
-(`experiments/DtorUnwind`, stage 7). To be proved by `fundamentalC` over every typing rule and
+(Jacobs, Hinrichsen, Krebbers, POPL 2024). It is stated as `OrDiverges`
+(`Core/StepsN.lean`), and proved at one branch of the tree world (`topAdequacyT`). To be proved by `fundamentalC` over every typing rule and
 adequacy, at one step-indexed safety relation. The existing total relation keeps the termination
 results (`total_every_run`, `Closing`, `total_open`/`total_call`/`total_subrun`) for derivations
 that use none of the new rules.
@@ -10458,19 +10458,39 @@ deep reborrows, and the Anti-Frame (`erwp_M_frame`, `erwp_I_frame`, `erwp_reborr
 (`HandlerLendProg`); cross-task scopes (`cerwp_scope`, `cerwp_scopeM`, which hold over any body),
 tested by programs with one child and a fixed order of events (`CrossProg`, `CrossProgM`).
 `CactusInv` (`reb-canon`) is stated, with `cactus_step`, `cactus_move` and
-`joinReady_fd`, and not yet used: the cross-task programs are proved without it. Over the tree
-world (`tree-wp`), `CactusInvT` is kept by a step, by tree growth and by moving a part between
-branches (`cactusT_step`, `cactusT_extend`, `cactusT_move`). `cerwpT_adequacy` is derived through
-`cactusT_step` at one branch; the branch clauses (`Apart`, points) and spawn, join and move are
-not used. No program is proved there yet. The typed tree world with frame records and canonical
-images is in the library (above); the relation over it is not.
+`joinReady_fd`, and not yet used: the cross-task programs are proved without it. **Built over the library's typed tree world** (`Core/StepsN.lean`, `Core/TreeWp.lean`,
+`Core/TreeWpEff.lean`, `Core/TreeCactus.lean`, `Core/TreeStepKeep.lean`, `Core/TreeHeadlines.lean`).
+`twp` is the step-indexed relation at a world that grows: a run starts at any extension of its
+world, from the re-reading of its resource, and ends at an extension of the start, the frame
+re-read there and the start and end related by row 5.27's `↭` masked at the run's own records
+(`EndT`, `UpdX`). Its rules: downward closure, the Kripke rule, bind, the frame (`twp_frame`, and
+`twp_frame_w`, whose frame obligation also reads the start world's invariants), world and resource
+changes at a segment's start (`twp_extend`, `twp_update`), and row 5.27's `mut` clause at every end
+(`endT_inv`). `cerwpT` adds operations: a stop at a non-abortive entry of the table leaves a
+continuation share (`contShareT`), a Kripke wand resumed at any extension and any list `extFT`
+allows (`contShareT_resume`). `CactusInvT` is kept by a step, by tree growth, by moving a part
+between branches, by spawn and by join (`cactusT_step`, `cactusT_extend`, `cactusT_move`,
+`cactusT_spawn`, `cactusT_join`). Proved at one branch (`Core/TreeHeadlines.lean`):
+- **adequacy** (`topAdequacyT`, `cerwpT_adequacy`): a closed program at `cerwpT` at the empty table,
+  from the empty world, whose result holds nothing, is `OrDiverges`; derived through `cactusT_step`;
+- **R1**, a step keeps every other branch's open lend (`r1_stepKeepsFdEsc`, `stepKeepsFdEsc`):
+  this rules out a run that ends holding part of a lend of its frame. Without `↭` at `twp`'s end it
+  fails (`not_stepKeepsFdEscNoUpd`): a branch ends with a copy of another's lent cell;
+- **R2**, a lend is not ended while a stored branch holds part of it (`r2_endBlockedByHolder`): the
+  lender's piece composes with no rest containing that branch to a valid world;
+- **R3**, a join ends a shared lend only when the other branches hold nothing of it
+  (`r3_joinEndNeedsFdEsc`); with `fdEsc_at_join` and `immEnd_valid_of_fdEsc`, the end is valid
+  exactly when no other branch holds part of the lend. R2 and R3 rest on `fdEsc_of_end_valid`;
+  `config_end_refused` places both at the configuration of `cactusT_config`.
+
+No program is proved there yet.
 
 *Open*:
 - adequacy derived from invariant preservation, at the relation the typing rules use;
 - preservation at spawn and join;
 - the frame rules as instances of capture;
 - one relation with abortive stops and forwarding (the two relations `erwp`/`cerwp` merge);
-- the relation over the library's typed tree world.
+- adequacy over several branches at the tree world (a scheduler as a handler; #781 slice (d)), and `[handle]` without `hdv` at `cerwpT`.
 
 ### Semantic types read at the tree
 
@@ -10516,12 +10536,61 @@ covered (`clause3_not_cov`).
   (`immEnd_esc_config`). It follows from a branch point not inside the frame (`fdEscOfBranch`,
   `escBeneathT`, `fdEsc_of_points`), and a run whose start and end are related by row 5.27's `↭`
   masked at the run's own records (`UpdX`) keeps it (`fdEsc_of_updX`). The mask is needed
-  (`lend_open_needs_mask`). On `tree-inv`, not in the library: the condition at a join from the
-  cactus invariant (`fdEsc_at_join`) and that steps keep it (`stepKeepsFdEsc`).
+  (`lend_open_needs_mask`). The condition holds at a join from the cactus invariant
+  (`fdEsc_at_join`), other branches' steps keep it (`stepKeepsFdEsc`), and an end of the lend is
+  valid only where it holds (`fdEsc_of_end_valid`).
 - Lifetimes on continuation and task types alone do not supply it: not at `Imm 'r 1` in a single
   chain (`not_fdFromLifetimeTypes`), and not at closure types in the tree
   (`not_fdFromThunkTypesT`).
 - *Open*: the typing rules and their compatibility lemmas.
+
+### Closing a branch
+
+One rule, stated in pieces at §12, §19, §27 and `[let-dtor]` above: what may be closed, by whom,
+and what an unwind passes through.
+
+- **Two kinds of linear type; neither is affine.** A type with a destructor is consumed, when not
+  consumed by name, by its destructor (`dropOf`, `DropOk`; typed at the destructor's row,
+  `DropOk.derives`). A strictly linear type has none and is consumed only by name: a declared type
+  with no derived drop (`decl_linear`, `decl_not_ownFree`, §42), a host handle with no declared
+  destructor (`file_no_derived_drop`). Nothing is dropped without running a destructor: the
+  checker inserts a drop only where the type has one (§12, `TDerivesP.dtor_hasDtor`).
+- **Closeability is a property of the suspension point**, read off the operation's qualifier
+  (`Qual`, `kTy`):
+  - at a `cancel` operation the continuation may be closed, and its destructor is its cancel
+    component (`dropOk_kappa`, `dropOf_kappa`); closing it runs the dead region's unwind
+    (`kappaC_cancel`, `letDE_cancel_run`);
+  - at a `lin` operation it must be resumed: `U((B ⊸ F_Σ R) & ⊤)` is strictly linear, not
+    persistent and with no destructor (`kappa_lin_strict`); no clause that cancels it is typed
+    (`refuses_R_clauses`, R3); its cancel branch has no step (`kappaC_cancel_lin`) and is never
+    reached by a typed program (`LiveOK.not_stuck`).
+- **The typing rule across a closeable point.** Across a cancellable or abortive point (a row that
+  `Row.Cancels`: some operation not `lin`; an abortive operation is never `lin`,
+  `OpSig.cancels_of_ent`), every live value is
+  persistent or has a destructor: `[let-dtor]`'s `hds` (`CDerives.effLetD`), and `[let]`'s `hW`
+  (`Γ₂` own-free), which gives a destructor once each host type has a declared one
+  (`DropOk.ofOwnFree`, `effLet_as_effLetD`). The destructors' row neither cancels nor diverges
+  (`hSDc`, `hSDd`), so closing a closeable branch always has a destructor to run for every value it
+  holds, and none of them fails.
+- **A branch paused at a `lin` point is itself strictly linear.** It is not closed by a scope's
+  end or by a parent's unwind; it is joined or resumed. Its continuation value is strictly linear
+  (`kappa_lin_strict`). Typing the branch itself (a stored task, a spawned closure paused at a `lin`
+  point) as strictly linear is a typing rule: #771 row 6.
+- **Raise, cancel and panic unwind only through closeable points.** A raise passes a `[let]` or
+  `[let-dtor]` frame only at a row that cancels, where the rule above holds; a cancel runs `κ.2`,
+  which exists only at a `cancel` operation. Core has no panic: an integer division with no answer
+  raises (§39).
+
+**What #781 slice (b) proves of it, at the relation over the tree world.** The continuation's
+share keeps its entry's qualifier (`contShareT`, `Core/TreeWpEff.lean`): at an unrestricted entry
+the share is empty; at an entry that is not `lin` it carries the entry's cancel obligation `fin`,
+run at the continuation's dead context from `raise (cancel)`; at a `lin` entry it carries none, so
+the continuation can only be resumed. A stop at the table carries the entry it stopped at
+(`opTableT`, `cerwpT_perform`), the share is kept along re-reading with the qualifier's clause
+re-established (`contShareT_kripke`), and only non-abortive entries are admitted, so no run at
+`opTableT` ends at a raise. The table is a premise: that an operation's entry carries the
+operation's declared qualifier, and the typing rules across closeable points and at a `lin`-paused
+branch, are #771 row 6.
 
 ### Not claimed
 
@@ -10983,12 +11052,24 @@ Entry 61 (§62): effectful destructors (#775) are implemented in `Core/LetDtor.l
 programs in `Core/LetDtorFiles.lean`, `Core/LetDtorCancel.lean`, `Core/LetDtorLoop.lean`,
 `Core/LetDtorLend.lean` and `Core/LetDtorSuspend.lean`. `[let-dtor]` is derived from `[then]`: no
 change to `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the checker, the backends or the
-corpus. The rest of §62 is design.
+corpus. The typed tree world (#781) is in `Support/Model/Tree/World/`, and the step-indexed
+relation over it in `Core/StepsN.lean`, `Core/TreeWp.lean`, `Core/TreeWpEff.lean`,
+`Core/TreeCactus.lean`, `Core/TreeStepKeep.lean` and `Core/TreeHeadlines.lean` (adequacy and R1–R3
+at one branch); `kappa_lin_strict` is in `Core/LetDtorSuspend.lean`. No relation the typing rules use
+reads them yet. The rest of §62 is design.
 
 ---
 
 ## Changelog
 
+- **1.28** (2026-11-03) — §62 (#781, slice (b)): the step-indexed relation over the tree world.
+  `twp` and its rules (`twp_frame_w` beside `twp_frame`), `cerwpT` with `contShareT` and
+  `opTableT`, `CactusInvT` with step, growth, move, spawn and join, `cerwpT_adequacy`,
+  `fdEsc_at_join`, `stepKeepsFdEsc`; headlines at one branch: `topAdequacyT`, R1
+  (`r1_stepKeepsFdEsc`, with `not_stepKeepsFdEscNoUpd`), R2 (`r2_endBlockedByHolder`), R3
+  (`r3_joinEndNeedsFdEsc`), from `fdEsc_of_end_valid`. A subsection "Closing a branch";
+  `kappa_lin_strict`. No change to `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the
+  checker, the backends or the corpus.
 - **1.27** (2026-11-02) — §62 (#775): effectful destructors built. `[let-dtor]`
   (`CDerives.effLetD`) is derived from `[then]` at the finaliser `drop_ctx`, with destructors by
   type (`dropOf`, `DropOk`: `⊗`/`⊕` componentwise, declared at opaque types, `π₂` at `U(C & D)`,

@@ -7,7 +7,8 @@ import Core.LetDtorCancel
 `kTy Σ R cancel 1 F = U((1 ⊸ F_Σ R) & F_{F ⊕ Σ} 1)`: a thunk of a `&` whose second component is the
 cancel, the paper's `↓N = N & 1` with `drop_N = π₂`. So `κ` is a resource whose destructor, by its
 type, is `λk. k.2` (`dropOf_kappa`, `dropOk_kappa`, typed by `d_kDtor`), at the row of `y`'s cancel
-row ahead of `Σ`.
+row ahead of `Σ`. A must-resume `κ`, `U((B ⊸ F_Σ R) & ⊤)`, is strictly linear: not persistent, with
+no destructor at any row (`kappa_lin_strict`).
 
 The body holds two files across `y` by `[let-dtor]` (`Core/LetDtorFiles.lean`). The cancel row of `y` is the
 destructors' row `F_{close} 1` (`[then]`'s `hfin` reads it: `y` is capturable), so a cancel of `κ`
@@ -63,6 +64,22 @@ theorem dropOk_kappa {Δ : LifeCtx} {S SF : Row} {R B : VTy} {decl : Opaque → 
   show DropOk Δ (SF ++ S) decl (.thunk (.amp _ (cancelTy S (CTy.effOf SF .unit))))
   rw [cancelTy_effOf]
   exact .close (RowLe.refl _)
+
+/-- **A must-resume `κ` is strictly linear**: `kTy Σ R lin B = U((B ⊸ F_Σ R) & ⊤)` is not
+persistent and has no destructor, at any row and declaration (its second component is `⊤`, not a
+row of `1`). It is consumed only by resuming it.  `[spec §62]` -/
+theorem kappa_lin_strict {Δ : LifeCtx} {SD S : Row} {R B : VTy} {decl : Opaque → Option Expr} :
+    ¬ (kTy S R .lin B).Persistent ∧ ¬ DropOk Δ SD decl (kTy S R .lin B) := by
+  refine ⟨by simp [kTy, VTy.Persistent, VTy.persistent], fun h => ?_⟩
+  generalize hT : kTy S R .lin B = T at h
+  cases h with
+  | tensor => simp [kTy] at hT
+  | sum => simp [kTy] at hT
+  | opq => simp [kTy] at hT
+  | @close C SF _ =>
+      simp only [kTy, VTy.thunk.injEq, CTy.amp.injEq] at hT
+      cases SF <;> simp [CTy.effOf] at hT
+  | derived hs => simp [kTy] at hT; subst hT; simp [structB] at hs
 
 /-- `κ`'s destructor by type is `d_kDtor`'s term. -/
 theorem dropOf_kappa {S SF : Row} {R B : VTy} {decl : Opaque → Option Expr} :

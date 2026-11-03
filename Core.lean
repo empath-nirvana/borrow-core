@@ -123,3 +123,9 @@ import Core.LetDtorLoop
 import Core.LetDtorLend
 import Core.LetDtorSuspend
 import Core.LetDtorLet
+import Core.StepsN
+import Core.TreeWp
+import Core.TreeWpEff
+import Core.TreeCactus
+import Core.TreeStepKeep
+import Core.TreeHeadlines
