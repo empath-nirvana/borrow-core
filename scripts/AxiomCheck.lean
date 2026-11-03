@@ -906,6 +906,15 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.r2_endBlockedByHolder
 #print axioms BoCa.Fig16.Tree.Wp.r3_joinEndNeedsFdEsc
 #print axioms BoCa.Fig16.Tree.Wp.config_end_refused
+#print axioms BoCa.Fig16.Tree.Wp.ext_extFT
+#print axioms BoCa.Fig16.Tree.Wp.r4_extExtFT
+#print axioms BoCa.Fig16.Tree.Wp.desc_of_xexT
+#print axioms BoCa.Fig16.Tree.Wp.tag_ge_nestedT
+#print axioms BoCa.Fig16.Tree.Wp.not_relAt_xexT
+#print axioms BoCa.Fig16.Tree.Wp.extLT_admits_drop
+#print axioms BoCa.Fig16.Tree.Wp.not_extLT_drop_relevant
+#print axioms BoCa.Fig16.Tree.Wp.keepsT_drop_longer
+#print axioms BoCa.Fig16.Tree.Wp.not_extLT_drop_longer
 #print axioms BoCa.Fig16.Tree.chain_ResU_compS_defined_iff
 #print axioms BoCa.Fig16.Tree.chain_ResU_Valid_split
 #print axioms BoCa.Fig16.Tree.chain_ResU_Hash_split

@@ -1,4 +1,5 @@
 import Core.TreeStepKeep
+import Support.Model.Tree.World.ExtExtF
 
 /-!
 # The step-indexed relation over the tree world: headline results at one branch  `[spec §62]`
@@ -27,6 +28,12 @@ and proved below it:
   valid, the other branches' composite meets `FdEsc`. With `fdEsc_at_join` (`JoinPtT` ⇒ `FdEsc`)
   and `immEnd_valid_of_fdEsc` (`FdEsc` ⇒ the end is valid), the end is valid exactly when no
   other branch holds part of the lend.
+
+* **R4, the resumption condition is no stricter than the tree world's own extension**
+  (`R4_ExtExtFT`, `r4_extExtFT`): at a share inside a tagged typed tree world, every list at which
+  a typed tree world holds and which `ExtLT` (Core's `Ext` over the tree carrier) allows, `extFT`
+  allows. So a stored continuation is never refused at a resumption the world's extension
+  admits. It is `ext_extFT` (`Support/Model/Tree/World/ExtExtF.lean`).
 
 R2 and R3 both rest on one fact about the carrier (`fdEsc_of_end_valid`): a valid world in which
 `ℓ ↦ own(v) ● R` is a part leaves nothing of `ℓ` or of `ex(R)` to the rest. `ex` of the lender's
@@ -190,6 +197,19 @@ theorem config_end_refused :
     (by simp [bsC]) (recE ℓC mC) (List.mem_singleton_self _) config_not_fdEsc
     (TSet.single αC) (own_inStratum _ _ _) childRes PMap.empty X' hW
     (ResUT.compS_empty_right _) hX
+
+/-! ### R4. `extFT` is no stricter than the tree world's own extension -/
+
+/-- **R4, `ext_extF` over the tree.** At a share `ρ` inside a typed tree world at `ls`, every list
+`ls′` at which a typed tree world holds and which `ExtLT` allows, `extFT` allows. -/
+def R4_ExtExtFT : Prop :=
+  ∀ (K : WCactus) (Θ Θ' : CodeTy) (tc tc' : TChoice K) (W W' ρ : TRes K)
+    (ps ps' : List (FrameRecT K)) (ls ls' : List (SRecT K)),
+    TWNT K Θ tc W ps (rsOfT ls) → TaggedT K W ps ls → ResUT.Le ρ W →
+    TWNT K Θ' tc' W' ps' (rsOfT ls') → ExtLT ls ls' ρ → extFT ls ls' ρ
+
+theorem r4_extExtFT : R4_ExtExtFT :=
+  fun _ _ _ _ _ _ _ _ _ _ _ _ hT htag hρ hT' h => ext_extFT hT htag hρ hT' h
 
 end BoCa.Fig16.Tree.Wp
 
