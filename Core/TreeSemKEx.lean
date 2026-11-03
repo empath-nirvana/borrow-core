@@ -167,7 +167,7 @@ def enU : OpEntT where
   abort := false
   PA _ _ _ _ _ := True
   PBv _ k w ls a σ := STy.unit.P k w ls a σ
-  fin := none
+  fin := false
   fd _ _ _ _ := True
   oc _ _ := True
 
@@ -189,7 +189,7 @@ every extension and list keeping the records it reads, `K[()]` steps to `ℓ`, a
 `Imm @α 1` over the re-read view. -/
 theorem share_viewR (l : BoCa.Loc) (α : Life) (k : Nat) (ls : List (SRecT wCh.K)) :
     contShareT enU (fun _ _ => True) k wCh ls [] (kRet l) Val.unit
-      (cerwpTC (ℍ := ℍ) tbE (postOf (τR α)) k) (viewR l α) := by
+      (cerwpTC (ℍ := ℍ) tbE (postOf (τR α)) (fun _ _ => True) k) (viewR l α) := by
   unfold contShareT
   refine ⟨fun h => by simp [enU] at h, fun w' ρ' ls' O' hE hr hk hO => ?_⟩
   cases hO
@@ -217,11 +217,12 @@ the depth. -/
 theorem kontBox_view {l : BoCa.Loc} {a : Nat} {ls ls' : List (SRecT wCh.K)} {k n : Nat}
     (hn : n < k) (hk : KeepRel wCh.Θ ls ls' (viewR l (lf a))) :
     (STy.kontBox (lf (a + 1)) STy.unit
-        (SCmp.ret (ℍ := ℍ) tbE tbE_local tbE_down (fdNil enU Val.unit fun _ _ => True)
+        (SCmp.ret (ℍ := ℍ) tbE tbE_local tbE_down (fun _ _ => True) (fdNil enU Val.unit fun _ _ => True)
           (τR (lf a)))).P n wCh ls' (kontV (kRet l)) (viewR l (lf a)) ∧
       ∀ (b : Val) (ρa σ : TRes wCh.K), ResUT.CompS (viewR l (lf a)) ρa σ →
         STy.unit.P n wCh ls' b ρa →
-        cerwpT (ℍ := ℍ) tbE (postOf (τR (lf a))) (fdNil enU Val.unit fun _ _ => True) n wCh ls'
+        cerwpT (ℍ := ℍ) tbE (postOf (τR (lf a))) (fun _ _ => True) (fdNil enU Val.unit fun _ _ => True) n
+          wCh ls'
           [] (.app (.val (kontV (kRet l))) (.val b)) σ :=
   STy.kontBox_resume_after tbE_local tbE_down (kontV_step (kRet l)) (fun _ _ _ _ _ h => h)
     (share_viewR l (lf a) k ls) (viewR_inStratum (Nat.lt_succ_self a)) (viewR_cov l (lf a))
@@ -252,7 +253,7 @@ theorem not_rr_d1 : ¬ SRecsRR wCh.Θ lsD1 lsD1' := by
 
 theorem kontBox_depth1 {k n : Nat} (hn : n < k) :
     (STy.kontBox (lf 2) STy.unit
-        (SCmp.ret (ℍ := ℍ) tbE tbE_local tbE_down (fdNil enU Val.unit fun _ _ => True)
+        (SCmp.ret (ℍ := ℍ) tbE tbE_local tbE_down (fun _ _ => True) (fdNil enU Val.unit fun _ _ => True)
           (τR (lf 1)))).P n wCh lsD1' (kontV (kRet 0)) (viewR 0 (lf 1)) :=
   (kontBox_view (ℍ := ℍ) (k := k) hn keep_d1).1
 
@@ -281,7 +282,7 @@ theorem not_rr_d3 : ¬ SRecsRR wCh.Θ lsD3 lsD3' := by
 
 theorem kontBox_depth3 {k n : Nat} (hn : n < k) :
     (STy.kontBox (lf 4) STy.unit
-        (SCmp.ret (ℍ := ℍ) tbE tbE_local tbE_down (fdNil enU Val.unit fun _ _ => True)
+        (SCmp.ret (ℍ := ℍ) tbE tbE_local tbE_down (fun _ _ => True) (fdNil enU Val.unit fun _ _ => True)
           (τR (lf 3)))).P n wCh lsD3' (kontV (kRet 0)) (viewR 0 (lf 3)) :=
   (kontBox_view (ℍ := ℍ) (k := k) hn keep_d3).1
 
@@ -303,8 +304,8 @@ theorem not_kontBox_at_root {a n : Nat} {ls : List (SRecT wCh.K)} {τB : STy} {C
 
 /-- **At the empty list, a term that never steps, over the view, is a run** (`cerwpT_nil_of_imm`):
 a thunk type running its thunks at `[]` would hold of `λ_. () ()` holding the view. -/
-theorem nilRun_stuck {Q : TPostV} {F : TFrame} {n : Nat} {a : Nat} :
-    cerwpT (ℍ := ℍ) tbE Q F n wCh [] [] BoCa.BoLo.stuckE (viewR 0 (lf a)) :=
+theorem nilRun_stuck {Q : TPostV} {Fb F : TFrame} {n : Nat} {a : Nat} :
+    cerwpT (ℍ := ℍ) tbE Q Fb F n wCh [] [] BoCa.BoLo.stuckE (viewR 0 (lf a)) :=
   cerwpT_nil_of_imm (ψ := CellUT.imm (viewI (lf a))) (l := 0) (by simp [viewR, PMap.sng_get]) rfl
 
 end BoCa.Fig16.Tree.Wp.KEx

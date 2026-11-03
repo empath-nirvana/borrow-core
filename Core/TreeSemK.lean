@@ -93,25 +93,20 @@ theorem STy.task_force_after {d : Life} {C : SCmp} {force : Val → Expr} {n : N
 
 /-! ### A captured continuation is a value of its type -/
 
-/-- **A continuation captured at a stop is a value of its type.** The share `ρ` of a stop at the
-world `w` and stop list `ls`, owning no records, owing the relation at the table `Tb` and the
-result type `A` (`contShareT … (cerwpTC Tb (postOf A) k)`), with `κ` the function whose
-application to an answer is the resumed context (`hκ`) and `B` read by the entry's answer
-(`hB`): `κ` is a value of `U (B ⊸ F A)` at `w`, `ls`, `ρ` at every index below the stop's, `F A`
-at the frame the share resumes at (`fdNil`).
-
-Every type, lifetime and nesting: the proof is the share's own resume (`contShareT_resume`) at
-the thunk's quantifier, which is `KeepRel`'s, and one step of `κ`'s application. -/
-theorem STy.kont_of_share {Tb : TableT} (hL : Tb.Local) (hTb : Tb.Down) {τ τB : STy}
-    {en : OpEntT} {F : TFrame} {k : Nat} {w : TWd} {ls : List (SRecT w.K)} {K : Kont}
-    {v κ : Val} {ρ : TRes w.K}
+/-- **The resume of a captured continuation is a run of `F A`** at every extension of the stop's
+world, on the share's re-reading, at every list keeping the records the share reads, at every index
+below the stop's: the share's own resume (`contShareT_resume`) and one step of `κ`'s application. -/
+theorem kont_run_of_share {Tb : TableT} (hL : Tb.Local) {τ τB : STy} {en : OpEntT} {Fb : TFrame}
+    {k : Nat} {w w' : TWd} {ls : List (SRecT w.K)} {ls' : List (SRecT w'.K)} {K : Kont}
+    {v κ : Val} {ρ : TRes w.K} {ρ' : TRes w'.K}
     (hκ : ∀ (a : Val) μ, Step1Only (ℍ := ℍ) μ (.app (.val κ) (.val a)) μ (K.plug (.val a)))
     (hB : ∀ j (w' : TWd) ls' a σ, τB.P j w' ls' a σ → en.PBv v j w' ls' a σ)
-    (h : contShareT en F k w ls [] K v (cerwpTC (ℍ := ℍ) Tb (postOf τ) k) ρ) {n : Nat}
-    (hn : n < k) :
-    (STy.kont τB (SCmp.ret (ℍ := ℍ) Tb hL hTb (fdNil en v F) τ)).P n w ls κ ρ := by
-  intro w' ρ' ls' hE hr hk j hj a ρa σ hc ha
-  show cerwpT (ℍ := ℍ) Tb (postOf τ) (fdNil en v F) j w' ls' [] (.app (.val κ) (.val a)) σ
+    (h : contShareT en Fb k w ls [] K v (cerwpTC (ℍ := ℍ) Tb (postOf τ) Fb k) ρ)
+    (hE : w.Ext w' ρ) (hr : RRw (w := w) (w' := w') ρ ρ') (hk : KeepRel w'.Θ ls ls' ρ)
+    {j : Nat} (hj : j < k) {a : Val} {ρa σ : TRes w'.K} (hc : ResUT.CompS ρ' ρa σ)
+    (ha : τB.P j w' ls' a ρa) :
+    RunRet (ℍ := ℍ) Tb Fb (fdNil en v Fb) τ j w' ls' (.app (.val κ) (.val a)) σ := by
+  show cerwpT (ℍ := ℍ) Tb (postOf τ) Fb (fdNil en v Fb) j w' ls' [] (.app (.val κ) (.val a)) σ
   cases j with
   | zero => exact cerwpT_zero
   | succ j =>
@@ -121,17 +116,43 @@ theorem STy.kont_of_share {Tb : TableT} (hL : Tb.Local) (hTb : Tb.Down) {τ τB 
       simp only [cerwpTC, show j < k by omega, if_true, fdAt_nil] at hres
       exact hres
 
+/-- **A continuation captured at a stop is a value of its type.** The share `ρ` of a stop at the
+world `w` and stop list `ls`, owning no records, owing the relation at the table `Tb`, the base
+frame condition `Fb` and the result type `A` (`contShareT … (cerwpTC Tb (postOf A) Fb k)`), with `κ`
+the function whose application to an answer is the resumed context (`hκ`) and `B` read by the
+entry's answer (`hB`): `κ` is a value of `U (B ⊸ F A)` at `w`, `ls`, `ρ` at every index below the
+stop's, `F A` at the frame the share resumes at (`fdNil`).
+
+Every type, lifetime and nesting: `F A` is read at every later list, and the share resumes at every
+later list keeping the records it reads (`kont_run_of_share`), the argument's re-reading split off
+the composite's (`RR.split_retype`). -/
+theorem STy.kont_of_share {Tb : TableT} (hL : Tb.Local) (hTb : Tb.Down) {τ τB : STy}
+    {en : OpEntT} {Fb : TFrame} {k : Nat} {w : TWd} {ls : List (SRecT w.K)} {K : Kont}
+    {v κ : Val} {ρ : TRes w.K}
+    (hκ : ∀ (a : Val) μ, Step1Only (ℍ := ℍ) μ (.app (.val κ) (.val a)) μ (K.plug (.val a)))
+    (hB : ∀ j (w' : TWd) ls' a σ, τB.P j w' ls' a σ → en.PBv v j w' ls' a σ)
+    (h : contShareT en Fb k w ls [] K v (cerwpTC (ℍ := ℍ) Tb (postOf τ) Fb k) ρ) {n : Nat}
+    (hn : n < k) :
+    (STy.kont τB (SCmp.ret (ℍ := ℍ) Tb hL hTb Fb (fdNil en v Fb) τ)).P n w ls κ ρ := by
+  intro w' ρ' ls' hE hr hk j hj a ρa σ hc ha hcσ w'' σ'' ls'' hE' hr' hk'
+  obtain ⟨ρ'', ρa'', h₁, h₂, hc''⟩ := RR.split_retype hE'.1 hc hcσ hE'.2 hr'
+  exact kont_run_of_share hL hκ hB h (hE.trans hr (hE'.of_compS_left hc))
+    (RRw.trans hE'.1 hr h₁) (KeepRel.trans hE'.1 hr hk (KeepRel.of_compS_left hc hk'))
+    (by omega) hc''
+    (τB.mono j w' w'' ls' ls'' a ρa ρa'' (hE'.of_compS_right hc) h₂
+      (KeepRel.of_compS_right hc hk') (CovR.of_compS_right hc hcσ) ha)
+
 /-- **A captured continuation boxed at a lifetime its share outlives** is a value of `[@d] K`:
 BOXED-κ's premise, that the share is in `Res_d` (every borrow cell strictly longer-lived than
 `d`), is what the box asks. -/
 theorem STy.kontBox_of_share {Tb : TableT} (hL : Tb.Local) (hTb : Tb.Down) {τ τB : STy}
-    {en : OpEntT} {F : TFrame} {k : Nat} {w : TWd} {ls : List (SRecT w.K)} {K : Kont}
+    {en : OpEntT} {Fb : TFrame} {k : Nat} {w : TWd} {ls : List (SRecT w.K)} {K : Kont}
     {v κ : Val} {ρ : TRes w.K} {d : Life}
     (hκ : ∀ (a : Val) μ, Step1Only (ℍ := ℍ) μ (.app (.val κ) (.val a)) μ (K.plug (.val a)))
     (hB : ∀ j (w' : TWd) ls' a σ, τB.P j w' ls' a σ → en.PBv v j w' ls' a σ)
-    (h : contShareT en F k w ls [] K v (cerwpTC (ℍ := ℍ) Tb (postOf τ) k) ρ)
+    (h : contShareT en Fb k w ls [] K v (cerwpTC (ℍ := ℍ) Tb (postOf τ) Fb k) ρ)
     (hd : ρ.InStratum (TSet.single d)) {n : Nat} (hn : n < k) :
-    (STy.kontBox d τB (SCmp.ret (ℍ := ℍ) Tb hL hTb (fdNil en v F) τ)).P n w ls κ ρ :=
+    (STy.kontBox d τB (SCmp.ret (ℍ := ℍ) Tb hL hTb Fb (fdNil en v Fb) τ)).P n w ls κ ρ :=
   ⟨STy.kont_of_share hL hTb hκ hB h hn, hd⟩
 
 /-- **The hardest case: a boxed continuation holding a borrow, carried and resumed.** A `κ`
@@ -141,19 +162,19 @@ of the records of `ls` the share reads: records of `ls` the share does not read 
 ended, and records opened since may be added, by other branches. There it is a value of its type
 (`[@d] U (B ⊸ F A)` at `w′`, `ls′`), and resuming it at any answer of `B` is a run of `F A`. -/
 theorem STy.kontBox_resume_after {Tb : TableT} (hL : Tb.Local) (hTb : Tb.Down) {τ τB : STy}
-    {en : OpEntT} {F : TFrame} {k : Nat} {w w' : TWd} {ls : List (SRecT w.K)}
+    {en : OpEntT} {Fb : TFrame} {k : Nat} {w w' : TWd} {ls : List (SRecT w.K)}
     {ls' : List (SRecT w'.K)} {K : Kont} {v κ : Val} {ρ : TRes w.K} {ρ' : TRes w'.K} {d : Life}
     (hκ : ∀ (a : Val) μ, Step1Only (ℍ := ℍ) μ (.app (.val κ) (.val a)) μ (K.plug (.val a)))
     (hB : ∀ j (w' : TWd) ls' a σ, τB.P j w' ls' a σ → en.PBv v j w' ls' a σ)
-    (h : contShareT en F k w ls [] K v (cerwpTC (ℍ := ℍ) Tb (postOf τ) k) ρ)
+    (h : contShareT en Fb k w ls [] K v (cerwpTC (ℍ := ℍ) Tb (postOf τ) Fb k) ρ)
     (hd : ρ.InStratum (TSet.single d)) (hc : CovR (sem w.Θ) w.K ρ) (hE : w.Ext w' ρ)
     (hr : RRw (w := w) (w' := w') ρ ρ') (hk : KeepRel w'.Θ ls ls' ρ) {n : Nat} (hn : n < k) :
-    (STy.kontBox d τB (SCmp.ret (ℍ := ℍ) Tb hL hTb (fdNil en v F) τ)).P n w' ls' κ ρ' ∧
+    (STy.kontBox d τB (SCmp.ret (ℍ := ℍ) Tb hL hTb Fb (fdNil en v Fb) τ)).P n w' ls' κ ρ' ∧
       ∀ (a : Val) (ρa σ : TRes w'.K), ResUT.CompS ρ' ρa σ → τB.P n w' ls' a ρa →
-        cerwpT (ℍ := ℍ) Tb (postOf τ) (fdNil en v F) n w' ls' [] (.app (.val κ) (.val a)) σ := by
+        cerwpT (ℍ := ℍ) Tb (postOf τ) Fb (fdNil en v Fb) n w' ls' [] (.app (.val κ) (.val a)) σ := by
   have hb := STy.kontBox_of_share hL hTb hκ hB h hd hn
   have hb' := (STy.kontBox d τB _).mono n w w' ls ls' κ ρ ρ' hE hr hk hc hb
-  exact ⟨hb', fun a ρa σ hcσ ha => hb.1 w' ρ' ls' hE hr hk n le_rfl a ρa σ hcσ ha⟩
+  exact ⟨hb', fun a ρa σ hcσ ha => kont_run_of_share hL hκ hB h hE hr hk hn hcσ ha⟩
 
 /-! ### Rules out: a continuation stored past its lend -/
 
