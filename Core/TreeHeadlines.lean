@@ -3,7 +3,7 @@ import Core.TreeStepKeep
 /-!
 # The step-indexed relation over the tree world: headline results at one branch  `[spec §62]`
 
-The statements of `docs/new-core/scope-781.md` §4 that slice (b) proves, each stated as a `Prop`
+The statements of `docs/new-core/scope-781.md` §4 at one branch, each stated as a `Prop`
 and proved below it:
 
 * **Top-level adequacy** (`TopAdequacyT`, `topAdequacyT`): a closed program verified at
