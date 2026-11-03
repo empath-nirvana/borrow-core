@@ -1,4 +1,4 @@
-import DtorUnwind.TreeWp.Rel
+import DtorUnwind.TreeWp.ExtFT
 import DtorUnwind.SI.CaptureE
 
 /-!
@@ -10,11 +10,11 @@ continuation below the index. What changes:
 * **The resume world is any extension of the stop's world**, with the share, the list and the
   records the continuation owns re-read there (`contShareT`): the continuation is a Kripke wand.
   At `RR.refl` the resume is at the stop's own world, list and records.
-* **The resume list is the stop's re-read.** A table entry's `wc` (`extF` for an operation
-  performed under a live lend: the lists that keep the records named by frozen locations) is not
-  carried: the continuation is resumed at the re-reading of the stop's list. A resumer whose
-  world holds records opened since (round 7's handler lend) resumes at a longer list; that needs
-  `extF` over the tree (records named by frozen locations kept, re-read), not built.
+* **The resume list is any list keeping the records the share's views name** (`extFT`,
+  `TreeWp/ExtFT.lean`), read at the re-reading of the stop's list and of the share: a resumer
+  whose world holds records opened since the stop, or no longer holds records the share does not
+  name, resumes at its own list. At `extFT_refl` it is the stop's re-read list. This is
+  `SI/CaptureE.lean`'s `wc` at its `extF` instance.
 * **Owned records** (`O`, `oc`): as `cerwp`'s; `oc` is read at the stop's world.
 * The resumer's guarantee `fd` and the payload-dependent answer `PBv` are `OpEntC`'s, read at the
   resume world.
@@ -73,13 +73,15 @@ abbrev TPostV : Type :=
   Nat → (w : TWd) → List (SRecT w.K) → List (FrameRecT w.K) → Val → TRes w.K → Prop
 
 /-- **The continuation's share at the tree world**: at every extension of the stop's world, on
-the share's, the list's and the owned records' re-readings there, resumed at every answer at
-every `k′ < k` under a frame meeting `F` and the entry's `fd`; cancellable when the entry is. -/
+the share's and the owned records' re-readings there, at every list `ls′` keeping the records of
+the stop's re-read list `lsR` the re-read share names (`extFT`), resumed at every answer at every
+`k′ < k` under a frame meeting `F` and the entry's `fd`; cancellable when the entry is. -/
 def contShareT (en : OpEntT) (F : TFrame) (k : Nat) (w : TWd) (ls : List (SRecT w.K))
     (O : List (FrameRecT w.K)) (K : Kont) (v : Val) (Ψ : ContT) : TRes w.K → Prop := fun ρ =>
   (en.q = .unr → ρ = PMap.empty) ∧
-  ∀ (w' : TWd) (ρ' : TRes w'.K) (ls' : List (SRecT w'.K)) (O' : List (FrameRecT w'.K)),
-    w.Ext w' ρ → RRw (w := w) (w' := w') ρ ρ' → SRecsRR w'.Θ ls ls' → RecsRR w'.Θ O O' →
+  ∀ (w' : TWd) (ρ' : TRes w'.K) (lsR ls' : List (SRecT w'.K)) (O' : List (FrameRecT w'.K)),
+    w.Ext w' ρ → RRw (w := w) (w' := w') ρ ρ' → SRecsRR w'.Θ ls lsR → extFT lsR ls' ρ' →
+    RecsRR w'.Θ O O' →
     (∀ k', k' < k → ∀ (a : Val) (σ σ' : TRes w'.K), en.PBv v k' w' ls' a σ →
       ResUT.CompS ρ' σ σ' → Ψ (fun w'' ρf => F w'' ρf ∧ en.fd v w'' ρf) w' O' k' ls'
         (K.plug (.val a)) σ') ∧
@@ -102,10 +104,11 @@ def TableT.Local (Tb : TableT) : Prop :=
 theorem opTableT_local (T : OpTabT) : (opTableT T).Local := by
   intro F k w ls O t Ψ Ψ' ρ hΨ h
   obtain ⟨K, n, i, v, en, h₁, h₂, h₃, h₄, h₅, ρa, ρk, hc, hA, hu, hcont⟩ := h
-  exact ⟨K, n, i, v, en, h₁, h₂, h₃, h₄, h₅, ρa, ρk, hc, hA, hu, fun w' ρ' ls' O' hE hr hl hO =>
+  exact ⟨K, n, i, v, en, h₁, h₂, h₃, h₄, h₅, ρa, ρk, hc, hA, hu,
+    fun w' ρ' lsR ls' O' hE hr hl hx hO =>
     ⟨fun k' hk a σ σ' hB hcσ =>
-      hΨ _ _ _ k' hk _ _ _ ((hcont w' ρ' ls' O' hE hr hl hO).1 k' hk a σ σ' hB hcσ),
-      (hcont w' ρ' ls' O' hE hr hl hO).2⟩⟩
+      hΨ _ _ _ k' hk _ _ _ ((hcont w' ρ' lsR ls' O' hE hr hl hx hO).1 k' hk a σ σ' hB hcσ),
+      (hcont w' ρ' lsR ls' O' hE hr hl hx hO).2⟩⟩
 
 /-! ### The relation -/
 
@@ -206,17 +209,19 @@ theorem cerwpT_perform {T : OpTabT} {Q : TPostV} {F : TFrame} (K : Kont) {m i : 
 
 /-! ### The resume -/
 
-/-- **Resuming a stored continuation at a grown world**, with the share, list and owned records
-re-read there. -/
+/-- **Resuming a stored continuation at a grown world**, with the share and owned records
+re-read there, at any list keeping the records of the stop's re-read list that the re-read share
+names: records opened by others since the stop may be added, and records the share does not name
+dropped. -/
 theorem contShareT_resume {en : OpEntT} {F : TFrame} {k : Nat} {w w' : TWd}
-    {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {ls' : List (SRecT w'.K)}
+    {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {lsR ls' : List (SRecT w'.K)}
     {O' : List (FrameRecT w'.K)} {K : Kont} {v : Val} {Ψ : ContT} {ρ : TRes w.K}
     {ρ' : TRes w'.K} (h : contShareT en F k w ls O K v Ψ ρ) (hE : w.Ext w' ρ)
-    (hr : RRw (w := w) (w' := w') ρ ρ') (hl : SRecsRR w'.Θ ls ls') (hO : RecsRR w'.Θ O O')
-    {k' : Nat} (hk : k' < k) {a : Val} {σ σ' : TRes w'.K} (hB : en.PBv v k' w' ls' a σ)
-    (hc : ResUT.CompS ρ' σ σ') :
+    (hr : RRw (w := w) (w' := w') ρ ρ') (hl : SRecsRR w'.Θ ls lsR) (hx : extFT lsR ls' ρ')
+    (hO : RecsRR w'.Θ O O') {k' : Nat} (hk : k' < k) {a : Val} {σ σ' : TRes w'.K}
+    (hB : en.PBv v k' w' ls' a σ) (hc : ResUT.CompS ρ' σ σ') :
     Ψ (fun w'' ρf => F w'' ρf ∧ en.fd v w'' ρf) w' O' k' ls' (K.plug (.val a)) σ' :=
-  (h.2 w' ρ' ls' O' hE hr hl hO).1 k' hk a σ σ' hB hc
+  (h.2 w' ρ' lsR ls' O' hE hr hl hx hO).1 k' hk a σ σ' hB hc
 
 /-- A share captured at `w` is a share at every extension of `w`, on its re-reading. -/
 theorem contShareT_kripke {en : OpEntT} {F : TFrame} {k : Nat} {w w₁ : TWd}
@@ -225,8 +230,21 @@ theorem contShareT_kripke {en : OpEntT} {F : TFrame} {k : Nat} {w w₁ : TWd}
     {ρ₁ : TRes w₁.K} (h : contShareT en F k w ls O K v Ψ ρ) (hE : w.Ext w₁ ρ)
     (hr : RRw (w := w) (w' := w₁) ρ ρ₁) (hl : SRecsRR w₁.Θ ls ls₁) (hO : RecsRR w₁.Θ O O₁)
     (hu : en.q = .unr → ρ₁ = PMap.empty) : contShareT en F k w₁ ls₁ O₁ K v Ψ ρ₁ :=
-  ⟨hu, fun w' ρ' ls' O' hE' hr' hl' hO' => h.2 w' ρ' ls' O' (hE.trans hr hE')
-    (RRw.trans hE'.1 hr hr') (hl.trans hE'.1 hl') (hO.trans hE'.1 hO')⟩
+  ⟨hu, fun w' ρ' lsR ls' O' hE' hr' hl' hx hO' => h.2 w' ρ' lsR ls' O' (hE.trans hr hE')
+    (RRw.trans hE'.1 hr hr') (hl.trans hE'.1 hl') hx (hO.trans hE'.1 hO')⟩
+
+/-- **`extFT` refuses no resumption the tree world's own extension allows**: a resume at the
+re-reading of the stop's list, the only list `TWd.Ext` and `SRecsRR` give, is a resume the share
+admits (`extFT_refl`). -/
+theorem contShareT_resume_rr {en : OpEntT} {F : TFrame} {k : Nat} {w w' : TWd}
+    {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {ls' : List (SRecT w'.K)}
+    {O' : List (FrameRecT w'.K)} {K : Kont} {v : Val} {Ψ : ContT} {ρ : TRes w.K}
+    {ρ' : TRes w'.K} (h : contShareT en F k w ls O K v Ψ ρ) (hE : w.Ext w' ρ)
+    (hr : RRw (w := w) (w' := w') ρ ρ') (hl : SRecsRR w'.Θ ls ls') (hO : RecsRR w'.Θ O O')
+    {k' : Nat} (hk : k' < k) {a : Val} {σ σ' : TRes w'.K} (hB : en.PBv v k' w' ls' a σ)
+    (hc : ResUT.CompS ρ' σ σ') :
+    Ψ (fun w'' ρf => F w'' ρf ∧ en.fd v w'' ρf) w' O' k' ls' (K.plug (.val a)) σ' :=
+  contShareT_resume h hE hr hl (extFT_refl ls' ρ') hO hk hB hc
 
 end BoCa.Fig16.Tree.Wp
 
