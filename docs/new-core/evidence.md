@@ -10,11 +10,11 @@ proved at that part's rules, not a result of its own. Every other name is a Lean
 
 | Part | Result (Lean name) | Branch, commit |
 |---|---|---|
-| Destructors on every exit | `CDerives.effLetD`, `resourceSafety` | `dtor-unwind` ea63f889 |
-| Cancellation as a corollary; early loop close | `Cancel.lean` (file); `d_stepD`, `loopProg_safe` | `dtor-unwind` |
-| A lend whose callback raises | `d_lendD`, `lendD` | `dtor-unwind` 471a5d2d |
-| Owned resources across a suspension | `d_kDtor`, `dtors_kappa` | `dtor-unwind` 9b2a2eb5 |
-| `hdv` is guardedness | `rtSafety`, `effLetDDiv` | `dtor-unwind` aabb1c68 |
+| Destructors on every exit | `CDerives.effLetD`, `resourceSafety` | library: `Core/LetDtor.lean`, `Core/LetDtorSafety.lean` |
+| Cancellation as a corollary; early loop close | `cancelProg_safe`; `d_stepD`, `loopProg_safe` | library: `Core/LetDtorCancel.lean`, `Core/LetDtorLoop.lean` |
+| A lend whose callback raises | `d_lendD`, `lendD` | library: `Core/LetDtorLend.lean` |
+| Owned resources across a suspension | `d_kDtor`, `dtors_kappa` | library: `Core/LetDtorSuspend.lean` |
+| `hdv` is guardedness | `rtSafety`, `CDerives.effLetDDiv` | library: `Core/LetDtorSafety.lean`, `Core/LetDtor.lean` |
 | Step-indexed `ewp`; storing scheduler, unbounded loop, no fuel | `ewp_handle`, `adequacy`, `progStore_orDiverges`, `progDrop_orDiverges` | `dtor-unwind` 9f0571da |
 | `[handle]` at Core's types without `hdv` | `handle_sem`, `kap_sem` | `dtor-unwind` 6969c14f |
 | Index-relative `mut` cells; 6.48, 6.59 at the index | `UpdMutN`, `not_mutMutMemberStep`, `updVN_frame`, `six59VN` | `dtor-unwind` 99fc8d04, 20641658 |

@@ -115,3 +115,10 @@ import Core.Clo
 import Core.CloRules
 import Core.CloPrograms
 import Core.Mentions
+import Core.LetDtor
+import Core.LetDtorSafety
+import Core.LetDtorFiles
+import Core.LetDtorCancel
+import Core.LetDtorLoop
+import Core.LetDtorLend
+import Core.LetDtorSuspend
