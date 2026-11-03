@@ -176,20 +176,24 @@ theorem ParentFn.graftOf_graft (P : ParentFn) {r t : Nat} (hr : r ≠ 0) (ht : �
     P.Graft (P.graftOf r t hr ht) r t :=
   ⟨by simp [ParentFn.graftOf], fun n hn => by simp [ParentFn.graftOf, hn]⟩
 
-/-- The world with `r`'s subtree grafted under `t`. -/
-def TWd.graft (w : TWd) (r t : Nat) (hr : r ≠ 0) (ht : ¬ w.P.Anc t r) : TWd :=
-  ⟨w.P.graftOf r t hr ht, w.Θ⟩
+/-- The world with `r`'s subtree grafted under `t`, at the template choice `tc` of the grown
+tree. -/
+def TWd.graft (w : TWd) (r t : Nat) (hr : r ≠ 0) (ht : ¬ w.P.Anc t r)
+    (tc : TChoice (WCactus.ofParent (w.P.graftOf r t hr ht))) : TWd :=
+  ⟨w.P.graftOf r t hr ht, w.Θ, tc⟩
 
 /-- **A graft whose capture point is above the resume point extends the world**, carrying every
 resource (`graft_mono`). -/
 theorem TWd.graft_ext (w : TWd) {r t : Nat} (hr : r ≠ 0) (ht : ¬ w.P.Anc t r)
-    (hc : w.P.Anc t (w.P.par r)) (ρ : TRes w.K) : w.Ext (w.graft r t hr ht) ρ :=
+    (hc : w.P.Anc t (w.P.par r)) (tc : TChoice (WCactus.ofParent (w.P.graftOf r t hr ht)))
+    (ρ : TRes w.K) : w.Ext (w.graft r t hr ht tc) ρ :=
   ⟨fun {_ _} h => ⟨ParentFn.graft_mono (w.P.graftOf_graft hr ht) hc ht h.1, h.2⟩,
     AgreeOn.refl _ _⟩
 
 /-- After the graft, `r` is nested in `t`. -/
-theorem TWd.graft_lt (w : TWd) {r t : Nat} (hr : r ≠ 0) (ht : ¬ w.P.Anc t r) (hrt : r ≠ t) :
-    (w.graft r t hr ht).K.lt (OrderDual.toDual r) (OrderDual.toDual t) :=
+theorem TWd.graft_lt (w : TWd) {r t : Nat} (hr : r ≠ 0) (ht : ¬ w.P.Anc t r) (hrt : r ≠ t)
+    (tc : TChoice (WCactus.ofParent (w.P.graftOf r t hr ht))) :
+    (w.graft r t hr ht tc).K.lt (OrderDual.toDual r) (OrderDual.toDual t) :=
   ⟨.up (by simp [TWd.graft, ParentFn.graftOf]; exact .refl t),
     fun e => hrt (OrderDual.toDual.injective e)⟩
 
@@ -200,10 +204,11 @@ def TWd.Unused (w : TWd) (a : Nat) : Prop :=
 /-- **A fresh child of `n`**: an unused leaf grafted under `n` extends the world, carrying every
 resource, and is nested in `n` after. -/
 theorem TWd.fresh_ext (w : TWd) {a n : Nat} (hu : w.Unused a) (hn : n ≠ a) :
-    ∃ (ht : ¬ w.P.Anc n a), (∀ ρ : TRes w.K, w.Ext (w.graft a n hu.1 ht) ρ) ∧
-      (w.graft a n hu.1 ht).K.lt (OrderDual.toDual a) (OrderDual.toDual n) := by
+    ∃ (ht : ¬ w.P.Anc n a), ∀ tc : TChoice (WCactus.ofParent (w.P.graftOf a n hu.1 ht)),
+      (∀ ρ : TRes w.K, w.Ext (w.graft a n hu.1 ht tc) ρ) ∧
+      (w.graft a n hu.1 ht tc).K.lt (OrderDual.toDual a) (OrderDual.toDual n) := by
   have ht : ¬ w.P.Anc n a := fun h => hn (hu.2.2 n h)
-  refine ⟨ht, w.graft_ext hu.1 ht ?_, w.graft_lt hu.1 ht (Ne.symm hn)⟩
+  refine ⟨ht, fun tc => ⟨w.graft_ext hu.1 ht ?_ tc, w.graft_lt hu.1 ht (Ne.symm hn) tc⟩⟩
   rw [hu.2.1]
   exact w.P.anc_zero n
 
@@ -212,7 +217,7 @@ theorem TWd.fresh_ext (w : TWd) {a n : Nat} (hu : w.Unused a) (hn : n ≠ a) :
 open Classical in
 /-- `Θ[ℓ ↦ B]`. -/
 def TWd.setTy (w : TWd) (l : BoCa.Loc) (B : Option KTy) : TWd :=
-  ⟨w.P, fun m => if m = l then B else w.Θ m⟩
+  ⟨w.P, fun m => if m = l then B else w.Θ m, w.tc⟩
 
 /-- **Re-typing a location no `mut` cell of `ρ` is at extends the world carrying `ρ`.** -/
 theorem TWd.setTy_ext (w : TWd) {l : BoCa.Loc} (B : Option KTy) {ρ : TRes w.K}
@@ -221,8 +226,9 @@ theorem TWd.setTy_ext (w : TWd) {l : BoCa.Loc} (B : Option KTy) {ρ : TRes w.K}
 
 /-- Re-typing a location to the code it has is the identity. -/
 theorem TWd.setTy_self (w : TWd) (l : BoCa.Loc) : w.setTy l (w.Θ l) = w := by
-  obtain ⟨P, Θ⟩ := w
-  simp only [TWd.setTy, TWd.mk.injEq, true_and]
+  obtain ⟨P, Θ, tc⟩ := w
+  simp only [TWd.setTy]
+  congr 1
   funext m
   by_cases h : m = l
   · subst h; simp

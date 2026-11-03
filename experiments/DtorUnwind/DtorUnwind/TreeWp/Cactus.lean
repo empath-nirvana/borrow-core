@@ -275,12 +275,12 @@ theorem lower_emptyT {K : WCactus} :
 
 /-- The empty world at any tree and the empty store typing. -/
 theorem winv_empty (P : ParentFn) :
-    WInv ⟨P, fun _ => none⟩ (PMap.empty : TRes (WCactus.ofParent P)) (fun _ => none) :=
+    WInv ⟨P, fun _ => none, tmplT _ (fun _ => none)⟩ (PMap.empty : TRes (WCactus.ofParent P)) (fun _ => none) :=
   ⟨fun _ _ e => by simp at e, lower_emptyT⟩
 
 theorem recInv_empty (P : ParentFn) :
-    RecInv ⟨P, fun _ => none⟩ (PMap.empty : TRes (WCactus.ofParent P)) [] [] :=
-  ⟨⟨tmplT _ (fun _ => none), .empty⟩, fun _ hx => by simp at hx⟩
+    RecInv ⟨P, fun _ => none, tmplT _ (fun _ => none)⟩ (PMap.empty : TRes (WCactus.ofParent P)) [] [] :=
+  ⟨.empty, fun _ hx => by simp at hx⟩
 
 /-- Nothing stops at the empty table. -/
 def OpTabT.empty : OpTabT := fun _ _ => none
@@ -298,11 +298,11 @@ its cell. -/
 theorem cerwpT_adequacy (P : ParentFn) {Q : TPostV} {P₀ : Expr}
     (hQ : ∀ k w ls O v ρ, Q k w ls O v ρ → ρ = PMap.empty)
     (hall : ∀ n, cerwpT (ℍ := ℍ) (opTableT OpTabT.empty) Q (fun _ ρf => ρf = PMap.empty) n
-      ⟨P, fun _ => none⟩ [] [] P₀ (PMap.empty : TRes (WCactus.ofParent P))) :
+      ⟨P, fun _ => none, tmplT _ (fun _ => none)⟩ [] [] P₀ (PMap.empty : TRes (WCactus.ofParent P))) :
     BoCa.Fig16.LogRel.Core.DtorUnwind.LoopAwait.OrDiverges (ℍ := ℍ) P₀ := by
   intro μ e hs
   obtain ⟨j, hrun⟩ := stepsN_of_steps hs
-  have hI₀ : CactusInvT ⟨P, fun _ => none⟩ [(PMap.empty, [])] PMap.empty [] []
+  have hI₀ : CactusInvT ⟨P, fun _ => none, tmplT _ (fun _ => none)⟩ [(PMap.empty, [])] PMap.empty [] []
       (fun _ => none) :=
     ⟨.cons .nil (ResUT.compS_empty_right _), fun p => by simp,
       List.pairwise_singleton _ _, recInv_empty P, winv_empty P⟩

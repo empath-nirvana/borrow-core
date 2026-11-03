@@ -12,6 +12,9 @@ world `fρ` with records proper `ps`, a list `ls`, `TWNC fρ ps (rsOf ls)`, `Tag
   graft are both `ParentFn.Graft`s, so both extend `K` (`WCactus.Ext`) by `graft_mono`.
 * **`Θ`**, the store typing, a code per location (`TreeWp/Codes.lean`); its cells are read at
   the semantic typing `sem Θ` (`Tree/KSem.lean`'s `Cov`).
+* **`tc`**, the template choice the records' canonical images are read at
+  (`TreeWp/Records.lean`'s `TChoice`); a run at a world keeps it, and a grown world carries it
+  (`TWNT.reread`'s `TcCarried`).
 * **the resource**, a `TRes K`, covered by `sem Θ` at `K`, lowering to the memory (`WInv`).
 
 `TWd.Ext w w′ ρ` is the extension of worlds carrying `ρ`: `K` keeps every nesting, and `Θ′`
@@ -42,12 +45,16 @@ open BoCa.Fig16.Tree.Wp
 
 /-! ### The world -/
 
-/-- **A world over the tree-stratified carrier**: the lifetime tree and the store typing. -/
+/-- **A world over the tree-stratified carrier**: the lifetime tree, the store typing and the
+template choice. -/
 structure TWd where
   /-- The lifetime tree, as a parent function. -/
   P : ParentFn
   /-- The store typing, a code per location. -/
   Θ : CodeTy
+  /-- The template choice the canonical images of the world's records are read at
+  (`TChoice`, `TreeWp/Records.lean`): kept by every step, carried when the tree grows. -/
+  tc : TRes (WCactus.ofParent P) → KTy → BoCa.Val → TRes (WCactus.ofParent P)
 
 /-- The lifetime tree. -/
 abbrev TWd.K (w : TWd) : WCactus := WCactus.ofParent w.P
