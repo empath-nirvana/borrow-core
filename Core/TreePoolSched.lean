@@ -143,6 +143,70 @@ theorem poolAns_park {Q : TPostV} {H : Val} {Inv : List StoredT → Prop} {en : 
   · exact ⟨rfl, hj, fun _ _ _ _ _ _ _ h => h⟩
   · exact hg t ht
 
+/-! ### Reordering the pool -/
+
+/-- A pointwise relation carried along a permutation of its left list. -/
+theorem forall₂_perm {α β : Type _} {R : α → β → Prop} {l u : List α} {v : List β}
+    (hp : l.Perm u) (h : List.Forall₂ R u v) : ∃ v', List.Forall₂ R l v' ∧ v'.Perm v := by
+  induction hp generalizing v with
+  | nil => cases h; exact ⟨[], .nil, .nil⟩
+  | cons x _ ih =>
+      cases h with
+      | cons hx t => obtain ⟨v', h', hp'⟩ := ih t; exact ⟨_, .cons hx h', hp'.cons _⟩
+  | swap x y l =>
+      cases h with
+      | cons hx t => cases t with
+        | cons hy t' => exact ⟨_, .cons hy (.cons hx t'), .swap _ _ _⟩
+  | trans _ _ ih₁ ih₂ =>
+      obtain ⟨v₁, h₁, p₁⟩ := ih₂ h
+      obtain ⟨v₂, h₂, p₂⟩ := ih₁ h₁
+      exact ⟨v₂, h₂, p₂.trans p₁⟩
+
+/-- A record list's masks do not depend on its order. -/
+theorem recMask_perm {K : WCactus} {O O' : List (FrameRecT K)} (h : O.Perm O') :
+    recMask O = recMask O' :=
+  funext fun _ => propext ⟨fun ⟨p, hp, hx⟩ => ⟨p, h.mem_iff.mp hp, hx⟩,
+    fun ⟨p, hp, hx⟩ => ⟨p, h.mem_iff.mpr hp, hx⟩⟩
+
+/-- **`twp` does not depend on the order of the records the run owns**: it reads them through
+their re-readings (pointwise, carried along the permutation), `SplitT` and their masks (both by
+membership). -/
+theorem twp_perm {F : TFrame} {P : TPost} {n : Nat} {w : TWd} {ls : List (SRecT w.K)}
+    {O O' : List (FrameRecT w.K)} (hp : O.Perm O') {e : Expr} {ρ : TRes w.K}
+    (h : twp (ℍ := ℍ) F P n w ls O e ρ) : twp (ℍ := ℍ) F P n w ls O' e ρ := by
+  intro w₀ ρ₀ ρf fρ ls₀ O₀' ps psF μ hE hr hl hO' hF hh hc hS hR hI hfd j μ' e' hj hrun hfin
+  obtain ⟨O₀, hO, hp₀⟩ := forall₂_perm hp hO'
+  have hS' : SplitT ps O₀ psF :=
+    ⟨fun q => by rw [hS.1 q, hp₀.mem_iff], fun q hq r hr => hS.2 q (hp₀.mem_iff.mp hq) r hr⟩
+  have := h w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE hr hl hO hF hh hc hS' hR hI hfd j μ' e' hj hrun hfin
+  unfold EndT at this ⊢
+  rwa [recMask_perm hp₀] at this
+
+/-- **The pool's first two tasks exchanged**: the same resource, the records permuted. -/
+theorem poolT_swap {a b : StoredT} {ts : List StoredT} {w : TWd} {ls : List (SRecT w.K)}
+    {O : List (FrameRecT w.K)} {ρ : TRes w.K} (hP : PoolT (ℍ := ℍ) (a :: b :: ts) w ls O ρ)
+    (hv : ResUT.Valid ρ) : ∃ O' : List (FrameRecT w.K), O'.Perm O ∧
+      PoolT (ℍ := ℍ) (b :: a :: ts) w ls O' ρ := by
+  obtain ⟨Oa, Os₁, ra, rs₁, rfl, hc₁, hκa, hMa, hP₁, hb₁, ha₁, hap₁⟩ := hP
+  obtain ⟨Ob, Os, rb, rs, rfl, hc₂, hκb, hMb, hPs, hb₂, ha₂, hap₂⟩ := hP₁
+  obtain ⟨x, hx₁, hx₂⟩ := (ResUT.CompS.assoc ra rb rs ρ).mp ⟨_, hc₂, hc₁⟩
+  obtain ⟨y, hy₁, hy₂⟩ := (ResUT.CompS.assoc rb ra rs ρ).mpr ⟨x, ResUT.CompS.comm hx₁, hx₂⟩
+  have hvs₁ := (ResUT.Valid.split hc₁ hv).2
+  have hvy := (ResUT.Valid.split hy₂ hv).2
+  have hvar := ResUT.Valid.split hy₁ hvy
+  refine ⟨Ob ++ (Oa ++ Os), ?_, Ob, Oa ++ Os, rb, y, rfl, hy₂, hκb, hMb,
+    ⟨Oa, Os, ra, rs, rfl, hy₁, hκa, hMa, hPs, hb₁.of_compS_right hc₂ hvs₁,
+      ha₁.mono fun x hx => (recMask_append x).mpr (Or.inr hx),
+      fun p hp q hq => hap₁ p hp q (List.mem_append_right _ hq)⟩,
+    NoneAt.compS hy₁ hvar.1 hvar.2 (ha₁.mono fun x hx => (recMask_append x).mpr (Or.inl hx)) hb₂,
+    (NoneAt.or (hb₁.of_compS_left hc₂ hvs₁) ha₂).mono fun x hx => (recMask_append x).mp hx,
+    fun p hp q hq => ?_⟩
+  · rw [← List.append_assoc, ← List.append_assoc]
+    exact List.perm_append_comm.append_right _
+  · rcases List.mem_append.mp hq with hq | hq
+    · exact (hap₁ q hq p (List.mem_append_left _ hp)).symm
+    · exact hap₂ p hp q hq
+
 /-- What a stored task answers when resumed or cancelled, handed the rest of the pool: the
 continuation from `PoolPost` at a good task, under frames avoiding everything's records. -/
 theorem poolAns_handRest {Q : TPostV} {H : Val} {Inv : List StoredT → Prop} {t : StoredT}
@@ -180,6 +244,23 @@ theorem poolAns_resume {Q : TPostV} {H : Val} {Inv : List StoredT → Prop} {t :
       (hFM w' ρf hf))
   exact twp_bind_fd hFm (fun _ _ h => h) (Kont.appL .hole (stateVal H ts))
     (fun w₀ ρf hf => (hFM w₀ ρf hf).2) h (poolAns_handRest hg hi hFm)
+
+/-- **Resume the second**: the pool's second task resumed at an answer `a` its entry accepts, the
+first kept at the head of the rest (`poolT_swap`, `twp_perm`). A park that resumes another task
+and keeps the parked one in its place is this move after `poolAns_park`. -/
+theorem poolAns_resumeSnd {Q : TPostV} {H : Val} {Inv : List StoredT → Prop} {t u : StoredT}
+    {ts : List StoredT} {k' : Nat} (hg : ∀ x ∈ t :: u :: ts, GoodT (ℍ := ℍ) Q H Inv (k' + 1) x)
+    {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {ρp σ ρ : TRes w.K}
+    (hP : PoolT (ℍ := ℍ) (t :: u :: ts) w ls O ρp) (hvp : ResUT.Valid ρp) {a : Val}
+    (hB : u.en.PBv u.v k' w ls a σ) (hc : ResUT.CompS ρp σ ρ) (hσ : NoneAt (recMask O) σ)
+    (hcov : CovR (sem w.Θ) w.K ρ) (hv : ResUT.Valid ρ) {F : TFrame} (hFm : F.Mono)
+    (hFM : ∀ w' ρf, F w' ρf → fdMask (recMask O) w' ρf) (hi : Inv (t :: ts)) :
+    twp (ℍ := ℍ) F (valPost Q) k' w ls O
+      (.app (.app (.app u.κ.1 (.val (Val.inj₁ .unit))) (.val a)) (stateVal H (t :: ts)).1) ρ := by
+  obtain ⟨O', hp, hP'⟩ := poolT_swap hP hvp
+  have hM := recMask_perm hp
+  refine twp_perm hp (poolAns_resume (fun x hx => hg x ((List.Perm.swap t u ts).mem_iff.mp hx))
+    hP' hB hc (by rw [hM]; exact hσ) hcov hv hFm (by rw [hM]; exact hFM) hi)
 
 /-- **Cancel**: the pool's first task, at a cancellable entry, its cancel branch run under its
 scheduler, the rest of the pool handed to what it answers (the unwinding finished, or stopped at
