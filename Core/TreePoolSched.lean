@@ -115,13 +115,14 @@ theorem poolAnsAt_iff {Q : TPostV} {H : Val} {Ok : StoredT → Prop} {k : Nat} {
 /-! ### The pool's moves -/
 
 /-- **Park**: the stopped task (`KapSchedT` at the masks of its records, answering a scheduler
-answer) joins the pool, good at its stop's index when the scheduler's `Ok` admits it. -/
+answer) joins the pool, good at every index `j` up to its stop's when the scheduler's `Ok` admits
+it. -/
 theorem poolAns_park {Q : TPostV} {H : Val} {Ok : StoredT → Prop} {en : OpEntT} {k : Nat}
     {v κ : Val} {ts : List StoredT} {w : TWd} {ls : List (SRecT w.K)}
     {Ot Os : List (FrameRecT w.K)} {a b ρ : TRes w.K}
     (hκ : KapSchedT (ℍ := ℍ) (PoolAns (ℍ := ℍ) Q H Ok) (recMask Ot) en H k w ls Ot v κ a)
     (hok : Ok ⟨PoolAns (ℍ := ℍ) Q H Ok, recMask Ot, en, H, k, v, κ⟩)
-    (hg : ∀ t ∈ ts, GoodT (ℍ := ℍ) Q H Ok k t)
+    {j : Nat} (hj : j ≤ k) (hg : ∀ t ∈ ts, GoodT (ℍ := ℍ) Q H Ok j t)
     (hP : PoolT (ℍ := ℍ) ts w ls Os b) (hc : ResUT.CompS a b ρ)
     (hb : NoneAt (recMask Ot) b) (ha : NoneAt (recMask Os) a)
     (hap : ∀ p ∈ Ot, ∀ q ∈ Os, p.le ≠ q.le) (hcov : CovR (sem w.Θ) w.K a)
@@ -129,12 +130,12 @@ theorem poolAns_park {Q : TPostV} {H : Val} {Ok : StoredT → Prop} {en : OpEntT
     PoolT (ℍ := ℍ) (⟨PoolAns (ℍ := ℍ) Q H Ok, recMask Ot, en, H, k, v, κ⟩ :: ts) w ls
       (Ot ++ Os) ρ ∧
     ∀ t ∈ (⟨PoolAns (ℍ := ℍ) Q H Ok, recMask Ot, en, H, k, v, κ⟩ :: ts : List StoredT),
-      GoodT (ℍ := ℍ) Q H Ok k t := by
+      GoodT (ℍ := ℍ) Q H Ok j t := by
   refine ⟨poolT_park (t := ⟨_, _, en, H, k, v, κ⟩) hκ (fun _ => Iff.rfl) hP hc hb ha hap hcov
     hls hO, ?_⟩
   intro t ht
   rcases List.mem_cons.mp ht with rfl | ht
-  · exact ⟨hok, rfl, le_refl _, fun _ _ _ _ _ _ _ h => h⟩
+  · exact ⟨hok, rfl, hj, fun _ _ _ _ _ _ _ h => h⟩
   · exact hg t ht
 
 /-- What a stored task answers when resumed or cancelled, handed the rest of the pool: the
