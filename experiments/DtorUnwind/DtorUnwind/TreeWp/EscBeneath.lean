@@ -332,11 +332,19 @@ theorem chain_view_le {Θ : CodeTy} {W : TRes K} {ps rs : List (FrameRecT K)}
           rw [hw₀]
           exact ResUT.Le.trans ⟨_, ResUT.del_compS eζ₀⟩ hq₀
 
-/-! ### The theorem -/
+/-! ### The innermost view -/
 
-/-- **`EscBeneathT`.** -/
-theorem escBeneathT : EscBeneathT := by
-  intro K Θ tc W ρo ρrest ps rs p α n hT hp hW hFL hbr hnα d hd x ζ eζ kζ ar har χ eχ kχ _
+/-- **The innermost view above a lineage cell is the record's, or at a lineage location of it.**
+A non-`imm` cell of `ag(ρ_rest)`, for `ρ_rest` a part of `W`, at a location where a lineage member
+`d` of the record proper `p` holds a non-`imm` cell, sits beneath an `imm` cell `V` of `ρ_rest`
+(at depth) whose location is `p`'s or a lineage location of `p`. -/
+theorem innermost_view {Θ : CodeTy} {tc : TChoice K} {W ρo ρrest : TRes K}
+    {ps rs : List (FrameRecT K)} {p : FrameRecT K} (hT : TWNT K Θ tc W ps rs) (hp : p ∈ ps)
+    (hW : ResUT.CompS ρo ρrest W) {d : FrameRecT K} (hd : DescRT p d) {x : BoCa.Loc}
+    {ζ : TCell K} (eζ : d.R.get x = some ζ) (kζ : ζ.kind ≠ Kind.imm) {ar : TRes K}
+    (har : AgWT ρrest ar) {χ : TCell K} (eχ : ar.get x = some χ) (kχ : χ.kind ≠ Kind.imm) :
+    ∃ (m₁ : BoCa.Loc) (V : TCell K), CellAt ρrest m₁ V ∧ V.kind = Kind.imm ∧
+      (m₁ = p.le ∨ LinLocT p m₁) := by
   have hTI := hT.inv
   have hv := hT.valid
   have hU := hT.exclUnique
@@ -345,35 +353,20 @@ theorem escBeneathT : EscBeneathT := by
   have hprs : p ∈ rs := (hTI.2.2.2.2.2.2.1 p).mpr ⟨p, hp, [], .nil p⟩
   have hdrs : d ∈ rs := hcl p hprs d hd
   obtain ⟨pd, hpd⟩ := hd
-  -- the cell of `ag(ρ_rest)` sits beneath a borrow of `ρ_rest`
   obtain ⟨m, χ', hm, hχ', ψ₀, c₀, k₀, -⟩ := agW_nonimm_beneath har x χ eχ kχ
   have hk₀ : ψ₀.kind ≠ Kind.imm := by rw [k₀]; exact kχ
   have c₁ : CellAt ρrest x ψ₀ := .nest hm c₀
-  -- `ag(W)` holds the lineage's cell at `x`
   have hxR : CellAt p.R x ζ := hpd.cellAt (fun y φ e => .top e) x ζ eζ
   obtain ⟨ζW, eζW⟩ := le_view_cellAt hT hp hxR haW
   rcases cellAt_split c₁ with ⟨q, σ, hq, eσ⟩ | ⟨m₁, V, hV, kV, q, σ, hq, eσ⟩
   · -- `mut` cells only from the top: the cell is in `ex(W)_●`
     obtain ⟨σ', hq', eσ'⟩ := xpath_le ⟨ρo, ResUT.CompS.comm hW⟩ hq eσ hk₀
     obtain ⟨σW, eW, aW', heW, -, -⟩ := hv
-    exact ex_ag_disjoint hT.valid heW haW (xpath_ex heW hq' eσ' hk₀) eζW
-  · -- the innermost view `V`
+    exact (ex_ag_disjoint hT.valid heW haW (xpath_ex heW hq' eσ' hk₀) eζW).elim
+  · refine ⟨m₁, V, hV, kV, ?_⟩
     obtain ⟨a₁, a₂, -, ha₂, hcW⟩ := (AgWT.split hW).mp haW
-    obtain ⟨V', eV', kV', -, wV', lV'⟩ :=
+    obtain ⟨V', eV', kV', -, wV', -⟩ :=
       icp_trans (cellAt_imm_icp hV ha₂) (icpAt_right hcW m₁) kV
-    obtain ⟨sV, hsV, hηV⟩ := CellUT.imm_eta kV
-    have hlsV : V.lsOfI = some sV := by rw [hηV]; exact CellUT.lsOfI_immOf _ _ _ _
-    have hlsV' : V.lsOf = some sV := by rw [hηV]; exact CellUT.lsOf_immOf _ _ _ _
-    obtain ⟨y, hy⟩ := sV.ne
-    obtain ⟨tV, htV⟩ := lsOf_of_imm kV'
-    have hyV' : y ∈ tV.set := lV' sV tV hlsV htV y hy
-    have hny : K.le n y := cellAt_onBranch hbr hV sV hlsV' y hy
-    -- `V`'s location is `p`'s, or a lineage location of `p`
-    suffices hloc : m₁ = p.le ∨ LinLocT p m₁ by
-      rcases hloc with h | hl
-      · subst h
-        exact hnα (hFL.1 aW haW V' tV eV' htV y hyV' ▸ hny)
-      · exact hnα (K.trans hny (hFL.2 aW haW m₁ hl V' tV eV' htV y hyV'))
     -- a proper ancestor of `p` would make `p.le` a `mut` cell at depth
     have notSub : ∀ r ∈ rs, ∀ q', q' ≠ [] → LinPathT r q' p → False := by
       intro r hr q' hq' hpath
@@ -411,6 +404,28 @@ theorem escBeneathT : EscBeneathT := by
       · rcases hrp.cases with rfl | ⟨pp, hpp, hpath⟩
         · exact Or.inr ⟨_, ⟨[], .nil _⟩, _, hown, by simp⟩
         · exact (notSub r hr pp hpp hpath).elim
+
+/-! ### The theorem -/
+
+/-- **`EscBeneathT`.** -/
+theorem escBeneathT : EscBeneathT := by
+  intro K Θ tc W ρo ρrest ps rs p α n hT hp hW hFL hbr hnα d hd x ζ eζ kζ ar har χ eχ kχ _
+  obtain ⟨m₁, V, hV, kV, hloc⟩ := innermost_view hT hp hW hd eζ kζ har eχ kχ
+  obtain ⟨aW, haW⟩ := agW_of_valid hT.valid
+  obtain ⟨a₁, a₂, -, ha₂, hcW⟩ := (AgWT.split hW).mp haW
+  obtain ⟨V', eV', kV', -, -, lV'⟩ :=
+    icp_trans (cellAt_imm_icp hV ha₂) (icpAt_right hcW m₁) kV
+  obtain ⟨sV, hsV, hηV⟩ := CellUT.imm_eta kV
+  have hlsV : V.lsOfI = some sV := by rw [hηV]; exact CellUT.lsOfI_immOf _ _ _ _
+  have hlsV' : V.lsOf = some sV := by rw [hηV]; exact CellUT.lsOf_immOf _ _ _ _
+  obtain ⟨y, hy⟩ := sV.ne
+  obtain ⟨tV, htV⟩ := lsOf_of_imm kV'
+  have hyV' : y ∈ tV.set := lV' sV tV hlsV htV y hy
+  have hny : K.le n y := cellAt_onBranch hbr hV sV hlsV' y hy
+  rcases hloc with h | hl
+  · subst h
+    exact hnα (hFL.1 aW haW V' tV eV' htV y hyV' ▸ hny)
+  · exact hnα (K.trans hny (hFL.2 aW haW m₁ hl V' tV eV' htV y hyV'))
 
 /-! ### The escrow's frame condition -/
 

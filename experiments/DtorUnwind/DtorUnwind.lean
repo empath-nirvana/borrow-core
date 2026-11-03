@@ -144,6 +144,8 @@ import DtorUnwind.Tree.CarrierSim
 import DtorUnwind.Tree.KSem
 import DtorUnwind.Tree.KSemGraft
 import DtorUnwind.TreeWp.World
+import DtorUnwind.TreeWp.FlatLs
+import DtorUnwind.TreeWp.UpdX
 import DtorUnwind.TreeWp.Rel
 import DtorUnwind.TreeWp.Eff
 import DtorUnwind.TreeWp.Cactus
@@ -169,4 +171,6 @@ import DtorUnwind.TreeWp.InvSimple
 import DtorUnwind.TreeWp.TInvHolds
 import DtorUnwind.TreeWp.InvUses
 import DtorUnwind.TreeWp.EscBeneath
+import DtorUnwind.TreeWp.StepKeep
 import DtorUnwind.TreeWp.StepCopy
+import DtorUnwind.TreeWp.UpdXMasks
