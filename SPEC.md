@@ -10535,15 +10535,27 @@ runner's lend, R2 at the stored branch (`kapStored_end_refused`) refuses the run
 location keeps the child's share, a view of the parent's lend, resumable. Record lists have
 re-readings wherever the code typing agrees on their escrows (`SRecsRR.exists_retype`).
 
+**Opening and ending a lend at `twp`** (`Core/TreeLend.lean`), each a `twp_update` instance, for a
+lend of `ℓ ↦ own(())` with the empty escrow (record `lendRec ℓ`). Open (`twp_lendOpen`): the cell
+becomes the lend cell `ℓ ↦ imm({α}, (), ∅)`, the run owns the record and the list carries it
+tagged `α` (`TWNT.immFrame`; the record's frame lifetime read off the lend cell, the only view at
+`ℓ`; other records' frame lifetimes kept since `ℓ` is no lineage location of theirs,
+`le_not_linLoc`). End (`twp_lendEnd`): the lend cell goes back to `own`, the record leaves the
+run's records and the list (`TWNT.immEnd`), when the rest of the run's resource and the frame hold
+nothing at `ℓ` at any depth (`FdEsc ℓ ∅`). The lend cell splits into copies (`viewRes_dup`), each
+a shared view another branch may hold across a stop; the end needs every copy back. Neither rule
+asks anything of `α`. Escrows that hand out views of their contents (`TWNT.reb`) are not covered.
+
 *Open*:
 - adequacy derived from invariant preservation, at the relation the typing rules use;
 - preservation at spawn and join;
 - the frame rules as instances of capture;
 - one relation with abortive stops and forwarding (the two relations `erwp`/`cerwp` merge);
-- the lend rules at `twp` over the tree (opening and ending a record), and multi-branch programs
-  with lends;
+- the lend rules at `twp` over the tree for escrows with contents (reborrows, `TWNT.reb`), and
+  multi-branch programs with lends;
 - a program through the headline in which a parked task holds a view of a lend while another
-  ends a lend of its own (`twp_keepsKap_sep` carries it; the lend rules above are missing);
+  ends a lend of its own (`twp_keepsKap_sep` carries it, `twp_lendOpen` and `twp_lendEnd` give the lends; the program
+  is not written);
   `pingpong-mut`'s relay is not yet written through `twp_keepsKap`;
 - a scheduler that keeps state beside a branch that owned records at an earlier stop: `contShareT`
   resumes at `fdAt en v F O′`, `F` the stop's own frame condition, so the conditions accumulate and

@@ -164,6 +164,47 @@ theorem holdsMut_of_compS_view {a y : TRes K} {β : Life} {l' : BoCa.Loc}
         have hw := (CellUT.CompS.wit hC).1
         exact .deep f₁ (hw ▸ hm)
 
+theorem rr_own {Θ : LocTy} {l : BoCa.Loc} {v : BoCa.Val} :
+    RR Θ (ResUT.single l (CellUT.ownOf (K := K) v)) (ResUT.single l (CellUT.ownOf (K := K') v)) := by
+  classical
+  refine ⟨fun m => ?_, fun m ψ ψ' e e' => ?_⟩
+  · by_cases hm : m = l
+    · subst hm; simp
+    · simp [ResUT.single_get_ne _ hm]
+  · obtain ⟨rfl, rfl⟩ := ResUT.single_get_eq_some e
+    obtain ⟨-, rfl⟩ := ResUT.single_get_eq_some e'
+    exact RC.own _ _
+
+/-- A re-read resource holding the lend cell at `ℓ` holds it there. -/
+theorem rr_view_get {Θ : LocTy} {β : Life} {l : BoCa.Loc} {ρ : TRes K} {ρ' : TRes K'}
+    (h : RR Θ ρ ρ') (e : ρ.get l = some (viewCell β)) : ρ'.get l = some (viewCell β) := by
+  obtain ⟨ψ', e', hr⟩ := h.get_some e
+  obtain ⟨χ', h', rfl, hχ⟩ := RC.immOf_inv hr
+  obtain rfl := RR.of_empty hχ
+  exact e'
+
+/-- A part beside a singleton, missing its location, is the composite without it. -/
+theorem eq_del_of_compS_single' {ρ ρ₂ : TRes K} {l : BoCa.Loc} {ψ : TCell K}
+    (hc : ResUT.CompS ρ₂ (ResUT.single l ψ) ρ) (hl : ρ₂.get l = none) : ρ₂ = ρ.del l := by
+  classical
+  refine PMap.ext fun x => ?_
+  by_cases ex : x = l
+  · subst ex; rw [ResUT.del_get_self]; exact hl
+  · rw [ResUT.del_get_ne _ ex, ResUT.Comp.get_of_right_none hc (ResUT.single_get_ne _ ex)]
+
+/-- **A sub-list of a re-read list has a re-reading** inside the re-read list. -/
+theorem forall₂_sub {α β : Type} {R : α → β → Prop} {xs : List α} {ys : List β}
+    (h : List.Forall₂ R xs ys) :
+    ∀ {zs : List α}, (∀ z ∈ zs, z ∈ xs) → ∃ ws, List.Forall₂ R zs ws ∧ ∀ y ∈ ws, y ∈ ys
+  | [], _ => ⟨[], .nil, fun _ h => by cases h⟩
+  | z :: zs, hz => by
+      obtain ⟨y, hy, hzy⟩ := forall₂_mem_left h (hz z List.mem_cons_self)
+      obtain ⟨ws, hws, hin⟩ := forall₂_sub h (zs := zs) fun z' h' => hz z' (List.mem_cons_of_mem _ h')
+      exact ⟨y :: ws, .cons hzy hws, fun y' h' => by
+        rcases List.mem_cons.mp h' with rfl | h'
+        · exact hy
+        · exact hin y' h'⟩
+
 /-! ### The record of a lend -/
 
 /-- **The record of a lend of `ℓ ↦ own(())`**: lent location `ℓ`, value `()`, the empty escrow,
@@ -354,6 +395,203 @@ theorem twp_lendOpen {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls : List (SR
       rfl
     · rw [ResUT.Comp.get_of_right_none hστ (ResUT.single_get_ne _ hx),
         ResUT.Comp.get_of_right_none hστ₁ (ResUT.single_get_ne _ hx)]
+
+/-! ### End -/
+
+/-- **End a lend at `twp`.** The run holds the lend cell `ℓ ↦ imm({α}, (), ∅)` beside `Z` and owns
+`lendRec ℓ`; from there on it holds `ℓ ↦ own(())` beside `Z`, owns the records `O₁` (`O` without
+the lend's), and the list is `ls₁` (`ls` without the lend's entries). The end needs every copy of
+the lend cell back: `Z` and the frame hold nothing at `ℓ` at any depth, which is `FdEsc ℓ ∅`
+against the rest of the world. An instance of `twp_update`: `TWNT.immEnd`, the records' frame
+lifetimes kept (the aliasable walk loses `ℓ` and nothing else), `UpdX` masked at `ℓ`. -/
+theorem twp_lendEnd {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls ls₁ : List (SRecT w.K)}
+    {O O₁ : List (FrameRecT w.K)} {e : Expr} {Z ρ ρ₁ : TRes w.K} {l : BoCa.Loc} {α : Life}
+    (hρ : ResUT.CompS Z (viewRes α l) ρ)
+    (hρ₁ : ResUT.CompS Z (ResUT.single l (CellUT.ownOf BoCa.Val.unit)) ρ₁)
+    (hvZ : ResUT.Valid Z) (hZ : NoneAt (· = l) Z)
+    (hF : ∀ w' ρf, F w' ρf → NoneAt (· = l) ρf)
+    (hO : ∀ x, x ∈ O ↔ x = lendRec l ∨ x ∈ O₁) (hO₁ : lendRec l ∉ O₁)
+    (hls : ∀ x, x ∈ ls ↔ x.1 = lendRec l ∨ x ∈ ls₁) (hls₁ : ∀ x ∈ ls₁, x.1 ≠ lendRec l)
+    (h : twp (ℍ := ℍ) F Q n w ls₁ O₁ e ρ₁) :
+    twp (ℍ := ℍ) F Q n w ls O e ρ := by
+  classical
+  refine twp_update (fun w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE hr hl hOr hFρ _ hc hS hR hI => ?_) h
+  obtain ⟨σZw, hσZw⟩ := hvZ
+  have hZl : Z.get l = none := get_eq_none_of_flatT hσZw (hZ σZw hσZw l rfl)
+  have hρl : ρ.get l = some (viewCell α) := by
+    rw [ResUT.Comp.get_of_left_none hρ hZl, viewRes, ResUT.single_get_self]
+  have hρ₀ : ResUT.CompS (ρ₀.del l) (viewRes α l) ρ₀ := ResUT.del_compS (rr_view_get hr hρl)
+  have hZd : Z = ρ.del l := eq_del_of_compS_single' hρ hZl
+  have hrZ : RRw (w := w) (w' := w₀) Z (ρ₀.del l) := hZd ▸ RR.del hr l
+  obtain ⟨ρ₁₀, hρ₁₀, hr₁⟩ := RR.compS hrZ rr_own hρ₁
+  have hZ₀ : NoneAt (· = l) (ρ₀.del l) := NoneAt.rr hE.1 ⟨σZw, hσZw⟩ hrZ hZ
+  -- the rest of the world, `Y = ρf ● Z₀`; it holds nothing at `ℓ`
+  obtain ⟨Y, hY, hYf⟩ := (ResUT.CompS.assoc ρf (ρ₀.del l) _ fρ).mp ⟨ρ₀, hρ₀, hc⟩
+  have hvf : ResUT.Valid fρ := hI.valid
+  have hvY : ResUT.Valid Y := (ResUT.Valid.split hYf hvf).1
+  have hvYp := ResUT.Valid.split hY hvY
+  have hYl : NoneAt (· = l) Y := NoneAt.compS hY hvYp.1 hvYp.2 (hF w₀ ρf hFρ) hZ₀
+  obtain ⟨σ, hσ⟩ := hvY
+  have hσl : σ.get l = none := hYl σ hσ l rfl
+  obtain ⟨τ, hτ, hστ⟩ := flat_compS_view hYf hσ hσl
+  obtain ⟨fρ₁, hY₁⟩ := (ResUT.compS_defined_iff Y (ResUT.single l (CellUT.ownOf BoCa.Val.unit))).mpr
+    (compatS_single_of_get_noneT (get_eq_none_of_flatT hσ hσl))
+  obtain ⟨τ₁, hστ₁⟩ := (ResUT.compS_defined_iff σ (ResUT.single l (CellUT.ownOf BoCa.Val.unit))).mpr
+    (compatS_single_of_get_noneT hσl)
+  have hτ₁ : ResUT.Flat fρ₁ τ₁ := (flat_compS_ownT hY₁).mpr ⟨σ, hσ, hστ₁⟩
+  have hv₁ : ResUT.Valid fρ₁ := ⟨τ₁, hτ₁⟩
+  obtain ⟨ρ', hρ', hfρ₁⟩ := (ResUT.CompS.assoc ρf (ρ₀.del l) _ fρ₁).mpr ⟨Y, hY, hY₁⟩
+  rw [ResUT.CompS.functional hρ' hρ₁₀] at hfρ₁
+  -- the records: `O₁` and `ls₁` re-read inside `O₀` and `ls₀`
+  have hTW := hR.1
+  have hTI := hTW.inv
+  obtain ⟨O₁₀, hO₁₀, hO₁₀in⟩ := forall₂_sub hOr (zs := O₁) fun z hz => (hO z).mpr (Or.inr hz)
+  obtain ⟨ls₁₀, hls₁₀, hls₁₀in⟩ := forall₂_sub hl (zs := ls₁) fun z hz => (hls z).mpr (Or.inr hz)
+  have hr₀O : lendRec l ∈ O₀ := by
+    obtain ⟨y, hy, hry⟩ := forall₂_mem_left hOr ((hO _).mpr (Or.inl rfl))
+    rwa [RecRR.func hry (lendRec_rr l)] at hy
+  have hr₀ps : lendRec l ∈ ps := (hS.1 _).mpr (Or.inl hr₀O)
+  have hr₀O₁ : lendRec l ∉ O₁₀ := fun hm => by
+    obtain ⟨x, hx, hxr⟩ := forall₂_mem_right hO₁₀ hm
+    exact hO₁ (lendRec_rr_eq hxr ▸ hx)
+  have hr₀ls₁ : ∀ y ∈ ls₁₀, y.1 ≠ lendRec l := fun y hy hyr => by
+    obtain ⟨x, hx, hxy, -⟩ := forall₂_mem_right hls₁₀ hy
+    rw [hyr] at hxy
+    exact hls₁ x hx (lendRec_rr_eq hxy)
+  have hO₀mem : ∀ x, x ∈ O₀ ↔ x = lendRec l ∨ x ∈ O₁₀ := by
+    intro x
+    refine ⟨fun hx => ?_, fun hx => hx.elim (fun e => e ▸ hr₀O) (hO₁₀in x)⟩
+    obtain ⟨y, hy, hyx⟩ := forall₂_mem_right hOr hx
+    rcases (hO y).mp hy with rfl | hy₁
+    · exact Or.inl (RecRR.func hyx (lendRec_rr l))
+    · obtain ⟨x', hx', hyx'⟩ := forall₂_mem_left hO₁₀ hy₁
+      exact Or.inr (RecRR.func hyx hyx' ▸ hx')
+  have hls₀mem : ∀ y ∈ ls₀, y.1 ≠ lendRec l → y ∈ ls₁₀ := by
+    intro y hy hyr
+    obtain ⟨x, hx, hxy, hxt⟩ := forall₂_mem_right hl hy
+    rcases (hls x).mp hx with hx₁ | hx₁
+    · exact absurd (RecRR.func hxy (hx₁ ▸ lendRec_rr l)) hyr
+    · obtain ⟨y', hy', hxy', hxt'⟩ := forall₂_mem_left hls₁₀ hx₁
+      have : y' = y := Prod.ext (RecRR.func hxy' hxy) (hxt'.trans hxt.symm)
+      exact this ▸ hy'
+  have hpsF : lendRec l ∉ psF := fun hm => hS.2 _ hr₀O _ hm rfl
+  have hps₁ : ∀ p, p ∈ O₁₀ ++ psF ↔ p ∈ ps ∧ p ≠ lendRec l := by
+    intro p
+    rw [List.mem_append, hS.1 p, hO₀mem p]
+    constructor
+    · rintro (h | h)
+      · exact ⟨Or.inl (Or.inr h), fun e => hr₀O₁ (e ▸ h)⟩
+      · exact ⟨Or.inr h, fun e => hpsF (e ▸ h)⟩
+    · rintro ⟨(h | h) | h, hne⟩
+      · exact absurd h hne
+      · exact Or.inl h
+      · exact Or.inr h
+  have hrs₁ : ∀ d, d ∈ rsOfT ls₁₀ ↔ ∃ p ∈ O₁₀ ++ psF, DescRT p d := by
+    intro d
+    simp only [rsOfT, List.mem_map]
+    constructor
+    · rintro ⟨y, hy, rfl⟩
+      obtain ⟨p, hp, hd⟩ := (hTI.2.2.2.2.2.2.1 y.1).mp
+        (List.mem_map.mpr ⟨y, hls₁₀in y hy, rfl⟩)
+      refine ⟨p, (hps₁ p).mpr ⟨hp, fun e => ?_⟩, hd⟩
+      subst e
+      exact hr₀ls₁ y hy (descRT_lendRec hd)
+    · rintro ⟨p, hp, hd⟩
+      obtain ⟨hpps, hpne⟩ := (hps₁ p).mp hp
+      obtain ⟨y, hy, rfl⟩ := List.mem_map.mp ((hTI.2.2.2.2.2.2.1 d).mpr ⟨p, hpps, hd⟩)
+      refine ⟨y, hls₀mem y hy fun e => ?_, rfl⟩
+      rw [e] at hd
+      obtain ⟨q, hq⟩ := hd
+      cases hq with
+      | nil => exact hpne rfl
+      | cons hs t =>
+          have hprs : p ∈ rsOfT ls₀ := (hTI.2.2.2.2.2.2.1 p).mpr ⟨p, hpps, [], .nil p⟩
+          exact not_desc_proper hTW hr₀ps hprs ⟨_, List.cons_ne_nil _ _, .cons hs t⟩
+  have hTout : TWNT w₀.K w₀.Θ w₀.tc fρ₁ (O₁₀ ++ psF) (rsOfT ls₁₀) :=
+    TWNT.immEnd (lendRec l) (s := TSet.single α) (hs := emptyT_inStratum _) hTW hr₀ps
+      (ResUT.CompS.comm hYf) (ResUT.compS_empty_right _) (ResUT.CompS.comm hY₁) hv₁ hps₁ hrs₁
+  -- the frame lifetimes: the aliasable walk loses `ℓ`
+  have hag : ∀ a₁, AgWT fρ₁ a₁ → ∃ a, AgWT fρ a ∧ a₁.get l = none ∧
+      ∀ m, m ≠ l → a₁.get m = a.get m := by
+    intro a₁ ha₁
+    have haY : AgWT Y a₁ := alloc_agT hY₁ ha₁
+    obtain ⟨a, ha⟩ := agW_of_valid hvf
+    obtain ⟨aY, haY', haYl, -, hm⟩ := ag_compS_view hYf hσ hσl ha
+    obtain rfl := AgWT.functional haY' haY
+    exact ⟨a, ha, haYl, fun m hm' => (hm m hm').symm⟩
+  have htg : TaggedT w₀.K fρ₁ (O₁₀ ++ psF) ls₁₀ := by
+    intro x hx
+    obtain ⟨p, hp, hd, hf₁, hf₂⟩ := hR.2 x (hls₁₀in x hx)
+    have hpne : p ≠ lendRec l := fun e => hr₀ls₁ x hx (descRT_lendRec (e ▸ hd))
+    refine ⟨p, (hps₁ p).mpr ⟨hp, hpne⟩, hd, fun a₁ ha₁ ζ s eζ hs y hy => ?_,
+      fun a₁ ha₁ m hm ψ s eψ hs y hy => ?_⟩
+    · obtain ⟨a, ha, hl₁, hm⟩ := hag a₁ ha₁
+      have hpl : p.le ≠ l := fun e => by rw [e, hl₁] at eζ; cases eζ
+      exact hf₁ a ha ζ s (by rw [← hm _ hpl]; exact eζ) hs y hy
+    · obtain ⟨a, ha, hl₁, hm'⟩ := hag a₁ ha₁
+      have hml : m ≠ l := fun e => by rw [e, hl₁] at eψ; cases eψ
+      exact hf₂ a ha m hm ψ s (by rw [← hm' m hml]; exact eψ) hs y hy
+  -- the run's part, flattened, and the update masked at `ℓ`
+  have hvρ₀ : ResUT.Valid ρ₀ := (ResUT.Valid.split hc hvf).2
+  have hvZ₀ : ResUT.Valid (ρ₀.del l) := (ResUT.Valid.split hρ₀ hvρ₀).1
+  obtain ⟨σZ, hσZ⟩ := hvZ₀
+  have hσZl : σZ.get l = none := hZ₀ σZ hσZ l rfl
+  obtain ⟨σ₀, hσ₀, hσZ₀⟩ := flat_compS_view hρ₀ hσZ hσZl
+  obtain ⟨σ₁', hσZ₁⟩ := (ResUT.compS_defined_iff σZ (ResUT.single l (CellUT.ownOf BoCa.Val.unit))).mpr
+    (compatS_single_of_get_noneT hσZl)
+  have hσ₁' : ResUT.Flat ρ₁₀ σ₁' := (flat_compS_ownT hρ₁₀).mpr ⟨σZ, hσZ, hσZ₁⟩
+  have hcovY : CovR (sem w₀.Θ) w₀.K Y := CovR.of_compS_left hYf hI.1
+  have hcovZ : CovR (sem w₀.Θ) w₀.K (ρ₀.del l) :=
+    CovR.of_compS_left (ResUT.CompS.comm hY) hcovY
+  obtain ⟨τa, τb, ha, hb, hx⟩ :=
+    UpdX.of_rr (Θ := sem w₀.Θ) (WCactus.Ext.refl _) (recMask O₀) ⟨σZ, hσZ⟩ (RR.refl hcovZ)
+  obtain rfl := ResUT.Flat.functional hσZ ha
+  obtain rfl := ResUT.Flat.functional hσZ hb
+  have hlm : recMask O₀ l := ⟨lendRec l, hr₀O, Or.inl rfl⟩
+  have hmask : ∀ k, k ≠ l → recMask O₁₀ k = recMask O₀ k := fun k hk => by
+    apply propext
+    simp only [recMask]
+    constructor
+    · rintro ⟨p, hp, hpk⟩; exact ⟨p, hO₁₀in p hp, hpk⟩
+    · rintro ⟨p, hp, hpk⟩
+      rcases (hO₀mem p).mp hp with rfl | hp
+      · rcases hpk with hpk | hpk
+        · exact absurd hpk hk
+        · exact absurd hpk exDom_empty
+      · exact ⟨p, hp, hpk⟩
+  have hupd : UpdX (sem w₀.Θ) (recMask O₀) (recMask O₁₀) ρ₀ ρ₁₀ := by
+    refine ⟨σ₀, σ₁', hσ₀, hσ₁', fun k => ?_⟩
+    by_cases hk : k = l
+    · subst hk
+      refine ⟨fun _ _ _ hE => absurd hlm hE, fun ψ' e hk' _ => ?_⟩
+      rw [ResUT.Comp.get_of_left_none hσZ₁ hσZl, ResUT.single_get_self] at e
+      cases e; exact absurd rfl hk'
+    · rw [hmask k hk, ResUT.Comp.get_of_right_none hσZ₀ (ResUT.single_get_ne _ hk),
+        ResUT.Comp.get_of_right_none hσZ₁ (ResUT.single_get_ne _ hk)]
+      exact hx k
+  have hnone : NoneAt (MaskDiff (recMask O₀) (recMask O₁₀)) ρf := by
+    intro τf hτf x hx
+    by_cases hxl : x = l
+    · subst hxl; exact hF w₀ ρf hFρ τf hτf x rfl
+    · unfold MaskDiff at hx
+      rw [hmask x hxl] at hx
+      tauto
+  refine ⟨ρ₁₀, fρ₁, ls₁₀, O₁₀, O₁₀ ++ psF,
+    ⟨hE.1, fun x hx => (AgreeOn.of_compS_left hρ hE.2) x (holdsMut_of_compS_own hρ₁ hx)⟩,
+    hr₁, hls₁₀, hO₁₀, ⟨hfρ₁.1, fρ₁, hfρ₁, hv₁⟩, hfρ₁,
+    ⟨fun p => by rw [List.mem_append], fun p hp q hq => hS.2 p (hO₁₀in p hp) q hq⟩,
+    ⟨hTout, htg⟩, ⟨covR_compS_own hY₁ hcovY, ?_⟩, hupd, hnone⟩
+  obtain ⟨τ', hτ', hval⟩ := hI.2
+  obtain rfl := ResUT.Flat.functional hτ hτ'
+  refine ⟨τ₁, hτ₁, fun x => ?_⟩
+  rw [hval x]
+  by_cases hx : x = l
+  · subst hx
+    rw [ResUT.Comp.get_of_left_none hστ hσl, ResUT.Comp.get_of_left_none hστ₁ hσl, viewRes,
+      ResUT.single_get_self, ResUT.single_get_self]
+    rfl
+  · rw [ResUT.Comp.get_of_right_none hστ (ResUT.single_get_ne _ hx),
+      ResUT.Comp.get_of_right_none hστ₁ (ResUT.single_get_ne _ hx)]
 
 end BoCa.Fig16.Tree.Wp
 
