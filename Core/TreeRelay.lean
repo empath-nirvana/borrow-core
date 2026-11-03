@@ -19,6 +19,14 @@ stored task parked included (`twp_keepsPool`), cancel a stored task under the st
 (`poolT_cancel`), resume one (`poolT_resume`) or drive one (`drive_twp`). The tasks run at frame
 conditions met by every frame avoiding their records, not at `⊤`, so a task may end a lend.
 
+**One fixed scheduler form, not an instance of `PoolSchedAdequacyT`.** The relay is setup, the
+loop driving one task, and the code after it. Its scheduler is code outside a handler: the park
+stepper `HP` hands each stop back as `inj₁ κ` (`QP`), and the relay's code holds the pool. The
+general headline (`PoolSchedAdequacyT`, `Core/TreePoolSched.lean`) is about a program
+`(hnd H e₀) (H, [])` whose scheduler is the handler and whose answers are functions of its state
+(`PoolAns`). `relayE pre post` is not of that form, and `QP` is not `PoolAns`, so this theorem is
+kept beside it as a check of the pool's moves from code outside the handler.
+
 **How it is proved.** The setup ends in `RelayMidT`; the loop runs beside the relay's state
 (`twp_frame_keep`, the state holding nothing at the pool's and the task's records,
 `pool_frame`), and `drive_twp` keeps the pool by strong induction on the index; `post` runs from

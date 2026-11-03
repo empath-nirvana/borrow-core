@@ -25,7 +25,8 @@ condition on its pool (for instance, which entries its tasks stopped at, or thei
 
 **What the scheduler must satisfy** is `SchedOKT` at `Qout = PoolAns Q H Inv`: the return clause
 and each operation's clause answer such a function. A clause proves it by the pool's moves, each a
-preservation lemma: park the stopped task (`poolAns_park`, from `poolT_park`), resume a stored task
+preservation lemma: run a task under the scheduler beside the pool (`poolAns_run`, from
+`twp_keepsPool`), park the stopped task (`poolAns_park`, from `poolT_park`), resume a stored task
 and hand the rest of the pool to what it answers (`poolAns_resume`, from `poolT_resume` and
 `twp_keepsPool`), or cancel one the same way (`poolAns_cancel`, from `poolT_cancel`). A task
 resumed or cancelled runs at its base frame condition and its resumer's guarantee at that resume
@@ -198,6 +199,39 @@ theorem poolAns_cancel {Q : TPostV} {H : Val} {Inv : List StoredT → Prop} {t :
       (hFM w' ρf hf))
   exact twp_bind_fd hFm (fun _ _ h => h) (Kont.appL .hole (stateVal H ts))
     (fun w₀ ρf hf => (hFM w₀ ρf hf).2) h (poolAns_handRest hg hi hFm)
+
+/-- **Run**: a task `e` (at `cerwpT` at the scheduler's table, owning `Or`, at a base frame
+condition every valid frame meets and a present one met by every frame avoiding its records) run
+under the scheduler beside the pool, the state handed to what it answers. The pool is kept across
+the run (`twp_keepsPool`): the task may open lends, end lends of its own, allocate and free. -/
+theorem poolAns_run {T : OpTabT} {n₀ : UInt32} {qs hr hs : Val} {Qin Q : TPostV}
+    {Inv : List StoredT → Prop}
+    (hS : SchedOKT (ℍ := ℍ) T n₀ qs hr hs Qin (PoolAns (ℍ := ℍ) Q (hndVal n₀ qs hr hs) Inv))
+    {ts : List StoredT} {k : Nat}
+    (hg : ∀ u ∈ ts, GoodT (ℍ := ℍ) Q (hndVal n₀ qs hr hs) Inv k u) (hi : Inv ts)
+    {w : TWd} {ls : List (SRecT w.K)} {Or Op : List (FrameRecT w.K)} {e : Expr}
+    {ρ₁ ρp ρ : TRes w.K} (hP : PoolT (ℍ := ℍ) ts w ls Op ρp) (hcρ : ResUT.CompS ρ₁ ρp ρ)
+    (hcov : CovR (sem w.Θ) w.K ρ) (hv : ResUT.Valid ρ) (hap : ∀ p ∈ Or, ∀ q ∈ Op, p.le ≠ q.le)
+    (hesc₁ : NoneAt (recMask Or) ρp) (hesc₂ : NoneAt (recMask Op) ρ₁) {Fb Fe : TFrame}
+    (hFb : ∀ w ρf, ResUT.Valid ρf → Fb w ρf) (hFe : ∀ w ρf, fdMask (recMask Or) w ρf → Fe w ρf)
+    (he : cerwpT (ℍ := ℍ) (opTableT T) Qin Fb Fe k w ls Or e ρ₁) {F : TFrame} (hFm : F.Mono)
+    (hFM : ∀ w' ρf, F w' ρf → fdMask (recMask (Or ++ Op)) w' ρf) :
+    twp (ℍ := ℍ) F (valPost Q) k w ls (Or ++ Op)
+      (.app (hndE (hndVal n₀ qs hr hs) e) (stateVal (hndVal n₀ qs hr hs) ts).1) ρ := by
+  have hvp := (ResUT.Valid.split hcρ hv).2
+  have h₁ := cerwpT_schedHandle hS k (recMask Or) (fdMask (recMask Or)) Fb Fe w ls Or e ρ₁
+    (fdMask_mono _) (fun _ _ h => h) (fun _ h => h) hFb hFe he
+  have h₂ := twp_keepsPool hcρ hcov hv hap hesc₁ hesc₂
+    (pool_frame (M := recMask Or) (F := F)
+      (fun w ρf hf => fdMask_le (fun x hx => (recMask_append x).mpr (_root_.Or.inl hx)) (hFM w ρf hf))
+      (fun _ => Iff.rfl) hvp hesc₁) h₁ hP
+  refine twp_bind_fd hFm (fun _ _ h => h) (Kont.appL .hole (stateVal (hndVal n₀ qs hr hs) ts))
+    (fun w₀ ρf hf => (hFM w₀ ρf hf).2) h₂ ?_
+  intro k₁ hk₁ w' ls' O' t₁ ρ' hcov' hv' hls' hO' hpost
+  obtain ⟨Oa, Ob, a, b, rfl, hc, ⟨f, rfl, hf⟩, hP', hb, ha, hap'⟩ := hpost
+  exact poolAnsAt_iff.mp (hf k₁ le_rfl) ts Ob b ρ' hi (fun u hu => (hg u hu).le hk₁) hP' hc hb ha
+    hap' hcov' hv' hls' (fun x hx => hO' x (List.mem_append_left _ hx)) _
+    (TFrame.and_mono hFm (fdMask_mono _)) (fun _ _ h => h.2)
 
 /-! ### The headline -/
 
