@@ -22,10 +22,8 @@ function. So every used argument, its cells at depth in the world, re-reads inje
 * `MutOne`, `TWNT.mutOne`: the invariant, by `TWNT`'s induction.
 * `RC.inj_of`, `RR.inj_of`: re-reading is injective on cells at depth of a `MutOne` world.
 * `agW_cellAt`: a non-`own` cell of `ag(ρ)` carries the witness of a cell at depth of `ρ`.
-* `TWNT.used_cellAt`: every used argument's cells sit at depth of the world (given
-  `TWNT.InvHolds`, as `TWNT.noOwnUnder` takes it).
-* `TWNT.tcCoherent`: coherence, through `tcCoherent_of_inj`; `TWNT.tcCarried_exists`: a carried
-  choice exists wherever the used templates have re-readings.
+* `TWNT.used_cellAt`, `TWNT.tcCoherent`, `TWNT.tcCarried_exists` read `TIT`; they are in
+  `TreeWp/InvUses.lean`, after `TWNT.inv`.
 
 The choice itself is recorded in the world (`TWd.tc`, `TreeWp/World.lean`): `RecInv` reads
 `TWNT` at `w.tc`, so a run that does not grow the tree reads every canonical image at its start's
@@ -507,38 +505,6 @@ theorem LinPathT.cellAt {W : TRes K} {r d : FrameRecT K} {p : List BoCa.Loc}
       obtain ⟨-, ζ, eζ, -, -, wζ⟩ := hs
       exact ih fun y ψ e => (hr _ ζ eζ).wit_trans (by rw [wζ]; exact e)
 
-/-- **Every used argument's cells sit at depth of the world.** A record's escrow is the witness of
-the record cell's view (`LeInv`) or of a `mut` cell of its parent's escrow; a chain view's
-witness is the witness of a view of `ag(W)`. -/
-theorem TWNT.used_cellAt (hI : TWNT.InvHolds) {Θ : CodeTy} {tc : TChoice K} {W : TRes K}
-    {ps rs : List (FrameRecT K)} (hT : TWNT K Θ tc W ps rs) {R : TRes K} {T : KTy}
-    {v : BoCa.Val} (hu : UsedT W rs R T v) : ∀ y ψ, R.get y = some ψ → CellAt W y ψ := by
-  have hTI := hI K Θ tc W ps rs hT
-  obtain ⟨aW, haW⟩ := agW_of_valid hT.valid
-  rcases hu with ⟨r, hr, rfl, -, -⟩ | ⟨r, -, p₀, l₀, -, a, ha, ψ₀, e₀, k₀, rfl⟩
-  · obtain ⟨p, hp, q, hq⟩ := (hTI.2.2.2.2.2.2.1 r).mp hr
-    obtain ⟨ψ, eψ, kψ, -, wψ⟩ := hTI.2.1 p hp aW haW
-    obtain ⟨ψ', cψ', wψ'⟩ := agW_cellAt haW _ ψ eψ (by rw [kψ]; simp)
-    refine hq.cellAt fun y φ e => cψ'.wit_trans ?_
-    rw [wψ', wψ]; exact e
-  · obtain ⟨ψ', cψ', wψ'⟩ := agW_cellAt ha _ ψ₀ e₀ k₀
-    exact fun y φ e => cψ'.wit_trans (by rw [wψ']; exact e)
-
-/-- **Template coherence across a re-reading**: two used arguments whose escrows re-read to one
-escrow are one argument, so their templates re-read to one template. -/
-theorem TWNT.tcCoherent (hI : TWNT.InvHolds) {K' : WCactus} {Θ Θ' : CodeTy} {tc : TChoice K}
-    {W : TRes K} {ps rs : List (FrameRecT K)} (hT : TWNT K Θ tc W ps rs) :
-    TcCoherent (K' := K') Θ' W rs tc :=
-  tcCoherent_of_inj fun _ _ _ _ h₁ h₂ _ e₁ e₂ =>
-    RR.inj_of hT.mutOne e₁ e₂ (hT.used_cellAt hI h₁) (hT.used_cellAt hI h₂)
-
-/-- **A carried choice exists at every re-reading** whose used templates have re-readings:
-`tcCarried_exists` at `TWNT.tcCoherent`. -/
-theorem TWNT.tcCarried_exists (hI : TWNT.InvHolds) {K' : WCactus} {Θ Θ' Θ'' : CodeTy}
-    {tc : TChoice K} {W : TRes K} {ps rs : List (FrameRecT K)} (hT : TWNT K Θ tc W ps rs)
-    (hex : ∀ R T v, UsedT W rs R T v → ∃ c : TRes K', RR (sem Θ') (tc R T v) c) :
-    ∃ tc' : TChoice K', TcCarried Θ' W rs tc tc' :=
-  BoCa.Fig16.Tree.Wp.tcCarried_exists (Θ' := Θ') (Θ'' := Θ'') hex (hT.tcCoherent (K' := K') (Θ' := Θ') hI)
 
 end BoCa.Fig16.Tree.Wp
 

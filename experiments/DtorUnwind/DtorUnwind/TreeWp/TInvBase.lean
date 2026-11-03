@@ -3,7 +3,7 @@ import DtorUnwind.TreeWp.Coherent
 /-!
 # `TIT` at the empty world and across an allocation
 
-A first check that `TWNT.InvHolds` is not vacuous, ahead of its port: `TIT` holds at `TWNT.empty`
+`TIT` holds at `TWNT.empty`
 (`tit_empty`), and `TWNT.alloc` keeps it (`tit_alloc`). `TIT` reads the world only through its
 aliasable walks (`AgWT W a`) and its `mut` cells at depth (`MutAtT W x`) (`TIT.congr`); a fresh
 `ℓ ↦ own(v)` adds nothing to the aliasable walk and no `mut` cell, so both are unchanged.

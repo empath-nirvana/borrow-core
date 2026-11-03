@@ -5,11 +5,8 @@ import DtorUnwind.TreeWp.TInv
 
 `Tree/NoOwnUnder.lean` (branch `tree-life`) over `TWNT`: the vocabulary (`OwnAt`, `OwnUnder`)
 and its lemmas, ported by `port-tools/port.py` from that file and `Tree/JoinFd.lean`, with
-`Core/Invariant.lean`'s `compS_back` and `hSS`. `TWNT.noOwnUnder` is `TWNC.noOwnUnder`'s
-induction, case for case. It reads `TI` at two cases (`immFrame`, `mutFold`), through
-`leInv_view`, as the printed one reads `TWNC.inv`; over the tree that is `TWNT.InvHolds`, taken
-as a hypothesis. One case beyond it, `reread`: a re-reading keeps every cell's kind and the
-witnesses' cells (`OwnAt.rr_back`), and every record's location (`RecRR`).
+`Core/Invariant.lean`'s `compS_back` and `hSS`. `TWNT.noOwnUnder`, which reads `TIT`, is in
+`TreeWp/InvUses.lean`, after `TWNT.inv`.
 -/
 
 noncomputable section
@@ -261,104 +258,6 @@ theorem OwnUnder.rr_back {Θ : LocTy} {K' : WCactus} {ρ : TRes K} {ρ' : TRes K
 
 /-! ### The invariant -/
 
-/-- `LeInv` gives `own_not_at_view`'s hypothesis at every record proper. -/
-theorem leInv_view {Θ : CodeTy} {tc : TChoice K} {W : TRes K} {ps rs : List (FrameRecT K)}
-    (hI : TWNT.InvHolds) (hT : TWNT K Θ tc W ps rs) {q : FrameRecT K} (hq : q ∈ ps) :
-    ∀ a, AgWT W a → ∃ ψ : TCell K, a.get q.le = some ψ := fun a ha => by
-  obtain ⟨ψ, hψ, -, -, -⟩ := (hI K Θ tc W ps rs hT).2.1 q hq a ha
-  exact ⟨ψ, hψ⟩
-
-/-- **No `own` cell of a record's location beneath a borrow of the world.** -/
-def NoOwnUnderT (W : TRes K) (ps : List (FrameRecT K)) : Prop :=
-  ∀ p ∈ ps, ¬ OwnUnder W p.le
-
-/-- **`NoOwnUnder` is an invariant of `TWNT`**, given `TWNT.InvHolds`. -/
-theorem TWNT.noOwnUnder (hI : TWNT.InvHolds) {Θ : CodeTy} {tc : TChoice K} {W : TRes K}
-    {ps rs : List (FrameRecT K)} (h : TWNT K Θ tc W ps rs) : NoOwnUnderT W ps := by
-  induction h with
-  | empty => intro p hp; simp at hp
-  | alloc _ _ _ hW _ ih =>
-      intro p hp ho
-      rcases OwnUnder.split hW ho with h | h
-      · exact ih p hp h
-      · exact not_ownUnder_single_own _ _ _ h
-  | @immFrame K Θ tc W X Z R W' ps rs ds l v α T hα hT hX hW hden hW' hv hds ih =>
-      intro p hp ho
-      rcases step_frame hX hW (CellUT.wit_immOf _ _ _ _) hW' ho with h | ⟨χ, e, hk⟩
-      · rcases List.mem_cons.mp hp with rfl | hp
-        · -- the new record: `W(ℓ) = own(v)`
-          have hl : W.get l = some (CellUT.ownOf v) :=
-            (ResUT.CompS.get_left_of_ne_imm hW
-              (ResUT.CompS.get_left_of_ne_imm hX (ResUT.single_get_self _ _) (by simp)).2
-              (by simp)).2
-          exact not_ownUnder_top_own hT.valid hl h
-        · exact ih p hp h
-      · rcases List.mem_cons.mp hp with rfl | hp
-        · -- `ρ` misses `ℓ`: `ℓ ↦ own(v) ● ρ` is defined
-          have := hX.1 l _ χ (ResUT.single_get_self _ _) e
-          exact absurd (CellUT.CompatS.kind_left this) (by simp)
-        · obtain ⟨ζ, eζ, kζ⟩ := top_of_frame hX hW e
-          exact own_not_at_view hT.valid (leInv_view hI hT hp) eζ (kζ.trans hk)
-  | reb r hT hr hle hreb hden hβ hc hW hv ih =>
-      intro p hp ho
-      rcases OwnUnder.split hW ho with h | h
-      · exact ih p hp h
-      · exact ih p hp (OwnUnder.of_cell hle (by simp)
-          (by rw [CellUT.wit_immOf]; exact ownAt_image hreb h))
-  | rebDeep r hT hr hch hcell hreb hden hβc hrec hc hW hv ih =>
-      intro p hp ho
-      rcases OwnUnder.split hW ho with h | h
-      · exact ih p hp h
-      · exact ih p hp (OwnUnder.of_cell hcell (by simp)
-          (by rw [CellUT.wit_immOf]; exact ownAt_image hreb h))
-  | mutFold hT hX hW hW' hv ih =>
-      intro p hp ho
-      rcases step_frame hX hW (CellUT.wit_mutOf _ _ _ _ _ _) hW' ho with h | ⟨χ, e, hk⟩
-      · exact ih p hp h
-      · obtain ⟨ζ, eζ, kζ⟩ := top_of_frame hX hW e
-        exact own_not_at_view hT.valid (leInv_view hI hT hp) eζ (kζ.trans hk)
-  | mutUnfold hT hW hX hW' hv ih =>
-      intro p hp ho
-      rcases OwnUnder.split hW' ho with h | h
-      · rcases OwnUnder.split hX h with h | ⟨m, ζ, e, hk, hw⟩
-        · exact not_ownUnder_single_own _ _ _ h
-        · obtain ⟨ψ, eψ, kψ, wψ, -⟩ :=
-            compS_get_left' hW (ResUT.single_get_self _ _)
-          refine ih p hp (OwnUnder.of_cell eψ (by rw [kψ]; simp) ?_)
-          rw [wψ, CellUT.wit_mutOf]
-          exact OwnAt.nest e hk hw
-      · exact ih p hp (OwnUnder.of_compS_right hW h)
-  | free hT hW hv ih =>
-      intro p hp ho
-      exact ih p hp (OwnUnder.of_compS_right hW ho)
-  | store hT hW hW' hv ih =>
-      intro p hp ho
-      rcases OwnUnder.split hW' ho with h | h
-      · exact not_ownUnder_single_own _ _ _ h
-      · exact ih p hp (OwnUnder.of_compS_right hW h)
-  | immEnd r hT hr hc hX' hW' hv hps hrs ih =>
-      intro p hp ho
-      have hp' : p ∈ _ := ((hps p).mp hp).1
-      rcases OwnUnder.split hW' ho with h | h
-      · rcases OwnUnder.split hX' h with h | ⟨m, ζ, e, hk, hw⟩
-        · exact not_ownUnder_single_own _ _ _ h
-        · obtain ⟨ψ, eψ, kψ, wψ, -⟩ :=
-            compS_get_left' hc (ResUT.single_get_self _ _)
-          refine ih p hp' (OwnUnder.of_cell eψ (by rw [kψ]; simp) ?_)
-          rw [wψ, CellUT.wit_immOf]
-          exact OwnAt.nest e hk hw
-      · exact ih p hp' (OwnUnder.of_compS_right hc h)
-  | rebEnd r hT hr hle hreb hW hβ ih =>
-      intro p hp ho
-      exact ih p hp (OwnUnder.of_compS_left hW ho)
-  | rebEndDeep r hT hr hch hle hreb hW hβ ih =>
-      intro p hp ho
-      exact ih p hp (OwnUnder.of_compS_left hW ho)
-  | reread hT hE hag hr hps hrs _ ih =>
-      intro p' hp' ho
-      obtain ⟨p, hp, hpp⟩ := forall₂_mem_right hps hp'
-      rw [hpp.1] at ho
-      exact ih p hp (ho.rr_back hr)
 
 end BoCa.Fig16.Tree.Wp
 

@@ -167,3 +167,4 @@ import DtorUnwind.TreeWp.RebRR
 import DtorUnwind.TreeWp.TInvReread
 import DtorUnwind.TreeWp.InvSimple
 import DtorUnwind.TreeWp.TInvHolds
+import DtorUnwind.TreeWp.InvUses

@@ -8,10 +8,10 @@ with records at codes (`TreeWp/Records.lean`): `vShape T δ` is `T.interp Θ` re
 `K.lt`, `s.mem x` is `x ∈ s.set`. Definitions only.
 
 `TWNT.InvHolds` is `TWN.inv`'s statement (`SI/TWN.lean`) over `TWNT`: every `TWNT` world
-satisfies `TIT`. Its proof is the port of `TWN.inv` and of `Core/Invariant.lean`'s preservation
-lemmas (`ti_frame`, `ti_reb`, `ti_rebDeepN`, `ti_mutFold`, `ti_end`, `ti_endRebN`, `ti_of_ag`),
-with one case beyond them, `reread`. It is not derived here; results that read it take it as a
-hypothesis named by this definition.
+satisfies `TIT`. It is proved in `TreeWp/TInvHolds.lean` (`twnt_invHolds`), from the port of
+`TWN.inv` and of `Core/Invariant.lean`'s preservation lemmas (`ti_frame`, `ti_reb`,
+`ti_rebDeepN`, `ti_mutFold`, `ti_end`, `ti_endRebN`, `ti_of_ag`), with one case beyond them,
+`reread` (`TreeWp/TInvReread.lean`).
 -/
 
 noncomputable section
@@ -114,7 +114,7 @@ def TIT (K : WCactus) (Θ : CodeTy) (W : TRes K) (ps rs : List (FrameRecT K)) : 
   (∀ x, x ∈ rs ↔ ∃ p ∈ ps, DescRT p x) ∧ CoverageT W rs
 
 /-- **`TWN.inv`'s statement over `TWNT`**: every world of the typed world over the tree satisfies
-`TIT`. Not derived (see the header). -/
+`TIT` (`twnt_invHolds`, `TreeWp/TInvHolds.lean`). -/
 def TWNT.InvHolds : Prop :=
   ∀ (K : WCactus) (Θ : CodeTy) (tc : TChoice K) (W : TRes K) (ps rs : List (FrameRecT K)),
     TWNT K Θ tc W ps rs → TIT K Θ W ps rs

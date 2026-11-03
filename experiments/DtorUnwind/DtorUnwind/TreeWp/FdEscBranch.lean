@@ -1,5 +1,6 @@
 import DtorUnwind.TreeWp.FdEscCactus
 import DtorUnwind.TreeWp.Coherent
+import DtorUnwind.TreeWp.InvUses
 
 /-!
 # The escrow's frame condition from branch points
@@ -344,12 +345,12 @@ tree world): a view there carries a lifetime of the branch, while `ag(W)`'s view
 frame `α` (`FrameLifeT`); an `own`/`mut` cell of the exclusive walk meets `ag(W)`'s view
 (`LeInvT`); a `mut` cell of the aliasable walk is a `mut` cell at depth (`NoMutT`); an `own` cell
 of it sits beneath a borrow (`NoOwnUnderT`). -/
-theorem fd_le_of_branch (hI : TWNT.InvHolds) {Θ : CodeTy} {tc : TChoice K}
+theorem fd_le_of_branch {Θ : CodeTy} {tc : TChoice K}
     {W ρo ρrest : TRes K} {ps rs : List (FrameRecT K)} {p : FrameRecT K} {α n : Life}
     (hT : TWNT K Θ tc W ps rs) (hp : p ∈ ps) (hW : ResUT.CompS ρo ρrest W)
     (hFL : FrameLifeT K W p α) (hbr : OnBranchResT K n ρrest) (hnα : ¬ K.le n α)
     {τ : TRes K} (hτ : ResUT.Flat ρrest τ) : τ.get p.le = none := by
-  have hTI := hI K Θ tc W ps rs hT
+  have hTI := hT.inv
   have hv := hT.valid
   obtain ⟨aW, haW⟩ := agW_of_valid hv
   obtain ⟨ψL, eL, kL, -, -⟩ := hTI.2.1 p hp aW haW
@@ -390,7 +391,7 @@ theorem fd_le_of_branch (hI : TWNT.InvHolds) {Θ : CodeTy} {tc : TChoice K}
         obtain ⟨m, χ', hm, hχ', ψ₀, c₀, k₀, -⟩ :=
           agW_nonimm_beneath har _ χ f₂ (by rw [hk]; simp)
         obtain ⟨χ'', e'', k'', c''⟩ := beneath_of_compS_right hW hm hχ' c₀
-        exact TWNT.noOwnUnder hI hT p hp ⟨m, χ'', e'', k'', c''.ownAt (k₀.trans hk)⟩
+        exact TWNT.noOwnUnder hT p hp ⟨m, χ'', e'', k'', c''.ownAt (k₀.trans hk)⟩
     | «mut» =>
         obtain ⟨m, χ', hm, hχ', ψ₀, c₀, k₀, -⟩ :=
           agW_nonimm_beneath har _ χ f₂ (by rw [hk]; simp)
@@ -547,11 +548,11 @@ theorem cellAt_beneath_imm_ag {W : TRes K} {y : BoCa.Loc} {ψ₀ : TCell K} (h :
 
 /-- The record's view at depth, over its escrow: an `imm` cell (a `mut` one would be refused by
 `NoMutT`, an `own` one has no witness). -/
-theorem le_view_cellAt (hI : TWNT.InvHolds) {Θ : CodeTy} {tc : TChoice K} {W : TRes K}
+theorem le_view_cellAt {Θ : CodeTy} {tc : TChoice K} {W : TRes K}
     {ps rs : List (FrameRecT K)} (hT : TWNT K Θ tc W ps rs) {p : FrameRecT K} (hp : p ∈ ps)
     {x : BoCa.Loc} {χ : TCell K} (hx : CellAt p.R x χ) {aW : TRes K} (haW : AgWT W aW) :
     ∃ ζ, aW.get x = some ζ := by
-  have hTI := hI K Θ tc W ps rs hT
+  have hTI := hT.inv
   obtain ⟨ψ, eψ, kψ, -, wψ⟩ := hTI.2.1 p hp aW haW
   obtain ⟨ψ₀, c₀, w₀⟩ := agW_cellAt haW _ ψ eψ (by rw [kψ]; simp)
   have hx' : CellAt ψ₀.wit x χ := by rw [w₀, wψ]; exact hx
@@ -584,13 +585,13 @@ def EscBeneathT : Prop :=
 `EscBeneathT`'s case: a cell of the exclusive walk meets `ag(W)` beneath the record's view; a view
 carries a lifetime of the branch while `ag(W)`'s view at a lineage location is inside `α`
 (`FrameLifeT`); a `mut` cell where the lineage holds `own` is refused by `NoMutT`. -/
-theorem fd_esc_of_branch (hI : TWNT.InvHolds) (hB : EscBeneathT) {Θ : CodeTy} {tc : TChoice K}
+theorem fd_esc_of_branch (hB : EscBeneathT) {Θ : CodeTy} {tc : TChoice K}
     {W ρo ρrest : TRes K} {ps rs : List (FrameRecT K)} {p : FrameRecT K} {α n : Life}
     (hT : TWNT K Θ tc W ps rs) (hp : p ∈ ps) (hW : ResUT.CompS ρo ρrest W)
     (hFL : FrameLifeT K W p α) (hbr : OnBranchResT K n ρrest) (hnα : ¬ K.le n α)
     {τ : TRes K} (hτ : ResUT.Flat ρrest τ) {eR : TRes K} (heR : ExST p.R eR) {x : BoCa.Loc}
     (hx : (eR.get x).isSome) : τ.get x = none := by
-  have hTI := hI K Θ tc W ps rs hT
+  have hTI := hT.inv
   have hv := hT.valid
   have hprs : p ∈ rs := (hTI.2.2.2.2.2.2.1 p).mpr ⟨p, hp, [], .nil p⟩
   obtain ⟨ψx, eψx⟩ := Option.isSome_iff_exists.mp hx
@@ -599,7 +600,7 @@ theorem fd_esc_of_branch (hI : TWNT.InvHolds) (hB : EscBeneathT) {Θ : CodeTy} {
   have hlin : LinLocT p x := ⟨d, ⟨pd, hpd⟩, ζ, eζ, kζ⟩
   have hxR : CellAt p.R x ζ := hpd.cellAt (fun y φ e => .top e) x ζ eζ
   obtain ⟨aW, haW⟩ := agW_of_valid hv
-  obtain ⟨ζW, eζW⟩ := le_view_cellAt hI hT hp hxR haW
+  obtain ⟨ζW, eζW⟩ := le_view_cellAt hT hp hxR haW
   cases hg : τ.get x with
   | none => rfl
   | some χ =>
@@ -656,10 +657,10 @@ theorem fd_esc_of_branch (hI : TWNT.InvHolds) (hB : EscBeneathT) {Θ : CodeTy} {
     exact ExST.immFree her _ _ f₁ (by rw [h₁]; exact CellUT.kind_immOf _ _ _ _)
 
 /-- **`FdEscOfBranchT` from `EscBeneathT`.** -/
-theorem fdEscOfBranch (hI : TWNT.InvHolds) (hB : EscBeneathT) : FdEscOfBranchT :=
+theorem fdEscOfBranch (hB : EscBeneathT) : FdEscOfBranchT :=
   fun _ _ _ _ _ _ _ _ _ _ _ hT hp hW hFL hbr hnα _ hτ =>
-    ⟨fd_le_of_branch hI hT hp hW hFL hbr hnα hτ,
-      fun _ heR _ hx => fd_esc_of_branch hI hB hT hp hW hFL hbr hnα hτ heR hx⟩
+    ⟨fd_le_of_branch hT hp hW hFL hbr hnα hτ,
+      fun _ heR _ hx => fd_esc_of_branch hB hT hp hW hFL hbr hnα hτ heR hx⟩
 
 /-! ### At a join -/
 
@@ -714,7 +715,7 @@ theorem noneAt_empty (P : BoCa.Loc → Prop) : NoneAt P (PMap.empty : TRes K) :=
   rw [ResUT.CompS.functional hc (ResUT.compS_empty_right _)]; rfl
 
 /-- **The other branches at their points, none inside `α`, hold nothing the lend lends.** -/
-theorem fdEsc_of_points (hI : TWNT.InvHolds) (hB : EscBeneathT) {Θ : CodeTy} {tc : TChoice K}
+theorem fdEsc_of_points (hB : EscBeneathT) {Θ : CodeTy} {tc : TChoice K}
     {W : TRes K} {ps rs : List (FrameRecT K)} {p : FrameRecT K} {α : Life}
     (hT : TWNT K Θ tc W ps rs) (hp : p ∈ ps) (hFL : FrameLifeT K W p α) :
     ∀ {bs : List (TRes K)} {ns : List Life},
@@ -736,14 +737,14 @@ theorem fdEsc_of_points (hI : TWNT.InvHolds) (hB : EscBeneathT) {Θ : CodeTy} {t
       obtain ⟨hvb, hvf'⟩ := ResUT.Valid.split hc hvf
       obtain ⟨y, -, hyW⟩ := reassoc_out hW hc
       have hb : NoneAt (escLocs p.le p.R) b := fdEsc_iff_noneAt.mp
-        (fdEscOfBranch hI hB _ _ _ _ _ _ _ _ _ _ _ hT hp hyW hFL hbn (hns n List.mem_cons_self))
+        (fdEscOfBranch hB _ _ _ _ _ _ _ _ _ _ _ hT hp hyW hFL hbn (hns n List.mem_cons_self))
       obtain ⟨y', -, hyW'⟩ := reassoc_out hW (ResUT.CompS.comm hc)
       exact NoneAt.compS hc hvb hvf' hb
         (ih (fun m hm => hns m (List.mem_cons_of_mem _ hm)) hC' hyW')
 
 /-- **`FdEsc` at a join, from the cactus invariant**: the resumed branch owns the record framed at
 `α`, and no other branch's point is inside `α` (`JoinPtT`). -/
-theorem fdEsc_at_join (hI : TWNT.InvHolds) (hB : EscBeneathT) {w : TWd} {ρ : TRes w.K}
+theorem fdEsc_at_join (hB : EscBeneathT) {w : TWd} {ρ : TRes w.K}
     {O : List (FrameRecT w.K)} {others : List (TBranch w.K)} {n₀ : Life} {ns : List Life}
     {W : TRes w.K} {ps : List (FrameRecT w.K)} {ls : List (SRecT w.K)} {μ : BoCa.BoLo.Heap}
     (hC : CactusInvT w ((ρ, O) :: others) (n₀ :: ns) W ps ls μ) {p : FrameRecT w.K}
@@ -756,7 +757,7 @@ theorem fdEsc_at_join (hI : TWNT.InvHolds) (hB : EscBeneathT) {w : TWd} {ρ : TR
   cases hpts with
   | cons _ hpts' =>
   have hpps : p ∈ ps := (hps p).mpr (by simp [hp])
-  exact fdEsc_iff_noneAt.mpr (fdEsc_of_points hI hB hR.1 hpps hFL
+  exact fdEsc_iff_noneAt.mpr (fdEsc_of_points hB hR.1 hpps hFL
     (forall₂_map_left.mpr hpts') hJ hf hc)
 
 end BoCa.Fig16.Tree.Wp
