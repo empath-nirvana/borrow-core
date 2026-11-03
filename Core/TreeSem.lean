@@ -444,6 +444,24 @@ theorem STy.tensor_le {σ₁ σ₂ τ₁ τ₂ : STy} (h₁ : σ₁.Le τ₁) (h
   rintro n w ls v ρ ⟨v₁, v₂, ρ₁, ρ₂, rfl, hc, a, b⟩
   exact ⟨v₁, v₂, ρ₁, ρ₂, rfl, hc, h₁ n w ls v₁ ρ₁ a, h₂ n w ls v₂ ρ₂ b⟩
 
+theorem STy.imm_le {a : Life} {σ τ : STy} (h : σ.Le τ) : (STy.imm a σ).Le (STy.imm a τ) := by
+  rintro n w ls v ρ ⟨l, i, rfl, rfl, hle, hP⟩
+  exact ⟨l, i, rfl, rfl, hle, h n w ls i.v i.res hP⟩
+
+theorem STy.box_le {a : Life} {σ τ : STy} (h : σ.Le τ) : (STy.box a σ).Le (STy.box a τ) :=
+  fun n w ls v ρ hv => ⟨h n w ls v ρ hv.1, hv.2⟩
+
+theorem STy.ref_le {σ τ : STy} (h : σ.Le τ) : (STy.ref σ).Le (STy.ref τ) := by
+  rintro n w ls v ρ ⟨l, u, ρ₁, rfl, hl, rfl, hP⟩
+  exact ⟨l, u, ρ₁, rfl, hl, rfl, h n w ls u ρ₁ hP⟩
+
+theorem STy.bang_le {σ τ : STy} (h : σ.Le τ) : (STy.bang σ).Le (STy.bang τ) :=
+  fun n w ls v ρ hv => ⟨hv.1, h n w ls v ρ hv.2⟩
+
+theorem STy.fam_le {σ τ : STy} (h : σ.Le τ) : (STy.fam σ).Le (STy.fam τ) := by
+  rintro n w ls v ρ ⟨l, c, rfl, hc, hP⟩
+  exact ⟨l, c, rfl, hc, sepRangeT_imp (fun m ρ => h n w ls _ ρ) _ l ρ hP⟩
+
 /-- `List A = μX. 1 + (A ⊗ X)`, the body read at the variable `0`. -/
 def STy.list (τ : STy) : STy :=
   STy.mu fun X => STy.sum STy.unit (STy.tensor τ (STy.var (STy.scons X fun _ => STy.zero) 0))
@@ -456,6 +474,35 @@ theorem STy.list_body_mono (τ : STy) :
 theorem STy.list_nil (τ : STy) (n : Nat) (w : TWd) (ls : List (SRecT w.K)) :
     (STy.list τ).P n w ls (BoCa.Val.inj₁ BoCa.Val.unit) PMap.empty :=
   STy.mu_fold (STy.list_body_mono τ) n w ls _ _ (Or.inl ⟨_, rfl, rfl, rfl⟩)
+
+/-- **A cons cell is a value of `List A`**: a value of `A` beside a value of `List A`, by `μ`'s fold. -/
+theorem STy.list_cons {τ : STy} {n : Nat} {w : TWd} {ls : List (SRecT w.K)} {a l : BoCa.Val}
+    {ρ₁ ρ₂ ρ : TRes w.K} (hc : ResUT.CompS ρ₁ ρ₂ ρ) (ha : τ.P n w ls a ρ₁)
+    (hl : (STy.list τ).P n w ls l ρ₂) :
+    (STy.list τ).P n w ls (BoCa.Val.inj₂ (BoCa.Val.pair a l)) ρ :=
+  STy.mu_fold (STy.list_body_mono τ) n w ls _ _ (Or.inr ⟨_, rfl, a, l, ρ₁, ρ₂, rfl, hc, ha, hl⟩)
+
+/-- `[()]` is a value of `List 1`: a cons folded onto the empty list. -/
+theorem STy.list_unit_one (n : Nat) (w : TWd) (ls : List (SRecT w.K)) :
+    (STy.list STy.unit).P n w ls
+      (BoCa.Val.inj₂ (BoCa.Val.pair BoCa.Val.unit (BoCa.Val.inj₁ BoCa.Val.unit))) PMap.empty :=
+  STy.list_cons (ResUT.compS_empty_right _) ⟨rfl, rfl⟩ (STy.list_nil STy.unit n w ls)
+
+/-- **A `μ` body with `X` under every former `VTy.NoMut` admits**, `1 + (Imm @a X ⊗ (ref ([b] X) ⊗
+(!X ⊗ [X])))`: monotone, from `+`, `⊗`, `Imm`, `ref`, `[b]`, `!` and `[L]`'s monotonicity, so it
+folds and unfolds (`STy.mu_fold`, `STy.mu_unfold`). -/
+def STy.allBody (a b : Life) (X : STy) : STy :=
+  STy.sum STy.unit (STy.tensor (STy.imm a X)
+    (STy.tensor (STy.ref (STy.box b X)) (STy.tensor (STy.bang X) (STy.fam X))))
+
+theorem STy.allBody_mono (a b : Life) : STy.MonoBody (STy.allBody a b) :=
+  fun _ _ h => STy.sum_le (STy.le_refl _) (STy.tensor_le (STy.imm_le h)
+    (STy.tensor_le (STy.ref_le (STy.box_le h)) (STy.tensor_le (STy.bang_le h) (STy.fam_le h))))
+
+/-- `inj₁ ()` folds into `μX. allBody`, and unfolding returns it. -/
+theorem STy.allBody_nil (a b : Life) (n : Nat) (w : TWd) (ls : List (SRecT w.K)) :
+    (STy.mu (STy.allBody a b)).P n w ls (BoCa.Val.inj₁ BoCa.Val.unit) PMap.empty :=
+  STy.mu_fold (STy.allBody_mono a b) n w ls _ _ (Or.inl ⟨_, rfl, rfl, rfl⟩)
 
 /-! ### What carries `Mut`: the re-read invariant is the store type -/
 

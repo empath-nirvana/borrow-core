@@ -19,16 +19,22 @@ the thunk monotone (`STy.thunk`).
 * **A run at the empty list says nothing of a borrow** (`cerwpT_nil_of_imm`): no world with an
   empty list holds an `imm` cell, so every term over a resource holding a view is a run there.
   This is why `SCmp.ret` runs at the list it is read at (E3, #794).
-* **The formers**: `F A` at `cerwpT` at the list (`SCmp.ret`), `A ⊸ C` (`SCmp.arr`), `C & D`
-  (`SCmp.amp`), `⊤` (`SCmp.top`), `∀α ⊏ c. C` over the lifetimes below `c` in the current tree
-  (`SCmp.all`), and `νX. C`, the greatest fixed point over candidates (`SCmp.nu`, fold and unfold
-  at a monotone body).
+* **The formers**: `F A` (`SCmp.ret`): over a covered resource, a run of `cerwpT` at every
+  extension and every list keeping the records the resource reads, so Kripke along `KeepRel`
+  (`SCmp.ret_kripke`) and monotone in `A` (`SCmp.ret_le`, from `cerwpT_post_mono`). A bare
+  `cerwpT` run is not Kripke along `KeepRel` (`Obs.cerwpT_not_keepKripke`,
+  `Core/TreeSemObs.lean`). `A ⊸ C` (`SCmp.arr`), `C & D` (`SCmp.amp`), `⊤` (`SCmp.top`),
+  `∀α ⊏ c. C` over the lifetimes below `c` in the current tree (`SCmp.all`), and `νX. C`, the
+  greatest fixed point over candidates (`SCmp.nu`, fold and unfold at a monotone body), shown at
+  Core's body shape `F(A ⊕ U X) & F B` (`SCmp.loopBody_mono`, `SCmp.loop_nonempty`).
 * **Thunks read at the relation** (`STy.thunkC`, `STy.thunkRet`): a value type for every
-  computation type, downward closed and monotone. Monotone by definition (`STy.thunk`). A thunk is
-  a run at every later list keeping the records it reads: from a run at the current world when `C`
-  is Kripke along `KeepRel` (`STy.thunk_intro`), from a value (`STy.thunkC_val`), from a stored
-  continuation's share (`Core/TreeSemK.lean`). `F A` is Kripke along the re-reading of its list
-  (`SCmp.ret_kripke`), not along `KeepRel`.
+  computation type, downward closed and monotone by `STy.thunk`'s definition, monotone in the
+  computation type (`STy.thunkC_le`). A thunk is a run at every later list keeping the records it
+  reads: from a run at the current world when `C` is Kripke along `KeepRel` (`STy.thunk_intro`),
+  so for `F A` (`STy.thunkRet_intro`) and `&`-trees of them (`SCmp.amp_kripke`); from a value
+  (`STy.thunkC_val`); from a stored continuation's share (`Core/TreeSemK.lean`).
+* **Not Kripke, so not introduced by `STy.thunk_intro`**: `A ⊸ C`, `∀`, `ν`. A thunk of one of these
+  is proved at every extension directly (`STy.thunk`'s quantifier).
 
 Continuation and task types are `Core/TreeSemK.lean`.
 
@@ -122,8 +128,8 @@ This is why the value types read the list (E3, #794): a thunk type that does not
 runs its thunk at a list fixed in advance, `[]` the only one every world has, and then holds of
 every thunk holding a borrow, stuck or not. -/
 theorem cerwpT_nil_of_imm {Tb : TableT} {Q : TPostV} {Fb F : TFrame} {n : Nat} {w : TWd}
-    {e : Expr} {ρ : TRes w.K} {l : BoCa.Loc} {ψ : TCell w.K} (hl : ρ.get l = some ψ)
-    (hk : ψ.kind = Kind.imm) : cerwpT (ℍ := ℍ) Tb Q Fb F n w [] [] e ρ := by
+    {O : List (FrameRecT w.K)} {e : Expr} {ρ : TRes w.K} {l : BoCa.Loc} {ψ : TCell w.K}
+    (hl : ρ.get l = some ψ) (hk : ψ.kind = Kind.imm) : cerwpT (ℍ := ℍ) Tb Q Fb F n w [] O e ρ := by
   rw [cerwpT_eq]
   intro w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE hr hls hO hF hf hc hS hR hI hfd
   exfalso
@@ -177,11 +183,11 @@ extension of the world, on the re-reading, at every list there keeping the recor
 resource reads (`KeepRel`).
 
 The quantifier is `U`'s (`STy.thunk`), and it is needed here: a bare run at a list is not one at
-a later list keeping the records its resource reads (`cerwpT_not_keepKripke`,
-`Core/TreeSemKEx.lean`). `cerwpT` quantifies over the starts whose list re-reads `ls` whole, and
-at a list no world with the resource's cells has, `[]` under a view, there is no such start and
-every term is a run (`cerwpT_nil_of_imm`). Read at every later list, `F A` admits no such term
-(`SCmp.ret_not_stuck`). -/
+a later list keeping the records its resource reads (`Obs.cerwpT_not_keepKripke`,
+`Core/TreeSemObs.lean`). `cerwpT` quantifies over the starts whose list re-reads `ls` whole; at a
+list no world holding the resource's cells has, `[]` under a view, there is no such start, and
+every term is a run there (`cerwpT_nil_of_imm`). `F A` at `[]` asks the run at every later list,
+the lend's own among them. -/
 def SCmp.ret (Tb : TableT) (hL : Tb.Local) (hTb : Tb.Down) (Fb F : TFrame) (τ : STy) : SCmp where
   P n w ls e ρ := CovR (sem w.Θ) w.K ρ → ∀ (w' : TWd) (ρ' : TRes w'.K) (ls' : List (SRecT w'.K)),
     w.Ext w' ρ → RRw (w := w) (w' := w') ρ ρ' → KeepRel w'.Θ ls ls' ρ →
@@ -374,6 +380,45 @@ theorem SCmp.loop_fold {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : TFr
         (SCmp.nu (SCmp.loopBody (ℍ := ℍ) Tb hL hTb Fb F τA τB force))).Le
       (SCmp.nu (SCmp.loopBody (ℍ := ℍ) Tb hL hTb Fb F τA τB force)) :=
   SCmp.nu_fold SCmp.loopBody_mono
+
+/-- `λ_. inj₁ ()`. -/
+def constInl : Val := Val.lam (.val (Val.inj₁ Val.unit))
+
+theorem constInl_step (a : Val) (μ : BoCa.BoLo.Heap) :
+    Step1Only (ℍ := ℍ) μ (.app (.val constInl) (.val a)) μ (.val (Val.inj₁ Val.unit)) := by
+  have h := step1Only_plug (ℍ := ℍ) (BoCa.BoLo.Head.beta μ (.val (Val.inj₁ Val.unit)) a) rfl
+    BoCa.BoLo.Kont.hole
+  simpa [BoCa.BoLo.Kont.plug, Expr.subst, constInl] using h
+
+/-- The candidate holding `λ_. inj₁ ()` over the empty resource. -/
+def constCand : SCmp where
+  P _ _ _ e ρ := e = (constInl).1 ∧ ρ = PMap.empty
+  down _ _ _ _ _ h := h
+
+/-- `λ_. inj₁ ()` over the empty resource, at either projection, is a run of `F (1 + _)`. -/
+theorem constInl_ret {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : TFrame} {τ : STy}
+    {n : Nat} {w : TWd} {ls : List (SRecT w.K)} (b : Val) :
+    (SCmp.ret (ℍ := ℍ) Tb hL hTb Fb F (STy.sum STy.unit τ)).P n w ls
+      (.app (.val constInl) (.val b)) PMap.empty := by
+  intro _ w' ρ' ls' _ hr _
+  obtain rfl := RR.of_empty hr
+  cases n with
+  | zero => exact cerwpT_zero
+  | succ n =>
+      refine cerwpT_step hL (constInl_step b) ?_
+      exact cerwpT_val (v := Val.inj₁ Val.unit) fun _ _ _ _ _ hr₀ _ _ =>
+        Or.inl ⟨_, rfl, rfl, RR.of_empty hr₀⟩
+
+/-- **The `ν` of Core's shape is not empty**: `λ_. inj₁ ()` is a run of
+`νX. F(1 ⊕ U X) & F(1 + 0)` at every index, world and list: the candidate holding it is below the
+body at itself (`SCmp.nu_greatest`). -/
+theorem SCmp.loop_nonempty {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : TFrame}
+    {force : Val → Expr} (n : Nat) (w : TWd) (ls : List (SRecT w.K)) :
+    (SCmp.nu (SCmp.loopBody (ℍ := ℍ) Tb hL hTb Fb F STy.unit (STy.sum STy.unit STy.zero)
+      force)).P n w ls (constInl).1 PMap.empty :=
+  SCmp.nu_greatest (R := constCand) (fun _ _ _ _ _ h => by
+      obtain ⟨rfl, rfl⟩ := h
+      exact ⟨constInl_ret _, constInl_ret _⟩) n w ls _ _ ⟨rfl, rfl⟩
 
 end BoCa.Fig16.Tree.Wp
 
