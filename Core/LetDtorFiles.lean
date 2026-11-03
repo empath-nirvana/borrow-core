@@ -244,6 +244,57 @@ theorem d_twoFiles {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {M : Expr}
   d_twoFilesAt hΓ Sfs_nz Sfs_uniq Sfs_not_unrD SD_le rfl
     (fun _ _ o hf hr => by rw [Sfs_noRead o (Row.find_mem hf).1] at hr; cases hr) hM
 
+/-! ### The files' frames at the run -/
+
+theorem dead_replicate (T : VTy) : ∀ k : Nat, Ctx.Dead (List.replicate k (⟨T, false⟩ : Slot VTy))
+  | 0 => .nil
+  | k + 1 => .cons (dead_replicate T k)
+
+/-- **`FrameOk` at the files' inner frame**, from typing (`FrameOk.ofDrops`): closed values, a
+value per slot.  `[spec §62]` -/
+theorem files_frameOk {k : Nat} {γ : List Val} (hγ : ∀ v ∈ γ, closedAt 0 v.1 = true)
+    (hl : k + 2 ≤ γ.length) : FrameOk (dsFiles k) γ := by
+  have hΓ := dead_replicate File k
+  have e := ctxDrops_files (Γ := List.replicate k ⟨File, false⟩) hΓ
+  rw [List.length_replicate] at e
+  rw [← e]
+  exact FrameOk.ofDrops (Δ := LifeCtx.empty) SD_not_cancels
+    (hds_file (hds_file (hds_dead hΓ))) hγ (by simp; omega)
+
+/-- **`FrameOk` at the files' outer frame** (`f₁` across `open 2`). -/
+theorem one_frameOk {k : Nat} {γ : List Val} (hγ : ∀ v ∈ γ, closedAt 0 v.1 = true)
+    (hl : k + 1 ≤ γ.length) : FrameOk (dsOne k) γ := by
+  have hΓ := dead_replicate File k
+  have e := ctxDrops_one (Γ := List.replicate k ⟨File, false⟩) hΓ
+  rw [List.length_replicate] at e
+  rw [← e]
+  exact FrameOk.ofDrops (Δ := LifeCtx.empty) SD_not_cancels (hds_file (hds_dead hΓ)) hγ
+    (by simp; omega)
+
+theorem dropChain_replicate_none : ∀ (k : Nat) (γ : List Val),
+    dropChain (List.replicate k none) γ = .val .unit
+  | 0, _ => rfl
+  | k + 1, γ => dropChain_replicate_none k γ.tail
+
+/-- The files' chain: `close f₂; close f₁`. -/
+theorem dropChain_files (k : Nat) (f₁ f₂ : Val) (γ₀ : List Val) :
+    dropChain (dsFiles k) (f₂ :: f₁ :: γ₀) =
+      bindE (.app (.val (.lam closeB)) (.val f₂))
+        (bindE (.app (.val (.lam closeB)) (.val f₁)) (.val .unit)) := by
+  simp [dsFiles, dropChain, dropChain_replicate_none]
+
+/-- **On the raise, the files' frame runs `close f₂; close f₁`, then the raise**: the inner frame
+of `twoFiles` at `M = raise ()`, its slots at closed values.  `[spec §62]` -/
+theorem files_raise_run (k : Nat) (μ : Heap) (N : Expr) {f₁ f₂ : Val} {γ₀ : List Val}
+    (hγ : ∀ v ∈ f₂ :: f₁ :: γ₀, closedAt 0 v.1 = true) (hl : k ≤ γ₀.length) (K : Kont) :
+    Steps (ℍ := ℍ) μ (K.plug (substAll (f₂ :: f₁ :: γ₀) (letDE (dsFiles k) N raiseU))) μ
+      (K.plug (.seq (bindE (.app (.val (.lam closeB)) (.val f₂))
+        (bindE (.app (.val (.lam closeB)) (.val f₁)) (.val .unit))) raiseU)) := by
+  have h := letDE_raise_run (ℍ := ℍ) (N := N) (M := raiseU) (μ := μ) (μ' := μ)
+    (files_frameOk hγ (by simp; omega)) K .hole (n := 1) (i := 0) (v := .unit) (by decide) rfl
+    (by rw [psub_closedAt _ _ (by decide) (Nat.zero_le 0)]; exact .refl _ _)
+  rwa [dropChain_files] at h
+
 /-! ### `with_fs`: the handler of `Fs` -/
 
 /-- `with_fs`'s answer clause `λx. return x`. -/

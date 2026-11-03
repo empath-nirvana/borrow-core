@@ -130,6 +130,20 @@ theorem d_twoFilesY {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
       (.comp (CTy.effOf SY .unit)) :=
   d_twoFilesAt hΓ SY_nz SY_uniq SY_not_unrD SD_le_SY rfl hfin_y d_yM
 
+/-- **When `κ` is cancelled, the files' frame runs `close f₂; close f₁`**: `files_cancel_run` at
+the body `M = y ()`, whose run, inside `κ`'s cancel, reaches the cancel.  `[spec §62]` -/
+theorem y_cancel_run (k : Nat) {μ μ' : Heap} (N : Expr) {f₁ f₂ : Val} {γ₀ : List Val}
+    (hγ : ∀ v ∈ f₂ :: f₁ :: γ₀, closedAt 0 v.1 = true) (hl : k ≤ γ₀.length) (K K' : Kont)
+    {err : Option Val} (hK : K'.Catches 0 = false)
+    (hM : Steps (ℍ := ℍ) μ (Expr.psub 0 (f₂ :: f₁ :: γ₀) (performE (opArgE 6 0 (.val .unit)))) μ'
+      (K'.plug (BoCa.BoLo.raiseE (.val (BoCa.BoLo.cancelVal err))))) :
+    Steps (ℍ := ℍ) μ (K.plug (substAll (f₂ :: f₁ :: γ₀)
+        (letDE (dsFiles k) N (performE (opArgE 6 0 (.val .unit)))))) μ'
+      (K.plug (BoCa.BoLo.cfinE (BoCa.BoLo.cancelVal err)
+        (bindE (.app (.val (.lam closeB)) (.val f₂))
+          (bindE (.app (.val (.lam closeB)) (.val f₁)) (.val .unit))))) :=
+  Cancel.files_cancel_run k N _ hγ hl K K' hK hM
+
 /-! ### The handlers -/
 
 /-- (a) `λ(v, κ). κ.1 v`: resume. -/

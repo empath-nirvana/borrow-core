@@ -10,7 +10,7 @@ proved at that part's rules, not a result of its own. Every other name is a Lean
 
 | Part | Result (Lean name) | Branch, commit |
 |---|---|---|
-| Destructors on every exit | rule `CDerives.effLetD`, destructors by type `dropOf`/`DropOk.derives`; per-exit runs `letDE_raise_run`, `letDE_cancel_run`, `letDE_return_run`, `dropChain_run`; `resourceSafety` (`adequacyD` read over cells) | library: `Core/LetDtor.lean`, `Core/LetDtorSafety.lean` |
+| Destructors on every exit | rule `CDerives.effLetD`, destructors by type `dropOf`/`DropOk.derives`; per-exit runs `letDE_raise_run`, `letDE_cancel_run`, `letDE_return_run`, exits `letDE_raise_exit`, `letDE_cancel_exit`; `resourceSafety` (`adequacyD` read over cells) | library: `Core/LetDtor.lean`, `Core/LetDtorSafety.lean` |
 | Cancellation; early loop close | *programs* `cancelProg_safe`, `cancel_order`, `loopProg_safe`, `loop_close3`; typing lemma `d_stepD` | library: `Core/LetDtorCancel.lean`, `Core/LetDtorLoop.lean` |
 | A lend whose callback raises | typing lemma `d_lendD`; *programs* `lendMutRaise_safe`, `lendNested_run` | library: `Core/LetDtorLend.lean` |
 | Owned resources across a suspension | typing lemma `d_kDtor`, `dropOk_kappa`; *programs* `ySeqDrop_safe`, `ySeqDrop_order` | library: `Core/LetDtorSuspend.lean` |

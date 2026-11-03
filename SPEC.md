@@ -10276,20 +10276,29 @@ unwind, by the destructor of its type, which may perform operations. What is pro
 of a `[let-dtor]` frame (`Core/LetDtorSafety.lean`):
 - **raise**: the frame step `[finalise]` (`letDE_finalise`), and the frame's run to
   `drop_ctx; raise p` with the slots' values in place, the slot bound last first
-  (`letDE_raise_run`, `dropChain_some`); where each destructor's run returns, they run in that
-  order and the same raise goes on (`letDE_raise_reraise`, `dropChain_run`);
+  (`letDE_raise_run`, `dropChain_some`). Every run that goes on to a configuration past the chain
+  first runs the chain to a term that takes no step; if that term is a value, each destructor ran
+  on its slot's value to a value, last bound first, before the raise was reached
+  (`letDE_raise_exit`, `dropChain_ran`, `DropsRan`);
 - **cancel**: the frame step `[finalise-cancel]` (`letDE_finaliseCancel`), the run to
-  `cfin c drop_ctx` (`letDE_cancel_run`), and, where each destructor returns, the cancel going on
-  (`letDE_cancel_reraise`);
+  `cfin c drop_ctx` (`letDE_cancel_run`), and the same reading of every run past the chain
+  (`letDE_cancel_exit`);
 - **return**: the frame is discarded and the continuation `N` runs with the slots' values, no
   destructor run (`letDE_return_run`): `N` owns the slots and its derivation consumes each live
   one. That it consumes a slot by its destructor is shown on examples;
 - **early close of a loop**: shown on examples (a step whose *close* is the state's destructor);
 - **reverse order**: within one frame only.
 
-That each destructor's run returns where it runs is the hypothesis of `dropChain_run`
-(`DropsReturn`), not derived: `hSDc` and `hSDd` are why it is expected, and `resourceSafety` gives
-that the whole run reaches a value.
+A destructor is guaranteed to run on every exit, not to exit itself: no termination is assumed,
+and a run that never leaves the chain is not constrained. This rules out a frame that lets the
+error out with a destructor skipped or out of order. Where the chain stops at a term that is not a
+value, a destructor has handed one of its own operations to the handlers of the context (`close`
+to `with_fs`, for the files); the run is not followed through that capture and resume, so for a
+destructor that performs, the theorems give the frame's run up to its first operation, and the
+order of the closes is shown on the programs by `eval`. The frames' side conditions (`FrameOk`:
+closed values, closed destructors, a value per slot) come from typing (`FrameOk.ofDrops`), and are
+discharged at the files' frames (`files_frameOk`, `one_frameOk`; `files_raise_run`,
+`Cancel.files_cancel_run`, `Suspend.y_cancel_run`: `close f₂; close f₁`).
 
 **Destructors by type** (`dropOf`). One destructor per type, from the type and the program's
 declaration `decl` at the opaque types: `⊗` and `⊕` componentwise (`tensorDropB`, `sumDropB`, the
@@ -10376,7 +10385,8 @@ through `close`. `resourceSafety` then gives that every handle's cell is freed, 
 each file is closed once, `f₂` before `f₁`. What it does **not** give: Core keeps `burn` available
 to every program (§42's declared types use it), so a program whose declared destructor of `Tok`
 is `burn` types, is resource safe, and closes nothing. `close` is the only eliminator of a
-`File` only where `burn` is withheld from the program text; making it so in Core is not done.
+`File` only where `burn` is withheld from the program text; making it so in Core is #778 (abstract
+types with a single provider).
 
 **Programs**, each a closed derivation under `resourceSafety`; `*_safe` and `*_order`/`*_run` are
 programs, `d_stepD`, `d_lendD` and `d_kDtor` typing lemmas:
@@ -10408,10 +10418,10 @@ elaborate to `letDT`, with `decl` the program's declared destructors at its opaq
 destructor row `Σ_D ≤ Σ` with no cancelling operation and no `Div`, and `hfin` at the cancel rows
 of `Σ_M`.
 
-*Open*: a destructor that can fail (above); relaxing `hSDd` (a destructor that loops); deriving
-`DropsReturn` from the relation; the order of releases as a program-wide theorem (the paper's
-ordered judgment, `⊢ₒ`, is not transcribed); `close` as the only eliminator of a host handle in
-Core.
+*Open*: a destructor that can fail (above); relaxing `hSDd` (a destructor that loops); following
+a destructor's run through its operations' capture and resume; the order of releases as a
+program-wide theorem (the paper's ordered judgment, `⊢ₒ`, is not transcribed); `close` as the only eliminator of a host handle in
+Core (#778).
 
 ### The safety relation
 
@@ -10950,7 +10960,8 @@ corpus. The rest of §62 is design.
   type (`dropOf`, `DropOk`: `⊗`/`⊕` componentwise, declared at opaque types, `π₂` at `U(C & D)`,
   derived drops elsewhere), `M` at `Σ_M ≤ Σ`, and the premises `hSDc`, `hSDd`, `hfin`;
   `effLetDDiv` drops `hSDd` where nothing is captured. Per-exit run theorems of a frame
-  (`letDE_raise_run`, `letDE_cancel_run`, `letDE_return_run`, `dropChain_run`); `[let]` against
+  (`letDE_raise_run`, `letDE_cancel_run`, `letDE_return_run`, `letDE_raise_exit`,
+  `letDE_cancel_exit`); `[let]` against
   `[let-dtor]` (`Core/LetDtorLet.lean`); the file handle `File = Tok` with `open`/`close`; a lend
   with its error type a parameter. A destructor that can fail is *Open*. No change to `CDerives`,
   the relation, the checker, the backends or the corpus.

@@ -12,17 +12,18 @@ of its context; `dropChain ds γ` is `drop_ctx` with each slot's value in place)
 
 | exit of `M` | proved |
 |---|---|
-| raise `p` | `letDE_raise_run`: the frame reaches `dropChain ds γ; raise p`, whose first redex is the destructor of slot `0`, the variable bound last (`dropChain_some`); `dropChain_run`: if each destructor's run returns where it runs, they run in that order and `raise p` goes on unchanged (`letDE_raise_reraise`) |
-| cancel | `letDE_cancel_run`: the frame reaches `cfin c (dropChain ds γ)`; with each destructor returning, the cancel goes on (`letDE_cancel_reraise`) |
+| raise `p` | `letDE_raise_run`: the frame reaches `dropChain ds γ; raise p`, whose first redex is the destructor of slot `0`, the variable bound last (`dropChain_some`); `letDE_raise_exit`: every run that leaves the chain first runs it to a term that takes no step, and if that term is a value each destructor ran on its slot's value, last bound first (`DropsRan`, `dropChain_ran`) |
+| cancel | `letDE_cancel_run`: the frame reaches `cfin c (dropChain ds γ)`; `letDE_cancel_exit`, as for the raise |
 | return `w` | `letDE_return_run`: the frame is discarded and `N` runs with `w` and the slots' values, no destructor run: `N` owns `Γ₂`, and its derivation consumes each live slot |
 
-That each destructor's run returns where it runs is the hypothesis of `dropChain_run`
-(`DropsReturn`), not derived here. `hSDc` and `hSDd` are why it is expected (a destructor neither
-raises nor loops), and `resourceSafety` gives that the whole run reaches a value; deriving the
-per-destructor statement from the relation is not done. The reverse order is within one frame
-only: a program-wide statement that releases follow the reverse order of allocation is not made,
-since `CDerives` has exchange (`Ctx.SplitP` interleaves freely) and a program may free its cells in
-any order it writes.
+A destructor is guaranteed to run on every exit, not to exit itself: no termination is assumed,
+and a run that never leaves the chain is not constrained. When the chain stops at a term that is
+not a value, a destructor has handed one of its own operations to the handlers of the context
+(`close` to `with_fs`, for the files); following the chain through that capture and the resume is
+not done here, so for a destructor that performs, `DropsRan` is not read off the run. The reverse
+order is within one frame only: a program-wide statement that releases follow the reverse order of
+allocation is not made, since `CDerives` has exchange (`Ctx.SplitP` interleaves freely) and a
+program may free its cells in any order it writes.
 
 **`resourceSafety`** is `adequacyD` read over cells. For every closed `CDerives` program at a
 persistent answer, every run from the empty memory, under every allocator, continues to a value at
@@ -240,75 +241,107 @@ theorem letDE_return_run {μ μ' : Heap} {ds : List (Option Expr)} {N M : Expr} 
   exact h1.trans (.more ⟨K, _, _, rfl, rfl, Head.uthen μ' _ _ w⟩
     (.one ⟨K, _, _, rfl, rfl, Head.beta μ' _ w⟩))
 
-/-- **Each destructor of the chain returns where it runs**: at the slot `0`, the destructor's
-body at its value runs, in the context `K` and before the rest of the chain, to `()`; then the
-rest. The hypothesis of `dropChain_run`.  `[spec §62]` -/
-inductive DropsReturn (K : Kont) : Heap → List (Option Expr) → List Val → Heap → Prop where
-  | nil (μ : Heap) (γ : List Val) : DropsReturn K μ [] γ μ
+/-- **The destructors ran, in order**: at the slot `0`, the destructor applied to its slot's
+value ran to a value, then the rest, each from the memory the previous one left. A record of a
+run, read off it by `dropChain_ran`.  `[spec §62]` -/
+inductive DropsRan : Heap → List (Option Expr) → List Val → Heap → Prop where
+  | nil (μ : Heap) (γ : List Val) : DropsRan μ [] γ μ
   | none {μ μ' : Heap} {ds : List (Option Expr)} {γ : List Val} :
-      DropsReturn K μ ds γ.tail μ' → DropsReturn K μ (none :: ds) γ μ'
-  | some {μ μ₁ μ' : Heap} {b : Expr} {ds : List (Option Expr)} {v : Val} {γ : List Val}
-      (h : Steps (ℍ := ℍ) μ (K.plug (bindE (b.subst 0 v) (dropChain ds γ))) μ₁
-        (K.plug (bindE (.val .unit) (dropChain ds γ)))) :
-      DropsReturn K μ₁ ds γ μ' → DropsReturn K μ (some b :: ds) (v :: γ) μ'
+      DropsRan μ ds γ.tail μ' → DropsRan μ (none :: ds) γ μ'
+  | some {μ μ₁ μ' : Heap} {b : Expr} {ds : List (Option Expr)} {v w : Val} {γ : List Val}
+      (h : Steps (ℍ := ℍ) μ (.app (.val (.lam b)) (.val v)) μ₁ (.val w)) :
+      DropsRan μ₁ ds γ μ' → DropsRan μ (some b :: ds) (v :: γ) μ'
 
-/-- **The chain runs each destructor in turn**: where each returns, the chain runs them, the
-slot bound last first, and returns `()`.  `[spec §62]` -/
-theorem dropChain_run {K : Kont} {μ μ' : Heap} {ds : List (Option Expr)} {γ : List Val} :
-    DropsReturn (ℍ := ℍ) K μ ds γ μ' → (∀ b, some b ∈ ds → closedAt 1 b = true) →
-      (∀ v ∈ γ, closedAt 0 v.1 = true) →
-      Steps (ℍ := ℍ) μ (K.plug (dropChain ds γ)) μ' (K.plug (.val .unit)) := by
-  intro h
-  induction h with
-  | nil μ γ => intro _ _; exact .refl _ _
-  | none _ ih =>
-      intro hb hγ
-      exact ih (fun b h => hb b (List.mem_cons_of_mem _ h))
+/-- **A chain that runs to a value ran each destructor, the slot bound last first**: the run
+is read off by determinism, the chain being `(λx. drop_0) v₀ to _. rest`.  `[spec §62]` -/
+theorem dropChain_ran :
+    ∀ {ds : List (Option Expr)} {γ : List Val} {μ μ' : Heap} {w : Val},
+      (∀ b, some b ∈ ds → closedAt 1 b = true) → (∀ v ∈ γ, closedAt 0 v.1 = true) →
+      ds.length ≤ γ.length →
+      Steps (ℍ := ℍ) μ (dropChain ds γ) μ' (.val w) → DropsRan (ℍ := ℍ) μ ds γ μ'
+  | [], γ, μ, μ', w, _, _, _, h => by
+      obtain ⟨rfl, -⟩ := steps_from_val (v := .unit) h
+      exact .nil _ γ
+  | none :: ds, γ, μ, μ', w, hb, hγ, hl, h =>
+      .none (dropChain_ran (fun b h => hb b (List.mem_cons_of_mem _ h))
         (fun v hv => hγ v (List.mem_of_mem_tail hv))
-  | @some μ μ₁ μ' b ds v γ hrun _ ih =>
-      intro hb hγ
+        (by simp only [List.length_cons, List.length_tail] at hl ⊢; omega) h)
+  | some _ :: _, [], _, _, _, _, _, hl, _ => by simp at hl
+  | some b :: ds, v :: γ, μ, μ', w, hb, hγ, hl, h => by
       have hb' : ∀ b', some b' ∈ ds → closedAt 1 b' = true :=
         fun b' h => hb b' (List.mem_cons_of_mem _ h)
       have hγ' : ∀ w ∈ γ, closedAt 0 w.1 = true := fun w hw => hγ w (List.mem_cons_of_mem _ hw)
-      have hcl := closedAt_dropChain hb' hγ'
-      have hstep : Step1 (ℍ := ℍ) μ (K.plug (dropChain (some b :: ds) (v :: γ))) μ
-          (K.plug (bindE (b.subst 0 v) (dropChain ds γ))) :=
-        ⟨K.comp (.appR (.val (.lam (dropChain ds γ))) .hole), _, _,
-          by simp [Kont.plug_comp, Kont.plug, dropChain, bindE],
-          by simp [Kont.plug_comp, Kont.plug, bindE], Head.beta μ b v⟩
-      refine .more hstep (hrun.trans ?_)
-      refine .more ⟨K, _, _, rfl, rfl, Head.beta μ₁ (dropChain ds γ) .unit⟩ ?_
-      rw [subst_closedAt _ _ hcl (Nat.zero_le 0)]
-      exact ih hb' hγ'
+      obtain ⟨μm, v₁, h₁, h₂⟩ := steps_plug_inv (.appR (.val (.lam (dropChain ds γ))) .hole) rfl h
+        (e := .app (.val (.lam b)) (.val v)) (w := w) rfl rfl
+      have h₃ := steps_peel (m := μm) (e' := (dropChain ds γ).subst 0 v₁) h₂ (by simp [Kont.plug])
+        (fun μ₁ e₁ hs => step1_beta_inv (v := v₁) hs)
+      rw [subst_closedAt _ _ (closedAt_dropChain hb' hγ') (Nat.zero_le 0)] at h₃
+      exact .some h₁ (dropChain_ran hb' hγ' (by simpa using hl) h₃)
 
-/-- **The raise exit, completed**: where each destructor returns, the frame runs them, the slot
-bound last first, and then the same raise `p` goes on.  `[spec §62]` -/
-theorem letDE_raise_reraise {μ μ' μ'' : Heap} {ds : List (Option Expr)} {N M : Expr}
-    {γ : List Val} (hok : FrameOk ds γ) (K K' : Kont) {n i : UInt32} {v : Val} (hn : n ≠ 0)
-    (hK : K'.Catches n = false)
-    (hM : Steps (ℍ := ℍ) μ (Expr.psub 0 γ M) μ' (K'.plug (raiseE (.val (opPayload n i v)))))
-    (hd : DropsReturn (ℍ := ℍ) (K.comp (.seq .hole (raiseE (.val (opPayload n i v))))) μ' ds γ μ'') :
-    Steps (ℍ := ℍ) μ (K.plug (substAll γ (letDE ds N M))) μ''
-      (K.plug (raiseE (.val (opPayload n i v)))) := by
-  refine (letDE_raise_run hok K K' hn hK hM).trans ?_
-  have h2 := dropChain_run hd hok.dtors hok.vals
-  simp only [Kont.plug_comp, Kont.plug] at h2
-  exact h2.trans (.one ⟨K, _, _, rfl, rfl, Head.seq μ'' _⟩)
+/-- **The raise exit, on every run that leaves the chain.** From the configuration
+`letDE_raise_run` reaches, `K[dropChain ds γ; raise p]`, every run to a configuration that is no
+longer `K[_; raise p]` (the error gone on, or a value) first runs the chain to a term `t` that
+takes no step. Either `t` is a value, and then each destructor ran on its slot's value to a value,
+the slot bound last first (`DropsRan`), before `raise p` was reached; or `t` is not a value: a
+destructor's own operation or error, handed to the handlers of `K`. No termination is assumed: a
+run that never leaves the chain is not constrained.
 
-/-- **The cancel exit, completed**: where each destructor returns, the frame runs them and the
-cancel goes on (`[cfin-ret]`).  `[spec §62]` -/
-theorem letDE_cancel_reraise {μ μ' μ'' : Heap} {ds : List (Option Expr)} {N M : Expr}
-    {γ : List Val} (hok : FrameOk ds γ) (K K' : Kont) {err : Option Val}
-    (hK : K'.Catches 0 = false)
-    (hM : Steps (ℍ := ℍ) μ (Expr.psub 0 γ M) μ' (K'.plug (raiseE (.val (cancelVal err)))))
-    (hd : DropsReturn (ℍ := ℍ)
-      (K.comp (.appR (.app (.val (.prim .cfin)) (.val (cancelVal err))) .hole)) μ' ds γ μ'') :
-    Steps (ℍ := ℍ) μ (K.plug (substAll γ (letDE ds N M))) μ''
-      (K.plug (raiseE (.val (cancelVal err)))) := by
-  refine (letDE_cancel_run hok K K' hK hM).trans ?_
-  have h2 := dropChain_run hd hok.dtors hok.vals
-  simp only [Kont.plug_comp, Kont.plug] at h2
-  exact h2.trans (.one ⟨K, _, _, rfl, rfl, Head.cfret μ'' err .unit⟩)
+This rules out a frame that lets the error out while a destructor is skipped or out of order:
+the term at the frame is fixed (`letDE_raise_run`), and the error is reached only through it.
+`[spec §62]` -/
+theorem letDE_raise_exit {μ μ' : Heap} {ds : List (Option Expr)} {γ : List Val}
+    (hok : FrameOk ds γ) (K : Kont) {R F : Expr}
+    (hrun : Steps (ℍ := ℍ) μ (K.plug (.seq (dropChain ds γ) R)) μ' F)
+    (hF : ∀ e, F ≠ K.plug (.seq e R)) :
+    ∃ μ₁ t, Steps (ℍ := ℍ) μ (dropChain ds γ) μ₁ t ∧ (∀ μ₂ t₂, ¬ Step1 (ℍ := ℍ) μ₁ t μ₂ t₂) ∧
+      Steps (ℍ := ℍ) μ₁ (K.plug (.seq t R)) μ' F ∧
+      (IsVal t → DropsRan (ℍ := ℍ) μ ds γ μ₁) := by
+  have hrun' : Steps (ℍ := ℍ) μ ((K.comp (.seq .hole R)).plug (dropChain ds γ)) μ' F := by
+    simpa [Kont.plug_comp, Kont.plug] using hrun
+  rcases steps_plug_split _ hrun' with ⟨e', hE, -⟩ | ⟨μ₁, t, h₁, hirr, h₂⟩
+  · exact absurd (by simpa [Kont.plug_comp, Kont.plug] using hE) (hF e')
+  · refine ⟨μ₁, t, h₁, hirr, by simpa [Kont.plug_comp, Kont.plug] using h₂, fun ht => ?_⟩
+    exact dropChain_ran (w := ⟨t, ht⟩) hok.dtors hok.vals hok.len h₁
+
+/-- **The cancel exit, on every run that leaves the chain**: as `letDE_raise_exit`, from
+`K[cfin c (dropChain ds γ)]`, the configuration `letDE_cancel_run` reaches.  `[spec §62]` -/
+theorem letDE_cancel_exit {μ μ' : Heap} {ds : List (Option Expr)} {γ : List Val}
+    (hok : FrameOk ds γ) (K : Kont) {c : Val} {F : Expr}
+    (hrun : Steps (ℍ := ℍ) μ (K.plug (cfinE c (dropChain ds γ))) μ' F)
+    (hF : ∀ e, F ≠ K.plug (cfinE c e)) :
+    ∃ μ₁ t, Steps (ℍ := ℍ) μ (dropChain ds γ) μ₁ t ∧ (∀ μ₂ t₂, ¬ Step1 (ℍ := ℍ) μ₁ t μ₂ t₂) ∧
+      Steps (ℍ := ℍ) μ₁ (K.plug (cfinE c t)) μ' F ∧
+      (IsVal t → DropsRan (ℍ := ℍ) μ ds γ μ₁) := by
+  have hrun' : Steps (ℍ := ℍ) μ ((K.comp (.appR (.app (.val (.prim .cfin)) (.val c)) .hole)).plug
+      (dropChain ds γ)) μ' F := by
+    simpa [Kont.plug_comp, Kont.plug, cfinE] using hrun
+  rcases steps_plug_split _ hrun' with ⟨e', hE, -⟩ | ⟨μ₁, t, h₁, hirr, h₂⟩
+  · exact absurd (by simpa [Kont.plug_comp, Kont.plug, cfinE] using hE) (hF e')
+  · refine ⟨μ₁, t, h₁, hirr, by simpa [Kont.plug_comp, Kont.plug, cfinE] using h₂, fun ht => ?_⟩
+    exact dropChain_ran (w := ⟨t, ht⟩) hok.dtors hok.vals hok.len h₁
+
+/-- **`FrameOk` from typing**: destructors by type are closed (`closedAt_of_derives` at the empty
+context), and a closing substitution of closed values with a value per slot of `Γ₂`.
+`[spec §62]` -/
+theorem FrameOk.ofDrops {Δ : LifeCtx} {SD : Row} {decl : Opaque → Option Expr}
+    (hSD : ¬ SD.Cancels) {Γ₂ : Ctx VTy} {γ : List Val}
+    (hds : ∀ s ∈ Γ₂, s.live = true → s.ty.Persistent ∨ DropOk Δ SD decl s.ty)
+    (hγ : ∀ v ∈ γ, closedAt 0 v.1 = true) (hl : Γ₂.length ≤ γ.length) :
+    FrameOk (ctxDrops decl Γ₂) γ := by
+  refine ⟨hγ, ?_, by simpa [ctxDrops] using hl⟩
+  intro b hb
+  obtain ⟨s, hs, hsb⟩ := List.mem_map.mp hb
+  by_cases hc : (s.live && !s.ty.persistent) = true
+  · rw [if_pos hc] at hsb
+    simp only [Bool.and_eq_true, Bool.not_eq_true'] at hc
+    have hok := ((hds s hs hc.1).resolve_left (by simp [VTy.Persistent, hc.2])).derives hSD
+    obtain ⟨b', hb', hd⟩ := hok
+    rw [hb'] at hsb
+    cases hsb
+    have := closedAt_of_derives (hd [] .nil)
+    simpa [closedAt] using this
+  · rw [if_neg hc] at hsb
+    cases hsb
 
 end BoCa.Fig16.LogRel.Core
 

@@ -106,6 +106,22 @@ theorem d_twoFilesAwait {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ (twoFiles Γ.length (awaitE 1)) (.comp (CTy.effOf S2 .unit)) :=
   d_twoFilesAt hΓ S2_nz S2_uniq S2_not_unrD SD_le_S2 rfl hfin_await d_awaitM
 
+/-- **On a cancel, the files' frame runs `close f₂; close f₁` under `cfin`**: for every `M` whose run
+at the files' values reaches a cancel through a context that catches nothing of name `0` (here
+`await_1`, resumed with *cancelled*), the inner frame of `twoFiles` reaches the two closes, `f₂`
+first; `letDE_cancel_exit` then reads every run that leaves them.  `[spec §62]` -/
+theorem files_cancel_run (k : Nat) {μ μ' : Heap} (N M : Expr) {f₁ f₂ : Val} {γ₀ : List Val}
+    (hγ : ∀ v ∈ f₂ :: f₁ :: γ₀, closedAt 0 v.1 = true) (hl : k ≤ γ₀.length) (K K' : Kont)
+    {err : Option Val} (hK : K'.Catches 0 = false)
+    (hM : Steps (ℍ := ℍ) μ (Expr.psub 0 (f₂ :: f₁ :: γ₀) M) μ'
+      (K'.plug (BoCa.BoLo.raiseE (.val (BoCa.BoLo.cancelVal err))))) :
+    Steps (ℍ := ℍ) μ (K.plug (substAll (f₂ :: f₁ :: γ₀) (letDE (dsFiles k) N M))) μ'
+      (K.plug (BoCa.BoLo.cfinE (BoCa.BoLo.cancelVal err)
+        (bindE (.app (.val (.lam closeB)) (.val f₂))
+          (bindE (.app (.val (.lam closeB)) (.val f₁)) (.val .unit))))) := by
+  have h := letDE_cancel_run (files_frameOk hγ (by simp; omega)) K K' hK hM (N := N)
+  rwa [dropChain_files] at h
+
 /-! ### The immediate scheduler at the outer row `{close, open}` -/
 
 /-- The scheduler's answer: `U(Flag ⊸ F_{close, open} Flag)`. -/
