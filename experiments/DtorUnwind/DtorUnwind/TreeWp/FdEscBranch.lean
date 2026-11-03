@@ -661,6 +661,104 @@ theorem fdEscOfBranch (hI : TWNT.InvHolds) (hB : EscBeneathT) : FdEscOfBranchT :
     ⟨fd_le_of_branch hI hT hp hW hFL hbr hnα hτ,
       fun _ heR _ hx => fd_esc_of_branch hI hB hT hp hW hFL hbr hnα hτ heR hx⟩
 
+/-! ### At a join -/
+
+/-- Locations no flattening of `a` holds. -/
+def NoneAt (P : BoCa.Loc → Prop) (a : TRes K) : Prop :=
+  ∀ τ, ResUT.Flat a τ → ∀ x, P x → τ.get x = none
+
+/-- **A composite of valid resources holding nothing at `P` holds nothing there.** -/
+theorem NoneAt.compS {P : BoCa.Loc → Prop} {a b c : TRes K} (hc : ResUT.CompS a b c)
+    (hva : ResUT.Valid a) (hvb : ResUT.Valid b) (ha : NoneAt P a) (hb : NoneAt P b) :
+    NoneAt P c := by
+  intro τ hτ x hx
+  cases hg : τ.get x with
+  | none => rfl
+  | some χ =>
+  exfalso
+  obtain ⟨e₁, e₂, e, a₁, a₂, a', he₁, he₂, he, ha₁, ha₂, ha', hσ⟩ := (ResUT.Flat.split hc).mp hτ
+  obtain ⟨τa, ea, aa, hea, haa, hca⟩ := hva
+  obtain ⟨τb, eb, ab, heb, hab, hcb⟩ := hvb
+  obtain rfl := ExST.functional hea he₁
+  obtain rfl := AgWT.functional haa ha₁
+  obtain rfl := ExST.functional heb he₂
+  obtain rfl := AgWT.functional hab ha₂
+  have hA : ∀ ψ, τa.get x = some ψ → False := fun ψ h => by
+    rw [ha τa ⟨ea, aa, hea, haa, hca⟩ x hx] at h; cases h
+  have hB : ∀ ψ, τb.get x = some ψ → False := fun ψ h => by
+    rw [hb τb ⟨eb, ab, heb, hab, hcb⟩ x hx] at h; cases h
+  rcases back_some hσ hg with ⟨ψ, hψ⟩ | ⟨ψ, hψ⟩
+  · rcases back_some he hψ with ⟨ψ', h'⟩ | ⟨ψ', h'⟩
+    · obtain ⟨_, h''⟩ := comp_some hca h'; exact hA _ h''
+    · obtain ⟨_, h''⟩ := comp_some hcb h'; exact hB _ h''
+  · rcases back_some ha' hψ with ⟨ψ', h'⟩ | ⟨ψ', h'⟩
+    · obtain ⟨_, h''⟩ := comp_some_r hca h'; exact hA _ h''
+    · obtain ⟨_, h''⟩ := comp_some_r hcb h'; exact hB _ h''
+
+/-- The locations `FdEsc` reads: the lent location and the escrow's exclusive part. -/
+def escLocs (l : BoCa.Loc) (R : TRes K) (x : BoCa.Loc) : Prop :=
+  x = l ∨ ∃ eR, ExST R eR ∧ (eR.get x).isSome
+
+theorem fdEsc_iff_noneAt {l : BoCa.Loc} {R Y : TRes K} : FdEsc l R Y ↔ NoneAt (escLocs l R) Y := by
+  refine ⟨fun h τ hτ x hx => ?_, fun h τ hτ => ⟨h τ hτ l (Or.inl rfl),
+    fun eR heR x hx => h τ hτ x (Or.inr ⟨eR, heR, hx⟩)⟩⟩
+  rcases hx with rfl | ⟨eR, heR, hx⟩
+  · exact (h τ hτ).1
+  · exact (h τ hτ).2 eR heR x hx
+
+theorem noneAt_empty (P : BoCa.Loc → Prop) : NoneAt P (PMap.empty : TRes K) := by
+  intro τ hτ x _
+  obtain ⟨e, a, he, ha, hc⟩ := hτ
+  obtain rfl := ExST.functional he exW_empty
+  obtain rfl := AgWT.functional ha agW_empty
+  rw [ResUT.CompS.functional hc (ResUT.compS_empty_right _)]; rfl
+
+/-- **The other branches at their points, none inside `α`, hold nothing the lend lends.** -/
+theorem fdEsc_of_points (hI : TWNT.InvHolds) (hB : EscBeneathT) {Θ : CodeTy} {tc : TChoice K}
+    {W : TRes K} {ps rs : List (FrameRecT K)} {p : FrameRecT K} {α : Life}
+    (hT : TWNT K Θ tc W ps rs) (hp : p ∈ ps) (hFL : FrameLifeT K W p α) :
+    ∀ {bs : List (TRes K)} {ns : List Life},
+      List.Forall₂ (fun b n => OnBranchResT K n b) bs ns → (∀ n ∈ ns, ¬ K.le n α) →
+      ∀ {ρo ρf : TRes K}, CompAllT bs ρf → ResUT.CompS ρo ρf W →
+        NoneAt (escLocs p.le p.R) ρf := by
+  intro bs ns hpts
+  induction hpts with
+  | nil =>
+      intro _ ρo ρf hC _
+      cases hC
+      exact noneAt_empty _
+  | @cons b n bs ns hbn _ ih =>
+      intro hns ρo ρf hC hW
+      cases hC with
+      | @cons _ _ ρf' _ hC' hc =>
+      have hv := hT.valid
+      have hvf := (ResUT.Valid.split hW hv).2
+      obtain ⟨hvb, hvf'⟩ := ResUT.Valid.split hc hvf
+      obtain ⟨y, -, hyW⟩ := reassoc_out hW hc
+      have hb : NoneAt (escLocs p.le p.R) b := fdEsc_iff_noneAt.mp
+        (fdEscOfBranch hI hB _ _ _ _ _ _ _ _ _ _ _ hT hp hyW hFL hbn (hns n List.mem_cons_self))
+      obtain ⟨y', -, hyW'⟩ := reassoc_out hW (ResUT.CompS.comm hc)
+      exact NoneAt.compS hc hvb hvf' hb
+        (ih (fun m hm => hns m (List.mem_cons_of_mem _ hm)) hC' hyW')
+
+/-- **`FdEsc` at a join, from the cactus invariant**: the resumed branch owns the record framed at
+`α`, and no other branch's point is inside `α` (`JoinPtT`). -/
+theorem fdEsc_at_join (hI : TWNT.InvHolds) (hB : EscBeneathT) {w : TWd} {ρ : TRes w.K}
+    {O : List (FrameRecT w.K)} {others : List (TBranch w.K)} {n₀ : Life} {ns : List Life}
+    {W : TRes w.K} {ps : List (FrameRecT w.K)} {ls : List (SRecT w.K)} {μ : BoCa.BoLo.Heap}
+    (hC : CactusInvT w ((ρ, O) :: others) (n₀ :: ns) W ps ls μ) {p : FrameRecT w.K}
+    (hp : p ∈ O) {α : Life} (hFL : FrameLifeT w.K W p α) (hJ : JoinPtT (K := w.K) ns α)
+    {ρf : TRes w.K} (hf : CompAllT (others.map Prod.fst) ρf) : FdEsc p.le p.R ρf := by
+  obtain ⟨hCA, hps, -, hR, -, hpts⟩ := hC
+  cases hCA with
+  | cons hr hc =>
+  obtain rfl := compAllT_functional hf hr
+  cases hpts with
+  | cons _ hpts' =>
+  have hpps : p ∈ ps := (hps p).mpr (by simp [hp])
+  exact fdEsc_iff_noneAt.mpr (fdEsc_of_points hI hB hR.1 hpps hFL
+    (forall₂_map_left.mpr hpts') hJ hf hc)
+
 end BoCa.Fig16.Tree.Wp
 
 end
