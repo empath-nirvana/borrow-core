@@ -333,6 +333,293 @@ theorem asyncProg_safe : OrDiverges (ℍ := ℍ) asyncProg :=
 
 end Async
 
+/-! ### Facts about `KapSchedT` the stepper reads -/
+
+/-- `KapSchedT` reads its answer predicate only below its index. -/
+theorem kapSchedT_congr {Q₁ Q₂ : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : Nat}
+    {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {v κ : Val} {ρ : TRes w.K}
+    (hQ : ∀ j, j < k → ∀ w ls O v ρ, Q₁ j w ls O v ρ → Q₂ j w ls O v ρ)
+    (h : KapSchedT (ℍ := ℍ) Q₁ M en k w ls O v κ ρ) : KapSchedT (ℍ := ℍ) Q₂ M en k w ls O v κ ρ := by
+  refine ⟨h.1, fun w' ρ' lsR ls' O' hE hr hl hx hO k' hk' a σ σ' hB hc F' hF'm hF'M => ?_⟩
+  have h₁ := cerwpTE_iff.mp (h.2 w' ρ' lsR ls' O' hE hr hl hx hO k' hk' a σ σ' hB hc F' hF'm hF'M)
+  exact cerwpTE_iff.mpr (twp_mono_le (fun j hj _ _ _ _ _ ⟨r, hr', hq⟩ =>
+    ⟨r, hr', hQ j (by omega) _ _ _ _ _ hq⟩) h₁)
+
+theorem KapSchedT.down {Q : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : Nat} {w : TWd}
+    {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {v κ : Val} {ρ : TRes w.K}
+    (h : KapSchedT (ℍ := ℍ) Q M en (k + 1) w ls O v κ ρ) : KapSchedT (ℍ := ℍ) Q M en k w ls O v κ ρ :=
+  ⟨h.1, fun w' ρ' lsR ls' O' hE hr hl hx hO k' hk' => h.2 w' ρ' lsR ls' O' hE hr hl hx hO k'
+    (by omega)⟩
+
+/-- A frame avoiding more locations is one `κ` may be resumed under. -/
+theorem KapSchedT.mask_mono {Q : TPostV} {M M' : BoCa.Loc → Prop} {en : OpEntT} {k : Nat}
+    {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {v κ : Val} {ρ : TRes w.K}
+    (hM : ∀ x, M x → M' x) (h : KapSchedT (ℍ := ℍ) Q M en k w ls O v κ ρ) :
+    KapSchedT (ℍ := ℍ) Q M' en k w ls O v κ ρ :=
+  ⟨h.1, fun w' ρ' lsR ls' O' hE hr hl hx hO k' hk' a σ σ' hB hc F' hF'm hF'M =>
+    h.2 w' ρ' lsR ls' O' hE hr hl hx hO k' hk' a σ σ' hB hc F' hF'm
+      fun w'' ρf hf => fdMask_le hM (hF'M w'' ρf hf)⟩
+
+/-- **A tail resume**: `κ` at the clause's own world, under the clause's frame condition. -/
+theorem kapSchedT_resume_tail {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : Nat}
+    {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {v κ : Val} {ρk : TRes w.K}
+    (hκ : KapSchedT (ℍ := ℍ) Qout M en k w ls O v κ ρk) {F : TFrame} (hFm : F.Mono)
+    (hFM : ∀ w' ρf, F w' ρf → fdMask M w' ρf) {k' : Nat} (hk' : k' < k) {a : Val}
+    {σ σ' : TRes w.K} (hB : en.PBv v k' w ls a σ) (hcσ : ResUT.CompS ρk σ σ')
+    (hcov : CovR (sem w.Θ) w.K ρk) (hls : ∀ x ∈ ls, CovR (sem w.Θ) w.K x.1.R)
+    (hO : ∀ r ∈ O, CovR (sem w.Θ) w.K r.R) :
+    twp (ℍ := ℍ) F (valPost Qout) k' w ls O (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val a)) σ' :=
+  cerwpTE_iff.mp (hκ.2 w ρk ls ls O (TWd.Ext.refl _ _) (RR.refl hcov) (SRecsRR.refl hls)
+    (extFT_refl _ _) (RecsRR.refl hO) k' hk' a σ σ' hB hcσ F hFm hFM)
+
+/-! ### `pingpong-mut`: a slot handed back and forth between two suspended tasks by a relay -/
+
+namespace PingPong
+
+/-- The relay's name and the stepper's. -/
+abbrev nH : UInt32 := 1
+abbrev nS : UInt32 := 2
+
+def zero : Val := Val.i32 0
+def one : Val := Val.i32 1
+
+/-- `pass`: unrestricted (the continuation owns nothing), the slot handed out with the payload
+and back with the answer. -/
+def enPass : OpEntT where
+  q := .unr
+  abort := false
+  PA := fun _ _ _ v ρ => ∃ (m : BoCa.Loc) (u : BoCa.Val), v = Val.loc m ∧
+    ρ = ResUT.single m (CellUT.ownOf u)
+  PBv := fun _ _ _ _ a σ => ∃ (m : BoCa.Loc) (u : BoCa.Val), a = Val.loc m ∧
+    σ = ResUT.single m (CellUT.ownOf u)
+  fin := none
+  fd := fdJoinT
+  oc := fun _ O => O = []
+
+def TS : OpTabT := fun m i => if m = nS ∧ i = 0 then some enPass else none
+
+theorem TS_some {m i : UInt32} {en : OpEntT} (h : TS m i = some en) :
+    m = nS ∧ i = 0 ∧ en = enPass := by
+  unfold TS at h
+  split at h
+  · rename_i hm; cases h; exact ⟨hm.1, hm.2, rfl⟩
+  · cases h
+
+/-- **What a stepped task answers** (`Qt` its final answer): a stop at `pass`, the slot and the
+continuation resumable at the answers below the index; or the task's end. A step-indexed
+fixpoint: the continuation's answers are this predicate again. -/
+def QS (Qt : TPostV) : (k : Nat) → (w : TWd) → List (SRecT w.K) → List (FrameRecT w.K) → Val →
+    TRes w.K → Prop
+  | k, w, ls, O, v, ρ =>
+    (∃ (m : BoCa.Loc) (u : BoCa.Val) (κ : Val), v = Val.inj₁ (Val.pair (Val.loc m) κ) ∧
+      ρ = ResUT.single m (CellUT.ownOf u) ∧ O = [] ∧
+      KapSchedT (ℍ := ℍ) (fun j w' ls' O' v' ρ' => if _h : j < k then QS Qt j w' ls' O' v' ρ'
+        else False) (fun _ => False) enPass k w ls O (Val.loc m) κ PMap.empty) ∨
+    (∃ r : Val, v = Val.inj₂ r ∧ Qt k w ls O r ρ)
+termination_by k => k
+
+theorem QS_iff {Qt : TPostV} {k : Nat} {w : TWd} {ls : List (SRecT w.K)}
+    {O : List (FrameRecT w.K)} {v : Val} {ρ : TRes w.K} :
+    QS (ℍ := ℍ) Qt k w ls O v ρ ↔
+      (∃ (m : BoCa.Loc) (u : BoCa.Val) (κ : Val), v = Val.inj₁ (Val.pair (Val.loc m) κ) ∧
+        ρ = ResUT.single m (CellUT.ownOf u) ∧ O = [] ∧
+        KapSchedT (ℍ := ℍ) (QS (ℍ := ℍ) Qt) (fun _ => False) enPass k w ls O (Val.loc m) κ
+          PMap.empty) ∨
+      (∃ r : Val, v = Val.inj₂ r ∧ Qt k w ls O r ρ) := by
+  rw [QS]
+  constructor
+  · rintro (⟨m, u, κ, h₁, h₂, h₃, h₄⟩ | h)
+    · exact Or.inl ⟨m, u, κ, h₁, h₂, h₃, kapSchedT_congr (fun j hj _ _ _ _ _ hq => by
+        simpa [hj] using hq) h₄⟩
+    · exact Or.inr h
+  · rintro (⟨m, u, κ, h₁, h₂, h₃, h₄⟩ | h)
+    · exact Or.inl ⟨m, u, κ, h₁, h₂, h₃, kapSchedT_congr (fun j hj _ _ _ _ _ hq => by
+        simpa [hj] using hq) h₄⟩
+    · exact Or.inr h
+
+theorem QS_down {Qt : TPostV} (hQt : Qt.Down) : TPostV.Down (QS (ℍ := ℍ) Qt) := by
+  intro k w ls O v ρ h
+  rcases QS_iff.mp h with ⟨m, u, κ, h₁, h₂, h₃, h₄⟩ | ⟨r, h₁, h₂⟩
+  · exact QS_iff.mpr (Or.inl ⟨m, u, κ, h₁, h₂, h₃, KapSchedT.down h₄⟩)
+  · exact QS_iff.mpr (Or.inr ⟨r, h₁, hQt _ _ _ _ _ _ h₂⟩)
+
+/-! #### The stepper -/
+
+/-- `λ(m, κ). inj₁ (m, κ)`: hand the slot and the continuation to whoever ran the task. -/
+def passClause : Val := Val.lam (.letpair (.var 0) (.inj₁ (.pair (.var 1) (.var 0))))
+def stepRet : Val := Val.lam (.inj₂ (.var 0))
+def qsS : Val := Val.pair (Val.i32 2) Val.unit
+def hsS : Val := Val.pair passClause Val.unit
+def HS : Val := hndVal nS qsS stepRet hsS
+
+/-- A final answer read the same at every re-reading of the world. -/
+def QtStable (Qt : TPostV) : Prop :=
+  ∀ k (w w₀ : TWd) (ls : List (SRecT w.K)) (O : List (FrameRecT w.K)) (ls₀ : List (SRecT w₀.K))
+    (O₀ : List (FrameRecT w₀.K)) (r : Val) (ρ : TRes w.K) (ρ₀ : TRes w₀.K), w.Ext w₀ ρ →
+    RRw (w := w) (w' := w₀) ρ ρ₀ → RecsRR w₀.Θ O O₀ → Qt k w ls O r ρ → Qt k w₀ ls₀ O₀ r ρ₀
+
+theorem passClause_ok {Qt : TPostV} (hQt : Qt.Down) :
+    SchedClauseT (ℍ := ℍ) TS nS (QS (ℍ := ℍ) Qt) enPass passClause := by
+  rintro M F k w ls O v κ ρ _ hMh hoc _ _ _ _ ⟨ρa, ρk, hc, ⟨m, u, rfl, rfl⟩, hκ⟩
+  change O = [] at hoc
+  subst hoc
+  obtain rfl := hκ.1 rfl
+  obtain rfl := compS_empty_right_eq hc
+  have hM : ∀ x, (M x ∨ recMask ([] : List (FrameRecT w.K)) x) → False := fun x hx =>
+    hx.elim (maskHist_nil (fun i en h w O ho => by obtain ⟨-, -, rfl⟩ := TS_some h; exact ho)
+      hMh x) (by simp [recMask])
+  rw [cerwpTE_iff]
+  have hD := valPost_down (QS_down (ℍ := ℍ) hQt)
+  · refine twp_det hD (fun μ => step1Only_plug (Head.beta μ _ (Val.pair (Val.loc m) κ)) rfl .hole) ?_
+    show twp (ℍ := ℍ) F _ k w ls [] (.letpair (.val (Val.pair (Val.loc m) κ))
+      (.inj₁ (.pair (.var 1) (.var 0)))) _
+    refine twp_det hD (fun μ => step1Only_plug (Head.letpair μ (Val.loc m) κ _) rfl .hole) ?_
+    have e : ((Expr.inj₁ (.pair (.var 1) (.var 0))).subst 0 (κ.shift 1 0)).subst 0 (Val.loc m) =
+        (Val.inj₁ (Val.pair (Val.loc m) κ)).1 := by
+      simp [Expr.subst, Val.inj₁, Val.pair, Val.loc]
+      rw [Expr.subst_shift 0 0 0 _ _ (by omega) (by omega), Expr.shift_zero]
+    rw [e]
+    refine twp_here (fun μ => final_val μ _) fun w₀ ρ₀ ls₀ O₀ hE hr hl hO => ?_
+    cases hO
+    refine ⟨_, rfl, QS_iff.mpr (Or.inl ⟨m, u, κ, rfl, rr_single_own hr, rfl,
+      KapSchedT.kripke (KapSchedT.mask_mono (fun x hx => hM x hx) hκ)
+        (hE.of_compS_left (ResUT.CompS.comm (ResUT.compS_empty_right _))) RR.empty hl .nil⟩)⟩
+
+theorem stepRet_ok {Qt : TPostV} (hQt : Qt.Down) (hst : QtStable Qt) :
+    SchedRetT (ℍ := ℍ) TS nS Qt (QS (ℍ := ℍ) Qt) stepRet := by
+  intro M F k w ls O v ρ _ _ _ _ _ _ hv
+  rw [cerwpTE_iff]
+  refine twp_det (valPost_down (QS_down (ℍ := ℍ) hQt))
+    (fun μ => step1Only_plug (Head.beta μ _ v) rfl .hole) ?_
+  have e : (Expr.inj₂ (.var 0)).subst 0 v = (Val.inj₂ v).1 := by simp [Expr.subst, Val.inj₂]
+  rw [e]
+  exact twp_here (fun μ => final_val μ _) fun w₀ ρ₀ ls₀ O₀ hE hr _ hO =>
+    ⟨_, rfl, QS_iff.mpr (Or.inr ⟨v, rfl, hst k w w₀ ls O ls₀ O₀ v ρ ρ₀ hE hr hO hv⟩)⟩
+
+/-- **The stepper meets `SchedOKT`**, at every final answer of the task. -/
+theorem schedS_ok {Qt : TPostV} (hQt : Qt.Down) (hst : QtStable Qt) :
+    SchedOKT (ℍ := ℍ) TS nS qsS stepRet hsS Qt (QS (ℍ := ℍ) Qt) := by
+  refine ⟨fun m i hm => by simp [TS, hm], fun i en h _ => ?_, fun i en h v w O ρf hj => ?_,
+    QS_down hQt, stepRet_ok hQt hst, fun i en h => ?_⟩
+  · obtain ⟨-, rfl, rfl⟩ := TS_some h
+    rfl
+  · obtain ⟨-, -, rfl⟩ := TS_some h
+    exact hj
+  · obtain ⟨-, rfl, rfl⟩ := TS_some h
+    exact ⟨passClause, by simp [clauseAt, hsS, Val.pair, passClause, Val.lam, IsVal.lam],
+      passClause_ok hQt⟩
+
+/-- **A stepped task, run under the stepper**, under any frame condition whose frames are valid:
+the stepper's `[handle]` at the empty mask. -/
+theorem stepped_twp {Qt : TPostV} (hQt : Qt.Down) (hst : QtStable Qt) {F : TFrame}
+    (hFm : F.Mono) (hFv : ∀ w ρf, F w ρf → ResUT.Valid ρf) {n : Nat} {w : TWd}
+    {ls : List (SRecT w.K)} {e : Expr} {ρ : TRes w.K}
+    (he : cerwpT (ℍ := ℍ) (opTableT TS) Qt (fun _ _ => True) n w ls [] e ρ) :
+    twp (ℍ := ℍ) F (valPost (QS (ℍ := ℍ) Qt)) n w ls [] (hndE HS e) ρ :=
+  cerwpT_schedHandle (schedS_ok hQt hst) n (fun _ => False) F _ w ls [] e ρ hFm
+    (maskHist_empty _ _) (fun w ρf h => fdMask_of_false (fun _ h => h) (hFv w ρf h))
+    (fun x hx => by simp [recMask] at hx) (fun _ _ _ => trivial) he
+
+/-! #### The two tasks -/
+
+/-- The payload `(nS, (0, s))` of `pass`, the slot at the variable `i`. -/
+def passE (i : Nat) : Expr := performE (.pair (.val (Val.i32 nS)) (.pair (.val (Val.i32 0)) (.var i)))
+
+/-- **`fill`**: `λs. let _ = store s 1 in pass s`. -/
+def fillV : Val := Val.lam (.app (.lam (passE 1)) (.app (.app (.prim .store) (.var 0)) (.val one)))
+
+/-- **`drain`**: `λs. let s′ = pass s in let x = load s′ in (s′, x)`. -/
+def drainB : Expr := .app (.lam (.pair (.var 1) (.var 0))) (.app (.prim .load) (.var 0))
+def drainV : Val := Val.lam (.app (.lam drainB) (passE 0))
+
+/-- `fill` answers the slot; `drain` the slot and what it read. -/
+def Qf : TPostV := fun _ _ _ _ r ρ => ∃ (m : BoCa.Loc) (u : BoCa.Val), r = Val.loc m ∧
+  ρ = ResUT.single m (CellUT.ownOf u)
+def Qd : TPostV := fun _ _ _ _ r ρ => ∃ (m : BoCa.Loc) (u x : BoCa.Val),
+  r = Val.pair (Val.loc m) x ∧ ρ = ResUT.single m (CellUT.ownOf u)
+
+theorem Qf_stable : QtStable Qf := by
+  rintro k w w₀ ls O ls₀ O₀ r ρ ρ₀ - hr - ⟨m, u, rfl, rfl⟩
+  exact ⟨m, u, rfl, rr_single_own hr⟩
+
+theorem Qd_stable : QtStable Qd := by
+  rintro k w w₀ ls O ls₀ O₀ r ρ ρ₀ - hr - ⟨m, u, x, rfl, rfl⟩
+  exact ⟨m, u, x, rfl, rr_single_own hr⟩
+
+theorem TS_down {Qt : TPostV} (hQt : Qt.Down) {Ψ : ContT} {F : TFrame} :
+    (cerwpPostT (opTableT TS) Qt Ψ F).Down :=
+  cerwpPostT_down hQt
+    (fun m i en h k w ls v ρ hA => by obtain ⟨-, -, rfl⟩ := TS_some h; exact hA)
+    (fun m i en h => by obtain ⟨-, -, rfl⟩ := TS_some h; rfl)
+
+/-- The stop at `pass`, the slot `l` handed out; the continuation `K`, given what `pass`
+answers, is `Ψ`'s. -/
+theorem pass_stop {Qt : TPostV} {F : TFrame} {n : Nat} {w : TWd} {ls : List (SRecT w.K)}
+    (K : Kont) (hK : K.HasHnd nS = false) (l : BoCa.Loc) (u : BoCa.Val)
+    (hk : ∀ k', k' < n → ∀ (w' : TWd) (ls' : List (SRecT w'.K)) (O' : List (FrameRecT w'.K))
+      (m : BoCa.Loc) (u' : BoCa.Val), cerwpT (ℍ := ℍ) (opTableT TS) Qt
+        (fdAt enPass (Val.loc l) F O') k' w' ls' O' (K.plug (.val (Val.loc m)))
+        (ResUT.single m (CellUT.ownOf u'))) :
+    cerwpT (ℍ := ℍ) (opTableT TS) Qt F n w ls []
+      (K.plug (performE (.val (opPayload nS 0 (Val.loc l))))) (ResUT.single l (CellUT.ownOf u)) := by
+  refine cerwpT_perform K hK (show TS nS 0 = some enPass by simp [TS]) rfl ?_
+  intro w₀ ρ₀ ls₀ O₀ _ hr _ hO
+  cases hO
+  obtain rfl := rr_single_own hr
+  refine ⟨rfl, _, PMap.empty, ResUT.compS_empty_right _, ⟨l, u, rfl, rfl⟩,
+    ⟨fun _ => rfl, fun w' ρ' lsR ls' O' _ hr' _ _ _ =>
+      ⟨fun k' hk' a σ σ' hB hcσ => ?_, fun _ P hP => by cases hP⟩⟩⟩
+  obtain ⟨m, u', rfl, rfl⟩ := hB
+  obtain rfl := RR.of_empty hr'
+  obtain rfl := compS_empty_left_eq hcσ
+  simp only [cerwpTC, hk', if_true]
+  exact hk k' hk' w' ls' O' m u'
+
+/-- **`fill` at the stepper's table**: from the slot, at every index. -/
+theorem fill_cerwpT (n : Nat) (w : TWd) (ls : List (SRecT w.K)) (l : BoCa.Loc) (u : BoCa.Val) :
+    cerwpT (ℍ := ℍ) (opTableT TS) Qf (fun _ _ => True) n w ls [] (.app fillV.1 (.loc l))
+      (ResUT.single l (CellUT.ownOf u)) := by
+  have hD := TS_down (Qt := Qf) (Ψ := cerwpTC (ℍ := ℍ) (opTableT TS) Qf n)
+    (F := fun _ _ => True) (fun _ _ _ _ _ _ h => h)
+  refine cerwpT_det hD (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl .hole) ?_
+  show cerwpT (ℍ := ℍ) (opTableT TS) Qf _ n w ls []
+    ((Kont.appR (.lam ((passE 1).subst 1 (Val.loc l))) .hole).plug
+      (.app (.app (.val (.prim .store)) (.val (Val.loc l))) (.val one))) _
+  rw [cerwpT_eq]
+  refine twp_store hD _ l u one (ResUT.compS_empty_right _) (ResUT.compS_empty_right _) ?_
+  refine twp_det hD (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) ?_
+  rw [← cerwpT_eq]
+  show cerwpT (ℍ := ℍ) (opTableT TS) Qf _ n w ls []
+    (Kont.hole.plug (performE (.val (opPayload nS 0 (Val.loc l))))) _
+  refine pass_stop .hole rfl l one fun k' _ w' ls' O' m u' => ?_
+  exact cerwpT_val fun w₀ ρ₀ _ _ _ hr _ _ => ⟨m, u', rfl, rr_single_own hr⟩
+
+/-- **`drain` at the stepper's table**: from the slot, at every index. -/
+theorem drain_cerwpT (n : Nat) (w : TWd) (ls : List (SRecT w.K)) (l : BoCa.Loc) (u : BoCa.Val) :
+    cerwpT (ℍ := ℍ) (opTableT TS) Qd (fun _ _ => True) n w ls [] (.app drainV.1 (.loc l))
+      (ResUT.single l (CellUT.ownOf u)) := by
+  have hD := TS_down (Qt := Qd) (Ψ := cerwpTC (ℍ := ℍ) (opTableT TS) Qd n)
+    (F := fun _ _ => True) (fun _ _ _ _ _ _ h => h)
+  refine cerwpT_det hD (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl .hole) ?_
+  show cerwpT (ℍ := ℍ) (opTableT TS) Qd _ n w ls []
+    ((Kont.appR (.lam (drainB.subst 1 (Val.loc l))) .hole).plug
+      (performE (.val (opPayload nS 0 (Val.loc l))))) _
+  refine pass_stop _ (by simp [Kont.HasHnd]) l u fun k' _ w' ls' O' m u' => ?_
+  have hD' := TS_down (Qt := Qd) (Ψ := cerwpTC (ℍ := ℍ) (opTableT TS) Qd k')
+    (F := fdAt enPass (Val.loc l) (fun _ _ => True) O') (fun _ _ _ _ _ _ h => h)
+  refine cerwpT_det hD' (fun μ => step1Only_plug (Head.beta μ _ (Val.loc m)) rfl .hole) ?_
+  show cerwpT (ℍ := ℍ) (opTableT TS) Qd _ k' w' ls' O'
+    ((Kont.appR (.lam (.pair (.val (Val.loc m)) (.var 0))) .hole).plug
+      (.app (.val (.prim .load)) (.val (Val.loc m)))) _
+  rw [cerwpT_eq]
+  refine twp_load hD' _ m u' (ResUT.single_get_self _ _) ?_
+  refine twp_det hD' (fun μ => step1Only_plug (Head.beta μ _ u') rfl .hole) ?_
+  rw [← cerwpT_eq]
+  show cerwpT (ℍ := ℍ) (opTableT TS) Qd _ k' w' ls' O' (Val.pair (Val.loc m) u').1 _
+  exact cerwpT_val fun w₀ ρ₀ _ _ _ hr _ _ => ⟨m, u', u', rfl, rr_single_own hr⟩
+
+end PingPong
+
 end BoCa.Fig16.Tree.Wp.SchedProgs
 
 end
