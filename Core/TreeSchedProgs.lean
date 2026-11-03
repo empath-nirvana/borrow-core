@@ -83,8 +83,8 @@ theorem cerwpPostT_down {T : OpTabT} {Q : TPostV} (hQ : Q.Down) {Ψ : ContT} {F 
   rcases h with ⟨v, hv, hq⟩ | ⟨K, m, i, v, en, ht, hK, hT, ha, hoc, ρa, ρk, hc, hA, hsh⟩
   · exact Or.inl ⟨v, hv, hQ _ _ _ _ _ _ hq⟩
   · refine Or.inr ⟨K, m, i, v, en, ht, hK, hT, ha, hoc, ρa, ρk, hc, hPA m i en hT _ _ _ _ _ hA,
-      hsh.1, fun w' ρ' lsR ls' O' hE hr hl hx hO => ⟨fun k' hk' a σ σ' hB hcσ =>
-        (hsh.2 w' ρ' lsR ls' O' hE hr hl hx hO).1 k' (by omega) a σ σ' hB hcσ,
+      hsh.1, fun w' ρ' ls' O' hE hr hx hO => ⟨fun k' hk' a σ σ' hB hcσ =>
+        (hsh.2 w' ρ' ls' O' hE hr hx hO).1 k' (by omega) a σ σ' hB hcσ,
         fun _ P hP => by rw [hfin m i en hT] at hP; cases hP⟩⟩
 
 /-- A deterministic step in front of `cerwpT`, for free. -/
@@ -203,7 +203,7 @@ theorem task_cerwpT (n : Nat) (w : TWd) :
   cases hO
   obtain rfl := rr_single_own hr
   refine ⟨rfl, PMap.empty, _, ResUT.CompS.comm (ResUT.compS_empty_right _), ⟨rfl, rfl⟩,
-    ⟨fun h => by simp [enAsk] at h, fun w' ρ' lsR ls' O' _ hr' _ _ _ =>
+    ⟨fun h => by simp [enAsk] at h, fun w' ρ' ls' O' _ hr' _ _ =>
       ⟨fun k' hk' a σ σ' hB hcσ => ?_, fun h => absurd rfl h⟩⟩⟩
   obtain ⟨rfl, rfl⟩ := hB
   obtain rfl := compS_empty_right_eq hcσ
@@ -348,15 +348,15 @@ theorem kapSchedT_congr {Q₁ Q₂ : TPostV} {M : BoCa.Loc → Prop} {en : OpEnt
     {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {v κ : Val} {ρ : TRes w.K}
     (hQ : ∀ j, j < k → ∀ w ls O v ρ, Q₁ j w ls O v ρ → Q₂ j w ls O v ρ)
     (h : KapSchedT (ℍ := ℍ) Q₁ M en k w ls O v κ ρ) : KapSchedT (ℍ := ℍ) Q₂ M en k w ls O v κ ρ := by
-  refine ⟨h.1, fun w' ρ' lsR ls' O' hE hr hl hx hO k' hk' a σ σ' hB hc F' hF'm hF'M => ?_⟩
-  have h₁ := cerwpTE_iff.mp (h.2 w' ρ' lsR ls' O' hE hr hl hx hO k' hk' a σ σ' hB hc F' hF'm hF'M)
+  refine ⟨h.1, fun w' ρ' ls' O' hE hr hx hO k' hk' a σ σ' hB hc F' hF'm hF'M => ?_⟩
+  have h₁ := cerwpTE_iff.mp (h.2 w' ρ' ls' O' hE hr hx hO k' hk' a σ σ' hB hc F' hF'm hF'M)
   exact cerwpTE_iff.mpr (twp_mono_le (fun j hj _ _ _ _ _ ⟨r, hr', hq⟩ =>
     ⟨r, hr', hQ j (by omega) _ _ _ _ _ hq⟩) h₁)
 
 theorem KapSchedT.down {Q : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : Nat} {w : TWd}
     {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {v κ : Val} {ρ : TRes w.K}
     (h : KapSchedT (ℍ := ℍ) Q M en (k + 1) w ls O v κ ρ) : KapSchedT (ℍ := ℍ) Q M en k w ls O v κ ρ :=
-  ⟨h.1, fun w' ρ' lsR ls' O' hE hr hl hx hO k' hk' => h.2 w' ρ' lsR ls' O' hE hr hl hx hO k'
+  ⟨h.1, fun w' ρ' ls' O' hE hr hx hO k' hk' => h.2 w' ρ' ls' O' hE hr hx hO k'
     (by omega)⟩
 
 /-- A frame avoiding more locations is one `κ` may be resumed under. -/
@@ -364,8 +364,8 @@ theorem KapSchedT.mask_mono {Q : TPostV} {M M' : BoCa.Loc → Prop} {en : OpEntT
     {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {v κ : Val} {ρ : TRes w.K}
     (hM : ∀ x, M x → M' x) (h : KapSchedT (ℍ := ℍ) Q M en k w ls O v κ ρ) :
     KapSchedT (ℍ := ℍ) Q M' en k w ls O v κ ρ :=
-  ⟨h.1, fun w' ρ' lsR ls' O' hE hr hl hx hO k' hk' a σ σ' hB hc F' hF'm hF'M =>
-    h.2 w' ρ' lsR ls' O' hE hr hl hx hO k' hk' a σ σ' hB hc F' hF'm
+  ⟨h.1, fun w' ρ' ls' O' hE hr hx hO k' hk' a σ σ' hB hc F' hF'm hF'M =>
+    h.2 w' ρ' ls' O' hE hr hx hO k' hk' a σ σ' hB hc F' hF'm
       fun w'' ρf hf => fdMask_le hM (hF'M w'' ρf hf)⟩
 
 /-- **A tail resume**: `κ` at the clause's own world, under the clause's frame condition. -/
@@ -377,8 +377,8 @@ theorem kapSchedT_resume_tail {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEn
     (hcov : CovR (sem w.Θ) w.K ρk) (hls : ∀ x ∈ ls, CovR (sem w.Θ) w.K x.1.R)
     (hO : ∀ r ∈ O, CovR (sem w.Θ) w.K r.R) :
     twp (ℍ := ℍ) F (valPost Qout) k' w ls O (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val a)) σ' :=
-  cerwpTE_iff.mp (hκ.2 w ρk ls ls O (TWd.Ext.refl _ _) (RR.refl hcov) (SRecsRR.refl hls)
-    (extFT_refl _ _) (RecsRR.refl hO) k' hk' a σ σ' hB hcσ F hFm hFM)
+  cerwpTE_iff.mp (hκ.2 w ρk ls O (TWd.Ext.refl _ _) (RR.refl hcov) (KeepRel.refl hls ρk)
+    (RecsRR.refl hO) k' hk' a σ σ' hB hcσ F hFm hFM)
 
 /-! ### `pingpong-mut`: a slot handed back and forth between two suspended tasks by a relay -/
 
@@ -491,7 +491,8 @@ theorem passClause_ok {Qt : TPostV} (hQt : Qt.Down) :
     cases hO
     refine ⟨_, rfl, QS_iff.mpr (Or.inl ⟨m, u, κ, rfl, rr_single_own hr, rfl,
       KapSchedT.kripke (KapSchedT.mask_mono (fun x hx => hM x hx) hκ)
-        (hE.of_compS_left (ResUT.CompS.comm (ResUT.compS_empty_right _))) RR.empty hl .nil⟩)⟩
+        (hE.of_compS_left (ResUT.CompS.comm (ResUT.compS_empty_right _))) RR.empty
+        (KeepRel.of_srecsRR hl _) .nil⟩)⟩
 
 theorem stepRet_ok {Qt : TPostV} (hQt : Qt.Down) (hst : QtStable Qt) :
     SchedRetT (ℍ := ℍ) TS nS Qt (QS (ℍ := ℍ) Qt) stepRet := by
@@ -575,7 +576,7 @@ theorem pass_stop {Qt : TPostV} {F : TFrame} {n : Nat} {w : TWd} {ls : List (SRe
   cases hO
   obtain rfl := rr_single_own hr
   refine ⟨rfl, _, PMap.empty, ResUT.compS_empty_right _, ⟨l, u, rfl, rfl⟩,
-    ⟨fun _ => rfl, fun w' ρ' lsR ls' O' _ hr' _ _ _ =>
+    ⟨fun _ => rfl, fun w' ρ' ls' O' _ hr' _ _ =>
       ⟨fun k' hk' a σ σ' hB hcσ => ?_, fun _ P hP => by cases hP⟩⟩⟩
   obtain ⟨m, u', rfl, rfl⟩ := hB
   obtain rfl := RR.of_empty hr'

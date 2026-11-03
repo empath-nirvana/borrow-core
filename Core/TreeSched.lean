@@ -8,9 +8,9 @@ task verified at `cerwpT` at the scheduler's table, is safe or diverges: every c
 reaches steps or is a value, a value is reached only at the empty memory, and every `free` finds
 its cell (`MultiBranchAdequacyT`, `multiBranchAdequacyT`). Nothing in `SchedOKT` fixes how many
 continuations a clause holds or which it resumes next. Divergence is allowed and there is no fuel.
-A continuation a clause holds across another branch's run is resumed through a re-reading of its
-stop's tagged list at the later world (`KapSchedT`'s `SRecsRR` premise); `Core/TreeResume.lean`
-derives it across a run that owns no record at its start (`twp_keepsKap`, `KapAtT.resume`).
+A continuation a clause holds across another branch's run is resumed at any list keeping the
+records of its stop list its share reads (`KapSchedT`'s `KeepRel` premise); `Core/TreeResume.lean`
+derives it across another branch's run, that branch opening and ending lends of its own.
 
 **What the scheduler must satisfy** (`SchedOKT`, `Core/TreeHandle.lean`): its clauses at the empty
 table, each continuation `κ` read by `KapSchedT`. `κ` may be resumed beside a state the clause
@@ -103,8 +103,8 @@ theorem kapSchedT_resume_beside {Qout : TPostV} {M : BoCa.Loc → Prop} {en : Op
       (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val a)) ρ := by
   have hcovk : CovR (sem w.Θ) w.K ρk :=
     CovR.of_compS_left hcσ (CovR.of_compS_left hcρ hcov)
-  have h := cerwpTE_iff.mp (hκ.2 w ρk ls ls O (TWd.Ext.refl _ _) (RR.refl hcovk)
-    (SRecsRR.refl hls) (extFT_refl _ _) (RecsRR.refl hO) k' hk' a σ σ' hB hcσ (fdMask M)
+  have h := cerwpTE_iff.mp (hκ.2 w ρk ls O (TWd.Ext.refl _ _) (RR.refl hcovk)
+    (KeepRel.refl hls ρk) (RecsRR.refl hO) k' hk' a σ σ' hB hcσ (fdMask M)
     (fdMask_mono M) (fun _ _ h => h))
   refine twp_frame_w hR hap hcρ hcov ?_ h hR₂
   intro w₀ ρf ρ₁₀ ρ₂₀ y fρ O₁₀ O₂₀ ps psF ls₀ μ hE h₂₀ _ _ hFρ hy hyf _ _ _ hI

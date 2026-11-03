@@ -884,6 +884,13 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.contShareT_resume
 #print axioms BoCa.Fig16.Tree.Wp.contShareT_kripke
 #print axioms BoCa.Fig16.Tree.Wp.contShareT_resume_rr
+#print axioms BoCa.Fig16.Tree.Wp.contShareT_resume_ext
+#print axioms BoCa.Fig16.Tree.Wp.KeepRel.refl
+#print axioms BoCa.Fig16.Tree.Wp.keepRel_of_extFT
+#print axioms BoCa.Fig16.Tree.Wp.KeepRel.trans
+#print axioms BoCa.Fig16.Tree.Wp.KeepRel.of_compS_left
+#print axioms BoCa.Fig16.Tree.Wp.KeepRel.of_srecsRR
+#print axioms BoCa.Fig16.Tree.Wp.KeepRel.of_srecsIn
 #print axioms BoCa.Fig16.Tree.Wp.cactusT_step
 #print axioms BoCa.Fig16.Tree.Wp.cactusT_extend
 #print axioms BoCa.Fig16.Tree.Wp.cactusT_move

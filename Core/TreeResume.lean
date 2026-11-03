@@ -130,6 +130,11 @@ theorem SRecsIn.trans {K₁ K₂ K₃ : WCactus} (hE : K₂.Ext K₃) {Θ₂ Θ�
   obtain ⟨r₃, h₃, e₃⟩ := h' r₂ h₂
   exact ⟨r₃, h₃, RecRR.trans hE e₂ e₃⟩
 
+/-- A list carried whole keeps the records any share reads. -/
+theorem KeepRel.of_srecsIn {K K' : WCactus} {Θ' : CodeTy} {ls : List (SRecT K)}
+    {ls' : List (SRecT K')} (h : SRecsIn Θ' ls ls') (ρ : TRes K) : KeepRel Θ' ls ls' ρ :=
+  fun r hr _ => h r hr
+
 /-- **A list carried into `ls′` has a re-reading whose records are all in `ls′`.** -/
 theorem SRecsIn.exists_srecsRR {K K' : WCactus} {Θ' : CodeTy} {ls' : List (SRecT K')} :
     ∀ {ls : List (SRecT K)}, SRecsIn Θ' ls ls' →
@@ -188,25 +193,23 @@ theorem twp_keepsList {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls : List (S
 
 /-! ### Resuming at a list the stop list is carried into -/
 
-/-- **A share resumed at any list its stop list is carried into**: the re-reading of the stop list
-exists there (`SRecsIn.exists_srecsRR`) and `extFT` admits the list, which keeps all of it. -/
+/-- **A share resumed at any list its stop list is carried into.** -/
 theorem contShareT_resume_in {en : OpEntT} {F : TFrame} {k : Nat} {w w' : TWd}
     {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {ls' : List (SRecT w'.K)}
     {O' : List (FrameRecT w'.K)} {K : Kont} {v : Val} {Ψ : ContT} {ρ : TRes w.K}
     {ρ' : TRes w'.K} (h : contShareT en F k w ls O K v Ψ ρ) (hE : w.Ext w' ρ)
     (hr : RRw (w := w) (w' := w') ρ ρ') (hl : SRecsIn w'.Θ ls ls') (hO : RecsRR w'.Θ O O')
     {k' : Nat} (hk : k' < k) {a : Val} {σ σ' : TRes w'.K} (hB : en.PBv v k' w' ls' a σ)
-    (hc : ResUT.CompS ρ' σ σ') : Ψ (fdAt en v F O') w' O' k' ls' (K.plug (.val a)) σ' := by
-  obtain ⟨lsR, hlR, hsub⟩ := hl.exists_srecsRR
-  exact contShareT_resume h hE hr hlR (extFT_of_sub hsub ρ') hO hk hB hc
+    (hc : ResUT.CompS ρ' σ σ') : Ψ (fdAt en v F O') w' O' k' ls' (K.plug (.val a)) σ' :=
+  contShareT_resume h hE hr (KeepRel.of_srecsIn hl ρ) hO hk hB hc
 
 /-- **`κ` held at a later world**: captured at `w₁` (`KapSchedT`), its share and records re-read at
-`w`, its stop list carried into `w`'s list `ls`. -/
+`w`, the records of its stop list its share reads kept in `w`'s list `ls` (`KeepRel`). -/
 def KapAtT (Qout : TPostV) (M : BoCa.Loc → Prop) (en : OpEntT) (k : Nat) (v κ : Val) (w : TWd)
     (ls : List (SRecT w.K)) (O : List (FrameRecT w.K)) (ρ : TRes w.K) : Prop :=
   ∃ (w₁ : TWd) (ls₁ : List (SRecT w₁.K)) (O₁ : List (FrameRecT w₁.K)) (ρ₁ : TRes w₁.K),
     KapSchedT (ℍ := ℍ) Qout M en k w₁ ls₁ O₁ v κ ρ₁ ∧ w₁.Ext w ρ₁ ∧
-      RRw (w := w₁) (w' := w) ρ₁ ρ ∧ RecsRR w.Θ O₁ O ∧ SRecsIn w.Θ ls₁ ls
+      RRw (w := w₁) (w' := w) ρ₁ ρ ∧ RecsRR w.Θ O₁ O ∧ KeepRel w.Θ ls₁ ls ρ₁
 
 /-- At its stop, `κ` is held there. -/
 theorem KapAtT.of_stop {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : Nat} {v κ : Val}
@@ -214,7 +217,7 @@ theorem KapAtT.of_stop {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k 
     (h : KapSchedT (ℍ := ℍ) Qout M en k w ls O v κ ρ) (hcov : CovR (sem w.Θ) w.K ρ)
     (hls : ∀ x ∈ ls, CovR (sem w.Θ) w.K x.1.R) (hO : ∀ r ∈ O, CovR (sem w.Θ) w.K r.R) :
     KapAtT (ℍ := ℍ) Qout M en k v κ w ls O ρ :=
-  ⟨w, ls, O, ρ, h, TWd.Ext.refl _ _, RR.refl hcov, RecsRR.refl hO, SRecsIn.refl hls⟩
+  ⟨w, ls, O, ρ, h, TWd.Ext.refl _ _, RR.refl hcov, RecsRR.refl hO, KeepRel.refl hls ρ⟩
 
 /-- **`κ` held at `w` is resumed at `w`, at its list `ls`**, at every answer the entry accepts,
 under every frame condition whose frames avoid `M`. -/
@@ -226,19 +229,18 @@ theorem KapAtT.resume {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k :
     cerwpT (ℍ := ℍ) (opTableT OpTabT.empty) Qout F' k' w ls O
       (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val a)) σ' := by
   obtain ⟨w₁, ls₁, O₁, ρ₁, hK, hE, hr, hO, hl⟩ := h
-  obtain ⟨lsR, hlR, hsub⟩ := hl.exists_srecsRR
-  exact hK.2 w ρ lsR ls O hE hr hlR (extFT_of_sub hsub ρ) hO k' hk a σ σ' hB hc F' hF'm hF'M
+  exact hK.2 w ρ ls O hE hr hl hO k' hk a σ σ' hB hc F' hF'm hF'M
 
-/-- `κ` held at `w` is held at every extension of `w`, its list carried. -/
+/-- `κ` held at `w` is held at every extension of `w`, the records its share reads kept. -/
 theorem KapAtT.kripke {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : Nat} {v κ : Val}
     {w w' : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {ρ : TRes w.K}
     {ls' : List (SRecT w'.K)} {O' : List (FrameRecT w'.K)} {ρ' : TRes w'.K}
     (h : KapAtT (ℍ := ℍ) Qout M en k v κ w ls O ρ) (hE : w.Ext w' ρ)
-    (hr : RRw (w := w) (w' := w') ρ ρ') (hO : RecsRR w'.Θ O O') (hl : SRecsIn w'.Θ ls ls') :
+    (hr : RRw (w := w) (w' := w') ρ ρ') (hO : RecsRR w'.Θ O O') (hl : KeepRel w'.Θ ls ls' ρ) :
     KapAtT (ℍ := ℍ) Qout M en k v κ w' ls' O' ρ' := by
   obtain ⟨w₁, ls₁, O₁, ρ₁, hK, hE₁, hr₁, hO₁, hl₁⟩ := h
   exact ⟨w₁, ls₁, O₁, ρ₁, hK, hE₁.trans hr₁ hE, RRw.trans hE.1 hr₁ hr, hO₁.trans hE.1 hO,
-    hl₁.trans hE.1 hl⟩
+    hl₁.trans hE.1 hr₁ hl⟩
 
 /-- **A held `κ` resumed beside a state the scheduler keeps**, at the world and list it is held at:
 `kapSchedT_resume_beside` at a later world, the stop list's re-reading supplied by `KapAtT`. With
@@ -289,7 +291,7 @@ theorem twp_keepsKap {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : 
   refine twp_mono (fun k₁ w' ls' O' t ρ' hp => ?_) h
   obtain ⟨Oa, Ob, a, b, hO', hc, ⟨hP, hKx, hls⟩, hRb⟩ := hp
   exact ⟨Oa, Ob, a, b, hO', hc, hP, w₁, ls₁, O₁, ρκ₁, hK, hRb.1, hRb.2.1, hRb.2.2,
-    hl₁.trans hKx hls⟩
+    hl₁.trans hKx hr₁ (KeepRel.of_srecsIn hls ρκ)⟩
 
 /-- **The runner's lineage, at locations**: no record in the lineage of a record of `O` is at `r`'s
 location. -/
@@ -345,7 +347,7 @@ theorem twp_keepsKap_apart {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT}
   refine twp_mono (fun k₁ w' ls' O' t ρ' hp => ?_) h
   obtain ⟨Oa, Ob, a, b, hO', hc, ⟨hP, hKx, hls⟩, hRb⟩ := hp
   refine ⟨Oa, Ob, a, b, hO', hc, hP, w₁, ls₁, O₁, ρκ₁, hK, hRb.1, hRb.2.1, hRb.2.2,
-    fun r₁ hr₁' => ?_⟩
+    KeepRel.of_srecsIn (fun r₁ hr₁' => ?_) ρκ₁⟩
   obtain ⟨r, hr, e₁⟩ := hl₁ r₁ hr₁'
   obtain ⟨r', hr', e'⟩ := hls r hr (hap r₁ hr₁' r hr e₁)
   exact ⟨r', hr', RecRR.trans hKx e₁ e'⟩
