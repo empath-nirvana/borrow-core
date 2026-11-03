@@ -42,20 +42,6 @@ theorem chain_immFree_iff {ρ : ResUT Loc Val WCactus.chain} :
     have := h l _ (map_ΦU_get.mpr e)
     rwa [ΦU_kind] at this
 
-/-- `⟦ρ⟧ = m` at the chain is the printed `⟦ρ⟧ = m`. -/
-theorem chain_lower_iff {ρ : ResUT Loc Val WCactus.chain} {m : Loc → Option Val} :
-    ρ.Lower m ↔ ResU.Lower (ρ.map ΦU) m := by
-  have herase : ∀ σ : ResUT Loc Val WCactus.chain, ∀ l,
-      ((σ.map ΦU).get l).map CellU.erase = (σ.get l).map CellUT.erase := by
-    intro σ l
-    rw [PMap.map_get, Option.map_map]
-    exact congrArg (fun f => Option.map f (σ.get l)) (funext ΦU_erase)
-  constructor
-  · rintro ⟨σ, hσ, hm⟩
-    exact ⟨σ.map ΦU, chain_flat_iff.mp hσ, fun l => by rw [hm l, herase]⟩
-  · rintro ⟨σ, hσ, hm⟩
-    obtain ⟨σ, rfl⟩ := exists_map_ΦU σ
-    exact ⟨σ, chain_flat_iff.mpr hσ, fun l => by rw [hm l, herase]⟩
 
 /-- `ρ∣imm = ∅` at the chain is the printed `ρ∣imm = ∅`. -/
 theorem chain_restrict_imm_empty_iff {ρ : ResUT Loc Val WCactus.chain} :

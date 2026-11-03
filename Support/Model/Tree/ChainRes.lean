@@ -234,6 +234,35 @@ theorem chain_inStratum_iff {ρ : ResUT Loc Val WCactus.chain} {a : Life} :
   · intro h l ψ e
     exact ΦU_inStratum_single_iff.mp (h l _ (map_ΦU_get.mpr e))
 
+/-! ### `⟦−⟧` and `ℓ ↦ own(v)` -/
+
+theorem ΦU_ownOf (v : Val) : ΦU (CellUT.ownOf (K := WCactus.chain) (Loc := Loc) v) = CellU.ownOf v :=
+  rfl
+
+theorem erase_map_ΦU (o : Option (CellUT Loc Val WCactus.chain)) :
+    (o.map ΦU).map CellU.erase = o.map CellUT.erase := by
+  cases o with
+  | none => rfl
+  | some ψ => exact congrArg some (ΦU_erase ψ)
+
+/-- `⟦−⟧` (row 5.25) at the chain is the printed `⟦−⟧`. -/
+theorem chain_lower_iff {ρ : ResUT Loc Val WCactus.chain} {m : Loc → Option Val} :
+    ResUT.Lower ρ m ↔ ResU.Lower (ρ.map ΦU) m := by
+  constructor
+  · rintro ⟨σ, hf, hm⟩
+    refine ⟨σ.map ΦU, chain_flat_iff.mp hf, fun l => ?_⟩
+    rw [hm l, PMap.map_get, erase_map_ΦU]
+  · rintro ⟨σ, hf, hm⟩
+    obtain ⟨σ, rfl⟩ := exists_map_ΦU σ
+    refine ⟨σ, chain_flat_iff.mpr hf, fun l => ?_⟩
+    rw [hm l, PMap.map_get, erase_map_ΦU]
+
+/-- `ℓ ↦ own(v)` read back along `ΦU`. -/
+theorem chain_single_own (l : Loc) (v : Val) :
+    ResU.single l (CellU.ownOf v) =
+      (ResUT.single l (CellUT.ownOf (K := WCactus.chain) (Loc := Loc) v)).map ΦU := by
+  rw [chain_single, ΦU_ownOf]
+
 end BoCa.Fig16.Tree
 
 end

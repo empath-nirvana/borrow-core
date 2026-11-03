@@ -20,24 +20,6 @@ open BoCa.Fig16 BoCa.Fig16.Tree
 
 variable {Loc Val : Type}
 
-/-- `ℓ ↦ own(v)` read back along `ΦU`. -/
-theorem chain_single_ownOf (l : Loc) (v : Val) :
-    ResU.single l (CellU.ownOf v) =
-      (ResUT.single l (CellUT.ownOf (K := WCactus.chain) v)).map ΦU := by
-  rw [chain_single, ΦU_ownOf]
-
-/-- **`⦇−⦈_○` at the chain is the printed `⦇−⦈_○`** (`[TR]` Definition 6.1). -/
-theorem chain_flatR_iff {ρ σ : ResUT Loc Val WCactus.chain} :
-    ResUT.FlatR ρ σ ↔ ResU.FlatR (ρ.map ΦU) (σ.map ΦU) := by
-  constructor
-  · rintro ⟨a, e, ha, he, hc⟩
-    exact ⟨a.map ΦU, e.map ΦU, chain_agW_iff.mp ha, chain_exR_iff.mp he,
-      chain_resCompR_iff.mp hc⟩
-  · rintro ⟨a, e, ha, he, hc⟩
-    obtain ⟨a, rfl⟩ := exists_map_ΦU a
-    obtain ⟨e, rfl⟩ := exists_map_ΦU e
-    exact ⟨a, e, chain_agW_iff.mpr ha, chain_exR_iff.mpr he, chain_resCompR_iff.mpr hc⟩
-
 end BoCa.Fig16.Tree.ChainSix3
 
 namespace BoCa.Fig16.Tree
@@ -55,7 +37,7 @@ theorem chain_ResU_six34 {l : Loc} {s : LSet} {v : Val} {ρ ρv W : ResU Loc Val
   obtain ⟨ρ, rfl⟩ := exists_map_ΦU ρ
   obtain ⟨ρv, rfl⟩ := exists_map_ΦU ρv
   obtain ⟨W, rfl⟩ := exists_map_ΦU W
-  rw [chain_single_ownOf] at hW
+  rw [chain_single_own] at hW
   rw [chain_single_immOf]
   exact chain_hash_iff.mp (ResUT.six34 (chain_resCompS_iff.mpr hW) (chain_hash_iff.mpr hh))
 
@@ -100,7 +82,7 @@ theorem chain_ResU_six38 :
   have himm : CellU.immOf (LSet.singleton α) v (ρv.map ΦU) hv =
       ΦU (CellUT.immOf (TSet.single α) v ρv hv') :=
     (ΦU_immOf_eq (TSet.toLSet_single α) rfl).symm
-  rw [chain_single_ownOf] at hW
+  rw [chain_single_own] at hW
   rw [himm, ← chain_single] at hi
   rw [← chain_restrict, ← chain_empty] at hown
   obtain ⟨G, hG, hGW⟩ := ResUT.six38 (K := WCactus.chain) (hv := hv')
@@ -127,7 +109,7 @@ theorem chain_ResU_six39 {l : Loc} {s : LSet} {v : Val}
   obtain ⟨ov, rfl⟩ := exists_map_ΦU ov
   obtain ⟨iw, rfl⟩ := exists_map_ΦU iw
   obtain ⟨iw', rfl⟩ := exists_map_ΦU iw'
-  rw [chain_single_ownOf] at hov
+  rw [chain_single_own] at hov
   rw [chain_single_immOf] at hi hi'
   obtain ⟨w, w', hw, hw', hu⟩ := ResUT.six39 (chain_resCompS_iff.mpr hov)
     (chain_hash_iff.mpr h1) (chain_hash_iff.mpr h2) (chain_resCompS_iff.mpr hi)

@@ -118,6 +118,18 @@ theorem chain_exclPart (ρ : ResUT Loc Val WCactus.chain) :
 theorem chain_borrowPart (ρ : ResUT Loc Val WCactus.chain) :
     ρ.borrowPart.map ΦU = ResU.borrowPart (ρ.map ΦU) := chain_restrictOn ρ _
 
+/-- `⦇−⦈_○` (Definition 6.1) at the chain is the printed `⦇−⦈_○`. -/
+theorem chain_flatR_iff {ρ σ : ResUT Loc Val WCactus.chain} :
+    ResUT.FlatR ρ σ ↔ ResU.FlatR (ρ.map ΦU) (σ.map ΦU) := by
+  constructor
+  · rintro ⟨a, e, ha, he, hc⟩
+    exact ⟨a.map ΦU, e.map ΦU, chain_agW_iff.mp ha, chain_exR_iff.mp he,
+      chain_resCompR_iff.mp hc⟩
+  · rintro ⟨a, e, ha, he, hc⟩
+    obtain ⟨a, rfl⟩ := exists_map_ΦU a
+    obtain ⟨e, rfl⟩ := exists_map_ΦU e
+    exact ⟨a, e, chain_agW_iff.mpr ha, chain_exR_iff.mpr he, chain_resCompR_iff.mpr hc⟩
+
 end BoCa.Fig16.Tree
 
 end

@@ -27,42 +27,6 @@ open BoCa.Fig16 BoCa.Fig16.Tree
 
 variable {Loc Val : Type}
 
-/-- `⦇−⦈_○` (Definition 6.1) at the chain is the printed `⦇−⦈_○`. -/
-theorem chain_flatR_iff {ρ σ : ResUT Loc Val WCactus.chain} :
-    ResUT.FlatR ρ σ ↔ ResU.FlatR (ρ.map ΦU) (σ.map ΦU) := by
-  constructor
-  · rintro ⟨a, e, ha, he, hc⟩
-    exact ⟨a.map ΦU, e.map ΦU, chain_agW_iff.mp ha, chain_exR_iff.mp he,
-      chain_resCompR_iff.mp hc⟩
-  · rintro ⟨a, e, ha, he, hc⟩
-    obtain ⟨a, rfl⟩ := exists_map_ΦU a
-    obtain ⟨e, rfl⟩ := exists_map_ΦU e
-    exact ⟨a, e, chain_agW_iff.mpr ha, chain_exR_iff.mpr he, chain_resCompR_iff.mpr hc⟩
-
-theorem erase_map_ΦU (o : Option (CellUT Loc Val WCactus.chain)) :
-    (o.map ΦU).map CellU.erase = o.map CellUT.erase := by
-  cases o with
-  | none => rfl
-  | some ψ => exact congrArg some (ΦU_erase ψ)
-
-/-- `⟦−⟧` (row 5.25) at the chain is the printed `⟦−⟧`. -/
-theorem chain_lower_iff {ρ : ResUT Loc Val WCactus.chain} {m : Loc → Option Val} :
-    ResUT.Lower ρ m ↔ ResU.Lower (ρ.map ΦU) m := by
-  constructor
-  · rintro ⟨σ, hf, hm⟩
-    refine ⟨σ.map ΦU, chain_flat_iff.mp hf, fun l => ?_⟩
-    rw [hm l, PMap.map_get, erase_map_ΦU]
-  · rintro ⟨σ, hf, hm⟩
-    obtain ⟨σ, rfl⟩ := exists_map_ΦU σ
-    refine ⟨σ, chain_flat_iff.mpr hf, fun l => ?_⟩
-    rw [hm l, PMap.map_get, erase_map_ΦU]
-
-/-- `ℓ ↦ own(v)` read back along `ΦU`. -/
-theorem chain_single_own (l : Loc) (v : Val) :
-    ResU.single l (CellU.ownOf v) =
-      (ResUT.single l (CellUT.ownOf (K := WCactus.chain) (Loc := Loc) v)).map ΦU := by
-  rw [chain_single, ΦU_ownOf]
-
 /-- `ℓ ↦ mut(β, v, ρ_v, P̂)` read back along `ΦU`: the image of
 `ℓ ↦ mut({β}, v, ΨU ρ_v, P̂ ∘ ΨU⁻¹)`. -/
 theorem chain_single_mutOf (l : Loc) {b : Life} {v : Val} {ρv : ResU Loc Val}

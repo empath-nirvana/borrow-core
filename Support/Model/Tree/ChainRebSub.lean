@@ -26,9 +26,6 @@ theorem ΦU_immOf_eq {s : TSet} {v : Val} {χ : ResUT Loc Val WCactus.chain} {h 
     (hχ : χ.map ΦU = χ') : ΦU (CellUT.immOf s v χ h) = CellU.immOf L v χ' h' := by
   rw [ΦU_immOf]; exact CellU.immOf_congr hL rfl hχ _ _
 
-theorem ΦU_ownOf (v : Val) : ΦU (CellUT.ownOf (K := WCactus.chain) (Loc := Loc) v) = CellU.ownOf v :=
-  rfl
-
 /-- `Res_S` at the chain is the printed `Res_{⊔S}`. -/
 theorem chain_inStratum_jn_iff {S : TSet} {ρ : ResUT Loc Val WCactus.chain} :
     ρ.InStratum S ↔ ResU.InStratum S.jn (ρ.map ΦU) := by

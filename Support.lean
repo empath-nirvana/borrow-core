@@ -52,6 +52,10 @@ import Support.Model.Tree.CarrierSim
 import Support.Model.Tree.Chain59
 import Support.Model.Tree.ChainRebSub
 import Support.Model.Tree.ChainRes
+import Support.Model.Tree.ChainSix1
+import Support.Model.Tree.ChainSix2
+import Support.Model.Tree.ChainSix3
+import Support.Model.Tree.ChainSix4
 import Support.Model.Tree.ChainUpd
 import Support.Model.Tree.Comparability
 import Support.Model.Tree.Graft
