@@ -1,0 +1,87 @@
+-- pending: #771 (an exclusive borrow handed back and forth between two suspended tasks)
+-- now: 24:19: `pass`: only an answering operation (`fn`) takes lifetime parameters
+-- Two coroutines share one slot through an exclusive borrow that moves between them. `fill`
+-- writes the next square into the slot and passes the borrow on; `drain` adds what the slot holds
+-- and passes it back. At every moment exactly one of them holds the `mut` borrow, the other is
+-- suspended without it, and the borrow ends only when both have finished, inside `main`'s
+-- `borrow` block. No lock, no copy of the slot, no owned buffer sent through a channel.
+--
+-- `pass` answers the borrow it was given: the handler holds it while the task is suspended and
+-- hands it to the other task's continuation. That is the cactus invariant's move of a part
+-- between branches (#770, `cactusT_move`), with both continuations stored by the handler.
+--
+-- Blocked by: no stored continuation holds a borrow across its suspension (decision 71), and an
+-- operation cannot answer a borrow the handler holds for another task. Wanted: tree-ordered
+-- lifetimes and resumption at any extension of the task's world (#770 stage 2), and the typing rule
+-- for continuations that hold borrows (#771).
+--
+-- What fails first today: `pass` is a `ctl` operation (its continuation may be stored), and only
+-- an answering operation may take a lifetime parameter, so the operation cannot even name the
+-- borrow it carries. Nothing after line 24 is checked yet.
+--
+-- Once it lands: `30`, the squares 1, 4, 9, 16 summed. A relay that handed `drain` the slot
+-- before `fill` wrote gives 14 (it reads one turn late); one that let both hold it is refused.
+effect Pass { ctl pass<'b>(m: mut 'b i32) -> mut 'b i32 }
+
+-- Writes the squares 1..n into the slot, passing the slot on after each.
+fn fill<'b>(m: mut 'b i32, n: i32) -> mut 'b i32 with Pass =
+  let mut m = m;
+  for i in 1..n + 1 {
+    let _ = modify m { x -> (i * i, i * i) };
+    m = pass(m)
+  };
+  m
+
+-- Waits for the slot `n` times, adding what it holds each time.
+fn drain<'b>(m: mut 'b i32, n: i32) -> mut 'b i32 * i32 with Pass =
+  let mut m = m;
+  let mut acc = 0;
+  for _ in 0..n {
+    m = pass(m);
+    acc = acc + modify m { x -> (x, x) }
+  };
+  (m, acc)
+
+-- A task paused at `pass`: handed the slot, it runs to its next `pass` (answering the slot and
+-- its rest) or to its end.
+type Step['b, A] = U (nu X. (mut 'b i32 -o F ((mut 'b i32 * U X) + A)) & F 1)
+
+handler stepper['b, A]: Pass, A -> mut 'b i32 * Step['b, A] + A = {
+  return(v) = inr v;
+  pass(m, k) = inl (m, thunkv nu_in < fun (m2 : mut 'b i32) -> t <- (force k).1 m2; return t,
+                                      (force k).2 >)
+}
+
+-- Hands the slot to `d`, then to `f`, alternately. When `d` finishes, `f` is handed the slot
+-- once more to finish too; if `f` finished first, `d` is cancelled (it would wait forever).
+fn relay<'b>(m: mut 'b i32, f: Step['b, mut 'b i32], d: Step['b, mut 'b i32 * i32]) -> i32
+    with Exhausted =
+  match (nu_out (force d)).1 m {
+    inr (m, acc) ->
+      match (nu_out (force f)).1 m {
+        inr m -> acc
+      | inl (m, f) -> (nu_out (force f)).2; acc
+      }
+  | inl (m, d) ->
+      match (nu_out (force f)).1 m {
+        inr m -> (nu_out (force d)).2; 0
+      | inl (m, f) -> relay(m, f, d)
+      }
+  }
+
+main -> i32 =
+  let slot = alloc(0);
+  let total = borrow mut slot { 'b, m ->
+    -- `fill` runs first, to its first `pass`; `drain` is started at its first wait with the slot
+    -- `fill` handed back, and the two then alternate.
+    match with stepper { fill(m, 4) } {
+      inr m -> m; 0
+    | inl (m, f) ->
+        match with stepper { drain(m, 4) } {
+          inr (m, acc) -> acc
+        | inl (m, d) -> with on_exhausted(!{ u -> 0 }) { relay(m, f, d) }
+        }
+    }
+  };
+  let _ = free(slot);
+  total

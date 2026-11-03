@@ -1,0 +1,80 @@
+-- pending: #771 (two generators over borrowed trees stepped in lockstep, one cancelled early)
+-- now: 31:9: `*` copies the content, and `mu X. i32 + ref X * ref X` is linear
+-- Same fringe: do two trees of different shapes have the same leaves, left to right? Each tree
+-- is walked by a generator that borrows it `imm` and yields its leaves; `same` pulls one leaf
+-- from each in turn and stops at the first difference. Neither tree is copied or flattened into
+-- a list, and both generators live in `main`'s borrow blocks. When the leaves differ, both
+-- generators are suspended mid-walk: they must be closed (cancelled), and dropping one instead is
+-- refused, because a stored generator is linear.
+--
+-- Blocked by: a recursive walk that reads a boxed field through an `imm` borrow of the node and
+-- keeps the field's borrow live across `yield` (a reborrow of a borrowed component across a
+-- suspension, #770 canonical images; the projection of an `Imm` onto a component, Core gap), and
+-- two stored generators each holding a different borrow at once (#771 typing for continuations
+-- that hold borrows).
+--
+-- What fails first today is earlier than #771, as in `pending/async-field-await.bc`: no surface
+-- form reads a boxed field through an `imm` borrow of the node (`*` copies the whole node, which
+-- holds boxes). Nothing after that line is checked yet.
+--
+-- Once it lands: `1` for `t1`/`t2` (leaves 1 2 3 4, shapes `((1 2) (3 4))` and `(1 (2 (3 4)))`),
+-- `0` for `t1`/`t3` (`t3`'s leaves 1 2 5 4 differ at the third), so `i32[10]` (1 * 10 + 0).
+-- A `same` that compared only the first leaf gives 11; one that leaked the suspended walks is
+-- refused, not run.
+include yield
+include rec
+
+data Tree = Leaf(x: i32) | Node(l: box Tree, r: box Tree)
+
+-- Yields the leaves of `t`, left to right.
+fn leaves<'a>(t: imm 'a Tree) -> 1 with Yield[i32], Exhausted =
+  match *t {
+    Leaf(x) -> yield(x)
+  | Node(l, r) -> leaves(l); leaves(r)
+  };
+  ()
+
+-- The walk with its recursion's budget handled: a tree too deep to walk yields nothing more.
+fn walk<'a>(t: imm 'a Tree) -> 1 with Yield[i32] = with on_exhausted(!{ k -> () }) { leaves(t) }
+
+-- The next leaf and the rest of the walk, or `inr ()` once it has finished.
+fn next(it: U (pull i32 1 1)) -> (i32 * U (pull i32 1 1)) + 1 =
+  o <- (nu_out (force it)).1;
+  match o {
+    inl (x, it) -> inl (x, it)
+  | inr d -> match d { inl u -> inr () | inr it -> next(it) }
+  }
+
+fn close(it: U (pull i32 1 1)) -> 1 = (nu_out (force it)).2
+
+-- Pulls a leaf from each walk in turn; `1` if both end together with every pair equal.
+fn same(a: U (pull i32 1 1), b: U (pull i32 1 1)) -> i32 with Exhausted =
+  match next(a) {
+    inr u -> match next(b) { inr u -> 1 | inl (y, b) -> close(b); 0 }
+  | inl (x, a) -> match next(b) {
+      inr u -> close(a); 0
+    | inl (y, b) -> if x == y { same(a, b) } else { close(a); close(b); 0 }
+    }
+  }
+
+fn mk_leaf(x: i32) -> box Tree = alloc(Leaf(x))
+fn mk_node(l: box Tree, r: box Tree) -> box Tree = alloc(Node(l, r))
+
+fn compare(s: box Tree, t: box Tree) -> i32 =
+  let r = borrow imm s { 'a, u ->
+    borrow imm t { 'b, v ->
+      with on_exhausted(!{ k -> 0 }) {
+        let ga : U (pull i32 1 1) = walk(u);
+        let gb : U (pull i32 1 1) = walk(v);
+        same(ga, gb)
+      } } };
+  let _ = free(s);
+  let _ = free(t);
+  r
+
+main -> i32 =
+  let t1 = mk_node(mk_node(mk_leaf(1), mk_leaf(2)), mk_node(mk_leaf(3), mk_leaf(4)));
+  let t2 = mk_node(mk_leaf(1), mk_node(mk_leaf(2), mk_node(mk_leaf(3), mk_leaf(4))));
+  let t1b = mk_node(mk_node(mk_leaf(1), mk_leaf(2)), mk_node(mk_leaf(3), mk_leaf(4)));
+  let t3 = mk_node(mk_node(mk_leaf(1), mk_leaf(2)), mk_node(mk_leaf(5), mk_leaf(4)));
+  compare(t1, t2) * 10 + compare(t1b, t3)
