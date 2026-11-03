@@ -1,5 +1,5 @@
 import DtorUnwind.TreeWp.Records
-import DtorUnwind.TreeWp.UpdX
+import DtorUnwind.TreeWp.UpdXInv
 import DtorUnwind.SI.RwpG
 
 /-!
@@ -174,7 +174,10 @@ invariants, and two clauses about the run from `ρ₀` with records `O₀`:
 * **The frame holds nothing at a record the run opened or ended** (`MaskDiff`): where only one
   side is masked, the re-read frame's flattening is empty. A frame beside a run (`twp_frame`)
   is carried by `↭` only where both sides of the run read the same cells or both are masked
-  (`UpdX.frame`). -/
+  (`UpdX.frame`).
+* **`↭`'s `P̂`** (`InvKept`): at every unmasked `mut` cell of `⦇ρ₀⦈` the code typing of `w′` keeps
+  `w₀`'s code. A flattened `mut` cell's invariant is its location's code read at the world
+  (`flat_mut_inv`), so with `UpdX` this is row 5.27's `mut` clause, `P̂` re-read (`endT_inv`). -/
 def EndT (Q : TPost) (k : Nat) (w₀ : TWd) (ρ₀ : TRes w₀.K) (O₀ : List (FrameRecT w₀.K))
     (ρf : TRes w₀.K) (psF : List (FrameRecT w₀.K)) (μ' : Heap) (t : Expr) : Prop :=
   ∃ (w' : TWd) (ρf' ρ' fρ' : TRes w'.K) (psF' ps' O' : List (FrameRecT w'.K))
@@ -182,7 +185,7 @@ def EndT (Q : TPost) (k : Nat) (w₀ : TWd) (ρ₀ : TRes w₀.K) (O₀ : List (
     RecsRR w'.Θ psF psF' ∧ ResUT.Hash ρ' ρf' ∧ ResUT.CompS ρf' ρ' fρ' ∧ SplitT ps' O' psF' ∧
     RecInv w' fρ' ps' ls' ∧ WInv w' fρ' μ' ∧ Q k w' ls' O' t ρ' ∧
     UpdX (sem w'.Θ) (recMask O₀) (recMask O') ρ₀ ρ' ∧
-    NoneAt (MaskDiff (recMask O₀) (recMask O')) ρf'
+    NoneAt (MaskDiff (recMask O₀) (recMask O')) ρf' ∧ InvKept w₀.Θ w'.Θ (recMask O₀) ρ₀
 
 /-- **`crwpG` over the tree world.** -/
 def twp (F : TFrame) (Q : TPost) (n : Nat) (w : TWd) (ls : List (SRecT w.K))
@@ -202,9 +205,10 @@ theorem EndT.mono {P Q : TPost} {k k' : Nat} {t : Expr}
     {O₀ : List (FrameRecT w₀.K)} {ρf : TRes w₀.K}
     {psF : List (FrameRecT w₀.K)} {μ' : Heap} (h : EndT P k w₀ ρ₀ O₀ ρf psF μ' t) :
     EndT Q k' w₀ ρ₀ O₀ ρf psF μ' t := by
-  obtain ⟨w', ρf', ρ', fρ', psF', ps', O', ls', h₀, h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀⟩ := h
+  obtain ⟨w', ρf', ρ', fρ', psF', ps', O', ls', h₀, h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁⟩ :=
+    h
   exact ⟨w', ρf', ρ', fρ', psF', ps', O', ls', h₀, h₁, h₂, h₃, h₄, h₅, h₆, h₇, hPQ _ _ _ _ h₈,
-    h₉, h₁₀⟩
+    h₉, h₁₀, h₁₁⟩
 
 theorem twp_zero {F : TFrame} {Q : TPost} {w : TWd} {ls : List (SRecT w.K)}
     {O : List (FrameRecT w.K)} {e : Expr} {ρ : TRes w.K} : twp (ℍ := ℍ) F Q 0 w ls O e ρ := by
@@ -278,6 +282,13 @@ theorem covf_valid {w : TWd} {ρf ρ fρ : TRes w.K} {μ : Heap} (hc : ResUT.Com
     (hI : WInv w fρ μ) : ResUT.Valid ρf :=
   (ResUT.Valid.split hc hI.valid).1
 
+/-- A part of a world meeting `RecInv` and `WInv` meets `MutCov`. -/
+theorem MutCov.of_part {w : TWd} {fρ ρf ρ : TRes w.K} {ps : List (FrameRecT w.K)}
+    {ls : List (SRecT w.K)} {μ : Heap} (hR : RecInv w fρ ps ls) (hI : WInv w fρ μ)
+    (hc : ResUT.CompS ρf ρ fρ) : MutCov (sem w.Θ) w.K ρ :=
+  ⟨cov_of_comp hc hI, fρ, TWNT.mutOne hR.1, fun _ _ h k =>
+    h.of_compS_right hc (kind_mut_ne_imm k)⟩
+
 /-- **A final term in the postcondition**, at every extension of the world. -/
 theorem twp_here {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls : List (SRecT w.K)}
     {O : List (FrameRecT w.K)} {e : Expr} {ρ : TRes w.K} (hfin : ∀ μ, Final (ℍ := ℍ) μ e)
@@ -294,7 +305,7 @@ theorem twp_here {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls : List (SRecT 
     by simpa using h w₀ ρ₀ ls₀ O₀ hE hr hl hO,
     UpdX.of_rr (WCactus.Ext.refl _) _ (cov_valid hc hI)
       (RR.refl (cov_of_comp hc hI)),
-    NoneAt.of_false (fun x hx => by unfold MaskDiff at hx; tauto) _⟩
+    NoneAt.of_false (fun x hx => by unfold MaskDiff at hx; tauto) _, InvKept.refl _ _ _⟩
 
 /-- **A step that is its configuration's only one, for free.** -/
 theorem twp_det {F : TFrame} {Q : TPost} (hQ : Q.Down) {n : Nat} {w : TWd}
@@ -338,17 +349,17 @@ theorem twp_bind {F : TFrame} (hFm : F.Mono) {Q : TPost} (K : Kont) {n : Nat} {w
   have go : ∀ j₁ j₂ μ₁ t, j₁ + j₂ = j → StepsN (ℍ := ℍ) j₁ μ e μ₁ t → Final (ℍ := ℍ) μ₁ t →
       StepsN (ℍ := ℍ) j₂ μ₁ (K.plug t) μ' E → EndT Q (n - j) w₀ ρ₀ O₀ ρf psF μ' E := by
     intro j₁ j₂ μ₁ t hjj hrun₁ hfin₁ hrun₂
-    obtain ⟨w₁, ρf₁, ρ₁, fρ₁, psF₁, ps₁, O₁, ls₁, g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, g₉, g₁₀⟩ :=
-      hw w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE hr hl hO hF hf hc hS hR hI hfd j₁ μ₁ t (by omega)
+    obtain ⟨w₁, ρf₁, ρ₁, fρ₁, psF₁, ps₁, O₁, ls₁, g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, g₉, g₁₀,
+        g₁₁⟩ := hw w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE hr hl hO hF hf hc hS hR hI hfd j₁ μ₁ t (by omega)
         hrun₁ hfin₁
     have hcov : CovR (sem w₁.Θ) w₁.K ρ₁ := cov_of_comp g₄ g₇
-    obtain ⟨w₂, ρf₂, ρ₂, fρ₂, psF₂, ps₂, O₂, ls₂, k₀, k₁, k₂, k₃, k₄, k₅, k₆, k₇, k₈, k₉, k₁₀⟩ :=
-      g₈ w₁ ρ₁ ρf₁ fρ₁ ls₁ O₁ ps₁ psF₁ μ₁ (TWd.Ext.refl _ _) (RR.refl hcov)
+    obtain ⟨w₂, ρf₂, ρ₂, fρ₂, psF₂, ps₂, O₂, ls₂, k₀, k₁, k₂, k₃, k₄, k₅, k₆, k₇, k₈, k₉, k₁₀,
+        k₁₁⟩ := g₈ w₁ ρ₁ ρf₁ fρ₁ ls₁ O₁ ps₁ psF₁ μ₁ (TWd.Ext.refl _ _) (RR.refl hcov)
         (SRecsRR.refl g₆.cov_ls) (RecsRR.refl fun r hr => g₆.cov_ps r (g₅.left r hr))
         (hFm _ _ _ _ g₀ g₁ hF) (ResUT.hash_symm g₃) g₄ g₅ g₆ g₇ (fd_stepsN hrun₁ hfd) j₂ μ' E
         (by omega) hrun₂ hfin
     refine ⟨w₂, ρf₂, ρ₂, fρ₂, psF₂, ps₂, O₂, ls₂, g₀.trans g₁ k₀, RRw.trans k₀.1 g₁ k₁,
-      g₂.trans k₀.1 k₂, k₃, k₄, k₅, k₆, k₇, ?_, UpdX.trans k₀.1 g₉ k₉, ?_⟩
+      g₂.trans k₀.1 k₂, k₃, k₄, k₅, k₆, k₇, ?_, UpdX.trans k₀.1 g₉ k₉, ?_, g₁₁.trans g₉ k₁₁⟩
     · rwa [show n - j₁ - j₂ = n - j by omega] at k₈
     · have hf₂ : NoneAt (MaskDiff (recMask O₀) (recMask O₁)) ρf₂ :=
         g₁₀.rr k₀.1 (covf_valid g₄ g₇) k₁
@@ -390,16 +401,6 @@ theorem forall₂_append_left {α β : Type} {R : α → β → Prop} :
       let ⟨ys₁, ys₂, e, h₁, h₂⟩ := forall₂_append_left t
       ⟨_ :: ys₁, ys₂, by rw [e]; rfl, .cons hxy h₁, h₂⟩
 
-theorem forall₂_mem_left {α β : Type} {R : α → β → Prop} {xs : List α} {ys : List β}
-    (h : List.Forall₂ R xs ys) {x : α} (hx : x ∈ xs) : ∃ y ∈ ys, R x y := by
-  induction h with
-  | nil => cases hx
-  | cons hxy _ ih =>
-      rcases List.mem_cons.mp hx with rfl | hx
-      · exact ⟨_, List.mem_cons_self, hxy⟩
-      · obtain ⟨y, hy, hr⟩ := ih hx
-        exact ⟨y, List.mem_cons_of_mem _ hy, hr⟩
-
 /-- **The frame**: a resource `ρ₂` in `R`, owning the records `O₂`, kept beside the run, which
 owns `O₁`. Forced beside `crwpG_frame`: `R` is carried along re-reading (`hR`), and the framed
 resource is covered at its world (`hcov`), so that its parts have re-readings at every extension
@@ -430,7 +431,8 @@ theorem twp_frame {F F₁ : TFrame} {P : TPost} {R : TRProp} (hR : R.Mono) {n : 
     · rcases List.mem_append.mp hq with h | h
       · exact hO₀ p hp q h
       · exact hS.2 p (List.mem_append_left _ hp) q h
-  obtain ⟨w', y', ρ₁', fρ', psF'', ps', O₁', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, g₉, g₁₀⟩ :=
+  obtain ⟨w', y', ρ₁', fρ', psF'', ps', O₁', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, g₉, g₁₀,
+      g₁₁⟩ :=
     hwp w₀ ρ₁₀ y fρ ls₀ O₁₀ ps (O₂₀ ++ psF) μ hE₁ h₁₀ hl hO₁ (hF w₀ ρf ρ₂₀ y hE₂ h₂₀ hFρ hy)
       (hash_of_inv hyf hI) hyf hS₁ hRi hI hfd j μ' e' hj hrun hfin
   obtain ⟨O₂', psF', rfl, hO₂', hpsF'⟩ := forall₂_append_left g₂
@@ -452,7 +454,11 @@ theorem twp_frame {F F₁ : TFrame} {P : TPost} {R : TRProp} (hR : R.Mono) {n : 
     ⟨O₁', O₂', ρ₁', ρ₂', rfl, hρ', g₈, hR _ _ _ _ _ _ (g₀.of_compS_right hy) h₂' hO₂' hR₂₀⟩,
     (hu.widen (recMask O₂₀)).congr (fun l => recMask_append l)
       (fun l => by rw [recMask_append, recMask_rr hO₂' l]),
-    (g₁₀.of_compS_left hy' hvy').mono hmask⟩
+    (g₁₀.of_compS_left hy' hvy').mono hmask,
+    (g₁₁.mono fun l h => (recMask_append l).mpr (Or.inl h)).frame hc₀ (TWNT.mutOne hRi.1)
+      (fun _ _ h k => (h.of_compS_right hc₀ (kind_mut_ne_imm k)).of_compS_right hc
+        (kind_mut_ne_imm k))
+      (AgreeOn.of_compS_right hy g₀.2)⟩
   · rw [g₅.1 p, List.mem_append, List.mem_append]; tauto
   · rcases List.mem_append.mp hp with h | h
     · exact g₅.2 p h q (List.mem_append_right _ hq)
@@ -487,15 +493,20 @@ theorem twp_extend {F : TFrame} (hFm : F.Mono) {Q : TPost} {n : Nat} {w : TWd}
   obtain ⟨ls₁, O₁, ps₁, psF₁, hl₁, hO₁, hF₁, hS₁, hR₁, hw⟩ := hw₁ fρ₁ hfr
   obtain ⟨ρf₁, ρ₀₁, hf₁, h₀₁, hc₁⟩ := RR.split_retype hE₁.1 hc hI.1 hE₁.2 hfr
   have hEf := hE₁.of_compS_left hc
-  obtain ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, g₉, g₁₀⟩ :=
-    hw ρ₀₁ h₀₁ w₁ ρ₀₁ ρf₁ fρ₁ ls₁ O₁ ps₁ psF₁ μ (TWd.Ext.refl _ _)
+  obtain ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, g₉, g₁₀,
+      g₁₁⟩ := hw ρ₀₁ h₀₁ w₁ ρ₀₁ ρf₁ fρ₁ ls₁ O₁ ps₁ psF₁ μ (TWd.Ext.refl _ _)
       (RR.refl (cov_of_comp hc₁ hI₁)) (SRecsRR.refl hR₁.cov_ls)
       (RecsRR.refl fun r hr => hR₁.cov_ps r (hS₁.left r hr)) (hFm _ _ _ _ hEf hf₁ hFρ)
       (hash_of_inv hc₁ hI₁) hc₁ hS₁ hR₁ hI₁ hfd j μ' e' hj hrun hfin
+  have hu₀₁ : UpdX (sem w₁.Θ) (recMask O₀) (recMask O₁) ρ₀ ρ₀₁ :=
+    (UpdX.of_rr hE₁.1 (recMask O₀) (cov_valid hc hI) h₀₁).congr (fun _ => Iff.rfl)
+      (fun l => (recMask_rr hO₁ l).symm)
+  have hk₀₁ : InvKept w₀.Θ w₁.Θ (recMask O₀) ρ₀ :=
+    InvKept.of_agree (TWNT.mutOne hR.1) (fun _ _ h k => h.of_compS_right hc (kind_mut_ne_imm k))
+      (AgreeOn.of_compS_right hc hE₁.2)
   refine ⟨w', ρf', ρ', fρ', psF', ps', O', ls', hEf.trans hf₁ g₀, RRw.trans g₀.1 hf₁ g₁,
-    hF₁.trans g₀.1 g₂, g₃, g₄, g₅, g₆, g₇, g₈,
-    ((UpdX.of_rr hE₁.1 (recMask O₀) (cov_valid hc hI) h₀₁).congr (fun _ => Iff.rfl)
-      (fun l => (recMask_rr hO₁ l).symm)).trans g₀.1 g₉, g₁₀.mono fun x hx => ?_⟩
+    hF₁.trans g₀.1 g₂, g₃, g₄, g₅, g₆, g₇, g₈, hu₀₁.trans g₀.1 g₉, g₁₀.mono fun x hx => ?_,
+    hk₀₁.trans hu₀₁ g₁₁⟩
   unfold MaskDiff at hx ⊢
   rw [recMask_rr hO₁ x] at hx
   exact hx
@@ -520,11 +531,32 @@ theorem twp_update {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls ls₁ : List
   intro w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE hr hl hO hFρ hf hc hS hR hI hfd j μ' e' hj hrun hfin
   obtain ⟨ρ₁₀, fρ₁, ls₁₀, O₁₀, ps₁, h₀, h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀⟩ :=
     hup w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE hr hl hO hFρ hf hc hS hR hI
-  obtain ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, g₉, g₁₀⟩ :=
-    h w₀ ρ₁₀ ρf fρ₁ ls₁₀ O₁₀ ps₁ psF μ h₀ h₁ h₂ h₃ hFρ h₄ h₅ h₆ h₇ h₈ hfd j μ' e' hj hrun hfin
+  obtain ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, g₉, g₁₀,
+      g₁₁⟩ := h w₀ ρ₁₀ ρf fρ₁ ls₁₀ O₁₀ ps₁ psF μ h₀ h₁ h₂ h₃ hFρ h₄ h₅ h₆ h₇ h₈ hfd j μ' e' hj hrun hfin
   exact ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈,
     UpdX.trans g₀.1 h₉ g₉,
-    ((h₁₀.rr g₀.1 (covf_valid hc hI) g₁).or g₁₀).mono fun x hx => maskDiff_trans x hx⟩
+    ((h₁₀.rr g₀.1 (covf_valid hc hI) g₁).or g₁₀).mono fun x hx => maskDiff_trans x hx,
+    (InvKept.refl _ _ _).trans h₉ g₁₁⟩
+
+/-! ### Row 5.27's `mut` clause at `twp`'s ends -/
+
+/-- **`↭`'s `mut` clause holds of every `EndT` end, `P̂` re-read.** For a run from `ρ₀` (a part of a
+world meeting `RecInv`/`WInv`) to an `EndT` end `ρ′`: the flattenings are related by `UpdX`, and at
+every location outside the run's start records where both carry a `mut` cell, the two invariants
+are one code `A`, the same at `w₀` and `w′`, read at each world (`XInv`). -/
+theorem endT_inv {Q : TPost} {k : Nat} {w₀ : TWd} {ρ₀ ρf fρ : TRes w₀.K}
+    {O₀ ps psF : List (FrameRecT w₀.K)} {ls₀ : List (SRecT w₀.K)} {μ μ' : Heap} {t : Expr}
+    (hc : ResUT.CompS ρf ρ₀ fρ) (hR : RecInv w₀ fρ ps ls₀) (hI : WInv w₀ fρ μ)
+    (h : EndT Q k w₀ ρ₀ O₀ ρf psF μ' t) :
+    ∃ (w' : TWd) (ρ' : TRes w'.K) (O' : List (FrameRecT w'.K)) (σ : TRes w₀.K) (σ' : TRes w'.K),
+      ResUT.Flat ρ₀ σ ∧ ResUT.Flat ρ' σ' ∧
+      (∀ l, XOpt (sem w'.Θ) (recMask O₀ l) (recMask O' l) (σ.get l) (σ'.get l)) ∧
+      ∀ l ψ ψ', σ.get l = some ψ → σ'.get l = some ψ' → ¬ recMask O₀ l →
+        XInv w₀.Θ w'.Θ w₀.K w'.K l ψ ψ' := by
+  obtain ⟨w', ρf', ρ', fρ', psF', ps', O', ls', -, -, -, -, g₄, -, g₆, g₇, -, g₉, -, g₁₁⟩ := h
+  obtain ⟨σ, σ', hσ, hσ', hx, hinv⟩ :=
+    g₉.inv (MutCov.of_part hR hI hc) (MutCov.of_part g₆ g₇ g₄) g₁₁
+  exact ⟨w', ρ', O', σ, σ', hσ, hσ', hx, hinv⟩
 
 end BoCa.Fig16.Tree.Wp
 

@@ -24,10 +24,13 @@ back. `↭` refuses both, which is why `crwpG` and `twp` dropped it. Each side o
 at a set of locations (`E`, `E′`): there it reads nothing. A run's masks are the lent locations and
 escrow locations of the records it owns at its start and at its end (`recLocs`), and nothing else.
 
-What `UpdX` does not compare: a `mut` cell's invariant. The re-reading reads it off the location
-typing at the new tree, and a `○`-composite's `P̂ ∧ Q̂` is read on `Res_{min(β̄₁ ∪ β̄₂)}`
-(`Tree/CarrierOps.lean`), so the composite of re-read cells is not the re-read composite there
-(`TreeWp/FlatLs.lean`).
+**A `mut` cell's invariant** is not a clause of `UpdX`: it is determined by the location typing.
+In a world with one `mut` cell per location at any depth (`MutOne`, kept by `TWNT`), every `mut`
+cell of the flattening is a stored cell, and a covered stored cell's `P̂` is its location's code
+read at the world on `Res_β̄` (`flat_mut_inv`, `TreeWp/UpdXInv.lean`). So row 5.27's "same `P̂`"
+is "the same code at `ℓ` on both sides" (`InvKept`, an `EndT` clause), and with `UpdX`'s `β̄`
+clause it gives the printed `mut` clause with `P̂` re-read as `RC.mut` re-reads it (`UpdX.inv`,
+`endT_inv`); at the identity re-reading it is the printed clause (`updX_refl_mut`).
 
 What is proved of it: re-reading is an update (`UpdX.of_rr`), updates compose
 (`UpdX.trans`), and a frame re-read beside an update is kept (`UpdX.frame`), given that the frame
