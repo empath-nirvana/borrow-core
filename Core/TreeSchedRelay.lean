@@ -517,6 +517,28 @@ theorem taskB_twp {F : TFrame} (hFm : F.Mono) {β : Life} {l₁ : BoCa.Loc}
   exact twp_here (fun μ => final_val μ Val.unit) fun w₀ ρ₀ _ O₀ _ hr _ hO => by
     cases hO; exact ⟨Val.unit, rfl, rfl, rfl, RR.of_empty hr⟩
 
+/-- A run that never stops is `cerwpT` at every table and base. -/
+theorem cerwpT_of_twp {Tb : TableT} {Q : TPostV} {Fb F : TFrame} {n : Nat} {w : TWd}
+    {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {e : Expr} {ρ : TRes w.K}
+    (h : twp (ℍ := ℍ) F (valPost Q) n w ls O e ρ) : cerwpT (ℍ := ℍ) Tb Q Fb F n w ls O e ρ := by
+  rw [cerwpT_eq]
+  exact twp_mono (fun _ _ _ _ _ _ ht => Or.inl ht) h
+
+/-- **Task B under the park stepper**, starting owning the record of a lend open since before it
+ran: its base frame condition is `⊤`, its present one avoids the record's mask. -/
+theorem taskB_parked {F : TFrame} (hFm : F.Mono) {β : Life} {l₁ : BoCa.Loc}
+    (hFM : ∀ w ρf, F w ρf → fdMask (recMask [lendRec (K := w.K) l₁]) w ρf) {n : Nat} {w : TWd}
+    {ls : List (SRecT w.K)} :
+    twp (ℍ := ℍ) F (valPost (QP (ℍ := ℍ) QB)) n w ls [lendRec l₁]
+      (hndE HP (.app (.val taskB) (.val (Val.loc l₁)))) (viewRes β l₁) := by
+  refine parked_twp QB_down QB_stable hFm (M := fun x => x = l₁) (fun w ρf hf => ?_)
+    (fun x hx => ?_) (Fb := fun _ _ => True) (Fe := fdMask fun x => x = l₁) (fun _ _ _ => trivial)
+    (fun _ _ h => h) (cerwpT_of_twp (taskB_twp (fdMask_mono _) (fun _ _ h => h.2)))
+  · exact fdMask_le (fun x hx => recMask_lendRec.mpr (Or.inl hx)) (hFM w ρf hf)
+  · rcases recMask_lendRec.mp hx with h | h
+    · exact h
+    · simp [recMask] at h
+
 end BoCa.Fig16.Tree.Wp.SchedProgs.Park
 
 end
