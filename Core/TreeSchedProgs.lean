@@ -13,9 +13,9 @@ illustrate the theorem; they are not its goal. Both are shapes from `corpus/pend
   step-indexed fixpoint `QS`), and the two tasks at its table (`fill_cerwpT`, `drain_cerwpT`).
   The relay itself is not proved: it holds `fill`'s continuation across `drain`'s run, and the
   resume needs a re-reading of that continuation's stop list at the later world (`KapSchedT`'s
-  `SRecsRR` premise, from `contShareT`). A run's post does not relate its end list to its start
-  list, and a `TRProp` carries no list, so neither `twp_bind` nor `twp_frame` carries it. That
-  transport is not derived here.
+  `SRecsRR` premise, from `contShareT`). `drain` under the stepper owns no record, so
+  `twp_keepsKap` (`Core/TreeResume.lean`) carries the continuation across its run; the relay is not
+  yet written through it.
 * **`async-handler-lends.bc`** (`asyncProg`, `asyncProg_safe`): a scheduler that resumes a task
   inside a state of its own. The task allocates `mine`, asks the scheduler, frees `mine` and answers
   the pair. At `ask` the scheduler allocates its state `cfg`, reads it, resumes the task with what

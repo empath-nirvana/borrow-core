@@ -8,9 +8,9 @@ task verified at `cerwpT` at the scheduler's table, is safe or diverges: every c
 reaches steps or is a value, a value is reached only at the empty memory, and every `free` finds
 its cell (`MultiBranchAdequacyT`, `multiBranchAdequacyT`). Nothing in `SchedOKT` fixes how many
 continuations a clause holds or which it resumes next. Divergence is allowed and there is no fuel.
-A continuation a clause holds across another branch's run is resumed only through a re-reading of
-its stop's tagged list at the later world (`KapSchedT`'s `SRecsRR` premise); carrying that list
-across a run is not derived here (SPEC §62, *Open*).
+A continuation a clause holds across another branch's run is resumed through a re-reading of its
+stop's tagged list at the later world (`KapSchedT`'s `SRecsRR` premise); `Core/TreeResume.lean`
+derives it across a run that owns no record at its start (`twp_keepsKap`, `KapAtT.resume`).
 
 **What the scheduler must satisfy** (`SchedOKT`, `Core/TreeHandle.lean`): its clauses at the empty
 table, each continuation `κ` read by `KapSchedT`. `κ` may be resumed beside a state the clause

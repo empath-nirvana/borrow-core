@@ -941,6 +941,8 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.KapAtT.kripke
 #print axioms BoCa.Fig16.Tree.Wp.twp_keepsKap
 #print axioms BoCa.Fig16.Tree.Wp.kapStored_end_refused
+#print axioms BoCa.Fig16.Tree.Wp.twp_keepsList_apart
+#print axioms BoCa.Fig16.Tree.Wp.twp_keepsKap_apart
 #print axioms BoCa.Fig16.Tree.Wp.kapAtT_resume_beside
 #print axioms BoCa.Fig16.Tree.Wp.emptyRec_no_desc
 #print axioms BoCa.Fig16.Tree.Wp.config_share_reads

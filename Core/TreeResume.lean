@@ -28,8 +28,14 @@ exists at the end at all; so the ownership condition is on every record of the l
 `κ`'s share reads (`ExtLT`, R4). With every record kept, `extFT lsR ls′` holds at every share
 (`extFT_of_sub`), so R4 is not needed for this theorem.
 
-**What the condition rules out.** A runner that owns a record of `κ`'s stop list: in particular
-the lender of a lend `κ`'s share holds a view of. Whether such a run leaves `κ` resumable is not
+**Runners that own records** (`twp_keepsList_apart`, `twp_keepsKap_apart`): the same holds when
+the runner owns records at its start, provided no record in their lineage is at the location of a
+record of `κ`'s stop list (`ApartLin`); the runner's own lends, opened after `κ`'s stop, are free.
+The record-free form is the case `Or = []`.
+
+**What the condition rules out.** A runner whose lineage holds a record of `κ`'s stop list: in
+particular the lender of a lend `κ`'s share holds a view of, and any runner with a record open at
+`κ`'s stop (the stop list is the configuration's whole list). Whether such a run leaves `κ` resumable is not
 derived here, and no obstruction is verified. What is derived (`kapStored_end_refused`, R2 at the
 stored branch): in a configuration of the cactus invariant, such a runner cannot validly end a lend
 while `κ`'s share holds part of it.
@@ -284,6 +290,65 @@ theorem twp_keepsKap {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : 
   obtain ⟨Oa, Ob, a, b, hO', hc, ⟨hP, hKx, hls⟩, hRb⟩ := hp
   exact ⟨Oa, Ob, a, b, hO', hc, hP, w₁, ls₁, O₁, ρκ₁, hK, hRb.1, hRb.2.1, hRb.2.2,
     hl₁.trans hKx hls⟩
+
+/-- **The runner's lineage, at locations**: no record in the lineage of a record of `O` is at `r`'s
+location. -/
+def ApartLin {K : WCactus} (O : List (FrameRecT K)) (r : FrameRecT K) : Prop :=
+  ∀ p ∈ O, ∀ d, DescRT p d → d.le ≠ r.le
+
+/-- **A run keeps every record of its start list outside its own lineage**: each record of `ls`
+apart from the lineage of the records `O` the run owns at its start (`ApartLin`) has its re-reading
+in the end list. At `O = []` it is `twp_keepsList`. -/
+theorem twp_keepsList_apart {F : TFrame} {Q : TPost} {n : Nat} {w : TWd}
+    {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {e : Expr} {ρ : TRes w.K}
+    (h : twp (ℍ := ℍ) F Q n w ls O e ρ) :
+    twp (ℍ := ℍ) F (fun k w' ls' O' t ρ' => Q k w' ls' O' t ρ' ∧ w.K.Ext w'.K ∧
+      ∀ r ∈ rsOfT ls, ApartLin O r → ∃ r' ∈ rsOfT ls', RecRR w'.Θ r r') n w ls O e ρ := by
+  intro w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE hr hl hO hF hf hc hS hR hI hfd j μ' e' hj hrun hfin
+  obtain ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, g₉, g₁₀,
+      g₁₁⟩ := h w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE hr hl hO hF hf hc hS hR hI hfd j μ' e' hj hrun hfin
+  refine ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇,
+    ⟨g₈, WCactus.Ext.trans hE.1 g₀.1, fun r hr' hap => ?_⟩, g₉, g₁₀, g₁₁⟩
+  obtain ⟨r₀, hr₀, e₀⟩ := hl.mem_fwd hr'
+  have hroot : ∀ p₀ ∈ O₀, ¬ DescRT p₀ r₀ := by
+    rintro p₀ hp₀ ⟨path, hpath⟩
+    obtain ⟨p, hp, hpp⟩ := forall₂_mem_right hO hp₀
+    obtain ⟨d, hd, hpath'⟩ := hpath.rr_back hpp
+    exact hap p hp d ⟨path, hpath'⟩ (hd.1.symm.trans e₀.1)
+  obtain ⟨r', hr'', e'⟩ := keep_frameRooted g₂ g₅ g₆.1 (frameRooted_of_notRunner hS hR.1 hr₀ hroot)
+  exact ⟨r', hr'', RecRR.trans g₀.1 e₀ e'⟩
+
+/-- **The resumability theorem, for a runner owning records**: as `twp_keepsKap`, the runner owning
+`Or` at its start, where every record of the list that carries a record of `κ`'s stop list `ls₁`
+is apart from the runner's lineage (`hap`). `κ`'s capture is given by its witnesses (`KapAtT`'s
+clauses), so that `hap` can name `ls₁`. -/
+theorem twp_keepsKap_apart {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : Nat}
+    {v κ : Val} {F F₁ : TFrame} {P : TPost} {n : Nat} {w w₁ : TWd} {ls : List (SRecT w.K)}
+    {Or Oκ : List (FrameRecT w.K)} {e : Expr} {ρ₁ ρκ ρ : TRes w.K} {ls₁ : List (SRecT w₁.K)}
+    {O₁ : List (FrameRecT w₁.K)} {ρκ₁ : TRes w₁.K}
+    (hcρ : ResUT.CompS ρ₁ ρκ ρ) (hcov : CovR (sem w.Θ) w.K ρ)
+    (hOκ : ∀ p ∈ Or, ∀ q ∈ Oκ, p.le ≠ q.le)
+    (hF : ∀ (w₀ : TWd) (ρf ρ₂₀ y : TRes w₀.K), w.Ext w₀ ρκ → RRw (w := w) (w' := w₀) ρκ ρ₂₀ →
+      F w₀ ρf → ResUT.CompS ρf ρ₂₀ y → F₁ w₀ y)
+    (hwp : twp (ℍ := ℍ) F₁ P n w ls Or e ρ₁)
+    (hK : KapSchedT (ℍ := ℍ) Qout M en k w₁ ls₁ O₁ v κ ρκ₁) (hE₁ : w₁.Ext w ρκ₁)
+    (hr₁ : RRw (w := w₁) (w' := w) ρκ₁ ρκ) (hO₁ : RecsRR w.Θ O₁ Oκ) (hl₁ : SRecsIn w.Θ ls₁ ls)
+    (hap : ∀ r₁ ∈ rsOfT ls₁, ∀ r ∈ rsOfT ls, RecRR w.Θ r₁ r → ApartLin Or r) :
+    twp (ℍ := ℍ) F (fun k₁ w' ls' O' t ρ' => ∃ (Oa Ob : List (FrameRecT w'.K)) (a b : TRes w'.K),
+      O' = Oa ++ Ob ∧ ResUT.CompS a b ρ' ∧ P k₁ w' ls' Oa t a ∧
+        KapAtT (ℍ := ℍ) Qout M en k v κ w' ls' Ob b) n w ls (Or ++ Oκ) e ρ := by
+  let R : TRProp := fun w' O ρ' =>
+    w₁.Ext w' ρκ₁ ∧ RRw (w := w₁) (w' := w') ρκ₁ ρ' ∧ RecsRR w'.Θ O₁ O
+  have hRm : R.Mono := fun _ _ _ _ _ _ hE hr hO ⟨a, b, c⟩ =>
+    ⟨a.trans b hE, RRw.trans hE.1 b hr, c.trans hE.1 hO⟩
+  have h := twp_frame (R := R) hRm hOκ hcρ hcov hF (twp_keepsList_apart hwp) ⟨hE₁, hr₁, hO₁⟩
+  refine twp_mono (fun k₁ w' ls' O' t ρ' hp => ?_) h
+  obtain ⟨Oa, Ob, a, b, hO', hc, ⟨hP, hKx, hls⟩, hRb⟩ := hp
+  refine ⟨Oa, Ob, a, b, hO', hc, hP, w₁, ls₁, O₁, ρκ₁, hK, hRb.1, hRb.2.1, hRb.2.2,
+    fun r₁ hr₁' => ?_⟩
+  obtain ⟨r, hr, e₁⟩ := hl₁ r₁ hr₁'
+  obtain ⟨r', hr', e'⟩ := hls r hr (hap r₁ hr₁' r hr e₁)
+  exact ⟨r', hr', RecRR.trans hKx e₁ e'⟩
 
 /-! ### Where it must refuse: R2 at the stored branch -/
 
