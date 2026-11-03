@@ -10597,7 +10597,35 @@ answers (`poolAns_resume`, `poolT_resume`), cancel it the same way (`poolAns_can
 `poolT_cancel`). The state carries `H` so a clause runs a task or a cancel branch under its own
 handler without naming itself. The stack scheduler (`Core/TreePoolSchedProgs.lean`,
 `stack_schedOK`) meets `SchedOKT` at `PoolAns` for every pool; `stackProg_safe` is a closed program
-through the headline. **Borrow edges point to ancestors**
+through the headline.
+
+**A spawning scheduler** (`Core/TreePoolSpawn.lean`). `SchedOKTLe N` is `SchedOKT` with the return
+clause and the clauses asked only at stops `k ≤ N`; `cerwpT_schedHandle_le` is `[handle]` at every
+index `n ≤ N` from it, and `poolAns_run_le` the run move. A clause that runs a task under its own
+scheduler proves its stop at `k` from `SchedOKTLe` below `k` (the child runs at least one step
+later), so `∀ N, SchedOKTLe N` is proved by strong induction and is `SchedOKT`
+(`schedOKT_of_le`): no premise on the scheduler itself. `HS` has three cancellable operations:
+`park` (the stopped task parked, the pool's former head resumed in its place: `poolAns_park`,
+`poolAns_resumeSnd`), `spawn th` (`enSpawn`: the spawner parked, the child `th ()` run under `HS`
+beside the pool, `poolAns_run_le`; the thunk is verified at the child's table `TC`, lifted to the
+root's `TS` by `cerwpT_table_mono`) and `cancel` (the stopped task parked, the pool's former head
+cancelled with its cancel branch run under `HS`: `poolAns_cancelSnd`, `poolAns_cancel`); a task's
+end resumes the pool's head. `hs_schedOK`: `SchedOKT` at `PoolAns` for every pool. Limits of this
+scheduler, not of the headline: children are spawned from the root only and start owning nothing,
+and the policy exchanges the parked task with the pool's head rather than queueing it; join and
+borrow sharing across tasks are #795.
+
+**Interleaved lends across parks** (`Core/TreePoolSpawnProgs.lean`), three closed programs
+`(hnd HS root) (HS, [])`, each `OrDiverges` through `poolSchedAdequacyT` with every premise
+discharged. The loan task `L = let a = alloc () in ubind (λ_. free a, λ_. free a) (park ())` opens a
+lend of `a` (`twp_lendOpen`) and parks holding the lend cell (an `imm` view, its own copy) with the
+record open; resumed or cancelled, it merges the view, ends the lend at the resumer's guarantee
+(`twp_lendEnd`) and frees `a`. `progLoan_safe`: the root spawns `B = L` and runs `L`; B parks with its
+lend open, the root parks holding its view, B resumes and ends its lend, then the root ends its own.
+`progCancel_safe`: the root runs `LC` (as `L`, its finaliser parking again inside its own `ubind`)
+and spawns `park (); cancel ()`, which cancels the root while it is parked holding its view; the
+finaliser parks, is resumed, and ends the lend. `progDepth3_safe`: the root spawns two `L`s and
+runs a third; three tasks hold a lend open across a park at once. **Borrow edges point to ancestors**
 (`borrowEdges_ancestors`, `lender_ancestor`): in `CactusInvT`, every view a part of a branch's
 resource holds (a stored continuation's share among them) carries only lifetimes enclosing the
 branch point, so every lender of a borrow a stored continuation holds is an ancestor of where it
@@ -10610,11 +10638,9 @@ is stored; `cactusT_step` keeps it through capture and resume.
 - one relation with abortive stops and forwarding (the two relations `erwp`/`cerwp` merge);
 - the lend rules at `twp` over the tree for escrows with contents (reborrows, `TWNT.reb`), and
   multi-branch programs with lends;
-- programs through `PoolSchedAdequacyT` in which a parked task holds a view of a lend while
-  another task ends a lend of its own, the same with the parked task cancelled through an effectful
-  finaliser, and one with three stored tasks: a spawning scheduler (a clause running a new task
-  through `poolAns_run`) and the route by which a task's copy of a view gets back to its lender are
-  not written; `pingpong-mut`'s relay is not yet written through the pool;
+- join, and the route by which a task's copy of a view gets back to a lender in another task
+  (#795); spawning from a child (a step-indexed table fixpoint); a FIFO scheduling policy (a
+  recursive append in the clause); `pingpong-mut`'s relay is not yet written through the pool;
 - `lender_ancestor`'s link from a share's top cell to `FrameLifeT`'s walk cells is assumed, not
   derived.
 
