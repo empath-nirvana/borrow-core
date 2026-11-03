@@ -10258,19 +10258,31 @@ reflects strata, `●` and `○`, and along it `✓`, `#` and flattening are the
 (`chain_valid_iff`, `chain_hash_iff`, `chain_flat_iff`). A world valid before a graft is valid,
 carried, after it (`ResUT.Valid.graft`).
 
-### Typed worlds with canonical images (#774)
+### Typed worlds with canonical images (#781)
 
 Each reborrow's image is the canonical one for its frame record and lifetime (one template per
 record, relabelled in lifetimes only), for root and deep reborrows. Two readers of the same frozen
 data then share witnesses. Each route tried that kept the choice (re-entry at the same image,
-re-choosing the image, worlds by invariants) was refuted (`not_rebReentryAgreeN`,
+re-choosing the image, worlds by invariants) was refuted on the chain (`not_rebReentryAgreeN`,
 `not_rebRelabelAgreeN`, `not_witSwapIWN`).
 
-Every result of the generated copy of Core builds over canonical worlds (`canon-core` branch,
-namespace `Core.C`). The content is `C.fundamentalC` at `TWNC`; `C.adequacyC` re-derives the
-library's statement from it. The demonic, pin, `Div` runtime and cancel-runs results build there
-too. The two places the library chooses a reborrow's image are the only proofs
-written by hand. `Core.Stdio` is not covered. *Open*: canonical images over the tree carrier.
+**Built over the tree world** (`Support/Model/Tree/World/`). `TWNT` is Core's `TW` over the tree
+carrier, with store types as codes (`KTy`), the reborrow premises read at one record
+(`RebRecLeT`, `RebEndRecT`, `RebCellLeT`), every reborrow's image the canonical one, and one more
+constructor, `reread` (the tree grows, or a location no `mut` cell is at is re-typed). The images
+are read through a template choice the world carries (`canonTc`, `canonDTc`, `TWd.tc`). Re-reading
+carries the choice (`TcCarried`, `templAt_reread`, `templDAt_reread`, `TWNT.templ_reread`), a
+carried choice exists (`TWNT.tcCarried_exists`, from `TWNT.tcCoherent`), and at the `Classical`
+choice the images are one template per record (`canonTc_tmplT`, `canonDTc_tmplT`). Every `TWNT`
+world satisfies the typed world's invariant (`twnt_invHolds`). No relation in the library reads
+this world yet, and no rule uses its reborrow constructors across a stop.
+
+On the chain, every result of the generated copy of Core builds over canonical worlds
+(`canon-core` branch, namespace `Core.C`). The content is `C.fundamentalC` at `TWNC`;
+`C.adequacyC` re-derives the library's statement from it. The demonic, pin, `Div` runtime and
+cancel-runs results build there too. The two places the library chooses a reborrow's image are the
+only proofs written by hand. `Core.Stdio` is not covered. This is evidence; Core's chain `TW` is
+not made canonical, and Core moves to the tree world in a later PR of #771.
 
 ### Effectful destructors (#775)
 
@@ -10450,15 +10462,15 @@ tested by programs with one child and a fixed order of events (`CrossProg`, `Cro
 world (`tree-wp`), `CactusInvT` is kept by a step, by tree growth and by moving a part between
 branches (`cactusT_step`, `cactusT_extend`, `cactusT_move`). `cerwpT_adequacy` is derived through
 `cactusT_step` at one branch; the branch clauses (`Apart`, points) and spawn, join and move are
-not used. No program is proved there yet, and that world carries no frame records or canonical
-images.
+not used. No program is proved there yet. The typed tree world with frame records and canonical
+images is in the library (above); the relation over it is not.
 
 *Open*:
 - adequacy derived from invariant preservation, at the relation the typing rules use;
 - preservation at spawn and join;
 - the frame rules as instances of capture;
 - one relation with abortive stops and forwarding (the two relations `erwp`/`cerwp` merge);
-- the integration over the tree carrier with frame records and canonical images.
+- the relation over the library's typed tree world.
 
 ### Semantic types read at the tree
 
@@ -10472,10 +10484,14 @@ predicate. Carried unchanged, a cell leaves `Mut`'s meaning (`trU_not_kmono`). R
 task may write the handler's newer borrow into a cell it made before the graft (for example
 `round7_write`). Store types are syntactic codes read at the tree. The store typing grows at a
 `mut` lend of a location it does not type, and a location keeps its type for the run
-(`TWd.addTy_ext`, `Cov.mono`, `RR.mono` on `tree-wp`, over semantic types).
+(`TWd.addTy_ext`, `Cov.mono`, `RR.mono` on `tree-wp`, over semantic types). Re-reading and the
+codes are in the library (`Support/Model/Tree/Reread.lean`, `World/Codes.lean`: `RR`, `KTy`,
+`interp_retype`, `RR.exists_retype`); a code's meaning is carried along the re-reading of a
+covered resource, at every re-typing that agrees on the locations it holds a `mut` cell at. One `mut` cell per location at any depth is an
+invariant of the typed tree world (`TWNT.mutOne`); without it clause 3 of two covered cells is not
+covered (`clause3_not_cov`).
 
-*Open*: monotonicity at μ, ν, ∀, ⊗ and families; store types as syntactic codes; one type per
-location against a combined `mut` cell.
+*Open*: monotonicity at μ, ν, ∀, ⊗ and families; store typing growth at the codes.
 
 ### Typing: suspension, scoped spawn, join
 
@@ -10494,12 +10510,14 @@ location against a combined `mut` cell.
   ends) holds at the type `Imm 'r 1` in the tree (`fdFromLifetimeTypesT`). At every type it is
   reduced to the branch hypotheses (`hbr`, `hnα`: the others' flattening on a branch not inside
   the frame's lifetime) by `joinFd_of_branch`, whose ownership premise is an invariant of
-  canonical-image worlds (`TWNC.noOwnUnder`). Over the tree world (`tree-inv`), the condition at
-  the escrow's exclusive locations holds at a join, from the cactus invariant and the other
-  branches' points (`fdEsc_at_join`, with `twnt_invHolds` and `escBeneathT`). That other
-  branches' steps keep it is open, and at the current relation it fails: `twp`'s end condition
-  does not ask the printed `↭`, and a step can end holding a copy of the frame's lent cell
-  (`not_stepKeepsFdEsc`, `copy_config`).
+  canonical-image worlds (`TWNC.noOwnUnder`). In the library's tree world, the condition at the
+  lent location and the escrow's exclusive locations (`FdEsc`) gives the end of an `imm` lend
+  (`immEnd_valid_of_fdEsc`); the condition at the lent location alone does not
+  (`immEnd_esc_config`). It follows from a branch point not inside the frame (`fdEscOfBranch`,
+  `escBeneathT`, `fdEsc_of_points`), and a run whose start and end are related by row 5.27's `↭`
+  masked at the run's own records (`UpdX`) keeps it (`fdEsc_of_updX`). The mask is needed
+  (`lend_open_needs_mask`). On `tree-inv`, not in the library: the condition at a join from the
+  cactus invariant (`fdEsc_at_join`) and that steps keep it (`stepKeepsFdEsc`).
 - Lifetimes on continuation and task types alone do not supply it: not at `Imm 'r 1` in a single
   chain (`not_fdFromLifetimeTypes`), and not at closure types in the tree
   (`not_fdFromThunkTypesT`).

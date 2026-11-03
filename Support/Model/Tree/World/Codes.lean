@@ -13,8 +13,8 @@ meaning, so `interp` is structural in the code: there is no circularity to resol
 * **The semantic typing is `sem Θ`** (`ℓ ↦ ⟦Θ ℓ⟧_Θ`); `Cov`, `RC`, `RR` are read at it unchanged,
   so every result of `Tree/Reread.lean` applies. The tree world (`World/World.lean`) carries a
   code typing and reads its cells at `sem`.
-* **Every code is carried along re-reading** (`interp_retype`), at any re-typing that agrees
-  on the locations the resource holds a `mut` cell at.
+* **Every code is carried along re-reading** (`interp_retype`): of a covered resource, at any
+  re-typing that agrees on the locations it holds a `mut` cell at.
 * **A location may be re-typed** when no `mut` cell at it is held (`RR.exists_retype`): a world
   covered at `sem Θ` has a re-reading covered at `sem Θ'` at any tree extension, for any `Θ'`
   agreeing with `Θ` on the locations the world holds a `mut` cell at (`HoldsMut`, at any depth).

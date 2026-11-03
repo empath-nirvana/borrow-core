@@ -41,8 +41,19 @@ proved at that part's rules, not a result of its own. Every other name is a Lean
 | BoLo 6.25–6.59 over the tree carrier | `ResUT.six52`, `ResUT.six59` and the `Tree/Port` files | `tree-life` 01ac9316–9fdb1c7b |
 | The resume condition at every type, from the branch hypotheses (`hbr`, `hnα`) | `joinFd_of_branch`, `TWNC.noOwnUnder` | `tree-life` bfe33dab, c4addc10 |
 | The cactus invariant over the tree world; adequacy derived through `cactusT_step` at one branch, the branch clauses and spawn, join and move unused (no programs yet) | `CactusInvT`, `cactusT_step`, `cactusT_extend`, `cactusT_move`, `cerwpT_adequacy` | `tree-wp` 89c0f8a7 |
-| The resume condition at the escrow's exclusive locations, at a join, from the cactus invariant and the other branches' points | `fdEsc_at_join`, `twnt_invHolds`, `escBeneathT` | `tree-inv` 4447bc6c |
+| The resume condition at the escrow's exclusive locations, at a join, from the cactus invariant and the other branches' points | `fdEsc_at_join` (`twnt_invHolds`, `escBeneathT` are in the library, below) | `tree-inv` 4447bc6c |
 | Other branches' steps keeping that condition at the current `twp`, whose end does not ask the printed `↭` (refuted) | `not_stepKeepsFdEsc`, `copy_config` | `tree-inv` 5d637286 |
+| Re-reading: semantic types read at the tree, `mut` cells re-read as it grows | `RR`, `RR.func`, `RR.refl`, `RR.inStratum`, `RR.exists_of` | library: `Support/Model/Tree/Reread.lean` |
+| Store types as codes; re-typing where no `mut` cell is held | `KTy`, `KTy.interp`, `interp_retype`, `RR.exists_retype`, `RR.trans_retype` | library: `Support/Model/Tree/World/Codes.lean` |
+| The tree world; its extension carries a resource, `●` commutes with re-reading, the world is re-read | `TWd`, `TWd.Ext.trans`, `RR.split_retype`, `WInv.reread` | library: `Support/Model/Tree/World/World.lean` |
+| Frame records and the typed tree world with canonical images; the template choice carried by re-reading and coherent; at the `Classical` choice the images are `canonT`/`canonDT` | `FrameRecT`, `TWNT`, `canonTc`, `canonDTc`, `TWNT.templ_reread`, `TWNT.tcCoherent`, `TWNT.tcCarried_exists`, `canonTc_tmplT`, `canonDTc_tmplT` | library: `Support/Model/Tree/World/Records.lean`, `Templ.lean`, `InvUses.lean` |
+| Every typed tree world satisfies the invariant; one `mut` cell per location; no `own` cell of a lent location beneath a borrow | `twnt_invHolds`, `TWNT.mutOne`, `TWNT.noOwnUnder` | library: `Support/Model/Tree/World/TInvHolds.lean`, `Coherent.lean`, `InvUses.lean` |
+| Row 5.27's `↭` across a re-reading, masked at a run's own records; 6.48 at that reading (pointwise, departure D5) | `UpdX`, `UpdX.of_rr`, `UpdX.trans`, `UpdX.frame`, `UpdX.of_updV`, `updX_refl_imm`, `UpdX.inv`, `updX_refl_mut`, `InvKept` | library: `Support/Model/Tree/World/UpdX.lean`, `UpdXInv.lean` |
+| The mask is needed (a lend left open at a stop) | `lend_open_admitted`, `lend_open_needs_mask` | library: `Support/Model/Tree/World/UpdXMasks.lean` |
+| Clause 3 of two covered `mut` cells is not covered, on the tree and on the printed chain | `clause3_not_cov`, `clause3_chain` | library: `Support/Model/Tree/World/Clause3.lean` |
+| The end of an `imm` lend from the condition at the escrow's exclusive locations; the condition at `ℓ` alone is not enough | `FdEsc`, `immEnd_valid_of_fdEsc`; `twnt_config`, `immEnd_esc_config`, `immEnd_esc_chain`, `config_not_fdEsc` | library: `Support/Model/Tree/World/FdEsc.lean` |
+| The condition from branch points; kept across a masked update | `escBeneathT`, `fdEscOfBranch`, `fdEsc_of_points`, `fdEsc_of_updX` | library: `Support/Model/Tree/World/EscBeneath.lean`, `StepKeep.lean` |
+| Where κ resumes, over the tree carrier | `extFT`, `extFT.rr`, `extFT.trans`, `extFT_comp` | library: `Support/Model/Tree/World/ExtF.lean` |
 | World operations over the tree world; store typing growth | `TWd.addTy_ext`, `Cov.mono`, `RR.mono`, `winv_swap` | `tree-wp` fc49ed48, 44667d04 |
 
 The target programs are in `corpus/pending/` on the local branch `pending-770`, stacked on
