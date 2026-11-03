@@ -26,6 +26,7 @@ Done means that theorem. Passing test programs doesn't count.
 | Index-relative `mut` cells (`UpdMutN`), 6.48 / 6.59 at the index | `mut` payloads under step-indexing | `UpdN`, `RebN` |
 | Canonical images (`TWNC`, `TemplAt`, `TemplDAt`) | shared reborrows (root and deep) can't disagree; Core's results over them (`Core.C`, not `Core.Stdio`) | `TWNC`, `CanonDeep`, `CoreC` |
 | `extF` + `LinDisj`/`DLinDisj`/`EscEx`, and `ext_extF` | where κ may resume; no restriction relative to Core's `Ext` | `ExtF`, `LinDisj`, `ExtExtF` |
+| `extFT` and `ext_extFT` over the tree | where κ may resume at the tree world; no restriction relative to `ExtLT` (Core's `Ext` over the tree carrier), with `TWNT.exclUnique` in place of `LinDisj`/`DLinDisj`/`EscEx` | library: `Tree/World/ExtF`, `Tree/World/ExtExtF` |
 | Same-task frames across stops | `mut`/`imm` lend, reborrow, deep reborrow, Anti-Frame, cancel/raise variants | `StopFrameN`, `IStopN`, `RebAcrossC`, `RebStopD`, `AntiStopN` |
 | Capture as its own operation (`crwpG`/`cerwp`) | owned records per computation, no garbage, scoped join (the rules over any body; the programs `CrossProg`/`CrossProgM` with one child and a fixed order of events) | `Capture*`, `CrossProg*` |
 | The tree order, the antichain carrier, re-reading | §4 | `Tree/` |
