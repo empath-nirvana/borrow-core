@@ -10493,8 +10493,8 @@ entry's resumer guarantee follows from the join's (`fdJoinT`), and its clauses h
 table, each `κ` read by `KapSchedT`: resumable beside a state the clause keeps when that state is
 valid and holds nothing at the branch's mask history (`fdMask`, `MaskHist`; `FdEsc` read at
 locations). **Multi-branch adequacy** (`multiBranchAdequacyT`): `hnd H e₀` is `OrDiverges` for
-every scheduler `H` meeting `SchedOKT` and every task `e₀` at its table, however many branches the
-scheduler stores and in whatever order it resumes them; derived through `cerwpT_adequacy`. The
+every scheduler `H` meeting `SchedOKT` and every task `e₀` at its table (`SchedOKT` fixes neither
+how many continuations a clause holds nor which it resumes); derived through `cerwpT_adequacy`. The
 task runs at the frame condition `⊤`: the scheduler's state is in the resumed branch's frame. A
 stopped branch's clause knows its frame holds nothing of the branch's lends, those it opened
 during the segment included (`twp_bind_fd`, `noneAt_recMask_end`). One program is proved through

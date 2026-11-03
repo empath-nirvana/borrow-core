@@ -14,8 +14,8 @@ and proved below it:
   (`Core/TreeCactus.lean`).
 * **Multi-branch adequacy** (`MultiBranchAdequacyT`, `multiBranchAdequacyT`,
   `Core/TreeSched.lean`): a scheduler meeting `SchedOKT` around a task at its table is safe or
-  diverges, however many branches it stores and in whatever order it resumes them. Derived through
-  the scheduler's `[handle]` (`cerwpT_schedHandle`) and `cerwpT_adequacy`.
+  diverges. Derived through the scheduler's `[handle]` (`cerwpT_schedHandle`) and
+  `cerwpT_adequacy`.
 * **R1, a step keeps every other branch's open lend** (`R1_StepKeepsFdEsc`,
   `r1_stepKeepsFdEsc`): a branch that holds nothing of a frame record's lend before its run holds
   nothing of it after, in every post-configuration `twp` admits. Beside it,
