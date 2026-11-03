@@ -929,6 +929,12 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Async.task_cerwpT
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Async.async_schedOK
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Async.asyncProg_safe
+#print axioms BoCa.Fig16.Tree.Wp.SchedProgs.kapSchedT_congr
+#print axioms BoCa.Fig16.Tree.Wp.SchedProgs.kapSchedT_resume_tail
+#print axioms BoCa.Fig16.Tree.Wp.SchedProgs.PingPong.schedS_ok
+#print axioms BoCa.Fig16.Tree.Wp.SchedProgs.PingPong.stepped_twp
+#print axioms BoCa.Fig16.Tree.Wp.SchedProgs.PingPong.fill_cerwpT
+#print axioms BoCa.Fig16.Tree.Wp.SchedProgs.PingPong.drain_cerwpT
 #print axioms BoCa.Fig16.Tree.chain_ResU_compS_defined_iff
 #print axioms BoCa.Fig16.Tree.chain_ResU_Valid_split
 #print axioms BoCa.Fig16.Tree.chain_ResU_Hash_split

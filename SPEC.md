@@ -10499,7 +10499,9 @@ task runs at the frame condition `⊤`: the scheduler's state is in the resumed 
 stopped branch's clause knows its frame holds nothing of the branch's lends, those it opened
 during the segment included (`twp_bind_fd`, `noneAt_recMask_end`). One program is proved through
 the headline (`Core/TreeSchedProgs.lean`, `asyncProg_safe`): a scheduler that resumes a task beside
-a state of its own, its cells owned rather than borrowed.
+a state of its own, its cells owned rather than borrowed. For `pingpong-mut` the stepper each task
+runs under meets `SchedOKT` (`schedS_ok`, its answers a step-indexed fixpoint) and both tasks are
+proved; the relay is not (below).
 
 *Open*:
 - adequacy derived from invariant preservation, at the relation the typing rules use;
@@ -10508,6 +10510,9 @@ a state of its own, its cells owned rather than borrowed.
 - one relation with abortive stops and forwarding (the two relations `erwp`/`cerwp` merge);
 - the lend rules at `twp` over the tree (opening and ending a record), and multi-branch programs
   with lends;
+- a stored continuation carried across another branch's run: its resume needs a re-reading of its
+  stop's tagged list at the later world (`contShareT`'s `SRecsRR` premise), and neither a run's post
+  nor a `TRProp` frame carries the list (`pingpong-mut`'s relay, `Core/TreeSchedProgs.lean`);
 - a scheduler that keeps state beside a branch that owned records at an earlier stop: `contShareT`
   resumes at `fdAt en v F O′`, `F` the stop's own frame condition, so the conditions accumulate and
   the state must hold nothing at every record mask the branch has had (`MaskHist`).
