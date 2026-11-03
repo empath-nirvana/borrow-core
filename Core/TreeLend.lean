@@ -411,7 +411,8 @@ theorem twp_lendEnd {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls ls₁ : Lis
     (hvZ : ResUT.Valid Z) (hZ : NoneAt (· = l) Z)
     (hF : ∀ w' ρf, F w' ρf → NoneAt (· = l) ρf)
     (hO : ∀ x, x ∈ O ↔ x = lendRec l ∨ x ∈ O₁) (hO₁ : lendRec l ∉ O₁)
-    (hls : ∀ x, x ∈ ls ↔ x.1 = lendRec l ∨ x ∈ ls₁) (hls₁ : ∀ x ∈ ls₁, x.1 ≠ lendRec l)
+    (hls : ∀ x ∈ ls, x.1 = lendRec l ∨ x ∈ ls₁) (hls₁in : ∀ x ∈ ls₁, x ∈ ls)
+    (hls₁ : ∀ x ∈ ls₁, x.1 ≠ lendRec l)
     (h : twp (ℍ := ℍ) F Q n w ls₁ O₁ e ρ₁) :
     twp (ℍ := ℍ) F Q n w ls O e ρ := by
   classical
@@ -446,7 +447,7 @@ theorem twp_lendEnd {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls ls₁ : Lis
   have hTW := hR.1
   have hTI := hTW.inv
   obtain ⟨O₁₀, hO₁₀, hO₁₀in⟩ := forall₂_sub hOr (zs := O₁) fun z hz => (hO z).mpr (Or.inr hz)
-  obtain ⟨ls₁₀, hls₁₀, hls₁₀in⟩ := forall₂_sub hl (zs := ls₁) fun z hz => (hls z).mpr (Or.inr hz)
+  obtain ⟨ls₁₀, hls₁₀, hls₁₀in⟩ := forall₂_sub hl (zs := ls₁) fun z hz => hls₁in z hz
   have hr₀O : lendRec l ∈ O₀ := by
     obtain ⟨y, hy, hry⟩ := forall₂_mem_left hOr ((hO _).mpr (Or.inl rfl))
     rwa [RecRR.func hry (lendRec_rr l)] at hy
@@ -469,7 +470,7 @@ theorem twp_lendEnd {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls ls₁ : Lis
   have hls₀mem : ∀ y ∈ ls₀, y.1 ≠ lendRec l → y ∈ ls₁₀ := by
     intro y hy hyr
     obtain ⟨x, hx, hxy, hxt⟩ := forall₂_mem_right hl hy
-    rcases (hls x).mp hx with hx₁ | hx₁
+    rcases hls x hx with hx₁ | hx₁
     · exact absurd (RecRR.func hxy (hx₁ ▸ lendRec_rr l)) hyr
     · obtain ⟨y', hy', hxy', hxt'⟩ := forall₂_mem_left hls₁₀ hx₁
       have : y' = y := Prod.ext (RecRR.func hxy' hxy) (hxt'.trans hxt.symm)
