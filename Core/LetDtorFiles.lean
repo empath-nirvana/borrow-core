@@ -85,7 +85,7 @@ theorem file_no_derived_drop : ¬ HasDtor File := fun h => by cases h
 /-- **The handle owns its cell**: an abort may not abandon it (`[let]`'s `hW`, `[raise]`'s `hd`). -/
 theorem file_not_ownFree : ¬ File.OwnFree := fun h => by
   cases h with
-  | opq _ hk => exact hk rfl
+  | opq _ hk => exact nomatch hk
 
 theorem file_not_persistent : File.persistent = false := rfl
 

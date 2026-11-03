@@ -281,6 +281,9 @@ def ofV (ms : MachSet) : VTy → Except String LTy
   -- `alloc` and released by `free` (`tokMint`, `tokBurn`); its view is `Unk` (`Imm̲ 'b Tok`), a
   -- pointer read as forgotten (`Layout.joinRe`, `Lower.reVals`).
   | .opq .tok => pure (.ref .unit)
+  -- `File` is a location owning a cell holding its descriptor, `Ref I32`'s relation
+  -- (`vCE_file_eq_ref`), made by `file_mk` and released by `file_take`.
+  | .opq .file => pure (.ref (.int .w32))
   | .opq k => pure (.opq k)
   | .unk => pure .unk
   | .thunk C => ofU ms false C
@@ -407,7 +410,7 @@ theorem ofV_drops {ms : MachSet} {A : VTy} (hA : A.OwnFree) : ∀ {t : LTy}, ofV
   induction hA with
   | opq k hk =>
     intro t h; cases k <;> simp only [ofV] at h <;> cases h <;>
-      first | rfl | exact absurd rfl hk
+      first | rfl | exact nomatch hk
   | unit | zero | int | unk | imm | «mut» =>
       intro t h; simp only [ofV] at h
       first
@@ -446,7 +449,7 @@ def LTy.pp : LTy → String
   | .mut a => s!"mut {a.pp}"
   | .fam l => s!"[{l.pp}]"
   | .opq k => match k with
-    | .input => "Input" | .output => "Output" | .clock => "Clock" | .args => "Args" | .tok => "Tok"
+    | .input => "Input" | .output => "Output" | .clock => "Clock" | .args => "Args" | .fs => "Fs" | .tok => "Tok" | .file => "File"
   | .unk => "Unk"
   | .thunk k => s!"U {k.pp}"
   | .bang a => s!"!{a.pp}"

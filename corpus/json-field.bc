@@ -1,0 +1,196 @@
+-- A JSON field from a file (#67, milestone 1; SPEC §34, *Files*): the file named by the first
+-- argument read whole (`read_all`: one buffer of the file's size), its tokens scanned, and the value
+-- of the top-level key named by the second argument printed: a string's body, a number, or a word
+-- (`true`, `false`, `null`). A nested object or array as the value is printed as `<object>` or
+-- `<array>`. The tokenizer is `corpus/json-tokens.bc`'s (`token` and its helpers), copied: the
+-- tokens are views into the file's bytes, so no token allocates.
+--
+-- The file is closed before the bytes are scanned: it is consumed on every exit (`File` has no
+-- derived drop), and nothing after `close` can fail with a file open.
+--
+-- Answer, here: `corpus/no-such-file` is not found at every stage (`fs-cat`'s note), so
+-- `json-field: corpus/no-such-file: not found` on standard error, and `i32[1]`.
+-- `scripts/check-fs.sh` runs it on a real file.
+include fs
+include textio
+
+-- The byte at `i`, or `inr ()` past the end.
+fn get_byte<'a>(t: text 'a, i: i32) -> u8 + 1 = match get(t, i) { inl g -> inl *g | inr u -> inr () }
+
+-- The view of the bytes `[i, j)` of `t`, clamped to it.
+fn sub<'a>(t: text 'a, i: i32, j: i32) -> text 'a =
+  let left = match split_at(t, j) { inl (l, r) -> array_forget['a, u8](r); l | inr t -> t };
+  match split_at(left, i) { inl (l, r) -> array_forget['a, u8](l); r | inr l -> array_forget['a, u8](l); slice_empty_imm['a, u8] }
+
+-- The index of the first byte at or after `i` that is not white space.
+fn skip_ws<'a>(t: text 'a, i: i32) -> i32 =
+  let (t, u) = array_copy['a, u8] t;
+  let (t, (j, _)) = count_fold[text 'a * (i32 * bool)](
+    !{ (k, (t, (j, go))) ->
+      let (t, w) = array_copy['a, u8] t;
+      let sp = is_space(at(w, k, b'x'));
+      if go && sp { (t, (k + 1, true)) } else { (t, (j, false)) } },
+    len(u), i, (t, (i, true)));
+  array_forget['a, u8](t);
+  j
+
+-- The index of the quote closing a string whose body starts at `i`, or `inr` of the length when
+-- there is none. A backslash escapes the byte after it.
+fn scan_string<'a>(t: text 'a, i: i32) -> i32 + i32 =
+  let (t, u) = array_copy['a, u8] t;
+  let n = len(u);
+  let (t, (_, r)) = count_fold[text 'a * (bool * (i32 + 1))](
+    !{ (k, (t, (esc, r))) ->
+      match r {
+        inl j -> (t, (esc, inl j))
+      | inr u ->
+          let (t, w) = array_copy['a, u8] t;
+          let c = at(w, k, b'x');
+          if esc { (t, (false, inr ())) }
+          else { if c == b'\\' { (t, (true, inr ())) }
+          else { if c == b'"' { (t, (false, inl k)) } else { (t, (false, inr ())) } } }
+      } },
+    n, i, (t, (false, inr ())));
+  array_forget['a, u8](t);
+  match r { inl j -> inl j | inr u -> inr n }
+
+-- A number at `i`, an optional `-` and its digits, and the index after it.
+fn scan_int<'a>(t: text 'a, i: i32) -> i32 * i32 =
+  let (t, u) = array_copy['a, u8] t;
+  let neg = at(u, i, b'x') == b'-';
+  let start = if neg { i + 1 } else { i };
+  let (t, w) = array_copy['a, u8] t;
+  let (t, (v, (j, _))) = count_fold[text 'a * (i32 * (i32 * bool))](
+    !{ (k, (t, (v, (j, go)))) ->
+      let (t, x) = array_copy['a, u8] t;
+      let c = at(x, k, b'x');
+      if go && b'0' <= c && c <= b'9' { (t, (v * 10 + to_i32(c) - 48, (k + 1, true))) }
+      else { (t, (v, (j, false))) } },
+    len(w), start, (t, (0, (start, true))));
+  array_forget['a, u8](t);
+  let v = if neg { 0 - v } else { v };
+  (v, j)
+
+-- The index after a word of letters starting at `i`.
+fn scan_word<'a>(t: text 'a, i: i32) -> i32 =
+  let (t, u) = array_copy['a, u8] t;
+  let (t, (j, _)) = count_fold[text 'a * (i32 * bool)](
+    !{ (k, (t, (j, go))) ->
+      let (t, w) = array_copy['a, u8] t;
+      let c = at(w, k, b'0');
+      if go && b'a' <= c && c <= b'z' { (t, (k + 1, true)) } else { (t, (j, false)) } },
+    len(u), i, (t, (i, true)));
+  array_forget['a, u8](t);
+  j
+
+-- The token at byte `i` of `t` and the index after it: `Punct(c)`, `Str(view)`, `Num(n)`,
+-- `Word(view)`, `End`, `Bad(i)`, in that order as summands.
+fn token<'a>(t: text 'a, i: i32) -> (u8 + (text 'a + (i32 + (text 'a + (1 + i32))))) * i32 =
+  let (t, u) = array_copy['a, u8] t;
+  let i = skip_ws(u, i);
+  let (t, w) = array_copy['a, u8] t;
+  match get_byte(w, i) {
+    inl c ->
+      if c == b'{' || c == b'}' || c == b'[' || c == b']' || c == b':' || c == b',' {
+        array_forget['a, u8](t); (inl c, i + 1) }
+      else { if c == b'"' {
+        let (t, x) = array_copy['a, u8] t;
+        match scan_string(x, i + 1) {
+          inl j -> (inr (inl (sub(t, i + 1, j))), j + 1)
+        | inr j -> array_forget['a, u8](t); (inr (inr (inr (inr (inr i)))), j)
+        } }
+      else { if (b'0' <= c && c <= b'9') || c == b'-' {
+        let (n, j) = scan_int(t, i); (inr (inr (inl n)), j) }
+      else { if b'a' <= c && c <= b'z' {
+        let (t, x) = array_copy['a, u8] t;
+        let j = scan_word(x, i);
+        (inr (inr (inr (inl (sub(t, i, j))))), j) }
+      else { array_forget['a, u8](t); (inr (inr (inr (inr (inr i)))), i + 1) } } } }
+  | inr u -> array_forget['a, u8](t); (inr (inr (inr (inr (inl ())))), i)
+  }
+
+-- The value of the top-level key `key` in `t`: the token after `"key" :` at depth one, or
+-- `inr ()`. The state: the views, the index, the depth, whether the last token was the key at
+-- depth one, whether it was its `:`, and the value once found.
+type Tok<'a> = u8 + (text 'a + (i32 + (text 'a + (1 + i32))))
+
+fn field<'a, 'k>(t: text 'a, key: text 'k) -> Tok<'a> + 1 =
+  let (t, u) = array_copy['a, u8] t;
+  let n = len(u);
+  let (t, (key, (_, (_, (_, (_, r)))))) =
+    count_fold[text 'a * (text 'k * (i32 * (i32 * (bool * (bool * (Tok<'a> + 1))))))](
+    !{ (k, (t, (key, (i, (depth, (named, (colon, r))))))) ->
+      match r {
+        inl v -> (t, (key, (i, (depth, (named, (colon, inl v))))))
+      | inr none ->
+          let (t, w) = array_copy['a, u8] t;
+          let (tok, j) = token(w, i);
+          if colon { (t, (key, (j, (depth, (false, (false, inl tok)))))) } else {
+          match tok {
+            inl c ->
+              let d = if c == b'{' || c == b'[' { depth + 1 }
+                else { if c == b'}' || c == b']' { depth - 1 } else { depth } };
+              (t, (key, (j, (d, (false, (named && c == b':', inr ()))))))
+          | inr r2 -> match r2 {
+              inl s ->
+                let (key, kk) = array_copy['k, u8] key;
+                let same = eq(s, kk, !{ p -> let (x, y) = p; x == y });
+                (t, (key, (j, (depth, (depth == 1 && same, (false, inr ()))))))
+            | inr r3 -> match r3 {
+                inl m -> (t, (key, (j, (depth, (false, (false, inr ()))))))
+              | inr r4 -> match r4 {
+                  inl w2 -> array_forget['a, u8](w2); (t, (key, (j, (depth, (false, (false, inr ()))))))
+                | inr r5 -> match r5 {
+                    inl e -> (t, (key, (j, (depth, (false, (false, inr ()))))))
+                  | inr b -> (t, (key, (j, (depth, (false, (false, inr ()))))))
+                  } } } }
+          } }
+      } },
+    n + 1, 0, (t, (key, (0, (0, (false, (false, inr ())))))));
+  array_forget['a, u8](t);
+  array_forget['k, u8](key);
+  r
+
+-- The value printed on a line: whether there was one.
+fn show<'a>(r: Tok<'a> + 1) -> bool with Stdout =
+  match r {
+    inr u -> false
+  | inl tok -> match tok {
+      inl c -> if c == b'{' { print_lit("<object>\n") } else { print_lit("<array>\n") }; true
+    | inr r2 -> match r2 {
+        inl s -> print_str(s); print_lit("\n"); true
+      | inr r3 -> match r3 {
+          inl v -> print_dec(v); print_lit("\n"); true
+        | inr r4 -> match r4 {
+            inl w -> print_str(w); print_lit("\n"); true
+          | inr r5 -> false
+          } } } }
+  }
+
+main -> i32 =
+  let path = string_new(64);
+  let (path, _) = next_arg(path);
+  let key = string_new(16);
+  let (key, _) = next_arg(key);
+  let (path, opened) = fs_open(path, Reading);
+  let r = match opened {
+    inl f -> with to_result {
+      let (f, s) = read_all(f);
+      close(f);
+      s
+    }
+  | inr e -> inr e
+  };
+  match r {
+    inl s ->
+      let found = borrow imm s { 't, t -> borrow imm key { 'k, k -> show(field(t, k)) } };
+      if found { 0 } else { print_lit("missing\n"); 2 }
+  | inr e ->
+      let _ = key;
+      eprint_lit("json-field: ");
+      borrow imm path { v -> eprint_bytes(v) };
+      eprint_lit(": ");
+      eprint_lit(fs_error_name(e));
+      eprint_lit("\n");
+      1
+  }

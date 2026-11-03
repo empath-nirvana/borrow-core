@@ -27,6 +27,16 @@ allocator), so that `live` and the counts agree:
 - `bc_now c` answers the nanoseconds of `CLOCK_MONOTONIC` since the clock's first use,
   saturating at `2^63 − 1`, and `bc_sleep c ns` waits at least `ns` nanoseconds when `ns > 0`
   (`nanosleep`, again after an interruption); the cell `c` is the model's and is not read.
+- `bc_file op x p n` is a file operation (SPEC §34), one system call each: `op` `0` opens the
+  path of `n` bytes at `p` (copied into a stack buffer of `PATH_MAX` with its `NUL`), for reading
+  when `x` is `0` (`O_RDONLY`), else for writing (`O_WRONLY | O_CREAT | O_TRUNC`, `0644`), with
+  `O_CLOEXEC`; `1` is one `read(2)` of the descriptor `x` into the `n` bytes at `p`; `2` writes the
+  `n` bytes at `p` to `x`, calling `write(2)` again after a short write; `3` is `fstat(2)`'s size;
+  `4` is `close(2)`. Each answers an `i32`, zero-extended: the result, or `-1` not found
+  (`ENOENT`, `ENOTDIR`), `-2` denied (`EACCES`, `EPERM`, `EROFS`), `-3` a directory (`EISDIR`),
+  `-4` a bad file (`EBADF`), `-5` too big (a size past `2^31 − 2`, a path past `PATH_MAX`), `-(16 + errno)` any other. `EINTR` is retried by
+  all but `close`, which releases the descriptor whatever it answers. A path holding a `NUL` byte
+  names no file (`-1`): `open(2)` would read a shorter one.
 - `bc_status code` is the exit status the run ends with once the entry returns (SPEC §39).
 
 `main` runs the program's entry on a thread whose stack is 512 MiB (reserved, not committed),
@@ -39,6 +49,9 @@ namespace Backend.Native
 
 def runtimeC : String := r##"/* borrow-core native runtime (Backend/Native/Runtime.lean) */
 #include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <sys/stat.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdint.h>
@@ -204,6 +217,62 @@ void bc_sleep(int64_t c, int64_t ns) {
   if (ns <= 0) return;
   struct timespec r = { (time_t)(ns / 1000000000), (long)(ns % 1000000000) };
   while (nanosleep(&r, &r) == -1 && errno == EINTR) {}
+}
+
+static int64_t fs_ans(int64_t r) { return (int64_t)(uint32_t)(int32_t)r; }
+
+static int64_t fs_err(int e) {
+  switch (e) {
+  case ENOENT: case ENOTDIR: return fs_ans(-1);
+  case EACCES: case EPERM: case EROFS: return fs_ans(-2);
+  case EISDIR: return fs_ans(-3);
+  case EBADF: return fs_ans(-4);
+  case ENAMETOOLONG: case EOVERFLOW: case EFBIG: return fs_ans(-5);
+  default: return fs_ans(-(16 + (int64_t)e));
+  }
+}
+
+int64_t bc_file(int64_t op, int64_t x, int64_t p, int64_t n) {
+  unsigned char *a = (unsigned char *)(uintptr_t)p;
+  if (op == 0) {
+    char path[PATH_MAX];
+    if (n < 0 || n >= PATH_MAX) return fs_ans(-5);
+    if (memchr(a, 0, (size_t)n)) return fs_ans(-1);
+    memcpy(path, a, (size_t)n);
+    path[n] = 0;
+    int fl = x == 0 ? O_RDONLY : (O_WRONLY | O_CREAT | O_TRUNC);
+    int fd;
+    while ((fd = open(path, fl | O_CLOEXEC, 0644)) < 0 && errno == EINTR) {}
+    return fd < 0 ? fs_err(errno) : fs_ans(fd);
+  }
+  if (x < 0 || x > INT32_MAX) return fs_ans(-4);
+  int fd = (int)x;
+  if (op == 1) {
+    ssize_t r;
+    while ((r = read(fd, a, (size_t)n)) < 0 && errno == EINTR) {}
+    return r < 0 ? fs_err(errno) : fs_ans(r);
+  }
+  if (op == 2) {
+    uint64_t k = (uint64_t)n;
+    while (k > 0) {
+      ssize_t w = write(fd, a, k);
+      if (w < 0 && errno == EINTR) continue;
+      if (w < 0) return fs_err(errno);
+      if (w == 0) return fs_err(EIO);
+      a += w;
+      k -= (uint64_t)w;
+    }
+    return 0;
+  }
+  if (op == 3) {
+    struct stat st;
+    int r;
+    while ((r = fstat(fd, &st)) < 0 && errno == EINTR) {}
+    if (r < 0) return fs_err(errno);
+    if (st.st_size > INT32_MAX - 1) return fs_ans(-5);
+    return fs_ans(st.st_size);
+  }
+  return close(fd) < 0 && errno != EINTR ? fs_err(errno) : 0;
 }
 
 void bc_status(int64_t code) { status = (int32_t)(uint32_t)code; }

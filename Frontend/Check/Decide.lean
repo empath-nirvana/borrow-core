@@ -820,9 +820,9 @@ theorem boundsAvoidB_sound {Δ : LifeCtx} {x : LifeVar} (h : boundsAvoidB Δ x =
 /-! ### Rows  `[spec §19]` -/
 
 /-- `VTy.OwnFree`, decided: data, borrows, `!` and the host types, under `⊗` and `⊕`; not `Tok`,
-which owns its cell. -/
+which owns its cell, nor `File`. -/
 def ownFreeB : VTy → Bool
-  | .opq k => k != .tok
+  | .opq k => !k.ownsB
   | .unit | .zero | .int _ | .unk | .bang _ | .imm _ _ | .mut _ _ => true
   | .tensor A B | .sum A B => ownFreeB A && ownFreeB B
   | _ => false

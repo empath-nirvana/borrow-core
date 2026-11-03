@@ -746,6 +746,37 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
       return [.set r (.getv (.load (.loc m) 0) (.loc a) (.loc k))] ++
         (← emit d [.loc m, .loc a, .loc k, .loc r])
     | _ => throw "word IR: read_into of a non-pair"
+  | .io .fileOpen => do
+    match ← arg 0 with
+    | [m, a, k, md] =>
+      let r ← fresh1
+      return [.set r (.file 0 (.loc md) (.loc a) (.loc k))] ++ (← emit d [.loc m, .loc r])
+    | _ => throw "word IR: file_open of a non-pair"
+  | .io .fileRead => do
+    match ← arg 0 with
+    | [m, fd, a, k] =>
+      let r ← fresh1
+      return [.set r (.file 1 (.loc fd) (.loc a) (.loc k))] ++
+        (← emit d [.loc m, .loc a, .loc k, .loc r])
+    | _ => throw "word IR: file_read of a non-pair"
+  | .io .fileWrite => do
+    match ← arg 0 with
+    | [m, fd, a, k] =>
+      let r ← fresh1
+      return [.set r (.file 2 (.loc fd) (.loc a) (.loc k))] ++ (← emit d [.loc m, .loc r])
+    | _ => throw "word IR: file_write of a non-pair"
+  | .io .fileSize => do
+    match ← arg 0 with
+    | [m, fd] =>
+      let r ← fresh1
+      return [.set r (.file 3 (.loc fd) (.c64 0) (.c64 0))] ++ (← emit d [.loc m, .loc r])
+    | _ => throw "word IR: file_size of a non-pair"
+  | .io .fileClose => do
+    match ← arg 0 with
+    | [m, fd] =>
+      let r ← fresh1
+      return [.set r (.file 4 (.loc fd) (.c64 0) (.c64 0))] ++ (← emit d [.loc m, .loc r])
+    | _ => throw "word IR: file_close of a non-pair"
   | .io .clockNow => do
     let m := (← arg 0).headD 0
     let t ← fresh1
@@ -1232,9 +1263,10 @@ def citeWillreturn : String :=
 
 mutual
 /-- An expression calls a runtime function: an allocation (`bc_alloc`, which aborts when `malloc`
-fails), a read (`bc_getc`, `bc_getv`, which may block) or the clock (`bc_now`). -/
+fails), a read (`bc_getc`, `bc_getv`, which may block), the clock (`bc_now`) or a file operation
+(`bc_file`, which may block). -/
 def expRt : Exp → Bool
-  | .alloc _ | .getc _ | .getv _ _ _ | .now _ => true
+  | .alloc _ | .getc _ | .getv _ _ _ | .now _ | .file .. => true
   | .load a _ | .load8 a | .load32 a => expRt a
   | .op _ as => expsRt as
   | .gep a b => expRt a || expRt b

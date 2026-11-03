@@ -291,6 +291,25 @@ def applyOp : Op → List CV → IM CV
         emitBytes fd bs
         pure m
       | _, _, _ => throw "closure IR: write_all on a cell that holds no output stream"
+  -- The file operations run the model (SPEC §34, `Core/Stdio.lean`): the file system is empty,
+  -- so every open is not found (`-1`) and every descriptor is bad (`-4`).
+  | .io .fileOpen, [p] => do
+      let (m, r) ← unpair p
+      let (v, _) ← unpair r
+      let _ ← unpair v
+      allocObj (.pair m (.i32 0xFFFFFFFF))
+  | .io .fileRead, [p] => do
+      let (m, r) ← unpair p
+      let (_, v) ← unpair r
+      allocObj (.pair m (← allocObj (.pair v (.i32 0xFFFFFFFC))))
+  | .io .fileWrite, [p] => do
+      let (m, r) ← unpair p
+      let (_, v) ← unpair r
+      let _ ← unpair v
+      allocObj (.pair m (.i32 0xFFFFFFFC))
+  | .io .fileSize, [p] | .io .fileClose, [p] => do
+      let (m, _) ← unpair p
+      allocObj (.pair m (.i32 0xFFFFFFFC))
   | .io .readInto, [p] => do
       let (m, v) ← unpair p
       let (_, c) ← cellOf m

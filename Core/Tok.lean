@@ -87,8 +87,10 @@ theorem tokBurn_compatX {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) :
   refine wpTS_val ls ⟨_, .lam⟩ _ _ ?_
   intro ls' _ v ρ₁ ρ₂ hv hcomp
   rw [eq_of_compS_empty_left hcomp]
-  rcases Opaque.rel_cases hv with ⟨hk, -, -⟩ | ⟨-, ℓ, rfl, rfl⟩
+  rcases Opaque.rel_cases hv with ⟨hk, -, -⟩ | ⟨-, ℓ, rfl, rfl⟩ | ⟨hk, -⟩
   · exact absurd hk Opaque.tok_not_host
+  swap
+  · exact nomatch hk
   refine wpTS_lolli ls' _ (Val.loc ℓ) _ _ ?_
   rw [burnE_subst]
   refine wpTS_free ls' ℓ Val.unit _ _ ?_

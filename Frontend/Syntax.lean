@@ -85,7 +85,9 @@ inductive HostKind where
   | output
   | clock
   | args
+  | fs
   | tok
+  | file
   deriving DecidableEq, Repr, Inhabited
 
 /-- The surface name of a host resource kind. -/
@@ -94,7 +96,9 @@ def HostKind.name : HostKind → String
   | .output => "output"
   | .clock => "clock"
   | .args => "args"
+  | .fs => "fs"
   | .tok => "tok"
+  | .file => "file"
 
 mutual
 /-- Value types (syntax-core §4), with the built-in abbreviations as nodes of their own:

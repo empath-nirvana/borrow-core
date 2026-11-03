@@ -38,9 +38,22 @@ in `Backend/README.md`:
   on one relative clock subscription); `c` is the clock's cell, whose content is the model's and
   is not read (SPEC §34, `clock_now`, `clock_sleep`).
 
+- `$file op x p n` is a file operation (SPEC §34), the native runtime's `bc_file` over WASI:
+  `0` opens the path of `n` bytes at `p` (`path_open`), resolved against the preopened
+  directories as wasi-libc resolves it: the walk of descriptors `3, 4, …` while `fd_prestat_get`
+  answers a directory, choosing the one whose name is the longest prefix of the path ending at a
+  `/` or at its end (a name `.` is the empty prefix of every relative path), and opening the rest
+  of the path under it; no preopen covers it: `-1`, not found. `1` is one `fd_read`, `2`
+  `fd_write`s until the view is written, `3` `fd_filestat_get`'s size, `4` `fd_close`. The
+  answers and the kinds are `bc_file`'s, from WASI's error numbers. An empty path names no
+  file (`-1`), as natively. A read of a directory, which WASI answers with `EBADF`, is `-3` (a
+  directory) as natively: on that error, one `fd_filestat_get` tells it.
+
 Layout: bytes `0–31` hold `$putfd`'s and `$putv`'s I/O vector and byte, bytes `32–63` `$getc`'s
 and `$getv`'s, bytes `64–71` the clock's reading, `72–79` `$args`'s sizes, `128–175` `$sleep`'s
-subscription, `192–231` its event and count; `1024 + 4s` holds the head of the
+subscription, `192–231` its event and count, `256–263` a preopen's description, `264–267` an opened
+descriptor, `272–283` a file read's or write's I/O vector and count, `320–383` a file's
+`filestat`, `508` the path `.`, `512–1023` a preopen's name; `1024 + 4s` holds the head of the
 free list of ranges of `s` words, for `s < 1024`; the program's data (its literals' bytes, then a
 word for each capability's cell) starts at `16384`; a module with frames has its stack after the
 data (`Backend/Wasm/Print.lean`, `stackBytes`), growing down from its top; ranges start after
@@ -66,6 +79,16 @@ def runtimeWat : String := "
     (func $args_get (param i32 i32) (result i32)))
   (import \"wasi_snapshot_preview1\" \"proc_exit\"
     (func $proc_exit (param i32)))
+  (import \"wasi_snapshot_preview1\" \"path_open\"
+    (func $path_open (param i32 i32 i32 i32 i32 i64 i64 i32 i32) (result i32)))
+  (import \"wasi_snapshot_preview1\" \"fd_prestat_get\"
+    (func $fd_prestat_get (param i32 i32) (result i32)))
+  (import \"wasi_snapshot_preview1\" \"fd_prestat_dir_name\"
+    (func $fd_prestat_dir_name (param i32 i32 i32) (result i32)))
+  (import \"wasi_snapshot_preview1\" \"fd_filestat_get\"
+    (func $fd_filestat_get (param i32 i32) (result i32)))
+  (import \"wasi_snapshot_preview1\" \"fd_close\"
+    (func $fd_close (param i32) (result i32)))
   (memory (export \"memory\") 1)
   (global $heap (mut i32) (i32.const 16376))
   (global $sp (mut i64) (i64.const 0))
@@ -149,7 +172,7 @@ def runtimeWat : String := "
                                     (i32.const 1)))
               (i32.const -1))
           (then unreachable))))
-    (global.set $heap (i32.sub (local.get $top) (i32.const 8)))
+    (global.set $heap (local.get $top))
     (local.get $p))
 
   (func $args
@@ -241,6 +264,163 @@ def runtimeWat : String := "
     (local.set $ns (i64.sub (call $mono) (global.get $t0)))
     (if (result i64) (i64.gt_u (local.get $ns) (i64.const 9223372036854775807))
       (then (i64.const 9223372036854775807)) (else (local.get $ns))))
+
+  (func $fs_ans (param $r i32) (result i64)
+    (i64.extend_i32_u (local.get $r)))
+
+  (func $fs_err (param $e i32) (result i64)
+    (if (i32.or (i32.eq (local.get $e) (i32.const 44)) (i32.eq (local.get $e) (i32.const 54)))
+      (then (return (call $fs_ans (i32.const -1)))))
+    (if (i32.or (i32.or (i32.eq (local.get $e) (i32.const 2)) (i32.eq (local.get $e) (i32.const 63)))
+                (i32.or (i32.eq (local.get $e) (i32.const 69)) (i32.eq (local.get $e) (i32.const 76))))
+      (then (return (call $fs_ans (i32.const -2)))))
+    (if (i32.eq (local.get $e) (i32.const 31)) (then (return (call $fs_ans (i32.const -3)))))
+    (if (i32.eq (local.get $e) (i32.const 8)) (then (return (call $fs_ans (i32.const -4)))))
+    (if (i32.or (i32.or (i32.eq (local.get $e) (i32.const 37)) (i32.eq (local.get $e) (i32.const 61)))
+                (i32.eq (local.get $e) (i32.const 22)))
+      (then (return (call $fs_ans (i32.const -5)))))
+    (call $fs_ans (i32.sub (i32.const -16) (local.get $e))))
+
+  (func $fs_open (param $mode i32) (param $a i32) (param $k i32) (result i64)
+    (local $d i32) (local $best i32) (local $blen i32) (local $nl i32) (local $abs i32)
+    (local $i i32) (local $ok i32) (local $r i32) (local $rl i32) (local $e i32)
+    (if (i32.eqz (local.get $k)) (then (return (call $fs_ans (i32.const -1)))))
+    (local.set $best (i32.const -1))
+    (local.set $blen (i32.const -1))
+    (local.set $abs (i32.and (i32.gt_u (local.get $k) (i32.const 0))
+      (i32.eq (i32.load8_u (local.get $a)) (i32.const 47))))
+    (local.set $d (i32.const 3))
+    (block $walked
+      (loop $next
+        (br_if $walked (call $fd_prestat_get (local.get $d) (i32.const 256)))
+        (local.set $nl (i32.load (i32.const 260)))
+        (if (i32.and (i32.eqz (i32.load8_u (i32.const 256)))
+              (i32.le_u (local.get $nl) (i32.const 512)))
+          (then
+            (if (i32.eqz (call $fd_prestat_dir_name (local.get $d) (i32.const 512) (local.get $nl)))
+              (then
+                ;; a trailing NUL, then trailing `/`s (but a lone `/`), are not the name's
+                (if (i32.and (i32.gt_u (local.get $nl) (i32.const 0))
+                      (i32.eqz (i32.load8_u (i32.add (i32.const 511) (local.get $nl)))))
+                  (then (local.set $nl (i32.sub (local.get $nl) (i32.const 1)))))
+                (block $trimmed
+                  (loop $trim
+                    (br_if $trimmed (i32.le_u (local.get $nl) (i32.const 1)))
+                    (br_if $trimmed (i32.ne (i32.load8_u (i32.add (i32.const 511) (local.get $nl)))
+                      (i32.const 47)))
+                    (local.set $nl (i32.sub (local.get $nl) (i32.const 1)))
+                    (br $trim)))
+                (local.set $ok (i32.const 0))
+                (if (i32.and (i32.eq (local.get $nl) (i32.const 1))
+                      (i32.eq (i32.load8_u (i32.const 512)) (i32.const 46)))
+                  (then
+                    (if (i32.eqz (local.get $abs))
+                      (then (local.set $ok (i32.const 1)) (local.set $nl (i32.const 0)))))
+                  (else
+                    (if (i32.and
+                          (i32.eq (local.get $abs)
+                            (i32.and (i32.gt_u (local.get $nl) (i32.const 0))
+                              (i32.eq (i32.load8_u (i32.const 512)) (i32.const 47))))
+                          (i32.le_u (local.get $nl) (local.get $k)))
+                      (then
+                        (local.set $ok (i32.const 1))
+                        (local.set $i (i32.const 0))
+                        (block $cmp
+                          (loop $byte
+                            (br_if $cmp (i32.ge_u (local.get $i) (local.get $nl)))
+                            (if (i32.ne (i32.load8_u (i32.add (i32.const 512) (local.get $i)))
+                                        (i32.load8_u (i32.add (local.get $a) (local.get $i))))
+                              (then (local.set $ok (i32.const 0)) (br $cmp)))
+                            (local.set $i (i32.add (local.get $i) (i32.const 1)))
+                            (br $byte)))
+                        ;; the prefix ends at a `/` of the path, at its end, or is `/` itself
+                        (if (i32.and (local.get $ok)
+                              (i32.lt_u (local.get $nl) (local.get $k)))
+                          (then
+                            (if (i32.and
+                                  (i32.ne (i32.load8_u (i32.add (local.get $a) (local.get $nl)))
+                                    (i32.const 47))
+                                  (i32.ne (i32.load8_u (i32.add (i32.const 511) (local.get $nl)))
+                                    (i32.const 47)))
+                              (then (local.set $ok (i32.const 0))))))))))
+                (if (i32.and (local.get $ok) (i32.gt_s (local.get $nl) (local.get $blen)))
+                  (then (local.set $best (local.get $d)) (local.set $blen (local.get $nl))))))))
+        (local.set $d (i32.add (local.get $d) (i32.const 1)))
+        (br $next)))
+    (if (i32.lt_s (local.get $best) (i32.const 0)) (then (return (call $fs_ans (i32.const -1)))))
+    (local.set $r (i32.add (local.get $a) (local.get $blen)))
+    (local.set $rl (i32.sub (local.get $k) (local.get $blen)))
+    (block $skipped
+      (loop $skip
+        (br_if $skipped (i32.eqz (local.get $rl)))
+        (br_if $skipped (i32.ne (i32.load8_u (local.get $r)) (i32.const 47)))
+        (local.set $r (i32.add (local.get $r) (i32.const 1)))
+        (local.set $rl (i32.sub (local.get $rl) (i32.const 1)))
+        (br $skip)))
+    (if (i32.eqz (local.get $rl))
+      (then
+        (i32.store8 (i32.const 508) (i32.const 46))
+        (local.set $r (i32.const 508))
+        (local.set $rl (i32.const 1))))
+    (local.set $e (call $path_open (local.get $best) (i32.const 1) (local.get $r) (local.get $rl)
+      (select (i32.const 9) (i32.const 0) (local.get $mode))
+      (select (i64.const 2097220) (i64.const 2097158) (local.get $mode))
+      (select (i64.const 2097220) (i64.const 2097158) (local.get $mode))
+      (i32.const 0) (i32.const 264)))
+    (if (local.get $e) (then (return (call $fs_err (local.get $e)))))
+    (call $fs_ans (i32.load (i32.const 264))))
+
+  (func $file (param $op i64) (param $x i64) (param $p i64) (param $n i64) (result i64)
+    (local $a i32) (local $k i32) (local $fd i32) (local $e i32) (local $w i32) (local $sz i64)
+    (local.set $a (i32.wrap_i64 (local.get $p)))
+    (local.set $k (i32.wrap_i64 (local.get $n)))
+    (if (i64.eqz (local.get $op))
+      (then (return (call $fs_open (i32.wrap_i64 (local.get $x)) (local.get $a) (local.get $k)))))
+    (if (i64.gt_u (local.get $x) (i64.const 2147483647))
+      (then (return (call $fs_ans (i32.const -4)))))
+    (local.set $fd (i32.wrap_i64 (local.get $x)))
+    (if (i64.eq (local.get $op) (i64.const 1))
+      (then
+        (i32.store (i32.const 272) (local.get $a))
+        (i32.store (i32.const 276) (local.get $k))
+        (local.set $e (call $fd_read (local.get $fd) (i32.const 272) (i32.const 1) (i32.const 280)))
+        ;; WASI answers a read of a directory with `EBADF`: the kind is `IsDir`, as natively, which
+        ;; one `fd_filestat_get` on that error path tells (its file type `3`, a directory)
+        (if (i32.eq (local.get $e) (i32.const 8))
+          (then
+            (if (i32.eqz (call $fd_filestat_get (local.get $fd) (i32.const 320)))
+              (then
+                (if (i32.eq (i32.load8_u (i32.const 336)) (i32.const 3))
+                  (then (return (call $fs_ans (i32.const -3)))))))))
+        (if (local.get $e) (then (return (call $fs_err (local.get $e)))))
+        (return (call $fs_ans (i32.load (i32.const 280))))))
+    (if (i64.eq (local.get $op) (i64.const 2))
+      (then
+        (block $done
+          (loop $again
+            (br_if $done (i32.eqz (local.get $k)))
+            (i32.store (i32.const 272) (local.get $a))
+            (i32.store (i32.const 276) (local.get $k))
+            (local.set $e (call $fd_write (local.get $fd) (i32.const 272) (i32.const 1) (i32.const 280)))
+            (if (local.get $e) (then (return (call $fs_err (local.get $e)))))
+            (local.set $w (i32.load (i32.const 280)))
+            (if (i32.eqz (local.get $w)) (then (return (call $fs_err (i32.const 29)))))
+            (local.set $a (i32.add (local.get $a) (local.get $w)))
+            (local.set $k (i32.sub (local.get $k) (local.get $w)))
+            (br $again)))
+        (return (i64.const 0))))
+    (if (i64.eq (local.get $op) (i64.const 3))
+      (then
+        (local.set $e (call $fd_filestat_get (local.get $fd) (i32.const 320)))
+        (if (local.get $e) (then (return (call $fs_err (local.get $e)))))
+        (local.set $sz (i64.load (i32.const 352)))
+        (if (i64.gt_u (local.get $sz) (i64.const 2147483646))
+          (then (return (call $fs_ans (i32.const -5)))))
+        (return (local.get $sz))))
+    (local.set $e (call $fd_close (local.get $fd)))
+    (if (i32.and (i32.ne (local.get $e) (i32.const 0)) (i32.ne (local.get $e) (i32.const 27)))
+      (then (return (call $fs_err (local.get $e)))))
+    (i64.const 0))
 
   (func $sleep (param $c i64) (param $ns i64)
     (if (i64.eq (global.get $t0) (i64.const -1)) (then (global.set $t0 (call $mono))))

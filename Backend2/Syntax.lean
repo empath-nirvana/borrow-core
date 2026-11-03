@@ -32,6 +32,9 @@ abbrev Var := Nat
 /-- The host implementations of the externs that are operations. -/
 inductive IOKind where
   | readByte | writeByte | writeAll | readInto | clockNow | clockSleep
+  /-- The file operations (SPEC §34): `file_open`, `file_read`, `file_write`, `file_size`,
+  `file_close`. -/
+  | fileOpen | fileRead | fileWrite | fileSize | fileClose
   deriving Inhabited, BEq, Repr
 
 /-- A primitive: an operation on its arguments' values that runs no code of the program. -/

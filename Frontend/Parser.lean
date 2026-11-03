@@ -223,7 +223,7 @@ structure PState where
 abbrev P := StateT PState (Except Error)
 
 /-- The capabilities, which are passed and handed back by name (SPEC §11). -/
-def capabilityNames : List String := ["stdin", "stdout", "stderr", "clock", "args"]
+def capabilityNames : List String := ["stdin", "stdout", "stderr", "clock", "args", "fs"]
 
 /-- Record that the name written `x` at `sp` resolved to the variable `y`, the binder numbered
 `b`. -/
@@ -682,6 +682,10 @@ def rtyAtom : Nat → P RTy
     -- `clock` and `args` are also variables'.
     | .ident "clock" => discard bump; pure (.handle t.span .clock)
     | .ident "args" => discard bump; pure (.handle t.span .args)
+    -- `fs`, the file system's resource (SPEC §34).
+    | .ident "fs" => discard bump; pure (.handle t.span .fs)
+    -- `file`, an open file's handle (SPEC §34, §62).
+    | .ident "file" => discard bump; pure (.handle t.span .file)
     -- `tok`, only in the elaboration's own source (SPEC §42).
     | .ident "tok" =>
       unless (← get).internal do failAt t.span "unknown type `tok`"

@@ -51,7 +51,7 @@ structure Template where
 
 /-- A stream whose capability cell the harness makes and takes back (SPEC §11, §34). -/
 inductive CapStream where
-  | input | output | clock | args
+  | input | output | clock | args | fs | file
   deriving Inhabited, BEq
 
 /-- How an extern of `run_io` is implemented (SPEC §11, §34), in declaration order. -/
@@ -2116,7 +2116,8 @@ def mkClosOf (s : CapStream) (B : VTy) (t : LTy) : CM Tm := do
     | .input => return .drop .dead p (← cell (.i32 0) .w32)
     | .args => return .drop .dead p (← cell (.i32 0xFFFFFFFF) .w32)
     | .clock => return .drop .dead p (← cell (.i64 0) .w64)
-    | .output => return .prim (.alloc cls) [p]
+    | .fs => return .drop .dead p (← cell (.i32 0) .w32)
+    | .output | .file => return .prim (.alloc cls) [p]
 
 /-- **The host function of a harness take** (SPEC §11, §34), as the extern's closure at its type
 `t` (`Ref B ⊸ F R`): the capability's cell freed, and the extern's result: the empty byte list for
@@ -2134,7 +2135,7 @@ def takeClosOf (s : CapStream) (t : LTy) : CM Tm := do
   mkClos "extern" [] (.arr a (.ret b)) (some a) b fun ctx => do
     let some p :: _ := ctx | throw "LIR: an extern's argument"
     match s with
-    | .clock => return .prim .free [p]
+    | .clock | .fs | .file => return .prim .free [p]
     | .input | .args =>
       let w ← fresh i32T
       return .letv w (.prim .free [p]) (.drop .dead w (← nilOf b))
@@ -3827,6 +3828,7 @@ def convMain (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy)
     let some e := exts[n - 1 - i]? | throw "LIR: main's context has a slot no extern gives"
     let c ← match e with
       | .io op => ioClos 8 op aT
+      | .mk .file => mkClosOf .file .i32 aT
       | .mk s => do
         let .bang (.thunk (.arr _ (.ret (.ref B)))) := A | throw "LIR: a harness make's type"
         mkClosOf s B aT

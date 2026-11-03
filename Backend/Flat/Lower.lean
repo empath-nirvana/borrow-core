@@ -513,6 +513,14 @@ def lowerFree (k : Option Nat) (l : Var) (d : Dest) : LM (List Stmt) := do
     if zeroCell (← T) (← vty l) then [] else if slot then [.unslot p] else [.free p]
   return s ++ fr ++ (← emit d (locs ls))
 
+/-- `file_size` (`op` `3`) or `file_close` (`4`) of `(m, fd)`: `(m, r)`. -/
+def fileFd (op : Nat) (p : Var) (d : Dest) : LM (List Stmt) := do
+  match ← vals p with
+  | [m, fd] =>
+    let r ← fresh1
+    return [.set r (.file op (.loc fd) (.c64 0) (.c64 0))] ++ (← emit d [.loc m, .loc r])
+  | _ => throw "flat IR: a file operation of a non-pair"
+
 def lowerPrim : Op → List Var → Dest → LM (List Stmt)
   | .alloc, [v], d => lowerAlloc none v d
   | .scopedAlloc k, [v], d => lowerAlloc (some k) v d
@@ -661,6 +669,27 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
       match ← vals p with
       | [m, ns] => return [.sleep (.loc m) (.loc ns)] ++ (← emit d [.loc m])
       | _ => throw "flat IR: clock_sleep of a non-pair"
+  | .io .fileOpen, [p], d => do
+      match ← vals p with
+      | [m, a, k, md] =>
+        let r ← fresh1
+        return [.set r (.file 0 (.loc md) (.loc a) (.loc k))] ++ (← emit d [.loc m, .loc r])
+      | _ => throw "flat IR: file_open of a non-pair"
+  | .io .fileRead, [p], d => do
+      match ← vals p with
+      | [m, fd, a, k] =>
+        let r ← fresh1
+        return [.set r (.file 1 (.loc fd) (.loc a) (.loc k))] ++
+          (← emit d [.loc m, .loc a, .loc k, .loc r])
+      | _ => throw "flat IR: file_read of a non-pair"
+  | .io .fileWrite, [p], d => do
+      match ← vals p with
+      | [m, fd, a, k] =>
+        let r ← fresh1
+        return [.set r (.file 2 (.loc fd) (.loc a) (.loc k))] ++ (← emit d [.loc m, .loc r])
+      | _ => throw "flat IR: file_write of a non-pair"
+  | .io .fileSize, [p], d => fileFd 3 p d
+  | .io .fileClose, [p], d => fileFd 4 p d
   | .io .readInto, [p], d => do
       let T ← T
       let f := (T.field (← vty p) 1).1

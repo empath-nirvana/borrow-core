@@ -16,12 +16,16 @@ modes (`Relation.lean`).
 * `Output`: `(fd, bs)`, the stream `fd` and the bytes written to it, most recent first.
 * `Clock`: `t`, the time in nanoseconds (SPEC §34).
 * `Args`: the arguments not yet read, a byte list, each argument followed by `0` (SPEC §34).
+* `Fs`: `n`, an `i32` the runtimes do not read: the file system's capability (SPEC §34).
 * `Tok`: the token of a declared type with no derived drop (SPEC §11, §12, §42). It is not a host
   type: its value is a location owning a unit cell, allocated by `mint` and freed by `burn`, the
   capture cell's pattern (SPEC §25). Its model is `Ref 1`'s (`Opaque.rel`).
+* `File`: an open file's handle (SPEC §34, §62). It is not a host type: its value is a location
+  owning a cell that holds the file's descriptor, an `I32`; its model is `Ref I32`'s
+  (`Opaque.rel`). No Core constant takes one apart: only the externs of `Fs` (`Stdio.lean`).
 
-The relation at an opaque type is `Opaque.rel`: `⌜k.Holds v⌝` at a host type, and the owned
-unit cell at `Tok`.
+The relation at an opaque type is `Opaque.rel`: `⌜k.Holds v⌝` at a host type, the owned unit
+cell at `Tok`, and the owned cell holding an `I32` at `File`.
 
 A byte list is a value of `Bytes = μX. 1 ⊕ (U8 ⊗ X)` (`Stdio.lean`): `inj₁ ()`, or
 `inj₂ (b, rest)` with `b` a byte literal.
@@ -40,9 +44,14 @@ inductive Opaque where
   | clock
   /-- `Args`: the content of the arguments' cell, the arguments not yet read (SPEC §34). -/
   | args
+  /-- `Fs`: the content of the file system's cell (SPEC §34). -/
+  | fs
   /-- `Tok`: the token of a declared type with no derived drop, a location owning a unit cell.
   `[spec §11, §12, §42]` -/
   | tok
+  /-- `File`: an open file's handle, a location owning a cell that holds its descriptor.
+  `[spec §34, §62]` -/
+  | file
   deriving DecidableEq, Repr
 
 /-- `v` is a byte list: `inj₁ ()`, or `inj₂ (u8[b], rest)` with `rest` a byte list.
@@ -57,41 +66,61 @@ def Opaque.Holds : Opaque → Val → Prop
   | .output, v => ∃ fd bs, v = .pair (.i32 fd) bs ∧ BytesV bs
   | .clock, v => ∃ t, v = .i64 t
   | .args, v => BytesV v
+  | .fs, v => ∃ n, v = .i32 n
   | .tok, v => ∃ ℓ, v = .loc ℓ
+  | .file, v => ∃ ℓ, v = .loc ℓ
 
 open BoCa.Fig16 BoCa.Fig16.BoLo in
 /-- The relation at an opaque type, in both modes: the model `⌜k.Holds v⌝` at a host type; at
-`Tok` a location owning a unit cell, `Ref 1`'s clause.  `[spec §11, §12]` -/
+`Tok` a location owning a unit cell, `Ref 1`'s clause; at `File` a location owning a cell that
+holds an `I32`, `Ref I32`'s clause.  `[spec §11, §12, §34]` -/
 noncomputable def Opaque.rel : Opaque → Val → WProp
   | .tok, v => ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ ⌜v' = .unit⌝
+  | .file, v => ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ ⌜v'.IsInt .w32⌝
   | .input, v => ⌜Opaque.Holds .input v⌝
   | .output, v => ⌜Opaque.Holds .output v⌝
   | .clock, v => ⌜Opaque.Holds .clock v⌝
   | .args, v => ⌜Opaque.Holds .args v⌝
+  | .fs, v => ⌜Opaque.Holds .fs v⌝
 
-/-- A host type: every opaque type but `Tok`. Its relation is pure.  `[spec §11]` -/
-def Opaque.Host (k : Opaque) : Prop := k ≠ .tok
+/-- An opaque type whose value owns a cell: `Tok` and `File`. -/
+def Opaque.ownsB : Opaque → Bool
+  | .tok | .file => true
+  | _ => false
+
+/-- A host type: every opaque type but `Tok` and `File`. Its relation is pure.  `[spec §11]` -/
+def Opaque.Host (k : Opaque) : Prop := k.ownsB = false
 
 open BoCa.Fig16 BoCa.Fig16.BoLo in
 theorem Opaque.rel_host {k : Opaque} (hk : k.Host) (v : Val) : k.rel v = ⌜k.Holds v⌝ := by
-  cases k <;> first | rfl | exact absurd rfl hk
+  cases k <;> first | rfl | exact nomatch hk
 
-theorem Opaque.tok_not_host : ¬ Opaque.Host .tok := fun h => h rfl
+theorem Opaque.tok_not_host : ¬ Opaque.Host .tok := fun h => nomatch h
+
+theorem Opaque.file_not_host : ¬ Opaque.Host .file := fun h => nomatch h
 
 open BoCa.Fig16 BoCa.Fig16.BoLo in
 /-- The relation at an opaque type: at a host type the empty resource and the model; at `Tok` a
-location and its owned unit cell. -/
+location and its owned unit cell; at `File` a location and its owned cell holding an `I32`. -/
 theorem Opaque.rel_cases {k : Opaque} {v : Val} {ρ : WRes} (h : k.rel v ρ) :
     (k.Host ∧ ρ = PMap.empty ∧ k.Holds v) ∨
-      (k = .tok ∧ ∃ ℓ, v = .loc ℓ ∧ ρ = ResU.single ℓ (CellU.ownOf .unit)) := by
+      (k = .tok ∧ ∃ ℓ, v = .loc ℓ ∧ ρ = ResU.single ℓ (CellU.ownOf .unit)) ∨
+      (k = .file ∧ ∃ ℓ w, v = .loc ℓ ∧ w.IsInt .w32 ∧ ρ = ResU.single ℓ (CellU.ownOf w)) := by
   cases k with
   | tok =>
-      right
+      right; left
       obtain ⟨ℓ, w, hs⟩ := h
       obtain ⟨rfl, ρ₁, ρ₂, hc, rfl, hw⟩ := pure_sep_iff.mp hs
       obtain ⟨rfl, rfl⟩ := hw
       exact ⟨rfl, ℓ, rfl, (eq_of_compS_empty_left (ResU.CompS.comm hc))⟩
-  | _ => obtain ⟨h₁, h₂⟩ := h; exact Or.inl (And.intro (fun e => nomatch e) (And.intro h₁ h₂))
+  | file =>
+      right; right
+      obtain ⟨ℓ, w, hs⟩ := h
+      obtain ⟨rfl, ρ₁, ρ₂, hc, rfl, hw⟩ := pure_sep_iff.mp hs
+      obtain ⟨hρ, hi⟩ := hw
+      subst hρ
+      exact ⟨rfl, ℓ, w, rfl, hi, (eq_of_compS_empty_left (ResU.CompS.comm hc))⟩
+  | _ => obtain ⟨h₁, h₂⟩ := h; exact Or.inl (And.intro rfl (And.intro h₁ h₂))
 
 open BoCa.Fig16 BoCa.Fig16.BoLo in
 /-- `Tok`'s relation at a location and its owned unit cell. -/

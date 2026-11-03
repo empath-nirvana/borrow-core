@@ -761,6 +761,250 @@ theorem takeArgs_meets (ls : List SRec) (δ : LSub) :
   rw [← vC_externTy_congr rfl rfl cC_takeArgsC]
   exact meets_of_derives rfl d_takeInput ls δ
 
+/-! ### Files  `[spec §34]`
+
+The file system's capability is a cell whose content is an `I32`, which the runtimes do not
+read: its representation is `I32`, and the relation there is `Fs`'s model (`vC_fsRep`). A file is
+its descriptor, an `I32`, under the capability. Every extern answers an `I32`: the result when
+`≥ 0`, an error's kind when negative (`-1` not found, `-4` a bad file, …).
+
+The model is **the file system with no files**: `file_open` answers `-1` for every path, and
+`file_read`, `file_write`, `file_size` and `file_close` answer `-4` for every descriptor, the view
+of a read handed back unchanged. It is lawful vacuously: no file is ever open. Each model is a
+`CDerives` derivation at the representation, so it meets its contract by the Fundamental
+Property, as the clock's do. -/
+
+/-- **`Fs` is `I32` with the rules taken away.**  `[spec §34]` -/
+theorem vC_fsRep (b : Bool) (ls : List SRec) (δ : LSub) :
+    vC b .i32 ls δ = vC b (.opq .fs) ls δ := by
+  funext v ρ
+  rfl
+
+/-- `file_open`: `∀'a ⊏ ⊤. F (∀'b ⊏ ⊤. Mut 'a F ⊗ ([Imm 'b U8] ⊗ I32) ⇒ Mut 'a F ⊗ I32)`.
+`[spec §34]` -/
+def fileOpenC (F : VTy) : CTy :=
+  .all 0 .top (.ret (.all 1 .top
+    (.lolli (.tensor (.mut (.var 0) F) (.tensor (.arrayImm (.var 1) u8T) .i32))
+      (.tensor (.mut (.var 0) F) .i32))))
+
+/-- `file_read`: `∀'a ⊏ ⊤. F (∀'b ⊏ ⊤. Mut 'a F ⊗ (I32 ⊗ [Mut 'b U8]) ⇒
+Mut 'a F ⊗ ([Mut 'b U8] ⊗ I32))`.  `[spec §34]` -/
+def fileReadC (F : VTy) : CTy :=
+  .all 0 .top (.ret (.all 1 .top
+    (.lolli (.tensor (.mut (.var 0) F) (.tensor .i32 (.sliceMut (.var 1) u8T)))
+      (.tensor (.mut (.var 0) F) (.tensor (.sliceMut (.var 1) u8T) .i32)))))
+
+/-- `file_write`: `∀'a ⊏ ⊤. F (∀'b ⊏ ⊤. Mut 'a F ⊗ (I32 ⊗ [Imm 'b U8]) ⇒ Mut 'a F ⊗ I32)`.
+`[spec §34]` -/
+def fileWriteC (F : VTy) : CTy :=
+  .all 0 .top (.ret (.all 1 .top
+    (.lolli (.tensor (.mut (.var 0) F) (.tensor .i32 (.arrayImm (.var 1) u8T)))
+      (.tensor (.mut (.var 0) F) .i32))))
+
+/-- `file_size`, `file_close`: `∀'a ⊏ ⊤. F (Mut 'a F ⊗ I32 ⇒ Mut 'a F ⊗ I32)`.  `[spec §34]` -/
+def fileFdC (F : VTy) : CTy :=
+  .all 0 .top (.ret (.lolli (.tensor (.mut (.var 0) F) .i32) (.tensor (.mut (.var 0) F) .i32)))
+
+/-- `mk_fs`: `1 ⊸ F (Ref F)`.  `[spec §34]` -/
+def mkFsC (F : VTy) : CTy := .arr .unit (.ret (.ref F))
+
+/-- `take_fs`: `Ref F ⊸ F I32`.  `[spec §34]` -/
+def takeFsC (F : VTy) : CTy := .arr (.ref F) (.ret .i32)
+
+/-- The answer "not found", `-1`. -/
+def fsNotFound : UInt32 := 0xFFFFFFFF
+
+/-- The answer "a bad file", `-4`. -/
+def fsBadFile : UInt32 := 0xFFFFFFFC
+
+/-- The model of `file_open`: `Λ. Λ. λp. let (m, r) = p in let (v, md) = r in forget v;
+(m, -1)`.  `[spec §34]` -/
+def fileOpenB : Expr :=
+  .letpair (.var 0)
+    (.letpair (.var 0)
+      (.seq (.app (.val forgetV) (.var 1)) (.pair (.var 3) (i32E fsNotFound))))
+
+def fileOpenV : Val := .lam (.val (.lam (.val (.lam fileOpenB))))
+
+/-- The model of `file_read`: `Λ. Λ. λp. let (m, r) = p in let (fd, v) = r in (m, (v, -4))`.
+`[spec §34]` -/
+def fileReadB : Expr :=
+  .letpair (.var 0)
+    (.letpair (.var 0) (.pair (.var 3) (.pair (.var 0) (i32E fsBadFile))))
+
+def fileReadV : Val := .lam (.val (.lam (.val (.lam fileReadB))))
+
+/-- The model of `file_write`: `Λ. Λ. λp. let (m, r) = p in let (fd, v) = r in forget v;
+(m, -4)`.  `[spec §34]` -/
+def fileWriteB : Expr :=
+  .letpair (.var 0)
+    (.letpair (.var 0)
+      (.seq (.app (.val forgetV) (.var 0)) (.pair (.var 3) (i32E fsBadFile))))
+
+def fileWriteV : Val := .lam (.val (.lam (.val (.lam fileWriteB))))
+
+/-- The model of `file_size` and `file_close`: `Λ. λp. let (m, fd) = p in (m, -4)`.
+`[spec §34]` -/
+def fileFdV : Val := .lam (.val (.lam (.letpair (.var 0) (.pair (.var 1) (i32E fsBadFile)))))
+
+/-- The model of `mk_fs`: `λu. alloc i32[0]`.  `[spec §34]` -/
+def mkFsV : Val := .lam (.app (.val (.prim .alloc)) (i32E 0))
+
+theorem d_fileOpen : CDerives LifeCtx.empty [] (.val fileOpenV) (.comp (fileOpenC .i32)) := by
+  refine .allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false ok_empty rfl hy)
+    (fun _ h => by cases h) (.ret (.thunkV rfl ?_))
+  refine .allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false Δwa₁_ok rfl hy)
+    (fun s hs hl => by simp only [List.mem_cons, List.not_mem_nil, or_false] at hs; subst hs; cases hl)
+    (.ret (.lamV ?_))
+  refine letP (A := .mut (.var 0) .i32) (B := .tensor (.arrayImm (.var 1) u8T) .i32)
+    (.var (by csoloQ)) ?_
+  refine letP (A := .arrayImm (.var 1) u8T) (B := .i32) (.var (by csoloQ)) ?_
+  exact .seqV (partP_split (.app (.val forgetV) (.var 1)) 0 _)
+    (appP (.var (by csoloQ)) (.bangE (.arrForget (.var 1) u8T (by cdeadQ))))
+    (pairP (.var (by csoloQ)) (d_i32 fsNotFound (by cdeadQ)))
+
+theorem d_fileRead : CDerives LifeCtx.empty [] (.val fileReadV) (.comp (fileReadC .i32)) := by
+  refine .allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false ok_empty rfl hy)
+    (fun _ h => by cases h) (.ret (.thunkV rfl ?_))
+  refine .allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false Δwa₁_ok rfl hy)
+    (fun s hs hl => by simp only [List.mem_cons, List.not_mem_nil, or_false] at hs; subst hs; cases hl)
+    (.ret (.lamV ?_))
+  refine letP (A := .mut (.var 0) .i32) (B := .tensor .i32 (.sliceMut (.var 1) u8T))
+    (.var (by csoloQ)) ?_
+  refine letP (A := .i32) (B := .sliceMut (.var 1) u8T) (.var (by csoloQ)) ?_
+  exact pairP (.var (by csoloQ)) (pairP (.var (by csoloQ)) (d_i32 fsBadFile (by cdeadQ)))
+
+theorem d_fileWrite : CDerives LifeCtx.empty [] (.val fileWriteV) (.comp (fileWriteC .i32)) := by
+  refine .allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false ok_empty rfl hy)
+    (fun _ h => by cases h) (.ret (.thunkV rfl ?_))
+  refine .allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false Δwa₁_ok rfl hy)
+    (fun s hs hl => by simp only [List.mem_cons, List.not_mem_nil, or_false] at hs; subst hs; cases hl)
+    (.ret (.lamV ?_))
+  refine letP (A := .mut (.var 0) .i32) (B := .tensor .i32 (.arrayImm (.var 1) u8T))
+    (.var (by csoloQ)) ?_
+  refine letP (A := .i32) (B := .arrayImm (.var 1) u8T) (.var (by csoloQ)) ?_
+  exact .seqV (partP_split (.app (.val forgetV) (.var 0)) 0 _)
+    (appP (.var (by csoloQ)) (.bangE (.arrForget (.var 1) u8T (by cdeadQ))))
+    (pairP (.var (by csoloQ)) (d_i32 fsBadFile (by cdeadQ)))
+
+theorem d_fileFd : CDerives LifeCtx.empty [] (.val fileFdV) (.comp (fileFdC .i32)) := by
+  refine .allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false ok_empty rfl hy)
+    (fun _ h => by cases h) (.ret (.lamV ?_))
+  refine letP (A := .mut (.var 0) .i32) (B := .i32) (.var (by csoloP)) ?_
+  exact pairP (.var (by csoloP)) (d_i32 fsBadFile (by cdeadP))
+
+theorem d_mkFs : CDerives LifeCtx.empty [] (.val mkFsV) (.comp (mkFsC .i32)) :=
+  .lam (.ret (appP (d_i32 0 (by cdeadP)) (.alloc (by cdeadP))))
+
+theorem d_takeFs : CDerives LifeCtx.empty [] (.val takeCapV) (.comp (takeFsC .i32)) :=
+  .lam (.ret (appP (.var (by csoloP)) (.free (by cdeadP))))
+
+theorem cC_fileOpenC : cC (fileOpenC .i32) = cC (fileOpenC (.opq .fs)) := by
+  funext ls δ e ρ
+  simp only [fileOpenC, cC, vCE, forceE, Opaque.rel, Opaque.Holds, Val.IsInt]
+
+theorem cC_fileReadC : cC (fileReadC .i32) = cC (fileReadC (.opq .fs)) := by
+  funext ls δ e ρ
+  simp only [fileReadC, cC, vCE, forceE, Opaque.rel, Opaque.Holds, Val.IsInt]
+
+theorem cC_fileWriteC : cC (fileWriteC .i32) = cC (fileWriteC (.opq .fs)) := by
+  funext ls δ e ρ
+  simp only [fileWriteC, cC, vCE, forceE, Opaque.rel, Opaque.Holds, Val.IsInt]
+
+theorem cC_fileFdC : cC (fileFdC .i32) = cC (fileFdC (.opq .fs)) := by
+  funext ls δ e ρ
+  simp only [fileFdC, cC, vCE, forceE, Opaque.rel, Opaque.Holds, Val.IsInt]
+
+theorem cC_mkFsC : cC (mkFsC .i32) = cC (mkFsC (.opq .fs)) := by
+  funext ls δ e ρ
+  simp only [mkFsC, cC, vCE, Opaque.rel, Opaque.Holds, Val.IsInt]
+
+theorem cC_takeFsC : cC (takeFsC .i32) = cC (takeFsC (.opq .fs)) := by
+  funext ls δ e ρ
+  simp only [takeFsC, cC, vCE, Opaque.rel, Opaque.Holds, Val.IsInt]
+
+/-- **The model of `file_open` meets its contract.**  `[spec §34]` -/
+theorem fileOpen_meets (ls : List SRec) (δ : LSub) :
+    vC true (externTy (fileOpenC (.opq .fs))) ls δ fileOpenV PMap.empty := by
+  rw [← vC_externTy_congr rfl rfl cC_fileOpenC]
+  exact meets_of_derives rfl d_fileOpen ls δ
+
+/-- **The model of `file_read` meets its contract.**  `[spec §34]` -/
+theorem fileRead_meets (ls : List SRec) (δ : LSub) :
+    vC true (externTy (fileReadC (.opq .fs))) ls δ fileReadV PMap.empty := by
+  rw [← vC_externTy_congr rfl rfl cC_fileReadC]
+  exact meets_of_derives rfl d_fileRead ls δ
+
+/-- **The model of `file_write` meets its contract.**  `[spec §34]` -/
+theorem fileWrite_meets (ls : List SRec) (δ : LSub) :
+    vC true (externTy (fileWriteC (.opq .fs))) ls δ fileWriteV PMap.empty := by
+  rw [← vC_externTy_congr rfl rfl cC_fileWriteC]
+  exact meets_of_derives rfl d_fileWrite ls δ
+
+/-- **The model of `file_size` and `file_close` meets their contract.**  `[spec §34]` -/
+theorem fileFd_meets (ls : List SRec) (δ : LSub) :
+    vC true (externTy (fileFdC (.opq .fs))) ls δ fileFdV PMap.empty := by
+  rw [← vC_externTy_congr rfl rfl cC_fileFdC]
+  exact meets_of_derives rfl d_fileFd ls δ
+
+/-- **The model of `mk_fs` meets its contract.**  `[spec §34]` -/
+theorem mkFs_meets (ls : List SRec) (δ : LSub) :
+    vC true (externTy (mkFsC (.opq .fs))) ls δ mkFsV PMap.empty := by
+  rw [← vC_externTy_congr rfl rfl cC_mkFsC]
+  exact meets_of_derives rfl d_mkFs ls δ
+
+/-- **The model of `take_fs` meets its contract.**  `[spec §34]` -/
+theorem takeFs_meets (ls : List SRec) (δ : LSub) :
+    vC true (externTy (takeFsC (.opq .fs))) ls δ takeCapV PMap.empty := by
+  rw [← vC_externTy_congr rfl rfl cC_takeFsC]
+  exact meets_of_derives rfl d_takeFs ls δ
+
+/-! ### The file handle  `[spec §34, §62]`
+
+A `File` is a location owning a cell that holds the file's descriptor: `Ref I32` with the rules
+taken away (`vCE_file_eq_ref`). It owns its cell, so it has no derived drop, is not own-free and
+is not persistent: an abort may not abandon one, and a frame holding one across an abortive point
+drops it by its declared destructor (`[let-dtor]`, SPEC §62). Two externs make and take one:
+`file_mk : I32 ⊸ F File`, the descriptor put in a fresh cell (`λx. alloc x`), and
+`file_take : File ⊸ F I32`, the cell freed and its descriptor answered (`λc. free c`). No other
+Core term takes a `File` apart. -/
+
+/-- **`File` is `Ref I32` with the rules taken away**, in both modes.  `[spec §34]` -/
+theorem vCE_file_eq_ref (η : Option (Nat → TEnt)) (b : Bool) (ls : List SRec) (δ : LSub)
+    (v : Val) : vCE η b (.opq .file) ls δ v = vCE η b (.ref .i32) ls δ v := rfl
+
+/-- `file_mk`: `I32 ⊸ F Fl`.  `[spec §34]` -/
+def fileMkC (Fl : VTy) : CTy := .arr .i32 (.ret Fl)
+
+/-- `file_take`: `Fl ⊸ F I32`.  `[spec §34]` -/
+def fileTakeC (Fl : VTy) : CTy := .arr Fl (.ret .i32)
+
+theorem d_fileMk : CDerives LifeCtx.empty [] (.val mkInputV) (.comp (fileMkC (.ref .i32))) :=
+  .lam (.ret (appP (.var (by csoloP)) (.alloc (by cdeadP))))
+
+theorem d_fileTake : CDerives LifeCtx.empty [] (.val takeCapV) (.comp (fileTakeC (.ref .i32))) :=
+  .lam (.ret (appP (.var (by csoloP)) (.free (by cdeadP))))
+
+theorem cC_fileMkC : cC (fileMkC (.ref .i32)) = cC (fileMkC (.opq .file)) := by
+  funext ls δ e ρ
+  rfl
+
+theorem cC_fileTakeC : cC (fileTakeC (.ref .i32)) = cC (fileTakeC (.opq .file)) := by
+  funext ls δ e ρ
+  rfl
+
+/-- **The model of `file_mk` meets its contract.**  `[spec §34]` -/
+theorem fileMk_meets (ls : List SRec) (δ : LSub) :
+    vC true (externTy (fileMkC (.opq .file))) ls δ mkInputV PMap.empty := by
+  rw [← vC_externTy_congr rfl rfl cC_fileMkC]
+  exact meets_of_derives rfl d_fileMk ls δ
+
+/-- **The model of `file_take` meets its contract.**  `[spec §34]` -/
+theorem fileTake_meets (ls : List SRec) (δ : LSub) :
+    vC true (externTy (fileTakeC (.opq .file))) ls δ takeCapV PMap.empty := by
+  rw [← vC_externTy_congr rfl rfl cC_fileTakeC]
+  exact meets_of_derives rfl d_fileTake ls δ
+
 /-! ### End to end -/
 
 /-- **The contracts, as a named hypothesis.**  Each slot of `Γ` is live, at a persistent type,
@@ -840,13 +1084,21 @@ def stdModel : List (VTy × Val) :=
    (externTy (takeClockC (.opq .clock)), takeCapV),
    (externTy (readByteC (.opq .args)), readByteV),
    (externTy (mkInputC (.opq .args)), mkInputV),
-   (externTy (takeInputC (.opq .args)), takeCapV)]
+   (externTy (takeInputC (.opq .args)), takeCapV),
+   (externTy (fileOpenC (.opq .fs)), fileOpenV),
+   (externTy (fileReadC (.opq .fs)), fileReadV),
+   (externTy (fileWriteC (.opq .fs)), fileWriteV),
+   (externTy (fileFdC (.opq .fs)), fileFdV),
+   (externTy (mkFsC (.opq .fs)), mkFsV),
+   (externTy (takeFsC (.opq .fs)), takeCapV),
+   (externTy (fileMkC (.opq .file)), mkInputV),
+   (externTy (fileTakeC (.opq .file)), takeCapV)]
 
 theorem stdModel_meets : ∀ p ∈ stdModel, ∀ ls δ, vC true p.1 ls δ p.2 PMap.empty := by
   intro p hp ls δ
   simp only [stdModel, List.mem_cons, List.not_mem_nil, or_false] at hp
   rcases hp with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl |
-    rfl
+    rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
   · exact readByte_meets ls δ
   · exact writeByte_meets ls δ
   · exact mkInput_meets ls δ
@@ -862,6 +1114,14 @@ theorem stdModel_meets : ∀ p ∈ stdModel, ∀ ls δ, vC true p.1 ls δ p.2 PM
   · exact readArg_meets ls δ
   · exact mkArgs_meets ls δ
   · exact takeArgs_meets ls δ
+  · exact fileOpen_meets ls δ
+  · exact fileRead_meets ls δ
+  · exact fileWrite_meets ls δ
+  · exact fileFd_meets ls δ
+  · exact mkFs_meets ls δ
+  · exact takeFs_meets ls δ
+  · exact fileMk_meets ls δ
+  · exact fileTake_meets ls δ
 
 /-- Externs each given its model, by type. -/
 theorem externsMeet_of_model : ∀ {Γ : Ctx VTy} {γ : List Val},
@@ -873,7 +1133,8 @@ theorem externsMeet_of_model : ∀ {Γ : Ctx VTy} {γ : List Val},
         simp only [stdModel, List.mem_cons, List.not_mem_nil, or_false, Prod.mk.injEq] at hm
         rcases hm with ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ |
           ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ |
-          ⟨rfl, -⟩ <;> rfl
+          ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ |
+          ⟨rfl, -⟩ | ⟨rfl, -⟩ <;> rfl
       exact .cons hT (stdModel_meets _ hm) (externsMeet_of_model h)
 
 /-- **End to end, the model.**  `bcc interp`'s run: `run_io` with every extern given its model.

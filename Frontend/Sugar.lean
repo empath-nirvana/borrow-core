@@ -49,7 +49,7 @@ one is adding its name here. The elaboration brings in `io`, `div` and `prelude`
 (`elaborateS`); `include m` brings in any of them. -/
 def libNames : List String :=
   ["io", "div", "prelude", "lend", "adapters", "slice", "buf", "text", "textio", "iters", "fail",
-   "yield", "rec", "clo", "async", "list", "sys", "wasi", "key", "map", "float", "arith"]
+   "yield", "rec", "clo", "async", "list", "sys", "wasi", "key", "map", "float", "arith", "fs"]
 
 /-- The directory of the library: `$BCC_LIB` when it is set; otherwise `lib/` of the checkout
 whose `.lake/build/bin/` holds the running `bcc`; otherwise `lib/` of the working directory. -/
@@ -80,7 +80,7 @@ def libSrc (m : String) : Option String := match library m with
 
 /-- The capabilities `main` may be given, in its order: the standard streams (SPEC §11), the clock
 and the arguments (SPEC §34). -/
-def capNames : List String := ["stdin", "stdout", "stderr", "clock", "args"]
+def capNames : List String := ["stdin", "stdout", "stderr", "clock", "args", "fs"]
 
 /-- The capabilities a `main` may name as values (SPEC §11 *Sugar*). -/
 def streamNames : List String := ["stdin", "stdout", "stderr"]
@@ -90,6 +90,7 @@ def capKind : String → HostKind
   | "stdout" | "stderr" => .output
   | "clock" => .clock
   | "args" => .args
+  | "fs" => .fs
   | _ => .input
 
 def capTy (sp : Span) (c : String) : VTy := .ref sp (.handle sp (capKind c))
@@ -1604,7 +1605,9 @@ def capTyC (c : String) : CVTy := .ref (.opq (match capKind c with
   | .output => .output
   | .clock => .clock
   | .args => .args
-  | .tok => .tok))
+  | .fs => .fs
+  | .tok => .tok
+  | .file => .file))
 
 /-- `main` with ambient capabilities, elaborated: its new type and body. `c` is the typing
 context of `main`.  `[spec §11, §14]` -/

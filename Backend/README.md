@@ -604,6 +604,12 @@ A `main` may declare the standard externs (`Frontend/Check/Externs.lean`): the c
   nothing, answering the count). They are unbuffered, so a
   prompt is out before the next read. The plain LLVM/libc counterpart is `read(2)`/`write(2)`
   on the same descriptors; nothing WASI-specific is part of the semantics.
+- **Files (SPEC §34, *Files*).** `fs` is a cell holding `i32[0]`, which no runtime reads. The
+  five file externs are the closure-IR primitives `io fileOpen`, `io fileRead`, `io fileWrite`,
+  `io fileSize`, `io fileClose`, and in the flat IR one expression, `file op x p n` (`op` `0`–`4`),
+  answering an `i32`: natively `bc_file` over libc, in Wasm `$file` over WASI (`path_open` under
+  a preopened directory, `fd_read`, `fd_write`, `fd_filestat_get`, `fd_close`). The interpreters
+  run the model, an empty file system: an open answers `-1`, every other operation `-4`.
 - **The clock and the arguments (SPEC §34).** `clock` is a cell holding the model's time
   (`i64[0]`, nanoseconds), and `clock_now`/`clock_sleep` are the closure-IR primitives `io clockNow` and
   `io clockSleep`: in the flat IR the expression `now c` and the statement `sleep c ns`, which the

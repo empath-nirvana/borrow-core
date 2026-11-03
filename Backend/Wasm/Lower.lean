@@ -52,6 +52,8 @@ def lowerExp (fp : Nat) : Flat.Exp → List Instr
   | .getc fd => lowerExp fp fd ++ [.call "$getc"]
   | .getv fd a k => lowerExp fp fd ++ lowerExp fp a ++ lowerExp fp k ++ [.call "$getv"]
   | .now c => lowerExp fp c ++ [.call "$now"]
+  | .file op x a k => [.i64Const op.toUInt64] ++ lowerExp fp x ++ lowerExp fp a ++ lowerExp fp k ++
+      [.call "$file"]
   | .data off => [.i64Const (dataBase + off).toUInt64]
   | .gep a k => lowerExp fp a ++ lowerExp fp k ++ [.num (.bin .w64 .add)]
   | .stat k => [.globalGet (if k == 0 then "$allocs" else if k == 1 then "$indirect" else "$copies")]

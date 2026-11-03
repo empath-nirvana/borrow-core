@@ -353,6 +353,11 @@ def walk (p : Prog) (w : String) : Nat → Tm → Nat → CM Unit
         | none => modify fun st => { st with regions := st.regions.insert s c }
       | .io .readByte | .io .clockNow => eq "a capability" (← kd dst 0) (← a 0)
       | .io .writeByte | .io .writeAll | .io .clockSleep => eq "a capability" dst (← kd (← a 0) 0)
+      | .io .fileOpen | .io .fileWrite | .io .fileSize | .io .fileClose =>
+        eq "a capability" (← kd dst 0) (← kd (← a 0) 0)
+      | .io .fileRead => do
+        eq "a capability" (← kd dst 0) (← kd (← a 0) 0)
+        eq "a read's buffer" (← kd (← kd dst 1) 0) (← kd (← kd (← a 0) 1) 1)
       | .io .readInto => do
         eq "a capability" (← kd dst 0) (← kd (← a 0) 0)
         eq "a read's buffer" (← kd (← kd dst 1) 0) (← kd (← a 0) 1)

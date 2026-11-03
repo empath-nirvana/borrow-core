@@ -52,6 +52,12 @@ inductive Exp where
   | getv (fd addr len : Exp)
   /-- The time of the clock in the cell at `cell`, in nanoseconds (SPEC §34, `clock_now`). -/
   | now (cell : Exp)
+  /-- A file operation (SPEC §34): `op` `0` open (`x` the mode, the path's `len` bytes at
+  `addr`), `1` read (into the `len` bytes at `addr` of the descriptor `x`), `2` write (the `len`
+  bytes at `addr` to `x`), `3` size, `4` close (of `x`). Its answer is an `i32`, zero-extended: the
+  result, or a negative error (`-1` not found, `-2` denied, `-3` a directory, `-4` a bad file,
+  `-(16 + c)` the host's error `c`). -/
+  | file (op : Nat) (x addr len : Exp)
   /-- A run's counter: `0` the allocations so far, `1` the dispatched calls so far, `2` the
   copies of a variable at a non-trivial type so far. -/
   | stat (k : Nat)

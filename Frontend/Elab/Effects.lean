@@ -3702,7 +3702,7 @@ capability's cell. -/
 def platformEffects : List (String × String × String) :=
   [("Stdin", "stdin", "wasi_stdin"), ("Stdout", "stdout", "wasi_stdout"),
    ("Stderr", "stderr", "wasi_stderr"), ("Clock", "clock", "wasi_clock"),
-   ("Args", "args", "wasi_args")]
+   ("Args", "args", "wasi_args"), ("Fs", "fs", "wasi_fs")]
 
 /-- The capabilities of the system interface, in `main`'s order. -/
 def platformCaps : List String := platformEffects.map (·.2.1)

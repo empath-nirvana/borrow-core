@@ -76,9 +76,14 @@ def extImpls (xs : List Frontend.Check.ExternSpec) : Except String (List Clos.Ex
     | .readInto => pure (.io .readInto)
     | .clockNow => pure (.io .clockNow)
     | .clockSleep => pure (.io .clockSleep)
+    | .file .open_ => pure (.io .fileOpen)
+    | .file .read => pure (.io .fileRead)
+    | .file .write => pure (.io .fileWrite)
+    | .file .size => pure (.io .fileSize)
+    | .file .close => pure (.io .fileClose)
     | .mk s => pure (.mk (capStream s))
     | .take s => pure (.take (capStream s))
-    | .cap _ | .clockCap =>
+    | .cap _ | .clockCap | .fsCap =>
       throw s!"extern `{x.name}` is a capability, which run_io's harness makes"
 where
   capStream : Frontend.Check.IOStream → Clos.CapStream
@@ -86,6 +91,8 @@ where
     | .output => .output
     | .clock => .clock
     | .args => .args
+    | .fs => .fs
+    | .file => .file
 
 /-- **The program a backend compiles, for a program with capabilities** (SPEC §11): `run_io`
 checked in its compiled form (`Frontend.Check.IORun`, the term `IORun.every_run` and
