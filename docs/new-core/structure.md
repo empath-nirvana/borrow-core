@@ -22,7 +22,7 @@ Done means that theorem. Passing test programs doesn't count.
 | Piece | What it gives | Where |
 |---|---|---|
 | Step-indexed linear `ewp`/`erwp`, `[handle]` with no `hdv` | stored κ around unbounded loops | `SI/Ewp`, `SI/HandleN` |
-| Effectful destructors on every exit | raise, cancel, early loop close, performing destructors | `Let`, `FinCancelN`, `FinPerformN` |
+| Effectful destructors on every exit | raise, cancel, early loop close, performing destructors | `Core/LetDtor*` (library); `FinCancelN`, `FinPerformN` |
 | Index-relative `mut` cells (`UpdMutN`), 6.48 / 6.59 at the index | `mut` payloads under step-indexing | `UpdN`, `RebN` |
 | Canonical images (`TWNC`, `TemplAt`, `TemplDAt`) | shared reborrows (root and deep) can't disagree; Core's results over them (`Core.C`, not `Core.Stdio`) | `TWNC`, `CanonDeep`, `CoreC` |
 | `extF` + `LinDisj`/`DLinDisj`/`EscEx`, and `ext_extF` | where κ may resume; no restriction relative to Core's `Ext` | `ExtF`, `LinDisj`, `ExtExtF` |
