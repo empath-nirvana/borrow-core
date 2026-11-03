@@ -1003,6 +1003,10 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Park.relayAdequacyT
 #print axioms BoCa.Fig16.Tree.Wp.poolAns_park
 #print axioms BoCa.Fig16.Tree.Wp.poolAns_resume
+#print axioms BoCa.Fig16.Tree.Wp.poolAns_resumeSnd
+#print axioms BoCa.Fig16.Tree.Wp.twp_perm
+#print axioms BoCa.Fig16.Tree.Wp.poolT_swap
+#print axioms BoCa.Fig16.Tree.Wp.cerwpT_table_mono
 #print axioms BoCa.Fig16.Tree.Wp.poolAns_cancel
 #print axioms BoCa.Fig16.Tree.Wp.poolAns_run
 #print axioms BoCa.Fig16.Tree.Wp.poolSched_twp
