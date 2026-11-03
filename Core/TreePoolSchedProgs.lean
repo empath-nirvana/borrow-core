@@ -153,12 +153,15 @@ theorem stackClause_ok :
   exact poolAns_resume hg' hP' (a := Val.unit) (σ := PMap.empty) ⟨rfl, rfl⟩
     (ResUT.compS_empty_right ρ') (noneAt_empty _) hcov hv hF'm hF'M hi
 
-/-- **The return clause**: the pool's head resumed with the rest, or the pool empty, the task's
-answer the program's. -/
-theorem stackRet_ok : SchedRetT (ℍ := ℍ) QS (PoolAns (ℍ := ℍ) QS HStack InvStack) stackRet := by
+/-- **The return clause**, for any scheduler whose pool invariant says each stored task accepts `()`
+owning nothing: the pool's head resumed with the rest, or the pool empty, the task's answer the
+program's. -/
+theorem stackRet_okAt {H : Val} {Inv : List StoredT → Prop}
+    (hInv : ∀ t ts, Inv (t :: ts) → (∀ k w ls, t.en.PBv t.v k w ls Val.unit PMap.empty) ∧ Inv ts) :
+    SchedRetT (ℍ := ℍ) QS (PoolAns (ℍ := ℍ) QS H Inv) stackRet := by
   rintro F k w ls O v ρ _ _ _ _ _ ⟨rfl, rfl, rfl⟩
   rw [cerwpTE_iff]
-  have hD := valPost_down (poolAns_down (ℍ := ℍ) QS HStack InvStack)
+  have hD := valPost_down (poolAns_down (ℍ := ℍ) QS H Inv)
   refine twp_det hD (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) ?_
   show twp (ℍ := ℍ) F _ k w ls [] ((Expr.lam retBody).subst 0 Val.unit) _
   rw [ret_after]
@@ -172,9 +175,9 @@ theorem stackRet_ok : SchedRetT (ℍ := ℍ) QS (PoolAns (ℍ := ℍ) QS HStack 
   cases ts with
   | nil =>
     obtain ⟨rfl, rfl⟩ := hP
-    refine twp_det hQD (fun μ => step1Only_plug (Head.beta μ _ (stateVal HStack [])) rfl .hole) ?_
+    refine twp_det hQD (fun μ => step1Only_plug (Head.beta μ _ (stateVal H [])) rfl .hole) ?_
     rw [Kont.plug, stateVal, ret_s1]
-    refine twp_det hQD (fun μ => step1Only_plug (Head.letpair μ HStack (poolVal []) _) rfl .hole) ?_
+    refine twp_det hQD (fun μ => step1Only_plug (Head.letpair μ H (poolVal []) _) rfl .hole) ?_
     rw [Kont.plug, ret_s2]
     refine twp_det hQD (fun μ => step1Only_plug (Head.case₂ μ Val.unit _ _) rfl .hole) ?_
     rw [Kont.plug, ret_nil]
@@ -184,10 +187,10 @@ theorem stackRet_ok : SchedRetT (ℍ := ℍ) QS (PoolAns (ℍ := ℍ) QS HStack 
     cases j with
     | zero => exact twp_zero
     | succ j₀ =>
-    refine twp_step (fun μ => step1Only_plug (Head.beta μ _ (stateVal HStack (t :: ts))) rfl
+    refine twp_step (fun μ => step1Only_plug (Head.beta μ _ (stateVal H (t :: ts))) rfl
       .hole) ?_
     rw [Kont.plug, stateVal, ret_s1]
-    refine twp_det hQD (fun μ => step1Only_plug (Head.letpair μ HStack (poolVal (t :: ts)) _) rfl
+    refine twp_det hQD (fun μ => step1Only_plug (Head.letpair μ H (poolVal (t :: ts)) _) rfl
       .hole) ?_
     rw [Kont.plug, ret_s2]
     refine twp_det hQD (fun μ => step1Only_plug
@@ -195,11 +198,14 @@ theorem stackRet_ok : SchedRetT (ℍ := ℍ) QS (PoolAns (ℍ := ℍ) QS HStack 
     rw [Kont.plug, ret_cons]
     refine twp_det hQD (fun μ => step1Only_plug (Head.letpair μ t.κ (poolVal ts) _) rfl .hole) ?_
     rw [Kont.plug, ret_cons_let]
-    have hB : t.en.PBv t.v j₀ w₀ ls₀ Val.unit PMap.empty := by
-      rw [(hi t List.mem_cons_self).1]; exact ⟨rfl, rfl⟩
+    have hB : t.en.PBv t.v j₀ w₀ ls₀ Val.unit PMap.empty := (hInv t ts hi).1 _ _ _
     simp only [List.nil_append] at hF'M ⊢
     exact poolAns_resume hg hP hB (ResUT.compS_empty_right _) (noneAt_empty _) hcov hv hF'm hF'M
-      (fun u hu => hi u (List.mem_cons_of_mem _ hu))
+      (hInv t ts hi).2
+
+theorem stackRet_ok : SchedRetT (ℍ := ℍ) QS (PoolAns (ℍ := ℍ) QS HStack InvStack) stackRet :=
+  stackRet_okAt fun t ts hi => ⟨fun _ _ _ => by rw [(hi t List.mem_cons_self).1]; exact ⟨rfl, rfl⟩,
+    fun u hu => hi u (List.mem_cons_of_mem _ hu)⟩
 
 /-- **The stack scheduler meets `SchedOKT`** with its answers functions of its pool. -/
 theorem stack_schedOK :
