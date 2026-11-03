@@ -134,7 +134,7 @@ becomes `Core/TreeHeadlines.lean`, with the namespaces of §1.
 | `R1_StepKeepsFdEsc` | proved (`r1_stepKeepsFdEsc`, `stepKeepsFdEsc`) |
 | `R2_EndBlockedByHolder` | proved (`r2_endBlockedByHolder`, from `fdEsc_of_end_valid`) |
 | `R3_JoinEndNeedsFdEsc` | proved (`r3_joinEndNeedsFdEsc`, from `fdEsc_of_end_valid`; the converse direction is `fdEsc_at_join` + `immEnd_valid_of_fdEsc`) |
-| `R4_ExtExtFT` | **open**; `RelT`, `KeepsT`, `CellInT`, `ExtLT` are new definitions (Core's `Rel`, `Keeps`, `CellIn`, `Ext` over the tree carrier) |
+| `R4_ExtExtFT` | proved (`r4_extExtFT`, from `ext_extFT`, `Support/Model/Tree/World/ExtExtF.lean`); `RelT`, `KeepsT`, `CellInT`, `ExtLT` defined there (Core's `Rel`, `Keeps`, `CellIn`, `Ext` over the tree carrier), the statement as below |
 
 Names that do not exist yet anywhere: `SchedOKT`, `RelT`, `KeepsT`, `CellInT`, `ExtLT` (the last
 four are defined in the text). Every other name is the spike's.
@@ -282,7 +282,7 @@ theorem do not run on, and a later PR would have to connect it to `hnd` or throw
 
 | Item | Reads | Size (estimate) | Risk |
 |---|---|---|---|
-| **R4: tree `ext_extF`**, with `LinDisj`/`DLinDisj`/`EscEx` | `ExtLT` (new, §4); tree versions of `LinDisj`, `DLinDisj`, `EscEx`, `desc_of_xex`, `tag_ge_nested`, `NCell.icp`, `inDom_imm_or_xex`, `xpath_unique`, over `LinPathT`, `DescT`, `LinLocT`, `FrameLifeT`, `TaggedT` (all exist); `escBeneathT` may serve for `EscEx` | chain: `ExtExtF` 408 + `LinDisj` 195 + part of `ExtF`; tree: 1.2k–2k lines | medium. At the tree, `ExtLT`'s lifetime clause leaves records on other branches unconstrained (they are incomparable with `b`). `tag_ge_nested`'s role must then come from `TaggedT` + `FrameLifeT` on one branch. Not checked. |
+| **R4: tree `ext_extF`** (done, slice (c)) | `ExtLT`; `inDomT_imm_or_xex`, `CellAt.inStratum`, `desc_of_xexT`, `tag_ge_nestedT`, `not_relAt_xexT` over `LinPathT`, `DescRT`, `LinLocT`, `FrameLifeT`, `TaggedT`; `LinDisj`/`DLinDisj`/`EscEx` not ported (D11): `TWNT.exclUnique`, `desc_comparable`, `not_desc_proper`, `le_not_linLoc` take their role | about 480 lines with the examples | resolved. The lifetime clause leaves records incomparable with `b` free, and the proof never asks about one: the tag it bounds is reached from `b` by `b ⊏ z ⊑ t`, `z` a lifetime of the nested view (strata), `z ⊑ t` by `FrameLifeT` of the root `TaggedT` names, the root found by `root_unique` on one branch. |
 | **`fdAt` monotone** (`TFrame.Mono (fdAt en v F O′)`) | `OpEntT.fd` monotone along re-reading (a table condition, to add as a premise callers discharge), and that a record list has a re-reading at every extension (from `RR.exists_retype` per escrow) | 150–300 lines | low. Needed when a resumed run is bound (`twp_bind`'s `hFm`), so by the multi-branch slice. |
 | **Tree `extF_fold`/`extF_seal`** (with `FrzT.del_or`, `FrzT.of_del`, `not_frzT_single_own`, …) | `FrzT`, `InDomT` and the composition lemmas in `ExtFT` | 200–400 lines | low. Read only by the frame rules across stops (`erwp_M_frame`, `erwp_M_antiFrame` analogues), which are row 6. **Recommendation:** move them to row 6 unless the scheduler's specification reads `extFT` through a fold; the top-level scheduler holds no lend. |
 | **The multi-branch scheduler** (`MultiBranchAdequacyT`) | `[handle]` at `cerwpT` over the tree (no tree version exists: the spike's `[handle]` without `hdv` is `ewp_handle`/`erwp_handle`, over `ewp` and chain `erwp`, which `cerwpT` does not reuse); `κ` cells and cancel at the tree (`cerwp_kappaCell`, `cerwp_kappaC_resume/cancel` at chain); `SchedOKT`; `cactusT_move` at capture, `cactusT_extend` + `TWd.graft` (`Ops`) at a resume, `cactusT_spawn`/`cactusT_join`; `stepKeepsFdEsc` for every stored branch across each segment; `fdEsc_at_join` + `immEnd_valid_of_fdEsc` at a join; `contShareT_resume` at the resumer's list | 3k–5k lines | **high** |
@@ -321,7 +321,7 @@ hypotheses (every headline premise is one callers discharge: `hQ`, the program's
 |---|---|---|---|
 | **(a) The typed tree world** (`Support/Model/Tree/Reread.lean`, `World/*`) | re-reading, codes, `TWd`, records, `TWNT` with canonical images, `twnt_invHolds`, `UpdX`/`InvKept`, `FdEsc`, `escBeneathT`, `fdEsc_of_updX`, `extFT`; companions `clause3_not_cov`, `lend_open_*`, `twnt_config`/`immEnd_esc_config`; SPEC §62 updated (the canonical-image paragraph, per the #774 ruling; conditions 21 and 23) | every listed result builds with axioms ⊆ the three | about 9–10k lines, mostly copied (the carrier names already match) |
 | **(b) The relation at one branch** (`Core/StepsN`, `TreeWp`, `TreeWpEff`, `TreeCactus`, `TreeStepKeep`, `TreeHeadlines`) | `twp`, `cerwpT`, `contShareT`, `CactusInvT` and its operations, `TopAdequacyT`, R1 with `not_stepKeepsFdEscNoUpd`, R3 with `cactusT_not_fdEsc`, R2 | `TopAdequacyT`, R1, R2, R3 proved | about 2k lines ported, plus R2 and R3 |
-| **(c) R4** | `ExtLT`, tree `LinDisj`/`DLinDisj`/`EscEx`, R4 | R4 proved | 1.2k–2k |
+| **(c) R4** | `ExtLT`, R4 (`Support/Model/Tree/World/ExtExtF.lean`); `LinDisj`/`DLinDisj`/`EscEx` not needed (D11) | R4 proved (done) | about 480 |
 | **(d) Multi-branch adequacy** | `[handle]` at `cerwpT`, `κ` cells, `SchedOKT`, `fdAt` monotone, `Ops`' graft, `MultiBranchAdequacyT` | `MultiBranchAdequacyT` proved, `SchedOKT` a definition | 3k–5k |
 
 #781 closes after (d). (c) and (d) are independent once (b) is in.
@@ -370,6 +370,7 @@ carrier sits beside the printed one. Unlike #777 (`chainEquiv`), there is no the
 | D8 | `escBeneathT` is a new derivation with its own case splits, not a port | — | Check it in review against `borrow_lang` CLAUDE.md §6: the splits are ours |
 | D9 | Store types as codes `KTy`, no substitution `δ`/`AdmWf` | Ruling of condition 16 | — |
 | D10 | `extF`/`extFT`, `contShareT`'s resume at any `extFT` list | In-house design (`SI/ExtF.lean`: "not a transcription") | — |
+| D11 | `ext_extFT`'s `desc_of_xexT` reads the owner of an exclusive cell off `TWNT.exclUnique` (with `desc_comparable`, `not_desc_proper`, `le_not_linLoc`), not off the chain's `DLinDisj`, `EscEx` and `xpath_unique` in the root's escrow | Those results are already proved of `TWNT`, its `reread` case included; `DLinDisj`/`EscEx` would need a new `reread` case | — (the chain statements are in-house designs, not printed) |
 
 Unspent printed hypotheses: 6.64's H24 and H6 (D6). Unused uniqueness results: none
 (`RecRR.func`, `RecsRR.func`, `RR.func`, `Flat.functional`, `CompR.functional` are used).

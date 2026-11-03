@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.28 · 2026-11-03
+Version 1.29 · 2026-11-03
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -10481,7 +10481,16 @@ between branches, by spawn and by join (`cactusT_step`, `cactusT_extend`, `cactu
 - **R3**, a join ends a shared lend only when the other branches hold nothing of it
   (`r3_joinEndNeedsFdEsc`); with `fdEsc_at_join` and `immEnd_valid_of_fdEsc`, the end is valid
   exactly when no other branch holds part of the lend. R2 and R3 rest on `fdEsc_of_end_valid`;
-  `config_end_refused` places both at the configuration of `cactusT_config`.
+  `config_end_refused` places both at the configuration of `cactusT_config`;
+- **R4**, a stored continuation is never refused at a resumption the tree world's own extension
+  allows (`r4_extExtFT`, `ext_extFT`, `Support/Model/Tree/World/ExtExtF.lean`): at a share inside
+  a tagged typed tree world, every list at which a typed tree world holds and which `ExtLT` allows
+  (Core's `Ext` over the tree carrier: the records an `imm` cell of the share reads kept, and the
+  records strictly longer-lived than a borrow cell of the share the same), `extFT` allows. A record
+  frozen at depth is reached from a lifetime of the share's cell by a chain of the tree's order
+  (the strata, then the root's `FrameLifeT`), so `ExtLT`'s lifetime clause is read on one branch.
+  `extLT_admits_drop`, `not_extLT_drop_relevant` and `not_extLT_drop_longer` show what each clause
+  admits and refuses.
 
 No program is proved there yet.
 
@@ -11054,7 +11063,7 @@ programs in `Core/LetDtorFiles.lean`, `Core/LetDtorCancel.lean`, `Core/LetDtorLo
 change to `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the checker, the backends or the
 corpus. The typed tree world (#781) is in `Support/Model/Tree/World/`, and the step-indexed
 relation over it in `Core/StepsN.lean`, `Core/TreeWp.lean`, `Core/TreeWpEff.lean`,
-`Core/TreeCactus.lean`, `Core/TreeStepKeep.lean` and `Core/TreeHeadlines.lean` (adequacy and R1–R3
+`Core/TreeCactus.lean`, `Core/TreeStepKeep.lean` and `Core/TreeHeadlines.lean` (adequacy and R1–R4
 at one branch); `kappa_lin_strict` is in `Core/LetDtorSuspend.lean`. No relation the typing rules use
 reads them yet. The rest of §62 is design.
 
@@ -11062,6 +11071,10 @@ reads them yet. The rest of §62 is design.
 
 ## Changelog
 
+- **1.29** (2026-11-03) — §62 (#781, slice (c)): R4 at the tree world (`r4_extExtFT`,
+  `ext_extFT`), with `RelT`, `KeepsT`, `CellInT`, `ExtLT` and the examples of what `ExtLT` admits
+  and refuses. No change to `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the checker, the
+  backends or the corpus.
 - **1.28** (2026-11-03) — §62 (#781, slice (b)): the step-indexed relation over the tree world.
   `twp` and its rules (`twp_frame_w` beside `twp_frame`), `cerwpT` with `contShareT` and
   `opTableT`, `CactusInvT` with step, growth, move, spawn and join, `cerwpT_adequacy`,
