@@ -10507,7 +10507,9 @@ records it owns at that resume, with nothing from earlier stops. A task may star
 its present frame condition avoids them, its base need not. **Multi-branch adequacy** (`multiBranchAdequacyT`): `hnd H e₀` is `OrDiverges` for
 every scheduler `H` meeting `SchedOKT` and every task `e₀` at its table (`SchedOKT` fixes neither
 how many continuations a clause holds nor which it resumes); derived through `cerwpT_adequacy`. The
-task runs at the frame condition `⊤`: the scheduler's state is in the resumed branch's frame. A
+task runs at any base and present frame conditions every valid frame meets (`⊤` among them): the
+scheduler's state is in the resumed branch's frame, and a valid frame avoids the task's records
+from their opening, so the task may end a lend it opened. A
 stopped branch's clause knows its frame holds nothing of the branch's lends, those it opened
 during the segment included (`twp_bind_fd`, `noneAt_recMask_end`). One program is proved through
 the headline (`Core/TreeSchedProgs.lean`, `asyncProg_safe`): a scheduler that resumes a task beside
@@ -10576,8 +10578,26 @@ closed program `(λx. post) (drive pre)` whose setup `pre` ends at a task's answ
 any number of parked tasks and the relay's own state, apart (`RelayMidT`), and whose `post` is
 verified from every end of the loop, is `OrDiverges`; through `twp_frame_keep`, `drive_twp` and
 `topAdequacyT`. Its tasks run at frame conditions met by frames avoiding their records, so they may
-end lends. `MultiBranchAdequacyT` stays for a scheduler whose clauses handle every stop
-themselves, its task at `⊤`. **Borrow edges point to ancestors**
+end lends. It covers one fixed scheduler form (setup, drive one task, post), with the scheduler
+outside the stepper handler; it is not an instance of the pool-scheduler headline below.
+
+**Pool-scheduler adequacy** (`Core/TreePoolSched.lean`). A scheduler handler keeps its pool in its
+state: the state value is the handler with the pool's continuations (`stateVal H ts`), and the
+scheduler's answers are functions of it (`PoolAns Q H Inv`: applied to any pool meeting the
+scheduler's invariant `Inv`, of any length, whose tasks run under `H` and answer in `PoolAns`
+again (`GoodT`), apart from the answer's own resource, it answers the program's `Q` under every
+frame condition whose frames avoid all their records). `SchedOKT` is unchanged; it is read at
+`Qout = PoolAns Q H Inv`. `PoolSchedAdequacyT` (`poolSchedAdequacyT`): `(hnd H e₀) (H, [])` is
+`OrDiverges` for every such scheduler meeting `SchedOKT`, every `Inv` the empty pool meets, and
+every task at its table at frame conditions every valid frame meets; through `cerwpT_schedHandle`,
+`poolT_nil` and `topAdequacyT`. A clause proves its answer by the pool's moves, each a preservation
+lemma: run a task under the scheduler beside the pool (`poolAns_run`, `twp_keepsPool`), park the
+stopped task (`poolAns_park`, `poolT_park`), resume the pool's head with the rest handed to what it
+answers (`poolAns_resume`, `poolT_resume`), cancel it the same way (`poolAns_cancel`,
+`poolT_cancel`). The state carries `H` so a clause runs a task or a cancel branch under its own
+handler without naming itself. The stack scheduler (`Core/TreePoolSchedProgs.lean`,
+`stack_schedOK`) meets `SchedOKT` at `PoolAns` for every pool; `stackProg_safe` is a closed program
+through the headline. **Borrow edges point to ancestors**
 (`borrowEdges_ancestors`, `lender_ancestor`): in `CactusInvT`, every view a part of a branch's
 resource holds (a stored continuation's share among them) carries only lifetimes enclosing the
 branch point, so every lender of a borrow a stored continuation holds is an ancestor of where it
@@ -10590,10 +10610,11 @@ is stored; `cactusT_step` keeps it through capture and resume.
 - one relation with abortive stops and forwarding (the two relations `erwp`/`cerwp` merge);
 - the lend rules at `twp` over the tree for escrows with contents (reborrows, `TWNT.reb`), and
   multi-branch programs with lends;
-- programs through `RelayAdequacyT` in which a parked task holds a view of a lend while another
-  task ends a lend of its own, and the same with the parked task cancelled through an effectful
-  finaliser (the stepper, task A, the loop and the headline are written; task B and the two
-  setups are not); `pingpong-mut`'s relay is not yet written through the pool;
+- programs through `PoolSchedAdequacyT` in which a parked task holds a view of a lend while
+  another task ends a lend of its own, the same with the parked task cancelled through an effectful
+  finaliser, and one with three stored tasks: a spawning scheduler (a clause running a new task
+  through `poolAns_run`) and the route by which a task's copy of a view gets back to its lender are
+  not written; `pingpong-mut`'s relay is not yet written through the pool;
 - `lender_ancestor`'s link from a share's top cell to `FrameLifeT`'s walk cells is assumed, not
   derived.
 
