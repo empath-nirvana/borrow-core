@@ -90,9 +90,9 @@ theorem fdJoinT_fdMono {en : OpEntT} (h : ∀ v w O ρf, en.fd v w O ρf ↔ fdJ
 (`KapSchedT` at the masks `M`) and a state `ρ₂` in `R` (owning `O₂`), valid and holding nothing at
 `M`; under a frame condition whose frames avoid `M`, the resume of `κ` at an answer the entry
 accepts runs with the state beside it, and ends beside the state re-read. -/
-theorem kapSchedT_resume_beside {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : Nat}
+theorem kapSchedT_resume_beside {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {H : Val} {k : Nat}
     {w : TWd} {ls : List (SRecT w.K)} {O O₂ : List (FrameRecT w.K)} {v κ : Val} {ρk : TRes w.K}
-    (hκ : KapSchedT (ℍ := ℍ) Qout M en k w ls O v κ ρk) {F : TFrame}
+    (hκ : KapSchedT (ℍ := ℍ) Qout M en H k w ls O v κ ρk) {F : TFrame}
     (hFM : ∀ w' ρf, F w' ρf → fdMask M w' ρf) {k' : Nat} (hk' : k' < k) {a : Val}
     {σ σ' ρ₂ ρ : TRes w.K} (hB : en.PBv v k' w ls a σ) (hcσ : ResUT.CompS ρk σ σ')
     (hcρ : ResUT.CompS σ' ρ₂ ρ) (hcov : CovR (sem w.Θ) w.K ρ)
@@ -103,7 +103,7 @@ theorem kapSchedT_resume_beside {Qout : TPostV} {M : BoCa.Loc → Prop} {en : Op
       (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val a)) ρ := by
   have hcovk : CovR (sem w.Θ) w.K ρk :=
     CovR.of_compS_left hcσ (CovR.of_compS_left hcρ hcov)
-  have h := cerwpTE_iff.mp (hκ.2 w ρk ls O (TWd.Ext.refl _ _) (RR.refl hcovk)
+  have h := cerwpTE_iff.mp (hκ.2.1 w ρk ls O (TWd.Ext.refl _ _) (RR.refl hcovk)
     (KeepRel.refl hls ρk) (RecsRR.refl hO) k' hk' a σ σ' hB hcσ (fdMask M)
     (fdMask_mono M) (fun _ _ h => h))
   refine twp_frame_w hR hap hcρ hcov ?_ h hR₂

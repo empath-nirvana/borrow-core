@@ -45,7 +45,7 @@ open BoCa.Fig16
 open BoCa.Fig16.Tree
 open BoCa.Fig16.BoLo
 open BoCa.Fig16.LogRel.Core
-open BoCa.BoLo (Heap Step1 Head Kont performE raiseE cancelVal opPayload)
+open BoCa.BoLo (Heap Step1 Head Kont performE raiseE cancelVal opPayload ccatchE)
 /-! ### Tables -/
 
 /-- A world-indexed predicate over values at a step index, reading the list. -/
@@ -58,8 +58,9 @@ structure OpEntT where
   PA : TVProp
   /-- The answer, read at the payload. -/
   PBv : Val → TVProp
-  /-- The cancel obligation, at a world and list. -/
-  fin : Option (Nat → (w : TWd) → List (SRecT w.K) → Expr → TRes w.K → Prop)
+  /-- Whether the continuation's cancel branch is owed: at a cancellable entry (`q ≠ lin`), the
+  unwinding `ccatch (K†[raise …])` is owed as a continuation, like a resume (`contShareT`). -/
+  fin : Bool
   /-- What the resumer guarantees of the frame at the resume, read at the payload and at the
   records the resumed run owns there. -/
   fd : Val → (w : TWd) → List (FrameRecT w.K) → TRes w.K → Prop
@@ -110,7 +111,10 @@ theorem fdAt_iff {en : OpEntT} {v : Val} {F : TFrame} {w' w'' : TWd}
 /-- **The continuation's share at the tree world**: at every extension of the stop's world, on
 the share's and the owned records' re-readings there, at every list `ls′` keeping the re-readings
 of the records of the stop list `ls` the share reads (`KeepRel`), resumed at every answer at every
-`k′ < k` under a frame meeting `F` and the entry's `fd`; cancellable when the entry is.
+`k′ < k` under a frame meeting `F` and the entry's `fd`. At a cancellable entry (`q ≠ lin`, `fin`)
+its cancel branch is owed the same way: the unwinding of `K` with its handler frames and cancel
+delimiters removed (`K†`) is a run of the task, which may stop again at an operation (an effectful
+finaliser) and come back as a stored continuation.
 
 The resume list's condition reads only the stop list's records the share is relevant to: another
 branch may end a record of its own that was open at the stop, and the share still resumes
@@ -124,8 +128,8 @@ def contShareT (en : OpEntT) (F : TFrame) (k : Nat) (w : TWd) (ls : List (SRecT 
     (∀ k', k' < k → ∀ (a : Val) (σ σ' : TRes w'.K), en.PBv v k' w' ls' a σ →
       ResUT.CompS ρ' σ σ' → Ψ (fdAt en v F O') w' O' k' ls'
         (K.plug (.val a)) σ') ∧
-    (en.q ≠ .lin → ∀ P, en.fin = some P →
-      P k w' ls' (K.dead.plug (raiseE (.val (cancelVal none)))) ρ')
+    (en.q ≠ .lin → en.fin = true → ∀ k', k' < k → Ψ (fdAt en v F O') w' O' k' ls'
+      (ccatchE (K.dead.plug (raiseE (.val (cancelVal none))))) ρ')
 
 /-- A stop at a non-abortive operation the table allows. -/
 def opTableT (T : OpTabT) : TableT := fun F k w ls O t Ψ ρ =>
@@ -147,7 +151,7 @@ theorem opTableT_local (T : OpTabT) : (opTableT T).Local := by
     fun w' ρ' ls' O' hE hr hx hO =>
     ⟨fun k' hk a σ σ' hB hcσ =>
       hΨ _ _ _ k' hk _ _ _ ((hcont w' ρ' ls' O' hE hr hx hO).1 k' hk a σ σ' hB hcσ),
-      (hcont w' ρ' ls' O' hE hr hx hO).2⟩⟩
+      fun hq hf k' hk => hΨ _ _ _ k' hk _ _ _ ((hcont w' ρ' ls' O' hE hr hx hO).2 hq hf k' hk)⟩⟩
 
 /-! ### The relation -/
 

@@ -261,36 +261,82 @@ theorem twp_kappaC_cancel {F : TFrame} {Q : TPost} (hQ : Q.Down) (l : BoCa.Loc) 
   rw [show (0 + 1 : Nat) = 1 from rfl, kappa_cancel_subst]
   exact h
 
+/-- **Cancelling `κ` inside a context**: `Kc[κ (inj₂ ())]` runs `Kc[ccatch (K†[raise …])]`. -/
+theorem twp_kappa_cancel_in {F : TFrame} {Q : TPost} (hQ : Q.Down) (H : Val) (K Kc : Kont)
+    {n : Nat} {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {ρ : TRes w.K}
+    (h : twp (ℍ := ℍ) F Q n w ls O
+      (Kc.plug (ccatchE (K.dead.plug (raiseE (.val (cancelVal none)))))) ρ) :
+    twp (ℍ := ℍ) F Q n w ls O (Kc.plug (.app (kappa H K) (.val (Val.inj₂ .unit)))) ρ := by
+  refine twp_det hQ (fun μ => step1Only_plug (Head.beta μ _ _) rfl Kc) ?_
+  refine twp_det hQ (fun μ => step1Only_plug (Head.case₂ μ Val.unit _ _) rfl Kc) ?_
+  refine twp_det hQ (fun μ => step1Only_plug (Head.seq μ _) rfl Kc) ?_
+  rw [show (0 + 1 : Nat) = 1 from rfl, kappa_cancel_subst]
+  exact h
+
+/-- **Cancelling a cancellable `κ` inside a context**: its cell is freed, then
+`Kc[ccatch (K†[raise …])]` runs. -/
+theorem twp_kappaC_cancel_in {F : TFrame} {Q : TPost} (hQ : Q.Down) (l : BoCa.Loc) (H : Val)
+    (K Kc : Kont) {n : Nat} {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)}
+    {ρ ρ₂ : TRes w.K} (hc : ResUT.CompS (ResUT.single l (CellUT.ownOf BoCa.Val.unit)) ρ₂ ρ)
+    (h : twp (ℍ := ℍ) F Q n w ls O
+      (Kc.plug (ccatchE (K.dead.plug (raiseE (.val (cancelVal none)))))) ρ₂) :
+    twp (ℍ := ℍ) F Q n w ls O (Kc.plug (.app (kappaC true l H K) (.val (Val.inj₂ .unit)))) ρ := by
+  refine twp_det hQ (fun μ => step1Only_plug (Head.beta μ _ _) rfl Kc) ?_
+  refine twp_det hQ (fun μ => step1Only_plug (Head.case₂ μ Val.unit _ _) rfl Kc) ?_
+  refine twp_det hQ (fun μ => step1Only_plug (Head.seq μ _) rfl Kc) ?_
+  have e₁ : ∀ e : Expr, Kc.plug (.seq (freeE (.val (.loc l))) e) =
+      (Kc.comp (Kont.seq .hole e)).plug (freeE (.val (.loc l))) := fun e => by
+    rw [Kont.plug_comp]; rfl
+  show twp (ℍ := ℍ) F Q n w ls O (Kc.plug (.seq (freeE (.val (.loc l)))
+    (Expr.subst 0 Val.unit (Expr.subst (0 + 1) (Val.shift 1 0 Val.unit.inj₂)
+      (ccatchE ((Kont.shift 2 0 K.dead).plug (raiseE (Expr.val (cancelVal none))))))))) ρ
+  rw [e₁]
+  refine twp_free hQ _ l Val.unit hc ?_
+  rw [Kont.plug_comp]
+  refine twp_det hQ (fun μ => step1Only_plug (Head.seq μ _) rfl Kc) ?_
+  rw [show (0 + 1 : Nat) = 1 from rfl, kappa_cancel_subst]
+  exact h
+
 /-! ### The scheduler's interface -/
 
 /-- **`κ` as the scheduler's clause receives it.** At every extension of the stop's world, on
 the share's and records' re-readings, at every resume list keeping the stop list's records the
-share reads (`KeepRel`): resumed at
-every answer the entry accepts, at every `k′ < k`, it is the scheduler's relation (`cerwpT` at
-the empty table) under every frame condition whose frames avoid `M`. `M` holds the lent and escrow
+share reads (`KeepRel`): resumed at every answer the entry accepts, at every `k′ < k`, it is the
+scheduler's relation (`cerwpT` at the empty table) under every frame condition whose frames avoid
+`M`; and at a cancellable entry (`q ≠ lin`, `fin`) so is its cancel branch run under the scheduler
+`H` again, `hnd H (κ (inj₂ ()))`: the unwinding may stop at an operation of `H`'s, and then comes
+back to `H`'s clause as a stored continuation like any other. `M` holds the lent and escrow
 locations of every record the branch has owned at a resume and at the stop: a state the clause
 keeps beside the resumed run must hold nothing there, and be valid. At an unrestricted operation
 `κ` owns nothing, so it may be dropped. -/
-def KapSchedT (Qout : TPostV) (M : BoCa.Loc → Prop) (en : OpEntT) (k : Nat) (w : TWd)
+def KapSchedT (Qout : TPostV) (M : BoCa.Loc → Prop) (en : OpEntT) (H : Val) (k : Nat) (w : TWd)
     (ls : List (SRecT w.K)) (O : List (FrameRecT w.K)) (v κ : Val) : TRes w.K → Prop := fun ρ =>
-  (en.q = .unr → ρ = PMap.empty) ∧ ∀ (w' : TWd) (ρ' : TRes w'.K) (ls' : List (SRecT w'.K))
+  (en.q = .unr → ρ = PMap.empty) ∧ (∀ (w' : TWd) (ρ' : TRes w'.K) (ls' : List (SRecT w'.K))
     (O' : List (FrameRecT w'.K)),
     w.Ext w' ρ → RRw (w := w) (w' := w') ρ ρ' → KeepRel w'.Θ ls ls' ρ → RecsRR w'.Θ O O' →
     ∀ k', k' < k → ∀ (a : Val) (σ σ' : TRes w'.K), en.PBv v k' w' ls' a σ →
       ResUT.CompS ρ' σ σ' → ∀ F' : TFrame, F'.Mono → (∀ w'' ρf, F' w'' ρf → fdMask M w'' ρf) →
       cerwpT (ℍ := ℍ) (opTableT OpTabT.empty) Qout F' k' w' ls' O'
-        (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val a)) σ'
+        (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val a)) σ') ∧
+  ∀ (w' : TWd) (ρ' : TRes w'.K) (ls' : List (SRecT w'.K)) (O' : List (FrameRecT w'.K)),
+    w.Ext w' ρ → RRw (w := w) (w' := w') ρ ρ' → KeepRel w'.Θ ls ls' ρ → RecsRR w'.Θ O O' →
+    en.q ≠ .lin → en.fin = true → ∀ k', k' < k → ∀ F' : TFrame, F'.Mono →
+      (∀ w'' ρf, F' w'' ρf → fdMask M w'' ρf) →
+      cerwpT (ℍ := ℍ) (opTableT OpTabT.empty) Qout F' k' w' ls' O'
+        (hndE H (.app κ.1 (.val (Val.inj₂ .unit)))) ρ'
 
 /-- A `κ` held at `w` is held at every extension of `w`, on its re-reading, at any list there
 keeping the records of `ls` its share reads. -/
-theorem KapSchedT.kripke {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : Nat}
+theorem KapSchedT.kripke {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {H : Val} {k : Nat}
     {w w₁ : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {ls₁ : List (SRecT w₁.K)}
     {O₁ : List (FrameRecT w₁.K)} {v κ : Val} {ρ : TRes w.K} {ρ₁ : TRes w₁.K}
-    (h : KapSchedT (ℍ := ℍ) Qout M en k w ls O v κ ρ) (hE : w.Ext w₁ ρ)
+    (h : KapSchedT (ℍ := ℍ) Qout M en H k w ls O v κ ρ) (hE : w.Ext w₁ ρ)
     (hr : RRw (w := w) (w' := w₁) ρ ρ₁) (hl : KeepRel w₁.Θ ls ls₁ ρ) (hO : RecsRR w₁.Θ O O₁) :
-    KapSchedT (ℍ := ℍ) Qout M en k w₁ ls₁ O₁ v κ ρ₁ :=
+    KapSchedT (ℍ := ℍ) Qout M en H k w₁ ls₁ O₁ v κ ρ₁ :=
   ⟨fun hu => by obtain rfl := h.1 hu; exact RR.of_empty hr,
-    fun w' ρ' ls' O' hE' hr' hx hO' => h.2 w' ρ' ls' O' (hE.trans hr hE')
+    fun w' ρ' ls' O' hE' hr' hx hO' => h.2.1 w' ρ' ls' O' (hE.trans hr hE')
+      (RRw.trans hE'.1 hr hr') (hl.trans hE'.1 hr hx) (hO.trans hE'.1 hO'),
+    fun w' ρ' ls' O' hE' hr' hx hO' => h.2.2 w' ρ' ls' O' (hE.trans hr hE')
       (RRw.trans hE'.1 hr hr') (hl.trans hE'.1 hr hx) (hO.trans hE'.1 hO')⟩
 
 /-- **A mask history at the table**: every location of `M` is the lent or an escrow location of a
@@ -315,14 +361,15 @@ def SchedRetT (T : OpTabT) (n₀ : UInt32) (Qin Qout : TPostV) (hr : Val) : Prop
 /-- **An operation's clause**: the payload's resource in the entry's `PA`, `κ` in `KapSchedT` at
 the branch's mask history `M` and the masks of the records `O` it owns at the stop (which the
 entry's `oc` admits), under every frame condition whose frames avoid both. -/
-def SchedClauseT (T : OpTabT) (n₀ : UInt32) (Qout : TPostV) (en : OpEntT) (c : Val) : Prop :=
+def SchedClauseT (T : OpTabT) (n₀ : UInt32) (H : Val) (Qout : TPostV) (en : OpEntT) (c : Val) :
+    Prop :=
   ∀ (M : BoCa.Loc → Prop) (F : TFrame) (k : Nat) (w : TWd) (ls : List (SRecT w.K))
     (O : List (FrameRecT w.K)) (v κ : Val) (ρ : TRes w.K), F.Mono → MaskHist T n₀ M →
     en.oc w O → (∀ w' ρf, F w' ρf → fdMask (fun x => M x ∨ recMask O x) w' ρf) →
     CovR (sem w.Θ) w.K ρ → (∀ x ∈ ls, CovR (sem w.Θ) w.K x.1.R) →
     (∀ r ∈ O, CovR (sem w.Θ) w.K r.R) →
     (∃ ρa ρk : TRes w.K, ResUT.CompS ρa ρk ρ ∧ en.PA k w ls v ρa ∧
-      KapSchedT (ℍ := ℍ) Qout (fun x => M x ∨ recMask O x) en k w ls O v κ ρk) →
+      KapSchedT (ℍ := ℍ) Qout (fun x => M x ∨ recMask O x) en H k w ls O v κ ρk) →
     cerwpT (ℍ := ℍ) (opTableT OpTabT.empty) Qout F k w ls O (.app (.val c) (.pair (.val v) κ.1)) ρ
 
 /-- **What a top-level scheduler `hnd (n₀, (qs, (h_ret, hs)))` must satisfy**, for tasks at the
@@ -342,7 +389,8 @@ def SchedOKT (T : OpTabT) (n₀ : UInt32) (qs hr hs : Val) (Qin Qout : TPostV) :
   (∀ i en, T n₀ i = some en → ∀ v w O ρf, fdJoinT v w O ρf → en.fd v w O ρf) ∧
   Qout.Down ∧ SchedRetT (ℍ := ℍ) T n₀ Qin Qout hr ∧
   (∀ i en, T n₀ i = some en →
-    ∃ c, clauseAt hs.1 i.toNat = some c ∧ SchedClauseT (ℍ := ℍ) T n₀ Qout en c)
+    ∃ c, clauseAt hs.1 i.toNat = some c ∧
+      SchedClauseT (ℍ := ℍ) T n₀ (hndVal n₀ qs hr hs) Qout en c)
 
 /-! ### `[handle]` for the scheduler -/
 
@@ -409,15 +457,35 @@ theorem cerwpT_schedHandle {T : OpTabT} {n₀ : UInt32} {qs hr hs : Val} {Qin Qo
         (fun w₃ ρf hf => ⟨hFe w₃ ρf (fdMask_le (fun x hx => Or.inl hx) hf),
           fun O₃ hO₃ => hfd i en hTe v w₃ O₃ ρf (fdMask_le (fun x hx =>
             Or.inr ((recMask_rr hO x).mpr ((recMask_rr hO₃ x).mpr hx))) hf)⟩) h₁
+    -- the cancel: the share's unwinding under the handler, by the induction hypothesis
+    have hcan : ∀ (w'' : TWd) (ρk' : TRes w''.K) (ls'' : List (SRecT w''.K))
+        (O'' : List (FrameRecT w''.K)), w'.Ext w'' ρk → RRw (w := w') (w' := w'') ρk ρk' →
+        KeepRel w''.Θ ls' ls'' ρk → RecsRR w''.Θ O' O'' → en.q ≠ .lin → en.fin = true →
+        ∀ k', k' < k → ∀ F'' : TFrame, F''.Mono →
+        (∀ w₃ ρf, F'' w₃ ρf → fdMask (fun x => M x ∨ recMask O' x) w₃ ρf) →
+        twp (ℍ := ℍ) F'' (valPost Qout) k' w'' ls'' O''
+          (hndE (hndVal m qs hr hs) (ccatchE (K₁.dead.plug (raiseE (.val (cancelVal none))))))
+          ρk' := by
+      intro w'' ρk' ls'' O'' hE hr' hx hO hq hf k' hk' F'' hF''m hF''M
+      have h₁ := (hsh.2 w'' ρk' ls'' O'' hE hr' hx hO).2 hq hf k' hk'
+      simp only [cerwpTC, show k' < n by omega, if_true] at h₁
+      refine ih k' (by omega) (fun x => M x ∨ recMask O' x) F'' (fdAt en v Fe O'') w'' ls'' O''
+        _ ρk' hF''m hMh' hF''M (fun x hx => Or.inr ((recMask_rr hO x).mpr hx))
+        (fun w₃ ρf hf => ⟨hFe w₃ ρf (fdMask_le (fun x hx => Or.inl hx) hf),
+          fun O₃ hO₃ => hfd i en hTe v w₃ O₃ ρf (fdMask_le (fun x hx =>
+            Or.inr ((recMask_rr hO x).mpr ((recMask_rr hO₃ x).mpr hx))) hf)⟩) h₁
     rw [htag i en hTe ha, kappaAt_tag]
     cases hqq : en.q with
     | unr =>
         refine cerwpTE_iff.mp (hcl M _ k w' ls' O' v ⟨kappa (hndVal m qs hr hs) K₁, by
           unfold kappa; exact .lam⟩ ρ' hF'm hMh hoc hF'M hcov' hls' hO'
-          ⟨ρa, ρk, hcak, hA, ⟨hsh.1, ?_⟩⟩)
-        intro w'' ρk' ls'' O'' hE hr' hx hO k' hk' a σ σ' hB hcσ F'' hF''m hF''M
-        exact cerwpTE_iff.mpr (twp_kappa_resume hPd _ K₁ a
-          (hres w'' ρk' ls'' O'' hE hr' hx hO k' hk' a σ σ' hB hcσ F'' hF''m hF''M))
+          ⟨ρa, ρk, hcak, hA, ⟨hsh.1, ?_, ?_⟩⟩)
+        · intro w'' ρk' ls'' O'' hE hr' hx hO k' hk' a σ σ' hB hcσ F'' hF''m hF''M
+          exact cerwpTE_iff.mpr (twp_kappa_resume hPd _ K₁ a
+            (hres w'' ρk' ls'' O'' hE hr' hx hO k' hk' a σ σ' hB hcσ F'' hF''m hF''M))
+        · intro w'' ρk' ls'' O'' hE hr' hx hO hq hf k' hk' F'' hF''m hF''M
+          exact cerwpTE_iff.mpr (twp_kappa_cancel_in hPd _ K₁ (hndK _)
+            (hcan w'' ρk' ls'' O'' hE hr' hx hO hq hf k' hk' F'' hF''m hF''M))
     | lin | cancel =>
         refine twp_kappaCell hPd _ _ K₁ (.appR (.val c) (.pairR v .hole)) fun l ρ₁ hc₁ => ?_
         obtain ⟨x, hx₂, hx₁⟩ :=
@@ -429,7 +497,16 @@ theorem cerwpT_schedHandle {T : OpTabT} {n₀ : UInt32} {qs hr hs : Val} {Qin Qo
         have hxd : x.del l = ρk := (eq_del_of_compS_single (ResUT.CompS.comm hx₂)).symm
         refine cerwpTE_iff.mp (hcl M _ k w' ls' O' v ⟨kappaC _ l (hndVal m qs hr hs) K₁,
           isVal_kappaC _ l _ K₁⟩ ρ₁ hF'm hMh hoc hF'M (covR_compS_own hc₁ hcov') hls' hO'
-          ⟨ρa, x, hx₁, hA, ⟨fun hu => (by rw [hqq] at hu; cases hu), ?_⟩⟩)
+          ⟨ρa, x, hx₁, hA, ⟨fun hu => (by rw [hqq] at hu; cases hu), ?_, ?_⟩⟩)
+        swap
+        · intro w'' ρx' ls'' O'' hE hr' hxF hO hq hf k' hk' F'' hF''m hF''M
+          first
+          | exact absurd hqq hq
+          | have hρx'l := RR.own_fwd hr' hxl
+            have hrk : RRw (w := w') (w' := w'') ρk (ρx'.del l) := hxd ▸ RR.del hr' l
+            exact cerwpTE_iff.mpr (twp_kappaC_cancel_in hPd l _ K₁ (hndK _)
+              (compS_single_del hρx'l) (hcan w'' (ρx'.del l) ls'' O'' (hE.of_compS_left hx₂) hrk
+                (hxF.of_compS_left hx₂) hO hq hf k' hk' F'' hF''m hF''M))
         intro w'' ρx' ls'' O'' hE hr' hxF hO k' hk' a σ σ' hB hcσ F'' hF''m hF''M
         have hρx'l := RR.own_fwd hr' hxl
         have hrk : RRw (w := w') (w' := w'') ρk (ρx'.del l) := hxd ▸ RR.del hr' l

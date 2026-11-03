@@ -203,39 +203,39 @@ theorem contShareT_resume_in {en : OpEntT} {F : TFrame} {k : Nat} {w w' : TWd}
 
 /-- **`κ` held at a later world**: captured at `w₁` (`KapSchedT`), its share and records re-read at
 `w`, the records of its stop list its share reads kept in `w`'s list `ls` (`KeepRel`). -/
-def KapAtT (Qout : TPostV) (M : BoCa.Loc → Prop) (en : OpEntT) (k : Nat) (v κ : Val) (w : TWd)
-    (ls : List (SRecT w.K)) (O : List (FrameRecT w.K)) (ρ : TRes w.K) : Prop :=
+def KapAtT (Qout : TPostV) (M : BoCa.Loc → Prop) (en : OpEntT) (H : Val) (k : Nat) (v κ : Val)
+    (w : TWd) (ls : List (SRecT w.K)) (O : List (FrameRecT w.K)) (ρ : TRes w.K) : Prop :=
   ∃ (w₁ : TWd) (ls₁ : List (SRecT w₁.K)) (O₁ : List (FrameRecT w₁.K)) (ρ₁ : TRes w₁.K),
-    KapSchedT (ℍ := ℍ) Qout M en k w₁ ls₁ O₁ v κ ρ₁ ∧ w₁.Ext w ρ₁ ∧
+    KapSchedT (ℍ := ℍ) Qout M en H k w₁ ls₁ O₁ v κ ρ₁ ∧ w₁.Ext w ρ₁ ∧
       RRw (w := w₁) (w' := w) ρ₁ ρ ∧ RecsRR w.Θ O₁ O ∧ KeepRel w.Θ ls₁ ls ρ₁
 
 /-- At its stop, `κ` is held there. -/
-theorem KapAtT.of_stop {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : Nat} {v κ : Val}
+theorem KapAtT.of_stop {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {H : Val} {k : Nat} {v κ : Val}
     {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {ρ : TRes w.K}
-    (h : KapSchedT (ℍ := ℍ) Qout M en k w ls O v κ ρ) (hcov : CovR (sem w.Θ) w.K ρ)
+    (h : KapSchedT (ℍ := ℍ) Qout M en H k w ls O v κ ρ) (hcov : CovR (sem w.Θ) w.K ρ)
     (hls : ∀ x ∈ ls, CovR (sem w.Θ) w.K x.1.R) (hO : ∀ r ∈ O, CovR (sem w.Θ) w.K r.R) :
-    KapAtT (ℍ := ℍ) Qout M en k v κ w ls O ρ :=
+    KapAtT (ℍ := ℍ) Qout M en H k v κ w ls O ρ :=
   ⟨w, ls, O, ρ, h, TWd.Ext.refl _ _, RR.refl hcov, RecsRR.refl hO, KeepRel.refl hls ρ⟩
 
 /-- **`κ` held at `w` is resumed at `w`, at its list `ls`**, at every answer the entry accepts,
 under every frame condition whose frames avoid `M`. -/
-theorem KapAtT.resume {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : Nat} {v κ : Val}
+theorem KapAtT.resume {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {H : Val} {k : Nat} {v κ : Val}
     {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {ρ : TRes w.K}
-    (h : KapAtT (ℍ := ℍ) Qout M en k v κ w ls O ρ) {k' : Nat} (hk : k' < k) {a : Val}
+    (h : KapAtT (ℍ := ℍ) Qout M en H k v κ w ls O ρ) {k' : Nat} (hk : k' < k) {a : Val}
     {σ σ' : TRes w.K} (hB : en.PBv v k' w ls a σ) (hc : ResUT.CompS ρ σ σ') {F' : TFrame}
     (hF'm : F'.Mono) (hF'M : ∀ w'' ρf, F' w'' ρf → fdMask M w'' ρf) :
     cerwpT (ℍ := ℍ) (opTableT OpTabT.empty) Qout F' k' w ls O
       (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val a)) σ' := by
   obtain ⟨w₁, ls₁, O₁, ρ₁, hK, hE, hr, hO, hl⟩ := h
-  exact hK.2 w ρ ls O hE hr hl hO k' hk a σ σ' hB hc F' hF'm hF'M
+  exact hK.2.1 w ρ ls O hE hr hl hO k' hk a σ σ' hB hc F' hF'm hF'M
 
 /-- `κ` held at `w` is held at every extension of `w`, the records its share reads kept. -/
-theorem KapAtT.kripke {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : Nat} {v κ : Val}
+theorem KapAtT.kripke {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {H : Val} {k : Nat} {v κ : Val}
     {w w' : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {ρ : TRes w.K}
     {ls' : List (SRecT w'.K)} {O' : List (FrameRecT w'.K)} {ρ' : TRes w'.K}
-    (h : KapAtT (ℍ := ℍ) Qout M en k v κ w ls O ρ) (hE : w.Ext w' ρ)
+    (h : KapAtT (ℍ := ℍ) Qout M en H k v κ w ls O ρ) (hE : w.Ext w' ρ)
     (hr : RRw (w := w) (w' := w') ρ ρ') (hO : RecsRR w'.Θ O O') (hl : KeepRel w'.Θ ls ls' ρ) :
-    KapAtT (ℍ := ℍ) Qout M en k v κ w' ls' O' ρ' := by
+    KapAtT (ℍ := ℍ) Qout M en H k v κ w' ls' O' ρ' := by
   obtain ⟨w₁, ls₁, O₁, ρ₁, hK, hE₁, hr₁, hO₁, hl₁⟩ := h
   exact ⟨w₁, ls₁, O₁, ρ₁, hK, hE₁.trans hr₁ hE, RRw.trans hE.1 hr₁ hr, hO₁.trans hE.1 hO,
     hl₁.trans hE.1 hr₁ hl⟩
@@ -243,9 +243,9 @@ theorem KapAtT.kripke {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k :
 /-- **A held `κ` resumed beside a state the scheduler keeps**, at the world and list it is held at:
 `kapSchedT_resume_beside` at a later world, the stop list's re-reading supplied by `KapAtT`. With
 `twp_keepsKap` this is the resume after another branch's run. -/
-theorem kapAtT_resume_beside {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : Nat}
+theorem kapAtT_resume_beside {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {H : Val} {k : Nat}
     {v κ : Val} {w : TWd} {ls : List (SRecT w.K)} {O O₂ : List (FrameRecT w.K)} {ρk : TRes w.K}
-    (hκ : KapAtT (ℍ := ℍ) Qout M en k v κ w ls O ρk) {F : TFrame}
+    (hκ : KapAtT (ℍ := ℍ) Qout M en H k v κ w ls O ρk) {F : TFrame}
     (hFM : ∀ w' ρf, F w' ρf → fdMask M w' ρf) {k' : Nat} (hk' : k' < k) {a : Val}
     {σ σ' ρ₂ ρ : TRes w.K} (hB : en.PBv v k' w ls a σ) (hcσ : ResUT.CompS ρk σ σ')
     (hcρ : ResUT.CompS σ' ρ₂ ρ) (hcov : CovR (sem w.Θ) w.K ρ)
@@ -269,16 +269,16 @@ record at its start. At every end of the run, at the world `w′` and list `ls�
 part is in `P` and `κ` is held there (`KapAtT` at `w′`, `ls′`), so `KapAtT.resume` resumes it.
 
 The frame obligation `hF` and the coverage `hcov` are `twp_frame`'s. -/
-theorem twp_keepsKap {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : Nat} {v κ : Val}
+theorem twp_keepsKap {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {H : Val} {k : Nat} {v κ : Val}
     {F F₁ : TFrame} {P : TPost} {n : Nat} {w : TWd} {ls : List (SRecT w.K)}
     {Oκ : List (FrameRecT w.K)} {e : Expr} {ρ₁ ρκ ρ : TRes w.K}
     (hcρ : ResUT.CompS ρ₁ ρκ ρ) (hcov : CovR (sem w.Θ) w.K ρ)
     (hF : ∀ (w₀ : TWd) (ρf ρ₂₀ y : TRes w₀.K), w.Ext w₀ ρκ → RRw (w := w) (w' := w₀) ρκ ρ₂₀ →
       F w₀ ρf → ResUT.CompS ρf ρ₂₀ y → F₁ w₀ y)
-    (hwp : twp (ℍ := ℍ) F₁ P n w ls [] e ρ₁) (hκ : KapAtT (ℍ := ℍ) Qout M en k v κ w ls Oκ ρκ) :
+    (hwp : twp (ℍ := ℍ) F₁ P n w ls [] e ρ₁) (hκ : KapAtT (ℍ := ℍ) Qout M en H k v κ w ls Oκ ρκ) :
     twp (ℍ := ℍ) F (fun k₁ w' ls' O' t ρ' => ∃ (O₁ O₂ : List (FrameRecT w'.K)) (a b : TRes w'.K),
       O' = O₁ ++ O₂ ∧ ResUT.CompS a b ρ' ∧ P k₁ w' ls' O₁ t a ∧
-        KapAtT (ℍ := ℍ) Qout M en k v κ w' ls' O₂ b) n w ls Oκ e ρ := by
+        KapAtT (ℍ := ℍ) Qout M en H k v κ w' ls' O₂ b) n w ls Oκ e ρ := by
   obtain ⟨w₁, ls₁, O₁, ρκ₁, hK, hE₁, hr₁, hO₁, hl₁⟩ := hκ
   let R : TRProp := fun w' O ρ' =>
     w₁.Ext w' ρκ₁ ∧ RRw (w := w₁) (w' := w') ρκ₁ ρ' ∧ RecsRR w'.Θ O₁ O
@@ -322,7 +322,7 @@ theorem twp_keepsList_apart {F : TFrame} {Q : TPost} {n : Nat} {w : TWd}
 `Or` at its start, where every record of the list that carries a record of `κ`'s stop list `ls₁`
 is apart from the runner's lineage (`hap`). `κ`'s capture is given by its witnesses (`KapAtT`'s
 clauses), so that `hap` can name `ls₁`. -/
-theorem twp_keepsKap_apart {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : Nat}
+theorem twp_keepsKap_apart {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {H : Val} {k : Nat}
     {v κ : Val} {F F₁ : TFrame} {P : TPost} {n : Nat} {w w₁ : TWd} {ls : List (SRecT w.K)}
     {Or Oκ : List (FrameRecT w.K)} {e : Expr} {ρ₁ ρκ ρ : TRes w.K} {ls₁ : List (SRecT w₁.K)}
     {O₁ : List (FrameRecT w₁.K)} {ρκ₁ : TRes w₁.K}
@@ -331,12 +331,12 @@ theorem twp_keepsKap_apart {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT}
     (hF : ∀ (w₀ : TWd) (ρf ρ₂₀ y : TRes w₀.K), w.Ext w₀ ρκ → RRw (w := w) (w' := w₀) ρκ ρ₂₀ →
       F w₀ ρf → ResUT.CompS ρf ρ₂₀ y → F₁ w₀ y)
     (hwp : twp (ℍ := ℍ) F₁ P n w ls Or e ρ₁)
-    (hK : KapSchedT (ℍ := ℍ) Qout M en k w₁ ls₁ O₁ v κ ρκ₁) (hE₁ : w₁.Ext w ρκ₁)
+    (hK : KapSchedT (ℍ := ℍ) Qout M en H k w₁ ls₁ O₁ v κ ρκ₁) (hE₁ : w₁.Ext w ρκ₁)
     (hr₁ : RRw (w := w₁) (w' := w) ρκ₁ ρκ) (hO₁ : RecsRR w.Θ O₁ Oκ) (hl₁ : SRecsIn w.Θ ls₁ ls)
     (hap : ∀ r₁ ∈ rsOfT ls₁, ∀ r ∈ rsOfT ls, RecRR w.Θ r₁ r → ApartLin Or r) :
     twp (ℍ := ℍ) F (fun k₁ w' ls' O' t ρ' => ∃ (Oa Ob : List (FrameRecT w'.K)) (a b : TRes w'.K),
       O' = Oa ++ Ob ∧ ResUT.CompS a b ρ' ∧ P k₁ w' ls' Oa t a ∧
-        KapAtT (ℍ := ℍ) Qout M en k v κ w' ls' Ob b) n w ls (Or ++ Oκ) e ρ := by
+        KapAtT (ℍ := ℍ) Qout M en H k v κ w' ls' Ob b) n w ls (Or ++ Oκ) e ρ := by
   let R : TRProp := fun w' O ρ' =>
     w₁.Ext w' ρκ₁ ∧ RRw (w := w₁) (w' := w') ρκ₁ ρ' ∧ RecsRR w'.Θ O₁ O
   have hRm : R.Mono := fun _ _ _ _ _ _ hE hr hO ⟨a, b, c⟩ =>

@@ -235,7 +235,7 @@ run, at the world `w′` and list `ls′` it ends in, `κ` is held there (`KapAt
 and the two are still apart at the masks of the records each ends with. Nothing is asked of the
 records of `κ`'s stop list beyond what `KapAtT` carries: the runner may end any record of its own,
 those open at `κ`'s stop included. -/
-theorem twp_keepsKap_sep {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : Nat}
+theorem twp_keepsKap_sep {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {H : Val} {k : Nat}
     {v κ : Val} {F F₁ : TFrame} {P : TPost} {n : Nat} {w : TWd} {ls : List (SRecT w.K)}
     {Or Oκ : List (FrameRecT w.K)} {e : Expr} {ρ₁ ρκ ρ : TRes w.K}
     (hcρ : ResUT.CompS ρ₁ ρκ ρ) (hcov : CovR (sem w.Θ) w.K ρ) (hv : ResUT.Valid ρ)
@@ -246,10 +246,10 @@ theorem twp_keepsKap_sep {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {
       RecsRR w₀.Θ Or O₁₀ → RecsRR w₀.Θ Oκ O₂₀ → F w₀ ρf → ResUT.CompS ρf ρ₂₀ y →
       ResUT.CompS y ρ₁₀ fρ → SplitT ps (O₁₀ ++ O₂₀) psF →
       (∀ p ∈ O₁₀, ∀ q ∈ O₂₀, p.le ≠ q.le) → RecInv w₀ fρ ps ls₀ → WInv w₀ fρ μ → F₁ w₀ y)
-    (hwp : twp (ℍ := ℍ) F₁ P n w ls Or e ρ₁) (hκ : KapAtT (ℍ := ℍ) Qout M en k v κ w ls Oκ ρκ) :
+    (hwp : twp (ℍ := ℍ) F₁ P n w ls Or e ρ₁) (hκ : KapAtT (ℍ := ℍ) Qout M en H k v κ w ls Oκ ρκ) :
     twp (ℍ := ℍ) F (fun k₁ w' ls' O' t ρ' => ∃ (Oa Ob : List (FrameRecT w'.K)) (a b : TRes w'.K),
       O' = Oa ++ Ob ∧ ResUT.CompS a b ρ' ∧ P k₁ w' ls' Oa t a ∧
-        KapAtT (ℍ := ℍ) Qout M en k v κ w' ls' Ob b ∧ NoneAt (recMask Oa) b ∧
+        KapAtT (ℍ := ℍ) Qout M en H k v κ w' ls' Ob b ∧ NoneAt (recMask Oa) b ∧
         NoneAt (recMask Ob) a) n w ls (Or ++ Oκ) e ρ := by
   let R : TRProp := fun w' O ρ' => w.Ext w' ρκ ∧ RRw (w := w) (w' := w') ρκ ρ' ∧ RecsRR w'.Θ Oκ O
   have hRm : R.Mono := fun _ _ _ _ _ _ hE hr hO ⟨a, b, c⟩ =>
@@ -273,18 +273,18 @@ of `κB`'s run, `κA` is held at the end world and list, and the two are apart a
 records each ends with. The premises are separation: `κA`'s share holds nothing at `MB` (which
 holds `κB`'s records' masks), and `κB`'s resumed resource holds nothing at `κA`'s records' masks.
 `κB`'s run may end any lend of its own, those open when `κA` stopped included. -/
-theorem kapAtT_resume_keep {QB QA : TPostV} {MB MA : BoCa.Loc → Prop} {enB enA : OpEntT}
+theorem kapAtT_resume_keep {QB QA : TPostV} {MB MA : BoCa.Loc → Prop} {enB enA : OpEntT} {H : Val}
     {kB kA : Nat} {vB vA κB κA : Val} {w : TWd} {ls : List (SRecT w.K)}
     {OB OA : List (FrameRecT w.K)} {ρB ρA σ σ' ρ : TRes w.K}
-    (hκB : KapAtT (ℍ := ℍ) QB MB enB kB vB κB w ls OB ρB)
-    (hκA : KapAtT (ℍ := ℍ) QA MA enA kA vA κA w ls OA ρA) {F : TFrame}
+    (hκB : KapAtT (ℍ := ℍ) QB MB enB H kB vB κB w ls OB ρB)
+    (hκA : KapAtT (ℍ := ℍ) QA MA enA H kA vA κA w ls OA ρA) {F : TFrame}
     (hFM : ∀ w' ρf, F w' ρf → fdMask MB w' ρf) {k' : Nat} (hk' : k' < kB) {a : Val}
     (hPB : enB.PBv vB k' w ls a σ) (hcσ : ResUT.CompS ρB σ σ') (hcρ : ResUT.CompS σ' ρA ρ)
     (hcov : CovR (sem w.Θ) w.K ρ) (hv : ResUT.Valid ρ) (hap : ∀ p ∈ OB, ∀ q ∈ OA, p.le ≠ q.le)
     (hMA : NoneAt MB ρA) (hOBM : ∀ x, recMask OB x → MB x) (hesc₂ : NoneAt (recMask OA) σ') :
     twp (ℍ := ℍ) F (fun k₁ w' ls' O' t ρ' => ∃ (Oa Ob : List (FrameRecT w'.K)) (a b : TRes w'.K),
       O' = Oa ++ Ob ∧ ResUT.CompS a b ρ' ∧ valPost QB k₁ w' ls' Oa t a ∧
-        KapAtT (ℍ := ℍ) QA MA enA kA vA κA w' ls' Ob b ∧ NoneAt (recMask Oa) b ∧
+        KapAtT (ℍ := ℍ) QA MA enA H kA vA κA w' ls' Ob b ∧ NoneAt (recMask Oa) b ∧
         NoneAt (recMask Ob) a) k' w ls (OB ++ OA)
       (.app (.app κB.1 (.val (Val.inj₁ .unit))) (.val a)) ρ := by
   have h := cerwpTE_iff.mp (hκB.resume hk' hPB hcσ (fdMask_mono MB) (fun _ _ h => h))

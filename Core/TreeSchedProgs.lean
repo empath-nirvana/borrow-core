@@ -76,8 +76,7 @@ theorem fdMask_of_false {M : BoCa.Loc → Prop} (hM : ∀ x, ¬ M x) {w : TWd} {
 
 /-- A post whose answers do not read the index is downward closed. -/
 theorem cerwpPostT_down {T : OpTabT} {Q : TPostV} (hQ : Q.Down) {Ψ : ContT} {F : TFrame}
-    (hPA : ∀ m i en, T m i = some en → ∀ k w ls v ρ, en.PA (k + 1) w ls v ρ → en.PA k w ls v ρ)
-    (hfin : ∀ m i en, T m i = some en → en.fin = none) :
+    (hPA : ∀ m i en, T m i = some en → ∀ k w ls v ρ, en.PA (k + 1) w ls v ρ → en.PA k w ls v ρ) :
     (cerwpPostT (opTableT T) Q Ψ F).Down := by
   intro k w ls O t ρ h
   rcases h with ⟨v, hv, hq⟩ | ⟨K, m, i, v, en, ht, hK, hT, ha, hoc, ρa, ρk, hc, hA, hsh⟩
@@ -85,7 +84,7 @@ theorem cerwpPostT_down {T : OpTabT} {Q : TPostV} (hQ : Q.Down) {Ψ : ContT} {F 
   · refine Or.inr ⟨K, m, i, v, en, ht, hK, hT, ha, hoc, ρa, ρk, hc, hPA m i en hT _ _ _ _ _ hA,
       hsh.1, fun w' ρ' ls' O' hE hr hx hO => ⟨fun k' hk' a σ σ' hB hcσ =>
         (hsh.2 w' ρ' ls' O' hE hr hx hO).1 k' (by omega) a σ σ' hB hcσ,
-        fun _ P hP => by rw [hfin m i en hT] at hP; cases hP⟩⟩
+        fun hq hf k' hk' => (hsh.2 w' ρ' ls' O' hE hr hx hO).2 hq hf k' (by omega)⟩⟩
 
 /-- A deterministic step in front of `cerwpT`, for free. -/
 theorem cerwpT_det {Tb : TableT} {Q : TPostV} {F : TFrame} {n : Nat} {w : TWd}
@@ -146,7 +145,7 @@ def enAsk : OpEntT where
   abort := false
   PA := fun _ _ _ v ρ => v = Val.unit ∧ ρ = PMap.empty
   PBv := fun _ _ _ _ a σ => a = ten ∧ σ = PMap.empty
-  fin := none
+  fin := false
   fd := fdJoinT
   oc := fun _ O => O = []
 
@@ -166,7 +165,6 @@ theorem TA_some {m i : UInt32} {en : OpEntT} (h : TA m i = some en) : m = nA ∧
 theorem TA_down {Ψ : ContT} {F : TFrame} : (cerwpPostT (opTableT TA) QA Ψ F).Down :=
   cerwpPostT_down QA_down
     (fun m i en h k w ls v ρ hA => by obtain ⟨-, -, rfl⟩ := TA_some h; exact hA)
-    (fun m i en h => by obtain ⟨-, -, rfl⟩ := TA_some h; rfl)
 
 /-! #### The task at `cerwpT` -/
 
@@ -272,7 +270,7 @@ theorem stateR_mono (l : BoCa.Loc) : (stateR l).Mono := by
   exact ⟨rfl, rr_single_own hr⟩
 
 /-- **The clause of `ask`.** -/
-theorem askClause_ok : SchedClauseT (ℍ := ℍ) TA nA QA enAsk askClause := by
+theorem askClause_ok : SchedClauseT (ℍ := ℍ) TA nA (hndVal nA qsA retClause hsA) QA enAsk askClause := by
   rintro M F k w ls O v κ ρ hFm hMh hoc hFM hcov hls hO ⟨ρa, ρk, hc, ⟨rfl, rfl⟩, hκ⟩
   obtain rfl := compS_empty_left_eq hc
   change O = [] at hoc
@@ -344,40 +342,48 @@ end Async
 /-! ### Facts about `KapSchedT` the stepper reads -/
 
 /-- `KapSchedT` reads its answer predicate only below its index. -/
-theorem kapSchedT_congr {Q₁ Q₂ : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : Nat}
+theorem kapSchedT_congr {Q₁ Q₂ : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {H : Val} {k : Nat}
     {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {v κ : Val} {ρ : TRes w.K}
     (hQ : ∀ j, j < k → ∀ w ls O v ρ, Q₁ j w ls O v ρ → Q₂ j w ls O v ρ)
-    (h : KapSchedT (ℍ := ℍ) Q₁ M en k w ls O v κ ρ) : KapSchedT (ℍ := ℍ) Q₂ M en k w ls O v κ ρ := by
-  refine ⟨h.1, fun w' ρ' ls' O' hE hr hx hO k' hk' a σ σ' hB hc F' hF'm hF'M => ?_⟩
-  have h₁ := cerwpTE_iff.mp (h.2 w' ρ' ls' O' hE hr hx hO k' hk' a σ σ' hB hc F' hF'm hF'M)
-  exact cerwpTE_iff.mpr (twp_mono_le (fun j hj _ _ _ _ _ ⟨r, hr', hq⟩ =>
-    ⟨r, hr', hQ j (by omega) _ _ _ _ _ hq⟩) h₁)
+    (h : KapSchedT (ℍ := ℍ) Q₁ M en H k w ls O v κ ρ) : KapSchedT (ℍ := ℍ) Q₂ M en H k w ls O v κ ρ := by
+  refine ⟨h.1, fun w' ρ' ls' O' hE hr hx hO k' hk' a σ σ' hB hc F' hF'm hF'M => ?_,
+    fun w' ρ' ls' O' hE hr hx hO hq hf k' hk' F' hF'm hF'M => ?_⟩
+  · have h₁ := cerwpTE_iff.mp (h.2.1 w' ρ' ls' O' hE hr hx hO k' hk' a σ σ' hB hc F' hF'm hF'M)
+    exact cerwpTE_iff.mpr (twp_mono_le (fun j hj _ _ _ _ _ ⟨r, hr', hq⟩ =>
+      ⟨r, hr', hQ j (by omega) _ _ _ _ _ hq⟩) h₁)
+  · have h₁ := cerwpTE_iff.mp (h.2.2 w' ρ' ls' O' hE hr hx hO hq hf k' hk' F' hF'm hF'M)
+    exact cerwpTE_iff.mpr (twp_mono_le (fun j hj _ _ _ _ _ ⟨r, hr', hq⟩ =>
+      ⟨r, hr', hQ j (by omega) _ _ _ _ _ hq⟩) h₁)
 
-theorem KapSchedT.down {Q : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : Nat} {w : TWd}
+theorem KapSchedT.down {Q : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {H : Val} {k : Nat} {w : TWd}
     {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {v κ : Val} {ρ : TRes w.K}
-    (h : KapSchedT (ℍ := ℍ) Q M en (k + 1) w ls O v κ ρ) : KapSchedT (ℍ := ℍ) Q M en k w ls O v κ ρ :=
-  ⟨h.1, fun w' ρ' ls' O' hE hr hx hO k' hk' => h.2 w' ρ' ls' O' hE hr hx hO k'
-    (by omega)⟩
+    (h : KapSchedT (ℍ := ℍ) Q M en H (k + 1) w ls O v κ ρ) : KapSchedT (ℍ := ℍ) Q M en H k w ls O v κ ρ :=
+  ⟨h.1, fun w' ρ' ls' O' hE hr hx hO k' hk' => h.2.1 w' ρ' ls' O' hE hr hx hO k'
+    (by omega), fun w' ρ' ls' O' hE hr hx hO hq hf k' hk' => h.2.2 w' ρ' ls' O' hE hr hx hO hq hf
+    k' (by omega)⟩
 
 /-- A frame avoiding more locations is one `κ` may be resumed under. -/
-theorem KapSchedT.mask_mono {Q : TPostV} {M M' : BoCa.Loc → Prop} {en : OpEntT} {k : Nat}
+theorem KapSchedT.mask_mono {Q : TPostV} {M M' : BoCa.Loc → Prop} {en : OpEntT} {H : Val} {k : Nat}
     {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {v κ : Val} {ρ : TRes w.K}
-    (hM : ∀ x, M x → M' x) (h : KapSchedT (ℍ := ℍ) Q M en k w ls O v κ ρ) :
-    KapSchedT (ℍ := ℍ) Q M' en k w ls O v κ ρ :=
+    (hM : ∀ x, M x → M' x) (h : KapSchedT (ℍ := ℍ) Q M en H k w ls O v κ ρ) :
+    KapSchedT (ℍ := ℍ) Q M' en H k w ls O v κ ρ :=
   ⟨h.1, fun w' ρ' ls' O' hE hr hx hO k' hk' a σ σ' hB hc F' hF'm hF'M =>
-    h.2 w' ρ' ls' O' hE hr hx hO k' hk' a σ σ' hB hc F' hF'm
-      fun w'' ρf hf => fdMask_le hM (hF'M w'' ρf hf)⟩
+    h.2.1 w' ρ' ls' O' hE hr hx hO k' hk' a σ σ' hB hc F' hF'm
+      (fun w'' ρf hf => fdMask_le hM (hF'M w'' ρf hf)),
+    fun w' ρ' ls' O' hE hr hx hO hq hf k' hk' F' hF'm hF'M =>
+    h.2.2 w' ρ' ls' O' hE hr hx hO hq hf k' hk' F' hF'm
+      (fun w'' ρf hf => fdMask_le hM (hF'M w'' ρf hf))⟩
 
 /-- **A tail resume**: `κ` at the clause's own world, under the clause's frame condition. -/
-theorem kapSchedT_resume_tail {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : Nat}
+theorem kapSchedT_resume_tail {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {H : Val} {k : Nat}
     {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {v κ : Val} {ρk : TRes w.K}
-    (hκ : KapSchedT (ℍ := ℍ) Qout M en k w ls O v κ ρk) {F : TFrame} (hFm : F.Mono)
+    (hκ : KapSchedT (ℍ := ℍ) Qout M en H k w ls O v κ ρk) {F : TFrame} (hFm : F.Mono)
     (hFM : ∀ w' ρf, F w' ρf → fdMask M w' ρf) {k' : Nat} (hk' : k' < k) {a : Val}
     {σ σ' : TRes w.K} (hB : en.PBv v k' w ls a σ) (hcσ : ResUT.CompS ρk σ σ')
     (hcov : CovR (sem w.Θ) w.K ρk) (hls : ∀ x ∈ ls, CovR (sem w.Θ) w.K x.1.R)
     (hO : ∀ r ∈ O, CovR (sem w.Θ) w.K r.R) :
     twp (ℍ := ℍ) F (valPost Qout) k' w ls O (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val a)) σ' :=
-  cerwpTE_iff.mp (hκ.2 w ρk ls O (TWd.Ext.refl _ _) (RR.refl hcov) (KeepRel.refl hls ρk)
+  cerwpTE_iff.mp (hκ.2.1 w ρk ls O (TWd.Ext.refl _ _) (RR.refl hcov) (KeepRel.refl hls ρk)
     (RecsRR.refl hO) k' hk' a σ σ' hB hcσ F hFm hFM)
 
 /-! ### `pingpong-mut`: a slot handed back and forth between two suspended tasks by a relay -/
@@ -400,7 +406,7 @@ def enPass : OpEntT where
     ρ = ResUT.single m (CellUT.ownOf u)
   PBv := fun _ _ _ _ a σ => ∃ (m : BoCa.Loc) (u : BoCa.Val), a = Val.loc m ∧
     σ = ResUT.single m (CellUT.ownOf u)
-  fin := none
+  fin := false
   fd := fdJoinT
   oc := fun _ O => O = []
 
@@ -413,6 +419,13 @@ theorem TS_some {m i : UInt32} {en : OpEntT} (h : TS m i = some en) :
   · rename_i hm; cases h; exact ⟨hm.1, hm.2, rfl⟩
   · cases h
 
+/-- `λ(m, κ). inj₁ (m, κ)`: hand the slot and the continuation to whoever ran the task. -/
+def passClause : Val := Val.lam (.letpair (.var 0) (.inj₁ (.pair (.var 1) (.var 0))))
+def stepRet : Val := Val.lam (.inj₂ (.var 0))
+def qsS : Val := Val.pair (Val.i32 2) Val.unit
+def hsS : Val := Val.pair passClause Val.unit
+def HS : Val := hndVal nS qsS stepRet hsS
+
 /-- **What a stepped task answers** (`Qt` its final answer): a stop at `pass`, the slot and the
 continuation resumable at the answers below the index; or the task's end. A step-indexed
 fixpoint: the continuation's answers are this predicate again. -/
@@ -422,7 +435,7 @@ def QS (Qt : TPostV) : (k : Nat) → (w : TWd) → List (SRecT w.K) → List (Fr
     (∃ (m : BoCa.Loc) (u : BoCa.Val) (κ : Val), v = Val.inj₁ (Val.pair (Val.loc m) κ) ∧
       ρ = ResUT.single m (CellUT.ownOf u) ∧ O = [] ∧
       KapSchedT (ℍ := ℍ) (fun j w' ls' O' v' ρ' => if _h : j < k then QS Qt j w' ls' O' v' ρ'
-        else False) (fun _ => False) enPass k w ls O (Val.loc m) κ PMap.empty) ∨
+        else False) (fun _ => False) enPass HS k w ls O (Val.loc m) κ PMap.empty) ∨
     (∃ r : Val, v = Val.inj₂ r ∧ Qt k w ls O r ρ)
 termination_by k => k
 
@@ -431,7 +444,7 @@ theorem QS_iff {Qt : TPostV} {k : Nat} {w : TWd} {ls : List (SRecT w.K)}
     QS (ℍ := ℍ) Qt k w ls O v ρ ↔
       (∃ (m : BoCa.Loc) (u : BoCa.Val) (κ : Val), v = Val.inj₁ (Val.pair (Val.loc m) κ) ∧
         ρ = ResUT.single m (CellUT.ownOf u) ∧ O = [] ∧
-        KapSchedT (ℍ := ℍ) (QS (ℍ := ℍ) Qt) (fun _ => False) enPass k w ls O (Val.loc m) κ
+        KapSchedT (ℍ := ℍ) (QS (ℍ := ℍ) Qt) (fun _ => False) enPass HS k w ls O (Val.loc m) κ
           PMap.empty) ∨
       (∃ r : Val, v = Val.inj₂ r ∧ Qt k w ls O r ρ) := by
   rw [QS]
@@ -453,12 +466,6 @@ theorem QS_down {Qt : TPostV} (hQt : Qt.Down) : TPostV.Down (QS (ℍ := ℍ) Qt)
 
 /-! #### The stepper -/
 
-/-- `λ(m, κ). inj₁ (m, κ)`: hand the slot and the continuation to whoever ran the task. -/
-def passClause : Val := Val.lam (.letpair (.var 0) (.inj₁ (.pair (.var 1) (.var 0))))
-def stepRet : Val := Val.lam (.inj₂ (.var 0))
-def qsS : Val := Val.pair (Val.i32 2) Val.unit
-def hsS : Val := Val.pair passClause Val.unit
-def HS : Val := hndVal nS qsS stepRet hsS
 
 /-- A final answer read the same at every re-reading of the world. -/
 def QtStable (Qt : TPostV) : Prop :=
@@ -467,7 +474,7 @@ def QtStable (Qt : TPostV) : Prop :=
     RRw (w := w) (w' := w₀) ρ ρ₀ → RecsRR w₀.Θ O O₀ → Qt k w ls O r ρ → Qt k w₀ ls₀ O₀ r ρ₀
 
 theorem passClause_ok {Qt : TPostV} (hQt : Qt.Down) :
-    SchedClauseT (ℍ := ℍ) TS nS (QS (ℍ := ℍ) Qt) enPass passClause := by
+    SchedClauseT (ℍ := ℍ) TS nS HS (QS (ℍ := ℍ) Qt) enPass passClause := by
   rintro M F k w ls O v κ ρ _ hMh hoc _ _ _ _ ⟨ρa, ρk, hc, ⟨m, u, rfl, rfl⟩, hκ⟩
   change O = [] at hoc
   subst hoc
@@ -559,7 +566,6 @@ theorem TS_down {Qt : TPostV} (hQt : Qt.Down) {Ψ : ContT} {F : TFrame} :
     (cerwpPostT (opTableT TS) Qt Ψ F).Down :=
   cerwpPostT_down hQt
     (fun m i en h k w ls v ρ hA => by obtain ⟨-, -, rfl⟩ := TS_some h; exact hA)
-    (fun m i en h => by obtain ⟨-, -, rfl⟩ := TS_some h; rfl)
 
 /-- The stop at `pass`, the slot `l` handed out; the continuation `K`, given what `pass`
 answers, is `Ψ`'s. -/
@@ -577,7 +583,7 @@ theorem pass_stop {Qt : TPostV} {F : TFrame} {n : Nat} {w : TWd} {ls : List (SRe
   obtain rfl := rr_single_own hr
   refine ⟨rfl, _, PMap.empty, ResUT.compS_empty_right _, ⟨l, u, rfl, rfl⟩,
     ⟨fun _ => rfl, fun w' ρ' ls' O' _ hr' _ _ =>
-      ⟨fun k' hk' a σ σ' hB hcσ => ?_, fun _ P hP => by cases hP⟩⟩⟩
+      ⟨fun k' hk' a σ σ' hB hcσ => ?_, fun _ hf => by cases hf⟩⟩⟩
   obtain ⟨m, u', rfl, rfl⟩ := hB
   obtain rfl := RR.of_empty hr'
   obtain rfl := compS_empty_left_eq hcσ
