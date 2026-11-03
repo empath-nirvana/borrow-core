@@ -115,8 +115,9 @@ theorem fdEsc_of_noneAt {K : WCactus} {Θ : CodeTy} {tc : TChoice K} {W : TRes K
 /-- **A resource framed beside a run, apart from it, keeps the records it reads.** As
 `twp_frame_w`; with the framed part `ρ₂` and the run's `ρ₁` holding nothing at each other's
 record masks at the start (`hesc₁`, `hesc₂`), at every end the framed part is beside the run's
-part with: the records of `ls` it reads re-read in the end list (`KeepRel`), and the two still
-apart at the masks of the records each ends with. The run may open and end lends of its own,
+part with: the records of `ls` it reads re-read in the end list (`KeepRel`), the two still apart
+at the masks of the records each ends with, and the two ends' records at distinct lent
+locations. The run may open and end lends of its own,
 those open at its start included. -/
 theorem twp_frame_keep {F F₁ : TFrame} {P : TPost} {R : TRProp} (hR : R.Mono) {n : Nat}
     {w : TWd} {ls : List (SRecT w.K)} {O₁ O₂ : List (FrameRecT w.K)}
@@ -131,7 +132,8 @@ theorem twp_frame_keep {F F₁ : TFrame} {P : TPost} {R : TRProp} (hR : R.Mono) 
     (hwp : twp (ℍ := ℍ) F₁ P n w ls O₁ e ρ₁) (hR₂ : R w O₂ ρ₂) :
     twp (ℍ := ℍ) F (fun k w' ls' O' t ρ' => ∃ (O₁' O₂' : List (FrameRecT w'.K)) (a b : TRes w'.K),
       O' = O₁' ++ O₂' ∧ ResUT.CompS a b ρ' ∧ P k w' ls' O₁' t a ∧ R w' O₂' b ∧
-        KeepRel w'.Θ ls ls' ρ₂ ∧ NoneAt (recMask O₁') b ∧ NoneAt (recMask O₂') a)
+        KeepRel w'.Θ ls ls' ρ₂ ∧ NoneAt (recMask O₁') b ∧ NoneAt (recMask O₂') a ∧
+        ∀ p ∈ O₁', ∀ q ∈ O₂', p.le ≠ q.le)
       n w ls (O₁ ++ O₂) e ρ := by
   intro w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE hr hl hOr hFρ hf hc hS hRi hI hfd j μ' e' hj hrun hfin
   obtain ⟨O₁₀, O₂₀, rfl, hO₁, hO₂⟩ := forall₂_append_left hOr
@@ -210,7 +212,7 @@ theorem twp_frame_keep {F F₁ : TFrame} {P : TPost} {R : TRProp} (hR : R.Mono) 
   refine ⟨w', ρf', ρ', fρ', psF', ps', O₁' ++ O₂', ls', g₀.of_compS_left hy, hf', hpsF',
     ResUT.hash_symm (hash_of_inv hfρ' g₇), hfρ', ⟨fun p => ?_, fun p hp q hq => ?_⟩, g₆, g₇,
     ⟨O₁', O₂', ρ₁', ρ₂', rfl, hρ', g₈, hR _ _ _ _ _ _ (g₀.of_compS_right hy) h₂' hO₂' hR₂₀,
-      hkeep, hb, ha⟩,
+      hkeep, hb, ha, fun p hp q hq => g₅.2 p hp q (List.mem_append_left _ hq)⟩,
     (hu.widen (recMask O₂₀)).congr (fun l => recMask_append l)
       (fun l => by rw [recMask_append, recMask_rr hO₂' l]),
     (g₁₀.of_compS_left hy' hvy').mono hmask,
@@ -263,7 +265,7 @@ theorem twp_keepsKap_sep {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {
   have h := twp_frame_keep (R := R) hRm hOκ hcρ hcov hv hesc₁ hesc₂ hF hwp
     ⟨TWd.Ext.refl _ _, RR.refl hcovκ, RecsRR.refl hOκc⟩
   refine twp_mono (fun k₁ w' ls' O' t ρ' hp => ?_) h
-  obtain ⟨Oa, Ob, a, b, hO', hc, hP, ⟨hEb, hrb, hOb⟩, hkeep, hb, ha⟩ := hp
+  obtain ⟨Oa, Ob, a, b, hO', hc, hP, ⟨hEb, hrb, hOb⟩, hkeep, hb, ha, -⟩ := hp
   exact ⟨Oa, Ob, a, b, hO', hc, hP, hκ.kripke hEb hrb hOb hkeep, hb, ha⟩
 
 /-- **One stored task resumed beside another, the other kept resumable.** The scheduler holds

@@ -117,6 +117,18 @@ theorem PoolT.cov_recs : ∀ {ts : List StoredT} {w : TWd} {ls : List (SRecT w.K
 
 /-! ### A segment beside the pool -/
 
+/-- **What a run beside the pool ends with**: its end (`P`, owning `Oa`) beside the pool held at
+the end world and list (owning `Ob`), the two apart at each other's record masks and their records
+at distinct lent locations. -/
+def PoolPost (P : TPost) (ts : List StoredT) : TPost := fun k₁ w' ls' O' t ρ' =>
+  ∃ (Oa Ob : List (FrameRecT w'.K)) (a b : TRes w'.K), O' = Oa ++ Ob ∧ ResUT.CompS a b ρ' ∧
+    P k₁ w' ls' Oa t a ∧ PoolT (ℍ := ℍ) ts w' ls' Ob b ∧ NoneAt (recMask Oa) b ∧
+    NoneAt (recMask Ob) a ∧ ∀ p ∈ Oa, ∀ q ∈ Ob, p.le ≠ q.le
+
+theorem PoolPost.down {P : TPost} (hP : P.Down) (ts : List StoredT) :
+    (PoolPost (ℍ := ℍ) P ts).Down :=
+  fun _ _ _ _ _ _ ⟨Oa, Ob, a, b, h₁, h₂, h₃, h₄⟩ => ⟨Oa, Ob, a, b, h₁, h₂, hP _ _ _ _ _ _ h₃, h₄⟩
+
 /-- **A segment keeps the pool.** A run of `e` from `ρ₁` owning `Or`, beside the pool (`ρp`
 owning `Op`), the two holding nothing at each other's record masks: at every end of the run, at the
 world `w′` and list `ls′` it ends in, the pool is held there, and the run's end and the pool are
@@ -132,9 +144,7 @@ theorem twp_keepsPool {ts : List StoredT} {F F₁ : TFrame} {P : TPost} {n : Nat
       ResUT.CompS y ρ₁₀ fρ → SplitT ps (O₁₀ ++ O₂₀) psF →
       (∀ p ∈ O₁₀, ∀ q ∈ O₂₀, p.le ≠ q.le) → RecInv w₀ fρ ps ls₀ → WInv w₀ fρ μ → F₁ w₀ y)
     (hwp : twp (ℍ := ℍ) F₁ P n w ls Or e ρ₁) (hP : PoolT (ℍ := ℍ) ts w ls Op ρp) :
-    twp (ℍ := ℍ) F (fun k₁ w' ls' O' t ρ' => ∃ (Oa Ob : List (FrameRecT w'.K)) (a b : TRes w'.K),
-      O' = Oa ++ Ob ∧ ResUT.CompS a b ρ' ∧ P k₁ w' ls' Oa t a ∧
-        PoolT (ℍ := ℍ) ts w' ls' Ob b ∧ NoneAt (recMask Oa) b ∧ NoneAt (recMask Ob) a)
+    twp (ℍ := ℍ) F (PoolPost (ℍ := ℍ) P ts)
       n w ls (Or ++ Op) e ρ := by
   let R : TRProp := fun w' O ρ' => w.Ext w' ρp ∧ RRw (w := w) (w' := w') ρp ρ' ∧ RecsRR w'.Θ Op O
   have hRm : R.Mono := fun _ _ _ _ _ _ hE hr hO ⟨a, b, c⟩ =>
@@ -145,8 +155,8 @@ theorem twp_keepsPool {ts : List StoredT} {F F₁ : TFrame} {P : TPost} {n : Nat
   have h := twp_frame_keep (R := R) hRm hap hcρ hcov hv hesc₁ hesc₂ hF hwp
     ⟨TWd.Ext.refl _ _, RR.refl hcovp, RecsRR.refl hOpc⟩
   refine twp_mono (fun k₁ w' ls' O' t ρ' hp => ?_) h
-  obtain ⟨Oa, Ob, a, b, hO', hc, hPa, ⟨hEb, hrb, hOb⟩, hkeep, hb, ha⟩ := hp
-  exact ⟨Oa, Ob, a, b, hO', hc, hPa, hP.kripke hEb hrb hOb hkeep hcovp hvp, hb, ha⟩
+  obtain ⟨Oa, Ob, a, b, hO', hc, hPa, ⟨hEb, hrb, hOb⟩, hkeep, hb, ha, hap'⟩ := hp
+  exact ⟨Oa, Ob, a, b, hO', hc, hPa, hP.kripke hEb hrb hOb hkeep hcovp hvp, hb, ha, hap'⟩
 
 /-! ### Park, resume, cancel -/
 
@@ -202,9 +212,7 @@ theorem poolT_resume {t : StoredT} {ts : List StoredT} {w : TWd} {ls : List (SRe
     {k' : Nat} (hk : k' < t.k) {a : Val} (hB : t.en.PBv t.v k' w ls a σ)
     (hc : ResUT.CompS ρp σ ρ) (hσ : NoneAt (recMask O) σ) (hcov : CovR (sem w.Θ) w.K ρ)
     (hv : ResUT.Valid ρ) {F : TFrame} (hFM : ∀ w' ρf, F w' ρf → fdMask t.M w' ρf) :
-    twp (ℍ := ℍ) F (fun k₁ w' ls' O' e ρ' => ∃ (Oa Ob : List (FrameRecT w'.K)) (a b : TRes w'.K),
-      O' = Oa ++ Ob ∧ ResUT.CompS a b ρ' ∧ valPost t.Q k₁ w' ls' Oa e a ∧
-        PoolT (ℍ := ℍ) ts w' ls' Ob b ∧ NoneAt (recMask Oa) b ∧ NoneAt (recMask Ob) a)
+    twp (ℍ := ℍ) F (PoolPost (ℍ := ℍ) (valPost t.Q) ts)
       k' w ls O (.app (.app t.κ.1 (.val (Val.inj₁ .unit))) (.val a)) ρ := by
   obtain ⟨Ot, Os, ρt, ρs, rfl, hcp, hκ, hM, hPs, hb, ha, hap⟩ := hP
   obtain ⟨σ', hσ₁, hσ₂⟩ := (ResUT.CompS.assoc ρs ρt σ ρ).mpr ⟨ρp, ResUT.CompS.comm hcp, hc⟩
@@ -227,9 +235,7 @@ theorem poolT_cancel {t : StoredT} {ts : List StoredT} {w : TWd} {ls : List (SRe
     (hq : t.en.q ≠ .lin) (hf : t.en.fin = true) {k' : Nat} (hk : k' < t.k)
     (hcov : CovR (sem w.Θ) w.K ρ) (hv : ResUT.Valid ρ) {F : TFrame}
     (hFM : ∀ w' ρf, F w' ρf → fdMask t.M w' ρf) :
-    twp (ℍ := ℍ) F (fun k₁ w' ls' O' e ρ' => ∃ (Oa Ob : List (FrameRecT w'.K)) (a b : TRes w'.K),
-      O' = Oa ++ Ob ∧ ResUT.CompS a b ρ' ∧ valPost t.Q k₁ w' ls' Oa e a ∧
-        PoolT (ℍ := ℍ) ts w' ls' Ob b ∧ NoneAt (recMask Oa) b ∧ NoneAt (recMask Ob) a)
+    twp (ℍ := ℍ) F (PoolPost (ℍ := ℍ) (valPost t.Q) ts)
       k' w ls O (hndE t.H (.app t.κ.1 (.val (Val.inj₂ .unit)))) ρ := by
   obtain ⟨Ot, Os, ρt, ρs, rfl, hcp, hκ, hM, hPs, hb, ha, hap⟩ := hP
   have hvs := (ResUT.Valid.split hcp hv).2

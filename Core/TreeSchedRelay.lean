@@ -1,6 +1,7 @@
 import Core.TreeSchedProgs
 import Core.TreeSchedPool
 import Core.TreeLend
+import Core.Fix
 
 /-!
 # The park stepper: a task parks holding a share, and is resumed or cancelled  `[spec §62]`
@@ -218,6 +219,150 @@ theorem taskA_cerwpT (n : Nat) (Fb F : TFrame) (w : TWd) (ls : List (SRecT w.K))
     cases hO'
     simp only [cerwpTC, hk', if_true]
     exact kA_cancel α l
+
+/-! ### The relay's loop: drive a parked task to its end -/
+
+/-- The loop's body, `self` at 1 and the task's answer `r` at 0:
+`case r {inj₁ κ. self (κ (inj₁ ()) ()), inj₂ x. x}`. -/
+def driveB : Expr :=
+  .case (.var 0) (.app (.var 2) (.app (.app (.var 0) (.inj₁ .unit)) .unit)) (.var 0)
+
+theorem driveB_closed : closedAt 2 driveB = true := rfl
+
+/-- **The relay's loop**, `Z (λself. λr. driveB)`: a parked task is resumed, and resumed again
+each time it parks, until it answers. -/
+def driveV : Val := fixV driveB
+
+/-- Steps that take every heap to itself, in front of a `twp`, for free. -/
+theorem twp_pure {F : TFrame} {Q : TPost} (hQ : Q.Down) {n : Nat} {w : TWd}
+    {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {e e' : Expr} {ρ : TRes w.K}
+    (hs : PureSteps (ℍ := ℍ) e e') (h : twp (ℍ := ℍ) F Q n w ls O e' ρ) :
+    twp (ℍ := ℍ) F Q n w ls O e ρ := by
+  revert h
+  induction hs with
+  | refl => exact id
+  | tail _ hbc ih =>
+      intro h
+      exact ih (twp_det hQ (fun μ => by
+        obtain ⟨K, a, a', rfl, rfl, hh, hn⟩ := hbc μ
+        exact step1Only_plug hh hn K) h)
+
+theorem selfV_drive_closed : closedAt 0 (selfV driveB).1 = true := selfV_closed driveB_closed
+
+theorem drive_beta_at {S : Val} (hS : closedAt 0 S.1 = true) (r : Val) :
+    (driveB.subst 1 S).subst 0 r = .case r.1
+      (.app S.1 (.app (.app (.var 0) (.inj₁ .unit)) .unit)) (.var 0) := by
+  simp [driveB, Expr.subst, shift_closedAt _ 1 hS (Nat.zero_le _),
+    subst_closedAt _ _ hS (Nat.zero_le _)]
+
+/-- `drive r` unrolled: `case r {inj₁ κ. selfV (κ (inj₁ ()) ()), inj₂ x. x}`. -/
+theorem drive_beta (r : Val) :
+    (driveB.subst 1 (selfV driveB)).subst 0 r = .case r.1
+      (.app (selfV driveB).1 (.app (.app (.var 0) (.inj₁ .unit)) .unit)) (.var 0) :=
+  drive_beta_at selfV_drive_closed r
+
+theorem drive_case₁_at {S : Val} (hS : closedAt 0 S.1 = true) (κ : Val) :
+    (Expr.app S.1 (.app (.app (.var 0) (.inj₁ .unit)) .unit)).subst 0 κ =
+      (Kont.appR S.1 .hole).plug (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val Val.unit)) := by
+  simp [Expr.subst, subst_closedAt _ _ hS (Nat.zero_le _), Kont.plug, Val.inj₁]
+
+theorem drive_case₁ (κ : Val) :
+    (Expr.app (selfV driveB).1 (.app (.app (.var 0) (.inj₁ .unit)) .unit)).subst 0 κ =
+      (Kont.appR (selfV driveB).1 .hole).plug
+        (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val Val.unit)) :=
+  drive_case₁_at selfV_drive_closed κ
+
+theorem drive_steps₁ (κ : Val) : ∀ μ, Step1Only (ℍ := ℍ) μ (.app driveV.1 (Val.inj₁ κ).1) μ
+    (.case (Val.inj₁ κ).1
+      (.app (selfV driveB).1 (.app (.app (.var 0) (.inj₁ .unit)) .unit)) (.var 0)) := by
+  intro μ
+  have h := step1Only_plug (ℍ := ℍ) (Head.beta μ (driveB.subst 1 (selfV driveB)) (Val.inj₁ κ))
+    rfl .hole
+  rw [drive_beta] at h
+  rw [driveV, fixV_eq driveB_closed]
+  exact h
+
+theorem drive_steps₂ (x : Val) : ∀ μ, Step1Only (ℍ := ℍ) μ (.app driveV.1 (Val.inj₂ x).1) μ
+    (.case (Val.inj₂ x).1
+      (.app (selfV driveB).1 (.app (.app (.var 0) (.inj₁ .unit)) .unit)) (.var 0)) := by
+  intro μ
+  have h := step1Only_plug (ℍ := ℍ) (Head.beta μ (driveB.subst 1 (selfV driveB)) (Val.inj₂ x))
+    rfl .hole
+  rw [drive_beta] at h
+  rw [driveV, fixV_eq driveB_closed]
+  exact h
+
+/-- **A value beside the pool, at every extension**: the value's resource in `Qt` (carried along
+re-reading, `QtStable`), the pool beside it. -/
+theorem poolPost_here {Qt : TPostV} (hst : QtStable Qt) {ts : List StoredT} {F : TFrame}
+    {k : Nat} {w : TWd} {ls : List (SRecT w.K)} {Oa Ob : List (FrameRecT w.K)}
+    {a b ρ : TRes w.K} {x : Val} (hx : Qt k w ls Oa x a) (hP : PoolT (ℍ := ℍ) ts w ls Ob b)
+    (hc : ResUT.CompS a b ρ) (hb : NoneAt (recMask Oa) b) (ha : NoneAt (recMask Ob) a)
+    (hap : ∀ p ∈ Oa, ∀ q ∈ Ob, p.le ≠ q.le) (hcov : CovR (sem w.Θ) w.K ρ)
+    (hv : ResUT.Valid ρ) :
+    twp (ℍ := ℍ) F (PoolPost (ℍ := ℍ) (valPost Qt) ts) k w ls (Oa ++ Ob) x.1 ρ := by
+  refine twp_here (fun μ => final_val μ x) fun w₀ ρ₀ ls₀ O₀ hE hr hl hO => ?_
+  obtain ⟨Oa₀, Ob₀, rfl, hOa, hOb⟩ := forall₂_append_left hO
+  obtain ⟨a₀, b₀, hra, hrb, hc₀⟩ := RR.split_retype hE.1 hc hcov hE.2 hr
+  have hva := (ResUT.Valid.split hc hv).1
+  have hvb := (ResUT.Valid.split hc hv).2
+  exact ⟨Oa₀, Ob₀, a₀, b₀, rfl, hc₀,
+    ⟨x, rfl, hst k w w₀ ls Oa ls₀ Oa₀ x a a₀ (hE.of_compS_left hc) hra hOa hx⟩,
+    hP.kripke (hE.of_compS_right hc) hrb hOb (KeepRel.of_srecsRR hl _)
+      (hcov.of_compS_right hc) hvb,
+    (NoneAt.rr hE.1 hvb hrb hb).mono fun y hy => (recMask_rr hOa y).mpr hy,
+    (NoneAt.rr hE.1 hva hra ha).mono fun y hy => (recMask_rr hOb y).mpr hy,
+    apart_rr hOa hOb hap⟩
+
+/-- **Driving a parked task to its end keeps the pool.** The task's answer `r` under the park
+stepper (`QP`, owning `Oa`, resource `a`) beside a pool `ts` of any length (owning `Ob`), the two
+apart; under frames avoiding all their records. At every end of `drive r` the task has answered
+in `Qt`, beside the pool held at the end world and list, still apart. By strong induction on the
+index: a parked answer joins the pool (`poolT_park`), is resumed at its head (`poolT_resume`) one
+index below, and what the resume answers is driven again (`selfV` unrolls to the loop). -/
+theorem drive_twp {Qt : TPostV} (hQt : Qt.Down) (hst : QtStable Qt) :
+    ∀ (k : Nat) (ts : List StoredT) (F : TFrame) (w : TWd) (ls : List (SRecT w.K))
+      (Oa Ob : List (FrameRecT w.K)) (a b ρ : TRes w.K) (r : Val), F.Mono →
+      (∀ w' ρf, F w' ρf → fdMask (recMask (Oa ++ Ob)) w' ρf) →
+      QP (ℍ := ℍ) Qt k w ls Oa r a → PoolT (ℍ := ℍ) ts w ls Ob b → ResUT.CompS a b ρ →
+      NoneAt (recMask Oa) b → NoneAt (recMask Ob) a → (∀ p ∈ Oa, ∀ q ∈ Ob, p.le ≠ q.le) →
+      CovR (sem w.Θ) w.K ρ → ResUT.Valid ρ → (∀ x ∈ ls, CovR (sem w.Θ) w.K x.1.R) →
+      (∀ x ∈ Oa, CovR (sem w.Θ) w.K x.R) →
+      twp (ℍ := ℍ) F (PoolPost (ℍ := ℍ) (valPost Qt) ts) k w ls (Oa ++ Ob)
+        (.app driveV.1 r.1) ρ := by
+  intro k
+  induction k using Nat.strong_induction_on with
+  | _ k ih =>
+  intro ts F w ls Oa Ob a b ρ r hFm hFM hQ hP hc hb ha hap hcov hv hls hOc
+  have hD := PoolPost.down (ℍ := ℍ) (valPost_down hQt) ts
+  rcases QP_iff.mp hQ with ⟨κ, rfl, hκ⟩ | ⟨x, rfl, hx⟩
+  · -- parked: join the pool, resume at its head, drive what it answers
+    cases k with
+    | zero => exact twp_zero
+    | succ k₀ =>
+    have hP' := poolT_park (t := parkedT Qt (k₀ + 1) (recMask Oa) κ) hκ (fun _ => Iff.rfl) hP hc
+      hb ha hap (CovR.of_compS_left hc hcov) hls hOc
+    refine twp_step (drive_steps₁ κ) ?_
+    refine twp_det hD (fun μ => step1Only_plug (Head.case₁ μ κ _ _) rfl .hole) ?_
+    rw [Kont.plug, drive_case₁]
+    have hres : twp (ℍ := ℍ) F (PoolPost (ℍ := ℍ) (valPost (QP (ℍ := ℍ) Qt)) ts) k₀ w ls
+        (Oa ++ Ob) (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val Val.unit)) ρ :=
+      poolT_resume (k' := k₀) (a := Val.unit) (σ := PMap.empty) (F := F) hP'
+      (by simp [parkedT]) ⟨rfl, rfl⟩ (ResUT.compS_empty_right ρ) (noneAt_empty _) hcov hv
+      (fun w' ρf hf => fdMask_le (fun x hx => (recMask_append x).mpr (Or.inl hx)) (hFM w' ρf hf))
+    refine twp_bind_fd hFm (fun _ _ h => h) _ (fun w₀ ρf hf => (hFM w₀ ρf hf).2) hres ?_
+    intro k₁ hk₁ w' ls' O' t ρ' hcov' hv' hls' hO' hpost
+    obtain ⟨Oa', Ob', a', b', rfl, hc', ⟨r', rfl, hQ'⟩, hP'', hb', ha', hap'⟩ := hpost
+    refine twp_pure hD (selfV_steps_in driveB_closed .hole r') ?_
+    exact ih k₁ (by omega) ts _ w' ls' Oa' Ob' a' b' ρ' r'
+      (TFrame.and_mono hFm (fdMask_mono _)) (fun _ _ h => h.2) hQ' hP'' hc' hb' ha' hap'
+      hcov' hv' hls' (fun x hx => hO' x (List.mem_append_left _ hx))
+  · -- answered: `x`
+    refine twp_det hD (drive_steps₂ x) ?_
+    refine twp_det hD (fun μ => step1Only_plug (Head.case₂ μ x _ _) rfl .hole) ?_
+    have e : (Expr.var 0).subst 0 x = x.1 := by simp [Expr.subst]
+    rw [Kont.plug, e]
+    exact poolPost_here hst hx hP hc hb ha hap hcov hv
 
 end BoCa.Fig16.Tree.Wp.SchedProgs.Park
 

@@ -95,7 +95,8 @@ theorem twp_bind_fd {F Fe : TFrame} (hFm : F.Mono) (hFe : ∀ w ρf, F w ρf →
     (hJ : ∀ w₀ ρf, F w₀ ρf → NoneAt (recMask O) ρf)
     (he : twp (ℍ := ℍ) Fe P n w ls O e ρ)
     (hk : ∀ k, k ≤ n → ∀ (w' : TWd) (ls' : List (SRecT w'.K)) (O' : List (FrameRecT w'.K)) t
-      (ρ' : TRes w'.K), CovR (sem w'.Θ) w'.K ρ' → (∀ x ∈ ls', CovR (sem w'.Θ) w'.K x.1.R) →
+      (ρ' : TRes w'.K), CovR (sem w'.Θ) w'.K ρ' → ResUT.Valid ρ' →
+      (∀ x ∈ ls', CovR (sem w'.Θ) w'.K x.1.R) →
       (∀ r ∈ O', CovR (sem w'.Θ) w'.K r.R) → P k w' ls' O' t ρ' →
       twp (ℍ := ℍ) (F.and (fdMask (recMask O'))) Q k w' ls' O' (K.plug t) ρ') :
     twp (ℍ := ℍ) F Q n w ls O (K.plug e) ρ := by
@@ -113,7 +114,7 @@ theorem twp_bind_fd {F Fe : TFrame} (hFm : F.Mono) (hFe : ∀ w ρf, F w ρf →
       ⟨hFm _ _ _ _ g₀ g₁ hF, covf_valid g₄ g₇,
         noneAt_recMask_end g₀.1 (covf_valid hc hI) g₁ hJ₀ g₁₀⟩
     obtain ⟨w₂, ρf₂, ρ₂, fρ₂, psF₂, ps₂, O₂, ls₂, k₀, k₁, k₂, k₃, k₄, k₅, k₆, k₇, k₈, k₉, k₁₀,
-        k₁₁⟩ := hk (n - j₁) (Nat.sub_le _ _) w₁ ls₁ O₁ t ρ₁ hcov g₆.cov_ls
+        k₁₁⟩ := hk (n - j₁) (Nat.sub_le _ _) w₁ ls₁ O₁ t ρ₁ hcov (cov_valid g₄ g₇) g₆.cov_ls
         (fun r hr => g₆.cov_ps r (g₅.left r hr)) g₈ w₁ ρ₁ ρf₁ fρ₁ ls₁ O₁ ps₁ psF₁ μ₁
         (TWd.Ext.refl _ _) (RR.refl hcov) (SRecsRR.refl g₆.cov_ls)
         (RecsRR.refl fun r hr => g₆.cov_ps r (g₅.left r hr)) hF₁ (ResUT.hash_symm g₃) g₄ g₅ g₆
@@ -413,7 +414,7 @@ theorem cerwpT_schedHandle {T : OpTabT} {n₀ : UInt32} {qs hr hs : Val} {Qin Qo
   rw [cerwpT_eq] at h
   refine twp_bind_fd hFm (fun w ρf hf => hFe w ρf (hFM w ρf hf)) (hndK (hndVal n₀ qs hr hs))
     (fun w₀ ρf hf => (hFM w₀ ρf hf).2.mono hOM) h
-    (fun k hk w' ls' O' t ρ' hcov' hls' hO' ht => ?_)
+    (fun k hk w' ls' O' t ρ' hcov' _ hls' hO' ht => ?_)
   -- the clause's frame: `F`, avoiding the masks of the records the run ended with
   have hF'm : (F.and (fdMask (recMask O'))).Mono := TFrame.and_mono hFm (fdMask_mono _)
   have hF'M : ∀ w'' ρf, (F.and (fdMask (recMask O'))) w'' ρf → fdMask (recMask O') w'' ρf :=
