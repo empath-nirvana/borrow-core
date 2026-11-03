@@ -285,7 +285,7 @@ theorem cactusT_step {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {e : Expr} {ρ
   obtain ⟨ρf, hr, hf, hc, hS⟩ := cactusT_frame hI
   obtain ⟨-, -, hA, hR, hI', hpts⟩ := hI
   have hcov : CovR (sem w.Θ) w.K ρ := cov_of_comp hc hI'
-  obtain ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈⟩ :=
+  obtain ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, -, -⟩ :=
     h w ρ ρf W ls O ps _ μ (TWd.Ext.refl _ _) (RR.refl hcov) (SRecsRR.refl hR.cov_ls)
       (RecsRR.refl fun r hr' => hR.cov_ps r (hS.left r hr')) (hF ρf hr) hf hc hS hR hI' hfd j μ'
       e' hj hrun hfin

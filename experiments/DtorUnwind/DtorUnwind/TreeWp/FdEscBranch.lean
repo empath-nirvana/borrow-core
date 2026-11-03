@@ -657,10 +657,6 @@ theorem fd_esc_of_branch (hB : EscBeneathT) {Θ : CodeTy} {tc : TChoice K}
 
 /-! ### At a join -/
 
-/-- Locations no flattening of `a` holds. -/
-def NoneAt (P : BoCa.Loc → Prop) (a : TRes K) : Prop :=
-  ∀ τ, ResUT.Flat a τ → ∀ x, P x → τ.get x = none
-
 /-- **A composite of valid resources holding nothing at `P` holds nothing there.** -/
 theorem NoneAt.compS {P : BoCa.Loc → Prop} {a b c : TRes K} (hc : ResUT.CompS a b c)
     (hva : ResUT.Valid a) (hvb : ResUT.Valid b) (ha : NoneAt P a) (hb : NoneAt P b) :
@@ -688,10 +684,6 @@ theorem NoneAt.compS {P : BoCa.Loc → Prop} {a b c : TRes K} (hc : ResUT.CompS 
   · rcases back_some ha' hψ with ⟨ψ', h'⟩ | ⟨ψ', h'⟩
     · obtain ⟨_, h''⟩ := comp_some_r hca h'; exact hA _ h''
     · obtain ⟨_, h''⟩ := comp_some_r hcb h'; exact hB _ h''
-
-/-- The locations `FdEsc` reads: the lent location and the escrow's exclusive part. -/
-def escLocs (l : BoCa.Loc) (R : TRes K) (x : BoCa.Loc) : Prop :=
-  x = l ∨ ∃ eR, ExST R eR ∧ (eR.get x).isSome
 
 theorem fdEsc_iff_noneAt {l : BoCa.Loc} {R Y : TRes K} : FdEsc l R Y ↔ NoneAt (escLocs l R) Y := by
   refine ⟨fun h τ hτ x hx => ?_, fun h τ hτ => ⟨h τ hτ l (Or.inl rfl),
