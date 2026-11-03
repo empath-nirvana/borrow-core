@@ -5,9 +5,10 @@ import Support.Model.Tree.Port.ReborrowLowering
 /-!
 # Frame records and canonical images over the tree world
 
-`SI/TWNC.lean`'s typed world with canonical images, read over the tree-stratified carrier with
-store types as codes (`TreeWp/Codes.lean`). Each piece is the `SI/`/`Core/` one with the
-carrier's names (`CellUT`, `TSet`, `K.le`), and with the record's type a code:
+`[spec §62]`. Core's typed world (`Core/World.lean`'s `TW`), read over the tree-stratified
+carrier with store types as codes (`World/Codes.lean`) and every reborrow's image the canonical
+one. Each piece is the `Core/` one with the carrier's names (`CellUT`, `TSet`, `K.le`), and with
+the record's type a code:
 
 * **Records** (`FrameRecT`): location, value, escrow and code, as `Core/FrameRecords.lean`'s
   `FrameRec` with `T : KTy`. A code names its lifetimes, so there is no substitution `δ` and no
@@ -17,20 +18,26 @@ carrier's names (`CellUT`, `TSet`, `K.le`), and with the record's type a code:
   codes' formers (`1`, `+`, `Imm`, `Mut`, `[a]`, `ref`).
 * **`Imm̲ 'b`** (`KTy.immReborrow`): `Core/Types.lean`'s `VTy.immReborrow` at the codes' formers,
   at a lifetime `b` (codes are closed, so no variable is introduced and extended).
-* **Reborrow premises** (`RebRecLeT`, `RebEndRecT`, `RebCellLeT`): `SI/TWN.lean`'s, with `⊑`, `⊏`
-  read in `K`.
-* **Templates and canonical images** (`TmplSpecT`, `tmplT`, `canonT`, and the deep ones):
-  `SI/TWNC.lean`'s, the typing read through `interp`, the choice made at the current tree and
-  code typing. A template is covered (`TmplSpecT`'s last clause).
-* **`TWNT`**: `TWNC`'s constructors over `TRes K`, and one more, `reread`: the tree grows or a
-  location no `mut` cell is at is re-typed, the world and every record re-read (`RecRR`). At no
-  growth the re-reading is the identity (`TWNT.reread_refl`).
+* **Reborrow premises** (`RebRecLeT`, `RebEndRecT`, `RebCellLeT`), read at one record:
+  `TW.reb`'s `StratumLe W β` and `TW.rebEnd`'s `W′.InStratum β` ask for a lifetime below the whole
+  world, which does not exist for a world holding two siblings (class 4 of SPEC §62's
+  comparability classes, `no_stratum_below_siblings`). Each is replaced by the premise read at the
+  records whose lineage meets the reborrowed escrow, the only place `TW`'s invariant reads it.
+* **Templates and canonical images** (`TmplSpecT`, `tmplT`, `canonT`, and the deep ones): one
+  typed image of a record's escrow (`TmplSpecT`), the image at `β` the template re-taken at `β`
+  (`relResT`, which changes lifetimes and keeps every witness), for root and deep reborrows. Two
+  readers of the same frozen data then share witnesses. A template is covered (`TmplSpecT`'s last
+  clause).
+* **`TWNT`**: `TW`'s constructors over `TRes K`, with `reb`'s and `rebDeep`'s image required to be
+  the canonical one, and one more, `reread`: the tree grows or a location no `mut` cell is at is
+  re-typed, the world and every record re-read (`RecRR`). At no growth the re-reading is the
+  identity (`TWNT.reread_refl`).
 * **The template choice** (`TChoice`): `TWNT` carries the choice its canonical images read
   (`canonTc`, `canonDTc`), and `reread` carries it, each used argument's template re-read
-  (`TcCarried`). At `tc = tmplT K Θ` the images are `canonT`, `canonDT` (`TreeWp/Templ.lean`), so
-  where nothing grows `TWNT` is `TWNC` read over the tree with the `Classical` choice.
+  (`TcCarried`). At `tc = tmplT K Θ` the images are `canonT`, `canonDT` (`World/Templ.lean`), so
+  where nothing grows every image is the `Classical` choice of one template per record.
 
-**Templates across a re-reading** are carried, not re-chosen: `TreeWp/Templ.lean` shows
+**Templates across a re-reading** are carried, not re-chosen: `World/Templ.lean` shows
 `TemplAt` and `TemplDAt` kept by a re-reading (`templAt_reread`, `templDAt_reread`).
 -/
 
@@ -270,9 +277,11 @@ def TcCarried {K' : WCactus} (Θ' : CodeTy) (W : TRes K) (rs : List (FrameRecT K
 
 /-! ### The typed world over the tree -/
 
-/-- **`TWNC` over the tree world.** `TWNT K Θ tc W ps rs`: the configuration `W` at the tree `K`,
-the code typing `Θ` and the template choice `tc` (`canonTc` reads it), reached from `∅` by the operations; `ps` the frames taken and not ended,
-`rs` with their lineages. `TWNC`'s constructors, read over `TRes K`, and `reread`. -/
+/-- **The typed world over the tree, with canonical images.** `TWNT K Θ tc W ps rs`: the
+configuration `W` at the tree `K`, the code typing `Θ` and the template choice `tc` (`canonTc`
+reads it), reached from `∅` by the operations; `ps` the frames taken and not ended, `rs` with
+their lineages. `TW`'s constructors read over `TRes K`, the reborrow images canonical, and
+`reread`. -/
 inductive TWNT : (K : WCactus) → CodeTy → TChoice K → TRes K → List (FrameRecT K) →
     List (FrameRecT K) → Prop
   | empty {K : WCactus} {Θ : CodeTy} {tc : TChoice K} : TWNT K Θ tc PMap.empty [] []
@@ -393,7 +402,6 @@ theorem forall₂_mem_right {α β : Type} {R : α → β → Prop} {xs : List �
       · exact ⟨_, List.mem_cons_self, hxy⟩
       · obtain ⟨x, hx, hr⟩ := ih hy
         exact ⟨x, List.mem_cons_of_mem _ hx, hr⟩
-
 
 /-- **A value of a code is held by a covered resource**: every `mut` cell the code's meaning
 asks for stores its location's code read at the tree, and its payload is a value of that code. -/

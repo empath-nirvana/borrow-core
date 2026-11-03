@@ -1,5 +1,14 @@
 import Support.Model.Tree.World.TInvFrame
 
+/-!
+# `TIT` across the end of a borrow
+
+`[spec §62]`. `Core/Invariant.lean`'s `ti_end` and `ti_endRebN` over `TWNT` (`tit_end`,
+`tit_endReb`): the walks of the two configurations of an end (`end_walks`), each view of the
+later world a view of the earlier one (`end_back`), and an `imm` view away from the ended location
+kept (`end_fwd_imm`).
+-/
+
 noncomputable section
 
 namespace BoCa.Fig16.Tree.Wp

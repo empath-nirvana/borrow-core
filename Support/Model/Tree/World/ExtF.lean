@@ -4,18 +4,18 @@ import Support.Model.Tree.World.TInvReread
 /-!
 # `extF` over the tree carrier
 
-`SI/ExtF.lean`'s world condition of a resumed continuation, read on `TRes K`: a location is
+`[spec §62]`. The world condition of a resumed continuation, read on `TRes K`: a location is
 *frozen* in `ρ` (`FrzT`) when an `imm` cell of `ρ` sits there, or it lies anywhere inside the
 witness of an `imm` cell, the cells reached from the top through `mut` witnesses included. A
 record is relevant (`RelFT`) when a frozen location is its cell or one of its chain positions.
-`extFT ls ls′ ρ`: every record of `ls` relevant to `ρ` is in `ls′`. The definitions are
-`SI/ExtF.lean`'s, at the tree carrier's cells and records (`ChainT`).
+`extFT ls ls′ ρ`: every record of `ls` relevant to `ρ` is in `ls′`.
 
 **Re-reading.** A re-reading keeps every location, tag and witness domain, and every `own` cell
-(`RC`), so it keeps and reflects the locations at depth (`InDomT.rr_iff`), the frozen locations
-(`FrzT.rr_iff`), a record's places (`RelAtT.rr_iff`, through `chain_recRR_fwd`/`_back`), and the
-relevant records (`RelFT.rr_iff`). Re-reading is single-valued on records (`RecRR.func`), so
-`extFT` between two lists is carried to their re-readings (`extFT.rr`).
+(`RC`), so it carries the locations at depth (`InDomT.rr_fwd`, `InDomT.rr_back`), the frozen
+locations (`FrzT.rr_fwd`, `FrzT.rr_back`), a record's places (`RelAtT.rr_iff`, through
+`chain_recRR_fwd`/`_back`), and the relevant records (`RelFT.rr_iff`). Re-reading is
+single-valued on records (`RecRR.func`), so `extFT` between two lists is carried to their
+re-readings (`extFT.rr`).
 -/
 
 noncomputable section
@@ -54,7 +54,11 @@ def RelAtT (r : FrameRecT K) (m : BoCa.Loc) : Prop :=
 def RelFT (r : FrameRecT K) (ρ : TRes K) : Prop := ∃ m, FrzT ρ m ∧ RelAtT r m
 
 /-- **The world condition of a resumed continuation**: the records of `ls` relevant to the
-share `ρ` are in `ls′`. -/
+share `ρ` are in `ls′`.
+
+**Departure (D10, `docs/new-core/scope-781.md` §8).** An in-house design, not a transcription:
+a stored continuation may resume at any list `extFT` allows. No printed lemma reads it, so no
+printed technique is replaced. -/
 def extFT (ls ls' : List (SRecT K)) (ρ : TRes K) : Prop :=
   ∀ r ∈ rsOfT ls, RelFT r ρ → r ∈ rsOfT ls'
 

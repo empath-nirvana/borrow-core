@@ -4,7 +4,7 @@ import Support.Model.Tree.CarrierGraftEx
 /-!
 # Row 5.16 clause 3 against the store typing
 
-Two `mut` cells at one location `ℓ`, both storing `Θ ℓ = τ` read at the tree, at lifetimes
+`[spec §62]`. Two `mut` cells at one location `ℓ`, both storing `Θ ℓ = τ` read at the tree, at lifetimes
 `a ⊏ b`: `mut({a}, v, χ, τ|_{Res_a}) ○ mut({b}, v, χ, τ|_{Res_b})` is, by clause 3,
 `mut(min{a, b}, v, χ, P̂ ∧ Q̂) = mut({a}, v, χ, P̂ ∧ Q̂)`.
 
@@ -13,13 +13,9 @@ Two `mut` cells at one location `ℓ`, both storing `Θ ℓ = τ` read at the tr
   on `Res_α ∩ Res_β` (each conjunct extended by falsity outside its own stratum, row 5.57).
 * **It is not `τ` on `Res_{min(s ∪ t)}`** (`clause3_not_cov`): with `a ⊏ c ⊏ b` and
   `τ = 1 + Imm @c 1`, the witness `ℓ′ ↦ imm({c}, (), ∅)` lies in `Res_{a}`, `inj₂ ℓ′` is in `τ`
-  there, and `P̂ ∧ Q̂` refuses it. Each operand is covered (`clause3_operands_cov`); the composite
-  is not (`Cov` reads `τ` on the cell's own stratum `Res_{min(s ∪ t)}`).
+  there, and `P̂ ∧ Q̂` refuses it. Each operand is covered (`cellAt_cov`); the composite is not
+  (`Cov` reads `τ` on the cell's own stratum `Res_{min(s ∪ t)}`).
 * **The configuration is on the printed chain** (`clause3_chain`): it is not a tree effect.
-* **Coverage read on the formation stratum** (`CovAt`): a `mut` cell stores `τ` read on a stratum
-  `S` whose `min` is the cell's antichain. The composite is covered at `S = s ∪ t`
-  (`clause3_covAt`); at `S = β̄` it is `Cov` (`covAt_self_iff`), so a cell no `○` formed is
-  covered exactly as before.
 
 Where the composite occurs. `Cov` is read of the cells a world stores (`CovR`); the composite of
 clause 3 is formed by `○` in the flattening `⦇ρ⦈` (the aliasable walk, `AgWT`), where a world's
@@ -29,9 +25,8 @@ at `ℓ` is held beneath an `imm` cell elsewhere while another `mut` cell at `�
 printed rules, a `mut` cell is made only by the Mut Frame (6.65) from `own(v)`, so the second cell
 needs a lend of `ℓ` after an earlier lend of `ℓ` ended with a view of its cell still held. The
 printed Mut Frame ends its lend with every `imm` lend inside it ended (6.64 returns the lender's
-resource), so in the printed run the two cells never meet at distinct lifetimes; over the tree,
-`mutEnd_world` asks nothing of the frame, and the frame condition (`joinFd`) is what excludes the
-held view.
+resource), so in the printed run the two cells never meet at distinct lifetimes. Over the tree
+world `MutOne` (`World/Coherent.lean`, an invariant of `TWNT`) excludes them.
 -/
 
 noncomputable section
@@ -168,8 +163,6 @@ theorem clause3_chain (l' : BoCa.Loc) :
         (TSet.single (OrderDual.toDual 1))) :=
   (clause3_not_cov (K := WCactus.chain) ((WCactus.chain_lt _ _).mpr (by decide))
     ((WCactus.chain_lt _ _).mpr (by decide)) l').2.2.2
-
-/-! ### Coverage read on the stratum a cell's invariant was formed at -/
 
 end BoCa.Fig16.Tree.Wp
 

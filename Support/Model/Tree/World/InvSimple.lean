@@ -3,7 +3,7 @@ import Support.Model.Tree.World.TInvReread
 /-!
 # `TIT` at the steps that keep the aliasable walk
 
-`Core/Invariant.lean`'s `own_cell_ag`, `mut_fold_ag`, the `MutAt` lemmas, `chainInv_of_ag_sub` and
+`[spec §62]`. `Core/Invariant.lean`'s `own_cell_ag`, `mut_fold_ag`, the `MutAt` lemmas, `chainInv_of_ag_sub` and
 `ti_of_ag`, `ti_mutFold`, over the tree. `TIT` reads `ag(W)` only through hypotheses `AgW W a`
 and `mut` cells only through `¬ MutAt W x` (`TIT.of_ag`). Allocation, `free`, `store` and
 `mutUnfold` keep both (`tit_free`, `tit_store`, `tit_mutUnfold`); `mutFold` keeps the walk and
@@ -204,7 +204,6 @@ theorem tit_mutFold {Θ : CodeTy} {W X Z ρ W' : TRes K} {ps rs : List (FrameRec
     · exact hM.2 r hr m u hm h'
     · obtain ⟨ζ, e⟩ := h3.2.1 r hr m u hm aW haW
       rw [h', lNone] at e; cases e
-
 
 end BoCa.Fig16.Tree.Wp
 

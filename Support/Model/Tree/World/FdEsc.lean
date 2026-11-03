@@ -5,15 +5,15 @@ import Support.Model.Tree.World.Branches
 /-!
 # The end of an `imm` lend whose escrow holds an `own` cell
 
-`TWNT.immEnd` turns `ℓ ↦ imm({α}, v, R)` back into `ℓ ↦ own(v) ● R` beside the rest `Y` of the
+`[spec §62]`. `TWNT.immEnd` turns `ℓ ↦ imm({α}, v, R)` back into `ℓ ↦ own(v) ● R` beside the rest `Y` of the
 world, and asks `✓(ℓ ↦ own(v) ● R ● Y)`.
 
 **The configuration** (`immEnd_esc_config`). `R = m ↦ own(())`, `v = loc m`, the record at
 `ref 1`, and a reborrow of the record at `β ⊏ α` (`TWNT.reb`, its image the canonical one,
 `m ↦ imm({β}, (), ∅)`). The world `W = ℓ ↦ imm({α}, loc m, R) ● m ↦ imm({β}, (), ∅)` is a `TWNT`
 world, so every invariant of `TWNT` holds of it. Split at the record, the rest is the image
-`Y = m ↦ imm({β}, (), ∅)`. Its flattening holds nothing at `ℓ`: the join's frame condition at
-`ℓ` (`joinFd`, `SI/CaptureScope.lean`) holds of `Y`. Yet `ℓ ↦ own(loc m) ● R ● Y` is undefined:
+`Y = m ↦ imm({β}, (), ∅)`. Its flattening holds nothing at `ℓ`: a join's frame condition read
+at `ℓ` alone holds of `Y`. Yet `ℓ ↦ own(loc m) ● R ● Y` is undefined:
 `own(())` and `imm({β}, (), ∅)` meet at `m`.
 
 So the frame condition at the lent location does not give `immEnd`'s `✓`, and no invariant of the
@@ -28,10 +28,11 @@ and at every location of `ex(R)`, the escrow's exclusive part at any depth. With
 `✓(ℓ ↦ own(v) ● R ● Y)` follows from `✓(ℓ ↦ imm(s, v, R) ● Y)`, along 6.38's proof: the
 flattening splits into the exclusive parts and the aliasable parts; every disjointness but the
 one between `ex(R) ● ℓ ↦ own(v)` and `Y`'s flattening is read off `✓W`, and that one is the
-condition. The lender's piece is valid at every record proper (`TWNT.lenderValid`). Where the
-escrow has no exclusive part the condition is the one at `ℓ` (`fdEsc_iff_of_ex_empty`).
-`JoinReadyEscT` is `JoinReady` at those locations; `joinReadyEsc_fdEsc` gives the condition from
-it, as `joinReady_fd` gives `joinFd`.
+condition.
+
+`FdEscOfBranchT` states `FdEsc` from `TWNT`, the frame's lifetime, a branch point the rest's top
+cells sit on, and that point not inside the frame; it is proved in `World/EscBeneath.lean`
+(`fdEscOfBranch`).
 -/
 
 noncomputable section
@@ -65,7 +66,6 @@ def viewCell (β : Life) : TCell K :=
 
 /-- The image `m ↦ imm({β}, (), ∅)`. -/
 def viewRes (β : Life) (m : BoCa.Loc) : TRes K := ResUT.single m (viewCell β)
-
 
 theorem single_disjoint {l m : BoCa.Loc} (h : l ≠ m) (ψ χ : TCell K) :
     ∀ x, (ResUT.single l ψ).get x = none ∨ (ResUT.single m χ).get x = none := by
@@ -101,7 +101,6 @@ theorem valid_single_imm {l : BoCa.Loc} {s : TSet} {v : BoCa.Val} {ρv X : TRes 
   obtain ⟨-, y, hy, hvy⟩ := ResUT.six34 (ρ := PMap.empty) (hs := hs) hX
     (ResUT.hash_symm (ResUT.hash_empty_right hv))
   rwa [← ResUT.CompS.functional hy (ResUT.comp_empty_left _)]
-
 
 /-! ### The aliasable walks of the two cells -/
 
@@ -212,7 +211,6 @@ theorem canonT_view (Θ : CodeTy) (β : Life) (l m : BoCa.Loc) :
     exact CellUT.immOf_congr rfl hiv hw _ _
   · simp [hx]
 
-
 /-! ### The world -/
 
 /-- The record: `ℓ`, `loc m`, `R`, `ref 1`. -/
@@ -311,7 +309,7 @@ theorem twnt_config (Θ : CodeTy) {α β : Life} (hβα : K.lt β α) {l m : BoC
 
 /-- **The end of the lend at the configuration.** The world is a `TWNT` world holding the record
 proper `p = (ℓ, loc m, R, ref 1)`; split at `p`'s cell, the rest `Y` is the image; `Y`'s
-flattening holds nothing at `ℓ` (`joinFd` at `ℓ`); and `ℓ ↦ own(loc m) ● R` does not compose
+flattening holds nothing at `ℓ`; and `ℓ ↦ own(loc m) ● R` does not compose
 with `Y`, so `TWNT.immEnd` has no end world. -/
 theorem immEnd_esc_config (Θ : CodeTy) {α β : Life} (hβα : K.lt β α) {l m : BoCa.Loc}
     (hlm : l ≠ m) :
@@ -329,7 +327,6 @@ theorem immEnd_esc_config (Θ : CodeTy) {α β : Life} (hβα : K.lt β α) {l m
       (ResUT.single_get_self _ _)
   have hc := hW'.1 m _ _ eX (ResUT.single_get_self _ _)
   exact absurd (CellUT.compatS_iff.mp hc).1 (by simp)
-
 
 /-- **The same configuration on the printed chain** (`β = 2 ⊏ α = 1`): the record, the reborrow
 and the end are the printed ones; what is not printed is a frame holding the image. -/
@@ -417,10 +414,15 @@ theorem hash_of_walks {ρ₁ ρ₂ e₁ e₂ a₁ a₂ : TRes K}
   exact ⟨hcs, ρ, hρ, σ, (ResUT.Flat.split hρ).mpr ⟨e₁, e₂, e, a₁, a₂, a, he₁, he₂, he, ha₁, ha₂,
     ha, hσ⟩⟩
 
-
 /-- **The frame condition at an escrow's exclusive locations.** `Y`'s flattening holds nothing at
-the lent location `ℓ` (`joinFd`) and nothing at any location of `ex(R)`, the escrow's
-exclusive part at any depth. -/
+the lent location `ℓ` and nothing at any location of `ex(R)`, the escrow's exclusive part at any
+depth.
+
+**Departure (D6, `docs/new-core/scope-781.md` §8).** This is the join's condition, from branch
+points, in place of `[TR]` 6.64's route. 6.64 reads H24 (`@ρ′ ⊐ α`) and 6.38's H6 (the frame fixed
+for the run, read at the lend); over the tree the frame is the other branches, which change while
+the lending segment is stopped, so neither is available. The condition at `ℓ` alone does not give
+`immEnd`'s `✓` (`immEnd_esc_config`). The printed technique not built: 6.64's H24/H6 route. -/
 def FdEsc (l : BoCa.Loc) (R Y : TRes K) : Prop :=
   ∀ τ, ResUT.Flat Y τ → τ.get l = none ∧ ∀ eR, ExST R eR → ∀ x, (eR.get x).isSome → τ.get x = none
 
@@ -557,11 +559,6 @@ theorem config_not_fdEsc {β : Life} {l m : BoCa.Loc} :
   have := (h _ hf).2 (escR m) (ExWT.single_own m _) m (by rw [escR, ResUT.single_get_self]; rfl)
   rw [viewRes, ResUT.single_get_self] at this
   cases this
-
-
-/-! ### The lender's piece is valid -/
-
-/-! ### The join's condition at the escrow -/
 
 /-! ### The statement with branch points -/
 

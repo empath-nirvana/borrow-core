@@ -3,7 +3,7 @@ import Support.Model.Tree.World.World
 /-!
 # The flattening along re-reading, lifetime sets kept
 
-`ResUT.Flat.rr` (`TreeWp/World.lean`) carries `⦇·⦈` along `RR`, relating the two flattenings
+`[spec §62]`. `ResUT.Flat.rr` (`World/World.lean`) carries `⦇·⦈` along `RR`, relating the two flattenings
 cell by cell through `rrRel`'s `TSim`: tag, value and witness re-read. `↭`'s `imm` clause
 (row 5.27) also reads an `imm` cell's lifetime set, and its `mut` clause a `mut` cell's `β̄`, so
 reading `↭` across a re-reading asks for those too. A re-read `imm` cell keeps its lifetime set and

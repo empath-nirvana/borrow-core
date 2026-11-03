@@ -4,7 +4,7 @@ import Support.Model.Tree.World.NoOwnUnder
 /-!
 # Template coherence across a re-reading
 
-`TcCoherent` (`TreeWp/Templ.lean`) asks that two used arguments at one code and value whose
+`[spec §62]`. `TcCoherent` (`World/Templ.lean`) asks that two used arguments at one code and value whose
 escrows re-read to one escrow have templates that re-read to one template. A re-reading keeps
 every cell's location, kind, value and an `imm` cell's lifetime set; it reads a `mut` cell's
 antichain as `min_{K′}`, so two `mut` cells at one location differing only in their antichains can
@@ -23,9 +23,9 @@ function. So every used argument, its cells at depth in the world, re-reads inje
 * `RC.inj_of`, `RR.inj_of`: re-reading is injective on cells at depth of a `MutOne` world.
 * `agW_cellAt`: a non-`own` cell of `ag(ρ)` carries the witness of a cell at depth of `ρ`.
 * `TWNT.used_cellAt`, `TWNT.tcCoherent`, `TWNT.tcCarried_exists` read `TIT`; they are in
-  `TreeWp/InvUses.lean`, after `TWNT.inv`.
+  `World/InvUses.lean`, after `TWNT.inv`.
 
-The choice itself is recorded in the world (`TWd.tc`, `TreeWp/World.lean`): `RecInv` reads
+The choice itself is recorded in the world (`TWd.tc`, `World/World.lean`): `RecInv` reads
 `TWNT` at `w.tc`, so a run that does not grow the tree reads every canonical image at its start's
 choice, and a grown world's choice is a carried one.
 -/
@@ -221,7 +221,13 @@ theorem cellAt_top_own {W : TRes K} (hv : ResUT.Valid W) {x : BoCa.Loc} {u : BoC
 
 /-! ### One `mut` cell per location -/
 
-/-- **Two `mut` cells at one location, at any depth of `W`, are one cell.** -/
+/-- **Two `mut` cells at one location, at any depth of `W`, are one cell.**
+
+**Departure (D3, `docs/new-core/scope-781.md` §8).** The printed carrier has no such condition.
+It makes a flattened `mut` cell a stored one (`flat_mut_cellAt`); without it, clause 3 of `○` on
+two covered cells is not covered (`clause3_not_cov`, which is on the printed chain as well,
+`clause3_chain`). It is an invariant of `TWNT` (`TWNT.mutOne`), not a premise. The printed
+technique not built: reasoning about clause 3's `P̂ ∧ Q̂` composite. -/
 def MutOne (W : TRes K) : Prop :=
   ∀ y (ψ₁ ψ₂ : TCell K), CellAt W y ψ₁ → CellAt W y ψ₂ → ψ₁.kind = Kind.mut →
     ψ₂.kind = Kind.mut → ψ₁ = ψ₂
@@ -262,7 +268,7 @@ theorem CellAt.rr_back {Θ : LocTy} {K' : WCactus} {ρ' : TRes K'} {y : BoCa.Loc
       obtain ⟨ψ, hψ, hcψ⟩ := ih hc.wit
       exact ⟨ψ, .nest e' hψ, hcψ⟩
 
-/-- **`MutOne` is an invariant of `TWNT`.** -/
+/-- **`MutOne` is an invariant of `TWNT`.** Departure D3 (see `MutOne`). -/
 theorem TWNT.mutOne {Θ : CodeTy} {tc : TChoice K} {W : TRes K} {ps rs : List (FrameRecT K)}
     (h : TWNT K Θ tc W ps rs) : MutOne W := by
   induction h with
@@ -490,7 +496,6 @@ theorem LinPathT.cellAt {W : TRes K} {r d : FrameRecT K} {p : List BoCa.Loc}
   | cons hs _ ih =>
       obtain ⟨-, ζ, eζ, -, -, wζ⟩ := hs
       exact ih fun y ψ e => (hr _ ζ eζ).wit_trans (by rw [wζ]; exact e)
-
 
 end BoCa.Fig16.Tree.Wp
 

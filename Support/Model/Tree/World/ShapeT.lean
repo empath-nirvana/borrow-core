@@ -3,7 +3,7 @@ import Support.Model.Tree.World.Templ
 /-!
 # The shape lemmas of `Core/Images.lean` at the codes
 
-`Core/Images.lean`'s lemmas about a typed escrow's roots and images (`image_dom`, `own_split`,
+`[spec §62]`. `Core/Images.lean`'s lemmas about a typed escrow's roots and images (`image_dom`, `own_split`,
 `refPos_blocks`, `chain_own`), read at the codes (`1`, `+`, `Imm`, `Mut`, `[a]`, `ref`) with
 `T.interp Θ` for `vShape T δ`. Each is the printed induction, on `T` or on the position, at the
 codes' clauses. The codes have no `⊗`, so two positions of one value are one position

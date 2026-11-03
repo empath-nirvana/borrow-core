@@ -3,7 +3,7 @@ import Support.Model.Tree.World.TInv
 /-!
 # Templates carried along a re-reading
 
-`SI/TWNC.lean`'s template invariant (`TemplAt`: every view at a root of a record carries the
+`[spec §62]`. The template invariant (`TemplAt`: every view at a root of a record carries the
 record's template's witness there; `TemplDAt`: the same at a chain view's children) reads one
 template per record. Over the tree a template is a typed image read at the current tree; when the
 tree grows the world and every record are re-read (`TWNT.reread`). A template chosen anew at the
@@ -13,7 +13,7 @@ only through `≤` and the code, and `●` composes `imm` cells at different lif
 
 Here the template is a **choice** carried by the typed world (`TChoice`, one function for record
 templates and chain-view templates, `tmplT`'s and `tmplDT`'s argument order; `TWNT`'s index, in
-`TreeWp/Records.lean`) and re-read along the re-reading: at `TWNT.reread`, the choice at the grown
+`World/Records.lean`) and re-read along the re-reading: at `TWNT.reread`, the choice at the grown
 tree takes each used argument's re-read to the re-read of its old template (`TcCarried`). The re-reading of a world is a function (`RR.func`), and
 the aliasable walk of the re-read world is the re-read of the walk (`AgW.sim`), so
 
@@ -203,7 +203,6 @@ theorem tcCarried_exists {Θ' Θ'' : CodeTy} {tc : TChoice K} {W : TRes K}
   have := hcoh _ _ T v hp.choose_spec.1 hu R' hp.choose_spec.2 hR _ c
     (hex _ T v hp.choose_spec.1).choose_spec hc
   rw [this]; exact hc
-
 
 /-- **The template invariants across `TWNT.reread`**: given them at every record of the old
 list, they hold at every record of the re-read list. -/

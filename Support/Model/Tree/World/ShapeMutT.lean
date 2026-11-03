@@ -3,7 +3,7 @@ import Support.Model.Tree.World.InvMid
 /-!
 # The image and `Mut`-position lemmas of `Core/Images.lean` and `Core/Invariant.lean` at the codes
 
-`image_at_pos`, `typed_image_pos` (`Core/Images.lean`), `image_dom_mut`, `mut_split_den`,
+`[spec §62]`. `image_at_pos`, `typed_image_pos` (`Core/Images.lean`), `image_dom_mut`, `mut_split_den`,
 `GPos.of_chain`, `gpos_mut_cell` (`Core/Invariant.lean`), read at the codes (`1`, `+`, `Imm`,
 `Mut`, `[a]`, `ref`) with `T.interp Θ` for `vShape T δ` and `T.immReborrow β` for
 `vShape (T.immReborrow (.var x)) (δ.extend x β)`. Each is the printed induction, on the position

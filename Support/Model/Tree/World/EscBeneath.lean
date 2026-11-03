@@ -3,7 +3,7 @@ import Support.Model.Tree.World.FdEscBranch
 /-!
 # `EscBeneathT`
 
-`EscBeneathT` (`TreeWp/FdEscBranch.lean`) is the case of the escrow's frame condition that
+`[spec §62]`. `EscBeneathT` (`World/FdEscBranch.lean`) is the case of the escrow's frame condition that
 `fd_esc_of_branch` does not derive: a non-`imm` cell of the aliasable walk of the other branches
 `ρ_rest` at a location where a lineage member `d` of the record proper `p` holds a non-`imm` cell.
 It is derived here (`escBeneathT`), from three facts:
@@ -407,7 +407,14 @@ theorem innermost_view {Θ : CodeTy} {tc : TChoice K} {W ρo ρrest : TRes K}
 
 /-! ### The theorem -/
 
-/-- **`EscBeneathT`.** -/
+/-- **`EscBeneathT`**: a cell of the other branches' aliasable walk at a lineage location of a
+record proper `p` holding a non-`imm` cell does not exist when those branches sit on a point not
+inside `p`'s frame.
+
+**Departure (D8, `docs/new-core/scope-781.md` §8).** A new derivation, not a port of a printed
+proof: no printed lemma states it. Its case splits are ours: the innermost view above the cell
+against an all-`mut` path to the top (`cellAt_split`), and that view's record against `p` in the
+lineage order (`desc_comparable`). No printed technique is replaced by it. -/
 theorem escBeneathT : EscBeneathT := by
   intro K Θ tc W ρo ρrest ps rs p α n hT hp hW hFL hbr hnα d hd x ζ eζ kζ ar har χ eχ kχ _
   obtain ⟨m₁, V, hV, kV, hloc⟩ := innermost_view hT hp hW hd eζ kζ har eχ kχ

@@ -3,15 +3,15 @@ import Support.Model.Tree.World.Images
 /-!
 # The typed world's invariant over the tree: `TIT`
 
-`Core/Invariant.lean`'s `TI` and `Core/Images.lean`'s `ChainInv`, read over the tree carrier
-with records at codes (`TreeWp/Records.lean`): `vShape T δ` is `T.interp Θ` read at `K`, `⊏` is
+`[spec §62]`. `Core/Invariant.lean`'s `TI` and `Core/Images.lean`'s `ChainInv`, read over the tree carrier
+with records at codes (`World/Records.lean`): `vShape T δ` is `T.interp Θ` read at `K`, `⊏` is
 `K.lt`, `s.mem x` is `x ∈ s.set`. Definitions only.
 
-`TWNT.InvHolds` is `TWN.inv`'s statement (`SI/TWN.lean`) over `TWNT`: every `TWNT` world
-satisfies `TIT`. It is proved in `TreeWp/TInvHolds.lean` (`twnt_invHolds`), from the port of
-`TWN.inv` and of `Core/Invariant.lean`'s preservation lemmas (`ti_frame`, `ti_reb`,
+`TWNT.InvHolds` states that every `TWNT` world satisfies `TIT`. It is proved in
+`World/TInvHolds.lean` (`twnt_invHolds`), from the port of `Core/Invariant.lean`'s preservation
+lemmas (`ti_frame`, `ti_reb`,
 `ti_rebDeepN`, `ti_mutFold`, `ti_end`, `ti_endRebN`, `ti_of_ag`), with one case beyond them,
-`reread` (`TreeWp/TInvReread.lean`).
+`reread` (`World/TInvReread.lean`).
 -/
 
 noncomputable section
@@ -113,8 +113,8 @@ def TIT (K : WCactus) (Θ : CodeTy) (W : TRes K) (ps rs : List (FrameRecT K)) : 
   (∀ r ∈ rs, NestLifeT K W r) ∧ NoMutT W ps rs ∧
   (∀ x, x ∈ rs ↔ ∃ p ∈ ps, DescRT p x) ∧ CoverageT W rs
 
-/-- **`TWN.inv`'s statement over `TWNT`**: every world of the typed world over the tree satisfies
-`TIT` (`twnt_invHolds`, `TreeWp/TInvHolds.lean`). -/
+/-- **The invariant holds of `TWNT`**: every world of the typed world over the tree satisfies
+`TIT` (`twnt_invHolds`, `World/TInvHolds.lean`). -/
 def TWNT.InvHolds : Prop :=
   ∀ (K : WCactus) (Θ : CodeTy) (tc : TChoice K) (W : TRes K) (ps rs : List (FrameRecT K)),
     TWNT K Θ tc W ps rs → TIT K Θ W ps rs

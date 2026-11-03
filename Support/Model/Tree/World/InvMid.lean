@@ -1,5 +1,14 @@
 import Support.Model.Tree.World.InvBase
 
+/-!
+# Exclusive paths and lineages over the tree carrier
+
+`[spec §62]`. `Core/Invariant.lean`'s paths through `mut` witnesses (`XPath`, `xpath_unique`,
+`xpath_ex`), the lifting of a cell through `○` (`Lifts`), a lineage's exclusive part (`ExIn`,
+`LeInvW`, `TI.exIn`, `TI.leInvW`), and the framed world's exclusive part (`frame_ex`,
+`frame_new_root'`), over the tree carrier with records at codes.
+-/
+
 noncomputable section
 
 namespace BoCa.Fig16.Tree.Wp

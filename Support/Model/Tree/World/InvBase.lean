@@ -1,6 +1,17 @@
 import Support.Model.Tree.World.InvSimple
 import Support.Model.Tree.World.ShapeT
 
+/-!
+# The invariant's base lemmas over the tree carrier
+
+`[spec §62]`. `Core/Invariant.lean`'s cell-level lemmas at `CellUT K`: the `imm` counterparts of
+a cell in the aliasable walk (`ICp`, `ICpAt`, `AllICp` and their composition lemmas), the source of
+a `mut` cell of a composite (`compR_mut_src`, `bigComp_mut_src`), `mut` cells at depth
+(`mutAt_walk_dom`, `not_mutAt_top_own`, `mutAt_image`), the images' walks (`img_walk`,
+`img_cell`) and `NestLife` from the counterparts (`nestLife_of_icp`). Each is the library proof
+over the tree carrier.
+-/
+
 noncomputable section
 
 namespace BoCa.Fig16.Tree.Wp

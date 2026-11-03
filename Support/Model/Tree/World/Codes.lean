@@ -4,18 +4,17 @@ import Support.Model.Tree.Port.WalkSplitting
 /-!
 # Store types as syntactic codes read at the tree
 
-`Tree/KSem.lean`'s store typing `Θ : Loc → Option KSem` gives each location a semantic type, and
-`𝒱⟦Mut @a τ⟧` (`vMut`) compares `Θ ℓ` with `τ` as semantic values. A location's type is then
-fixed for the run. Here, as Core's `FrameRec.T` is a syntactic type
-read at a substitution, a store type is a code (`KTy`) and its meaning is read at the tree and at
-the code typing (`KTy.interp`). The `Mut` clause reads `Θ ℓ = A` syntactically and stores `A`'s
+`[spec §62]`. `Tree/Reread.lean`'s store typing `Θ : Loc → Option KSem` gives each location a
+semantic type. Here, as Core's `FrameRec.T` is a syntactic type read at a substitution, a store
+type is a code (`KTy`) and its meaning is read at the tree and at the code typing
+(`KTy.interp`). The `Mut` clause reads `Θ ℓ = A` syntactically and stores `A`'s
 meaning, so `interp` is structural in the code: there is no circularity to resolve.
 
 * **The semantic typing is `sem Θ`** (`ℓ ↦ ⟦Θ ℓ⟧_Θ`); `Cov`, `RC`, `RR` are read at it unchanged,
-  so every result of `Tree/KSem.lean` applies. The tree world (`TreeWp/World.lean`) carries a
+  so every result of `Tree/Reread.lean` applies. The tree world (`World/World.lean`) carries a
   code typing and reads its cells at `sem`.
-* **Every code is monotone** (`interp_retype` at `Θ' = Θ`, `monoΘ_sem`): the hypothesis
-  `MonoΘ` holds of every code typing.
+* **Every code is carried along re-reading** (`interp_retype`), at any re-typing that agrees
+  on the locations the resource holds a `mut` cell at.
 * **A location may be re-typed** when no `mut` cell at it is held (`RR.exists_retype`): a world
   covered at `sem Θ` has a re-reading covered at `sem Θ'` at any tree extension, for any `Θ'`
   agreeing with `Θ` on the locations the world holds a `mut` cell at (`HoldsMut`, at any depth).
@@ -26,9 +25,12 @@ meaning, so `interp` is structural in the code: there is no circularity to resol
   `sem Θ₂`. The held `mut` locations are kept by re-reading (`HoldsMut.rr`) and are those of the
   parts of a composite (`HoldsMut.of_compS_left`), so agreement passes along both.
 
-The codes are the formers whose meaning `Tree/KSem.lean` builds at the tree (`1`, `+`, `Imm`,
-`Mut`, `[a]`, `ref`); thunks are not coded here. `ref` is the position a frame record's chain
-steps through (`TreeWp/Records.lean`).
+The codes are `1`, `+`, `Imm`, `Mut`, `[a]` and `ref`; thunks are not coded here. `ref` is the
+position a frame record's chain steps through (`World/Records.lean`).
+
+**Departure (D9, `docs/new-core/scope-781.md` §8).** Store types are codes, with no substitution
+`δ` and no `AdmWf`, by the ruling of condition 16 (`docs/new-core/conditions.md`). No printed
+technique is left unbuilt by it.
 -/
 
 noncomputable section
@@ -38,7 +40,8 @@ open BoCa
 open BoCa.Fig16
 open BoCa.Fig16.Tree
 
-/-- **A store type, as a code.** -/
+/-- **A store type, as a code.** Departure D9 (`docs/new-core/scope-781.md` §8): codes, with no
+substitution `δ` and no `AdmWf`, by the ruling of condition 16. -/
 inductive KTy : Type where
   | unit
   | sum (A B : KTy)
@@ -282,7 +285,7 @@ theorem AgreeOn.trans {Θ : LocTy} {K K' : WCactus} {Θ₁ Θ₂ Θ₃ : CodeTy}
 
 /-! ### Re-readings across re-typings compose -/
 
-/-- `RC.trans`'s proof, the second re-reading at another typing: `RC` constrains only the
+/-- One cell's re-readings composed, the second at another typing: `RC` constrains only the
 re-read cell's invariant, so the composite is read at the second typing. -/
 theorem RC.trans_retype {Θ₁ Θ₂ : LocTy} {K K' K'' : WCactus} (hE' : K'.Ext K'') {l : BoCa.Loc}
     {ψ : TCell K} {ψ' : TCell K'} (h : RC Θ₁ l ψ ψ') :
@@ -306,7 +309,7 @@ theorem RC.trans_retype {Θ₁ Θ₂ : LocTy} {K K' K'' : WCactus} (hE' : K'.Ext
           obtain ⟨ψ', e', hr⟩ := RR.get_some (Θ := Θ₁) ⟨hdom, hw⟩ e
           exact ih k ψ ψ' e e' (hw' k ψ' ψ'' e' e'')
 
-/-- **Re-readings across re-typings compose.** At `Θ₁ = Θ₂` this is `RR.trans`. -/
+/-- **Re-readings across re-typings compose.** -/
 theorem RR.trans_retype {Θ₁ Θ₂ : LocTy} {K K' K'' : WCactus} (hE' : K'.Ext K'') {ρ : TRes K}
     {ρ' : TRes K'} {ρ'' : TRes K''} (h : RR Θ₁ ρ ρ') (h' : RR Θ₂ ρ' ρ'') : RR Θ₂ ρ ρ'' := by
   refine ⟨fun k => (h.1 k).trans (h'.1 k), fun k ψ ψ'' e e'' => ?_⟩

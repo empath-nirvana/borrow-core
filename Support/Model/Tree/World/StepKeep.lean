@@ -3,13 +3,11 @@ import Support.Model.Tree.World.EscBeneath
 /-!
 # What `↭` keeps of a lend a run holds nothing of
 
-`StepKeepsFdEsc` (`TreeWp/StepCopy.lean`) asks that a branch stepping at `twp` beside a record
-proper `p` of its frame, holding nothing at `p`'s lent location or escrow (`FdEsc`), still holds
-nothing there in every post-configuration `EndT` admits. It is a fact about `EndT` alone
-(`fdEsc_of_updX`), read from three things.
+`[spec §62]`. A run beside a record proper `p` of its frame, holding nothing at `p`'s lent location
+or escrow (`FdEsc`), still holds nothing there at its end, when its start `ρ` and end `ρ′` are
+related by `UpdX` masked at the run's own records (`fdEsc_of_updX`). It is read from three things.
 
-* **`↭` at the locations `FdEsc` reads.** `EndT` relates the run's start `ρ` and end `ρ′` by
-  `UpdX`, masked at the run's own records. `p′`'s lent location and lineage locations are none of
+* **`↭` at the locations `FdEsc` reads.** `p′`'s lent location and lineage locations are none of
   them (`recMask_apart`): two records proper have different locations (`SplitT`), their lineages
   share no exclusive cell (`ExclUniqueT`, `desc_comparable`), and neither is a sub-record of the
   other, which would put a `mut` cell at a lent location (`NoMutT`). So an `imm` or `mut` cell of

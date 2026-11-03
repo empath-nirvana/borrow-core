@@ -3,7 +3,7 @@ import Support.Model.Tree.World.RebRR
 /-!
 # `TIT` across a re-reading
 
-`TWNT.reread` grows the tree to `K'` and re-types to `Θ'` where no `mut` cell is held, re-reading
+`[spec §62]`. `TWNT.reread` grows the tree to `K'` and re-types to `Θ'` where no `mut` cell is held, re-reading
 the world (`RR`) and every record (`RecRR`). `tit_reread`: `TIT` at `K`, `Θ` gives it at `K'`,
 `Θ'`.
 

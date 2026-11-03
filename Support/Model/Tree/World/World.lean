@@ -4,16 +4,16 @@ import Support.Model.Tree.Port.Base
 /-!
 # The world over the tree-stratified carrier
 
-The step-indexed relation of `SI/Capture.lean` reads, at every frame and every end of a run, a
-world `fρ` with records proper `ps`, a list `ls`, `TWNC fρ ps (rsOf ls)`, `Tagged fρ ps ls`, and
-`ResU.Lower fρ μ`. Over the tree-stratified carrier (`Tree/Carrier.lean`) the world is:
+`[spec §62]`. Core's typed world (`Core/World.lean`) reads, at every frame and every end of a run,
+a world `fρ` with records proper `ps` and a tagged list `ls`, and `ResU.Lower fρ μ`. Over the
+tree-stratified carrier (`Tree/Carrier.lean`) the world is:
 
 * **`K`**, the lifetime tree, as a parent function `P` (`Tree/Parent.lean`): a fresh lend and a
   graft are both `ParentFn.Graft`s, so both extend `K` (`WCactus.Ext`) by `graft_mono`.
-* **`Θ`**, the store typing, a code per location (`TreeWp/Codes.lean`); its cells are read at
-  the semantic typing `sem Θ` (`Tree/KSem.lean`'s `Cov`).
+* **`Θ`**, the store typing, a code per location (`World/Codes.lean`); its cells are read at
+  the semantic typing `sem Θ` (`Tree/Reread.lean`'s `Cov`).
 * **`tc`**, the template choice the records' canonical images are read at
-  (`TreeWp/Records.lean`'s `TChoice`); a run at a world keeps it, and a grown world carries it
+  (`World/Records.lean`'s `TChoice`); a run at a world keeps it, and a grown world carries it
   (`TWNT.reread`'s `TcCarried`).
 * **the resource**, a `TRes K`, covered by `sem Θ` at `K`, lowering to the memory (`WInv`).
 
@@ -30,8 +30,8 @@ at may be re-typed (a freed location re-allocated). Along it `ρ` is carried by 
 * **`⟦·⟧` is kept** (`ResUT.Lower.rr`): the walks are carried along `RR` with tags and values
   kept (`Tree/CarrierSim.lean`), so the flattening lowers to the same memory.
 * **The world is re-read** at every extension carrying it (`WInv.reread`, from
-  `RR.exists_retype`): covered, lowering to the same memory. Every code is monotone
-  (`monoΘ_sem`), so no monotonicity is asked of the world.
+  `RR.exists_retype`): covered, lowering to the same memory. Codes are carried along
+  re-reading (`interp_retype`), so no monotonicity is asked of the world.
 
 At `w′ = w` the re-reading is the identity (`RR.refl`), and `TWd.Ext w w ρ` holds
 (`TWd.Ext.refl`), so every statement here is the one without re-reading.
@@ -53,7 +53,7 @@ structure TWd where
   /-- The store typing, a code per location. -/
   Θ : CodeTy
   /-- The template choice the canonical images of the world's records are read at
-  (`TChoice`, `TreeWp/Records.lean`): kept by every step, carried when the tree grows. -/
+  (`TChoice`, `World/Records.lean`): kept by every step, carried when the tree grows. -/
   tc : TRes (WCactus.ofParent P) → KTy → BoCa.Val → TRes (WCactus.ofParent P)
 
 /-- The lifetime tree. -/
@@ -230,8 +230,7 @@ theorem CovR.of_compS_right {Θ : LocTy} {K : WCactus} {a b y : TRes K}
     (hc : ResUT.CompS a b y) (h : CovR Θ K y) : CovR Θ K b :=
   CovR.of_compS_left (ResUT.CompS.comm hc) h
 
-/-- **The re-reading of a composite across a re-typing splits** into its parts' re-readings.
-At `Θ' = Θ` it is `RR.split` at `sem Θ`. -/
+/-- **The re-reading of a composite across a re-typing splits** into its parts' re-readings. -/
 theorem RR.split_retype {Θ Θ' : CodeTy} {K K' : WCactus} (hE : K.Ext K') {a b y : TRes K}
     {y' : TRes K'} (hc : ResUT.CompS a b y) (hy : CovR (sem Θ) K y) (hag : AgreeOn Θ Θ' y)
     (hr : RR (sem Θ') y y') :

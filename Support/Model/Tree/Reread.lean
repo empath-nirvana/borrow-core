@@ -2,45 +2,34 @@ import Support.Model.Tree.CarrierSim
 import Support.Model.Tree.CarrierGraftEx
 
 /-!
-# Semantic types read at the lifetime tree, and `mut` cells re-read as the tree grows
+# Re-reading: semantic types read at the lifetime tree
 
-The tree-stratified carrier (`Tree/Carrier.lean`) is indexed by the cactus `K` its strata are
-read in. Grafting a stored task under a newer lend extends `K` to `K'` (`WCactus.Ext`), and
-`trU` carries a world across (`ResUT.Valid.graft`). `trU` keeps each `mut` cell's stored
-predicate as an image, extended by falsity outside it as row 5.57 extends `SProp_α ⊆ SProp_α'`,
-so a borrow newly admissible at `K'` never satisfies it (`graft_carried_refuses`).
-
-Here the lifetime tree is part of the world semantic types are read at, and a `mut` cell's
-invariant is its type's interpretation at the current tree.
+`[spec §62]`. The tree-stratified carrier (`Tree/Carrier.lean`) is indexed by the cactus `K` its
+strata are read in. Grafting a stored task under a newer lend extends `K` to `K'`
+(`WCactus.Ext`). Here the lifetime tree is part of the world semantic types are read at, and a
+`mut` cell's invariant is its type's interpretation at the current tree.
 
 * **Kripke semantic types.** `KSem`: a predicate on values and resources at every cactus.
 * **Location typing.** `Θ : LocTy` gives each `mut` cell's location the semantic type of its
-  contents, as `SI/MutSemN.lean`'s `LocFam` does at the step index (Ahmed's store typing). A
-  world is covered at `K` (`CovR`) when every `mut` cell in it, at any depth, stores `Θ ℓ` read
-  at `K` on its stratum.
+  contents (Ahmed's store typing). A world is covered at `K` (`CovR`) when every `mut` cell in
+  it, at any depth, stores `Θ ℓ` read at `K` on its stratum.
 * **Re-reading.** `RC`/`RR`: the world at `K'` that keeps every location, tag, value and lifetime
-  name (a `mut` cell's antichain `β̄` becomes `min_{K'} β̄`, as under `trU`) and stores at each
-  `mut` cell `Θ ℓ` read at `K'`. It is single-valued (`RR.func`), the identity when the tree does
-  not grow (`RR.refl`; at the printed chain nothing grows), and composes along extensions
-  (`RR.trans`).
-* **Monotonicity** (`KMono`): a value in `τ` at `K` is in `τ` at `K'`, carried by the re-reading.
-  Proved for `1`, `+`, `Imm @a τ` (`vImm`), `Mut @a τ` (`vMut`), `ref τ` (`vRef`), `[a] τ`
-  (`vBox`), and a thunk (`vThunk`), each from its components'.
-* **Existence and `✓`** (`reread`): when every type `Θ` assigns is monotone, a covered world at
-  `K` has a re-reading at `K'`; it is covered at `K'`, it keeps every stratum, and it is valid
-  when the world is (`ResUT.Valid.sim`, the walks carried along `RR`).
+  name (a `mut` cell's antichain `β̄` becomes `min_{K'} β̄`) and stores at each `mut` cell `Θ ℓ`
+  read at `K'`. It is single-valued (`RR.func`), the identity when the tree does not grow
+  (`RR.refl`; at the printed chain nothing grows), and keeps every stratum (`RR.inStratum`). A
+  world each of whose cells has a re-reading has one (`RR.exists_of`); the re-readings at codes
+  exist and compose (`RR.exists_retype`, `RR.trans_retype`, `World/Codes.lean`).
+* **The interpretations** `vUnit`, `vSum`, `vImm`, `vRef`, `vBox`, which the codes of
+  `World/Codes.lean` read.
 
-**Against row 5.57.** The re-read invariant is not an extension by falsity: it is the type read
-at `K'`, which holds wherever the old invariant held (on re-read resources, `reread_extends`) and
-also at resources only `K'` admits. Cells whose location `Θ` does not type are not re-read; they
-are not covered, and `reread` asks for coverage.
+**Forced change, against row 5.57's `SProp_α ⊆ SProp_α'`.** Row 5.57 extends a stored predicate
+by falsity outside its stratum. The re-read invariant is not an extension by falsity: it is the
+type read at `K'`, which also holds at resources only `K'` admits. Cells whose location `Θ` does
+not type are not re-read; they are not covered.
 
 **Against the stratum condition `ρ_P ∈ Res_A`.** A re-read cell's payload lies in the stratum
 `Res_{min β̄}` read at `K'` (`RC.inStratum`): every stratum of `K` sits inside the same-named
 stratum of `K'`, so `ρ_P ∈ Res_A` at `K` gives it at `K'`.
-
-**Not modelled:** the records list (`ls`), `Coh`, and `Ext` of Core's `vCT`, which the tree carrier
-does not carry; and growth of `Θ` (allocation), which this file holds fixed.
 -/
 
 noncomputable section
@@ -307,8 +296,6 @@ def rrRel (Θ : LocTy) (K K' : WCactus) : WitRel BoCa.Loc BoCa.Val K K' where
 theorem RR.rsim {K K' : WCactus} {ρ : TRes K} {ρ' : TRes K'} (h : RR Θ ρ ρ') :
     (rrRel Θ K K').RSim ρ' ρ :=
   (rrRel Θ K K').rsim_of_W h
-
-/-! ### Monotonicity -/
 
 /-! ### Existence of the re-reading -/
 

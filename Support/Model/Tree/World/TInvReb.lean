@@ -1,5 +1,13 @@
 import Support.Model.Tree.World.InvReb
 
+/-!
+# `TIT` across a reborrow
+
+`[spec §62]`. `Core/Invariant.lean`'s `ti_reb` and `ti_rebDeepN` over `TWNT`: a root reborrow and a
+deep one keep `TIT` (`tit_reb`, `tit_rebDeep`), the record-read premises (`RebRecLeT`) in place
+of `StratumLe`.
+-/
+
 noncomputable section
 
 namespace BoCa.Fig16.Tree.Wp

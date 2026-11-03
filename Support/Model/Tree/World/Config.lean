@@ -2,31 +2,12 @@ import Support.Model.Tree.World.FdEsc
 import Support.Model.Tree.CarrierGraftEx
 
 /-!
-# The escrow's frame condition and the cactus invariant
+# A two-branch configuration at the grafted tree
 
-`FdEsc ℓ R Y` (`TreeWp/ImmEndEsc.lean`) is what `immEnd` asks of the rest of the world: `Y`'s
-flattening holds nothing at the lent location `ℓ` nor at any location of `ex(R)`. At a join's
-resume of the task owning the record, `Y` is the other branches.
-
-**The configuration** (`cactusT_config`). Two branches: the parent, at its lend `α`, holds
-`ℓ ↦ imm({α}, loc m, m ↦ own(()))` and owns the record; a child, at `β ⊏ α`, holds the record's
-canonical image `m ↦ imm({β}, (), ∅)` and owns nothing. Every clause of `CactusInvT` holds: the
-world is the branches' composition, the records proper are the parent's, `RecInv` (a `TWNT`
-world at the world's choice, tagged at `α`), `WInv` (covered, lowering to the memory
-`ℓ ↦ loc m, m ↦ ()`), and each branch is at its point. The child fails `FdEsc` at `m`
-(`cactusT_not_fdEsc`). This is program (b) after a child reborrows the parent's `imm` lend and
-before the join.
-
-**What excludes it at a join is the points.** A join resuming the parent reads `JoinPtT`: no
-other branch's point is inside the parent's lend. The child's point is `β ⊑ α`
-(`config_not_joinPt`), and every point the child's resource sits on is inside `α`
-(`config_branch_inside`): its image is at `β ⊑ α`, as `RebRecLeT` makes every image of a lineage
-location. Without points (`CactusInvT` before this round) nothing excluded the configuration.
-
-`FdEscOfBranchT` states `FdEsc` from `TWNT`, the frame's lifetime, a branch point the rest's top
-cells sit on, and that point not inside the frame: `joinFd_of_branch`'s hypotheses
-(`tree-life`) read at `FdEsc` and at the top cells (the strata carry a top cell's branch to every
-cell beneath it).
+`[spec §62]`. The pieces of a configuration at `K₁` (`Tree/CarrierGraftEx.lean`): the parent's
+resource, at its lend `α`, is `ℓ ↦ imm({α}, loc m, m ↦ own(()))` (`parentRes`); a child's, at
+`β ⊏ α`, is the record's canonical image `m ↦ imm({β}, (), ∅)` (`childRes`). `ag_config` reads
+the aliasable walk of their composite. `World/UpdXMasks.lean` reads a lend left open at it.
 -/
 
 noncomputable section

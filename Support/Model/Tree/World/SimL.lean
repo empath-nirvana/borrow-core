@@ -3,7 +3,7 @@ import Support.Model.Tree.World.Records
 /-!
 # The walks carried along a re-reading, with each `imm` cell's lifetimes
 
-`Tree/CarrierSim.lean` carries the walks along any single-valued relation between witnesses,
+`[spec §62]`. `Tree/CarrierSim.lean` carries the walks along any single-valued relation between witnesses,
 relating cells by tag, value and witness (`WitRel.TSim`). A re-reading (`RR`) also keeps each
 `imm` cell's lifetimes (`RC.imm`'s `hs`), and `○` computes a composite's lifetimes from its
 operands' (`CellUT.CompR.lsOfI_eq`), so the walks carried along `RR` keep them too
@@ -18,7 +18,6 @@ open BoCa.Fig16
 open BoCa.Fig16.Tree
 
 variable {Θ : LocTy} {K K' : WCactus}
-
 
 /-- Two lifetime readings merged: the union where both are `imm`. -/
 def lsMerge : Option TSet → Option TSet → Option TSet

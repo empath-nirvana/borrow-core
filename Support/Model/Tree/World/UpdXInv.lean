@@ -5,9 +5,9 @@ import Support.Model.Tree.World.TInvReread
 /-!
 # Row 5.27's `mut` clause across a re-reading: the invariant read off the location typing
 
-Row 5.27's `↭` asks of a `mut` cell of the flattening that the other side carry a `mut` cell with
-the same `β̄` **and the same `P̂`**. `UpdX` (`TreeWp/UpdX.lean`) compares `β̄`, re-read as
-`min_{K′} β̄`. This file shows the `P̂` part needs no separate clause in the worlds `twp` runs in:
+`[spec §62]`. Row 5.27's `↭` asks of a `mut` cell of the flattening that the other side carry a `mut` cell with
+the same `β̄` **and the same `P̂`**. `UpdX` (`World/UpdX.lean`) compares `β̄`, re-read as
+`min_{K′} β̄`. This file shows the `P̂` part needs no separate clause in `TWNT` worlds:
 there a flattened `mut` cell's invariant is the location typing's type of its location, read at
 the tree, on the cell's own stratum. That is exactly what the re-reading of a cell stores
 (`RC.mut`'s `hP`), so on both sides of an update `P̂` is `Θ ℓ` read at that side's tree.
@@ -24,12 +24,12 @@ the tree, on the cell's own stratum. That is exactly what the re-reading of a ce
   re-reading two `mut` cells with one `β̄` then have one `P̂` (`updX_refl_mut`): row 5.27's clause
   as printed.
 * **What the world must keep** (`InvKept`): the code typing of the end keeps the start's code at
-  every unmasked `mut` cell of the start's flattening. `EndT` (`TreeWp/Rel.lean`) carries it, every
-  `twp` rule keeps it (`InvKept.trans`, `.frame`, `.of_agree`), and `endT_inv` reads row 5.27's
-  `mut` clause off every `EndT` end.
+  every unmasked `mut` cell of the start's flattening. It composes (`InvKept.trans`), is kept
+  beside a frame (`InvKept.frame`) and by agreeing typings (`InvKept.of_agree`), and with `UpdX`
+  gives row 5.27's `mut` clause (`UpdX.inv`).
 
 Without `MutOne` the clause is not implied: clause 3 of two covered cells at distinct lifetimes is
-not covered (`clause3_not_cov`, `TreeWp/Clause3.lean`).
+not covered (`clause3_not_cov`, `World/Clause3.lean`).
 -/
 
 noncomputable section
@@ -215,7 +215,13 @@ def MutCov (Θ : LocTy) (K : WCactus) (ρ : TRes K) : Prop :=
 
 /-- **`Θ′` keeps `Θ`'s code at every `mut` cell of `⦇ρ⦈` outside `E`.** The invariant a `mut` cell
 stores is its location's code read at the world (`flat_mut_inv`), so this is what row 5.27's
-"the same `P̂`" asks of the world when `ρ` is updated to a resource at `Θ′`. -/
+"the same `P̂`" asks of the world when `ρ` is updated to a resource at `Θ′`.
+
+**Departure (D2, `docs/new-core/scope-781.md` §8).** `P̂` in `↭`'s `mut` clause is read as "the
+same code at `ℓ`, each side read at its own world" (`InvKept`, `XInv`), not as equal predicates.
+A `○` composite's `P̂ ∧ Q̂` re-read is not the re-read of the composite, and a flattened `mut`
+cell's `P̂` is its location's code (`flat_mut_inv`). At the identity re-reading the two agree
+(`updX_refl_mut`). The printed technique not built: `P̂` compared as a predicate across `↭`. -/
 def InvKept (Θ Θ' : CodeTy) (E : BoCa.Loc → Prop) (ρ : TRes K) : Prop :=
   ∀ σ, ResUT.Flat ρ σ → ∀ l (m : TMut K), σ.get l = some (.mut m) → ¬ E l → Θ' l = Θ l
 
@@ -297,7 +303,8 @@ theorem InvKept.frame {Θ Θ' : CodeTy} {E : BoCa.Loc → Prop} {ρ₁ ρ₂ ρ 
 /-! ### Row 5.27's `P̂` across the re-reading -/
 
 /-- `ψ` and `ψ'` at `l`, if both `mut`, store one code `A`, kept from `Θ` to `Θ′`, read at
-`(Θ, K)` and at `(Θ′, K′)`: the invariant `RC.mut` gives a re-read cell. -/
+`(Θ, K)` and at `(Θ′, K′)`: the invariant `RC.mut` gives a re-read cell. Departure D2 (see
+`InvKept`). -/
 def XInv (Θ Θ' : CodeTy) (K K' : WCactus) (l : BoCa.Loc) (ψ : TCell K) (ψ' : TCell K') : Prop :=
   ∀ m m', ψ = .mut m → ψ' = .mut m' →
     ∃ A, Θ l = some A ∧ Θ' l = some A ∧ (∀ w r, m.P w r ↔ (A.interp Θ).P K w r.toU) ∧

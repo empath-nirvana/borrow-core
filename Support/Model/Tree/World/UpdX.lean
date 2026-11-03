@@ -5,32 +5,32 @@ import Support.Model.Tree.Port.UpdateFrame
 /-!
 # Row 5.27's `↭` read across a re-reading, masked at a run's own records
 
-`[TR]` p. 6's `wp` (row 5.33) asks of a run from `ρ` to `ρ′` that `ρ ↭ ρ′ ● ρ⁺`, and row 5.27's
-`↭` (`ResUT.UpdV`, `Tree/Port/Cells.lean`) reads the two flattenings at every location:
+`[spec §62]`. `[TR]` p. 6's `wp` (row 5.33) asks of a run from `ρ` to `ρ′` that `ρ ↭ ρ′ ● ρ⁺`, and
+row 5.27's `↭` (`ResUT.UpdV`, `Tree/Port/Cells.lean`) reads the two flattenings at every location:
 
 > `ρ₁ ↭ ρ₂` iff `✓ρ₁`, `✓ρ₂`, and for all `ℓ`: `⦇ρ₁⦈(ℓ) = imm(ᾱ, v, ρ) ⇔ ⦇ρ₂⦈(ℓ) = imm(ᾱ, v, ρ)`,
 > and `⦇ρ₁⦈(ℓ) = mut(β, _, _, P̂) ⇔ ⦇ρ₂⦈(ℓ) = mut(β, _, _, P̂)`.
 
-Over the tree world a run starts at a world `w₀` and ends at an extension `w′` (`TreeWp/Rel.lean`),
-so `ρ` and `ρ′` are resources of two carriers. `UpdX` reads `↭` across the re-reading from `K` to
-`K′`: an `imm` cell of the one flattening is an `imm` cell of the other with the same lifetime set
-and value and the re-read witness, and a `mut` cell of the one is a `mut` cell of the other with
-the re-read `β̄` (`XCell`). At the identity re-reading its `imm` clause is row 5.27's
-(`updX_refl_imm`), and `UpdV` gives it (`UpdX.of_updV`).
+Over the tree world a run starts at a world `w₀` and ends at an extension `w′`, so `ρ` and `ρ′`
+are resources of two carriers. `UpdX` reads `↭` across the re-reading from `K` to `K′`: an `imm`
+cell of the one flattening is an `imm` cell of the other with the same lifetime set and value and
+the re-read witness, and a `mut` cell of the one is a `mut` cell of the other with the re-read
+`β̄` (`XCell`). At the identity re-reading its `imm` clause is row 5.27's (`updX_refl_imm`), and
+`UpdV` gives it (`UpdX.of_updV`).
 
 **The masks.** A run that leaves a lend it opened open at a stop turns an `own` cell into the lend
 cell `ℓ ↦ imm(…)` and hands out views of the escrow, and a run that ends such a lend turns them
-back. `↭` refuses both, which is why `crwpG` and `twp` dropped it. Each side of `UpdX` is masked
-at a set of locations (`E`, `E′`): there it reads nothing. A run's masks are the lent locations and
-escrow locations of the records it owns at its start and at its end (`recLocs`), and nothing else.
+back. `↭` refuses both (`lend_open_needs_mask`). Each side of `UpdX` is masked at a set of
+locations (`E`, `E′`): there it reads nothing. A run's masks are the lent locations and escrow
+locations of the records it owns at its start and at its end (`recMask`), and nothing else.
 
 **A `mut` cell's invariant** is not a clause of `UpdX`: it is determined by the location typing.
 In a world with one `mut` cell per location at any depth (`MutOne`, kept by `TWNT`), every `mut`
 cell of the flattening is a stored cell, and a covered stored cell's `P̂` is its location's code
-read at the world on `Res_β̄` (`flat_mut_inv`, `TreeWp/UpdXInv.lean`). So row 5.27's "same `P̂`"
-is "the same code at `ℓ` on both sides" (`InvKept`, an `EndT` clause), and with `UpdX`'s `β̄`
-clause it gives the printed `mut` clause with `P̂` re-read as `RC.mut` re-reads it (`UpdX.inv`,
-`endT_inv`); at the identity re-reading it is the printed clause (`updX_refl_mut`).
+read at the world on `Res_β̄` (`flat_mut_inv`, `World/UpdXInv.lean`). So row 5.27's "same `P̂`"
+is "the same code at `ℓ` on both sides" (`InvKept`), and with `UpdX`'s `β̄` clause it gives the
+printed `mut` clause with `P̂` re-read as `RC.mut` re-reads it (`UpdX.inv`); at the identity
+re-reading it is the printed clause (`updX_refl_mut`).
 
 What is proved of it: re-reading is an update (`UpdX.of_rr`), updates compose
 (`UpdX.trans`), and a frame re-read beside an update is kept (`UpdX.frame`), given that the frame
@@ -105,7 +105,15 @@ def XOpt (Θ : LocTy) (E E' : Prop) (o : Option (TCell K)) (o' : Option (TCell K
   (∀ ψ', o' = some ψ' → ψ'.kind ≠ Kind.own → ¬ E' → ¬ E ∧ ∃ ψ, o = some ψ ∧ XCell Θ ψ ψ')
 
 /-- **`ρ ↭ ρ′` across a re-reading at `Θ`, masked at `E` and `E′`.** Both sides valid (each has a
-flattening), and the two flattenings related by `XOpt` at every location. -/
+flattening), and the two flattenings related by `XOpt` at every location.
+
+**Departure (D1, `docs/new-core/scope-781.md` §8).** Row 5.27/5.33's `↭` is masked at the run's
+own records' lent and escrow locations (`recMask`) and read across the re-reading `w₀ → w′`. A lend
+left open at a stop turns `own` into the lend cell and hands out the escrow's views
+(`lend_open_admitted`); without the mask that end is refused (`lend_open_needs_mask`). Unmasked
+locations read row 5.27's `imm` clause exactly (`updX_refl_imm`), and printed `UpdV` gives `UpdX`
+(`UpdX.of_updV`). The printed technique not built: `↭` unmasked across a lend left open, as 6.39
+uses it. -/
 def UpdX (Θ : LocTy) (E E' : BoCa.Loc → Prop) (ρ : TRes K) (ρ' : TRes K') : Prop :=
   ∃ σ σ', ResUT.Flat ρ σ ∧ ResUT.Flat ρ' σ' ∧ ∀ l, XOpt Θ (E l) (E' l) (σ.get l) (σ'.get l)
 
@@ -373,7 +381,21 @@ theorem xopt_comp {Θ : LocTy} (hE : K.Ext K') {E E' : Prop} {oa oc o : Option (
 
 /-- **A frame re-read beside an update is kept**: `a ↭ a′` across the re-reading, the frame `c`
 re-read to `c′`, both composites valid, and the frame holding nothing where only one side is
-masked. -/
+masked. This is `[TR]` 6.48 at the masked cross-world `↭`.
+
+**Departure (D5, `docs/new-core/scope-781.md` §8): proved pointwise, by a shorter route than the
+printed one.** The proof reads `⦇a ● c⦈ = ⦇a⦈ ○ ⦇c⦈` (`flat_compR`) and relates the two
+composites one location at a time (`xopt_comp`, `xcell_compR`). The printed proof splits
+`⦇ρ₁ ● ρⱼ⦈ = ex(ρ₁)_● ● ex(ρⱼ)_● ● (ag(ρ₁) ○ ag(ρⱼ))` (6.20, 6.18) and, in the aliasable case,
+accounts for a `mut` cell of `ag(ρ₂)` by its `imm` ancestor. **That ancestor technique is not
+built here.** It is built at the tree carrier for the unmasked `↭` in `Tree/Port/Six48.lean`
+(`Tree.ResUT.upd_ag_eq_of_ne_own`, read by `updV_frame`), and `fdEsc_of_updX` uses the ancestor
+view (`innermost_view`).
+
+Not derived at this reading, and no obstruction verified: the printed step "the cell sits beneath
+`ag(ρ₂)(ℓ′) = imm(_, _, ρ′)`, which the update carries to `ag(ρ₃)(ℓ′)`". At `UpdX` the update says
+nothing at a masked location (`XOpt` at `E ℓ′` is vacuous), and this statement constrains no mask
+at the ancestor `ℓ′` of an unmasked cell (`hn` reads only the frame `c′`). -/
 theorem UpdX.frame {Θ : LocTy} (hE : K.Ext K') {E E' : BoCa.Loc → Prop} {a c ac : TRes K}
     {a' c' ac' : TRes K'} (h : UpdX Θ E E' a a') (hr : RR Θ c c') (h₁ : ResUT.CompS a c ac)
     (h₂ : ResUT.CompS a' c' ac') (hv₁ : ResUT.Valid ac) (hv₂ : ResUT.Valid ac')

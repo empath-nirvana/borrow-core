@@ -2,44 +2,18 @@ import Support.Model.Tree.World.Records
 import Support.Model.Tree.Port.Split
 
 /-!
-# The scheduler-wide invariant over the tree world
+# Branches and their points over the tree world
 
-`SI/CactusInv.lean`'s `CactusInv`, at a world `w`: the branches (the running computation, the
-stored continuations, the spawned closures) are resources at `w`'s tree, each owning records and
-each **at a point** of the lifetime tree: every top cell of its resource carries lifetimes that are
-the point or enclose it (`OnBranchResT`; the strata carry it to every cell beneath). The world is
-the branches' composition, the records proper are the branches' records, apart by location between
-branches, and the world's invariants hold (`RecInv`, `WInv`).
-
-The operations, each proved to keep the invariant, and what each does to the points:
-
-* **step** (`cactusT_step`): the running branch at `twp` under the frame of the others ends at a
-  world extending the start, the others **re-read** there with their records, at their points
-  (`AtPoints.rr`: a re-reading keeps an `imm` cell's lifetimes and reads a `mut` cell's antichain
-  as its minimal members; the grown tree keeps every nesting). The running branch ends at the
-  point its postcondition names (`hpt`): a **fresh lend** opened and still open moves it to the
-  fresh child, a lend ended moves it back.
-* **grow** (`cactusT_extend`): a fresh child, a **graft** or a re-typing of a location no `mut`
-  cell is at extends the world, every branch re-read and carried at its point; a grafted task's
-  point is unchanged and lies, after the graft, inside the resumer's lend.
-* **capture / move** (`cactusT_move`): a part leaves one branch for another (a continuation's
-  share stored by the scheduler, a borrow handed to a joiner); the part is on the receiver's point
-  (`hσn`); the giver keeps its point.
-* **spawn** (`cactusT_spawn`): a part of a branch, with the records it owns, becomes a branch at
-  the point it sits on.
-* **join** (`cactusT_join`): a finished branch's resource and records become the joiner's, at the
-  joiner's point; the resource is on that point. A join that resumes a branch owning a record
-  framed at `α` reads `JoinPtT`: no other branch's point is inside `α`.
-* **unwind** is a step of the cancelled branch's `fin` obligation at `twp`, so it is
-  `cactusT_step`.
-
-**Adequacy is derived from the invariant** (`cerwpT_adequacy`): the initial configuration is the
-invariant at one empty branch at `⊤`; `cactusT_step` carries it to any final configuration; there
-the branch's postcondition gives an empty resource, so the world is empty, so the memory is.
+`[spec §62]`. A branch is a resource with the records it owns (`TBranch`); a list of resources
+composes (`CompAllT`, single-valued: `compAllT_functional`). A branch is **at a point** `n` of
+the lifetime tree when every top cell of its resource carries lifetimes that are `n` or enclose it
+(`OnBranchResT`; the strata carry it to every cell beneath, `World/EscBeneath.lean`'s
+`cellAt_onBranch`). Points are kept by a re-reading along a grown tree (`OnBranchResT.rr`: an
+`imm` cell keeps its lifetimes, a `mut` cell's antichain is read as its minimal members), and by
+composition and its parts (`OnBranchResT.compS`, `.of_compS_left`, `.of_compS_right`).
 -/
 
 noncomputable section
-
 
 namespace BoCa.Fig16.Tree.Wp
 open BoCa
@@ -151,12 +125,6 @@ theorem compAllT_functional {K : WCactus} {ρs : List (TRes K)} {W W' : TRes K}
       | cons hr' hc' =>
           cases ih hr'
           exact ResUT.CompS.functional hc hc'
-
-/-! ### Lists of lists along re-reading -/
-
-/-! ### The operations -/
-
-/-! ### Adequacy -/
 
 end BoCa.Fig16.Tree.Wp
 

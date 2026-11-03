@@ -2,39 +2,24 @@ import Support.Model.Tree.World.Records
 import Support.Model.Tree.World.UpdXInv
 
 /-!
-# `crwpG` over the tree world: `twp`
+# Records along re-reading, and the world's record invariant
 
-`SI/Capture.lean`'s `crwpG F Q n ls O e ρ`, read at a world `w` of `TreeWp/World.lean`. What
-changes, each forced by the world growing:
+`[spec §62]`. The records a run owns and the tagged list it reads, over the tree world
+(`World/World.lean`):
 
-* **The frame is quantified over the tree world.** A run starts at any extension `w₀` of `w`,
-  from the re-reading `ρ₀` of `ρ` there (`RRw`): a stored continuation is resumed after the tree
-  grew under it (a graft) and its cells' invariants were re-read (`Tree/KSem.lean`). This makes
-  `twp` monotone along world extension by construction (`twp_kripke`), as a Kripke relation is.
-* **The world at the end extends the world at the start**, and the frame at the end is the
-  frame at the start re-read there (`EndT`). A run that opens a lend adds a child to `K`; a run
-  that resumes a stored task inside a newer lend grafts it; neither touches the frame's cells
-  other than by re-reading them.
-* **Records are carried, re-read.** As in `crwpG`, the run owns records `O` and reads a tagged
-  list `ls`; the frame owns `psF`; `Split ps O psF`, `TWNT fρ ps (rsOf ls)` and `Tagged fρ ps ls`
-  hold of the world (`RecInv`). At an extension the records are re-read with the world
-  (`RecsRR`, `SRecsRR`): location, value and code kept, escrow re-read. The end's frame records
-  are the start's re-read there.
-* **The world invariant** is `WInv` (covered by `sem Θ`, lowering to the memory) beside
-  `RecInv` (`TWNT ∧ Tagged`), in place of `TWNC ∧ Tagged ∧ Lower`.
-* **Each extension carries a resource**: the run's start extends `w` carrying the run's resource,
-  the end extends the start carrying the frame (`TWd.Ext`). A location only the run holds a
-  `mut` cell at, or none does, may be re-typed: the run may free a location and allocate it at
-  another code.
-
-What the rules ask in exchange: a frame condition and a resource framed beside a run, with the
-records it owns, must be carried along re-reading (`TFrame.Mono`, `TRProp.Mono`); records owned
-apart are at different locations (`twp_frame`'s `hO`), which re-reading keeps. At `RR.refl` (no
-growth) every re-reading is the identity.
+* **Tagged records** (`SRecT`, `rsOfT`, `TaggedT`): Core's `Tagged` read in `K`: every tagged
+  record is in the lineage of a record proper whose frame is at its tag.
+* **The split** (`SplitT`): the records proper are the run's and the frame's, and records owned
+  apart are at different locations.
+* **The world's record invariant** (`RecInv`): `TWNT` at the world's code typing and template
+  choice, and `TaggedT`, in place of Core's `TW ∧ Tagged`. `WInv` (covered by `sem Θ`, lowering
+  to the memory) is beside it.
+* **Records are carried, re-read** (`RecsRR`, `SRecsRR`): location, value and code kept, escrow
+  re-read. They compose along extensions (`RecsRR.trans`, `SRecsRR.trans`) and are the identity
+  where nothing grows (`RecsRR.refl`, `SRecsRR.refl`).
 -/
 
 noncomputable section
-
 
 namespace BoCa.Fig16.Tree.Wp
 open BoCa
@@ -130,12 +115,6 @@ theorem SplitT.left {K : WCactus} {ps O psF : List (FrameRecT K)} (h : SplitT ps
 theorem SplitT.right {K : WCactus} {ps O psF : List (FrameRecT K)} (h : SplitT ps O psF) :
     ∀ p ∈ psF, p ∈ ps := fun p hp => (h.1 p).mpr (Or.inr hp)
 
-/-! ### The relation -/
-
-/-! ### Basic facts -/
-
-/-! ### Bind -/
-
 /-! ### Reassociation -/
 
 theorem reassoc_out {K : WCactus} {ρf ρ₀ fρ ρ₁ ρ₂ : TRes K} (hc : ResUT.CompS ρf ρ₀ fρ)
@@ -146,12 +125,6 @@ theorem reassoc_in {K : WCactus} {ρf ρ₂ y ρ₁ fρ : TRes K} (hy : ResUT.Co
     (hc : ResUT.CompS y ρ₁ fρ) : ∃ ρ', ResUT.CompS ρ₁ ρ₂ ρ' ∧ ResUT.CompS ρf ρ' fρ := by
   obtain ⟨x, hx, hfx⟩ := (ResUT.CompS.assoc ρf ρ₂ ρ₁ fρ).mpr ⟨y, hy, hc⟩
   exact ⟨x, ResUT.CompS.comm hx, hfx⟩
-
-/-! ### The frame -/
-
-/-! ### World changes at the start of a run -/
-
-/-! ### Row 5.27's `mut` clause at `twp`'s ends -/
 
 end BoCa.Fig16.Tree.Wp
 

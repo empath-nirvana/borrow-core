@@ -1,5 +1,12 @@
 import Support.Model.Tree.World.TInvReb
 
+/-!
+# `TIT` across `immFrame`
+
+`[spec §62]`. `Core/Invariant.lean`'s `ti_frame` over `TWNT` (`tit_frame`): a view of `ag(W)`
+reaches `ag(W′)` over the same witness (`frame_fwd`).
+-/
+
 noncomputable section
 
 namespace BoCa.Fig16.Tree.Wp

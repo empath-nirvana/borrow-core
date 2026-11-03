@@ -1,6 +1,16 @@
 import Support.Model.Tree.World.Records
 import Support.Model.Tree.Port.ClosingSentence
 
+/-!
+# The image lemmas of `Core/Images.lean` over the tree carrier
+
+`[spec §62]`. The transfer lemmas the typed world's invariant is proved from, read over
+`CellUT K`: a non-`own` cell lifted through `○` and `●` (`lift_view`, `lift_part`,
+`back_view`), the walks of a framed world (`frame_walks`, `frame_transfer`), and a reborrow's
+image carried into the aliasable walk (`reb_cell`, `reb_transfer_gen`). Each is
+`Core/Images.lean`'s proof at the tree carrier's cells; no printed row changes.
+-/
+
 noncomputable section
 
 namespace BoCa.Fig16.Tree.Wp

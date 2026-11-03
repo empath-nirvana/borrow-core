@@ -5,13 +5,13 @@ import Support.Model.Tree.World.InvUses
 /-!
 # The escrow's frame condition from branch points
 
-`FdEscOfBranchT` (`TreeWp/FdEscCactus.lean`): at a `TWNT` world, for a record proper `p` framed
+`[spec §62]`. `FdEscOfBranchT` (`World/FdEsc.lean`): at a `TWNT` world, for a record proper `p` framed
 at `α`, a part `ρ_rest` of the world whose top cells are on a branch `n` not inside `α` holds
 nothing, in its flattening, at `p`'s location nor at its escrow's exclusive locations.
 
 * **The flattening is on the branch** (`flat_onBranch`): the strata put every cell beneath a cell
-  above every lifetime of that cell, so a resource's walks keep its branch. This is `tree-life`'s
-  `hbr`, read off the top cells.
+  above every lifetime of that cell, so a resource's walks keep its branch, read off the top
+  cells.
 -/
 
 noncomputable section
@@ -166,7 +166,7 @@ theorem agWT_onBranch {n : Life} {ρ σ : TRes K} (h : AgWT ρ σ) :
       exact OnBranchResT.comp hR hc (exWT_onBranch hR hex hwb) (iha hwb)
     · exact ihw hρ q hq
 
-/-- **The flattening of a resource on a branch is on it** (`tree-life`'s `hbr`). -/
+/-- **The flattening of a resource on a branch is on it.** -/
 theorem flat_onBranch {n : Life} {ρ τ : TRes K} (h : OnBranchResT K n ρ) (hτ : ResUT.Flat ρ τ) :
     OnBranchResT K n τ := by
   obtain ⟨e, a, he, ha, hc⟩ := hτ
@@ -340,8 +340,7 @@ theorem beneath_of_compS_right {a b c : TRes K} (hc : ResUT.CompS a b c) {m : Bo
 
 /-! ### The join's frame condition at the lent location -/
 
-/-- **The frame condition at `p`'s location from a branch point** (`joinFd_of_branch` over the
-tree world): a view there carries a lifetime of the branch, while `ag(W)`'s view there is at the
+/-- **The frame condition at `p`'s location from a branch point**: a view there carries a lifetime of the branch, while `ag(W)`'s view there is at the
 frame `α` (`FrameLifeT`); an `own`/`mut` cell of the exclusive walk meets `ag(W)`'s view
 (`LeInvT`); a `mut` cell of the aliasable walk is a `mut` cell at depth (`NoMutT`); an `own` cell
 of it sits beneath a borrow (`NoOwnUnderT`). -/
@@ -569,7 +568,7 @@ theorem le_view_cellAt {Θ : CodeTy} {tc : TChoice K} {W : TRes K}
 
 /-- **The case `fd_esc_of_branch` reads as a hypothesis**: a cell of `ρ_rest`'s aliasable walk
 beneath a borrow of `ρ_rest`, at a top location of `p`'s lineage that holds `mut`, or an `own`
-cell where the lineage holds `own`. Derived in `TreeWp/EscBeneath.lean` (`escBeneathT`), through
+cell where the lineage holds `own`. Derived in `World/EscBeneath.lean` (`escBeneathT`), through
 the innermost view above the cell (`Coverage`, `DeepInv`) to `p`'s lineage. -/
 def EscBeneathT : Prop :=
   ∀ (K : WCactus) (Θ : CodeTy) (tc : TChoice K) (W ρo ρrest : TRes K)
@@ -698,7 +697,6 @@ theorem noneAt_empty (P : BoCa.Loc → Prop) : NoneAt P (PMap.empty : TRes K) :=
   obtain rfl := ExST.functional he exW_empty
   obtain rfl := AgWT.functional ha agW_empty
   rw [ResUT.CompS.functional hc (ResUT.compS_empty_right _)]; rfl
-
 
 end BoCa.Fig16.Tree.Wp
 

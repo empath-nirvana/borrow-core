@@ -2,23 +2,20 @@ import Support.Model.Tree.World.Config
 import Support.Model.Tree.World.StepKeep
 
 /-!
-# `EndT`'s masks: needed, and no wider
+# `UpdX`'s masks: needed, and no wider
 
-`EndT` (`TreeWp/Rel.lean`) masks `↭` at the run's own records: their lent locations and escrow
-locations (`recMask`), on the start side at the records the run starts with and on the end side
-at those it ends with.
+`[spec §62]`. A run's update is `UpdX` masked at the run's own records: their lent locations and
+escrow locations (`recMask`), on the start side at the records the run starts with and on the end
+side at those it ends with.
 
 **Needed.** A lend left open at a stop turns `ℓ ↦ own(loc m) ● m ↦ own(())` into the lend cell
-`ℓ ↦ imm({α}, loc m, m ↦ own(()))` beside the borrower's view `m ↦ imm({β}, (), ∅)` (the world of
-`cactusT_config`, before the view is handed to a child). That is an update masked at the record
-the run now owns (`lend_open_admitted`), and it is no update with the mask removed
-(`lend_open_needs_mask`): `↭`'s `imm` clause reads the lend cell at `ℓ` on one side only. This is
-why `crwpG` dropped `↭`.
+`ℓ ↦ imm({α}, loc m, m ↦ own(()))` beside the borrower's view `m ↦ imm({β}, (), ∅)`
+(`World/Config.lean`). That is an update masked at the record the run now owns
+(`lend_open_admitted`), and it is no update with the mask removed (`lend_open_needs_mask`):
+`↭`'s `imm` clause reads the lend cell at `ℓ` on one side only.
 
 **No wider.** At every location neither side masks, `UpdX` is row 5.27's `imm` clause
 (`updX_refl_imm`), and a location is masked only where one of the run's own records reads it.
-The copy of the frame's lent cell (`copy_end_refused`) is at a location no record of the run's
-reads, and is refused.
 -/
 
 noncomputable section

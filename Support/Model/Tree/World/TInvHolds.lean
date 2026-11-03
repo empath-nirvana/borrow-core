@@ -5,11 +5,11 @@ import Support.Model.Tree.World.TInvBase
 /-!
 # Every `TWNT` world satisfies `TIT`
 
-`TWN.inv` (`SI/TWN.lean`) over the tree: induction on `TWNT`, each constructor by the
-preservation lemma ported from `Core/Invariant.lean` (`tit_alloc`, `tit_frame`, `tit_reb`,
+`[spec §62]`. Induction on `TWNT`, each constructor by the preservation lemma ported from
+`Core/Invariant.lean` (`tit_alloc`, `tit_frame`, `tit_reb`,
 `tit_rebDeep`, `tit_mutFold`, `tit_mutUnfold`, `tit_free`, `tit_store`, `tit_end`,
 `tit_endReb`), and `reread` by `tit_reread`. The `rebEndDeep` case reads the escrow's `own`
-cells off `DeepInv` at the reborrowed view, as `TWN.inv` does.
+cells off `DeepInv` at the reborrowed view.
 -/
 
 noncomputable section
@@ -19,7 +19,7 @@ open BoCa
 open BoCa.Fig16
 open BoCa.Fig16.Tree
 
-/-- **`TWN.inv` over the tree: every `TWNT` world satisfies `TIT`.** -/
+/-- **Every `TWNT` world satisfies `TIT`.** -/
 theorem TWNT.inv {K : WCactus} {Θ : CodeTy} {tc : TChoice K} {W : TRes K}
     {ps rs : List (FrameRecT K)} (h : TWNT K Θ tc W ps rs) : TIT K Θ W ps rs := by
   induction h with

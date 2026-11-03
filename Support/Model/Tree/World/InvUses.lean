@@ -3,8 +3,8 @@ import Support.Model.Tree.World.TInvHolds
 /-!
 # The results that read `TIT`
 
-`TWNT.noOwnUnder` (`TreeWp/NoOwnUnder.lean`'s vocabulary) and `TWNT.used_cellAt`,
-`TWNT.tcCoherent`, `TWNT.tcCarried_exists` (`TreeWp/Coherent.lean`'s), each reading `TIT` at a
+`[spec §62]`. `TWNT.noOwnUnder` (`World/NoOwnUnder.lean`'s vocabulary) and `TWNT.used_cellAt`,
+`TWNT.tcCoherent`, `TWNT.tcCarried_exists` (`World/Coherent.lean`'s), each reading `TIT` at a
 `TWNT` world through `TWNT.inv`.
 -/
 
@@ -30,7 +30,7 @@ def NoOwnUnderT (W : TRes K) (ps : List (FrameRecT K)) : Prop :=
   ∀ p ∈ ps, ¬ OwnUnder W p.le
 
 /-- **`NoOwnUnder` is an invariant of `TWNT`.** It reads `TIT` at `immFrame` and `mutFold`
-(`leInv_view`), as the printed one reads `TWNC.inv`; at `reread` a re-reading keeps every cell's
+(`leInv_view`); at `reread` a re-reading keeps every cell's
 kind and the witnesses' cells (`OwnAt.rr_back`), and every record's location (`RecRR`). -/
 theorem TWNT.noOwnUnder {Θ : CodeTy} {tc : TChoice K} {W : TRes K}
     {ps rs : List (FrameRecT K)} (h : TWNT K Θ tc W ps rs) : NoOwnUnderT W ps := by

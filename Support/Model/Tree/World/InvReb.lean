@@ -1,5 +1,13 @@
 import Support.Model.Tree.World.ShapeMutT
 
+/-!
+# A reborrow step's transfer lemmas over the tree carrier
+
+`[spec §62]`. `Core/Invariant.lean`'s reborrow transfer (`reb_like_back`, `reb_like_fwd`,
+`reb_like_new`), `ChainInv` and `DeepInv` across a root and a deep reborrow (`chainInv_reb`,
+`chainInv_rebDeep`, `deepInv_back`), at the codes.
+-/
+
 noncomputable section
 
 namespace BoCa.Fig16.Tree.Wp

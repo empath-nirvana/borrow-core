@@ -5,7 +5,7 @@ import Support.Model.Tree.World.ShapeT
 /-!
 # A reborrow carried along a re-reading
 
-`c ∈ reb_β(R)` at `K`, `R` covered at `Θ` and `Θ'` agreeing with `Θ` on `R`'s `mut` cells: then
+`[spec §62]`. `c ∈ reb_β(R)` at `K`, `R` covered at `Θ` and `Θ'` agreeing with `Θ` on `R`'s `mut` cells: then
 `c` is covered, `Θ'` agrees on it, and its re-reading `c'` is in `reb_β(R')` at `K'`, for `R'`
 the re-reading of `R` (`reb_rr`). Each piece `p` of the reborrow's decomposition is a part of
 `R`, so it has a re-reading `p'`; the composite of the `p'` is the re-reading of the composite

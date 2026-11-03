@@ -3,10 +3,9 @@ import Support.Model.Tree.World.TInv
 /-!
 # No `own` cell of a lent location beneath a borrow, over the tree world
 
-`Tree/NoOwnUnder.lean` (branch `tree-life`) over `TWNT`: the vocabulary (`OwnAt`, `OwnUnder`)
-and its lemmas, ported by `port-tools/port.py` from that file and `Tree/JoinFd.lean`, with
-`Core/Invariant.lean`'s `compS_back` and `hSS`. `TWNT.noOwnUnder`, which reads `TIT`, is in
-`TreeWp/InvUses.lean`, after `TWNT.inv`.
+`[spec §62]`. The vocabulary of an `own` cell at depth (`OwnAt`) and beneath a borrow
+(`OwnUnder`) over the tree world, with `Core/Invariant.lean`'s `compS_back` and `hSS`. `TWNT.noOwnUnder`, which reads `TIT`, is in
+`World/InvUses.lean`, after `TWNT.inv`.
 -/
 
 noncomputable section
@@ -39,7 +38,6 @@ theorem hSS : ∀ ψ₁ ψ₂ ψ : CellUT Loc Val K, CellUT.CompS ψ₁ ψ₂ ψ
   obtain ⟨s₁, s₂, v, ρ, h₁, h₂, -, e₁, e₂, -⟩ := h
   exact ⟨s₁, s₂, v, ρ, h₁, h₂, e₁, e₂⟩
 
-
 /-- `OwnAt ρ ℓ`: an `own` cell at `ℓ` sits in `ρ`, at the top or inside the witness of a
 non-`own` cell (`MutAt` at `own`). -/
 inductive OwnAt : (ResUT BoCa.Loc BoCa.Val K) → Loc → Prop
@@ -60,8 +58,6 @@ theorem OwnUnder.of_compS_left {a b c : (ResUT BoCa.Loc BoCa.Val K)} (h : ResUT.
 
 theorem OwnUnder.of_compS_right {a b c : (ResUT BoCa.Loc BoCa.Val K)} (h : ResUT.CompS a b c) {l : Loc}
     (ho : OwnUnder b l) : OwnUnder c l := OwnUnder.of_compS_left (ResUT.CompS.comm h) ho
-
-
 
 /-- `OwnAt` moves along any map of cells that keeps kind and witness. -/
 theorem OwnAt.mono {ρ σ : (ResUT BoCa.Loc BoCa.Val K)}
@@ -208,7 +204,6 @@ theorem own_not_at_view {W : (ResUT BoCa.Loc BoCa.Val K)} (hv : ResUT.Valid W) {
   obtain ⟨ψ, hψ⟩ := hag aW haW
   exact ex_ag_disjoint ⟨σ, eW, aW, heW, haW, hc⟩ heW haW eo hψ
 
-
 /-- A frame step: the borrows of `W′ = new ● Z` are `Z`'s, which sit in `W = (old ● ρ) ● Z`,
 or the new cell's, whose witness `ρ` sits at the top of `W` or beneath one of its borrows. -/
 theorem step_frame {W X Z ρ W' : (ResUT BoCa.Loc BoCa.Val K)} {l : Loc} {v : Val} {ψ : CellUT Loc Val K}
@@ -255,9 +250,6 @@ theorem OwnUnder.rr_back {Θ : LocTy} {K' : WCactus} {ρ : TRes K} {ρ' : TRes K
   obtain ⟨m, ψ', e', hk, hw⟩ := h
   obtain ⟨ψ, e, hc⟩ := hr.get_some' e'
   exact ⟨m, ψ, e, hc.kind ▸ hk, hw.rr_back hc.wit⟩
-
-/-! ### The invariant -/
-
 
 end BoCa.Fig16.Tree.Wp
 
