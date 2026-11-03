@@ -1,0 +1,392 @@
+import Support.Model.Tree.Port.Walks
+
+/-!
+# The printed source over the tree-stratified carrier
+
+`[spec §62]`. `Support/Model/WalkSplitting.lean`, read at `CellUT K`, by the printed proofs.
+-/
+
+noncomputable section
+
+/-!
+# Support — Model — WalkSplitting
+
+`[about ours]`.  The pieces of Lemmas 6.18 and 6.20: the sites of a composite, the witness families of each walk and how they split across `●`, and inclusion–exclusion over shared `imm` cells.
+-/
+
+
+
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+variable {Loc Val : Type} {K : WCactus}
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+theorem Kind.mut_ne_imm : Kind.mut ≠ Kind.imm := by decide
+
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+variable {Loc Val : Type} {K : WCactus}
+/-- A non-`imm` cell of `ρ₁` has no partner in `ρ₂`. -/
+theorem ResUT.CompatS.right_eq_none {ρ₁ ρ₂ : ResUT Loc Val K} (h : ResUT.CompatS ρ₁ ρ₂)
+    {l : Loc} {ψ₁ : CellUT Loc Val K} (e₁ : ρ₁.get l = some ψ₁)
+    (hk : ψ₁.kind ≠ Kind.imm) : ρ₂.get l = none := by
+  cases e₂ : ρ₂.get l with
+  | none => rfl
+  | some ψ₂ => exact absurd (CellUT.CompatS.kinds (h l ψ₁ ψ₂ e₁ e₂)).1 hk
+
+/-- Where `ρ₁` is defined, the composite carries a cell of the same tag over the
+same witness. -/
+theorem ResUT.CompS.kind_wit_left {ρ₁ ρ₂ ρ : ResUT Loc Val K} (h : ResUT.CompS ρ₁ ρ₂ ρ)
+    {l : Loc} {ψ₁ ψ : CellUT Loc Val K} (e₁ : ρ₁.get l = some ψ₁) (e : ρ.get l = some ψ) :
+    ψ.kind = ψ₁.kind ∧ ψ.wit = ψ₁.wit := by
+  rcases ResUT.Comp.get h l with ⟨f₁, -, -⟩ | ⟨χ, f₁, -, f⟩ | ⟨χ, f₁, -, -⟩ |
+      ⟨χ₁, χ₂, χ, f₁, -, f, hC⟩
+  · rw [e₁] at f₁; exact absurd f₁ (by simp)
+  · rw [e₁] at f₁
+    obtain rfl := Option.some.inj f₁
+    rw [e] at f
+    obtain rfl := Option.some.inj f
+    exact ⟨rfl, rfl⟩
+  · rw [e₁] at f₁; exact absurd f₁ (by simp)
+  · rw [e₁] at f₁
+    obtain rfl := Option.some.inj f₁
+    rw [e] at f
+    obtain rfl := Option.some.inj f
+    exact ⟨(CellUT.CompS.kind hC).trans
+        (CellUT.CompatS.kinds (CellUT.CompS.compat hC)).1.symm,
+      (CellUT.CompS.wit hC).1⟩
+
+/-- Where `ρ₁` is defined the composite is too, with a cell of the same tag over
+the same witness: the form the `imm` families of [TR] 6.20 need.
+`[about ours: `CellUT.wit` is a projection of ours]` -/
+theorem ResUT.CompS.get_left {ρ₁ ρ₂ ρ : ResUT Loc Val K} (h : ResUT.CompS ρ₁ ρ₂ ρ)
+    {l : Loc} {ψ₁ : CellUT Loc Val K} (e₁ : ρ₁.get l = some ψ₁) :
+    ∃ ψ, ρ.get l = some ψ ∧ ψ.kind = ψ₁.kind ∧ ψ.wit = ψ₁.wit := by
+  rcases G.optSplit (ρ.get l) with e | ⟨ψ, e⟩
+  · rcases ResUT.Comp.get h l with ⟨f₁, -, -⟩ | ⟨χ, f₁, -, f⟩ | ⟨χ, f₁, -, -⟩ |
+        ⟨χ₁, χ₂, χ, f₁, -, f, -⟩
+    · rw [e₁] at f₁; exact absurd f₁ (by simp)
+    · rw [e] at f; exact absurd f (by simp)
+    · rw [e₁] at f₁; exact absurd f₁ (by simp)
+    · rw [e] at f; exact absurd f (by simp)
+  · exact ⟨ψ, e, ResUT.CompS.kind_wit_left h e₁ e⟩
+
+/-- A non-`imm` cell of `ρ₁` survives into the composite unchanged, and `ρ₂` is
+undefined there. -/
+theorem ResUT.CompS.get_left_of_ne_imm {ρ₁ ρ₂ ρ : ResUT Loc Val K} (h : ResUT.CompS ρ₁ ρ₂ ρ)
+    {l : Loc} {ψ : CellUT Loc Val K} (e₁ : ρ₁.get l = some ψ) (hk : ψ.kind ≠ Kind.imm) :
+    ρ₂.get l = none ∧ ρ.get l = some ψ := by
+  have e₂ : ρ₂.get l = none := ResUT.CompatS.right_eq_none h.1 e₁ hk
+  have hp := h.2 l
+  rw [e₁, e₂] at hp
+  exact ⟨e₂, hp⟩
+
+/-- A non-`imm` cell of the composite comes from exactly one side. -/
+theorem ResUT.CompS.get_split_of_ne_imm {ρ₁ ρ₂ ρ : ResUT Loc Val K} (h : ResUT.CompS ρ₁ ρ₂ ρ)
+    {l : Loc} {ψ : CellUT Loc Val K} (e : ρ.get l = some ψ) (hk : ψ.kind ≠ Kind.imm) :
+    (ρ₁.get l = some ψ ∧ ρ₂.get l = none) ∨ (ρ₁.get l = none ∧ ρ₂.get l = some ψ) := by
+  rcases ResUT.Comp.get h l with ⟨-, -, f⟩ | ⟨χ, f₁, f₂, f⟩ | ⟨χ, f₁, f₂, f⟩ |
+      ⟨χ₁, χ₂, χ, -, -, f, hC⟩
+  · rw [e] at f; exact absurd f (by simp)
+  · rw [e] at f
+    obtain rfl := Option.some.inj f
+    exact Or.inl ⟨f₁, f₂⟩
+  · rw [e] at f
+    obtain rfl := Option.some.inj f
+    exact Or.inr ⟨f₁, f₂⟩
+  · rw [e] at f
+    obtain rfl := Option.some.inj f
+    exact absurd (CellUT.CompS.kind hC) hk
+
+/-- `ρ|ι` is undefined where `ρ` is. -/
+theorem ResUT.restrict_get_none {ρ : ResUT Loc Val K} {k : Kind} {l : Loc}
+    (e : ρ.get l = none) : (G.restrict CellUT.kind ρ k).get l = none := by
+  show (ρ.get l).bind _ = none
+  rw [e]
+  rfl
+
+/-- `ρ|ι` keeps a cell of tag `ι`. -/
+theorem ResUT.restrict_get_some {ρ : ResUT Loc Val K} {k : Kind} {l : Loc}
+    {ψ : CellUT Loc Val K} (e : ρ.get l = some ψ) (hk : ψ.kind = k) :
+    (G.restrict CellUT.kind ρ k).get l = some ψ :=
+  ResUT.restrict_eq_some.mpr ⟨e, hk⟩
+
+/-- `ρ|ι` drops a cell of any other tag. -/
+theorem ResUT.restrict_get_ne {ρ : ResUT Loc Val K} {k : Kind} {l : Loc}
+    {ψ : CellUT Loc Val K} (e : ρ.get l = some ψ) (hk : ψ.kind ≠ k) :
+    (G.restrict CellUT.kind ρ k).get l = none := by
+  show (ρ.get l).bind _ = none
+  rw [e]
+  exact if_neg hk
+
+/-- `(ρ₁ ● ρ₂)|ι = ρ₁|ι ● ρ₂|ι`, as a graph, at every tag.
+`[about ours: a step inside 6.18's and 6.20's proofs]` -/
+theorem ResUT.CompS.restrict {ρ₁ ρ₂ ρ : ResUT Loc Val K} (h : ResUT.CompS ρ₁ ρ₂ ρ)
+    (k : Kind) :
+    ResUT.CompS (G.restrict CellUT.kind ρ₁ k) (G.restrict CellUT.kind ρ₂ k) (G.restrict CellUT.kind ρ k) := by
+  refine ⟨fun l χ₁ χ₂ f₁ f₂ => h.1 l χ₁ χ₂ (ResUT.restrict_eq_some.mp f₁).1
+    (ResUT.restrict_eq_some.mp f₂).1, fun l => ?_⟩
+  rcases ResUT.Comp.get h l with ⟨f₁, f₂, f⟩ | ⟨χ, f₁, f₂, f⟩ | ⟨χ, f₁, f₂, f⟩ |
+      ⟨χ₁, χ₂, χ, f₁, f₂, f, hC⟩
+  · rw [ResUT.restrict_get_none f₁, ResUT.restrict_get_none f₂, ResUT.restrict_get_none f]
+    rfl
+  · by_cases hk : χ.kind = k
+    · rw [ResUT.restrict_get_some f₁ hk, ResUT.restrict_get_none f₂,
+        ResUT.restrict_get_some f hk]
+      rfl
+    · rw [ResUT.restrict_get_ne f₁ hk, ResUT.restrict_get_none f₂,
+        ResUT.restrict_get_ne f hk]
+      rfl
+  · by_cases hk : χ.kind = k
+    · rw [ResUT.restrict_get_none f₁, ResUT.restrict_get_some f₂ hk,
+        ResUT.restrict_get_some f hk]
+      rfl
+    · rw [ResUT.restrict_get_none f₁, ResUT.restrict_get_ne f₂ hk,
+        ResUT.restrict_get_ne f hk]
+      rfl
+  · -- Every cell in sight is `imm`, so the three restrictions stand or fall
+    -- together and `●` is the composition it already was.
+    obtain ⟨k₁, k₂⟩ := CellUT.CompatS.kinds (CellUT.CompS.compat hC)
+    have k₃ : χ.kind = Kind.imm := CellUT.CompS.kind hC
+    by_cases hk : k = Kind.imm
+    · subst hk
+      rw [ResUT.restrict_get_some f₁ k₁, ResUT.restrict_get_some f₂ k₂,
+        ResUT.restrict_get_some f k₃]
+      exact ⟨χ, rfl, hC⟩
+    · rw [ResUT.restrict_get_ne f₁ (fun e => hk (k₁ ▸ e).symm),
+        ResUT.restrict_get_ne f₂ (fun e => hk (k₂ ▸ e).symm),
+        ResUT.restrict_get_ne f (fun e => hk (k₃ ▸ e).symm)]
+      rfl
+
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+/-- A list is a permutation of its `p`-part followed by its non-`p`-part. -/
+theorem List.filter_perm_append {α : Type} (p : α → Bool) (l : List α) :
+    l.Perm (l.filter p ++ l.filter (fun a => !(p a))) := by
+  induction l with
+  | nil => exact List.Perm.refl _
+  | cons a l ih =>
+      by_cases ha : p a = true
+      · rw [List.filter_cons_of_pos ha, List.filter_cons_of_neg (by simp [ha])]
+        exact List.Perm.cons a ih
+      · have ha' : p a = false := by
+          cases e : p a with
+          | false => rfl
+          | true => exact absurd e ha
+        rw [List.filter_cons_of_neg (by simp [ha']),
+          List.filter_cons_of_pos (by simp [ha'])]
+        exact (List.Perm.cons a ih).trans List.perm_middle.symm
+
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+variable {Loc Val : Type} {K : WCactus}
+/-- The split of a key-indexed list by a predicate on the key, characterised by
+membership.  The predicate is decided classically (G8). -/
+theorem List.split_by_key {α β : Type} (q : α → Prop) (w : List (α × β)) :
+    ∃ w₁ w₂ : List (α × β), w.Perm (w₁ ++ w₂) ∧
+      (∀ p, p ∈ w₁ ↔ (p ∈ w ∧ q p.1)) ∧ (∀ p, p ∈ w₂ ↔ (p ∈ w ∧ ¬ q p.1)) := by
+  classical
+  refine ⟨w.filter (fun p => decide (q p.1)), w.filter (fun p => !(decide (q p.1))),
+    List.filter_perm_append _ w, fun p => ?_, fun p => ?_⟩
+  · rw [List.mem_filter]
+    exact ⟨fun hx => ⟨hx.1, of_decide_eq_true hx.2⟩, fun hx => ⟨hx.1, decide_eq_true hx.2⟩⟩
+  · rw [List.mem_filter]
+    refine ⟨fun hx => ⟨hx.1, fun hq => ?_⟩, fun hx => ⟨hx.1, ?_⟩⟩
+    · rw [decide_eq_true hq] at hx
+      exact absurd hx.2 (by simp)
+    · simp [hx.2]
+
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+variable {Loc Val : Type} {K : WCactus}
+variable {R : CellUT Loc Val K → CellUT Loc Val K → Prop}
+variable {C : CellUT Loc Val K → CellUT Loc Val K → CellUT Loc Val K → Prop}
+
+/-- The exclusive family, entry by entry. -/
+theorem ExWitsT.iff_mem {ρ : ResUT Loc Val K} {w : List (Loc × ResUT Loc Val K)} :
+    ExWitsT R C ρ w ↔
+      ∀ p ∈ w, ∃ ψ, ρ.get p.1 = some ψ ∧ ψ.kind = Kind.mut ∧ ExWT R C ψ.wit p.2 := by
+  induction w with
+  | nil => exact ⟨fun _ p hp => absurd hp (by simp), fun _ => G.ExWits.nil⟩
+  | cons q w ih =>
+      constructor
+      · intro h p hp
+        cases h with
+        | cons ψ hψ hk he hw =>
+            rcases List.mem_cons.mp hp with rfl | hp
+            · exact ⟨ψ, hψ, hk, he⟩
+            · exact ih.mp hw p hp
+      · intro h
+        obtain ⟨ψ, hψ, hk, he⟩ := h q (by simp)
+        exact G.ExWits.cons ψ hψ hk he (ih.mpr fun p hp => h p (by simp [hp]))
+
+/-- Two exclusive families over one resource concatenate. -/
+theorem ExWitsT.append {ρ : ResUT Loc Val K} {w₁ w₂ : List (Loc × ResUT Loc Val K)}
+    (h₁ : ExWitsT R C ρ w₁) (h₂ : ExWitsT R C ρ w₂) : ExWitsT R C ρ (w₁ ++ w₂) :=
+  ExWitsT.iff_mem.mpr fun p hp => by
+    rcases List.mem_append.mp hp with hp | hp
+    · exact ExWitsT.iff_mem.mp h₁ p hp
+    · exact ExWitsT.iff_mem.mp h₂ p hp
+
+/-- `ρ₁`'s exclusive family is one of `ρ₁ ● ρ₂`'s. -/
+theorem ExWitsT.of_compS_left {ρ₁ ρ₂ ρ : ResUT Loc Val K} (h : ResUT.CompS ρ₁ ρ₂ ρ)
+    {w : List (Loc × ResUT Loc Val K)} (hw : ExWitsT R C ρ₁ w) : ExWitsT R C ρ w :=
+  ExWitsT.iff_mem.mpr fun p hp => by
+    obtain ⟨ψ, hψ, hk, he⟩ := ExWitsT.iff_mem.mp hw p hp
+    exact ⟨ψ,
+      (ResUT.CompS.get_left_of_ne_imm h hψ (fun e => Kind.mut_ne_imm (hk.symm.trans e))).2,
+      hk, he⟩
+
+/-- The entries of `ρ₁ ● ρ₂`'s exclusive family that lie over `ρ₁` are `ρ₁`'s
+exclusive family: the cut [TR] 6.18's forward direction makes.
+`[about ours: `ExWitsT` is the family relation of convention G6]` -/
+theorem ExWitsT.to_compS_left {ρ₁ ρ₂ ρ : ResUT Loc Val K} (h : ResUT.CompS ρ₁ ρ₂ ρ)
+    {w w₁ : List (Loc × ResUT Loc Val K)} (hw : ExWitsT R C ρ w)
+    (hsub : ∀ p ∈ w₁, p ∈ w) (hs₁ : ρ₁.Sites Kind.mut (w₁.map Prod.fst)) :
+    ExWitsT R C ρ₁ w₁ := by
+  refine ExWitsT.iff_mem.mpr fun p hp => ?_
+  obtain ⟨ψ₁, g₁, gk₁⟩ := (hs₁.2 p.1).mp (List.mem_map.mpr ⟨p, hp, rfl⟩)
+  obtain ⟨ψ, hψ, -, hwalk⟩ := ExWitsT.iff_mem.mp hw p (hsub p hp)
+  have hg : ρ.get p.1 = some ψ₁ :=
+    (ResUT.CompS.get_left_of_ne_imm h g₁ (fun e => Kind.mut_ne_imm (gk₁.symm.trans e))).2
+  rw [hψ] at hg
+  obtain rfl := Option.some.inj hg
+  exact ⟨_, g₁, gk₁, hwalk⟩
+
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+variable {Loc Val : Type} {K : WCactus}
+/-- The `mut` half of the aliasable family, entry by entry. -/
+theorem AgWitsMT.iff_mem {ρ : ResUT Loc Val K} {w : List (Loc × ResUT Loc Val K)} :
+    AgWitsMT ρ w ↔
+      ∀ p ∈ w, ∃ ψ, ρ.get p.1 = some ψ ∧ ψ.kind = Kind.mut ∧ AgWT ψ.wit p.2 := by
+  induction w with
+  | nil => exact ⟨fun _ p hp => absurd hp (by simp), fun _ => G.AgWitsM.nil⟩
+  | cons q w ih =>
+      constructor
+      · intro h p hp
+        cases h with
+        | cons ψ hψ hk he hw =>
+            rcases List.mem_cons.mp hp with rfl | hp
+            · exact ⟨ψ, hψ, hk, he⟩
+            · exact ih.mp hw p hp
+      · intro h
+        obtain ⟨ψ, hψ, hk, he⟩ := h q (by simp)
+        exact G.AgWitsM.cons ψ hψ hk he (ih.mpr fun p hp => h p (by simp [hp]))
+
+/-- The `imm` half of the aliasable family, entry by entry. -/
+theorem AgWitsIT.iff_mem {ρ : ResUT Loc Val K} {w : List (Loc × ResUT Loc Val K)} :
+    AgWitsIT ρ w ↔
+      ∀ p ∈ w, ∃ ψ, ρ.get p.1 = some ψ ∧ ψ.kind = Kind.imm ∧
+        ∃ e a, ExRT ψ.wit e ∧ AgWT ψ.wit a ∧ ResUT.CompR e a p.2 := by
+  induction w with
+  | nil => exact ⟨fun _ p hp => absurd hp (by simp), fun _ => G.AgWitsI.nil⟩
+  | cons q w ih =>
+      constructor
+      · intro h p hp
+        cases h with
+        | cons ψ hψ hk e a hex hag hc hw =>
+            rcases List.mem_cons.mp hp with rfl | hp
+            · exact ⟨ψ, hψ, hk, e, a, hex, hag, hc⟩
+            · exact ih.mp hw p hp
+      · intro h
+        obtain ⟨ψ, hψ, hk, e, a, hex, hag, hc⟩ := h q (by simp)
+        exact G.AgWitsI.cons ψ hψ hk e a hex hag hc (ih.mpr fun p hp => h p (by simp [hp]))
+
+/-- Two `mut` halves over one resource concatenate. -/
+theorem AgWitsMT.append {ρ : ResUT Loc Val K} {w₁ w₂ : List (Loc × ResUT Loc Val K)}
+    (h₁ : AgWitsMT ρ w₁) (h₂ : AgWitsMT ρ w₂) : AgWitsMT ρ (w₁ ++ w₂) :=
+  AgWitsMT.iff_mem.mpr fun p hp => by
+    rcases List.mem_append.mp hp with hp | hp
+    · exact AgWitsMT.iff_mem.mp h₁ p hp
+    · exact AgWitsMT.iff_mem.mp h₂ p hp
+
+/-- Two `imm` halves over one resource concatenate. -/
+theorem AgWitsIT.append {ρ : ResUT Loc Val K} {w₁ w₂ : List (Loc × ResUT Loc Val K)}
+    (h₁ : AgWitsIT ρ w₁) (h₂ : AgWitsIT ρ w₂) : AgWitsIT ρ (w₁ ++ w₂) :=
+  AgWitsIT.iff_mem.mpr fun p hp => by
+    rcases List.mem_append.mp hp with hp | hp
+    · exact AgWitsIT.iff_mem.mp h₁ p hp
+    · exact AgWitsIT.iff_mem.mp h₂ p hp
+
+/-- Any sub-family of the `imm` half is one. -/
+theorem AgWitsIT.subset {ρ : ResUT Loc Val K} {w w' : List (Loc × ResUT Loc Val K)}
+    (h : AgWitsIT ρ w) (hsub : ∀ p ∈ w', p ∈ w) : AgWitsIT ρ w' :=
+  AgWitsIT.iff_mem.mpr fun p hp => AgWitsIT.iff_mem.mp h p (hsub p hp)
+
+/-- `ρ₁`'s `mut` half is one of `ρ₁ ● ρ₂`'s. -/
+theorem AgWitsMT.of_compS_left {ρ₁ ρ₂ ρ : ResUT Loc Val K} (h : ResUT.CompS ρ₁ ρ₂ ρ)
+    {w : List (Loc × ResUT Loc Val K)} (hw : AgWitsMT ρ₁ w) : AgWitsMT ρ w :=
+  AgWitsMT.iff_mem.mpr fun p hp => by
+    obtain ⟨ψ, hψ, hk, he⟩ := AgWitsMT.iff_mem.mp hw p hp
+    exact ⟨ψ,
+      (ResUT.CompS.get_left_of_ne_imm h hψ (fun e => Kind.mut_ne_imm (hk.symm.trans e))).2,
+      hk, he⟩
+
+/-- `ρ₁`'s `imm` half is one of `ρ₁ ● ρ₂`'s, overlaps included. -/
+theorem AgWitsIT.of_compS_left {ρ₁ ρ₂ ρ : ResUT Loc Val K} (h : ResUT.CompS ρ₁ ρ₂ ρ)
+    {w : List (Loc × ResUT Loc Val K)} (hw : AgWitsIT ρ₁ w) : AgWitsIT ρ w :=
+  AgWitsIT.iff_mem.mpr fun p hp => by
+    obtain ⟨ψ, hψ, hk, e, a, hex, hag, hc⟩ := AgWitsIT.iff_mem.mp hw p hp
+    obtain ⟨χ, g, gk, gw⟩ := ResUT.CompS.get_left h hψ
+    exact ⟨χ, g, gk.trans hk, e, a, by rw [gw]; exact hex, by rw [gw]; exact hag, hc⟩
+
+/-- The entries of `ρ₁ ● ρ₂`'s `mut` half that lie over `ρ₁` are `ρ₁`'s. -/
+theorem AgWitsMT.to_compS_left {ρ₁ ρ₂ ρ : ResUT Loc Val K} (h : ResUT.CompS ρ₁ ρ₂ ρ)
+    {w w₁ : List (Loc × ResUT Loc Val K)} (hw : AgWitsMT ρ w)
+    (hsub : ∀ p ∈ w₁, p ∈ w) (hs₁ : ρ₁.Sites Kind.mut (w₁.map Prod.fst)) :
+    AgWitsMT ρ₁ w₁ := by
+  refine AgWitsMT.iff_mem.mpr fun p hp => ?_
+  obtain ⟨ψ₁, g₁, gk₁⟩ := (hs₁.2 p.1).mp (List.mem_map.mpr ⟨p, hp, rfl⟩)
+  obtain ⟨ψ, hψ, -, hwalk⟩ := AgWitsMT.iff_mem.mp hw p (hsub p hp)
+  have hg : ρ.get p.1 = some ψ₁ :=
+    (ResUT.CompS.get_left_of_ne_imm h g₁ (fun e => Kind.mut_ne_imm (gk₁.symm.trans e))).2
+  rw [hψ] at hg
+  obtain rfl := Option.some.inj hg
+  exact ⟨_, g₁, gk₁, hwalk⟩
+
+/-- The entries of `ρ₁ ● ρ₂`'s `imm` half that lie over `ρ₁` are `ρ₁`'s. -/
+theorem AgWitsIT.to_compS_left {ρ₁ ρ₂ ρ : ResUT Loc Val K} (h : ResUT.CompS ρ₁ ρ₂ ρ)
+    {w w₁ : List (Loc × ResUT Loc Val K)} (hw : AgWitsIT ρ w)
+    (hsub : ∀ p ∈ w₁, p ∈ w) (hs₁ : ρ₁.Sites Kind.imm (w₁.map Prod.fst)) :
+    AgWitsIT ρ₁ w₁ := by
+  refine AgWitsIT.iff_mem.mpr fun p hp => ?_
+  obtain ⟨ψ₁, g₁, gk₁⟩ := (hs₁.2 p.1).mp (List.mem_map.mpr ⟨p, hp, rfl⟩)
+  obtain ⟨ψ, hψ, -, e, a, hex, hag, hc⟩ := AgWitsIT.iff_mem.mp hw p (hsub p hp)
+  obtain ⟨χ, g, -, gw⟩ := ResUT.CompS.get_left h g₁
+  rw [hψ] at g
+  obtain rfl := Option.some.inj g
+  exact ⟨ψ₁, g₁, gk₁, e, a, by rw [← gw]; exact hex, by rw [← gw]; exact hag, hc⟩
+
+/-- Two `▶◀`-compatible cells carry the same witness. -/
+theorem CellUT.CompatS.wit {ψ₁ ψ₂ : CellUT Loc Val K} (h : CellUT.CompatS ψ₁ ψ₂) :
+    ψ₁.wit = ψ₂.wit := by
+  obtain ⟨s₁, s₂, v, ρ, k₁, k₂, e₁, e₂⟩ := h
+  rw [e₁, e₂, CellUT.wit_immOf, CellUT.wit_immOf]
+
+/-- At an overlap the two operands' cells share their witness. -/
+theorem ResUT.CompatS.wit_of_overlap {ρ₁ ρ₂ : ResUT Loc Val K} (h : ResUT.CompatS ρ₁ ρ₂)
+    {l : Loc} {ψ₁ ψ₂ : CellUT Loc Val K}
+    (e₁ : ρ₁.get l = some ψ₁) (e₂ : ρ₂.get l = some ψ₂) : ψ₁.wit = ψ₂.wit :=
+  CellUT.CompatS.wit (h l ψ₁ ψ₂ e₁ e₂)
+
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+/-- `BoCa.Fig16.Tree.List.perm_of_keys` with same-membership of the key lists. -/
+theorem List.perm_of_keys_mem {α β : Type} {w w' : List (α × β)}
+    (hk : (w.map Prod.fst).Nodup) (hk' : (w'.map Prod.fst).Nodup)
+    (hmem : ∀ l, l ∈ w.map Prod.fst ↔ l ∈ w'.map Prod.fst)
+    (hval : ∀ p ∈ w, ∀ q ∈ w', p.1 = q.1 → p.2 = q.2) : w.Perm w' :=
+  BoCa.Fig16.Tree.List.perm_of_keys hk
+    ((List.perm_ext_iff_of_nodup hk hk').mpr hmem) hval
+
+end BoCa.Fig16.Tree
+
+end

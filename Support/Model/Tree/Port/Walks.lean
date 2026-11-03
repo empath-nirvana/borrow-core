@@ -1,0 +1,243 @@
+import Support.Model.Tree.Port.Base
+
+/-!
+# The printed source over the tree-stratified carrier
+
+`[spec §62]`. `Support/Model/Walks.lean`, read at `CellUT K`, by the printed proofs.
+-/
+
+noncomputable section
+
+/-!
+# Support — Model — Walks
+
+`[about ours]`.  The exclusive walk `ex(ρ)_◐` and `imm`-free resources, and the functionality of the walks `ex`, `ag` and of `⦇−⦈`, `⟦−⟧` (the witness families they range over).
+-/
+
+
+
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+variable {Loc Val : Type} {K : WCactus}
+/-- `ρ|imm = ∅`, written pointwise. -/
+def ResUT.ImmFree (ρ : ResUT Loc Val K) : Prop :=
+  ∀ l ψ, ρ.get l = some ψ → ψ.kind ≠ Kind.imm
+
+theorem ResUT.restrict_imm_empty_iff (ρ : ResUT Loc Val K) :
+    (G.restrict CellUT.kind ρ Kind.imm) = PMap.empty ↔ ρ.ImmFree := by
+  constructor
+  · intro h l ψ hl hk
+    have : (G.restrict CellUT.kind ρ Kind.imm).get l = some ψ := ResUT.restrict_eq_some.mpr ⟨hl, hk⟩
+    rw [h] at this
+    exact absurd this (by simp)
+  · intro h
+    refine PMap.ext fun l => ?_
+    cases e : (G.restrict CellUT.kind ρ Kind.imm).get l with
+    | none => rfl
+    | some ψ =>
+        obtain ⟨hl, hk⟩ := ResUT.restrict_eq_some.mp e
+        exact absurd hk (h l ψ hl)
+
+theorem ResUT.immFree_empty : ResUT.ImmFree (PMap.empty : ResUT Loc Val K) := by
+  intro l ψ h; exact absurd h (by simp)
+
+theorem ResUT.immFree_restrict {ρ : ResUT Loc Val K} {k : Kind} (hk : k ≠ Kind.imm) :
+    ResUT.ImmFree (ρ := (G.restrict CellUT.kind ρ k)) := by
+  intro l ψ h
+  exact fun e => hk (((ResUT.restrict_eq_some.mp h).2).symm.trans e)
+
+/-- A composition of two `imm`-free resources is `imm`-free, for a cell
+operation that makes no `imm` cell from two non-`imm` ones. -/
+theorem ResUT.ImmFree.comp {R : CellUT Loc Val K → CellUT Loc Val K → Prop}
+    {C : CellUT Loc Val K → CellUT Loc Val K → CellUT Loc Val K → Prop}
+    (hC : ∀ ψ₁ ψ₂ ψ, C ψ₁ ψ₂ ψ → ψ₁.kind ≠ Kind.imm → ψ₂.kind ≠ Kind.imm →
+        ψ.kind ≠ Kind.imm)
+    {ρ₁ ρ₂ ρ : ResUT Loc Val K} (h : ResUT.Comp R C ρ₁ ρ₂ ρ)
+    (h₁ : ρ₁.ImmFree) (h₂ : ρ₂.ImmFree) : ρ.ImmFree := by
+  intro l ψ hl
+  have hp := h.2 l
+  cases e₁ : ρ₁.get l <;> cases e₂ : ρ₂.get l <;> rw [e₁, e₂] at hp
+  · rw [hp] at hl; exact absurd hl (by simp)
+  · rw [hp] at hl; cases Option.some.inj hl; exact h₂ l _ e₂
+  · rw [hp] at hl; cases Option.some.inj hl; exact h₁ l _ e₁
+  · obtain ⟨χ, hχ, hCχ⟩ := hp
+    rw [hχ] at hl
+    cases Option.some.inj hl
+    exact hC _ _ _ hCχ (h₁ l _ e₁) (h₂ l _ e₂)
+
+theorem ResUT.ImmFree.bigComp {R : CellUT Loc Val K → CellUT Loc Val K → Prop}
+    {C : CellUT Loc Val K → CellUT Loc Val K → CellUT Loc Val K → Prop}
+    (hC : ∀ ψ₁ ψ₂ ψ, C ψ₁ ψ₂ ψ → ψ₁.kind ≠ Kind.imm → ψ₂.kind ≠ Kind.imm →
+        ψ.kind ≠ Kind.imm)
+    {es : List (ResUT Loc Val K)} {b : ResUT Loc Val K} (h : BigCompT R C es b) :
+    (∀ e ∈ es, ResUT.ImmFree e) → ResUT.ImmFree b := by
+  induction h with
+  | nil => intro _; exact ResUT.immFree_empty
+  | cons hrest hcomp ih =>
+      intro hall
+      exact ResUT.ImmFree.comp hC hcomp (hall _ (by simp))
+        (ih (fun e he => hall e (by simp [he])))
+
+theorem CellUT.compS_ne_imm (ψ₁ ψ₂ ψ : CellUT Loc Val K) (h : CellUT.CompS ψ₁ ψ₂ ψ)
+    (h₁ : ψ₁.kind ≠ Kind.imm) : ψ.kind ≠ Kind.imm := by
+  obtain ⟨s₁, s₂, v, ρ, k₁, k₂, k₃, e₁, -, -⟩ := h
+  exact absurd (by rw [e₁]; rfl) h₁
+
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+/-- Key-indexed lists with duplicate-free permuted keys and agreeing values are
+permutations of each other. -/
+theorem List.perm_of_keys {α β : Type} {w w' : List (α × β)}
+    (hk : (w.map Prod.fst).Nodup)
+    (hkeys : (w.map Prod.fst).Perm (w'.map Prod.fst))
+    (hval : ∀ p ∈ w, ∀ q ∈ w', p.1 = q.1 → p.2 = q.2) : w.Perm w' := by
+  have nd : ∀ {v : List (α × β)}, (v.map Prod.fst).Nodup → v.Nodup :=
+    fun h => List.Pairwise.of_map Prod.fst (fun _ _ hne e => hne (congrArg Prod.fst e)) h
+  refine (List.perm_ext_iff_of_nodup (nd hk) (nd (hk.perm hkeys))).mpr fun p => ⟨?_, ?_⟩
+  · intro hp
+    obtain ⟨q, hq, hql⟩ :=
+      List.mem_map.mp (hkeys.mem_iff.mp (List.mem_map.mpr ⟨p, hp, rfl⟩))
+    exact Prod.ext hql.symm (hval p hp q hq hql.symm) ▸ hq
+  · intro hp
+    obtain ⟨q, hq, hql⟩ :=
+      List.mem_map.mp (hkeys.mem_iff.mpr (List.mem_map.mpr ⟨p, hp, rfl⟩))
+    exact Prod.ext hql.symm (hval q hq p hp hql).symm ▸ hq
+
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+variable {Loc Val : Type} {K : WCactus}
+/-- Two index lists for the same tag of the same resource are permutations of
+each other.
+`[about ours: `ResUT.Sites` is convention G6's index set]` -/
+theorem ResUT.Sites.perm {ρ : ResUT Loc Val K} {k : Kind} {d d' : List Loc}
+    (h : ρ.Sites k d) (h' : ρ.Sites k d') : d.Perm d' :=
+  (List.perm_ext_iff_of_nodup h.1 h'.1).mpr fun l => (h.2 l).trans (h'.2 l).symm
+
+/-- The cell-level facts about `◐` the order-independence of `⨀` rests on:
+single-valuedness and the cell halves of `[TR]` Lemmas 6.2 and 6.3.
+`[about ours: the hypotheses of the schema, collected]` -/
+structure ResUT.CompLaws (C : CellUT Loc Val K → CellUT Loc Val K → CellUT Loc Val K → Prop) :
+    Prop where
+  /-- `◐` is a partial function on cells. -/
+  functional : ∀ ψ₁ ψ₂ ψ ψ', C ψ₁ ψ₂ ψ → C ψ₁ ψ₂ ψ' → ψ = ψ'
+  /-- The cell half of `[TR]` Lemma 6.2. -/
+  comm : ∀ ψ₁ ψ₂ ψ, C ψ₁ ψ₂ ψ → C ψ₂ ψ₁ ψ
+  /-- The cell half of `[TR]` Lemma 6.3, as a Kleene equality. -/
+  assoc : ∀ ψ₁ ψ₂ ψ₃ ω, (∃ χ, C ψ₂ ψ₃ χ ∧ C ψ₁ χ ω) ↔ (∃ υ, C ψ₁ ψ₂ υ ∧ C υ ψ₃ ω)
+
+/-- `ResUT.CompLaws` at `●`.
+`[about ours: `ResUT.CompLaws` collects the schema's hypotheses]` -/
+theorem ResUT.compLawsS : ResUT.CompLaws (Loc := Loc) (Val := Val) (K := K) CellUT.CompS where
+  functional := fun _ _ _ _ a b => CellUT.CompS.functional a b
+  comm := fun _ _ _ a => a.comm
+  assoc := CellUT.compS_assoc
+
+/-- `ResUT.CompLaws` at `○`.
+`[about ours: `ResUT.CompLaws` collects the schema's hypotheses]` -/
+theorem ResUT.compLawsR : ResUT.CompLaws (Loc := Loc) (Val := Val) (K := K) CellUT.CompR where
+  functional := fun _ _ _ _ a b => CellUT.CompR.functional a b
+  comm := fun _ _ _ a => a.comm
+  assoc := CellUT.compR_assoc
+
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+variable {Loc Val : Type} {K : WCactus}
+variable {R : CellUT Loc Val K → CellUT Loc Val K → Prop}
+variable {C : CellUT Loc Val K → CellUT Loc Val K → CellUT Loc Val K → Prop}
+
+/-- When cell composability implies the guard, `▶◁` is read off the cellwise
+data. -/
+theorem ResUT.Comp.of_pointwise (hR : ∀ ψ₁ ψ₂ ψ, C ψ₁ ψ₂ ψ → R ψ₁ ψ₂)
+    {ρ₁ ρ₂ ρ : ResUT Loc Val K}
+    (h : ∀ l, OptCompT C (ρ₁.get l) (ρ₂.get l) (ρ.get l)) :
+    ResUT.Comp R C ρ₁ ρ₂ ρ := by
+  refine ⟨fun l ψ₁ ψ₂ e₁ e₂ => ?_, h⟩
+  have hp := h l
+  rw [e₁, e₂] at hp
+  obtain ⟨ψ, -, hc⟩ := hp
+  exact hR _ _ _ hc
+
+/-- `[TR]` Lemma 6.2 with the guard hypothesis weakened to what the fold has.
+`[about ours: 6.2 at the guard hypothesis the fold can discharge; the printed
+statement is `ResUT.Comp.comm`]` -/
+theorem ResUT.Comp.comm_of_laws (hR : ∀ ψ₁ ψ₂ ψ, C ψ₁ ψ₂ ψ → R ψ₁ ψ₂)
+    (hC : ResUT.CompLaws C) {ρ₁ ρ₂ ρ : ResUT Loc Val K}
+    (h : ResUT.Comp R C ρ₁ ρ₂ ρ) : ResUT.Comp R C ρ₂ ρ₁ ρ :=
+  ResUT.Comp.of_pointwise hR fun l => by
+    rcases h.get l with ⟨e₁, e₂, e⟩ | ⟨ψ, e₁, e₂, e⟩ | ⟨ψ, e₁, e₂, e⟩ |
+        ⟨ψ₁, ψ₂, ψ, e₁, e₂, e, hc⟩ <;> rw [e₁, e₂]
+    · exact e
+    · exact e
+    · exact e
+    · exact ⟨ψ, e, hC.comm _ _ _ hc⟩
+
+/-- `⨀` is single-valued at a fixed list.
+`[about ours: `BigCompT` is the fold shape for a printed iterated operator]` -/
+theorem BigCompT.functional (hC : ResUT.CompLaws C)
+    {l : List (ResUT Loc Val K)} {b b' : ResUT Loc Val K}
+    (h : BigCompT R C l b) (h' : BigCompT R C l b') : b = b' := by
+  induction h generalizing b' with
+  | nil => cases h'; rfl
+  | cons _ hc ih =>
+      cases h' with
+      | cons hτ' hc' =>
+          cases ih hτ'
+          exact ResUT.Comp.functional hC.functional hc hc'
+
+/-- An entry of the exclusive family is a `mut` location of `ρ` paired with a
+walk of that cell's witness. -/
+theorem ExWitsT.mem {ρ : ResUT Loc Val K} :
+    ∀ {w : List (Loc × ResUT Loc Val K)}, ExWitsT R C ρ w →
+      ∀ p ∈ w, ∃ ψ, ρ.get p.1 = some ψ ∧ ExWT R C ψ.wit p.2 := by
+  intro w
+  induction w with
+  | nil => intro _ p hp; exact absurd hp (by simp)
+  | cons q w ih =>
+      intro h p hp
+      cases h with
+      | cons ψ hψ _ he hw =>
+          rcases List.mem_cons.mp hp with rfl | hp
+          · exact ⟨ψ, hψ, he⟩
+          · exact ih hw p hp
+
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+variable {Loc Val : Type} {K : WCactus}
+/-- Reading `{ag(ρ′) | ∃ℓ. ρ(ℓ) = mut(_,_,ρ′,_)}` off its list. -/
+theorem AgWitsMT.mem {ρ : ResUT Loc Val K} :
+    ∀ {w : List (Loc × ResUT Loc Val K)}, AgWitsMT ρ w →
+      ∀ p ∈ w, ∃ ψ, ρ.get p.1 = some ψ ∧ AgWT ψ.wit p.2 := by
+  intro w
+  induction w with
+  | nil => intro _ p hp; exact absurd hp (by simp)
+  | cons q w ih =>
+      intro h p hp
+      cases h with
+      | cons ψ hψ _ he hw =>
+          rcases List.mem_cons.mp hp with rfl | hp
+          · exact ⟨ψ, hψ, he⟩
+          · exact ih hw p hp
+
+/-- Reading `{ex(ρ′)_○ ○ ag(ρ′) | ∃ℓ. ρ(ℓ) = imm(_,_,ρ′)}` off its list. -/
+theorem AgWitsIT.mem {ρ : ResUT Loc Val K} :
+    ∀ {w : List (Loc × ResUT Loc Val K)}, AgWitsIT ρ w →
+      ∀ p ∈ w, ∃ ψ e a, ρ.get p.1 = some ψ ∧
+        ExRT ψ.wit e ∧ AgWT ψ.wit a ∧ ResUT.CompR e a p.2 := by
+  intro w
+  induction w with
+  | nil => intro _ p hp; exact absurd hp (by simp)
+  | cons q w ih =>
+      intro h p hp
+      cases h with
+      | cons ψ hψ _ e a hex hag hc hw =>
+          rcases List.mem_cons.mp hp with rfl | hp
+          · exact ⟨ψ, e, a, hψ, hex, hag, hc⟩
+          · exact ih hw p hp
+
+end BoCa.Fig16.Tree
+
+end

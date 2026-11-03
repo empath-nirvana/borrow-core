@@ -1,0 +1,332 @@
+import Support.Model.Tree.Port.OutlivesB
+
+/-!
+# The printed source over the tree-stratified carrier
+
+`[spec §62]`. `Paper/S6_2_NonStandardLemmas/Lemmas.lean:2372-2690`, read at `CellUT K`, by the printed proofs.
+-/
+
+noncomputable section
+
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+variable {Loc Val : Type} {K : WCactus}
+/-!
+## Lemma 6.49 · `[TR]` p. 17 · `proved`
+
+> If ρ₁ ↭ ρ₂ and ρ₂ ↭ ρ₃, then ρ₁ ↭ ρ₃.
+
+**Printed proof, transcribed.** `∼` is transitive, since `imm`s are required to be equal and `mut`s to have the same lifetime and predicate.
+
+**Lean.** `BoCa.Fig16.Tree.ResUT.UpdV.trans`, tag `[as printed]`; `BoCa.Fig16.Tree.ResUT.Upd.trans`, tag `[as printed]`.
+
+**Note.** `UpdV.trans` is at `[TR]` p. 5's guarded `↭`, `Upd.trans` at `[CONF]` Fig. 18b's unguarded one (D3).
+-/
+/-- `[TR]` Lemma 6.49 (p. 17) at `[CONF]` Fig. 18b's unguarded `↭`. `[as printed]` -/
+theorem ResUT.Upd.trans {ρ₁ ρ₂ ρ₃ : ResUT Loc Val K} (h₁ : ρ₁.Upd ρ₂) (h₂ : ρ₂.Upd ρ₃) :
+    ρ₁.Upd ρ₃ :=
+  ⟨fun l s v χ hs => (h₁.1 l s v χ hs).trans (h₂.1 l s v χ hs),
+   fun l b _ P => (h₁.2 l b P).trans (h₂.2 l b P)⟩
+
+/-- `[TR]` Lemma 6.49 at `[TR]` p. 5's guarded `↭`. `[as printed]` -/
+theorem ResUT.UpdV.trans {ρ₁ ρ₂ ρ₃ : ResUT Loc Val K} (h₁ : ρ₁.UpdV ρ₂)
+    (h₂ : ρ₂.UpdV ρ₃) : ρ₁.UpdV ρ₃ :=
+  ⟨h₁.1.trans h₂.1, h₁.2.1, h₂.2.2⟩
+
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree.BoLo
+open BoCa.Fig16 BoCa.Fig16.Tree
+open BoCa.Fig16
+open BoCa.BoLo (Heap Steps Step1 Head Kont)
+
+/-!
+## Lemma 6.50 · `[TR]` p. 17 · `proved`
+
+> If @ρ ⊐ α and ρ ↭ ρ′, then @ρ′ ⊐ α.
+
+**Printed proof, transcribed.** Unfolding the update relation: all borrows have the same lifetime before and after updating.
+
+**Lean.** `BoCa.Fig16.Tree.BoLo.updV_outlives`, tag `[as printed]`.
+-/
+/-- `[TR]` Lemma 6.50 (p. 17).  `[as printed]` -/
+theorem updV_outlives {ρ ρ' : (ResUT BoCa.Loc BoCa.Val K)} {α : TSet} (h : ρ.InStratum α)
+    (hu : ResUT.UpdV ρ ρ') : ρ'.InStratum α := by
+  have hρ : ρ.InStratum α := h
+  obtain ⟨σ, hσ⟩ := hu.2.1
+  obtain ⟨σ', hσ'⟩ := hu.2.2
+  have hsσ : ResUT.InStratum α σ := flat_inStratum hσ hρ
+  refine flat_inStratum_inv hσ' (fun l χ hl => ?_)
+  rcases CellUT.rep' χ with ⟨w, rfl⟩ | ⟨s, w, ξ, hξ, rfl⟩ | ⟨b, _, w, ξ, hξ, P, hP, rfl⟩
+  · exact trivial
+  · obtain ⟨τ, hτ, hg⟩ := (hu.1.1 l s w ξ hξ).mpr ⟨σ', hσ', hl⟩
+    cases ResUT.Flat.functional hτ hσ
+    exact hsσ l _ hg
+  · obtain ⟨w₀, ξ₀, hξ₀, hP₀, τ, hτ, hg⟩ :=
+      (hu.1.2 l b P).mpr ⟨w, ξ, hξ, hP, ⟨σ', hσ', hl⟩⟩
+    cases ResUT.Flat.functional hτ hσ
+    exact (hsσ l _ hg : K.Above α b)
+
+end BoCa.Fig16.Tree.BoLo
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+variable {Loc Val : Type} {K : WCactus}
+/-!
+## Lemma 6.51 · `[TR]` p. 17 · `proved`
+
+> If ⦇ρ⦈(ℓ) = imm(α, ρᵢ, v) and ⦇ρ′⦈(ℓ) = imm(β, ρᵢ, v) and ρ # ρ′ then ⦇ρ ● ρ′⦈(ℓ) = imm(α ∪ β, ρᵢ, v)
+
+**Printed proof, transcribed.** By Lemma 6.20, noting that by the definitions of `○` and `●`, `imm(α, ρᵢ, v) ○ imm(β, ρᵢ, v) = imm(α, ρᵢ, v) ● imm(β, ρᵢ, v)`, the `imm` cell over `ρᵢ` and `v` at the two lifetime sets joined.
+
+**Lean.** `BoCa.Fig16.Tree.ResUT.six51`, tag `[as printed]`.
+-/
+/-- `[TR]` Lemma 6.51 (p. 17).  `[as printed]` -/
+theorem ResUT.six51 {ρ ρ' ρ₁₂ σ σ' σ₁₂ : ResUT BoCa.Loc BoCa.Val K}
+    (hc : ResUT.CompS ρ ρ' ρ₁₂) (hσ : ResUT.Flat ρ σ) (hσ' : ResUT.Flat ρ' σ')
+    (hσ₁₂ : ResUT.Flat ρ₁₂ σ₁₂)
+    {l : BoCa.Loc} {a b : TSet} {v : BoCa.Val} {χ : ResUT BoCa.Loc BoCa.Val K}
+    {ha : χ.InStratum a} {hb : χ.InStratum b}
+    (hg : σ.get l = some (CellUT.immOf a v χ ha))
+    (hg' : σ'.get l = some (CellUT.immOf b v χ hb)) :
+    ∃ h : χ.InStratum (a ∪ b),
+      σ₁₂.get l = some (CellUT.immOf (a ∪ b) v χ h) := by
+  obtain ⟨σ₁, σ₂, hf₁, hf₂, hcσ⟩ := BoLo.flat_compR hc hσ₁₂
+  rw [ResUT.Flat.functional hf₁ hσ, ResUT.Flat.functional hf₂ hσ'] at hcσ
+  rcases ResUT.Comp.get hcσ l with ⟨f₁, -, -⟩ | ⟨ξ, f₁, f₂, -⟩ | ⟨ξ, f₁, -, -⟩ |
+      ⟨ξ₁, ξ₂, ξ, f₁, f₂, f, hC⟩
+  · rw [hg] at f₁; exact absurd f₁ (by simp)
+  · rw [hg'] at f₂; exact absurd f₂ (by simp)
+  · rw [hg] at f₁; exact absurd f₁ (by simp)
+  · obtain ⟨h', he⟩ := CellUT.CompR.imm_union hC
+      (Option.some.inj (f₁.symm.trans hg)) (Option.some.inj (f₂.symm.trans hg'))
+    exact ⟨h', f.trans (congrArg some he)⟩
+
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+variable {Loc Val : Type} {K : WCactus}
+/-! `[about ours]` — for Lemma 6.52. -/
+/-- The image of `reb_α` lies in `Res_{↓α}`: its cells are the source's `imm` cells,
+which lie in `Res_α`, or fresh `imm` cells at `{α}` exactly. -/
+theorem ResUT.reb_inStratum_down {α : Life} {D : TSet} (hD : K.DownOf D (TSet.single α))
+    {ρ' ρ : ResUT Loc Val K} (h : ResUT.Reb α ρ' ρ) : ρ.InStratum D := by
+  intro l ψ hg
+  obtain ⟨φ, hφ⟩ := ResUT.reb_dom_subset h hg
+  by_cases hk : φ.kind = Kind.imm
+  · exact (ResUT.reb_imm_cell_kw h hg hφ hk).2.2.2 _
+      (CellUT.InStratum.mono (fun x hx => ⟨α, by simp, (hD.1 x hx α (by simp)).le⟩) (h.1 l φ hφ))
+  · obtain ⟨v, χ, hχ, hψ, -, -⟩ := ResUT.reb_src h hg hφ hk
+    rw [hψ]
+    exact hD.1
+
+/-- `[TR]` 6.52's H1 (p. 17): at every location the reborrow covers, `ρ⁺` carries an
+`imm` cell over the same value and witness as `ρ_reb`'s, and over a lifetime set
+containing `ρ_reb`'s.  `[about ours: the display inside `[TR]` 6.52's proof, named]` -/
+theorem ResUT.six52_H1 {α : Life}
+    {ρ'i ρ ρe ρ'' ρp ρρe ρ'p : ResUT BoCa.Loc BoCa.Val K}
+    {D : TSet} (hD : K.DownOf D (TSet.single α))
+    (hreb : ResUT.Reb α ρ'i ρ)
+    (hce : ResUT.CompS ρ ρe ρρe)
+    (hcp : ResUT.CompS ρ'' ρp ρ'p)
+    (hupd : ResUT.UpdV ρρe ρ'p)
+    (hse : ρe.InStratum (TSet.single α))
+    (hs' : ρ''.InStratum (TSet.single α)) :
+    ∀ (l : BoCa.Loc) (s' : TSet) (v : BoCa.Val)
+      (χ : ResUT BoCa.Loc BoCa.Val K) (h' : χ.InStratum s'),
+      (ρ.restrictDom ρ'i.exclPart).get l = some (CellUT.immOf s' v χ h') →
+      ∃ (s : TSet) (h : χ.InStratum s),
+        ρp.get l = some (CellUT.immOf s v χ h) ∧ s'.set ⊆ s.set := by
+  classical
+  -- `ρ⁺` carries no borrow strictly shorter than `α`.
+  have hdle : ∀ x ∈ D.set, ∃ y ∈ (TSet.single α).set, K.le x y :=
+    fun x hx => ⟨α, by simp, (hD.1 x hx α (by simp)).le⟩
+  have hρρe : ρρe.InStratum D :=
+    ResUT.CompS.inStratum hce (ResUT.reb_inStratum_down hD hreb)
+      (ResUT.InStratum.mono hdle hse)
+  have hpdown : ρp.InStratum D :=
+    ResUT.CompS.inStratum_right hcp (BoLo.updV_outlives hρρe hupd)
+  have hnb : ∀ m φ, ρp.get m = some φ → ¬ φ.Shorter α :=
+    ResUT.not_shorter_of_down hD hpdown
+  obtain ⟨σ, hσ⟩ := hupd.2.1
+  obtain ⟨σ', hσ'⟩ := hupd.2.2
+  obtain ⟨σ'', σp, hσ'', hσp, hcσ⟩ := BoLo.flat_compR hcp hσ'
+  have hσ''s : σ''.InStratum (TSet.single α) := BoLo.flat_inStratum hσ'' hs'
+  have hexcl : (ρ.restrictDom ρ'i.exclPart).exclPart = PMap.empty := by
+    -- the image of `reb_α` carries `imm` cells only
+    refine PMap.ext fun m => ?_
+    have hnone : (ρ.restrictDom ρ'i.exclPart).exclPart.get m = none := by
+      cases f : (ρ.restrictDom ρ'i.exclPart).exclPart.get m with
+      | none => rfl
+      | some ξ =>
+          obtain ⟨g1, g2⟩ := ResUT.exclPart_eq_some.mp f
+          exact absurd (ResUT.reb_imm_image hreb (ResUT.restrictDom_get_inv g1)) g2
+    rw [hnone]; rfl
+  have hle : ∀ (l : BoCa.Loc) (s' : TSet) (v : BoCa.Val)
+      (χ : ResUT BoCa.Loc BoCa.Val K) (h' : χ.InStratum s'),
+      (ρ.restrictDom ρ'i.exclPart).get l = some (CellUT.immOf s' v χ h') →
+      ∃ (s : TSet) (h : χ.InStratum s),
+        ρp.get l = some (CellUT.immOf s v χ h) ∧ s'.set ⊆ s.set := by
+    intro l s' v χ h' he
+    -- the reborrowed cell at `ℓ`, and `α ∈ s'`
+    have hρl : ρ.get l = some (CellUT.immOf s' v χ h') := ResUT.restrictDom_get_inv he
+    obtain ⟨φ', hφ'⟩ := ResUT.restrictDom_dom he
+    obtain ⟨hφ'g, hφ'k⟩ := ResUT.exclPart_eq_some.mp hφ'
+    obtain ⟨vv, χw, hχs, hψeq, -, -⟩ := ResUT.reb_src hreb hρl hφ'g hφ'k
+    obtain ⟨hs'eq, -, -⟩ := CellUT.immOf_inj hψeq
+    have hmem : α ∈ s'.set := by rw [hs'eq]; simp
+    -- `⦇ρ ● ρₑ⦈(ℓ)` carries `α`, over the same value and witness
+    obtain ⟨ζ, hζ, hζk, hζw⟩ := ResUT.CompS.get_left hce hρl
+    have hζe : ζ.erase = v := by
+      rw [ResUT.CompS.erase_left hce hρl hζ, CellUT.erase_immOf]
+    obtain ⟨tζ, htζ, hζeta⟩ := CellUT.imm_eta (hζk.trans (CellUT.kind_immOf _ _ _ _))
+    have hζget : ρρe.get l = some (CellUT.immOf tζ ζ.erase ζ.wit htζ) :=
+      hζ.trans (congrArg some hζeta)
+    have hmemζ : α ∈ tζ.set :=
+      ResUT.CompR.get_ls_imm (ResUT.CompS.toCompR hce) hρl hζget hmem
+    obtain ⟨π, hπ, hπk, hπe, hπw⟩ := ResUT.Flat.get hσ hζget
+    obtain ⟨tπ, htπ, hπeta⟩ := CellUT.imm_eta (hπk.trans (CellUT.kind_immOf _ _ _ _))
+    have hπget : σ.get l = some (CellUT.immOf tπ π.erase π.wit htπ) :=
+      hπ.trans (congrArg some hπeta)
+    have hmemπ : α ∈ tπ.set := ResUT.Flat.get_ls_imm hσ hζget hπget hmemζ
+    -- across `↭`
+    have hπ' : σ'.get l = some (CellUT.immOf tπ π.erase π.wit htπ) :=
+      (ResUT.flatAt_iff hσ' l _).mp
+        ((hupd.1.1 l tπ π.erase π.wit htπ).mp ⟨σ, hσ, hπget⟩)
+    -- `α` cannot come from `⦇ρ′⦈`
+    have hmemp : ∃ ξ t, σp.get l = some ξ ∧ ξ.lsOfI = some t ∧ α ∈ t.set := by
+      rcases ResUT.CompR.lsOf_inv hcσ hπ' rfl hmemπ with ⟨ξ, t, e, ht, hxt⟩ | h
+      · exact absurd (CellUT.above_of_lsOfI ht (hσ''s l ξ e) α (by simp) α hxt)
+          (Cactus.lt_irrefl _ α)
+      · exact h
+    obtain ⟨ξp, tp, hξp, htp, hxtp⟩ := hmemp
+    -- so `ρ⁺` carries it at the top level
+    obtain ⟨ω, tω, hω, htω, hxtω⟩ :=
+      ResUT.flat_imm_at_top_of_no_shorter hσp hξp htp hxtp hnb
+    -- and it is over the same value and witness
+    have hξpe : ξp.erase = π.erase ∧ ξp.wit = π.wit := by
+      have hc2 := hcσ.2 l
+      rw [hξp, hπ'] at hc2
+      cases hσ''l : σ''.get l with
+      | none =>
+          rw [hσ''l] at hc2
+          exact ⟨by rw [← Option.some.inj hc2, CellUT.erase_immOf],
+            by rw [← Option.some.inj hc2, CellUT.wit_immOf]⟩
+      | some ξ'' =>
+          rw [hσ''l] at hc2
+          obtain ⟨ω', hω', hCω⟩ := hc2
+          have hω'eq : ω' = CellUT.immOf tπ π.erase π.wit htπ := (Option.some.inj hω').symm
+          have hkξp : ξp.kind ≠ Kind.own := by
+            rw [CellUT.kind_of_lsOfI htp]; exact fun c => Kind.noConfusion c
+          refine ⟨?_, ?_⟩
+          · rw [← CellUT.CompR.erase_right hCω, hω'eq, CellUT.erase_immOf]
+          · rw [← (CellUT.CompR.nonown_right hCω hkξp).2, hω'eq, CellUT.wit_immOf]
+    obtain ⟨tω', htω', hωeta⟩ := CellUT.imm_eta (CellUT.kind_of_lsOfI htω)
+    obtain ⟨κ, hκ, -, hκe, hκw⟩ := ResUT.Flat.get hσp hω
+    obtain rfl : κ = ξp := Option.some.inj (hκ.symm.trans hξp)
+    have hωe : ω.erase = v := by
+      rw [← hκe, hξpe.1, hπe, CellUT.erase_immOf, hζe]
+    have hωw : ω.wit = χ := by
+      rw [← hκw, hξpe.2, hπw, CellUT.wit_immOf, hζw, CellUT.wit_immOf]
+    have htωeq : tω = tω' := by
+      have hlsω : CellUT.lsOfI ω = some tω' := by rw [hωeta]; rfl
+      exact Option.some.inj (htω.symm.trans hlsω)
+    refine ⟨tω', hωw ▸ htω', ?_, ?_⟩
+    · exact hω.trans (congrArg some
+        (hωeta.trans (CellUT.immOf_congr rfl hωe hωw htω' _)))
+    · intro x hx
+      rw [hs'eq] at hx
+      rw [show x = α by simpa using hx, ← htωeq]
+      exact hxtω
+  exact hle
+
+/-- `[TR]` 6.52's second conclusion, at any `χ` the definition admits.  `[about ours:
+`[TR]` 6.52's second conclusion at a `χ` given rather than constructed]` -/
+theorem ResUT.six52_sub_inStratum {α : Life}
+    {ρ'i ρ ρe ρ'' ρp ρρe ρ'p : ResUT BoCa.Loc BoCa.Val K}
+    {D : TSet} (hD : K.DownOf D (TSet.single α))
+    (hreb : ResUT.Reb α ρ'i ρ)
+    (hce : ResUT.CompS ρ ρe ρρe)
+    (hcp : ResUT.CompS ρ'' ρp ρ'p)
+    (hupd : ResUT.UpdV ρρe ρ'p)
+    (hse : ρe.InStratum (TSet.single α))
+    (hs' : ρ''.InStratum (TSet.single α)) :
+    ∀ χ, ResUT.Sub ρp (ρ.restrictDom ρ'i.exclPart) χ → χ.InStratum (TSet.single α) := by
+  classical
+  have hdle : ∀ x ∈ D.set, ∃ y ∈ (TSet.single α).set, K.le x y :=
+    fun x hx => ⟨α, by simp, (hD.1 x hx α (by simp)).le⟩
+  have hρρe : ρρe.InStratum D :=
+    ResUT.CompS.inStratum hce (ResUT.reb_inStratum_down hD hreb)
+      (ResUT.InStratum.mono hdle hse)
+  have hpdown : ρp.InStratum D :=
+    ResUT.CompS.inStratum_right hcp (BoLo.updV_outlives hρρe hupd)
+  have hle := ResUT.six52_H1 hD hreb hce hcp hupd hse hs'
+  intro ψ hsub
+  refine ResUT.Sub.inStratum hD hsub hpdown ?_ ?_
+  · -- off `dom(ρ_reb)`: `ρ ∈ Res_α`, and 6.50 at `ℓ` carries that to `ρ⁺`
+    intro l φ hnone hφ
+    have hρl : ∀ ξ, ρ.get l = some ξ → ξ.InStratum (TSet.single α) := by
+      intro ξ hξ
+      have hexl : ρ'i.exclPart.get l = none := by
+        cases f : ρ'i.exclPart.get l with
+        | none => rfl
+        | some φ' =>
+            rw [ResUT.restrictDom_get_of_some f, hξ] at hnone
+            exact absurd hnone (by simp)
+      obtain ⟨φ', hφ'⟩ := ResUT.reb_dom_subset hreb hξ
+      have hk : φ'.kind = Kind.imm := by
+        by_contra hk
+        rw [ResUT.exclPart_eq_some.mpr ⟨hφ', hk⟩] at hexl
+        exact absurd hexl (by simp)
+      exact (ResUT.reb_imm_cell_kw hreb hξ hφ' hk).2.2.2 _ (hreb.1 l φ' hφ')
+    have hρρel : ∀ ξ, ρρe.get l = some ξ → ξ.InStratum (TSet.single α) :=
+      fun ξ e =>
+        ResUT.inStratum_comp_at (CellUT.compS_hC (TSet.single α)) hce hρl (fun ω f => hse l ω f) e
+    exact ResUT.CompS.inStratum_right_at hcp
+      (fun ξ e => ResUT.updV_outlives_at hD hρρe hupd hρρel e) hφ
+  · -- on it: the reborrowed cell is `imm({α}, ρ_ℓ, v_ℓ)`, and H1 matches `ρ⁺`
+    intro l ζ hζ
+    have hρl : ρ.get l = some ζ := ResUT.restrictDom_get_inv hζ
+    obtain ⟨φ', hφ'⟩ := ResUT.restrictDom_dom hζ
+    obtain ⟨hφ'g, hφ'k⟩ := ResUT.exclPart_eq_some.mp hφ'
+    obtain ⟨v, w, hw, hζeq, -, -⟩ := ResUT.reb_src hreb hρl hφ'g hφ'k
+    obtain ⟨s, hs, hpl, -⟩ :=
+      hle l (TSet.single α) v w hw (by rw [hζ, hζeq])
+    exact ⟨s, TSet.single α, v, w, hs, hw, hpl, hζeq, by simp⟩
+
+/-!
+## Lemma 6.52 · `[TR]` p. 17 · `variant`
+
+> Let ρ_reb = ρ∣dom(ρ′ᵢ∣mut,own). If ρ ∈ reb_α(ρ′ᵢ) and ρ ● ρₑ ↭ ρ′ ● ρ⁺ and @ρₑ ⊐ α and @ρ′ ⊐ α then ρ⁺ = (ρ⁺ ⊟ ρ_reb) ● ρ_reb and @(ρ⁺ ⊟ ρ_reb) ⊐ α
+
+**Printed proof, transcribed.** Unfolding `reb`: `ρ∣own,mut = ∅`, `ρ′ᵢ ⊐ α`, and each `ℓ ∈ dom(ρ′ᵢ∣mut,own) ∩ dom(ρ)` has `ρ(ℓ) = imm({α}, ρ_ℓ, v_ℓ)`.  At such an `ℓ`, the update gives `β_ℓ` with `⦇ρ ● ρₑ⦈(ℓ) = ⦇ρ′ ● ρ⁺⦈(ℓ) = imm(β_ℓ, ρ_ℓ, v_ℓ)` and `α ∈ β_ℓ`; since `ρ′ ⊐ α` there is `β_ℓ⁺ ⊆ β_ℓ` with `⦇ρ⁺⦈(ℓ) = imm(β_ℓ⁺, ρ_ℓ, v_ℓ)` and `α ∈ β_ℓ⁺`; and since `ρ′ᵢ, ρₑ ⊐ α` there are no borrows at any lifetime shorter than `α`, so no borrow contains `ρ(ℓ)`.  Hence (H1) `ρ⁺ = (ρ⁺ ⊟ ℓ ↦ imm({α}, ρ_ℓ, v_ℓ)) ● ℓ ↦ imm({α}, ρ_ℓ, v_ℓ)`.  Noting `ρ_reb = ⨀_{ℓ ∈ dom(ρ′ᵢ∣mut,own) ∩ dom(ρ)} ρ(ℓ)`, rewriting with H1 at every such `ℓ` gives `ρ⁺ = (ρ⁺ ⊟ ρ_reb) ● ρ_reb`.  The outlives constraint: every part of the resource outlives `α` except the locations of `ρ` that are `mut` or `own` in `ρ′ᵢ`.
+
+**Lean.** `BoCa.Fig16.Tree.ResUT.six52`, tag `[variant: `ρ⁺ ⊟ ρ_reb` as some `ψ` with `ResUT.Sub`, stated existentially; `↓α` read as the hypothesis `hD : K.DownOf D {α}`]`.
+
+**Note.** `@ρ ⊐ α` is read as `Tree.ResUT.InStratum` (`docs/adjudications.md` §C.25).  `ResUT.Sub` admits more than one value (§12.38); at `ResUT.SubKeep`, the reading of Definition 6.3 used from §12.64 on, the same conclusion is `Tree.ResUT.six52_keep`, and `ResUT.SubKeep.functional` makes `ρ⁺ ⊟ ρ_reb` single-valued under 6.52's H1.
+-/
+/-- `[TR]` Lemma 6.52 (p. 17).  `[variant: `ρ⁺ ⊟ ρ_reb` as some `ψ` with `ResUT.Sub`;
+the `ResUT.SubKeep` form is `ResUT.six52_keep`]`. Over the tree-stratified carrier.
+**Forced change:** the proof's "no borrows at any lifetime shorter than `α`" reads `↓α`
+(row 5.12, `α + 1`) as a stratum `D` with `K.DownOf D {α}` (`hD`), as 6.27 does; in a tree
+`α` need not have a child, so it is a hypothesis, and a covering child of `α` gives one
+(`WCactus.downOf_covers`). The proof is the printed one with `↓α` read through `hD`. -/
+theorem ResUT.six52 {α : Life}
+    {ρ'i ρ ρe ρ'' ρp ρρe ρ'p : ResUT BoCa.Loc BoCa.Val K}
+    {D : TSet} (hD : K.DownOf D (TSet.single α))
+    (hreb : ResUT.Reb α ρ'i ρ)
+    (hce : ResUT.CompS ρ ρe ρρe)
+    (hcp : ResUT.CompS ρ'' ρp ρ'p)
+    (hupd : ResUT.UpdV ρρe ρ'p)
+    (hse : ρe.InStratum (TSet.single α))
+    (hs' : ρ''.InStratum (TSet.single α)) :
+    ∃ ψ, ResUT.Sub ρp (ρ.restrictDom ρ'i.exclPart) ψ ∧
+      ResUT.CompS ψ (ρ.restrictDom ρ'i.exclPart) ρp ∧ ψ.InStratum (TSet.single α) := by
+  classical
+  obtain ⟨ψ, hsub, hcomp⟩ :=
+    ResUT.sub_of_le (ResUT.reb_restrictDom_exclPart_empty hreb)
+      (ResUT.six52_H1 hD hreb hce hcp hupd hse hs')
+  exact ⟨ψ, hsub.toSub, hcomp,
+    ResUT.six52_sub_inStratum hD hreb hce hcp hupd hse hs' ψ hsub.toSub⟩
+
+end BoCa.Fig16.Tree
+
+end

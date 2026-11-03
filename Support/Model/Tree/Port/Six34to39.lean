@@ -1,0 +1,749 @@
+import Support.Model.Tree.Port.SurgeryC
+
+/-!
+# The printed source over the tree-stratified carrier
+
+`[spec §62]`. `Paper/S6_2_NonStandardLemmas/Remarks.lean:17-115`, `Paper/S6_2_NonStandardLemmas/Lemmas.lean:1024-1155`, `Paper/S6_2_NonStandardLemmas/Lemmas.lean:1159-1160`, `Paper/S6_2_NonStandardLemmas/Lemmas.lean:1263-1776`, read at `CellUT K`, by the printed proofs.
+-/
+
+noncomputable section
+
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+variable {Loc Val : Type} {K : WCactus}
+/-- `∼` is transitive, as `[TR]` Lemma 6.44's proof asserts: *"imms are required
+to be equal and muts are required to have"* the same lifetime and invariant.
+`[about ours]` -/
+theorem CellUT.Sim.trans {ψ₁ ψ₂ ψ₃ : CellUT Loc Val K} (h₁ : CellUT.Sim ψ₁ ψ₂)
+    (h₂ : CellUT.Sim ψ₂ ψ₃) : CellUT.Sim ψ₁ ψ₃ := by
+  rcases h₁ with ⟨a, _, P, hA, ⟨v₂, χ₂, h₂', hw₂, e₂⟩⟩ | ⟨s, v, χ, hh, e₁, e₂⟩
+  · rcases h₂ with ⟨a', _, P', ⟨v₃, χ₃, h₃', hw₃, e₃⟩, hC⟩ | ⟨s', v', χ', hh', e₃, e₄⟩
+    · rw [e₂] at e₃
+      obtain rfl : a = a' := CellUT.mutOf_ls e₃
+      obtain ⟨-, -, rfl⟩ := CellUT.mutOf_inj e₃
+      exact Or.inl ⟨a, inferInstance, P, hA, hC⟩
+    · exact absurd (e₃.symm.trans e₂) CellUT.immOf_ne_mutOf
+  · rcases h₂ with ⟨a', _, P', ⟨v₃, χ₃, h₃', hw₃, e₃⟩, -⟩ | ⟨s', v', χ', hh', e₃, e₄⟩
+    · exact absurd (e₂.symm.trans e₃) CellUT.immOf_ne_mutOf
+    · rw [e₂] at e₃
+      obtain ⟨rfl, rfl, rfl⟩ := CellUT.immOf_inj e₃
+      exact Or.inr ⟨s, v, χ, hh, e₁, e₄⟩
+
+/-- `[CONF]` Fig. 18b's `↭` is `[TR]` §6's *"`dom(⦇ρ₁⦈|imm,mut) = dom(⦇ρ₂⦈|imm,mut)`
+and pointwise `∼`"*, both flattenings named (G4).  `[about ours]` -/
+theorem ResUT.upd_iff_sim {ρ₁ ρ₂ σ₁ σ₂ : ResUT Loc Val K}
+    (h₁ : ResUT.Flat ρ₁ σ₁) (h₂ : ResUT.Flat ρ₂ σ₂) :
+    ResUT.Upd ρ₁ ρ₂ ↔ ResUT.SimForm σ₁ σ₂ := by
+  constructor
+  · intro h
+    refine ⟨fun l => ⟨?_, ?_⟩, fun l ψ hb => ?_⟩
+    · rintro ⟨ψ, hb⟩
+      obtain ⟨hg, hk⟩ := ResUT.borrowPart_eq_some.mp hb
+      obtain ⟨ψ', hg', hsim⟩ := ResUT.sim_of_upd h h₁ h₂ hg hk
+      refine ⟨ψ', ResUT.borrowPart_eq_some.mpr ⟨hg', ?_⟩⟩
+      rcases hsim with ⟨a, _, P, -, ⟨v, χ, hh, hw, rfl⟩⟩ | ⟨s, v, χ, hh, -, rfl⟩
+      · simp
+      · simp
+    · rintro ⟨ψ, hb⟩
+      obtain ⟨hg, hk⟩ := ResUT.borrowPart_eq_some.mp hb
+      obtain ⟨ψ', hg', hsim⟩ := ResUT.sim_of_upd h.symm h₂ h₁ hg hk
+      refine ⟨ψ', ResUT.borrowPart_eq_some.mpr ⟨hg', ?_⟩⟩
+      rcases hsim with ⟨a, _, P, -, ⟨v, χ, hh, hw, rfl⟩⟩ | ⟨s, v, χ, hh, -, rfl⟩
+      · simp
+      · simp
+    · obtain ⟨hg, hk⟩ := ResUT.borrowPart_eq_some.mp hb
+      exact ResUT.sim_of_upd h h₁ h₂ hg hk
+  · rintro ⟨hd, hs⟩
+    have hback : ∀ (l : Loc) (ψ₂ : CellUT Loc Val K), (ResUT.borrowPart σ₂).get l = some ψ₂ →
+        ∃ ψ₁, σ₁.get l = some ψ₁ ∧ CellUT.Sim ψ₂ ψ₁ := by
+      intro l ψ₂ hb₂
+      obtain ⟨ψ₁, hb₁⟩ := (hd l).mpr ⟨ψ₂, hb₂⟩
+      obtain ⟨ψ₂', hg₂', hsim⟩ := hs l ψ₁ hb₁
+      obtain ⟨hg₂, -⟩ := ResUT.borrowPart_eq_some.mp hb₂
+      rw [hg₂] at hg₂'
+      cases Option.some.inj hg₂'
+      exact ⟨ψ₁, (ResUT.borrowPart_eq_some.mp hb₁).1, hsim.symm⟩
+    refine ⟨fun l s v χ hh => ?_, fun l b _ P => ?_⟩
+    · rw [ResUT.flatAt_iff h₁, ResUT.flatAt_iff h₂]
+      constructor
+      · intro hg
+        obtain ⟨ψ', hg', hsim⟩ :=
+          hs l _ (ResUT.borrowPart_eq_some.mpr ⟨hg, by simp⟩)
+        rcases hsim with ⟨a, _, P, ⟨v₁, χ₁, h₁', hw₁, e₁⟩, -⟩ | ⟨s', v', χ', h', e₁, e₂⟩
+        · exact absurd e₁ CellUT.immOf_ne_mutOf
+        · obtain ⟨hs2, hv2, hχ2⟩ := CellUT.immOf_inj e₁
+          subst hs2; subst hv2; subst hχ2
+          rw [hg']; exact congrArg some e₂
+      · intro hg
+        obtain ⟨ψ', hg', hsim⟩ :=
+          hback l _ (ResUT.borrowPart_eq_some.mpr ⟨hg, by simp⟩)
+        rcases hsim with ⟨a, _, P, ⟨v₁, χ₁, h₁', hw₁, e₁⟩, -⟩ | ⟨s', v', χ', h', e₁, e₂⟩
+        · exact absurd e₁ CellUT.immOf_ne_mutOf
+        · obtain ⟨hs2, hv2, hχ2⟩ := CellUT.immOf_inj e₁
+          subst hs2; subst hv2; subst hχ2
+          rw [hg']; exact congrArg some e₂
+    · constructor
+      · rintro ⟨v, χ, hh, hw, hfa⟩
+        rw [ResUT.flatAt_iff h₁] at hfa
+        obtain ⟨ψ', hg', hsim⟩ :=
+          hs l _ (ResUT.borrowPart_eq_some.mpr ⟨hfa, by simp⟩)
+        rcases hsim with ⟨a, _, P', ⟨v₁, χ₁, h₁', hw₁, e₁⟩, ⟨v₂, χ₂, h₂', hw₂, e₂⟩⟩ |
+            ⟨s', v', χ', h', e₁, e₂⟩
+        · obtain rfl : b = a := CellUT.mutOf_ls e₁
+          obtain ⟨-, -, hPP⟩ := CellUT.mutOf_inj e₁
+          subst hPP
+          exact ⟨v₂, χ₂, h₂', hw₂, (ResUT.flatAt_iff h₂ l _).mpr (e₂ ▸ hg')⟩
+        · exact absurd e₁.symm CellUT.immOf_ne_mutOf
+      · rintro ⟨v, χ, hh, hw, hfa⟩
+        rw [ResUT.flatAt_iff h₂] at hfa
+        obtain ⟨ψ', hg', hsim⟩ :=
+          hback l _ (ResUT.borrowPart_eq_some.mpr ⟨hfa, by simp⟩)
+        rcases hsim with ⟨a, _, P', ⟨v₁, χ₁, h₁', hw₁, e₁⟩, ⟨v₂, χ₂, h₂', hw₂, e₂⟩⟩ |
+            ⟨s', v', χ', h', e₁, e₂⟩
+        · obtain rfl : b = a := CellUT.mutOf_ls e₁
+          obtain ⟨-, -, hPP⟩ := CellUT.mutOf_inj e₁
+          subst hPP
+          exact ⟨v₂, χ₂, h₂', hw₂, (ResUT.flatAt_iff h₁ l _).mpr (e₂ ▸ hg')⟩
+        · exact absurd e₁.symm CellUT.immOf_ne_mutOf
+
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+variable {Loc Val : Type} {K : WCactus}
+variable {Loc Val : Type} {K : WCactus}
+/-!
+## Lemma 6.34 · `[TR]` p. 11 · `proved`
+
+> If ρ # ρ_v ● ℓ ↦ own(v) and @ρ_v ⊐ α then ρ # ℓ ↦ imm(α, v, ρ_v)
+
+**Printed proof, transcribed.** By Lemma 6.11, `ρ # ρ_v` and `ρ # ℓ ↦ own(v)`.  Unfolding these, `ℓ ∉ dom(⦇ρ ● ρ_v⦈)`, and by Lemmas 6.20, 6.18, 6.31 and 6.32 the following are all defined and equal: `⦇ρ ● ρ_v⦈ = ex(ρ ● ρ_v)_● ● ag(ρ ● ρ_v) = ex(ρ)_● ● ex(ρ_v)_● ● (ag(ρ) ○ ag(ρ_v)) = ex(ρ)_● ● (ex(ρ_v)_● ○ ag(ρ) ○ ag(ρ_v)) = ex(ρ)_● ● (ex(ρ_v)_○ ○ ag(ρ) ○ ag(ρ_v)) = ex(ρ)_● ● (⦇ρ_v⦈_○ ○ ag(ρ))`.  The last equality, with `ℓ` outside the domain, completes the proof.
+
+**Lean.** `BoCa.Fig16.Tree.ResUT.six34`, tag `[as printed]`.
+-/
+/-- `[TR]` Lemma 6.34 (p. 11).  `[as printed]` (G4) -/
+theorem ResUT.six34 {l : Loc} {s : TSet} {v : Val} {ρ ρv W : ResUT Loc Val K}
+    {hs : ρv.InStratum s}
+    (hW : ResUT.CompS ρv (ResUT.single l (CellUT.ownOf v)) W)
+    (hh : ResUT.Hash ρ W) :
+    ResUT.Hash ρ (ResUT.single l (CellUT.immOf s v ρv hs)) := by
+  classical
+  -- By 6.11, `ρ # ρ_v` and `ρ # ℓ ↦ own(v)`.
+  obtain ⟨hhv, hho⟩ := ResUT.Hash.split hW (ResUT.hash_symm hh)
+  have hρl : ρ.get l = none := ResUT.compatS_single_own hho.1
+  -- The printed display, at `ρ ● ρ_v`.
+  obtain ⟨-, T₀, hT₀, σ₀, Ee, Aa, hEe, hAa, hσ₀⟩ := ResUT.hash_symm hhv
+  obtain ⟨e₁, f₁, he₁, hf₁, hEc⟩ := (ExST.split hT₀).mp hEe
+  obtain ⟨a₁, b₁, ha₁, hb₁, hAc⟩ := (AgWT.split hT₀).mp hAa
+  obtain ⟨he₁l, ha₁l, hf₁l, hb₁l⟩ :=
+    ResUT.walks_none_of_hash_own hW hh he₁ ha₁ hf₁ hb₁
+  have hEel : Ee.get l = none := (ResUT.Comp.eq_none_iff hEc l).mpr ⟨he₁l, hf₁l⟩
+  have hAal : Aa.get l = none := (ResUT.Comp.eq_none_iff hAc l).mpr ⟨ha₁l, hb₁l⟩
+  have hσ₀l : σ₀.get l = none := (ResUT.Comp.eq_none_iff hσ₀ l).mpr ⟨hEel, hAal⟩
+  -- Line 3: regroup, and read the freed `●` at `○` by 6.31.
+  obtain ⟨X, hX₁, hX₂⟩ := (ResUT.CompS.assoc e₁ f₁ Aa σ₀).mpr ⟨Ee, hEc, hσ₀⟩
+  have hXR : ResUT.CompR f₁ Aa X := (ResUT.compR_iff_compS hX₁.1 X).mpr hX₁
+  -- Lines 4 and 5: 6.32 names `ex(ρ_v)_●` at `○`, and the three `○` factors
+  -- regroup as `⦇ρ_v⦈_○ ○ ag(ρ)`.
+  obtain ⟨P, hP₁, hP₂⟩ :=
+    (ResUT.CompR.assoc a₁ b₁ f₁ X).mpr ⟨Aa, hAc, ResUT.CompR.comm hXR⟩
+  have hflatR : ResUT.FlatR ρv P := ⟨b₁, f₁, hb₁, ExST.toExR hf₁, hP₁⟩
+  have hXl : X.get l = none := ((ResUT.Comp.eq_none_iff hX₂ l).mp hσ₀l).2
+  -- `ρ ▸◂ ℓ ↦ imm(ᾱ, v, ρ_v)`, `ℓ` being absent from `ρ`.
+  have hcompat : ResUT.CompatS ρ (ResUT.single l (CellUT.immOf s v ρv hs)) :=
+    ResUT.Compat.of_disjoint (fun l' => by
+      by_cases hl : l' = l
+      · exact Or.inl (hl ▸ hρl)
+      · exact Or.inr (ResUT.single_get_ne _ hl))
+  obtain ⟨ρρi, hρρi⟩ :=
+    (ResUT.compS_defined_iff ρ (ResUT.single l (CellUT.immOf s v ρv hs))).mpr hcompat
+  refine ⟨hcompat, ρρi, hρρi, ?_⟩
+  have hexρi : ExST ρρi e₁ :=
+    (ExST.split hρρi).mpr ⟨e₁, PMap.empty, he₁,
+      ExWT.empty_of_all_imm (fun m' ψ hg => by
+        obtain ⟨-, rfl⟩ := ResUT.single_get_eq_some hg
+        exact CellUT.kind_immOf _ _ _ _),
+      ResUT.comp_empty_right e₁⟩
+  -- The one cell, inserted where the last line has room for it.
+  have hcsA : ResUT.CompatS (ResUT.single l (CellUT.immOf s v ρv hs)) X :=
+    ResUT.Compat.of_disjoint (fun l' => by
+      by_cases hl : l' = l
+      · exact Or.inr (hl ▸ hXl)
+      · exact Or.inl (ResUT.single_get_ne _ hl))
+  obtain ⟨A, hA⟩ :=
+    (ResUT.compS_defined_iff (ResUT.single l (CellUT.immOf s v ρv hs)) X).mpr hcsA
+  have hAR : ResUT.CompR (ResUT.single l (CellUT.immOf s v ρv hs)) X A :=
+    (ResUT.compR_iff_compS hcsA A).mpr hA
+  obtain ⟨A₂, hA₂a, hA₂b⟩ :=
+    (ResUT.CompR.assoc a₁ P (ResUT.single l (CellUT.immOf s v ρv hs)) A).mpr
+      ⟨X, hP₂, ResUT.CompR.comm hAR⟩
+  have hagρi : AgWT (ResUT.single l (CellUT.immOf s v ρv hs)) A₂ :=
+    AgWT.single_imm hflatR (ResUT.CompR.comm hA₂a)
+  have hagA : AgWT ρρi A := (AgWT.split hρρi).mpr ⟨a₁, A₂, ha₁, hagρi, hA₂b⟩
+  have hcsσ : ResUT.CompatS (ResUT.single l (CellUT.immOf s v ρv hs)) σ₀ :=
+    ResUT.Compat.of_disjoint (fun l' => by
+      by_cases hl : l' = l
+      · exact Or.inr (hl ▸ hσ₀l)
+      · exact Or.inl (ResUT.single_get_ne _ hl))
+  obtain ⟨σ, hσ⟩ :=
+    (ResUT.compS_defined_iff (ResUT.single l (CellUT.immOf s v ρv hs)) σ₀).mpr hcsσ
+  obtain ⟨y, hy₁, hy₂⟩ :=
+    (ResUT.CompS.assoc (ResUT.single l (CellUT.immOf s v ρv hs)) e₁ X σ).mp
+      ⟨σ₀, hX₂, hσ⟩
+  obtain ⟨x, hx₁, hx₂⟩ :=
+    (ResUT.CompS.assoc e₁ (ResUT.single l (CellUT.immOf s v ρv hs)) X σ).mpr
+      ⟨y, ResUT.CompS.comm hy₁, hy₂⟩
+  rw [ResUT.CompS.functional hx₁ hA] at hx₂
+  exact ⟨σ, e₁, A, hexρi, hagA, hx₂⟩
+
+end BoCa.Fig16.Tree
+/-!
+## Lemma 6.35 · `[TR]` p. 12 · `proved`
+
+> If ⦇ρ ● ρ′⦈ is defined then ⦇ρ⦈ and ⦇ρ′⦈ are defined.
+
+**Printed proof, transcribed.** Unfolding `⦇−⦈` and applying Lemmas 6.20 and 6.18, `⦇ρ ● ρ′⦈ = ex(ρ ● ρ′)_● ● ag(ρ ● ρ′) = ex(ρ)_● ● ex(ρ′)_● ● (ag(ρ) ○ ag(ρ′))`, all defined.  Then: `ex(ρ)_● ● ex(ρ′)_● ▸◂ ag(ρ)` by Lemmas 6.30 and 6.36; hence `ex(ρ)_● ▸◂ ag(ρ)`, so `⦇ρ⦈` is defined; `ex(ρ)_● ● ex(ρ′)_● ▸◂ ag(ρ′)` by Lemmas 6.30 and 6.36; hence `ex(ρ′)_● ▸◂ ag(ρ′)`, so `⦇ρ′⦈` is defined.
+
+**Lean.** `BoCa.Fig16.Tree.ResUT.Valid.split`, tag `[as printed]` — the declaration of Lemma 6.10, the same statement printed twice.
+-/
+
+/-!
+## Lemma 6.36 · `[TR]` p. 12 · `proved`
+
+> If ex(ρ)_◐ is defined then ex(ρ)_◐∣imm = ∅.
+
+**Printed proof, transcribed.** By induction on `ρ` and unfolding `ex`, noting that at each level only `mut` and `own` are kept.
+
+**Lean.** `BoCa.Fig16.Tree.ExWT.immFree`, tag `[as printed]` — declared in `Paper/S6_1_StandardLemmas/Lemmas.lean`.
+-/
+
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+variable {Loc Val : Type} {K : WCactus}
+/-!
+## Lemma 6.37 · `[TR]` p. 12 · `proved`
+
+> If ρ ▸◂ ρ₁ and ρ ▸◂ ρ₂ and ρ₁ ▷◁ ρ₂ then ρ ▸◂ ρ₁ ○ ρ₂.
+
+**Printed proof, transcribed.** Unfolding `▸◂`, at a location of `dom(ρ) ∩ dom(ρ₁)` both cells are `imm` over one witness and one value, and similarly for `ρ₂`.  By the definition of `○`, at a location of `dom(ρ) ∩ dom(ρ₁) ∩ dom(ρ₂)` the composite `(ρ₁ ○ ρ₂)(ℓ)` is `imm` over that witness and value, which suffices.
+
+**Lean.** `BoCa.Fig16.Tree.ResUT.six37`, tag `[as printed]`.
+-/
+/-- `[TR]` Lemma 6.37 (p. 12).  `[as printed]` (G4) -/
+theorem ResUT.six37 {ρ ρ₁ ρ₂ r : ResUT Loc Val K} (h₁ : ResUT.CompatS ρ ρ₁)
+    (h₂ : ResUT.CompatS ρ ρ₂) (h₁₂ : ResUT.CompR ρ₁ ρ₂ r) : ResUT.CompatS ρ r :=
+  ResUT.compatS_of_compR h₁ h₂ h₁₂
+
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+variable {Loc Val : Type} {K : WCactus}
+/-! `[about ours]` — for Lemma 6.38. -/
+/-- `[about ours: `[TR]` Lemma 6.38's proof through its second sentence]` -/
+theorem ResUT.six38_steps_one_two {α : Life} {l : BoCa.Loc} {v : BoCa.Val}
+    {ρ ρv ρ' ρp W ρρi ρ'ρp : ResUT BoCa.Loc BoCa.Val K}
+    {hv : ρv.InStratum (TSet.single α)}
+    (hW : ResUT.CompS ρv (ResUT.single l (CellUT.ownOf v)) W)
+    (h1 : ResUT.Hash ρ W) (h2 : ResUT.Hash ρ' ρp)
+    (h3 : ρ.InStratum (TSet.single α)) (h4 : ρ'.InStratum (TSet.single α))
+    (hρi : ResUT.CompS ρ (ResUT.single l (CellUT.immOf (TSet.single α) v ρv hv)) ρρi)
+    (hpp : ResUT.CompS ρ' ρp ρ'ρp) (h6 : ResUT.UpdV ρρi ρ'ρp) :
+    ResUT.CompS ρ' (ρp.del l) (ρ'ρp.del l) ∧
+      ResUT.Hash (ρ'ρp.del l)
+        (ResUT.single l (CellUT.immOf (TSet.single α) v ρv hv)) ∧
+      ResUT.CompS (ρ'ρp.del l)
+        (ResUT.single l (CellUT.immOf (TSet.single α) v ρv hv)) ρ'ρp := by
+  classical
+  have h7 : ResUT.CompS (ρ'ρp.del l)
+      (ResUT.single l (CellUT.immOf (TSet.single α) v ρv hv)) ρ'ρp :=
+    ResUT.six29 h3 hW h1 hρi h6
+  have hcl : ρ'ρp.get l = some (CellUT.immOf (TSet.single α) v ρv hv) :=
+    ResUT.compS_single_get_self (ResUT.CompS.comm h7) (ResUT.del_get_self _ _)
+  have hρ'l : ρ'.get l = none := ResUT.six38_no_borrow_in_frame h4 hpp hcl
+  obtain ⟨-, x, hx, hvx⟩ := h2
+  rw [ResUT.CompS.functional hx hpp] at hvx
+  refine ⟨⟨fun m ψ₁ ψ₂ e₁ e₂ => ?_, fun m => ?_⟩, ⟨h7.1, ρ'ρp, h7, hvx⟩, h7⟩
+  · by_cases hm : m = l
+    · subst hm; rw [ResUT.del_get_self] at e₂; exact absurd e₂ (by simp)
+    · exact hpp.1 m ψ₁ ψ₂ e₁ (by rwa [ResUT.del_get_ne ρp hm] at e₂)
+  · by_cases hm : m = l
+    · subst hm
+      show OptCompT CellUT.CompS (ρ'.get m) ((ρp.del m).get m) ((ρ'ρp.del m).get m)
+      rw [hρ'l, ResUT.del_get_self, ResUT.del_get_self]
+      rfl
+    · show OptCompT CellUT.CompS (ρ'.get m) ((ρp.del l).get m) ((ρ'ρp.del l).get m)
+      rw [ResUT.del_get_ne ρp hm, ResUT.del_get_ne ρ'ρp hm]
+      exact hpp.2 m
+
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+/-- `[about ours: `[TR]` Lemma 6.38 reduced to `ResUT.SixThirtyEightResidual`]` -/
+theorem ResUT.sixThirtyEight_of_residual {K : WCactus}
+    (h : ResUT.SixThirtyEightResidual (K := K)) : ResUT.SixThirtyEight (K := K) := by
+  intro α l v ρ ρv ρ' ρp W ρρi ρ'ρp hv hW h1 h2 h3 h4 h5 hρi hpp h6
+  obtain ⟨hG, hGi, hGc⟩ := ResUT.six38_steps_one_two hW h1 h2 h3 h4 hρi hpp h6
+  exact ⟨ρ'ρp.del l, hG, h hW h1 h3 h4 h5 hρi hpp h6 hG hGi hGc⟩
+
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+variable {Loc Val : Type} {K : WCactus}
+/-- `[TR]` 6.38's step-10 sentence, *"By the definition of `ag`, `ℓ′ ∈ dom(ρ′|imm)`, `ℓ′
+∈ dom(ρ⁺/ℓ|imm)`, or there are some `ℓ″`, `ρ″_v` such that `(ag(ρ′) ○ ag(ρ⁺/ℓ))(ℓ″)
+= imm(_,_,ρ″_v)` and `ℓ′ ∈ dom(⦇ρ″_v⦈_○)`"*, at one walk, its first cases read at
+`⦇ρ⦈|imm` as the next clause *"by H6, `ℓ′ ∈ ⦇ρ⦈|imm`"* requires. `[about ours:
+`[TR]` Lemma 6.38's step-10 sentence, at one walk]` -/
+theorem AgWT.dom_split {ρ A σ : ResUT BoCa.Loc BoCa.Val K}
+    (h : AgWT ρ A) (hf : ResUT.Flat ρ σ)
+    {m : BoCa.Loc} {ψ : CellUT BoCa.Loc BoCa.Val K} (hg : A.get m = some ψ) :
+    (∃ φ, σ.get m = some φ ∧ φ.kind = Kind.imm) ∨
+    (∃ (m' : BoCa.Loc) (χ : CellUT BoCa.Loc BoCa.Val K) (f : ResUT BoCa.Loc BoCa.Val K),
+      A.get m' = some χ ∧ χ.kind = Kind.imm ∧ ResUT.FlatR χ.wit f ∧ (f.get m).isSome) := by
+  classical
+  by_cases hk : ψ.kind = Kind.imm
+  · obtain ⟨e, a, he, ha, hc⟩ := hf
+    cases AgWT.functional ha h
+    exact Or.inl ⟨ψ, ResUT.CompS.get_right_of_immFree hc (ExST.immFree he) hg, hk⟩
+  · obtain ⟨m', s, u, χ, hh, ev, av, p, ξ, hAm', hex, hag, hp, hpm, -, -, -⟩ :=
+      AgWT.nonimm_beneath_imm h m ψ hg hk
+    refine Or.inr ⟨m', CellUT.immOf s u χ hh, p, hAm', CellUT.kind_immOf _ _ _ _, ?_, ?_⟩
+    · rw [CellUT.wit_immOf]
+      exact ⟨av, ev, hag, hex, ResUT.CompR.comm hp⟩
+    · rw [hpm]; rfl
+
+/-- `[about ours: `[TR]` Lemma 6.38's proof from "Then in order to show G1" on]` -/
+theorem ResUT.sixThirtyEightResidual : ResUT.SixThirtyEightResidual (K := K) := by
+  classical
+  intro α l v ρ ρv ρ' ρp W ρρi ρ'ρp Gr hv hW h1 h3 h4 h5 hρi hpp h6 hG hGi hGc
+  -- the borrow cell
+  set ι : CellUT BoCa.Loc BoCa.Val K := CellUT.immOf (TSet.single α) v ρv hv with hιdef
+  have hιk : ι.kind = Kind.imm := CellUT.kind_immOf _ _ _ _
+  have himmi : ∀ m ψ, (ResUT.single l ι).get m = some ψ → ψ.kind = Kind.imm := by
+    intro m ψ h
+    obtain ⟨-, rfl⟩ := ResUT.single_get_eq_some h
+    exact hιk
+  -- `⦇ρ′ ● ρ⁺⦈`, and the first display for `ρ′ ● ρ⁺/ℓ ● ℓ ↦ imm({α}, v, ρ_v)`
+  obtain ⟨σρρ, hσρρ⟩ := h6.2.2
+  obtain ⟨eG, eI, e, aG, aI, a, heG, heI, hec, haG, haI, hac, hc⟩ :=
+    (ResUT.Flat.split hGc).mp hσρρ
+  obtain rfl : eI = (PMap.empty : ResUT BoCa.Loc BoCa.Val K) :=
+    ExST.functional heI (ExWT.empty_of_all_imm himmi)
+  obtain rfl : eG = e := ResUT.eq_of_comp_empty_right hec
+  -- `ag(ℓ ↦ imm({α}, v, ρ_v)) = ℓ ↦ imm({α}, v, ρ_v) ○ ex(ρ_v)_○ ○ ag(ρ_v)`
+  obtain ⟨ev, av, p, hev, hav, hcp, hagi⟩ := AgWT.single_imm_inv (χ := ρv) haI
+  -- 6.35 with H1: `⦇ρ_v⦈` and `⦇ρ_v ● ℓ ↦ own(v)⦈` are defined
+  obtain ⟨-, T, hT, hvT⟩ := id h1
+  obtain ⟨hvρ, hvW⟩ := ResUT.Valid.split hT hvT
+  obtain ⟨hvρv, -⟩ := ResUT.Valid.split hW hvW
+  obtain ⟨σv, hσv⟩ := hvρv
+  obtain ⟨exv, agv, hexv, hagv, hcv⟩ := hσv
+  obtain rfl : av = agv := AgWT.functional hav hagv
+  -- 6.33: `⦇ρ_v⦈_○ = ⦇ρ_v⦈`, so `p = ex(ρ_v)_● ● ag(ρ_v)`
+  obtain rfl : p = σv :=
+    ResUT.FlatR.functional ⟨av, ev, hav, hev, ResUT.CompR.comm hcp⟩
+      (ResUT.six33 ⟨exv, av, hexv, hav, hcv⟩)
+  -- The second display: `ex(W)_● = ex(ρ_v)_● ● ℓ ↦ own(v)` and `ag(W) = ag(ρ_v)`
+  obtain ⟨σW, hσW⟩ := hvW
+  obtain ⟨f₁, f₂, eW, b₁, b₂, aW, hf₁, hf₂, hfc, hb₁, hb₂, hbc, hWc⟩ :=
+    (ResUT.Flat.split hW).mp hσW
+  obtain rfl : exv = f₁ := ExST.functional hexv hf₁
+  obtain rfl : ResUT.single l (CellUT.ownOf v) = f₂ :=
+    ExST.functional (ExWT.single_own l v) hf₂
+  obtain rfl : av = b₁ := AgWT.functional hav hb₁
+  obtain rfl : (PMap.empty : ResUT BoCa.Loc BoCa.Val K) = b₂ :=
+    AgWT.functional (AgWT.single_own l v) hb₂
+  obtain rfl : av = aW := ResUT.eq_of_comp_empty_right hbc
+  have heW : ExST W eW :=
+    (ExST.split hW).mpr ⟨exv, _, hexv, ExWT.single_own l v, hfc⟩
+  have haW : AgWT W av := (AgWT.split hW).mpr ⟨av, _, hav, AgWT.single_own l v, hbc⟩
+  -- `ag(ρ′) ○ ag(ρ⁺/ℓ) ○ ℓ ↦ imm({α},v,ρ_v) ○ ex(ρ_v)_● ○ ag(ρ_v)` regrouped so
+  -- that `ag(ρ′) ○ ag(ρ⁺/ℓ) ○ ag(ρ_v)` is one factor: `[TR]` 6.3 at `○`.
+  have hcvR : ResUT.CompR exv av p := ResUT.CompS.toCompR hcv
+  obtain ⟨y, hy₁, hy₂⟩ :=
+    (ResUT.CompR.assoc aG (ResUT.single l ι) p a).mp ⟨aI, hagi, hac⟩
+  obtain ⟨z, hz₁, hz₂⟩ := (ResUT.CompR.assoc y exv av a).mp ⟨p, hcvR, hy₂⟩
+  obtain ⟨Z, hZ, hZ₂⟩ :=
+    (ResUT.CompR.assoc aG (ResUT.single l ι) exv z).mpr ⟨y, hy₁, hz₁⟩
+  obtain ⟨A, hA₀, hAZ⟩ :=
+    (ResUT.CompR.assoc av aG Z a).mp ⟨z, hZ₂, ResUT.CompR.comm hz₂⟩
+  have hA : ResUT.CompR aG av A := ResUT.CompR.comm hA₀
+  -- The three printed bullets: 6.30 and 6.36 at each `○`.
+  have himmE : eG.ImmFree := ExST.immFree heG
+  have himmE' : (G.restrict CellUT.kind eG Kind.imm) = PMap.empty :=
+    (ResUT.restrict_imm_empty_iff eG).mpr himmE
+  obtain ⟨hcA, hcZ⟩ := ResUT.CompatS.of_compR_left himmE' hAZ hc.1
+  obtain ⟨hcι, hcexv⟩ := ResUT.CompatS.of_compR_left himmE' hZ hcZ
+  obtain ⟨hcaG, hcav⟩ := ResUT.CompatS.of_compR_left himmE' hA hcA
+  -- `⦇ρ⦈`, `⦇W⦈` and the disjointness H1 supplies
+  obtain ⟨σT, hσT⟩ := hvT
+  obtain ⟨e₁, e₂, eT, a₁, a₂, aT, he₁, he₂, hecT, ha₁, ha₂, hacT, hcT⟩ :=
+    (ResUT.Flat.split hT).mp hσT
+  obtain rfl : eW = e₂ := ExST.functional heW he₂
+  obtain rfl : av = a₂ := AgWT.functional haW ha₂
+  have himmW : eW.ImmFree := ExST.immFree heW
+  have himmT : eT.ImmFree := ResUT.ImmFree.compS hecT (ExST.immFree he₁) himmW
+  obtain ⟨hcTa₁, -⟩ :=
+    ResUT.CompatS.of_compR_left ((ResUT.restrict_imm_empty_iff eT).mpr himmT) hacT hcT.1
+  obtain ⟨-, hcWa₁⟩ := ResUT.CompatS.of_compS_left_immFree himmT hecT hcTa₁
+  have hF1 : ∀ m, eW.get m = none ∨ a₁.get m = none :=
+    ResUT.CompatS.disjoint_of_immFree himmW hcWa₁
+  have hF2 : ∀ m, eW.get m = none ∨ av.get m = none :=
+    ResUT.CompatS.disjoint_of_immFree himmW hWc.1
+  -- `⦇Gr⦈` itself
+  obtain ⟨σG, hσGc⟩ := (ResUT.compS_defined_iff eG aG).mpr hcaG
+  have hσG : ResUT.Flat Gr σG := ⟨eG, aG, heG, haG, hσGc⟩
+  -- `[TR]` 6.29's second sentence, at `ρ′ ● ρ⁺`
+  obtain ⟨hσρρl, hstrat⟩ :=
+    ResUT.six29_borrows_off (hv := hv) h3 hW h1 hρi h6 hσρρ
+  have h7 : ResUT.CompS (ρ'ρp.del l)
+      (ResUT.single l (CellUT.immOf (TSet.single α) v ρv hv)) ρ'ρp :=
+    ResUT.six29 h3 hW h1 hρi h6
+  have hcl : ρ'ρp.get l = some (CellUT.immOf (TSet.single α) v ρv hv) :=
+    ResUT.compS_single_get_self (ResUT.CompS.comm h7) (ResUT.del_get_self _ _)
+  have hρ'l : ρ'.get l = none := ResUT.six38_no_borrow_in_frame h4 hpp hcl
+  have hGl : Gr.get l = none :=
+    (ResUT.Comp.eq_none_iff hG l).mpr ⟨hρ'l, ResUT.del_get_self _ _⟩
+  -- `ρ′ ● ρ⁺/ℓ ∈ Res_α`, hence so is `⦇ρ′ ● ρ⁺/ℓ⦈`
+  have hGstrat : Gr.InStratum (TSet.single α) := by
+    intro m φ hφ
+    by_cases hm : m = l
+    · subst hm; rw [hGl] at hφ; simp at hφ
+    · refine ResUT.flat_inStratum_inv_at hσρρ (hstrat m hm) ?_
+      exact (ResUT.Comp.get_of_right_none hGc
+        (ResUT.single_get_ne _ hm)).trans hφ
+  have hσGstrat : σG.InStratum (TSet.single α) := BoLo.flat_inStratum hσG hGstrat
+  -- `⦇ρ′ ● ρ⁺/ℓ⦈ = ⦇ρ′ ● ρ⁺⦈ ○ ⦇ℓ ↦ imm({α},v,ρ_v)⦈` read backwards at `ℓ`:
+  -- the borrow is at the top level of `ρ′ ● ρ⁺` and nowhere else
+  obtain ⟨σG', σI, hσG', hσI, hCompRG⟩ := BoLo.flat_compR hGc hσρρ
+  obtain rfl : σG = σG' := ResUT.Flat.functional hσG hσG'
+  have hF3 : ∀ ψ, σG.get l = some ψ → ψ.kind ≠ Kind.imm := by
+    intro ψ hψ hk
+    obtain ⟨s₁, hs₁, heta⟩ := CellUT.imm_eta hk
+    have hψ' : σG.get l = some (CellUT.immOf s₁ ψ.erase ψ.wit hs₁) :=
+      hψ.trans (congrArg some heta)
+    have hsub : ∀ x, x ∈ s₁.set → x ∈ (TSet.single α).set := fun x hx =>
+      ResUT.CompR.get_ls_imm hCompRG hψ' hσρρl hx
+    obtain ⟨y, hy⟩ := s₁.ne
+    have hmem : α ∈ s₁.set := by
+      have hyα : y = α := by simpa using hsub y hy
+      exact hyα ▸ hy
+    have hstr := hσGstrat l _ hψ'
+    rw [CellUT.inStratum_immOf] at hstr
+    exact Cactus.lt_irrefl _ α (hstr α (by simp) α hmem)
+  -- *"by H6"*: an `imm` cell of `⦇ρ′ ● ρ⁺/ℓ⦈` is one of `ag(ρ)`, one of
+  -- `ag(ρ_v)`, or the borrow at `ℓ`
+  obtain ⟨σρρi, hσρρi⟩ := h6.2.1
+  obtain ⟨τρ, τI, hτρ, hτI, hCompRρ⟩ := BoLo.flat_compR hρi hσρρi
+  obtain ⟨eρ, aρ, heρ, haρ, hcρ⟩ := hτρ
+  obtain rfl : a₁ = aρ := AgWT.functional ha₁ haρ
+  obtain ⟨eI', aI', heI', haI', hcI'⟩ := hτI
+  obtain rfl : (PMap.empty : ResUT BoCa.Loc BoCa.Val K) = eI' :=
+    ExST.functional (ExWT.empty_of_all_imm himmi) heI'
+  obtain rfl : aI' = τI := ResUT.eq_of_comp_empty_left hcI'
+  obtain ⟨ev', av', p', hev', hav', hcp', hagi'⟩ := AgWT.single_imm_inv (χ := ρv) haI'
+  obtain rfl : p = p' :=
+    ResUT.FlatR.functional (ResUT.six33 ⟨exv, av, hexv, hav, hcv⟩)
+      ⟨av', ev', hav', hev', ResUT.CompR.comm hcp'⟩
+  have hF4 : ∀ m ψ, σG.get m = some ψ → ψ.kind = Kind.imm →
+      m = l ∨ (∃ φ, a₁.get m = some φ ∧ φ.kind = Kind.imm ∧ φ.wit = ψ.wit) ∨
+        (∃ φ, av.get m = some φ ∧ φ.kind = Kind.imm ∧ φ.wit = ψ.wit) := by
+    intro m ψ hψ hk
+    obtain ⟨χ₀, hχ₀, hkχ₀, heχ₀, hwχ₀⟩ := ResUT.CompR.get_imm_left hCompRG hψ hk
+    obtain ⟨s₀, hs₀, heta₀⟩ := CellUT.imm_eta hkχ₀
+    have hχ₀' : σρρ.get m = some (CellUT.immOf s₀ χ₀.erase χ₀.wit hs₀) :=
+      hχ₀.trans (congrArg some heta₀)
+    have hupd : σρρi.get m = some (CellUT.immOf s₀ χ₀.erase χ₀.wit hs₀) :=
+      (ResUT.flatAt_iff hσρρi m _).mp
+        ((h6.1.1 m s₀ χ₀.erase χ₀.wit hs₀).mpr ⟨σρρ, hσρρ, hχ₀'⟩)
+    rcases ResUT.CompR.imm_source hCompRρ hupd with ⟨s₂, h₂, hg₂⟩ | ⟨s₃, h₃, hg₃⟩
+    · refine Or.inr (Or.inl ⟨_, ResUT.ag_eq_flat_at_imm heρ hcρ hg₂
+        (CellUT.kind_immOf _ _ _ _), CellUT.kind_immOf _ _ _ _, ?_⟩)
+      rw [CellUT.wit_immOf]; exact hwχ₀
+    · rcases ResUT.CompR.imm_source hagi' hg₃ with ⟨s₄, h₄, hg₄⟩ | ⟨s₅, h₅, hg₅⟩
+      · exact Or.inl (ResUT.single_get_eq_some hg₄).1
+      · refine Or.inr (Or.inr ⟨_, ResUT.ag_eq_flat_at_imm hexv hcv hg₅
+          (CellUT.kind_immOf _ _ _ _), CellUT.kind_immOf _ _ _ _, ?_⟩)
+        rw [CellUT.wit_immOf]; exact hwχ₀
+  -- *"Assume for sake of contradiction that `ℓ′ ∈ dom(ex(ρ_v)_● ● ℓ ↦ own(v))`
+  -- and `ℓ′ ∈ dom(ag(ρ′) ○ ag(ρ⁺/ℓ))`"*
+  have hkey : ∀ m, eW.get m = none ∨ aG.get m = none := by
+    intro m
+    cases hmW : eW.get m with
+    | none => exact Or.inl rfl
+    | some ψW =>
+      cases hmG : aG.get m with
+      | none => exact Or.inr rfl
+      | some ψG =>
+        exfalso
+        rcases AgWT.dom_split haG hσG hmG with
+          ⟨φ, hφ, hkφ⟩ | ⟨m', χc, f, hm', hkχ, hf, hsf⟩
+        · rcases hF4 m φ hφ hkφ with rfl | ⟨φ', hφ', -, -⟩ | ⟨φ', hφ', -, -⟩
+          · exact hF3 φ hφ hkφ
+          · rcases hF1 m with h | h
+            · rw [h] at hmW; simp at hmW
+            · rw [h] at hφ'; simp at hφ'
+          · rcases hF2 m with h | h
+            · rw [h] at hmW; simp at hmW
+            · rw [h] at hφ'; simp at hφ'
+        · have hσGm' : σG.get m' = some χc :=
+            ResUT.CompS.get_right_of_immFree hσGc himmE hm'
+          rcases hF4 m' χc hσGm' hkχ with
+            rfl | ⟨φ', hφ', hkφ', hwφ'⟩ | ⟨φ', hφ', hkφ', hwφ'⟩
+          · exact hF3 χc hσGm' hkχ
+          · obtain ⟨s', hs', heta'⟩ := CellUT.imm_eta hkφ'
+            obtain ⟨ev₀, av₀, p₀, z₀, hev₀, hav₀, hcp₀, hz₀⟩ :=
+              AgWT.flat_imm_wit_le haρ m' s' φ'.erase φ'.wit hs'
+                (hφ'.trans (congrArg some heta'))
+            obtain rfl : f = p₀ :=
+              ResUT.FlatR.functional (by rw [hwφ']; exact hf)
+                ⟨av₀, ev₀, hav₀, hev₀, ResUT.CompR.comm hcp₀⟩
+            rcases hF1 m with h | h
+            · rw [h] at hmW; simp at hmW
+            · rw [((ResUT.Comp.eq_none_iff hz₀ m).mp h).1] at hsf; simp at hsf
+          · obtain ⟨s', hs', heta'⟩ := CellUT.imm_eta hkφ'
+            obtain ⟨ev₀, av₀, p₀, z₀, hev₀, hav₀, hcp₀, hz₀⟩ :=
+              AgWT.flat_imm_wit_le hav m' s' φ'.erase φ'.wit hs'
+                (hφ'.trans (congrArg some heta'))
+            obtain rfl : f = p₀ :=
+              ResUT.FlatR.functional (by rw [hwφ']; exact hf)
+                ⟨av₀, ev₀, hav₀, hev₀, ResUT.CompR.comm hcp₀⟩
+            rcases hF2 m with h | h
+            · rw [h] at hmW; simp at hmW
+            · rw [((ResUT.Comp.eq_none_iff hz₀ m).mp h).1] at hsf; simp at hsf
+  -- 6.37 with `⦇ρ_v ● ℓ ↦ own(v)⦈` defined
+  have hceWaG : ResUT.CompatS eW aG := ResUT.Compat.of_disjoint hkey
+  have hceWA : ResUT.CompatS eW A := ResUT.six37 hceWaG hWc.1 hA
+  -- the third bullet's *"which implies … ▸◂ ℓ ↦ own(v)"*, and then `▸◂ ex(W)_●`
+  have hEl : eG.get l = none := by
+    rcases ResUT.CompatS.disjoint_of_immFree himmE hcι l with h | h
+    · exact h
+    · rw [ResUT.single_get_self] at h; simp at h
+  have hceW : ResUT.CompatS eG eW := ResUT.Compat.of_disjoint (fun m => by
+    by_cases hm : m = l
+    · subst hm; exact Or.inl hEl
+    · rcases ResUT.CompatS.disjoint_of_immFree himmE hcexv m with h | h
+      · exact Or.inl h
+      · exact Or.inr ((ResUT.Comp.eq_none_iff hfc m).mpr ⟨h, ResUT.single_get_ne _ hm⟩))
+  obtain ⟨E, hE⟩ := (ResUT.compS_defined_iff eG eW).mpr hceW
+  have hcEA : ResUT.CompatS E A := ResUT.Compat.of_disjoint (fun m => by
+    rcases ResUT.CompatS.disjoint_of_immFree himmE hcA m with h' | h'
+    · rcases ResUT.CompatS.disjoint_of_immFree himmW hceWA m with h'' | h''
+      · exact Or.inl ((ResUT.Comp.eq_none_iff hE m).mpr ⟨h', h''⟩)
+      · exact Or.inr h''
+    · exact Or.inr h')
+  obtain ⟨σ, hσ⟩ := (ResUT.compS_defined_iff E A).mpr hcEA
+  -- the step-3 presupposition: `ρ′ ● ρ⁺/ℓ ▸◂ ρ_v ● ℓ ↦ own(v)`
+  have hWm : ∀ m, m ≠ l → W.get m = ρv.get m := fun m hm =>
+    ResUT.Comp.get_of_right_none hW (ResUT.single_get_ne _ hm)
+  have hGW : ResUT.CompatS Gr W := by
+    intro m ψ₁ ψ₂ hg₁ hg₂
+    by_cases hm : m = l
+    · subst hm; rw [hGl] at hg₁; simp at hg₁
+    · rw [hWm m hm] at hg₂
+      by_cases hk₂ : ψ₂.kind = Kind.imm
+      · obtain ⟨χ₂, hχ₂, hkχ₂, heχ₂, hwχ₂⟩ := AgWT.get_imm hav hg₂ hk₂
+        by_cases hk₁ : ψ₁.kind = Kind.imm
+        · obtain ⟨χ₁, hχ₁, hkχ₁, heχ₁, hwχ₁⟩ := AgWT.get_imm haG hg₁ hk₁
+          obtain ⟨ξ, hξ⟩ := hA.1 m χ₁ χ₂ hχ₁ hχ₂
+          obtain ⟨-, he₁', hw₁'⟩ := CellUT.CompR.imm_left hξ hkχ₁
+          obtain ⟨-, he₂', hw₂'⟩ := CellUT.CompR.imm_left (CellUT.CompR.comm hξ) hkχ₂
+          exact CellUT.compatS_iff.mpr ⟨hk₁, hk₂,
+            heχ₁.symm.trans (he₁'.symm.trans (he₂'.trans heχ₂)),
+            hwχ₁.symm.trans (hw₁'.symm.trans (hw₂'.trans hwχ₂))⟩
+        · exfalso
+          have hex₁ := ExST.get_of_ne_imm heG hg₁ hk₁
+          rcases ResUT.CompatS.disjoint_of_immFree himmE hcav m with h | h
+          · rw [h] at hex₁; simp at hex₁
+          · rw [h] at hχ₂; simp at hχ₂
+      · exfalso
+        have hex : exv.get m = some ψ₂ := ExST.get_of_ne_imm hexv hg₂ hk₂
+        have heWm : eW.get m = some ψ₂ :=
+          (ResUT.Comp.get_of_right_none hfc (ResUT.single_get_ne _ hm)).trans hex
+        obtain ⟨χ₁, hχ₁, -, -, -⟩ := ResUT.Flat.get hσG hg₁
+        rcases ResUT.CompatS.disjoint_of_immFree himmE hceW m with h | h
+        · rcases hkey m with h' | h'
+          · rw [h'] at heWm; simp at heWm
+          · rw [(ResUT.Comp.eq_none_iff hσGc m).mpr ⟨h, h'⟩] at hχ₁; simp at hχ₁
+        · rw [h] at heWm; simp at heWm
+  obtain ⟨X, hX⟩ := (ResUT.compS_defined_iff Gr W).mpr hGW
+  exact ⟨hGW, X, hX, σ, (ResUT.Flat.split hX).mpr
+    ⟨eG, eW, E, aG, av, A, heG, heW, hE, haG, haW, hA, hσ⟩⟩
+
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+/-!
+## Lemma 6.38 · `[TR]` p. 12 · `proved`
+
+> If (H1) ρ # ρ_v ● ℓ ↦ own(v), (H2) ρ′ # ρ⁺, (H3) @ρ ⊐ α, (H4) @ρ′ ⊐ α, (H5) ρ⁺∣own = ∅, (H6) ρ ● ℓ ↦ imm({α}, v, ρ_v) ↭ ρ′ ● ρ⁺, then (G1) ρ′ ● ρ⁺/ℓ # ρ_v ● ℓ ↦ own(v)
+
+**Printed proof, transcribed.** By Lemma 6.29 with H3, H1 and H6, (H7) `ρ′ ● ρ⁺ = (ρ′ ● ρ⁺)/ℓ ● ℓ ↦ imm({α}, v, ρ_v)`; by H4 and H7, `ρ′ ● ρ⁺ = ρ′ ● ρ⁺/ℓ ● ℓ ↦ imm({α}, v, ρ_v)`.  For G1 it suffices that `⦇ρ′ ● ρ⁺/ℓ ● ρ_v ● ℓ ↦ own(v)⦈` is defined, which by Lemmas 6.18 and 6.20 is Kleene-equal to `ex(ρ′)_● ● ex(ρ⁺/ℓ)_● ● ex(ρ_v)_● ● ℓ ↦ own(v) ● (ag(ρ′) ○ ag(ρ⁺/ℓ) ○ ag(ρ_v))`.  The same reasoning with H2 gives `⦇ρ′ ● ρ⁺/ℓ ● ℓ ↦ imm({α}, v, ρ_v)⦈ = ex(ρ′)_● ● ex(ρ⁺/ℓ)_● ● (ag(ρ′) ○ ag(ρ⁺/ℓ) ○ ℓ ↦ imm({α}, v, ρ_v) ○ ⦇ρ_v⦈_○)`, defined; Lemma 6.35 with H1 makes `⦇ρ_v⦈` defined, Lemma 6.33 gives `⦇ρ_v⦈ = ⦇ρ_v⦈_○`, and Lemma 6.31 rewrites the last factor as `… ○ ex(ρ_v)_● ○ ag(ρ_v)`.  Lemmas 6.30 and 6.36, applied repeatedly, make `ex(ρ′)_● ● ex(ρ⁺/ℓ)_●` compatible with `ag(ρ′) ○ ag(ρ⁺/ℓ) ○ ag(ρ_v)`, with `ex(ρ_v)_●`, and with `ℓ ↦ imm({α}, v, ρ_v)`, hence with `ℓ ↦ own(v)`.  So it suffices that `ex(ρ_v)_● ● ℓ ↦ own(v) ▸◂ (ag(ρ′) ○ ag(ρ⁺/ℓ) ○ ag(ρ_v))`; by Lemma 6.37, with `⦇ρ_v ● ℓ ↦ own(v)⦈` defined by Lemma 6.35 and H1, that `ex(ρ_v)_● ● ℓ ↦ own(v) ▸◂ (ag(ρ′) ○ ag(ρ⁺/ℓ))`; and by Lemma 6.36, whose `imm` part is empty, that the two domains are disjoint.  Suppose `ℓ′` is in both.  By the definition of `ag`, `ℓ′ ∈ dom(ρ′∣imm)`, `ℓ′ ∈ dom(ρ⁺/ℓ∣imm)`, or `ℓ′ ∈ dom(⦇ρ″_v⦈_○)` for an `imm(_, _, ρ″_v)` at some `ℓ″` of `ag(ρ′) ○ ag(ρ⁺/ℓ)`.  In the first two cases H6 gives `ℓ′ ∈ ⦇ρ⦈∣imm`, contradicting H1; in the third, by the same reasoning about update `ℓ″ ∈ dom(⦇ρ⦈∣imm)`, so `ℓ′ ∈ dom(ag(ρ))`, again contradicting H1.
+
+**Lean.** `BoCa.Fig16.Tree.ResUT.six38`, tag `[as printed]`.
+-/
+/-- `[TR]` Lemma 6.38 (p. 12).  `[as printed]` (G4) -/
+theorem ResUT.six38 {K : WCactus} : ResUT.SixThirtyEight (K := K) :=
+  ResUT.sixThirtyEight_of_residual ResUT.sixThirtyEightResidual
+
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+variable {Loc Val : Type} {K : WCactus}
+variable {Loc Val : Type} {K : WCactus}
+/-! `[about ours]` — for Lemma 6.39. -/
+/-- `[about ours: `[TR]` 6.39's second through fourth displays, as a graph — G4]` -/
+theorem ResUT.flat_imm_normal {l : Loc} {s : TSet} {v : Val}
+    {ρ ρv e₁ e₂ EX a₁ a₂ AG Kr iw σ' : ResUT Loc Val K} {hstr : ρv.InStratum s}
+    (hiw : ResUT.CompS ρ (ResUT.single l (CellUT.immOf s v ρv hstr)) iw)
+    (hflat : ResUT.Flat iw σ')
+    (he₁ : ExST ρ e₁) (he₂ : ExST ρv e₂) (hEX : ResUT.CompS e₁ e₂ EX)
+    (ha₁ : AgWT ρ a₁) (ha₂ : AgWT ρv a₂) (hAG : ResUT.CompR a₁ a₂ AG)
+    (hK : ResUT.CompS EX AG Kr) (hnone : Kr.get l = none) (hvv : ResUT.Valid ρv) :
+    ResUT.CompS (ResUT.single l (CellUT.immOf s v ρv hstr)) Kr σ' := by
+  classical
+  obtain ⟨E₁, E₂, E, A₁, A₂, A, hE₁, hE₂, hEc, hA₁, hA₂, hAc, hσ'⟩ :=
+    (ResUT.Flat.split hiw).mp hflat
+  rw [ExST.functional hE₁ he₁] at hEc
+  rw [ExST.functional hE₂ (ExWT.empty_of_all_imm (fun m ψ hg => by
+      obtain ⟨-, rfl⟩ := ResUT.single_get_eq_some hg
+      exact CellUT.kind_immOf _ _ _ _))] at hEc
+  rw [ResUT.CompS.functional hEc (ResUT.comp_empty_right e₁)] at hσ'
+  rw [AgWT.functional hA₁ ha₁] at hAc
+  obtain ⟨ev, av, p, hev, hav, hp, hpA⟩ := AgWT.single_imm_inv hA₂
+  rw [AgWT.functional hav ha₂] at hp
+  -- 6.10 gave `✓ρ_v`; 6.33 identifies `⦇ρ_v⦈_○` with `⦇ρ_v⦈`.
+  obtain ⟨τ, hτ⟩ := hvv
+  obtain ⟨aτ, eτ, haτ, heτ, hcτ⟩ := ResUT.six33 hτ
+  rw [AgWT.functional haτ ha₂, ExRT.functional heτ hev] at hcτ
+  rw [ResUT.CompR.functional hp (ResUT.CompR.comm hcτ)] at hpA
+  obtain ⟨eF, aF, heF, haF, hcF⟩ := hτ
+  rw [ExST.functional heF he₂, AgWT.functional haF ha₂] at hcF
+  -- `⦇ρ_v⦈ = ex(ρ_v)_● ● ag(ρ_v)`, read at `○` by 6.31.
+  have hτR : ResUT.CompR e₂ a₂ τ := ResUT.CompS.toCompR hcF
+  -- Rearrange `ag(ρ) ○ (ℓ↦imm ○ (ex(ρ_v)_○ ○ ag(ρ_v)))` to
+  -- `ex(ρ_v)_● ○ (ℓ↦imm ○ (ag(ρ) ○ ag(ρ_v)))`.
+  obtain ⟨q, hq₁, hq₂⟩ :=
+    (ResUT.CompR.assoc a₁ (ResUT.single l (CellUT.immOf s v ρv hstr)) τ A).mp
+      ⟨A₂, hpA, hAc⟩
+  obtain ⟨S₁, S₂, hS₁, hS₂, hS⟩ :=
+    (ResUT.CompR.exchange₄ e₂ a₂ (ResUT.single l (CellUT.immOf s v ρv hstr)) a₁ A).mp
+      ⟨τ, q, hτR, ResUT.CompR.comm hq₁, ResUT.CompR.comm hq₂⟩
+  rw [ResUT.CompR.functional (ResUT.CompR.comm hS₂) hAG] at hS
+  obtain ⟨M, hM₁, hM₂⟩ :=
+    (ResUT.CompR.assoc e₂ (ResUT.single l (CellUT.immOf s v ρv hstr)) AG A).mpr
+      ⟨S₁, hS₁, hS⟩
+  -- The two silencings, both out of `ℓ ∉ dom(K)`.
+  have hEXl : EX.get l = none := ((ResUT.Comp.eq_none_iff hK l).mp hnone).1
+  have he₂l : e₂.get l = none := ((ResUT.Comp.eq_none_iff hEX l).mp hEXl).2
+  have hAGl : AG.get l = none := ((ResUT.Comp.eq_none_iff hK l).mp hnone).2
+  have hcsAG : ResUT.CompatS (ResUT.single l (CellUT.immOf s v ρv hstr)) AG :=
+    ResUT.Compat.of_disjoint (fun l' => by
+      by_cases hl : l' = l
+      · exact Or.inr (hl ▸ hAGl)
+      · exact Or.inl (ResUT.single_get_ne _ hl))
+  have hcse₂ : ResUT.CompatS e₂ (ResUT.single l (CellUT.immOf s v ρv hstr)) :=
+    ResUT.Compat.of_disjoint (fun l' => by
+      by_cases hl : l' = l
+      · exact Or.inl (hl ▸ he₂l)
+      · exact Or.inr (ResUT.single_get_ne _ hl))
+  have hcse₂AG : ResUT.CompatS e₂ AG :=
+    (ResUT.CompatS.of_compS_left_immFree
+      (ResUT.ImmFree.compS hEX (ExST.immFree he₁) (ExST.immFree he₂)) hEX hK.1).2
+  -- 6.37 lifts the two to `ex(ρ_v)_● ▸◂ (ℓ↦imm ○ (ag(ρ) ○ ag(ρ_v)))`.
+  have hcsM : ResUT.CompatS e₂ M := ResUT.six37 hcse₂ hcse₂AG hM₁
+  have hMS : ResUT.CompS e₂ M A := (ResUT.compR_iff_compS hcsM A).mp hM₂
+  obtain ⟨z, hz₁, hz₂⟩ := (ResUT.CompS.assoc e₁ e₂ M σ').mp ⟨A, hMS, hσ'⟩
+  rw [ResUT.CompS.functional hz₁ hEX] at hz₂
+  have hMS' : ResUT.CompS (ResUT.single l (CellUT.immOf s v ρv hstr)) AG M :=
+    (ResUT.compR_iff_compS hcsAG M).mp hM₁
+  obtain ⟨u, hu₁, hu₂⟩ :=
+    (ResUT.CompS.assoc EX (ResUT.single l (CellUT.immOf s v ρv hstr)) AG σ').mp
+      ⟨M, hMS', hz₂⟩
+  obtain ⟨K', hK', hK'σ⟩ :=
+    (ResUT.CompS.assoc (ResUT.single l (CellUT.immOf s v ρv hstr)) EX AG σ').mpr
+      ⟨u, ResUT.CompS.comm hu₁, hu₂⟩
+  rwa [ResUT.CompS.functional hK' hK] at hK'σ
+
+/-!
+## Lemma 6.39 · `[TR]` p. 13 · `proved`
+
+> If (H1) ρ # ℓ ↦ own(v) ● ρ_v, (H2) ρ′ # ℓ ↦ own(v) ● ρ_v, (H3) ρ ● ℓ ↦ imm(α, v, ρ_v) ↭ ρ′ ● ℓ ↦ imm(α, v, ρ_v) then ρ ● ℓ ↦ own(v) ● ρ_v ↭ ρ′ ● ℓ ↦ own(v) ● ρ_v
+
+**Printed proof, transcribed.** By H1 and H2, `ρ_of = ⦇ρ ● ℓ ↦ own(v) ● ρ_v⦈` and `ρ′_of` are defined; the goals are (G1) `dom(ρ_of∣imm,mut) = dom(ρ′_of∣imm,mut)` and (G2) `ρ_of(ℓ) ∼ ρ′_of(ℓ)` on that domain.  By Lemmas 6.18 and 6.20, `ρ_of = ℓ ↦ own(v) ● ex(ρ)_● ● ex(ρ_v)_● ● (ag(ρ) ○ ag(ρ_v))`, and likewise `ρ′_of`.  By H3, `ρ_if = ⦇ρ ● ℓ ↦ imm(α, v, ρ_v)⦈` and `ρ′_if` are defined with (H4) the same `imm`/`mut` domain, and `ρ_if = ex(ρ)_● ● (ℓ ↦ imm(α, v, ρ_v) ○ ag(ρ) ○ ⦇ρ_v⦈_○)`.  By Lemma 6.10 with H1, `✓ρ_v`; then by Lemma 6.35, `⦇ρ_v⦈ = ⦇ρ_v⦈_○`; rewriting, unfolding `⦇−⦈` and using Lemma 6.31, `ρ_if = ex(ρ)_● ● (ex(ρ_v)_● ○ (ℓ ↦ imm(α, v, ρ_v) ○ (ag(ρ) ○ ag(ρ_v))))`.  `ex(ρ_v)_●` is compatible with `ag(ρ_v)` (from `✓ρ_v`), with `ag(ρ)` and `ag(ρ′)` (from the forms of `ρ_of`, `ρ′_of` with Lemmas 6.30 and 6.36), and with `ℓ ↦ imm(α, v, ρ_v)` (Lemma 6.36); with Lemmas 6.37 and 6.31, `ρ_if = ex(ρ)_● ● ex(ρ_v)_● ● (ℓ ↦ imm(α, v, ρ_v) ○ (ag(ρ) ○ ag(ρ_v)))`.  From `ρ_of`, `ℓ ↦ own(v) ▸◂ ag(ρ) ○ ag(ρ_v)`, so `ℓ ∉ dom(ag(ρ) ○ ag(ρ_v))` (likewise primed), so `ℓ ↦ imm(α, v, ρ_v)` is compatible with it and by Lemma 6.31 `ρ_if = ℓ ↦ imm(α, v, ρ_v) ● ex(ρ)_● ● ex(ρ_v)_● ● (ag(ρ) ○ ag(ρ_v))`, likewise `ρ′_if`.  So `ρ_of` and `ρ_if` differ only by `ℓ ↦ own(v)` against `ℓ ↦ imm(α, v, ρ_v)`, with `ℓ` outside both `ag` parts, and G1 and G2 follow from H4: `dom(ρ_of)∣imm,mut = dom(ρ′_of)∣imm,mut = dom(ρ_if∣imm,mut)/ℓ = dom(ρ′_if∣imm,mut)/ℓ`, `ρ_of∣imm,mut = ρ_if∣imm,mut/ℓ`, `ρ′_of∣imm,mut = ρ′_if∣imm,mut/ℓ`.
+
+**Lean.** `BoCa.Fig16.Tree.ResUT.six39`, tag `[as printed]`.
+
+**Note.** `↭` is the guarded `UpdV`: the print reads H3 as carrying the definedness of `ρ_if` and `ρ′_if`.
+-/
+/-- `[TR]` Lemma 6.39 (p. 13).  `[as printed]` (G4) -/
+theorem ResUT.six39 {l : Loc} {s : TSet} {v : Val}
+    {ρ ρ' ρv ov iw iw' : ResUT Loc Val K} {hstr : ρv.InStratum s}
+    (hov : ResUT.CompS (ResUT.single l (CellUT.ownOf v)) ρv ov)
+    (h1 : ResUT.Hash ρ ov) (h2 : ResUT.Hash ρ' ov)
+    (hi : ResUT.CompS ρ (ResUT.single l (CellUT.immOf s v ρv hstr)) iw)
+    (hi' : ResUT.CompS ρ' (ResUT.single l (CellUT.immOf s v ρv hstr)) iw')
+    (h3 : ResUT.UpdV iw iw') :
+    ∃ w w', ResUT.CompS ρ ov w ∧ ResUT.CompS ρ' ov w' ∧ ResUT.UpdV w w' := by
+  classical
+  obtain ⟨-, w, hw, hvw⟩ := h1
+  obtain ⟨-, w', hw', hvw'⟩ := h2
+  obtain ⟨σof, hfof⟩ := hvw
+  obtain ⟨σof', hfof'⟩ := hvw'
+  obtain ⟨e₁, e₂, EX, a₁, a₂, AG, Kr, he₁, he₂, hEX, ha₁, ha₂, hAG, hK, hKσ⟩ :=
+    ResUT.flat_own_normal hov hw hfof
+  obtain ⟨e₁', e₂', EX', a₁', a₂', AG', Kr', he₁', he₂', hEX', ha₁', ha₂', hAG',
+    hK', hK'σ⟩ := ResUT.flat_own_normal hov hw' hfof'
+  rw [ExST.functional he₂' he₂] at hEX'
+  rw [AgWT.functional ha₂' ha₂] at hAG'
+  -- The silencing step, on each side: `ℓ ↦ own(v) ▸◂ K` gives `ℓ ∉ dom(K)`.
+  have hnone : Kr.get l = none := ResUT.compatS_single_own hKσ.1
+  have hnone' : Kr'.get l = none := ResUT.compatS_single_own hK'σ.1
+  -- *"By lemma 6.10 with H1, `✓ρ_v`."*
+  have hvv : ResUT.Valid ρv :=
+    (ResUT.Valid.split hov (ResUT.Valid.split hw ⟨σof, hfof⟩).2).2
+  obtain ⟨σif, hfif⟩ := h3.2.1
+  obtain ⟨σif', hfif'⟩ := h3.2.2
+  have hiσ : ResUT.CompS (ResUT.single l (CellUT.immOf s v ρv hstr)) Kr σif :=
+    ResUT.flat_imm_normal hi hfif he₁ he₂ hEX ha₁ ha₂ hAG hK hnone hvv
+  have hiσ' : ResUT.CompS (ResUT.single l (CellUT.immOf s v ρv hstr)) Kr' σif' :=
+    ResUT.flat_imm_normal hi' hfif' he₁' he₂ hEX' ha₁' ha₂ hAG' hK' hnone' hvv
+  -- Off `ℓ`, the `own` flattening and the `imm` flattening are the same resource.
+  have hoff : ∀ x : Loc, x ≠ l → σof.get x = σif.get x := fun x hx =>
+    (ResUT.compS_single_get_ne hKσ hx).trans (ResUT.compS_single_get_ne hiσ hx).symm
+  have hoff' : ∀ x : Loc, x ≠ l → σof'.get x = σif'.get x := fun x hx =>
+    (ResUT.compS_single_get_ne hK'σ hx).trans (ResUT.compS_single_get_ne hiσ' hx).symm
+  -- At `ℓ` the `own` flattening carries `own(v)`, which `−|imm,mut` drops.
+  have hatl : ∀ ψ : CellUT Loc Val K, (ResUT.borrowPart σof).get l ≠ some ψ := by
+    intro ψ hb
+    obtain ⟨hg, hk⟩ := ResUT.borrowPart_eq_some.mp hb
+    rw [ResUT.compS_single_get_self hKσ hnone] at hg
+    exact hk (by rw [← Option.some.inj hg]; exact CellUT.kind_ownOf v)
+  have hatl' : ∀ ψ : CellUT Loc Val K, (ResUT.borrowPart σof').get l ≠ some ψ := by
+    intro ψ hb
+    obtain ⟨hg, hk⟩ := ResUT.borrowPart_eq_some.mp hb
+    rw [ResUT.compS_single_get_self hK'σ hnone'] at hg
+    exact hk (by rw [← Option.some.inj hg]; exact CellUT.kind_ownOf v)
+  have hsim : ResUT.SimForm σif σif' := (ResUT.upd_iff_sim hfif hfif').mp h3.1
+  refine ⟨w, w', hw, hw', (ResUT.upd_iff_sim hfof hfof').mpr ⟨fun x => ?_, fun x ψ hb => ?_⟩,
+    ⟨σof, hfof⟩, ⟨σof', hfof'⟩⟩
+  · by_cases hx : x = l
+    · subst hx
+      exact ⟨fun ⟨ψ, hψ⟩ => absurd hψ (hatl ψ), fun ⟨ψ, hψ⟩ => absurd hψ (hatl' ψ)⟩
+    · have hb : ∀ ζ : CellUT Loc Val K, (ResUT.borrowPart σof).get x = some ζ ↔
+          (ResUT.borrowPart σif).get x = some ζ := fun ζ => by
+        rw [ResUT.borrowPart_eq_some, ResUT.borrowPart_eq_some, hoff x hx]
+      have hb' : ∀ ζ : CellUT Loc Val K, (ResUT.borrowPart σof').get x = some ζ ↔
+          (ResUT.borrowPart σif').get x = some ζ := fun ζ => by
+        rw [ResUT.borrowPart_eq_some, ResUT.borrowPart_eq_some, hoff' x hx]
+      exact ⟨fun ⟨ζ, hζ⟩ => ((hsim.1 x).mp ⟨ζ, (hb ζ).mp hζ⟩).imp (fun ζ' h => (hb' ζ').mpr h),
+        fun ⟨ζ, hζ⟩ => ((hsim.1 x).mpr ⟨ζ, (hb' ζ).mp hζ⟩).imp (fun ζ' h => (hb ζ').mpr h)⟩
+  · by_cases hx : x = l
+    · exact absurd hb (hx ▸ hatl ψ)
+    · have hbi : (ResUT.borrowPart σif).get x = some ψ := by
+        rw [ResUT.borrowPart_eq_some, ← hoff x hx, ← ResUT.borrowPart_eq_some]; exact hb
+      obtain ⟨ψ', hψ', hs⟩ := hsim.2 x ψ hbi
+      exact ⟨ψ', (hoff' x hx).trans hψ', hs⟩
+
+end BoCa.Fig16.Tree
+
+end

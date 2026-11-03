@@ -1,0 +1,358 @@
+import Support.Model.Tree.Port.SubDef
+
+/-!
+# The printed source over the tree-stratified carrier
+
+`[spec §62]`. `Support/Model/Subtraction.lean`, read at `CellUT K`, by the printed proofs.
+-/
+
+noncomputable section
+
+/-!
+# Support — Model — Subtraction
+
+`[about ours]`.  Definition 6.3's `⊟`: lifetime-set difference, and `⊟` inhabited, total and a term at `SubKeep`.
+-/
+
+
+
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+variable {Loc Val : Type} {K : WCactus}
+/-- `ᾱ ∖ β̄ ⊆ ᾱ`, so a witness in `Res_ᾱ` is a witness in `Res_{ᾱ ∖ β̄}`. -/
+theorem TSet.diff_inStratum {s t u : TSet} (h : TSet.Diff s t u)
+    {ρ : ResUT Loc Val K} (hρ : ρ.InStratum s) : ρ.InStratum u :=
+  hρ.mono fun x hx => ⟨x, ((h x).mp hx).1, K.refl x⟩
+
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+/-- Whenever the difference is nonempty it is a `TSet`. -/
+theorem TSet.exists_diff {s t : TSet} (h : ¬ TSet.DiffEmpty s t) :
+    ∃ u : TSet, TSet.Diff s t u := by
+  classical
+  have hne : ∃ x, x ∈ s.set ∧ x ∉ t.set :=
+    Classical.byContradiction fun hc =>
+      h (fun x hx => Classical.byContradiction fun ht => hc ⟨x, hx, ht⟩)
+  obtain ⟨x₀, hx₀, ht₀⟩ := hne
+  exact ⟨⟨s.set \ t.set, ⟨x₀, Finset.mem_sdiff.mpr ⟨hx₀, ht₀⟩⟩⟩,
+    fun _ => Finset.mem_sdiff⟩
+
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+variable {Loc Val : Type} {K : WCactus}
+/-- Every `ρ ⊟ ρ′` on the paragraph's reading (§12.58) is one on the bullets'
+reading. -/
+theorem ResUT.SubKeep.toSub {ρ ρ' χ : ResUT Loc Val K} (h : ResUT.SubKeep ρ ρ' χ) :
+    ResUT.Sub ρ ρ' χ := by
+  obtain ⟨ρ'', h1, h2, h3, h4, h5⟩ := h
+  exact ⟨ρ'', h1, h2, fun l hd he => by rw [h3 l hd he]; exact hd, h4, h5⟩
+
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+/-- `ᾱ ∖ β̄` is determined by `ᾱ` and `β̄`. -/
+theorem TSet.Diff.functional {s t u u' : TSet} (h : TSet.Diff s t u)
+    (h' : TSet.Diff s t u') : u = u' :=
+  TSet.ext (Finset.ext fun x => (h x).trans (h' x).symm)
+
+/-- `(ᾱ ∖ β̄) ∪ β̄ = ᾱ` when `β̄ ⊆ ᾱ` — the printed *"removing the lifetimes of
+borrows from `ρ′`, but keeping the lifetimes only in `ρ`"*, read back. -/
+theorem TSet.diff_union {s t u : TSet} (h : TSet.Diff s t u)
+    (ht : t.set ⊆ s.set) : u ∪ t = s := by
+  classical
+  refine TSet.ext (Finset.ext fun x => ⟨fun hx => ?_, fun hx => ?_⟩)
+  · rcases Finset.mem_union.mp hx with hx | hx
+    · exact ((h x).mp hx).1
+    · exact ht hx
+  · by_cases hxt : x ∈ t.set
+    · exact Finset.mem_union_right _ hxt
+    · exact Finset.mem_union_left _ ((h x).mpr ⟨hx, hxt⟩)
+
+/-- `ᾱ ∖ β̄ = ∅` with `β̄ ⊆ ᾱ` says `ᾱ = β̄`. -/
+theorem TSet.eq_of_diffEmpty {s t : TSet} (h : TSet.DiffEmpty s t)
+    (ht : t.set ⊆ s.set) : s = t :=
+  TSet.ext (Finset.ext fun x => ⟨h x, fun hx => ht hx⟩)
+
+end BoCa.Fig16.Tree
+namespace BoCa.Fig16.Tree
+open BoCa.Fig16
+variable {Loc Val : Type} {K : WCactus}
+/-- `ρ|own,mut` at a location, read back. -/
+theorem ResUT.exclPart_eq_some {ρ : ResUT Loc Val K} {l : Loc} {ψ : CellUT Loc Val K} :
+    ρ.exclPart.get l = some ψ ↔ (ρ.get l = some ψ ∧ ψ.kind ≠ Kind.imm) := by
+  rw [show ρ.exclPart = ρ.restrictOn (fun k => !(k == Kind.imm)) from rfl,
+    ResUT.restrictOn_eq_some]
+  constructor
+  · rintro ⟨h1, h2⟩; exact ⟨h1, by simpa using h2⟩
+  · rintro ⟨h1, h2⟩; exact ⟨h1, by simpa using h2⟩
+
+/-- `ρ = ρ|own,mut ● ρ|imm` — a cell's tag is `imm` or it is not. -/
+theorem ResUT.exclPart_restrict_compS (ρ : ResUT Loc Val K) :
+    ResUT.CompS ρ.exclPart (G.restrict CellUT.kind ρ Kind.imm) ρ := by
+  have hcase : ∀ l, (ρ.exclPart.get l = ρ.get l ∧ (G.restrict CellUT.kind ρ Kind.imm).get l = none) ∨
+      (ρ.exclPart.get l = none ∧ (G.restrict CellUT.kind ρ Kind.imm).get l = ρ.get l) := by
+    intro l
+    cases e : ρ.get l with
+    | none =>
+        have h1 : ρ.exclPart.get l = none := by
+          cases f : ρ.exclPart.get l with
+          | none => rfl
+          | some ζ => rw [(ResUT.exclPart_eq_some.mp f).1] at e; exact absurd e (by simp)
+        exact Or.inl ⟨h1, ResUT.restrict_get_none e⟩
+    | some ζ =>
+        by_cases hk : ζ.kind = Kind.imm
+        · have h1 : ρ.exclPart.get l = none := by
+            cases f : ρ.exclPart.get l with
+            | none => rfl
+            | some ξ =>
+                obtain ⟨g1, g2⟩ := ResUT.exclPart_eq_some.mp f
+                rw [e] at g1
+                cases Option.some.inj g1
+                exact absurd hk g2
+          exact Or.inr ⟨h1, ResUT.restrict_get_some e hk⟩
+        · exact Or.inl ⟨ResUT.exclPart_eq_some.mpr ⟨e, hk⟩,
+            ResUT.restrict_get_ne e hk⟩
+  refine ⟨ResUT.Compat.of_disjoint (fun l => ?_), fun l => ?_⟩
+  · rcases hcase l with ⟨-, h⟩ | ⟨h, -⟩
+    · exact Or.inr h
+    · exact Or.inl h
+  · show OptCompT CellUT.CompS (ρ.exclPart.get l) ((G.restrict CellUT.kind ρ Kind.imm).get l) (ρ.get l)
+    rcases hcase l with ⟨h₁, h₂⟩ | ⟨h₁, h₂⟩ <;> rw [h₁, h₂] <;>
+      cases ρ.get l with
+      | none => rfl
+      | some ζ => rfl
+
+open Classical in
+/-- `ψ` with the lifetimes of `t̄` removed.
+`[about ours: `[TR]` Definition 6.3's fourth bullet, as a function on cells]` -/
+noncomputable def CellUT.subLS (ζ : CellUT Loc Val K) (t : TSet) : Option (CellUT Loc Val K) :=
+  match ζ with
+  | .imm i =>
+      if h : TSet.DiffEmpty i.ls t then none
+      else some (CellUT.immOf (TSet.exists_diff h).choose i.v i.res
+        (TSet.diff_inStratum (TSet.exists_diff h).choose_spec i.ρ.toU_inStratum))
+  | _ => none
+
+open Classical in
+theorem CellUT.subLS_of_diffEmpty {s t : TSet} {v : Val} {χ : ResUT Loc Val K}
+    {h : χ.InStratum s} (hd : TSet.DiffEmpty s t) :
+    (CellUT.immOf s v χ h).subLS t = none := by
+  show (if _ : TSet.DiffEmpty s t then none else _) = none
+  rw [dif_pos hd]
+
+open Classical in
+theorem CellUT.subLS_of_diff {s t u : TSet} {v : Val} {χ : ResUT Loc Val K}
+    {h : χ.InStratum s} (hu : TSet.Diff s t u) (hd : ¬ TSet.DiffEmpty s t) :
+    ∃ hu' : χ.InStratum u,
+      (CellUT.immOf s v χ h).subLS t = some (CellUT.immOf u v χ hu') := by
+  refine ⟨TSet.diff_inStratum hu h, ?_⟩
+  show (if _ : TSet.DiffEmpty s t then none else _) = _
+  rw [dif_neg hd]
+  refine congrArg some ?_
+  refine CellUT.immOf_congr (TSet.Diff.functional (TSet.exists_diff hd).choose_spec hu)
+    rfl ?_ _ _
+  exact CellUT.wit_immOf s v χ h
+
+/-- `ρ″` — Definition 6.3's witness, pointwise: `ρ|imm` off `dom(ρ′)`, and on it
+the cell with `ρ′`'s lifetimes removed.
+`[about ours: `[TR]` Definition 6.3's `ρ″`, as a construction]` -/
+noncomputable def ResUT.subWitness (ρ ρ' : ResUT Loc Val K) : ResUT Loc Val K where
+  get := fun l =>
+    ((G.restrict CellUT.kind ρ Kind.imm).get l).bind fun ζ =>
+      match (ρ'.get l).bind CellUT.lsOfI with
+      | none => some ζ
+      | some t => ζ.subLS t
+  finite := by
+    obtain ⟨d, hd⟩ := ρ.finite
+    refine ⟨d, fun l hl => hd l (fun e => hl ?_)⟩
+    show ((G.restrict CellUT.kind ρ Kind.imm).get l).bind _ = none
+    rw [ResUT.restrict_get_none e]
+    rfl
+
+theorem ResUT.subWitness_of_none {ρ ρ' : ResUT Loc Val K} {l : Loc}
+    (h : ρ'.get l = none) :
+    (ρ.subWitness ρ').get l = (G.restrict CellUT.kind ρ Kind.imm).get l := by
+  show ((G.restrict CellUT.kind ρ Kind.imm).get l).bind _ = _
+  rw [h]
+  cases (G.restrict CellUT.kind ρ Kind.imm).get l with
+  | none => rfl
+  | some ζ => rfl
+
+theorem ResUT.subWitness_of_imm {ρ ρ' : ResUT Loc Val K} {l : Loc} {s t : TSet}
+    {v : Val} {χ : ResUT Loc Val K} {h : χ.InStratum s} {ξ : CellUT Loc Val K}
+    (hρ : (G.restrict CellUT.kind ρ Kind.imm).get l = some (CellUT.immOf s v χ h))
+    (hρ' : ρ'.get l = some ξ) (hls : CellUT.lsOfI ξ = some t) :
+    (ρ.subWitness ρ').get l = (CellUT.immOf s v χ h).subLS t := by
+  show ((G.restrict CellUT.kind ρ Kind.imm).get l).bind _ = _
+  rw [hρ, hρ']
+  show (match CellUT.lsOfI ξ with | none => _ | some t => _) = _
+  rw [hls]
+
+theorem ResUT.subWitness_dom {ρ ρ' : ResUT Loc Val K} {l : Loc} {ζ : CellUT Loc Val K}
+    (h : (ρ.subWitness ρ').get l = some ζ) :
+    ∃ φ, (G.restrict CellUT.kind ρ Kind.imm).get l = some φ := by
+  cases e : (G.restrict CellUT.kind ρ Kind.imm).get l with
+  | some φ => exact ⟨φ, rfl⟩
+  | none =>
+      exfalso
+      have : (ρ.subWitness ρ').get l = none := by
+        show ((G.restrict CellUT.kind ρ Kind.imm).get l).bind _ = none
+        rw [e]; rfl
+      rw [this] at h; exact absurd h (by simp)
+
+/-- If `ρ′` carries `imm` cells only and, at every location it covers, `ρ`
+carries an `imm` cell over the same value and witness whose lifetime set contains
+`ρ′`'s, then `ρ ⊟ ρ′` is defined and composes with `ρ′` back to `ρ`.
+`[about ours: `[TR]` Definition 6.3 inhabited at a general subtrahend; `⊟` and
+`●` appear as their graphs (G4)]` -/
+theorem ResUT.sub_of_le {ρ ρ' : ResUT Loc Val K}
+    (hexcl : ρ'.exclPart = PMap.empty)
+    (hle : ∀ (l : Loc) (s' : TSet) (v : Val) (χ : ResUT Loc Val K)
+        (h' : χ.InStratum s'), ρ'.get l = some (CellUT.immOf s' v χ h') →
+        ∃ (s : TSet) (h : χ.InStratum s),
+          ρ.get l = some (CellUT.immOf s v χ h) ∧ s'.set ⊆ s.set) :
+    ∃ ψ, ResUT.SubKeep ρ ρ' ψ ∧ ResUT.CompS ψ ρ' ρ := by
+  classical
+  have hpair : ∀ l ξ, ρ'.get l = some ξ →
+      ∃ (s' s : TSet) (v : Val) (χ : ResUT Loc Val K)
+        (h' : χ.InStratum s') (h : χ.InStratum s),
+        ρ'.get l = some (CellUT.immOf s' v χ h') ∧
+        ρ.get l = some (CellUT.immOf s v χ h) ∧
+        CellUT.lsOfI ξ = some s' ∧ (s'.set ⊆ s.set) := by
+    intro l ξ hξ
+    have hk : ξ.kind = Kind.imm := by
+      by_contra hk
+      have hx : ρ'.exclPart.get l = some ξ := ResUT.exclPart_eq_some.mpr ⟨hξ, hk⟩
+      rw [hexcl] at hx; exact absurd hx (by simp)
+    obtain ⟨s', hs', heta⟩ := CellUT.imm_eta hk
+    obtain ⟨s, h, hρ, hsub⟩ := hle l s' ξ.erase ξ.wit hs' (hξ.trans (congrArg some heta))
+    exact ⟨s', s, ξ.erase, ξ.wit, hs', h, hξ.trans (congrArg some heta), hρ,
+      by rw [heta]; rfl, hsub⟩
+  have hloc : ∀ l, OptCompT CellUT.CompS ((ρ.subWitness ρ').get l) (ρ'.get l)
+      ((G.restrict CellUT.kind ρ Kind.imm).get l) := by
+    intro l
+    cases hξ : ρ'.get l with
+    | none =>
+        rw [ResUT.subWitness_of_none hξ]
+        cases (G.restrict CellUT.kind ρ Kind.imm).get l with
+        | none => rfl
+        | some ζ => rfl
+    | some ξ =>
+        obtain ⟨s', s, v, χ, h', h, hρ'l, hρl, hlsξ, hsub⟩ := hpair l ξ hξ
+        have hρi : (G.restrict CellUT.kind ρ Kind.imm).get l = some (CellUT.immOf s v χ h) :=
+          ResUT.restrict_get_some hρl (CellUT.kind_immOf _ _ _ _)
+        have hξeq : ξ = CellUT.immOf s' v χ h' := Option.some.inj (hξ.symm.trans hρ'l)
+        by_cases hd : TSet.DiffEmpty s s'
+        · have hss : s = s' := TSet.eq_of_diffEmpty hd hsub
+          rw [ResUT.subWitness_of_imm hρi hξ hlsξ, CellUT.subLS_of_diffEmpty hd, hρi,
+            hξeq]
+          show some (CellUT.immOf s v χ h) = some (CellUT.immOf s' v χ h')
+          exact congrArg some (CellUT.immOf_congr hss rfl rfl h h')
+        · obtain ⟨u, hu⟩ := TSet.exists_diff hd
+          obtain ⟨hu', hsub'⟩ := CellUT.subLS_of_diff (v := v) (χ := χ) (h := h) hu hd
+          rw [ResUT.subWitness_of_imm hρi hξ hlsξ, hsub', hρi, hξeq]
+          refine ⟨CellUT.immOf s v χ h, rfl, u, s', v, χ, hu', h',
+            (ResUT.inStratum_union_iff.mpr ⟨hu', h'⟩), rfl, rfl, ?_⟩
+          exact CellUT.immOf_congr (TSet.diff_union hu hsub).symm rfl rfl h _
+  have hLe : ResUT.CompS (ρ.subWitness ρ') ρ' (G.restrict CellUT.kind ρ Kind.imm) := by
+    refine ⟨fun l ζ ξ e₁ e₂ => ?_, hloc⟩
+    have hp := hloc l
+    rw [e₁, e₂] at hp
+    obtain ⟨ω, -, hC⟩ := hp
+    exact CellUT.CompS.compat hC
+  have hdom : ∀ m, (G.restrict CellUT.kind ρ Kind.imm).get m ≠ none → ρ'.get m = none →
+      (ρ.subWitness ρ').get m = (G.restrict CellUT.kind ρ Kind.imm).get m :=
+    fun m _ h₂ => ResUT.subWitness_of_none h₂
+  have hclause : ResUT.SubClause ρ ρ' (ρ.subWitness ρ') := by
+    intro m s s' w ρi h h' e e'
+    have hρi : (G.restrict CellUT.kind ρ Kind.imm).get m = some (CellUT.immOf s w ρi h) :=
+      ResUT.restrict_get_some e (CellUT.kind_immOf _ _ _ _)
+    have hls : CellUT.lsOfI (CellUT.immOf s' w ρi h') = some s' := rfl
+    refine ⟨fun hd => ?_, fun u hu hd => ?_⟩
+    · rw [ResUT.subWitness_of_imm hρi e' hls]; exact CellUT.subLS_of_diffEmpty hd
+    · obtain ⟨hu', hsub'⟩ := CellUT.subLS_of_diff (v := w) (χ := ρi) (h := h) hu hd
+      exact ⟨hu', by rw [ResUT.subWitness_of_imm hρi e' hls, hsub']⟩
+  have hsplit := ResUT.exclPart_restrict_compS ρ
+  have hdisj2 : ResUT.CompatS ρ.exclPart (ρ.subWitness ρ') :=
+    ResUT.Compat.of_disjoint (fun m => by
+      cases f : ρ.exclPart.get m with
+      | none => exact Or.inl rfl
+      | some ζ =>
+          refine Or.inr ?_
+          cases g : (ρ.subWitness ρ').get m with
+          | none => rfl
+          | some ξ =>
+              obtain ⟨φ, hφ⟩ := ResUT.subWitness_dom g
+              obtain ⟨g1, g2⟩ := ResUT.exclPart_eq_some.mp f
+              obtain ⟨k1, k2⟩ := ResUT.restrict_eq_some.mp hφ
+              rw [g1] at k1
+              cases Option.some.inj k1
+              exact absurd k2 g2)
+  obtain ⟨ψ, hψ⟩ := (ResUT.compS_defined_iff _ _).mpr hdisj2
+  refine ⟨ψ, ⟨ρ.subWitness ρ', hexcl, ⟨_, hLe⟩, hdom, hclause, hψ⟩, ?_⟩
+  obtain ⟨y, hy, hyc⟩ :=
+    (ResUT.CompS.assoc ρ.exclPart (ρ.subWitness ρ') ρ' ρ).mp ⟨_, hLe, hsplit⟩
+  rwa [ResUT.CompS.functional hy hψ] at hyc
+
+/-- `⊟` is single-valued on the paragraph's reading, under `ResUT.sub_of_le`'s
+hypothesis (which `[TR]` 6.52's H1 establishes).
+`[about ours]` -/
+theorem ResUT.SubKeep.functional {ρ ρ' χ χ' : ResUT Loc Val K}
+    (hle : ∀ (l : Loc) (s' : TSet) (v : Val) (w : ResUT Loc Val K)
+        (h' : w.InStratum s'), ρ'.get l = some (CellUT.immOf s' v w h') →
+        ∃ (s : TSet) (h : w.InStratum s),
+          ρ.get l = some (CellUT.immOf s v w h) ∧ s'.set ⊆ s.set)
+    (h₁ : ResUT.SubKeep ρ ρ' χ) (h₂ : ResUT.SubKeep ρ ρ' χ') : χ = χ' := by
+  classical
+  obtain ⟨a, ha1, ha2, ha3, ha4, ha5⟩ := h₁
+  obtain ⟨b, hb1, hb2, hb3, hb4, hb5⟩ := h₂
+  have hnone : ∀ (c : ResUT Loc Val K), ResUT.Le c (G.restrict CellUT.kind ρ Kind.imm) →
+      ∀ l, (G.restrict CellUT.kind ρ Kind.imm).get l = none → c.get l = none := by
+    rintro c ⟨τ, hτ⟩ l hl
+    exact ((ResUT.Comp.eq_none_iff hτ l).mp hl).1
+  have hab : a = b := by
+    refine PMap.ext fun l => ?_
+    cases hi : (G.restrict CellUT.kind ρ Kind.imm).get l with
+    | none => rw [hnone a ha2 l hi, hnone b hb2 l hi]
+    | some φ =>
+        have hine : (G.restrict CellUT.kind ρ Kind.imm).get l ≠ none := by rw [hi]; simp
+        cases hξ : ρ'.get l with
+        | none => rw [ha3 l hine hξ, hb3 l hine hξ]
+        | some ξ =>
+            have hk : ξ.kind = Kind.imm := by
+              by_contra hk
+              have hx : ρ'.exclPart.get l = some ξ :=
+                ResUT.exclPart_eq_some.mpr ⟨hξ, hk⟩
+              rw [ha1] at hx; exact absurd hx (by simp)
+            obtain ⟨s', hs', heta⟩ := CellUT.imm_eta hk
+            obtain ⟨s, h, hρl, hsub⟩ :=
+              hle l s' ξ.erase ξ.wit hs' (hξ.trans (congrArg some heta))
+            have hρ'l : ρ'.get l = some (CellUT.immOf s' ξ.erase ξ.wit hs') :=
+              hξ.trans (congrArg some heta)
+            have hA := ha4 l s s' ξ.erase ξ.wit h hs' hρl hρ'l
+            have hB := hb4 l s s' ξ.erase ξ.wit h hs' hρl hρ'l
+            by_cases hd : TSet.DiffEmpty s s'
+            · rw [hA.1 hd, hB.1 hd]
+            · obtain ⟨u, hu⟩ := TSet.exists_diff hd
+              obtain ⟨huA, hgA⟩ := hA.2 u hu hd
+              obtain ⟨huB, hgB⟩ := hB.2 u hu hd
+              rw [hgA, hgB]
+  exact ResUT.CompS.functional ha5 (hab ▸ hb5)
+
+/-- `[TR]` 6.52's `ρ = (ρ ⊟ ρ′) ● ρ′` holds of every `χ` that `ResUT.SubKeep`
+admits.
+`[about ours: `[TR]` 6.52's equation at any `ResUT.SubKeep`]` -/
+theorem ResUT.SubKeep.compS {ρ ρ' χ : ResUT Loc Val K}
+    (hle : ∀ (l : Loc) (s' : TSet) (v : Val) (w : ResUT Loc Val K)
+        (h' : w.InStratum s'), ρ'.get l = some (CellUT.immOf s' v w h') →
+        ∃ (s : TSet) (h : w.InStratum s),
+          ρ.get l = some (CellUT.immOf s v w h) ∧ s'.set ⊆ s.set)
+    (h : ResUT.SubKeep ρ ρ' χ) : ResUT.CompS χ ρ' ρ := by
+  obtain ⟨ψ, hψ, hcomp⟩ := ResUT.sub_of_le h.choose_spec.1 hle
+  rwa [ResUT.SubKeep.functional hle h hψ]
+
+end BoCa.Fig16.Tree
+
+end
