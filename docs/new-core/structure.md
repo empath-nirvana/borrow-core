@@ -27,9 +27,9 @@ Done means that theorem. Passing test programs doesn't count.
 | Canonical images (`TWNC`, `TemplAt`, `TemplDAt`) | shared reborrows (root and deep) can't disagree; Core's results over them (`Core.C`, not `Core.Stdio`) | `TWNC`, `CanonDeep`, `CoreC` |
 | `extF` + `LinDisj`/`DLinDisj`/`EscEx`, and `ext_extF` | where κ may resume; no restriction relative to Core's `Ext` | `ExtF`, `LinDisj`, `ExtExtF` |
 | Same-task frames across stops | `mut`/`imm` lend, reborrow, deep reborrow, Anti-Frame, cancel/raise variants | `StopFrameN`, `IStopN`, `RebAcrossC`, `RebStopD`, `AntiStopN` |
-| Capture as its own operation (`crwpG`/`cerwp`) | owned records per computation, no garbage, scoped join (one child, a fixed order of events) | `Capture*` |
+| Capture as its own operation (`crwpG`/`cerwp`) | owned records per computation, no garbage, scoped join (the rules over any body; the programs `CrossProg`/`CrossProgM` with one child and a fixed order of events) | `Capture*`, `CrossProg*` |
 | The tree order, the antichain carrier, re-reading | §4 | `Tree/` |
-| The resume condition at every type | `joinFd_of_branch`, `TWNC.noOwnUnder` | `Tree/JoinFd`, `Tree/NoOwnUnder` |
+| The resume condition at every type, from the branch hypotheses (`hbr`, `hnα`) | `joinFd_of_branch`, `TWNC.noOwnUnder` | `Tree/JoinFd`, `Tree/NoOwnUnder` |
 
 Stated but not yet used by any proof: `CactusInv` and its preservation lemmas (§5).
 
@@ -98,7 +98,8 @@ instances of these operations. A proof that goes around the invariant is not the
 
 Status: `CactusInv` is stated with `cactus_step`, `cactus_move`, `joinReady_fd`, and not yet used.
 Over the tree world, `CactusInvT` is kept by step, growth and move, and `cerwpT_adequacy` is derived
-from it, with no programs. Open: preservation at spawn and join; adequacy from preservation at the
+through `cactusT_step` at one branch (the branch clauses and spawn, join and move unused), with no
+programs. Open: preservation at spawn and join; adequacy from preservation at the
 relation the typing rules use; the frame rules as instances of capture (condition 20).
 
 Threads: the invariant is per computation. The two dependencies on sequential scheduling (a frame
@@ -113,17 +114,20 @@ children end). They reach the typing rules as local facts, or are carried by the
 - **Operation signatures:** qualifier (`lin` / `cancel` / `unr`), what payload and answer own,
   and their lifetimes relative to live borrows (conditions 3 and 4; not derived).
 - **The resume condition from the branch invariant.** When a lend ends in a resumed segment,
-  nothing outside the segment may hold its location. At borrow types the tree order supplies it
-  (`fdFromLifetimeTypesT`). Types alone do not: not in a single chain (`not_fdFromLifetimeTypes`),
-  and not at closure types, which name no lifetime (`not_fdFromThunkTypesT`). The branch invariant
-  supplies it at every type (`joinFd_of_branch`, with `TWNC.noOwnUnder`).
+  nothing outside the segment may hold its location. At the type `Imm 'r 1` the tree order
+  supplies it (`fdFromLifetimeTypesT`). Types alone do not: not at `Imm 'r 1` in a single chain
+  (`not_fdFromLifetimeTypes`), and not at closure types, which name no lifetime
+  (`not_fdFromThunkTypesT`). At every type it is reduced to the branch hypotheses
+  (`joinFd_of_branch`, with `TWNC.noOwnUnder`); over the tree world it holds at a join
+  (`fdEsc_at_join`), and that other branches' steps keep it is open (condition 23).
 - **Scoped spawn.** A lend shared across tasks ends only at a join. A branch resumed from a join
   asks that no other branch's flattening hold the joined location (`JoinReady`), which gives the
   resumer's frame condition (`joinFd`, `joinReady_fd`); it holds once every branch that held a
   borrow of the location has finished or been cancelled and handed its borrows to the joiner.
-- **Unrestricted operations:** excluded while a borrow or owned resource is live, because the
-  continuation share of an unrestricted operation owns nothing and a live lend folds an exclusive
-  cell into it (`unr_share_no_own`). Multi-shot continuations over duplicable state are a
+- **Unrestricted operations:** excluded while a borrow or owned resource is live, because a live
+  lend folds an exclusive cell into the continuation's share, and an unrestricted continuation
+  resumed twice would lend twice (argued); its share owning nothing is a clause of the share's
+  definition (`contShareN`). Multi-shot continuations over duplicable state are a
   hypothesis, not a rule.
 
 Each condition in `conditions.md` gets a row: which typing rule supplies it, or which side

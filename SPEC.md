@@ -10202,7 +10202,9 @@ Linear resources meeting non-local exits and suspensions broke the language (#76
 
 The cause is structural. Core's lifetimes form a single chain and its frames nest last-in-first-out.
 A stored continuation, resumed later under frames its handler opened in the meantime, makes the
-program's lends nest as a tree (#770: `resume_frame_short`, `not_fdFromLifetimeTypes`).
+program's lends nest as a tree (argued). #770's evidence is two configurations at typed worlds
+where the single chain's reading fails (`resume_frame_short`, `not_fdFromLifetimeTypes`); neither
+is shown reachable from a program.
 
 ### The target theorem
 
@@ -10265,8 +10267,9 @@ re-choosing the image, worlds by invariants) was refuted (`not_rebReentryAgreeN`
 `not_rebRelabelAgreeN`, `not_witSwapIWN`).
 
 Every result of the generated copy of Core builds over canonical worlds (`canon-core` branch,
-namespace `Core.C`): `fundamentalC`, `adequacyC`, and the demonic, pin, `Div` runtime and
-cancel-runs results. The two places the library chooses a reborrow's image are the only proofs
+namespace `Core.C`). The content is `C.fundamentalC` at `TWNC`; `C.adequacyC` re-derives the
+library's statement from it. The demonic, pin, `Div` runtime and cancel-runs results build there
+too. The two places the library chooses a reborrow's image are the only proofs
 written by hand. `Core.Stdio` is not covered. *Open*: canonical images over the tree carrier.
 
 ### Effectful destructors (#775)
@@ -10440,12 +10443,15 @@ A step-indexed linear weakest precondition with the following parts:
 Evidence: `progStore_orDiverges`; borrows live across stops for `mut`/`imm` lends, reborrows,
 deep reborrows, and the Anti-Frame (`erwp_M_frame`, `erwp_I_frame`, `erwp_reborrow(Deep)`,
 `erwp_M_antiFrame`); a handler that lends its own cell and resumes κ inside it
-(`HandlerLendProg`); cross-task scopes with one child and a fixed order of events (`cerwp_scope`,
-`cerwp_scopeM`). `CactusInv` (`reb-canon`) is stated, with `cactus_step`, `cactus_move` and
+(`HandlerLendProg`); cross-task scopes (`cerwp_scope`, `cerwp_scopeM`, which hold over any body),
+tested by programs with one child and a fixed order of events (`CrossProg`, `CrossProgM`).
+`CactusInv` (`reb-canon`) is stated, with `cactus_step`, `cactus_move` and
 `joinReady_fd`, and not yet used: the cross-task programs are proved without it. Over the tree
 world (`tree-wp`), `CactusInvT` is kept by a step, by tree growth and by moving a part between
-branches (`cactusT_step`, `cactusT_extend`, `cactusT_move`), and `cerwpT_adequacy` is derived from
-it; no program is proved there yet, and that world carries no frame records or canonical images.
+branches (`cactusT_step`, `cactusT_extend`, `cactusT_move`). `cerwpT_adequacy` is derived through
+`cactusT_step` at one branch; the branch clauses (`Apart`, points) and spawn, join and move are
+not used. No program is proved there yet, and that world carries no frame records or canonical
+images.
 
 *Open*:
 - adequacy derived from invariant preservation, at the relation the typing rules use;
@@ -10457,8 +10463,10 @@ it; no program is proved there yet, and that world carries no frame records or c
 ### Semantic types read at the tree
 
 The relation's types are read at the current tree and are monotone along its extension. This is
-proved for `1`, `+`, `Imm`, `Mut`, `ref`, `[a]` (box) and thunks, each from its components'
-(`kmono_unit`, `kmono_sum`, `kmono_imm`, `kmono_mut`, `kmono_ref`, `kmono_box`, `kmono_thunk`).
+proved for `1`, `+`, `Imm`, `ref` and `[a]` (box), each from its components' (`kmono_unit`,
+`kmono_sum`, `kmono_imm`, `kmono_ref`, `kmono_box`). `kmono_mut` and `kmono_thunk` hold for
+every `τ` (for thunks, every computation predicate) by the definitions of `vMut` and `vThunk`:
+they are not results about the contents of a `mut` cell or a thunk.
 A `mut` cell's invariant is its store type, re-read when the tree grows (`reread`), not a fixed
 predicate. Carried unchanged, a cell leaves `Mut`'s meaning (`trU_not_kmono`). Re-read, a stored
 task may write the handler's newer borrow into a cell it made before the graft (for example
@@ -10472,9 +10480,10 @@ location against a combined `mut` cell.
 ### Typing: suspension, scoped spawn, join
 
 - **Operations** carry their qualifier (`lin`, `cancel`, `unr`) and what payload and answer own.
-  The continuation share of an unrestricted operation (one that may resume more than once) owns
-  nothing (`unr_share_no_own`), and a lend live across a stop puts the lender's exclusive cell in
-  that share. So an unrestricted operation is excluded while a borrow or owned resource is live.
+  A lend live across a stop puts the lender's exclusive cell in the continuation's share. An
+  unrestricted operation (one that may resume more than once) resumed twice would lend twice
+  (argued), so its share owns nothing, a clause of the share's definition (`contShareN`), and an
+  unrestricted operation is excluded while a borrow or owned resource is live.
   Multi-shot continuations over duplicable state are a hypothesis, not a rule.
 - **Lends shared across tasks end only at a join**: scoped spawn. A branch resumed from a join
   asks that no other branch's flattening hold the joined location (`JoinReady`), which gives the
@@ -10482,11 +10491,18 @@ location against a combined `mut` cell.
   or cancelling every branch that held a borrow of the location and handing their borrows to the
   joiner, which is what a join does.
 - **The resume condition** (nothing outside a resumed segment holds a location whose lend it
-  ends) holds at borrow types in the tree (`fdFromLifetimeTypesT`) and at every type from the
-  branch invariant (`joinFd_of_branch`; its ownership premise is an invariant of canonical-image
-  worlds, `TWNC.noOwnUnder`).
-- Lifetimes on continuation and task types alone do not supply it: not in a single chain
-  (`not_fdFromLifetimeTypes`), and not at closure types in the tree (`not_fdFromThunkTypesT`).
+  ends) holds at the type `Imm 'r 1` in the tree (`fdFromLifetimeTypesT`). At every type it is
+  reduced to the branch hypotheses (`hbr`, `hnα`: the others' flattening on a branch not inside
+  the frame's lifetime) by `joinFd_of_branch`, whose ownership premise is an invariant of
+  canonical-image worlds (`TWNC.noOwnUnder`). Over the tree world (`tree-inv`), the condition at
+  the escrow's exclusive locations holds at a join, from the cactus invariant and the other
+  branches' points (`fdEsc_at_join`, with `twnt_invHolds` and `escBeneathT`). That other
+  branches' steps keep it is open, and at the current relation it fails: `twp`'s end condition
+  does not ask the printed `↭`, and a step can end holding a copy of the frame's lent cell
+  (`not_stepKeepsFdEsc`, `copy_config`).
+- Lifetimes on continuation and task types alone do not supply it: not at `Imm 'r 1` in a single
+  chain (`not_fdFromLifetimeTypes`), and not at closure types in the tree
+  (`not_fdFromThunkTypesT`).
 - *Open*: the typing rules and their compatibility lemmas.
 
 ### Not claimed
