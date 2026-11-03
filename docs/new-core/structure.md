@@ -77,8 +77,9 @@ A valid world stays valid, carried, across a graft, with no renaming.
 type read at the current tree, re-read when the tree grows (`reread`), not a fixed predicate:
 carried unchanged, a cell leaves `Mut`'s meaning (`trU_not_kmono`). Store types are syntactic
 codes read at the tree; the store typing grows at allocation and a location keeps its type
-(condition 16). The relation's value types (`STy`, `Core/TreeSem.lean`) are downward closed and
-monotone along the tree for every former but continuation and task types (#789); the computation
+(condition 16). The relation's value types (`STy`, `Core/TreeSem.lean`) read the record list and
+are downward closed and monotone along the tree and `KeepRel` for every former, continuation and
+task types included (`Core/TreeSemK.lean`: a captured `κ` is a value of its type); the computation
 types (`SCmp`, `Core/TreeSemC.lean`) are downward closed and reach values under `U`
 (`docs/new-core/scope-782.md`).
 
@@ -142,8 +143,8 @@ condition Core lacks.
 Over the single relation:
 1. `Row.tabN`, then 𝒱/𝒞 for every type: Imm, Mut (`vMut`), boxes, lifetimes, thunks
    (`vThunk`/`Covers`), μ, ν, ∀, type variables, families, opaque types, κ and task types. All
-   downward closed and monotone along the tree. Done at the tree for every former but κ and task
-   types (#789): `STy`, `SCmp` (`Core/TreeSem.lean`, `Core/TreeSemC.lean`).
+   downward closed and monotone along the tree. Done at the tree for every former: `STy`, `SCmp`,
+   κ and task types (`Core/TreeSem.lean`, `Core/TreeSemC.lean`, `Core/TreeSemK.lean`).
 2. `SemJ`, then compatibility for every `CDerives` rule. The new rules are lend/reborrow/Anti-Frame
    across stops, spawn/join, `[let-dtor]`, and `[handle]` without `hdv`.
 3. Adequacy to `OrDiverges` via §5.

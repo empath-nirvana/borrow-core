@@ -10468,7 +10468,8 @@ re-read there and the start and end related by row 5.27's `↭` masked at the ru
 changes at a segment's start (`twp_extend`, `twp_update`), and row 5.27's `mut` clause at every end
 (`endT_inv`). `cerwpT` adds operations: a stop at a non-abortive entry of the table leaves a
 continuation share (`contShareT`), a Kripke wand resumed at any extension and any list keeping
-the records it reads (`KeepRel`, `contShareT_resume`). `CactusInvT` is kept by a step, by tree growth, by moving a part
+the re-readings of the stop list's records the share reads (`KeepRel`, `contShareT_resume`; the
+whole-list condition with `extFT` against it implies it, `contShareT_resume_ext`). `CactusInvT` is kept by a step, by tree growth, by moving a part
 between branches, by spawn and by join (`cactusT_step`, `cactusT_extend`, `cactusT_move`,
 `cactusT_spawn`, `cactusT_join`). Proved at one branch (`Core/TreeHeadlines.lean`):
 - **adequacy** (`topAdequacyT`, `cerwpT_adequacy`): a closed program at `cerwpT` at the empty table,
@@ -10662,8 +10663,10 @@ layers (`docs/new-core/scope-782.md`):
   re-typing that agrees on the locations it holds a `mut` cell at (`interp_retype`,
   `RR.exists_retype`; `Support/Model/Tree/Reread.lean`, `World/Codes.lean`).
 - **The relation's value types** (`STy`, `Core/TreeSem.lean`) are step-indexed predicates at the
-  tree world, each downward closed in the index and monotone along world extension, on the
-  re-reading. Every former is one, each law proved from the components': codes, `1`, `0`, `+`,
+  tree world and the record list, each downward closed in the index and monotone along world
+  extension, on the re-reading, at every list keeping the re-readings of the records of the old
+  list the resource reads (`KeepRel`: records it does not read may have been ended, and records
+  opened, by other branches). Every former is one, each law proved from the components': codes, `1`, `0`, `+`,
   `⊗`, `Imm`, `Mut` (at a store code), `[a]`, `ref`, `!`, `Unk`, the integers, the opaque types,
   the families `[L]`, thunks, `μ` (least fixed point over value-type candidates, with fold and
   unfold at a monotone body) and type variables. A value stored before a graft meets its type
@@ -10671,8 +10674,24 @@ layers (`docs/new-core/scope-782.md`):
   closed: `F A` read at `cerwpT` (`SCmp.ret`, downward closed by `cerwpT_le`, Kripke by
   `cerwpT_kripke`), `⊸`, `&`, `⊤`, `∀α ⊏ c` over the lifetimes below `c` in the current tree, and
   `ν` (greatest fixed point over candidates). As in Core, a computation type reaches a value only
-  under `U`, whose quantifier over world extensions makes the thunk monotone; a run of the forced
-  body at the current world gives the thunk (`STy.thunk_intro`, `STy.thunkRet_intro`).
+  under `U`, whose quantifier over world extensions and lists keeping what the thunk reads makes
+  the thunk monotone (`STy.thunk_intro` at a computation Kripke along `KeepRel`,
+  `STy.thunkC_val`).
+- **Continuation and task types** (`Core/TreeSemK.lean`) are thunks and boxed thunks, no new
+  former: a continuation is `U (B ⊸ C)` (`STy.kont`), boxed at `@d` by BOXED-κ (`STy.kontBox`),
+  a task `[@d] U C` (`STy.task`). The value types read the record list because a thunk is a run,
+  and a run is at a list: read at a list fixed in advance (`[]`), a thunk type holds of every
+  thunk holding a borrow, since no world with an empty list holds an `imm` cell
+  (`cerwpT_nil_of_imm`; a stuck thunk is one, `nilRun_stuck`). Read at the list, a thunk's
+  quantifier is the resume condition of the relation's continuation share (`contShareT`, per
+  branch: `KeepRel`), so **a continuation captured at a stop, holding a view of an open lend, is a
+  value of its type** at every answer type, result type, lifetime and nesting
+  (`STy.kont_of_share`); boxed at a lifetime its share outlives, it is carried along any extension
+  in which other branches opened and ended records of their own, and resumed there at its type
+  (`STy.kontBox_resume_after`). Instances at a lend at depth 1 and nested two deep, with the resume
+  list not a re-reading of the stop list (`kontBox_depth1`, `kontBox_depth3`,
+  `Core/TreeSemKEx.lean`). A continuation owning the records of lends its own branch opened is row
+  6's: the value types own no records.
 
 On the semantic store typing (`KSem`, `Support/Model/Tree/KSem.lean`) monotonicity is proved for
 `1`, `+`, `Imm`, `ref` and `[a]`, each from its components' (`kmono_unit`, `kmono_sum`,
@@ -10690,6 +10709,10 @@ What this rules out:
   at the grown tree (`trU_not_kmono`); every `STy` carries monotonicity as a field;
 - **a re-read `mut` cell whose invariant changes under re-reading**: a cell whose invariant is not
   its location's code at the new tree is not a re-reading (`not_rc_of_inv_ne`).
+- **a continuation stored past its lend**: a boxed value holding a view at `α` is not of `[@d] A`
+  unless `d` is strictly below `α` (`STy.not_box_of_view`, `STy.not_kontBox_of_view`): the `κ`
+  above boxed at its lend's lifetime or at the root is not of its type (`not_kontBox_at_lend`,
+  `not_kontBox_at_root`).
 
 Re-read, a stored task may write the handler's newer borrow into a cell it made before the graft
 (`round7_write`). The store typing grows at a `mut` lend of a location it does not type, and a
@@ -10699,11 +10722,13 @@ semantic types). One `mut` cell per location at any depth is an invariant of the
 
 Departures: `Mut`'s payload is a store code, since a cell's invariant is index-free and a
 step-indexed payload (a thunk in a cell) would need step-indexed cell invariants; one mode (no
-observable view at `Imm`); the value types do not read the records list; `⊸` reads its argument
-at every index up to `n`.
+observable view at `Imm`); the value types read the record list but own no records, and a thunk
+runs owning none; `⊸` reads its argument at every index up to `n`.
 
-*Open*: continuation and task types (#789); store typing growth at the codes; `Mut` at a payload
-that is not a store code; the records list in the value types.
+*Open*: store typing growth at the codes; `Mut` at a payload that is not a store code; a
+continuation owning the records of lends its own branch opened (row 6); `F A` Kripke along
+`KeepRel`, which a thunk built from a run at the current world needs and a typed `λ` gets from its
+context's monotonicity.
 
 ### Typing: suspension, scoped spawn, join
 
