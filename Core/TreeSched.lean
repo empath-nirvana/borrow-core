@@ -76,7 +76,7 @@ theorem schedProgram_cerwpT {P : ParentFn} {T : OpTabT} {n₀ : UInt32} {qs hr h
       ⟨P, fun _ => none, tmplT _ (fun _ => none)⟩ [] [] (hndE (hndVal n₀ qs hr hs) e₀)
       (PMap.empty : TRes (WCactus.ofParent P)) :=
   cerwpTE_iff.mpr (cerwpT_schedHandle hS n (fun _ => False) _ _ _ _ _ e₀ _ emptyFrame_mono
-    (fun w ρf h => by subst h; exact fdMask_empty _ w) (fun x hx => by simp [recMask] at hx)
+    (maskHist_empty T n₀) (fun w ρf h => by subst h; exact fdMask_empty _ w) (fun x hx => by simp [recMask] at hx)
     (fun _ _ _ => trivial) (he n))
 
 theorem multiBranchAdequacyT : MultiBranchAdequacyT (ℍ := ℍ) :=
