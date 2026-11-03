@@ -400,6 +400,267 @@ theorem fd_le_of_branch (hI : TWNT.InvHolds) {Θ : CodeTy} {tc : TChoice K}
     obtain ⟨_, _, _, _, _, _, _, h₁, _, _⟩ := hC
     exact ExST.immFree her _ _ f₁ (by rw [h₁]; exact CellUT.kind_immOf _ _ _ _)
 
+/-! ### The escrow's exclusive locations are its lineage's -/
+
+theorem GPosT.sumL {R : TRes K} {T₁ T₂ : KTy} {v₁ : BoCa.Val} {m : BoCa.Loc} {S : KTy}
+    (h : GPosT R T₁ v₁ m S) : GPosT R (.sum T₁ T₂) (BoCa.Val.inj₁ v₁) m S := by
+  cases h with
+  | here h => exact .here (.sumL h)
+  | step hr e g => exact .step (.sumL hr) e g
+
+theorem GPosT.sumR {R : TRes K} {T₁ T₂ : KTy} {v₂ : BoCa.Val} {m : BoCa.Loc} {S : KTy}
+    (h : GPosT R T₂ v₂ m S) : GPosT R (.sum T₁ T₂) (BoCa.Val.inj₂ v₂) m S := by
+  cases h with
+  | here h => exact .here (.sumR h)
+  | step hr e g => exact .step (.sumR hr) e g
+
+theorem GPosT.box {R : TRes K} {a : Life} {T : KTy} {v : BoCa.Val} {m : BoCa.Loc} {S : KTy}
+    (h : GPosT R T v m S) : GPosT R (.box a T) v m S := by
+  cases h with
+  | here h => exact .here (.box h)
+  | step hr e g => exact .step (.box hr) e g
+
+theorem GPosT.mono {R₁ R₂ : TRes K}
+    (hown : ∀ m u, R₁.get m = some (CellUT.ownOf u) → R₂.get m = some (CellUT.ownOf u))
+    {T : KTy} {v : BoCa.Val} {m : BoCa.Loc} {S : KTy} (h : GPosT R₁ T v m S) :
+    GPosT R₂ T v m S := by
+  induction h with
+  | here h => exact .here h
+  | step hr e _ ih => exact .step hr (hown _ _ e) ih
+
+/-- **Every `mut` cell of a typed escrow is at a `Mut` position**, its witness of the position's
+code. -/
+theorem mut_gposT (Θ : CodeTy) :
+    ∀ (T : KTy) {v : BoCa.Val} {R : TRes K}, (T.interp Θ).P K v R →
+      ∀ {y : BoCa.Loc} {ζ : TCell K}, R.get y = some ζ → ζ.kind = Kind.mut →
+      ∃ S, GPosT R T v y S ∧ (S.interp Θ).P K ζ.erase ζ.wit := by
+  intro T
+  induction T with
+  | unit => rintro v R ⟨-, rfl⟩ y ζ e; simp at e
+  | sum A B ihA ihB =>
+      rintro v R (⟨v₁, rfl, h⟩ | ⟨v₂, rfl, h⟩) y ζ e hk
+      · obtain ⟨S, g, hS⟩ := ihA h e hk; exact ⟨S, g.sumL, hS⟩
+      · obtain ⟨S, g, hS⟩ := ihB h e hk; exact ⟨S, g.sumR, hS⟩
+  | imm a A _ =>
+      rintro v R ⟨l, i, rfl, rfl, -⟩ y ζ e hk
+      rw [PMap.sng_get] at e
+      split_ifs at e
+      cases e; cases hk
+  | «mut» a A _ =>
+      rintro v R ⟨l, m, rfl, rfl, hΘ, -, hP⟩ y ζ e hk
+      rw [PMap.sng_get] at e
+      split_ifs at e with hy
+      cases e; subst hy
+      exact ⟨A, .here (.mut a A y), (hP m.v m.ρ).mp m.hw⟩
+  | box a A ih =>
+      rintro v R ⟨h, -⟩ y ζ e hk
+      obtain ⟨S, g, hS⟩ := ih h e hk; exact ⟨S, g.box, hS⟩
+  | ref A ih =>
+      classical
+      rintro v R ⟨l, w, ρ₁, rfl, hl, rfl, h⟩ y ζ e hk
+      rw [PMap.ins_get] at e
+      split_ifs at e with hy
+      · cases e; cases hk
+      · obtain ⟨S, g, hS⟩ := ih h e hk
+        refine ⟨S, .step (.ref A l) (by rw [PMap.ins_get, if_pos rfl]; rfl) (g.mono ?_), hS⟩
+        intro m u em
+        rw [PMap.ins_get, if_neg]; exact em
+        rintro rfl; rw [hl] at em; cases em
+
+/-- A `●` of two operands: a cell of the composite is a cell of an operand, at the same kind. -/
+theorem bigCompS_back_some {xs : List (TRes K)} {b : TRes K}
+    (h : BigCompT CellUT.CompatS CellUT.CompS xs b) {l : BoCa.Loc} {ψ : TCell K}
+    (e : b.get l = some ψ) : ∃ x ∈ xs, ∃ ψ', x.get l = some ψ' ∧ ψ'.kind = ψ.kind := by
+  induction h generalizing ψ with
+  | nil => rw [PMap.empty_get] at e; cases e
+  | @cons σ τ ρ σs _ hc ih =>
+      rcases compS_back hc e with ⟨ψ₁, e₁, k₁, -⟩ | ⟨ψ₁, e₁, k₁, -⟩
+      · exact ⟨σ, List.mem_cons_self .., ψ₁, e₁, k₁⟩
+      · obtain ⟨x, hx, ψ', e', k'⟩ := ih e₁
+        exact ⟨x, List.mem_cons_of_mem _ hx, ψ', e', k'.trans k₁⟩
+
+/-- **A location of a typed record's escrow's exclusive walk is a top `own`/`mut` location of a
+member of its lineage.** -/
+theorem exST_lineage (Θ : CodeTy) {ρ σ : TRes K} (h : ExST ρ σ) :
+    ∀ r : FrameRecT K, r.R = ρ → (r.T.interp Θ).P K r.v r.R →
+      ∀ x (ψ : TCell K), σ.get x = some ψ →
+        ∃ d, DescRT r d ∧ ∃ ζ : TCell K, d.R.get x = some ζ ∧ ζ.kind ≠ Kind.imm := by
+  refine G.ExW.rec (motive_1 := fun ρ σ _ => ∀ r : FrameRecT K, r.R = ρ →
+      (r.T.interp Θ).P K r.v r.R → ∀ x (ψ : TCell K), σ.get x = some ψ →
+        ∃ d, DescRT r d ∧ ∃ ζ : TCell K, d.R.get x = some ζ ∧ ζ.kind ≠ Kind.imm)
+    (motive_2 := fun ρ w _ => ∀ r : FrameRecT K, r.R = ρ → (r.T.interp Θ).P K r.v r.R →
+      ∀ q ∈ w, ∀ x (ψ : TCell K), q.2.get x = some ψ →
+        ∃ d, DescRT r d ∧ ∃ ζ : TCell K, d.R.get x = some ζ ∧ ζ.kind ≠ Kind.imm)
+    ?mk ?nil ?cons h
+  case mk =>
+    intro ρ' σ' nm b w hs hw hb hnm hσ ih r hr hty x ψ e
+    rcases compS_back hσ e with ⟨ψ₁, e₁, -, -⟩ | ⟨ψ₁, e₁, -, -⟩
+    · rcases compS_back hnm e₁ with ⟨ψ₂, e₂, -, -⟩ | ⟨ψ₂, e₂, -, -⟩
+      · obtain ⟨e₃, k₃⟩ := ResUT.restrict_eq_some.mp e₂
+        exact ⟨r, ⟨[], .nil r⟩, ψ₂, hr ▸ e₃, by rw [k₃]; simp⟩
+      · obtain ⟨e₃, k₃⟩ := ResUT.restrict_eq_some.mp e₂
+        exact ⟨r, ⟨[], .nil r⟩, ψ₂, hr ▸ e₃, by rw [k₃]; simp⟩
+    · obtain ⟨τ, hτ, ψ', e', -⟩ := bigCompS_back_some hb e₁
+      obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hτ
+      exact ih r hr hty q hq x ψ' e'
+  case nil => intro ρ' r _ _ q hq; exact absurd hq (by simp)
+  case cons =>
+    intro ρ' e l w ψ hψ hk he hw ihe ihw r hr hty q hq
+    rcases List.mem_cons.mp hq with rfl | hq'
+    · intro x φ ex
+      obtain ⟨S, g, hS⟩ := mut_gposT Θ r.T hty (hr ▸ hψ) hk
+      let d₀ : FrameRecT K := ⟨l, ψ.erase, ψ.wit, S⟩
+      have hsub : SubRecT r d₀ := ⟨g, ψ, hr ▸ hψ, hk, rfl, rfl⟩
+      obtain ⟨d, ⟨pa, hpa⟩, hd⟩ := ihe d₀ rfl hS x φ ex
+      exact ⟨d, ⟨_, .cons hsub hpa⟩, hd⟩
+    · exact ihw r hr hty q hq'
+
+/-! ### Beneath a view -/
+
+/-- **Everything beneath a view at depth shows in the aliasable walk.** -/
+theorem cellAt_beneath_imm_ag {W : TRes K} {y : BoCa.Loc} {ψ₀ : TCell K} (h : CellAt W y ψ₀)
+    (hk : ψ₀.kind = Kind.imm) {x : BoCa.Loc} {χ : TCell K} (hx : CellAt ψ₀.wit x χ) :
+    ∀ {aW : TRes K}, AgWT W aW → ∃ ζ, aW.get x = some ζ := by
+  induction h with
+  | @top W y ψ₀ e =>
+      intro aW haW
+      obtain ⟨ev, av, p, z, hev, hav, hp, hz⟩ := AgWT.imm_wit_le haW e hk
+      rcases cellAt_walk_dom hx hRR ResUT.compLawsR hev hav with ⟨ζ, hζ⟩ | ⟨ζ, hζ⟩
+      · obtain ⟨_, h1⟩ := comp_some hp hζ; exact comp_some hz h1
+      · obtain ⟨_, h1⟩ := comp_some_r hp hζ; exact comp_some hz h1
+  | @nest W m y χ₁ ψ₀ e h' ih =>
+      intro aW haW
+      cases hk₁ : χ₁.kind with
+      | own =>
+          cases χ₁ with
+          | own => exact absurd h' CellAt.not_empty
+          | imm => cases hk₁
+          | «mut» => cases hk₁
+      | imm =>
+          obtain ⟨ev, av, p, z, hev, hav, hp, hz⟩ := AgWT.imm_wit_le haW e hk₁
+          obtain ⟨ζ, hζ⟩ := ih hk hx hav
+          obtain ⟨_, h1⟩ := comp_some_r hp hζ; exact comp_some hz h1
+      | «mut» =>
+          obtain ⟨av, z, hav, hz⟩ := AgWT.mut_wit_le haW e hk₁
+          obtain ⟨ζ, hζ⟩ := ih hk hx hav
+          exact comp_some hz hζ
+
+/-- The record's view at depth, over its escrow: an `imm` cell (a `mut` one would be refused by
+`NoMutT`, an `own` one has no witness). -/
+theorem le_view_cellAt (hI : TWNT.InvHolds) {Θ : CodeTy} {tc : TChoice K} {W : TRes K}
+    {ps rs : List (FrameRecT K)} (hT : TWNT K Θ tc W ps rs) {p : FrameRecT K} (hp : p ∈ ps)
+    {x : BoCa.Loc} {χ : TCell K} (hx : CellAt p.R x χ) {aW : TRes K} (haW : AgWT W aW) :
+    ∃ ζ, aW.get x = some ζ := by
+  have hTI := hI K Θ tc W ps rs hT
+  obtain ⟨ψ, eψ, kψ, -, wψ⟩ := hTI.2.1 p hp aW haW
+  obtain ⟨ψ₀, c₀, w₀⟩ := agW_cellAt haW _ ψ eψ (by rw [kψ]; simp)
+  have hx' : CellAt ψ₀.wit x χ := by rw [w₀, wψ]; exact hx
+  cases hk : ψ₀.kind with
+  | imm => exact cellAt_beneath_imm_ag c₀ hk hx' haW
+  | «mut» => exact absurd (c₀.mutAt hk) (hTI.2.2.2.2.2.1.1 p hp)
+  | own =>
+      cases ψ₀ with
+      | own => exact absurd hx' CellAt.not_empty
+      | imm => cases hk
+      | «mut» => cases hk
+
+/-! ### The frame condition at the escrow -/
+
+/-- **The case not derived here**: a cell of `ρ_rest`'s aliasable walk beneath a borrow of
+`ρ_rest`, at a top location of `p`'s lineage that holds `mut`, or an `own` cell where the lineage
+holds `own`. Its derivation goes through the innermost view above the cell (`Coverage`,
+`DeepInv`) to `p`'s lineage, which needs a `mut` analogue of `ChainInv`'s own-uniqueness clause
+and a lineage with one parent per record. -/
+def EscBeneathT : Prop :=
+  ∀ (K : WCactus) (Θ : CodeTy) (tc : TChoice K) (W ρo ρrest : TRes K)
+    (ps rs : List (FrameRecT K)) (p : FrameRecT K) (α n : Life),
+    TWNT K Θ tc W ps rs → p ∈ ps → ResUT.CompS ρo ρrest W → FrameLifeT K W p α →
+    OnBranchResT K n ρrest → ¬ K.le n α →
+    ∀ d, DescRT p d → ∀ x (ζ : TCell K), d.R.get x = some ζ → ζ.kind ≠ Kind.imm →
+    ∀ ar, AgWT ρrest ar → ∀ χ : TCell K, ar.get x = some χ → χ.kind ≠ Kind.imm →
+    (ζ.kind = Kind.own → χ.kind = Kind.own) → False
+
+/-- **The frame condition at the escrow's exclusive locations, from a branch point**, but for
+`EscBeneathT`'s case: a cell of the exclusive walk meets `ag(W)` beneath the record's view; a view
+carries a lifetime of the branch while `ag(W)`'s view at a lineage location is inside `α`
+(`FrameLifeT`); a `mut` cell where the lineage holds `own` is refused by `NoMutT`. -/
+theorem fd_esc_of_branch (hI : TWNT.InvHolds) (hB : EscBeneathT) {Θ : CodeTy} {tc : TChoice K}
+    {W ρo ρrest : TRes K} {ps rs : List (FrameRecT K)} {p : FrameRecT K} {α n : Life}
+    (hT : TWNT K Θ tc W ps rs) (hp : p ∈ ps) (hW : ResUT.CompS ρo ρrest W)
+    (hFL : FrameLifeT K W p α) (hbr : OnBranchResT K n ρrest) (hnα : ¬ K.le n α)
+    {τ : TRes K} (hτ : ResUT.Flat ρrest τ) {eR : TRes K} (heR : ExST p.R eR) {x : BoCa.Loc}
+    (hx : (eR.get x).isSome) : τ.get x = none := by
+  have hTI := hI K Θ tc W ps rs hT
+  have hv := hT.valid
+  have hprs : p ∈ rs := (hTI.2.2.2.2.2.2.1 p).mpr ⟨p, hp, [], .nil p⟩
+  obtain ⟨ψx, eψx⟩ := Option.isSome_iff_exists.mp hx
+  obtain ⟨d, ⟨pd, hpd⟩, ζ, eζ, kζ⟩ := exST_lineage Θ heR p rfl (hTI.1.2.2.2.1 p hprs) x ψx eψx
+  have hdrs : d ∈ rs := (hTI.2.2.2.2.2.2.1 d).mpr ⟨p, hp, pd, hpd⟩
+  have hlin : LinLocT p x := ⟨d, ⟨pd, hpd⟩, ζ, eζ, kζ⟩
+  have hxR : CellAt p.R x ζ := hpd.cellAt (fun y φ e => .top e) x ζ eζ
+  obtain ⟨aW, haW⟩ := agW_of_valid hv
+  obtain ⟨ζW, eζW⟩ := le_view_cellAt hI hT hp hxR haW
+  cases hg : τ.get x with
+  | none => rfl
+  | some χ =>
+  exfalso
+  have hτn := flat_onBranch hbr hτ x χ hg
+  obtain ⟨er, ar, her, har, hcr⟩ := hτ
+  obtain ⟨a₁, a₂, ha₁, ha₂, hcW⟩ := (AgWT.split hW).mp haW
+  obtain rfl := AgWT.functional ha₂ har
+  rcases ResUT.Comp.get hcr x with ⟨-, -, f⟩ | ⟨ψ, f₁, -, f⟩ | ⟨ψ, -, f₂, f⟩ |
+      ⟨ψ₁, ψ₂, ψ, f₁, -, f, hC⟩
+  · rw [hg] at f; cases f
+  · rw [hg] at f; cases Option.some.inj f
+    have hk : χ.kind ≠ Kind.imm := ExST.immFree her _ _ f₁
+    obtain ⟨eW, heW⟩ : ∃ eW, ExST W eW := by
+      obtain ⟨σ, eW, aW', heW, -, -⟩ := hv; exact ⟨eW, heW⟩
+    obtain ⟨e₁, e₂, -, he₂, hc₁⟩ := (ExST.split hW).mp heW
+    obtain rfl := ExST.functional he₂ her
+    exact ex_ag_disjoint hv heW haW (ResUT.CompS.get_right_of_ne_imm hc₁ f₁ hk).2 eζW
+  · rw [hg] at f; cases Option.some.inj f
+    cases hk : χ.kind with
+    | imm =>
+        obtain ⟨χW, eχW, kχW, -, -⟩ := ResUT.CompR.get_imm_left (ResUT.CompR.comm hcW) f₂ hk
+        obtain ⟨s, hs, hη⟩ := CellUT.imm_eta hk
+        obtain ⟨t, ht, hηW⟩ := CellUT.imm_eta kχW
+        rw [hη] at f₂
+        rw [hηW] at eχW
+        obtain ⟨y, hy⟩ := s.ne
+        have hyW : y ∈ t.set := ResUT.CompR.get_ls_imm (ResUT.CompR.comm hcW) f₂ eχW hy
+        have hyα := hFL.2 aW haW x hlin _ t eχW (CellUT.lsOfI_immOf _ _ _ _) y hyW
+        have hny := hτn s (by rw [hη]; exact CellUT.lsOf_immOf _ _ _ _) y hy
+        exact hnα (K.trans hny hyα)
+    | «mut» =>
+        cases hkζ : ζ.kind with
+        | own =>
+            obtain ⟨m, χ', hm, hχ', ψ₀, c₀, k₀, -⟩ :=
+              agW_nonimm_beneath har _ χ f₂ (by rw [hk]; simp)
+            obtain ⟨χ'', e'', k'', c''⟩ := beneath_of_compS_right hW hm hχ' c₀
+            have hζo : ζ = CellUT.ownOf ζ.erase := by
+              cases ζ with
+              | own => rfl
+              | imm => cases hkζ
+              | «mut» => cases hkζ
+            rw [hζo] at eζ
+            exact hTI.2.2.2.2.2.1.2 d hdrs x _ eζ (.nest e'' k'' (c''.mutAt (k₀.trans hk)))
+        | imm => exact kζ hkζ
+        | «mut» =>
+            exact hB K Θ tc W ρo ρrest ps rs p α n hT hp hW hFL hbr hnα d ⟨pd, hpd⟩ x ζ eζ kζ
+              _ ha₂ χ f₂ (by rw [hk]; simp) (fun h => by rw [hkζ] at h; cases h)
+    | own =>
+        exact hB K Θ tc W ρo ρrest ps rs p α n hT hp hW hFL hbr hnα d ⟨pd, hpd⟩ x ζ eζ kζ
+          _ ha₂ χ f₂ (by rw [hk]; simp) (fun _ => hk)
+  · rw [hg] at f; cases Option.some.inj f
+    obtain ⟨_, _, _, _, _, _, _, h₁, _, _⟩ := hC
+    exact ExST.immFree her _ _ f₁ (by rw [h₁]; exact CellUT.kind_immOf _ _ _ _)
+
+/-- **`FdEscOfBranchT` from `EscBeneathT`.** -/
+theorem fdEscOfBranch (hI : TWNT.InvHolds) (hB : EscBeneathT) : FdEscOfBranchT :=
+  fun _ _ _ _ _ _ _ _ _ _ _ hT hp hW hFL hbr hnα _ hτ =>
+    ⟨fd_le_of_branch hI hT hp hW hFL hbr hnα hτ,
+      fun _ heR _ hx => fd_esc_of_branch hI hB hT hp hW hFL hbr hnα hτ heR hx⟩
+
 end BoCa.Fig16.Tree.Wp
 
 end
