@@ -384,6 +384,139 @@ theorem poolT_head_QP {Qt : TPostV} {k : Nat} {M : BoCa.Loc → Prop} {κ : Val}
   exact ⟨Ot, Os, a, b, hO, hc, QP_iff.mpr (Or.inl ⟨κ, rfl,
     KapSchedT.mask_mono (fun x hx => (hM x).mp hx) (KapAtT.sched hκ)⟩), hPs, hb, ha, hap⟩
 
+/-! ### Task B: a lend open since before another task parked, a lend of its own, both ended -/
+
+theorem noneAt_view_ne {K : WCactus} {β : Life} {m l : BoCa.Loc} (h : l ≠ m) :
+    NoneAt (· = l) (viewRes (K := K) β m) := by
+  intro τ hτ x hx
+  subst hx
+  rw [flat_view hτ, viewRes]
+  exact ResUT.single_get_ne _ h
+
+theorem noneAt_own_ne {K : WCactus} {v : BoCa.Val} {m l : BoCa.Loc} (h : l ≠ m) :
+    NoneAt (· = l) (ResUT.single m (CellUT.ownOf (K := K) v)) := by
+  intro τ hτ x hx
+  subst hx
+  obtain rfl := ResUT.Flat.functional hτ (ResUT.flat_single_own m v)
+  exact ResUT.single_get_ne _ h
+
+theorem lendRec_inj {K : WCactus} {l m : BoCa.Loc} (h : lendRec (K := K) l = lendRec m) : l = m :=
+  congrArg FrameRecT.le h
+
+/-- A re-reading of two views side by side is the two views (`RR.compS`, `RR.func`). -/
+theorem rr_views_eq {K K' : WCactus} {Θ : LocTy} {β α : Life} {m l : BoCa.Loc} {ρ : TRes K}
+    {ρ' : TRes K'} (hc : ResUT.CompS (viewRes β m) (viewRes α l) ρ) (hr : RR Θ ρ ρ') :
+    ResUT.CompS (viewRes β m) (viewRes α l) ρ' := by
+  obtain ⟨y, hy, hry⟩ := RR.compS (rr_view (K' := K')) (rr_view (K' := K')) hc
+  rw [RR.func hr hry]
+  exact hy
+
+/-- **Task B**: `λy. let x = alloc () in free x; free y`. -/
+def taskBbody : Expr :=
+  .app (.lam (.seq (freeE (.var 0)) (freeE (.var 1)))) (.app (.val (.prim .alloc)) (.val .unit))
+
+def taskB : Val := Val.lam taskBbody
+
+def kB (l₁ : BoCa.Loc) : Kont :=
+  .appR (.lam (.seq (freeE (.var 0)) (freeE (.val (.loc l₁))))) .hole
+
+theorem taskB_beta (l₁ : BoCa.Loc) : taskBbody.subst 0 (Val.loc l₁) =
+    (kB l₁).plug (.app (.val (.prim .alloc)) (.val .unit)) := by
+  simp [taskBbody, kB, Expr.subst, Expr.shift, freeE, Kont.plug]
+
+/-- B's answer: `()`, owning nothing. -/
+def QB : TPostV := fun _ _ _ O r ρ => r = Val.unit ∧ O = [] ∧ ρ = PMap.empty
+
+theorem QB_down : QB.Down := fun _ _ _ _ _ _ h => h
+
+theorem QB_stable : QtStable QB := by
+  intro k w w₀ ls O ls₀ O₀ r ρ ρ₀ hE hr hO ⟨h₁, h₂, h₃⟩
+  subst h₂; subst h₃; cases hO
+  exact ⟨h₁, rfl, RR.of_empty hr⟩
+
+/-- What B's allocation ends with: the new cell lent (`α`), B owning both lends' records. -/
+def PB (β : Life) (l₁ : BoCa.Loc) : TPost := fun _ _ _ O t ρ =>
+  ∃ (l : BoCa.Loc) (α : Life), t = (Val.loc l).1 ∧ l ≠ l₁ ∧ O = [lendRec l, lendRec l₁] ∧
+    ResUT.CompS (viewRes β l₁) (viewRes α l) ρ
+
+/-- B's allocation, and the lend of the new cell opened at its end. -/
+theorem taskB_alloc {F : TFrame} {β : Life} {l₁ : BoCa.Loc} {n : Nat} {w : TWd}
+    {ls : List (SRecT w.K)} (α : Life) :
+    twp (ℍ := ℍ) F (PB β l₁) n w ls [lendRec l₁] (.app (.val (.prim .alloc)) (.val .unit))
+      (viewRes β l₁) := by
+  refine twp_alloc_here (Kc := .hole) (fun _ _ _ _ _ _ h => h) Val.unit fun l ρ₁ hc => ?_
+  have hZl : (viewRes (K := w.K) β l₁).get l = none :=
+    ResUT.compatS_single_own (ResUT.CompatS.symm hc.1)
+  have hne : l ≠ l₁ := fun e => by subst e; simp [viewRes, ResUT.single_get_self] at hZl
+  obtain ⟨ρ₂, hc₂⟩ := (ResUT.compS_defined_iff (viewRes β l₁) (viewRes α l)).mpr
+    (compatS_single_of_get_noneT hZl)
+  refine twp_lendOpen α hc hc₂ ?_
+  refine twp_here (fun μ => final_val μ (Val.loc l)) fun w₀ ρ₀ ls₀ O₀ _ hr _ hO => ?_
+  refine ⟨l, α, rfl, hne, ?_, rr_views_eq hc₂ hr⟩
+  cases hO with
+  | cons h₁ t =>
+    cases t with
+    | cons h₂ t =>
+      cases t
+      rw [RecRR.func h₁ (lendRec_rr l), RecRR.func h₂ (lendRec_rr l₁)]
+
+/-- **Task B, from a lend's record and its lend cell**: it allocates, opens a lend of the new cell,
+ends that lend and the one it started with (open since before it ran), and frees both cells. The
+new lend is ended under the frame `twp_bind_fd` hands the continuation, which avoids it from its
+opening. -/
+theorem taskB_twp {F : TFrame} (hFm : F.Mono) {β : Life} {l₁ : BoCa.Loc}
+    (hF : ∀ w ρf, F w ρf → NoneAt (· = l₁) ρf) {n : Nat} {w : TWd} {ls : List (SRecT w.K)} :
+    twp (ℍ := ℍ) F (valPost QB) n w ls [lendRec l₁] (.app (.val taskB) (.val (Val.loc l₁)))
+      (viewRes β l₁) := by
+  classical
+  have hD := valPost_down QB_down
+  refine twp_det hD (fun μ => step1Only_plug (Head.beta μ taskBbody (Val.loc l₁)) rfl .hole) ?_
+  rw [taskB_beta]
+  refine twp_bind_fd hFm (fun _ _ h => h) (kB l₁)
+    (fun w₀ ρf hf => (hF w₀ ρf hf).mono fun x hx => by
+      rcases recMask_lendRec.mp hx with h | h
+      · exact h
+      · simp [recMask] at h) (taskB_alloc β) ?_
+  rintro k _ w' ls' O' t ρ' _ _ _ _ ⟨l, α, rfl, hne, rfl, hc⟩
+  -- end the new lend, then the one B started with
+  obtain ⟨ρ₁, hc₁⟩ := (ResUT.compS_defined_iff (viewRes (K := w'.K) β l₁)
+    (ResUT.single l (CellUT.ownOf BoCa.Val.unit))).mpr (compatS_single_of_get_noneT
+      (by simp [viewRes, ResUT.single_get_ne _ hne]))
+  refine twp_lendEnd (O₁ := [lendRec l₁]) (ls₁ := ls'.filter fun x => x.1 ≠ lendRec l)
+    hc hc₁ (valid_view β l₁) (noneAt_view_ne hne)
+    (fun w₀ ρf hf => hf.2.2.mono fun x hx => by subst hx; exact recMask_lendRec.mpr (Or.inl rfl))
+    (fun x => by simp) (by simp; exact fun e => hne (lendRec_inj e))
+    (fun x hx => by
+      by_cases h : x.1 = lendRec l
+      · exact Or.inl h
+      · exact Or.inr (List.mem_filter.mpr ⟨hx, by simpa using h⟩))
+    (fun x hx => (List.mem_filter.mp hx).1)
+    (fun x hx => by simpa using (List.mem_filter.mp hx).2) ?_
+  obtain ⟨ρ₂, hc₂⟩ := (ResUT.compS_defined_iff (ResUT.single l (CellUT.ownOf (K := w'.K)
+    BoCa.Val.unit)) (ResUT.single l₁ (CellUT.ownOf BoCa.Val.unit))).mpr
+    (compatS_single_of_get_noneT (ResUT.single_get_ne _ (Ne.symm hne)))
+  refine twp_lendEnd (O₁ := []) (ls₁ := (ls'.filter fun x => x.1 ≠ lendRec l).filter
+      fun x => x.1 ≠ lendRec l₁)
+    (ResUT.CompS.comm hc₁) hc₂ (ResUT.valid_single_own l _) (noneAt_own_ne (Ne.symm hne))
+    (fun w₀ ρf hf => hF w₀ ρf hf.1) (fun x => by simp) (by simp)
+    (fun x hx => by
+      by_cases h : x.1 = lendRec l₁
+      · exact Or.inl h
+      · exact Or.inr (List.mem_filter.mpr ⟨hx, by simpa using h⟩))
+    (fun x hx => (List.mem_filter.mp hx).1)
+    (fun x hx => by simpa using (List.mem_filter.mp hx).2) ?_
+  -- `free x; free y`
+  refine twp_det hD (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl .hole) ?_
+  have e : (Expr.seq (freeE (.var 0)) (freeE (.val (.loc l₁)))).subst 0 (Val.loc l) =
+      (Kont.seq .hole (freeE (.val (.loc l₁)))).plug (freeE (.val (.loc l))) := by
+    simp [Expr.subst, freeE, Kont.plug]
+  rw [e]
+  refine twp_free hD (Kont.seq .hole _) l Val.unit hc₂ ?_
+  refine twp_det hD (fun μ => step1Only_plug (Head.seq μ _) rfl .hole) ?_
+  refine twp_free hD .hole l₁ Val.unit (ResUT.compS_empty_right _) ?_
+  exact twp_here (fun μ => final_val μ Val.unit) fun w₀ ρ₀ _ O₀ _ hr _ hO => by
+    cases hO; exact ⟨Val.unit, rfl, rfl, rfl, RR.of_empty hr⟩
+
 end BoCa.Fig16.Tree.Wp.SchedProgs.Park
 
 end
