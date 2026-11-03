@@ -114,34 +114,51 @@ theorem kapSchedT_resume_beside {Qout : TPostV} {M : BoCa.Loc → Prop} {en : Op
     (NoneAt.rr hE.1 hM₂.1 h₂₀ hM₂.2)⟩
 
 /-- **Multi-branch adequacy over the tree world.** A closed program `hnd H e₀`: the task `e₀` at
-`cerwpT` at the scheduler's table `T`, from the empty world at any tree, under any frame; the
-scheduler `H = hndVal n₀ qs hr hs` meeting `SchedOKT`; the program's answers holding nothing. -/
+`cerwpT` at the scheduler's table `T`, from the empty world at any tree, at a base frame condition
+`Fb` every valid frame meets and a present one `Fe` every valid frame meets (so a task may end a
+lend it opened: its frames are valid, and avoid its records from their opening, `twp_bind_fd`);
+the scheduler `H = hndVal n₀ qs hr hs` meeting `SchedOKT`; the program's answers holding nothing. -/
 def MultiBranchAdequacyT : Prop :=
-  ∀ (P : ParentFn) (T : OpTabT) (n₀ : UInt32) (qs hr hs : Val) (Qin Qout : TPostV) (e₀ : Expr),
+  ∀ (P : ParentFn) (T : OpTabT) (n₀ : UInt32) (qs hr hs : Val) (Qin Qout : TPostV)
+    (Fb Fe : TFrame) (e₀ : Expr),
     (∀ k w ls O v ρ, Qout k w ls O v ρ → ρ = PMap.empty) →
     SchedOKT (ℍ := ℍ) T n₀ qs hr hs Qin Qout →
-    (∀ n, cerwpT (ℍ := ℍ) (opTableT T) Qin (fun _ _ => True) (fun _ _ => True) n
+    (∀ w ρf, ResUT.Valid ρf → Fb w ρf) → (∀ w ρf, fdMask (fun _ => False) w ρf → Fe w ρf) →
+    (∀ n, cerwpT (ℍ := ℍ) (opTableT T) Qin Fb Fe n
       ⟨P, fun _ => none, tmplT _ (fun _ => none)⟩ [] [] e₀
       (PMap.empty : TRes (WCactus.ofParent P))) →
     OrDiverges (ℍ := ℍ) (hndE (hndVal n₀ qs hr hs) e₀)
 
+/-- **The scheduled program at `twp`**, under any frame condition whose frames are valid: `[handle]`
+for the scheduler at the empty mask. -/
+theorem schedProgram_twp {T : OpTabT} {n₀ : UInt32} {qs hr hs : Val}
+    {Qin Qout : TPostV} {Fb Fe F : TFrame} {e₀ : Expr} (hS : SchedOKT (ℍ := ℍ) T n₀ qs hr hs Qin Qout)
+    (hFb : ∀ w ρf, ResUT.Valid ρf → Fb w ρf) (hFe : ∀ w ρf, fdMask (fun _ => False) w ρf → Fe w ρf)
+    (hFm : F.Mono) (hF : ∀ w ρf, F w ρf → fdMask (fun _ => False) w ρf) {n : Nat} {w : TWd}
+    {ρ : TRes w.K}
+    (he : cerwpT (ℍ := ℍ) (opTableT T) Qin Fb Fe n w [] [] e₀ ρ) :
+    twp (ℍ := ℍ) F (valPost Qout) n w [] [] (hndE (hndVal n₀ qs hr hs) e₀) ρ :=
+  cerwpT_schedHandle hS n (fun _ => False) _ _ _ _ _ _ e₀ _ hFm hF
+    (fun x hx => by simp [recMask] at hx) hFb hFe he
+
 /-- **The program at the empty table**: `[handle]` for the scheduler, under the empty frame, at
 the empty mask. -/
 theorem schedProgram_cerwpT {P : ParentFn} {T : OpTabT} {n₀ : UInt32} {qs hr hs : Val}
-    {Qin Qout : TPostV} {e₀ : Expr} (hS : SchedOKT (ℍ := ℍ) T n₀ qs hr hs Qin Qout)
-    (he : ∀ n, cerwpT (ℍ := ℍ) (opTableT T) Qin (fun _ _ => True) (fun _ _ => True) n
+    {Qin Qout : TPostV} {Fb Fe : TFrame} {e₀ : Expr} (hS : SchedOKT (ℍ := ℍ) T n₀ qs hr hs Qin Qout)
+    (hFb : ∀ w ρf, ResUT.Valid ρf → Fb w ρf) (hFe : ∀ w ρf, fdMask (fun _ => False) w ρf → Fe w ρf)
+    (he : ∀ n, cerwpT (ℍ := ℍ) (opTableT T) Qin Fb Fe n
       ⟨P, fun _ => none, tmplT _ (fun _ => none)⟩ [] [] e₀
       (PMap.empty : TRes (WCactus.ofParent P))) (n : Nat) :
     cerwpT (ℍ := ℍ) (opTableT OpTabT.empty) Qout (fun _ ρf => ρf = PMap.empty)
       (fun _ ρf => ρf = PMap.empty) n
       ⟨P, fun _ => none, tmplT _ (fun _ => none)⟩ [] [] (hndE (hndVal n₀ qs hr hs) e₀)
       (PMap.empty : TRes (WCactus.ofParent P)) :=
-  cerwpTE_iff.mpr (cerwpT_schedHandle hS n (fun _ => False) _ _ _ _ _ _ e₀ _
-    emptyFrame_mono (fun w ρf h => by subst h; exact fdMask_empty _ w) (fun x hx => by simp [recMask] at hx)
-    (fun _ _ _ => trivial) (fun _ _ _ => trivial) (he n))
+  cerwpTE_iff.mpr (schedProgram_twp hS hFb hFe emptyFrame_mono
+    (fun w ρf h => by subst h; exact fdMask_empty _ w) (he n))
 
 theorem multiBranchAdequacyT : MultiBranchAdequacyT (ℍ := ℍ) :=
-  fun P _ _ _ _ _ _ _ _ hQ hS he => cerwpT_adequacy (ℍ := ℍ) P hQ (schedProgram_cerwpT hS he)
+  fun P _ _ _ _ _ _ _ _ _ _ hQ hS hFb hFe he =>
+    cerwpT_adequacy (ℍ := ℍ) P hQ (schedProgram_cerwpT hS hFb hFe he)
 
 end BoCa.Fig16.Tree.Wp
 

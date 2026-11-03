@@ -324,8 +324,8 @@ theorem async_schedOK : SchedOKT (ℍ := ℍ) TA nA qsA retClause hsA QA QA := b
 /-- **`async-handler-lends` is safe, or diverges**: every configuration it reaches steps or is a
 value, a value only at the empty memory, every `free` finds its cell. Through the headline. -/
 theorem asyncProg_safe : OrDiverges (ℍ := ℍ) asyncProg :=
-  multiBranchAdequacyT beforeP TA nA qsA retClause hsA QA QA task (fun _ _ _ _ _ _ h => h)
-    async_schedOK fun n => task_cerwpT n _
+  multiBranchAdequacyT beforeP TA nA qsA retClause hsA QA QA _ _ task (fun _ _ _ _ _ _ h => h)
+    async_schedOK (fun _ _ _ => trivial) (fun _ _ _ => trivial) fun n => task_cerwpT n _
 
 end Async
 
