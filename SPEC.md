@@ -10546,6 +10546,28 @@ nothing at `ℓ` at any depth (`FdEsc ℓ ∅`). The lend cell splits into copie
 a shared view another branch may hold across a stop; the end needs every copy back. Neither rule
 asks anything of `α`. Escrows that hand out views of their contents (`TWNT.reb`) are not covered.
 
+**Cancel in the scheduler interface.** A cancel is a resume into the continuation's cancel branch.
+At a cancellable entry (`q ≠ lin`, `OpEntT.fin`), `contShareT` owes the unwinding
+`ccatch (K†[raise …])` as a continuation, below the index, like a resume; `KapSchedT` (naming its
+scheduler `H`) offers `hnd H (κ (inj₂ ()))` at `cerwpT` at the empty table, under the same frames
+as a resume. An unwinding that performs one of `H`'s operations (an effectful finaliser) stops and
+comes back to `H`'s clause as an ordinary stored continuation. `cerwpT_schedHandle` proves the
+offering by its induction hypothesis (`twp_kappa_cancel_in`, `twp_kappaC_cancel_in`).
+`MultiBranchAdequacyT`'s statement is unchanged.
+
+**The scheduler's pool** (`Core/TreeSchedPool.lean`). `PoolT` is a list of stored tasks, each a
+continuation held at the present world (`KapAtT`) whose mask is its present records' masks, every
+two apart both ways (`NoneAt` of each other's record masks, and record locations distinct). Every
+scheduler operation keeps it: a segment (`twp_keepsPool`, from `twp_frame_keep`: the run may open,
+end, allocate and free, those lends open when a stored task stopped included), a park
+(`poolT_park`), a resume (`poolT_resume`) and a cancel (`poolT_cancel`), the last two with the rest
+of the pool beside the resumed run and a pool again at its every end. Adequacy for a program whose
+scheduler is proved through these is `cerwpT_adequacy`'s. **Borrow edges point to ancestors**
+(`borrowEdges_ancestors`, `lender_ancestor`): in `CactusInvT`, every view a part of a branch's
+resource holds (a stored continuation's share among them) carries only lifetimes enclosing the
+branch point, so every lender of a borrow a stored continuation holds is an ancestor of where it
+is stored; `cactusT_step` keeps it through capture and resume.
+
 *Open*:
 - adequacy derived from invariant preservation, at the relation the typing rules use;
 - preservation at spawn and join;
@@ -10554,12 +10576,14 @@ asks anything of `α`. Escrows that hand out views of their contents (`TWNT.reb`
 - the lend rules at `twp` over the tree for escrows with contents (reborrows, `TWNT.reb`), and
   multi-branch programs with lends;
 - a program through the headline in which a parked task holds a view of a lend while another
-  ends a lend of its own (`twp_keepsKap_sep` carries it, `twp_lendOpen` and `twp_lendEnd` give the lends; the program
-  is not written);
-  `pingpong-mut`'s relay is not yet written through `twp_keepsKap`;
-- a scheduler that keeps state beside a branch that owned records at an earlier stop: `contShareT`
-  resumes at `fdAt en v F O′`, `F` the stop's own frame condition, so the conditions accumulate and
-  the state must hold nothing at every record mask the branch has had (`MaskHist`).
+  ends a lend of its own, and the same with the parked task cancelled through an effectful
+  finaliser (the pool gives each step; the relay, its stepper and the tasks are not written);
+  `pingpong-mut`'s relay is not yet written through the pool;
+- a stored task whose mask history exceeds its present records: `contShareT` resumes at
+  `fdAt en v F O′`, `F` the stop's own frame condition, so the conditions accumulate and a state
+  beside the resumed run must hold nothing at every record mask the branch has had (`MaskHist`);
+  the pool admits only tasks whose history is their present records. Resuming at the task's base
+  frame condition (the table handed the base, not the stop's `F`) removes it.
 
 ### Semantic types read at the tree
 
