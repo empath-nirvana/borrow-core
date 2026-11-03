@@ -1,4 +1,5 @@
 import Core.TreePool
+import Core.TreeCactus
 
 /-!
 # The scheduler's pool: stored tasks and their separation, kept by every operation  `[spec §62]`
@@ -234,6 +235,45 @@ theorem poolT_cancel {t : StoredT} {ts : List StoredT} {w : TWd} {ls : List (SRe
   have hvs := (ResUT.Valid.split hcp hv).2
   have h := cerwpTE_iff.mp (hκ.cancel hq hf hk (fdMask_mono t.M) (fun _ _ h => h))
   exact twp_keepsPool hcp hcov hv hap hb ha (pool_frame hFM hM hvs hb) h hPs
+
+/-! ### Borrow edges point to ancestors -/
+
+/-- **Borrow edges point to ancestors.** In the scheduler-wide invariant, every resource sitting in
+a branch, a stored continuation's share among them (the share is part of the resource of the
+branch whose clause or relay holds it), holds only borrows whose lifetimes are the branch's point
+or enclose it: for every view the part holds at a location `l`, every lifetime `x` the view
+carries has the branch point `n` beneath it (`K.le n x`). A lender's scope is the lifetime of its
+lend's views (`FrameLifeT`: the views at a record's lent location carry its frame lifetime), so
+every lender of a borrow a stored continuation holds is an ancestor of where the continuation is
+stored. `cactusT_step` keeps `CactusInvT` through every step, a capture and a resume among them,
+so this holds before and after each. -/
+theorem borrowEdges_ancestors {w : TWd} {bs : List (TBranch w.K)} {ns : List Life}
+    {W : TRes w.K} {ps : List (FrameRecT w.K)} {ls : List (SRecT w.K)} {μ : Heap}
+    (hI : CactusInvT w bs ns W ps ls μ) :
+    List.Forall₂ (fun (b : TBranch w.K) n => ∀ ρκ rest : TRes w.K, ResUT.CompS ρκ rest b.1 →
+      ∀ (l : BoCa.Loc) (ψ : TCell w.K) s, ρκ.get l = some ψ → ψ.lsOf = some s →
+        ∀ x ∈ s.set, w.K.le n x) bs ns :=
+  hI.2.2.2.2.2.imp fun _ _ hb ρκ _ hc l ψ s hl hs => OnBranchResT.of_compS_left hc hb l ψ hl s hs
+
+/-- **A stored continuation's lender is an ancestor**: as `borrowEdges_ancestors`, at a view the
+share holds at a record's lent location carrying the record's frame lifetime `α`. -/
+theorem lender_ancestor {w : TWd} {bs : List (TBranch w.K)} {ns : List Life}
+    {W : TRes w.K} {ps : List (FrameRecT w.K)} {ls : List (SRecT w.K)} {μ : Heap}
+    (hI : CactusInvT w bs ns W ps ls μ) {b : TBranch w.K} {n : Life}
+    (hbn : (b, n) ∈ bs.zip ns) {ρκ rest : TRes w.K} (hc : ResUT.CompS ρκ rest b.1)
+    {p : FrameRecT w.K} {α : Life} {ψ : TCell w.K} {s : TSet} (hl : ρκ.get p.le = some ψ)
+    (hs : ψ.lsOf = some s) (hα : α ∈ s.set) : w.K.le n α := by
+  have h := borrowEdges_ancestors hI
+  obtain ⟨i, hi₁, hi₂⟩ := List.mem_iff_getElem.mp hbn
+  have hmin : i < min bs.length ns.length := by simpa using hi₁
+  have hib : i < bs.length := lt_of_lt_of_le hmin (Nat.min_le_left _ _)
+  have hin : i < ns.length := lt_of_lt_of_le hmin (Nat.min_le_right _ _)
+  rw [List.getElem_zip] at hi₂
+  have hb : bs[i] = b := (Prod.mk.inj hi₂).1
+  have hn : ns[i] = n := (Prod.mk.inj hi₂).2
+  have := List.forall₂_iff_get.mp h |>.2 i hib hin
+  simp only [List.get_eq_getElem, hb, hn] at this
+  exact this ρκ rest hc p.le ψ s hl hs α hα
 
 end BoCa.Fig16.Tree.Wp
 

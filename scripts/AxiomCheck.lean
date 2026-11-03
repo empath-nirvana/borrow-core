@@ -982,6 +982,16 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.twp_lendOpen
 #print axioms BoCa.Fig16.Tree.Wp.twp_lendEnd
 #print axioms BoCa.Fig16.Tree.Wp.viewRes_dup
+#print axioms BoCa.Fig16.Tree.Wp.twp_kappa_cancel_in
+#print axioms BoCa.Fig16.Tree.Wp.twp_kappaC_cancel_in
+#print axioms BoCa.Fig16.Tree.Wp.PoolT.kripke
+#print axioms BoCa.Fig16.Tree.Wp.twp_keepsPool
+#print axioms BoCa.Fig16.Tree.Wp.poolT_park
+#print axioms BoCa.Fig16.Tree.Wp.poolT_resume
+#print axioms BoCa.Fig16.Tree.Wp.poolT_cancel
+#print axioms BoCa.Fig16.Tree.Wp.KapAtT.cancel
+#print axioms BoCa.Fig16.Tree.Wp.borrowEdges_ancestors
+#print axioms BoCa.Fig16.Tree.Wp.lender_ancestor
 #print axioms BoCa.Fig16.Tree.chain_ResU_compS_defined_iff
 #print axioms BoCa.Fig16.Tree.chain_ResU_Valid_split
 #print axioms BoCa.Fig16.Tree.chain_ResU_Hash_split
