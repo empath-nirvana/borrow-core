@@ -941,6 +941,10 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.KapAtT.kripke
 #print axioms BoCa.Fig16.Tree.Wp.twp_keepsKap
 #print axioms BoCa.Fig16.Tree.Wp.kapStored_end_refused
+#print axioms BoCa.Fig16.Tree.Wp.kapAtT_resume_beside
+#print axioms BoCa.Fig16.Tree.Wp.emptyRec_no_desc
+#print axioms BoCa.Fig16.Tree.Wp.config_share_reads
+#print axioms BoCa.Fig16.Tree.Wp.config_resumable_after_open
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Async.task_cerwpT
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Async.async_schedOK
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Async.asyncProg_safe

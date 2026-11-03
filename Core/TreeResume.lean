@@ -234,6 +234,27 @@ theorem KapAtT.kripke {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k :
   exact ⟨w₁, ls₁, O₁, ρ₁, hK, hE₁.trans hr₁ hE, RRw.trans hE.1 hr₁ hr, hO₁.trans hE.1 hO,
     hl₁.trans hE.1 hl⟩
 
+/-- **A held `κ` resumed beside a state the scheduler keeps**, at the world and list it is held at:
+`kapSchedT_resume_beside` at a later world, the stop list's re-reading supplied by `KapAtT`. With
+`twp_keepsKap` this is the resume after another branch's run. -/
+theorem kapAtT_resume_beside {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : Nat}
+    {v κ : Val} {w : TWd} {ls : List (SRecT w.K)} {O O₂ : List (FrameRecT w.K)} {ρk : TRes w.K}
+    (hκ : KapAtT (ℍ := ℍ) Qout M en k v κ w ls O ρk) {F : TFrame}
+    (hFM : ∀ w' ρf, F w' ρf → fdMask M w' ρf) {k' : Nat} (hk' : k' < k) {a : Val}
+    {σ σ' ρ₂ ρ : TRes w.K} (hB : en.PBv v k' w ls a σ) (hcσ : ResUT.CompS ρk σ σ')
+    (hcρ : ResUT.CompS σ' ρ₂ ρ) (hcov : CovR (sem w.Θ) w.K ρ)
+    {R : TRProp} (hR : R.Mono) (hap : ∀ p ∈ O, ∀ q ∈ O₂, p.le ≠ q.le) (hR₂ : R w O₂ ρ₂)
+    (hM₂ : fdMask M w ρ₂) :
+    twp (ℍ := ℍ) F ((valPost Qout).sep R) k' w ls (O ++ O₂)
+      (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val a)) ρ := by
+  have h := cerwpTE_iff.mp (hκ.resume hk' hB hcσ (fdMask_mono M) (fun _ _ h => h))
+  refine twp_frame_w hR hap hcρ hcov ?_ h hR₂
+  intro w₀ ρf ρ₁₀ ρ₂₀ y fρ O₁₀ O₂₀ ps psF ls₀ μ hE h₂₀ _ _ hFρ hy hyf _ _ _ hI
+  have hvy : ResUT.Valid y := (ResUT.Valid.split hyf hI.valid).1
+  have hvf := ResUT.Valid.split hy hvy
+  exact ⟨hvy, NoneAt.compS hy hvf.1 hvf.2 (hFM w₀ ρf hFρ).2
+    (NoneAt.rr hE.1 hM₂.1 h₂₀ hM₂.2)⟩
+
 /-! ### The resumability theorem -/
 
 /-- **Another branch's run keeps a stored continuation resumable.** `κ` is held at `w` with its
@@ -282,6 +303,98 @@ theorem kapStored_end_refused {w : TWd} {bs : List (TBranch w.K)} {ns : List Lif
     (hX : ResUT.CompS (ResUT.single p.le (CellUT.ownOf p.v)) p.R X') :
     ¬ ∃ W', ResUT.CompS X' Y W' ∧ ResUT.Valid W' :=
   r2_endBlockedByHolder w bs ns W ps ls μ hI (ρκ, Oκ) hκ p hp hfd s hs Y Yr X' hW hY hX
+
+/-! ### At a configuration
+
+`World/Config.lean`'s world (`twnt_config`): the parent holds the lend `ℓ ↦ imm({α}, loc m, R)`
+of the record `recE ℓ m`, and `κ`'s share is the child's image `m ↦ imm({β}, (), ∅)`, a view of the
+record (`config_share_reads`). Another branch, owning no record, allocates a fresh location and
+opens a lend of it, unrelated to `recE` (`TWNT.alloc`, then `TWNT.immFrame`). At the end, the stop
+list `[(recE ℓ m, α)]` is carried into the end list by the theorem's two steps
+(`frameRooted_of_notRunner` at the start, `keep_frameRooted` at the end), so its re-reading exists
+there and `extFT` admits the end list at `κ`'s share: `contShareT_resume_in`'s and
+`KapAtT.resume`'s list premises hold. -/
+
+/-- A record over the empty escrow has no proper sub-record. -/
+theorem emptyRec_no_desc {K : WCactus} (l : BoCa.Loc) (v : BoCa.Val) (T : KTy) (d : FrameRecT K) :
+    ¬ DescT (⟨l, v, PMap.empty, T⟩ : FrameRecT K) d := by
+  rintro ⟨p, hp, h⟩
+  cases h with
+  | nil => exact hp rfl
+  | cons hs _ =>
+      obtain ⟨-, ζ, eζ, -⟩ := hs
+      simp at eζ
+
+/-- `κ`'s share at the configuration reads the record: `m` is frozen in it and a chain position
+of `recE ℓ m`. -/
+theorem config_share_reads : RelFT (recE (K := KC) ℓC mC) childRes :=
+  ⟨mC, FrzT.imm (ResUT.single_get_self _ _) (CellUT.kind_immOf _ _ _ _),
+    Or.inr ⟨none, KTy.unit, BoCa.Val.unit, ChainT.one (RefPosT.ref KTy.unit mC)
+      (ResUT.single_get_self _ _)⟩⟩
+
+/-- **At the configuration, a record-free branch opening an unrelated lend keeps `κ` resumable.**
+From the world `W` of the parent's lend and the child's view, the runner allocates `l` and lends
+it (`r₂`, owned by the runner at the end); at the end world `W′` the stop list `lsC` is carried
+into the end list, so a re-reading `lsR` of it exists there and `extFT lsR ls′` holds at the
+share. -/
+theorem config_resumable_after_open :
+    ∃ (W W' : TRes KC) (l : BoCa.Loc) (ls' : List (SRecT KC)),
+      ResUT.CompS parentRes childRes W ∧
+      TWNT KC wC.Θ wC.tc W [recE ℓC mC] (rsOfT lsC) ∧
+      RelFT (recE (K := KC) ℓC mC) childRes ∧
+      TWNT KC wC.Θ wC.tc W' [⟨l, BoCa.Val.unit, PMap.empty, KTy.unit⟩, recE ℓC mC] (rsOfT ls') ∧
+      (⟨l, BoCa.Val.unit, PMap.empty, KTy.unit⟩ : FrameRecT KC) ∈ rsOfT ls' ∧
+      ¬ (⟨l, BoCa.Val.unit, PMap.empty, KTy.unit⟩ : FrameRecT KC) ∈ rsOfT lsC ∧
+      SRecsIn wC.Θ lsC ls' ∧
+      ∃ lsR : List (SRecT KC), SRecsRR wC.Θ lsC lsR ∧ extFT lsR ls' childRes := by
+  classical
+  obtain ⟨W, hW, hT⟩ := twnt_config (K := KC) (fun _ => none) βC_lt_αC ℓC_ne_mC
+  obtain ⟨σ, hσ⟩ := hT.valid
+  let μ : BoCa.Loc → Option BoCa.Val := fun x => (σ.get x).map CellUT.erase
+  have hlow : ResUT.Lower W μ := ⟨σ, hσ, fun _ => rfl⟩
+  have hfin : FinDom μ := by
+    obtain ⟨d, hd⟩ := σ.finite
+    exact ⟨d, fun x hx => hd x fun e => hx (by simp [μ, e])⟩
+  obtain ⟨l, hl⟩ := exists_fresh_heap hfin
+  have hσl : σ.get l = none := by
+    revert hl; simp only [μ]; cases σ.get l <;> simp
+  have hWl : W.get l = none := get_eq_none_of_flatT hσ hσl
+  have hl₁ : l ≠ ℓC := fun e => by
+    subst e
+    obtain ⟨ψ, e', -⟩ := compS_get_left' hW (ResUT.single_get_self _ _)
+    rw [hWl] at e'; cases e'
+  -- the runner allocates `l`
+  obtain ⟨W₁, hW₁⟩ := (ResUT.compS_defined_iff W (ResUT.single l (CellUT.ownOf BoCa.Val.unit))).mpr
+    (compatS_single_of_get_noneT hWl)
+  have hlow₁ := lower_compS_ownT hW₁ hlow hl
+  have hv₁ : ResUT.Valid W₁ := by obtain ⟨τ, hτ, -⟩ := hlow₁; exact ⟨τ, hτ⟩
+  have hT₁ : TWNT KC wC.Θ wC.tc W₁ [recE ℓC mC] [recE ℓC mC] := TWNT.alloc hT hlow hl hW₁ hv₁
+  -- and lends it
+  have hs : ResUT.InStratum (TSet.single αC) (PMap.empty : TRes KC) := emptyT_inStratum _
+  obtain ⟨-, W', hW', hv'⟩ := ResUT.six34 (ρ := W) (ρv := PMap.empty) (hs := hs)
+    (ResUT.comp_empty_left _) (ResUT.Hash.of_compS hW₁ hv₁)
+  have hT' : TWNT KC wC.Θ wC.tc W' [⟨l, BoCa.Val.unit, PMap.empty, KTy.unit⟩, recE ℓC mC]
+      [⟨l, BoCa.Val.unit, PMap.empty, KTy.unit⟩, recE ℓC mC] :=
+    TWNT.immFrame (ds := []) KTy.unit hs hT₁ (ResUT.compS_empty_right _) (ResUT.CompS.comm hW₁)
+      ⟨rfl, rfl⟩ (ResUT.CompS.comm hW') hv'
+      (fun d => ⟨fun h => by simp at h, fun h => (emptyRec_no_desc l _ _ d h).elim⟩)
+  let ls' : List (SRecT KC) :=
+    [(⟨l, BoCa.Val.unit, PMap.empty, KTy.unit⟩, αC), (recE ℓC mC, αC)]
+  have hcov : CovR (sem wC.Θ) KC (escR (K := KC) mC) := fun x ψ e => by
+    obtain ⟨-, rfl⟩ := ResUT.single_get_eq_some e
+    exact .own _ _
+  have hin : SRecsIn wC.Θ lsC ls' := by
+    intro r hr
+    have hr₀ := frameRooted_of_notRunner (O := []) (psF := [recE ℓC mC])
+      ⟨fun p => by simp, fun _ h => by cases h⟩ hT hr (fun _ h => by cases h)
+    exact keep_frameRooted (psF := [recE ℓC mC]) (O' := [⟨l, BoCa.Val.unit, PMap.empty, KTy.unit⟩])
+      (.cons (RecRR.refl hcov) .nil) ⟨fun p => by simp, fun p hp q hq => by
+        simp only [List.mem_singleton] at hp hq; subst hp; subst hq; exact hl₁⟩ hT' hr₀
+  obtain ⟨lsR, hlR, hsub⟩ := hin.exists_srecsRR
+  refine ⟨W, W', l, ls', hW, hT, config_share_reads, hT', by simp [ls', rsOfT],
+    fun h => ?_, hin, lsR, hlR, extFT_of_sub hsub _⟩
+  simp only [lsC, rsOfT, List.map_cons, List.map_nil, List.mem_singleton] at h
+  exact hl₁ (congrArg FrameRecT.le h)
 
 end BoCa.Fig16.Tree.Wp
 
