@@ -267,23 +267,23 @@ lent `imm` at `α` (the record at `ref 1`), the record reborrowed at `β ⊏ α`
 image. -/
 theorem twnt_config (Θ : CodeTy) {α β : Life} (hβα : K.lt β α) {l m : BoCa.Loc} (hlm : l ≠ m) :
     ∃ W, ResUT.CompS (ResUT.single l (lendCell α m)) (viewRes β m) W ∧
-      TWNT K Θ W [recE l m] [recE l m] := by
+      TWNT K Θ (tmplT K Θ) W [recE l m] [recE l m] := by
   -- `m ↦ own(())`
-  have h1 : TWNT K Θ (escR m) [] [] :=
+  have h1 : TWNT K Θ (tmplT K Θ) (escR m) [] [] :=
     .alloc (μ := fun _ => none) .empty ⟨_, flat_empty, fun x => by simp⟩ rfl
       (ResUT.comp_empty_left _) (ResUT.valid_single_own m _)
   -- `ℓ ↦ own(loc m)`
   obtain ⟨W2, hW2⟩ := single_compS (K := K) hlm.symm (CellUT.ownOf BoCa.Val.unit)
     (CellUT.ownOf (BoCa.Val.loc m))
   have hv2 := valid_two_own (K := K) BoCa.Val.unit (BoCa.Val.loc m) hW2
-  have h2 : TWNT K Θ W2 [] [] :=
+  have h2 : TWNT K Θ (tmplT K Θ) W2 [] [] :=
     .alloc (μ := fun x => if x = m then some BoCa.Val.unit else none) h1
       ⟨_, ResUT.flat_single_own m _, fun x => by
         rw [PMap.sng_get]; by_cases hx : x = m <;> simp [hx]⟩ (if_neg hlm) hW2 hv2.1
   -- the `imm` lend at `α`
   have hv3 : ResUT.Valid (ResUT.single l (lendCell (K := K) α m)) :=
     valid_single_imm _ hW2 hv2.1
-  have h3 : TWNT K Θ (ResUT.single l (lendCell α m)) [recE l m] [recE l m] := by
+  have h3 : TWNT K Θ (tmplT K Θ) (ResUT.single l (lendCell α m)) [recE l m] [recE l m] := by
     have hX : ResUT.CompS (ResUT.single l (CellUT.ownOf (BoCa.Val.loc m))) (escR m) W2 :=
       ResUT.CompS.comm hW2
     have := TWNT.immFrame (W := W2) (X := W2) (Z := PMap.empty) (R := escR m) (ds := [])
@@ -314,7 +314,7 @@ flattening holds nothing at `ℓ` (`joinFd` at `ℓ`); and `ℓ ↦ own(loc m) �
 with `Y`, so `TWNT.immEnd` has no end world. -/
 theorem immEnd_esc_config (Θ : CodeTy) {α β : Life} (hβα : K.lt β α) {l m : BoCa.Loc}
     (hlm : l ≠ m) :
-    ∃ W, TWNT K Θ W [recE l m] [recE l m] ∧
+    ∃ W, TWNT K Θ (tmplT K Θ) W [recE l m] [recE l m] ∧
       ResUT.CompS (ResUT.single l (CellUT.immOf (TSet.single α) (recE (K := K) l m).v (recE l m).R
         (own_inStratum _ _ _))) (viewRes β m) W ∧
       (∀ τ, ResUT.Flat (viewRes (K := K) β m) τ → τ.get l = none) ∧
@@ -333,7 +333,7 @@ theorem immEnd_esc_config (Θ : CodeTy) {α β : Life} (hβα : K.lt β α) {l m
 /-- **The same configuration on the printed chain** (`β = 2 ⊏ α = 1`): the record, the reborrow
 and the end are the printed ones; what is not printed is a frame holding the image. -/
 theorem immEnd_esc_chain (Θ : CodeTy) :
-    ∃ W, TWNT WCactus.chain Θ W [recE 1 2] [recE 1 2] ∧
+    ∃ W, TWNT WCactus.chain Θ (tmplT WCactus.chain Θ) W [recE 1 2] [recE 1 2] ∧
       ResUT.CompS (ResUT.single 1 (CellUT.immOf (TSet.single (OrderDual.toDual 1))
         (recE (K := WCactus.chain) 1 2).v (recE 1 2).R (own_inStratum _ _ _)))
         (viewRes (OrderDual.toDual 2) 2) W ∧
@@ -569,13 +569,13 @@ theorem fdEsc_iff_of_ex_empty {l : BoCa.Loc} {R Y : TRes K} (hR : ExST R PMap.em
 
 /-- **Every record proper's lender piece `ℓ ↦ own(v) ● R` is defined and valid**: it was a part
 of the valid world at the lend, and it is fixed by the record (re-read along a re-reading). -/
-theorem TWNT.lenderValid {K : WCactus} {Θ : CodeTy} {W : TRes K} {ps rs : List (FrameRecT K)}
-    (h : TWNT K Θ W ps rs) : ∀ p ∈ ps, ∃ X, ResUT.CompS (ResUT.single p.le (CellUT.ownOf p.v))
+theorem TWNT.lenderValid {K : WCactus} {Θ : CodeTy} {tc : TChoice K} {W : TRes K}
+    {ps rs : List (FrameRecT K)} (h : TWNT K Θ tc W ps rs) : ∀ p ∈ ps, ∃ X, ResUT.CompS (ResUT.single p.le (CellUT.ownOf p.v))
       p.R X ∧ ResUT.Valid X := by
   induction h with
   | empty => intro p hp; simp at hp
   | alloc _ _ _ _ _ ih => exact ih
-  | @immFrame K Θ W X Z R W' ps rs ds l v α T hα h₀ hX hW _ _ _ _ ih =>
+  | @immFrame K Θ tc W X Z R W' ps rs ds l v α T hα h₀ hX hW _ _ _ _ ih =>
       intro p hp
       rcases List.mem_cons.mp hp with rfl | hp
       · exact ⟨X, hX, (ResUT.Valid.split hW h₀.valid).1⟩
@@ -589,7 +589,7 @@ theorem TWNT.lenderValid {K : WCactus} {Θ : CodeTy} {W : TRes K} {ps rs : List 
   | immEnd r _ _ _ _ _ _ hps _ ih => exact fun p hp => ih p ((hps p).mp hp).1
   | rebEnd _ _ _ _ _ _ _ ih => exact ih
   | rebEndDeep _ _ _ _ _ _ _ _ ih => exact ih
-  | @reread K K' Θ Θ' W W' ps rs ps' rs' _ _ _ _ hps _ ih =>
+  | @reread K K' Θ Θ' tc tc' W W' ps rs ps' rs' _ _ _ _ hps _ _ ih =>
       intro p' hp'
       obtain ⟨p, hp, hle, hv, -, hR⟩ := forall₂_mem_right hps hp'
       obtain ⟨X, hX, hvX⟩ := ih p hp

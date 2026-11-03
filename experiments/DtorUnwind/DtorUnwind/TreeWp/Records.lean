@@ -25,13 +25,13 @@ carrier's names (`CellUT`, `TSet`, `K.le`), and with the record's type a code:
 * **`TWNT`**: `TWNC`'s constructors over `TRes K`, and one more, `reread`: the tree grows or a
   location no `mut` cell is at is re-typed, the world and every record re-read (`RecRR`). At no
   growth the re-reading is the identity (`TWNT.reread_refl`).
+* **The template choice** (`TChoice`): `TWNT` carries the choice its canonical images read
+  (`canonTc`, `canonDTc`), and `reread` carries it, each used argument's template re-read
+  (`TcCarried`). At `tc = tmplT K Θ` the images are `canonT`, `canonDT` (`TreeWp/Templ.lean`), so
+  where nothing grows `TWNT` is `TWNC` read over the tree with the `Classical` choice.
 
-**Open: templates across a re-reading.** A template is the `Classical` choice at `(K, Θ)`; after
-`reread` the choice at `(K′, Θ′)` need not be the re-reading of the one at `(K, Θ)`, so `TWNC`'s
-template invariant (`TemplAt`: every view at a record's roots carries the template's witness) is
-not carried by `reread` as stated. Carrying the template with the record fixes it for records
-proper but leaves sub-records' templates undetermined (a sub-record is named by its lineage,
-which fixes location, value, escrow and code only). Not derived, obstruction not verified.
+**Templates across a re-reading** are carried, not re-chosen: `TreeWp/Templ.lean` shows
+`TemplAt` and `TemplDAt` kept by a re-reading (`templAt_reread`, `templDAt_reread`).
 -/
 
 noncomputable section
@@ -241,88 +241,116 @@ def canonDT (K : WCactus) (Θ : CodeTy) (S₀ : KTy) (u₀ : BoCa.Val) (w₀ : T
 def RecRR {K K' : WCactus} (Θ' : CodeTy) (r : FrameRecT K) (r' : FrameRecT K') : Prop :=
   r'.le = r.le ∧ r'.v = r.v ∧ r'.T = r.T ∧ RR (sem Θ') r.R r'.R
 
+/-! ### Template choices -/
+
+/-- **A template choice**: for an escrow, a code and a value, a typed image. `tmplT K Θ` is one. -/
+abbrev TChoice (K : WCactus) : Type := TRes K → KTy → BoCa.Val → TRes K
+
+/-- The canonical image of a record at `β`, at the choice `tc`. -/
+def canonTc (tc : TChoice K) (r : FrameRecT K) (β : Life) : TRes K :=
+  relResT r.R β (tc r.R r.T r.v)
+
+/-- The canonical image of a chain view at `β`, at the choice `tc`. -/
+def canonDTc (tc : TChoice K) (S₀ : KTy) (u₀ : BoCa.Val) (w₀ : TRes K) (β : Life) : TRes K :=
+  relResT w₀ β (tc w₀ S₀ u₀)
+
+/-- **The arguments the template invariants read** at `W` and `rs`: each record's escrow, code and
+value, and each chain view's witness with the position's code and value. -/
+def UsedT (W : TRes K) (rs : List (FrameRecT K)) (R : TRes K) (T : KTy) (v : BoCa.Val) : Prop :=
+  (∃ r ∈ rs, r.R = R ∧ r.T = T ∧ r.v = v) ∨
+  (∃ r ∈ rs, ∃ p₀ l₀, ChainT r.R r.T r.v p₀ l₀ T v ∧ ∃ a, AgWT W a ∧ ∃ ψ₀ : TCell K,
+    a.get l₀ = some ψ₀ ∧ ψ₀.kind ≠ Kind.own ∧ ψ₀.wit = R)
+
+/-- **A choice carried along a re-reading**: at every used argument, the new choice at the
+re-read escrow is the re-reading of the old template. -/
+def TcCarried {K' : WCactus} (Θ' : CodeTy) (W : TRes K) (rs : List (FrameRecT K)) (tc : TChoice K)
+    (tc' : TChoice K') : Prop :=
+  ∀ R T v, UsedT W rs R T v → ∀ R' : TRes K', RR (sem Θ') R R' →
+    RR (sem Θ') (tc R T v) (tc' R' T v)
+
 /-! ### The typed world over the tree -/
 
-/-- **`TWNC` over the tree world.** `TWNT K Θ W ps rs`: the configuration `W` at the tree `K` and
-the code typing `Θ`, reached from `∅` by the operations; `ps` the frames taken and not ended,
+/-- **`TWNC` over the tree world.** `TWNT K Θ tc W ps rs`: the configuration `W` at the tree `K`,
+the code typing `Θ` and the template choice `tc` (`canonTc` reads it), reached from `∅` by the operations; `ps` the frames taken and not ended,
 `rs` with their lineages. `TWNC`'s constructors, read over `TRes K`, and `reread`. -/
-inductive TWNT : (K : WCactus) → CodeTy → TRes K → List (FrameRecT K) → List (FrameRecT K) →
-    Prop
-  | empty {K : WCactus} {Θ : CodeTy} : TWNT K Θ PMap.empty [] []
-  | alloc {K : WCactus} {Θ : CodeTy} {W W' : TRes K} {ps rs : List (FrameRecT K)}
+inductive TWNT : (K : WCactus) → CodeTy → TChoice K → TRes K → List (FrameRecT K) →
+    List (FrameRecT K) → Prop
+  | empty {K : WCactus} {Θ : CodeTy} {tc : TChoice K} : TWNT K Θ tc PMap.empty [] []
+  | alloc {K : WCactus} {Θ : CodeTy} {tc : TChoice K} {W W' : TRes K} {ps rs : List (FrameRecT K)}
       {μ : BoCa.Loc → Option BoCa.Val} {l : BoCa.Loc} {v : BoCa.Val} :
-      TWNT K Θ W ps rs → ResUT.Lower W μ → μ l = none →
-      ResUT.CompS W (ResUT.single l (CellUT.ownOf v)) W' → ResUT.Valid W' → TWNT K Θ W' ps rs
-  | immFrame {K : WCactus} {Θ : CodeTy} {W X Z R W' : TRes K} {ps rs ds : List (FrameRecT K)}
+      TWNT K Θ tc W ps rs → ResUT.Lower W μ → μ l = none →
+      ResUT.CompS W (ResUT.single l (CellUT.ownOf v)) W' → ResUT.Valid W' → TWNT K Θ tc W' ps rs
+  | immFrame {K : WCactus} {Θ : CodeTy} {tc : TChoice K} {W X Z R W' : TRes K} {ps rs ds : List (FrameRecT K)}
       {l : BoCa.Loc} {v : BoCa.Val} {α : Life} (T : KTy) (h : R.InStratum (TSet.single α)) :
-      TWNT K Θ W ps rs → ResUT.CompS (ResUT.single l (CellUT.ownOf v)) R X →
+      TWNT K Θ tc W ps rs → ResUT.CompS (ResUT.single l (CellUT.ownOf v)) R X →
       ResUT.CompS X Z W → (T.interp Θ).P K v R →
       ResUT.CompS (ResUT.single l (CellUT.immOf (TSet.single α) v R h)) Z W' →
       ResUT.Valid W' → (∀ d, d ∈ ds ↔ DescT ⟨l, v, R, T⟩ d) →
-      TWNT K Θ W' (⟨l, v, R, T⟩ :: ps) (⟨l, v, R, T⟩ :: (ds ++ rs))
-  | reb {K : WCactus} {Θ : CodeTy} {W W' c : TRes K} {ps rs : List (FrameRecT K)}
+      TWNT K Θ tc W' (⟨l, v, R, T⟩ :: ps) (⟨l, v, R, T⟩ :: (ds ++ rs))
+  | reb {K : WCactus} {Θ : CodeTy} {tc : TChoice K} {W W' c : TRes K} {ps rs : List (FrameRecT K)}
       (r : FrameRecT K) {le : BoCa.Loc} {s : TSet} {β : Life} {hs : r.R.InStratum s} :
-      TWNT K Θ W ps rs → r ∈ rs → W.get le = some (CellUT.immOf s r.v r.R hs) →
+      TWNT K Θ tc W ps rs → r ∈ rs → W.get le = some (CellUT.immOf s r.v r.R hs) →
       ResUT.Reb β r.R c → ((r.T.immReborrow β).interp Θ).P K r.v c →
-      RebRecLeT K W ps r.R β → c = canonT K Θ r β → ResUT.CompS W c W' → ResUT.Valid W' →
-      TWNT K Θ W' ps rs
-  | rebDeep {K : WCactus} {Θ : CodeTy} {W W' c : TRes K} {ps rs : List (FrameRecT K)}
+      RebRecLeT K W ps r.R β → c = canonTc tc r β → ResUT.CompS W c W' → ResUT.Valid W' →
+      TWNT K Θ tc W' ps rs
+  | rebDeep {K : WCactus} {Θ : CodeTy} {tc : TChoice K} {W W' c : TRes K} {ps rs : List (FrameRecT K)}
       (r : FrameRecT K) {p : Option BoCa.Loc} {l₀ : BoCa.Loc} {S₀ : KTy} {u₀ : BoCa.Val}
       {s : TSet} {w₀ : TRes K} {hs : w₀.InStratum s} {β : Life} :
-      TWNT K Θ W ps rs → r ∈ rs → ChainT r.R r.T r.v p l₀ S₀ u₀ →
+      TWNT K Θ tc W ps rs → r ∈ rs → ChainT r.R r.T r.v p l₀ S₀ u₀ →
       W.get l₀ = some (CellUT.immOf s u₀ w₀ hs) → ResUT.Reb β w₀ c →
       ((S₀.immReborrow β).interp Θ).P K u₀ c →
-      RebCellLeT K W l₀ β → RebRecLeT K W ps w₀ β → c = canonDT K Θ S₀ u₀ w₀ β →
-      ResUT.CompS W c W' → ResUT.Valid W' → TWNT K Θ W' ps rs
-  | mutFold {K : WCactus} {Θ : CodeTy} {W X Z ρ W' : TRes K} {ps rs : List (FrameRecT K)}
+      RebCellLeT K W l₀ β → RebRecLeT K W ps w₀ β → c = canonDTc tc S₀ u₀ w₀ β →
+      ResUT.CompS W c W' → ResUT.Valid W' → TWNT K Θ tc W' ps rs
+  | mutFold {K : WCactus} {Θ : CodeTy} {tc : TChoice K} {W X Z ρ W' : TRes K} {ps rs : List (FrameRecT K)}
       {l : BoCa.Loc} {v : BoCa.Val} {b : TSet} [Fact (K.Anti b)] {hstr : ρ.InStratum b}
       {P : BoCa.Val → SPropST BoCa.Loc BoCa.Val K b} {hw : P v ⟨ρ, hstr⟩} :
-      TWNT K Θ W ps rs → ResUT.CompS (ResUT.single l (CellUT.ownOf v)) ρ X →
+      TWNT K Θ tc W ps rs → ResUT.CompS (ResUT.single l (CellUT.ownOf v)) ρ X →
       ResUT.CompS X Z W → ResUT.CompS (ResUT.single l (CellUT.mutOf b v ρ hstr P hw)) Z W' →
-      ResUT.Valid W' → TWNT K Θ W' ps rs
-  | mutUnfold {K : WCactus} {Θ : CodeTy} {W X Z ρ W' : TRes K} {ps rs : List (FrameRecT K)}
+      ResUT.Valid W' → TWNT K Θ tc W' ps rs
+  | mutUnfold {K : WCactus} {Θ : CodeTy} {tc : TChoice K} {W X Z ρ W' : TRes K} {ps rs : List (FrameRecT K)}
       {l : BoCa.Loc} {v : BoCa.Val} {b : TSet} [Fact (K.Anti b)] {hstr : ρ.InStratum b}
       {P : BoCa.Val → SPropST BoCa.Loc BoCa.Val K b} {hw : P v ⟨ρ, hstr⟩} :
-      TWNT K Θ W ps rs → ResUT.CompS (ResUT.single l (CellUT.mutOf b v ρ hstr P hw)) Z W →
+      TWNT K Θ tc W ps rs → ResUT.CompS (ResUT.single l (CellUT.mutOf b v ρ hstr P hw)) Z W →
       ResUT.CompS (ResUT.single l (CellUT.ownOf v)) ρ X → ResUT.CompS X Z W' →
-      ResUT.Valid W' → TWNT K Θ W' ps rs
-  | free {K : WCactus} {Θ : CodeTy} {W W' : TRes K} {ps rs : List (FrameRecT K)} {l : BoCa.Loc}
+      ResUT.Valid W' → TWNT K Θ tc W' ps rs
+  | free {K : WCactus} {Θ : CodeTy} {tc : TChoice K} {W W' : TRes K} {ps rs : List (FrameRecT K)} {l : BoCa.Loc}
       {v : BoCa.Val} :
-      TWNT K Θ W ps rs → ResUT.CompS (ResUT.single l (CellUT.ownOf v)) W' W →
-      ResUT.Valid W' → TWNT K Θ W' ps rs
-  | store {K : WCactus} {Θ : CodeTy} {W Z W' : TRes K} {ps rs : List (FrameRecT K)}
+      TWNT K Θ tc W ps rs → ResUT.CompS (ResUT.single l (CellUT.ownOf v)) W' W →
+      ResUT.Valid W' → TWNT K Θ tc W' ps rs
+  | store {K : WCactus} {Θ : CodeTy} {tc : TChoice K} {W Z W' : TRes K} {ps rs : List (FrameRecT K)}
       {l : BoCa.Loc} {v₁ v₂ : BoCa.Val} :
-      TWNT K Θ W ps rs → ResUT.CompS (ResUT.single l (CellUT.ownOf v₁)) Z W →
+      TWNT K Θ tc W ps rs → ResUT.CompS (ResUT.single l (CellUT.ownOf v₁)) Z W →
       ResUT.CompS (ResUT.single l (CellUT.ownOf v₂)) Z W' → ResUT.Valid W' →
-      TWNT K Θ W' ps rs
-  | immEnd {K : WCactus} {Θ : CodeTy} {W Y X' W' : TRes K} {ps rs ps' rs' : List (FrameRecT K)}
+      TWNT K Θ tc W' ps rs
+  | immEnd {K : WCactus} {Θ : CodeTy} {tc : TChoice K} {W Y X' W' : TRes K} {ps rs ps' rs' : List (FrameRecT K)}
       (r : FrameRecT K) {s : TSet} {hs : r.R.InStratum s} :
-      TWNT K Θ W ps rs → r ∈ ps →
+      TWNT K Θ tc W ps rs → r ∈ ps →
       ResUT.CompS (ResUT.single r.le (CellUT.immOf s r.v r.R hs)) Y W →
       ResUT.CompS (ResUT.single r.le (CellUT.ownOf r.v)) r.R X' → ResUT.CompS X' Y W' →
       ResUT.Valid W' → (∀ r', r' ∈ ps' ↔ (r' ∈ ps ∧ r' ≠ r)) →
-      (∀ d, d ∈ rs' ↔ ∃ p ∈ ps', DescRT p d) → TWNT K Θ W' ps' rs'
-  | rebEnd {K : WCactus} {Θ : CodeTy} {W W' c : TRes K} {ps rs : List (FrameRecT K)}
+      (∀ d, d ∈ rs' ↔ ∃ p ∈ ps', DescRT p d) → TWNT K Θ tc W' ps' rs'
+  | rebEnd {K : WCactus} {Θ : CodeTy} {tc : TChoice K} {W W' c : TRes K} {ps rs : List (FrameRecT K)}
       (r : FrameRecT K) {le : BoCa.Loc} {s : TSet} {β : Life} {hs : r.R.InStratum s} :
-      TWNT K Θ W ps rs → r ∈ rs → W'.get le = some (CellUT.immOf s r.v r.R hs) →
+      TWNT K Θ tc W ps rs → r ∈ rs → W'.get le = some (CellUT.immOf s r.v r.R hs) →
       ResUT.Reb β r.R c → ResUT.CompS W' (c.restrictDom r.R.exclPart) W →
-      RebEndRecT K W' rs r.R β → TWNT K Θ W' ps rs
-  | rebEndDeep {K : WCactus} {Θ : CodeTy} {W W' c : TRes K} {ps rs : List (FrameRecT K)}
+      RebEndRecT K W' rs r.R β → TWNT K Θ tc W' ps rs
+  | rebEndDeep {K : WCactus} {Θ : CodeTy} {tc : TChoice K} {W W' c : TRes K} {ps rs : List (FrameRecT K)}
       (r : FrameRecT K) {p : Option BoCa.Loc} {l₀ : BoCa.Loc} {S₀ : KTy} {u₀ : BoCa.Val}
       {s : TSet} {w₀ : TRes K} {hs : w₀.InStratum s} {β : Life} :
-      TWNT K Θ W ps rs → r ∈ rs → ChainT r.R r.T r.v p l₀ S₀ u₀ →
+      TWNT K Θ tc W ps rs → r ∈ rs → ChainT r.R r.T r.v p l₀ S₀ u₀ →
       W'.get l₀ = some (CellUT.immOf s u₀ w₀ hs) → ResUT.Reb β w₀ c →
       ResUT.CompS W' (c.restrictDom w₀.exclPart) W → RebEndRecT K W' rs w₀ β →
-      TWNT K Θ W' ps rs
+      TWNT K Θ tc W' ps rs
   /-- **The tree grows, or a location no `mut` cell is at is re-typed**: the world and every
-  record re-read. -/
-  | reread {K K' : WCactus} {Θ Θ' : CodeTy} {W : TRes K} {W' : TRes K'}
+  record re-read, and the template choice carried (`TcCarried`). -/
+  | reread {K K' : WCactus} {Θ Θ' : CodeTy} {tc : TChoice K} {tc' : TChoice K'} {W : TRes K} {W' : TRes K'}
       {ps rs : List (FrameRecT K)} {ps' rs' : List (FrameRecT K')} :
-      TWNT K Θ W ps rs → K.Ext K' → AgreeOn Θ Θ' W → RR (sem Θ') W W' →
-      List.Forall₂ (RecRR Θ') ps ps' → List.Forall₂ (RecRR Θ') rs rs' → TWNT K' Θ' W' ps' rs'
+      TWNT K Θ tc W ps rs → K.Ext K' → AgreeOn Θ Θ' W → RR (sem Θ') W W' →
+      List.Forall₂ (RecRR Θ') ps ps' → List.Forall₂ (RecRR Θ') rs rs' →
+      TcCarried Θ' W rs tc tc' → TWNT K' Θ' tc' W' ps' rs'
 
-theorem TWNT.valid {K : WCactus} {Θ : CodeTy} {W : TRes K} {ps rs : List (FrameRecT K)}
-    (h : TWNT K Θ W ps rs) : ResUT.Valid W := by
+theorem TWNT.valid {K : WCactus} {Θ : CodeTy} {tc : TChoice K} {W : TRes K}
+    {ps rs : List (FrameRecT K)} (h : TWNT K Θ tc W ps rs) : ResUT.Valid W := by
   induction h with
   | empty => exact ⟨PMap.empty, ⟨PMap.empty, PMap.empty, exW_empty, agW_empty,
       G.comp_empty_right _⟩⟩
@@ -337,22 +365,22 @@ theorem TWNT.valid {K : WCactus} {Θ : CodeTy} {W : TRes K} {ps rs : List (Frame
   | immEnd _ _ _ _ _ _ hv _ _ _ => exact hv
   | rebEnd _ _ _ _ _ hW _ ih => exact (ResUT.Valid.split hW ih).1
   | rebEndDeep _ _ _ _ _ _ hW _ ih => exact (ResUT.Valid.split hW ih).1
-  | reread _ _ _ hr _ _ ih => exact WitRel.ResUT.Valid.sim ih hr.rsim
+  | reread _ _ _ hr _ _ _ ih => exact WitRel.ResUT.Valid.sim ih hr.rsim
 
 /-- A covered record is its own re-reading where nothing grows. -/
 theorem RecRR.refl {Θ : CodeTy} {r : FrameRecT K} (hR : CovR (sem Θ) K r.R) :
     RecRR (K' := K) Θ r r :=
   ⟨rfl, rfl, rfl, RR.refl hR⟩
 
-/-- **Nothing changes where nothing grows**: `reread` at `K' = K`, `Θ' = Θ` is the world itself,
-by `RR.refl`. -/
-theorem TWNT.reread_refl {Θ : CodeTy} {W : TRes K} {ps rs : List (FrameRecT K)}
-    (h : TWNT K Θ W ps rs) (hW : CovR (sem Θ) K W)
-    (hps : ∀ r ∈ ps, CovR (sem Θ) K r.R) (hrs : ∀ r ∈ rs, CovR (sem Θ) K r.R) :
-    TWNT K Θ W ps rs :=
+/-- **Nothing changes where nothing grows**: `reread` at `K' = K`, `Θ' = Θ`, `tc' = tc` is the
+world itself, by `RR.refl` (`tcCarried_refl` gives `htc`). -/
+theorem TWNT.reread_refl {Θ : CodeTy} {tc : TChoice K} {W : TRes K} {ps rs : List (FrameRecT K)}
+    (h : TWNT K Θ tc W ps rs) (hW : CovR (sem Θ) K W)
+    (hps : ∀ r ∈ ps, CovR (sem Θ) K r.R) (hrs : ∀ r ∈ rs, CovR (sem Θ) K r.R)
+    (htc : TcCarried (K' := K) Θ W rs tc tc) : TWNT K Θ tc W ps rs :=
   .reread h (WCactus.Ext.refl K) (AgreeOn.refl Θ W) (RR.refl hW)
     (List.forall₂_same.mpr fun r hr => RecRR.refl (hps r hr))
-    (List.forall₂_same.mpr fun r hr => RecRR.refl (hrs r hr))
+    (List.forall₂_same.mpr fun r hr => RecRR.refl (hrs r hr)) htc
 
 /-! ### Coverage -/
 
@@ -415,13 +443,13 @@ theorem LinPathT.cov {Θ : CodeTy} {r d : FrameRecT K} {p : List BoCa.Loc} (h : 
       | «mut» _ m₀ _ _ _ hw => exact hw m χ (by rw [← wζ] at e; exact e)
 
 /-- **Every record of a `TWNT` world is covered.** -/
-theorem TWNT.cov_recs {Θ : CodeTy} {W : TRes K} {ps rs : List (FrameRecT K)}
-    (h : TWNT K Θ W ps rs) :
+theorem TWNT.cov_recs {Θ : CodeTy} {tc : TChoice K} {W : TRes K} {ps rs : List (FrameRecT K)}
+    (h : TWNT K Θ tc W ps rs) :
     (∀ r ∈ ps, CovR (sem Θ) K r.R) ∧ (∀ r ∈ rs, CovR (sem Θ) K r.R) := by
   induction h with
   | empty => exact ⟨fun r hr => by simp at hr, fun r hr => by simp at hr⟩
   | alloc _ _ _ _ _ ih => exact ih
-  | @immFrame K Θ W X Z R W' ps rs ds l v α T hα _ _ _ hden _ _ hds ih =>
+  | @immFrame K Θ tc W X Z R W' ps rs ds l v α T hα _ _ _ hden _ _ hds ih =>
       have hR : CovR (sem Θ) K R := interp_cov T hden
       refine ⟨fun r hr => ?_, fun r hr => ?_⟩
       · rcases List.mem_cons.mp hr with rfl | hr
@@ -445,7 +473,7 @@ theorem TWNT.cov_recs {Θ : CodeTy} {W : TRes K} {ps rs : List (FrameRecT K)}
       exact hq.cov (ih.1 p ((hps p).mp hp).1)
   | rebEnd _ _ _ _ _ _ _ ih => exact ih
   | rebEndDeep _ _ _ _ _ _ _ _ ih => exact ih
-  | reread _ _ _ _ hps hrs _ =>
+  | reread _ _ _ _ hps hrs _ _ =>
       refine ⟨fun r' hr' => ?_, fun r' hr' => ?_⟩
       · obtain ⟨r, -, -, -, -, hrr⟩ := forall₂_mem_right hps hr'
         exact hrr.cov

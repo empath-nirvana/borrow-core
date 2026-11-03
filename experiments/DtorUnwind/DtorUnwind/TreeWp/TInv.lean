@@ -116,8 +116,8 @@ def TIT (K : WCactus) (Θ : CodeTy) (W : TRes K) (ps rs : List (FrameRecT K)) : 
 /-- **`TWN.inv`'s statement over `TWNT`**: every world of the typed world over the tree satisfies
 `TIT`. Not derived (see the header). -/
 def TWNT.InvHolds : Prop :=
-  ∀ (K : WCactus) (Θ : CodeTy) (W : TRes K) (ps rs : List (FrameRecT K)),
-    TWNT K Θ W ps rs → TIT K Θ W ps rs
+  ∀ (K : WCactus) (Θ : CodeTy) (tc : TChoice K) (W : TRes K) (ps rs : List (FrameRecT K)),
+    TWNT K Θ tc W ps rs → TIT K Θ W ps rs
 
 end BoCa.Fig16.Tree.Wp
 

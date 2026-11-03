@@ -262,10 +262,10 @@ theorem OwnUnder.rr_back {Θ : LocTy} {K' : WCactus} {ρ : TRes K} {ρ' : TRes K
 /-! ### The invariant -/
 
 /-- `LeInv` gives `own_not_at_view`'s hypothesis at every record proper. -/
-theorem leInv_view {Θ : CodeTy} {W : TRes K} {ps rs : List (FrameRecT K)} (hI : TWNT.InvHolds)
-    (hT : TWNT K Θ W ps rs) {q : FrameRecT K} (hq : q ∈ ps) :
+theorem leInv_view {Θ : CodeTy} {tc : TChoice K} {W : TRes K} {ps rs : List (FrameRecT K)}
+    (hI : TWNT.InvHolds) (hT : TWNT K Θ tc W ps rs) {q : FrameRecT K} (hq : q ∈ ps) :
     ∀ a, AgWT W a → ∃ ψ : TCell K, a.get q.le = some ψ := fun a ha => by
-  obtain ⟨ψ, hψ, -, -, -⟩ := (hI K Θ W ps rs hT).2.1 q hq a ha
+  obtain ⟨ψ, hψ, -, -, -⟩ := (hI K Θ tc W ps rs hT).2.1 q hq a ha
   exact ⟨ψ, hψ⟩
 
 /-- **No `own` cell of a record's location beneath a borrow of the world.** -/
@@ -273,8 +273,8 @@ def NoOwnUnderT (W : TRes K) (ps : List (FrameRecT K)) : Prop :=
   ∀ p ∈ ps, ¬ OwnUnder W p.le
 
 /-- **`NoOwnUnder` is an invariant of `TWNT`**, given `TWNT.InvHolds`. -/
-theorem TWNT.noOwnUnder (hI : TWNT.InvHolds) {Θ : CodeTy} {W : TRes K}
-    {ps rs : List (FrameRecT K)} (h : TWNT K Θ W ps rs) : NoOwnUnderT W ps := by
+theorem TWNT.noOwnUnder (hI : TWNT.InvHolds) {Θ : CodeTy} {tc : TChoice K} {W : TRes K}
+    {ps rs : List (FrameRecT K)} (h : TWNT K Θ tc W ps rs) : NoOwnUnderT W ps := by
   induction h with
   | empty => intro p hp; simp at hp
   | alloc _ _ _ hW _ ih =>
@@ -282,7 +282,7 @@ theorem TWNT.noOwnUnder (hI : TWNT.InvHolds) {Θ : CodeTy} {W : TRes K}
       rcases OwnUnder.split hW ho with h | h
       · exact ih p hp h
       · exact not_ownUnder_single_own _ _ _ h
-  | @immFrame K Θ W X Z R W' ps rs ds l v α T hα hT hX hW hden hW' hv hds ih =>
+  | @immFrame K Θ tc W X Z R W' ps rs ds l v α T hα hT hX hW hden hW' hv hds ih =>
       intro p hp ho
       rcases step_frame hX hW (CellUT.wit_immOf _ _ _ _) hW' ho with h | ⟨χ, e, hk⟩
       · rcases List.mem_cons.mp hp with rfl | hp
@@ -354,7 +354,7 @@ theorem TWNT.noOwnUnder (hI : TWNT.InvHolds) {Θ : CodeTy} {W : TRes K}
   | rebEndDeep r hT hr hch hle hreb hW hβ ih =>
       intro p hp ho
       exact ih p hp (OwnUnder.of_compS_left hW ho)
-  | reread hT hE hag hr hps hrs ih =>
+  | reread hT hE hag hr hps hrs _ ih =>
       intro p' hp' ho
       obtain ⟨p, hp, hpp⟩ := forall₂_mem_right hps hp'
       rw [hpp.1] at ho

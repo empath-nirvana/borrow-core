@@ -66,10 +66,13 @@ clause) it is `Split`'s `p ∉ psF`. -/
 def SplitT {K : WCactus} (ps O psF : List (FrameRecT K)) : Prop :=
   (∀ p, p ∈ ps ↔ p ∈ O ∨ p ∈ psF) ∧ ∀ p ∈ O, ∀ q ∈ psF, p.le ≠ q.le
 
-/-- **The records of the world**: `TWNT` at the records proper and the list's records, tagged. -/
+/-- **The records of the world**: `TWNT` at the records proper and the list's records, tagged.
+The template choice is read here under `∃`; a relation step that reborrows must keep the choice
+of the world it starts from (it changes only at `TWNT.reread`), which this definition does not yet
+record. -/
 def RecInv (w : TWd) (fρ : TRes w.K) (ps : List (FrameRecT w.K)) (ls : List (SRecT w.K)) :
     Prop :=
-  TWNT w.K w.Θ fρ ps (rsOfT ls) ∧ TaggedT w.K fρ ps ls
+  (∃ tc, TWNT w.K w.Θ tc fρ ps (rsOfT ls)) ∧ TaggedT w.K fρ ps ls
 
 /-- Records re-read along an extension. -/
 abbrev RecsRR {K K' : WCactus} (Θ' : CodeTy) (rs : List (FrameRecT K))
@@ -119,11 +122,11 @@ theorem SRecsRR.refl {K : WCactus} {Θ : CodeTy} {ls : List (SRecT K)}
 /-- Every record of the world is covered (`TWNT.cov_recs`). -/
 theorem RecInv.cov_ps {w : TWd} {fρ : TRes w.K} {ps : List (FrameRecT w.K)}
     {ls : List (SRecT w.K)} (h : RecInv w fρ ps ls) : ∀ r ∈ ps, CovR (sem w.Θ) w.K r.R :=
-  h.1.cov_recs.1
+  h.1.choose_spec.cov_recs.1
 
 theorem RecInv.cov_ls {w : TWd} {fρ : TRes w.K} {ps : List (FrameRecT w.K)}
     {ls : List (SRecT w.K)} (h : RecInv w fρ ps ls) : ∀ x ∈ ls, CovR (sem w.Θ) w.K x.1.R :=
-  fun x hx => h.1.cov_recs.2 x.1 (List.mem_map_of_mem hx)
+  fun x hx => h.1.choose_spec.cov_recs.2 x.1 (List.mem_map_of_mem hx)
 
 theorem SplitT.left {K : WCactus} {ps O psF : List (FrameRecT K)} (h : SplitT ps O psF) :
     ∀ p ∈ O, p ∈ ps := fun p hp => (h.1 p).mpr (Or.inl hp)

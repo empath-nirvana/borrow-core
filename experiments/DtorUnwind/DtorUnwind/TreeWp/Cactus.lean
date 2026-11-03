@@ -280,7 +280,7 @@ theorem winv_empty (P : ParentFn) :
 
 theorem recInv_empty (P : ParentFn) :
     RecInv ⟨P, fun _ => none⟩ (PMap.empty : TRes (WCactus.ofParent P)) [] [] :=
-  ⟨.empty, fun _ hx => by simp at hx⟩
+  ⟨⟨tmplT _ (fun _ => none), .empty⟩, fun _ hx => by simp at hx⟩
 
 /-- Nothing stops at the empty table. -/
 def OpTabT.empty : OpTabT := fun _ _ => none
