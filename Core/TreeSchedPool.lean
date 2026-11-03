@@ -261,25 +261,109 @@ theorem borrowEdges_ancestors {w : TWd} {bs : List (TBranch w.K)} {ns : List Lif
         ∀ x ∈ s.set, w.K.le n x) bs ns :=
   hI.2.2.2.2.2.imp fun _ _ hb ρκ _ hc l ψ s hl hs => OnBranchResT.of_compS_left hc hb l ψ hl s hs
 
-/-- **A stored continuation's lender is an ancestor**: as `borrowEdges_ancestors`, at a view the
-share holds at a record's lent location carrying the record's frame lifetime `α`. -/
+/-- A relation held along two lists holds at every pair of their zip. -/
+theorem forall₂_of_mem_zip {α β : Type} {R : α → β → Prop} :
+    ∀ {xs : List α} {ys : List β}, List.Forall₂ R xs ys → ∀ {x : α} {y : β},
+      (x, y) ∈ xs.zip ys → R x y
+  | _, _, .nil, _, _, h => by simp at h
+  | _, _, .cons hr t, _, _, h => by
+      rcases List.mem_cons.mp h with e | h
+      · cases e; exact hr
+      · exact forall₂_of_mem_zip t h
+
+/-- A member of a composed list of resources is a factor of the composite. -/
+theorem CompAllT.factor {K : WCactus} : ∀ {L : List (TRes K)} {W : TRes K}, CompAllT L W →
+    ∀ ρ ∈ L, ∃ o, ResUT.CompS ρ o W
+  | _, _, .nil, _, h => by simp at h
+  | _, _, .cons hL hc, ρ, h => by
+      rcases List.mem_cons.mp h with rfl | h
+      · exact ⟨_, hc⟩
+      · obtain ⟨o, ho⟩ := CompAllT.factor hL ρ h
+        obtain ⟨x, -, hx⟩ := (ResUT.CompS.assoc ρ o _ _).mpr ⟨_, ho, ResUT.CompS.comm hc⟩
+        exact ⟨x, hx⟩
+
+/-- **A part of a branch is a factor of the world, on the branch's point.** -/
+theorem CactusInvT.part {w : TWd} {bs : List (TBranch w.K)} {ns : List Life}
+    {W : TRes w.K} {ps : List (FrameRecT w.K)} {ls : List (SRecT w.K)} {μ : Heap}
+    (hI : CactusInvT w bs ns W ps ls μ) {b : TBranch w.K} {n : Life}
+    (hbn : (b, n) ∈ bs.zip ns) {ρκ rest : TRes w.K} (hc : ResUT.CompS ρκ rest b.1) :
+    (∃ o, ResUT.CompS ρκ o W) ∧ OnBranchResT w.K n ρκ := by
+  have hb : b.1 ∈ bs.map Prod.fst := List.mem_map.mpr ⟨b, (List.of_mem_zip hbn).1, rfl⟩
+  obtain ⟨o, ho⟩ := CompAllT.factor hI.1 _ hb
+  obtain ⟨x, -, hx⟩ := (ResUT.CompS.assoc ρκ rest o W).mpr ⟨b.1, hc, ho⟩
+  exact ⟨⟨x, hx⟩, OnBranchResT.of_compS_left hc (forall₂_of_mem_zip hI.2.2.2.2.2 hbn)⟩
+
+/-- **A view at a lender's location carries the lender's frame lifetime and nothing else.** In a
+world of the typed world, a part `ρ` of it that holds a view at the location of a record proper
+`p` framed at `α` holds a view whose every lifetime is `α`. A `mut` cell there is refused by
+`NoMutT`; an `imm` cell of `ρ` is in `ag(W)` with its lifetimes kept (`○` drops none), and
+`FrameLifeT` puts every lifetime of `ag(W)`'s view at `p.le` at `α`. -/
+theorem view_at_lender {K : WCactus} {Θ : CodeTy} {tc : TChoice K} {W ρ o : TRes K}
+    {ps rs : List (FrameRecT K)} {p : FrameRecT K} {α : Life}
+    (hT : TWNT K Θ tc W ps rs) (hp : p ∈ ps) (hW : ResUT.CompS ρ o W)
+    (hFL : FrameLifeT K W p α) {ψ : TCell K} {s : TSet} (hl : ρ.get p.le = some ψ)
+    (hs : ψ.lsOf = some s) : ∀ y ∈ s.set, y = α := by
+  have hTI := hT.inv
+  obtain ⟨aW, haW⟩ := agW_of_valid hT.valid
+  obtain ⟨ψL, eL, kL, -, -⟩ := hTI.2.1 p hp aW haW
+  cases ψ with
+  | own v => cases hs
+  | «mut» m =>
+      exact absurd (MutAtT.top (ResUT.CompS.get_left_of_ne_imm hW hl (by simp [CellUT.kind])).2
+        rfl) (hTI.2.2.2.2.2.1.1 p hp)
+  | imm i =>
+      cases hs
+      intro y hy
+      obtain ⟨a₁, a₂, ha₁, -, hcW⟩ := (AgWT.split hW).mp haW
+      obtain ⟨χ, eχ, kχ, -, -⟩ := AgWT.get_imm ha₁ hl rfl
+      obtain ⟨t₁, ht₁, hη₁⟩ := CellUT.imm_eta kχ
+      obtain ⟨tL, htL, hηL⟩ := CellUT.imm_eta kL
+      rw [hη₁] at eχ
+      rw [hηL] at eL
+      have hl' : ρ.get p.le = some (CellUT.immOf i.ls i.v i.res i.ρ.toU_inStratum) := by
+        rw [ImmT.immOf_eta i]; exact hl
+      have hy₁ : y ∈ t₁.set := AgWT.get_ls_imm ha₁ hl' eχ hy
+      have hy₂ : y ∈ tL.set := ResUT.CompR.get_ls_imm hcW eχ eL hy₁
+      exact hFL.1 aW haW _ tL eL (CellUT.lsOfI_immOf _ _ _ _) y hy₂
+
+/-- **A stored continuation's lender is an ancestor of where it is stored.** In the
+scheduler-wide invariant, let `b` be a branch at point `n` and `ρκ` a part of its resource (a
+stored continuation's share, say). If `ρκ` holds any cell at the location of a record proper `p`
+whose frame is at `α` (the lender of that location's borrow), then `α` is `n` or encloses it
+(`K.le n α`). Nothing links the cell to `α` beforehand: a part on `n`'s branch that holds a cell at
+`p.le` while `n` is not inside `α` is refused by the invariant (`fd_le_of_branch`: a view there
+carries `α` by `FrameLifeT`, an `own` cell sits beneath a borrow refused by `TWNT.noOwnUnder`, a
+`mut` cell by `NoMutT`), and every cell of the part survives its flattening. `cactusT_step` keeps
+`CactusInvT` through every step, a capture and a resume among them, so this holds before and
+after each. -/
 theorem lender_ancestor {w : TWd} {bs : List (TBranch w.K)} {ns : List Life}
     {W : TRes w.K} {ps : List (FrameRecT w.K)} {ls : List (SRecT w.K)} {μ : Heap}
     (hI : CactusInvT w bs ns W ps ls μ) {b : TBranch w.K} {n : Life}
     (hbn : (b, n) ∈ bs.zip ns) {ρκ rest : TRes w.K} (hc : ResUT.CompS ρκ rest b.1)
-    {p : FrameRecT w.K} {α : Life} {ψ : TCell w.K} {s : TSet} (hl : ρκ.get p.le = some ψ)
-    (hs : ψ.lsOf = some s) (hα : α ∈ s.set) : w.K.le n α := by
-  have h := borrowEdges_ancestors hI
-  obtain ⟨i, hi₁, hi₂⟩ := List.mem_iff_getElem.mp hbn
-  have hmin : i < min bs.length ns.length := by simpa using hi₁
-  have hib : i < bs.length := lt_of_lt_of_le hmin (Nat.min_le_left _ _)
-  have hin : i < ns.length := lt_of_lt_of_le hmin (Nat.min_le_right _ _)
-  rw [List.getElem_zip] at hi₂
-  have hb : bs[i] = b := (Prod.mk.inj hi₂).1
-  have hn : ns[i] = n := (Prod.mk.inj hi₂).2
-  have := List.forall₂_iff_get.mp h |>.2 i hib hin
-  simp only [List.get_eq_getElem, hb, hn] at this
-  exact this ρκ rest hc p.le ψ s hl hs α hα
+    {p : FrameRecT w.K} (hp : p ∈ ps) {α : Life} (hFL : FrameLifeT w.K W p α)
+    {ψ : TCell w.K} (hl : ρκ.get p.le = some ψ) : w.K.le n α := by
+  obtain ⟨⟨o, ho⟩, hon⟩ := hI.part hbn hc
+  have hT := hI.2.2.2.1.1
+  refine Classical.byContradiction fun hnα => ?_
+  obtain ⟨τ, hτ⟩ := (ResUT.Valid.split ho hT.valid).1
+  obtain ⟨χ, hχ, -⟩ := ResUT.Flat.get hτ hl
+  rw [fd_le_of_branch hT hp (ResUT.CompS.comm ho) hFL hon hnα hτ] at hχ
+  cases hχ
+
+/-- **The view a stored continuation holds at a lender's location carries the lender's frame
+lifetime**: as `lender_ancestor`, at a view, `α` is among the view's lifetimes (and is the only
+one, `view_at_lender`). With `borrowEdges_ancestors` this is `lender_ancestor` read through the
+view's own lifetimes. -/
+theorem lender_view_carries {w : TWd} {bs : List (TBranch w.K)} {ns : List Life}
+    {W : TRes w.K} {ps : List (FrameRecT w.K)} {ls : List (SRecT w.K)} {μ : Heap}
+    (hI : CactusInvT w bs ns W ps ls μ) {b : TBranch w.K} {n : Life}
+    (hbn : (b, n) ∈ bs.zip ns) {ρκ rest : TRes w.K} (hc : ResUT.CompS ρκ rest b.1)
+    {p : FrameRecT w.K} (hp : p ∈ ps) {α : Life} (hFL : FrameLifeT w.K W p α)
+    {ψ : TCell w.K} {s : TSet} (hl : ρκ.get p.le = some ψ) (hs : ψ.lsOf = some s) :
+    α ∈ s.set := by
+  obtain ⟨⟨o, ho⟩, -⟩ := hI.part hbn hc
+  obtain ⟨y, hy⟩ := s.ne
+  exact view_at_lender hI.2.2.2.1.1 hp ho hFL hl hs y hy ▸ hy
 
 end BoCa.Fig16.Tree.Wp
 

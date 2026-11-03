@@ -134,6 +134,7 @@ becomes `Core/TreeHeadlines.lean`, with the namespaces of §1.
 | `R1_StepKeepsFdEsc` | proved (`r1_stepKeepsFdEsc`, `stepKeepsFdEsc`) |
 | `R2_EndBlockedByHolder` | proved (`r2_endBlockedByHolder`, from `fdEsc_of_end_valid`) |
 | `R3_JoinEndNeedsFdEsc` | proved (`r3_joinEndNeedsFdEsc`, from `fdEsc_of_end_valid`; the converse direction is `fdEsc_at_join` + `immEnd_valid_of_fdEsc`) |
+| Borrow edges to ancestors | proved (`borrowEdges_ancestors`, `lender_ancestor`, `Core/TreeSchedPool.lean`): a part of a branch at point `n` holding any cell at the location of a record proper framed at `α` has `n` inside `α`, from `CactusInvT` alone (`fd_le_of_branch`); no premise links the cell to `α`. Instances at depth 1 and 3 (`lenderEdge_depth1`, `lenderEdge_depth3`, `Core/TreeBorrowEdges.lean`) |
 | `R4_ExtExtFT` | proved (`r4_extExtFT`, from `ext_extFT`, `Support/Model/Tree/World/ExtExtF.lean`); `RelT`, `KeepsT`, `CellInT`, `ExtLT` defined there (Core's `Rel`, `Keeps`, `CellIn`, `Ext` over the tree carrier), the statement as below |
 
 Names that do not exist yet anywhere: `SchedOKT`, `RelT`, `KeepsT`, `CellInT`, `ExtLT` (the last

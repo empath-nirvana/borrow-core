@@ -992,6 +992,14 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.KapAtT.cancel
 #print axioms BoCa.Fig16.Tree.Wp.borrowEdges_ancestors
 #print axioms BoCa.Fig16.Tree.Wp.lender_ancestor
+#print axioms BoCa.Fig16.Tree.Wp.CactusInvT.part
+#print axioms BoCa.Fig16.Tree.Wp.view_at_lender
+#print axioms BoCa.Fig16.Tree.Wp.lender_view_carries
+#print axioms BoCa.Fig16.Tree.Wp.recWInv_alloc
+#print axioms BoCa.Fig16.Tree.Wp.recWInv_lend
+#print axioms BoCa.Fig16.Tree.Wp.recWInv_lendStep
+#print axioms BoCa.Fig16.Tree.Wp.lenderEdge_depth1
+#print axioms BoCa.Fig16.Tree.Wp.lenderEdge_depth3
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Park.schedP_ok
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Park.parked_twp
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Park.taskA_cerwpT

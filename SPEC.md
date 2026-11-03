@@ -10628,8 +10628,17 @@ finaliser parks, is resumed, and ends the lend. `progDepth3_safe`: the root spaw
 runs a third; three tasks hold a lend open across a park at once. **Borrow edges point to ancestors**
 (`borrowEdges_ancestors`, `lender_ancestor`): in `CactusInvT`, every view a part of a branch's
 resource holds (a stored continuation's share among them) carries only lifetimes enclosing the
-branch point, so every lender of a borrow a stored continuation holds is an ancestor of where it
-is stored; `cactusT_step` keeps it through capture and resume.
+branch point; and if the part holds any cell at the location of a record proper framed at `α`
+(`FrameLifeT`), `α` encloses the branch point. The second reads the invariant alone, with no
+premise linking the cell to `α`: a part on a branch not inside `α` holding a cell there is refused
+(`fd_le_of_branch`: a view carries `α`, an `own` cell is beneath a borrow, `TWNT.noOwnUnder`, a
+`mut` cell is refused by `NoMutT`). A view there carries `α` and nothing else
+(`view_at_lender`, `lender_view_carries`). `cactusT_step` keeps the invariant through capture and
+resume. Instances (`Core/TreeBorrowEdges.lean`), built from the empty world by `TWNT.alloc` and
+`TWNT.immFrame` (`recWInv_lendStep`, `twp_lendOpen`'s update at the world):
+`lenderEdge_depth1` (a stored branch at a lend's own lifetime holding its view) and
+`lenderEdge_depth3` (three lends nested `α₃ ⊏ α₂ ⊏ α₁` on the chain tree, a stored branch at
+`α₃` holding the outermost view, its lender two levels up).
 
 *Open*:
 - adequacy derived from invariant preservation, at the relation the typing rules use;
@@ -10640,9 +10649,7 @@ is stored; `cactusT_step` keeps it through capture and resume.
   multi-branch programs with lends;
 - join, and the route by which a task's copy of a view gets back to a lender in another task
   (#795); spawning from a child (a step-indexed table fixpoint); a FIFO scheduling policy (a
-  recursive append in the clause); `pingpong-mut`'s relay is not yet written through the pool;
-- `lender_ancestor`'s link from a share's top cell to `FrameLifeT`'s walk cells is assumed, not
-  derived.
+  recursive append in the clause); `pingpong-mut`'s relay is not yet written through the pool.
 
 ### Semantic types read at the tree
 
