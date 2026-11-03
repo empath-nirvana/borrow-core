@@ -995,6 +995,9 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Park.schedP_ok
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Park.parked_twp
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Park.taskA_cerwpT
+#print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Park.drive_twp
+#print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Park.relay_twp
+#print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Park.relayAdequacyT
 #print axioms BoCa.Fig16.Tree.chain_ResU_compS_defined_iff
 #print axioms BoCa.Fig16.Tree.chain_ResU_Valid_split
 #print axioms BoCa.Fig16.Tree.chain_ResU_Hash_split
