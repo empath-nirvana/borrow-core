@@ -270,7 +270,7 @@ theorem twp_keepsKap_sep {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {
 
 /-- **One stored task resumed beside another, the other kept resumable.** The scheduler holds
 `κB` and `κA` (`KapAtT` at the present world and list). It resumes `κB` at an answer its entry
-accepts, under frames avoiding `κB`'s mask history `MB`, with `κA`'s share beside it. At every end
+accepts, under frames avoiding `κB`'s mask `MB`, with `κA`'s share beside it. At every end
 of `κB`'s run, `κA` is held at the end world and list, and the two are apart at the masks of the
 records each ends with. The premises are separation: `κA`'s share holds nothing at `MB` (which
 holds `κB`'s records' masks), and `κB`'s resumed resource holds nothing at `κA`'s records' masks.

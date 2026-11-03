@@ -10500,8 +10500,11 @@ store at `twp` (`twp_alloc`, `twp_free`, `twp_load`, `twp_store`). A scheduler m
 every operation of the tasks' table is its own, each continuation tag is its entry's qualifier, the
 entry's resumer guarantee follows from the join's (`fdJoinT`), and its clauses hold at the empty
 table, each `κ` read by `KapSchedT`: resumable beside a state the clause keeps when that state is
-valid and holds nothing at the branch's mask history (`fdMask`, `MaskHist`; `FdEsc` read at
-locations). **Multi-branch adequacy** (`multiBranchAdequacyT`): `hnd H e₀` is `OrDiverges` for
+valid and holds nothing at the masks of the records the branch owns at its stop (`fdMask`; `FdEsc`
+read at locations). `cerwpT Tb Q Fb F` carries a base frame condition `Fb`: a stop hands the table
+`Fb`, so a continuation resumes at `fdAt en v Fb O′`, the base and its resumer's guarantee at the
+records it owns at that resume, with nothing from earlier stops. A task may start owning records:
+its present frame condition avoids them, its base need not. **Multi-branch adequacy** (`multiBranchAdequacyT`): `hnd H e₀` is `OrDiverges` for
 every scheduler `H` meeting `SchedOKT` and every task `e₀` at its table (`SchedOKT` fixes neither
 how many continuations a clause holds nor which it resumes); derived through `cerwpT_adequacy`. The
 task runs at the frame condition `⊤`: the scheduler's state is in the resumed branch's frame. A
@@ -10561,8 +10564,20 @@ two apart both ways (`NoneAt` of each other's record masks, and record locations
 scheduler operation keeps it: a segment (`twp_keepsPool`, from `twp_frame_keep`: the run may open,
 end, allocate and free, those lends open when a stored task stopped included), a park
 (`poolT_park`), a resume (`poolT_resume`) and a cancel (`poolT_cancel`), the last two with the rest
-of the pool beside the resumed run and a pool again at its every end. Adequacy for a program whose
-scheduler is proved through these is `cerwpT_adequacy`'s. **Borrow edges point to ancestors**
+of the pool beside the resumed run and a pool again at its every end (`PoolPost`: apart both ways,
+records at distinct lent locations, so a task that parks again rejoins it).
+
+**Relay adequacy** (`Core/TreeSchedRelay.lean`, `Core/TreeRelay.lean`). The park stepper `HP`
+(`schedP_ok`) hands a parked task's continuation back, at the masks of the records the task owns
+at its stop. The relay's loop `drive` (`driveV`, the Z combinator) resumes a parked task each time
+it parks until it answers; `drive_twp` keeps a pool of any length beside it, by strong induction
+on the index through `poolT_park` and `poolT_resume`. `RelayAdequacyT` (`relayAdequacyT`): a
+closed program `(λx. post) (drive pre)` whose setup `pre` ends at a task's answer beside a pool of
+any number of parked tasks and the relay's own state, apart (`RelayMidT`), and whose `post` is
+verified from every end of the loop, is `OrDiverges`; through `twp_frame_keep`, `drive_twp` and
+`topAdequacyT`. Its tasks run at frame conditions met by frames avoiding their records, so they may
+end lends. `MultiBranchAdequacyT` stays for a scheduler whose clauses handle every stop
+themselves, its task at `⊤`. **Borrow edges point to ancestors**
 (`borrowEdges_ancestors`, `lender_ancestor`): in `CactusInvT`, every view a part of a branch's
 resource holds (a stored continuation's share among them) carries only lifetimes enclosing the
 branch point, so every lender of a borrow a stored continuation holds is an ancestor of where it
@@ -10575,15 +10590,12 @@ is stored; `cactusT_step` keeps it through capture and resume.
 - one relation with abortive stops and forwarding (the two relations `erwp`/`cerwp` merge);
 - the lend rules at `twp` over the tree for escrows with contents (reborrows, `TWNT.reb`), and
   multi-branch programs with lends;
-- a program through the headline in which a parked task holds a view of a lend while another
-  ends a lend of its own, and the same with the parked task cancelled through an effectful
-  finaliser (the pool gives each step; the relay, its stepper and the tasks are not written);
-  `pingpong-mut`'s relay is not yet written through the pool;
-- a stored task whose mask history exceeds its present records: `contShareT` resumes at
-  `fdAt en v F O′`, `F` the stop's own frame condition, so the conditions accumulate and a state
-  beside the resumed run must hold nothing at every record mask the branch has had (`MaskHist`);
-  the pool admits only tasks whose history is their present records. Resuming at the task's base
-  frame condition (the table handed the base, not the stop's `F`) removes it.
+- programs through `RelayAdequacyT` in which a parked task holds a view of a lend while another
+  task ends a lend of its own, and the same with the parked task cancelled through an effectful
+  finaliser (the stepper, task A, the loop and the headline are written; task B and the two
+  setups are not); `pingpong-mut`'s relay is not yet written through the pool;
+- `lender_ancestor`'s link from a share's top cell to `FrameLifeT`'s walk cells is assumed, not
+  derived.
 
 ### Semantic types read at the tree
 

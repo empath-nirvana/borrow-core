@@ -15,7 +15,7 @@ derives it across another branch's run, that branch opening and ending lends of 
 **What the scheduler must satisfy** (`SchedOKT`, `Core/TreeHandle.lean`): its clauses at the empty
 table, each continuation `κ` read by `KapSchedT`. `κ` may be resumed beside a state the clause
 keeps, under any frame condition whose frames hold nothing at the masks `M` of the records the
-branch owned at its resumes and at its stop, and are valid (`fdMask M`). So the state a scheduler
+branch owns at its stop, and are valid (`fdMask M`). So the state a scheduler
 keeps beside a resumed branch must be valid and hold nothing of that branch's lends: the join
 condition, in location form. The table's resumer guarantee `fd` must follow from it (`fdJoinT`).
 
