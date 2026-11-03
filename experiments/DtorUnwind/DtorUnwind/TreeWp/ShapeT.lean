@@ -7,7 +7,9 @@ import DtorUnwind.TreeWp.Templ
 `refPos_blocks`, `chain_own`), read at the codes (`1`, `+`, `Imm`, `Mut`, `[a]`, `ref`) with
 `T.interp Θ` for `vShape T δ`. Each is the printed induction, on `T` or on the position, at the
 codes' clauses. The codes have no `⊗`, so two positions of one value are one position
-(`RefPosT.unique`): `refPos_blocks`'s second disjunct does not arise.
+(`RefPosT.unique`): `refPos_blocks`'s second disjunct does not arise, and `chain_uniqueT` is
+`chain_unique`'s induction with that disjunct's cases absent. `ChainT.own`, `ChainT.snoc` and
+`chain_lastT` are the printed ones at `ChainT`.
 -/
 
 noncomputable section
@@ -165,6 +167,90 @@ theorem image_domT (Θ : CodeTy) (b : Life) :
       split_ifs at e with hm
       subst hm
       exact ⟨CellUT.own w, by simp [PMap.ins_get], fun _ => ⟨A, RefPosT.ref A m⟩⟩
+
+theorem ChainT.own {R : TRes K} {T : KTy} {v : BoCa.Val} {p : Option BoCa.Loc} {l : BoCa.Loc}
+    {S : KTy} {u : BoCa.Val} (h : ChainT R T v p l S u) : R.get l = some (CellUT.ownOf u) := by
+  induction h with
+  | one _ e => exact e
+  | step _ _ _ ih => exact ih
+
+/-- Extending a chain by one `RefPosT` step of its last pointee. -/
+theorem ChainT.snoc {R : TRes K} {T : KTy} {v : BoCa.Val} {p : Option BoCa.Loc} {l₀ : BoCa.Loc}
+    {S₀ : KTy} {u₀ : BoCa.Val} (h : ChainT R T v p l₀ S₀ u₀) {l : BoCa.Loc} {S : KTy}
+    {u : BoCa.Val} (hp : RefPosT S₀ u₀ l S) (e : R.get l = some (CellUT.ownOf u)) :
+    ChainT R T v (some l₀) l S u := by
+  induction h with
+  | one h₁ e₁ => exact ChainT.step h₁ e₁ (ChainT.one hp e)
+  | step h₁ e₁ _ ih => exact ChainT.step h₁ e₁ (ih hp)
+
+/-- **`chain_unique` at the codes**: a location is reached by at most one chain, one parent and
+one pointee code. The printed proof's case split on two first steps (`refPos_blocks`) has one
+case at the codes, the steps being one position (`RefPosT.unique`); a chain through a first step
+stays inside that step's piece (`chain_ownT`). -/
+theorem chain_uniqueT (Θ : CodeTy) {R : TRes K} {T : KTy} {v : BoCa.Val} {p₁ : Option BoCa.Loc}
+    {l : BoCa.Loc} {S₁ : KTy} {u₁ : BoCa.Val} (h₁ : ChainT R T v p₁ l S₁ u₁) :
+    ∀ {P : TRes K}, (T.interp Θ).P K v P →
+      (∀ m w, P.get m = some (CellUT.ownOf w) → R.get m = some (CellUT.ownOf w)) →
+      ∀ {p₂ : Option BoCa.Loc} {S₂ : KTy} {u₂ : BoCa.Val}, ChainT R T v p₂ l S₂ u₂ →
+        p₁ = p₂ ∧ S₁ = S₂ := by
+  induction h₁ with
+  | @one T v l S₁ u₁ hp₁ e₁ =>
+      intro P hP hag p₂ S₂ u₂ h₂
+      cases h₂ with
+      | one hp₂ e₂ => exact ⟨rfl, (RefPosT.unique hp₁ hp₂).2⟩
+      | @step _ _ l₁' S₁' u₁' p' _ _ _ hp₂ e₂ t₂ =>
+          obtain ⟨rfl, rfl⟩ := RefPosT.unique hp₁ hp₂
+          obtain ⟨w, Q, B, hB, hQ, hle⟩ := own_splitT Θ hp₁ hP
+          have eP := own_of_le hle
+            (ResUT.CompS.get_left_of_ne_imm hB (ResUT.single_get_self _ _) (by simp)).2
+          rw [hag _ w eP] at e₂; cases Option.some.inj e₂
+          have hleQ : ResUT.Le Q P := (le_of_compS_right hB).trans hle
+          have eQ := chain_ownT Θ t₂ hQ (fun m w e => hag m w (own_of_le hleQ e))
+          have := ResUT.CompatS.right_eq_none hB.1 (ResUT.single_get_self _ _) (by simp)
+          rw [eQ] at this; cases this
+  | @step T v l₁ S₁ u₁ p l S u hp₁ e₁ t₁ ih =>
+      intro P hP hag p₂ S₂ u₂ h₂
+      cases h₂ with
+      | one hp₂ e₂ =>
+          obtain ⟨rfl, rfl⟩ := RefPosT.unique hp₂ hp₁
+          obtain ⟨w, Q, B, hB, hQ, hle⟩ := own_splitT Θ hp₂ hP
+          have eP := own_of_le hle
+            (ResUT.CompS.get_left_of_ne_imm hB (ResUT.single_get_self _ _) (by simp)).2
+          rw [hag _ w eP] at e₁; cases Option.some.inj e₁
+          have hleQ : ResUT.Le Q P := (le_of_compS_right hB).trans hle
+          have eQ := chain_ownT Θ t₁ hQ (fun m w e => hag m w (own_of_le hleQ e))
+          have := ResUT.CompatS.right_eq_none hB.1 (ResUT.single_get_self _ _) (by simp)
+          rw [eQ] at this; cases this
+      | @step _ _ l₁' S₁' u₁' p' _ _ _ hp₂ e₂ t₂ =>
+          obtain ⟨rfl, rfl⟩ := RefPosT.unique hp₁ hp₂
+          rw [e₁] at e₂; cases Option.some.inj e₂
+          obtain ⟨w, Q, B, hB, hQ, hle⟩ := own_splitT Θ hp₁ hP
+          have eP := own_of_le hle
+            (ResUT.CompS.get_left_of_ne_imm hB (ResUT.single_get_self _ _) (by simp)).2
+          rw [hag _ w eP] at e₁; cases Option.some.inj e₁
+          have hleQ : ResUT.Le Q P := (le_of_compS_right hB).trans hle
+          obtain ⟨hp, hS⟩ := ih hQ (fun m w e => hag m w (own_of_le hleQ e)) t₂
+          subst hp; exact ⟨rfl, hS⟩
+
+/-- The last step of a chain with a parent. -/
+theorem chain_lastT {R : TRes K} {T : KTy} {v : BoCa.Val} {p : Option BoCa.Loc} {l : BoCa.Loc}
+    {S : KTy} {u : BoCa.Val} (h : ChainT R T v p l S u) :
+    ∀ l₀, p = some l₀ → ∃ p₀ S₀ u₀, ChainT R T v p₀ l₀ S₀ u₀ ∧ RefPosT S₀ u₀ l S := by
+  induction h with
+  | one _ _ => intro l₀ e; cases e
+  | @step T v l₁ S₁ u₁ p l S u hp e₁ t ih =>
+      intro l₀ e
+      cases p with
+      | none =>
+          simp only [Option.getD_none, Option.some.injEq] at e
+          subst e
+          cases t with
+          | one hp' _ => exact ⟨none, S₁, u₁, ChainT.one hp e₁, hp'⟩
+      | some l₀' =>
+          simp only [Option.getD_some, Option.some.injEq] at e
+          subst e
+          obtain ⟨p₀, S₀, u₀, hc, hr⟩ := ih l₀' rfl
+          exact ⟨_, S₀, u₀, ChainT.step hp e₁ hc, hr⟩
 
 end BoCa.Fig16.Tree.Wp
 
