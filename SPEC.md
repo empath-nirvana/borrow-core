@@ -10651,26 +10651,59 @@ resume. Instances (`Core/TreeBorrowEdges.lean`), built from the empty world by `
   (#795); spawning from a child (a step-indexed table fixpoint); a FIFO scheduling policy (a
   recursive append in the clause); `pingpong-mut`'s relay is not yet written through the pool.
 
-### Semantic types read at the tree
+### Semantic types read at the tree (#782)
 
-The relation's types are read at the current tree and are monotone along its extension. This is
-proved for `1`, `+`, `Imm`, `ref` and `[a]` (box), each from its components' (`kmono_unit`,
-`kmono_sum`, `kmono_imm`, `kmono_ref`, `kmono_box`). `kmono_mut` and `kmono_thunk` hold for
-every `τ` (for thunks, every computation predicate) by the definitions of `vMut` and `vThunk`:
-they are not results about the contents of a `mut` cell or a thunk.
-A `mut` cell's invariant is its store type, re-read when the tree grows (`reread`), not a fixed
-predicate. Carried unchanged, a cell leaves `Mut`'s meaning (`trU_not_kmono`). Re-read, a stored
-task may write the handler's newer borrow into a cell it made before the graft (for example
-`round7_write`). Store types are syntactic codes read at the tree. The store typing grows at a
-`mut` lend of a location it does not type, and a location keeps its type for the run
-(`TWd.addTy_ext`, `Cov.mono`, `RR.mono` on `tree-wp`, over semantic types). Re-reading and the
-codes are in the library (`Support/Model/Tree/Reread.lean`, `World/Codes.lean`: `RR`, `KTy`,
-`interp_retype`, `RR.exists_retype`); a code's meaning is carried along the re-reading of a
-covered resource, at every re-typing that agrees on the locations it holds a `mut` cell at. One `mut` cell per location at any depth is an
-invariant of the typed tree world (`TWNT.mutOne`); without it clause 3 of two covered cells is not
-covered (`clause3_not_cov`).
+The relation's types are read at the current tree and are monotone along its extension. Two
+layers (`docs/new-core/scope-782.md`):
 
-*Open*: monotonicity at μ, ν, ∀, ⊗ and families; store typing growth at the codes.
+- **Store types** are syntactic codes (`KTy`: `1`, `+`, `Imm`, `Mut`, `[a]`, `ref`) read at the
+  tree; a `mut` cell's invariant is its location's code read at the current tree, re-read when the
+  tree grows. A code's meaning is carried along the re-reading of a covered resource, at every
+  re-typing that agrees on the locations it holds a `mut` cell at (`interp_retype`,
+  `RR.exists_retype`; `Support/Model/Tree/Reread.lean`, `World/Codes.lean`).
+- **The relation's value types** (`STy`, `Core/TreeSem.lean`) are step-indexed predicates at the
+  tree world, each downward closed in the index and monotone along world extension, on the
+  re-reading. Every former is one, each law proved from the components': codes, `1`, `0`, `+`,
+  `⊗`, `Imm`, `Mut` (at a store code), `[a]`, `ref`, `!`, `Unk`, the integers, the opaque types,
+  the families `[L]`, thunks, `μ` (least fixed point over value-type candidates, with fold and
+  unfold at a monotone body) and type variables. A value stored before a graft meets its type
+  after it (`STy.reread`). **The computation types** (`SCmp`, `Core/TreeSemC.lean`) are downward
+  closed: `F A` read at `cerwpT` (`SCmp.ret`, downward closed by `cerwpT_le`, Kripke by
+  `cerwpT_kripke`), `⊸`, `&`, `⊤`, `∀α ⊏ c` over the lifetimes below `c` in the current tree, and
+  `ν` (greatest fixed point over candidates). As in Core, a computation type reaches a value only
+  under `U`, whose quantifier over world extensions makes the thunk monotone; a run of the forced
+  body at the current world gives the thunk (`STy.thunk_intro`, `STy.thunkRet_intro`).
+
+On the semantic store typing (`KSem`, `Support/Model/Tree/KSem.lean`) monotonicity is proved for
+`1`, `+`, `Imm`, `ref` and `[a]`, each from its components' (`kmono_unit`, `kmono_sum`,
+`kmono_imm`, `kmono_ref`, `kmono_box`), and the re-reading exists when every assigned type is
+monotone (`reread`). `kmono_mut` and `kmono_thunk` hold for every `τ` (for thunks, every
+computation predicate) by the definitions of `vMut` and `vThunk`: they are not results about the
+contents of a `mut` cell or a thunk. What carries `Mut` is the re-reading of the store type: the
+re-read cell's invariant is its location's code read at the new tree (`RC.mut_inv`), so a lender
+reads back a value of the store type (`RC.mut_readback`), and it holds wherever the old invariant
+held on carried resources (`RC.mut_extends`, `reread_extends`).
+
+What this rules out:
+- **a type whose meaning is not monotone along extension**: a `Mut` whose invariant is carried as
+  the predicate it was stored with (row 5.57's extension by falsity, `trU`) leaves `Mut`'s meaning
+  at the grown tree (`trU_not_kmono`); every `STy` carries monotonicity as a field;
+- **a re-read `mut` cell whose invariant changes under re-reading**: a cell whose invariant is not
+  its location's code at the new tree is not a re-reading (`not_rc_of_inv_ne`).
+
+Re-read, a stored task may write the handler's newer borrow into a cell it made before the graft
+(`round7_write`). The store typing grows at a `mut` lend of a location it does not type, and a
+location keeps its type for the run (`TWd.addTy_ext`, `Cov.mono`, `RR.mono` on `tree-wp`, over
+semantic types). One `mut` cell per location at any depth is an invariant of the typed tree world
+(`TWNT.mutOne`); without it clause 3 of two covered cells is not covered (`clause3_not_cov`).
+
+Departures: `Mut`'s payload is a store code, since a cell's invariant is index-free and a
+step-indexed payload (a thunk in a cell) would need step-indexed cell invariants; one mode (no
+observable view at `Imm`); the value types do not read the records list; `⊸` reads its argument
+at every index up to `n`.
+
+*Open*: continuation and task types (#789); store typing growth at the codes; `Mut` at a payload
+that is not a store code; the records list in the value types.
 
 ### Typing: suspension, scoped spawn, join
 

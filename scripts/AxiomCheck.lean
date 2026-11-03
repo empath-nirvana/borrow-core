@@ -879,6 +879,7 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.SCmp.nu
 #print axioms BoCa.Fig16.Tree.Wp.SCmp.nu_fold
 #print axioms BoCa.Fig16.Tree.Wp.SCmp.nu_unfold
+#print axioms BoCa.Fig16.Tree.Wp.SCmp.stream_body_mono
 #print axioms BoCa.Fig16.Tree.Wp.STy.thunk_intro
 #print axioms BoCa.Fig16.Tree.Wp.STy.thunkRet_intro
 #print axioms BoCa.Fig16.Tree.Wp.STy.thunkC_val
