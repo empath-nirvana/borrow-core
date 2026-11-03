@@ -420,6 +420,13 @@ theorem SCmp.loop_nonempty {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F :
       obtain ⟨rfl, rfl⟩ := h
       exact ⟨constInl_ret _, constInl_ret _⟩) n w ls _ _ ⟨rfl, rfl⟩
 
+/-- **`STy.thunkRet_intro` met**: `λ_. inj₁ ()` is a thunk of `F (1 + A)`, at every index, world and
+list, from its run at the current world (`constInl_ret`). -/
+theorem STy.thunkRet_constInl {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : TFrame}
+    {τ : STy} (n : Nat) (w : TWd) (ls : List (SRecT w.K)) :
+    (STy.thunkRet (ℍ := ℍ) Tb hL hTb Fb F (STy.sum STy.unit τ)).P n w ls constInl PMap.empty :=
+  STy.thunkRet_intro (fun _ _ e => by simp at e) (constInl_ret _)
+
 end BoCa.Fig16.Tree.Wp
 
 end

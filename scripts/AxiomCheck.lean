@@ -935,6 +935,7 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.constCand
 #print axioms BoCa.Fig16.Tree.Wp.constInl_ret
 #print axioms BoCa.Fig16.Tree.Wp.SCmp.loop_nonempty
+#print axioms BoCa.Fig16.Tree.Wp.STy.thunkRet_constInl
 #print axioms BoCa.Fig16.Tree.Wp.STy.imm_le
 #print axioms BoCa.Fig16.Tree.Wp.STy.box_le
 #print axioms BoCa.Fig16.Tree.Wp.STy.ref_le
