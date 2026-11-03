@@ -340,6 +340,8 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
   | tokBurn hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := burnE) (by rfl)]; exact .tokBurn (deadP_insert hd Γa hΓ)
+  | absSeal hn _ ih => intro Γa Γb hΓ; exact .absSeal hn (ih Γa Γb hΓ)
+  | absUnseal hn _ ih => intro Γa Γb hΓ; exact .absUnseal hn (ih Γa Γb hΓ)
   | swap hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := BoCa.swap) (by rfl)]; exact .swap (deadP_insert hd Γa hΓ)
@@ -719,6 +721,8 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
   | tokBurn hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := burnE) (by rfl)]; exact .tokBurn (deadP_insert hd Γa hΓ)
+  | absSeal hn _ ih => intro Γa Γb hΓ; exact .absSeal hn (ih Γa Γb hΓ)
+  | absUnseal hn _ ih => intro Γa Γb hΓ; exact .absUnseal hn (ih Γa Γb hΓ)
   | swap hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := BoCa.swap) (by rfl)]; exact .swap (deadP_insert hd Γa hΓ)

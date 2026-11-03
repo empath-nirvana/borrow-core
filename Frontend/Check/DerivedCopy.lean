@@ -4,7 +4,7 @@ import Frontend.Check.Pin
 # Frontend — Check — the derived copy at `imm`  `[spec §12, #746]`
 
 `Imm @a A` and `[Imm @a A]` are linear with a **derived copy** (`DerivedCopy`, `Core/Classes.lean`):
-the kernel's constant `copy` (`CDerives.copy`, at `axCopyTy`) or `array_copy` (`CDerives.arrCopy`,
+the kernel's constant `copy` (`CDerivesIn.copy`, at `axCopyTy`) or `array_copy` (`CDerivesIn.arrCopy`,
 under `bangE`) makes two of one. A second use of such a variable is its derived copy, which the
 checker inserts, as it inserts a derived drop (SPEC §12); the split admits a slot both parts use
 only at a persistent type.

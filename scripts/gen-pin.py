@@ -36,11 +36,14 @@ def block(start_pat, stop_pat):
     return text[i:j]
 
 
-ind = block(r"^inductive CDerives ", r"^/-- `\[then\]` with its finaliser at the pure row")
+# `CDerivesIn P`'s rules up to the provider's two (`absSeal`, `absUnseal`, SPEC §63): `CDerivesP`
+# has those ungated, written in its template, and the typed term has neither
+ind = block(r"^inductive CDerivesIn ", r"^  /-- `\[abs-seal\]`")
 while ind and ind[-1].strip() == "":
     ind.pop()
 # fundamentalC's induction: up to the next top-level declaration or section
 fund = block(r"^theorem fundamentalC ", r"^(/-! |/-- |theorem |def |lemma )")
+fund = [l for l in fund if not re.match(r"^  \| abs(Seal|Unseal) ", l)]
 # `[then]` at the pure row and `[handle]` at two variables, stated after the inductive
 derived = block(r"^/-- `\[then\]` with its finaliser at the pure row", r"^/-! ### The delay, stream")
 while derived and derived[-1].strip() == "":
@@ -50,7 +53,12 @@ while fund and fund[-1].strip() == "":
 
 
 def rename(lines):
-    return [re.sub(r"\bCDerives\b", "CDerivesP", l) for l in lines]
+    out = []
+    for l in lines:
+        l = l.replace(" {P : Nat → Prop}", "").replace("CDerivesIn P ", "CDerivesP ")
+        l = re.sub(r"\bCDerivesIn\.", "CDerivesP.", l)
+        out.append(re.sub(r"\bCDerives\b", "CDerivesP", l))
+    return out
 
 
 # --- constructors and their explicit binders, for `PDerives.ofC` ---------------------------------
@@ -290,6 +298,10 @@ PROJ_LETPOLY = """  | letPoly a0 a1 a2 a3 a4 a5 ih0 ih1 =>
       rw [a5] at ih1
       rw [a3, a5, Expr.letBody_shift, Expr.lamBody_lam]
       exact JN.letPoly a0 a1 ih0 (by rw [subst_unfill a1]; exact ih1)"""
+
+
+# the namespace of a judgment's constructors: `CDerivesAt Ξ` is `CDerivesAtIn` at every provider
+CTOR_NS = {"CDerivesP": "CDerivesP", "CDerivesAt": "CDerivesAtIn"}
 
 
 def kid_name(h):
@@ -553,17 +565,17 @@ def typed_rule(r, fieldsof):
                     if r.pass_eq and p[1] == r.pass_kid:
                         rws.append(f"rw [{q}]")
     if r.name == "letPoly":
-        return ctor, PROJ_LETPOLY.replace("JN", jn)
+        return ctor, PROJ_LETPOLY.replace("JN", CTOR_NS[jn])
     if r.name in DERIVED:
         rws += [x.split(" at ")[0] for x in rws if x.startswith("rw [") and " at " in x]
         rws += PROJ_TAIL.get(r.name, [])
     lines = [f"  | {' '.join([r.name] + pat + ihs)} =>", "      dsimp only [TExpr.erase]"]
     lines += [f"      {x}" for x in rws]
-    lines.append(f"      exact {jn}.{r.name} {' '.join(args)}".rstrip())
+    lines.append(f"      exact {CTOR_NS[jn]}.{r.name} {' '.join(args)}".rstrip())
     return ctor, "\n".join(lines)
 
 
-RULE_NAMES = {n for n, _ in ctor_texts(der, "inductive CDerivesP ")}
+RULE_NAMES = {n for n, _ in ctor_texts(der, "inductive CDerivesP ")} - {"absSeal", "absUnseal"}
 def typed_explicit(r):
     """The explicit binders of `r`'s typed rule, in order: `(name, whether a premise)`; each
     equation follows its premise."""
@@ -595,9 +607,16 @@ def to_p_case(ra, rp):
     return f"  | {lhs} => exact TDerivesP.{rp.name} {' '.join(args)}".rstrip()
 
 
-rulesP = [Rule(n, rest, "CDerivesP") for n, rest in ctor_texts(der, "inductive CDerivesP ")]
-tied_src = (ROOT / "Core" / "Tied.lean").read_text()
-rulesAt = [Rule(n, rest, "CDerivesAt Ξ") for n, rest in ctor_texts(tied_src, "inductive CDerivesAt ")]
+# the provider's rules (SPEC §63) have no node: the checker's terms are outside every provider
+PROVIDER = {"absSeal", "absUnseal"}
+rulesP = [Rule(n, rest, "CDerivesP") for n, rest in ctor_texts(der, "inductive CDerivesP ")
+          if n not in PROVIDER]
+# `CDerivesAtIn P Ξ`'s rules, read at `CDerivesAt Ξ`: none but the provider's reads `P`
+tied_src = (ROOT / "Core" / "Tied.lean").read_text().replace("CDerivesAtIn P Ξ ", "CDerivesAt Ξ ")
+tied_src = tied_src.replace("inductive CDerivesAtIn (P : Nat → Prop) (Ξ : EffCtx)",
+                            "inductive CDerivesAt (Ξ : EffCtx)")
+rulesAt = [Rule(n, rest, "CDerivesAt Ξ") for n, rest in ctor_texts(tied_src, "inductive CDerivesAt ")
+           if n not in PROVIDER]
 fieldsof = {r.name: r.fields for r in rulesP}
 for r in rulesAt:
     if r.name not in fieldsof:

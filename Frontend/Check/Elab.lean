@@ -169,6 +169,7 @@ def ppV (nm : List (String × LifeVar)) (d p : Nat) : CVTy → String
   | .opq .clock => "clock"
   | .opq .args => "args"
   | .opq .tok => "tok"
+  | .opq (.abs n) => s!"abs {n}"
   -- The variable of the `nu` around (`ppC`), which occurs only as `U X`.
   | .tvar n => if n < d then tvName (d - 1 - n) else if n == d then "U X" else s!"?{n}"
   | .mu A => parenIf (p > 0) s!"mu {tvName d}. {ppV nm (d + 1) 0 A}"

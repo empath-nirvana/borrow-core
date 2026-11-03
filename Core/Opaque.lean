@@ -19,9 +19,12 @@ modes (`Relation.lean`).
 * `Tok`: the token of a declared type with no derived drop (SPEC §11, §12, §42). It is not a host
   type: its value is a location owning a unit cell, allocated by `mint` and freed by `burn`, the
   capture cell's pattern (SPEC §25). Its model is `Ref 1`'s (`Opaque.rel`).
+* `abs n`: the abstract type named `n` (SPEC §63). Its representation is `Tok`, and its relation is
+  `Tok`'s. Only its provider may convert between the two (`CDerivesIn.absSeal`,
+  `CDerivesIn.absUnseal`, `Fundamental.lean`).
 
 The relation at an opaque type is `Opaque.rel`: `⌜k.Holds v⌝` at a host type, and the owned
-unit cell at `Tok`.
+unit cell at `Tok` and at every abstract type.
 
 A byte list is a value of `Bytes = μX. 1 ⊕ (U8 ⊗ X)` (`Stdio.lean`): `inj₁ ()`, or
 `inj₂ (b, rest)` with `b` a byte literal.
@@ -43,6 +46,8 @@ inductive Opaque where
   /-- `Tok`: the token of a declared type with no derived drop, a location owning a unit cell.
   `[spec §11, §12, §42]` -/
   | tok
+  /-- `abs n`: the abstract type named `n`, represented by `Tok`.  `[spec §63]` -/
+  | abs (n : Nat)
   deriving DecidableEq, Repr
 
 /-- `v` is a byte list: `inj₁ ()`, or `inj₂ (u8[b], rest)` with `rest` a byte list.
@@ -58,40 +63,51 @@ def Opaque.Holds : Opaque → Val → Prop
   | .clock, v => ∃ t, v = .i64 t
   | .args, v => BytesV v
   | .tok, v => ∃ ℓ, v = .loc ℓ
+  | .abs _, v => ∃ ℓ, v = .loc ℓ
 
 open BoCa.Fig16 BoCa.Fig16.BoLo in
 /-- The relation at an opaque type, in both modes: the model `⌜k.Holds v⌝` at a host type; at
-`Tok` a location owning a unit cell, `Ref 1`'s clause.  `[spec §11, §12]` -/
+`Tok` a location owning a unit cell, `Ref 1`'s clause; at an abstract type `Tok`'s.
+`[spec §11, §12, §63]` -/
 noncomputable def Opaque.rel : Opaque → Val → WProp
   | .tok, v => ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ ⌜v' = .unit⌝
+  | .abs _, v => ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ ⌜v' = .unit⌝
   | .input, v => ⌜Opaque.Holds .input v⌝
   | .output, v => ⌜Opaque.Holds .output v⌝
   | .clock, v => ⌜Opaque.Holds .clock v⌝
   | .args, v => ⌜Opaque.Holds .args v⌝
 
-/-- A host type: every opaque type but `Tok`. Its relation is pure.  `[spec §11]` -/
-def Opaque.Host (k : Opaque) : Prop := k ≠ .tok
+/-- A host type: every opaque type but `Tok` and the abstract types. Its relation is pure.
+`[spec §11, §63]` -/
+def Opaque.Host : Opaque → Prop
+  | .tok | .abs _ => False
+  | _ => True
 
 open BoCa.Fig16 BoCa.Fig16.BoLo in
 theorem Opaque.rel_host {k : Opaque} (hk : k.Host) (v : Val) : k.rel v = ⌜k.Holds v⌝ := by
-  cases k <;> first | rfl | exact absurd rfl hk
+  cases k <;> first | rfl | exact hk.elim
 
-theorem Opaque.tok_not_host : ¬ Opaque.Host .tok := fun h => h rfl
+theorem Opaque.tok_not_host : ¬ Opaque.Host .tok := id
+
+theorem Opaque.abs_not_host (n : Nat) : ¬ Opaque.Host (.abs n) := id
+
+/-- **An abstract type's relation is its representation's**, `Tok`'s.  `[spec §63]` -/
+theorem Opaque.rel_abs (n : Nat) : Opaque.rel (.abs n) = Opaque.rel .tok := rfl
 
 open BoCa.Fig16 BoCa.Fig16.BoLo in
-/-- The relation at an opaque type: at a host type the empty resource and the model; at `Tok` a
-location and its owned unit cell. -/
+/-- The relation at an opaque type: at a host type the empty resource and the model; at `Tok` and
+at an abstract type a location and its owned unit cell. -/
 theorem Opaque.rel_cases {k : Opaque} {v : Val} {ρ : WRes} (h : k.rel v ρ) :
     (k.Host ∧ ρ = PMap.empty ∧ k.Holds v) ∨
-      (k = .tok ∧ ∃ ℓ, v = .loc ℓ ∧ ρ = ResU.single ℓ (CellU.ownOf .unit)) := by
+      (¬ k.Host ∧ ∃ ℓ, v = .loc ℓ ∧ ρ = ResU.single ℓ (CellU.ownOf .unit)) := by
   cases k with
-  | tok =>
+  | tok | abs _ =>
       right
       obtain ⟨ℓ, w, hs⟩ := h
       obtain ⟨rfl, ρ₁, ρ₂, hc, rfl, hw⟩ := pure_sep_iff.mp hs
       obtain ⟨rfl, rfl⟩ := hw
-      exact ⟨rfl, ℓ, rfl, (eq_of_compS_empty_left (ResU.CompS.comm hc))⟩
-  | _ => obtain ⟨h₁, h₂⟩ := h; exact Or.inl (And.intro (fun e => nomatch e) (And.intro h₁ h₂))
+      exact ⟨id, ℓ, rfl, (eq_of_compS_empty_left (ResU.CompS.comm hc))⟩
+  | _ => obtain ⟨h₁, h₂⟩ := h; exact Or.inl (And.intro trivial (And.intro h₁ h₂))
 
 open BoCa.Fig16 BoCa.Fig16.BoLo in
 /-- `Tok`'s relation at a location and its owned unit cell. -/

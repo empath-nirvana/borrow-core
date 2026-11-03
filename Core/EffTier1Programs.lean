@@ -255,10 +255,10 @@ def timeoutProg : Expr := bindE timeoutRE timeoutUses
 
 /-! ### Weakening a tied derivation -/
 
-/-- **Weakening** of a tied derivation by consumed slots at the end, as `CDerives.append_dead`. -/
-theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' : Ctx VTy}
-    (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
-    (h : CDerivesAt Ξ Δ Γ e j) : CDerivesAt Ξ Δ (Γ ++ Γ') e j := by
+/-- **Weakening** of a tied derivation by consumed slots at the end, as `CDerivesIn.append_dead`. -/
+theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAtIn.append_dead {P : Nat → Prop} {Ξ : EffCtx}
+    {Γ' : Ctx VTy} (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
+    (h : CDerivesAtIn P Ξ Δ Γ e j) : CDerivesAtIn P Ξ Δ (Γ ++ Γ') e j := by
   induction h with
   | var hs => exact .var (soloP_append h' hs)
   | unitI hd => exact .unitI (deadP_append h' hd)
@@ -296,6 +296,8 @@ theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' 
   | free hΓ => exact .free (deadP_append h' hΓ)
   | tokMint hΓ => exact .tokMint (deadP_append h' hΓ)
   | tokBurn hΓ => exact .tokBurn (deadP_append h' hΓ)
+  | absSeal hn _ ih => exact .absSeal hn ih
+  | absUnseal hn _ ih => exact .absUnseal hn ih
   | swap hΓ => exact .swap (deadP_append h' hΓ)
   | copy hΓ => exact .copy (deadP_append h' hΓ)
   | forgetImm hΓ => exact .forgetImm (deadP_append h' hΓ)
@@ -439,7 +441,7 @@ theorem dAt_hQ {Δ : LifeCtx} {Γ Γ₁ : Ctx VTy} (hs : Ctx.SplitP Γ Γ₁ Γ)
   have hAt := rowAt_ofEff_fs (fs' := fun _ => F) (rowAt_ofEff_append hn hn0 (by simp) hS)
   exact .effHandleV (cs := rcsNil) (E := [(q, A, B)]) (fs := fun _ => F) hAt hs hΓ₁.toP
     (.pair (.val _) (.pair (.val _) (.val _)))
-    ((CDerivesAt.tensorI .nil hhr (.tensorI .nil hc (.unitI .nil))).append_dead hΓ₁)
+    ((CDerivesAtIn.tensorI .nil hhr (.tensorI .nil hc (.unitI .nil))).append_dead hΓ₁)
     hn0 hnS (by simp) (Row.divB_of_rowAt hAt hΞ) hM
 
 end Kernel

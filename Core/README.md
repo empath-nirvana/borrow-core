@@ -58,6 +58,12 @@ and stream bodies. `Loop A B = νX. F(A ⊕ U X) & F B` (`CTy.loop`) is the loop
 returns a residual, and `D A = Loop A 1`; the driver `driveE n` is typed at every loop
 (`d_driveL`, `DelayPrograms.lean`).
 
+`CDerives` is `CDerivesIn (fun _ => True)`: the judgment at a provider set `P`, inside every
+provider (SPEC §63). Only `absSeal` and `absUnseal`, the iso between an abstract type
+`abs n` and its representation `Tok`, read `P`, each under `P n`. `CDerivesIn.mono` embeds a
+derivation at any provider set, and `Abstract.lean` has encapsulation (`CDerivesIn.outside`) and
+the refused unseal (`CDerivesIn.var_abs_not_tok`).
+
 Its context premises are `Ctx.SplitP`, `Ctx.DeadP` and `Ctx.SoloP` (`Persistent.lean`,
 `[spec §10]`), which extend the paper's `Ctx.Split`, `Ctx.Dead` and `Ctx.Solo`: a live slot of
 persistent type (`VTy.persistent`: `1`, `0`, `Unk`, `I32`, `I64`, `!A`, and `⊗`, `⊕`, `[@a]`,
@@ -263,7 +269,7 @@ effect).
   suspension's finalisers (`e7a`, `e7b`, `e7d`), an unwind through a finaliser that raises (`e8b`),
   and a stored continuation resumed, cancelled, or cancelled through a finaliser that raises
   (`storedKResume`, `storedKCancel`, `storedKFin`). A tied derivation weakens by consumed slots at
-  the end (`CDerivesAt.append_dead`).
+  the end (`CDerivesAtIn.append_dead`).
 - **Embedding.** `embed : DerivesWf Δ Γ e T → CDerives Δ (cbvCtx Γ) e (.val (cbv T))` for every
   `DerivesWf` rule, and `adequacy_of_derivesWf`. `EmbeddingExamples.lean` runs BoLo's baseline
   programs through it.

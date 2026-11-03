@@ -89,6 +89,13 @@ declared type adds nothing that a `match` cannot already do.
 - **T3, #778's done-when:** for every client `M` at `¬ P fileName` under `with_fs`, every run that
   ends performed `close` once per `open`. **This one needs a decision; see below.**
 
+## Ruling (user, 2026-11-03)
+
+Built: T1, the kernel rule and its embedding, with the encapsulation statement
+(`CDerivesIn.outside`) and the unseal step refused (`CDerivesIn.var_abs_not_tok`,
+`file_not_tok_outside`), in `Core/Abstract.lean` (SPEC §63). Parked on #778: T2's inversion
+lemmas for `CDerivesIn P`, and T3, the run-level theorem.
+
 ## Decision needed (why work stopped after this document)
 
 T3 cannot be a corollary of `fundamentalC` / `resourceSafety`. Every theorem about runs in the total

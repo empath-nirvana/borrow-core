@@ -226,7 +226,7 @@ theorem d_call {Δ : LifeCtx} {σ : Shape} {cb : Expr} {C T : VTy}
       (.val (.lolli σ.refTy (.lolli C (.tensor σ.refTy T)))))
     (hcb : CDerives Δ [] cb (.val C)) :
     CDerives Δ [⟨σ.refTy, true⟩] (app2 (withborS σ) (.var 0) cb) (.val (.tensor σ.refTy T)) :=
-  .lolliE (.right .nil) (CDerives.append_dead (Γ' := [⟨σ.refTy, false⟩]) (.cons .nil) hcb)
+  .lolliE (.right .nil) (CDerivesIn.append_dead (Γ' := [⟨σ.refTy, false⟩]) (.cons .nil) hcb)
     (.lolliE (.left .nil) (.var (.here .nil)) hW)
 
 /-- **Allocate a struct as one block, then borrow its leaves, on some run.**  On the run that

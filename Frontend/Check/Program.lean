@@ -33,7 +33,7 @@ typed derivation off; its projections (`TDerivesAt.erase`, `TDerivesP.erase`) gi
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt CDerivesP Jdg SemC fundamentalC adequacyC EffCtx
+open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt CDerivesAtIn CDerivesP Jdg SemC fundamentalC adequacyC EffCtx
   SigsAt PinLaw fundamentalC_pin adequacyC_pin)
 
 /-- A checked `main`: its context, typed term and type, the rows its derivation reads at
@@ -388,6 +388,15 @@ theorem checkProgram_tied {p : Program} {r : Report} {c : Checked}
     (_h : checkProgram p = .ok r) (_hc : r.main = some c) (hp : c.pins = []) :
     ∀ Ξ : EffCtx, SigsAt Ξ c.sigs → CDerivesAt Ξ LifeCtx.empty c.ctx c.t.erase (.comp c.C) :=
   c.tied.tied.1 hp
+
+/-- **Every checked program is outside every abstract type's provider** (SPEC §63): `main`'s
+derivation is tied at the provider set that holds no name, since no typed node is a provider's
+rule (`TDerivesAt.eraseIn`). So no checked program takes an abstract type apart, and
+`CDerivesIn.outside` holds of it at every name.  `[spec §19, §63]` -/
+theorem checkProgram_outside {p : Program} {r : Report} {c : Checked}
+    (_h : checkProgram p = .ok r) (_hc : r.main = some c) (hp : c.pins = []) :
+    CDerivesAtIn (fun _ => False) c.Ξ LifeCtx.empty c.ctx c.t.erase (.comp c.C) :=
+  (c.typedAt hp).eraseIn
 
 /-- **At the program's own effect context**, whose abortive operations are cancellable (decision
 63): `main`'s derivation is `CDerivesAt c.Ξ`, and `c.Ξ` has no unrestricted operation answering `0`.

@@ -31,7 +31,7 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.ewp_handleS
 #print axioms BoCa.Fig16.LogRel.Core.handle_compatCB
 #print axioms BoCa.Fig16.LogRel.Core.handleV_compatCB
-#print axioms BoCa.Fig16.LogRel.Core.CDerivesAt.effHandleB
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesAtIn.effHandleB
 #print axioms BoCa.Fig16.LogRel.Core.Check.ansOutlivesB_sound
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.tail_resumes
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.tail_resumes_answer
@@ -158,7 +158,7 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.nuIn_compatX
 #print axioms BoCa.Fig16.LogRel.Core.nuOut_compatX
 #print axioms BoCa.Fig16.LogRel.Core.unfold_compatX
-#print axioms BoCa.Fig16.LogRel.Core.CDerives.fixD
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesIn.fixD
 #print axioms BoCa.Fig16.LogRel.Core.take_runs
 #print axioms BoCa.Fig16.LogRel.Core.sumProg_runs
 #print axioms BoCa.Fig16.LogRel.Core.mapIncR_inPlace
@@ -292,7 +292,7 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.ewp_handle_vals
 #print axioms BoCa.Fig16.LogRel.Core.handleV_compatC
 #print axioms BoCa.Fig16.LogRel.Core.then_compatC
-#print axioms BoCa.Fig16.LogRel.Core.CDerives.effHandle
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesIn.effHandle
 -- SPEC §25 (entry 24): the capture cell
 #print axioms BoCa.Fig16.LogRel.Core.ewp_alloc
 #print axioms BoCa.Fig16.LogRel.Core.ewp_free
@@ -362,8 +362,8 @@ import Backend2.Interp
 -- SPEC §19, *Typing*: decision R, one signature per operation; §18, abortive operations cancellable
 #print axioms BoCa.Fig16.LogRel.Core.CDerivesAt.toCDerives
 #print axioms BoCa.Fig16.LogRel.Core.CDerivesAt.ofEffFree
-#print axioms BoCa.Fig16.LogRel.Core.CDerivesAt.effThenA
-#print axioms BoCa.Fig16.LogRel.Core.CDerivesAt.effHandle
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesAtIn.effThenA
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesAtIn.effHandle
 #print axioms BoCa.Fig16.LogRel.Core.rowAt_of_le
 #print axioms BoCa.Fig16.LogRel.Core.rowAt_ofEff_fs
 #print axioms BoCa.Fig16.LogRel.Core.sig_prefix_of_rowAt
@@ -534,7 +534,7 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.sub_compatC
 #print axioms BoCa.Fig16.LogRel.Core.let_compatC
 #print axioms BoCa.Fig16.LogRel.Core.handleV_compatC
-#print axioms BoCa.Fig16.LogRel.Core.CDerives.effThenA
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesIn.effThenA
 #print axioms BoCa.Fig16.LogRel.Core.Row.unrD_iff_of_fin
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.cancelT_start
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.resumeT_start
@@ -593,7 +593,7 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_e7c_lift
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.noUnrExn_Ξe7c
 -- SPEC §19 *Programs*: the effect properties' programs, typed at `ΞE` and run by `runM`
-#print axioms BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesAtIn.append_dead
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.noUnrExn_ΞE
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.dAt_hQ
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.dAt_hofTwoRows
@@ -693,7 +693,7 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.AwaitCancel.close_sticky
 #print axioms BoCa.Fig16.LogRel.Core.AwaitCancel.shield_sticky
 #print axioms BoCa.Fig16.LogRel.Core.AwaitCancel.unshielded_sticky
-#print axioms BoCa.Fig16.LogRel.Core.CDerives.effHandleCs
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesIn.effHandleCs
 #print axioms BoCa.Fig16.LogRel.Core.AwaitCancel.d_stickyScope
 #print axioms BoCa.Fig16.LogRel.Core.AwaitCancel.stickyScope_runs
 #print axioms BoCa.Fig16.LogRel.Core.AwaitCancel.stickyScope_eval
@@ -723,8 +723,8 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.cwp_handle_last
 #print axioms BoCa.Fig16.LogRel.Core.ewp_handle_last
 #print axioms BoCa.Fig16.LogRel.Core.handleL_compatC
-#print axioms BoCa.Fig16.LogRel.Core.CDerives.effHandleL
-#print axioms BoCa.Fig16.LogRel.Core.CDerivesAt.effHandleL
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesIn.effHandleL
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesAtIn.effHandleL
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.der_hndJ₁
 #print axioms BoCa.Fig16.LogRel.Core.kappaFinSelf
 #print axioms BoCa.Fig16.LogRel.Core.lastFinOK_nil_of_find
@@ -1040,3 +1040,24 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.LetDtor.Suspend.ySeqDrop_safe
 #print axioms BoCa.Fig16.LogRel.Core.LetDtor.Suspend.ySeqResume_order
 #print axioms BoCa.Fig16.LogRel.Core.LetDtor.Suspend.ySeqDrop_order
+#print axioms BoCa.Fig16.LogRel.Core.Opaque.rel_abs
+#print axioms BoCa.Fig16.LogRel.Core.vCE_abs_eq_tok
+#print axioms BoCa.Fig16.LogRel.Core.absSeal_compatC
+#print axioms BoCa.Fig16.LogRel.Core.absUnseal_compatC
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesIn.mono
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesIn.toCDerives
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesAtIn.toCDerivesIn
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesAtIn.ofEffFree
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesIn.outside
+#print axioms BoCa.Fig16.LogRel.Core.ProvWithout.not_self
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesIn.var_abs_hnf
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesIn.var_abs_not_tok
+#print axioms BoCa.Fig16.LogRel.Core.file_not_tok_outside
+#print axioms BoCa.Fig16.LogRel.Core.file_tok_inside
+#print axioms BoCa.Fig16.LogRel.Core.d_skipClose_inside
+#print axioms BoCa.Fig16.LogRel.Core.d_openClose
+#print axioms BoCa.Fig16.LogRel.Core.d_fsOpenClose
+#print axioms BoCa.Fig16.LogRel.Core.fsOpenClose_safe
+#print axioms BoCa.Fig16.LogRel.Core.openClose_outside
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.eraseIn
+#print axioms Frontend.Check.checkProgram_outside

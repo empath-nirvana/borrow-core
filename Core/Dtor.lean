@@ -460,22 +460,22 @@ theorem hasDtor_of_forgettable {A : VTy} (h : Forgettable A) : HasDtor A := by
 /-! ### The destructors are `CDerives` derivations -/
 
 /-- `forget : T ⊸ 1` at a persistent `T`, from `λ` and `Ctx.DeadP.drop`. -/
-theorem forget_persistent {Δ : LifeCtx} {Γ : Ctx VTy} {T : VTy} (hT : T.Persistent)
-    (hΓ : Ctx.Dead Γ) : CDerives Δ Γ forget (.val (.lolli T .unit)) :=
+theorem forget_persistent {P : Nat → Prop} {Δ : LifeCtx} {Γ : Ctx VTy} {T : VTy} (hT : T.Persistent)
+    (hΓ : Ctx.Dead Γ) : CDerivesIn P Δ Γ forget (.val (.lolli T .unit)) :=
   .thunkV rfl (.lam (.ret (.unitI (.drop hT hΓ.toP))))
 
 /-- `λx. close x : U(C & F 1) ⊸ F 1` body, from `force`/`proj₂`. -/
-theorem close_body {Δ : LifeCtx} {Γ : Ctx VTy} {C : CTy} (hΓ : Ctx.Dead Γ) :
-    CDerives Δ (⟨.thunk (.amp C (.ret .unit)), true⟩ :: Γ) (.app (.var 0) (.val (.inj₂ .unit)))
+theorem close_body {P : Nat → Prop} {Δ : LifeCtx} {Γ : Ctx VTy} {C : CTy} (hΓ : Ctx.Dead Γ) :
+    CDerivesIn P Δ (⟨.thunk (.amp C (.ret .unit)), true⟩ :: Γ) (.app (.var 0) (.val (.inj₂ .unit)))
       (.comp (.ret .unit)) :=
   .proj₂ (C := C) (.force (C := .amp C (.ret .unit)) (.here hΓ.toP))
 
 /-- The destructor of `A ⊗ B`, from the destructors of `A` and `B`. -/
-theorem dtor_tensor_wf {Δ : LifeCtx} {A B : VTy}
-    (ih₁ : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ Γ (dtorE A) (.val (.lolli A .unit)))
-    (ih₂ : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ Γ (dtorE B) (.val (.lolli B .unit)))
+theorem dtor_tensor_wf {P : Nat → Prop} {Δ : LifeCtx} {A B : VTy}
+    (ih₁ : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerivesIn P Δ Γ (dtorE A) (.val (.lolli A .unit)))
+    (ih₂ : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerivesIn P Δ Γ (dtorE B) (.val (.lolli B .unit)))
     {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives Δ Γ (dtorE (.tensor A B)) (.val (.lolli (.tensor A B) .unit)) :=
+    CDerivesIn P Δ Γ (dtorE (.tensor A B)) (.val (.lolli (.tensor A B) .unit)) :=
   .lamV (.letpairV (.left (deadSplit hΓ)) (.var (.here hΓ.toP))
     (.seqV (.right (.left (.dead (deadSplit hΓ))))
       (.lolliE (.dead (.left (.dead (deadSplit hΓ)))) (.var (.there (.here (.cons hΓ.toP))))
@@ -484,11 +484,11 @@ theorem dtor_tensor_wf {Δ : LifeCtx} {A B : VTy}
         (ih₂ (.cons (.cons (.cons hΓ)))))))
 
 /-- The destructor of `A ⊕ B`, from the destructors of `A` and `B`. -/
-theorem dtor_sum_wf {Δ : LifeCtx} {A B : VTy}
-    (ih₁ : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ Γ (dtorE A) (.val (.lolli A .unit)))
-    (ih₂ : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ Γ (dtorE B) (.val (.lolli B .unit)))
+theorem dtor_sum_wf {P : Nat → Prop} {Δ : LifeCtx} {A B : VTy}
+    (ih₁ : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerivesIn P Δ Γ (dtorE A) (.val (.lolli A .unit)))
+    (ih₂ : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerivesIn P Δ Γ (dtorE B) (.val (.lolli B .unit)))
     {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives Δ Γ (dtorE (.sum A B)) (.val (.lolli (.sum A B) .unit)) :=
+    CDerivesIn P Δ Γ (dtorE (.sum A B)) (.val (.lolli (.sum A B) .unit)) :=
   .lamV (.caseV (.left (deadSplit hΓ)) (.var (.here hΓ.toP))
     (.lolliE (.left (.dead (deadSplit hΓ))) (.var (.here (.cons hΓ.toP)))
       (ih₁ (.cons (.cons hΓ))))
@@ -496,16 +496,16 @@ theorem dtor_sum_wf {Δ : LifeCtx} {A B : VTy}
       (ih₂ (.cons (.cons hΓ)))))
 
 /-- `λr. d r`, promoted, at `!(A ⊸ 1)`, from the destructor `d` of `A`. -/
-theorem d_alg_of_dtor {Δ : LifeCtx} {A : VTy} {d : Expr}
-    (ih : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ Γ d (.val (.lolli A .unit)))
+theorem d_alg_of_dtor {P : Nat → Prop} {Δ : LifeCtx} {A : VTy} {d : Expr}
+    (ih : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerivesIn P Δ Γ d (.val (.lolli A .unit)))
     {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives Δ Γ (.val (.lam (.app d (.var 0)))) (.val (.bang (VTy.lolli A .unit))) :=
+    CDerivesIn P Δ Γ (.val (.lam (.app d (.var 0)))) (.val (.bang (VTy.lolli A .unit))) :=
   d_algO hΓ (.ret (.lolliE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) (ih (.cons hΓ))))
 
 /-- A tuple of derivations at a dead context. -/
-theorem d_tup {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {α : Type} (f : α → Expr) (g : α → VTy) :
-    ∀ (ks : List α), (∀ k ∈ ks, CDerives Δ Γ (f k) (.val (g k))) →
-      CDerives Δ Γ (FoldP.tupE (ks.map f)) (.val (FoldP.tupTy (ks.map g)))
+theorem d_tup {P : Nat → Prop} {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {α : Type} (f : α → Expr) (g : α → VTy) :
+    ∀ (ks : List α), (∀ k ∈ ks, CDerivesIn P Δ Γ (f k) (.val (g k))) →
+      CDerivesIn P Δ Γ (FoldP.tupE (ks.map f)) (.val (FoldP.tupTy (ks.map g)))
   | [], _ => .unitI hΓ.toP
   | [k], h => h k (by simp)
   | k :: k' :: r, h => .tensorI (deadSplit hΓ) (h k (by simp))
@@ -515,8 +515,8 @@ theorem algsOf_nil (ks : List FoldP.Bnd) : FoldP.algsOf ks [] = dtorAlgs := rfl
 
 /-- **Every destructor is a closed `CDerives` derivation**, at every lifetime context and every
 dead context.  `[spec §12]` -/
-theorem dtor_wf {Δ : LifeCtx} {T : VTy} (hT : HasDtor T) :
-    ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ Γ (dtorE T) (.val (.lolli T .unit)) := by
+theorem dtor_wf {P : Nat → Prop} {Δ : LifeCtx} {T : VTy} (hT : HasDtor T) :
+    ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerivesIn P Δ Γ (dtorE T) (.val (.lolli T .unit)) := by
   induction hT generalizing Δ with
   | unit => intro Γ hΓ; exact forget_persistent rfl hΓ
   | zero => intro Γ hΓ; exact forget_persistent rfl hΓ
@@ -543,24 +543,24 @@ theorem dtor_wf {Δ : LifeCtx} {T : VTy} (hT : HasDtor T) :
       | true =>
           obtain ⟨hW, hG⟩ := fshapeB_sound hF
           rw [dtorE_mu_F hF]
-          have halg : CDerives Δ (⟨.mu A, false⟩ :: Γ) (.val (.lam (.app (algE A) (.var 0))))
+          have halg : CDerivesIn P Δ (⟨.mu A, false⟩ :: Γ) (.val (.lam (.app (algE A) (.var 0))))
               (.val (algOTy (toFShape A) .unit)) := by
             simp only [algE]
             rw [algE_eqP [A] A]
             have h := d_alg_of_dtor (Δ := Δ) ihr (Γ := ⟨.mu A, false⟩ :: Γ) (.cons hΓ)
             rw [resO_toFShape [A] A hW] at h ⊢
             exact h
-          have hfold : CDerives Δ (⟨.mu A, false⟩ :: Γ)
+          have hfold : CDerivesIn P Δ (⟨.mu A, false⟩ :: Γ)
               (.app (.val (foldOwnV (toFShape A))) (.val (.lam (.app (algE A) (.var 0)))))
               (.val (.lolli (.mu A) .unit)) := by
-            have h := CDerives.bangE (CDerives.lolliE (deadSplit (.cons hΓ)) halg
+            have h := CDerivesIn.bangE (CDerivesIn.lolliE (deadSplit (.cons hΓ)) halg
               (.foldOwn (toFShape A) .unit (Ctx.Dead.cons hΓ).toP hW hG))
             rwa [toFShape_ty] at h
           exact .lamV (.lolliE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) hfold)
       | false =>
           rw [dtorE_mu_P hF]
           have hΓ' : Ctx.Dead (⟨.mu A, false⟩ :: Γ) := .cons hΓ
-          have hkey : ∀ k ∈ FoldP.keys A, CDerives Δ (⟨.mu A, false⟩ :: Γ) (keyAlg k)
+          have hkey : ∀ k ∈ FoldP.keys A, CDerivesIn P Δ (⟨.mu A, false⟩ :: Γ) (keyAlg k)
               (.val (FoldP.algTy (FoldP.algsOf (FoldP.keys A) []) k)) := by
             intro k hk
             rw [algsOf_nil]
@@ -577,7 +577,7 @@ theorem dtor_wf {Δ : LifeCtx} {T : VTy} (hT : HasDtor T) :
                   exact d_alg_of_dtor (Δ := Δ) (ihm B Bs hk) hΓ'
               | .arr Bs S, hk, _ =>
                   have hd : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ →
-                      CDerives Δ Γ (arrAlgE (algE S))
+                      CDerivesIn P Δ Γ (arrAlgE (algE S))
                         (.val (.lolli (.sum .unit (.tensor .unit (FoldP.resO dtorAlgs Bs S))) .unit)) := by
                     intro Γ hΓ
                     simp only [algE]
@@ -586,16 +586,16 @@ theorem dtor_wf {Δ : LifeCtx} {T : VTy} (hT : HasDtor T) :
                       (dtor_tensor_wf (fun h => forget_persistent rfl h) (iha Bs S hk)) hΓ
                   exact d_alg_of_dtor (Δ := Δ) hd hΓ'
           have htup := d_tup hΓ' keyAlg (FoldP.algTy (FoldP.algsOf (FoldP.keys A) [])) (FoldP.keys A) hkey
-          have hfold : CDerives Δ (⟨.mu A, false⟩ :: Γ)
+          have hfold : CDerivesIn P Δ (⟨.mu A, false⟩ :: Γ)
               (.app (.val (FoldP.foldOwnGV A)) (FoldP.tupE ((FoldP.keys A).map keyAlg)))
               (.val (.lolli (.mu A) .unit)) :=
-            CDerives.bangE (CDerives.lolliE (deadSplit (.cons hΓ)) htup
+            CDerivesIn.bangE (CDerivesIn.lolliE (deadSplit (.cons hΓ)) htup
               (.foldOwnG A [] (Ctx.Dead.cons hΓ).toP hP))
           exact .lamV (.lolliE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) hfold)
   | close => intro Γ hΓ; exact .thunkV rfl (.lam (close_body hΓ))
   | @nu C R hC hRc _ ih =>
       intro Γ hΓ
-      have hM := CDerives.proj₂ (Δ := Δ)
+      have hM := CDerivesIn.proj₂ (P := P) (Δ := Δ)
         (.nuOut hC (.force (C := .nu (.amp C (.ret R))) (.here hΓ.toP)))
       simp only [CTy.instT, VTy.inst, VTy.subst_closed0 hRc] at hM
       exact .thunkV rfl (.lam (.bind (.left (deadSplit hΓ)) hM

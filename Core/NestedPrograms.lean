@@ -193,7 +193,7 @@ def nestSumE : Expr :=
 
 theorem d_nestSum (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ nestSumE (.val (.lolli nodeT .i32)) := by
-  have h := CDerives.lolliE (deadSplit hΓ)
+  have h := CDerivesIn.lolliE (deadSplit hΓ)
     (.tensorI (deadSplit hΓ) (d_addAlg hΓ) (.tensorI (deadSplit hΓ) (d_sumAlg hΓ) (d_sumAlg hΓ)))
     (.foldOwnG (Δ := LifeCtx.empty) nodeB nestRs hΓ.toP nodeB_P)
   simp only [nest_res] at h

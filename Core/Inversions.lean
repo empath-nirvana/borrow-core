@@ -76,6 +76,10 @@ inductive VS : VTy → VTy → Prop
   | mutS (a b : Lifetime.Life) (A : VTy) : VS (.mut b A) (.mut a A)
   | roll (A : VTy) : VS (VTy.inst (.mu A) A) (.mu A)
   | unroll (A : VTy) : VS (.mu A) (VTy.inst (.mu A) A)
+  /-- `absSeal`, inside the abstract type's provider (SPEC §63). -/
+  | absSeal (n : Nat) : VS tokTy (.opq (.abs n))
+  /-- `absUnseal`, inside the abstract type's provider (SPEC §63). -/
+  | absUnseal (n : Nat) : VS (.opq (.abs n)) tokTy
 
 /-- The views of a value type. -/
 abbrev VView := Relation.ReflTransGen VS
@@ -106,14 +110,15 @@ theorem Hnf.eq_self {T h : VTy} (hh : Hnf T h) (hb : ∀ a A, T ≠ .box a A) (h
 
 theorem hnf_self {T : VTy} (hb : ∀ a A, T ≠ .box a A) (hm : ∀ A, T ≠ .mu A) : Hnf T T := .base hb hm
 
-/-- **Views keep the head**, unless the head is `!` (whose content is then viewed), `Imm` or
-`Mut`. -/
+/-- **Views keep the head**, unless the head is `!` (whose content is then viewed), `Imm`, `Mut`,
+or `Tok` or an abstract type (the provider's iso, SPEC §63). -/
 theorem VView.hnf {T T' h : VTy} (hv : VView T T') (hT : Hnf T h) :
-    Hnf T' h ∨ (∃ A, h = .bang A ∧ VView A T') ∨ (∃ a A, h = .imm a A) ∨ (∃ a A, h = .mut a A) := by
+    Hnf T' h ∨ (∃ A, h = .bang A ∧ VView A T') ∨ (∃ a A, h = .imm a A) ∨ (∃ a A, h = .mut a A) ∨
+      ∃ k, h = .opq k := by
   induction hv with
   | refl => exact .inl hT
   | tail _ hs ih =>
-      rcases ih with h₁ | ⟨A, rfl, hA⟩ | hi | hm
+      rcases ih with h₁ | ⟨A, rfl, hA⟩ | hi | hm | ho
       · cases hs with
         | bang A =>
             obtain rfl := h₁.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)
@@ -127,31 +132,41 @@ theorem VView.hnf {T T' h : VTy} (hv : VView T T') (hT : Hnf T h) :
             exact .inr (.inr (.inl ⟨b, A, rfl⟩))
         | mutS a b A =>
             obtain rfl := h₁.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)
-            exact .inr (.inr (.inr ⟨b, A, rfl⟩))
+            exact .inr (.inr (.inr (.inl ⟨b, A, rfl⟩)))
         | roll A => exact .inl (.mu h₁)
         | unroll A => cases h₁ with
           | mu h₁ => exact .inl h₁
           | base _ hm => exact absurd rfl (hm _)
+        | absSeal n =>
+            obtain rfl := h₁.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)
+            exact .inr (.inr (.inr (.inr ⟨_, rfl⟩)))
+        | absUnseal n =>
+            obtain rfl := h₁.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)
+            exact .inr (.inr (.inr (.inr ⟨_, rfl⟩)))
       · exact .inr (.inl ⟨A, rfl, hA.tail hs⟩)
       · exact .inr (.inr (.inl hi))
-      · exact .inr (.inr (.inr hm))
+      · exact .inr (.inr (.inr (.inl hm)))
+      · exact .inr (.inr (.inr (.inr ho)))
 
-/-- A view of a type whose head is no `!`, `Imm` or `Mut` has that head. -/
+/-- A view of a type whose head is no `!`, `Imm`, `Mut` or opaque type has that head. -/
 theorem VView.hnf_of {T T' h : VTy} (hv : VView T T') (hT : Hnf T h) (hb : ∀ A, h ≠ .bang A)
-    (hi : ∀ a A, h ≠ .imm a A) (hm : ∀ a A, h ≠ .mut a A) : Hnf T' h := by
-  rcases hv.hnf hT with h' | ⟨A, rfl, -⟩ | ⟨a, A, rfl⟩ | ⟨a, A, rfl⟩
+    (hi : ∀ a A, h ≠ .imm a A) (hm : ∀ a A, h ≠ .mut a A)
+    (ho : ∀ k, h ≠ .opq k := by intro _ h; cases h) : Hnf T' h := by
+  rcases hv.hnf hT with h' | ⟨A, rfl, -⟩ | ⟨a, A, rfl⟩ | ⟨a, A, rfl⟩ | ⟨k, rfl⟩
   · exact h'
   · exact absurd rfl (hb A)
   · exact absurd rfl (hi a A)
   · exact absurd rfl (hm a A)
+  · exact absurd rfl (ho k)
 
-/-- **Views of a type that is its own head, no `!`, `Imm`, `Mut`, are that type**, when they are
-their own heads too. -/
+/-- **Views of a type that is its own head, no `!`, `Imm`, `Mut` or opaque type, are that type**,
+when they are their own heads too. -/
 theorem VView.eq_of_heads {T T' : VTy} (hv : VView T T') (hTb : ∀ a A, T ≠ .box a A)
     (hTm : ∀ A, T ≠ .mu A) (hb : ∀ A, T ≠ .bang A) (hi : ∀ a A, T ≠ .imm a A)
-    (hmu : ∀ a A, T ≠ .mut a A) (hT'b : ∀ a A, T' ≠ .box a A) (hT'm : ∀ A, T' ≠ .mu A) :
+    (hmu : ∀ a A, T ≠ .mut a A) (hT'b : ∀ a A, T' ≠ .box a A) (hT'm : ∀ A, T' ≠ .mu A)
+    (ho : ∀ k, T ≠ .opq k := by intro _ h; cases h) :
     T' = T :=
-  ((hv.hnf_of (hnf_self hTb hTm) hb hi hmu).eq_self hT'b hT'm).symm
+  ((hv.hnf_of (hnf_self hTb hTm) hb hi hmu ho).eq_self hT'b hT'm).symm
 
 /-! ### Persistence is a property of the head -/
 
@@ -836,6 +851,7 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | foldOwnG => intro k hk; exact absurd hk (not_hasVar_closed (FoldP.foldOwnGV_closed _))
   | foldReuse => intro k hk; exact absurd hk (not_hasVar_closed (foldReuseV_closed _))
   | unfoldN => intro k hk; exact absurd hk (not_hasVar_closed (unfoldV_closed _))
+  | absSeal _ _ ih | absUnseal _ _ ih => exact ih
   | _ => intro k hk; exact absurd hk (not_hasVar_closed (by rfl))
 
 /-! ### Inversions -/
@@ -927,6 +943,10 @@ theorem der_var {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.val (VS.boxI _ _))⟩
   | boxE _ ih =>
       intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.val (VS.boxE _ _))⟩
+  | absSeal _ _ ih =>
+      intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.val (VS.absSeal _))⟩
+  | absUnseal _ _ ih =>
+      intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.val (VS.absUnseal _))⟩
   | immSub _ _ ih =>
       intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.val (VS.immS _ _ _))⟩
   | mutSub _ _ ih =>
@@ -987,6 +1007,16 @@ theorem der_pair {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       rcases ih a b he with ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc⟩ | h
       · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.val (VS.boxE _ _))⟩
       · exact .inr h
+  | absSeal _ _ ih =>
+      intro a b he
+      rcases ih a b he with ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc⟩ | h
+      · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.val (VS.absSeal _))⟩
+      · exact .inr h
+  | absUnseal _ _ ih =>
+      intro a b he
+      rcases ih a b he with ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc⟩ | h
+      · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.val (VS.absUnseal _))⟩
+      · exact .inr h
   | immSub _ _ ih =>
       intro a b he
       rcases ih a b he with ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc⟩ | h
@@ -1035,6 +1065,12 @@ theorem der_inj₁ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeri
   | boxE _ ih =>
       intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he
       exact ⟨A, B, ha, hc.step (JS.val (VS.boxE _ _))⟩
+  | absSeal _ _ ih =>
+      intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he
+      exact ⟨A, B, ha, hc.step (JS.val (VS.absSeal _))⟩
+  | absUnseal _ _ ih =>
+      intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he
+      exact ⟨A, B, ha, hc.step (JS.val (VS.absUnseal _))⟩
   | immSub _ _ ih =>
       intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he
       exact ⟨A, B, ha, hc.step (JS.val (VS.immS _ _ _))⟩
@@ -1088,6 +1124,14 @@ theorem der_unit {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       intro he; rcases ih he with ⟨hd, hc⟩ | hr
       · exact .inl ⟨hd, hc.step (JS.val (VS.boxE _ _))⟩
       · exact .inr (hr.tail (JS.val (VS.boxE _ _)))
+  | absSeal _ _ ih =>
+      intro he; rcases ih he with ⟨hd, hc⟩ | hr
+      · exact .inl ⟨hd, hc.step (JS.val (VS.absSeal _))⟩
+      · exact .inr (hr.tail (JS.val (VS.absSeal _)))
+  | absUnseal _ _ ih =>
+      intro he; rcases ih he with ⟨hd, hc⟩ | hr
+      · exact .inl ⟨hd, hc.step (JS.val (VS.absUnseal _))⟩
+      · exact .inr (hr.tail (JS.val (VS.absUnseal _)))
   | immSub _ _ ih =>
       intro he; rcases ih he with ⟨hd, hc⟩ | hr
       · exact .inl ⟨hd, hc.step (JS.val (VS.immS _ _ _))⟩
@@ -1120,6 +1164,8 @@ theorem der_prim_alloc {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : C
   | bangE _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.bang _))⟩
   | boxI _ _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.boxI _ _))⟩
   | boxE _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.boxE _ _))⟩
+  | absSeal _ _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.absSeal _))⟩
+  | absUnseal _ _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.absUnseal _))⟩
   | immSub _ _ ih =>
       intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.immS _ _ _))⟩
   | mutSub _ _ ih =>
@@ -1239,6 +1285,12 @@ theorem der_app {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | boxE _ ih =>
       intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.boxE _ _))⟩
+  | absSeal _ _ ih =>
+      intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.absSeal _))⟩
+  | absUnseal _ _ ih =>
+      intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.absUnseal _))⟩
   | immSub _ _ ih =>
       intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.immS _ _ _))⟩
@@ -1286,6 +1338,12 @@ theorem der_letpair {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDer
   | boxE _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr⟩ := ih V M he
       exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.val (VS.boxE _ _))⟩
+  | absSeal _ _ ih =>
+      intro V M he; obtain ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr⟩ := ih V M he
+      exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.val (VS.absSeal _))⟩
+  | absUnseal _ _ ih =>
+      intro V M he; obtain ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr⟩ := ih V M he
+      exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.val (VS.absUnseal _))⟩
   | immSub _ _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr⟩ := ih V M he
       exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.val (VS.immS _ _ _))⟩
@@ -1332,6 +1390,12 @@ theorem der_seq {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | boxE _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, C, hs, hV, hM, hr⟩ := ih V M he
       exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.val (VS.boxE _ _))⟩
+  | absSeal _ _ ih =>
+      intro V M he; obtain ⟨Γ₁, Γ₂, C, hs, hV, hM, hr⟩ := ih V M he
+      exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.val (VS.absSeal _))⟩
+  | absUnseal _ _ ih =>
+      intro V M he; obtain ⟨Γ₁, Γ₂, C, hs, hV, hM, hr⟩ := ih V M he
+      exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.val (VS.absUnseal _))⟩
   | immSub _ _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, C, hs, hV, hM, hr⟩ := ih V M he
       exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.val (VS.immS _ _ _))⟩
@@ -1457,7 +1521,8 @@ theorem der_hnd {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       intro n Q H M he; simp only [Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
       exact (not_der_app_prim hM _ _ rfl id (by decide) (by decide)).elim
   | ret _ ih | ofRet _ ih | effSub _ _ ih | nuIn _ _ ih | nuOut _ _ ih | bangE _ ih | boxI _ _ ih
-  | boxE _ ih | immSub _ _ ih | mutSub _ _ ih | roll _ _ _ ih | unroll _ ih => exact ih
+  | boxE _ ih | immSub _ _ ih | mutSub _ _ ih | roll _ _ _ ih | unroll _ ih | absSeal _ _ ih
+  | absUnseal _ _ ih => exact ih
   | _ => intro n Q H M he; cd_at he
 
 /-! #### λ-values -/
@@ -1609,6 +1674,8 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | bangE _ ih => intro M he; exact (ih M he).step (JS.val (VS.bang _))
   | boxI _ _ ih => intro M he; exact (ih M he).step (JS.val (VS.boxI _ _))
   | boxE _ ih => intro M he; exact (ih M he).step (JS.val (VS.boxE _ _))
+  | absSeal _ _ ih => intro M he; exact (ih M he).step (JS.val (VS.absSeal _))
+  | absUnseal _ _ ih => intro M he; exact (ih M he).step (JS.val (VS.absUnseal _))
   | immSub _ _ ih => intro M he; exact (ih M he).step (JS.val (VS.immS _ _ _))
   | mutSub _ _ ih => intro M he; exact (ih M he).step (JS.val (VS.mutS _ _ _))
   | roll _ _ _ ih => intro M he; exact (ih M he).step (JS.val (VS.roll _))
@@ -1726,18 +1793,20 @@ theorem not_vview_thunk_bang {C₀ : CTy} {X : VTy} (h : VView (.thunk C₀) (.b
 
 theorem vview_bang_thunk {C₀ C : CTy} (h : VView (.bang (.thunk C₀)) (.thunk C)) : C₀ = C := by
   rcases h.hnf (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h)) with
-    h' | ⟨A, hA, h'⟩ | ⟨a, A, h'⟩ | ⟨a, A, h'⟩
+    h' | ⟨A, hA, h'⟩ | ⟨a, A, h'⟩ | ⟨a, A, h'⟩ | ⟨k, h'⟩
   · have := h'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h); cases this
   · cases hA; exact vview_thunk h'
+  · cases h'
   · cases h'
   · cases h'
 
 theorem vview_bang_bang {C₀ C : CTy} (h : VView (.bang (.thunk C₀)) (.bang (.thunk C))) :
     C₀ = C := by
   rcases h.hnf (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h)) with
-    h' | ⟨A, hA, h'⟩ | ⟨a, A, h'⟩ | ⟨a, A, h'⟩
+    h' | ⟨A, hA, h'⟩ | ⟨a, A, h'⟩ | ⟨a, A, h'⟩ | ⟨k, h'⟩
   · have := h'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h); cases this; rfl
   · cases hA; exact (not_vview_thunk_bang h').elim
+  · cases h'
   · cases h'
   · cases h'
 
@@ -1985,6 +2054,10 @@ theorem der_swap {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.boxI _ _))⟩
   | boxE _ ih =>
       intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.boxE _ _))⟩
+  | absSeal _ _ ih =>
+      intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.absSeal _))⟩
+  | absUnseal _ _ ih =>
+      intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.absUnseal _))⟩
   | immSub _ _ ih =>
       intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.immS _ _ _))⟩
   | mutSub _ _ ih =>
@@ -2294,6 +2367,12 @@ theorem der_hndJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
   | boxE _ ih =>
       intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.boxE _ _))⟩
+  | absSeal _ _ ih =>
+      intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.absSeal _))⟩
+  | absUnseal _ _ ih =>
+      intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.absUnseal _))⟩
   | immSub _ _ ih =>
       intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.immS _ _ _))⟩
@@ -2403,6 +2482,12 @@ theorem der_thenJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeriv
   | boxE _ ih =>
       intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.boxE _ _))⟩
+  | absSeal _ _ ih =>
+      intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.absSeal _))⟩
+  | absUnseal _ _ ih =>
+      intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.absUnseal _))⟩
   | immSub _ _ ih =>
       intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.immS _ _ _))⟩
@@ -2466,6 +2551,12 @@ theorem der_performJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDe
   | boxE _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.boxE _ _))⟩
+  | absSeal _ _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.absSeal _))⟩
+  | absUnseal _ _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.absUnseal _))⟩
   | immSub _ _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.immS _ _ _))⟩
@@ -2529,6 +2620,12 @@ theorem der_raiseJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeri
   | boxE _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.boxE _ _))⟩
+  | absSeal _ _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.absSeal _))⟩
+  | absUnseal _ _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.absUnseal _))⟩
   | immSub _ _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.immS _ _ _))⟩
@@ -2642,6 +2739,16 @@ theorem der_letJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       rcases ih N M he h₁ h₂ h₃ h₄ h₅ h₆ with ⟨j₀, hb, hr⟩ | h
       · exact .inl ⟨j₀, hb, hr.tail (JS.val (VS.boxE _ _))⟩
       · exact .inr h
+  | absSeal _ _ ih =>
+      intro N M he h₁ h₂ h₃ h₄ h₅ h₆
+      rcases ih N M he h₁ h₂ h₃ h₄ h₅ h₆ with ⟨j₀, hb, hr⟩ | h
+      · exact .inl ⟨j₀, hb, hr.tail (JS.val (VS.absSeal _))⟩
+      · exact .inr h
+  | absUnseal _ _ ih =>
+      intro N M he h₁ h₂ h₃ h₄ h₅ h₆
+      rcases ih N M he h₁ h₂ h₃ h₄ h₅ h₆ with ⟨j₀, hb, hr⟩ | h
+      · exact .inl ⟨j₀, hb, hr.tail (JS.val (VS.absUnseal _))⟩
+      · exact .inr h
   | immSub _ _ ih =>
       intro N M he h₁ h₂ h₃ h₄ h₅ h₆
       rcases ih N M he h₁ h₂ h₃ h₄ h₅ h₆ with ⟨j₀, hb, hr⟩ | h
@@ -2711,13 +2818,14 @@ theorem varCls_of_le {Δ : LifeCtx} {Γ Γ' : Ctx VTy} {T : VTy} {j : Jdg}
 /-- No view of a `!` thunk is `1`. -/
 theorem vview_bang_thunk_unit {C : CTy} (h : VView (.bang (.thunk C)) .unit) : False := by
   rcases h.hnf (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h)) with
-    h' | ⟨A', hA, h'⟩ | ⟨a, A', h'⟩ | ⟨a, A', h'⟩
+    h' | ⟨A', hA, h'⟩ | ⟨a, A', h'⟩ | ⟨a, A', h'⟩ | ⟨k, h'⟩
   · have := h'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h); cases this
   · cases hA
     have := h'.eq_of_heads (fun _ _ h => by cases h) (fun _ h => by cases h) (fun _ h => by cases h)
       (fun _ _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
       (fun _ h => by cases h)
     cases this
+  · cases h'
   · cases h'
   · cases h'
 

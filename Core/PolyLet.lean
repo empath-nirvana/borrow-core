@@ -4,7 +4,7 @@ import Core.Fix
 # Core — the polymorphic let  `[spec §24]`
 
 `let x = V in N` for a closed value `V`, typed by typing `N` with `V` in place of `x`
-(`CDerives.letPoly`): the bound slot stays in the context, dead, and every occurrence of `V` in
+(`CDerivesIn.letPoly`): the bound slot stays in the context, dead, and every occurrence of `V` in
 `N` is typed on its own.  Terms carry no rows, so one closed λ-value is used at as many rows as its
 occurrences have: this is the kernel's row polymorphism, as let-polymorphism by substitution.
 

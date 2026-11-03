@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.29 · 2026-11-03
+Version 1.30 · 2026-11-03
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -10400,8 +10400,8 @@ through `close`. `resourceSafety` then gives that every handle's cell is freed, 
 each file is closed once, `f₂` before `f₁`. What it does **not** give: Core keeps `burn` available
 to every program (§42's declared types use it), so a program whose declared destructor of `Tok`
 is `burn` types, is resource safe, and closes nothing. `close` is the only eliminator of a
-`File` only where `burn` is withheld from the program text; making it so in Core is #778 (abstract
-types with a single provider).
+`File` only where `burn` is withheld from the program text. §63 makes it so in Core: `File` is an
+abstract type whose provider is `with_fs`, and outside it a `File` is never a `Tok`.
 
 **Programs**, each a closed derivation under `resourceSafety`; `*_safe` and `*_order`/`*_run` are
 programs, `d_stepD`, `d_lendD` and `d_kDtor` typing lemmas:
@@ -10435,8 +10435,8 @@ of `Σ_M`.
 
 *Open*: a destructor that can fail (above); relaxing `hSDd` (a destructor that loops); following
 a destructor's run through its operations' capture and resume; the order of releases as a
-program-wide theorem (the paper's ordered judgment, `⊢ₒ`, is not transcribed); `close` as the only eliminator of a host handle in
-Core (#778).
+program-wide theorem (the paper's ordered judgment, `⊢ₒ`, is not transcribed); that each file is
+closed exactly once on every run (§63, *Open*).
 
 ### The safety relation
 
@@ -10623,6 +10623,92 @@ starts to pass, a variation must pass as well (#771). Three fail first on earlie
 
 `docs/new-core/structure.md` (target structure and its rules), `docs/new-core/conditions.md` (every
 condition and gap, classified), `docs/new-core/evidence.md` (the spikes' results by Lean name).
+
+## 63. Entry 62 — abstract types with a single provider (#778)
+
+**Kernel target.** Outside a type's provider, a well-typed program cannot take a value of an
+abstract type apart, by `match`, `burn` or any other route, except through the operations its
+provider exports. The provider is an index of the judgment, so the kernel enforces it: neither the
+parser nor the elaborator does.
+
+**The abstract kind.** `Opaque.abs n` is the abstract type named `n` (`Core/Opaque.lean`). Its
+representation is `Tok`, and its relation is `Tok`'s (`Opaque.rel_abs`, `vCE_abs_eq_tok`): an owned
+unit cell. Like `Tok`, it is not a host type, not own-free, not persistent and has no derived drop.
+
+**The provider index.** The judgment is `CDerivesIn (P : Nat → Prop)` (`Core/Fundamental.lean`).
+`P n` means the derivation is inside the provider of `n`. Two rules read `P`. They are the iso
+between an abstract type and its representation:
+
+    absSeal   (hn : P n) : CDerivesIn P Δ Γ e (.val Tok)     → CDerivesIn P Δ Γ e (.val (abs n))
+    absUnseal (hn : P n) : CDerivesIn P Δ Γ e (.val (abs n)) → CDerivesIn P Δ Γ e (.val Tok)
+
+No other rule mentions `abs`, and the compatibility lemma of each is the identity
+(`absSeal_compatC`, `absUnseal_compatC`). `mint` and `burn` stay `Tok`'s: a provider mints a
+`Tok` and seals it, and it unseals before it burns.
+
+- `CDerives := CDerivesIn (fun _ => True)`, an `abbrev`: inside every provider. Every theorem
+  stated about `CDerives` reads as before.
+- `CDerivesIn.mono : (∀ n, P n → Q n) → CDerivesIn P … → CDerivesIn Q …`, and
+  `CDerivesIn.toCDerives`. So `fundamentalC`, `adequacyC`, `adequacyD` and `resourceSafety` hold
+  of every derivation at every provider set, through `CDerives`.
+- The tied judgment gets the same index: `CDerivesAtIn P Ξ`, with `CDerivesAt Ξ := CDerivesAtIn
+  (fun _ => True) Ξ`; `CDerivesAtIn.toCDerivesIn` and `CDerivesAtIn.ofEffFree` are stated at
+  every `P`, and `CDerivesAt.toCDerives` and `CDerivesAt.ofEffFree` keep their statements.
+- `CDerivesP` (§29) extends `CDerives`, so it has both rules, ungated.
+- The typed term (§3) has no node for either rule, so `TDerivesAt.eraseIn` projects a typed
+  derivation to `CDerivesAtIn P Ξ` at every `P`. **Every checked program is outside every
+  provider** (`checkProgram_outside`, at `P = fun _ => False`).
+
+**Encapsulation** (`Core/Abstract.lean`).
+- `CDerivesIn.outside`: a derivation at a provider set `P` with `¬ P n` is a derivation at
+  `ProvWithout P n` (`P` less `n`), where the seal and the unseal at `n` have no instance
+  (`ProvWithout.not_self`). So it holds no seal or unseal at `n`.
+- `CDerivesIn.var_abs_unbox`, `CDerivesIn.var_abs_not_tok`: outside `n`'s provider, a variable of
+  type `abs n` is typed at `abs n` alone, up to `[]`. It is never a `Tok`, which `burn` takes, nor
+  any other type a constant consumes. This is the unseal step refused, by one induction over the
+  derivation.
+- The premises are satisfiable: `d_openClose` types `f ← open 1; close f` at every provider set,
+  `Outside` among them (`openClose_outside`). Linked under `with_fs` it is a closed `CDerives`
+  program (`d_fsOpenClose`), resource safe (`fsOpenClose_safe`).
+
+**`File`.** `File := abs fileName` in the `LetDtorFiles` family (`Core/LetDtorFiles.lean`; the
+cancel, loop and suspension programs use it). `with_fs` is `File`'s provider, typed in `CDerives`:
+`close`'s clause unseals and burns, and `open`'s mints and seals. The programs and their theorem
+statements are unchanged. The skip-close destructor of #775, `λf. burn f; ()`, types inside the
+provider (`d_skipClose_inside`), and its one step at `Tok` is refused outside it
+(`file_not_tok_outside`).
+
+**The escape.** A deliberate escape is a forget that the provider supplies: an operation of the
+provider's effect, handled by a clause typed inside the provider that unseals and burns. `Fs` has
+none. Adding one is a clause of `with_fs` and an entry of `Efs`, with no kernel change. There is
+no `trust` form, in Core or in the checker.
+
+**Changed existing code.**
+- Every induction over `CDerives`, `CDerivesAt` or `CDerivesP` has the two cases.
+- The derivation-building lemmas that the checker's projection reaches are stated at every `P`:
+  `dtor_wf`, `d_allocS`, `d_freeS`, `withborSM_wf`, `withborSI_wf`, `withborM2_wf`,
+  `withborI2_wf`, their helpers, the structure `Borrows`, and the derived rules
+  (`CDerivesIn.effThenA`, `lamV`, `letpairV`, `eletV`, …). Each is the old statement at
+  `P = fun _ => True`, and every caller is unchanged.
+- At `CDerives`, the inversion machinery of `Core/Inversions.lean` gets the two steps as views
+  (`VS.absSeal`, `VS.absUnseal`). `VView.hnf` gains the disjunct "the head is opaque", and
+  `VView.hnf_of` and `VView.eq_of_heads` take the hypothesis "the head is not opaque", which is
+  discharged by default, so their callers are unchanged.
+- `Opaque.Host` excludes `abs`. In `Opaque.rel_cases`, the cell disjunct reads `¬ k.Host` where
+  it read `k = .tok`.
+
+**Not changed.** `burn`, `mint`, §42's declared types, the machine, `Paper/`, `Support/`, the
+relation, `Core/Tree*`, `Support/Model/Tree/`, the corpus.
+
+*Open* (parked on #778):
+- Inversion lemmas for `CDerivesIn P` (T2), which would refuse the skip-close destructor as a whole
+  derivation.
+- The run-level theorem "each file is closed exactly once". It needs a parametric reading of
+  abstract types (#782, #789): every theorem that factors through `SemC` admits `burn` at `abs n`,
+  whose relation is `Tok`'s.
+- The provider of a user-declared abstract type (methods, modules).
+- The checker's `File`. `File` reaches the checker on the `dtor-wire` branch as the kind
+  `Opaque.file`, whose relation is `Ref I32`'s (a cell holding the descriptor), not `Tok`'s.
 
 ## Status
 
@@ -11066,11 +11152,27 @@ relation over it in `Core/StepsN.lean`, `Core/TreeWp.lean`, `Core/TreeWpEff.lean
 `Core/TreeCactus.lean`, `Core/TreeStepKeep.lean` and `Core/TreeHeadlines.lean` (adequacy and R1–R4
 at one branch); `kappa_lin_strict` is in `Core/LetDtorSuspend.lean`. No relation the typing rules use
 reads them yet. The rest of §62 is design.
+Entry 62 (§63): abstract types are implemented in `Core/Opaque.lean` (`Opaque.abs`),
+`Core/Tok.lean` (the iso's compatibility lemmas), `Core/Fundamental.lean` (`CDerivesIn`,
+`absSeal`, `absUnseal`, `CDerivesIn.mono`), `Core/Tied.lean` (`CDerivesAtIn`),
+`Core/Abstract.lean` (encapsulation, the refused unseal, the client `openClose`),
+`Core/LetDtorFiles.lean` (`File := abs fileName`) and `Frontend/Check/Program.lean`
+(`checkProgram_outside`). The checker has no abstract type yet.
 
 ---
 
 ## Changelog
 
+- **1.30** (2026-11-03) — §63 (#778): abstract types with a single provider. `Opaque.abs n`, the
+  judgment `CDerivesIn P` with `CDerives` an `abbrev` at `P = fun _ => True`, the seal and unseal
+  gated on `P n`, `CDerivesIn.mono`, `CDerivesAtIn`, `TDerivesAt.eraseIn`,
+  `checkProgram_outside`; encapsulation (`CDerivesIn.outside`) and the refused unseal
+  (`CDerivesIn.var_abs_not_tok`, `file_not_tok_outside`); `File := abs fileName`, provided by
+  `with_fs`. Derivation-building lemmas the checker's projection reaches, and the derived rules,
+  are stated at every provider set; `Core/Inversions.lean` gets the iso as two views, and
+  `VView.hnf` a disjunct; `Opaque.rel_cases` reads `¬ k.Host`. No change to `fundamentalC`,
+  `adequacyC`, `adequacyD`, `resourceSafety`, the checker's theorems, the relation, the machine,
+  `Paper/`, `Support/`, the backends' output or the corpus.
 - **1.29** (2026-11-03) — §62 (#781, slice (c)): R4 at the tree world (`r4_extExtFT`,
   `ext_extFT`), with `RelT`, `KeepsT`, `CellInT`, `ExtLT` and the examples of what `ExtLT` admits
   and refuses. No change to `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the checker, the

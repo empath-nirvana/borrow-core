@@ -7,8 +7,8 @@ import Core.Compatibility
 (`N = A ⊗ Tok`, SPEC §42). Its value is a location owning a unit cell, the capture cell's pattern
 (SPEC §25): `Opaque.rel .tok` is `Ref 1`'s clause. Two constants handle it:
 
-    mint : 1 ⊸ Tok      mint ≜ λx. alloc x        (`CDerives.tokMint`)
-    burn : Tok ⊸ 1      burn ≜ λc. free c         (`CDerives.tokBurn`)
+    mint : 1 ⊸ Tok      mint ≜ λx. alloc x        (`CDerivesIn.tokMint`)
+    burn : Tok ⊸ 1      burn ≜ λc. free c         (`CDerivesIn.tokBurn`)
 
 `mint` allocates the cell by the ordinary `alloc` step and `burn` frees it, so their compatibility
 lemmas are `[TR]` 6.141 and 6.142 (`wpTS_alloc`, `wpTS_free`, the steps `ewp_alloc` and `ewp_free`
@@ -93,5 +93,30 @@ theorem tokBurn_compatX {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) :
   rw [burnE_subst]
   refine wpTS_free ls' ℓ Val.unit _ _ ?_
   exact ⟨_, _, ResU.comp_empty_right _, rfl, ⟨rfl, rfl⟩⟩
+
+/-! ### Abstract types: the representation iso  `[spec §63]`
+
+An abstract type `abs n` has `Tok`'s relation (`Opaque.rel_abs`), so the iso between it and its
+representation is the identity on the relation: the compatibility lemmas of `absSeal` and
+`absUnseal` (`Fundamental.lean`) are `id`. Only typing tells the two apart, where the iso is
+gated on the provider (`CDerivesIn`). -/
+
+/-- An abstract type `abs n`. -/
+abbrev absTy (n : Nat) : VTy := .opq (.abs n)
+
+/-- The name of the abstract type `File`, provided by the platform's `with_fs` (SPEC §62, §63). -/
+abbrev fileName : Nat := 0
+
+/-- **An abstract type's relation is `Tok`'s**, in both modes.  `[spec §63]` -/
+theorem vCE_abs_eq_tok (n : Nat) (η : Option (Nat → TEnt)) (b : Bool) (ls : List SRec) (δ : LSub)
+    (v : Val) : vCE η b (absTy n) ls δ v = vCE η b tokTy ls δ v := rfl
+
+/-- **`[abs-seal]` is sound**: a `Tok` is an `abs n`.  `[spec §63]` -/
+theorem absSeal_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {n : Nat}
+    (h : SemV Δ Γ e tokTy) : SemV Δ Γ e (absTy n) := h
+
+/-- **`[abs-unseal]` is sound**: an `abs n` is a `Tok`.  `[spec §63]` -/
+theorem absUnseal_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {n : Nat}
+    (h : SemV Δ Γ e (absTy n)) : SemV Δ Γ e tokTy := h
 
 end BoCa.Fig16.LogRel.Core

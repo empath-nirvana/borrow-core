@@ -37,6 +37,8 @@ theorem CDerivesP.ofC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerives Δ Γ e j) : CDerivesP Δ Γ e j := by
   induction h with
 --@OFC_CASES@
+  | absSeal _ _ ih => exact CDerivesP.absSeal ih
+  | absUnseal _ _ ih => exact CDerivesP.absUnseal ih
 
 /-- **The Fundamental Property under `PinLaw`.** -/
 theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr}
@@ -50,6 +52,8 @@ theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
       exact hPin.loopFrame _ _ _ _ _ _ _ _ _ hx hbx hΔx hA hB hR hBn hRn hsc hN1 hK1 hs0c
         hN hK hs0 ihN ihK ihs0
   | @nilDead _ _ _ j hΓ _ ih => cases j <;> exact semC_dead .nil hΓ ih
+  | absSeal _ ih => exact absSeal_compatC ih
+  | absUnseal _ ih => exact absUnseal_compatC ih
 
 /-- **R1's compatibility lemma, from `LendFrame` at `ref`.** The callback's relation is the
 Fundamental Property at its derivation. -/

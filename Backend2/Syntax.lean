@@ -165,13 +165,13 @@ context absorbs it. Not a drop: no destructor runs. `Lint.abandonable` checks ea
 at a `[let]`'s abort, the abandoned values hold no owned cell (`VTy.OwnFree`, `vC_noOwn_of_ownFree`);
 `⊤` has none. -/
 inductive Abandon where
-  /-- `[let]`'s abort (`CDerives.effLet`'s `hW : S.Weak → Γ₂.Drops`): `N`'s context, at the abort
+  /-- `[let]`'s abort (`CDerivesIn.effLet`'s `hW : S.Weak → Γ₂.Drops`): `N`'s context, at the abort
   branch of the `[let]` or of a frame it pushed. -/
   | letAbort
-  /-- `⊤`'s introduction (`CDerives.topI`): the whole context. -/
+  /-- `⊤`'s introduction (`CDerivesIn.topI`): the whole context. -/
   | top
   /-- A raise's payload superseded by a finaliser's (`then_fin`, `unwind_prefix`): the payload
-  of a raise holds no owned cell (`CDerives.effRaise`'s `hd : o.A.Drop`). -/
+  of a raise holds no owned cell (`CDerivesIn.effRaise`'s `hd : o.A.Drop`). -/
   | superseded
   deriving Inhabited, BEq, Repr
 
@@ -187,7 +187,7 @@ inductive DropRule where
   a `use`'s slots it does not read, a handler's values (`effHandleV`'s `DeadP`), a pure frame's
   arguments at an abort, and the machine's own words (a unit, a counter). -/
   | dead
-  /-- A `forget` constant applied (`CDerives.forgetImm`, `forgetMut`, `forgetUnk`, `arrForget`):
+  /-- A `forget` constant applied (`CDerivesIn.forgetImm`, `forgetMut`, `forgetUnk`, `arrForget`):
   a borrow, `Unk`, or a family of `imm` borrows. -/
   | forget
   /-- A piece of the destructor of a `dtor` node's type (`drop_derives` over `dtor_wf`): each leaf
@@ -218,7 +218,7 @@ def DropRule.name : DropRule → String
 inductive CopyRule where
   /-- A split that gives an unrestricted slot to both parts (`Ctx.SplitP.dup`). -/
   | dup
-  /-- The `copy` or `array_copy` constant applied (`CDerives.copy`, `CDerives.arrCopy`). -/
+  /-- The `copy` or `array_copy` constant applied (`CDerivesIn.copy`, `CDerivesIn.arrCopy`). -/
   | const
   /-- The derived copy of an `imm` borrow or a family of them, where no constant is written
   (`copy_derives` at `DerivedCopy`, `Core/Classes.lean`): `copyE A i e` is a derivation whenever

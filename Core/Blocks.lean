@@ -104,8 +104,8 @@ theorem freeS_closed : ∀ σ : Shape, closedAt 0 (freeS σ) = true
         closedAt_mono _ (freeS_closed s₂) (by omega), by omega⟩
 
 /-- `allocS σ : valTy σ ⊸ refTy σ`, from the `alloc` rule at every leaf.  `[spec §5]` -/
-theorem d_allocS : ∀ (σ : Shape) {Δ : LifeCtx} {Γ : Ctx VTy}, Ctx.Dead Γ →
-    CDerives Δ Γ (allocS σ) (.val (.lolli σ.valTy σ.refTy))
+theorem d_allocS {P : Nat → Prop} : ∀ (σ : Shape) {Δ : LifeCtx} {Γ : Ctx VTy}, Ctx.Dead Γ →
+    CDerivesIn P Δ Γ (allocS σ) (.val (.lolli σ.valTy σ.refTy))
   | .leaf _, _, _, hΓ => .alloc hΓ
   | .node s₁ s₂, _, _, hΓ =>
       .thunkV rfl (.lam (.tensorE (.left (deadSplit hΓ)) (.var (.here hΓ))
@@ -116,8 +116,8 @@ theorem d_allocS : ∀ (σ : Shape) {Δ : LifeCtx} {Γ : Ctx VTy}, Ctx.Dead Γ �
             (d_allocS s₂ (.cons (.cons (.cons hΓ)))))))))
 
 /-- `freeS σ : refTy σ ⊸ valTy σ`, from the `free` rule at every leaf.  `[spec §5]` -/
-theorem d_freeS : ∀ (σ : Shape) {Δ : LifeCtx} {Γ : Ctx VTy}, Ctx.Dead Γ →
-    CDerives Δ Γ (freeS σ) (.val (.lolli σ.refTy σ.valTy))
+theorem d_freeS {P : Nat → Prop} : ∀ (σ : Shape) {Δ : LifeCtx} {Γ : Ctx VTy}, Ctx.Dead Γ →
+    CDerivesIn P Δ Γ (freeS σ) (.val (.lolli σ.refTy σ.valTy))
   | .leaf _, _, _, hΓ => .free hΓ
   | .node s₁ s₂, _, _, hΓ =>
       .thunkV rfl (.lam (.tensorE (.left (deadSplit hΓ)) (.var (.here hΓ))

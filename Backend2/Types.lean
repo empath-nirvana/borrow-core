@@ -281,6 +281,8 @@ def ofV (ms : MachSet) : VTy → Except String LTy
   -- `alloc` and released by `free` (`tokMint`, `tokBurn`); its view is `Unk` (`Imm̲ 'b Tok`), a
   -- pointer read as forgotten (`Layout.joinRe`, `Lower.reVals`).
   | .opq .tok => pure (.ref .unit)
+  -- An abstract type is its representation, `Tok` (`vCE_abs_eq_tok`).
+  | .opq (.abs _) => pure (.ref .unit)
   | .opq k => pure (.opq k)
   | .unk => pure .unk
   | .thunk C => ofU ms false C
@@ -407,7 +409,7 @@ theorem ofV_drops {ms : MachSet} {A : VTy} (hA : A.OwnFree) : ∀ {t : LTy}, ofV
   induction hA with
   | opq k hk =>
     intro t h; cases k <;> simp only [ofV] at h <;> cases h <;>
-      first | rfl | exact absurd rfl hk
+      first | rfl | exact hk.elim
   | unit | zero | int | unk | imm | «mut» =>
       intro t h; simp only [ofV] at h
       first
@@ -447,6 +449,7 @@ def LTy.pp : LTy → String
   | .fam l => s!"[{l.pp}]"
   | .opq k => match k with
     | .input => "Input" | .output => "Output" | .clock => "Clock" | .args => "Args" | .tok => "Tok"
+    | .abs n => s!"Abs {n}"
   | .unk => "Unk"
   | .thunk k => s!"U {k.pp}"
   | .bang a => s!"!{a.pp}"

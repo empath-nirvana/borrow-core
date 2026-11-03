@@ -139,6 +139,8 @@ theorem CDerivesP.ofC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 => exact CDerivesP.effHandleT a0 a1 a2 a3 ih0 a5 a6 a7 a8 a9 a10 ih1
   | effHandleL a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 ih0 ih1 => exact CDerivesP.effHandleL a0 a1 a2 a3 a4 ih0 a6 a7 a8 a9 a10 a11 a12 a13 a14 ih1
   | letPoly a0 a1 a2 a3 ih0 ih1 => exact CDerivesP.letPoly a0 a1 ih0 ih1
+  | absSeal _ _ ih => exact CDerivesP.absSeal ih
+  | absUnseal _ _ ih => exact CDerivesP.absUnseal ih
 
 /-- **The Fundamental Property under `PinLaw`.** -/
 theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr}
@@ -271,6 +273,8 @@ theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
       exact hPin.loopFrame _ _ _ _ _ _ _ _ _ hx hbx hΔx hA hB hR hBn hRn hsc hN1 hK1 hs0c
         hN hK hs0 ihN ihK ihs0
   | @nilDead _ _ _ j hΓ _ ih => cases j <;> exact semC_dead .nil hΓ ih
+  | absSeal _ ih => exact absSeal_compatC ih
+  | absUnseal _ ih => exact absUnseal_compatC ih
 
 /-- **R1's compatibility lemma, from `LendFrame` at `ref`.** The callback's relation is the
 Fundamental Property at its derivation. -/

@@ -246,7 +246,7 @@ theorem d_readOneAt {Δ : LifeCtx} {Γ : Ctx VTy} (hΔ : Δ.Ok) (hΓ : Ctx.Dead 
     (he : (Δ.extend d .top).find? e = none)
     (hinst : VTy.instLife d (.var x) (.lolli (.imm (.var d) BB) BB) = .lolli (.imm (.var x) BB) BB) :
     CDerives Δ Γ (.app readOne unit') (.val (.lolli (.imm (.var x) BB) BB)) := by
-  have h := CDerives.allEV (a := .var x) (d_readOne hΔ hΓ d e hd he) (entailsLt_top hx)
+  have h := CDerivesIn.allEV (a := .var x) (d_readOne hΔ hΓ d e hd he) (entailsLt_top hx)
   rwa [hinst] at h
 
 theorem d_readBoth {Δ : LifeCtx} {Γ : Ctx VTy} (hΔ : Δ.Ok) (hΓ : Ctx.Dead Γ) (d d' e : LifeVar)
@@ -382,7 +382,7 @@ theorem d_swapFnAtVar {Δ : LifeCtx} {Γ : Ctx VTy} (hΔ : Δ.Ok) (hΓ : Ctx.Dea
     {u : Lifetime.Life} (hx : Δ.find? x = some u) (hd : Δ.find? d = none)
     (hinst : VTy.instLife d (.var x) (famEndo d) = famEndo x) :
     CDerives Δ Γ (.app swapFn unit') (.val (famEndo x)) := by
-  have h := CDerives.allEV (a := .var x) (d_swapFn hΔ hΓ d hd) (entailsLt_top hx)
+  have h := CDerivesIn.allEV (a := .var x) (d_swapFn hΔ hΓ d hd) (entailsLt_top hx)
   rwa [hinst] at h
 
 /-- `(Mut @a B ⊗ Mut @a B) ⊗ (Mut @a B ⊗ Mut @a B)`. -/

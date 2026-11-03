@@ -27,8 +27,8 @@ the derived rules over existing rules.
 | the types whose destructor does nothing (the unrestricted ones and the borrows) | `forgettable_iff` |
 
 Three rules absorb a context without using its slots, and none is a drop: `⊤` introduction
-(`CDerives.topI`), `absurd` (`CDerives.zeroE`), and the abandonment of a `VTy.OwnFree` context at an
-abort (`CDerives.effLet`'s `hW`, `CDerives.effRaise`'s `hd`; `vC_noOwn_of_ownFree`).
+(`CDerivesIn.topI`), `absurd` (`CDerivesIn.zeroE`), and the abandonment of a `VTy.OwnFree` context at an
+abort (`CDerivesIn.effLet`'s `hW`, `CDerivesIn.effRaise`'s `hd`; `vC_noOwn_of_ownFree`).
 -/
 
 noncomputable section
@@ -311,9 +311,9 @@ theorem dtorE_closed {A : VTy} (h : HasDtor A) : closedAt 0 (dtorE A) = true :=
 
 /-- A linear type with a derived copy: a kernel constant duplicates it.  `[spec §9, §10]` -/
 inductive DerivedCopy : VTy → Prop where
-  /-- `Imm @a A`, by `copy` (`CDerives.copy`). -/
+  /-- `Imm @a A`, by `copy` (`CDerivesIn.copy`). -/
   | imm (a : Lifetime.Life) (A : VTy) : DerivedCopy (.imm a A)
-  /-- `ArrayImm @a A`, by `array_copy` (`CDerives.arrCopy`). -/
+  /-- `ArrayImm @a A`, by `array_copy` (`CDerivesIn.arrCopy`). -/
   | arrImm (a : Lifetime.Life) (A : VTy) : DerivedCopy (.fam (.imm a A))
 
 /-- A type with a derived copy is linear. -/

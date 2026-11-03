@@ -6,7 +6,7 @@ import Core.Splits
 /-!
 # Core — `[let-dtor]`: effectful destructors on every exit  `[spec §62]`
 
-`[let]` (`CDerives.effLet`) keeps the continuation's context `Γ₂` live across `M` only where `M`'s
+`[let]` (`CDerivesIn.effLet`) keeps the continuation's context `Γ₂` live across `M` only where `M`'s
 row cannot abort or every live slot of `Γ₂` is own-free (`hW`). `[let-dtor]` lifts that refusal:
 each live slot of `Γ₂` that is not persistent is dropped, on the unwind, by **the destructor of its
 type**, `drop_T : T ⊸ F_{Σ_D} 1`, a closed function that may perform operations of a row
@@ -46,7 +46,7 @@ ESOP 2026, §4.3), whose translation of the resource CBPV's `let` is
 The order inside `drop_{A⊗B}` (the second component first) is ours, chosen to agree with
 `drop_ctx`, which drops the variable bound last first.
 
-**A derived form, not a constructor.** `[let-dtor]` is `[then]` (`CDerives.effThen`) at the
+**A derived form, not a constructor.** `[let-dtor]` is `[then]` (`CDerivesIn.effThen`) at the
 finaliser `drop_ctx`, which is itself a `CDerives` derivation (`dropCtx_derives`). So no
 constructor is added to `CDerives`: `fundamentalC`, `adequacyC` and `adequacyD` cover it with no
 new compatibility lemma, and every induction over `CDerives` (`CDerivesAt`, `CDerivesP`, `Tied`,
@@ -424,7 +424,7 @@ destructors of its types.** The finaliser is `drop_ctx` of `Γ₂`, so a raise i
 continuation captured in `M`, runs every live owned slot's destructor, `drop_T` of its type `T`
 (`dropOf decl T`), last bound first, and passes the error on.
 
-Against `[let]` (`CDerives.effLet`): `hW : Σ.Cancels → Γ₂.OwnFree` is replaced by a destructor for
+Against `[let]` (`CDerivesIn.effLet`): `hW : Σ.Cancels → Γ₂.OwnFree` is replaced by a destructor for
 every live slot of `Γ₂` that is not persistent (`hds`, `DropOk`), at a row `Σ_D ≤ Σ` whose
 operations all resume (`hSDc`) and which does not hold `Div` (`hSDd`). `M` is at `Σ_M ≤ Σ`, as in
 `[then]`, and `hfin` is `[then]`'s: the cancel row of each capturable operation and cancellable

@@ -22,7 +22,7 @@ is the one the list gives (`effCtxOf`), at which `main`'s derivation is `CDerive
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt CDerivesP Jdg EffCtx RowAt SigsAt OpAt Ctx.Banged
+open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt CDerivesAtIn CDerivesP Jdg EffCtx RowAt SigsAt OpAt Ctx.Banged
   CtxOutlives HasDtor dtorE dropE dtor_wf rowAt_of_sigsAt)
 
 /-- **A derivation tied at every effect context at which the list `s` is**: `s` holds the rows the
@@ -243,7 +243,7 @@ theorem effThenA {s₁ s₂ s₃ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {M N D : BoCa.
     (hN : TiedAt s₂ Δ (⟨A, true⟩ :: Γ₂) N (.comp (effOf S B)))
     (hD : TiedAt s₃ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (.ret .unit))) :
     TiedAt (s₁ ∪ (s₂ ∪ s₃)) Δ Γ (BoCa.Fig16.LogRel.Core.thenE N D M) (.comp (effOf S B)) :=
-  fun Ξ h => CDerivesAt.effThenA hs hNZ hUq hU (hM Ξ (sigsAt_union_left h))
+  fun Ξ h => CDerivesAtIn.effThenA hs hNZ hUq hU (hM Ξ (sigsAt_union_left h))
     (hN Ξ (sigsAt_union_left (sigsAt_union_right h)))
     (hD Ξ (sigsAt_union_right (sigsAt_union_right h)))
 
@@ -259,7 +259,7 @@ theorem effHandle {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {e : BoCa.Expr} {S
     (he : TiedAt s Δ Γ₂ e (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A))) :
     TiedAt ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ s) Δ Γ
       (BoCa.Fig16.LogRel.Core.hndTerm n (E.map Prod.fst) ir ic e) (.comp (effOf S R)) :=
-  fun Ξ h => CDerivesAt.effHandle (rowAt_of_union_left h) hs hs₁ hr hc hn0 hnS hlen hdv
+  fun Ξ h => CDerivesAtIn.effHandle (rowAt_of_union_left h) hs hs₁ hr hc hn0 hnS hlen hdv
     (he Ξ (sigsAt_union_right h))
 
 /-- BOXED-κ reads its handled row.  `[spec §28]` -/
@@ -276,7 +276,7 @@ theorem effHandleB {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {e : BoCa.Expr} {
     (hSd : BoCa.Fig16.LogRel.Core.Row.AnsOutlives Δ d (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S)) :
     TiedAt ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ s) Δ Γ
       (BoCa.Fig16.LogRel.Core.hndTerm n (E.map Prod.fst) ir ic e) (.comp (effOf S R)) :=
-  fun Ξ h => CDerivesAt.effHandleB (rowAt_of_union_left h) hs hs₁ hr hc hn0 hnS hlen hdv
+  fun Ξ h => CDerivesAtIn.effHandleB (rowAt_of_union_left h) hs hs₁ hr hc hn0 hnS hlen hdv
     (he Ξ (sigsAt_union_right h)) hΓd hSd
 
 /-! ### Derived forms -/

@@ -220,7 +220,7 @@ theorem d_yH {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {cl e : Expr}
   refine .bind (split_kill Γ).toP
     (.ret (.tensorI (deadSplit (kill_dead Γ)) (hcl (kill_dead Γ)) (.unitI (kill_dead Γ).toP))) ?_
   refine .bind (.right (split_kill Γ).toP) (.ret (d_hrF (S := SO) (A := .unit) (.cons (kill_dead Γ)))) ?_
-  refine CDerives.effHandleCs (S := SO) (E := Ey) (n := 6) (A := .unit) (R := .unit) fsY rcsNil
+  refine CDerivesIn.effHandleCs (S := SO) (E := Ey) (n := 6) (A := .unit) (R := .unit) fsY rcsNil
     (.left (.left (deadSplit hΓ))) (.left (.right (deadSplit hΓ)))
     (.here (.cons hΓ.toP)) (.there (.here hΓ.toP))
     (by decide) (by simp [fcloseSig, fopenSig]) (by simp) (by decide) ?_

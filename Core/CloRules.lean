@@ -33,12 +33,12 @@ variable {Δ : LifeCtx}
 
 /-! ### In, out, coiteration -/
 
-theorem CDerives.cloIn {Γ : Ctx VTy} {e : Expr} {c : Lifetime.Life} {A B : VTy} (hA : A.Cl 0)
-    (h : CDerives Δ Γ e (.comp (cloUnroll c A B))) : CDerives Δ Γ e (.comp (cloC c A B)) :=
+theorem CDerivesIn.cloIn {P : Nat → Prop} {Γ : Ctx VTy} {e : Expr} {c : Lifetime.Life} {A B : VTy} (hA : A.Cl 0)
+    (h : CDerivesIn P Δ Γ e (.comp (cloUnroll c A B))) : CDerivesIn P Δ Γ e (.comp (cloC c A B)) :=
   .nuIn (cloBody_nuOk hA c B) (by rw [cloBody_unroll]; exact h)
 
-theorem CDerives.cloOut {Γ : Ctx VTy} {e : Expr} {c : Lifetime.Life} {A B : VTy} (hA : A.Cl 0)
-    (h : CDerives Δ Γ e (.comp (cloC c A B))) : CDerives Δ Γ e (.comp (cloUnroll c A B)) := by
+theorem CDerivesIn.cloOut {P : Nat → Prop} {Γ : Ctx VTy} {e : Expr} {c : Lifetime.Life} {A B : VTy} (hA : A.Cl 0)
+    (h : CDerivesIn P Δ Γ e (.comp (cloC c A B))) : CDerivesIn P Δ Γ e (.comp (cloUnroll c A B)) := by
   rw [← cloBody_unroll]; exact .nuOut (cloBody_nuOk hA c B) h
 
 /-- `unfold` at `Clo^c A B`: `!U(S ⊸ (A ⊸ F(B ⊗ [@c] S)) & F 1) ⊸ !U(S ⊸ Clo^c A B)`. -/
@@ -47,9 +47,9 @@ abbrev cloUnfoldTy (c : Lifetime.Life) (A B S : VTy) : VTy :=
 
 abbrev cloUnfoldV (c : Lifetime.Life) (A B : VTy) : Val := unfoldV (cloBody c A B)
 
-theorem CDerives.cloUnfold {Γ : Ctx VTy} {c : Lifetime.Life} {A : VTy} (hA : A.Cl 0) (B S : VTy)
-    (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ (.val (cloUnfoldV c A B)) (.val (cloUnfoldTy c A B S)) := by
-  have h := CDerives.unfoldN (Δ := Δ) (cloBody c A B) S (cloBody_nuOk hA c B) hΓ
+theorem CDerivesIn.cloUnfold {P : Nat → Prop} {Γ : Ctx VTy} {c : Lifetime.Life} {A : VTy} (hA : A.Cl 0) (B S : VTy)
+    (hΓ : Ctx.DeadP Γ) : CDerivesIn P Δ Γ (.val (cloUnfoldV c A B)) (.val (cloUnfoldTy c A B S)) := by
+  have h := CDerivesIn.unfoldN (P := P) (Δ := Δ) (cloBody c A B) S (cloBody_nuOk hA c B) hΓ
   rwa [unfoldTy, cloBody_instT] at h
 
 /-! ### Outlives of contexts -/
