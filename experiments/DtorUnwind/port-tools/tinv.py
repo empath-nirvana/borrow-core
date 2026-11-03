@@ -46,7 +46,7 @@ open BoCa
 open BoCa.Fig16
 open BoCa.Fig16.Tree
 
-variable {{K : WCactus}}
+variable {{K : WCactus}} {{Θ : CodeTy}}
 
 '''
 open(out, 'w').write(hdr + s.strip() + '\n\nend BoCa.Fig16.Tree.Wp\n\nend\n')
