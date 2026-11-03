@@ -186,6 +186,39 @@ theorem cerwpT_eq (Tb : TableT) (Q : TPostV) (Fb F : TFrame) (n : Nat) (w : TWd)
   rw [cerwpT]
   congr 1
 
+/-- **A table includes another**: every stop the first allows owing `Ψ`, the second allows owing
+any `Ψ'` that `Ψ` gives below the stop's index. -/
+def TableT.Incl (Tb₁ Tb₂ : TableT) : Prop :=
+  ∀ F k w ls O t (Ψ Ψ' : ContT) ρ,
+    (∀ F' w' O' k', k' < k → ∀ ls' e ρ', Ψ F' w' O' k' ls' e ρ' → Ψ' F' w' O' k' ls' e ρ') →
+    Tb₁ F k w ls O t Ψ ρ → Tb₂ F k w ls O t Ψ' ρ
+
+/-- An operation table whose entries another's contain is included in it. -/
+theorem opTableT_incl {T₁ T₂ : OpTabT} (h : ∀ n i en, T₁ n i = some en → T₂ n i = some en) :
+    TableT.Incl (opTableT T₁) (opTableT T₂) := by
+  intro F k w ls O t Ψ Ψ' ρ hΨ ht
+  obtain ⟨K, m, i, v, en, h₁, h₂, h₃, rest⟩ := ht
+  exact opTableT_local T₂ F k w ls O t Ψ Ψ' ρ hΨ ⟨K, m, i, v, en, h₁, h₂, h m i en h₃, rest⟩
+
+/-- **A run verified at a table is verified at every table including it**, by strong induction on
+the index: each stop the smaller table allows the larger allows, owing the continuation again at
+the larger table. -/
+theorem cerwpT_table_mono {Tb₁ Tb₂ : TableT} (hI : TableT.Incl Tb₁ Tb₂) {Q : TPostV}
+    {Fb : TFrame} : ∀ (n : Nat) (F : TFrame) (w : TWd) (ls : List (SRecT w.K))
+      (O : List (FrameRecT w.K)) (e : Expr) (ρ : TRes w.K),
+      cerwpT (ℍ := ℍ) Tb₁ Q Fb F n w ls O e ρ → cerwpT (ℍ := ℍ) Tb₂ Q Fb F n w ls O e ρ := by
+  intro n
+  induction n using Nat.strong_induction_on with
+  | _ n ih =>
+  intro F w ls O e ρ h
+  rw [cerwpT_eq] at h ⊢
+  refine twp_mono_le (fun k hk w' ls' O' t ρ' ht => ?_) h
+  rcases ht with ht | ht
+  · exact Or.inl ht
+  · refine Or.inr (hI Fb k w' ls' O' t _ _ ρ' (fun F' w'' O'' k' hk' ls'' e'' ρ'' hΨ => ?_) ht)
+    simp only [cerwpTC, show k' < n by omega, if_true] at hΨ ⊢
+    exact ih k' (by omega) F' w'' ls'' O'' e'' ρ'' hΨ
+
 theorem cerwpT_unfold_at {Tb : TableT} (hTb : Tb.Local) {Q : TPostV} {Fb F : TFrame}
     {n N : Nat} (hnN : n ≤ N) {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)}
     {e : Expr} {ρ : TRes w.K} (h : cerwpT (ℍ := ℍ) Tb Q Fb F n w ls O e ρ) :
