@@ -22,12 +22,12 @@ the pool through each of its operations:
 Each stored task's premises are its own stop's (`KapSchedT`); nothing in a resume reads another
 task's history. The pool's separation is the join condition in location form, both ways.
 
-**Scope.** A stored task's mask `M` is the masks of the records it holds (`t.M x ↔ recMask O x`),
-not a history: a run beside the pool keeps apart from the pool's present records (R1), not from
-locations a stored task held at an earlier stop and has since ended. `KapSchedT`'s `M` holds that
-history (`cerwpT_schedHandle` accumulates it through `fdAt` at the frame condition the task resumes
-at); resuming at the task's base frame condition removes it. Until then a pool admits a task whose
-history is its present records, which is every task that owns no record across an earlier stop.
+**A stored task's mask is its present records' masks** (`t.M x ↔ recMask O x`): a run beside the
+pool keeps apart from the pool's present records (R1). `KapSchedT`'s mask is the masks of the
+records the task owns at its stop, with nothing from earlier stops: a task's frame condition at a
+resume is its base and its resumer's guarantee at that resume (`cerwpT`'s base frame condition),
+so a task that owned a record across an earlier stop and has since ended it is stored like any
+other.
 -/
 
 noncomputable section
@@ -167,7 +167,7 @@ theorem KapAtT.cancel {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {H :
     (h : KapAtT (ℍ := ℍ) Qout M en H k v κ w ls O ρ) (hq : en.q ≠ .lin) (hf : en.fin = true)
     {k' : Nat} (hk : k' < k) {F' : TFrame} (hF'm : F'.Mono)
     (hF'M : ∀ w'' ρf, F' w'' ρf → fdMask M w'' ρf) :
-    cerwpT (ℍ := ℍ) (opTableT OpTabT.empty) Qout F' k' w ls O
+    cerwpT (ℍ := ℍ) (opTableT OpTabT.empty) Qout F' F' k' w ls O
       (hndE H (.app κ.1 (.val (Val.inj₂ .unit)))) ρ := by
   obtain ⟨w₁, ls₁, O₁, ρ₁, hK, hE, hr, hO, hl⟩ := h
   exact hK.2.2 w ρ ls O hE hr hl hO hq hf k' hk F' hF'm hF'M

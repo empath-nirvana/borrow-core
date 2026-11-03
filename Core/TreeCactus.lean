@@ -386,8 +386,9 @@ result holds nothing, is safe or diverges, a value only at the empty memory, eve
 its cell. -/
 theorem cerwpT_adequacy (P : ParentFn) {Q : TPostV} {P₀ : Expr}
     (hQ : ∀ k w ls O v ρ, Q k w ls O v ρ → ρ = PMap.empty)
-    (hall : ∀ n, cerwpT (ℍ := ℍ) (opTableT OpTabT.empty) Q (fun _ ρf => ρf = PMap.empty) n
-      ⟨P, fun _ => none, tmplT _ (fun _ => none)⟩ [] [] P₀ (PMap.empty : TRes (WCactus.ofParent P))) :
+    (hall : ∀ n, cerwpT (ℍ := ℍ) (opTableT OpTabT.empty) Q (fun _ ρf => ρf = PMap.empty)
+      (fun _ ρf => ρf = PMap.empty) n ⟨P, fun _ => none, tmplT _ (fun _ => none)⟩ [] [] P₀
+      (PMap.empty : TRes (WCactus.ofParent P))) :
     OrDiverges (ℍ := ℍ) P₀ := by
   intro μ e hs
   obtain ⟨j, hrun⟩ := stepsN_of_steps hs

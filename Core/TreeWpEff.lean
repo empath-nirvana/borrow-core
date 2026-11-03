@@ -4,10 +4,15 @@ import Support.Model.Tree.World.ExtF
 /-!
 # The step-indexed relation with operations, over the tree world: `cerwpT`  `[spec §62]`
 
-`cerwpT Tb Q F n w ls O e`: `twp` whose postcondition is a value in `Q` or a stop the table `Tb`
-allows, the stop owing the continuation below the index. A stop leaves a continuation share and
-owes the continuation at every lower index (`cerwpTC`). It is Core's step-indexed relation with
-operations read at the tree world:
+`cerwpT Tb Q Fb F n w ls O e`: `twp` at `F` whose postcondition is a value in `Q` or a stop the
+table `Tb` allows, the stop owing the continuation below the index. A stop leaves a continuation
+share and owes the continuation at every lower index (`cerwpTC`). It is Core's step-indexed
+relation with operations read at the tree world:
+
+* **A stop hands the table the base frame condition `Fb`**, not the one current at the stop: the
+  continuation resumes at `fdAt en v Fb O′`, the base and the resumer's guarantee at the records
+  the resumed run owns. A run resumed many times carries no history of what earlier resumers
+  guaranteed: its frame condition at each resume reads only its records at that resume.
 
 * **The resume world is any extension of the stop's world**, with the share, the list and the
   records the continuation owns re-read there (`contShareT`): the continuation is a Kripke wand.
@@ -159,91 +164,95 @@ theorem opTableT_local (T : OpTabT) : (opTableT T).Local := by
 def cerwpPostT (Tb : TableT) (Q : TPostV) (Ψ : ContT) (F : TFrame) : TPost :=
   fun k w ls O t ρ => (∃ v : Val, t = v.1 ∧ Q k w ls O v ρ) ∨ Tb F k w ls O t Ψ ρ
 
-/-- **`cerwp` over the tree world.** -/
-def cerwpT (Tb : TableT) (Q : TPostV) : TFrame → Nat → (w : TWd) → List (SRecT w.K) →
-    List (FrameRecT w.K) → Expr → TRes w.K → Prop
+/-- **`cerwp` over the tree world**, at the base frame condition `Fb` and the present one `F`.
+The run is `twp` at `F`; a stop hands the table `Fb`, so the continuation resumes at the
+resumer's guarantee over `Fb` (`fdAt en v Fb O′`), and is again `cerwpT` at the base `Fb`. A
+resumed run's frame condition is the base and what its resumer guarantees of the records it owns
+at that resume, never what earlier resumers guaranteed of records it has since ended. -/
+def cerwpT (Tb : TableT) (Q : TPostV) (Fb : TFrame) : TFrame → Nat → (w : TWd) →
+    List (SRecT w.K) → List (FrameRecT w.K) → Expr → TRes w.K → Prop
   | F, n, w, ls, O, e => twp (ℍ := ℍ) F (cerwpPostT Tb Q (fun F' w' O' k' ls' e' =>
-      if _h : k' < n then cerwpT Tb Q F' k' w' ls' O' e' else fun _ => False) F) n w ls O e
+      if _h : k' < n then cerwpT Tb Q Fb F' k' w' ls' O' e' else fun _ => False) Fb) n w ls O e
 termination_by _ n => n
 
-/-- What `cerwpT` at `N` owes below it. -/
-def cerwpTC (Tb : TableT) (Q : TPostV) (N : Nat) : ContT := fun F' w' O' k' ls' e' =>
-  if k' < N then cerwpT (ℍ := ℍ) Tb Q F' k' w' ls' O' e' else fun _ => False
+/-- What `cerwpT` at the base `Fb` at `N` owes below it. -/
+def cerwpTC (Tb : TableT) (Q : TPostV) (Fb : TFrame) (N : Nat) : ContT := fun F' w' O' k' ls' e' =>
+  if k' < N then cerwpT (ℍ := ℍ) Tb Q Fb F' k' w' ls' O' e' else fun _ => False
 
-theorem cerwpT_eq (Tb : TableT) (Q : TPostV) (F : TFrame) (n : Nat) (w : TWd)
+theorem cerwpT_eq (Tb : TableT) (Q : TPostV) (Fb F : TFrame) (n : Nat) (w : TWd)
     (ls : List (SRecT w.K)) (O : List (FrameRecT w.K)) (e : Expr) :
-    cerwpT (ℍ := ℍ) Tb Q F n w ls O e =
-      twp (ℍ := ℍ) F (cerwpPostT Tb Q (cerwpTC (ℍ := ℍ) Tb Q n) F) n w ls O e := by
+    cerwpT (ℍ := ℍ) Tb Q Fb F n w ls O e =
+      twp (ℍ := ℍ) F (cerwpPostT Tb Q (cerwpTC (ℍ := ℍ) Tb Q Fb n) Fb) n w ls O e := by
   rw [cerwpT]
   congr 1
 
-theorem cerwpT_unfold_at {Tb : TableT} (hTb : Tb.Local) {Q : TPostV} {F : TFrame}
+theorem cerwpT_unfold_at {Tb : TableT} (hTb : Tb.Local) {Q : TPostV} {Fb F : TFrame}
     {n N : Nat} (hnN : n ≤ N) {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)}
-    {e : Expr} {ρ : TRes w.K} (h : cerwpT (ℍ := ℍ) Tb Q F n w ls O e ρ) :
-    twp (ℍ := ℍ) F (cerwpPostT Tb Q (cerwpTC (ℍ := ℍ) Tb Q N) F) n w ls O e ρ := by
+    {e : Expr} {ρ : TRes w.K} (h : cerwpT (ℍ := ℍ) Tb Q Fb F n w ls O e ρ) :
+    twp (ℍ := ℍ) F (cerwpPostT Tb Q (cerwpTC (ℍ := ℍ) Tb Q Fb N) Fb) n w ls O e ρ := by
   rw [cerwpT_eq] at h
   refine twp_mono_le (fun k hk w' ls' O' t ρ' ht => ?_) h
   rcases ht with ht | ht
   · exact Or.inl ht
-  · refine Or.inr (hTb F k w' ls' O' t _ _ ρ' (fun F' w'' O'' k' hk' ls'' e'' ρ'' hΨ => ?_) ht)
+  · refine Or.inr (hTb Fb k w' ls' O' t _ _ ρ' (fun F' w'' O'' k' hk' ls'' e'' ρ'' hΨ => ?_) ht)
     simp only [cerwpTC, show k' < n by omega, show k' < N by omega, if_true] at hΨ ⊢
     exact hΨ
 
-theorem cerwpT_fold_at {Tb : TableT} (hTb : Tb.Local) {Q : TPostV} {F : TFrame}
+theorem cerwpT_fold_at {Tb : TableT} (hTb : Tb.Local) {Q : TPostV} {Fb F : TFrame}
     {n N : Nat} (hnN : n ≤ N) {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)}
     {e : Expr} {ρ : TRes w.K}
-    (h : twp (ℍ := ℍ) F (cerwpPostT Tb Q (cerwpTC (ℍ := ℍ) Tb Q N) F) n w ls O e ρ) :
-    cerwpT (ℍ := ℍ) Tb Q F n w ls O e ρ := by
+    (h : twp (ℍ := ℍ) F (cerwpPostT Tb Q (cerwpTC (ℍ := ℍ) Tb Q Fb N) Fb) n w ls O e ρ) :
+    cerwpT (ℍ := ℍ) Tb Q Fb F n w ls O e ρ := by
   rw [cerwpT_eq]
   refine twp_mono_le (fun k hk w' ls' O' t ρ' ht => ?_) h
   rcases ht with ht | ht
   · exact Or.inl ht
-  · refine Or.inr (hTb F k w' ls' O' t _ _ ρ' (fun F' w'' O'' k' hk' ls'' e'' ρ'' hΨ => ?_) ht)
+  · refine Or.inr (hTb Fb k w' ls' O' t _ _ ρ' (fun F' w'' O'' k' hk' ls'' e'' ρ'' hΨ => ?_) ht)
     simp only [cerwpTC, show k' < n by omega, show k' < N by omega, if_true] at hΨ ⊢
     exact hΨ
 
-theorem cerwpT_zero {Tb : TableT} {Q : TPostV} {F : TFrame} {w : TWd} {ls : List (SRecT w.K)}
+theorem cerwpT_zero {Tb : TableT} {Q : TPostV} {Fb F : TFrame} {w : TWd} {ls : List (SRecT w.K)}
     {O : List (FrameRecT w.K)} {e : Expr} {ρ : TRes w.K} :
-    cerwpT (ℍ := ℍ) Tb Q F 0 w ls O e ρ := by
+    cerwpT (ℍ := ℍ) Tb Q Fb F 0 w ls O e ρ := by
   rw [cerwpT_eq]; exact twp_zero
 
 /-- **`cerwpT` is monotone along world extension**, with the list and records re-read. -/
-theorem cerwpT_kripke {Tb : TableT} {Q : TPostV} {F : TFrame} {n : Nat} {w w₁ : TWd}
+theorem cerwpT_kripke {Tb : TableT} {Q : TPostV} {Fb F : TFrame} {n : Nat} {w w₁ : TWd}
     {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {ls₁ : List (SRecT w₁.K)}
     {O₁ : List (FrameRecT w₁.K)} {e : Expr} {ρ : TRes w.K} {ρ₁ : TRes w₁.K} (hE : w.Ext w₁ ρ)
     (hr : RRw (w := w) (w' := w₁) ρ ρ₁) (hl : SRecsRR w₁.Θ ls ls₁) (hO : RecsRR w₁.Θ O O₁)
-    (h : cerwpT (ℍ := ℍ) Tb Q F n w ls O e ρ) : cerwpT (ℍ := ℍ) Tb Q F n w₁ ls₁ O₁ e ρ₁ := by
+    (h : cerwpT (ℍ := ℍ) Tb Q Fb F n w ls O e ρ) : cerwpT (ℍ := ℍ) Tb Q Fb F n w₁ ls₁ O₁ e ρ₁ := by
   rw [cerwpT_eq] at h ⊢
   exact twp_kripke hE hr hl hO h
 
 /-- A deterministic step in front of a `cerwpT`, paid. -/
-theorem cerwpT_step {Tb : TableT} (hL : Tb.Local) {Q : TPostV} {F : TFrame} {n : Nat}
+theorem cerwpT_step {Tb : TableT} (hL : Tb.Local) {Q : TPostV} {Fb F : TFrame} {n : Nat}
     {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {e e' : Expr} {ρ : TRes w.K}
-    (hdet : ∀ μ, Step1Only (ℍ := ℍ) μ e μ e') (h : cerwpT (ℍ := ℍ) Tb Q F n w ls O e' ρ) :
-    cerwpT (ℍ := ℍ) Tb Q F (n + 1) w ls O e ρ :=
+    (hdet : ∀ μ, Step1Only (ℍ := ℍ) μ e μ e') (h : cerwpT (ℍ := ℍ) Tb Q Fb F n w ls O e' ρ) :
+    cerwpT (ℍ := ℍ) Tb Q Fb F (n + 1) w ls O e ρ :=
   cerwpT_fold_at hL le_rfl (twp_step hdet (cerwpT_unfold_at hL (Nat.le_succ n) h))
 
 /-- A value in the postcondition, at every extension. -/
-theorem cerwpT_val {Tb : TableT} {Q : TPostV} {F : TFrame} {n : Nat} {w : TWd}
+theorem cerwpT_val {Tb : TableT} {Q : TPostV} {Fb F : TFrame} {n : Nat} {w : TWd}
     {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {v : Val} {ρ : TRes w.K}
     (h : ∀ (w₀ : TWd) (ρ₀ : TRes w₀.K) (ls₀ : List (SRecT w₀.K)) (O₀ : List (FrameRecT w₀.K)),
       w.Ext w₀ ρ → RRw (w := w) (w' := w₀) ρ ρ₀ → SRecsRR w₀.Θ ls ls₀ → RecsRR w₀.Θ O O₀ →
       Q n w₀ ls₀ O₀ v ρ₀) :
-    cerwpT (ℍ := ℍ) Tb Q F n w ls O v.1 ρ := by
+    cerwpT (ℍ := ℍ) Tb Q Fb F n w ls O v.1 ρ := by
   rw [cerwpT_eq]
   exact twp_here (fun μ => final_val μ v) fun w₀ ρ₀ ls₀ O₀ hE hr hl hO =>
     Or.inl ⟨v, rfl, h w₀ ρ₀ ls₀ O₀ hE hr hl hO⟩
 
 /-- **A stop at a non-abortive operation the table allows**, at every extension of the world. -/
-theorem cerwpT_perform {T : OpTabT} {Q : TPostV} {F : TFrame} (K : Kont) {m i : UInt32}
+theorem cerwpT_perform {T : OpTabT} {Q : TPostV} {Fb F : TFrame} (K : Kont) {m i : UInt32}
     {v : Val} {en : OpEntT} (hK : K.HasHnd m = false) (hT : T m i = some en)
     (ha : en.abort = false) {n : Nat} {w : TWd} {ls : List (SRecT w.K)}
     {O : List (FrameRecT w.K)} {ρ : TRes w.K}
     (h : ∀ (w₀ : TWd) (ρ₀ : TRes w₀.K) (ls₀ : List (SRecT w₀.K)) (O₀ : List (FrameRecT w₀.K)),
       w.Ext w₀ ρ → RRw (w := w) (w' := w₀) ρ ρ₀ → SRecsRR w₀.Θ ls ls₀ → RecsRR w₀.Θ O O₀ →
       en.oc w₀ O₀ ∧ ∃ ρa ρk : TRes w₀.K, ResUT.CompS ρa ρk ρ₀ ∧ en.PA n w₀ ls₀ v ρa ∧
-        contShareT en F n w₀ ls₀ O₀ K v (cerwpTC (ℍ := ℍ) (opTableT T) Q n) ρk) :
-    cerwpT (ℍ := ℍ) (opTableT T) Q F n w ls O (K.plug (performE (.val (opPayload m i v)))) ρ := by
+        contShareT en Fb n w₀ ls₀ O₀ K v (cerwpTC (ℍ := ℍ) (opTableT T) Q Fb n) ρk) :
+    cerwpT (ℍ := ℍ) (opTableT T) Q Fb F n w ls O (K.plug (performE (.val (opPayload m i v)))) ρ := by
   rw [cerwpT_eq]
   refine twp_here (final_opPlug (r := false) (payloadName_opPayload m i v) hK)
     fun w₀ ρ₀ ls₀ O₀ hE hr hl hO => Or.inr ?_

@@ -224,7 +224,7 @@ theorem KapAtT.resume {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {H :
     (h : KapAtT (ℍ := ℍ) Qout M en H k v κ w ls O ρ) {k' : Nat} (hk : k' < k) {a : Val}
     {σ σ' : TRes w.K} (hB : en.PBv v k' w ls a σ) (hc : ResUT.CompS ρ σ σ') {F' : TFrame}
     (hF'm : F'.Mono) (hF'M : ∀ w'' ρf, F' w'' ρf → fdMask M w'' ρf) :
-    cerwpT (ℍ := ℍ) (opTableT OpTabT.empty) Qout F' k' w ls O
+    cerwpT (ℍ := ℍ) (opTableT OpTabT.empty) Qout F' F' k' w ls O
       (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val a)) σ' := by
   obtain ⟨w₁, ls₁, O₁, ρ₁, hK, hE, hr, hO, hl⟩ := h
   exact hK.2.1 w ρ ls O hE hr hl hO k' hk a σ σ' hB hc F' hF'm hF'M

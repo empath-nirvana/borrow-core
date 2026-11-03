@@ -70,8 +70,8 @@ def w₀ (P : ParentFn) : TWd := ⟨P, fun _ => none, tmplT _ (fun _ => none)⟩
 def TopAdequacyT : Prop :=
   ∀ (P : ParentFn) (Q : TPostV) (P₀ : Expr),
     (∀ k w ls O v ρ, Q k w ls O v ρ → ρ = PMap.empty) →
-    (∀ n, cerwpT (ℍ := ℍ) (opTableT OpTabT.empty) Q (fun _ ρf => ρf = PMap.empty) n (w₀ P) [] []
-      P₀ (PMap.empty : TRes (WCactus.ofParent P))) →
+    (∀ n, cerwpT (ℍ := ℍ) (opTableT OpTabT.empty) Q (fun _ ρf => ρf = PMap.empty)
+      (fun _ ρf => ρf = PMap.empty) n (w₀ P) [] [] P₀ (PMap.empty : TRes (WCactus.ofParent P))) →
     OrDiverges (ℍ := ℍ) P₀
 
 theorem topAdequacyT : TopAdequacyT (ℍ := ℍ) :=

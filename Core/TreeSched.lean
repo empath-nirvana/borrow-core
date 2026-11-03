@@ -120,7 +120,7 @@ def MultiBranchAdequacyT : Prop :=
   ∀ (P : ParentFn) (T : OpTabT) (n₀ : UInt32) (qs hr hs : Val) (Qin Qout : TPostV) (e₀ : Expr),
     (∀ k w ls O v ρ, Qout k w ls O v ρ → ρ = PMap.empty) →
     SchedOKT (ℍ := ℍ) T n₀ qs hr hs Qin Qout →
-    (∀ n, cerwpT (ℍ := ℍ) (opTableT T) Qin (fun _ _ => True) n
+    (∀ n, cerwpT (ℍ := ℍ) (opTableT T) Qin (fun _ _ => True) (fun _ _ => True) n
       ⟨P, fun _ => none, tmplT _ (fun _ => none)⟩ [] [] e₀
       (PMap.empty : TRes (WCactus.ofParent P))) →
     OrDiverges (ℍ := ℍ) (hndE (hndVal n₀ qs hr hs) e₀)
@@ -129,15 +129,16 @@ def MultiBranchAdequacyT : Prop :=
 the empty mask. -/
 theorem schedProgram_cerwpT {P : ParentFn} {T : OpTabT} {n₀ : UInt32} {qs hr hs : Val}
     {Qin Qout : TPostV} {e₀ : Expr} (hS : SchedOKT (ℍ := ℍ) T n₀ qs hr hs Qin Qout)
-    (he : ∀ n, cerwpT (ℍ := ℍ) (opTableT T) Qin (fun _ _ => True) n
+    (he : ∀ n, cerwpT (ℍ := ℍ) (opTableT T) Qin (fun _ _ => True) (fun _ _ => True) n
       ⟨P, fun _ => none, tmplT _ (fun _ => none)⟩ [] [] e₀
       (PMap.empty : TRes (WCactus.ofParent P))) (n : Nat) :
-    cerwpT (ℍ := ℍ) (opTableT OpTabT.empty) Qout (fun _ ρf => ρf = PMap.empty) n
+    cerwpT (ℍ := ℍ) (opTableT OpTabT.empty) Qout (fun _ ρf => ρf = PMap.empty)
+      (fun _ ρf => ρf = PMap.empty) n
       ⟨P, fun _ => none, tmplT _ (fun _ => none)⟩ [] [] (hndE (hndVal n₀ qs hr hs) e₀)
       (PMap.empty : TRes (WCactus.ofParent P)) :=
-  cerwpTE_iff.mpr (cerwpT_schedHandle hS n (fun _ => False) _ _ _ _ _ e₀ _ emptyFrame_mono
-    (maskHist_empty T n₀) (fun w ρf h => by subst h; exact fdMask_empty _ w) (fun x hx => by simp [recMask] at hx)
-    (fun _ _ _ => trivial) (he n))
+  cerwpTE_iff.mpr (cerwpT_schedHandle hS n (fun _ => False) _ _ _ _ _ _ e₀ _
+    emptyFrame_mono (fun w ρf h => by subst h; exact fdMask_empty _ w) (fun x hx => by simp [recMask] at hx)
+    (fun _ _ _ => trivial) (fun _ _ _ => trivial) (he n))
 
 theorem multiBranchAdequacyT : MultiBranchAdequacyT (ℍ := ℍ) :=
   fun P _ _ _ _ _ _ _ _ hQ hS he => cerwpT_adequacy (ℍ := ℍ) P hQ (schedProgram_cerwpT hS he)
