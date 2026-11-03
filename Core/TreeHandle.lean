@@ -95,7 +95,8 @@ theorem twp_bind_fd {F Fe : TFrame} (hFm : F.Mono) (hFe : ∀ w ρf, F w ρf →
     (hJ : ∀ w₀ ρf, F w₀ ρf → NoneAt (recMask O) ρf)
     (he : twp (ℍ := ℍ) Fe P n w ls O e ρ)
     (hk : ∀ k, k ≤ n → ∀ (w' : TWd) (ls' : List (SRecT w'.K)) (O' : List (FrameRecT w'.K)) t
-      (ρ' : TRes w'.K), P k w' ls' O' t ρ' →
+      (ρ' : TRes w'.K), CovR (sem w'.Θ) w'.K ρ' → (∀ x ∈ ls', CovR (sem w'.Θ) w'.K x.1.R) →
+      (∀ r ∈ O', CovR (sem w'.Θ) w'.K r.R) → P k w' ls' O' t ρ' →
       twp (ℍ := ℍ) (F.and (fdMask (recMask O'))) Q k w' ls' O' (K.plug t) ρ') :
     twp (ℍ := ℍ) F Q n w ls O (K.plug e) ρ := by
   classical
@@ -112,7 +113,8 @@ theorem twp_bind_fd {F Fe : TFrame} (hFm : F.Mono) (hFe : ∀ w ρf, F w ρf →
       ⟨hFm _ _ _ _ g₀ g₁ hF, covf_valid g₄ g₇,
         noneAt_recMask_end g₀.1 (covf_valid hc hI) g₁ hJ₀ g₁₀⟩
     obtain ⟨w₂, ρf₂, ρ₂, fρ₂, psF₂, ps₂, O₂, ls₂, k₀, k₁, k₂, k₃, k₄, k₅, k₆, k₇, k₈, k₉, k₁₀,
-        k₁₁⟩ := hk (n - j₁) (Nat.sub_le _ _) w₁ ls₁ O₁ t ρ₁ g₈ w₁ ρ₁ ρf₁ fρ₁ ls₁ O₁ ps₁ psF₁ μ₁
+        k₁₁⟩ := hk (n - j₁) (Nat.sub_le _ _) w₁ ls₁ O₁ t ρ₁ hcov g₆.cov_ls
+        (fun r hr => g₆.cov_ps r (g₅.left r hr)) g₈ w₁ ρ₁ ρf₁ fρ₁ ls₁ O₁ ps₁ psF₁ μ₁
         (TWd.Ext.refl _ _) (RR.refl hcov) (SRecsRR.refl g₆.cov_ls)
         (RecsRR.refl fun r hr => g₆.cov_ps r (g₅.left r hr)) hF₁ (ResUT.hash_symm g₃) g₄ g₅ g₆
         g₇ (fd_stepsN hrun₁ hfd) j₂ μ' E (by omega) hrun₂ hfin
@@ -301,7 +303,9 @@ frames avoid the run's mask history `M` and the masks of the records it ended wi
 def SchedRetT (T : OpTabT) (n₀ : UInt32) (Qin Qout : TPostV) (hr : Val) : Prop :=
   ∀ (M : BoCa.Loc → Prop) (F : TFrame) (k : Nat) (w : TWd) (ls : List (SRecT w.K))
     (O : List (FrameRecT w.K)) (v : Val) (ρ : TRes w.K), F.Mono → MaskHist T n₀ M →
-    (∀ w' ρf, F w' ρf → fdMask (fun x => M x ∨ recMask O x) w' ρf) → Qin k w ls O v ρ →
+    (∀ w' ρf, F w' ρf → fdMask (fun x => M x ∨ recMask O x) w' ρf) →
+    CovR (sem w.Θ) w.K ρ → (∀ x ∈ ls, CovR (sem w.Θ) w.K x.1.R) →
+    (∀ r ∈ O, CovR (sem w.Θ) w.K r.R) → Qin k w ls O v ρ →
     cerwpT (ℍ := ℍ) (opTableT OpTabT.empty) Qout F k w ls O (.app (.val hr) (.val v)) ρ
 
 /-- **An operation's clause**: the payload's resource in the entry's `PA`, `κ` in `KapSchedT` at
@@ -311,6 +315,8 @@ def SchedClauseT (T : OpTabT) (n₀ : UInt32) (Qout : TPostV) (en : OpEntT) (c :
   ∀ (M : BoCa.Loc → Prop) (F : TFrame) (k : Nat) (w : TWd) (ls : List (SRecT w.K))
     (O : List (FrameRecT w.K)) (v κ : Val) (ρ : TRes w.K), F.Mono → MaskHist T n₀ M →
     en.oc w O → (∀ w' ρf, F w' ρf → fdMask (fun x => M x ∨ recMask O x) w' ρf) →
+    CovR (sem w.Θ) w.K ρ → (∀ x ∈ ls, CovR (sem w.Θ) w.K x.1.R) →
+    (∀ r ∈ O, CovR (sem w.Θ) w.K r.R) →
     (∃ ρa ρk : TRes w.K, ResUT.CompS ρa ρk ρ ∧ en.PA k w ls v ρa ∧
       KapSchedT (ℍ := ℍ) Qout (fun x => M x ∨ recMask O x) en k w ls O v κ ρk) →
     cerwpT (ℍ := ℍ) (opTableT OpTabT.empty) Qout F k w ls O (.app (.val c) (.pair (.val v) κ.1)) ρ
@@ -361,7 +367,8 @@ theorem cerwpT_schedHandle {T : OpTabT} {n₀ : UInt32} {qs hr hs : Val} {Qin Qo
   show twp (ℍ := ℍ) F (valPost Qout) n w ls O ((hndK (hndVal n₀ qs hr hs)).plug e) ρ
   rw [cerwpT_eq] at h
   refine twp_bind_fd hFm (fun w ρf hf => hFe w ρf (hFM w ρf hf)) (hndK (hndVal n₀ qs hr hs))
-    (fun w₀ ρf hf => (hFM w₀ ρf hf).2.mono hOM) h (fun k hk w' ls' O' t ρ' ht => ?_)
+    (fun w₀ ρf hf => (hFM w₀ ρf hf).2.mono hOM) h
+    (fun k hk w' ls' O' t ρ' hcov' hls' hO' ht => ?_)
   -- the clause's frame: `F`, avoiding the masks of the records the run ended with
   have hF'm : (F.and (fdMask (recMask O'))).Mono := TFrame.and_mono hFm (fdMask_mono _)
   have hF'M : ∀ w'' ρf, (F.and (fdMask (recMask O'))) w'' ρf →
@@ -370,7 +377,7 @@ theorem cerwpT_schedHandle {T : OpTabT} {n₀ : UInt32} {qs hr hs : Val} {Qin Qo
   rcases ht with ⟨v, rfl, hv⟩ | ht
   · -- `[ret]`
     refine twp_det hPd (fun μ => step1Only_plug (Head.hret μ n₀ qs hr hs v) rfl .hole) ?_
-    exact cerwpTE_iff.mp (hret M _ k w' ls' O' v ρ' hF'm hMh hF'M hv)
+    exact cerwpTE_iff.mp (hret M _ k w' ls' O' v ρ' hF'm hMh hF'M hcov' hls' hO' hv)
   · obtain ⟨K₁, m, i, v, en, rfl, hK₁, hTe, ha, hoc, ρa, ρk, hcak, hA, hsh⟩ := ht
     by_cases hm : m = n₀
     swap
@@ -402,7 +409,7 @@ theorem cerwpT_schedHandle {T : OpTabT} {n₀ : UInt32} {qs hr hs : Val} {Qin Qo
     cases hqq : en.q with
     | unr =>
         refine cerwpTE_iff.mp (hcl M _ k w' ls' O' v ⟨kappa (hndVal m qs hr hs) K₁, by
-          unfold kappa; exact .lam⟩ ρ' hF'm hMh hoc hF'M ⟨ρa, ρk, hcak, hA, ?_⟩)
+          unfold kappa; exact .lam⟩ ρ' hF'm hMh hoc hF'M hcov' hls' hO' ⟨ρa, ρk, hcak, hA, ?_⟩)
         intro w'' ρk' lsR ls'' O'' hE hr' hl hx hO k' hk' a σ σ' hB hcσ F'' hF''m hF''M
         exact cerwpTE_iff.mpr (twp_kappa_resume hPd _ K₁ a
           (hres w'' ρk' lsR ls'' O'' hE hr' hl hx hO k' hk' a σ σ' hB hcσ F'' hF''m hF''M))
@@ -416,7 +423,8 @@ theorem cerwpT_schedHandle {T : OpTabT} {n₀ : UInt32} {qs hr hs : Val} {Qin Qo
           rw [ResUT.Comp.get_of_left_none hx₂ hρkl, ResUT.single_get_self]
         have hxd : x.del l = ρk := (eq_del_of_compS_single (ResUT.CompS.comm hx₂)).symm
         refine cerwpTE_iff.mp (hcl M _ k w' ls' O' v ⟨kappaC _ l (hndVal m qs hr hs) K₁,
-          isVal_kappaC _ l _ K₁⟩ ρ₁ hF'm hMh hoc hF'M ⟨ρa, x, hx₁, hA, ?_⟩)
+          isVal_kappaC _ l _ K₁⟩ ρ₁ hF'm hMh hoc hF'M (covR_compS_own hc₁ hcov') hls' hO'
+          ⟨ρa, x, hx₁, hA, ?_⟩)
         intro w'' ρx' lsR ls'' O'' hE hr' hl hxF hO k' hk' a σ σ' hB hcσ F'' hF''m hF''M
         have hρx'l := RR.own_fwd hr' hxl
         have hrk : RRw (w := w') (w' := w'') ρk (ρx'.del l) := hxd ▸ RR.del hr' l
