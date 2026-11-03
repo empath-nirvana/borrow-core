@@ -29,18 +29,25 @@ not. Read at the list, a thunk is a run at every later list keeping the records 
 what a stored continuation's share gives (`STy.kont_of_share`, `Core/TreeSemK.lean`).
 
 Every former is an `STy` constructor, both laws proved from the components': codes (`STy.code`),
-`1`, `0`, `+`, `⊗`, `Imm`, `Mut`, `[a]`, `ref`, `!`, `Unk`, the integers, the opaque types, the
-families `[L]`, thunks (`STy.thunk`), `μ` (`STy.mu`) and type variables (`STy.var`). The
+`1`, `0`, `+`, `⊗`, `Imm`, `Mut` (at a store code, E1), `[a]`, `ref`, `!`, `Unk`, the integers, the
+opaque types, the families `[L]`, thunks (`STy.thunk`), `μ` (`STy.mu`) and type variables
+(`STy.var`). Every former `X` may occur under in a Core `μ` body (`VTy.NoMut`: `+`, `⊗`, `Imm`,
+`[a]`, `ref`, `!`, `[L]`) is monotone in it (`STy.sum_le` … `STy.fam_le`), so `μ` folds and
+unfolds at those bodies (`STy.allBody_mono`; `List`'s cons, `STy.list_cons`). The
 computation types, `ν`, `∀` over lifetimes and thunks read at `cerwpT` are `Core/TreeSemC.lean`.
 Continuation and task types are `Core/TreeSemK.lean`.
 
 **What carries `Mut`.** `STy.mut`'s monotonicity holds by definition: its invariant is its
-location's code read at the world, and `RC` re-reads it so. What carries it is that the re-read
-cell's invariant is the store type at the new tree (`RC.mut_inv`), so a lender reads back a value
-of the store type (`RC.mut_readback`); the re-read invariant holds wherever the old one held, on
-carried resources (`RC.mut_extends`); and an invariant other than the store type is not a
-re-reading (`not_rc_of_inv_ne`). Carried instead as a fixed predicate (row 5.57's extension by
-falsity, `trU`), `Mut` is not monotone (`Support/Model/Tree/KSemGraft.lean`'s `trU_not_kmono`).
+location's code read at the world, and `RC` re-reads it so. That the re-read cell's invariant is
+the store type at the new tree (`RC.mut_inv`), that a lender reads back a value of the store type
+(`RC.mut_readback`) and that another invariant is not a re-reading (`not_rc_of_inv_ne`) are `RC`'s
+definition too. The content is that the re-reading exists (`RR.exists_retype`) and that the
+re-read invariant holds wherever the old one held, on carried resources (`RC.mut_extends`, via
+`interp_retype`). Carrying the cell instead with `trU` (row 5.57's extension by falsity) does not
+meet this `Mut`, whose invariant is the store type read at the current tree (`trU_not_kmono`,
+`Support/Model/Tree/KSemGraft.lean`); the evidence against a cell kept with the predicate it was
+stored with is that it refuses round 7's write (`graft_carried_refuses` against `round7_write`),
+an expressiveness argument, not a monotonicity one.
 
 **Departures** (`docs/new-core/scope-782.md` §2):
 * E1: `Mut`'s payload is a store code (`KTy`), not an `STy`. A cell's invariant is index-free
@@ -99,7 +106,8 @@ theorem STy.down_le (τ : STy) {m n : Nat} (h : m ≤ n) :
 
 /-- **A value stored before a graft meets its type after it.** At every world extension carrying a
 covered resource, the resource has a re-reading, covered at the new world, and the value is a
-value of its type over it at every list keeping the records of `ls` the resource reads. -/
+value of `τ` over it at every list keeping the records of `ls` the resource reads. The re-reading
+is single-valued (`RR.func`), so the one re-reading serves every type the value has. -/
 theorem STy.reread (τ : STy) {n : Nat} {w w' : TWd} {ls : List (SRecT w.K)} {v : BoCa.Val}
     {ρ : TRes w.K} (hE : w.Ext w' ρ) (hc : CovR (sem w.Θ) w.K ρ) (h : τ.P n w ls v ρ) :
     ∃ ρ' : TRes w'.K, RRw (w := w) (w' := w') ρ ρ' ∧ CovR (sem w'.Θ) w'.K ρ' ∧
@@ -506,7 +514,8 @@ theorem STy.allBody_nil (a b : Life) (n : Nat) (w : TWd) (ls : List (SRecT w.K))
 
 /-! ### What carries `Mut`: the re-read invariant is the store type -/
 
-/-- **The invariant of a re-read `mut` cell is its location's code read at the new tree.** -/
+/-- **The invariant of a re-read `mut` cell is its location's code read at the new tree.** By
+`RC`'s definition: its `mut` clause's field `hP` is this (`Tree/Reread.lean`). -/
 theorem RC.mut_inv {Θ' : CodeTy} {K K' : WCactus} {l : BoCa.Loc} {m : TMut K} {m' : TMut K'}
     {A : KTy} (hA : Θ' l = some A) (h : RC (sem Θ') l (.mut m) (.mut m')) :
     ∀ u r, m'.P u r ↔ (A.interp Θ').P K' u r.toU := by
@@ -515,17 +524,17 @@ theorem RC.mut_inv {Θ' : CodeTy} {K K' : WCactus} {l : BoCa.Loc} {m : TMut K} {
       rw [sem_of hA] at hΘ; cases Option.some.inj hΘ; exact hP
 
 /-- **A lender reads back a value of the store type** from a re-read cell: whatever the re-read
-invariant admits is in the location's code at the new tree. -/
+invariant admits is in the location's code at the new tree. By `RC`'s definition (`RC.mut_inv`'s
+forward direction). -/
 theorem RC.mut_readback {Θ' : CodeTy} {K K' : WCactus} {l : BoCa.Loc} {m : TMut K}
     {m' : TMut K'} {A : KTy} (hA : Θ' l = some A) (h : RC (sem Θ') l (.mut m) (.mut m'))
     {u : BoCa.Val} {r : ResT BoCa.Loc BoCa.Val K' m'.ls} (hm : m'.P u r) :
     (A.interp Θ').P K' u r.toU :=
   (RC.mut_inv hA h u r).mp hm
 
-/-- **Rules out a re-read `mut` cell whose invariant changes under re-reading.** A cell whose
-invariant is not its location's code read at the new tree, at some value and resource, is not a
-re-reading: no `RC` produces it. So a lender never reads back, from a re-read cell, a value
-outside the cell's store type. -/
+/-- A cell whose invariant is not its location's code read at the new tree is not a re-reading. By
+`RC`'s definition (`RC.mut_inv`'s contrapositive); it rules out nothing `RC`'s definition does not.
+A design whose re-reading changed the invariant would be another `RC`, which this does not test. -/
 theorem not_rc_of_inv_ne {Θ' : CodeTy} {K K' : WCactus} {l : BoCa.Loc} {m : TMut K}
     {m' : TMut K'} {A : KTy} (hA : Θ' l = some A)
     (hne : ¬ ∀ u r, m'.P u r ↔ (A.interp Θ').P K' u r.toU) :

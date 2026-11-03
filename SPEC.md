@@ -10669,14 +10669,27 @@ layers (`docs/new-core/scope-782.md`):
   opened, by other branches). Every former is one, each law proved from the components': codes, `1`, `0`, `+`,
   `⊗`, `Imm`, `Mut` (at a store code), `[a]`, `ref`, `!`, `Unk`, the integers, the opaque types,
   the families `[L]`, thunks, `μ` (least fixed point over value-type candidates, with fold and
-  unfold at a monotone body) and type variables. A value stored before a graft meets its type
-  after it (`STy.reread`). **The computation types** (`SCmp`, `Core/TreeSemC.lean`) are downward
-  closed: `F A` read at `cerwpT` (`SCmp.ret`, downward closed by `cerwpT_le`, Kripke by
-  `cerwpT_kripke`), `⊸`, `&`, `⊤`, `∀α ⊏ c` over the lifetimes below `c` in the current tree, and
-  `ν` (greatest fixed point over candidates). As in Core, a computation type reaches a value only
-  under `U`, whose quantifier over world extensions and lists keeping what the thunk reads makes
-  the thunk monotone (`STy.thunk_intro` at a computation Kripke along `KeepRel`,
-  `STy.thunkC_val`).
+  unfold at a monotone body: every former `VTy.NoMut` lets `X` occur under is monotone in it,
+  `STy.allBody_mono`; `List`'s cons folds, `STy.list_cons`) and type variables. A value stored
+  before a graft meets its type after it (`STy.reread`). **The computation types** (`SCmp`,
+  `Core/TreeSemC.lean`) are downward closed: `F A` (`SCmp.ret`), `⊸`, `&`, `⊤`, `∀α ⊏ c` over the
+  lifetimes below `c` in the current tree, and `ν` (greatest fixed point over candidates).
+- **`F A` is Kripke along `KeepRel`** (`SCmp.ret_kripke`): over a covered resource, `F A` is a
+  `cerwpT` run at every extension, on the re-reading, at every list keeping the records the
+  resource reads, so a run of `F A` at a list is one at every later such list, by `KeepRel.trans`,
+  uniformly in the table, the frame conditions and `A`. The quantifier is needed: a bare `cerwpT`
+  run is not Kripke along `KeepRel` (`Obs.cerwpT_not_keepKripke`, `Core/TreeSemObs.lean`).
+  `cerwpT` quantifies over starts whose list re-reads its list whole, a resource holding a view
+  has none at `[]` (`cerwpT_nil_of_imm`), and the property would make `let a = alloc () in () ()`
+  a run at the empty world, which adequacy (`cerwpT_adequacy`) refutes. `F A` is monotone in `A`
+  (`SCmp.ret_le`, from `cerwpT_post_mono`), and `U` in its computation type (`STy.thunkC_le`).
+  As in Core, a computation type reaches a value only under `U`, whose quantifier over world
+  extensions and lists keeping what the thunk reads makes the thunk monotone: a thunk of `F A`
+  from a run at the current world and list (`STy.thunkRet_intro`), of any computation type Kripke
+  along `KeepRel` (`STy.thunk_intro`; `&` of Kripke types is one, `SCmp.amp_kripke`), of a value
+  (`STy.thunkC_val`). `⊸`, `∀` and `ν` are not Kripke: a thunk of one is proved at every extension
+  directly. `ν` folds and unfolds at Core's body shape `F(A ⊕ U X) & F B` (`SCmp.loopBody_mono`),
+  and is not empty there (`SCmp.loop_nonempty`).
 - **Continuation and task types** (`Core/TreeSemK.lean`) are thunks and boxed thunks, no new
   former: a continuation is `U (B ⊸ C)` (`STy.kont`), boxed at `@d` by BOXED-κ (`STy.kontBox`),
   a task `[@d] U C` (`STy.task`). The value types read the record list because a thunk is a run,
@@ -10698,17 +10711,22 @@ On the semantic store typing (`KSem`, `Support/Model/Tree/KSem.lean`) monotonici
 `kmono_imm`, `kmono_ref`, `kmono_box`), and the re-reading exists when every assigned type is
 monotone (`reread`). `kmono_mut` and `kmono_thunk` hold for every `τ` (for thunks, every
 computation predicate) by the definitions of `vMut` and `vThunk`: they are not results about the
-contents of a `mut` cell or a thunk. What carries `Mut` is the re-reading of the store type: the
-re-read cell's invariant is its location's code read at the new tree (`RC.mut_inv`), so a lender
-reads back a value of the store type (`RC.mut_readback`), and it holds wherever the old invariant
-held on carried resources (`RC.mut_extends`, `reread_extends`).
+contents of a `mut` cell or a thunk. That a re-read cell's invariant is its location's code read
+at the new tree (`RC.mut_inv`), that a lender reads back a value of the store type
+(`RC.mut_readback`) and that another invariant is not a re-reading (`not_rc_of_inv_ne`) hold by
+`RC`'s definition. What carries `Mut` is that the re-reading exists (`RR.exists_retype`) and that
+it holds wherever the old invariant held on carried resources (`RC.mut_extends`,
+`reread_extends`). Carried by `trU` (row 5.57's extension by falsity), a cell is not a value of
+this `Mut`, whose invariant is the store type read at the current tree (`trU_not_kmono`): that
+rules out `trU` with this `Mut`. Against a `Mut` that keeps the predicate a cell was stored with,
+the evidence is expressiveness: it refuses round 7's write (`graft_carried_refuses`, against
+`round7_write`).
 
 What this rules out:
-- **a type whose meaning is not monotone along extension**: a `Mut` whose invariant is carried as
-  the predicate it was stored with (row 5.57's extension by falsity, `trU`) leaves `Mut`'s meaning
-  at the grown tree (`trU_not_kmono`); every `STy` carries monotonicity as a field;
-- **a re-read `mut` cell whose invariant changes under re-reading**: a cell whose invariant is not
-  its location's code at the new tree is not a re-reading (`not_rc_of_inv_ne`).
+- **a value type not monotone along extension**: every `STy` carries monotonicity as a field;
+- **a bare run read as `F A`**: `F A` at `[]` over a view would otherwise hold of the stuck
+  `() ()` (`cerwpT_nil_of_imm`, `nilRun_stuck`); read at every later list it asks the run at the
+  lend's own list too, where a bare run is refuted (`Obs.cerwpT_not_keepKripke`).
 - **a continuation stored past its lend**: a boxed value holding a view at `α` is not of `[@d] A`
   unless `d` is strictly below `α` (`STy.not_box_of_view`, `STy.not_kontBox_of_view`): the `κ`
   above boxed at its lend's lifetime or at the root is not of its type (`not_kontBox_at_lend`,
@@ -10725,10 +10743,11 @@ step-indexed payload (a thunk in a cell) would need step-indexed cell invariants
 observable view at `Imm`); the value types read the record list but own no records, and a thunk
 runs owning none; `⊸` reads its argument at every index up to `n`.
 
-*Open*: store typing growth at the codes; `Mut` at a payload that is not a store code; a
-continuation owning the records of lends its own branch opened (row 6); `F A` Kripke along
-`KeepRel`, which a thunk built from a run at the current world needs and a typed `λ` gets from its
-context's monotonicity.
+*Open*: store typing growth at the codes; `Mut` at a payload that is not a store code (#790); a
+continuation owning the records of lends its own branch opened (row 6); effect rows (`F_Σ`,
+`CTy.eff`): no `SCmp` former, since `SCmp.ret` takes a table with its `Local` and `Down` proofs
+and nothing yet builds a row's table with its entries downward closed (`opTableT_down` does it
+given the entries'); the typing rules and the fundamental theorem over these types.
 
 ### Typing: suspension, scoped spawn, join
 

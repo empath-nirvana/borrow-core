@@ -20,7 +20,9 @@ handler holds its view of `ℓ₂ = 2` at `{β}`.
   stored task whose continuation is a thunk over the cell at `K₀` is a thunk over the re-read
   cell at `K₁` (`kmono_thunk`).
 * `trU_not_kmono`: carried by `trU` instead, the task's cell is no longer a value of `Mut @α τc`
-  at `K₁`.
+  at `K₁` (`vMut`, invariant `τc` read at the current tree). That rules out `trU` with this `vMut`,
+  not a `Mut` reading the carried predicate; against that former the evidence is
+  `graft_carried_refuses` (it refuses `round7_write`'s write).
 -/
 
 noncomputable section
@@ -210,16 +212,17 @@ theorem round7_write :
         · cases e)
       (RR.sng hrc₁') h
 
-/-- **Rules out a `Mut` whose invariant is carried, not re-read.** This is the shape of a type
-whose meaning is not monotone along tree extension: a value stored before a graft stops meeting
-its type after it. The former it rules out is `Mut @a A` with the cell's invariant kept as the
-predicate it was stored with (row 5.57's `SProp_α ⊆ SProp_α'`, extension by falsity, which `trU`
-implements), in place of the store type re-read at the grown tree (`RC`, `kmono_mut`).
+/-- **`trU` does not carry a value of this `Mut`.** The task's cell at `K₀` is a value of
+`Mut @α τc` (`vMut`, whose invariant must be `τc` read at the current tree); carried to `K₁` by
+`trU`, which keeps the stored predicate as the image of the old one (row 5.57's extension by
+falsity), it is not, because that predicate refuses the handler's borrow that `τc` read at `K₁`
+admits. What this rules out is pairing `trU` as the transport with this `vMut`; the transport of
+`Tree/KSem.lean` re-reads invariants for that reason.
 
-**Monotonicity carried by `trU` fails at `Mut`.** The task's cell at `K₀` is a value of
-`Mut @α τc`; carried to `K₁` by `trU` it is not, because `trU` keeps the stored predicate as the
-image of the old one (row 5.57's extension by falsity), which refuses the handler's borrow that
-`τc` read at `K₁` admits. This is why the transport of `Tree/KSem.lean` re-reads invariants. -/
+It does not show that a `Mut` former reading the carried predicate is not monotone: under that
+former the carried cell would meet its type, and the stored value never stops meeting `τc`. The
+evidence against keeping a cell's invariant as the predicate it was stored with is that it refuses
+round 7's write (`graft_carried_refuses`, against `round7_write`): an expressiveness argument. -/
 theorem trU_not_kmono :
     (vMut Θ₇ αL τc).P K₀ (BoCa.Val.loc 1) (PMap.sng 1 cell₀) ∧
     ¬ (vMut Θ₇ αL τc).P K₁ (BoCa.Val.loc 1) ((PMap.sng 1 cell₀).map (trU graftExt)) := by

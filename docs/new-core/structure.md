@@ -75,13 +75,14 @@ A valid world stays valid, carried, across a graft, with no renaming.
 
 **Re-reading.** Semantic types are read at the current tree. A `mut` cell's invariant is its store
 type read at the current tree, re-read when the tree grows (`reread`), not a fixed predicate:
-carried unchanged, a cell leaves `Mut`'s meaning (`trU_not_kmono`). Store types are syntactic
+a cell carried unchanged by `trU` is not a value of this `Mut` (`trU_not_kmono`). Store types are syntactic
 codes read at the tree; the store typing grows at allocation and a location keeps its type
 (condition 16). The relation's value types (`STy`, `Core/TreeSem.lean`) read the record list and
-are downward closed and monotone along the tree and `KeepRel` for every former, continuation and
-task types included (`Core/TreeSemK.lean`: a captured `κ` is a value of its type); the computation
-types (`SCmp`, `Core/TreeSemC.lean`) are downward closed and reach values under `U`
-(`docs/new-core/scope-782.md`).
+are downward closed and monotone along the tree and `KeepRel` for every former, `Mut` only at a
+store-code payload (E1, #790), continuation and task types included (`Core/TreeSemK.lean`: a
+captured `κ` is a value of its type); the computation types (`SCmp`, `Core/TreeSemC.lean`) are
+downward closed, `F A` is Kripke along `KeepRel`, and they reach values under `U`. Effect rows
+(`CTy.eff`) have no `SCmp` former yet (`docs/new-core/scope-782.md`).
 
 ## 5. The cactus invariant carries the proofs
 
@@ -143,8 +144,9 @@ condition Core lacks.
 Over the single relation:
 1. `Row.tabN`, then 𝒱/𝒞 for every type: Imm, Mut (`vMut`), boxes, lifetimes, thunks
    (`vThunk`/`Covers`), μ, ν, ∀, type variables, families, opaque types, κ and task types. All
-   downward closed and monotone along the tree. Done at the tree for every former: `STy`, `SCmp`,
-   κ and task types (`Core/TreeSem.lean`, `Core/TreeSemC.lean`, `Core/TreeSemK.lean`).
+   downward closed and monotone along the tree. Done at the tree (`STy`, `SCmp`, κ and task
+   types, `Core/TreeSem.lean`, `Core/TreeSemC.lean`, `Core/TreeSemK.lean`) for every former but
+   `Mut` at a payload that is not a store code (#790) and effect rows (`CTy.eff`).
 2. `SemJ`, then compatibility for every `CDerives` rule. The new rules are lend/reborrow/Anti-Frame
    across stops, spawn/join, `[let-dtor]`, and `[handle]` without `hdv`.
 3. Adequacy to `OrDiverges` via §5.
