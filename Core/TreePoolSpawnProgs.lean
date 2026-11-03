@@ -299,6 +299,183 @@ theorem LC_cerwpT {T : OpTabT} (hT0 : T nP 0 = some enPark)
   rw [cerwpT_eq]
   exact twp_resumeTail (post_down hTd) .hole fdAt_lend (Dc l) twp_unitEnd
 
+/-! ### Stops that own nothing -/
+
+/-- **`(λ_. b) (op ())` at a cancellable `enPark` operation**, owning nothing: resumed, `b`; its
+cancel answers `()`. -/
+theorem cerwpT_parkThen {T : OpTabT}
+    (hTd : ∀ m i en, T m i = some en → ∀ k w ls v ρ, en.PA (k + 1) w ls v ρ → en.PA k w ls v ρ)
+    {i : UInt32} (hTi : T nP i = some enPark) {b : Expr} {Fb F : TFrame} {n : Nat} {w : TWd}
+    {ls : List (SRecT w.K)}
+    (hb : ∀ k', k' < n → ∀ (w' : TWd) (ls' : List (SRecT w'.K)),
+      cerwpT (ℍ := ℍ) (opTableT T) QS Fb (fdAt enPark Val.unit Fb ([] : List (FrameRecT w'.K))) k'
+        w' ls' [] (b.subst 0 Val.unit) PMap.empty) :
+    cerwpT (ℍ := ℍ) (opTableT T) QS Fb F n w ls []
+      (.app (.lam b) (performE (.val (opPayload nP i Val.unit)))) PMap.empty := by
+  show cerwpT (ℍ := ℍ) (opTableT T) QS Fb F n w ls []
+    ((Kont.appR (.lam b) .hole).plug (performE (.val (opPayload nP i Val.unit)))) PMap.empty
+  refine cerwpT_perform (.appR (.lam b) .hole) rfl hTi rfl ?_
+  intro w₀ ρ₀ ls₀ O₀ _ hr _ hO
+  cases hO
+  obtain rfl := RR.of_empty hr
+  refine ⟨trivial, PMap.empty, PMap.empty, ResUT.compS_empty_right _, ⟨rfl, rfl⟩,
+    (⟨(fun _ => rfl), fun w' ρ' ls' O' _ hr' _ hO' => ⟨fun k' hk' a σ σ' hB hcσ => ?_,
+      (fun _ _ k' hk' => ?_)⟩⟩ : contShareT enPark Fb n w₀ ls₀ [] (.appR (.lam b) .hole) Val.unit
+        (cerwpTC (ℍ := ℍ) (opTableT T) QS Fb n) PMap.empty)⟩
+  · obtain ⟨rfl, rfl⟩ := hB
+    obtain rfl := RR.of_empty hr'
+    obtain rfl := compS_empty_right_eq hcσ
+    cases hO'
+    simp only [cerwpTC, hk', if_true]
+    exact cerwpT_det (post_down hTd) (fun μ => step1Only_plug (Head.beta μ b Val.unit) rfl .hole)
+      (hb k' hk' w' ls')
+  · obtain rfl := RR.of_empty hr'
+    cases hO'
+    simp only [cerwpTC, hk', if_true]
+    exact cerwpT_det (post_down hTd) (fun μ => step1Only_plug (Head.cancel μ _ rfl) rfl .hole)
+      cerwpT_unit
+
+/-- **`(λ_. b) (spawn th)` at the root's table**, owning nothing: the thunk verified at the
+child's table; resumed, `b`; its cancel answers `()`. -/
+theorem cerwpT_spawnThen {th : Val}
+    (hth : ∀ j (w' : TWd) (ls' : List (SRecT w'.K)) (Fb' Fe' : TFrame),
+      (∀ w ρf, ResUT.Valid ρf → Fb' w ρf) → (∀ w ρf, fdMask (fun _ => False) w ρf → Fe' w ρf) →
+      cerwpT (ℍ := ℍ) (opTableT TC) QS Fb' Fe' j w' ls' [] (.app th.1 (.val Val.unit)) PMap.empty)
+    {b : Expr} {Fb F : TFrame} {n : Nat} {w : TWd} {ls : List (SRecT w.K)}
+    (hb : ∀ k', k' < n → ∀ (w' : TWd) (ls' : List (SRecT w'.K)),
+      cerwpT (ℍ := ℍ) (opTableT TS) QS Fb (fdAt enSpawn Val.unit Fb ([] : List (FrameRecT w'.K)))
+        k' w' ls' [] (b.subst 0 Val.unit) PMap.empty) :
+    cerwpT (ℍ := ℍ) (opTableT TS) QS Fb F n w ls [] (.app (.lam b) (spawnE th)) PMap.empty := by
+  show cerwpT (ℍ := ℍ) (opTableT TS) QS Fb F n w ls []
+    ((Kont.appR (.lam b) .hole).plug (performE (.val (opPayload nP 1 th)))) PMap.empty
+  refine cerwpT_perform (.appR (.lam b) .hole) rfl (show TS nP 1 = some enSpawn by simp [TS]) rfl ?_
+  intro w₀ ρ₀ ls₀ O₀ _ hr _ hO
+  cases hO
+  obtain rfl := RR.of_empty hr
+  refine ⟨trivial, PMap.empty, PMap.empty, ResUT.compS_empty_right _,
+    ⟨rfl, fun j _ w' ls' Fb' Fe' h₁ h₂ => hth j w' ls' Fb' Fe' h₁ h₂⟩,
+    (⟨(fun _ => rfl), fun w' ρ' ls' O' _ hr' _ hO' => ⟨fun k' hk' a σ σ' hB hcσ => ?_,
+      (fun _ _ k' hk' => ?_)⟩⟩ : contShareT enSpawn Fb n w₀ ls₀ [] (.appR (.lam b) .hole) th
+        (cerwpTC (ℍ := ℍ) (opTableT TS) QS Fb n) PMap.empty)⟩
+  · obtain ⟨rfl, rfl⟩ := hB
+    obtain rfl := RR.of_empty hr'
+    obtain rfl := compS_empty_right_eq hcσ
+    cases hO'
+    simp only [cerwpTC, hk', if_true]
+    exact cerwpT_det (post_down TS_down) (fun μ => step1Only_plug (Head.beta μ b Val.unit) rfl
+      .hole) (hb k' hk' w' ls')
+  · obtain rfl := RR.of_empty hr'
+    cases hO'
+    simp only [cerwpTC, hk', if_true]
+    exact cerwpT_det (post_down TS_down) (fun μ => step1Only_plug (Head.cancel μ _ rfl) rfl .hole)
+      cerwpT_unit
+
+/-! ### The programs -/
+
+/-- A lifetime for the lends' records (any will do). -/
+def α₀ : Life := default
+
+theorem L_closed (v : Val) : L.subst 0 v = L := by
+  simp [L, Lbody, parkE, Expr.subst, freeE, performE, opPayload]
+  repeat (first | rfl | constructor)
+
+theorem LC_closed (v : Val) : LC.subst 0 v = LC := by
+  simp [LC, LCbody, Dbody, parkE, Expr.subst, freeE, performE, opPayload]
+  repeat (first | rfl | constructor)
+
+/-- The child `λ_. L`. -/
+def thL : Val := Val.lam L
+
+/-- The child `λ_. park (); cancel ()`. -/
+def Cbody : Expr := .app (.lam (.app (.lam (.val .unit)) cancelE)) parkE
+def thC : Val := Val.lam Cbody
+
+theorem TC_park : TC nP 0 = some enPark := by simp [TC]
+theorem TC_cancel : TC nP 2 = some enPark := by simp [TC]
+theorem TS_park : TS (ℍ := ℍ) nP 0 = some enPark := by simp [TS]
+
+theorem thL_ok (j : Nat) (w' : TWd) (ls' : List (SRecT w'.K)) (Fb' Fe' : TFrame) :
+    cerwpT (ℍ := ℍ) (opTableT TC) QS Fb' Fe' j w' ls' [] (.app thL.1 (.val Val.unit)) PMap.empty :=
+  cerwpT_det (post_down TC_down) (fun μ => step1Only_plug (Head.beta μ L Val.unit) rfl .hole)
+    (by rw [Kont.plug, L_closed]; exact L_cerwpT TC_park TC_down α₀ j Fb' Fe' w' ls')
+
+theorem thC_ok (j : Nat) (w' : TWd) (ls' : List (SRecT w'.K)) (Fb' Fe' : TFrame) :
+    cerwpT (ℍ := ℍ) (opTableT TC) QS Fb' Fe' j w' ls' [] (.app thC.1 (.val Val.unit)) PMap.empty := by
+  refine cerwpT_det (post_down TC_down) (fun μ => step1Only_plug (Head.beta μ Cbody Val.unit) rfl
+    .hole) ?_
+  have e : Cbody.subst 0 Val.unit = Cbody := by
+    simp [Cbody, parkE, cancelE, Expr.subst, performE, opPayload]
+    repeat (first | rfl | constructor)
+  rw [Kont.plug, e]
+  refine cerwpT_parkThen TC_down TC_park fun k' _ w'' ls'' => ?_
+  have e' : (Expr.app (.lam (.val Val.unit)) cancelE).subst 0 Val.unit =
+      .app (.lam (.val Val.unit)) (performE (.val (opPayload nP 2 Val.unit))) := by
+    simp [cancelE, Expr.subst, performE, opPayload]
+    repeat (first | rfl | constructor)
+  rw [e']
+  exact cerwpT_parkThen TC_down TC_cancel fun k'' _ w₃ ls₃ => cerwpT_unit
+
+/-- **Root of the loan test**: `let _ = spawn (λ_. L) in L`. -/
+def rootLoan : Expr := .app (.lam L) (spawnE thL)
+/-- **Root of the cancel test**: `let _ = spawn (λ_. park (); cancel ()) in LC`. -/
+def rootCancel : Expr := .app (.lam LC) (spawnE thC)
+/-- **Root of the depth-3 test**: `let _ = spawn (λ_. L) in let _ = spawn (λ_. L) in L`. -/
+def rootDepth3 : Expr := .app (.lam rootLoan) (spawnE thL)
+
+theorem rootLoan_cerwpT (n : Nat) (Fb F : TFrame) (w : TWd) (ls : List (SRecT w.K)) :
+    cerwpT (ℍ := ℍ) (opTableT TS) QS Fb F n w ls [] rootLoan PMap.empty :=
+  cerwpT_spawnThen (fun j w' ls' Fb' Fe' _ _ => thL_ok j w' ls' Fb' Fe') fun k' _ w' ls' => by
+    rw [L_closed]; exact L_cerwpT TS_park TS_down α₀ k' _ _ w' ls'
+
+theorem rootCancel_cerwpT (n : Nat) (Fb F : TFrame) (w : TWd) (ls : List (SRecT w.K)) :
+    cerwpT (ℍ := ℍ) (opTableT TS) QS Fb F n w ls [] rootCancel PMap.empty :=
+  cerwpT_spawnThen (fun j w' ls' Fb' Fe' _ _ => thC_ok j w' ls' Fb' Fe') fun k' _ w' ls' => by
+    rw [LC_closed]; exact LC_cerwpT TS_park TS_down α₀ k' _ _ w' ls'
+
+theorem rootDepth3_cerwpT (n : Nat) (Fb F : TFrame) (w : TWd) (ls : List (SRecT w.K)) :
+    cerwpT (ℍ := ℍ) (opTableT TS) QS Fb F n w ls [] rootDepth3 PMap.empty := by
+  refine cerwpT_spawnThen (fun j w' ls' Fb' Fe' _ _ => thL_ok j w' ls' Fb' Fe') fun k' _ w' ls' => ?_
+  have e : rootLoan.subst 0 Val.unit = rootLoan := by
+    simp [rootLoan, spawnE, thL, Expr.subst, performE, opPayload, Val.lam, L_closed]
+    repeat (first | rfl | constructor)
+  rw [e]
+  exact rootLoan_cerwpT k' _ _ w' ls'
+
+/-- `(hnd HS root) (HS, [])`. -/
+def progOf (root : Expr) : Expr := .app (hndE HS root) (stateVal HS []).1
+
+def progLoan : Expr := progOf rootLoan
+def progCancel : Expr := progOf rootCancel
+def progDepth3 : Expr := progOf rootDepth3
+
+/-- **The loan test is safe and leak-free, or diverges**, through `PoolSchedAdequacyT`, every
+premise discharged. The root spawns `B = L`; B opens a lend of its own and parks; the root opens its
+own lend and parks holding its view; B resumes, ends its lend (open since before the root parked)
+and finishes; the root resumes, merges its view, ends its lend and finishes. Every configuration
+reached steps or is a value; a value is reached only at the empty memory; every `free` finds its
+cell. -/
+theorem progLoan_safe : OrDiverges (ℍ := ℍ) progLoan :=
+  poolSchedAdequacyT beforeP TS nP qsS stackRet hsS QS QS InvS _ _ rootLoan
+    (fun _ _ _ _ _ _ h => h.2.2) (fun _ h => by cases h) hs_schedOK (fun _ _ _ => trivial)
+    (fun _ _ _ => trivial) fun n => rootLoan_cerwpT n _ _ _ _
+
+/-- **The cancel test is safe and leak-free, or diverges**, through `PoolSchedAdequacyT`. The root
+spawns `C`; C parks; the root opens its lend and parks holding its view; C cancels the root
+(`cancel`'s clause, `poolAns_cancelSnd`); the root's finaliser parks again, C finishes, the
+finaliser is resumed and ends the lend and frees the cell. -/
+theorem progCancel_safe : OrDiverges (ℍ := ℍ) progCancel :=
+  poolSchedAdequacyT beforeP TS nP qsS stackRet hsS QS QS InvS _ _ rootCancel
+    (fun _ _ _ _ _ _ h => h.2.2) (fun _ h => by cases h) hs_schedOK (fun _ _ _ => trivial)
+    (fun _ _ _ => trivial) fun n => rootCancel_cerwpT n _ _ _ _
+
+/-- **The depth-3 test is safe and leak-free, or diverges**, through `PoolSchedAdequacyT`. The
+root spawns two loan tasks and runs a third; when the root parks, three tasks each hold a lend
+open across a park, and each ends its own lend after the others have parked. -/
+theorem progDepth3_safe : OrDiverges (ℍ := ℍ) progDepth3 :=
+  poolSchedAdequacyT beforeP TS nP qsS stackRet hsS QS QS InvS _ _ rootDepth3
+    (fun _ _ _ _ _ _ h => h.2.2) (fun _ h => by cases h) hs_schedOK (fun _ _ _ => trivial)
+    (fun _ _ _ => trivial) fun n => rootDepth3_cerwpT n _ _ _ _
+
 end BoCa.Fig16.Tree.Wp.SchedProgs.SpawnProgs
 
 end
