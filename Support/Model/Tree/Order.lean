@@ -1,20 +1,22 @@
-import Paper.S6_2_NonStandardLemmas.Lemmas
+import Paper.S5_Model.Definitions
 
 /-!
 # The lifetime order as a tree
 
-Row 5.9 orders `Life` as a single chain (`ℕᵒᵈ`): every two lifetimes are comparable. Lends
+`[spec §62]`. Row 5.9 orders `Life` as a single chain (`ℕᵒᵈ`): every two lifetimes are comparable. Lends
 nested across stored continuations do not form a chain. A task stored in `κ` keeps the
 lifetimes it opened; the resumer opens new ones beside them. Those are siblings: neither is
 inside the other.
 
 `Cactus` is the order this file puts in its place. `le a b` reads "`a` is `b` or nested inside
 it" (`b` outlives `a`, row 5.9's `⊑`). The order is a tree: the lifetimes above any one
-lifetime form a chain (`up_chain`), and `⊤` is above all. Lifetimes are still named by `Life`,
-and the printed chain is kept as the *allocation order*: a lifetime nested inside another was
-opened after it (`sub`). So the printed carrier (row 5.58's well-founded recursion on the chain)
-is unchanged, and `Cactus` is the order the model reads when it asks whether one lifetime
-outlives another.
+lifetime form a chain (`up_chain`), and `⊤` is above all. Lifetimes are still named by `Life`.
+`Cactus` is the order the model reads when it asks whether one lifetime outlives another. The
+tree-stratified carrier (`Tree/Carrier.lean`) recurses on it: on `WCactus.above_wf`, "strictly
+above every member" in a cactus with no infinite ascending chain, of which the printed chain
+(row 5.58's measure) is the instance `WCactus.chain`. A run's cactus may also sit inside the
+printed chain as its allocation order (`InChain`: a lifetime nested inside another was opened
+after it); a graft can break that (`Tree/Graft.lean`), and nothing here needs it.
 
 Contents:
 * `Cactus`, its strict part `lt`, the printed chain as an instance (`chainC`), and `star`, where
@@ -35,10 +37,6 @@ Contents:
 * The meet of a lifetime set as it is read: `α ⊑ ⊓ᾱ ↔ ∀ x ∈ ᾱ. α ⊑ x` and
   `⊓ᾱ ⊏ x ↔ ∃ y ∈ ᾱ. y ⊏ x` in the chain (`LSet.le_meet_iff`, `LSet.meet_lt_iff`); the tree
   reading takes the right-hand sides.
-* Strata in the tree order: `CellU.InStratumT`/`ResU.InStratumT`, inside the printed
-  stratum when the order sits inside the chain (`ResU.InStratumT.toChain`) and equal to it in the chain (`ResU.inStratumT_chainC`);
-  `Res_{⊔ᾱ}` read as `⋂_{x ∈ ᾱ} Res_x` (`ResU.InStratumAll`), equal to the printed one in the
-  chain (`ResU.inStratumAll_chainC`).
 -/
 
 noncomputable section
@@ -217,7 +215,7 @@ theorem Covers.le_of_lt {C : Cactus} {c a b : Life} (h : C.Covers c a) (hb : C.l
 
 /-- `↓α` covers `α` in the chain. -/
 theorem chainC_covers_down (a : Life) : chainC.Covers (Life.down a) a := by
-  refine ⟨(chainC_lt _ _).mpr (Life.down_sqsubset a), fun x hx => ?_⟩
+  refine ⟨(chainC_lt _ _).mpr (Nat.lt_succ_self _), fun x hx => ?_⟩
   have h1 : OrderDual.ofDual x < OrderDual.ofDual a + 1 := ((chainC_lt _ _).mp hx)
   show OrderDual.ofDual x ≤ OrderDual.ofDual a
   omega
@@ -240,58 +238,6 @@ theorem LSet.le_meet_iff (s : LSet) (a : Life) : a ≤ s.meet ↔ ∀ x, s.mem x
 /-- `⊓ᾱ ⊏ x` is `y ⊏ x` at some member. -/
 theorem LSet.meet_lt_iff (s : LSet) (x : Life) : s.meet < x ↔ ∃ y, s.mem y ∧ y < x :=
   ⟨fun h => ⟨_, s.meet_mem, h⟩, fun ⟨y, hy, h⟩ => lt_of_le_of_lt (s.meet_least y hy) h⟩
-
-/-! ### Strata in the tree order -/
-
-variable {Loc Val : Type}
-
-/-- `ψ ∈ Cell_α` in the tree order: every lifetime of a borrow cell is strictly above `α`. -/
-def CellU.InStratumT (C : Cactus) (α : Life) : CellU Loc Val → Prop
-  | .own _ => True
-  | .imm i => ∀ x, i.ls.mem x → C.lt α x
-  | .mut m => C.lt α m.β
-
-/-- `ρ ∈ Res_α` in the tree order. -/
-def ResU.InStratumT (C : Cactus) (α : Life) (ρ : ResU Loc Val) : Prop :=
-  ∀ l ψ, ρ.get l = some ψ → CellU.InStratumT C α ψ
-
-theorem CellU.InStratumT.toChain {C : Cactus} (hC : C.InChain) {α : Life} {ψ : CellU Loc Val}
-    (h : CellU.InStratumT C α ψ) : ψ.InStratum α := by
-  cases ψ with
-  | own _ => trivial
-  | imm i => exact (h _ i.ls.meet_mem).sub hC
-  | «mut» m => exact Cactus.lt.sub hC h
-
-/-- The tree stratum is inside the printed one, when the order sits inside the chain. -/
-theorem ResU.InStratumT.toChain {C : Cactus} (hC : C.InChain) {α : Life} {ρ : ResU Loc Val}
-    (h : ResU.InStratumT C α ρ) : ρ.InStratum α :=
-  fun l ψ e => CellU.InStratumT.toChain hC (h l ψ e)
-
-theorem CellU.inStratumT_chainC (α : Life) (ψ : CellU Loc Val) :
-    CellU.InStratumT Cactus.chainC α ψ ↔ ψ.InStratum α := by
-  cases ψ with
-  | own _ => exact ⟨fun _ => trivial, fun _ => trivial⟩
-  | imm i =>
-      show (∀ x, i.ls.mem x → Cactus.chainC.lt α x) ↔ α < i.ls.meet
-      simp only [Cactus.chainC_lt]
-      exact ⟨fun h => h _ i.ls.meet_mem, fun h x hx => lt_of_lt_of_le h (i.ls.meet_least x hx)⟩
-  | «mut» m => exact Cactus.chainC_lt _ _
-
-/-- At the printed chain the tree stratum is the printed one. -/
-theorem ResU.inStratumT_chainC (α : Life) (ρ : ResU Loc Val) :
-    ResU.InStratumT Cactus.chainC α ρ ↔ ρ.InStratum α :=
-  ⟨fun h l ψ e => (CellU.inStratumT_chainC α ψ).mp (h l ψ e),
-    fun h l ψ e => (CellU.inStratumT_chainC α ψ).mpr (h l ψ e)⟩
-
-/-- `Res_{⊔ᾱ}` read without `⊔`: in the stratum of every member. -/
-def ResU.InStratumAll (C : Cactus) (s : LSet) (ρ : ResU Loc Val) : Prop :=
-  ∀ x, s.mem x → ResU.InStratumT C x ρ
-
-/-- At the printed chain, `⋂_{x ∈ ᾱ} Res_x = Res_{⊔ᾱ}`. -/
-theorem ResU.inStratumAll_chainC (s : LSet) (ρ : ResU Loc Val) :
-    ResU.InStratumAll Cactus.chainC s ρ ↔ ρ.InStratum s.join := by
-  simp only [ResU.InStratumAll, ResU.inStratumT_chainC]
-  exact ⟨fun h => h _ s.join_mem, fun h x hx => h.mono (s.join_greatest x hx)⟩
 
 end BoCa.Fig16.Tree
 

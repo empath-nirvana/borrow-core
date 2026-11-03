@@ -4,10 +4,13 @@ import Support.Model.Tree.Parent
 # The carrier stratified by the lifetime tree
 
 `[spec §62]`. Rows 5.1–5.8 and 5.58 with `⊐` read in a cactus `K` (`Tree/Order.lean`) instead
-of the printed chain (row 5.9). It is a generalisation beside the printed carrier: nothing in
-`Paper/` is edited, and at the chain it is the printed carrier (`chainEquiv`). Core's relation
-and typed worlds still read the printed carrier (`ResU`); they move to this one in the later
-PRs of #771.
+of the printed chain (row 5.9). At the chain it is the printed carrier (`chainEquiv`), and the
+printed statements of `[TR]` §6 are its chain instances (`Tree/Chain*.lean`). The tree files read
+only the printed definitions (`Paper/S5_Model/Definitions.lean`,
+`Paper/S6_2_NonStandardLemmas/Definitions.lean`) and the cell facts below them
+(`Support/Model/Cells.lean`, `Composition.lean`, `CellFacts.lean`, `Lifetimes.lean`,
+`Prelude.lean`), never a printed lemma. Core's relation and typed worlds still read the printed
+carrier (`ResU`); they move to this one in the later PRs of #771.
 
     Cell_S ≜ own(Val) + imm(Imm_S) + mut(Mut_S)
     Imm_S  ≜ {(ᾱ : ℘⁺_fin(Life), v, ρ : Res_ᾱ) ∣ ∀ x ∈ S, y ∈ ᾱ. x ⊏ y}
@@ -48,9 +51,12 @@ Each change is proved equal to the printed row at the chain: strata, `▶◀`, `
 named in the lemma's docstring:
 * **6.27, 6.52, 6.59: `↓α` (row 5.12, `α + 1`).** The proofs read of `↓α` that it lies strictly
   below `α` and that whatever lies strictly above it is at or above `α`. In a tree `α` need
-  not have a child, so that stratum is a hypothesis `hD : K.DownOf D α` (`Tree/Port/Down.lean`).
-  A covering child gives one (`WCactus.downOf_covers`), and at the chain the printed `↓α` does
-  (`WCactus.chain_downOf`).
+  not have a child, so that stratum is a hypothesis `hD : K.DownOf D {α}`
+  (`Tree/Port/Down.lean`). A covering child gives one (`WCactus.downOf_covers`), and at the
+  chain the printed `↓α` does (`WCactus.chain_downOf`). A stratum below an antichain exists only
+  when the antichain is one lifetime (`WCactus.downOf_anti_singleton`), so 6.27 is stated for a
+  `mut` cell at `{a}`; for a `mut` cell at two or more siblings it is open
+  (`Tree/Port/Six27.lean`).
 * **`@χ ⊑ @ψ` inside `Support/Model/Outlives.lean`'s walk strata** is read as what the proofs
   use of it, that every stratum holding `χ` holds `ψ` (`StratumLE`, `Tree/Port/Strata.lean`), and
   "a borrow shorter than `x`" as `CellUT.Shorter` (`Tree/Port/OutlivesB.lean`). Neither appears
@@ -61,20 +67,25 @@ Not ported: 6.40 (untranscribed on the printed carrier too) and 6.45, which read
 meet of a resource's lifetimes) as one lifetime; its stratum reading is
 `ResUT.CompS.inStratum`, `ResUT.CompS.inStratum_left` and `ResUT.CompS.inStratum_right`.
 
+**Records.** In `Tree/Port/` a record's tag `[as printed]` means the printed statement read at
+`CellUT K` through the readings above (a lifetime as the stratum `{α}`, a lifetime set as a
+`TSet`, a `mut` cell's lifetime as its antichain); a further change is `[variant: …]` or
+`[restricted: …]`, as in `Paper/INDEX.md`.
+
 **Files** (`Support/Model/Tree/`):
 * `Order`, `Parent`, `Graft`: the lifetime order as a cactus, built from a parent function, and
   grafting a subtree under a newer lifetime.
 * `Carrier`, `CarrierOps`, `CarrierRes`: this carrier, its cell operations, resources, walks,
   `✓`, `#`, and Lemmas 6.1–6.6 and 6.9.
 * `CarrierChain`, `CarrierChainOps`, `CarrierChainValid`: the chain instance and `chainEquiv`.
-* `CarrierGraft`, `CarrierGraftEx`, `CarrierSim`, `KSem`: worlds carried along a graft, a
-  handler's lend with a task resumed inside it, and semantic types read at the tree.
+* `ChainRes`, `ChainUpd`, `ChainRebSub`: the printed resource vocabulary, `↭`, `reb_α` and `⊟`
+  along `chainEquiv`; `Chain59` and `ChainSix*`: the printed statements of `[TR]` §6 as chain
+  instances.
+* `CarrierGraft`, `CarrierGraftEx`, `CarrierSim`: worlds carried along a graft, and a handler's
+  lend with a task resumed inside it.
 * `Port/`: the printed lemmas of `[TR]` §6 (6.1–6.59 but 6.40 and 6.45) and the `Support/Model`
-  results they rest on, over `CellUT K`, by the printed proofs. Most are generated from the
-  printed sources by `scripts/tree-port/regen.sh` (`--check` verifies them); the others are
-  written by hand and say so in their headers.
-* `Frame`, `Comparability`: 6.112 and 6.64 in the tree order, and the classification of every
-  place the printed model compares two lifetimes.
+  results they rest on, over `CellUT K`, by the printed proofs.
+* `Comparability`: the classification of every place the printed model compares two lifetimes.
 -/
 
 noncomputable section

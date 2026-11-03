@@ -3,7 +3,7 @@ import Support.Model.Tree.Port.Six25to33
 /-!
 # `Support/Model/Surgery.lean`'s cell-level support, over the tree-stratified carrier
 
-`Support/Model/Surgery.lean` lines 41–156, translated and then edited by hand, not generated.
+`[spec §62]`. `Support/Model/Surgery.lean`'s cell-level support, read at `CellUT K`.
 -/
 
 noncomputable section

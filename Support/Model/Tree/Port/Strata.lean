@@ -3,8 +3,8 @@ import Support.Model.Tree.Port.Six16to24
 /-!
 # The walks' strata, over the tree-stratified carrier
 
-`Support/Model/Outlives.lean`'s strata of cells, compositions and walks, translated and then
-edited by hand, not generated.
+`[spec §62]`. `Support/Model/Outlives.lean`'s strata of cells, compositions and walks, read at
+`CellUT K`.
 -/
 
 noncomputable section

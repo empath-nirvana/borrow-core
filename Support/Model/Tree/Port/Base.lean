@@ -3,7 +3,7 @@ import Support.Model.Tree.CarrierGraftEx
 /-!
 # The printed resource vocabulary at the tree-stratified carrier
 
-The names the printed proofs of `[TR]` §6 use (`ResU.Comp`, `ExW`, `AgW`, `ρ∣ι`, `ℓ ↦ ψ`, the
+`[spec §62]`. The names the printed proofs of `[TR]` §6 use (`ResU.Comp`, `ExW`, `AgW`, `ρ∣ι`, `ℓ ↦ ψ`, the
 index sets) read at `CellUT K`, so that the files under `Tree/Port/` carry the printed proofs
 over with their text. Each is the generic row of `Tree/CarrierRes.lean` at `CellUT K`; nothing
 here compares lifetimes.

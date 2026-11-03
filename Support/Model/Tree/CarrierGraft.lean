@@ -24,7 +24,7 @@ the carrier (`Tree/CarrierGraftEx.lean`): `graftWorld_valid_before`, `graftWorld
 tree after it), and `graftCell_admitted`: after the graft, a `mut` cell at `α = 1` whose
 witness holds a borrow at `β = 2` is a cell of `Cell_{α}` and its world is valid, while before
 the graft its witness is in no stratum of `α` (`graftCell_refused_before`). This is
-`graftEx_carrier_refuses`'s cell, admitted with no lifetime renamed.
+`graftEx_printed_refuses`'s cell, admitted with no lifetime renamed.
 -/
 
 noncomputable section

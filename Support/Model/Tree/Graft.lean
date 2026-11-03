@@ -22,9 +22,9 @@ task can then hold the borrows the resumer passes it at `t`.
   inside `β`: `graftEx_lt`, and `β` is still not inside `α` (`graftEx_not_le`).
 * That graft puts a lifetime inside one opened after it. The order no longer sits inside the
   printed chain (`graftEx_not_inChain`), and the printed carrier, whose strata follow the
-  chain, refuses a cell the tree admits: a view at `β` is in `α`'s tree stratum and not in the
-  printed one (`graftEx_carrier_refuses`). The tree-stratified carrier admits it with no
-  lifetime renamed (`Tree/CarrierGraftEx.lean`).
+  chain, refuses a cell the tree admits: a view at `β` is not in `α`'s printed stratum
+  (`graftEx_printed_refuses`), though `α` lies inside `β`. The tree-stratified carrier admits it
+  with no lifetime renamed (`Tree/CarrierGraftEx.lean`, `graftCell_admitted`).
 * The other route, renaming the task's lifetimes on graft to lifetimes opened after `t`, keeps
   every parent opened before its children (`renameEx`). It is not taken.
 
@@ -130,26 +130,17 @@ theorem graftP_not_inAlloc : ¬ graftP.InAlloc := fun h => by
 
 variable {Loc Val : Type}
 
-/-- **The carrier refuses what the grafted tree admits**: a view at `β = 2` is in `α`'s tree
-stratum, and not in `α`'s carrier stratum. -/
-theorem graftEx_carrier_refuses (l : Loc) (v : Val) :
-    ResU.InStratumT (Cactus.ofParent graftP) (OrderDual.toDual 1)
-        (ResU.single l (CellU.immOf (LSet.singleton (OrderDual.toDual 2)) v
-          (PMap.empty : ResU Loc Val) (fun _ _ e => by simp at e))) ∧
-      ¬ ResU.InStratum (OrderDual.toDual 1)
+/-- **The printed carrier refuses what the grafted tree admits**: a view at `β = 2` is not in
+`α = 1`'s printed stratum, though `α` lies inside `β` after the graft (`graftEx_lt`). -/
+theorem graftEx_printed_refuses (l : Loc) (v : Val) :
+    ¬ ResU.InStratum (OrderDual.toDual 1)
         (ResU.single l (CellU.immOf (LSet.singleton (OrderDual.toDual 2)) v
           (PMap.empty : ResU Loc Val) (fun _ _ e => by simp at e))) := by
-  constructor
-  · intro m ψ e
-    obtain ⟨-, rfl⟩ := ResU.single_get_eq_some e
-    intro x hx
-    cases hx
-    exact graftEx_lt
-  · intro h
-    have := h l _ (ResU.single_get_self _ _)
-    have h' : OrderDual.ofDual (OrderDual.toDual 2 : Life) < OrderDual.ofDual (OrderDual.toDual 1) :=
-      this
-    simp at h'
+  intro h
+  have := h l _ (ResU.single_get_self _ _)
+  have h' : OrderDual.ofDual (OrderDual.toDual 2 : Life) < OrderDual.ofDual (OrderDual.toDual 1) :=
+    this
+  simp at h'
 
 /-- **Renamed on graft**: the task's `α` re-opened as `3`, a child of `β = 2`. Parents are
 opened before their children again. -/

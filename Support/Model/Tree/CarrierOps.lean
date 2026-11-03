@@ -3,7 +3,7 @@ import Support.Model.Tree.Carrier
 /-!
 # `▶◀`, `●`, `⋈` and `○` on the tree-stratified carrier
 
-Rows 5.13–5.16 over `CellUT K`, and the cell-level laws the printed proofs of Lemmas 6.2 and 6.3
+`[spec §62]`. Rows 5.13–5.16 over `CellUT K`, and the cell-level laws the printed proofs of Lemmas 6.2 and 6.3
 rest on (`Support/Model/Composition.lean`, `Support/Model/Algebra.lean`), each by the printed
 proof.
 

@@ -3,7 +3,7 @@ import Support.Model.Tree.Port.ReborrowLowering
 /-!
 # `⊟` (`[TR]` Definition 6.3, row 5.66) at the tree-stratified carrier
 
-`Paper/S6_2_NonStandardLemmas/Definitions.lean`'s `ResU.SubClause`, `SubClauseL`, `Sub`, `SubL`
+`[spec §62]`. `Paper/S6_2_NonStandardLemmas/Definitions.lean`'s `ResU.SubClause`, `SubClauseL`, `Sub`, `SubL`
 and `SubKeep`, read at `CellUT K`, with `Support/Model/Cells.lean`'s lifetime-set difference
 (`LSet.Diff`, `LSet.DiffEmpty`) read on `TSet`. Nothing here compares lifetimes: `ᾱ ∖ β̄` is a
 set difference, and a nonempty one is a `TSet`.

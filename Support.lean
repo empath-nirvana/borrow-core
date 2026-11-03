@@ -49,10 +49,12 @@ import Support.Model.Tree.CarrierGraftEx
 import Support.Model.Tree.CarrierOps
 import Support.Model.Tree.CarrierRes
 import Support.Model.Tree.CarrierSim
+import Support.Model.Tree.Chain59
+import Support.Model.Tree.ChainRebSub
+import Support.Model.Tree.ChainRes
+import Support.Model.Tree.ChainUpd
 import Support.Model.Tree.Comparability
-import Support.Model.Tree.Frame
 import Support.Model.Tree.Graft
-import Support.Model.Tree.KSem
 import Support.Model.Tree.Order
 import Support.Model.Tree.Parent
 import Support.Model.Tree.Port.AgBeneath

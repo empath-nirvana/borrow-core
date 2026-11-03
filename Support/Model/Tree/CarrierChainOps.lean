@@ -3,7 +3,7 @@ import Support.Model.Tree.CarrierChain
 /-!
 # At the chain, the tree carrier's operations are the printed ones
 
-Along `chainEquiv` (`ΦU`, `Tree/CarrierChain.lean`): the tags, values, witnesses and strata are
+`[spec §62]`. Along `chainEquiv` (`ΦU`, `Tree/CarrierChain.lean`): the tags, values, witnesses and strata are
 the printed ones (`ΦU_kind`, `ΦU_erase`, `ΦU_wit`, `ΦU_inStratum_iff`), and `▶◀`, `●`, `⋈`, `○`
 hold of tree cells exactly when they hold of their images (`chain_compatS_iff`,
 `chain_compS_iff`, `chain_compatR_iff`, `chain_compR_iff`). Clause 3 of `○` restated
@@ -142,13 +142,6 @@ theorem chain_compatS_iff {ψ₁ ψ₂ : CellUT Loc Val chain} :
     ΦU_wit]
   exact ⟨fun ⟨a, b, c, d⟩ => ⟨a, b, c, ΦU_map_injective d⟩, fun ⟨a, b, c, d⟩ => ⟨a, b, c, d ▸ rfl⟩⟩
 
-theorem chain_compatR_iff {ψ₁ ψ₂ : CellUT Loc Val chain} :
-    CellU.CompatR (ΦU ψ₁) (ΦU ψ₂) ↔ CellUT.CompatR ψ₁ ψ₂ := by
-  rw [CellU.compatR_iff, CellUT.compatR_iff, ΦU_kind, ΦU_kind, ΦU_erase, ΦU_erase, ΦU_wit,
-    ΦU_wit]
-  exact ⟨fun ⟨a, b⟩ => ⟨a, fun k₁ k₂ => ΦU_map_injective (b k₁ k₂)⟩,
-    fun ⟨a, b⟩ => ⟨a, fun k₁ k₂ => b k₁ k₂ ▸ rfl⟩⟩
-
 /-! ### `●` -/
 
 theorem chain_compS_of {ψ₁ ψ₂ ψ : CellUT Loc Val chain} (h : CellUT.CompS ψ₁ ψ₂ ψ) :
@@ -221,6 +214,20 @@ theorem chain_compR_of {ψ₁ ψ₂ ψ : CellUT Loc Val chain} (h : CellUT.CompR
       rw [ΦU_immOf, ΦU_mutOf]; exact CellU.CompR.immMut _ _ _ _ _ _ _ _
   | mutImm s v ρ h b hb P hP =>
       rw [ΦU_immOf, ΦU_mutOf]; exact CellU.CompR.mutImm _ _ _ _ _ _ _ _
+
+/-- **At the chain, `⋈` is the printed `⋈`.** -/
+theorem chain_compatR_iff {ψ₁ ψ₂ : CellUT Loc Val chain} :
+    CellU.CompatR (ΦU ψ₁) (ΦU ψ₂) ↔ CellUT.CompatR ψ₁ ψ₂ := by
+  constructor
+  · rintro ⟨ψ, h⟩
+    refine CellUT.compatR_iff.mpr ⟨?_, fun k₁ k₂ => ?_⟩
+    · have := (CellU.CompR.erase h).1
+      rwa [ΦU_erase, ΦU_erase] at this
+    · have := CellU.CompR.wit h (by rwa [ΦU_kind]) (by rwa [ΦU_kind])
+      rw [ΦU_wit, ΦU_wit] at this
+      exact ΦU_map_injective this
+  · rintro ⟨ψ, h⟩
+    exact ⟨_, chain_compR_of h⟩
 
 /-- **At the chain, `○` is the printed `○`.** -/
 theorem chain_compR_iff {ψ₁ ψ₂ ψ : CellUT Loc Val chain} :

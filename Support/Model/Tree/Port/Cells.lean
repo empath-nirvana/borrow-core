@@ -3,7 +3,7 @@ import Support.Model.Tree.Port.Split
 /-!
 # Cell facts, `↭`, and Definitions 6.1–6.2 at the tree-stratified carrier
 
-`Support/Model/Cells.lean`, `Support/Model/CellFacts.lean`, row 5.27 (`↭`) and `[TR]`
+`[spec §62]`. `Support/Model/Cells.lean`, `Support/Model/CellFacts.lean`, row 5.27 (`↭`) and `[TR]`
 Definitions 6.1–6.2 read at `CellUT K`. The `mut` cell's lifetime is a set `β̄` (clause 3
 restated, `Tree/CarrierOps.lean`), so every place the printed text writes a `mut` cell's `β`
 it writes `β̄` and the antichain proof; `↭`'s `mut` clause fixes `β̄` and `P̂` as the printed

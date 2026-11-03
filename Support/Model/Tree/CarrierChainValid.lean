@@ -3,7 +3,7 @@ import Support.Model.Tree.CarrierChainOps
 /-!
 # At the WCactus.chain, `✓` and `#` are the printed ones
 
-`chainEquiv` (`Tree/CarrierChain.lean`) identifies the cells of the tree-stratified carrier at
+`[spec §62]`. `chainEquiv` (`Tree/CarrierChain.lean`) identifies the cells of the tree-stratified carrier at
 `WCactus.chain` with the printed cells, keeping tags, values and witnesses, `▶◀`, `●`, `⋈` and
 `○` (`Tree/CarrierChainOps.lean`). The walks, `⦇−⦈`, `✓` and `#` are built from those alone, so
 they agree along it:

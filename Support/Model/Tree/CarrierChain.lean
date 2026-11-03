@@ -1,9 +1,11 @@
 import Support.Model.Tree.CarrierRes
+import Support.Model.Cells
+import Support.Model.Composition
 
 /-!
 # At the chain, the tree-stratified carrier is the printed one
 
-`WCactus.chain` is the printed order (row 5.9) with the printed measure (row 5.58). At it:
+`[spec §62]`. `WCactus.chain` is the printed order (row 5.9) with the printed measure (row 5.58). At it:
 
 * finite lifetime sets are the printed `LSet`s (`TSet.toLSet`, `LSet.toTSet`, inverse);
 * `Above S T` is `⊔S ⊏ ⊓T` (`chain_above_iff`), so the tree stratum of `S` is the printed

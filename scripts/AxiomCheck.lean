@@ -804,7 +804,6 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.ResUT.Valid.graft
 #print axioms BoCa.Fig16.Tree.WitRel.ResUT.Valid.sim
 #print axioms BoCa.Fig16.Tree.graftCell_admitted
-#print axioms BoCa.Fig16.Tree.reread
 #print axioms BoCa.Fig16.Tree.WCactus.chain_downOf
 #print axioms BoCa.Fig16.Tree.ResUT.six27
 #print axioms BoCa.Fig16.Tree.ResUT.six38
@@ -813,5 +812,11 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.ResUT.six52
 #print axioms BoCa.Fig16.Tree.ResUT.six59
 #print axioms BoCa.Fig16.Tree.cousins_no_common_stratum
-#print axioms BoCa.Fig16.Tree.fresh_frameT
-#print axioms BoCa.Fig16.LogRel.Tree.wp_I_frameT
+#print axioms BoCa.Fig16.Tree.chain_upd_iff
+#print axioms BoCa.Fig16.Tree.chain_updV_iff
+#print axioms BoCa.Fig16.Tree.chain_reb_iff
+#print axioms BoCa.Fig16.Tree.chain_sub_iff
+#print axioms BoCa.Fig16.Tree.chain_subL_iff
+#print axioms BoCa.Fig16.Tree.chain_subKeep_iff
+#print axioms BoCa.Fig16.Tree.chain_six59
+#print axioms BoCa.Fig16.Tree.WCactus.downOf_anti_singleton

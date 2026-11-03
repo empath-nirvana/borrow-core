@@ -3,8 +3,7 @@ import Support.Model.Tree.Port.Six48
 /-!
 # Singleton and empty-resource facts for the surgery lemmas, over the tree-stratified carrier
 
-Translated from `Support/Model/Reborrow.lean` and `Support/Model/Surgery.lean` and edited by
-hand, not generated. The facts about `ℓ ↦ mut(…)` singletons, empty composites and agreement off
+`[spec §62]`. From `Support/Model/Reborrow.lean` and `Support/Model/Surgery.lean`. The facts about `ℓ ↦ mut(…)` singletons, empty composites and agreement off
 a location that Lemmas 6.16–6.24 and the surgery lemmas use, over `CellUT K`.
 -/
 

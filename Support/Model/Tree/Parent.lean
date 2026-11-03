@@ -3,7 +3,7 @@ import Support.Model.Tree.Order
 /-!
 # A cactus from a parent function
 
-Every lifetime other than `⊤` has a parent; following parents always reaches `⊤` (`rank`
+`[spec §62]`. Every lifetime other than `⊤` has a parent; following parents always reaches `⊤` (`rank`
 decreases). The order is "is an ancestor of, or equal" (`ParentFn.Anc`), and it is a tree
 (`Cactus.ofParent`).
 

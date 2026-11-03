@@ -3,9 +3,8 @@ import Support.Model.Tree.Port.SurgeryA
 /-!
 # `[TR]` Lemmas 6.16–6.24 over the tree-stratified carrier
 
-`Paper/S6_2_NonStandardLemmas/Lemmas.lean`'s Lemmas 6.16–6.24, translated and then edited by
-hand, not generated. Each record below is the printed one; the Lean names are under
-`BoCa.Fig16.Tree`.
+`[spec §62]`. `Paper/S6_2_NonStandardLemmas/Lemmas.lean`'s Lemmas 6.16–6.24, by the printed
+proofs.
 -/
 
 noncomputable section
@@ -20,7 +19,7 @@ variable {Loc Val : Type} {K : WCactus}
 
 **Printed proof, transcribed.** `ρ ● ⦇ρ′⦈` is defined iff `ρ` and `⦇ρ′⦈` have disjoint own-or-mut cells and `imm` cells that agree up to lifetimes.  Unravelling `⦇−⦈`, the cells of `ρ′` are a subset of those of `⦇ρ′⦈`, so the same condition holds of `ρ` and `ρ′`.
 
-**Lean.** `BoCa.Fig16.ResUT.CompatS.of_flat`, alias `TR.lemma_6_16`, tag `[as printed]`.
+**Lean.** `BoCa.Fig16.Tree.ResUT.CompatS.of_flat`, tag `[as printed]`.
 -/
 /-- `[TR]` Lemma 6.16 (p. 8).  `[as printed]` (G4) -/
 theorem ResUT.CompatS.of_flat {ρ ρ' f : ResUT Loc Val K} (hf : ResUT.Flat ρ' f)
@@ -41,7 +40,7 @@ variable {Loc Val : Type} {K : WCactus}
 
 **Printed proof, transcribed.** By definition.
 
-**Lean.** `BoCa.Fig16.ResUT.compatS_single_mut`, alias `TR.lemma_6_42`, tag `[as printed]`.
+**Lean.** `BoCa.Fig16.Tree.ResUT.compatS_single_mut`, tag `[as printed]`.
 -/
 /-- `[TR]` Lemma 6.42 (p. 15).  `[as printed]` -/
 theorem ResUT.compatS_single_mut {l : Loc} {b : TSet} [Fact (K.Anti b)] {v : Val}
@@ -62,7 +61,7 @@ variable {Loc Val : Type} {K : WCactus}
 
 **Printed proof, transcribed.** Let `ρ_o = ℓ ↦ own(v)` and `ρ_m = ℓ ↦ mut(α, v, ρ_v, P̂)`.  By Lemma 6.9 it is enough that `ρ ● ρ_v ● ρ_o` is defined.  `✓(ρ ● ρ_m)` makes `⦇ρ ● ρ_m⦈ = ex(ρ)_● ● (ρ_m ● ex(ρ_v)_●) ● (ag(ρ) ○ ag(ρ_v))` defined; ignoring `ex(ρ)_●` and `ag(ρ)`, `ρ_m ● ⦇ρ_v⦈` is defined, so `ℓ ∉ dom⦇ρ_v⦈`, so `ρ_o ● ⦇ρ_v⦈` is defined, so `ρ_o ● ρ_v` is defined by Lemma 6.16.  Definedness of `ag(ρ) ○ ag(ρ_v)` makes `ρ` and `ρ_v` agree on `imm` cells up to lifetimes, hence `ρ` and `ρ_o ● ρ_v` (`ρ_o` has no `imm` cell); definedness of `ex(ρ)_● ● (ρ_m ● ex(ρ_v)_●)` makes `ρ` and `ρ_m ● ρ_v` have disjoint own-or-mut cells, hence `ρ` and `ρ_o ● ρ_v` (`ρ_o` and `ρ_m` have the same own-or-mut cells).  Together, `ρ` and `ρ_o ● ρ_v` are composable.
 
-**Lean.** `BoCa.Fig16.ResUT.compatS_of_hash_mut`, alias `TR.lemma_6_17`, tag `[as printed]`.
+**Lean.** `BoCa.Fig16.Tree.ResUT.compatS_of_hash_mut`, tag `[as printed]`.
 -/
 /-- `[TR]` Lemma 6.17 (p. 8).  `[as printed]` (G4) -/
 theorem ResUT.compatS_of_hash_mut {ρ ρv w : ResUT Loc Val K} {l : Loc} {α : TSet} [Fact (K.Anti α)] {v : Val}
@@ -94,7 +93,7 @@ end BoCa.Fig16.Tree
 `= (ρ₁∣own ● ρ₂∣own) ● (ρ₁∣mut ● ρ₂∣mut) ● (⨀_{mut(_,_,ρ′,_)∈ρ₁} ex(ρ′)_●) ● (⨀_{mut(_,_,ρ′,_)∈ρ₂} ex(ρ′)_●)`
 `= (ρ₁∣own ● ρ₁∣mut ● ⨀_{…∈ρ₁} ex(ρ′)_●) ● (ρ₂∣own ● ρ₂∣mut ● ⨀_{…∈ρ₂} ex(ρ′)_●) = ex(ρ₁)_● ● ex(ρ₂)_●`.
 
-**Lean.** `BoCa.Fig16.ExS.split`, alias `TR.lemma_6_18`, tag `[as printed]` — declared in `Paper/S6_1_StandardLemmas/Lemmas.lean`.
+**Lean.** `BoCa.Fig16.Tree.ExST.split`, tag `[as printed]` — declared in `Paper/S6_1_StandardLemmas/Lemmas.lean`.
 -/
 
 namespace BoCa.Fig16.Tree
@@ -107,9 +106,9 @@ variable {Loc Val : Type} {K : WCactus}
 
 **Printed proof, transcribed.** By induction on `ρ`, mutual with the statement that `ag(ρ)` and `ag(ρ) ○ ag(ρ)` are Kleene-equal.
 
-**Lean.** `BoCa.Fig16.ResUT.flatR_idem`, alias `TR.lemma_6_19`, tag `[as printed]`.
+**Lean.** `BoCa.Fig16.Tree.ResUT.flatR_idem`, tag `[as printed]`.
 
-**Note.** The `FlatR` hypothesis is unused; `Fig16.ResUT.flatR_single_own` inhabits it.
+**Note.** The `FlatR` hypothesis is unused; `Tree.ResUT.flatR_single_own` inhabits it.
 -/
 /-- `[TR]` Lemma 6.19 (p. 9).  `[as printed]` -/
 theorem ResUT.flatR_idem {ρ σ : ResUT Loc Val K} (_ : ResUT.FlatR ρ σ) :
@@ -124,7 +123,7 @@ end BoCa.Fig16.Tree
 
 **Printed proof, transcribed.** `ρ₁ ▸◂ ρ₂` makes the `mut` cells disjoint and the `imm` cells agree up to lifetimes.  With `ρ₁₂ = ρ₁ ● ρ₂`, `ag(ρ₁₂) = ρ₁₂∣imm ○ ◯_{mut(_,_,ρ′,_)∈ρ₁₂} ag(ρ′) ○ ◯_{imm(_,_,ρ′)∈ρ₁₂} ⦇ρ′⦈_○ = (ρ₁∣imm ○ ρ₂∣imm) ○ (◯_{mut∈ρ₁} ag(ρ′) ○ ◯_{mut∈ρ₂} ag(ρ′)) ○ ρ_ag`.  The big composite `ρ_ag` has one component per `imm` cell of `ρ₁₂`, and those are the union up to lifetimes of the `imm` cells of `ρ₁` and of `ρ₂`, so by inclusion–exclusion `ρ_ag = ◯_{ρ₁∖ρ₂} ○ ◯_{ρ₂∖ρ₁} ○ ◯_{ρ₁∩ρ₂}`; by Lemma 6.19 the shared block equals itself composed with itself, so `ρ_ag = ◯_{imm∈ρ₁} ⦇ρ′⦈_○ ○ ◯_{imm∈ρ₂} ⦇ρ′⦈_○`.  Regrouping, `ag(ρ₁ ● ρ₂) = (ρ₁∣imm ○ ◯_{mut∈ρ₁} ag(ρ′) ○ ◯_{imm∈ρ₁} ⦇ρ′⦈_○) ○ (the same for ρ₂) = ag(ρ₁) ○ ag(ρ₂)`.
 
-**Lean.** `BoCa.Fig16.AgW.split`, alias `TR.lemma_6_20`, tag `[as printed]` — declared in `Paper/S6_1_StandardLemmas/Lemmas.lean`.
+**Lean.** `BoCa.Fig16.Tree.AgWT.split`, tag `[as printed]` — declared in `Paper/S6_1_StandardLemmas/Lemmas.lean`.
 -/
 
 namespace BoCa.Fig16.Tree
@@ -137,7 +136,7 @@ variable {Loc Val : Type} {K : WCactus}
 
 **Printed proof, transcribed.** By definition.
 
-**Lean.** `BoCa.Fig16.ResUT.compatS_single_own`, alias `TR.lemma_6_41`, tag `[as printed]`.
+**Lean.** `BoCa.Fig16.Tree.ResUT.compatS_single_own`, tag `[as printed]`.
 -/
 /-- `[TR]` Lemma 6.41 (p. 15).  `[as printed]` -/
 theorem ResUT.compatS_single_own {l : Loc} {v : Val} {ρ : ResUT Loc Val K}
@@ -156,7 +155,7 @@ variable {Loc Val : Type} {K : WCactus}
 
 **Printed proof, transcribed.** The hypothesis makes `ρ ● ρ_v ● (ℓ ↦ own(v))` defined, which implies `ℓ ∉ dom(ρ)`, which implies `ρ ▸◂ ℓ ↦ mut(α, v, ρ_v, P̂)`.
 
-**Lean.** `BoCa.Fig16.ResUT.six21`, alias `TR.lemma_6_21`, tag `[as printed]`.
+**Lean.** `BoCa.Fig16.Tree.ResUT.six21`, tag `[as printed]`.
 -/
 /-- `[TR]` Lemma 6.21 (p. 10).  `[as printed]` -/
 theorem ResUT.six21 {l : Loc} {b : TSet} [Fact (K.Anti b)] {v : Val} {ρ ρv W : ResUT Loc Val K}
@@ -185,7 +184,7 @@ variable {Loc Val : Type} {K : WCactus}
 
 **Printed proof, transcribed.** Let `ρ_o = ℓ ↦ own(v)`, `ρ_m = ℓ ↦ mut(α, v, ρ_v, P̂)`.  The hypothesis gives `✓(ρ ● ρ_m)`, i.e. `ρ_hyp ≔ ex(ρ)_● ● ex(ρ_v)_● ● ρ_m ● (ag(ρ) ○ ag(ρ_v))` is defined.  `ρ ▸◂ ρ_v ● ρ_o` is Lemma 6.17, so it remains to show `✓(ρ ● ρ_v ● ρ_o)`, i.e. that `ρ_goal ≔ ex(ρ ● ρ_v)_● ● ρ_o ● ag(ρ ● ρ_v)` is defined.  By Lemma 6.17 `ρ ● ρ_v` is defined, so by Lemmas 6.18 and 6.20 `ρ_goal` is defined iff `(ex(ρ)_● ● ex(ρ_v)_●) ● ρ_o ● (ag(ρ) ○ ag(ρ_v))` is.  Since `ρ_o` contains a single `own` cell, that composite is defined iff the same composite with `ρ_m` for `ρ_o` is, which is `ρ_hyp`.
 
-**Lean.** `BoCa.Fig16.ResUT.six22`, alias `TR.lemma_6_22`, tag `[as printed]`.
+**Lean.** `BoCa.Fig16.Tree.ResUT.six22`, tag `[as printed]`.
 -/
 /-- `[TR]` Lemma 6.22 (p. 10).  `[as printed]` -/
 theorem ResUT.six22 {l : Loc} {b : TSet} [Fact (K.Anti b)] {v : Val} {ρ ρv W : ResUT Loc Val K}
@@ -246,7 +245,7 @@ variable {Loc Val : Type} {K : WCactus}
 
 **Printed proof, transcribed.** Analogous to Lemma 6.22.  `ρ ▸◂ ρ_m` is Lemma 6.21, so it remains to show that `ρ_goal ≔ ex(ρ)_● ● ex(ρ_v)_● ● ρ_m ● (ag(ρ) ○ ag(ρ_v))` is defined given `ρ_hyp ≔ ex(ρ ● ρ_v)_● ● ρ_o ● ag(ρ ● ρ_v)`.  The assumption makes `ρ ● ρ_v` defined, so by Lemmas 6.18 and 6.20 `ρ_hyp`'s definedness is that of `ex(ρ)_● ● ex(ρ_v)_● ● ρ_o ● (ag(ρ) ○ ag(ρ_v))`; since `ρ_o` contains a single `own` cell, replacing it by `ρ_m` preserves definedness, which is `ρ_goal`.
 
-**Lean.** `BoCa.Fig16.ResUT.six23`, alias `TR.lemma_6_23`, tag `[as printed]`.
+**Lean.** `BoCa.Fig16.Tree.ResUT.six23`, tag `[as printed]`.
 -/
 /-- `[TR]` Lemma 6.23 (p. 10).  `[as printed]` -/
 theorem ResUT.six23 {l : Loc} {b : TSet} [Fact (K.Anti b)] {v : Val} {ρ ρv W : ResUT Loc Val K}
@@ -313,7 +312,7 @@ variable {Loc Val : Type} {K : WCactus}
 
 **Printed proof, transcribed.** Combine Lemmas 6.22 and 6.23.
 
-**Lean.** `BoCa.Fig16.ResUT.six24`, alias `TR.lemma_6_24`, tag `[as printed]`.
+**Lean.** `BoCa.Fig16.Tree.ResUT.six24`, tag `[as printed]`.
 -/
 /-- `[TR]` Lemma 6.24 (p. 10).  `[as printed]` -/
 theorem ResUT.six24 {l : Loc} {b : TSet} [Fact (K.Anti b)] {v : Val} {ρ ρv W : ResUT Loc Val K}

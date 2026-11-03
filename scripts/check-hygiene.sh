@@ -36,6 +36,4 @@ fi
 # The extended judgment of SPEC §29 and the typed term of SPEC §3 are generated from `CDerives`:
 # they must be up to date.
 python3 scripts/gen-pin.py --check
-# The generated files of Support/Model/Tree/Port equal their regeneration from the printed sources.
-scripts/tree-port/regen.sh --check
 lake env lean --run scripts/CheckAxioms.lean

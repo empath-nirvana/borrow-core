@@ -3,7 +3,7 @@ import Support.Model.Tree.Port.Strata
 /-!
 # `↓α` read as a stratum below `α`, over the tree-stratified carrier
 
-Written by hand, not generated. `↓α` (row 5.12) is read as the printed proofs read it: a
+`[spec §62]`. `↓α` (row 5.12) is read as the printed proofs read it: a
 stratum `D` strictly below every member of `α` such that a lifetime strictly above `D` is at or
 above every member (`WCactus.DownOf`); a covering child is one (`WCactus.downOf_covers`). With it,
 the walk and composition strata of `Support/Model/Outlives.lean` that read `↓α`, over `CellUT K`.
@@ -19,6 +19,18 @@ variable {Loc Val : Type} {K : WCactus}
 every member of `α`. -/
 def WCactus.DownOf (K : WCactus) (D A : TSet) : Prop :=
   K.Above D A ∧ ∀ y, (∀ x ∈ D.set, K.lt x y) → ∀ a ∈ A.set, K.le a y
+
+/-- **A stratum below an antichain pins it to one lifetime.** Every member lies strictly above
+`D`'s members, and the lifetimes above any one form a chain (`Cactus.up_chain`), so two members
+are comparable; an antichain has no two comparable members. So `hD : K.DownOf D α` at a `mut`
+cell's antichain `α` holds only when `α` is a single lifetime. -/
+theorem WCactus.downOf_anti_singleton {K : WCactus} {D α : TSet} (hA : K.Anti α)
+    (hD : K.DownOf D α) : ∀ a ∈ α.set, ∀ b ∈ α.set, a = b := by
+  intro a ha b hb
+  obtain ⟨x, hx⟩ := D.ne
+  rcases K.up_chain (hD.1 x hx a ha).le (hD.1 x hx b hb).le with h | h
+  · by_contra hne; exact hA a ha b hb ⟨h, hne⟩
+  · by_contra hne; exact hA b hb a ha ⟨h, fun e => hne e.symm⟩
 
 /-- A covering child of `a` is `↓a` (`Cactus.Covers`, row 5.12 in a tree). -/
 theorem WCactus.downOf_covers {K : WCactus} {c a : Life} (h : K.Covers c a) :

@@ -3,7 +3,7 @@ import Support.Model.Tree.CarrierOps
 /-!
 # Resources on the tree-stratified carrier: `◐`, `⨀`, the walks, `✓`, `#`
 
-Rows 5.17–5.23, 5.26, 5.55, 5.56 written once over a cell type `X` with a tag and a witness
+`[spec §62]`. Rows 5.17–5.23, 5.26, 5.55, 5.56 written once over a cell type `X` with a tag and a witness
 (the printed rows are over `CellU` only), then read at `CellUT K`. The definitions are the
 printed ones with `CellU` replaced by `X`; none of them compares lifetimes. Lemmas 6.1–6.6 and
 6.9, by their printed proofs (`Paper/S6_1_StandardLemmas/Lemmas.lean`,

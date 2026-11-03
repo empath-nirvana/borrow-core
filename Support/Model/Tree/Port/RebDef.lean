@@ -3,7 +3,7 @@ import Support.Model.Tree.Port.Six27
 /-!
 # `reb_α` (row 5.28) and `↺_α` (row 5.47) at the tree-stratified carrier
 
-`Paper/S5_Model/Definitions.lean`'s `ResU.RebAt`, `ResU.Reb` and `BoLo.reborrow`, read at
+`[spec §62]`. `Paper/S5_Model/Definitions.lean`'s `ResU.RebAt`, `ResU.Reb` and `BoLo.reborrow`, read at
 `CellUT K`. The places that change, each a reading of the tree carrier already named in
 `Tree/Carrier.lean`:
 

@@ -13,7 +13,7 @@ siblings under `⊤`. `K₁ = WCactus.ofParent graftP`: after the handler resume
   stratum of `α` (they are siblings), so no `mut` cell at `α` stores it.
 * `graftCell_admitted`: in `K₁` the `mut` cell at `α` whose witness holds the borrow at `β` is a
   cell (`CellUT.mutOf` at `{α}`), and the world holding it beside the handler's own view of the
-  same borrow is valid. This is the cell `graftEx_carrier_refuses` exhibits: refused by the
+  same borrow is valid. This is the cell `graftEx_printed_refuses` exhibits: refused by the
   printed carrier, stratified by the chain, and admitted by the carrier stratified by the tree.
 -/
 

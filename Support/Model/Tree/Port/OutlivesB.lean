@@ -3,7 +3,7 @@ import Support.Model.Tree.Port.ClosingSentence
 /-!
 # `Support/Model/Outlives.lean`'s step for `[TR]` 6.52, over the tree-stratified carrier
 
-`Support/Model/Outlives.lean` lines 257–414 and 625–690, translated and then edited by hand. The printed
+`[spec §62]`. From `Support/Model/Outlives.lean`, read at `CellUT K`. The printed
 step is 6.52's *"there are no borrows, mutable or immutable, at any lifetime shorter than `α`,
 so there cannot be any borrow that contains `ρ(ℓ)`"*. The chain reads "a borrow at a lifetime
 shorter than `x`" as `@φ ⊏ x`. In the tree a cell carries a set of lifetimes, and a cell whose

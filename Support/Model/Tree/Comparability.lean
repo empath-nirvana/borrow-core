@@ -1,17 +1,16 @@
-import Support.Model.Tree.Frame
-import Support.Model.Tree.Parent
+import Support.Model.Tree.Carrier
 
 /-!
 # Where the printed model compares two lifetimes, read in a tree
 
 `[spec §62]`. Row 5.9 orders `Life` as a single chain (`ℕᵒᵈ`). The tree-stratified carrier
-(`Tree/Carrier.lean`) reads `⊐` in a cactus instead. A scan of the elaborated terms
-(`Tree/Scan.lean`, run in `Tree/ChainUses.lean`, in the #770 spike `experiments/DtorUnwind` on
-branch `tree-life`: it reads that experiment's typed worlds, so it is not in the library) lists
-every declaration in the closure of the printed lemmas #770 asks about, of `TW`'s and `TWNC`'s
-invariants and of the relation's resource clauses, whose term reads `Life` as a single chain.
-They fall into five classes. This file gives each its Lean evidence: a tree statement proved,
-or a tree configuration where the chain's fact fails.
+(`Tree/Carrier.lean`) reads `⊐` in a cactus instead. A scan of the elaborated terms (the #770
+spike's `Tree/ChainUses.lean`, recorded in `docs/new-core/evidence.md`; it reads that
+experiment's typed worlds, so it is not in the library) lists every declaration in the closure
+of the printed lemmas #770 asks about, of `TW`'s and `TWNC`'s invariants and of the relation's
+resource clauses, whose term reads `Life` as a single chain. They fall into five classes. This
+file gives each its Lean evidence: a tree statement proved, or a tree configuration where the
+chain's fact fails.
 
 **1. The carrier: strata and the cell operations.** `CellU.CompR.mutMut` and the declarations
 that mention it (`○` clause 3, `mut(α ⊓ β, v, ρ, P̂ ∧ Q̂)`, row 5.16; `SPropS.conj*`,
@@ -27,8 +26,8 @@ composite as a `⊓`); `Life.meet_*`.
     `mut(β̄₁) ○ mut(β̄₂) = mut(min(β̄₁ ∪ β̄₂))` (`Tree/CarrierOps.lean`). At the chain every
     antichain is a singleton and the clause is the printed one (`chain_compR_iff`).
   * `Res_{⊔ᾱ}` fails in a tree (`Cactus.star_sup_lt_fails`) and is restated as `⋂_{x ∈ ᾱ} Res_x`
-    (`ResU.InStratumAll` here, `Res_ᾱ` in the tree carrier; equal to the printed at the chain,
-    `ResU.inStratumAll_chainC`, `ΦU_inStratum_iff`); `⊓ᾱ` is read universally
+    (`Res_ᾱ` in the tree carrier, equal to the printed at the chain, `ΦU_inStratum_iff`);
+    `⊓ᾱ` is read universally
     (`LSet.le_meet_iff`, `LSet.meet_lt_iff`).
 
 **2. A fresh lifetime: `↓α` (row 5.12).** `Life.down_sqsubset`, `Life.not_lt_of_down_lt`,
@@ -45,12 +44,12 @@ is that nothing lies strictly between it and `α`; every covering child has that
 (6.150 H11, `↓(γᵢ ⊓ γ_b)`), `wp_I_frame` (6.64 H4, through 6.112). Needs a common lower bound,
 which in a tree exists only for comparable lifetimes (`Cactus.comparable_of_lower`,
 `Cactus.star_no_lower`). Holds for lifetimes on one branch: `exists_below_two` (6.150 H11 and
-6.65 H4), `fresh_frameT` (6.112), `wp_I_frameT` (6.64, the whole printed proof;
-`Tree/Frame.lean`).
+6.65 H4). 6.112 and 6.64 are entailments and a `wp` rule, read over the relation; they move to
+the tree order with it (#771, tree lifetimes in the semantics).
 
 **4. A lifetime below the whole world.** `TW.reb`'s `StratumLe W β`, `TW.rebDeep`'s
 `W.InStratum β`, `TW.rebEnd`'s `W′.InStratum β`, and `frameLife_reb_like` (`le_of_not_gt` on
-`StratumLe`). A world holding two siblings has no lifetime strictly below all of it
+`StratumLe`). A world holding two siblings lies in no stratum
 (`no_stratum_below_siblings`). These premises need every lifetime of the world to be
 comparable. The spike's `TWN`/`TWNC` replace them by premises read at one record
 (`RebRecLe`, `RebEndRec`, `RebCellLe`), which compare only lifetimes of one lineage; they move
@@ -161,31 +160,39 @@ theorem star_none_below_two :
 
 variable {Loc Val : Type}
 
-/-- **A world holding cells at two incomparable lifetimes has no lifetime strictly below all of
-it**: `StratumLe W β` and `W.InStratum β`, read in a tree, are false. -/
-theorem no_stratum_below_siblings (K : Cactus) {W : ResU Loc Val} {l₁ l₂ : Loc}
-    {ψ₁ ψ₂ : CellU Loc Val} {x y : Life} (e₁ : W.get l₁ = some ψ₁) (e₂ : W.get l₂ = some ψ₂)
-    (hxy : ¬ K.le x y ∧ ¬ K.le y x)
-    (hψ₁ : ∀ β, CellU.InStratumT K β ψ₁ → K.lt β x)
-    (hψ₂ : ∀ β, CellU.InStratumT K β ψ₂ → K.lt β y) :
-    ¬ ∃ β, ResU.InStratumT K β W := by
-  rintro ⟨β, hβ⟩
-  rcases Cactus.comparable_of_lower K (hψ₁ β (hβ l₁ ψ₁ e₁)).le (hψ₂ β (hβ l₂ ψ₂ e₂)).le with
+/-- **A world holding cells at two incomparable lifetimes lies in no stratum**: `StratumLe W β`
+and `W.InStratum β`, read in a tree, are false. A member `z` of the stratum would lie strictly
+below both lifetimes, which makes them comparable. -/
+theorem no_stratum_below_siblings {K : WCactus} {W : ResUT Loc Val K} {l₁ l₂ : Loc}
+    {ψ₁ ψ₂ : CellUT Loc Val K} {s₁ s₂ : TSet} {x y : Life} (e₁ : W.get l₁ = some ψ₁)
+    (e₂ : W.get l₂ = some ψ₂) (h₁ : ψ₁.lsOf = some s₁) (h₂ : ψ₂.lsOf = some s₂)
+    (hx : x ∈ s₁.set) (hy : y ∈ s₂.set) (hxy : ¬ K.le x y ∧ ¬ K.le y x) :
+    ¬ ∃ S, W.InStratum S := by
+  rintro ⟨S, hS⟩
+  obtain ⟨z, hz⟩ := S.ne
+  have below : ∀ {l : Loc} {ψ : CellUT Loc Val K} {s : TSet} {w : Life}, W.get l = some ψ →
+      ψ.lsOf = some s → w ∈ s.set → K.lt z w := by
+    intro l ψ s w e h hw
+    have hψ := hS l ψ e
+    cases ψ with
+    | own _ => cases h
+    | imm i => cases h; exact hψ z hz w hw
+    | «mut» m => cases h; exact hψ z hz w hw
+  rcases Cactus.comparable_of_lower K.toCactus (below e₁ h₁ hx).le (below e₂ h₂ hy).le with
     h | h
   · exact hxy.1 h
   · exact hxy.2 h
 
-/-- The instance: two `imm` views at `1` and `2` in `star`. -/
-theorem star_world_no_stratum {W : ResU Loc Val} {l₁ l₂ : Loc} {v₁ v₂ : Val}
-    {σ₁ σ₂ : ResU Loc Val} {h₁ : σ₁.InStratum (LSet.singleton (OrderDual.toDual 1)).join}
-    {h₂ : σ₂.InStratum (LSet.singleton (OrderDual.toDual 2)).join}
-    (e₁ : W.get l₁ = some (CellU.immOf (LSet.singleton (OrderDual.toDual 1)) v₁ σ₁ h₁))
-    (e₂ : W.get l₂ = some (CellU.immOf (LSet.singleton (OrderDual.toDual 2)) v₂ σ₂ h₂)) :
-    ¬ ∃ β, ResU.InStratumT Cactus.star β W :=
-  no_stratum_below_siblings Cactus.star e₁ e₂
-    ⟨Cactus.star_not_le (m := 1) (n := 2) (by decide) (by decide),
-      Cactus.star_not_le (m := 2) (n := 1) (by decide) (by decide)⟩
-    (fun _ h => h _ rfl) (fun _ h => h _ rfl)
+/-- The instance: two `imm` views at the siblings `1` and `2` of the cousins cactus. -/
+theorem cousins_world_no_stratum {W : ResUT Loc Val (WCactus.ofParent cousinsP)} {l₁ l₂ : Loc}
+    {v₁ v₂ : Val} {σ₁ σ₂ : ResUT Loc Val (WCactus.ofParent cousinsP)}
+    {h₁ : σ₁.InStratum (TSet.single (OrderDual.toDual 1))}
+    {h₂ : σ₂.InStratum (TSet.single (OrderDual.toDual 2))}
+    (e₁ : W.get l₁ = some (CellUT.immOf (TSet.single (OrderDual.toDual 1)) v₁ σ₁ h₁))
+    (e₂ : W.get l₂ = some (CellUT.immOf (TSet.single (OrderDual.toDual 2)) v₂ σ₂ h₂)) :
+    ¬ ∃ S, W.InStratum S :=
+  no_stratum_below_siblings e₁ e₂ rfl rfl (Finset.mem_singleton_self _)
+    (Finset.mem_singleton_self _) ⟨cousins_not_le_1_2, cousins_not_le_2_1⟩
 
 end BoCa.Fig16.Tree
 

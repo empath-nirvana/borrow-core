@@ -3,12 +3,11 @@ import Support.Model.Tree.CarrierGraft
 /-!
 # `✓` carried along a relation between carriers
 
-`ResUT.Valid.graft` carries `✓` along the map `trU`. The walks it carries read only a cell's
+`[spec §62]`. `ResUT.Valid.graft` carries `✓` along the map `trU`. The walks it carries read only a cell's
 tag, its value and its witness (`CellUT.compatS_iff`, `CellUT.compatR_iff`), and the witness
 only up to equality. So `✓` is carried along any relation `W` between witnesses in `K` and in
 `K'` that is single-valued and relates witnesses cell by cell, with tags and values kept
-(`WitRel`). The re-reading of `Tree/KSem.lean`, which replaces the stored predicate of each
-`mut` cell, is such a relation.
+(`WitRel`).
 
 The proofs are `Tree/CarrierGraft.lean`'s, with `TSim`/`RSim` read through `W`.
 -/
