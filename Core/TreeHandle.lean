@@ -268,10 +268,11 @@ the share's, list's and records' re-readings, at every resume list `extFT` admit
 every answer the entry accepts, at every `k′ < k`, it is the scheduler's relation (`cerwpT` at
 the empty table) under every frame condition whose frames avoid `M`. `M` holds the lent and escrow
 locations of every record the branch has owned at a resume and at the stop: a state the clause
-keeps beside the resumed run must hold nothing there, and be valid. -/
+keeps beside the resumed run must hold nothing there, and be valid. At an unrestricted operation
+`κ` owns nothing, so it may be dropped. -/
 def KapSchedT (Qout : TPostV) (M : BoCa.Loc → Prop) (en : OpEntT) (k : Nat) (w : TWd)
     (ls : List (SRecT w.K)) (O : List (FrameRecT w.K)) (v κ : Val) : TRes w.K → Prop := fun ρ =>
-  ∀ (w' : TWd) (ρ' : TRes w'.K) (lsR ls' : List (SRecT w'.K)) (O' : List (FrameRecT w'.K)),
+  (en.q = .unr → ρ = PMap.empty) ∧ ∀ (w' : TWd) (ρ' : TRes w'.K) (lsR ls' : List (SRecT w'.K)) (O' : List (FrameRecT w'.K)),
     w.Ext w' ρ → RRw (w := w) (w' := w') ρ ρ' → SRecsRR w'.Θ ls lsR → extFT lsR ls' ρ' →
     RecsRR w'.Θ O O' →
     ∀ k', k' < k → ∀ (a : Val) (σ σ' : TRes w'.K), en.PBv v k' w' ls' a σ →
@@ -286,8 +287,9 @@ theorem KapSchedT.kripke {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {
     (h : KapSchedT (ℍ := ℍ) Qout M en k w ls O v κ ρ) (hE : w.Ext w₁ ρ)
     (hr : RRw (w := w) (w' := w₁) ρ ρ₁) (hl : SRecsRR w₁.Θ ls ls₁) (hO : RecsRR w₁.Θ O O₁) :
     KapSchedT (ℍ := ℍ) Qout M en k w₁ ls₁ O₁ v κ ρ₁ :=
-  fun w' ρ' lsR ls' O' hE' hr' hl' hx hO' => h w' ρ' lsR ls' O' (hE.trans hr hE')
-    (RRw.trans hE'.1 hr hr') (hl.trans hE'.1 hl') hx (hO.trans hE'.1 hO')
+  ⟨fun hu => by obtain rfl := h.1 hu; exact RR.of_empty hr,
+    fun w' ρ' lsR ls' O' hE' hr' hl' hx hO' => h.2 w' ρ' lsR ls' O' (hE.trans hr hE')
+      (RRw.trans hE'.1 hr hr') (hl.trans hE'.1 hl') hx (hO.trans hE'.1 hO')⟩
 
 /-- **A mask history at the table**: every location of `M` is the lent or an escrow location of a
 record some stop at `T`'s operations of name `n₀` left a branch owning (the entry's `oc`). -/
@@ -409,7 +411,8 @@ theorem cerwpT_schedHandle {T : OpTabT} {n₀ : UInt32} {qs hr hs : Val} {Qin Qo
     cases hqq : en.q with
     | unr =>
         refine cerwpTE_iff.mp (hcl M _ k w' ls' O' v ⟨kappa (hndVal m qs hr hs) K₁, by
-          unfold kappa; exact .lam⟩ ρ' hF'm hMh hoc hF'M hcov' hls' hO' ⟨ρa, ρk, hcak, hA, ?_⟩)
+          unfold kappa; exact .lam⟩ ρ' hF'm hMh hoc hF'M hcov' hls' hO'
+          ⟨ρa, ρk, hcak, hA, ⟨hsh.1, ?_⟩⟩)
         intro w'' ρk' lsR ls'' O'' hE hr' hl hx hO k' hk' a σ σ' hB hcσ F'' hF''m hF''M
         exact cerwpTE_iff.mpr (twp_kappa_resume hPd _ K₁ a
           (hres w'' ρk' lsR ls'' O'' hE hr' hl hx hO k' hk' a σ σ' hB hcσ F'' hF''m hF''M))
@@ -424,7 +427,7 @@ theorem cerwpT_schedHandle {T : OpTabT} {n₀ : UInt32} {qs hr hs : Val} {Qin Qo
         have hxd : x.del l = ρk := (eq_del_of_compS_single (ResUT.CompS.comm hx₂)).symm
         refine cerwpTE_iff.mp (hcl M _ k w' ls' O' v ⟨kappaC _ l (hndVal m qs hr hs) K₁,
           isVal_kappaC _ l _ K₁⟩ ρ₁ hF'm hMh hoc hF'M (covR_compS_own hc₁ hcov') hls' hO'
-          ⟨ρa, x, hx₁, hA, ?_⟩)
+          ⟨ρa, x, hx₁, hA, ⟨fun hu => (by rw [hqq] at hu; cases hu), ?_⟩⟩)
         intro w'' ρx' lsR ls'' O'' hE hr' hl hxF hO k' hk' a σ σ' hB hcσ F'' hF''m hF''M
         have hρx'l := RR.own_fwd hr' hxl
         have hrk : RRw (w := w') (w' := w'') ρk (ρx'.del l) := hxd ▸ RR.del hr' l

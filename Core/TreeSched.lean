@@ -102,7 +102,7 @@ theorem kapSchedT_resume_beside {Qout : TPostV} {M : BoCa.Loc → Prop} {en : Op
       (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val a)) ρ := by
   have hcovk : CovR (sem w.Θ) w.K ρk :=
     CovR.of_compS_left hcσ (CovR.of_compS_left hcρ hcov)
-  have h := cerwpTE_iff.mp (hκ w ρk ls ls O (TWd.Ext.refl _ _) (RR.refl hcovk)
+  have h := cerwpTE_iff.mp (hκ.2 w ρk ls ls O (TWd.Ext.refl _ _) (RR.refl hcovk)
     (SRecsRR.refl hls) (extFT_refl _ _) (RecsRR.refl hO) k' hk' a σ σ' hB hcσ (fdMask M)
     (fdMask_mono M) (fun _ _ h => h))
   refine twp_frame_w hR hap hcρ hcov ?_ h hR₂
