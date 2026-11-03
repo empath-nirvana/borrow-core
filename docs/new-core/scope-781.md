@@ -130,7 +130,7 @@ becomes `Core/TreeHeadlines.lean`, with the namespaces of §1.
 | Statement | Status |
 |---|---|
 | `TopAdequacyT` | proved (`topAdequacyT`, from `cerwpT_adequacy`); one branch at the top |
-| `MultiBranchAdequacyT` | **open**; `SchedOKT` not defined (a parameter only so the text elaborates; it becomes a definition, see §5) |
+| `MultiBranchAdequacyT` | proved (`multiBranchAdequacyT`, `Core/TreeSched.lean`); `SchedOKT` a definition (`Core/TreeHandle.lean`). Changed from the draft below: the task runs at the frame condition `⊤`, not `emptyFrameT` (the scheduler's state is in a resumed branch's frame; `hFy_emptyFrame`) |
 | `R1_StepKeepsFdEsc` | proved (`r1_stepKeepsFdEsc`, `stepKeepsFdEsc`) |
 | `R2_EndBlockedByHolder` | proved (`r2_endBlockedByHolder`, from `fdEsc_of_end_valid`) |
 | `R3_JoinEndNeedsFdEsc` | proved (`r3_joinEndNeedsFdEsc`, from `fdEsc_of_end_valid`; the converse direction is `fdEsc_at_join` + `immEnd_valid_of_fdEsc`) |
@@ -283,9 +283,9 @@ theorem do not run on, and a later PR would have to connect it to `hnd` or throw
 | Item | Reads | Size (estimate) | Risk |
 |---|---|---|---|
 | **R4: tree `ext_extF`**, with `LinDisj`/`DLinDisj`/`EscEx` | `ExtLT` (new, §4); tree versions of `LinDisj`, `DLinDisj`, `EscEx`, `desc_of_xex`, `tag_ge_nested`, `NCell.icp`, `inDom_imm_or_xex`, `xpath_unique`, over `LinPathT`, `DescT`, `LinLocT`, `FrameLifeT`, `TaggedT` (all exist); `escBeneathT` may serve for `EscEx` | chain: `ExtExtF` 408 + `LinDisj` 195 + part of `ExtF`; tree: 1.2k–2k lines | medium. At the tree, `ExtLT`'s lifetime clause leaves records on other branches unconstrained (they are incomparable with `b`). `tag_ge_nested`'s role must then come from `TaggedT` + `FrameLifeT` on one branch. Not checked. |
-| **`fdAt` monotone** (`TFrame.Mono (fdAt en v F O′)`) | `OpEntT.fd` monotone along re-reading (a table condition, to add as a premise callers discharge), and that a record list has a re-reading at every extension (from `RR.exists_retype` per escrow) | 150–300 lines | low. Needed when a resumed run is bound (`twp_bind`'s `hFm`), so by the multi-branch slice. |
+| **`fdAt` monotone** (`TFrame.Mono (fdAt en v F O′)`; done: `fdAt_mono`, the re-reading's existence a premise, `fdJoinT_fdMono`) | `OpEntT.fd` monotone along re-reading (a table condition, to add as a premise callers discharge), and that a record list has a re-reading at every extension (from `RR.exists_retype` per escrow) | 150–300 lines | low. Needed when a resumed run is bound (`twp_bind`'s `hFm`), so by the multi-branch slice. |
 | **Tree `extF_fold`/`extF_seal`** (with `FrzT.del_or`, `FrzT.of_del`, `not_frzT_single_own`, …) | `FrzT`, `InDomT` and the composition lemmas in `ExtFT` | 200–400 lines | low. Read only by the frame rules across stops (`erwp_M_frame`, `erwp_M_antiFrame` analogues), which are row 6. **Recommendation:** move them to row 6 unless the scheduler's specification reads `extFT` through a fold; the top-level scheduler holds no lend. |
-| **The multi-branch scheduler** (`MultiBranchAdequacyT`) | `[handle]` at `cerwpT` over the tree (no tree version exists: the spike's `[handle]` without `hdv` is `ewp_handle`/`erwp_handle`, over `ewp` and chain `erwp`, which `cerwpT` does not reuse); `κ` cells and cancel at the tree (`cerwp_kappaCell`, `cerwp_kappaC_resume/cancel` at chain); `SchedOKT`; `cactusT_move` at capture, `cactusT_extend` + `TWd.graft` (`Ops`) at a resume, `cactusT_spawn`/`cactusT_join`; `stepKeepsFdEsc` for every stored branch across each segment; `fdEsc_at_join` + `immEnd_valid_of_fdEsc` at a join; `contShareT_resume` at the resumer's list | 3k–5k lines | **high** |
+| **The multi-branch scheduler** (`MultiBranchAdequacyT`; done for a scheduler at the program's top: `cerwpT_schedHandle`, `multiBranchAdequacyT`) | `[handle]` at `cerwpT` over the tree (no tree version exists: the spike's `[handle]` without `hdv` is `ewp_handle`/`erwp_handle`, over `ewp` and chain `erwp`, which `cerwpT` does not reuse); `κ` cells and cancel at the tree (`cerwp_kappaCell`, `cerwp_kappaC_resume/cancel` at chain); `SchedOKT`; `cactusT_move` at capture, `cactusT_extend` + `TWd.graft` (`Ops`) at a resume, `cactusT_spawn`/`cactusT_join`; `stepKeepsFdEsc` for every stored branch across each segment; `fdEsc_at_join` + `immEnd_valid_of_fdEsc` at a join; `contShareT_resume` at the resumer's list | 3k–5k lines | **high** |
 
 **Missing from #781's open list: `[handle]` without `hdv` at the tree relation.** #771 row 4 says
 it lands here. It exists only over the chain relations. Porting it means re-proving
@@ -370,6 +370,8 @@ carrier sits beside the printed one. Unlike #777 (`chainEquiv`), there is no the
 | D8 | `escBeneathT` is a new derivation with its own case splits, not a port | — | Check it in review against `borrow_lang` CLAUDE.md §6: the splits are ours |
 | D9 | Store types as codes `KTy`, no substitution `δ`/`AdmWf` | Ruling of condition 16 | — |
 | D10 | `extF`/`extFT`, `contShareT`'s resume at any `extFT` list | In-house design (`SI/ExtF.lean`: "not a transcription") | — |
+| D11 | The scheduler's join condition in location form (`fdMask`, `recMask`, `fdJoinT`), carried by the clause's state, not branch points | Points are not kept along tree extension (spike `not_joinPtKeptT`); locations are (`fdMask_mono`) | — (not printed) |
+| D12 | `[handle]` at `cerwpT` for a scheduler at the program's top only: the tasks' operations are all its own, its clauses at the empty table; `KapSchedT` offers resumption, not cancellation | The headline needs no forwarding; the cancel steps are proved (`twp_kappa_cancel`, `twp_kappaC_cancel`) | forwarding of other names, cancel of a stored `κ` by the scheduler |
 
 Unspent printed hypotheses: 6.64's H24 and H6 (D6). Unused uniqueness results: none
 (`RecRR.func`, `RecsRR.func`, `RR.func`, `Flat.functional`, `CompR.functional` are used).

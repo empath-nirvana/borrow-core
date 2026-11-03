@@ -10483,14 +10483,34 @@ between branches, by spawn and by join (`cactusT_step`, `cactusT_extend`, `cactu
   exactly when no other branch holds part of the lend. R2 and R3 rest on `fdEsc_of_end_valid`;
   `config_end_refused` places both at the configuration of `cactusT_config`.
 
-No program is proved there yet.
+**Over several branches** (`Core/TreeHeap.lean`, `Core/TreeHandle.lean`, `Core/TreeSched.lean`):
+`[handle]` without `hdv` at `cerwpT` for a scheduler at the program's top (`cerwpT_schedHandle`,
+by induction on the index), with `κ`'s cell, resume and cancel at `twp` (`twp_kappaCell`,
+`twp_kappaC_resume`, `twp_kappa_cancel`, `twp_kappaC_cancel`) and allocation, release, load and
+store at `twp` (`twp_alloc`, `twp_free`, `twp_load`, `twp_store`). A scheduler meets `SchedOKT`:
+every operation of the tasks' table is its own, each continuation tag is its entry's qualifier, the
+entry's resumer guarantee follows from the join's (`fdJoinT`), and its clauses hold at the empty
+table, each `κ` read by `KapSchedT`: resumable beside a state the clause keeps when that state is
+valid and holds nothing at the branch's mask history (`fdMask`, `MaskHist`; `FdEsc` read at
+locations). **Multi-branch adequacy** (`multiBranchAdequacyT`): `hnd H e₀` is `OrDiverges` for
+every scheduler `H` meeting `SchedOKT` and every task `e₀` at its table, however many branches the
+scheduler stores and in whatever order it resumes them; derived through `cerwpT_adequacy`. The
+task runs at the frame condition `⊤`: the scheduler's state is in the resumed branch's frame. A
+stopped branch's clause knows its frame holds nothing of the branch's lends, those it opened
+during the segment included (`twp_bind_fd`, `noneAt_recMask_end`). One program is proved through
+the headline (`Core/TreeSchedProgs.lean`, `asyncProg_safe`): a scheduler that resumes a task beside
+a state of its own, its cells owned rather than borrowed.
 
 *Open*:
 - adequacy derived from invariant preservation, at the relation the typing rules use;
 - preservation at spawn and join;
 - the frame rules as instances of capture;
 - one relation with abortive stops and forwarding (the two relations `erwp`/`cerwp` merge);
-- adequacy over several branches at the tree world (a scheduler as a handler; #781 slice (d)), and `[handle]` without `hdv` at `cerwpT`.
+- the lend rules at `twp` over the tree (opening and ending a record), and multi-branch programs
+  with lends;
+- a scheduler that keeps state beside a branch that owned records at an earlier stop: `contShareT`
+  resumes at `fdAt en v F O′`, `F` the stop's own frame condition, so the conditions accumulate and
+  the state must hold nothing at every record mask the branch has had (`MaskHist`).
 
 ### Semantic types read at the tree
 

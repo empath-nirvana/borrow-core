@@ -129,3 +129,7 @@ import Core.TreeWpEff
 import Core.TreeCactus
 import Core.TreeStepKeep
 import Core.TreeHeadlines
+import Core.TreeHeap
+import Core.TreeHandle
+import Core.TreeSched
+import Core.TreeSchedProgs
