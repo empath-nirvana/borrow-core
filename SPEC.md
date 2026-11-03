@@ -10187,7 +10187,7 @@ in `P` and runs (`corpus/data-option-block.bc`); the reject is now a field under
 
 **Status: design, partly built.** This entry is the target of the series #771–#775 (and its later
 issues). Each part names the PR that lands it. Built: effectful destructors (#775), as a form
-derived from `[then]`. Nothing else here changes `CDerives` until those PRs land; until then the checker enforces the rules of §14, §19 (T1), §29 and §32 as stated there.
+derived from `[then]`, with destructors by type. Nothing else here changes `CDerives` until those PRs land; until then the checker enforces the rules of §14, §19 (T1), §29 and §32 as stated there.
 Evidence for each part comes from the #770 spikes and is cited by the name of the Lean result
 (`docs/new-core/evidence.md`).
 
@@ -10211,7 +10211,9 @@ For every closed, well-typed program `P`:
 > every configuration a run of `P` reaches is a value or steps; a value is reached only at the
 > empty memory; every `free` finds its cell.
 
-Divergence is allowed, and termination is not claimed. This is LinearActris's adequacy shape
+The theorem sees memory only: a host resource counts as closed only if its handle owns a cell
+and its type is linear with `close` its only eliminator. Divergence is allowed, and termination is
+not claimed. This is LinearActris's adequacy shape
 (Jacobs, Hinrichsen, Krebbers, POPL 2024). It is stated today as `OrDiverges`
 (`experiments/DtorUnwind`, stage 7). To be proved by `fundamentalC` over every typing rule and
 adequacy, at one step-indexed safety relation. The existing total relation keeps the termination
@@ -10269,90 +10271,147 @@ written by hand. `Core.Stdio` is not covered. *Open*: canonical images over the 
 
 ### Effectful destructors (#775)
 
-**Built** (`Core/LetDtor.lean` to `Core/LetDtorSuspend.lean`). An owned value may carry a destructor
-that performs operations. Every exit runs the live context's destructors in reverse order of
-binding: return, raise, cancel, and early close of a loop.
+**Built** (`Core/LetDtor.lean` to `Core/LetDtorLet.lean`). An owned value is dropped, on the
+unwind, by the destructor of its type, which may perform operations. What is proved for each exit
+of a `[let-dtor]` frame (`Core/LetDtorSafety.lean`):
+- **raise**: the frame step `[finalise]` (`letDE_finalise`), and the frame's run to
+  `drop_ctx; raise p` with the slots' values in place, the slot bound last first
+  (`letDE_raise_run`, `dropChain_some`); where each destructor's run returns, they run in that
+  order and the same raise goes on (`letDE_raise_reraise`, `dropChain_run`);
+- **cancel**: the frame step `[finalise-cancel]` (`letDE_finaliseCancel`), the run to
+  `cfin c drop_ctx` (`letDE_cancel_run`), and, where each destructor returns, the cancel going on
+  (`letDE_cancel_reraise`);
+- **return**: the frame is discarded and the continuation `N` runs with the slots' values, no
+  destructor run (`letDE_return_run`): `N` owns the slots and its derivation consumes each live
+  one. That it consumes a slot by its destructor is shown on examples;
+- **early close of a loop**: shown on examples (a step whose *close* is the state's destructor);
+- **reverse order**: within one frame only.
+
+That each destructor's run returns where it runs is the hypothesis of `dropChain_run`
+(`DropsReturn`), not derived: `hSDc` and `hSDd` are why it is expected, and `resourceSafety` gives
+that the whole run reaches a value.
+
+**Destructors by type** (`dropOf`). One destructor per type, from the type and the program's
+declaration `decl` at the opaque types: `⊗` and `⊕` componentwise (`tensorDropB`, `sumDropB`, the
+paper's `drop_{A⊗B}`, `drop_{A⊕B}`; inside `⊗` the second component first, our choice, as
+`drop_ctx`), `Opq k` the declared `decl k`, `U(C & D)` the second component (`closeDropB`, the
+paper's `drop_{↓N} = π₂`), and every other type its derived drop (§12, `HasDtor`). So two frames
+and a loop's *close* that drop the same type run the same destructor. `DropOk` is the condition
+under which `drop_T` is typed at `Σ_D` (`DropOk.derives`); every type with a derived drop meets it
+at every row (`DropOk.ofHasDtor`), and so does a stored `κ` (`dropOk_kappa`).
 
 **The rule.** `[let-dtor]` (`CDerives.effLetD`):
 
-    Γ = Γ₁ ⋈ Γ₂    Γ₁ ⊢ M : F_Σ A    x : A, Γ₂ ⊢ N : F_Σ B    Dtors_{Σ_D}(Γ₂) = ds
-    Σ_D ≤ Σ    ¬ Σ_D.Cancels (hSDc)    Div ∉ Σ_D (hSDd)    hfin    Σ.NZ    Σ.Uniq    Σ.UnrD → !Γ₂
-    ─────────────────────────────────────────────────────────────────────────────────────────
-    Γ ⊢ M then x. N unwind drop_ctx(ds) : F_Σ B
+    Γ = Γ₁ ⋈ Γ₂    Γ₁ ⊢ M : F_{Σ_M} A    x : A, Γ₂ ⊢ N : F_Σ B    Σ_M ≤ Σ    Σ_D ≤ Σ
+    each live slot T of Γ₂: T persistent or DropOk_{Σ_D}(T)    ¬ Σ_D.Cancels (hSDc)
+    Div ∉ Σ_D (hSDd)    hfin(Σ_M, Σ_D)    Σ.NZ    Σ.Uniq    Σ.UnrD → !Γ₂
+    ──────────────────────────────────────────────────────────────────────────────
+    Γ ⊢ M then x. N unwind drop_ctx(ctxDrops Γ₂) : F_Σ B
 
-`Dtors Δ Σ_D Γ₂ ds` gives each live slot of `Γ₂` that is not persistent a destructor
-`λx. b : T ⊸ F_{Σ_D} 1`, typed in every dead context (a closed function). `drop_ctx`
-(`dropCtxE`) applies them, the slot bound last first (`dropCtxE_some`), each bound by `[let]` at
-`Σ_D` with the slots not yet dropped live across it (`dropCtx_derives`). The term is `[then]`'s,
-`letDE ds N M = thenE N (drop_ctx ds) M`.
+`drop_ctx` (`dropCtxE`) applies each slot's destructor, the slot bound last first
+(`dropCtxE_some`), each bound by `[let]` at `Σ_D` with the slots not yet dropped live across it
+(`dropCtx_derives`). The term is `[then]`'s, `letDT decl Γ₂ N M = thenE N (drop_ctx) M`.
 
 `[let-dtor]` is a **derived form**: it is `[then]` (`CDerives.effThen`) at the finaliser
 `drop_ctx`, which is itself a derivation. No constructor is added to `CDerives`, so
 `fundamentalC`, `adequacyC` and `adequacyD` hold unchanged and cover it (`effLetD_sound`), and
 every induction over `CDerives` (`CDerivesAt`, `CDerivesP`, `Tied`, `PinDerives`, the totality
-results) already has its case, `[then]`'s. A constructor would add a compatibility lemma and a
-case to each of those inductions for a rule they already prove.
+results) already has its case, `[then]`'s.
 
-`[let]` (`CDerives.effLet`) keeps `hW`: its term has no unwind frame, so a raise in `M` would
-abandon `Γ₂`. A program `[let]` refuses for an owned slot live across an abortive point
-(`let_refuses_files`) is typed by `[let-dtor]`. A slot with a derived drop (§12, `HasDtor`) gets
-`dtorE` as its destructor at every row (`derivedDropB_derives`, `Dtors.ofHasDtor`).
+**`[let]` and `[let-dtor]`** (`Core/LetDtorLet.lean`). With no destructor to run, the runs agree up
+to administrative steps on every exit: the return exit of any frame steps to `M to x. N` itself
+(`letDE_return_eq_let`), and at all-`none` destructors a raise or a cancel reaches the same error
+under the same context in three steps (`letDE_none_raise`, `letDE_none_cancel`,
+`let_raise_shape`). At a cancelling row, `[let]`'s premises give `[let-dtor]` at the same `M` and
+`N`: `hW` makes `Γ₂` own-free, and an own-free type has a destructor once each host type in it has
+a declared one (`DropOk.ofOwnFree`, `effLet_as_effLetD`). `[let]` is **not** the instance of
+`[let-dtor]` at all-`none` destructors, for three reasons:
+1. at a row that does not cancel, `[let]` admits any `Γ₂`, a live `U(F 1)` included, and
+   `[let-dtor]` types `drop_ctx` even where no exit runs it; `U(F 1)` has no destructor
+   (`not_dropOk_thunkRet`);
+2. `[let-dtor]` carries `[then]`'s row conditions (`Σ.NZ`, `Σ.Uniq`, `hfin`, `!Γ₂` at `Σ.UnrD`
+   rather than `Σ.Unr`), which `[let]`'s frameless term does not need;
+3. the terms differ, and `CDerives` does not identify them up to administrative steps.
+A form with both as instances would ask the finaliser's premise only where `Σ` cancels and
+`[then]`'s row conditions only where there is a frame: a change to `then_compatC`, not made.
 
 **The premises, and why.**
-- `hSDc : ¬ Σ_D.Cancels`: a destructor does not fail. `drop_ctx` binds each destructor by `[let]`
-  at `Σ_D` with the slots not yet dropped live; a destructor that raised would abandon them, which
-  `[let]`'s `hW` refuses. A close that can fail is an operation that answers its error, which the
-  destructor ignores (`close_try`, `d_dFileTry`); a program that wants the error closes the value
-  itself on the normal path.
-- `hSDd : Div ∉ Σ_D`: a destructor terminates. It is `[then]`'s finaliser condition
-  (decision 69): a cancel run is a least fixed point and reaches the finaliser.
-  `CDerives.effLetDDiv` drops it when `Σ` has no capturable operation, so no cancel run reaches the
-  frame.
-- `hfin`: the cancel row of each capturable operation and cancellable wait of `Σ` records `Σ_D`
-  (`[then]`'s `hfin`, §27): a cancel there unwinds through the destructors, which perform `Σ_D`.
-  It holds at every row of errors and must-resume operations (`hfin_of_noRead`).
+- `hSDc : ¬ Σ_D.Cancels`: a destructor does not fail, as the paper's `delete` "releases without
+  fail". `drop_ctx` binds each destructor by `[let]` at `Σ_D` with the slots not yet dropped live;
+  a destructor that raised would abandon them, which `[let]`'s `hW` refuses.
+- `hSDd : Div ∉ Σ_D`: `[then]`'s premise `hSD`. `then_compatC` is a proof in the total relation,
+  which reads the finaliser's run as a terminating one (a cancel run is a least fixed point and
+  reaches the finaliser), and `Div` stays out of the destructor machinery.
+  `CDerives.effLetDDiv` drops it when `Σ_M` has no capturable operation, by `[then]`'s
+  `effThenDiv`.
+- `hfin`: `[then]`'s, at `M`'s row `Σ_M`: the cancel row of each capturable operation and
+  cancellable wait of `Σ_M` records `Σ_D` (§27): a cancel there unwinds through the destructors,
+  which perform `Σ_D`. It holds at every row of errors and must-resume operations
+  (`hfin_of_noRead`).
 - An error carries no resources: `[raise]`'s `hd : o.A.OwnFree`, unchanged.
 
-**Resource safety** (`resourceSafety`, `Core/LetDtorSafety.lean`). For every closed `CDerives`
-program at a persistent answer, every run from the empty memory, under every allocator, continues
-to a value at the empty memory (every allocated cell is freed), and every `free ℓ` it reaches
-finds `ℓ` allocated (none is freed twice). With `step1_alloc_iff`, each allocation is released
-exactly once. On a raise or cancel the frame runs `drop_ctx` before the error goes on
-(`letDE_finalise`, `letDE_finaliseCancel`). At a `Div` row under the runtime's handler,
-`rtSafety` gives the same without termination. The order of releases is stated per frame
-(`dropCtxE_some`) and checked by `eval` on the programs below; a program-wide statement that
-releases follow the reverse order of allocation is not made, since `CDerives` has exchange and a
-program may free in any order it writes.
+> *Open*, a choice for the user: **a destructor that can fail.** `hSDc` is the rule today.
+> (a) the error is ignored by the destructor (`d_dFileTry` is an example of this option, not a
+> rule); (b) destructors cannot fail, so a fallible close is handled inside the destructor by the
+> program, through the error machinery; (c) the rest of the context is unwound, then the error is
+> raised, which needs a policy for two errors.
 
-**Corollaries**, each a closed derivation under `resourceSafety`:
-- *Two files across a raise* (`Core/LetDtorFiles.lean`): `File = Ref I32` with the destructor
-  `free; close` at `{close}`; `fsRaise_safe`, `fsReturn_safe`; `f₂` then `f₁` on both exits
-  (`fsRaise_order`, `fsReturn_order`).
-- *Cancellation runs the destructors* (`Core/LetDtorCancel.lean`): the files held across
-  `await_1` by `[let-dtor]` under the immediate scheduler, whose cancel's raise unwinds through the
-  frame; the wait's cancel row records `{close}` (`hfin_await`); `cancelProg_safe`,
-  `cancel_order`.
-- *Early close of a loop through its state's destructor* (`Core/LetDtorLoop.lean`): a step whose
-  *close* is the state's destructor, at the residual `1` (`d_stepD`); a file as a loop's state
-  under `div_fuel`, `loopProg_safe` at every budget, `loop_close0`, `loop_close3`.
-- *A lend whose callback raises, the source closed by its destructor* (`Core/LetDtorLend.lean`):
-  `d_lendD` over `withbor1`/`withbor2`/`withbor3`; `mut`, `imm` and nested reborrow programs
-  (`lendMutRaise_safe`, `lendMutReturn_safe`, `lendImmRaise_safe`, `lendNested_safe`, and their
-  runs).
-- *Owned resources across a suspension* (`Core/LetDtorSuspend.lean`): a cancellable `κ` is a
-  resource whose destructor is its cancel component (`d_kDtor`, `dtors_kappa`); two files across a
-  suspension, `κ` resumed (`ySeqResume_safe`) or stored and dropped (`ySeqDrop_safe`), closing
-  `f₂` then `f₁` in both (`ySeqResume_order`, `ySeqDrop_order`).
+**`resourceSafety`** (`Core/LetDtorSafety.lean`) is `adequacyD` read over cells: for every closed
+`CDerives` program at a persistent answer, every run from the empty memory, under every allocator,
+continues to a value at the empty memory, and every `free ℓ` it reaches finds `ℓ` allocated. It
+covers every program `[let-dtor]` types because the rule is derived; it says nothing about
+destructors as such, which is what the per-exit theorems above are for. That each allocation is
+released exactly once follows informally (an allocation picks an unheld location,
+`step1_alloc_iff`, a release removes the one it frees, and the run starts and ends empty); no
+theorem counts releases. `rtSafety` is a different statement, at the row `[tickSig]` under the
+runtime's handler: progress and no double free, on terminating and diverging runs alike, without
+leak freedom.
 
-**What the checker needs** (the next PR, issue 7 of #771): where `[let]`'s `hW` fails, elaborate to
-`letDE`, with a destructor for every live slot of the continuation's context that is not
-persistent (a declared destructor, or `dtorE` where the type has a derived drop), a destructor row
-`Σ_D ≤ Σ` with no cancelling operation and no `Div`, and `hfin` at the cancel rows of `Σ`.
+**The file handle** (`Core/LetDtorFiles.lean`). `File = Tok`: a location owning a unit cell, no
+derived drop, not own-free, not persistent (`file_no_derived_drop`, `file_not_ownFree`), whose one
+Core eliminator is `burn`. The platform's `Fs` has `open : I32 ↠^lin File` and
+`close : File ↠^lin 1`, handled by `with_fs` (mint, burn); the program declares `close` as
+`File`'s destructor (`dropOf_file`), and the bodies contain no `burn`, so a `File` leaves them only
+through `close`. `resourceSafety` then gives that every handle's cell is freed, and `eval` that
+each file is closed once, `f₂` before `f₁`. What it does **not** give: Core keeps `burn` available
+to every program (§42's declared types use it), so a program whose declared destructor of `Tok`
+is `burn` types, is resource safe, and closes nothing. `close` is the only eliminator of a
+`File` only where `burn` is withheld from the program text; making it so in Core is not done.
 
-*Open*: relaxing `hSDc` and `hSDd` (a destructor that can fail, as an ignored error or a
-constraint, or that loops); the order of releases as a program-wide theorem (the paper's ordered
-judgment, `⊢ₒ`, is not transcribed); the step-indexed relation's destructors (`erwp_ubind*`)
-carry the same rule.
+**Programs**, each a closed derivation under `resourceSafety`; `*_safe` and `*_order`/`*_run` are
+programs, `d_stepD`, `d_lendD` and `d_kDtor` typing lemmas:
+- *Two files across a raise* (`Core/LetDtorFiles.lean`): the handle above, the second `open` and
+  the raise each under a `[let-dtor]` frame; `fsRaise_safe`, `fsReturn_safe`; `f₂` then `f₁` on
+  both exits (`fsRaise_order`, `fsReturn_order`).
+- *A cancel* (`Core/LetDtorCancel.lean`): the files held across `await_1` under the immediate
+  scheduler, whose cancel's raise unwinds through the frames; the wait's cancel row records
+  `{close}` (`hfin_await`); `cancelProg_safe`, `cancel_order`.
+- *A loop closed early* (`Core/LetDtorLoop.lean`): `d_stepD`, a step whose *close* is the state's
+  destructor at the residual `1`; a file as a loop's state under `div_fuel`, `loopProg_safe` at
+  every budget, `loop_close0`, `loop_close3`.
+- *A lend whose callback raises* (`Core/LetDtorLend.lean`): `d_lendD` over `withbor1`/`withbor2`/
+  `withbor3`, its error type `E = o.A` a parameter and the error raised again unchanged
+  (`raise_Γ(e)`); the source dropped by its type's destructor; `mut`, `imm` and nested programs at
+  `E = 1` (`lendMutRaise_safe`, `lendMutReturn_safe`, `lendImmRaise_safe`, `lendNested_safe`, and
+  their runs). The next step: `withborU`'s finaliser generalised to a destructor row `Σ_D`.
+- *Resources across a suspension* (`Core/LetDtorSuspend.lean`): `d_kDtor`; a cancellable `κ` has
+  its type's destructor, its cancel component (`dropOk_kappa`); two files across a suspension,
+  `κ` resumed (`ySeqResume_safe`) or stored and dropped (`ySeqDrop_safe`), closing `f₂` then `f₁`
+  in both (`ySeqResume_order`, `ySeqDrop_order`).
+
+**Not proved at the step index.** `[then]` with a finaliser that performs on the cancel path is
+proved in the total relation only (`then_compatC`); at the step-indexed relation it is unproved,
+the step-indexed relation PR's obligation (`erwp_ubind*`).
+
+**What the checker needs** (issue 7 of #771; the next PR is issue 4): where `[let]`'s `hW` fails,
+elaborate to `letDT`, with `decl` the program's declared destructors at its opaque types, a
+destructor row `Σ_D ≤ Σ` with no cancelling operation and no `Div`, and `hfin` at the cancel rows
+of `Σ_M`.
+
+*Open*: a destructor that can fail (above); relaxing `hSDd` (a destructor that loops); deriving
+`DropsReturn` from the relation; the order of releases as a program-wide theorem (the paper's
+ordered judgment, `⊢ₒ`, is not transcribed); `close` as the only eliminator of a host handle in
+Core.
 
 ### The safety relation
 
@@ -10873,10 +10932,11 @@ judgments and their inductions, the typed term by `scripts/gen-pin.py`, `Fronten
 `Frontend/Check/Consts.lean`, `Backend2/Convert.lean`, `Backend/Clos/Interp.lean`'s `drop`); and
 Backend2's `foldOwnG` arity (`Backend2/Convert.lean`). No change to `Paper/`, `Support/`, the
 relation or the machine.
-Entry 61 (§62): effectful destructors (#775) are implemented in `Core/LetDtor.lean` (`Dtors`,
-`dropCtxE`, `CDerives.effLetD`, `CDerives.effLetDDiv`, `Dtors.ofHasDtor`), `Core/LetDtorSafety.lean`
-(`resourceSafety`, `letDE_finalise`, `letDE_finaliseCancel`, `rtSafety`) and the corollaries in
-`Core/LetDtorFiles.lean`, `Core/LetDtorCancel.lean`, `Core/LetDtorLoop.lean`,
+Entry 61 (§62): effectful destructors (#775) are implemented in `Core/LetDtor.lean` (`dropOf`,
+`DropOk`, `ctxDrops`, `Dtors`, `dropCtxE`, `CDerives.effLetD`, `CDerives.effLetDDiv`),
+`Core/LetDtorSafety.lean` (the per-exit run theorems, `resourceSafety`, `letDE_finalise`,
+`letDE_finaliseCancel`, `rtSafety`), `Core/LetDtorLet.lean` (`[let]` against `[let-dtor]`) and the
+programs in `Core/LetDtorFiles.lean`, `Core/LetDtorCancel.lean`, `Core/LetDtorLoop.lean`,
 `Core/LetDtorLend.lean` and `Core/LetDtorSuspend.lean`. `[let-dtor]` is derived from `[then]`: no
 change to `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the checker, the backends or the
 corpus. The rest of §62 is design.
@@ -10886,12 +10946,14 @@ corpus. The rest of §62 is design.
 ## Changelog
 
 - **1.27** (2026-11-02) — §62 (#775): effectful destructors built. `[let-dtor]`
-  (`CDerives.effLetD`) is derived from `[then]` at the finaliser `drop_ctx`, with the premises
-  `hSDc` (destructors do not fail), `hSDd` (no `Div`) and `hfin`; `effLetDDiv` drops `hSDd` where
-  nothing is captured; derived drops are destructors at every row (`Dtors.ofHasDtor`).
-  `resourceSafety` for every closed program; the cancel, early loop close, raising lend and
-  suspension corollaries. No change to `CDerives`, the relation, the checker, the backends or the
-  corpus.
+  (`CDerives.effLetD`) is derived from `[then]` at the finaliser `drop_ctx`, with destructors by
+  type (`dropOf`, `DropOk`: `⊗`/`⊕` componentwise, declared at opaque types, `π₂` at `U(C & D)`,
+  derived drops elsewhere), `M` at `Σ_M ≤ Σ`, and the premises `hSDc`, `hSDd`, `hfin`;
+  `effLetDDiv` drops `hSDd` where nothing is captured. Per-exit run theorems of a frame
+  (`letDE_raise_run`, `letDE_cancel_run`, `letDE_return_run`, `dropChain_run`); `[let]` against
+  `[let-dtor]` (`Core/LetDtorLet.lean`); the file handle `File = Tok` with `open`/`close`; a lend
+  with its error type a parameter. A destructor that can fail is *Open*. No change to `CDerives`,
+  the relation, the checker, the backends or the corpus.
 - **1.26** (2026-11-02) — §62 (decision 72, #771–#775): the new Core, as a design not yet built.
   Lifetimes ordered as a tree, the tree-stratified carrier, canonical images, effectful
   destructors, a step-indexed safety relation with capture as its own operation and a cactus

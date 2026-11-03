@@ -16,9 +16,12 @@ The residual rule (§14, §15: *close* hands back `R`) is not deleted by this: a
 residual at `R = 1`, the close that hands nothing back. A loop that must return its state, or a
 lent capability, to its caller still needs `R`.
 
-The closed program: a file is the loop's state; `div_fuel` closes the loop after `k` turns:
+The closed program: a file (the handle of `Core/LetDtorFiles.lean`) is the loop's state;
+`div_fuel` closes the loop after `k` turns. `drop_File` is the destructor of `File`'s type,
+`dropOf fsDecl File = close` (`dropOf_file`): the step's *close*, the loop body's *close* branch
+and the frames of `Core/LetDtorFiles.lean` run the same destructor.
 
-    with_fs (f ← alloc 7; df ← div_fuel; df (λ_. tick () to n. case n
+    with_fs (f ← open 7; df ← div_fuel; df (λ_. tick () to n. case n
                  { next → iterate (λs. ⟨inr s, drop_File s⟩, f)
                  | close → drop_File f to u. inr u }, k))
 -/
@@ -52,8 +55,8 @@ theorem d_stepD {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S SD : Row} {
 
 /-! ### The loop over a file -/
 
-/-- The loop's row: `{tick, close}`. -/
-abbrev SL : Row := [tickSig, fcloseSig]
+/-- The loop's row: `{tick, close, open}`. -/
+abbrev SL : Row := [tickSig, fcloseSig, fopenSig]
 
 /-- The loop's answer: `I32 ⊕ 1`, a result or the residual `1`. -/
 abbrev Ans : VTy := .sum I32 .unit
@@ -61,7 +64,7 @@ abbrev Ans : VTy := .sum I32 .unit
 theorem SL_not_cancels : ¬ SL.Cancels := by
   rintro ⟨o, ho, hq⟩
   simp only [SL, List.mem_cons, List.not_mem_nil, or_false] at ho
-  rcases ho with rfl | rfl <;> exact hq rfl
+  rcases ho with rfl | rfl | rfl <;> exact hq rfl
 
 theorem SD_le_SL : RowLe SD SL := by
   intro n i o h
@@ -70,20 +73,21 @@ theorem SD_le_SL : RowLe SD SL := by
   subst hm
   exact ⟨fcloseSig, rfl, OpSig.LeF.refl _⟩
 
-/-- The step `λs. ⟨inr s, drop_File s⟩`: go on with the same state, or close it. -/
-def stepD : Val := .lam (withPair (.inj₂ (.var 2)) (.app (.val (.lam dFileB)) (.var 2)))
+/-- The step `λs. ⟨inr s, drop_File s⟩`, `drop_File = dropOf fsDecl File`: go on with the same
+state, or close it. -/
+def stepD : Val := .lam (withPair (.inj₂ (.var 2)) (.app (.val (.lam closeB)) (.var 2)))
 
 theorem d_stepFile {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ (.val stepD) (.val (iterStepTy SL File I32 .unit)) :=
   d_stepD hΓ (.effSub (RowLe.nil SL) (.ret (.sumI₂ (.var (.there (.there (.here hΓ.toP)))))))
-    d_dFile SD_le_SL
+    d_closeB SD_le_SL
 
 /-- The loop's body under its dead binder (`0`), the file at `1`:
 `tick () to n. case n { next → it ← iterate; p ← (stepD, f); it p | close → drop_File f to u. inr u }`. -/
 def loopBD : Expr :=
   .app (.val (.lam (.case (.var 0)
       (bindE (.val (.prim .iterate)) (bindE (.pair (.val stepD) (.var 4)) (.app (.var 1) (.var 0))))
-      (bindE (.app (.val (.lam dFileB)) (.var 3)) (.inj₂ (.var 0))))))
+      (bindE (.app (.val (.lam closeB)) (.var 3)) (.inj₂ (.var 0))))))
     tickE
 
 theorem d_loopBD {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
@@ -108,35 +112,34 @@ theorem d_loopBD {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     refine .effLet (A := .unit) (.right (.dead (.dead (.left (deadSplit hΓ)))))
       (fun h => absurd h SL_not_cancels)
       (fun h => absurd h (Row.not_unr_of_not_cancels SL_not_cancels))
-      (.effSub SD_le_SL (.app (split_kill _).toP (d_dFile _ (kill_dead _))
+      (.effSub SD_le_SL (.app (split_kill _).toP (d_closeB _ (kill_dead _))
         (.there (.there (.there (.here hΓ.toP)))))) ?_
     exact .effSub (RowLe.nil SL) (.ret (.sumI₂ (.var (.here (.drop rfl (.cons (.cons (.cons
       hΓ.toP))))))))
 
-theorem SD_noDiv : ∀ o ∈ SD, o.n ≠ divEff := by
+theorem SO_noDiv : ∀ o ∈ SO, o.n ≠ divEff := by
   intro o ho
-  simp only [SD, List.mem_singleton] at ho
-  subst ho
-  decide
+  simp only [SO, List.mem_cons, List.not_mem_nil, or_false] at ho
+  rcases ho with rfl | rfl <;> decide
 
-/-- `f ← alloc 7; t ← (λ_. loopBD, k); df ← div_fuel; df t`. -/
+/-- `f ← open 7; t ← (λ_. loopBD, k); df ← div_fuel; df t`. -/
 def fileLoop (k : UInt32) : Expr :=
-  bindE (.app (.val (.prim .alloc)) (.val (Val.i32 7)))
+  bindE (openE 7)
     (bindE (.pair (.val (.lam loopBD)) (.val (Val.i32 k)))
       (bindE (.val divFuelV) (.app (.var 0) (.var 1))))
 
 theorem d_fileLoop {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) (k : UInt32) :
-    CDerives Δ Γ (fileLoop k) (.comp (CTy.effOf SD Ans)) := by
-  refine .bind (A := File) (deadSplit hΓ)
-    (.ret (appW (.lit (.i32 7) (by cdead)) (.alloc (by cdead)))) ?_
+    CDerives Δ Γ (fileLoop k) (.comp (CTy.effOf SO Ans)) := by
+  refine .effLet (A := File) (deadSplit hΓ) (fun h => absurd h SO_not_cancels)
+    (fun h => absurd h SO_not_unr) (d_openE hΓ rfl 7) ?_
   refine .bind (A := .tensor (.thunk (.arr .unit (CTy.effOf SL Ans))) I32) (.left (deadSplit hΓ))
     (.ret (.tensorI (.left (deadSplit hΓ)) (.thunkV rfl (.lamDead (d_loopBD hΓ)))
       (.lit (.i32 k) (.cons hΓ.toP)))) ?_
   refine .bind (.right (.dead (deadSplit hΓ)))
-    (.ret (.bangE (.divFuel SD Ans SD_noDiv (.cons (.cons hΓ.toP))))) ?_
+    (.ret (.bangE (.divFuel SO Ans SO_noDiv (.cons (.cons hΓ.toP))))) ?_
   exact .app (.left (.right (.dead (deadSplit hΓ))))
-    (.force (C := .arr (.tensor (.thunk (.arr .unit (CTy.effOf (tickSig :: SD) Ans))) I32)
-      (CTy.effOf SD Ans)) (.here (.cons (.cons hΓ.toP))))
+    (.force (C := .arr (.tensor (.thunk (.arr .unit (CTy.effOf (tickSig :: SO) Ans))) I32)
+      (CTy.effOf SO Ans)) (.here (.cons (.cons hΓ.toP))))
     (.there (.here (.cons hΓ.toP)))
 
 /-- `with_fs (fileLoop k)`. -/

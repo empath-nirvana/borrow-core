@@ -1,22 +1,34 @@
 import Core.LetDtorSafety
+import Core.Tok
 
 /-!
 # Core — two files open across a raise, closed by their effectful destructors  `[spec §62]`
 
-Two files are open and an error is raised. Each `File` is a cell
-holding a descriptor, and its destructor is effectful: it frees the cell and performs `close` of
-the effect `Fs`, a must-resume operation handled outside the program (the platform's place). The
-two files are live across the abortive point, which `[let]`'s `hW` refuses; `[let-dtor]` admits
-them, and on the raise the frame closes `f₂` then `f₁` before the error goes on.
+A file is an abstract linear handle: `File = Tok` (`Core/Tok.lean`), a location owning a unit cell
+with no derived drop, not own-free and not persistent (`file_no_derived_drop`,
+`file_not_ownFree`), whose one Core eliminator is `burn`. The platform's effect `Fs` has two
+must-resume operations,
+
+    close : File ↠^lin 1        open : I32 ↠^lin File
+
+handled by `with_fs` (the platform's place): `open`'s clause mints the handle, `close`'s burns it.
+The program declares `File`'s destructor to be `close` (`fsDecl`), so every frame that drops a
+`File` performs `close` (`dropOf_file`). The bodies below contain no `burn`: a `File` leaves a body
+only as the argument of `close`.
+
+Two files are open and an error is raised. Each is live across the abortive point, which
+`[let]`'s `hW` refuses (`let_refuses_files`); `[let-dtor]` admits them, and on the raise the frame
+closes `f₂` then `f₁` before the error goes on.
 
     fs_prog M = to_result (with_fs (
-                  f₁ ← alloc 1;  f₂ ← alloc 2;
-                  let _ = M in drop_ctx  (unwind drop_ctx)))
+                  f₁ ← open 1;
+                  let f₂ = open 2 in                (unwind: close f₁)
+                  let _ = M in drop_ctx             (unwind: close f₂; close f₁)))
 
 `M` is `raise ()` (the error exit) or `return ()` (the normal exit). Both programs are closed
 `CDerives` derivations, so every run of each, under every allocator, ends at the empty memory and
-never sticks (`fsRaise_safe`, `fsReturn_safe`), and on both exits `f₂` is closed before `f₁`
-(`fsRaise_order`, `fsReturn_order`).
+never sticks (`fsRaise_safe`, `fsReturn_safe`): each handle's cell is freed. On both exits `f₂` is
+closed before `f₁`, each once (`fsRaise_order`, `fsReturn_order`, by `eval`).
 
 **The capability reaches the destructor.** `close` is an operation of the row, not a value in the
 context: the destructor performs it at `Σ_D = {close}`, a part of the frame's row `Σ`. The frame
@@ -38,35 +50,63 @@ open BoCa.BoLo (Heap Steps Step1 Kont freeE performE)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open BoCa.Programs (alloc' free')
 
-/-! ### The effect `Fs` and the type `File` -/
+/-! ### The effect `Fs` and the handle `File` -/
 
 abbrev I32 : VTy := .int .w32
 
-/-- `close : I32 ↠^lin 1`, the operation `0` of the name `4`: must resume, so it never fails. -/
-def fcloseSig : OpSig := ⟨4, 0, .lin, I32, .unit, .ret .unit, false⟩
+/-- A file: the abstract linear handle `Tok`. -/
+abbrev File : VTy := tokTy
+
+/-- `close : File ↠^lin 1`, the operation `0` of the name `4`: must resume, so it never fails. -/
+def fcloseSig : OpSig := ⟨4, 0, .lin, File, .unit, .ret .unit, false⟩
+
+/-- `open : I32 ↠^lin File`, the operation `1` of the name `4`. -/
+def fopenSig : OpSig := ⟨4, 1, .lin, I32, File, .ret .unit, false⟩
 
 /-- `Fs`'s operations. -/
-abbrev Efs : List (Qual × VTy × VTy) := [(.lin, I32, .unit)]
+abbrev Efs : List (Qual × VTy × VTy) := [(.lin, File, .unit), (.lin, I32, File)]
 
 /-- The destructors' row `{close}`. -/
 abbrev SD : Row := [fcloseSig]
 
-/-- The program's row `{close, raise}`. -/
-abbrev Sfs : Row := [fcloseSig, failSig]
+/-- The platform's row `{close, open}`. -/
+abbrev SO : Row := [fcloseSig, fopenSig]
+
+/-- The program's row `{close, open, raise}`. -/
+abbrev Sfs : Row := [fcloseSig, fopenSig, failSig]
 
 theorem ofEff_Efs : Row.ofEff 4 Efs 0 ++ Sf = Sfs := rfl
 
-/-- A file: a cell holding its descriptor. -/
-abbrev File : VTy := .ref I32
+theorem ofEff_Efs_nil : Row.ofEff 4 Efs 0 ++ [] = SO := rfl
 
-/-- **The file's destructor**, `λf. n ← free f; close n`: an object `File → F_{close} 1`. -/
-def dFileB : Expr := bindE (.app free' (.var 0)) (performE (opArgE 4 0 (.var 0)))
+/-- **The handle has no derived drop**: nothing but its declared destructor disposes of it. -/
+theorem file_no_derived_drop : ¬ HasDtor File := fun h => by cases h
 
-theorem d_dFile {Δ : LifeCtx} (Γ : Ctx VTy) (hΓ : Ctx.Dead Γ) :
-    CDerives Δ Γ (.val (.lam dFileB)) (.comp (.arr File (CTy.effOf SD .unit))) := by
-  refine .lam (.bind (A := I32) (.left (deadSplit hΓ))
-    (.ret (appW (.var (by csolo)) (.free (by cdead)))) ?_)
-  exact .effPerform (S := SD) (o := fcloseSig) rfl rfl rfl (.var (by csolo))
+/-- **The handle owns its cell**: an abort may not abandon it (`[let]`'s `hW`, `[raise]`'s `hd`). -/
+theorem file_not_ownFree : ¬ File.OwnFree := fun h => by
+  cases h with
+  | opq _ hk => exact hk rfl
+
+theorem file_not_persistent : File.persistent = false := rfl
+
+/-! ### `File`'s destructor: `close` -/
+
+/-- `close f`, the destructor's body. -/
+def closeB : Expr := performE (opArgE 4 0 (.var 0))
+
+/-- **The program's declaration**: `Tok`'s destructor is `close`. -/
+def fsDecl : Opaque → Option Expr
+  | .tok => some closeB
+  | _ => none
+
+theorem dropOf_file : dropOf fsDecl File = some closeB := rfl
+
+theorem d_closeB {Δ : LifeCtx} (Γ : Ctx VTy) (hΓ : Ctx.Dead Γ) :
+    CDerives Δ Γ (.val (.lam closeB)) (.comp (.arr File (CTy.effOf SD .unit))) :=
+  .lam (.effPerform (S := SD) (o := fcloseSig) rfl rfl rfl (.var (.here hΓ.toP)))
+
+/-- `File` has a destructor at `{close}`, its declared one. -/
+theorem fileOk {Δ : LifeCtx} : DropOk Δ SD fsDecl File := .opq rfl d_closeB
 
 /-- The destructors never fail: `close` must resume. -/
 theorem SD_not_cancels : ¬ SD.Cancels := by
@@ -77,90 +117,152 @@ theorem SD_not_cancels : ¬ SD.Cancels := by
 
 theorem SD_divB : Row.divB SD = false := by decide
 
+theorem SO_not_cancels : ¬ SO.Cancels := by
+  rintro ⟨o, ho, hq⟩
+  simp only [SO, List.mem_cons, List.not_mem_nil, or_false] at ho
+  rcases ho with rfl | rfl <;> exact hq rfl
+
+theorem SO_not_unr : ¬ SO.Unr := Row.not_unr_of_not_cancels SO_not_cancels
+
+theorem SD_le_SO : RowLe SD SO := by
+  intro n i o h
+  obtain ⟨hm, rfl, rfl⟩ := Row.find_mem h
+  simp only [SD, List.mem_singleton] at hm
+  subst hm
+  exact ⟨fcloseSig, rfl, OpSig.LeF.refl _⟩
+
 theorem SD_le : RowLe SD Sfs := by
   intro n i o h
-  refine ⟨o, ?_, OpSig.LeF.refl o⟩
-  simp only [Row.find, List.find?_cons] at h ⊢
-  split at h
-  · exact h
-  · simp at h
+  obtain ⟨hm, rfl, rfl⟩ := Row.find_mem h
+  simp only [SD, List.mem_singleton] at hm
+  subst hm
+  exact ⟨fcloseSig, rfl, OpSig.LeF.refl _⟩
 
 theorem Sfs_nz : Sfs.NZ := by
   intro o ho
   simp only [Sfs, List.mem_cons, List.not_mem_nil, or_false] at ho
-  rcases ho with rfl | rfl <;> decide
+  rcases ho with rfl | rfl | rfl <;> decide
 
-theorem Sfs_uniq : Sfs.Uniq := by simp [Row.Uniq, fcloseSig, failSig]
+theorem Sfs_uniq : Sfs.Uniq := by simp [Row.Uniq, fcloseSig, fopenSig, failSig]
 
 theorem Sfs_noRead : ∀ o ∈ Sfs, o.finRead = false := by
   intro o ho
   simp only [Sfs, List.mem_cons, List.not_mem_nil, or_false] at ho
-  rcases ho with rfl | rfl <;> decide
+  rcases ho with rfl | rfl | rfl <;> decide
 
 theorem Sfs_not_unrD : ¬ Sfs.UnrD := by
   rintro ⟨o, ho, h⟩
   simp only [Sfs, List.mem_cons, List.not_mem_nil, or_false] at ho
-  rcases ho with rfl | rfl <;> rcases h with h | ⟨h, -⟩ <;> simp_all [fcloseSig, failSig, capB, VTy.isZero]
+  rcases ho with rfl | rfl | rfl <;> rcases h with h | ⟨h, -⟩ <;>
+    simp_all [fcloseSig, fopenSig, failSig, capB, VTy.isZero]
 
-/-! ### `[let]` refuses the two files; `[let-dtor]` admits them -/
+/-- A consumed context holds nothing owned. -/
+theorem deadOwnFree {Γ : Ctx VTy} (h : Ctx.Dead Γ) : Γ.OwnFree :=
+  fun s hs hl => dead_noLive (P := fun s => s.ty.OwnFree) h s hs hl
+
+/-! ### `open` -/
+
+/-- `open n`. -/
+def openE (n : UInt32) : Expr := performE (opArgE 4 1 (.val (Val.i32 n)))
+
+theorem d_openE {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row}
+    (hop : Row.find S 4 1 = some fopenSig) (n : UInt32) :
+    CDerives Δ Γ (openE n) (.comp (CTy.effOf S File)) :=
+  .effPerform (o := fopenSig) hop rfl rfl (.lit (.i32 n) hΓ.toP)
+
+/-! ### `[let]` refuses the files; `[let-dtor]` admits them -/
 
 /-- **`[let]`'s `hW` fails here**: the row has the abortive `raise`, and a file is owned. -/
 theorem let_refuses_files (Γ : Ctx VTy) :
-    ¬ (Sfs.Cancels → Ctx.OwnFree (⟨File, true⟩ :: ⟨File, true⟩ :: Γ)) := by
+    ¬ (Sfs.Cancels → Ctx.OwnFree (⟨File, true⟩ :: Γ)) := by
   intro h
-  have := h ⟨failSig, by simp, by simp [failSig]⟩ ⟨File, true⟩ (by simp) rfl
-  cases this
+  exact file_not_ownFree (h ⟨failSig, by simp, by simp [failSig]⟩ ⟨File, true⟩ (by simp) rfl)
+
+/-- The destructors of `f₁` over a dead rest of length `k`. -/
+def dsOne (k : Nat) : List (Option Expr) := some closeB :: List.replicate k none
 
 /-- The two files' destructors, then none for the dead rest. -/
-def dsFiles (k : Nat) : List (Option Expr) := some dFileB :: some dFileB :: List.replicate k none
+def dsFiles (k : Nat) : List (Option Expr) := some closeB :: some closeB :: List.replicate k none
 
-theorem dtors_files {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    Dtors Δ SD (⟨File, true⟩ :: ⟨File, true⟩ :: Γ) (dsFiles Γ.length) :=
-  .drop (d_dFile (Δ := Δ)) (.drop (d_dFile (Δ := Δ)) (Dtors.ofDead hΓ))
+theorem ctxDrops_one {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
+    ctxDrops fsDecl (⟨File, true⟩ :: Γ) = dsOne Γ.length := by
+  rw [ctxDrops_cons_live Γ file_not_persistent dropOf_file, ctxDrops_dead hΓ]; rfl
 
-/-- `f₁ ← alloc 1; f₂ ← alloc 2; let _ = M in drop_ctx unwind drop_ctx`, at the context `Γ`. -/
+theorem ctxDrops_files {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
+    ctxDrops fsDecl (⟨File, true⟩ :: ⟨File, true⟩ :: Γ) = dsFiles Γ.length := by
+  rw [ctxDrops_cons_live _ file_not_persistent dropOf_file, ctxDrops_one hΓ]; rfl
+
+/-- A context of live files over a rest that has its destructors has its destructors. -/
+theorem hds_file {Δ : LifeCtx} {Γ : Ctx VTy}
+    (hΓ : ∀ s ∈ Γ, s.live = true → s.ty.Persistent ∨ DropOk Δ SD fsDecl s.ty) :
+    ∀ s ∈ (⟨File, true⟩ :: Γ : Ctx VTy), s.live = true →
+      s.ty.Persistent ∨ DropOk Δ SD fsDecl s.ty := by
+  intro s hs hl
+  rcases List.mem_cons.mp hs with rfl | hs'
+  · exact .inr fileOk
+  · exact hΓ s hs' hl
+
+theorem hds_dead {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
+    ∀ s ∈ Γ, s.live = true → s.ty.Persistent ∨ DropOk Δ SD fsDecl s.ty :=
+  dead_noLive (P := fun s => s.ty.Persistent ∨ DropOk Δ SD fsDecl s.ty) hΓ
+
+/-- `f₁ ← open 1; let f₂ = open 2 in let _ = M in drop_ctx`, each `let` unwinding through
+`drop_ctx`, at the context `Γ`. -/
 def twoFiles (k : Nat) (M : Expr) : Expr :=
-  bindE (.app alloc' (.val (Val.i32 1)))
-    (bindE (.app alloc' (.val (Val.i32 2)))
-      (letDE (dsFiles k) (dropCtxE (dsFiles k) 1) M))
+  bindE (openE 1)
+    (letDE (dsOne k) (letDE (dsFiles k) (dropCtxE (dsFiles k) 1) M) (openE 2))
 
-/-- **The body is typed** at every row `Σ ≥ {close}` that `[let-dtor]` admits, for every closed
-`M` of that row: the two files are live across `M`, held by `[let-dtor]`. -/
+/-- **The body is typed** at every row `Σ ≥ {close, open}` that `[let-dtor]` admits, for every
+closed `M` of that row: `f₁` is live across `open 2` and both files across `M`, each frame holding
+them by `[let-dtor]` with `File`'s destructor. -/
 theorem d_twoFilesAt {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} {M : Expr}
     (hNZ : S.NZ) (hUq : S.Uniq) (hUnr : ¬ S.UnrD) (hDS : RowLe SD S)
+    (hop : Row.find S 4 1 = some fopenSig)
     (hfin : ∀ n i o, Row.find S n i = some o → o.finRead = true → ThenLe o.fin SD o.fin)
     (hM : ∀ Γ' : Ctx VTy, Ctx.Dead Γ' → CDerives Δ Γ' M (.comp (CTy.effOf S .unit))) :
     CDerives Δ Γ (twoFiles Γ.length M) (.comp (CTy.effOf S .unit)) := by
-  refine .bind (A := File) (deadSplit hΓ)
-    (.ret (appW (.lit (.i32 1) (by cdead)) (.alloc (by cdead)))) ?_
-  refine .bind (A := File) (.right (deadSplit hΓ))
-    (.ret (appW (.lit (.i32 2) (by cdead)) (.alloc (by cdead)))) ?_
-  have hds := dtors_files (Δ := Δ) hΓ
-  refine CDerives.effLetD (A := .unit) (split_kill _).toP hNZ hUq
-    (fun h => absurd h hUnr) hDS SD_not_cancels SD_divB hfin hds (hM _ (kill_dead _)) ?_
-  have hN := dropCtx_derives SD_not_cancels hds (P := [⟨.unit, true⟩]) (.drop rfl .nil)
+  refine .effLet (A := File) (deadSplit hΓ) (fun _ => deadOwnFree hΓ) (fun _ => banged_dead hΓ)
+    (d_openE hΓ hop 1) ?_
+  have h1 := hds_file (Δ := Δ) (hds_dead hΓ)
+  have h2 := hds_file (Δ := Δ) h1
+  show CDerives Δ (⟨File, true⟩ :: Γ)
+    (letDE (dsOne Γ.length) (letDE (dsFiles Γ.length) (dropCtxE (dsFiles Γ.length) 1) M)
+      (openE 2)) _
+  rw [← ctxDrops_one hΓ, ← ctxDrops_files hΓ]
+  refine CDerives.effLetD (A := File) (split_kill _).toP hNZ hUq (fun h => absurd h hUnr)
+    (RowLe.refl S) hDS SD_not_cancels SD_divB (hfin_self hfin) h1 (d_openE (kill_dead _) hop 2) ?_
+  refine CDerives.effLetD (A := .unit) (split_kill _).toP hNZ hUq (fun h => absurd h hUnr)
+    (RowLe.refl S) hDS SD_not_cancels SD_divB (hfin_self hfin) h2 (hM _ (kill_dead _)) ?_
+  have hN := dropCtx_derives SD_not_cancels (Dtors.ofDrops SD_not_cancels h2)
+    (P := [⟨.unit, true⟩]) (.drop rfl .nil)
   exact .effSub hDS hN
 
-/-- The body at the row `{close, raise}`. -/
+/-- The body at the row `{close, open, raise}`. -/
 theorem d_twoFiles {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {M : Expr}
     (hM : ∀ Γ' : Ctx VTy, Ctx.Dead Γ' → CDerives Δ Γ' M (.comp (CTy.effOf Sfs .unit))) :
     CDerives Δ Γ (twoFiles Γ.length M) (.comp (CTy.effOf Sfs .unit)) :=
-  d_twoFilesAt hΓ Sfs_nz Sfs_uniq Sfs_not_unrD SD_le (hfin_of_noRead Sfs_noRead) hM
+  d_twoFilesAt hΓ Sfs_nz Sfs_uniq Sfs_not_unrD SD_le rfl
+    (fun _ _ o hf hr => by rw [Sfs_noRead o (Row.find_mem hf).1] at hr; cases hr) hM
 
 /-! ### `with_fs`: the handler of `Fs` -/
 
 /-- `with_fs`'s answer clause `λx. return x`. -/
 def hrF : Expr := .val (.lam (.var 0))
 
-/-- `close`'s clause: `λ(n, κ). u ← return (); κ.1 u`, resuming at once. -/
+/-- `close`'s clause: `λ(f, κ). u ← burn f; κ.1 u`. -/
 def clF : Expr :=
   .val (.lam (.letpair (.var 0)
-    (bindE (.val .unit) (.app (.app (.var 1) (.val (.inj₁ .unit))) (.var 0)))))
+    (bindE (.app burnE (.var 1)) (.app (.app (.var 1) (.val (.inj₁ .unit))) (.var 0)))))
 
-def clsF : Expr := .pair clF (.val .unit)
+/-- `open`'s clause: `λ(n, κ). f ← mint (); κ.1 f`. -/
+def clO : Expr :=
+  .val (.lam (.letpair (.var 0)
+    (bindE (.app mintE (.val .unit)) (.app (.app (.var 1) (.val (.inj₁ .unit))) (.var 0)))))
+
+def clsF : Expr := .pair clF (.pair clO (.val .unit))
 
 /-- `with_fs e`. -/
-def withFs (e : Expr) : Expr := bindE clsF (bindE hrF (hndTerm 4 [.lin] 0 1 e))
+def withFs (e : Expr) : Expr := bindE clsF (bindE hrF (hndTerm 4 [.lin, .lin] 0 1 e))
 
 theorem d_hrF {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ hrF (.val (retTy S A A)) :=
@@ -168,13 +270,23 @@ theorem d_hrF {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} (hΓ : Ctx.Dead 
     (.lam (.effSub (RowLe.nil S) (.ret (.var (.here hΓ.toP)))))
 
 theorem d_clF {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives Δ Γ clF (.val (clauseTy S A (.lin, I32, .unit))) := by
+    CDerives Δ Γ clF (.val (clauseTy S A (.lin, File, .unit))) := by
   refine .bangThunkV (dead_noLive hΓ) rfl (.lam ?_)
   refine .tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_
-  refine .bind (A := .unit) (.right (.right (.dead (deadSplit hΓ))))
-    (.ret (.unitI (.cons (.cons (.cons hΓ.toP))))) ?_
-  exact .app (.right (.left (.right (.dead (deadSplit hΓ)))))
+  refine .bind (A := .unit) (.right (.left (.dead (deadSplit hΓ))))
+    (.ret (appW (.var (by csolo)) (.tokBurn (by cdead)))) ?_
+  exact .app (.right (.left (.dead (.dead (deadSplit hΓ)))))
     (.proj₁ (.force (C := .amp (.arr .unit (CTy.effOf S A)) .top) (.there (.here (by cdead)))))
+    (.here (by cdead))
+
+theorem d_clO {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} (hΓ : Ctx.Dead Γ) :
+    CDerives Δ Γ clO (.val (clauseTy S A (.lin, I32, File))) := by
+  refine .bangThunkV (dead_noLive hΓ) rfl (.lam ?_)
+  refine .tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_
+  refine .bind (A := File) (.right (.right (.dead (deadSplit hΓ))))
+    (.ret (appW (.unitI (by cdead)) (.tokMint (by cdead)))) ?_
+  exact .app (.right (.left (.right (.dead (deadSplit hΓ)))))
+    (.proj₁ (.force (C := .amp (.arr File (CTy.effOf S A)) .top) (.there (.here (by cdead)))))
     (.here (.cons (.drop rfl (.cons hΓ.toP))))
 
 theorem d_withFsG {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} {e : Expr}
@@ -184,7 +296,8 @@ theorem d_withFsG {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} {e : Expr}
     CDerives Δ Γ (withFs e) (.comp (CTy.effOf S A)) := by
   refine .bind (split_kill Γ).toP
     (.ret (.tensorI (deadSplit (kill_dead Γ)) (d_clF (S := S) (A := A) (kill_dead Γ))
-      (.unitI (kill_dead Γ).toP))) ?_
+      (.tensorI (deadSplit (kill_dead Γ)) (d_clO (S := S) (A := A) (kill_dead Γ))
+        (.unitI (kill_dead Γ).toP)))) ?_
   refine .bind (.right (split_kill Γ).toP) (.ret (d_hrF (S := S) (A := A) (.cons (kill_dead Γ)))) ?_
   exact .effHandle (E := Efs) (.left (.left (split_kill Γ).toP))
     (.left (.right (deadSplit (kill_dead Γ)))) (.here (.cons (kill_dead Γ).toP))
@@ -224,23 +337,25 @@ theorem d_fsRaise : CDerives LifeCtx.empty [] fsRaise (.comp (.ret (.sum .unit .
 theorem d_fsReturn : CDerives LifeCtx.empty [] fsReturn (.comp (.ret (.sum .unit .unit))) :=
   d_fsProg d_returnM
 
-/-! ### A `close` that can fail
+/-! ### One option for a `close` that can fail: the error ignored
 
-The paper's destructors never fail, and `[let-dtor]` asks the same (`¬ Σ_D.Cancels`): a destructor
-that raised would abandon the slots `drop_ctx` has not reached. A `close` that can fail is an
-operation that answers its error, `close_try : I32 ↠^lin 1 ⊕ I32`, and the destructor ignores the
-error, as Rust's `Drop` does; a program that wants the error closes the file itself on the normal
-path, consuming it, and handles the answer. -/
+`[let-dtor]` asks the destructors' row to have no failing operation (`hSDc`), as the paper's
+`delete` releases without fail. What a destructor that can fail should do is *Open* (SPEC §62),
+with three options: (a) the error is ignored; (b) destructors cannot fail, so a fallible close is
+handled inside the destructor by the program; (c) the rest is unwound, then the error is raised,
+which needs a policy for two errors. This section is an example of (a) only, not a rule: a close
+that answers its error, `close_try : File ↠^lin 1 ⊕ I32`, whose error the destructor drops. -/
 
-/-- `close_try : I32 ↠^lin 1 ⊕ I32`, the operation `1` of `Fs`: must resume, answering an errno. -/
-def ftrySig : OpSig := ⟨4, 1, .lin, I32, .sum .unit I32, .ret .unit, false⟩
+/-- `close_try : File ↠^lin 1 ⊕ I32`, the operation `2` of `Fs`: must resume, answering an
+errno. -/
+def ftrySig : OpSig := ⟨4, 2, .lin, File, .sum .unit I32, .ret .unit, false⟩
 
-/-- `λf. n ← free f; r ← close_try n; case r {inl u → u | inr _ → ()}`. -/
+/-- `λf. r ← close_try f; case r {inl u → u | inr _ → ()}`. -/
 def dFileTryB : Expr :=
-  bindE (.app free' (.var 0))
-    (bindE (performE (opArgE 4 1 (.var 0))) (.case (.var 0) (.var 0) (.val .unit)))
+  bindE (performE (opArgE 4 2 (.var 0))) (.case (.var 0) (.var 0) (.val .unit))
 
-/-- **The destructor that ignores `close_try`'s error** is an object `File → F_{close_try} 1`. -/
+/-- **Option (a), the error ignored**: a destructor `File → F_{close_try} 1` that drops
+`close_try`'s error. -/
 theorem d_dFileTry {Δ : LifeCtx} (Γ : Ctx VTy) (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ (.val (.lam dFileTryB)) (.comp (.arr File (CTy.effOf [ftrySig] .unit))) := by
   have hnc : ¬ Row.Cancels [ftrySig] := by
@@ -248,12 +363,10 @@ theorem d_dFileTry {Δ : LifeCtx} (Γ : Ctx VTy) (hΓ : Ctx.Dead Γ) :
     simp only [List.mem_singleton] at ho
     subst ho
     exact hq rfl
-  refine .lam (.bind (A := I32) (.left (deadSplit hΓ))
-    (.ret (appW (.var (by csolo)) (.free (by cdead)))) ?_)
-  refine .effLet (A := .sum .unit I32) (.left (.dead (deadSplit hΓ))) (fun h => absurd h hnc)
+  refine .lam (.effLet (A := .sum .unit I32) (.left (deadSplit hΓ)) (fun h => absurd h hnc)
     (fun h => absurd h (Row.not_unr_of_not_cancels hnc))
-    (.effPerform (S := [ftrySig]) (o := ftrySig) rfl rfl rfl (.var (by csolo))) ?_
-  refine .sumE (.left (.dead (.dead (deadSplit hΓ)))) (.var (.here (by cdead)))
+    (.effPerform (S := [ftrySig]) (o := ftrySig) rfl rfl rfl (.var (.here hΓ.toP))) ?_)
+  refine .sumE (.left (.dead (deadSplit hΓ))) (.var (.here (by cdead)))
     (.effSub (RowLe.nil _) (.ret (.var (.here (by cdead)))))
     (.effSub (RowLe.nil _) (.ret (.unitI (.drop rfl (by cdead)))))
 
@@ -274,8 +387,10 @@ theorem fsReturn_safe {μ₁ : Heap} {e₁ : Expr}
 
 /-! ### The order of the closes, by `eval`
 
-The same body `twoFiles 4 M` under a `with_fs` whose `close` clause records the descriptor in a
-log cell at location `0`, `log := log · 10 + n`, then resumes. -/
+The same body `twoFiles 4 M` under a `with_fs` that records: `open n` allocates a cell holding
+`n` as the handle, and `close` frees it and records its `n` in a log cell at location `0`,
+`log := log · 10 + n`, then resumes. Each close appends one digit, so the log is the sequence of
+closes. -/
 
 def litE (n : UInt32) : Expr := (Val.i32 n).1
 
@@ -285,16 +400,22 @@ def loadE (l : Expr) : Expr := .app (.val (.prim .load)) l
 
 def storeE (l v : Expr) : Expr := .app (.app (.val (.prim .store)) l) v
 
-/-- `λ(n, κ). log := log · 10 + n; κ.1 ()`. -/
+/-- `λ(f, κ). n ← free f; log := log · 10 + n; κ.1 ()`. -/
 def clFLog : Expr :=
   .val (.lam (.letpair (.var 0)
-    (bindE (storeE (.val (Val.loc 0))
-        (binE .add (binE .mul (loadE (.val (Val.loc 0))) (litE 10)) (.var 1)))
-      (.app (.app (.var 1) (.val (.inj₁ .unit))) (.val .unit)))))
+    (bindE (.app free' (.var 1))
+      (bindE (storeE (.val (Val.loc 0))
+          (binE .add (binE .mul (loadE (.val (Val.loc 0))) (litE 10)) (.var 0)))
+        (.app (.app (.var 2) (.val (.inj₁ .unit))) (.val .unit))))))
+
+/-- `λ(n, κ). f ← alloc n; κ.1 f`. -/
+def clOLog : Expr :=
+  .val (.lam (.letpair (.var 0)
+    (bindE (.app alloc' (.var 1)) (.app (.app (.var 1) (.val (.inj₁ .unit))) (.var 0)))))
 
 /-- `with_fs` that records the closes. -/
 def withFsLog (e : Expr) : Expr :=
-  bindE (.pair clFLog (.val .unit)) (bindE hrF (hndTerm 4 [.lin] 0 1 e))
+  bindE (.pair clFLog (.pair clOLog (.val .unit))) (bindE hrF (hndTerm 4 [.lin, .lin] 0 1 e))
 
 /-- `log ← alloc 0; r ← P; (r, free log)`. -/
 def withLogCell (P : Expr) : Expr :=
@@ -310,7 +431,7 @@ def logIs (e : Expr) (l : UInt32) : Bool :=
 def fsRaiseLog : Expr := withLogCell (toResult (withFsLog (twoFiles 4 raiseU)))
 def fsReturnLog : Expr := withLogCell (toResult (withFsLog (twoFiles 4 (.val .unit))))
 
-/-- **On the raise, `f₂` is closed before `f₁`**, and no cell is left. -/
+/-- **On the raise, `f₂` is closed before `f₁`**, each once, and no cell is left. -/
 theorem fsRaise_order : logIs fsRaiseLog 21 = true := by decide
 
 /-- **On the normal exit, the same order.** -/

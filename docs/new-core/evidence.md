@@ -10,10 +10,10 @@ proved at that part's rules, not a result of its own. Every other name is a Lean
 
 | Part | Result (Lean name) | Branch, commit |
 |---|---|---|
-| Destructors on every exit | `CDerives.effLetD`, `resourceSafety` | library: `Core/LetDtor.lean`, `Core/LetDtorSafety.lean` |
-| Cancellation as a corollary; early loop close | `cancelProg_safe`; `d_stepD`, `loopProg_safe` | library: `Core/LetDtorCancel.lean`, `Core/LetDtorLoop.lean` |
-| A lend whose callback raises | `d_lendD`, `lendD` | library: `Core/LetDtorLend.lean` |
-| Owned resources across a suspension | `d_kDtor`, `dtors_kappa` | library: `Core/LetDtorSuspend.lean` |
+| Destructors on every exit | rule `CDerives.effLetD`, destructors by type `dropOf`/`DropOk.derives`; per-exit runs `letDE_raise_run`, `letDE_cancel_run`, `letDE_return_run`, `dropChain_run`; `resourceSafety` (`adequacyD` read over cells) | library: `Core/LetDtor.lean`, `Core/LetDtorSafety.lean` |
+| Cancellation; early loop close | *programs* `cancelProg_safe`, `cancel_order`, `loopProg_safe`, `loop_close3`; typing lemma `d_stepD` | library: `Core/LetDtorCancel.lean`, `Core/LetDtorLoop.lean` |
+| A lend whose callback raises | typing lemma `d_lendD`; *programs* `lendMutRaise_safe`, `lendNested_run` | library: `Core/LetDtorLend.lean` |
+| Owned resources across a suspension | typing lemma `d_kDtor`, `dropOk_kappa`; *programs* `ySeqDrop_safe`, `ySeqDrop_order` | library: `Core/LetDtorSuspend.lean` |
 | `hdv` is guardedness | `rtSafety`, `CDerives.effLetDDiv` | library: `Core/LetDtorSafety.lean`, `Core/LetDtor.lean` |
 | Step-indexed `ewp`; storing scheduler, unbounded loop, no fuel | `ewp_handle`, `adequacy`, `progStore_orDiverges`, `progDrop_orDiverges` | `dtor-unwind` 9f0571da |
 | `[handle]` at Core's types without `hdv` | `handle_sem`, `kap_sem` | `dtor-unwind` 6969c14f |

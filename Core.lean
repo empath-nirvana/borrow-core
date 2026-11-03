@@ -122,3 +122,4 @@ import Core.LetDtorCancel
 import Core.LetDtorLoop
 import Core.LetDtorLend
 import Core.LetDtorSuspend
+import Core.LetDtorLet

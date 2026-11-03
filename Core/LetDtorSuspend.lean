@@ -5,8 +5,9 @@ import Core.LetDtorCancel
 
 `y : 1 ↠^cancel 1` (name `6`) suspends: its handler receives `κ` and may store it. `κ`'s type is
 `kTy Σ R cancel 1 F = U((1 ⊸ F_Σ R) & F_{F ⊕ Σ} 1)`: a thunk of a `&` whose second component is the
-cancel, the paper's `↓N = N & 1` with `drop_N = π₂`. So `κ` is a resource whose destructor is
-`λk. k.2` (`d_kDtor`), at the row of `y`'s cancel row ahead of `Σ`.
+cancel, the paper's `↓N = N & 1` with `drop_N = π₂`. So `κ` is a resource whose destructor, by its
+type, is `λk. k.2` (`dropOf_kappa`, `dropOk_kappa`, typed by `d_kDtor`), at the row of `y`'s cancel
+row ahead of `Σ`.
 
 The body holds two files across `y` by `[let-dtor]` (`Core/LetDtorFiles.lean`). The cancel row of `y` is the
 destructors' row `F_{close} 1` (`[then]`'s `hfin` reads it: `y` is capturable), so a cancel of `κ`
@@ -48,21 +49,24 @@ theorem d_kDtor {Δ : LifeCtx} {S : Row} {R B : VTy} {F : CTy} (Γ : Ctx VTy) (h
       (.comp (.arr (kTy S R .cancel B F) (cancelTy S F))) :=
   .lam (.proj₂ (.force (C := .amp (.arr B (CTy.effOf S R)) (cancelTy S F)) (.here hΓ.toP)))
 
-/-- At a cancel row `F_{Σ_F} 1`, the destructor is at `F_{Σ_F ++ Σ} 1`, a `Dtors` entry. -/
+/-- At a cancel row `F_{Σ_F} 1`, the cancel component is at `F_{Σ_F ++ Σ} 1`. -/
 theorem cancelTy_effOf (S SF : Row) : cancelTy S (CTy.effOf SF .unit) = CTy.effOf (SF ++ S) .unit := by
   unfold cancelTy
   rw [CTy.rowOf_effOf]
   cases SF <;> rfl
 
-/-- **A stored `κ` is a `Dtors` slot**: held live across an abortive point by `[let-dtor]`, it is
-dropped by its cancel, at the row `Σ_F ++ Σ`. -/
-theorem dtors_kappa {Δ : LifeCtx} {S SF : Row} {R B : VTy} {Γ : Ctx VTy} {ds : List (Option Expr)}
-    (h : Dtors Δ (SF ++ S) Γ ds) :
-    Dtors Δ (SF ++ S) (⟨kTy S R .cancel B (CTy.effOf SF .unit), true⟩ :: Γ)
-      (some (.app (.var 0) (.val (.inj₂ .unit))) :: ds) :=
-  .drop (fun Γ' hΓ' => by
-    have := d_kDtor (Δ := Δ) (S := S) (R := R) (B := B) (F := CTy.effOf SF .unit) Γ' hΓ'
-    rwa [cancelTy_effOf] at this) h
+/-- **A stored `κ` has a destructor by its type**: `kTy` is `U(C & F_{Σ_F ++ Σ} 1)`, whose
+destructor is `closeDropB = λk. k.2` (`dropOf`), at the row `Σ_F ++ Σ`, at every declaration. So
+`[let-dtor]` holds a stored `κ` live across an abortive point and drops it by its cancel. -/
+theorem dropOk_kappa {Δ : LifeCtx} {S SF : Row} {R B : VTy} {decl : Opaque → Option Expr} :
+    DropOk Δ (SF ++ S) decl (kTy S R .cancel B (CTy.effOf SF .unit)) := by
+  show DropOk Δ (SF ++ S) decl (.thunk (.amp _ (cancelTy S (CTy.effOf SF .unit))))
+  rw [cancelTy_effOf]
+  exact .close (RowLe.refl _)
+
+/-- `κ`'s destructor by type is `d_kDtor`'s term. -/
+theorem dropOf_kappa {S SF : Row} {R B : VTy} {decl : Opaque → Option Expr} :
+    dropOf decl (kTy S R .cancel B (CTy.effOf SF .unit)) = some closeDropB := rfl
 
 /-! ### The suspending operation and the body -/
 
@@ -73,28 +77,31 @@ abbrev Ey : List (Qual × VTy × VTy) := [(.cancel, .unit, .unit)]
 
 def fsY : Nat → CTy := fun _ => FD
 
-/-- The body's row `{y⟨close⟩, close}`. -/
-abbrev SY : Row := [ySig, fcloseSig]
+/-- The body's row `{y⟨close⟩, close, open}`. -/
+abbrev SY : Row := [ySig, fcloseSig, fopenSig]
 
-theorem ofEff_SY : Row.ofEff 6 Ey 0 fsY rcsNil ++ SD = SY := rfl
+theorem ofEff_SY : Row.ofEff 6 Ey 0 fsY rcsNil ++ SO = SY := rfl
 
 theorem SY_nz : SY.NZ := by
   intro o ho
   simp only [SY, List.mem_cons, List.not_mem_nil, or_false] at ho
-  rcases ho with rfl | rfl <;> decide
+  rcases ho with rfl | rfl | rfl <;> decide
 
-theorem SY_uniq : SY.Uniq := by simp [Row.Uniq, ySig, fcloseSig]
+theorem SY_uniq : SY.Uniq := by simp [Row.Uniq, ySig, fcloseSig, fopenSig]
 
 theorem SY_not_unrD : ¬ SY.UnrD := by
   rintro ⟨o, ho, h⟩
   simp only [SY, List.mem_cons, List.not_mem_nil, or_false] at ho
-  rcases ho with rfl | rfl
+  rcases ho with rfl | rfl | rfl
   · rcases h with h | ⟨-, h⟩
     · cases h
     · simp [ySig, FD, CTy.effOf, CTy.FinUnr, fcloseSig] at h
   · rcases h with h | ⟨h, -⟩
     · cases h
     · simp [fcloseSig, capB] at h
+  · rcases h with h | ⟨h, -⟩
+    · cases h
+    · simp [fopenSig, capB] at h
 
 theorem SD_le_SY : RowLe SD SY := by
   intro n i o h
@@ -108,9 +115,10 @@ theorem hfin_y : ∀ n i o, Row.find SY n i = some o → o.finRead = true → Th
   intro n i o hf hr
   have hm := (Row.find_mem hf).1
   simp only [SY, List.mem_cons, List.not_mem_nil, or_false] at hm
-  rcases hm with rfl | rfl
+  rcases hm with rfl | rfl | rfl
   · exact thenLe_FD
   · simp [OpSig.finRead, fcloseSig, capB] at hr
+  · simp [OpSig.finRead, fopenSig, capB] at hr
 
 theorem d_yM {Δ : LifeCtx} (Γ' : Ctx VTy) (hΓ : Ctx.Dead Γ') :
     CDerives Δ Γ' (performE (opArgE 6 0 (.val .unit))) (.comp (CTy.effOf SY .unit)) :=
@@ -120,7 +128,7 @@ theorem d_yM {Δ : LifeCtx} (Γ' : Ctx VTy) (hΓ : Ctx.Dead Γ') :
 theorem d_twoFilesY {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ (twoFiles Γ.length (performE (opArgE 6 0 (.val .unit))))
       (.comp (CTy.effOf SY .unit)) :=
-  d_twoFilesAt hΓ SY_nz SY_uniq SY_not_unrD SD_le_SY hfin_y d_yM
+  d_twoFilesAt hΓ SY_nz SY_uniq SY_not_unrD SD_le_SY rfl hfin_y d_yM
 
 /-! ### The handlers -/
 
@@ -133,28 +141,30 @@ def clDrop : Expr :=
     (bindE (.app alloc' (.var 0)) (bindE (.app free' (.var 0))
       (.app (.var 0) (.val (.inj₂ .unit))))))))
 
-abbrev KY : VTy := kTy SD .unit .cancel .unit FD
+abbrev KY : VTy := kTy SO .unit .cancel .unit FD
 
 theorem d_clRes {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives Δ Γ clRes (.val (clauseTy SD .unit (.cancel, .unit, .unit) FD)) := by
+    CDerives Δ Γ clRes (.val (clauseTy SO .unit (.cancel, .unit, .unit) FD)) := by
   refine .bangThunkV (banged_dead hΓ) rfl (.lam ?_)
   refine .tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_
   exact .app (.left (.right (.dead (deadSplit hΓ))))
-    (.proj₁ (.force (C := .amp (.arr .unit (CTy.effOf SD .unit)) (cancelTy SD FD))
+    (.proj₁ (.force (C := .amp (.arr .unit (CTy.effOf SO .unit)) (cancelTy SO FD))
       (.here (by cdead))))
     (.there (.here (by cdead)))
 
-/-- `{close} ++ {close} ≤ {close}`. -/
-theorem SDSD_le : RowLe (SD ++ SD) SD := by
+/-- `{close} ++ {close, open} ≤ {close, open}`. -/
+theorem SDSO_le : RowLe (SD ++ SO) SO := by
   intro n i o h
   obtain ⟨hm, rfl, rfl⟩ := Row.find_mem h
-  simp only [SD, List.singleton_append, List.mem_cons, List.not_mem_nil,
-    or_false, or_self] at hm
-  subst hm
-  exact ⟨fcloseSig, rfl, OpSig.LeF.refl _⟩
+  simp only [SD, SO, List.singleton_append, List.mem_cons, List.not_mem_nil,
+    or_false] at hm
+  rcases hm with rfl | rfl | rfl
+  · exact ⟨fcloseSig, rfl, OpSig.LeF.refl _⟩
+  · exact ⟨fcloseSig, rfl, OpSig.LeF.refl _⟩
+  · exact ⟨fopenSig, rfl, OpSig.LeF.refl _⟩
 
 theorem d_clDrop {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives Δ Γ clDrop (.val (clauseTy SD .unit (.cancel, .unit, .unit) FD)) := by
+    CDerives Δ Γ clDrop (.val (clauseTy SO .unit (.cancel, .unit, .unit) FD)) := by
   refine .bangThunkV (banged_dead hΓ) rfl (.lam ?_)
   refine .tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_
   refine .unitE (.right (.left (.dead (deadSplit hΓ)))) (.var (by csolo)) ?_
@@ -163,26 +173,26 @@ theorem d_clDrop {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
   refine .bind (A := KY) (.left (.dead (.dead (.dead (deadSplit hΓ)))))
     (.ret (appW (.var (by csolo)) (.free (by cdead)))) ?_
   have h : CDerives Δ (⟨KY, true⟩ :: ⟨.ref KY, false⟩ :: ⟨KY, false⟩ :: ⟨.unit, false⟩ ::
-      ⟨.tensor .unit KY, false⟩ :: Γ) (.app (.var 0) (.val (.inj₂ .unit))) (.comp (cancelTy SD FD)) :=
-    .proj₂ (.force (C := .amp (.arr .unit (CTy.effOf SD .unit)) (cancelTy SD FD)) (.here (by cdead)))
+      ⟨.tensor .unit KY, false⟩ :: Γ) (.app (.var 0) (.val (.inj₂ .unit))) (.comp (cancelTy SO FD)) :=
+    .proj₂ (.force (C := .amp (.arr .unit (CTy.effOf SO .unit)) (cancelTy SO FD)) (.here (by cdead)))
   rw [cancelTy_effOf] at h
-  exact .effSub SDSD_le h
+  exact .effSub SDSO_le h
 
 def yH (cl : Expr) (e : Expr) : Expr := bindE (.pair cl (.val .unit)) (bindE hrF (hndTerm 6 [.cancel] 0 1 e))
 
 theorem d_yH {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {cl e : Expr}
     (hcl : ∀ {Γ' : Ctx VTy}, Ctx.Dead Γ' →
-      CDerives LifeCtx.empty Γ' cl (.val (clauseTy SD .unit (.cancel, .unit, .unit) FD)))
-    (he : CDerives LifeCtx.empty (⟨retTy SD .unit .unit, false⟩ :: ⟨clausesTy SD .unit Ey fsY, false⟩
+      CDerives LifeCtx.empty Γ' cl (.val (clauseTy SO .unit (.cancel, .unit, .unit) FD)))
+    (he : CDerives LifeCtx.empty (⟨retTy SO .unit .unit, false⟩ :: ⟨clausesTy SO .unit Ey fsY, false⟩
       :: Γ) e (.comp (CTy.effOf SY .unit))) :
-    CDerives LifeCtx.empty Γ (yH cl e) (.comp (CTy.effOf SD .unit)) := by
+    CDerives LifeCtx.empty Γ (yH cl e) (.comp (CTy.effOf SO .unit)) := by
   refine .bind (split_kill Γ).toP
     (.ret (.tensorI (deadSplit (kill_dead Γ)) (hcl (kill_dead Γ)) (.unitI (kill_dead Γ).toP))) ?_
-  refine .bind (.right (split_kill Γ).toP) (.ret (d_hrF (S := SD) (A := .unit) (.cons (kill_dead Γ)))) ?_
-  refine CDerives.effHandleCs (S := SD) (E := Ey) (n := 6) (A := .unit) (R := .unit) fsY rcsNil
+  refine .bind (.right (split_kill Γ).toP) (.ret (d_hrF (S := SO) (A := .unit) (.cons (kill_dead Γ)))) ?_
+  refine CDerives.effHandleCs (S := SO) (E := Ey) (n := 6) (A := .unit) (R := .unit) fsY rcsNil
     (.left (.left (deadSplit hΓ))) (.left (.right (deadSplit hΓ)))
     (.here (.cons hΓ.toP)) (.there (.here hΓ.toP))
-    (by decide) (by simp [fcloseSig]) (by simp) (by decide) ?_
+    (by decide) (by simp [fcloseSig, fopenSig]) (by simp) (by decide) ?_
   rw [ofEff_SY]
   exact he
 
@@ -192,7 +202,7 @@ def yProg (cl : Expr) : Expr := withFs (yH cl (twoFiles 4 (performE (opArgE 6 0 
 
 theorem d_yProg {cl : Expr}
     (hcl : ∀ {Γ' : Ctx VTy}, Ctx.Dead Γ' →
-      CDerives LifeCtx.empty Γ' cl (.val (clauseTy SD .unit (.cancel, .unit, .unit) FD))) :
+      CDerives LifeCtx.empty Γ' cl (.val (clauseTy SO .unit (.cancel, .unit, .unit) FD))) :
     CDerives LifeCtx.empty [] (yProg cl) (.comp (.ret .unit)) := by
   refine d_withFsG (S := []) (A := .unit) (by simp) rfl ?_
   exact d_yH (.cons (.cons .nil)) hcl (d_twoFilesY (Γ := [_, _, _, _]) (by cdead))

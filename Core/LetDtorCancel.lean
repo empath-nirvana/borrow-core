@@ -15,9 +15,9 @@ That is §27's record of what a cancel's unwind may perform, the capability chec
 path.
 
 The closed program is the immediate scheduler of §29a (`AwaitCancel.stickyScope`) at the outer row
-`{close}`, resuming the wait with *cancelled* at once, under `with_fs`:
+`{close, open}`, resuming the wait with *cancelled* at once, under `with_fs`:
 
-    with_fs (sched (f₁ ← alloc 1; f₂ ← alloc 2; let _ = await_1 in drop_ctx unwind drop_ctx))
+    with_fs (sched (f₁ ← open 1; let f₂ = open 2 in let _ = await_1 in drop_ctx))
 -/
 
 noncomputable section
@@ -41,23 +41,23 @@ abbrev FD : CTy := CTy.effOf SD .unit
 /-- The cancel rows: `{close}` at `await`. -/
 def fs2 : Nat → CTy := fun j => if j = 0 then FD else .ret .unit
 
-/-- The body's row: `{await⟨{close}⟩, cancelled, close}`. -/
-abbrev S2 : Row := [awaitF FD, cancelled, fcloseSig]
+/-- The body's row: `{await⟨{close}⟩, cancelled, close, open}`. -/
+abbrev S2 : Row := [awaitF FD, cancelled, fcloseSig, fopenSig]
 
-theorem ofEff_S2 : Row.ofEff 1 Esched 0 fs2 csSched ++ SD = S2 := rfl
+theorem ofEff_S2 : Row.ofEff 1 Esched 0 fs2 csSched ++ SO = S2 := rfl
 
 theorem S2_nz : S2.NZ := by
   intro o ho
   simp only [S2, List.mem_cons, List.not_mem_nil, or_false] at ho
-  rcases ho with rfl | rfl | rfl <;> decide
+  rcases ho with rfl | rfl | rfl | rfl <;> decide
 
-theorem S2_uniq : S2.Uniq := by simp [Row.Uniq, awaitF, cancelled, fcloseSig]
+theorem S2_uniq : S2.Uniq := by simp [Row.Uniq, awaitF, cancelled, fcloseSig, fopenSig]
 
 theorem S2_not_unrD : ¬ S2.UnrD := by
   rintro ⟨o, ho, h⟩
   simp only [S2, List.mem_cons, List.not_mem_nil, or_false] at ho
-  rcases ho with rfl | rfl | rfl <;> rcases h with h | ⟨h, -⟩ <;>
-    simp_all [awaitF, cancelled, fcloseSig, capB, VTy.isZero]
+  rcases ho with rfl | rfl | rfl | rfl <;> rcases h with h | ⟨h, -⟩ <;>
+    simp_all [awaitF, cancelled, fcloseSig, fopenSig, capB, VTy.isZero]
 
 theorem SD_le_S2 : RowLe SD S2 := by
   intro n i o h
@@ -90,10 +90,11 @@ theorem hfin_await :
   intro n i o hf hr
   have hm := (Row.find_mem hf).1
   simp only [S2, List.mem_cons, List.not_mem_nil, or_false] at hm
-  rcases hm with rfl | rfl | rfl
+  rcases hm with rfl | rfl | rfl | rfl
   · exact thenLe_FD
   · simp [OpSig.finRead, cancelled, capB, OpSig.abort, VTy.isZero] at hr
   · simp [OpSig.finRead, fcloseSig, capB] at hr
+  · simp [OpSig.finRead, fopenSig, capB] at hr
 
 /-- `await_1` at the body's row. -/
 theorem d_awaitM {Δ : LifeCtx} (Γ' : Ctx VTy) (hΓ : Ctx.Dead Γ') :
@@ -103,12 +104,12 @@ theorem d_awaitM {Δ : LifeCtx} (Γ' : Ctx VTy) (hΓ : Ctx.Dead Γ') :
 /-- **The two files held across a cancellable wait**: `[let-dtor]` at `M = await_1`. -/
 theorem d_twoFilesAwait {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ (twoFiles Γ.length (awaitE 1)) (.comp (CTy.effOf S2 .unit)) :=
-  d_twoFilesAt hΓ S2_nz S2_uniq S2_not_unrD SD_le_S2 hfin_await d_awaitM
+  d_twoFilesAt hΓ S2_nz S2_uniq S2_not_unrD SD_le_S2 rfl hfin_await d_awaitM
 
-/-! ### The immediate scheduler at the outer row `{close}` -/
+/-! ### The immediate scheduler at the outer row `{close, open}` -/
 
-/-- The scheduler's answer: `U(Flag ⊸ F_{close} Flag)`. -/
-abbrev StR : VTy := .thunk (.arr Flag (CTy.effOf SD Flag))
+/-- The scheduler's answer: `U(Flag ⊸ F_{close, open} Flag)`. -/
+abbrev StR : VTy := .thunk (.arr Flag (CTy.effOf SO Flag))
 
 /-- `λx. return (λc. inj₁ x)`. -/
 def hrS : Expr := .val (.lam (.val (.lam (.inj₁ (.var 1)))))
@@ -128,28 +129,26 @@ def sched (e : Expr) : Expr :=
   bindE clsS (bindE hrS (bindE (hndTerm 1 [.lin, .cancel] 0 1 e)
     (bindE (.val (.inj₂ .unit)) (.app (.var 1) (.var 0)))))
 
-theorem SD_not_unr : ¬ SD.Unr := Row.not_unr_of_not_cancels SD_not_cancels
-
 theorem d_hrS {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives Δ Γ hrS (.val (retTy SD .unit StR)) :=
-  .bangThunkV (banged_dead hΓ) rfl (.lam (.effSub (RowLe.nil SD) (.ret (.thunkV rfl
-    (.lam (.effSub (RowLe.nil SD) (.ret (.sumI₁
+    CDerives Δ Γ hrS (.val (retTy SO .unit StR)) :=
+  .bangThunkV (banged_dead hΓ) rfl (.lam (.effSub (RowLe.nil SO) (.ret (.thunkV rfl
+    (.lam (.effSub (RowLe.nil SO) (.ret (.sumI₁
       (.var (.skip flag_persistent (.here hΓ.toP)))))))))))
 
 theorem d_ccS {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives Δ Γ ccS (.val (clauseTy SD StR (.cancel, .unit, .zero))) :=
-  .bangThunkV (banged_dead hΓ) rfl (.lam (.effSub (RowLe.nil SD) (.ret (.thunkV rfl
-    (.lam (.effSub (RowLe.nil SD) (.ret (.sumI₂ (.unitI (.drop rfl (.drop rfl hΓ.toP)))))))))))
+    CDerives Δ Γ ccS (.val (clauseTy SO StR (.cancel, .unit, .zero))) :=
+  .bangThunkV (banged_dead hΓ) rfl (.lam (.effSub (RowLe.nil SO) (.ret (.thunkV rfl
+    (.lam (.effSub (RowLe.nil SO) (.ret (.sumI₂ (.unitI (.drop rfl (.drop rfl hΓ.toP)))))))))))
 
 theorem d_clS {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives Δ Γ clS (.val (clauseTy SD StR (.lin, .unit, .sum .unit .unit) FD)) := by
+    CDerives Δ Γ clS (.val (clauseTy SO StR (.lin, .unit, .sum .unit .unit) FD)) := by
   refine .bangThunkV (banged_dead hΓ) rfl (.lam ?_)
   refine .tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_
-  refine .effSub (RowLe.nil SD) (.ret (.thunkV rfl (.lam ?_)))
+  refine .effSub (RowLe.nil SO) (.ret (.thunkV rfl (.lam ?_)))
   refine .effLet (A := StR) (.dup rfl (.left (.right (.dead (deadSplit hΓ)))))
-    (fun h => absurd h SD_not_cancels) (fun h => absurd h SD_not_unr)
+    (fun h => absurd h SO_not_cancels) (fun h => absurd h SO_not_unr)
     (.app (.right (.left (.dead (.dead (deadSplit hΓ)))))
-      (.proj₁ (.force (C := .amp (.arr (.sum .unit .unit) (CTy.effOf SD StR)) .top)
+      (.proj₁ (.force (C := .amp (.arr (.sum .unit .unit) (CTy.effOf SO StR)) .top)
         (.there (.here (by cdead)))))
       (.here (by cdead))) ?_
   exact .app (.left (.right (.dead (.right (.dead (deadSplit hΓ))))))
@@ -157,35 +156,35 @@ theorem d_clS {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
 
 /-- **The scheduler is typed** at the outer row `{close}`, around any body at `S2`. -/
 theorem d_schedG {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {e : Expr}
-    (he : CDerives Δ (⟨retTy SD .unit StR, false⟩ :: ⟨clausesTy SD StR Esched fs2, false⟩ :: kill Γ)
+    (he : CDerives Δ (⟨retTy SO .unit StR, false⟩ :: ⟨clausesTy SO StR Esched fs2, false⟩ :: kill Γ)
       e (.comp (CTy.effOf S2 .unit))) :
-    CDerives Δ Γ (sched e) (.comp (CTy.effOf SD Flag)) := by
+    CDerives Δ Γ (sched e) (.comp (CTy.effOf SO Flag)) := by
   refine .bind (split_kill Γ).toP (.ret (.tensorI (deadSplit (kill_dead Γ))
     (d_clS (kill_dead Γ)) (.tensorI (deadSplit (kill_dead Γ)) (d_ccS (kill_dead Γ))
       (.unitI (kill_dead Γ).toP)))) ?_
   refine .bind (.right (split_kill Γ).toP) (.ret (d_hrS (.cons (kill_dead Γ)))) ?_
   refine .effLet (A := StR) (.left (.left (split_kill Γ).toP))
-    (fun h => absurd h SD_not_cancels) (fun h => absurd h SD_not_unr) ?_ ?_
-  · refine CDerives.effHandleCs (S := SD) (E := Esched) (n := 1) (A := .unit) (R := StR) fs2 csSched
+    (fun h => absurd h SO_not_cancels) (fun h => absurd h SO_not_unr) ?_ ?_
+  · refine CDerives.effHandleCs (S := SO) (E := Esched) (n := 1) (A := .unit) (R := StR) fs2 csSched
       (.left (.left (deadSplit (kill_dead Γ)))) (.left (.right (deadSplit (kill_dead Γ))))
       (.here (.cons (kill_dead Γ).toP)) (.there (.here (kill_dead Γ).toP))
-      (by decide) (by simp [fcloseSig]) (by simp) (by decide) ?_
+      (by decide) (by simp [fcloseSig, fopenSig]) (by simp) (by decide) ?_
     rw [ofEff_S2]
     exact he
   · refine .bind (A := Flag) (.right (.dead (.dead (deadSplit hΓ))))
       (.ret (.sumI₂ (.unitI (by cdead)))) ?_
     exact .app (.right (.left (.dead (.dead (deadSplit hΓ)))))
-      (.force (C := .arr Flag (CTy.effOf SD Flag)) (.there (.here (by cdead))))
+      (.force (C := .arr Flag (CTy.effOf SO Flag)) (.there (.here (by cdead))))
       (.here (by cdead))
 
 /-! ### The closed program -/
 
-/-- `with_fs (sched (f₁ ← alloc 1; f₂ ← alloc 2; let _ = await_1 in drop_ctx unwind drop_ctx))`. -/
+/-- `with_fs (sched (f₁ ← open 1; let f₂ = open 2 in let _ = await_1 in drop_ctx))`. -/
 def cancelProg : Expr := withFs (sched (twoFiles 4 (awaitE 1)))
 
 theorem d_cancelProg : CDerives LifeCtx.empty [] cancelProg (.comp (.ret Flag)) := by
   refine d_withFsG (S := []) (A := Flag) (by simp) rfl ?_
-  show CDerives _ _ _ (.comp (CTy.effOf SD Flag))
+  show CDerives _ _ _ (.comp (CTy.effOf SO Flag))
   exact d_schedG (.cons (.cons .nil))
     (d_twoFilesAwait (Γ := [_, _, _, _]) (.cons (.cons (.cons (.cons .nil)))))
 
