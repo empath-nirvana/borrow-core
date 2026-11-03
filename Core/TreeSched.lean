@@ -53,6 +53,65 @@ theorem emptyFrame_mono : TFrame.Mono (fun _ ρf => ρf = PMap.empty) := by
   subst h
   exact RR.of_empty hr
 
+/-! ### The frame condition at a resume, along re-reading -/
+
+/-- An entry's `fd` read at two re-readings of one record list, carried along the extension
+between them. -/
+def OpEntT.FdMono (en : OpEntT) : Prop :=
+  ∀ (v : Val) (w₀ w w₁ : TWd) (O : List (FrameRecT w₀.K)) (O' : List (FrameRecT w.K))
+    (O₁ : List (FrameRecT w₁.K)) (ρ : TRes w.K) (ρ₁ : TRes w₁.K),
+    RecsRR w.Θ O O' → RecsRR w₁.Θ O O₁ → w.Ext w₁ ρ → RRw (w := w) (w' := w₁) ρ ρ₁ →
+    en.fd v w O' ρ → en.fd v w₁ O₁ ρ₁
+
+/-- **`fdAt` is carried along re-reading** (`TFrame.Mono (fdAt …)`), where the entry's `fd` is
+(`OpEntT.FdMono`) and the records have a re-reading at every world the frame condition holds at.
+A run resumed at `fdAt` binds through it (`twp_bind`'s `hFm`). -/
+theorem fdAt_mono {en : OpEntT} {v : Val} {F : TFrame} {w' : TWd} {O' : List (FrameRecT w'.K)}
+    (hF : F.Mono) (hfd : en.FdMono)
+    (hex : ∀ (w : TWd) (ρf : TRes w.K), F w ρf → ∃ O'' : List (FrameRecT w.K), RecsRR w.Θ O' O'') :
+    (fdAt en v F O').Mono := by
+  intro w w₁ ρ ρ₁ hE hr hw
+  refine ⟨hF w w₁ ρ ρ₁ hE hr hw.1, fun O₁ hO₁ => ?_⟩
+  obtain ⟨O'', hO''⟩ := hex w ρ hw.1
+  exact hfd v w' w w₁ O' O'' O₁ ρ ρ₁ hO'' hO₁ hE hr (hw.2 O'' hO'')
+
+/-- The join's guarantee is read at the records' locations, which re-reading keeps. -/
+theorem fdJoinT_fdMono {en : OpEntT} (h : ∀ v w O ρf, en.fd v w O ρf ↔ fdJoinT v w O ρf) :
+    en.FdMono := by
+  intro v w₀ w w₁ O O' O₁ ρ ρ₁ hO' hO₁ hE hr hfd
+  refine (h v w₁ O₁ ρ₁).mpr ?_
+  have h₀ := fdMask_mono _ w w₁ ρ ρ₁ hE hr ((h v w O' ρ).mp hfd)
+  exact fdMask_le (fun x hx => (recMask_rr hO' x).mp ((recMask_rr hO₁ x).mpr hx)) h₀
+
+/-! ### Resuming a stored branch beside the scheduler's state -/
+
+/-- **A stored branch resumed beside a state the scheduler keeps.** The clause holds `κ`
+(`KapSchedT` at the masks `M`) and a state `ρ₂` in `R` (owning `O₂`), valid and holding nothing at
+`M`; under a frame condition whose frames avoid `M`, the resume of `κ` at an answer the entry
+accepts runs with the state beside it, and ends beside the state re-read. -/
+theorem kapSchedT_resume_beside {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {k : Nat}
+    {w : TWd} {ls : List (SRecT w.K)} {O O₂ : List (FrameRecT w.K)} {v κ : Val} {ρk : TRes w.K}
+    (hκ : KapSchedT (ℍ := ℍ) Qout M en k w ls O v κ ρk) {F : TFrame}
+    (hFM : ∀ w' ρf, F w' ρf → fdMask M w' ρf) {k' : Nat} (hk' : k' < k) {a : Val}
+    {σ σ' ρ₂ ρ : TRes w.K} (hB : en.PBv v k' w ls a σ) (hcσ : ResUT.CompS ρk σ σ')
+    (hcρ : ResUT.CompS σ' ρ₂ ρ) (hcov : CovR (sem w.Θ) w.K ρ)
+    (hls : ∀ x ∈ ls, CovR (sem w.Θ) w.K x.1.R) (hO : ∀ r ∈ O, CovR (sem w.Θ) w.K r.R)
+    {R : TRProp} (hR : R.Mono) (hap : ∀ p ∈ O, ∀ q ∈ O₂, p.le ≠ q.le) (hR₂ : R w O₂ ρ₂)
+    (hM₂ : fdMask M w ρ₂) :
+    twp (ℍ := ℍ) F ((valPost Qout).sep R) k' w ls (O ++ O₂)
+      (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val a)) ρ := by
+  have hcovk : CovR (sem w.Θ) w.K ρk :=
+    CovR.of_compS_left hcσ (CovR.of_compS_left hcρ hcov)
+  have h := cerwpTE_iff.mp (hκ w ρk ls ls O (TWd.Ext.refl _ _) (RR.refl hcovk)
+    (SRecsRR.refl hls) (extFT_refl _ _) (RecsRR.refl hO) k' hk' a σ σ' hB hcσ (fdMask M)
+    (fdMask_mono M) (fun _ _ h => h))
+  refine twp_frame_w hR hap hcρ hcov ?_ h hR₂
+  intro w₀ ρf ρ₁₀ ρ₂₀ y fρ O₁₀ O₂₀ ps psF ls₀ μ hE h₂₀ _ _ hFρ hy hyf _ _ _ hI
+  have hvy : ResUT.Valid y := (ResUT.Valid.split hyf hI.valid).1
+  have hvf := ResUT.Valid.split hy hvy
+  exact ⟨hvy, NoneAt.compS hy hvf.1 hvf.2 (hFM w₀ ρf hFρ).2
+    (NoneAt.rr hE.1 hM₂.1 h₂₀ hM₂.2)⟩
+
 /-- **Multi-branch adequacy over the tree world.** A closed program `hnd H e₀`: the task `e₀` at
 `cerwpT` at the scheduler's table `T`, from the empty world at any tree, under any frame; the
 scheduler `H = hndVal n₀ qs hr hs` meeting `SchedOKT`; the program's answers holding nothing. -/
