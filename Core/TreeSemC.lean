@@ -176,6 +176,14 @@ theorem SCmp.nu_fold {Φ : SCmp → SCmp} (hΦ : SCmp.MonoBody Φ) :
     (Φ (SCmp.nu Φ)).Le (SCmp.nu Φ) :=
   SCmp.nu_greatest (hΦ _ _ (SCmp.nu_unfold hΦ))
 
+theorem SCmp.amp_le {C₁ C₂ D₁ D₂ : SCmp} (h₁ : C₁.Le D₁) (h₂ : C₂.Le D₂) :
+    (SCmp.amp C₁ C₂).Le (SCmp.amp D₁ D₂) :=
+  fun n w _ ρ h => ⟨h₁ n w _ ρ h.1, h₂ n w _ ρ h.2⟩
+
+/-- A stream of `C`s, `νX. C & X`: its body is monotone, so it folds and unfolds. -/
+theorem SCmp.stream_body_mono (C : SCmp) : SCmp.MonoBody fun X => SCmp.amp C X :=
+  fun _ _ h => SCmp.amp_le (fun _ _ _ _ x => x) h
+
 /-- `νX. C` is Kripke when the candidates it is the union of are: at every world extension, a
 candidate that is Kripke carries the run. -/
 theorem SCmp.nu_kripke_of {Φ : SCmp → SCmp} {n : Nat} {w w' : TWd} {e : Expr} {ρ : TRes w.K}

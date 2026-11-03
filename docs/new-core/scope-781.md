@@ -63,7 +63,8 @@ No chain-world declaration is in the closure: no `erwp`, `cerwp`, `crwpG`, `TW`,
 **Not ported:**
 - `TreeWp/Ops.lean` (`TWd.graft`, fresh child, `setTy`): no headline uses it today. The
   multi-branch slice ports what it reads (graft at a resume).
-- `Tree/KSem.lean`'s `KMono`, `MonoΘ`, `reread`, `kmono_*`, `vMut`, `vThunk`: these go to #782.
+- `Tree/KSem.lean`'s `KMono`, `MonoΘ`, `reread`, `kmono_*`, `vMut`, `vThunk`: these go to #782
+  (landed: `Support/Model/Tree/KSem.lean`; `docs/new-core/scope-782.md`).
 - `TreeWp/TInvConfig.lean` (`tit_twnt_config`): this was the non-vacuity check of
   `TWNT.InvHolds` while it was a hypothesis. `twnt_invHolds` now discharges it, so it is history.
 - Every chain-world `SI/` result (`erwp`/`cerwp`/`crwpG`, `HandleN`, `CaptureScope*`,
