@@ -11,3 +11,6 @@ Strata, Down, Six27, SurgeryA, SurgeryB, Six16to24 were translated and then edit
 RebDef and SubDef (rows 5.28, 5.47, 5.64, 5.66) are written by hand.
 subfix.py, six28fix.py, surgcfix.py, lifefix.py, closfix.py: recorded fixes run by fixups.py.
 sub_lset*.lean.txt: the lifetime-set lemmas of the Subtraction port, on TSet.
+tinv.py   ports Core/Invariant.lean and Core/Images.lean ranges to the tree world (TreeWp): port.py's
+          carrier translation with `Life` binders kept, then the record layer (FrameRecT, KTy, the
+          TIT clause names); the record-typing seams (vShape, x/δ) were fixed per file by hand.

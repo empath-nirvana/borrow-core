@@ -567,11 +567,10 @@ theorem le_view_cellAt {Θ : CodeTy} {tc : TChoice K} {W : TRes K}
 
 /-! ### The frame condition at the escrow -/
 
-/-- **The case not derived here**: a cell of `ρ_rest`'s aliasable walk beneath a borrow of
-`ρ_rest`, at a top location of `p`'s lineage that holds `mut`, or an `own` cell where the lineage
-holds `own`. Its derivation goes through the innermost view above the cell (`Coverage`,
-`DeepInv`) to `p`'s lineage, which needs a `mut` analogue of `ChainInv`'s own-uniqueness clause
-and a lineage with one parent per record. -/
+/-- **The case `fd_esc_of_branch` reads as a hypothesis**: a cell of `ρ_rest`'s aliasable walk
+beneath a borrow of `ρ_rest`, at a top location of `p`'s lineage that holds `mut`, or an `own`
+cell where the lineage holds `own`. Derived in `TreeWp/EscBeneath.lean` (`escBeneathT`), through
+the innermost view above the cell (`Coverage`, `DeepInv`) to `p`'s lineage. -/
 def EscBeneathT : Prop :=
   ∀ (K : WCactus) (Θ : CodeTy) (tc : TChoice K) (W ρo ρrest : TRes K)
     (ps rs : List (FrameRecT K)) (p : FrameRecT K) (α n : Life),
@@ -656,12 +655,6 @@ theorem fd_esc_of_branch (hB : EscBeneathT) {Θ : CodeTy} {tc : TChoice K}
     obtain ⟨_, _, _, _, _, _, _, h₁, _, _⟩ := hC
     exact ExST.immFree her _ _ f₁ (by rw [h₁]; exact CellUT.kind_immOf _ _ _ _)
 
-/-- **`FdEscOfBranchT` from `EscBeneathT`.** -/
-theorem fdEscOfBranch (hB : EscBeneathT) : FdEscOfBranchT :=
-  fun _ _ _ _ _ _ _ _ _ _ _ hT hp hW hFL hbr hnα _ hτ =>
-    ⟨fd_le_of_branch hT hp hW hFL hbr hnα hτ,
-      fun _ heR _ hx => fd_esc_of_branch hB hT hp hW hFL hbr hnα hτ heR hx⟩
-
 /-! ### At a join -/
 
 /-- Locations no flattening of `a` holds. -/
@@ -714,51 +707,6 @@ theorem noneAt_empty (P : BoCa.Loc → Prop) : NoneAt P (PMap.empty : TRes K) :=
   obtain rfl := AgWT.functional ha agW_empty
   rw [ResUT.CompS.functional hc (ResUT.compS_empty_right _)]; rfl
 
-/-- **The other branches at their points, none inside `α`, hold nothing the lend lends.** -/
-theorem fdEsc_of_points (hB : EscBeneathT) {Θ : CodeTy} {tc : TChoice K}
-    {W : TRes K} {ps rs : List (FrameRecT K)} {p : FrameRecT K} {α : Life}
-    (hT : TWNT K Θ tc W ps rs) (hp : p ∈ ps) (hFL : FrameLifeT K W p α) :
-    ∀ {bs : List (TRes K)} {ns : List Life},
-      List.Forall₂ (fun b n => OnBranchResT K n b) bs ns → (∀ n ∈ ns, ¬ K.le n α) →
-      ∀ {ρo ρf : TRes K}, CompAllT bs ρf → ResUT.CompS ρo ρf W →
-        NoneAt (escLocs p.le p.R) ρf := by
-  intro bs ns hpts
-  induction hpts with
-  | nil =>
-      intro _ ρo ρf hC _
-      cases hC
-      exact noneAt_empty _
-  | @cons b n bs ns hbn _ ih =>
-      intro hns ρo ρf hC hW
-      cases hC with
-      | @cons _ _ ρf' _ hC' hc =>
-      have hv := hT.valid
-      have hvf := (ResUT.Valid.split hW hv).2
-      obtain ⟨hvb, hvf'⟩ := ResUT.Valid.split hc hvf
-      obtain ⟨y, -, hyW⟩ := reassoc_out hW hc
-      have hb : NoneAt (escLocs p.le p.R) b := fdEsc_iff_noneAt.mp
-        (fdEscOfBranch hB _ _ _ _ _ _ _ _ _ _ _ hT hp hyW hFL hbn (hns n List.mem_cons_self))
-      obtain ⟨y', -, hyW'⟩ := reassoc_out hW (ResUT.CompS.comm hc)
-      exact NoneAt.compS hc hvb hvf' hb
-        (ih (fun m hm => hns m (List.mem_cons_of_mem _ hm)) hC' hyW')
-
-/-- **`FdEsc` at a join, from the cactus invariant**: the resumed branch owns the record framed at
-`α`, and no other branch's point is inside `α` (`JoinPtT`). -/
-theorem fdEsc_at_join (hB : EscBeneathT) {w : TWd} {ρ : TRes w.K}
-    {O : List (FrameRecT w.K)} {others : List (TBranch w.K)} {n₀ : Life} {ns : List Life}
-    {W : TRes w.K} {ps : List (FrameRecT w.K)} {ls : List (SRecT w.K)} {μ : BoCa.BoLo.Heap}
-    (hC : CactusInvT w ((ρ, O) :: others) (n₀ :: ns) W ps ls μ) {p : FrameRecT w.K}
-    (hp : p ∈ O) {α : Life} (hFL : FrameLifeT w.K W p α) (hJ : JoinPtT (K := w.K) ns α)
-    {ρf : TRes w.K} (hf : CompAllT (others.map Prod.fst) ρf) : FdEsc p.le p.R ρf := by
-  obtain ⟨hCA, hps, -, hR, -, hpts⟩ := hC
-  cases hCA with
-  | cons hr hc =>
-  obtain rfl := compAllT_functional hf hr
-  cases hpts with
-  | cons _ hpts' =>
-  have hpps : p ∈ ps := (hps p).mpr (by simp [hp])
-  exact fdEsc_iff_noneAt.mpr (fdEsc_of_points hB hR.1 hpps hFL
-    (forall₂_map_left.mpr hpts') hJ hf hc)
 
 end BoCa.Fig16.Tree.Wp
 
