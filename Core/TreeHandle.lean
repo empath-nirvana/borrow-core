@@ -154,42 +154,6 @@ theorem cerwpTE_iff {Q : TPostV} {F : TFrame} {n : Nat} {w : TWd} {ls : List (SR
 
 /-! ### Allocation at the run's own world -/
 
-/-- An `own` cell holds no `mut` cell. -/
-theorem not_holdsMut_own {K : WCactus} {l l' : BoCa.Loc} {v : BoCa.Val} :
-    ¬ HoldsMut (ResUT.single l' (CellUT.ownOf (K := K) v)) l := by
-  intro h
-  cases h with
-  | top e => obtain ⟨-, h⟩ := ResUT.single_get_eq_some e; cases h
-  | deep e h =>
-      obtain ⟨-, rfl⟩ := ResUT.single_get_eq_some e
-      cases h with
-      | top e' => simp [CellUT.ownOf, CellUT.wit] at e'
-      | deep e' _ => simp [CellUT.ownOf, CellUT.wit] at e'
-
-/-- A `mut` cell a composite with an `own` cell holds is held by the other part. -/
-theorem holdsMut_of_compS_own {K : WCactus} {a y : TRes K} {l' : BoCa.Loc} {v : BoCa.Val}
-    (hc : ResUT.CompS a (ResUT.single l' (CellUT.ownOf v)) y) {l : BoCa.Loc}
-    (h : HoldsMut y l) : HoldsMut a l := by
-  classical
-  have hal : a.get l' = none := ResUT.compatS_single_own (ResUT.CompatS.symm hc.1)
-  have hyl : y.get l' = some (CellUT.ownOf v) := by
-    rw [ResUT.Comp.get_of_left_none hc hal, ResUT.single_get_self]
-  cases h with
-  | @top _ _ m e =>
-      by_cases hk : l = l'
-      · subst hk; rw [hyl] at e; cases e
-      · rw [ResUT.Comp.get_of_right_none hc (ResUT.single_get_ne _ hk)] at e
-        exact .top e
-  | @deep _ k _ ψ e h =>
-      by_cases hk : k = l'
-      · subst hk; rw [hyl] at e; cases e
-        cases h with
-        | top e' => simp [CellUT.ownOf, CellUT.wit] at e'
-        | deep e' _ => simp [CellUT.ownOf, CellUT.wit] at e'
-      · rw [ResUT.Comp.get_of_right_none hc (ResUT.single_get_ne _ hk)] at e
-        exact .deep e h
-
-
 /-- **Allocation at `twp`, read at the run's own world**: `twp_alloc` with the continuation at
 the resource the run holds, every cell it may allocate at. -/
 theorem twp_alloc_here {F : TFrame} {Q : TPost} (hQ : Q.Down) (Kc : Kont) (v : BoCa.Val)

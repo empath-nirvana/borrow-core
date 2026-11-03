@@ -337,6 +337,205 @@ theorem twp_free {F : TFrame} {Q : TPost} (hQ : Q.Down) (Kc : Kont) (l : BoCa.Lo
     hQ.le (by omega) _ _ _ _ _ g₈, UpdX.trans g₀.1 hu g₉, g₁₀,
     (InvKept.refl _ _ _).trans hu g₁₁⟩
 
+/-- An `own` cell holds no `mut` cell. -/
+theorem not_holdsMut_own {K : WCactus} {l l' : BoCa.Loc} {v : BoCa.Val} :
+    ¬ HoldsMut (ResUT.single l' (CellUT.ownOf (K := K) v)) l := by
+  intro h
+  cases h with
+  | top e => obtain ⟨-, h⟩ := ResUT.single_get_eq_some e; cases h
+  | deep e h =>
+      obtain ⟨-, rfl⟩ := ResUT.single_get_eq_some e
+      cases h with
+      | top e' => simp [CellUT.ownOf, CellUT.wit] at e'
+      | deep e' _ => simp [CellUT.ownOf, CellUT.wit] at e'
+
+/-- A `mut` cell a composite with an `own` cell holds is held by the other part. -/
+theorem holdsMut_of_compS_own {K : WCactus} {a y : TRes K} {l' : BoCa.Loc} {v : BoCa.Val}
+    (hc : ResUT.CompS a (ResUT.single l' (CellUT.ownOf v)) y) {l : BoCa.Loc}
+    (h : HoldsMut y l) : HoldsMut a l := by
+  classical
+  have hal : a.get l' = none := ResUT.compatS_single_own (ResUT.CompatS.symm hc.1)
+  have hyl : y.get l' = some (CellUT.ownOf v) := by
+    rw [ResUT.Comp.get_of_left_none hc hal, ResUT.single_get_self]
+  cases h with
+  | @top _ _ m e =>
+      by_cases hk : l = l'
+      · subst hk; rw [hyl] at e; cases e
+      · rw [ResUT.Comp.get_of_right_none hc (ResUT.single_get_ne _ hk)] at e
+        exact .top e
+  | @deep _ k _ ψ e h =>
+      by_cases hk : k = l'
+      · subst hk; rw [hyl] at e; cases e
+        cases h with
+        | top e' => simp [CellUT.ownOf, CellUT.wit] at e'
+        | deep e' _ => simp [CellUT.ownOf, CellUT.wit] at e'
+      · rw [ResUT.Comp.get_of_right_none hc (ResUT.single_get_ne _ hk)] at e
+        exact .deep e h
+
+
+/-! ### Load and store at an `own` cell -/
+
+/-- A load's head steps: the memory's value at the location. -/
+theorem head_load_inv {μ μ' : Heap} {ℓ : BoCa.Loc} {a' : Expr}
+    (h : Head (ℍ := ℍ) μ (.app (.val (.prim .load)) (.val (Val.loc ℓ))) μ' a') :
+    ∃ u, μ ℓ = some u ∧ μ' = μ ∧ a' = .val u := by
+  generalize hb : Expr.app (.val (.prim .load)) (.val (Val.loc ℓ)) = b at h
+  cases h with
+  | load k u hk =>
+      simp only [Expr.val, Val.prim, Val.loc, Expr.app.injEq, Expr.loc.injEq, true_and] at hb
+      subst hb
+      exact ⟨u, hk, rfl, rfl⟩
+  | _ => simp_all [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE, BoCa.BoLo.cfinE, Expr.val, Val.prim]
+
+theorem step1_load_iff {μ μ₁ : Heap} {e₁ : Expr} (K : Kont) (ℓ : BoCa.Loc) :
+    Step1 (ℍ := ℍ) μ (K.plug (.app (.val (.prim .load)) (.val (Val.loc ℓ)))) μ₁ e₁ ↔
+      ∃ u, μ ℓ = some u ∧ μ₁ = μ ∧ e₁ = K.plug (.val u) := by
+  constructor
+  · rintro ⟨K', b, b', he, rfl, hb⟩
+    obtain ⟨rfl, rfl⟩ := plug_decomp hb K K'
+      (Head.load (ℍ := ℍ) (fun _ => some Val.unit) ℓ Val.unit rfl) he
+    obtain ⟨u, hu, rfl, rfl⟩ := head_load_inv hb
+    exact ⟨u, hu, rfl, rfl⟩
+  · rintro ⟨u, hu, rfl, rfl⟩
+    exact ⟨K, _, _, rfl, rfl, Head.load _ ℓ u hu⟩
+
+/-- A store's head steps: the location held, overwritten. -/
+theorem head_store_inv {μ μ' : Heap} {ℓ : BoCa.Loc} {v : Val} {a' : Expr}
+    (h : Head (ℍ := ℍ) μ (.app (.app (.val (.prim .store)) (.val (Val.loc ℓ))) (.val v)) μ' a') :
+    (∃ u, μ ℓ = some u) ∧ μ' = μ.upd ℓ v ∧ a' = .val .unit := by
+  generalize hb : Expr.app (.app (.val (.prim .store)) (.val (Val.loc ℓ))) (.val v) = b at h
+  cases h with
+  | store k u w hk =>
+      simp only [Expr.val, Val.prim, Val.loc, Expr.app.injEq, Expr.loc.injEq, true_and] at hb
+      obtain ⟨rfl, hv⟩ := hb
+      obtain rfl : v = u := Subtype.ext hv
+      exact ⟨⟨w, hk⟩, rfl, rfl⟩
+  | _ => simp_all [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE, BoCa.BoLo.cfinE, Expr.val, Val.prim]
+
+theorem step1_store_iff {μ μ₁ : Heap} {e₁ : Expr} (K : Kont) (ℓ : BoCa.Loc) (v : Val) :
+    Step1 (ℍ := ℍ) μ (K.plug (.app (.app (.val (.prim .store)) (.val (Val.loc ℓ))) (.val v)))
+      μ₁ e₁ ↔ (∃ u, μ ℓ = some u) ∧ μ₁ = μ.upd ℓ v ∧ e₁ = K.plug (.val .unit) := by
+  constructor
+  · rintro ⟨K', b, b', he, rfl, hb⟩
+    obtain ⟨rfl, rfl⟩ := plug_decomp hb K K'
+      (Head.store (ℍ := ℍ) (fun _ => some Val.unit) ℓ v Val.unit rfl) he
+    obtain ⟨hu, rfl, rfl⟩ := head_store_inv hb
+    exact ⟨hu, rfl, rfl⟩
+  · rintro ⟨⟨u, hu⟩, rfl, rfl⟩
+    exact ⟨K, _, _, rfl, rfl, Head.store μ ℓ v u hu⟩
+
+/-- An `own` cell excludes every other cell at its location. -/
+theorem get_eq_none_of_compatS_ownT {ρ σ : TRes K} {l : BoCa.Loc} {v : BoCa.Val}
+    (h : ResUT.CompatS σ ρ) (e : ρ.get l = some (CellUT.ownOf v)) : σ.get l = none := by
+  cases f : σ.get l with
+  | none => rfl
+  | some χ => exact absurd (CellUT.CompatS.kinds (h l χ _ f e)).2 (by simp [CellUT.ownOf, CellUT.kind])
+
+/-- A location owned in `ρ` reads its value in every memory `ρ` lowers to. -/
+theorem lower_get_ownT {ρ : TRes K} {μ : Heap} {l : BoCa.Loc} {v : BoCa.Val}
+    (h : ResUT.Lower ρ μ) (e : ρ.get l = some (CellUT.ownOf v)) : μ l = some v := by
+  obtain ⟨τ, hτ, hval⟩ := h
+  obtain ⟨χ, hχ, -, hv, -⟩ := hτ.get e
+  rw [hval l, hχ]
+  exact congrArg some hv
+
+/-- **Load at `twp`** (row 6.143): an `own` cell of the run's resource is read; nothing changes. -/
+theorem twp_load {F : TFrame} {Q : TPost} (hQ : Q.Down) (Kc : Kont) (l : BoCa.Loc)
+    (v : BoCa.Val) {n : Nat} {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)}
+    {ρ : TRes w.K} (hρ : ρ.get l = some (CellUT.ownOf v))
+    (h : twp (ℍ := ℍ) F Q n w ls O (Kc.plug (.val v)) ρ) :
+    twp (ℍ := ℍ) F Q n w ls O (Kc.plug (.app (.val (.prim .load)) (.val (.loc l)))) ρ := by
+  classical
+  intro w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE hr hl hO hFρ hf hc hS hR hI hfd j μ' e' hj hrun hfin
+  have hρ₀ := RR.own_fwd hr hρ
+  have hfl : fρ.get l = some (CellUT.ownOf v) := by
+    rw [ResUT.Comp.get_of_left_none hc (get_eq_none_of_compatS_ownT hc.1 hρ₀), hρ₀]
+  have hμl : μ l = some v := lower_get_ownT hI.2 hfl
+  cases hrun with
+  | refl => exact absurd ((step1_load_iff Kc l).2 ⟨v, hμl, rfl, rfl⟩) (hfin _ _)
+  | @more j' _ μ₁ _ _ e₁ _ hs t =>
+  obtain ⟨u, hu, rfl, rfl⟩ := (step1_load_iff Kc l).1 hs
+  rw [hμl] at hu; cases hu
+  obtain ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, g₉, g₁₀,
+      g₁₁⟩ := h w₀ ρ₀ ρf fρ ls₀ O₀ ps psF _ hE hr hl hO hFρ hf hc hS hR hI hfd j' μ' e'
+      (by omega) t hfin
+  exact ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇,
+    hQ.le (by omega) _ _ _ _ _ g₈, g₉, g₁₀, g₁₁⟩
+
+/-- **Store at `twp`** (row 6.145): an `own` cell of the run's resource is overwritten. -/
+theorem twp_store {F : TFrame} {Q : TPost} (hQ : Q.Down) (Kc : Kont) (l : BoCa.Loc)
+    (v₁ v₂ : BoCa.Val) {n : Nat} {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)}
+    {ρ ρ₂ ρ' : TRes w.K} (hcρ : ResUT.CompS (ResUT.single l (CellUT.ownOf v₁)) ρ₂ ρ)
+    (hcρ' : ResUT.CompS (ResUT.single l (CellUT.ownOf v₂)) ρ₂ ρ')
+    (h : twp (ℍ := ℍ) F Q n w ls O (Kc.plug (.val .unit)) ρ') :
+    twp (ℍ := ℍ) F Q n w ls O
+      (Kc.plug (.app (.app (.val (.prim .store)) (.val (.loc l))) (.val v₂))) ρ := by
+  classical
+  intro w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE hr hl hO hFρ _ hc hS hR hI hfd j μ' e' hj hrun hfin
+  have hρl : ρ.get l = some (CellUT.ownOf v₁) := by
+    rw [ResUT.Comp.get_of_right_none hcρ (ResUT.compatS_single_own hcρ.1),
+      ResUT.single_get_self]
+  obtain rfl := eq_del_of_compS_single hcρ
+  have hρ₀l := RR.own_fwd hr hρl
+  have hc₀ := ResUT.CompS.comm (compS_single_del hρ₀l)
+  have h₂₀ : RRw (w := w) (w' := w₀) (ρ.del l) (ρ₀.del l) := RR.del hr l
+  have hcov₀ : CovR (sem w₀.Θ) w₀.K ρ₀ := cov_of_comp hc hI
+  -- `fρ = (ρf ● ρ₂₀) ● ℓ ↦ own(v₁)`
+  obtain ⟨Z, hZ, hZf⟩ :=
+    (ResUT.CompS.assoc ρf (ρ₀.del l) (ResUT.single l (CellUT.ownOf v₁)) fρ).mp ⟨ρ₀, hc₀, hc⟩
+  obtain ⟨hμl, μZ, hlowZ, rfl, hμZl⟩ := lower_compS_own_invT hZf hI.2
+  have hZl : Z.get l = none := ResUT.compatS_single_own (ResUT.CompatS.symm hZf.1)
+  obtain ⟨fρ', hfρ'⟩ := (ResUT.compS_defined_iff Z (ResUT.single l (CellUT.ownOf v₂))).mpr
+    (compatS_single_of_get_noneT hZl)
+  have hlow' : ResUT.Lower fρ' (BoCa.BoLo.Heap.upd μZ l v₂) := lower_compS_ownT hfρ' hlowZ hμZl
+  have hupd : BoCa.BoLo.Heap.upd (BoCa.BoLo.Heap.upd μZ l v₁) l v₂ = BoCa.BoLo.Heap.upd μZ l v₂ := by
+    funext k; by_cases e : k = l
+    · subst e; simp
+    · simp [BoCa.BoLo.Heap.upd_other e]
+  have hv' : ResUT.Valid fρ' := by obtain ⟨τ, hτ, -⟩ := hlow'; exact ⟨τ, hτ⟩
+  have hI' : WInv w₀ fρ' (BoCa.BoLo.Heap.upd μZ l v₂) :=
+    ⟨covR_compS_own hfρ' (CovR.of_compS_left hZf hI.1), hlow'⟩
+  have hR' : RecInv w₀ fρ' ps ls₀ :=
+    ⟨TWNT.store hR.1 (ResUT.CompS.comm hZf) (ResUT.CompS.comm hfρ') hv',
+      taggedT_of_ag (fun a ha => (own_cell_ag (ResUT.CompS.comm hZf) a).mpr
+        ((own_cell_ag (ResUT.CompS.comm hfρ') a).mp ha)) hR.2⟩
+  -- the run's new resource `ρ₀′ = ρ₂₀ ● ℓ ↦ own(v₂)`, beside the frame
+  obtain ⟨ρ₀', hρ₀', hfρ₀'⟩ :=
+    (ResUT.CompS.assoc ρf (ρ₀.del l) (ResUT.single l (CellUT.ownOf v₂)) fρ').mpr ⟨Z, hZ, hfρ'⟩
+  have hrs : RR (sem w₀.Θ) (ResUT.single l (CellUT.ownOf (K := w.K) v₂))
+      (ResUT.single l (CellUT.ownOf (K := w₀.K) v₂)) := by
+    refine ⟨fun m => ?_, fun m ψ ψ' e e' => ?_⟩
+    · by_cases hm : m = l
+      · subst hm; simp
+      · simp only [ResUT.single_get_ne _ hm]
+    · obtain ⟨rfl, rfl⟩ := ResUT.single_get_eq_some e
+      obtain ⟨-, rfl⟩ := ResUT.single_get_eq_some e'
+      exact RC.own _ _
+  obtain ⟨ρx, hcx, hrx⟩ := RR.compS h₂₀ hrs (ResUT.CompS.comm hcρ')
+  obtain rfl := ResUT.CompS.functional hcx hρ₀'
+  have hE' : w.Ext w₀ ρ' := ⟨hE.1, fun m hm => (hE.of_compS_right hcρ).2 m
+    (holdsMut_of_compS_own (ResUT.CompS.comm hcρ') hm)⟩
+  have hcov₂ : CovR (sem w₀.Θ) w₀.K (ρ₀.del l) := CovR.of_compS_left hc₀ hcov₀
+  have hu : UpdX (sem w₀.Θ) (recMask O₀) (recMask O₀) ρ₀ ρx :=
+    UpdX.trans (WCactus.Ext.refl _)
+      (updX_compS_own_back hc₀ (cov_valid hZ ⟨CovR.of_compS_left hZf hI.1, hlowZ⟩)
+        (cov_valid hc hI) hcov₂)
+      (updX_compS_own hρ₀' (cov_valid hZ ⟨CovR.of_compS_left hZf hI.1, hlowZ⟩)
+        (cov_valid hfρ₀' hI') hcov₂)
+  cases hrun with
+  | refl =>
+      exact absurd ((step1_store_iff Kc l v₂).2 ⟨⟨v₁, hμl⟩, rfl, rfl⟩) (hfin _ _)
+  | @more j' _ μ₁ _ _ e₁ _ hs t =>
+  obtain ⟨-, rfl, rfl⟩ := (step1_store_iff Kc l v₂).1 hs
+  rw [hupd] at t
+  obtain ⟨w', ρf', ρ'', fρ'', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, g₉, g₁₀,
+      g₁₁⟩ :=
+    h w₀ ρx ρf fρ' ls₀ O₀ ps psF _ hE' hrx hl hO hFρ (hash_of_inv hfρ₀' hI') hfρ₀' hS hR' hI'
+      (by rw [← hupd]; exact finDom_upd hfd l v₂) j' μ' e' (by omega) t hfin
+  exact ⟨w', ρf', ρ'', fρ'', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇,
+    hQ.le (by omega) _ _ _ _ _ g₈, UpdX.trans g₀.1 hu g₉, g₁₀,
+    (InvKept.refl _ _ _).trans hu g₁₁⟩
+
 end BoCa.Fig16.Tree.Wp
 
 end
