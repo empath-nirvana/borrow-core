@@ -136,3 +136,4 @@ import Core.TreeSchedProgs
 import Core.TreeResume
 import Core.TreePool
 import Core.TreeLend
+import Core.TreeSchedPool
