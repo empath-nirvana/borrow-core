@@ -160,3 +160,4 @@ import DtorUnwind.TreeWp.ShapeT
 import DtorUnwind.TreeWp.Coherent
 import DtorUnwind.TreeWp.FdEscCactus
 import DtorUnwind.TreeWp.FdEscBranch
+import DtorUnwind.TreeWp.TInvBase
