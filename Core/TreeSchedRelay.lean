@@ -1,5 +1,6 @@
 import Core.TreeSchedProgs
 import Core.TreeSchedPool
+import Core.TreeLend
 
 /-!
 # The park stepper: a task parks holding a share, and is resumed or cancelled  `[spec §62]`
@@ -23,7 +24,8 @@ open BoCa.Fig16.Tree.Wp
 open BoCa.Fig16.Tree.Wp.SchedProgs.PingPong (stepRet QtStable)
 open BoCa.Fig16.BoLo
 open BoCa.Fig16.LogRel.Core
-open BoCa.BoLo (Heap Step1 Head Kont performE opPayload hndE hndVal capTag clauseAt freeE)
+open BoCa.BoLo (Heap Step1 Head Kont performE opPayload hndE hndVal capTag clauseAt freeE ccatchE
+  raiseE cancelVal)
 
 /-- The stepper's name. -/
 abbrev nP : UInt32 := 3
@@ -154,6 +156,76 @@ def parkedT (Qt : TPostV) (k : Nat) (κ : Val) : StoredT :=
 theorem parked_mask (x : BoCa.Loc) {K : WCactus} :
     (fun _ => False : BoCa.Loc → Prop) x ↔ recMask ([] : List (FrameRecT K)) x := by
   simp [recMask]
+
+/-! ### Task A: parks holding a copy of a view, answers it back -/
+
+theorem TP_down {Qt : TPostV} (hQt : Qt.Down) {Ψ : ContT} {F : TFrame} :
+    (cerwpPostT (opTableT TP) Qt Ψ F).Down :=
+  cerwpPostT_down hQt
+    (fun m i en h k w ls v ρ hA => by obtain ⟨-, -, rfl⟩ := TP_some h; exact hA)
+
+/-- **Task A**: `let _ = park () in ()`. Its resource is a copy of a lend's view, held across the
+park and answered back. -/
+def taskA : Expr := .app (.lam (.val Val.unit)) (performE (.val (opPayload nP 0 Val.unit)))
+
+def kA : Kont := .appR (.lam (.val Val.unit)) .hole
+
+/-- A's answer: `()`, owning no record, holding the copy `viewRes α ℓ`. -/
+def QA (α : Life) (l : BoCa.Loc) : TPostV := fun _ _ _ O r ρ =>
+  r = Val.unit ∧ O = [] ∧ ρ = viewRes α l
+
+theorem QA_down (α : Life) (l : BoCa.Loc) : (QA α l).Down := fun _ _ _ _ _ _ h => h
+
+theorem QA_stable (α : Life) (l : BoCa.Loc) : QtStable (QA α l) := by
+  intro k w w₀ ls O ls₀ O₀ r ρ ρ₀ hE hr hO ⟨h₁, h₂, h₃⟩
+  subst h₂; subst h₃; cases hO
+  exact ⟨h₁, rfl, rr_view_eq hr⟩
+
+/-- A's last step: `(λ_. ()) ()`, the copy answered back. -/
+theorem kA_unit {F : TFrame} {n : Nat} {w : TWd} {ls : List (SRecT w.K)} (α : Life)
+    (l : BoCa.Loc) :
+    cerwpT (ℍ := ℍ) (opTableT TP) (QA α l) F n w ls [] (kA.plug (.val Val.unit))
+      (viewRes α l) := by
+  refine cerwpT_det (TP_down (QA_down α l)) (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl
+    .hole) ?_
+  exact cerwpT_val (v := Val.unit) fun w₀ ρ₀ _ O₀ _ hr _ hO => by
+    cases hO; exact ⟨rfl, rfl, rr_view_eq hr⟩
+
+/-- A's cancel: `ccatch ((λ_. ()) (raise cancel))` answers `()` in one step, the copy kept. -/
+theorem kA_cancel {F : TFrame} {n : Nat} {w : TWd} {ls : List (SRecT w.K)} (α : Life)
+    (l : BoCa.Loc) :
+    cerwpT (ℍ := ℍ) (opTableT TP) (QA α l) F n w ls []
+      (ccatchE (kA.dead.plug (raiseE (.val (cancelVal none))))) (viewRes α l) := by
+  refine cerwpT_det (TP_down (QA_down α l)) (fun μ => step1Only_plug (Head.cancel μ kA rfl) rfl
+    .hole) ?_
+  exact cerwpT_val (v := Val.unit) fun w₀ ρ₀ _ O₀ _ hr _ hO => by
+    cases hO; exact ⟨rfl, rfl, rr_view_eq hr⟩
+
+/-- **Task A at the park stepper's table**, from a copy of a view, at every index and frame
+condition: it parks, cancellable; resumed it answers the copy, cancelled it answers the copy. -/
+theorem taskA_cerwpT (n : Nat) (F : TFrame) (w : TWd) (ls : List (SRecT w.K)) (α : Life)
+    (l : BoCa.Loc) :
+    cerwpT (ℍ := ℍ) (opTableT TP) (QA α l) F n w ls [] taskA (viewRes α l) := by
+  show cerwpT (ℍ := ℍ) (opTableT TP) (QA α l) F n w ls [] (kA.plug (performE (.val (opPayload nP 0
+    Val.unit)))) (viewRes α l)
+  refine cerwpT_perform kA rfl (show TP nP 0 = some enPark by simp [TP]) rfl ?_
+  intro w₀ ρ₀ ls₀ O₀ _ hr _ hO
+  cases hO
+  obtain rfl := rr_view_eq hr
+  refine ⟨rfl, PMap.empty, viewRes α l, ResUT.CompS.comm (ResUT.compS_empty_right _), ⟨rfl, rfl⟩,
+    (⟨(fun h => by cases h), fun w' ρ' ls' O' _ hr' _ hO' => ⟨fun k' hk' a σ σ' hB hcσ => ?_,
+      (fun _ _ k' hk' => ?_)⟩⟩ : contShareT enPark F n w₀ ls₀ [] kA Val.unit
+        (cerwpTC (ℍ := ℍ) (opTableT TP) (QA α l) n) (viewRes α l))⟩
+  · obtain ⟨rfl, rfl⟩ := hB
+    obtain rfl := rr_view_eq hr'
+    obtain rfl := compS_empty_right_eq hcσ
+    cases hO'
+    simp only [cerwpTC, hk', if_true]
+    exact kA_unit α l
+  · obtain rfl := rr_view_eq hr'
+    cases hO'
+    simp only [cerwpTC, hk', if_true]
+    exact kA_cancel α l
 
 end BoCa.Fig16.Tree.Wp.SchedProgs.Park
 
