@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.30 · 2026-11-04
+Version 1.31 · 2026-11-04
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -10353,8 +10353,8 @@ re-read there and the start and end related by row 5.27's `↭` masked at the ru
 `twp_frame_w`, whose frame obligation also reads the start world's invariants), world and resource
 changes at a segment's start (`twp_extend`, `twp_update`), and row 5.27's `mut` clause at every end
 (`endT_inv`). `cerwpT` adds operations: a stop at a non-abortive entry of the table leaves a
-continuation share (`contShareT`), a Kripke wand resumed at any extension and any list `extFT`
-allows (`contShareT_resume`). `CactusInvT` is kept by a step, by tree growth, by moving a part
+continuation share (`contShareT`), a Kripke wand resumed at any extension and any list keeping
+the records it reads (`KeepRel`, `contShareT_resume`). `CactusInvT` is kept by a step, by tree growth, by moving a part
 between branches, by spawn and by join (`cactusT_step`, `cactusT_extend`, `cactusT_move`,
 `cactusT_spawn`, `cactusT_join`). Proved at one branch (`Core/TreeHeadlines.lean`):
 - **adequacy** (`topAdequacyT`, `cerwpT_adequacy`): a closed program at `cerwpT` at the empty table,
@@ -10378,14 +10378,184 @@ between branches, by spawn and by join (`cactusT_step`, `cactusT_extend`, `cactu
   `extLT_admits_drop`, `not_extLT_drop_relevant` and `not_extLT_drop_longer` show what each clause
   admits and refuses.
 
-No program is proved there yet.
+**Over several branches** (`Core/TreeHeap.lean`, `Core/TreeHandle.lean`, `Core/TreeSched.lean`):
+`[handle]` without `hdv` at `cerwpT` for a scheduler at the program's top (`cerwpT_schedHandle`,
+by induction on the index), with `κ`'s cell, resume and cancel at `twp` (`twp_kappaCell`,
+`twp_kappaC_resume`, `twp_kappa_cancel`, `twp_kappaC_cancel`) and allocation, freeing, load and
+store at `twp` (`twp_alloc`, `twp_free`, `twp_load`, `twp_store`). A scheduler meets `SchedOKT`:
+every operation of the tasks' table is its own, each continuation tag is its entry's qualifier, the
+entry's resumer guarantee follows from the join's (`fdJoinT`), and its clauses hold at the empty
+table, each `κ` read by `KapSchedT`: resumable beside a state the clause keeps when that state is
+valid and holds nothing at the masks of the records the branch owns at its stop (`fdMask`; `FdEsc`
+read at locations). `cerwpT Tb Q Fb F` carries a base frame condition `Fb`: a stop hands the table
+`Fb`, so a continuation resumes at `fdAt en v Fb O′`, the base and its resumer's guarantee at the
+records it owns at that resume, with nothing from earlier stops. A task may start owning records:
+its present frame condition avoids them, its base need not. **Multi-branch adequacy** (`multiBranchAdequacyT`): `hnd H e₀` is `OrDiverges` for
+every scheduler `H` meeting `SchedOKT` and every task `e₀` at its table (`SchedOKT` fixes neither
+how many continuations a clause holds nor which it resumes); derived through `cerwpT_adequacy` at
+one branch (`cactusT_step`, the running branch alone in `CactusInvT`). The stored continuations are
+not branches of `CactusInvT`: `KapSchedT` (and `PoolT`, below) carries them through
+`cerwpT_schedHandle`'s induction on the index. The invariant over them is in pool form, each share
+resuming at `KeepRel` and every two apart at each other's record masks (`fdMask`, `recMask`), with
+no branch points (decision 74), since branch points are not kept
+along tree extension (`not_joinPtKeptT`) and locations are (`fdMask_mono`). The
+task runs at any base and present frame conditions every valid frame meets (`⊤` among them): the
+scheduler's state is in the resumed branch's frame, and a valid frame avoids the task's records
+from their opening, so the task may end a lend it opened. A
+stopped branch's clause knows its frame holds nothing of the branch's lends, those it opened
+during the segment included (`twp_bind_fd`, `noneAt_recMask_end`). One program is proved through
+the headline (`Core/TreeSchedProgs.lean`, `asyncProg_safe`): a scheduler that resumes a task beside
+a state of its own, its cells owned rather than borrowed. For `pingpong-mut` the stepper each task
+runs under meets `SchedOKT` (`schedS_ok`, its answers a step-indexed fixpoint) and both tasks are
+proved; the relay that hands the borrow between them is not.
+
+**The resume condition reads only the share's own lineage** (D13): `contShareT` and `KapSchedT`
+resume at any list keeping the re-readings of the stop list's records the share is relevant to
+(`KeepRel`, `Support/Model/Tree/World/ExtF.lean`); the whole-list condition implies it
+(`keepRel_of_extFT`, `contShareT_resume_ext`), and a share is carried along `KeepRel`
+(`contShareT_kripke`, `KapSchedT.kripke`).
+
+**A stored continuation across another branch's run** (`Core/TreeResume.lean`,
+`Core/TreePool.lean`): a run that owns no record at its start ends at a list holding the
+re-reading of every record of its start list (`twp_keepsList`), so a `κ` held beside it
+(`KapAtT`: captured at its stop, share and records re-read, the records its share reads kept) is
+held at the run's end (`twp_keepsKap`) and resumed there (`KapAtT.resume`,
+`kapAtT_resume_beside`). A runner that owns records, opens lends and ends lends of its own, those
+open at `κ`'s stop included, keeps `κ` held when the two hold nothing at each other's record masks
+(`twp_frame_keep`, `twp_keepsKap_sep`): a record `κ`'s share reads is in the lineage of a record
+proper (`TIT`); not the runner's, since the share would then hold part of the runner's lend
+(`relFT_not_fdEsc`), so the frame's, which `EndT` re-reads. The separation is kept both ways at the
+end (`MaskDiff`; R1 by `fdEsc_of_updX`). At the scheduler's interface: `kapAtT_resume_keep`, one
+stored task resumed beside another, the other held at the end. Where `κ`'s share holds part of the
+runner's lend, R2 at the stored branch (`kapStored_end_refused`) refuses the runner's end of it.
+`config_resumable_after_open`: at `World/Config.lean`'s world, a record-free branch lending a fresh
+location keeps the child's share, a view of the parent's lend, resumable. Record lists have
+re-readings wherever the code typing agrees on their escrows (`SRecsRR.exists_retype`).
+
+**Opening and ending a lend at `twp`** (`Core/TreeLend.lean`), each a `twp_update` instance, for a
+lend of `ℓ ↦ own(())` with the empty escrow (record `lendRec ℓ`). Open (`twp_lendOpen`): the cell
+becomes the lend cell `ℓ ↦ imm({α}, (), ∅)`, the run owns the record and the list carries it
+tagged `α` (`TWNT.immFrame`; the record's frame lifetime read off the lend cell, the only view at
+`ℓ`; other records' frame lifetimes kept since `ℓ` is no lineage location of theirs,
+`le_not_linLoc`). End (`twp_lendEnd`): the lend cell goes back to `own`, the record leaves the
+run's records and the list (`TWNT.immEnd`), when the rest of the run's resource and the frame hold
+nothing at `ℓ` at any depth (`FdEsc ℓ ∅`). The lend cell splits into copies (`viewRes_dup`), each
+a shared view another branch may hold across a stop; the end needs every copy back. Neither rule
+asks anything of `α`. Escrows that hand out views of their contents (`TWNT.reb`) are not covered.
+
+**Cancel in the scheduler interface.** A cancel is a resume into the continuation's cancel branch.
+At a cancellable entry (`q ≠ lin`, `OpEntT.fin`), `contShareT` owes the unwinding
+`ccatch (K†[raise …])` as a continuation, below the index, like a resume; `KapSchedT` (naming its
+scheduler `H`) offers `hnd H (κ (inj₂ ()))` at `cerwpT` at the empty table, under the same frames
+as a resume. An unwinding that performs one of `H`'s operations (an effectful finaliser) stops and
+comes back to `H`'s clause as an ordinary stored continuation. `cerwpT_schedHandle` proves the
+offering by its induction hypothesis (`twp_kappa_cancel_in`, `twp_kappaC_cancel_in`).
+`MultiBranchAdequacyT`'s statement is unchanged. The unwinding is §19's: the raise passes
+`[then]` frames, which run their finalisers, and the unwinding borrow forms (`withborU`), which end
+the branch's lends; there is no per-type close (decision 73). #793 keeps this rule: a cancelled task
+may hold `own` cells, `mut` cells, a copy of a view that only the frame holds, or a view's last
+copy, and none of these may be discarded without running the branch.
+
+**The scheduler's pool** (`Core/TreeSchedPool.lean`). `PoolT` is a list of stored tasks, each a
+continuation held at the present world (`KapAtT`) whose mask is its present records' masks, every
+two apart both ways (`NoneAt` of each other's record masks, and record locations distinct). Every
+scheduler operation keeps it: a segment (`twp_keepsPool`, from `twp_frame_keep`: the run may open,
+end, allocate and free, those lends open when a stored task stopped included), a park
+(`poolT_park`), a resume (`poolT_resume`) and a cancel (`poolT_cancel`), the last two with the rest
+of the pool beside the resumed run and a pool again at its every end (`PoolPost`: apart both ways,
+records at distinct lent locations, so a task that parks again rejoins it).
+
+**The park stepper** (`Core/TreeSchedRelay.lean`). The stepper `HP` (`schedP_ok`) hands a parked
+task's continuation back, at the masks of the records the task owns at its stop. The loop `drive`
+(`driveV`, the Z combinator) resumes a parked task each time it parks until it answers;
+`drive_twp` keeps a pool of any length beside it, by strong induction on the index through
+`poolT_park` and `poolT_resume`. These are lemmas, not a headline.
+
+**Pool-scheduler adequacy** (`Core/TreePoolSched.lean`). A scheduler handler keeps its pool in its
+state: the state value is the handler with the pool's continuations (`stateVal H ts`), and the
+scheduler's answers are functions of it (`PoolAns Q H Inv`: applied to any pool meeting the
+scheduler's invariant `Inv`, of any length, whose tasks run under `H` and answer in `PoolAns`
+again (`GoodT`), apart from the answer's own resource, it answers the program's `Q` under every
+frame condition whose frames avoid all their records). `SchedOKT` is unchanged; it is read at
+`Qout = PoolAns Q H Inv`. `PoolSchedAdequacyT` (`poolSchedAdequacyT`): `(hnd H e₀) (H, [])` is
+`OrDiverges` for every such scheduler meeting `SchedOKT`, every `Inv` the empty pool meets, and
+every task at its table at frame conditions every valid frame meets; through `cerwpT_schedHandle`,
+`poolT_nil` and `topAdequacyT`. It is tied to one representation of the scheduler's state (the
+pair `stateVal H ts`, the pool's continuations as `poolVal ts`) and to answers of the form
+`PoolAns`; `MultiBranchAdequacyT` is the general statement, with no state representation fixed. A clause proves its answer by the pool's moves, each a preservation
+lemma: run a task under the scheduler beside the pool (`poolAns_run`, `twp_keepsPool`), park the
+stopped task (`poolAns_park`, `poolT_park`), resume the pool's head with the rest handed to what it
+answers (`poolAns_resume`, `poolT_resume`), cancel it the same way (`poolAns_cancel`,
+`poolT_cancel`). The state carries `H` so a clause runs a task or a cancel branch under its own
+handler without naming itself. The stack scheduler (`Core/TreePoolSchedProgs.lean`,
+`stack_schedOK`) meets `SchedOKT` at `PoolAns` for every pool; `stackProg_safe` is a closed program
+through the headline.
+
+**A spawning scheduler** (`Core/TreePoolSpawn.lean`). `SchedOKTLe N` is `SchedOKT` with the return
+clause and the clauses asked only at stops `k ≤ N`; `cerwpT_schedHandle_le` is `[handle]` at every
+index `n ≤ N` from it, and `poolAns_run_le` the run move. A clause that runs a task under its own
+scheduler proves its stop at `k` from `SchedOKTLe` below `k` (the child runs at least one step
+later), so `∀ N, SchedOKTLe N` is proved by strong induction and is `SchedOKT`
+(`schedOKT_of_le`): no premise on the scheduler itself. `HS` has three cancellable operations:
+`park` (the stopped task parked, the pool's former head resumed in its place: `poolAns_park`,
+`poolAns_resumeSnd`), `spawn th` (`enSpawn`: the spawner parked, the child `th ()` run under `HS`
+beside the pool, `poolAns_run_le`; the thunk is verified at the child's table `TC`, lifted to the
+root's `TS` by `cerwpT_table_mono`) and `cancel` (the stopped task parked, the pool's former head
+cancelled with its cancel branch run under `HS`: `poolAns_cancelSnd`, `poolAns_cancel`); a task's
+end resumes the pool's head. `hs_schedOK`: `SchedOKT` at `PoolAns` for every pool. Limits of this
+scheduler: children are spawned from the root only and start owning nothing, and the policy
+exchanges the parked task with the pool's head rather than queueing it.
+
+**Cross-task borrows are excluded by the pool invariant**, not only by this scheduler. `PoolT`
+keeps every two stored tasks apart both ways (`NoneAt (recMask Ot) b` and `NoneAt (recMask Os) a`),
+`PoolAns` (`PoolAnsAt`) asks the same of the answer's resource against the pool, and the frame and resume
+conditions are `fdMask` at the resumed task's records. So no task holds part of another task's
+lend at any point the invariant reads. Join, and borrows shared across tasks, need a change to the
+pool invariant, not only a new scheduler (#795).
+
+**Interleaved lends across parks** (`Core/TreePoolSpawnProgs.lean`), three closed programs
+`(hnd HS root) (HS, [])`, each `OrDiverges` through `poolSchedAdequacyT` with every premise
+discharged. The program text has no borrow form: each task's lend is opened and ended in the proof,
+by `twp_lendOpen` and `twp_lendEnd` (each a `twp_update` instance) around the task's own code. Each
+task holds one lend, of its own cell, and every lend is at the same lifetime `α₀`; no task borrows
+another's. The loan task `L = let a = alloc () in ubind (λ_. free a, λ_. free a) (park ())` opens a
+lend of `a` (`twp_lendOpen`) and parks holding the lend cell (an `imm` view, its own copy) with the
+record open; resumed or cancelled, it merges the view, ends the lend at the resumer's guarantee
+(`twp_lendEnd`) and frees `a`. `progLoan_safe`: the root spawns `B = L` and runs `L`; B parks with its
+lend open, the root parks holding its view, B resumes and ends its lend, then the root ends its own.
+`progCancel_safe`: the root runs `LC` (as `L`, its finaliser parking again inside its own `ubind`)
+and spawns `park (); cancel ()`, which cancels the root while it is parked holding its view; the
+finaliser parks, is resumed, and ends the lend. `progDepth3_safe`: the root spawns two `L`s and
+runs a third; three tasks hold a lend open across a park at once.
+
+**Borrow edges point to ancestors, in `CactusInvT` configurations** (`borrowEdges_ancestors`,
+`lender_ancestor`; no scheduler instance). In `CactusInvT`, every view a part of a branch's
+resource holds (a stored continuation's share among them) carries only lifetimes enclosing the
+branch point; and if the part holds any cell at the location of a record proper framed at `α`
+(`FrameLifeT`), `α` encloses the branch point. The second reads the invariant alone, with no
+premise linking the cell to `α`: a part on a branch not inside `α` holding a cell there is refused
+(`fd_le_of_branch`: a view carries `α`, an `own` cell is beneath a borrow, `TWNT.noOwnUnder`, a
+`mut` cell is refused by `NoMutT`). A view there carries `α` and nothing else
+(`view_at_lender`, `lender_view_carries`). Instances (`Core/TreeBorrowEdges.lean`), built from
+the empty world by `TWNT.alloc` and `TWNT.immFrame` (`recWInv_lendStep`, `twp_lendOpen`'s update
+at the world), the second branch added by hand with `cactusT_spawn`: `lenderEdge_depth1` (a branch
+at a lend's own lifetime holding its view) and `lenderEdge_depth3` (three lends nested
+`α₃ ⊏ α₂ ⊏ α₁` on the chain tree, a branch at `α₃` holding the outermost view, its lender two
+levels up). These are properties of `CactusInvT` configurations. The scheduler's stored tasks are
+carried by `PoolT`/`KapAtT`, not as branches of `CactusInvT`, and nothing yet connects the two:
+deriving the property for `PoolT`/`KapAtT` shares is open (#789).
 
 *Open*:
 - adequacy derived from invariant preservation, at the relation the typing rules use;
 - preservation at spawn and join;
 - the frame rules as instances of capture;
 - one relation with abortive stops and forwarding (the two relations `erwp`/`cerwp` merge);
-- adequacy over several branches at the tree world (a scheduler as a handler; #781 slice (d)), and `[handle]` without `hdv` at `cerwpT`.
+- the lend rules at `twp` over the tree for escrows with contents (reborrows, `TWNT.reb`), and
+  multi-branch programs whose tasks borrow each other's lends;
+- borrow edges to ancestors for the scheduler's stored shares (`PoolT`/`KapAtT`, #789);
+- join, and the route by which a task's copy of a view gets back to a lender in another task
+  (#795); spawning from a child (a step-indexed table fixpoint); a FIFO scheduling policy (a
+  recursive append in the clause); `pingpong-mut`'s relay is not yet written through the pool.
 
 ### Semantic types read at the tree
 
@@ -10929,6 +11099,16 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
 
 ## Changelog
 
+- **1.31** (2026-11-04) — §62 (#781, slice (d)): the per-branch share (`KeepRel`) in
+  `contShareT_resume`'s list condition; a lend's open and end at `twp` (`twp_lendOpen`,
+  `twp_lendEnd`); `[handle]` for a scheduler at the program's top (`cerwpT_schedHandle`) and
+  adequacy over several branches (`multiBranchAdequacyT`), through `cerwpT_adequacy` at one branch
+  with the stored continuations in pool form (`KapSchedT`, `PoolT`, `poolT_park`, `poolT_resume`,
+  `poolT_cancel`; decision 74); `PoolSchedAdequacyT` at one state
+  representation; a cancel as a resume into the cancel branch (D15). Cross-task borrows are
+  excluded by the pool invariant. Borrow edges to ancestors are properties of `CactusInvT`
+  configurations, with no scheduler instance. No change to `CDerives`, `fundamentalC`,
+  `adequacyC`, `adequacyD`, the checker, the backends or the corpus.
 - **1.30** (2026-11-04) — §62, §12 (#771): the frame form of 1.27 is removed with its programs
   and its file handle; Core has no file-specific definition. `resourceSafety` and `rtSafety` keep
   their statements, in `Core/ResourceSafety.lean`. `kappa_lin_strict` (a must-resume `κ` is
