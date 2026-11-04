@@ -135,6 +135,7 @@ import Support.Model.Tree.World.TInvReb
 import Support.Model.Tree.World.TInvReread
 import Support.Model.Tree.World.Templ
 import Support.Model.Tree.World.UpdX
+import Support.Model.Tree.World.UpdXW
 import Support.Model.Tree.World.UpdXInv
 import Support.Model.Tree.World.UpdXMasks
 import Support.Model.Tree.World.World
