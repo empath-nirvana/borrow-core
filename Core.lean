@@ -142,3 +142,5 @@ import Core.TreePoolSched
 import Core.TreePoolSchedProgs
 import Core.TreePoolSpawn
 import Core.TreePoolSpawnProgs
+import Core.TreePoolShare
+import Core.TreePoolJoinProgs
