@@ -501,3 +501,38 @@ the re-typing is forced. Two candidate shapes:
 **Next step.** Prove `CerwpTMFrameC`. Start with the stop-free lender's side at `twp` (the port of
 `rwpG_M_frameG`; see "R1 status" above), then the strong induction. Its stop case folds into the
 share, and the resume and cancel cases re-lend at the re-typed world.
+
+### Anti-Frame decided; where the build stops (2026-11-04)
+
+The Anti-Frame uses `MFPostTK` (Core's fixed `Φ ℓ`), with no premise on `Q`. Its statement is
+`CerwpTMAntiFrameK` (`Core/TreeMutFrame.lean`, elaborates; not proved). If proving it shows that a
+real borrowed run must re-type `ℓ`, build that configuration and stop. Do not fall back to a
+premise on `Q`.
+
+**Next step, precisely: prove `CerwpTMFrameC`.**
+1. **Lender's side at a final term, at `twp`** (port `rwpG_M_frameG`, `StopFrameN.lean` on
+   `tree-inv`), in a new `Core/TreeMutFrameRun.lean`.
+   - **Start.** Given the outer start world `w₀ ⊒ w`, form `w₀'` = `w₀` with `Θ ℓ := A`. It
+     extends `w₀` on `ρf`, since `ρf` holds no `mut` cell at `ℓ`: `ℓ` is `own` in the run and the
+     world is valid. Move `F` there by `F.Mono`. Re-read `BM` there; its `mut` cell is covered by
+     `codeP w₀' A`.
+   - **Entry.** Enter by `TWNT.mutFold`. Prove `TaggedT` across the fold (`mut_fold_ag`'s port),
+     the lowering swap of `mut` for `own ● ρ_P` (`lower_swap_mut_own`'s port) and `CovR`.
+   - **The borrowed run.** Apply it. `ResUT.six27` at its end finds `ℓ ↦ mut` at the top (`houtb`
+     gives `Res_D`).
+   - **Fold and exit.** Fold, and exit by `TWNT.mutUnfold`.
+   - **`↭`.** Prove a six28 at `UpdA`: `UpdA BM ρ' fρ'` gives `UpdA ρ Y fY`. It does not exist
+     yet and is the largest piece.
+   - **The rest.** `InvKeptA`, `MaskDiff`, `NoneAt` and `SplitT` carry over: the records are
+     unchanged, and `ℓ` is not in `recMask`.
+2. **Strong induction on `n`** (port `erwp_M_frame`).
+   - **Value.** A value ends as `MFPostT`.
+   - **Stop.** At a stop, the borrow lies in the share. Fold it there (`extF_fold`'s port is
+     `KeepRel` across the fold).
+   - **Resume.** At a resume at `w''`, re-type `ℓ := A` again, move `fdAt en v Fb O′` by
+     `fdAt_mono`, and apply the induction hypothesis.
+   - **Cancel.** The cancel clause is the same as a resume with no answer.
+3. **Anti-Frame** (`erwp_M_antiFrame`, `AntiStopN.lean`). The opening is `TWNT.mutUnfold`, the
+   reseal is `TWNT.mutFold` read at `MFPostTK`'s `Θ ℓ = A`, and the stop's seal runs under
+   `CellFoldT`.
+4. **Then** the record change (option (a), `canon_two_wit`) and the rest of §0's order.

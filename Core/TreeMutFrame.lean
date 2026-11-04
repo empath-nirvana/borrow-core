@@ -227,6 +227,22 @@ typing `ℓ` at `A`. The Anti-Frame's alternative to a closure premise on `Q`: t
 def MFPostTK (l : BoCa.Loc) (A : KTy) (Q : TPostV) : TPostV := fun k w ls O v ρ' =>
   w.Θ l = some A ∧ MFPostT l A Q k w ls O v ρ'
 
+
+/-- **Anti-Frame across stops at `cerwpT`, as decided**: the borrowed run hands the content back
+with `ℓ` still typed at `A` (`MFPostTK`), as Core's fixed `Φ ℓ`; cancellable stops admitted
+(`OpTabT.KeepsShare`). The outer run starts where its `mut` cell pins `Θ ℓ = A`, so no frame
+premise is needed at the start. -/
+def CerwpTMAntiFrameK : Prop :=
+  ∀ (T : OpTabT) (Q : TPostV) (Fb F : TFrame) (n : Nat) (w : TWd) (ls : List (SRecT w.K))
+    (O : List (FrameRecT w.K)) (e : Expr) (l : BoCa.Loc) (A : KTy) (b : TSet)
+    [Fact (w.K.Anti b)] (v : BoCa.Val) (σP ρa ρ : TRes w.K)
+    (hP : σP.InStratum b) (hw : codeP w A b v ⟨σP, hP⟩),
+    OpTabT.KeepsShare T → w.Θ l = some A →
+    ResUT.CompS (ResUT.single l (CellUT.mutOf b v σP hP (codeP w A b) hw)) ρa ρ →
+    (∀ W X, ResUT.CompS σP (ResUT.single l (CellUT.ownOf v)) W → ResUT.CompS ρa W X →
+      cerwpT (ℍ := ℍ) (opTableGT T (CellFoldT l A)) (MFPostTK l A Q) Fb F n w ls O e X) →
+    cerwpT (ℍ := ℍ) (opTableT T) Q Fb F n w ls O e ρ
+
 end BoCa.Fig16.Tree.Wp
 
 end
