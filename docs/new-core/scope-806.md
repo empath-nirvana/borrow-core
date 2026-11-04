@@ -213,3 +213,21 @@ This was worked by hand against the carrier's lemmas; none of it is built yet. T
   - If it is the run's part, the inner clause decides.
 
 **Masks.** `¬E′` comes from the framed part through `hn`, or from the inner clause through the run's part.
+
+## Appendix: status after R1, and the next step
+
+**Built** (`Support/Model/Tree/World/UpdAFrame.lean`, axioms ⊆ [propext, Classical.choice, Quot.sound], entries in `scripts/AxiomCheck.lean`):
+- Fact 2, `AgW.mut_beneath` (:100): under `MutOne W` and `CellAt ρ ⊆ CellAt W` at `mut` cells, every `mut` cell of `ag(ρ)` has `Beneath ag(ρ) m ζ n φ` with `φ` itself in the ancestor's walk. `nonimm_beneath_imm`'s `G.AgW.rec`, the motives carrying `MutIn (CellAt ρ)` so that `mutKeep_compR` follows the cell into the operand that carries it (`compR_mut_source`, `bigCompR_mut_source`).
+- The `lsc` lemmas: `ImmLe`, `CellUT.CompR.immLe_left/right`, `imm_operand`, `imm_ls_le`; `cellAbs_compR` and `cellSub_compR` (an `imm` composite absorbed by, or absorbing, through each `imm` operand); `Beneath.lift`/`lift_right`.
+- R1, `UpdA.frame` (:388). Hypotheses: the inner `UpdA`, `RR c c′`, `a ● c = ac`, `a′ ● c′ = ac′`, `✓ac`, `f′ ● ac′ = fw` (the end composite is a part of the end world), `NoneAt (MaskDiff E E′) c′`, `MutOne W` with `ac`'s `mut` cells in `W`, `MutOne W′` with `ac′`'s in `W′`. At `twp_frame` these are `hc₀`, `hρ′`, `cov_valid hc hI`, `hfρ′`, `g₁₀.of_compS_right`, `TWNT.mutOne hRi.1` with `hc`, `TWNT.mutOne g₆.1` with `hfρ′`. The cases are the appendix's above; the `not_xoptWFrameAt` configuration is the end-side branch "frame `mut`, run `imm`": the frame's cell is shown to be in `ag(c)` (an `ex(c)_●` cell cannot be `▶◀` with the run's `imm` cell, `Flat.split_factors`), then `AgW.mut_beneath`.
+
+**Not derived: `UpdA.trans` (step 4).** I have not derived it and have not verified that any obstruction is real. The step that does not follow: the second segment's **end-side** ancestor disjunct gives `Beneath σ′ m ζ′ l ξ′` with no mask condition at `m`. When `¬E′ m`, the first segment's end side at `m` gives a start cell `ζ₀` with `RR ζ₀.wit ζ′.wit`, the walks re-read (`ExW.lsSim`/`AgW.lsSim`), and `Beneath σ m ζ₀ l ξ₀` with `XCell ξ₀ ψ″` follows. When `E′ m` (the middle ancestor is at a lent or escrow location of the run's own record), the first segment says nothing at `m`, and no start ancestor is produced. The start-side ancestor disjunct carries `¬E m`, so it composes; the end-side one does not.
+
+Routes, none tried:
+1. Re-anchor to an inner ancestor. If `ξ′` lies in `ex(ζ′.wit)_○` and `m ∈ recMask` because `m = p.le` with `ζ′.wit = p.R`, then `l ∈ ExDom p.R ⊆ E′`, against `¬E′ l`. Otherwise `ξ′` is in `ag(ζ′.wit)`, and `AgW.mut_beneath` inside the witness gives a strictly deeper ancestor; induct on depth until an unmasked one. Needs a resource fact discharged at `twp_bind` from `RecInv`: the flattening's `imm` cell at a record's lent location has the record's escrow as witness, and the case `m ∈ ExDom p.R` with an `imm` cell there is handled. Not checked.
+2. Use the end world instead of the middle ancestor. When `ψ″` is in `ex(ρ″)`, `⦇fw″⦈(l) = ψ″` (`ex`/`ag` disjoint), which refutes the absorbed branch at `σ′(l)`. When it is in `ag(ρ″)`, `AgW.mut_beneath` at the end gives an end ancestor, but it may be masked by `E″`: the same question one segment later.
+3. Add `¬E m` to the end-side disjunct. This breaks R1 where the frame's ancestor sits at a location masked on both sides (a frame copy of the run's lend cell). That would need route 1's re-anchoring inside `UpdA.frame` instead.
+
+The mask obligation `XOptW.trans` names (R2) is dischargeable at `twp_bind` as planned: an `imm` cell of the middle world at `l` is the run's (the second segment's start side gives `¬E″ l`) or the frame's (`k₁₀`, `NoneAt (MaskDiff …) ρf₂`, gives `¬E″ l`). `UpdA.trans` also needs `MutOne` at the start (a middle `mut` cell leaving with its ancestor must be the start's cell beneath the start ancestor); `twp_bind` has it (`hR`).
+
+**Then:** step 5 (`EndT` reads `UpdA`; `twp_frame`/`twp_frame_w` call `UpdA.frame` with the arguments above; `twp_here`, `twp_extend`, `twp_update` via `UpdX.toA`/an `UpdX.transA`), T1–T4, step 6, C-2 (`UpdX.frame` along the walks: `UpdA.frame`'s proof with the absorbed branches unused).
