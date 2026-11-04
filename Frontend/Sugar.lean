@@ -3175,6 +3175,13 @@ def unwindingC? (sp : Span) : Val → Option Comp
     | _ => none
   -- A lent cell's mark is the plain borrow's scheme, not the unwinding form's.
   | .mark _ _ V => unwindingC? sp V
+  -- A buffer's scheme: its array lent by the unwinding form, the length kept outside the lend,
+  -- and the buffer rebuilt from what the lend hands back. The scheme's ascription is kept on
+  -- the computation.
+  | .ascribe asp (.run rsp (.letPair lsp a n P (.bind bsp r A (.ret _ V) rest))) T =>
+    (unwindingC? sp V).map fun M =>
+      let t : Ident := ⟨s!"io_ub{sp.start.line}_{sp.start.col}", asp⟩
+      .bind asp t (some T) (.letPair lsp a n P (.bind bsp r A M rest)) (.ret rsp (.var rsp t.name))
   | _ => none
 where
   ty (x : Ident) (L B : VTy) (r : Frontend.Row) : VTy :=
@@ -3871,6 +3878,11 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let xi : Ident := ⟨x, ksp⟩
         -- The side conditions' bound is `dom`: the elements (views, say) may have lifetimes.
         let C := if imm then Const.sliceBorrowImm xi (.dom ksp) As Bs else .sliceBorrowMut xi (.dom ksp) As Bs
+        -- In an unwinding borrow block, the array's lend is the unwinding form at the block's
+        -- row (`unwindingC?` reads the buffer's scheme below).
+        let C ← match cbr with
+          | some r => do pure ((Const.unwinding (← (surfRow c ksp r : Except Error Frontend.Row)) C).getD C)
+          | none => pure C
         let Tbs := if imm then VTy.arrayImm lsp (.var lsp x) As else .arrayMut lsp (.var lsp x) As
         let splitC := if imm then Const.sliceSplitImm (.var lsp x) As else .sliceSplitMut (.var lsp x) As
         let id (s : String) : Ident := ⟨s, lsp⟩
