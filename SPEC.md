@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.34 · 2026-11-04
+Version 1.35 · 2026-11-04
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -10636,25 +10636,28 @@ layers (`docs/new-core/scope-782.md`):
   three deep, `reread_v3`). **The computation types** (`SCmp`,
   `Core/TreeSemC.lean`) are downward closed: `F A` (`SCmp.ret`), `⊸`, `&`, `⊤`, `∀α ⊏ c` over the
   lifetimes below `c` in the current tree, and `ν` (greatest fixed point over candidates).
-- **`F A` is Kripke along `KeepRel`** (`SCmp.ret_kripke`): over a covered resource, `F A` is a
-  `cerwpT` run at every extension, on the re-reading, at every list keeping the records the
-  resource reads, so a run of `F A` at a list is one at every later such list, by `KeepRel.trans`,
-  uniformly in the table, the frame conditions and `A`. The quantifier is needed: a bare `cerwpT`
-  run owning no records, the records `F A` runs at, is not Kripke along `KeepRel`
+- **`F A` is a bare run** (`SCmp.ret`), as Core's `cC (.ret A)` is a bare `wpTS` run: a
+  `cerwpT` run at the world and list it is read at, owning no records, to a value of `A`. It is
+  Kripke along the re-reading of its whole list (`SCmp.ret_reread`, from `cerwpT_kripke`) and not
+  along `KeepRel`: a bare `cerwpT` run owning no records, the records `F A` runs at, is not
   (`Obs.cerwpT_not_keepKripkeNil`, `Core/TreeSemObs.lean`). `cerwpT` quantifies over starts whose
   list re-reads its list whole, a resource holding a view has none at `[]` (`cerwpT_nil_of_imm`),
   and the property would make the stuck `() ()` over a lend's view a run at the lend's list owning
   no records; framed beside the lend's record (`twp_frame`), `let a = alloc () in () ()` would be
-  a run at the empty world, which adequacy (`cerwpT_adequacy`) refutes. Over a resource that is
-  not covered, `F A` holds of every term: its runs are read only over covered resources. `F A` is monotone in `A`
+  a run at the empty world, which adequacy (`cerwpT_adequacy`) refutes. `F A` is monotone in `A`
   (`SCmp.ret_le`, from `cerwpT_post_mono`), and `U` in its computation type (`STy.thunkC_le`).
-  As in Core, a computation type reaches a value only under `U`, whose quantifier over world
-  extensions and lists keeping what the thunk reads makes the thunk monotone: a thunk of `F A`
-  from a run at the current world and list (`STy.thunkRet_intro`), of any computation type Kripke
-  along `KeepRel` (`STy.thunk_intro`; `&` of Kripke types is one, `SCmp.amp_kripke`), of a value
-  (`STy.thunkC_val`). `⊸`, `∀` and `ν` are not Kripke: a thunk of one is proved at every extension
-  directly. `ν` folds and unfolds at Core's body shape `F(A ⊕ U X) & F B` (`SCmp.loopBody_mono`),
-  and is not empty there (`SCmp.loop_nonempty`).
+  As in Core, the Kripke quantifier sits at `U` only: a thunk is a run at every world extension
+  and every list keeping what it reads, monotone by definition. **A thunk is introduced as Core's
+  `thunkF_compatC`/`thunkV_compatC` introduce one**: from its computation at every world and list
+  over a resource in which the environment is a value of its type, the environment carried to the
+  later world and list by its monotonicity (`TEnv.Mono`, the tree's `gDenC_local`, met at every
+  value type by `STy.env_mono`), at every computation type (`STy.thunk_intro_env`), at `F A`
+  (`STy.thunkRet_intro_env`), for `λ_. M` with the forcing's head step paid from the index
+  (`STy.thunkRet_lam_env`; met at `λ_. inj₁ ()`, `STy.thunkRet_constInl`), each with a corollary
+  at an environment read at a value type (`STy.thunk_intro`, `STy.thunkRet_intro`,
+  `STy.thunkRet_lam`), and of a value (`STy.thunkC_val`).
+  `ν` folds and unfolds at Core's body shape `F(A ⊕ U X) & F B` (`SCmp.loopBody_mono`), and is not
+  empty there (`SCmp.loop_nonempty`).
 - **Continuation and task types** (`Core/TreeSemK.lean`) are thunks and boxed thunks, no new
   former: a continuation is `U (B ⊸ C)` (`STy.kont`), boxed at `@d` by BOXED-κ (`STy.kontBox`),
   a task `[@d] U C` (`STy.task`). The value types read the record list because a thunk is a run,
@@ -10666,9 +10669,9 @@ layers (`docs/new-core/scope-782.md`):
   value of its type** at every answer type, result type, lifetime and nesting
   (`STy.kont_of_share`); boxed at a lifetime its share outlives, it is carried along any extension
   in which other branches opened and ended records of their own, and resumed there at its type
-  (`STy.kontBox_resume_after`): the resume is read off the carried value (`STy.kont_resume`,
-  `SCmp.ret_run`), over a covered composite at a list whose records are covered, which a start
-  provides (`cov_of_comp`, `RecInv.cov_ls`). Instances (`Core/TreeSemKEx.lean`) at a proper
+  (`STy.kontBox_resume_after`): the resume is read off the carried value (`STy.kont_resume` at
+  the reflexive extension), at a list whose records are covered, which a start provides
+  (`RecInv.cov_ls`). Instances (`Core/TreeSemKEx.lean`) at a proper
   extension of the tree (a fresh child grafted into a chain, `dExt`, `dExt_proper`), with the
   resume list adding a record at the lifetime the extension opened and not a re-reading of the stop
   list: a lend at depth 1 (`kontBox_depth1`), and a view whose witness holds the views of its two
@@ -11249,6 +11252,16 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
 
 ## Changelog
 
+- **1.35** (2026-11-04) — §62 (*Semantic types read at the tree*): `F A` is a bare `cerwpT` run
+  (`SCmp.ret`), Core's `cC (.ret A)`; the Kripke quantifier over later worlds and lists sits at
+  `U` only. Thunks are introduced as Core's `thunkF_compatC` does, from the computation at every
+  world and list with the environment carried by its monotonicity (`TEnv.Mono`; `STy.thunk_intro_env`,
+  `STy.thunkRet_intro_env`, `STy.thunkRet_lam_env`, and their corollaries at a value type). `SCmp.ret_kripke`, `SCmp.ret_run`, `SCmp.ret_of_run`,
+  `CSem.Kripke`, `SCmp.amp_kripke` and `SCmp.nu_kripke_of` are retired; `SCmp.ret_reread` is
+  `F A`'s Kripke property along the whole-list re-reading. `SCmp.ret_val` takes the resource's
+  coverage. `STy.kont_of_share`, `STy.kontBox_resume_after` and the instances keep their
+  statements. No change to `twp`, `EndT`, `cerwpT`, `CDerives`, `fundamentalC`, `adequacyC`,
+  `adequacyD`, the checker, the backends or the corpus.
 - **1.34** (2026-11-04) — §62 (#795): the scheduler interface over the running task and a stack
   pool (`PoolTJ`, `PoolAns`): tasks above a joiner hold views of what it shares, hand them back at
   their end (`PoolTJ.deposit`), and the joiner is resumed with them; `poolSchedAdequacyT` at the new

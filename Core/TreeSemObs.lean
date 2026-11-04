@@ -7,9 +7,11 @@ import Core.EffMachine
 /-!
 # A bare run at a list is not one at every later list keeping its records  `[spec §62]`
 
-Why `𝒞⟦F A⟧` (`SCmp.ret`, `Core/TreeSemC.lean`) quantifies over the later lists itself rather than
-being a bare `cerwpT` run: `cerwpT` is Kripke along the re-reading of its list (`cerwpT_kripke`)
-but not along `KeepRel`. `KeepKripkeRunNil` is the property at the records `F A` runs at, none
+Why a thunk of `F A` (`STy.thunkRet`, `Core/TreeSemC.lean`) is introduced from its computation at
+every later list (`STy.thunk_intro`, Core's `thunkF_compatC`), not from a run at the list it is
+built at: `𝒞⟦F A⟧` is a bare `cerwpT` run (`SCmp.ret`, Core's `cC (.ret A)`), and `cerwpT` is
+Kripke along the re-reading of its list (`cerwpT_kripke`) but not along `KeepRel`, the quantifier
+of `U`. `KeepKripkeRunNil` is the property at the records `F A` runs at, none
 owned, and `cerwpT_not_keepKripkeNil` refutes it; `cerwpT_not_keepKripke` refutes it at any records
 owned (`KeepKripkeRun`).
 
@@ -157,8 +159,8 @@ theorem obsE_steps :
       Head.beta _ stuckE (Val.loc 0)⟩ (.refl _ _))
 
 /-- **A bare run owning no records is not Kripke along `KeepRel`**, with the lend's record in the
-run's list and not owned by it: the configuration `F A` runs at. So `𝒞⟦F A⟧` reads the later
-lists itself (`SCmp.ret`). -/
+run's list and not owned by it: the configuration `F A` runs at. So a run of `F A` at the list a
+thunk is built at is not a thunk; `STy.thunk_intro` asks the computation at every later list. -/
 theorem cerwpT_not_keepKripkeNil : ¬ KeepKripkeRunNil (ℍ := ℍ) := fun H => by
   obtain ⟨hp, -, -⟩ := cerwpT_adequacy (ℍ := ℍ) KEx.chainP
     (Q := fun _ _ _ _ _ ρ => ρ = PMap.empty) (fun _ _ _ _ _ _ h => h) (obsE_cerwpT H) obsE_steps

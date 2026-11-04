@@ -80,7 +80,9 @@ codes read at the tree; the store typing grows at allocation and a location keep
 are downward closed and monotone along the tree and `KeepRel` for every former, `Mut` only at a
 store-code payload (E1, #790), continuation and task types included (`Core/TreeSemK.lean`: a
 captured `κ` is a value of its type); the computation types (`SCmp`, `Core/TreeSemC.lean`) are
-downward closed, `F A` is Kripke along `KeepRel`, and they reach values under `U`. Effect rows
+downward closed, `F A` is a bare run, Kripke along the whole-list re-reading (`SCmp.ret_reread`),
+and they reach values under `U`, whose quantifier over later lists is the only one
+(`STy.thunk`); thunks are introduced by `STy.thunk_intro`. Effect rows
 (`CTy.eff`) have no `SCmp` former yet (`docs/new-core/scope-782.md`).
 
 ## 5. The cactus invariant carries the proofs
@@ -151,8 +153,9 @@ Over the single relation:
 1. `Row.tabN`, then 𝒱/𝒞 for every type: Imm, Mut (`vMut`), boxes, lifetimes, thunks
    (`vThunk`/`Covers`), μ, ν, ∀, type variables, families, opaque types, κ and task types. All
    downward closed; the value types, thunks included, monotone along the tree and `KeepRel`. Of
-   the computation types, `F A` and `&` of Kripke types are Kripke along `KeepRel`; `⊸`, `∀` and
-   `ν` are not, and a thunk of one is monotone by `U`'s quantifier. Done at the tree (`STy`, `SCmp`, κ and task
+   the computation types, `F A` is a bare run, Kripke along the whole-list re-reading
+   (`SCmp.ret_reread`); the quantifier over later lists is `U`'s alone (`STy.thunk`), and thunks
+   are introduced by `STy.thunk_intro`. Done at the tree (`STy`, `SCmp`, κ and task
    types, `Core/TreeSem.lean`, `Core/TreeSemC.lean`, `Core/TreeSemK.lean`) for every former but
    `Mut` at a payload that is not a store code (#790) and effect rows (`CTy.eff`).
 2. `SemJ`, then compatibility for every `CDerives` rule. The new rules are lend/reborrow/Anti-Frame

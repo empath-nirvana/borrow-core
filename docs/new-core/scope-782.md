@@ -66,7 +66,7 @@ second layer over it, step-indexed and read at the tree world:
 |---|---|---|
 | E1 | `Mut`'s payload is a store code, not an `STy` | A cell's invariant is index-free (`MutT.P`); a step-indexed payload (a thunk in a cell) needs step-indexed cell invariants, which the carrier does not have. Every code is a `STy` (`STy.code`), and Core's `μ` already keeps `X` out of `Mut` payloads (`VTy.NoMut`). |
 | E2 | One mode: no observable view (`vCE false`) | Core reads an `Imm` payload with `U` relaxed to `True`. Here an `Imm` payload is read in full; row 6 adds the view if `Imm`'s rules need it. |
-| E3 | The value types read the record list. They own no records: `SCmp.ret` runs at its list owning none | See §5. A continuation owning the records of lends its own branch opened (row 6) is not a value of a type here. |
+| E3 | The value types read the record list. They own no records: `SCmp.ret` runs at its list owning none | See §5. A continuation owning the records of lends its own branch opened (row 6) is not a value of a type here. E3b, `F A` carrying `U`'s quantifier over later lists, is reverted to Core's answer: `SCmp.ret` is a bare run, and thunks are introduced as `thunkF_compatC` does (§5). |
 | E4 | `SCmp.arr` quantifies the index below `n` | Downward closure of a function type at a step index needs it; Core's `cC` has no index. |
 
 ## 3. Rules out
@@ -80,8 +80,9 @@ second layer over it, step-indexed and read at the tree world:
 - **A bare run read as `F A`.** `Obs.cerwpT_not_keepKripkeNil`: a bare `cerwpT` run owning no
   records, the records `F A` runs at, is not Kripke along `KeepRel` (the stuck `() ()` over a view
   at `[]` would be a run at the lend's own list owning no records, and, framed beside the lend's
-  record, `let a = alloc () in () ()` a run at the empty world, against adequacy). `F A` asks the
-  run at every later list (`SCmp.ret`).
+  record, `let a = alloc () in () ()` a run at the empty world, against adequacy). A thunk of
+  `F A` is introduced from its computation at every later list (`STy.thunk_intro`), not from a run
+  at the current one.
 - **A continuation stored past its lend.** `STy.not_box_of_view`: a boxed value holding a view at
   `α` is not of `[@d] A` unless `d` is strictly below `α`; at the `κ` of the instances, boxed at
   its lend's own lifetime or at the root (`not_kontBox_at_lend`, `not_kontBox_at_root`).
@@ -95,10 +96,11 @@ Built for every former but `Mut` at a payload that is not a store code (E1, #790
 (`CTy.eff`, no `SCmp` former: `SCmp.ret` takes a table with its `Local`/`Down` proofs, and nothing
 yet builds a row's table with its entries downward closed), continuation and task types included.
 The value types are downward closed and monotone along extension and `KeepRel`; the computation
-types are downward closed, `F A` Kripke along `KeepRel` (`SCmp.ret_kripke`) and monotone in `A`
-(`SCmp.ret_le`), `&` Kripke when its components are (`SCmp.amp_kripke`), and reach values under
-`U` (`STy.thunkRet_intro`). `⊸`, `∀α ⊏ c` and `ν` are not Kripke by themselves; a thunk of one is
-proved at every extension directly. Each former `VTy.NoMut` lets `X` occur under is monotone in
+types are downward closed, `F A` a bare run (`SCmp.ret`), Kripke along the whole-list re-reading
+(`SCmp.ret_reread`) and monotone in `A` (`SCmp.ret_le`), and reach values under `U`, whose
+quantifier is the only one over later lists keeping what a thunk reads. A thunk is introduced from
+its computation at every world and list over its environment's type (`STy.thunk_intro`,
+`STy.thunkRet_intro`, `STy.thunkRet_lam`: Core's `thunkF_compatC`/`thunkV_compatC`). Each former `VTy.NoMut` lets `X` occur under is monotone in
 it (`STy.sum_le` … `STy.fam_le`), and `μ` in its body (`STy.mu_le`), so `μ` folds and unfolds at
 every body built from them, shown at `STy.allBody_mono` and `STy.list_cons`; a map from `NoMut`
 bodies to monotone bodies is not built. `ν` folds at Core's shape `F(A ⊕ U X) & F B`
@@ -149,13 +151,15 @@ the library discharges by a named result. None stands in for an unproved fact.
 | `STy.mu_fold`/`_unfold`, `SCmp.nu_fold`/`_unfold` | a monotone body | (a); met by `STy.list_body_mono`, `STy.allBody_mono`, `SCmp.loopBody_mono` |
 | `RC.mut_inv`, `RC.mut_readback`, `not_rc_of_inv_ne` | the cell's code `Θ′ ℓ = A`; the re-reading | (a); by `RC`'s definition |
 | `SCmp.ret_le`, `cerwpT_post_mono` | `Tb.Local`; the value types included | (s) `opTableT_local`; (a) |
-| `SCmp.ret_run` | coverage of the resource and of the list's records | (s) `cov_of_comp`, `RecInv.cov_ls` |
-| `SCmp.ret_kripke`, `STy.thunkRet_intro` | coverage of the resource | (s) `cov_of_comp` |
+| `SCmp.ret_reread` | `hE`, `hr`, `hl : SRecsRR` | (a) |
 | `Obs.cerwpT_not_keepKripkeNil`, `Obs.cerwpT_not_keepKripke` | none: refute `Obs.KeepKripkeRunNil` (`O = O′ = []`) and `Obs.KeepKripkeRun` with every hypothesis of `cerwpT_adequacy` discharged | — |
 | `Obs.d1_nonvacuous` | none: every hypothesis of `cerwpT_adequacy` discharged | — |
 | `STy.mu_le` | the bodies ordered pointwise | (a) |
 | `RC.mut_extends` | coverage, the code kept (`Θ′ ℓ = Θ ℓ`), the payload re-read and agreed on | (a); coverage and agreement (s) from `WInv` and `TWd.Ext`; met in `round7_codes` |
-| `STy.thunk_intro` | `C` Kripke along `KeepRel`; coverage of the resource | (a), met at `F A` (`SCmp.ret_kripke`) and `&`-trees of them; coverage (s) `cov_of_comp` |
+| `STy.thunk_intro_env`, `STy.thunkRet_intro_env`, `STy.thunkRet_lam_env` | `hG : G.Mono`, the environment monotone along the tree | (a) `thunkF_compatC`'s `gDenC_local`; met at every value type (`STy.env_mono`) |
+| | `hM`: the computation at every world and list, over a covered resource meeting the environment | (a) the term's semantic computation, as `thunkF_compatC`'s `SemC` premise |
+| | `hg`: the environment met here; coverage of the resource | (a) `thunkF_compatC`'s `gDenC`; coverage (s) `cov_of_comp` |
+| `STy.thunk_intro`, `STy.thunkRet_intro`, `STy.thunkRet_lam` | the `_env` forms at `G := τΓ.env γ` | as above; `thunkRet_lam` met at `λ_. inj₁ ()` (`STy.thunkRet_constInl`), `thunk_intro` at a value (`STy.thunkC_val`) |
 | `STy.thunk_force` | coverage of the resource and of the list's escrows | (s) `cov_of_comp`, `RecInv.cov_ls` |
 | `cerwpT_nil_of_imm` | a top-level `imm` cell of the resource | (a) |
 | `STy.kont_of_share`, `STy.kontBox_of_share` | `hκ`: `κ a` steps only to `K[a]` | (a) what `κ` is; met by `kontV_step` |
@@ -164,7 +168,8 @@ the library discharges by a named result. None stands in for an unproved fact.
 | | `hd`: the share in `Res_d` | (a) BOXED-κ's premise; met by `viewR_inStratum` |
 | | `n < k` | (a) the index below the stop's |
 | `STy.kontBox_resume_after` | the above; coverage of the share; `hE`, `hr`, `hk : KeepRel` | (a); coverage (s) as above; met in `kontBox_depth1`/`_depth3` at a proper extension and a `KeepRel` that is not `SRecsRR` (`not_rr_d1`, `not_rr_d3`) |
-| | `hls`: the records of `ls′` covered; the composite `σ` covered (in the resume conjunct) | (s) `RecInv.cov_ls`, `cov_of_comp`: the resume is read off the carried value (`STy.kont_resume`, `SCmp.ret_run`), which needs them |
+| | `hls`: the records of `ls′` covered | (s) `RecInv.cov_ls`: the resume is read off the carried value (`STy.kont_resume` at the reflexive extension), which needs it |
+| | the composite `σ` covered (in the resume conjunct) | unspent: `F A` is the run itself (`STy.kont_resume` gives it) |
 | `STy.not_box_of_view` | a view at `α` in the resource, `¬ d ⊏ α` | (a) |
 | `SCmp.ret_val`, `STy.thunkC_val` | coverage | (s) as above |
 | `reread` (`KSem`) | `MonoΘ Θ` | (a); met by `monoΘ₇` |
@@ -196,20 +201,23 @@ quantify over it (`KeepRel.trans`). The answer depends on `KeepRel`: a whole-lis
 (`SRecsRR`) refuses a resume after another branch ended a record of its own open at the stop,
 which the hardest case needs (`not_rr_d1`, `not_rr_d3`).
 
-**`F A` along `KeepRel`.** A thunk built from a run of `F A` at the current world needs `F A`
-Kripke along `KeepRel`. A bare `cerwpT` run is not: `twp` quantifies over starts whose list
-re-reads its list whole, and at `[]` a resource holding a view has none (`cerwpT_nil_of_imm`), so
-Kripke along `KeepRel` would make the stuck `() ()`, over the view of a lend the program opens, a
-run at the lend's own list, and `let a = alloc () in () ()` a run at the empty world, which
-adequacy refutes (`Obs.KeepKripkeRunNil`, `Obs.cerwpT_not_keepKripkeNil`, `Core/TreeSemObs.lean`;
-the refutation is at no records owned, the lend's record in the run's list, the stuck run framed
-beside it by `twp_frame`). So `F A`
-(`SCmp.ret`) is, over a covered resource, a run at every extension and every list keeping the
-records the resource reads: `U`'s quantifier at `F`. It is Kripke along `KeepRel` by
-`KeepRel.trans` (`SCmp.ret_kripke`), uniformly; `STy.thunkRet_intro` holds; a captured `κ`
-is a value of `U (B ⊸ F A)` because the share resumes at every such list (`kont_run_of_share`,
-`STy.kont_of_share`). The alternative, `twp`'s start condition weakened from `SRecsRR` to `KeepRel`
-(which would make `cerwpT` itself Kripke along `KeepRel` and `cerwpT_nil_of_imm` false), changes
-the relation under every rule of slice (d) and is not done here. A continuation owning the records
+**`F A` is a bare run; thunks as Core introduces them (E3b).** A bare `cerwpT` run is not Kripke
+along `KeepRel`: `twp` quantifies over starts whose list re-reads its list whole, and at `[]` a
+resource holding a view has none (`cerwpT_nil_of_imm`), so Kripke along `KeepRel` would make the
+stuck `() ()`, over the view of a lend the program opens, a run at the lend's own list, and
+`let a = alloc () in () ()` a run at the empty world, which adequacy refutes
+(`Obs.KeepKripkeRunNil`, `Obs.cerwpT_not_keepKripkeNil`, `Core/TreeSemObs.lean`; the refutation
+is at no records owned, the lend's record in the run's list, the stuck run framed beside it by
+`twp_frame`). That matters only to a thunk built from a run at the current list. Core never builds
+one so: `cC (.ret A)` is a bare `wpTS` run, and `thunkF_compatC` builds the thunk from `SemC` at
+the later list with the context moved there (`gDenC_local`). So does the tree. `F A`
+(`SCmp.ret`) is a bare run at its list, Kripke along the whole-list re-reading (`SCmp.ret_reread`);
+the quantifier over later lists keeping what the thunk reads is `U`'s alone (`STy.thunk`); and a
+thunk is introduced from its computation at every world and list over its environment's type,
+the environment carried by that type's monotonicity, which every `STy` has (`STy.thunk_intro`,
+`STy.thunkRet_intro`, `STy.thunkRet_lam`). A captured `κ` is a value of `U (B ⊸ F A)` because
+the share resumes at every such list (`kont_run_of_share`, `STy.kont_of_share`). The alternative,
+`twp`'s start condition weakened from `SRecsRR` to `KeepRel` (which would make `cerwpT` itself
+Kripke along `KeepRel` and `cerwpT_nil_of_imm` false), is not Core's answer and is not done. A continuation owning the records
 of lends its own branch opened is row 6's.
 
