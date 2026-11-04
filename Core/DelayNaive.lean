@@ -261,7 +261,7 @@ theorem naive_not_delay (δ : LSub) : ¬ cC (.delay .unit) [] δ (.val NV) PMap.
       delayF (fun ls v => vC true .unit ls δ v) (fun ls e => cC (.delay .unit) ls δ e) ls e ρ :=
     fun ls e ρ h => by
       rw [← nuF_delay]
-      exact (cC_nu_unfold (CTy.delayBody_nuOk _) ls δ e ρ).mp h
+      exact (cC_nu_unfold (CTy.delayBody_nuOk _).1 ls δ e ρ).mp h
   intro h
   have h₁ := (hout [] _ _ h).1
   have htg : Tagged (PMap.empty : WRes) [] [] := fun x hx => absurd hx (by simp)

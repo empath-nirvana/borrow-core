@@ -386,7 +386,8 @@ def elabC : Nat → TyEnv → CTy → Except Error CCTy
         let pattern := E.tps.any fun (_, T) => match T with | .tvar i => i ≥ 2 ^ 24 | _ => false
         if CTy.nuOkB B || pattern then pure (.nu B)
         else err sp (s!"`nu {X.name}. C` needs `C` to be a `&` of observations `F A`, each " ++
-          s!"possibly taking a closed argument `A -o …`, with `U {X.name}` only under `*`, `+` and `box`")
+          s!"possibly taking an argument `A -o …` without `U {X.name}` or a lifetime `forall 'x < @b. …`, " ++
+          s!"with `U {X.name}` only under `*`, `+` and `box`")
     | .name sp X => err sp s!"the `nu` variable `{X}` occurs only as `U {X}`"
     | .delay _ A => do pure (.delay (← elabV n E A))
     | .stream _ A => do pure (.stream (← elabV n E A))

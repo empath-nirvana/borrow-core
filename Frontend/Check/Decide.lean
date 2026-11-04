@@ -11,7 +11,8 @@ cases the comments name; where it is not, the gap is stated at the function.
 
 * `DecidableEq` on `VTy` and `CTy` (§12 item 4), derived; on `Expr`, `Core/LetCopy.lean`'s.
 * `VTy.clB`, `VTy.occB`, `VTy.noMutB`: `Cl`, `Occ`, `NoMut`, exactly.
-* `CTy.nuOkB`: `νX. C`'s positivity `NuOk`, exactly.
+* `CTy.nuOkB`: `νX. C`'s positivity `NuOk` (shape `CTy.nuShapeB` and binder freshness), exactly;
+  `CTy.bindsFreshB`: `unfold`'s premise `BindsFresh`.
 * `vfreeB`/`cfreeB`: `VFree`/`CFree`, exactly.
 * `ordB`: lifetime entailment `Δ ⊨ @a ⊏ @b` / `Δ ⊨ @a ⊑ @b` (§12 item 1), sound, by a bounded
   search over the structural rules of the carrier (`⊓` is `max`, `⊔` is `min`, `⊤` is `0`).
@@ -243,6 +244,7 @@ def CTy.nuLeafB : CTy → Bool
   | .amp C D => CTy.nuLeafB C && CTy.nuLeafB D
   | .eff n i q A B fin rc C => CTy.effLeafB (.eff n i q A B fin rc C)
   | .arr A D => VTy.clB 0 A && CTy.nuLeafB D
+  | .all _ _ D => CTy.nuLeafB D
   | _ => false
 
 theorem CTy.nuLeafB_sound : ∀ C : CTy, CTy.nuLeafB C = true → C.NuLeaf
@@ -254,19 +256,20 @@ theorem CTy.nuLeafB_sound : ∀ C : CTy, CTy.nuLeafB C = true → C.NuLeaf
   | .arr A D, h => by
       simp only [CTy.nuLeafB, Bool.and_eq_true] at h
       exact ⟨VTy.clB_sound 0 A h.1, nuLeafB_sound D h.2⟩
-  | .top, h | .all _ _ _, h | .nu _, h => by simp [CTy.nuLeafB] at h
+  | .all _ _ D, h => nuLeafB_sound D h
+  | .top, h | .nu _, h => by simp [CTy.nuLeafB] at h
 
-/-- `CTy.NuOk`, decided. -/
-def CTy.nuOkB : CTy → Bool
+/-- `CTy.NuShape`, decided. -/
+def CTy.nuShapeB : CTy → Bool
   | .amp C D => CTy.nuLeafB C && CTy.nuLeafB D
   | _ => false
 
-theorem CTy.nuOkB_sound : ∀ C : CTy, CTy.nuOkB C = true → C.NuOk
+theorem CTy.nuShapeB_sound : ∀ C : CTy, CTy.nuShapeB C = true → C.NuShape
   | .amp C D, h => by
-      simp only [CTy.nuOkB, Bool.and_eq_true] at h
+      simp only [CTy.nuShapeB, Bool.and_eq_true] at h
       exact ⟨CTy.nuLeafB_sound C h.1, CTy.nuLeafB_sound D h.2⟩
   | .ret _, h | .arr _ _, h | .top, h | .all _ _ _, h | .nu _, h | .eff _ _ _ _ _ _ _ _, h => by
-      simp [CTy.nuOkB] at h
+      simp [CTy.nuShapeB] at h
 
 /-- `VTy.polyB` is complete for `VTy.Poly`. -/
 theorem VTy.polyB_complete : ∀ A : VTy, A.Poly → VTy.polyB A = true
@@ -293,12 +296,13 @@ theorem CTy.nuLeafB_complete : ∀ C : CTy, C.NuLeaf → CTy.nuLeafB C = true
   | .amp C D, h => by simp [CTy.nuLeafB, nuLeafB_complete C h.1, nuLeafB_complete D h.2]
   | .eff n i q A B fin rc C, h => CTy.effLeafB_complete (.eff n i q A B fin rc C) h
   | .arr A D, h => by simp [CTy.nuLeafB, VTy.clB_complete 0 A h.1, nuLeafB_complete D h.2]
-  | .top, h | .all _ _ _, h | .nu _, h => h.elim
+  | .all _ _ D, h => by simpa [CTy.nuLeafB] using nuLeafB_complete D h
+  | .top, h | .nu _, h => h.elim
 
-/-- `CTy.nuOkB` is complete for `CTy.NuOk`. -/
-theorem CTy.nuOkB_complete : ∀ C : CTy, C.NuOk → CTy.nuOkB C = true
+/-- `CTy.nuShapeB` is complete for `CTy.NuShape`. -/
+theorem CTy.nuShapeB_complete : ∀ C : CTy, C.NuShape → CTy.nuShapeB C = true
   | .amp C D, h => by
-      simp [CTy.nuOkB, CTy.nuLeafB_complete C h.1, CTy.nuLeafB_complete D h.2]
+      simp [CTy.nuShapeB, CTy.nuLeafB_complete C h.1, CTy.nuLeafB_complete D h.2]
   | .ret _, h | .arr _ _, h | .top, h | .all _ _ _, h | .nu _, h | .eff _ _ _ _ _ _ _ _, h => h.elim
 
 /-- The bodies `C` of the thunks `U(νX. C)` in a value type: where `nu_in` looks for the type
@@ -381,6 +385,49 @@ end
 
 theorem not_vfree_of_vfreeB {x : LifeVar} {A : VTy} (h : vfreeB x A = false) : ¬ VFree x A :=
   fun hf => by rw [(vfreeB_iff x A).mpr hf] at h; exact Bool.noConfusion h
+
+/-! ### Leaf binders and positivity -/
+
+/-- The lifetimes bound by the `∀` leaves of an observation tree (`CTy.LeafBinds`). -/
+def CTy.leafBindsL : CTy → List LifeVar
+  | .amp C D => (CTy.leafBindsL C) ++ (CTy.leafBindsL D)
+  | .arr _ D => (CTy.leafBindsL D)
+  | .all y _ D => y :: (CTy.leafBindsL D)
+  | _ => []
+
+theorem CTy.leafBinds_iff (x : LifeVar) : ∀ C : CTy, C.LeafBinds x ↔ x ∈ (CTy.leafBindsL C)
+  | .amp C D => by
+      simp [CTy.LeafBinds, CTy.leafBindsL, CTy.leafBinds_iff x C, CTy.leafBinds_iff x D]
+  | .arr _ D => by simp [CTy.LeafBinds, CTy.leafBindsL, CTy.leafBinds_iff x D]
+  | .all y _ D => by simp [CTy.LeafBinds, CTy.leafBindsL, CTy.leafBinds_iff x D, eq_comm]
+  | .ret _ | .top | .nu _ | .eff _ _ _ _ _ _ _ _ => by simp [CTy.LeafBinds, CTy.leafBindsL]
+
+/-- `CTy.NuOk`, decided: the shape, and no leaf binder free in the body. -/
+def CTy.nuOkB (C : CTy) : Bool :=
+  CTy.nuShapeB C && (CTy.leafBindsL C).all (fun x => !cfreeB x C)
+
+theorem CTy.nuOkB_sound (C : CTy) (h : CTy.nuOkB C = true) : C.NuOk := by
+  simp only [CTy.nuOkB, Bool.and_eq_true, List.all_eq_true, Bool.not_eq_true'] at h
+  refine ⟨CTy.nuShapeB_sound C h.1, fun x hx hf => ?_⟩
+  have := h.2 x ((CTy.leafBinds_iff x C).mp hx)
+  rw [(cfreeB_iff x C).mpr hf] at this
+  exact Bool.noConfusion this
+
+/-- `CTy.nuOkB` is complete for `CTy.NuOk`. -/
+theorem CTy.nuOkB_complete (C : CTy) (h : C.NuOk) : CTy.nuOkB C = true := by
+  simp only [CTy.nuOkB, Bool.and_eq_true, List.all_eq_true, Bool.not_eq_true']
+  refine ⟨CTy.nuShapeB_complete C h.1, fun x hx => ?_⟩
+  cases hc : cfreeB x C with
+  | false => rfl
+  | true => exact absurd ((cfreeB_iff x C).mp hc) (h.2 x ((CTy.leafBinds_iff x C).mpr hx))
+
+/-- `CTy.BindsFresh`, decided: `unfold`'s premise. -/
+def CTy.bindsFreshB (C : CTy) (S : VTy) : Bool := (CTy.leafBindsL C).all (fun x => !vfreeB x S)
+
+theorem CTy.bindsFreshB_sound (C : CTy) (S : VTy) (h : CTy.bindsFreshB C S = true) :
+    C.BindsFresh S := by
+  simp only [CTy.bindsFreshB, List.all_eq_true, Bool.not_eq_true'] at h
+  exact fun x hx => not_vfree_of_vfreeB (h x ((CTy.leafBinds_iff x C).mp hx))
 
 /-! ### Lifetime entailment
 

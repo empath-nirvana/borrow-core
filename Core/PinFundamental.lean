@@ -126,7 +126,7 @@ theorem CDerivesP.ofC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | foldOwnG a0 a1 a2 a3 => exact CDerivesP.foldOwnG a0 a1 a2 a3
   | nuIn a0 a1 ih0 => exact CDerivesP.nuIn a0 ih0
   | nuOut a0 a1 ih0 => exact CDerivesP.nuOut a0 ih0
-  | unfoldN a0 a1 a2 a3 => exact CDerivesP.unfoldN a0 a1 a2 a3
+  | unfoldN a0 a1 a2 a3 a4 => exact CDerivesP.unfoldN a0 a1 a2 a3 a4
   | effSub a0 a1 ih0 => exact CDerivesP.effSub a0 ih0
   | effPerform a0 a1 a2 a3 ih0 => exact CDerivesP.effPerform a0 a1 a2 ih0
   | effAwait a0 a1 a2 a3 a4 a5 => exact CDerivesP.effAwait a0 a1 a2 a3 a4 a5
@@ -238,7 +238,7 @@ theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | foldOwnG B₀ Rs hΓ hB => exact FoldP.foldOwnG_compatX B₀ hB Rs hΓ
   | nuIn hC _ ih => exact nuIn_compatX hC ih
   | nuOut hC _ ih => exact nuOut_compatX hC ih
-  | unfoldN C S hC hΓ => exact unfold_compatX hC S hΓ
+  | unfoldN C S hC hS hΓ => exact unfold_compatX hC S hS hΓ
   | effSub hle _ ih => exact sub_compatC hle ih
   | effPerform hf hna _ _ ih => exact perform_compatC hf hna ih
   | effAwait hΓ hfa ha haA hfc hc => exact semC_dead .nil hΓ (await_compatC hfa ha haA hfc hc)

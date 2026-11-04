@@ -367,7 +367,7 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       CDerivesAt Ξ Δ Γ e (.comp C.unroll)
   /-- Coiteration, a constant: `unfold : !U(S ⊸ C[S/X]) ⊸ !U(S ⊸ νX. C)` (`Nu.lean`), at a
   positive `C`.  `[spec §7]` -/
-  | unfoldN {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hΓ : Ctx.DeadP Γ) :
+  | unfoldN {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
       CDerivesAt Ξ Δ Γ (.val (unfoldV C)) (.val (unfoldTy C S))
   /-- `[sub]`: `F_Σ A ≤ F_Σ′ A` for `Σ ⊆ Σ′`; `F A = F_∅ A`.  `[spec §19]` -/
   | effSub {Δ Γ e} {S S' : Row} {A : VTy} (hle : RowLe S S')
@@ -579,7 +579,7 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | foldReuse F R hΓ hF hG => exact .foldReuse F R hΓ hF hG
   | nuIn hC _ ih1 => exact .nuIn hC ih1
   | nuOut hC _ ih1 => exact .nuOut hC ih1
-  | unfoldN C S hC hΓ => exact .unfoldN C S hC hΓ
+  | unfoldN C S hC hS hΓ => exact .unfoldN C S hC hS hΓ
   | effSub hle _ ih1 => exact .effSub hle ih1
   | effPerform _ hf hna hac _ ih1 => exact .effPerform hf hna hac ih1
   | effAwait _ hΓ hfa ha haA hfc hc => exact .effAwait hΓ hfa ha haA hfc hc
@@ -961,7 +961,7 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | foldReuse F R hΓ hF hG => exact .foldReuse F R hΓ hF hG
   | nuIn hC _ ih1 => exact .nuIn hC (ih1 he)
   | nuOut hC _ ih1 => exact .nuOut hC (ih1 he)
-  | unfoldN C S hC hΓ => exact .unfoldN C S hC hΓ
+  | unfoldN C S hC hS hΓ => exact .unfoldN C S hC hS hΓ
   | effSub hle _ ih1 => exact .effSub hle (ih1 he)
   | effPerform => simp [BoCa.BoLo.performE, Expr.effFree, Expr.val, Val.prim] at he
   | effAwait => simp [awaitE, BoCa.BoLo.performE, BoCa.BoLo.raiseE, Expr.effFree, Expr.val,

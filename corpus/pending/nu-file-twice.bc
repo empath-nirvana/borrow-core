@@ -1,0 +1,67 @@
+-- pending: #808 — a type with a `forall` observation, elaborated in two lifetime contexts, gets two binder names, and the checker compares types syntactically
+-- now: 61:53: type mismatch: expected `box ('main /\ top) U (nu X. ((forall 'l5 < top. mut 'l5 i32 -o F (i32 * box ('main /\ top) U X)) & (forall 'l5 < top. imm 'l5 i32 -o F (i32 * box ('main /\ top) U X))) & F i32)`, but this has type `box ('main /\ top) U (nu X. ((forall 'l2 < top. mut 'l2 i32 -o F (i32 * box ('main /\ top) U X)) & (forall 'l2 < top. imm 'l2 i32 -o F (i32 * box ('main /\ top) U X))) & F i32)`
+--
+-- SPEC §22 (#808): the object of `nu-file-read.bc` called twice inside one lend of the buffer,
+-- the first call through a reborrow (`borrow mut m`), the second through the lend itself, and
+-- once more in a second lend. The rest crosses each lend boxed at `'c`; the state persists from
+-- call to call.
+--
+-- Answer: see `nu-file-twice.out`; `live 0`.
+
+type File<'c> = U (nu X. ((forall 'x < top. mut 'x i32 -o F (i32 * box 'c U X))
+                        & (forall 'x < top. imm 'x i32 -o F (i32 * box 'c U X))) & F i32)
+
+-- The state: the content and the number of reads.
+fn file_open<'c>(start: i32) -> box 'c File<'c> =
+  f <- return (unfold[nu X. ((forall 'x < top. mut 'x i32 -o F (i32 * box 'c U X))
+                           & (forall 'x < top. imm 'x i32 -o F (i32 * box 'c U X))) & F i32,
+                       ref i32 * i32]
+    (!thunkv fun (s : ref i32 * i32) ->
+      < < Fun 'x < top. fun (m : mut 'x i32) ->
+          let (c, n) = s;
+          cx <- return (swap[i32, i32] c i32[0]);
+          let (c, k) = cx;
+          cu <- return (swap[i32, i32] c k);
+          let (c, u) = cu;
+          q <- return (withswap['x, i32, i32] m (thunkv fun (v : i32) -> return (v + k, n + 1)));
+          let (m, r) = q;
+          return (release_mut['x, i32] m);
+          return (r, boxed['c] (c, n + 1)),
+          Fun 'x < top. fun (b : imm 'x i32) ->
+            let (c, n) = s;
+            w <- return (*b);
+            return (release_imm['x, i32] b);
+            cx <- return (swap[i32, i32] c w);
+            let (c, old) = cx;
+            return (old, boxed['c] (c, n)) >,
+        let (c, n) = s;
+        return (free[i32] c + n * 0) >));
+  s <- return (alloc[i32] start, 0);
+  return (boxed['c] (thunkv nu_in
+    < < g <- return (unbang f); (nu_out (force g s)).1 .1,
+        g <- return (unbang f); (nu_out (force g s)).1 .2 >,
+      g <- return (unbang f); (nu_out (force g s)).2 >))
+
+fn file_read<'a, 'c>(f: box 'c File<'c>, b: mut 'a i32) -> i32 * box 'c File<'c> =
+  g <- return (unbox f);
+  (nu_out (force g)).1 .1['a] b
+
+fn file_write<'a, 'c>(f: box 'c File<'c>, b: imm 'a i32) -> i32 * box 'c File<'c> =
+  g <- return (unbox f);
+  (nu_out (force g)).1 .2['a] b
+
+fn file_close<'c>(f: box 'c File<'c>) -> i32 =
+  g <- return (unbox f);
+  (nu_out (force g)).2
+
+main -> i32 =
+  let buf = alloc(1);
+  let f = file_open(2);
+  let (s, f) = borrow mut buf { 'w, m ->
+    let (r1, f) = borrow mut m { 'v, n -> file_read(f, n) };
+    let (r2, f) = file_read(f, m);
+    (r1 * 10 + r2, f) };
+  let (r3, f) = borrow mut buf { 'w, m -> file_read(f, m) };
+  let content = file_close(f);
+  let b = free(buf);
+  b * 10000 + content * 1000 + s * 10 + r3

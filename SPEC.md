@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.30 · 2026-11-04
+Version 1.31 · 2026-11-04
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -441,17 +441,28 @@ over it; a new codata shape is a new abbreviation, and a library of iterator ada
 rest of the codata". Every observation of a `νX. C` returns, possibly among other values, a
 thunk of the rest.
 
-**Positivity** (`CTy.NuOk`). `C` is a `&` of two observation trees, and an observation tree is
-an `F A`, a `&` of two observation trees, or an observation that takes a closed argument,
-`A ⊸ D` with `X` not in `A` and `D` an observation tree (§22). In each result `A`, `U X` occurs
-only under `⊗`, `⊕` and `[@a]`: `A` is `U X`, `B ⊗ B'`, `B ⊕ B'` or `[@a] B` of such types, or a
-type in which `X` does not occur (`VTy.Poly`). So `X` is never in an argument, under a `Ref`, a
-borrow, a `!`, a `μ` or another `U`, and a `νX. C` always has at least two observations.
+**Positivity** (`CTy.NuOk`). `C` is a `&` of two observation trees (`CTy.NuShape`), and an
+observation tree is an `F A`, a `&` of two observation trees, an observation that takes an
+argument, `A ⊸ D` with `X` not in `A` and `D` an observation tree (§22), or an observation
+quantified over a lifetime, `∀'x ⊏ @b. D` with `D` an observation tree (§22). In each result
+`A`, `U X` occurs only under `⊗`, `⊕` and `[@a]`: `A` is `U X`, `B ⊗ B'`, `B ⊕ B'` or `[@a] B` of
+such types, or a type in which `X` does not occur (`VTy.Poly`). So `X` is never in an argument,
+under a `Ref`, a borrow, a `!`, a `μ` or another `U`, and a `νX. C` always has at least two
+observations. An argument's lifetimes are unrestricted: `Mut 'x A ⊸ D` under `∀'x` takes a borrow
+lent for that one call. **Binder freshness:** no lifetime bound by a `∀` leaf is free in `C`, so
+the unrolling `C[U(νX. C)/X]`, which puts `U(νX. C)` under those binders, captures none.
+
+`X` is kept out of arguments because an argument is a negative position: one unfolding is
+monotone in the candidate for `U X` (below) only while the argument does not read it.
+Lifetimes are not type variables, so `X ∉ A` (`A.Cl 0`) places no restriction on them; what an
+observation taking a borrow needs is the `∀` leaf (#808).
 
 **Relation.** At a positive `C`, `𝒞⟦νX. C⟧` is the greatest fixed point of one unfolding of the
 observation tree, with a candidate `R` for `U X`: `⋃{R | R ⊆ Φ_C(R)}`, written in `Prop` as
 `∃ R` (`docs/scope-recursion.md` §3.1). `Φ_C` is monotone because `X` is outside every `Mut`
-payload. It needs no approximation of `νX. C` and no step index.
+payload and every argument. It needs no approximation of `νX. C` and no step index. `cC` reads
+the shape (`NuShape`) as its guard; freshness is syntactic, not invariant under renaming a
+binder, and the rules carry it through `NuOk`.
 
 **In and out.** `C[U(νX. C)/X]` is the unrolling:
 
@@ -462,7 +473,8 @@ payload. It needs no approximation of `νX. C` and no step index.
 on the same term, at a positive `C`. Observing a `νX. C` is `nuOut` followed by the projections
 of the unrolling.
 
-**Coiteration.** At every positive `C` and every state type `S`:
+**Coiteration.** At every positive `C` and every state type `S` that mentions no lifetime
+bound by a `∀` leaf of `C` (`CTy.BindsFresh`, since `C[S/X]` puts `S` under those binders):
 
     unfold : !U(S ⊸ C[S/X]) ⊸ !U(S ⊸ νX. C)
 
@@ -3381,7 +3393,8 @@ Richer policies are K3 (#162), and *Open*:
   state in the loop's state.
 - **As built** (`Core/Types.lean`, `Core/Relation.lean`, `Core/NuRel.lean`, `Core/Nu.lean`):
   - an observation tree's leaf is `F A` or `F_Σ A` (`CTy.EffLeaf`): a row's layers with closed
-    operation types over `F A`, `A` polynomial in `X`;
+    operation types over `F A`, `A` polynomial in `X`; it may sit under arguments and `∀` leaves
+    (§22), and its operation types are then read at the leaf's lifetime substitution;
   - `cB` at `F_Σ A` is `ewpTS` at the row's table, with the answer at the candidate (`effRetE`);
   - `instT` passes through a row's layers, so `unfold` coiterates an effectful step, mapped
     through the `[let]` frame (`node_ok`);
@@ -4338,6 +4351,63 @@ the step's computation (`nodeV`, `node_ok`, `Core/Nu.lean`). The map at `[@a] B`
 
 Every body positive before is positive after, and `nuIn`, `nuOut` and `unfold` cover the new
 shapes through these cases, with no new compatibility lemma.
+
+### Observations that take borrowed arguments: `∀` leaves (#808)
+
+An observation tree may also be `∀'x ⊏ @b. D` over an observation tree `D` (`CTy.NuLeaf`). With
+it an observation takes a borrow lent for one call: `∀'x ⊏ ⊤. Mut 'x A ⊸ F(B ⊗ [@c] U X)` and
+`∀'x ⊏ ⊤. Imm 'x A ⊸ …`, and in general any argument type that mentions the bound lifetimes.
+
+- **Why it was missing.** `A ⊸ D` needs `X ∉ A` (`A.Cl 0`), which says nothing about lifetimes:
+  `Mut 'x A ⊸ D` with `'x` free was already an observation tree. The gap was that `NuLeaf` had no
+  `∀` case, so a lifetime could not be quantified at the observation, and every call shared one
+  lend. `X ∉ A` stays: it keeps `X` out of a negative position (`cB_mono`'s `⊸` case passes the
+  argument through unchanged, and an argument that read the candidate would need it antitone).
+- **Positivity.** `NuOk C` is `NuShape C` and binder freshness: no `'x` bound by a `∀` leaf is free
+  in `C` (`CTy.LeafBinds`). `unfold` asks the same of its state type (`CTy.BindsFresh`). The
+  checker decides both (`CTy.nuOkB`, `CTy.bindsFreshB`); a written type is fresh by construction,
+  since a binder is named `Δ.freshVar` at its elaboration.
+- **Relation.** `cB` at `∀'x ⊏ @c. D` is `cC`'s `∀` clause:
+  `∀α, ⌜δ ⊨ α ⊏ c⌝ ─⋆ cB η D (δ[x ↦ α]) (e ())`. The candidate for `U X` is read at no lifetime
+  substitution (`nuP`), so the rest an observation answers does not depend on `α`. One
+  unfolding at the relation is the unrolling with the candidate at `δ` and the tree at an
+  agreeing `δ'` (`cB_unroll`, `vCE_nuEnv_at`); under a `∀'x` leaf `δ[x ↦ α]` still agrees on
+  `νX. C` because `'x` is not free in `C`. Monotonicity (`cB_mono`) gains the `∀` case. Up to
+  `TyEq` (`cB_tyEq`) the two sides may extend by different binder names; one unfolding never
+  reads the type the environment gives `X`, only its candidate (`vCE_poly_ty`, `cB_poly_ty`), so
+  it is compared at the type `1` on both sides (`nuEnvU`).
+- **Coiteration.** The node at `∀'x ⊏ @b. D` is the node at `⊸` with the argument `()` (`Λ` is
+  `λ_`; `nodeV_all_steps`). In `node_ok` the candidate at `δ` is the candidate at `δ[x ↦ α]`
+  because `'x` is not free in the state type (`candN_congr`).
+- **The rest leaves a lend only boxed.** `U` has no outlives rule, so a rest that is to outlive the
+  lend its call is made in is `[@c] U X`, as in `Clo`. A lend's callback answers `['y] B` with `'y`
+  not in `B` (`withbor`); `B = I32 ⊗ [@c] U(νX. C)` qualifies when `'c` is outside the lend. The
+  rest's type cannot mention the call's `'x` (it is `νX. C`, formed outside the binder), and the
+  lend's existing compatibility lemma returns the lent cell.
+- **Surface.** `forall 'x < @b. C` in a `nu` body, `Fun 'x < @b. M` for the observation, `M['a]` to
+  instantiate it; a call with `&mut buf` is `borrow mut buf { 'w, m -> f(…, m) }` over a function
+  that instantiates the observation at its own lifetime parameter (pending, below). No judgment,
+  rule or elaboration is added.
+- **Kernel derivations** (`Core/NuBorrow.lean`): `File^c`'s body is positive (`fileBody_nuOk`);
+  a `read` called on a lent `Mut 'y I32` and a `write` on a lent `Imm 'y I32` derive in `CDerives`
+  at `F(I32 ⊗ [@c] File^c)` (`d_fileRead`, `d_fileWrite`), covered by `fundamentalC`
+  (`fileRead_sem`, `fileWrite_sem`); `∀E` at the lend's lifetime leaves the rest's type
+  `File^c` (`fileRead_inst`, `fileWrite_inst`).
+- **Programs: pending.** `corpus/pending/nu-file-read.bc` (lend `mut` to `read`, the buffer back,
+  lend `imm` to `write`, `close`, free), `corpus/pending/nu-file-twice.bc` (two reads inside one
+  lend, one after) and `corpus/pending/nu-file-consumed.bc` (the implicit consume) are refused by
+  the checker. Their object, step and observations check; the refusal is at a call of a helper
+  function: the checker compares types syntactically, a `∀` binder in a type is named from the
+  lifetime context it is elaborated in (`Δ.freshVar`), and `∀E` renames a binder its argument
+  would capture, so `File<'c>` elaborated in two functions of different lifetime contexts gets two
+  binder names. Types equal up to renaming a `∀` binder are not one type to `CDerives`. Open.
+- **Baseline.** `fundamentalC`, `adequacyC`, `adequacyD`, `resourceSafety`, `fundamentalC_pin` and
+  `adequacyC_pin` keep their statements. Changed statements: `CTy.NuLeaf` (the `∀` case),
+  `CTy.instT` (passes under `∀`), `CTy.NuOk` (`NuShape` and freshness), `cB` (the `∀` clause),
+  `cC`'s `ν` guard (`NuShape`), `CDerives.unfoldN` and its copies (the premise `BindsFresh`), and
+  at the `ν` level `cB_unroll`/`effRetE_unroll` (the candidate's `δ` apart from the tree's),
+  `cB_tyEq` (an environment related at every pair of substitutions), `node_ok`/`candN_post`/
+  `unfold_compatX` (freshness of the state type), `sSB` (the `∀` clause).
 
 ### The closure
 
@@ -10929,6 +10999,18 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
 
 ## Changelog
 
+- **1.31** (2026-11-04) — §7, §19, §22 (#808): observations quantified over a lifetime. An
+  observation tree may be `∀'x ⊏ @b. D` (`CTy.NuLeaf`), so a codata observation takes a borrow
+  lent for one call (`∀'x. Mut 'x A ⊸ …`, `∀'x. Imm 'x A ⊸ …`). `NuOk` is `NuShape` plus binder
+  freshness; `cC`'s `ν` guard is `NuShape`; `unfold` gains the premise `BindsFresh`; `cB` gains
+  `cC`'s `∀` clause, with `cB_mono`, `cB_unroll`, `cB_congr`, `cB_tyEq`, `cB_iff_stacks`,
+  `cB_step`, `cB_bind` and `node_ok` extended. §7 corrects the earlier reading of `X ∉ A`: it
+  keeps `X` out of a negative position and was never a restriction on lifetimes; the missing
+  piece was the `∀` case. `fundamentalC`, `adequacyC`, `adequacyD` and `resourceSafety` keep their
+  statements. `Core/NuBorrow.lean` derives `read`/`write` calls on lent buffers. The programs
+  `nu-file-read`, `nu-file-twice`, `nu-file-consumed` are pending: the checker compares types
+  syntactically, and a type with a `∀` observation gets different binder names in different
+  lifetime contexts (§22).
 - **1.30** (2026-11-04) — §62, §12 (#771): the frame form of 1.27 is removed with its programs
   and its file handle; Core has no file-specific definition. `resourceSafety` and `rtSafety` keep
   their statements, in `Core/ResourceSafety.lean`. `kappa_lin_strict` (a must-resume `κ` is

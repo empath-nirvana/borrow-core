@@ -858,9 +858,9 @@ theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | nuOut a0 a1 ih0 =>
       intro Δ' he hd
       exact TDerivesP.nuOut a0 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
-  | unfoldN a0 a1 a2 a3 =>
+  | unfoldN a0 a1 a2 a3 a4 =>
       intro Δ' he hd
-      exact TDerivesP.unfoldN a0 a1 a2 a3
+      exact TDerivesP.unfoldN a0 a1 a2 a3 a4
   | effSub a0 a1 ih0 =>
       intro Δ' he hd
       exact TDerivesP.effSub a0 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
@@ -1186,9 +1186,9 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
   | nuOut a0 a1 ih0 =>
       intro Δ' he hd
       exact TDerivesAt.nuOut a0 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
-  | unfoldN a0 a1 a2 a3 =>
+  | unfoldN a0 a1 a2 a3 a4 =>
       intro Δ' he hd
-      exact TDerivesAt.unfoldN a0 a1 a2 a3
+      exact TDerivesAt.unfoldN a0 a1 a2 a3 a4
   | effSub a0 a1 ih0 =>
       intro Δ' he hd
       exact TDerivesAt.effSub a0 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))

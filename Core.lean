@@ -114,6 +114,7 @@ import Core.ClauseOwn
 import Core.Clo
 import Core.CloRules
 import Core.CloPrograms
+import Core.NuBorrow
 import Core.Mentions
 import Core.ResourceSafety
 import Core.StepsN

@@ -240,7 +240,8 @@ abbrev JR := Relation.ReflTransGen JS
 
 /-- An `&`-tree unrolls to an `&`. -/
 theorem unroll_amp {C : CTy} (hC : C.NuOk) : ∃ C₁ C₂, C.unroll = .amp C₁ C₂ := by
-  cases C <;> simp [CTy.NuOk] at hC
+  obtain ⟨hS, -⟩ := hC
+  cases C <;> simp [CTy.NuShape] at hS
   exact ⟨_, _, rfl⟩
 
 theorem effOf_ne_arr (S : Row) (Y A : VTy) (C : CTy) : CTy.effOf S Y ≠ .arr A C := by
