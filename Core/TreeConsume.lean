@@ -1,4 +1,5 @@
 import Core.TreeBorrowEdges
+import Core.TreeHandle
 
 /-!
 # Consuming a copy of a shared view at `twp`  `[spec §62]`
@@ -30,6 +31,13 @@ places a copy can be held elsewhere, three answers:
 A copy kept in the world as garbage, as row 5.33's `ρ⁺` is kept, sits in the lender's frame at its
 end and fails `twp_lendEnd`'s frame condition (`not_noneAt_view`).
 
+**Three positions of an ordinary consume.** Under `twp_bind` the callee's run is handed the whole
+resource, the caller's copy included, so a callee consuming its copy is admitted
+(`twp_bind_callee_consume`). A callee proved at its own copy alone, the caller's outside its run
+(`twp_frame`), is refused (`twp_frame_callee_refused`). A lend's callback consuming one of two
+copies it holds ends the lend through `twp_lendEnd` as it stands (`twp_lendEnd_after_consume`). A
+spawned task is its own run, its parent's copy in its frame: refused (`twp_child_refused`).
+
 A `mut` cell has no second copy (`not_compS_single_self`): no part absorbs it, so consuming one
 always changes the world.
 -/
@@ -43,7 +51,7 @@ open BoCa
 open BoCa.Fig16
 open BoCa.Fig16.Tree
 open BoCa.Fig16.BoLo
-open BoCa.BoLo (Heap)
+open BoCa.BoLo (Heap Kont)
 
 section Carrier
 variable {K : WCactus}
@@ -163,10 +171,10 @@ abbrev lsOne : List (SRecT wE.K) := [(lendRec 1, lfE 1)]
 
 /-- **A task holding one copy of a shared view cannot consume it at `twp`.** At the chain tree,
 with the lend of `ℓ = 1` at `α = 1` open, the frame owning its record and holding a copy, the run
-holding the other copy and owning no record, no `twp` at any frame condition the frame meets runs
+holding the other copy and owning no record, no `twp` at a frame condition `F` the frame meets runs
 `()` to an end owning nothing and holding nothing. -/
-theorem twp_refuses_consume_view :
-    ¬ twp (ℍ := ℍ) (fun _ _ => True) QGiveUp 1 wE lsOne [] (.val .unit) (viewRes (lfE 1) 1) := by
+theorem twp_refuses_consume_view_at (F : TFrame) (hF : F wE (viewRes (lfE 1) 1)) :
+    ¬ twp (ℍ := ℍ) F QGiveUp 1 wE lsOne [] (.val .unit) (viewRes (lfE 1) 1) := by
   intro h
   obtain ⟨W₁, hW₁, hR₁, hI₁⟩ := recWInv_lendStep (lfE 1) (recInv_empty chainP)
     (winv_empty chainP) (l := 1) rfl
@@ -182,11 +190,16 @@ theorem twp_refuses_consume_view :
     ⟨fun p => by simp, fun p hp => by simp at hp⟩
   obtain ⟨w', ρf', ρ', fρ', psF', ps', O', ls', -, -, -, -, -, -, -, -, ⟨hO', hρ'⟩, hu, -, -⟩ :=
     h wE (viewRes (lfE 1) 1) (viewRes (lfE 1) 1) (viewRes (lfE 1) 1) lsOne [] [lendRec 1]
-      [lendRec 1] _ (TWd.Ext.refl _ _) rr_view (.cons ⟨lendRec_rr 1, rfl⟩ .nil) .nil trivial
+      [lendRec 1] _ (TWd.Ext.refl _ _) rr_view (.cons ⟨lendRec_rr 1, rfl⟩ .nil) .nil hF
       ⟨hdup.1, _, hdup, hI₁.valid⟩ hdup hS hR₁ hI₁ hfd 0 _ _ (by omega) (.refl _ _)
       (LogRel.Core.final_val _ Val.unit)
   subst hρ'
   exact updX_consume_view_false (by simp [recMask]) hu
+
+/-- `twp_refuses_consume_view_at` at the trivial frame condition. -/
+theorem twp_refuses_consume_view :
+    ¬ twp (ℍ := ℍ) (fun _ _ => True) QGiveUp 1 wE lsOne [] (.val .unit) (viewRes (lfE 1) 1) :=
+  twp_refuses_consume_view_at _ trivial
 
 /-- The run's postcondition when it keeps its copy: it ends owning no record and holding the view. -/
 def QKeep : TPost := fun _ w _ O _ ρ => O = [] ∧ ρ = viewRes (K := w.K) (lfE 1) 1
@@ -198,6 +211,63 @@ theorem twp_admits_keep_view (F : TFrame) (n : Nat) :
   twp_here (fun μ => LogRel.Core.final_val μ Val.unit) fun _ _ _ _ _ hr _ hO => by
     cases hO
     exact ⟨rfl, rr_view_eq hr⟩
+
+/-! ### An ordinary call, a lend's end, a spawned task -/
+
+/-- **A callee consuming its copy under `twp_bind`, the caller holding another.** `twp_bind` hands
+the callee's run `e` the whole resource `ρ`: the caller's continuation is the run's postcondition,
+not its frame, so the caller's copy (in `A`) is in the callee's run beside the callee's, and the
+consume is `twp_consume_view_held`. Here the callee's body after its consume is the value `()`, and
+the continuation `K[()]` runs from `A` (re-read to wherever the callee ends, `twp_kripke`). -/
+theorem twp_bind_callee_consume {F : TFrame} (hFm : F.Mono) {Q : TPost} (K : Kont) {n : Nat}
+    {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {Y A ρ : TRes w.K} {β : Life}
+    {l : BoCa.Loc} (hY : ResUT.CompS Y (viewRes β l) A) (hA : ResUT.CompS A (viewRes β l) ρ)
+    (hK : twp (ℍ := ℍ) F Q n w ls O (K.plug (.val .unit)) A) :
+    twp (ℍ := ℍ) F Q n w ls O (K.plug (.val .unit)) ρ :=
+  twp_bind hFm K (twp_consume_view_held hY hA
+    (twp_here (fun μ => LogRel.Core.final_val μ Val.unit)
+      fun _ _ _ _ hE hr hl hO => twp_kripke hE hr hl hO hK))
+
+/-- **A callee proved at its own copy alone cannot consume it** when the caller's copy is outside
+its run (`twp_frame`'s `R`, or the frame), at every frame condition the configuration's frame
+meets. `twp_refuses_consume_view_at`, restated for a callee's frame condition `F₁`. -/
+theorem twp_frame_callee_refused (F₁ : TFrame) (hF₁ : F₁ wE (viewRes (lfE 1) 1)) :
+    ¬ twp (ℍ := ℍ) F₁ QGiveUp 1 wE lsOne [] (.val .unit) (viewRes (lfE 1) 1) :=
+  twp_refuses_consume_view_at F₁ hF₁
+
+/-- **A lend's end after the callback consumed one of two copies it held.** The lender holds the
+lend cell beside `Z` (`ρ₁`) and one more copy (`ρ₂ = ρ₁ ● v`); it consumes the extra copy
+(`twp_consume_view_held`) and ends the lend (`twp_lendEnd`, as it stands). Nothing of the consumed
+copy is left for the end's frame condition to meet. -/
+theorem twp_lendEnd_after_consume {F : TFrame} {Q : TPost} {n : Nat} {w : TWd}
+    {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {e : Expr} {Z ρ ρ₁ ρ₂ : TRes w.K}
+    {l : BoCa.Loc} {α : Life}
+    (hρ₁ : ResUT.CompS Z (viewRes α l) ρ₁) (hρ₂ : ResUT.CompS ρ₁ (viewRes α l) ρ₂)
+    (hρ : ResUT.CompS Z (ResUT.single l (CellUT.ownOf BoCa.Val.unit)) ρ)
+    (hvZ : ResUT.Valid Z) (hZ : NoneAt (· = l) Z)
+    (hF : ∀ w' ρf, F w' ρf → NoneAt (· = l) ρf) (hO : lendRec l ∉ O)
+    (hls : ∀ x ∈ ls, x.1 ≠ lendRec l) (h : twp (ℍ := ℍ) F Q n w ls O e ρ) :
+    twp (ℍ := ℍ) F Q n w ((lendRec l, α) :: ls) (lendRec l :: O) e ρ₂ :=
+  twp_consume_view_held hρ₁ hρ₂ <| twp_lendEnd hρ₁ hρ hvZ hZ hF
+    (fun x => by simp) hO
+    (fun x hx => by
+      rcases List.mem_cons.mp hx with rfl | hx
+      · exact Or.inl rfl
+      · exact Or.inr hx)
+    (fun x hx => List.mem_cons_of_mem _ hx) hls h
+
+/-- The configuration's frame meets a spawned child's frame condition at the empty mask
+(`enSpawn`'s `Fe`). -/
+theorem fdMask_false_view : fdMask (fun _ => False) wE (viewRes (lfE 1) 1) :=
+  ⟨valid_view _ _, fun _ _ _ h => h.elim⟩
+
+/-- **A spawned task holding a copy its parent also holds cannot consume it**: the task is its own
+run, and the parent's copy is outside it, in its frame. At the child's frame condition
+(`fdMask` at the empty mask). -/
+theorem twp_child_refused :
+    ¬ twp (ℍ := ℍ) (fdMask (fun _ => False)) QGiveUp 1 wE lsOne [] (.val .unit)
+      (viewRes (lfE 1) 1) :=
+  twp_refuses_consume_view_at _ fdMask_false_view
 
 end BoCa.Fig16.Tree.Wp
 
