@@ -23,6 +23,16 @@ one `F`, the base `Fb`, and every entry's resumer guarantee `fd` (`OpTabT.FdMono
 resumes at `fdAt en v Fb O′` and the resumed run re-lends there. It also carries the premise
 `ρ_b ∈ Res_{↓α}` of `erwp_M_frame` (`houtb`), read as a stratum `D` with `K.DownOf D {α}` as at
 `ResUT.six27`.
+
+**The postconditions, at the value program.** `MFPostT` hands the content back by composing the
+run's end resource with `ℓ ↦ own(u)`. Core's `MFPost` reads the part of the end without the
+borrow, which sits in Core's garbage part; the tree's `EndT` has no garbage part (D4), so a run's
+end resource holding a cell at `ℓ` meets `MFPostT` at every `Q` (`mfPostT_of_get`).
+`not_cerwpTMFrameC` is the configuration refusing `CerwpTMFrameC` at the value program.
+`antiInnerVal_retypes`: at `MFPostTK`, the Anti-Frame's inner run `val ()`, started where `ℓ` is
+untyped (its `own` cell pins no code), ends at a world typing `ℓ`. `MFPostTop`, `OpTabT.LendOKT`
+and `CerwpTMFrameP` are candidates, and `RetypeRecInv` states what re-typing `ℓ` at a run's start
+asks of the records.
 -/
 
 noncomputable section
@@ -242,6 +252,167 @@ def CerwpTMAntiFrameK : Prop :=
     (∀ W X, ResUT.CompS σP (ResUT.single l (CellUT.ownOf v)) W → ResUT.CompS ρa W X →
       cerwpT (ℍ := ℍ) (opTableGT T (CellFoldT l A)) (MFPostTK l A Q) Fb F n w ls O e X) →
     cerwpT (ℍ := ℍ) (opTableT T) Q Fb F n w ls O e ρ
+
+/-! ### The statements as written, at the value program -/
+
+/-- `2` covers `1` in the chain tree. -/
+theorem chain_downOf_one : w1.K.DownOf (TSet.single (lfE 2)) (TSet.single (lfE 1)) := by
+  refine WCactus.downOf_covers ⟨⟨chain_le (by omega), lfE_ne (by omega)⟩, fun x hx => ?_⟩
+  induction x using OrderDual.rec with
+  | toDual k =>
+  have hk : k ≤ 2 := by
+    by_contra h
+    exact chain_not_le (a := 2) (b := k) (by omega) hx.1
+  have hk2 : k ≠ 2 := fun e => hx.2 (by rw [e])
+  exact chain_le (by omega)
+
+/-- **`CerwpTMFrameC` has a configuration refusing it.** `MFPostT` hands the content back by
+composing the run's end resource with `ℓ ↦ own(u)`. At the tree a run's end resource holds the
+borrow itself (`EndT` has no garbage part, departure D4, where Core's `MFPost` read the part
+without the borrow), so at `ℓ` the composite is undefined and `MFPostT` holds of every end
+(`mfPostT_of_get`). The borrowed run `val ()` meets it; the lender's run `val ()` ends at
+`Q = False`. Every premise is discharged: the empty table, `fun _ _ => True` for both frame
+conditions, `↓1 = {2}` (`chain_downOf_one`). -/
+theorem not_cerwpTMFrameC : ¬ CerwpTMFrameC (ℍ := ℍ) := by
+  intro H
+  have hP : ResUT.InStratum (TSet.single (lfE 1)) (PMap.empty : TRes w1.K) :=
+    ResUT.inStratum_empty _
+  have hw : codeP w1 KTy.unit (TSet.single (lfE 1)) BoCa.Val.unit ⟨PMap.empty, hP⟩ :=
+    ⟨rfl, rfl⟩
+  have h := H OpTabT.empty (fun _ _ _ _ _ _ => False) (fun _ _ => True) (fun _ _ => True) 1 w1
+    [] [] (.val .unit) 1 KTy.unit (lfE 1) (TSet.single (lfE 2)) BoCa.Val.unit PMap.empty
+    (ResUT.single 1 (CellUT.ownOf BoCa.Val.unit)) PMap.empty
+    (ResUT.single 1 (CellUT.ownOf BoCa.Val.unit)) hP hw
+    (fun _ _ _ h _ => by simp [OpTabT.empty] at h) (fun _ _ _ h => by simp [OpTabT.empty] at h)
+    (fun _ _ _ _ _ _ _ => trivial) (fun _ _ _ _ _ _ _ => trivial) chain_downOf_one
+    (ResUT.inStratum_empty _) (by simp [Θ1]) (ResUT.compS_empty_right _)
+    (ResUT.compS_empty_right _) (fun BM hBM => by
+      rw [cerwpT_eq]
+      refine twp_here (fun μ => final_val μ Val.unit) fun w₀ ρ₀ ls₀ O₀ _ hr _ _ =>
+        Or.inl ⟨Val.unit, rfl, fun u Y hY => ?_⟩
+      exfalso
+      have hk : (CellUT.mutOf (K := w1.K) (TSet.single (lfE 1)) BoCa.Val.unit PMap.empty hP
+          (codeP w1 KTy.unit (TSet.single (lfE 1))) hw).kind ≠ Kind.imm := by
+        simp [CellUT.kind, CellUT.mutOf]
+      have hg := (ResUT.CompS.get_left_of_ne_imm (ResUT.CompS.comm hBM)
+        (ResUT.single_get_self _ _) hk).2
+      obtain ⟨ψ', e', -⟩ := hr.get_some hg
+      have := ResUT.compatS_single_own (ResUT.CompatS.symm hY.1)
+      rw [e'] at this; cases this)
+  rw [cerwpT_eq] at h
+  have hE : w1.Ext wE (ResUT.single 1 (CellUT.ownOf BoCa.Val.unit)) :=
+    ⟨WCactus.Ext.refl _, fun _ hl => absurd hl not_holdsMut_own⟩
+  have hc : ResUT.CompS (PMap.empty : TRes wE.K) (ResUT.single 1 (CellUT.ownOf BoCa.Val.unit))
+      (ResUT.single 1 (CellUT.ownOf BoCa.Val.unit)) :=
+    ResUT.CompS.comm (ResUT.compS_empty_right _)
+  obtain ⟨hR, hI⟩ := recWInv_alloc (w := wE) (l := 1) (recInv_empty chainP) (winv_empty chainP)
+    rfl (ResUT.CompS.comm (ResUT.compS_empty_right _))
+  have hfd : FinDom (BoCa.BoLo.Heap.upd (fun _ => none : Heap) 1 BoCa.Val.unit) :=
+    ⟨[1], fun l hl => by
+      by_cases e : l = 1
+      · simp [e]
+      · exact absurd (BoCa.BoLo.Heap.upd_other e) hl⟩
+  obtain ⟨w', _, _, _, _, _, _, _, -, -, -, -, -, -, -, -, hQ, -⟩ :=
+    h wE (ResUT.single 1 (CellUT.ownOf BoCa.Val.unit)) PMap.empty _ [] [] [] [] _ hE
+      (RR.refl hI.1) .nil .nil trivial ⟨hc.1, _, hc, hI.valid⟩ hc
+      ⟨fun p => by simp, fun p hp => by simp at hp⟩ hR hI hfd 0 _ _ (by omega) (.refl _ _)
+      (final_val _ Val.unit)
+  rcases hQ with ⟨_, _, hq⟩ | hq
+  · exact hq
+  · exact opTableT_empty_false hq
+
+/-- **`MFPostT` holds of every resource with a cell at `ℓ`**: the composite with `ℓ ↦ own(u)` is
+undefined there. -/
+theorem mfPostT_of_get {l : BoCa.Loc} {A : KTy} {Q : TPostV} {k : Nat} {w : TWd}
+    {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {v : Val} {ρ' : TRes w.K}
+    {ψ : TCell w.K} (e : ρ'.get l = some ψ) : MFPostT l A Q k w ls O v ρ' := by
+  intro u Y hY
+  have := ResUT.compatS_single_own (ResUT.CompatS.symm hY.1)
+  rw [e] at this; cases this
+
+/-- The Anti-Frame's inner premise at the value program, at `ℓ = 1`, `A = unit`, empty content and
+frame, at `w1`. -/
+def AntiInnerVal (Q : TPostV) (Fb F : TFrame) : Prop :=
+  ∀ W X : TRes w1.K, ResUT.CompS (PMap.empty : TRes w1.K)
+      (ResUT.single 1 (CellUT.ownOf BoCa.Val.unit)) W →
+    ResUT.CompS (PMap.empty : TRes w1.K) W X →
+    cerwpT (ℍ := ℍ) (opTableGT OpTabT.empty (CellFoldT 1 KTy.unit)) (MFPostTK 1 KTy.unit Q) Fb F
+      1 w1 [] [] (.val .unit) X
+
+/-- **At `MFPostTK`, the Anti-Frame's inner run `val ()` re-types `ℓ`.** Its resource
+`ℓ ↦ own(())` pins no code, so it is run from `wE`, where `1` is untyped; `MFPostTK` asks the end
+world to type `1` at `unit`, and `MFPostT`'s part holds of every end with a cell at `1`
+(`mfPostT_of_get`). So any proof of the inner premise of `CerwpTMAntiFrameK` at the value program
+ends a run started at `wE` (`wE.Θ 1 = none`) at a world typing `1`. -/
+theorem antiInnerVal_retypes {Q : TPostV} {Fb F : TFrame} (hF : F wE PMap.empty)
+    (h : AntiInnerVal (ℍ := ℍ) Q Fb F) :
+    ∃ w' : TWd, wE.Ext w' PMap.empty ∧ w'.Θ 1 = some KTy.unit := by
+  have hc : ResUT.CompS (PMap.empty : TRes wE.K) (ResUT.single 1 (CellUT.ownOf BoCa.Val.unit))
+      (ResUT.single 1 (CellUT.ownOf BoCa.Val.unit)) :=
+    ResUT.CompS.comm (ResUT.compS_empty_right _)
+  have h₁ := h _ _ (ResUT.CompS.comm (ResUT.compS_empty_right _))
+    (ResUT.CompS.comm (ResUT.compS_empty_right _))
+  rw [cerwpT_eq] at h₁
+  have hE : w1.Ext wE (ResUT.single 1 (CellUT.ownOf BoCa.Val.unit)) :=
+    ⟨WCactus.Ext.refl _, fun _ hl => absurd hl not_holdsMut_own⟩
+  obtain ⟨hR, hI⟩ := recWInv_alloc (w := wE) (l := 1) (recInv_empty chainP) (winv_empty chainP)
+    rfl (ResUT.CompS.comm (ResUT.compS_empty_right _))
+  have hfd : FinDom (BoCa.BoLo.Heap.upd (fun _ => none : Heap) 1 BoCa.Val.unit) :=
+    ⟨[1], fun l hl => by
+      by_cases e : l = 1
+      · simp [e]
+      · exact absurd (BoCa.BoLo.Heap.upd_other e) hl⟩
+  obtain ⟨w', _, _, _, _, _, _, _, hE', -, -, -, -, -, -, -, hQ, -⟩ :=
+    h₁ wE (ResUT.single 1 (CellUT.ownOf BoCa.Val.unit)) PMap.empty _ [] [] [] [] _ hE
+      (RR.refl hI.1) .nil .nil hF ⟨hc.1, _, hc, hI.valid⟩ hc
+      ⟨fun p => by simp, fun p hp => by simp at hp⟩ hR hI hfd 0 _ _ (by omega) (.refl _ _)
+      (final_val _ Val.unit)
+  rcases hQ with ⟨_, _, hq, -⟩ | ⟨_, _, _, _, _, _, _, h3, _⟩
+  · exact ⟨w', hE', hq⟩
+  · simp [OpTabT.empty] at h3
+
+/-! ### Candidates, for the user's decision (elaborate; not proved) -/
+
+/-- **`MFPost` (WpN.lean:604) read at a run's end resource with the borrow taken out**: Core's
+`MFPost` reads the part of the end without the borrow (the borrow is in its garbage part); the
+tree's `EndT` has none (D4), so the part is `ρ′/ℓ`. The result outlives the lend, as in Core. -/
+def MFPostTop (l : BoCa.Loc) (α : Life) (A : KTy) (Q : TPostV) : TPostV := fun k w ls O v ρ' =>
+  (ρ'.del l).InStratum (TSet.single α) ∧ MFPostT l A Q k w ls O v (ρ'.del l)
+
+/-- `OpTabN.LendOK`'s `pa` and `pb` (StopFrameN.lean) at the tree: what a stop passes out
+outlives the lend, what it passes in lies in `Res_D`. -/
+structure OpTabT.LendOKT (T : OpTabT) (α : Life) (D : TSet) : Prop where
+  pa : ∀ m i en, T m i = some en → ∀ k w ls v (ρ : TRes w.K), en.PA k w ls v ρ →
+    ρ.InStratum (TSet.single α)
+  pb : ∀ m i en, T m i = some en → ∀ v k w ls a (σ : TRes w.K), en.PBv v k w ls a σ →
+    σ.InStratum D
+
+/-- **Candidate**: `CerwpTMFrameC` at `MFPostTop`, with `OpTabT.LendOKT` (Core's `pa`, `pb`). -/
+def CerwpTMFrameP : Prop :=
+  ∀ (T : OpTabT) (Q : TPostV) (Fb F : TFrame) (n : Nat) (w : TWd) (ls : List (SRecT w.K))
+    (O : List (FrameRecT w.K)) (e : Expr) (l : BoCa.Loc) (A : KTy) (α : Life) (D : TSet)
+    (v : BoCa.Val) (ρP ρlP ρb ρ : TRes w.K)
+    (hP : ρP.InStratum (TSet.single α)) (hw : codeP w A (TSet.single α) v ⟨ρP, hP⟩),
+    OpTabT.KeepsShare T → OpTabT.FdMono T → OpTabT.LendOKT T α D → Fb.Mono → F.Mono →
+    w.K.DownOf D (TSet.single α) → ρb.InStratum D → w.Θ l = some A →
+    ResUT.CompS (ResUT.single l (CellUT.ownOf v)) ρP ρlP → ResUT.CompS ρlP ρb ρ →
+    (∀ BM, ResUT.CompS ρb (ResUT.single l (CellUT.mutOf (TSet.single α) v ρP hP
+        (codeP w A (TSet.single α)) hw)) BM →
+      cerwpT (ℍ := ℍ) (opTableT T) (MFPostTop l α A Q) Fb F n w ls O e BM) →
+    cerwpT (ℍ := ℍ) (opTableT T) Q Fb F n w ls O e ρ
+
+/-- **What re-typing the lent location at a run's start asks of the records**: at a world whose
+resource holds `ℓ ↦ own(u)` at the top, a world re-typing `ℓ` at `A`, extending it, with the
+records re-read and `RecInv` there. The Mut Frame's lender re-types `ℓ` at its start (step 1 of
+the appendix); `RecInv` at the re-typed world is `TWNT.reread`'s, whose `TcCarried` asks each
+used template to have a re-reading. -/
+def RetypeRecInv : Prop :=
+  ∀ (w₀ : TWd) (fρ : TRes w₀.K) (ps : List (FrameRecT w₀.K)) (ls : List (SRecT w₀.K))
+    (μ : Heap) (l : BoCa.Loc) (A : KTy) (u : BoCa.Val),
+    RecInv w₀ fρ ps ls → WInv w₀ fρ μ → fρ.get l = some (CellUT.ownOf u) →
+    ∃ w₁ : TWd, w₀.Ext w₁ fρ ∧ w₁.Θ l = some A ∧ ∀ fρ₁ : TRes w₁.K,
+      RRw (w := w₀) (w' := w₁) fρ fρ₁ → ∃ (ps₁ : List (FrameRecT w₁.K)) (ls₁ : List (SRecT w₁.K)),
+        RecsRR w₁.Θ ps ps₁ ∧ SRecsRR w₁.Θ ls ls₁ ∧ RecInv w₁ fρ₁ ps₁ ls₁
 
 end BoCa.Fig16.Tree.Wp
 

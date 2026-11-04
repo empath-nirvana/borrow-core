@@ -536,3 +536,64 @@ premise on `Q`.
    reseal is `TWNT.mutFold` read at `MFPostTK`'s `Θ ℓ = A`, and the stop's seal runs under
    `CellFoldT`.
 4. **Then** the record change (option (a), `canon_two_wit`) and the rest of §0's order.
+
+### The build stops at the statements (2026-11-04)
+
+Step 1 was not started on `CerwpTMFrameC`. Its statement is refused by a configuration, and
+`MFPostTK` forces the Anti-Frame's inner runs to re-type `ℓ`. Both need the user's decision.
+Everything below is in `Core/TreeMutFrame.lean` and `Core/TreeMutFrameRun.lean`, every hypothesis
+discharged, axioms within the three.
+
+**`not_cerwpTMFrameC` (configuration).** `MFPostT l A Q` composes the run's end resource with
+`ℓ ↦ own(u)`. Core's `MFPost` (WpN.lean:604) reads the part of the end *without* the borrow, which
+Core keeps in its garbage part `ρ⁺` (`rwpG_M_frameG`'s value case finds the cell in `ρp`). The
+tree's `EndT` has no garbage part (D4), so the borrowed run's end resource holds the borrow at `ℓ`,
+and the composite is undefined there: `MFPostT` holds of every end with a cell at `ℓ`
+(`mfPostT_of_get`), at every `Q`. The configuration: `w1`, `ℓ = 1`, `A = unit`, `α = 1`,
+`D = {2}` (`chain_downOf_one`), the empty table, `fun _ _ => True` for `F` and `Fb`, `Q = False`,
+`e = val ()`. The borrowed run meets `MFPostT` at once; the lender's run, from `wE`, must end in
+`False`. The same holds of `CerwpTMFrame` and `CerwpTMFrameM` (same postcondition).
+
+**`antiInnerVal_retypes` (the Anti-Frame's stop condition).** The inner run of
+`CerwpTMAntiFrameK` is given `ℓ ↦ own(v) ● σ_P`, an `own` cell, which pins no code. So the inner
+premise is owed at start worlds where `ℓ` has another code. At the value program, started at `wE`
+(`wE.Θ 1 = none`), `MFPostTK` asks the end world to type `1` at `unit`. Its `MFPostT` part is the
+vacuous one above (the end holds `ℓ ↦ own`). So any proof of the inner premise at `val ()` ends a
+run at a world re-typing `ℓ`. That is the configuration the decision asked for: a real borrowed
+run must re-type `ℓ`. Per the decision, the build stops here; no premise on `Q` was added.
+
+**A third item, step 1's re-typing (not derived either way).** The lender re-types `ℓ := A` at its
+start (decided). `twp` then needs `RecInv` at the re-typed world, which is `TWNT.reread`'s, and its
+`TcCarried` asks every used template `w₀.tc R T v` to have a re-reading. `w₀.tc` is arbitrary
+(`twp_tc_irrel`), and nothing makes its templates covered. `RetypeRecInv` (elaborates) is the
+statement step 1 needs. I have not derived it under `TWd.tc`, and have not verified that any
+obstruction is real. Under option (a), `TWC.reread` re-reads `C`/`D`, and `TmplAt`'s `CovR` gives the
+re-reading for `C` (`RR.exists_retype`). `D` at non-chain positions is unconstrained in `TWC` as
+written. So the record change looks like a prerequisite of step 1, not a follow-up.
+
+**Candidates (elaborate; not proved).**
+- `MFPostTop l α A Q`: `MFPost` read at `ρ′/ℓ`, with Core's `ρ′ ∈ Res_α` conjunct.
+- `OpTabT.LendOKT T α D`: Core's `LendOK.pa` (payload in `Res_α`) and `pb` (answer in `Res_D`). The
+  tree statement dropped them. Not checked whether the tree needs them.
+- `CerwpTMFrameP` is `CerwpTMFrameC` at both. Not checked: whether `w.K.DownOf D {α}` at `w` alone
+  suffices, since `ResUT.six27` reads `DownOf` at the tree it is applied at, and the borrowed run
+  ends at extensions of `w`.
+
+**Built, independent of the choice (`Core/TreeMutFrameRun.lean`).** The fold at the borrowed run's
+two ends, along the walks. These are `[TR]` 6.28's iffs, from the two flattenings agreeing off `ℓ`
+(`ResUT.flat_mut_own_agree_off`). A `Beneath` ancestor is `imm`, so it is never at `ℓ`, and the
+ancestor disjuncts carry over. No per-location split is introduced.
+- `UpdA.of_mut_own`: `↭` from the `mut` sides to the `own` sides, beside the end world folded the
+  same way.
+- `InvKeptA.of_mut_own`: the codes kept.
+- `lower_mut_own_iff`: the same memory (6.25 under a frame).
+
+**For the decision.**
+1. The Mut Frame's postcondition: `MFPostTop`, or another reading of "the borrow handed back" at an
+   end that holds it.
+2. Whether Core's `pa`/`pb` join the approved premises.
+3. The Anti-Frame: its inner runs start where `ℓ` may be re-typed. Under `MFPostTK` each must re-type
+   `ℓ` back at its end. Options include an inner premise read only at start worlds typing `ℓ` at
+   `A` (no such relation exists; `cerwpT` quantifies every extension), or re-typing at the end,
+   which needs `RetypeRecInv` and a `Q` read at the re-typed world.
+4. The order: the record change before step 1 (the third item).

@@ -1203,6 +1203,13 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.TP_fdMono
 #print axioms BoCa.Fig16.Tree.Wp.not_mustResume_TP
 #print axioms BoCa.Fig16.Tree.Wp.TP_keepsShare
+#print axioms BoCa.Fig16.Tree.Wp.chain_downOf_one
+#print axioms BoCa.Fig16.Tree.Wp.not_cerwpTMFrameC
+#print axioms BoCa.Fig16.Tree.Wp.mfPostT_of_get
+#print axioms BoCa.Fig16.Tree.Wp.antiInnerVal_retypes
+#print axioms BoCa.Fig16.Tree.Wp.UpdA.of_mut_own
+#print axioms BoCa.Fig16.Tree.Wp.InvKeptA.of_mut_own
+#print axioms BoCa.Fig16.Tree.Wp.lower_mut_own_iff
 #print axioms BoCa.Fig16.Tree.Wp.tmplSpecT_view
 #print axioms BoCa.Fig16.Tree.Wp.tmplSpecT_two
 #print axioms BoCa.Fig16.Tree.Wp.tmplSpecT_two_wit
