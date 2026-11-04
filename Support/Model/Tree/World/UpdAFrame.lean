@@ -171,7 +171,7 @@ def ImmLe (φ ψ : TCell K) : Prop :=
   φ.kind = Kind.imm ∧ ψ.kind = Kind.imm ∧ ψ.erase = φ.erase ∧ ψ.wit = φ.wit ∧
     ∃ s t, φ.lsOf = some s ∧ ψ.lsOf = some t ∧ s.set ⊆ t.set
 
-theorem lsOf_of_imm {ψ : TCell K} (h : ψ.kind = Kind.imm) : ∃ s, ψ.lsOf = some s := by
+theorem lsOf_some_of_imm {ψ : TCell K} (h : ψ.kind = Kind.imm) : ∃ s, ψ.lsOf = some s := by
   cases ψ with
   | own v => simp [CellUT.kind] at h
   | imm i => exact ⟨i.ls, rfl⟩
@@ -180,7 +180,7 @@ theorem lsOf_of_imm {ψ : TCell K} (h : ψ.kind = Kind.imm) : ∃ s, ψ.lsOf = s
 /-- **An `imm` operand of `○` is below the composite.** -/
 theorem CellUT.CompR.immLe_left {φ₁ φ₂ ψ : TCell K} (h : CellUT.CompR φ₁ φ₂ ψ)
     (hk : φ₁.kind = Kind.imm) : ImmLe φ₁ ψ := by
-  obtain ⟨s, hs⟩ := lsOf_of_imm hk
+  obtain ⟨s, hs⟩ := lsOf_some_of_imm hk
   have hl := h.lsOf_eq
   rw [hk, hs] at hl
   have hkψ : ψ.kind = Kind.imm := by rw [h.kind_eq, hk]; cases φ₂.kind <;> rfl
@@ -188,7 +188,7 @@ theorem CellUT.CompR.immLe_left {φ₁ φ₂ ψ : TCell K} (h : CellUT.CompR φ�
   cases hk₂ : φ₂.kind with
   | own => rw [hk₂] at hl; exact ⟨s, s, hs, hl, subset_rfl⟩
   | imm =>
-      obtain ⟨t, ht⟩ := lsOf_of_imm hk₂
+      obtain ⟨t, ht⟩ := lsOf_some_of_imm hk₂
       rw [hk₂, ht] at hl
       exact ⟨s, s ∪ t, hs, hl, by simp⟩
   | «mut» => rw [hk₂] at hl; exact ⟨s, s, hs, hl, subset_rfl⟩
@@ -236,14 +236,14 @@ theorem CellAbs.of_le {ψ : TCell K} {χ χ' : TCell K'} (h : CellAbs Θ ψ χ) 
 theorem XCell.abs_of_le {ψ : TCell K} {ψ' χ : TCell K'} (h : XCell Θ ψ ψ')
     (hk : ψ.kind = Kind.imm) (h' : ImmLe ψ' χ) : CellAbs Θ ψ χ := by
   obtain ⟨e, r⟩ := h.2.2 hk
-  obtain ⟨s, hs⟩ := lsOf_of_imm hk
+  obtain ⟨s, hs⟩ := lsOf_some_of_imm hk
   exact CellAbs.of_le ⟨hk, h.1.trans hk, e, r, s, s, hs, (h.lsOf_imm hk).trans hs, subset_rfl⟩ h'
 
 /-- An `imm` cell carried by `XCell` is absorbed by it from the start side. -/
 theorem XCell.sub {ψ : TCell K} {ψ' : TCell K'} (h : XCell Θ ψ ψ') (hk : ψ.kind = Kind.imm) :
     CellSub Θ ψ ψ' := by
   obtain ⟨e, r⟩ := h.2.2 hk
-  obtain ⟨s, hs⟩ := lsOf_of_imm hk
+  obtain ⟨s, hs⟩ := lsOf_some_of_imm hk
   exact ⟨hk, h.1.trans hk, e, r, s, s, hs, (h.lsOf_imm hk).trans hs, subset_rfl⟩
 
 theorem CellSub.of_le {ψ ψ₂ : TCell K} {ψ' : TCell K'} (h : ImmLe ψ ψ₂) (h' : CellSub Θ ψ ψ') :
@@ -294,7 +294,7 @@ theorem cellSub_compR {ψ : TCell K} {φ₁ φ₂ ψ' : TCell K'} (h : CellUT.Co
   · exact one (CellUT.CompR.immLe_right h k) (h₂ k)
 
 theorem ImmLe.refl {ψ : TCell K} (hk : ψ.kind = Kind.imm) : ImmLe ψ ψ := by
-  obtain ⟨s, hs⟩ := lsOf_of_imm hk
+  obtain ⟨s, hs⟩ := lsOf_some_of_imm hk
   exact ⟨hk, hk, rfl, rfl, s, s, hs, hs, subset_rfl⟩
 
 /-! ### Cells of a `○` of resources -/
