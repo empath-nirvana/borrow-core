@@ -61,6 +61,7 @@ def enSpawn : OpEntT where
   fin := true
   fd := fdJoinT
   oc := fun _ _ => True
+  cn := fun _ _ => False
 
 /-- The root's table: the child's, and `spawn` (1). -/
 def TS : OpTabT := fun m i =>
@@ -267,7 +268,7 @@ theorem spawnCl_ok (N : Nat)
   ssimp
   refine twp_det hQD (fun μ => step1Only_plug (Head.letpair μ HS (poolVal ts) _) rfl .hole) ?_
   ssimp
-  have he := cerwpT_table_mono (opTableT_incl (TC_TS (ℍ := ℍ))) j₀ _ w₀ ls₀ [] _ _
+  have he := cerwpT_table_mono j₀ (TC_TS (ℍ := ℍ)) _ w₀ ls₀ [] _ _
     (hth j₀ (by omega) w₀ ls₀ (fun _ _ => True) (fdMask (recMask ([] : List (FrameRecT w₀.K))))
       (fun _ _ _ => trivial) (fun _ _ h => fdMask_le (fun x hx => by simp [recMask] at hx) h))
   have h := poolAns_run_le (ih j₀ (by omega)) le_rfl (fun u hu => (hg' u hu).le (by omega))
@@ -288,6 +289,7 @@ theorem hs_schedOKLe : ∀ N, SchedOKTLe (ℍ := ℍ) N TS nP qsS stackRet hsS Q
   | _ N ih =>
   refine ⟨fun m i hm => by simp [TS, hm], fun i en h _ => ?_, fun i en h v w O ρf hj => ?_,
     poolAns_down _ _ _, fun F k w ls O v ρ _ => stackRet_okAt (fun t ts hi => invS_cons hi) F k w ls O v ρ,
+    fun _ F k w ls O v ρ _ => stackRet_okAt (fun t ts hi => invS_cons hi) F k w ls O v ρ,
     fun i en h => ?_⟩
   · obtain ⟨-, ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩⟩ := TS_some h <;> rfl
   · obtain ⟨-, ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩⟩ := TS_some h <;> exact hj

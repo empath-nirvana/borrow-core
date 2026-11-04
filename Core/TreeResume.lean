@@ -194,8 +194,8 @@ theorem twp_keepsList {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls : List (S
 /-- **A share resumed at any list its stop list is carried into.** -/
 theorem contShareT_resume_in {en : OpEntT} {F : TFrame} {k : Nat} {w w' : TWd}
     {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {ls' : List (SRecT w'.K)}
-    {O' : List (FrameRecT w'.K)} {K : Kont} {v : Val} {Ψ : ContT} {ρ : TRes w.K}
-    {ρ' : TRes w'.K} (h : contShareT en F k w ls O K v Ψ ρ) (hE : w.Ext w' ρ)
+    {O' : List (FrameRecT w'.K)} {K : Kont} {v : Val} {Ψ : ContT} {T : OpTabT} {Ψc : ContP}
+    {ρ : TRes w.K} {ρ' : TRes w'.K} (h : contShareT T en F k w ls O K v Ψ Ψc ρ) (hE : w.Ext w' ρ)
     (hr : RRw (w := w) (w' := w') ρ ρ') (hl : SRecsIn w'.Θ ls ls') (hO : RecsRR w'.Θ O O')
     {k' : Nat} (hk : k' < k) {a : Val} {σ σ' : TRes w'.K} (hB : en.PBv v k' w' ls' a σ)
     (hc : ResUT.CompS ρ' σ σ') : Ψ (fdAt en v F O') w' O' k' ls' (K.plug (.val a)) σ' :=

@@ -211,7 +211,7 @@ theorem stackRet_ok : SchedRetT (ℍ := ℍ) QS (PoolAns (ℍ := ℍ) QS HStack 
 theorem stack_schedOK :
     SchedOKT (ℍ := ℍ) TP nP qsP stackRet hsStack QS (PoolAns (ℍ := ℍ) QS HStack InvStack) := by
   refine ⟨fun m i hm => by simp [TP, hm], fun i en h _ => ?_, fun i en h v w O ρf hj => ?_,
-    poolAns_down _ _ _, stackRet_ok, fun i en h => ?_⟩
+    poolAns_down _ _ _, stackRet_ok, fun _ => stackRet_ok, fun i en h => ?_⟩
   · obtain ⟨-, rfl, rfl⟩ := TP_some h
     rfl
   · obtain ⟨-, -, rfl⟩ := TP_some h
@@ -229,11 +229,11 @@ theorem kU_unit {Fb F : TFrame} {n : Nat} {w : TWd} {ls : List (SRecT w.K)} :
   exact cerwpT_val (v := Val.unit) fun w₀ ρ₀ _ O₀ _ hr _ hO => by
     cases hO; exact ⟨rfl, rfl, RR.of_empty hr⟩
 
-theorem kU_cancel {Fb F : TFrame} {n : Nat} {w : TWd} {ls : List (SRecT w.K)} :
-    cerwpT (ℍ := ℍ) (opTableT TP) QS Fb F n w ls []
-      (ccatchE (kA.dead.plug (raiseE (.val (cancelVal none))))) PMap.empty := by
-  refine cerwpT_det (TP_down QB_down) (fun μ => step1Only_plug (Head.cancel μ kA rfl) rfl
-    .hole) ?_
+theorem kU_cancel {T : OpTabT} (hT : PADown T) {Fb F : TFrame} {n : Nat} {w : TWd}
+    {ls : List (SRecT w.K)} :
+    cerwpT (ℍ := ℍ) (opTableT T) Qunit Fb F n w ls [] (unwindE kA) PMap.empty := by
+  refine cerwpT_det (cerwpPostT_down (fun _ _ _ _ _ _ h => h) hT)
+    (fun μ => step1Only_plug (Head.cancel μ kA rfl) rfl .hole) ?_
   exact cerwpT_val (v := Val.unit) fun w₀ ρ₀ _ O₀ _ hr _ hO => by
     cases hO; exact ⟨rfl, rfl, RR.of_empty hr⟩
 
@@ -249,8 +249,8 @@ theorem taskU_cerwpT (n : Nat) (Fb F : TFrame) (w : TWd) (ls : List (SRecT w.K))
   obtain rfl := RR.of_empty hr
   refine ⟨trivial, PMap.empty, PMap.empty, ResUT.compS_empty_right _, ⟨rfl, rfl⟩,
     (⟨(fun _ => rfl), fun w' ρ' ls' O' _ hr' _ hO' => ⟨fun k' hk' a σ σ' hB hcσ => ?_,
-      (fun _ _ k' hk' => ?_)⟩⟩ : contShareT enPark Fb n w₀ ls₀ [] kA Val.unit
-        (cerwpTC (ℍ := ℍ) (opTableT TP) QS Fb n) PMap.empty)⟩
+      (fun _ _ k' hk' _ _ => ?_)⟩⟩ : contShareT TP enPark Fb n w₀ ls₀ [] kA Val.unit
+        (cerwpTC (ℍ := ℍ) (opTableT TP) QS Fb n) (cerwpTK (ℍ := ℍ) n) PMap.empty)⟩
   · obtain ⟨rfl, rfl⟩ := hB
     obtain rfl := RR.of_empty hr'
     obtain rfl := compS_empty_right_eq hcσ
@@ -259,8 +259,8 @@ theorem taskU_cerwpT (n : Nat) (Fb F : TFrame) (w : TWd) (ls : List (SRecT w.K))
     exact kU_unit
   · obtain rfl := RR.of_empty hr'
     cases hO'
-    simp only [cerwpTC, hk', if_true]
-    exact kU_cancel
+    simp only [cerwpTK, hk', if_true]
+    exact kU_cancel (TP_PA.restrict _)
 
 /-- The program: `(hnd HStack (let _ = park () in ())) s₀`. -/
 def stackProg : Expr := .app (hndE HStack taskA) (stateVal HStack []).1

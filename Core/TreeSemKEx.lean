@@ -312,6 +312,7 @@ def enU : OpEntT where
   fin := false
   fd _ _ _ _ := True
   oc _ _ := True
+  cn _ _ := False
 
 /-- `K = [·]; ℓ`: resumed at `()`, it returns `ℓ`. -/
 def kRet (l : BoCa.Loc) : Kont := .seq .hole (.val (Val.loc l))
@@ -328,8 +329,8 @@ at `()` at every extension and list keeping the records it reads, `K[()]` steps 
 of `A` over the re-read share. At any world. -/
 theorem share_val {τ : STy} {w : TWd} {l : BoCa.Loc} {ρ : TRes w.K} (hc : CovR (sem w.Θ) w.K ρ)
     (hv : ∀ n ls, τ.P n w ls (Val.loc l) ρ) (k : Nat) (ls : List (SRecT w.K)) :
-    contShareT enU Fb k w ls [] (kRet l) Val.unit
-      (cerwpTC (ℍ := ℍ) tbE (postOf τ) Fb k) ρ := by
+    contShareT (fun _ _ => none) enU Fb k w ls [] (kRet l) Val.unit
+      (cerwpTC (ℍ := ℍ) tbE (postOf τ) Fb k) (cerwpTK (ℍ := ℍ) k) ρ := by
   unfold contShareT
   refine ⟨fun h => by simp [enU] at h, fun w' ρ' ls' O' hE hr hk hO => ?_⟩
   cases hO
@@ -361,8 +362,8 @@ theorem viewR_val {n : Nat} {w : TWd} {l : BoCa.Loc} {α : Life} (ls : List (SRe
 
 /-- **A stop's share holding the view**, at every world, stop index and stop list. -/
 theorem share_viewR (w : TWd) (l : BoCa.Loc) (α : Life) (k : Nat) (ls : List (SRecT w.K)) :
-    contShareT enU Fb k w ls [] (kRet l) Val.unit
-      (cerwpTC (ℍ := ℍ) tbE (postOf (τR α)) Fb k) (viewR l α) :=
+    contShareT (fun _ _ => none) enU Fb k w ls [] (kRet l) Val.unit
+      (cerwpTC (ℍ := ℍ) tbE (postOf (τR α)) Fb k) (cerwpTK (ℍ := ℍ) k) (viewR l α) :=
   share_val (viewR_cov l α) (fun _ ls => viewR_val ls) k ls
 
 /-! ### Depth 1, at the extension -/

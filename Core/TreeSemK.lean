@@ -101,7 +101,8 @@ theorem kont_run_of_share {Tb : TableT} (hL : Tb.Local) {τ τB : STy} {en : OpE
     {v κ : Val} {ρ : TRes w.K} {ρ' : TRes w'.K}
     (hκ : ∀ (a : Val) μ, Step1Only (ℍ := ℍ) μ (.app (.val κ) (.val a)) μ (K.plug (.val a)))
     (hB : ∀ j (w' : TWd) ls' a σ, τB.P j w' ls' a σ → en.PBv v j w' ls' a σ)
-    (h : contShareT en Fb k w ls [] K v (cerwpTC (ℍ := ℍ) Tb (postOf τ) Fb k) ρ)
+    {T : OpTabT} {Ψc : ContP}
+    (h : contShareT T en Fb k w ls [] K v (cerwpTC (ℍ := ℍ) Tb (postOf τ) Fb k) Ψc ρ)
     (hE : w.Ext w' ρ) (hr : RRw (w := w) (w' := w') ρ ρ') (hk : KeepRel w'.Θ ls ls' ρ)
     {j : Nat} (hj : j < k) {a : Val} {ρa σ : TRes w'.K} (hc : ResUT.CompS ρ' ρa σ)
     (ha : τB.P j w' ls' a ρa) :
@@ -131,7 +132,8 @@ theorem STy.kont_of_share {Tb : TableT} (hL : Tb.Local) (hTb : Tb.Down) {τ τB 
     {v κ : Val} {ρ : TRes w.K}
     (hκ : ∀ (a : Val) μ, Step1Only (ℍ := ℍ) μ (.app (.val κ) (.val a)) μ (K.plug (.val a)))
     (hB : ∀ j (w' : TWd) ls' a σ, τB.P j w' ls' a σ → en.PBv v j w' ls' a σ)
-    (h : contShareT en Fb k w ls [] K v (cerwpTC (ℍ := ℍ) Tb (postOf τ) Fb k) ρ) {n : Nat}
+    {T : OpTabT} {Ψc : ContP}
+    (h : contShareT T en Fb k w ls [] K v (cerwpTC (ℍ := ℍ) Tb (postOf τ) Fb k) Ψc ρ) {n : Nat}
     (hn : n < k) :
     (STy.kont τB (SCmp.ret (ℍ := ℍ) Tb hL hTb Fb (fdNil en v Fb) τ)).P n w ls κ ρ := by
   intro w' ρ' ls' hE hr hk j hj a ρa σ hc ha hcσ w'' σ'' ls'' hE' hr' hk'
@@ -150,7 +152,8 @@ theorem STy.kontBox_of_share {Tb : TableT} (hL : Tb.Local) (hTb : Tb.Down) {τ �
     {v κ : Val} {ρ : TRes w.K} {d : Life}
     (hκ : ∀ (a : Val) μ, Step1Only (ℍ := ℍ) μ (.app (.val κ) (.val a)) μ (K.plug (.val a)))
     (hB : ∀ j (w' : TWd) ls' a σ, τB.P j w' ls' a σ → en.PBv v j w' ls' a σ)
-    (h : contShareT en Fb k w ls [] K v (cerwpTC (ℍ := ℍ) Tb (postOf τ) Fb k) ρ)
+    {T : OpTabT} {Ψc : ContP}
+    (h : contShareT T en Fb k w ls [] K v (cerwpTC (ℍ := ℍ) Tb (postOf τ) Fb k) Ψc ρ)
     (hd : ρ.InStratum (TSet.single d)) {n : Nat} (hn : n < k) :
     (STy.kontBox d τB (SCmp.ret (ℍ := ℍ) Tb hL hTb Fb (fdNil en v Fb) τ)).P n w ls κ ρ :=
   ⟨STy.kont_of_share hL hTb hκ hB h hn, hd⟩
@@ -171,7 +174,8 @@ theorem STy.kontBox_resume_after {Tb : TableT} (hL : Tb.Local) (hTb : Tb.Down) {
     {ls' : List (SRecT w'.K)} {K : Kont} {v κ : Val} {ρ : TRes w.K} {ρ' : TRes w'.K} {d : Life}
     (hκ : ∀ (a : Val) μ, Step1Only (ℍ := ℍ) μ (.app (.val κ) (.val a)) μ (K.plug (.val a)))
     (hB : ∀ j (w' : TWd) ls' a σ, τB.P j w' ls' a σ → en.PBv v j w' ls' a σ)
-    (h : contShareT en Fb k w ls [] K v (cerwpTC (ℍ := ℍ) Tb (postOf τ) Fb k) ρ)
+    {T : OpTabT} {Ψc : ContP}
+    (h : contShareT T en Fb k w ls [] K v (cerwpTC (ℍ := ℍ) Tb (postOf τ) Fb k) Ψc ρ)
     (hd : ρ.InStratum (TSet.single d)) (hc : CovR (sem w.Θ) w.K ρ) (hE : w.Ext w' ρ)
     (hr : RRw (w := w) (w' := w') ρ ρ') (hk : KeepRel w'.Θ ls ls' ρ)
     (hls : ∀ x ∈ ls', CovR (sem w'.Θ) w'.K x.1.R) {n : Nat} (hn : n < k) :

@@ -1220,7 +1220,6 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.lenderEdge_depth3
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Park.schedP_ok
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Park.parked_twp
-#print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Park.taskA_cerwpT
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Park.drive_twp
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Park.taskB_twp
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Park.taskB_parked

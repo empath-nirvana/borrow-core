@@ -66,8 +66,8 @@ theorem keepKripkeRunNil_of (H : KeepKripkeRun (ℍ := ℍ)) : KeepKripkeRunNil 
 
 /-- The stuck term `() ()` is neither a value nor a stop of a table with no entries. -/
 theorem not_post_stuckE {T : OpTabT} (hT : ∀ m i, T m i = none) {Q : TPostV} {Ψ : ContT}
-    {F : TFrame} {k : Nat} {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)}
-    {ρ : TRes w.K} : ¬ cerwpPostT (opTableT T) Q Ψ F k w ls O stuckE ρ := by
+    {Ψc : ContP} {F : TFrame} {k : Nat} {w : TWd} {ls : List (SRecT w.K)}
+    {O : List (FrameRecT w.K)} {ρ : TRes w.K} : ¬ cerwpPostT (opTableT T) Q Ψ Ψc F k w ls O stuckE ρ := by
   rintro (⟨v, hv, -⟩ | ⟨_, m, i, _, _, _, _, h₃, -⟩)
   · exact absurd (hv ▸ v.2) (by simp [stuckE])
   · rw [hT m i] at h₃; cases h₃
@@ -122,7 +122,7 @@ theorem obsE_cerwpT (H : KeepKripkeRunNil (ℍ := ℍ)) (n : Nat) :
   have hD := cerwpPostT_down (Tb := opTableT OpTabT.empty)
     (Q := fun _ _ _ _ _ ρ => ρ = PMap.empty) (fun _ _ _ _ _ _ h => h) tbEmpty_down
     (Ψ := cerwpTC (ℍ := ℍ) (opTableT OpTabT.empty) (fun _ _ _ _ _ ρ => ρ = PMap.empty)
-      (fun _ ρf => ρf = PMap.empty) n) (F := fun _ ρf => ρf = PMap.empty)
+      (fun _ ρf => ρf = PMap.empty) n) (Ψc := cerwpTK (ℍ := ℍ) n) (F := fun _ ρf => ρf = PMap.empty)
   rw [cerwpT_eq]
   refine twp_alloc_here hD (.appR (.lam stuckE) .hole) Val.unit fun l ρ₁ hc => ?_
   obtain rfl := SchedProgs.compS_empty_left_eq hc
@@ -190,7 +190,7 @@ theorem obsD_cerwpT (H : ∀ (n : Nat) (l₀ l₂ : BoCa.Loc), l₀ ≠ l₂ →
   have hD := cerwpPostT_down (Tb := opTableT OpTabT.empty)
     (Q := fun _ _ _ _ _ ρ => ρ = PMap.empty) (fun _ _ _ _ _ _ h => h) tbEmpty_down
     (Ψ := cerwpTC (ℍ := ℍ) (opTableT OpTabT.empty) (fun _ _ _ _ _ ρ => ρ = PMap.empty)
-      (fun _ ρf => ρf = PMap.empty) n) (F := fun _ ρf => ρf = PMap.empty)
+      (fun _ ρf => ρf = PMap.empty) n) (Ψc := cerwpTK (ℍ := ℍ) n) (F := fun _ ρf => ρf = PMap.empty)
   rw [cerwpT_eq]
   refine twp_alloc_here hD (.appR (.lam obsE) .hole) Val.unit fun la ρ₁ hc => ?_
   obtain rfl := SchedProgs.compS_empty_left_eq hc
