@@ -131,6 +131,11 @@ srcDir = "experiments/HandlersAsBorrows"
 roots = ["HandlersAsBorrows"]
 
 [[lean_lib]]
+name = "ExnGlue"
+srcDir = "experiments/ExnGlue"
+roots = ["ExnGlue"]
+
+[[lean_lib]]
 name = "HandlersControl"
 srcDir = "experiments/HandlersControl"
 roots = ["HandlersControl"]

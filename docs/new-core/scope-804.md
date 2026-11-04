@@ -69,9 +69,14 @@ Trade-offs:
   effect-erasure decision, "abort = branch" is what the IR does anyway.
 - **K′** is outside this spike.
 
-**Default if the user does not choose:** none. The kill criterion (§7) depends on the choice, so
-proof work does not start until it is made. Below, "K" marks text specific to route K, and the
-other routes' differences are noted inline.
+**Decided (user, 2026-11-04): route K.** The source typing's payload condition excludes owned
+payloads: `ExnRow` asks `o.A.OwnFree` of every exception operation, which `ownFreeB` decides
+(fallback condition C1, here a premise). Relaxing `effRaise.hd` is a separate kernel question,
+for later. Its reason is SPEC §19 *Unwinding*: a finaliser that raises during an ordinary unwind
+supersedes the pending raise, whose payload is then abandoned, so a raised payload must hold
+nothing owned. A relaxation would have to rule out that supersession, for example by excluding
+abortive operations from the row of every finaliser between the raise and its handler, and would
+re-prove `then_compatC`. §8 records what was built.
 
 ---
 
@@ -506,3 +511,43 @@ to rejecting the program. C1 and C2 are the two conditions on which the routes d
 The only conditions allowed are ones with a `Bool` decider and a soundness lemma, like those above.
 A semantic condition with no decider (for example, "no finaliser raises during this unwind") is not
 an acceptable fallback, and the doc lists none.
+
+---
+
+## 8. As built (route K)
+
+The library is `experiments/ExnGlue/` (`lake build ExnGlue`, not a default target). It imports
+`Core` and changes nothing there. It adds one line to `scripts/judgments.allow`, for the source
+judgment `SDerives`.
+
+| result | file:line | statement |
+|---|---|---|
+| `SDerives` | `ExnGlue/Source.lean:61` | the source judgment `Δ; Γ ⊢ t : F_Σ A` |
+| `tr` | `ExnGlue/Translate.lean:39` | the translation with its glue |
+| `consAll_derives` | `ExnGlue/Translate.lean:91` | the consumes of a part `Γb` of `Γ = Γa, Γb` are typed in front of a term typed at `Γa` |
+| `tr_derives` | `ExnGlue/Translate.lean:144` | `SDerives Δ Γ t S A → CDerives Δ Γ (tr t) (.comp (CTy.effOf S A))` |
+| `sourceResourceSafety` | `ExnGlue/Translate.lean:188` | `resourceSafety hA (tr_derives h) hs` |
+| `hard_derives` | `ExnGlue/Example.lean:115` | the §4 program's source derivation, every premise discharged |
+| `hard_safe` | `ExnGlue/Example.lean:121` | `sourceResourceSafety` at it |
+| `not_exnRow_ref` | `ExnGlue/Source.lean:105` | a `try` at an owned payload `Ref A` is outside `ExnRow` |
+
+Every result's `#print axioms` is within `[propext, Classical.choice, Quot.sound]`.
+
+Changes from §1–§2, each to fit what the kernel's rules read:
+- **Every `let` is `[then]`**, at every row (`effThenA`; at `Σ = []` its premises hold vacuously).
+  So `letv` asks its rest's context to be consumable at every row, not only where the head may
+  raise. No `bind` clause is needed.
+- **Values are kernel value derivations** (`CDerives … (.val A)`). `alloc`, `free`, literals and
+  `[]I` are therefore not source constructors, and nothing is translated inside a value.
+- **The borrow's source is a slot** (`borrowI A i M`, `Ctx.SoloP Γv i (Ref A)`), so the translation
+  needs no shift: `bindE cb (bindE (withborUE d) ((w r) f))`, as `DeclLend.declAcrossBody`.
+- **Handler arms see a `!` context** (`Ctx.Banged Γh`): `retTy` and `clauseTy` are built by
+  `bangThunkV`, which reads `Ctx.Banged`, not persistence.
+- **`allI`'s side conditions** come from `Δ.Ok` and `x`'s freshness, as `allI_fresh` derives them,
+  with the captured context's slots not mentioning `x` (`hΓx`).
+
+Hypotheses of `tr_derives`: only `h : SDerives …` (the situation). Hypotheses of
+`sourceResourceSafety`: `hA : A.Persistent`, `h`, and the run `hs` (the situation, as
+`resourceSafety`'s). The source rules' premises are side conditions read off the program (§3's
+table), each decidable: `ownFreeB`, `consumableB`, `Row.nzB`, `Row.uniqB`, `Row.unwindB`, and
+`decide` on `Persistent`/`Banged`. None stands in for a fact.
