@@ -1,12 +1,10 @@
--- pending: refused #492
--- now: 19:20: in this `case`, `a` is consumed in the `inr` arm but not in the `inl` arm
---
 -- A recursive call inside a counted `for` whose loop threads an array. The `for` is total (SPEC
 -- §16) and SPEC §20 *Not provided* names only a `while` or a `loop` in a member's body; the same
 -- recursion threading an `i32` alone is accepted, and so is a `raise` in a `for` that threads an
--- array. The error is in elaborated code, at the recursive call.
+-- array. The array a path of the loop's elaborated clause does not use is dropped on that path
+-- by the thunk that captures it (SPEC §62, `Env.capture`).
 --
--- Once it lands: `i32[5]`, `live 0`.
+-- Answer: `i32[5]`, `live 0`.
 
 include buf
 include rec

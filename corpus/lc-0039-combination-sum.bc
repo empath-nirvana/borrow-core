@@ -1,6 +1,3 @@
--- pending: refused #492
--- now: 58:28: in this `case`, `out` is consumed in the `inr` arm but not in the `inl` arm
---
 -- LeetCode 39, Combination Sum, as backtracking is usually written: a loop over the candidates that
 -- recurses. `corpus/leetcode/dp/0039-combination-sum.bc` is the same search written as two calls,
 -- taking the `i`-th candidate or not, which is accepted.
@@ -21,10 +18,10 @@
 -- the lent input, `for l in lines(t)`, would hold the borrow across its turns, which
 -- decision 71 rules out (SPEC §14 *Not covered*), and a `fold_lines` callback cannot print (#161).
 --
--- The recursive call inside the `for` that threads the candidates, the path and the answer is
--- refused as a linearity error (#492).
+-- The recursive call inside the `for` threads the candidates, the path and the answer; a path of
+-- the loop's elaborated clause that does not use one drops it (SPEC §62, `Env.capture`).
 --
--- Once it lands: on `corpus/leetcode/dp/0039-combination-sum.in`, the same output as
+-- On `corpus/leetcode/dp/0039-combination-sum.in` (copied as its input), the same output as
 -- `corpus/leetcode/dp/0039-combination-sum.out`; `live 0`.
 
 include textio

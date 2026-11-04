@@ -226,7 +226,7 @@ blocker. "Runs (shape)" means it runs only in a shape the language forces, named
 | nested loops where an inner loop is unbounded or a looping function is called per element (sieve's strike loop inside its passes; a scan inside a sort's outer loop) — written today as separate functions | `reject/while-in-counted-for.bc`, #503, `docs/loops.md` S1/S2 | refused (recorded) | T03, T04, sieve's forced shape |
 | a loop that updates a collection only on some elements (append when a test passes) — the update is a lend in one arm | `for-in-if-lend` (#502), #538 | refused (measured) | T03, T06 |
 | a loop body that reuses a name the enclosing code also uses (an innocent local shadowing an owner) | `loop-shadow-*`, `loop-handler-binder` (#493) | refused (measured) | quicksort's forced shape |
-| backtracking: a loop over candidates that recurses, pushing and popping a path | `rec-in-for-linear`, `lc-0039` (#492) | refused (measured) | outside |
+| backtracking: a loop over candidates that recurses, pushing and popping a path | `rec-in-for-linear`, `lc-0039-combination-sum` (#492) | runs (SPEC §62, `Env.capture`) | outside |
 | a callback or block that updates a local of its caller (a visitor accumulating a sum) | #586 | **runs with a silent wrong answer** (recorded on the issue) | T12 |
 | borrowing a value while already working inside another borrow, then using the outer value after | `borrow-nested-handback` (#495) | refused (measured) | outside |
 

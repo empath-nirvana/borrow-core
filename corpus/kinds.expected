@@ -256,6 +256,24 @@ corpus/for-never.bc 2.0 cancellable tail: -; agree
 corpus/for-yield-branch.bc 2.0 cancellable tail: direct; agree
 corpus/for-yield-branch.bc 3.0 cancellable resume-or-cancel,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/for-yield-branch.bc 1.0 cancellable tail: direct; agree
+corpus/fs-cat.bc 1.0 must-resume tail+state: machine: the clause captures values; agree
+corpus/fs-cat.bc 1.1 must-resume tail+state: machine: the clause captures values; agree
+corpus/fs-cat.bc 1.2 must-resume tail+state: -; agree
+corpus/fs-cat.bc 1.3 must-resume tail+state: -; agree
+corpus/fs-cat.bc 1.4 must-resume tail+state: machine: the clause captures values; agree
+corpus/fs-fake-exit.bc 1.0 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/fs-fake-exit.bc 1.1 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/fs-fake-exit.bc 1.2 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/fs-fake-exit.bc 1.3 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/fs-fake-exit.bc 1.4 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/fs-fake-exit.bc 3.0 cancellable abortive: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/fs-fake-exit.bc 2.0 cancellable abortive: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/fs-raise-two.bc 1.0 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/fs-raise-two.bc 1.1 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/fs-raise-two.bc 1.2 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/fs-raise-two.bc 1.3 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/fs-raise-two.bc 1.4 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/fs-raise-two.bc 2.0 cancellable abortive: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
 corpus/gen-adapters-fail.bc 4.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-adapters-fail.bc 3.0 cancellable tail: direct; agree
 corpus/gen-adapters-fail.bc 6.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
@@ -357,6 +375,12 @@ corpus/io-task.bc 3.1 cancellable tail: -; agree
 corpus/io-task.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/io-task.bc 2.1 cancellable tail: -; agree
 corpus/io-task.bc 1.0 cancellable abortive: branch; agree
+corpus/json-field.bc 1.0 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/json-field.bc 1.1 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/json-field.bc 1.2 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/json-field.bc 1.3 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/json-field.bc 1.4 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/json-field.bc 2.0 cancellable abortive: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
 corpus/key-value.bc 1.0 cancellable abortive: branch; agree
 corpus/leetcode/dp/0039-combination-sum.bc 1.0 cancellable abortive: branch; agree
 corpus/leetcode/dp/0070-climbing-stairs.bc 1.0 cancellable abortive: branch; agree

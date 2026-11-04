@@ -82,7 +82,8 @@ def cites : List Cite := [
 /-- **The sites**: each declaration that builds a node at a rule, and the rules it uses. -/
 def sites : List (Name × List Name) := [
   -- Backend2.
-  (``Backend2.abortK, [``Backend2.DropRule.dead, ``Backend2.Abandon.superseded]),
+  (``Backend2.abortKf, [``Backend2.DropRule.dead, ``Backend2.Abandon.superseded]),
+  (``Backend2.applyKf, [``Backend2.DropRule.dead]),
   (``Backend2.cancelK, [``Backend2.DropRule.dead, ``Backend2.Abandon.superseded]),
   (``Backend2.conv, [``Backend2.DropRule.dead, ``Backend2.Abandon.superseded,
     ``Backend2.Abandon.letAbort, ``Backend2.Abandon.top]),

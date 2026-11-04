@@ -256,6 +256,7 @@ json-field 8 2 0 162 108 25
 json-tokens 4 0 0 5276 4099 992
 key-value 5 0 0 4548 4163 431
 labels-json 5 0 0 361 161 253
+lc-0039-combination-sum 40 0 0 5494 4929 695
 leetcode/arrays/0001-two-sum 22 0 0 4908 4529 336
 leetcode/arrays/0011-container-with-most-water 10 0 0 4407 4225 223
 leetcode/arrays/0015-3sum 16 0 0 5091 4592 633
@@ -389,6 +390,7 @@ rec-fib 0 0 0 0 0 0
 rec-generic-deep 120057 0 0 1888403 1888403 502080
 rec-generic-layer 6 0 0 23 20 0
 rec-generic-mutual 11 0 0 45 33 0
+rec-in-for-linear 1 0 0 1 1 0
 rec-layer 2 0 0 17 17 0
 rec-lifetimes 2 0 0 16 6 23
 rec-log 1 0 0 7 7 0
@@ -413,6 +415,7 @@ sort-numbers 4 0 0 167 133 136
 split-at-mut 4 0 0 133 93 41
 state-machine 0 0 0 0 0 0
 state-machine-audit 1 0 0 15 15 0
+state-under-capability 1 12 0 4 4 0
 storage-array 5461 0 0 55180 55180 5460
 sum-i32 7 0 0 30 15 0
 sum-prog-exact 37 9 3 120 78 0
