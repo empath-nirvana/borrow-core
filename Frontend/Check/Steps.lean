@@ -552,6 +552,14 @@ structure Env where
   row : Option CRow
   /-- Checking a destructor (SPEC §62): its own frames use no declared destructor. -/
   inDtor : Bool := false
+  /-- The slots owed to a declared destructor (SPEC §62), beside `own`: a binder's live slot whose
+  type has no derived drop and holds an opaque type, which a `dtor` may cover. At the scope's
+  normal exit the destructor of its type is called on it (`Checker.lean`, `exitDtor`). -/
+  dOwn : List Bool := []
+  /-- The slots owed to the computation a value is part of (`own`, kept by `forVal` and
+  `clearOwn`): a thunk in the value owes those its body mentions, which it captures
+  (`Env.capture`). -/
+  vOwn : List Bool := []
 
 /-- The depth bound for elaborating a type. -/
 def tyFuel : Nat := 65536
@@ -585,8 +593,16 @@ def Env.atC (E : Env) (C : CCTy) : Env :=
   | some (S, _) => { E with row := some S }
   | none => E
 
-/-- A value: nothing owed, and no row. -/
-def Env.forVal (E : Env) : Env := { E with own := [], row := none }
+/-- Pointwise `||`, the longer list's tail kept. -/
+def orPad : List Bool → List Bool → List Bool
+  | a :: as, b :: bs => (a || b) :: orPad as bs
+  | as, [] => as
+  | [], bs => bs
+
+/-- A value: nothing owed, and no row; what the computation owes is kept for its thunks to
+capture (`vOwn`). -/
+def Env.forVal (E : Env) : Env :=
+  { E with own := [], dOwn := [], vOwn := orPad E.own E.vOwn, row := none }
 
 def ppRow (E : Env) (S : CRow) : String :=
   "[" ++ ", ".intercalate (S.map fun o =>
@@ -832,12 +848,23 @@ def lookupVar (x : String) : List (Option String) → Option Nat
   | y :: ys => if y == some x then some 0 else (lookupVar x ys).map (· + 1)
 
 /-- A slot that is not owed: a dead binder. -/
-def Env.push (E : Env) (x : Option String) : Env := { E with vars := x :: E.vars, own := false :: E.own }
+def Env.push (E : Env) (x : Option String) : Env :=
+  { E with vars := x :: E.vars, own := false :: E.own, dOwn := false :: E.dOwn,
+           vOwn := false :: E.vOwn }
+
+/-- A type whose destructor a `dtor` may give (`dfnOf`'s formers through an opaque type), where it
+has no derived drop. -/
+def dtorShape : CVTy → Bool
+  | .tensor A B | .sum A B => dtorShape A || dtorShape B
+  | .opq _ => true
+  | _ => false
 
 /-- A binder's live slot `x : A`, owed to its scope when `A` is linear and has a derived drop
 (SPEC §12). -/
 def Env.pushOwn (E : Env) (x : String) (A : CVTy) : Env :=
-  { E with vars := some x :: E.vars, own := (!A.persistent && hasDtorB A) :: E.own }
+  { E with vars := some x :: E.vars, own := (!A.persistent && hasDtorB A) :: E.own,
+           dOwn := (!A.persistent && !hasDtorB A && dtorShape A) :: E.dOwn,
+           vOwn := false :: E.vOwn }
 
 /-- A binder owes exactly the slot with a derived drop.  `[spec §12]` -/
 theorem Env.pushOwn_own (E : Env) (x : String) (A : CVTy) :
@@ -847,19 +874,27 @@ theorem Env.pushOwn_own (E : Env) (x : String) (A : CVTy) :
   simp [DerivedDrop, Linear, hasDtorB_iff]
 
 /-- Nothing owed: a value, or a computation that is not in tail position. -/
-def Env.clearOwn (E : Env) : Env := { E with own := [] }
+def Env.clearOwn (E : Env) : Env := { E with own := [], dOwn := [], vOwn := orPad E.own E.vOwn }
+
+/-- The slot `j` no longer owed to a declared destructor: its destructor is bound after the
+computation (`exitDtor`). -/
+def Env.dtorPaid (E : Env) (j : Nat) : Env := { E with dOwn := E.dOwn.set j false }
 
 
 
 /-- What is still owed after the slots `u` are consumed. -/
-def Env.minus (E : Env) (u : List Bool) : Env := { E with own := andL E.own (u.map (! ·)) }
+def Env.minus (E : Env) (u : List Bool) : Env :=
+  { E with own := andL E.own (u.map (! ·)), dOwn := andL E.dOwn (u.map (! ·)),
+           vOwn := andL E.vOwn (u.map (! ·)) }
 
 /-- The owed slots a computation mentions by name, where the name is not shadowed. -/
 def Env.ownIn (E : Env) (p : String → Bool) : Env :=
-  { E with own := (List.range E.own.length).map fun i =>
-      E.own.getD i false && match E.vars[i]? with
+  let named (o : List Bool) := (List.range o.length).map fun i =>
+      o.getD i false && match E.vars[i]? with
         | some (some x) => lookupVar x E.vars == some i && p x
-        | _ => false }
+        | _ => false
+  { E with own := named E.own, dOwn := named E.dOwn, vOwn := named E.vOwn }
+
 
 /-- The environment of a `def`'s body at a use: its own scope, no variables or lifetimes of the
 use site but the persistent externs (the operations of SPEC §11, which carry no authority; a
@@ -868,7 +903,7 @@ def Env.forDef (E : Env) (T : List CVTy) (d : DefInfo) (tps : List (String × CV
   let n := E.vars.length
   let vars := (List.range n).map fun i =>
     if n ≤ i + E.nExt && (T[i]?.map (·.persistent)).getD false then E.vars.getD i none else none
-  ⟨d.scope, vars, [], tps, [], E.nExt, none, E.inDtor⟩
+  ⟨d.scope, vars, [], tps, [], E.nExt, none, E.inDtor, [], []⟩
 
 def inDef (x : String) (sp : Span) (e : Error) : Error :=
   { e with msg := s!"{e.msg}\n  in the body of `{x}`, used at {sp.start.render}" }
@@ -921,11 +956,24 @@ def mentionsC (x : String) : Comp → Bool
   | .withbor2r _ _ _ _ _ _ p m M => p.name == x || (m.name != x && mentionsC x M)
 end
 
+/-- **A thunk's body** `N` in a value: it owes the slots owed to the computation the value is part
+of (`vOwn`) that it mentions, which it captures, so that a path of `N` that does not use one drops
+it at its terminal (`dropOwed`), as a binder's scope does. -/
+def Env.capture (E : Env) (N : Comp) : Env :=
+  let E' := { E with own := E.vOwn, dOwn := [], vOwn := [] }
+  E'.ownIn (mentionsC · N)
+
+/-- No slot owed, none to capture: a value's computation that does not capture (`!thunk`, `run`). -/
+def Env.noCapture (E : Env) : Env := { E with own := [], dOwn := [], vOwn := [] }
+
+
 /-- A path's terminal computation: every form except those that pass what is owed on to a tail
-position (`x <- M; N`, `let`, `case`, `<M, N>`, `fun`, `Fun`, `nu_in`, an ascription). -/
+position (`x <- M; N`, `let`, `case`, `<M, N>`, `fun`, `Fun`, `nu_in`, an ascription, and
+`handle`, whose handled computation is in tail position: a slot owed at a handler site and not
+used on a path of the handled computation is dropped on that path, under the handler). -/
 def _root_.Frontend.Comp.terminal : Comp → Bool
   | .bind .. | .letUnit .. | .letPair .. | .case .. | .with_ .. | .lam .. | .lamL ..
-  | .nuIn .. | .ascribe .. | .unwind .. => false
+  | .nuIn .. | .ascribe .. | .unwind .. | .handle .. => false
   | _ => true
 
 /-- The slots to drop before a terminal computation: owed, and neither used nor absorbed by it. -/
@@ -1425,6 +1473,25 @@ def effBind (E : Env) (sp : Span) (x : Ident) {S : CRow} {A B : CVTy} (D : Optio
           (S.Unr → BoCa.Fig16.LogRel.Core.Ctx.Banged (mkCtx T _)))
     if h : overlapOK T rM.F.u FN'.u = true then pure (rScope (at_ sp) (rEffLet (atB sp [x.name]) rM FN' h))
     else throw (splitErr E T sp rM.F.u FN'.u)
+
+/-- **The destructor at a scope's normal exit**  `[spec §62]`: `y <- M; u <- drop_A x_j; return y`,
+the destructor `f` of the slot `j`'s type `A` called after the scope's terminal computation `M`,
+its answer handed on. Both bindings are `effBind`'s, so a slot live across `M` that has no derived
+drop, `x_j` among them, is closed by `[let-dtor]` if `M` aborts. -/
+def bindExitD (E : Env) (sp : Span) {S : CRow} {B A : CVTy} (D : Dtors Δ) (j : Nat)
+    (f : DFn Δ D.SD A) (rM : Res Δ T (.comp (effOf S B))) :
+    Except Error (Res Δ T (.comp (effOf S B))) := do
+  if hle : rowLeB D.SD S = true then
+    let rd ← appD (Tc := B :: T) sp f (j + 1)
+    let rd' : Res Δ (B :: T) (.comp (effOf S .unit)) := rEffSub (at_ sp) hle rd
+    let ry : Res Δ (.unit :: B :: T) (.val B) := rVar (at_ sp) 1 _ rfl
+    let rret : Res Δ (.unit :: B :: T) (.comp (effOf S B)) :=
+      rEffSub (at_ sp) (show rowLeB [] S = true from rfl)
+        (rRet (at_ sp) ry : Res Δ _ (.comp (effOf [] B)))
+    let Ey := E.push (some "_exit_value")
+    let rN ← effBind Ey sp ⟨"_exit_unit", sp⟩ (some D) rd' rret
+    effBind E sp ⟨"_exit_value", sp⟩ (some D) rM rN
+  else throw ⟨sp, "internal error: a destructor's row is not within the scope's"⟩
 
 end
 

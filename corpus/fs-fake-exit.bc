@@ -1,0 +1,50 @@
+-- check: old-backend-refuses
+-- Destructors on every exit, over a handler of `Fs` of the program's own (SPEC §62). `fake` opens
+-- a handle whose descriptor is its path's length and prints each close with it, so the order the
+-- destructors run in is the output. `exit_two` leaves two files open at its scope's normal exit:
+-- each is closed by its type's destructor (`dtor file = fs_close`) after the scope's last
+-- computation, the one opened last first. `raise_two` raises while two files are open: each is
+-- closed on the unwind (`[let-dtor]`), the one opened last first, before the error reaches
+-- `to_result`.
+include fs
+include textio
+
+handler fake[A]: Fs, A -> A = {
+  return(a) = a;
+  fs_open(p, m, k) = {
+    let (a, n) = p;
+    if n == 0 { k(((a, n), (inr NotFound : File + FsError))) } else { k(((a, n), (inl file_mk(n) : File + FsError))) }
+  };
+  fs_read(f, b, k) = { k((f, (b, (inl 0 : i32 + FsError)))) };
+  fs_write(f, b, k) = { k((f, (b, (inl () : 1 + FsError)))) };
+  fs_size(f, k) = { k((f, (inl 0 : i32 + FsError))) };
+  fs_close(f, k) = {
+    let d = file_take(f);
+    print_lit("close ");
+    print_dec(d);
+    print_lit("\n");
+    k((inl () : 1 + FsError))
+  }
+}
+
+fn exit_two() -> i32 with Fs, Fail[FsError] =
+  let (p, a) = open(string_of_lit("ab"), Reading);
+  let (q, b) = open(string_of_lit("abc"), Reading);
+  let (b, n) = fs_size(b);
+  7
+
+fn raise_two() -> i32 with Fs, Fail[FsError] =
+  let (p, a) = open(string_of_lit("abcd"), Reading);
+  let (q, b) = open(string_of_lit("abcde"), Reading);
+  let (r, c) = open(string_of_lit(""), Reading);
+  close(c);
+  close(b);
+  close(a);
+  0
+
+main -> (i32 + FsError) * (i32 + FsError) =
+  with fake {
+    let x = with to_result { exit_two() };
+    let y = with to_result { raise_two() };
+    (x, y)
+  }

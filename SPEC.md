@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.30 · 2026-11-03
+Version 1.31 · 2026-11-03
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -8636,7 +8636,9 @@ No change: no type, rule, term, typing, elaboration or semantics.
   (`effLet`'s `hW`: it holds no own cell), the branch per call of §19 (`abort_to`, `abort_passes`).
 - **`[sub]`** (`effSub`): the payload of `Σ` re-injected at `Σ'`'s summands (`RowLe`).
 - **`[then]`** (`effThen`): `N` on a value; on an abort the finaliser `D`, then the abort, or the
-  finaliser's own, which supersedes it, handed on (`then_ret`, `then_fin`, `unwind_prefix`).
+  finaliser's own, which supersedes it, handed on (`then_ret`, `then_fin`, `unwind_prefix`). A finaliser
+  whose row holds machine operations is a machine called at a point of the unwind (§62
+  *Lowering*).
 - **The unwinding borrows** (`withbor1U`, `withbor2U`, `withbor3U`, `withloadU`, `sliceBorrowMU`,
   `sliceBorrowIU`; `withborUE d`): the lend as §43's; the callback's abort ends it, runs the
   finaliser `d` on the owner and is handed on (`then_fin`). A finaliser that is not a constant is
@@ -10428,7 +10430,7 @@ programs, `d_stepD`, `d_lendD` and `d_kDtor` typing lemmas:
 proved in the total relation only (`then_compatC`); at the step-indexed relation it is unproved,
 the step-indexed relation PR's obligation (`erwp_ubind*`).
 
-**In the checker** (#771 row 7, partly built). A program declares a destructor at an opaque type:
+**In the checker** (#771 row 7). A program declares a destructor at an opaque type:
 `dtor k : k -o F[Σ_D] 1 = fun (x : k) -> M`, a closed function whose row has no operation that
 does not resume (`hSDc`) and no `Div` (`hSDd`), checked once at its declaration
 (`Frontend/Check/Program.lean`). The surface form names an operation, `dtor file = fs_close`; the
@@ -10451,13 +10453,51 @@ first, before the error goes on (`certFrame_raise`, `certFrame_cancel`, from `le
 `letDE_cancel_exit`). Where every such slot has a derived drop, the binding is §19's `[then]` with
 the pure finaliser `finalOf`, as before.
 
-*Not built*: the normal exit, where a slot with a declared destructor and no derived drop that is
-not consumed by name is refused at the end of its scope (§12's drop is a derived drop's only), so a
-loop that holds a file and ends early is refused (`corpus/pending/fs-loop-early.bc`); and the
-lowering of a finaliser that performs an operation compiled as a state machine: Backend2 refuses
-it ("a finaliser that may suspend is outside the fragment", `Backend2/Convert.lean`, `effThen`),
-as the old backend does (§27), so a program whose frame closes a file is checked and runs at the
-source stage only.
+**The normal exit.** A binder's live slot whose type has no derived drop and is built through an
+opaque type (`dtorShape`) is owed to a declared destructor (`Env.dOwn`, beside §12's `own`). At a
+path's terminal computation `M` that leaves such a slot unused, and where the program's destructors
+within the row of `M`'s type `F_Σ B` give its type one (`exitDtor`, `dfnOf`), the slot's destructor
+is bound after `M`: `y <- M; u <- drop_A x; return y` (`bindExitD`), both bindings `effBind`'s, so
+a slot live across `M` with no derived drop, `x` among them, is closed by a `[let-dtor]` frame
+(checked against `frameCert`) if `M` aborts. The slot bound first is bound outermost, so the
+destructors at a normal exit run the slot bound last first, as on the unwind. `M` is checked again
+with the rest still owed. Where no destructor is given the slot is left to its binder, which
+refuses it as before. A `handle` passes what is owed on to its handled computation, which is in
+tail position (`Comp.terminal`), so a slot owed at a handler site and unused on a path of the
+handled computation is dropped on that path, under the handler. A thunk in a value owes the slots
+owed to the computation the value is part of that its body mentions (`Env.capture`, `vOwn`), which
+it captures, so that a path of its body that does not use one drops it, as a binder's scope does: a
+capability lent to a handled computation through a block's callback is captured by the callbacks
+inside it, and an arm of a `case` there that does not use it drops it. `!thunk` and `run` capture
+nothing owed.
+
+**At a handler site with a state** (§19 *Handler state*, `Frontend/Elab/Effects.lean`). The
+site's answer, a function of the handler's state, is applied to the initial state inside the
+blocks that lend the handled computation its capabilities (`reborrowed`): the function may hold
+the lent capabilities, so only its result leaves the blocks. (Applied after them, it would carry
+the borrows out of their lends, which `[]I` refuses.) `main`'s body under `files` is such a site.
+
+**Lowering** (Backend2, §47, §49). `files`' clauses are `tail+state`, so `Fs`'s operations are
+machine operations (`machineOps`), and the effect erasure of §47 does not apply to them: the
+rewrite that keeps a handler's state in a cell needs the initial state at the node and the clause's
+work after its resume to be a value, neither a fact of the typed term (§47 *Open*). A `[then]`
+frame whose finaliser's row holds machine operations therefore compiles its finaliser as a machine
+of its own outcome (`effThen`, `Frame.thenF`'s `md`), and an abort through the frame calls it at
+a call point of the enclosing machine (`abortKf`, `pointKf`) whose continuation is the re-raise
+frame `Frame.raiseF` over the pending abort: the finaliser's value hands the abort on through the
+rest of the continuation (`then_fin`), its own abort supersedes it (`unwind_prefix`), and a
+suspension inside it suspends the machine with the unwind as its state, resumed by `files`' drive
+as any other point. Under a cancel such a frame is outside the fragment: a cancel row holds no
+machine operation (`Types.ofFin`), and a finaliser's row is within the cancel row of every
+operation it is live across (`hSDc`). A must-resume operation's cancel entry is never run
+(`OutInfo.lins`, `capB`). The old backend still refuses such a finaliser (§27).
+
+Programs (`corpus/`, marked `old-backend-refuses`): `fs-raise-two` (two files open when an open
+raises), `fs-exit-two` (two files open at a scope's normal exit), `fs-cat` and `json-field`; each
+at its golden at the source stage, the LIR, Wasm and natively.
+
+*Not built*: `corpus/pending/fs-loop-early.bc` (a `loop` that holds a file and ends early) now
+passes the scope exit and is refused by a type mismatch at `main`'s body.
 
 **The file handle in the language** (§34). `File` is the opaque `file`: a location owning a cell
 that holds its descriptor, `Ref I32` with the rules taken away (`vCE_file_eq_ref`), so it is not
@@ -11114,6 +11154,11 @@ theorems); `dtor` declarations in `Frontend/Syntax.lean`, `Frontend/Parser.lean`
 
 ## Changelog
 
+- **1.31** (2026-11-03) — §62 (#771 row 7): the normal exit's destructor (`exitDtor`,
+  `bindExitD`); a thunk owes the owed slots it captures (`Env.capture`); `handle` passes what is owed on to its handled computation; a stateful handler
+  site applies its answer inside the blocks that lend its body capabilities; Backend2 lowers a
+  finaliser whose row holds machine operations as a machine called at a point of the unwind, with
+  the re-raise frame `raiseF`. No change to `CDerives`, `fundamentalC`, `adequacyC` or `adequacyD`.
 - **1.30** (2026-11-03) — §62 (#771 row 7, partly): `dtor` declarations at opaque types; the
   checker's `[let-dtor]` frames where a slot with no derived drop is held across a computation that
   may abort, each checked against `frameCert` (`frameCert_letDT`, `certFrame_raise`,

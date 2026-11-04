@@ -1,0 +1,47 @@
+-- `cat` for one file (SPEC §34, *Files*; SPEC §62): the file named by the first argument, printed
+-- in chunks of one buffer of 64 KiB, reused across the reads. Each read moves the file and the
+-- buffer into `fs_read` and has them handed back with its answer, error or not, so nothing is lent
+-- across the read (T1, SPEC §19); its error is a value, and the loop ends with it. The file is
+-- closed by its destructor (`dtor file = fs_close`) where its scope ends, on every exit.
+--
+-- Answer, here: `corpus/no-such-file` is not found at every stage (the model's file system is
+-- empty, Wasm preopens no directory, and natively there is no such file), so `fs-cat:
+-- corpus/no-such-file: not found` on standard error, and `i32[1]`. `scripts/check-fs.sh` runs it
+-- on real files.
+include fs
+include textio
+
+-- The file's bytes to standard output: `inl ()` at its end, or the read's error. The loop is
+-- counted (`fs_max_reads`, `lib/fs.bc`); when the reads run out it answers `TooBig`.
+fn cat(f: File) -> 1 + FsError with Fs, Stdout =
+  let mut f = f;
+  let mut b = string_new(65536);
+  for _ in 0..fs_max_reads {
+    let (a, n) = b;
+    let (f2, (b2, r)) = fs_read(f, (a, 0));
+    f = f2;
+    b = print_string(b2);
+    match r {
+      inl k -> if k == 0 { break (inl () : 1 + FsError) } else { () }
+    | inr e -> break (inr e : 1 + FsError)
+    }
+  } else { (inr TooBig : 1 + FsError) }
+
+main -> i32 =
+  let path = string_new(64);
+  let (path, got) = next_arg(path);
+  let (path, opened) = fs_open(path, Reading);
+  let r = match opened {
+    inl f -> cat(f)
+  | inr e -> inr e
+  };
+  match r {
+    inl u -> 0
+  | inr e ->
+      eprint_lit("fs-cat: ");
+      borrow imm path { v -> eprint_bytes(v) };
+      eprint_lit(": ");
+      eprint_lit(fs_error_name(e));
+      eprint_lit("\n");
+      1
+  }

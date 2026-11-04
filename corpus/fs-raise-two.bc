@@ -1,0 +1,20 @@
+-- check: old-backend-refuses
+-- Two files open when an error is raised (SPEC §62, `[let-dtor]`). The open of a third file,
+-- which does not exist, raises while the first two are live. Each is closed by its type's
+-- destructor, `fs_close` (`dtor file = fs_close`, `lib/fs.bc`), on the unwind, the one bound last
+-- first, and the error reaches the handler: `inr NotFound`.
+--
+-- The frames are `[let-dtor]`'s (`CDerives.effLetD`): each open is bound with the files before it
+-- live, so its finaliser closes them (`certFrame_raise`).
+include fs
+
+fn three() -> i32 with Fs, Fail[FsError] =
+  let (p, a) = open(string_of_lit("corpus/fs-cat.bc"), Reading);
+  let (q, b) = open(string_of_lit("corpus/json-field.bc"), Reading);
+  let (r, c) = open(string_of_lit("corpus/no-such-file"), Reading);
+  close(c);
+  close(b);
+  close(a);
+  0
+
+main -> i32 + FsError = with to_result { three() }

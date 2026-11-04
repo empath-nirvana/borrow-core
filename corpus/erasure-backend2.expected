@@ -176,6 +176,9 @@ for-return erased handles 0 performs 0 raises 0 left 0 0
 for-view-effect-copy erased handles 0 performs 0 raises 0 left 0 0
 for-yield-branch erased handles 0 performs 0 raises 0 machines 6 suspends 3 left 0 0
 format erased handles 0 performs 0 raises 0 left 0 0
+fs-cat erased handles 0 performs 0 raises 0 machines 1 suspends 3 left 0 0
+fs-fake-exit erased handles 0 performs 0 raises 3 machines 3 suspends 16 left 0 0
+fs-raise-two erased handles 0 performs 0 raises 2 machines 2 suspends 8 left 0 0
 gen-adapters erased handles 0 performs 0 raises 0 machines 38 suspends 22 left 0 0
 gen-adapters-fail erased handles 0 performs 0 raises 0 machines 46 suspends 27 left 0 0
 gen-borrowed erased handles 0 performs 0 raises 0 machines 4 suspends 2 left 0 0
@@ -249,6 +252,7 @@ join-let-loop erased handles 0 performs 0 raises 0 left 0 0
 join-let-match erased handles 0 performs 0 raises 0 left 0 0
 join-let-nested erased handles 0 performs 0 raises 0 left 0 0
 join-let-with erased handles 0 performs 0 raises 0 left 0 0
+json-field erased handles 0 performs 0 raises 2 machines 2 suspends 6 left 0 0
 json-tokens erased handles 0 performs 0 raises 0 left 0 0
 key-value erased handles 1 performs 0 raises 1 left 0 0
 labels-json erased handles 0 performs 0 raises 0 left 0 0

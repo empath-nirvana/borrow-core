@@ -2008,7 +2008,7 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
           ", ".intercalate (lent.map fun c => s!"`{c.eff}`") ++ ", lent for the block")
         let M' ← trC k cx' csM true M
         let blk := Val.app sp (.app sp₂ (.sugar ksp k') P') (.thunkv tsp (.lam lsp b A M'))
-        let (bsH, hv) ← reborrowed k sp ksp blk lent
+        let (bsH, hv) ← reborrowed k sp ksp (.ret sp blk) lent
         let (bsB, V) ← blockResult k cx sp hv csM
         return (bsP ++ bsH ++ bsB, V)
       let csM := cx.needC M
@@ -2672,7 +2672,7 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       let (bsP, P') ← goV k cx cs P
       let hnd : Val := .app sp (.app sp (.app sp (.app sp (.sugar ksp (.hndCtl info)) P')
         (.thunkv sp (.lam sp ⟨xr, sp⟩ rA (.ret sp (.inl sp (.var sp xr)))))) clsV) (.thunk sp M')
-      let (bsH, hv) ← reborrowed k sp ksp hnd csM
+      let (bsH, hv) ← reborrowed k sp ksp (.ret sp hnd) csM
       let rn ← fresh "fx_ar"
       let pv ← fresh "fx_hp"
       let rv : Val := .var sp rn
@@ -2781,13 +2781,22 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       let clsV := cls.foldr (fun c t => Val.pair sp c t) (.unit sp)
       let hnd : Val := .app sp (.app sp (.app sp (.app sp (.sugar ksp (.hndCtl info)) (.unit sp))
         hr) clsV) (.thunk sp M')
-      let (bsH, gv) ← reborrowed k sp ksp hnd csM
-      -- The site's answer applied to the initial state; the capabilities bound again after.
+      -- The site's answer applied to the initial state inside the blocks that lend the body its
+      -- capabilities: the answer, a function of the state, may hold them, so only its result
+      -- leaves the blocks. The clauses' capabilities are bound again after.
       let g ← fresh "fx_hg"; let sv ← fresh "fx_hs"; let t ← fresh "fx_ht"
       let r ← fresh "fx_v"
-      let run : List Bind := [.one sp g none (.ret sp gv) false,
-        .one sp sv none (.ret sp (capsTuple sp csCl (.var sp pv))) false,
-        .caps sp t none (.app sp (.force sp ⟨g, sp⟩) ⟨sv, sp⟩) csCl r false id]
+      let app : Comp := .bind sp ⟨g, sp⟩ none (.ret sp hnd)
+        (.bind sp ⟨sv, sp⟩ none (.ret sp (capsTuple sp csCl (.var sp pv)))
+          (.app sp (.force sp ⟨g, sp⟩) ⟨sv, sp⟩))
+      let (bsH, run) ← if csM.isEmpty then do
+          let (bsH, gv) ← reborrowed k sp ksp (.ret sp hnd) csM
+          pure (bsH, [.one sp g none (.ret sp gv) false,
+            .one sp sv none (.ret sp (capsTuple sp csCl (.var sp pv))) false,
+            .caps sp t none (.app sp (.force sp ⟨g, sp⟩) ⟨sv, sp⟩) csCl r false id])
+        else do
+          let (bsH, gv) ← reborrowed k sp ksp app csM
+          pure (bsH, [Bind.caps sp t none (.ret sp gv) csCl r false id])
       report ksp "lowering" (s!"with {ch.name.name}: a handler with a state, its parameters" ++
         (if csCl.isEmpty then "" else " and the capabilities its clauses use") ++
         ", passed to each clause and to the continuation at each resume")
@@ -2822,20 +2831,22 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
     let clsV := cls.foldr (fun c t => Val.pair sp c t) (.unit sp)
     let hnd : Val := .app sp (.app sp (.app sp (.app sp (.sugar ksp (.hndCtl info)) P')
       (.thunkv sp (.lam sp rx rA rM'))) clsV) (.thunk sp M')
-    let (bsH, rv) ← reborrowed k sp ksp hnd csM
+    let (bsH, rv) ← reborrowed k sp ksp (.ret sp hnd) csM
     pure (bsP ++ bsH, rv)
 
 /-- The handler site `hnd` bound before the value it is in, inside `borrow mut c { 'l, c -> … }`
 for each capability `c` of `csM` its body uses, innermost last (`withCtl`): each block hands the
-capability back beside the result, and the capabilities are bound again after it. -/
-def reborrowed : Nat → Span → Span → Val → List Cap → EM (List Bind × Val)
+capability back beside the result, and the capabilities are bound again after it. `blk₀` is
+`return hnd`, or a computation that uses it: it runs inside the blocks, so what it answers is all
+that leaves them. -/
+def reborrowed : Nat → Span → Span → Comp → List Cap → EM (List Bind × Val)
   | 0, sp, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
-  | _ + 1, sp, ksp, hnd, csM => do
+  | _ + 1, sp, ksp, blk₀, csM => do
     let r ← fresh "fx_v"
     if csM.isEmpty then
-      let bind : Bind := .one sp r none (.ret sp hnd) false
+      let bind : Bind := .one sp r none blk₀ false
       return ([bind], .var sp r)
-    let mut blk : Comp := .ret sp hnd
+    let mut blk : Comp := blk₀
     for c in csM.reverse do
       let l := c.life
       let t ← fresh "fx_rb"

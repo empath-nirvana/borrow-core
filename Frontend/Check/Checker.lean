@@ -183,7 +183,7 @@ def Env.dtorDecls (E : Env) : List (Span × CTy × Comp × Nat) :=
 
 /-- An environment in which no name of the context is in scope: a destructor is closed. -/
 def Env.closed (E : Env) : Env :=
-  { E with vars := [], own := [], row := none, nExt := 0, inDtor := true }
+  { E with vars := [], own := [], dOwn := [], vOwn := [], row := none, nExt := 0, inDtor := true }
 
 /-- **The program's destructors within the row `S`** (SPEC §62): each declared destructor whose
 row is within `S`, all checked closed at the union of their rows, `Σ_D`, which must have no
@@ -270,28 +270,28 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
     | .inl sp _ => err sp "the type of `inl V` cannot be synthesized: ascribe it, `(inl V : A + B)`"
     | .inr sp _ => err sp "the type of `inr V` cannot be synthesized: ascribe it, `(inr V : A + B)`"
     | .thunk sp M => do
-      let ⟨C, r⟩ ← synC n (E.push none) Δ (.unit :: T) M
+      let ⟨C, r⟩ ← synC n ((E.capture M).push none) Δ (.unit :: T) M
       match C, r with
       | .ret _, r => match rThunkF (at_ sp) r with
         | some r' => pure ⟨_, r'⟩
         | none => err sp "internal error: a dead binder is used"
       | C, _ => err sp s!"`thunk M` needs `M : F A`, but `M : {E.ppC C}`; use `thunkv`"
     | .thunkv sp N => do
-      let ⟨C, r⟩ ← synC n E Δ T N
+      let ⟨C, r⟩ ← synC n (E.capture N) Δ T N
       if hC : C.isRet = false then
         match rThunkV (at_ sp) hC r with
         | some r' => pure ⟨_, r'⟩
         | none => err sp thunkvLam
       else err sp s!"`thunkv N` needs `N` not of type `F A`, but `N : {E.ppC C}`; use `thunk`"
     | .bangThunk sp M => do
-      let ⟨C, r⟩ ← synC n (E.push none) Δ (.unit :: T) M
+      let ⟨C, r⟩ ← synC n (E.noCapture.push none) Δ (.unit :: T) M
       match C, r with
       | .ret _, r => match rBangThunkF (at_ sp) r with
         | .ok r' => pure ⟨_, r'⟩
         | .error i => throw (notBang E T sp i)
       | C, _ => err sp s!"`!thunk M` needs `M : F A`, but `M : {E.ppC C}`; use `!thunkv`"
     | .bangThunkv sp N => do
-      let ⟨C, r⟩ ← synC n E Δ T N
+      let ⟨C, r⟩ ← synC n E.noCapture Δ T N
       if hC : C.isRet = false then
         match rBangThunkV (at_ sp) hC r with
         | .ok r' => pure ⟨_, r'⟩
@@ -329,7 +329,7 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
       | .mu _, r => pure ⟨_, rUnroll (at_ sp) r⟩
       | A, _ => err sp s!"`unroll V` needs `V : mu X. A`, but `V : {E.ppV A}`"
     | .run sp M => do
-      let ⟨C, r⟩ ← synC n E Δ T M
+      let ⟨C, r⟩ ← synC n E.noCapture Δ T M
       match C, r with
       | .ret _, r => pure ⟨_, rOfRet (at_ sp) r⟩
       | C, _ => err sp s!"`run M` needs `M : F A`, but `M : {E.ppC C}`"
@@ -393,7 +393,7 @@ def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : C
     | .thunk sp M =>
       match A with
       | .thunk (.ret A) => do
-        let r ← chkC n (E.push none) Δ (.unit :: T) M (.ret A)
+        let r ← chkC n ((E.capture M).push none) Δ (.unit :: T) M (.ret A)
         match rThunkF (at_ sp) r with
         | some r' => pure r'
         | none => err sp "internal error: a dead binder is used"
@@ -402,7 +402,7 @@ def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : C
       match A with
       | .thunk C =>
         if hC : C.isRet = false then do
-          let r ← chkC n E Δ T N C
+          let r ← chkC n (E.capture N) Δ T N C
           match rThunkV (at_ sp) hC r with
           | some r' => pure r'
           | none => err sp thunkvLam
@@ -411,7 +411,7 @@ def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : C
     | .bangThunk sp M =>
       match A with
       | .bang (.thunk (.ret A)) => do
-        let r ← chkC n (E.push none) Δ (.unit :: T) M (.ret A)
+        let r ← chkC n (E.noCapture.push none) Δ (.unit :: T) M (.ret A)
         match rBangThunkF (at_ sp) r with
         | .ok r' => pure r'
         | .error i => throw (notBang E T sp i)
@@ -420,7 +420,7 @@ def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : C
       match A with
       | .bang (.thunk C) =>
         if hC : C.isRet = false then do
-          let r ← chkC n E Δ T N C
+          let r ← chkC n E.noCapture Δ T N C
           match rBangThunkV (at_ sp) hC r with
           | .ok r' => pure r'
           | .error i => throw (notBang E T sp i)
@@ -445,18 +445,49 @@ def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : C
           else err sp s!"`roll` at `{E.ppV (.mu A)}`, which is not closed"
         else err sp s!"`roll` at `{E.ppV (.mu A)}`, whose variable occurs under `mut`"
       | A => err sp s!"`roll V` is checked against `{E.ppV A}`, which is not a `mu` type"
-    | .run sp M => do pure (rOfRet (at_ sp) (← chkC n E Δ T M (.ret A)))
+    | .run sp M => do pure (rOfRet (at_ sp) (← chkC n E.noCapture Δ T M (.ret A)))
     | .mark sp k V => do markIt sp k (← chkV n E Δ T V A)
     | v => do convV E v.span A (← synV n E Δ T v)
+
+/-- **A slot owed to a declared destructor at a scope's normal exit** (SPEC §62): of the slots the
+terminal computation `r` leaves owed to one (`Env.dOwn`), the one bound first (the highest index,
+so that the ones bound after it are destroyed before it), with its type's destructor (`dfnOf`) at
+the program's destructors within the row of `C`. `none` where there is none: such a slot is left
+to its binder, which refuses it as before (`unconsumed`). -/
+def exitDtor (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) {C : CCTy} (r : Res Δ T (.comp C))
+    (chk : (C : CCTy) → Comp → CheckM (Res Δ [] (.comp C))) :
+    CheckM (Option (Σ' (S : CRow) (B : CVTy) (_ : effOf S B = C) (D : Dtors Δ) (A : CVTy),
+      Nat × DFn Δ D.SD A)) := do
+  let js := owedLeft E.dOwn r.F.u r.F.w 0
+  if js.isEmpty then return none
+  match effRow? C with
+  | some (S, B) =>
+    if hC : effOf S B = C then
+      let some D ← dtorsAt E Δ S chk | return none
+      for j in js.reverse do
+        match T[j]? with
+        | some A =>
+          if let some f := dfnOf sp D.hc D.dts A then
+            return some ⟨S, B, hC, D, A, j, f⟩
+        | none => pure ()
+      return none
+    else return none
+  | none => return none
 
 /-- Synthesize the type of a computation. -/
 def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
     CheckM (Σ C : CCTy, Res Δ T (.comp C))
   | 0, _, _, _, m => err m.span "expression nested too deeply"
   | n + 1, E, Δ, T, m =>
-    if m.terminal && E.own.any id then do
+    if m.terminal && (E.own.any id || E.dOwn.any id) then do
       let ⟨C, r⟩ ← synC n E.clearOwn Δ T m
-      pure ⟨C, ← dropOwed E m.span r⟩
+      match ← exitDtor E Δ T m.span r (fun C M => chkC n E.closed Δ [] M C) with
+      | some ⟨_, _, hC, D, _, j, f⟩ =>
+        -- The slot `j`'s destructor bound after the scope's computation, checked with the rest
+        -- still owed (SPEC §62).
+        let r' ← chkC n (E.dtorPaid j) Δ T m C
+        pure ⟨C, hC ▸ (← bindExitD E m.span D j f (hC ▸ r'))⟩
+      | none => pure ⟨C, ← dropOwed E m.span r⟩
     else match m with
     | .ret sp V => do
       let ⟨_, r⟩ ← synV n E Δ T V
@@ -727,7 +758,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                   if hBn : noThunkB B' = true then
                     let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A')
                     let E' : Env :=
-                      { E with vars := [], own := [], nExt := 0, lenv := (x.name, v) :: E.lenv,
+                      { E with vars := [], own := [], dOwn := [], vOwn := [], nExt := 0, lenv := (x.name, v) :: E.lenv,
                                row := some S }
                     let rM ← chkC n (E'.pushOwn m.name (.mut (.var v) A')) (Δ.extend v bl)
                       [.mut (.var v) A'] M (effOf S (.box (.var v) B'))
@@ -805,9 +836,15 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
   | 0, _, _, _, m, _ => err m.span "expression nested too deeply"
   | n + 1, E, Δ, T, m, C =>
     let E := E.atC C
-    if m.terminal && E.own.any id then do
+    if m.terminal && (E.own.any id || E.dOwn.any id) then do
       let r ← chkC n E.clearOwn Δ T m C
-      dropOwed E m.span r
+      match ← exitDtor E Δ T m.span r (fun C M => chkC n E.closed Δ [] M C) with
+      | some ⟨_, _, hC, D, _, j, f⟩ =>
+        -- The slot `j`'s destructor bound after the scope's computation, checked with the rest
+        -- still owed (SPEC §62).
+        let r' ← chkC n (E.dtorPaid j) Δ T m C
+        pure (hC ▸ (← bindExitD E m.span D j f (hC ▸ r')))
+      | none => dropOwed E m.span r
     else match m with
     | .ret sp V =>
       match C with

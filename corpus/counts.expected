@@ -178,6 +178,7 @@ for-return 1 0 0 9 5 4
 for-view-effect-copy 4 0 0 13 7 9 # the string the view lends
 for-yield-branch 3 0 0 3 3 0
 format 4 0 0 40 33 37 # the string, built at its capacity
+fs-cat 7 2 0 133 88 85
 gen-adapters 8 0 0 33 33 0 # the nodes of the lists `chunks` builds; each generator one state machine, each stored generator one handler site, each `yield` to a `for` a direct call
 gen-adapters-fail 11 0 0 51 51 0 # the nodes of the lists `chunks` and `lines` build
 gen-borrowed 2 0 0 11 7 2
