@@ -54,4 +54,27 @@ siblings interleaved, one cancelled, the lender ending the lend only after every
 
 ## 5. State
 
-(Updated at each stop.)
+**Item 1: outcome (a), route B.** `Core/TreeLendJoin.lean`: `frameLife_of_tagged` (a tagged record
+proper's frame is at its tag, `TaggedT` with `not_desc_proper`), `proper_view_single` (every cell
+at its location has lifetime set `{α}`, `view_at_lender`), `twp_lendEnd_imm` (end a lend at
+`imm(S, (), ∅)`, the list carrying the lend's record; `S = {α}` at every start world, then
+`twp_lendEnd` unchanged). No statement changed.
+
+**Items 2–4: built.**
+
+| Piece | Where |
+|---|---|
+| the stack (`PoolTJ`, with each joiner's collected copies), `twp_frame_keep_sh`, `HoldsIn`/`twp_holdsIn`, `ViewsT`, `twp_keepsPoolJ`, `poolTJ_resume`, `poolTJ_cancel`, `PoolTJ.swap`, `PoolTJ.deposit` | `Core/TreePoolShare.lean` |
+| the interface (`PoolAnsAt`/`PoolAns`/`GoodT` over `PoolTJ` and the running task), the moves (park as ready or joiner, resume, resume-second, cancel, cancel-second, deposit-and-resume, run), `poolSchedAdequacyT` | `Core/TreePoolSched.lean` |
+| the stack scheduler and its return clause (deposit, then resume the top) | `Core/TreePoolSchedProgs.lean` |
+| `HS` with `park`, `spawn`, `cancel`, `par`; indexed tables `tabAt`; the unstarted child `κU` | `Core/TreePoolSpawn.lean` |
+| the loan, cancel and depth-3 tests | `Core/TreePoolSpawnProgs.lean` |
+| a lend shared by a tree of tasks at every depth, ended after the join (`progJoin_safe`, `progJoin_depth1`, `progJoin_depth3`) | `Core/TreePoolJoinProgs.lean` |
+
+**Second child.** A continuation the `par` clause builds (`κU H th`), proved a stored task
+(`kapSchedT_κU`), not a `fork` operation: it needs no new kernel primitive.
+
+**The per-task obligation** (`imm` cells only at own masks or where the nearest joiner shares) is
+carried by every run (`twp_holdsIn`), so no task proves it: a task starts with it (the root and a
+spawned child hold nothing; a `par` child holds copies at what its parent shares) and every run
+keeps it. `L` and `LC` meet it with no change to their proofs.
