@@ -136,6 +136,8 @@ import Core.TreePool
 import Core.TreeLend
 import Core.TreeSchedPool
 import Core.TreeBorrowEdges
+import Core.TreeConsume
+import Core.TreeConsumeInst
 import Core.TreeSchedRelay
 import Core.TreePoolSched
 import Core.TreePoolSchedProgs
