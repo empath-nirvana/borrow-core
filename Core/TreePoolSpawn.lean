@@ -376,9 +376,14 @@ theorem subst_shift0 (d j : Nat) (s : Val) (e : Expr) (h : j ≤ d) :
   Expr.subst_shift d 0 j s e (Nat.zero_le _) (by omega)
 
 /-- Substitution into a clause body after a step. -/
-macro "ssimp" : tactic => `(tactic| simp [Kont.plug, Expr.subst, Expr.shift_shift,
-  BoCa.Fig16.Tree.Wp.SchedProgs.Spawn.subst_shift0, Expr.shift_zero, clauseOf, readyE, parkB,
-  cancelB, spawnB, parB, kUB, stateVal, poolVal])
+syntax "ssimp" (" [" Lean.Parser.Tactic.simpLemma,* "]")? : tactic
+macro_rules
+  | `(tactic| ssimp) => `(tactic| simp [Kont.plug, Expr.subst, Expr.shift_shift,
+      BoCa.Fig16.Tree.Wp.SchedProgs.Spawn.subst_shift0, Expr.shift_zero, clauseOf, readyE, parkB,
+      cancelB, spawnB, parB, kUB, stateVal, poolVal])
+  | `(tactic| ssimp [$ls,*]) => `(tactic| simp [Kont.plug, Expr.subst, Expr.shift_shift,
+      BoCa.Fig16.Tree.Wp.SchedProgs.Spawn.subst_shift0, Expr.shift_zero, clauseOf, readyE, parkB,
+      cancelB, spawnB, parB, kUB, stateVal, poolVal, $ls,*])
 
 /-- The stopped task, parked as a ready entry. -/
 def readyJ (k : Nat) {w : TWd} (O : List (FrameRecT w.K)) (en : OpEntT) (v κ : Val) : StoredJ :=
@@ -567,6 +572,207 @@ theorem spawnCl_ok (N : Nat)
     (HoldsIn.empty _ _) (fun _ _ h => h) (fun _ _ h => h) he hF'm (by simpa using hF'M)
   simp only [List.nil_append] at h
   exact h
+
+
+theorem ChildOK.kripke {T : Nat → OpTabT} {k : Nat} {w w₀ : TWd} {th : Val} {ρ : TRes w.K}
+    {ρ₀ : TRes w₀.K} (h : ChildOK (ℍ := ℍ) T k w th ρ) (hE : w.Ext w₀ ρ)
+    (hr : RRw (w := w) (w' := w₀) ρ ρ₀) : ChildOK (ℍ := ℍ) T k w₀ th ρ₀ :=
+  fun j hj w' ρ' ls' hE' hr' => h j hj w' ρ' ls' (hE.trans hr hE') (RRw.trans hE'.1 hr hr')
+
+theorem ChildOK.le {T : Nat → OpTabT} {k k' : Nat} (hk : k' ≤ k) {w : TWd} {th : Val}
+    {ρ : TRes w.K} (h : ChildOK (ℍ := ℍ) T k w th ρ) : ChildOK (ℍ := ℍ) T k' w th ρ :=
+  fun j hj => h j (by omega)
+
+theorem TJ_down : ∀ m i en, TJ (ℍ := ℍ) m i = some en →
+    ∀ k w ls v ρ, en.PA (k + 1) w ls v ρ → en.PA k w ls v ρ := tabOf_down _
+
+/-- **The unstarted child is a stored task**: `κU H th` at `enU`, holding the child's copies `ρ`,
+owning no record. Resumed at `()` it runs `th ()` under the scheduler (`cerwpT_schedHandle_le`,
+from the scheduler's clauses below its index); cancelled, it answers `()` holding `ρ`, which the
+return clause hands to the nearest joiner. -/
+theorem kapSchedT_κU {N : Nat}
+    (ih : ∀ N', N' < N → SchedOKTLe (ℍ := ℍ) N' (TJ (ℍ := ℍ)) nP qsS stackRet hsS QV (PA_S (ℍ := ℍ)))
+    {kU : Nat} (hkU : kU ≤ N) {w : TWd} {ls : List (SRecT w.K)} {th : Val} {ρ : TRes w.K}
+    (hth : ChildOK (ℍ := ℍ) (tabAt (ℍ := ℍ)) kU w th ρ) (hV : ViewsT ρ) :
+    KapSchedT (ℍ := ℍ) (PA_S (ℍ := ℍ)) (recMask ([] : List (FrameRecT w.K))) enU HS kU w ls []
+      Val.unit (κU HS th) ρ := by
+  have hQD := valPost_down (poolAns_down (ℍ := ℍ) QS HS InvS)
+  refine ⟨fun h => (by cases h), ?_, ?_⟩
+  · intro w' ρ' ls' O' hE hr _ hO k' hk' a σ σ' hB hcσ F' hF'm hF'M
+    cases hO
+    obtain ⟨rfl, rfl⟩ := hB
+    obtain rfl : ρ' = σ' := (compS_empty_right_eq hcσ).symm
+    rw [cerwpTE_iff]
+    refine twp_det hQD (fun μ => step1Only_plug (Head.beta μ _ (Val.inj₁ Val.unit)) rfl
+      (.appL .hole Val.unit)) ?_
+    ssimp [κU]
+    refine twp_det hQD (fun μ => step1Only_plug (Head.case₁ μ Val.unit _ _) rfl
+      (.appL .hole Val.unit)) ?_
+    ssimp
+    refine twp_det hQD (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) ?_
+    ssimp
+    have he := cerwpT_tabAt (hth k' hk' w' ρ' ls' hE hr (fun w ρf => ResUT.Valid ρf)
+      (fdMask (recMask ([] : List (FrameRecT w'.K)))) (fun _ _ h => h)
+      (fun _ _ h => fdMask_le (fun x hx => by simp [recMask] at hx) h))
+    exact cerwpT_schedHandle_le (ih k' (by omega)) k' le_rfl (recMask ([] : List (FrameRecT w'.K)))
+      F' _ _ w' ls' [] _ ρ' hF'm (fun w'' ρf hf => fdMask_le (fun x hx => by simp [recMask] at hx) (hF'M w'' ρf hf))
+      (fun _ h => h) (fun _ _ h => h) (fun _ _ h => h) he
+  · intro w' ρ' ls' O' hE hr _ hO _ _ k' hk' F' hF'm hF'M
+    cases hO
+    rw [cerwpTE_iff]
+    have hV' : ViewsT ρ' := hV.rr hr
+    have he : cerwpT (ℍ := ℍ) (opTableT (TJ (ℍ := ℍ))) QV (fun w ρf => ResUT.Valid ρf)
+        (fdMask (recMask ([] : List (FrameRecT w'.K)))) k' w' ls' []
+        (.app (κU HS th).1 (.val (Val.inj₂ Val.unit))) ρ' := by
+      have hPD := cerwpPostT_down (Ψ := cerwpTC (ℍ := ℍ) (opTableT (TJ (ℍ := ℍ))) QV
+        (fun w ρf => ResUT.Valid ρf) k') (F := fun w ρf => ResUT.Valid ρf) QV_down
+        TJ_down
+      refine cerwpT_det hPD (fun μ => step1Only_plug (Head.beta μ _ (Val.inj₂ Val.unit)) rfl
+        .hole) ?_
+      ssimp [κU]
+      refine cerwpT_det hPD (fun μ => step1Only_plug (Head.case₂ μ Val.unit _ _) rfl .hole) ?_
+      ssimp
+      exact cerwpT_val (v := Val.unit) fun w₀ ρ₀ _ O₀ _ hr₀ _ hO₀ => by
+        cases hO₀; exact ⟨rfl, rfl, hV'.rr hr₀⟩
+    exact cerwpT_schedHandle_le (ih k' (by omega)) k' le_rfl (recMask ([] : List (FrameRecT w'.K)))
+      F' _ _ w' ls' [] _ ρ' hF'm (fun w'' ρf hf => fdMask_le (fun x hx => by simp [recMask] at hx) (hF'M w'' ρf hf))
+      (fun _ h => h) (fun _ _ h => h) (fun _ _ h => h) he
+
+
+/-- **`par`'s clause at stops up to `N`**, from the scheduler's clauses below `N`: the parent
+parked as a joiner sharing what it owns or is shared with it (`poolAns_park`), the second child
+stored unstarted above it (`kapSchedT_κU`, `poolAns_park`), the first child run under the
+scheduler beside the stack (`poolAns_run_le`). Each child's copies sit where the parent shares:
+the parent's own `imm` cells sit at its masks or where its nearest joiner shares (the running
+task's condition), and it shares exactly those. -/
+theorem parCl_ok (N : Nat)
+    (ih : ∀ N', N' < N → SchedOKTLe (ℍ := ℍ) N' (TJ (ℍ := ℍ)) nP qsS stackRet hsS QV (PA_S (ℍ := ℍ))) :
+    SchedClauseTLe (ℍ := ℍ) N HS (PA_S (ℍ := ℍ)) (enParP (parPA (ℍ := ℍ) (tabAt (ℍ := ℍ))))
+      parCl := by
+  rintro F k w ls O v κ ρ hkN _ _ _ hcovρ _ _ ⟨ρa, ρk, hc, ⟨th₁, th₂, ρ₁, ρ₂, rfl, h12, hV₁, hV₂,
+    hth₁, hth₂⟩, hκ⟩
+  rw [cerwpTE_iff]
+  have hD := valPost_down (poolAns_down (ℍ := ℍ) QS HS InvS)
+  refine twp_det hD (fun μ => step1Only_plug (Head.beta μ _ (Val.pair (Val.pair th₁ th₂) κ)) rfl
+    .hole) ?_
+  refine twp_det hD (fun μ => step1Only_plug (Head.letpair μ (Val.pair th₁ th₂) κ _) rfl .hole) ?_
+  simp only [Kont.plug]
+  refine twp_here (fun μ => final_val μ ⟨_, .lam⟩) fun w₀ ρ₀ ls₀ O₀ hE hr hl hO => ?_
+  -- the stop's resource re-read: the children's copies and the parent's share
+  obtain ⟨ρa₀, ρk₀, hra, hrk, hc₀⟩ := RR.split_retype hE.1 hc hcovρ hE.2 hr
+  have hEa := hE.of_compS_left hc
+  obtain ⟨ρ₁₀, ρ₂₀, hr₁, hr₂, h12₀⟩ :=
+    RR.split_retype hEa.1 h12 (hcovρ.of_compS_left hc) hEa.2 hra
+  have hκ' := KapSchedT.mask_mono (fun x hx => (recMask_rr hO x).mp hx)
+    (KapSchedT.kripke hκ (hE.of_compS_right hc) hrk (KeepRel.of_srecsRR hl _) hO)
+  have hth₁' := hth₁.kripke (hEa.of_compS_left h12) hr₁
+  have hth₂' := hth₂.kripke (hEa.of_compS_right h12) hr₂
+  refine ⟨⟨_, .lam⟩, rfl, fun j hj => poolAnsAt_iff.mpr ?_⟩
+  intro ts Os σ ρ' hi hg hP hc' hσ hρ hH hap hcov hv hls hO' F' hF'm hF'M
+  have hv₀ := (ResUT.Valid.split hc' hv).1
+  have hva₀ := (ResUT.Valid.split hc₀ hv₀).1
+  -- `ρ′ = ρ₁ ● (ρ₂ ● (ρk ● σ))`
+  obtain ⟨y, hy₁, hy₂⟩ := (ResUT.CompS.assoc ρa₀ ρk₀ σ ρ').mpr ⟨ρ₀, hc₀, hc'⟩
+  obtain ⟨z, hz₁, hz₂⟩ := (ResUT.CompS.assoc ρ₁₀ ρ₂₀ y ρ').mpr ⟨ρa₀, h12₀, hy₂⟩
+  let shJ : BoCa.Loc → Prop := fun x => recMask O₀ x ∨ shTop ts x
+  -- the parent parked as a joiner sharing `shJ`
+  obtain ⟨hPJ, hgJ⟩ := poolAns_park (Inv := InvS) true shJ (Val.inj₂ Val.unit) hκ' hj hg hP hy₁ hσ
+    (hρ.of_compS_right hc₀ hv₀) (hH.of_compS_right hc₀ hv₀) (fun _ h => h) hap
+    (CovR.of_compS_right hc₀ (CovR.of_compS_left hc' hcov)) hls hO'
+  have hshJ : ∀ x, shTop (⟨⟨PA_S (ℍ := ℍ), recMask O₀, enParP (parPA (ℍ := ℍ) (tabAt (ℍ := ℍ))), HS,
+      k, Val.pair th₁ th₂, κ⟩, true, shJ, Val.inj₂ Val.unit⟩ :: ts) x ↔ shJ x :=
+    shTop_joiner rfl
+  -- a child's copies against the stack above the joiner
+  have hAv : ∀ {ρc : TRes w₀.K}, (∃ o, ResUT.CompS ρc o ρ₀) →
+      AvoidUnsh shJ (O₀ ++ Os) ρc ∧ HoldsIn shJ [] ρc := by
+    rintro ρc ⟨o, ho⟩
+    refine ⟨fun q hq hn => ?_, fun τ hτ x ψ e k => ?_⟩
+    · rcases List.mem_append.mp hq with hq | hq
+      · exact (hn (Or.inl ⟨q, hq, Or.inl rfl⟩)).elim
+      · exact (hρ.of_compS_left ho hv₀) q hq fun h => hn (Or.inr h)
+    · exact Or.inr ((hH.of_compS_left ho hv₀) τ hτ x ψ e k)
+  obtain ⟨o₁, ho₁⟩ : ∃ o, ResUT.CompS ρ₁₀ o ρ₀ := by
+    obtain ⟨x, hx₁, hx₂⟩ := (ResUT.CompS.assoc ρ₁₀ ρ₂₀ ρk₀ ρ₀).mpr ⟨ρa₀, h12₀, hc₀⟩
+    exact ⟨x, hx₂⟩
+  obtain ⟨o₂, ho₂⟩ : ∃ o, ResUT.CompS ρ₂₀ o ρ₀ := by
+    obtain ⟨x, hx₁, hx₂⟩ := (ResUT.CompS.assoc ρ₂₀ ρ₁₀ ρk₀ ρ₀).mpr
+      ⟨ρa₀, ResUT.CompS.comm h12₀, hc₀⟩
+    exact ⟨x, hx₂⟩
+  have hvz := (ResUT.Valid.split hz₂ hv).2
+  have hvy := (ResUT.Valid.split hz₁ hvz).2
+  have hcovz := CovR.of_compS_right hz₂ hcov
+  -- the second child stored unstarted above the joiner
+  have hκU := kapSchedT_κU (ls := ls₀) ih (kU := j) (by omega) (hth₂'.le hj) (hV₂.rr hr₂)
+  obtain ⟨hPU, hgU⟩ := poolAns_park (Inv := InvS) false (fun _ => False) (Val.inj₁ Val.unit) hκU
+    le_rfl hgJ hPJ hz₁ (NoneAt.of_false (fun x hx => by simp [recMask] at hx) _)
+    (((hAv ⟨o₂, ho₂⟩).1).mono fun x hx => (hshJ x).mpr hx)
+    (((hAv ⟨o₂, ho₂⟩).2).mono fun x hx => (hshJ x).mpr hx) (fun _ h => h.elim)
+    (recsApart_nil_left _) (CovR.of_compS_left hz₁ hcovz) hls (fun _ h => by cases h)
+  have hQD := valPost_down QB_down
+  cases j with
+  | zero => exact twp_zero
+  | succ j₀ =>
+  refine twp_step (fun μ => step1Only_plug (Head.beta μ _ (stateVal HS ts)) rfl .hole) ?_
+  ssimp
+  refine twp_det hQD (fun μ => step1Only_plug (Head.letpair μ HS (poolVal ts) _) rfl .hole) ?_
+  ssimp
+  refine twp_det hQD (fun μ => step1Only_plug (Head.letpair μ th₁ th₂ _) rfl .hole) ?_
+  ssimp
+  have hEc : w₀.Ext w₀ ρ₁₀ := TWd.Ext.refl _ _
+  have he := cerwpT_tabAt (hth₁' j₀ (by omega) w₀ ρ₁₀ ls₀ (TWd.Ext.refl _ _)
+    (RR.refl (CovR.of_compS_left hz₂ hcov)) (fun w ρf => ResUT.Valid ρf)
+    (fdMask (recMask ([] : List (FrameRecT w₀.K)))) (fun _ _ h => h)
+    (fun _ _ h => fdMask_le (fun x hx => by simp [recMask] at hx) h))
+  have hiU : InvS (⟨⟨PA_S (ℍ := ℍ), recMask ([] : List (FrameRecT w₀.K)), enU, HS, j₀ + 1, Val.unit,
+      κU HS th₂⟩, false, fun _ => False, Val.inj₁ Val.unit⟩ ::
+      ⟨⟨PA_S (ℍ := ℍ), recMask O₀, enParP (parPA (ℍ := ℍ) (tabAt (ℍ := ℍ))), HS, k,
+        Val.pair th₁ th₂, κ⟩, true, shJ, Val.inj₂ Val.unit⟩ :: ts) := by
+    intro x hx
+    rcases List.mem_cons.mp hx with rfl | hx
+    · exact ⟨fun k w ls c _ hj => by rw [hj rfl]; exact ⟨rfl, rfl⟩, Or.inl ⟨rfl, rfl, rfl, rfl⟩⟩
+    rcases List.mem_cons.mp hx with rfl | hx
+    · exact ⟨fun k w ls c hc _ => ⟨rfl, hc⟩, Or.inr ⟨rfl, rfl⟩⟩
+    · exact hi x hx
+  have hshU : ∀ x, shTop (⟨⟨PA_S (ℍ := ℍ), recMask ([] : List (FrameRecT w₀.K)), enU, HS, j₀ + 1,
+      Val.unit, κU HS th₂⟩, false, fun _ => False, Val.inj₁ Val.unit⟩ ::
+      ⟨⟨PA_S (ℍ := ℍ), recMask O₀, enParP (parPA (ℍ := ℍ) (tabAt (ℍ := ℍ))), HS, k,
+        Val.pair th₁ th₂, κ⟩, true, shJ, Val.inj₂ Val.unit⟩ :: ts) x ↔ shJ x :=
+    fun x => (shTop_ready rfl x).trans (hshJ x)
+  have h := poolAns_run_le (ih j₀ (by omega)) le_rfl (fun u hu => (hgU u hu).le (by omega)) hiU
+    hPU hz₂ hcov hv (recsApart_nil_left _)
+    (NoneAt.of_false (fun x hx => by simp [recMask] at hx) _)
+    (((hAv ⟨o₁, ho₁⟩).1).mono fun x hx => (hshU x).mpr hx)
+    (((hAv ⟨o₁, ho₁⟩).2).mono fun x hx => (hshU x).mpr hx)
+    (fun _ _ h => h) (fun _ _ h => h) he hF'm (by simpa using hF'M)
+  simp only [List.nil_append] at h
+  exact h
+
+
+/-- **The scheduler meets its clauses at stops up to every `N`**, by strong induction on `N`. -/
+theorem hs_schedOKLe : ∀ N, SchedOKTLe (ℍ := ℍ) N (TJ (ℍ := ℍ)) nP qsS stackRet hsS QV
+    (PA_S (ℍ := ℍ)) := by
+  intro N
+  induction N using Nat.strong_induction_on with
+  | _ N ih =>
+  refine ⟨fun m i hm => by simp [TJ, tabOf, hm], fun i en h _ => ?_, fun i en h v w O ρf hj => ?_,
+    poolAns_down _ _ _, fun F k w ls O v ρ _ =>
+      stackRet_okAt (fun t ts hi => ⟨(invS_cons hi).1.1, (invS_cons hi).2⟩) F k w ls O v ρ,
+    fun i en h => ?_⟩
+  · obtain ⟨-, ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩⟩ := tabOf_some h <;> rfl
+  · obtain ⟨-, ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩⟩ := tabOf_some h <;> exact hj
+  · obtain ⟨-, ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩⟩ := tabOf_some h
+    · exact ⟨parkCl, by simp [clauseAt, hsS, Val.pair, parkCl, clauseOf, Val.lam, IsVal.lam],
+        parkCl_ok N⟩
+    · exact ⟨spawnCl, by simp [clauseAt, hsS, Val.pair, spawnCl, clauseOf, Val.lam, IsVal.lam],
+        spawnCl_ok N ih⟩
+    · exact ⟨cancelCl, by simp [clauseAt, hsS, Val.pair, cancelCl, clauseOf, Val.lam, IsVal.lam],
+        cancelCl_ok N⟩
+    · exact ⟨parCl, by simp [clauseAt, hsS, Val.pair, parCl, clauseOf, Val.lam, IsVal.lam],
+        parCl_ok N ih⟩
+
+/-- **The scheduler meets `SchedOKT`** with its answers functions of its stack, for every stack. -/
+theorem hs_schedOK : SchedOKT (ℍ := ℍ) (TJ (ℍ := ℍ)) nP qsS stackRet hsS QV (PA_S (ℍ := ℍ)) :=
+  schedOKT_of_le hs_schedOKLe
 
 end BoCa.Fig16.Tree.Wp.SchedProgs.Spawn
 
