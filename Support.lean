@@ -120,6 +120,7 @@ import Support.Model.Tree.World.InvSimple
 import Support.Model.Tree.World.InvUses
 import Support.Model.Tree.World.NoOwnUnder
 import Support.Model.Tree.World.RebRR
+import Support.Model.Tree.World.RecMask
 import Support.Model.Tree.World.Records
 import Support.Model.Tree.World.Recs
 import Support.Model.Tree.World.ShapeMutT

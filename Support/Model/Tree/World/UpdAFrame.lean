@@ -284,8 +284,9 @@ theorem AgW.mut_beneath_unmasked {W : TRes K} (hW : MutOne W) {E : BoCa.Loc → 
 
 /-- **The resource fact `UpdA.trans` reads** (route 1 of `docs/new-core/scope-806.md`'s
 appendix): in a world meeting `RecInv`, a run's resource is `ImmMaskClosed` at the masks of the
-records it owns. Stated, not yet proved; `UpdA.trans` is to take it as a side condition that
-`twp_bind` discharges from the middle world's `RecInv`. -/
+records it owns. Proved as `recMaskClosed` (`World/RecMask.lean`). `UpdA.trans` takes
+`ImmMaskClosed` as a side condition, which `twp_bind` discharges through it from the middle
+world's `RecInv`. -/
 def RecMaskClosed : Prop :=
   ∀ (w : TWd) (fρ ρf ρ : TRes w.K) (ps O psF : List (FrameRecT w.K)) (ls : List (SRecT w.K)),
     RecInv w fρ ps ls → ResUT.CompS ρf ρ fρ → SplitT ps O psF → ImmMaskClosed (recMask O) ρ
