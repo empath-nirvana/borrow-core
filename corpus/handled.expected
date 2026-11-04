@@ -700,6 +700,44 @@ corpus/fs-fake-exit.bc 1.3 tail+state: error; condition 2 holds; -
 corpus/fs-fake-exit.bc 1.4 tail+state: error; condition 2 holds; -
 corpus/fs-fake-exit.bc 3.0 abortive: error; condition 2 holds; -
 corpus/fs-fake-exit.bc 2.0 abortive: error; condition 2 holds; -
+corpus/fs-nested-order.bc flows [0, 1, 2, 3, 4, 5, 4294967295], finaliser; main [1, 2, 3, 4, 5], finaliser
+corpus/fs-nested-order.bc 68:3: handle 1: inside [2, 3, 4, 5], finaliser; row []; ops 1.0 tail, 1.1 tail, 1.2 tail, 1.3 tail, 1.4 tail; names 1.0 row, 1.1 [], 1.2 [], 1.3 [], 1.4 row; condition 2 holds
+corpus/fs-nested-order.bc 69:5: handle 2: inside [3, 4, 5], finaliser; row [1]; ops 2.0 tail+state, 2.1 tail+state, 2.2 tail+state, 2.3 tail+state, 2.4 tail+state; names 2.0 row, 2.1 [], 2.2 [], 2.3 [], 2.4 row; condition 2 fails at 1
+corpus/fs-nested-order.bc 70:15: handle 5: inside [], finaliser; row [2, 1]; ops 5.0 abortive; names 5.0 []; condition 2 holds
+corpus/fs-nested-order.bc 71:15: handle 4: inside [], finaliser; row [2, 1]; ops 4.0 abortive; names 4.0 []; condition 2 holds
+corpus/fs-nested-order.bc 72:15: handle 3: inside [], finaliser; row [2, 1]; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/fs-nested-order.bc 1.0 tail: error; condition 2 holds; -
+corpus/fs-nested-order.bc 1.1 tail: error; condition 2 holds; -
+corpus/fs-nested-order.bc 1.2 tail: error; condition 2 holds; -
+corpus/fs-nested-order.bc 1.3 tail: error; condition 2 holds; -
+corpus/fs-nested-order.bc 1.4 tail: error; condition 2 holds; -
+corpus/fs-nested-order.bc 2.0 tail+state: error; condition 2 fails; -
+corpus/fs-nested-order.bc 2.1 tail+state: error; condition 2 fails; -
+corpus/fs-nested-order.bc 2.2 tail+state: error; condition 2 fails; -
+corpus/fs-nested-order.bc 2.3 tail+state: error; condition 2 fails; -
+corpus/fs-nested-order.bc 2.4 tail+state: error; condition 2 fails; -
+corpus/fs-nested-order.bc 5.0 abortive: error; condition 2 holds; -
+corpus/fs-nested-order.bc 4.0 abortive: error; condition 2 holds; -
+corpus/fs-nested-order.bc 3.0 abortive: error; condition 2 holds; -
+corpus/fs-nested-sites.bc flows [0, 2, 3, 4, 5, 4294967295], finaliser; main [1, 2, 3, 4, 5], finaliser
+corpus/fs-nested-sites.bc 70:3: handle 1: inside [2, 3, 4, 5], finaliser; row []; ops 1.0 tail+state, 1.1 tail+state, 1.2 tail+state, 1.3 tail+state, 1.4 tail+state; names 1.0 row, 1.1 [], 1.2 [], 1.3 [], 1.4 row; condition 2 holds
+corpus/fs-nested-sites.bc 71:5: handle 2: inside [3, 4, 5], finaliser; row [1]; ops 2.0 tail, 2.1 tail, 2.2 tail, 2.3 tail, 2.4 tail; names 2.0 row, 2.1 [], 2.2 [], 2.3 [], 2.4 row; condition 2 fails at 1
+corpus/fs-nested-sites.bc 72:15: handle 5: inside [], finaliser; row [2, 1]; ops 5.0 abortive; names 5.0 []; condition 2 holds
+corpus/fs-nested-sites.bc 73:15: handle 4: inside [], finaliser; row [2, 1]; ops 4.0 abortive; names 4.0 []; condition 2 holds
+corpus/fs-nested-sites.bc 74:15: handle 3: inside [], finaliser; row [2, 1]; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/fs-nested-sites.bc 1.0 tail+state: error; condition 2 holds; -
+corpus/fs-nested-sites.bc 1.1 tail+state: error; condition 2 holds; -
+corpus/fs-nested-sites.bc 1.2 tail+state: error; condition 2 holds; -
+corpus/fs-nested-sites.bc 1.3 tail+state: error; condition 2 holds; -
+corpus/fs-nested-sites.bc 1.4 tail+state: error; condition 2 holds; -
+corpus/fs-nested-sites.bc 2.0 tail: error; condition 2 fails; -
+corpus/fs-nested-sites.bc 2.1 tail: error; condition 2 fails; -
+corpus/fs-nested-sites.bc 2.2 tail: error; condition 2 fails; -
+corpus/fs-nested-sites.bc 2.3 tail: error; condition 2 fails; -
+corpus/fs-nested-sites.bc 2.4 tail: error; condition 2 fails; -
+corpus/fs-nested-sites.bc 5.0 abortive: error; condition 2 holds; -
+corpus/fs-nested-sites.bc 4.0 abortive: error; condition 2 holds; -
+corpus/fs-nested-sites.bc 3.0 abortive: error; condition 2 holds; -
 corpus/fs-raise-two.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
 corpus/fs-raise-two.bc 20:1: handle 1: inside [2], finaliser; row []; ops 1.0 tail+state, 1.1 tail+state, 1.2 tail+state, 1.3 tail+state, 1.4 tail+state; names 1.0 row, 1.1 row, 1.2 row, 1.3 row, 1.4 row; condition 2 holds
 corpus/fs-raise-two.bc 20:25: handle 2: inside [], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
