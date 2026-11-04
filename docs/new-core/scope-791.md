@@ -469,3 +469,35 @@ the lend (`StopFrameN.lean`'s header, "step 3"). It needs the user's decision be
 So which one `tmplT` picks at each tree is not fixed by the specification, which is the evidence for
 option (a). Caveat: here the two differ only in the template's own lifetime, and the canonical
 images agree (`canonT_view`). The witness-set variant (`ref (imm a 1)`, O1) is not built.
+
+### Templates, the witness-set variant (2026-11-04)
+
+`Core/TreeTemplChoice.lean`. Take the escrow at `ref (imm '3 1)`: `k ↦ own(loc j) ●
+j ↦ imm({1, 2}, (), ∅)`. `●` unions `imm` lifetime sets, so the escrow lies above
+`k ↦ own(loc j) ● j ↦ imm({aᵢ})` for `aᵢ = 1, 2`. Each part gives a template
+`k ↦ imm({3}, loc j, j ↦ imm({aᵢ}))` meeting `TmplSpecT` (`tmplSpecT_two_wit`). `relRes` keeps the
+witness, and `RC` keeps the lifetime sets in a witness. So at every `β` the two canonical images
+have no common re-reading (`canon_two_wit`). The canonical images can differ. Option (a), the
+per-record template, proceeds.
+
+### `mut` and cancellable stops: option (b) (decided 2026-11-04)
+
+`CerwpTMFrameC` (`Core/TreeMutFrame.lean`, elaborates; not proved) replaces `MustResume` with
+`OpTabT.KeepsShare`: no non-abortive entry is unrestricted. At the tree a cancel is the
+continuation's cancel branch, run at the same `Ψ` (`contShareT`'s second clause, #817's shape). So
+the fold-and-re-lend induction treats it as a resume with no answer resource: the borrowed run's
+cancel branch, re-lent, ends in `MFPostT l A Q`. Only an unrestricted entry, whose share is empty,
+cannot hold the folded cell. `TP_keepsShare`: `park`'s table meets it.
+
+**The Anti-Frame at the start and end worlds (not derived either way).** The borrowed run holds
+`ℓ ↦ own(v) ● σ_P` and may end at a world re-typing `ℓ`. The outer run reseals `ℓ` as a `mut` cell,
+which `Cov.mut` and `InvKeptA` read at `A`. So it either re-types `ℓ` back to `A`, owing `Q` there,
+or needs the borrowed run to end with `ℓ` still at `A`. I have not built a configuration showing
+the re-typing is forced. Two candidate shapes:
+- a closure premise on `Q` (beyond the approved four: needs the user's OK);
+- `MFPostTK`, `MFPostT` with `w.Θ l = some A`. This is closer to Core, where the cell's family `Φ ℓ`
+  is fixed and the borrowed run cannot change it.
+
+**Next step.** Prove `CerwpTMFrameC`. Start with the stop-free lender's side at `twp` (the port of
+`rwpG_M_frameG`; see "R1 status" above), then the strong induction. Its stop case folds into the
+share, and the resume and cancel cases re-lend at the re-typed world.

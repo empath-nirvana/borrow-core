@@ -190,6 +190,43 @@ theorem not_mustResume_TP : ¬ OpTabT.MustResume TP := fun h => by
   have := h nP 0 enPark (by simp [TP]) rfl
   simp [enPark] at this
 
+
+/-! ### Cancellable stops: the cancel branch hands the borrow back -/
+
+/-- **Every non-abortive entry keeps a share**: none is unrestricted (`contShareT`'s first clause
+empties an unrestricted share, which could not hold the folded cell). A cancellable entry is
+admitted: its cancel branch is a run of the continuation at the same postcondition
+(`contShareT`'s second clause), so the borrowed run's cancel branch, re-lent, ends in
+`MFPostT l A Q` and hands the borrow back as a resume does. -/
+def OpTabT.KeepsShare (T : OpTabT) : Prop :=
+  ∀ m i en, T m i = some en → en.abort = false → en.q ≠ .unr
+
+/-- **Mut Frame across stops at `cerwpT`, cancellable stops included**: `CerwpTMFrameM` with
+`OpTabT.MustResume` replaced by `OpTabT.KeepsShare`. -/
+def CerwpTMFrameC : Prop :=
+  ∀ (T : OpTabT) (Q : TPostV) (Fb F : TFrame) (n : Nat) (w : TWd) (ls : List (SRecT w.K))
+    (O : List (FrameRecT w.K)) (e : Expr) (l : BoCa.Loc) (A : KTy) (α : Life) (D : TSet)
+    (v : BoCa.Val) (ρP ρlP ρb ρ : TRes w.K)
+    (hP : ρP.InStratum (TSet.single α)) (hw : codeP w A (TSet.single α) v ⟨ρP, hP⟩),
+    OpTabT.KeepsShare T → OpTabT.FdMono T → Fb.Mono → F.Mono →
+    w.K.DownOf D (TSet.single α) → ρb.InStratum D → w.Θ l = some A →
+    ResUT.CompS (ResUT.single l (CellUT.ownOf v)) ρP ρlP → ResUT.CompS ρlP ρb ρ →
+    (∀ BM, ResUT.CompS ρb (ResUT.single l (CellUT.mutOf (TSet.single α) v ρP hP
+        (codeP w A (TSet.single α)) hw)) BM →
+      cerwpT (ℍ := ℍ) (opTableT T) (MFPostT l A Q) Fb F n w ls O e BM) →
+    cerwpT (ℍ := ℍ) (opTableT T) Q Fb F n w ls O e ρ
+
+/-- `park`'s table keeps a share: its one entry is cancellable. -/
+theorem TP_keepsShare : OpTabT.KeepsShare TP := fun _ _ _ h _ => by
+  obtain ⟨-, -, rfl⟩ := TP_some h
+  simp [enPark]
+
+/-- **`MFPostT` with the code kept**: the borrowed run hands the content back at a world still
+typing `ℓ` at `A`. The Anti-Frame's alternative to a closure premise on `Q`: the outer run reseals
+`ℓ` as a `mut` cell, which `InvKeptA` and `Cov.mut` read at `A`. -/
+def MFPostTK (l : BoCa.Loc) (A : KTy) (Q : TPostV) : TPostV := fun k w ls O v ρ' =>
+  w.Θ l = some A ∧ MFPostT l A Q k w ls O v ρ'
+
 end BoCa.Fig16.Tree.Wp
 
 end
