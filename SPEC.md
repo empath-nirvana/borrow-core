@@ -10650,9 +10650,12 @@ layers (`docs/new-core/scope-782.md`):
   and every list keeping what it reads, monotone by definition. **A thunk is introduced as Core's
   `thunkF_compatC`/`thunkV_compatC` introduce one**: from its computation at every world and list
   over a resource in which the environment is a value of its type, the environment carried to the
-  later world and list by its type's monotonicity (`STy.mono`, the tree's `gDenC_local`), at every
-  computation type (`STy.thunk_intro`), at `F A` (`STy.thunkRet_intro`), for `λ_. M` with the
-  forcing's head step paid from the index (`STy.thunkRet_lam`), and of a value (`STy.thunkC_val`).
+  later world and list by its monotonicity (`TEnv.Mono`, the tree's `gDenC_local`, met at every
+  value type by `STy.env_mono`), at every computation type (`STy.thunk_intro_env`), at `F A`
+  (`STy.thunkRet_intro_env`), for `λ_. M` with the forcing's head step paid from the index
+  (`STy.thunkRet_lam_env`; met at `λ_. inj₁ ()`, `STy.thunkRet_constInl`), each with a corollary
+  at an environment read at a value type (`STy.thunk_intro`, `STy.thunkRet_intro`,
+  `STy.thunkRet_lam`), and of a value (`STy.thunkC_val`).
   `ν` folds and unfolds at Core's body shape `F(A ⊕ U X) & F B` (`SCmp.loopBody_mono`), and is not
   empty there (`SCmp.loop_nonempty`).
 - **Continuation and task types** (`Core/TreeSemK.lean`) are thunks and boxed thunks, no new
@@ -11252,8 +11255,8 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
 - **1.35** (2026-11-04) — §62 (*Semantic types read at the tree*): `F A` is a bare `cerwpT` run
   (`SCmp.ret`), Core's `cC (.ret A)`; the Kripke quantifier over later worlds and lists sits at
   `U` only. Thunks are introduced as Core's `thunkF_compatC` does, from the computation at every
-  world and list with the environment carried by its type's monotonicity (`STy.thunk_intro`,
-  `STy.thunkRet_intro`, `STy.thunkRet_lam`). `SCmp.ret_kripke`, `SCmp.ret_run`, `SCmp.ret_of_run`,
+  world and list with the environment carried by its monotonicity (`TEnv.Mono`; `STy.thunk_intro_env`,
+  `STy.thunkRet_intro_env`, `STy.thunkRet_lam_env`, and their corollaries at a value type). `SCmp.ret_kripke`, `SCmp.ret_run`, `SCmp.ret_of_run`,
   `CSem.Kripke`, `SCmp.amp_kripke` and `SCmp.nu_kripke_of` are retired; `SCmp.ret_reread` is
   `F A`'s Kripke property along the whole-list re-reading. `SCmp.ret_val` takes the resource's
   coverage. `STy.kont_of_share`, `STy.kontBox_resume_after` and the instances keep their

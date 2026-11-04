@@ -880,6 +880,10 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.SCmp.nu_fold
 #print axioms BoCa.Fig16.Tree.Wp.SCmp.nu_unfold
 #print axioms BoCa.Fig16.Tree.Wp.STy.thunk_intro
+#print axioms BoCa.Fig16.Tree.Wp.STy.thunk_intro_env
+#print axioms BoCa.Fig16.Tree.Wp.STy.env_mono
+#print axioms BoCa.Fig16.Tree.Wp.STy.env
+#print axioms BoCa.Fig16.Tree.Wp.TEnv.Mono
 #print axioms BoCa.Fig16.Tree.Wp.STy.thunkC_val
 #print axioms BoCa.Fig16.Tree.Wp.STy.thunk_force
 #print axioms BoCa.Fig16.Tree.Wp.STy.thunkC
@@ -916,6 +920,8 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.STy.thunkRet
 #print axioms BoCa.Fig16.Tree.Wp.STy.thunkRet_intro
 #print axioms BoCa.Fig16.Tree.Wp.STy.thunkRet_lam
+#print axioms BoCa.Fig16.Tree.Wp.STy.thunkRet_lam_env
+#print axioms BoCa.Fig16.Tree.Wp.STy.thunkRet_intro_env
 #print axioms BoCa.Fig16.Tree.Wp.STy.down_le
 #print axioms BoCa.Fig16.Tree.Wp.STy.list_body_mono
 #print axioms BoCa.Fig16.Tree.Wp.cerwpT_post_mono_n

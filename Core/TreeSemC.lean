@@ -33,8 +33,10 @@ the thunk monotone (`STy.thunk`).
   computation type (`STy.thunkC_le`). A thunk is introduced as Core's `thunkF_compatC` and
   `thunkV_compatC` introduce one: from the computation at every world and list, over the
   environment's value type, and the environment carried to the later world and list by its own
-  monotonicity (`STy.mono`, the tree's `gDenC_local`): `STy.thunk_intro` for every computation type,
-  `STy.thunkRet_intro` at `F A`, `STy.thunkRet_lam` for `λ_. M` (`thunkF_compatC`'s head step). From
+  monotonicity (`TEnv.Mono`, the tree's `gDenC_local`; `STy.env_mono` at a value type):
+  `STy.thunk_intro_env` for every computation type, `STy.thunkRet_intro_env` at `F A`,
+  `STy.thunkRet_lam_env` for `λ_. M` (`thunkF_compatC`'s head step), each with a corollary at an
+  environment read at a value type (`STy.thunk_intro`, `STy.thunkRet_intro`, `STy.thunkRet_lam`). From
   a value (`STy.thunkC_val`); from a stored continuation's share (`Core/TreeSemK.lean`).
 
 Continuation and task types are `Core/TreeSemK.lean`.
@@ -183,7 +185,7 @@ def SCmp.ret (Tb : TableT) (hL : Tb.Local) (hTb : Tb.Down) (Fb F : TFrame) (τ :
 
 /-- **`F A` is Kripke along the re-reading of its whole list** (`cerwpT_kripke`): at every
 extension, on the re-reading of the resource, at every list re-reading the list record by record
-(`SRecsRR`). Along `KeepRel`, which may drop records the resource does not read, it is not
+(`SRecsRR`). Along `KeepRel`, which may leave out records the resource does not read, it is not
 (`Obs.cerwpT_not_keepKripkeNil`). -/
 theorem SCmp.ret_reread {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : TFrame} {τ : STy}
     {n : Nat} {w w' : TWd} {ls : List (SRecT w.K)} {ls' : List (SRecT w'.K)} {e : Expr}
@@ -271,42 +273,79 @@ theorem STy.thunkC_le {C D : SCmp} (h : C.Le D) (force : Val → Expr) :
     (STy.thunkC C force).Le (STy.thunkC D force) :=
   fun _ _ _ v _ hv w' ρ' ls' hE hr hk => h _ w' ls' (force v) ρ' (hv w' ρ' ls' hE hr hk)
 
-/-- **A thunk from its computation at every world and list**, Core's `thunkV_compatC`: the
-forcing is a run of `C` at every world and list over a resource in which the environment `γ` is a
-value of `τΓ`, and `γ` is a value of `τΓ` here. The thunk is forced at a later world and list
-keeping the records its resource reads; `γ` is a value of `τΓ` there (`STy.mono`, the tree's
-`gDenC_local`), so the forcing runs there. -/
+/-- **An environment's meaning**: a predicate on resources at the index, the world and the list,
+the reading of a context at its substitution (Core's `gDenC ls δ Γ γ`). -/
+abbrev TEnv : Type := Nat → (w : TWd) → List (SRecT w.K) → TRes w.K → Prop
+
+/-- **An environment monotone along the tree**, at `TVal.Mono`'s shape: at every world extension
+carrying `ρ`, on the re-reading of a covered `ρ`, at every list keeping the records of `ls` that
+`ρ` reads. The tree's `gDenC_local`. -/
+def TEnv.Mono (G : TEnv) : Prop :=
+  ∀ n (w w' : TWd) (ls : List (SRecT w.K)) (ls' : List (SRecT w'.K)) (ρ : TRes w.K)
+    (ρ' : TRes w'.K), w.Ext w' ρ → RRw (w := w) (w' := w') ρ ρ' → KeepRel w'.Θ ls ls' ρ →
+    CovR (sem w.Θ) w.K ρ → G n w ls ρ → G n w' ls' ρ'
+
+/-- The environment `γ` read at a value type. -/
+def STy.env (τΓ : STy) (γ : Val) : TEnv := fun n w ls ρ => τΓ.P n w ls γ ρ
+
+/-- An environment read at a value type is monotone (`STy.mono`). -/
+theorem STy.env_mono (τΓ : STy) (γ : Val) : (τΓ.env γ).Mono :=
+  fun n w w' ls ls' ρ ρ' hE hr hk hc h => τΓ.mono n w w' ls ls' γ ρ ρ' hE hr hk hc h
+
+/-- **A thunk from its computation at every world and list**, Core's `thunkV_compatC`, at every
+monotone environment: the forcing is a run of `C` at every world and list over a covered resource
+meeting the environment `G`, and `G` holds here. The thunk is forced at a later world and list
+keeping the records its resource reads; `G` holds there (`hG`, the tree's `gDenC_local`), so the
+forcing runs there. -/
+theorem STy.thunk_intro_env {C : SCmp} {force : Val → Expr} {G : TEnv} (hG : G.Mono) {v : Val}
+    {n : Nat} {w : TWd} {ls : List (SRecT w.K)} {ρ : TRes w.K} (hc : CovR (sem w.Θ) w.K ρ)
+    (hM : ∀ (w' : TWd) (ls' : List (SRecT w'.K)) (ρ' : TRes w'.K), CovR (sem w'.Θ) w'.K ρ' →
+      G n w' ls' ρ' → C.P n w' ls' (force v) ρ')
+    (hg : G n w ls ρ) : (STy.thunkC C force).P n w ls v ρ :=
+  fun w' ρ' ls' hE hr hk => hM w' ls' ρ' hr.cov (hG n w w' ls ls' ρ ρ' hE hr hk hc hg)
+
+/-- **`STy.thunk_intro_env` at an environment read at a value type**: `γ` a value of `τΓ`. -/
 theorem STy.thunk_intro {C : SCmp} {force : Val → Expr} {τΓ : STy} {γ v : Val} {n : Nat}
     {w : TWd} {ls : List (SRecT w.K)} {ρ : TRes w.K} (hc : CovR (sem w.Θ) w.K ρ)
     (hM : ∀ (w' : TWd) (ls' : List (SRecT w'.K)) (ρ' : TRes w'.K), CovR (sem w'.Θ) w'.K ρ' →
       τΓ.P n w' ls' γ ρ' → C.P n w' ls' (force v) ρ')
     (hg : τΓ.P n w ls γ ρ) : (STy.thunkC C force).P n w ls v ρ :=
-  fun w' ρ' ls' hE hr hk => hM w' ls' ρ' hr.cov (τΓ.mono n w w' ls ls' γ ρ ρ' hE hr hk hc hg)
+  STy.thunk_intro_env (STy.env_mono τΓ γ) hc hM hg
 
 /-- **`𝒱⟦U (F A)⟧` at `cerwpT`**: a thunk `λ_. M` forced by applying it to `()`. -/
 def STy.thunkRet (Tb : TableT) (hL : Tb.Local) (hTb : Tb.Down) (Fb F : TFrame) (τ : STy) : STy :=
   STy.thunkC (SCmp.ret (ℍ := ℍ) Tb hL hTb Fb F τ) fun v => .app (.val v) (.val .unit)
 
-/-- **A thunk of `F A` from its forcing's run at every world and list** over the environment's
-value type: `STy.thunk_intro` at `F A`. -/
+/-- **A thunk of `F A` from its forcing's run at every world and list** over a monotone
+environment: `STy.thunk_intro_env` at `F A`. -/
+theorem STy.thunkRet_intro_env {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : TFrame}
+    {τ : STy} {G : TEnv} (hG : G.Mono) {v : Val} {n : Nat} {w : TWd} {ls : List (SRecT w.K)}
+    {ρ : TRes w.K} (hc : CovR (sem w.Θ) w.K ρ)
+    (hM : ∀ (w' : TWd) (ls' : List (SRecT w'.K)) (ρ' : TRes w'.K), CovR (sem w'.Θ) w'.K ρ' →
+      G n w' ls' ρ' → RunRet (ℍ := ℍ) Tb Fb F τ n w' ls' (.app (.val v) (.val .unit)) ρ')
+    (hg : G n w ls ρ) : (STy.thunkRet (ℍ := ℍ) Tb hL hTb Fb F τ).P n w ls v ρ :=
+  STy.thunk_intro_env hG hc hM hg
+
+/-- **`STy.thunkRet_intro_env` at an environment read at a value type.** -/
 theorem STy.thunkRet_intro {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : TFrame}
     {τ τΓ : STy} {γ v : Val} {n : Nat} {w : TWd} {ls : List (SRecT w.K)} {ρ : TRes w.K}
     (hc : CovR (sem w.Θ) w.K ρ)
     (hM : ∀ (w' : TWd) (ls' : List (SRecT w'.K)) (ρ' : TRes w'.K), CovR (sem w'.Θ) w'.K ρ' →
       τΓ.P n w' ls' γ ρ' → RunRet (ℍ := ℍ) Tb Fb F τ n w' ls' (.app (.val v) (.val .unit)) ρ')
     (hg : τΓ.P n w ls γ ρ) : (STy.thunkRet (ℍ := ℍ) Tb hL hTb Fb F τ).P n w ls v ρ :=
-  STy.thunk_intro hc hM hg
+  STy.thunkRet_intro_env (STy.env_mono τΓ γ) hc hM hg
 
-/-- **`thunk M : U (F A)`, written `λ_. M`**, Core's `thunkF_compatC`: `M` a run of `F A` at every
-world and list over a resource in which the environment is a value of `τΓ`, the environment one
-here. Forcing `λ_. M` steps to `M` (`Head.beta`), the step paid from the index. -/
-theorem STy.thunkRet_lam {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : TFrame}
-    {τ τΓ : STy} {γ : Val} {M : Expr} {n : Nat} {w : TWd} {ls : List (SRecT w.K)} {ρ : TRes w.K}
-    (hc : CovR (sem w.Θ) w.K ρ)
+/-- **`thunk M : U (F A)`, written `λ_. M`**, Core's `thunkF_compatC`, at every monotone
+environment: `M` a run of `F A` at every world and list over a covered resource meeting the
+environment, the environment met here. Forcing `λ_. M` steps to `M` (`Head.beta`), the step paid
+from the index. -/
+theorem STy.thunkRet_lam_env {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : TFrame}
+    {τ : STy} {G : TEnv} (hG : G.Mono) {M : Expr} {n : Nat} {w : TWd} {ls : List (SRecT w.K)}
+    {ρ : TRes w.K} (hc : CovR (sem w.Θ) w.K ρ)
     (hM : ∀ (w' : TWd) (ls' : List (SRecT w'.K)) (ρ' : TRes w'.K), CovR (sem w'.Θ) w'.K ρ' →
-      τΓ.P n w' ls' γ ρ' → RunRet (ℍ := ℍ) Tb Fb F τ n w' ls' (M.subst 0 Val.unit) ρ')
-    (hg : τΓ.P n w ls γ ρ) : (STy.thunkRet (ℍ := ℍ) Tb hL hTb Fb F τ).P n w ls (Val.lam M) ρ := by
-  refine STy.thunkRet_intro hc (fun w' ls' ρ' hc' hg' => ?_) hg
+      G n w' ls' ρ' → RunRet (ℍ := ℍ) Tb Fb F τ n w' ls' (M.subst 0 Val.unit) ρ')
+    (hg : G n w ls ρ) : (STy.thunkRet (ℍ := ℍ) Tb hL hTb Fb F τ).P n w ls (Val.lam M) ρ := by
+  refine STy.thunkRet_intro_env hG hc (fun w' ls' ρ' hc' hg' => ?_) hg
   cases n with
   | zero => exact cerwpT_zero
   | succ n =>
@@ -314,6 +353,15 @@ theorem STy.thunkRet_lam {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : T
         (hM w' ls' ρ' hc' hg'))
       simpa [BoCa.BoLo.Kont.plug] using
         step1Only_plug (ℍ := ℍ) (BoCa.BoLo.Head.beta μ M Val.unit) rfl BoCa.BoLo.Kont.hole
+
+/-- **`STy.thunkRet_lam_env` at an environment read at a value type.** -/
+theorem STy.thunkRet_lam {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : TFrame}
+    {τ τΓ : STy} {γ : Val} {M : Expr} {n : Nat} {w : TWd} {ls : List (SRecT w.K)} {ρ : TRes w.K}
+    (hc : CovR (sem w.Θ) w.K ρ)
+    (hM : ∀ (w' : TWd) (ls' : List (SRecT w'.K)) (ρ' : TRes w'.K), CovR (sem w'.Θ) w'.K ρ' →
+      τΓ.P n w' ls' γ ρ' → RunRet (ℍ := ℍ) Tb Fb F τ n w' ls' (M.subst 0 Val.unit) ρ')
+    (hg : τΓ.P n w ls γ ρ) : (STy.thunkRet (ℍ := ℍ) Tb hL hTb Fb F τ).P n w ls (Val.lam M) ρ :=
+  STy.thunkRet_lam_env (STy.env_mono τΓ γ) hc hM hg
 
 /-- **A thunk of a value computation at the relation**: a thunk whose forcing is a value of `A`
 is a thunk of `F A` at the world and list it is held at, at every index. The environment is the
@@ -398,14 +446,20 @@ theorem SCmp.loop_nonempty {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F :
       obtain ⟨rfl, rfl⟩ := h
       exact ⟨constInl_ret _, constInl_ret _⟩) n w ls _ _ ⟨rfl, rfl⟩
 
-/-- **`STy.thunkRet_intro` met**: `λ_. inj₁ ()` is a thunk of `F (1 + A)`, at every index, world and
-list, over the empty environment: its forcing is a run at every world and list over the empty
-resource (`constInl_ret`). -/
+/-- **`STy.thunkRet_lam` met**: `λ_. inj₁ ()` is a thunk of `F (1 + A)`, at every index, world and
+list, over the empty environment (`τΓ := 1`, `γ := ()`): its body `inj₁ ()` is a value of `1 + A`
+over the empty resource at every world and list. -/
 theorem STy.thunkRet_constInl {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : TFrame}
     {τ : STy} (n : Nat) (w : TWd) (ls : List (SRecT w.K)) :
     (STy.thunkRet (ℍ := ℍ) Tb hL hTb Fb F (STy.sum STy.unit τ)).P n w ls constInl PMap.empty :=
-  STy.thunkRet_intro (τΓ := STy.unit) (γ := Val.unit) (fun _ _ e => by simp at e)
-    (fun _ _ _ _ hg => hg.2 ▸ constInl_ret (hL := hL) (hTb := hTb) _) ⟨rfl, rfl⟩
+  STy.thunkRet_lam (τΓ := STy.unit) (γ := Val.unit) (M := .val (Val.inj₁ Val.unit))
+    (fun _ _ e => by simp at e)
+    (fun _ _ _ _ hg => by
+      obtain ⟨-, rfl⟩ := hg
+      simpa [Expr.subst, RunRet] using cerwpT_val (ℍ := ℍ) (v := Val.inj₁ Val.unit)
+        (Tb := Tb) (Q := postOf (STy.sum STy.unit τ)) (Fb := Fb) (F := F) (O := [])
+        fun _ _ _ _ _ hr₀ _ _ => Or.inl ⟨_, rfl, rfl, RR.of_empty hr₀⟩)
+    ⟨rfl, rfl⟩
 
 end BoCa.Fig16.Tree.Wp
 

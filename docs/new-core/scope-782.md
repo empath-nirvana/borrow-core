@@ -156,8 +156,10 @@ the library discharges by a named result. None stands in for an unproved fact.
 | `Obs.d1_nonvacuous` | none: every hypothesis of `cerwpT_adequacy` discharged | — |
 | `STy.mu_le` | the bodies ordered pointwise | (a) |
 | `RC.mut_extends` | coverage, the code kept (`Θ′ ℓ = Θ ℓ`), the payload re-read and agreed on | (a); coverage and agreement (s) from `WInv` and `TWd.Ext`; met in `round7_codes` |
-| `STy.thunk_intro`, `STy.thunkRet_intro`, `STy.thunkRet_lam` | `hM`: the computation at every world and list, over a covered resource holding the environment at its type | (a) the term's semantic computation, as `thunkF_compatC`'s `SemC` premise; met at `λ_. inj₁ ()` (`STy.thunkRet_constInl`) and at a value (`STy.thunkC_val`) |
-| | `hg`: the environment at its type; coverage of the resource | (a) `thunkF_compatC`'s `gDenC`; coverage (s) `cov_of_comp` |
+| `STy.thunk_intro_env`, `STy.thunkRet_intro_env`, `STy.thunkRet_lam_env` | `hG : G.Mono`, the environment monotone along the tree | (a) `thunkF_compatC`'s `gDenC_local`; met at every value type (`STy.env_mono`) |
+| | `hM`: the computation at every world and list, over a covered resource meeting the environment | (a) the term's semantic computation, as `thunkF_compatC`'s `SemC` premise |
+| | `hg`: the environment met here; coverage of the resource | (a) `thunkF_compatC`'s `gDenC`; coverage (s) `cov_of_comp` |
+| `STy.thunk_intro`, `STy.thunkRet_intro`, `STy.thunkRet_lam` | the `_env` forms at `G := τΓ.env γ` | as above; `thunkRet_lam` met at `λ_. inj₁ ()` (`STy.thunkRet_constInl`), `thunk_intro` at a value (`STy.thunkC_val`) |
 | `STy.thunk_force` | coverage of the resource and of the list's escrows | (s) `cov_of_comp`, `RecInv.cov_ls` |
 | `cerwpT_nil_of_imm` | a top-level `imm` cell of the resource | (a) |
 | `STy.kont_of_share`, `STy.kontBox_of_share` | `hκ`: `κ a` steps only to `K[a]` | (a) what `κ` is; met by `kontV_step` |
@@ -167,7 +169,7 @@ the library discharges by a named result. None stands in for an unproved fact.
 | | `n < k` | (a) the index below the stop's |
 | `STy.kontBox_resume_after` | the above; coverage of the share; `hE`, `hr`, `hk : KeepRel` | (a); coverage (s) as above; met in `kontBox_depth1`/`_depth3` at a proper extension and a `KeepRel` that is not `SRecsRR` (`not_rr_d1`, `not_rr_d3`) |
 | | `hls`: the records of `ls′` covered | (s) `RecInv.cov_ls`: the resume is read off the carried value (`STy.kont_resume` at the reflexive extension), which needs it |
-| | the composite `σ` covered (in the resume conjunct) | unspent since `F A` is a bare run; kept so the statement is unchanged |
+| | the composite `σ` covered (in the resume conjunct) | unspent: `F A` is the run itself (`STy.kont_resume` gives it) |
 | `STy.not_box_of_view` | a view at `α` in the resource, `¬ d ⊏ α` | (a) |
 | `SCmp.ret_val`, `STy.thunkC_val` | coverage | (s) as above |
 | `reread` (`KSem`) | `MonoΘ Θ` | (a); met by `monoΘ₇` |
