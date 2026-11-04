@@ -1,196 +1,196 @@
-# Scope: a run may give up an `imm` view copy held outside it (#806)
+# Scope: a run may give up an `imm` view copy held outside it (#806), along the walks
 
-Part of #771. This is departure D4's design (b) from #793. It is needed before #789's compatibility step. Branch `updx-806`, which builds on `spike-793` (6e6ac79e) and sits on top of `si-782`. Nothing is built until this doc is reviewed.
+Part of #771; needed before #789's compatibility step. Branch `updx-806` (stretch stack, on
+`si-782`). This is revision 2. The user chose option C (compare walks, `[TR]` 6.48's ancestor
+technique) after the flattening-pointwise relation `UpdXW` failed its frame step. No proof work
+until this is reviewed.
 
-All of the Lean quoted below is in `docs/new-core/scope-806/Clause.lean`. Check it with `lake env lean docs/new-core/scope-806/Clause.lean` after `lake build Core.TreeConsume`. It elaborates. Every theorem in it has `#print axioms` ⊆ [propext, Classical.choice, Quot.sound].
+**Evidence kept.**
+- `Support/Model/Tree/World/UpdXW.lean`: the pointwise relation `UpdXW`, its composition (`XOptW.trans`), and `not_xoptWFrameAt`, which refutes `xopt_comp`'s route at it.
+- `docs/new-core/scope-806/Clause.lean`: `twp_refuses_last_copy` and `twp_refuses_lendEnd_live_copy`. Both are proved, and neither reads `UpdX`.
+- `Core/TreeConsume.lean` (#793).
 
-**Kernel target.** `twp`'s post-configuration `EndT` reads a relaxed `↭`, `UpdXW`, in place of `UpdX`. The consequences:
-- a run gives up a copy of a view, at any configuration, whenever its frame condition guarantees an absorbing copy;
-- every existing tree result is re-proved;
-- `twp_lendEnd` is unchanged.
+All `#print axioms` are ⊆ [propext, Classical.choice, Quot.sound].
 
-## 1. The new clause
+**Kernel target.** `EndT`'s start/end relation becomes `UpdA` (§1), which reads a `mut` cell through the `imm` cell it sits beneath. Under it these must hold:
+- `UpdA.frame` and `UpdA.trans`;
+- T1–T4 as approved;
+- `not_xoptWFrameAt`'s configuration admitted;
+- `twp_refuses_lendEnd_live_copy` and `twp_refuses_last_copy` still true;
+- `twp_lendEnd`, `twp_lendOpen` and `twp_update`'s premise unchanged.
 
-`UpdX` itself stays. Every `UpdX` built at the start of a segment (`twp_update`, `twp_lendOpen`, `twp_lendEnd`, the heap rules) is still a plain `UpdX`, and `UpdX.toW` lifts it.
+## 0. Why per-location failed, and what the printed proof does instead
 
-`EndT`'s `↭` becomes `UpdXW`. It differs from `UpdX` in two ways:
-- **Start side:** the end world's flattening `⦇fρ′⦈` may absorb an `imm` cell of the start.
-- **End side:** a start cell may absorb an `imm` cell of the end.
+`not_xoptWFrameAt` is the failure. A run gives up `x = imm(…)` at `ℓ` while the framed part's flattening holds `y = mut(…)` at `ℓ`. `⦇·⦈` composes the two (`imm ○ mut = imm`, `○` clause (5)), so the composite start reads `x` and the composite end reads `y`. No relation between the two cells at `ℓ` alone accepts that.
+
+`[TR]` 6.48's proof never compares the `○`-composites at `ℓ` alone. It is transcribed at `Support/Model/Tree/Port/Six48.lean`, `updV_frame`.
+- It splits `⦇ρ₁ ● ρⱼ⦈ = ex(ρ₁)_● ● ex(ρⱼ)_● ● (ag(ρ₁) ○ ag(ρⱼ))` (6.20, 6.18).
+- In the aliasable case, it accounts for a `mut` cell of `ag(ρ₂)` **by the `imm` cell it sits beneath**: `ag(ρ₂)(ℓ′) = imm(_, _, ρ′)` with `ℓ ∈ dom(⦇ρ′⦈_○)`. The update pins the ancestor, so the cell beneath travels with it (`ResUT.upd_ag_nonimm_transfer`, `upd_ag_mut_eq`, `upd_ag_eq_of_ne_own`).
+
+`[TR]` 6.59's closing sentence uses the same technique: it absorbs a walk by absorbing the walk's `imm` cells and their ancestors' witnesses (`AgWT.absorb_of_ancestors`, `AgWT.AbsImm`, `AgWT.AbsAnc`, `Port/ClosingSentence.lean`).
+
+In `y`'s case the ancestor is the framed part's `imm` cell above `y`, which the run never touched. The end's `y` is accounted for by that ancestor.
+
+## 1. The new relation
+
+**What a walk is at the tree world, and which existing definitions give it.** The walks are the carrier's own:
+
+| Object | Definition | File |
+|---|---|---|
+| exclusive walk `ex(ρ)_●`, `ex(ρ)_○` | `ExST`, `ExRT` (`G.ExW` at `●`/`○`) | `Tree/CarrierRes.lean:400–403` |
+| aliasable walk `ag(ρ)` | `AgWT` (`G.AgW`: the top `imm` cells, the `ag` of `mut` witnesses, and `ex_○ ○ ag` of `imm` witnesses) | `Tree/CarrierRes.lean:406` |
+| `⦇ρ⦈ = ex(ρ)_● ● ag(ρ)` | `ResUT.Flat` | `CarrierRes.lean` (row 5.22) |
+| a cell of the aliasable walk beneath an `imm` ancestor | `AgWT.nonimm_beneath_imm` | `Tree/Port/AgBeneath.lean:17` |
+| an ancestor's witness walk is a `○`-factor | `AgWT.flat_imm_wit_le`, `ResUT.flat_imm_wit_factor` | `Tree/Port/Ancestors.lean:239, 332` |
+| the ancestor carried by an update | `ResUT.upd_ag_imm_wit_factor` | `Ancestors.lean:344` |
+| absorption through ancestors | `AgWT.absorb_of_ancestors`, `AbsImm`, `AbsAnc` | `Port/ClosingSentence.lean:548–583` |
+
+The tree has no `Path`/`Anc` predicate over cells; the ancestor relation is the existential shape that `AgWT.nonimm_beneath_imm` returns. `FrzT`/`InDomT` (`World/ExtF.lean`) and `CellAt` (`World/Coherent.lean`) are predicates on locations or cells at depth in the resource tree, and `HoldsMut` (`World/Codes.lean:76`) reaches every witness. None of these is the walk. §5 uses `CellAt` and `HoldsMut` (R3, R7).
+
+**What is new** is in `Support/Model/Tree/World/UpdA.lean`. It elaborates: `#check @UpdA` and `#check @Beneath` pass, and `UpdX.toA` and `UpdXW.toA` are proved.
 
 ```lean
-/-- `χ` (at the end) absorbs the `imm` cell `ψ` (at the start), across the re-reading: same
-value, witness re-read, lifetime set at least `ψ`'s. -/
-def CellAbs (Θ : LocTy) (ψ : TCell K) (χ : TCell K') : Prop :=
-  ψ.kind = Kind.imm ∧ χ.kind = Kind.imm ∧ χ.erase = ψ.erase ∧ RR Θ ψ.wit χ.wit ∧
-    ∃ s t, ψ.lsOf = some s ∧ χ.lsOf = some t ∧ s.set ⊆ t.set
+/-- `ξ` sits beneath the `imm` cell `ζ` at `m` of `σ`, at `n`: `ζ`'s witness's `⦇−⦈_○`
+(`ex(χ)_○ ○ ag(χ)`) carries `ξ` at `n`. The shape `AgWT.nonimm_beneath_imm` returns. -/
+def Beneath (σ : TRes K) (m : BoCa.Loc) (ζ : TCell K) (n : BoCa.Loc) (ξ : TCell K) : Prop :=
+  σ.get m = some ζ ∧ ζ.kind = Kind.imm ∧
+    ∃ ev av p, ExRT ζ.wit ev ∧ AgWT ζ.wit av ∧ ResUT.CompR ev av p ∧ p.get n = some ξ
 
-/-- `ψ'` (at the end) is absorbed by `ψ` (at the start): lifetime set at most `ψ`'s. -/
-def CellSub (Θ : LocTy) (ψ : TCell K) (ψ' : TCell K') : Prop :=
-  ψ.kind = Kind.imm ∧ ψ'.kind = Kind.imm ∧ ψ'.erase = ψ.erase ∧ RR Θ ψ.wit ψ'.wit ∧
-    ∃ s t, ψ.lsOf = some s ∧ ψ'.lsOf = some t ∧ t.set ⊆ s.set
+def XOptA (Θ : LocTy) (E E' : BoCa.Loc → Prop) (σ : TRes K) (σ' τw : TRes K') (l : BoCa.Loc) :
+    Prop :=
+  (∀ ψ, σ.get l = some ψ → ψ.kind ≠ Kind.own → ¬ E l → ¬ E' l ∧
+    ((∃ ψ', σ'.get l = some ψ' ∧ XCell Θ ψ ψ') ∨                    -- kept
+     (∃ χ, τw.get l = some χ ∧ CellAbs Θ ψ χ) ∨                     -- an `imm` cell given up
+     (ψ.kind = Kind.mut ∧ ∃ m ζ χ, ¬ E m ∧ Beneath σ m ζ l ψ ∧       -- a `mut` cell leaving
+        τw.get m = some χ ∧ CellAbs Θ ζ χ))) ∧                       --   with its ancestor
+  (∀ ψ', σ'.get l = some ψ' → ψ'.kind ≠ Kind.own → ¬ E' l → ¬ E l ∧
+    ((∃ ψ, σ.get l = some ψ ∧ (XCell Θ ψ ψ' ∨ CellSub Θ ψ ψ')) ∨     -- from the start's cell
+     (ψ'.kind = Kind.mut ∧ ∃ m ζ ξ, Beneath σ m ζ l ξ ∧ XCell Θ ξ ψ')))  -- from beneath an ancestor
 
-def XOptW (Θ : LocTy) (E E' : Prop) (o : Option (TCell K)) (o' ow : Option (TCell K')) : Prop :=
-  (∀ ψ, o = some ψ → ψ.kind ≠ Kind.own → ¬ E → ¬ E' ∧
-    ((∃ ψ', o' = some ψ' ∧ XCell Θ ψ ψ') ∨ ∃ χ, ow = some χ ∧ CellAbs Θ ψ χ)) ∧
-  (∀ ψ', o' = some ψ' → ψ'.kind ≠ Kind.own → ¬ E' → ¬ E ∧
-    ∃ ψ, o = some ψ ∧ (XCell Θ ψ ψ' ∨ CellSub Θ ψ ψ'))
-
-def UpdXW (Θ : LocTy) (E E' : BoCa.Loc → Prop) (ρ : TRes K) (ρ' fρ' : TRes K') : Prop :=
+def UpdA (Θ : LocTy) (E E' : BoCa.Loc → Prop) (ρ : TRes K) (ρ' fρ' : TRes K') : Prop :=
   ∃ σ σ' τw, ResUT.Flat ρ σ ∧ ResUT.Flat ρ' σ' ∧ ResUT.Flat fρ' τw ∧
-    ∀ l, XOptW Θ (E l) (E' l) (σ.get l) (σ'.get l) (τw.get l)
-
-#check @UpdXW   -- elaborates
-theorem UpdX.toW … (h : UpdX Θ E E' ρ ρ') (hv : ResUT.Valid fρ') : UpdXW Θ E E' ρ ρ' fρ'   -- proved
+    ∀ l, XOptA Θ E E' σ σ' τw l
 ```
 
-In `EndT`, the clause `UpdX (sem w′.Θ) (recMask O₀) (recMask O′) ρ₀ ρ′` becomes `UpdXW (sem w′.Θ) (recMask O₀) (recMask O′) ρ₀ ρ′ fρ′`. Nothing else in `EndT` changes. The masks, `MaskDiff` and `InvKept` stay as they are.
+`CellAbs` and `CellSub` are the ones in `UpdXW.lean` (approved D-2, D-3).
 
-**Why the end world, not the frame.** `twp_frame` runs the inner run in the same world as the outer one: the inner frame is `ρf ● ρ₂`, and the inner world is `fρ`. So an absorption the inner run proves at `⦇fρ′⦈` is already the outer's.
+The two new disjuncts are the ancestor technique. They read `σ` at an ancestor location `m ≠ l` and the ancestor's witness walk, so `XOptA` is not a function of the three cells at `l`.
 
-An absorber that is "the frame `ρf′`" does not carry through. Take an inner start cell `ψ₁` and a framed cell `ψ₂` at the same `ℓ` with different lifetime sets. The outer start cell is `ψ₁ ○ ψ₂`, with set `s₁ ∪ s₂`. After the inner run consumes `ψ₁`, the outer end cell is `ψ₂′`, with set `s₂`. No exact match exists on either side; only absorption by the world does. This is also why the end side needs `CellSub`.
+The end-side `mut` disjunct requires the cell to have sat beneath a **start** ancestor, that is, provenance in `ρ`. This is what separates it from option B (any `mut` cell where the start read `imm`): a run cannot produce a `mut` cell that was not in its start's walk.
 
-This failure is an argument, not a configuration. I have not built a configuration for it and have not verified that the obstruction is real. It decides the design only as a precaution.
+In `EndT`, `UpdX (sem w′.Θ) (recMask O₀) (recMask O′) ρ₀ ρ′` becomes `UpdA (sem w′.Θ) (recMask O₀) (recMask O′) ρ₀ ρ′ fρ′`. Nothing else in `EndT` changes.
 
-**Why `imm` only.** `CellAbs` forces `imm` on both sides, so every `mut` cell still falls under `XCell`, exactly as before. Consequences:
-- `InvKept.trans` and `UpdX.inv` (both read the start side at `mut` cells) keep their proofs.
-- `mut` is untouched: a `mut` cell has one holder (`not_compS_single_self`).
+## 2. `UpdX` itself
 
-## 2. Results to re-prove, file by file
+`UpdX` does **not** move to the walk form.
+- **Why it can stay:** `UpdX` is the relation every segment-start update builds: `twp_update`'s premise, `twp_lendOpen`, `twp_lendEnd`, the heap rules, `UpdX.of_rr`. None of those gives a cell up, and `UpdX.toA` lifts `UpdX` to `UpdA`.
+- **`UpdX.frame`'s proof survives:** its current proof (D5's pointwise route through `xopt_comp`) is unchanged. With no cell given up, `not_xoptWFrameAt`'s failing case cannot arise: `XOpt` keeps `x`, so the composite end reads `x ○ y′ = x`.
+- **D5 is now forced for `UpdA.frame`:** D5 recommended proving the frame step along `Port/Six48`'s route (walk split, then ancestor) rather than pointwise. For `UpdA.frame` that is now required. Whether to re-prove `UpdX.frame` the same way, so that D5 closes, is design choice C-2.
 
-The statements stay the same unless a row says otherwise. "Mechanical" means the change is a new lemma name at the same site.
+## 3. Results to re-prove
 
-| File | Result | Statement changes? | Work |
-|---|---|---|---|
-| `Support/Model/Tree/World/UpdX.lean` | new: `XOptW.trans`, `UpdXW.trans`, `UpdX.transW` (a plain `UpdX` followed by a `UpdXW`), `UpdXW.widen`, `UpdXW.congr`, `UpdXW.frame`, `UpdX.toW` | new | **the main proofs** (§4 R1, R2) |
-| same | `UpdX`, `XOpt`, `UpdX.trans`/`frame`/`widen`/`congr`/`of_rr`, `updX_refl_imm`, `UpdX.of_updV` | no; kept for segment starts | none |
-| `…/World/UpdXInv.lean` | new: `UpdXW.inv`, `InvKept.transW` | new; same shape as `UpdX.inv`/`InvKept.trans` with `UpdXW` | the `mut` cells take the `XCell` disjunct |
-| `…/World/UpdXMasks.lean` | `lend_open_admitted`, `lend_open_needs_mask` | no (about `UpdX`, not `EndT`) | none; add `UpdXW` versions only if review asks |
-| `…/World/StepKeep.lean` | `fdEsc_of_updX` → `fdEsc_of_updXW` | **yes**: hypothesis `hu : UpdXW … ρ ρ′ fρ′` | it reads only the end side's "a start cell exists", which `XOptW` keeps |
-| `Core/TreeWp.lean` | `EndT` | **yes** (§1) | — |
-| same | `twp_here` | no | `UpdX.toW` |
-| same | `twp_bind` | no | `UpdXW.trans`, `InvKept.transW` |
-| same | `twp_frame`, `twp_frame_w` | no | `UpdXW.frame` |
-| same | `twp_extend`, `twp_update` | no | `UpdX.transW` |
-| same | `endT_inv` | **yes**: the conclusion's `XOpt … (σ.get l) (σ′.get l)` becomes `XOptW … (τw.get l)` with `∃ τw, Flat fρ′ τw`. It exposes the clause | `UpdXW.inv` |
-| `Core/TreeHeap.lean` | `twp_alloc*`, `twp_free`, store/load (`UpdX.trans g₀.1 hu g₉` at :287, :337, :536; `g₉` passed at :463) | no | `UpdX.transW` |
-| `Core/TreeStepKeep.lean` | `StepKeepsFdEsc`, `StepKeepsFdEscNoUpd` (defs), `stepKeepsFdEsc` | **yes**: the defs quote `EndT`'s clauses, so `UpdX … ρ ρ′` becomes `UpdXW … ρ ρ′ fρ′`. `not_stepKeepsFdEscNoUpd` is unchanged | `fdEsc_of_updXW` |
-| `Core/TreePool.lean` | pool frame (:168 `UpdX.frame`, :211 `fdEsc_of_updX`) | no | `UpdXW.frame`, `fdEsc_of_updXW` |
-| `Core/TreeHandle.lean` | bind through the handler (:123) | no | `UpdXW.trans`, `InvKept.transW` |
-| `Core/TreeResume.lean`, `TreeSched*`, `TreePool*`, `TreeRelay*`, `TreeCactus`, `TreeHeadlines` | — | no | they read `EndT` only through the rules above. Rebuild and check |
-| `Core/TreeLend.lean` | `twp_lendOpen`, `twp_lendEnd` | **no** (`twp_update`'s premise stays plain `UpdX`) | none |
-| `Core/TreeConsume.lean` | `updX_consume_view_false`, `twp_refuses_consume_view(_at)`, `twp_frame_callee_refused`, `twp_child_refused` | **retired**: they refute what (b) admits. `updX_consume_view_false` stays true of `UpdX`. The others are replaced by §3's admitted results | — |
-| same | `twp_consume_view_held`, `twp_bind_callee_consume`, `twp_lendEnd_after_consume`, `twp_admits_keep_view`, carrier lemmas | no | rebuild |
+| File | Result | Statement changes? |
+|---|---|---|
+| `World/UpdA.lean` (new) | `UpdA.frame`, `UpdA.trans`, `UpdX.transA` (a plain `UpdX`, then `UpdA`), `UpdA.widen`, `UpdA.congr`, `UpdA.inv`, `InvKept.transA`, `Beneath.compS_left/right`, `Beneath.rr`, `Beneath.flat_get` (the ancestor's contents are in `⦇ρ⦈`), `UpdX.toA` (done) | new |
+| `World/UpdX.lean`, `UpdXInv.lean`, `UpdXMasks.lean` | everything | no |
+| `World/UpdXW.lean` | kept as evidence; `EndT` does not read it | — |
+| `World/StepKeep.lean` | `fdEsc_of_updX` → `fdEsc_of_updA` | **yes** (approved): `hu : UpdA … ρ ρ′ fρ′` |
+| `Core/TreeWp.lean` | `EndT` | **yes** (approved) |
+| same | `endT_inv` | **yes** (approved): its conclusion exposes the clause, which becomes `XOptA` with `∃ τw, Flat fρ′ τw`. `XInv` is unchanged (it reads pairs of `mut` cells at one location) |
+| same | `twp_here` (`UpdX.toA`), `twp_bind` (`UpdA.trans`, `InvKept.transA`), `twp_frame` and `twp_frame_w` (`UpdA.frame`), `twp_extend` and `twp_update` (`UpdX.transA`) | no |
+| `Core/TreeHeap.lean` (:287, :337, :463, :536) | the heap rules | no |
+| `Core/TreeStepKeep.lean` | `StepKeepsFdEsc`, `StepKeepsFdEscNoUpd` (defs), `stepKeepsFdEsc` | **yes** (approved): the defs quote `EndT` |
+| `Core/TreePool.lean` (:168, :211), `Core/TreeHandle.lean` (:123) | the pool frame; bind through the handler | no |
+| `Core/TreeLend.lean` | `twp_lendOpen`, `twp_lendEnd` | **no** |
+| `Core/TreeResume`, `TreeSched*`, `TreePool*`, `TreeRelay*`, `TreeCactus`, `TreeHeadlines` | — | no (they read `EndT` only through the rules) |
+| `Core/TreeConsume.lean` | `updX_consume_view_false` stays (it is about `UpdX`). `twp_refuses_consume_view(_at)`, `twp_frame_callee_refused` and `twp_child_refused` are **retired**, replaced by T1–T3 | — |
+| same | the rest | no |
 
-**Size estimate**
-- 350–500 lines in `UpdX.lean`, `UpdXInv.lean` and `StepKeep.lean`; the bulk is `UpdXW.frame` and `XOptW.trans`.
-- 60–120 lines at the Core sites.
-- 250–400 lines for §3 in `Core/TreeConsume.lean`.
-- About 700–1000 lines in all.
+`twp_frame`'s statement does not change. `UpdA.frame` takes `MutOne` of the end world as a hypothesis, and `twp_frame` reads that off the end's `RecInv` (`TWNT.mutOne`), as it already does for `InvKept.frame`.
 
-## 3. Theorem statements
+## 4. `not_xoptWFrameAt`'s configuration through `UpdA`, by hand; the hardest case
 
-`HoldsView`/`StmtConsumeFramed` elaborate as given in `Clause.lean`. The `def … : Prop` forms below are the targets, proved for every configuration, not only fixed ones.
+**The configuration at resources.** One carrier, empty masks.
+- The run's part is `a = ℓ ↦ x`, with `x = imm(s, v, χ₀)`.
+- The framed part is `c = n ↦ ζ`, with `ζ = imm(t, u, χ)`, `χ = ℓ ↦ y`, and `y = mut(b, v, χ₀, P)`. `y` has the same value and witness as `x`, as `○` clause (5) requires.
+- The frame is `ρf = ℓ ↦ x`, a copy of the run's view.
+- The run gives `x` up: `a′ = ∅` and `c′ = c`.
 
-```lean
-def HoldsView (Θ : LocTy) (β : Life) (l : BoCa.Loc) {K : WCactus} (ρf : TRes K) : Prop :=
-  ∃ τ χ, ResUT.Flat ρf τ ∧ τ.get l = some χ ∧ CellAbs Θ (viewCell (K := K) β) χ
-```
+The walks and flattenings:
+- `ac = a ● c` has `ex(ac) = ∅`, because both tops are `imm`.
+- `ag(ac)` is the top `imm` cells `{ℓ ↦ x, n ↦ ζ}` composed (`○`) with `ζ`'s witness walk `ex(χ)_○ ○ ag(χ) = ℓ ↦ y`. So `⦇ac⦈ = {ℓ ↦ x ○ y = x, n ↦ ζ}`.
+- `⦇ac′⦈ = ⦇c⦈ = {ℓ ↦ y, n ↦ ζ}`.
+- The end world is `fρ′ = ρf ● c`, with `⦇fρ′⦈ = {ℓ ↦ x ○ y = x, n ↦ ζ}`.
 
-**(T1) The admitted consume.** A run gives up a copy when every frame meeting `F` holds an absorbing copy.
+Checking each side:
+- **Start side at `ℓ`:** `x` (`imm`, unmasked) is not kept, because `⦇ac′⦈(ℓ) = y`. But `⦇fρ′⦈(ℓ) = x` absorbs it (`CellAbs x x`). ✓ by the second disjunct.
+- **Start side at `n`:** `ζ` is kept (`XCell ζ ζ`). ✓
+- **End side at `ℓ`:** no start cell at `ℓ` relates to `y` (`mut`), because `⦇ac⦈(ℓ) = x` is `imm`. But `Beneath ⦇ac⦈ n ζ ℓ y` holds (`ζ` is at `n` and its witness walk carries `y` at `ℓ`), and `XCell y y` holds. ✓ by the ancestor disjunct.
+- **End side at `n`:** `ζ` comes from `ζ`. ✓
 
-```lean
-theorem twp_consume_view_framed :  -- = StmtConsumeFramed
-  ∀ F Q n w ls O e (Z ρ : TRes w.K) β l,
-    ResUT.CompS Z (viewRes β l) ρ → (∀ w' ρf, F w' ρf → HoldsView (sem w'.Θ) β l ρf) →
-    twp F Q n w ls O e Z → twp F Q n w ls O e ρ
-```
+So `UpdA ∅ ∅ ac ac′ fρ′` holds where `UpdXW` and `UpdX` fail. The inner run (`a → a′`, beside the frame `ρf ● c`) meets `UpdA` at `ℓ` by the absorbed disjunct; no ancestor is needed there.
 
-**(T2) The admitted callee consume.** For the callee proved on its own copy (`twp_frame`'s inner run), `F₁` is any frame condition implying `HoldsView`. Callers discharge it with `twp_frame`'s `hF` obligation: the framed `ρ₂` holds the caller's copy, so `ρf ● ρ₂₀` holds it. The theorem is T1 at `F₁`, plus a corollary `twp_frame_callee_consume` that states it through `twp_frame` with `R` holding the caller's copy.
+**The hardest case (T4), restated.** A lend of `ℓ` at `α` ends after one copy was given up while another task still holds a live copy.
+- **T4a (the given-up copy leaves nothing):** `twp_consume_view_framed` (T1) runs from `Z`, and the world is unchanged (`consume_view_world`). Under `UpdA`, a copy given up over a `mut` cell takes nothing else with it. The cells beneath it belong to the ancestor, and they leave only together with an absorbed ancestor (the start-side `mut` disjunct reads `CellAbs` at `m`).
+- **T4b (no end while a live copy is held):** `twp_refuses_lendEnd_live_copy`. It is proved, and it reads `▶◀` at the end world, not `↭`. It is re-checked under `UpdA`.
+- **T4c:** `twp_lendEnd_after_framed_consume`, as in revision 1. First T2 (the callee gives its copy up under the lender's frame), then `twp_lendEnd`, unchanged, once the live holder has returned its copy (`hF : NoneAt (· = ℓ)` on the frame).
 
-**(T3) The admitted child consume.** A spawned task gives up a copy at any frame condition implying `HoldsView`. The theorem is T1 at the child's frame condition.
+T1–T3 are as approved (D-1: frame conditions strengthened by `HoldsView`), and are stated for every configuration. `twp_refuses_last_copy` stays: it reads `RecInv`, not `↭`.
 
-The spikes' frame conditions cannot be kept as stated (§7, `twp_refuses_last_copy`). Those were `fun _ _ => True` for the callee and `fdMask (fun _ => False)` (`enSpawn`'s `Fe`) for the child. Both admit the empty frame, and at the empty frame the consume is refused under any reading of `↭`.
-
-The issue's done-when "at the frame conditions those spikes used" is therefore read as "at those frame conditions strengthened by `HoldsView`" (design choice D-1 below). For the scheduler, this asks `enSpawn`'s `Fe` to carry the parent's copy, which is #795's resource hand-off. T3 is stated at the `twp` of the child, not through `HS`.
-
-**(T4) The hardest case: a lend ends after one copy was given up while another task still holds a live copy.** Three parts.
-
-- **(T4a) The given-up copy leaves nothing behind.** T1's conclusion runs from `Z`, which holds nothing more at `ℓ` than before. The world is unchanged (`consume_view_world`, proved).
-- **(T4b) The end is refused while a live copy is outside the lender.** At every `F` admitting a frame that holds a copy, the lender, holding the lend cell and owning `lendRec 1`, cannot end holding `ℓ ↦ own(())`. **Proved already at today's `twp`, without reading `UpdX`:** `twp_refuses_lendEnd_live_copy` (`Clause.lean`). It is re-checked after the change and moved to `Core/TreeConsume.lean`. The reason: the end world would compose the frame's re-read copy with `own` at `ℓ`, and `▶◀` refuses that.
-- **(T4c) Once the holder has returned its copy, the end is admitted by `twp_lendEnd`, unchanged.** The combined statement:
-
-```lean
-theorem twp_lendEnd_after_framed_consume
-    (hρ₁ : ResUT.CompS Z (viewRes α l) ρ₁)               -- the lender's lend cell
-    (hρ : ResUT.CompS Z (ResUT.single l (CellUT.ownOf ())) ρ)
-    (hvZ : ResUT.Valid Z) (hZ : NoneAt (· = l) Z)
-    (hF : ∀ w' ρf, F w' ρf → NoneAt (· = l) ρf)          -- the live holder has returned its copy
-    (hO : lendRec l ∉ O) (hls : ∀ x ∈ ls, x.1 ≠ lendRec l)
-    (hcallee : twp F₁ P n w ls' O₁ e₁ (viewRes α l))     -- a callee that gave up its copy (T2)
-    (hrest : ∀ …, P … → twp F Q … (K.plug t) ρ)          -- after the end
-    : twp F Q n w ((lendRec l, α) :: ls) (lendRec l :: O) (K.plug e₁) ρ₂   -- ρ₂ = ρ₁ ● v
-```
-
-The binders of `hcallee`/`hrest` (the `twp_frame` instance that frames the lender's copy around the callee, then `twp_bind`) are fixed in the build. T4b sits beside this as the refusal while `hF` cannot hold. `twp_lendEnd`'s statement and proof are not touched.
-
-## 4. Risks, ranked
+## 5. Risks, ranked
 
 | # | Risk | Lean check |
 |---|---|---|
-| R1 | **`UpdXW.frame`.** The inner and outer worlds are the same `fρ′`, so start-side absorption carries over verbatim. The end side needs `CellSub` from `ψ₂′ ⊆ ψ₁ ○ ψ₂` (`lsc` union, erase and witness agreement across `○`, `xcell_compR`'s shape). Also needed: the `own`-left cases of `xopt_comp` redone with three options. | not checked |
-| R2 | **`XOptW.trans` / `UpdXW.trans`.** The middle world `fρ₁ = ρf₁ ● ρ₁` absorbs `ψ`. By `ρ₁ → ρ₂`'s clause and the frame's re-reading, the end world absorbs every cell of `⦇ρf₁⦈(l) ○ ⦇ρ₁⦈(l)`, so it absorbs `ψ`. This needs "the world's flattening at an unmasked `imm` location only grows" as a lemma. Masks: an unmasked start stays unmasked (the clause's `¬E′`), as `XOpt.trans` already uses. | not checked |
-| R3 | **`endT_inv` / `UpdXW.inv`.** `mut` cells take the `XCell` disjunct (`CellAbs` forces `imm`). The statement changes (§2). | not checked. The `mut`-only reading of `UpdX.inv`'s proof (`UpdXInv.lean:313`) was read, not built |
-| R4 | **`RecInv` preservation** is not read off `↭`. A run must establish `RecInv` at its own end. A consume of the last copy fails there whatever `↭` says. | **checked**: `twp_refuses_last_copy` (`Clause.lean`) refutes the last-copy consume without reading `EndT`'s `UpdX` clause |
-| R5 | **Who reads the old start-side clause.** Consumers of `EndT`'s `UpdX`: `UpdX.trans`/`frame` (rebuilt), `InvKept.trans` (`mut` only), `UpdX.inv` (`mut` only), `fdEsc_of_updX` (end side only). | **checked by grep**: no `UpdX` in `TreeCactus.lean`, `Recs.lean` (an import only), `TreeHeadlines`, `TreePoolSched`, `TreeResume`. `CactusInvT` and the record invariants (`TWNT`, `RecInv`, `TaggedT`) do not mention `UpdX` or `XOpt`. Not checked by build |
-| R6 | **T1's proof.** It runs `Z` at the same world (`consume_view_world` needs the frame's absorbing cell to compose with `v` to itself: `CellAbs` with an empty witness gives that, `RR.of_empty`). It needs a flattening lemma for `Z ● v` when `Z` already holds a cell at `ℓ`. `flat_compS_view` asks `σ.get ℓ = none`, so it needs the `○` version. | not checked |
-| R7 | **`StepKeepsFdEsc` statement change.** It is consumed by the scheduler invariant (`PoolT`, `cerwpT_schedHandle`); every use must pass `fρ′`. | not checked |
+| R1 | **`UpdA.frame`.** Proved along `updV_frame`: `Flat.split` gives `ex(a ● c)` and `ag(a ● c)` from the parts, with 6.36's three-way disjointness (`ExST.immFree`). New obligations: **(a)** a `Beneath` in `⦇a⦈` or `⦇c⦈` lifts to `⦇a ● c⦈`, because the ancestor's composite has the same witness (`○` of an `imm` cell keeps it, `CellUT.CompR.wit_eq`); **(b)** an end `mut` cell of `ag(c′)` has a `c′`-ancestor (`AgWT.nonimm_beneath_imm`), which is the re-reading of a `c`-ancestor (`RR` on witnesses, `Flat.rrLs` at the witness); **(c)** `MutOne` at the end world makes the end `mut` cell at `l` a single contribution, so the `mut ○ mut` clause of `○` with mixed provenance does not arise | not checked |
+| R2 | **Masks in the absorbed branches** (`UpdA.trans`, and `¬ E′ l` in the two disjuncts where a cell leaves). `XOptW.trans` is proved with the mask as an explicit obligation `hw`. At resources this needs "a run does not gain a record masking a location where the world's flattening reads `imm`": opening a lend there needs `own`, which `▶◀` refuses, and an escrow's exclusive part is the same | partly: `XOptW.trans` (`UpdXW.lean:117`) is proved with `hw`; the resource lemma is not checked |
+| R3 | **`InvKept.transA`.** A start `mut` cell that left with its ancestor has no middle cell to chain through. Its code is kept because the world still holds it beneath the absorber: `HoldsMut` reaches every witness (`Codes.lean:76`), and `TWd.Ext` carries `AgreeOn` of the frame | not checked |
+| R4 | **World growth for `UpdA.trans`.** The end world must absorb every `imm` cell the middle world absorbed: the frame part through re-reading (`LsSim`), the run part by segment 2's clause. The ancestor disjuncts compose through this, since an absorbed ancestor stays absorbed | not checked |
+| R5 | **`fdEsc_of_updA`.** An end `mut` cell from beneath a start ancestor is in `⦇ρ⦈` at `l` (`flat_imm_wit_factor` makes the witness walk a `○`-factor of `ag`). So `FdEsc`'s "the start holds nothing there" still refutes it | not checked |
+| R6 | **T1 under `UpdA`.** `Z ● v` with `Z` holding a `mut` cell beneath an ancestor at `ℓ` (the same cells as `not_xoptWFrameAt`): the ancestor disjunct covers it | not checked |
+| R7 | **`endT_inv`.** `XInv` reads pairs of `mut` cells at one location. An end `mut` cell from beneath an ancestor faces an `imm` start cell there, so `XInv` is vacuous at it. Row 5.27's `P̂` for that cell is the code at `l`, kept by `AgreeOn` (as in R3) | not checked |
+| R8 | `CactusInvT`, `TWNT`, `RecInv` and `TaggedT` do not read `↭` | checked by grep (revision 1); not by a build |
 
-## 5. What #789's compatibility lemmas get
-
-**What they get:** a rule whose semantic proof consumes an `imm` value can be proved at its own resource, through T1, whenever its frame condition implies `HoldsView` at the value's location. For example, `release_imm` on an `STy.imm` value with `STy.unit`'s `ρ = ∅` as the answer.
-
-**The escape is not moot. It flips.** Under (b), a frame condition that *guarantees* a copy is what admits the consume, and one that admits a copy-free frame refuses it (`twp_refuses_last_copy`).
-
-So #789 has to supply `HoldsView` at every consume. This is the typing fact that "someone else holds this borrow": the lender, or the caller's copy. It is not a hypothesis standing in for an unproved fact. Without it, the consume is refuted (R4).
-
-Whether #789's frame conditions can carry `HoldsView` across stops and resumes (`fdAt`'s `fd`, `KapSchedT`) is not derived.
+**Size.**
+- `UpdA.lean`: 900–1400 lines. R1 is the bulk. `updV_frame` is about 200 lines at the unmasked relation with no cell given up; the ancestor lift and the re-reading add the rest.
+- `StepKeep` and the Core sites: 100–200 lines.
+- T1–T4: 300–500 lines.
+- In all, about 1300–2100 lines.
 
 ## 6. Not doing
 
-- **Restoring ρ⁺** (design (a)). Garbage in another branch fails `twp_lendEnd`'s `hF` (`not_noneAt_view`).
-- **`mut`.** One holder (`not_compS_single_self`); no `mut` lend at `twp` (D14). `CellAbs` forces `imm`.
-- **Changing D15**, `OpEntT.Down` or `twp_kappa_cancel`.
-- **Weakening `twp_lendEnd`.** Its statement and proof stay byte-for-byte. T4b must still hold.
-- **Proving T1–T4 only at fixed configurations.** The configurations in `Clause.lean` and `TreeConsume.lean` are refutations and non-vacuity witnesses only.
-- **Changing `UpdX`, `twp_update`'s premise, or `UpdXMasks`** to make proofs shorter.
-- **A new judgment**, or a `HoldsView`-shaped premise on `twp` itself. It goes on the frame condition `F` only.
-- **Hypotheses standing in for unproved lemmas** (R1, R2, R6 are proved, not assumed).
+- **Per-location splits.** No proof of `UpdA.frame` or `UpdA.trans` through a lemma about the three cells at `l` (`xopt_comp`'s shape); `not_xoptWFrameAt` shows that route fails. Case splits follow `updV_frame`'s (the walk split and its three domains), not new splits on cell kinds.
+- **Option B.** No end case "`mut` where the start read `imm`" without a start ancestor.
+- **Hypotheses on `twp_frame`**, and no statement change outside `EndT`, `endT_inv`, `fdEsc_of_updX` and `StepKeepsFdEsc`.
+- **Restoring ρ⁺.**
+- **Giving up `mut` views.** A `mut` cell leaves only together with an `imm` ancestor.
+- **Changing D15.**
+- **Weakening `twp_lendEnd`.**
+- **T1–T4 proved only at fixed configurations.**
+- **Changing `UpdX`** or `twp_update`'s premise.
+- **The reachability check** (whether `TWNT` excludes an `imm` view over a `mut` cell): not done, per the user.
 
-## 7. Kill criterion, and the fallback form
+## 7. Kill criterion and the stated-exclusion fallback
 
-**(b) is dead if any of these happens:**
-- A configuration, with every hypothesis discharged, satisfies all of `EndT`'s clauses except `UpdXW`, while `UpdXW.frame` or `UpdXW.trans` fails for it. That is, the composite of two admitted ends is not an admitted end.
-- T4b fails under `UpdXW`. That would be an unsound end: a lend ending while a live copy is outside the lender.
+**Kill.** Design (b) along the walks is dead if either of these is shown by a Lean configuration with every hypothesis discharged:
+- `UpdA.frame` or `UpdA.trans` is false under `MutOne` and validity of the worlds involved (both composites admitted ends, their composite not);
+- T4b is false under `UpdA`.
 
-Any of these is shown as a Lean configuration (a `def … : Prop` that elaborates, plus its instance). An informal "it does not go through" is not a kill.
-
-**The fallback form, if (b) covers only part of the space.** The user allows "resource safety, except under these well-defined conditions". If some case cannot be admitted (expected candidate: R1's mixed lifetime sets at one location across `twp_frame`'s parts):
-- T1–T3 stay admitted results.
-- The excluded configurations become explicit hypotheses **on the frame condition or the resource**, never a list of programs. For example:
+**Fallback (stated exclusion).** If `UpdA` covers everything except some class:
+- T1–T3 stay theorems.
+- The class is excluded by an explicit hypothesis on the frame condition or on the resource. The hypothesis is decidable (a recursion over the finite resource tree, `CellAt`) and is never a list of programs:
 
 ```lean
-/-- At `ℓ`, every cell of the frame's flattening has the consumed view's lifetime set. -/
-def UniformAt (β : Life) (l : BoCa.Loc) {K : WCactus} (ρf : TRes K) : Prop :=
-  ∀ τ χ, ResUT.Flat ρf τ → τ.get l = some χ → χ.lsOf = some (TSet.single β)
+/-- No `mut` cell at `l` at any depth of `ρ`. Decided by recursion on `ρ`'s cells and witnesses. -/
+def NoMutAt (l : BoCa.Loc) (ρ : TRes K) : Prop :=
+  ∀ ψ, CellAt ρ l ψ → ψ.kind ≠ Kind.mut
 ```
 
-- **The exclusion is a premise.** It is added beside `HoldsView` on `F`, or as a premise on the run's resource (`UniformAt β l Z`) of T1 and of `UpdXW.frame`.
-- **It must not be vacuous.** Each exclusion is shown satisfiable at the #793 configuration (`fdMask`/`True` strengthened, the frame `viewRes (lfE 1) 1`).
-- **The excluded cases are stated as excluded.** Their refutations are configurations.
-- **It is a real exclusion, not a stand-in.** It must be refuted outside its scope, by a configuration. If the needed fact is merely unproved, the step stays open.
+- It goes on T1's `Z` and on the frame condition (`∀ w ρf, F w ρf → NoMutAt ℓ ρf`).
+- It is shown satisfiable at the #793 configuration, and the excluded class is refuted outside it by a configuration.
+- It is not a hypothesis on `twp_frame` (§6), and it does not stand in for an unproved lemma.
 
 ## Design choices for the user
 
-- **D-1 (needed for T2/T3).** The spikes' frame conditions (`True`; `fdMask` at the empty mask) admit the empty frame, where any consume is refuted (`twp_refuses_last_copy`). The proposal: the admitted results are stated at those conditions **strengthened by `HoldsView`**. The alternative, keeping them literally, cannot be met by any `↭`.
-- **D-2.** The absorber is the end **world** `fρ′` (proposed), not the frame `ρf′`. The frame alone does not carry through `twp_frame` with mixed lifetime sets (an argument, not checked).
-- **D-3.** Absorption by lifetime-set inclusion (`CellAbs`/`CellSub`, proposed) versus an exact copy (`XCell` only). Exact copy is smaller and covers every view `twp` builds today (`viewCell α`). It fails R1's mixed-set case, which `STy.imm`'s general `TImm` reaches.
+- **C-1.** The ancestor disjuncts read the ancestor from the **start's** flattening (provenance in the run's start), not from the end world's. Reading the world would also admit a `mut` cell beneath another task's ancestor, which is weaker.
+- **C-2.** Either re-prove `UpdX.frame` along the walks too (closes D5; about 150 more lines), or leave its pointwise proof (it is sound and not on `EndT`'s path).
+- **C-3.** For `UpdA.frame`, either take `MutOne` of the end world as a hypothesis (proposed; it is already in `RecInv`), or handle `mut ○ mut` with mixed provenance by a third ancestor case.
