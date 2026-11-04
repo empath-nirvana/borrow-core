@@ -140,6 +140,16 @@ def ppLifeP (nm : List (String × LifeVar)) (p : Nat) : CLife → String
 
 def tvName (d : Nat) : String := if d == 0 then "X" else s!"X{d}"
 
+/-- An opaque type in the surface syntax. -/
+def ppOpq : BoCa.Fig16.LogRel.Core.Opaque → String
+  | .input => "input"
+  | .output => "output"
+  | .clock => "clock"
+  | .args => "args"
+  | .tok => "tok"
+  | .cell => "cell"
+  | .abs n rep => s!"abs {n} ({ppOpq rep})"
+
 mutual
 /-- A value type in the surface syntax, at precedence `p` (syntax-core §4: `0` binders, `1`
 `-o`/`=>`, `2` `&`, `3` `+`, `4` `*`, `5` prefix); `d` is the number of enclosing `μ`s, and
@@ -164,12 +174,7 @@ def ppV (nm : List (String × LifeVar)) (d p : Nat) : CVTy → String
   | .int .w8 => "u8"
   | .int .f32 => "f32"
   | .int .f64 => "f64"
-  | .opq .input => "input"
-  | .opq .output => "output"
-  | .opq .clock => "clock"
-  | .opq .args => "args"
-  | .opq .tok => "tok"
-  | .opq (.abs n) => s!"abs {n}"
+  | .opq k => ppOpq k
   -- The variable of the `nu` around (`ppC`), which occurs only as `U X`.
   | .tvar n => if n < d then tvName (d - 1 - n) else if n == d then "U X" else s!"?{n}"
   | .mu A => parenIf (p > 0) s!"mu {tvName d}. {ppV nm (d + 1) 0 A}"

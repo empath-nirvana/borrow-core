@@ -4,7 +4,7 @@ import Core.Tok
 /-!
 # Core — two files open across a raise, closed by their effectful destructors  `[spec §62]`
 
-A file is an abstract linear handle: `File = abs fileName` (SPEC §63), represented by `Tok`
+A file is an abstract linear handle: `File = abs fileName Tok` (SPEC §63), represented by `Tok`
 (`Core/Tok.lean`), a location owning a unit cell with no derived drop, not own-free and not
 persistent (`file_no_derived_drop`, `file_not_ownFree`). Its provider is the platform's `with_fs`,
 typed inside `File`'s provider: only there does a `File` become a `Tok` (`absUnseal`), which
@@ -56,8 +56,11 @@ open BoCa.Programs (alloc' free')
 
 abbrev I32 : VTy := .int .w32
 
-/-- A file: the abstract linear handle `abs fileName`, represented by `Tok`.  `[spec §63]` -/
-abbrev File : VTy := absTy fileName
+/-- A file: the abstract linear handle `abs fileName Tok`, represented by `Tok`, a location owning
+a unit cell. The platform's `File` (branch `dtor-wire`, SPEC §34) is the same abstract type at the
+representation `Cell`, `Ref I32`'s relation, whose cell holds the descriptor: `abs fileName Cell`,
+provided by the `Fs` externs' models (`Core/Abstract.lean`, `fileC`).  `[spec §63]` -/
+abbrev File : VTy := absTy fileName .tok
 
 /-- `close : File ↠^lin 1`, the operation `0` of the name `4`: must resume, so it never fails. -/
 def fcloseSig : OpSig := ⟨4, 0, .lin, File, .unit, .ret .unit, false⟩
@@ -97,7 +100,7 @@ theorem file_not_persistent : File.persistent = false := rfl
 def closeB : Expr := performE (opArgE 4 0 (.var 0))
 
 /-- **The program's declaration**: `File`'s destructor is `close`. -/
-def fsDecl (k : Opaque) : Option Expr := if k = .abs fileName then some closeB else none
+def fsDecl (k : Opaque) : Option Expr := if k = .abs fileName .tok then some closeB else none
 
 theorem dropOf_file : dropOf fsDecl File = some closeB := rfl
 

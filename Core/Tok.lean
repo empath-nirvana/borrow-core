@@ -87,7 +87,7 @@ theorem tokBurn_compatX {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) :
   refine wpTS_val ls ⟨_, .lam⟩ _ _ ?_
   intro ls' _ v ρ₁ ρ₂ hv hcomp
   rw [eq_of_compS_empty_left hcomp]
-  rcases Opaque.rel_cases hv with ⟨hk, -, -⟩ | ⟨-, ℓ, rfl, rfl⟩
+  rcases Opaque.rel_cases hv with ⟨hk, -, -⟩ | ⟨-, ℓ, w, rfl, rfl, rfl⟩
   · exact absurd hk Opaque.tok_not_host
   refine wpTS_lolli ls' _ (Val.loc ℓ) _ _ ?_
   rw [burnE_subst]
@@ -96,27 +96,40 @@ theorem tokBurn_compatX {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) :
 
 /-! ### Abstract types: the representation iso  `[spec §63]`
 
-An abstract type `abs n` has `Tok`'s relation (`Opaque.rel_abs`), so the iso between it and its
-representation is the identity on the relation: the compatibility lemmas of `absSeal` and
-`absUnseal` (`Fundamental.lean`) are `id`. Only typing tells the two apart, where the iso is
-gated on the provider (`CDerivesIn`). -/
+An abstract type `abs n rep` has its representation's relation (`Opaque.rel_abs`), so the iso
+between it and `rep` is the identity on the relation: the compatibility lemmas of `absSeal` and
+`absUnseal` (`Fundamental.lean`) are `id`, at every representation. Only typing tells the two
+apart, where the iso is gated on the provider (`CDerivesIn`). -/
 
-/-- An abstract type `abs n`. -/
-abbrev absTy (n : Nat) : VTy := .opq (.abs n)
+/-- An abstract type `abs n rep`, named `n` and represented by `rep`. -/
+abbrev absTy (n : Nat) (rep : Opaque) : VTy := .opq (.abs n rep)
+
+/-- `Cell`, a location owning a cell that holds an `I32`. -/
+abbrev cellTy : VTy := .opq .cell
 
 /-- The name of the abstract type `File`, provided by the platform's `with_fs` (SPEC §62, §63). -/
 abbrev fileName : Nat := 0
 
-/-- **An abstract type's relation is `Tok`'s**, in both modes.  `[spec §63]` -/
+/-- **An abstract type's relation is its representation's**, in both modes.  `[spec §63]` -/
+theorem vCE_abs_eq_rep (n : Nat) (rep : Opaque) (η : Option (Nat → TEnt)) (b : Bool)
+    (ls : List SRec) (δ : LSub) (v : Val) :
+    vCE η b (absTy n rep) ls δ v = vCE η b (.opq rep) ls δ v := rfl
+
+/-- **At the token representation, an abstract type's relation is `Tok`'s.**  `[spec §63]` -/
 theorem vCE_abs_eq_tok (n : Nat) (η : Option (Nat → TEnt)) (b : Bool) (ls : List SRec) (δ : LSub)
-    (v : Val) : vCE η b (absTy n) ls δ v = vCE η b tokTy ls δ v := rfl
+    (v : Val) : vCE η b (absTy n .tok) ls δ v = vCE η b tokTy ls δ v := rfl
 
-/-- **`[abs-seal]` is sound**: a `Tok` is an `abs n`.  `[spec §63]` -/
-theorem absSeal_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {n : Nat}
-    (h : SemV Δ Γ e tokTy) : SemV Δ Γ e (absTy n) := h
+/-- **`Cell`'s relation is `Ref I32`'s**, in both modes: an owned cell holding a value.
+`[spec §63]` -/
+theorem vCE_cell_eq_ref (η : Option (Nat → TEnt)) (b : Bool) (ls : List SRec) (δ : LSub)
+    (v : Val) : vCE η b cellTy ls δ v = vCE η b (.ref (.int .w32)) ls δ v := rfl
 
-/-- **`[abs-unseal]` is sound**: an `abs n` is a `Tok`.  `[spec §63]` -/
-theorem absUnseal_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {n : Nat}
-    (h : SemV Δ Γ e (absTy n)) : SemV Δ Γ e tokTy := h
+/-- **`[abs-seal]` is sound**: a `rep` is an `abs n rep`.  `[spec §63]` -/
+theorem absSeal_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {n : Nat} {rep : Opaque}
+    (h : SemV Δ Γ e (.opq rep)) : SemV Δ Γ e (absTy n rep) := h
+
+/-- **`[abs-unseal]` is sound**: an `abs n rep` is a `rep`.  `[spec §63]` -/
+theorem absUnseal_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {n : Nat} {rep : Opaque}
+    (h : SemV Δ Γ e (absTy n rep)) : SemV Δ Γ e (.opq rep) := h
 
 end BoCa.Fig16.LogRel.Core

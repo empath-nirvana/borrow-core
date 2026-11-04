@@ -170,11 +170,13 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (h : CDerivesP Δ [] e j) : CDerivesP Δ Γ e j
   /-- `[abs-seal]`, ungated: `CDerivesP` extends `CDerives`, which is inside every provider.
   `[spec §63]` -/
-  | absSeal {Δ Γ e} {n : Nat} (h : CDerivesP Δ Γ e (.val tokTy)) :
-      CDerivesP Δ Γ e (.val (.opq (.abs n)))
+  | absSeal {Δ Γ e} {n : Nat} {rep : Opaque}
+      (h : CDerivesP Δ Γ e (.val (.opq rep))) :
+      CDerivesP Δ Γ e (.val (.opq (.abs n rep)))
   /-- `[abs-unseal]`, ungated.  `[spec §63]` -/
-  | absUnseal {Δ Γ e} {n : Nat} (h : CDerivesP Δ Γ e (.val (.opq (.abs n)))) :
-      CDerivesP Δ Γ e (.val tokTy)
+  | absUnseal {Δ Γ e} {n : Nat} {rep : Opaque}
+      (h : CDerivesP Δ Γ e (.val (.opq (.abs n rep)))) :
+      CDerivesP Δ Γ e (.val (.opq rep))
 
 --@CORE_DERIVED@
 

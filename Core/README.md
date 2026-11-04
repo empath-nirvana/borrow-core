@@ -60,9 +60,9 @@ returns a residual, and `D A = Loop A 1`; the driver `driveE n` is typed at ever
 
 `CDerives` is `CDerivesIn (fun _ => True)`: the judgment at a provider set `P`, inside every
 provider (SPEC §63). Only `absSeal` and `absUnseal`, the iso between an abstract type
-`abs n` and its representation `Tok`, read `P`, each under `P n`. `CDerivesIn.mono` embeds a
+`abs n rep` and its representation `rep`, read `P`, each under `P n`. `CDerivesIn.mono` embeds a
 derivation at any provider set, and `Abstract.lean` has encapsulation (`CDerivesIn.outside`) and
-the refused unseal (`CDerivesIn.var_abs_not_tok`).
+the refused unseal at every representation (`CDerivesIn.var_abs_not_rep`).
 
 Its context premises are `Ctx.SplitP`, `Ctx.DeadP` and `Ctx.SoloP` (`Persistent.lean`,
 `[spec §10]`), which extend the paper's `Ctx.Split`, `Ctx.Dead` and `Ctx.Solo`: a live slot of

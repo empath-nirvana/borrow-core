@@ -635,14 +635,17 @@ inductive CDerivesIn (P : Nat → Prop) : LifeCtx → Ctx VTy → Expr → Jdg �
       (hV : CDerivesIn P Δ [] (.val (.lam b)) j)
       (hN : CDerivesIn P Δ (⟨.unit, false⟩ :: Γ) ((N.subst 0 (Val.lam b)).shift 1 0) (.comp C)) :
       CDerivesIn P Δ Γ (.app (.val (.lam N)) (.val (.lam b))) (.comp C)
-  /-- `[abs-seal]`: inside the provider of the abstract type `n` (`P n`), a `Tok` is an `abs n`.
-  No other rule concludes at an abstract type from its representation.  `[spec §63]` -/
-  | absSeal {Δ Γ e} {n : Nat} (hn : P n) (h : CDerivesIn P Δ Γ e (.val tokTy)) :
-      CDerivesIn P Δ Γ e (.val (.opq (.abs n)))
-  /-- `[abs-unseal]`: inside the provider of the abstract type `n` (`P n`), an `abs n` is a `Tok`.
-  No other rule reads an abstract type's representation.  `[spec §63]` -/
-  | absUnseal {Δ Γ e} {n : Nat} (hn : P n) (h : CDerivesIn P Δ Γ e (.val (.opq (.abs n)))) :
-      CDerivesIn P Δ Γ e (.val tokTy)
+  /-- `[abs-seal]`: inside the provider of the abstract type `n` (`P n`), a value of the
+  representation `rep` is an `abs n rep`. No other rule concludes at an abstract type from its
+  representation.  `[spec §63]` -/
+  | absSeal {Δ Γ e} {n : Nat} {rep : Opaque} (hn : P n)
+      (h : CDerivesIn P Δ Γ e (.val (.opq rep))) :
+      CDerivesIn P Δ Γ e (.val (.opq (.abs n rep)))
+  /-- `[abs-unseal]`: inside the provider of the abstract type `n` (`P n`), an `abs n rep` is a
+  `rep`. No other rule reads an abstract type's representation.  `[spec §63]` -/
+  | absUnseal {Δ Γ e} {n : Nat} {rep : Opaque} (hn : P n)
+      (h : CDerivesIn P Δ Γ e (.val (.opq (.abs n rep)))) :
+      CDerivesIn P Δ Γ e (.val (.opq rep))
 
 /-- **The CBPV typing judgment, inside every provider**: `CDerivesIn` at the provider set that
 holds every name. Every theorem about the judgment is stated here.  `[spec §3, §63]` -/
