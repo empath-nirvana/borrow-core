@@ -25,7 +25,7 @@ Each typed program is derived (`d_…`) and its run computed (`…_run`):
 | `progReT` | `{3}`: `f ()` at `{1}`, the region re-entering the site `3` | `inj₂ ()` |
 | `progFinOpT` | `{4}`: the finaliser performs `4`, the outer `4` resumes it | `inj₁ ()` |
 | `progNC₁T` | `{4}`: the outer `4` cancels the finaliser's continuation (`[cfin-cancel]`) | `()` |
-| `progDropT` | `{2, 4⟨{2}⟩}`: the kept `2` pending at the second finaliser's `4` (`pend`); `H₄ₒ` drops `κ₄` | `inj₁ ()` |
+| `progConsumeT` | `{2, 4⟨{2}⟩}`: the kept `2` pending at the second finaliser's `4` (`pend`); `H₄ₒ` consumes `κ₄` | `inj₁ ()` |
 | `progKeepT` | `{2, 4⟨{2}⟩}`; `H₄ₒ` resumes `κ₄`, and the kept `2` reaches `H₂ₒ` | `inj₂ ()` |
 
 **The rejections (decision D3)**, each by inversion of `CDerives` (`Core/Inversions.lean`): the
@@ -248,7 +248,7 @@ theorem d_cancelCT {Δ : LifeCtx} {S : Row} {F : CTy} (hF : F.isTop = false)
       ⟨.tensor .unit (kTy S .unit .unr .unit F), false⟩]
       (.app (.var 0) (.val (Val.inj₂ Val.unit))) (.comp (cancelTy S F)) :=
     .proj₂ (.force (C := .amp (.arr .unit (CTy.effOf S .unit)) (cancelTy S F))
-      (.here (.cons (.drop rfl (.cons .nil)))))
+      (.here (.cons (.weaken rfl (.cons .nil)))))
   have hC : cancelTy S F = CTy.effOf (F.rowOf ++ S) .unit := by simp [cancelTy, hF]
   refine .effSub hle ?_
   rw [← hC]
@@ -608,7 +608,7 @@ theorem progNC₁T_run (μ : Heap) : Steps (ℍ := ℍ) μ progNC₁T μ (.val V
 /-- The cancel row of one operation `4`, at its own empty cancel row. -/
 abbrev finP (m : UInt32) : CTy := CTy.effOf [pSig m (.ret .unit)] .unit
 
-/-- A capturable operation's clause `λ_. v`, at `!U(1 ⊗ K ⊸ F_Σ R)`: its argument and `κ` drop. -/
+/-- A capturable operation's clause `λ_. v`, at `!U(1 ⊗ K ⊸ F_Σ R)`: its argument and `κ` consume. -/
 theorem d_constC_op {Δ : LifeCtx} (S : Row) {R : VTy} {F : CTy} {v : Val}
     (hv : CDerives Δ [⟨.tensor .unit (kTy S R .unr .unit F), true⟩] (.val v) (.val R)) :
     CDerives Δ [] (.val (constC v)) (.val (clauseTy S R (.unr, .unit, .unit) F)) := by
@@ -668,7 +668,7 @@ theorem d_innerP {Δ : LifeCtx} :
     (.val Val.unit))) (thenU (performU 1) (performU 4))) _
   exact .effHandleV (cs := rcsNil) (Γ₁ := []) (Γ₂ := []) (E := [(.unr, .unit, .unit)])
     (fs := fun _ => .ret .unit) .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
-    (.tensorI .nil (d_idV _ .unit) (.tensorI .nil (d_constC_op _ (.unitI (.drop rfl .nil)))
+    (.tensorI .nil (d_idV _ .unit) (.tensorI .nil (d_constC_op _ (.unitI (.weaken rfl .nil)))
       (.unitI .nil)))
     (by decide) (by simp [pSig]) (by simp) rfl d_thenP
 
@@ -726,8 +726,8 @@ def progKDT (c : Val) : Expr :=
   hndE (hU 2 idV (constC (Val.inj₂ Val.unit))) (hndE (hU 4 injlV c)
     (hndE H₁T (thenU (thenU (performU 1) (raiseU 2)) (performU 4))))
 
-/-- `H₄ₒ`'s clause answers `inj₁ ()` and drops its continuation. -/
-def progDropT : Expr := progKDT (constC (Val.inj₁ Val.unit))
+/-- `H₄ₒ`'s clause answers `inj₁ ()` and consumes its continuation. -/
+def progConsumeT : Expr := progKDT (constC (Val.inj₁ Val.unit))
 
 /-- `H₄ₒ`'s clause resumes its continuation. -/
 def progKeepT : Expr := progKDT resumeCT
@@ -750,9 +750,9 @@ theorem progKDT_cancel (μ : Heap) (c : Val) :
     (raiseE (.val (cancelVal (some (opPayload 2 0 Val.unit))))))) μ _
   exact Steps.plug (Ko.comp (ccF .hole)) (fin_cancel μ (performU 4) _)
 
-/-- **`progDropT`**: `H₄ₒ`'s unrestricted clause drops the continuation that holds the kept error
+/-- **`progConsumeT`**: `H₄ₒ`'s unrestricted clause consumes the continuation that holds the kept error
 `2`, so `H₂ₒ`'s clause never runs. -/
-theorem progDropT_run (μ : Heap) : Steps (ℍ := ℍ) μ progDropT μ (.val (Val.inj₁ Val.unit)) := by
+theorem progConsumeT_run (μ : Heap) : Steps (ℍ := ℍ) μ progConsumeT μ (.val (Val.inj₁ Val.unit)) := by
   refine (progKDT_cancel μ _).trans ?_
   refine (Steps.plug (hF (hU 2 idV (constC (Val.inj₂ Val.unit))) .hole) (const_start μ 4 injlV
     (Val.inj₁ Val.unit) (fun _ => rfl) (ccF (cfF (cancelVal (some (opPayload 2 0 Val.unit))) .hole))
@@ -930,10 +930,10 @@ theorem d_progKDT {Δ : LifeCtx} {c : Val}
   · exact ⟨rSig 2, rfl, OpSig.LeF.refl _⟩
   · exact ⟨pSig 4 (finR 2), rfl, OpSig.LeF.refl _⟩
 
-/-- **`progDropT` is typed at `F (1 ⊕ 1)`**: a finaliser may perform an operation whose
+/-- **`progConsumeT` is typed at `F (1 ⊕ 1)`**: a finaliser may perform an operation whose
 unrestricted clause discards its continuation (§27's *Open*: the kept error goes with it). -/
-theorem d_progDropT {Δ : LifeCtx} : CDerives Δ [] progDropT (.comp (.ret (.sum .unit .unit))) :=
-  d_progKDT (d_constC_op _ (.sumI₁ (.unitI (.drop rfl .nil))))
+theorem d_progConsumeT {Δ : LifeCtx} : CDerives Δ [] progConsumeT (.comp (.ret (.sum .unit .unit))) :=
+  d_progKDT (d_constC_op _ (.sumI₁ (.unitI (.weaken rfl .nil))))
 
 /-- **`progKeepT` is typed at `F (1 ⊕ 1)`**. -/
 theorem d_progKeepT {Δ : LifeCtx} : CDerives Δ [] progKeepT (.comp (.ret (.sum .unit .unit))) :=
@@ -1065,7 +1065,7 @@ theorem d_fRe {Δ : LifeCtx} :
       (.tensorI (.dead .nil) (d_constC_raiseΓ (.cons .nil) _ (.unitI (.cons (.cons .nil))))
         (.unitI (.cons .nil))))
     (by decide) (by simp [pSig]) (by simp) rfl
-    (.effPerform (o := pSig 1 (.ret .unit)) rfl rfl rfl (.unitI (.drop rfl .nil)))
+    (.effPerform (o := pSig 1 (.ret .unit)) rfl rfl rfl (.unitI (.weaken rfl .nil)))
 
 /-- **The `[then]` of `progReT`**: `f () then x. x unwind raise 3` at `{1⟨{3}⟩, 3}`. -/
 theorem d_thenRe {Δ : LifeCtx} :
@@ -1642,8 +1642,8 @@ theorem d_timeoutCl {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} 
     refine .effSub hFS ?_
     rw [← hct]
     exact .proj₂ (.force (C := .amp (.arr .unit (CTy.effOf S (.sum X .unit))) (cancelTy S F))
-      (.here (.drop rfl (.cons hΓ.toP))))
-  · exact .effSub (RowLe.nil S) (.ret (.sumI₂ (.unitI (.drop rfl (.cons (.cons (.cons hΓ.toP)))))))
+      (.here (.weaken rfl (.cons hΓ.toP))))
+  · exact .effSub (RowLe.nil S) (.ret (.sumI₂ (.unitI (.weaken rfl (.cons (.cons (.cons hΓ.toP)))))))
 
 section Tied
 variable {Ξ : EffCtx}
@@ -1710,7 +1710,7 @@ theorem dAt_bodyF {Δ : LifeCtx} {nw : UInt32} (hw : Ξ nw = [(.cancel, .unit, .
       (fun _ => fun _ h => absurd h List.not_mem_nil)
       (.effPerform (o := ⟨nw, 0, .cancel, .unit, .unit, .ret .unit, false⟩) hW
         (by simp [Row.ofEff, Row.find]) rfl rfl (.unitI .nil))
-      (.effSub (RowLe.nil _) (.ret (.sumI₂ (.unitI (.drop rfl .nil)))))
+      (.effSub (RowLe.nil _) (.ret (.sumI₂ (.unitI (.weaken rfl .nil)))))
   show CDerivesAt Ξ Δ [] (thenE (.var 0) D (bindE (performU nw) (.inj₂ .unit))) _
   refine .effThen (SM := Row.ofEff nw [(.cancel, .unit, .unit)] 0) (SD := SD) .nil hNZ hUq
     (fun _ => fun _ h => absurd h List.not_mem_nil) ?_ hDS ?_ ?_ hSD hM

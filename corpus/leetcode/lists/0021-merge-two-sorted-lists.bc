@@ -24,7 +24,7 @@ fn nums<'t>(l: text 't) -> buf i32 =
 fn cases<'t>(t: text 't) -> buf (buf i32) =
   fold_lines(t, !{ (l, cs) ->
     let (l, m) = array_copy['t, u8] l;
-    if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, nums(l)); cs } },
+    if len(m) == 0 { array_release['t, u8](l); cs } else { let (cs, _) = push(cs, nums(l)); cs } },
     box buf[buf i32](8))
 
 -- A singly linked list: each node is a value and a cell holding the rest, the cell being Rust's

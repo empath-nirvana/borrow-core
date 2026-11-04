@@ -166,14 +166,14 @@ def stdExterns : List ExternSpec :=
       some (mkHost "the time 0 (clock_now reads the host's monotonic clock)", .assumed)⟩,
     ⟨"mk_args", externTy (mkInputC (.opq .args)), .mk .args, "mkArgs_meets",
       some (mkHost ("the stream 0xFFFFFFFF, the host's arguments; " ++
-        "its argument, a byte list, dropped whatever it holds"), .assumed)⟩,
+        "its argument, a byte list, consumed whatever it holds"), .assumed)⟩,
     ⟨"take_args", externTy (takeInputC (.opq .args)), .take .args, "takeArgs_meets",
       some (takeHost "the empty list", .assumed)⟩,
     ⟨"take_clock", externTy (takeClockC (.opq .clock)), .take .clock, "takeClock_meets",
       some (takeHost "its contents", .assumed)⟩,
     ⟨"mk_input", externTy (mkInputC (.opq .input)), .mk .input, "mkInput_meets",
       some (mkHost ("fd 0, the platform's standard input; " ++
-        "its argument, a byte list, dropped whatever it holds"), .assumed)⟩,
+        "its argument, a byte list, consumed whatever it holds"), .assumed)⟩,
     ⟨"mk_output", externTy (mkOutputC (.opq .output)), .mk .output, "mkOutput_meets",
       some (mkHost "its argument, the descriptor", .assumed)⟩,
     ⟨"take_input", externTy (takeInputC (.opq .input)), .take .input, "takeInput_meets",

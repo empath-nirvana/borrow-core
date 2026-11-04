@@ -3,13 +3,13 @@
 -- drop (cf. Rust's `Fn ≤ FnMut ≤ FnOnce`). `clo_of_fn` makes an unrestricted function a closure
 -- whose state is the function; `clo_once` makes a closure a function that calls it once and
 -- closes the rest. The other directions are refused: a closure is linear
--- (`corpus/reject/clo-copy.bc`), and `A => B` has no derived drop, so it cannot be the state a
+-- (`corpus/reject/clo-copy.bc`), and `A => B` is not consumable, so it cannot be the state a
 -- `close` disposes of
 -- (`corpus/reject/clo-linear-state.bc`).
 --
 -- Answer: i32[230011], and `live 0`: `x + 10` as a closure answers 11 and 12 (`23`, times
 -- 10000); the counter from 10, made linear and called once with 1, answers 11, and its `close`
--- frees its cell. A coercion that dropped the counter without closing it leaves its cell live.
+-- frees its cell. A coercion that consumed the counter without closing it leaves its cell live.
 -- Both closures are bounded by `main`'s own lifetime (SPEC §23).
 
 include clo

@@ -873,7 +873,7 @@ theorem bangAllI_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {x : LifeVar} {b : Lifeti
 
 /-! ### Lemma 6.163 ([]I-compat) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
 
-/-- `!E` at `SemV`: forget the `ρ = ∅`. -/
+/-- `!E` at `SemV`: discard the `ρ = ∅`. -/
 theorem bangE_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {T : VTy}
     (h : SemV Δ Γ e (.bang T)) : SemV Δ Γ e T := by
   intro δ γ ls ρ hδ hg

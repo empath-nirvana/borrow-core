@@ -2,7 +2,7 @@
 -- value is cancelled. `victim` owns `extra` and lends `buf`, and holds the view (in a pair)
 -- across two `await`s. The first `victim` is observed to its first `await` and closed there: the
 -- cancel unwinds its continuation innermost first, the lend's unwinding form ends the lend and
--- frees `buf` (its finaliser, the source's destructor), and `extra`'s drop glue frees it. The
+-- frees `buf` (its finaliser, the source's consume), and `extra`'s consume glue frees it. The
 -- second runs to its end.
 --
 -- `assurance: PinLaw (R1 at 17:11)`.

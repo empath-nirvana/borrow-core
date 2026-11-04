@@ -3,7 +3,7 @@
 -- the view back when the index is past its length; `slice_swap_mut` exchanges two slots of one
 -- view (one slot with itself when `i = j`); `slice_replace_mut` writes a slot and hands the old
 -- element back; `slice_empty_imm`/`slice_empty_mut` are views of nothing. A view left unused is
--- dropped: a `mut` family's destructor gives it up (SPEC §12). On an `imm` view, `slice_split_imm`
+-- consumed: a `mut` family's consume gives it up (SPEC §12). On an `imm` view, `slice_split_imm`
 -- cuts it the same way.
 --
 -- Answer: (i32[21354], (i32[4], (i32[0], (i32[1], i32[3])))). The array [1, 2, 3, 4, 5] is cut

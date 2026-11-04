@@ -10,7 +10,7 @@ the typing rules of §19 need:
 * `ewp_perform_here`, `ewp_raise_here`: an operation stops at once, owing its continuation;
 * `ewp_sub`: a row may grow (`opTable_le`);
 * `ewp_let`: `M to x. N` at a row, the frame of `N` carried through every stop of `M`: resumed with
-  it, or, at a cancel or an abortive stop, dropped (it holds nothing owned);
+  it, or, at a cancel or an abortive stop, consumed (it holds nothing owned);
 * `ewp_then`: the same with a finaliser, which runs at a cancel and at an abortive stop;
 * `ewp_handle`: a handler, by induction on the inner computation's least fixed point.
 -/
@@ -849,7 +849,7 @@ theorem kappaAt_tag (q : Qual) (H : Val) (K : Kont) :
 `[ret]` answers through `h_ret`; an operation of the handler's name runs its clause, with `κ`
 resumed by the induction hypothesis and cancelled by the inner computation's cancel run of the
 dead region under `ccatch`; at a must-resume or cancellable operation `κ` first gets its cell
-(`ewp_kappaCell`), which its resume and its cancel free; an abortive one runs its clause and drops
+(`ewp_kappaCell`), which its resume and its cancel free; an abortive one runs its clause and consumes
 the abandoned continuation; an operation of another name passes outward, the handler reinstalled in
 its continuation, and dead in that continuation's cancel, so the inner cancel run is the outer one.
 The handler's tags `qs` record its operations' qualifiers.  `κ`'s cancel branch at the operation
@@ -938,7 +938,7 @@ theorem ewp_handle_or (Tin Tout : OpTab) (Px Px' : Table) (hPx' : Px'.Mono) (n :
         exact (hcont ls'' he).2 hq P hP
   · obtain ⟨⟨rfl, hK₁, hT, ha⟩, ρa, ρn, hcan, ⟨hPA, hnA⟩, hnn⟩ := pure_sep_iff.mp hp
     by_cases hm : m = n
-    · -- `[unwind]` at the handler's name: the clause; the continuation is dropped
+    · -- `[unwind]` at the handler's name: the clause; the continuation is consumed
       subst hm
       obtain ⟨c, hc, -, hab⟩ := hop i en hT
       refine wpG_head (fun μ => Head.hunwind μ m i qs hr hs c v K₁ hc hK₁) rfl _ _ σ ?_
@@ -1081,7 +1081,7 @@ theorem Row.abortOnly_abort (S : Row) (δ : LSub) : (Row.tab S.abortOnly δ).Abo
 /-! ### Own-free contexts -/
 
 /-- A type whose values hold no `own` cell: data, borrows, `!`, the opaque host types. An abort
-abandons a value of such a type (SPEC §19); that is not a drop. `Tok` owns its cell, so it is not
+abandons a value of such a type (SPEC §19); that is not a consume. `Tok` owns its cell, so it is not
 here, and neither is any type that holds it (SPEC §11, §42).  `[spec §19]` -/
 inductive _root_.BoCa.Fig16.LogRel.Core.VTy.OwnFree : VTy → Prop where
   | unit : VTy.OwnFree .unit
@@ -1440,18 +1440,18 @@ theorem clausesTy_persistent (S : Row) (R : VTy) :
 persistent slots. -/
 theorem _root_.BoCa.Fig16.LogRel.Core.Ctx.SoloP.deadP {T : VTy} (hT : T.Persistent) :
     ∀ {Γ : Ctx VTy} {i : Nat}, Ctx.SoloP Γ i T → Ctx.DeadP Γ
-  | _, _, .here h => .drop hT h
+  | _, _, .here h => .weaken hT h
   | _, _, .there h => .cons (Ctx.SoloP.deadP hT h)
-  | _, _, .skip hS h => .drop hS (Ctx.SoloP.deadP hT h)
+  | _, _, .skip hS h => .weaken hS (Ctx.SoloP.deadP hT h)
 
 /-- Two consumed halves, up to persistent slots, make a consumed whole. -/
 theorem _root_.BoCa.Fig16.LogRel.Core.Ctx.SplitP.deadP :
     ∀ {Γ Γ₁ Γ₂ : Ctx VTy}, Ctx.SplitP Γ Γ₁ Γ₂ → Ctx.DeadP Γ₁ → Ctx.DeadP Γ₂ → Ctx.DeadP Γ
   | _, _, _, .nil, _, _ => .nil
-  | _, _, _, .left h, .drop hT h₁, .cons h₂ => .drop hT (Ctx.SplitP.deadP h h₁ h₂)
-  | _, _, _, .right h, .cons h₁, .drop hT h₂ => .drop hT (Ctx.SplitP.deadP h h₁ h₂)
+  | _, _, _, .left h, .weaken hT h₁, .cons h₂ => .weaken hT (Ctx.SplitP.deadP h h₁ h₂)
+  | _, _, _, .right h, .cons h₁, .weaken hT h₂ => .weaken hT (Ctx.SplitP.deadP h h₁ h₂)
   | _, _, _, .dead h, .cons h₁, .cons h₂ => .cons (Ctx.SplitP.deadP h h₁ h₂)
-  | _, _, _, .dup hT h, .drop _ h₁, .drop _ h₂ => .drop hT (Ctx.SplitP.deadP h h₁ h₂)
+  | _, _, _, .dup hT h, .weaken _ h₁, .weaken _ h₂ => .weaken hT (Ctx.SplitP.deadP h h₁ h₂)
 
 /-- The slot of `SoloP` is live. -/
 theorem _root_.BoCa.Fig16.LogRel.Core.Ctx.SoloP.live :

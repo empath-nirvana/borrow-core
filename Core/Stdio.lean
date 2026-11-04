@@ -352,10 +352,10 @@ theorem partP_deadP (e : Expr) : ∀ {i : Nat} {Γ : Ctx VTy}, Ctx.DeadP Γ →
   | i, _, .cons h => by
       simp only [partP, Bool.false_eq_true, if_false]
       exact ⟨.cons (partP_deadP e (i := i + 1) h).1, .cons (partP_deadP e (i := i + 1) h).2⟩
-  | i, _, .drop hT h => by
+  | i, _, .weaken hT h => by
       have hp : _ = true := hT
       simp only [partP, if_true, hp]
-      exact ⟨.drop hT (partP_deadP e (i := i + 1) h).1, .drop hT (partP_deadP e (i := i + 1) h).2⟩
+      exact ⟨.weaken hT (partP_deadP e (i := i + 1) h).1, .weaken hT (partP_deadP e (i := i + 1) h).2⟩
 
 theorem part_deadP (e : Expr) : ∀ {i : Nat} {Γ : Ctx VTy}, Ctx.DeadP Γ →
     Ctx.DeadP (part e i Γ).1 ∧ Ctx.DeadP (part e i Γ).2
@@ -363,16 +363,16 @@ theorem part_deadP (e : Expr) : ∀ {i : Nat} {Γ : Ctx VTy}, Ctx.DeadP Γ →
   | i, _, .cons h => by
       simp only [part, Bool.false_eq_true, if_false]
       exact ⟨.cons (part_deadP e (i := i + 1) h).1, .cons (part_deadP e (i := i + 1) h).2⟩
-  | i, _, .drop hT h => by
+  | i, _, .weaken hT h => by
       simp only [part, if_true]
       split
-      · exact ⟨.drop hT (part_deadP e (i := i + 1) h).1, .cons (part_deadP e (i := i + 1) h).2⟩
-      · exact ⟨.cons (part_deadP e (i := i + 1) h).1, .drop hT (part_deadP e (i := i + 1) h).2⟩
+      · exact ⟨.weaken hT (part_deadP e (i := i + 1) h).1, .cons (part_deadP e (i := i + 1) h).2⟩
+      · exact ⟨.cons (part_deadP e (i := i + 1) h).1, .weaken hT (part_deadP e (i := i + 1) h).2⟩
 
 /-- `Γ` consumed, up to live persistent slots, with `DeadP` hypotheses in scope. -/
 syntax "cdeadQ" : tactic
 macro_rules
-  | `(tactic| cdeadQ) => `(tactic| first | assumption | exact Ctx.DeadP.nil | exact Ctx.Dead.toP (by assumption) | (refine Ctx.DeadP.cons ?_; cdeadQ) | (refine Ctx.DeadP.drop (by decide) ?_; cdeadQ) | exact (partP_deadP _ (by cdeadQ)).1 | exact (partP_deadP _ (by cdeadQ)).2 | exact (part_deadP _ (by cdeadQ)).1 | exact (part_deadP _ (by cdeadQ)).2)
+  | `(tactic| cdeadQ) => `(tactic| first | assumption | exact Ctx.DeadP.nil | exact Ctx.Dead.toP (by assumption) | (refine Ctx.DeadP.cons ?_; cdeadQ) | (refine Ctx.DeadP.weaken (by decide) ?_; cdeadQ) | exact (partP_deadP _ (by cdeadQ)).1 | exact (partP_deadP _ (by cdeadQ)).2 | exact (part_deadP _ (by cdeadQ)).1 | exact (part_deadP _ (by cdeadQ)).2)
 
 /-- `Γ = x : A`, up to live persistent slots elsewhere, with `DeadP` hypotheses in scope. -/
 syntax "csoloQ" : tactic
@@ -470,14 +470,14 @@ theorem d_waStepΓ {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
   simpa using d_waStep.append_dead hΓ
 
 /-- The model of `write_all`: `Λ. Λ. λp. let (m, v) = p in let (v, w) = copy v in
-count_fold (step, (len w, (0, (m, v)))) to (m, v). forget v; m`.  `[spec §11]` -/
+count_fold (step, (len w, (0, (m, v)))) to (m, v). release v; m`.  `[spec §11]` -/
 def writeAllB : Expr :=
   .letpair (.var 0)
     (.letpair (.app (.val copyV) (.var 0))
       (bindE (.app (.val arrLenV) (.var 0))
         (.letpair (.app (.val (.prim .count))
             (.pair (.val waStepV) (.pair (.var 0) (.pair (i32E 0) (.pair (.var 4) (.var 2))))))
-          (.seq (.app (.val forgetV) (.var 0)) (.var 1)))))
+          (.seq (.app (.val releaseV) (.var 0)) (.var 1)))))
 
 def writeAllV : Val := .lam (.val (.lam (.val (.lam writeAllB))))
 
@@ -498,8 +498,8 @@ theorem d_writeAll :
     refine .tensorI (splitP_right_all _) (d_waStepΓ (kill_dead _)) ?_
     exact pairP (.var (by csoloQ)) (pairP (d_i32 0 (by cdeadQ))
       (pairP (.var (by csoloQ)) (.var (by csoloQ))))
-  · exact .seqV (partP_split (.app (.val forgetV) (.var 0)) 0 _)
-      (appP (.var (by csoloQ)) (.bangE (.arrForget (.var 1) u8T (by cdeadQ)))) (.var (by csoloQ))
+  · exact .seqV (partP_split (.app (.val releaseV) (.var 0)) 0 _)
+      (appP (.var (by csoloQ)) (.bangE (.arrRelease (.var 1) u8T (by cdeadQ)))) (.var (by csoloQ))
 
 
 /-- `read_into`'s loop state: the input borrow, the view, and the bytes read. -/

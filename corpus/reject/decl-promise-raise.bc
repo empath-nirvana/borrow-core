@@ -1,8 +1,8 @@
 -- `corpus/decl-promise.bc` with the queue of promises live across a `raise`: `check` may abort
 -- between the requests and the answers, with no finaliser. `Queue` holds `Promise`, which holds a
 -- token's cell, so it is not `OwnFree` and `[let]`'s `hW` fails; the `[then]` the checker would
--- build instead needs `Queue`'s derived drop, and a type that holds a field with none has none
--- (`not_hasDtor_mu_body`, `decl_linear`). Refused.
+-- build instead needs `Queue`'s consume, and a type that holds a field with none has none
+-- (`not_consumable_mu_body`, `decl_linear`). Refused.
 include fail
 
 data Promise = { must_close(answer) id: i32 }
@@ -23,4 +23,4 @@ main -> i32 + i32 =
     let y = check(5);
     answer_all(q) + y
   }
--- expect: 23:13: `q`, of type `mu X. 1 + ref (i32 * tok) * ref X`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell: `Promise` holds the field `id`, marked `must_close`; pass it to `answer` before the computation that may abort, or close it in a `finally`
+-- expect: 23:13: `q`, of type `mu X. 1 + ref (i32 * tok) * ref X`, is live across a computation that may abort, and its type is linear and not consumable, and an abort abandons only a value that holds no owned cell: `Promise` holds the field `id`, marked `must_close`; pass it to `answer` before the computation that may abort, or close it in a `finally`

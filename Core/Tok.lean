@@ -3,7 +3,7 @@ import Core.Compatibility
 /-!
 # Core — the token of a declared type: `mint` and `burn`  `[spec §11, §12, §42]`
 
-`Tok = VTy.opq .tok` is the token a declared type with no derived drop carries beside its payload
+`Tok = VTy.opq .tok` is the token a declared type that is not consumable carries beside its payload
 (`N = A ⊗ Tok`, SPEC §42). Its value is a location owning a unit cell, the capture cell's pattern
 (SPEC §25): `Opaque.rel .tok` is `Ref 1`'s clause. Two constants handle it:
 
@@ -14,7 +14,7 @@ import Core.Compatibility
 lemmas are `[TR]` 6.141 and 6.142 (`wpTS_alloc`, `wpTS_free`, the steps `ewp_alloc` and `ewp_free`
 take at an effect row). `burn` is the only constant that takes a `Tok`.
 
-`Tok` has no derived drop (`HasDtor` has no `opq` constructor) and is not `VTy.OwnFree`, so neither
+`Tok` is not consumable (`Consumable` has no `opq` constructor) and is not `VTy.OwnFree`, so neither
 is a type holding it; `[let]`'s `hW` and `[raise]`'s `hd` refuse to abandon one at an abort.
 -/
 

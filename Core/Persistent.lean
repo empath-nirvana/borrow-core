@@ -10,8 +10,8 @@ import Core.Relation
 
 A value type is persistent when the relation holds its values only at the empty resource
 (`vP_empty_of_persistent`).  A live slot of persistent type may be duplicated by a context
-split (`Ctx.SplitP.dup`) and dropped by a leaf that asks for a consumed context
-(`Ctx.DeadP.drop`, `Ctx.SoloP.skip`): its resource is `∅`, and `∅ = ∅ ⋆ ∅`.
+split (`Ctx.SplitP.dup`) and consumed by a leaf that asks for a consumed context
+(`Ctx.DeadP.weaken`, `Ctx.SoloP.skip`): its resource is `∅`, and `∅ = ∅ ⋆ ∅`.
 
 `Ctx.SplitP`, `Ctx.DeadP` and `Ctx.SoloP` extend `Ctx.Split`, `Ctx.Dead` and `Ctx.Solo` by those
 constructors (`Ctx.Split.toP`, `Ctx.Dead.toP`, `Ctx.Solo.toP`).  The context relation respects
@@ -125,15 +125,15 @@ inductive Ctx.SplitP : Ctx VTy → Ctx VTy → Ctx VTy → Prop where
 inductive Ctx.DeadP : Ctx VTy → Prop where
   | nil : Ctx.DeadP []
   | cons {T : VTy} {Γ : Ctx VTy} : Ctx.DeadP Γ → Ctx.DeadP (⟨T, false⟩ :: Γ)
-  /-- A persistent slot is dropped. -/
-  | drop {T : VTy} {Γ : Ctx VTy} (hT : T.Persistent) : Ctx.DeadP Γ → Ctx.DeadP (⟨T, true⟩ :: Γ)
+  /-- A persistent slot is consumed. -/
+  | weaken {T : VTy} {Γ : Ctx VTy} (hT : T.Persistent) : Ctx.DeadP Γ → Ctx.DeadP (⟨T, true⟩ :: Γ)
 
 /-- `Γ = x : T`, up to live slots of persistent type elsewhere.  `[spec §10]` -/
 inductive Ctx.SoloP : Ctx VTy → Nat → VTy → Prop where
   | here {T : VTy} {Γ : Ctx VTy} : Ctx.DeadP Γ → Ctx.SoloP (⟨T, true⟩ :: Γ) 0 T
   | there {S T : VTy} {Γ : Ctx VTy} {i : Nat} : Ctx.SoloP Γ i T →
       Ctx.SoloP (⟨S, false⟩ :: Γ) (i + 1) T
-  /-- A persistent slot before the variable is dropped. -/
+  /-- A persistent slot before the variable is consumed. -/
   | skip {S T : VTy} {Γ : Ctx VTy} {i : Nat} (hS : S.Persistent) : Ctx.SoloP Γ i T →
       Ctx.SoloP (⟨S, true⟩ :: Γ) (i + 1) T
 
@@ -206,7 +206,7 @@ theorem gSepC_deadP {ls : List SRec} {δ : LSub} : ∀ {Γ : Ctx VTy}, Ctx.DeadP
       cases γ with
       | nil => exact h.1
       | cons v γ' => exact ih (γ := γ') h
-  | drop hT _ ih =>
+  | weaken hT _ ih =>
       intro γ ρ h
       cases γ with
       | nil => exact h.1

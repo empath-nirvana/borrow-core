@@ -980,7 +980,7 @@ def bindPat (sp : Span) : Nat → Pat → Val → Comp → P Comp
       else pure x
     let y ← if y.name == "" then pure ⟨← freshName (if q matches .wild _ then "io_d" else "io_p"), sp⟩
       else pure y
-    -- A name or `_` is bound by the pair itself (an unused name is dropped).
+    -- A name or `_` is bound by the pair itself (an unused name is consumed).
     let M ← match q with
       | .var _ | .wild _ => pure M
       | q => bindPat sp n q (.var sp y.name) M
@@ -1077,7 +1077,7 @@ names it rebinds. -/
 def Val.rebinds : Val → Option Pat
   | .app _ (.app _ (.sugar _ (.borrow _ _)) P) _ => placeNames P
   -- `with h(&mut c) { … }` hands the cell `c` back; a `with` whose body hands back the
-  -- variables it assigns hands back its place beside them, which is dropped. Any other `with`
+  -- variables it assigns hands back its place beside them, which is consumed. Any other `with`
   -- answers its result alone.
   | .app sp (.app _ (.sugar _ (.handle _ _ _ _)) P) (.thunkv _ (.lam _ _ _ M)) => match P with
     | .lend _ x _ => some (.var x)
@@ -1087,7 +1087,7 @@ where
   placeNames : Val → Option Pat
     | .var sp x => some (.var ⟨x, sp⟩)
     | .pair sp (.var s₁ x) (.var s₂ y) => some (.pair sp (.var ⟨x, s₁⟩) (.var ⟨y, s₂⟩))
-    -- A literal lent by a borrow block is handed back, and dropped.
+    -- A literal lent by a borrow block is handed back, and consumed.
     | .sugar sp (.str _) => some (.wild sp)
     -- A load `borrow imm *g { … }` hands back nothing: its value is `((), B)`.
     | .app sp (.sugar _ .deref) _ => some (.wild sp)
@@ -1225,7 +1225,7 @@ def Val.isExit : Val → Bool
 
 /-- How a frame hands on what it writes (SPEC §41, rule R3): the frame's value bound at each
 terminal (`t`, typed `A`), and the value beside the variables, or the variables alone when the
-value is dropped (`keep`). -/
+value is consumed (`keep`). -/
 structure HandOn where
   t : String
   A : Option VTy := none
@@ -2273,7 +2273,7 @@ def fieldUpdate : Nat → P (Option Val)
       (.thunkv sp (.lam sp ⟨r, sp⟩ (holeTy sp) body))))
 
 /-- A statement: a computation, a force `t!` or `f!(e)`, or an expression `e`, which is returned.
-    Outside the head of a binding, `S; N` sequences it (its result is dropped), and a borrow
+    Outside the head of a binding, `S; N` sequences it (its result is consumed), and a borrow
     block or `modify` on a place rebinds the place. -/
 def statement : Nat → Pos → Bool → P Comp
   | 0, _, _ => outOfFuel
@@ -2346,7 +2346,7 @@ def statement : Nat → Pos → Bool → P Comp
     else
       match frameV with
       | some V =>
-        -- A tail frame hands back its result; the place is rebound, and dropped.
+        -- A tail frame hands back its result; the place is rebound, and consumed.
         let sp ← spanFrom st
         let v ← freshName "io_v"
         letVal sp n (.var ⟨v, sp⟩) none V (.ret sp (.var sp v)) thr

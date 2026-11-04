@@ -512,7 +512,7 @@ fn rest_is(s: string, i: i32, l: lit) -> string * bool =
     (s, ok)
   }
 
--- `D × 10^E`, `D > 0` the `Big` of the `nd` digits and `sticky` whether a dropped digit was
+-- `D × 10^E`, `D > 0` the `Big` of the `nd` digits and `sticky` whether a consumed digit was
 -- nonzero, rounded to significand width `p` and exponent width `w`: the bits of the float, its sign
 -- clear.
 fn round_dec(d: Big, ex: i32, sticky: bool, nd: i32, p: i32, w: i32) -> i64 =
@@ -549,9 +549,9 @@ fn round_dec(d: Big, ex: i32, sticky: bool, nd: i32, p: i32, w: i32) -> i64 =
     let emin = 1 - bias;
     if bias < eh { inf } else {
       let keep = if emin <= eh { p } else { p - (emin - eh) };
-      let drop = l - keep;
-      if 62 < drop { i64[0] } else {
-        let dd = host[extend_u](drop);
+      let excess = l - keep;
+      if 62 < excess { i64[0] } else {
+        let dd = host[extend_u](excess);
         let kept = host[shr_u64](q, dd);
         let rem = host[and64](q, host[shl64](i64[1], dd) - i64[1]);
         let half = host[shl64](i64[1], dd - i64[1]);

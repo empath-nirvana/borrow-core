@@ -105,7 +105,7 @@ argument it ignores. This is OQ-B1-2.
 ### 1.3 `LendFrame`
 
 This is `Round5.LendFrameN` at main's forms, with `RowOf tk S x` read as `Row.ResumeO S x` and the
-`tk` binder dropped. Every other premise, and the conclusion, are `LendFrameN`'s as written.
+`tk` binder consumed. Every other premise, and the conclusion, are `LendFrameN`'s as written.
 
 ```lean
 /-- **LendFrame.** The relaxed `withborUV` lend's compatibility lemma at every `LendForm`: a lend
@@ -244,7 +244,7 @@ theorem pinLaw_iff : PinLaw (ℍ := ℍ) ↔ PinStop (ℍ := ℍ) ∧ PinLoop (�
 ```
 
 `PinLaw.of_stop_loop` is `cases` on the `LendForm` premise, then `hS` at its fields; `loopFrame`
-is `hL` with the last three premises dropped. This is the accounting for §6: the hypothesis's
+is `hL` with the last three premises consumed. This is the accounting for §6: the hypothesis's
 definition changes and its content does not. B2 retires both theorems when it adds forms
 (§1.1).
 
@@ -326,7 +326,7 @@ is today, and is now an instance of the schema for its rule shape.
 | shortcut | why it is tempting | STOP |
 |---|---|---|
 | Keep `stop : PinStop` and `loop : PinLoop` as fields beside the schemas | the existing code and docs compile unchanged | STOP: that is four assertions, not two. `PinStop`/`PinLoop` must be theorems. |
-| State `LendForm` with `hold`/`fam`/`ref imm` "for later" | B2 gets additive constructors | STOP unless the reviewer picks (b). Then each such case is listed as asserted with no rule, in SPEC and in the docstring, and `pinLaw_iff` is dropped with that recorded. |
+| State `LendForm` with `hold`/`fam`/`ref imm` "for later" | B2 gets additive constructors | STOP unless the reviewer picks (b). Then each such case is listed as asserted with no rule, in SPEC and in the docstring, and `pinLaw_iff` is consumed with that recorded. |
 | Add `tk`/`RowOf` with both branches `ResumeO` | B2 then only edits `RowOf`'s body | STOP: it is an index the code ignores. Raise it under OQ-B1-2. |
 | Prove `PinStop` from `LendFrame` some other way (inline a second induction, or a `fundamentalC_of_frames` beside `fundamentalC_pin`) | it decouples the files | STOP: the spike's route is `fundamentalC_pin`'s induction with the frames' cases, then the fields from it. One induction. |
 | Put `PinLaw.stop`/`loop` in `Core/PinFundamental.lean` by hand | it avoids the template | STOP: that file is generated, and `gen-pin.py --check` fails. They go in the template. |

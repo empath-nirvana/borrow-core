@@ -6,7 +6,7 @@
 --
 -- Answer: on the input `abc.defg`, the line `abc` and i32[305]: three bytes copied, then the five
 -- bytes `defg` and the newline. A `break` that only ended the iteration copies `abcdefg`; one that
--- dropped the input instead of handing it back does not check.
+-- consumed the input instead of handing it back does not check.
 main -> i32 =
   let mut n = 0;
   for b in bytes(&mut stdin) {

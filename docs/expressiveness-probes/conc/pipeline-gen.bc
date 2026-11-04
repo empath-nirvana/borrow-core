@@ -1,5 +1,5 @@
 -- Stage pipeline as generators composed with |>: stage1 produces 1..n, stage2 squares (and
--- keeps a running count in its own state), stage3 drops odd values; the consumer sums.
+-- keeps a running count in its own state), stage3 consumes odd values; the consumer sums.
 include yield
 
 fn stage1(n: i32) -> 1 with Yield[i32] =

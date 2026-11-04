@@ -6,7 +6,7 @@ import Frontend.Check.Pin
 `Imm @a A` and `[Imm @a A]` are linear with a **derived copy** (`DerivedCopy`, `Core/Classes.lean`):
 the kernel's constant `copy` (`CDerives.copy`, at `axCopyTy`) or `array_copy` (`CDerives.arrCopy`,
 under `bangE`) makes two of one. A second use of such a variable is its derived copy, which the
-checker inserts, as it inserts a derived drop (SPEC §12); the split admits a slot both parts use
+checker inserts, as it inserts a consume (SPEC §12); the split admits a slot both parts use
 only at a persistent type.
 
 **The rule** (`docs/scope/746-imm-copy.md` §1). At a node whose context the checker splits between
@@ -63,7 +63,7 @@ where
 any binder's (`Env.pushOwn`) and the other copy hidden and not owed. -/
 def Env.copyAt (E : Env) (T : List CVTy) (i : Nat) (x : String) (A : CVTy) (fst : Bool) : Env :=
   let E₀ := (E.minus (oneL T i)).push none
-  let own := !A.persistent && hasDtorB A
+  let own := !A.persistent && consumableB A
   if fst then { E₀ with vars := none :: some x :: E₀.vars, own := false :: own :: E₀.own }
   else { E₀ with vars := some x :: none :: E₀.vars, own := own :: false :: E₀.own }
 
@@ -138,8 +138,8 @@ theorem copyIt_erase {E : Env} {sp : Span} {x : String} {i : Nat} {A : CVTy}
           · simp [throw, throwThe, MonadExceptOf.throw] at h
       · simp [throw, throwThe, MonadExceptOf.throw] at h
 
-/-- `copyIt` where each copy is used or dropped by its part, an internal error otherwise (a copy
-absorbed and never dropped). A part mentions `x` only
+/-- `copyIt` where each copy is used or consumed by its part, an internal error otherwise (a copy
+absorbed and never consumed). A part mentions `x` only
 at `var` leaves, each a use its masks keep, so the rule fires exactly where the split would give
 the slot to both parts: the trigger is the split's own masks, read before the parts are checked.
 -/

@@ -350,7 +350,7 @@ theorem kappaFinSelf : KappaFinSelf := by
 outer row `Σ` and the exit's argument `X`: `F` is not `⊤`, it is below `Σ` (D3) and free of `Div`
 (decision 69), each capturable operation of `Σ_W` has a cancel row above its own `⋈ F` (`[then]`'s
 `hfin`, `κ.2 ()` being the finaliser), the errors pending at the finaliser are persistent where
-`F` has an unrestricted operation (`[then]`'s `hP`), and `X` drops where `F` has an operation
+`F` has an unrestricted operation (`[then]`'s `hP`), and `X` consumes where `F` has an operation
 with weakening: `z : X` is held across `κ.2 ()`, which may raise or be captured and cancelled
 (`[let]`'s `hW`).  `[spec §27, §51]` -/
 def LastFinOK (S SW : Row) (F : CTy) (X : VTy) : Prop :=
@@ -410,7 +410,7 @@ theorem find_not_unr {G S : Row} (hGS : RowLe G S) (hSu : ¬ S.UnrD) {n i : UInt
 
 /-- **The finaliser frame's answer**: `inl y` resumes `κ` at `y`; `inr z` cancels `κ`, at the
 table of its cancel row `G`, beside `z`, which the cancel leaves held (left behind where `G` may
-raise or be captured, so `X` drops there), and then runs the exit at `z`.  `[spec §51]` -/
+raise or be captured, so `X` consumes there), and then runs the exit at `z`.  `[spec §51]` -/
 theorem last_cont {δ : LSub} {T' : OpTab} {Px' : Table} (hPx' : Px'.Mono) {G : Row}
     (hGT : (Row.tab G δ).Le T') (hGu : ∀ n i o, Row.find G n i = some o → o.q ≠ .unr)
     {X : VTy} (hXd : G.Cancels → X.OwnFree) {Qout : List SRec → Val → WProp} {en : OpEnt}

@@ -296,7 +296,7 @@ theorem CactusInvT.part {w : TWd} {bs : List (TBranch w.K)} {ns : List Life}
 /-- **A view at a lender's location carries the lender's frame lifetime and nothing else.** In a
 world of the typed world, a part `ρ` of it that holds a view at the location of a record proper
 `p` framed at `α` holds a view whose every lifetime is `α`. A `mut` cell there is refused by
-`NoMutT`; an `imm` cell of `ρ` is in `ag(W)` with its lifetimes kept (`○` drops none), and
+`NoMutT`; an `imm` cell of `ρ` is in `ag(W)` with its lifetimes kept (`○` removes none), and
 `FrameLifeT` puts every lifetime of `ag(W)`'s view at `p.le` at `α`. -/
 theorem view_at_lender {K : WCactus} {Θ : CodeTy} {tc : TChoice K} {W ρ o : TRes K}
     {ps rs : List (FrameRecT K)} {p : FrameRecT K} {α : Life}

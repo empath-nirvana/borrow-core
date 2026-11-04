@@ -7,7 +7,7 @@ main : F 1 =
   r <- return (alloc[B] (inl ()));
   q <- return (withbor1['x, B, 1 => 1] r
          (thunkv Fun 'x < top. return (thunkv fun (b : imm 'x B) ->
-            return (boxed['x] (thunkv fun (u : 1) -> let () = u; return (forget_imm['x, B] b))))));
+            return (boxed['x] (thunkv fun (u : 1) -> let () = u; return (release_imm['x, B] b))))));
   let (r2, k) = q;
   y <- return (k ());
   let () = y;

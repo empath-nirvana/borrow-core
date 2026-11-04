@@ -116,7 +116,7 @@ der = der.replace("--@CORE_DERIVED@", "\n".join(rename(derived)))
 
 fun = (TMPL / "PinFundamental.tmpl.lean").read_text()
 fcases = rename(fund)
-# drop the signature and `induction` line: the template supplies them
+# consume the signature and `induction` line: the template supplies them
 start = next(k for k, l in enumerate(fcases) if l.strip() == "induction h with") + 1
 fun = fun.replace("--@CORE_CASES@", "\n".join(fcases[start:]))
 fun = fun.replace("--@OFC_CASES@", "\n".join(ofc))
@@ -264,7 +264,7 @@ EXTRA = {"effHandleV": [("ks", "List ClauseKinds.HKind"), ("site", "Option HSite
          "effHandleL": [("site", "Option HSite"), ("inside", "ClauseKinds.HIn")]}
 
 # Premises the typed rule adds to its rule's, which pin a field of `EXTRA` to the node's children:
-# `inside` is the handled computation's frames. The projection to `CDerives` drops them.
+# `inside` is the handled computation's frames. The projection to `CDerives` consumes them.
 EXTRA_PREM = {r: [("hins", "inside = Expr.hin e")] for r in ("effHandleV", "effHandleVB", "effHandleT",
                                                          "effHandleL")}
 
@@ -538,7 +538,7 @@ def typed_rule(r, fieldsof):
                 if nm not in {q for q, _ in EXTRA_PREM.get(r.name, [])}:
                     args.append(v)
                 if r.split and ty == r.split[1]:
-                    pat.append(f"a{n}")  # the masks' premises, which the projection drops
+                    pat.append(f"a{n}")  # the masks' premises, which the projection consumes
                     pat.append(f"a{n + 1}")
                     n += 2
             else:
@@ -584,7 +584,7 @@ def typed_explicit(r):
 
 
 def to_p_case(ra, rp):
-    """`TDerivesAt.toP`'s case at `ra`: the same node in `TDerivesP`, its tie dropped."""
+    """`TDerivesAt.toP`'s case at `ra`: the same node in `TDerivesP`, its tie consumed."""
     ea = typed_explicit(ra)
     pat = {nm: f"a{k}" for k, (nm, _) in enumerate(ea)}
     ihs = {nm: f"ih{k}" for k, nm in enumerate([nm for nm, prem in ea if prem])}

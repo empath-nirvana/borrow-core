@@ -8,7 +8,7 @@
 --
 -- Answer: (i32[100], i32[7]): the table holds 10 * i, and 40 + 30 + 20 + 10 = 100; the cell goes
 -- from 3 to 7 in 4 steps, and comes back holding 7. A loop that lent the owner once and lost it
--- could not return it; a step that dropped its state gives 40; a `mut` step that did not store
+-- could not return it; a step that consumed its state gives 40; a `mut` step that did not store
 -- gives 3.
 
 include lend

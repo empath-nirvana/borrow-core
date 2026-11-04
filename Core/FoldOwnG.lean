@@ -14,7 +14,7 @@ key of element type `S`. The results `R_b` are any value types (`algsOf`).
   handles: the call of a `μ` key `b` on a value `w` of its closed type is `s (tag b w)`, and
   `IHL s n K r` says every such call meets its spec at every measure below `(n, K, r)`,
   lexicographically: `n` bounds the value's cells (`dsize`), `K` its size, `r` the key's rank,
-  the size of its body. The measure drops at every call: at a variable after `⊗`/`⊕`, the value
+  the size of its body. The measure consumes at every call: at a variable after `⊗`/`⊕`, the value
   is smaller, since a body's head is not a variable (`Hd`); after `Ref` or an array slot, the
   content has fewer cells (`dsize_tail_lt`); at an inner `μ`, at the same value, the inner body
   is smaller.

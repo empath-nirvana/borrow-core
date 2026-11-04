@@ -130,7 +130,7 @@ main : F i32 =
 
 `(unbang sum_list) ['x]` instantiates the fold at the borrow's lifetime. The list and its cell
 are still owned by `r2` at the end, and the checker frees them (see
-[Implicit destructors](implicit-destructors.md)).
+[Implicit consumes](implicit-consumes.md)).
 
 ## Updating in place: `fold_reuse`
 

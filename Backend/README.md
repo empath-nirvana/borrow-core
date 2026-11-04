@@ -24,7 +24,7 @@ from it (`Clos/Types.lean`), and every stage from the flat IR on lays values out
     scripts/compile-scaling.sh                 compile time against program size, per stage
 
 Every stage prints the same report: `main`'s value, then `live N`, the number of objects live
-after the value has been dropped (`Backend.report`, `Backend/Value.lean`). Values print in
+after the value has been consumed (`Backend.report`, `Backend/Value.lean`). Values print in
 the syntax of `docs/syntax-core.md` (`inl`, `inr`, pairs, `()`, `i32[n]`/`i64[n]` unsigned);
 a function prints as `<fun>` and a location as `<loc>`. A `main` whose value is codata (a thunk
 of a `nu` type such as `delay`, `stream` or `iter`) prints `<fun>`; the corpus drives such values
@@ -58,7 +58,7 @@ ended or suspended lend, an aliased access, an owner access while lent, and a le
 ends. `scripts/falsify.sh` runs every accepted program the four ways and requires one output and
 `live 0`; `bcc kernel negatives` are untyped terms that must trip each check.
 No stage optimizes beyond choosing layouts, defunctionalizing closures, calling known codes
-directly, compiling `let` as a binding, cancelling the copy and drop inside `swap`, compiling
+directly, compiling `let` as a binding, cancelling the copy and consume inside `swap`, compiling
 the Z combinator's fixed point natively, building codata thunks eagerly, merging equal codes,
 compiling owned folds by pointer reversal (Stack) and placing scoped cells in frame slots
 (Representation). The WAT printer and the runtime are the only
@@ -71,15 +71,15 @@ application's argument before its function. A `λ` becomes `clos c xs`, code `c`
 variables `xs` captured by value; a β-redex `(λx. b) a`, the erasure's `let`, is `letv x a b`
 and makes no closure. A primitive applied to its argument is `prim`; used as a value it is
 η-expanded into closure code. The axiom `swap ≜ λx.λy. let z = load x; store x y; (x, z)` is the
-primitive `swap`, which moves the old contents out where the axiom copies and then drops them.
+primitive `swap`, which moves the old contents out where the axiom copies and then consumes them.
 
 Two more shapes are recognized, as `swap` is. **The Z combinator's fixed point**
 `selfV B = λv. X X v`, `X = λx. (λself. λx. B) (λv. x x v)` (`Core/Fix.lean`), with `B` closed
 under `self` and `x`, is one code `c`, `λx. B[self := clos c []]`: it captures nothing, and
 `self` is a closure of its own code, built where it is used (it is never captured, copied or
-dropped), so the recursion is a call of `c` by its code index. Applied to an argument,
+consumed), so the recursion is a call of `c` by its code index. Applied to an argument,
 `selfV B a` is that call, not a `let`. Every fixed point of the core is built this
-way: `fold_imm`, `fold_own`, `fold_reuse`, the general owned fold `foldOwnG` of the destructors
+way: `fold_imm`, `fold_own`, `fold_reuse`, the general owned fold `foldOwnG` of the consumes
 outside `FShape` (SPEC §6), `unfold` (so `ν`, loops, `fixd`, streams and iterators) and the
 programs of `Core/`. **η** `λv. y v` of a variable `y` is `y` itself, as
 `unfold`'s map at a recursive position forwards the rest of the codata: no closure wraps a closure
@@ -121,7 +121,7 @@ search:
   `inr`, and each frame it suspends through passes the `inr` on.
 - The resume code takes `inl y` to resume: a switch on the state, then the point's continuation
   with its frames rebuilt around `y`. It takes `inr ()` to cancel: the callee's `k` first, then
-  the point's finalisers, innermost first, every other variable dropped; the first error a
+  the point's finalisers, innermost first, every other variable consumed; the first error a
   finaliser raises is kept, and `κ`'s cancel re-raises it at the canceller (`reraise`).
 - Which codes may suspend is the least solution of the operations their bodies and callees may
   perform, over the closure flow. Codes called at one site share a convention, and so do a code
@@ -143,7 +143,7 @@ representation of Rust's `Result` and `?`:
 - A code that raises answers a sum: `inl v` when it returns `v`, `inr p` when it raises `p`. The
   codes called at one site share a convention: a class with a raising code answers sums.
 - A term that may raise is computed as such a sum. `let x = e in b`, `e` raising, is
-  `case e {inl x ⇒ b | inr p ⇒ drop (b's variables); inr p}`; a term that cannot raise is not
+  `case e {inl x ⇒ b | inr p ⇒ consume (b's variables); inr p}`; a term that cannot raise is not
   touched, so a call branches exactly when its callee may raise, and a tail call passes the sum
   on with no branch. A `catch n` cases on its body's sum (a compare of the name when the body
   raises more than one), and passes any other name on. A finaliser frame runs its finaliser on
@@ -199,7 +199,7 @@ words, returning the answer's words. A call is a direct call of the code when it
 closure type's union has one code, or the flow analysis finds one code of it at the call; the
 loop driver's call too), and otherwise a call of the type's dispatcher `apply`, a `switch` on the closure's tag whose cases
 tail-call the codes. A call in return position whose callee answers the caller's words is a tail
-call. `case` is an `if` on the tag word. Copy, drop, the
+call. `case` is an `if` on the tag word. Copy, consume, the
 printer, the array primitives, the counted loop and the loop driver are flat-IR functions
 generated per layout type; host operations are inline. Every local is set once, where it is made,
 so a `let` whose value's words are already in locals (a variable, a component, a call's results)
@@ -313,7 +313,7 @@ Wasm runtime's specification and algorithm (a size word before each range, a fre
 below 1024 words, a bump arena of 1 MiB chunks; a larger range is a `malloc` of its own, and is
 given back to `free`), so `live` and `bcc-counts` agree with the flat IR and Wasm; and the POSIX
 platform: `read(2)`/`write(2)` on the descriptors, unbuffered as WASI's are, `SIGPIPE` ignored so
-a write's error is dropped as Wasm's is; the arguments' stream from `argv` (counted as one
+a write's error is consumed as Wasm's is; the arguments' stream from `argv` (counted as one
 allocation at its first read, as `$args`); `clock_gettime(CLOCK_MONOTONIC)` and `nanosleep`; the
 exit status `bc_status` sets, returned from `main` once the entry returns. `main` runs the entry
 on a thread of a 512 MiB stack (`BC_STACK` sets another), past Wasm's 64 MiB, so the recursions
@@ -423,7 +423,7 @@ Not objects:
   (`Flat/Syntax.lean`, `dataBase`): the Wasm target's is a data segment from `16384`. A literal is then two
   words and no object, and every literal is one code, so a call of one is direct. A literal
   view's array (the borrow block on a literal: `tab` of the literal, lent to a callback that
-  first copies the family, then dropped; `litView?`) is `litTab`: `(address, n)` in the data when
+  first copies the family, then consumed; `litView?`) is `litTab`: `(address, n)` in the data when
   the tabulator is `litCode`'s closure and `n` at most the literal's length, with nothing
   allocated, and `tab` otherwise. `$free` skips an address below the heap.
 
@@ -490,8 +490,8 @@ What does not:
   reformulation where the algebra allows, would remove it.
 - **Owned folds over non-linear shapes** (trees, with a recursive position on both sides of a
   `⊗`) or whose child is reached through more than one pointer recurse natively.
-- **The general owned fold** `foldOwnG` (SPEC §6), the destructor of a `μ` outside `FShape`
-  (`Core/Dtor.lean`), recurses natively. Its term is one fixed point whose body dispatches on the
+- **The general owned fold** `foldOwnG` (SPEC §6), the consume of a `μ` outside `FShape`
+  (`Core/Consume.lean`), recurses natively. Its term is one fixed point whose body dispatches on the
   tag of the key it is called at (Bekič's simultaneous fixed point), so each call is a direct call
   of that one code and a `case` on the tag word; each key's traversal is a code of its own. An
   array key's step is a `count` loop of tail calls that moves each element out (`swap` with
@@ -523,15 +523,15 @@ typed layouts:
   that copies that code's captured values; so a closure whose captures are all trivial, as a `!`
   closure's persistent captures are unless they hold a boxed field or a recursive closure, is
   copied as plain words.
-- **Discarding drops.** A variable that a path does not use is dropped where its scope starts
+- **Discarding consumes.** A variable that a path does not use is consumed where its scope starts
   on that path: an unused binder, or in a `case` arm, what only the other arm uses. At a
-  trivial type a drop is nothing; otherwise the type's generated drop frees each heap
+  trivial type a consume is nothing; otherwise the type's generated consume frees each heap
   environment and boxed field, a closure's by a `switch` on its tag.
 - **Cells.** `alloc v` allocates a cell holding `v`'s words; `load` copies the contents (the
-  source copies the value out); `store` drops the old contents; `free` moves them out and frees
+  source copies the value out); `store` consumes the old contents; `free` moves them out and frees
   the cell; `swap` moves the old contents out and the new in. A copy copies a location as a
-  word, and a drop leaves cells alone: cells are freed only by `free`. So a location to a freed
-  cell may still be held, copied and dropped (a finaliser frees a cell a dropped closure still
+  word, and a consume leaves cells alone: cells are freed only by `free`. So a location to a freed
+  cell may still be held, copied and consumed (a finaliser frees a cell a consumed closure still
   names); the closure-IR interpreter records the freed cells, and any other address that is not
   live is a fault.
 
@@ -540,9 +540,9 @@ the closure-IR interpreter, which keeps the uniform boxed objects, checks this a
 flat IR follows the same consumption at typed layouts. For a closure union: the captured words
 after its tag are owned by that union value alone, and the padding words own nothing; building
 moves the captures in, a call moves them out to the code (so a linear closure's captures are
-moved, never shared), a copy copies them by the tag, and a drop drops them by the tag. Persistent types (SPEC §10) hold no
+moved, never shared), a copy copies them by the tag, and a consume consumes them by the tag. Persistent types (SPEC §10) hold no
 resource, so copying a persistent value copies no resource. After `main`'s value is printed and
-dropped, the live count is 0 exactly when the source run ends with empty memory.
+consumed, the live count is 0 exactly when the source run ends with empty memory.
 
 ## The allocator (trusted)
 
@@ -711,7 +711,7 @@ is a closure of the other with the same captured values. Building a codata thunk
 that the call made early, `f s₀` of a known code whose body only builds a value, cannot fail and
 reads or writes no memory but that value, so it commutes with everything between the thunk's
 construction and its first observation; the thunk's captures are consumed by it as either
-projection would consume them, and a thunk that is dropped unobserved drops the same values
+projection would consume them, and a thunk that is consumed unobserved consumes the same values
 (the call's result holds them). η of a thunk of `&` for a variable is the same step as η above.
 Removing unbuilt codes from the unions needs the reachability argument (a closure is built only
 by a `clos` of a code whose closure is built, or by `main`).
@@ -790,7 +790,7 @@ one closed clause; one whose clause captures values is a state machine (its capt
 evidence is open). A clause is tail-resumptive when every path through it, through the arms of
 its `case`s and the bodies of its `let`s, ends in one `k.resume y` and uses `κ` nowhere else, and
 the clause neither suspends nor raises (`Capture`'s `tailClause?`, SPEC §19). A path that raises
-out of the clause, cancels, drops or stores `κ`, resumes twice, or resumes under a `catch` or
+out of the clause, cancels, consumes or stores `κ`, resumes twice, or resumes under a `catch` or
 finaliser frame makes the clause a state machine; a raise caught inside the clause is a branch in
 it. The resume commutes out of the arms (`Core/Handlers.lean`, `tail_resumes`). `bcc-counts
 --sites` reports the operations lowered so (`tail-resumptive [(name, op)]`), the codes made

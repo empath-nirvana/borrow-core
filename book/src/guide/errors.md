@@ -68,7 +68,7 @@ is an error. A row may also give the error's type where nothing else does.
 
 ## What happens to values when an error leaves
 
-An error unwinds: what the code it leaves owned is freed by its derived drops, and every borrow
+An error unwinds: what the code it leaves owned is freed by its derived consumes, and every borrow
 it was inside ends, the place going back to its owner. Here the cell that `checked` holds when it
 raises is freed on the way out, and the run ends with nothing live:
 
@@ -76,7 +76,7 @@ raises is freed on the way out, and the run ends with nothing live:
 include textio
 include fail
 
--- Holds a cell while it checks `x`; an error frees the cell by its derived drop.
+-- Holds a cell while it checks `x`; an error frees the cell by its consume.
 fn checked(x: i32) -> i32 with Fail[i32] =
   let c = alloc(x * 10);
   if x < 0 { raise(x) };
@@ -90,7 +90,7 @@ main -> 1 =
 -- output: 40 0
 ```
 
-A value with no derived drop (a capability, a one-shot closure that must be called, a
+A value that is not consumable (a capability, a one-shot closure that must be called, a
 `must_close` value) can't be live where an error may leave, and the checker names it
 ([What an abort does](linear.md#what-an-abort-does)). An error's payload is plain data, borrows or
 `!` values.

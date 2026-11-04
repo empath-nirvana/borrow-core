@@ -257,7 +257,7 @@ theorem ewp_handleS (α : Life) (Tin Tout : OpTab) (n : UInt32) (hn0 : n ≠ 0)
         exact (hcont ls'' he).2 hq P hP
   · obtain ⟨⟨rfl, hK₁, hT, ha⟩, ρa, ρn, hcan, ⟨hPA, hnA⟩, hnn⟩ := pure_sep_iff.mp hp
     by_cases hm : m = n
-    · -- `[unwind]` at the handler's name: the clause; the continuation is dropped
+    · -- `[unwind]` at the handler's name: the clause; the continuation is consumed
       subst hm
       obtain ⟨c, hc, -, hab⟩ := hop i en hT
       refine wpG_head (fun μ => Head.hunwind μ m i qs hr hs c v K₁ hc hK₁) rfl _ _ σ ?_

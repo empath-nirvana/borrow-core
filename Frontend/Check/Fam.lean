@@ -9,7 +9,7 @@ the types `T` of every slot in scope and reports two masks over the slots:
 
 * `u`, the slots it **uses**: the variables it consumes;
 * `w`, the slots it may **absorb**: live slots it can be given without using them. A
-  persistent slot can be dropped at a leaf (`Ctx.DeadP.drop`, `Ctx.SoloP.skip`); every slot
+  persistent slot can be consumed at a leaf (`Ctx.DeadP.weaken`, `Ctx.SoloP.skip`); every slot
   can be absorbed by `⟨⟩` (`topI` holds at any context) and by `absurd` (`zeroE`'s `Γ₂`).
 
 It returns a derivation at **every** liveness `L` with `u ⊆ L ⊆ u ∪ w` (`Btw u w L`): that
@@ -112,7 +112,7 @@ theorem btw_none_deadP : ∀ {T : List VTy} {L : List Bool}, Btw (noneL T) (pers
       | false => exact .cons (btw_none_deadP h)
       | true =>
           have : A.persistent = true := by simpa using h₂ rfl
-          exact .drop this (btw_none_deadP h)
+          exact .weaken this (btw_none_deadP h)
 
 theorem btw_none_dead : ∀ {T : List VTy} {L : List Bool}, Btw (noneL T) (noneL T) L →
     Ctx.Dead (mkCtx T L)

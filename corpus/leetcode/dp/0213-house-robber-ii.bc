@@ -31,11 +31,11 @@ fn rob<'a>(nums: array_imm 'a i32) -> i32 =
   if n == 1 { let r = at(nums, 0, 0); r } else {
     let (nums, w) = array_copy['a, i32] nums;
     let a = match split_at(nums, n - 1) {
-      inl (h, t) -> array_forget['a, i32](t); rob_row(h)
+      inl (h, t) -> array_release['a, i32](t); rob_row(h)
     | inr h -> rob_row(h)
     };
     let b = match split_at(w, 1) {
-      inl (h, t) -> array_forget['a, i32](h); rob_row(t)
+      inl (h, t) -> array_release['a, i32](h); rob_row(t)
     | inr t -> rob_row(t)
     };
     if a < b { b } else { a }
@@ -46,16 +46,16 @@ fn rob<'a>(nums: array_imm 'a i32) -> i32 =
 fn case_at<'t>(t: text 't, pos: i32) -> (buf i32 * i32) + 1 =
   match split_at(t, pos) {
     inl (h, rest) ->
-      array_forget['t, u8](h);
+      array_release['t, u8](h);
       match next_line(rest) {
         inl (l, r) ->
-          array_forget['t, u8](r);
+          array_release['t, u8](r);
           let (l, m) = array_copy['t, u8] l;
           let c = fold_i32s(l, !{ (x, b) -> let (b, _) = push(b, x); b }, box buf[i32](16));
           inl (c, pos + len(m) + 1)
       | inr u -> inr ()
       }
-  | inr t -> array_forget['t, u8](t); inr ()
+  | inr t -> array_release['t, u8](t); inr ()
   }
 
 -- Each line of the input a case. The number of cases.

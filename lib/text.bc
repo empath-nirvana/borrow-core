@@ -42,7 +42,7 @@ fn push_str<'a>(s: string, t: text 'a) -> string * 1 =
       let (a, _) = array_replace[u8] (a, n + i, at(w, i, 0));
       (a, (t, n)) },
     m, 0, (a, (t, n)));
-  array_forget['a, u8](t);
+  array_release['a, u8](t);
   ((a, n + m), ())
 
 -- The bytes of a literal appended. Allocates when the string grows (`reserve`).
@@ -123,9 +123,9 @@ fn eq_lit<'a>(t: text 'a, l: lit) -> bool =
         let same = at(w, i, 0) == f(i);
         (t, (f, r && same)) },
       m, 0, (t, (f, true)));
-    array_forget['a, u8](t);
+    array_release['a, u8](t);
     r
-  } else { array_forget['a, u8](t); false }
+  } else { array_release['a, u8](t); false }
 
 -- ### UTF-8
 
@@ -169,17 +169,17 @@ fn utf8_error<'a>(t: text 'a) -> i32 + 1 =
           } else { (t, (next, inr ())) }
       } },
     len(u), 0, (t, (0, inr ())));
-  array_forget['a, u8](t);
+  array_release['a, u8](t);
   r
 
 -- The bytes as text, if they are UTF-8; else it raises the index of the first byte that is not.
 -- No copy.
 fn str_from_utf8<'a>(v: array_imm 'a u8) -> text 'a with Fail[i32] =
   let (v, w) = array_copy['a, u8] v;
-  match utf8_error(w) { inl e -> array_forget['a, u8](v); raise(e) | inr u -> v }
+  match utf8_error(w) { inl e -> array_release['a, u8](v); raise(e) | inr u -> v }
 
 -- A buffer of bytes as a string, in place, if they are UTF-8; else it raises the index of the
--- first byte that is not, and the buffer is dropped (an error holds nothing owned, SPEC §19).
+-- first byte that is not, and the buffer is consumed (an error holds nothing owned, SPEC §19).
 -- Provisional: the error should hand the buffer back once an abortive operation's payload may
 -- be linear (#215).
 fn from_utf8(b: buf u8) -> string with Fail[i32] =
@@ -213,18 +213,18 @@ fn count_chars<'a>(t: text 'a) -> i32 =
       let n = if is_cont(at(w, i, 0)) { n } else { n + 1 };
       (t, n) },
     len(u), 0, (t, 0));
-  array_forget['a, u8](t);
+  array_release['a, u8](t);
   n
 
 -- The first character and the rest of the view, or `inr ()` for the empty view.
 fn split_char<'a>(t: text 'a) -> i32 * text 'a + 1 =
   let (t, u) = array_copy['a, u8] t;
-  if len(u) == 0 { array_forget['a, u8](t); inr () } else {
+  if len(u) == 0 { array_release['a, u8](t); inr () } else {
     let (t, w) = array_copy['a, u8] t;
     let (c, k) = char_at(w, 0);
     match split_at(t, k) {
-      inl (h, r) -> array_forget['a, u8](h); inl (c, r)
-    | inr r -> array_forget['a, u8](r); inr ()
+      inl (h, r) -> array_release['a, u8](h); inl (c, r)
+    | inr r -> array_release['a, u8](r); inr ()
     }
   }
 
@@ -232,7 +232,7 @@ fn split_char<'a>(t: text 'a) -> i32 * text 'a + 1 =
 -- observation decodes one character; a view of `n` bytes finishes within `n + 1` observations.
 fn chars<'a>(t: text 'a) -> U (iter i32 1 1) =
   f <- return (unbang (unfold[iter i32 1 1, text 'a]
-    (!thunkv fun (v : text 'a) -> < split_char(v), array_forget['a, u8](v) >)));
+    (!thunkv fun (v : text 'a) -> < split_char(v), array_release['a, u8](v) >)));
   thunkv nu_in < (nu_out (force f t)).1, (nu_out (force f t)).2 >
 
 -- ### Splitting and searching
@@ -244,7 +244,7 @@ fn split_once<'a>(t: text 'a, sep: u8) -> text 'a * text 'a + text 'a =
   match find(u, sep, eq_u8) {
     inl k -> match split_at(t, k) {
                inl (h, r) -> match split_at(r, 1) {
-                               inl (s, r) -> array_forget['a, u8](s); inl (h, r)
+                               inl (s, r) -> array_release['a, u8](s); inl (h, r)
                              | inr r -> inl (h, r) }
              | inr t -> inr t }
   | inr u -> inr t
@@ -254,7 +254,7 @@ fn split_once<'a>(t: text 'a, sep: u8) -> text 'a * text 'a + text 'a =
 -- line without a newline is a line.
 fn next_line<'a>(t: text 'a) -> text 'a * text 'a + 1 =
   let (t, u) = array_copy['a, u8] t;
-  if len(u) == 0 { array_forget['a, u8](t); inr () } else {
+  if len(u) == 0 { array_release['a, u8](t); inr () } else {
     match split_once(t, b'\n') {
       inl (l, r) -> inl (l, r)
     | inr t -> inl (t, slice_empty_imm['a, u8])
@@ -266,7 +266,7 @@ fn next_line<'a>(t: text 'a) -> text 'a * text 'a + 1 =
 -- `n + 1` observations.
 fn lines<'a>(t: text 'a) -> U (iter (text 'a) 1 1) =
   f <- return (unbang (unfold[iter (text 'a) 1 1, text 'a]
-    (!thunkv fun (v : text 'a) -> < next_line(v), array_forget['a, u8](v) >)));
+    (!thunkv fun (v : text 'a) -> < next_line(v), array_release['a, u8](v) >)));
   thunkv nu_in < (nu_out (force f t)).1, (nu_out (force f t)).2 >
 
 -- The lines of `t` folded into a state by `f`, in order: a counted loop over the view's length,
@@ -294,7 +294,7 @@ fn prefix_len<'a>(t: text 'a, p: !(u8 => bool)) -> i32 =
       let holds = p(at(w, i, 0));
       if go && holds { (t, (p, (k + 1, true))) } else { (t, (p, (k, false))) } },
     len(u), 0, (t, (p, (0, true))));
-  array_forget['a, u8](t);
+  array_release['a, u8](t);
   k
 
 -- The number of trailing bytes of `t` that `p` holds of.
@@ -308,14 +308,14 @@ fn suffix_len<'a>(t: text 'a, p: !(u8 => bool)) -> i32 =
       if go && holds { (t, (p, (n, (k + 1, true)))) }
       else { (t, (p, (n, (k, false)))) } },
     n, 0, (t, (p, (n, (0, true)))));
-  array_forget['a, u8](t);
+  array_release['a, u8](t);
   k
 
 -- `t` without its leading bytes that `p` holds of: a sub-view.
 fn skip_while<'a>(t: text 'a, p: !(u8 => bool)) -> text 'a =
   let (t, u) = array_copy['a, u8] t;
   match split_at(t, prefix_len(u, p)) {
-    inl (h, r) -> array_forget['a, u8](h); r
+    inl (h, r) -> array_release['a, u8](h); r
   | inr t -> t
   }
 
@@ -324,7 +324,7 @@ fn rskip_while<'a>(t: text 'a, p: !(u8 => bool)) -> text 'a =
   let (t, u) = array_copy['a, u8] t;
   let (t, w) = array_copy['a, u8] t;
   match split_at(t, len(u) - suffix_len(w, p)) {
-    inl (h, r) -> array_forget['a, u8](r); h
+    inl (h, r) -> array_release['a, u8](r); h
   | inr t -> t
   }
 
@@ -348,14 +348,14 @@ fn find_str<'a, 'b>(t: text 'a, p: text 'b) -> i32 + 1 =
           let (t, w) = array_copy['a, u8] t;
           let (p, x) = array_copy['b, u8] p;
           match split_at(w, i) {
-            inl (h, rest) -> array_forget['a, u8](h);
+            inl (h, rest) -> array_release['a, u8](h);
                              if starts_with(rest, x, eq_u8) { (t, (p, inl i)) } else { (t, (p, inr ())) }
-          | inr w -> array_forget['a, u8](w); array_forget['b, u8](x); (t, (p, inr ()))
+          | inr w -> array_release['a, u8](w); array_release['b, u8](x); (t, (p, inr ()))
           }
       } },
     starts, 0, (t, (p, inr ())));
-  array_forget['a, u8](t);
-  array_forget['b, u8](p);
+  array_release['a, u8](t);
+  array_release['b, u8](p);
   r
 
 -- ### Parsing
@@ -382,10 +382,10 @@ type ParseError = 1 + (u8 + 1)
 fn parse_i32<'a>(t: text 'a) -> i32 with Fail[ParseError] =
   let (t, u) = array_copy['a, u8] t;
   let neg = at(u, 0, 0) == b'-';
-  let t = if neg { match split_at(t, 1) { inl (h, r) -> array_forget['a, u8](h); r | inr t -> t } }
+  let t = if neg { match split_at(t, 1) { inl (h, r) -> array_release['a, u8](h); r | inr t -> t } }
     else { t };
   let (t, w) = array_copy['a, u8] t;
-  if len(w) == 0 { array_forget['a, u8](t); raise(inl ()) } else {
+  if len(w) == 0 { array_release['a, u8](t); raise(inl ()) } else {
     let mut n = 0;
     for x in t {
       let d = *x;

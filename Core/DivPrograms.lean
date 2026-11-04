@@ -141,7 +141,7 @@ theorem dAt_loopB :
         (.var (.there (.there (.there (.there (.here .nil)))))))) ?_
     exact .app (.right (.left (.left (.dead (.dead (.dead .nil))))))
       (.force (C := .arr (.tensor (iterStepTy Sg St I St) St) (CTy.effOf Sg (.sum I St)))
-        (.there (.here (.drop unit_persistent (.cons (.cons (.cons .nil)))))))
+        (.there (.here (.weaken unit_persistent (.cons (.cons (.cons .nil)))))))
       (.here (.cons (.cons (.cons (.cons (.cons .nil))))))
   · -- *close*: `inr c`
     exact .effSub (RowLe.nil Sg) (.ret (.sumI₂ (.var (.skip unit_persistent

@@ -57,8 +57,8 @@ fn longest<'t>(s: text 't) -> text 't * (i32 * i32) =
 -- The run of `s` of length `k` at `i`.
 fn sub<'t>(s: text 't, i: i32, k: i32) -> text 't =
   match split_at(s, i) {
-    inl (h, r) -> array_forget['t, u8](h);
-      match split_at(r, k) { inl (w, e) -> array_forget['t, u8](e); w | inr r -> r }
+    inl (h, r) -> array_release['t, u8](h);
+      match split_at(r, k) { inl (w, e) -> array_release['t, u8](e); w | inr r -> r }
   | inr s -> s
   }
 

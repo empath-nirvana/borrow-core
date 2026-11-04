@@ -9,19 +9,19 @@ more rule:
 
     drop:   Γ = Γ₁, Γ₂    Γ₁ = x : T    T droppable    Γ₂ ⊢ e ⤳ e' : C
             ───────────────────────────────────────────────────────────
-            Γ ⊢ e ⤳ (dtorE T x; e') : C
+            Γ ⊢ e ⤳ (consumeE T x; e') : C
 
 and every rule of `CDerives` with a subderivation repeated at `ADerives` premises, so a discard
 may sit under any former: at the end of a scope, in one arm of a `case`, inside a `λ`, a `thunk`
 or a callback. `core` embeds every `CDerives` derivation unchanged.
 
 **The elaboration theorem** (`ADerives.elab`): the elaborated term is a `CDerives` derivation.
-The `drop` case is `unitE` over `lolliE` of `dtor_wf`; every other case is the rule it copies.
+The `drop` case is `unitE` over `lolliE` of `consume_wf`; every other case is the rule it copies.
 No case inverts `CDerives` (decision 21), and nothing is added to `CDerives` (decision 19).
 Soundness and leak freedom are `fundamentalC` and `adequacyC` applied to the elaborated term
 (`fundamentalA`, `adequacyA`, `runsA`): no model change and no new invariant.
 
-**Borrows** (`owner_not_shared`, `dtorE_imm`, `dtorE_mut`). A lent owner is not in scope during
+**Borrows** (`owner_not_shared`, `consumeE_imm`, `consumeE_mut`). A lent owner is not in scope during
 the loan: `withbor r cb` takes `r` by a context split, and a split sends a live `Ref A` to one
 side only, so the callback's context, where a `drop` would have to find it, has it dead. A
 borrow handed to the callback is droppable, and its destructor is `forget`: ending a loan early
@@ -44,8 +44,8 @@ inductive ADerives : LifeCtx → Ctx VTy → Expr → Expr → Jdg → Prop wher
   | core {Δ Γ e j} (h : CDerives Δ Γ e j) : ADerives Δ Γ e e j
   /-- Discard a droppable live slot before a computation. -/
   | drop {Δ Γ Γ₁ Γ₂ i T e e' C} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hx : Ctx.SoloP Γ₁ i T)
-      (hT : HasDtor T) (h : ADerives Δ Γ₂ e e' (.comp C)) :
-      ADerives Δ Γ e (dropE T i e') (.comp C)
+      (hT : Consumable T) (h : ADerives Δ Γ₂ e e' (.comp C)) :
+      ADerives Δ Γ e (consumeSlotE T i e') (.comp C)
   | tensorI {Δ Γ Γ₁ Γ₂ e₁ e₁' e₂ e₂' A B} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
       (h₁ : ADerives Δ Γ₁ e₁ e₁' (.val A)) (h₂ : ADerives Δ Γ₂ e₂ e₂' (.val B)) :
       ADerives Δ Γ (.pair e₁ e₂) (.pair e₁' e₂') (.val (.tensor A B))
@@ -97,10 +97,10 @@ inductive ADerives : LifeCtx → Ctx VTy → Expr → Expr → Jdg → Prop wher
   | allE {Δ Γ M M' x b a C} (h : ADerives Δ Γ M M' (.comp (.all x b C)))
       (hlt : Δ.EntailsLt a b) :
       ADerives Δ Γ (.app M (.val .unit)) (.app M' (.val .unit)) (.comp (C.instLife x a))
-  | bangThunkF {Δ Γ M M' A} (hp : Persistent Γ)
+  | bangThunkF {Δ Γ M M' A} (hp : Ctx.Banged Γ)
       (h : ADerives Δ (⟨.unit, false⟩ :: Γ) M M' (.comp (.ret A))) :
       ADerives Δ Γ (.val (.lam M)) (.val (.lam M')) (.val (.bang (.thunk (.ret A))))
-  | bangThunkV {Δ Γ N N' C} (hp : Persistent Γ) (hC : C.isRet = false)
+  | bangThunkV {Δ Γ N N' C} (hp : Ctx.Banged Γ) (hC : C.isRet = false)
       (h : ADerives Δ Γ (.val (.lam N)) (.val (.lam N')) (.comp C)) :
       ADerives Δ Γ (.val (.lam N)) (.val (.lam N')) (.val (.bang (.thunk C)))
   | bangE {Δ Γ e e' A} (h : ADerives Δ Γ e e' (.val (.bang A))) : ADerives Δ Γ e e' (.val A)
@@ -137,7 +137,7 @@ theorem ADerives.elab {Δ : LifeCtx} {Γ : Ctx VTy} {e e' : Expr} {j : Jdg}
     (h : ADerives Δ Γ e e' j) : CDerives Δ Γ e' j := by
   induction h with
   | core h => exact h
-  | drop hs hx hT _ ih => exact drop_derives hs hx hT ih
+  | drop hs hx hT _ ih => exact consumeSlot_derives hs hx hT ih
   | tensorI hs _ _ ih₁ ih₂ => exact .tensorI hs ih₁ ih₂
   | sumI₁ _ ih => exact .sumI₁ ih
   | sumI₂ _ ih => exact .sumI₂ ih

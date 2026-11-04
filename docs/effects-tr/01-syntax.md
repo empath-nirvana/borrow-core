@@ -9,7 +9,7 @@ The calculus is phase A's (`experiments/EffModel/EffModel/Syntax.lean`, `docs/ef
 |---|---|---|
 | `lend` consumes the capability and returns it (BoLo's `withbor` shape) | D1.9, [lend] in §2 | phase A's place-based `lend` is unsound once the place has been moved (§10.1, machine-checked) |
 | a frame-owned resource is an **instance** of a built-in effect `Res`, not a value of type `resD` | D1.3, D1.9 | phase A lets a continuation carry the handle past its frame (§10.2, machine-checked) |
-| a continuation is the static pair `⟨resume, cancel⟩` (phase B's `kty`) | D1.8 | destructor placement is static (§8.1) |
+| a continuation is the static pair `⟨resume, cancel⟩` (phase B's `kty`) | D1.8 | consume placement is static (§8.1) |
 | a co-operation may fail, at an operation whose qualifier admits weakening | D1.3, D1.9 | phase A open problem 3 (§8.2) |
 | recursion is `bfix`, bounded (phase B's form of SPEC §20's `bounded_fix`) | D1.9 | no step-indexing (§9) |
 
@@ -108,12 +108,12 @@ operation `o` receives, in a handler into `C` whose outer row is `ρ'`:
     K(q, B, ρ', C) = U_q^∅ ( B ⇒^{ρ'} C )                                if W ∉ q
 
 writing `q.c` for `C ∈ q`. The first component resumes; the second, `cancel`, runs the
-continuation's destructors and answers `()`. A cancellable continuation is a **linear** thunk of the
+continuation's consumes and answers `()`. A cancellable continuation is a **linear** thunk of the
 pair, so the clause consumes it exactly once, by one of the two entries: the `A & 1` encoding
 (SPEC §19's `κ`), which Munch-Maccagnoni reads as an affine type in his system (*Resource
 Polymorphism*, 2018 [recalled]). A
-continuation that may be both dropped and copied (`unr`) is an unrestricted thunk of the pair:
-its captures are persistent (Lemma L5.6), so dropping it runs nothing. [PB `ktyB`, `kty`; PA
+continuation that may be both consumed and copied (`unr`) is an unrestricted thunk of the pair:
+its captures are persistent (Lemma L5.6), so consuming it runs nothing. [PB `ktyB`, `kty`; PA
 `kty` in `clauses` (without the cancel entry).]
 
 **Definition D1.9 (terms).** Values and computations:
@@ -169,7 +169,7 @@ its captures are persistent (Lemma L5.6), so dropping it runs nothing. [PB `ktyB
 
     perform x.o V      ≜ op x.o(V; y. ret y)
     M ; N              ≜ M to _. N                      (M : F 1)
-    drop V             ≜ prj₂ (unfold V)
+    consume V             ≜ prj₂ (unfold V)
     resume k w         ≜ (prj₁ (force k)) w             if W ∈ q;   (force k) w   otherwise
     cancel k           ≜ prj₂ (force k)                 (only if W ∈ q)
     call V w           ≜ (force V) w

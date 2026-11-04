@@ -25,12 +25,12 @@ mechanization of Wagner, Gierczak, Marshall, Li and Ahmed, *From Linearity to Bo
 - **Integers and bytes:** `i32`/`i64` with Wasm's operations, and the byte `u8` (§8).
 - **Arrays and slices:** `array A` owns `n` cells, read through the family of leaf views; slice
   borrows lend a run of an array, which can be split, and its elements replaced or swapped (§9).
-- **Persistent variables:** values holding no resource are copied and dropped freely (§10).
+- **Persistent variables:** values holding no resource are copied and consumed freely (§10).
 - **Externs and standard I/O:** `stdin`, `stdout`, `stderr` as capabilities with opaque
   content, `read_byte`/`write_byte` on `mut` borrows of them, proved against their model and
   compiled to WASI `fd_read`/`fd_write` (§11).
-- **Implicit destructors:** an owned value a path leaves unused is freed or closed by a
-  destructor the checker inserts (§12).
+- **Implicit consumes:** an owned value a path leaves unused is freed or closed by a
+  consume the checker inserts (§12).
 - **Divergence as an effect:** a function whose body may loop without bound has a loop in its
   type; this is inferred, and `total def` asserts its absence (§14).
 - **Generators:** `gen fn` with `yield`; each generator body is one state machine, and generic

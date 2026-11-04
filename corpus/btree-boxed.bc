@@ -3,8 +3,8 @@
 -- buffer is empty, so a leaf is one heap allocation (its keys) and an inner node two, as Rust's
 -- `struct Node { keys: Vec<i32>, kids: Vec<Option<Node>> }`. Insertion is CLRS's: a full root is
 -- split first, and each full child is split before the descent enters it. A child is taken out of
--- its parent's buffer (`inl ()` left in its place) and put back. The tree is dropped by its
--- derived destructor (SPEC §12): each node's children, then its buffers, each at once.
+-- its parent's buffer (`inl ()` left in its place) and put back. The tree is consumed by its
+-- consume (SPEC §12): each node's children, then its buffers, each at once.
 --
 -- Answer: `200 0 4` (every one of the 200 inserted keys found, an absent key not, height 4),
 -- `i32[200]` (the number of keys), `live 0`. 77 allocations, Rust's count for the same tree

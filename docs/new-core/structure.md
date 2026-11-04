@@ -22,7 +22,6 @@ Done means that theorem. Passing test programs doesn't count.
 | Piece | What it gives | Where |
 |---|---|---|
 | Step-indexed linear `ewp`/`erwp`, `[handle]` with no `hdv` | stored κ around unbounded loops | `SI/Ewp`, `SI/HandleN` |
-| Effectful destructors on every exit | raise, cancel, early loop close, performing destructors | `Core/LetDtor*` (library); `FinCancelN`, `FinPerformN` |
 | Index-relative `mut` cells (`UpdMutN`), 6.48 / 6.59 at the index | `mut` payloads under step-indexing | `UpdN`, `RebN` |
 | Canonical images (`TWNC`, `TemplAt`, `TemplDAt`) | shared reborrows (root and deep) can't disagree; Core's results over them (`Core.C`, not `Core.Stdio`) | `TWNC`, `CanonDeep`, `CoreC` |
 | `extF` + `LinDisj`/`DLinDisj`/`EscEx`, and `ext_extF` | where κ may resume; no restriction relative to Core's `Ext` | `ExtF`, `LinDisj`, `ExtExtF` |
@@ -91,7 +90,9 @@ The operations, each to be proved to preserve it:
 - **capture:** a branch, with its live lends' records, goes into a one-shot κ;
 - **graft:** resuming κ attaches its branch, possibly under frames opened since, or under another
   parent; the tree grows and every branch is re-read;
-- **unwind:** cancel or raise runs a branch's destructors and ends its lends in order;
+- **unwind:** a raise, or a cancel (a resume into the continuation's cancel branch, §62 D15),
+  runs the branch's `[then]` finalisers, and its unwinding borrow forms (`withborU`) end its lends
+  in order;
 - **spawn / join:** a lend's record is shared into children and passes back at the join.
 
 **Adequacy is derived from preservation** (LinearActris Thm 5.4 shape), and the frame rules are
@@ -142,7 +143,8 @@ Over the single relation:
    (`vThunk`/`Covers`), μ, ν, ∀, type variables, families, opaque types, κ and task types. All
    downward closed and monotone along the tree.
 2. `SemJ`, then compatibility for every `CDerives` rule. The new rules are lend/reborrow/Anti-Frame
-   across stops, spawn/join, `[let-dtor]`, and `[handle]` without `hdv`.
+   across stops (with the unwinding borrow forms `withborU`), `[then]` across stops (the
+   unwinding rule), spawn/join, and `[handle]` without `hdv`.
 3. Adequacy to `OrDiverges` via §5.
 
 Core's plain results over canonical worlds are `Core.C` (condition 8); over the tree world they
@@ -174,7 +176,7 @@ Each test must go through §5, not around it:
   `foldImm` across stops; `withswap` with a callback that stops.
 - The recorded unreconciled point on 6.150.
 - Lowering: per-task state machines, self-reference (pinning or a movability mode), per-state
-  drop glue.
+  consume glue.
 - Threads: a concurrent semantics and the multi-thread adequacy.
 
 ## 11. Not doing / tempting shortcuts (stop and report)

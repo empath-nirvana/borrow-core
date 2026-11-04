@@ -5,7 +5,7 @@ import Core.Classes
 # Frontend — Check — steps shared by the checker's cases
 
 The checker's environment, the messages it reports, the deciders of fold shapes and
-destructors, the implicit drops (SPEC §12), and the steps that combine checked premises through a
+consumes, the implicit consumes (SPEC §12), and the steps that combine checked premises through a
 rule builder once its side conditions are decided: closing binders, splitting and merging
 contexts, `boxed`, application to a variable, `<,>`, `case` and `Fun`.
 -/
@@ -13,9 +13,9 @@ contexts, `boxed`, application to a variable, `<,>`, `case` and `Fun`.
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (Jdg FShape HasDtor dtorAlgs DerivedDrop Linear)
+open BoCa.Fig16.LogRel.Core (Jdg FShape Consumable consumeAlgs LinearConsumable Linear)
 
-/-! ### Fold shapes and destructors, decided -/
+/-! ### Fold shapes and consumes, decided -/
 
 /-- `FShape.WF`, decided. -/
 def FShape.wfB : FShape → Bool
@@ -48,32 +48,32 @@ theorem FShape.guardedB_sound : ∀ F : FShape, FShape.guardedB F = true → F.G
   | .tensor _ _, _ => trivial
   | .sum _ _, _ => trivial
 
-/-! ### Destructors (SPEC §12) -/
+/-! ### Consumes (SPEC §12) -/
 
 open BoCa.Fig16.LogRel.Core.FoldP (clB keysIn resO PBody pBodyB pBodyB_iff Bnd Stack) in
-/-- `HasDtor`, decided: `dtorB false A` for `A`; `dtorB true A` for a position `A` of a `μ` body:
-`A⟨1⟩` has a destructor, and so has the body of each key inside `A` (the recursion of `dtorAt` and
+/-- `Consumable`, decided: `consumableAtB false A` for `A`; `consumableAtB true A` for a position `A` of a `μ` body:
+`A⟨1⟩` is consumable, and so has the body of each key inside `A` (the recursion of `consumeAt` and
 `algsIn`). -/
-def dtorB : Bool → CVTy → Bool
-  | alg, .tensor A B => dtorB alg A && dtorB alg B
-  | alg, .sum A B => dtorB alg A && dtorB alg B
-  | alg, .ref A => if alg && !clB 0 A then dtorB true A else dtorB false A
+def consumableAtB : Bool → CVTy → Bool
+  | alg, .tensor A B => consumableAtB alg A && consumableAtB alg B
+  | alg, .sum A B => consumableAtB alg A && consumableAtB alg B
+  | alg, .ref A => if alg && !clB 0 A then consumableAtB true A else consumableAtB false A
   | alg, .tvar _ => alg
-  | _, .box _ A => dtorB false A
-  | alg, .mu A => if alg && !clB 0 (.mu A) then dtorB true A else pBodyB A && dtorB true A
+  | _, .box _ A => consumableAtB false A
+  | alg, .mu A => if alg && !clB 0 (.mu A) then consumableAtB true A else pBodyB A && consumableAtB true A
   | _, .thunk (.amp _ (.ret .unit)) => true
   | _, .thunk (.nu (.amp C (.ret R))) =>
-      CTy.nuOkB (.amp C (.ret R)) && VTy.clB 0 R && dtorB false R
+      CTy.nuOkB (.amp C (.ret R)) && VTy.clB 0 R && consumableAtB false R
   | _, .thunk _ => false
   | _, .unit | _, .zero | _, .int _ | _, .unk | _, .bang _ | _, .imm _ _ | _, .mut _ _ => true
-  | alg, .fam (.ref A) => if alg && !clB 0 A then dtorB true A else dtorB false A
+  | alg, .fam (.ref A) => if alg && !clB 0 A then consumableAtB true A else consumableAtB false A
   | _, .fam (.imm _ _) => true
   | _, .fam (.mut _ _) => true
   | _, .fam _ => false
   | _, .opq _ => false
 
-/-- At a thunk `dtorB` does not depend on the mode. -/
-theorem dtorB_thunk : ∀ (b : Bool) (C : CCTy), dtorB b (.thunk C) = dtorB false (.thunk C)
+/-- At a thunk `consumableAtB` does not depend on the mode. -/
+theorem consumableAtB_thunk : ∀ (b : Bool) (C : CCTy), consumableAtB b (.thunk C) = consumableAtB false (.thunk C)
   | _, .amp _ (.ret .unit) | _, .nu (.amp _ (.ret _)) | _, .nu (.ret _) | _, .nu (.arr _ _)
   | _, .nu .top | _, .nu (.all _ _ _) | _, .nu (.nu _) | _, .nu (.eff _ _ _ _ _ _ _ _)
   | _, .nu (.amp _ (.arr _ _)) | _, .nu (.amp _ (.amp _ _)) | _, .nu (.amp _ .top)
@@ -89,22 +89,22 @@ theorem dtorB_thunk : ∀ (b : Bool) (C : CCTy), dtorB b (.thunk C) = dtorB fals
 
 open BoCa.Fig16.LogRel.Core.FoldP (clB) in
 /-- At a closed type the two modes agree. -/
-theorem dtorB_closed : ∀ (A : CVTy), clB 0 A = true → dtorB true A = dtorB false A
+theorem consumableAtB_closed : ∀ (A : CVTy), clB 0 A = true → consumableAtB true A = consumableAtB false A
   | .tensor A B, h => by
       simp only [BoCa.Fig16.LogRel.Core.FoldP.clB, Bool.and_eq_true] at h
-      simp only [dtorB, dtorB_closed A h.1, dtorB_closed B h.2]
+      simp only [consumableAtB, consumableAtB_closed A h.1, consumableAtB_closed B h.2]
   | .sum A B, h => by
       simp only [BoCa.Fig16.LogRel.Core.FoldP.clB, Bool.and_eq_true] at h
-      simp only [dtorB, dtorB_closed A h.1, dtorB_closed B h.2]
+      simp only [consumableAtB, consumableAtB_closed A h.1, consumableAtB_closed B h.2]
   | .ref A, h => by
       simp only [BoCa.Fig16.LogRel.Core.FoldP.clB] at h
-      simp [dtorB, h]
+      simp [consumableAtB, h]
   | .fam (.ref A), h => by
       simp only [BoCa.Fig16.LogRel.Core.FoldP.clB] at h
-      simp [dtorB, h]
-  | .mu A, h => by simp [dtorB, h]
+      simp [consumableAtB, h]
+  | .mu A, h => by simp [consumableAtB, h]
   | .tvar _, h => by simp [BoCa.Fig16.LogRel.Core.FoldP.clB] at h
-  | .thunk C, _ => dtorB_thunk true C
+  | .thunk C, _ => consumableAtB_thunk true C
   | .unit, _ | .zero, _ | .box _ _, _ | .bang _, _ | .unk, _ | .int _, _
   | .opq _, _ | .imm _ _, _ | .mut _ _, _ => rfl
   | .fam .unit, _ | .fam (.tensor _ _), _ | .fam .zero, _ | .fam (.sum _ _), _
@@ -113,55 +113,55 @@ theorem dtorB_closed : ∀ (A : CVTy), clB 0 A = true → dtorB true A = dtorB f
   | .fam (.fam _), _ | .fam (.opq _), _ => rfl
 
 open BoCa.Fig16.LogRel.Core.FoldP (keysIn resO Bnd Stack) in
-/-- What `dtorB true A` gives at a position `A` under the stack `Bs`: `A⟨1⟩` has a destructor,
+/-- What `consumableAtB true A` gives at a position `A` under the stack `Bs`: `A⟨1⟩` is consumable,
 and so has the body of each key of `A`. -/
-abbrev AlgDtor (Bs : Stack) (A : CVTy) : Prop :=
-  HasDtor (resO dtorAlgs Bs A) ∧
-    (∀ B Bs', Bnd.mu (B :: Bs') ∈ keysIn Bs A → HasDtor (resO dtorAlgs (B :: Bs') B)) ∧
-    ∀ Bs' S, Bnd.arr Bs' S ∈ keysIn Bs A → HasDtor (resO dtorAlgs Bs' S)
+abbrev AlgConsume (Bs : Stack) (A : CVTy) : Prop :=
+  Consumable (resO consumeAlgs Bs A) ∧
+    (∀ B Bs', Bnd.mu (B :: Bs') ∈ keysIn Bs A → Consumable (resO consumeAlgs (B :: Bs') B)) ∧
+    ∀ Bs' S, Bnd.arr Bs' S ∈ keysIn Bs A → Consumable (resO consumeAlgs Bs' S)
 
 open BoCa.Fig16.LogRel.Core.FoldP (clB keysIn resO resO_leaf Bnd Stack) in
-/-- A closed position's `AlgDtor` is its own destructor. -/
-theorem algDtor_closed {A : CVTy} (hc : clB 0 A = true) (h : HasDtor A) (Bs : Stack) :
-    AlgDtor Bs A := by
-  refine ⟨by rwa [resO_leaf dtorAlgs Bs hc], fun B Bs' hm => ?_, fun Bs' S hm => ?_⟩
+/-- A closed position's `AlgConsume` is its own consume. -/
+theorem algConsume_closed {A : CVTy} (hc : clB 0 A = true) (h : Consumable A) (Bs : Stack) :
+    AlgConsume Bs A := by
+  refine ⟨by rwa [resO_leaf consumeAlgs Bs hc], fun B Bs' hm => ?_, fun Bs' S hm => ?_⟩
   · rw [BoCa.Fig16.LogRel.Core.keysIn_toFShape.keysIn_closed Bs hc] at hm; cases hm
   · rw [BoCa.Fig16.LogRel.Core.keysIn_toFShape.keysIn_closed Bs hc] at hm; cases hm
 
 open BoCa.Fig16.LogRel.Core.FoldP (keysIn resO Stack) in
 /-- A position the fold passes through: `A⟨1⟩` is `A`, and it has no key. -/
-theorem algDtorLeaf (A : CVTy) (h : HasDtor A) (Bs : Stack)
-    (hr : resO dtorAlgs Bs A = A := by rfl) (hk : keysIn Bs A = [] := by rfl) : AlgDtor Bs A :=
+theorem algConsumeLeaf (A : CVTy) (h : Consumable A) (Bs : Stack)
+    (hr : resO consumeAlgs Bs A = A := by rfl) (hk : keysIn Bs A = [] := by rfl) : AlgConsume Bs A :=
   ⟨by rwa [hr], ⟨fun B Bs' hm => (by rw [hk] at hm; cases hm),
     fun Bs' S hm => (by rw [hk] at hm; cases hm)⟩⟩
 
 mutual
-/-- **`dtorB false` is sound for `HasDtor`.** -/
-theorem dtorB_sound : ∀ (A : CVTy), dtorB false A = true → HasDtor A
+/-- **`consumableAtB false` is sound for `Consumable`.** -/
+theorem consumableAtB_sound : ∀ (A : CVTy), consumableAtB false A = true → Consumable A
   | .tensor A B, h => by
-      simp only [dtorB, Bool.and_eq_true] at h
-      exact .tensor (dtorB_sound A h.1) (dtorB_sound B h.2)
+      simp only [consumableAtB, Bool.and_eq_true] at h
+      exact .tensor (consumableAtB_sound A h.1) (consumableAtB_sound B h.2)
   | .sum A B, h => by
-      simp only [dtorB, Bool.and_eq_true] at h
-      exact .sum (dtorB_sound A h.1) (dtorB_sound B h.2)
-  | .ref A, h => .ref (dtorB_sound A (by simpa [dtorB] using h))
-  | .tvar _, h => by simp [dtorB] at h
-  | .box _ A, h => .box (dtorB_sound A (by simpa [dtorB] using h))
+      simp only [consumableAtB, Bool.and_eq_true] at h
+      exact .sum (consumableAtB_sound A h.1) (consumableAtB_sound B h.2)
+  | .ref A, h => .ref (consumableAtB_sound A (by simpa [consumableAtB] using h))
+  | .tvar _, h => by simp [consumableAtB] at h
+  | .box _ A, h => .box (consumableAtB_sound A (by simpa [consumableAtB] using h))
   | .mu A, h => by
-      simp only [dtorB, Bool.false_and, Bool.false_eq_true, if_false, Bool.and_eq_true] at h
-      obtain ⟨h₁, h₂, h₃⟩ := dtorB_soundA A h.2 [A]
+      simp only [consumableAtB, Bool.false_and, Bool.false_eq_true, if_false, Bool.and_eq_true] at h
+      obtain ⟨h₁, h₂, h₃⟩ := consumableAtB_soundA A h.2 [A]
       exact .mu ((BoCa.Fig16.LogRel.Core.FoldP.pBodyB_iff A).mp h.1) h₁ h₂ h₃
   | .thunk (.amp _ (.ret .unit)), _ => .close
   | .thunk (.nu (.amp C (.ret R))), h => by
-      simp only [dtorB, Bool.and_eq_true] at h
-      exact .nu (CTy.nuOkB_sound _ h.1.1) (VTy.clB_sound 0 R h.1.2) (dtorB_sound R h.2)
+      simp only [consumableAtB, Bool.and_eq_true] at h
+      exact .nu (CTy.nuOkB_sound _ h.1.1) (VTy.clB_sound 0 R h.1.2) (consumableAtB_sound R h.2)
   | .thunk (.nu (.ret _)), h | .thunk (.nu (.arr _ _)), h | .thunk (.nu .top), h
   | .thunk (.nu (.all _ _ _)), h | .thunk (.nu (.nu _)), h
   | .thunk (.nu (.amp _ (.arr _ _))), h | .thunk (.nu (.amp _ (.amp _ _))), h
   | .thunk (.nu (.amp _ .top)), h | .thunk (.nu (.amp _ (.all _ _ _))), h
-  | .thunk (.nu (.amp _ (.nu _))), h => by simp [dtorB] at h
+  | .thunk (.nu (.amp _ (.nu _))), h => by simp [consumableAtB] at h
   | .thunk (.ret _), h | .thunk (.arr _ _), h | .thunk .top, h
-  | .thunk (.all _ _ _), h => by simp [dtorB] at h
+  | .thunk (.all _ _ _), h => by simp [consumableAtB] at h
   | .thunk (.amp _ (.ret (.tensor _ _))), h | .thunk (.amp _ (.ret .zero)), h
   | .thunk (.amp _ (.ret (.sum _ _))), h | .thunk (.amp _ (.ret (.thunk _))), h
   | .thunk (.amp _ (.ret (.ref _))), h | .thunk (.amp _ (.ret (.imm _ _))), h
@@ -172,31 +172,31 @@ theorem dtorB_sound : ∀ (A : CVTy), dtorB false A = true → HasDtor A
   | .thunk (.amp _ (.ret (.opq _))), h
   | .thunk (.amp _ (.arr _ _)), h
   | .thunk (.amp _ (.amp _ _)), h | .thunk (.amp _ .top), h
-  | .thunk (.amp _ (.all _ _ _)), h | .thunk (.amp _ (.nu _)), h => by simp [dtorB] at h
+  | .thunk (.amp _ (.all _ _ _)), h | .thunk (.amp _ (.nu _)), h => by simp [consumableAtB] at h
   | .unit, _ => .unit
   | .zero, _ => .zero
   | .int _, _ => .int
-  | .opq _, h => by simp [dtorB] at h
+  | .opq _, h => by simp [consumableAtB] at h
   | .unk, _ => .unk
   | .bang _, _ => .bang
   | .imm _ _, _ => .imm
   | .mut _ _, _ => .mut
-  | .fam (.ref A), h => .array (dtorB_sound A (by simpa [dtorB] using h))
+  | .fam (.ref A), h => .array (consumableAtB_sound A (by simpa [consumableAtB] using h))
   | .fam (.imm _ _), _ => .arrayImm
   | .fam (.mut _ _), _ => .arrayMut
   | .fam .unit, h | .fam (.tensor _ _), h | .fam .zero, h | .fam (.sum _ _), h
   | .fam (.thunk _), h | .fam (.box _ _), h
   | .fam (.bang _), h | .fam .unk, h | .fam (.tvar _), h | .fam (.mu _), h
-  | .fam (.int _), h | .fam (.fam _), h => by simp [dtorB] at h
+  | .fam (.int _), h | .fam (.fam _), h => by simp [consumableAtB] at h
 
-/-- **`dtorB true` is sound for `AlgDtor`.** -/
-theorem dtorB_soundA : ∀ (A : CVTy), dtorB true A = true → ∀ Bs, AlgDtor Bs A
+/-- **`consumableAtB true` is sound for `AlgConsume`.** -/
+theorem consumableAtB_soundA : ∀ (A : CVTy), consumableAtB true A = true → ∀ Bs, AlgConsume Bs A
   | .tensor A B, h, Bs => by
       by_cases hc : BoCa.Fig16.LogRel.Core.FoldP.clB 0 (.tensor A B) = true
-      · exact algDtor_closed hc (dtorB_sound _ (by rwa [← dtorB_closed _ hc])) Bs
-      · simp only [dtorB, Bool.and_eq_true] at h
-        obtain ⟨a₁, a₂, a₃⟩ := dtorB_soundA A h.1 Bs
-        obtain ⟨b₁, b₂, b₃⟩ := dtorB_soundA B h.2 Bs
+      · exact algConsume_closed hc (consumableAtB_sound _ (by rwa [← consumableAtB_closed _ hc])) Bs
+      · simp only [consumableAtB, Bool.and_eq_true] at h
+        obtain ⟨a₁, a₂, a₃⟩ := consumableAtB_soundA A h.1 Bs
+        obtain ⟨b₁, b₂, b₃⟩ := consumableAtB_soundA B h.2 Bs
         refine ⟨?_, fun B' Bs' hm => ?_, fun Bs' S hm => ?_⟩
         · simp only [BoCa.Fig16.LogRel.Core.FoldP.resO, if_neg hc]; exact .tensor a₁ b₁
         · simp only [BoCa.Fig16.LogRel.Core.FoldP.keysIn, List.mem_append] at hm
@@ -205,10 +205,10 @@ theorem dtorB_soundA : ∀ (A : CVTy), dtorB true A = true → ∀ Bs, AlgDtor B
           exact hm.elim (a₃ Bs' S) (b₃ Bs' S)
   | .sum A B, h, Bs => by
       by_cases hc : BoCa.Fig16.LogRel.Core.FoldP.clB 0 (.sum A B) = true
-      · exact algDtor_closed hc (dtorB_sound _ (by rwa [← dtorB_closed _ hc])) Bs
-      · simp only [dtorB, Bool.and_eq_true] at h
-        obtain ⟨a₁, a₂, a₃⟩ := dtorB_soundA A h.1 Bs
-        obtain ⟨b₁, b₂, b₃⟩ := dtorB_soundA B h.2 Bs
+      · exact algConsume_closed hc (consumableAtB_sound _ (by rwa [← consumableAtB_closed _ hc])) Bs
+      · simp only [consumableAtB, Bool.and_eq_true] at h
+        obtain ⟨a₁, a₂, a₃⟩ := consumableAtB_soundA A h.1 Bs
+        obtain ⟨b₁, b₂, b₃⟩ := consumableAtB_soundA B h.2 Bs
         refine ⟨?_, fun B' Bs' hm => ?_, fun Bs' S hm => ?_⟩
         · simp only [BoCa.Fig16.LogRel.Core.FoldP.resO, if_neg hc]; exact .sum a₁ b₁
         · simp only [BoCa.Fig16.LogRel.Core.FoldP.keysIn, List.mem_append] at hm
@@ -217,18 +217,18 @@ theorem dtorB_soundA : ∀ (A : CVTy), dtorB true A = true → ∀ Bs, AlgDtor B
           exact hm.elim (a₃ Bs' S) (b₃ Bs' S)
   | .ref A, h, Bs => by
       by_cases hc : BoCa.Fig16.LogRel.Core.FoldP.clB 0 A = true
-      · exact algDtor_closed (A := .ref A) hc
-          (dtorB_sound _ (by rwa [← dtorB_closed (.ref A) hc])) Bs
-      · simp only [dtorB, hc, Bool.not_false, Bool.and_self, if_true] at h
-        obtain ⟨a₁, a₂, a₃⟩ := dtorB_soundA A h Bs
+      · exact algConsume_closed (A := .ref A) hc
+          (consumableAtB_sound _ (by rwa [← consumableAtB_closed (.ref A) hc])) Bs
+      · simp only [consumableAtB, hc, Bool.not_false, Bool.and_self, if_true] at h
+        obtain ⟨a₁, a₂, a₃⟩ := consumableAtB_soundA A h Bs
         refine ⟨?_, fun B' Bs' hm => a₂ B' Bs' hm, fun Bs' S hm => a₃ Bs' S hm⟩
         simp only [BoCa.Fig16.LogRel.Core.FoldP.resO, if_neg hc]; exact a₁
   | .fam (.ref A), h, Bs => by
       by_cases hc : BoCa.Fig16.LogRel.Core.FoldP.clB 0 A = true
-      · exact algDtor_closed (A := .fam (.ref A)) hc
-          (dtorB_sound _ (by rwa [← dtorB_closed (.fam (.ref A)) hc])) Bs
-      · simp only [dtorB, hc, Bool.not_false, Bool.and_self, if_true] at h
-        obtain ⟨a₁, a₂, a₃⟩ := dtorB_soundA A h Bs
+      · exact algConsume_closed (A := .fam (.ref A)) hc
+          (consumableAtB_sound _ (by rwa [← consumableAtB_closed (.fam (.ref A)) hc])) Bs
+      · simp only [consumableAtB, hc, Bool.not_false, Bool.and_self, if_true] at h
+        obtain ⟨a₁, a₂, a₃⟩ := consumableAtB_soundA A h Bs
         refine ⟨?_, fun B' Bs' hm => ?_, fun Bs' S hm => ?_⟩
         · simp only [BoCa.Fig16.LogRel.Core.FoldP.resO, if_neg hc]; exact .unit
         · simp only [BoCa.Fig16.LogRel.Core.FoldP.keysIn, if_neg hc, List.mem_cons,
@@ -241,9 +241,9 @@ theorem dtorB_soundA : ∀ (A : CVTy), dtorB true A = true → ∀ Bs, AlgDtor B
           · exact a₃ Bs' S hm
   | .mu A, h, Bs => by
       by_cases hc : BoCa.Fig16.LogRel.Core.FoldP.clB 0 (.mu A) = true
-      · exact algDtor_closed hc (dtorB_sound _ (by rwa [← dtorB_closed _ hc])) Bs
-      · simp only [dtorB, hc, Bool.not_false, Bool.and_self, if_true] at h
-        obtain ⟨a₁, a₂, a₃⟩ := dtorB_soundA A h (A :: Bs)
+      · exact algConsume_closed hc (consumableAtB_sound _ (by rwa [← consumableAtB_closed _ hc])) Bs
+      · simp only [consumableAtB, hc, Bool.not_false, Bool.and_self, if_true] at h
+        obtain ⟨a₁, a₂, a₃⟩ := consumableAtB_soundA A h (A :: Bs)
         refine ⟨?_, fun B' Bs' hm => ?_, fun Bs' S hm => ?_⟩
         · simp only [BoCa.Fig16.LogRel.Core.FoldP.resO, if_neg hc]; exact .unit
         · simp only [BoCa.Fig16.LogRel.Core.FoldP.keysIn, if_neg hc, List.mem_cons,
@@ -255,21 +255,21 @@ theorem dtorB_soundA : ∀ (A : CVTy), dtorB true A = true → ∀ Bs, AlgDtor B
             reduceCtorEq, false_or] at hm
           exact a₃ Bs' S hm
   | .tvar _, _, Bs => by
-      refine ⟨by simp [BoCa.Fig16.LogRel.Core.FoldP.resO, dtorAlgs]; exact .unit,
+      refine ⟨by simp [BoCa.Fig16.LogRel.Core.FoldP.resO, consumeAlgs]; exact .unit,
         fun _ _ hm => by simp [BoCa.Fig16.LogRel.Core.FoldP.keysIn] at hm,
         fun _ _ hm => by simp [BoCa.Fig16.LogRel.Core.FoldP.keysIn] at hm⟩
-  | .box a A, h, Bs => algDtorLeaf (.box a A) (dtorB_sound _ h) Bs
-  | .thunk (.amp C (.ret .unit)), _, Bs => algDtorLeaf (.thunk (.amp C (.ret .unit))) .close Bs
+  | .box a A, h, Bs => algConsumeLeaf (.box a A) (consumableAtB_sound _ h) Bs
+  | .thunk (.amp C (.ret .unit)), _, Bs => algConsumeLeaf (.thunk (.amp C (.ret .unit))) .close Bs
   | .thunk (.nu (.amp C (.ret R))), h, Bs => by
-      simp only [dtorB, Bool.and_eq_true] at h
-      exact algDtorLeaf _ (.nu (CTy.nuOkB_sound _ h.1.1) (VTy.clB_sound 0 R h.1.2) (dtorB_sound R h.2)) Bs
+      simp only [consumableAtB, Bool.and_eq_true] at h
+      exact algConsumeLeaf _ (.nu (CTy.nuOkB_sound _ h.1.1) (VTy.clB_sound 0 R h.1.2) (consumableAtB_sound R h.2)) Bs
   | .thunk (.nu (.ret _)), h, _ | .thunk (.nu (.arr _ _)), h, _ | .thunk (.nu .top), h, _
   | .thunk (.nu (.all _ _ _)), h, _ | .thunk (.nu (.nu _)), h, _
   | .thunk (.nu (.amp _ (.arr _ _))), h, _ | .thunk (.nu (.amp _ (.amp _ _))), h, _
   | .thunk (.nu (.amp _ .top)), h, _ | .thunk (.nu (.amp _ (.all _ _ _))), h, _
-  | .thunk (.nu (.amp _ (.nu _))), h, _ => by simp [dtorB] at h
+  | .thunk (.nu (.amp _ (.nu _))), h, _ => by simp [consumableAtB] at h
   | .thunk (.ret _), h, _ | .thunk (.arr _ _), h, _ | .thunk .top, h, _
-  | .thunk (.all _ _ _), h, _ => by simp [dtorB] at h
+  | .thunk (.all _ _ _), h, _ => by simp [consumableAtB] at h
   | .thunk (.amp _ (.ret (.tensor _ _))), h, _ | .thunk (.amp _ (.ret .zero)), h, _
   | .thunk (.amp _ (.ret (.sum _ _))), h, _ | .thunk (.amp _ (.ret (.thunk _))), h, _
   | .thunk (.amp _ (.ret (.ref _))), h, _ | .thunk (.amp _ (.ret (.imm _ _))), h, _
@@ -280,55 +280,55 @@ theorem dtorB_soundA : ∀ (A : CVTy), dtorB true A = true → ∀ Bs, AlgDtor B
   | .thunk (.amp _ (.ret (.opq _))), h, _
   | .thunk (.amp _ (.arr _ _)), h, _
   | .thunk (.amp _ (.amp _ _)), h, _ | .thunk (.amp _ .top), h, _
-  | .thunk (.amp _ (.all _ _ _)), h, _ | .thunk (.amp _ (.nu _)), h, _ => by simp [dtorB] at h
-  | .unit, _, Bs => algDtorLeaf .unit .unit Bs
-  | .zero, _, Bs => algDtorLeaf .zero .zero Bs
-  | .int w, _, Bs => algDtorLeaf (.int w) .int Bs
-  | .unk, _, Bs => algDtorLeaf .unk .unk Bs
-  | .bang A, _, Bs => algDtorLeaf (.bang A) .bang Bs
-  | .imm a A, _, Bs => algDtorLeaf (.imm a A) .imm Bs
-  | .mut a A, _, Bs => algDtorLeaf (.mut a A) .mut Bs
-  | .opq _, h, _ => by simp [dtorB] at h
-  | .fam (.imm a A), _, Bs => algDtorLeaf (.fam (.imm a A)) .arrayImm Bs
-  | .fam (.mut a A), _, Bs => algDtorLeaf (.fam (.mut a A)) .arrayMut Bs
+  | .thunk (.amp _ (.all _ _ _)), h, _ | .thunk (.amp _ (.nu _)), h, _ => by simp [consumableAtB] at h
+  | .unit, _, Bs => algConsumeLeaf .unit .unit Bs
+  | .zero, _, Bs => algConsumeLeaf .zero .zero Bs
+  | .int w, _, Bs => algConsumeLeaf (.int w) .int Bs
+  | .unk, _, Bs => algConsumeLeaf .unk .unk Bs
+  | .bang A, _, Bs => algConsumeLeaf (.bang A) .bang Bs
+  | .imm a A, _, Bs => algConsumeLeaf (.imm a A) .imm Bs
+  | .mut a A, _, Bs => algConsumeLeaf (.mut a A) .mut Bs
+  | .opq _, h, _ => by simp [consumableAtB] at h
+  | .fam (.imm a A), _, Bs => algConsumeLeaf (.fam (.imm a A)) .arrayImm Bs
+  | .fam (.mut a A), _, Bs => algConsumeLeaf (.fam (.mut a A)) .arrayMut Bs
   | .fam .unit, h, _ | .fam (.tensor _ _), h, _ | .fam .zero, h, _ | .fam (.sum _ _), h, _
   | .fam (.thunk _), h, _ | .fam (.box _ _), h, _
   | .fam (.bang _), h, _ | .fam .unk, h, _ | .fam (.tvar _), h, _ | .fam (.mu _), h, _
-  | .fam (.int _), h, _ | .fam (.fam _), h, _ | .fam (.opq _), h, _ => by simp [dtorB] at h
+  | .fam (.int _), h, _ | .fam (.fam _), h, _ | .fam (.opq _), h, _ => by simp [consumableAtB] at h
 end
 
-/-- `A` has a destructor. -/
-def hasDtorB (A : CVTy) : Bool := dtorB false A
+/-- `A` is consumable. -/
+def consumableB (A : CVTy) : Bool := consumableAtB false A
 
-theorem hasDtorB_sound {A : CVTy} (h : hasDtorB A = true) : HasDtor A := dtorB_sound A h
+theorem consumableB_sound {A : CVTy} (h : consumableB A = true) : Consumable A := consumableAtB_sound A h
 
 open BoCa.Fig16.LogRel.Core.FoldP (clB keysIn resO resO_leaf pBodyB_iff Bnd Stack) in
 mutual
-/-- **`dtorB false` is complete for `HasDtor`.** -/
-theorem dtorB_complete : ∀ A : CVTy, HasDtor A → dtorB false A = true
+/-- **`consumableAtB false` is complete for `Consumable`.** -/
+theorem consumableAtB_complete : ∀ A : CVTy, Consumable A → consumableAtB false A = true
   | .tensor A B, h => by
       cases h with
-      | tensor h₁ h₂ => simp [dtorB, dtorB_complete A h₁, dtorB_complete B h₂]
+      | tensor h₁ h₂ => simp [consumableAtB, consumableAtB_complete A h₁, consumableAtB_complete B h₂]
   | .sum A B, h => by
       cases h with
-      | sum h₁ h₂ => simp [dtorB, dtorB_complete A h₁, dtorB_complete B h₂]
+      | sum h₁ h₂ => simp [consumableAtB, consumableAtB_complete A h₁, consumableAtB_complete B h₂]
   | .ref A, h => by
       cases h with
-      | ref h => simpa [dtorB] using dtorB_complete A h
+      | ref h => simpa [consumableAtB] using consumableAtB_complete A h
   | .tvar _, h => by cases h
   | .box _ A, h => by
       cases h with
-      | box h => simpa [dtorB] using dtorB_complete A h
+      | box h => simpa [consumableAtB] using consumableAtB_complete A h
   | .mu A, h => by
       cases h with
       | mu hP h₁ h₂ h₃ =>
-          simp only [dtorB, Bool.false_and, Bool.false_eq_true, if_false, Bool.and_eq_true]
-          exact ⟨(pBodyB_iff A).mpr hP, dtorB_completeA A [A] ⟨h₁, h₂, h₃⟩⟩
+          simp only [consumableAtB, Bool.false_and, Bool.false_eq_true, if_false, Bool.and_eq_true]
+          exact ⟨(pBodyB_iff A).mpr hP, consumableAtB_completeA A [A] ⟨h₁, h₂, h₃⟩⟩
   | .thunk (.amp _ (.ret .unit)), _ => rfl
   | .thunk (.nu (.amp C (.ret R))), h => by
       cases h with
       | nu hC hRc h =>
-          simp [dtorB, CTy.nuOkB_complete _ hC, VTy.clB_complete 0 R hRc, dtorB_complete R h]
+          simp [consumableAtB, CTy.nuOkB_complete _ hC, VTy.clB_complete 0 R hRc, consumableAtB_complete R h]
   | .thunk (.nu (.ret _)), h | .thunk (.nu (.arr _ _)), h | .thunk (.nu .top), h
   | .thunk (.nu (.all _ _ _)), h | .thunk (.nu (.nu _)), h | .thunk (.nu (.eff _ _ _ _ _ _ _ _)), h
   | .thunk (.nu (.amp _ (.arr _ _))), h | .thunk (.nu (.amp _ (.amp _ _))), h
@@ -352,90 +352,90 @@ theorem dtorB_complete : ∀ A : CVTy, HasDtor A → dtorB false A = true
   | .opq _, h => by cases h
   | .fam (.ref A), h => by
       cases h with
-      | array h => simpa [dtorB] using dtorB_complete A h
+      | array h => simpa [consumableAtB] using consumableAtB_complete A h
   | .fam (.imm _ _), _ | .fam (.mut _ _), _ => rfl
   | .fam .unit, h | .fam (.tensor _ _), h | .fam .zero, h | .fam (.sum _ _), h
   | .fam (.thunk _), h | .fam (.box _ _), h
   | .fam (.bang _), h | .fam .unk, h | .fam (.tvar _), h | .fam (.mu _), h
   | .fam (.int _), h | .fam (.fam _), h | .fam (.opq _), h => by cases h
 
-/-- **`dtorB true` is complete for `AlgDtor`**, at every stack: the recursion carries the stack
-as `AlgDtor` does, `A :: Bs` under a `μ` that is not closed. -/
-theorem dtorB_completeA : ∀ (A : CVTy) (Bs : Stack), AlgDtor Bs A → dtorB true A = true
+/-- **`consumableAtB true` is complete for `AlgConsume`**, at every stack: the recursion carries the stack
+as `AlgConsume` does, `A :: Bs` under a `μ` that is not closed. -/
+theorem consumableAtB_completeA : ∀ (A : CVTy) (Bs : Stack), AlgConsume Bs A → consumableAtB true A = true
   | .tensor A B, Bs, h => by
       by_cases hc : clB 0 (.tensor A B) = true
       · have h₁ := h.1
-        rw [resO_leaf dtorAlgs Bs hc] at h₁
-        rw [dtorB_closed _ hc]
-        exact dtorB_complete _ h₁
+        rw [resO_leaf consumeAlgs Bs hc] at h₁
+        rw [consumableAtB_closed _ hc]
+        exact consumableAtB_complete _ h₁
       · obtain ⟨h₁, h₂, h₃⟩ := h
         simp only [BoCa.Fig16.LogRel.Core.FoldP.resO, if_neg hc] at h₁
         cases h₁ with
         | tensor ha hb =>
-          have hA : AlgDtor Bs A := ⟨ha, fun B' Bs' hm => h₂ B' Bs' (by
+          have hA : AlgConsume Bs A := ⟨ha, fun B' Bs' hm => h₂ B' Bs' (by
               simp only [keysIn, List.mem_append]; exact .inl hm),
             fun Bs' S hm => h₃ Bs' S (by simp only [keysIn, List.mem_append]; exact .inl hm)⟩
-          have hB : AlgDtor Bs B := ⟨hb, fun B' Bs' hm => h₂ B' Bs' (by
+          have hB : AlgConsume Bs B := ⟨hb, fun B' Bs' hm => h₂ B' Bs' (by
               simp only [keysIn, List.mem_append]; exact .inr hm),
             fun Bs' S hm => h₃ Bs' S (by simp only [keysIn, List.mem_append]; exact .inr hm)⟩
-          simp [dtorB, dtorB_completeA A Bs hA, dtorB_completeA B Bs hB]
+          simp [consumableAtB, consumableAtB_completeA A Bs hA, consumableAtB_completeA B Bs hB]
   | .sum A B, Bs, h => by
       by_cases hc : clB 0 (.sum A B) = true
       · have h₁ := h.1
-        rw [resO_leaf dtorAlgs Bs hc] at h₁
-        rw [dtorB_closed _ hc]
-        exact dtorB_complete _ h₁
+        rw [resO_leaf consumeAlgs Bs hc] at h₁
+        rw [consumableAtB_closed _ hc]
+        exact consumableAtB_complete _ h₁
       · obtain ⟨h₁, h₂, h₃⟩ := h
         simp only [BoCa.Fig16.LogRel.Core.FoldP.resO, if_neg hc] at h₁
         cases h₁ with
         | sum ha hb =>
-          have hA : AlgDtor Bs A := ⟨ha, fun B' Bs' hm => h₂ B' Bs' (by
+          have hA : AlgConsume Bs A := ⟨ha, fun B' Bs' hm => h₂ B' Bs' (by
               simp only [keysIn, List.mem_append]; exact .inl hm),
             fun Bs' S hm => h₃ Bs' S (by simp only [keysIn, List.mem_append]; exact .inl hm)⟩
-          have hB : AlgDtor Bs B := ⟨hb, fun B' Bs' hm => h₂ B' Bs' (by
+          have hB : AlgConsume Bs B := ⟨hb, fun B' Bs' hm => h₂ B' Bs' (by
               simp only [keysIn, List.mem_append]; exact .inr hm),
             fun Bs' S hm => h₃ Bs' S (by simp only [keysIn, List.mem_append]; exact .inr hm)⟩
-          simp [dtorB, dtorB_completeA A Bs hA, dtorB_completeA B Bs hB]
+          simp [consumableAtB, consumableAtB_completeA A Bs hA, consumableAtB_completeA B Bs hB]
   | .ref A, Bs, h => by
       by_cases hc : clB 0 A = true
       · have h₁ := h.1
-        rw [resO_leaf dtorAlgs Bs (A := .ref A) hc] at h₁
+        rw [resO_leaf consumeAlgs Bs (A := .ref A) hc] at h₁
         cases h₁ with
-        | ref h₁ => simp [dtorB, hc, dtorB_complete A h₁]
+        | ref h₁ => simp [consumableAtB, hc, consumableAtB_complete A h₁]
       · obtain ⟨h₁, h₂, h₃⟩ := h
         simp only [BoCa.Fig16.LogRel.Core.FoldP.resO, if_neg hc] at h₁
-        simp only [dtorB, hc, Bool.not_false, Bool.and_self, if_true]
-        exact dtorB_completeA A Bs ⟨h₁, h₂, h₃⟩
+        simp only [consumableAtB, hc, Bool.not_false, Bool.and_self, if_true]
+        exact consumableAtB_completeA A Bs ⟨h₁, h₂, h₃⟩
   | .tvar _, _, _ => rfl
   | .box a A, Bs, h => by
       have h₁ := h.1
       simp only [BoCa.Fig16.LogRel.Core.FoldP.resO] at h₁
       cases h₁ with
-      | box h₁ => simpa [dtorB] using dtorB_complete A h₁
+      | box h₁ => simpa [consumableAtB] using consumableAtB_complete A h₁
   | .mu A, Bs, h => by
       by_cases hc : clB 0 (.mu A) = true
       · have h₁ := h.1
-        rw [resO_leaf dtorAlgs Bs hc] at h₁
+        rw [resO_leaf consumeAlgs Bs hc] at h₁
         cases h₁ with
         | mu hP h₁ h₂ h₃ =>
-            simp only [dtorB, hc, Bool.not_true, Bool.and_false, Bool.false_eq_true, if_false,
+            simp only [consumableAtB, hc, Bool.not_true, Bool.and_false, Bool.false_eq_true, if_false,
               Bool.and_eq_true]
-            exact ⟨(pBodyB_iff A).mpr hP, dtorB_completeA A [A] ⟨h₁, h₂, h₃⟩⟩
+            exact ⟨(pBodyB_iff A).mpr hP, consumableAtB_completeA A [A] ⟨h₁, h₂, h₃⟩⟩
       · obtain ⟨-, h₂, h₃⟩ := h
-        have hroot : HasDtor (resO dtorAlgs (A :: Bs) A) :=
+        have hroot : Consumable (resO consumeAlgs (A :: Bs) A) :=
           h₂ A Bs (by simp [keysIn, hc])
-        have hA : AlgDtor (A :: Bs) A := ⟨hroot,
+        have hA : AlgConsume (A :: Bs) A := ⟨hroot,
           fun B' Bs' hm => h₂ B' Bs' (by simp only [keysIn, if_neg hc]; exact .tail _ hm),
           fun Bs' S hm => h₃ Bs' S (by simp only [keysIn, if_neg hc]; exact .tail _ hm)⟩
-        simp only [dtorB, hc, Bool.not_false, Bool.and_self, if_true]
-        exact dtorB_completeA A (A :: Bs) hA
+        simp only [consumableAtB, hc, Bool.not_false, Bool.and_self, if_true]
+        exact consumableAtB_completeA A (A :: Bs) hA
   | .thunk (.amp _ (.ret .unit)), _, _ => rfl
   | .thunk (.nu (.amp C (.ret R))), _, h => by
       have h₁ := h.1
       simp only [BoCa.Fig16.LogRel.Core.FoldP.resO] at h₁
       cases h₁ with
       | nu hC hRc h =>
-          simp [dtorB, CTy.nuOkB_complete _ hC, VTy.clB_complete 0 R hRc, dtorB_complete R h]
+          simp [consumableAtB, CTy.nuOkB_complete _ hC, VTy.clB_complete 0 R hRc, consumableAtB_complete R h]
   | .thunk (.nu (.ret _)), _, h | .thunk (.nu (.arr _ _)), _, h | .thunk (.nu .top), _, h
   | .thunk (.nu (.all _ _ _)), _, h | .thunk (.nu (.nu _)), _, h
   | .thunk (.nu (.eff _ _ _ _ _ _ _ _)), _, h
@@ -468,16 +468,16 @@ theorem dtorB_completeA : ∀ (A : CVTy) (Bs : Stack), AlgDtor Bs A → dtorB tr
   | .fam (.ref A), Bs, h => by
       by_cases hc : clB 0 A = true
       · have h₁ := h.1
-        rw [resO_leaf dtorAlgs Bs (A := .fam (.ref A)) hc] at h₁
+        rw [resO_leaf consumeAlgs Bs (A := .fam (.ref A)) hc] at h₁
         cases h₁ with
-        | array h₁ => simp [dtorB, hc, dtorB_complete A h₁]
+        | array h₁ => simp [consumableAtB, hc, consumableAtB_complete A h₁]
       · obtain ⟨-, h₂, h₃⟩ := h
-        have hS : HasDtor (resO dtorAlgs Bs A) := h₃ Bs A (by simp [keysIn, hc])
-        have hA : AlgDtor Bs A := ⟨hS,
+        have hS : Consumable (resO consumeAlgs Bs A) := h₃ Bs A (by simp [keysIn, hc])
+        have hA : AlgConsume Bs A := ⟨hS,
           fun B' Bs' hm => h₂ B' Bs' (by simp only [keysIn, if_neg hc]; exact .tail _ hm),
           fun Bs' S hm => h₃ Bs' S (by simp only [keysIn, if_neg hc]; exact .tail _ hm)⟩
-        simp only [dtorB, hc, Bool.not_false, Bool.and_self, if_true]
-        exact dtorB_completeA A Bs hA
+        simp only [consumableAtB, hc, Bool.not_false, Bool.and_self, if_true]
+        exact consumableAtB_completeA A Bs hA
   | .fam (.imm _ _), _, _ | .fam (.mut _ _), _, _ => rfl
   | .fam .unit, _, h | .fam (.tensor _ _), _, h | .fam .zero, _, h | .fam (.sum _ _), _, h
   | .fam (.thunk _), _, h | .fam (.box _ _), _, h
@@ -488,20 +488,20 @@ theorem dtorB_completeA : ∀ (A : CVTy) (Bs : Stack), AlgDtor Bs A → dtorB tr
       cases h₁
 end
 
-/-- **`hasDtorB` decides `HasDtor`.**  `[spec §12]` -/
-theorem hasDtorB_iff (A : CVTy) : hasDtorB A = true ↔ HasDtor A :=
-  ⟨dtorB_sound A, dtorB_complete A⟩
+/-- **`consumableB` decides `Consumable`.**  `[spec §12]` -/
+theorem consumableB_iff (A : CVTy) : consumableB A = true ↔ Consumable A :=
+  ⟨consumableAtB_sound A, consumableAtB_complete A⟩
 
-instance : DecidablePred HasDtor := fun A => decidable_of_iff _ (hasDtorB_iff A)
+instance : DecidablePred Consumable := fun A => decidable_of_iff _ (consumableB_iff A)
 
-instance : DecidablePred DerivedDrop := fun A =>
-  inferInstanceAs (Decidable (¬ A.Persistent ∧ HasDtor A))
+instance : DecidablePred LinearConsumable := fun A =>
+  inferInstanceAs (Decidable (¬ A.Persistent ∧ Consumable A))
 
 
 /-- What the checker knows at a point besides `Δ` and the slot types `T`: the declarations in
 scope, the name of each slot (a dead binder has none), the lifetime names, a `def`'s type
 parameters, and the slots **owed** to the current tail position (SPEC §12): variables with a
-destructor that the computation being checked must consume on every path, the checker dropping
+consume that the computation being checked must consume on every path, the checker consuming
 them where it does not. `own` is indexed like `vars`; a slot past its end is not owed. -/
 structure Env where
   scope : Scope
@@ -718,11 +718,11 @@ def Env.closeHint (E : Env) (A : CVTy) (abort : Bool) : String :=
     s!": `{n}` holds the field `{g}`, marked `must_close`; {fix}{at_}"
   | none => ""
 
-/-- Why slot `i` was not dropped where a path does not consume it. -/
-def Env.notDropped (E : Env) (T : List CVTy) (i : Nat) : String :=
+/-- Why slot `i` was not consumed where a path does not consume it. -/
+def Env.notConsumed (E : Env) (T : List CVTy) (i : Nat) : String :=
   match T[i]? with
-  | some A => if hasDtorB A then "" else
-      s!", and its type `{E.ppV A}` is linear and has no derived drop" ++ E.closeHint A false
+  | some A => if consumableB A then "" else
+      s!", and its type `{E.ppV A}` is linear and is not consumable" ++ E.closeHint A false
   | none => ""
 
 /-- The two parts of a `case` or a `<,>` do not consume the same variables. -/
@@ -730,17 +730,17 @@ def mergeErr (E : Env) (T : List CVTy) (sp : Span) (what₁ what₂ intro : Stri
     (u₁ w₁ u₂ w₂ : List Bool) : Error :=
   match firstMissing u₁ u₂ w₂, firstMissing u₂ u₁ w₁ with
   | some i, _ => ⟨sp, s!"{intro}{E.slotName i} is consumed in {what₁} but not in {what₂}" ++
-      E.notDropped T i⟩
+      E.notConsumed T i⟩
   | _, some i => ⟨sp, s!"{intro}{E.slotName i} is consumed in {what₂} but not in {what₁}" ++
-      E.notDropped T i⟩
+      E.notConsumed T i⟩
   | _, _ => ⟨sp, "internal error: merge"⟩
 
-/-- A binder's variable is neither consumed nor dropped when its scope closes. -/
+/-- A binder's variable is neither consumed nor consumed when its scope closes. -/
 def unconsumed (E : Env) (sp : Span) (x : String) (A : CVTy) : Error :=
-  if hasDtorB A then
-    ⟨sp, s!"`{x}` is not consumed in its scope, and it cannot be dropped where its scope ends"⟩
+  if consumableB A then
+    ⟨sp, s!"`{x}` is not consumed in its scope, and it cannot be consumed where its scope ends"⟩
   else ⟨sp, s!"`{x}` is not consumed in its scope, and its type `{E.ppV A}` is linear and " ++
-    "has no derived drop" ++ E.closeHint A false⟩
+    "is not consumable" ++ E.closeHint A false⟩
 
 def mismatch (sp : Span) (want got : String) : Error :=
   ⟨sp, s!"type mismatch: expected `{want}`, but this has type `{got}`"⟩
@@ -797,17 +797,17 @@ def lookupVar (x : String) : List (Option String) → Option Nat
 /-- A slot that is not owed: a dead binder. -/
 def Env.push (E : Env) (x : Option String) : Env := { E with vars := x :: E.vars, own := false :: E.own }
 
-/-- A binder's live slot `x : A`, owed to its scope when `A` is linear and has a derived drop
+/-- A binder's live slot `x : A`, owed to its scope when `A` is linear and is consumable
 (SPEC §12). -/
 def Env.pushOwn (E : Env) (x : String) (A : CVTy) : Env :=
-  { E with vars := some x :: E.vars, own := (!A.persistent && hasDtorB A) :: E.own }
+  { E with vars := some x :: E.vars, own := (!A.persistent && consumableB A) :: E.own }
 
-/-- A binder owes exactly the slot with a derived drop.  `[spec §12]` -/
+/-- A binder owes exactly the slot that is consumable.  `[spec §12]` -/
 theorem Env.pushOwn_own (E : Env) (x : String) (A : CVTy) :
-    (E.pushOwn x A).own.head? = some (decide (DerivedDrop A)) := by
+    (E.pushOwn x A).own.head? = some (decide (LinearConsumable A)) := by
   simp only [Env.pushOwn, List.head?_cons, Option.some.injEq]
   rw [Bool.eq_iff_iff]
-  simp [DerivedDrop, Linear, hasDtorB_iff]
+  simp [LinearConsumable, Linear, consumableB_iff]
 
 /-- Nothing owed: a value, or a computation that is not in tail position. -/
 def Env.clearOwn (E : Env) : Env := { E with own := [] }
@@ -849,7 +849,7 @@ def notBang (E : Env) (T : List CVTy) (sp : Span) : Option Nat → Error
 section
 variable {Δ : LifeCtx} {T : List CVTy}
 
-/-! ### Drops (SPEC §12) -/
+/-! ### Consumes (SPEC §12) -/
 
 mutual
 /-- `x` occurs free in a value-judged expression. -/
@@ -891,7 +891,7 @@ def _root_.Frontend.Comp.terminal : Comp → Bool
   | .nuIn .. | .ascribe .. | .unwind .. => false
   | _ => true
 
-/-- The slots to drop before a terminal computation: owed, and neither used nor absorbed by it. -/
+/-- The slots to consume before a terminal computation: owed, and neither used nor absorbed by it. -/
 def owedLeft : List Bool → List Bool → List Bool → Nat → List Nat
   | o :: os, u :: us, w :: ws, i => (if o && !u && !w then [i] else []) ++ owedLeft os us ws (i + 1)
   | _, _, _, _ => []
@@ -899,37 +899,37 @@ def owedLeft : List Bool → List Bool → List Bool → Nat → List Nat
 section
 variable {Δ : LifeCtx} {T : List CVTy}
 
-/-- `dtorE A xᵢ; M` for the slot `i`. -/
-def dropOne {C : CCTy} (sp : Span) (i : Nat) (r : Res Δ T (.comp C)) :
+/-- `consumeE A xᵢ; M` for the slot `i`. -/
+def consumeOne {C : CCTy} (sp : Span) (i : Nat) (r : Res Δ T (.comp C)) :
     Except Error (Res Δ T (.comp C)) :=
   match hi : T[i]? with
   | some A =>
-    if hA : hasDtorB A = true then
+    if hA : consumableB A = true then
       if h : overlapOK T (oneL T i) r.F.u = true then
-        pure (rDrop (at_ sp) (at_ sp) i A hi (hasDtorB_sound hA)
-          (BoCa.Fig16.LogRel.Core.dtorE_closed (hasDtorB_sound hA))
-          (BoCa.Fig16.LogRel.Core.dtorE_effFree A) r h)
-      else throw ⟨sp, "internal error: a dropped slot is used"⟩
-    else throw ⟨sp, "internal error: an owed slot has no destructor"⟩
+        pure (rConsume (at_ sp) (at_ sp) i A hi (consumableB_sound hA)
+          (BoCa.Fig16.LogRel.Core.consumeE_closed (consumableB_sound hA))
+          (BoCa.Fig16.LogRel.Core.consumeE_effFree A) r h)
+      else throw ⟨sp, "internal error: a consumed slot is used"⟩
+    else throw ⟨sp, "internal error: an owed slot is not consumable"⟩
   | none => throw ⟨sp, "internal error: an owed slot is out of range"⟩
 
 /-- The binders' slots `0 … k − 1` of a scope whose body can leave none of them live, each with a
-derived drop, consumed by it at the head of the body (`drop_derives`): the body neither uses such
+consume, consumed by it at the head of the body (`consumeSlot_derives`): the body neither uses such
 a slot nor can weaken it, as under `boxed[@a]`, whose context must outlive `@a` (`[]I`), a slot
-of `Unk` among them. Such a slot is not owed (an owed one is dropped at the terminal), so its type
-is persistent or a borrow, and its drop does nothing observable.  `[spec §12]` -/
-def dropStuck {C : CCTy} (sp : Span) (k : Nat) (r : Res Δ T (.comp C)) :
+of `Unk` among them. Such a slot is not owed (an owed one is consumed at the terminal), so its type
+is persistent or a borrow, and its consume does nothing observable.  `[spec §12]` -/
+def consumeStuck {C : CCTy} (sp : Span) (k : Nat) (r : Res Δ T (.comp C)) :
     Except Error (Res Δ T (.comp C)) :=
   (List.range k).foldlM (init := r) fun r i =>
-    if !(r.F.u.getD i false) && !(r.F.w.getD i true) && (T[i]?.map hasDtorB).getD false then
-      dropOne sp i r
+    if !(r.F.u.getD i false) && !(r.F.w.getD i true) && (T[i]?.map consumableB).getD false then
+      consumeOne sp i r
     else pure r
 
-/-- Drop what the terminal computation `r` leaves owed, the lowest index (the most recently
+/-- Consume what the terminal computation `r` leaves owed, the lowest index (the most recently
 bound variable) first. -/
-def dropOwed {C : CCTy} (E : Env) (sp : Span) (r : Res Δ T (.comp C)) :
+def consumeOwed {C : CCTy} (E : Env) (sp : Span) (r : Res Δ T (.comp C)) :
     Except Error (Res Δ T (.comp C)) :=
-  (owedLeft E.own r.F.u r.F.w 0).foldr (fun i acc => do dropOne sp i (← acc)) (pure r)
+  (owedLeft E.own r.F.u r.F.w 0).foldr (fun i acc => do consumeOne sp i (← acc)) (pure r)
 
 end
 
@@ -972,8 +972,8 @@ def withIt {C D : CCTy} (E : Env) (T : List CVTy) (sp : Span) (r₁ : Res Δ (wi
 def caseIt {A B : CVTy} {C : CCTy} (E : Env) (T : List CVTy) (sp : Span) (x y : Ident)
     (rV : Res Δ T (.val (.sum A B))) (r₁ : Res Δ (A :: T) (.comp C))
     (r₂ : Res Δ (B :: T) (.comp C)) : Except Error (Res Δ T (.comp C)) := do
-  let r₁ ← dropStuck x.span 1 r₁
-  let r₂ ← dropStuck y.span 1 r₂
+  let r₁ ← consumeStuck x.span 1 r₁
+  let r₂ ← consumeStuck y.span 1 r₂
   let F₁ ← popL E x.span x.name r₁.F
   let F₂ ← popL E y.span y.name r₂.F
   if s₁ : subL F₁.u (orL F₂.u F₂.w) = true then
@@ -1021,7 +1021,7 @@ def lamIt {A : CVTy} {C : CCTy} (E : Env) (sp : Span) (x : Ident) (rM : Res Δ (
       else rLam { sp, name := x.name } <$> popL E x.span x.name rM.F
     | none => rLam { sp, name := x.name } <$> popL E x.span x.name rM.F
   | _, rM => do
-    let rM ← dropStuck x.span 1 rM
+    let rM ← consumeStuck x.span 1 rM
     rLam { sp, name := x.name } <$> popL E x.span x.name rM.F
 
 /-! ### Effectful bindings  `[spec §19]` -/
@@ -1044,10 +1044,10 @@ def atRow (E : Env) (sp : Span) (S : CRow) :
     | none => throw ⟨sp, s!"after a computation that performs operations, this must have a " ++
         s!"type `F[…] B`, but it has type `{E.ppC C}`"⟩
 
-/-- The finaliser of an effectful binding: the destructors of the non-persistent slots `u` (the
+/-- The finaliser of an effectful binding: the consumes of the non-persistent slots `u` (the
 slots the rest of the computation uses), under the binder's dead slot, at the pure row (SPEC §24:
 a finaliser lets no raise escape). It runs when an abortive operation of the bound computation
-stops the rest. SPEC §19's drop glue: `[then]`'s `D`, inserted as SPEC §12 inserts destructors. -/
+stops the rest. SPEC §19's consume glue: `[then]`'s `D`, inserted as SPEC §12 inserts consumes. -/
 def finalOf (E : Env) (sp : Span) (S : CRow) (u : List Bool) :
     Except Error (Res Δ (.unit :: T) (.comp (effOf [] .unit))) := do
   -- The row has an operation that resumes and may be cancelled (`capB`): the finaliser runs at
@@ -1059,13 +1059,13 @@ def finalOf (E : Env) (sp : Span) (S : CRow) (u : List Bool) :
   let r ← idx.foldlM (init := r0) fun r i => do
     match T[i]? with
     | some A =>
-      if hasDtorB A then dropOne sp (i + 1) r
+      if consumableB A then consumeOne sp (i + 1) r
       else if cancels then
         throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across an operation that " ++
           "may be cancelled: the cancel runs a finaliser (`[then]`) that consumes it by its " ++
-          "derived drop, and its type is linear with no derived drop" ++ E.closeHint A true⟩
+          "consume, and its type is linear and not consumable" ++ E.closeHint A true⟩
       else throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across a computation " ++
-        "that may abort, and its type is linear with no derived drop, and an abort abandons " ++
+        "that may abort, and its type is linear and not consumable, and an abort abandons " ++
         "only a value that holds no owned cell" ++ E.closeHint A true⟩
     | none => throw ⟨sp, "internal error: a slot is out of range"⟩
   pure r
@@ -1114,11 +1114,11 @@ def thenIt (E : Env) (sp : Span) (x : String) {S : CRow} {A B : CVTy} {tN : TExp
 /-- `x <- M; N` whose head `M` performs operations, at the row `S` (SPEC §19). At a row with no
 cancellable or unrestricted operation, or when every slot `N` uses holds no owned cell (and is `!`
 at an unrestricted row), `[let]`; otherwise `[then]`, with the finaliser `finalOf`: the
-destructors of the slots `N` uses. -/
+consumes of the slots `N` uses. -/
 def effBind (E : Env) (sp : Span) (x : Ident) {S : CRow} {A B : CVTy}
     (rM : Res Δ T (.comp (effOf S A))) (rN : Res Δ (A :: T) (.comp (effOf S B))) :
     Except Error (Res Δ T (.comp (effOf S B))) := do
-  let rN ← dropStuck x.span 1 rN
+  let rN ← consumeStuck x.span 1 rN
   let FN ← popL E x.span x.name rN.F
   if hw : Row.cancelsB S = true then
     let p : CVTy → Bool := fun A => ownFreeB A && (!Row.unrB S || isBangB A)

@@ -24,8 +24,8 @@ instance of their name.
 * `progNC₁`: as `progFinOp`, but the outer `4` cancels the finaliser's continuation: that cancel
   passes the running finaliser's `cfin` (`[cfin-cancel]`) and ends at its own `ccatch`
   (`progNC₁_run`).
-* `progDrop`, `progKeep`: a finaliser raises `2`, kept; a later finaliser performs `4`, whose
-  unrestricted handler drops its continuation, and the kept error with it (`progDrop_run`), or
+* `progConsume`, `progKeep`: a finaliser raises `2`, kept; a later finaliser performs `4`, whose
+  unrestricted handler consumes its continuation, and the kept error with it (`progConsume_run`), or
   resumes it, and the kept error reaches the live `2` (`progKeep_run`).
 
 The handlers' operations are unrestricted (`qualsVal [.unr]`), so `κ` owns no cell (§25) and the
@@ -156,7 +156,7 @@ theorem resume_start (μ : Heap) (n : UInt32) (hr : Val) (K : Kont) (hK : K.HasH
   exact kappa_resume_steps μ _ K Val.unit
 
 /-- **A constant clause**: `hnd (n, H) K[perform (n, (0, ()))]`, `K` free of `n`, answers the
-closed value `v`; the continuation is dropped. -/
+closed value `v`; the continuation is consumed. -/
 theorem const_start (μ : Heap) (n : UInt32) (hr v : Val) (hv : ∀ s, Expr.subst 0 s v.1 = v.1)
     (K : Kont) (hK : K.HasHnd n = false) :
     Steps (ℍ := ℍ) μ (hndE (hU n hr (constC v)) (K.plug (performU n))) μ (.val v) := by
@@ -339,8 +339,8 @@ def progKD (c : Val) : Expr :=
   hndE (hU 2 idV (constC (Val.inj₂ Val.unit))) (hndE (hU 4 injlV c)
     (hndE H₁ (thenU (thenU (performU 1) (raiseU 2)) (performU 4))))
 
-/-- `H₄ₒ`'s clause answers `inj₁ ()` and drops its continuation. -/
-def progDrop : Expr := progKD (constC (Val.inj₁ Val.unit))
+/-- `H₄ₒ`'s clause answers `inj₁ ()` and consumes its continuation. -/
+def progConsume : Expr := progKD (constC (Val.inj₁ Val.unit))
 
 /-- `H₄ₒ`'s clause resumes its continuation. -/
 def progKeep : Expr := progKD resumeC
@@ -362,9 +362,9 @@ theorem progKD_cancel (μ : Heap) (c : Val) :
     (raiseE (.val (cancelVal (some (opPayload 2 0 Val.unit))))))) μ _
   exact Steps.plug (Ko.comp (ccF .hole)) (fin_cancel μ (performU 4) _)
 
-/-- **`progDrop`**: `H₄ₒ`'s unrestricted clause drops the continuation that holds the kept error
+/-- **`progConsume`**: `H₄ₒ`'s unrestricted clause consumes the continuation that holds the kept error
 `2`, so `H₂ₒ`'s clause never runs. -/
-theorem progDrop_run (μ : Heap) : Steps (ℍ := ℍ) μ progDrop μ (.val (Val.inj₁ Val.unit)) := by
+theorem progConsume_run (μ : Heap) : Steps (ℍ := ℍ) μ progConsume μ (.val (Val.inj₁ Val.unit)) := by
   refine (progKD_cancel μ _).trans ?_
   refine (Steps.plug (hF (hU 2 idV (constC (Val.inj₂ Val.unit))) .hole) (const_start μ 4 injlV
     (Val.inj₁ Val.unit) (fun _ => rfl) (ccF (cfF (cancelVal (some (opPayload 2 0 Val.unit))) .hole))
@@ -584,8 +584,8 @@ theorem progNC₁_eval :
     (match eval progNC₁ with | .value ⟨.unit, _⟩ false => true | _ => false) = true := by
   decide
 
-theorem progDrop_eval :
-    (match eval progDrop with | .value ⟨.inj₁ .unit, _⟩ false => true | _ => false) = true := by
+theorem progConsume_eval :
+    (match eval progConsume with | .value ⟨.inj₁ .unit, _⟩ false => true | _ => false) = true := by
   decide
 
 theorem progKeep_eval :

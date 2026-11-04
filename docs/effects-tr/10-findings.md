@@ -88,7 +88,7 @@ frame-owned resource") extended to continuations, by moving the handle where row
 
 A deep handler's frame is part of every continuation of its own operations. Phase A checks the
 clauses' captures at the row the handler *forwards*, and for its own operations only the case
-where a continuation may be dropped (the return clause may not run). It does not check the case
+where a continuation may be consumed (the return clause may not run). It does not check the case
 where a continuation may be resumed twice, which reinstalls the frame twice and runs the return
 clause twice.
 
@@ -139,7 +139,7 @@ it (T7.15, *On Staton's law*).
   cancellable, so `bound(ρ).req ≠ lin` in [lend]) rather than by T1; and `t1Harm`, refused by grades
   (T9.1).
 - Phase A's 10 programs: each types under §2 after mechanical rewrites: the lend's rebinding
-  (10.1); an explicit `cancel k` where a clause drops a cancellable continuation, and `hStream`'s
+  (10.1); an explicit `cancel k` where a clause consumes a cancellable continuation, and `hStream`'s
   stream built as `fold (thunk_lin ⟨resume k (), cancel k⟩)` (§8.1); and each `fix` (`retry`,
   `retryPolN`, `countdown`, `pullAll`) as `bfix_n` under a handler of an exhaustion effect (§9.4,
   SPEC §20). Every lend in them has a body whose row, after erasing the lent instance, holds only

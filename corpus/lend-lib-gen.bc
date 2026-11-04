@@ -5,7 +5,7 @@
 --
 -- Answer: (i32[18], i32[8]): the cell starts at 5, the three elements are 5, 6, 7, and the cell
 -- holds 8 when it comes back. A step that yielded after the store gives 21; a lend that did not
--- store through the borrow gives (15, 5); a close that dropped the cell could not return it.
+-- store through the borrow gives (15, 5); a close that consumed the cell could not return it.
 
 include lend
 

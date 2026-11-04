@@ -1,4 +1,4 @@
-import Core.Dtor
+import Core.Consume
 import Core.RelationFacts
 
 /-!
@@ -89,7 +89,7 @@ theorem clo_coind {A : VTy} (hA : A.Cl 0) {c : Lifetime.Life} {B : VTy} {δ : LS
 
 A closure is a `U C`.  The observable view, at which an `Imm` payload is held
 (§12.69), relaxes `U` to `True`, and `Imm̲` takes `U C` to `Unk`: a closure behind an `Imm`
-borrow can only be forgotten, as the paper's clause (4) says of `⊸`.  A `Mut` payload is held
+borrow can only be released, as the paper's clause (4) says of `⊸`.  A `Mut` payload is held
 at the program's view.  So no access path reads a closure at the observable view, and
 `obs_transfer` is not asked to move one. -/
 
@@ -102,17 +102,17 @@ theorem immReborrow_clo (b c : Lifetime.Life) (A B : VTy) :
 theorem immReborrow_cloBox (b c : Lifetime.Life) (A B : VTy) :
     VTy.immReborrow b (cloBox c A B) = .unk := rfl
 
-/-! ### Structure: linear, with a derived drop -/
+/-! ### Structure: linear and consumable -/
 
-/-- A closure has a destructor, `close` (SPEC §12, group 2). -/
-theorem hasDtor_clo {A : VTy} (hA : A.Cl 0) (c : Lifetime.Life) (B : VTy) :
-    HasDtor (cloT c A B) :=
+/-- A closure is consumable, `close` (SPEC §12, group 2). -/
+theorem consumable_clo {A : VTy} (hA : A.Cl 0) (c : Lifetime.Life) (B : VTy) :
+    Consumable (cloT c A B) :=
   .nu (C := .arr A (.ret (.tensor (B.rename Nat.succ) (.box c (.tvar 0))))) (R := .unit)
     (cloBody_nuOk hA c B) trivial .unit
 
-theorem hasDtor_cloBox {A : VTy} (hA : A.Cl 0) (c : Lifetime.Life) (B : VTy) :
-    HasDtor (cloBox c A B) :=
-  .box (hasDtor_clo hA c B)
+theorem consumable_cloBox {A : VTy} (hA : A.Cl 0) (c : Lifetime.Life) (B : VTy) :
+    Consumable (cloBox c A B) :=
+  .box (consumable_clo hA c B)
 
 /-- A closure is not persistent: no split duplicates it and no promotion takes it. -/
 theorem not_persistent_clo (c : Lifetime.Life) (A B : VTy) :
@@ -123,15 +123,15 @@ theorem not_persistent_cloBox (c : Lifetime.Life) (A B : VTy) :
     ¬ (cloBox c A B).Persistent := by
   simp [VTy.Persistent, VTy.persistent]
 
-/-- A closure is not forgettable (`Forgettable`, SPEC §12 group 1): dropping one runs its `close`,
-so its derived drop is its destructor (group 2), not `forget`. -/
-theorem not_forgettable_clo (c : Lifetime.Life) (A B : VTy) : ¬ Forgettable (cloT c A B) := by
+/-- A closure is not releasable (`Releasable`, SPEC §12 group 1): consuming one runs its `close`,
+so its consume is `close` (group 2), not `forget`. -/
+theorem not_releasable_clo (c : Lifetime.Life) (A B : VTy) : ¬ Releasable (cloT c A B) := by
   intro h; cases h
 
-/-- `U(A ⊸ F B)` is linear with no derived drop (SPEC §12 group 3): it is disposed of only
+/-- `U(A ⊸ F B)` is linear and not consumable (SPEC §12 group 3): it is disposed of only
 by calling it, which needs an `A`.  So it cannot be the state of a closure whose `close`
 must dispose of it, and there is no uniform coercion from `A ⇒ B` to `Clo`. -/
-theorem not_hasDtor_lolli (A B : VTy) : ¬ HasDtor (.lolli A B) := by
+theorem not_consumable_lolli (A B : VTy) : ¬ Consumable (.lolli A B) := by
   intro h; cases h
 
 /-- `obs_transfer` at a closure: its arm at `U C`, where the observable view holds

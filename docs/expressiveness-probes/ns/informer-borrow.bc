@@ -4,7 +4,7 @@ include async
 fn watch<'c>(c: mut 'c i32, n: i32) -> i32 with Async =
   let mut m = c;
   for i in 0..n { modify m { x -> (i, ()) }; await() };
-  forget_mut['c, i32](m); n
+  release_mut['c, i32](m); n
 fn reader<'c>(c: imm 'c i32) -> i32 with Async = await(); *c
 
 main -> List[i32] =

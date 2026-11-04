@@ -53,7 +53,7 @@ union. A union that contains itself, a closure type that lies on a cycle of the 
 are pair and sum fields and a closure type's captured values, would be infinitely wide; such a
 *recursive* closure type keeps one word, `2t + 1` for a code `t` that captures nothing, or else
 the address of a heap object holding `t` and the captured words. A type is *trivial* when copying
-it is copying its words and dropping it is nothing: it holds no boxed field, no recursive closure
+it is copying its words and consuming it is nothing: it holds no boxed field, no recursive closure
 type, and no closure whose code captures a non-trivial value.
 -/
 
@@ -205,7 +205,7 @@ def tyVar (x : Var) : TM Nat := do
 def selOf : Tm → TM (Option Bool)
   | .inj r _ => pure (some r)
   | .var y => return (← get).sel[y]?
-  | .letv _ _ b | .copy _ _ _ b | .drop _ _ b => selOf b
+  | .letv _ _ b | .copy _ _ _ b | .consume _ _ b => selOf b
   | _ => pure none
 
 def int32 : TM Nat := newNode (.int .w32)
@@ -370,7 +370,7 @@ def infer (codeTy : Array Nat) (codes : Array Code) : Tm → TM Nat
       unify (← tyVar x') (← tyVar x)
       if let some r := (← get).sel[x]? then modify fun s => { s with sel := s.sel.insert x' r }
       infer codeTy codes b
-  | .drop _ _ b => infer codeTy codes b
+  | .consume _ _ b => infer codeTy codes b
   | .con k n a => do
       let fs ← (List.range n).mapM fun i => if i == k then tyVar a else newNode .any
       let t ← newNode (.sumN fs)
@@ -757,7 +757,7 @@ def resolve (s : TState) (codeTy : Array Nat) (codeEnv : Array (List Nat)) (main
 def Tm.builds : Tm → List Nat
   | .clos c _ => [c]
   | .letv _ e b => e.builds ++ b.builds
-  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b | .hnd _ _ _ b | .ubind _ _ b | .catch _ b
+  | .letpair _ _ _ b | .copy _ _ _ b | .consume _ _ b | .hnd _ _ _ b | .ubind _ _ b | .catch _ b
   | .fin _ _ b | .catchAll b => b.builds
   | .case _ _ b₁ _ b₂ => b₁.builds ++ b₂.builds
   | .when _ _ _ _ b r => b.builds ++ r.builds

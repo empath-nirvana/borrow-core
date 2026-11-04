@@ -49,10 +49,10 @@ fn word_eq(a: Word, b: Word) -> bool = list_eq(a, b, !{ (x, y) -> x == y })
 -- The words that are not stop words. (`filter` of `lib/list.bc` keeps the element it hands its
 -- predicate, so it needs an element it may copy freely; a word is a list, whose copy is a
 -- `clone`.)
-fn drop_stops(ws: List[Word]) -> List[Word] =
+fn consume_stops(ws: List[Word]) -> List[Word] =
   match unroll ws {
     inl u -> nil()
-  | inr (w, rest) -> if is_stop(clone(w)) { drop_stops(rest) } else { cons(w, drop_stops(rest)) }
+  | inr (w, rest) -> if is_stop(clone(w)) { consume_stops(rest) } else { cons(w, consume_stops(rest)) }
   }
 
 fn is_stop(w: Word) -> bool =
@@ -102,7 +102,7 @@ main -> i32 =
   let r = with on_exhausted(!{ u -> (0, nil[(Word * i32) * i32]()) }) {
     let ws = borrow imm "the fox saw a dog and the fox ran to the dog then a fox quick end" { v ->
       with on_exhausted(!{ u -> nil() }) { words(v) } };
-    let kept = drop_stops(ws);
+    let kept = consume_stops(ws);
     let counts = fold(kept, nil[Word * i32](), !{ (acc, w) -> bump(acc, w) });
     let sorted = sort_by(counts, !{ (a, b) -> let (wa, na) = a; let (wb, nb) = b; na > nb });
     let n = length(clone(sorted));

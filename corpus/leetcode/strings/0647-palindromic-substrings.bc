@@ -48,7 +48,7 @@ fn count<'t>(s: text 't) -> i32 =
     s = s2;
     sum = sum + k
   };
-  array_forget['t, u8](s);
+  array_release['t, u8](s);
   sum
 
 main -> i32 =

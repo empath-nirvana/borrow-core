@@ -222,7 +222,7 @@ theorem d_callMut {Γ Γa Γm : Ctx VTy} {a c : Lifetime.Life} {A B : VTy} {i j 
 /-! ### From `!(A ⇒ B)` to `Clo` -/
 
 /-- The step over a persistent function: `λs. ⟨λa. s a to b. (b, s), ()⟩`.  The state `s : !U(A ⊸ F B)` is
-persistent: the call uses it and hands it back, `close` drops it. -/
+persistent: the call uses it and hands it back, `close` consumes it. -/
 def ofFnStep : Val :=
   .lam (withPair (.val (.lam (bindE (.app (.var 3) (.var 0)) (.pair (.var 0) (.var 4)))))
     (.val .unit))
@@ -241,7 +241,7 @@ theorem d_ofFnStep {Γ : Ctx VTy} {c : Lifetime.Life} {A B : VTy} (hc : Δ.Defin
         (.boxI (.var (.there (.there (.there (.there (.here hΓ.toP))))))
           (.consDead (.consDead (.consDead (.consDead (.consLive .bang
             (ctxOutlives_dead hc hΓ)))))))))
-  · exact .unitI (.cons (.cons (.drop rfl hΓ.toP)))
+  · exact .unitI (.cons (.cons (.weaken rfl hΓ.toP)))
 
 /-- **From `!(A ⇒ B)` to `Clo`** (cf. Rust's `Fn ≤ FnMut`).  A `!U(A ⊸ F B)` is a closure
 outliving any defined `@c`: the state is persistent, so the closure is boxed at `@c`

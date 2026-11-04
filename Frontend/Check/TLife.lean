@@ -171,7 +171,7 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .bangThunkV ii jj C t => t.lifeBinders
   | .bangE ii jj A t => t.lifeBinders
   | .copyBang ii jj A => []
-  | .forgetBang ii jj A => []
+  | .releaseBang ii jj A => []
   | .boxI ii jj a A t => t.lifeBinders
   | .boxE ii jj a A t => t.lifeBinders
   | .immSub ii jj a b A t => t.lifeBinders
@@ -182,9 +182,9 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .tokBurn ii jj => []
   | .swap ii jj A B => []
   | .copy ii jj a A => []
-  | .forgetImm ii jj a A => []
-  | .forgetMut ii jj a A => []
-  | .forgetUnk ii jj => []
+  | .releaseImm ii jj a A => []
+  | .releaseMut ii jj a A => []
+  | .releaseUnk ii jj => []
   | .lit ii jj c => []
   | .hostOp ii jj op => []
   | .arrNew ii jj A => []
@@ -194,7 +194,7 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .arrLen ii jj a A => []
   | .arrGet ii jj a A => []
   | .arrCopy ii jj a A => []
-  | .arrForget ii jj a A => []
+  | .arrRelease ii jj a A => []
   | .countFold ii jj S => []
   | .countTry ii jj S E => []
   | .boundedFix ii jj A C => []
@@ -250,7 +250,7 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .lendR ii jj x b T B S td tM => [x] ++ td.lifeBinders ++ tM.lifeBinders
   | .lendLoopR ii jj x A S B R tN tK ts0 => [x] ++ [x] ++ [x] ++ tN.lifeBinders ++ tK.lifeBinders ++ ts0.lifeBinders
   | .nilDead ii jj j t => t.lifeBinders
-  | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
+  | .consume .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => []
   | .litFn _ _ _ t | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t
   | .nuEta _ _ _ _ t | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t
@@ -286,7 +286,7 @@ def TExpr.domFree : TExpr → Bool
   | .bangThunkV ii jj C t => t.domFree
   | .bangE ii jj A t => t.domFree
   | .copyBang ii jj A => true
-  | .forgetBang ii jj A => true
+  | .releaseBang ii jj A => true
   | .boxI ii jj a A t => t.domFree
   | .boxE ii jj a A t => t.domFree
   | .immSub ii jj a b A t => t.domFree
@@ -297,9 +297,9 @@ def TExpr.domFree : TExpr → Bool
   | .tokBurn ii jj => true
   | .swap ii jj A B => true
   | .copy ii jj a A => true
-  | .forgetImm ii jj a A => true
-  | .forgetMut ii jj a A => true
-  | .forgetUnk ii jj => true
+  | .releaseImm ii jj a A => true
+  | .releaseMut ii jj a A => true
+  | .releaseUnk ii jj => true
   | .lit ii jj c => true
   | .hostOp ii jj op => true
   | .arrNew ii jj A => true
@@ -309,7 +309,7 @@ def TExpr.domFree : TExpr → Bool
   | .arrLen ii jj a A => true
   | .arrGet ii jj a A => true
   | .arrCopy ii jj a A => true
-  | .arrForget ii jj a A => true
+  | .arrRelease ii jj a A => true
   | .countFold ii jj S => true
   | .countTry ii jj S E => true
   | .boundedFix ii jj A C => true
@@ -365,7 +365,7 @@ def TExpr.domFree : TExpr → Bool
   | .lendR ii jj x b T B S td tM => false
   | .lendLoopR ii jj x A S B R tN tK ts0 => false
   | .nilDead ii jj j t => t.domFree
-  | .dtor .. | .allocS .. | .freeS .. => true
+  | .consume .. | .allocS .. | .freeS .. => true
   | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I .. => false
   | .litFn _ _ _ t | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t
   | .nuEta _ _ _ _ t | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t
@@ -400,7 +400,7 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .bangThunkV ii jj C t => .bangThunkV ii jj C (t.reAb Δr)
   | .bangE ii jj A t => .bangE ii jj A (t.reAb Δr)
   | .copyBang ii jj A => .copyBang ii jj A
-  | .forgetBang ii jj A => .forgetBang ii jj A
+  | .releaseBang ii jj A => .releaseBang ii jj A
   | .boxI ii jj a A t => .boxI ii jj a A (t.reAb Δr)
   | .boxE ii jj a A t => .boxE ii jj a A (t.reAb Δr)
   | .immSub ii jj a b A t => .immSub ii jj a b A (t.reAb Δr)
@@ -411,9 +411,9 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .tokBurn ii jj => .tokBurn ii jj
   | .swap ii jj A B => .swap ii jj A B
   | .copy ii jj a A => .copy ii jj a A
-  | .forgetImm ii jj a A => .forgetImm ii jj a A
-  | .forgetMut ii jj a A => .forgetMut ii jj a A
-  | .forgetUnk ii jj => .forgetUnk ii jj
+  | .releaseImm ii jj a A => .releaseImm ii jj a A
+  | .releaseMut ii jj a A => .releaseMut ii jj a A
+  | .releaseUnk ii jj => .releaseUnk ii jj
   | .lit ii jj c => .lit ii jj c
   | .hostOp ii jj op => .hostOp ii jj op
   | .arrNew ii jj A => .arrNew ii jj A
@@ -423,7 +423,7 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .arrLen ii jj a A => .arrLen ii jj a A
   | .arrGet ii jj a A => .arrGet ii jj a A
   | .arrCopy ii jj a A => .arrCopy ii jj a A
-  | .arrForget ii jj a A => .arrForget ii jj a A
+  | .arrRelease ii jj a A => .arrRelease ii jj a A
   | .countFold ii jj S => .countFold ii jj S
   | .countTry ii jj S E => .countTry ii jj S E
   | .boundedFix ii jj A C => .boundedFix ii jj A C
@@ -479,7 +479,7 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .lendR ii jj x b T B S td tM => .lendR ii jj x b T B S (td.reAb Δr) (tM.reAb (Δr.extend x b))
   | .lendLoopR ii jj x A S B R tN tK ts0 => .lendLoopR ii jj x A S B R (tN.reAb (Δr.extend x Δr.meetOfDom)) (tK.reAb (Δr.extend x Δr.meetOfDom)) (ts0.reAb (Δr.extend x Δr.meetOfDom))
   | .nilDead ii jj j t => .nilDead ii jj j (t.reAb Δr)
-  | t@(.dtor ..) | t@(.allocS ..) | t@(.freeS ..) | t@(.withborSM ..) | t@(.withborSI ..)
+  | t@(.consume ..) | t@(.allocS ..) | t@(.freeS ..) | t@(.withborSM ..) | t@(.withborSI ..)
   | t@(.withborF2M ..) | t@(.withborF2I ..) => t
   | .litFn i j bs t => .litFn i j bs (t.reAb Δr)
   | .divLit i j op c t => .divLit i j op c (t.reAb Δr)
@@ -582,9 +582,9 @@ theorem litBodyT_reAb (Δr : LifeCtx) (t : TExpr) : litBodyT (t.reAb Δr) = litB
                 | _ => rfl
               | _ => rfl
             | _ => rfl
-          have hD : dtorOf1T (tD.reAb Δr) = dtorOf1T tD := by
+          have hD : consumeOf1T (tD.reAb Δr) = consumeOf1T tD := by
             cases tD with
-            | lolliE _ _ _ _ _ x h => cases h <;> simp only [TExpr.reAb, dtorOf1T, TExpr.isVarT_reAb]
+            | lolliE _ _ _ _ _ x h => cases h <;> simp only [TExpr.reAb, consumeOf1T, TExpr.isVarT_reAb]
             | _ => rfl
           simp only [TExpr.reAb, litBodyT, hA, hL, hD, TExpr.isVarT_reAb]
         | _ => rfl
@@ -693,9 +693,9 @@ theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | copyBang a0 =>
       intro Δ' he hd
       exact TDerivesP.copyBang a0
-  | forgetBang a0 =>
+  | releaseBang a0 =>
       intro Δ' he hd
-      exact TDerivesP.forgetBang a0
+      exact TDerivesP.releaseBang a0
   | boxI a0 a1 ih0 =>
       intro Δ' he hd
       exact TDerivesP.boxI (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (LeΔ.ctxOutlives he.1 a1)
@@ -726,15 +726,15 @@ theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | copy a0 =>
       intro Δ' he hd
       exact TDerivesP.copy a0
-  | forgetImm a0 =>
+  | releaseImm a0 =>
       intro Δ' he hd
-      exact TDerivesP.forgetImm a0
-  | forgetMut a0 =>
+      exact TDerivesP.releaseImm a0
+  | releaseMut a0 =>
       intro Δ' he hd
-      exact TDerivesP.forgetMut a0
-  | forgetUnk a0 =>
+      exact TDerivesP.releaseMut a0
+  | releaseUnk a0 =>
       intro Δ' he hd
-      exact TDerivesP.forgetUnk a0
+      exact TDerivesP.releaseUnk a0
   | lit a0 a1 =>
       intro Δ' he hd
       exact TDerivesP.lit a0 a1
@@ -762,9 +762,9 @@ theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | arrCopy a0 a1 a2 =>
       intro Δ' he hd
       exact TDerivesP.arrCopy a0 a1 a2
-  | arrForget a0 a1 a2 =>
+  | arrRelease a0 a1 a2 =>
       intro Δ' he hd
-      exact TDerivesP.arrForget a0 a1 a2
+      exact TDerivesP.arrRelease a0 a1 a2
   | countFold a0 a1 =>
       intro Δ' he hd
       exact TDerivesP.countFold a0 a1
@@ -902,7 +902,7 @@ theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | nilDead a0 a1 ih0 =>
       intro Δ' he hd
       exact TDerivesP.nilDead a0 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
-  | dtor hA hc he hΓ => intro _ _ _; exact .dtor hA hc he hΓ
+  | consume hA hc he hΓ => intro _ _ _; exact .consume hA hc he hΓ
   | allocS σ he hΓ => intro _ _ _; exact .allocS σ he hΓ
   | freeS σ he hΓ => intro _ _ _; exact .freeS σ he hΓ
   | withborSM => intro _ _ hd; simp [TExpr.domFree] at hd
@@ -1021,9 +1021,9 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
   | copyBang a0 =>
       intro Δ' he hd
       exact TDerivesAt.copyBang a0
-  | forgetBang a0 =>
+  | releaseBang a0 =>
       intro Δ' he hd
-      exact TDerivesAt.forgetBang a0
+      exact TDerivesAt.releaseBang a0
   | boxI a0 a1 ih0 =>
       intro Δ' he hd
       exact TDerivesAt.boxI (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (LeΔ.ctxOutlives he.1 a1)
@@ -1054,15 +1054,15 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
   | copy a0 =>
       intro Δ' he hd
       exact TDerivesAt.copy a0
-  | forgetImm a0 =>
+  | releaseImm a0 =>
       intro Δ' he hd
-      exact TDerivesAt.forgetImm a0
-  | forgetMut a0 =>
+      exact TDerivesAt.releaseImm a0
+  | releaseMut a0 =>
       intro Δ' he hd
-      exact TDerivesAt.forgetMut a0
-  | forgetUnk a0 =>
+      exact TDerivesAt.releaseMut a0
+  | releaseUnk a0 =>
       intro Δ' he hd
-      exact TDerivesAt.forgetUnk a0
+      exact TDerivesAt.releaseUnk a0
   | lit a0 a1 =>
       intro Δ' he hd
       exact TDerivesAt.lit a0 a1
@@ -1090,9 +1090,9 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
   | arrCopy a0 a1 a2 =>
       intro Δ' he hd
       exact TDerivesAt.arrCopy a0 a1 a2
-  | arrForget a0 a1 a2 =>
+  | arrRelease a0 a1 a2 =>
       intro Δ' he hd
-      exact TDerivesAt.arrForget a0 a1 a2
+      exact TDerivesAt.arrRelease a0 a1 a2
   | countFold a0 a1 =>
       intro Δ' he hd
       exact TDerivesAt.countFold a0 a1
@@ -1225,7 +1225,7 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
   | letPoly a0 a1 a2 a3 a4 a5 ih0 ih1 =>
       intro Δ' he hd
       exact TDerivesAt.letPoly a0 a1 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a3) (ih1 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a5)
-  | dtor hA hc he hΓ => intro _ _ _; exact .dtor hA hc he hΓ
+  | consume hA hc he hΓ => intro _ _ _; exact .consume hA hc he hΓ
   | allocS σ he hΓ => intro _ _ _; exact .allocS σ he hΓ
   | freeS σ he hΓ => intro _ _ _; exact .freeS σ he hΓ
   | withborSM => intro _ _ hd; simp [TExpr.domFree] at hd

@@ -42,7 +42,7 @@ writes the type `FnMut^c A B` as the experiment did, and SPEC §22 writes it `Cl
 
    What `experiments/BorrowedClosures` anticipated as "a mode index on the codata former" is
    supplied by `ν`'s observation set: the `close` observation is what gives the closure a derived
-   drop. No new former is needed, no index on `⊸`, and no new `CDerives` rule.
+   consume. No new former is needed, no index on `⊸`, and no new `CDerives` rule.
 
 3. **Is it derivable?**
    - **Not in `Core` as it is [inspection].** `CTy.NuLeaf` (`Core/Types.lean`) admits only
@@ -85,7 +85,7 @@ writes the type `FnMut^c A B` as the experiment did, and SPEC §22 writes it `Cl
    - **introduction** `d_mk`/`d_mkBox`, a λ capturing any context, linear and borrowed parts
      included, as the state;
    - **elimination** `d_call`, and `d_callMut` through `Mut @a ([@c] U FnMut)`;
-   - **forget** `d_close`, `d_closeBox`, and SPEC §12's `drop_derives` at `hasDtor_fnBox`;
+   - **consume** `d_close`, `d_closeBox`, and SPEC §12's `consumeSlot_derives` at `consumable_cloBox`;
    - **coercions** `d_fromFn` (`Fn ≤ FnMut`) and `d_once` (`FnMut ≤ FnOnce`).
 
 6. **The kernel change** (§8): the two positivity relaxations of `νX. C` in `Core`, `FnMut` as a
@@ -100,8 +100,8 @@ writes the type `FnMut^c A B` as the experiment did, and SPEC §22 writes it `Cl
 | 2 | pass a borrowed closure on, at any depth | **[Lean]** | `d_passF n` for every `n`; `passF` reborrows once (`withbor` form 3) and calls twice; `passProg 3` = `13` |
 | 3 | a closure capturing a closure; closures taking closures | **[Lean]** for capture and for `!` functions taking a borrowed closure; **[Lean]** positivity only for a `Clo` closure whose argument is a closure | `nestProg` = `8`; `twiceV`, `reV`, `passF`; `fnBody_nuOk_higher` |
 | 4 | store or return one, bounded by the borrows it captures | **[Lean]** | `counterProg` stores one in a cell; `retProg` returns one from a function (`15`); `logProg` captures `Mut 'x I32`, is boxed at `'w ⊏ 'x`, and writes through the borrow (`12`); `logState_not_outlives`, `fnMut_not_outlives` |
-| 5 | forget/drop | **[Lean]**; the policy **[inspection]** | `hasDtor_fnMut`; `dropProg` (`0`, its cell freed by the destructor); `not_forgettable_clo` |
-| 6 | `Fn ≤ FnMut ≤ FnOnce`, with refusals | **[Lean]** for the coercions and for the premises the refusals lack; the refusal of a uniform `FnOnce → FnMut` is **[inspection]** | `d_fromFn`, `fromFnProg` (`23`); `d_once`, `onceProg` (`5`); `not_persistent_fnMut`, `not_hasDtor_lolli` |
+| 5 | consume | **[Lean]**; the policy **[inspection]** | `consumable_clo`; `consumeProg` (`0`, its cell freed by the consume); `not_releasable_clo` |
+| 6 | `Fn ≤ FnMut ≤ FnOnce`, with refusals | **[Lean]** for the coercions and for the premises the refusals lack; the refusal of a uniform `FnOnce → FnMut` is **[inspection]** | `d_fromFn`, `fromFnProg` (`23`); `d_once`, `onceProg` (`5`); `not_persistent_fnMut`, `not_consumable_lolli` |
 
 ---
 
@@ -110,8 +110,8 @@ writes the type `FnMut^c A B` as the experiment did, and SPEC §22 writes it `Cl
 | Rust | here | copy | drop | SPEC §12 class |
 |---|---|---|---|---|
 | `FnOnce(A) -> B` | `U(A ⊸ F B)` | no | no: only by calling it | 3 (strictly linear) |
-| `FnMut(A) -> B + 'c` | `[@c] U(FnMut^c A B)` | no | yes: `close`, which runs code | 2 (destructor) |
-| `Fn(A) -> B` | `!U(A ⊸ F B)` | yes | yes: `forget` | 1 (forgettable) |
+| `FnMut(A) -> B + 'c` | `[@c] U(FnMut^c A B)` | no | yes: `close`, which runs code | 2 (consume) |
+| `Fn(A) -> B` | `!U(A ⊸ F B)` | yes | yes: `forget` | 1 (releasable) |
 
 The `!` row is SPEC §2. The `FnOnce` row is the paper's `⊸`. The `FnMut` row replaces §2's
 "`(env, !code)` behind a `Mut` borrow, … run by `withswap`". That row exposes the environment's
@@ -123,7 +123,7 @@ on the payload (`d_callMut`). What changes is that the environment is hidden by 
 ## 2. The relaxation of `νX. C`
 
 The fork `experiments/FnMut/FnMut/Core/` is `Core`'s import closure: the 50 modules
-`Core.Fundamental`, `Core.Dtor` and `Core.Steps` need, plus `Splits.lean` and `Weaken.lean`,
+`Core.Fundamental`, `Core.Consume` and `Core.Steps` need, plus `Splits.lean` and `Weaken.lean`,
 copied at `620c82c` with only the imports renamed. The first commit on the branch is the
 verbatim copy, so the second commit's diff is the change. Two relaxations:
 
@@ -145,7 +145,7 @@ Every arm that read the old trees gains its case: `cB_mono`, `cB_unroll`, `cB_st
 - `fundamentalC`, `adequacyC`, the frame rules, the reborrow images and the invariants build
   unchanged;
 - every previously positive body is still positive;
-- `Dtor.lean`'s `HasDtor.nu` covers `FnMut` without a new case.
+- `Consume.lean`'s `Consumable.nu` covers `FnMut` without a new case.
 
 `experiments/FnMut/kernel.patch` is the same diff as a patch against `Core/`, plus one proof arm
 in `Frontend/Check/Decide.lean` (`polyB_sound`'s `[@a]` case, which now reaches `VTy.Poly`'s new
@@ -190,9 +190,9 @@ Each is closed, typed at `F I32`, run by adequacy at every host and by the inter
 | `logProg` | `Capture.lean` | a logger whose state is the captured `Mut 'x I32`. It is boxed at `'w ⊏ 'x` and adds each argument to the log through `withswap` on the borrow. The owner reads the log after the borrow ends | `12` |
 | `fromFnProg` | `Programs.lean` | `λx. x + 10 : !U(I32 ⊸ F I32)` made a `Clo` closure and called twice | `23` |
 | `onceProg` | `Programs.lean` | the counter used once as `U(I32 ⊸ F I32)` | `5` |
-| `dropProg` | `Programs.lean` | the counter over a cell, never called, dropped by its destructor | `0` |
+| `consumeProg` | `Programs.lean` | the counter over a cell, never called, consumed implicitly | `0` |
 
-Every run ends with no cell left. In `dropProg` and `onceProg` that is the destructor's `close`
+Every run ends with no cell left. In `consumeProg` and `onceProg` that is the consume's `close`
 freeing the closure's cell.
 
 **Scopes.** `withbor`'s mutable form needs its payload to outlive a lifetime defined *before* the
@@ -202,27 +202,27 @@ captures a borrow at `'x` is boxed at a shorter `'w ⊏ 'x` (`logProg`). It cann
 itself (`logState_not_outlives`). Rust's `+ 'c` is non-strict and needs neither scope. This is
 BoLo's strict outlives, not a property of the closure `Clo` [inspection].
 
-## 5. Dropping
+## 5. Consuming
 
-**Choice: dropping a `Clo` closure runs its destructor, `close`.** `close` disposes of the
+**Choice: consuming a `Clo` closure runs its consume, `close`.** `close` disposes of the
 captured state. Owned linear captures are freed (the counter's `close` frees its cell), captured
-borrows are forgotten (the logger's `close` forgets `Mut 'x I32`), and captured closures are
+borrows are released (the logger's `close` releases `Mut 'x I32`), and captured closures are
 closed (`nestProg`).
 
-- **Justification.** This is SPEC §12 group 2, unchanged. `HasDtor.nu` already gives every
-  `U(νX. C & F R)` with a closed droppable residual the destructor "force, `nuOut`, `π₂`, then
-  the residual's destructor" (`hasDtor_fnMut` is that constructor at `FnMut`'s body). So the
-  checker's insertion policy (§12) drops an unused closure at the end of its scope, as it drops
-  a `Ref` or a `Stream`, and the drop is placed so that it never reorders effects.
+- **Justification.** This is SPEC §12 group 2, unchanged. `Consumable.nu` already gives every
+  `U(νX. C & F R)` with a closed consumable residual the consume "force, `nuOut`, `π₂`, then
+  the residual's consume" (`consumable_clo` is that constructor at `FnMut`'s body). So the
+  checker's insertion policy (§12) consumes an unused closure at the end of its scope, as it consumes
+  a `Ref` or a `Stream`, and the consume is placed so that it never reorders effects.
 - **What it requires of captures.** The creator writes `close`, so it must be able to dispose of
   the state.
   - The closure sugar that turns `λ` over a context into `unfold` would write `close` as the
-    destructors of the captures, so it requires every capture to be droppable (`HasDtor`:
+    consumes of the captures, so it requires every capture to be consumable (`Consumable`:
     classes 1 and 2).
-  - A capture without one, such as a `U(A ⊸ F B)` (`not_hasDtor_lolli`), is accepted only when
+  - A capture without one, such as a `U(A ⊸ F B)` (`not_consumable_lolli`), is accepted only when
     the creator writes an explicit `close` for it.
-- **A derived drop by destructor, not by `forget`.** A `Clo` closure is not `Forgettable`
-  (`not_forgettable_clo`, the experiment's name): discarding it is an action, its `close`, placed by
+- **A consume by consume, not by `forget`.** A `Clo` closure is not `Releasable`
+  (`not_releasable_clo`, the experiment's name): discarding it is an action, its `close`, placed by
   the checker's insertion policy so that it never reorders effects.
 
 ## 6. Relations
@@ -236,9 +236,9 @@ closed (`nestProg`).
   - The experiment does not need annotated arrows: the modes are the three shapes of §1.
   - **`FnMut` is not at the weakening mode in `ModesLabels`' sense [inspection].** `weaken_sound`
     says a value at a weakenable mode holds no `own` cell, and a `Clo` closure can own cells: the
-    counter owns one, freed by its `close`. Its weakening is a destructor, as for `Ref A` under §12,
+    counter owns one, freed by its `close`. Its weakening is a consume, as for `Ref A` under §12,
     not the free weakening of `Mut`.
-  - So `σ(m) = W` splits in two: *forgettable* (`Mut`, class 1) and *droppable by an action*
+  - So `σ(m) = W` splits in two: *releasable* (`Mut`, class 1) and *consumable by an action*
     (`FnMut`, and `Ref` since §12). The label reading is unaffected: a `Clo` closure breaks
     independence only through the borrows its state holds, and its `[@c]` bound is the label
     that licenses it.
@@ -259,8 +259,8 @@ closed (`nestProg`).
 - `cC_fnMut_iff` (the clause), `fnMut_coind`, `vC_obs_fnMut`, `immReborrow_fnMut`,
   `immReborrow_fnBox`, `obs_transfer_fnBox`.
 - `fnBody_nuOk`, `fnBody_nuOk_higher`, `fnEffBody_nuOk`.
-- `hasDtor_fnMut`, `hasDtor_fnBox`, `not_forgettable_clo`, `not_persistent_fnMut`,
-  `not_persistent_fnBox`, `not_hasDtor_lolli`, `fnMut_not_outlives`, `logState_not_outlives`,
+- `consumable_clo`, `consumable_cloBox`, `not_releasable_clo`, `not_persistent_fnMut`,
+  `not_persistent_fnBox`, `not_consumable_lolli`, `fnMut_not_outlives`, `logState_not_outlives`,
   `logState_ctx_not_outlives`.
 - The derived rules of §3, and `d_passF` at every depth.
 - The eight programs of §4, each with `*_derives`, `*_runs` and `*_eval`.
@@ -281,7 +281,7 @@ shapes, and the corpus programs `corpus/clo-*.bc` cover the requirements of §0.
   outside `NuOk`" is then closed for an argument without `X`. An argument mentioning `X` stays
   open.
 - **SPEC §7 Instances.** Add `FnMut^c A B ≜ νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`. Its
-  `nuIn`/`nuOut`/`unfold` are the general ones, and its destructor is §12's `HasDtor.nu`.
+  `nuIn`/`nuOut`/`unfold` are the general ones, and its consume is §12's `Consumable.nu`.
 - **SPEC §2's closure table.** The `FnMut` row becomes `[@c] U(FnMut^c A B)`, called through
   `Mut` by `withswap`.
 - **`Core/`.** `kernel.patch`: about 140 changed lines in `Types.lean`, `Relation.lean`,
@@ -292,7 +292,7 @@ shapes, and the corpus programs `corpus/clo-*.bc` cover the requirements of §0.
   `VTy`/`CTy`/`CDerives` constructor and no new index. The baseline theorems keep their
   statements.
 - **`Frontend/`.** A closure sugar: `fnmut` over a context elaborates to `unfold` with the
-  captures as the state and `close` as their destructors: elaboration into existing core terms
+  captures as the state and `close` as their consumes: elaboration into existing core terms
   (`docs/decisions.md` 33).
 - **Not covered by this change.** A higher-ranked argument, Rust's `FnMut(&mut T)` for every
   lifetime (§9).
@@ -313,5 +313,5 @@ shapes, and the corpus programs `corpus/clo-*.bc` cover the requirements of §0.
 - **A uniform `FnOnce → FnMut`** is refused by inspection only. For some `A` and `B` such a
   coercion exists: at `A = 1`, `B = 1`, a state `1 ⊕ U(1 ⊸ F 1)` calls once, then answers `()`,
   and `close` calls it if it was not called. So the refusal is about parametricity, which is not
-  stated. Its mechanical part is `not_hasDtor_lolli`: a `FnOnce` cannot be dropped by a `close`
+  stated. Its mechanical part is `not_consumable_lolli`: a `FnOnce` cannot be consumed by a `close`
   that has no `A`.

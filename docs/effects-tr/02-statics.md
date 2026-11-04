@@ -10,7 +10,7 @@ four side conditions, all phase A's:
 - **independence**: at every place something is captured, every captured variable has a mode
   `≥` the capturer's (D2.6);
 - **scope**: an instance never appears in a type outside its binder;
-- **frame captures**: a frame that owns something without a destructor is captured only by
+- **frame captures**: a frame that owns something without a consume is captured only by
   continuations that must be resumed (rules [lend], [using]).
 
 Phase A's fifth check, T1, is not a premise here. §9.3 shows the owning `lend` does not need it
@@ -91,8 +91,8 @@ The capturers and their modes:
 | an operation's own continuation | `b_x.req` | [op] |
 | a handler's clauses, forwarded through by `ρ` | `bound(ρ).req` | [handle] |
 | a resuming clause (run once per operation) | `unr` | [handle] |
-| a `using` frame (linear, with a destructor) | `cancel ≥ bound(ρ).req` | [using] |
-| a `lend` frame (linear: the capability has no destructor) | `lin = bound(ρ).req` | [lend] |
+| a `using` frame (linear and consumable) | `cancel ≥ bound(ρ).req` | [using] |
+| a `lend` frame (linear: the capability is not consumable) | `lin = bound(ρ).req` | [lend] |
 
 **Lemma L2.2 (order facts).** For modes `m, k, m'` and bounds `b, b'`:
 
@@ -140,7 +140,7 @@ position. That is what Lemma L5.12 uses: at a tail call the clause's own frames 
 **Definition D2.9 (judgements).** `Ψ; Θ; Γ ⊢ V : A ▷ u` and `Ψ; Θ; Γ ⊢ M : C ! ρ ▷ u`, by the
 rules of Figure 2.1. `Ψ; Θ; Γ` is fixed and omitted where it does not change. "check `x`" is the
 premise `gradeOK(mode(A), u(x))` for the binder `x : A`, after which `x` is removed from the
-usage. Subtyping `≤` is phase A's `vsub`/`csub` (rows covariant, modes forgotten downward along
+usage. Subtyping `≤` is phase A's `vsub`/`csub` (rows covariant, modes weakened downward along
 `≥`, bounds widened along `⊑`, `cap` invariant in its state) [PA `vsubN`, `csubN`]. Every
 `handle`/`handleAt` carries the annotations `ρ_h, C` of phase A's syntax.
 
@@ -226,7 +226,7 @@ when ([PA `clauses`]):
   `u_many = Σ_o ω·u_o` (each resuming clause runs once per operation);
   `u_once' = ω·u_once` if some `C ∈ q_o` (a resumed-twice continuation reinstalls the handler
   frame twice, so the return clause may run twice), else `u_once ⊔ [0,0]` if some `W ∈ q_o` (a
-  dropped continuation means the return clause may never run), else `u_once`.
+  consumed continuation means the return clause may never run), else `u_once`.
 
 The capture premise of [handle] has two parts. `bound(ρ).req` is phase A's: the handler frame
 sits in every continuation *forwarded* through it. `⨆_o q_o`, over the handler's own resuming

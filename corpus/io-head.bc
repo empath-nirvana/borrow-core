@@ -6,7 +6,7 @@
 --
 -- Answer: `hello | , world` for `hello, world`: the five bytes through the first stream, then
 -- the rest through the capability it returned. A capability not handed back could not read the
--- rest; a byte lost at the close would drop the comma.
+-- rest; a byte lost at the close would consume the comma.
 
 type It = U (iter u8 In In)
 

@@ -7,7 +7,7 @@ import Examples.CallBorrowed
                      withload y (Λ. λq.                         -- q : Imm 'a 1 ⊗ !(Imm 'a 1 ⊗ 1 ⊸ 1)
                        let (x₁, f) = q; let (x₂, x₃) = copy x₁; let (f₁, f₂) = copy f;
                        f₁ (x₂, ()); f₂ (x₃, ()); ()));
-      w; let (x₄, g) = free c; forget x₄; forget g; ());
+      w; let (x₄, g) = free c; release x₄; release g; ());
     u; free r
 
 The closure is the pair `(x, code)`: its environment `x : Imm 'a 1`, and code capturing nothing,

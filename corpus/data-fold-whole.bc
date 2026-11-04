@@ -5,8 +5,8 @@
 --
 -- Answer: i32[2012014]: `nonempty` 1; `nonempty_own` 1 and `last` 1 (each layer's tail folds to
 -- 1, so the `Cons(h, 0)` arm never matches); the list [0, 7] incremented in place, read as
--- digits, 81; `marks` 201 (a `KA(1)` kid counts 100, the `KB` kid 1, its subtree's fold dropped with
--- `k`) and `drops` 4 (each node 1, the `KB` kid's folded subtree added). `live 0`.
+-- digits, 81; `marks` 201 (a `KA(1)` kid counts 100, the `KB` kid 1, its subtree's fold consumed with
+-- `k`) and `consumes` 4 (each node 1, the `KB` kid's folded subtree added). `live 0`.
 
 data List = Nil | Cons(head: i32, tail: List)
 
@@ -35,7 +35,7 @@ fn digits(l: List) -> i32 = fold_own l { Nil -> 0 | box Cons(h, t) -> h + t * 10
 fn marks<'a>(t: imm 'a T) -> i32 =
   fold_imm t { L -> 0 | N(KA(1), r) -> 100 + r | N(k, r) -> 1 + r }
 
-fn drops(t: T) -> i32 = fold_own t { L -> 0 | N(KB(s), r) -> 1 + s + r | N(k, r) -> 1 + r }
+fn consumes(t: T) -> i32 = fold_own t { L -> 0 | N(KB(s), r) -> 1 + s + r | N(k, r) -> 1 + r }
 
 fn tnode(k: Kid, t: T) -> T = N(k, alloc(t))
 
@@ -47,4 +47,4 @@ main -> i32 =
   let c = digits(inc(l));
   let t = tnode(KA(1), tnode(KB(alloc(tnode(KA(2), L))), tnode(KA(1), L)));
   let m = marks(&t);
-  n * 1000000 + z * 100000 + c * 10000 + m * 10 + drops(t)
+  n * 1000000 + z * 100000 + c * 10000 + m * 10 + consumes(t)
