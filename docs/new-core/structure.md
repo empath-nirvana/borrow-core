@@ -107,9 +107,10 @@ Status: `CactusInv` is stated with `cactus_step`, `cactus_move`, `joinReady_fd`,
 Over the tree world (`Core/TreeCactus.lean`), `CactusInvT` is kept by step, growth, move, spawn and
 join, and `cerwpT_adequacy` is derived through `cactusT_step` at one branch. Adequacy over several
 branches (`multiBranchAdequacyT`, `poolSchedAdequacyT`) goes through `cerwpT_adequacy` at one
-branch, the stored branches carried in pool form (`KapSchedT`, `PoolT`: each share resuming at
-`KeepRel`, every two apart at each other's record masks, no branch points), not as branches of
-`CactusInvT`; this is decision 74 (`scope-781.md` §4). Open: adequacy at the
+branch, the stored branches carried in pool form (`KapSchedT`, `PoolTJ`: each share resuming at
+`KeepRel`, the pool a stack whose entries hold views only of what their nearest joiner shares, no
+branch points), not as branches of `CactusInvT`; this is decision 74 (`scope-781.md` §4,
+`scope-795.md`). Open: adequacy at the
 relation the typing rules use; the frame rules as instances of capture (condition 20).
 
 Threads: the invariant is per computation. The two dependencies on sequential scheduling (a frame
