@@ -1,0 +1,167 @@
+-- Files (#769, SPEC §34): the effect `Fs`, the WASI platform's handler of it, and the library over
+-- it. SPIKE: `File` is the two-branch thunk of scope-fs D10, a workaround pending #808.
+--
+-- A file is `U(F (ref s) & F 1)`: `take` (`.1`) ends it and answers the stream's cell, `close`
+-- (`.2`) closes it. `U(C & F 1)` is consumable (SPEC §12), so a file the program does not use
+-- again is closed by the checker's consumes, on the normal path and at an abort.
+
+include fail
+include text
+include io
+
+-- Why a file operation failed. `Other(c)` carries the host's own error number.
+data FsError = NotFound | Denied | IsDir | BadFile | TooBig | Other(i32)
+
+-- Boxed at `top`, so that a file may be the result of a borrow block: a thunk alone outlives no
+-- lifetime (`outlivesB`), and a file's thunk holds only its cell.
+type ReadFile = box top U (F (ref input) & F 1)
+type WriteFile = box top U (F (ref output) & F 1)
+
+effect Fs {
+  fn open_status<'b>(path: array_imm 'b u8) -> ReadFile + FsError;
+  fn create_status<'b>(path: array_imm 'b u8) -> WriteFile + FsError
+}
+
+-- The externs answer `n >= 0`, or an error: `-1` not found, `-2` denied, `-3` a directory, `-4` a
+-- bad file, `-5` too big, `-(16 + c)` any other with the host's number `c`.
+extern fs_open_read : !(all 'a < top. all 'b < top.
+  mut 'a fs * array_imm 'b u8 => mut 'a fs * (ref input + i32))
+extern fs_open_write : !(all 'a < top. all 'b < top.
+  mut 'a fs * array_imm 'b u8 => mut 'a fs * (ref output + i32))
+extern file_read : !(all 'a < top. all 'b < top.
+  mut 'a input * array_mut 'b u8 => mut 'a input * (array_mut 'b u8 * i32))
+extern file_write : !(all 'a < top. all 'b < top.
+  mut 'a output * array_imm 'b u8 => mut 'a output * i32)
+extern close_input : !(ref input => 1)
+extern close_output : !(ref output => i32)
+
+-- An extern's negative answer as the error it names.
+fn fs_error(n: i32) -> FsError =
+  if n == 0 - 1 { NotFound }
+  else if n == 0 - 2 { Denied }
+  else if n == 0 - 3 { IsDir }
+  else if n == 0 - 4 { BadFile }
+  else if n == 0 - 5 { TooBig }
+  else { Other(0 - n - 16) }
+
+fn mk_read(c: ref input) -> ReadFile =
+  boxed[top] (thunkv < return c, (u <- return (close_input(c)); return ()) >)
+
+fn mk_write(c: ref output) -> WriteFile =
+  boxed[top] (thunkv < return c, (r <- return (close_output(c)); return ()) >)
+
+fn take_read(f: ReadFile) -> ref input = g <- return (unbox f); (force g).1
+fn take_write(f: WriteFile) -> ref output = g <- return (unbox f); (force g).1
+
+handler wasi_fs(&mut c: fs): Fs = {
+  open_status(p) = {
+    let (d, r) = fs_open_read(c, p);
+    c = d;
+    match r { inl x -> (inl mk_read(x) : ReadFile + FsError) | inr n -> inr fs_error(n) }
+  };
+  create_status(p) = {
+    let (d, r) = fs_open_write(c, p);
+    c = d;
+    match r { inl x -> (inl mk_write(x) : WriteFile + FsError) | inr n -> inr fs_error(n) }
+  }
+}
+
+-- ### The library
+
+-- Open the file at `path` to read it.
+fn open<'b>(path: array_imm 'b u8) -> ReadFile with Fs, Fail[FsError] =
+  match open_status(path) { inl f -> f | inr e -> raise(e) }
+
+-- Create (or truncate) the file at `path` to write it.
+fn create<'b>(path: array_imm 'b u8) -> WriteFile with Fs, Fail[FsError] =
+  match create_status(path) { inl f -> f | inr e -> raise(e) }
+
+-- One read(2) on the cell into `s`'s spare capacity: the count, or an error code.
+fn read_cell<'a>(c: ref input, m: mut 'a string) -> ref input * i32 =
+  let mut c = c;
+  let k = modify m { s ->
+    let (a, n) = s;
+    let (a, room) = array_size[u8](a);
+    let k = borrow mut a { v ->
+      if n < room {
+        match split_at_mut(v, n) {
+          inl (h, t) -> borrow mut c { ci -> let (ci, (t, k)) = file_read(ci, t); k }
+        | inr v -> 0
+        }
+      } else { 0 } };
+    let got = if k > 0 { k } else { 0 };
+    ((a, n + got), k)
+  };
+  (c, k)
+
+-- Bytes of the file appended into `buf`'s spare capacity: how many, `0` at the end of the file
+-- (or when `buf` has no room). The file is rebuilt before an error is raised.
+fn read<'a>(f: ReadFile, m: mut 'a string) -> ReadFile * i32 with Fail[FsError] =
+  let c = take_read(f);
+  let (c, k) = read_cell(c, m);
+  let f = mk_read(c);
+  if k < 0 { raise(fs_error(k)) } else { () };
+  (f, k)
+
+-- As `read`, the status as a value.
+fn read_status<'a>(f: ReadFile, m: mut 'a string) -> ReadFile * (i32 + FsError) =
+  let c = take_read(f);
+  let (c, k) = read_cell(c, m);
+  let f = mk_read(c);
+  let r = if k < 0 { (inr fs_error(k) : i32 + FsError) } else { (inl k : i32 + FsError) };
+  (f, r)
+
+-- The rest of the file appended to `buf`, which grows by 4096 bytes of room before each read;
+-- the file is closed at the end.
+fn read_all<'a>(f: ReadFile, m: mut 'a string) -> 1 with Fail[FsError] =
+  let mut f = f;
+  for _ in 0..100000000 {
+    borrow mut m { r -> modify r { s -> let (a, n) = reserve(s, 4096); ((a, n), ()) } };
+    let (g, k) = borrow mut m { r -> read(f, r) };
+    f = g;
+    if k == 0 { break } else { () }
+  }
+
+-- Every byte of `t` to the file.
+fn write<'a>(f: WriteFile, t: imm 'a string) -> WriteFile with Fail[FsError] =
+  let c = take_write(f);
+  let r = borrow mut c { co -> borrow imm *t { s ->
+    let (v, n) = s;
+    let p = match split_at(v, n) { inl (l, q) -> l | inr w -> w };
+    let (co, r) = file_write(co, p);
+    r } };
+  let f = mk_write(c);
+  if r < 0 { raise(fs_error(r)) } else { () };
+  f
+
+-- Close a file (the implicit close does the same).
+fn close(f: ReadFile) -> 1 = g <- return (unbox f); (force g).2
+
+-- Close a file written to, raising the close's error (D3).
+fn finish(f: WriteFile) -> 1 with Fail[FsError] =
+  let c = take_write(f);
+  let r = close_output(c);
+  if r < 0 { raise(fs_error(r)) } else { () }
+
+-- The name of an error, for a message.
+fn fs_error_name(e: FsError) -> lit =
+  match e {
+    NotFound -> "not found"
+  | Denied -> "permission denied"
+  | IsDir -> "is a directory"
+  | BadFile -> "bad file"
+  | TooBig -> "too big"
+  | Other(c) -> "error"
+  }
+
+-- A file error that reaches `main` (D5): written on standard error, and `main` answers `inr ()`,
+-- which the runtime reports as the exit status 1.
+handler main_fs_error[A]: Fail[FsError], A -> A + 1 = {
+  return(a) = inl a;
+  raise(e) = {
+    borrow imm "error: " { v -> eprint_bytes(v) };
+    borrow imm fs_error_name(e) { v -> eprint_bytes(v) };
+    borrow imm "\n" { v -> eprint_bytes(v) };
+    inr ()
+  }
+}

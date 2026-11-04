@@ -85,6 +85,7 @@ inductive HostKind where
   | output
   | clock
   | args
+  | fs
   | tok
   deriving DecidableEq, Repr, Inhabited
 
@@ -94,6 +95,7 @@ def HostKind.name : HostKind → String
   | .output => "output"
   | .clock => "clock"
   | .args => "args"
+  | .fs => "fs"
   | .tok => "tok"
 
 mutual

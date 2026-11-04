@@ -31,9 +31,10 @@ def extsOf (xs : List Frontend.Check.ExternSpec) : Except String (List Ext) :=
     | .readInto => pure (.io .readInto)
     | .clockNow => pure (.io .clockNow)
     | .clockSleep => pure (.io .clockSleep)
+    | .file _ => throw s!"extern `{x.name}`: the new backend does not provide the spike's file externs"
     | .mk s => pure (.mk (capStream s))
     | .take s => pure (.take (capStream s))
-    | .cap _ | .clockCap =>
+    | .cap _ | .clockCap | .fsCap =>
       throw s!"extern `{x.name}` is a capability, which run_io's harness makes"
 where
   capStream : Frontend.Check.IOStream → CapStream
@@ -41,6 +42,7 @@ where
     | .output => .output
     | .clock => .clock
     | .args => .args
+    | .fs => .fs
 
 /-- A `handle` node of the typed term, as the direct-call facts read it: its name, operations,
 outer row, clauses' kinds and its handler pair's erasure. -/

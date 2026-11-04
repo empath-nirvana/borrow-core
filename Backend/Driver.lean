@@ -76,9 +76,15 @@ def extImpls (xs : List Frontend.Check.ExternSpec) : Except String (List Clos.Ex
     | .readInto => pure (.io .readInto)
     | .clockNow => pure (.io .clockNow)
     | .clockSleep => pure (.io .clockSleep)
+    | .file .openRead => pure (.io (.fsOpen false))
+    | .file .openWrite => pure (.io (.fsOpen true))
+    | .file .read => pure (.io .fileRead)
+    | .file .write => pure (.io .fileWrite)
+    | .file .closeIn => pure (.io (.fileClose false))
+    | .file .closeOut => pure (.io (.fileClose true))
     | .mk s => pure (.mk (capStream s))
     | .take s => pure (.take (capStream s))
-    | .cap _ | .clockCap =>
+    | .cap _ | .clockCap | .fsCap =>
       throw s!"extern `{x.name}` is a capability, which run_io's harness makes"
 where
   capStream : Frontend.Check.IOStream → Clos.CapStream
@@ -86,6 +92,7 @@ where
     | .output => .output
     | .clock => .clock
     | .args => .args
+    | .fs => .fs
 
 /-- **The program a backend compiles, for a program with capabilities** (SPEC §11): `run_io`
 checked in its compiled form (`Frontend.Check.IORun`, the term `IORun.every_run` and
@@ -322,8 +329,8 @@ def compileWatTimed (file src : String) : IO (Except String String) := do
 /-- The model run of a program with capabilities: `run_io` checked, with every extern's model
 (`Frontend.Check.IORun`). -/
 def ioRunOf (file : String) (k : CheckedProg) (m : Frontend.Check.IOMain)
-    (args : List UInt8 := []) : Except String Frontend.Check.IORun := do
-  let w ← match Frontend.Check.ioWrapper k.prog m args with
+    (args : List UInt8 := []) (files : List UInt8 := []) : Except String Frontend.Check.IORun := do
+  let w ← match Frontend.Check.ioWrapper k.prog m args (files := files) with
     | .ok w => pure w
     | .error e => throw s!"{file}: {e}"
   match Frontend.Check.ioRunOf w k.keys with
@@ -333,14 +340,14 @@ def ioRunOf (file : String) (k : CheckedProg) (m : Frontend.Check.IOMain)
 /-- A stage's output on a source file, checked (`checkedOf file src`), with `input` as standard
 input and `args` as the arguments' stream (each argument followed by `0`, SPEC §34). -/
 def interpStage (stage file : String) (k : Except String CheckedProg) (input : List UInt8)
-    (args : List UInt8 := []) : Except String Output := do
+    (args : List UInt8 := []) (files : List UInt8 := []) : Except String Output := do
   match stage with
   | "source" =>
     let k ← k
     match k.io with
     | none => interpSource runFuel k.main.e
     | some m =>
-      let r ← ioRunOf file k m args
+      let r ← ioRunOf file k m args files
       if r.loops then interpIOLoop runFuel (r.expr input) r.c.exitsOnDivError
       else interpIO runFuel (r.expr input) r.c.exitsOnDivError
   | "clos" => Clos.interp runFuel (← (← k).clos) input args
@@ -369,11 +376,11 @@ def falsifyOpts : String → Except String Falsify.Opts
 
 /-- The source stage of a checked program, on the falsifier's machine under `o`. -/
 def interpChecked (o : Falsify.Opts) (file : String) (k : CheckedProg) (input : List UInt8)
-    (args : List UInt8 := []) : Except String (Output × String) := do
+    (args : List UInt8 := []) (files : List UInt8 := []) : Except String (Output × String) := do
   match k.io with
   | none => Falsify.interpSource o runFuel k.main.e
   | some m =>
-    let r ← ioRunOf file k m args
+    let r ← ioRunOf file k m args files
     if r.loops then Falsify.interpIOLoop o runFuel (r.expr input) r.c.exitsOnDivError
     else Falsify.interpIO o runFuel (r.expr input) r.c.exitsOnDivError
 

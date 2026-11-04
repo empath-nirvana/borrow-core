@@ -1,0 +1,13 @@
+-- SPIKE #769: opening a file that does not exist raises `NotFound`; `main_fs_error` writes it on
+-- standard error and `main` answers `inr ()`, the exit status 1.
+include fs
+include textio
+
+fn first<'p>(path: array_imm 'p u8) -> 1 with Fs, Stdout, Fail[FsError] =
+  let f = open(path);
+  print_lit("opened\n")
+
+main -> 1 + 1 =
+  let path = string_new(256);
+  let (path, got) = next_arg(path);
+  borrow imm path { v -> with main_fs_error { first(v) } }

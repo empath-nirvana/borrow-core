@@ -295,6 +295,12 @@ def ioOp (k : IOKind) (v : LV) : IM LV := do
     set (if fromArgs then { s with args := src.drop n.toNat } else { s with input := src.drop n.toNat })
     for (b, i) in bs.zipIdx do writeAt (a + i) (some (.int b.toUInt64))
     pure (.pair m (.pair (.fam a n) (.int bs.length.toUInt64)))
+  -- The file operations run the model (SPEC §34, `Core/Stdio.lean`): the file system is empty,
+  -- so every open is not found (`-1`) and every descriptor is bad (`-4`).
+  | .fileOpen, .pair m (.pair (.fam _ _) _) => pure (.pair m (.int 0xFFFFFFFF))
+  | .fileRead, .pair m (.pair _ v) => pure (.pair m (.pair v (.int 0xFFFFFFFC)))
+  | .fileWrite, .pair m (.pair _ (.fam _ _)) => pure (.pair m (.int 0xFFFFFFFC))
+  | .fileSize, .pair m _ | .fileClose, .pair m _ => pure (.pair m (.int 0xFFFFFFFC))
   | .clockNow, m => do
     let (_, c) ← fdOf m
     let .int t := c | bad "clock_now on a cell that holds no clock"

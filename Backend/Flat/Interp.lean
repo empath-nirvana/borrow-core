@@ -278,6 +278,9 @@ def evalExp (p : Prog) : Nat → Array UInt64 → Exp → FM UInt64
         for (b, i) in bs.zipIdx do writeByte (a.toNat + i) b.toUInt64
         pure bs.length.toUInt64
     | .now c => do readWord (← evalExp p n fr c).toNat
+    -- The model (SPEC §34, `Core/Stdio.lean`): no files, so an open is not found (`-1`) and every
+    -- descriptor is bad (`-4`).
+    | .file op _ _ _ => pure (if op == 0 then 0xFFFFFFFF else 0xFFFFFFFC)
     | .stat 0 => do pure (← get).allocs.toUInt64
     | .stat 1 => do pure (← get).indirect.toUInt64
     | .stat _ => do pure (← get).copies.toUInt64

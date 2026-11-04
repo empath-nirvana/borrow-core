@@ -1,0 +1,29 @@
+-- SPIKE #769: copy the file named by the first argument to the second, in chunks through one
+-- buffer cell: two files open at once. The read file is closed by the checker's consume, the
+-- written one by `finish`, which raises a failed close.
+include fs
+include textio
+
+fn copy_file<'s, 'd>(src: array_imm 's u8, dst: array_imm 'd u8) -> i32 with Fs, Fail[FsError] =
+  let mut i = open(src);
+  let mut o = create(dst);
+  let mut buf = alloc(string_new(8));
+  let mut count = 0;
+  for _ in 0..1000000 {
+    let (g, n) = borrow mut buf { m -> read(i, m) };
+    i = g;
+    o = borrow imm buf { t -> write(o, t) };
+    buf = alloc(clear_str(free(buf)));
+    count = count + n;
+    if n == 0 { break } else { () }
+  };
+  let s = free(buf);
+  finish(o);
+  count
+
+main -> i32 + 1 =
+  let src = string_new(256);
+  let (src, _) = next_arg(src);
+  let dst = string_new(256);
+  let (dst, _) = next_arg(dst);
+  borrow imm src { s -> borrow imm dst { d -> with main_fs_error { copy_file(s, d) } } }

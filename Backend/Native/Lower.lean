@@ -354,6 +354,11 @@ def expr (fp : String) : Exp → EM String
     let k ← expr fp k
     val s!"call i64 @bc_getv(i64 {fd}, i64 {a}, i64 {k})"
   | .now c => do val s!"call i64 @bc_now(i64 {← expr fp c})"
+  | .file op x a k => do
+    let x ← expr fp x
+    let a ← expr fp a
+    let k ← expr fp k
+    val s!"call i64 @bc_file(i64 {op}, i64 {x}, i64 {a}, i64 {k})"
   | .stat k => val s!"load i64, ptr {statName k}"
   | .data off => do
     let p ← val s!"getelementptr i8, ptr @bc_data, i64 {off}"
@@ -410,6 +415,11 @@ def texpr (want : Bool) : Exp → EM (String × Bool)
     let k ← int k
     pure (← val s!"call i64 @bc_getv(i64 {fd}, i64 {a}, i64 {k})", false)
   | .now c => do pure (← val s!"call i64 @bc_now(i64 {← int c})", false)
+  | .file op x a k => do
+    let x ← int x
+    let a ← int a
+    let k ← int k
+    pure (← val s!"call i64 @bc_file(i64 {op}, i64 {x}, i64 {a}, i64 {k})", false)
   | .stat k => do pure (← val s!"load i64, ptr {statName k}", false)
   | .data off => do pure (← val s!"getelementptr i8, ptr @bc_data, i64 {off}", true)
   | .gep a k => do
@@ -940,6 +950,7 @@ def runtimeDecls : List String := [
   "declare i64 @bc_getc(i64)",
   "declare i64 @bc_getv(i64, i64, i64)",
   "declare i64 @bc_now(i64)",
+  "declare i64 @bc_file(i64, i64, i64, i64)",
   "declare void @bc_sleep(i64, i64)",
   "declare void @bc_status(i64)"]
 

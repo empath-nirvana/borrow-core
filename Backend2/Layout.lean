@@ -374,6 +374,11 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
       | none => modify fun st => { st with regions := st.regions.insert s c }
     | .io .readByte | .io .clockNow => join (← kid dst 0) (← a 0)
     | .io .writeByte | .io .writeAll | .io .clockSleep => join dst (← kid (← a 0) 0)
+    | .io .fileOpen | .io .fileWrite | .io .fileSize | .io .fileClose =>
+      join (← kid dst 0) (← kid (← a 0) 0)
+    | .io .fileRead => do
+      join (← kid dst 0) (← kid (← a 0) 0)
+      join (← kid (← kid dst 1) 0) (← kid (← kid (← a 0) 1) 1)
     | .io .readInto => do
       join (← kid dst 0) (← kid (← a 0) 0)
       join (← kid (← kid dst 1) 0) (← kid (← a 0) 1)

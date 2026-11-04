@@ -44,12 +44,26 @@ inductive IOOp where
   /-- `clock_sleep (m, ns)`: wait at least `max(ns, 0)` nanoseconds on the clock in the cell `m`;
   the result is `m` (SPEC §34). -/
   | clockSleep
+  /-- `fs_open_read (m, (p, n))`, `fs_open_write`: `(m, inl c)`, `c` a fresh cell holding the
+  descriptor of the file at the path's bytes, opened to read or to write, or `(m, inr r)`, `r` a
+  negative error (SPEC §34). -/
+  | fsOpen (write : Bool)
+  /-- `file_read (m, (p, n))`: `(m, ((p, n), r))`, one read of the descriptor in the cell `m`
+  into the view, `r` the count or a negative error. -/
+  | fileRead
+  /-- `file_write (m, (p, n))`: `(m, r)`, the view written to the descriptor in the cell `m`, `r`
+  `0` or a negative error. -/
+  | fileWrite
+  /-- `close_input c`, `close_output c`: the descriptor in the cell `c` closed and the cell freed;
+  `()`, or `close(2)`'s `0` or negative error. -/
+  | fileClose (out : Bool)
   deriving Repr, DecidableEq
 
 /-- The lifetime parameters of an operation's extern: the `Λ`s before its argument. -/
 def IOOp.lifes : IOOp → Nat
   | .readByte | .writeByte | .clockNow | .clockSleep => 1
-  | .writeAll | .readInto => 2
+  | .fileClose _ => 0
+  | .writeAll | .readInto | .fsOpen _ | .fileRead | .fileWrite => 2
 
 /-- The primitives of `[TR]` §1, §8 and §9, saturated, and the I/O operations of §11. -/
 inductive Op where

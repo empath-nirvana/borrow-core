@@ -16,6 +16,8 @@ modes (`Relation.lean`).
 * `Output`: `(fd, bs)`, the stream `fd` and the bytes written to it, most recent first.
 * `Clock`: `t`, the time in nanoseconds (SPEC §34).
 * `Args`: the arguments not yet read, a byte list, each argument followed by `0` (SPEC §34).
+* `Fs`: the model file system, a byte list encoding its entries (path, content) (SPEC §34,
+  `Core/Stdio.lean`, *Files*).
 * `Tok`: the token of a declared type that is not consumable (SPEC §11, §12, §42). It is not a host
   type: its value is a location owning a unit cell, allocated by `mint` and freed by `burn`, the
   capture cell's pattern (SPEC §25). Its model is `Ref 1`'s (`Opaque.rel`).
@@ -40,6 +42,8 @@ inductive Opaque where
   | clock
   /-- `Args`: the content of the arguments' cell, the arguments not yet read (SPEC §34). -/
   | args
+  /-- `Fs`: the content of the file system's cell (SPEC §34). -/
+  | fs
   /-- `Tok`: the token of a declared type that is not consumable, a location owning a unit cell.
   `[spec §11, §12, §42]` -/
   | tok
@@ -57,6 +61,7 @@ def Opaque.Holds : Opaque → Val → Prop
   | .output, v => ∃ fd bs, v = .pair (.i32 fd) bs ∧ BytesV bs
   | .clock, v => ∃ t, v = .i64 t
   | .args, v => BytesV v
+  | .fs, v => BytesV v
   | .tok, v => ∃ ℓ, v = .loc ℓ
 
 open BoCa.Fig16 BoCa.Fig16.BoLo in
@@ -68,6 +73,7 @@ noncomputable def Opaque.rel : Opaque → Val → WProp
   | .output, v => ⌜Opaque.Holds .output v⌝
   | .clock, v => ⌜Opaque.Holds .clock v⌝
   | .args, v => ⌜Opaque.Holds .args v⌝
+  | .fs, v => ⌜Opaque.Holds .fs v⌝
 
 /-- A host type: every opaque type but `Tok`. Its relation is pure.  `[spec §11]` -/
 def Opaque.Host (k : Opaque) : Prop := k ≠ .tok

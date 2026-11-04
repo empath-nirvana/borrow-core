@@ -1,0 +1,16 @@
+-- SPIKE #769 (§4 first gap): a `let mut` string lent by a borrow block whose body raises, the
+-- handler outside the lend: the array is lent by the unwinding form `slice_borrow_mut_u`.
+
+include fail
+include text
+
+fn bump(s: string, k: i32) -> string with Fail[i32] =
+  let mut s = s;
+  borrow mut s { m -> if k < 0 { raise(k) } else { () }; () };
+  s
+
+fn go(k: i32) -> i32 + i32 =
+  let s = string_new(4);
+  with to_result { let s = bump(s, k); 0 }
+
+main -> (i32 + i32) * (i32 + i32) = (go(5), go(0 - 2))

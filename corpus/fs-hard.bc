@@ -1,0 +1,48 @@
+-- SPIKE #769, the hardest case (scope-fs §5): a raise inside a borrow callback while two files are
+-- open, `out` bound outside the callback and `inp` inside it; the callback's lend is the buffer's.
+-- `run` raises at `open` when `inp` names no file, and at `read` when it names a directory (a
+-- read(2) of a directory fails natively; the model has no directories, so there the open fails).
+-- `kept` is the handled variant: the handler is inside the lend, so the buffer comes back.
+include fs
+include textio
+
+-- A literal path is copied to a string first: a literal's lend crossed by an abort has no
+-- unwinding form (a buffer's has).
+fn open_lit(l: lit) -> ReadFile with Fs, Fail[FsError] =
+  let s = string_of_lit(l); borrow imm s { v -> open(v) }
+fn create_lit(l: lit) -> WriteFile with Fs, Fail[FsError] =
+  let s = string_of_lit(l); borrow imm s { v -> create(v) }
+
+fn run_hard(outp: lit, inp: lit) -> i32 + FsError = with to_result {
+  let out = create_lit(outp);
+  let buf = alloc(string_new(64));
+  let n = borrow mut buf { m ->
+    let f = open_lit(inp);
+    let (f, n) = read(f, m);
+    n
+  };
+  let out = borrow imm buf { t -> write(out, t) };
+  let s = free(buf);
+  n
+}
+
+fn kept(inp: lit) -> i32 =
+  let buf = alloc(string_new(64));
+  let r = borrow mut buf { m -> with to_result { let f = open_lit(inp); let (f, n) = read(f, m); n } };
+  let s = free(buf);
+  let (s, k) = len_of[u8](s);
+  match r { inl n -> k | inr e -> 0 - k - 1 }
+
+fn show(r: i32 + FsError) -> 1 =
+  match r { inl n -> print_dec(n) | inr e -> print_lit(fs_error_name(e)) };
+  print_lit("\n")
+
+main -> i32 =
+  show(run_hard("corpus/fs-data/hard.out", "corpus/fs-data/hard.txt"));
+  show(run_hard("corpus/fs-data/hard.out", "corpus/fs-data/missing.txt"));
+  show(run_hard("corpus/fs-data/hard.out", "corpus/fs-data"));
+  print_dec(kept("corpus/fs-data/hard.txt"));
+  print_lit("\n");
+  print_dec(kept("corpus/fs-data/missing.txt"));
+  print_lit("\n");
+  0

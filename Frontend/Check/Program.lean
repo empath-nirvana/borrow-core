@@ -54,11 +54,12 @@ structure Checked where
   cellsOk : cellsOkB t.cells.1 t.cells.2 cells = true
 
 /-- **`main` answers an exit status**: it is served `Fail[DivError]` by the platform's handler
-`main_div_error`, read from the site of a `handle` node of its typed term (`HSite`), so that its
+`main_div_error` (or, in the #769 spike, `Fail[FsError]` by `main_fs_error`, written by the program), read from the site of a `handle` node of its typed term (`HSite`), so that its
 value `inr ()` is an exit status (SPEC §39). -/
 def Checked.exitsOnDivError (c : Checked) : Bool :=
   (c.t.handleSites copiesFuel).any fun h => match h.site with
-    | some s => s.handler == Frontend.Elab.Effects.mainDivHandler && s.eff == "Fail"
+    | some s => (s.handler == Frontend.Elab.Effects.mainDivHandler || s.handler == "main_fs_error") &&
+        s.eff == "Fail"
     | none => false
 
 /-- **The checked term**: the typed term's erasure, the term the derivation types and the backend
@@ -230,11 +231,11 @@ def checkDecl (ds : Array Decl) (k : Nat) (keys : List DefKey)
 `run_io`'s wrapper (`Frontend.Check.ioWrapper`) declares. -/
 def harnessExterns : List String :=
   ["mk_input", "mk_output", "take_input", "take_output", "mk_clock", "take_clock", "mk_args",
-   "take_args"]
+   "take_args", "mk_fs", "take_fs"]
 
 /-- **The capabilities** (SPEC §11, §34): each is declared only as an extern, which `run_io`'s
 wrapper replaces by a binder of the same name around `main`'s body. -/
-def capabilityNames : List String := ["stdin", "stdout", "stderr", "clock", "args"]
+def capabilityNames : List String := ["stdin", "stdout", "stderr", "clock", "args", "fs"]
 
 /-- **The wrapper's names around `main`'s body** (`Frontend.Check.wrapperSrc`): its parameter, and
 the hole the body is put at. -/

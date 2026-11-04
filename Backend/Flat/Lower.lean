@@ -661,6 +661,47 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
       match ← vals p with
       | [m, ns] => return [.sleep (.loc m) (.loc ns)] ++ (← emit d [.loc m])
       | _ => throw "flat IR: clock_sleep of a non-pair"
+  | .io (.fsOpen w), [p], d => do
+      -- `open(2)` of the path; on success a fresh cell holding the descriptor, `inl` of it; else
+      -- `inr` of the error.
+      let T ← T
+      let some r := T.cons[p]? | throw "flat IR: an untyped fs_open"
+      let sn := (T.field r 1).1
+      let cn := (T.field sn 0).1
+      match ← vals p with
+      | [m, a, k] =>
+        let x ← fresh1
+        let c ← fresh1
+        let (s₁, vl) ← mkInj sn false [.loc c]
+        let (s₂, vr) ← mkInj sn true [.loc x]
+        let ts ← fresh (vl.length)
+        let sets (vs : List Exp) : List Stmt := (ts.zip vs).map fun (t, e) => .set t e
+        let cw := max 1 (T.cellWords cn)
+        return [.set x (.file 0 (.c64 (if w then 1 else 0)) (.loc a) (.loc k)),
+          .ite (.op (.rel .w64 .ge_u) [.loc x, .c64 0x80000000]) (s₂ ++ sets vr)
+            ([.set c (.alloc (.c64 cw.toUInt64)), .store (.loc c) 0 (.loc x)] ++ s₁ ++ sets vl)] ++
+          (← emit d (.loc m :: locs ts))
+      | _ => throw "flat IR: fs_open of a non-pair"
+  | .io .fileRead, [p], d => do
+      match ← vals p with
+      | [m, a, k] =>
+        let r ← fresh1
+        return [.set r (.file 1 (.load (.loc m) 0) (.loc a) (.loc k))] ++
+          (← emit d [.loc m, .loc a, .loc k, .loc r])
+      | _ => throw "flat IR: file_read of a non-pair"
+  | .io .fileWrite, [p], d => do
+      match ← vals p with
+      | [m, a, k] =>
+        let r ← fresh1
+        return [.set r (.file 2 (.load (.loc m) 0) (.loc a) (.loc k))] ++ (← emit d [.loc m, .loc r])
+      | _ => throw "flat IR: file_write of a non-pair"
+  | .io (.fileClose out), [c], d => do
+      match ← vals c with
+      | [c] =>
+        let r ← fresh1
+        return [.set r (.file 4 (.load (.loc c) 0) (.c64 0) (.c64 0)), .free (.loc c)] ++
+          (← emit d (if out then [.loc r] else []))
+      | _ => throw "flat IR: a file's close of a non-cell"
   | .io .readInto, [p], d => do
       let T ← T
       let f := (T.field (← vty p) 1).1

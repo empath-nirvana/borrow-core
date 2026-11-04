@@ -1,0 +1,23 @@
+-- SPIKE #769: `cat` of the file named by the first argument, read in chunks into one buffer cell.
+-- The file is opened under a borrow of the path (an abort crossing a buffer's lend), read with
+-- `read(f, m)` under the buffer's lend, and closed by the checker's consume when it is not used
+-- again.
+include fs
+include textio
+
+fn cat<'p>(path: array_imm 'p u8) -> 1 with Fs, Stdout, Fail[FsError] =
+  let mut f = open(path);
+  let mut buf = alloc(string_new(8));
+  for _ in 0..1000000 {
+    let (g, n) = borrow mut buf { m -> read(f, m) };
+    f = g;
+    buf = alloc(clear_str(print_string(free(buf))));
+    if n == 0 { break } else { () }
+  };
+  let s = free(buf);
+  ()
+
+main -> 1 + 1 =
+  let path = string_new(256);
+  let (path, got) = next_arg(path);
+  borrow imm path { v -> with main_fs_error { cat(v) } }

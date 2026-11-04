@@ -291,6 +291,8 @@ def applyOp : Op → List CV → IM CV
         emitBytes fd bs
         pure m
       | _, _, _ => throw "closure IR: write_all on a cell that holds no output stream"
+  | .io (.fsOpen _), _ | .io .fileRead, _ | .io .fileWrite, _ | .io (.fileClose _), _ =>
+      throw "closure IR: the spike's file operations are not interpreted at this stage"
   | .io .readInto, [p] => do
       let (m, v) ← unpair p
       let (_, c) ← cellOf m

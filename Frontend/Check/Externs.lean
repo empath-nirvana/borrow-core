@@ -35,7 +35,8 @@ The standard externs, each with its type, its role, its model and its assurance 
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core (Opaque BytesV bytesTy outRep externTy readByteC writeByteC writeAllC
-  readIntoC clockNowC clockSleepC mkClockC takeClockC mkInputC
+  readIntoC clockNowC clockSleepC mkClockC takeClockC fsOpenC fileWriteC closeInputC
+  closeOutputC mkFsC takeFsC mkInputC
   mkOutputC takeInputC takeOutputC readByteV writeByteV mkInputV mkOutputV takeCapV stdModel
   io_every_run io_loop_every_run ioLoopE bytesVal bytesVal_bytes)
 
@@ -78,6 +79,19 @@ inductive IOStream where
   | output
   | clock
   | args
+  /-- The file system (SPEC §34): a cell holding `i32[0]`, which the runtimes do not read. -/
+  | fs
+  deriving DecidableEq, Repr
+
+/-- A file operation (SPEC §34): the host implementations of `fs_open_read`, `fs_open_write`,
+`file_read`, `file_write`, `close_input`, `close_output`. -/
+inductive FileOp where
+  | openRead
+  | openWrite
+  | read
+  | write
+  | closeIn
+  | closeOut
   deriving DecidableEq, Repr
 
 /-- What an extern is. -/
@@ -87,12 +101,16 @@ inductive ExternRole where
   | cap (fd : Nat)
   /-- The clock: a cell holding the model's time, `i64[0]` (SPEC §34). -/
   | clockCap
+  /-- The file system: a cell holding `i32[0]` (SPEC §34). -/
+  | fsCap
   | readByte
   | writeByte
   | writeAll
   | readInto
   | clockNow
   | clockSleep
+  /-- A file operation (SPEC §34). -/
+  | file (op : FileOp)
   /-- The harness's make of a stream's capability (`mk_input`, `mk_output`, `mk_clock`,
   `mk_args`). -/
   | mk (s : IOStream)
@@ -114,7 +132,7 @@ structure ExternSpec where
 
 def ExternSpec.isCap (x : ExternSpec) : Bool :=
   match x.role with
-  | .cap _ | .clockCap => true
+  | .cap _ | .clockCap | .fsCap => true
   | _ => false
 
 /-- The host of a harness make: a fresh heap cell, the stream's capability, holding `holds`. Its
@@ -146,6 +164,8 @@ def stdExterns : List ExternSpec :=
       "vC_argsRep (a cell holding the arguments, each followed by 0)",
       some (capHost "mk_args" ", over the arguments, read once (WASI args_get; libc argv)",
         .interpChecked)⟩,
+    ⟨"fs", .ref (.opq .fs), .fsCap, "vC_fsRep (a cell holding the model file system)",
+      some (capHost "mk_fs" "; the file system is the host's", .assumed)⟩,
     ⟨"read_byte", externTy (readByteC (.opq .input)), .readByte, "readByte_meets",
       some ("WASI fd_read of one byte (libc read(2))", .interpChecked)⟩,
     ⟨"write_byte", externTy (writeByteC (.opq .output)), .writeByte, "writeByte_meets",
@@ -162,6 +182,30 @@ def stdExterns : List ExternSpec :=
     ⟨"read_arg", externTy (readByteC (.opq .args)), .readByte, "readArg_meets",
       some ("the arguments read once into memory (WASI args_sizes_get, args_get; libc argv)",
         .interpChecked)⟩,
+    ⟨"fs_open_read", externTy (fsOpenC (.opq .fs) (.opq .input)), .file .openRead,
+      "fsOpenRead_meets",
+      some ("libc open(2) O_RDONLY|O_CLOEXEC, then a fresh heap cell holding the descriptor; WASI " ++
+        "path_open under the preopened directory that is the path's longest prefix", .assumed)⟩,
+    ⟨"fs_open_write", externTy (fsOpenC (.opq .fs) (.opq .output)), .file .openWrite,
+      "fsOpenWrite_meets",
+      some ("libc open(2) O_WRONLY|O_CREAT|O_TRUNC 0644, then a fresh heap cell holding the " ++
+        "descriptor; WASI path_open with create and truncate", .assumed)⟩,
+    ⟨"file_read", externTy (readIntoC (.opq .input)), .file .read,
+      "readInto_meets (file_read has read_into's type and model)",
+      some ("one read(2) of the cell's descriptor into the view (WASI fd_read)", .assumed)⟩,
+    ⟨"file_write", externTy (fileWriteC (.opq .output)), .file .write, "fileWrite_meets",
+      some ("write(2) of the view to the cell's descriptor, again after a short write (WASI " ++
+        "fd_write)", .assumed)⟩,
+    ⟨"close_input", externTy (closeInputC (.opq .input)), .file .closeIn, "closeInput_meets",
+      some ("close(2) of the cell's descriptor, then the cell freed (WASI fd_close)", .assumed)⟩,
+    ⟨"close_output", externTy (closeOutputC (.opq .output)), .file .closeOut,
+      "closeOutput_meets",
+      some ("close(2) of the cell's descriptor, then the cell freed, answering its result " ++
+        "(WASI fd_close)", .assumed)⟩,
+    ⟨"mk_fs", externTy (mkFsC (.opq .fs)), .mk .fs, "mkFs_meets",
+      some (mkHost "i32[0] (the file system is the host's; the model's entries are not kept)", .assumed)⟩,
+    ⟨"take_fs", externTy (takeFsC (.opq .fs)), .take .fs, "takeFs_meets",
+      some (takeHost "its contents", .assumed)⟩,
     ⟨"mk_clock", externTy (mkClockC (.opq .clock)), .mk .clock, "mkClock_meets",
       some (mkHost "the time 0 (clock_now reads the host's monotonic clock)", .assumed)⟩,
     ⟨"mk_args", externTy (mkInputC (.opq .args)), .mk .args, "mkArgs_meets",
@@ -240,24 +284,30 @@ def clockExterns (caps : List String) : String :=
     "extern mk_clock : !(1 => ref clock)\nextern take_clock : !(ref clock => i64)\n" else "") ++
   (if caps.contains "args" then
     s!"extern mk_args : !({bytesSrc} => ref args)\nextern take_args : !(ref args => {bytesSrc})\n"
+  else "") ++
+  (if caps.contains "fs" then
+    s!"extern mk_fs : !({bytesSrc} => ref fs)\nextern take_fs : !(ref fs => {bytesSrc})\n"
   else "")
 
 /-- Make the clock and the arguments `main` declares: the clock at time `0`, the arguments a
 stream of `args` (SPEC §34). -/
-def makeExtra (caps : List String) (args : List UInt8) : String :=
+def makeExtra (caps : List String) (args : List UInt8) (files : List UInt8 := []) : String :=
   (if caps.contains "clock" then "clock <- return ((unbang mk_clock) ());\n    " else "") ++
-  (if caps.contains "args" then s!"args <- return ((unbang mk_args) {bytesLit args});\n    " else "")
+  (if caps.contains "args" then s!"args <- return ((unbang mk_args) {bytesLit args});\n    " else "") ++
+  (if caps.contains "fs" then s!"fs <- return ((unbang mk_fs) {bytesLit files});\n    " else "")
 
 /-- Take back the clock and the arguments `main` declares. -/
 def takeExtra (caps : List String) : String :=
   (if caps.contains "clock" then "io_clk <- return ((unbang take_clock) clock);\n    " else "") ++
-  (if caps.contains "args" then "io_args <- return ((unbang take_args) args);\n    " else "")
+  (if caps.contains "args" then "io_args <- return ((unbang take_args) args);\n    " else "") ++
+  (if caps.contains "fs" then "io_fs <- return ((unbang take_fs) fs);\n    " else "")
 
 /-- The source of `run_io`: the harness's externs and the wrapped `main`, which is given `args`
 as its arguments; `main`'s body is at the hole `bodyHole`. With `outs`, `run_io` returns the
 outputs `take_output` answers with `main`'s result `a`; without, it returns `a`, and the outputs,
 persistent, are weakened.  `[spec §11, §34]` -/
-def wrapperSrc (caps : List String) (capsT A : CVTy) (args : List UInt8) (outs : Bool) : String :=
+def wrapperSrc (caps : List String) (capsT A : CVTy) (args : List UInt8) (outs : Bool)
+    (files : List UInt8 := []) : String :=
   let B := bytesSrc
   let out := s!"(i32 * {B})"
   let res := if outs then s!"{out} * ({out} * ({ppVTy A}))" else ppVTy A
@@ -272,7 +322,7 @@ main : {B} -o F ({res}) =
     stdin <- return ((unbang mk_input) io_inp);
     stdout <- return ((unbang mk_output) i32[1]);
     stderr <- return ((unbang mk_output) i32[2]);
-    {makeExtra caps args}io_r : ({ppVTy capsT}) * ({ppVTy A}) <- (force io_main_body);
+    {makeExtra caps args files}io_r : ({ppVTy capsT}) * ({ppVTy A}) <- (force io_main_body);
     let (io_caps, io_a) = io_r;
     " ++ rebindCaps caps "io_caps" ++ takeExtra caps ++ s!"io_in <- return ((unbang take_input) stdin);
     io_out <- return ((unbang take_output) stdout);
@@ -320,8 +370,8 @@ def tupleNames : List String → String
 `main`'s loop and the capabilities `main` does not declare. Its `next` observes `main`'s loop and,
 when it finishes, takes the outputs back; its `close` closes it and takes them. `main`'s body is at
 the hole `bodyHole`. `outs` is `wrapperSrc`'s.  `[spec §11]` -/
-def loopWrapperSrc (caps : List String) (capsT A B : CVTy) (args : List UInt8) (outs : Bool) :
-    String :=
+def loopWrapperSrc (caps : List String) (capsT A B : CVTy) (args : List UInt8) (outs : Bool)
+    (files : List UInt8 := []) : String :=
   let bs := bytesSrc
   let out := s!"(i32 * {bs})"
   let extra := ["stdin", "stdout", "stderr"].filter (!caps.contains ·)
@@ -353,7 +403,7 @@ main : {bs} -o F (U (loop {res} {res'})) =
     stdin <- return ((unbang mk_input) io_inp);
     stdout <- return ((unbang mk_output) i32[1]);
     stderr <- return ((unbang mk_output) i32[2]);
-    {makeExtra caps args}io_l : {inner} <- (force io_main_body);
+    {makeExtra caps args files}io_l : {inner} <- (force io_main_body);
     io_step : !U ({st} -o F ({res} + ({st})) & F {res'}) <- return (!thunkv fun (io_s : {st}) ->
       < let (io_it, io_x) = io_s;
         {dx}io_o <- (nu_out (force io_it)).1;
@@ -426,7 +476,8 @@ harness's externs, and `run_io` as `main`, with `main`'s elaborated body at its 
 observes (`take_output`'s model answers the bytes written); without, it returns `main`'s result
 alone, the outputs weakened in the term: the compiled form, whose hosts write each byte to its
 descriptor.  `[spec §11]` -/
-def ioWrapper (p : Program) (m : IOMain) (args : List UInt8 := []) (outs : Bool := true) :
+def ioWrapper (p : Program) (m : IOMain) (args : List UInt8 := []) (outs : Bool := true)
+    (files : List UInt8 := []) :
     Except String Program := do
   let some body := p.decls.findSome? (fun | .main _ _ M => some M | _ => none)
     | throw "no `main`"
@@ -435,8 +486,8 @@ def ioWrapper (p : Program) (m : IOMain) (args : List UInt8 := []) (outs : Bool 
     | .extern _ n _ => !(m.caps.any (·.name == n.name))
     | _ => true
   let src := match m.loopB with
-    | none => wrapperSrc (m.caps.map (·.name)) (capsTy m.caps) m.A args outs
-    | some B => loopWrapperSrc (m.caps.map (·.name)) (capsTy m.caps) m.A B args outs
+    | none => wrapperSrc (m.caps.map (·.name)) (capsTy m.caps) m.A args outs files
+    | some B => loopWrapperSrc (m.caps.map (·.name)) (capsTy m.caps) m.A B args outs files
   match parseProgram src (resolve := false) (internal := true) with
   | .ok w =>
     -- The wrapper's externs are the harness's, which no program declares (`reservedDecl?`).

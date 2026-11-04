@@ -446,7 +446,7 @@ def LTy.pp : LTy → String
   | .mut a => s!"mut {a.pp}"
   | .fam l => s!"[{l.pp}]"
   | .opq k => match k with
-    | .input => "Input" | .output => "Output" | .clock => "Clock" | .args => "Args" | .tok => "Tok"
+    | .input => "Input" | .output => "Output" | .clock => "Clock" | .args => "Args" | .fs => "Fs" | .tok => "Tok"
   | .unk => "Unk"
   | .thunk k => s!"U {k.pp}"
   | .bang a => s!"!{a.pp}"

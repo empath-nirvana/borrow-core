@@ -1,0 +1,23 @@
+-- SPIKE #769: two files open (one read, one written) when a third open raises; both are closed by
+-- the unwind, most recently bound first.
+include fs
+include textio
+
+-- A literal path is copied to a string first: a literal's lend crossed by an abort has no
+-- unwinding form (a buffer's has).
+fn open_lit(l: lit) -> ReadFile with Fs, Fail[FsError] =
+  let s = string_of_lit(l); borrow imm s { v -> open(v) }
+fn create_lit(l: lit) -> WriteFile with Fs, Fail[FsError] =
+  let s = string_of_lit(l); borrow imm s { v -> create(v) }
+
+fn three() -> i32 + FsError = with to_result {
+  let a = open_lit("corpus/fs-data/hard.txt");
+  let b = create_lit("corpus/fs-data/raise-two.out");
+  let c = open_lit("corpus/fs-data/missing.txt");
+  0
+}
+
+main -> i32 =
+  match three() { inl n -> print_dec(n) | inr e -> print_lit(fs_error_name(e)) };
+  print_lit("\n");
+  0

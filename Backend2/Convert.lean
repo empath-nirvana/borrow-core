@@ -51,7 +51,7 @@ structure Template where
 
 /-- A stream whose capability cell the harness makes and takes back (SPEC §11, §34). -/
 inductive CapStream where
-  | input | output | clock | args
+  | input | output | clock | args | fs
   deriving Inhabited, BEq
 
 /-- How an extern of `run_io` is implemented (SPEC §11, §34), in declaration order. -/
@@ -2116,6 +2116,7 @@ def mkClosOf (s : CapStream) (B : VTy) (t : LTy) : CM Tm := do
     | .input => return .consume .dead p (← cell (.i32 0) .w32)
     | .args => return .consume .dead p (← cell (.i32 0xFFFFFFFF) .w32)
     | .clock => return .consume .dead p (← cell (.i64 0) .w64)
+    | .fs => return .consume .dead p (← cell (.i32 0) .w32)
     | .output => return .prim (.alloc cls) [p]
 
 /-- **The host function of a harness take** (SPEC §11, §34), as the extern's closure at its type
@@ -2134,7 +2135,7 @@ def takeClosOf (s : CapStream) (t : LTy) : CM Tm := do
   mkClos "extern" [] (.arr a (.ret b)) (some a) b fun ctx => do
     let some p :: _ := ctx | throw "LIR: an extern's argument"
     match s with
-    | .clock => return .prim .free [p]
+    | .clock | .fs => return .prim .free [p]
     | .input | .args =>
       let w ← fresh i32T
       return .letv w (.prim .free [p]) (.consume .dead w (← nilOf b))

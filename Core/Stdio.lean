@@ -761,6 +761,470 @@ theorem takeArgs_meets (ls : List SRec) (δ : LSub) :
   rw [← vC_externTy_congr rfl rfl cC_takeArgsC]
   exact meets_of_derives rfl d_takeInput ls δ
 
+/-! ### Files  `[spec §34]`
+
+SPIKE (#769, never merged; `File` is a workaround pending #808). The file system's capability
+is a cell whose content is the model file system, a byte list (`vC_fsRep`): each entry is its
+path's bytes, then its content's bytes last first, each byte as `1, b`, each part ended by `0`.
+`bcc interp` puts there each host file its arguments name (`Frontend/Main.lean`, `modelFiles`).
+An open file is a stream's cell: `fs_open_read`'s model looks the path up and allocates an
+input's cell holding the content; `fs_open_write`'s allocates an output's cell, whose writes
+stay in it. `file_read` is `read_into`'s type and model. Each model is a `CDerives` derivation
+at the representation, so it meets its contract by the Fundamental Property. -/
+
+abbrev pairBytes : VTy := .tensor bytesTy bytesTy
+
+/-! ### Byte lists equal -/
+
+/-- One step of the comparison of two byte lists: equal at their ends (`inj₂ true`), different at
+the first byte that differs or where one ends (`inj₂ false`), else the rests (`inj₁`). -/
+def eqStepB : Expr :=
+  .letpair (.var 0)
+    (.letpair (.var 0)
+      (.case (.var 1)
+        (.case (.var 1) (.inj₂ (.inj₂ (.val .unit))) (.inj₂ (.inj₁ (.val .unit))))
+        (.letpair (.var 0)
+          (.case (.var 3)
+            (.inj₂ (.inj₁ (.val .unit)))
+            (.letpair (.var 0)
+              (.case (hop (.rel .w32 .eq)
+                  (.pair (hop .extend8_u (.var 4)) (hop .extend8_u (.var 1))))
+                (.inj₂ (.inj₁ (.val .unit)))
+                (.inj₁ (.pair (.var 4) (.var 1)))))))))
+
+def eqStepV : Val := .lam eqStepB
+
+theorem d_eqStep {Δ : LifeCtx} :
+    CDerives Δ [] (.val eqStepV)
+      (.val (.bang (.lolli (.tensor .i32 pairBytes) (.sum pairBytes VTy.boolT)))) := by
+  refine .bangThunkV (fun s hs => by cases hs) rfl (.lam (.ret ?_))
+  refine letP (A := .i32) (B := pairBytes) (.var (by csoloQ)) ?_
+  refine letP (A := bytesTy) (B := bytesTy) (.var (by csoloQ)) ?_
+  refine caseP (A := .unit) (B := .tensor u8T bytesTy) (.unroll (A := bytesBody) (.var (by csoloQ)))
+    ?_ ?_
+  · refine caseP (A := .unit) (B := .tensor u8T bytesTy)
+      (.unroll (A := bytesBody) (.var (by csoloQ))) ?_ ?_
+    · exact .sumI₂ (.sumI₂ (.unitI (by cdeadQ)))
+    · exact .sumI₂ (.sumI₁ (.unitI (by cdeadQ)))
+  · refine letP (A := u8T) (B := bytesTy) (.var (by csoloQ)) ?_
+    refine caseP (A := .unit) (B := .tensor u8T bytesTy)
+      (.unroll (A := bytesBody) (.var (by csoloQ))) ?_ ?_
+    · exact .sumI₂ (.sumI₁ (.unitI (by cdeadQ)))
+    · refine letP (A := u8T) (B := bytesTy) (.var (by csoloQ)) ?_
+      refine caseP (A := .unit) (B := .unit)
+        (d_hop (.rel .w32 .eq)
+          (pairP (d_hop .extend8_u (.var (by csoloQ)) (by cdeadQ))
+            (d_hop .extend8_u (.var (by csoloQ)) (by cdeadQ))) (by cdeadQ)) ?_ ?_
+      · exact .sumI₂ (.sumI₁ (.unitI (by cdeadQ)))
+      · exact .sumI₁ (pairP (.var (by csoloQ)) (.var (by csoloQ)))
+
+theorem d_eqStepΓ {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
+    CDerives Δ Γ (.val eqStepV)
+      (.val (.bang (.lolli (.tensor .i32 pairBytes) (.sum pairBytes VTy.boolT)))) := by
+  simpa using d_eqStep.append_dead hΓ
+
+/-- The largest `i32` bound: a loop that ends by its exit. -/
+def bigN : UInt32 := 0x7FFFFFFF
+
+/-- `λz. let (x, y) = z in case count_try (eqStep, (big, (0, (x, y)))) {inj₁ _. false |
+inj₂ e. e}`. -/
+def eqBytesV : Val :=
+  .lam (.letpair (.var 0)
+    (.case (.app (.val (.prim .countTry))
+        (.pair (.val eqStepV) (.pair (i32E bigN) (.pair (i32E 0) (.pair (.var 1) (.var 0))))))
+      (.inj₁ (.val .unit))
+      (.var 0)))
+
+theorem d_eqBytes {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) :
+    CDerives Δ Γ (.val eqBytesV) (.val (.lolli pairBytes VTy.boolT)) := by
+  refine .lamV ?_
+  refine letP (A := bytesTy) (B := bytesTy) (.var (by csoloQ)) ?_
+  refine caseP (A := pairBytes) (B := VTy.boolT) ?_ (.sumI₁ (.unitI (by cdeadQ)))
+    (.var (by csoloQ))
+  refine appP (A := .tensor (.bang (.lolli (.tensor .i32 pairBytes) (.sum pairBytes VTy.boolT)))
+    (.tensor .i32 (.tensor .i32 pairBytes))) ?_ (.bangE (.countTry pairBytes VTy.boolT (by cdeadQ)))
+  refine .tensorI (splitP_right_all _) (d_eqStepΓ (kill_dead _)) ?_
+  exact pairP (d_i32 _ (by cdeadQ)) (pairP (d_i32 0 (by cdeadQ))
+    (pairP (.var (by csoloQ)) (.var (by csoloQ))))
+
+/-! ### Looking a path up
+
+The model file system is one byte list: each entry is its path's bytes, then its content's bytes,
+most recent first, each byte as `1, b` and each part ended by `0`. A scan reads the path of each
+entry into `cur`, compares it with the path looked up at its end, and then reads the content into
+`cur` (the entry looked up) or skips it. -/
+
+/-- The scan's mode: reading a path (`inj₁`), reading the content looked up (`inj₂ inj₁`), or
+skipping a content (`inj₂ inj₂`). -/
+abbrev mdT : VTy := .sum .unit (.sum .unit .unit)
+
+/-- The scan's state: the rest of the list, the path looked up, the bytes read, and the mode. -/
+abbrev luS : VTy := .tensor bytesTy (.tensor bytesTy (.tensor bytesTy mdT))
+
+/-- The lookup's exit: the content, or not found. -/
+abbrev luE : VTy := .sum bytesTy .unit
+
+/-- `inj₁ (rest, (tg, (cur, md)))`, the scan going on. -/
+def luNext (rest tg cur md : Expr) : Expr := .inj₁ (.pair rest (.pair tg (.pair cur md)))
+
+def nilE : Expr := .inj₁ (.val .unit)
+
+/-- One step of the scan. -/
+def luStepB : Expr :=
+  .letpair (.var 0)
+  (.letpair (.var 0)
+  (.letpair (.var 0)
+  (.letpair (.var 0)
+  (.case (.var 5)
+    (.inj₂ (.inj₂ (.val .unit)))
+    (.letpair (.var 0)
+      (.case (hop (.rel .w32 .eq) (.pair (hop .extend8_u (.var 1)) (i32E 0)))
+        -- a byte
+        (.case (.var 1)
+          (.inj₂ (.inj₂ (.val .unit)))
+          (.letpair (.var 0)
+            (.case (.var 7)
+              (luNext (.var 1) (.var 11) (.inj₂ (.pair (.var 2) (.var 9))) (.inj₁ (.val .unit)))
+              (.case (.var 0)
+                (luNext (.var 2) (.var 12) (.inj₂ (.pair (.var 3) (.var 10)))
+                  (.inj₂ (.inj₁ (.val .unit))))
+                (luNext (.var 2) (.var 12) (.var 10) (.inj₂ (.inj₂ (.val .unit))))))))
+        -- the end of a part
+        (.case (.var 4)
+          (.case (.app (.val eqBytesV) (.pair (.var 6) (.var 8)))
+            (luNext (.var 3) (.var 9) nilE (.inj₂ (.inj₂ (.val .unit))))
+            (luNext (.var 3) (.var 9) nilE (.inj₂ (.inj₁ (.val .unit)))))
+          (.case (.var 0)
+            (.inj₂ (.inj₁ (.var 7)))
+            (luNext (.var 3) (.var 9) nilE (.inj₁ (.val .unit)))))))))))
+
+def luStepV : Val := .lam luStepB
+
+theorem d_nilB {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ nilE (.val bytesTy) :=
+  .roll bytesBody_noMut bytesTy_closed (.sumI₁ (.unitI hΓ))
+
+theorem d_luStep {Δ : LifeCtx} :
+    CDerives Δ [] (.val luStepV) (.val (.bang (.lolli (.tensor .i32 luS) (.sum luS luE)))) := by
+  refine .bangThunkV (fun s hs => by cases hs) rfl (.lam (.ret ?_))
+  refine letP (A := .i32) (B := luS) (.var (by csoloQ)) ?_
+  refine letP (A := bytesTy) (B := .tensor bytesTy (.tensor bytesTy mdT)) (.var (by csoloQ)) ?_
+  refine letP (A := bytesTy) (B := .tensor bytesTy mdT) (.var (by csoloQ)) ?_
+  refine letP (A := bytesTy) (B := mdT) (.var (by csoloQ)) ?_
+  refine caseP (A := .unit) (B := .tensor u8T bytesTy) (.unroll (A := bytesBody) (.var (by csoloQ)))
+    (.sumI₂ (.sumI₂ (.unitI (by cdeadQ)))) ?_
+  refine letP (A := u8T) (B := bytesTy) (.var (by csoloQ)) ?_
+  refine caseP (A := .unit) (B := .unit)
+    (d_hop (.rel .w32 .eq) (pairP (d_hop .extend8_u (.var (by csoloQ)) (by cdeadQ))
+      (d_i32 0 (by cdeadQ))) (by cdeadQ)) ?_ ?_
+  · refine caseP (A := .unit) (B := .tensor u8T bytesTy)
+      (.unroll (A := bytesBody) (.var (by csoloQ))) (.sumI₂ (.sumI₂ (.unitI (by cdeadQ)))) ?_
+    refine letP (A := u8T) (B := bytesTy) (.var (by csoloQ)) ?_
+    refine caseP (A := .unit) (B := .sum .unit .unit) (.var (by csoloQ)) ?_ ?_
+    · exact .sumI₁ (pairP (.var (by csoloQ)) (pairP (.var (by csoloQ))
+        (pairP (.roll bytesBody_noMut bytesTy_closed (.sumI₂ (pairP (.var (by csoloQ))
+          (.var (by csoloQ))))) (.sumI₁ (.unitI (by cdeadQ))))))
+    · refine caseP (A := .unit) (B := .unit) (.var (by csoloQ)) ?_ ?_
+      · exact .sumI₁ (pairP (.var (by csoloQ)) (pairP (.var (by csoloQ))
+          (pairP (.roll bytesBody_noMut bytesTy_closed (.sumI₂ (pairP (.var (by csoloQ))
+            (.var (by csoloQ))))) (.sumI₂ (.sumI₁ (.unitI (by cdeadQ)))))))
+      · exact .sumI₁ (pairP (.var (by csoloQ)) (pairP (.var (by csoloQ))
+          (pairP (.var (by csoloQ)) (.sumI₂ (.sumI₂ (.unitI (by cdeadQ)))))))
+  · refine caseP (A := .unit) (B := .sum .unit .unit) (.var (by csoloQ)) ?_ ?_
+    · refine caseP (A := .unit) (B := .unit)
+        (appP (pairP (.var (by csoloQ)) (.var (by csoloQ))) (d_eqBytes (by cdeadQ))) ?_ ?_
+      · exact .sumI₁ (pairP (.var (by csoloQ)) (pairP (.var (by csoloQ))
+          (pairP (d_nilB (by cdeadQ)) (.sumI₂ (.sumI₂ (.unitI (by cdeadQ)))))))
+      · exact .sumI₁ (pairP (.var (by csoloQ)) (pairP (.var (by csoloQ))
+          (pairP (d_nilB (by cdeadQ)) (.sumI₂ (.sumI₁ (.unitI (by cdeadQ)))))))
+    · refine caseP (A := .unit) (B := .unit) (.var (by csoloQ)) ?_ ?_
+      · exact .sumI₂ (.sumI₁ (.var (by csoloQ)))
+      · exact .sumI₁ (pairP (.var (by csoloQ)) (pairP (.var (by csoloQ))
+          (pairP (d_nilB (by cdeadQ)) (.sumI₁ (.unitI (by cdeadQ))))))
+
+theorem d_luStepΓ {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
+    CDerives Δ Γ (.val luStepV) (.val (.bang (.lolli (.tensor .i32 luS) (.sum luS luE)))) := by
+  simpa using d_luStep.append_dead hΓ
+
+/-- `λfs. (fs, case count_try (luStep, (big, (0, (fs, (p, (nil, inj₁ ())))))) {inj₁ _. inj₂ () |
+inj₂ e. e})`, at the path `p` (index `1` under the binder): `withswap`'s callback on the file
+system's cell. -/
+def luCbB : Expr :=
+  .pair (.var 0)
+    (.case (.app (.val (.prim .countTry))
+        (.pair (.val luStepV) (.pair (i32E bigN) (.pair (i32E 0)
+          (.pair (.var 0) (.pair (.var 1) (.pair nilE (.inj₁ (.val .unit)))))))))
+      (.inj₂ (.val .unit))
+      (.var 0))
+
+theorem d_luCb {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) :
+    CDerives Δ (⟨bytesTy, true⟩ :: Γ) (.val (.lam luCbB))
+      (.val (.lolli bytesTy (.tensor bytesTy luE))) := by
+  refine .lamV ?_
+  refine pairP (.var (by csoloQ)) ?_
+  refine caseP (A := luS) (B := luE) ?_ (.sumI₂ (.unitI (by cdeadQ))) (.var (by csoloQ))
+  refine appP (A := .tensor (.bang (.lolli (.tensor .i32 luS) (.sum luS luE)))
+    (.tensor .i32 (.tensor .i32 luS))) ?_ (.bangE (.countTry luS luE (by cdeadQ)))
+  refine .tensorI (splitP_right_all _) (d_luStepΓ (kill_dead _)) ?_
+  exact pairP (d_i32 _ (by cdeadQ)) (pairP (d_i32 0 (by cdeadQ))
+    (pairP (.var (by csoloQ)) (pairP (.var (by csoloQ)) (pairP (d_nilB (by cdeadQ))
+      (.sumI₁ (.unitI (by cdeadQ)))))))
+
+/-! ### A view's bytes as a byte list -/
+
+/-- The state: the view, and its bytes so far, most recent first. -/
+abbrev vbS : VTy := .tensor (.arrayImm (.var 1) u8T) bytesTy
+
+/-- One step at index `i`: the byte at `i` consed onto the list. -/
+def vbStepB : Expr :=
+  .letpair (.var 0)
+    (.letpair (.var 0)
+      (.letpair (.app (.val copyV) (.var 1))
+        (.case (.app (.val (.prim .idx)) (.pair (.var 0) (.var 5)))
+          (.pair (.var 2) (.inj₂ (.pair (readI (.var 0)) (.var 3))))
+          (.pair (.var 2) (.var 3)))))
+
+def vbStepV : Val := .lam vbStepB
+
+theorem d_vbStep :
+    CDerives Δwa [] (.val vbStepV) (.val (.bang (.lolli (.tensor .i32 vbS) vbS))) := by
+  refine .bangThunkV (fun s hs => by cases hs) rfl (.lam (.ret ?_))
+  refine letP (A := .i32) (B := vbS) (.var (by csoloQ)) ?_
+  refine letP (A := .arrayImm (.var 1) u8T) (B := bytesTy) (.var (by csoloQ)) ?_
+  refine letP (A := .arrayImm (.var 1) u8T) (B := .arrayImm (.var 1) u8T)
+    (appP (.var (by csoloQ)) (.bangE (.arrCopy (.var 1) u8T (by cdeadQ)))) ?_
+  refine caseP (A := .imm (.var 1) u8T) (B := .unit)
+    (appP (pairP (.var (by csoloQ)) (.var (by csoloQ))) (.bangE (.arrGet (.var 1) u8T (by cdeadQ))))
+    ?_ ?_
+  · refine pairP (.var (by csoloQ)) (.roll bytesBody_noMut bytesTy_closed (.sumI₂ (pairP ?_
+      (.var (by csoloQ)))))
+    exact appW
+      (callbackW Δwa_ok (x := 2) rfl (by cdead)
+        (.boxI (.var (by csoloP))
+          (CtxOutlives.solo (LifeCtx.defines_of_wf (wf_var_self _ _ _)) (outlives_of_dataB rfl)
+            (by cdead))))
+      (appW (.var (by csoloQ))
+        (.withload (a := .var 1) (A := u8T) (B := u8T) 2 (by cdeadQ) rfl (by simp [VFree])
+          (by simp [VFree])))
+  · exact pairP (.var (by csoloQ)) (.var (by csoloQ))
+
+theorem d_vbStepΓ {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
+    CDerives Δwa Γ (.val vbStepV) (.val (.bang (.lolli (.tensor .i32 vbS) vbS))) := by
+  simpa using d_vbStep.append_dead hΓ
+
+
+/-! ### The externs -/
+
+/-- `fs_open_read`, `fs_open_write`: `∀'a ⊏ ⊤. F (∀'b ⊏ ⊤. Mut 'a FS ⊗ [Imm 'b U8] ⇒
+Mut 'a FS ⊗ (Ref S ⊕ I32))`.  `[spec §34]` -/
+def fsOpenC (FS S : VTy) : CTy :=
+  .all 0 .top (.ret (.all 1 .top
+    (.lolli (.tensor (.mut (.var 0) FS) (.arrayImm (.var 1) u8T))
+      (.tensor (.mut (.var 0) FS) (.sum (.ref S) .i32)))))
+
+/-- `file_write`: `∀'a ⊏ ⊤. F (∀'b ⊏ ⊤. Mut 'a O ⊗ [Imm 'b U8] ⇒ Mut 'a O ⊗ I32)`. -/
+def fileWriteC (O : VTy) : CTy :=
+  .all 0 .top (.ret (.all 1 .top
+    (.lolli (.tensor (.mut (.var 0) O) (.arrayImm (.var 1) u8T)) (.tensor (.mut (.var 0) O) .i32))))
+
+/-- `close_input`: `Ref I ⊸ F 1`. -/
+def closeInputC (I : VTy) : CTy := .arr (.ref I) (.ret .unit)
+
+/-- `close_output`: `Ref O ⊸ F I32`. -/
+def closeOutputC (O : VTy) : CTy := .arr (.ref O) (.ret .i32)
+
+/-- `mk_fs`: `Bytes ⊸ F (Ref FS)`; `take_fs`: `Ref FS ⊸ F Bytes`. -/
+def mkFsC (FS : VTy) : CTy := .arr bytesTy (.ret (.ref FS))
+def takeFsC (FS : VTy) : CTy := .arr (.ref FS) (.ret bytesTy)
+
+/-- The answer "not found", `-1`. -/
+def fsNotFound : UInt32 := 0xFFFFFFFF
+
+/-- The model of `fs_open_read`: the path's bytes read from the view, looked up in the file
+system's cell, and the content found allocated as an input's cell, or not found. -/
+def fsOpenReadB : Expr :=
+  .letpair (.var 0)
+    (.letpair (.app (.val copyV) (.var 0))
+      (bindE (.app (.val arrLenV) (.var 0))
+        (.letpair (.app (.val (.prim .count))
+            (.pair (.val vbStepV) (.pair (.var 0) (.pair (i32E 0) (.pair (.var 2) nilE)))))
+          (.seq (.app (.val releaseV) (.var 1))
+            (.letpair (.app (.app withswap (.var 6)) (.val (.lam luCbB)))
+              (.case (.var 0)
+                (.pair (.var 2) (.inj₁ (.app (.val (.prim .alloc)) (.var 0))))
+                (.pair (.var 2) (.inj₂ (i32E fsNotFound)))))))))
+
+def fsOpenReadV : Val := .lam (.val (.lam (.val (.lam fsOpenReadB))))
+
+theorem d_fsOpenRead :
+    CDerives LifeCtx.empty [] (.val fsOpenReadV) (.comp (fsOpenC bytesTy bytesTy)) := by
+  refine .allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false ok_empty rfl hy)
+    (fun _ h => by cases h) (.ret (.thunkV rfl ?_))
+  refine .allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false Δwa₁_ok rfl hy)
+    (fun s hs hl => by simp only [List.mem_cons, List.not_mem_nil, or_false] at hs; subst hs; cases hl)
+    (.ret (.lamV ?_))
+  refine letP (A := .mut (.var 0) bytesTy) (B := .arrayImm (.var 1) u8T) (.var (by csoloQ)) ?_
+  refine letP (A := .arrayImm (.var 1) u8T) (B := .arrayImm (.var 1) u8T)
+    (appP (.var (by csoloQ)) (.bangE (.arrCopy (.var 1) u8T (by cdeadQ)))) ?_
+  refine bindP (A := .i32) (appP (.var (by csoloQ)) (.bangE (.arrLen (.var 1) u8T (by cdeadQ)))) ?_
+  refine letP (A := .arrayImm (.var 1) u8T) (B := bytesTy) ?_ ?_
+  · refine appP (A := .tensor (.bang (.lolli (.tensor .i32 vbS) vbS)) (.tensor .i32 (.tensor .i32 vbS)))
+      ?_ (.bangE (.countFold vbS (by cdeadQ)))
+    refine .tensorI (splitP_right_all _) (d_vbStepΓ (kill_dead _)) ?_
+    exact pairP (.var (by csoloQ)) (pairP (d_i32 0 (by cdeadQ))
+      (pairP (.var (by csoloQ)) (d_nilB (by cdeadQ))))
+  · refine .seqV (partP_split (.app (.val releaseV) (.var 1)) 0 _)
+      (appP (.var (by csoloQ)) (.bangE (.arrRelease (.var 1) u8T (by cdeadQ)))) ?_
+    refine letP (A := .mut (.var 0) bytesTy) (B := luE) ?_ ?_
+    · exact appP (A := .lolli bytesTy (.tensor bytesTy luE)) (d_luCb (by cdeadQ))
+        (appP (A := .mut (.var 0) bytesTy) (.var (by csoloQ)) (.withswap (by cdeadQ)))
+    · refine caseP (A := bytesTy) (B := .unit) (.var (by csoloQ)) ?_ ?_
+      · exact pairP (.var (by csoloQ)) (.sumI₁ (appP (.var (by csoloQ)) (.alloc (by cdeadQ))))
+      · exact pairP (.var (by csoloQ)) (.sumI₂ (d_i32 _ (by cdeadQ)))
+
+/-- The model of `fs_open_write`: the view released, and a fresh output's cell, at the
+descriptor `3`; what is written stays in the cell. -/
+def fsOpenWriteB : Expr :=
+  .letpair (.var 0)
+    (.seq (.app (.val releaseV) (.var 0))
+      (.pair (.var 1) (.inj₁ (.app (.val (.prim .alloc)) (.pair (i32E 3) nilE)))))
+
+def fsOpenWriteV : Val := .lam (.val (.lam (.val (.lam fsOpenWriteB))))
+
+theorem d_fsOpenWrite :
+    CDerives LifeCtx.empty [] (.val fsOpenWriteV) (.comp (fsOpenC bytesTy outRep)) := by
+  refine .allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false ok_empty rfl hy)
+    (fun _ h => by cases h) (.ret (.thunkV rfl ?_))
+  refine .allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false Δwa₁_ok rfl hy)
+    (fun s hs hl => by simp only [List.mem_cons, List.not_mem_nil, or_false] at hs; subst hs; cases hl)
+    (.ret (.lamV ?_))
+  refine letP (A := .mut (.var 0) bytesTy) (B := .arrayImm (.var 1) u8T) (.var (by csoloQ)) ?_
+  refine .seqV (partP_split (.app (.val releaseV) (.var 0)) 0 _)
+    (appP (.var (by csoloQ)) (.bangE (.arrRelease (.var 1) u8T (by cdeadQ)))) ?_
+  exact pairP (.var (by csoloQ)) (.sumI₁ (appP (pairP (d_i32 3 (by cdeadQ)) (d_nilB (by cdeadQ)))
+    (.alloc (by cdeadQ))))
+
+/-- The model of `file_write`: `write_all`'s, answering `0`. -/
+def fileWriteV : Val := .lam (.val (.lam (.val (.lam (.pair writeAllB (i32E 0))))))
+
+theorem d_fileWrite :
+    CDerives LifeCtx.empty [] (.val fileWriteV) (.comp (fileWriteC outRep)) := by
+  refine .allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false ok_empty rfl hy)
+    (fun _ h => by cases h) (.ret (.thunkV rfl ?_))
+  refine .allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false Δwa₁_ok rfl hy)
+    (fun s hs hl => by simp only [List.mem_cons, List.not_mem_nil, or_false] at hs; subst hs; cases hl)
+    (.ret (.lamV ?_))
+  refine pairP ?_ (d_i32 0 (by cdeadQ))
+  refine letP (A := .mut (.var 0) outRep) (B := .arrayImm (.var 1) u8T) (.var (by csoloQ)) ?_
+  refine letP (A := .arrayImm (.var 1) u8T) (B := .arrayImm (.var 1) u8T)
+    (appP (.var (by csoloQ)) (.bangE (.arrCopy (.var 1) u8T (by cdeadQ)))) ?_
+  refine bindP (A := .i32) (appP (.var (by csoloQ)) (.bangE (.arrLen (.var 1) u8T (by cdeadQ)))) ?_
+  refine letP (A := .mut (.var 0) outRep) (B := .arrayImm (.var 1) u8T) ?_ ?_
+  · refine appP (A := .tensor (.bang (.lolli (.tensor .i32 waS) waS)) (.tensor .i32 (.tensor .i32 waS)))
+      ?_ (.bangE (.countFold waS (by cdeadQ)))
+    refine .tensorI (splitP_right_all _) (d_waStepΓ (kill_dead _)) ?_
+    exact pairP (.var (by csoloQ)) (pairP (d_i32 0 (by cdeadQ))
+      (pairP (.var (by csoloQ)) (.var (by csoloQ))))
+  · exact .seqV (partP_split (.app (.val releaseV) (.var 0)) 0 _)
+      (appP (.var (by csoloQ)) (.bangE (.arrRelease (.var 1) u8T (by cdeadQ)))) (.var (by csoloQ))
+
+/-- The model of `close_input`: the cell freed. -/
+def closeInputV : Val := .lam (bindE (.app (.val (.prim .free)) (.var 0)) (.val .unit))
+
+/-- The model of `close_output`: the cell freed, answering `0`. -/
+def closeOutputV : Val := .lam (bindE (.app (.val (.prim .free)) (.var 0)) (i32E 0))
+
+theorem d_closeInput : CDerives LifeCtx.empty [] (.val closeInputV) (.comp (closeInputC bytesTy)) :=
+  .lam (.ret (bindP (A := bytesTy) (appP (.var (by csoloP)) (.free (by cdeadP)))
+    (.unitI (by cdeadP))))
+
+theorem d_closeOutput :
+    CDerives LifeCtx.empty [] (.val closeOutputV) (.comp (closeOutputC outRep)) :=
+  .lam (.ret (bindP (A := outRep) (appP (.var (by csoloP)) (.free (by cdeadP)))
+    (d_i32 0 (by cdeadP))))
+
+theorem d_mkFs : CDerives LifeCtx.empty [] (.val mkInputV) (.comp (mkFsC bytesTy)) :=
+  .lam (.ret (appP (.var (by csoloP)) (.alloc (by cdeadP))))
+
+theorem d_takeFs : CDerives LifeCtx.empty [] (.val takeCapV) (.comp (takeFsC bytesTy)) :=
+  .lam (.ret (appP (.var (by csoloP)) (.free (by cdeadP))))
+
+/-- **`Fs` is `Bytes` with the rules taken away.**  `[spec §34]` -/
+theorem vC_fsRep (b : Bool) (ls : List SRec) (δ : LSub) :
+    vC b bytesTy ls δ = vC b (.opq .fs) ls δ := by
+  funext v ρ
+  exact propext (vC_bytes_iff.trans ⟨fun ⟨h₁, h₂⟩ => ⟨h₁, h₂⟩, fun ⟨h₁, h₂⟩ => ⟨h₁, h₂⟩⟩)
+
+theorem cC_fsOpenReadC : cC (fsOpenC bytesTy bytesTy) = cC (fsOpenC (.opq .fs) (.opq .input)) := by
+  funext ls δ e ρ
+  simp only [fsOpenC, cC, vCE, forceE, vC_bytes, Opaque.rel, Opaque.Holds]
+
+theorem cC_fsOpenWriteC : cC (fsOpenC bytesTy outRep) = cC (fsOpenC (.opq .fs) (.opq .output)) := by
+  funext ls δ e ρ
+  simp only [fsOpenC, cC, vCE, forceE, vC_outRep, vC_fsRep]
+
+theorem cC_fileWriteC : cC (fileWriteC outRep) = cC (fileWriteC (.opq .output)) := by
+  funext ls δ e ρ
+  simp only [fileWriteC, cC, vCE, forceE, vC_outRep]
+
+theorem cC_closeInputC : cC (closeInputC bytesTy) = cC (closeInputC (.opq .input)) := by
+  funext ls δ e ρ
+  simp only [closeInputC, cC, vCE, vC_bytes]
+
+theorem cC_closeOutputC : cC (closeOutputC outRep) = cC (closeOutputC (.opq .output)) := by
+  funext ls δ e ρ
+  simp only [closeOutputC, cC, vCE, vC_outRep]
+
+theorem cC_mkFsC : cC (mkFsC bytesTy) = cC (mkFsC (.opq .fs)) := by
+  funext ls δ e ρ
+  simp only [mkFsC, cC, vCE, vC_fsRep]
+
+theorem cC_takeFsC : cC (takeFsC bytesTy) = cC (takeFsC (.opq .fs)) := by
+  funext ls δ e ρ
+  simp only [takeFsC, cC, vCE, vC_fsRep]
+
+/-- **The model of `fs_open_read` meets its contract.**  `[spec §34]` -/
+theorem fsOpenRead_meets (ls : List SRec) (δ : LSub) :
+    vC true (externTy (fsOpenC (.opq .fs) (.opq .input))) ls δ fsOpenReadV PMap.empty := by
+  rw [← vC_externTy_congr rfl rfl cC_fsOpenReadC]
+  exact meets_of_derives rfl d_fsOpenRead ls δ
+
+/-- **The model of `fs_open_write` meets its contract.**  `[spec §34]` -/
+theorem fsOpenWrite_meets (ls : List SRec) (δ : LSub) :
+    vC true (externTy (fsOpenC (.opq .fs) (.opq .output))) ls δ fsOpenWriteV PMap.empty := by
+  rw [← vC_externTy_congr rfl rfl cC_fsOpenWriteC]
+  exact meets_of_derives rfl d_fsOpenWrite ls δ
+
+/-- **The model of `file_write` meets its contract.**  `[spec §34]` -/
+theorem fileWrite_meets (ls : List SRec) (δ : LSub) :
+    vC true (externTy (fileWriteC (.opq .output))) ls δ fileWriteV PMap.empty := by
+  rw [← vC_externTy_congr rfl rfl cC_fileWriteC]
+  exact meets_of_derives rfl d_fileWrite ls δ
+
+/-- **The model of `close_input` meets its contract.**  `[spec §34]` -/
+theorem closeInput_meets (ls : List SRec) (δ : LSub) :
+    vC true (externTy (closeInputC (.opq .input))) ls δ closeInputV PMap.empty := by
+  rw [← vC_externTy_congr rfl rfl cC_closeInputC]
+  exact meets_of_derives rfl d_closeInput ls δ
+
+/-- **The model of `close_output` meets its contract.**  `[spec §34]` -/
+theorem closeOutput_meets (ls : List SRec) (δ : LSub) :
+    vC true (externTy (closeOutputC (.opq .output))) ls δ closeOutputV PMap.empty := by
+  rw [← vC_externTy_congr rfl rfl cC_closeOutputC]
+  exact meets_of_derives rfl d_closeOutput ls δ
+
+/-- **The model of `mk_fs` meets its contract.**  `[spec §34]` -/
+theorem mkFs_meets (ls : List SRec) (δ : LSub) :
+    vC true (externTy (mkFsC (.opq .fs))) ls δ mkInputV PMap.empty := by
+  rw [← vC_externTy_congr rfl rfl cC_mkFsC]
+  exact meets_of_derives rfl d_mkFs ls δ
+
+/-- **The model of `take_fs` meets its contract.**  `[spec §34]` -/
+theorem takeFs_meets (ls : List SRec) (δ : LSub) :
+    vC true (externTy (takeFsC (.opq .fs))) ls δ takeCapV PMap.empty := by
+  rw [← vC_externTy_congr rfl rfl cC_takeFsC]
+  exact meets_of_derives rfl d_takeFs ls δ
+
+
 /-! ### End to end -/
 
 /-- **The contracts, as a named hypothesis.**  Each slot of `Γ` is live, at a persistent type,
@@ -840,13 +1304,20 @@ def stdModel : List (VTy × Val) :=
    (externTy (takeClockC (.opq .clock)), takeCapV),
    (externTy (readByteC (.opq .args)), readByteV),
    (externTy (mkInputC (.opq .args)), mkInputV),
-   (externTy (takeInputC (.opq .args)), takeCapV)]
+   (externTy (takeInputC (.opq .args)), takeCapV),
+   (externTy (fsOpenC (.opq .fs) (.opq .input)), fsOpenReadV),
+   (externTy (fsOpenC (.opq .fs) (.opq .output)), fsOpenWriteV),
+   (externTy (fileWriteC (.opq .output)), fileWriteV),
+   (externTy (closeInputC (.opq .input)), closeInputV),
+   (externTy (closeOutputC (.opq .output)), closeOutputV),
+   (externTy (mkFsC (.opq .fs)), mkInputV),
+   (externTy (takeFsC (.opq .fs)), takeCapV)]
 
 theorem stdModel_meets : ∀ p ∈ stdModel, ∀ ls δ, vC true p.1 ls δ p.2 PMap.empty := by
   intro p hp ls δ
   simp only [stdModel, List.mem_cons, List.not_mem_nil, or_false] at hp
   rcases hp with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl |
-    rfl
+    rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
   · exact readByte_meets ls δ
   · exact writeByte_meets ls δ
   · exact mkInput_meets ls δ
@@ -862,6 +1333,16 @@ theorem stdModel_meets : ∀ p ∈ stdModel, ∀ ls δ, vC true p.1 ls δ p.2 PM
   · exact readArg_meets ls δ
   · exact mkArgs_meets ls δ
   · exact takeArgs_meets ls δ
+  · exact fsOpenRead_meets ls δ
+  · exact fsOpenWrite_meets ls δ
+  · exact fileWrite_meets ls δ
+  · exact closeInput_meets ls δ
+  · exact closeOutput_meets ls δ
+  · exact mkFs_meets ls δ
+  · exact takeFs_meets ls δ
+
+/-- Every extern's type in the model is persistent. -/
+theorem stdModel_persistent : stdModel.all (fun p => p.1.persistent) = true := by rfl
 
 /-- Externs each given its model, by type. -/
 theorem externsMeet_of_model : ∀ {Γ : Ctx VTy} {γ : List Val},
@@ -869,11 +1350,7 @@ theorem externsMeet_of_model : ∀ {Γ : Ctx VTy} {γ : List Val},
   | [], [], .nil => .nil
   | ⟨T, l⟩ :: _, v :: _, .cons ⟨hl, hm⟩ h => by
       simp only at hl; subst hl
-      have hT : T.Persistent := by
-        simp only [stdModel, List.mem_cons, List.not_mem_nil, or_false, Prod.mk.injEq] at hm
-        rcases hm with ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ |
-          ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ |
-          ⟨rfl, -⟩ <;> rfl
+      have hT : T.Persistent := List.all_eq_true.mp stdModel_persistent _ hm
       exact .cons hT (stdModel_meets _ hm) (externsMeet_of_model h)
 
 /-- **End to end, the model.**  `bcc interp`'s run: `run_io` with every extern given its model.
