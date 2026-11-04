@@ -401,6 +401,13 @@ the ancestor technique at `P̂`. It composes along every rule:
   3. `twp_bind`;
   4. `twp_lendEnd` as it stands, at the callee's end world.
 
+  Closed instance, every hypothesis discharged (`Core/TreeConsumeInst.lean`):
+  `twp_lendEnd_after_framed_consume_inst`, at `wE` with `Z = ∅`, the lender alone (`FEmpty`),
+  the callee `twp_admits_consume_view`'s run, and `K = [ ]`. `hrest`, at every expression `t`,
+  is `twp_own_any`: a run owning one `own` cell, alone and with no records, ends at every final
+  state, its end world owning the final memory (`ownWorldT_of_list`). Not vacuous:
+  `twp_lendEnd_after_framed_consume_inst_ends` runs it from the lend opened at the empty world.
+
 **Not done.**
 - **C-2:** resolved by retiring `UpdX.frame` (see "Retired results").
 - **`not_xoptWFrameAt`'s configuration admitted in Lean:** done, `updA_admits_frameAt` (`Core/TreeConsume.lean`). At the graft cactus, the run's copy `ℓ ↦ x` is given up beside the frame's `n ↦ imm(…, ℓ ↦ y)`. The world is the start composite, which is valid (`acF_valid`, walks built cell by cell) and `MutOne`. The proof is `updA_consume_view` (`UpdA.frame`).

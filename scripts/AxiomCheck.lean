@@ -1052,6 +1052,10 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.lendRec_rr_fwd
 #print axioms BoCa.Fig16.Tree.Wp.LenderAt.mono
 #print axioms BoCa.Fig16.Tree.Wp.twp_lendEnd_after_framed_consume
+#print axioms BoCa.Fig16.Tree.Wp.twp_lendEnd_after_framed_consume_inst
+#print axioms BoCa.Fig16.Tree.Wp.twp_lendEnd_after_framed_consume_inst_ends
+#print axioms BoCa.Fig16.Tree.Wp.twp_own_any
+#print axioms BoCa.Fig16.Tree.Wp.ownWorldT_of_list
 #print axioms BoCa.Fig16.Tree.Wp.child_cond_view
 #print axioms BoCa.Fig16.Tree.Wp.copy_not_updA
 #print axioms BoCa.Fig16.Tree.Wp.single_yF_inStratum
