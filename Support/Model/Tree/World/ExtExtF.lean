@@ -34,7 +34,7 @@ reached from `y` by a chain `y ⊏ z ⊑ t` (`z` a lifetime of the nested view, 
 `z ⊑ t` by `FrameLifeT` of the record proper `TaggedT` names), so the record it asks about is
 always comparable with `y`.
 
-**Departure (D11, `docs/new-core/scope-781.md` §8).** The chain proof (`SI/ExtExtF.lean` on the
+**Departure (D10, `docs/new-core/scope-781.md` §8).** The chain proof (`SI/ExtExtF.lean` on the
 spike branch) reads `desc_of_xex` off two facts it establishes by induction on the typed world:
 `DLinDisj` (no two records proper hold a location of their lineages, or a frame cell, in common)
 and `EscEx` (a record proper's escrow is exclusively walkable without its frame cell), with

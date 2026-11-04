@@ -28,7 +28,7 @@ meaning, so `interp` is structural in the code: there is no circularity to resol
 The codes are `1`, `+`, `Imm`, `Mut`, `[a]` and `ref`; thunks are not coded here. `ref` is the
 position a frame record's chain steps through (`World/Records.lean`).
 
-**Departure (D9, `docs/new-core/scope-781.md` §8).** Store types are codes, with no substitution
+**Departure (D8, `docs/new-core/scope-781.md` §8).** Store types are codes, with no substitution
 `δ` and no `AdmWf`, by the ruling of condition 16 (`docs/new-core/conditions.md`). No printed
 technique is left unbuilt by it.
 -/
@@ -40,7 +40,7 @@ open BoCa
 open BoCa.Fig16
 open BoCa.Fig16.Tree
 
-/-- **A store type, as a code.** Departure D9 (`docs/new-core/scope-781.md` §8): codes, with no
+/-- **A store type, as a code.** Departure D8 (`docs/new-core/scope-781.md` §8): codes, with no
 substitution `δ` and no `AdmWf`, by the ruling of condition 16. -/
 inductive KTy : Type where
   | unit

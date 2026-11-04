@@ -1007,8 +1007,6 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Park.taskB_twp
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Park.taskB_parked
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Park.poolT_head_QP
-#print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Park.relay_twp
-#print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Park.relayAdequacyT
 #print axioms BoCa.Fig16.Tree.Wp.poolAns_park
 #print axioms BoCa.Fig16.Tree.Wp.poolAns_resume
 #print axioms BoCa.Fig16.Tree.Wp.poolAns_resumeSnd

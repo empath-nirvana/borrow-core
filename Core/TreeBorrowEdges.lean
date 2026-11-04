@@ -4,16 +4,17 @@ import Core.TreeLend
 /-!
 # Borrow edges point to ancestors: configurations at depth 1 and depth 3  `[spec §62]`
 
-`lender_ancestor` (`Core/TreeSchedPool.lean`) reads the scheduler-wide invariant only. This file
-builds configurations meeting every premise, from the empty world through `TWNT`'s own
-constructors:
+`lender_ancestor` (`Core/TreeSchedPool.lean`) reads `CactusInvT` only. This file builds
+`CactusInvT` configurations meeting every premise, from the empty world through `TWNT`'s own
+constructors, the second branch added by hand (`cactusT_spawn`). They are not reached by a
+scheduler: nothing connects them to `PoolT` or to a stored `κ` (open, #789).
 
 * **a lend opened at the world** (`recWInv_lendStep`): a fresh `ℓ ↦ own(())` allocated
   (`TWNT.alloc`), then lent `imm` at any `α` with the empty escrow (`TWNT.immFrame`, the record
   `lendRec ℓ` tagged `α`). It is `twp_lendOpen`'s update read at the world, with no run around it;
-* **depth 1** (`lenderEdge_depth1`): one lend at `α₁`; a stored branch at `α₁` holds its view;
+* **depth 1** (`lenderEdge_depth1`): one lend at `α₁`; a second branch at `α₁` holds its view;
 * **depth 3** (`lenderEdge_depth3`): three lends nested `α₃ ⊏ α₂ ⊏ α₁` on the chain tree
-  `chainP`, each record owned by the running branch; a stored branch at `α₃`, two lends inside the
+  `chainP`, each record owned by the running branch; a second branch at `α₃`, two lends inside the
   outermost, holds the outermost lend's view. `lender_ancestor` puts its lender `α₁` above it,
   strictly and two levels up.
 -/
@@ -195,7 +196,7 @@ theorem lfE_ne {a b : Nat} (h : a ≠ b) : lfE a ≠ lfE b := fun e =>
 
 /-! ### Depth 1 -/
 
-/-- **Depth 1**: one lend of `ℓ = 1` at `α₁ = 1`; the running branch owns its record, a stored
+/-- **Depth 1**: one lend of `ℓ = 1` at `α₁ = 1`; the running branch owns its record, a second
 branch at `α₁` holds the lend's view. Every premise of `lender_ancestor` holds. -/
 theorem lenderEdge_depth1 :
     ∃ (W : TRes wE.K) (μ : Heap),
@@ -220,8 +221,8 @@ theorem lenderEdge_depth1 :
 /-! ### Depth 3 -/
 
 /-- **Depth 3**: lends of `ℓ = 1, 2, 3` at `α₁ = 1 ⊐ α₂ = 2 ⊐ α₃ = 3`, each record owned by the
-running branch; a stored branch at `α₃` holds the outermost lend's view. Every premise of
-`lender_ancestor` holds there, so the stored branch's lender `α₁` encloses its point, strictly and
+running branch; a second branch at `α₃` holds the outermost lend's view. Every premise of
+`lender_ancestor` holds there, so the second branch's lender `α₁` encloses its point, strictly and
 two levels up. -/
 theorem lenderEdge_depth3 :
     ∃ (W ρ : TRes wE.K) (μ : Heap),

@@ -22,7 +22,7 @@ proper (`RecsRR psF psF′`, `SplitT ps′ O′ psF′`); a lineage path is re-r
 at the end). No case split on what the run did: it may open, end and re-type anything of its own.
 
 **The whole list kept, here.** `contShareT` and `KapSchedT` resume at any list keeping the
-records of the stop list the share reads (`KeepRel`, D13). A run owning no record keeps every
+records of the stop list the share reads (`KeepRel`, D12). A run owning no record keeps every
 record of its start list, so `KeepRel` holds at every share (`KeepRel.of_srecsIn`). A runner that
 owns records and ends lends of its own, those open at `κ`'s stop included, is
 `Core/TreePool.lean`'s `twp_keepsKap_sep`: only the records the share reads are kept there.

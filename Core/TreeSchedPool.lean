@@ -244,15 +244,15 @@ theorem poolT_cancel {t : StoredT} {ts : List StoredT} {w : TWd} {ls : List (SRe
 
 /-! ### Borrow edges point to ancestors -/
 
-/-- **Borrow edges point to ancestors.** In the scheduler-wide invariant, every resource sitting in
-a branch, a stored continuation's share among them (the share is part of the resource of the
-branch whose clause or relay holds it), holds only borrows whose lifetimes are the branch's point
-or enclose it: for every view the part holds at a location `l`, every lifetime `x` the view
-carries has the branch point `n` beneath it (`K.le n x`). A lender's scope is the lifetime of its
-lend's views (`FrameLifeT`: the views at a record's lent location carry its frame lifetime), so
-every lender of a borrow a stored continuation holds is an ancestor of where the continuation is
-stored. `cactusT_step` keeps `CactusInvT` through every step, a capture and a resume among them,
-so this holds before and after each. -/
+/-- **Borrow edges point to ancestors, in a `CactusInvT` configuration.** Every part of a branch's
+resource holds only borrows whose lifetimes are the branch's point or enclose it: for every view
+the part holds at a location `l`, every lifetime `x` the view carries has the branch point `n`
+beneath it (`K.le n x`). A lender's scope is the lifetime of its lend's views (`FrameLifeT`), so in
+such a configuration every lender of a borrow a part holds is an ancestor of the part's branch.
+
+This is a property of `CactusInvT` configurations only. It has no scheduler instance: the
+scheduler's stored tasks are carried by `PoolT`/`KapAtT`, not as branches of `CactusInvT`, and
+nothing here connects the two. Deriving the property for `PoolT`/`KapAtT` shares is open (#789). -/
 theorem borrowEdges_ancestors {w : TWd} {bs : List (TBranch w.K)} {ns : List Life}
     {W : TRes w.K} {ps : List (FrameRecT w.K)} {ls : List (SRecT w.K)} {μ : Heap}
     (hI : CactusInvT w bs ns W ps ls μ) :
@@ -326,16 +326,17 @@ theorem view_at_lender {K : WCactus} {Θ : CodeTy} {tc : TChoice K} {W ρ o : TR
       have hy₂ : y ∈ tL.set := ResUT.CompR.get_ls_imm hcW eχ eL hy₁
       exact hFL.1 aW haW _ tL eL (CellUT.lsOfI_immOf _ _ _ _) y hy₂
 
-/-- **A stored continuation's lender is an ancestor of where it is stored.** In the
-scheduler-wide invariant, let `b` be a branch at point `n` and `ρκ` a part of its resource (a
-stored continuation's share, say). If `ρκ` holds any cell at the location of a record proper `p`
+/-- **A lender is an ancestor of the branch holding its cell, in a `CactusInvT` configuration.**
+Let `b` be a branch at point `n` and `ρκ` a part of its resource. If `ρκ` holds any cell at the location of a record proper `p`
 whose frame is at `α` (the lender of that location's borrow), then `α` is `n` or encloses it
 (`K.le n α`). Nothing links the cell to `α` beforehand: a part on `n`'s branch that holds a cell at
 `p.le` while `n` is not inside `α` is refused by the invariant (`fd_le_of_branch`: a view there
 carries `α` by `FrameLifeT`, an `own` cell sits beneath a borrow refused by `TWNT.noOwnUnder`, a
-`mut` cell by `NoMutT`), and every cell of the part survives its flattening. `cactusT_step` keeps
-`CactusInvT` through every step, a capture and a resume among them, so this holds before and
-after each. -/
+`mut` cell by `NoMutT`), and every cell of the part survives its flattening.
+
+Like `borrowEdges_ancestors`, this has no scheduler instance: no stored task of `PoolT` is a
+branch of `CactusInvT`. Its instances (`Core/TreeBorrowEdges.lean`) build the second branch by
+hand. Deriving it for `PoolT`/`KapAtT` shares is open (#789). -/
 theorem lender_ancestor {w : TWd} {bs : List (TBranch w.K)} {ns : List Life}
     {W : TRes w.K} {ps : List (FrameRecT w.K)} {ls : List (SRecT w.K)} {μ : Heap}
     (hI : CactusInvT w bs ns W ps ls μ) {b : TBranch w.K} {n : Life}
@@ -350,8 +351,8 @@ theorem lender_ancestor {w : TWd} {bs : List (TBranch w.K)} {ns : List Life}
   rw [fd_le_of_branch hT hp (ResUT.CompS.comm ho) hFL hon hnα hτ] at hχ
   cases hχ
 
-/-- **The view a stored continuation holds at a lender's location carries the lender's frame
-lifetime**: as `lender_ancestor`, at a view, `α` is among the view's lifetimes (and is the only
+/-- **The view a part of a branch holds at a lender's location carries the lender's frame
+lifetime**, in a `CactusInvT` configuration: as `lender_ancestor`, at a view, `α` is among the view's lifetimes (and is the only
 one, `view_at_lender`). With `borrowEdges_ancestors` this is `lender_ancestor` read through the
 view's own lifetimes. -/
 theorem lender_view_carries {w : TWd} {bs : List (TBranch w.K)} {ns : List Life}

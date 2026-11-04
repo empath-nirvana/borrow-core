@@ -90,9 +90,10 @@ The operations, each to be proved to preserve it:
 - **capture:** a branch, with its live lends' records, goes into a one-shot κ;
 - **graft:** resuming κ attaches its branch, possibly under frames opened since, or under another
   parent; the tree grows and every branch is re-read;
-- **unwind:** a raise, or a cancel (a resume into the continuation's cancel branch, §62 D15),
+- **unwind:** a raise, or a cancel (a resume into the continuation's cancel branch, §62 D14),
   runs the branch's `[then]` finalisers, and its unwinding borrow forms (`withborU`) end its lends
-  in order;
+  in order. The tree has no `withborU` rule yet (row 6): the closed programs end their lends
+  through `ubind` finalisers in the program and `twp_lendEnd` in the proof;
 - **spawn / join:** a lend's record is shared into children and passes back at the join.
 
 **Adequacy is derived from preservation** (LinearActris Thm 5.4 shape), and the frame rules are
@@ -100,9 +101,12 @@ instances of these operations. A proof that goes around the invariant is not the
 
 Status: `CactusInv` is stated with `cactus_step`, `cactus_move`, `joinReady_fd`, and not yet used.
 Over the tree world (`Core/TreeCactus.lean`), `CactusInvT` is kept by step, growth, move, spawn and
-join, and `cerwpT_adequacy` is derived through `cactusT_step` at one branch, with no programs. Open:
-adequacy over several branches from preservation; adequacy at the relation the typing rules use;
-the frame rules as instances of capture (condition 20).
+join, and `cerwpT_adequacy` is derived through `cactusT_step` at one branch. Adequacy over several
+branches (`multiBranchAdequacyT`, `poolSchedAdequacyT`) goes through `cerwpT_adequacy` at one
+branch, the stored branches carried in pool form (`KapSchedT`, `PoolT`: each share resuming at
+`KeepRel`, every two apart at each other's record masks, no branch points), not as branches of
+`CactusInvT`; this is the user's decision of 2026-11-03 (`scope-781.md` §4). Open: adequacy at the
+relation the typing rules use; the frame rules as instances of capture (condition 20).
 
 Threads: the invariant is per computation. The two dependencies on sequential scheduling (a frame
 fixed for a whole segment; `JoinReady` read at the resume) are kept separate, so a concurrent
