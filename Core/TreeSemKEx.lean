@@ -313,6 +313,7 @@ def enU : OpEntT where
   fd _ _ _ _ := True
   oc _ _ := True
   cn _ _ := False
+  QC := Qunit
 
 /-- `K = [·]; ℓ`: resumed at `()`, it returns `ℓ`. -/
 def kRet (l : BoCa.Loc) : Kont := .seq .hole (.val (Val.loc l))

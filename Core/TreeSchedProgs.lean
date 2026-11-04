@@ -139,6 +139,7 @@ def enAsk : OpEntT where
   fd := fdJoinT
   oc := fun _ O => O = []
   cn := fun _ _ => False
+  QC := Qunit
 
 def TA : OpTabT := fun m i => if m = nA ∧ i = 0 then some enAsk else none
 
@@ -313,7 +314,7 @@ theorem retClause_ok : SchedRetT (ℍ := ℍ) QA QA retClause := by
 /-- **The scheduler meets `SchedOKT`.** -/
 theorem async_schedOK : SchedOKT (ℍ := ℍ) TA nA qsA retClause hsA QA QA := by
   refine ⟨fun m i hm => by simp [TA, hm], fun i en h _ => ?_, fun i en h v w O ρf hj => ?_,
-    QA_down, retClause_ok, fun ⟨_, _, h, hq, _⟩ => absurd (by obtain ⟨-, -, rfl⟩ := TA_some h; rfl) hq,
+    QA_down, retClause_ok, fun _ _ h hq _ => absurd (by obtain ⟨-, -, rfl⟩ := TA_some h; rfl) hq,
     fun i en h => ?_⟩
   · obtain ⟨-, rfl, rfl⟩ := TA_some h
     rfl
@@ -402,6 +403,7 @@ def enPass : OpEntT where
   fd := fdJoinT
   oc := fun _ O => O = []
   cn := fun _ _ => False
+  QC := Qunit
 
 def TS : OpTabT := fun m i => if m = nS ∧ i = 0 then some enPass else none
 
@@ -509,7 +511,7 @@ theorem schedS_ok {Qt : TPostV} (hQt : Qt.Down) (hst : QtStable Qt) :
     SchedOKT (ℍ := ℍ) TS nS qsS stepRet hsS Qt (QS (ℍ := ℍ) Qt) := by
   refine ⟨fun m i hm => by simp [TS, hm], fun i en h _ => ?_, fun i en h v w O ρf hj => ?_,
     QS_down hQt, stepRet_ok hQt hst,
-    fun ⟨_, _, h, _, hf⟩ => absurd (by obtain ⟨-, -, rfl⟩ := TS_some h; exact hf) Bool.false_ne_true,
+    fun _ _ h _ hf => absurd (by obtain ⟨-, -, rfl⟩ := TS_some h; exact hf) Bool.false_ne_true,
     fun i en h => ?_⟩
   · obtain ⟨-, rfl, rfl⟩ := TS_some h
     rfl

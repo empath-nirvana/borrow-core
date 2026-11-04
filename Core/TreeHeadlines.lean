@@ -20,9 +20,9 @@ and proved below it:
   `cerwpT_schedHandle`'s induction, not as branches of `CactusInvT`.
 * **Pool-scheduler adequacy** (`PoolSchedAdequacyT`, `poolSchedAdequacyT`,
   `Core/TreePoolSched.lean`): `MultiBranchAdequacyT` for a scheduler whose state is one fixed
-  representation, the handler and the pool's continuations (`stateVal`, `poolVal`), its answers
-  functions of that state (`PoolAns`), its pool held by `PoolT`. `MultiBranchAdequacyT` is the
-  general statement.
+  representation, the handler and the pool's entries (`stateVal`, `poolVal`), its answers
+  functions of that state (`PoolAns`), its pool a stack held by `PoolTJ` with the running task's
+  conditions against it. `MultiBranchAdequacyT` is the general statement.
 * **R1, a step keeps every other branch's open lend** (`R1_StepKeepsFdEsc`,
   `r1_stepKeepsFdEsc`): a branch that holds nothing of a frame record's lend before its run holds
   nothing of it after, in every post-configuration `twp` admits. Beside it,

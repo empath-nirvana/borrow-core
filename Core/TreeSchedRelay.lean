@@ -2,6 +2,7 @@ import Core.TreeSchedProgs
 import Core.TreeSchedPool
 import Core.TreeLend
 import Core.Fix
+import Core.TreePoolShare
 
 /-!
 # The park stepper: a task parks holding a share, and is resumed or cancelled  `[spec §62]`
@@ -31,6 +32,10 @@ open BoCa.BoLo (Heap Step1 Head Kont performE opPayload hndE hndVal capTag claus
 /-- The stepper's name. -/
 abbrev nP : UInt32 := 3
 
+/-- **Park's cancel answer**: `()`, owning no record, holding copies of lends (`ViewsT`), which a
+cancelled task hands back to the nearest joiner. -/
+def QCV : TPostV := fun _ _ _ O r ρ => r = Val.unit ∧ O = [] ∧ ViewsT ρ
+
 /-- `park`: cancellable, no payload and no answer resource; the continuation owns its share. The
 parked branch may own records at the stop. -/
 def enPark : OpEntT where
@@ -42,6 +47,7 @@ def enPark : OpEntT where
   fd := fdJoinT
   oc := fun _ _ => True
   cn := fun m i => m = nP ∧ i = 0
+  QC := QCV
 
 def TP : OpTabT := fun m i => if m = nP ∧ i = 0 then some enPark else none
 
@@ -122,15 +128,24 @@ theorem parkRet_ok {Qt : TPostV} (hQt : Qt.Down) (hst : QtStable Qt) :
   exact twp_here (fun μ => final_val μ _) fun w₀ ρ₀ ls₀ O₀ hE hr _ hO =>
     ⟨_, rfl, QP_iff.mpr (Or.inr ⟨v, rfl, hst k w w₀ ls O ls₀ O₀ v ρ ρ₀ hE hr hO hv⟩)⟩
 
-/-- **The park stepper meets `SchedOKT`**, at every final answer of the task that accepts the
-cancel's (`park` is cancellable, so a cancelled task's `()` reaches the return clause). -/
+theorem QCV_down : QCV.Down := fun _ _ _ _ _ _ h => h
+
+theorem QCV_stable : QtStable QCV := by
+  intro k w w₀ ls O ls₀ O₀ r ρ ρ₀ _ hr hO ⟨h₁, h₂, h₃⟩
+  subst h₂; cases hO
+  exact ⟨h₁, rfl, ViewsT.rr hr h₃⟩
+
+/-- **The park stepper meets `SchedOKT`**, at every final answer of the task that accepts park's
+cancel answer (`park` is cancellable, so a cancelled task's answer, `()` and the copies it hands
+back, reaches the return clause). -/
 theorem schedP_ok {Qt : TPostV} (hQt : Qt.Down) (hst : QtStable Qt)
-    (hQu : ∀ k w ls O v ρ, Qunit k w ls O v ρ → Qt k w ls O v ρ) :
+    (hQu : ∀ k w ls O v ρ, QCV k w ls O v ρ → Qt k w ls O v ρ) :
     SchedOKT (ℍ := ℍ) TP nP qsP stepRet hsP Qt (QP (ℍ := ℍ) Qt) := by
   refine ⟨fun m i hm => by simp [TP, hm], fun i en h _ => ?_, fun i en h v w O ρf hj => ?_,
     QP_down hQt, parkRet_ok hQt hst,
-    fun _ F k w ls O v ρ h₁ h₂ h₃ h₄ h₅ hv =>
-      parkRet_ok hQt hst F k w ls O v ρ h₁ h₂ h₃ h₄ h₅ (hQu _ _ _ _ _ _ hv), fun i en h => ?_⟩
+    fun i en h _ _ F k w ls O v ρ h₁ h₂ h₃ h₄ h₅ hv => by
+      obtain ⟨-, -, rfl⟩ := TP_some h
+      exact parkRet_ok hQt hst F k w ls O v ρ h₁ h₂ h₃ h₄ h₅ (hQu _ _ _ _ _ _ hv), fun i en h => ?_⟩
   · obtain ⟨-, rfl, rfl⟩ := TP_some h
     rfl
   · obtain ⟨-, -, rfl⟩ := TP_some h
@@ -143,7 +158,7 @@ theorem schedP_ok {Qt : TPostV} (hQt : Qt.Down) (hst : QtStable Qt)
 condition whose frames avoid a mask `M` holding their masks: the stepper's `[handle]`. The task's
 base frame condition is met by every valid frame; its present one by every frame avoiding `M`. -/
 theorem parked_twp {Qt : TPostV} (hQt : Qt.Down) (hst : QtStable Qt)
-    (hQu : ∀ k w ls O v ρ, Qunit k w ls O v ρ → Qt k w ls O v ρ) {F : TFrame}
+    (hQu : ∀ k w ls O v ρ, QCV k w ls O v ρ → Qt k w ls O v ρ) {F : TFrame}
     (hFm : F.Mono) {M : BoCa.Loc → Prop} (hFM : ∀ w ρf, F w ρf → fdMask M w ρf) {n : Nat}
     {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {e : Expr} {ρ : TRes w.K}
     (hOM : ∀ x, recMask O x → M x) {Fb Fe : TFrame} (hFb : ∀ w ρf, ResUT.Valid ρf → Fb w ρf)
@@ -156,7 +171,7 @@ theorem parked_twp {Qt : TPostV} (hQt : Qt.Down) (hst : QtStable Qt)
 def parkedT (Qt : TPostV) (k : Nat) (M : BoCa.Loc → Prop) (κ : Val) : StoredT :=
   ⟨QP (ℍ := ℍ) Qt, M, enPark, HP, k, Val.unit, κ⟩
 
-/-! ### Task A: parks, owning nothing -/
+/-! ### Task A: parks holding a copy of a view, answers it back -/
 
 theorem TP_PA : PADown TP := fun _ _ _ h _ _ _ _ _ hA => by
   obtain ⟨-, -, rfl⟩ := TP_some h; exact hA
@@ -166,10 +181,69 @@ theorem TP_down {Qt : TPostV} (hQt : Qt.Down) {Ψ : ContT} {Ψc : ContP} {F : TF
   cerwpPostT_down hQt
     (fun m i en h k w ls v ρ hA => by obtain ⟨-, -, rfl⟩ := TP_some h; exact hA)
 
-/-- **Task A**: `let _ = park () in ()`. -/
+/-- **Task A**: `let _ = park () in ()`. Its resource is a copy of a lend's view, held across the
+park and answered back, by its end or by its cancel. -/
 def taskA : Expr := .app (.lam (.val Val.unit)) (performE (.val (opPayload nP 0 Val.unit)))
 
 def kA : Kont := .appR (.lam (.val Val.unit)) .hole
+
+/-- A's answer: `()`, owning no record, holding the copy `viewRes α ℓ`. -/
+def QA (α : Life) (l : BoCa.Loc) : TPostV := fun _ _ _ O r ρ =>
+  r = Val.unit ∧ O = [] ∧ ρ = viewRes α l
+
+theorem QA_down (α : Life) (l : BoCa.Loc) : (QA α l).Down := fun _ _ _ _ _ _ h => h
+
+theorem QA_stable (α : Life) (l : BoCa.Loc) : QtStable (QA α l) := by
+  intro k w w₀ ls O ls₀ O₀ r ρ ρ₀ hE hr hO ⟨h₁, h₂, h₃⟩
+  subst h₂; subst h₃; cases hO
+  exact ⟨h₁, rfl, rr_view_eq hr⟩
+
+/-- A's last step: `(λ_. ()) ()`, the copy answered back. -/
+theorem kA_unit {Fb F : TFrame} {n : Nat} {w : TWd} {ls : List (SRecT w.K)} (α : Life)
+    (l : BoCa.Loc) :
+    cerwpT (ℍ := ℍ) (opTableT TP) (QA α l) Fb F n w ls [] (kA.plug (.val Val.unit))
+      (viewRes α l) := by
+  refine cerwpT_det (TP_down (QA_down α l)) (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl
+    .hole) ?_
+  exact cerwpT_val (v := Val.unit) fun w₀ ρ₀ _ O₀ _ hr _ hO => by
+    cases hO; exact ⟨rfl, rfl, rr_view_eq hr⟩
+
+/-- A's cancel: `ccatch ((λ_. ()) (raise cancel))` answers `()` in one step, the copy handed back
+in park's cancel answer (`QCV`), at any table. -/
+theorem kA_cancel {T : OpTabT} (hT : PADown T) {Fb F : TFrame} {n : Nat} {w : TWd}
+    {ls : List (SRecT w.K)} (α : Life) (l : BoCa.Loc) :
+    cerwpT (ℍ := ℍ) (opTableT T) QCV Fb F n w ls [] (unwindE kA) (viewRes α l) := by
+  refine cerwpT_det (cerwpPostT_down (fun _ _ _ _ _ _ h => h) hT)
+    (fun μ => step1Only_plug (Head.cancel μ kA rfl) rfl .hole) ?_
+  exact cerwpT_val (v := Val.unit) fun w₀ ρ₀ _ O₀ _ hr _ hO => by
+    cases hO; exact ⟨rfl, rfl, by rw [rr_view_eq hr]; exact ViewsT.view α l⟩
+
+/-- **Task A at the park stepper's table**, from a copy of a view, at every index and frame
+condition: it parks, cancellable; resumed it answers the copy, cancelled its cancel answer hands
+the copy back. -/
+theorem taskA_cerwpT (n : Nat) (Fb F : TFrame) (w : TWd) (ls : List (SRecT w.K)) (α : Life)
+    (l : BoCa.Loc) :
+    cerwpT (ℍ := ℍ) (opTableT TP) (QA α l) Fb F n w ls [] taskA (viewRes α l) := by
+  show cerwpT (ℍ := ℍ) (opTableT TP) (QA α l) Fb F n w ls [] (kA.plug (performE (.val (opPayload nP 0
+    Val.unit)))) (viewRes α l)
+  refine cerwpT_perform kA rfl (show TP nP 0 = some enPark by simp [TP]) rfl ?_
+  intro w₀ ρ₀ ls₀ O₀ _ hr _ hO
+  cases hO
+  obtain rfl := rr_view_eq hr
+  refine ⟨trivial, PMap.empty, viewRes α l, ResUT.CompS.comm (ResUT.compS_empty_right _), ⟨rfl, rfl⟩,
+    (⟨(fun h => by cases h), fun w' ρ' ls' O' _ hr' _ hO' => ⟨fun k' hk' a σ σ' hB hcσ => ?_,
+      (fun _ _ k' hk' _ _ => ?_)⟩⟩ : contShareT TP enPark Fb n w₀ ls₀ [] kA Val.unit
+        (cerwpTC (ℍ := ℍ) (opTableT TP) (QA α l) Fb n) (cerwpTK (ℍ := ℍ) n) (viewRes α l))⟩
+  · obtain ⟨rfl, rfl⟩ := hB
+    obtain rfl := rr_view_eq hr'
+    obtain rfl := compS_empty_right_eq hcσ
+    cases hO'
+    simp only [cerwpTC, hk', if_true]
+    exact kA_unit α l
+  · obtain rfl := rr_view_eq hr'
+    cases hO'
+    simp only [cerwpTK, hk', if_true]
+    exact kA_cancel (TP_PA.restrict _) α l
 
 /-! ### The relay's loop: drive a parked task to its end -/
 
@@ -480,15 +554,18 @@ ran: its base frame condition is `⊤`, its present one avoids the record's mask
 theorem taskB_parked {F : TFrame} (hFm : F.Mono) {β : Life} {l₁ : BoCa.Loc}
     (hFM : ∀ w ρf, F w ρf → fdMask (recMask [lendRec (K := w.K) l₁]) w ρf) {n : Nat} {w : TWd}
     {ls : List (SRecT w.K)} :
-    twp (ℍ := ℍ) F (valPost (QP (ℍ := ℍ) QB)) n w ls [lendRec l₁]
+    twp (ℍ := ℍ) F (valPost (QP (ℍ := ℍ) QCV)) n w ls [lendRec l₁]
       (hndE HP (.app (.val taskB) (.val (Val.loc l₁)))) (viewRes β l₁) := by
-  refine parked_twp QB_down QB_stable (fun _ _ _ _ _ _ h => h) hFm (M := fun x => x = l₁) (fun w ρf hf => ?_)
-    (fun x hx => ?_) (Fb := fun _ _ => True) (Fe := fdMask fun x => x = l₁) (fun _ _ _ => trivial)
-    (fun _ _ h => h) (cerwpT_of_twp (taskB_twp (fdMask_mono _) (fun _ _ h => h.2)))
+  refine parked_twp QCV_down QCV_stable (fun _ _ _ _ _ _ h => h) hFm (M := fun x => x = l₁)
+    (fun w ρf hf => ?_) (fun x hx => ?_) (Fb := fun _ _ => True) (Fe := fdMask fun x => x = l₁)
+    (fun _ _ _ => trivial) (fun _ _ h => h) (cerwpT_of_twp (twp_mono (fun _ _ _ _ _ _ hv => ?_)
+      (taskB_twp (fdMask_mono _) (fun _ _ h => h.2))))
   · exact fdMask_le (fun x hx => recMask_lendRec.mpr (Or.inl hx)) (hFM w ρf hf)
   · rcases recMask_lendRec.mp hx with h | h
     · exact h
     · simp [recMask] at h
+  · obtain ⟨v, rfl, rfl, rfl, rfl⟩ := hv
+    exact ⟨Val.unit, rfl, rfl, rfl, ViewsT.empty⟩
 
 end BoCa.Fig16.Tree.Wp.SchedProgs.Park
 

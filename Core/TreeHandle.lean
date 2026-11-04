@@ -371,11 +371,6 @@ def SchedClauseT (H : Val) (Qout : TPostV) (en : OpEntT) (c : Val) : Prop :=
     cerwpT (ℍ := ℍ) (opTableT OpTabT.empty) Qout F F k w ls O
       (.app (.val c) (.pair (.val v) κ.1)) ρ
 
-/-- **A table owes a cancel branch at the name `n₀`**: one of its entries there is cancellable
-(`q ≠ lin`) and owes its continuation's unwinding (`fin`). -/
-def OpTabT.Cancels (T : OpTabT) (n₀ : UInt32) : Prop :=
-  ∃ i en, T n₀ i = some en ∧ en.q ≠ .lin ∧ en.fin = true
-
 /-- **What a top-level scheduler `hnd (n₀, (qs, (h_ret, hs)))` must satisfy**, for tasks at the
 table `T` answering `Qin` and the program answering `Qout`:
 
@@ -384,8 +379,8 @@ table `T` answering `Qin` and the program answering `Qout`:
 * the entry's resumer guarantee `fd` follows from the join's (`fdJoinT`): a resumer whose frame
   avoids the masks of the resumed branch's records meets it;
 * `Qout` is downward closed in the index;
-* the return clause (`SchedRetT`) at the tasks' answer, and at the cancel's (`Qunit`) when one of
-  the scheduler's operations owes a cancel branch (`OpTabT.Cancels`), and every operation's clause
+* the return clause (`SchedRetT`) at the tasks' answer, and at the cancel answer (`QC`) of each of
+  the scheduler's operations that owes a cancel branch, and every operation's clause
   (`SchedClauseT`), at the empty table, each `κ` read by `KapSchedT`: resumed beside any state that
   is valid and holds nothing at the masks of the records the branch owns at its stop. -/
 def SchedOKT (T : OpTabT) (n₀ : UInt32) (qs hr hs : Val) (Qin Qout : TPostV) : Prop :=
@@ -393,7 +388,7 @@ def SchedOKT (T : OpTabT) (n₀ : UInt32) (qs hr hs : Val) (Qin Qout : TPostV) :
   (∀ i en, T n₀ i = some en → en.abort = false → capTag qs.1 i.toNat = en.q.tag) ∧
   (∀ i en, T n₀ i = some en → ∀ v w O ρf, fdJoinT v w O ρf → en.fd v w O ρf) ∧
   Qout.Down ∧ SchedRetT (ℍ := ℍ) Qin Qout hr ∧
-  (T.Cancels n₀ → SchedRetT (ℍ := ℍ) Qunit Qout hr) ∧
+  (∀ i en, T n₀ i = some en → en.q ≠ .lin → en.fin = true → SchedRetT (ℍ := ℍ) en.QC Qout hr) ∧
   (∀ i en, T n₀ i = some en →
     ∃ c, clauseAt hs.1 i.toNat = some c ∧
       SchedClauseT (ℍ := ℍ) (hndVal n₀ qs hr hs) Qout en c)
@@ -429,7 +424,8 @@ def SchedOKTLe (N : Nat) (T : OpTabT) (n₀ : UInt32) (qs hr hs : Val) (Qin Qout
   (∀ i en, T n₀ i = some en → en.abort = false → capTag qs.1 i.toNat = en.q.tag) ∧
   (∀ i en, T n₀ i = some en → ∀ v w O ρf, fdJoinT v w O ρf → en.fd v w O ρf) ∧
   Qout.Down ∧ SchedRetTLe (ℍ := ℍ) N Qin Qout hr ∧
-  (T.Cancels n₀ → SchedRetTLe (ℍ := ℍ) N Qunit Qout hr) ∧
+  (∀ i en, T n₀ i = some en → en.q ≠ .lin → en.fin = true →
+    SchedRetTLe (ℍ := ℍ) N en.QC Qout hr) ∧
   (∀ i en, T n₀ i = some en →
     ∃ c, clauseAt hs.1 i.toNat = some c ∧
       SchedClauseTLe (ℍ := ℍ) N (hndVal n₀ qs hr hs) Qout en c)
@@ -439,7 +435,7 @@ theorem SchedOKT.le {T : OpTabT} {n₀ : UInt32} {qs hr hs : Val} {Qin Qout : TP
     SchedOKTLe (ℍ := ℍ) N T n₀ qs hr hs Qin Qout := by
   obtain ⟨h₁, h₂, h₃, h₄, h₅, h₅', h₆⟩ := h
   refine ⟨h₁, h₂, h₃, h₄, fun F k w ls O v ρ _ => h₅ F k w ls O v ρ,
-    fun hc F k w ls O v ρ _ => h₅' hc F k w ls O v ρ, fun i en he => ?_⟩
+    fun i en h₁ h₂ h₃ F k w ls O v ρ _ => h₅' i en h₁ h₂ h₃ F k w ls O v ρ, fun i en he => ?_⟩
   obtain ⟨c, hc, hcl⟩ := h₆ i en he
   exact ⟨c, hc, fun F k w ls O v κ ρ _ => hcl F k w ls O v κ ρ⟩
 
@@ -450,7 +446,8 @@ theorem schedOKT_of_le {T : OpTabT} {n₀ : UInt32} {qs hr hs : Val} {Qin Qout :
     SchedOKT (ℍ := ℍ) T n₀ qs hr hs Qin Qout := by
   obtain ⟨h₁, h₂, h₃, h₄, -, -, -⟩ := h 0
   refine ⟨h₁, h₂, h₃, h₄, fun F k w ls O v ρ => (h k).2.2.2.2.1 F k w ls O v ρ le_rfl,
-    fun hc F k w ls O v ρ => (h k).2.2.2.2.2.1 hc F k w ls O v ρ le_rfl, fun i en he => ?_⟩
+    fun i en h₁ h₂ h₃ F k w ls O v ρ => (h k).2.2.2.2.2.1 i en h₁ h₂ h₃ F k w ls O v ρ le_rfl,
+    fun i en he => ?_⟩
   obtain ⟨c, hc, -⟩ := (h 0).2.2.2.2.2.2 i en he
   refine ⟨c, hc, fun F k w ls O v κ ρ => ?_⟩
   obtain ⟨c', hc', hcl⟩ := (h k).2.2.2.2.2.2 i en he
@@ -527,7 +524,7 @@ theorem cerwpT_schedHandle_leQ {N : Nat} {T : OpTabT} {n₀ : UInt32} {qs hr hs 
       exact ih k' (by omega) (by omega) Q hret (recMask O') F'' Fb (fdAt en v Fb O'') w'' ls''
         O'' _ σ' hF''m hF''M (fun x hx => (recMask_rr hO x).mpr hx) hFb (hFe' w'' O'' hO) h₁
     -- the cancel: owed at the entry's cancel row, a restriction of the tasks' table `T`; the
-    -- share's unwinding under the handler, by the induction hypothesis at the cancel's answer
+    -- share's unwinding under the handler, by the induction hypothesis at the cancel's answer `QC`
     have hcan : ∀ (w'' : TWd) (ρk' : TRes w''.K) (ls'' : List (SRecT w''.K))
         (O'' : List (FrameRecT w''.K)), w'.Ext w'' ρk → RRw (w := w') (w' := w'') ρk ρk' →
         KeepRel w''.Θ ls' ls'' ρk → RecsRR w''.Θ O' O'' → en.q ≠ .lin → en.fin = true →
@@ -539,7 +536,7 @@ theorem cerwpT_schedHandle_leQ {N : Nat} {T : OpTabT} {n₀ : UInt32} {qs hr hs 
       have h₁ := (hsh.2 w'' ρk' ls'' O'' hE hr' hx hO).2 hq hf k' hk' Fb hFb
       simp only [cerwpTK, show k' < n by omega, if_true] at h₁
       replace h₁ := cerwpT_table_mono k' OpTabT.restrict_le _ _ _ _ _ _ h₁
-      exact ih k' (by omega) (by omega) Qunit (hretU ⟨i, en, hTe, hq, hf⟩) (recMask O') F'' Fb (fdAt en v Fb O'') w''
+      exact ih k' (by omega) (by omega) en.QC (hretU i en hTe hq hf) (recMask O') F'' Fb (fdAt en v Fb O'') w''
         ls'' O'' _ ρk' hF''m hF''M (fun x hx => (recMask_rr hO x).mpr hx) hFb (hFe' w'' O'' hO) h₁
     rw [htag i en hTe ha, kappaAt_tag]
     cases hqq : en.q with

@@ -93,7 +93,7 @@ theorem cerwpT_post_mono_n {Tb : TableT} (hL : Tb.Local) {Q₁ Q₂ : TPostV}
   rcases ht with ⟨v, rfl, hv⟩ | ht
   · exact Or.inl ⟨v, rfl, hQ _ _ _ _ _ _ hv⟩
   · refine Or.inr (hL _ _ Fb k w' ls' O' t _ _ ρ' (fun F' w'' O'' k' hk' ls'' e'' ρ'' hΨ => ?_)
-      (fun _ _ _ _ _ _ _ _ _ _ h => h) ht)
+      (fun _ _ _ _ _ _ _ _ _ _ _ h => h) ht)
     simp only [cerwpTC, show k' < n by omega, if_true] at hΨ ⊢
     exact ih k' (by omega) F' w'' ls'' O'' e'' ρ'' hΨ
 

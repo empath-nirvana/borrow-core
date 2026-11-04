@@ -47,86 +47,100 @@ theorem Fv_mono : TFrame.Mono Fv := fun _ _ _ _ _ hr hv =>
 /-- `λx. x`. -/
 def idV : Val := Val.lam (.var 0)
 
-/-- **A forwarding handler of the name `nm`**, returning its argument; it has no clauses. -/
-def hFw (nm : UInt32) : HFrameT :=
-  ⟨nm, Val.pair Val.unit Val.unit, idV, Val.pair Val.unit Val.unit, TS (ℍ := ℍ), QS, Fv⟩
+/-- **A forwarding handler of the name `nm`** at the indexed table `tabAt k`, returning its
+argument; it has no clauses. -/
+def hFw (k : Nat) (nm : UInt32) : HFrameT :=
+  ⟨nm, Val.pair Val.unit Val.unit, idV, Val.pair Val.unit Val.unit, tabAt (ℍ := ℍ) k, QS, Fv⟩
 
 /-- The identity return clause at the root's table and answer. -/
-theorem idRet_ok : RetT (ℍ := ℍ) (TS (ℍ := ℍ)) QS QS Fv idV := by
-  intro F k w ls O v ρ _ _ _ _ _ ⟨hv, hO, hρ⟩
+theorem idRet_ok (k : Nat) : RetT (ℍ := ℍ) (tabAt (ℍ := ℍ) k) QS QS Fv idV := by
+  intro F j w ls O v ρ _ _ _ _ _ ⟨hv, hO, hρ⟩
   subst hv; subst hO; subst hρ
-  exact cerwpT_det (post_down TS_down) (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole)
-    cerwpT_unit
+  exact cerwpT_det (post_down (tabAt_down k))
+    (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) cerwpT_unit
 
-/-- **A forwarding handler of a name other than `park`'s meets `HandleOKT`** at the root's table:
-every operation is forwarded, with its cancel row. -/
-theorem hFw_ok (nm : UInt32) (hnm : nm ≠ nP) :
-    HandleOKT (ℍ := ℍ) (TS (ℍ := ℍ)) (TS (ℍ := ℍ)) nm (hFw nm).qs (hFw nm).hr (hFw nm).hs QS QS
-      Fv := by
+theorem tabAt_name {k : Nat} {m i : UInt32} {en : OpEntT} (h : tabAt (ℍ := ℍ) k m i = some en) :
+    m = nP := by rw [tabAt_eq] at h; exact (tabOf_some h).1
+
+/-- **A forwarding handler of a name other than the scheduler's meets `HandleOKT`** at the root's
+table: every operation is forwarded, with its cancel row. -/
+theorem hFw_ok (k : Nat) (nm : UInt32) (hnm : nm ≠ nP) :
+    HandleOKT (ℍ := ℍ) (tabAt (ℍ := ℍ) k) (tabAt (ℍ := ℍ) k) nm (hFw k nm).qs (hFw k nm).hr
+      (hFw k nm).hs QS QS Fv := by
   refine ⟨fun m i en _ h => ⟨h, fun _ _ _ _ h' => h'⟩, fun i en h => ?_,
-    fun m i en h v w O ρf => ?_, QB_down, TS_down, idRet_ok, fun ⟨i, en, h, _⟩ => ?_,
+    fun m i en h v w O ρf => ?_, QB_down, tabAt_down k, idRet_ok k, fun i en h => ?_,
     fun i en h => ?_⟩
-  · exact absurd (TS_some h).1 hnm
-  · obtain ⟨-, ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩⟩ := TS_some h <;> exact Iff.rfl
-  · exact absurd (TS_some h).1 hnm
-  · exact absurd (TS_some h).1 hnm
+  · exact absurd (tabAt_name h) hnm
+  · rw [tabAt_eq] at h
+    obtain ⟨-, ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩⟩ := tabOf_some h <;> exact Iff.rfl
+  · exact absurd (tabAt_name h) hnm
+  · exact absurd (tabAt_name h) hnm
 
-theorem stack_ok : ∀ (ns : List UInt32), (∀ nm ∈ ns, nm ≠ nP) →
-    StackOKT (ℍ := ℍ) (TS (ℍ := ℍ)) QS (ns.map hFw)
+theorem stack_ok (k : Nat) : ∀ (ns : List UInt32), (∀ nm ∈ ns, nm ≠ nP) →
+    StackOKT (ℍ := ℍ) (tabAt (ℍ := ℍ) k) QS (ns.map (hFw k))
   | [], _ => trivial
-  | nm :: ns, h => ⟨hFw_ok nm (h nm (by simp)), Fv_mono, fun _ _ hv => hv,
-      stack_ok ns fun x hx => h x (by simp [hx])⟩
+  | nm :: ns, h => ⟨hFw_ok k nm (h nm (by simp)), Fv_mono, fun _ _ hv => hv,
+      stack_ok k ns fun x hx => h x (by simp [hx])⟩
 
-theorem top_eq : ∀ (ns : List UInt32),
-    HFrameT.topT (TS (ℍ := ℍ)) (ns.map hFw) = TS (ℍ := ℍ) ∧ HFrameT.topQ QS (ns.map hFw) = QS ∧
-      HFrameT.topFb Fv (ns.map (hFw (ℍ := ℍ))) = Fv
+theorem top_eq (k : Nat) : ∀ (ns : List UInt32),
+    HFrameT.topT (tabAt (ℍ := ℍ) k) (ns.map (hFw k)) = tabAt (ℍ := ℍ) k ∧
+      HFrameT.topQ QS (ns.map (hFw (ℍ := ℍ) k)) = QS ∧
+      HFrameT.topFb Fv (ns.map (hFw (ℍ := ℍ) k)) = Fv
   | [] => ⟨rfl, rfl, rfl⟩
-  | _ :: ns => top_eq ns
+  | _ :: ns => top_eq k ns
 
-/-- **`LC` under a stack of forwarding handlers**, at the root's table, at every index, from the
-present frame condition the spawner's resume gives (`fdAt enSpawn () Fv []`). -/
-theorem fwdLC_cerwpT (ns : List UInt32) (hns : ∀ nm ∈ ns, nm ≠ nP) (n : Nat) (w : TWd)
-    (ls : List (SRecT w.K)) :
-    cerwpT (ℍ := ℍ) (opTableT (TS (ℍ := ℍ))) QS Fv
-      (fdAt (enSpawn (ℍ := ℍ)) Val.unit Fv ([] : List (FrameRecT w.K))) n w ls []
-      (HFrameT.wrap (ns.map (hFw (ℍ := ℍ))) LC) PMap.empty := by
-  have h := cerwpT_handleStack _ _ _ _ (stack_ok ns hns) (fun _ _ hv => hv) n (fun _ => False) w
+/-- **`LC` under a stack of forwarding handlers**, at the indexed table, at every index, from the
+present frame condition a spawner's resume gives (`fdAt (enSpawnP P) v Fv []`). -/
+theorem fwdLC_cerwpT (k : Nat) (ns : List UInt32) (hns : ∀ nm ∈ ns, nm ≠ nP) (P : TVProp)
+    (v : Val) (n : Nat) (w : TWd) (ls : List (SRecT w.K)) :
+    cerwpT (ℍ := ℍ) (opTableT (tabAt (ℍ := ℍ) k)) QS Fv
+      (fdAt (enSpawnP P) v Fv ([] : List (FrameRecT w.K))) n w ls []
+      (HFrameT.wrap (ns.map (hFw (ℍ := ℍ) k)) LC) PMap.empty := by
+  have h := cerwpT_handleStack _ _ _ _ (stack_ok k ns hns) (fun _ _ hv => hv) n (fun _ => False) w
     ls [] LC PMap.empty (fun x hx => by simp [recMask] at hx)
-    (LC_cerwpT TS_park TS_down α₀ n _ _ w ls)
-  obtain ⟨e₁, e₂, e₃⟩ := top_eq (ℍ := ℍ) ns
+    (LC_cerwpT (tabAt_park k) (tabAt_down k) α₀ n _ _ w ls)
+  obtain ⟨e₁, e₂, e₃⟩ := top_eq (ℍ := ℍ) k ns
   rw [e₁, e₂, e₃] at h
   refine cerwpT_frameCond_rel (fun w₀ O₀ ρf hO₀ hf => ?_) h
   cases hO₀
   exact fdMask_le (fun _ h => h.elim) (hf.2 [] .nil)
 
-theorem wrap_closed : ∀ (ns : List UInt32) (e : Expr) (v : Val), e.subst 0 v = e →
-    (HFrameT.wrap (ns.map (hFw (ℍ := ℍ))) e).subst 0 v = HFrameT.wrap (ns.map (hFw (ℍ := ℍ))) e
+theorem wrap_closed (k : Nat) : ∀ (ns : List UInt32) (e : Expr) (v : Val), e.subst 0 v = e →
+    (HFrameT.wrap (ns.map (hFw (ℍ := ℍ) k)) e).subst 0 v = HFrameT.wrap (ns.map (hFw (ℍ := ℍ) k)) e
   | [], _, _, h => h
-  | nm :: ns, e, v, h => wrap_closed ns _ v (by
+  | nm :: ns, e, v, h => wrap_closed k ns _ v (by
       simp only [hndE, Expr.subst, h]
       repeat (first | rfl | constructor))
 
 /-- **The root**: `let _ = spawn (λ_. park (); cancel ()) in hnd_{ns} LC`, the forwarding
-handlers `ns` around `LC`. -/
+handlers `ns` around `LC`. The handlers' values do not read the table index. -/
 def rootFwd (ns : List UInt32) : Expr :=
-  .app (.lam (HFrameT.wrap (ns.map (hFw (ℍ := ℍ))) LC)) (spawnE thC)
+  .app (.lam (HFrameT.wrap (ns.map (hFw (ℍ := ℍ) 0)) LC)) (spawnE thC)
 
-theorem rootFwd_cerwpT (ns : List UInt32) (hns : ∀ nm ∈ ns, nm ≠ nP) (n : Nat) (w : TWd)
-    (ls : List (SRecT w.K)) :
-    cerwpT (ℍ := ℍ) (opTableT (TS (ℍ := ℍ))) QS Fv (fdMask fun _ => False) n w ls []
-      (rootFwd (ℍ := ℍ) ns) PMap.empty :=
-  cerwpT_spawnThen (fun j w' ls' Fb' Fe' _ _ => thC_ok j w' ls' Fb' Fe') fun k' _ w' ls' => by
-    rw [wrap_closed ns LC Val.unit (LC_closed _)]
-    exact fwdLC_cerwpT ns hns k' w' ls'
+theorem wrap_index (ns : List UInt32) (k k' : Nat) (e : Expr) :
+    HFrameT.wrap (ns.map (hFw (ℍ := ℍ) k)) e = HFrameT.wrap (ns.map (hFw (ℍ := ℍ) k')) e := by
+  induction ns generalizing e with
+  | nil => rfl
+  | cons nm ns ih => exact ih _
+
+theorem rootFwd_cerwpT (ns : List UInt32) (hns : ∀ nm ∈ ns, nm ≠ nP) {k n : Nat} (hn : n ≤ k)
+    (w : TWd) (ls : List (SRecT w.K)) :
+    cerwpT (ℍ := ℍ) (opTableT (tabAt (ℍ := ℍ) k)) QS Fv (fdMask fun _ => False) n w ls []
+      (rootFwd (ℍ := ℍ) ns) PMap.empty := by
+  rw [tabAt_eq]
+  refine cerwpT_spawnThen (child_trunc hn fun j w' ls' Fb' Fe' => thC_ok j w' ls' Fb' Fe')
+    fun k' _ w' ls' => ?_
+  rw [wrap_closed 0 ns LC Val.unit (LC_closed _), wrap_index ns 0 k, ← tabAt_eq]
+  exact fwdLC_cerwpT k ns hns _ _ k' w' ls'
 
 /-- `(hnd HS root) (HS, [])`. -/
 def progFwd (ns : List UInt32) : Expr := progOf (rootFwd (ℍ := ℍ) ns)
 
 theorem progFwd_safe (ns : List UInt32) (hns : ∀ nm ∈ ns, nm ≠ nP) :
     OrDiverges (ℍ := ℍ) (progFwd (ℍ := ℍ) ns) :=
-  poolSchedAdequacyT beforeP TS nP qsS stackRet hsS QS QS InvS Fv _ (rootFwd ns)
+  poolSchedAdequacyT beforeP TJ nP qsS stackRet hsS QV QS InvS Fv _ (rootFwd ns)
     (fun _ _ _ _ _ _ h => h.2.2) (fun _ h => by cases h) hs_schedOK (fun _ _ h => h)
-    (fun _ _ h => h) fun n => rootFwd_cerwpT ns hns n _ _
+    (fun _ _ h => h) fun n => cerwpT_QV (cerwpT_tabAt (rootFwd_cerwpT ns hns le_rfl _ _))
 
 /-- **The hardest case, at one forwarding handler, is safe and leak-free, or diverges.** The root
 runs `LC` under a handler forwarding `park` and `cancel` to `HS`; `LC` parks holding its lend; `C`
@@ -167,6 +181,7 @@ def enC : OpEntT where
   fd := fdJoinT
   oc := fun _ O => O = []
   cn := fun m i => m = nC ∧ i = 0
+  QC := Qunit
 
 def TCk : OpTabT := fun m i => if m = nC ∧ i = 0 then some enC else none
 
@@ -209,18 +224,16 @@ theorem clC_ok (Fbo : TFrame) : ClauseT (ℍ := ℍ) OpTabT.empty HC Qunit Fbo e
   simp [Kont.plug, Expr.subst, hndE, Val.shift, e₂]
 
 /-- **The cancelling handler meets `HandleOKT`** at the empty outer table, its operation
-cancellable, so its return clause is asked at `Qunit` too. -/
+cancellable, so its return clause is asked at the operation's cancel answer too. -/
 theorem handleC_ok (Fbo : TFrame) :
     HandleOKT (ℍ := ℍ) TCk OpTabT.empty nC qsC idV hsC Qunit Qunit Fbo := by
   refine ⟨fun m i en hm h => absurd (TCk_some h).1 hm, fun i en h _ => ?_,
     fun m i en h v w O ρf => ?_, fun _ _ _ _ _ _ h => h, PADown_empty, retC_ok Fbo,
-    fun _ => retC_ok Fbo, fun i en h => ?_⟩
+    fun i en h _ _ => by obtain ⟨-, -, rfl⟩ := TCk_some h; exact retC_ok Fbo, fun i en h => ?_⟩
   · obtain ⟨-, rfl, rfl⟩ := TCk_some h; rfl
   · obtain ⟨-, -, rfl⟩ := TCk_some h; exact Iff.rfl
   · obtain ⟨-, rfl, rfl⟩ := TCk_some h
     exact ⟨clC, by simp [clauseAt, hsC, Val.pair, clC, Val.lam, IsVal.lam], clC_ok Fbo⟩
-
-theorem TCk_cancels : TCk.Cancels nC := ⟨0, enC, by simp [TCk], by decide, rfl⟩
 
 end BoCa.Fig16.Tree.Wp.SchedProgs.FwdProgs
 

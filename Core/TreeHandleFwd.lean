@@ -24,7 +24,7 @@ The proof is `cerwpT_schedHandle_le`'s, by induction on the index, with three ch
   outward (`[sub]`, `ewp_ccatch`'s `T.Le Tout`). A stop at the handler's own name is cancelled by
   its clause under the handler again (`KapT`'s cancel, as `KapSchedT`'s): the unwinding runs at the
   inner table (`cerwpT_table_mono` from its cancel row) and the handler around it by the induction
-  hypothesis at the cancel's answer `Qunit`.
+  hypothesis at the entry's cancel answer (`QC`).
 -/
 
 noncomputable section
@@ -191,8 +191,8 @@ table `To` must satisfy**:
 * each non-abortive operation's continuation tag (`qs`) is its entry's qualifier;
 * every entry's resumer guarantee is the join's (`fdJoinT`);
 * `Qout` and `To`'s payload relations are downward closed in the index;
-* the return clause at the handled run's answer, and at the cancel's answer `Qunit` when one of the
-  handler's own operations owes a cancel branch;
+* the return clause at the handled run's answer, and at the cancel answer (`QC`) of each of the
+  handler's own operations that owes a cancel branch;
 * every clause of the handler's operations (`ClauseT`). -/
 def HandleOKT (T To : OpTabT) (n₀ : UInt32) (qs hr hs : Val) (Qin Qout : TPostV) (Fbo : TFrame) :
     Prop :=
@@ -201,7 +201,8 @@ def HandleOKT (T To : OpTabT) (n₀ : UInt32) (qs hr hs : Val) (Qin Qout : TPost
   (∀ i en, T n₀ i = some en → en.abort = false → capTag qs.1 i.toNat = en.q.tag) ∧
   (∀ m i en, T m i = some en → ∀ v w O ρf, en.fd v w O ρf ↔ fdJoinT v w O ρf) ∧
   Qout.Down ∧ PADown To ∧
-  RetT (ℍ := ℍ) To Qin Qout Fbo hr ∧ (T.Cancels n₀ → RetT (ℍ := ℍ) To Qunit Qout Fbo hr) ∧
+  RetT (ℍ := ℍ) To Qin Qout Fbo hr ∧
+  (∀ i en, T n₀ i = some en → en.q ≠ .lin → en.fin = true → RetT (ℍ := ℍ) To en.QC Qout Fbo hr) ∧
   (∀ i en, T n₀ i = some en →
     ∃ c, clauseAt hs.1 i.toNat = some c ∧
       ClauseT (ℍ := ℍ) To (hndVal n₀ qs hr hs) Qout Fbo en c)
@@ -210,7 +211,7 @@ def HandleOKT (T To : OpTabT) (n₀ : UInt32) (qs hr hs : Val) (Qin Qout : TPost
 
 /-- **`[handle]` at `cerwpT` for every handler**, between a computation at `T` and an outer table
 `To`, forwarding cancellable operations included, by induction on the index; the inner answer any
-the return clause accepts (the cancel's run is the induction hypothesis at `Qunit`). The handled
+the return clause accepts (the cancel's run is the induction hypothesis at the entry's `QC`). The handled
 run `e` at a base frame condition `Fb` every valid frame meets and a present one `Fe` met by every
 frame avoiding `M` (which holds the masks of `e`'s records); the handler's run under frames
 meeting `F`, each avoiding `M`. -/
@@ -301,8 +302,8 @@ theorem cerwpT_handleQ {T To : OpTabT} {n₀ : UInt32} {qs hr hs : Val} {Qin Qou
     exact ih k' (by omega) Q hret (recMask O') F'' Fb (fdAt en v Fb O'') w'' ls'' O'' _ σ'
       hF''m hF''M (fun x hx => (recMask_rr hO x).mpr hx) hFb
       (hFe' m i en hTe v w' O' w'' O'' hO) h₁
-  -- the cancel: owed at the entry's cancel row, a restriction of `T`; the handler around the
-  -- unwinding, by the induction hypothesis at `Qunit`
+  -- the cancel: owed at the entry's cancel row, a restriction of `T`, at its cancel answer; the
+  -- handler around the unwinding, by the induction hypothesis there
   have hcan : ∀ (w'' : TWd) (ρk' : TRes w''.K) (ls'' : List (SRecT w''.K))
       (O'' : List (FrameRecT w''.K)), w'.Ext w'' ρk → RRw (w := w') (w' := w'') ρk ρk' →
       KeepRel w''.Θ ls' ls'' ρk → RecsRR w''.Θ O' O'' → en.q ≠ .lin → en.fin = true →
@@ -313,7 +314,7 @@ theorem cerwpT_handleQ {T To : OpTabT} {n₀ : UInt32} {qs hr hs : Val} {Qin Qou
     intro w'' ρk' ls'' O'' hE hr' hx hO hq hf k' hk' F'' hF''m hF''M
     have h₁ := (hsh.2 w'' ρk' ls'' O'' hE hr' hx hO).2 hq hf k' hk' Fb hFb
     simp only [cerwpTK, show k' < n by omega, if_true] at h₁
-    exact ih k' (by omega) Qunit (hretU ⟨i, en, hTe, hq, hf⟩) (recMask O') F'' Fb
+    exact ih k' (by omega) en.QC (hretU i en hTe hq hf) (recMask O') F'' Fb
       (fdAt en v Fb O'') w'' ls'' O'' _ ρk' hF''m hF''M (fun x hx => (recMask_rr hO x).mpr hx) hFb
       (hFe' m i en hTe v w' O' w'' O'' hO)
       (cerwpT_table_mono k' OpTabT.restrict_le _ _ _ _ _ _ h₁)
