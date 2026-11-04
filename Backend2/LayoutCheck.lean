@@ -225,7 +225,7 @@ def reCompat (w : String) (c d : Nat) : CM Unit := do
         same L w "a pointer read through a shared borrow: its contents" a c
       | .fam a, .fam c => todo := (a, c) :: todo
       | .clos .., .unk | .opq, .unk => pure ()
-      -- `Tok`'s cell read through `Imm̲`: released (`Imm̲ 'b Tok = Unk`).
+      -- `Tok`'s cell read through `Imm̲`: discarded (`Imm̲ 'b Tok = Unk`).
       | .ref _, .unk => pure ()
       | kx, ky =>
         throw s!"{w}: a read through a shared borrow of contents at node {rx} ({short kx}) as node {ry} ({short ky}): not one node, and not a reading of it"

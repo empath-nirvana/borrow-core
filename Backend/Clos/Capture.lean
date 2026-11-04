@@ -604,7 +604,7 @@ def TPath.resume? (defs : Std.HashMap Var Tm) (B : Tm) (k : Var) (ka : List Var)
   return (kk, s, ff, y)
 
 /-- `t` with the resume projection `kk s` replaced by `()` and the resume `ff y` by `y`, the
-variables they consumed consumed. -/
+variables they consumed discarded. -/
 def Tm.consumeResume (kk s ff y : Var) : Tm → Tm
   | .app a b =>
     if a == kk && b == s then .consume .kappa kk (.consume .word s .unit)

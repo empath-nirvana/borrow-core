@@ -106,7 +106,7 @@ agreed on #552, and loops U1–U4 are taken as decided and placed in the new pip
   them:
   - `hndExpr` (`Core/EffRules.lean:1179`), `thenE` (`:1018`);
   - `withborE = λℓ.λf.(ℓ, f () ℓ)` (`Backend/Clos/Convert.lean:493–494`);
-  - the copy and release axioms, `λx.(x, x)` and `λx.()` (`Paper/S3_Dynamics/Definitions.lean:624`,
+  - the copy and `forget` axioms, `λx.(x, x)` and `λx.()` (`Paper/S3_Dynamics/Definitions.lean:624`,
     `:629`).
 
   The erasure consumes binder types, ascriptions, every lifetime (`rImmSub` and the others erase to

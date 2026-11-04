@@ -292,7 +292,7 @@ The kernel already has the rule, and cancel-by-resume reaches it with no new pre
   handles its own body's awaits, which makes it a nested scheduler) together with `[raise]`'s `hrc`. A
   handler that catches a superseding finaliser raise exits through that handler's clause, which is an
   ordinary exit typed by the same `hW`.
-- **Only values that is not consumable need written code.** An owned `Ref`, `Array` or thunk held across an
+- **Only values that are not consumable need written code.** An owned `Ref`, `Array` or thunk held across an
   `await` gets its consume as a finaliser on the cancel unwind, exactly as for errors. The checker
   inserts that consume at a `consume` node (`TDerivesP.consume_consumable`), and nothing new is needed: the cancel
   unwind is an ordinary raise. A value that is not consumable (`declTy`, `must_close`, a borrowing task
@@ -372,7 +372,7 @@ Each comes with `#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
 - **Routes (b) and (c) of §6.1, or keeping the κ.2 consume as a fallback.** STOP.
 
 - **Keeping the shape test** (`lin ∧ i = 0 ∧ B = 1 ⊕ 1 ∧ n ≠ divEff`) and calling it a marker. STOP.
-- **Putting the marker in `OpSig` but not in `CTy`.** `[sub]` could then release it. STOP.
+- **Putting the marker in `OpSig` but not in `CTy`.** `[sub]` could then lose it. STOP.
 - **Making the marker a fourth `Qual`.** The machine and the relation read `Qual`, and the marker must
   stay a typing datum. STOP.
 - **Leaving `rc` out of `OpSig.Sig`, or letting `RowLe` consume it.** STOP.

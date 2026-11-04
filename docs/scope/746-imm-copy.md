@@ -227,7 +227,7 @@ One review, one targeted fix check; a Fatal finding gets one more full review.
 
 ## 8. The SPEC §42 handler-state mismatch
 
-SPEC §42, *Declared types that is not consumable*: "The program is accepted when the value is
+SPEC §42, *Declared types that are not consumable*: "The program is accepted when the value is
 consumed before, lent into the computation, held as a handler's state, or under a `[then]` whose
 written finaliser consumes it", and later "'commit in the body, roll back on an abort' lends the
 value into `M` or holds it as a handler's state". The book's program holds a `Txn` as `in_txn`'s

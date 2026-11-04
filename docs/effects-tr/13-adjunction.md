@@ -67,7 +67,7 @@ continuation is `resume`.
 the existence half of `F`'s universal property: a stack is determined by what it does to `ret`.
 `φ ∘ φ⁻¹ = id` is `U`'s η together with `⇒`'s. In the TR's tree semantics `F A` is `Tree A`. That
 is the **free** model on `A` over every instance's operations: D3.9 is an inductive type, and
-D3.11 makes every computation type a model. So `F ⊣ U` there is the free ⊣ releaseful adjunction
+D3.11 makes every computation type a model. So `F ⊣ U` there is the free ⊣ forgetful adjunction
 for models, and its universal property has two halves:
 
 - **existence**: a deep handler is the fold out of `Tree A` (D3.12), and a stack is `bindC`;

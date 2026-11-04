@@ -274,7 +274,7 @@ terminating programs at all, not only for leak freedom**. **[read / expected]**
 With `B = F(A ⊗ U X) & F 1`, the step's `close` branch consumes the state (for example,
 `free`), and a program that runs `take n` and then `close` is an ordinary closed `F 1`
 program. `adequacyC` (`Fundamental.lean:270`) then gives it an empty final memory, unchanged.
-A stream whose state is `!` can be promoted over `!Γ` and released.
+A stream whose state is `!` can be promoted over `!Γ` and discarded.
 
 ### 3.5 Lifetime-indexed codata (`IterMut<'a>`)
 
@@ -396,7 +396,7 @@ written out by hand. `listRel` is Knaster–Tarski's least fixed point over `vC`
 3. `take2_close_runs`: `alloc`, `unfold`, `next`, `next`, `close`. It runs from empty memory
    to `()` with empty memory. This is the linear `close`.
 4. **Negative check.** A version without `close` cannot be typed at `F 1`. The claim is only
-   that no `CDerives` rule releases a `U C` (`Fundamental.lean:107-126`), which can be checked
+   that no `CDerives` rule discards a `U C` (`Fundamental.lean:107-126`), which can be checked
    by listing the rules.
 
 **Probe P-Imm̲** (pure syntax, no model). Take a small `VTy` extension with `μ`/`tvar`.

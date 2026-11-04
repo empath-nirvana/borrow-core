@@ -79,7 +79,7 @@ Case (E) needs no new idea.
 - **Cancelling** a frozen continuation is "resuming it into `raise`" (SPEC §19,
   `cancel_compatC`). It ends the borrows inside it by the mechanised LIFO frame lemmas
   `ewpTS_I_frameU`, `ewpTS_M_frameU` and `ewpTS_M_antiFrameU`. Its external borrows are consumed
-  by [TR] 6.148 and 6.149 (release).
+  by [TR] 6.148 and 6.149 (`forget`).
 
 This is the route #249 tests: T1 by lifetime bounding. It needs a premise and its compatibility
 lemma, and both are small. The structure under test does not change it.

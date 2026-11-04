@@ -1,4 +1,4 @@
--- A guard stored in data (SPEC §42, *Declared types that is not consumable*): `Guard`'s field `lock`
+-- A guard stored in data (SPEC §42, *Declared types that are not consumable*): `Guard`'s field `lock`
 -- is marked `must_close(release)`, so a guard is linear and not consumable, and so is
 -- `Session`, which stores one beside its data. `main` takes the session apart and runs the work
 -- under `with … finally { … }`: `[then]` (SPEC §27) around the handled computation, its finaliser

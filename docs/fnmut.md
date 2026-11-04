@@ -85,7 +85,7 @@ writes the type `FnMut^c A B` as the experiment did, and SPEC §22 writes it `Cl
    - **introduction** `d_mk`/`d_mkBox`, a λ capturing any context, linear and borrowed parts
      included, as the state;
    - **elimination** `d_call`, and `d_callMut` through `Mut @a ([@c] U FnMut)`;
-   - **release** `d_close`, `d_closeBox`, and SPEC §12's `consumeSlot_derives` at `consumable_cloBox`;
+   - **consume** `d_close`, `d_closeBox`, and SPEC §12's `consumeSlot_derives` at `consumable_cloBox`;
    - **coercions** `d_fromFn` (`Fn ≤ FnMut`) and `d_once` (`FnMut ≤ FnOnce`).
 
 6. **The kernel change** (§8): the two positivity relaxations of `νX. C` in `Core`, `FnMut` as a
@@ -100,7 +100,7 @@ writes the type `FnMut^c A B` as the experiment did, and SPEC §22 writes it `Cl
 | 2 | pass a borrowed closure on, at any depth | **[Lean]** | `d_passF n` for every `n`; `passF` reborrows once (`withbor` form 3) and calls twice; `passProg 3` = `13` |
 | 3 | a closure capturing a closure; closures taking closures | **[Lean]** for capture and for `!` functions taking a borrowed closure; **[Lean]** positivity only for a `Clo` closure whose argument is a closure | `nestProg` = `8`; `twiceV`, `reV`, `passF`; `fnBody_nuOk_higher` |
 | 4 | store or return one, bounded by the borrows it captures | **[Lean]** | `counterProg` stores one in a cell; `retProg` returns one from a function (`15`); `logProg` captures `Mut 'x I32`, is boxed at `'w ⊏ 'x`, and writes through the borrow (`12`); `logState_not_outlives`, `fnMut_not_outlives` |
-| 5 | release/consume | **[Lean]**; the policy **[inspection]** | `consumable_clo`; `consumeProg` (`0`, its cell freed by the consume); `not_releasable_clo` |
+| 5 | consume | **[Lean]**; the policy **[inspection]** | `consumable_clo`; `consumeProg` (`0`, its cell freed by the consume); `not_releasable_clo` |
 | 6 | `Fn ≤ FnMut ≤ FnOnce`, with refusals | **[Lean]** for the coercions and for the premises the refusals lack; the refusal of a uniform `FnOnce → FnMut` is **[inspection]** | `d_fromFn`, `fromFnProg` (`23`); `d_once`, `onceProg` (`5`); `not_persistent_fnMut`, `not_consumable_lolli` |
 
 ---
@@ -210,14 +210,14 @@ borrows are released (the logger's `close` releases `Mut 'x I32`), and captured 
 closed (`nestProg`).
 
 - **Justification.** This is SPEC §12 group 2, unchanged. `Consumable.nu` already gives every
-  `U(νX. C & F R)` with a closed weakenable residual the consume "force, `nuOut`, `π₂`, then
+  `U(νX. C & F R)` with a closed consumable residual the consume "force, `nuOut`, `π₂`, then
   the residual's consume" (`consumable_clo` is that constructor at `FnMut`'s body). So the
   checker's insertion policy (§12) consumes an unused closure at the end of its scope, as it consumes
   a `Ref` or a `Stream`, and the consume is placed so that it never reorders effects.
 - **What it requires of captures.** The creator writes `close`, so it must be able to dispose of
   the state.
   - The closure sugar that turns `λ` over a context into `unfold` would write `close` as the
-    consumes of the captures, so it requires every capture to be weakenable (`Consumable`:
+    consumes of the captures, so it requires every capture to be consumable (`Consumable`:
     classes 1 and 2).
   - A capture without one, such as a `U(A ⊸ F B)` (`not_consumable_lolli`), is accepted only when
     the creator writes an explicit `close` for it.
@@ -238,7 +238,7 @@ closed (`nestProg`).
     says a value at a weakenable mode holds no `own` cell, and a `Clo` closure can own cells: the
     counter owns one, freed by its `close`. Its weakening is a consume, as for `Ref A` under §12,
     not the free weakening of `Mut`.
-  - So `σ(m) = W` splits in two: *releasable* (`Mut`, class 1) and *weakenable by an action*
+  - So `σ(m) = W` splits in two: *releasable* (`Mut`, class 1) and *consumable by an action*
     (`FnMut`, and `Ref` since §12). The label reading is unaffected: a `Clo` closure breaks
     independence only through the borrows its state holds, and its `[@c]` bound is the label
     that licenses it.

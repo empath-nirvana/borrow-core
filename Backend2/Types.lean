@@ -279,7 +279,7 @@ def ofV (ms : MachSet) : VTy → Except String LTy
   | .fam L => return .fam (← ofV ms L)
   -- `Tok` is a location owning a unit cell, `Ref 1`'s relation (`vCE_tok_eq_ref`), made by
   -- `alloc` and released by `free` (`tokMint`, `tokBurn`); its view is `Unk` (`Imm̲ 'b Tok`), a
-  -- pointer read as released (`Layout.joinRe`, `Lower.reVals`).
+  -- pointer read as discarded (`Layout.joinRe`, `Lower.reVals`).
   | .opq .tok => pure (.ref .unit)
   | .opq k => pure (.opq k)
   | .unk => pure .unk

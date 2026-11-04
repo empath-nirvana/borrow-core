@@ -804,7 +804,7 @@ theorem wpTS_box (ls : List SRec) (α : Life) (e : Expr) (Q : List SRec → Val 
   exact ⟨ρ', ρp, fρ', fρ'p, π, v, μ, μ', ps', ls', h₁, h₂, h₃, h₅, h₆, h₇, h₈, h₉,
     hA, hB, hT', htg', hps, hls, hC, ((outlives_comp h₉ α).mp (updV_outlives hout hA)).1⟩
 
-/-! ### Lemma 6.148 (wp-M-release) at the typed world; record in `Paper/S6_7_WeakestPreconditionRules/Lemmas.lean` -/
+/-! ### Lemma 6.148 (wp-M-forget) at the typed world; record in `Paper/S6_7_WeakestPreconditionRules/Lemmas.lean` -/
 /-- A frame with no owned cell passes through a `wpTS` run (6.148/6.149's shared argument). -/
 theorem wpTS_frame_noOwn {R : WProp} (hR : ∀ ρ, R ρ → NoOwn ρ) (ls : List SRec) (e : Expr)
     (Q : List SRec → Val → WProp) : Entails (sep R (wpTS ls e Q)) (wpTS ls e Q) := by
@@ -841,7 +841,7 @@ theorem wpTS_M_forget (ls : List SRec) (l : BoCa.Loc) (α : Life) (P : Val → W
   obtain ⟨b, v, σ, hs, R, hw, hα, rfl, -⟩ := h
   exact ResU.restrict_single_other (by simp)
 
-/-! ### Lemma 6.149 (wp-I-release) at the typed world; record in `Paper/S6_7_WeakestPreconditionRules/Lemmas.lean` -/
+/-! ### Lemma 6.149 (wp-I-forget) at the typed world; record in `Paper/S6_7_WeakestPreconditionRules/Lemmas.lean` -/
 /-- `[TR]` 6.149 (`wp-I-forget`) at `wpTS`. -/
 theorem wpTS_I_forget (ls : List SRec) (l : BoCa.Loc) (α : Life) (P : Val → WProp)
     (e : Expr) (Q : List SRec → Val → WProp) :

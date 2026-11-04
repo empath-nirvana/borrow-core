@@ -1,4 +1,4 @@
--- A transaction held as a value (SPEC §42, *Declared types that is not consumable*): `Txn`'s field
+-- A transaction held as a value (SPEC §42, *Declared types that are not consumable*): `Txn`'s field
 -- `log` is marked `must_close(commit)`, so `Txn` holds §11's `Tok` and is linear with no derived
 -- consume. `begin` makes one in one function, `write` takes it apart and builds the next, and
 -- `commit`, another function, consumes it with a `match`, which burns the token. Nothing consumes a

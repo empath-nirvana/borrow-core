@@ -4,7 +4,7 @@ import Core.EffPrograms
 import Core.Demonic
 
 /-!
-# Core — declared types that is not consumable  `[spec §11, §12, §42]`
+# Core — declared types that are not consumable  `[spec §11, §12, §42]`
 
 A declared type that is not consumable `N` with payload `A` is `A ⊗ Tok` (SPEC §42), `Tok` the token
 of `Core/Tok.lean`: a location owning a unit cell, made by `mint` and consumed by `burn`. No new

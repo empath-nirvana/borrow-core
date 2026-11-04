@@ -75,7 +75,7 @@ def copiesAt : CopyRule → LTy → Bool
 
 /-- **A consume at the rule `r`**, its premise read on the LIR type:
 - `dead` (`Ctx.DeadP.weaken`, `Ctx.SoloP.skip`): an unrestricted type;
-- `forget` (the `release` constants, `arrRelease`): `Imm`, `Mut`, `Unk`, `[Imm A]`;
+- `release` (the `release` constants, `arrRelease`): `Imm`, `Mut`, `Unk`, `[Imm A]`;
 - `consume` (`consumeSlot_derives`): only in a consume function (`Prog.consumeFns`, checked by `lintTm`), a
   leaf the consume releases: an unrestricted type, a borrow, `Unk`, or a family of borrows
   (`Consumable.arrayMut` at `[Mut A]`: `consumeAt` is `idx` then `forget`);
@@ -129,7 +129,7 @@ on the LIR type. At a `[let]`'s abort, `CDerives.effLet`'s `hW : S.Weak → Γ�
 of `N`'s context is at a `VTy.Consume` type, which `LTy.consumes` reads (`ofV_consumes`), an opaque value
 among them. At `⊤`, `CDerives.topI`, which has no premise: `⊤` absorbs its whole context at every
 type. A raise's payload superseded by a finaliser's: `CDerives.effRaise`'s `hd : o.A.Consume`,
-`LTy.consumes` again. No other rule discards an opaque value: no constant releases it and it has no
+`LTy.consumes` again. No other rule discards an opaque value: no constant discards it and it has no
 consume. -/
 def abandonable : Abandon → LTy → Bool
   | .letAbort, t | .superseded, t => t.consumes

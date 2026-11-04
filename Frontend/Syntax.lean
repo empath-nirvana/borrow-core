@@ -214,7 +214,7 @@ structure DField where
   ty : VTy
   /-- `must_close g: A` (spelling provisional): `some none`, or `some (some f)` for
   `must_close(f)`, which names the function that consumes the value, for the messages only. The
-  field holds `A * tok` (SPEC §42, *Declared types that is not consumable*). -/
+  field holds `A * tok` (SPEC §42, *Declared types that are not consumable*). -/
   close : Option (Option Ident) := none
   deriving DecidableEq, Repr
 

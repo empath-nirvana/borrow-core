@@ -1,4 +1,4 @@
--- Promises stored in a queue and answered later (SPEC §42, *Declared types that is not consumable*):
+-- Promises stored in a queue and answered later (SPEC §42, *Declared types that are not consumable*):
 -- `Promise`'s field `id` is marked `must_close(answer)`, so a promise holds §11's `Tok` and is
 -- linear and not consumable, and so is `Queue`, which holds promises. `request` puts a promise
 -- in the queue; `answer_all`, later, folds the queue (`fold_own`, SPEC §60), taking each block

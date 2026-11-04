@@ -75,14 +75,14 @@ Each entry: the decision, and why. Newest last.
     3. **`Imm` is linear, with a derived copy** (`DerivedCopy`, `copy_derives` over the kernel's
        `copy` constant). The checker inserts it at a split whose two parts both use the borrow
        (SPEC §12, *The derived copy at `imm`*; #746).
-    4. **A declared type may are not consumable.** Its payload is paired with a token of the
+    4. **A declared type is not consumable.** Its payload is paired with a token of the
        opaque kind `tok` (`A ⊗ Tok`, minted at construction and burned at a written `match`), so
        `Consumable` fails at it and the checker cannot consume it; borrows of it still have a derived
        consume.
 
-    *Status (decision 72):* these choices on linearity and consumes are released as design; SPEC
-    §62's consumes may perform operations, replacing item 1 (superseded by decision 73), and
+    *Status (decision 72):* these choices on linearity and consumes are set aside as design, and
     `must_close` (item 4) is void.
+    *Status (decision 73):* item 1 is restored as decided: a consume is pure at the row.
     What is built stays the checker's behaviour until §62's PRs land.
 24. **Recursion is the fixed point of a generator, called directly (revised twice; first read
     "recursion is always structured, no general direct recursion", then "recursion is an
@@ -931,7 +931,7 @@ Each entry: the decision, and why. Newest last.
       #564 does not lift it.
     - The theorem that every run of a finaliser terminates, the handler clauses its operations
       reach included, is open (SPEC §14 *Open*).
-    - *Status (decision 72):* released as a fixed design.
+    - *Status (decision 72):* set aside as a fixed design.
 70. **Allocation is an effect (the user's decisions of 2026-09-28, 2026-10-20 and 2026-10-29; #763; not built).**
     - Every heap allocation is written in the program. The marker need not be `box`: `box`,
       `buf_new`, `array_tab` and any allocator a library writes all count. No elaboration rule
@@ -997,7 +997,7 @@ Each entry: the decision, and why. Newest last.
       the row, `must_close`), decision 62's cancellation as built, and the finaliser algebra as
       fixed (decision 69's total finalisers and the algebra it keeps). Decision 68's tail-resuming
       restriction is superseded as design by SPEC §62's `[handle]` without `hdv`.
-    - The kernel's theorems stand. Only the design choices are released.
+    - The kernel's theorems stand. Only the design choices are set aside.
     - The rules decision 71 made are still what the checker enforces today, and change only as
       SPEC §62's PRs land: T1 (`Row.Unwind` on the borrow constants), R1 and `PinLaw` as on
       `main`, R2 unemitted, and LoopLend's per-observation lend over loops. What decision 71
@@ -1007,7 +1007,12 @@ Each entry: the decision, and why. Newest last.
     - The goal, in the user's words: a destructor and "a guarantee that it runs it every exit but
       no guarantee that it ever exits". The target theorem is SPEC §62's: every reachable state
       steps or is final with an empty heap. (The first half, a per-type finaliser run on every
-      exit, is superseded by decision 73.)
+      exit, is void by decision 73.)
+    - *Status (decision 73):* only this decision's cleanup parts are void: the goal's per-type
+      finaliser run on every exit (the target theorem stands), and its voiding of decision 23
+      item 1, which is restored. Everything else stands as written here: decision 71 and its
+      tombstone are void, and so are decision 62's cancellation as built, decision 69's finalisers
+      and `must_close`; decision 68's restriction is superseded as design.
 73. **No per-type close in the kernel (the user's decision of 2026-11-04; #771).**
     - The kernel guarantees that every linear value is used and that no memory leaks: every
       reachable state steps or is final with an empty heap. It makes no guarantee about closing
@@ -1019,3 +1024,9 @@ Each entry: the decision, and why. Newest last.
       type's consume (`Consumable`), which frees cells, releases a borrow, or closes codata.
       "Free" names only the primitives that deallocate; "release" only a borrow returning to its
       lender. A value type is unrestricted or linear, with no third class.
+    - Decision 72 is revised (the user, 2026-11-04): only its cleanup parts are void, the goal's
+      per-type finaliser run on every exit and its voiding of decision 23 item 1; the rest of
+      decision 72 stands. Decision 23 item 1, a consume is pure at the row, is restored as
+      decided.
+    - In the user's words: "The implicit close of co-data is fine." The implicit consume at
+      codata calls its `close`; that is decided.

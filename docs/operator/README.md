@@ -93,7 +93,7 @@ Each design choice in `operator.bc` is tagged with the goals it serves. Two note
 | **G6** | A stream is an iterator. | `Stream` vs `Iterator` vs `TryStream`; `StreamExt` vs `TryStreamExt`; `boxed()` | the element type, and the effects of `next` |
 | **G7** | A codec is derived once per type and runs over any byte source. | `from_slice` vs `from_reader` vs an async codec; buffering whole bodies | the source's row, plus `Fail<JsonError>` |
 | **G8** | Cost stays readable, as good as Rust. | nothing: see the right-hand column | `box` allocates; `{ … }` suspends; a copy per effect set; `total` promises no effect |
-| **G9** | Concurrency is structured. | `Arc`, `'static`, released `JoinHandle`s | lifetimes; a task cannot outlive its scope |
+| **G9** | Concurrency is structured. | `Arc`, `'static`, forgotten `JoinHandle`s | lifetimes; a task cannot outlive its scope |
 
 ## 2. The one mechanism
 

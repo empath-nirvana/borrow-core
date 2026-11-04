@@ -402,7 +402,7 @@ theorem bangThunkV_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy} (h
   rw [forceE_of_not_ret hC]
   exact h δ γ ls' ρ hδ (gDenC_local hext hg)
 
-/-- Dereliction: release the `ρ = ∅` (`bangE_compatX`). -/
+/-- Dereliction: discard the `ρ = ∅` (`bangE_compatX`). -/
 theorem bangE_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy}
     (h : SemV Δ Γ e (.bang A)) : SemV Δ Γ e A := by
   intro δ γ ls ρ hδ hg

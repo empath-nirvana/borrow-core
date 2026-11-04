@@ -343,7 +343,7 @@ and a rough proof burden; dependencies; and whether it is a one-way door.
   `catch` (in place), `map_err`; that `?` disappears; the retirement of `A + E` results in the
   library (decision 46: "Errors are sums (provisional until the error effect, #18)"); how an
   abort leaves loops (`count_try`'s exit), `for` bodies, generators and nested handlers; what
-  happens to live values that is not consumable on the abort path (E9); `return` and `break` as
+  happens to live values that are not consumable on the abort path (E9); `return` and `break` as
   private aborts (operator N5).
 - **Examples:** 2; the reconciler's `Fail[KubeError]`; the platform draft's `IoError`.
 - **Class:** (a) the sum exit exists; (b) elaboration of a body with `raise` on its spine,
@@ -359,7 +359,7 @@ and a rough proof burden; dependencies; and whether it is a one-way door.
 
 - **Decides:** what runs when a continuation is abandoned (abort, `close`, a lost race, a
   timeout): the consumes of SPEC §12 in reverse binding order; `close` of each held codata;
-  the handing back of values that is not consumable (a capability, a class-3 thunk) through the
+  the handing back of values that are not consumable (a capability, a class-3 thunk) through the
   residual, or a rejection of the abort while one is live; `finally` clauses; effectful and
   failing consumes (K3; #18's design note on files, "Leaning: 3 as the idiom, 1 as the
   default consume").

@@ -1,4 +1,4 @@
--- SPEC §19's consume glue: a variable live across a call that may abort must are consumable, which
+-- SPEC §19's consume glue: a variable live across a call that may abort must be consumable, which
 -- the finaliser runs when the call aborts. `g`, a thunk with no `close`, has none: an abort of the
 -- call would abandon it.
 -- expect: 12:5: `g`, of type `1 => i32`, is live across a computation that may abort, and its type is linear and not consumable, and an abort abandons only a value that holds no owned cell
