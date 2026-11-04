@@ -231,3 +231,32 @@ Routes, none tried:
 The mask obligation `XOptW.trans` names (R2) is dischargeable at `twp_bind` as planned: an `imm` cell of the middle world at `l` is the run's (the second segment's start side gives `¬E″ l`) or the frame's (`k₁₀`, `NoneAt (MaskDiff …) ρf₂`, gives `¬E″ l`). `UpdA.trans` also needs `MutOne` at the start (a middle `mut` cell leaving with its ancestor must be the start's cell beneath the start ancestor); `twp_bind` has it (`hR`).
 
 **Then:** step 5 (`EndT` reads `UpdA`; `twp_frame`/`twp_frame_w` call `UpdA.frame` with the arguments above; `twp_here`, `twp_extend`, `twp_update` via `UpdX.toA`/an `UpdX.transA`), T1–T4, step 6, C-2 (`UpdX.frame` along the walks: `UpdA.frame`'s proof with the absorbed branches unused).
+
+### Route 1 (chosen by the coordinator): progress and the next step
+
+**Built** (`World/UpdAFrame.lean`):
+- `ImmMaskClosed E ρ`: wherever a masked location holds an `imm` cell at any depth of `ρ`, every location of that cell's witness's `ex(−)_○` is masked.
+- `AgW.mut_beneath_unmasked`: under `MutOne` and `ImmMaskClosed E ρ`, an unmasked `mut` cell of `ag(ρ)` sits beneath an **unmasked** `imm` cell of `ag(ρ)` whose walk carries it. It is the re-anchoring by induction on depth, as one `G.AgW.rec`: at a masked top `imm` cell, closure keeps the cell out of the exclusive walk, so it is in the witness's aliasable walk and the induction hypothesis applies.
+- `RecMaskClosed : Prop` (elaborates): `RecInv w fρ ps ls → ρf ● ρ = fρ → SplitT ps O psF → ImmMaskClosed (recMask O) ρ`. It is stated and **not proved**.
+- `ImmMaskClosed.nil`: the #793 configurations own no record (`O = []`), so the mask is empty and closed there.
+
+**`UpdA.trans`, once `RecMaskClosed` holds.**
+- **Side condition.** It takes `ImmMaskClosed E′ ρ′` at the middle resource. `twp_bind` discharges it from `g₆ : RecInv w₁ fρ₁ ps₁ ls₁`, `g₄`, `g₅`.
+- **Hard case.** The second segment's end-side disjunct `Beneath σ′ m ζ′ l ξ′` is replaced by an unmasked one:
+  - The cell `ξ′` is in `ag(ρ′)`, by `flat_imm_wit_factor` at `σ′(m)`, the cell exactly by `compR_mut_source`.
+  - `AgW.mut_beneath_unmasked` gives an ancestor `m₂` with `¬E′ m₂`.
+  - The first segment's end side at `m₂` gives `σ(m₂) = ζ₀` with `RR ζ₀.wit ζ₂.wit`.
+  - The walks of `ζ₀.wit` re-read forward (`ExW.lsSim`, `AgW.lsSim`, and `lsRSim_comp` at `○`). `ExRT`/`AgWT`/`CompR` functionality identifies them with `ζ₂`'s, which gives `Beneath σ m₂ ζ₀ l ξ₀` with `XCell ξ₀ ψ″`.
+- **Other obligations.** The start side needs start `MutOne` (`hR` at `twp_bind`). R2's mask obligation is discharged from `k₁₀`.
+
+**Proving `RecMaskClosed`: the cases, by `TWNT` induction on the world.** Two locations can be masked:
+1. **`y = p.le`.** Claim: every `imm` cell at depth at `p.le` has witness `p.R`. Then `ex(p.R)_○ ⊆ ExDom p.R` (a lemma `ExDom.of_exRT` is needed, as `ExDom.of_exST` exists for `●`).
+   - At `immFrame`, validity leaves no other cell at `p.le`: a top `own` in `ex(W)_●` is not `▶◀` with any walk cell.
+   - Later copies come from reborrow images of an outer escrow holding the lend cell. `reb_cell` gives an `imm` image over an `imm` source cell the source cell's witness, so the image's witness is `p.R`.
+2. **`y ∈ ExDom p.R`, with an `imm` cell at `y` at depth.**
+   - A reborrow image of `p.R` itself puts at `y` an `imm` cell over a piece `q ≤ p.R`, and `ExDom q ⊆ ExDom p.R` (to prove).
+   - **The case not reconciled:** a `rebDeep` image over `w₀`, the witness of an `imm` cell at `l₀` reached by `ChainT` inside `p.R`. Its pieces' exclusive locations are in `dom w₀`, which `ExDom p.R` does not reach (`ExDom` descends only through `mut` witnesses). Whether `TWNT`/validity excludes `y ∈ ExDom p.R ∩ dom w₀` is not checked.
+   - If that case is real, the closure should be stated at the walks rather than at `CellAt`. The induction only meets `imm` cells of `ρ` at the top and in `imm` witnesses, which is exactly `AgW.rec`'s `consI` case. The weaker closure is `ImmMaskClosed` restricted to cells reached through `imm` witnesses from a masked top cell. Before the `TWNT` proof, check whether that weaker form is what case 2 needs.
+   - If it fails, the coordinator's instruction applies: build the configuration with every hypothesis discharged and stop.
+
+**Order after that:** `UpdA.trans`; step 5; T1–T4; step 6; C-2; SPEC §62 and the D4/D5 rows. `scripts/check-judgments.sh` predates #798 on this branch, so it is skipped until the port onto `tree-core`.

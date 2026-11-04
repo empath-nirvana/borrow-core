@@ -1,5 +1,6 @@
 import Support.Model.Tree.World.UpdA
 import Support.Model.Tree.World.UpdXInv
+import Support.Model.Tree.World.Recs
 
 /-!
 # `UpdA` beside a frame, along the walks  `[spec §62]`
@@ -163,6 +164,136 @@ theorem AgW.mut_beneath {W : TRes K} (hW : MutOne W) {ρ σ : TRes K} (h : AgWT 
       exact ⟨(MutIn.comp mutKeep_compR hu hp (ExW.mutIn mutKeep_compR hW hex hsub')
         (iha hsub').1).mono fun _ _ h => .nest hψ h, ψ, hψ, hk, e, a, hex, hag, hp⟩
     · exact ihw hsub q hq'
+
+/-! ### An unmasked ancestor -/
+
+/-- **A mask closed under the exclusive walks of masked `imm` cells**: wherever a masked
+location holds an `imm` cell at any depth of `ρ`, every location of its witness's `ex(−)_○` is
+masked. At a run's own records' mask (`recMask`) this is the lent location's escrow: the lend
+cell's witness is the escrow, whose exclusive part is masked (`ExDom`). -/
+def ImmMaskClosed (E : BoCa.Loc → Prop) (ρ : TRes K) : Prop :=
+  ∀ y ζ, CellAt ρ y ζ → ζ.kind = Kind.imm → E y → ∀ ev, ExRT ζ.wit ev → ∀ x ξ,
+    ev.get x = some ξ → E x
+
+/-- **An unmasked `mut` cell of `ag(ρ)` sits beneath an unmasked `imm` cell of `ag(ρ)`**, whose
+witness's `⦇−⦈_○` carries it, under a mask closed under masked `imm` cells' exclusive walks.
+`AgW.mut_beneath`'s induction: at a masked `imm` ancestor the cell is not in the ancestor's
+exclusive walk (that is masked), so it is in the ancestor's witness's aliasable walk, where the
+induction gives an ancestor beneath it. -/
+theorem AgW.mut_beneath_unmasked {W : TRes K} (hW : MutOne W) {E : BoCa.Loc → Prop} {ρ σ : TRes K}
+    (h : AgWT ρ σ) (hsub : ∀ y φ, CellAt ρ y φ → φ.kind = Kind.mut → CellAt W y φ)
+    (hcl : ImmMaskClosed E ρ) :
+    ∀ n φ, σ.get n = some φ → φ.kind = Kind.mut → ¬ E n → ∃ m ζ, ¬ E m ∧ Beneath σ m ζ n φ := by
+  have hR : ∀ ψ₁ ψ₂ ψ : TCell K, CellUT.CompR ψ₁ ψ₂ ψ → CellUT.CompatR ψ₁ ψ₂ :=
+    fun _ _ ψ hc => ⟨ψ, hc⟩
+  refine (G.AgW.rec
+    (motive_1 := fun ρ σ _ => (∀ y φ, CellAt ρ y φ → φ.kind = Kind.mut → CellAt W y φ) →
+      ImmMaskClosed E ρ → MutIn (CellAt ρ) σ ∧
+        ∀ n φ, σ.get n = some φ → φ.kind = Kind.mut → ¬ E n → ∃ m ζ, ¬ E m ∧ Beneath σ m ζ n φ)
+    (motive_2 := fun ρ w _ => (∀ y φ, CellAt ρ y φ → φ.kind = Kind.mut → CellAt W y φ) →
+      ImmMaskClosed E ρ → ∀ q ∈ w, MutIn (CellAt ρ) q.2 ∧
+        ∀ n φ, q.2.get n = some φ → φ.kind = Kind.mut → ¬ E n →
+          ∃ m ζ, ¬ E m ∧ Beneath q.2 m ζ n φ)
+    (motive_3 := fun ρ w _ => (∀ y φ, CellAt ρ y φ → φ.kind = Kind.mut → CellAt W y φ) →
+      ImmMaskClosed E ρ → ∀ q ∈ w, MutIn (CellAt ρ) q.2 ∧
+        ∀ n φ, q.2.get n = some φ → φ.kind = Kind.mut → ¬ E n →
+          (∃ ζ, ρ.get q.1 = some ζ ∧ ζ.kind = Kind.imm ∧ ¬ E q.1 ∧
+            ∃ ev av, ExRT ζ.wit ev ∧ AgWT ζ.wit av ∧ ResUT.CompR ev av q.2) ∨
+          ∃ m ζ, ¬ E m ∧ Beneath q.2 m ζ n φ)
+    ?mk ?nilM ?consM ?nilI ?consI h hsub hcl).2
+  case mk =>
+    intro ρ₀ σ₀ a bm bi wm wi _ _ _ _ hbm hbi ha hσ ihm ihi hsub hcl
+    have hu := MutUniq.of_sub hW hsub
+    have hm : ∀ x ∈ wm.map Prod.snd, MutIn (CellAt ρ₀) x := fun x hx => by
+      obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hx
+      exact (ihm hsub hcl q hq).1
+    have hi : ∀ x ∈ wi.map Prod.snd, MutIn (CellAt ρ₀) x := fun x hx => by
+      obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hx
+      exact (ihi hsub hcl q hq).1
+    have hbm' : MutIn (CellAt ρ₀) bm := MutIn.bigComp mutKeep_compR hu hbm hm
+    have hbi' : MutIn (CellAt ρ₀) bi := MutIn.bigComp mutKeep_compR hu hbi hi
+    have hr' := MutIn.restrict ρ₀ Kind.imm
+    have ha' : MutIn (CellAt ρ₀) a := MutIn.comp mutKeep_compR hu ha hr' hbm'
+    refine ⟨MutIn.comp mutKeep_compR hu hσ ha' hbi', fun n φ e hk hEn => ?_⟩
+    have toσ : ∀ {x : TRes K}, x ∈ wi.map Prod.snd → ∀ {m ζ}, Beneath x m ζ n φ →
+        ∃ ζ', Beneath σ₀ m ζ' n φ := fun hx m ζ hb => by
+      obtain ⟨z, hz⟩ := BigCompT.mem_factor hR ResUT.compLawsR hbi _ hx
+      obtain ⟨y₁, hy₁⟩ := ResUT.Comp.factor_trans hR ResUT.compLawsR hz (ResUT.CompR.comm hσ)
+      obtain ⟨ζ', -, -, -, -, hb'⟩ := hb.lift hy₁
+      exact ⟨ζ', hb'⟩
+    rcases compR_mut_source hu hσ ha' hbi' e hk with ea | eb
+    · rcases compR_mut_source hu ha hr' hbm' ea hk with er | em
+      · rw [(ResUT.restrict_eq_some.mp er).2] at hk; cases hk
+      · obtain ⟨x, hx, ex⟩ := bigCompR_mut_source hu hbm hm em hk
+        obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hx
+        obtain ⟨m, ζ, hEm, hb⟩ := (ihm hsub hcl q hq).2 n φ ex hk hEn
+        obtain ⟨z, hz⟩ := BigCompT.mem_factor hR ResUT.compLawsR hbm q.2 hx
+        obtain ⟨y₁, hy₁⟩ := ResUT.Comp.factor_trans hR ResUT.compLawsR hz (ResUT.CompR.comm ha)
+        obtain ⟨y₂, hy₂⟩ := ResUT.Comp.factor_trans hR ResUT.compLawsR hy₁ hσ
+        obtain ⟨ζ', -, -, -, -, hb'⟩ := hb.lift hy₂
+        exact ⟨m, ζ', hEm, hb'⟩
+    · obtain ⟨x, hx, ex⟩ := bigCompR_mut_source hu hbi hi eb hk
+      obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hx
+      rcases (ihi hsub hcl q hq).2 n φ ex hk hEn with
+        ⟨ζ, eζ, hkζ, hEq, ev, av, hev, hav, hp⟩ | ⟨m, ζ, hEm, hb⟩
+      · have hb : Beneath (G.restrict CellUT.kind ρ₀ Kind.imm) q.1 ζ n φ :=
+          ⟨ResUT.restrict_get_some eζ hkζ, hkζ, ev, av, q.2, hev, hav, hp, ex⟩
+        obtain ⟨ζ₁, -, -, -, -, hb₁⟩ := hb.lift ha
+        obtain ⟨ζ₂, -, -, -, -, hb₂⟩ := hb₁.lift hσ
+        exact ⟨q.1, ζ₂, hEq, hb₂⟩
+      · obtain ⟨ζ', hb'⟩ := toσ hx hb
+        exact ⟨m, ζ', hEm, hb'⟩
+  case nilM => intro _ _ _ q hq; cases hq
+  case consM =>
+    intro ρ₀ e l w ψ hψ _ _ _ ihe ihw hsub hcl q hq
+    rcases List.mem_cons.mp hq with rfl | hq'
+    · obtain ⟨h₁, h₂⟩ := ihe (fun y φ h k => hsub y φ (.nest hψ h) k)
+        (fun y ζ h => hcl y ζ (.nest hψ h))
+      exact ⟨h₁.mono fun _ _ h => .nest hψ h, h₂⟩
+    · exact ihw hsub hcl q hq'
+  case nilI => intro _ _ _ q hq; cases hq
+  case consI =>
+    intro ρ₀ p l w ψ hψ hk e a hex hag hp _ iha ihw hsub hcl q hq
+    rcases List.mem_cons.mp hq with rfl | hq'
+    · have hsub' : ∀ y φ, CellAt ψ.wit y φ → φ.kind = Kind.mut → CellAt W y φ :=
+        fun y φ h k => hsub y φ (.nest hψ h) k
+      have hu := MutUniq.of_sub hW hsub'
+      have hexm := ExW.mutIn mutKeep_compR hW hex hsub'
+      obtain ⟨ham, hab⟩ := iha hsub' (fun y ζ h => hcl y ζ (.nest hψ h))
+      refine ⟨(MutIn.comp mutKeep_compR hu hp hexm ham).mono fun _ _ h => .nest hψ h,
+        fun n φ en hkn hEn => ?_⟩
+      by_cases hEl : E l
+      · -- a masked ancestor: the cell is not in its exclusive walk, so it is beneath an `imm`
+        -- cell of its witness's aliasable walk
+        have hen : e.get n = none := by
+          cases f : e.get n with
+          | none => rfl
+          | some ξ => exact absurd (hcl l ψ (.top hψ) hk hEl e hex n ξ f) hEn
+        have ean : a.get n = some φ := by
+          rcases G.Comp.get hp n with ⟨-, -, f⟩ | ⟨ζ, f₁, -, -⟩ | ⟨ζ, -, f₂, f⟩ |
+              ⟨ζ₁, ζ₂, ζ, f₁, -, -, -⟩
+          · rw [f] at en; cases en
+          · rw [hen] at f₁; cases f₁
+          · rw [f] at en; cases en; exact f₂
+          · rw [hen] at f₁; cases f₁
+        obtain ⟨m, ζ, hEm, hb⟩ := hab n φ ean hkn hEn
+        obtain ⟨ζ', -, -, -, -, hb'⟩ := hb.lift_right hp
+        exact Or.inr ⟨m, ζ', hEm, hb'⟩
+      · exact Or.inl ⟨ψ, hψ, hk, hEl, e, a, hex, hag, hp⟩
+    · exact ihw hsub hcl q hq'
+
+/-- **The resource fact `UpdA.trans` reads** (route 1 of `docs/new-core/scope-806.md`'s
+appendix): in a world meeting `RecInv`, a run's resource is `ImmMaskClosed` at the masks of the
+records it owns. Stated, not yet proved; `UpdA.trans` is to take it as a side condition that
+`twp_bind` discharges from the middle world's `RecInv`. -/
+def RecMaskClosed : Prop :=
+  ∀ (w : TWd) (fρ ρf ρ : TRes w.K) (ps O psF : List (FrameRecT w.K)) (ls : List (SRecT w.K)),
+    RecInv w fρ ps ls → ResUT.CompS ρf ρ fρ → SplitT ps O psF → ImmMaskClosed (recMask O) ρ
+
+/-- With no records owned the mask is empty, and closed. The #793 configurations (a callee or a
+child giving up its copy of a view of a lend another task opened) own no record. -/
+theorem ImmMaskClosed.nil (ρ : TRes K) : ImmMaskClosed (recMask ([] : List (FrameRecT K))) ρ :=
+  fun _ _ _ _ hE => by obtain ⟨p, hp, -⟩ := hE; cases hp
 
 /-! ### An `imm` composite and its operands -/
 

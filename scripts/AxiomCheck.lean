@@ -979,6 +979,8 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.cellAbs_compR
 #print axioms BoCa.Fig16.Tree.Wp.cellSub_compR
 #print axioms BoCa.Fig16.Tree.Wp.UpdA.frame
+#print axioms BoCa.Fig16.Tree.Wp.AgW.mut_beneath_unmasked
+#print axioms BoCa.Fig16.Tree.Wp.ImmMaskClosed.nil
 #print axioms BoCa.Fig16.Tree.Wp.InvKept.frame
 #print axioms BoCa.Fig16.Tree.Wp.immEnd_valid_of_fdEsc
 #print axioms BoCa.Fig16.Tree.Wp.escBeneathT
