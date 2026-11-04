@@ -70,7 +70,7 @@ def dtorB : Bool → CVTy → Bool
   | _, .fam (.imm _ _) => true
   | _, .fam (.mut _ _) => true
   | _, .fam _ => false
-  | _, .opq _ => false
+  | _, .opq _ | _, .abs _ _ => false
 
 /-- At a thunk `dtorB` does not depend on the mode. -/
 theorem dtorB_thunk : ∀ (b : Bool) (C : CCTy), dtorB b (.thunk C) = dtorB false (.thunk C)
@@ -84,6 +84,7 @@ theorem dtorB_thunk : ∀ (b : Bool) (C : CCTy), dtorB b (.thunk C) = dtorB fals
   | _, .amp _ (.ret (.mut _ _)) | _, .amp _ (.ret (.box _ _)) | _, .amp _ (.ret (.bang _))
   | _, .amp _ (.ret .unk) | _, .amp _ (.ret (.tvar _)) | _, .amp _ (.ret (.mu _))
   | _, .amp _ (.ret (.int _)) | _, .amp _ (.ret (.fam _)) | _, .amp _ (.ret (.opq _))
+  | _, .amp _ (.ret (.abs _ _))
   | _, .amp _ (.arr _ _) | _, .amp _ (.amp _ _) | _, .amp _ .top | _, .amp _ (.all _ _ _)
   | _, .amp _ (.nu _) | _, .amp _ (.eff _ _ _ _ _ _ _ _) => rfl
 
@@ -106,11 +107,11 @@ theorem dtorB_closed : ∀ (A : CVTy), clB 0 A = true → dtorB true A = dtorB f
   | .tvar _, h => by simp [BoCa.Fig16.LogRel.Core.FoldP.clB] at h
   | .thunk C, _ => dtorB_thunk true C
   | .unit, _ | .zero, _ | .box _ _, _ | .bang _, _ | .unk, _ | .int _, _
-  | .opq _, _ | .imm _ _, _ | .mut _ _, _ => rfl
+  | .opq _, _ | .abs _ _, _ | .imm _ _, _ | .mut _ _, _ => rfl
   | .fam .unit, _ | .fam (.tensor _ _), _ | .fam .zero, _ | .fam (.sum _ _), _
   | .fam (.thunk _), _ | .fam (.imm _ _), _ | .fam (.mut _ _), _ | .fam (.box _ _), _
   | .fam (.bang _), _ | .fam .unk, _ | .fam (.tvar _), _ | .fam (.mu _), _ | .fam (.int _), _
-  | .fam (.fam _), _ | .fam (.opq _), _ => rfl
+  | .fam (.fam _), _ | .fam (.opq _), _ | .fam (.abs _ _), _ => rfl
 
 open BoCa.Fig16.LogRel.Core.FoldP (keysIn resO Bnd Stack) in
 /-- What `dtorB true A` gives at a position `A` under the stack `Bs`: `A⟨1⟩` has a destructor,
@@ -169,14 +170,14 @@ theorem dtorB_sound : ∀ (A : CVTy), dtorB false A = true → HasDtor A
   | .thunk (.amp _ (.ret (.bang _))), h | .thunk (.amp _ (.ret .unk)), h
   | .thunk (.amp _ (.ret (.tvar _))), h | .thunk (.amp _ (.ret (.mu _))), h
   | .thunk (.amp _ (.ret (.int _))), h | .thunk (.amp _ (.ret (.fam _))), h
-  | .thunk (.amp _ (.ret (.opq _))), h
+  | .thunk (.amp _ (.ret (.opq _))), h | .thunk (.amp _ (.ret (.abs _ _))), h
   | .thunk (.amp _ (.arr _ _)), h
   | .thunk (.amp _ (.amp _ _)), h | .thunk (.amp _ .top), h
   | .thunk (.amp _ (.all _ _ _)), h | .thunk (.amp _ (.nu _)), h => by simp [dtorB] at h
   | .unit, _ => .unit
   | .zero, _ => .zero
   | .int _, _ => .int
-  | .opq _, h => by simp [dtorB] at h
+  | .opq _, h | .abs _ _, h => by simp [dtorB] at h
   | .unk, _ => .unk
   | .bang _, _ => .bang
   | .imm _ _, _ => .imm
@@ -277,7 +278,7 @@ theorem dtorB_soundA : ∀ (A : CVTy), dtorB true A = true → ∀ Bs, AlgDtor B
   | .thunk (.amp _ (.ret (.bang _))), h, _ | .thunk (.amp _ (.ret .unk)), h, _
   | .thunk (.amp _ (.ret (.tvar _))), h, _ | .thunk (.amp _ (.ret (.mu _))), h, _
   | .thunk (.amp _ (.ret (.int _))), h, _ | .thunk (.amp _ (.ret (.fam _))), h, _
-  | .thunk (.amp _ (.ret (.opq _))), h, _
+  | .thunk (.amp _ (.ret (.opq _))), h, _ | .thunk (.amp _ (.ret (.abs _ _))), h, _
   | .thunk (.amp _ (.arr _ _)), h, _
   | .thunk (.amp _ (.amp _ _)), h, _ | .thunk (.amp _ .top), h, _
   | .thunk (.amp _ (.all _ _ _)), h, _ | .thunk (.amp _ (.nu _)), h, _ => by simp [dtorB] at h
@@ -288,13 +289,14 @@ theorem dtorB_soundA : ∀ (A : CVTy), dtorB true A = true → ∀ Bs, AlgDtor B
   | .bang A, _, Bs => algDtorLeaf (.bang A) .bang Bs
   | .imm a A, _, Bs => algDtorLeaf (.imm a A) .imm Bs
   | .mut a A, _, Bs => algDtorLeaf (.mut a A) .mut Bs
-  | .opq _, h, _ => by simp [dtorB] at h
+  | .opq _, h, _ | .abs _ _, h, _ => by simp [dtorB] at h
   | .fam (.imm a A), _, Bs => algDtorLeaf (.fam (.imm a A)) .arrayImm Bs
   | .fam (.mut a A), _, Bs => algDtorLeaf (.fam (.mut a A)) .arrayMut Bs
   | .fam .unit, h, _ | .fam (.tensor _ _), h, _ | .fam .zero, h, _ | .fam (.sum _ _), h, _
   | .fam (.thunk _), h, _ | .fam (.box _ _), h, _
   | .fam (.bang _), h, _ | .fam .unk, h, _ | .fam (.tvar _), h, _ | .fam (.mu _), h, _
-  | .fam (.int _), h, _ | .fam (.fam _), h, _ | .fam (.opq _), h, _ => by simp [dtorB] at h
+  | .fam (.int _), h, _ | .fam (.fam _), h, _ | .fam (.opq _), h, _ | .fam (.abs _ _), h, _ => by
+      simp [dtorB] at h
 end
 
 /-- `A` has a destructor. -/

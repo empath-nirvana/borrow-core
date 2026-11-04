@@ -323,7 +323,7 @@ theorem letDE_cancel_exit {μ μ' : Heap} {ds : List (Option Expr)} {γ : List V
 /-- **`FrameOk` from typing**: destructors by type are closed (`closedAt_of_derives` at the empty
 context), and a closing substitution of closed values with a value per slot of `Γ₂`.
 `[spec §62]` -/
-theorem FrameOk.ofDrops {Δ : LifeCtx} {SD : Row} {decl : Opaque → Option Expr}
+theorem FrameOk.ofDrops {Δ : LifeCtx} {SD : Row} {decl : VTy → Option Expr}
     (hSD : ¬ SD.Cancels) {Γ₂ : Ctx VTy} {γ : List Val}
     (hds : ∀ s ∈ Γ₂, s.live = true → s.ty.Persistent ∨ DropOk Δ SD decl s.ty)
     (hγ : ∀ v ∈ γ, closedAt 0 v.1 = true) (hl : Γ₂.length ≤ γ.length) :

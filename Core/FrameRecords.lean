@@ -209,6 +209,7 @@ def TyEq : VTy → LSub → VTy → LSub → Prop
   | .tvar n, _, .tvar n', _ => n = n'
   | .mu A, δ, .mu A', δ' => TyEq A δ A' δ'
   | .fam A, δ, .fam A', δ' => TyEq A δ A' δ'
+  | .abs n A, δ, .abs n' A', δ' => n = n' ∧ TyEq A δ A' δ'
   | _, _, _, _ => False
 /-- `C` at `δ` and `C′` at `δ′` are one computation type.  `[about ours]` -/
 def CTyEq : CTy → LSub → CTy → LSub → Prop

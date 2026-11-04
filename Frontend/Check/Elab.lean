@@ -147,8 +147,6 @@ def ppOpq : BoCa.Fig16.LogRel.Core.Opaque → String
   | .clock => "clock"
   | .args => "args"
   | .tok => "tok"
-  | .cell => "cell"
-  | .abs n rep => s!"abs {n} ({ppOpq rep})"
 
 mutual
 /-- A value type in the surface syntax, at precedence `p` (syntax-core §4: `0` binders, `1`
@@ -175,6 +173,8 @@ def ppV (nm : List (String × LifeVar)) (d p : Nat) : CVTy → String
   | .int .f32 => "f32"
   | .int .f64 => "f64"
   | .opq k => ppOpq k
+  -- No surface syntax names an abstract type (SPEC §63): printed by its name and representation.
+  | .abs n A => parenIf (p > 5) s!"abs {n} {ppV nm d 5 A}"
   -- The variable of the `nu` around (`ppC`), which occurs only as `U X`.
   | .tvar n => if n < d then tvName (d - 1 - n) else if n == d then "U X" else s!"?{n}"
   | .mu A => parenIf (p > 0) s!"mu {tvName d}. {ppV nm (d + 1) 0 A}"

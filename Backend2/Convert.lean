@@ -306,6 +306,7 @@ def formersV (acc : List String) : VTy → List String
   | .bang A => formersV ("V.bang" :: acc) A
   | .mu A => formersV ("V.mu" :: acc) A
   | .fam A => formersV ("V.fam" :: acc) A
+  | .abs _ A => formersV ("V.abs" :: acc) A
   | .unit => "V.unit" :: acc
   | .zero => "V.zero" :: acc
   | .unk => "V.unk" :: acc

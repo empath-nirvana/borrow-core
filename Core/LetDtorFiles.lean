@@ -58,9 +58,9 @@ abbrev I32 : VTy := .int .w32
 
 /-- A file: the abstract linear handle `abs fileName Tok`, represented by `Tok`, a location owning
 a unit cell. The platform's `File` (branch `dtor-wire`, SPEC §34) is the same abstract type at the
-representation `Cell`, `Ref I32`'s relation, whose cell holds the descriptor: `abs fileName Cell`,
-provided by the `Fs` externs' models (`Core/Abstract.lean`, `fileC`).  `[spec §63]` -/
-abbrev File : VTy := absTy fileName .tok
+representation `Ref I32`, whose cell holds the descriptor: `abs fileName (Ref I32)`, provided by
+the `Fs` externs' models (`Core/Abstract.lean`, `fileC`).  `[spec §63]` -/
+abbrev File : VTy := absTy fileName tokTy
 
 /-- `close : File ↠^lin 1`, the operation `0` of the name `4`: must resume, so it never fails. -/
 def fcloseSig : OpSig := ⟨4, 0, .lin, File, .unit, .ret .unit, false⟩
@@ -89,8 +89,7 @@ theorem file_no_derived_drop : ¬ HasDtor File := fun h => by cases h
 
 /-- **The handle owns its cell**: an abort may not abandon it (`[let]`'s `hW`, `[raise]`'s `hd`). -/
 theorem file_not_ownFree : ¬ File.OwnFree := fun h => by
-  cases h with
-  | opq _ hk => exact hk
+  cases h
 
 theorem file_not_persistent : File.persistent = false := rfl
 
@@ -100,7 +99,9 @@ theorem file_not_persistent : File.persistent = false := rfl
 def closeB : Expr := performE (opArgE 4 0 (.var 0))
 
 /-- **The program's declaration**: `File`'s destructor is `close`. -/
-def fsDecl (k : Opaque) : Option Expr := if k = .abs fileName .tok then some closeB else none
+def fsDecl : VTy → Option Expr
+  | .abs 0 (.opq .tok) => some closeB
+  | _ => none
 
 theorem dropOf_file : dropOf fsDecl File = some closeB := rfl
 
@@ -109,7 +110,7 @@ theorem d_closeB {Δ : LifeCtx} (Γ : Ctx VTy) (hΓ : Ctx.Dead Γ) :
   .lam (.effPerform (S := SD) (o := fcloseSig) rfl rfl rfl (.var (.here hΓ.toP)))
 
 /-- `File` has a destructor at `{close}`, its declared one. -/
-theorem fileOk {Δ : LifeCtx} : DropOk Δ SD fsDecl File := .opq rfl d_closeB
+theorem fileOk {Δ : LifeCtx} : DropOk Δ SD fsDecl File := .abs rfl d_closeB
 
 /-- The destructors never fail: `close` must resume. -/
 theorem SD_not_cancels : ¬ SD.Cancels := by

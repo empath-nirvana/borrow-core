@@ -85,7 +85,9 @@ The proof burden of the previous language grew until it was unmaintainable
   Exceptions are listed here, each signed off by the user, and each keeps `CDerives` as an
   abbreviation so that no existing statement changes:
   - **The provider set** (`CDerivesIn P`, #778, SPEC §63): which abstract types a derivation may
-    open. `CDerives := CDerivesIn (fun _ => True)`. Only `absSeal`/`absUnseal` read it.
+    open. `CDerives := CDerivesIn (fun _ => True)`. Only `absSeal`/`absUnseal` read it. The tied
+    and pinned judgments carry the same index (`CDerivesAtIn`, `CDerivesPIn`), with
+    `CDerivesAt` and `CDerivesP` their instances inside every provider.
 - **Generalize by deleting.** A general former lands in the same change that turns the fixed
   formers it replaces into abbreviations.
 - **Do not invert `CDerives` casually.** Inversion lemmas, substitution over derivations, checker

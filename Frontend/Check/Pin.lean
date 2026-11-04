@@ -3,7 +3,7 @@ import Frontend.Check.Consts
 /-!
 # Frontend — Check — the relaxed lend R1  `[spec §29]`
 
-`withbor2r['x, @b, A, B, [ROW]](p, m) M` is R1 (`CDerivesP.lendR`): the owned cell `p : ref A`
+`withbor2r['x, @b, A, B, [ROW]](p, m) M` is R1 (`CDerivesPIn.lendR`): the owned cell `p : ref A`
 lent as `m : mut 'x A` to a body `M` at a row of resuming operations (`Row.ResumeO`). `M` is
 checked at the lifetime context `Δ, 'x ⊏ @b` and the context `m : mut 'x A` alone: it sees no
 other variable. The rule concludes at the context `p : ref A` alone; under the program's other
@@ -27,6 +27,7 @@ def noThunkB : VTy → Bool
   | .ref A => noThunkB A
   | .box _ A => noThunkB A
   | .fam L => noThunkB L
+  | .abs _ A => noThunkB A
   | _ => true
 
 theorem noThunkB_sound : ∀ {A : VTy}, noThunkB A = true → NoThunkT A
@@ -34,7 +35,7 @@ theorem noThunkB_sound : ∀ {A : VTy}, noThunkB A = true → NoThunkT A
       simp only [noThunkB, Bool.and_eq_true] at h
       exact ⟨noThunkB_sound h.1, noThunkB_sound h.2⟩
   | .thunk _, h => by simp [noThunkB] at h
-  | .bang A, h | .ref A, h | .box _ A, h | .fam A, h => noThunkB_sound (A := A) h
+  | .bang A, h | .ref A, h | .box _ A, h | .fam A, h | .abs _ A, h => noThunkB_sound (A := A) h
   | .unit, _ | .zero, _ | .imm _ _, _ | .mut _ _, _ | .unk, _ | .tvar _, _ | .mu _, _
   | .int _, _ | .opq _, _ => by simp [NoThunkT]
 
@@ -90,7 +91,7 @@ end BoCa.Fig16.LogRel.Core.Check
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (CDerivesP Jdg NoThunkT Row.ResumeO Row.ResumeOC VFree VOutlivesLe HasDtor dtorE
+open BoCa.Fig16.LogRel.Core (CDerivesP CDerivesPIn Jdg NoThunkT Row.ResumeO Row.ResumeOC VFree VOutlivesLe HasDtor dtorE
   dtor_wf withborUV lendCb closedAt)
 
 /-- A derivation that uses a relaxed rule: its tie is not claimed. -/
@@ -105,7 +106,7 @@ def lendRE (d M : CExpr) : CExpr :=
 section
 variable {Δ : LifeCtx} {T : List CVTy}
 
-/-- **R1** (`CDerivesP.lendR`) at the slot `k : ref A`, its body `rM` checked at `Δ, 'x ⊏ @b`
+/-- **R1** (`CDerivesPIn.lendR`) at the slot `k : ref A`, its body `rM` checked at `Δ, 'x ⊏ @b`
 and the view alone: the λ over the rule's node at the empty context, placed by `nilDead` and
 applied to the slot. The finaliser is the owner's destructor, its derived node.  `[spec §29]` -/
 def rLendR (i : TInfo) {A B : CVTy} {S : CRow} (q : Pin) (x : LifeVar) (b : CLife) (k : Nat)

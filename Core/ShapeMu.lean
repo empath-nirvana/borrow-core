@@ -56,6 +56,7 @@ theorem vShapeE_some (η : Option (Nat → SEnt)) :
   | thunk _ => rfl
   | ref A ih => funext δ v; simp only [vShapeE, ih]
   | fam L ih => funext δ v; simp only [vShapeE, ih]
+  | abs _ A ih => funext δ v; simp only [vShapeE, ih]
   | imm a A ih => funext δ v; simp only [vShapeE, ih]
   | «mut» a A ih => funext δ v; simp only [vShapeE, ih]
   | box a A ih => funext δ v; simp only [vShapeE, ih]
@@ -95,6 +96,7 @@ theorem vShapeE_rename : ∀ (A : VTy) (ρ : Nat → SEnt) (r : Nat → Nat),
   | thunk _ => intro ρ r; rfl
   | ref A ih => intro ρ r; funext δ v; simp only [VTy.rename, vShapeE, ih]
   | fam L ih => intro ρ r; funext δ v; simp only [VTy.rename, vShapeE, ih]
+  | abs _ A ih => intro ρ r; funext δ v; simp only [VTy.rename, vShapeE, ih]
   | imm a A ih => intro ρ r; funext δ v; simp only [VTy.rename, vShapeE, ih]
   | «mut» a A ih => intro ρ r; funext δ v; simp only [VTy.rename, vShapeE, ih]
   | box a A ih => intro ρ r; funext δ v; simp only [VTy.rename, vShapeE, ih]
@@ -123,6 +125,7 @@ theorem vShapeE_subst : ∀ (A : VTy) (ρ : Nat → SEnt) (σ : Nat → VTy) (δ
   | thunk _ => intro ρ σ δ; rfl
   | ref A ih => intro ρ σ δ; funext v; simp only [VTy.subst, vShapeE, ih]
   | fam L ih => intro ρ σ δ; funext v; simp only [VTy.subst, vShapeE, ih]
+  | abs _ A ih => intro ρ σ δ; funext v; simp only [VTy.subst, vShapeE, ih]
   | imm a A ih => intro ρ σ δ; funext v; simp only [VTy.subst, vShapeE, ih]
   | «mut» a A ih => intro ρ σ δ; funext v; simp only [VTy.subst, vShapeE, ih]
   | box a A ih => intro ρ σ δ; funext v; simp only [VTy.subst, vShapeE, ih]
@@ -195,6 +198,7 @@ theorem vShapeE_mono : ∀ (A : VTy) (η₁ η₂ : Nat → SEnt), (∀ n, (η�
       intro η₁ η₂ ht hP δ v ρ h
       obtain ⟨ℓ, c, ρ₀, ρ₁, hc, hp, hs⟩ := h
       exact ⟨ℓ, c, ρ₀, ρ₁, hc, hp, sepRange_mono' (fun m σ hm => ih η₁ η₂ ht hP δ _ σ hm) hs⟩
+  | abs _ A ih => intro η₁ η₂ ht hP δ v ρ h; exact ih η₁ η₂ ht hP δ v ρ h
   | imm a A ih =>
       intro η₁ η₂ ht hP δ v ρ h
       obtain ⟨α, hα, ℓ, ρ₀, ρ₁, hc, hp, hpto⟩ := h
@@ -289,6 +293,7 @@ def sF (S : VTy → Val → WProp) (δ : LSub) : VTy → Val → WProp
   | .box a T, v => atLife δ a fun α => box α (S T v)
   | .ref T, v => ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ S T v'
   | .fam L, v => ex fun ℓ => ex fun c => ⌜v = Val.arr ℓ c⌝ ⋆ sepRange (fun m => S L (.loc m)) ℓ c.toNat
+  | .abs _ T, v => S T v
   | .bang _, _ => emp
   | .imm a T, v => atLife δ a fun α => ex fun ℓ => ⌜v = .loc ℓ⌝ ⋆ ptoImm ℓ α (S T)
   | .mut a T, v => atLife δ a fun α => ex fun ℓ => ⌜v = .loc ℓ⌝ ⋆
@@ -310,6 +315,7 @@ theorem sF_vShape (δ : LSub) : ∀ (T : VTy) (v : Val) (ρ : WRes),
   | .box _ _, _, _ => Iff.rfl
   | .ref _, _, _ => Iff.rfl
   | .fam _, _, _ => Iff.rfl
+  | .abs _ _, _, _ => Iff.rfl
   | .bang _, _, _ => Iff.rfl
   | .imm _ _, _, _ => Iff.rfl
   | .mut _ _, _, _ => Iff.rfl
@@ -340,6 +346,7 @@ theorem sF_mono {S₁ S₂ : VTy → Val → WProp} (h : ∀ T v ρ, S₁ T v ρ
   | .fam L, _, _, hs => by
       obtain ⟨ℓ, c, ρ₀, ρ₁, hc, hp, hs⟩ := hs
       exact ⟨ℓ, c, ρ₀, ρ₁, hc, hp, sepRange_mono' (fun m σ hm => h L _ σ hm) hs⟩
+  | .abs _ T, _, _, hs => h T _ _ hs
   | .bang _, _, _, hs => hs
   | .imm _ T, _, _, hs => by
       obtain ⟨α, hα, ℓ, ρ₀, ρ₁, hc, hp, hpto⟩ := hs
@@ -405,6 +412,7 @@ theorem vShape_ind (δ : LSub) (Φ : VTy → Val → WRes → Prop)
         obtain ⟨ℓ, c, ρ₀, ρ₁, hc, hp, hs⟩ := hr
         exact hG _ v r ⟨ℓ, c, ρ₀, ρ₁, hc, hp,
           sepRange_mono' (fun m σ' hm => ih ρe σ ht hP _ σ' hm) hs⟩
+    | abs _ A ih => intro ρe σ ht hP v r hr; exact hG _ v r (ih ρe σ ht hP v r hr)
     | imm a A ih =>
         intro ρe σ ht hP v r hr
         obtain ⟨α, hα, ℓ, ρ₀, ρ₁, hc, hp, hpto⟩ := hr
@@ -465,6 +473,7 @@ theorem vShapeE_congr : ∀ (T : VTy) (η : Option (Nat → SEnt)) {δ₁ δ₂ 
   | thunk _ => intros; rfl
   | ref A ih => intro η δ₁ δ₂ h; funext v; simp only [vShapeE, ih η h]
   | fam L ih => intro η δ₁ δ₂ h; funext v; simp only [vShapeE, ih η h]
+  | abs _ A ih => intro η δ₁ δ₂ h; funext v; simp only [vShapeE, ih η h]
   | imm a A ih =>
       intro η δ₁ δ₂ h; funext v
       simp only [vShapeE, ih η (fun y hy => h y (Or.inr hy))]
@@ -513,6 +522,9 @@ theorem tyEq_symm : ∀ (S : VTy) {S' : VTy} {δ δ' : LSub}, TyEq S δ S' δ' �
   | .fam A, S', _, _, h => by
       cases S' <;> simp only [TyEq] at h ⊢
       exact tyEq_symm A h
+  | .abs _ A, S', _, _, h => by
+      cases S' <;> simp only [TyEq] at h ⊢
+      exact ⟨h.1.symm, tyEq_symm A h.2⟩
   | .bang A, S', _, _, h => by
       cases S' <;> simp only [TyEq] at h ⊢
       exact tyEq_symm A h
@@ -586,6 +598,10 @@ theorem tyEq_trans : ∀ (S : VTy) {S' S'' : VTy} {δ δ' δ'' : LSub}, TyEq S �
       cases S' <;> simp only [TyEq] at h
       cases S'' <;> simp only [TyEq] at h' ⊢
       exact tyEq_trans A h h'
+  | .abs _ A, S', S'', _, _, _, h, h' => by
+      cases S' <;> simp only [TyEq] at h
+      cases S'' <;> simp only [TyEq] at h' ⊢
+      exact ⟨h.1.trans h'.1, tyEq_trans A h.2 h'.2⟩
   | .bang A, S', S'', _, _, _, h, h' => by
       cases S' <;> simp only [TyEq] at h
       cases S'' <;> simp only [TyEq] at h' ⊢
@@ -660,6 +676,7 @@ theorem TyEq.of_agree : ∀ (T : VTy) {δ₁ δ₂ : LSub},
   | .thunk C, _, _, h => CTyEq.of_agree C h
   | .ref A, _, _, h => TyEq.of_agree A h
   | .fam A, _, _, h => TyEq.of_agree A h
+  | .abs _ A, _, _, h => ⟨rfl, TyEq.of_agree A h⟩
   | .bang A, _, _, h => TyEq.of_agree A h
   | .box a A, _, _, h => ⟨interp_congr a (fun y hy => h y (Or.inl hy)),
       TyEq.of_agree A (fun y hy => h y (Or.inr hy))⟩
@@ -716,6 +733,8 @@ theorem TyEq.rename : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub} (r : Nat → Nat)
       exact ⟨ihA r h.1, ihB r h.2⟩
   | ref A ih => intro A' _ _ r h; cases A' <;> simp only [TyEq, VTy.rename] at h ⊢; exact ih r h
   | fam A ih => intro A' _ _ r h; cases A' <;> simp only [TyEq, VTy.rename] at h ⊢; exact ih r h
+  | abs _ A ih =>
+      intro A' _ _ r h; cases A' <;> simp only [TyEq, VTy.rename] at h ⊢; exact ⟨h.1, ih r h.2⟩
   | bang A ih => intro A' _ _ r h; cases A' <;> simp only [TyEq, VTy.rename] at h ⊢; exact ih r h
   | imm a A ih =>
       intro A' _ _ r h; cases A' <;> simp only [TyEq, VTy.rename] at h ⊢; exact ⟨h.1, ih r h.2⟩
@@ -749,6 +768,9 @@ theorem TyEq.subst : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub} (σ σ' : Nat → 
       intro A' _ _ σ σ' h hσ; cases A' <;> simp only [TyEq, VTy.subst] at h ⊢; exact ih σ σ' h hσ
   | fam A ih =>
       intro A' _ _ σ σ' h hσ; cases A' <;> simp only [TyEq, VTy.subst] at h ⊢; exact ih σ σ' h hσ
+  | abs _ A ih =>
+      intro A' _ _ σ σ' h hσ; cases A' <;> simp only [TyEq, VTy.subst] at h ⊢
+      exact ⟨h.1, ih σ σ' h.2 hσ⟩
   | bang A ih =>
       intro A' _ _ σ σ' h hσ; cases A' <;> simp only [TyEq, VTy.subst] at h ⊢; exact ih σ σ' h hσ
   | imm a A ih =>
@@ -786,6 +808,7 @@ theorem TyEq.Cl_iff : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub} (k : Nat),
       exact and_congr (ihA k h.1) (ihB k h.2)
   | ref A ih => intro A' _ _ k h; cases A' <;> simp only [TyEq] at h; simp only [VTy.Cl]; exact ih k h
   | fam A ih => intro A' _ _ k h; cases A' <;> simp only [TyEq] at h; simp only [VTy.Cl]; exact ih k h
+  | abs _ A ih => intro A' _ _ k h; cases A' <;> simp only [TyEq] at h; simp only [VTy.Cl]; exact ih k h.2
   | bang A ih => intro A' _ _ k h; cases A' <;> simp only [TyEq] at h; simp only [VTy.Cl]; exact ih k h
   | imm a A ih => intro A' _ _ k h; cases A' <;> simp only [TyEq] at h; simp only [VTy.Cl]; exact ih k h.2
   | «mut» a A ih => intro A' _ _ k h; cases A' <;> simp only [TyEq] at h; simp only [VTy.Cl]; exact ih k h.2
@@ -811,6 +834,7 @@ theorem TyEq.occ_iff : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub} (k : Nat),
       exact or_congr (ihA k h.1) (ihB k h.2)
   | ref A ih => intro A' _ _ k h; cases A' <;> simp only [TyEq] at h; simp only [VTy.Occ]; exact ih k h
   | fam A ih => intro A' _ _ k h; cases A' <;> simp only [TyEq] at h; simp only [VTy.Occ]; exact ih k h
+  | abs _ A ih => intro A' _ _ k h; cases A' <;> simp only [TyEq] at h; simp only [VTy.Occ]; exact ih k h.2
   | bang A ih => intro A' _ _ k h; cases A' <;> simp only [TyEq] at h; simp only [VTy.Occ]; exact ih k h
   | imm a A ih => intro A' _ _ k h; cases A' <;> simp only [TyEq] at h; simp only [VTy.Occ]; exact ih k h.2
   | «mut» a A ih => intro A' _ _ k h; cases A' <;> simp only [TyEq] at h; simp only [VTy.Occ]; exact ih k h.2
@@ -836,6 +860,7 @@ theorem TyEq.noMut_iff : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub} (k : Nat),
       exact and_congr (ihA k h.1) (ihB k h.2)
   | ref A ih => intro A' _ _ k h; cases A' <;> simp only [TyEq] at h; simp only [VTy.NoMut]; exact ih k h
   | fam A ih => intro A' _ _ k h; cases A' <;> simp only [TyEq] at h; simp only [VTy.NoMut]; exact ih k h
+  | abs _ A ih => intro A' _ _ k h; cases A' <;> simp only [TyEq] at h; simp only [VTy.NoMut]; exact ih k h.2
   | bang A ih => intro A' _ _ k h; cases A' <;> simp only [TyEq] at h; simp only [VTy.NoMut]; exact ih k h
   | imm a A ih => intro A' _ _ k h; cases A' <;> simp only [TyEq] at h; simp only [VTy.NoMut]; exact ih k h.2
   | «mut» a A _ =>
@@ -883,6 +908,9 @@ theorem vShapeE_tyEq : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub} (η η' : Nat �
   | fam A ih =>
       intro A' _ _ η η' h hη; cases A' <;> simp only [TyEq] at h
       funext v; simp only [vShapeE, ih η η' h hη]
+  | abs _ A ih =>
+      intro A' _ _ η η' h hη; cases A' <;> simp only [TyEq] at h
+      funext v; simp only [vShapeE, ih η η' h.2 hη]
   | bang A _ => intro A' _ _ η η' h _; cases A' <;> first | rfl | simp_all [TyEq]
   | imm a A ih =>
       intro A' _ _ η η' h hη; cases A' <;> simp only [TyEq] at h

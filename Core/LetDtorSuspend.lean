@@ -59,7 +59,7 @@ theorem cancelTy_effOf (S SF : Row) : cancelTy S (CTy.effOf SF .unit) = CTy.effO
 /-- **A stored `κ` has a destructor by its type**: `kTy` is `U(C & F_{Σ_F ++ Σ} 1)`, whose
 destructor is `closeDropB = λk. k.2` (`dropOf`), at the row `Σ_F ++ Σ`, at every declaration. So
 `[let-dtor]` holds a stored `κ` live across an abortive point and drops it by its cancel. -/
-theorem dropOk_kappa {Δ : LifeCtx} {S SF : Row} {R B : VTy} {decl : Opaque → Option Expr} :
+theorem dropOk_kappa {Δ : LifeCtx} {S SF : Row} {R B : VTy} {decl : VTy → Option Expr} :
     DropOk Δ (SF ++ S) decl (kTy S R .cancel B (CTy.effOf SF .unit)) := by
   show DropOk Δ (SF ++ S) decl (.thunk (.amp _ (cancelTy S (CTy.effOf SF .unit))))
   rw [cancelTy_effOf]
@@ -68,7 +68,7 @@ theorem dropOk_kappa {Δ : LifeCtx} {S SF : Row} {R B : VTy} {decl : Opaque → 
 /-- **A must-resume `κ` is strictly linear**: `kTy Σ R lin B = U((B ⊸ F_Σ R) & ⊤)` is not
 persistent and has no destructor, at any row and declaration (its second component is `⊤`, not a
 row of `1`). It is consumed only by resuming it.  `[spec §62]` -/
-theorem kappa_lin_strict {Δ : LifeCtx} {SD S : Row} {R B : VTy} {decl : Opaque → Option Expr} :
+theorem kappa_lin_strict {Δ : LifeCtx} {SD S : Row} {R B : VTy} {decl : VTy → Option Expr} :
     ¬ (kTy S R .lin B).Persistent ∧ ¬ DropOk Δ SD decl (kTy S R .lin B) := by
   refine ⟨by simp [kTy, VTy.Persistent, VTy.persistent], fun h => ?_⟩
   generalize hT : kTy S R .lin B = T at h
@@ -76,13 +76,14 @@ theorem kappa_lin_strict {Δ : LifeCtx} {SD S : Row} {R B : VTy} {decl : Opaque 
   | tensor => simp [kTy] at hT
   | sum => simp [kTy] at hT
   | opq => simp [kTy] at hT
+  | abs => simp [kTy] at hT
   | @close C SF _ =>
       simp only [kTy, VTy.thunk.injEq, CTy.amp.injEq] at hT
       cases SF <;> simp [CTy.effOf] at hT
   | derived hs => simp [kTy] at hT; subst hT; simp [structB] at hs
 
 /-- `κ`'s destructor by type is `d_kDtor`'s term. -/
-theorem dropOf_kappa {S SF : Row} {R B : VTy} {decl : Opaque → Option Expr} :
+theorem dropOf_kappa {S SF : Row} {R B : VTy} {decl : VTy → Option Expr} :
     dropOf decl (kTy S R .cancel B (CTy.effOf SF .unit)) = some closeDropB := rfl
 
 /-! ### The suspending operation and the body -/

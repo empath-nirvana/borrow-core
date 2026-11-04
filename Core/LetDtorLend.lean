@@ -135,7 +135,7 @@ theorem Sf_not_unr' : ¬ Sf.Unr := by
   subst ho; cases h
 
 /-- The lender's destructor of its cell: the destructor of `Ref Flag`'s type, its derived drop. -/
-theorem dropOf_refFlag {decl : Opaque → Option Expr} :
+theorem dropOf_refFlag {decl : VTy → Option Expr} :
     dropOf decl (.ref Flag) = some (derivedDropB (.ref Flag)) :=
   dropOf_derived rfl (.ref (.sum .unit .unit))
 
@@ -304,7 +304,7 @@ the cell's destructor runs, and the error goes on. -/
 abbrev Δx : LifeCtx := LifeCtx.empty.extend 0 LifeCtx.empty.meetOfDom
 
 /-- A view's destructor, by its type: its derived drop (`forget`). -/
-theorem dropOf_mutFlag {decl : Opaque → Option Expr} :
+theorem dropOf_mutFlag {decl : VTy → Option Expr} :
     dropOf decl (.mut (.var 0) Flag) = some (derivedDropB (.mut (.var 0) Flag)) :=
   dropOf_derived rfl .mut
 

@@ -36,14 +36,18 @@ def block(start_pat, stop_pat):
     return text[i:j]
 
 
-# `CDerivesIn P`'s rules up to the provider's two (`absSeal`, `absUnseal`, SPEC §63): `CDerivesP`
-# has those ungated, written in its template, and the typed term has neither
-ind = block(r"^inductive CDerivesIn ", r"^  /-- `\[abs-seal\]`")
+# `CDerivesIn P`'s rules, the provider's two (`absSeal`, `absUnseal`, SPEC §63) among them:
+# `CDerivesPIn P` has them gated on `P` as `CDerivesIn P` has; the typed term has neither
+ind = block(r"^inductive CDerivesIn ", r"^/-- \*\*The CBPV typing judgment, inside every provider")
 while ind and ind[-1].strip() == "":
     ind.pop()
 # fundamentalC's induction: up to the next top-level declaration or section
 fund = block(r"^theorem fundamentalC ", r"^(/-! |/-- |theorem |def |lemma )")
-fund = [l for l in fund if not re.match(r"^  \| abs(Seal|Unseal) ", l)]
+# `CDerivesIn.mono`'s cases, for `CDerivesPIn.mono`
+mono = block(r"^theorem CDerivesIn\.mono ", r"^(/-! |/-- |theorem |def |lemma )")
+while mono and mono[-1].strip() == "":
+    mono.pop()
+mono = mono[next(k for k, l in enumerate(mono) if l.strip() == "induction h with") + 1:]
 # `[then]` at the pure row and `[handle]` at two variables, stated after the inductive
 derived = block(r"^/-- `\[then\]` with its finaliser at the pure row", r"^/-! ### The delay, stream")
 while derived and derived[-1].strip() == "":
@@ -55,8 +59,7 @@ while fund and fund[-1].strip() == "":
 def rename(lines):
     out = []
     for l in lines:
-        l = l.replace(" {P : Nat → Prop}", "").replace("CDerivesIn P ", "CDerivesP ")
-        l = re.sub(r"\bCDerivesIn\.", "CDerivesP.", l)
+        l = re.sub(r"\bCDerivesIn\b", "CDerivesPIn", l)
         out.append(re.sub(r"\bCDerives\b", "CDerivesP", l))
     return out
 
@@ -114,7 +117,7 @@ for name, explicit in ctors:
         else:
             args.append(f"a{i}")
     lhs = " ".join([name] + pat + ihs)
-    rhs = " ".join([f"CDerivesP.{name}"] + args)
+    rhs = " ".join([f"CDerivesPIn.{name}"] + args)
     ofc.append(f"  | {lhs} => exact {rhs}")
 
 # --- assemble ---------------------------------------------------------------------------------
@@ -128,6 +131,7 @@ fcases = rename(fund)
 start = next(k for k, l in enumerate(fcases) if l.strip() == "induction h with") + 1
 fun = fun.replace("--@CORE_CASES@", "\n".join(fcases[start:]))
 fun = fun.replace("--@OFC_CASES@", "\n".join(ofc))
+fun = fun.replace("--@MONO_CASES@", "\n".join(rename(mono)))
 
 
 # --- the typed term (docs/compiler.md §2.3, §2.4) ---------------------------------------------
@@ -301,7 +305,7 @@ PROJ_LETPOLY = """  | letPoly a0 a1 a2 a3 a4 a5 ih0 ih1 =>
 
 
 # the namespace of a judgment's constructors: `CDerivesAt Ξ` is `CDerivesAtIn` at every provider
-CTOR_NS = {"CDerivesP": "CDerivesP", "CDerivesAt": "CDerivesAtIn"}
+CTOR_NS = {"CDerivesP": "CDerivesPIn", "CDerivesAt": "CDerivesAtIn"}
 
 
 def kid_name(h):
@@ -575,7 +579,10 @@ def typed_rule(r, fieldsof):
     return ctor, "\n".join(lines)
 
 
-RULE_NAMES = {n for n, _ in ctor_texts(der, "inductive CDerivesP ")} - {"absSeal", "absUnseal"}
+# `CDerivesPIn P`'s rules, read at `CDerivesP`: none but the provider's reads `P`
+derP = der.replace("CDerivesPIn P ", "CDerivesP ").replace(
+    "inductive CDerivesPIn (P : Nat → Prop) :", "inductive CDerivesP :")
+RULE_NAMES = {n for n, _ in ctor_texts(derP, "inductive CDerivesP ")} - {"absSeal", "absUnseal"}
 def typed_explicit(r):
     """The explicit binders of `r`'s typed rule, in order: `(name, whether a premise)`; each
     equation follows its premise."""
@@ -609,7 +616,7 @@ def to_p_case(ra, rp):
 
 # the provider's rules (SPEC §63) have no node: the checker's terms are outside every provider
 PROVIDER = {"absSeal", "absUnseal"}
-rulesP = [Rule(n, rest, "CDerivesP") for n, rest in ctor_texts(der, "inductive CDerivesP ")
+rulesP = [Rule(n, rest, "CDerivesP") for n, rest in ctor_texts(derP, "inductive CDerivesP ")
           if n not in PROVIDER]
 # `CDerivesAtIn P Ξ`'s rules, read at `CDerivesAt Ξ`: none but the provider's reads `P`
 tied_src = (ROOT / "Core" / "Tied.lean").read_text().replace("CDerivesAtIn P Ξ ", "CDerivesAt Ξ ")

@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.31 · 2026-11-03
+Version 1.32 · 2026-11-03
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -10401,7 +10401,8 @@ each file is closed once, `f₂` before `f₁`. What it does **not** give: Core 
 to every program (§42's declared types use it), so a program whose declared destructor of `Tok`
 is `burn` types, is resource safe, and closes nothing. `close` is the only eliminator of a
 `File` only where `burn` is withheld from the program text. §63 makes it so in Core: `File` is an
-abstract type whose provider is `with_fs`, and outside it a `File` is never a `Tok`.
+abstract type whose provider is `with_fs`; outside it a `File` is never a `Tok`, and the destructor
+that burns a `File` instead of closing it is refused (`not_skipClose_outside`).
 
 **Programs**, each a closed derivation under `resourceSafety`; `*_safe` and `*_order`/`*_run` are
 programs, `d_stepD`, `d_lendD` and `d_kDtor` typing lemmas:
@@ -10626,30 +10627,43 @@ condition and gap, classified), `docs/new-core/evidence.md` (the spikes' results
 
 ## 63. Entry 62 — abstract types with a single provider (#778)
 
-**Kernel target.** Outside a type's provider, a well-typed program cannot take a value of an
-abstract type apart, by `match`, `burn` or any other route, except through the operations its
-provider exports. The provider is an index of the judgment, so the kernel enforces it: neither the
-parser nor the elaborator does.
+**Kernel target.** Outside a type's provider, a value of an abstract type `abs n A` is never read
+at its representation `A`, and the skip-close destructor of #775 is refused as a term. This holds
+for every checked program, pinned or not, and for abstract types over any value type. The
+provider set is an index of the judgment, so the kernel enforces it: neither the parser nor the
+elaborator does. Encapsulation is relative to the provider set chosen: a derivation inside `n`'s
+provider may take an `abs n A` apart.
 
-**The abstract kind.** `Opaque.abs n rep` is the abstract type named `n`, represented by the
-opaque type `rep` (`Core/Opaque.lean`). Its relation is `rep`'s (`Opaque.rel_abs`,
-`vCE_abs_eq_rep`), and so are its model, its cell's content (`Opaque.CellOk`) and whether it is a
-host type. It is not persistent and has no derived drop. Two representations own a cell: `Tok`, an
-owned unit cell (`vCE_abs_eq_tok`), and `Cell`, an owned cell holding an `I32`, `Ref I32`'s
-relation (`vCE_cell_eq_ref`). At either, `abs n rep` is not a host type and not own-free. No Core
-constant makes or takes a `Cell`: it is the representation of an abstract type whose provider is a
-set of externs. A token-only abstract type is `abs n Tok`.
+**The former.** `VTy.abs n A` is the abstract type named `n`, represented by the value type `A`
+(`Core/Types.lean`): a record, a sum, `Ref (A ⊗ B)`, an opaque type, any value type. Its relation
+is `A`'s (`vCE_abs_eq_rep`), and the type-level functions go through it as through a unary former:
+substitution, renaming, closedness, occurrence, free lifetimes, lifetime substitution, outlives
+(`VOutlivesR.abs`), shapes and `TyEq`. Where the representation would be read off a type by a
+metafunction, `abs` is a leaf:
+- its immutable reborrow `Imm̲` is `Unk` (`VTy.immReborrow`, `VTy.immG`), as an opaque type's;
+- it has no derived destructor (`HasDtor`); a declared one comes from the program's declaration
+  table, which is keyed by type (`dropOf`, `DropOk.abs`);
+- it is never own-free (`VTy.OwnFree`), so no abort abandons one;
+- in the fold class `FoldP.P` it is a closed leaf: a fold does not recurse through it.
+
+**Restrictions.** An abstract type inherits what its representation's relation decides:
+- it is persistent, so copied and dropped by any client, exactly when its representation is
+  (`VTy.persistent`). A linear abstract type needs a linear representation: `Tok`, a `Ref`, a
+  record holding one.
+- In the inversions inside every provider (`Core/Inversions.lean`), the head of `abs n A` is `A`'s
+  (`Hnf.abs`).
 
 **The provider index.** The judgment is `CDerivesIn (P : Nat → Prop)` (`Core/Fundamental.lean`).
 `P n` means the derivation is inside the provider of `n`. Two rules read `P`. They are the iso
 between an abstract type and its representation:
 
-    absSeal   (hn : P n) : CDerivesIn P Δ Γ e (.val rep)         → CDerivesIn P Δ Γ e (.val (abs n rep))
-    absUnseal (hn : P n) : CDerivesIn P Δ Γ e (.val (abs n rep)) → CDerivesIn P Δ Γ e (.val rep)
+    absSeal   (hn : P n) : CDerivesIn P Δ Γ e (.val A)         → CDerivesIn P Δ Γ e (.val (abs n A))
+    absUnseal (hn : P n) : CDerivesIn P Δ Γ e (.val (abs n A)) → CDerivesIn P Δ Γ e (.val A)
 
-No other rule mentions `abs`, and the compatibility lemma of each is the identity, at every
-representation (`absSeal_compatC`, `absUnseal_compatC`). `mint` and `burn` stay `Tok`'s: a
-provider at `Tok` mints a `Tok` and seals it, and it unseals before it burns.
+The compatibility lemma of each is the identity, at every representation (`absSeal_compatC`,
+`absUnseal_compatC`). That no other rule mentions `abs` is a reading of the rule set, not a
+theorem; what is proved is `var_abs_hnf` below. `mint` and `burn` stay `Tok`'s: a provider at
+`Tok` mints a `Tok` and seals it, and it unseals before it burns.
 
 - `CDerives := CDerivesIn (fun _ => True)`, an `abbrev`: inside every provider. Every theorem
   stated about `CDerives` reads as before.
@@ -10657,43 +10671,58 @@ provider at `Tok` mints a `Tok` and seals it, and it unseals before it burns.
   `CDerivesIn.toCDerives`. So `fundamentalC`, `adequacyC`, `adequacyD` and `resourceSafety` hold
   of every derivation at every provider set, through `CDerives`.
 - The tied judgment gets the same index: `CDerivesAtIn P Ξ`, with `CDerivesAt Ξ := CDerivesAtIn
-  (fun _ => True) Ξ`; `CDerivesAtIn.toCDerivesIn` and `CDerivesAtIn.ofEffFree` are stated at
-  every `P`, and `CDerivesAt.toCDerives` and `CDerivesAt.ofEffFree` keep their statements.
-- `CDerivesP` (§29) extends `CDerives`, so it has both rules, ungated.
-- The typed term (§3) has no node for either rule, so `TDerivesAt.eraseIn` projects a typed
-  derivation to `CDerivesAtIn P Ξ` at every `P`. **Every checked program is outside every
-  provider** (`checkProgram_outside`, at `P = fun _ => False`).
+  (fun _ => True) Ξ`.
+- The pinned judgment (§29) too: `CDerivesPIn P`, its seal and unseal gated on `P` as
+  `CDerivesIn`'s, with `CDerivesP := CDerivesPIn (fun _ => True)`; `CDerivesP.ofC` embeds
+  `CDerivesIn P` into `CDerivesPIn P`, and `CDerivesPIn.mono` widens the set, so
+  `fundamentalC_pin` covers every provider set.
+- The typed term (§3) has no node for either rule, so `TDerivesAt.eraseIn` and
+  `TDerivesP.eraseIn` project a typed derivation to every `P`. **Every checked program is outside
+  every provider** (`checkProgram_outside`, `CDerivesPIn` at `P = fun _ => False`, with no
+  hypothesis; `checkProgram_outsideAt` at the tied judgment, for a program without relaxed rules).
 
 **Encapsulation** (`Core/Abstract.lean`).
-- `CDerivesIn.outside`: a derivation at a provider set `P` with `¬ P n` is a derivation at
-  `ProvWithout P n` (`P` less `n`), where the seal and the unseal at `n` have no instance
-  (`ProvWithout.not_self`). So it holds no seal or unseal at `n`.
-- `CDerivesIn.var_abs_hnf`: outside `n`'s provider, a variable of type `abs n rep` is read only
-  at types whose head (boxes stripped, `μ` unrolled) is an opaque type over `abs n rep` by
-  abstract types of `P` (`Opaque.Over P`): the derivation may seal it again into `abs m (abs n
-  rep)` when `P m`, and unseal that, never take it to `rep`. This is the unseal step refused, by
-  one induction over the derivation, at every representation. Its corollaries:
-  `CDerivesIn.var_abs_not_rep` (never at `rep`), `CDerivesIn.var_abs_not_tok` (never a `Tok`,
-  which `burn` takes), and `CDerivesIn.var_abs_hnf_none`: at a provider set with no name, as every
-  checked program's, the head is `abs n rep` itself.
-- The premises are satisfiable, at two representations.
-  - `Tok`: `d_openCloseR` types `f ← open 1; close f` at every provider set and every
-    representation, `Outside` among them (`openCloseR_outside`, `openClose_outside`). At `File`,
-    linked under `with_fs` it is a closed `CDerives` program (`d_fsOpenClose`), resource safe
-    (`fsOpenClose_safe`).
-  - `Cell`: `fileC = abs fileName Cell`, provided by two externs, `open : I32 ⊸ F fileC` and
-    `close : fileC ⊸ F I32`, whose models `λx. alloc x` and `λc. free c` are typed at `Ref I32` and
-    meet their contracts at `fileC` by the relations' equality (`openX_meets`, `closeX_meets`). The
-    client `f ← open 1; close f` through them is typed at every provider set (`d_openCloseX`,
-    `openCloseX_outside`), and run with the models every run continues to an `I32` at the empty
-    memory (`openCloseX_runs`).
+- `CDerivesIn.var_abs_not_rep`, the headline: outside `n`'s provider, a variable of type
+  `abs n A` is never read at `A`. Its hypothesis `RepNotOver P n A` says that `A`'s head is not
+  `abs n A` again by `μ`-unrolling and seals of `P`; it holds at every `A` whose head is no abstract
+  type (`RepNotOver.of_head`), and fails at `μX. abs n X`, where the read is a `roll`
+  (`var_abs_rep_mu`). The theorem fails if the unseal is ungated: inside the provider the read is
+  the unseal (`file_rep_inside`). `CDerivesIn.var_abs_not_tok`: never a `Tok`, which `burn` takes.
+- `CDerivesIn.var_abs_hnf`, what both are corollaries of, by one induction over the rule set: a
+  variable of type `abs n A` is read only at types whose head (`AHnf`: boxes stripped, `μ`
+  unrolled, abstract types kept) is `abs n A` under abstract types of `P` (`Over P`). It is never
+  read at the representation, nor at any type whose head is not over `abs n A`.
+  `CDerivesIn.var_abs_hnf_none`: at a provider set with no name, the head is `abs n A` itself.
+- The pinned judgment has the same three (`CDerivesPIn.var_abs_hnf`, `CDerivesPIn.var_abs_not_rep`,
+  `CDerivesPIn.var_abs_not_tok`), so with `checkProgram_outside` they cover every checked program.
+- `not_skipClose`: **the skip-close destructor is refused as a term.** Outside `File`'s provider,
+  `λf. burn f; ()` has no derivation at any `File ⊸ C` (`not_skipClose_outside` at the
+  destructor's type). The proof inverts the λ, the application and `burn` (`der_burn`,
+  `burnBody_ref`, `der_free`), through the inversions of `Core/Inversions.lean` stated at every
+  provider set (`der_lam`, `der_app`, `der_bind`), and reads `f` at a type over `File` by
+  `var_abs_hnf`. Inside the provider it types (`d_skipClose_inside`).
+- `CDerivesIn.provWithout` is the hypothesis `¬ P n` restated: `ProvWithout P n` is `P`
+  (`ProvWithout.eq_of_not`). It is not evidence of encapsulation.
+- The premises are satisfiable. `d_openCloseR` types `f ← open 1; close f` at every provider set
+  and every representation, `Outside` among them. At `File`, linked under `with_fs`, it is a
+  closed `CDerives` program (`d_fsOpenClose`), resource safe (`fsOpenClose_safe`); that is the
+  provider's soundness, not encapsulation, since a client that burned the file would be as safe.
+  `fileC = abs fileName (Ref I32)`, provided by two externs, `open : I32 ⊸ F fileC` and
+  `close : fileC ⊸ F I32`, whose models `λx. alloc x` and `λc. free c` are typed at `Ref I32` and
+  meet their contracts at `fileC` by the relations' equality (`openX_meets`, `closeX_meets`). The
+  client through them is typed at every provider set (`d_openCloseX`) and every run ends at the
+  empty memory (`openCloseX_runs`).
+
+**Trust boundary.** For an abstract type provided by externs, the kernel does not decide which
+externs are the provider: an extern `fileC ⊸ F (Ref I32)` with the identity for its model meets
+its contract by the same equality as `close`. Which externs may mention `abs n` is an obligation
+of the trusted extern table, not a kernel one.
 
 **`File`.** `File := abs fileName Tok` in the `LetDtorFiles` family (`Core/LetDtorFiles.lean`; the
 cancel, loop and suspension programs use it). `with_fs` is `File`'s provider, typed in `CDerives`:
-`close`'s clause unseals and burns, and `open`'s mints and seals. The programs and their theorem
-statements are unchanged. The skip-close destructor of #775, `λf. burn f; ()`, types inside the
-provider (`d_skipClose_inside`), and its one step at `Tok` is refused outside it
-(`file_not_tok_outside`).
+`close`'s clause unseals and burns, and `open`'s mints and seals. The program's declaration table
+`fsDecl` gives `File` its destructor `close`. The programs and their theorem statements are
+unchanged.
 
 **The escape.** A deliberate escape is a forget that the provider supplies: an operation of the
 provider's effect, handled by a clause typed inside the provider that unseals and burns. `Fs` has
@@ -10701,36 +10730,41 @@ none. Adding one is a clause of `with_fs` and an entry of `Efs`, with no kernel 
 no `trust` form, in Core or in the checker.
 
 **Changed existing code.**
-- Every induction over `CDerives`, `CDerivesAt` or `CDerivesP` has the two cases.
-- The derivation-building lemmas that the checker's projection reaches are stated at every `P`:
-  `dtor_wf`, `d_allocS`, `d_freeS`, `withborSM_wf`, `withborSI_wf`, `withborM2_wf`,
-  `withborI2_wf`, their helpers, the structure `Borrows`, and the derived rules
-  (`CDerivesIn.effThenA`, `lamV`, `letpairV`, `eletV`, …). Each is the old statement at
-  `P = fun _ => True`, and every caller is unchanged.
-- At `CDerives`, the inversion machinery of `Core/Inversions.lean` gets the two steps as views
-  (`VS.absSeal`, `VS.absUnseal`). `VView.hnf` gains the disjunct "the head is opaque", and
-  `VView.hnf_of` and `VView.eq_of_heads` take the hypothesis "the head is not opaque", which is
-  discharged by default, so their callers are unchanged.
-- `Opaque.Host` excludes `Tok` and `Cell`, and is the representation's at `abs` (`Opaque.hostB`
-  decides it; the checker's `ownFreeB` reads it). In `Opaque.rel_cases`, the cell disjunct reads
-  `¬ k.Host` where it read `k = .tok`, and gives the cell's content (`Opaque.CellOk`).
-- Backend2 lays out an abstract type as its representation (`ofOpq`): `Tok` and `Cell` as
-  `ref 1` and `ref i32`.
+- `VTy` has the former `abs`; every function and induction over `VTy` has its case.
+- Every induction over `CDerives`, `CDerivesAt` or `CDerivesP` has the two rules' cases.
+- `CDerivesP` is `CDerivesPIn (fun _ => True)`; its constructors are `CDerivesPIn`'s, generated
+  by `scripts/gen-pin.py` with the seal and unseal gated.
+- The derivation-building lemmas the checker's projection reaches are stated at every `P`
+  (`dtor_wf`, `d_allocS`, `d_freeS`, the `withbor*_wf`, the derived rules). Each is the old
+  statement at `P = fun _ => True`.
+- At `CDerives`, the inversions of `Core/Inversions.lean` have the iso as views (`VS.absSeal`,
+  `VS.absUnseal`) and the head strips abstract types (`Hnf.abs`); `VView.hnf` and its corollaries
+  keep their statements. `der_app`, `der_lam`, `der_bind` and `der_bind_split` are stated at every
+  `P` (`AppBaseIn`, `LamInvIn`, with `AppBase`, `LamInv` their instances inside every provider).
+- The declaration table of destructors (`dropOf`, `DropOk`, `letDT`) is keyed by `VTy`, read at an
+  opaque or an abstract type.
+- Backend2 lays out an abstract type as its representation.
 
-**Not changed.** `burn`, `mint`, §42's declared types, the machine, `Paper/`, `Support/`, the
-relation, `Core/Tree*`, `Support/Model/Tree/`, the corpus.
+**Not changed.** `Opaque` (the `Cell` kind and `Opaque.abs` are gone), `burn`, `mint`, §42's
+declared types, the machine, `Paper/`, `Support/`, the relation's clauses at the other formers,
+`Core/Tree*`, `Support/Model/Tree/`, the corpus.
 
 *Open* (parked on #778):
-- Inversion lemmas for `CDerivesIn P` (T2), which would refuse the skip-close destructor as a whole
-  derivation.
+- A theorem that no rule but the provider's mentions `abs n`: parametricity in the name `n`.
+  Without it, a new constant at a type over `abs n A` would escape `var_abs_hnf`; today there is
+  none.
 - The run-level theorem "each file is closed exactly once". It needs a parametric reading of
   abstract types (#782, #789): every theorem that factors through `SemC` admits `burn` at `abs n`,
   whose relation is `Tok`'s.
-- The provider of a user-declared abstract type (methods, modules).
+- The provider of a user-declared abstract type (methods, modules), and whether such a type may be
+  more linear than its representation (today it is persistent when the representation is).
+- Reading an abstract value through a borrow inside its provider: `Imm̲ (abs n A)` is `Unk`, and
+  no rule unseals under `Imm`/`Mut`.
 - The checker's `File`. `File` reaches the checker on the `dtor-wire` branch as the kind
-  `Opaque.file`, whose relation is `Ref I32`'s. Adopting this entry, it is `abs fileName Cell`:
-  the checker's `.file` maps to it, the `Fs` externs' models are its provider (as `openX_meets`),
-  and Backend2 lays it out from `Cell` (`ofOpq`).
+  `Opaque.file`, whose relation is `Ref I32`'s. Adopting this entry, it is `abs fileName (Ref I32)`
+  (`fileC`): the checker's `.file` maps to `VTy.abs fileName (.ref (.int .w32))`, the `Fs` externs'
+  models are its provider (as `openX_meets`), the declaration table maps `fileC` to its
+  destructor, and Backend2 lays it out as `Ref I32`.
 
 ## Status
 
@@ -11174,18 +11208,30 @@ relation over it in `Core/StepsN.lean`, `Core/TreeWp.lean`, `Core/TreeWpEff.lean
 `Core/TreeCactus.lean`, `Core/TreeStepKeep.lean` and `Core/TreeHeadlines.lean` (adequacy and R1–R4
 at one branch); `kappa_lin_strict` is in `Core/LetDtorSuspend.lean`. No relation the typing rules use
 reads them yet. The rest of §62 is design.
-Entry 62 (§63): abstract types are implemented in `Core/Opaque.lean` (`Opaque.abs`),
-`Core/Tok.lean` (the iso's compatibility lemmas), `Core/Fundamental.lean` (`CDerivesIn`,
-`absSeal`, `absUnseal`, `CDerivesIn.mono`), `Core/Tied.lean` (`CDerivesAtIn`),
-`Core/Abstract.lean` (encapsulation, the refused unseal at every representation, the clients
-`openClose` and `openCloseX`), `Core/LetDtorFiles.lean` (`File := abs fileName Tok`),
-`Backend2/Types.lean` (`ofOpq`) and `Frontend/Check/Program.lean` (`checkProgram_outside`). The
-checker has no abstract type yet.
+Entry 62 (§63): abstract types are implemented in `Core/Types.lean` (the former `VTy.abs`) and
+every function over `VTy`, `Core/Tok.lean` (the iso's compatibility lemmas), `Core/Fundamental.lean`
+(`CDerivesIn`, `absSeal`, `absUnseal`, `CDerivesIn.mono`), `Core/Tied.lean` (`CDerivesAtIn`),
+`Core/PinDerives.lean` (`CDerivesPIn`, generated), `Core/Inversions.lean` (`der_app`, `der_lam`,
+`der_bind` at every provider set), `Core/Abstract.lean` (encapsulation, the refused skip-close
+destructor, the clients `openClose` and `openCloseX`), `Core/LetDtorFiles.lean`
+(`File := abs fileName Tok`), `Backend2/Types.lean` and `Frontend/Check/Program.lean`
+(`checkProgram_outside`). The surface has no abstract type yet.
 
 ---
 
 ## Changelog
 
+- **1.32** (2026-11-03) — §63 (#778): the abstract type is the value-type former `VTy.abs n A`,
+  over any value type; `Opaque.abs` and `Opaque.cell` are gone. The pinned judgment is indexed,
+  `CDerivesPIn P`, its seal and unseal gated, so `checkProgram_outside` holds of every checked
+  program with no hypothesis. Encapsulation leads with `var_abs_not_rep` (and its pinned form),
+  with the side condition `RepNotOver` and its counterexample `var_abs_rep_mu`; the skip-close
+  destructor is refused as a term (`not_skipClose`), through `der_app`, `der_lam` and `der_bind`
+  stated at every provider set. `CDerivesIn.outside` is `CDerivesIn.provWithout`, documented as
+  its hypothesis restated. The declaration table of destructors is keyed by `VTy`. An abstract
+  type is persistent when its representation is, never own-free, with no derived drop, its `Imm̲`
+  `Unk`. No change to `fundamentalC`, `adequacyC`, `adequacyD`, `resourceSafety`, the machine,
+  `Paper/`, `Support/` or the corpus.
 - **1.31** (2026-11-03) — §63 (#778): an abstract type carries its representation.
   `Opaque.abs n rep`, whose relation is `rep`'s; the seal and unseal between `rep` and
   `abs n rep`, gated on `P n`; the representation `Cell` (`Ref I32`'s relation). The refused

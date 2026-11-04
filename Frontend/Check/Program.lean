@@ -33,7 +33,7 @@ typed derivation off; its projections (`TDerivesAt.erase`, `TDerivesP.erase`) gi
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt CDerivesAtIn CDerivesP Jdg SemC fundamentalC adequacyC EffCtx
+open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt CDerivesAtIn CDerivesP CDerivesPIn Jdg SemC fundamentalC adequacyC EffCtx
   SigsAt PinLaw fundamentalC_pin adequacyC_pin)
 
 /-- A checked `main`: its context, typed term and type, the rows its derivation reads at
@@ -389,11 +389,20 @@ theorem checkProgram_tied {p : Program} {r : Report} {c : Checked}
     ∀ Ξ : EffCtx, SigsAt Ξ c.sigs → CDerivesAt Ξ LifeCtx.empty c.ctx c.t.erase (.comp c.C) :=
   c.tied.tied.1 hp
 
-/-- **Every checked program is outside every abstract type's provider** (SPEC §63): `main`'s
-derivation is tied at the provider set that holds no name, since no typed node is a provider's
-rule (`TDerivesAt.eraseIn`). So no checked program takes an abstract type apart, and
-`CDerivesIn.outside` holds of it at every name.  `[spec §19, §63]` -/
+/-- **Every checked program is outside every abstract type's provider** (SPEC §63), pinned or
+not: `main`'s derivation is one of `CDerivesPIn` at the provider set that holds no name, since no
+typed node is a provider's rule (`TDerivesP.eraseIn`). So in no checked program is a variable of
+an abstract type `abs n A` read at its representation (`CDerivesPIn.var_abs_not_rep` at `¬ False`).
+The surface does not yet name an abstract type: today the abstract types such a program mentions
+come from the platform's operations and externs.  `[spec §29, §63]` -/
 theorem checkProgram_outside {p : Program} {r : Report} {c : Checked}
+    (_h : checkProgram p = .ok r) (_hc : r.main = some c) :
+    CDerivesPIn (fun _ => False) LifeCtx.empty c.ctx c.t.erase (.comp c.C) :=
+  c.typedP.eraseIn
+
+/-- **`checkProgram_outside` at the tied judgment**, for a program with no relaxed rule.
+`[spec §19, §63]` -/
+theorem checkProgram_outsideAt {p : Program} {r : Report} {c : Checked}
     (_h : checkProgram p = .ok r) (_hc : r.main = some c) (hp : c.pins = []) :
     CDerivesAtIn (fun _ => False) c.Ξ LifeCtx.empty c.ctx c.t.erase (.comp c.C) :=
   (c.typedAt hp).eraseIn

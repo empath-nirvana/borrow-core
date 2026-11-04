@@ -87,7 +87,7 @@ theorem toFShape_ty : ∀ A : VTy, (toFShape A).ty = A
   | .ref .unk => rfl
   | .ref (.mu _) => rfl
   | .ref (.int _) => rfl
-  | .ref (.opq _) => rfl
+  | .ref (.opq _) | .ref (.abs _ _) => rfl
   | .ref (.fam _) => rfl
   | .imm _ _ => rfl
   | .mut _ _ => rfl
@@ -96,7 +96,7 @@ theorem toFShape_ty : ∀ A : VTy, (toFShape A).ty = A
   | .unk => rfl
   | .mu _ => rfl
   | .int _ => rfl
-  | .opq _ => rfl
+  | .opq _ | .abs _ _ => rfl
   | .fam _ => rfl
 
 /-! ### The destructors -/
@@ -219,12 +219,12 @@ theorem algE_closed : ∀ (A : VTy), FoldP.clB 0 A = true → dtorAt true A = dt
   | .mu A, h => by simp [dtorAt, h]
   | .thunk C, _ => dtorAt_thunk true C
   | .tvar _, h => by simp [FoldP.clB] at h
-  | .unit, _ | .zero, _ | .box _ _, _ | .bang _, _ | .unk, _ | .int _, _ | .opq _, _
+  | .unit, _ | .zero, _ | .box _ _, _ | .bang _, _ | .unk, _ | .int _, _ | .opq _, _ | .abs _ _, _
   | .imm _ _, _ | .mut _ _, _ => rfl
   | .fam .unit, _ | .fam (.tensor _ _), _ | .fam .zero, _ | .fam (.sum _ _), _
   | .fam (.thunk _), _ | .fam (.imm _ _), _ | .fam (.mut _ _), _ | .fam (.box _ _), _
   | .fam (.bang _), _ | .fam .unk, _ | .fam (.tvar _), _ | .fam (.mu _), _ | .fam (.int _), _
-  | .fam (.fam _), _ | .fam (.opq _), _ => rfl
+  | .fam (.fam _), _ | .fam (.opq _), _ | .fam (.abs _ _), _ => rfl
 
 /-- **The algebra is the destructor of the position at results `1`.** -/
 theorem algE_eqP (Bs : FoldP.Stack) :
@@ -259,10 +259,10 @@ theorem algE_eqP (Bs : FoldP.Stack) :
       · rw [FoldP.resO_leaf dtorAlgs Bs h]; exact algE_closed _ h
       · simp [FoldP.resO, h, dtorAt, dtorAlgs]
   | .thunk C => dtorAt_thunk true C
-  | .unit | .zero | .box _ _ | .bang _ | .unk | .int _ | .opq _ | .imm _ _ | .mut _ _ => rfl
+  | .unit | .zero | .box _ _ | .bang _ | .unk | .int _ | .opq _ | .abs _ _ | .imm _ _ | .mut _ _ => rfl
   | .fam .unit | .fam (.tensor _ _) | .fam .zero | .fam (.sum _ _) | .fam (.thunk _)
   | .fam (.imm _ _) | .fam (.mut _ _) | .fam (.box _ _) | .fam (.bang _) | .fam .unk
-  | .fam (.tvar _) | .fam (.mu _) | .fam (.int _) | .fam (.fam _) | .fam (.opq _) => rfl
+  | .fam (.tvar _) | .fam (.mu _) | .fam (.int _) | .fam (.fam _) | .fam (.opq _) | .fam (.abs _ _) => rfl
 
 /-- A closed type's `FShape` reading has no recursive position. -/
 theorem toFShape_resO_closed (R : VTy) : ∀ {A : VTy}, FoldP.clB 0 A = true → (toFShape A).resO R = A
@@ -277,9 +277,9 @@ theorem toFShape_resO_closed (R : VTy) : ∀ {A : VTy}, FoldP.clB 0 A = true →
   | .ref .unit, _ | .ref (.tensor _ _), _ | .ref .zero, _ | .ref (.sum _ _), _
   | .ref (.thunk _), _ | .ref (.ref _), _ | .ref (.imm _ _), _ | .ref (.mut _ _), _
   | .ref (.box _ _), _ | .ref (.bang _), _ | .ref .unk, _ | .ref (.mu _), _ | .ref (.int _), _
-  | .ref (.opq _), _ | .ref (.fam _), _ => rfl
+  | .ref (.opq _), _ | .ref (.abs _ _), _ | .ref (.fam _), _ => rfl
   | .unit, _ | .zero, _ | .thunk _, _ | .imm _ _, _ | .mut _ _, _ | .box _ _, _ | .bang _, _
-  | .unk, _ | .mu _, _ | .int _, _ | .opq _, _ | .fam _, _ => rfl
+  | .unk, _ | .mu _, _ | .int _, _ | .opq _, _ | .abs _ _, _ | .fam _, _ => rfl
 
 /-- At a body in `FShape`, the result type at `1` is the `FShape` one. -/
 theorem resO_toFShape (Bs : FoldP.Stack) :
@@ -303,8 +303,8 @@ theorem resO_toFShape (Bs : FoldP.Stack) :
   | .ref .unit, h | .ref (.tensor _ _), h | .ref .zero, h | .ref (.sum _ _), h
   | .ref (.thunk _), h | .ref (.ref _), h | .ref (.imm _ _), h | .ref (.mut _ _), h
   | .ref (.box _ _), h | .ref (.bang _), h | .ref .unk, h | .ref (.mu _), h | .ref (.int _), h
-  | .ref (.opq _), h | .ref (.fam _), h | .unit, h | .zero, h | .thunk _, h | .imm _ _, h
-  | .mut _ _, h | .box _ _, h | .bang _, h | .unk, h | .mu _, h | .int _, h | .opq _, h
+  | .ref (.opq _), h | .ref (.abs _ _), h | .ref (.fam _), h | .unit, h | .zero, h | .thunk _, h | .imm _ _, h
+  | .mut _ _, h | .box _ _, h | .bang _, h | .unk, h | .mu _, h | .int _, h | .opq _, h | .abs _ _, h
   | .fam _, h => by
       have hc := (FoldP.clB_iff 0 _).mpr h
       rw [FoldP.resO_leaf dtorAlgs Bs hc]
@@ -330,8 +330,8 @@ theorem keysIn_toFShape (Bs : FoldP.Stack) :
   | .ref .unit, h | .ref (.tensor _ _), h | .ref .zero, h | .ref (.sum _ _), h
   | .ref (.thunk _), h | .ref (.ref _), h | .ref (.imm _ _), h | .ref (.mut _ _), h
   | .ref (.box _ _), h | .ref (.bang _), h | .ref .unk, h | .ref (.mu _), h | .ref (.int _), h
-  | .ref (.opq _), h | .ref (.fam _), h | .unit, h | .zero, h | .thunk _, h | .imm _ _, h
-  | .mut _ _, h | .box _ _, h | .bang _, h | .unk, h | .mu _, h | .int _, h | .opq _, h
+  | .ref (.opq _), h | .ref (.abs _ _), h | .ref (.fam _), h | .unit, h | .zero, h | .thunk _, h | .imm _ _, h
+  | .mut _ _, h | .box _ _, h | .bang _, h | .unk, h | .mu _, h | .int _, h | .opq _, h | .abs _ _, h
   | .fam _, h => keysIn_closed Bs ((FoldP.clB_iff 0 _).mpr h)
 where
   keysIn_closed (Bs : FoldP.Stack) : ∀ {A : VTy}, FoldP.clB 0 A = true → FoldP.keysIn Bs A = []
@@ -346,11 +346,11 @@ where
     | .mu B, h => by simp [FoldP.keysIn, h]
     | .tvar _, h => by simp [FoldP.clB] at h
     | .unit, _ | .zero, _ | .thunk _, _ | .imm _ _, _ | .mut _ _, _ | .box _ _, _ | .bang _, _
-    | .unk, _ | .int _, _ | .opq _, _ => rfl
+    | .unk, _ | .int _, _ | .opq _, _ | .abs _ _, _ => rfl
     | .fam .unit, _ | .fam (.tensor _ _), _ | .fam .zero, _ | .fam (.sum _ _), _
     | .fam (.thunk _), _ | .fam (.imm _ _), _ | .fam (.mut _ _), _ | .fam (.box _ _), _
     | .fam (.bang _), _ | .fam .unk, _ | .fam (.tvar _), _ | .fam (.mu _), _ | .fam (.int _), _
-    | .fam (.fam _), _ | .fam (.opq _), _ => rfl
+    | .fam (.fam _), _ | .fam (.opq _), _ | .fam (.abs _ _), _ => rfl
 
 /-- The algebra of a key. -/
 def keyAlg : FoldP.Bnd → Expr
@@ -372,11 +372,11 @@ theorem algsIn_eq : ∀ (A : VTy) (Bs : FoldP.Stack), algsIn A = (FoldP.keysIn B
       · simp [algsIn, FoldP.keysIn, h]
       · simp only [algsIn, FoldP.keysIn, if_neg h, List.map_cons, keyAlg, algsIn_eq B (B :: Bs)]
   | .unit, _ | .zero, _ | .thunk _, _ | .imm _ _, _ | .mut _ _, _ | .box _ _, _ | .bang _, _
-  | .unk, _ | .int _, _ | .opq _, _ | .tvar _, _ => rfl
+  | .unk, _ | .int _, _ | .opq _, _ | .abs _ _, _ | .tvar _, _ => rfl
   | .fam .unit, _ | .fam (.tensor _ _), _ | .fam .zero, _ | .fam (.sum _ _), _
   | .fam (.thunk _), _ | .fam (.imm _ _), _ | .fam (.mut _ _), _ | .fam (.box _ _), _
   | .fam (.bang _), _ | .fam .unk, _ | .fam (.tvar _), _ | .fam (.mu _), _ | .fam (.int _), _
-  | .fam (.fam _), _ | .fam (.opq _), _ => rfl
+  | .fam (.fam _), _ | .fam (.opq _), _ | .fam (.abs _ _), _ => rfl
 
 /-- The destructor of a `μ` whose body is in `FShape`: `foldOwn` with the `alg` mode. -/
 theorem dtorE_mu_F {A : VTy} (h : fshapeB A = true) :

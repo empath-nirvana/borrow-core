@@ -1,5 +1,8 @@
 # Abstract types with a single provider (#778): scope
 
+The scope as first agreed. SPEC §63 states the mechanism as built: the former is `VTy.abs n A`
+over any value type, and the pinned judgment is indexed too.
+
 Kernel target: outside a type's provider, a well-typed program cannot eliminate a value of an
 abstract linear type except through the provider's operations. For a linear handle whose provider
 exposes only `close`, leak freedom then implies that `close` ran exactly once.

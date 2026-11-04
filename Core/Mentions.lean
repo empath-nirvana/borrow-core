@@ -343,7 +343,7 @@ theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
         simp only [lendLoopApp, bindE, mentions, Expr.val, Val.lam] at hk h2 h3
         simp [h1, h2, h3, h4] at hk
   | nilDead _ _ ih => intro k hk; exact absurd (ih k hk) (Ctx.liveAt_nil k)
-  | absSeal _ ih | absUnseal _ ih => exact ih
+  | absSeal _ _ ih | absUnseal _ _ ih => exact ih
   | effAwait =>
       intro k hk
       rw [mentions_of_closed (by simp [awaitE, closedAt, opArgE, BoCa.BoLo.performE,

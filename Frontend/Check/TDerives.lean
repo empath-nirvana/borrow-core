@@ -989,342 +989,344 @@ theorem TDerivesAt.erase {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr}
     (h : TDerivesAt Ξ Δ Γ t j) : CDerivesAt Ξ Δ Γ t.erase j :=
   h.eraseIn
 
-/-- **A typed derivation is a derivation of the erasure**, in `CDerivesP`.  `[spec §29]` -/
-theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
-    (h : TDerivesP Δ Γ t j) : CDerivesP Δ Γ t.erase j := by
+/-- **A typed derivation is a derivation of the erasure**, in `CDerivesPIn`, at every provider
+set: no node is a provider's rule (SPEC §63), so a checked term, pinned or not, is outside every
+abstract type's provider.  `[spec §29, §63]` -/
+theorem TDerivesP.eraseIn {P : Nat → Prop} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
+    (h : TDerivesP Δ Γ t j) : CDerivesPIn P Δ Γ t.erase j := by
   induction h with
   | var a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.var a0
+      exact CDerivesPIn.var a0
   | unitI a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.unitI a0
+      exact CDerivesPIn.unitI a0
   | tensorI a0 a1 a2 a3 a4 ih0 ih1 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.tensorI a0 ih0 ih1
+      exact CDerivesPIn.tensorI a0 ih0 ih1
   | sumI₁ a0 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.sumI₁ ih0
+      exact CDerivesPIn.sumI₁ ih0
   | sumI₂ a0 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.sumI₂ ih0
+      exact CDerivesPIn.sumI₂ ih0
   | thunkF a0 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.thunkF ih0
+      exact CDerivesPIn.thunkF ih0
   | thunkV a0 a1 a2 ih0 =>
       dsimp only [TExpr.erase]
       rw [a2] at ih0
       rw [a2]
-      exact CDerivesP.thunkV a0 ih0
+      exact CDerivesPIn.thunkV a0 ih0
   | ret a0 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.ret ih0
+      exact CDerivesPIn.ret ih0
   | bind a0 a1 a2 a3 a4 ih0 ih1 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.bind a0 ih0 ih1
+      exact CDerivesPIn.bind a0 ih0 ih1
   | force a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.force a0
+      exact CDerivesPIn.force a0
   | lam a0 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.lam ih0
+      exact CDerivesPIn.lam ih0
   | lamDead a0 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.lamDead ih0
+      exact CDerivesPIn.lamDead ih0
   | app a0 a1 a2 a3 a4 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.app a0 ih0 a4
+      exact CDerivesPIn.app a0 ih0 a4
   | withI a0 a1 ih0 ih1 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.withI ih0 ih1
+      exact CDerivesPIn.withI ih0 ih1
   | proj₁ a0 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.proj₁ ih0
+      exact CDerivesPIn.proj₁ ih0
   | proj₂ a0 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.proj₂ ih0
+      exact CDerivesPIn.proj₂ ih0
   | topI =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.topI
+      exact CDerivesPIn.topI
   | unitE a0 a1 a2 a3 a4 ih0 ih1 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.unitE a0 ih0 ih1
+      exact CDerivesPIn.unitE a0 ih0 ih1
   | tensorE a0 a1 a2 a3 a4 ih0 ih1 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.tensorE a0 ih0 ih1
+      exact CDerivesPIn.tensorE a0 ih0 ih1
   | sumE a0 a1 a2 a3 a4 a5 ih0 ih1 ih2 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.sumE a0 ih0 ih1 ih2
+      exact CDerivesPIn.sumE a0 ih0 ih1 ih2
   | zeroE a0 a1 a2 a3 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.zeroE a0 ih0
+      exact CDerivesPIn.zeroE a0 ih0
   | allI a0 a1 a2 a3 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.allI a0 a1 a2 ih0
+      exact CDerivesPIn.allI a0 a1 a2 ih0
   | allE a0 a1 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.allE ih0 a1
+      exact CDerivesPIn.allE ih0 a1
   | bangThunkF a0 a1 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.bangThunkF a0 ih0
+      exact CDerivesPIn.bangThunkF a0 ih0
   | bangThunkV a0 a1 a2 a3 ih0 =>
       dsimp only [TExpr.erase]
       rw [a3] at ih0
       rw [a3]
-      exact CDerivesP.bangThunkV a0 a1 ih0
+      exact CDerivesPIn.bangThunkV a0 a1 ih0
   | bangE a0 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.bangE ih0
+      exact CDerivesPIn.bangE ih0
   | copyBang a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.copyBang a0
+      exact CDerivesPIn.copyBang a0
   | forgetBang a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.forgetBang a0
+      exact CDerivesPIn.forgetBang a0
   | boxI a0 a1 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.boxI ih0 a1
+      exact CDerivesPIn.boxI ih0 a1
   | boxE a0 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.boxE ih0
+      exact CDerivesPIn.boxE ih0
   | immSub a0 a1 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.immSub ih0 a1
+      exact CDerivesPIn.immSub ih0 a1
   | mutSub a0 a1 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.mutSub ih0 a1
+      exact CDerivesPIn.mutSub ih0 a1
   | alloc a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.alloc a0
+      exact CDerivesPIn.alloc a0
   | free a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.free a0
+      exact CDerivesPIn.free a0
   | tokMint a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.tokMint a0
+      exact CDerivesPIn.tokMint a0
   | tokBurn a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.tokBurn a0
+      exact CDerivesPIn.tokBurn a0
   | swap a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.swap a0
+      exact CDerivesPIn.swap a0
   | copy a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.copy a0
+      exact CDerivesPIn.copy a0
   | forgetImm a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.forgetImm a0
+      exact CDerivesPIn.forgetImm a0
   | forgetMut a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.forgetMut a0
+      exact CDerivesPIn.forgetMut a0
   | forgetUnk a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.forgetUnk a0
+      exact CDerivesPIn.forgetUnk a0
   | lit a0 a1 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.lit a0 a1
+      exact CDerivesPIn.lit a0 a1
   | hostOp a0 a1 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.hostOp a0 a1
+      exact CDerivesPIn.hostOp a0 a1
   | arrNew a0 a1 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.arrNew a0 a1
+      exact CDerivesPIn.arrNew a0 a1
   | arrFree a0 a1 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.arrFree a0 a1
+      exact CDerivesPIn.arrFree a0 a1
   | arrSize a0 a1 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.arrSize a0 a1
+      exact CDerivesPIn.arrSize a0 a1
   | arrReplace a0 a1 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.arrReplace a0 a1
+      exact CDerivesPIn.arrReplace a0 a1
   | arrLen a0 a1 a2 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.arrLen a0 a1 a2
+      exact CDerivesPIn.arrLen a0 a1 a2
   | arrGet a0 a1 a2 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.arrGet a0 a1 a2
+      exact CDerivesPIn.arrGet a0 a1 a2
   | arrCopy a0 a1 a2 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.arrCopy a0 a1 a2
+      exact CDerivesPIn.arrCopy a0 a1 a2
   | arrForget a0 a1 a2 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.arrForget a0 a1 a2
+      exact CDerivesPIn.arrForget a0 a1 a2
   | countFold a0 a1 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.countFold a0 a1
+      exact CDerivesPIn.countFold a0 a1
   | countTry a0 a1 a2 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.countTry a0 a1 a2
+      exact CDerivesPIn.countTry a0 a1 a2
   | boundedFix a0 a1 a2 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.boundedFix a0 a1 a2
+      exact CDerivesPIn.boundedFix a0 a1 a2
   | iterate a0 a1 a2 a3 a4 a5 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.iterate a0 a1 a2 a3 a4 a5
+      exact CDerivesPIn.iterate a0 a1 a2 a3 a4 a5
   | divFuel a0 a1 a2 a3 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.divFuel a0 a1 a2 a3
+      exact CDerivesPIn.divFuel a0 a1 a2 a3
   | reify a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 =>
       dsimp only [TExpr.erase]
       rw [a7] at ih0
       rw [a7]
       rw [Expr.toVal_val]
-      exact CDerivesP.reify a0 a1 a2 a3 a4 a5 ih0 a8
+      exact CDerivesPIn.reify a0 a1 a2 a3 a4 a5 ih0 a8
   | sliceBorrowM a0 a1 a2 a3 a4 a5 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.sliceBorrowM a0 a1 a2 a3 a4 a5
+      exact CDerivesPIn.sliceBorrowM a0 a1 a2 a3 a4 a5
   | sliceBorrowI a0 a1 a2 a3 a4 a5 a6 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.sliceBorrowI a0 a1 a2 a3 a4 a5 a6
+      exact CDerivesPIn.sliceBorrowI a0 a1 a2 a3 a4 a5 a6
   | sliceGetM a0 a1 a2 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.sliceGetM a0 a1 a2
+      exact CDerivesPIn.sliceGetM a0 a1 a2
   | sliceLenM a0 a1 a2 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.sliceLenM a0 a1 a2
+      exact CDerivesPIn.sliceLenM a0 a1 a2
   | sliceSplitI a0 a1 a2 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.sliceSplitI a0 a1 a2
+      exact CDerivesPIn.sliceSplitI a0 a1 a2
   | sliceSplitM a0 a1 a2 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.sliceSplitM a0 a1 a2
+      exact CDerivesPIn.sliceSplitM a0 a1 a2
   | sliceEmptyI a0 a1 a2 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.sliceEmptyI a0 a1 a2
+      exact CDerivesPIn.sliceEmptyI a0 a1 a2
   | sliceEmptyM a0 a1 a2 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.sliceEmptyM a0 a1 a2
+      exact CDerivesPIn.sliceEmptyM a0 a1 a2
   | arrEmpty a0 a1 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.arrEmpty a0 a1
+      exact CDerivesPIn.arrEmpty a0 a1
   | sliceReplaceM a0 a1 a2 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.sliceReplaceM a0 a1 a2
+      exact CDerivesPIn.sliceReplaceM a0 a1 a2
   | sliceSwapM a0 a1 a2 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.sliceSwapM a0 a1 a2
+      exact CDerivesPIn.sliceSwapM a0 a1 a2
   | withbor1 a0 a1 a2 a3 a4 a5 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.withbor1 a0 a1 a2 a3 a4 a5
+      exact CDerivesPIn.withbor1 a0 a1 a2 a3 a4 a5
   | withbor2 a0 a1 a2 a3 a4 a5 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.withbor2 a0 a1 a2 a3 a4 a5
+      exact CDerivesPIn.withbor2 a0 a1 a2 a3 a4 a5
   | withbor3 a0 a1 a2 a3 a4 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.withbor3 a0 a1 a2 a3 a4
+      exact CDerivesPIn.withbor3 a0 a1 a2 a3 a4
   | withload a0 a1 a2 a3 a4 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.withload a0 a1 a2 a3 a4
+      exact CDerivesPIn.withload a0 a1 a2 a3 a4
   | withswap a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.withswap a0
+      exact CDerivesPIn.withswap a0
   | withbor1U a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.withbor1U a0 a1 a2 a3 a4 a5 a6 a7 ih0
+      exact CDerivesPIn.withbor1U a0 a1 a2 a3 a4 a5 a6 a7 ih0
   | withbor2U a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.withbor2U a0 a1 a2 a3 a4 a5 a6 a7 ih0
+      exact CDerivesPIn.withbor2U a0 a1 a2 a3 a4 a5 a6 a7 ih0
   | withbor3U a0 a1 a2 a3 a4 a5 a6 a7 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.withbor3U a0 a1 a2 a3 a4 a5 a6 ih0
+      exact CDerivesPIn.withbor3U a0 a1 a2 a3 a4 a5 a6 ih0
   | withloadU a0 a1 a2 a3 a4 a5 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.withloadU a0 a1 a2 a3 a4 a5
+      exact CDerivesPIn.withloadU a0 a1 a2 a3 a4 a5
   | sliceBorrowMU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.sliceBorrowMU a0 a1 a2 a3 a4 a5 a6 a7 ih0
+      exact CDerivesPIn.sliceBorrowMU a0 a1 a2 a3 a4 a5 a6 a7 ih0
   | sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0
+      exact CDerivesPIn.sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0
   | lolliE a0 a1 a2 a3 a4 ih0 ih1 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.lolliE a0 ih0 ih1
+      exact CDerivesPIn.lolliE a0 ih0 ih1
   | allEV a0 a1 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.allEV ih0 a1
+      exact CDerivesPIn.allEV ih0 a1
   | ofRet a0 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.ofRet ih0
+      exact CDerivesPIn.ofRet ih0
   | roll a0 a1 a2 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.roll a0 a1 ih0
+      exact CDerivesPIn.roll a0 a1 ih0
   | unroll a0 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.unroll ih0
+      exact CDerivesPIn.unroll ih0
   | foldImm a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.foldImm a0 a1 a2 a3 a4 a5 a6 a7 a8 a9
+      exact CDerivesPIn.foldImm a0 a1 a2 a3 a4 a5 a6 a7 a8 a9
   | foldOwn a0 a1 a2 a3 a4 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.foldOwn a0 a1 a2 a3 a4
+      exact CDerivesPIn.foldOwn a0 a1 a2 a3 a4
   | foldReuse a0 a1 a2 a3 a4 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.foldReuse a0 a1 a2 a3 a4
+      exact CDerivesPIn.foldReuse a0 a1 a2 a3 a4
   | foldOwnG a0 a1 a2 a3 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.foldOwnG a0 a1 a2 a3
+      exact CDerivesPIn.foldOwnG a0 a1 a2 a3
   | nuIn a0 a1 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.nuIn a0 ih0
+      exact CDerivesPIn.nuIn a0 ih0
   | nuOut a0 a1 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.nuOut a0 ih0
+      exact CDerivesPIn.nuOut a0 ih0
   | unfoldN a0 a1 a2 a3 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.unfoldN a0 a1 a2 a3
+      exact CDerivesPIn.unfoldN a0 a1 a2 a3
   | effSub a0 a1 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.effSub a0 ih0
+      exact CDerivesPIn.effSub a0 ih0
   | effPerform a0 a1 a2 a3 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.effPerform a0 a1 a2 ih0
+      exact CDerivesPIn.effPerform a0 a1 a2 ih0
   | effAwait a0 a1 a2 a3 a4 a5 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.effAwait a0 a1 a2 a3 a4 a5
+      exact CDerivesPIn.effAwait a0 a1 a2 a3 a4 a5
   | effRaise a0 a1 a2 a3 a4 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.effRaise a0 a1 a2 a3 ih0
+      exact CDerivesPIn.effRaise a0 a1 a2 a3 ih0
   | effLet a0 a1 a2 a3 a4 a5 a6 ih0 ih1 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.effLet a0 a3 a4 ih0 ih1
+      exact CDerivesPIn.effLet a0 a3 a4 ih0 ih1
   | effThen a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 ih0 ih1 ih2 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.effThen a0 a3 a4 a5 a6 a7 a8 a9 a10 ih0 ih1 ih2
+      exact CDerivesPIn.effThen a0 a3 a4 a5 a6 a7 a8 a9 a10 ih0 ih1 ih2
   | effThenDiv a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 ih0 ih1 ih2 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.effThenDiv a0 a3 a4 a5 a6 a7 a8 a9 a10 ih0 ih1 ih2
+      exact CDerivesPIn.effThenDiv a0 a3 a4 a5 a6 a7 a8 a9 a10 ih0 ih1 ih2
   | effHandleV a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.effHandleV a0 a3 a4 ih0 a6 a7 a8 a9 ih1
+      exact CDerivesPIn.effHandleV a0 a3 a4 ih0 a6 a7 a8 a9 ih1
   | effHandleVB a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 ih0 ih1 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.effHandleVB a0 a3 a4 ih0 a6 a7 a8 a9 ih1 a11 a12
+      exact CDerivesPIn.effHandleVB a0 a3 a4 ih0 a6 a7 a8 a9 ih1 a11 a12
   | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 ih0 ih1 =>
       dsimp only [TExpr.erase]
       rw [a7] at ih0
       rw [a7]
-      exact CDerivesP.effHandleT a0 a3 a4 a5 ih0 a8 a9 a10 a11 a12 a13 ih1
+      exact CDerivesPIn.effHandleT a0 a3 a4 a5 ih0 a8 a9 a10 a11 a12 a13 ih1
   | effHandleL a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 ih0 ih1 =>
       dsimp only [TExpr.erase]
       rw [a8] at ih0
       rw [a8]
-      exact CDerivesP.effHandleL a0 a3 a4 a5 a6 ih0 a9 a10 a11 a12 a13 a14 a15 a16 a17 ih1
+      exact CDerivesPIn.effHandleL a0 a3 a4 a5 a6 ih0 a9 a10 a11 a12 a13 a14 a15 a16 a17 ih1
   | letPoly a0 a1 a2 a3 a4 a5 ih0 ih1 =>
       dsimp only [TExpr.erase]
       rw [a3] at ih0
       rw [a5] at ih1
       rw [a3, a5, Expr.letBody_shift, Expr.lamBody_lam]
-      exact CDerivesP.letPoly a0 a1 ih0 (by rw [subst_unfill a1]; exact ih1)
+      exact CDerivesPIn.letPoly a0 a1 ih0 (by rw [subst_unfill a1]; exact ih1)
   | lendR a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 ih0 ih1 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.lendR a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1
+      exact CDerivesPIn.lendR a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1
   | lendLoopR a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 ih0 ih1 ih2 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.lendLoopR a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2
+      exact CDerivesPIn.lendLoopR a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2
   | nilDead a0 a1 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.nilDead a0 ih0
+      exact CDerivesPIn.nilDead a0 ih0
   | dtor hA _ _ hΓ => exact CDerivesP.ofC (dtor_wf hA hΓ)
   | allocS σ _ hΓ => exact CDerivesP.ofC (d_allocS σ hΓ)
   | freeS σ _ hΓ => exact CDerivesP.ofC (d_freeS σ hΓ)
@@ -1336,6 +1338,11 @@ theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | divLit _ _ _ ih | walk _ _ _ ih | walkGet _ _ ih | selfCall _ _ ih | lendCell _ _ _ ih | nuEta _ _ ih => exact ih
   | lendScope _ _ _ ih | litView _ _ ih | unfoldStep _ _ ih => exact ih
   | use _ _ ih => exact ih
+
+/-- **A typed derivation is a derivation of the erasure**, in `CDerivesP`.  `[spec §29]` -/
+theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
+    (h : TDerivesP Δ Γ t j) : CDerivesP Δ Γ t.erase j :=
+  h.eraseIn
 
 /-- A tied typed derivation is one of `TDerivesP`, at the same node. -/
 theorem TDerivesAt.toP {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}

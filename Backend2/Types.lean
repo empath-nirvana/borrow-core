@@ -262,13 +262,9 @@ def outcomeTy (r : LTy) (aborts : List ((UInt32 × UInt32) × LTy))
 
 /-- The LIR type of an opaque type. `Tok` is a location owning a unit cell, `Ref 1`'s relation
 (`vCE_tok_eq_ref`), made by `alloc` and released by `free` (`tokMint`, `tokBurn`); its view is
-`Unk` (`Imm̲ 'b Tok`), a pointer read as forgotten (`Layout.joinRe`, `Lower.reVals`). `Cell` is a
-location owning a cell that holds an `I32`, `Ref I32`'s relation (`vCE_cell_eq_ref`). An abstract
-type is laid out as its representation (`vCE_abs_eq_rep`). -/
+`Unk` (`Imm̲ 'b Tok`), a pointer read as forgotten (`Layout.joinRe`, `Lower.reVals`). -/
 def ofOpq : Opaque → LTy
   | .tok => .ref .unit
-  | .cell => .ref (.int .w32)
-  | .abs _ rep => ofOpq rep
   | k => .opq k
 
 mutual
@@ -289,6 +285,8 @@ def ofV (ms : MachSet) : VTy → Except String LTy
   | .bang A => return .bang (← ofV ms A)
   | .fam L => return .fam (← ofV ms L)
   | .opq k => pure (ofOpq k)
+  -- An abstract type is laid out as its representation, whose relation it has (`vCE_abs_eq_rep`).
+  | .abs _ A => ofV ms A
   | .unk => pure .unk
   | .thunk C => ofU ms false C
 
@@ -405,13 +403,15 @@ theorem ofV_persistent {ms : MachSet} : ∀ {A : VTy} {t : LTy}, A.persistent = 
       simp only [ofV] at h
       cases hA : ofV ms A <;> cases hB : ofV ms B <;> rw [hA, hB] at h <;> cases h
       simp [LTy.persistent, ofV_persistent hp.1 hA, ofV_persistent hp.2 hB]
+  | .abs _ A, t, hp, h => by
+      simp only [ofV] at h
+      exact ofV_persistent (by simpa [VTy.persistent] using hp) h
   | .opq _, _, hp, _ | .thunk _, _, hp, _ | .ref _, _, hp, _ | .imm _ _, _, hp, _
   | .mut _ _, _, hp, _ | .fam _, _, hp, _ => by simp [VTy.persistent] at hp
 
 /-- The LIR type of a host type drops. -/
 theorem ofOpq_drops : ∀ {k : Opaque}, k.Host → (ofOpq k).drops = true
-  | .abs _ rep, hk => ofOpq_drops (k := rep) hk
-  | .tok, hk | .cell, hk => hk.elim
+  | .tok, hk => absurd rfl hk
   | .input, _ | .output, _ | .clock, _ | .args, _ => rfl
 
 /-- The LIR type of a `VTy.Drop` type drops. -/
@@ -446,8 +446,6 @@ def widthName : Width → String
 
 def opqName : Opaque → String
   | .input => "Input" | .output => "Output" | .clock => "Clock" | .args => "Args" | .tok => "Tok"
-  | .cell => "Cell"
-  | .abs n rep => s!"Abs {n} ({opqName rep})"
 
 mutual
 def LTy.pp : LTy → String

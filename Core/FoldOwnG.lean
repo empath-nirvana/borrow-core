@@ -821,6 +821,8 @@ theorem trav_spec (s : Val) (hAH : AH ks G δ s) :
   | .unk, Bs, _, _, _, _, hP, _, _, _, w, χ, ls, _, _, hv, _
   | .int _, Bs, _, _, _, _, hP, _, _, _, w, χ, ls, _, _, hv, _
   | .opq _, Bs, _, _, _, _, hP, _, _, _, w, χ, ls, _, _, hv, _
+  | .abs _ _, Bs, _, _, _, _, hP, _, _, _, w, χ, ls, _, _, hv, _
+  | .fam (.abs _ _), Bs, _, _, _, _, hP, _, _, _, w, χ, ls, _, _, hv, _
   | .fam .unit, Bs, _, _, _, _, hP, _, _, _, w, χ, ls, _, _, hv, _
   | .fam (.tensor _ _), Bs, _, _, _, _, hP, _, _, _, w, χ, ls, _, _, hv, _
   | .fam .zero, Bs, _, _, _, _, hP, _, _, _, w, χ, ls, _, _, hv, _

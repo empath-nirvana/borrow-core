@@ -353,6 +353,7 @@ theorem forgettable_immReborrow (b : Lifetime.Life) : ∀ A : VTy, A.SpineMuFree
   | .sum A B, ⟨h₁, h₂⟩ => .sum (forgettable_immReborrow b A h₁) (forgettable_immReborrow b B h₂)
   | .thunk _, _ => .unk
   | .opq _, _ => .unk
+  | .abs _ _, _ => .unk
   | .ref _, _ => .imm
   | .imm _ _, _ => .imm
   | .mut _ _, _ => .imm

@@ -1082,7 +1082,8 @@ theorem Row.abortOnly_abort (S : Row) (δ : LSub) : (Row.tab S.abortOnly δ).Abo
 
 /-- A type whose values hold no `own` cell: data, borrows, `!`, the opaque host types. An abort
 abandons a value of such a type (SPEC §19); that is not a drop. `Tok` owns its cell, so it is not
-here, and neither is any type that holds it (SPEC §11, §42).  `[spec §19]` -/
+here, and neither is any type that holds it (SPEC §11, §42). No abstract type is here, whatever its
+representation: an abort never abandons one (SPEC §63).  `[spec §19, §63]` -/
 inductive _root_.BoCa.Fig16.LogRel.Core.VTy.OwnFree : VTy → Prop where
   | unit : VTy.OwnFree .unit
   | zero : VTy.OwnFree .zero

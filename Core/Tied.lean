@@ -481,13 +481,13 @@ inductive CDerivesAtIn (P : Nat → Prop) (Ξ : EffCtx) : LifeCtx → Ctx VTy �
       (hN : CDerivesAtIn P Ξ Δ (⟨.unit, false⟩ :: Γ) ((N.subst 0 (Val.lam b)).shift 1 0) (.comp C)) :
       CDerivesAtIn P Ξ Δ Γ (.app (.val (.lam N)) (.val (.lam b))) (.comp C)
   /-- `[abs-seal]`, gated on the provider.  `[spec §63]` -/
-  | absSeal {Δ Γ e} {n : Nat} {rep : Opaque} (hn : P n)
-      (h : CDerivesAtIn P Ξ Δ Γ e (.val (.opq rep))) :
-      CDerivesAtIn P Ξ Δ Γ e (.val (.opq (.abs n rep)))
+  | absSeal {Δ Γ e} {n : Nat} {A : VTy} (hn : P n)
+      (h : CDerivesAtIn P Ξ Δ Γ e (.val A)) :
+      CDerivesAtIn P Ξ Δ Γ e (.val (.abs n A))
   /-- `[abs-unseal]`, gated on the provider.  `[spec §63]` -/
-  | absUnseal {Δ Γ e} {n : Nat} {rep : Opaque} (hn : P n)
-      (h : CDerivesAtIn P Ξ Δ Γ e (.val (.opq (.abs n rep)))) :
-      CDerivesAtIn P Ξ Δ Γ e (.val (.opq rep))
+  | absUnseal {Δ Γ e} {n : Nat} {A : VTy} (hn : P n)
+      (h : CDerivesAtIn P Ξ Δ Γ e (.val (.abs n A))) :
+      CDerivesAtIn P Ξ Δ Γ e (.val A)
 
 /-- **The tied judgment, inside every provider.**  `[spec §19, §63]` -/
 abbrev CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop :=

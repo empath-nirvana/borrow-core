@@ -220,21 +220,22 @@ def sumDropB (a b : Expr) : Expr :=
 /-- `drop_{U(C & D)} = λk. k.2`: the paper's `drop_{↓N} = π₂` at `↓N = N & 1`.  `[spec §62]` -/
 def closeDropB : Expr := .app (.var 0) (.val (.inj₂ .unit))
 
-/-- The types whose destructor `dropOf` builds by their former: `⊗`, `⊕`, the opaque types (read
-from the declaration) and `U(C & D)`. -/
+/-- The types whose destructor `dropOf` builds by their former: `⊗`, `⊕`, the opaque and abstract
+types (read from the declaration) and `U(C & D)`. -/
 def structB : VTy → Bool
   | .tensor _ _ => true
   | .sum _ _ => true
   | .opq _ => true
+  | .abs _ _ => true
   | .thunk (.amp _ _) => true
   | _ => false
 
 open Classical in
 /-- **The destructor of a type**, `drop_T`, as the body of `λx. drop_T`: structural at `⊗` and
-`⊕`, the declaration `decl k` at an opaque type `Opq k`, the second component at `U(C & D)`, and
+`⊕`, the declaration `decl T` at an opaque or abstract type `T`, the second component at `U(C & D)`, and
 the derived drop of §12 at every other type that has one. `none`: the type has no destructor.
 One destructor per type and declaration.  `[spec §12, §62]` -/
-noncomputable def dropOf (decl : Opaque → Option Expr) : VTy → Option Expr
+noncomputable def dropOf (decl : VTy → Option Expr) : VTy → Option Expr
   | .tensor A B =>
       match dropOf decl A, dropOf decl B with
       | some a, some b => some (tensorDropB a b)
@@ -243,21 +244,22 @@ noncomputable def dropOf (decl : Opaque → Option Expr) : VTy → Option Expr
       match dropOf decl A, dropOf decl B with
       | some a, some b => some (sumDropB a b)
       | _, _ => none
-  | .opq k => decl k
+  | .opq k => decl (.opq k)
+  | .abs n A => decl (.abs n A)
   | .thunk (.amp _ _) => some closeDropB
   | T => if HasDtor T then some (derivedDropB T) else none
 
-theorem dropOf_tensor {decl : Opaque → Option Expr} {A B : VTy} {a b : Expr}
+theorem dropOf_tensor {decl : VTy → Option Expr} {A B : VTy} {a b : Expr}
     (ha : dropOf decl A = some a) (hb : dropOf decl B = some b) :
     dropOf decl (.tensor A B) = some (tensorDropB a b) := by
   simp [dropOf, ha, hb]
 
-theorem dropOf_sum {decl : Opaque → Option Expr} {A B : VTy} {a b : Expr}
+theorem dropOf_sum {decl : VTy → Option Expr} {A B : VTy} {a b : Expr}
     (ha : dropOf decl A = some a) (hb : dropOf decl B = some b) :
     dropOf decl (.sum A B) = some (sumDropB a b) := by
   simp [dropOf, ha, hb]
 
-theorem dropOf_derived {decl : Opaque → Option Expr} {T : VTy} (hs : structB T = false)
+theorem dropOf_derived {decl : VTy → Option Expr} {T : VTy} (hs : structB T = false)
     (hT : HasDtor T) : dropOf decl T = some (derivedDropB T) := by
   cases T with
   | thunk C => cases C <;> simp_all [dropOf, structB]
@@ -266,13 +268,18 @@ theorem dropOf_derived {decl : Opaque → Option Expr} {T : VTy} (hs : structB T
 /-- **`drop_T` is typed at `Σ_D`**: the condition, by the type's former. At an opaque type the
 declared destructor is typed (`hb`); at `U(C & F_{Σ_F} 1)`, `Σ_F ≤ Σ_D`; at every type `dropOf`
 reads by its derived drop, `HasDtor`.  `[spec §62]` -/
-inductive DropOk (Δ : LifeCtx) (SD : Row) (decl : Opaque → Option Expr) : VTy → Prop where
+inductive DropOk (Δ : LifeCtx) (SD : Row) (decl : VTy → Option Expr) : VTy → Prop where
   | tensor {A B : VTy} : DropOk Δ SD decl A → DropOk Δ SD decl B → DropOk Δ SD decl (.tensor A B)
   | sum {A B : VTy} : DropOk Δ SD decl A → DropOk Δ SD decl B → DropOk Δ SD decl (.sum A B)
-  | opq {k : Opaque} {b : Expr} (hk : decl k = some b)
+  | opq {k : Opaque} {b : Expr} (hk : decl (.opq k) = some b)
       (hb : ∀ Γ' : Ctx VTy, Ctx.Dead Γ' →
         CDerives Δ Γ' (.val (.lam b)) (.comp (.arr (.opq k) (CTy.effOf SD .unit)))) :
       DropOk Δ SD decl (.opq k)
+  /-- At an abstract type the declared destructor is typed.  `[spec §62, §63]` -/
+  | abs {n : Nat} {A : VTy} {b : Expr} (hk : decl (.abs n A) = some b)
+      (hb : ∀ Γ' : Ctx VTy, Ctx.Dead Γ' →
+        CDerives Δ Γ' (.val (.lam b)) (.comp (.arr (.abs n A) (CTy.effOf SD .unit)))) :
+      DropOk Δ SD decl (.abs n A)
   | close {C : CTy} {SF : Row} (hF : RowLe SF SD) :
       DropOk Δ SD decl (.thunk (.amp C (CTy.effOf SF .unit)))
   | derived {T : VTy} (hs : structB T = false) (hT : HasDtor T) : DropOk Δ SD decl T
@@ -311,7 +318,7 @@ theorem closeDropB_derives {Δ : LifeCtx} {SD SF : Row} {C : CTy} (hF : RowLe SF
 /-- **The destructor of a type is typed**: under `DropOk`, `dropOf decl T` is a destructor
 `λx. b : T ⊸ F_{Σ_D} 1` in every dead context, for a row of destructors that never fail.
 `[spec §62]` -/
-theorem DropOk.derives {Δ : LifeCtx} {SD : Row} {decl : Opaque → Option Expr}
+theorem DropOk.derives {Δ : LifeCtx} {SD : Row} {decl : VTy → Option Expr}
     (hSD : ¬ SD.Cancels) {T : VTy} (h : DropOk Δ SD decl T) :
     ∃ b, dropOf decl T = some b ∧ ∀ Γ' : Ctx VTy, Ctx.Dead Γ' →
       CDerives Δ Γ' (.val (.lam b)) (.comp (.arr T (CTy.effOf SD .unit))) := by
@@ -325,12 +332,13 @@ theorem DropOk.derives {Δ : LifeCtx} {SD : Row} {decl : Opaque → Option Expr}
       obtain ⟨b, hb, hdb⟩ := ihb
       exact ⟨_, dropOf_sum ha hb, sumDropB_derives hda hdb⟩
   | opq hk hb => exact ⟨_, hk, hb⟩
+  | abs hk hb => exact ⟨_, hk, hb⟩
   | close hF => exact ⟨_, rfl, closeDropB_derives hF⟩
   | derived hs hT => exact ⟨_, dropOf_derived hs hT, derivedDropB_derives hT SD⟩
 
 /-- **A type with a derived drop has a destructor** at every row and declaration: its structural
 destructor at `⊗`, `⊕` and `U(C & F 1)`, its derived drop elsewhere.  `[spec §12, §62]` -/
-theorem DropOk.ofHasDtor {Δ : LifeCtx} {SD : Row} {decl : Opaque → Option Expr} :
+theorem DropOk.ofHasDtor {Δ : LifeCtx} {SD : Row} {decl : VTy → Option Expr} :
     ∀ {T : VTy}, HasDtor T → DropOk Δ SD decl T
   | _, .tensor ha hb => .tensor (DropOk.ofHasDtor ha) (DropOk.ofHasDtor hb)
   | _, .sum ha hb => .sum (DropOk.ofHasDtor ha) (DropOk.ofHasDtor hb)
@@ -352,10 +360,10 @@ theorem DropOk.ofHasDtor {Δ : LifeCtx} {SD : Row} {decl : Opaque → Option Exp
 
 /-- **The destructors of a context**, by type: `drop_T` for each live slot that is not persistent,
 `none` for the rest.  `[spec §62]` -/
-noncomputable def ctxDrops (decl : Opaque → Option Expr) (Γ : Ctx VTy) : List (Option Expr) :=
+noncomputable def ctxDrops (decl : VTy → Option Expr) (Γ : Ctx VTy) : List (Option Expr) :=
   Γ.map fun s => if s.live && !s.ty.persistent then dropOf decl s.ty else none
 
-theorem ctxDrops_dead {decl : Opaque → Option Expr} :
+theorem ctxDrops_dead {decl : VTy → Option Expr} :
     ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → ctxDrops decl Γ = List.replicate Γ.length none
   | [], _ => rfl
   | _ :: _, .cons h => by
@@ -363,17 +371,17 @@ theorem ctxDrops_dead {decl : Opaque → Option Expr} :
         List.replicate_succ]
       exact congrArg _ (ctxDrops_dead h)
 
-theorem ctxDrops_cons_live {decl : Opaque → Option Expr} {T : VTy} {b : Expr} (Γ : Ctx VTy)
+theorem ctxDrops_cons_live {decl : VTy → Option Expr} {T : VTy} {b : Expr} (Γ : Ctx VTy)
     (hp : T.persistent = false) (hb : dropOf decl T = some b) :
     ctxDrops decl (⟨T, true⟩ :: Γ) = some b :: ctxDrops decl Γ := by
   simp [ctxDrops, hp, hb]
 
-theorem ctxDrops_cons_pers {decl : Opaque → Option Expr} {T : VTy} (Γ : Ctx VTy)
+theorem ctxDrops_cons_pers {decl : VTy → Option Expr} {T : VTy} (Γ : Ctx VTy)
     (hp : T.Persistent) : ctxDrops decl (⟨T, true⟩ :: Γ) = none :: ctxDrops decl Γ := by
   simp [ctxDrops, hp]
 
 /-- **A context whose live slots are persistent or have a destructor has `Dtors`**, by type. -/
-theorem Dtors.ofDrops {Δ : LifeCtx} {SD : Row} {decl : Opaque → Option Expr}
+theorem Dtors.ofDrops {Δ : LifeCtx} {SD : Row} {decl : VTy → Option Expr}
     (hSD : ¬ SD.Cancels) :
     ∀ {Γ : Ctx VTy}, (∀ s ∈ Γ, s.live = true → s.ty.Persistent ∨ DropOk Δ SD decl s.ty) →
       Dtors Δ SD Γ (ctxDrops decl Γ)
@@ -400,7 +408,7 @@ def letDE (ds : List (Option Expr)) (N M : Expr) : Expr := thenE N (dropCtxE ds 
 
 /-- **`let x = M in N` with the continuation's context dropped on the unwind**, each slot by the
 destructor of its type: `letDE (ctxDrops decl Γ₂) N M`.  `[spec §62]` -/
-noncomputable def letDT (decl : Opaque → Option Expr) (Γ₂ : Ctx VTy) (N M : Expr) : Expr :=
+noncomputable def letDT (decl : VTy → Option Expr) (Γ₂ : Ctx VTy) (N M : Expr) : Expr :=
   letDE (ctxDrops decl Γ₂) N M
 
 /-- `[then]`'s `hfin` at `Σ_M = Σ`, from the cancel rows of `Σ` themselves. -/
@@ -433,7 +441,7 @@ persistent where `Σ` has an unrestricted operation at some depth.
 
 Derived from `[then]`, no constructor added.  `[spec §62]` -/
 theorem CDerives.effLetD {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B : VTy}
-    {S SM SD : Row} {decl : Opaque → Option Expr}
+    {S SM SD : Row} {decl : VTy → Option Expr}
     (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂)
     (hMS : RowLe SM S) (hDS : RowLe SD S) (hSDc : ¬ SD.Cancels) (hSDd : Row.divB SD = false)
     (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
@@ -451,7 +459,7 @@ theorem CDerives.effLetD {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} 
 /-- **`[let-dtor]` is sound**: `fundamentalC` at its derivation, no hypothesis added.
 `[spec §62]` -/
 theorem effLetD_sound {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B : VTy}
-    {S SM SD : Row} {decl : Opaque → Option Expr}
+    {S SM SD : Row} {decl : VTy → Option Expr}
     (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂)
     (hMS : RowLe SM S) (hDS : RowLe SD S) (hSDc : ¬ SD.Cancels) (hSDd : Row.divB SD = false)
     (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
@@ -468,7 +476,7 @@ theorem effLetD_sound {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A 
 run reaches the frame, and a raise reaches it on the ordinary unwind, at `Σ`, which then holds
 `Div`. The destructors still never fail (`¬ Σ_D.Cancels`).  `[spec §62]` -/
 theorem CDerives.effLetDDiv {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B : VTy}
-    {S SM SD : Row} {decl : Opaque → Option Expr}
+    {S SM SD : Row} {decl : VTy → Option Expr}
     (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂)
     (hMS : RowLe SM S) (hDS : RowLe SD S) (hSDc : ¬ SD.Cancels)
     (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
@@ -495,7 +503,7 @@ theorem Dtors.ofDead {Δ : LifeCtx} {SD : Row} :
 /-- **A context whose live slots are persistent or have derived drops** satisfies `[let-dtor]`'s
 `hds` at every row and declaration. So `[let-dtor]` holds such a context across an abortive `M`,
 where `[let]`'s `hW` asks it own-free.  `[spec §12, §62]` -/
-theorem hds_ofHasDtor {Δ : LifeCtx} {SD : Row} {decl : Opaque → Option Expr} {Γ : Ctx VTy}
+theorem hds_ofHasDtor {Δ : LifeCtx} {SD : Row} {decl : VTy → Option Expr} {Γ : Ctx VTy}
     (h : ∀ s ∈ Γ, s.live = true → s.ty.Persistent ∨ HasDtor s.ty) :
     ∀ s ∈ Γ, s.live = true → s.ty.Persistent ∨ DropOk Δ SD decl s.ty :=
   fun s hs hl => (h s hs hl).imp_right DropOk.ofHasDtor

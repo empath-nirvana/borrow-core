@@ -160,10 +160,10 @@ theorem tE_effFree (ks : List Bnd) (Bs : Stack) : ∀ A : VTy, (tE ks Bs A).effF
       simp only [tE]; split
       · rfl
       · exact callE_effFree ks _
-  | .unit | .zero | .thunk _ | .imm _ _ | .mut _ _ | .box _ _ | .bang _ | .unk | .int _ | .opq _ => rfl
+  | .unit | .zero | .thunk _ | .imm _ _ | .mut _ _ | .box _ _ | .bang _ | .unk | .int _ | .opq _ | .abs _ _ => rfl
   | .fam .unit | .fam (.tensor _ _) | .fam .zero | .fam (.sum _ _) | .fam (.thunk _)
   | .fam (.imm _ _) | .fam (.mut _ _) | .fam (.box _ _) | .fam (.bang _) | .fam .unk
-  | .fam (.tvar _) | .fam (.mu _) | .fam (.int _) | .fam (.fam _) | .fam (.opq _) => rfl
+  | .fam (.tvar _) | .fam (.mu _) | .fam (.int _) | .fam (.fam _) | .fam (.opq _) | .fam (.abs _ _) => rfl
 
 theorem travB_effFree (ks : List Bnd) : ∀ k, (travB ks k).1.effFree = true
   | .mu [] => rfl
@@ -251,11 +251,11 @@ theorem dtorAt_effFree : ∀ (b : Bool) (A : VTy), (dtorAt b A).effFree = true
       · simp [Expr.effFree, dtorAt_effFree false A]
   | _, .fam (.mut _ _) => rfl
   | _, .unit | _, .zero | _, .imm _ _ | _, .mut _ _ | _, .bang _ | _, .unk | _, .tvar _
-  | _, .int _ | _, .opq _ => rfl
+  | _, .int _ | _, .opq _ | _, .abs _ _ => rfl
   | _, .fam .unit | _, .fam (.tensor _ _) | _, .fam .zero | _, .fam (.sum _ _)
   | _, .fam (.thunk _) | _, .fam (.imm _ _) | _, .fam (.box _ _) | _, .fam (.bang _)
   | _, .fam .unk | _, .fam (.tvar _) | _, .fam (.mu _) | _, .fam (.int _) | _, .fam (.fam _)
-  | _, .fam (.opq _) => rfl
+  | _, .fam (.opq _) | _, .fam (.abs _ _) => rfl
 
 /-- Every algebra `algsIn` lists holds no operation. -/
 theorem algsIn_effFree : ∀ (A : VTy), ∀ e ∈ algsIn A, e.effFree = true

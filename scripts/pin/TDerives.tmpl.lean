@@ -251,9 +251,11 @@ theorem TDerivesAt.erase {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr}
     (h : TDerivesAt Ξ Δ Γ t j) : CDerivesAt Ξ Δ Γ t.erase j :=
   h.eraseIn
 
-/-- **A typed derivation is a derivation of the erasure**, in `CDerivesP`.  `[spec §29]` -/
-theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
-    (h : TDerivesP Δ Γ t j) : CDerivesP Δ Γ t.erase j := by
+/-- **A typed derivation is a derivation of the erasure**, in `CDerivesPIn`, at every provider
+set: no node is a provider's rule (SPEC §63), so a checked term, pinned or not, is outside every
+abstract type's provider.  `[spec §29, §63]` -/
+theorem TDerivesP.eraseIn {P : Nat → Prop} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
+    (h : TDerivesP Δ Γ t j) : CDerivesPIn P Δ Γ t.erase j := by
   induction h with
 --@P_ERASE@
   | dtor hA _ _ hΓ => exact CDerivesP.ofC (dtor_wf hA hΓ)
@@ -267,6 +269,11 @@ theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | divLit _ _ _ ih | walk _ _ _ ih | walkGet _ _ ih | selfCall _ _ ih | lendCell _ _ _ ih | nuEta _ _ ih => exact ih
   | lendScope _ _ _ ih | litView _ _ ih | unfoldStep _ _ ih => exact ih
   | use _ _ ih => exact ih
+
+/-- **A typed derivation is a derivation of the erasure**, in `CDerivesP`.  `[spec §29]` -/
+theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
+    (h : TDerivesP Δ Γ t j) : CDerivesP Δ Γ t.erase j :=
+  h.eraseIn
 
 /-- A tied typed derivation is one of `TDerivesP`, at the same node. -/
 theorem TDerivesAt.toP {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}

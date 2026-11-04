@@ -799,6 +799,8 @@ theorem image_dom {x : LifeVar} {δ δ' : LSub} :
   | zero => exact False.elim hc
   | unk =>
       rw [empty_of_pure hc, PMap.empty_get] at e; cases e
+  | abs _ _ =>
+      rw [empty_of_pure hc, PMap.empty_get] at e; cases e
   | tvar n => exact hR.elim
   | mu A =>
       obtain ⟨hcl, hG⟩ := hR

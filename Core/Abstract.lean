@@ -1,43 +1,55 @@
 import Core.LetDtorFiles
 import Core.Inversions
 import Core.Stdio
+import Core.PinDerives
 
 /-!
 # Core — abstract types and their provider  `[spec §63]`
 
-An abstract type `abs n rep` (`Opaque.abs`) is named `n` and represented by the opaque type `rep`,
-whose relation it has (`Opaque.rel_abs`). The judgment `CDerivesIn P` is indexed by a provider set
-`P`: `P n` when the derivation is inside the provider of `n`. Two rules read `P`, the iso between
-`abs n rep` and its representation:
+An abstract type `abs n A` (`VTy.abs`) is named `n` and represented by the value type `A`, whose
+relation it has (`vCE_abs_eq_rep`). The judgment `CDerivesIn P` is indexed by a provider set `P`:
+`P n` when the derivation is inside the provider of `n`. Two rules read `P`, the iso between
+`abs n A` and its representation:
 
-    absSeal   (hn : P n) : CDerivesIn P Δ Γ e (.val rep)         → CDerivesIn P Δ Γ e (.val (abs n rep))
-    absUnseal (hn : P n) : CDerivesIn P Δ Γ e (.val (abs n rep)) → CDerivesIn P Δ Γ e (.val rep)
+    absSeal   (hn : P n) : CDerivesIn P Δ Γ e (.val A)         → CDerivesIn P Δ Γ e (.val (abs n A))
+    absUnseal (hn : P n) : CDerivesIn P Δ Γ e (.val (abs n A)) → CDerivesIn P Δ Γ e (.val A)
 
-`CDerives` is `CDerivesIn` inside every provider, so every theorem about `CDerives` reads as
-before, and `CDerivesIn.mono` embeds a derivation at any provider set into it: `fundamentalC`,
-`adequacyC` and `resourceSafety` hold of every client. Every theorem below is stated at every
-representation.
+The pinned judgment `CDerivesPIn P` has the same two rules, gated the same way. `CDerives` and
+`CDerivesP` are the two judgments inside every provider, so every theorem about them reads as
+before, and `CDerivesIn.mono`/`CDerivesPIn.mono` embed a derivation at any provider set into
+them: `fundamentalC`, `fundamentalC_pin`, the adequacy theorems and `resourceSafety` hold of
+every client.
 
-* `CDerivesIn.outside`: **encapsulation.** A derivation at a provider set that excludes `n` is a
-  derivation at `ProvWithout P n`, where the seal and the unseal at `n` have no instance
-  (`ProvWithout.not_self`): it contains no seal or unseal at `n`.
-* `CDerivesIn.var_abs_hnf`: **the unseal step refused.** Outside `n`'s provider, a variable of type
-  `abs n rep` is read only at types whose head (boxes stripped, `μ` unrolled) is `abs n rep` under
-  abstract types of `P` (`Opaque.Over`): it may be sealed again into a type whose provider `P` is
-  in, never taken to `rep`. `CDerivesIn.var_abs_not_rep`: never at `rep`;
-  `CDerivesIn.var_abs_not_tok`: never at `Tok`, which `burn` takes. At a provider set with no name
-  (`Outside`, every checked program's), the head is `abs n rep` itself (`var_abs_hnf_none`).
-* `file_not_tok_outside`, `file_not_rep_outside`: at `File`, outside its provider. A `File` reaches
-  `burn` only through the unseal, so a destructor that burns a `File` instead of closing it does not
-  type outside `Fs`'s provider; inside it, it does (`d_skipClose_inside`).
-* **Non-vacuity at two representations.** At `Tok` (`File`): `d_openClose`, a client at every
-  provider set, `Outside` among them, that opens a file and closes it through `Fs`'s operations;
-  `fsOpenClose_safe`: linked under `with_fs`, it is resource safe. At `Cell`, an owned cell holding
-  an `I32` (`fileC`): the provider is two externs, `open : I32 ⊸ F File` and
-  `close : File ⊸ F I32`, whose models allocate and free the cell and meet their contracts at
-  `abs fileName Cell` by the relation's equality (`openX_meets`, `closeX_meets`); the client
-  `f ← open 1; close f` is typed at every provider set (`d_openCloseX`, `openCloseX_outside`), and
-  run with the models every run ends at the empty memory (`openCloseX_runs`).
+**Encapsulation, the headline.** Outside `n`'s provider (`¬ P n`):
+
+* `CDerivesIn.var_abs_not_rep` (and `CDerivesPIn.var_abs_not_rep`): a variable of type
+  `abs n A` is never read at `A`, for every representation `A` whose head is not, by `μ`-unrolling
+  and seals `P` allows, `abs n A` again (`RepNotOver`; every `A` whose head is no abstract type,
+  `RepNotOver.of_head`). This fails if the unseal is ungated: inside the provider the read is
+  `absUnseal` (`file_rep_inside`).
+* `CDerivesIn.var_abs_hnf` (and `CDerivesPIn.var_abs_hnf`), what it is a corollary of: every
+  judgment that reads such a variable at a value type `T` reads it at a `T` whose head (`AHnf`:
+  boxes stripped, `μ` unrolled, abstract types kept) is `abs n A` under abstract types of `P`
+  (`Over`). It is never read at the representation, nor at any type whose head is not over
+  `abs n A`. At a provider set with no name (`Outside`, every checked program's, pinned or not:
+  `checkProgram_outside`) the head is `abs n A` itself (`var_abs_hnf_none`).
+* `not_skipClose_outside`: **the skip-close destructor of #775 is refused as a term** outside
+  `File`'s provider: `λf. burn f; ()` has no derivation at `File ⊸ F_{close} 1`. Inside the
+  provider it types (`d_skipClose_inside`).
+
+What is not proved: that no rule other than the provider's two mentions `abs` is a reading of
+the rule set, not a theorem. `var_abs_hnf` covers every rule that reads a variable, and
+`not_skipClose_outside` the one wrong destructor; a constant added at a type over `abs n A`
+would be a new rule, outside both. Encapsulation is relative to the chosen provider set; for a
+type provided by externs (`fileC` below), which externs may mention `abs n` is an obligation of
+the trusted extern table, not of the kernel.
+
+**Restrictions.** An abstract type has its representation's relation, so it inherits what the
+relation decides: it is persistent, copied and dropped by any client, when its representation is
+(`VTy.persistent`). It is never own-free (`VTy.OwnFree`: an abort never abandons one), it has no
+derived destructor (`HasDtor`), and its immutable reborrow is `Unk` (`VTy.immReborrow`). An
+abstract type is in the fold class only when it is closed (`FoldP.P`): a fold does not recurse
+through one.
 
 **The escape.** A deliberate escape is a provider-supplied forget: an operation of `Fs`, handled in
 `with_fs`'s clauses (inside the provider), that unseals and burns. No such operation exists in
@@ -55,6 +67,7 @@ open BoCa.Fig16
 open BoCa.BoLo (Heap Steps Kont freeE performE)
 open BoCa.Lifetime (LifeCtx LSub)
 open BoCa.Fig16.LogRel.Core.LetDtor.Files
+open BoCa.Fig16.LogRel.Core.Inversions (Hnf VView ValCls LamCls CtxLe)
 
 /-! ### Provider sets -/
 
@@ -64,22 +77,24 @@ abbrev Outside : Nat → Prop := fun _ => False
 /-- `P` without the name `n`. -/
 def ProvWithout (P : Nat → Prop) (n : Nat) : Nat → Prop := fun m => P m ∧ m ≠ n
 
-/-- **At `P` without `n`, the seal and the unseal at `n` have no instance**: their premise is
+/-- At `P` without `n`, the seal and the unseal at `n` have no instance: their premise is
 `ProvWithout P n n`, which is false. -/
 theorem ProvWithout.not_self (P : Nat → Prop) (n : Nat) : ¬ ProvWithout P n n := fun h => h.2 rfl
 
-/-! ### Encapsulation -/
+/-- **`P` without a name it does not hold is `P`.** -/
+theorem ProvWithout.eq_of_not {P : Nat → Prop} {n : Nat} (hn : ¬ P n) : ProvWithout P n = P := by
+  funext m
+  exact propext ⟨fun h => h.1, fun h => ⟨h, fun e => hn (e ▸ h)⟩⟩
 
-/-- **Encapsulation**: a derivation at a provider set that excludes `n` is a derivation at `P`
-without `n`, whose seal and unseal at `n` have no instance (`ProvWithout.not_self`). So it holds
-no seal or unseal at `n`: outside `n`'s provider, a value of `abs n` is never taken to its
-representation, nor made from one.  `[spec §63]` -/
-theorem CDerivesIn.outside {P : Nat → Prop} {n : Nat} (hn : ¬ P n) {Δ : LifeCtx}
+/-- A derivation at a provider set that excludes `n` is one at `ProvWithout P n`. This is its
+hypothesis restated, since that set is `P` itself (`ProvWithout.eq_of_not`), and it holds of an
+ungated unseal as well: what encapsulation says is `CDerivesIn.var_abs_not_rep`.  `[spec §63]` -/
+theorem CDerivesIn.provWithout {P : Nat → Prop} {n : Nat} (hn : ¬ P n) {Δ : LifeCtx}
     {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerivesIn P Δ Γ e j) :
-    CDerivesIn (ProvWithout P n) Δ Γ e j :=
-  h.mono fun m hm => ⟨hm, fun e => hn (e ▸ hm)⟩
+    CDerivesIn (ProvWithout P n) Δ Γ e j := by
+  rw [ProvWithout.eq_of_not hn]; exact h
 
-/-! ### The unseal step refused -/
+/-! ### The head of a type, abstract types kept -/
 
 theorem Ctx.SoloP.getElem? {Γ : Ctx VTy} {i : Nat} {A : VTy} (h : Ctx.SoloP Γ i A) :
     Γ[i]? = some ⟨A, true⟩ := by
@@ -87,6 +102,12 @@ theorem Ctx.SoloP.getElem? {Γ : Ctx VTy} {i : Nat} {A : VTy} (h : Ctx.SoloP Γ 
   | here => rfl
   | there _ ih => exact ih
   | skip _ _ ih => exact ih
+
+theorem _root_.BoCa.Ctx.Dead.not_live : ∀ {Γ : Ctx VTy} (_ : Ctx.Dead Γ) {i : Nat} {A : VTy},
+    Γ[i]? ≠ some ⟨A, true⟩
+  | _, .nil, _, _, h => by simp at h
+  | _, .cons _, 0, _, h => by simp at h
+  | _, .cons hd, _ + 1, _, h => hd.not_live (by simpa using h)
 
 theorem CTy.effOf_inj_right : ∀ {S S' : Row} {A A' : VTy},
     CTy.effOf S A = CTy.effOf S' A' → A = A'
@@ -100,84 +121,123 @@ theorem CTy.effOf_inj_right : ∀ {S S' : Row} {A A' : VTy},
 /-- The judgments at which a term is read at the value type `A`: `A` itself, and `F_Σ A`. -/
 def Jdg.AtVal (j : Jdg) (A : VTy) : Prop := ∃ S : Row, j = .val A ∨ j = .comp (CTy.effOf S A)
 
-/-- `k` is `a` under abstract types whose names are in `P`: `a`, or `abs m k'` with `P m` and `k'`
-such. Inside `m`'s provider, a value of `k'` may be sealed into `abs m k'`. -/
-inductive Opaque.Over (P : Nat → Prop) (a : Opaque) : Opaque → Prop
-  | refl : Opaque.Over P a a
-  | abs {m : Nat} {k : Opaque} : P m → Opaque.Over P a k → Opaque.Over P a (.abs m k)
+/-- **The head of a value type, abstract types kept**: boxes stripped and `μ` unrolled, an
+abstract type a head of its own. (`Inversions.Hnf` strips abstract types too: inside every
+provider the iso keeps a type's head.) -/
+inductive AHnf : VTy → VTy → Prop
+  | box {a : Lifetime.Life} {A h : VTy} : AHnf A h → AHnf (.box a A) h
+  | mu {A h : VTy} : AHnf (VTy.inst (.mu A) A) h → AHnf (.mu A) h
+  | base {T : VTy} (hb : ∀ a A, T ≠ .box a A) (hm : ∀ A, T ≠ .mu A) : AHnf T T
 
-theorem Opaque.Over.sizeOf_le {P : Nat → Prop} {a k : Opaque} (h : Opaque.Over P a k) :
-    sizeOf a ≤ sizeOf k := by
-  induction h with
-  | refl => exact Nat.le_refl _
-  | abs _ _ ih => simp only [Opaque.abs.sizeOf_spec]; omega
+theorem AHnf.self {T : VTy} (hb : ∀ a A, T ≠ .box a A := by intro _ _ h; cases h)
+    (hm : ∀ A, T ≠ .mu A := by intro _ h; cases h) : AHnf T T := .base hb hm
 
-/-- **The representation is not over its abstract type.** -/
-theorem Opaque.Over.not_rep {P : Nat → Prop} {n : Nat} {rep : Opaque}
-    (h : Opaque.Over P (.abs n rep) rep) : False := by
-  have := h.sizeOf_le
-  simp only [Opaque.abs.sizeOf_spec] at this
-  omega
+theorem AHnf.eq_self {T h : VTy} (hh : AHnf T h) (hb : ∀ a A, T ≠ .box a A := by
+    intro _ _ h; cases h) (hm : ∀ A, T ≠ .mu A := by intro _ h; cases h) : h = T := by
+  cases hh with
+  | box _ => exact absurd rfl (hb _ _)
+  | mu _ => exact absurd rfl (hm _)
+  | base => rfl
 
-/-- At a provider set with no name, `k` over `a` is `a`. -/
-theorem Opaque.Over.eq_of_none {P : Nat → Prop} (hP : ∀ m, ¬ P m) {a k : Opaque}
-    (h : Opaque.Over P a k) : k = a := by
-  cases h with
+theorem AHnf.unique {T h h' : VTy} (hh : AHnf T h) (hh' : AHnf T h') : h = h' := by
+  induction hh generalizing h' with
+  | box _ ih => cases hh' with
+    | box hh' => exact ih hh'
+    | base hb _ => exact absurd rfl (hb _ _)
+  | mu _ ih => cases hh' with
+    | mu hh' => exact ih hh'
+    | base _ hm => exact absurd rfl (hm _)
+  | base hb hm => exact (hh'.eq_self hb hm).symm
+
+/-- **`k` is a head over `a` by abstract types of `P`**: `a`, or `abs m k'` with `P m` and the
+head of `k'` over `a`. Inside `m`'s provider, a value of `k'` may be sealed into `abs m k'`. -/
+inductive Over (P : Nat → Prop) (a : VTy) : VTy → Prop
+  | refl : Over P a a
+  | abs {m : Nat} {k h : VTy} : P m → AHnf k h → Over P a h → Over P a (.abs m k)
+
+/-- A head over an abstract type is an abstract type. -/
+theorem Over.isAbs {P : Nat → Prop} {n : Nat} {A h : VTy} (ho : Over P (.abs n A) h) :
+    ∃ m B, h = .abs m B := by
+  cases ho with
+  | refl => exact ⟨_, _, rfl⟩
+  | abs _ _ _ => exact ⟨_, _, rfl⟩
+
+/-- At a provider set with no name, a head over `a` is `a`. -/
+theorem Over.eq_of_none {P : Nat → Prop} (hP : ∀ m, ¬ P m) {a h : VTy} (ho : Over P a h) :
+    h = a := by
+  cases ho with
   | refl => rfl
-  | abs hm _ => exact absurd hm (hP _)
+  | abs hm _ _ => exact absurd hm (hP _)
 
-/-- **Outside its provider, a variable of an abstract type is read at that type alone**, up to
-seals the derivation's provider set allows: at every judgment that reads it at a value type `A`,
-`A`'s head (`Hnf`: boxes stripped, `μ` unrolled) is an opaque type over `abs n rep` by abstract
-types of `P` (`Opaque.Over`). No rule takes it to its representation `rep`, nor to any type a
-constant consumes. The rules that read a variable at another judgment are `var`, `force`, the
-`!`, `[]`, `μ`, `ν`, `F` and borrow-weakening rules, and the provider's two; at `¬ P n` the unseal
-at `n` has no instance, and an unseal at another name `m` takes off only a seal at `m`.
+/-- A type whose head is `abs m B` has `B`'s head, abstract types stripped. -/
+theorem AHnf.hnf_abs {T k : VTy} (hT : AHnf T k) {m : Nat} {B h : VTy} (hk : k = .abs m B)
+    (hB : Hnf B h) : Hnf T h := by
+  induction hT with
+  | box _ ih => exact .box (ih hk)
+  | mu _ ih => exact .mu (ih hk)
+  | base => subst hk; exact .abs hB
+
+/-- **A type whose head is over `abs n X` has `X`'s head**, abstract types stripped. -/
+theorem Over.hnf {P : Nat → Prop} {n : Nat} {X hX : VTy} (hXh : Hnf X hX) {k : VTy}
+    (ho : Over P (.abs n X) k) : ∀ {T : VTy}, AHnf T k → Hnf T hX := by
+  induction ho with
+  | refl => intro T hT; exact hT.hnf_abs rfl hXh
+  | abs _ hk' _ ih => intro T hT; exact hT.hnf_abs rfl (ih hk')
+
+/-! ### Encapsulation: outside its provider, an abstract type is never its representation -/
+
+/-- **Outside its provider, a variable of an abstract type is read only at types over it**: at
+every judgment that reads it at a value type `T`, `T`'s head (`AHnf`: boxes stripped, `μ` unrolled,
+abstract types kept) is `abs n A` under abstract types of `P` (`Over`). So it is never read at its
+representation `A`, nor at any type whose head is not over `abs n A`. The proof is an induction
+over the whole rule set; the cases that read a variable at another judgment are `var`, `force`,
+the `F`, `!`, `[]`, `⊑`, `μ`, `ν` and row-weakening rules, and the provider's two. At `¬ P n` the
+unseal at `n` has no instance, and an unseal at another name `m` takes off only a seal at `m`.
 `[spec §63]` -/
-theorem CDerivesIn.var_abs_hnf {P : Nat → Prop} {n : Nat} {rep : Opaque} (hn : ¬ P n)
+theorem CDerivesIn.var_abs_hnf {P : Nat → Prop} {n : Nat} {A : VTy} (hn : ¬ P n)
     {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerivesIn P Δ Γ e j) :
-    ∀ {i : Nat} {A : VTy}, e = .var i → j.AtVal A → Γ[i]? = some ⟨absTy n rep, true⟩ →
-      ∃ k, Inversions.Hnf A (.opq k) ∧ Opaque.Over P (.abs n rep) k := by
+    ∀ {i : Nat} {T : VTy}, e = .var i → j.AtVal T → Γ[i]? = some ⟨.abs n A, true⟩ →
+      ∃ k, AHnf T k ∧ Over P (.abs n A) k := by
   induction h with
   | var hs =>
-      intro i A he hj hΓ
+      intro i T he hj hΓ
       cases he
       obtain ⟨S, hj | hj⟩ := hj
       · cases hj
         rw [hs.getElem?] at hΓ
         cases hΓ
-        exact ⟨_, .base (fun _ _ h => by cases h) (fun _ h => by cases h), .refl⟩
+        exact ⟨_, AHnf.self, .refl⟩
       · cases hj
   | force hs =>
-      intro i A he hj hΓ
+      intro i T he hj hΓ
       rename_i C
       cases C <;> simp only [forceE] at he <;> (try cases he) <;>
         (rw [hs.getElem?] at hΓ; cases hΓ)
   | ret _ ih =>
-      intro i A he hj hΓ
+      intro i T he hj hΓ
       obtain ⟨S, hj | hj⟩ := hj
       · cases hj
       · have hA := CTy.effOf_inj_right (S := []) (Jdg.comp.inj hj)
         subst hA
         exact ih he ⟨[], .inl rfl⟩ hΓ
   | ofRet _ ih =>
-      intro i A he hj hΓ
+      intro i T he hj hΓ
       obtain ⟨S, hj | hj⟩ := hj
       · cases hj; exact ih he ⟨[], .inr rfl⟩ hΓ
       · cases hj
   | effSub _ _ ih =>
-      intro i A he hj hΓ
+      intro i T he hj hΓ
       obtain ⟨S, hj | hj⟩ := hj
       · cases hj
       · rw [← CTy.effOf_inj_right (Jdg.comp.inj hj)]
         exact ih he ⟨_, .inr rfl⟩ hΓ
   | nuIn _ _ _ =>
-      intro i A he hj hΓ
+      intro i T he hj hΓ
       obtain ⟨S, hj | hj⟩ := hj
       · cases hj
       · exact absurd (Jdg.comp.inj hj).symm (Inversions.effOf_ne_nu _ _ _)
   | nuOut hC _ _ =>
-      intro i A he hj hΓ
+      intro i T he hj hΓ
       obtain ⟨S, hj | hj⟩ := hj
       · cases hj
       · obtain ⟨C₁, C₂, hu⟩ := Inversions.unroll_amp hC
@@ -185,103 +245,273 @@ theorem CDerivesIn.var_abs_hnf {P : Nat → Prop} {n : Nat} {rep : Opaque} (hn :
         rw [hu] at hj
         exact absurd hj.symm (Inversions.effOf_ne_amp _ _ _ _)
   | bangE _ ih =>
-      intro i A he hj hΓ
+      intro i T he hj hΓ
       obtain ⟨S, hj | hj⟩ := hj
       · cases hj
-        obtain ⟨k, h', -⟩ := ih he ⟨[], .inl rfl⟩ hΓ
-        cases h'
+        obtain ⟨k, h', ho⟩ := ih he ⟨[], .inl rfl⟩ hΓ
+        obtain ⟨m, B, rfl⟩ := ho.isAbs
+        cases h'.eq_self
       · cases hj
   | boxI _ _ ih =>
-      intro i A he hj hΓ
+      intro i T he hj hΓ
       obtain ⟨S, hj | hj⟩ := hj
       · cases hj
         obtain ⟨k, h', ho⟩ := ih he ⟨[], .inl rfl⟩ hΓ
         exact ⟨k, .box h', ho⟩
       · cases hj
   | boxE _ ih =>
-      intro i A he hj hΓ
+      intro i T he hj hΓ
       obtain ⟨S, hj | hj⟩ := hj
       · cases hj
         obtain ⟨k, h', ho⟩ := ih he ⟨[], .inl rfl⟩ hΓ
         cases h' with
         | box h' => exact ⟨k, h', ho⟩
+        | base hb _ => exact absurd rfl (hb _ _)
       · cases hj
   | immSub _ _ ih =>
-      intro i A he hj hΓ
+      intro i T he hj hΓ
       obtain ⟨S, hj | hj⟩ := hj
       · cases hj
-        obtain ⟨k, h', -⟩ := ih he ⟨[], .inl rfl⟩ hΓ
-        cases h'
+        obtain ⟨k, h', ho⟩ := ih he ⟨[], .inl rfl⟩ hΓ
+        obtain ⟨m, B, rfl⟩ := ho.isAbs
+        cases h'.eq_self
       · cases hj
   | mutSub _ _ ih =>
-      intro i A he hj hΓ
+      intro i T he hj hΓ
       obtain ⟨S, hj | hj⟩ := hj
       · cases hj
-        obtain ⟨k, h', -⟩ := ih he ⟨[], .inl rfl⟩ hΓ
-        cases h'
+        obtain ⟨k, h', ho⟩ := ih he ⟨[], .inl rfl⟩ hΓ
+        obtain ⟨m, B, rfl⟩ := ho.isAbs
+        cases h'.eq_self
       · cases hj
   | roll _ _ _ ih =>
-      intro i A he hj hΓ
+      intro i T he hj hΓ
       obtain ⟨S, hj | hj⟩ := hj
       · cases hj
         obtain ⟨k, h', ho⟩ := ih he ⟨[], .inl rfl⟩ hΓ
         exact ⟨k, .mu h', ho⟩
       · cases hj
   | unroll _ ih =>
-      intro i A he hj hΓ
+      intro i T he hj hΓ
       obtain ⟨S, hj | hj⟩ := hj
       · cases hj
         obtain ⟨k, h', ho⟩ := ih he ⟨[], .inl rfl⟩ hΓ
         cases h' with
         | mu h' => exact ⟨k, h', ho⟩
+        | base _ hm => exact absurd rfl (hm _)
       · cases hj
-  | @absSeal _ _ _ m r hm _ ih =>
-      intro i A he hj hΓ
+  | absSeal hm _ ih =>
+      intro i T he hj hΓ
       obtain ⟨S, hj | hj⟩ := hj
       · cases hj
         obtain ⟨k, h', ho⟩ := ih he ⟨[], .inl rfl⟩ hΓ
-        cases h'
-        exact ⟨_, .base (fun _ _ h => by cases h) (fun _ h => by cases h), .abs hm ho⟩
+        exact ⟨_, AHnf.self, .abs hm h' ho⟩
       · cases hj
-  | @absUnseal _ _ _ m r hm _ ih =>
-      intro i A he hj hΓ
+  | absUnseal hm _ ih =>
+      intro i T he hj hΓ
       obtain ⟨S, hj | hj⟩ := hj
       · cases hj
         obtain ⟨k, h', ho⟩ := ih he ⟨[], .inl rfl⟩ hΓ
-        cases h'
+        obtain rfl := h'.eq_self
         cases ho with
         | refl => exact absurd hm hn
-        | abs _ ho => exact ⟨_, .base (fun _ _ h => by cases h) (fun _ h => by cases h), ho⟩
+        | abs _ hk ho => exact ⟨_, hk, ho⟩
       · cases hj
-  | _ => intro i A he hj _; first | cases he | (obtain ⟨S, hj | hj⟩ := hj <;> cases hj) | simp_all
+  | _ => intro i T he hj _; first | cases he | (obtain ⟨S, hj | hj⟩ := hj <;> cases hj) | simp_all
 
-/-- **At a provider set with no name, the head is the abstract type itself**: no seal or unseal
-has an instance.  `[spec §63]` -/
-theorem CDerivesIn.var_abs_hnf_none {P : Nat → Prop} (hP : ∀ m, ¬ P m) {n : Nat} {rep : Opaque}
+/-- **At a provider set with no name, the head is the abstract type itself.**  `[spec §63]` -/
+theorem CDerivesIn.var_abs_hnf_none {P : Nat → Prop} (hP : ∀ m, ¬ P m) {n : Nat} {A : VTy}
     {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerivesIn P Δ Γ e j) {i : Nat}
-    {A : VTy} (he : e = .var i) (hj : j.AtVal A) (hΓ : Γ[i]? = some ⟨absTy n rep, true⟩) :
-    Inversions.Hnf A (absTy n rep) := by
+    {T : VTy} (he : e = .var i) (hj : j.AtVal T) (hΓ : Γ[i]? = some ⟨.abs n A, true⟩) :
+    AHnf T (.abs n A) := by
   obtain ⟨k, hk, ho⟩ := h.var_abs_hnf (hP n) he hj hΓ
   rw [ho.eq_of_none hP] at hk
   exact hk
 
-/-- **Outside its provider, a variable of an abstract type is never its representation**: the
-unseal step has no instance at `n`.  `[spec §63]` -/
-theorem CDerivesIn.var_abs_not_rep {P : Nat → Prop} {n : Nat} {rep : Opaque} (hn : ¬ P n)
-    {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} (hΓ : Γ[i]? = some ⟨absTy n rep, true⟩) :
-    ¬ CDerivesIn P Δ Γ (.var i) (.val (.opq rep)) := fun h => by
-  obtain ⟨k, h', ho⟩ := h.var_abs_hnf hn rfl ⟨[], .inl rfl⟩ hΓ
-  cases h'
-  exact ho.not_rep
+/-- **The representation is not, up to its head, its abstract type again**: no head of `A` is
+over `abs n A` by abstract types of `P`. It holds at every `A` whose head is no abstract type
+(`RepNotOver.of_head`), so at every record, sum, reference, borrow, opaque type and thunk. It
+fails at a representation that unrolls to the abstract type itself, `μX. abs n X`, where reading
+the variable at `A` is a `roll`, not an unseal (`var_abs_rep_mu`). -/
+def RepNotOver (P : Nat → Prop) (n : Nat) (A : VTy) : Prop := ∀ h, AHnf A h → ¬ Over P (.abs n A) h
 
-/-- **Outside its provider, a variable of an abstract type is never a `Tok`**: `burn`, which
-takes a `Tok`, does not take it.  `[spec §63]` -/
-theorem CDerivesIn.var_abs_not_tok {P : Nat → Prop} {n : Nat} {rep : Opaque} (hn : ¬ P n)
-    {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} (hΓ : Γ[i]? = some ⟨absTy n rep, true⟩) :
+theorem RepNotOver.of_head {P : Nat → Prop} {n : Nat} {A h : VTy} (hh : AHnf A h)
+    (hna : ∀ m B, h ≠ .abs m B) : RepNotOver P n A := fun h' hh' ho => by
+  obtain rfl := hh.unique hh'
+  obtain ⟨m, B, rfl⟩ := ho.isAbs
+  exact hna m B rfl
+
+/-- `μX. abs n X`: an abstract type that is its own representation, unrolled. -/
+abbrev muAbs (n : Nat) : VTy := .mu (.abs n (.tvar 0))
+
+/-- **`RepNotOver` is needed**: at `A = μX. abs n X`, outside every provider, a variable of
+`abs n A` is read at `A`, by `roll`. No unseal is used: `abs n A` is `A` unrolled. -/
+theorem var_abs_rep_mu (n : Nat) {Δ : LifeCtx} :
+    CDerivesIn Outside Δ [⟨.abs n (muAbs n), true⟩] (.var 0) (.val (muAbs n)) :=
+  .roll trivial (by simp [VTy.Cl]) (.var (.here .nil))
+
+/-- **Outside its provider, a variable of an abstract type is never read at its
+representation.** It fails if the unseal is ungated: inside the provider the read is `absUnseal`
+(`file_rep_inside`).  `[spec §63]` -/
+theorem CDerivesIn.var_abs_not_rep {P : Nat → Prop} {n : Nat} {A : VTy} (hn : ¬ P n)
+    (hA : RepNotOver P n A) {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat}
+    (hΓ : Γ[i]? = some ⟨.abs n A, true⟩) : ¬ CDerivesIn P Δ Γ (.var i) (.val A) := fun h => by
+  obtain ⟨k, hk, ho⟩ := h.var_abs_hnf hn rfl ⟨[], .inl rfl⟩ hΓ
+  exact hA k hk ho
+
+/-- **Outside its provider, a variable of an abstract type is never a `Tok`**: `burn`, which takes
+a `Tok`, does not take it.  `[spec §63]` -/
+theorem CDerivesIn.var_abs_not_tok {P : Nat → Prop} {n : Nat} {A : VTy} (hn : ¬ P n)
+    {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} (hΓ : Γ[i]? = some ⟨.abs n A, true⟩) :
     ¬ CDerivesIn P Δ Γ (.var i) (.val tokTy) := fun h => by
-  obtain ⟨k, h', ho⟩ := h.var_abs_hnf hn rfl ⟨[], .inl rfl⟩ hΓ
-  cases h'
-  cases ho
+  obtain ⟨k, hk, ho⟩ := h.var_abs_hnf hn rfl ⟨[], .inl rfl⟩ hΓ
+  obtain ⟨m, B, rfl⟩ := ho.isAbs
+  cases hk.eq_self
+
+/-! ### The pinned judgment -/
+
+/-- **`var_abs_hnf` in the pinned judgment**: the relaxed lends conclude at no variable, and
+`nilDead`'s context holds no live slot.  `[spec §29, §63]` -/
+theorem CDerivesPIn.var_abs_hnf {P : Nat → Prop} {n : Nat} {A : VTy} (hn : ¬ P n)
+    {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerivesPIn P Δ Γ e j) :
+    ∀ {i : Nat} {T : VTy}, e = .var i → j.AtVal T → Γ[i]? = some ⟨.abs n A, true⟩ →
+      ∃ k, AHnf T k ∧ Over P (.abs n A) k := by
+  induction h with
+  | var hs =>
+      intro i T he hj hΓ
+      cases he
+      obtain ⟨S, hj | hj⟩ := hj
+      · cases hj
+        rw [hs.getElem?] at hΓ
+        cases hΓ
+        exact ⟨_, AHnf.self, .refl⟩
+      · cases hj
+  | force hs =>
+      intro i T he hj hΓ
+      rename_i C
+      cases C <;> simp only [forceE] at he <;> (try cases he) <;>
+        (rw [hs.getElem?] at hΓ; cases hΓ)
+  | nilDead hΓd _ _ => intro i T _ _ hΓ; exact absurd hΓ hΓd.not_live
+  | ret _ ih =>
+      intro i T he hj hΓ
+      obtain ⟨S, hj | hj⟩ := hj
+      · cases hj
+      · have hA := CTy.effOf_inj_right (S := []) (Jdg.comp.inj hj)
+        subst hA
+        exact ih he ⟨[], .inl rfl⟩ hΓ
+  | ofRet _ ih =>
+      intro i T he hj hΓ
+      obtain ⟨S, hj | hj⟩ := hj
+      · cases hj; exact ih he ⟨[], .inr rfl⟩ hΓ
+      · cases hj
+  | effSub _ _ ih =>
+      intro i T he hj hΓ
+      obtain ⟨S, hj | hj⟩ := hj
+      · cases hj
+      · rw [← CTy.effOf_inj_right (Jdg.comp.inj hj)]
+        exact ih he ⟨_, .inr rfl⟩ hΓ
+  | nuIn _ _ _ =>
+      intro i T he hj hΓ
+      obtain ⟨S, hj | hj⟩ := hj
+      · cases hj
+      · exact absurd (Jdg.comp.inj hj).symm (Inversions.effOf_ne_nu _ _ _)
+  | nuOut hC _ _ =>
+      intro i T he hj hΓ
+      obtain ⟨S, hj | hj⟩ := hj
+      · cases hj
+      · obtain ⟨C₁, C₂, hu⟩ := Inversions.unroll_amp hC
+        have hj := Jdg.comp.inj hj
+        rw [hu] at hj
+        exact absurd hj.symm (Inversions.effOf_ne_amp _ _ _ _)
+  | bangE _ ih =>
+      intro i T he hj hΓ
+      obtain ⟨S, hj | hj⟩ := hj
+      · cases hj
+        obtain ⟨k, h', ho⟩ := ih he ⟨[], .inl rfl⟩ hΓ
+        obtain ⟨m, B, rfl⟩ := ho.isAbs
+        cases h'.eq_self
+      · cases hj
+  | boxI _ _ ih =>
+      intro i T he hj hΓ
+      obtain ⟨S, hj | hj⟩ := hj
+      · cases hj
+        obtain ⟨k, h', ho⟩ := ih he ⟨[], .inl rfl⟩ hΓ
+        exact ⟨k, .box h', ho⟩
+      · cases hj
+  | boxE _ ih =>
+      intro i T he hj hΓ
+      obtain ⟨S, hj | hj⟩ := hj
+      · cases hj
+        obtain ⟨k, h', ho⟩ := ih he ⟨[], .inl rfl⟩ hΓ
+        cases h' with
+        | box h' => exact ⟨k, h', ho⟩
+        | base hb _ => exact absurd rfl (hb _ _)
+      · cases hj
+  | immSub _ _ ih =>
+      intro i T he hj hΓ
+      obtain ⟨S, hj | hj⟩ := hj
+      · cases hj
+        obtain ⟨k, h', ho⟩ := ih he ⟨[], .inl rfl⟩ hΓ
+        obtain ⟨m, B, rfl⟩ := ho.isAbs
+        cases h'.eq_self
+      · cases hj
+  | mutSub _ _ ih =>
+      intro i T he hj hΓ
+      obtain ⟨S, hj | hj⟩ := hj
+      · cases hj
+        obtain ⟨k, h', ho⟩ := ih he ⟨[], .inl rfl⟩ hΓ
+        obtain ⟨m, B, rfl⟩ := ho.isAbs
+        cases h'.eq_self
+      · cases hj
+  | roll _ _ _ ih =>
+      intro i T he hj hΓ
+      obtain ⟨S, hj | hj⟩ := hj
+      · cases hj
+        obtain ⟨k, h', ho⟩ := ih he ⟨[], .inl rfl⟩ hΓ
+        exact ⟨k, .mu h', ho⟩
+      · cases hj
+  | unroll _ ih =>
+      intro i T he hj hΓ
+      obtain ⟨S, hj | hj⟩ := hj
+      · cases hj
+        obtain ⟨k, h', ho⟩ := ih he ⟨[], .inl rfl⟩ hΓ
+        cases h' with
+        | mu h' => exact ⟨k, h', ho⟩
+        | base _ hm => exact absurd rfl (hm _)
+      · cases hj
+  | absSeal hm _ ih =>
+      intro i T he hj hΓ
+      obtain ⟨S, hj | hj⟩ := hj
+      · cases hj
+        obtain ⟨k, h', ho⟩ := ih he ⟨[], .inl rfl⟩ hΓ
+        exact ⟨_, AHnf.self, .abs hm h' ho⟩
+      · cases hj
+  | absUnseal hm _ ih =>
+      intro i T he hj hΓ
+      obtain ⟨S, hj | hj⟩ := hj
+      · cases hj
+        obtain ⟨k, h', ho⟩ := ih he ⟨[], .inl rfl⟩ hΓ
+        obtain rfl := h'.eq_self
+        cases ho with
+        | refl => exact absurd hm hn
+        | abs _ hk ho => exact ⟨_, hk, ho⟩
+      · cases hj
+  | _ => intro i T he hj _; first | cases he | (obtain ⟨S, hj | hj⟩ := hj <;> cases hj) | simp_all
+
+/-- **`var_abs_not_rep` in the pinned judgment.**  `[spec §29, §63]` -/
+theorem CDerivesPIn.var_abs_not_rep {P : Nat → Prop} {n : Nat} {A : VTy} (hn : ¬ P n)
+    (hA : RepNotOver P n A) {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat}
+    (hΓ : Γ[i]? = some ⟨.abs n A, true⟩) : ¬ CDerivesPIn P Δ Γ (.var i) (.val A) := fun h => by
+  obtain ⟨k, hk, ho⟩ := h.var_abs_hnf hn rfl ⟨[], .inl rfl⟩ hΓ
+  exact hA k hk ho
+
+/-- **`var_abs_not_tok` in the pinned judgment.**  `[spec §29, §63]` -/
+theorem CDerivesPIn.var_abs_not_tok {P : Nat → Prop} {n : Nat} {A : VTy} (hn : ¬ P n)
+    {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} (hΓ : Γ[i]? = some ⟨.abs n A, true⟩) :
+    ¬ CDerivesPIn P Δ Γ (.var i) (.val tokTy) := fun h => by
+  obtain ⟨k, hk, ho⟩ := h.var_abs_hnf hn rfl ⟨[], .inl rfl⟩ hΓ
+  obtain ⟨m, B, rfl⟩ := ho.isAbs
+  cases hk.eq_self
 
 /-! ### `File` outside and inside `with_fs` -/
 
@@ -292,27 +522,30 @@ theorem file_not_tok_outside {Δ : LifeCtx} {Γ : Ctx VTy} :
 
 /-- **Outside its provider, a file at any representation is never that representation.**
 `[spec §63]` -/
-theorem file_not_rep_outside (rep : Opaque) {Δ : LifeCtx} {Γ : Ctx VTy} :
-    ¬ CDerivesIn Outside Δ (⟨absTy fileName rep, true⟩ :: Γ) (.var 0) (.val (.opq rep)) :=
-  CDerivesIn.var_abs_not_rep (n := fileName) id rfl
+theorem file_not_rep_outside {A : VTy} (hA : RepNotOver Outside fileName A) {Δ : LifeCtx}
+    {Γ : Ctx VTy} : ¬ CDerivesIn Outside Δ (⟨absTy fileName A, true⟩ :: Γ) (.var 0) (.val A) :=
+  CDerivesIn.var_abs_not_rep (n := fileName) id hA rfl
 
-/-- Inside its provider a file is its representation. -/
-theorem file_rep_inside {P : Nat → Prop} (hP : P fileName) (rep : Opaque) {Δ : LifeCtx}
+/-- Inside its provider a file is its representation, by the unseal: what
+`file_not_rep_outside` refuses. -/
+theorem file_rep_inside {P : Nat → Prop} (hP : P fileName) (A : VTy) {Δ : LifeCtx}
     {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) :
-    CDerivesIn P Δ (⟨absTy fileName rep, true⟩ :: Γ) (.var 0) (.val (.opq rep)) :=
+    CDerivesIn P Δ (⟨absTy fileName A, true⟩ :: Γ) (.var 0) (.val A) :=
   .absUnseal hP (.var (.here hΓ))
 
 /-- Inside `File`'s provider a `File` is its `Tok`. -/
 theorem file_tok_inside {P : Nat → Prop} (hP : P fileName) {Δ : LifeCtx} {Γ : Ctx VTy}
     (hΓ : Ctx.DeadP Γ) : CDerivesIn P Δ (⟨File, true⟩ :: Γ) (.var 0) (.val tokTy) :=
-  file_rep_inside hP .tok hΓ
+  file_rep_inside hP tokTy hΓ
+
+/-! ### The skip-close destructor, refused as a term -/
 
 /-- The wrong destructor of #775: `λf. u ← burn f; return ()`, which frees the handle's cell and
 never performs `close`. -/
 def skipCloseB : Expr := bindE (.app burnE (.var 0)) (.val .unit)
 
 /-- **Inside `File`'s provider the wrong destructor types**, at the destructor's type: its one
-step at `Tok` is the unseal of `f`. Outside, that step is refused (`file_not_tok_outside`). -/
+step at `Tok` is the unseal of `f`. -/
 theorem d_skipClose_inside {P : Nat → Prop} (hP : P fileName) {Δ : LifeCtx} (Γ : Ctx VTy)
     (hΓ : Ctx.Dead Γ) :
     CDerivesIn P Δ Γ (.val (.lam skipCloseB)) (.comp (.arr File (CTy.effOf SD .unit))) := by
@@ -320,21 +553,280 @@ theorem d_skipClose_inside {P : Nat → Prop} (hP : P fileName) {Δ : LifeCtx} (
     (.ret (appW (.absUnseal (n := fileName) hP (.var (by csolo))) (.tokBurn (by cdead)))) ?_)
   exact .effSub (RowLe.nil _) (.ret (.unitI (.drop rfl (by cdead))))
 
+/-- `burn`'s body, `free c`. -/
+abbrev burnBody : Expr := .app (.val (.prim .free)) (.var 0)
+
+theorem burn_lam {M : Expr} (h : Expr.lam M = burnE) : M = burnBody := by
+  cases h; rfl
+
+/-- `free` is read at the views of its axiom's type `Ref A ⊸ A`. -/
+theorem der_free {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
+    e = .val (.prim .free) → ∃ A, ValCls (.lolli (.ref A) A) j := by
+  induction h with
+  | free => intro _; exact ⟨_, ValCls.refl _⟩
+  | thunkV hC _ ih =>
+      intro he; obtain ⟨A, hc⟩ := ih he; rw [hc.comp_isRet] at hC; cases hC
+  | bangThunkV _ hC _ ih =>
+      intro he; obtain ⟨A, hc⟩ := ih he; rw [hc.comp_isRet] at hC; cases hC
+  | ret _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (.ret _)⟩
+  | ofRet _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (.ofRet _)⟩
+  | effSub hle _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (.effSub _ _ _ hle)⟩
+  | nuIn hC _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (.nuIn _ hC)⟩
+  | nuOut hC _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (.nuOut _ hC)⟩
+  | bangE _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (.val (.bang _))⟩
+  | boxI _ _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (.val (.boxI _ _))⟩
+  | boxE _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (.val (.boxE _ _))⟩
+  | absSeal _ _ ih =>
+      intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (.val (.absSeal _ _))⟩
+  | absUnseal _ _ ih =>
+      intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (.val (.absUnseal _ _))⟩
+  | immSub _ _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (.val (.immS _ _ _))⟩
+  | mutSub _ _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (.val (.mutS _ _ _))⟩
+  | roll _ _ _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (.val (.roll _))⟩
+  | unroll _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (.val (.unroll _))⟩
+  | force => intro he; rcases Inversions.forceE_var he with h | h <;> cases h
+  | _ => intro he; cd_terms
+
+/-- `burn`'s body at a dead binder has no derivation: it reads the binder. -/
+theorem not_burnBody_dead {Δ : LifeCtx} {Γ : Ctx VTy} {T : VTy} {j : Jdg}
+    (h : CDerives Δ (⟨T, false⟩ :: Γ) burnBody j) : False := by
+  obtain ⟨_, hT⟩ := Inversions.fv_live h 0 (by simp [Expr.HasVar, burnBody, Expr.val, Val.prim])
+  simp at hT
+
+/-- **`burn` is read at the views of its axiom's type**, or through its body under a live binder
+at the type it is read at. -/
+theorem der_burn {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
+    e = burnE → ValCls burnTy j ∨
+      ∃ A D, CDerives Δ (⟨A, true⟩ :: Γ) burnBody (.comp D) ∧ LamCls Γ (.arr A D) j := by
+  induction h with
+  | tokBurn => intro _; exact .inl (ValCls.refl _)
+  | lam h => intro he; obtain rfl := burn_lam he; exact .inr ⟨_, _, h, .inl rfl⟩
+  | lamDead h => intro he; obtain rfl := burn_lam he; exact (not_burnBody_dead h).elim
+  | allI _ _ _ h => intro he; obtain rfl := burn_lam he; exact (not_burnBody_dead h).elim
+  | thunkF h => intro he; obtain rfl := burn_lam he; exact (not_burnBody_dead h).elim
+  | bangThunkF _ h => intro he; obtain rfl := burn_lam he; exact (not_burnBody_dead h).elim
+  | thunkV hC _ ih =>
+      intro he
+      rcases ih he with hc | ⟨A, D, hB, hc⟩
+      · rw [hc.comp_isRet] at hC; cases hC
+      · exact .inr ⟨A, D, hB, hc.thunkV hC⟩
+  | bangThunkV hp hC _ ih =>
+      intro he
+      rcases ih he with hc | ⟨A, D, hB, hc⟩
+      · rw [hc.comp_isRet] at hC; cases hC
+      · exact .inr ⟨A, D, hB, hc.bangThunkV hC hp⟩
+  | ret _ ih =>
+      intro he; rcases ih he with hc | ⟨A, D, hB, hc⟩
+      · exact .inl (hc.step (.ret _))
+      · exact .inr ⟨A, D, hB, hc.step (.ret _) (Inversions.rigid_arr _ _)⟩
+  | ofRet _ ih =>
+      intro he; rcases ih he with hc | ⟨A, D, hB, hc⟩
+      · exact .inl (hc.step (.ofRet _))
+      · exact .inr ⟨A, D, hB, hc.step (.ofRet _) (Inversions.rigid_arr _ _)⟩
+  | effSub hle _ ih =>
+      intro he; rcases ih he with hc | ⟨A, D, hB, hc⟩
+      · exact .inl (hc.step (.effSub _ _ _ hle))
+      · exact .inr ⟨A, D, hB, hc.step (.effSub _ _ _ hle) (Inversions.rigid_arr _ _)⟩
+  | nuIn hC _ ih =>
+      intro he; rcases ih he with hc | ⟨A, D, hB, hc⟩
+      · exact .inl (hc.step (.nuIn _ hC))
+      · exact .inr ⟨A, D, hB, hc.step (.nuIn _ hC) (Inversions.rigid_arr _ _)⟩
+  | nuOut hC _ ih =>
+      intro he; rcases ih he with hc | ⟨A, D, hB, hc⟩
+      · exact .inl (hc.step (.nuOut _ hC))
+      · exact .inr ⟨A, D, hB, hc.step (.nuOut _ hC) (Inversions.rigid_arr _ _)⟩
+  | bangE _ ih =>
+      intro he; rcases ih he with hc | ⟨A, D, hB, hc⟩
+      · exact .inl (hc.step (.val (.bang _)))
+      · exact .inr ⟨A, D, hB, hc.step (.val (.bang _)) (Inversions.rigid_arr _ _)⟩
+  | boxI _ _ ih =>
+      intro he; rcases ih he with hc | ⟨A, D, hB, hc⟩
+      · exact .inl (hc.step (.val (.boxI _ _)))
+      · exact .inr ⟨A, D, hB, hc.step (.val (.boxI _ _)) (Inversions.rigid_arr _ _)⟩
+  | boxE _ ih =>
+      intro he; rcases ih he with hc | ⟨A, D, hB, hc⟩
+      · exact .inl (hc.step (.val (.boxE _ _)))
+      · exact .inr ⟨A, D, hB, hc.step (.val (.boxE _ _)) (Inversions.rigid_arr _ _)⟩
+  | absSeal _ _ ih =>
+      intro he; rcases ih he with hc | ⟨A, D, hB, hc⟩
+      · exact .inl (hc.step (.val (.absSeal _ _)))
+      · exact .inr ⟨A, D, hB, hc.step (.val (.absSeal _ _)) (Inversions.rigid_arr _ _)⟩
+  | absUnseal _ _ ih =>
+      intro he; rcases ih he with hc | ⟨A, D, hB, hc⟩
+      · exact .inl (hc.step (.val (.absUnseal _ _)))
+      · exact .inr ⟨A, D, hB, hc.step (.val (.absUnseal _ _)) (Inversions.rigid_arr _ _)⟩
+  | immSub _ _ ih =>
+      intro he; rcases ih he with hc | ⟨A, D, hB, hc⟩
+      · exact .inl (hc.step (.val (.immS _ _ _)))
+      · exact .inr ⟨A, D, hB, hc.step (.val (.immS _ _ _)) (Inversions.rigid_arr _ _)⟩
+  | mutSub _ _ ih =>
+      intro he; rcases ih he with hc | ⟨A, D, hB, hc⟩
+      · exact .inl (hc.step (.val (.mutS _ _ _)))
+      · exact .inr ⟨A, D, hB, hc.step (.val (.mutS _ _ _)) (Inversions.rigid_arr _ _)⟩
+  | roll _ _ _ ih =>
+      intro he; rcases ih he with hc | ⟨A, D, hB, hc⟩
+      · exact .inl (hc.step (.val (.roll _)))
+      · exact .inr ⟨A, D, hB, hc.step (.val (.roll _)) (Inversions.rigid_arr _ _)⟩
+  | unroll _ ih =>
+      intro he; rcases ih he with hc | ⟨A, D, hB, hc⟩
+      · exact .inl (hc.step (.val (.unroll _)))
+      · exact .inr ⟨A, D, hB, hc.step (.val (.unroll _)) (Inversions.rigid_arr _ _)⟩
+  | force => intro he; rcases Inversions.forceE_var he with h | h <;> cases h
+  | tokMint => intro he; simp [mintE, burnE] at he
+  | reify => intro he; simp [reifyV, rkV, BoCa.BoLo.hndE, burnE, Expr.val, Val.lam] at he
+  | _ => intro he; first | cd_terms | simp_all [burnE, Expr.val, Val.lam]
+
+/-- **`burn`'s body takes a reference**: typed under a live binder `c : A`, `free c` reads `c` at a
+`Ref X`, a view of `A`. -/
+theorem burnBody_ref {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} {D : CTy}
+    (h : CDerives Δ (⟨A, true⟩ :: Γ) burnBody (.comp D)) : ∃ X, VView A (.ref X) := by
+  obtain ⟨j₀, hb, -⟩ := Inversions.der_app h _ _ rfl
+  rcases hb with ⟨Γ₁, Γ₂, A', B, hs, hY, hf, rfl⟩ | ⟨Γ₁, Γ₂, i', A', C, hi, hs, hf, hx, rfl⟩ |
+    ⟨N, Γ₁, Γ₂, A', S, C, hN, -⟩ | ⟨N, b, C, -, hb, -⟩ |
+    ⟨-, -, -, -, hu, -⟩ | ⟨-, -, -, -, hu, -⟩ | ⟨-, -, hu, -⟩ | ⟨-, -, hu, -⟩ | ⟨hu, -⟩ | hX
+  · obtain ⟨X, hc⟩ := der_free hf rfl
+    have := Inversions.vview_thunk hc
+    simp only [CTy.arr.injEq, CTy.ret.injEq] at this
+    obtain ⟨rfl, -⟩ := this
+    exact ⟨X, (Inversions.varCls_of_le rfl (Inversions.splitP_le_left hs) hY).val⟩
+  · obtain ⟨X, S, Y, he, -⟩ := der_free hf rfl
+    exact absurd he.symm (Inversions.effOf_ne_arr _ _ _ _)
+  · cases hN
+  · cases hb
+  · cases hu
+  · cases hu
+  · cases hu
+  · cases hu
+  · cases hu
+  · rcases hX with hX | hX | ⟨Z, hX⟩ | ⟨Z, hX⟩ | ⟨_, hX, -, -⟩ <;> cases hX
+
+/-- `File`'s head, abstract types stripped, is `Tok`. -/
+theorem hnf_file : Hnf File tokTy := .abs (Inversions.hnf_self (T := tokTy) (fun _ _ h => by cases h) (fun _ h => by cases h))
+
+/-- A type whose head is `Tok` has no view at a reference. -/
+theorem tok_not_ref {A X : VTy} (hA : Hnf A tokTy) (hv : VView A (.ref X)) : False := by
+  have := (hv.hnf_of hA (fun _ h => by cases h) (fun _ _ h => by cases h)
+    (fun _ _ h => by cases h)).eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)
+  cases this
+
+/-- A slot of a context below `f : File, Γ`, live where a term reads it, is `f`. -/
+theorem slot_file {P : Nat → Prop} {Δ : LifeCtx} {Γ Γ' : Ctx VTy} {j : Jdg}
+    (hle : CtxLe Γ' (⟨File, true⟩ :: Γ)) (h : CDerivesIn P Δ Γ' (.var 0) j) :
+    Γ'[0]? = some ⟨File, true⟩ := by
+  obtain ⟨T, hT⟩ := Inversions.fv_live h.toCDerives 0 rfl
+  have := hle 0 T hT
+  simp only [List.getElem?_cons_zero, Option.some.injEq, Slot.mk.injEq, and_true] at this
+  subst this; exact hT
+
+/-- **Outside `File`'s provider, `burn f` has no derivation** at a context below `f : File`.
+Each rule that types an application reads `f` at a type whose head is over `File`
+(`var_abs_hnf`), so with `File`'s head `Tok` (`Over.hnf`); and `burn` takes only a `Tok`, or a
+`Ref` through its body (`der_burn`, `burnBody_ref`). -/
+theorem not_burnFile {P : Nat → Prop} (hP : ¬ P fileName) {Δ : LifeCtx} {Γ Γ₁ : Ctx VTy}
+    {j : Jdg} (hle : CtxLe Γ₁ (⟨File, true⟩ :: Γ)) (h : CDerivesIn P Δ Γ₁ (.app burnE (.var 0)) j) :
+    False := by
+  obtain ⟨j₀, hb, -⟩ := Inversions.der_app h _ _ rfl
+  rcases hb with ⟨Γa, Γb, A, B, hs, hY, hf, -⟩ | ⟨Γa, Γb, i, A, C, hi, hs, hf, hx, -⟩ |
+    ⟨N, Γa, Γb, A, S, C, hN, hs, hY, hN', -⟩ | ⟨N, b, C, -, hb, -⟩ |
+    ⟨-, -, -, -, hu, -⟩ | ⟨-, -, -, -, hu, -⟩ | ⟨-, -, hu, -⟩ | ⟨-, -, hu, -⟩ | ⟨hu, -⟩ | hX
+  · -- `⊸E`: `f` at `A`, `burn` at `A ⊸ B`
+    have hslot := slot_file ((Inversions.splitP_le_left hs).trans hle) hY
+    obtain ⟨k, hk, ho⟩ := hY.var_abs_hnf hP rfl ⟨[], .inl rfl⟩ hslot
+    rcases der_burn hf.toCDerives rfl with hc | ⟨A', D, hB, hc⟩
+    · have := Inversions.vview_thunk hc
+      simp only [CTy.arr.injEq] at this
+      obtain ⟨rfl, -⟩ := this
+      obtain ⟨m, B', rfl⟩ := ho.isAbs
+      cases hk.eq_self
+    · have := hc.val_thunk
+      simp only [CTy.arr.injEq] at this
+      obtain ⟨rfl, -⟩ := this
+      obtain ⟨X, hv⟩ := burnBody_ref hB
+      exact tok_not_ref (ho.hnf (Inversions.hnf_self (T := tokTy) (fun _ _ h => by cases h) (fun _ h => by cases h)) hk) hv
+  · -- `[app]`: `f`'s slot at `A`, `burn` at `A ⊸ C`
+    cases hi
+    have hA : A = File := by
+      have := hle 0 A ((Inversions.splitP_le_right hs) 0 A (Ctx.SoloP.getElem? hx))
+      simpa using this.symm
+    subst hA
+    rcases der_burn hf.toCDerives rfl with hc | ⟨A', D, hB, hc⟩
+    · obtain ⟨S, Y, he, -⟩ := hc
+      exact absurd he.symm (Inversions.effOf_ne_arr _ _ _ _)
+    · have := hc.comp_rigid (Inversions.rigid_arr _ _)
+      simp only [CTy.arr.injEq] at this
+      obtain ⟨rfl, -⟩ := this
+      obtain ⟨X, hv⟩ := burnBody_ref hB
+      exact tok_not_ref hnf_file hv
+  · -- `[let]`: `f` at a row over `A`, `burn`'s body under `c : A`
+    obtain rfl := burn_lam hN.symm
+    have hslot := slot_file ((Inversions.splitP_le_left hs).trans hle) hY
+    obtain ⟨k, hk, ho⟩ := hY.var_abs_hnf hP rfl ⟨S, .inr rfl⟩ hslot
+    obtain ⟨X, hv⟩ := burnBody_ref hN'.toCDerives
+    exact tok_not_ref (ho.hnf (Inversions.hnf_self (T := tokTy) (fun _ _ h => by cases h) (fun _ h => by cases h)) hk) hv
+  · cases hb
+  · cases hu
+  · cases hu
+  · cases hu
+  · cases hu
+  · cases hu
+  · rcases hX with hX | hX | ⟨Z, hX⟩ | ⟨Z, hX⟩ | ⟨_, hX, -, -⟩ <;> cases hX
+
+/-- **The skip-close destructor is refused as a term outside `File`'s provider**: `λf. burn f; ()`
+has no derivation at any type `File ⊸ C`, so none at the destructor's type `File ⊸ F_{close} 1`.
+This rules out the wrong implementation of #775: a client that disposes of a `File` by freeing
+its cell instead of closing it does not type. Inside the provider it does
+(`d_skipClose_inside`).  `[spec §63]` -/
+theorem not_skipClose {P : Nat → Prop} (hP : ¬ P fileName) {Δ : LifeCtx} {Γ : Ctx VTy}
+    {C : CTy} : ¬ CDerivesIn P Δ Γ (.val (.lam skipCloseB)) (.comp (.arr File C)) := by
+  intro h
+  rcases Inversions.der_lam h skipCloseB rfl with ⟨A, D, hM, hc⟩ | ⟨S, B, hM, hc⟩ |
+    ⟨x, b, Δ', S, C', hM, hc⟩ | ⟨A, hM, hc⟩ | ⟨M₁, M₂, hw⟩ | hx
+  · have := hc.comp_rigid (Inversions.rigid_arr _ _)
+    simp only [CTy.arr.injEq] at this
+    obtain ⟨rfl, -⟩ := this
+    -- `λu. return ()` is `forget`: the body is read as an application, its argument `burn f`
+    obtain ⟨j₀, hb, -⟩ := Inversions.der_app hM _ _ rfl
+    rcases hb with ⟨Γa, Γb, A, B, hs, hY, -, -⟩ | ⟨-, -, i, -, -, hi, -⟩ |
+      ⟨N, Γa, Γb, A, S, C, -, hs, hY, -, -⟩ | ⟨N, b, C, -, hb, -⟩ |
+      ⟨-, -, -, -, hu, -⟩ | ⟨-, -, -, -, hu, -⟩ | ⟨-, -, hu, -⟩ | ⟨-, -, hu, -⟩ | ⟨hu, -⟩ | hX
+    · exact not_burnFile hP (Inversions.splitP_le_left hs) hY
+    · cases hi
+    · exact not_burnFile hP (Inversions.splitP_le_left hs) hY
+    · cases hb
+    · cases hu
+    · cases hu
+    · cases hu
+    · cases hu
+    · cases hu
+    · rcases hX with hX | hX | ⟨Z, hX⟩ | ⟨Z, hX⟩ | ⟨_, hX, -, -⟩ <;> cases hX
+  · have := hc.comp_rigid (Inversions.rigid_arr _ _); cases this
+  · have := hc.comp_rigid (Inversions.rigid_arr _ _); cases this
+  · rcases hc with ⟨S, Y, he, -⟩ | ⟨-, S, Y, he, -⟩ <;>
+      exact absurd he.symm (Inversions.effOf_ne_arr _ _ _ _)
+  · simp [withPair, skipCloseB, bindE, Expr.val, Val.lam] at hw
+  · exact Inversions.NotConst.notAx (by unfold skipCloseB; not_const) _ hx
+
+/-- **At `Outside`, the skip-close destructor is refused**: no checked program types it.
+`[spec §63]` -/
+theorem not_skipClose_outside {Δ : LifeCtx} {Γ : Ctx VTy} :
+    ¬ CDerivesIn Outside Δ Γ (.val (.lam skipCloseB)) (.comp (.arr File (CTy.effOf SD .unit))) :=
+  not_skipClose id
+
 /-! ### A client outside every provider, at every representation
 
-`Fs`'s operations at a file of representation `rep`: `close : abs fileName rep ↠^lin 1` and
-`open : I32 ↠^lin abs fileName rep`. At `rep = Tok` they are `fcloseSig` and `fopenSig`. -/
+`Fs`'s operations at a file of representation `A`: `close : abs fileName A ↠^lin 1` and
+`open : I32 ↠^lin abs fileName A`. At `A = Tok` they are `fcloseSig` and `fopenSig`. -/
 
-/-- `close` at the representation `rep`. -/
-def fcloseSigR (rep : Opaque) : OpSig := ⟨4, 0, .lin, absTy fileName rep, .unit, .ret .unit, false⟩
+/-- `close` at the representation `A`. -/
+def fcloseSigR (A : VTy) : OpSig := ⟨4, 0, .lin, absTy fileName A, .unit, .ret .unit, false⟩
 
-/-- `open` at the representation `rep`. -/
-def fopenSigR (rep : Opaque) : OpSig := ⟨4, 1, .lin, I32, absTy fileName rep, .ret .unit, false⟩
+/-- `open` at the representation `A`. -/
+def fopenSigR (A : VTy) : OpSig := ⟨4, 1, .lin, I32, absTy fileName A, .ret .unit, false⟩
 
-/-- `{close, open}` at the representation `rep`. -/
-abbrev SOR (rep : Opaque) : Row := [fcloseSigR rep, fopenSigR rep]
+/-- `{close, open}` at the representation `A`. -/
+abbrev SOR (A : VTy) : Row := [fcloseSigR A, fopenSigR A]
 
-theorem SOR_not_cancels (rep : Opaque) : ¬ (SOR rep).Cancels := by
+theorem SOR_not_cancels (A : VTy) : ¬ (SOR A).Cancels := by
   rintro ⟨o, ho, hq⟩
   simp only [SOR, List.mem_cons, List.not_mem_nil, or_false] at ho
   rcases ho with rfl | rfl <;> exact hq rfl
@@ -344,18 +836,17 @@ def openClose : Expr := bindE (openE 1) closeB
 
 /-- **The client is typed at every provider set and every representation**, `Outside` among
 them: it takes no file apart.  `[spec §63]` -/
-theorem d_openCloseR {P : Nat → Prop} (rep : Opaque) {Δ : LifeCtx} {Γ : Ctx VTy}
-    (hΓ : Ctx.Dead Γ) : CDerivesIn P Δ Γ openClose (.comp (CTy.effOf (SOR rep) .unit)) :=
-  .effLet (A := absTy fileName rep) (deadSplit hΓ) (fun h => absurd h (SOR_not_cancels rep))
-    (fun h => absurd h (Row.not_unr_of_not_cancels (SOR_not_cancels rep)))
-    (.effPerform (o := fopenSigR rep) rfl rfl rfl (.lit (.i32 1) hΓ.toP))
-    (.effPerform (o := fcloseSigR rep) rfl rfl rfl (.var (.here hΓ.toP)))
+theorem d_openCloseR {P : Nat → Prop} (A : VTy) {Δ : LifeCtx} {Γ : Ctx VTy}
+    (hΓ : Ctx.Dead Γ) : CDerivesIn P Δ Γ openClose (.comp (CTy.effOf (SOR A) .unit)) :=
+  .effLet (A := absTy fileName A) (deadSplit hΓ) (fun h => absurd h (SOR_not_cancels A))
+    (fun h => absurd h (Row.not_unr_of_not_cancels (SOR_not_cancels A)))
+    (.effPerform (o := fopenSigR A) rfl rfl rfl (.lit (.i32 1) hΓ.toP))
+    (.effPerform (o := fcloseSigR A) rfl rfl rfl (.var (.here hΓ.toP)))
 
-/-- **The client is typed at every provider set**, `Outside` among them: it takes no `File`
-apart.  `[spec §63]` -/
+/-- **The client is typed at every provider set**, `Outside` among them. -/
 theorem d_openClose {P : Nat → Prop} {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerivesIn P Δ Γ openClose (.comp (CTy.effOf SO .unit)) :=
-  d_openCloseR .tok hΓ
+  d_openCloseR tokTy hΓ
 
 /-- `with_fs (f ← open 1; close f)`: the client linked under `File`'s provider. -/
 def fsOpenClose : Expr := withFs openClose
@@ -368,37 +859,29 @@ theorem d_fsOpenClose : CDerives LifeCtx.empty [] fsOpenClose (.comp (.ret .unit
   exact (d_openClose (P := Outside) (.cons (.cons .nil))).toCDerives
 
 /-- **The linked program is resource safe**: every run ends at the empty memory and none is
-stuck. -/
+stuck. This is the provider's soundness, not encapsulation: the relation cannot tell `File` from
+`Tok`, and a client that burned the file would be as safe. -/
 theorem fsOpenClose_safe {μ₁ : Heap} {e₁ : Expr}
     (hs : Steps (ℍ := ℍ) Adequacy.emptyMem fsOpenClose μ₁ e₁) :
     (∃ v : Val, Steps (ℍ := ℍ) μ₁ e₁ Adequacy.emptyMem (.val v)) ∧
     (∀ (K : Kont) (ℓ : Loc), e₁ = K.plug (freeE (.val (Val.loc ℓ))) → ∃ u, μ₁ ℓ = some u) :=
   resourceSafety (by decide) d_fsOpenClose hs
 
-/-- **The encapsulation statement's premises hold, at every representation**: the client's
-derivation is at a provider set that excludes `File`'s name, and so at `Outside` without it. -/
-theorem openCloseR_outside (rep : Opaque) {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerivesIn (ProvWithout Outside fileName) Δ Γ openClose
-      (.comp (CTy.effOf (SOR rep) .unit)) :=
-  (d_openCloseR (P := Outside) rep hΓ).outside id
+/-! ### A file at the representation `Ref I32`, provided by externs
 
-/-- **The encapsulation statement's premises hold** at `File`. -/
-theorem openClose_outside {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerivesIn (ProvWithout Outside fileName) Δ Γ openClose (.comp (CTy.effOf SO .unit)) :=
-  openCloseR_outside .tok hΓ
+`fileC = abs fileName (Ref I32)`: a location owning a cell that holds the descriptor. Its provider
+is two externs, values in the program's context at `!U C` (SPEC §11): `open : I32 ⊸ F fileC`,
+whose model `λx. alloc x` puts the descriptor in a fresh cell, and `close : fileC ⊸ F I32`, whose
+model `λc. free c` frees it and answers the descriptor. Each model is typed at `Ref I32` and meets
+its contract at `fileC` because the two relations are equal (`vCE_abs_eq_rep`), the identity that
+is `absSeal`'s and `absUnseal`'s compatibility lemma. The client is typed at every provider set.
 
-/-! ### A file at the representation `Cell`, provided by externs
-
-`fileC = abs fileName Cell`: a location owning a cell that holds the descriptor, `Ref I32`'s
-relation (`vCE_cell_eq_ref`). Its provider is two externs, values in the program's context at
-`!U C` (SPEC §11): `open : I32 ⊸ F fileC`, whose model `λx. alloc x` puts the descriptor in a
-fresh cell, and `close : fileC ⊸ F I32`, whose model `λc. free c` frees it and answers the
-descriptor. Each model is typed at `Ref I32` and meets its contract at `fileC` because the two
-relations are equal: the identity that is `absSeal`'s and `absUnseal`'s compatibility lemma
-(`absSeal_compatC`). The client is typed at every provider set. -/
+The kernel does not decide which externs are `fileC`'s provider: an extern `fileC ⊸ F (Ref I32)`
+with the identity for its model meets its contract by the same equality. Which externs may
+mention `abs fileName` is the trusted extern table's obligation (SPEC §63). -/
 
 /-- A file represented by an owned cell holding its descriptor. -/
-abbrev fileC : VTy := absTy fileName .cell
+abbrev fileC : VTy := absTy fileName (.ref I32)
 
 /-- `open`'s type at the representation `R`: `I32 ⊸ F R`. -/
 def openXC (R : VTy) : CTy := .arr I32 (.ret R)
@@ -466,12 +949,6 @@ theorem d_openCloseX {P : Nat → Prop} {Δ : LifeCtx} :
   exact .app (.left (.right (.dead (.dead (.dup pO (.dup pC .nil))))))
     (.force (C := closeXC fileC) (.here (.cons (.cons (.cons (.drop pO (.drop pC .nil)))))))
     (.there (.here (.cons (.cons (.drop pO (.drop pC .nil))))))
-
-/-- **The client is outside `fileC`'s provider**: the encapsulation statement's premises, at the
-representation `Cell`. -/
-theorem openCloseX_outside {Δ : LifeCtx} :
-    CDerivesIn (ProvWithout Outside fileName) Δ Γx openCloseX (.comp (.ret I32)) :=
-  (d_openCloseX (P := Outside)).outside id
 
 /-- **Linked with the externs' models, every run ends at the empty memory**: from the empty
 memory, under every allocator, every run continues to an `I32` at the empty memory, the file's

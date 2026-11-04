@@ -50,6 +50,7 @@ def _root_.BoCa.Fig16.LogRel.Core.VTy.eraseLife : VTy → VTy
   | .int w => .int w
   | .fam L => .fam L.eraseLife
   | .opq k => .opq k
+  | .abs n A => .abs n A.eraseLife
 
 /-- A computation type with its lifetimes erased. -/
 def _root_.BoCa.Fig16.LogRel.Core.CTy.eraseLife : CTy → CTy
