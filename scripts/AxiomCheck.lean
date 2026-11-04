@@ -1044,6 +1044,12 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.CDerivesPIn.var_abs_not_rep
 #print axioms BoCa.Fig16.LogRel.Core.not_skipClose
 #print axioms BoCa.Fig16.LogRel.Core.not_skipClose_outside
+#print axioms BoCa.Fig16.LogRel.Core.abs_not_persistent
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesIn.var_abs_linear
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesPIn.var_abs_linear
+#print axioms BoCa.Fig16.LogRel.Core.absI32_linear_outside
+#print axioms BoCa.Fig16.LogRel.Core.d_absCopy_inside
+#print axioms BoCa.Fig16.LogRel.Core.Inversions.Hnf.persistent_false
 #print axioms BoCa.Fig16.LogRel.Core.CDerivesIn.var_abs_hnf
 #print axioms BoCa.Fig16.LogRel.Core.CDerivesPIn.var_abs_hnf
 #print axioms BoCa.Fig16.LogRel.Core.CDerivesIn.var_abs_hnf_none

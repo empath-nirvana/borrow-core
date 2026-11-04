@@ -44,10 +44,16 @@ would be a new rule, outside both. Encapsulation is relative to the chosen provi
 type provided by externs (`fileC` below), which externs may mention `abs n` is an obligation of
 the trusted extern table, not of the kernel.
 
-**Restrictions.** An abstract type has its representation's relation, so it inherits what the
-relation decides: it is persistent, copied and dropped by any client, when its representation is
-(`VTy.persistent`). It is never own-free (`VTy.OwnFree`: an abort never abandons one), it has no
-derived destructor (`HasDtor`), and its immutable reborrow is `Unk` (`VTy.immReborrow`). An
+**Linearity.** An abstract type is never persistent, whatever its representation
+(`abs_not_persistent`): a client neither copies nor drops one. Outside the provider every type a
+client reads it at is linear (`CDerivesIn.var_abs_linear`, `CDerivesPIn.var_abs_linear`), so a
+handle over `I32` is linear (`absI32_linear_outside`). Inside the provider it is its representation
+and may be copied (`d_absCopy_inside`): a provider that wants its clients to copy or drop exposes an
+operation that does it.
+
+**Restrictions.** An abstract type has its representation's relation. It is never own-free
+(`VTy.OwnFree`: an abort never abandons one), it has no derived destructor (`HasDtor`), and its
+immutable reborrow is `Unk` (`VTy.immReborrow`). An
 abstract type is in the fold class only when it is closed (`FoldP.P`): a fold does not recurse
 through one.
 
@@ -512,6 +518,82 @@ theorem CDerivesPIn.var_abs_not_tok {P : Nat → Prop} {n : Nat} {A : VTy} (hn :
   obtain ⟨k, hk, ho⟩ := h.var_abs_hnf hn rfl ⟨[], .inl rfl⟩ hΓ
   obtain ⟨m, B, rfl⟩ := ho.isAbs
   cases hk.eq_self
+
+/-! ### Outside its provider, an abstract type is linear
+
+`abs n A` is not persistent at any `A` (`VTy.persistent`), so no context split duplicates a slot
+of it (`Ctx.SplitP.dup`) and no leaf drops one (`Ctx.DeadP.drop`, `Ctx.SoloP.skip`). Outside the
+provider that holds of every type a client reads such a value at: the provider's route to a copy,
+reading it at a persistent representation, is the unseal. -/
+
+/-- **An abstract type is never persistent**, whatever its representation.  `[spec §10, §63]` -/
+theorem abs_not_persistent (n : Nat) (A : VTy) : ¬ (VTy.abs n A).Persistent := by
+  simp [VTy.Persistent, VTy.persistent]
+
+/-- A type whose head, abstract types kept, is an abstract type is not persistent. -/
+theorem AHnf.persistent_false_abs {T k : VTy} (hT : AHnf T k) {m : Nat} {B : VTy}
+    (hk : k = .abs m B) : T.persistent = false := by
+  induction hT with
+  | box _ ih => simpa [VTy.persistent] using ih hk
+  | mu _ ih =>
+      rename_i A _ _
+      have := ih hk
+      rw [Inversions.persistent_inst_mu] at this
+      simpa [VTy.persistent] using this
+  | base => subst hk; rfl
+
+/-- **Outside its provider, a value of an abstract type is read only at linear types**, at every
+representation `A`, `I32` among them: every type a variable of `abs n A` is read at is not
+persistent. So whatever a client binds it to, no split duplicates it and no leaf drops it: a client
+neither copies nor drops an `abs n A` (no `dup` at `P` with `¬ P n`). It fails if `abs n A` is
+persistent when `A` is (the read at `abs n I32` itself), and if the unseal is ungated: inside the
+provider the variable is read at `A` (`abs_rep_inside`), and a persistent `A` is copied
+(`d_absCopy_inside`). A provider that wants its clients to copy or drop exposes an operation that
+does it.  `[spec §10, §63]` -/
+theorem CDerivesIn.var_abs_linear {P : Nat → Prop} {n : Nat} {A : VTy} (hn : ¬ P n)
+    {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {j : Jdg} {T : VTy} (h : CDerivesIn P Δ Γ (.var i) j)
+    (hj : j.AtVal T) (hΓ : Γ[i]? = some ⟨.abs n A, true⟩) : ¬ T.Persistent := by
+  obtain ⟨k, hk, ho⟩ := h.var_abs_hnf hn rfl hj hΓ
+  obtain ⟨m, B, rfl⟩ := ho.isAbs
+  simp [VTy.Persistent, hk.persistent_false_abs rfl]
+
+/-- **`var_abs_linear` in the pinned judgment**, so for every checked program
+(`checkProgram_outside`).  `[spec §29, §63]` -/
+theorem CDerivesPIn.var_abs_linear {P : Nat → Prop} {n : Nat} {A : VTy} (hn : ¬ P n)
+    {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {j : Jdg} {T : VTy} (h : CDerivesPIn P Δ Γ (.var i) j)
+    (hj : j.AtVal T) (hΓ : Γ[i]? = some ⟨.abs n A, true⟩) : ¬ T.Persistent := by
+  obtain ⟨k, hk, ho⟩ := h.var_abs_hnf hn rfl hj hΓ
+  obtain ⟨m, B, rfl⟩ := ho.isAbs
+  simp [VTy.Persistent, hk.persistent_false_abs rfl]
+
+/-- **A linear handle over `I32`**: outside its provider, a variable of `abs n I32` is read at no
+persistent type, though `I32` is persistent.  `[spec §63]` -/
+theorem absI32_linear_outside {P : Nat → Prop} {n : Nat} (hn : ¬ P n) {Δ : LifeCtx}
+    {Γ : Ctx VTy} {j : Jdg} {T : VTy} (h : CDerivesIn P Δ (⟨.abs n I32, true⟩ :: Γ) (.var 0) j)
+    (hj : j.AtVal T) : ¬ T.Persistent ∧ I32.Persistent :=
+  ⟨h.var_abs_linear hn hj rfl, rfl⟩
+
+/-- Inside its provider an abstract value is its representation, by the unseal: the read
+`var_abs_linear` refuses when the representation is persistent. -/
+theorem abs_rep_inside {P : Nat → Prop} {n : Nat} (hP : P n) (A : VTy) {Δ : LifeCtx}
+    {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) :
+    CDerivesIn P Δ (⟨.abs n A, true⟩ :: Γ) (.var 0) (.val A) :=
+  .absUnseal hP (.var (.here hΓ))
+
+/-- The provider's copy of a handle: `λx. y ← return x; return (y, y)`, with `x` unsealed to its
+representation and each copy sealed again. -/
+def absCopyB : Expr := bindE (.var 0) (.pair (.var 0) (.var 0))
+
+/-- **Inside its provider a handle over a persistent representation is copied**, at
+`abs n A ⊸ F (abs n A ⊗ abs n A)`: the operation a provider exposes to let its clients copy. The
+duplication is of `y : A`, after the unseal.  `[spec §63]` -/
+theorem d_absCopy_inside {P : Nat → Prop} {n : Nat} (hP : P n) {A : VTy} (hA : A.Persistent)
+    {Δ : LifeCtx} :
+    CDerivesIn P Δ [] (.val (.lam absCopyB))
+      (.comp (.arr (.abs n A) (.ret (.tensor (.abs n A) (.abs n A))))) :=
+  .lam (.bind (.left .nil) (.ret (abs_rep_inside hP A .nil))
+    (.ret (.tensorI (.dup hA (.dead .nil)) (.absSeal hP (.var (.here (.cons .nil))))
+      (.absSeal hP (.var (.here (.cons .nil)))))))
 
 /-! ### `File` outside and inside `with_fs` -/
 

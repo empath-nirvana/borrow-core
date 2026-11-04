@@ -20,7 +20,7 @@ the two thunk rules conclude with their premise's term.  So:
 
 **Views keep the head** (`VView.hnf`).  A view of `T` has `T`'s head (`Hnf`: boxes stripped, `μ`
 unrolled), unless that head is `!` (dereliction reaches its content), `Imm` or `Mut` (`⊑` changes
-the lifetime).  Persistence is a property of the head (`Hnf.persistent`).
+the lifetime).  A persistent type has a persistent head (`Hnf.persistent`).
 
 **The inversions.**  A variable is read at a view of its live slot's type (`der_var`); a pair at the
 views of a tensor of its parts' types (`der_pair`); `inj₁ a` at the views of a sum, `a` typed in the
@@ -177,23 +177,23 @@ theorem persistent_rename (r : Nat → Nat) : ∀ A : VTy, (A.rename r).persiste
   | .unit | .zero | .unk | .int _ | .opq _ | .tvar _ | .thunk _ => rfl
   | .tensor A B | .sum A B => by
       simp only [VTy.rename, VTy.persistent, persistent_rename r A, persistent_rename r B]
-  | .ref _ | .imm _ _ | .mut _ _ | .fam _ | .bang _ => rfl
-  | .box _ A | .abs _ A => by simp only [VTy.rename, VTy.persistent, persistent_rename r A]
+  | .ref _ | .imm _ _ | .mut _ _ | .fam _ | .bang _ | .abs _ _ => rfl
+  | .box _ A => by simp only [VTy.rename, VTy.persistent, persistent_rename r A]
   | .mu A => by simp only [VTy.rename, VTy.persistent, persistent_rename _ A]
 
 theorem persistent_subst_false : ∀ (A : VTy) (σ : Nat → VTy), A.persistent = false →
     (A.subst σ).persistent = false
   | .unit, _, h | .zero, _, h | .unk, _, h | .int _, _, h | .tvar _, _, h | .bang _, _, h => by
       simp [VTy.persistent] at h
-  | .opq _, _, _ | .thunk _, _, _ | .ref _, _, _ | .imm _ _, _, _ | .mut _ _, _, _ | .fam _, _, _ =>
-      rfl
+  | .opq _, _, _ | .thunk _, _, _ | .ref _, _, _ | .imm _ _, _, _ | .mut _ _, _, _ | .fam _, _, _
+  | .abs _ _, _, _ => rfl
   | .tensor A B, σ, h | .sum A B, σ, h => by
       simp only [VTy.persistent, Bool.and_eq_false_iff] at h
       simp only [VTy.subst, VTy.persistent, Bool.and_eq_false_iff]
       rcases h with h | h
       · exact .inl (persistent_subst_false A σ h)
       · exact .inr (persistent_subst_false B σ h)
-  | .box _ A, σ, h | .abs _ A, σ, h => by
+  | .box _ A, σ, h => by
       simp only [VTy.persistent] at h
       simp only [VTy.subst, VTy.persistent]; exact persistent_subst_false A σ h
   | .mu A, σ, h => by
@@ -205,12 +205,12 @@ theorem persistent_subst_true : ∀ (A : VTy) (σ : Nat → VTy), A.persistent =
   | .unit, _, _, _ | .zero, _, _, _ | .unk, _, _, _ | .int _, _, _, _ | .bang _, _, _, _ => rfl
   | .tvar n, σ, _, hσ => hσ n
   | .opq _, _, h, _ | .thunk _, _, h, _ | .ref _, _, h, _ | .imm _ _, _, h, _ | .mut _ _, _, h, _
-  | .fam _, _, h, _ => by simp [VTy.persistent] at h
+  | .fam _, _, h, _ | .abs _ _, _, h, _ => by simp [VTy.persistent] at h
   | .tensor A B, σ, h, hσ | .sum A B, σ, h, hσ => by
       simp only [VTy.persistent, Bool.and_eq_true] at h
       simp only [VTy.subst, VTy.persistent, Bool.and_eq_true]
       exact ⟨persistent_subst_true A σ h.1 hσ, persistent_subst_true B σ h.2 hσ⟩
-  | .box _ A, σ, h, hσ | .abs _ A, σ, h, hσ => by
+  | .box _ A, σ, h, hσ => by
       simp only [VTy.persistent] at h
       simp only [VTy.subst, VTy.persistent]; exact persistent_subst_true A σ h hσ
   | .mu A, σ, h, hσ => by
@@ -233,13 +233,23 @@ theorem persistent_inst_mu (A : VTy) : (VTy.inst (.mu A) A).persistent = A.persi
       | zero => simpa [VTy.scons, VTy.persistent] using hA
       | succ n => rfl
 
-/-- **A type is persistent exactly when its head is.** -/
-theorem Hnf.persistent {T h : VTy} (hh : Hnf T h) : T.persistent = h.persistent := by
+/-- **A persistent type has a persistent head.** The converse fails only through an abstract
+type: `Hnf` strips `abs n A` to `A`'s head, and `abs n A` is never persistent while `A` may be.
+`[spec §10, §63]` -/
+theorem Hnf.persistent {T h : VTy} (hh : Hnf T h) (hT : T.persistent = true) :
+    h.persistent = true := by
   induction hh with
-  | box _ ih => simpa [VTy.persistent] using ih
-  | mu _ ih => rw [← ih, persistent_inst_mu]; rfl
-  | abs _ ih => simpa [VTy.persistent] using ih
-  | base => rfl
+  | box _ ih => exact ih (by simpa [VTy.persistent] using hT)
+  | mu _ ih => exact ih (by rw [persistent_inst_mu]; simpa [VTy.persistent] using hT)
+  | abs _ _ => simp [VTy.persistent] at hT
+  | base => exact hT
+
+/-- A type whose head is not persistent is not persistent. -/
+theorem Hnf.persistent_false {T h : VTy} (hh : Hnf T h) (hf : h.persistent = false) :
+    T.persistent = false := by
+  cases hT : T.persistent with
+  | false => rfl
+  | true => rw [hh.persistent hT] at hf; cases hf
 
 /-! ### The same-term rules, at the judgements -/
 

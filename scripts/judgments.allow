@@ -1,8 +1,8 @@
 # Typing judgments that exist today (#798). Frozen: do not add lines; fold judgments instead.
 # Format: path name
-Core/Fundamental.lean CDerives
-Core/PinDerives.lean CDerivesP
-Core/Tied.lean CDerivesAt
+Core/Fundamental.lean CDerivesIn
+Core/PinDerives.lean CDerivesPIn
+Core/Tied.lean CDerivesAtIn
 experiments/Affine/Affine/Elab.lean ADerives
 experiments/CBPVCore/CBPVCore/Fundamental.lean CDerives
 experiments/CBPVMu/CBPVMu/Fundamental.lean CDerives
@@ -14,7 +14,7 @@ experiments/Outlives/Outlives/Derives.lean LDerives
 Frontend/Check/TDerives.lean TDerivesAt
 Frontend/Check/TDerives.lean TDerivesP
 Paper/S2_Statics/Definitions.lean Derives
-scripts/pin/CDerivesP.tmpl.lean CDerivesP
+scripts/pin/CDerivesP.tmpl.lean CDerivesPIn
 scripts/pin/TDerives.tmpl.lean TDerivesAt
 scripts/pin/TDerives.tmpl.lean TDerivesP
 Support/LogicalRelation/Compatibility.lean DerivesIn

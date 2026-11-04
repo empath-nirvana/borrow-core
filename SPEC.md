@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.32 · 2026-11-03
+Version 1.33 · 2026-11-03
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -10646,12 +10646,23 @@ metafunction, `abs` is a leaf:
 - it is never own-free (`VTy.OwnFree`), so no abort abandons one;
 - in the fold class `FoldP.P` it is a closed leaf: a fold does not recurse through it.
 
-**Restrictions.** An abstract type inherits what its representation's relation decides:
-- it is persistent, so copied and dropped by any client, exactly when its representation is
-  (`VTy.persistent`). A linear abstract type needs a linear representation: `Tok`, a `Ref`, a
-  record holding one.
+**Linearity.** An abstract type is never persistent, whatever its representation
+(`VTy.persistent`, `abs_not_persistent`): no split duplicates a slot of `abs n A` and no leaf drops
+one, so a provider can make a linear abstraction over a copyable representation, a handle over
+`I32`. Outside the provider this holds of every type a client reads such a value at
+(`CDerivesIn.var_abs_linear`, `CDerivesPIn.var_abs_linear`; `absI32_linear_outside` at `I32`):
+reading it at a persistent representation is the unseal. Inside the provider the value is its
+representation (`abs_rep_inside`), and a persistent representation is copied there
+(`d_absCopy_inside`, `λx. y ← return x; return (y, y)` with the unseal and two seals). **A provider
+that wants its clients to copy or drop an abstract type exposes an operation that does it**: a
+copy as `d_absCopy_inside`, a drop as a destructor in the declaration table (`DropOk.abs`). The
+relation does not change: `abs n A`'s is `A`'s, and persistence only gates the split and the
+leaves, so every soundness theorem holds with fewer derivations.
+
+**Restrictions.**
 - In the inversions inside every provider (`Core/Inversions.lean`), the head of `abs n A` is `A`'s
-  (`Hnf.abs`).
+  (`Hnf.abs`). A persistent type has a persistent head (`Hnf.persistent`); the converse fails
+  only at an abstract type.
 
 **The provider index.** The judgment is `CDerivesIn (P : Nat → Prop)` (`Core/Fundamental.lean`).
 `P n` means the derivation is inside the provider of `n`. Two rules read `P`. They are the iso
@@ -10756,8 +10767,7 @@ declared types, the machine, `Paper/`, `Support/`, the relation's clauses at the
 - The run-level theorem "each file is closed exactly once". It needs a parametric reading of
   abstract types (#782, #789): every theorem that factors through `SemC` admits `burn` at `abs n`,
   whose relation is `Tok`'s.
-- The provider of a user-declared abstract type (methods, modules), and whether such a type may be
-  more linear than its representation (today it is persistent when the representation is).
+- The provider of a user-declared abstract type (methods, modules).
 - Reading an abstract value through a borrow inside its provider: `Imm̲ (abs n A)` is `Unk`, and
   no rule unseals under `Imm`/`Mut`.
 - The checker's `File`. `File` reaches the checker on the `dtor-wire` branch as the kind
@@ -11221,6 +11231,12 @@ destructor, the clients `openClose` and `openCloseX`), `Core/LetDtorFiles.lean`
 
 ## Changelog
 
+- **1.33** (2026-11-03) — §63 (#778): an abstract type is never persistent, whatever its
+  representation (`VTy.persistent`), so a provider can make a linear abstraction over a copyable
+  representation. Outside the provider every type a client reads one at is linear
+  (`CDerivesIn.var_abs_linear`, `CDerivesPIn.var_abs_linear`); inside, the provider copies through
+  its representation (`d_absCopy_inside`) and exposes that as an operation. `Hnf.persistent` is the
+  implication "a persistent type has a persistent head".
 - **1.32** (2026-11-03) — §63 (#778): the abstract type is the value-type former `VTy.abs n A`,
   over any value type; `Opaque.abs` and `Opaque.cell` are gone. The pinned judgment is indexed,
   `CDerivesPIn P`, its seal and unseal gated, so `checkProgram_outside` holds of every checked
