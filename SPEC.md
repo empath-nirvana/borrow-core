@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.31 · 2026-11-04
+Version 1.32 · 2026-11-04
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -171,7 +171,8 @@ data is materialized, and gives codata (`&`, and the formers of §7) a home.
 the CBPV formers (`thunk`, `force`, `return`, `to`, `λ`, application, `⟨·,·⟩`, projections),
 the lifetime `∀` (elimination at every `C`), the `!` rules of §2, `[]I` at every value type,
 `⊑Imm`/`⊑Mut`, one constant per borrow axiom of `[TR]` p. 3 at arbitrary value-type payloads,
-and three call-by-value derived forms (`lolliE`, `allEV`, `ofRet`). No new machine rules.
+three call-by-value derived forms (`lolliE`, `allEV`, `ofRet`), and conversion up to the names of
+lifetime binders (`[α]`, *Lifetime binders and `[α]`* below). No new machine rules.
 
 ### Semantics
 
@@ -292,39 +293,47 @@ mention none of its binders. Two kinds of body are still checked once per lifeti
 - one with a borrow, whose type `∀'x ⊏ ⊓Δ. …` the context changes (the borrow rules' type reads
   `⊓Δ`, so no derivation at a smaller context is one at a larger);
 - one whose type has a lifetime binder: the binder is numbered from the context (`Δ.freshVar`), so
-  the type elaborated at the use is another `VTy` than the one checked, and the checker compares
-  types as they are. A renaming of typed derivations' lifetime binders would place it.
+  the type elaborated at the use is another `VTy` than the one checked. `[α]` (below) relates the
+  two types; placing the body without checking it again would also need its derivation's binders
+  renamed, which is not built.
 
 In #509's reproduction (`print_f64` twice) that is 179 keys and 249 checks, of which 36 are bodies
 with a borrow and 34 bodies whose type has a binder.
 
-**Lifetime binders inside a computation type (#808).** A term's lifetime context numbers its
-variables from `0`: a function's lifetime parameters, `Fun`, a borrow's lifetime, `'main`
-(`Δ.freshVar`). A binder of a computation type, `forall 'x < @b. C`, is named by its body instead:
-`CTy.canonBinder 'x C = max binderBase (lifeBound C[⊤/'x])`, one past every lifetime index of `C`
-other than `'x`, binders included, and at least `binderBase = 65536` (`Core/Types.lean`). The
-checker elaborates the body with `'x` numbered from the context, then renames it to that name
-(`elabC`); the unwinding borrows, whose callback is a computation type `U (∀'x ⊏ @b. C)`, name
-their binder the same way (`canonFor`, `Frontend/Check/Consts.lean`).
+**Lifetime binders and `[α]` (#808).** A term's lifetime context numbers its variables from `0`: a
+function's lifetime parameters, `Fun`, a borrow's lifetime, `'main` (`Δ.freshVar`), and the
+elaborator names a type's binder `forall 'x < @b. C` or `all 'x < @b. A` the same way. So one
+written type elaborated in two lifetime contexts can be two `VTy`s that differ only in their
+binders' names, as `File<'c>` (§22) is in `main` and in `file_read<'a, 'c>`. The kernel accepts a
+term at every type equal to its own up to those names, by one rule of `CDerives`:
 
-- **One term everywhere.** The name is a function of the body up to the binder's own name. While a
-  context's variables are below `binderBase`, every name inside a type is `binderBase` plus the
-  nesting of binders below it, so a type such as `File<'c>` (§22) elaborates to the same `CTy` in
-  every function, and `∀E` and `[sub]` at a context's lifetimes leave those names as they are:
-  `applyLSub` renames a binder only where a substituted lifetime mentions it, and none mentions a
-  name at or above `binderBase`.
-- **No capture.** The name is above every variable of the body other than `'x`, free or bound, so
-  renaming `'x` to it captures nothing, and an inner binder's name is below the outer's. `NuOk`'s
-  freshness (no `∀` leaf binder free in the body) holds of a written `nu` type whose other leaves
-  mention no name at or above the leaf's, and `unfold`'s (`BindsFresh`) of every state type with
-  the context's variables only; the checker decides both (`nuOkB`, `bindsFreshB`).
-- **Where the names are not canonical.** A `Fun` checked against a computation type takes the
-  type's binder name into its body's context, so inside it a type that mentions that lifetime has
-  names above it; and `instT` (the unrolling, `unfold`'s step type) keeps a leaf's name when it puts
-  a type with binders under it. Both are compared with types built by the same operations, never
-  with a type written elsewhere. A value type `all 'x < @b. A` (a function's lifetime parameters)
-  keeps the context's numbering: its binder is the variable the function's body is checked at.
-  The kernel's rules are unchanged; `CDerives` compares types as they are.
+    Δ; Γ ⊢ e : j     j ≡α j'
+    ────────────────────────  [α]
+         Δ; Γ ⊢ e : j'
+
+- **The relation.** `j ≡α j'` is `Jdg.alphaB j j' = true` (`Core/Fundamental.lean`): `VTy.alphaB`/
+  `CTy.alphaB` at no binder pairs (`Core/Types.lean`). The binders are `CTy.all` alone (`VTy.all`
+  is `U (∀'x ⊏ @b. F A)`); passing `∀'x ⊏ @b. C` and `∀'x' ⊏ @b'. C'` pairs `'x` with `'x'`, and
+  a variable is read through the innermost pair that binds it on either side, or is free on both.
+  An operation's signature (`A ↠ B` and its cancel row) is compared as it is written, its free
+  lifetimes read at the pairs: rows are tied to the effect context's signatures as written
+  (`RowAt`). It is an equivalence (`VTy.alphaB_refl`, `_symm`, `_trans'`, `Core/Alpha.lean`).
+- **Soundness.** At substitutions agreeing on the pairs (`AlphaAgree`), α-equivalent types are one
+  type (`VTy.alphaB_sound`, `CTy.alphaB_sound` into `TyEq`/`CTyEq`), so the relation reads them
+  alike (`cC_alpha`, from `cC_tyEq`). `[α]`'s compatibility lemma is `alpha_compatJ`; it is the
+  rule's one cost under the growth rule.
+- **The checker.** `convV`/`convC` (`Frontend/Check/Steps.lean`) accept a synthesized type equal
+  to the expected one, or α-equivalent to it, emitting the `alpha` node (`rAlpha`); at an
+  effect row, `[sub]` and then `[α]` at the answer. The node erases to its premise's term, and the
+  backends read through it (`transparent?`).
+- **Inversions.** `[α]` concludes with its premise's term, so it is a same-term step (`JS.alpha`,
+  `VS.alpha`, `Core/Inversions.lean`), and what an inversion gives is up to `≡α`: views keep their
+  head up to `≡α` (`VView.hnf`, `Hnf.alpha`), a rigid type is read at its α-equivalents
+  (`JR.rigid`), an `&` at α-equivalent `&`s (`JR.amp_amp`, through `CTy.alphaB_unroll` at two
+  positive bodies), and a λ-value's binder at an α-equivalent of the type it is read at
+  (`lam_bang`, `lam_arr`, `der_clause_body`). Persistence is kept (`VTy.alphaB_persistent`), so
+  each refusal (`refuses_R_clauses`, `not_der_at05`, `not_der_at06`, `not_der_at08`,
+  `not_der_at13`, `not_der_progT`, `not_der_e7c`) holds as before.
 
 **The elaborator's keys.** A `use` node records the elaborator's key of the `def` (`TInfo.key`,
 `Frontend.DefKey`), when the elaboration generated it: a template instance's template and type
@@ -4394,7 +4403,7 @@ it an observation takes a borrow lent for one call: `∀'x ⊏ ⊤. Mut 'x A ⊸
 - **Positivity.** `NuOk C` is `NuShape C` and binder freshness: no `'x` bound by a `∀` leaf is free
   in `C` (`CTy.LeafBinds`). `unfold` asks the same of its state type (`CTy.BindsFresh`). The
   checker decides both (`CTy.nuOkB`, `CTy.bindsFreshB`); a written type is fresh by construction,
-  since a binder is named above every other index of its body (§3, `CTy.canonBinder`).
+  since a binder is named `Δ.freshVar`, past every variable the body's free lifetimes name.
 - **Relation.** `cB` at `∀'x ⊏ @c. D` is `cC`'s `∀` clause:
   `∀α, ⌜δ ⊨ α ⊏ c⌝ ─⋆ cB η D (δ[x ↦ α]) (e ())`. The candidate for `U X` is read at no lifetime
   substitution (`nuP`), so the rest an observation answers does not depend on `α`. One
@@ -4427,8 +4436,10 @@ it an observation takes a borrow lent for one call: `∀'x ⊏ ⊤. Mut 'x A ⊸
   reborrow, one after: `i32[72123]`) and `corpus/nu-file-consumed.bc` (the object closed by its
   implicit consume: `i32[71]`). Each calls the observations through functions of their own
   lifetime parameters (`file_read<'a, 'c>`), so `File<'c>` is elaborated in several lifetime
-  contexts; it is one `CTy` in all of them because its `forall` binders are named by their bodies
-  (§3, *Lifetime binders inside a computation type*).
+  contexts, with other binder names in each; the checker relates them by `[α]` (§3, *Lifetime
+  binders and `[α]`*). `corpus/nu-file-contexts.bc` writes the type in two contexts whose numbering
+  differs and passes the object between them, and `corpus/alpha-all-u.bc` uses one type written
+  as `all 'x < b. A` in one function and as `U (forall 'x < b. F A)` in another.
 - **Baseline.** `fundamentalC`, `adequacyC`, `adequacyD`, `resourceSafety`, `fundamentalC_pin` and
   `adequacyC_pin` keep their statements. Changed statements: `CTy.NuLeaf` (the `∀` case),
   `CTy.instT` (passes under `∀`), `CTy.NuOk` (`NuShape` and freshness), `cB` (the `∀` clause),
@@ -11027,6 +11038,20 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
 
 ## Changelog
 
+- **1.32** (2026-11-04) — §3, §22 (#808): conversion up to the names of lifetime binders. `CDerives`
+  gains `[α]` (`CDerives.alpha`, premise `Jdg.alphaB j j' = true`), and so do its copies
+  (`CDerivesAt`, `CDerivesP`, `TDerivesAt`, `TDerivesP`) and the typed term (`TExpr.alpha`). The
+  rule's compatibility lemma is `alpha_compatJ`, from `cC_tyEq` through `CTy.alphaB_sound`. The
+  checker's `convV`/`convC` compare types up to `≡α`. `check-judgments` is unchanged: a rule, no
+  judgment. `fundamentalC`, `adequacyC`, `adequacyD` and `resourceSafety` keep their statements.
+  Changed statements, at the inversions (`Core/Inversions.lean`): `VView.hnf`, `VView.hnf_of`,
+  `VView.eq_of_heads`, `vview_thunk`, `vview_kBoxO_thunk`, `vview_bang_thunk`, `vview_bang_bang`,
+  `vview_tensor`, `LamCls` and `LamCls.val_thunk`/`val_bang`/`comp_rigid`, `JR.rigid`, `AmpCls`,
+  `JR.amp_amp`, `lam_bang`, `lam_arr`, `der_clause_body`, `der_cancel_lin`,
+  `kcancel_jr_cancellable` (each up to `≡α`); in `Core/Rejections.lean` `kview`, `kviewO`,
+  `vview_ref`, `not_release_kappa`, `wb_view`, `at05_M`. Every refusal keeps its statement. The
+  1.31 naming of a computation type's binders by its body (`CTy.canonBinder`) is withdrawn:
+  binders keep the context's numbering. Programs `alpha-all-u`, `nu-file-contexts`.
 - **1.31** (2026-11-04) — §7, §19, §22 (#808): observations quantified over a lifetime. An
   observation tree may be `∀'x ⊏ @b. D` (`CTy.NuLeaf`), so a codata observation takes a borrow
   lent for one call (`∀'x. Mut 'x A ⊸ …`, `∀'x. Imm 'x A ⊸ …`). `NuOk` is `NuShape` plus binder
@@ -11035,11 +11060,8 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
   `cB_step`, `cB_bind` and `node_ok` extended. §7 corrects the earlier reading of `X ∉ A`: it
   keeps `X` out of a negative position and was never a restriction on lifetimes; the missing
   piece was the `∀` case. `fundamentalC`, `adequacyC`, `adequacyD` and `resourceSafety` keep their
-  statements. `Core/NuBorrow.lean` derives `read`/`write` calls on lent buffers. §3: a binder of a
-  computation type is named by its body (`CTy.canonBinder`, at or above `binderBase`), in the
-  checker's `elabC` and the unwinding borrows' callbacks, so a type with a `forall` observation is
-  one `CTy` in every lifetime context. Programs `nu-file-read`, `nu-file-twice`,
-  `nu-file-consumed`.
+  statements. `Core/NuBorrow.lean` derives `read`/`write` calls on lent buffers. Programs
+  `nu-file-read`, `nu-file-twice`, `nu-file-consumed`.
 - **1.30** (2026-11-04) — §62, §12 (#771): the frame form of 1.27 is removed with its programs
   and its file handle; Core has no file-specific definition. `resourceSafety` and `rtSafety` keep
   their statements, in `Core/ResourceSafety.lean`. `kappa_lin_strict` (a must-resume `κ` is

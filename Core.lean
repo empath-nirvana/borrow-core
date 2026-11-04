@@ -43,6 +43,7 @@ import Core.FoldOwnG
 import Core.FoldOwnGTerm
 import Core.FoldClass
 import Core.Nu
+import Core.Alpha
 import Core.Fundamental
 import Core.Examples
 import Core.Embedding

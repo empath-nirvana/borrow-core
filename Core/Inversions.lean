@@ -9,8 +9,11 @@ derivation, which carries a *class* of judgements through the rules that conclud
 premise's term (`JS`, `JR`) and tells every other rule apart by its conclusion's term.
 
 **The same-term rules.**  The value rules `!E`, `[]I`, `[]E`, `⊑` at `Imm` and `Mut`, `μ`'s `roll`
-and `unroll`; `return`, its reading back (`ofRet`), `[sub]` and `ν`'s two rules; and, at a λ-value,
-the two thunk rules conclude with their premise's term.  So:
+and `unroll`; `return`, its reading back (`ofRet`), `[sub]`, `ν`'s two rules and `[α]`; and, at a
+λ-value, the two thunk rules conclude with their premise's term.  `[α]` changes a type only in its
+binders' names, so what the inversions give about a type is up to α-equivalence (`VTy.alphaB`): a
+head up to it (`Hnf.alpha`), a rigid type at its α-equivalents, a λ-value's binder at an
+α-equivalent of the type read.  So:
 
 * a value read at a type `T` is read at the views of `T` and at rows over them (`ValCls`): `!`,
   `[]`, `⊑` and `μ` change the type, `ν` and `[sub]` only the row;
@@ -76,6 +79,7 @@ inductive VS : VTy → VTy → Prop
   | mutS (a b : Lifetime.Life) (A : VTy) : VS (.mut b A) (.mut a A)
   | roll (A : VTy) : VS (VTy.inst (.mu A) A) (.mu A)
   | unroll (A : VTy) : VS (.mu A) (VTy.inst (.mu A) A)
+  | alpha {A B : VTy} : VTy.alphaB [] A B = true → VS A B
 
 /-- The views of a value type. -/
 abbrev VView := Relation.ReflTransGen VS
@@ -106,52 +110,88 @@ theorem Hnf.eq_self {T h : VTy} (hh : Hnf T h) (hb : ∀ a A, T ≠ .box a A) (h
 
 theorem hnf_self {T : VTy} (hb : ∀ a A, T ≠ .box a A) (hm : ∀ A, T ≠ .mu A) : Hnf T T := .base hb hm
 
-/-- **Views keep the head**, unless the head is `!` (whose content is then viewed), `Imm` or
-`Mut`. -/
+/-- **α-equivalence keeps the head**, up to α-equivalence: `μ`'s unrolling respects it
+(`VTy.alphaB_inst`), and so do the formers. -/
+theorem Hnf.alpha {T h : VTy} (hh : Hnf T h) :
+    ∀ {T' : VTy}, VTy.alphaB [] T T' = true → ∃ h', Hnf T' h' ∧ VTy.alphaB [] h h' = true := by
+  induction hh with
+  | box _ ih =>
+      intro T' hα
+      cases T' <;> simp only [VTy.alphaB, Bool.and_eq_true, reduceCtorEq, Bool.false_eq_true] at hα
+      obtain ⟨h', hh', hα'⟩ := ih hα.2
+      exact ⟨h', .box hh', hα'⟩
+  | @mu A _ _ ih =>
+      intro T' hα
+      cases T' with
+      | mu A' =>
+          obtain ⟨h', hh', hα'⟩ := ih (VTy.alphaB_inst (S := .mu A) (S' := .mu A') hα hα)
+          exact ⟨h', .mu hh', hα'⟩
+      | _ => simp [VTy.alphaB] at hα
+  | @base T hb hm =>
+      intro T' hα
+      refine ⟨T', .base ?_ ?_, hα⟩
+      · rintro a A rfl
+        cases T <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hα
+        exact hb _ _ rfl
+      · rintro A rfl
+        cases T <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hα
+        exact hm _ rfl
+
+/-- **Views keep the head** up to α-equivalence, unless the head is `!` (whose content is then
+viewed), `Imm` or `Mut`. -/
 theorem VView.hnf {T T' h : VTy} (hv : VView T T') (hT : Hnf T h) :
-    Hnf T' h ∨ (∃ A, h = .bang A ∧ VView A T') ∨ (∃ a A, h = .imm a A) ∨ (∃ a A, h = .mut a A) := by
+    (∃ h', Hnf T' h' ∧ VTy.alphaB [] h h' = true) ∨ (∃ A, h = .bang A ∧ VView A T') ∨
+      (∃ a A, h = .imm a A) ∨ (∃ a A, h = .mut a A) := by
   induction hv with
-  | refl => exact .inl hT
+  | refl => exact .inl ⟨h, hT, VTy.alphaB_refl h⟩
   | tail _ hs ih =>
-      rcases ih with h₁ | ⟨A, rfl, hA⟩ | hi | hm
+      rcases ih with ⟨h₁, hh₁, hα⟩ | ⟨A, rfl, hA⟩ | hi | hm
       · cases hs with
         | bang A =>
-            obtain rfl := h₁.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)
-            exact .inr (.inl ⟨_, rfl, .refl⟩)
-        | boxI a A => exact .inl (.box h₁)
-        | boxE a A => cases h₁ with
-          | box h₁ => exact .inl h₁
+            obtain rfl := hh₁.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)
+            cases h <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hα
+            exact .inr (.inl ⟨_, rfl, .single (.alpha hα)⟩)
+        | boxI a A => exact .inl ⟨h₁, .box hh₁, hα⟩
+        | boxE a A => cases hh₁ with
+          | box hh₁ => exact .inl ⟨_, hh₁, hα⟩
           | base hb _ => exact absurd rfl (hb _ _)
         | immS a b A =>
-            obtain rfl := h₁.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)
-            exact .inr (.inr (.inl ⟨b, A, rfl⟩))
+            obtain rfl := hh₁.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)
+            cases h <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hα
+            exact .inr (.inr (.inl ⟨_, _, rfl⟩))
         | mutS a b A =>
-            obtain rfl := h₁.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)
-            exact .inr (.inr (.inr ⟨b, A, rfl⟩))
-        | roll A => exact .inl (.mu h₁)
-        | unroll A => cases h₁ with
-          | mu h₁ => exact .inl h₁
+            obtain rfl := hh₁.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)
+            cases h <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hα
+            exact .inr (.inr (.inr ⟨_, _, rfl⟩))
+        | roll A => exact .inl ⟨h₁, .mu hh₁, hα⟩
+        | unroll A => cases hh₁ with
+          | mu hh₁ => exact .inl ⟨_, hh₁, hα⟩
           | base _ hm => exact absurd rfl (hm _)
+        | alpha hα' =>
+            obtain ⟨h₂, hh₂, hα₂⟩ := hh₁.alpha hα'
+            exact .inl ⟨h₂, hh₂, VTy.alphaB_trans' hα hα₂⟩
       · exact .inr (.inl ⟨A, rfl, hA.tail hs⟩)
       · exact .inr (.inr (.inl hi))
       · exact .inr (.inr (.inr hm))
 
-/-- A view of a type whose head is no `!`, `Imm` or `Mut` has that head. -/
+/-- A view of a type whose head is no `!`, `Imm` or `Mut` has that head, up to α-equivalence. -/
 theorem VView.hnf_of {T T' h : VTy} (hv : VView T T') (hT : Hnf T h) (hb : ∀ A, h ≠ .bang A)
-    (hi : ∀ a A, h ≠ .imm a A) (hm : ∀ a A, h ≠ .mut a A) : Hnf T' h := by
+    (hi : ∀ a A, h ≠ .imm a A) (hm : ∀ a A, h ≠ .mut a A) :
+    ∃ h', Hnf T' h' ∧ VTy.alphaB [] h h' = true := by
   rcases hv.hnf hT with h' | ⟨A, rfl, -⟩ | ⟨a, A, rfl⟩ | ⟨a, A, rfl⟩
   · exact h'
   · exact absurd rfl (hb A)
   · exact absurd rfl (hi a A)
   · exact absurd rfl (hm a A)
 
-/-- **Views of a type that is its own head, no `!`, `Imm`, `Mut`, are that type**, when they are
-their own heads too. -/
+/-- **Views of a type that is its own head, no `!`, `Imm`, `Mut`, are that type** up to
+α-equivalence, when they are their own heads too. -/
 theorem VView.eq_of_heads {T T' : VTy} (hv : VView T T') (hTb : ∀ a A, T ≠ .box a A)
     (hTm : ∀ A, T ≠ .mu A) (hb : ∀ A, T ≠ .bang A) (hi : ∀ a A, T ≠ .imm a A)
     (hmu : ∀ a A, T ≠ .mut a A) (hT'b : ∀ a A, T' ≠ .box a A) (hT'm : ∀ A, T' ≠ .mu A) :
-    T' = T :=
-  ((hv.hnf_of (hnf_self hTb hTm) hb hi hmu).eq_self hT'b hT'm).symm
+    VTy.alphaB [] T T' = true := by
+  obtain ⟨h', hh', hα⟩ := hv.hnf_of (hnf_self hTb hTm) hb hi hmu
+  rwa [hh'.eq_self hT'b hT'm] at hα
 
 /-! ### Persistence is a property of the head -/
 
@@ -234,6 +274,13 @@ inductive JS : Jdg → Jdg → Prop
   | effSub (S S' : Row) (A : VTy) : RowLe S S' → JS (.comp (CTy.effOf S A)) (.comp (CTy.effOf S' A))
   | nuIn (C : CTy) : C.NuOk → JS (.comp C.unroll) (.comp (.nu C))
   | nuOut (C : CTy) : C.NuOk → JS (.comp (.nu C)) (.comp C.unroll)
+  | alpha {C C' : CTy} : CTy.alphaB [] C C' = true → JS (.comp C) (.comp C')
+
+/-- `[α]` at the judgements alone. -/
+theorem JS.ofAlpha : ∀ {j j' : Jdg}, j.alphaB j' = true → JS j j'
+  | .val _, .val _, h => .val (.alpha h)
+  | .comp _, .comp _, h => .alpha h
+  | .val _, .comp _, h | .comp _, .val _, h => by simp [Jdg.alphaB] at h
 
 /-- The judgements the same-term rules reach. -/
 abbrev JR := Relation.ReflTransGen JS
@@ -303,11 +350,31 @@ theorem ValCls.step {T : VTy} {j j' : Jdg} (hs : JS j j') (h : ValCls T j) : Val
   | nuOut C hC =>
       obtain ⟨S, Y, he, -⟩ := h
       exact absurd he.symm (effOf_ne_nu S Y C)
+  | alpha hα =>
+      obtain ⟨S, Y, rfl, hY⟩ := h
+      obtain ⟨Y', rfl, hY'⟩ := CTy.alphaB_effOf S hα
+      exact ⟨S, Y', rfl, hY.tail (.alpha hY')⟩
 
 theorem ValCls.reach {T : VTy} {j j' : Jdg} (hr : JR j j') (h : ValCls T j) : ValCls T j' := by
   induction hr with
   | refl => exact h
   | tail _ hs ih => exact ih.step hs
+
+/-- A view of an α-equivalent is a view. -/
+theorem VView.of_alpha {T₀ T Y : VTy} (hα : VTy.alphaB [] T₀ T = true) (h : VView T Y) :
+    VView T₀ Y :=
+  Relation.ReflTransGen.head (VS.alpha hα) h
+
+/-- An α-equivalent of a view is a view. -/
+theorem VView.alpha {T Y Y' : VTy} (h : VView T Y) (hα : VTy.alphaB [] Y Y' = true) :
+    VView T Y' :=
+  h.tail (VS.alpha hα)
+
+theorem ValCls.of_alpha {T₀ T : VTy} {j : Jdg} (hα : VTy.alphaB [] T₀ T = true)
+    (h : ValCls T j) : ValCls T₀ j := by
+  cases j with
+  | val Y => exact VView.of_alpha hα h
+  | comp D => obtain ⟨S, Y, rfl, hY⟩ := h; exact ⟨S, Y, rfl, VView.of_alpha hα hY⟩
 
 /-- A computation type no same-term rule leaves: no row's, no `&`, no `ν`. -/
 def Rigid (D : CTy) : Prop :=
@@ -323,22 +390,51 @@ theorem rigid_all (x : BoCa.Lifetime.LifeVar) (b : Lifetime.Life) (C : CTy) :
 theorem rigid_top : Rigid .top := by
   refine ⟨fun S Y h => effOf_ne_top S Y h.symm, fun _ _ h => ?_, fun _ h => ?_⟩ <;> cases h
 
-/-- No same-term rule leaves a rigid type. -/
-theorem JS.not_rigid {D : CTy} {j : Jdg} (hs : JS (.comp D) j) (hD : Rigid D) : False := by
+/-- An α-equivalent of a type that is no row's is no row's. -/
+theorem alpha_not_effOf {D D' : CTy} (hα : CTy.alphaB [] D D' = true)
+    (hD : ∀ S A, D ≠ CTy.effOf S A) : ∀ S A, D' ≠ CTy.effOf S A := by
+  rintro S A rfl
+  obtain ⟨Y, rfl, -⟩ := CTy.alphaB_effOf S (CTy.alphaB_symm hα)
+  exact hD S Y rfl
+
+theorem Rigid.alpha {D D' : CTy} (hD : Rigid D) (hα : CTy.alphaB [] D D' = true) : Rigid D' := by
+  obtain ⟨he, ha, hn⟩ := hD
+  refine ⟨alpha_not_effOf hα he, ?_, ?_⟩
+  · rintro C₁ C₂ rfl
+    cases D <;> simp only [CTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hα
+    exact ha _ _ rfl
+  · rintro C rfl
+    cases D <;> simp only [CTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hα
+    exact hn _ rfl
+
+/-- A same-term rule leaves a rigid type only for an α-equivalent of it. -/
+theorem JS.rigid {D : CTy} {j : Jdg} (hs : JS (.comp D) j) (hD : Rigid D) :
+    ∃ D', j = .comp D' ∧ CTy.alphaB [] D D' = true := by
   obtain ⟨he, ha, hn⟩ := hD
   cases hs with
-  | ofRet A => exact he [] A rfl
-  | effSub S S' A _ => exact he S A rfl
+  | ofRet A => exact (he [] A rfl).elim
+  | effSub S S' A _ => exact (he S A rfl).elim
   | nuIn C hC =>
       obtain ⟨C₁, C₂, hu⟩ := unroll_amp hC
-      exact ha C₁ C₂ hu
-  | nuOut C _ => exact hn C rfl
+      exact (ha C₁ C₂ hu).elim
+  | nuOut C _ => exact (hn C rfl).elim
+  | alpha hα => exact ⟨_, rfl, hα⟩
 
-/-- **A rigid computation type is read at itself alone.** -/
-theorem JR.rigid {D : CTy} {j : Jdg} (hr : JR (.comp D) j) (hD : Rigid D) : j = .comp D := by
+/-- **A rigid computation type is read at itself alone**, up to α-equivalence. -/
+theorem JR.rigid {D : CTy} {j : Jdg} (hr : JR (.comp D) j) (hD : Rigid D) :
+    ∃ D', j = .comp D' ∧ CTy.alphaB [] D D' = true := by
   induction hr with
-  | refl => rfl
-  | tail _ hs ih => subst ih; exact (hs.not_rigid hD).elim
+  | refl => exact ⟨D, rfl, CTy.alphaB_refl D⟩
+  | tail _ hs ih =>
+      obtain ⟨D', rfl, hα⟩ := ih
+      obtain ⟨D'', rfl, hα'⟩ := hs.rigid (hD.alpha hα)
+      exact ⟨D'', rfl, CTy.alphaB_trans' hα hα'⟩
+
+/-- `⊤` is read at itself alone. -/
+theorem JR.top_eq {j : Jdg} (hr : JR (.comp .top) j) : j = .comp .top := by
+  obtain ⟨D', rfl, hα⟩ := hr.rigid rigid_top
+  cases D' <;> simp only [CTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hα
+  rfl
 
 /-- A judgement reached from a computation type at a value: the computation type is a row's. -/
 theorem JR.comp_val {D : CTy} {Y : VTy} (hr : JR (.comp D) (.val Y)) :
@@ -369,6 +465,7 @@ theorem JR.comp_val {D : CTy} {Y : VTy} (hr : JR (.comp D) (.val Y)) :
             refine ⟨_, rfl, fun S A h => ?_⟩
             rw [hu] at h
             exact effOf_ne_amp S A C₁ C₂ h.symm
+        | alpha hα => exact ⟨_, rfl, alpha_not_effOf hα hD'⟩
 
 /-- An `&` or a `ν` is read at `&`s and `ν`s alone. -/
 def AmpNu (D : CTy) : Prop := (∃ C₁ C₂, D = .amp C₁ C₂) ∨ ∃ C, D = .nu C
@@ -387,42 +484,66 @@ theorem JR.ampNu {D : CTy} {j : Jdg} (hr : JR (.comp D) j) (hD : AmpNu D) :
           · exact absurd h (effOf_ne_nu _ _ _)
       | nuIn C hC => exact ⟨_, rfl, .inr ⟨C, rfl⟩⟩
       | nuOut C hC => exact ⟨_, rfl, .inl (unroll_amp hC)⟩
+      | @alpha _ D'' hα =>
+          refine ⟨D'', rfl, ?_⟩
+          rcases hD' with ⟨_, _, rfl⟩ | ⟨_, rfl⟩ <;> cases D'' <;>
+            simp only [CTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hα
+          · exact .inl ⟨_, _, rfl⟩
+          · exact .inr ⟨_, rfl⟩
 
-/-- The judgements an `&` is read at: itself, and the `ν`s that unroll to it. -/
+/-- The judgements an `&` is read at: itself, and the `ν`s that unroll to it, up to
+α-equivalence.  A `ν` is kept with the positive body it was formed at, `C₀`: an α-equivalent
+body need not be positive, and two positive bodies unroll alike (`CTy.alphaB_unroll`). -/
 def AmpCls (C₁ C₂ : CTy) (j : Jdg) : Prop :=
-  j = .comp (.amp C₁ C₂) ∨ ∃ C, j = .comp (.nu C) ∧ C.unroll = .amp C₁ C₂
+  (∃ D₁ D₂, j = .comp (.amp D₁ D₂) ∧ CTy.alphaB [] C₁ D₁ = true ∧ CTy.alphaB [] C₂ D₂ = true) ∨
+    ∃ C C₀, j = .comp (.nu C) ∧ C₀.NuOk ∧ CTy.alphaB [] C₀ C = true ∧ ∃ D₁ D₂,
+      C₀.unroll = .amp D₁ D₂ ∧ CTy.alphaB [] C₁ D₁ = true ∧ CTy.alphaB [] C₂ D₂ = true
 
 theorem AmpCls.step {C₁ C₂ : CTy} {j j' : Jdg} (hs : JS j j') (h : AmpCls C₁ C₂ j) :
     AmpCls C₁ C₂ j' := by
   cases hs with
-  | val hv => rcases h with h | ⟨_, h, -⟩ <;> cases h
-  | ret A => rcases h with h | ⟨_, h, -⟩ <;> cases h
-  | ofRet A => rcases h with h | ⟨_, h, -⟩ <;> cases h
+  | val hv => rcases h with ⟨_, _, h, -⟩ | ⟨_, _, h, -⟩ <;> cases h
+  | ret A => rcases h with ⟨_, _, h, -⟩ | ⟨_, _, h, -⟩ <;> cases h
+  | ofRet A => rcases h with ⟨_, _, h, -⟩ | ⟨_, _, h, -⟩ <;> cases h
   | effSub S S' A _ =>
-      rcases h with h | ⟨_, h, -⟩ <;> simp only [Jdg.comp.injEq] at h
+      rcases h with ⟨_, _, h, -⟩ | ⟨_, _, h, -⟩ <;> simp only [Jdg.comp.injEq] at h
       · exact absurd h (effOf_ne_amp _ _ _ _)
       · exact absurd h (effOf_ne_nu _ _ _)
   | nuIn C hC =>
-      rcases h with h | ⟨C', h, -⟩ <;> simp only [Jdg.comp.injEq] at h
-      · exact .inr ⟨C, rfl, h⟩
+      rcases h with ⟨D₁, D₂, h, h₁, h₂⟩ | ⟨_, _, h, -⟩ <;> simp only [Jdg.comp.injEq] at h
+      · exact .inr ⟨C, C, rfl, hC, CTy.alphaB_refl C, D₁, D₂, h, h₁, h₂⟩
       · obtain ⟨D₁, D₂, hu⟩ := unroll_amp hC
         rw [hu] at h; cases h
   | nuOut C hC =>
-      rcases h with h | ⟨C', h, hC'⟩ <;> simp only [Jdg.comp.injEq] at h
+      rcases h with ⟨_, _, h, -⟩ | ⟨C', C₀, h, hC₀, hα, D₁, D₂, hu, h₁, h₂⟩ <;>
+        simp only [Jdg.comp.injEq] at h
       · cases h
-      · cases h; exact .inl (by rw [hC'])
+      · cases h
+        have hu' := CTy.alphaB_unroll hα hC₀ hC
+        rw [hu] at hu'
+        cases hC' : C.unroll <;> rw [hC'] at hu' <;>
+          simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq, Bool.false_eq_true] at hu'
+        exact .inl ⟨_, _, rfl, CTy.alphaB_trans' h₁ hu'.1, CTy.alphaB_trans' h₂ hu'.2⟩
+  | @alpha D D' hα =>
+      rcases h with ⟨D₁, D₂, h, h₁, h₂⟩ | ⟨C, C₀, h, hC₀, hα₀, hu⟩ <;>
+        simp only [Jdg.comp.injEq] at h <;> subst h <;> cases D' <;>
+        simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq, Bool.false_eq_true] at hα
+      · exact .inl ⟨_, _, rfl, CTy.alphaB_trans' h₁ hα.1, CTy.alphaB_trans' h₂ hα.2⟩
+      · exact .inr ⟨_, C₀, rfl, hC₀, CTy.alphaB_trans' hα₀ hα, hu⟩
 
-/-- **An `&` is read at itself and at the `ν`s that unroll to it.** -/
+/-- **An `&` is read at itself and at the `ν`s that unroll to it**, up to α-equivalence. -/
 theorem JR.amp {C₁ C₂ : CTy} {j : Jdg} (hr : JR (.comp (.amp C₁ C₂)) j) : AmpCls C₁ C₂ j := by
   induction hr with
-  | refl => exact .inl rfl
+  | refl => exact .inl ⟨C₁, C₂, rfl, CTy.alphaB_refl C₁, CTy.alphaB_refl C₂⟩
   | tail _ hs ih => exact ih.step hs
 
-/-- An `&` read at an `&` is read at itself. -/
+/-- An `&` read at an `&` is read at an α-equivalent of itself. -/
 theorem JR.amp_amp {C₁ C₂ D₁ D₂ : CTy} (hr : JR (.comp (.amp C₁ C₂)) (.comp (.amp D₁ D₂))) :
-    D₁ = C₁ ∧ D₂ = C₂ := by
-  rcases hr.amp with h | ⟨_, h, -⟩
-  · simp only [Jdg.comp.injEq, CTy.amp.injEq] at h; exact h
+    CTy.alphaB [] C₁ D₁ = true ∧ CTy.alphaB [] C₂ D₂ = true := by
+  rcases hr.amp with ⟨_, _, h, h₁, h₂⟩ | ⟨_, _, h, -⟩
+  · simp only [Jdg.comp.injEq, CTy.amp.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
+    exact ⟨h₁, h₂⟩
   · cases h
 
 /-! ### Contexts -/
@@ -837,6 +958,7 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | foldOwnG => intro k hk; exact absurd hk (not_hasVar_closed (FoldP.foldOwnGV_closed _))
   | foldReuse => intro k hk; exact absurd hk (not_hasVar_closed (foldReuseV_closed _))
   | unfoldN => intro k hk; exact absurd hk (not_hasVar_closed (unfoldV_closed _))
+  | alpha _ _ ih => exact ih
   | _ => intro k hk; exact absurd hk (not_hasVar_closed (by rfl))
 
 /-! ### Inversions -/
@@ -914,6 +1036,8 @@ theorem der_var {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
         exact ⟨_, soloP_le hs, .inr ⟨_, rfl, rfl, .refl⟩⟩
   | ret _ ih =>
       intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.ret _)⟩
+  | alpha _ hα ih =>
+      intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.ofAlpha hα)⟩
   | ofRet _ ih =>
       intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.ofRet _)⟩
   | effSub hle _ ih =>
@@ -952,6 +1076,11 @@ theorem der_pair {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       intro a b he
       rcases ih a b he with ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc⟩ | h
       · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.ret _)⟩
+      · exact .inr h
+  | alpha _ hα ih =>
+      intro a b he
+      rcases ih a b he with ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc⟩ | h
+      · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.ofAlpha hα)⟩
       · exact .inr h
   | ofRet _ ih =>
       intro a b he
@@ -1018,6 +1147,8 @@ theorem der_inj₁ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeri
   | sumI₁ h => intro a he; cases he; exact ⟨_, _, h, ValCls.refl _⟩
   | ret _ ih =>
       intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he; exact ⟨A, B, ha, hc.step (JS.ret _)⟩
+  | alpha _ hα ih =>
+      intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he; exact ⟨A, B, ha, hc.step (JS.ofAlpha hα)⟩
   | ofRet _ ih =>
       intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he; exact ⟨A, B, ha, hc.step (JS.ofRet _)⟩
   | effSub hle _ ih =>
@@ -1061,6 +1192,10 @@ theorem der_unit {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       intro he; rcases ih he with ⟨hd, hc⟩ | hr
       · exact .inl ⟨hd, hc.step (JS.ret _)⟩
       · exact .inr (hr.tail (JS.ret _))
+  | alpha _ hα ih =>
+      intro he; rcases ih he with ⟨hd, hc⟩ | hr
+      · exact .inl ⟨hd, hc.step (JS.ofAlpha hα)⟩
+      · exact .inr (hr.tail (JS.ofAlpha hα))
   | ofRet _ ih =>
       intro he; rcases ih he with ⟨hd, hc⟩ | hr
       · exact .inl ⟨hd, hc.step (JS.ofRet _)⟩
@@ -1114,6 +1249,7 @@ theorem der_prim_alloc {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : C
   induction h with
   | alloc => intro _; exact ⟨_, ValCls.refl _⟩
   | ret _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.ret _)⟩
+  | alpha _ hα ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.ofAlpha hα)⟩
   | ofRet _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.ofRet _)⟩
   | effSub hle _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.effSub _ _ _ hle)⟩
   | nuIn hC _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.nuIn _ hC)⟩
@@ -1224,6 +1360,8 @@ theorem der_app {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
         (.inr (.inl ⟨_, rfl⟩)))))))))))), .refl⟩
   | ret _ ih =>
       intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he; exact ⟨j₀, hb, hr.tail (JS.ret _)⟩
+  | alpha _ hα ih =>
+      intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he; exact ⟨j₀, hb, hr.tail (JS.ofAlpha hα)⟩
   | ofRet _ ih =>
       intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he; exact ⟨j₀, hb, hr.tail (JS.ofRet _)⟩
   | effSub hle _ ih =>
@@ -1266,6 +1404,9 @@ theorem der_letpair {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDer
   | ret _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr⟩ := ih V M he
       exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.ret _)⟩
+  | alpha _ hα ih =>
+      intro V M he; obtain ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr⟩ := ih V M he
+      exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.ofAlpha hα)⟩
   | ofRet _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr⟩ := ih V M he
       exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.ofRet _)⟩
@@ -1312,6 +1453,9 @@ theorem der_seq {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | ret _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, C, hs, hV, hM, hr⟩ := ih V M he
       exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.ret _)⟩
+  | alpha _ hα ih =>
+      intro V M he; obtain ⟨Γ₁, Γ₂, C, hs, hV, hM, hr⟩ := ih V M he
+      exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.ofAlpha hα)⟩
   | ofRet _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, C, hs, hV, hM, hr⟩ := ih V M he
       exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.ofRet _)⟩
@@ -1458,7 +1602,7 @@ theorem der_hnd {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       intro n Q H M he; simp only [Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
       exact (not_der_app_prim hM _ _ rfl id (by decide) (by decide)).elim
   | ret _ ih | ofRet _ ih | effSub _ _ ih | nuIn _ _ ih | nuOut _ _ ih | bangE _ ih | boxI _ _ ih
-  | boxE _ ih | immSub _ _ ih | mutSub _ _ ih | roll _ _ _ ih | unroll _ ih => exact ih
+  | boxE _ ih | immSub _ _ ih | mutSub _ _ ih | roll _ _ _ ih | unroll _ ih | alpha _ _ ih => exact ih
   | _ => intro n Q H M he; cd_at he
 
 /-! #### λ-values -/
@@ -1503,26 +1647,29 @@ theorem LamAx.not_comp {e : Expr} {C : CTy} (h : LamAx e (.comp C)) : C.isRet = 
 /-- The judgements a λ-value whose body is typed at `D` is read at: `D` itself, the views of its
 thunk, and, over a persistent context, the views of the thunk's `!`. -/
 def LamCls (Γ : Ctx VTy) (D : CTy) (j : Jdg) : Prop :=
-  j = .comp D ∨ ValCls (.thunk D) j ∨ (Ctx.Banged Γ ∧ ValCls (.bang (.thunk D)) j)
+  (∃ D', j = .comp D' ∧ CTy.alphaB [] D D' = true) ∨ ValCls (.thunk D) j ∨
+    (Ctx.Banged Γ ∧ ValCls (.bang (.thunk D)) j)
 
 theorem LamCls.step {Γ : Ctx VTy} {D : CTy} {j j' : Jdg} (hs : JS j j') (h : LamCls Γ D j)
     (hD : Rigid D) : LamCls Γ D j' := by
-  rcases h with rfl | hc | ⟨hp, hc⟩
-  · exact (hs.not_rigid hD).elim
+  rcases h with ⟨D', rfl, hα⟩ | hc | ⟨hp, hc⟩
+  · obtain ⟨D'', rfl, hα'⟩ := hs.rigid (hD.alpha hα)
+    exact .inl ⟨D'', rfl, CTy.alphaB_trans' hα hα'⟩
   · exact .inr (.inl (hc.step hs))
   · exact .inr (.inr ⟨hp, hc.step hs⟩)
 
 theorem LamCls.thunkV {Γ : Ctx VTy} {D C : CTy} (h : LamCls Γ D (.comp C)) (hC : C.isRet = false) :
     LamCls Γ D (.val (.thunk C)) := by
-  rcases h with h | hc | ⟨-, hc⟩
-  · cases h; exact .inr (.inl (ValCls.refl _))
+  rcases h with ⟨D', h, hα⟩ | hc | ⟨-, hc⟩
+  · cases h; exact .inr (.inl (Relation.ReflTransGen.single (VS.alpha (A := .thunk D) hα)))
   · rw [hc.comp_isRet] at hC; cases hC
   · rw [hc.comp_isRet] at hC; cases hC
 
 theorem LamCls.bangThunkV {Γ : Ctx VTy} {D C : CTy} (h : LamCls Γ D (.comp C))
     (hC : C.isRet = false) (hp : Ctx.Banged Γ) : LamCls Γ D (.val (.bang (.thunk C))) := by
-  rcases h with h | hc | ⟨-, hc⟩
-  · cases h; exact .inr (.inr ⟨hp, ValCls.refl _⟩)
+  rcases h with ⟨D', h, hα⟩ | hc | ⟨-, hc⟩
+  · cases h
+    exact .inr (.inr ⟨hp, Relation.ReflTransGen.single (VS.alpha (A := .bang (.thunk D)) hα)⟩)
   · rw [hc.comp_isRet] at hC; cases hC
   · rw [hc.comp_isRet] at hC; cases hC
 
@@ -1593,9 +1740,11 @@ theorem lamAx_withborU (d : Expr) {T : VTy} (h : WithborUTy T) : LamAx (withborU
 theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ M, e = .lam M → LamInv Δ Γ M j := by
   induction h with
-  | lam h => intro M he; cases he; exact .inl ⟨_, _, h, .inl rfl⟩
-  | lamDead h => intro M he; cases he; exact .inr (.inl ⟨_, _, h, .inl rfl⟩)
-  | allI _ _ _ h => intro M he; cases he; exact .inr (.inr (.inl ⟨_, _, _, _, _, h, .inl rfl⟩))
+  | lam h => intro M he; cases he; exact .inl ⟨_, _, h, .inl ⟨_, rfl, CTy.alphaB_refl _⟩⟩
+  | lamDead h => intro M he; cases he; exact .inr (.inl ⟨_, _, h, .inl ⟨_, rfl, CTy.alphaB_refl _⟩⟩)
+  | allI _ _ _ h =>
+      intro M he; cases he
+      exact .inr (.inr (.inl ⟨_, _, _, _, _, h, .inl ⟨_, rfl, CTy.alphaB_refl _⟩⟩))
   | thunkF h => intro M he; cases he; exact .inr (.inr (.inr (.inl ⟨_, h, .inl (ValCls.refl _)⟩)))
   | bangThunkF hp h =>
       intro M he; cases he; exact .inr (.inr (.inr (.inl ⟨_, h, .inr ⟨hp, ValCls.refl _⟩⟩)))
@@ -1603,6 +1752,7 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | bangThunkV hp hC _ ih => intro M he; exact (ih M he).bangThunkV hC hp
   | withI => intro M he; exact .inr (.inr (.inr (.inr (.inl ⟨_, _, he.symm⟩))))
   | ret _ ih => intro M he; exact (ih M he).step (JS.ret _)
+  | alpha _ hα ih => intro M he; exact (ih M he).step (JS.ofAlpha hα)
   | ofRet _ ih => intro M he; exact (ih M he).step (JS.ofRet _)
   | effSub hle _ ih => intro M he; exact (ih M he).step (JS.effSub _ _ _ hle)
   | nuIn hC _ ih => intro M he; exact (ih M he).step (JS.nuIn _ hC)
@@ -1702,74 +1852,79 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
 
 /-! ### Reading the inversions -/
 
-theorem vview_thunk {C₀ C : CTy} (h : VView (.thunk C₀) (.thunk C)) : C₀ = C := by
-  have := h.eq_of_heads (fun _ _ h => by cases h) (fun _ h => by cases h) (fun _ h => by cases h)
+theorem vview_thunk {C₀ C : CTy} (h : VView (.thunk C₀) (.thunk C)) :
+    CTy.alphaB [] C₀ C = true :=
+  h.eq_of_heads (fun _ _ h => by cases h) (fun _ h => by cases h) (fun _ h => by cases h)
     (fun _ _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
     (fun _ h => by cases h)
-  cases this; rfl
 
-/-- A view of `κ`'s type, bare or boxed, at a thunk is at its thunk. -/
+/-- A view of `κ`'s type, bare or boxed, at a thunk is at its thunk, up to α-equivalence. -/
 theorem vview_kBoxO_thunk {C₀ C : CTy} (ob : Option Lifetime.Life)
-    (h : VView (kBoxO ob (.thunk C₀)) (.thunk C)) : C₀ = C := by
+    (h : VView (kBoxO ob (.thunk C₀)) (.thunk C)) : CTy.alphaB [] C₀ C = true := by
   cases ob with
   | none => exact vview_thunk h
   | some d =>
-      have := (h.hnf_of (.box (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h)))
-        (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)).eq_self
-        (fun _ _ h => by cases h) (fun _ h => by cases h)
-      cases this; rfl
+      obtain ⟨h', hh', hα⟩ := h.hnf_of (.box (hnf_self (fun _ _ h => by cases h)
+        (fun _ h => by cases h))) (fun _ h => by cases h) (fun _ _ h => by cases h)
+        (fun _ _ h => by cases h)
+      rw [hh'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
+      exact hα
 
 theorem not_vview_thunk_bang {C₀ : CTy} {X : VTy} (h : VView (.thunk C₀) (.bang X)) : False := by
-  have := (h.hnf_of (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h))
-    (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)).eq_self
-    (fun _ _ h => by cases h) (fun _ h => by cases h)
-  cases this
+  obtain ⟨h', hh', hα⟩ := h.hnf_of (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h))
+    (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
+  rw [hh'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
+  simp [VTy.alphaB] at hα
 
-theorem vview_bang_thunk {C₀ C : CTy} (h : VView (.bang (.thunk C₀)) (.thunk C)) : C₀ = C := by
+theorem vview_bang_thunk {C₀ C : CTy} (h : VView (.bang (.thunk C₀)) (.thunk C)) :
+    CTy.alphaB [] C₀ C = true := by
   rcases h.hnf (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h)) with
-    h' | ⟨A, hA, h'⟩ | ⟨a, A, h'⟩ | ⟨a, A, h'⟩
-  · have := h'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h); cases this
+    ⟨h', hh', hα⟩ | ⟨A, hA, h'⟩ | ⟨a, A, h'⟩ | ⟨a, A, h'⟩
+  · rw [hh'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
+    simp [VTy.alphaB] at hα
   · cases hA; exact vview_thunk h'
   · cases h'
   · cases h'
 
 theorem vview_bang_bang {C₀ C : CTy} (h : VView (.bang (.thunk C₀)) (.bang (.thunk C))) :
-    C₀ = C := by
+    CTy.alphaB [] C₀ C = true := by
   rcases h.hnf (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h)) with
-    h' | ⟨A, hA, h'⟩ | ⟨a, A, h'⟩ | ⟨a, A, h'⟩
-  · have := h'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h); cases this; rfl
+    ⟨h', hh', hα⟩ | ⟨A, hA, h'⟩ | ⟨a, A, h'⟩ | ⟨a, A, h'⟩
+  · rw [hh'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
+    exact hα
   · cases hA; exact (not_vview_thunk_bang h').elim
   · cases h'
   · cases h'
 
 theorem vview_tensor {A B A' B' : VTy} (h : VView (.tensor A B) (.tensor A' B')) :
-    A = A' ∧ B = B' := by
+    VTy.alphaB [] A A' = true ∧ VTy.alphaB [] B B' = true := by
   have := h.eq_of_heads (fun _ _ h => by cases h) (fun _ h => by cases h) (fun _ h => by cases h)
     (fun _ _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
     (fun _ h => by cases h)
-  cases this; exact ⟨rfl, rfl⟩
+  simpa only [VTy.alphaB, Bool.and_eq_true] using this
 
-/-- A λ-value read at a thunk was typed at that thunk's computation type. -/
-theorem LamCls.val_thunk {Γ : Ctx VTy} {D C : CTy} (h : LamCls Γ D (.val (.thunk C))) : D = C := by
-  rcases h with h | h | ⟨-, h⟩
+/-- A λ-value read at a thunk was typed at that thunk's computation type, up to α-equivalence. -/
+theorem LamCls.val_thunk {Γ : Ctx VTy} {D C : CTy} (h : LamCls Γ D (.val (.thunk C))) :
+    CTy.alphaB [] D C = true := by
+  rcases h with ⟨_, h, -⟩ | h | ⟨-, h⟩
   · cases h
   · exact vview_thunk h
   · exact vview_bang_thunk h
 
-/-- A λ-value read at a `!` thunk was typed at that thunk's computation type, over a persistent
-context. -/
+/-- A λ-value read at a `!` thunk was typed at that thunk's computation type, up to
+α-equivalence, over a persistent context. -/
 theorem LamCls.val_bang {Γ : Ctx VTy} {D C : CTy} (h : LamCls Γ D (.val (.bang (.thunk C)))) :
-    D = C ∧ Ctx.Banged Γ := by
-  rcases h with h | h | ⟨hp, h⟩
+    CTy.alphaB [] D C = true ∧ Ctx.Banged Γ := by
+  rcases h with ⟨_, h, -⟩ | h | ⟨hp, h⟩
   · cases h
   · exact (not_vview_thunk_bang h).elim
   · exact ⟨vview_bang_bang h, hp⟩
 
-/-- A λ-value read at a rigid computation type was typed at it. -/
+/-- A λ-value read at a rigid computation type was typed at it, up to α-equivalence. -/
 theorem LamCls.comp_rigid {Γ : Ctx VTy} {D C : CTy} (h : LamCls Γ D (.comp C)) (hC : Rigid C) :
-    D = C := by
-  rcases h with h | h | ⟨-, h⟩
-  · cases h; rfl
+    CTy.alphaB [] D C = true := by
+  rcases h with ⟨_, h, hα⟩ | h | ⟨-, h⟩
+  · cases h; exact hα
   · obtain ⟨S, Y, rfl, -⟩ := h; exact (hC.1 S Y rfl).elim
   · obtain ⟨S, Y, rfl, -⟩ := h; exact (hC.1 S Y rfl).elim
 
@@ -1812,17 +1967,17 @@ theorem der_bind_split {Δ : LifeCtx} {Γ : Ctx VTy} {N M : Expr} {j : Jdg}
     ⟨-, -, -, -, hu, -⟩ | ⟨-, -, -, -, hu, -⟩ | ⟨-, -, hu, -⟩ | ⟨-, -, hu, -⟩ | ⟨hu, -⟩ | hX
   · rcases der_lam hf N rfl with ⟨A', D, hN, hcl⟩ | ⟨S', B', hN, hcl⟩ | ⟨_, _, _, _, _, _, hcl⟩ |
       ⟨_, _, hcl⟩ | ⟨M₁, M₂, hwp⟩ | hx
-    · obtain ⟨rfl, -⟩ : A' = A ∧ D = .ret B := by
-        have := hcl.val_thunk; cases this; exact ⟨rfl, rfl⟩
-      exact ⟨Γ₁, Γ₂, A', true, [], _, hs, .ret hM, hN⟩
-    · have := hcl.val_thunk
-      simp only [CTy.arr.injEq] at this
-      obtain ⟨rfl, -⟩ := this
+    · have hα := hcl.val_thunk
+      simp only [CTy.alphaB, Bool.and_eq_true] at hα
+      exact ⟨Γ₁, Γ₂, A', true, [], _, hs, .alpha (.ret hM) (VTy.alphaB_symm hα.1), hN⟩
+    · have hα := hcl.val_thunk
+      simp only [CTy.alphaB, Bool.and_eq_true] at hα
+      cases A <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true, false_and] at hα
       exact ⟨Γ₁, Γ₂, .unit, false, [], _, hs, .ret hM, hN⟩
-    · have := hcl.val_thunk; cases this
+    · have := hcl.val_thunk; simp [CTy.alphaB] at this
     · rcases hcl with hcl | ⟨-, hcl⟩
-      · have := vview_thunk hcl; cases this
-      · have := vview_bang_thunk hcl; cases this
+      · have := vview_thunk hcl; simp [CTy.alphaB] at this
+      · have := vview_bang_thunk hcl; simp [CTy.alphaB] at this
     · exact (hw M₁ M₂ hwp).elim
     · exact (hc.notAx _ hx).elim
   · exact (hMv i hi).elim
@@ -1878,17 +2033,18 @@ theorem der_bindLam {Δ : LifeCtx} {Γ : Ctx VTy} {N b : Expr} {j : Jdg}
   · refine .inl ?_
     rcases der_lam hf N rfl with ⟨A', D, hN, hcl⟩ | ⟨S', B', hN, hcl⟩ | ⟨_, _, _, _, _, _, hcl⟩ |
       ⟨_, _, hcl⟩ | ⟨M₁, M₂, hwp⟩ | hx
-    · obtain ⟨rfl, -⟩ : A' = A ∧ D = .ret B := by
-        have := hcl.val_thunk; cases this; exact ⟨rfl, rfl⟩
-      exact ⟨Γ₁, Γ₂, A', true, [], _, splitP_le_left hs, splitP_le_right hs, .ret hM, hN⟩
-    · have := hcl.val_thunk
-      simp only [CTy.arr.injEq] at this
-      obtain ⟨rfl, -⟩ := this
+    · have hα := hcl.val_thunk
+      simp only [CTy.alphaB, Bool.and_eq_true] at hα
+      exact ⟨Γ₁, Γ₂, A', true, [], _, splitP_le_left hs, splitP_le_right hs,
+        .alpha (.ret hM) (VTy.alphaB_symm hα.1), hN⟩
+    · have hα := hcl.val_thunk
+      simp only [CTy.alphaB, Bool.and_eq_true] at hα
+      cases A <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true, false_and] at hα
       exact ⟨Γ₁, Γ₂, .unit, false, [], _, splitP_le_left hs, splitP_le_right hs, .ret hM, hN⟩
-    · have := hcl.val_thunk; cases this
+    · have := hcl.val_thunk; simp [CTy.alphaB] at this
     · rcases hcl with hcl | ⟨-, hcl⟩
-      · have := vview_thunk hcl; cases this
-      · have := vview_bang_thunk hcl; cases this
+      · have := vview_thunk hcl; simp [CTy.alphaB] at this
+      · have := vview_bang_thunk hcl; simp [CTy.alphaB] at this
     · exact (hw M₁ M₂ hwp).elim
     · exact (hc.notAx _ hx).elim
   · cases hi
@@ -1976,6 +2132,7 @@ theorem der_swap {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
   | bangThunkV _ hC _ ih =>
       intro he; obtain ⟨A, B, hc⟩ := ih he; rw [hc.comp_isRet] at hC; cases hC
   | ret _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.ret _)⟩
+  | alpha _ hα ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.ofAlpha hα)⟩
   | ofRet _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.ofRet _)⟩
   | effSub hle _ ih =>
       intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.effSub _ _ _ hle)⟩
@@ -2009,9 +2166,9 @@ theorem der_swap_var {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {j : Jdg}
     ⟨-, -, -, -, hu, -⟩ | ⟨-, -, -, -, hu, -⟩ | ⟨-, -, hu, -⟩ | ⟨-, -, hu, -⟩ | ⟨hu, -⟩ | hX
   · obtain ⟨A', B', hc⟩ := der_swap hf rfl
     have := vview_thunk hc
-    simp only [CTy.arr.injEq, CTy.ret.injEq] at this
-    obtain ⟨rfl, rfl⟩ := this
-    exact ⟨Γ₁, A', B', splitP_le_left hs, hY, (ValCls.refl _).reach hr⟩
+    simp only [CTy.alphaB, Bool.and_eq_true] at this
+    exact ⟨Γ₁, A', B', splitP_le_left hs, .alpha hY (VTy.alphaB_symm this.1),
+      ValCls.of_alpha this.2 ((ValCls.refl _).reach hr)⟩
   · obtain ⟨A', B', hc⟩ := der_swap hf rfl
     have := hc.comp_isRet
     simp [CTy.isRet] at this
@@ -2040,9 +2197,9 @@ theorem der_swap_app {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {Y : Expr} {j : Jdg
     ⟨-, i', hu⟩ | hX
   · obtain ⟨Γ₃, A', B', hle, hc, hcl⟩ := der_swap_var hf
     have := vview_thunk hcl
-    simp only [CTy.arr.injEq, CTy.ret.injEq] at this
-    obtain ⟨rfl, rfl⟩ := this
-    exact ⟨Γ₃, A', B', hle.trans (splitP_le_right hs), hc, (ValCls.refl _).reach hr⟩
+    simp only [CTy.alphaB, Bool.and_eq_true] at this
+    exact ⟨Γ₃, A', B', hle.trans (splitP_le_right hs), hc,
+      ValCls.of_alpha this.2 ((ValCls.refl _).reach hr)⟩
   · obtain ⟨_, _, _, -, -, hcl⟩ := der_swap_var hf
     have := hcl.comp_isRet
     simp [CTy.isRet] at this
@@ -2053,7 +2210,7 @@ theorem der_swap_app {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {Y : Expr} {j : Jdg
     simp [CTy.isRet] at this
   · obtain ⟨_, _, _, -, -, hcl⟩ := der_swap_var hf
     have := vview_thunk hcl
-    cases this
+    simp [CTy.alphaB] at this
   · exact (hY₁ hu).elim
   · exact (hY₂ hu).elim
   · cases hu
@@ -2096,9 +2253,10 @@ theorem hnd_clauses {Δ : LifeCtx} {Γ : Ctx VTy} {n : UInt32} {qs : List Qual} 
     cases E <;> simp [lastTuple, Val.unit] at hH
   have hE : E.map Prod.fst = qs := (qualsVal_inj hQ).symm
   rcases der_pair hH X (.var 1) rfl with ⟨Γ₁₁, Γ₁₂, A', B', hs', -, hv, hc⟩ | he
-  · obtain ⟨-, rfl⟩ := vview_tensor hc
+  · obtain ⟨-, hαB⟩ := vview_tensor hc
     obtain ⟨T, hT, hcT⟩ := der_var hv 1 rfl
-    exact ⟨T, S, R, E, fs, ob, splitP_le_left hs _ _ (splitP_le_right hs' _ _ hT), hcT.val, hE⟩
+    exact ⟨T, S, R, E, fs, ob, splitP_le_left hs _ _ (splitP_le_right hs' _ _ hT),
+      hcT.val.alpha hαB, hE⟩
   · simp [emptyFamV, Val.arr, Val.pair, Val.loc, Val.i32] at he
 
 /-- **A pair read at a row**: its first part is read at the first factor of a tensor whose views
@@ -2118,19 +2276,21 @@ body is typed under a live `P`. -/
 theorem lam_bang {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {P : VTy} {D : CTy}
     (h : CDerives Δ Γ (.lam M) (.val (.bang (.thunk (.arr P D))))) (hP : P ≠ .unit)
     (hw : ∀ M₁ M₂, Expr.lam M ≠ withPair M₁ M₂) (hc : NotConst (.lam M)) :
-    Ctx.Banged Γ ∧ CDerives Δ (⟨P, true⟩ :: Γ) M (.comp D) := by
+    Ctx.Banged Γ ∧ ∃ P', VTy.alphaB [] P' P = true ∧
+      CDerives Δ (⟨P', true⟩ :: Γ) M (.comp D) := by
   rcases der_lam h M rfl with ⟨A, D', hM, hcl⟩ | ⟨S, B, hM, hcl⟩ | ⟨x, b, Δ', S, C, hM, hcl⟩ |
     ⟨A, hM, hcl⟩ | ⟨M₁, M₂, hwp⟩ | hx
   · obtain ⟨he, hp⟩ := hcl.val_bang
-    cases he
-    exact ⟨hp, hM⟩
+    simp only [CTy.alphaB, Bool.and_eq_true] at he
+    exact ⟨hp, A, he.1, .alpha hM he.2⟩
   · obtain ⟨he, -⟩ := hcl.val_bang
-    simp only [CTy.arr.injEq] at he
-    exact (hP he.1.symm).elim
-  · obtain ⟨he, -⟩ := hcl.val_bang; cases he
+    simp only [CTy.alphaB, Bool.and_eq_true] at he
+    cases P <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true, false_and] at he
+    exact (hP rfl).elim
+  · obtain ⟨he, -⟩ := hcl.val_bang; simp [CTy.alphaB] at he
   · rcases hcl with hcl | ⟨-, hcl⟩
     · exact (not_vview_thunk_bang hcl).elim
-    · have := vview_bang_bang hcl; cases this
+    · have := vview_bang_bang hcl; simp [CTy.alphaB] at this
   · exact (hw M₁ M₂ hwp).elim
   · exact (hc.notAx _ hx).elim
 
@@ -2187,6 +2347,10 @@ theorem RowCls.step {S : Row} {Y : VTy} {j j' : Jdg} (hs : JS j j') (h : RowCls 
   | nuOut C hC =>
       obtain ⟨S', Y', he, -⟩ := h
       exact absurd he.symm (effOf_ne_nu S' Y' C)
+  | alpha hα =>
+      obtain ⟨S', Y', rfl, hle, hY⟩ := h
+      obtain ⟨Y'', rfl, hY'⟩ := CTy.alphaB_effOf S' hα
+      exact ⟨S', Y'', rfl, hle, hY.alpha hY'⟩
 
 theorem RowCls.reach {S : Row} {Y : VTy} {j j' : Jdg} (hr : JR j j') (h : RowCls S Y j) :
     RowCls S Y j' := by
@@ -2276,6 +2440,8 @@ theorem der_hndJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       exact (not_der_app_prim hM _ _ rfl id (by decide) (by decide)).elim
   | ret _ ih =>
       intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he; exact ⟨j₀, hb, hr.tail (JS.ret _)⟩
+  | alpha _ hα ih =>
+      intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he; exact ⟨j₀, hb, hr.tail (JS.ofAlpha hα)⟩
   | ofRet _ ih =>
       intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he; exact ⟨j₀, hb, hr.tail (JS.ofRet _)⟩
   | effSub hle _ ih =>
@@ -2385,6 +2551,8 @@ theorem der_thenJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeriv
       exact (not_der_app_prim hM _ _ rfl id (by decide) (by decide)).elim
   | ret _ ih =>
       intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he; exact ⟨j₀, hb, hr.tail (JS.ret _)⟩
+  | alpha _ hα ih =>
+      intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he; exact ⟨j₀, hb, hr.tail (JS.ofAlpha hα)⟩
   | ofRet _ ih =>
       intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he; exact ⟨j₀, hb, hr.tail (JS.ofRet _)⟩
   | effSub hle _ ih =>
@@ -2448,6 +2616,8 @@ theorem der_performJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDe
       obtain ⟨rfl, -⟩ := he; exact (der_prim hM _ rfl).elim
   | ret _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he; exact ⟨j₀, hb, hr.tail (JS.ret _)⟩
+  | alpha _ hα ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he; exact ⟨j₀, hb, hr.tail (JS.ofAlpha hα)⟩
   | ofRet _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he; exact ⟨j₀, hb, hr.tail (JS.ofRet _)⟩
   | effSub hle _ ih =>
@@ -2511,6 +2681,8 @@ theorem der_raiseJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeri
       obtain ⟨rfl, -⟩ := he; exact (der_prim hM _ rfl).elim
   | ret _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he; exact ⟨j₀, hb, hr.tail (JS.ret _)⟩
+  | alpha _ hα ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he; exact ⟨j₀, hb, hr.tail (JS.ofAlpha hα)⟩
   | ofRet _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he; exact ⟨j₀, hb, hr.tail (JS.ofRet _)⟩
   | effSub hle _ ih =>
@@ -2608,6 +2780,11 @@ theorem der_letJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       rcases ih N M he h₁ h₂ h₃ h₄ h₅ h₆ with ⟨j₀, hb, hr⟩ | h
       · exact .inl ⟨j₀, hb, hr.tail (JS.ret _)⟩
       · exact .inr h
+  | alpha _ hα ih =>
+      intro N M he h₁ h₂ h₃ h₄ h₅ h₆
+      rcases ih N M he h₁ h₂ h₃ h₄ h₅ h₆ with ⟨j₀, hb, hr⟩ | h
+      · exact .inl ⟨j₀, hb, hr.tail (JS.ofAlpha hα)⟩
+      · exact .inr h
   | ofRet _ ih =>
       intro N M he h₁ h₂ h₃ h₄ h₅ h₆
       rcases ih N M he h₁ h₂ h₃ h₄ h₅ h₆ with ⟨j₀, hb, hr⟩ | h
@@ -2672,31 +2849,34 @@ theorem der_letJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
 theorem lam_arr {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {A : VTy} {D : CTy} {j : Jdg}
     (h : CDerives Δ Γ (.lam N) j) (hj : j = .comp (.arr A D) ∨ j = .val (.thunk (.arr A D)))
     (hA : A ≠ .unit) (hw : ∀ M₁ M₂, Expr.lam N ≠ withPair M₁ M₂) (hc : NotConst (.lam N)) :
-    CDerives Δ (⟨A, true⟩ :: Γ) N (.comp D) := by
-  have hcls : ∀ {D' : CTy} {Γ' : Ctx VTy}, LamCls Γ' D' j → D' = .arr A D := by
+    ∃ A', VTy.alphaB [] A' A = true ∧ CDerives Δ (⟨A', true⟩ :: Γ) N (.comp D) := by
+  have hcls : ∀ {D' : CTy} {Γ' : Ctx VTy}, LamCls Γ' D' j → CTy.alphaB [] D' (.arr A D) = true := by
     intro D' Γ' h
     rcases hj with rfl | rfl
-    · rcases h with h | h | ⟨-, h⟩
-      · cases h; rfl
+    · rcases h with ⟨_, h, hα⟩ | h | ⟨-, h⟩
+      · cases h; exact hα
       · obtain ⟨S, Y, he, -⟩ := h; exact absurd he.symm (effOf_ne_arr S Y A D)
       · obtain ⟨S, Y, he, -⟩ := h; exact absurd he.symm (effOf_ne_arr S Y A D)
-    · rcases h with h | h | ⟨-, h⟩
+    · rcases h with ⟨_, h, -⟩ | h | ⟨-, h⟩
       · cases h
       · exact vview_thunk h
       · exact vview_bang_thunk h
   rcases der_lam h N rfl with ⟨A', D', hN, hl⟩ | ⟨S, B, -, hl⟩ | ⟨_, _, _, _, _, -, hl⟩ |
     ⟨A', -, hl⟩ | ⟨M₁, M₂, hwp⟩ | hx
-  · cases hcls hl; exact hN
-  · have := hcls hl
-    simp only [CTy.arr.injEq] at this
-    exact (hA this.1.symm).elim
-  · cases hcls hl
+  · have hα := hcls hl
+    simp only [CTy.alphaB, Bool.and_eq_true] at hα
+    exact ⟨A', hα.1, .alpha hN hα.2⟩
+  · have hα := hcls hl
+    simp only [CTy.alphaB, Bool.and_eq_true] at hα
+    cases A <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true, false_and] at hα
+    exact (hA rfl).elim
+  · have := hcls hl; simp [CTy.alphaB] at this
   · rcases hj with rfl | rfl
     · rcases hl with ⟨S, Y, he, -⟩ | ⟨-, S, Y, he, -⟩ <;>
         exact absurd he.symm (effOf_ne_arr S Y A D)
     · rcases hl with hl | ⟨-, hl⟩
-      · cases vview_thunk hl
-      · cases vview_bang_thunk hl
+      · have := vview_thunk hl; simp [CTy.alphaB] at this
+      · have := vview_bang_thunk hl; simp [CTy.alphaB] at this
   · exact (hw M₁ M₂ hwp).elim
   · exact (hc.notAx _ hx).elim
 
@@ -2712,13 +2892,14 @@ theorem varCls_of_le {Δ : LifeCtx} {Γ Γ' : Ctx VTy} {T : VTy} {j : Jdg}
 /-- No view of a `!` thunk is `1`. -/
 theorem vview_bang_thunk_unit {C : CTy} (h : VView (.bang (.thunk C)) .unit) : False := by
   rcases h.hnf (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h)) with
-    h' | ⟨A', hA, h'⟩ | ⟨a, A', h'⟩ | ⟨a, A', h'⟩
-  · have := h'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h); cases this
+    ⟨h', hh', hα⟩ | ⟨A', hA, h'⟩ | ⟨a, A', h'⟩ | ⟨a, A', h'⟩
+  · rw [hh'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
+    simp [VTy.alphaB] at hα
   · cases hA
     have := h'.eq_of_heads (fun _ _ h => by cases h) (fun _ h => by cases h) (fun _ h => by cases h)
       (fun _ _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
       (fun _ h => by cases h)
-    cases this
+    simp [VTy.alphaB] at this
   · cases h'
   · cases h'
 
@@ -2732,44 +2913,54 @@ theorem kappa_cancel_jr {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy} {T : VTy
     ⟨_, _, _, he, -⟩ | ⟨_, _, _, _, he, -⟩ | ⟨_, _, _, _, he, -⟩ | ⟨_, _, he, -⟩ |
     ⟨D₁, D₂, -, hX, rfl⟩ | ⟨he, -⟩ | he | he | ⟨_, he⟩ | ⟨_, he⟩ | ⟨_, he, -⟩
   · rcases varCls_of_le hslot (splitP_le_right hs) hf with hc | ⟨C, rfl, -, hr'⟩
-    · cases vview_bang_thunk (hT.trans hc)
-    · cases vview_bang_thunk hT
-      obtain ⟨S, A, he⟩ := JR.comp_val hr'
-      exact absurd he (effOf_ne_amp S A C₁ C₂).symm
+    · have := vview_bang_thunk (hT.trans hc); simp [CTy.alphaB] at this
+    · have hα := vview_bang_thunk hT
+      obtain ⟨S, A, rfl⟩ := JR.comp_val hr'
+      obtain ⟨Y, he, -⟩ := CTy.alphaB_effOf S (CTy.alphaB_symm hα)
+      exact absurd he (effOf_ne_amp S Y C₁ C₂).symm
   all_goals first
     | (cases he)
     | skip
   · rcases varCls_of_le hslot (CtxLe.refl Γ) hX with hc | ⟨C, rfl, -, hr'⟩
     · obtain ⟨S, Y, he, -⟩ := hc
       exact absurd he.symm (effOf_ne_amp S Y D₁ D₂)
-    · cases vview_bang_thunk hT
-      obtain ⟨-, rfl⟩ := JR.amp_amp hr'
-      exact hr
+    · have hα := vview_bang_thunk hT
+      cases C <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq, Bool.false_eq_true] at hα
+      obtain ⟨-, h₂⟩ := JR.amp_amp hr'
+      exact Relation.ReflTransGen.head (JS.alpha (CTy.alphaB_trans' hα.2 h₂)) hr
 
 /-- **A cancellable `κ`'s cancel branch, applied**: at a slot of `U(C₁ & C₂)`, bare or boxed,
 `x (inj₂ ())` is read at what the same-term rules reach from `C₂`. -/
 theorem kcancel_jr_cancellable {Δ : LifeCtx} {Γ Γ' : Ctx VTy} {C₁ C₂ : CTy} {j : Jdg}
-    {ob : Option Lifetime.Life}
-    (hslot : Γ[0]? = some ⟨kBoxO ob (.thunk (.amp C₁ C₂)), true⟩) (hle : CtxLe Γ' Γ)
+    {ob : Option Lifetime.Life} {T : VTy} (hslot : Γ[0]? = some ⟨T, true⟩)
+    (hT : VTy.alphaB [] (kBoxO ob (.thunk (.amp C₁ C₂))) T = true) (hle : CtxLe Γ' Γ)
     (h : CDerives Δ Γ' (.app (.var 0) (.val (Val.inj₂ Val.unit))) j) : JR (.comp C₂) j := by
   obtain ⟨j₀, hb, hr⟩ := der_app h (.var 0) (.val (Val.inj₂ Val.unit)) rfl
+  -- a slot of `T` read at a thunk's computation type: `T` is `κ`'s bare thunk
+  have hthunk : ∀ {C : CTy}, T = .thunk C → ∃ E₁ E₂, C = .amp E₁ E₂ ∧
+      CTy.alphaB [] C₂ E₂ = true := by
+    intro C hC
+    subst hC
+    rcases ob with _ | d <;> simp only [kBoxO, VTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hT
+    cases C <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq, Bool.false_eq_true] at hT
+    exact ⟨_, _, rfl, hT.2⟩
   rcases hb with ⟨_, _, _, _, hs, -, hf, rfl⟩ | ⟨_, _, _, _, _, he, -⟩ | ⟨_, _, _, _, _, _, he, -⟩ |
     ⟨_, _, _, he, -⟩ | ⟨_, _, _, _, he, -⟩ | ⟨_, _, _, _, he, -⟩ | ⟨_, _, he, -⟩ |
     ⟨D₁, D₂, -, hX, rfl⟩ | ⟨he, -⟩ | he | he | ⟨_, he⟩ | ⟨_, he⟩ | ⟨_, he, -⟩
-  · rcases varCls_of_le hslot (CtxLe.trans (splitP_le_right hs) hle) hf with hc | ⟨C, hT, -, hr'⟩
-    · cases vview_kBoxO_thunk ob hc
-    · rcases ob with _ | d <;> cases hT
+  · rcases varCls_of_le hslot (CtxLe.trans (splitP_le_right hs) hle) hf with hc | ⟨C, hT', -, hr'⟩
+    · have := vview_kBoxO_thunk ob (hc.of_alpha hT); simp [CTy.alphaB] at this
+    · obtain ⟨E₁, E₂, rfl, -⟩ := hthunk hT'
       obtain ⟨S, A, he⟩ := JR.comp_val hr'
-      exact absurd he (effOf_ne_amp S A C₁ C₂).symm
+      exact absurd he (effOf_ne_amp S A E₁ E₂).symm
   all_goals first
     | (cases he)
     | skip
-  · rcases varCls_of_le hslot hle hX with hc | ⟨C, hT, -, hr'⟩
+  · rcases varCls_of_le hslot hle hX with hc | ⟨C, hT', -, hr'⟩
     · obtain ⟨S, Y, he, -⟩ := hc
       exact absurd he.symm (effOf_ne_amp S Y D₁ D₂)
-    · rcases ob with _ | d <;> cases hT
-      obtain ⟨-, rfl⟩ := JR.amp_amp hr'
-      exact hr
+    · obtain ⟨E₁, E₂, rfl, hE⟩ := hthunk hT'
+      obtain ⟨-, h₂⟩ := JR.amp_amp hr'
+      exact Relation.ReflTransGen.head (JS.alpha (CTy.alphaB_trans' hE h₂)) hr
 
 /-- **`κ`'s cancel read at a row**: the cancel row is no `⊤`, and its operations, ahead of the row,
 are below the row. -/
@@ -2780,9 +2971,11 @@ theorem cancelTy_rowLe {S : Row} {F : CTy} {R : VTy}
   · rw [show cancelTy S F = CTy.effOf (F.rowOf ++ S) .unit by simp [cancelTy, hF]] at h
     exact ⟨rfl, JR.rowLe h⟩
   · rw [show cancelTy S F = .top by simp [cancelTy, hF]] at h
-    have := JR.rigid h rigid_top
-    simp only [Jdg.comp.injEq] at this
-    exact (effOf_ne_top S R this).elim
+    obtain ⟨D', he, hα⟩ := JR.rigid h rigid_top
+    simp only [Jdg.comp.injEq] at he
+    subst he
+    obtain ⟨Y, he, -⟩ := CTy.alphaB_effOf S (CTy.alphaB_symm hα)
+    exact (effOf_ne_top S Y he.symm).elim
 
 /-! ### A continuation is used once: the clauses R1–R4
 
@@ -2828,6 +3021,12 @@ theorem kTy_not_persistent {S : Row} {R : VTy} {q : Qual} {B : VTy} {F : CTy} (h
     ¬ (kTy S R q B F).Persistent := by
   cases q <;> simp_all [kTy, VTy.Persistent, VTy.persistent]
 
+/-- Nor is any α-equivalent of it. -/
+theorem kTy_not_persistent_alpha {S : Row} {R : VTy} {q : Qual} {B : VTy} {F : CTy} {K : VTy}
+    (hq : q ≠ .unr) (hα : VTy.alphaB [] (kTy S R q B F) K = true) : ¬ K.Persistent := by
+  intro h
+  exact kTy_not_persistent hq (by rw [VTy.Persistent, VTy.alphaB_persistent _ hα]; exact h)
+
 /-- **A clause `λp. let (v, k) = p in X` at a resuming operation's clause type** types `X` with
 `k : kTy` live in slot `0` and `v : A` in slot `1`, at a computation type from which the same-term
 rules reach the clause's row. -/
@@ -2836,17 +3035,18 @@ theorem der_clause_body {Δ : LifeCtx} {Γ : Ctx VTy} {X : Expr} {S : Row} {R : 
     (hw : ∀ M₁ M₂, Expr.lam (.letpair (.var 0) X) ≠ withPair M₁ M₂)
     (hc : NotConst (.lam (.letpair (.var 0) X)))
     (h : CDerives Δ Γ (.lam (.letpair (.var 0) X)) (.val (clauseTy S R (q, A, B) F))) :
-    ∃ Γb C, CDerives Δ (⟨kTy S R q B F, true⟩ :: ⟨A, true⟩ :: Γb) X (.comp C) ∧
+    ∃ Γb C K A', VTy.alphaB [] (kTy S R q B F) K = true ∧ VTy.alphaB [] A A' = true ∧
+      CDerives Δ (⟨K, true⟩ :: ⟨A', true⟩ :: Γb) X (.comp C) ∧
       JR (.comp C) (.comp (CTy.effOf S R)) := by
   rw [clauseTy_resuming hres] at h
-  obtain ⟨-, hb⟩ := lam_bang h (fun h => by cases h) hw hc
+  obtain ⟨-, P', hP', hb⟩ := lam_bang h (fun h => by cases h) hw hc
   obtain ⟨Γ₁, Γ₂, A', B', C, hs, hV, hX, hr⟩ := der_letpair hb _ _ rfl
   obtain ⟨T, hT, hcT⟩ := der_var hV 0 rfl
   have hT' := splitP_le_left hs 0 T hT
   simp only [List.getElem?_cons_zero, Option.some.injEq, Slot.mk.injEq, and_true] at hT'
   subst hT'
-  obtain ⟨rfl, rfl⟩ := vview_tensor hcT.val
-  exact ⟨Γ₂, C, hX, hr⟩
+  obtain ⟨hA, hK⟩ := vview_tensor (hcT.val.of_alpha (VTy.alphaB_symm hP'))
+  exact ⟨Γ₂, C, B', A', hK, hA, hX, hr⟩
 
 /-- **A slot used on both sides of `M to x. N` is persistent.** -/
 theorem k_twice {Δ : LifeCtx} {Γb : Ctx VTy} {K A : VTy} {N M : Expr} {j : Jdg}
@@ -2867,16 +3067,16 @@ theorem k_twice {Δ : LifeCtx} {Γb : Ctx VTy} {K A : VTy} {N M : Expr} {j : Jdg
 branch, `⊤` at a must-resume operation, and `κ` is no function of `⊸`. -/
 theorem der_cancel_lin {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {S : Row} {R B : VTy} {F : CTy}
     {j : Jdg} (h : CDerives Δ Γ (cancelE (.var i)) j)
-    (hi : ∀ T, Γ[i]? = some ⟨T, true⟩ → T = kTy S R .lin B F) : JR (.comp .top) j := by
+    (hi : ∀ T, Γ[i]? = some ⟨T, true⟩ → VTy.alphaB [] (kTy S R .lin B F) T = true) :
+    JR (.comp .top) j := by
   obtain ⟨j₀, hb, hr⟩ := der_app h _ _ rfl
   rcases hb with ⟨Γ₁, Γ₂, A, B', hs, -, hf, rfl⟩ | ⟨-, -, i', -, -, hi', -⟩ |
     ⟨N, -, -, -, -, -, hN, -⟩ | ⟨N, -, -, hN, -⟩ |
     ⟨-, -, -, -, hu, -⟩ | ⟨-, -, -, -, hu, -⟩ | ⟨-, -, hu, -⟩ | ⟨C, D, -, hX, rfl⟩ | ⟨hu, -⟩ | hX
   · -- `⊸E`: `κ` read at `A ⊸ B'`, which no view of a thunk of an `&` is
     obtain ⟨T, hT, hcT⟩ := der_var hf i rfl
-    obtain rfl := hi T (splitP_le_right hs _ _ hT)
-    have := vview_thunk hcT.val
-    cases this
+    have := vview_thunk (hcT.val.of_alpha (hi T (splitP_le_right hs _ _ hT)))
+    simp [kTy, CTy.alphaB] at this
   · cases hi'
   · cases hN
   · cases hN
@@ -2885,12 +3085,15 @@ theorem der_cancel_lin {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {S : Row} {R B : 
   · cases hu
   · -- the second projection: `κ` read at `C & D`, so `D` is `⊤`
     obtain ⟨T, hT, hcT⟩ := der_var hX i rfl
-    obtain rfl := hi T hT
+    have hα := hi T hT
     rcases hcT with ⟨S', Y, he, -⟩ | ⟨C₀, hC₀, -, hr'⟩
     · exact (effOf_ne_amp _ _ _ _ he.symm).elim
-    · simp only [kTy, VTy.thunk.injEq] at hC₀
-      subst hC₀
-      obtain ⟨-, rfl⟩ := hr'.amp_amp
+    · subst hC₀
+      simp only [kTy, VTy.alphaB] at hα
+      cases C₀ <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq, Bool.false_eq_true] at hα
+      obtain ⟨-, h₂⟩ := hr'.amp_amp
+      have hD := CTy.alphaB_trans' hα.2 h₂
+      cases D <;> simp only [CTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hD
       exact hr
   · cases hu
   · rcases hX with hX | hX | ⟨Z, hX⟩ | ⟨Z, hX⟩ | ⟨_, hX₁, hX₂, -⟩ <;>
@@ -2902,11 +3105,11 @@ theorem refuses_consumeClause {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} 
     {A B : VTy} {F : CTy} (hq : q ≠ .unr) (hres : (B.isZero && q != .lin) = false) :
     ¬ CDerives Δ Γ consumeCl.1 (.val (clauseTy S R (q, A, B) F)) := by
   intro h
-  obtain ⟨Γb, C, hX, -⟩ := der_clause_body (X := .inj₁ .unit) hres (by not_withPair)
+  obtain ⟨Γb, C, K, A', hK, -, hX, -⟩ := der_clause_body (X := .inj₁ .unit) hres (by not_withPair)
     (by not_const) h
   obtain ⟨A₁, B₁, hu, -⟩ := der_inj₁ hX _ rfl
   rcases der_unit hu rfl with ⟨hd, -⟩ | hr
-  · exact kTy_not_persistent hq (deadP_slot hd (k := 0) rfl)
+  · exact kTy_not_persistent_alpha hq hK (deadP_slot hd (k := 0) rfl)
   · obtain ⟨S', Y, he⟩ := hr.comp_val
     exact effOf_ne_top S' Y he.symm
 
@@ -2917,10 +3120,10 @@ theorem refuses_twiceClause {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q
     {A B : VTy} {F : CTy} (hq : q ≠ .unr) (hres : (B.isZero && q != .lin) = false) :
     ¬ CDerives Δ Γ twiceCl.1 (.val (clauseTy S R (q, A, B) F)) := by
   intro h
-  obtain ⟨Γb, C, hX, -⟩ := der_clause_body (X := twiceBody) hres
+  obtain ⟨Γb, C, K, A', hK, -, hX, -⟩ := der_clause_body (X := twiceBody) hres
     (by simp only [twiceBody, resumeE]; not_withPair)
     (by simp only [twiceBody, resumeE]; not_const) h
-  exact kTy_not_persistent hq (k_twice hX (by simp [resumeE]) (by simp [resumeE])
+  exact kTy_not_persistent_alpha hq hK (k_twice hX (by simp [resumeE]) (by simp [resumeE])
     (by simp [resumeE]) (by simp [resumeE]) (by simp [resumeE])
     (by simp only [resumeE]; not_withPair) (by simp only [resumeE]; not_const)
     (by simp [resumeE, Expr.HasVar, Expr.shift]) (by simp [resumeE, Expr.HasVar, Expr.shift]))
@@ -2931,10 +3134,10 @@ theorem refuses_cancelResumeClause {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : 
     {A B : VTy} {F : CTy} (hq : q ≠ .unr) (hres : (B.isZero && q != .lin) = false) :
     ¬ CDerives Δ Γ cancelResumeCl.1 (.val (clauseTy S R (q, A, B) F)) := by
   intro h
-  obtain ⟨Γb, C, hX, -⟩ := der_clause_body (X := cancelResumeBody) hres
+  obtain ⟨Γb, C, K, A', hK, -, hX, -⟩ := der_clause_body (X := cancelResumeBody) hres
     (by simp only [cancelResumeBody, cancelE, resumeE]; not_withPair)
     (by simp only [cancelResumeBody, cancelE, resumeE]; not_const) h
-  exact kTy_not_persistent hq (k_twice hX (by simp [cancelE]) (by simp [cancelE])
+  exact kTy_not_persistent_alpha hq hK (k_twice hX (by simp [cancelE]) (by simp [cancelE])
     (by simp [cancelE]) (by simp [cancelE]) (by simp [cancelE])
     (by simp only [resumeE]; not_withPair) (by simp only [resumeE]; not_const)
     (by simp [cancelE, Expr.HasVar]) (by simp [resumeE, Expr.HasVar, Expr.shift]))
@@ -2944,7 +3147,7 @@ theorem refuses_cancelResumeClause {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : 
 theorem refuses_cancelClause_lin {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {A B : VTy}
     {F : CTy} : ¬ CDerives Δ Γ cancelCl.1 (.val (clauseTy S R (.lin, A, B) F)) := by
   intro h
-  obtain ⟨Γb, C, hX, -⟩ := der_clause_body (X := cancelBody) (by simp)
+  obtain ⟨Γb, C, K, A', hK, -, hX, -⟩ := der_clause_body (X := cancelBody) (by simp)
     (by simp only [cancelBody, cancelE]; not_withPair)
     (by simp only [cancelBody, cancelE]; not_const) h
   obtain ⟨Γ₁, Γ₂, T, b, S', j', hs, hM, -⟩ := der_bind_split hX (by simp [cancelE])
@@ -2953,10 +3156,12 @@ theorem refuses_cancelClause_lin {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VT
   have hc := der_cancel_lin (S := S) (R := R) (B := B) (F := F) hM (fun T hT => by
     have := splitP_le_left hs 0 T hT
     simp only [List.getElem?_cons_zero, Option.some.injEq, Slot.mk.injEq, and_true] at this
-    exact this.symm)
-  have := hc.rigid rigid_top
-  simp only [Jdg.comp.injEq] at this
-  exact effOf_ne_top _ _ this
+    exact this ▸ hK)
+  obtain ⟨D', he, hα⟩ := hc.rigid rigid_top
+  simp only [Jdg.comp.injEq] at he
+  subst he
+  obtain ⟨Y, he, -⟩ := CTy.alphaB_effOf _ (CTy.alphaB_symm hα)
+  exact effOf_ne_top _ _ he.symm
 
 /-- **The clause typing refuses R1–R4's clauses** at the classes S6's witnesses name: R1, R2 and R4
 at every resuming must-resume or cancellable operation, R3 at every must-resume one, at every cancel
@@ -2978,16 +3183,18 @@ open EffExamples in
 theorem refuses_clC_lin {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {A B : VTy} {F : CTy} :
     ¬ CDerives Δ Γ clC (.val (clauseTy S R (.lin, A, B) F)) := by
   intro h
-  obtain ⟨Γb, C, hX, hr⟩ := der_clause_body (X := .seq (.var 1) (cancelE (.var 0))) (by simp)
-    (by simp only [cancelE]; not_withPair) (by simp only [cancelE]; not_const) h
+  obtain ⟨Γb, C, K, A', hK, -, hX, hr⟩ := der_clause_body (X := .seq (.var 1) (cancelE (.var 0)))
+    (by simp) (by simp only [cancelE]; not_withPair) (by simp only [cancelE]; not_const) h
   obtain ⟨Γ₁, Γ₂, C', hs, -, hM, hr'⟩ := der_seq hX _ _ rfl
   have hc := der_cancel_lin (S := S) (R := R) (B := B) (F := F) hM (fun T hT => by
     have := splitP_le_right hs 0 T hT
     simp only [List.getElem?_cons_zero, Option.some.injEq, Slot.mk.injEq, and_true] at this
-    exact this.symm)
-  have := JR.rigid ((hc.trans hr').trans hr) rigid_top
-  simp only [Jdg.comp.injEq] at this
-  exact effOf_ne_top _ _ this
+    exact this ▸ hK)
+  obtain ⟨D', he, hα⟩ := JR.rigid ((hc.trans hr').trans hr) rigid_top
+  simp only [Jdg.comp.injEq] at he
+  subst he
+  obtain ⟨Y, he, -⟩ := CTy.alphaB_effOf _ (CTy.alphaB_symm hα)
+  exact effOf_ne_top _ _ he.symm
 
 open EffExamples in
 /-- **The refusals are of `κ`'s use, not of the clauses' form.**  At the clause type of a

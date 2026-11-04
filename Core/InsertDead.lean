@@ -590,6 +590,7 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       show CDerives _ _ (Expr.app (Expr.lam (N.shift _ (Γa.length + 1))) ((Expr.lam b).shift _ _)) _
       rw [hb]
       exact .letPoly b hcl hV eN
+  | alpha _ hα ih => intro Γa Γb hΓ; exact .alpha (ih Γa Γb hΓ) hα
 
 /-- **Weakening of a tied derivation** by consumed slots inside its context, as
 `CDerives.insert_dead`: the tie is on rows, which the shift leaves alone.  `[spec §3, §19]` -/
@@ -971,6 +972,7 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
         (Expr.app (Expr.lam (N.shift _ (Γa.length + 1))) ((Expr.lam b).shift _ _)) _
       rw [hb]
       exact .letPoly b hcl hV eN
+  | alpha _ hα ih => intro Γa Γb hΓ; exact .alpha (ih Γa Γb hΓ) hα
 
 end BoCa.Fig16.LogRel.Core
 

@@ -388,6 +388,7 @@ theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' 
   | divFuel S A hAt hS hΓ => exact .divFuel S A hAt hS (deadP_append h' hΓ)
   | reify S B R res hAt hS hcl hres hΓ _ => exact .reify S B R res hAt hS hcl hres (deadP_append h' hΓ)
   | letPoly b hcl hV _ _ ihN => exact .letPoly b hcl hV ihN
+  | alpha _ hα ih => exact .alpha ih hα
 
 /-! ### Typing: calls, callbacks and one-operation handlers -/
 

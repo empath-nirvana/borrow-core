@@ -686,6 +686,10 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
       exact ⟨.effSub hle d, e⟩
+  | alpha _ hα ih =>
+      intro Γa Γb Γp f hΓ hf hp
+      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
+      exact ⟨.alpha d hα, e⟩
   | effAwait => intro _ _ _ _ _ hf; simp [TExpr.absF] at hf
   | effPerform hf₀ hna hac _ ih =>
       intro Γa Γb Γp f hΓ hf hp
@@ -1277,6 +1281,10 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
       exact ⟨.effSub hle d, e⟩
+  | alpha _ hα ih =>
+      intro Γa Γb Γp f hΓ hf hp
+      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
+      exact ⟨.alpha d hα, e⟩
   | effAwait => intro _ _ _ _ _ hf; simp [TExpr.absF] at hf
   | effPerform hAt hf₀ hna hac _ ih =>
       intro Γa Γb Γp f hΓ hf hp

@@ -480,6 +480,9 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       (hV : CDerivesAt Ξ Δ [] (.val (.lam b)) j)
       (hN : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ) ((N.subst 0 (Val.lam b)).shift 1 0) (.comp C)) :
       CDerivesAt Ξ Δ Γ (.app (.val (.lam N)) (.val (.lam b))) (.comp C)
+  /-- `[α]`: conversion up to the names of lifetime binders.  `[spec §3]` -/
+  | alpha {Δ Γ e} {j j' : Jdg} (h : CDerivesAt Ξ Δ Γ e j) (hα : j.alphaB j' = true) :
+      CDerivesAt Ξ Δ Γ e j'
 
 /-- **Every tied derivation is one of `CDerives`.**  `[spec §19]` -/
 theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
@@ -601,6 +604,7 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | divFuel S A _ hS hΓ => exact .divFuel S A hS hΓ
   | reify S B R res _ hS hcl _ hΓ ih => exact .reify S B R res hS hcl ih hΓ
   | letPoly b hcl _ _ ihV ihN => exact .letPoly b hcl ihV ihN
+  | alpha _ hα ih => exact .alpha ih hα
 
 /-- `[then]` with its finaliser at the pure row (§24, option A), tied: `effThen` at `Σ_M = Σ` and
 `Σ_D = ∅`, as `CDerives.effThenA`.  `[spec §24, §27]` -/
@@ -984,6 +988,7 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
       simp only [Expr.effFree, Expr.val, Val.lam, Bool.and_eq_true] at he
       exact .letPoly b hcl (ihV he.2)
         (ihN (by rw [effFree_shift]; exact effFree_subst N 0 (Val.lam b) he.1 he.2))
+  | alpha _ hα ih => exact .alpha (ih he) hα
 
 /-! ### Signature lists -/
 

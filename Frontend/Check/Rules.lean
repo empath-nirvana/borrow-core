@@ -515,6 +515,10 @@ def rNuIn {C : CCTy} (hC : C.NuOk) (r : Res Δ T (.comp C.unroll)) : Res Δ T (.
 def rNuOut {C : CCTy} (hC : C.NuOk) (r : Res Δ T (.comp (.nu C))) : Res Δ T (.comp C.unroll) :=
   ⟨.nuOut i (.comp C.unroll) C r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.nuOut i hC h⟩
 
+/-- `[α]`: a term at a judgment up to the names of its types' lifetime binders.  `[spec §3]` -/
+def rAlpha {j j' : Jdg} (hα : j.alphaB j' = true) (r : Res Δ T j) : Res Δ T j' :=
+  ⟨.alpha i j' j j' r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.alpha i hα h⟩
+
 /-! ### Effects  `[spec §19]` -/
 
 /-- `[sub]`: `F_Σ A ≤ F_Σ′ A` at `Σ ⊆ Σ′`. -/

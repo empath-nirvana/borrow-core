@@ -563,6 +563,11 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (hV : CDerivesP Δ [] (.val (.lam b)) j)
       (hN : CDerivesP Δ (⟨.unit, false⟩ :: Γ) ((N.subst 0 (Val.lam b)).shift 1 0) (.comp C)) :
       CDerivesP Δ Γ (.app (.val (.lam N)) (.val (.lam b))) (.comp C)
+  /-- **Conversion** `[α]`: a term at a judgment is at every judgment equal to it up to the names
+  of its types' lifetime binders (`Jdg.alphaB`).  Its compatibility lemma is `alpha_compatJ`, from
+  `cC_tyEq`.  `[spec §3]` -/
+  | alpha {Δ Γ e} {j j' : Jdg} (h : CDerivesP Δ Γ e j) (hα : j.alphaB j' = true) :
+      CDerivesP Δ Γ e j'
   /-- **R1, the relaxed lend.** `r : Ref T ⊢ withborU d r (Λ. λm. M) : F_Σ (Ref T ⊗ B)`, the
   callback `M` at a row `Σ` of resuming operations and the cancel path's cancellable wait and cancel
   target (`Row.ResumeOC`), typed in `CDerivesP` with the

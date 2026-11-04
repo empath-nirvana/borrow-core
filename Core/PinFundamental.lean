@@ -139,6 +139,7 @@ theorem CDerivesP.ofC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 => exact CDerivesP.effHandleT a0 a1 a2 a3 ih0 a5 a6 a7 a8 a9 a10 ih1
   | effHandleL a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 ih0 ih1 => exact CDerivesP.effHandleL a0 a1 a2 a3 a4 ih0 a6 a7 a8 a9 a10 a11 a12 a13 a14 ih1
   | letPoly a0 a1 a2 a3 ih0 ih1 => exact CDerivesP.letPoly a0 a1 ih0 ih1
+  | alpha a0 a1 ih0 => exact CDerivesP.alpha ih0 a1
 
 /-- **The Fundamental Property under `PinLaw`.** -/
 theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr}
@@ -264,6 +265,7 @@ theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | effHandleL hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
       exact handleL_compatC hs hd hHr hHw hHn ihc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin ihe
   | letPoly b hcl _ _ _ ihN => exact letPoly_compatC (Val.lam b) hcl ihN
+  | alpha _ hα ih => exact alpha_compatJ hα ih
   | lendR hb hx hbx hΔx hT hB hBn hside hS hM1 hcb hdc _ hM ihd ihM =>
       exact hPin.lendFrame _ _ _ _ _ _ _ _ _ _ (.ref hT hside)
         hb hx hbx hΔx hB hBn hS hM1 hcb hdc ihd hM ihM

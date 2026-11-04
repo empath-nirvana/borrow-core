@@ -14,6 +14,7 @@ import Core.PolyLet
 import Core.DivHandle
 import Core.DivHandleLast
 import Core.Tok
+import Core.Alpha
 import Support.LogicalRelation.Adequacy
 
 /-!
@@ -186,6 +187,13 @@ theorem await_compatC {Δ : LifeCtx} {S : Row} {n : UInt32} {a c : OpSig}
 inductive Jdg where
   | val (A : VTy)
   | comp (C : CTy)
+
+/-- Judgment forms equal up to the names of their types' lifetime binders (`VTy.alphaB`,
+`CTy.alphaB` at no binder pairs).  `[spec §3]` -/
+def Jdg.alphaB : Jdg → Jdg → Bool
+  | .val A, .val A' => VTy.alphaB [] A A'
+  | .comp C, .comp C' => CTy.alphaB [] C C'
+  | _, _ => false
 
 /-- The CBPV typing judgment.  Its context premises are `Ctx.SplitP`, `Ctx.DeadP` and
 `Ctx.SoloP`: a live slot of persistent type may be duplicated and consumed.  `[spec §3, §10]` -/
@@ -633,6 +641,11 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (hV : CDerives Δ [] (.val (.lam b)) j)
       (hN : CDerives Δ (⟨.unit, false⟩ :: Γ) ((N.subst 0 (Val.lam b)).shift 1 0) (.comp C)) :
       CDerives Δ Γ (.app (.val (.lam N)) (.val (.lam b))) (.comp C)
+  /-- **Conversion** `[α]`: a term at a judgment is at every judgment equal to it up to the names
+  of its types' lifetime binders (`Jdg.alphaB`).  Its compatibility lemma is `alpha_compatJ`, from
+  `cC_tyEq`.  `[spec §3]` -/
+  | alpha {Δ Γ e} {j j' : Jdg} (h : CDerives Δ Γ e j) (hα : j.alphaB j' = true) :
+      CDerives Δ Γ e j'
 
 /-- `[then]` with its finaliser at the pure row (SPEC §24, option A): `effThen` at `Σ_M = Σ` and
 `Σ_D = ∅`, since `F ⋈ ∅ ≤ F` (`ThenLe.nil`).  `[spec §24, §27]` -/
@@ -739,6 +752,22 @@ theorem CDerives.unfoldS {Δ Γ} (A S : VTy) (hΓ : Ctx.DeadP Γ) :
 def SemJ (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) : Jdg → Prop
   | .val A => SemV Δ Γ e A
   | .comp C => SemC Δ Γ e C
+
+/-- `[α]` at a value judgment. -/
+theorem CDerives.alphaV {Δ Γ e} {A A' : VTy} (h : CDerives Δ Γ e (.val A))
+    (hα : VTy.alphaB [] A A' = true) : CDerives Δ Γ e (.val A') := .alpha h hα
+
+/-- `[α]` at a computation judgment. -/
+theorem CDerives.alphaC {Δ Γ e} {C C' : CTy} (h : CDerives Δ Γ e (.comp C))
+    (hα : CTy.alphaB [] C C' = true) : CDerives Δ Γ e (.comp C') := .alpha h hα
+
+/-- `[α]`'s compatibility lemma: the relation reads α-equivalent types alike (`cC_tyEq`).
+`[spec §3]` -/
+theorem alpha_compatJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} :
+    ∀ {j j' : Jdg}, j.alphaB j' = true → SemJ Δ Γ e j → SemJ Δ Γ e j'
+  | .val _, .val _, hα, h => alpha_compatC (C := .ret _) (C' := .ret _) hα h
+  | .comp _, .comp _, hα, h => alpha_compatC hα h
+  | .val _, .comp _, hα, _ | .comp _, .val _, hα, _ => by simp [Jdg.alphaB] at hα
 
 /-- **Fundamental Property** of the CBPV judgment over the typed world at CBPV types.  `[spec §3]` -/
 theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
@@ -864,6 +893,7 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | effHandleL hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
       exact handleL_compatC hs hd hHr hHw hHn ihc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin ihe
   | letPoly b hcl _ _ _ ihN => exact letPoly_compatC (Val.lam b) hcl ihN
+  | alpha _ hα ih => exact alpha_compatJ hα ih
 
 /-- **The stop lemma** (BOXED-κ's premise, `[spec §28]`): a computation typed at `F_Σ A` under
 `Γ`, with `Δ ⊨ Γ ⊐ @d` and every non-abortive answer type of `Σ` outliving `@d`, has the

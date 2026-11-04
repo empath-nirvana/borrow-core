@@ -750,20 +750,35 @@ def mismatch (sp : Span) (want got : String) : Error :=
 section
 variable {Δ : LifeCtx} {T : List CVTy}
 
+/-- A value of `B` at `A`: equal, or equal up to the names of lifetime binders by `[α]`
+(`VTy.alphaB`, SPEC §3). -/
 def convV (E : Env) (sp : Span) (A : CVTy) : (Σ B : CVTy, Res Δ T (.val B)) → Except Error (Res Δ T (.val A))
-  | ⟨B, r⟩ => if h : B = A then pure (h ▸ r) else throw (mismatch sp (E.ppV A) (E.ppV B))
+  | ⟨B, r⟩ =>
+    if h : B = A then pure (h ▸ r)
+    else if hα : BoCa.Fig16.LogRel.Core.VTy.alphaB [] B A = true then
+      pure (rAlpha (j := .val B) (j' := .val A) (at_ sp) hα r)
+    else throw (mismatch sp (E.ppV A) (E.ppV B))
 
-/-- A computation of `D` at `C`: equal, or `F_Σ′ A` within `F_Σ A` by `[sub]` (SPEC §19). -/
+/-- A computation of `D` at `C`: equal, equal up to the names of lifetime binders by `[α]`
+(SPEC §3), or `F_Σ′ A` within `F_Σ A` by `[sub]` (SPEC §19), its answer up to `[α]`. -/
 def convC (E : Env) (sp : Span) (C : CCTy) : (Σ D : CCTy, Res Δ T (.comp D)) → Except Error (Res Δ T (.comp C))
   | ⟨D, r⟩ =>
     if h : D = C then pure (h ▸ r) else
+    if hα : BoCa.Fig16.LogRel.Core.CTy.alphaB [] D C = true then
+      pure (rAlpha (j := .comp D) (j' := .comp C) (at_ sp) hα r) else
     match effRow? D, effRow? C with
     | some (S', A'), some (S, _) =>
       if hD : effOf S' A' = D then
+        let rowErr : Error := ⟨sp, s!"type mismatch: expected `{E.ppC C}`, but this has type " ++
+          s!"`{E.ppC D}`: its row `{ppRow E S'}` is not within `{ppRow E S}`"⟩
         if hC : effOf S A' = C then
           if hle : rowLeB S' S = true then pure (hC ▸ rEffSub (at_ sp) hle (hD ▸ r))
-          else throw ⟨sp, s!"type mismatch: expected `{E.ppC C}`, but this has type " ++
-            s!"`{E.ppC D}`: its row `{ppRow E S'}` is not within `{ppRow E S}`"⟩
+          else throw rowErr
+        else if hα : BoCa.Fig16.LogRel.Core.CTy.alphaB [] (effOf S A') C = true then
+          if hle : rowLeB S' S = true then
+            pure (rAlpha (j := .comp (effOf S A')) (j' := .comp C) (at_ sp) hα
+              (rEffSub (at_ sp) hle (hD ▸ r)))
+          else throw rowErr
         else throw (mismatch sp (E.ppC C) (E.ppC D))
       else throw (mismatch sp (E.ppC C) (E.ppC D))
     | _, _ => throw (mismatch sp (E.ppC C) (E.ppC D))

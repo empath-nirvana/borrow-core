@@ -96,6 +96,8 @@ inductive CTy where
   | eff (n i : UInt32) (q : Qual) (A B : VTy) (fin : CTy) (rc : Bool) (C : CTy)
 end
 
+deriving instance DecidableEq for VTy, CTy
+
 /-- The value-type eliminator with `U C` a leaf. -/
 @[elab_as_elim]
 theorem VTy.recV {motive : VTy → Prop}
@@ -1670,18 +1672,56 @@ def CTy.applyLSub (σ : LSubst) : CTy → CTy
       .eff n i q (A.applyLSub σ) (B.applyLSub σ) (fin.applyLSub σ) rc (C.applyLSub σ)
 end
 
-/-- The first name of a type's internal lifetime binders: the lifetime context of a term numbers
-its variables from `0` (`Δ.freshVar`), and a binder inside a type is named at or above this, by
-its body (`CTy.canonBinder`).  `[spec §3]` -/
-def CTy.binderBase : LifeVar := 65536
+/-! ### α-equivalence: types equal up to the names of their lifetime binders  `[spec §3]`
 
-/-- **The name of a type's internal `∀` binder `'x` over the body `C`**: one past every lifetime
-index of `C` other than `'x` itself (`C[⊤/'x]`), binders included, and at least `binderBase`.  It
-is a function of the body up to the binder's own name, so a type is one term wherever it is
-elaborated while the context's variables are below `binderBase`; it is above every other
-variable of `C`, so renaming `'x` to it captures nothing.  `[spec §3]` -/
-def CTy.canonBinder (x : LifeVar) (C : CTy) : LifeVar :=
-  max CTy.binderBase (C.applyLSub [(x, .top)]).lifeBound
+The binders are `∀'x ⊏ @b. C` (`CTy.all`) and nothing else; `VTy.all` is `U (∀'x ⊏ @b. F A)`.
+`ρ` pairs the binders passed on the left with those on the right, innermost first. -/
+
+/-- `'x` on the left and `'y` on the right name one lifetime under the binder pairs `ρ`: the
+innermost pair binding either decides, and a variable bound by neither is free on both sides. -/
+def varAlphaB : List (LifeVar × LifeVar) → LifeVar → LifeVar → Bool
+  | [], x, y => x == y
+  | (a, b) :: ρ, x, y => if x = a then y == b else if y = b then false else varAlphaB ρ x y
+
+/-- Lifetime terms equal up to the binder pairs `ρ`. -/
+def lifeAlphaB (ρ : List (LifeVar × LifeVar)) : Lifetime.Life → Lifetime.Life → Bool
+  | .var x, .var y => varAlphaB ρ x y
+  | .top, .top => true
+  | .join a b, .join a' b' => lifeAlphaB ρ a a' && lifeAlphaB ρ b b'
+  | .meet a b, .meet a' b' => lifeAlphaB ρ a a' && lifeAlphaB ρ b b'
+  | _, _ => false
+
+mutual
+/-- Value types equal up to the names of their lifetime binders, under the binder pairs `ρ`. -/
+def VTy.alphaB (ρ : List (LifeVar × LifeVar)) : VTy → VTy → Bool
+  | .unit, .unit | .zero, .zero | .unk, .unk => true
+  | .int w, .int w' => decide (w = w')
+  | .opq k, .opq k' => decide (k = k')
+  | .tensor A B, .tensor A' B' | .sum A B, .sum A' B' => VTy.alphaB ρ A A' && VTy.alphaB ρ B B'
+  | .thunk C, .thunk C' => CTy.alphaB ρ C C'
+  | .ref A, .ref A' | .bang A, .bang A' | .fam A, .fam A' | .mu A, .mu A' => VTy.alphaB ρ A A'
+  | .imm a A, .imm a' A' | .mut a A, .mut a' A' | .box a A, .box a' A' =>
+      lifeAlphaB ρ a a' && VTy.alphaB ρ A A'
+  | .tvar n, .tvar n' => n == n'
+  | _, _ => false
+/-- Computation types equal up to the names of their lifetime binders, under the binder pairs
+`ρ`: `∀'x ⊏ @b. C` and `∀'x' ⊏ @b'. C'` when `@b`, `@b'` are, and `C`, `C'` are with `'x`
+paired with `'x'`.  An operation's signature (`A ↠ B` and its cancel row) is compared as it is
+written, and read at `ρ` only for its free lifetimes: a row is tied to the effect context's
+signatures as written (`RowAt`), so the same-term rules leave it unchanged. -/
+def CTy.alphaB (ρ : List (LifeVar × LifeVar)) : CTy → CTy → Bool
+  | .ret A, .ret A' => VTy.alphaB ρ A A'
+  | .arr A C, .arr A' C' => VTy.alphaB ρ A A' && CTy.alphaB ρ C C'
+  | .amp C D, .amp C' D' => CTy.alphaB ρ C C' && CTy.alphaB ρ D D'
+  | .top, .top => true
+  | .all x b C, .all x' b' C' => lifeAlphaB ρ b b' && CTy.alphaB ((x, x') :: ρ) C C'
+  | .nu C, .nu C' => CTy.alphaB ρ C C'
+  | .eff n i q A B fin rc C, .eff n' i' q' A' B' fin' rc' C' =>
+      n == n' && i == i' && decide (q = q') && rc == rc' && decide (A = A') && decide (B = B') &&
+        decide (fin = fin') && VTy.alphaB ρ A A' && VTy.alphaB ρ B B' && CTy.alphaB ρ fin fin' &&
+        CTy.alphaB ρ C C'
+  | _, _ => false
+end
 
 /-- `A[@a/'x]`. -/
 def VTy.instLife (x : LifeVar) (a : Lifetime.Life) (A : VTy) : VTy := A.applyLSub [(x, a)]

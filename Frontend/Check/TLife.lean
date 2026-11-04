@@ -247,6 +247,7 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .effHandleT ii jj S SN E fs n A R u site inside tc te => tc.lifeBinders ++ te.lifeBinders
   | .effHandleL ii jj S SW E fs Xs n A R u site inside tc te => tc.lifeBinders ++ te.lifeBinders
   | .letPoly ii jj C j tV tN => tV.lifeBinders ++ tN.lifeBinders
+  | .alpha ii jj j j' t => t.lifeBinders
   | .lendR ii jj x b T B S td tM => [x] ++ td.lifeBinders ++ tM.lifeBinders
   | .lendLoopR ii jj x A S B R tN tK ts0 => [x] ++ [x] ++ [x] ++ tN.lifeBinders ++ tK.lifeBinders ++ ts0.lifeBinders
   | .nilDead ii jj j t => t.lifeBinders
@@ -362,6 +363,7 @@ def TExpr.domFree : TExpr → Bool
   | .effHandleT ii jj S SN E fs n A R u site inside tc te => tc.domFree && te.domFree
   | .effHandleL ii jj S SW E fs Xs n A R u site inside tc te => tc.domFree && te.domFree
   | .letPoly ii jj C j tV tN => tV.domFree && tN.domFree
+  | .alpha ii jj j j' t => t.domFree
   | .lendR ii jj x b T B S td tM => false
   | .lendLoopR ii jj x A S B R tN tK ts0 => false
   | .nilDead ii jj j t => t.domFree
@@ -476,6 +478,7 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .effHandleT ii jj S SN E fs n A R u site inside tc te => .effHandleT ii jj S SN E fs n A R u site inside (tc.reAb Δr) (te.reAb Δr)
   | .effHandleL ii jj S SW E fs Xs n A R u site inside tc te => .effHandleL ii jj S SW E fs Xs n A R u site inside (tc.reAb Δr) (te.reAb Δr)
   | .letPoly ii jj C j tV tN => .letPoly ii jj C j (tV.reAb Δr) (tN.reAb Δr)
+  | .alpha ii jj j j' t => .alpha ii jj j j' (t.reAb Δr)
   | .lendR ii jj x b T B S td tM => .lendR ii jj x b T B S (td.reAb Δr) (tM.reAb (Δr.extend x b))
   | .lendLoopR ii jj x A S B R tN tK ts0 => .lendLoopR ii jj x A S B R (tN.reAb (Δr.extend x Δr.meetOfDom)) (tK.reAb (Δr.extend x Δr.meetOfDom)) (ts0.reAb (Δr.extend x Δr.meetOfDom))
   | .nilDead ii jj j t => .nilDead ii jj j (t.reAb Δr)
@@ -528,7 +531,7 @@ theorem relT_reAb (Δr : LifeCtx) (t : TExpr) : ∀ k, relT k (t.reAb Δr) = rel
   case lolliE _ _ _ _ _ ta tf _ _ =>
     intro k; simp only [TExpr.reAb, relT, TExpr.isVarT_reAb, TExpr.isRelease_reAb]
   case ret _ _ _ t ih | ofRet _ _ _ t ih | effSub _ _ _ _ _ t ih | lendScope _ _ _ t ih
-    | sumI₁ _ _ _ _ t ih | sumI₂ _ _ _ _ t ih =>
+    | sumI₁ _ _ _ _ t ih | sumI₂ _ _ _ _ t ih | alpha _ _ _ _ t ih =>
     intro k; simp only [TExpr.reAb, relT, ih k]
   case bind _ _ _ _ u tM tN ihM ihN | effLet _ _ _ _ _ u tM tN ihM ihN =>
     intro k; simp only [TExpr.reAb, relT, ihM k, ihN (k + 1)]
@@ -897,6 +900,9 @@ theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | letPoly a0 a1 a2 a3 a4 a5 ih0 ih1 =>
       intro Δ' he hd
       exact TDerivesP.letPoly a0 a1 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a3) (ih1 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a5)
+  | alpha a0 a1 ih0 =>
+      intro Δ' he hd
+      exact TDerivesP.alpha (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) a1
   | lendR => intro _ _ hd; simp [TExpr.domFree] at hd
   | lendLoopR => intro _ _ hd; simp [TExpr.domFree] at hd
   | nilDead a0 a1 ih0 =>
@@ -1225,6 +1231,9 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
   | letPoly a0 a1 a2 a3 a4 a5 ih0 ih1 =>
       intro Δ' he hd
       exact TDerivesAt.letPoly a0 a1 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a3) (ih1 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a5)
+  | alpha a0 a1 ih0 =>
+      intro Δ' he hd
+      exact TDerivesAt.alpha (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) a1
   | consume hA hc he hΓ => intro _ _ _; exact .consume hA hc he hΓ
   | allocS σ he hΓ => intro _ _ _; exact .allocS σ he hΓ
   | freeS σ he hΓ => intro _ _ _; exact .freeS σ he hΓ

@@ -377,22 +377,22 @@ theorem cancelCT_jr {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F : C
     (h : CDerives Δ Γ (.val cancelCT) (.val (clauseTyO S R ob (.unr, A, B) F))) :
     JR (.comp (cancelTy S F)) (.comp (CTy.effOf S R)) := by
   rw [clauseTyO_cap S R ob F hB] at h
-  obtain ⟨-, hb⟩ := lam_bang h (fun h => by cases h) (by not_withPair) (by not_const)
+  obtain ⟨-, P', hP', hb⟩ := lam_bang h (fun h => by cases h) (by not_withPair) (by not_const)
   obtain ⟨Γ₁, Γ₂, A', B', C, hs, hV, hB₂, hr⟩ := der_letpair hb _ _ rfl
-  have hslotP : (⟨.tensor A (kBoxO ob (kTy S R .unr B F)), true⟩ :: Γ : Ctx VTy)[0]? =
-      some ⟨.tensor A (kBoxO ob (kTy S R .unr B F)), true⟩ := rfl
+  have hslotP : (⟨P', true⟩ :: Γ : Ctx VTy)[0]? = some ⟨P', true⟩ := rfl
   rcases varCls_of_le hslotP (splitP_le_left hs) hV with hc | ⟨_, hT, -, -⟩
   swap
-  · cases hT
-  obtain ⟨rfl, rfl⟩ := vview_tensor hc
-  have hslotK : (⟨kBoxO ob (kTy S R .unr B F), true⟩ :: ⟨A, true⟩ :: Γ₂ : Ctx VTy)[0]? =
-      some ⟨kBoxO ob (kTy S R .unr B F), true⟩ := rfl
+  · subst hT; simp [VTy.alphaB] at hP'
+  obtain ⟨-, hK⟩ := vview_tensor (hc.of_alpha (VTy.alphaB_symm hP'))
+  have hslotK : (⟨B', true⟩ :: ⟨A', true⟩ :: Γ₂ : Ctx VTy)[0]? = some ⟨B', true⟩ := rfl
   obtain ⟨j₁, hb₁, hr₁⟩ := der_app hB₂ _ _ rfl
-  have hk : VView (.bang (.thunk (.amp (.arr B (CTy.effOf S R)) (cancelTy S F))))
-      (kBoxO ob (kTy S R .unr B F)) := by
+  have hk : VView (.bang (.thunk (.amp (.arr B (CTy.effOf S R)) (cancelTy S F)))) B' := by
+    refine VView.alpha ?_ hK
     cases ob with
     | none => exact .refl
     | some d => exact .single (VS.boxI d _)
+  have hB'u : ∀ C₀, B' ≠ .thunk C₀ := by
+    rintro C₀ rfl; rcases ob with _ | d <;> simp [kBoxO, kTy, VTy.alphaB] at hK
   refine Relation.ReflTransGen.trans (Relation.ReflTransGen.trans ?_ hr₁) hr
   rcases hb₁ with ⟨Γ₃, Γ₄, A₀, B₀, hs', hY, hX, rfl⟩ | ⟨Γ₃, Γ₄, i, A₀, C₀, hi, hs', hX, hx, rfl⟩ |
     ⟨N', Γ₃, Γ₄, A₀, S₀, C₀, hXe, hs', hM, hN, rfl⟩ | ⟨_, _, _, _, he, -⟩ | ⟨_, _, _, _, he, -⟩ |
@@ -401,22 +401,24 @@ theorem cancelCT_jr {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F : C
   · -- `⊸E`: the λ at a `⊸`, its body at `F B₀`
     rcases varCls_of_le hslotK (splitP_le_left hs') hY with hc | ⟨_, hT, -, -⟩
     swap
-    · rcases ob with _ | d <;> cases hT
+    · exact (hB'u _ hT).elim
     have hA₀ : A₀ ≠ .unit := by rintro rfl; exact vview_bang_thunk_unit (hk.trans hc)
-    have hN := lam_arr hX (.inr rfl) hA₀ (by not_withPair) (by not_const)
-    exact (kappa_cancel_jr (hk.trans hc) rfl hN).tail (JS.ofRet _)
+    obtain ⟨A₁, hA₁, hN⟩ := lam_arr hX (.inr rfl) hA₀ (by not_withPair) (by not_const)
+    exact (kappa_cancel_jr (VView.alpha (hk.trans hc) (VTy.alphaB_symm hA₁)) rfl hN).tail (JS.ofRet _)
   · -- `[app]`: the argument at its slot's type
     cases hi
     have hA₀ := splitP_le_right hs' 0 A₀ (soloP_le hx)
     rw [hslotK] at hA₀
     cases hA₀
-    have hN := lam_arr hX (.inl rfl) (fun h => by rcases ob with _ | d <;> cases h) (by not_withPair) (by not_const)
-    exact kappa_cancel_jr hk rfl hN
+    obtain ⟨A₁, hA₁, hN⟩ := lam_arr hX (.inl rfl)
+      (fun h => by subst h; rcases ob with _ | d <;> simp [kBoxO, kTy, VTy.alphaB] at hK)
+      (by not_withPair) (by not_const)
+    exact kappa_cancel_jr (VView.alpha hk (VTy.alphaB_symm hA₁)) rfl hN
   · -- `[let]`: the argument returned, its type a view of `κ`'s
     cases hXe
     rcases varCls_of_le hslotK (splitP_le_left hs') hM with ⟨S₁, Y₁, he, hc⟩ | ⟨_, hT, -, -⟩
     swap
-    · rcases ob with _ | d <;> cases hT
+    · exact (hB'u _ hT).elim
     obtain ⟨-, rfl⟩ := effOf_inj he
     exact kappa_cancel_jr (hk.trans hc) rfl hN
   all_goals cases he
@@ -508,16 +510,18 @@ theorem not_der_progT {Δ : LifeCtx} {Γ : Ctx VTy} {S' : Row} {Y : VTy}
   rcases der_pair hH _ _ rfl with ⟨Γ₇, Γ₈, X₁, X₂, -, -, hcl, hc₁⟩ | he
   swap
   · simp [emptyFamV, Val.arr, Val.pair, Val.loc, Val.i32] at he
-  obtain ⟨-, rfl⟩ := vview_tensor hc₁
+  obtain ⟨-, hα₂⟩ := vview_tensor hc₁
+  replace hcl := CDerives.alphaV hcl hα₂
   rcases der_pair hcl _ _ rfl with ⟨Γ₉, Γ₁₀, X₃, X₄, -, hcan, -, hc₂⟩ | he
   swap
   · simp [emptyFamV, Val.arr, Val.pair, Val.loc, Val.i32] at he
   rw [clausesTyO_cons, clausesTyO_nil] at hc₂
-  obtain ⟨rfl, -⟩ := vview_tensor hc₂
+  obtain ⟨hα₃, -⟩ := vview_tensor hc₂
+  replace hcan := CDerives.alphaV hcan hα₃
   have hjr := cancelCT_jr hB₁ hcan
   rcases hfs with htop | ⟨o₆, hf₆⟩
   · rw [show cancelTy S (fs 0) = .top by simp [cancelTy, htop]] at hjr
-    have := JR.rigid hjr rigid_top
+    have := JR.top_eq hjr
     simp only [Jdg.comp.injEq] at this
     exact effOf_ne_top S R this
   · have hnt : (fs 0).isTop = false := by
@@ -549,12 +553,14 @@ theorem cancelPair_jr {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A R A₁ B₁ : V
   rcases der_pair hH _ _ rfl with ⟨Γ₇, Γ₈, X₁, X₂, -, -, hcl, hc₁⟩ | he
   swap
   · simp [emptyFamV, Val.arr, Val.pair, Val.loc, Val.i32] at he
-  obtain ⟨-, rfl⟩ := vview_tensor hc₁
+  obtain ⟨-, hα₂⟩ := vview_tensor hc₁
+  replace hcl := CDerives.alphaV hcl hα₂
   rcases der_pair hcl _ _ rfl with ⟨Γ₉, Γ₁₀, X₃, X₄, -, hcan, -, hc₂⟩ | he
   swap
   · simp [emptyFamV, Val.arr, Val.pair, Val.loc, Val.i32] at he
   rw [clausesTyO_cons, clausesTyO_nil] at hc₂
-  obtain ⟨rfl, -⟩ := vview_tensor hc₂
+  obtain ⟨hα₃, -⟩ := vview_tensor hc₂
+  replace hcan := CDerives.alphaV hcan hα₃
   exact cancelCT_jr hB₁ hcan
 
 end Rejections
@@ -1409,22 +1415,22 @@ theorem timeoutCl_finds {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F
     (h : CDerives Δ Γ (.val timeoutCl) (.val (clauseTyO S R ob (.cancel, A, B) F))) :
     F.isTop = false ∧ ∀ n i o, Row.find F.rowOf n i = some o → ∃ o', Row.find S n i = some o' := by
   rw [clauseTyO_cap S R ob F hB] at h
-  obtain ⟨-, hb⟩ := lam_bang h (fun h => by cases h) (by not_withPair) (by not_const)
+  obtain ⟨-, P', hP', hb⟩ := lam_bang h (fun h => by cases h) (by not_withPair) (by not_const)
   obtain ⟨Γ₁, Γ₂, A', B', C, hs, hV, hB₂, hr⟩ := der_letpair hb _ _ rfl
-  have hslotP : (⟨.tensor A (kBoxO ob (kTy S R .cancel B F)), true⟩ :: Γ : Ctx VTy)[0]? =
-      some ⟨.tensor A (kBoxO ob (kTy S R .cancel B F)), true⟩ := rfl
+  have hslotP : (⟨P', true⟩ :: Γ : Ctx VTy)[0]? = some ⟨P', true⟩ := rfl
   rcases varCls_of_le hslotP (splitP_le_left hs) hV with hc | ⟨_, hT, -, -⟩
   swap
-  · cases hT
-  obtain ⟨rfl, rfl⟩ := vview_tensor hc
-  have hslotK : (⟨kBoxO ob (kTy S R .cancel B F), true⟩ :: ⟨A, true⟩ :: Γ₂ : Ctx VTy)[0]? =
-      some ⟨kBoxO ob (.thunk (.amp (.arr B (CTy.effOf S R)) (cancelTy S F))), true⟩ := rfl
+  · subst hT; simp [VTy.alphaB] at hP'
+  obtain ⟨-, hK⟩ := vview_tensor (hc.of_alpha (VTy.alphaB_symm hP'))
+  have hslotK : (⟨B', true⟩ :: ⟨A', true⟩ :: Γ₂ : Ctx VTy)[0]? = some ⟨B', true⟩ := rfl
+  replace hK : VTy.alphaB [] (kBoxO ob (.thunk (.amp (.arr B (CTy.effOf S R)) (cancelTy S F)))) B' =
+    true := hK
   rcases der_letJ hB₂ (.inj₂ .unit) (cancelE (.var 0)) rfl (fun _ h => by cases h)
       (fun _ h => by cases h) (fun h => by cases h) (fun h => by cases h) (fun h => by cases h)
       (fun _ h => by cases h) with
     ⟨j₁, ⟨Γ₃, S₅, X, hle₃, hM, hS₅⟩, hr₁⟩ | ⟨Γ₃, X, hle₃, hM⟩
   · -- `bind` or `[let]`: `cancel k` at a row below the clause's
-    have hkj := kcancel_jr_cancellable hslotK hle₃ hM
+    have hkj := kcancel_jr_cancellable hslotK hK hle₃ hM
     have hS₅S : RowLe S₅ S := by
       rcases hS₅ with rfl | ⟨B', rfl⟩
       · exact RowLe.nil S
@@ -1436,11 +1442,11 @@ theorem timeoutCl_finds {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F
       obtain ⟨o', hf', -⟩ := hle n i o (by rw [Row.find_append, hf]; rfl)
       exact ⟨o', hf'⟩
     · rw [show cancelTy S F = .top by simp [cancelTy, hF]] at hkj
-      have := JR.rigid hkj rigid_top
+      have := JR.top_eq hkj
       simp only [Jdg.comp.injEq] at this
       exact (effOf_ne_top S₅ X this).elim
   · -- `⊸E`: `cancel k` at a value judgement
-    have hkj := kcancel_jr_cancellable hslotK hle₃ hM
+    have hkj := kcancel_jr_cancellable hslotK hK hle₃ hM
     cases hF : F.isTop
     · rw [show cancelTy S F = CTy.effOf (F.rowOf ++ S) .unit by simp [cancelTy, hF]] at hkj
       obtain ⟨hle, -⟩ := RowCls.reach hkj (S := F.rowOf ++ S) (Y := .unit)
@@ -1449,7 +1455,7 @@ theorem timeoutCl_finds {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F
       obtain ⟨o', hf', -⟩ := hle n i o (by rw [Row.find_append, hf]; rfl)
       simp [Row.find] at hf'
     · rw [show cancelTy S F = .top by simp [cancelTy, hF]] at hkj
-      have := JR.rigid hkj rigid_top
+      have := JR.top_eq hkj
       cases this
 
 /-- **`e7c` has no derivation at a row without `exnᵢ`** (decision D3).  `[handle] wait`'s body holds
@@ -1540,12 +1546,14 @@ theorem not_der_e7c {Δ : LifeCtx} {Γ : Ctx VTy} {nw ni : UInt32} {qi : Qual} (
   rcases der_pair hH _ _ rfl with ⟨Γ₇, Γ₈, X₁, X₂, -, -, hcl, hc₁⟩ | he
   swap
   · simp [emptyFamV, Val.arr, Val.pair, Val.loc, Val.i32] at he
-  obtain ⟨-, rfl⟩ := vview_tensor hc₁
+  obtain ⟨-, hα₂⟩ := vview_tensor hc₁
+  replace hcl := CDerives.alphaV hcl hα₂
   rcases der_pair hcl _ _ rfl with ⟨Γ₉, Γ₁₀, X₃, X₄, -, hcan, -, hc₂⟩ | he
   swap
   · simp [emptyFamV, Val.arr, Val.pair, Val.loc, Val.i32, timeoutCl] at he
   rw [clausesTyO_cons, clausesTyO_nil] at hc₂
-  obtain ⟨rfl, -⟩ := vview_tensor hc₂
+  obtain ⟨hα₃, -⟩ := vview_tensor hc₂
+  replace hcan := CDerives.alphaV hcan hα₃
   obtain ⟨hnt, hfS⟩ := timeoutCl_finds hB₁ hcan
   rcases hfs with htop | ⟨o₆, hf₆'⟩
   · rw [hnt] at htop; cases htop
