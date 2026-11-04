@@ -10462,8 +10462,15 @@ tested by programs with one child and a fixed order of events (`CrossProg`, `Cro
 `Core/TreeWpEff.lean`, `Core/TreeCactus.lean`, `Core/TreeStepKeep.lean`, `Core/TreeHeadlines.lean`).
 `twp` is the step-indexed relation at a world that grows: a run starts at any extension of its
 world, from the re-reading of its resource, and ends at an extension of the start, the frame
-re-read there and the start and end related by row 5.27's `↭` masked at the run's own records
-(`EndT`, `UpdX`). Its rules: downward closure, the Kripke rule, bind, the frame (`twp_frame`, and
+re-read there and the start and end related by row 5.27's `↭` masked at the run's own records,
+read along the walks (`EndT`, `UpdA`, #806): an `imm` cell may be given up to the end world while
+another part holds a copy, and a `mut` cell is read through the `imm` cell it sits beneath
+(`[TR]` 6.48's ancestor technique; `UpdA.frame`, `UpdA.trans`). A run gives up a copy of a view
+another part holds (`twp_consume_view_framed`; a callee, `twp_frame_callee_consume`; a spawned
+task, `twp_child_consume`, each at a frame condition holding a copy); the last copy is refused
+(`twp_refuses_last_copy`), a lend does not end while another part holds a live copy
+(`twp_refuses_lendEnd_live_copy`), and ends by `twp_lendEnd` as it stands once every copy is
+back (`twp_lendEnd_after_framed_consume`). Its rules: downward closure, the Kripke rule, bind, the frame (`twp_frame`, and
 `twp_frame_w`, whose frame obligation also reads the start world's invariants), world and resource
 changes at a segment's start (`twp_extend`, `twp_update`), and row 5.27's `mut` clause at every end
 (`endT_inv`). `cerwpT` adds operations: a stop at a non-abortive entry of the table leaves a
@@ -10771,7 +10778,8 @@ given the entries'); the typing rules and the fundamental theorem over these typ
   (`immEnd_valid_of_fdEsc`); the condition at the lent location alone does not
   (`immEnd_esc_config`). It follows from a branch point not inside the frame (`fdEscOfBranch`,
   `escBeneathT`, `fdEsc_of_points`), and a run whose start and end are related by row 5.27's `↭`
-  masked at the run's own records (`UpdX`) keeps it (`fdEsc_of_updX`). The mask is needed
+  masked at the run's own records keeps it (`fdEsc_of_updX`; along the walks, `fdEsc_of_updA`).
+  The mask is needed
   (`lend_open_needs_mask`). The condition holds at a join from the cactus invariant
   (`fdEsc_at_join`), other branches' steps keep it (`stepKeepsFdEsc`), and an end of the lend is
   valid only where it holds (`fdEsc_of_end_valid`).

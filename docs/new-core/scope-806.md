@@ -329,3 +329,83 @@ The cases follow the ancestor:
    directly).
 3. `InvKept.transA` (R3), `fdEsc_of_updA` (R5), `endT_inv` (R7).
 4. T1–T4, step 6, C-2, then SPEC §62 and the D4/D5 rows.
+
+### Step 5 and T1–T4: built
+
+**`EndT` reads `UpdA`** (`Core/TreeWp.lean`). Its run clause is `UpdA (sem w′.Θ) (recMask O₀)
+(recMask O′) ρ₀ ρ′ fρ′`, and its codes clause is `InvKeptA` (below). Every `twp` rule is
+re-proved, and so are the heap rules, the handler bind, the pool frame and `StepKeepsFdEsc`.
+
+- **`hw` at `twp_bind`:** `UpdA.grow` (`World/UpdAGrow.lean`). A non-`own` cell of
+  `⦇ρf ● ρ⦈ = ⦇ρf⦈ ○ ⦇ρ⦈` has a non-`own` operand (`CellUT.CompR.nonown_operand`).
+  - The run's operand gets `¬E″` from `h′`'s start side. Its `imm` part is kept below the end
+    world's cell (`compR_get_imm`, `XCell.abs_of_le`) or absorbed.
+  - The frame's operand is re-read (`Flat.rrLs`), and gets `¬E″` from `NoneAt (MaskDiff …)`.
+  - The composite is absorbed through each operand (`cellAbs_compR`).
+- **`twp_bind` and the handler bind:** `UpdA.trans` with `MutOne` at both worlds
+  (`TWNT.mutOne`), `recMaskClosed` at the middle, and `UpdA.grow`.
+- **`twp_frame`/`twp_frame_w`/the pool frame:** `UpdA.frame` with the R1 arguments, then
+  `UpdA.widen` at the frame's records.
+  - `UpdA.widen`'s ancestor disjunct needs the ancestor unmasked by the frame's records too. A
+    leaving cell re-anchors to such an ancestor (`Beneath.unmasked` at the closed mask
+    `recMask (O₁₀ ++ O₂₀)`, from `recMaskClosed`).
+  - That ancestor is absorbed because the run's end is a part of the end world (`hw`).
+- **`twp_extend`, `twp_update`, the heap rules:** `UpdX.transA`. This is `UpdX.toA` at the empty
+  middle world, where `UpdA.trans`'s `hw` reads no cell, then `UpdA.trans`.
+- **`fdEsc_of_updA`** (R5): an end borrow from beneath a start ancestor makes `⦇ρ⦈` non-empty
+  there (`flat_beneath_nonown`). The common part of the two proofs is `fdEsc_of_end`
+  (`World/StepKeep.lean`), and `fdEsc_of_updX` keeps its statement.
+- **`endT_inv`:** it exposes `XOptA` with `∃ τw, Flat fρ′ τw` (`UpdA.inv`).
+
+**`EndT`'s codes clause also changed: `InvKept` became `InvKeptA = InvKept ∧ InvBeneath`**
+(`World/UpdAInv.lean`). This was not in revision 2. R3 (`InvKept.transA` at `EndT`'s old
+clause) did not go through at this step:
+- A start `mut` cell at `l` leaves with its ancestor at `m`, and the middle world absorbs the
+  ancestor.
+- When the absorber's `imm` operand is the frame's, the frame holds the cell at depth, and
+  `TWd.Ext`'s `AgreeOn` keeps the code. This is R3's argument.
+- When the operand is the run's own `⦇ρ₁⦈(m)`, `⦇ρ₁⦈(l)` may be `imm` (`imm ○ mut`, clause (5)).
+  The second segment's `InvKept` reads nothing at an `imm` location.
+
+I have not derived `InvKept.transA` at the old clause, and I have not verified that any
+obstruction is real.
+
+`InvBeneath` keeps the code at every `mut` cell beneath an unmasked ancestor of `⦇ρ⦈`, which is
+the ancestor technique at `P̂`. It composes along every rule:
+- `InvKeptA.trans` along `UpdX`, through `Beneath.rr_fwd`.
+- `InvKeptA.transA` along `UpdA`, through `InvBeneath.absorbed`: the run's operand carries the
+  cell into the second segment's `InvBeneath`, and the frame's goes through `AgreeOn`.
+- `InvKeptA.frame`, through `compR_imm_source`.
+- `InvKeptA.of_agree`.
+
+`endT_inv` reads only `.1`.
+
+**T1–T4** (`Core/TreeConsume.lean`). The retired refusals are removed.
+- **T1, `twp_consume_view_framed`:** `Z ● v ↭ Z` at one world (`updA_consume_view`, which is
+  `UpdA.frame` with `v` absorbed and `Z` framed), then `UpdA.trans` with the run from `Z`.
+  - The world is unchanged (`consume_view_world`).
+  - Added hypothesis `hcov`, as on `twp_frame`, for `RR.split_retype`.
+  - The frame condition reads `HoldsCopy β l ρf := ∃ Y, Y ● v = ρf`, which implies the scope's
+    flattening-level `HoldsView` (`HoldsCopy.holdsView`).
+  - Not derived: T1 at `HoldsView` itself. A copy absorbed only at depth, inside another view's
+    witness, does not give `ρf ● v = ρf`, so `consume_view_world` does not apply. I have not
+    verified that any obstruction is real.
+- **T2, `twp_frame_callee_consume`; T3, `twp_child_consume`:** T1 at the condition strengthened
+  by `HoldsCopy` (D-1). The #793 configuration is admitted (`twp_admits_consume_view`).
+- **T4a:** T1 runs from `Z` in the same world.
+- **T4b:** `twp_refuses_lendEnd_live_copy`, moved from `Clause.lean`, with
+  `twp_refuses_last_copy`.
+- **T4c, `twp_lendEnd_after_framed_consume`:** the steps are:
+  1. `twp_frame` with the lender's frame `LenderAt`;
+  2. T2;
+  3. `twp_bind`;
+  4. `twp_lendEnd` as it stands, at the callee's end world.
+
+**Not done.**
+- **C-2.** `UpdA.frame`'s walk proof reads `MutOne` at both ends (C-3), and `UpdX.frame`'s
+  statement carries none, so "`UpdA.frame` with the absorbed branches unused" does not prove
+  `UpdX.frame` as stated. `UpdX.frame` is off `EndT`'s path. D5's row records this.
+- **`not_xoptWFrameAt`'s configuration admitted in Lean.** It is worked by hand in §4. It is not
+  built as a Lean witness.
+- **`Clause.lean` no longer elaborates** beside `UpdXW.lean`, because `CellAbs` and the moved
+  theorems are defined twice. It is kept as evidence.

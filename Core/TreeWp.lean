@@ -29,9 +29,11 @@ world that grows. Each change is forced by the world growing:
   code.
 
 The post-configuration relates the run's start and end by row 5.27's `↭` read across the
-re-reading and masked at the run's own records (`UpdX`, departure D1 of
-`docs/new-core/scope-781.md` §8), with `↭`'s `P̂` as codes (`InvKept`, D2). It has no `ρ⁺`: row
-5.33's `ρ ↭ ρ′ ● ρ⁺` is read as `ρ₀ ↭ ρ′` (D4).
+re-reading and masked at the run's own records (departure D1 of `docs/new-core/scope-781.md` §8),
+along the walks (`UpdA`, `docs/new-core/scope-806.md`): an `imm` cell may be given up to the end
+world, and a `mut` cell is read through the `imm` cell it sits beneath. `↭`'s `P̂` is read as
+codes (`InvKeptA`, D2), at the flattening's `mut` cells and beneath its ancestors. It has no `ρ⁺`:
+row 5.33's `ρ ↭ ρ′ ● ρ⁺` is read as `ρ₀ ↭ ρ′` beside the end world (D4).
 
 The rules: downward closure (`twp_le`), monotonicity (`twp_mono`, `twp_frameCond`), the Kripke
 rule (`twp_kripke`), a final term (`twp_here`), deterministic steps (`twp_det`, `twp_step`), bind
@@ -85,21 +87,21 @@ its records `psF` re-read there, the run's resource beside it, the records split
 invariants, and two clauses about the run from `ρ₀` with records `O₀`:
 
 * **`↭`**, as `[TR]` p. 6's `wp` asks it of the run (row 5.33, `ρ ↭ ρ′ ● ρ⁺`) and row 5.27 reads
-  it, across the re-reading from `w₀` to `w′` (`UpdX`): every `imm` cell of `⦇ρ₀⦈` is one of
-  `⦇ρ′⦈`, with its lifetime set and value and the witness re-read, and conversely; every `mut`
-  cell of the one is a `mut` cell of the other, `β̄` re-read. Exempt (`recMask`): the lent
-  locations and escrow locations of the run's own records, `O₀` on the start side and `O′` on
-  the end side. A lend the run opened and left open at a stop has turned an `own` cell into the
-  lend cell and handed out views of the escrow, and a lend it ended has turned them back; both
-  change `⦇·⦈` at those locations and nowhere else, and neither is a copy of someone else's cell.
-  No other location is exempt (`updX_refl_imm`).
+  it, across the re-reading from `w₀` to `w′`, along the walks (`UpdA`): every unmasked `imm`
+  cell of `⦇ρ₀⦈` is one of `⦇ρ′⦈`, with its lifetime set and value and the witness re-read, or is
+  absorbed by the end world `fρ′` (given up while another part holds a copy); every unmasked
+  `mut` cell is one of `⦇ρ′⦈`, `β̄` re-read, or leaves with an `imm` ancestor the end world
+  absorbs; conversely every end cell comes from the start's cell there or from beneath a start
+  ancestor. Exempt (`recMask`): the lent locations and escrow locations of the run's own records,
+  `O₀` on the start side and `O′` on the end side. A lend the run opened and left open at a stop
+  has turned an `own` cell into the lend cell and handed out views of the escrow, and a lend it
+  ended has turned them back; both change `⦇·⦈` at those locations and nowhere else.
 * **The frame holds nothing at a record the run opened or ended** (`MaskDiff`): where only one
-  side is masked, the re-read frame's flattening is empty. A frame beside a run (`twp_frame`)
-  is carried by `↭` only where both sides of the run read the same cells or both are masked
-  (`UpdX.frame`).
-* **`↭`'s `P̂`** (`InvKept`): at every unmasked `mut` cell of `⦇ρ₀⦈` the code typing of `w′` keeps
-  `w₀`'s code. A flattened `mut` cell's invariant is its location's code read at the world
-  (`flat_mut_inv`), so with `UpdX` this is row 5.27's `mut` clause, `P̂` re-read (`endT_inv`). -/
+  side is masked, the re-read frame's flattening is empty.
+* **`↭`'s `P̂`** (`InvKeptA`): at every unmasked `mut` cell of `⦇ρ₀⦈`, and beneath every unmasked
+  `imm` ancestor of it, the code typing of `w′` keeps `w₀`'s code. A flattened `mut` cell's
+  invariant is its location's code read at the world (`flat_mut_inv`), so with `UpdA` this is row
+  5.27's `mut` clause, `P̂` re-read (`endT_inv`). -/
 def EndT (Q : TPost) (k : Nat) (w₀ : TWd) (ρ₀ : TRes w₀.K) (O₀ : List (FrameRecT w₀.K))
     (ρf : TRes w₀.K) (psF : List (FrameRecT w₀.K)) (μ' : Heap) (t : Expr) : Prop :=
   ∃ (w' : TWd) (ρf' ρ' fρ' : TRes w'.K) (psF' ps' O' : List (FrameRecT w'.K))
@@ -547,7 +549,8 @@ theorem twp_update {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls ls₁ : List
 /-! ### Row 5.27's `mut` clause at `twp`'s ends -/
 
 /-- **`↭`'s `mut` clause holds of every `EndT` end, `P̂` re-read.** For a run from `ρ₀` (a part of a
-world meeting `RecInv`/`WInv`) to an `EndT` end `ρ′`: the flattenings are related by `UpdX`, and at
+world meeting `RecInv`/`WInv`) to an `EndT` end `ρ′`: the flattenings are related along the walks
+beside the end world's (`XOptA`), and at
 every location outside the run's start records where both carry a `mut` cell, the two invariants
 are one code `A`, the same at `w₀` and `w′`, read at each world (`XInv`). -/
 theorem endT_inv {Q : TPost} {k : Nat} {w₀ : TWd} {ρ₀ ρf fρ : TRes w₀.K}
