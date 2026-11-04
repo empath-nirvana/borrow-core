@@ -241,6 +241,146 @@ theorem Beneath.unmasked {W : TRes K} (hW : MutOne W) {E : BoCa.Loc → Prop} {�
   obtain ⟨ζ₅, e₅, k₅, w₅, -⟩ := compS_get_right' hc hb₄.1
   exact ⟨m₂, ζ₅, hEm₂, e₅, k₅.trans hb₄.2.1, by rw [w₅]; exact hb₄.2.2⟩
 
+/-! ### A `mut` cell beneath an ancestor of a flattening is the flattening's -/
+
+/-- **Under one `mut` cell per location, a `mut` cell beneath an ancestor of `⦇ρ⦈` at `n` is
+`⦇ρ⦈`'s `mut` cell at `n`.** Both are cells at depth of `ρ` (`flat_mut_cellAt`, `ExW.mutIn`,
+`AgW.mutIn` at the ancestor's witness). -/
+theorem Beneath.mut_eq {W : TRes K} (hW : MutOne W) {ρ σ : TRes K} (hσ : ResUT.Flat ρ σ)
+    (hsub : ∀ y φ, CellAt ρ y φ → φ.kind = Kind.mut → CellAt W y φ) {m n : BoCa.Loc}
+    {ζ ξ ψ : TCell K} (h : Beneath σ m ζ n ξ) (hk : ξ.kind = Kind.mut) (e : σ.get n = some ψ)
+    (hkψ : ψ.kind = Kind.mut) : ξ = ψ := by
+  obtain ⟨eζ, kζ, ev, av, p, hev, hav, hp, hn⟩ := h
+  obtain ⟨ζ₀, cζ₀, -, wζ₀⟩ := flat_imm_cellAt hσ eζ kζ
+  have hsub' : ∀ y φ, CellAt ζ.wit y φ → φ.kind = Kind.mut → CellAt W y φ :=
+    fun y φ c k => hsub y φ (cζ₀.trans (wζ₀ ▸ c)) k
+  have hpm : MutIn (CellAt ζ.wit) p := MutIn.comp mutKeep_compR (MutUniq.of_sub hW hsub') hp
+    (ExW.mutIn mutKeep_compR hW hev hsub') (AgW.mutIn hW hav hsub')
+  have cξ : CellAt ρ n ξ := cζ₀.trans (wζ₀ ▸ hpm n ξ hn hk)
+  have cψ : CellAt ρ n ψ := flat_mut_cellAt hW hsub hσ n ψ e hkψ
+  exact hW n ξ ψ (hsub n ξ cξ hk) (hsub n ψ cψ hkψ) hk hkψ
+
+/-! ### Two segments -/
+
+/-- **`UpdA` composes.** The first segment from `ρ` to `ρ′` beside the middle world `fρ′`, the
+second from `ρ′` to `ρ″` beside the end world `fρ″`. The side conditions:
+
+* one `mut` cell per location at the start (`hW`, `hsub`) and the middle (`hW′`, `hsub′`): a
+  start `mut` cell kept and then leaving with a middle ancestor is the start ancestor's cell
+  (`Beneath.mut_eq`), and the middle's ancestors re-anchor (`Beneath.unmasked`);
+* the middle resource closed at its mask (`hcl`, from `RecInv` by `recMaskClosed`);
+* the world grows (`hw`): where the middle mask is off, a non-`own` cell of the middle world's
+  flattening leaves the end mask off, and an `imm` one is absorbed by the end world's.
+
+Every case follows the ancestor: a `Beneath` of the middle is pulled back along the first
+segment's end side at the ancestor's location (`Beneath.rr_back`), whose cell there is `imm`. -/
+theorem UpdA.trans {K'' : WCactus} {Θ₁ Θ₂ : LocTy} (hK₁ : K.Ext K') (hK : K'.Ext K'')
+    {E E' E'' : BoCa.Loc → Prop} {ρ : TRes K} {ρ' fρ' : TRes K'} {ρ'' fρ'' : TRes K''}
+    (h : UpdA Θ₁ E E' ρ ρ' fρ') (h' : UpdA Θ₂ E' E'' ρ' ρ'' fρ'')
+    {W : TRes K} (hW : MutOne W) (hsub : ∀ y φ, CellAt ρ y φ → φ.kind = Kind.mut → CellAt W y φ)
+    {W' : TRes K'} (hW' : MutOne W')
+    (hsub' : ∀ y φ, CellAt ρ' y φ → φ.kind = Kind.mut → CellAt W' y φ)
+    (hcl : ImmMaskClosed E' ρ')
+    (hw : ∀ τw' τw'', ResUT.Flat fρ' τw' → ResUT.Flat fρ'' τw'' → ∀ l χ, τw'.get l = some χ →
+      χ.kind ≠ Kind.own → ¬ E' l → ¬ E'' l ∧
+        (χ.kind = Kind.imm → ∃ χ'', τw''.get l = some χ'' ∧ CellAbs Θ₂ χ χ'')) :
+    UpdA Θ₂ E E'' ρ ρ'' fρ'' := by
+  obtain ⟨σ, σ', τw', hσ, hσ', hτw', hx⟩ := h
+  obtain ⟨σ₂, σ'', τw'', hσ₂, hσ'', hτw'', hx'⟩ := h'
+  have eσ : σ' = σ₂ := ResUT.Flat.functional hσ' hσ₂
+  subst eσ
+  have hw' := hw τw' τw'' hτw' hτw''
+  have nonown_imm : ∀ {φ : TCell K'}, φ.kind = Kind.imm → φ.kind ≠ Kind.own :=
+    fun k c => Kind.noConfusion (k.symm.trans c)
+  have nonown_imm0 : ∀ {φ : TCell K}, φ.kind = Kind.imm → φ.kind ≠ Kind.own :=
+    fun k c => Kind.noConfusion (k.symm.trans c)
+  -- the first segment's start ancestor at an unmasked middle ancestor
+  have pull : ∀ m (ζ' : TCell K'), ¬ E' m → σ'.get m = some ζ' → ζ'.kind = Kind.imm →
+      ¬ E m ∧ ∃ ζ₀, σ.get m = some ζ₀ ∧ ζ₀.kind = Kind.imm ∧ RR Θ₁ ζ₀.wit ζ'.wit ∧
+        ∃ ev av p, ExRT ζ₀.wit ev ∧ AgWT ζ₀.wit av ∧ ResUT.CompR ev av p := by
+    intro m ζ' hEm e k
+    obtain ⟨hE₀, hd⟩ := (hx m).2 ζ' e (nonown_imm k) hEm
+    rcases hd with ⟨ζ₀, e₀, hxc | hsb⟩ | ⟨hkm, -⟩
+    · have k₀ : ζ₀.kind = Kind.imm := hxc.1.symm.trans k
+      obtain ⟨-, ev, av, p, -, -, hev, hav, hp, -⟩ := flat_imm_walk hσ e₀ k₀
+      exact ⟨hE₀, ζ₀, e₀, k₀, (hxc.2.2 k₀).2, ev, av, p, hev, hav, hp⟩
+    · obtain ⟨-, ev, av, p, -, -, hev, hav, hp, -⟩ := flat_imm_walk hσ e₀ hsb.1
+      exact ⟨hE₀, ζ₀, e₀, hsb.1, hsb.2.2.2.1, ev, av, p, hev, hav, hp⟩
+    · rw [k] at hkm; cases hkm
+  refine ⟨σ, σ'', τw'', hσ, hσ'', hτw'', fun l => ⟨fun ψ e hk hEl => ?_, fun ψ'' e hk hEl => ?_⟩⟩
+  · -- the start side
+    obtain ⟨hE₁, h₁⟩ := (hx l).1 ψ e hk hEl
+    rcases h₁ with ⟨ψ', e', hxc⟩ | ⟨χ, eχ, ha⟩ | ⟨hkm, m, ζ, χ, hEm, hb, eχ, ha⟩
+    · -- kept into the middle
+      obtain ⟨hE₂, h₂⟩ := (hx' l).1 ψ' e' (by rw [hxc.1]; exact hk) hE₁
+      refine ⟨hE₂, ?_⟩
+      rcases h₂ with ⟨ψ'', e'', hxc'⟩ | ⟨χ'', eχ'', ha'⟩ | ⟨hkm', m', ζ', χ'', hEm', hb', eχ'', ha'⟩
+      · exact Or.inl ⟨ψ'', e'', hxc.trans hK hxc'⟩
+      · exact Or.inr (Or.inl ⟨χ'', eχ'', hxc.abs hK ha'⟩)
+      · -- then leaving with a middle ancestor: pulled back to the start's
+        have hkψ : ψ.kind = Kind.mut := hxc.1.symm.trans hkm'
+        obtain ⟨hE₀, ζ₀, e₀, k₀, hr, hw₀⟩ := pull m' ζ' hEm' hb'.1 hb'.2.1
+        obtain ⟨ξ₀, hb₀, hs₀⟩ := hb'.rr_back hK₁ e₀ k₀ hr hw₀
+        obtain rfl := hb₀.mut_eq hW hσ hsub (hs₀.1.symm.trans hkm') e hkψ
+        have habs : CellAbs Θ₂ ζ₀ χ'' := by
+          obtain ⟨-, h₀⟩ := (hx m').1 ζ₀ e₀ (nonown_imm0 k₀) hE₀
+          rcases h₀ with ⟨ζ₁, e₁, hxc₁⟩ | ⟨χ', eχ', ha₁⟩ | ⟨hk₁, -⟩
+          · rw [hb'.1] at e₁; cases e₁; exact hxc₁.abs hK ha'
+          · obtain ⟨χ₃, e₃, ha₃⟩ := (hw' m' χ' eχ' (nonown_imm ha₁.2.1) hEm').2 ha₁.2.1
+            rw [eχ''] at e₃; cases e₃
+            exact ha₁.trans hK ha₃
+          · rw [k₀] at hk₁; cases hk₁
+        exact Or.inr (Or.inr ⟨hkψ, m', ζ₀, χ'', hE₀, hb₀, eχ'', habs⟩)
+    · -- given up to the middle world
+      obtain ⟨hE₂, h₃⟩ := hw' l χ eχ (nonown_imm ha.2.1) hE₁
+      obtain ⟨χ'', eχ'', ha'⟩ := h₃ ha.2.1
+      exact ⟨hE₂, Or.inr (Or.inl ⟨χ'', eχ'', ha.trans hK ha'⟩)⟩
+    · -- left with a start ancestor, which the middle world absorbed
+      obtain ⟨hEm', -⟩ := (hx m).1 ζ hb.1 (nonown_imm0 hb.2.1) hEm
+      obtain ⟨χ'', eχ'', ha'⟩ := (hw' m χ eχ (nonown_imm ha.2.1) hEm').2 ha.2.1
+      -- the middle world holds a non-`own` cell at `l`, beneath `χ`
+      obtain ⟨eb, kb, ev, av, p, hev, hav, hp, hn⟩ := hb
+      obtain ⟨-, ev', av', p', -, -, hev', hav', hp', -⟩ := flat_imm_walk hτw' eχ ha.2.1
+      have hs := walk_rr hK₁ ha.2.2.2.1 hev hav hp hev' hav' hp' l
+      rw [hn] at hs
+      cases hq : p'.get l with
+      | none => rw [hq] at hs; cases hs
+      | some ψt =>
+          rw [hq] at hs
+          cases hs with
+          | some hsim =>
+              obtain ⟨φ, eφ, kφ⟩ := flat_beneath_nonown hτw' eχ ha.2.1 hev' hav' hp' hq
+                (by rw [hsim.1]; exact hk)
+              obtain ⟨hE₂, -⟩ := hw' l φ eφ kφ hE₁
+              exact ⟨hE₂, Or.inr (Or.inr ⟨hkm, m, ζ, χ'', hEm,
+                ⟨eb, kb, ev, av, p, hev, hav, hp, hn⟩, eχ'', ha.trans hK ha'⟩)⟩
+  · -- the end side
+    obtain ⟨hE₁, h₂⟩ := (hx' l).2 ψ'' e hk hEl
+    rcases h₂ with ⟨ψ', e', hxs'⟩ | ⟨hkm, m, ζ', ξ', hb', hxc'⟩
+    · -- from the middle's cell
+      have hk' : ψ'.kind ≠ Kind.own := by
+        rcases hxs' with hxs' | hxs'
+        · exact fun c => hk (hxs'.1.trans c)
+        · exact nonown_imm hxs'.1
+      obtain ⟨hE₀, h₁⟩ := (hx l).2 ψ' e' hk' hE₁
+      refine ⟨hE₀, ?_⟩
+      rcases h₁ with ⟨ψ, e₀, hxs⟩ | ⟨hkm₁, m, ζ, ξ, hb, hxc⟩
+      · exact Or.inl ⟨ψ, e₀, xsub_trans hK hxs hxs'⟩
+      · rcases hxs' with hxs' | hxs'
+        · exact Or.inr ⟨hxs'.1.trans hkm₁, m, ζ, ξ, hb, hxc.trans hK hxs'⟩
+        · rw [hxs'.1] at hkm₁; cases hkm₁
+    · -- from beneath a middle ancestor: re-anchored unmasked, then pulled back
+      have hkξ : ξ'.kind = Kind.mut := hxc'.1.symm.trans hkm
+      obtain ⟨m₂, ζ₂, hEm₂, hb₂⟩ := hb'.unmasked hW' hσ' hsub' hcl hkξ hE₁
+      obtain ⟨-, ζ₀, e₀, k₀, hr, hw₀⟩ := pull m₂ ζ₂ hEm₂ hb₂.1 hb₂.2.1
+      obtain ⟨ξ₀, hb₀, hs₀⟩ := hb₂.rr_back hK₁ e₀ k₀ hr hw₀
+      -- the middle holds a non-`own` cell at `l`, so the start's mask is off there
+      obtain ⟨eb₂, kb₂, ev, av, p, hev, hav, hp, hn⟩ := hb₂
+      obtain ⟨φ, eφ, kφ⟩ := flat_beneath_nonown hσ' eb₂ kb₂ hev hav hp hn
+        (by rw [hkξ]; exact fun c => Kind.noConfusion c)
+      obtain ⟨hE₀, -⟩ := (hx l).2 φ eφ kφ hE₁
+      exact ⟨hE₀, Or.inr ⟨hkm, m₂, ζ₀, ξ₀, hb₀, (LsSim.xcell hs₀).trans hK hxc'⟩⟩
+
 end BoCa.Fig16.Tree.Wp
 
 end
