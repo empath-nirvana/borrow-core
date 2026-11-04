@@ -325,7 +325,7 @@ No new judgment, no new elaboration, no sugar.
   `∀'x ⊏ @b. D` for every tree `D`, and the argument is any `Cl 0` type.
 - Weakening `fundamentalC`, or a hypothesis on it, on `adequacyC`, on `adequacyD` or on
   `resourceSafety`.
-- `X` in an argument (dropping `Cl 0`).
+- `X` in an argument (removing `Cl 0`).
 - `File`, `lib/` functions, or #769's effect.
 
 **Tempting shortcuts (each a STOP).**
