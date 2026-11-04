@@ -135,7 +135,7 @@ def externs (ds : Array Decl) : Except Error (List (String × CVTy)) :=
         pure (acc ++ [(n.name, A')])
     | _ => pure acc
 
-/-- The first extern neither consumed nor weakenable. -/
+/-- The first extern neither consumed nor consumable. -/
 def firstUnconsumed : List Bool → List Bool → Option Nat
   | a :: as, b :: bs => if !(a || b) then some 0 else (firstUnconsumed as bs).map (· + 1)
   | _, _ => none

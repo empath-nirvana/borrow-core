@@ -670,7 +670,7 @@ theorem copy_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {T : VTy}
   exact ⟨v, v, pure_sep_mk rfl
     ⟨τ₁, τ₂, hc, ⟨α, ha, ℓ, pure_sep_mk hvl h₁⟩, ⟨α, ha, ℓ, pure_sep_mk hvl h₂⟩⟩⟩
 
-/-! ### Lemma 6.171 (release-compat) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
+/-! ### Lemma 6.171 (forget-compat) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
 /-- `[TR]` Lemma 6.171 (`forget-compat`) at `SemV`, `B = Imm @a T`.  `[as printed]`. -/
 theorem forgetImm_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {T : VTy}
     (hΓ : Ctx.DeadP Γ) : SemV Δ Γ forget (axForgetImmTy a T) := by
@@ -873,7 +873,7 @@ theorem bangAllI_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {x : LifeVar} {b : Lifeti
 
 /-! ### Lemma 6.163 ([]I-compat) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
 
-/-- `!E` at `SemV`: release the `ρ = ∅`. -/
+/-- `!E` at `SemV`: discard the `ρ = ∅`. -/
 theorem bangE_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {T : VTy}
     (h : SemV Δ Γ e (.bang T)) : SemV Δ Γ e T := by
   intro δ γ ls ρ hδ hg

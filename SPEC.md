@@ -87,7 +87,7 @@ Scoping, well-formedness, lifetime substitution and `TyEq` treat `!T` as a unary
 Axioms, at a dead context:
 
     copy   : !T ⊸ !T ⊗ !T
-    release : !T ⊸ 1
+    forget : !T ⊸ 1
 
 Promotion is for `λ` and `Λ` only: an arbitrary term can allocate (`alloc ()` in an empty
 context must not have type `!(Ref 1)`). No new terms and no new machine rules.
@@ -484,7 +484,7 @@ The first observation is `next`, the second `close`. A delay's `next` returns a 
 rest; a loop's does the same, and its `close` ends it early with a residual `B` (the delay is the
 loop whose residual is `1`); a stream's returns an element and the rest. An iterator's `next` yields an element and the
 rest, or finishes with `R`; its `close` ends it early and returns a residual `R'` (for example a
-buffer or a cell handed back). `close` is required: no rule releases a `U C`, so a linear state
+buffer or a cell handed back). `close` is required: no rule discards a `U C`, so a linear state
 is released only by running `close`.
 
 The former rules of the instances are the general ones at their bodies:
@@ -1323,7 +1323,7 @@ value types fall in three groups.
    nothing: it deallocates nothing and runs no code, and ending a loan early is safe. The
    unrestricted ones are already consumed by context splitting (§10), with no call. Every type of
    `Core/Records.lean`'s `Releasable` is here (`consumable_of_releasable`).
-2. **Owned types that is consumable.** The consume is an action:
+2. **Owned types that are consumable.** The consume is an action:
    | type | consume |
    |---|---|
    | `A ⊗ B`, `A ⊕ B`, `[@a] A` | componentwise |
@@ -1331,11 +1331,11 @@ value types fall in three groups.
    | `μX. T`, `T` in `FShape` (§6) | `foldOwn`, whose algebra is the consume of `T[1/X]` |
    | `μX. T`, `T` in `P` (§6, §61), not in `FShape` | `foldOwnG`, whose algebra at each key is the consume of the key's body (an array key's element type) at results `1` |
    | `U(C & F 1)` | `close`: force, then the second projection |
-   | `U(νX. C & F R)`, `R` closed that is consumable (`D A`, `Stream A`, `Iter A R₀ R`, `Clo^c A B`) | `close` (§7), then the consume of `R` |
+   | `U(νX. C & F R)`, `R` closed and consumable (`D A`, `Stream A`, `Iter A R₀ R`, `Clo^c A B`) | `close` (§7), then the consume of `R` |
    These are linear. A value of one of these types that goes unused is consumed by its
    consume, which the checker inserts. Because the consume deallocates memory and, at codata,
    runs the object's `close` code, where it is inserted can be observed.
-3. **Types that is not consumable**: `U C` other than the codata above (a thunk of `F A` or of
+3. **Types that are not consumable**: `U C` other than the codata above (a thunk of `F A` or of
    `A ⊸ C` can be disposed of only by running it, which has effects and may need an argument), `μ`
    outside `P` (§61), a type variable, and anything built from one of these. These are linear
    that is not consumable.
@@ -1587,7 +1587,7 @@ is one whose result is `F B` with no loop: `U(A ⊸ F B)`. There is no new forme
 clause: `div` is a reading of `Loop` (§7), which already exists, and the function types are the
 existing ones. `!(A ⇒ div B)` is the persistent form.
 
-**The residual.** A loop closed early must release its state. What is consumable (§12) is
+**The residual.** A loop closed early must give up its state. What is consumable (§12) is
 consumed, and what has none, such as a capability (§11), must be handed back. The residual of a
 result `B` is `K ⊗ 1`, where `K` is the tuple of the components of `B` (its right-nested `⊗`)
 whose type is not consumable, in their order in `B`; it is `1` when there are none, so `div B` is
@@ -3641,12 +3641,12 @@ interpreter has §19's steps, and `eval` gives each program's answer by `decide`
 each by inversion of `CDerives` (`Core/Inversions.lean`):
 - `at05`: an answering handler whose body uses its `Mut` capability twice, `(m, m)`
   (`not_der_at05`);
-- `at06`: a clause that frees a cell the handled body also releases; a clause is at a `!` type,
+- `at06`: a clause that frees a cell the handled body also frees; a clause is at a `!` type,
   so it captures only persistent values (`not_der_at06`);
 - `at08`: a clause that stores `κ` in a cell and reads it out twice (`not_der_at08`). `at08Once`,
   the same clause with the copy used once, is typed (`d_at08Once`), and every run of it ends at `()`
   with the memory empty (`at08Once_runs`); it is the kernel program `at08-once`;
-- `at13`: a clause that releases `κ` (`not_der_at13`).
+- `at13`: a clause that discards `κ` (`not_der_at13`).
 
 **The effect properties** (`Core/EffTier1Programs.lean`). Each program is a closed term with a
 derivation tied to its effect context `ΞE` (`CDerivesAt`, read in `CDerives`), which has no
@@ -5499,7 +5499,7 @@ its lend schema's row widened (§29).
   `[let]`'s `hW` refuses a value that is not `OwnFree` held across the wait
   (`let_refuses_decl_across_await`). A finaliser that consumes it is the way out
   (`d_closeOnCancel`). A value that is consumable gets it on the cancel unwind, as on an error's:
-  only values that is not consumable need written code.
+  only values that are not consumable need written code.
 - **`Row.CancelTotal` / `Row.CancelEnds`** (`Core/AwaitCancel.lean`), decided with `_iff`s, are
   typing-only predicates and premises of no rule. `CancelEnds` (`CancelTotal` and no `Div` where the
   row has a cancellable wait) is the termination target: a cancelled task ends at a `Div`-free row.
@@ -8153,10 +8153,10 @@ Written with the kernel's forms today, their counts rise or they are refused:
 So A7 waits for a block to be lowered as one object (N1, layouts from types): the block form is in
 `FShape`, has its consume, and is then one object a node, the rule's count.
 
-### Declared types that is not consumable (#746, L-D over L-T)
+### Declared types that are not consumable (#746, L-D over L-T)
 
 Every consume is derived (§12); the language has no written consumes. A declaration may put its type
-among the linear types that is not consumable, for a value whose silent destruction is a bug: a
+among the linear types that are not consumable, for a value whose silent destruction is a bug: a
 transaction that must be committed, a promise that must be answered, a guard that must be
 released. It is no new class and no new type former: a field holds §11's `Tok`.
 
@@ -8315,7 +8315,7 @@ T10 has no declaration: its form as written is tuple assignment and `let (mut a,
 ### Baseline
 
 No change to `CDerives`, `Core/`, `Paper/`, `Support/`, the relation, the machine or the checker,
-but §11's `Tok` for *Declared types that is not consumable*: the opaque kind `tok` with its relation,
+but §11's `Tok` for *Declared types that are not consumable*: the opaque kind `tok` with its relation,
 `VTy.OwnFree` at the host kinds only, and the two constants `tokMint` and `tokBurn` with their
 compatibility lemmas. `fundamentalC`, `adequacyC` and `adequacyD` keep their statements. No
 `Paper/` or `Support/` file and no step of the machine changes: `mint` and `burn` are λs over
@@ -10222,7 +10222,7 @@ file is the file effect's API in the library, not kernel work (decision 73); wha
 is a way for a program to keep such a linear value live across those points and consume it itself:
 - `[then]` gives the body and the finaliser disjoint contexts, so a finaliser cannot consume a
   linear value the body holds.
-- `[let]`'s side condition `hW` refuses an owned value that is not consumable that is live across
+- `[let]`'s side condition `hW` refuses an owned value that is not consumable and is live across
   an abortive point.
 - A linear value that is not consumable cannot be a loop's state when the loop is closed early.
 - No borrow may be held across a suspension whose handler stores the continuation (T1, §19).

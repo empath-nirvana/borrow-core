@@ -466,7 +466,7 @@ fn retry<T, E>(policy: Backoff, max: i32, retryable: fn(&E) -> bool,
 -- no `Arc` and no `'static`. Cancelling a task is observing `close` on its state machine:
 -- its consumes run (borrows end, owned buffers are freed) and it hands back what has no derived
 -- consume, its connections among them, to be closed through the connection effect's `close`. [G3, G9]
---   not-think: `Send + 'static`, `Arc<Context>`, `JoinHandle`s that can be released.
+--   not-think: `Send + 'static`, `Arc<Context>`, `JoinHandle`s that can be forgotten.
 --   types-tell: the tasks' effects appear in the scope's row, except `Async`, which the scope
 --               handles only when it is the outermost scheduler.
 fn scope<T>(body: fn(&mut Spawner) -> T) -> T

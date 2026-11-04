@@ -1062,7 +1062,7 @@ where
       match L.sh c', L.sh n' with
       | .clos .., .unk => return ([], [])
       | .opq, .unk => return ([], [])
-      -- `Tok`'s cell (`Ref 1`) read as `Unk`: released.
+      -- `Tok`'s cell (`Ref 1`) read as `Unk`: discarded.
       | .ref _, .unk => return ([], [])
       | _, _ =>
         if L.triv c' && L.w c' == L.w n' then return ([], locs vs)

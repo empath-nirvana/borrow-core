@@ -14,8 +14,8 @@ computation types (`F A`, `⊸`, `&`, `∀`, …), related by the shifts `U` (th
 **`CDerives`** — the typing judgment of the core (`Core/Fundamental.lean`). The checker is derived
 from it: every checker step applies one of its rules.
 
-**`close`** — the observation on codata that releases its state; required, because no rule
-releases a thunk.
+**`close`** — the observation on codata that consumes its state; required, because no rule
+discards a thunk.
 
 **Delay (`D A`)** — codata that either returns an `A` or asks to be observed again. Loops that may
 not terminate have this type (§7).

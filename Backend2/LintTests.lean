@@ -82,7 +82,7 @@ def closT : LTy := .thunk (.arr .unit (.ret .unit))
 #guard accepts (consumeProg (.imm i32T) .release)
 #guard accepts (consumeProg (.fam (.imm i32T)) .release)
 -- F7: a family of `mut` borrows is consumed only by a consume (`Consumable.arrayMut`, at a `consume`
--- node); no constant releases it.
+-- node); no constant discards it.
 #guard accepts { consumeProg (.fam (.mut i32T)) .consume with consumeFns := ({} : Std.HashSet Nat).insert 0 }
 -- …and only in a consume function: the same consume in a function `Convert` did not register as
 -- one is refused.
@@ -94,7 +94,7 @@ def closT : LTy := .thunk (.arr .unit (.ret .unit))
 #guard accepts (consumeProg i32T .unused)
 #guard refuses (consumeProg (.imm i32T) .unused) "(unused), where the rule's premise does not hold"
 
--- A consume of an opaque value, or of a pair holding one: refused at every rule. No constant releases
+-- A consume of an opaque value, or of a pair holding one: refused at every rule. No constant discards
 -- an opaque value and it is not consumable, so only an `abandon` node discards one.
 #guard refuses (consumeProg (.opq .output)) "where the rule's premise does not hold"
 #guard refuses (consumeProg (.opq .output) .unused) "where the rule's premise does not hold"

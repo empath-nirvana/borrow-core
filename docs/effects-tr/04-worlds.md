@@ -75,7 +75,7 @@ In `Res_own`, `NoOwn = Pers = {∅}`.
 `C ∈ m` gives `m ∈ {rel, unr}`. ∎
 
 `NoOwn` is what BoLo's `wp` lets a run leave behind (`ρ⁺|own = ∅`, [TR] p. 6) and what the
-release rules consume ([TR] 6.148, 6.149). `Pers` is BoLo's persistence: `!P ≜ emp ∧ P` holds of
+the `forget` rules consume ([TR] 6.148, 6.149). `Pers` is BoLo's persistence: `!P ≜ emp ∧ P` holds of
 `∅`, and an `imm` cell is idempotent ([TR] 6.43 at `α = β`, 6.116). In the lift, `⟦cancel⟧`
 contains `mut` and `imm` borrows and `⟦unr⟧` contains `imm` borrows.
 

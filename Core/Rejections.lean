@@ -10,10 +10,10 @@ BOXED-κ's (§28), so the clause is at its clause type (`handleWith_clause`, `cl
 `κ` at a must-resume operation is at `kTy`, a thunk of an `&`, bare or boxed; a view of either has
 the thunk head (`kviewO`).
 
-* **AT13** (`not_der_at13`): a clause that releases `κ`.  `forget`'s axioms take `!`, `Imm`, `Mut`,
+* **AT13** (`not_der_at13`): a clause that discards `κ`.  `forget`'s axioms take `!`, `Imm`, `Mut`,
   `Unk` and `ArrayImm`, and as a λ it consumes its argument only at a persistent type
   (`not_release_kappa`).
-* **AT06** (`not_der_at06`): a clause that frees a cell the handled body also releases.  The
+* **AT06** (`not_der_at06`): a clause that frees a cell the handled body also frees.  The
   clause is at a `!` type, so typed over a persistent context, and the cell's slot is at a view of a
   `Ref`.
 * **AT08** (`not_der_at08`): a continuation read twice out of a cell.  `alloc` stores a view of
@@ -63,7 +63,7 @@ macro "not_withPairH" : tactic => `(tactic| (intro M₁ M₂ h; simp [withPair, 
     bindE, hndTerm, hndExpr, Val.unit, Val.prim, Val.i32, Val.inj₁, Val.inj₂, Val.pair, fooE, dropB,
     BoCa.BoLo.performE, opArgE, handleWith, free', alloc'] at h))
 
-/-! ### A continuation is not released -/
+/-! ### A continuation is not discarded -/
 
 /-- A type whose head is a thunk of an `&`: what `κ` is at `lin` and `cancel`. -/
 theorem kview {C₁ C₂ : CTy} {A : VTy} (h : VView (.thunk (.amp C₁ C₂)) A) :

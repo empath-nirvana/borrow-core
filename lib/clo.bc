@@ -12,7 +12,7 @@
 --
 --     linear, no consume      A => B                  called once
 --     linear and consumable  box 'c Clo[A, B]<'c>     called any number of times, then closed
---     unrestricted                 !(A => B)               copied and released freely
+--     unrestricted                 !(A => B)               copied and discarded freely
 --
 -- with `clo_of_fn` (from `!(A => B)`) and `clo_once` (to `A => B`). The name `Clo` is
 -- provisional (decision 60). `include clo` puts these in scope.

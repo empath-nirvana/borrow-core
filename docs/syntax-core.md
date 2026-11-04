@@ -324,7 +324,7 @@ types (`VTy.persistent`). It follows that:
   `copy_bang[A]`/`release_bang[A]` (`Fu:125,127`) remain, to make it explicit.
 - **Every other variable is used exactly once.** `imm @ A` has `copy[@, A]` and
   `release_imm[@, A]`; `mut @ A` has `release_mut[@, A]`; `ref A`, `U C` and `box @ A` over a
-  non-persistent `A` have no release. `U C` is not persistent, because a thunk holds its closure's
+  non-persistent `A` have no release constant. `U C` is not persistent, because a thunk holds its closure's
   resource.
 - **Every `case` arm consumes the same non-persistent live variables.** `sumE` gives both arms the same
   `Γb` (`Fu:97`), so a variable live in `Γb` is consumed by each arm or by neither.
@@ -342,7 +342,7 @@ types (`VTy.persistent`). It follows that:
   most recently bound variable first. The erasure contains the call, so the core term still uses
   the variable exactly once. Borrows are consumed by `forget`. `ref A` is consumed by `free` followed
   by the consume of `A`, a fold-class `mu` by `fold_own`, `U (C & F 1)` by `close` (`.2`), and
-  `U (nu X. C & F R)` (`delay`, `stream`, `iter A R₀ R`) with `R` closed and weakenable by `close`
+  `U (nu X. C & F R)` (`delay`, `stream`, `iter A R₀ R`) with `R` closed and consumable by `close`
   followed by the consume of the residual `R`. `U C` otherwise is not consumable, so an unused thunk is an error.
   The same holds for a `case` whose arms consume different variables: arms that differ in a variable
   that is consumable are balanced by consuming it in the arm that does not use it. Any other

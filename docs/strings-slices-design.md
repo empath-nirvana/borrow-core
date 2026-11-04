@@ -666,7 +666,7 @@ Not provided, each for a reason:
 | `&s : str 'a` from `string`; `&b : slice 'a u8` from `buf u8`/`array u8` | permission (owned → view) | free: `(ptr, len)`, no cell |
 | `&v` of a view | none (a copy of an `imm` view) | free: two words |
 | `split_at`, `sub`, `trim`, `split_first` | range (narrowing) | one compare; free otherwise |
-| `as_bytes(t)`, `into_bytes(s)`, `as_bytes_mut` | encoding (release the refinement) | free |
+| `as_bytes(t)`, `into_bytes(s)`, `as_bytes_mut` | encoding (erase the refinement) | free |
 | `str_from_utf8(v)`, `from_utf8(b)` (in place) | encoding (establish the refinement) | checked: O(n), no allocation |
 | `split_at_str`, `sub_str` | range, on text | one compare and a boundary check |
 | `to_string(t)`, `to_buf(v)` | ownership (view → owned) | allocating: O(n) copy |

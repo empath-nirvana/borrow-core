@@ -39,7 +39,7 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
 - **Question:** "Can an owned value (`Ref A`, a block, a list, a codata thunk) go unused, with
   the elaborator inserting its consume so the result is an ordinary linear core program?"
   (#43)
-- **Answer:** "yes, with no model change and no new invariant. Every weakenable type's consume
+- **Answer:** "yes, with no model change and no new invariant. Every consumable type's consume
   is a closed `CDerives` derivation. The experiment's judgment `ADerives` elaborates into `CDerives`
   by a translation that never inverts `CDerives`."
 - **Status:** proved; promoted (SPEC §12, `Core/Consume.lean`, `Frontend/Check`).
@@ -211,7 +211,7 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
   `consumeProg`.
 - **Feeds:** SPEC §2's closure table and §7's positivity; #233 and
   `docs/effect-polymorphism.md` R2a (the environment type hidden); [ModesLabels](#modeslabels)
-  (a `Clo` closure is weakenable by an action, not releasable).
+  (a `Clo` closure is consumable by an action, not releasable).
 - **Links:** [`docs/fnmut.md`](fnmut.md);
   [`experiments/FnMut/README.md`](../experiments/FnMut/README.md).
 
@@ -911,7 +911,7 @@ obstruction exist unless a Lean name is given.
 
 ### T18. `Releasable` at recursive types
 
-- **Statement.** A lemma that `Imm̲ 'b` of a `μ`-typed field is weakenable (e.g. `Imm̲ 'b N =
+- **Statement.** A lemma that `Imm̲ 'b` of a `μ`-typed field is consumable (e.g. `Imm̲ 'b N =
   μY. 1 ⊕ Y` needs a recursive consume), so projection past an unboxed `μ`-typed field is available.
 - **Origin.** SPEC §5; `docs/consolidation-audit.md` §5.
 - **Issue:** [#10].

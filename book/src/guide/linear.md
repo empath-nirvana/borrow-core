@@ -2,7 +2,7 @@
 
 Every value has one of two kinds of type. An **unrestricted** type (a number, `bool`, `1`, a
 `!` function, tuples and sums of these, and recursive data of these, whose copy is written
-`clone`) can be copied and released freely. Every other type is **linear**: a value of it is
+`clone`) can be copied and discarded freely. Every other type is **linear**: a value of it is
 used exactly once. There is no third kind. [Ownership and borrows](ownership.md) introduced the
 two; this chapter says what linearity means for the data, handlers, errors and tasks of the
 chapters since.
@@ -57,7 +57,7 @@ lists every copy the checker inserted, a function's once for each call of it tha
 reaches. The copy is the borrow's alone: a second use of a `mut` borrow, an owned value or a
 declared value is still an error, "`x` is used twice here, and its type `…` is linear".
 
-## Linear types that is not consumable
+## Linear types that are not consumable
 
 Some linear types are not consumable. Consuming a value of one means doing something the
 program has to say: calling it, resuming it, closing it. They are:
@@ -99,7 +99,7 @@ main -> i32 =
 
 ### Declared types
 
-Marking a field `must_close` puts the whole type among the linear types that is not consumable.
+Marking a field `must_close` puts the whole type among the linear types that are not consumable.
 Use it for a value whose silent disappearance would be a bug: a transaction that has to be
 committed, a guard that has to be released. `must_close(commit)` also names the function that
 consumes it, which the error messages point at. In a message, a marked field carries a `tok`,
@@ -224,12 +224,12 @@ The second call raises inside `counted`, the error passes through it to `to_resu
 `finally` releases the guard on the way. Both runs end with nothing allocated. A `finally` block
 can't do I/O yet.
 
-## Values a program wants to release
+## Values a program wants to discard
 
-When you want a value to be weakenable, there are three ways to get there, and each is something
+When you want a value to be consumable, there are three ways to get there, and each is something
 the compiler derives or something you write.
 
-**Keep the type's fields weakenable.** A record or variant whose fields all have derived consumes
+**Keep the type's fields consumable.** A record or variant whose fields all have derived consumes
 has one too, built from theirs, and the checker inserts it (`Note` above).
 
 **Use a task, or declare the operation plain `ctl`.** A task can be run to the end or

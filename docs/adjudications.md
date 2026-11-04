@@ -1022,7 +1022,7 @@ every other clause is the full relation's, and `Mut` stores the full relation.
 * [CONF] 415:9: *"In some cases, like for computations with capture environments that may
   hold linear references, there is no view at which it would be safe to access the payload,
   so we map these types to a new, distinguished unknown type, Unk, for which the only
-  operation that is defined is release."*
+  operation that is defined is forget."*
 * [CONF] Fig. 8 (415:10), clauses (4) and (8): `Imm̲ 'b (T₁ ⊸ T₂) ≜ Unk` and
   `Imm̲ 'b (∀'a ⊏ @a. T) ≜ Unk`.
 * [CONF] 415:15: the metafunction *"immutably borrows any linear references or mutable borrows

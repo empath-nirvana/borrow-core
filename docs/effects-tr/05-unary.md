@@ -101,7 +101,7 @@ closed under `●`, L4.2.2; `↭` composes by [TR] 6.48 and 6.49). ∎
 `r ● R ↭ r' ● r⁺ ● R` by [TR] 6.48. At a stop the continuation obligations are the hypothesis's,
 unchanged. ∎
 
-This is how a variable used in one branch only is disposed of (L5.5), and it is BoLo's release
+This is how a variable used in one branch only is disposed of (L5.5), and it is BoLo's `forget`
 ([TR] 6.148, 6.149) at the own fragment.
 
 ## 5.2 The relation

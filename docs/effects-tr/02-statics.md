@@ -140,7 +140,7 @@ position. That is what Lemma L5.12 uses: at a tail call the clause's own frames 
 **Definition D2.9 (judgements).** `Ψ; Θ; Γ ⊢ V : A ▷ u` and `Ψ; Θ; Γ ⊢ M : C ! ρ ▷ u`, by the
 rules of Figure 2.1. `Ψ; Θ; Γ` is fixed and omitted where it does not change. "check `x`" is the
 premise `gradeOK(mode(A), u(x))` for the binder `x : A`, after which `x` is removed from the
-usage. Subtyping `≤` is phase A's `vsub`/`csub` (rows covariant, modes released downward along
+usage. Subtyping `≤` is phase A's `vsub`/`csub` (rows covariant, modes weakened downward along
 `≥`, bounds widened along `⊑`, `cap` invariant in its state) [PA `vsubN`, `csubN`]. Every
 `handle`/`handleAt` carries the annotations `ρ_h, C` of phase A's syntax.
 
