@@ -260,3 +260,72 @@ The mask obligation `XOptW.trans` names (R2) is dischargeable at `twp_bind` as p
    - If it fails, the coordinator's instruction applies: build the configuration with every hypothesis discharged and stop.
 
 **Order after that:** `UpdA.trans`; step 5; T1–T4; step 6; C-2; SPEC §62 and the D4/D5 rows. `scripts/check-judgments.sh` predates #798 on this branch, so it is skipped until the port onto `tree-core`.
+
+### `RecMaskClosed` and `UpdA.trans`: built
+
+**The weaker closure (along the walks) was checked first and is not what is needed.**
+`AgW.mut_beneath_unmasked` reads `ImmMaskClosed` only at masked `imm` cells its `G.AgW.rec` visits,
+but those include every top `imm` cell of `ρ`, and the reborrow images (`reb`, `rebDeep`) are top
+cells. So the walk form still meets the unreconciled case. The `CellAt` form holds, so
+`mut_beneath_unmasked`'s side condition is unchanged.
+
+**`recMaskClosed : RecMaskClosed`** (`World/RecMask.lean:114`) is proved from `TIT` and the
+world's aliasable walk. It is not a `TWNT` induction.
+- A view `ζ` at depth of the run's resource has the witness of the world's view `ψ = ag(W)(y)`
+  (`CellAt.imm_of_compS_right`, `cellAt_imm_icp`).
+- The exclusive walk of a witness lies in its `ExDom` (`ExDom.of_exRT`).
+- At `y = p.le`, `LeInvT` gives `ψ.wit = p.R`.
+- At `y ∈ ExDom p.R`, a lineage member `d` of `p` holds a non-`imm` cell at `y`
+  (`ExDom.linLoc`). `CoverageT` classifies `ψ`:
+  - A record `r`'s view at `r.le`. A proper `r` is refused by `TIT`'s fourth clause (`own`) or by
+    `NoMutT` (`mut`). A sub-record's parent holds a `mut` cell at `r.le`, so the parent is `d`
+    (`ExclUniqueT`), and `r.R` is that cell's witness.
+  - A chain view of `r`. Its position holds an `own` cell of `r.R` (`ChainT.own`), so `r = d`
+    (`ExclUniqueT`), and the witness is a part of `d.R` (`chain_view_le`).
+- In each case `ExDom ψ.wit ⊆ ExDom d.R ⊆ ExDom p.R` (`ExDom.of_le`, `ExDom.of_del`,
+  `LinPathT.exDom`).
+
+**The unreconciled case is excluded.** A `rebDeep` image over `w₀` at a location of `ExDom p.R`
+is a chain view of the record whose chain reaches `w₀`. Chain positions are `own` cells of that
+record's escrow, so `ExclUniqueT` makes it `p`'s lineage member at `y`.
+
+**`UpdA.trans`** (`World/UpdATrans.lean:277`). Its hypotheses:
+- **Situation:** `hK₁ : K.Ext K′`, `hK : K′.Ext K″`, `h : UpdA Θ₁ E E′ ρ ρ′ fρ′` and
+  `h′ : UpdA Θ₂ E′ E″ ρ′ ρ″ fρ″`.
+- **Side conditions:**
+  - `hW`/`hsub` is `MutOne` at the start, from `TWNT.mutOne` at `twp_bind`'s start world.
+  - `hW′`/`hsub′` is `MutOne` at the middle, from `TWNT.mutOne` at the middle world.
+  - `hcl : ImmMaskClosed E′ ρ′` is discharged by `recMaskClosed` from the middle `RecInv`.
+  - `hw` is the world-growth clause: where `E′` is off, a non-`own` cell of `⦇fρ′⦈` leaves `E″`
+    off, and an `imm` one is absorbed by `⦇fρ″⦈`. **Its discharging lemma at `twp_bind` is not
+    built.** It is step 5's first item; see below.
+
+The cases follow the ancestor:
+- The start side kept, then leaving with a middle ancestor: the first segment's end side at the
+  ancestor's location gives the start ancestor. Its walk re-reads to the middle one (`walk_rr`,
+  `Beneath.rr_back`), and the cell beneath it is the start cell (`Beneath.mut_eq`, start
+  `MutOne`). The start side at the same location carries the absorption (`XCell.abs`, or `hw`
+  and `CellAbs.trans`).
+- The start side leaving with a start ancestor: `hw` at the ancestor, and at `l` through the
+  re-read walk (`flat_beneath_nonown`).
+- The end side from beneath a middle ancestor: `Beneath.unmasked` (`ImmMaskClosed`,
+  `AgW.mut_beneath_unmasked`, `flat_imm_walk`) gives an unmasked ancestor, which is pulled back
+  (`Beneath.rr_back`). `¬E l` comes from the middle's non-`own` cell at `l`
+  (`flat_beneath_nonown`) and the first segment's end side.
+
+**Next step, precisely.** Step 5 begins at `twp_bind`:
+1. Prove `hw` as a named lemma at the worlds `twp_bind` holds: `fρ′ = ρf₂ ● ρ′` with frame
+   `NoneAt (MaskDiff E′ E″) ρf₂` (`k₁₀`), and `fρ″` beside the re-read frame. The argument:
+   - A non-`own` cell of `⦇fρ′⦈` at `l` has a non-`own` operand from `⦇ρ′⦈` or the frame.
+   - The run's operand gives `¬E″ l` through `h′`'s start side, and its `imm` part is kept into
+     `⦇ρ″⦈` (then into `⦇fρ″⦈` by `compR_get_imm`, as in `UpdA.frame`) or absorbed.
+   - The frame's operand gives `¬E″ l` by `NoneAt`, and its `imm` part is re-read into the end
+     frame (`Flat.rrLs`, then `compR_get_imm`).
+   - An `imm` composite is absorbed through each `imm` operand (`cellAbs_compR`).
+   This is R2/R4 of §5.
+2. `EndT` reads `UpdA`. Then `twp_here` (`UpdX.toA`), `twp_bind` (`UpdA.trans` with the
+   arguments above), `twp_frame`/`twp_frame_w` (`UpdA.frame`, arguments as in the R1 status) and
+   `twp_extend`/`twp_update` (`UpdX.transA`, to be proved: `UpdX.toA` then `UpdA.trans`, or
+   directly).
+3. `InvKept.transA` (R3), `fdEsc_of_updA` (R5), `endT_inv` (R7).
+4. T1–T4, step 6, C-2, then SPEC §62 and the D4/D5 rows.
