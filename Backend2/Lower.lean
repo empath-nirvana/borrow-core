@@ -18,8 +18,8 @@ word IR (`Backend/Flat/Syntax.lean`) is target-neutral: the Wasm and LLVM emitte
   direct call of that code's function; any other is a call of the class's dispatcher, a `switch`
   on the tag. A class that holds itself keeps its environment on the heap: the word `2t + 1`, or
   an object holding the tag and the captured words.
-- **Copies and drops** are the LIR's, at their layouts: a copy at a type with boxed fields or a
-  heap closure is a generated deep copy, counted under `copies` in the counting build; a drop
+- **Copies and consumes** are the LIR's, at their layouts: a copy at a type with boxed fields or a
+  heap closure is a generated deep copy, counted under `copies` in the counting build; a consume
   frees what the layout allocated.
 - **Cells and slots** hold their contents' words, or a slot of a byte or of 4 bytes (`i32`,
   `f32`) where the cell's class holds only integers of that width.
@@ -32,7 +32,7 @@ open BoCa Backend.Flat Backend2.Lay
 /-- A function generated per layout node. -/
 inductive Helper where
   | copy (n : Nat)
-  | drop (n : Nat)
+  | consume (n : Nat)
   | print (n : Nat)
   /-- A read through `Imm̲`: the contents at node `c` copied to the reading's node `d`. -/
   | reCopy (c d : Nat)
@@ -289,7 +289,7 @@ def leafOf (n : Nat) : LM Nat := do
   | .fam l => pure l
   | s => throw s!"word IR: not a family: {reprStr s |>.take 40}"
 
-/-! ### Copies and drops -/
+/-! ### Copies and consumes -/
 
 /-- A copy of the words `ls` at node `n`; with `tick`, counted in the counting build (a copy the
 LIR makes; a copy inside a generated copy is part of it). -/
@@ -299,9 +299,9 @@ def copyVals (n : Nat) (ls : List Nat) (tick : Bool := false) : LM (List Stmt ×
   let tick := if (← read).counts && tick then [Stmt.tickCopy] else []
   return (tick ++ [.call ts (← helper (.copy ((← L).r n))) (locs ls)], ts)
 
-def dropVals (n : Nat) (ls : List Nat) : LM (List Stmt) := do
+def consumeVals (n : Nat) (ls : List Nat) : LM (List Stmt) := do
   if (← L).triv n then return []
-  return [.call [] (← helper (.drop ((← L).r n))) (locs ls)]
+  return [.call [] (← helper (.consume ((← L).r n))) (locs ls)]
 
 
 /-! ### Closures -/
@@ -552,7 +552,7 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     match lit with
     | some c => do
       -- UNPROVED: that the literal tables' class is not on the heap. `envOf` of a heap class frees
-      -- its object, and the tabulator's words are then dropped (`dropVals`) or passed on: one
+      -- its object, and the tabulator's words are then consumed (`consumeVals`) or passed on: one
       -- release too many. It should hold because a class is on the heap only where it holds itself
       -- (SPEC §35), checked on every compile (`LayoutCheck.boxesOnCycles`), and the literal
       -- tables' code captures two integers. A class that also holds a code capturing that class
@@ -560,7 +560,7 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
       let ts ← fresh 2
       let gn ← argN 0
       let (es, env) ← envOf gn c fw
-      let dr ← dropVals gn fw
+      let dr ← consumeVals gn fw
       let off := env.headD (.c64 0)
       let len := env.getD 1 (.c64 0)
       return es ++ [.ite (.op (.rel .w64 .le_u) [.loc k, len])
@@ -760,7 +760,7 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
 
 /-- A term is a single value form: its words can be bound where they are made. -/
 def tmSimple : Tm → Bool
-  | .letv .. | .letpair .. | .case .. | .copy .. | .drop .. | .abandon .. | .absurd _ => false
+  | .letv .. | .letpair .. | .case .. | .copy .. | .consume .. | .abandon .. | .absurd _ => false
   | _ => true
 
 /-- The term `t`, whose value is at node `n`, its words to `d`. -/
@@ -831,8 +831,8 @@ def lowerTm (fuel : Nat) (t : Tm) (n : Nat) (d : Dest) : LM (List Stmt) := do
     let (s, ls) ← copyVals (← nodeV x) (← vals x) (tick := true)
     bindVals x' ls
     return s ++ (← lowerTm f b n d)
-  | .drop _ x b | .abandon _ x b => do
-    let s ← dropVals (← nodeV x) (← vals x)
+  | .consume _ x b | .abandon _ x b => do
+    let s ← consumeVals (← nodeV x) (← vals x)
     return s ++ (← lowerTm f b n d)
 
 
@@ -875,10 +875,10 @@ def copyField (n k : Nat) (ls : List Nat) : LM (List Stmt × List Exp) := do
   let (s₃, out) ← putField n k (locs vs)
   pure (s₁ ++ s₂ ++ s₃, out)
 
-def dropField (n k : Nat) (ls : List Nat) : LM (List Stmt) := do
+def consumeField (n k : Nat) (ls : List Nat) : LM (List Stmt) := do
   let c ← child n k
   let (s₁, vs) ← getField n k ls true
-  pure (s₁ ++ (← dropVals c vs))
+  pure (s₁ ++ (← consumeVals c vs))
 
 def printField (n k : Nat) (ls : List Nat) (atom : Bool) : LM (List Stmt) := do
   let c ← child n k
@@ -935,7 +935,7 @@ def genHelper (h : Helper) : LM Backend.Flat.Fn := do
           (s₂ ++ [.ret ([.c64 1] ++ b ++ zeros (w - 1 - b.length))])]
       | _ => pure [.ret (locs ps)]
     pure { name := "copy", params := w, results := w, locals := nloc, body := body ++ [.trap], ptrs }
-  | .drop n =>
+  | .consume n =>
     let w := L.w n
     let (body, nloc, ptrs) ← inFn w do
       let ps := List.range w
@@ -951,19 +951,19 @@ def genHelper (h : Helper) : LM Backend.Flat.Fn := do
             out := s
             let mut off := 0
             for e in ← envNodes c do
-              out := out ++ (← dropVals e (vs.drop off |>.take (L.w e))); off := off + L.w e
+              out := out ++ (← consumeVals e (vs.drop off |>.take (L.w e))); off := off + L.w e
             return out ++ [.free (.loc 0)]
           let mut off := 1
           for e in ← envNodes c do
-            out := out ++ (← dropVals e (List.range' off (L.w e))); off := off + L.w e
+            out := out ++ (← consumeVals e (List.range' off (L.w e))); off := off + L.w e
           return out
         pure (s ++ [.ret []])
-      | .pair .. => pure ((← dropField n 0 (← fieldLocals n 0 ps)) ++
-          (← dropField n 1 (← fieldLocals n 1 ps)) ++ [.ret []])
-      | .sum .. => pure [.ite (eqz64 (.loc 0)) (← dropField n 0 (← fieldLocals n 0 ps))
-          (← dropField n 1 (← fieldLocals n 1 ps)), .ret []]
+      | .pair .. => pure ((← consumeField n 0 (← fieldLocals n 0 ps)) ++
+          (← consumeField n 1 (← fieldLocals n 1 ps)) ++ [.ret []])
+      | .sum .. => pure [.ite (eqz64 (.loc 0)) (← consumeField n 0 (← fieldLocals n 0 ps))
+          (← consumeField n 1 (← fieldLocals n 1 ps)), .ret []]
       | _ => pure [.ret []]
-    pure { name := "drop", params := w, results := 0, locals := nloc, body, ptrs }
+    pure { name := "consume", params := w, results := 0, locals := nloc, body, ptrs }
   | .print n =>
     let w := L.w n
     let (body, nloc, ptrs) ← inFn w do
@@ -1062,7 +1062,7 @@ where
       match L.sh c', L.sh n' with
       | .clos .., .unk => return ([], [])
       | .opq, .unk => return ([], [])
-      -- `Tok`'s cell (`Ref 1`) read as `Unk`: forgotten.
+      -- `Tok`'s cell (`Ref 1`) read as `Unk`: discarded.
       | .ref _, .unk => return ([], [])
       | _, _ =>
         if L.triv c' && L.w c' == L.w n' then return ([], locs vs)
@@ -1196,7 +1196,7 @@ def countsReport : List Stmt :=
     [.call [] fPrintDec [.stat 1]] ++ outStr "\ncopies " ++
     [.call [] fPrintDec [.stat 2]] ++ outStr "\n"
 
-/-- Run `main`, print its value, drop it, print the live count, and with `counts` the run's
+/-- Run `main`, print its value, consume it, print the live count, and with `counts` the run's
 counts. -/
 def entryFn (fMain : Nat) (exits : Bool) : LM Backend.Flat.Fn := do
   let L ← L
@@ -1213,7 +1213,7 @@ def entryFn (fMain : Nat) (exits : Bool) : LM Backend.Flat.Fn := do
         pure ([Stmt.ite (eqz64 tag) (s ++ [.call [] (← helper (.print (L.r a))) (locs vs)] ++ outStr "\n") []],
           [Stmt.ite (eqz64 tag) [] [.status (.c64 1)]])
       else pure ([Stmt.call [] (← helper (.print (L.r n))) (locs m)] ++ outStr "\n", [])
-    let dr ← dropVals n m
+    let dr ← consumeVals n m
     pure ([Stmt.call m fMain []] ++ pr ++ dr ++ outStr "live " ++ [.call [] fPrintDec [.live]] ++
       outStr "\n" ++ (if (← read).counts then countsReport else []) ++ status ++ [.ret []])
   pure { name := "entry", params := 0, results := 0, locals := nloc, body, ptrs }

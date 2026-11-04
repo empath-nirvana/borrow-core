@@ -259,7 +259,7 @@ theorem subst_comm_closed {v : Val} (hv : closedAt 0 v.1 = true) : ∀ (e : Expr
 /-- `B` resumes with `R` on every path, in tail position, and `B'` is `B` with each resume
 `R N` replaced by its answer `N`: through the arms of a `case`, the body of a `let (x, y)`, the
 rest of a sequence, the body of a `let x = e`, `(λx. B) e`, the right unit `(λx. R₀) X`, `R₀`
-answering `x` (`Returns0`), whose frames `B'` drops, and a `let` of a closed value, `(λx. B) v`,
+answering `x` (`Returns0`), whose frames `B'` consumes, and a `let` of a closed value, `(λx. B) v`,
 which `B'` takes as its `β`-step `B[v/x]`. -/
 inductive TailResumes (R : Expr) : Expr → Expr → Prop where
   | resume (N : Expr) : TailResumes R (.app R N) N

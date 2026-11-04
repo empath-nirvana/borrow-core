@@ -87,7 +87,7 @@ fn survey<'a>(v: array_imm 'a i32) -> i32 * i32 =
       let bad = if 0 < i { if x < at(w, i - 1, 0) { bad + 1 } else { bad } } else { bad };
       (v, (sum + x, bad)) },
     n, 0, (v, (0, 0)));
-  array_forget['a, i32](v);
+  array_release['a, i32](v);
   (sum, bad)
 
 -- A signed number in decimal, then a space.

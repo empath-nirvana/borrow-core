@@ -39,7 +39,7 @@ provided) and a native handler parameter in the lowering.
    - **What they do not close.** #229, #216, loops in recursion, members' result types, or
      effects under `deep`.
    - **Watch item (1), recursive types through `⊸`/`U`.** The design does not lean on it as
-     long as tables are computed from types. The System C-faithful variant does: it drops rows
+     long as tables are computed from types. The System C-faithful variant does: it consumes rows
      and keeps protocols in the world, which needs higher-order state in the Kripke world. Do
      not take that variant (§2.6).
 2. **The gaps are not one family (§1).** The hypothesis "every gap is a `!`-closed effectful
@@ -412,7 +412,7 @@ copies nothing, so:
   capabilities.
   - `N_v` and `N_e` share `Γc` additively, which is #216's "at most once".
   - The side conditions are `[let]`'s on `Γc`. Under an outer row with weakening the captures
-    must drop; under an unrestricted one they must be persistent.
+    must consume; under an unrestricted one they must be persistent.
   - A native rule would need the same conditions: the captures sit in the handler's frame,
     which an outer continuation captures.
 - `handleAbortCapture_sem` is its soundness, by `fundamentalC`.
@@ -539,7 +539,7 @@ artifact (zenodo 5833713); Brachthäuser, Schuster and Ostermann, OOPSLA 2020.
 - **Where `Exhausted` appears.** In the row of every function that can reach a recursion.
 - **Quieting it.** Treat it as ambient, as #228 proposes for `Alloc`: handled by the platform
   around `main` and left out of printed rows.
-- **The real cost is drop glue.** `Exhausted` is abortive, so a call that can exhaust is a
+- **The real cost is consume glue.** `Exhausted` is abortive, so a call that can exhaust is a
   weakening point, with drop glue for the owned locals live across it. That is Rust's landing
   pads for panics.
   - With per-driver budgets, only calls that reach a group pay it.
@@ -642,7 +642,7 @@ member.
 
 1. **Now, as one spec entry with no kernel change:** apply the principle at the seams.
    - Recursive groups:
-     - generators called directly; drop the `rec` site;
+     - generators called directly; consume the `rec` site;
      - pass the environment (capabilities, layer state) in the argument;
      - a record fixed point for heterogeneous members;
      - layers as generator transformers;

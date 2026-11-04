@@ -1,6 +1,6 @@
 -- A place lent by `&` in the arguments of a call that threads a capability: `chk` may raise
 -- `Fail`, so its call carries the handler's capability, and `&t` lends `t` in the same call. The
--- record has a derived drop, so the refusal is the surface's for any type, not a declared type's
+-- record is consumable, so the refusal is the surface's for any type, not a declared type's
 -- (SPEC §42, *Lent across a computation that may abort*).
 include fail
 

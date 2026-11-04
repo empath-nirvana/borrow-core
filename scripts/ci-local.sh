@@ -70,6 +70,7 @@ step() {
 # The steps after the build, in the order they are reported: name, then command.
 steps=(
   "hygiene + axioms" "scripts/check-hygiene.sh"
+  "judgment freeze"  "scripts/check-judgments.sh"
   "axiom report"     "lake env lean scripts/AxiomCheck.lean"
   "insertion pins"   "scripts/check-pins.sh"
   "parse corpus"     "scripts/parse-corpus.sh"

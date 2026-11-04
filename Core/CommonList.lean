@@ -367,7 +367,7 @@ theorem d_borrowerMC :
     refine .unitE (.dead (.left (.dead (.dead (.dead (.dead (.dead (.dead (.dead .nil)))))))))
       (.lolliE (.dead (.left (.dead (.dead (.dead (.dead (.dead (.dead (.dead .nil)))))))))
         (.var (.there (.here (by repeat constructor))))
-        (.forgetMut (a := .var 0) (A := clistL) (by repeat constructor))) ?_
+        (.releaseMut (a := .var 0) (A := clistL) (by repeat constructor))) ?_
     exact .ret (.boxI (.unitI (by repeat constructor))
       ⟨LifeCtx.defines_of_wf rfl, dead_noLive (by repeat constructor)⟩)
 
@@ -376,7 +376,7 @@ theorem d_borrowerMC :
 
     buildC0 to lst. alloc lst to r.
     withbor r (Λ. λb. withswap b (λl. mapInc l to l′. (l′, ())) to q.
-                     let (b′, u) = q in u; forget b′; ()) to p.
+                     let (b′, u) = q in u; release b′; ()) to p.
     let (r′, u) = p in u; free r′ to lst′. toPure lst′                                   -/
 def mapProgOpenC : Expr :=
   bindE buildC0 (bindE (.app (.val (.prim .alloc)) (.var 0))

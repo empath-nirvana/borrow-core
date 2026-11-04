@@ -292,8 +292,8 @@ teaches them.
 | `push` | `push[A](b: buf A, x: A) -> buf A * 1` | `x` at the end, growing when full |
 | `pop` | `pop[A](b: buf A) -> buf A * (A + 1)` | the last element taken out |
 | `take` | `take[A](b: buf A, i: i32) -> buf A * (A + 1)` | element `i` moved out, an empty element left in its place |
-| `truncate` | `truncate[A](b: buf A, k: i32) -> buf A` | the first `k` kept, the rest dropped |
-| `clear` | `clear[A](b: buf A) -> buf A` | every element dropped, the capacity kept |
+| `truncate` | `truncate[A](b: buf A, k: i32) -> buf A` | the first `k` kept, the rest consumed |
+| `clear` | `clear[A](b: buf A) -> buf A` | every element consumed, the capacity kept |
 | `reserve` | `reserve[A](b: buf A, extra: i32) -> buf A` | room for `extra` more |
 | `grow` | `grow[A](b: buf A, cap: i32) -> buf A` | moved to capacity `cap` |
 | `heap_push` | `heap_push[A](h: buf (i32 * A), k: i32, x: A) -> buf (i32 * A)` | `x` added with priority `k` to a min-heap |

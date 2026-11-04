@@ -11,7 +11,7 @@
 --
 -- Answer: i32[65] on the input `1203`: the configuration is (step 10, bias 1), so each digit adds
 -- `10 * d + 1`, giving 64, and `main` adds the bias read from the configuration it got back. A
--- server that dropped the configuration could not return it; one that read the step once as 0
+-- server that consumed the configuration could not return it; one that read the step once as 0
 -- gives 5.
 
 type Cfg = i32 * i32

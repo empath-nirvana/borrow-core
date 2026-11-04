@@ -17,7 +17,7 @@ IR. One pass does three things:
   and arms of a `case`, argument and function of an application), a variable free in a part
   and in a later part is `copy`-ed for the earlier one; the last user takes the original. The
   two arms of a `case` are one part, so a variable used by both arms is not copied: each path
-  uses it once. An arm drops what only the other arm uses, and every binder is dropped where
+  uses it once. An arm consumes what only the other arm uses, and every binder is consumed where
   its scope does not use it. So each variable is consumed exactly once on every path, as
   substitution does in the source.
 - **`let`.** A β-redex `(λx. b) a`, how the erasure spells `let`, is `letv x a b`: the
@@ -26,7 +26,7 @@ IR. One pass does three things:
   primitive in function position with its arguments present becomes `prim`; a primitive used
   as a value is η-expanded into closure code (`store` into two).
 - **`swap`.** The axiom `swap ≜ λx.λy. let z = load x; store x y; (x, z)` becomes the closure
-  IR's `swap`, which moves the old contents out instead of copying them and dropping the
+  IR's `swap`, which moves the old contents out instead of copying them and consuming the
   original. Its contents change type, which the layout types (`Backend/Clos/Types.lean`) follow.
 - **Fixed points.** The Z combinator's fixed point `selfV B` (`Core/Fix.lean`) is one code
   `λx. B[self := clos c []]` that calls itself through a closure of its own code, which captures
@@ -167,7 +167,7 @@ def dummy : Var := 0
 
 /-- The variables from `selfBase` on are not variables: `selfBase + c` stands for `self` in the
 native fixed point of code `c` (see `conv`), the closure `clos c []`, built where it is used. It
-is never captured, copied or dropped. -/
+is never captured, copied or consumed. -/
 def selfBase : Var := 1 <<< 62
 
 def Var.isSelf (x : Var) : Bool := x ≥ selfBase
@@ -192,8 +192,8 @@ def fvsAt (id : Nat) (d : Nat) : CM (List Nat) := return (fvUnder d (← get).pr
 def wrapCopies (cs : List (Var × Var)) (t : Tm) : Tm :=
   cs.foldr (fun (x, x') t => .copy .split x x' t) t
 
-def wrapDrops (xs : List Var) (t : Tm) : Tm :=
-  xs.foldr (fun x t => .drop .unused x t) t
+def wrapConsumes (xs : List Var) (t : Tm) : Tm :=
+  xs.foldr (fun x t => .consume .unused x t) t
 
 /-- Copies for two sequential parts using the indices `f₁` and `f₂`: every index in both is
     copied for the first part. The contexts the two parts are converted in. -/
@@ -252,10 +252,10 @@ def fixValue : CM Tm := do
   let k' ← fresh; let b ← fresh; let u₁ ← fresh; let u₂ ← fresh
   let s' ← fresh; let one ← fresh; let q ← fresh; let j ← fresh; let cl ← fresh
   let sf₁ ← fresh; let pr₁ ← fresh; let un ← fresh; let sf₂ ← fresh; let pr₂ ← fresh
-  let more : Tm := .drop .word u₁ (.copy .step sv s' (.letv one (.lit (.i32 1)) (.letv q (.pair k one)
+  let more : Tm := .consume .word u₁ (.copy .step sv s' (.letv one (.lit (.i32 1)) (.letv q (.pair k one)
     (.letv j (.prim (.host (.bin .w32 .sub)) [q]) (.letv cl (.clos cS [s', j])
       (.letv sf₁ (.inj true cl) (.letv pr₁ (.pair sf₁ a) (.app sv pr₁))))))))
-  let spent : Tm := .drop .word u₂ (.drop .word k (.letv un .unit (.letv sf₂ (.inj false un)
+  let spent : Tm := .consume .word u₂ (.consume .word k (.letv un .unit (.letv sf₂ (.inj false un)
     (.letv pr₂ (.pair sf₂ a) (.app sv pr₂)))))
   let body : Tm := .letpair sv r p (.letpair k a r (.copy .word k k'
     (.letv b (.prim (.host (.eqz .w32)) [k']) (.case b u₁ more u₂ spent))))
@@ -405,7 +405,7 @@ def occurs (x : Nat) (e : Expr) : Bool := (fvsRaw e 0).contains x
 /-- The body `b` of `(λa. b) (tab (n, t))` is a literal view (`Frontend.Sugar`, the borrow block
 on a literal): `a` is lent by `withbor`'s term to a callback that first copies the family (only
 an `imm` family can be copied, so nothing writes the array), and the array handed back is
-dropped next, with `a` used nowhere else. Then the array may be the literal's read-only bytes. -/
+consumed next, with `a` used nowhere else. Then the array may be the literal's read-only bytes. -/
 def litView? (b : Expr) : Bool :=
   match b with
   | .app (.lam b₂) (.app (.app wb (.var 0)) cb) =>
@@ -413,11 +413,11 @@ def litView? (b : Expr) : Bool :=
     let cbOk := match cb with
       | .lam (.lam (.letpair (.app (.lam (.pair (.var 0) (.var 0))) (.var 0)) k)) => !occurs 4 k
       | _ => false
-    let dropOk := match b₂ with
+    let consumeOk := match b₂ with
       | .letpair (.var 0) (.seq (.app (.lam (.app (.prim .drop) (.pair _ (.var 0)))) (.var 1)) rest) =>
         !occurs 1 rest && !occurs 3 rest
       | _ => false
-    withborOk && cbOk && dropOk && !occurs 1 b₂
+    withborOk && cbOk && consumeOk && !occurs 1 b₂
   | _ => false
 
 /-- The mark of a literal view's `tab`: its argument paired with this `i64`, which no checked
@@ -674,7 +674,7 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
       let u ← fresh
       let t₁ ← conv c₁ e₁ k₁
       let t₂ ← conv c₂ e₂ k₂
-      return wrapCopies cs (.letv u t₁ (.drop .word u t₂))
+      return wrapCopies cs (.letv u t₁ (.consume .word u t₂))
   | .letpair e₁ e₂ => do
       let (cs, c₁, c₂) ← plan2 ctx (← fvsAt k₁ 0) (← fvsAt k₂ 2)
       let p ← fresh; let x ← fresh; let y ← fresh
@@ -682,7 +682,7 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
       let t₂ ← conv ((c₂.push x).push y) e₂ k₂
       let used ← fvsAt k₂ 0
       let unused := (if 1 ∈ used then [] else [x]) ++ (if 0 ∈ used then [] else [y])
-      return wrapCopies cs (.letv p t₁ (.letpair x y p (wrapDrops unused t₂)))
+      return wrapCopies cs (.letv p t₁ (.letpair x y p (wrapConsumes unused t₂)))
   | .case e e₁ e₂ => do
       let k₃ := k₂ + (← sizeAt k₂)
       let f₁ ← fvsAt k₂ 1; let f₂ ← fvsAt k₃ 1
@@ -697,7 +697,7 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
       let only₂ ← vars c₁ (f₂.filter (!in₁.contains ·))
       let d₁ := (if 0 ∈ (← fvsAt k₂ 0) then [] else [x]) ++ only₂
       let d₂ := (if 0 ∈ (← fvsAt k₃ 0) then [] else [y]) ++ only₁
-      return wrapCopies cs (.letv s t₀ (.case s x (wrapDrops d₁ t₁) y (wrapDrops d₂ t₂)))
+      return wrapCopies cs (.letv s t₀ (.case s x (wrapConsumes d₁ t₁) y (wrapConsumes d₂ t₂)))
   | .app (.prim (.lit (.i64 m))) (.pair (.prim (.lit (.i32 i))) v) => do
       -- A marked use of a polymorphic let (`polyLets`): its λ, and the codes it registers.
       if m != polyUseMark then throw "a literal applied"
@@ -798,7 +798,7 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
         -- `(λold. store c x; old) (load c)`, a slot's swap (`array_replace`, `Core/Arrays.lean`
         -- `swapCellE`): the closure IR's `swapSlot`, which moves the old contents out, as the
         -- axiom `swap` is, where `load` would copy them (a deep copy of a heap closure) and
-        -- `store` drop the original. `x` is evaluated before `c` is read; both are variables.
+        -- `store` consume the original. `x` is evaluated before `c` is read; both are variables.
         match b with
         | .seq (.app (.app (.prim .store) (.var (j + 1))) xE) (.var 0) =>
           match a with
@@ -811,7 +811,7 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
               let tx ← conv (cx.push dummy) xE (id + 7)
               let lc ← lookup cl j
               return wrapCopies cs (.letv xv tx (.letv lv (.var lc) (.letv pr (.prim .swapSlot [lv, xv])
-                (.letpair c' old pr (.drop .const c' (.var old))))))
+                (.letpair c' old pr (.consume .const c' (.var old))))))
           | _ => pure ()
         | _ => pure ()
         if !isSwap f && (fixBody? f).isNone then
@@ -821,7 +821,7 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
           let x ← fresh
           let ta ← conv ca a k₂
           let tb ← conv (cb.push x) b kb
-          let tb := if 0 ∈ (← fvsAt kb 0) then tb else .drop .unused x tb
+          let tb := if 0 ∈ (← fvsAt kb 0) then tb else .consume .unused x tb
           return wrapCopies cs (.letv x ta tb)
       | _ => pure ()
       match f, Op.ofPrim? (match f with | .prim p => p | _ => .store) with
@@ -854,7 +854,7 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
           if let (some (reuse, shape), .clos cu xs) := (foldShape? B, body) then
             if let some i := xs.idxOf? x then
               modify fun st => { st with folds := ⟨cu, reuse, shape, i⟩ :: st.folds }
-          let body := if 0 ∈ (← fvsAt kB 0) then body else .drop .unused x body
+          let body := if 0 ∈ (← fvsAt kB 0) then body else .consume .unused x body
           setCode c ⟨[], x, body⟩
           return .clos c []
       | _ => pure ()
@@ -869,7 +869,7 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
       let inner := (fv.zip es).foldl (fun c (i, x) => c.set i x) inner
       let inner ← selfs.foldlM (fun c i => return c.set i (← lookup ctx i)) inner
       let body ← conv (inner.push p) b k₁
-      let body := if 0 ∈ (← fvsAt k₁ 0) then body else .drop .unused p body
+      let body := if 0 ∈ (← fvsAt k₁ 0) then body else .consume .unused p body
       let c ← register ⟨es, p, body⟩
       return .clos c xs
 
@@ -936,13 +936,13 @@ inductive ExtImpl where
   | take (s : CapStream)
 
 /-- An operation's closure, as the extern's value: `Λ. λm. op m`, with one `Λ` per lifetime
-parameter (each argument is `()`, and is dropped). -/
+parameter (each argument is `()`, and is consumed). -/
 def ioValue (k : IOOp) : CM Tm := do
   let m ← fresh
   let mut c ← register ⟨[], m, .prim (.io k) [m]⟩
   for _ in [0:k.lifes] do
     let u ← fresh
-    c ← register ⟨[], u, .drop .word u (.clos c [])⟩
+    c ← register ⟨[], u, .consume .word u (.clos c [])⟩
   pure (.clos c [])
 
 /-- `[]`, the empty byte list. -/
@@ -957,16 +957,16 @@ def capCell (c : BoCa.IntLit) : CM Tm := do
 
 /-- **The host function of a harness make** (SPEC §11, §34), as the extern's value `λm. …`: a
 fresh cell, the stream's capability, holding the stream's descriptor (the clock's: the time `0`).
-`mk_input` and `mk_args` drop their argument, a byte list (persistent): the host's stream is the
+`mk_input` and `mk_args` consume their argument, a byte list (persistent): the host's stream is the
 platform's standard input or arguments, whatever bytes the term passes. `mk_output` holds its
 argument, the descriptor. Each call allocates its own cell, as the model's `alloc` does, so the
 extern's contract (`mkInput_meets`, …) holds at every call, with no condition on the run. -/
 def mkValue (s : CapStream) : CM Tm := do
   let m ← fresh
   let body ← match s with
-    | .input => pure <| .drop .word m (← capCell (.i32 0))
-    | .args => pure <| .drop .word m (← capCell (.i32 0xFFFFFFFF))
-    | .clock => pure <| .drop .word m (← capCell (.i64 0))
+    | .input => pure <| .consume .word m (← capCell (.i32 0))
+    | .args => pure <| .consume .word m (← capCell (.i32 0xFFFFFFFF))
+    | .clock => pure <| .consume .word m (← capCell (.i64 0))
     | .output => pure <| .prim .alloc [m]
   pure (.clos (← register ⟨[], m, body⟩) [])
 
@@ -984,7 +984,7 @@ byte list. -/
 def takeValue (s : CapStream) : CM Tm := do
   let m ← fresh; let w ← fresh
   let body ← match s with
-    | .input | .args => pure <| .letv w (.prim .free [m]) (.drop .word w (← nilTm))
+    | .input | .args => pure <| .letv w (.prim .free [m]) (.consume .word w (← nilTm))
     | .output =>
       let n ← fresh
       pure <| .letv w (.prim .free [m]) (.letv n (← nilTm) (.pair w n))

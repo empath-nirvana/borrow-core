@@ -22,7 +22,6 @@ Done means that theorem. Passing test programs doesn't count.
 | Piece | What it gives | Where |
 |---|---|---|
 | Step-indexed linear `ewp`/`erwp`, `[handle]` with no `hdv` | stored κ around unbounded loops | `SI/Ewp`, `SI/HandleN` |
-| Effectful destructors on every exit | raise, cancel, early loop close, performing destructors | `Core/LetDtor*` (library); `FinCancelN`, `FinPerformN` |
 | Index-relative `mut` cells (`UpdMutN`), 6.48 / 6.59 at the index | `mut` payloads under step-indexing | `UpdN`, `RebN` |
 | Canonical images (`TWNC`, `TemplAt`, `TemplDAt`) | shared reborrows (root and deep) can't disagree; Core's results over them (`Core.C`, not `Core.Stdio`) | `TWNC`, `CanonDeep`, `CoreC` |
 | `extF` + `LinDisj`/`DLinDisj`/`EscEx`, and `ext_extF` | where κ may resume; no restriction relative to Core's `Ext` | `ExtF`, `LinDisj`, `ExtExtF` |
@@ -95,7 +94,10 @@ The operations, each to be proved to preserve it:
 - **capture:** a branch, with its live lends' records, goes into a one-shot κ;
 - **graft:** resuming κ attaches its branch, possibly under frames opened since, or under another
   parent; the tree grows and every branch is re-read;
-- **unwind:** cancel or raise runs a branch's destructors and ends its lends in order;
+- **unwind:** a raise, or a cancel (a resume into the continuation's cancel branch, §62 D15),
+  runs the branch's `[then]` finalisers, and its unwinding borrow forms (`withborU`) end its lends
+  in order. The tree has no `withborU` rule yet (row 6): the closed programs end their lends
+  through `ubind` finalisers in the program and `twp_lendEnd` in the proof;
 - **spawn / join:** a lend's record is shared into children and passes back at the join.
 
 **Adequacy is derived from preservation** (LinearActris Thm 5.4 shape), and the frame rules are
@@ -103,9 +105,12 @@ instances of these operations. A proof that goes around the invariant is not the
 
 Status: `CactusInv` is stated with `cactus_step`, `cactus_move`, `joinReady_fd`, and not yet used.
 Over the tree world (`Core/TreeCactus.lean`), `CactusInvT` is kept by step, growth, move, spawn and
-join, and `cerwpT_adequacy` is derived through `cactusT_step` at one branch, with no programs. Open:
-adequacy over several branches from preservation; adequacy at the relation the typing rules use;
-the frame rules as instances of capture (condition 20).
+join, and `cerwpT_adequacy` is derived through `cactusT_step` at one branch. Adequacy over several
+branches (`multiBranchAdequacyT`, `poolSchedAdequacyT`) goes through `cerwpT_adequacy` at one
+branch, the stored branches carried in pool form (`KapSchedT`, `PoolT`: each share resuming at
+`KeepRel`, every two apart at each other's record masks, no branch points), not as branches of
+`CactusInvT`; this is decision 74 (`scope-781.md` §4). Open: adequacy at the
+relation the typing rules use; the frame rules as instances of capture (condition 20).
 
 Threads: the invariant is per computation. The two dependencies on sequential scheduling (a frame
 fixed for a whole segment; `JoinReady` read at the resume) are kept separate, so a concurrent
@@ -148,7 +153,8 @@ Over the single relation:
    types, `Core/TreeSem.lean`, `Core/TreeSemC.lean`, `Core/TreeSemK.lean`) for every former but
    `Mut` at a payload that is not a store code (#790) and effect rows (`CTy.eff`).
 2. `SemJ`, then compatibility for every `CDerives` rule. The new rules are lend/reborrow/Anti-Frame
-   across stops, spawn/join, `[let-dtor]`, and `[handle]` without `hdv`.
+   across stops (with the unwinding borrow forms `withborU`), `[then]` across stops (the
+   unwinding rule), spawn/join, and `[handle]` without `hdv`.
 3. Adequacy to `OrDiverges` via §5.
 
 Core's plain results over canonical worlds are `Core.C` (condition 8); over the tree world they
@@ -180,7 +186,7 @@ Each test must go through §5, not around it:
   `foldImm` across stops; `withswap` with a callback that stops.
 - The recorded unreconciled point on 6.150.
 - Lowering: per-task state machines, self-reference (pinning or a movability mode), per-state
-  drop glue.
+  consume glue.
 - Threads: a concurrent semantics and the multi-thread adequacy.
 
 ## 11. Not doing / tempting shortcuts (stop and report)

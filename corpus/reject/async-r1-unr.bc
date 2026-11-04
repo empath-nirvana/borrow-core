@@ -15,5 +15,5 @@ main : F (i32 + i32) =
   handle_with[1](hr, hc) (
     withbor2r['x, dom, i32, i32, [1.0 unr 1 ~> 1]](c, m) (
       u <- perform[1.0] ();
-      let () = forget_mut['x, i32] m;
+      let () = release_mut['x, i32] m;
       return (boxed['x] i32[1])))

@@ -41,7 +41,7 @@ them.  `Core/EffCancel.lean`'s `prog` is not compiled: its finaliser raises a na
 inside the cancelled region, whose handlers are dead, so its run ends at a raise no handler catches
 (`prog_run`, `prog_final`), and a typing of finalisers rejects it (SPEC §19, *Cancels*).  Its
 other runs (a finaliser that performs, a cancel nested in a cancel, an unrestricted continuation
-dropped with a kept error) are Lean runs there.
+consumed with a kept error) are Lean runs there.
 -/
 
 namespace Backend

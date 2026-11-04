@@ -305,8 +305,8 @@ Everything here is decided by types (`Frontend.Elab.TCx`, docs/typed-elaboration
   the variables the body reads, at their inferred types; then the same bind.
 * **A terminal** `return V` becomes the loop that finishes with `V` at its first observation.
 * **The residual** `R` is `K * 1`, where `K` is the components of the result type `B` that have
-  no destructor (SPEC §12), or `1` when there are none: a loop closed early hands back what it
-  cannot drop. The variables that hold `K` are the ones a terminal `return` puts there.
+  no consume (SPEC §12), or `1` when there are none: a loop closed early hands back what it
+  cannot consume. The variables that hold `K` are the ones a terminal `return` puts there.
 -/
 
 open Frontend.Elab (TCx loopOf loopRowOf iterOf pullOf elemOf loopFnOf spineT tupleT ppT toSurface Class)
@@ -535,11 +535,11 @@ def varsFor (A : CVTy) : Val → Option (List (String × CVTy))
     | (some (.var _ x), T) | (some (.clone _ x), T) => some (x, T)
     | _ => none
 
-/-- `A` is linear with no derived drop (`Class.of`): the checker inserts no drop of it. -/
-def noDerivedDrop (A : CVTy) : Bool := Class.of A == .linear false
+/-- `A` is linear and not consumable (`Class.of`): the checker inserts no consume of it. -/
+def strictlyLinear (A : CVTy) : Bool := Class.of A == .linear false
 
 /-- The variables a terminal `return V` of the body puts in each component of the result that
-has no destructor, as the loops' states hold them: a variable the terminal names by a copy made
+is not consumable, as the loops' states hold them: a variable the terminal names by a copy made
 after the last loop, `x1 <- return x`, is `x` there. The residual is identified by its binder,
 followed through its copies, not by the name the terminal gives it (SPEC §41, #617). -/
 def termParts (parts : List CVTy) (ρ : List (String × String)) :
@@ -551,7 +551,7 @@ def termParts (parts : List CVTy) (ρ : List (String × String)) :
   | .bind _ _ _ _ N | .letUnit _ _ N | .letPair _ _ _ _ N => termParts parts ρ N
   | .case _ _ _ M _ N => (termParts parts ρ M).orElse fun _ => termParts parts ρ N
   | .ret _ (.app _ (.sugar _ .retE) V) | .ret _ V =>
-    ((parts.zip (alignV parts V)).filter (noDerivedDrop ·.1)).mapM fun (A, v) =>
+    ((parts.zip (alignV parts V)).filter (strictlyLinear ·.1)).mapM fun (A, v) =>
       (v.bind (varsFor A)).map (·.map fun (z, T) => ((ρ.lookup z).getD z, T))
   | _ => none
 
@@ -588,12 +588,12 @@ def destructParts (v : String) (parts : List (List (String × CVTy))) : String :
 its residual is `K`.  `[spec §14, §15]` -/
 def loopCxOf (sp : Span) (B : CVTy) (M : Comp) (bare : Bool := false) : Except Error LoopCx := do
   let parts := spineT B
-  let lin := parts.filter noDerivedDrop
+  let lin := parts.filter strictlyLinear
   if lin.isEmpty then return ⟨B, .unit, .unit, [], true⟩
   let K := tupleT lin
   match termParts parts [] M with
   | some ps => pure (if bare then ⟨B, K, K, ps, false⟩ else ⟨B, .tensor K .unit, K, ps, true⟩)
-  | none => throw ⟨sp, s!"a div function whose result holds `{ppT K}`, which is linear with no derived drop, " ++
+  | none => throw ⟨sp, s!"a div function whose result holds `{ppT K}`, which is linear and not consumable, " ++
       "must hand it back by name: `return (c, …)` (SPEC §14)"⟩
 
 def internalError (sp : Span) (what : String) (e : Error) : Error :=
@@ -770,7 +770,7 @@ def exitOffSpine (sp : Span) : Error :=
 
 /-- Moved to tail positions: the exits (`break`, `continue`, `return e`) of a body's heads. What
 follows a head that leaves goes into it (a commuting conversion): into both arms of a `match` or
-`if`, after the body of a `let`, into what follows a loop; and what follows an exit is dropped,
+`if`, after the body of a `let`, into what follows a loop; and what follows an exit is consumed,
 since it never runs. Every exit is then a terminal. The bodies of loops are left as they are:
 each is moved when its loop is elaborated. -/
 def normExits : Nat → Comp → Except Error Comp
@@ -804,10 +804,10 @@ def normExits : Nat → Comp → Except Error Comp
 
 /-- A terminal `T` of a div body: `io_v : B <- T`, then the loop that finishes with `io_v` at
 its first observation; closed instead, it hands back the components of `io_v` that have no
-destructor, and the checker drops the others. -/
+consume, and the checker consumes the others. -/
 def dret (cx : LoopCx) (T : Comp) : SM Comp := do
   let parts := spineT cx.B
-  let lin := parts.map noDerivedDrop
+  let lin := parts.map strictlyLinear
   let last := (lin.zip (List.range lin.length)).foldl (fun a (b, i) => if b then i + 1 else a) 0
   let close := if last == 0 then "return ()" else
     let ns := (List.range last).map (s!"io_w{·}") ++ (if last < parts.length then ["io_wr"] else [])
@@ -1102,7 +1102,7 @@ def mTemplate (sp : Span) (what src : String) (vs : List (String × Val)) (cs : 
   let L ← (template sp what src : SM Comp)
   pure (L.fill (fun v => vs.lookup v) (fun v => cs.lookup v))
 
-/-- The terminal `T` of a loop's turn, then `K`, which goes on: `T`'s value is dropped, and a
+/-- The terminal `T` of a loop's turn, then `K`, which goes on: `T`'s value is consumed, and a
 terminal `()` is not bound at all (SPEC §41, rule R3: a turn hands on its state). -/
 def thenGo (T K : Comp) : Comp := match T with
   | .ret _ (.unit _) => K
@@ -1222,14 +1222,14 @@ def mAbort (m : MCx) (sp : Span) (lend : Option Ident) (Rf : CVTy) : MM (String 
       pure ((if cx.tail1 then destructR "io_r" cx.parts else destructParts "io_r" cx.parts), cx.capNames)
     else
       -- The loop hands back, by their types, capabilities of the body it was given (the variables
-      -- a `for` over a generator threads, say); what else it hands back is dropped.
+      -- a `for` over a generator threads, say); what else it hands back is consumed.
       let capOf (T : CVTy) : Option String := match cx.caps.filter (·.2 == T) with
         | [(p, _)] => some p
         | _ => none
       let (src, leaves) := destructLeaves divFuel "io_r" Rf capOf
       let caps := leaves.filterMap (·.1)
       if !caps.isEmpty && caps.eraseDups.length == caps.length &&
-          leaves.all (fun (p, T) => !noDerivedDrop T || p.isSome) then
+          leaves.all (fun (p, T) => !strictlyLinear T || p.isSome) then
         pure (src, caps)
       else throw ⟨sp, s!"a call whose loop hands back `{ppT Rf}` when closed, which is neither " ++
           s!"nothing, a capability it was lent, one capability of the body, nor what the body " ++
@@ -1419,8 +1419,8 @@ def mLoop (m : MCx) : Nat → TCx → Span → LoopSrc → Val → Comp → Comp
         let v := s!"io_it{k}"
         let ended := if Q == .zero then "absurd io_q" else match P.keep, P.els with
           | some (r, _), some _ =>
-            let drop := if P.cap.isSome then bindCap P.cap Q "io_q" else "io_dq <- return io_q;\n"
-            s!"{drop}{r} <- force io_hole_else;\nforce io_hole_after"
+            let consume := if P.cap.isSome then bindCap P.cap Q "io_q" else "io_dq <- return io_q;\n"
+            s!"{consume}{r} <- force io_hole_else;\nforce io_hole_after"
           | some (r, _), none => s!"{r} <- return io_q;\nforce io_hole_after"
           | none, _ => s!"{bindCap P.cap Q "io_q"}force io_hole_after"
         let fin := if isGen then s!"case io_d \{ inl io_q -> {ended} | inr {v} -> return io_hole_k }"
@@ -2470,7 +2470,7 @@ def fieldRead (c : TCx) (sp fsp : Span) (f : String) (j k : Nat) (rolls : Bool) 
 with `&x`) to the call `call l v`, whose result has type `Q` with the parameter's lifetime `v`:
 `slice_borrow_mut` or `slice_borrow_imm` around it, with no cell (SPEC §9), the array rebound
 from the pair. A view the call hands back, as its result or its result's first component, is
-dropped there: the lend's result is the rest (`()` for a function that hands back only the view,
+consumed there: the lend's result is the rest (`()` for a function that hands back only the view,
 `reverse(&mut a)`).  `[spec §9]` -/
 def lendSlice (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A : CVTy) (v : BoCa.Lifetime.LifeVar)
     (Q : CVTy) (call : String → String → Comp) : DM Val := do
@@ -2582,7 +2582,7 @@ over the bound, calling `next` at each step, and it is total. The kinds of sized
 * `&a` or `&mut a` of an owned array `a : array A`: the array lent as its view around the loop
   (`slice_borrow_imm`/`_mut`, SPEC §9), then as a view;
 * an owned array `array A` of a persistent `A`: lent `imm` around the loop, each element copied,
-  and the array dropped after it;
+  and the array consumed after it;
 * a sized iterator `sized D S A` (`lib/iter.bc`): its data `D` (a view, a count, or a pair of
   them), its state `S`, and its step. The bound is `len(D)`: a view's length, a count's `b − a`,
   and a pair's sum. Each step of the loop calls the step once, which answers an element, a skip, or
@@ -2920,10 +2920,10 @@ def wrapLives (sp : Span) (lives : List (Ident × Life)) (F : VTy) (lam : Comp) 
 
 /-- A case's instance with the lifetime parameters its type no longer mentions left out: a
 family's `'a` in `view 'a T` is no lifetime of the instance at a `T` whose view is itself (`i32`,
-a view, a pair of them). Such a binder is dropped, and its other mentions, in the parameter's
+a view, a pair of them). Such a binder is consumed, and its other mentions, in the parameter's
 written type, read `top`, which they do not depend on. A binder the case's body names (`keep`),
 or a later binder's bound names, stays.  `[spec §36]` -/
-def dropPhantoms (c : TCx) (keep : List String) (A : VTy) (V : Val) : VTy × Val :=
+def consumePhantoms (c : TCx) (keep : List String) (A : VTy) (V : Val) : VTy × Val :=
   match A, V with
   | .bang sp X, .bangThunkv _ M =>
     let (ls, F) := splitLivesTy X
@@ -3209,7 +3209,7 @@ def clauseList : Val → List Val
   | _ => []
 
 /-- The marker binding around what follows a loop whose body is elaborated under the loop's exit
-(`DivSt.exits`): `surfC` elaborates what it binds around without that exit, and drops it. -/
+(`DivSt.exits`): `surfC` elaborates what it binds around without that exit, and consumes it. -/
 def restScope : String := "io_rest_scope"
 
 /-- `N`, what follows a loop, marked as outside it (`restScope`). -/
@@ -3856,7 +3856,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       | .imm, .tensor (.fam (.ref A)) (.int .w32) | .mut, .tensor (.fam (.ref A)) (.int .w32) => do
         -- A buffer `buf A = array A * i32`: its array lent as a family (`slice_borrow_*`, SPEC
         -- §9), cut at the length (`slice_split_*`), and the initialised prefix lent to the block;
-        -- the rest is dropped. The buffer is handed back whole.
+        -- the rest is consumed. The buffer is handed back whole.
         let imm := k == .imm
         let dom ← need lsp "the block's bound" (c.elabL (.dom lsp))
         let c₁ := c.pushLife x dom
@@ -5135,7 +5135,7 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
       | none => pure .unit
     checkBreaks M (keep.map fun _ => Vt)
     if keep.isNone && Class.of Bg == .linear false then
-      throw ⟨sp, s!"`{i.callee}` returns `{ppT Bg}`, which is linear with no derived drop: bind the loop's value, " ++
+      throw ⟨sp, s!"`{i.callee}` returns `{ppT Bg}`, which is linear and not consumable: bind the loop's value, " ++
         "`let r = for …`"⟩
     if keep.isSome && Bg != Vt && Bg != .zero then
       throw ⟨sp, s!"the loop's value has type `{ppT Vt}`, and `{i.callee}` returns `{ppT Bg}`"⟩
@@ -5473,7 +5473,7 @@ def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) → Option 
     -- A case of a `poly` family: the lifetimes its instance's type does not mention left out.
     -- `[spec §36]`
     if let some ks := keep then
-      let (A₂, V₂) := dropPhantoms c' ks A₁ V₁
+      let (A₂, V₂) := consumePhantoms c' ks A₁ V₁
       A₁ := A₂
       V₁ := V₂
     let (A', V') ← if extras.isEmpty then pure (A₁, V₁) else

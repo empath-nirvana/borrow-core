@@ -310,7 +310,7 @@ main -> i64 =
         let (b, _) = array_replace[SlotAt[i64]<'d>] (slots, t, sl);
         slots = b
       };
-      let _ = array_forget['l, Tree] v;
+      let _ = array_release['l, Tree] v;
       run_at(tasks, n + 2, slots) };
     (d, tt) };
   let _ = free(d);

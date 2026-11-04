@@ -33,8 +33,8 @@ fn defaults() -> Config = (80, (1, 30))
 fn key_code<'a>(k: text 'a) -> i32 =
   let (k, a) = array_copy['a, u8] k;
   let (k, b) = array_copy['a, u8] k;
-  if eq_lit(a, "port") { array_forget['a, u8](b); array_forget['a, u8](k); 1 }
-  else { if eq_lit(b, "workers") { array_forget['a, u8](k); 2 }
+  if eq_lit(a, "port") { array_release['a, u8](b); array_release['a, u8](k); 1 }
+  else { if eq_lit(b, "workers") { array_release['a, u8](k); 2 }
   else { if eq_lit(k, "timeout") { 3 } else { 0 } } }
 
 fn set(c: Config, code: i32, v: i32) -> Config with Fail[i32] =
@@ -48,11 +48,11 @@ fn apply_line<'a>(l: text 'a, c: Config) -> Config with Fail[i32] =
   match split_once(l, b'=') {
     inl (k, v) ->
       let code = key_code(trim(k));
-      if code == 0 { array_forget['a, u8](v); raise(0 - 1) } else {
+      if code == 0 { array_release['a, u8](v); raise(0 - 1) } else {
         let n = with map_err(!{ e -> code }) { parse_i32(trim(v)) };
         set(c, code, n)
       }
-  | inr l -> array_forget['a, u8](l); c
+  | inr l -> array_release['a, u8](l); c
   }
 
 fn parse_config<'a>(t: text 'a) -> Config with Fail[i32] =

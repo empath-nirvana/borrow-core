@@ -3,7 +3,7 @@
 -- `array_imm 'y i32` at a shorter lifetime. The family is copied; `array_len` reads its
 -- length; `array_get` takes the view of one leaf at the family's lifetime, which `withload`
 -- reads; and `array_get` past the end takes the error branch. The cell and the array are
--- dropped implicitly (SPEC §12): the cell is freed, then the array, cell by cell.
+-- consumed implicitly (SPEC §12): the cell is freed, then the array, cell by cell.
 --
 -- Answer: (i32[5], (i32[30], inr ())): the length, the element at index 3 of
 -- [0, 10, 20, 30, 40], and the error branch at index 7. A get at the wrong index gives 20 or

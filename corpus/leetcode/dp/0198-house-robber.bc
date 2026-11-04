@@ -29,16 +29,16 @@ fn rob<'a>(nums: array_imm 'a i32) -> i32 =
 fn case_at<'t>(t: text 't, pos: i32) -> (buf i32 * i32) + 1 =
   match split_at(t, pos) {
     inl (h, rest) ->
-      array_forget['t, u8](h);
+      array_release['t, u8](h);
       match next_line(rest) {
         inl (l, r) ->
-          array_forget['t, u8](r);
+          array_release['t, u8](r);
           let (l, m) = array_copy['t, u8] l;
           let c = fold_i32s(l, !{ (x, b) -> let (b, _) = push(b, x); b }, box buf[i32](16));
           inl (c, pos + len(m) + 1)
       | inr u -> inr ()
       }
-  | inr t -> array_forget['t, u8](t); inr ()
+  | inr t -> array_release['t, u8](t); inr ()
   }
 
 -- Each line of the input a case. The number of cases.

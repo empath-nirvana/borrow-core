@@ -29,12 +29,12 @@ fn words<'t>(t: text 't) -> buf (text 't) =
       inl (w, r) -> let (b, _) = push(ws, w); ws = b; rest = r
     | inr w ->
         let (w, w2) = array_copy['t, u8] w;
-        if len(w2) == 0 { array_forget['t, u8](w) } else { let (b, _) = push(ws, w); ws = b };
+        if len(w2) == 0 { array_release['t, u8](w) } else { let (b, _) = push(ws, w); ws = b };
         rest = slice_empty_imm['t, u8];
         break
     }
   };
-  array_forget['t, u8](rest);
+  array_release['t, u8](rest);
   ws
 
 fn word_break<'t>(s: text 't, ws: buf (text 't)) -> bool =
@@ -49,7 +49,7 @@ fn word_break<'t>(s: text 't, ws: buf (text 't)) -> bool =
     if here {
       let (s1, s3) = array_copy['t, u8] s;
       s = s1;
-      let rest = match split_at(s3, i) { inl (h, r) -> array_forget['t, u8](h); r | inr r -> r };
+      let rest = match split_at(s3, i) { inl (h, r) -> array_release['t, u8](h); r | inr r -> r };
       let mut rest = rest;
       for j in 0..k {
         let (b, w) = view_at(ws, j);
@@ -59,10 +59,10 @@ fn word_break<'t>(s: text 't, ws: buf (text 't)) -> bool =
         rest = r1;
         if starts_with(r2, w, eq_u8) { ok = array_set(ok, i + len(w2), true) } else { () }
       };
-      array_forget['t, u8](rest)
+      array_release['t, u8](rest)
     } else { () }
   };
-  array_forget['t, u8](s);
+  array_release['t, u8](s);
   let r = at(&ok, n, false);
   r
 
@@ -71,19 +71,19 @@ fn word_break<'t>(s: text 't, ws: buf (text 't)) -> bool =
 fn case_at<'t>(t: text 't, pos: i32) -> (i32 * i32) + 1 =
   match split_at(t, pos) {
     inl (h, rest) ->
-      array_forget['t, u8](h);
+      array_release['t, u8](h);
       match next_line(rest) {
         inl (l, r) ->
-          array_forget['t, u8](r);
+          array_release['t, u8](r);
           let (l, m) = array_copy['t, u8] l;
           let c = match split_once(l, b'|') {
             inl (s, ws) -> if word_break(trim(s), words(ws)) { 1 } else { 0 }
-          | inr l -> array_forget['t, u8](l); 0
+          | inr l -> array_release['t, u8](l); 0
           };
           inl (c, pos + len(m) + 1)
       | inr u -> inr ()
       }
-  | inr t -> array_forget['t, u8](t); inr ()
+  | inr t -> array_release['t, u8](t); inr ()
   }
 
 -- Each line of the input a case. The number of cases.

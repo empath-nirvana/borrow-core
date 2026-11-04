@@ -21,7 +21,7 @@ and `tick : 1 ↠ 1` at `5`, must resume. No abortive operation of it is unrestr
 | `sumGen` (E2d) | a consumer of a generator, let-bound once and used at `yield ⊙ ∅` and `yield ⊙ exn`; the raise passes its reinstalled handler | `(tt, inr ())` |
 | `deepGen` (E4) | a deep handler: reinstalled at each resume, it catches both yields, its clause performing `tick` at each; a handler of `tick` counts them | `((), 2)` |
 | `deepGenPlain` (E4) | the same deep handler under a handler of `tick` that resumes | `()` |
-| `nestedLogOutside`, `nestedFailOutside` (E5) | a state-passing handler of the must-resume `log` and `toResult`, nested both ways: the log kept beside the error, or dropped with the handler the raise unwinds | `(inr (), tt)`, `inr ()` |
+| `nestedLogOutside`, `nestedFailOutside` (E5) | a state-passing handler of the must-resume `log` and `toResult`, nested both ways: the log kept beside the error, or consumed with the handler the raise unwinds | `(inr (), tt)`, `inr ()` |
 | `tunnel` (E6) | `fwrap`'s handler of `exnᵢ` passes the callback's raise of `exnₒ` to `toResult` | `inr ()` |
 | `e7a`, `e7b`, `e7d` (E7) | `timeout` cancels a suspended body: the finalisers fire innermost first, and the first error is kept and re-raised at the canceller | `inr ()` |
 | `e8b` (E8b) | an unwind fires a finaliser whose raise supersedes the pending one | `inl (inr ())` |
@@ -287,7 +287,7 @@ theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' 
   | bangThunkV hp hC _ ih => exact .bangThunkV (banged_append h' hp) hC ih
   | bangE _ ih => exact .bangE ih
   | copyBang hΓ => exact .copyBang (deadP_append h' hΓ)
-  | forgetBang hΓ => exact .forgetBang (deadP_append h' hΓ)
+  | releaseBang hΓ => exact .releaseBang (deadP_append h' hΓ)
   | boxI _ hΓ ih => exact .boxI ih (ctxOutlives_append h' hΓ)
   | boxE _ ih => exact .boxE ih
   | immSub _ hle ih => exact .immSub ih hle
@@ -298,9 +298,9 @@ theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' 
   | tokBurn hΓ => exact .tokBurn (deadP_append h' hΓ)
   | swap hΓ => exact .swap (deadP_append h' hΓ)
   | copy hΓ => exact .copy (deadP_append h' hΓ)
-  | forgetImm hΓ => exact .forgetImm (deadP_append h' hΓ)
-  | forgetMut hΓ => exact .forgetMut (deadP_append h' hΓ)
-  | forgetUnk hΓ => exact .forgetUnk (deadP_append h' hΓ)
+  | releaseImm hΓ => exact .releaseImm (deadP_append h' hΓ)
+  | releaseMut hΓ => exact .releaseMut (deadP_append h' hΓ)
+  | releaseUnk hΓ => exact .releaseUnk (deadP_append h' hΓ)
   | lit c hΓ => exact .lit c (deadP_append h' hΓ)
   | hostOp op hΓ => exact .hostOp op (deadP_append h' hΓ)
   | arrNew A hΓ => exact .arrNew A (deadP_append h' hΓ)
@@ -310,7 +310,7 @@ theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' 
   | arrLen a A hΓ => exact .arrLen a A (deadP_append h' hΓ)
   | arrGet a A hΓ => exact .arrGet a A (deadP_append h' hΓ)
   | arrCopy a A hΓ => exact .arrCopy a A (deadP_append h' hΓ)
-  | arrForget a A hΓ => exact .arrForget a A (deadP_append h' hΓ)
+  | arrRelease a A hΓ => exact .arrRelease a A (deadP_append h' hΓ)
   | countFold S hΓ => exact .countFold S (deadP_append h' hΓ)
   | countTry S E hΓ => exact .countTry S E (deadP_append h' hΓ)
   | boundedFix A C hΓ => exact .boundedFix A C (deadP_append h' hΓ)
@@ -677,13 +677,13 @@ theorem dAt_kResume {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} 
   | unr => exact absurd rfl hq
 
 /-- **The clause `op (_, k) ⇒ resume k ()`** at a resuming must-resume or cancellable operation
-`A ↠ 1`, `A` persistent (the argument is dropped). -/
+`A ↠ 1`, `A` persistent (the argument is consumed). -/
 theorem dAt_resumeCl {Δ : LifeCtx} (S : Row) (R : VTy) {q : Qual} {A : VTy} (hq : q ≠ .unr)
     (hA : A.Persistent) :
     CDerivesAt Ξ Δ [] (.val resumeClV) (.val (clauseTy S R (q, A, .unit))) := by
   rw [Inversions.clauseTy_resuming rfl]
   refine .bangThunkV (dead_noLive .nil) rfl (.lam (.tensorE (.left .nil) (.var (.here .nil)) ?_))
-  refine .bind (.right (.left (.dead .nil))) (.ret (.unitI (.cons (.drop hA (.cons .nil))))) ?_
+  refine .bind (.right (.left (.dead .nil))) (.ret (.unitI (.cons (.weaken hA (.cons .nil))))) ?_
   exact dAt_kResume (Γ := [⟨A, false⟩, ⟨.tensor A (kTy S R q .unit), false⟩])
     (.cons (.cons .nil)) hq
 
@@ -748,7 +748,7 @@ theorem dAt_logCl {Δ : LifeCtx} (S : Row) (A : VTy) (hU : ¬ S.Unr) :
     · exact .sum .unit .unit
     · cases hl
   · refine .bind (.left (.right (.dead (.dead .nil))))
-      (.ret (.unitI (.drop rfl (.cons (.cons (.cons .nil)))))) ?_
+      (.ret (.unitI (.weaken rfl (.cons (.cons (.cons .nil)))))) ?_
     exact .app (.right (.dead (.left (.dead (.dead .nil)))))
       (.proj₁ (.force (C := .amp (.arr .unit (CTy.effOf S (logR S A))) .top)
         (.there (.there (.here (.cons (.cons .nil)))))))
@@ -780,7 +780,7 @@ theorem dAt_body5 {Δ : LifeCtx} {T : Row} (hT : RowAt ΞE T)
     (fun _ => fun _ h => absurd h List.not_mem_nil)
     (.effPerform (o := ⟨4, 0, .lin, boolT, .unit, .ret .unit, false⟩) hT hf rfl
       rfl (.sumI₂ (.unitI .nil)))
-    (.effSub hE (dAt_raiseU (.drop rfl .nil) ΞE_1 (by decide) (by decide) .unit))
+    (.effSub hE (dAt_raiseU (.weaken rfl .nil) ΞE_1 (by decide) (by decide) .unit))
 
 theorem rowAt_log : RowAt ΞE (logRow ++ []) :=
   rowAt_ofEff_append ΞE_4 (by decide) (by simp) (rowAt_nil ΞE)
@@ -831,7 +831,7 @@ theorem dAt_stashRet {Δ : LifeCtx} (S : Row) :
     CDerivesAt ΞE Δ [] (.val (constC (Val.lam (.inj₁ .unit))))
       (.val (retTy S .unit (stashR S))) :=
   .bangThunkV (dead_noLive .nil) rfl (.lam (.effSub (RowLe.nil S) (.ret (.thunkV rfl (.lam
-    (.effSub (RowLe.nil S) (.ret (.sumI₁ (.unitI (.drop rfl (.drop rfl .nil)))))))))))
+    (.effSub (RowLe.nil S) (.ret (.sumI₁ (.unitI (.weaken rfl (.weaken rfl .nil)))))))))))
 
 /-- **`stash`'s clause** at the cancellable `bool ↠ 1` of cancel row `F`, at a row `S` with no `unr`
 operation: the closure it answers holds `k` and `x`; its cancel branch is a `[let]` of `cancel k`,
@@ -879,7 +879,7 @@ theorem dAt_stashCl {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} 
       · exact dead_noLive (P := fun s => s.ty.OwnFree) hΓ s hs hl
     · -- `resume k ()`: `() to y. k (inj₁ ()) y`
       refine .bind (.left (.dead (.right (.left (.dead (deadSplit hΓ))))))
-        (.ret (.unitI (.drop rfl (.cons (.cons (.drop rfl (.cons hΓ.toP))))))) ?_
+        (.ret (.unitI (.weaken rfl (.cons (.cons (.weaken rfl (.cons hΓ.toP))))))) ?_
       show CDerivesAt ΞE Δ _ (.app (.app (.var 3) (.inj₁ .unit)) (.var 0)) _
       exact .app (.right (.dead (.dead (.left (.dead (.dead (deadSplit hΓ)))))))
         (.proj₁ (.force (C := .amp (.arr .unit (CTy.effOf S (stashR S))) (cancelTy S F))
@@ -912,7 +912,7 @@ theorem dAt_gen9 {Δ : LifeCtx} : CDerivesAt ΞE Δ [] gen9E (.comp (CTy.effOf y
     (.effPerform (o := ⟨3, 0, .cancel, boolT, .unit, .ret .unit, false⟩) rowAt_yield
       (by simp [Row.ofEff, Row.find]) rfl rfl (.sumI₂ (.unitI .nil)))
     (.effPerform (o := ⟨3, 0, .cancel, boolT, .unit, .ret .unit, false⟩) rowAt_yield
-      (by simp [Row.ofEff, Row.find]) rfl rfl (.sumI₁ (.unitI (.drop rfl .nil))))
+      (by simp [Row.ofEff, Row.find]) rfl rfl (.sumI₁ (.unitI (.weaken rfl .nil))))
 
 theorem not_unr_nil : ¬ Row.Unr ([] : Row) := fun ⟨_, h, _⟩ => absurd h List.not_mem_nil
 
@@ -994,7 +994,7 @@ abbrev countR : VTy := .thunk (.arr natN (CTy.effOf [] (.tensor .unit natN)))
 theorem rowAt_tick : RowAt ΞE (tickRow ++ []) :=
   rowAt_ofEff_append ΞE_5 (by decide) (by simp) (rowAt_nil ΞE)
 
-/-- A row of one must-resume operation drops no continuation and copies none. -/
+/-- A row of one must-resume operation consumes no continuation and copies none. -/
 theorem not_cancels_tick : ¬ (tickRow ++ []).Cancels := by
   rintro ⟨o, ho, hq⟩
   simp [Row.ofEff] at ho
@@ -1009,7 +1009,7 @@ theorem not_unr_tick : ¬ (tickRow ++ []).Unr := by
 
 /-- **`yield (_, k) ⇒ tick (); resume k ()`** at the cancellable `bool ↠ 1`, at `tick`'s row:
 `tick ()` is a `[let]` at a row of one must-resume operation, so the continuation holding `k` is
-neither dropped nor copied. -/
+neither consumed nor copied. -/
 theorem dAt_tickingCl {Δ : LifeCtx} :
     CDerivesAt ΞE Δ [] (.val tickingClV)
       (.val (clauseTy (tickRow ++ []) .unit (.cancel, boolT, .unit))) := by
@@ -1018,9 +1018,9 @@ theorem dAt_tickingCl {Δ : LifeCtx} :
   refine .effLet (.right (.left (.dead .nil))) (fun h => absurd h not_cancels_tick)
     (fun h => absurd h not_unr_tick)
     (.effPerform (o := ⟨5, 0, .lin, .unit, .unit, .ret .unit, false⟩) rowAt_tick
-      (by simp [Row.ofEff, Row.find]) rfl rfl (.unitI (.cons (.drop rfl (.cons .nil))))) ?_
+      (by simp [Row.ofEff, Row.find]) rfl rfl (.unitI (.cons (.weaken rfl (.cons .nil))))) ?_
   refine .bind (.left (.right (.dead (.dead .nil))))
-    (.ret (.unitI (.drop rfl (.cons (.cons (.cons .nil)))))) ?_
+    (.ret (.unitI (.weaken rfl (.cons (.cons (.cons .nil)))))) ?_
   exact .app (.right (.dead (.left (.dead (.dead .nil)))))
     (.proj₁ (.force (C := .amp (.arr .unit (CTy.effOf (tickRow ++ []) .unit))
       (CTy.effOf (tickRow ++ []) .unit)) (.there (.there (.here (.cons (.cons .nil)))))))
@@ -1037,13 +1037,13 @@ theorem dAt_deepGenE {Δ : LifeCtx} :
     dAt_tickingCl ?_
   · intro o ho; simp [Row.ofEff] at ho; subst ho; decide
   · exact .bangThunkV (dead_noLive .nil) rfl
-      (.lam (.effSub (RowLe.nil _) (.ret (.unitI (.drop rfl .nil)))))
+      (.lam (.effSub (RowLe.nil _) (.ret (.unitI (.weaken rfl .nil)))))
   · exact .effLet (A := .unit) .nil (fun _ => fun _ h => absurd h List.not_mem_nil)
       (fun _ => fun _ h => absurd h List.not_mem_nil)
       (.effPerform (o := ⟨3, 0, .cancel, boolT, .unit, .ret .unit, false⟩) hY
         (by simp [Row.ofEff, Row.find]) rfl rfl (.sumI₂ (.unitI .nil)))
       (.effPerform (o := ⟨3, 0, .cancel, boolT, .unit, .ret .unit, false⟩) hY
-        (by simp [Row.ofEff, Row.find]) rfl rfl (.sumI₁ (.unitI (.drop rfl .nil))))
+        (by simp [Row.ofEff, Row.find]) rfl rfl (.sumI₁ (.unitI (.weaken rfl .nil))))
 
 /-- **`tick (_, k) ⇒ λc. resume k () to g. g (c + 1)`** at the must-resume `1 ↠ 1`, at the pure row:
 the count is held across the resume. -/
@@ -1055,7 +1055,7 @@ theorem dAt_countCl {Δ : LifeCtx} :
   -- `c` at `0`, `k` at `1`, `x` at `2`
   refine .bind (A := countR) (.right (.left (.left (.dead .nil)))) ?_ ?_
   · refine .bind (.dead (.right (.left (.dead .nil))))
-      (.ret (.unitI (.cons (.cons (.drop rfl (.cons .nil)))))) ?_
+      (.ret (.unitI (.cons (.cons (.weaken rfl (.cons .nil)))))) ?_
     exact .app (.right (.dead (.left (.dead (.dead .nil)))))
       (.proj₁ (.force (C := .amp (.arr .unit (CTy.effOf [] countR)) .top)
         (.there (.there (.here (.cons (.cons .nil)))))))
@@ -1101,7 +1101,7 @@ theorem dAt_waitBody {Δ : LifeCtx} {S : Row} (hS : RowAt ΞE S)
   .effLet (A := .unit) .nil (fun _ => fun _ h => absurd h List.not_mem_nil)
     (fun _ => fun _ h => absurd h List.not_mem_nil)
     (.effPerform (o := ⟨2, 0, .cancel, .unit, .unit, .ret .unit, false⟩) hS hf rfl rfl (.unitI .nil))
-    (.effSub (RowLe.nil _) (.ret (.sumI₂ (.unitI (.drop rfl .nil)))))
+    (.effSub (RowLe.nil _) (.ret (.sumI₂ (.unitI (.weaken rfl .nil)))))
 
 theorem rowAt_wait : RowAt ΞE (waitRow0 ++ []) :=
   rowAt_ofEff_append ΞE_2 (by decide) (by simp) (rowAt_nil ΞE)
@@ -1181,7 +1181,7 @@ theorem dAt_hofTwoRows {Δ : LifeCtx} :
 theorem dAt_sgRet {Δ : LifeCtx} (S : Row) :
     CDerivesAt ΞE Δ [] (.val (constC (Val.inj₁ Val.unit))) (.val (retTy S .unit boolT)) :=
   .bangThunkV (dead_noLive .nil) rfl
-    (.lam (.effSub (RowLe.nil S) (.ret (.sumI₁ (.unitI (.drop rfl .nil))))))
+    (.lam (.effSub (RowLe.nil S) (.ret (.sumI₁ (.unitI (.weaken rfl .nil))))))
 
 /-- **`sumGen`'s clause** at the row `S`: its `[let]` holds `x : bool` across the resume, so `S`
 has no `unr` operation. -/
@@ -1205,7 +1205,7 @@ theorem dAt_sgCl {Δ : LifeCtx} (S : Row) (hU : ¬ S.Unr) :
       (.var (.there (.there (.here (.cons .nil))))) ?_ ?_
     · exact .effSub (RowLe.nil S) (.ret (.var (.skip rfl (.here (.cons (.cons (.cons .nil)))))))
     · exact .effSub (RowLe.nil S)
-        (.ret (.sumI₂ (.unitI (.drop rfl (.drop rfl (.cons (.cons (.cons .nil))))))))
+        (.ret (.sumI₂ (.unitI (.weaken rfl (.weaken rfl (.cons (.cons (.cons .nil))))))))
 
 /-- **`sumGen` at the row `r`**, `r` without `yield` and with no `unr` operation:
 `U(1 ⊸ F_{yield ⊙ r} 1) ⊸ F_r bool`. -/
@@ -1247,7 +1247,7 @@ theorem dAt_sumGenUsesW {Δ : LifeCtx} :
       (.effPerform (o := ⟨3, 0, .cancel, boolT, .unit, .ret .unit, false⟩) hY₀
         (by simp [Row.ofEff, Row.find]) rfl rfl (.sumI₁ (.unitI .nil)))
       (.effPerform (o := ⟨3, 0, .cancel, boolT, .unit, .ret .unit, false⟩) hY₀
-        (by simp [Row.ofEff, Row.find]) rfl rfl (.sumI₂ (.unitI (.drop rfl .nil))))))) ?_
+        (by simp [Row.ofEff, Row.find]) rfl rfl (.sumI₂ (.unitI (.weaken rfl .nil))))))) ?_
   refine .bind (A := .sum boolT .unit) (.right (deadSplit hΓ₀)) ?_ ?_
   · refine dAt_dead (.cons hΓ₀) (dAt_toResult ΞE_1 (by decide) (by decide) (S := [])
       (rowAt_nil ΞE) (by simp) ?_)
@@ -1259,7 +1259,7 @@ theorem dAt_sumGenUsesW {Δ : LifeCtx} :
         (by simp [Row.ofEff, Row.find]) rfl rfl (.sumI₁ (.unitI .nil)))
       (.effSub ((rowLe_append_right _ []).trans
           (rowLe_ofEff_cons _ _ (names_exn1 (by decide))))
-        (dAt_raiseU (.drop rfl .nil) ΞE_1 (by decide) (by decide) .unit))
+        (dAt_raiseU (.weaken rfl .nil) ΞE_1 (by decide) (by decide) .unit))
   exact .ret (.tensorI (.right (.left (.dead .nil))) (.var (.there (.here (.cons .nil))))
     (.var (.here (.cons (.cons .nil)))))
 
@@ -1275,7 +1275,7 @@ theorem dAt_sumGenProg {Δ : LifeCtx} :
 /-! #### E10 -/
 
 /-- **`wait (_, k) ⇒ cancel k; return ff`** at the cancellable `1 ↠ 1`, at every row: the payload is
-dropped with the cancel, so the `[let]`'s continuation holds nothing. -/
+consumed with the cancel, so the `[let]`'s continuation holds nothing. -/
 theorem dAt_tmCl {Δ : LifeCtx} (S : Row) :
     CDerivesAt ΞE Δ [] (.val tmClV) (.val (clauseTy S boolT (.cancel, .unit, .unit))) := by
   rw [Inversions.clauseTy_resuming rfl]
@@ -1287,8 +1287,8 @@ theorem dAt_tmCl {Δ : LifeCtx} (S : Row) :
   · simp only [List.mem_cons, List.not_mem_nil, or_false] at hs
     rcases hs with rfl | rfl | rfl <;> cases hl
   · exact .proj₂ (.force (C := .amp (.arr .unit (CTy.effOf S boolT)) (CTy.effOf S .unit))
-      (.here (.drop rfl (.cons .nil))))
-  · exact .effSub (RowLe.nil S) (.ret (.sumI₁ (.unitI (.drop rfl (.cons (.cons (.cons .nil)))))))
+      (.here (.weaken rfl (.cons .nil))))
+  · exact .effSub (RowLe.nil S) (.ret (.sumI₁ (.unitI (.weaken rfl (.cons (.cons (.cons .nil)))))))
 
 /-- **`timeout` at the row `r`**, `r` without `wait`: `U(1 ⊸ F_{wait ⊙ r} bool) ⊸ F_r bool`.
 -/
@@ -1456,7 +1456,7 @@ theorem nestedLogOutside_run :
   runM_val (k := 200) (m := []) (m' := []) rfl
 
 /-- **E5, `toResult` outside, runs to `inr ()`**: the raise passes `withLog`'s handler, which the
-unwind drops with its state. -/
+unwind consumes with its state. -/
 theorem nestedFailOutside_run :
     Steps (ℍ := ℍ) Adequacy.emptyMem nestedFailOutside Adequacy.emptyMem
       (.val (Val.inj₂ Val.unit)) :=

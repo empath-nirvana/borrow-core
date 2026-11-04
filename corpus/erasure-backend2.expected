@@ -82,14 +82,14 @@ clo-capture erased handles 0 performs 0 raises 0 left 0 0
 clo-coerce erased handles 0 performs 0 raises 0 left 0 0
 clo-counter erased handles 0 performs 0 raises 0 left 0 0
 clo-depth erased handles 0 performs 0 raises 0 left 0 0
-clo-drop erased handles 0 performs 0 raises 0 left 0 0
+clo-consume erased handles 0 performs 0 raises 0 left 0 0
 clo-higher erased handles 0 performs 0 raises 0 left 0 0
 clone-reuse erased handles 0 performs 0 raises 0 left 0 0
 comp-param erased handles 6 performs 0 raises 4 left 0 0
 core-callback-dead erased handles 0 performs 0 raises 0 left 0 0
 core-effects-borrow-abort erased handles 1 performs 0 raises 1 left 0 0
 core-effects-borrows erased handles 2 performs 0 raises 2 left 0 0
-core-effects-drop-glue erased handles 2 performs 0 raises 1 left 0 0
+core-effects-consume-glue erased handles 2 performs 0 raises 1 left 0 0
 core-effects-loop erased handles 1 performs 1 raises 0 left 0 0
 core-effects-reborrows erased handles 3 performs 0 raises 3 left 0 0
 core-effects-result erased handles 2 performs 0 raises 1 left 0 0
@@ -212,7 +212,7 @@ hygiene-handler-state erased handles 0 performs 0 raises 0 machines 1 suspends 1
 hygiene-local-fn erased handles 0 performs 0 raises 0 left 0 0
 imm-copy erased handles 0 performs 0 raises 0 left 0 0
 imm-copy-view erased handles 0 performs 0 raises 0 left 0 0
-implicit-drops erased handles 0 performs 0 raises 0 left 0 0
+implicit-consumes erased handles 0 performs 0 raises 0 left 0 0
 int-arith erased handles 0 performs 0 raises 0 left 0 0
 int-ops erased handles 0 performs 0 raises 0 left 0 0
 int-slash erased handles 0 performs 0 raises 0 left 0 0

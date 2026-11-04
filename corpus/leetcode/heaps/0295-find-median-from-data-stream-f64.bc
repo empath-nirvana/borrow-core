@@ -65,9 +65,9 @@ fn answers<'t>(l: text 't) -> buf (f64 + 1) =
     rest = r;
     let (w, c) = array_copy['t, u8] w;
     let (w, d) = array_copy['t, u8] w;
-    if len(c) == 0 { array_forget['t, u8](w); array_forget['t, u8](d) } else {
+    if len(c) == 0 { array_release['t, u8](w); array_release['t, u8](d) } else {
       if eq_lit(d, "?") {
-        array_forget['t, u8](w);
+        array_release['t, u8](w);
         let (m2, o) = find_median(m);
         m = m2;
         let (b, _) = push(out, o);
@@ -76,7 +76,7 @@ fn answers<'t>(l: text 't) -> buf (f64 + 1) =
     };
     if last { break } else { () }
   };
-  array_forget['t, u8](rest);
+  array_release['t, u8](rest);
   out
 
 -- The answers, separated by spaces, on a line; and how many there were.

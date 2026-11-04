@@ -473,8 +473,8 @@ theorem ext_add {ls ls' : List SRec} {α : Life} (h : AddAt ls ls' α) {ρ : WRe
     rw [e] at hx
     exact lt_irrefl _ (lt_trans hx (hb.of_stratum hρ))
 
-/-- Dropping records at `α` is `Ext` at a resource in `Res_α` none of whose relevant records
-is dropped (6.64's exit). -/
+/-- Consuming records at `α` is `Ext` at a resource in `Res_α` none of whose relevant records
+is consumed (6.64's exit). -/
 theorem ext_drop {ls ls' : List SRec} {α : Life} (h : AddAt ls ls' α) {ρ : WRes}
     (hρ : ρ.InStratum α) (hk : ∀ r ∈ rsOf ls', Rel r ρ → r ∈ rsOf ls) : Ext ls' ls ρ := by
   refine ⟨hk, fun b hb x hx => ⟨fun h' => ?_, h.1 x⟩⟩

@@ -11,7 +11,7 @@
 --
 -- Each start is one recursion, driven by `deep_fuel` so that the loop over the starts (a
 -- `count_fold`) can call it: total. A start that ran out would lose the cache (the driver's
--- residual drops the state); 100 000 observations is far more than any chain here needs.
+-- residual consumes the state); 100 000 observations is far more than any chain here needs.
 --
 -- Answer: (i32[27], i32[111]).
 

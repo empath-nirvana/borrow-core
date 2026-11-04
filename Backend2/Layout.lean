@@ -231,7 +231,7 @@ def joinRe (c v : Nat) : GM Unit := do
       | .ref a, .imm c | .mut a, .imm c | .imm a, .imm c => join a c
       | .fam a, .fam c => todo := (a, c) :: todo
       | .clos .., .unk | .opq, .unk => pure ()
-      -- `Tok`'s cell (`ofV`: `Ref 1`) read through `Imm̲`: forgotten, `Imm̲ 'b Tok = Unk`.
+      -- `Tok`'s cell (`ofV`: `Ref 1`) read through `Imm̲`: discarded, `Imm̲ 'b Tok = Unk`.
       | .ref _, .unk => pure ()
       | _, _ => join rx ry
   throw "layout: a reborrowed read too deep"
@@ -393,7 +393,7 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
     walk p f cc b₂ dst
   | .absurd _ => pure cc
   | .copy _ x x' b => do join (← nv x) (← nv x'); walk p f cc b dst
-  | .drop _ _ b | .abandon _ _ b => walk p f cc b dst
+  | .consume _ _ b | .abandon _ _ b => walk p f cc b dst
 
 -- UNPROVED: that the closure classes hold every code whose closure can reach each place. It
 -- should hold because `walk` joins the two sides of every move a closure makes: a binding, a
@@ -688,12 +688,12 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
         | none =>
           let fw (j c : Nat) : Nat := if boxed.contains (v, j) then 1 else width[c]!
           let ft (j c : Nat) : Bool := !boxed.contains (v, j) && trivial[c]!
-          -- Copying or dropping a cell, a borrow or a family is its words alone (`trivial`): an
-          -- owned `Ref` or array is never copied or dropped by `copy`/`drop` but inside a value
-          -- that owns nothing. `Lint` checks, on every program compiled, each `copy` and `drop`
-          -- against its rule's premise (`Lint.copiesAt`, `Lint.dropsAt`): a persistent type, an
+          -- Copying or consuming a cell, a borrow or a family is its words alone (`trivial`): an
+          -- owned `Ref` or array is never copied or consumed by `copy`/`consume` but inside a value
+          -- that owns nothing. `Lint` checks, on every program compiled, each `copy` and `consume`
+          -- against its rule's premise (`Lint.copiesAt`, `Lint.consumesAt`): a persistent type, an
           -- `imm` borrow or a family of them at a copy; a persistent type, one with no owned
-          -- cell, or a family of borrows at a drop, `!` read off the LIR type; a persistent value
+          -- cell, or a family of borrows at a consume, `!` read off the LIR type; a persistent value
           -- holds no resource (`vP_empty_of_persistent`), a `VTy.OwnFree` one no owned cell
           -- (`vC_noOwn_of_ownFree`), a family of borrows none.
           -- UNPROVED: that a variable's LIR type is the image of its node's checked type (by

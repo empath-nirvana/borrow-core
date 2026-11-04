@@ -14,7 +14,7 @@
 --
 -- Answer: the line `hi`, and (i32[7], i32[3]): the program's result, and its three writes. A
 -- handler that ran the continuation before the operation writes the bytes in reverse; one that
--- dropped the result gives 0 for the first component.
+-- consumed the result gives 0 for the first component.
 
 type Prog = mu X. i32 + (i32 * X)
 

@@ -10,10 +10,10 @@ BOXED-κ's (§28), so the clause is at its clause type (`handleWith_clause`, `cl
 `κ` at a must-resume operation is at `kTy`, a thunk of an `&`, bare or boxed; a view of either has
 the thunk head (`kviewO`).
 
-* **AT13** (`not_der_at13`): a clause that forgets `κ`.  `forget`'s axioms take `!`, `Imm`, `Mut`,
-  `Unk` and `ArrayImm`, and as a λ it drops its argument only at a persistent type
-  (`not_forget_kappa`).
-* **AT06** (`not_der_at06`): a clause that releases a cell the handled body also releases.  The
+* **AT13** (`not_der_at13`): a clause that discards `κ`.  `forget`'s axioms take `!`, `Imm`, `Mut`,
+  `Unk` and `ArrayImm`, and as a λ it consumes its argument only at a persistent type
+  (`not_release_kappa`).
+* **AT06** (`not_der_at06`): a clause that frees a cell the handled body also frees.  The
   clause is at a `!` type, so typed over a persistent context, and the cell's slot is at a view of a
   `Ref`.
 * **AT08** (`not_der_at08`): a continuation read twice out of a cell.  `alloc` stores a view of
@@ -63,7 +63,7 @@ macro "not_withPairH" : tactic => `(tactic| (intro M₁ M₂ h; simp [withPair, 
     bindE, hndTerm, hndExpr, Val.unit, Val.prim, Val.i32, Val.inj₁, Val.inj₂, Val.pair, fooE, dropB,
     BoCa.BoLo.performE, opArgE, handleWith, free', alloc'] at h))
 
-/-! ### A continuation is not forgotten -/
+/-! ### A continuation is not discarded -/
 
 /-- A type whose head is a thunk of an `&`: what `κ` is at `lin` and `cancel`. -/
 theorem kview {C₁ C₂ : CTy} {A : VTy} (h : VView (.thunk (.amp C₁ C₂)) A) :
@@ -93,9 +93,9 @@ theorem kview_not {C : CTy} {A : VTy} (h : Hnf A (.thunk C)) :
     have := h.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h) <;> cases this
 
 /-- **`forget κ` has no derivation at `1`** when `κ`'s slot is a thunk of an `&` (`kTy` at `lin` and
-`cancel`): `forget`'s axioms take `!`, `Imm`, `Mut`, `Unk` and `ArrayImm`, and as a λ it drops its
+`cancel`): `forget`'s axioms take `!`, `Imm`, `Mut`, `Unk` and `ArrayImm`, and as a λ it consumes its
 argument only at a persistent type. -/
-theorem not_forget_kappa {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy}
+theorem not_release_kappa {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy}
     (h : CDerives Δ Γ (.app forget (.var 0)) (.val .unit))
     (ob : Option Lifetime.Life)
     (hΓ : ∀ T, Γ[0]? = some ⟨T, true⟩ → T = kBoxO ob (.thunk (.amp C₁ C₂))) : False := by
@@ -274,7 +274,7 @@ constants are at `Imm`, `Mut`, `!` and `Unk`; discarding `κ` is an explicit can
 def at13 : Expr := handleWith 5 .lin at13Cl fooE
 
 /-- **AT13 has no derivation**: the clause's `κ` is at `kTy` at `lin` (the clause tuple is
-`[handle]`'s), and `forget κ` has no derivation there (`not_forget_kappa`). -/
+`[handle]`'s), and `forget κ` has no derivation there (`not_release_kappa`). -/
 theorem not_der_at13 {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives Δ Γ at13 j := by
   intro h
   obtain ⟨Γ₁, S₁, T₁, S, R, E, fs, ob, -, hP, hv, hE⟩ := handleWith_clause (cl := at13Cl) h
@@ -288,7 +288,7 @@ theorem not_der_at13 {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives Δ Γ
   subst hT
   obtain ⟨-, rfl⟩ := vview_tensor hc₆.val
   obtain ⟨Γ₇₁, Γ₇₂, C₇, hs₇, hF, -, -⟩ := der_seq hM₆ _ _ rfl
-  refine not_forget_kappa (C₁ := .arr B₀ (CTy.effOf S R)) (C₂ := .top) hF ob (fun T hT => ?_)
+  refine not_release_kappa (C₁ := .arr B₀ (CTy.effOf S R)) (C₂ := .top) hF ob (fun T hT => ?_)
   have := splitP_le_left hs₇ 0 T hT
   simp only [List.getElem?_cons_zero, Option.some.injEq, Slot.mk.injEq, and_true] at this
   exact this.symm
@@ -328,12 +328,12 @@ theorem vview_ref_bang {A X : VTy} (h : VView (.ref A) (.bang X)) : False := by
     (fun _ _ h => by cases h) (fun _ h => by cases h)
   cases this
 
-/-- AT06's clause: `λ(a, κ). drop (free c); κ.resume ()`, `c` the cell bound outside. -/
+/-- AT06's clause: `λ(a, κ). consume (free c); κ.resume ()`, `c` the cell bound outside. -/
 abbrev at06Cl : Expr :=
   .lam (.letpair (.var 0) (.seq (dropB (.app free' (.var 3)))
     (.app (.app (.var 0) (.val (.inj₁ .unit))) (.val .unit))))
 
-/-- AT06's handled body: `foo (); drop (free c)`. -/
+/-- AT06's handled body: `foo (); consume (free c)`. -/
 abbrev at06Body : Expr := bindE fooE (dropB (.app free' (.var 3)))
 
 /-- **AT06**: a clause that writes a place the suspended body uses.  The clause captures the cell

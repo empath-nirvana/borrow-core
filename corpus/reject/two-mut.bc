@@ -8,8 +8,8 @@ main : F 1 =
          (thunkv Fun 'x < top. return (thunkv fun (m : mut 'x B) ->
             p <- return (m, m);
             let (m1, m2) = p;
-            let () = forget_mut['x, B] m1;
-            let () = forget_mut['x, B] m2;
+            let () = release_mut['x, B] m1;
+            let () = release_mut['x, B] m2;
             return (boxed['x] ()))));
   let (r2, u) = q;
   let () = u;

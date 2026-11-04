@@ -1,8 +1,8 @@
--- An unused owned value with no destructor: the thunk `k : U (F (1 + 1))` can be disposed of
--- only by running it, so it is not dropped implicitly (SPEC §12) and must be consumed.
+-- An unused owned value that is not consumable: the thunk `k : U (F (1 + 1))` can be disposed of
+-- only by running it, so it is not consumed implicitly (SPEC §12) and must be consumed.
 type B = 1 + 1
 
 main : F 1 =
   k <- return (thunk (return (inl () : B)));
   return ()
--- expect: 6:3: `k` is not consumed in its scope, and its type `U (F (1 + 1))` is linear and has no derived drop
+-- expect: 6:3: `k` is not consumed in its scope, and its type `U (F (1 + 1))` is linear and is not consumable

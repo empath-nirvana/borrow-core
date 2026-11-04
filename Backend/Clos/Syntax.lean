@@ -14,7 +14,7 @@ The first intermediate language. It differs from the erased `Expr` in four ways:
   parameter.
 - **Ownership.** Every variable is consumed exactly once on every path. A variable the source
   uses more than once is duplicated by `copy` (a deep copy); a variable a path does not use is
-  consumed by `drop` (a deep free). Eliminations consume their operand: `letpair` frees the pair,
+  consumed by `consume` (a deep free). Eliminations consume their operand: `letpair` frees the pair,
   `case` the injection, a call the closure's environment.
 -/
 
@@ -69,15 +69,15 @@ inductive Op where
   | dataAddr (addr : Nat)
   /-- `load ℓ`: a copy of the cell's contents. -/
   | load
-  /-- `store ℓ v`: the old contents are dropped and `v` stored; the result is `()`. -/
+  /-- `store ℓ v`: the old contents are consumed and `v` stored; the result is `()`. -/
   | store
   /-- `swap ℓ v`: `(ℓ, old)`, the old contents moved out and `v` moved in. It is the axiom
   `swap ≜ λx.λy. let z = load x; store x y; (x, z)` ([TR] 3.24) with its copy of the old contents
-  and their drop cancelled; the contents may change type (`Ref A ⊸ B ⊸ Ref B ⊗ A`). -/
+  and their consume cancelled; the contents may change type (`Ref A ⊸ B ⊸ Ref B ⊗ A`). -/
   | swap
   /-- `swapSlot ℓ v`: `(ℓ, old)`, the old contents moved out and `v` moved in, at a location whose
   contents keep their type (an array's slot): `array_replace`'s `(λold. store ℓ v; old) (load ℓ)`
-  (`Core/Arrays.lean`, `swapCellE`) with its copy of the old contents and their drop cancelled,
+  (`Core/Arrays.lean`, `swapCellE`) with its copy of the old contents and their consume cancelled,
   as `swap`'s are. -/
   | swapSlot
   /-- A host operation of §8, applied to its (consumed) argument. -/
@@ -103,21 +103,21 @@ inductive Op where
   read-only data (`Prog.data`), or `0` when `i ≥ n`, unsigned. -/
   | litByte
   /-- `litTab (n, t)`: `tab (n, t)` of a literal's tabulator where the array is only read and
-  then dropped (`Convert.litView?`): the array is the literal's own bytes in the read-only data
+  then consumed (`Convert.litView?`): the array is the literal's own bytes in the read-only data
   when `t` is a literal's closure and `n` its length at most, and `tab`'s array otherwise. -/
   | litTab
   deriving Repr, DecidableEq
 
-/-- **The kernel rule an inserted `copy` or `drop` stands for.** This backend converts the erased
+/-- **The kernel rule an inserted `copy` or `consume` stands for.** This backend converts the erased
 term (`Backend/Driver.lean`), so it does not read the typed term's rule: it inserts each copy and
-drop from free indices and occurrences, and the licence names the rule the site relies on. No
+consume from free indices and occurrences, and the licence names the rule the site relies on. No
 licence is proved: each is `UNPROVED:`, its statement `Clos.LicenceSound` at it
 (`Backend/Driver.lean`: `Clos.WordSound`, …). `scripts/PinSites.lean` checks that every licence
 names its statement and that each site builds nodes only at the licences its entry lists; it
 checks no licence against the program. -/
 inductive Licence where
   /-- The backend's own value of an unrestricted type (a unit, a tag, an index, a byte list):
-  `Ctx.DeadP.drop`, `Ctx.SplitP.dup`. -/
+  `Ctx.DeadP.weaken`, `Ctx.SplitP.dup`. -/
   | word
   /-- A handler's answer clause or clause tuple: `!` (`clausesTy_persistent`), weakened or
   duplicated. -/
@@ -125,7 +125,7 @@ inductive Licence where
   /-- The erased body of a kernel constant, which consumes what its rule's type does
   (`swapSlot` is `swap`'s). -/
   | const
-  /-- A raise's payload superseded by a finaliser's: `CDerives.effRaise`'s `hd : o.A.Drop`. -/
+  /-- A raise's payload superseded by a finaliser's: `CDerives.effRaise`'s `hd : o.A.Consume`. -/
   | payload
   /-- A variable free in two sequential parts (`plan2`), copied for the first: `Ctx.SplitP.dup`, a
   `copy` constant, or an axiom's erased body. `UNPROVED:` rebuilt from free indices; the typed
@@ -135,9 +135,9 @@ inductive Licence where
   unused extern). `UNPROVED:` `Check.UnmentionedAbsorbed`. -/
   | unused
   /-- A level's live variables at a raise or a cancel, a finaliser frame's closure on its normal
-  end. `UNPROVED:` `effLet`'s `hW` (`Ctx.Drops`) and the cancel's premises are not read. -/
+  end. `UNPROVED:` `effLet`'s `hW` (`Ctx.Consumes`) and the cancel's premises are not read. -/
   | abort
-  /-- A continuation dropped where its resume is the tail call (`dropResume`). `UNPROVED:` the
+  /-- A continuation consumed where its resume is the tail call (`consumeResume`). `UNPROVED:` the
   operation's qualifier is not read; only an `unr` continuation is unrestricted (`kTy_unr`). -/
   | kappa
   /-- A step closure copied for the next step (`bounded_fix`). `UNPROVED:` the step is `!`. -/
@@ -163,7 +163,7 @@ inductive Tm where
   /-- `x'` is a deep copy of `x`, by the licence `l`; `x` stays owned. -/
   | copy (l : Licence) (x x' : Var) (body : Tm)
   /-- `x` is deep-freed, by the licence `l`. -/
-  | drop (l : Licence) (x : Var) (body : Tm)
+  | consume (l : Licence) (x : Var) (body : Tm)
   /-- `raise p`: the abortive operation of spec §19, `p = (n, (i, v))`. `Unwind` lowers it. -/
   | raise (p : Var)
   /-- `hnd n (hr, cls) body`: a handler of the name `n` (§19), `hr` its answer clause and `cls`
@@ -188,8 +188,8 @@ inductive Tm where
   `n`; a raise of another name passes on. `Unwind` lowers it. -/
   | catch (n : UInt32) (body : Tm)
   /-- `fin poll dd body`: `body`; when it unwinds, the finaliser `dd` on `()`, then the raise
-  again. When it returns, `dd` is dropped; with `poll`, `body` answers a suspension's outcome
-  (`Capture`), and `dd` is dropped only at its `inl`, since a suspension has moved `dd` into its
+  again. When it returns, `dd` is consumed; with `poll`, `body` answers a suspension's outcome
+  (`Capture`), and `dd` is consumed only at its `inl`, since a suspension has moved `dd` into its
   state. `Unwind` lowers it. -/
   | fin (poll : Bool) (dd : Var) (body : Tm)
   /-- `catchAll body`: `inl v` when `body` returns `v`, `inr p` when it raises `p` of any name.

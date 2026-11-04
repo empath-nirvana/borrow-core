@@ -58,7 +58,7 @@ structure St where
   /-- The program's read-only data, from `dataBase`. -/
   data : Array UInt8 := #[]
   /-- The cells freed so far. A location is a word that may be copied, so a location to a freed
-  cell may still be held, and dropped or copied; any other address that is not live is a fault. -/
+  cell may still be held, and consumed or copied; any other address that is not live is a fault. -/
   freedCells : Std.HashSet Nat := {}
 
 abbrev IM := StateT St (Except String)
@@ -123,7 +123,7 @@ def deepCopy : Nat → CV → IM CV
     | _ => pure v
 
 /-- Deep free: structure is freed, cells are not. -/
-def deepDrop : Nat → CV → IM Unit
+def deepConsume : Nat → CV → IM Unit
   | 0, _ => throw "closure IR: out of fuel"
   | n + 1, v => do
     match v with
@@ -131,9 +131,9 @@ def deepDrop : Nat → CV → IM Unit
     | .ptr a =>
       if ← freedCell a then return
       match ← getObj a with
-      | .pair x y => do deepDrop n x; deepDrop n y; freeObj a
-      | .inj _ x | .con _ x => do deepDrop n x; freeObj a
-      | .clos _ xs => do xs.forM (deepDrop n); freeObj a
+      | .pair x y => do deepConsume n x; deepConsume n y; freeObj a
+      | .inj _ x | .con _ x => do deepConsume n x; freeObj a
+      | .clos _ xs => do xs.forM (deepConsume n); freeObj a
       | .i64 _ | .f64 _ => freeObj a
       | .cell _ => pure ()
     | _ => pure ()
@@ -203,7 +203,7 @@ def applyOp : Op → List CV → IM CV
   | .load, [l] => do let (_, c) ← cellOf l; deepCopy objFuel c
   | .store, [l, v] => do
       let (a, c) ← cellOf l
-      deepDrop objFuel c
+      deepConsume objFuel c
       setObj a (.cell v)
       pure .unit
   | .swap, [l, v] | .swapSlot, [l, v] => do
@@ -212,7 +212,7 @@ def applyOp : Op → List CV → IM CV
       allocObj (.pair l c)
   | .host op, [v] => do
       let sv ← toSource objFuel v
-      deepDrop objFuel v
+      deepConsume objFuel v
       match closHost.call op sv with
       | some r => ofSource r.1
       | none => throw "closure IR: host operation stuck"
@@ -373,7 +373,7 @@ def dropFill (codes : Array Code) : Nat → CV → Nat → Nat → Nat → IM Un
     freeCell (a + i)
     let fc ← deepCopy objFuel f
     let r ← callClos codes n fc c
-    deepDrop objFuel r
+    deepConsume objFuel r
     dropFill codes n f a (i + 1) k
 
 /-- Evaluate `t` in the frame `env`: its value and what is left of the frame. -/
@@ -406,7 +406,7 @@ def eval (codes : Array Code) : Nat → Env → Tm → IM (CV × Env)
         let base := (← get).next
         for _ in List.range (arrSlots len) do discard (allocObj (.cell .unit))
         tabFill codes n f base 0 len
-        deepDrop objFuel f
+        deepConsume objFuel f
         pure (← allocObj (.pair (.ptr base) (.i32 (arrLen c))), env)
     | .prim .count [x] => do
         let (v, env) ← take env x
@@ -416,7 +416,7 @@ def eval (codes : Array Code) : Nat → Env → Tm → IM (CV × Env)
         let .i32 len := len | throw "closure IR: count of a non-length"
         let .i32 i := i | throw "closure IR: count from a non-index"
         let s ← countLoop codes n f len i s
-        deepDrop objFuel f
+        deepConsume objFuel f
         pure (s, env)
     | .prim .countTry [x] => do
         let (v, env) ← take env x
@@ -426,16 +426,16 @@ def eval (codes : Array Code) : Nat → Env → Tm → IM (CV × Env)
         let .i32 len := len | throw "closure IR: count_try of a non-length"
         let .i32 i := i | throw "closure IR: count_try from a non-index"
         let s ← countTryLoop codes n f len i s
-        deepDrop objFuel f
+        deepConsume objFuel f
         pure (s, env)
     | .prim .drop [x] => do
         let (v, env) ← take env x
         let (f, arr) ← unpair v
         let (base, len) ← unpair arr
-        let .ptr a := base | throw "closure IR: drop of a non-array"
-        let .i32 len := len | throw "closure IR: drop of a non-array"
+        let .ptr a := base | throw "closure IR: consume of a non-array"
+        let .i32 len := len | throw "closure IR: consume of a non-array"
         dropFill codes n f a 0 len.toNat
-        deepDrop objFuel f
+        deepConsume objFuel f
         -- `tab` at length 0 places one cell, which this frees; the empty family `(0, 0)`
         -- (`array_empty`) holds none.
         if len.toNat = 0 && a ≠ 0 then freeCell a
@@ -471,9 +471,9 @@ def eval (codes : Array Code) : Nat → Env → Tm → IM (CV × Env)
         let some v := env.lookup x | throw s!"closure IR: copy of consumed variable {x}"
         let v' ← deepCopy objFuel v
         eval codes n ((x', v') :: env) b
-    | .drop _ x b => do
+    | .consume _ x b => do
         let (v, env) ← take env x
-        deepDrop objFuel v
+        deepConsume objFuel v
         eval codes n env b
     | .con t _ a => do
         let (va, env) ← take env a
@@ -534,7 +534,7 @@ def drive (codes : Array Code) : Nat → CV → IM CV
     | _ => throw "closure IR: a loop's `next` answered no injection"
 
 /-- Run `main` on the standard input `input` (driving it if it returns a loop), print its value,
-drop it, and count the objects left. -/
+consume it, and count the objects left. -/
 def interp (fuel : Nat) (p : Prog) (input : List UInt8) (args : List UInt8 := []) :
     Except String Output := do
   let act : IM (String × UInt32) := do
@@ -542,7 +542,7 @@ def interp (fuel : Nat) (p : Prog) (input : List UInt8) (args : List UInt8 := []
     if !rest.isEmpty then throw "closure IR: main leaves variables unconsumed"
     let v ← if p.drives then drive p.codes fuel v else pure v
     let pv ← observe objFuel v
-    deepDrop objFuel v
+    deepConsume objFuel v
     pure (reportExit p.exits pv (← get).heap.size)
   let s₀ : St := { heap := {}, next := 1, input, args, out := .empty, err := .empty,
                        data := p.data }

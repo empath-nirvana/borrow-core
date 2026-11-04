@@ -1,7 +1,7 @@
 -- AWFY Storage: a tree of arrays built recursively (depth 7, four children a level, a leaf an
 -- array of 1..10 elements sized by AWFY's Random); counts the arrays made, 5461.
 -- A node owns an array of its children: `mu X. array i32 + array X`, `X` under `array` in the fold
--- class `P` (SPEC §6). The tree is dropped by its derived destructor (SPEC §12): each node's
+-- class `P` (SPEC §6). The tree is consumed implicitly (SPEC §12): each node's
 -- children, then its array's buffer, at once. 5461 allocations, Rust's count for the same tree
 -- (`docs/expressiveness-probes/zero-cost/awfybg/rs/src/bin/storage.rs`).
 --

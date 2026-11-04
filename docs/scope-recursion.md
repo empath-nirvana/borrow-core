@@ -265,8 +265,8 @@ to `cC_{X↦R} B`. The map lemma is the polytypic lemma that fold (§2.6) needs 
 
 ### 3.4 `close` and leak freedom
 
-A `U C` cannot be dropped: `forget` exists at `!`, `Imm`, `Mut` and `Unk` only
-(`Fundamental.lean:107-126`; `Forgettable`, `experiments/Records/Records/Encoding.lean:228`). A
+A `U C` cannot be consumed: `forget` exists at `!`, `Imm`, `Mut` and `Unk` only
+(`Fundamental.lean:107-126`; `Releasable`, `experiments/Records/Records/Encoding.lean:228`). A
 stream observed only by `next : F(A ⊗ U X)` always hands back a new `U X`, so a closed `F 1`
 program cannot end while holding one. So **`close` is necessary for linear codata in
 terminating programs at all, not only for leak freedom**. **[read / expected]**
@@ -274,7 +274,7 @@ terminating programs at all, not only for leak freedom**. **[read / expected]**
 With `B = F(A ⊗ U X) & F 1`, the step's `close` branch consumes the state (for example,
 `free`), and a program that runs `take n` and then `close` is an ordinary closed `F 1`
 program. `adequacyC` (`Fundamental.lean:270`) then gives it an empty final memory, unchanged.
-A stream whose state is `!` can be promoted over `!Γ` and forgotten.
+A stream whose state is `!` can be promoted over `!Γ` and discarded.
 
 ### 3.5 Lifetime-indexed codata (`IterMut<'a>`)
 
@@ -306,7 +306,7 @@ through `VOutlives.mut`. After that, the `[@d]`-boxed iterator crosses scopes as
   - `bind` is coiteration with state `(U(D A) ⊗ U(A ⊸ D B)) ⊕ U(D B)`. The continuation is
     carried in the state, so the step is `!`. **[expected]**
   - With the cancellable `D`, `close` of a `bind` must dispose of `k : U(A ⊸ D B)`, which has
-    no derived drop. So continuations either are `!` or carry their own `& F 1`. This is a real
+    no consume. So continuations either are `!` or carry their own `& F 1`. This is a real
     design choice. It is not settled here.
 - **Loops.** `iterD : !U(S ⊸ F(A ⊕ S)) ⊸ S ⊸ U(D A)` is coiteration directly. For the
   cancellable `D`, it also takes a finalizer `!U(S ⊸ F 1)`.
@@ -396,7 +396,7 @@ written out by hand. `listRel` is Knaster–Tarski's least fixed point over `vC`
 3. `take2_close_runs`: `alloc`, `unfold`, `next`, `next`, `close`. It runs from empty memory
    to `()` with empty memory. This is the linear `close`.
 4. **Negative check.** A version without `close` cannot be typed at `F 1`. The claim is only
-   that no `CDerives` rule forgets a `U C` (`Fundamental.lean:107-126`), which can be checked
+   that no `CDerives` rule discards a `U C` (`Fundamental.lean:107-126`), which can be checked
    by listing the rules.
 
 **Probe P-Imm̲** (pure syntax, no model). Take a small `VTy` extension with `μ`/`tvar`.

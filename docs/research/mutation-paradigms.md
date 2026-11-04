@@ -136,7 +136,7 @@ There are seven parts, D1–D7, and one invariant. Spellings are provisional thr
   - On an owned array, `array_replace` (in place, because handles are never persistent; SPEC §9).
   - On a record field through `mut`, `swapField` (Core/Records.lean, per the critic) rather than a whole-record `modify`.
   - The right-hand side is computed **before** the swap, because `withswap` has no unwinding form (SPEC §19). That is an ANF obligation on the elaborator.
-- **Laws.** The lens laws hold only in range and for persistent elements. `array_replace` past the end answers `inr x` and changes nothing. Put-put on a linear element must run its destructor.
+- **Laws.** The lens laws hold only in range and for persistent elements. `array_replace` past the end answers `inr x` and changes nothing. Put-put on a linear element must run its drop.
 - **Not built.**
   - An index read of an owned array: there is no kernel read, and `at(&a, i, d)` is a lend per read.
   - A direct read through a `mut` view: `peek` is two `slice_replace_mut` calls.

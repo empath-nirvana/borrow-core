@@ -5,11 +5,11 @@
 -- once writes `>0`.
 --
 -- Blocked by the kernel, as `pending/gen-digits.bc` is: `ticks` holds the output capability
--- (no destructor, §12) across `yield`, whose continuation may be cancelled; and a stored
+-- (no consume, §12) across `yield`, whose continuation may be cancelled; and a stored
 -- generator's `close` cancels the continuation, which answers `()`, so the capability could not
 -- come back.
 --
--- now: 22:5: `o`, of type `ref output`, is live across an operation that may be cancelled: the cancel runs a finaliser (`[then]`) that consumes it by its derived drop, and its type is linear with no derived drop
+-- now: 22:5: `o`, of type `ref output`, is live across an operation that may be cancelled: the cancel runs a finaliser (`[then]`) that consumes it by its consume, and its type is linear and not consumable
 
 include yield
 

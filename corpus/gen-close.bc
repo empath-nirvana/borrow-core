@@ -1,7 +1,7 @@
 -- Closing a stored generator early frees its state. `elems` owns a list and yields its elements;
 -- its state between observations is the rest of the list. `take(2, …)` stops after two elements
--- and closes it: `close` drops the state, so the two nodes still in it are freed by the list's
--- destructor (SPEC §12) and nothing is left live. The `break` arm does not name `l`: nothing after
+-- and closes it: `close` consumes the state, so the two nodes still in it are freed by the list's
+-- consume (SPEC §12) and nothing is left live. The `break` arm does not name `l`: nothing after
 -- the loop reads it, so the loop does not hand it on, and the list `unroll` took apart is not
 -- copied (`copies 0`).
 --

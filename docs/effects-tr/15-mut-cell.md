@@ -3,7 +3,7 @@
 [← §12 Sources and novelty](12-sources.md) · [index](README.md) · next: [§16 Does the chain bottom out?](16-regress.md)
 
 Issue #251. This section attempts the central lemma of #245's brief head on: a `Mut` cell whose
-witness holds a suspended continuation, closed under resume and drop. It works in BoLo's real
+witness holds a suspended continuation, closed under resume and consume. It works in BoLo's real
 setting, the **kernel lift**: the full carrier `Res` with `imm` and `mut` cells and lifetimes,
 borrow-core's typed world (record lists `ls`, `Ext`, `Tagged`), and SPEC §19's `ewpTS` with
 protocol tables. That is §9.3's setting, not the own-fragment of §§4–5 (L4.1 is not used here).
@@ -16,7 +16,7 @@ is marked open, with its exact statement.
 
 1. **The lemma holds** (T14.5) for every continuation in the kernel's relation that is
    *rebased*: its resource is in `Res_c`, the stratum strictly above `'c`. Resume is `d_callMut`.
-   Drop is `close`, which runs the continuation's cancel, and that cancel disposes of every owned
+   Consume is `close`, which runs the continuation's cancel, and that cancel disposes of every owned
    cell exactly once. The one new proof is a coinduction (T14.4). It shows that the kernel's
    continuation value `kappa n H K`, under a handler whose `yield` clause returns it, is a closure
    `Clo^c` (§22). Every other step is an existing lemma.
@@ -142,15 +142,15 @@ At the empty table `ewpTS` is `wpTS` (`cC_effOf` at the empty row, through `ewp_
 The definition fixes no internal lifetime, and the world records none (the brief's "don't track
 suspended lifetimes in the world", #245).
 
-**Definition D14.6 (resume and drop).**
+**Definition D14.6 (resume and consume).**
 
 - **Resume** is `callMutE i j` (`d_callMut`, `Core/CloRules.lean`):
   1. `withswap` the witness out ([TR] 6.66 in the proof of `withswap_compatX`, `wpTS_M_antiFrameX`);
   2. call it at `a` (`κ (inj₁ ()) a`), which resumes `K` under `H_gen` up to the next `yield` or
      the end of the body;
   3. swap the rest in.
-- **Drop** is `close`: `κ (inj₂ ())`, which is cancel. It is reached as the destructor of the cell's
-  content (`hasDtor_clo`, `hasDtor_cloBox`; SPEC §12 group 2) or by `d_closeBox`.
+- **Consume** is `close`: `κ (inj₂ ())`, which is cancel. It is reached as the consume of the cell's
+  content (`consumable_clo`, `consumable_cloBox`; SPEC §12 group 2) or by `d_closeBox`.
 
 ## 14.2 Rebasing is forced by `↭`
 
@@ -254,11 +254,11 @@ rebased continuation (D14.5) under (H1) and (H4). Then:
      resumer's list (D14.5).
    - The new suspension is re-rebased by L14.2.
    - The cell is swapped back by `withswap`.
-2. **Drop.** Dropping the content runs `close`. The run ends at `()` with nothing owned left. Each
+2. **Consume.** Consuming the content runs `close`. The run ends at `()` with nothing owned left. Each
    owned cell of the witness `ρ̄` is disposed of by that run exactly once, in one of two ways:
    - it is freed;
    - it is stored into the payload of an external borrow that `ρ̄` held. Its lender then owns it,
-     and the borrow is forgotten by [TR] 6.148.
+     and the borrow is released by [TR] 6.148.
 
 *Proof.*
 
@@ -269,7 +269,7 @@ rebased continuation (D14.5) under (H1) and (H4). Then:
    and the `[]I` of the rest. The rest is the call clause's `[@c] U X` at T14.4's candidate `R`.
    - At a `yield` it is in `R_κ`: a rebased continuation.
    - At the body's end it is `done`.
-2. **Drop.** `close` is T14.4's close clause: a `wpTS` run with postcondition `⌜v = ()⌝`. So its
+2. **Consume.** `close` is T14.4's close clause: a `wpTS` run with postcondition `⌜v = ()⌝`. So its
    final resource is `∅`, and its leftover `ρ⁺` has `ρ⁺|own = ∅` (`wpG`).
    - The run starts from `ρ̄` and ends owning nothing. `↭` constrains only borrow cells, so each
      `ℓ ↦ own(_)` of `ρ̄` is either freed or moved into the witness of a `mut` cell that `↭` keeps.
@@ -278,7 +278,7 @@ rebased continuation (D14.5) under (H1) and (H4). Then:
      never gets stuck (`wpG`), so no location is freed twice. None is left in `ρ⁺` as `own`.
    - The cancel run itself is `ewp_kappa_cancel` then `ewp_ccatch`. It unwinds `K`'s frames
      innermost first, running their finalisers (SPEC §19 [finalise-cancel]).
-   - The content is consumed by `close`. `not_persistent_affBox` and `not_forgettable_clo` leave no
+   - The content is consumed by `close`. `not_persistent_affBox` and `not_releasable_clo` leave no
      copy that could be resumed or cancelled again. ∎
 
 T14.5 is the lemma #251 states. Every step is an existing lemma except two things written here:
@@ -464,7 +464,7 @@ covers the lend only. A view or closure derived from it cannot survive the `yiel
 (B_y ⊕ 1)))`.
 
 - `next` is `d_callMut`.
-- Dropping it is `close`, which finalises once (T14.5).
+- Consuming it is `close`, which finalises once (T14.5).
 - A finished generator is `done`.
 - This holds for every body with no spanning lend (T14.6).
 
@@ -478,7 +478,7 @@ covers the lend only. A view or closure derived from it cannot survive the `yiel
 
 **C14.5 (task queues).** A queue is a family of cells of `[@c] U(Clo^c A B)`. Polling a task is
 `d_callMut` on its cell (C14.1: the scheduler may hold lends while it polls). A finished task is
-dropped by `close`. Tasks are disjoint because their witnesses are separate owned resources
+consumed by `close`. Tasks are disjoint because their witnesses are separate owned resources
 (6.41). Tasks whose bodies have no spanning lend are covered.
 
 **C14.6 (handler state).** Consider a parameterised handler whose state cell stores a continuation.
@@ -494,7 +494,7 @@ other suspension.
 | L14.2 | re-rebasing | [TR] 6.147 at the typed world, mechanised (`wpTS_box`) |
 | L14.3 | the generator handler | proved here, an instance of `ewp_handle` |
 | T14.4 | a rebased continuation is a bounded `Clo` closure | proved here, by `clo_coind` |
-| **T14.5** | **the `Mut`-cell lemma: resume and drop** | **proved here** |
+| **T14.5** | **the `Mut`-cell lemma: resume and consume** | **proved here** |
 | T14.6 | production without a spanning lend | proved here, from `fundamentalC` |
 | D14.7 | the rule `[gen]` | candidate; its compatibility is T14.6 + T14.4; needs a SPEC entry |
 | L14.9 | T15 excluded | proved here |
@@ -511,7 +511,7 @@ other suspension.
 Everything else is cited by name: `cC_clo_iff`, `clo_coind`, `nuF_mono`, `nuRel_out`,
 `KapRel`, `ewp_kappa_resume`, `ewp_kappa_cancel`, `ewp_ccatch`, `cC_effOf`, `wpTS_box`,
 `updV_outlives`, `outlives_comp`, `vC_outlives`, `d_callMut`, `withswap_compatX`,
-`hasDtor_cloBox`, `not_persistent_affBox`, `fundamentalC`. No `CDerives` index is added. D14.7
+`consumable_cloBox`, `not_persistent_affBox`, `fundamentalC`. No `CDerives` index is added. D14.7
 is one rule.
 
 **Hypotheses, and where each is spent.**

@@ -37,10 +37,10 @@ def callOfVars? : Tm → Option (Var × Var)
   | _ => none
 
 /-- What an arm of a `sel` code applies to its projection: `let a = inl ()/inr (); let h = H; h a`
-after the arm's binder is dropped. `H` is a variable (`.inl`) or a call of two (`.inr`). -/
+after the arm's binder is consumed. `H` is a variable (`.inl`) or a call of two (`.inr`). -/
 def armHead? (bound : Var) : Tm → Option (Var ⊕ (Var × Var))
-  | .drop _ x b => if x == bound then armHead? bound b else none
-  | .letv t (.var x) (.drop _ t' b) =>
+  | .consume _ x b => if x == bound then armHead? bound b else none
+  | .letv t (.var x) (.consume _ t' b) =>
     if x == bound && t == t' then armHead? bound b else none
   | .letv a _ (.letv h H (.app h' a')) =>
     if h != h' || a != a' then none else
@@ -95,7 +95,7 @@ def collapse? (codes : Array Code) (flow : Std.HashMap Var (Array Nat)) (c : Cod
 where
   /-- The function variable of the arm's inner call `y x`. -/
   findCall : Tm → Option Var
-    | .drop _ _ b | .letv _ (.var _) (.drop _ _ b) | .letv _ (.var _) b => findCall b
+    | .consume _ _ b | .letv _ (.var _) (.consume _ _ b) | .letv _ (.var _) b => findCall b
     | .letv _ _ (.letv _ H _) => match H with
       | .letv _ (.var _) (.letv y (.var _) (.app _ _)) => some y
       | .app f _ => some f
@@ -114,7 +114,7 @@ def Tm.collapse (cs : Std.HashMap Nat Collapse) : Tm → Tm
   | .case s x b₁ y b₂ => .case s x (b₁.collapse cs) y (b₂.collapse cs)
   | .when s k n x b r => .when s k n x (b.collapse cs) (r.collapse cs)
   | .copy l x x' b => .copy l x x' (b.collapse cs)
-  | .drop l x b => .drop l x (b.collapse cs)
+  | .consume l x b => .consume l x (b.collapse cs)
   | t => t
 
 /-! ### Equal codes
@@ -146,7 +146,7 @@ def Tm.canon : Tm → RM Tm
   | .when s k n x b r => return .when (← rn s) k n (← rn x) (← b.canon) (← r.canon)
   | .absurd s => return .absurd (← rn s)
   | .copy l x x' b => return .copy l (← rn x) (← rn x') (← b.canon)
-  | .drop l x b => return .drop l (← rn x) (← b.canon)
+  | .consume l x b => return .consume l (← rn x) (← b.canon)
   | t => pure t
 
 /-- A term as a string that determines it (a key for `mergeCodes`), built directly: the derived
@@ -164,7 +164,7 @@ def Tm.keyStr : Tm → String
   | .letpair x y p b => s!"P({x},{y},{p},{b.keyStr})"
   | .case s x b₁ y b₂ => s!"C({s},{x},{b₁.keyStr},{y},{b₂.keyStr})"
   | .copy _ x x' b => s!"K({x},{x'},{b.keyStr})"
-  | .drop _ x b => s!"D({x},{b.keyStr})"
+  | .consume _ x b => s!"D({x},{b.keyStr})"
   | .raise p => s!"R({p})"
   | .hnd n hr cls b => s!"H({n},{hr},{cls},{b.keyStr})"
   | .ubind nn dd b => s!"U({nn},{dd},{b.keyStr})"
@@ -195,7 +195,7 @@ def Tm.renameCodes (f : Nat → Nat) : Tm → Tm
   | .case s x b₁ y b₂ => .case s x (b₁.renameCodes f) y (b₂.renameCodes f)
   | .when s k n x b r => .when s k n x (b.renameCodes f) (r.renameCodes f)
   | .copy l x x' b => .copy l x x' (b.renameCodes f)
-  | .drop l x b => .drop l x (b.renameCodes f)
+  | .consume l x b => .consume l x (b.renameCodes f)
   | t => t
 
 /-- Merge equal codes of the same layout type, with captured values of the same layout types,

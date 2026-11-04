@@ -1,7 +1,7 @@
 -- A field read through a borrow of a declared value (SPEC §42, *Declared types with no derived
--- drop*): `peek` reads `t.id` through `imm 'a Txn` (E5, `withload` around the projection of its
+-- consume*): `peek` reads `t.id` through `imm 'a Txn` (E5, `withload` around the projection of its
 -- view), and the view of the marked field, `Imm̲ 'b (i32 ⊗ Tok) = i32 ⊗ Unk`, is not used. The
--- checker consumes that part by its derived drop (`HasDtor.unk`, `drop_derives`) at the head of
+-- checker consumes that part by its consume (`Consumable.unk`, `consumeSlot_derives`) at the head of
 -- its scope, since a slot of `Unk` cannot stay live under `boxed[@a]`, whose context must outlive
 -- `@a` (`[]I`). The borrow ends, the transaction is not consumed, and `commit` consumes it after.
 --

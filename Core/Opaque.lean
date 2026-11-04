@@ -16,7 +16,7 @@ modes (`Relation.lean`).
 * `Output`: `(fd, bs)`, the stream `fd` and the bytes written to it, most recent first.
 * `Clock`: `t`, the time in nanoseconds (SPEC §34).
 * `Args`: the arguments not yet read, a byte list, each argument followed by `0` (SPEC §34).
-* `Tok`: the token of a declared type with no derived drop (SPEC §11, §12, §42). It is not a host
+* `Tok`: the token of a declared type that is not consumable (SPEC §11, §12, §42). It is not a host
   type: its value is a location owning a unit cell, allocated by `mint` and freed by `burn`, the
   capture cell's pattern (SPEC §25). Its model is `Ref 1`'s (`Opaque.rel`).
 
@@ -40,7 +40,7 @@ inductive Opaque where
   | clock
   /-- `Args`: the content of the arguments' cell, the arguments not yet read (SPEC §34). -/
   | args
-  /-- `Tok`: the token of a declared type with no derived drop, a location owning a unit cell.
+  /-- `Tok`: the token of a declared type that is not consumable, a location owning a unit cell.
   `[spec §11, §12, §42]` -/
   | tok
   deriving DecidableEq, Repr

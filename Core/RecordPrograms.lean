@@ -53,8 +53,8 @@ theorem d1_ok : D1.Ok := by decide
                    let c = withload x₂ (Λ. λr. let v = r.cell in
                              let w = withload v (Λ. λz. z) in w);
                    (f, c));
-    let (f, c) = p; drop f; drop c;
-    let {flag, cell} = free r; drop flag; drop (free cell)
+    let (f, c) = p; consume f; consume c;
+    let {flag, cell} = free r; consume flag; consume (free cell)
 
 Each `withload` runs at a fresh `'b ⊏ 'a`, and its callback receives
 `Imm̲ 'b {flag : 1 ⊕ 1, cell : Ref (1 ⊕ 1)} = {flag : 1 ⊕ 1, cell : Imm 'b (1 ⊕ 1)}`: the
@@ -75,7 +75,7 @@ def readBody : Expr :=
 
 def readBorrower : Expr := .val (.lam (.val (.lam readBody)))
 
-/-- `let {flag, cell} = free r; drop flag; drop (free cell)`, with `r` at index `i`. -/
+/-- `let {flag, cell} = free r; consume flag; consume (free cell)`, with `r` at index `i`. -/
 def freePt (i : Nat) : Expr :=
   recLet Pt (.app free' (.var i)) (.seq (dropB (.var 0)) (dropB (.app free' (.var 1))))
 
@@ -164,8 +164,8 @@ theorem readFieldsObs_eval :
 
     let (r, u) = withbor (alloc {flag = inj₂ (), cell = alloc (inj₁ ())}) (Λ. λm.
                    let (m₁, u₁) = swapField m flag flip;  u₁;
-                   let (m₂, u₂) = swapField m₁ cell poke; u₂; forget m₂; ());
-    u; let {flag, cell} = free r; drop flag; drop (free cell)
+                   let (m₂, u₂) = swapField m₁ cell poke; u₂; release m₂; ());
+    u; let {flag, cell} = free r; consume flag; consume (free cell)
 
 `withswap` moves the whole record out of its cell, the callback rebuilds it with one field
 changed, and `withswap` stores it back.  The boxed `cell` is written through a `Mut 'c` of its
@@ -174,7 +174,7 @@ own cell, taken by `withbor` on the `Ref` the callback holds (`pokeG`). -/
 /-- `λb. (case b {x ⇒ inj₂ x, y ⇒ inj₁ y}, ())`. -/
 def flipG : Expr := .val (.lam (.pair (.case (.var 0) (.inj₂ (.var 0)) (.inj₁ (.var 0))) unit'))
 
-/-- `λb. (inj₂ (), drop b)`. -/
+/-- `λb. (inj₂ (), consume b)`. -/
 def setG : Expr := .val (.lam (.pair (.inj₂ unit') (dropB (.var 0))))
 
 /-- `λc. withbor c (Λ. λm. let (m′, u) = withswap m setG; u; forget m′; ())`. -/
@@ -199,7 +199,7 @@ theorem d_pokeG {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
         letW (A := .mut (.var 1) BB) (B := .unit)
           (appW (d_setG (by cdead)) (appW (.var (by csolo)) (.withswap (by cdead)))) <|
         seqW (.var (by csolo)) <|
-        seqW (appW (.var (by csolo)) (.forgetMut (by cdead)))
+        seqW (appW (.var (by csolo)) (.releaseMut (by cdead)))
           (.boxI (.unitI (by cdead)) ⟨LifeCtx.defines_of_wf rfl, dead_noLive (by cdead)⟩))
       (appW (.var (by csolo))
         (.withbor2 (A := BB) (B := .unit) 1 (by cdead) rfl
@@ -232,7 +232,7 @@ theorem d_mutBorrower :
     letW (A := .mut (.var 0) Pt.valTy) (B := .unit)
       (swapField_wf (.var (by csolo)) rfl (fun h => d_pokeG h)) <|
     seqW (.var (by csolo)) <|
-    seqW (appW (.var (by csolo)) (.forgetMut (by cdead)))
+    seqW (appW (.var (by csolo)) (.releaseMut (by cdead)))
       (.boxI (.unitI (by cdead)) ⟨LifeCtx.defines_of_wf rfl, dead_noLive (by cdead)⟩)
 
 theorem d_mutFields : CDerives LifeCtx.empty [] mutFields (.val .unit) :=
@@ -265,7 +265,7 @@ theorem mutFieldsObs_eval :
                    let w = withload x (Λ. λv. case v {
                              some c ⇒ let w = withload c (Λ. λz. z) in w,
                              none u ⇒ u; inj₁ () }) in w);
-    drop o; case (free r) {some c ⇒ drop (free c), none u ⇒ u}
+    consume o; case (free r) {some c ⇒ consume (free c), none u ⇒ u}
 
 `⟨some : Ref (1 ⊕ 1) | none : 1⟩` loaded at `'b` is `⟨some : Imm 'b (1 ⊕ 1) | none : 1⟩`. -/
 
@@ -333,7 +333,7 @@ theorem matchSomeObs_eval :
 /-! ### A record with a list field
 
     let (r, u) = withbor (alloc {n = 0, items = []}) (Λ. λm.
-                   let (m′, t) = swapField m items (λl. (7 :: l, ())); t; forget m′; ());
+                   let (m′, t) = swapField m items (λl. (7 :: l, ())); t; release m′; ());
     u; let {n, items} = free r; freeNat n; freeList items
 
 The field `items : L` is the common list (`CommonList.lean`); `swapField` runs `consC` on it
@@ -379,7 +379,7 @@ theorem d_pushBorrower :
     letW (A := .mut (.var 0) Bag.valTy) (B := .unit)
       (swapField_wf (.var (by csolo)) rfl (fun h => d_pushG h)) <|
     seqW (.var (by csolo)) <|
-    seqW (appW (.var (by csolo)) (.forgetMut (by cdead)))
+    seqW (appW (.var (by csolo)) (.releaseMut (by cdead)))
       (.boxI (.unitI (by cdead)) ⟨LifeCtx.defines_of_wf rfl, dead_noLive (by cdead)⟩)
 
 theorem d_bagProg : CDerives LifeCtx.empty [] bagProg (.val .unit) :=

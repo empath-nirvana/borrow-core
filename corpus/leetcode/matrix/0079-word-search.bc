@@ -84,10 +84,10 @@ fn grid_of<'t>(t: text 't) -> buf u8 * i32 =
 fn case_at<'t>(t: text 't, pos: i32) -> (((buf u8 * i32) * string) * i32) + 1 =
   match split_at(t, pos) {
     inl (h, rest) ->
-      array_forget['t, u8](h);
+      array_release['t, u8](h);
       match next_line(rest) {
         inl (l, r) ->
-          array_forget['t, u8](r);
+          array_release['t, u8](r);
           let (l, m) = array_copy['t, u8] l;
           let c = match split_once(l, b'|') {
             inl (g, wd) -> (grid_of(trim(g)), to_string(trim(wd)))
@@ -96,7 +96,7 @@ fn case_at<'t>(t: text 't, pos: i32) -> (((buf u8 * i32) * string) * i32) + 1 =
           inl (c, pos + len(m) + 1)
       | inr u -> inr ()
       }
-  | inr t -> array_forget['t, u8](t); inr ()
+  | inr t -> array_release['t, u8](t); inr ()
   }
 
 -- Each line of the input a case. The number of cases.

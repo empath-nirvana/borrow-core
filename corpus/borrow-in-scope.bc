@@ -12,7 +12,7 @@ main -> i32 =
   let n = borrow imm a { 'x, b ->
     let c = alloc(b);
     let k = borrow mut c { 'w, m ->
-      modify m { i -> let (i, j) = copy['x, i32] i; forget_imm['x, i32] j; i };
+      modify m { i -> let (i, j) = copy['x, i32] i; release_imm['x, i32] j; i };
       7 };
     let b2 = free(c);
     *b2 + k };

@@ -9,5 +9,5 @@ main -> i32 =
   let r = match f { inl g -> g(20) | inr g -> 0 };
   let (t, f2) = array_replace[!(i32 => i32)] (t, 1, succ);
   let s = match f2 { inl g -> g(1) | inr g -> 0 };
-  array_forget_all(t);
+  array_release_all(t);
   r + s

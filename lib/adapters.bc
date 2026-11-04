@@ -47,7 +47,7 @@ fn enumerate[A, K, R](it: U (pull A K R)) -> K with Yield[i32 * A] =
   let k = for x in it { yield((i, x)); i = i + 1 };
   k
 
--- The elements of `a`, then those of `b`, which holds nothing (it is dropped, closed, if `a` is
+-- The elements of `a`, then those of `b`, which holds nothing (it is consumed, closed, if `a` is
 -- closed first).
 fn chain[A, K, R](a: U (pull A K R), b: U (pull A 1 1)) -> K with Yield[A] =
   let k = for x in a { yield(x) };

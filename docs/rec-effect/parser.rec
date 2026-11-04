@@ -28,7 +28,7 @@ main -> (i32 + i32) * (i32 + i32) =
 --   it, so the loop's accumulator is the frame ("in expr's loop, acc so far"). The group's
 --   calls are not in tail position (the loops continue after them).
 --   `e.fail(p)` is an operation of the `Fail` capability, handled by `try` outside the
---   recursion: it does not resume, so the machine stops, its pending frames are dropped, and
+--   recursion: it does not resume, so the machine stops, its pending frames are consumed, and
 --   the error comes out through `fix` to `try`. Layers between (memo, fuel) pass it on
 --   (rec.bc's `memo_wrap`, `fuel_wrap`).
 --   Implicit `rec` is ambiguous here in one way: whether `term` called from `expr` is the

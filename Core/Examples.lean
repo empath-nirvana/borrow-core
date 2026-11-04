@@ -5,16 +5,16 @@ import Paper.Examples.Derivations
 # Core — programs, typed in the CBPV judgment and run  `[spec §3]`
 
 * `cImmBorrow`: `experiments/CBPVCore`'s program, re-derived in this judgment.
-* `cBang`: a `!` value used twice and dropped, with no `copy` or `forget` (`[spec §10]`).
+* `cBang`: a `!` value used twice and consumed, with no `copy` or `forget` (`[spec §10]`).
 * `cRecBorrow`: an immutable borrow of a cell holding a record of methods
   `M = U (F 1 & F 1)`.  The borrower receives `Imm 'a M`, loads through it (`Imm̲ 'b M = Unk`)
-  and forgets the view; after the borrow ends the cell is freed and a method is called:
+  and releases the view; after the borrow ends the cell is freed and a method is called:
 
       return (thunk ⟨return (), return ()⟩) to m.
       return alloc to a. a m to r.
       return withbor to w. w r to g.
       return (thunk Λ. return (λb. return withload to wl. wl b to h.
-                                   return (thunk Λ. return (λy. return forget to fg.
+                                   return (thunk Λ. return (λy. return release to fg.
                                                                  fg y to z. return z)) to l.
                                    h l)) to f.
       g f to p. let (r′, t) = p in t; return free to fr. fr r′ to m′. π₁ (force m′)
@@ -171,7 +171,7 @@ theorem cImmBorrow_runs :
 abbrev idTy : VTy := .thunk (.arr .unit (.ret .unit))
 
 /-- `return !(thunk λx. x) to f. f to g₁. g₁ () to r. r; f to g₂. g₂ ()`: `f : !U(1 ⊸ F 1)` is
-used twice with no `copy`, and is dropped at the last call with no `forget`.  `[spec §10]` -/
+used twice with no `copy`, and is consumed at the last call with no `forget`.  `[spec §10]` -/
 def cBang : Expr :=
   bindE (.val (.lam (.var 0))) (bindE (.var 0) (bindE (.val .unit) (bindE (.app (.var 1) (.var 0))
     (.seq (.var 0) (bindE (.var 3) (bindE (.val .unit) (.app (.var 1) (.var 0))))))))
@@ -191,9 +191,9 @@ theorem cBang_derives : CDerives LifeCtx.empty [] cBang (.comp (.ret .unit)) := 
     (.ret (.bangE (.var (.there (.there (.there (.here .nil))))))) ?_
   refine .bind (.right (.dead (.dead (.dead (.right .nil)))))
     (.ret (.unitI (.cons (.cons (.cons (.cons (.cons .nil))))))) ?_
-  -- `g₂ ()`: `f` is dropped.
+  -- `g₂ ()`: `f` is consumed.
   exact .app (.right (.left (.dead (.dead (.dead (.left .nil))))))
-    (.force (.there (.here (.cons (.cons (.cons (.drop rfl .nil)))))))
+    (.force (.there (.here (.cons (.cons (.cons (.weaken rfl .nil)))))))
     (.here (.cons (.cons (.cons (.cons (.cons .nil))))))
 
 theorem cBang_runs : BoCa.BoLo.Steps Adequacy.emptyMem cBang Adequacy.emptyMem (.val .unit) :=
@@ -228,13 +228,13 @@ theorem d_methods {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ cMethods (.val methodsTy) :=
   .thunkV rfl (.withI (.ret (.unitI (.cons (.cons hΓ)))) (.ret (.unitI (.cons (.cons hΓ)))))
 
-/-- The loader at `M`: it receives `Imm̲ 'b M = Unk` and forgets it. -/
+/-- The loader at `M`: it receives `Imm̲ 'b M = Unk` and releases it. -/
 theorem d_recLoader {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives Δ₁ Γ cRecLoader (.val (loaderTy methodsTy)) :=
   .thunkV rfl (.allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false (by decide) rfl hy)
     (dead_noLive hΓ)
     (.ret (.thunkV rfl (.lam
-      (.bind (.right (.dead (deadSplit hΓ))) (.ret (.forgetUnk (.cons (.cons hΓ))))
+      (.bind (.right (.dead (deadSplit hΓ))) (.ret (.releaseUnk (.cons (.cons hΓ))))
         (.bind (.left (.left (.dead (deadSplit hΓ))))
           (.app (.left (.right (.dead (deadSplit hΓ))))
             (.force (.here (.cons (.cons hΓ)))) (.there (.here (.cons hΓ))))

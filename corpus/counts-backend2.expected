@@ -82,14 +82,14 @@ clo-capture 1 0 0 3 3 0
 clo-coerce 1 0 0 3 3 0
 clo-counter 2 0 0 17 17 0
 clo-depth 2 0 0 29 29 0
-clo-drop 3 0 0 5 5 0
+clo-consume 3 0 0 5 5 0
 clo-higher 2 6 0 8 8 0
 clone-reuse 6 0 1 27 18 0
 comp-param 0 0 0 0 0 0
 core-callback-dead 0 0 0 0 0 0
 core-effects-borrow-abort 1 0 0 1 1 0
 core-effects-borrows 2 0 0 3 3 0
-core-effects-drop-glue 2 0 0 2 2 0
+core-effects-consume-glue 2 0 0 2 2 0
 core-effects-loop 0 0 0 0 0 0
 core-effects-reborrows 3 0 0 5 4 0
 core-effects-result 0 0 0 0 0 0
@@ -212,7 +212,7 @@ hygiene-handler-state 0 2 0 0 0 0
 hygiene-local-fn 2 0 0 2 2 0
 imm-copy 11 0 0 87 39 0
 imm-copy-view 1 0 0 3 3 0
-implicit-drops 9 0 0 16 16 0
+implicit-consumes 9 0 0 16 16 0
 int-arith 0 0 0 0 0 0
 int-ops 0 0 0 0 0 0
 int-slash 0 0 0 0 0 0

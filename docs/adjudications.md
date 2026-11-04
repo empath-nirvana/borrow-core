@@ -261,8 +261,8 @@ Imm 'b (Imm @a T)  ≜  Imm @a T        ← LHS underlined, RHS not             
 Imm 'b (Mut @a T)  ≜  Imm 'b T        ← LHS underlined, RHS not ([CONF] Fig. 9) (9)
 ```
 
-([TR] p. 3; [CONF] Figs. 8, 9, p. 415:10, on the rendered pages; the text layer drops the
-underline.)  Under a recursive reading `Imm 'b (Ref 1) = 1` and clause (5) forgets the
+([TR] p. 3; [CONF] Figs. 8, 9, p. 415:10, on the rendered pages; the text layer consumes the
+underline.)  Under a recursive reading `Imm 'b (Ref 1) = 1` and clause (5) releases the
 borrow; under the printed reading it is `Imm 'b 1`, which keeps [CONF] §2.4's double-free
 program ill-typed while leaving its nested borrow usable.  [CONF] p. 415:11 on (9): "the
 lifetime on this reborrow is the fresh lifetime `'b` introduced for the load, and not the
@@ -1434,7 +1434,7 @@ G1.
 really does characterize executions that are safe, terminating, and reclaim memory. The next
 section develops proofs for these properties"*.  p. 415:23:
 
-> Inspired by Charguéraud and Pottier [5], in order to support `forget` on borrows, the post-condition is only required to hold of a fragment `ρ′` of the post-resource, but the discarded fragment `ρ⁺` must not contain any owned cells. This is essential for the memory reclamation component of adequacy (Theorem 3.2), which insists that owned cells are freed rather than forgotten.
+> Inspired by Charguéraud and Pottier [5], in order to support `forget` on borrows, the post-condition is only required to hold of a fragment `ρ′` of the post-resource, but the discarded fragment `ρ⁺` must not contain any owned cells. This is essential for the memory reclamation component of adequacy (Theorem 3.2), which insists that owned cells are freed rather than released.
 
 The statements are transcribed and the proofs are ours.  The printed `wp` is a
 total-correctness row; at `ρ = ρ_f = ∅` what remains is `BoCa.Adequacy.Reclaim`, where the

@@ -2,7 +2,7 @@ import Core.TreeCactus
 import Support.Model.Entailments
 
 /-!
-# Allocation and release at the step-indexed relation over the tree world  `[spec §62]`
+# Allocation and freeing at the step-indexed relation over the tree world  `[spec §62]`
 
 `twp`'s rules for the two steps that change the memory's domain, over the tree carrier:
 
@@ -153,7 +153,7 @@ theorem updX_compS_own {Θ : LocTy} {E : BoCa.Loc → Prop} {ρ ρ' : TRes K} {l
     · subst ek; rw [hgetl] at e; cases e; exact absurd rfl hk
     · rw [hget k ek] at e; exact (hx k).2 ψ' e hk hE
 
-/-- `ρ ● ℓ↦own(v) ↭ ρ`: the release direction of `updX_compS_own`. -/
+/-- `ρ ● ℓ↦own(v) ↭ ρ`: the free direction of `updX_compS_own`. -/
 theorem updX_compS_own_back {Θ : LocTy} {E : BoCa.Loc → Prop} {ρ ρ' : TRes K} {l : BoCa.Loc}
     {v : BoCa.Val} (hc : ResUT.CompS ρ (ResUT.single l (CellUT.ownOf v)) ρ')
     (hv : ResUT.Valid ρ) (hv' : ResUT.Valid ρ') (hcov : CovR Θ K ρ) :
@@ -287,7 +287,7 @@ theorem twp_alloc {F : TFrame} {Q : TPost} (hQ : Q.Down) (Kc : Kont) (v : BoCa.V
     hQ.le (by omega) _ _ _ _ _ g₈, UpdX.trans g₀.1 hu g₉, g₁₀,
     (InvKept.refl _ _ _).trans hu g₁₁⟩
 
-/-- **Release at `twp`** (row 6.142): the run gives up `ℓ ↦ own(v)` and continues from `Kc[v]`. -/
+/-- **Free at `twp`** (row 6.142): the run gives up `ℓ ↦ own(v)` and continues from `Kc[v]`. -/
 theorem twp_free {F : TFrame} {Q : TPost} (hQ : Q.Down) (Kc : Kont) (l : BoCa.Loc)
     (v : BoCa.Val) {n : Nat} {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)}
     {ρ ρ₂ : TRes w.K} (hcρ : ResUT.CompS (ResUT.single l (CellUT.ownOf v)) ρ₂ ρ)

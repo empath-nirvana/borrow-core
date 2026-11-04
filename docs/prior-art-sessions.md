@@ -606,7 +606,7 @@ defaulted judgment index.
 - Ferrite §8 names their shared failure: an endpoint "may be dropped by the Rust program without
   being consumed at all, thereby causing deadlock".
 - *(ours)*: this failure cannot arise in a linear core with a mandatory `close` (SPEC §7) and
-  implicit destructors only where a destructor exists (decision 23). Affine Rust has to catch it
+  implicit drops only where a derived drop exists (decision 23). Affine Rust has to catch it
   at run time.
 
 ### 5.3 Linear Haskell

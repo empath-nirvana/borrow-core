@@ -344,9 +344,9 @@ end SplitMasks
 
 /-! ### F5: a live slot no part reads  `[spec §55]`
 
-A stage that follows the typed term's masks (Backend2's `splitCtx`) drops, at a split, a live slot
-neither part's mask holds. The kernel does not drop it there: the part that receives it weakens it
-at its leaves (`Ctx.DeadP.drop`, persistent), or absorbs it in `⊤` (`topI`) or `absurd` (`zeroE`),
+A stage that follows the typed term's masks (Backend2's `splitCtx`) consumes, at a split, a live slot
+neither part's mask holds. The kernel does not consume it there: the part that receives it weakens it
+at its leaves (`Ctx.DeadP.weaken`, persistent), or absorbs it in `⊤` (`topI`) or `absurd` (`zeroE`),
 which type the term at every type of that slot. An abort (`effLet`'s `hW`) is not a third case: it
 abandons `N`'s context, and `N` still weakens or absorbs the slot itself. `UnmentionedAbsorbed` states that these are the only cases; it is not proved.
 `neitherAbsorbed_of` reduces the split's form (`SplitMasks.NeitherAbsorbed`) to it. -/
@@ -366,7 +366,7 @@ def UnmentionedAbsorbed : Prop :=
       s.ty.Persistent ∨ AbsorbsAt Δ Γ e j k
 
 /-- `UNPROVED:` (F5, at a split) **a live slot of a split's context that neither part's mask holds**
-is unrestricted, or the part that receives it absorbs it (`⊤`, `absurd`). Backend2 drops
+is unrestricted, or the part that receives it absorbs it (`⊤`, `absurd`). Backend2 consumes
 such a slot at the rule `unused` (`splitCtx`, `leaf`, the frames of `abortK`/`cancelK`) when it is
 persistent, the weakening the part applies at its leaves, and refuses it otherwise; this states
 which other cases a checked program may have. -/

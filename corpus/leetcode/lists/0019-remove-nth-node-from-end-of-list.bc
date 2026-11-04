@@ -2,7 +2,7 @@
 --
 -- `remove` takes out the `n`-th node from the end, in one pass: a recursion that answers the
 -- rest of the list with that node gone and how many nodes it had, so each node learns its place
--- from the end on the way back and the `n`-th drops itself, its cell freed. Every other node
+-- from the end on the way back and the `n`-th consumes itself, its cell freed. Every other node
 -- gets its rest back in its own cell; nothing is allocated. The textbook pass walks two cursors
 -- `n` apart through the one list, which over `Option<Box<ListNode>>` is a shared and a `mut`
 -- reference into one structure at once, refused by Rust too; Rust solutions count the nodes and
@@ -28,7 +28,7 @@ fn nums<'t>(l: text 't) -> buf i32 =
 fn cases<'t>(t: text 't) -> buf (buf i32) =
   fold_lines(t, !{ (l, cs) ->
     let (l, m) = array_copy['t, u8] l;
-    if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, nums(l)); cs } },
+    if len(m) == 0 { array_release['t, u8](l); cs } else { let (cs, _) = push(cs, nums(l)); cs } },
     box buf[buf i32](8))
 
 -- A singly linked list: each node is a value and a cell holding the rest, the cell being Rust's

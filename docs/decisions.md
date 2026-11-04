@@ -28,7 +28,7 @@ Each entry: the decision, and why. Newest last.
     every theorem holds for every host, and compiler correctness will use the target's own
     operations.
 11. **Persistent values are reused implicitly.** Types holding no resource may be copied and
-    dropped by context splitting.
+    consumed by context splitting.
 12. **The checker is derived from `CDerives`.** Every step applies one rule; incompleteness is
     listed once, never fixed by changing the judgment.
 13. **Core syntax first, sugar from measured pain.** Sugar is syntactic, desugars before
@@ -58,30 +58,31 @@ Each entry: the decision, and why. Newest last.
     (`experiments/Optics`), but they do not explain why borrows are safe: every law that matters
     needs a frame fact that comes from lifetimes and typing. The search for the underlying
     abstraction continues at the frame guarantee (lifetime parametricity).
-23. **Implicit destructors are derived drops of linear values (revised by #746).** The kernel has
+23. **Implicit consumes are derived consumes of linear values (revised by #746).** The kernel has
     two classes of value type: unrestricted (`VTy.Persistent`, where contraction and weakening are
     rules) and linear (every other type). An owned value that goes unused is consumed by its
-    derived destructor, which the checker inserts (SPEC §12, `drop_derives`), so the elaborated
-    program stays linear and leak freedom is `adequacyC` on it. A derived drop is a property of a
-    linear type (`DerivedDrop A := Linear A ∧ HasDtor A`), not a third class. A destructor that
+    consume, which the checker inserts (SPEC §12, `consumeSlot_derives`), so the elaborated
+    program stays linear and leak freedom is `adequacyC` on it. A consume is a property of a
+    linear type (`LinearConsumable A := Linear A ∧ Consumable A`), not a third class. A consume that
     frees or closes is an action whose placement can be observed: it goes at the end of each path,
     never earlier than an effect. Four decisions of #746 (2026-10-29) fix the rest:
-    1. **A derived drop is pure at the row** (`dtor_wf`'s type, `HasDtor.close`/`.nu`,
-       `kTy_cancel_hasDtor_iff`). The cancel of a continuation whose cancel row is not empty is a
-       use, written or emitted as `(force κ).2`, not a derived drop.
-    2. **An abort's abandonment is not a drop.** `⊤`, `absurd` and an abort absorb a context; an
+    1. **A consume is pure at the row** (`consume_wf`'s type, `Consumable.close`/`.nu`,
+       `kTy_cancel_consumable_iff`). The cancel of a continuation whose cancel row is not empty is a
+       use, written or emitted as `(force κ).2`, not a consume.
+    2. **An abort's abandonment is not a consume.** `⊤`, `absurd` and an abort absorb a context; an
        abort abandons only slots that hold no owned cell (`VTy.OwnFree`, which is not narrowed), so
        nothing leaks. Opaque host types are linear and may be abandoned there.
     3. **`Imm` is linear, with a derived copy** (`DerivedCopy`, `copy_derives` over the kernel's
        `copy` constant). The checker inserts it at a split whose two parts both use the borrow
        (SPEC §12, *The derived copy at `imm`*; #746).
-    4. **A declared type may have no derived drop.** Its payload is paired with a token of the
+    4. **A declared type is not consumable.** Its payload is paired with a token of the
        opaque kind `tok` (`A ⊗ Tok`, minted at construction and burned at a written `match`), so
-       `HasDtor` fails at it and the checker cannot drop it; borrows of it still have a derived
-       drop.
+       `Consumable` fails at it and the checker cannot consume it; borrows of it still have a derived
+       consume.
 
-    *Status (decision 72):* these choices on linearity and drops are released as design; SPEC
-    §62's destructors may perform operations, replacing item 1, and `must_close` (item 4) is void.
+    *Status (decision 72):* these choices on linearity and consumes are set aside as design, and
+    `must_close` (item 4) is void.
+    *Status (decision 73):* item 1 is restored as decided: a consume is pure at the row.
     What is built stays the checker's behaviour until §62's PRs land.
 24. **Recursion is the fixed point of a generator, called directly (revised twice; first read
     "recursion is always structured, no general direct recursion", then "recursion is an
@@ -108,7 +109,7 @@ Each entry: the decision, and why. Newest last.
     `memory.grow` (the allocator's host call). No function table or `call_indirect` is emitted.
 26. **Sugar may be type-directed.** This revises decision 13's "sugar is syntactic": elaboration
     may use types (filling type holes `_`, choosing `fold_imm`/`fold_own` from a type, inserting
-    copies or drops). It stays outside the trusted base anyway, because its output is a core program
+    copies or consumes). It stays outside the trusted base anyway, because its output is a core program
     that the checker must derive, returning a `CDerives` proof. What sugar may not do is hide a
     surviving polarity shift (`docs/surface-cbpv.md`); decision 49 amends how the shift is made
     visible.
@@ -116,7 +117,7 @@ Each entry: the decision, and why. Newest last.
     trusted boundary with a semantic-type contract (the logical relation at the declared type). The
     body may be host code (FFI) or low-level code of our own that the compiler compiles; the
     contract may be assumed (then it is a hypothesis of the end-to-end theorem) or proved in Lean
-    (then it drops off the trusted base). There are no unsafe blocks inside safe code, so raw
+    (then it consumes off the trusted base). There are no unsafe blocks inside safe code, so raw
     pointers never flow into safe code and provenance tracking is unnecessary; the set of unproved
     boundaries is the program's enumerable trusted base. A boundary can migrate — host extern,
     compiled unsafe body, proved body — without its type or callers changing.
@@ -151,7 +152,7 @@ Each entry: the decision, and why. Newest last.
     capability can later be served by a user-defined handler (#18) instead of the host.
 31. **Host resources are opaque types with a model.** One leaf former, `VTy.opq k`, whose
     relation is a predicate `k.Holds` on values and whose `Imm̲` is `Unk`: not persistent, no
-    destructor, no rule. Its values can only be moved and handed to externs, so a handle is never
+    consume, no rule. Its values can only be moved and handed to externs, so a handle is never
     copied (l_lang's L-199) and the model and the host can represent it differently (a byte list,
     a file descriptor). A new host resource is a new `k`, not a new former.
 32. **Provisional (SPEC §11, to be confirmed by the user).**
@@ -208,7 +209,7 @@ Each entry: the decision, and why. Newest last.
       written. In draft 0's surface they would be `total fn` and `div fn` (or `-> div T`).
     - *Withdrawn* (typed elaboration, stage 2): the residual was recognized by the names `In`,
       `Out`, `ref input` and `ref output`. It is now read off the result type: the components
-      with no destructor (SPEC §12), paired with `()`, or `1` (SPEC §14).
+      that is not consumable (SPEC §12), paired with `()`, or `1` (SPEC §14).
     - *Withdrawn* (stage 4): a `main` that looped but used no capability was given `stdout`
       ambiently, so the runtime could drive it. The runtime now drives a loop with no
       capabilities (SPEC §11).
@@ -333,7 +334,7 @@ Each entry: the decision, and why. Newest last.
     - **Pipelines over a borrowed source are not rewritten.** Moving the owner into the source
       needs the pipeline to hand it back: adapters generic in the source's finishing value and
       residual, a `for` that binds the finishing value (#109), and a residual that hands back an
-      owner with a destructor. A pipeline over owned sources, with a body that uses the borrow,
+      owner that is consumable. A pipeline over owned sources, with a body that uses the borrow,
       is covered.
     - `|>` is not provided: draft 0 puts the piped value last (#17), and #109's adapters take the
       source first; the two are to be reconciled with it.
@@ -419,7 +420,7 @@ Each entry: the decision, and why. Newest last.
     - **The nested binds stay as the fallback.** `gen_bind`, `gen_bind_loop` and `div_bind`
       elaborate a body the machine does not cover (a variable of undetermined type live at a
       point, a delegate's residual that is neither `()`, a lent capability nor the body's, a
-      capability-less extern with no destructor used across a point) and report the errors of a
+      capability-less extern that is not consumable used across a point) and report the errors of a
       body the elaboration rejects. The alternative, deleting them, would need every such error
       rebuilt in the machine; no accepted program of the corpus takes the fallback.
     - **The divergence library is emitted only when the elaborated program names it**, as the
@@ -457,8 +458,8 @@ Each entry: the decision, and why. Newest last.
       `slice_empty_mut[@a, A]`**, **`slice_replace_mut[@a, A]`**, **`slice_swap_mut[@a, A]`**
       are the core constants. The empty family is typed `[L]`, not the design's `![L]`: a
       constant at a dead context is already used at will.
-    - **`array_mut @a A` has a destructor**, derived (`slice_get_mut` past every length, then
-      `forget`), so it needs no new constant; the alternative, a `slice_forget_mut` constant, is
+    - **`array_mut @a A` is consumable**, derived (`slice_get_mut` past every length, then
+      `forget`), so it needs no new constant; the alternative, a `slice_release_mut` constant, is
       a kernel change for the same effect.
     - **The library `lib/slice.bc`** (`include slice`) is generic in the element type, called
       with it written: `reverse[u8](v)`, `sort[i32](v, cmp_i32, 0)`. Its names:
@@ -468,7 +469,7 @@ Each entry: the decision, and why. Newest last.
       `split_last`/`split_last_mut`, `read`, `reverse`, `fill`, `copy_from`, `find` (Rust's
       `position`), `contains`, `binary_search` (`inl` found, `inr` the insertion point), `eq`,
       `cmp`, `starts_with`, `ends_with`, `sort` (insertion, stable), `iter_imm`, `iter_mut`.
-      `swap`, `iter` and `forget_mut` are keywords, hence `swap_at`, `iter_imm` and
+      `swap`, `iter` and `release_mut` are keywords, hence `swap_at`, `iter_imm` and
       `discard_mut`.
     - **A comparison is an argument**: `find[u8](v, x, eq_u8)`, `sort[i32](v, cmp_i32, 0)`, with
       `eq_u8`, `cmp_u8`, `eq_i32`, `cmp_i32` in the library. There are no traits; the element
@@ -550,7 +551,7 @@ Each entry: the decision, and why. Newest last.
       `scope-data-effects`, two rejects).
     - **Library names** (`lib/buf.bc`, `lib/text.bc`, `lib/textio.bc`): `buf_new`, `push`,
       `pop`, `take`, `reserve`, `truncate`, `clear`, `len_of`, `cap_of`, `grow`,
-      `buf_of_array`, `array_tab`; `string_new`, `clear_str` (length 0 without dropping bytes),
+      `buf_of_array`, `array_tab`; `string_new`, `clear_str` (length 0 without consuming bytes),
       `push_str`, `push_lit`, `push_byte`, `push_char`, `push_dec`, `to_string`,
       `string_of_lit`, `lit_len`, `eq_lit`, `str_from_utf8`, `from_utf8`, `utf8_error`,
       `seq_len`, `char_at`, `count_chars`, `split_char`, `chars`, `split_once`, `next_line`,
@@ -573,7 +574,7 @@ Each entry: the decision, and why. Newest last.
     - **Literal lowering.** A literal's tabulator is recognised by its shape and becomes one
       shared code over the address and length of its bytes in read-only data; a literal view is
       recognised by its erased shape (the array lent to a callback that first copies the family,
-      then dropped) and points into the data. The recognition is of the terms the elaborator
+      then consumed) and points into the data. The recognition is of the terms the elaborator
       emits; it is tested on the corpus, not proved (design §5.7).
 
 47. **The `for` loop (strings stage S4, revised; SPEC §16). The user's decisions, and the
@@ -627,7 +628,7 @@ Each entry: the decision, and why. Newest last.
 48. **Effects: the scoping of #18 (`docs/effects-scoping.md`, #151). The user's decisions.**
     - **Handlers are defined by elaboration** into existing core terms: a capability lent by
       `withbor`, a handler as state plus `!` clauses, resume-once as a call, abort as a sum exit,
-      suspension as `ν` codata, finalisation as the §12 destructors. Effect safety follows from the
+      suspension as `ν` codata, finalisation as the §12 consumes. Effect safety follows from the
       Fundamental Property. Keeping effect rows out of the core was this stage's scope, not a
       standing rule: the user did not decide that rows never enter the core. Superseded by the
       user's decision (2026-09-30) that effects are core, built on a literature-backed
@@ -657,7 +658,7 @@ Each entry: the decision, and why. Newest last.
 51. **Provisional (effects S1a, SPEC §18, #152; to be confirmed by the user).**
     - **Spellings**: `effect E { fn op(x: A) -> B; … }`; `handler h(s: S) for E { op(x) -> e;
       op(x) -> { M }; … }`, the state a `let mut` variable of each clause and the clause's value
-      the answer; `with h(e) { M }` for a state made at the block and dropped after it, and
+      the answer; `with h(e) { M }` for a state made at the block and consumed after it, and
       `with h(&mut c) { M }` for a state lent from a cell, which holds the final state. An
       operation is called as a function; its name is its own.
     - **A clause is a function over the lent state**, `h__op(c: mut 'l S, x) -> mut 'l S * B`,
@@ -686,7 +687,7 @@ Each entry: the decision, and why. Newest last.
       a call of it is a branch, and an abort in a loop's body is the loop's exit. `try` of a call
       in tail position is the call's own sum. So a fallible program is the sum program a user
       would write by hand (`corpus/effects-fold.bc`, `effects-fold-sum.bc`).
-    - **An abort cannot abandon a value with no destructor**; the checker's error names the
+    - **An abort cannot abandon a value that is not consumable**; the checker's error names the
       abort (SPEC §12's group 3). The residual form, handing it to the handler, is later (E9).
     - **Errors are raised** in the library: decision 46's "errors are sums (provisional until the
       error effect)" is withdrawn for errors; a search that finds nothing still answers a sum.
@@ -720,21 +721,21 @@ Each entry: the decision, and why. Newest last.
     - **Handlers**: `handler h(mut s: S): E = { op(x) = e; … }` for an answering effect (its state a `mut` parameter); `handler h[T, …](p: A, …): E[…], A -> R with E₂[…] = { return(x) = M; op(x, …, k) = N; … }` for a control effect, naming the type `A` of the body it handles and its answer `R`, with the row its clauses perform after `with`. An abortive operation's clause takes no `k`. Open: the form of the handler's type annotation.
     - **A clause is `!` code** (§19's `[handle]`). Revised by decision 59: what a clause uses is passed to it, the clauses of a handler whose operations are all abortive run after it (`default` takes an owned fallback), and a handler whose operations resume has a state.
     - **`with h[A, …](e, …) { M }`** installs a handler; its type arguments are written only when the body does not determine them. A control `with` answers the handler's answer alone; an answering `with h(&mut c)` rebinds `c`.
-    - **Errors are `Fail[E]` in `lib/fail.bc`**, `ctl raise(e: E) -> never`, with `to_result`, `default` and `map_err` (`include fail`). `retry` waits for functions over computations (#161). An error holds nothing owned (§19's `[raise]`): `from_utf8` raises the index and drops the buffer, provisionally: the error should hand the buffer back once an abortive payload may be linear (#215).
+    - **Errors are `Fail[E]` in `lib/fail.bc`**, `ctl raise(e: E) -> never`, with `to_result`, `default` and `map_err` (`include fail`). `retry` waits for functions over computations (#161). An error holds nothing owned (§19's `[raise]`): `from_utf8` raises the index and consumes the buffer, provisionally: the error should hand the buffer back once an abortive payload may be linear (#215).
     - **Static names are per `with` site**, numbered from 1 in the order the elaboration meets them; a function performing a control effect is copied per site, `f__n3`.
     - **The textual core**: `F[n.i q A ~> B, …] T`, `perform[n.i] V`, `abort[n.i] V`, `handle_with[n](hr, hc) M`, `x <- M unwind (D); N`, and `withbor1u`, `withbor2u`, `withbor3u`, `withloadu`, `slice_borrow_mut_u`, `slice_borrow_imm_u` with the callback's row as a bracket argument (`handle` is a name in the corpus).
-    - **Drop glue is the checker's**, as §12's destructors are: a binding whose head may abort gets a `[then]` finaliser of the destructors of what the rest uses.
+    - **Consume glue is the checker's**, as §12's consumes are: a binding whose head may abort gets a `[then]` finaliser of the consumes of what the rest uses.
     - Not taken from the guidance yet: `run() |> to_result |> stderr_log` (`|>` at a computation parameter waits for #161) and named instances `with a: Kube = …` (#155).
 56. **Provisional (generators on the iteration effect, #188 stage 2, SPEC §15; the user's binding decisions of 2026-10-01 — effects are core, iteration is `Yield` with no iterator trait, the old generator system goes — and the spellings below, to be settled after rewriting a sample of the corpus).** Revises decisions 41 and 42 where they name `gen fn`, `gen { }`, `yield from` and the generator machine.
     - **`Yield[T]` is a library effect**, `effect Yield[T] { ctl yield(x: T) }` in `lib/yield.bc` (`include yield`), cancellable. A generator is a function that performs it and writes it in its row, `fn range(lo: i32, hi: i32) -> 1 with Yield[i32]`; `yield(x)` is an operation call (no keyword, decision 49).
     - **The elaborator knows an iteration effect by its structure**: one control operation that resumes and answers `()`. No effect's name appears in `Frontend/`.
     - **`for x in g(e) { M }` is a handler site** (push). The loop's variables are threaded through the operation (the generator's copy for the site takes their tuple first and hands it back first, generic in its type), so the body is the clause; `break` and `return` cancel the continuation. Alternative not taken: a state-passing answer type (`W ⊸ F (R ⊗ W)`), which allocates closures per `yield`.
-    - **A `for` whose body performs a control operation, or may loop** (a `while`, a `loop`, a `for` over anything but a count), drains the generator's stored generator instead: a cancellable continuation at a non-empty cancel row has no derived drop, so a clause cannot hold one across an operation, and a clause is total. So a generator that maps another (`for x in range(…) { yield(x * x) }`) runs as a loop over the stored source.
+    - **A `for` whose body performs a control operation, or may loop** (a `while`, a `loop`, a `for` over anything but a count), drains the generator's stored generator instead: a cancellable continuation at a non-empty cancel row is not consumable, so a clause cannot hold one across an operation, and a clause is total. So a generator that maps another (`for x in range(…) { yield(x * x) }`) runs as a loop over the stored source.
     - **The stored generator** of a call is its pull view, codata `pull A B R = νX. F((A ⊗ U X) ⊕ (B ⊕ U X)) & F R`; `pull` is read in a type only, not reserved. A call is stored where that type is written to be expected: an argument at a parameter of that type, or `let g : U (pull A B R) = g(e)`. Nothing else stores a call, so a call of a generator in any other position performs its operations where it stands (delegation is a call; `yield from` is withdrawn). Its `close` cancels the continuation, so `R = 1`.
     - **A generator's loops are a div body's at its row** (`Loop_Σ`), which runs nothing when called; `while` and `loop` are loops of any div body, and a loop's body may loop, except a counted loop's and a clause.
     - **Adapters** (`lib/adapters.bc`) are generic generators over stored generators, with the names of decision 41 but `from_iter` (an iterator over the input holds a capability, below). Alternative not taken: adapters as handlers over a computation, which need a handler's state threaded through the operation and functions over computations (#161).
     - **Withdrawn**: `gen fn`, `gen { }`, `yield from`, the `gen` type, callbacks that yield (they need effectful callbacks, #161; `corpus/pending/yield-callback.bc`), the generator machine and the fallback to nested binds (`gen_bind`, `lib/gen.bc`): a body the machine does not cover is an error that names it.
-    - **A generator cannot hold a capability across `yield`** (`corpus/pending/gen-digits.bc`): the kernel's `[let]` asks what is live across a cancellable operation to drop, and a capability has no destructor; a cancel answers `()`, with no residual. Not taken: a `must_resume ctl` iteration effect, which allows it but not `break`.
+    - **A generator cannot hold a capability across `yield`** (`corpus/pending/gen-digits.bc`): the kernel's `[let]` asks what is live across a cancellable operation to consume, and a capability is not consumable; a cancel answers `()`, with no residual. Not taken: a `must_resume ctl` iteration effect, which allows it but not `break`.
 57. **Effect polymorphism and functions over computations (#161, `docs/effect-polymorphism.md`; the user's decisions of 2026-10-01; spellings provisional).**
     - *Superseded by decision 62: the kernel has row variables.* **No row variables in the kernel (Option 2).** A function type states only what the callee provides. The kernel stays first-order in rows: no new `CTy` former, relation clause or `CDerives` rule.
     - **Provided and tunneled rows.** A computation parameter's written row is what the callee serves; its control effects are at **ports**, static names fixed by the parameter's declaration. Every other effect of the argument tunnels to the handlers in scope where the argument was written.
@@ -805,7 +806,7 @@ Each entry: the decision, and why. Newest last.
 60. **Provisional (the closure `Clo`, SPEC §22, #239; spellings to be confirmed by the user).**
     - **The name `Clo`.** The closure `Clo` is `type Clo[A, B]<'c>` in `lib/clo.bc`, a closure with
       a `close` observation, the middle one of the three kinds of function (linear with no derived
-      drop `A => B`; linear with a derived drop, `Clo`; unrestricted `!(A => B)`), with operations
+      consume `A => B`; linear and consumable, `Clo`; unrestricted `!(A => B)`), with operations
       `clo_new`, `clo_call`, `clo_call_mut`, `clo_close`, `clo_of_fn` and `clo_once`. Rust's names
       (`FnOnce`, `FnMut`, `Fn`) appear only as comparisons. The Lean names follow (`cloT`, `cloBox`,
       `d_callMut`, `d_ofFn`, `d_once`).
@@ -841,7 +842,8 @@ Each entry: the decision, and why. Newest last.
     - **Cancellation is what SPEC §19 and the unwinding effects do as built.** In the user's words: "Whatever they do is what we decided."
     - **No hard-stop phase while planning.** The tier-2 hard-stop rule is not in force. In the user's words: "There's no hard stop phase now we are just planning."
     - *Status (decision 72):* the cancellation bullet is released as a fixed design; in SPEC §62 a
-      cancel is one of the exits that run the live destructors. The other bullets stand.
+      cancel is one of the exits that run the live consumes (superseded by decision 73). The other
+      bullets stand.
 63. **Multi-shot continuations are not a design goal (the user's decision of 2026-10-04).**
     - In the user's words: "TOTALLY IGNORE MULTISHOT AS A DESIGN GOAL. If it works it works, if it doesn't, it doesn't, I don't care either way."
     - It supersedes "we also don't need multishot unless we get it for free" (2026-10-02).
@@ -929,8 +931,7 @@ Each entry: the decision, and why. Newest last.
       #564 does not lift it.
     - The theorem that every run of a finaliser terminates, the handler clauses its operations
       reach included, is open (SPEC §14 *Open*).
-    - *Status (decision 72):* released as a fixed design. SPEC §62's `[let-dtor]` keeps
-      `hSDd` (no `Div` in the destructors' row) as a premise for now; relaxing it is §62 *Open*.
+    - *Status (decision 72):* set aside as a fixed design.
 70. **Allocation is an effect (the user's decisions of 2026-09-28, 2026-10-20 and 2026-10-29; #763; not built).**
     - Every heap allocation is written in the program. The marker need not be `box`: `box`,
       `buf_new`, `array_tab` and any allocator a library writes all count. No elaboration rule
@@ -992,11 +993,11 @@ Each entry: the decision, and why. Newest last.
       language is broken fundamentally and we need a new approach."
     - Void: decision 71 (owned across suspensions, borrowed within; R1 frozen; lifting T1
       tombstoned), `docs/tombstones/lends-across-suspensions.md`, and the decisions on linearity,
-      drops and resource cleanup they rested on: decision 23's #746 items (derived drops pure at
+      consumes and resource cleanup they rested on: decision 23's #746 items (derived consumes pure at
       the row, `must_close`), decision 62's cancellation as built, and the finaliser algebra as
       fixed (decision 69's total finalisers and the algebra it keeps). Decision 68's tail-resuming
       restriction is superseded as design by SPEC §62's `[handle]` without `hdv`.
-    - The kernel's theorems stand. Only the design choices are released.
+    - The kernel's theorems stand. Only the design choices are set aside.
     - The rules decision 71 made are still what the checker enforces today, and change only as
       SPEC §62's PRs land: T1 (`Row.Unwind` on the borrow constants), R1 and `PinLaw` as on
       `main`, R2 unemitted, and LoopLend's per-observation lend over loops. What decision 71
@@ -1005,4 +1006,49 @@ Each entry: the decision, and why. Newest last.
       the design in their place.
     - The goal, in the user's words: a destructor and "a guarantee that it runs it every exit but
       no guarantee that it ever exits". The target theorem is SPEC §62's: every reachable state
-      steps or is final with an empty heap.
+      steps or is final with an empty heap. (The first half, a per-type finaliser run on every
+      exit, is void by decision 73.)
+    - *Status (decision 73):* only this decision's cleanup parts are void: the goal's per-type
+      finaliser run on every exit (the target theorem stands), and its voiding of decision 23
+      item 1, which is restored. Everything else stands as written here: decision 71 and its
+      tombstone are void, and so are decision 62's cancellation as built, decision 69's finalisers
+      and `must_close`; decision 68's restriction is superseded as design.
+73. **No per-type close in the kernel (the user's decision of 2026-11-04; #771).**
+    - The kernel guarantees that every linear value is used and that no memory leaks: every
+      reachable state steps or is final with an empty heap. It makes no guarantee about closing
+      any other resource. Closing a file is the file effect's API, written with linear types in the
+      library; it is not kernel work.
+    - SPEC §62's frame form that ran a per-type finaliser on every exit, its programs and its file
+      handle are removed (SPEC 1.30). PR #799, which had the checker emit it, was closed unmerged.
+    - The vocabulary is linear (SPEC §12, *Vocabulary*): a value is consumed, by a rule or by its
+      type's consume (`Consumable`), which frees cells, releases a borrow, or closes codata.
+      "Free" names only the primitives that deallocate; "release" only a borrow returning to its
+      lender. A value type is unrestricted or linear, with no third class.
+    - Decision 72 is revised (the user, 2026-11-04): only its cleanup parts are void, the goal's
+      per-type finaliser run on every exit and its voiding of decision 23 item 1; the rest of
+      decision 72 stands. Decision 23 item 1, a consume is pure at the row, is restored as
+      decided.
+    - In the user's words: "The implicit close of co-data is fine." The implicit consume at
+      codata calls its `close`; that is decided.
+74. **The scheduler's invariant is in pool form; the stretch track lands on `tree-core` (the
+    user's decisions of 2026-11-03 and 2026-11-04; #781, #789).**
+    - The stored branches of a scheduler are held by the per-branch share and an invariant in pool
+      shape, not by `CactusInvT` over several branches. In the user's words (2026-11-03): "The fix
+      is the per-branch share (`KeepRel`: only the records the share reads), plus the invariant in
+      the pool shape (pairwise `FdEsc`, no points)"; the user approved "that path". In the library
+      (SPEC §62, `docs/new-core/scope-781.md` §4): `multiBranchAdequacyT` goes through
+      `cerwpT_adequacy` at one branch, and the stored continuations are carried by `KapSchedT` and
+      `PoolT` in `cerwpT_schedHandle`'s induction, each share resuming at `KeepRel` and every two
+      apart at each other's record masks (`fdMask`, `recMask`).
+    - The merge rule for the stretch track (refined 2026-11-03): it merges only when every important
+      gap has a demonstrated route.
+    - The integration branch (2026-11-04): stretch-track PRs target `tree-core`, not `main`.
+      Downstream stretch-track PRs merge into `tree-core` as each outstanding issue is resolved, and
+      `main` is merged into `tree-core` periodically. `tree-core` merges to `main` once, when the
+      whole unit of work is done with no gaps: #789's done-when holds (`fundamentalC` over the
+      tree relation for every `CDerives` rule, and adequacy for every closed well-typed program),
+      with no stand-in hypotheses and no open gap. In the user's words: "i don't want to start
+      merging stuff to main until this whole track is done because there is still a huge risk that
+      this doesn't work and we need to unwind", and "what i would like to do is start merging
+      _downstream_ stretch-goal prs into tree-core as we resolve outstanding issues and then merge
+      it when that whole unit of work is done with no gaps".

@@ -6,7 +6,7 @@ import Examples.CallBorrowed
     let (f₁, f₂) = copy f;
     let (c, v) = withbor (alloc (inj₁ ())) (Λ. λm.
                    let (m₁, u₁) = withswap m (λe. f₁ (e, ())); u₁;
-                   let (m₂, u₂) = withswap m₁ (λe. f₂ (e, ())); u₂; forget m₂; ());
+                   let (m₂, u₂) = withswap m₁ (λe. f₂ (e, ())); u₂; release m₂; ());
     v; case (free c) {x ⇒ x, y ⇒ y}
 
 `f : !(1 ⊕ 1 ⊗ 1 ⊸ 1 ⊕ 1 ⊗ 1)` is code that captures nothing and takes its environment by value and returns

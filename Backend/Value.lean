@@ -60,7 +60,7 @@ def Output.mk' (out err : ByteArray) (report : String) (status : UInt32 := 0) : 
   ⟨out ++ report.toUTF8, err, status⟩
 
 /-- What every stage prints for a finished run: the value, then the number of live objects
-after the value has been dropped. The source counts cells; the compiled stages count every
+after the value has been consumed. The source counts cells; the compiled stages count every
 object, so a leaked cell also counts the structure it holds. The two counts are zero together. -/
 def report (v : PV) (live : Nat) : String :=
   v.render ++ "\nlive " ++ toString live ++ "\n"

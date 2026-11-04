@@ -150,7 +150,7 @@ corpus/comp-param.bc 4.0 cancellable abortive: branch; agree
 corpus/comp-param.bc 2.0 cancellable abortive: branch; agree
 corpus/core-effects-borrow-abort.bc 1.0 cancellable abortive: branch; agree
 corpus/core-effects-borrows.bc 1.0 cancellable abortive: branch; agree
-corpus/core-effects-drop-glue.bc 1.0 cancellable abortive: branch; agree
+corpus/core-effects-consume-glue.bc 1.0 cancellable abortive: branch; agree
 corpus/core-effects-loop.bc 3.0 must-resume tail: direct; agree
 corpus/core-effects-reborrows.bc 1.0 cancellable abortive: branch; agree
 corpus/core-effects-result.bc 1.0 cancellable abortive: branch; agree

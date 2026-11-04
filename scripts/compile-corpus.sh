@@ -10,7 +10,7 @@
 # must equal `<name>.out`, its standard error `<name>.err` (empty if there is none), and its exit
 # status `<name>.status` (`0` if there is none: a program that a division's error ends exits with
 # `1`, SPEC §39). The first stage that differs is named. The report must be `live 0`: no object is live once the
-# value is dropped. (The source counts cells, the compiled stages all objects, so the two agree
+# value is consumed. (The source counts cells, the compiled stages all objects, so the two agree
 # when either is 0.)
 #
 #     scripts/compile-corpus.sh [--source] [file.bc…]   check the corpus, or the files named

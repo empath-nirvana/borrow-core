@@ -75,7 +75,7 @@ import Core.DelayNaive
 import Core.StreamPrograms
 import Core.Integers
 import Core.IntPrograms
-import Core.Dtor
+import Core.Consume
 import Core.Classes
 import Core.Tok
 import Core.Decl
@@ -115,14 +115,7 @@ import Core.Clo
 import Core.CloRules
 import Core.CloPrograms
 import Core.Mentions
-import Core.LetDtor
-import Core.LetDtorSafety
-import Core.LetDtorFiles
-import Core.LetDtorCancel
-import Core.LetDtorLoop
-import Core.LetDtorLend
-import Core.LetDtorSuspend
-import Core.LetDtorLet
+import Core.ResourceSafety
 import Core.StepsN
 import Core.TreeWp
 import Core.TreeWpEff
@@ -144,7 +137,6 @@ import Core.TreeLend
 import Core.TreeSchedPool
 import Core.TreeBorrowEdges
 import Core.TreeSchedRelay
-import Core.TreeRelay
 import Core.TreePoolSched
 import Core.TreePoolSchedProgs
 import Core.TreePoolSpawn

@@ -85,14 +85,14 @@ clo-capture 1 0 0 3 3 0 # the log; the scope cell `d` holds `1` and takes no wor
 clo-coerce 1 0 0 3 3 0 # the counter's cell; `main`'s lifetime is a cell of no words
 clo-counter 2 0 0 29 29 0 # the cell the closure is stored in, and the counter's cell; the calls through `mut` are direct
 clo-depth 2 0 0 49 49 0 # as clo-counter: four calls through three functions and a reborrow, all direct
-clo-drop 3 0 0 5 5 0 # three counters' cells, each freed by its `close`
+clo-consume 3 0 0 5 5 0 # three counters' cells, each freed by its `close`
 clo-higher 2 6 0 8 8 0 # two counters' cells; the indirect calls are `runner`'s calls of its argument, which closures built at two sites reach: the flow analysis is monovariant, and the argument's code is chosen at run time, as a `dyn` call's is
 clone-reuse 6 0 1 36 27 0
 comp-param 0 0 0 0 0 0 # every argument is a closed block and every error a branch
 core-callback-dead 0 0 0 0 0 0 # the callback and the function it answers are closed λs; each call's code is known
 core-effects-borrow-abort 1 0 0 1 1 0 # the cell, freed by the finaliser on the unwind
 core-effects-borrows 2 0 0 3 3 1
-core-effects-drop-glue 2 0 0 2 2 0
+core-effects-consume-glue 2 0 0 2 2 0
 core-effects-loop 0 0 0 0 0 0
 core-effects-reborrows 3 0 0 5 4 0
 core-effects-result 0 0 0 0 0 0
@@ -137,10 +137,10 @@ div-innermost 3 0 0 3 3 0
 div-literal 0 0 0 0 0 0
 div-overflow 3 0 0 3 3 0
 div-own-fail 0 0 0 0 0 0
-div-recover 5 0 0 42 32 13 # the two arrays of rows and the buffers `means` builds; `bad`'s is dropped by the unwind
+div-recover 5 0 0 42 32 13 # the two arrays of rows and the buffers `means` builds; `bad`'s is consumed by the unwind
 div-recursive 3 0 0 3 3 0
 div-residual-copy 3 0 0 9 3 0
-div-unhandled 4 0 0 39 6 1 # the buffer, dropped by the unwind
+div-unhandled 4 0 0 39 6 1 # the buffer, consumed by the unwind
 effects-abstraction 0 0 0 0 0 0
 effects-borrow-raise 2 0 0 3 3 0 # the cell of each run; freed by the unwinding borrow on the abort
 effects-cancel-two-sites 0 4 0 0 0 0 # the indirect calls are of `scaled`'s answer, a function of its state (SPEC §19, *Handler state*)
@@ -182,7 +182,7 @@ gen-adapters 8 0 0 33 33 0 # the nodes of the lists `chunks` builds; each genera
 gen-adapters-fail 11 0 0 51 51 0 # the nodes of the lists `chunks` and `lines` build
 gen-borrowed 2 0 0 11 7 2
 gen-cell 4 0 0 14 9 0
-gen-close 7 0 0 15 15 0 # the list; the drop glue across each yield shares it with the rest (a finaliser frame's clauses one code, SPEC §19), so it is not copied
+gen-close 7 0 0 15 15 0 # the list; the consume glue across each yield shares it with the rest (a finaliser frame's clauses one code, SPEC §19), so it is not copied
 gen-div 3 0 0 3 3 0 # the generator that read the input (the stdin cell) is in corpus/pending/ (a capability across a yield, SPEC §15 Open)
 gen-fib 3 0 0 3 3 0
 gen-from 3 0 0 3 3 0 # the generator that echoed the input (the stdin cell) is in corpus/pending/ (a capability across a yield, SPEC §15 Open)
@@ -214,7 +214,7 @@ hygiene-handler-state 0 2 0 0 0 0
 hygiene-local-fn 2 0 0 2 2 0
 imm-copy 11 0 0 87 39 0
 imm-copy-view 1 0 0 3 3 0
-implicit-drops 9 0 0 22 22 0
+implicit-consumes 9 0 0 22 22 0
 int-arith 0 0 0 0 0 0
 int-ops 0 0 0 0 0 0
 int-slash 0 0 0 0 0 0

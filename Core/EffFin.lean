@@ -18,7 +18,7 @@ canceller's row asks that row to hold what `F` holds.
   them).
 * The semantics of a cancel row, by induction on it: `finObl` is `cancelObl` of the row's table
   (`finObl_eq`), monotone (`finObl_mono`), closed under plain contexts (`plain_cancel₀`), beside a
-  frame holding nothing owned, which the run leaves behind at its first stop (`cancel_frame_drop`,
+  frame holding nothing owned, which the run leaves behind at its first stop (`cancel_frame_consume`,
   `ent_plain`), under a running finaliser's `cfin` (`cfin_cancel`, `cfin_run`), and under a
   finaliser frame (`then_cancel`).
 * `[then]`'s unrestricted premise is read at every depth of the cancel rows (`Row.UnrD`): the
@@ -98,7 +98,7 @@ theorem abort_false_of_capB {o : OpSig} (h : capB o.q o.B = true) : o.abort = fa
   simp [OpSig.abort, h.2]
 
 /-- The operations are one: name, index, qualifier, argument and answer types, and the marker
-(`OpSig.rc`): `[sub]` neither adds nor drops it.  `[spec §19, §29a]` -/
+(`OpSig.rc`): `[sub]` neither adds nor consumes it.  `[spec §19, §29a]` -/
 def OpSig.Sig (o o' : OpSig) : Prop :=
   o.n = o'.n ∧ o.i = o'.i ∧ o.q = o'.q ∧ o.A = o'.A ∧ o.B = o'.B ∧ o.rc = o'.rc
 
@@ -332,7 +332,7 @@ theorem Row.tab_plainCancel (S : Row) (δ : LSub) : (Row.tab S δ).PlainCancel :
 owned, is garbage at the run's first stop (`wpG_garbage`), and the run goes on under `K` beside no
 frame, the nested cancels carried through `K` by `T.PlainCancel`.  The context's own code never
 runs in a cancel, so nothing of the frame is needed after the first stop.  `[spec §27]` -/
-theorem cancel_frame_drop {T T' : OpTab} (K : Kont) (hH : ∀ n, K.HasHnd n = false)
+theorem cancel_frame_consume {T T' : OpTab} (K : Kont) (hH : ∀ n, K.HasHnd n = false)
     (hC : K.Catches 0 = false) (hT : T.Le T') (hPC : T.PlainCancel) {σ : WRes} (hσ : NoOwn σ)
     {ls : List SRec} {e : Expr} {ρ : WRes}
     (h : ewpTS ls e (cancelTab T) (fun _ _ _ => False) ρ) {ρ' : WRes} (hc : ResU.CompS ρ σ ρ') :
@@ -353,7 +353,7 @@ theorem cancel_frame_drop {T T' : OpTab} (K : Kont) (hH : ∀ n, K.HasHnd n = fa
     ewp_unfold (cancelTab_mono T') (h₀ (ewp_fold (cancelTab_mono T) (wpG_here _ _ _ τ₁ hp)))⟩
 
 /-- **An entry's cancel obligation under a plain context, beside a frame holding nothing owned**:
-the frame is left behind (`cancel_frame_drop`).  `[spec §27]` -/
+the frame is left behind (`cancel_frame_consume`).  `[spec §27]` -/
 theorem ent_plain (δ : LSub) (K : Kont) (hH : ∀ n, K.HasHnd n = false)
     (hC : K.Catches 0 = false) {σ : WRes} (hσ : NoOwn σ) (o : OpSig) {ls : List SRec} {K₁ : Kont}
     {ρ ρ' : WRes} (hcan : cancelOK (o.ent δ) ls K₁ ρ) (hc : ResU.CompS ρ σ ρ') :
@@ -362,7 +362,7 @@ theorem ent_plain (δ : LSub) (K : Kont) (hH : ∀ n, K.HasHnd n = false)
   obtain ⟨-, -, rfl⟩ := ent_fin_some hP
   show cancelObl _ ls ((K.comp K₁).dead.plug _) ρ'
   rw [dead_comp, dead_plain K hH hC, Kont.plug_comp]
-  exact cancel_frame_drop K hH hC (OpTab.Le.refl _) (Row.tab_plainCancel o.fin.rowOf δ) hσ
+  exact cancel_frame_consume K hH hC (OpTab.Le.refl _) (Row.tab_plainCancel o.fin.rowOf δ) hσ
     (hcan _ hP) hc
 
 /-! ### Finalisers in a cancel: `pend` and `⋈` -/
@@ -1482,7 +1482,7 @@ theorem raise_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {o : Op
   rw [ResU.CompS.functional hc (ResU.comp_empty_right σ₁)]
   exact ewp_raise_here (en := o.ent δ) (Row.tab_find hf) ha hv (hd _ _ _ _ hv)
 
-/-- `[let]` at a row: `M to x. N`, the context of `N` dropping at a row with weakening and
+/-- `[let]` at a row: `M to x. N`, the context of `N` consuming at a row with weakening and
 persistent at an unrestricted row.  A cancel passing the frame leaves it behind
 (`ent_plain`).  At a row holding `Div`, bind at `cwp` (`cwp_bind`).  `[spec §14, §19, §27]` -/
 theorem let_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B : VTy} {S : Row}

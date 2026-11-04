@@ -12,7 +12,7 @@
 -- Answer: `(i32[6], (inr ((i32[2], i32[0]), inr ((i32[1], i32[3]), inr ((i32[3], i32[2]),
 -- inl ()))), (i32[9], i32[1])))`: round 6 is the first with nothing to do (deployment 2, the
 -- slowest, has its conflict in round 1 and goes from 4 to 0 in rounds 2 to 5); the cluster
--- equals the desired state (in the order the API stored it); nine updates and one conflict. `live 0`. A reconciler that dropped the
+-- equals the desired state (in the order the API stored it); nine updates and one conflict. `live 0`. A reconciler that consumed the
 -- object after a conflict never converges deployment 2.
 
 include list

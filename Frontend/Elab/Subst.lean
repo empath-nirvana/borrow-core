@@ -77,12 +77,12 @@ def Const.subst (σ : TySubst) : Const → Const
   | .swap A B => .swap (A.subst σ) (B.subst σ)
   | .copy a A => .copy a (A.subst σ)
   | .copyBang A => .copyBang (A.subst σ)
-  | .forgetImm a A => .forgetImm a (A.subst σ)
-  | .forgetMut a A => .forgetMut a (A.subst σ)
-  | .forgetUnk => .forgetUnk
+  | .releaseImm a A => .releaseImm a (A.subst σ)
+  | .releaseMut a A => .releaseMut a (A.subst σ)
+  | .releaseUnk => .releaseUnk
   | .tokMint => .tokMint
   | .tokBurn => .tokBurn
-  | .forgetBang A => .forgetBang (A.subst σ)
+  | .releaseBang A => .releaseBang (A.subst σ)
   | .withbor1 x A B => .withbor1 x (A.subst σ) (B.subst σ)
   | .withbor2 x b A B => .withbor2 x b (A.subst σ) (B.subst σ)
   | .withbor3 a x A B => .withbor3 a x (A.subst σ) (B.subst σ)
@@ -109,7 +109,7 @@ def Const.subst (σ : TySubst) : Const → Const
   | .arrayLen a A => .arrayLen a (A.subst σ)
   | .arrayGet a A => .arrayGet a (A.subst σ)
   | .arrayCopy a A => .arrayCopy a (A.subst σ)
-  | .arrayForget a A => .arrayForget a (A.subst σ)
+  | .arrayRelease a A => .arrayRelease a (A.subst σ)
   | .sliceBorrowMut x b A B => .sliceBorrowMut x b (A.subst σ) (B.subst σ)
   | .sliceBorrowImm x b A B => .sliceBorrowImm x b (A.subst σ) (B.subst σ)
   | .sliceGetMut a A => .sliceGetMut a (A.subst σ)
