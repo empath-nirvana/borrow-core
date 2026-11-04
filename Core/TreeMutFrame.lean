@@ -1,5 +1,6 @@
 import Core.TreeLend
 import Core.TreeBorrowEdges
+import Core.TreeSchedRelay
 
 /-!
 # The Mut Frame and the Anti-Frame at `cerwpT`: statements, and the start world  `[spec §62]`
@@ -31,6 +32,7 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 namespace BoCa.Fig16.Tree.Wp
 open BoCa BoCa.Fig16 BoCa.Fig16.Tree BoCa.Fig16.BoLo BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Kont performE opPayload)
+open BoCa.Fig16.Tree.Wp.SchedProgs.Park (TP TP_some nP enPark)
 
 /-- The cell's invariant read off its location's code (E1). -/
 def codeP (w : TWd) (A : KTy) (b : TSet) : BoCa.Val → SPropST BoCa.Loc BoCa.Val w.K b :=
@@ -149,11 +151,8 @@ theorem not_cerwpTMFrame : ¬ CerwpTMFrame (ℍ := ℍ) := by
 
 /-! ### The statement with the frame conditions carried along extension -/
 
-/-- Every entry's resumer guarantee is carried along extension, the records re-read. -/
-def OpTabT.FdMono (T : OpTabT) : Prop :=
-  ∀ m i en, T m i = some en → ∀ (v : Val) (w w' : TWd) (O : List (FrameRecT w.K))
-    (O' : List (FrameRecT w'.K)) (ρ : TRes w.K) (ρ' : TRes w'.K), w.Ext w' ρ →
-    RRw (w := w) (w' := w') ρ ρ' → RecsRR w'.Θ O O' → en.fd v w O ρ → en.fd v w' O' ρ'
+/-- Every entry's resumer guarantee is carried along extension (`OpEntT.FdMono`). -/
+def OpTabT.FdMono (T : OpTabT) : Prop := ∀ m i en, T m i = some en → en.FdMono
 
 /-- **Mut Frame across stops at `cerwpT`, the frame conditions carried along extension** and the
 frame below the lend (`ρ_b ∈ Res_D`, `K.DownOf D {α}`). -/
@@ -169,6 +168,27 @@ def CerwpTMFrameM : Prop :=
         (codeP w A (TSet.single α)) hw)) BM →
       cerwpT (ℍ := ℍ) (opTableT T) (MFPostT l A Q) Fb F n w ls O e BM) →
     cerwpT (ℍ := ℍ) (opTableT T) Q Fb F n w ls O e ρ
+
+
+/-! ### The premises at the scheduler -/
+
+/-- The scheduler headline's base frame condition at its weakest, `fdMask ∅`, meets the
+headline's premise and is carried along extension. -/
+theorem fdMask_none_headline :
+    (∀ (w : TWd) (ρf : TRes w.K), ResUT.Valid ρf → fdMask (fun _ => False) w ρf) ∧
+      (fdMask (fun _ => False)).Mono :=
+  ⟨fun _ _ hv => ⟨hv, NoneAt.of_false (fun _ h => h) _⟩, fdMask_mono _⟩
+
+/-- `park`'s table meets `OpTabT.FdMono`: its one entry's guarantee is `fdJoinT`. -/
+theorem TP_fdMono : OpTabT.FdMono TP := fun _ _ _ h => by
+  obtain ⟨-, -, rfl⟩ := TP_some h
+  exact fdJoinT_fdMono fun _ _ _ _ => Iff.rfl
+
+/-- **`park` is not must-resume**: its entry is cancellable (`enPark.q = .cancel`), so a run that
+parks inside a Mut Frame stops at a table `CerwpTMFrame`'s `OpTabT.MustResume` refuses. -/
+theorem not_mustResume_TP : ¬ OpTabT.MustResume TP := fun h => by
+  have := h nP 0 enPark (by simp [TP]) rfl
+  simp [enPark] at this
 
 end BoCa.Fig16.Tree.Wp
 

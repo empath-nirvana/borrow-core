@@ -110,6 +110,7 @@ import Support.Model.Tree.World.EscBeneath
 import Support.Model.Tree.World.ExtExtF
 import Support.Model.Tree.World.ExtF
 import Support.Model.Tree.World.FdEsc
+import Support.Model.Tree.World.TemplChoice
 import Support.Model.Tree.World.FdEscBranch
 import Support.Model.Tree.World.FlatLs
 import Support.Model.Tree.World.Images

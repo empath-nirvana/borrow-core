@@ -1199,6 +1199,11 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.not_extLT_drop_longer
 #print axioms BoCa.Fig16.Tree.Wp.twp_lendOpen
 #print axioms BoCa.Fig16.Tree.Wp.not_cerwpTMFrame
+#print axioms BoCa.Fig16.Tree.Wp.fdMask_none_headline
+#print axioms BoCa.Fig16.Tree.Wp.TP_fdMono
+#print axioms BoCa.Fig16.Tree.Wp.not_mustResume_TP
+#print axioms BoCa.Fig16.Tree.Wp.tmplSpecT_view
+#print axioms BoCa.Fig16.Tree.Wp.tmplSpecT_two
 #print axioms BoCa.Fig16.Tree.Wp.twp_lendEnd
 #print axioms BoCa.Fig16.Tree.Wp.viewRes_dup
 #print axioms BoCa.Fig16.Tree.Wp.twp_kappa_cancel_in

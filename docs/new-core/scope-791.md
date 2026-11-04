@@ -441,3 +441,31 @@ run, applies `ResUT.six27` at the end, folds, and exits through `TWNT.mutUnfold`
 the folded end needs a six28 at `UpdA`, which does not exist yet. `InvKeptA`, `MaskDiff` and the
 mask facts carry over (`l` is not in `recMask O₀`). Then comes `erwp_M_frame`'s strong induction at
 `cerwpT`: a stop folds the cell into the share, and the resume re-lends at `w''` with `ℓ` re-typed.
+
+### Why `CerwpTMFrameM` carries the frame premises (decided 2026-11-04)
+
+Core's location family `Φ` is a fixed parameter of `erwp`. The tree's store typing lives in the
+world, and `TWd.Ext` re-types every location the resource holds no `mut` cell at (`AgreeOn` reads
+`HoldsMut`). A Mut Frame turns an `own` cell, which pins no code, into a `mut` cell, which pins its
+location's code (`Cov.mut`). So the lender re-types `ℓ` at the start, and owes the frame condition
+at the re-typed world. `not_cerwpTMFrame` is the configuration that rules out the statement
+without it. Hence the four approved premises: `F.Mono`, `Fb.Mono`, `OpTabT.FdMono T`, and `houtb`.
+
+They are met at the scheduler (`Core/TreeMutFrame.lean`):
+- `fdMask_none_headline`: `fdMask ∅` meets the headline's `Fb` premise and is `Mono`.
+- `TP_fdMono`: `park`'s table is `FdMono` (by `fdJoinT_fdMono`), and `fdAt` is `Mono` by `fdAt_mono`.
+
+**Open: `park` is cancellable.** `not_mustResume_TP`: `enPark.q = .cancel`. So §4's park is at a
+table that `OpTabT.MustResume` (Core's `LendOK.entry`) refuses. Core's chain proof needs
+must-resume because a cancellable stop owes a cancel run (`contShareT`'s second clause). That run
+ends without resuming and cannot hand the folded cell back. Core defers that case to a frame around
+the lend (`StopFrameN.lean`'s header, "step 3"). It needs the user's decision before
+`CerwpTMFrameM` can serve §4.
+
+### Templates (decided 2026-11-04)
+
+`tmplSpecT_two` (`Support/Model/Tree/World/TemplChoice.lean`): at `ref 1` over `m ↦ own(())`,
+`m ↦ imm({β₁}, (), ∅)` and `m ↦ imm({β₂}, (), ∅)` both meet `TmplSpecT`, and no world re-reads both.
+So which one `tmplT` picks at each tree is not fixed by the specification, which is the evidence for
+option (a). Caveat: here the two differ only in the template's own lifetime, and the canonical
+images agree (`canonT_view`). The witness-set variant (`ref (imm a 1)`, O1) is not built.
