@@ -4,7 +4,7 @@
 -- cells and drops the option inside.
 --
 -- Answer: i32[6], `[1, 2, 3]` summed; `live 0`: the sum consumes one copy, freeing each block, and
--- the other is dropped by its derived drop. 12 allocations: two cells per block.
+-- the other is freed by its derived drop. 12 allocations: two cells per block.
 include rec
 
 data List = Nil | Cons(head: i32, tail: Option[List])

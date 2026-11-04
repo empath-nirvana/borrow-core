@@ -12,7 +12,7 @@ host; the interpreter (`eval`, Wasm's host) computes the answer by `decide`.
 `foldImm`'s sum, get it back) with both explicit frees removed. The source ends
 `let (r′, n) = p in return n`; the owner `r′ : Ref L` comes back from the loan and is dropped
 at the end of its scope. Its destructor is `free`, then `foldOwn` with the algebra that frees
-each node's value cell (`HasDtor.ref (.mu …)`). Answer `123`, no cell left, as
+each node's value cell (`HasDrop.ref (.mu …)`). Answer `123`, no cell left, as
 `sumListProg_eval`.
 
 **`blockAff b`**: a block `{a : I32, b : I32}` (one allocation, two leaves), then a branch. The
@@ -33,8 +33,8 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-! ### The list's destructor -/
 
-theorem hasDtor_ilistL : HasDtor ilistL :=
-  .mu (A := ilistF.ty) ilistF_WF trivial
+theorem hasDtor_ilistL : HasDrop ilistL :=
+  .muF (A := ilistF.ty) ilistF_WF trivial
     (.sum .unit (.tensor (.ref .int) .unit))
 
 /-! ### The borrowed sum at the empty context -/

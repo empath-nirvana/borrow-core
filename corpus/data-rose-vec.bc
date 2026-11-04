@@ -6,7 +6,7 @@
 -- `Arr([])`, the first summand that has one (`data-json-vec.bc` has `Num` first).
 --
 -- Answer: i32[19], the tree `10 [1, 2 [3]]` summed (16) plus `[1, [], 2]` summed (3); `live 0`: the
--- sums consume one tree and the `J`, and the other tree is dropped by its derived drop.
+-- sums consume one tree and the `J`, and the other tree is freed by its derived drop.
 -- 5 allocations: one buffer per node with children (two per tree) and one for `[1, [], 2]`; an
 -- empty buffer allocates nothing until its first push, as Rust's `Vec::new()`.
 include rec

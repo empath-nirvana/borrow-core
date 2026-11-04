@@ -18,7 +18,7 @@ tree over combinations of formers. The proof is now the library's (#722, SPEC §
 | the class `P`, binders, `reach_ok` | `Core/FoldClass.lean` (`P`, `PBody`, keys `Bnd`, `keysIn`, `keys_ok`) |
 | the generated traversal, the dispatch | `Core/FoldOwnGTerm.lean` (`tE`, `selfG`, `foldOwnGV`), with the algebras passed at run time |
 | `countLoop_inv`, `arr_spec`, `trav_spec`, `hs_all`, `fold_spec` | `Core/FoldOwnG.lean`, and `foldOwnG_compatX`, the rule's soundness |
-| `HasDtorMu`, `dtor_spec` | `HasDtor.mu` and `dtor_wf` in `Core/Dtor.lean` |
+| `HasDtorMu`, `dtor_spec` | `HasDrop.mu` and `dropFn_wf` in `Core/Drop.lean` |
 | the test types `μX. I32 ⊗ Array X`, `μX. I32 ⊗ μY. 1 ⊕ (Ref X ⊗ Ref Y)` | `corpus/storage-array.bc` and the kernel program `nested-fold` (`Core/NestedPrograms.lean`) |
 
 Two things changed on the way. The algebras are a run-time tuple, so the traversal's handle is not

@@ -329,7 +329,7 @@ interpreter (`…_eval`, kernel-checked by `decide`) with its result checked (`�
 | `StreamPrograms.lean` | `take_runs` (every closed `U(Stream 1)` observed `n` times and closed), `takeCloseR`, `natsSum` (`0 + 1 + 2 = 3`) |
 | `IntPrograms.lean` | `sumToProg` (`fixD` over `I32 ⊗ I32`, `1 + … + 10 = 55`), `sumListProg` (`[100, 20, 3]` as `μX. 1 ⊕ Ref (I32 ⊗ X)`, read by `withload` inside an immutable borrow, `foldImm` sum `123`), `signProg` (`div_s`/`div_u` of `-7` by `2`, a wrapping `mul`, `div_u` by zero taking the error branch) |
 | `ArrayPrograms.lean` | `arrProg`: `array_new` of three elements, `array_replace` at index 1, `array_size`, `array_free`; observed `(inl 11, 3)` and no cell left |
-| `NestedPrograms.lean` | `nestProg`: two values of `μX. I32 ⊗ Array (μY. 1 ⊕ (Ref X ⊗ Ref Y))`, nested three deep, built, one summed by `foldOwnG` and one dropped by its drop; observed `34` and no cell left (the kernel program `nested-fold`) |
+| `NestedPrograms.lean` | `nestProg`: two values of `μX. I32 ⊗ Array (μY. 1 ⊕ (Ref X ⊗ Ref Y))`, nested three deep, built, one summed by `foldOwnG` and one freed by its derived drop; observed `34` and no cell left (the kernel program `nested-fold`) |
 
 The `IntPrograms.lean` runs are theorems at every host; the interpreter's results are at
 `wasmHost`.

@@ -802,7 +802,7 @@ Read: the manual, *Language extensions: effect handlers* (5.3); Sivaramakrishnan
   switching, which decision 25 excludes as the semantics.
 - **For us.** The warning case. What OCaml checks dynamically (one-shot) or leaves to the
   programmer (finalising an abandoned continuation) is, here, linearity: a continuation is a
-  linear value, so an abandoned one is dropped by its drop (§12), and a second resume does
+  linear value, so an abandoned one is freed by its derived drop (§12), and a second resume does
   not type. #18's requirement "abandoned continuations are finalised" is exactly the gap OCaml
   documents.
 

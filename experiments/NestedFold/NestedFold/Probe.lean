@@ -1,4 +1,4 @@
-import Core.Dtor
+import Core.Drop
 
 /-!
 # NestedFold — the design pass's probe (#595)

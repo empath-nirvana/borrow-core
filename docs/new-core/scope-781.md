@@ -4,8 +4,9 @@ Part of #771, row 4. SPEC §62; `structure.md` §3, §5. This doc covers layout,
 the headline statements, the open items, the slices, and what not to do. No code lands until it
 is reviewed.
 
-Source: `tree-inv` 92b6cc49, `experiments/DtorUnwind/DtorUnwind/` (below: `TreeWp/`, `Tree/`,
-`SI/`). Every headline result cited from it was checked: `#print axioms` ⊆ `[propext,
+Source: `tree-inv` 92b6cc49, a local branch (not pushed) whose tree holds the spike library
+`experiments/DtorUnwind/DtorUnwind/`, which is not on `main` (below: `TreeWp/`, `Tree/`, `SI/`).
+Every headline result cited from it was checked: `#print axioms` ⊆ `[propext,
 Classical.choice, Quot.sound]` (`cerwpT_adequacy`, `stepKeepsFdEsc`, `fdEsc_at_join`,
 `immEnd_valid_of_fdEsc`, `escBeneathT`, `twnt_invHolds`, `contShareT_resume`, `twp_update`,
 `not_stepKeepsFdEscNoUpd`, `cactusT_not_fdEsc`).

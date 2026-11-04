@@ -87,7 +87,7 @@ Each design choice in `operator.bc` is tagged with the goals it serves. Two note
 |---|---|---|---|
 | **G1** | One function for every context. | async or sync; which runtime; `.await`; `Pin`; `Send` | the inferred effect row: `Async` means it may wait |
 | **G2** | Failure is handled where it is handled. | `?`, `map_err`, `From` impls at each call | `Fail<E>` in the row, with its `E` |
-| **G3** | Cleanup is automatic on every exit: return, raise, timeout, cancellation, shutdown. | which exit paths close which connection; async `Drop` | which values have drops (SPEC §12) and which must be handed back |
+| **G3** | Every connection is closed, on every exit: return, raise, timeout, cancellation, shutdown. | which exit paths close which connection; async `Drop` | a connection is linear, so each exit path consumes it through the connection effect's `close` (decision 73); which values must be handed back |
 | **G4** | Ambient services (log, clock, metrics) reach code without being threaded through it. | passing a logger or a context struct everywhere | `Log`, `Clock` and `Metrics` in the row |
 | **G5** | Tests replace the world by handlers. | mocking traits, dependency injection, paused runtimes, real time | which effects a test must handle (the row of what it calls) |
 | **G6** | A stream is an iterator. | `Stream` vs `Iterator` vs `TryStream`; `StreamExt` vs `TryStreamExt`; `boxed()` | the element type, and the effects of `next` |
@@ -344,11 +344,11 @@ and observable.
 **Ours.**
 
 - `timeout(d, body)` is `race(body, { sleep(d) })`, and the loser unwinds like a raise.
-- A connection is a value with a derived drop. Every exit closes it: `return`, `raise`, timeout,
-  shutdown.
+- A connection is a linear value with no derived drop. Closing it is the connection effect's
+  API, written with linear types in the library, so every exit (`return`, `raise`, timeout,
+  shutdown) must consume it through `close`; the kernel closes nothing by itself.
 - The fourth test asserts it (`open == 0`).
-- What is still open is a drop that must *perform* I/O and can fail (SPEC §12 Open; §5,
-  N6).
+- What is still open is the library's API for a close that can fail (§5, N6).
 
 ### 4.5 Logging
 
@@ -477,7 +477,7 @@ behind it.
 | an `interface` for `T: Json` and `K: Resource` | `decode<T: Json>` | **(c)** | N8: decision 8 re-checks generics, but has no overloading on `T` |
 | `Args`, `Env`, `Clock`, `Signals`, `Net` capabilities | `main` | **(b)** SPEC §11 "Designed", #66 | `Signals` is new but follows the same pattern |
 | TLS; service-account token and CA | in-cluster `http_client` | **(b)** #67 step 5 | host or FFI boundary (decision 27) |
-| a drop that performs I/O | `Conn`, `Listener`, `Body` | **(c)** | N6, SPEC §12 Open |
+| a close that performs I/O, as the connection effect's API | `Conn`, `Listener`, `Body` | **(c)** | N6, decision 73 |
 | multi-shot continuations | not used | none | `retry` re-runs a `fn`, not a continuation |
 
 ### 5.2 The obstacles in the engine
@@ -603,12 +603,11 @@ elaboration decision 6).
   - The operator needs nothing more.
 - **N5. `return` and `break` as `Fail`** with a private error, handled at the function's or the
   loop's boundary. SPEC §11 Open notes that `for` has no early exit today.
-- **N6. Drops that perform I/O.** `Conn` and `Listener` must close sockets on every exit.
-  - Is a host resource's drop an extern with a contract?
+- **N6. Closing sockets.** `Conn` and `Listener` are linear, and closing them is the connection
+  effect's API, written with linear types in the library (decision 73), not a kernel drop.
+  - Is `close` an extern with a contract?
   - What does a failing close do: ignore, as Rust's `Drop for TcpStream` does, or report to
     `Log`?
-
-  This is SPEC §12 Open.
 - **N7. `Metrics.render(out: &mut Buf)`.** An answering operation that lends the *caller's*
   buffer to the handler: is that `needs` with a borrowed argument?
 - **N8. Derivation.** How does `T: Json` find `T`'s codec?

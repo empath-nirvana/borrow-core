@@ -124,7 +124,7 @@ theorem not_persistent_cloBox (c : Lifetime.Life) (A B : VTy) :
   simp [VTy.Persistent, VTy.persistent]
 
 /-- A closure is not forgettable (`Forgettable`, SPEC §12 group 1): dropping one runs its `close`,
-so its derived drop is its drop (group 2), not `forget`. -/
+so its derived drop is `close` (group 2), not `forget`. -/
 theorem not_forgettable_clo (c : Lifetime.Life) (A B : VTy) : ¬ Forgettable (cloT c A B) := by
   intro h; cases h
 

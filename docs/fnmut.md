@@ -85,7 +85,7 @@ writes the type `FnMut^c A B` as the experiment did, and SPEC §22 writes it `Cl
    - **introduction** `d_mk`/`d_mkBox`, a λ capturing any context, linear and borrowed parts
      included, as the state;
    - **elimination** `d_call`, and `d_callMut` through `Mut @a ([@c] U FnMut)`;
-   - **forget** `d_close`, `d_closeBox`, and SPEC §12's `drop_derives` at `hasDtor_fnBox`;
+   - **forget** `d_close`, `d_closeBox`, and SPEC §12's `drop_derives` at `hasDrop_cloBox`;
    - **coercions** `d_fromFn` (`Fn ≤ FnMut`) and `d_once` (`FnMut ≤ FnOnce`).
 
 6. **The kernel change** (§8): the two positivity relaxations of `νX. C` in `Core`, `FnMut` as a
@@ -100,7 +100,7 @@ writes the type `FnMut^c A B` as the experiment did, and SPEC §22 writes it `Cl
 | 2 | pass a borrowed closure on, at any depth | **[Lean]** | `d_passF n` for every `n`; `passF` reborrows once (`withbor` form 3) and calls twice; `passProg 3` = `13` |
 | 3 | a closure capturing a closure; closures taking closures | **[Lean]** for capture and for `!` functions taking a borrowed closure; **[Lean]** positivity only for a `Clo` closure whose argument is a closure | `nestProg` = `8`; `twiceV`, `reV`, `passF`; `fnBody_nuOk_higher` |
 | 4 | store or return one, bounded by the borrows it captures | **[Lean]** | `counterProg` stores one in a cell; `retProg` returns one from a function (`15`); `logProg` captures `Mut 'x I32`, is boxed at `'w ⊏ 'x`, and writes through the borrow (`12`); `logState_not_outlives`, `fnMut_not_outlives` |
-| 5 | forget/drop | **[Lean]**; the policy **[inspection]** | `hasDtor_fnMut`; `dropProg` (`0`, its cell freed by the drop); `not_forgettable_clo` |
+| 5 | forget/drop | **[Lean]**; the policy **[inspection]** | `hasDrop_clo`; `dropProg` (`0`, its cell freed by the drop); `not_forgettable_clo` |
 | 6 | `Fn ≤ FnMut ≤ FnOnce`, with refusals | **[Lean]** for the coercions and for the premises the refusals lack; the refusal of a uniform `FnOnce → FnMut` is **[inspection]** | `d_fromFn`, `fromFnProg` (`23`); `d_once`, `onceProg` (`5`); `not_persistent_fnMut`, `not_hasDrop_lolli` |
 
 ---
@@ -190,7 +190,7 @@ Each is closed, typed at `F I32`, run by adequacy at every host and by the inter
 | `logProg` | `Capture.lean` | a logger whose state is the captured `Mut 'x I32`. It is boxed at `'w ⊏ 'x` and adds each argument to the log through `withswap` on the borrow. The owner reads the log after the borrow ends | `12` |
 | `fromFnProg` | `Programs.lean` | `λx. x + 10 : !U(I32 ⊸ F I32)` made a `Clo` closure and called twice | `23` |
 | `onceProg` | `Programs.lean` | the counter used once as `U(I32 ⊸ F I32)` | `5` |
-| `dropProg` | `Programs.lean` | the counter over a cell, never called, dropped by its drop | `0` |
+| `dropProg` | `Programs.lean` | the counter over a cell, never called, freed by its derived drop | `0` |
 
 Every run ends with no cell left. In `dropProg` and `onceProg` that is the drop's `close`
 freeing the closure's cell.
@@ -211,7 +211,7 @@ closed (`nestProg`).
 
 - **Justification.** This is SPEC §12 group 2, unchanged. `HasDrop.nu` already gives every
   `U(νX. C & F R)` with a closed droppable residual the drop "force, `nuOut`, `π₂`, then
-  the residual's drop" (`hasDtor_fnMut` is that constructor at `FnMut`'s body). So the
+  the residual's drop" (`hasDrop_clo` is that constructor at `FnMut`'s body). So the
   checker's insertion policy (§12) drops an unused closure at the end of its scope, as it drops
   a `Ref` or a `Stream`, and the drop is placed so that it never reorders effects.
 - **What it requires of captures.** The creator writes `close`, so it must be able to dispose of
@@ -259,7 +259,7 @@ closed (`nestProg`).
 - `cC_fnMut_iff` (the clause), `fnMut_coind`, `vC_obs_fnMut`, `immReborrow_fnMut`,
   `immReborrow_fnBox`, `obs_transfer_fnBox`.
 - `fnBody_nuOk`, `fnBody_nuOk_higher`, `fnEffBody_nuOk`.
-- `hasDtor_fnMut`, `hasDtor_fnBox`, `not_forgettable_clo`, `not_persistent_fnMut`,
+- `hasDrop_clo`, `hasDrop_cloBox`, `not_forgettable_clo`, `not_persistent_fnMut`,
   `not_persistent_fnBox`, `not_hasDrop_lolli`, `fnMut_not_outlives`, `logState_not_outlives`,
   `logState_ctx_not_outlives`.
 - The derived rules of §3, and `d_passF` at every depth.

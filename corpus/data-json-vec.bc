@@ -4,7 +4,7 @@
 -- filler is `Num(0)`, and its drop frees each element, then the buffer (SPEC §61).
 --
 -- Answer: i32[10], `[1, [2, 3], 4]` summed; `live 0`: the sum consumes one copy, and the other is
--- dropped by its derived drop.
+-- freed by its derived drop.
 include rec
 include buf
 

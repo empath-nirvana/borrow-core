@@ -418,7 +418,7 @@ theorem onceProg_runs :
 set_option maxRecDepth 100000 in
 theorem onceProg_eval : i32NoLeak (eval onceProg) = some 5 := by decide
 
-/-! ### Drop: the drop runs `close` -/
+/-! ### The derived drop runs `close` -/
 
 /-- `mkBox⊤ (alloc 7) counterStep to bf. dropFn bf; 0`. -/
 def dropProg : Expr :=

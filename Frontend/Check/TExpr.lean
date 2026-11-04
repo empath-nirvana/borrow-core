@@ -543,7 +543,7 @@ inductive TExpr where
   | lendR (info : TInfo) (jdg : Jdg) (x : LifeVar) (b : Lifetime.Life) (T : VTy) (B : VTy) (S : Row) (td tM : TExpr)
   | lendLoopR (info : TInfo) (jdg : Jdg) (x : LifeVar) (A : VTy) (S : VTy) (B : VTy) (R : VTy) (tN tK ts0 : TExpr)
   | nilDead (info : TInfo) (jdg : Jdg) (j : Jdg) (t : TExpr)
-  /-- **Derived**: the drop of `A` (`dropFnE`, SPEC §12), a finaliser or a drop. -/
+  /-- **Derived**: the drop function of `A` (`dropFnE`, SPEC §12), applied as an implicit drop or as a finaliser. -/
   | dropFn (info : TInfo) (jdg : Jdg) (A : VTy)
   /-- **Derived**: a block's allocation at the shape `σ` (`allocS`, SPEC §5). -/
   | allocS (info : TInfo) (jdg : Jdg) (σ : Shape)

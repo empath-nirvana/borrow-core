@@ -438,7 +438,7 @@ theorem Expr.letBody_shift (M b : Expr) :
 /-- **The typed term**: one node per rule application of the checked derivation.  `[spec §3]` -/
 inductive TExpr where
 --@TEXPR_CTORS@
-  /-- **Derived**: the drop of `A` (`dropFnE`, SPEC §12), a finaliser or a drop. -/
+  /-- **Derived**: the drop function of `A` (`dropFnE`, SPEC §12), applied as an implicit drop or as a finaliser. -/
   | dropFn (info : TInfo) (jdg : Jdg) (A : VTy)
   /-- **Derived**: a block's allocation at the shape `σ` (`allocS`, SPEC §5). -/
   | allocS (info : TInfo) (jdg : Jdg) (σ : Shape)

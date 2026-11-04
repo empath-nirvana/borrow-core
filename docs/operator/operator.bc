@@ -185,8 +185,9 @@ fn timeout<T>(d: Duration, body: { -> T }) -> Option<T> =
   match race(body, { sleep(d) }) { Left(v) -> Some(v) | Right(()) -> None }
   -- `race` (1.8) observes both; each `wait` of the body is combined with the deadline. When the
   -- deadline wins, the body is not resumed. Not resuming is how every cancellation works: the
-  -- body unwinds as if it had raised, its drops run (its connection closes, its borrows
-  -- end), and nothing is left running. Under simulated time it cancels in virtual time. [G3, G5]
+  -- body unwinds as if it had raised, its borrows end and its owned buffers are freed, its
+  -- connection is handed back to be closed through the connection effect's `close`, and nothing
+  -- is left running. Under simulated time it cancels in virtual time. [G3, G5]
 
 -- Text and bytes: `docs/strings-slices-design.md` (u8, `slice 'a A`, `buf A`, `string`,
 -- `str 'a`, `lit`). `Vec<T>` is `buf T`. `Map<K, V>` is #64, ordered.
@@ -463,8 +464,8 @@ fn retry<T, E>(policy: Backoff, max: i32, retryable: fn(&E) -> bool,
 -- `scope` is the scheduler: it handles `Async` for the tasks spawned in it, and returns when
 -- all of them have finished. A task may borrow anything that outlives the scope, so there is
 -- no `Arc` and no `'static`. Cancelling a task is observing `close` on its state machine:
--- its drops run (connections close, borrows end, owned buffers are freed) and it hands
--- back what has no derived drop. [G3, G9]
+-- its drops run (borrows end, owned buffers are freed) and it hands back what has no derived
+-- drop, its connections among them, to be closed through the connection effect's `close`. [G3, G9]
 --   not-think: `Send + 'static`, `Arc<Context>`, `JoinHandle`s that can be forgotten.
 --   types-tell: the tasks' effects appear in the scope's row, except `Async`, which the scope
 --               handles only when it is the outermost scheduler.

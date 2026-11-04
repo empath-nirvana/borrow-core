@@ -81,7 +81,8 @@ Each entry: the decision, and why. Newest last.
        drop.
 
     *Status (decision 72):* these choices on linearity and drops are released as design; SPEC
-    §62's drops may perform operations, replacing item 1, and `must_close` (item 4) is void.
+    §62's drops may perform operations, replacing item 1 (superseded by decision 73), and
+    `must_close` (item 4) is void.
     What is built stays the checker's behaviour until §62's PRs land.
 24. **Recursion is the fixed point of a generator, called directly (revised twice; first read
     "recursion is always structured, no general direct recursion", then "recursion is an
@@ -841,7 +842,8 @@ Each entry: the decision, and why. Newest last.
     - **Cancellation is what SPEC §19 and the unwinding effects do as built.** In the user's words: "Whatever they do is what we decided."
     - **No hard-stop phase while planning.** The tier-2 hard-stop rule is not in force. In the user's words: "There's no hard stop phase now we are just planning."
     - *Status (decision 72):* the cancellation bullet is released as a fixed design; in SPEC §62 a
-      cancel is one of the exits that run the live drops. The other bullets stand.
+      cancel is one of the exits that run the live drops (superseded by decision 73). The other
+      bullets stand.
 63. **Multi-shot continuations are not a design goal (the user's decision of 2026-10-04).**
     - In the user's words: "TOTALLY IGNORE MULTISHOT AS A DESIGN GOAL. If it works it works, if it doesn't, it doesn't, I don't care either way."
     - It supersedes "we also don't need multishot unless we get it for free" (2026-10-02).
@@ -1004,7 +1006,8 @@ Each entry: the decision, and why. Newest last.
       the design in their place.
     - The goal, in the user's words: a destructor and "a guarantee that it runs it every exit but
       no guarantee that it ever exits". The target theorem is SPEC §62's: every reachable state
-      steps or is final with an empty heap.
+      steps or is final with an empty heap. (The first half, a per-type finaliser run on every
+      exit, is superseded by decision 73.)
 73. **No per-type release in the kernel (the user's decision of 2026-11-04; #771).**
     - The kernel guarantees that every linear value is used and that no memory leaks: every
       reachable state steps or is final with an empty heap. It makes no guarantee about releasing
