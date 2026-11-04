@@ -417,3 +417,27 @@ existing facts (`contShareT_resume`, `KeepRel.trans`, `stepKeepsFdEsc`).
    #791's done-when, which makes #791 wait on #795.
 4. **Hardest case:** confirm §4's same-task two-level shape as #770's target. The other reading is
    a field borrow taken from a record lent by another task, which is O9.
+
+## Appendix: R1 status (2026-11-04)
+
+`Core/TreeMutFrame.lean` holds §3's `CerwpTMFrame` and `CerwpTMAntiFrame` as stated above, and
+`not_cerwpTMFrame`: a Lean configuration, every hypothesis discharged, refusing `CerwpTMFrame` as
+stated. The cause is not the stop. An `own` cell pins no code (`AgreeOn` reads `mut` cells only),
+so the lender's run starts at extensions re-typing `ℓ`. The borrowed run is entered only where `ℓ`
+is typed at `A` (`Cov.mut`). A frame condition reading `Θ ℓ` (`FOff`) admits the borrowed run
+vacuously and refuses the lender's. This is §5 risk 1's subpoint, confirmed in Lean.
+
+Candidate statement `CerwpTMFrameM` (elaborates; not proved): `F.Mono`, `Fb.Mono` and
+`OpTabT.FdMono T` (a resume runs at `fdAt en v Fb O′`, and the resumed run re-lends there), plus
+`ρ_b ∈ Res_D` with `K.DownOf D {α}` (§3's missing premise). It awaits the user's decision, since it
+changes §3's text. The Anti-Frame side was not checked: its inner run may end at a world re-typing
+`ℓ`. Whether that forces a closure premise on `Q` has not been derived either way.
+
+**Next step, once the statement is agreed.** Prove the lender's side of the Mut Frame at any final
+term at `twp`, the port of `rwpG_M_frameG` (`StopFrameN.lean` on `tree-inv`). That proof re-types
+`ℓ` at the start (`TWd` with `Θ ℓ := A`, `F.Mono`). It enters through `TWNT.mutFold`, and needs
+`TaggedT` across the fold, the lowering swap and `CovR` of the `mut` cell. It runs the borrowed
+run, applies `ResUT.six27` at the end, folds, and exits through `TWNT.mutUnfold`. `↭` from `ρ₀` to
+the folded end needs a six28 at `UpdA`, which does not exist yet. `InvKeptA`, `MaskDiff` and the
+mask facts carry over (`l` is not in `recMask O₀`). Then comes `erwp_M_frame`'s strong induction at
+`cerwpT`: a stop folds the cell into the share, and the resume re-lends at `w''` with `ℓ` re-typed.

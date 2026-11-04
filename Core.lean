@@ -134,6 +134,7 @@ import Core.TreeSchedProgs
 import Core.TreeResume
 import Core.TreePool
 import Core.TreeLend
+import Core.TreeMutFrame
 import Core.TreeSchedPool
 import Core.TreeBorrowEdges
 import Core.TreeConsume
