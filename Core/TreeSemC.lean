@@ -19,22 +19,23 @@ the thunk monotone (`STy.thunk`).
 * **A run at the empty list says nothing of a borrow** (`cerwpT_nil_of_imm`): no world with an
   empty list holds an `imm` cell, so every term over a resource holding a view is a run there.
   This is why `SCmp.ret` runs at the list it is read at (E3, #794).
-* **The formers**: `F A` (`SCmp.ret`): over a covered resource, a run of `cerwpT` at every
-  extension and every list keeping the records the resource reads, so Kripke along `KeepRel`
-  (`SCmp.ret_kripke`) and monotone in `A` (`SCmp.ret_le`, from `cerwpT_post_mono`). A bare
-  `cerwpT` run owning no records is not Kripke along `KeepRel` (`Obs.cerwpT_not_keepKripkeNil`,
-  `Core/TreeSemObs.lean`). `A ⊸ C` (`SCmp.arr`), `C & D` (`SCmp.amp`), `⊤` (`SCmp.top`),
-  `∀α ⊏ c. C` over the lifetimes below `c` in the current tree (`SCmp.all`), and `νX. C`, the
-  greatest fixed point over candidates (`SCmp.nu`, fold and unfold at a monotone body), shown at
-  Core's body shape `F(A ⊕ U X) & F B` (`SCmp.loopBody_mono`, `SCmp.loop_nonempty`).
+* **The formers**: `F A` (`SCmp.ret`): a bare run of `cerwpT` at the list, owning no records, to a
+  value of `A` (Core's `cC (.ret A)`, a bare `wpTS` run). Monotone in `A` (`SCmp.ret_le`, from
+  `cerwpT_post_mono`) and Kripke along the re-reading of its whole list (`SCmp.ret_reread`, from
+  `cerwpT_kripke`). It is not Kripke along `KeepRel` (`Obs.cerwpT_not_keepKripkeNil`,
+  `Core/TreeSemObs.lean`), and nothing asks it to be: the quantifier over later lists keeping the
+  records a resource reads is `U`'s (`STy.thunk`). `A ⊸ C` (`SCmp.arr`), `C & D` (`SCmp.amp`),
+  `⊤` (`SCmp.top`), `∀α ⊏ c. C` over the lifetimes below `c` in the current tree (`SCmp.all`), and
+  `νX. C`, the greatest fixed point over candidates (`SCmp.nu`, fold and unfold at a monotone body),
+  shown at Core's body shape `F(A ⊕ U X) & F B` (`SCmp.loopBody_mono`, `SCmp.loop_nonempty`).
 * **Thunks read at the relation** (`STy.thunkC`, `STy.thunkRet`): a value type for every
   computation type, downward closed and monotone by `STy.thunk`'s definition, monotone in the
-  computation type (`STy.thunkC_le`). A thunk is a run at every later list keeping the records it
-  reads: from a run at the current world when `C` is Kripke along `KeepRel` (`STy.thunk_intro`),
-  so for `F A` (`STy.thunkRet_intro`) and `&`-trees of them (`SCmp.amp_kripke`); from a value
-  (`STy.thunkC_val`); from a stored continuation's share (`Core/TreeSemK.lean`).
-* **Not Kripke, so not introduced by `STy.thunk_intro`**: `A ⊸ C`, `∀`, `ν`. A thunk of one of these
-  is proved at every extension directly (`STy.thunk`'s quantifier).
+  computation type (`STy.thunkC_le`). A thunk is introduced as Core's `thunkF_compatC` and
+  `thunkV_compatC` introduce one: from the computation at every world and list, over the
+  environment's value type, and the environment carried to the later world and list by its own
+  monotonicity (`STy.mono`, the tree's `gDenC_local`): `STy.thunk_intro` for every computation type,
+  `STy.thunkRet_intro` at `F A`, `STy.thunkRet_lam` for `λ_. M` (`thunkF_compatC`'s head step). From
+  a value (`STy.thunkC_val`); from a stored continuation's share (`Core/TreeSemK.lean`).
 
 Continuation and task types are `Core/TreeSemK.lean`.
 
@@ -150,13 +151,6 @@ abbrev CSem : Type := Nat → (w : TWd) → List (SRecT w.K) → Expr → TRes w
 /-- Downward closed in the step index. -/
 def CSem.Down (C : CSem) : Prop := ∀ n w ls e ρ, C (n + 1) w ls e ρ → C n w ls e ρ
 
-/-- Monotone along world extension, on the re-reading of a covered resource, at every list keeping
-the records the resource reads (as `TVal.Mono`). -/
-def CSem.Kripke (C : CSem) : Prop :=
-  ∀ n (w w' : TWd) (ls : List (SRecT w.K)) (ls' : List (SRecT w'.K)) e (ρ : TRes w.K)
-    (ρ' : TRes w'.K), w.Ext w' ρ → RRw (w := w) (w' := w') ρ ρ' → KeepRel w'.Θ ls ls' ρ →
-    CovR (sem w.Θ) w.K ρ → C n w ls e ρ → C n w' ls' e ρ'
-
 /-- **A computation type of the relation at the tree**: downward closed in the index. -/
 structure SCmp where
   P : CSem
@@ -170,7 +164,7 @@ def postOf (τ : STy) : TPostV := fun k w ls _ v ρ => τ.P k w ls v ρ
 
 theorem postOf_down (τ : STy) : (postOf τ).Down := fun n w ls _ v ρ h => τ.down n w ls v ρ h
 
-/-! ### `F A`: a run at every later list keeping the records its resource reads -/
+/-! ### `F A`: a bare run at the list -/
 
 /-- **A run of `F A` at a list**: `cerwpT` at the table `Tb`, the base frame condition `Fb` and the
 present one `F`, owning no records (E3, owned records), to a value of `A` or a stop the table
@@ -178,66 +172,39 @@ allows. -/
 def RunRet (Tb : TableT) (Fb F : TFrame) (τ : STy) : CSem :=
   fun n w ls e ρ => cerwpT (ℍ := ℍ) Tb (postOf τ) Fb F n w ls [] e ρ
 
-/-- **`𝒞⟦F A⟧` at `cerwpT`**: over a covered resource, a run of `F A` (`RunRet`) at every
-extension of the world, on the re-reading, at every list there keeping the records of `ls` the
-resource reads (`KeepRel`).
-
-The quantifier is `U`'s (`STy.thunk`), and it is needed here: a bare run owning no records at a
-list is not one at a later list keeping the records its resource reads, with a lend's record in
-the later list and not owned (`Obs.cerwpT_not_keepKripkeNil`, `Core/TreeSemObs.lean`). `cerwpT`
-quantifies over the starts whose list re-reads `ls` whole; at a list no world holding the
-resource's cells has, `[]` under a view, there is no such start, and every term is a run there
-(`cerwpT_nil_of_imm`). `F A` at `[]` asks the run at every later list, the lend's own among them.
-
-Over a resource that is not covered, `F A` holds of every term: the coverage premise is the
-coverage every start provides (`cov_of_comp`), and `SCmp.ret_run`, `SCmp.ret_kripke` and
-`STy.thunkRet_intro` read the run only over a covered resource. -/
+/-- **`𝒞⟦F A⟧` at `cerwpT`**: a bare run of `F A` at the world and list it is read at (`RunRet`),
+as Core's `cC (.ret A) ls e` is `wpTS ls e …` (`Core/Relation.lean`). The Kripke quantifier over
+later worlds and lists is `U`'s (`STy.thunk`): a thunk of `F A` is a run at every later list
+keeping the records its resource reads, and is introduced from the computation at each of them
+(`STy.thunk_intro`), not from a run at the current one. -/
 def SCmp.ret (Tb : TableT) (hL : Tb.Local) (hTb : Tb.Down) (Fb F : TFrame) (τ : STy) : SCmp where
-  P n w ls e ρ := CovR (sem w.Θ) w.K ρ → ∀ (w' : TWd) (ρ' : TRes w'.K) (ls' : List (SRecT w'.K)),
-    w.Ext w' ρ → RRw (w := w) (w' := w') ρ ρ' → KeepRel w'.Θ ls ls' ρ →
-    RunRet (ℍ := ℍ) Tb Fb F τ n w' ls' e ρ'
-  down _ _ _ _ _ h hc w' ρ' ls' hE hr hk :=
-    cerwpT_le hL hTb (postOf_down τ) (Nat.le_succ _) (h hc w' ρ' ls' hE hr hk)
+  P := RunRet (ℍ := ℍ) Tb Fb F τ
+  down _ _ _ _ _ h := cerwpT_le hL hTb (postOf_down τ) (Nat.le_succ _) h
 
-/-- **`F A` is Kripke along `KeepRel`**: a run of `F A` at a list is one at every extension, on the
-re-reading, at every list keeping the records the resource reads. General in the table, the frame
-conditions and `A`: extensions, re-readings and `KeepRel` compose (`TWd.Ext.trans`, `RRw.trans`,
-`KeepRel.trans`). -/
-theorem SCmp.ret_kripke {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : TFrame} {τ : STy} :
-    (SCmp.ret (ℍ := ℍ) Tb hL hTb Fb F τ).P.Kripke :=
-  fun _ _ _ _ _ _ _ _ hE hr hk hc h _ w'' ρ'' ls'' hE' hr' hk' =>
-    h hc w'' ρ'' ls'' (hE.trans hr hE') (RRw.trans hE'.1 hr hr') (KeepRel.trans hE'.1 hr hk hk')
-
-/-- **A run of `F A` is a run at its own world and list**, when the list's records are covered. -/
-theorem SCmp.ret_run {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : TFrame} {τ : STy}
-    {n : Nat} {w : TWd} {ls : List (SRecT w.K)} {e : Expr} {ρ : TRes w.K}
-    (hc : CovR (sem w.Θ) w.K ρ) (hls : ∀ x ∈ ls, CovR (sem w.Θ) w.K x.1.R)
-    (h : (SCmp.ret (ℍ := ℍ) Tb hL hTb Fb F τ).P n w ls e ρ) :
-    RunRet (ℍ := ℍ) Tb Fb F τ n w ls e ρ :=
-  h hc w ρ ls (TWd.Ext.refl w ρ) (RR.refl hc) (KeepRel.refl hls ρ)
-
-/-- **A run at every later list is a run of `F A`.** -/
-theorem SCmp.ret_of_run {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : TFrame} {τ : STy}
-    {n : Nat} {w : TWd} {ls : List (SRecT w.K)} {e : Expr} {ρ : TRes w.K}
-    (h : ∀ (w' : TWd) (ρ' : TRes w'.K) (ls' : List (SRecT w'.K)), w.Ext w' ρ →
-      RRw (w := w) (w' := w') ρ ρ' → KeepRel w'.Θ ls ls' ρ → RunRet (ℍ := ℍ) Tb Fb F τ n w' ls' e ρ') :
-    (SCmp.ret (ℍ := ℍ) Tb hL hTb Fb F τ).P n w ls e ρ :=
-  fun _ => h
+/-- **`F A` is Kripke along the re-reading of its whole list** (`cerwpT_kripke`): at every
+extension, on the re-reading of the resource, at every list re-reading the list record by record
+(`SRecsRR`). Along `KeepRel`, which may drop records the resource does not read, it is not
+(`Obs.cerwpT_not_keepKripkeNil`). -/
+theorem SCmp.ret_reread {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : TFrame} {τ : STy}
+    {n : Nat} {w w' : TWd} {ls : List (SRecT w.K)} {ls' : List (SRecT w'.K)} {e : Expr}
+    {ρ : TRes w.K} {ρ' : TRes w'.K} (hE : w.Ext w' ρ) (hr : RRw (w := w) (w' := w') ρ ρ')
+    (hl : SRecsRR w'.Θ ls ls') (h : (SCmp.ret (ℍ := ℍ) Tb hL hTb Fb F τ).P n w ls e ρ) :
+    (SCmp.ret (ℍ := ℍ) Tb hL hTb Fb F τ).P n w' ls' e ρ' :=
+  cerwpT_kripke hE hr hl List.Forall₂.nil h
 
 /-- A value of `A`, over a covered resource, is a run of `F A`. -/
 theorem SCmp.ret_val {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : TFrame} {τ : STy}
     {n : Nat} {w : TWd} {ls : List (SRecT w.K)} {v : Val} {ρ : TRes w.K}
-    (h : τ.P n w ls v ρ) : (SCmp.ret (ℍ := ℍ) Tb hL hTb Fb F τ).P n w ls v.1 ρ :=
-  fun hc _ ρ' _ hE hr hk => cerwpT_val fun w₀ ρ₀ _ _ hE₀ hr₀ hl _ =>
-    τ.mono n w w₀ ls _ v ρ ρ₀ (hE.trans hr hE₀) (RRw.trans hE₀.1 hr hr₀)
-      (KeepRel.trans hE₀.1 hr hk (KeepRel.of_srecsRR hl ρ')) hc h
+    (hc : CovR (sem w.Θ) w.K ρ) (h : τ.P n w ls v ρ) :
+    (SCmp.ret (ℍ := ℍ) Tb hL hTb Fb F τ).P n w ls v.1 ρ :=
+  cerwpT_val fun w₀ ρ₀ _ _ hE₀ hr₀ hl _ =>
+    τ.mono n w w₀ ls _ v ρ ρ₀ hE₀ hr₀ (KeepRel.of_srecsRR hl ρ) hc h
 
 /-- **`F A` is monotone in `A`**: `cerwpT` is monotone in its postcondition (`twp_mono` at every
 index of the unfolding, `cerwpT_post_mono`). -/
 theorem SCmp.ret_le {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : TFrame} {σ τ : STy}
     (h : σ.Le τ) : (SCmp.ret (ℍ := ℍ) Tb hL hTb Fb F σ).Le (SCmp.ret (ℍ := ℍ) Tb hL hTb Fb F τ) :=
-  fun _ _ _ _ _ hr hc w' ρ' ls' hE hrr hk =>
-    cerwpT_post_mono hL (fun k w ls _ v ρ x => h k w ls v ρ x) (hr hc w' ρ' ls' hE hrr hk)
+  fun _ _ _ _ _ hr => cerwpT_post_mono hL (fun k w ls _ v ρ x => h k w ls v ρ x) hr
 
 /-- **`𝒞⟦A ⊸ C⟧`**: applied to a value of `A` at the list, over a resource composed with the
 function's, a run of `C` at the list, at every index up to `n` (E4). -/
@@ -251,11 +218,6 @@ def SCmp.amp (C D : SCmp) : SCmp where
   P n w ls e ρ := C.P n w ls (.app e (.val (.inj₁ .unit))) ρ ∧
     D.P n w ls (.app e (.val (.inj₂ .unit))) ρ
   down n w ls _ ρ h := ⟨C.down n w ls _ ρ h.1, D.down n w ls _ ρ h.2⟩
-
-theorem SCmp.amp_kripke {C D : SCmp} (hC : C.P.Kripke) (hD : D.P.Kripke) :
-    (SCmp.amp C D).P.Kripke :=
-  fun n w w' ls ls' _ ρ ρ' hE hr hk hc h =>
-    ⟨hC n w w' ls ls' _ ρ ρ' hE hr hk hc h.1, hD n w w' ls ls' _ ρ ρ' hE hr hk hc h.2⟩
 
 /-- `𝒞⟦⊤⟧`. -/
 def SCmp.top : SCmp where
@@ -296,15 +258,6 @@ theorem SCmp.amp_le {C₁ C₂ D₁ D₂ : SCmp} (h₁ : C₁.Le D₁) (h₂ : C
     (SCmp.amp C₁ C₂).Le (SCmp.amp D₁ D₂) :=
   fun n w ls _ ρ h => ⟨h₁ n w ls _ ρ h.1, h₂ n w ls _ ρ h.2⟩
 
-/-- `νX. C` is Kripke when the candidates it is the union of are: at every world extension, a
-candidate that is Kripke carries the run. -/
-theorem SCmp.nu_kripke_of {Φ : SCmp → SCmp} {n : Nat} {w w' : TWd} {ls : List (SRecT w.K)}
-    {ls' : List (SRecT w'.K)} {e : Expr} {ρ : TRes w.K} {ρ' : TRes w'.K} (hE : w.Ext w' ρ)
-    (hr : RRw (w := w) (w' := w') ρ ρ') (hk : KeepRel w'.Θ ls ls' ρ) (hc : CovR (sem w.Θ) w.K ρ)
-    (h : ∃ R : SCmp, R.P.Kripke ∧ R.Le (Φ R) ∧ R.P n w ls e ρ) : (SCmp.nu Φ).P n w' ls' e ρ' :=
-  let ⟨R, hK, hR, hP⟩ := h
-  ⟨R, hR, hK n w w' ls ls' e ρ ρ' hE hr hk hc hP⟩
-
 /-! ### Thunks read at the relation -/
 
 /-- **`𝒱⟦U C⟧` for a computation type**, forced by `force`: downward closed (from `C`'s) and
@@ -318,35 +271,58 @@ theorem STy.thunkC_le {C D : SCmp} (h : C.Le D) (force : Val → Expr) :
     (STy.thunkC C force).Le (STy.thunkC D force) :=
   fun _ _ _ v _ hv w' ρ' ls' hE hr hk => h _ w' ls' (force v) ρ' (hv w' ρ' ls' hE hr hk)
 
-/-- **A thunk from a run at the current world and list**, over a covered resource, when `C` is
-Kripke along `KeepRel`: every computation type built from `F A` (`SCmp.ret_kripke`) and `&`
-(`SCmp.amp_kripke`). -/
-theorem STy.thunk_intro {C : SCmp} (hK : C.P.Kripke) {force : Val → Expr} {n : Nat} {w : TWd}
-    {ls : List (SRecT w.K)} {v : Val} {ρ : TRes w.K} (hc : CovR (sem w.Θ) w.K ρ)
-    (h : C.P n w ls (force v) ρ) : (STy.thunkC C force).P n w ls v ρ :=
-  fun w' ρ' ls' hE hr hk => hK n w w' ls ls' _ ρ ρ' hE hr hk hc h
+/-- **A thunk from its computation at every world and list**, Core's `thunkV_compatC`: the
+forcing is a run of `C` at every world and list over a resource in which the environment `γ` is a
+value of `τΓ`, and `γ` is a value of `τΓ` here. The thunk is forced at a later world and list
+keeping the records its resource reads; `γ` is a value of `τΓ` there (`STy.mono`, the tree's
+`gDenC_local`), so the forcing runs there. -/
+theorem STy.thunk_intro {C : SCmp} {force : Val → Expr} {τΓ : STy} {γ v : Val} {n : Nat}
+    {w : TWd} {ls : List (SRecT w.K)} {ρ : TRes w.K} (hc : CovR (sem w.Θ) w.K ρ)
+    (hM : ∀ (w' : TWd) (ls' : List (SRecT w'.K)) (ρ' : TRes w'.K), CovR (sem w'.Θ) w'.K ρ' →
+      τΓ.P n w' ls' γ ρ' → C.P n w' ls' (force v) ρ')
+    (hg : τΓ.P n w ls γ ρ) : (STy.thunkC C force).P n w ls v ρ :=
+  fun w' ρ' ls' hE hr hk => hM w' ls' ρ' hr.cov (τΓ.mono n w w' ls ls' γ ρ ρ' hE hr hk hc hg)
 
 /-- **`𝒱⟦U (F A)⟧` at `cerwpT`**: a thunk `λ_. M` forced by applying it to `()`. -/
 def STy.thunkRet (Tb : TableT) (hL : Tb.Local) (hTb : Tb.Down) (Fb F : TFrame) (τ : STy) : STy :=
   STy.thunkC (SCmp.ret (ℍ := ℍ) Tb hL hTb Fb F τ) fun v => .app (.val v) (.val .unit)
 
-/-- **A thunk of `F A` from a run of `F A` at the current world and list.** `F A` is Kripke along
-`KeepRel` (`SCmp.ret_kripke`), so its run at the list the thunk is built at is one at every later
-list keeping the records its resource reads, which is what `U` asks. -/
+/-- **A thunk of `F A` from its forcing's run at every world and list** over the environment's
+value type: `STy.thunk_intro` at `F A`. -/
 theorem STy.thunkRet_intro {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : TFrame}
-    {τ : STy} {n : Nat} {w : TWd} {ls : List (SRecT w.K)} {v : Val} {ρ : TRes w.K}
+    {τ τΓ : STy} {γ v : Val} {n : Nat} {w : TWd} {ls : List (SRecT w.K)} {ρ : TRes w.K}
     (hc : CovR (sem w.Θ) w.K ρ)
-    (h : (SCmp.ret (ℍ := ℍ) Tb hL hTb Fb F τ).P n w ls (.app (.val v) (.val .unit)) ρ) :
-    (STy.thunkRet (ℍ := ℍ) Tb hL hTb Fb F τ).P n w ls v ρ :=
-  STy.thunk_intro SCmp.ret_kripke hc h
+    (hM : ∀ (w' : TWd) (ls' : List (SRecT w'.K)) (ρ' : TRes w'.K), CovR (sem w'.Θ) w'.K ρ' →
+      τΓ.P n w' ls' γ ρ' → RunRet (ℍ := ℍ) Tb Fb F τ n w' ls' (.app (.val v) (.val .unit)) ρ')
+    (hg : τΓ.P n w ls γ ρ) : (STy.thunkRet (ℍ := ℍ) Tb hL hTb Fb F τ).P n w ls v ρ :=
+  STy.thunk_intro hc hM hg
+
+/-- **`thunk M : U (F A)`, written `λ_. M`**, Core's `thunkF_compatC`: `M` a run of `F A` at every
+world and list over a resource in which the environment is a value of `τΓ`, the environment one
+here. Forcing `λ_. M` steps to `M` (`Head.beta`), the step paid from the index. -/
+theorem STy.thunkRet_lam {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : TFrame}
+    {τ τΓ : STy} {γ : Val} {M : Expr} {n : Nat} {w : TWd} {ls : List (SRecT w.K)} {ρ : TRes w.K}
+    (hc : CovR (sem w.Θ) w.K ρ)
+    (hM : ∀ (w' : TWd) (ls' : List (SRecT w'.K)) (ρ' : TRes w'.K), CovR (sem w'.Θ) w'.K ρ' →
+      τΓ.P n w' ls' γ ρ' → RunRet (ℍ := ℍ) Tb Fb F τ n w' ls' (M.subst 0 Val.unit) ρ')
+    (hg : τΓ.P n w ls γ ρ) : (STy.thunkRet (ℍ := ℍ) Tb hL hTb Fb F τ).P n w ls (Val.lam M) ρ := by
+  refine STy.thunkRet_intro hc (fun w' ls' ρ' hc' hg' => ?_) hg
+  cases n with
+  | zero => exact cerwpT_zero
+  | succ n =>
+      refine cerwpT_step hL (fun μ => ?_) (cerwpT_le hL hTb (postOf_down τ) (Nat.le_succ n)
+        (hM w' ls' ρ' hc' hg'))
+      simpa [BoCa.BoLo.Kont.plug] using
+        step1Only_plug (ℍ := ℍ) (BoCa.BoLo.Head.beta μ M Val.unit) rfl BoCa.BoLo.Kont.hole
 
 /-- **A thunk of a value computation at the relation**: a thunk whose forcing is a value of `A`
-is a thunk of `F A` at the world and list it is held at, at every index. -/
+is a thunk of `F A` at the world and list it is held at, at every index. The environment is the
+value itself (`STy.thunk_intro` at `τΓ := A`). -/
 theorem STy.thunkC_val {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : TFrame} {τ : STy}
     {n : Nat} {w : TWd} {ls : List (SRecT w.K)} {v u : Val} {ρ : TRes w.K}
     (hc : CovR (sem w.Θ) w.K ρ) (h : τ.P n w ls u ρ) :
     (STy.thunkC (SCmp.ret (ℍ := ℍ) Tb hL hTb Fb F τ) fun _ => u.1).P n w ls v ρ :=
-  STy.thunk_intro SCmp.ret_kripke hc (SCmp.ret_val h)
+  STy.thunk_intro (τΓ := τ) hc (fun _ _ _ hc' h' => SCmp.ret_val hc' h') h
 
 /-! ### `ν` at Core's bodies -/
 
@@ -404,8 +380,6 @@ theorem constInl_ret {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : TFram
     {n : Nat} {w : TWd} {ls : List (SRecT w.K)} (b : Val) :
     (SCmp.ret (ℍ := ℍ) Tb hL hTb Fb F (STy.sum STy.unit τ)).P n w ls
       (.app (.val constInl) (.val b)) PMap.empty := by
-  intro _ w' ρ' ls' _ hr _
-  obtain rfl := RR.of_empty hr
   cases n with
   | zero => exact cerwpT_zero
   | succ n =>
@@ -425,11 +399,13 @@ theorem SCmp.loop_nonempty {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F :
       exact ⟨constInl_ret _, constInl_ret _⟩) n w ls _ _ ⟨rfl, rfl⟩
 
 /-- **`STy.thunkRet_intro` met**: `λ_. inj₁ ()` is a thunk of `F (1 + A)`, at every index, world and
-list, from its run at the current world (`constInl_ret`). -/
+list, over the empty environment: its forcing is a run at every world and list over the empty
+resource (`constInl_ret`). -/
 theorem STy.thunkRet_constInl {Tb : TableT} {hL : Tb.Local} {hTb : Tb.Down} {Fb F : TFrame}
     {τ : STy} (n : Nat) (w : TWd) (ls : List (SRecT w.K)) :
     (STy.thunkRet (ℍ := ℍ) Tb hL hTb Fb F (STy.sum STy.unit τ)).P n w ls constInl PMap.empty :=
-  STy.thunkRet_intro (fun _ _ e => by simp at e) (constInl_ret _)
+  STy.thunkRet_intro (τΓ := STy.unit) (γ := Val.unit) (fun _ _ e => by simp at e)
+    (fun _ _ _ _ hg => hg.2 ▸ constInl_ret (hL := hL) (hTb := hTb) _) ⟨rfl, rfl⟩
 
 end BoCa.Fig16.Tree.Wp
 
