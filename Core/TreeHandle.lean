@@ -116,7 +116,7 @@ theorem twp_bind_fd {F Fe : TFrame} (hFm : F.Mono) (hFe : ∀ w ρf, F w ρf →
     obtain ⟨w₂, ρf₂, ρ₂, fρ₂, psF₂, ps₂, O₂, ls₂, k₀, k₁, k₂, k₃, k₄, k₅, k₆, k₇, k₈, k₉, k₁₀,
         k₁₁⟩ := hk (n - j₁) (Nat.sub_le _ _) w₁ ls₁ O₁ t ρ₁ hcov (cov_valid g₄ g₇) g₆.cov_ls
         (fun r hr => g₆.cov_ps r (g₅.left r hr)) g₈ w₁ ρ₁ ρf₁ fρ₁ ls₁ O₁ ps₁ psF₁ μ₁
-        (TWd.Ext.refl _ _) (RR.refl hcov) (SRecsRR.refl g₆.cov_ls)
+        (TWd.Ext.refl _ _) (RR.refl hcov) (KeepRel.refl g₆.cov_ls _)
         (RecsRR.refl fun r hr => g₆.cov_ps r (g₅.left r hr)) hF₁ (ResUT.hash_symm g₃) g₄ g₅ g₆
         g₇ (fd_stepsN hrun₁ hfd) j₂ μ' E (by omega) hrun₂ hfin
     refine ⟨w₂, ρf₂, ρ₂, fρ₂, psF₂, ps₂, O₂, ls₂, g₀.trans g₁ k₀, RRw.trans k₀.1 g₁ k₁,
@@ -182,7 +182,8 @@ theorem twp_alloc_here {F : TFrame} {Q : TPost} (hQ : Q.Down) (Kc : Kont) (v : B
   obtain ⟨ρ₁', hc', hr'⟩ := RR.compS hr hrs hρ₁
   obtain rfl := ResUT.CompS.functional hc' hc₀
   have hE₁ : w.Ext w₀ ρ₁ := ⟨hE.1, fun m hm => hE.2 m (holdsMut_of_compS_own hρ₁ hm)⟩
-  exact twp_kripke hE₁ hr' hl hO (h l ρ₁ hρ₁)
+  exact twp_kripke hE₁ hr'
+    (KeepRel.of_frz (frz_of_own_right hρ₁ fun _ hm => hm) hl) hO (h l ρ₁ hρ₁)
 
 /-! ### `κ` at `twp` -/
 

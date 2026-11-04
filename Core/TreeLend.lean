@@ -259,6 +259,47 @@ theorem linLoc_lendRec {l m : BoCa.Loc} : ¬ LinLocT (lendRec (K := K) l) m := b
 
 end Carrier
 
+/-! ### The start list across a lend -/
+
+/-- The records of a list with no place at `ℓ`. -/
+def dropAt {K : WCactus} (l : BoCa.Loc) (ls : List (SRecT K)) : List (SRecT K) :=
+  ls.filter fun x => @decide (¬ RelAtT x.1 l) (Classical.propDecidable _)
+
+theorem mem_rsOfT_dropAt {K : WCactus} {l : BoCa.Loc} {ls : List (SRecT K)} {r : FrameRecT K}
+    (h : r ∈ rsOfT (dropAt l ls)) : r ∈ rsOfT ls ∧ ¬ RelAtT r l := by
+  obtain ⟨x, hx, rfl⟩ := List.mem_map.mp h
+  obtain ⟨hx, hd⟩ := List.mem_filter.mp hx
+  exact ⟨List.mem_map_of_mem hx, by simpa using hd⟩
+
+/-- A view freezes its own location only. -/
+theorem FrzT.view {K : WCactus} {β : Life} {l m : BoCa.Loc} (h : FrzT (viewRes (K := K) β l) m) :
+    m = l := by
+  cases h with
+  | imm e _ => exact (ResUT.single_get_eq_some e).1
+  | inImm e _ hd =>
+      obtain ⟨-, rfl⟩ := ResUT.single_get_eq_some e
+      cases hd with
+      | top e' => simp [viewCell] at e'
+      | wit e' _ _ => simp [viewCell] at e'
+  | inMut e k _ => obtain ⟨-, rfl⟩ := ResUT.single_get_eq_some e; simp [viewCell] at k
+
+/-- **The start list across a lend's opening**: the records the run reads after the opening,
+other than the lend's own and those with a place at `ℓ`, it read before. -/
+theorem keepRel_lendOpen {K K' : WCactus} {Θ' : CodeTy} {Z ρ ρ₁ : TRes K} {l : BoCa.Loc}
+    {α : Life} {v : BoCa.Val} {ls : List (SRecT K)} {ls₀ : List (SRecT K')}
+    (hρ : ResUT.CompS Z (ResUT.single l (CellUT.ownOf v)) ρ) (hρ₁ : ResUT.CompS Z (viewRes α l) ρ₁)
+    (hl : KeepRel Θ' ls ls₀ ρ) :
+    KeepRel Θ' ((lendRec l, α) :: dropAt l ls) ((lendRec l, α) :: ls₀) ρ₁ := by
+  intro r hr ⟨m, hm, ha⟩
+  simp only [rsOfT, List.map_cons, List.mem_cons] at hr
+  rcases hr with rfl | hr
+  · exact ⟨lendRec l, by simp [rsOfT], lendRec_rr l⟩
+  · obtain ⟨hr, hna⟩ := mem_rsOfT_dropAt (r := r) hr
+    rcases FrzT.split hρ₁ hm with hZ | hv
+    · obtain ⟨r', hr', e⟩ := hl r hr ⟨m, hZ.of_compS_left hρ, ha⟩
+      exact ⟨r', by simp only [rsOfT, List.map_cons, List.mem_cons] at hr' ⊢; exact Or.inr hr', e⟩
+    · exact (hna (FrzT.view hv ▸ ha)).elim
+
 /-! ### Open -/
 
 /-- **Open a lend at `twp`.** The run holds `ℓ ↦ own(())` beside `Z`; from there on it holds the
@@ -271,7 +312,7 @@ theorem twp_lendOpen {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls : List (SR
     {O : List (FrameRecT w.K)} {e : Expr} {Z ρ ρ₁ : TRes w.K} {l : BoCa.Loc} (α : Life)
     (hρ : ResUT.CompS Z (ResUT.single l (CellUT.ownOf BoCa.Val.unit)) ρ)
     (hρ₁ : ResUT.CompS Z (viewRes α l) ρ₁)
-    (h : twp (ℍ := ℍ) F Q n w ((lendRec l, α) :: ls) (lendRec l :: O) e ρ₁) :
+    (h : twp (ℍ := ℍ) F Q n w ((lendRec l, α) :: dropAt l ls) (lendRec l :: O) e ρ₁) :
     twp (ℍ := ℍ) F Q n w ls O e ρ := by
   classical
   refine twp_update (fun w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE hr hl hO _ _ hc hS hR hI => ?_) h
@@ -369,7 +410,7 @@ theorem twp_lendOpen {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls : List (SR
       tauto
   refine ⟨ρ₁₀, fρ₁, (lendRec l, α) :: ls₀, lendRec l :: O₀, lendRec l :: ps,
     ⟨hE.1, fun x hx => (AgreeOn.of_compS_left hρ hE.2) x (holdsMut_of_compS_view hρ₁ hx)⟩,
-    hr₁, .cons ⟨lendRec_rr l, rfl⟩ hl, .cons (lendRec_rr l) hO,
+    hr₁, keepRel_lendOpen hρ hρ₁ hl, .cons (lendRec_rr l) hO,
     ⟨hfρ₁.1, fρ₁, hfρ₁, hv₁⟩, hfρ₁, ⟨fun p => ?_, fun p hp q hq => ?_⟩, ⟨hTin, htg⟩,
     ⟨fun m ψ e => ?_, ?_⟩, hupd, hnone⟩
   · simp only [List.mem_cons]; rw [hS.1 p]; tauto
@@ -447,7 +488,16 @@ theorem twp_lendEnd {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls ls₁ : Lis
   have hTW := hR.1
   have hTI := hTW.inv
   obtain ⟨O₁₀, hO₁₀, hO₁₀in⟩ := forall₂_sub hOr (zs := O₁) fun z hz => (hO z).mpr (Or.inr hz)
-  obtain ⟨ls₁₀, hls₁₀, hls₁₀in⟩ := forall₂_sub hl (zs := ls₁) fun z hz => hls₁in z hz
+  let ls₁₀ := ls₀.filter fun y => decide (y.1 ≠ lendRec l)
+  have hls₁₀in : ∀ y ∈ ls₁₀, y ∈ ls₀ := fun y hy => (List.mem_filter.mp hy).1
+  have hfrz : ∀ m, FrzT ρ₁ m → FrzT ρ m := frz_of_own_right hρ₁ fun _ hm => hm.of_compS_left hρ
+  have hls₁₀ : KeepRel w₀.Θ ls₁ ls₁₀ ρ₁ := by
+    rintro r hr ⟨m, hm, ha⟩
+    obtain ⟨x, hx, rfl⟩ := List.mem_map.mp hr
+    obtain ⟨r', hr', e⟩ := hl x.1 (List.mem_map_of_mem (hls₁in x hx)) ⟨m, hfrz m hm, ha⟩
+    obtain ⟨y, hy, rfl⟩ := List.mem_map.mp hr'
+    have hyne : y.1 ≠ lendRec l := fun hyl => hls₁ x hx (lendRec_rr_eq (hyl ▸ e))
+    exact ⟨y.1, List.mem_map_of_mem (List.mem_filter.mpr ⟨hy, by simpa using hyne⟩), e⟩
   have hr₀O : lendRec l ∈ O₀ := by
     obtain ⟨y, hy, hry⟩ := forall₂_mem_left hOr ((hO _).mpr (Or.inl rfl))
     rwa [RecRR.func hry (lendRec_rr l)] at hy
@@ -455,10 +505,8 @@ theorem twp_lendEnd {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls ls₁ : Lis
   have hr₀O₁ : lendRec l ∉ O₁₀ := fun hm => by
     obtain ⟨x, hx, hxr⟩ := forall₂_mem_right hO₁₀ hm
     exact hO₁ (lendRec_rr_eq hxr ▸ hx)
-  have hr₀ls₁ : ∀ y ∈ ls₁₀, y.1 ≠ lendRec l := fun y hy hyr => by
-    obtain ⟨x, hx, hxy, -⟩ := forall₂_mem_right hls₁₀ hy
-    rw [hyr] at hxy
-    exact hls₁ x hx (lendRec_rr_eq hxy)
+  have hr₀ls₁ : ∀ y ∈ ls₁₀, y.1 ≠ lendRec l := fun y hy => by
+    simpa using (List.mem_filter.mp hy).2
   have hO₀mem : ∀ x, x ∈ O₀ ↔ x = lendRec l ∨ x ∈ O₁₀ := by
     intro x
     refine ⟨fun hx => ?_, fun hx => hx.elim (fun e => e ▸ hr₀O) (hO₁₀in x)⟩
@@ -467,14 +515,8 @@ theorem twp_lendEnd {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls ls₁ : Lis
     · exact Or.inl (RecRR.func hyx (lendRec_rr l))
     · obtain ⟨x', hx', hyx'⟩ := forall₂_mem_left hO₁₀ hy₁
       exact Or.inr (RecRR.func hyx hyx' ▸ hx')
-  have hls₀mem : ∀ y ∈ ls₀, y.1 ≠ lendRec l → y ∈ ls₁₀ := by
-    intro y hy hyr
-    obtain ⟨x, hx, hxy, hxt⟩ := forall₂_mem_right hl hy
-    rcases hls x hx with hx₁ | hx₁
-    · exact absurd (RecRR.func hxy (hx₁ ▸ lendRec_rr l)) hyr
-    · obtain ⟨y', hy', hxy', hxt'⟩ := forall₂_mem_left hls₁₀ hx₁
-      have : y' = y := Prod.ext (RecRR.func hxy' hxy) (hxt'.trans hxt.symm)
-      exact this ▸ hy'
+  have hls₀mem : ∀ y ∈ ls₀, y.1 ≠ lendRec l → y ∈ ls₁₀ := fun y hy hyr =>
+    List.mem_filter.mpr ⟨hy, by simpa using hyr⟩
   have hpsF : lendRec l ∉ psF := fun hm => hS.2 _ hr₀O _ hm rfl
   have hps₁ : ∀ p, p ∈ O₁₀ ++ psF ↔ p ∈ ps ∧ p ≠ lendRec l := by
     intro p

@@ -177,14 +177,14 @@ world extending its start's tree, at a list holding the re-reading of every reco
 theorem twp_keepsList {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls : List (SRecT w.K)}
     {e : Expr} {ρ : TRes w.K} (h : twp (ℍ := ℍ) F Q n w ls [] e ρ) :
     twp (ℍ := ℍ) F (fun k w' ls' O' t ρ' =>
-      Q k w' ls' O' t ρ' ∧ w.K.Ext w'.K ∧ SRecsIn w'.Θ ls ls') n w ls [] e ρ := by
+      Q k w' ls' O' t ρ' ∧ w.K.Ext w'.K ∧ KeepRel w'.Θ ls ls' ρ) n w ls [] e ρ := by
   intro w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE hr hl hO hF hf hc hS hR hI hfd j μ' e' hj hrun hfin
   cases hO
   obtain ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, g₉, g₁₀,
       g₁₁⟩ := h w₀ ρ₀ ρf fρ ls₀ [] ps psF μ hE hr hl .nil hF hf hc hS hR hI hfd j μ' e' hj hrun hfin
   refine ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇,
-    ⟨g₈, WCactus.Ext.trans hE.1 g₀.1, fun r hr' => ?_⟩, g₉, g₁₀, g₁₁⟩
-  obtain ⟨r₀, hr₀, e₀⟩ := hl.mem_fwd hr'
+    ⟨g₈, WCactus.Ext.trans hE.1 g₀.1, fun r hr' hrel => ?_⟩, g₉, g₁₀, g₁₁⟩
+  obtain ⟨r₀, hr₀, e₀⟩ := hl r hr' hrel
   obtain ⟨r', hr'', e'⟩ := keep_frameRooted g₂ g₅ g₆.1
     (frameRooted_of_notRunner hS hR.1 hr₀ (fun _ h => by cases h))
   exact ⟨r', hr'', RecRR.trans g₀.1 e₀ e'⟩
@@ -263,6 +263,91 @@ theorem kapAtT_resume_beside {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEnt
 
 /-! ### The resumability theorem -/
 
+/-- **The frame, keeping the records the framed part reads.** As `twp_frame`; at every end the
+records of `ls` the framed part `ρ₂` reads, apart from the lineage of the run's records `O₁`, are
+re-read in the end list. The start list keeps them (`twp`'s start reads `KeepRel` at the whole
+resource), they are rooted in records proper outside `O₁`, so in the run's frame, and `EndT`
+re-reads the frame's records (`keep_frameRooted`). -/
+theorem twp_frame_keepApart {F F₁ : TFrame} {P : TPost} {R : TRProp} (hR : R.Mono) {n : Nat}
+    {w : TWd} {ls : List (SRecT w.K)} {O₁ O₂ : List (FrameRecT w.K)}
+    (hO : ∀ p ∈ O₁, ∀ q ∈ O₂, p.le ≠ q.le) {e : Expr} {ρ₁ ρ₂ ρ : TRes w.K}
+    (hcρ : ResUT.CompS ρ₁ ρ₂ ρ) (hcov : CovR (sem w.Θ) w.K ρ)
+    (hF : ∀ (w₀ : TWd) (ρf ρ₂₀ y : TRes w₀.K), w.Ext w₀ ρ₂ → RRw (w := w) (w' := w₀) ρ₂ ρ₂₀ →
+      F w₀ ρf → ResUT.CompS ρf ρ₂₀ y → F₁ w₀ y)
+    (hwp : twp (ℍ := ℍ) F₁ P n w ls O₁ e ρ₁) (hR₂ : R w O₂ ρ₂) :
+    twp (ℍ := ℍ) F (fun k w' ls' O' t ρ' => ∃ (O₁' O₂' : List (FrameRecT w'.K)) (a b : TRes w'.K),
+      O' = O₁' ++ O₂' ∧ ResUT.CompS a b ρ' ∧ P k w' ls' O₁' t a ∧ R w' O₂' b ∧ w.K.Ext w'.K ∧
+        ∀ r ∈ rsOfT ls, RelFT r ρ₂ → (∀ p ∈ O₁, ∀ d, DescRT p d → d.le ≠ r.le) →
+          ∃ r' ∈ rsOfT ls', RecRR w'.Θ r r') n w ls (O₁ ++ O₂) e ρ := by
+  intro w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE hr hl hOr hFρ hf hc hS hRi hI hfd j μ' e' hj hrun hfin
+  obtain ⟨O₁₀, O₂₀, rfl, hO₁, hO₂⟩ := forall₂_append_left hOr
+  have hO₀ : ∀ p ∈ O₁₀, ∀ q ∈ O₂₀, p.le ≠ q.le := by
+    intro p hp q hq
+    obtain ⟨p₁, hp₁, r₁⟩ := forall₂_mem_right hO₁ hp
+    obtain ⟨q₂, hq₂, r₂⟩ := forall₂_mem_right hO₂ hq
+    rw [r₁.1, r₂.1]
+    exact hO p₁ hp₁ q₂ hq₂
+  obtain ⟨ρ₁₀, ρ₂₀, h₁₀, h₂₀, hc₀⟩ := RR.split_retype hE.1 hcρ hcov hE.2 hr
+  have hE₁ := hE.of_compS_left hcρ
+  have hE₂ := hE.of_compS_right hcρ
+  obtain ⟨y, hy, hyf⟩ := reassoc_out hc hc₀
+  have hS₁ : SplitT ps O₁₀ (O₂₀ ++ psF) := by
+    refine ⟨fun p => ?_, fun p hp q hq => ?_⟩
+    · rw [hS.1 p, List.mem_append, List.mem_append]; tauto
+    · rcases List.mem_append.mp hq with h | h
+      · exact hO₀ p hp q h
+      · exact hS.2 p (List.mem_append_left _ hp) q h
+  obtain ⟨w', y', ρ₁', fρ', psF'', ps', O₁', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, g₉, g₁₀,
+      g₁₁⟩ :=
+    hwp w₀ ρ₁₀ y fρ ls₀ O₁₀ ps (O₂₀ ++ psF) μ hE₁ h₁₀ (KeepRel.of_compS_left hcρ hl) hO₁
+      (hF w₀ ρf ρ₂₀ y hE₂ h₂₀ hFρ hy) (hash_of_inv hyf hI) hyf hS₁ hRi hI hfd j μ' e' hj hrun
+      hfin
+  have hkeep : ∀ r ∈ rsOfT ls, RelFT r ρ₂ → (∀ p ∈ O₁, ∀ d, DescRT p d → d.le ≠ r.le) →
+      ∃ r' ∈ rsOfT ls', RecRR w'.Θ r r' := by
+    intro r hr₀ hrel hap
+    obtain ⟨r₀, hr₀', e₀⟩ := hl r hr₀ (hrel.of_compS_right hcρ)
+    obtain ⟨p₁, hp₁, hd⟩ := (hRi.1.inv.2.2.2.2.2.2.1 r₀).mp hr₀'
+    rcases (hS₁.1 p₁).mp hp₁ with hp₁O | hp₁F
+    · exfalso
+      obtain ⟨path, hpath⟩ := hd
+      obtain ⟨p, hp, hpp⟩ := forall₂_mem_right hO₁ hp₁O
+      obtain ⟨d, hd, hpath'⟩ := hpath.rr_back hpp
+      exact hap p hp d ⟨path, hpath'⟩ (hd.1.symm.trans e₀.1)
+    · obtain ⟨r', hr', e'⟩ := keep_frameRooted g₂ g₅ g₆.1 ⟨p₁, hp₁F, hd⟩
+      exact ⟨r', hr', RecRR.trans g₀.1 e₀ e'⟩
+  obtain ⟨O₂', psF', rfl, hO₂', hpsF'⟩ := forall₂_append_left g₂
+  obtain ⟨ρf', ρ₂', hf', h₂', hy'⟩ :=
+    RR.split_retype g₀.1 hy (covf_of_comp hyf hI) g₀.2 g₁
+  obtain ⟨ρ', hρ', hfρ'⟩ := reassoc_in hy' g₄
+  have hR₂₀ : R w₀ O₂₀ ρ₂₀ := hR _ _ _ _ _ _ hE₂ h₂₀ hO₂ hR₂
+  have hvy' : ResUT.Valid y' := (ResUT.Valid.split g₄ g₇.valid).1
+  have hu : UpdX (sem w'.Θ) (recMask O₁₀) (recMask O₁') ρ₀ ρ' :=
+    UpdX.frame g₀.1 g₉ h₂' hc₀ hρ' (cov_valid hc hI) (cov_valid hfρ' g₇)
+      (g₁₀.of_compS_right hy' hvy')
+  have hmask : ∀ x, MaskDiff (recMask (O₁₀ ++ O₂₀)) (recMask (O₁' ++ O₂')) x →
+      MaskDiff (recMask O₁₀) (recMask O₁') x := fun x hx => by
+    unfold MaskDiff at hx ⊢
+    rw [recMask_append, recMask_append, ← recMask_rr hO₂' x] at hx
+    tauto
+  refine ⟨w', ρf', ρ', fρ', psF', ps', O₁' ++ O₂', ls', g₀.of_compS_left hy, hf', hpsF',
+    ResUT.hash_symm (hash_of_inv hfρ' g₇), hfρ', ⟨fun p => ?_, fun p hp q hq => ?_⟩, g₆, g₇,
+    ⟨O₁', O₂', ρ₁', ρ₂', rfl, hρ', g₈, hR _ _ _ _ _ _ (g₀.of_compS_right hy) h₂' hO₂' hR₂₀,
+      WCactus.Ext.trans hE.1 g₀.1, hkeep⟩,
+    (hu.widen (recMask O₂₀)).congr (fun l => recMask_append l)
+      (fun l => by rw [recMask_append, recMask_rr hO₂' l]),
+    (g₁₀.of_compS_left hy' hvy').mono hmask,
+    (g₁₁.mono fun l h => (recMask_append l).mpr (Or.inl h)).frame hc₀ (TWNT.mutOne hRi.1)
+      (fun _ _ h k => (h.of_compS_right hc₀ (kind_mut_ne_imm k)).of_compS_right hc
+        (kind_mut_ne_imm k))
+      (AgreeOn.of_compS_right hy g₀.2)⟩
+  · rw [g₅.1 p, List.mem_append, List.mem_append]; tauto
+  · rcases List.mem_append.mp hp with h | h
+    · exact g₅.2 p h q (List.mem_append_right _ hq)
+    · obtain ⟨p₀, hp₀, r₀⟩ := forall₂_mem_right hO₂' h
+      obtain ⟨q₀, hq₀, s₀⟩ := forall₂_mem_right hpsF' hq
+      rw [r₀.1, s₀.1]
+      exact hS.2 p₀ (List.mem_append_right _ hp₀) q₀ hq₀
+
 /-- **Another branch's run keeps a stored continuation resumable.** `κ` is held at `w` with its
 list `ls` (`KapAtT`), its share `ρκ` and records `Oκ` beside a run of `e` from `ρ₁` that owns no
 record at its start. At every end of the run, at the world `w′` and list `ls′` it ends in, the run's
@@ -284,12 +369,12 @@ theorem twp_keepsKap {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT} {H : 
     w₁.Ext w' ρκ₁ ∧ RRw (w := w₁) (w' := w') ρκ₁ ρ' ∧ RecsRR w'.Θ O₁ O
   have hRm : R.Mono := fun _ _ _ _ _ _ hE hr hO ⟨a, b, c⟩ =>
     ⟨a.trans b hE, RRw.trans hE.1 b hr, c.trans hE.1 hO⟩
-  have h := twp_frame (R := R) hRm (O₁ := []) (O₂ := Oκ) (fun _ h => by cases h) hcρ hcov hF
-    (twp_keepsList hwp) ⟨hE₁, hr₁, hO₁⟩
+  have h := twp_frame_keepApart (R := R) hRm (O₁ := []) (O₂ := Oκ) (fun _ h => by cases h) hcρ
+    hcov hF hwp ⟨hE₁, hr₁, hO₁⟩
   refine twp_mono (fun k₁ w' ls' O' t ρ' hp => ?_) h
-  obtain ⟨Oa, Ob, a, b, hO', hc, ⟨hP, hKx, hls⟩, hRb⟩ := hp
+  obtain ⟨Oa, Ob, a, b, hO', hc, hP, hRb, hKx, hls⟩ := hp
   exact ⟨Oa, Ob, a, b, hO', hc, hP, w₁, ls₁, O₁, ρκ₁, hK, hRb.1, hRb.2.1, hRb.2.2,
-    hl₁.trans hKx hr₁ (KeepRel.of_srecsIn hls ρκ)⟩
+    hl₁.trans hKx hr₁ fun r hr hrel => hls r hr hrel fun _ h => by cases h⟩
 
 /-- **The runner's lineage, at locations**: no record in the lineage of a record of `O` is at `r`'s
 location. -/
@@ -303,13 +388,13 @@ theorem twp_keepsList_apart {F : TFrame} {Q : TPost} {n : Nat} {w : TWd}
     {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {e : Expr} {ρ : TRes w.K}
     (h : twp (ℍ := ℍ) F Q n w ls O e ρ) :
     twp (ℍ := ℍ) F (fun k w' ls' O' t ρ' => Q k w' ls' O' t ρ' ∧ w.K.Ext w'.K ∧
-      ∀ r ∈ rsOfT ls, ApartLin O r → ∃ r' ∈ rsOfT ls', RecRR w'.Θ r r') n w ls O e ρ := by
+      ∀ r ∈ rsOfT ls, RelFT r ρ → ApartLin O r → ∃ r' ∈ rsOfT ls', RecRR w'.Θ r r') n w ls O e ρ := by
   intro w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE hr hl hO hF hf hc hS hR hI hfd j μ' e' hj hrun hfin
   obtain ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, g₉, g₁₀,
       g₁₁⟩ := h w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE hr hl hO hF hf hc hS hR hI hfd j μ' e' hj hrun hfin
   refine ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇,
-    ⟨g₈, WCactus.Ext.trans hE.1 g₀.1, fun r hr' hap => ?_⟩, g₉, g₁₀, g₁₁⟩
-  obtain ⟨r₀, hr₀, e₀⟩ := hl.mem_fwd hr'
+    ⟨g₈, WCactus.Ext.trans hE.1 g₀.1, fun r hr' hrel hap => ?_⟩, g₉, g₁₀, g₁₁⟩
+  obtain ⟨r₀, hr₀, e₀⟩ := hl r hr' hrel
   have hroot : ∀ p₀ ∈ O₀, ¬ DescRT p₀ r₀ := by
     rintro p₀ hp₀ ⟨path, hpath⟩
     obtain ⟨p, hp, hpp⟩ := forall₂_mem_right hO hp₀
@@ -341,13 +426,14 @@ theorem twp_keepsKap_apart {Qout : TPostV} {M : BoCa.Loc → Prop} {en : OpEntT}
     w₁.Ext w' ρκ₁ ∧ RRw (w := w₁) (w' := w') ρκ₁ ρ' ∧ RecsRR w'.Θ O₁ O
   have hRm : R.Mono := fun _ _ _ _ _ _ hE hr hO ⟨a, b, c⟩ =>
     ⟨a.trans b hE, RRw.trans hE.1 b hr, c.trans hE.1 hO⟩
-  have h := twp_frame (R := R) hRm hOκ hcρ hcov hF (twp_keepsList_apart hwp) ⟨hE₁, hr₁, hO₁⟩
+  have h := twp_frame_keepApart (R := R) hRm hOκ hcρ hcov hF hwp ⟨hE₁, hr₁, hO₁⟩
   refine twp_mono (fun k₁ w' ls' O' t ρ' hp => ?_) h
-  obtain ⟨Oa, Ob, a, b, hO', hc, ⟨hP, hKx, hls⟩, hRb⟩ := hp
+  obtain ⟨Oa, Ob, a, b, hO', hc, hP, hRb, hKx, hls⟩ := hp
   refine ⟨Oa, Ob, a, b, hO', hc, hP, w₁, ls₁, O₁, ρκ₁, hK, hRb.1, hRb.2.1, hRb.2.2,
-    KeepRel.of_srecsIn (fun r₁ hr₁' => ?_) ρκ₁⟩
+    fun r₁ hr₁' hrel => ?_⟩
   obtain ⟨r, hr, e₁⟩ := hl₁ r₁ hr₁'
-  obtain ⟨r', hr', e'⟩ := hls r hr (hap r₁ hr₁' r hr e₁)
+  obtain ⟨r', hr', e'⟩ :=
+    hls r hr ((RelFT.rr_iff e₁ hr₁).mp hrel) (hap r₁ hr₁' r hr e₁)
   exact ⟨r', hr', RecRR.trans hKx e₁ e'⟩
 
 /-! ### Where it must refuse: R2 at the stored branch -/

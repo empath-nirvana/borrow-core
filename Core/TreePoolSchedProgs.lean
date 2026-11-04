@@ -142,7 +142,7 @@ theorem stackClause_ok :
   refine ⟨_, rfl, fun j hj => poolAnsAt_iff.mpr ?_⟩
   intro ts Os σ ρ' hi hg hP hc' hσ hρ hap hcov hv hls hO' F' hF'm hF'M
   have hκ' := KapSchedT.mask_mono (fun x hx => (recMask_rr hO x).mp hx)
-    (KapSchedT.kripke hκ hE hr (KeepRel.of_srecsRR hl _) hO)
+    (KapSchedT.kripke hκ hE hr hl hO)
   obtain ⟨hP', hg'⟩ := poolAns_park (Inv := InvStack) hκ' hj hg hP hc' hσ hρ hap
     (CovR.of_compS_left hc' hcov) hls hO'
   cases j with

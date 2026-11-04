@@ -253,7 +253,7 @@ theorem cerwpT_zero {Tb : TableT} {Q : TPostV} {Fb F : TFrame} {w : TWd} {ls : L
 theorem cerwpT_kripke {Tb : TableT} {Q : TPostV} {Fb F : TFrame} {n : Nat} {w w₁ : TWd}
     {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {ls₁ : List (SRecT w₁.K)}
     {O₁ : List (FrameRecT w₁.K)} {e : Expr} {ρ : TRes w.K} {ρ₁ : TRes w₁.K} (hE : w.Ext w₁ ρ)
-    (hr : RRw (w := w) (w' := w₁) ρ ρ₁) (hl : SRecsRR w₁.Θ ls ls₁) (hO : RecsRR w₁.Θ O O₁)
+    (hr : RRw (w := w) (w' := w₁) ρ ρ₁) (hl : KeepRel w₁.Θ ls ls₁ ρ) (hO : RecsRR w₁.Θ O O₁)
     (h : cerwpT (ℍ := ℍ) Tb Q Fb F n w ls O e ρ) : cerwpT (ℍ := ℍ) Tb Q Fb F n w₁ ls₁ O₁ e ρ₁ := by
   rw [cerwpT_eq] at h ⊢
   exact twp_kripke hE hr hl hO h
@@ -269,7 +269,7 @@ theorem cerwpT_step {Tb : TableT} (hL : Tb.Local) {Q : TPostV} {Fb F : TFrame} {
 theorem cerwpT_val {Tb : TableT} {Q : TPostV} {Fb F : TFrame} {n : Nat} {w : TWd}
     {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {v : Val} {ρ : TRes w.K}
     (h : ∀ (w₀ : TWd) (ρ₀ : TRes w₀.K) (ls₀ : List (SRecT w₀.K)) (O₀ : List (FrameRecT w₀.K)),
-      w.Ext w₀ ρ → RRw (w := w) (w' := w₀) ρ ρ₀ → SRecsRR w₀.Θ ls ls₀ → RecsRR w₀.Θ O O₀ →
+      w.Ext w₀ ρ → RRw (w := w) (w' := w₀) ρ ρ₀ → KeepRel w₀.Θ ls ls₀ ρ → RecsRR w₀.Θ O O₀ →
       Q n w₀ ls₀ O₀ v ρ₀) :
     cerwpT (ℍ := ℍ) Tb Q Fb F n w ls O v.1 ρ := by
   rw [cerwpT_eq]
@@ -282,7 +282,7 @@ theorem cerwpT_perform {T : OpTabT} {Q : TPostV} {Fb F : TFrame} (K : Kont) {m i
     (ha : en.abort = false) {n : Nat} {w : TWd} {ls : List (SRecT w.K)}
     {O : List (FrameRecT w.K)} {ρ : TRes w.K}
     (h : ∀ (w₀ : TWd) (ρ₀ : TRes w₀.K) (ls₀ : List (SRecT w₀.K)) (O₀ : List (FrameRecT w₀.K)),
-      w.Ext w₀ ρ → RRw (w := w) (w' := w₀) ρ ρ₀ → SRecsRR w₀.Θ ls ls₀ → RecsRR w₀.Θ O O₀ →
+      w.Ext w₀ ρ → RRw (w := w) (w' := w₀) ρ ρ₀ → KeepRel w₀.Θ ls ls₀ ρ → RecsRR w₀.Θ O O₀ →
       en.oc w₀ O₀ ∧ ∃ ρa ρk : TRes w₀.K, ResUT.CompS ρa ρk ρ₀ ∧ en.PA n w₀ ls₀ v ρa ∧
         contShareT en Fb n w₀ ls₀ O₀ K v (cerwpTC (ℍ := ℍ) (opTableT T) Q Fb n) ρk) :
     cerwpT (ℍ := ℍ) (opTableT T) Q Fb F n w ls O (K.plug (performE (.val (opPayload m i v)))) ρ := by

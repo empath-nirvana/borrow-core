@@ -108,7 +108,7 @@ theorem parkClause_ok {Qt : TPostV} (hQt : Qt.Down) :
   refine twp_here (fun μ => final_val μ _) fun w₀ ρ₀ ls₀ O₀ hE hr hl hO => ?_
   exact ⟨_, rfl, QP_iff.mpr (Or.inl ⟨κ, rfl,
     KapSchedT.mask_mono (fun x hx => (recMask_rr hO x).mp hx)
-      (KapSchedT.kripke hκ hE hr (KeepRel.of_srecsRR hl _) hO)⟩)⟩
+      (KapSchedT.kripke hκ hE hr hl hO)⟩)⟩
 
 theorem parkRet_ok {Qt : TPostV} (hQt : Qt.Down) (hst : QtStable Qt) :
     SchedRetT (ℍ := ℍ) Qt (QP (ℍ := ℍ) Qt) stepRet := by
@@ -308,7 +308,7 @@ theorem poolPost_here {Qt : TPostV} (hst : QtStable Qt) {ts : List StoredT} {F :
   have hvb := (ResUT.Valid.split hc hv).2
   exact ⟨Oa₀, Ob₀, a₀, b₀, rfl, hc₀,
     ⟨x, rfl, hst k w w₀ ls Oa ls₀ Oa₀ x a a₀ (hE.of_compS_left hc) hra hOa hx⟩,
-    hP.kripke (hE.of_compS_right hc) hrb hOb (KeepRel.of_srecsRR hl _)
+    hP.kripke (hE.of_compS_right hc) hrb hOb (KeepRel.of_compS_left (ResUT.CompS.comm hc) hl)
       (hcov.of_compS_right hc) hvb,
     (NoneAt.rr hE.1 hvb hrb hb).mono fun y hy => (recMask_rr hOa y).mpr hy,
     (NoneAt.rr hE.1 hva hra ha).mono fun y hy => (recMask_rr hOb y).mpr hy,

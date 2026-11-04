@@ -247,7 +247,7 @@ the world misses, the run continues from `Kc[loc ℓ]` with `ℓ ↦ own(v)` bes
 theorem twp_alloc {F : TFrame} {Q : TPost} (hQ : Q.Down) (Kc : Kont) (v : BoCa.Val) {n : Nat}
     {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {ρ : TRes w.K}
     (h : ∀ (w₀ : TWd) (ρ₀ : TRes w₀.K) (ls₀ : List (SRecT w₀.K)) (O₀ : List (FrameRecT w₀.K)),
-      w.Ext w₀ ρ → RRw (w := w) (w' := w₀) ρ ρ₀ → SRecsRR w₀.Θ ls ls₀ → RecsRR w₀.Θ O O₀ →
+      w.Ext w₀ ρ → RRw (w := w) (w' := w₀) ρ ρ₀ → KeepRel w₀.Θ ls ls₀ ρ → RecsRR w₀.Θ O O₀ →
       ∀ (l : BoCa.Loc) (ρ₁ : TRes w₀.K), ResUT.CompS ρ₀ (ResUT.single l (CellUT.ownOf v)) ρ₁ →
         twp (ℍ := ℍ) F Q n w₀ ls₀ O₀ (Kc.plug (.val (.loc l))) ρ₁) :
     twp (ℍ := ℍ) F Q n w ls O (Kc.plug (.app (.val (.prim .alloc)) (.val v))) ρ := by
@@ -280,7 +280,7 @@ theorem twp_alloc {F : TFrame} {Q : TPost} (hQ : Q.Down) (Kc : Kont) (v : BoCa.V
   obtain ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, g₉, g₁₀,
       g₁₁⟩ :=
     h w₀ ρ₀ ls₀ O₀ hE hr hl hO l ρ₁ hρ₁ w₀ ρ₁ ρf fρ₁ ls₀ O₀ ps psF _ (TWd.Ext.refl _ _)
-      (RR.refl hcov₁) (SRecsRR.refl hR₁.cov_ls)
+      (RR.refl hcov₁) (KeepRel.refl hR₁.cov_ls _)
       (RecsRR.refl fun r hr' => hR₁.cov_ps r (hS.left r hr')) hFρ (hash_of_inv hfρ₁' hI₁) hfρ₁'
       hS hR₁ hI₁ (finDom_upd hfd l v) j' μ' e' (by omega) t hfin
   exact ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇,
@@ -330,7 +330,8 @@ theorem twp_free {F : TFrame} {Q : TPost} (hQ : Q.Down) (Kc : Kont) (l : BoCa.Lo
     updX_compS_own_back hc₀ (cov_valid hfρ₂ hI₂) (cov_valid hc hI) hcov₂
   obtain ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, g₉, g₁₀,
       g₁₁⟩ :=
-    h w₀ ρ₂₀ ρf fρ₂ ls₀ O₀ ps psF μ₂ (hE.of_compS_right hcρ) h₂₀ hl hO hFρ
+    h w₀ ρ₂₀ ρf fρ₂ ls₀ O₀ ps psF μ₂ (hE.of_compS_right hcρ) h₂₀
+      (KeepRel.of_compS_left (ResUT.CompS.comm hcρ) hl) hO hFρ
       (hash_of_inv hfρ₂ hI₂) hfρ₂ hS hR₂ hI₂ (by rw [← hdel]; exact finDom_del hfd l) j' μ' e'
       (by omega) t hfin
   exact ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇,
@@ -530,7 +531,9 @@ theorem twp_store {F : TFrame} {Q : TPost} (hQ : Q.Down) (Kc : Kont) (l : BoCa.L
   rw [hupd] at t
   obtain ⟨w', ρf', ρ'', fρ'', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, g₉, g₁₀,
       g₁₁⟩ :=
-    h w₀ ρx ρf fρ' ls₀ O₀ ps psF _ hE' hrx hl hO hFρ (hash_of_inv hfρ₀' hI') hfρ₀' hS hR' hI'
+    h w₀ ρx ρf fρ' ls₀ O₀ ps psF _ hE' hrx
+      (KeepRel.of_frz (frz_of_own_right (ResUT.CompS.comm hcρ')
+        fun m hm => hm.of_compS_left (ResUT.CompS.comm hcρ)) hl) hO hFρ (hash_of_inv hfρ₀' hI') hfρ₀' hS hR' hI'
       (by rw [← hupd]; exact finDom_upd hfd l v₂) j' μ' e' (by omega) t hfin
   exact ⟨w', ρf', ρ'', fρ'', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇,
     hQ.le (by omega) _ _ _ _ _ g₈, UpdX.trans g₀.1 hu g₉, g₁₀,

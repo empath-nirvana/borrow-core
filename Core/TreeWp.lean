@@ -1,5 +1,6 @@
 import Core.StepsN
 import Support.Model.Tree.World.Recs
+import Support.Model.Tree.World.ExtF
 
 /-!
 # The step-indexed relation over the tree world: `twp`  `[spec §62]`
@@ -55,6 +56,38 @@ open BoCa.Fig16.Tree
 open BoCa.Fig16.BoLo
 open BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Step1 Head Kont)
+
+/-! ### The start list's condition, along resource changes -/
+
+/-- `KeepRel` at a resource freezing no more than another. -/
+theorem KeepRel.of_frz {K K' : WCactus} {Θ' : CodeTy} {ls : List (SRecT K)}
+    {ls' : List (SRecT K')} {ρ ρ' : TRes K} (hf : ∀ m, FrzT ρ' m → FrzT ρ m)
+    (h : KeepRel Θ' ls ls' ρ) : KeepRel Θ' ls ls' ρ' :=
+  fun r hr ⟨m, hm, ha⟩ => h r hr ⟨m, hf m hm, ha⟩
+
+/-- The empty resource reads no record. -/
+theorem KeepRel.of_empty {K K' : WCactus} {Θ' : CodeTy} (ls : List (SRecT K))
+    (ls' : List (SRecT K')) : KeepRel Θ' ls ls' (PMap.empty : TRes K) := by
+  rintro r - ⟨m, hm, -⟩
+  cases hm with
+  | imm e _ => simp at e
+  | inImm e _ _ => simp at e
+  | inMut e _ _ => simp at e
+
+/-- An `own` cell freezes nothing. -/
+theorem FrzT.not_single_own {K : WCactus} {l m : BoCa.Loc} {v : BoCa.Val} :
+    ¬ FrzT (ResUT.single (K := K) l (CellUT.ownOf v)) m := by
+  intro h
+  cases h with
+  | imm e k => obtain ⟨-, rfl⟩ := ResUT.single_get_eq_some e; simp at k
+  | inImm e k _ => obtain ⟨-, rfl⟩ := ResUT.single_get_eq_some e; simp at k
+  | inMut e k _ => obtain ⟨-, rfl⟩ := ResUT.single_get_eq_some e; simp at k
+
+/-- Replacing a part by an `own` cell freezes no more. -/
+theorem frz_of_own_right {K : WCactus} {Z ρ' ρ : TRes K} {l : BoCa.Loc} {v : BoCa.Val}
+    (hc' : ResUT.CompS Z (ResUT.single l (CellUT.ownOf v)) ρ')
+    (hZ : ∀ m, FrzT Z m → FrzT ρ m) : ∀ m, FrzT ρ' m → FrzT ρ m := fun m hm =>
+  (FrzT.split hc' hm).elim (hZ m) fun h => (FrzT.not_single_own h).elim
 
 /-! ### The relation -/
 
@@ -113,7 +146,7 @@ def twp (F : TFrame) (Q : TPost) (n : Nat) (w : TWd) (ls : List (SRecT w.K))
     (O : List (FrameRecT w.K)) (e : Expr) (ρ : TRes w.K) : Prop :=
   ∀ (w₀ : TWd) (ρ₀ ρf fρ : TRes w₀.K) (ls₀ : List (SRecT w₀.K))
     (O₀ ps psF : List (FrameRecT w₀.K)) (μ : Heap),
-    w.Ext w₀ ρ → RRw (w := w) (w' := w₀) ρ ρ₀ → SRecsRR w₀.Θ ls ls₀ → RecsRR w₀.Θ O O₀ →
+    w.Ext w₀ ρ → RRw (w := w) (w' := w₀) ρ ρ₀ → KeepRel w₀.Θ ls ls₀ ρ → RecsRR w₀.Θ O O₀ →
     F w₀ ρf → ResUT.Hash ρf ρ₀ → ResUT.CompS ρf ρ₀ fρ → SplitT ps O₀ psF →
     RecInv w₀ fρ ps ls₀ → WInv w₀ fρ μ → FinDom μ →
     ∀ j μ' e', j < n → StepsN (ℍ := ℍ) j μ e μ' e' → Final (ℍ := ℍ) μ' e' →
@@ -179,11 +212,11 @@ over the extensions. -/
 theorem twp_kripke {F : TFrame} {Q : TPost} {n : Nat} {w w₁ : TWd} {ls : List (SRecT w.K)}
     {O : List (FrameRecT w.K)} {ls₁ : List (SRecT w₁.K)} {O₁ : List (FrameRecT w₁.K)}
     {e : Expr} {ρ : TRes w.K} {ρ₁ : TRes w₁.K} (hE : w.Ext w₁ ρ)
-    (hr : RRw (w := w) (w' := w₁) ρ ρ₁) (hl : SRecsRR w₁.Θ ls ls₁) (hO : RecsRR w₁.Θ O O₁)
+    (hr : RRw (w := w) (w' := w₁) ρ ρ₁) (hl : KeepRel w₁.Θ ls ls₁ ρ) (hO : RecsRR w₁.Θ O O₁)
     (h : twp (ℍ := ℍ) F Q n w ls O e ρ) : twp (ℍ := ℍ) F Q n w₁ ls₁ O₁ e ρ₁ := by
   intro w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE₀ hr₀ hl₀ hO₀
   exact h w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ (hE.trans hr hE₀) (RRw.trans hE₀.1 hr hr₀)
-    (hl.trans hE₀.1 hl₀) (hO.trans hE₀.1 hO₀)
+    (KeepRel.trans hE₀.1 hr hl hl₀) (hO.trans hE₀.1 hO₀)
 
 /-- The resource of a run, part of a world in the invariant, is covered. -/
 theorem cov_of_comp {w : TWd} {ρf ρ fρ : TRes w.K} {μ : Heap} (hc : ResUT.CompS ρf ρ fρ)
@@ -214,7 +247,7 @@ theorem MutCov.of_part {w : TWd} {fρ ρf ρ : TRes w.K} {ps : List (FrameRecT w
 theorem twp_here {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls : List (SRecT w.K)}
     {O : List (FrameRecT w.K)} {e : Expr} {ρ : TRes w.K} (hfin : ∀ μ, Final (ℍ := ℍ) μ e)
     (h : ∀ (w₀ : TWd) (ρ₀ : TRes w₀.K) (ls₀ : List (SRecT w₀.K)) (O₀ : List (FrameRecT w₀.K)),
-      w.Ext w₀ ρ → RRw (w := w) (w' := w₀) ρ ρ₀ → SRecsRR w₀.Θ ls ls₀ → RecsRR w₀.Θ O O₀ →
+      w.Ext w₀ ρ → RRw (w := w) (w' := w₀) ρ ρ₀ → KeepRel w₀.Θ ls ls₀ ρ → RecsRR w₀.Θ O O₀ →
       Q n w₀ ls₀ O₀ e ρ₀) :
     twp (ℍ := ℍ) F Q n w ls O e ρ := by
   intro w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE hr hl hO _ hf hc hS hR hI _ j μ' e' hj hrun _
@@ -276,7 +309,7 @@ theorem twp_bind {F : TFrame} (hFm : F.Mono) {Q : TPost} (K : Kont) {n : Nat} {w
     have hcov : CovR (sem w₁.Θ) w₁.K ρ₁ := cov_of_comp g₄ g₇
     obtain ⟨w₂, ρf₂, ρ₂, fρ₂, psF₂, ps₂, O₂, ls₂, k₀, k₁, k₂, k₃, k₄, k₅, k₆, k₇, k₈, k₉, k₁₀,
         k₁₁⟩ := g₈ w₁ ρ₁ ρf₁ fρ₁ ls₁ O₁ ps₁ psF₁ μ₁ (TWd.Ext.refl _ _) (RR.refl hcov)
-        (SRecsRR.refl g₆.cov_ls) (RecsRR.refl fun r hr => g₆.cov_ps r (g₅.left r hr))
+        (KeepRel.refl g₆.cov_ls _) (RecsRR.refl fun r hr => g₆.cov_ps r (g₅.left r hr))
         (hFm _ _ _ _ g₀ g₁ hF) (ResUT.hash_symm g₃) g₄ g₅ g₆ g₇ (fd_stepsN hrun₁ hfd) j₂ μ' E
         (by omega) hrun₂ hfin
     refine ⟨w₂, ρf₂, ρ₂, fρ₂, psF₂, ps₂, O₂, ls₂, g₀.trans g₁ k₀, RRw.trans k₀.1 g₁ k₁,
@@ -343,7 +376,8 @@ theorem twp_frame {F F₁ : TFrame} {P : TPost} {R : TRProp} (hR : R.Mono) {n : 
       · exact hS.2 p (List.mem_append_left _ hp) q h
   obtain ⟨w', y', ρ₁', fρ', psF'', ps', O₁', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, g₉, g₁₀,
       g₁₁⟩ :=
-    hwp w₀ ρ₁₀ y fρ ls₀ O₁₀ ps (O₂₀ ++ psF) μ hE₁ h₁₀ hl hO₁ (hF w₀ ρf ρ₂₀ y hE₂ h₂₀ hFρ hy)
+    hwp w₀ ρ₁₀ y fρ ls₀ O₁₀ ps (O₂₀ ++ psF) μ hE₁ h₁₀ (KeepRel.of_compS_left hcρ hl) hO₁
+      (hF w₀ ρf ρ₂₀ y hE₂ h₂₀ hFρ hy)
       (hash_of_inv hyf hI) hyf hS₁ hRi hI hfd j μ' e' hj hrun hfin
   obtain ⟨O₂', psF', rfl, hO₂', hpsF'⟩ := forall₂_append_left g₂
   obtain ⟨ρf', ρ₂', hf', h₂', hy'⟩ :=
@@ -411,7 +445,7 @@ theorem twp_frame_w {F F₁ : TFrame} {P : TPost} {R : TRProp} (hR : R.Mono) {n 
       · exact hS.2 p (List.mem_append_left _ hp) q h
   obtain ⟨w', y', ρ₁', fρ', psF'', ps', O₁', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, g₉, g₁₀,
       g₁₁⟩ :=
-    hwp w₀ ρ₁₀ y fρ ls₀ O₁₀ ps (O₂₀ ++ psF) μ hE₁ h₁₀ hl hO₁
+    hwp w₀ ρ₁₀ y fρ ls₀ O₁₀ ps (O₂₀ ++ psF) μ hE₁ h₁₀ (KeepRel.of_compS_left hcρ hl) hO₁
       (hF w₀ ρf ρ₁₀ ρ₂₀ y fρ O₁₀ O₂₀ ps psF ls₀ μ hE₂ h₂₀ hO₁ hO₂ hFρ hy hyf hS hO₀ hRi hI)
       (hash_of_inv hyf hI) hyf hS₁ hRi hI hfd j μ' e' hj hrun hfin
   obtain ⟨O₂', psF', rfl, hO₂', hpsF'⟩ := forall₂_append_left g₂
@@ -457,7 +491,7 @@ theorem twp_extend {F : TFrame} (hFm : F.Mono) {Q : TPost} {n : Nat} {w : TWd}
     {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {e : Expr} {ρ : TRes w.K}
     (h : ∀ (w₀ : TWd) (ρ₀ ρf fρ : TRes w₀.K) (ls₀ : List (SRecT w₀.K))
       (O₀ ps psF : List (FrameRecT w₀.K)) (μ : Heap), w.Ext w₀ ρ →
-      RRw (w := w) (w' := w₀) ρ ρ₀ → SRecsRR w₀.Θ ls ls₀ → RecsRR w₀.Θ O O₀ → F w₀ ρf →
+      RRw (w := w) (w' := w₀) ρ ρ₀ → KeepRel w₀.Θ ls ls₀ ρ → RecsRR w₀.Θ O O₀ → F w₀ ρf →
       ResUT.CompS ρf ρ₀ fρ → SplitT ps O₀ psF → RecInv w₀ fρ ps ls₀ → WInv w₀ fρ μ →
       ∃ (w₁ : TWd), w₀.Ext w₁ fρ ∧ ∀ (fρ₁ : TRes w₁.K), RRw (w := w₀) (w' := w₁) fρ fρ₁ →
         ∃ (ls₁ : List (SRecT w₁.K)) (O₁ ps₁ psF₁ : List (FrameRecT w₁.K)),
@@ -474,7 +508,7 @@ theorem twp_extend {F : TFrame} (hFm : F.Mono) {Q : TPost} {n : Nat} {w : TWd}
   have hEf := hE₁.of_compS_left hc
   obtain ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, g₉, g₁₀,
       g₁₁⟩ := hw ρ₀₁ h₀₁ w₁ ρ₀₁ ρf₁ fρ₁ ls₁ O₁ ps₁ psF₁ μ (TWd.Ext.refl _ _)
-      (RR.refl (cov_of_comp hc₁ hI₁)) (SRecsRR.refl hR₁.cov_ls)
+      (RR.refl (cov_of_comp hc₁ hI₁)) (KeepRel.refl hR₁.cov_ls _)
       (RecsRR.refl fun r hr => hR₁.cov_ps r (hS₁.left r hr)) (hFm _ _ _ _ hEf hf₁ hFρ)
       (hash_of_inv hc₁ hI₁) hc₁ hS₁ hR₁ hI₁ hfd j μ' e' hj hrun hfin
   have hu₀₁ : UpdX (sem w₁.Θ) (recMask O₀) (recMask O₁) ρ₀ ρ₀₁ :=
@@ -497,11 +531,11 @@ theorem twp_update {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls ls₁ : List
     {O O₁ : List (FrameRecT w.K)} {e : Expr} {ρ ρ₁ : TRes w.K}
     (hup : ∀ (w₀ : TWd) (ρ₀ ρf fρ : TRes w₀.K) (ls₀ : List (SRecT w₀.K))
       (O₀ ps psF : List (FrameRecT w₀.K)) (μ : Heap), w.Ext w₀ ρ →
-      RRw (w := w) (w' := w₀) ρ ρ₀ → SRecsRR w₀.Θ ls ls₀ → RecsRR w₀.Θ O O₀ → F w₀ ρf →
+      RRw (w := w) (w' := w₀) ρ ρ₀ → KeepRel w₀.Θ ls ls₀ ρ → RecsRR w₀.Θ O O₀ → F w₀ ρf →
       ResUT.Hash ρf ρ₀ → ResUT.CompS ρf ρ₀ fρ → SplitT ps O₀ psF → RecInv w₀ fρ ps ls₀ →
       WInv w₀ fρ μ →
       ∃ (ρ₁₀ fρ₁ : TRes w₀.K) (ls₁₀ : List (SRecT w₀.K)) (O₁₀ ps₁ : List (FrameRecT w₀.K)),
-        w.Ext w₀ ρ₁ ∧ RRw (w := w) (w' := w₀) ρ₁ ρ₁₀ ∧ SRecsRR w₀.Θ ls₁ ls₁₀ ∧
+        w.Ext w₀ ρ₁ ∧ RRw (w := w) (w' := w₀) ρ₁ ρ₁₀ ∧ KeepRel w₀.Θ ls₁ ls₁₀ ρ₁ ∧
         RecsRR w₀.Θ O₁ O₁₀ ∧ ResUT.Hash ρf ρ₁₀ ∧ ResUT.CompS ρf ρ₁₀ fρ₁ ∧
         SplitT ps₁ O₁₀ psF ∧ RecInv w₀ fρ₁ ps₁ ls₁₀ ∧ WInv w₀ fρ₁ μ ∧
         UpdX (sem w₀.Θ) (recMask O₀) (recMask O₁₀) ρ₀ ρ₁₀ ∧

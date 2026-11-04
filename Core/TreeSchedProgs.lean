@@ -488,7 +488,7 @@ theorem passClause_ok {Qt : TPostV} (hQt : Qt.Down) :
     refine ⟨_, rfl, QS_iff.mpr (Or.inl ⟨m, u, κ, rfl, rr_single_own hr, rfl,
       KapSchedT.kripke (KapSchedT.mask_mono (fun x hx => hM x hx) hκ)
         (hE.of_compS_left (ResUT.CompS.comm (ResUT.compS_empty_right _))) RR.empty
-        (KeepRel.of_srecsRR hl _) .nil⟩)⟩
+        (KeepRel.of_empty _ _) .nil⟩)⟩
 
 theorem stepRet_ok {Qt : TPostV} (hQt : Qt.Down) (hst : QtStable Qt) :
     SchedRetT (ℍ := ℍ) Qt (QS (ℍ := ℍ) Qt) stepRet := by

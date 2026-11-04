@@ -155,7 +155,7 @@ theorem twp_frame_keep {F F₁ : TFrame} {P : TPost} {R : TRProp} (hR : R.Mono) 
       · exact hS.2 p (List.mem_append_left _ hp) q h
   obtain ⟨w', y', ρ₁', fρ', psF'', ps', O₁', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, g₉, g₁₀,
       g₁₁⟩ :=
-    hwp w₀ ρ₁₀ y fρ ls₀ O₁₀ ps (O₂₀ ++ psF) μ hE₁ h₁₀ hl hO₁
+    hwp w₀ ρ₁₀ y fρ ls₀ O₁₀ ps (O₂₀ ++ psF) μ hE₁ h₁₀ (KeepRel.of_compS_left hcρ hl) hO₁
       (hF w₀ ρf ρ₁₀ ρ₂₀ y fρ O₁₀ O₂₀ ps psF ls₀ μ hE₂ h₂₀ hO₁ hO₂ hFρ hy hyf hS hO₀ hRi hI)
       (hash_of_inv hyf hI) hyf hS₁ hRi hI hfd j μ' e' hj hrun hfin
   obtain ⟨O₂', psF', rfl, hO₂', hpsF'⟩ := forall₂_append_left g₂
@@ -187,7 +187,7 @@ theorem twp_frame_keep {F F₁ : TFrame} {P : TPost} {R : TRProp} (hR : R.Mono) 
   -- **the records the framed part reads are kept**
   have hkeep : KeepRel w'.Θ ls ls' ρ₂ := by
     intro r hr₀ hrel
-    obtain ⟨r₀, hr₀', e₀⟩ := hl.mem_fwd hr₀
+    obtain ⟨r₀, hr₀', e₀⟩ := hl r hr₀ (hrel.of_compS_right hcρ)
     have hrel₀ : RelFT r₀ ρ₂₀ := (RelFT.rr_iff e₀ h₂₀).mp hrel
     obtain ⟨p₁, hp₁, hd⟩ := (hRi.1.inv.2.2.2.2.2.2.1 r₀).mp hr₀'
     rcases (hS₁.1 p₁).mp hp₁ with hp₁O | hp₁F
