@@ -222,6 +222,7 @@ theorem cerwpT_handleQ {T To : OpTabT} {n₀ : UInt32} {qs hr hs : Val} {Qin Qou
       (O : List (FrameRecT w.K)) (e : Expr) (ρ : TRes w.K), F.Mono →
       (∀ w' ρf, F w' ρf → fdMask M w' ρf) → (∀ x, recMask O x → M x) →
       (∀ w' ρf, ResUT.Valid ρf → Fb w' ρf) → (∀ w' ρf, fdMask M w' ρf → Fe w' ρf) →
+      (∀ w' ρf, Fbo w' ρf → Fb w' ρf) →
       cerwpT (ℍ := ℍ) (opTableT T) Q Fb Fe n w ls O e ρ →
       cerwpT (ℍ := ℍ) (opTableT To) Qout Fbo F n w ls O (hndE (hndVal n₀ qs hr hs) e) ρ := by
   obtain ⟨hfw, htag, hfd, hQd, hPA, -, hretU, hop⟩ := hOK
@@ -230,7 +231,7 @@ theorem cerwpT_handleQ {T To : OpTabT} {n₀ : UInt32} {qs hr hs : Val} {Qin Qou
   intro n
   induction n using Nat.strong_induction_on with
   | _ n ih =>
-  intro Q hret M F Fb Fe w ls O e ρ hFm hFM hOM hFb hFe h
+  intro Q hret M F Fb Fe w ls O e ρ hFm hFM hOM hFb hFe hFbI h
   rw [cerwpT_eq] at h ⊢
   -- the resumed run's present frame condition, met by every frame avoiding the records' masks
   have hFe₀ : ∀ (m i : UInt32) (en : OpEntT), T m i = some en → ∀ (v : Val) (w'' : TWd)
@@ -270,7 +271,7 @@ theorem cerwpT_handleQ {T To : OpTabT} {n₀ : UInt32} {qs hr hs : Val} {Qin Qou
     refine twpAt_here (final_opPlug (r := false) (payloadName_opPayload m i v) hK) (Or.inr
       ⟨(hndK (hndVal n₀ qs hr hs)).comp K₁, m, i, v, en, rfl, hK, hTo, ha, hoc, ρa, ρk, hcak, hA,
         hsh.1, fun w'' ρk' ls'' O'' hE hr' hx hO => ⟨fun k' hk' a σ σ' hB hcσ => ?_,
-        fun hq hf k' hk' Fb' hFb' => ?_⟩⟩)
+        fun hq hf k' hk' => ?_⟩⟩)
     · have h₁ := contShareT_resume hsh hE hr' hx hO hk' hB hcσ
       simp only [cerwpTC, show k' < n by omega, if_true] at h₁ ⊢
       rw [← e₁]
@@ -279,11 +280,13 @@ theorem cerwpT_handleQ {T To : OpTabT} {n₀ : UInt32} {qs hr hs : Val} {Qin Qou
           ((hfd m i en hTe v w₀ O₀ ρf).mp (hf.2 O₀ hO₀))⟩) ?_
       exact ih k' (by omega) Q hret (recMask O'') (Fbo.and (fdMask (recMask O''))) Fb
         (fdAt en v Fb O'') w'' ls'' O'' _ σ' (TFrame.and_mono hFbo (fdMask_mono _))
-        (fun _ _ hf => hf.2) (fun _ hx => hx) hFb (hFe₀ m i en hTe v w'' O'') h₁
-    · have h₁ := (hsh.2 w'' ρk' ls'' O'' hE hr' hx hO).2 hq hf k' hk' Fb' hFb'
+        (fun _ _ hf => hf.2) (fun _ hx => hx) hFb (hFe₀ m i en hTe v w'' O'') hFbI h₁
+    · have h₁ := (hsh.2 w'' ρk' ls'' O'' hE hr' hx hO).2 hq hf k' hk'
       simp only [cerwpTK, show k' < n by omega, if_true] at h₁ ⊢
       rw [unwindE_hndK]
-      exact cerwpT_table_mono k' (OpTabT.restrict_mono hcn) _ _ _ _ _ _ h₁
+      exact cerwpT_table_mono k' (OpTabT.restrict_mono hcn) _ _ _ _ _ _
+        (cerwpT_base_mono k' hFbI _ _ _ _ _ _
+          (cerwpT_frameCond (fun _ _ h => ⟨hFbI _ _ h.1, h.2⟩) h₁))
   subst hm
   obtain ⟨c, hc, hcl⟩ := hop i en hTe
   refine twpAt_of_twp (twp_det (hPd _ _)
@@ -301,7 +304,7 @@ theorem cerwpT_handleQ {T To : OpTabT} {n₀ : UInt32} {qs hr hs : Val} {Qin Qou
     simp only [cerwpTC, show k' < n by omega, if_true] at h₁
     exact ih k' (by omega) Q hret (recMask O') F'' Fb (fdAt en v Fb O'') w'' ls'' O'' _ σ'
       hF''m hF''M (fun x hx => (recMask_rr hO x).mpr hx) hFb
-      (hFe' m i en hTe v w' O' w'' O'' hO) h₁
+      (hFe' m i en hTe v w' O' w'' O'' hO) hFbI h₁
   -- the cancel: owed at the entry's cancel row, a restriction of `T`, at its cancel answer; the
   -- handler around the unwinding, by the induction hypothesis there
   have hcan : ∀ (w'' : TWd) (ρk' : TRes w''.K) (ls'' : List (SRecT w''.K))
@@ -312,11 +315,11 @@ theorem cerwpT_handleQ {T To : OpTabT} {n₀ : UInt32} {qs hr hs : Val} {Qin Qou
       cerwpT (ℍ := ℍ) (opTableT To) Qout Fbo F'' k' w'' ls'' O''
         (hndE (hndVal m qs hr hs) (unwindE K₁)) ρk' := by
     intro w'' ρk' ls'' O'' hE hr' hx hO hq hf k' hk' F'' hF''m hF''M
-    have h₁ := (hsh.2 w'' ρk' ls'' O'' hE hr' hx hO).2 hq hf k' hk' Fb hFb
+    have h₁ := (hsh.2 w'' ρk' ls'' O'' hE hr' hx hO).2 hq hf k' hk'
     simp only [cerwpTK, show k' < n by omega, if_true] at h₁
     exact ih k' (by omega) en.QC (hretU i en hTe hq hf) (recMask O') F'' Fb
       (fdAt en v Fb O'') w'' ls'' O'' _ ρk' hF''m hF''M (fun x hx => (recMask_rr hO x).mpr hx) hFb
-      (hFe' m i en hTe v w' O' w'' O'' hO)
+      (hFe' m i en hTe v w' O' w'' O'' hO) hFbI
       (cerwpT_table_mono k' OpTabT.restrict_le _ _ _ _ _ _ h₁)
   have hPdk := hPd (cerwpTC (ℍ := ℍ) (opTableT To) Qout Fbo n) (cerwpTK (ℍ := ℍ) n)
   rw [htag i en hTe ha, kappaAt_tag]
@@ -375,9 +378,10 @@ theorem cerwpT_handle {T To : OpTabT} {n₀ : UInt32} {qs hr hs : Val} {Qin Qout
     (O : List (FrameRecT w.K)) (e : Expr) (ρ : TRes w.K) (hFm : F.Mono)
     (hFM : ∀ w' ρf, F w' ρf → fdMask M w' ρf) (hOM : ∀ x, recMask O x → M x)
     (hFb : ∀ w' ρf, ResUT.Valid ρf → Fb w' ρf) (hFe : ∀ w' ρf, fdMask M w' ρf → Fe w' ρf)
+    (hFbI : ∀ w' ρf, Fbo w' ρf → Fb w' ρf)
     (h : cerwpT (ℍ := ℍ) (opTableT T) Qin Fb Fe n w ls O e ρ) :
     cerwpT (ℍ := ℍ) (opTableT To) Qout Fbo F n w ls O (hndE (hndVal n₀ qs hr hs) e) ρ :=
-  cerwpT_handleQ hOK hFbo n Qin hOK.2.2.2.2.2.1 M F Fb Fe w ls O e ρ hFm hFM hOM hFb hFe h
+  cerwpT_handleQ hOK hFbo n Qin hOK.2.2.2.2.2.1 M F Fb Fe w ls O e ρ hFm hFM hOM hFb hFe hFbI h
 
 /-! ### Handler stacks -/
 
@@ -392,11 +396,12 @@ structure HFrameT where
   Fbo : TFrame
 
 /-- **Every handler of a stack meets `HandleOKT`** between the table, answer and base inside it
-and its own outer ones; each base is monotone and met by every valid frame. -/
+and its own outer ones; each base is monotone and its frames are the valid ones. -/
 def StackOKT : OpTabT → TPostV → List HFrameT → Prop
   | _, _, [] => True
   | T, Q, h :: hs => HandleOKT (ℍ := ℍ) T h.To h.n₀ h.qs h.hr h.hs Q h.Qout h.Fbo ∧ h.Fbo.Mono ∧
-      (∀ w ρf, ResUT.Valid ρf → h.Fbo w ρf) ∧ StackOKT h.To h.Qout hs
+      (∀ w ρf, ResUT.Valid ρf → h.Fbo w ρf) ∧ (∀ w ρf, h.Fbo w ρf → ResUT.Valid ρf) ∧
+      StackOKT h.To h.Qout hs
 
 /-- The outermost table of a stack. -/
 def HFrameT.topT : OpTabT → List HFrameT → OpTabT
@@ -428,10 +433,10 @@ theorem cerwpT_handleStack : ∀ (Hs : List HFrameT) (T : OpTabT) (Q : TPostV) (
       cerwpT (ℍ := ℍ) (opTableT (HFrameT.topT T Hs)) (HFrameT.topQ Q Hs) (HFrameT.topFb Fb Hs)
         (fdMask M) n w ls O (HFrameT.wrap Hs e) ρ
   | [], _, _, _, _, _, _, _, _, _, _, _, _, _, h => h
-  | hd :: Hs, _, _, Fb, ⟨hOK, hFm, hFv, hrest⟩, hFb, n, M, w, ls, O, e, ρ, hOM, h =>
+  | hd :: Hs, _, _, Fb, ⟨hOK, hFm, hFv, hvF, hrest⟩, hFb, n, M, w, ls, O, e, ρ, hOM, h =>
       cerwpT_handleStack Hs hd.To hd.Qout hd.Fbo hrest hFv n M w ls O _ ρ hOM
         (cerwpT_handle hOK hFm n M (fdMask M) Fb (fdMask M) w ls O e ρ (fdMask_mono M)
-          (fun _ _ h => h) hOM hFb (fun _ _ h => h) h)
+          (fun _ _ h => h) hOM hFb (fun _ _ h => h) (fun w ρf h => hFb w ρf (hvF w ρf h)) h)
 
 end BoCa.Fig16.Tree.Wp
 

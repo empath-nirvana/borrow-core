@@ -533,7 +533,7 @@ theorem cerwpT_schedHandle_leQ {N : Nat} {T : OpTabT} {n₀ : UInt32} {qs hr hs 
         twp (ℍ := ℍ) F'' (valPost Qout) k' w'' ls'' O''
           (hndE (hndVal m qs hr hs) (unwindE K₁)) ρk' := by
       intro w'' ρk' ls'' O'' hE hr' hx hO hq hf k' hk' F'' hF''m hF''M
-      have h₁ := (hsh.2 w'' ρk' ls'' O'' hE hr' hx hO).2 hq hf k' hk' Fb hFb
+      have h₁ := (hsh.2 w'' ρk' ls'' O'' hE hr' hx hO).2 hq hf k' hk'
       simp only [cerwpTK, show k' < n by omega, if_true] at h₁
       replace h₁ := cerwpT_table_mono k' OpTabT.restrict_le _ _ _ _ _ _ h₁
       exact ih k' (by omega) (by omega) en.QC (hretU i en hTe hq hf) (recMask O') F'' Fb (fdAt en v Fb O'') w''

@@ -1259,6 +1259,9 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.cerwpT_handleQ
 #print axioms BoCa.Fig16.Tree.Wp.cerwpT_handle
 #print axioms BoCa.Fig16.Tree.Wp.cerwpT_handleStack
+#print axioms BoCa.Fig16.Tree.Wp.cerwpT_base_mono
+#print axioms BoCa.Fig16.Tree.Wp.contShareT_congr
+#print axioms BoCa.Fig16.Tree.Wp.SchedProgs.Park.QCV_stable
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.FwdProgs.hFw_ok
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.FwdProgs.rootFwd_cerwpT
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.FwdProgs.progFwd_safe

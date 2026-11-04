@@ -145,7 +145,7 @@ theorem cerwpT_parkThenV {T : OpTabT}
   have hV₀ := hV.rr hr
   refine ⟨trivial, PMap.empty, ρ₀, ResUT.CompS.comm (ResUT.compS_empty_right _), ⟨rfl, rfl⟩,
     (⟨(fun h => by cases h), fun w' ρ' ls' O' _ hr' _ hO' => ⟨fun k' hk' a σ σ' hB hcσ => ?_,
-      (fun _ _ k' hk' _ _ => ?_)⟩⟩ : contShareT T enPark Fb n w₀ ls₀ [] (.appR (.lam b) .hole)
+      (fun _ _ k' hk' => ?_)⟩⟩ : contShareT T enPark Fb n w₀ ls₀ [] (.appR (.lam b) .hole)
         Val.unit (cerwpTC (ℍ := ℍ) (opTableT T) QV Fb n) (cerwpTK (ℍ := ℍ) n) ρ₀)⟩
   · obtain ⟨rfl, rfl⟩ := hB
     obtain rfl : ρ' = σ' := (compS_empty_right_eq hcσ).symm

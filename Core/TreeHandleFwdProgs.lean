@@ -79,7 +79,7 @@ theorem hFw_ok (k : Nat) (nm : UInt32) (hnm : nm ≠ nP) :
 theorem stack_ok (k : Nat) : ∀ (ns : List UInt32), (∀ nm ∈ ns, nm ≠ nP) →
     StackOKT (ℍ := ℍ) (tabAt (ℍ := ℍ) k) QS (ns.map (hFw k))
   | [], _ => trivial
-  | nm :: ns, h => ⟨hFw_ok k nm (h nm (by simp)), Fv_mono, fun _ _ hv => hv,
+  | nm :: ns, h => ⟨hFw_ok k nm (h nm (by simp)), Fv_mono, fun _ _ hv => hv, fun _ _ hv => hv,
       stack_ok k ns fun x hx => h x (by simp [hx])⟩
 
 theorem top_eq (k : Nat) : ∀ (ns : List UInt32),

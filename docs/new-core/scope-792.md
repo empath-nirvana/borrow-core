@@ -43,41 +43,47 @@ canceller's table includes the row (`ewp_ccatch`'s `T.Le Tout`), and rows grow o
 The port keeps that shape:
 
 - `OpEntT.cn` is the cancel row, as a set of operations; the unwinding is owed at the stopper's
-  table restricted to it (`T.restrict en.cn`), answering `Qunit` (`()`, owning nothing, no records).
+  table restricted to it (`T.restrict en.cn`), answering the entry's cancel answer (`QC`).
 - Inclusion is checked where the cancel is run, by `cerwpT_table_mono`: the scheduler and a handler
   run their own operations' cancels at their tasks' table (`restrict_le`); a forwarding handler's
   outer stop owes the cancel at the outer table's row (`restrict_mono`, from `HandleOKT`'s clause
   that the forwarded entry's row is the outer table's).
 
-**Where the tree departs from Core, and why each is forced:**
+**The cancel's answer is the entry's** (`OpEntT.QC`). Core's cancel answers `1`, the rest of the
+cancelled branch dropped as `NoOwn` garbage (`wpG_garbage`). The tree has no `ρ⁺` (D4), so what a
+cancelled branch still holds goes back through the answer, as #817 does: park's cancel answer is
+`QCV` (`()`, no records, copies of lends, `ViewsT`), the same relation as #817's task answer `QV`
+(`QV := QCV`), so `poolTJ_cancel` deposits a cancelled task's copies at the nearest joiner. The
+answer travels with the entry, not the stopper, so a forwarded cancel answers the same at the
+outer handler; the handler asks its return clause at each cancellable own operation's `QC`.
+`Park.taskA_cerwpT` (a cancel handing a borrowed copy back) holds again.
 
-| Departure | Why |
+**Departures from Core's shape, and their status:**
+
+| Departure | Status |
 |---|---|
-| The row is a set of keys over the stopper's table, not a table in the entry | An entry whose unwinding performs its own operation (`LC`'s finaliser parks again at `park`) names itself; a table in the entry would be a circular definition. Core's rows are finite trees and would type `LC` with a two-level row; tree-core's D15 already owed the cancel at the stopper's own table, which is the same self-reference |
-| `cerwpT` recurses on the index alone (table, answer and base after the colon) | The cancel is owed at another table (the row) and answer (`Qunit`) than the stop's own |
-| The base `Fb′` is quantified, over every base every valid frame meets | Core has no frame conditions. A forwarded cancel is run under the outer handler's base, not the stopper's |
-| `Qunit` asks the resource empty | Core's cancel end is `NoOwn` with garbage dropped (`wpG_garbage`); the tree has no `ρ⁺` (D4). Decision 73: the cancelled branch's resources are used and its lends ended |
+| 1. The row as keys over the stopper's table, not a table in the entry | **Not reverted, no Lean configuration.** Core's rows are finite trees ordered by `RowLe` (an entry at a key with a smaller row is below the table's). Porting that needs `OpEntT` as a nested inductive with a row field and `cerwpT_table_mono` up to the entry order. `LC` under `HS` would then be typed with a two-level row at `park`. I have not built that and have not shown it fails; the keys route admits rows of any depth (an unwinding that performs its own operation names itself), which tree-core's D15 already admitted by owing the cancel at the stopper's own table |
+| 2. `cerwpT` recursing on the index alone | **Follows from 1, no separate configuration.** With the row as keys, the cancel is owed at `cerwpT` itself at another table and answer, so the relation recurses. With Core's shape the obligation would be a relation built before the entry (`cancelObl Tk`), and `cerwpT` could keep its parameters before the colon. Reverting 1 reverts 2 |
+| 3. The cancel's base quantified | **Reverted.** The cancel is owed under frames meeting the stopper's base and the entry's `fd`, as a resume. A canceller at another base runs it there by `cerwpT_base_mono`; `cerwpT_handle` asks that the outer base's frames meet the inner base (`hFbI`), and a stack that each base's frames are the valid ones |
+| 4. `Qunit` | **Replaced** by the entry's cancel answer (above) |
 
-**The spike's `CancelOK` is dropped.** The spike quantified the cancel over every canceller table
-`T′` with `CancelOK en.cn T T′` (the row's entries in `T′`, `T′`'s payloads downward closed). With
-the obligation fixed at the row, that quantifier is `cerwpT_table_mono` at the use site, as in Core,
-and its `PADown T′` conjunct is not needed anywhere: the scheduler's and the general handler's
-statements carry no `PADown` of the tasks' table. Nothing in it existed for per-type cleanup; the
-row (`cn`) is needed because a `[then]` finaliser may perform (the hardest case).
+`CancelOK` is dropped: with the obligation fixed at the row, its quantifier is
+`cerwpT_table_mono` at the use site, as in Core, and its `PADown` conjunct is needed nowhere.
 
 ## 3. What changes
 
 | Statement | Change |
 |---|---|
-| `OpEntT` | gains `cn`, the cancel row |
-| `contShareT` | takes the stopper's table `T` and the cancel relation `Ψc`; the cancel clause owes `Ψc (T.restrict en.cn) Fb′` at every base `Fb′` every valid frame meets |
+| `OpEntT` | gains `cn` (the cancel row) and `QC` (the cancel's answer) |
+| `contShareT` | `contShareT T en F k w ls O K v Ψ Ψc`: the cancel clause owes `Ψc (T.restrict en.cn) en.QC F (fdAt en v F O′) w′ O′ k′ ls′ (unwindE K) ρ′` |
+| `ContP` | `OpTabT → TPostV → TFrame → ContT` |
 | `TableT` | reads the cancel relation (`ContP → …`); `Local`, `Down` read both relations |
 | `cerwpPostT` | takes the cancel relation |
-| `cerwpT` | arguments after the colon; the table reads `cerwpTK` (the relation at `Qunit` at a table) |
-| `TableT.Incl`, `opTableT_incl` | retired; `cerwpT_table_mono` is stated over operation tables |
-| `SchedOKT`, `SchedOKTLe` | gain the return clause at `Qunit` when an operation owes a cancel branch (`OpTabT.Cancels`) |
-| `Park.schedP_ok`, `parked_twp` | gain that the task's answer accepts `Qunit` (park is cancellable); met at `QB` |
-| `Park.taskA_cerwpT` | retired: a task holding a borrowed view copy across a cancellable park, whose cancel answered the copy back. A cancel answers `()` owning nothing, so it cannot hand the copy back |
+| `cerwpT` | arguments after the colon; the table reads `cerwpTK` (the relation at a table and answer) |
+| `TableT.Incl`, `opTableT_incl` | retired; `cerwpT_table_mono` is stated over operation tables; #817's `InclLe` reads the cancel relation |
+| `SchedOKT`, `SchedOKTLe` | gain the return clause at each cancellable operation's `QC` |
+| `Park.schedP_ok`, `parked_twp` | gain that the task's answer accepts `QCV`; `taskB_parked` is read at `QCV` |
+| `QV` | `abbrev QV := QCV` |
 | `twp`, `EndT` | unchanged |
 
 ## 4. Not doing; tempting shortcuts → stop
@@ -91,14 +97,22 @@ row (`cn`) is needed because a `[then]` finaliser may perform (the hardest case)
 
 ## 5. Results
 
-- `cerwpT_handle`, `cerwpT_handleQ`, `cerwpT_handleStack` (`Core/TreeHandleFwd.lean`).
+- `cerwpT_handle`, `cerwpT_handleQ`, `cerwpT_handleStack` (`Core/TreeHandleFwd.lean`);
+  `cerwpT_table_mono`, `cerwpT_base_mono` (`Core/TreeWpEff.lean`).
 - `progFwdCancel_safe`, `progFwdCancel3_safe`: the hardest case at depth 1 and 3, through
-  `PoolSchedAdequacyT` (`Core/TreeHandleFwdProgs.lean`).
-- `handleC_ok`: a handler whose clause cancels under the handler meets `HandleOKT` with its
-  cancellable operation (`TCk_cancels`), so the clause and `Qunit` return premises are met
-  non-vacuously.
+  `PoolSchedAdequacyT` under #817's `HS` (`Core/TreeHandleFwdProgs.lean`).
+- `handleC_ok`: a handler whose clause cancels under the handler meets `HandleOKT`, its clause and
+  cancel-answer return premises met non-vacuously.
+- `progJoin_safe`, `progCancel_safe`, `Park.taskA_cerwpT` hold at the new share.
 
-Open: the forwarding instances' handlers have no clause the task reaches (they forward
-everything); a closed program with a forwarding handler whose own clause resumes `κ` inside its
-lend (`HandlerLendProg`'s shape) is not built. The `…Le` (spawn) variant of `cerwpT_handle` is not
-built; `cerwpT_schedHandle_le` covers the spawning scheduler at the top.
+**Next (not built; sized before starting):**
+1. A closed program where a forwarding handler's own clause resumes `κ` inside its lend: a handler
+   `hnd_ask` between `{ask} ∪ tabAt k` and `tabAt k`, its clause `askClause` (allocate, load,
+   resume, free) proved at `ClauseT` at `tabAt k` rather than at the empty table, under `HS`.
+   About 150–250 lines: `askClause_ok`'s proof re-read at `cerwpT (opTableT (tabAt k))`, the task
+   table and its down-closure, the root and the adequacy.
+2. The spawn variant `cerwpT_handle_le` (clauses asked at stops `k ≤ N`), so a forwarding handler's
+   clause may run a task under itself. About 100 lines if `cerwpT_handleQ` takes the bound as a
+   parameter and `cerwpT_handle` becomes its instance.
+3. Departure 1: Core's finite rows with `RowLe`, or a configuration showing them insufficient at
+   the tree.

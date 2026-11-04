@@ -243,7 +243,7 @@ theorem taskU_cerwpT (n : Nat) (Fb F : TFrame) (w : TWd) (ls : List (SRecT w.K))
   obtain rfl := RR.of_empty hr
   refine ⟨trivial, PMap.empty, PMap.empty, ResUT.compS_empty_right _, ⟨rfl, rfl⟩,
     (⟨(fun _ => rfl), fun w' ρ' ls' O' _ hr' _ hO' => ⟨fun k' hk' a σ σ' hB hcσ => ?_,
-      (fun _ _ k' hk' _ _ => ?_)⟩⟩ : contShareT TP enPark Fb n w₀ ls₀ [] kA Val.unit
+      (fun _ _ k' hk' => ?_)⟩⟩ : contShareT TP enPark Fb n w₀ ls₀ [] kA Val.unit
         (cerwpTC (ℍ := ℍ) (opTableT TP) QS Fb n) (cerwpTK (ℍ := ℍ) n) PMap.empty)⟩
   · obtain ⟨rfl, rfl⟩ := hB
     obtain rfl := RR.of_empty hr'

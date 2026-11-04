@@ -181,17 +181,16 @@ the share's and the owned records' re-readings there, at every list `ls′` keep
 of the records of the stop list `ls` the share reads (`KeepRel`), resumed at every answer at every
 `k′ < k` under a frame meeting `F` and the entry's `fd`. At a cancellable entry (`q ≠ lin`, `fin`)
 its cancel branch is owed at its **cancel row**: the unwinding of `K` with its handler frames and
-cancel delimiters removed (`K†`, `unwindE`) is `Ψc (T.restrict en.cn) en.QC Fb′`, a run at the
+cancel delimiters removed (`K†`, `unwindE`) is `Ψc (T.restrict en.cn) en.QC F`, a run at the
 stopper's table restricted to the operations the unwinding may perform, answering the entry's
-cancel answer `QC`, at every base `Fb′` every valid frame meets, under a frame meeting `Fb′` and the
-entry's `fd`. The answer is the entry's, not the stopper's: a stop passed outward is cancelled where
+cancel answer `QC`, under a frame meeting `F` and the entry's `fd`, as a resume. The answer is the entry's, not the stopper's: a stop passed outward is cancelled where
 it is caught, beyond the handlers whose answers the stopper's relation names. It may stop again at one of those
 operations (an effectful finaliser) and come back as a stored continuation. This is Core's
 `contShare`/`cancelOK`, the entry's cancel obligation a run at its cancel row's table: whoever
 runs the cancel includes the row (`ewp_ccatch`'s `T.Le Tout`; here `cerwpT_table_mono`). The row
 is narrower than the stopper's table because `K†` has no handler frames: a handler the stop passed
-outward is gone from the unwinding. The base is quantified because the cancel is run under the
-canceller's base, which a forwarded stop does not share with the stopper.
+outward is gone from the unwinding. A canceller at another base runs it there by
+`cerwpT_base_mono`.
 
 The resume list's condition reads only the stop list's records the share is relevant to: another
 branch may end a record of its own that was open at the stop, and the share still resumes
@@ -206,9 +205,8 @@ def contShareT (T : OpTabT) (en : OpEntT) (F : TFrame) (k : Nat) (w : TWd)
     (∀ k', k' < k → ∀ (a : Val) (σ σ' : TRes w'.K), en.PBv v k' w' ls' a σ →
       ResUT.CompS ρ' σ σ' → Ψ (fdAt en v F O') w' O' k' ls'
         (K.plug (.val a)) σ') ∧
-    (en.q ≠ .lin → en.fin = true → ∀ k', k' < k → ∀ Fb' : TFrame,
-      (∀ w₀ ρf, ResUT.Valid ρf → Fb' w₀ ρf) →
-      Ψc (T.restrict en.cn) en.QC Fb' (fdAt en v Fb' O') w' O' k' ls' (unwindE K) ρ')
+    (en.q ≠ .lin → en.fin = true → ∀ k', k' < k →
+      Ψc (T.restrict en.cn) en.QC F (fdAt en v F O') w' O' k' ls' (unwindE K) ρ')
 
 /-- **A share reads the stopper's table only at the entry's cancel row.** -/
 theorem contShareT_congr {T₁ T₂ : OpTabT} {en : OpEntT} (h : T₁.restrict en.cn = T₂.restrict en.cn)
@@ -239,8 +237,8 @@ theorem opTableT_local (T : OpTabT) : (opTableT T).Local := by
     fun w' ρ' ls' O' hE hr hx hO =>
     ⟨fun k' hk a σ σ' hB hcσ =>
       hΨ _ _ _ k' hk _ _ _ ((hcont w' ρ' ls' O' hE hr hx hO).1 k' hk a σ σ' hB hcσ),
-      fun hq hf k' hk Fb' hFb' => hΨc _ _ _ _ _ _ k' hk _ _ _
-        ((hcont w' ρ' ls' O' hE hr hx hO).2 hq hf k' hk Fb' hFb')⟩⟩
+      fun hq hf k' hk => hΨc _ _ _ _ _ _ k' hk _ _ _
+        ((hcont w' ρ' ls' O' hE hr hx hO).2 hq hf k' hk)⟩⟩
 
 /-! ### The relation -/
 
@@ -300,14 +298,51 @@ theorem cerwpT_table_mono : ∀ (n : Nat) {T₁ T₂ : OpTabT},
   · exact Or.inl ht
   refine Or.inr ⟨K, m, i, v, en, h₁, h₂, hI m i en h₃, h₄, h₅, ρa, ρk, hc, hA, hu,
     fun w'' ρ'' ls'' O'' hE hr hx hO => ⟨fun k' hk' a σ σ' hB hcσ => ?_,
-      fun hq hf k' hk' Fb' hFb' => ?_⟩⟩
+      fun hq hf k' hk' => ?_⟩⟩
   · have h₁ := (hcont w'' ρ'' ls'' O'' hE hr hx hO).1 k' hk' a σ σ' hB hcσ
     simp only [cerwpTC, show k' < n by omega, if_true] at h₁ ⊢
     exact ih k' (by omega) hI _ _ _ _ _ _ h₁
-  · have h₁ := (hcont w'' ρ'' ls'' O'' hE hr hx hO).2 hq hf k' hk' Fb' hFb'
+  · have h₁ := (hcont w'' ρ'' ls'' O'' hE hr hx hO).2 hq hf k' hk'
     simp only [cerwpTK, show k' < n by omega, if_true] at h₁ ⊢
     exact ih k' (by omega) (OpTabT.restrict_mono fun m' i' en' _ h => hI m' i' en' h) _ _ _ _ _
       _ h₁
+
+/-- A stronger present frame condition. -/
+theorem cerwpT_frameCond {Tb : TableT} {Q : TPostV} {Fb F F' : TFrame} {n : Nat} {w : TWd}
+    {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {e : Expr} {ρ : TRes w.K}
+    (hF : ∀ w₀ ρf, F' w₀ ρf → F w₀ ρf) (h : cerwpT (ℍ := ℍ) Tb Q Fb F n w ls O e ρ) :
+    cerwpT (ℍ := ℍ) Tb Q Fb F' n w ls O e ρ := by
+  rw [cerwpT_eq] at h ⊢
+  intro w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE hr hl hO hF'
+  exact h w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE hr hl hO (hF w₀ ρf hF')
+
+/-- **A run verified at a base is verified at every stronger base**, by strong induction on the
+index: a stop's resume and cancel are owed under frames meeting the base and the entry's `fd`, and
+a frame meeting the stronger base meets the weaker. -/
+theorem cerwpT_base_mono : ∀ (n : Nat) {T : OpTabT} {Q : TPostV} {Fb₁ Fb₂ : TFrame},
+    (∀ w ρf, Fb₂ w ρf → Fb₁ w ρf) → ∀ (F : TFrame) (w : TWd) (ls : List (SRecT w.K))
+      (O : List (FrameRecT w.K)) (e : Expr) (ρ : TRes w.K),
+      cerwpT (ℍ := ℍ) (opTableT T) Q Fb₁ F n w ls O e ρ →
+      cerwpT (ℍ := ℍ) (opTableT T) Q Fb₂ F n w ls O e ρ := by
+  intro n
+  induction n using Nat.strong_induction_on with
+  | _ n ih =>
+  intro T Q Fb₁ Fb₂ hb F w ls O e ρ h
+  rw [cerwpT_eq] at h ⊢
+  refine twp_mono_le (fun k hk w' ls' O' t ρ' ht => ?_) h
+  rcases ht with ht | ⟨K, m, i, v, en, h₁, h₂, h₃, h₄, h₅, ρa, ρk, hc, hA, hu, hcont⟩
+  · exact Or.inl ht
+  have hfd : ∀ {w'' : TWd} (O'' : List (FrameRecT w''.K)) w₀ ρf,
+      fdAt en v Fb₂ O'' w₀ ρf → fdAt en v Fb₁ O'' w₀ ρf := fun _ _ _ h => ⟨hb _ _ h.1, h.2⟩
+  refine Or.inr ⟨K, m, i, v, en, h₁, h₂, h₃, h₄, h₅, ρa, ρk, hc, hA, hu,
+    fun w'' ρ'' ls'' O'' hE hr hx hO => ⟨fun k' hk' a σ σ' hB hcσ => ?_,
+      fun hq hf k' hk' => ?_⟩⟩
+  · have h₁ := (hcont w'' ρ'' ls'' O'' hE hr hx hO).1 k' hk' a σ σ' hB hcσ
+    simp only [cerwpTC, show k' < n by omega, if_true] at h₁ ⊢
+    exact ih k' (by omega) hb _ _ _ _ _ _ (cerwpT_frameCond (hfd O'') h₁)
+  · have h₁ := (hcont w'' ρ'' ls'' O'' hE hr hx hO).2 hq hf k' hk'
+    simp only [cerwpTK, show k' < n by omega, if_true] at h₁ ⊢
+    exact ih k' (by omega) hb _ _ _ _ _ _ (cerwpT_frameCond (hfd O'') h₁)
 
 theorem cerwpT_unfold_at {Tb : TableT} (hTb : Tb.Local) {Q : TPostV} {Fb F : TFrame}
     {n N : Nat} (hnN : n ≤ N) {w : TWd} {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)}

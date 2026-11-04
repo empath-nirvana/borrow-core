@@ -232,7 +232,7 @@ theorem taskA_cerwpT (n : Nat) (Fb F : TFrame) (w : TWd) (ls : List (SRecT w.K))
   obtain rfl := rr_view_eq hr
   refine ⟨trivial, PMap.empty, viewRes α l, ResUT.CompS.comm (ResUT.compS_empty_right _), ⟨rfl, rfl⟩,
     (⟨(fun h => by cases h), fun w' ρ' ls' O' _ hr' _ hO' => ⟨fun k' hk' a σ σ' hB hcσ => ?_,
-      (fun _ _ k' hk' _ _ => ?_)⟩⟩ : contShareT TP enPark Fb n w₀ ls₀ [] kA Val.unit
+      (fun _ _ k' hk' => ?_)⟩⟩ : contShareT TP enPark Fb n w₀ ls₀ [] kA Val.unit
         (cerwpTC (ℍ := ℍ) (opTableT TP) (QA α l) Fb n) (cerwpTK (ℍ := ℍ) n) (viewRes α l))⟩
   · obtain ⟨rfl, rfl⟩ := hB
     obtain rfl := rr_view_eq hr'
