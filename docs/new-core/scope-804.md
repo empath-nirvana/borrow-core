@@ -10,8 +10,8 @@ typing-preservation theorem for the consume-glue translation into `CDerives`. No
 and `CDerives` is not changed.
 
 Prior art: Congard, Munch-Maccagnoni & Douence, ESOP 2026 (arXiv 2510.23517), §4.1–4.3. Their
-source is resource CBPV, where every positive type has a destructor `drop_A`. Their translation is
-**error-passing**: `P⁻ = P⁺ ⊕ E`, a raise unwinds the context (`unwind_Γ`, a drop per variable,
+source is resource CBPV, where every positive type has a chosen disposal map (their `drop_A`). Their translation is
+**error-passing**: `P⁻ = P⁺ ⊕ E`, a raise unwinds the context (`unwind_Γ`, their `drop` per variable,
 with `swap` moving the exception past each one) and injects `ι₂`, and `try` is a `case` on the sum.
 Prop 3 says the translation preserves typing into the linear fragment. Thm 4.1 says resource safety
 follows from the linear calculus. Their payload `E` is purely positive and resource-free, because
@@ -29,7 +29,7 @@ what changes under the other routes.
 ## 0. Owned payloads and `[raise]`
 
 The correction (#804, 2026-11-04) says the only payload restriction is `Row.Unwind`: the payload
-type is free of the lend's lifetime and outlives every lifetime. That excludes borrows and admits
+type is not mentioning the lend's lifetime and outlives every lifetime. That excludes borrows and admits
 owned cells. `Row.Unwind` does admit `Ref I32`. Checked:
 `Row.Unwind [exnOp 7 (.ref (.int .w32))] x`.
 
@@ -44,7 +44,7 @@ same site (SPEC §12: "`abandon` … at a superseded raise payload (`effRaise`'s
 So under route K, a source raise of an owned payload has no `[raise]` derivation through
 `effRaise`. Whether some other `CDerives` route types such a raise is **not derived, and the
 obstruction is not verified**. `Inversions.der_raiseJ` says every derivation of a raise is
-`effRaise` followed by the same-term rules, but its `RaiseBase` drops `hd`, so it does not settle
+`effRaise` followed by the same-term rules, but its `RaiseBase` omits `hd`, so it does not settle
 the question. The claim is stated as an elaborating `def`, `OwnedRaiseTypable : Prop`, in
 `~/repos/scratch-archive/804/Checks.lean`. It is neither proved nor refuted.
 
@@ -88,7 +88,7 @@ keeps `Γ` and the judgment unchanged. The fragment:
   index 0, qualifier `cancel` (never `unr`: `EffCtx.NoUnrExn`, and `[then]`'s `UnrD` stays false),
   answer `0` (so `OpSig.abort = true`), empty cancel row, unmarked;
 - **`ExnRow Σ`**: every operation is an `exnOp`, the names are distinct (`Row.Uniq`), and every
-  payload `P` is closed: free of every lifetime variable and outliving every lifetime. This is
+  payload `P` is closed: mentioning no lifetime variable and outliving every lifetime. This is
   `Row.Unwind`'s condition at every `'x`, which is what lets a raise leave any borrow. Under K,
   `P.OwnFree` as well (§0).
 - thunks appear only as a borrow block's callback, which is syntax, never a variable.
@@ -346,7 +346,7 @@ The translation, outside in, with the rule each step meets:
    - `hd`: `consume_wf (.ref .int)` at a dead context.
 
    The callback is `thunkV`/`allI`/`lam`, with `allI.hΓx` from the source's `hΓx`: `o` is
-   `Ref I32`, free of `x`.
+   `Ref I32`, not mentioning `x`.
 5. **Inside the callback**, `i ← alloc 3` is `bind`. Then `_ ← raise …; ret (box ())` is a `let`
    whose head is at `Σ₀`, so it is `[then]` again, with `D = consume i; consume m`
    (`Γ₂ = {i, m}`; `m`'s consume is `releaseImm`, `Consumable.imm`). `N` frees `i` and releases `m`
@@ -370,10 +370,10 @@ inside the callback, and the handler `(e. free e; ret ())`.
   outer context is empty). So `effHandleV`'s side accepts an owned payload, and only `[raise]`
   refuses it.
 - **K+cell:** the `try` becomes `c ← alloc (inl ()); (c', a) ← borrow_mut c as k in
-  (hndExpr 7 … ⟦body⟧[k]); case (load-free c') { inl () → Nret a | inr p → free p; ret () }`, and
+  (hndExpr 7 … ⟦body⟧[k]); case (take c') { inl () → Nret a | inr p → free p; ret () }`, and
   the raise becomes `k′ ← reborrow; swap k′ (inr p) → consume old (inl ()); raise_7 ()`. The
   payload rides in `c`. `free p` is the handler consuming it after the lend ends. The inner borrow
-  needs `k` reborrowed into the callback (`withbor3U` on `k`, whose `d` is `forget`). Each step meets
+  needs `k` reborrowed into the callback (`withbor3U` on `k`, whose `d` is the release of a `Mut`). Each step meets
   `withbor2U`/`withbor3U`/`swap`/`effRaise` at payload `1`, all of which exist. Not checked in Lean.
 - **E:** the raise is `cs (ret (inr p))`, and the callback answers `['x](B ⊕ Ref I32)`. `boxI` asks
   `CtxOutlives Δ Γ 'x` of `p`'s context, and `p : Ref I32` outlives `'x` (`VOutlivesR.ref .int`). At
@@ -398,7 +398,7 @@ Plus `#check`s of every rule and lemma the translation names.
 
 | # | risk | check run | status |
 |---|---|---|---|
-| R1 | **Owned payloads at `[raise]`** (K): `effRaise.hd : o.A.OwnFree` refuses `Ref`. | `example : ¬ VTy.OwnFree (.ref (.int .w32))` by `cases`; `Row.Unwind [exnOp 7 (Ref I32)] x` holds. Stated, not proved: `def OwnedRaiseTypable : Prop` | **real for `effRaise`**; for all of `CDerives`, not derived and the obstruction not verified (`der_raiseJ`'s `RaiseBase` drops `hd`) |
+| R1 | **Owned payloads at `[raise]`** (K): `effRaise.hd : o.A.OwnFree` refuses `Ref`. | `example : ¬ VTy.OwnFree (.ref (.int .w32))` by `cases`; `Row.Unwind [exnOp 7 (Ref I32)] x` holds. Stated, not proved: `def OwnedRaiseTypable : Prop` | **real for `effRaise`**; for all of `CDerives`, not derived and the obstruction not verified (`der_raiseJ`'s `RaiseBase` omits `hd`) |
 | R1b | **K+cell's threading.** Every head that may raise needs the cell's `Mut`. Sequential heads need reborrows (`withbor3U`), each with its own `'x` and its own `Row.Unwind`. A raise in a callback nested *n* deep needs *n* reborrows, and the payload stored through `Mut 'x (1 ⊕ P)` must outlive every `'x` (closed `P` does). | not checked | the largest unknown of K+cell |
 | R1c | **A handler receiving an owned payload.** `clauseTy` at an abortive operation is `!U(P ⊸ F_Σ R)`: the clause binds the payload linearly and may consume it, but its outer context is `Ctx.DeadP`. A source handler that consumes the payload *with* an owned value from outside the `try` is not typable by `effHandleV`. Under E and K+cell the exception arm runs after the handler, where it may use the linear context. | `clauseTy` read; `bangThunkV` needs `Ctx.Banged` of the clause's context, and the payload binder is inside the λ, not in that context | K: the arms are restricted as `[handle]` is; K+cell and E: no restriction |
 | R2 | **`[then]`'s row premises.** `S.NZ`, `S.Uniq`, `S.UnrD → Banged Γ₂`. | `Row.NZ`, `Row.Uniq`, `¬ Row.UnrD`, `Row.Cancels` at exception rows, all by `simp`/`decide` (checks 3) | met by `ExnRow`; `Uniq` is a source premise, not derivable from `Row.Unwind` |
