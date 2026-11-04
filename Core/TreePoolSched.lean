@@ -24,9 +24,15 @@ stack**: the stack holds nothing at `f`'s masks; `f`'s resource holds nothing at
 stack's records not lent at what the nearest joiner shares, and its `imm` cells only at its own
 masks or there. The state value is the scheduler's handler with the stack (`stateVal`), so a
 clause can run a task under its own handler (a new task, or a stored task's cancel branch)
-without naming itself. Nothing fixes which task the scheduler runs next, how many tasks or
-joiners it holds, how deep they nest, or what lends they hold; `Inv` is the scheduler's own
-condition on its stack (for instance, which entries its tags mark as joiners).
+without naming itself. Nothing fixes how many tasks or joiners the scheduler holds, how deep they
+nest, or which lends its tasks hold views of; `Inv` is the scheduler's own condition on its stack
+(for instance, which entries its tags mark as joiners). **The interface is depth-first across
+joiners**: the moves reach only the top two entries, a joiner is resumed only from the top (once
+every task above it has ended), and only the top two entries are exchanged, neither a joiner. So
+the scheduler picks among the ready tasks above the nearest joiner, and cannot run a task below a
+joiner before the tasks above it end; FIFO or round-robin across joiners needs a new `PoolTJ` move,
+not only a new clause. Each held view is a copy of a lend of `own(())` with the empty escrow
+(`ViewsT`), a limit generalised when lends with a non-empty escrow land (#791).
 
 **What the scheduler must satisfy** is `SchedOKT` at `Qout = PoolAns Q H Inv`: the return clause
 and each operation's clause answer such a function. A clause proves it by the stack's moves, each a

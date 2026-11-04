@@ -1285,6 +1285,8 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.JoinProgs.progJoin_safe
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.JoinProgs.progJoin_depth1
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.JoinProgs.progJoin_depth3
+#print axioms BoCa.Fig16.Tree.Wp.SchedProgs.JoinProgs.twp_refuses_join_early
+#print axioms BoCa.Fig16.Tree.Wp.SchedProgs.JoinProgs.not_fdMask_above_copy
 #print axioms BoCa.Fig16.Tree.chain_ResU_compS_defined_iff
 #print axioms BoCa.Fig16.Tree.chain_ResU_Valid_split
 #print axioms BoCa.Fig16.Tree.chain_ResU_Hash_split

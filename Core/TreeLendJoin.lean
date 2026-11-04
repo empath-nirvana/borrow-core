@@ -15,9 +15,9 @@ cell, so `twp_lendEnd`'s statement is unchanged:
 * **A cell at its location carries its frame lifetime and nothing else** (`proper_view_single`):
   `view_at_lender` at that frame lifetime. Every cell any part of the world holds at `ℓ`, while
   `lendRec ℓ` is a record proper tagged `α`, has lifetime set `{α}`.
-* **End at the composed copies** (`twp_lendEnd_imm`): the run holds `ℓ ↦ imm(S, (), ∅)` and the
-  list carries `lendRec ℓ` at a tag `α`; at every start world `S = {α}`, and `twp_lendEnd` applies
-  there.
+* **End at the composed copies** (`twp_lendEnd_imm`): the run holds `ℓ ↦ imm(S, (), ∅)` and owns
+  `lendRec ℓ`; at every start world the list carries it at a tag `α` (`RecInv`), `S = {α}`, and
+  `twp_lendEnd` applies there.
 -/
 
 noncomputable section
@@ -63,9 +63,6 @@ theorem proper_view_single {w : TWd} {fρ ρ o : TRes w.K} {ps : List (FrameRecT
 def viewResS {K : WCactus} (S : TSet) (l : BoCa.Loc) : TRes K :=
   ResUT.single l (CellUT.immOf S BoCa.Val.unit PMap.empty (emptyT_inStratum _))
 
-theorem viewResS_single {K : WCactus} (α : Life) (l : BoCa.Loc) :
-    viewResS (K := K) (TSet.single α) l = viewRes α l := rfl
-
 /-- Copies compose: their lifetime sets join. -/
 theorem viewResS_compS {K : WCactus} (S T : TSet) (l : BoCa.Loc) :
     ResUT.CompS (viewResS (K := K) S l) (viewResS T l) (viewResS (S ∪ T) l) :=
@@ -73,10 +70,11 @@ theorem viewResS_compS {K : WCactus} (S T : TSet) (l : BoCa.Loc) :
     (emptyT_inStratum _) (emptyT_inStratum _)
 
 /-- **End a lend at its copies composed.** `twp_lendEnd` with the run holding
-`ℓ ↦ imm(S, (), ∅)` for the lend cell, the list carrying `lendRec ℓ` at some tag. -/
+`ℓ ↦ imm(S, (), ∅)` for the lend cell. The lend's tag is read from the start world's list
+(`RecInv`), and `S` is that tag (`proper_view_single`). -/
 theorem twp_lendEnd_imm {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls ls₁ : List (SRecT w.K)}
     {O O₁ : List (FrameRecT w.K)} {e : Expr} {Z ρ ρ₁ : TRes w.K} {l : BoCa.Loc}
-    {S : TSet} (hρ : ResUT.CompS Z (viewResS S l) ρ) (hα : lendRec l ∈ rsOfT ls)
+    {S : TSet} (hρ : ResUT.CompS Z (viewResS S l) ρ)
     (hρ₁ : ResUT.CompS Z (ResUT.single l (CellUT.ownOf BoCa.Val.unit)) ρ₁)
     (hvZ : ResUT.Valid Z) (hZ : NoneAt (· = l) Z)
     (hF : ∀ w' ρf, F w' ρf → NoneAt (· = l) ρf)
@@ -86,10 +84,14 @@ theorem twp_lendEnd_imm {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls ls₁ :
     (h : twp (ℍ := ℍ) F Q n w ls₁ O₁ e ρ₁) :
     twp (ℍ := ℍ) F Q n w ls O e ρ := by
   intro w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE hr hl hOr hFρ hf hc hS hR hI
-  obtain ⟨⟨r, α⟩, hα', hrα⟩ := List.mem_map.mp hα
+  have hp₀ : lendRec l ∈ O₀ := by
+    obtain ⟨y, hy, hry⟩ := forall₂_mem_left hOr ((hO _).mpr (Or.inl rfl))
+    rwa [RecRR.func hry (lendRec_rr l)] at hy
+  have hpps : lendRec l ∈ ps := (hS.1 _).mpr (Or.inl hp₀)
+  have hrs : lendRec l ∈ rsOfT ls₀ := (hR.1.inv.2.2.2.2.2.2.1 _).mpr ⟨_, hpps, [], .nil _⟩
+  obtain ⟨⟨r, α⟩, hx₀, hrα⟩ := List.mem_map.mp hrs
   simp only at hrα
   subst hrα
-  -- at the start world, the copy's lifetime set is the lend's tag
   have hS1 : S = TSet.single α := by
     obtain ⟨σZ, hσZ⟩ := hvZ
     have hZl : Z.get l = none := get_eq_none_of_flatT hσZ (hZ σZ hσZ l rfl)
@@ -97,14 +99,6 @@ theorem twp_lendEnd_imm {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls ls₁ :
       rw [ResUT.Comp.get_of_left_none hρ hZl, viewResS, ResUT.single_get_self]
     obtain ⟨ψ', e', hrc⟩ := hr.get_some hρl
     obtain ⟨χ', h', rfl, -⟩ := RC.immOf_inv hrc
-    have hp₀ : lendRec l ∈ O₀ := by
-      obtain ⟨y, hy, hry⟩ := forall₂_mem_left hOr ((hO _).mpr (Or.inl rfl))
-      rwa [RecRR.func hry (lendRec_rr l)] at hy
-    have hpps : lendRec l ∈ ps := (hS.1 _).mpr (Or.inl hp₀)
-    have hx₀ : (lendRec l, α) ∈ ls₀ := by
-      obtain ⟨y, hy, hry, hyt⟩ := forall₂_mem_left hl hα'
-      have : y = (lendRec l, α) := Prod.ext (RecRR.func hry (lendRec_rr l)) hyt
-      exact this ▸ hy
     exact proper_view_single hR hpps hx₀ (ResUT.CompS.comm hc) e' (CellUT.lsOf_immOf _ _ _ _)
   subst hS1
   exact twp_lendEnd hρ hρ₁ hvZ hZ hF hO hO₁ hls hls₁in hls₁ h w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE

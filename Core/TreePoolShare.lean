@@ -273,11 +273,6 @@ theorem HoldsIn.rr {Θ : LocTy} (hE : K.Ext K') {A : BoCa.Loc → Prop} {O : Lis
       cases hl with
       | some hl => exact (h τ hτ x ψ eψ (hl.1.symm.trans k)).imp (hO x).mp id
 
-/-- The masks of the records read: `HoldsIn` asks only where the masks are. -/
-theorem HoldsIn.congr {A : BoCa.Loc → Prop} {O O' : List (FrameRecT K)}
-    (hO : ∀ x, recMask O x → recMask O' x) {ρ : TRes K} (h : HoldsIn A O ρ) : HoldsIn A O' ρ :=
-  fun τ hτ x ψ e k => (h τ hτ x ψ e k).imp (hO x) id
-
 end Holds
 
 /-- **Kept by every run**: an `imm` cell of the end's flattening outside the end's masks comes
@@ -311,7 +306,10 @@ section Views
 variable {K K' : WCactus}
 
 /-- **Copies of lends**: every cell is `imm(S, (), ∅)` at some lifetime set `S`, the cell a lend
-of `ℓ ↦ own(())` with the empty escrow hands out (`viewRes`). -/
+of `ℓ ↦ own(())` with the empty escrow hands out (`viewRes`). The stack's accumulator carries it;
+the stack itself reads only that each cell is `imm` (`ViewsT.kind`, `ViewsT.eq_empty`), while the
+join's end of the lend reads the shape (`ViewsT.split_at`). Fixing the shape is a limit of the
+interface, generalised when lends with a non-empty escrow land (#791). -/
 def ViewsT (ρ : TRes K) : Prop :=
   ∀ x ψ, ρ.get x = some ψ → ∃ S : TSet,
     ψ = CellUT.immOf S BoCa.Val.unit PMap.empty (emptyT_inStratum _)
@@ -322,11 +320,6 @@ theorem ViewsT.view (β : Life) (l : BoCa.Loc) : ViewsT (viewRes (K := K) β l) 
   intro x ψ e
   obtain ⟨-, rfl⟩ := ResUT.single_get_eq_some e
   exact ⟨TSet.single β, rfl⟩
-
-theorem ViewsT.viewS (S : TSet) (l : BoCa.Loc) : ViewsT (viewResS (K := K) S l) := by
-  intro x ψ e
-  obtain ⟨-, rfl⟩ := ResUT.single_get_eq_some e
-  exact ⟨S, rfl⟩
 
 /-- A cell composed of two copies is a copy. -/
 theorem viewCell_compS {ψ₁ ψ₂ ψ : TCell K} (hC : CellUT.CompS ψ₁ ψ₂ ψ) {S : TSet}

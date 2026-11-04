@@ -57,7 +57,8 @@ siblings interleaved, one cancelled, the lender ending the lend only after every
 **Item 1: outcome (a), route B.** `Core/TreeLendJoin.lean`: `frameLife_of_tagged` (a tagged record
 proper's frame is at its tag, `TaggedT` with `not_desc_proper`), `proper_view_single` (every cell
 at its location has lifetime set `{α}`, `view_at_lender`), `twp_lendEnd_imm` (end a lend at
-`imm(S, (), ∅)`, the list carrying the lend's record; `S = {α}` at every start world, then
+`imm(S, (), ∅)`, the run owning the lend's record, its tag read from the start world's list by
+`RecInv`; `S = {α}` at every start world, then
 `twp_lendEnd` unchanged). No statement changed.
 
 **Items 2–4: built.**
@@ -90,3 +91,18 @@ Two proofs read `EndT`'s clauses:
   beneath a start ancestor, is a `mut` cell, which `HoldsIn` does not read. The `imm` cell
   absorbed by the end world is a start-side disjunct, which `HoldsIn` does not read either. So
   `UpdA` forced no new case.
+
+**After review.**
+- `twp_lendEnd_imm` no longer takes `hα : lendRec ℓ ∈ rsOfT ls`: the run owns `lendRec ℓ`, so it
+  is a record proper of the start world and `RecInv` gives its tag. The plumbing that carried
+  `hα` (`cerwpT_parThen`'s list premise, `twp_joinEndFree`'s `hls`) is gone.
+- **The early join is refused** (`twp_refuses_join_early`, `Core/TreePoolJoinProgs.lean`): a
+  joiner resumed while an entry above it still holds a copy runs under a frame holding that copy,
+  and no such run ends the lend; the interface's resume condition excludes that frame
+  (`not_fdMask_above_copy`).
+- **Limits.** The interface is depth-first across joiners: a joiner is resumed only from the top,
+  and FIFO or round-robin across joiners needs a new `PoolTJ` move. A joiner collects copies of
+  lends of `own(())` with the empty escrow (`ViewsT`); the stack reads only their kind, the join's
+  end of the lend reads the shape, generalised when #791 lands lends with a non-empty escrow.
+  `HS`: `park` exchanges the stopped task with a ready top; a joiner is never cancelled; `par`
+  children hold only copies; `spawn` children hold nothing.

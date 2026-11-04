@@ -10515,12 +10515,21 @@ joiner (`poolAns_park`), resume the top with what it has collected (`poolAns_res
 return clause (`stackRet`, `stackRet_okAt`) the deposit-and-resume move; `stackProg_safe` is a
 closed program through the headline.
 
+**Limits of the interface.** It is depth-first across joiners (the stack discipline): the moves
+reach only the top two entries, a joiner is resumed only from the top, once every task above it
+has ended, and only two entries neither a joiner are exchanged. A scheduler picks among the ready
+tasks above the nearest joiner; FIFO or round-robin across joiners needs a new `PoolTJ` move, not
+only a new clause. Each view a joiner collects is a copy of a lend of `own(())` with the empty
+escrow (`ViewsT`); the stack reads only that its cells are `imm`, the join's end of the lend reads
+the shape. This is generalised when #791 lands lends with a non-empty escrow.
+
 **Ending a lend at its copies composed** (`Core/TreeLendJoin.lean`). Copies of a lend cell compose
 to `ℓ ↦ imm(S, (), ∅)`, `S` the union of their lifetime sets (`viewResS_compS`). In every world `S`
 is the lend's lifetime: a tagged record proper's frame is at its tag (`frameLife_of_tagged`, from
 `TaggedT` and `not_desc_proper`), and every cell at its location carries that lifetime and no other
 (`proper_view_single`, from `view_at_lender`). So `twp_lendEnd_imm` ends a lend at the composed
-copies, the list carrying the lend's record, through `twp_lendEnd` unchanged.
+copies, the run owning the lend's record (its tag read from the start world's list, `RecInv`),
+through `twp_lendEnd` unchanged.
 
 **A scheduler with spawn, cancel and join** (`Core/TreePoolSpawn.lean`). `SchedOKTLe N` is
 `SchedOKT` with the return clause and the clauses asked only at stops `k ≤ N`;
@@ -10538,7 +10547,9 @@ resumes the top. Children are verified at tables that themselves have `spawn` an
 are indexed (`tabAt k`, its children's tables those below `k`), and `tabAt k` agrees with the
 scheduler's table `TJ` at the stops up to `k` (`tabAt_inclLe`, `cerwpT_table_mono_le`,
 `cerwpT_tabAt`), so children spawn and join at every depth. `hs_schedOK`: `SchedOKT` at `PoolAns`
-for every stack.
+for every stack. Limits of this scheduler: `park` exchanges the stopped task with a ready top
+rather than queueing it; a joiner is never cancelled (`cancel` cancels only a ready top); `par`
+children hold only copies of lends (`ViewsT`); `spawn` children hold nothing.
 
 **Interleaved lends across parks** (`Core/TreePoolSpawnProgs.lean`), three closed programs
 `(hnd HS root) (HS, [])`, each `OrDiverges` through `poolSchedAdequacyT` with every premise
@@ -10563,7 +10574,11 @@ and cancel a ready sibling on top. Each task's end hands its copies to its paren
 resumed with every copy, ends the lend at them (`twp_joinEndFree`, `twp_lendEnd_imm`) and frees `a`.
 `progJoin_safe d`: `(hnd HS (rootJ d)) (HS, [])` is `OrDiverges` at every depth `d`, through
 `poolSchedAdequacyT` with every premise discharged; `progJoin_depth1` and `progJoin_depth3` are its
-instances at `d = 0` and `d = 2`.
+instances at `d = 0` and `d = 2`. **The early join is refused**
+(`twp_refuses_join_early`): a scheduler that resumed a joiner while an entry above it still holds
+a copy `viewRes β ℓ` of its lend would run it under a frame holding that copy, and no such run
+ends the lend; the interface's resume condition `fdMask` at the joiner's masks excludes that frame
+(`not_fdMask_above_copy`).
 
 **Borrow edges point to ancestors, in `CactusInvT` configurations** (`borrowEdges_ancestors`,
 `lender_ancestor`; no scheduler instance). In `CactusInvT`, every view a part of a branch's
@@ -10592,7 +10607,10 @@ deriving the property for `PoolT`/`KapAtT` shares is open (#789).
   joiner below them shares (`PoolTJ`);
 - borrow edges to ancestors for the scheduler's stored shares (`PoolT`/`KapAtT`, #789);
 - a FIFO scheduling policy (a recursive append in the clause); `pingpong-mut`'s relay is not yet
-  written through the pool.
+  written through the pool. Across joiners, FIFO or round-robin needs a new `PoolTJ` move, not only
+  a new clause: the stack interface is depth-first across joiners;
+- views of lends with a non-empty escrow collected at a joiner (`ViewsT` fixes `imm(S, (), ∅)`;
+  with #791).
 
 ### Semantic types read at the tree (#782)
 
@@ -11237,7 +11255,8 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
   interface. A lend ended at its copies composed (`twp_lendEnd_imm`, through `twp_lendEnd`
   unchanged). `HS` with `par` (a joiner and an unstarted child, `κU`) and indexed tables, so
   children spawn and join at every depth; `progJoin_safe` at every depth. `twp_frame_keep_sh` and
-  `twp_holdsIn` read `EndT` at `UpdA` and `InvKeptA` (1.33). No change to `twp`'s rules, `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the checker, the backends or the
+  `twp_holdsIn` read `EndT` at `UpdA` and `InvKeptA` (1.33). The early join refused
+  (`twp_refuses_join_early`). No change to `twp`'s rules, `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the checker, the backends or the
   corpus.
 - **1.33** (2026-11-04) — §62 (#806): `EndT` reads row 5.27's `↭` along the walks (`UpdA`), with
   row 5.27's `mut` clause read by `InvKeptA`: an `imm` cell may be given up to the end world while

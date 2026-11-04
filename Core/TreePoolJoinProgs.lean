@@ -1,4 +1,5 @@
 import Core.TreePoolSpawnProgs
+import Core.TreeConsume
 
 /-!
 # A lend shared by children at any depth, ended after the join, through `PoolSchedAdequacyT`  `[spec §62]`
@@ -23,7 +24,8 @@ lend's lifetime) and frees `a`.
 
 `progJoin_safe d` holds at every depth `d`: `progJoin_depth1` (`d = 0`) and `progJoin_depth3`
 (`d = 2`, three levels of tasks below the root, every one holding a copy of the root's lend) are
-its instances. The safety statements quantify over every interleaving `HS` performs.
+its instances. `HS` is deterministic, so each program runs one schedule; the generality over
+schedules is `poolSchedAdequacyT`'s, which holds for every scheduler meeting `SchedOKT`.
 -/
 
 noncomputable section
@@ -168,14 +170,10 @@ theorem recsFixed_lend (l : BoCa.Loc) : RecsFixed fun _ => [lendRec l] := by
   cases h with
   | cons h₁ t => cases t; rw [RecRR.func h₁ (lendRec_rr l)]
 
-theorem relFT_view (β : Life) (l : BoCa.Loc) {K : WCactus} :
-    RelFT (lendRec (K := K) l) (viewRes β l) :=
-  ⟨l, FrzT.imm (ResUT.single_get_self _ _) rfl, Or.inl rfl⟩
-
 /-- **`(λ_. b) (par (th₁, th₂))` at a table `tabOf Tc`, holding a copy `viewRes β ℓ`**: each child
 gets a copy (`viewRes_dup`) and is verified at the children's tables holding it; the parent,
 owning the records `Os`, keeps its copy and is resumed with the copies handed back to it
-(`ViewsT`), at every list keeping the records of its stop list its copy reads. -/
+(`ViewsT`), at every list. -/
 theorem cerwpT_parThen {Tc : Nat → OpTabT} {th₁ th₂ : Val} {n : Nat} {β : Life} {l : BoCa.Loc}
     (hth₁ : ∀ j, j < n → ∀ (w' : TWd) (ls' : List (SRecT w'.K)) (Fb' Fe' : TFrame),
       (∀ w ρf, ResUT.Valid ρf → Fb' w ρf) → (∀ w ρf, fdMask (fun _ => False) w ρf → Fe' w ρf) →
@@ -188,7 +186,7 @@ theorem cerwpT_parThen {Tc : Nat → OpTabT} {th₁ th₂ : Val} {n : Nat} {β :
     {Os : (K : WCactus) → List (FrameRecT K)} (hOs : RecsFixed Os)
     {b : Expr} {Fb F : TFrame} {w : TWd} {ls : List (SRecT w.K)}
     (hb : ∀ k', k' < n → ∀ (w' : TWd) (ls' : List (SRecT w'.K)) (σ σ' : TRes w'.K),
-      (lendRec l ∈ rsOfT ls → lendRec l ∈ rsOfT ls') → ViewsT σ →
+      ViewsT σ →
       ResUT.CompS (viewRes β l) σ σ' →
       cerwpT (ℍ := ℍ) (opTableT (tabOf (ℍ := ℍ) Tc)) QV Fb
         (fdAt (enParP (parPA (ℍ := ℍ) Tc)) (Val.pair th₁ th₂) Fb (Os w'.K)) k' w' ls' (Os w'.K)
@@ -199,7 +197,7 @@ theorem cerwpT_parThen {Tc : Nat → OpTabT} {th₁ th₂ : Val} {n : Nat} {β :
     ((Kont.appR (.lam b) .hole).plug (performE (.val (opPayload nP 3 (Val.pair th₁ th₂)))))
       (viewRes β l)
   refine cerwpT_perform (.appR (.lam b) .hole) rfl (tabOf_par Tc) rfl ?_
-  intro w₀ ρ₀ ls₀ O₀ _ hr hl hO
+  intro w₀ ρ₀ ls₀ O₀ _ hr _ hO
   obtain rfl := rr_view_eq hr
   obtain rfl := hOs _ _ _ _ hO
   have hchild : ∀ {th : Val}, (∀ j, j < n → ∀ (w' : TWd) (ls' : List (SRecT w'.K)) (Fb' Fe' : TFrame),
@@ -209,27 +207,19 @@ theorem cerwpT_parThen {Tc : Nat → OpTabT} {th₁ th₂ : Val} {n : Nat} {β :
     intro th hth j hj w' ρ' ls' _ hr' Fb' Fe' h₁ h₂
     obtain rfl := rr_view_eq hr'
     exact hth j hj w' ls' Fb' Fe' h₁ h₂
-  -- the lend's record, if the stop list carries it, is carried by the list at the stop's world
-  have hl₀ : lendRec l ∈ rsOfT ls → lendRec l ∈ rsOfT ls₀ := fun h => by
-    obtain ⟨⟨r, α⟩, hr₁, rfl⟩ := List.mem_map.mp h
-    obtain ⟨y, hy, hry, -⟩ := forall₂_mem_left hl hr₁
-    exact List.mem_map.mpr ⟨y, hy, RecRR.func hry (lendRec_rr l)⟩
   refine ⟨trivial, viewRes β l, viewRes β l, viewRes_dup β l,
     ⟨th₁, th₂, viewRes β l, viewRes β l, rfl, viewRes_dup β l, ViewsT.view β l, ViewsT.view β l,
       hchild hth₁, hchild hth₂⟩,
-    (⟨(fun h => by cases h), fun w' ρ' ls' O' _ hr' hx hO' => ⟨fun k' hk' a σ σ' hB hcσ => ?_,
+    (⟨(fun h => by cases h), fun w' ρ' ls' O' _ hr' _ hO' => ⟨fun k' hk' a σ σ' hB hcσ => ?_,
       (fun hq => absurd rfl hq)⟩⟩ : contShareT (enParP (parPA (ℍ := ℍ) Tc)) Fb n w₀ ls₀ (Os w₀.K)
         (.appR (.lam b) .hole) (Val.pair th₁ th₂)
         (cerwpTC (ℍ := ℍ) (opTableT (tabOf (ℍ := ℍ) Tc)) QV Fb n) (viewRes β l))⟩
   obtain ⟨rfl, hV⟩ := hB
   obtain rfl := rr_view_eq hr'
   obtain rfl := hOs _ _ _ _ hO'
-  have hls : lendRec l ∈ rsOfT ls → lendRec l ∈ rsOfT ls' := fun h => by
-    obtain ⟨r', hr'm, hrr⟩ := hx (lendRec l) (hl₀ h) (relFT_view β l)
-    rwa [RecRR.func hrr (lendRec_rr l)] at hr'm
   simp only [cerwpTC, hk', if_true]
   exact cerwpT_det (post_downV (tabOf_down Tc)) (fun μ => step1Only_plug (Head.beta μ b Val.unit)
-    rfl .hole) (hb k' hk' w' ls' σ σ' hls hV hcσ)
+    rfl .hole) (hb k' hk' w' ls' σ σ' hV hcσ)
 
 /-! ### The tree of tasks -/
 
@@ -293,7 +283,7 @@ theorem node_ok : ∀ (d j : Nat) (β : Life) (l : BoCa.Loc) (Fb Fe : TFrame) (w
         simp only [hj', if_true]
         exact node_ok d j' β l Fb' Fe' w' ls'
       exact cerwpT_parThen (Os := fun _ => []) hch hch recsFixed_nil
-        fun k' _ w' ls' σ σ' _ hV hcσ => by
+        fun k' _ w' ls' σ σ' hV hcσ => by
           have e₀ : Expr.subst 0 Val.unit (.val Val.unit) = .val Val.unit := rfl
           rw [e₀]
           exact cerwpT_unitV ((ViewsT.view β l).compS hcσ hV)
@@ -319,13 +309,13 @@ theorem fdAt_par_lend {P : TVProp} {v : Val} {Fb : TFrame} {w' : TWd} {l : BoCa.
 
 open Classical in
 /-- **End the lend at the copies handed back, and free the cell**: the root's copy `viewRes α ℓ`
-beside the copies `σ` handed back to it, under a frame holding nothing at `ℓ`, the list carrying
-the lend's record. The copies at `ℓ` compose with the root's into `imm(S, (), ∅)`
+beside the copies `σ` handed back to it, under a frame holding nothing at `ℓ`, the run owning the
+lend's record. The copies at `ℓ` compose with the root's into `imm(S, (), ∅)`
 (`ViewsT.split_at`, `viewResS_compS`) and the lend ends there (`twp_lendEnd_imm`); the copies
 elsewhere stay, and `free ℓ` frees the cell. -/
 theorem twp_joinEndFree {F : TFrame} {P : TPost} (hP : P.Down) (Kc : Kont) {l : BoCa.Loc}
     {α : Life} (hF : ∀ w ρf, F w ρf → NoneAt (· = l) ρf) {n : Nat} {w : TWd}
-    {ls : List (SRecT w.K)} (hls : lendRec l ∈ rsOfT ls) {σ σ' : TRes w.K} (hV : ViewsT σ)
+    {ls : List (SRecT w.K)} {σ σ' : TRes w.K} (hV : ViewsT σ)
     (hcσ : ResUT.CompS (viewRes α l) σ σ')
     (h : ∀ Z : TRes w.K, ViewsT Z →
       twp (ℍ := ℍ) F P n w (ls.filter fun x => x.1 ≠ lendRec l) [] (Kc.plug (.val Val.unit)) Z) :
@@ -344,7 +334,7 @@ theorem twp_joinEndFree {F : TFrame} {P : TPost} (hP : P.Down) (Kc : Kont) {l : 
       exact ⟨σ.del l, TSet.single α ∪ T, ViewsT.del hV l, ResUT.del_get_self _ _, hx₂⟩
   obtain ⟨ρ₁, hρ₁⟩ := (ResUT.compS_defined_iff Z (ResUT.single l (CellUT.ownOf BoCa.Val.unit))).mpr
     (compatS_single_of_get_noneT hZl)
-  refine twp_lendEnd_imm (O₁ := []) (ls₁ := ls.filter fun x => x.1 ≠ lendRec l) hρ hls hρ₁
+  refine twp_lendEnd_imm (O₁ := []) (ls₁ := ls.filter fun x => x.1 ≠ lendRec l) hρ hρ₁
     (ViewsT.valid hZ) (ViewsT.noneAt hZ hZl) hF (fun x => by simp) (by simp)
     (fun x hx => by
       by_cases h : x.1 = lendRec l
@@ -377,17 +367,37 @@ theorem rootJ_cerwpT (d : Nat) (α : Life) {k n : Nat} (hn : n ≤ k) (Fb F : TF
     simp only [show j' < k by omega, if_true]
     exact node_ok d j' α l Fb' Fe' w' ls'
   refine cerwpT_parThen (Os := fun _ => [lendRec l]) hch hch (recsFixed_lend l)
-    fun k' _ w' ls' σ σ' hls hV hcσ => ?_
+    fun k' _ w' ls' σ σ' hV hcσ => ?_
   have hD' := post_downV (tabOf_down (fun i => if i < k then tabAt (ℍ := ℍ) i else OpTabT.empty))
     (Ψ := cerwpTC (ℍ := ℍ) (opTableT (tabOf (ℍ := ℍ)
       (fun i => if i < k then tabAt (ℍ := ℍ) i else OpTabT.empty))) QV Fb k') (F := Fb)
   have e : (freeE (.val (Val.loc l))).subst 0 Val.unit = freeE (.val (Val.loc l)) := by
     simp [freeE, Expr.subst]
   rw [e, cerwpT_eq]
-  exact twp_joinEndFree hD' .hole fdAt_par_lend
-    (hls (List.mem_map.mpr ⟨(lendRec l, α), List.mem_cons_self, rfl⟩)) hV hcσ fun Z hZ =>
+  exact twp_joinEndFree hD' .hole fdAt_par_lend hV hcσ fun Z hZ =>
       twp_here (fun μ => final_val μ Val.unit) fun _ _ _ _ _ hr _ hO => by
         cases hO; exact Or.inl ⟨Val.unit, rfl, rfl, rfl, hZ.rr hr⟩
+
+/-! ### The early join, refused -/
+
+/-- **A joiner resumed while an entry above it still holds a copy cannot end the lend.** The wrong
+implementation: a scheduler that resumes a joiner (holding its lend's cell as `viewRes`, owning
+`lendRec ℓ`) before a task above it has handed back its copy. The joiner's run then has that task's
+resource in its frame, so the frame holds a copy (`HoldsCopy`); no run under such a frame ends
+holding `ℓ ↦ own(())` (`twp_refuses_lendEnd_live_copy`: the end world would compose the copy with
+`own` at `ℓ`). The configuration is `twp_refuses_lendEnd_live_copy`'s, with every hypothesis
+discharged. -/
+theorem twp_refuses_join_early :
+    ¬ twp (ℍ := ℍ) (fun _ ρf => HoldsCopy (lfE 1) 1 ρf) QOwnBack 1 wE lsOne [lendRec 1]
+      (.val .unit) (viewRes (lfE 1) 1) :=
+  twp_refuses_lendEnd_live_copy _ holdsCopy_view
+
+/-- **The interface's resume condition excludes that frame**: a joiner owning `lendRec ℓ` is
+resumed only at frames meeting `fdMask` at its masks (`poolTJ_resume`'s `hFM`), and a frame holding
+a copy of the lend does not. -/
+theorem not_fdMask_above_copy :
+    ¬ fdMask (recMask [lendRec (K := wE.K) 1]) wE (viewRes (lfE 1) 1) := fun ⟨_, hn⟩ =>
+  not_noneAt_view (hn.mono fun _ hx => recMask_lendRec.mpr (Or.inl hx))
 
 /-! ### The programs -/
 
