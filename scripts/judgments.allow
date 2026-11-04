@@ -7,6 +7,7 @@ experiments/Affine/Affine/Elab.lean ADerives
 experiments/CBPVCore/CBPVCore/Fundamental.lean CDerives
 experiments/CBPVMu/CBPVMu/Fundamental.lean CDerives
 experiments/CBPVWorld/CBPVWorld/Fundamental.lean CDerives
+experiments/ExnGlue/ExnGlue/Source.lean SDerives
 experiments/Grades/Grades/Judgment.lean GDerives
 experiments/HandlersAsBorrows/HandlersAsBorrows/Source.lean VDerives
 experiments/HandlersAsBorrows/HandlersAsBorrows/Source.lean XDerives
