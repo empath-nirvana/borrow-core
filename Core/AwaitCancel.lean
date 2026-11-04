@@ -7,7 +7,7 @@ import Core.PinFundamental
 # Core — cancellable waits and level-triggered cancellation  `[spec §29a]`
 
 A cancellable wait is an operation marked `rc` (`OpSig.Cancellable`: marked, `1 ↠^lin 1 ⊕ 1`),
-performed only by `[await-c]` (`CDerives.effAwait`), which raises the marked cancel target
+performed only by `[await-c]` (`CDerivesIn.effAwait`), which raises the marked cancel target
 (`OpSig.CancelTarget`) on the answer `inr ()`. A cancel is a resume with `inr ()`. The marker is
 read by typing only: `[perform]` and `[raise]` refuse a marked operation, and the relation and the
 machine do not read it (`semC_effOf_rc`).
@@ -206,7 +206,7 @@ theorem d_closeOnCancel {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
       (.comp (CTy.effOf rowAwait .unit)) := by
   refine .bind (A := .ref Flag) (deadSplit hΓ)
     (.ret (appW (.sumI₁ (.unitI (by cdead))) (.alloc (by cdead)))) ?_
-  refine CDerives.effThenA (A := .unit) (.right (deadSplit hΓ))
+  refine CDerivesIn.effThenA (A := .unit) (.right (deadSplit hΓ))
     (by intro o ho; simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
         rcases ho with rfl | rfl <;> decide)
     (by simp [Row.Uniq, awaitF, cancelled]) (fun h => absurd h not_unrD_rowAwait)
@@ -757,11 +757,11 @@ theorem d_stickyScope : CDerives LifeCtx.empty [] stickyScope (.comp (.ret Flag)
     (.tensorI .nil (d_ccS .nil) (.unitI .nil)))) ?_
   refine .bind (.right .nil) (.ret (d_hrS (.cons .nil))) ?_
   refine .bind (.left (.left .nil))
-    (CDerives.effHandleCs (S := []) (E := Esched) (n := 1) (A := .unit) (R := StR) fsSched csSched
+    (CDerivesIn.effHandleCs (S := []) (E := Esched) (n := 1) (A := .unit) (R := StR) fsSched csSched
       (.left (.left .nil)) (.left (.right .nil)) (.here (.cons .nil)) (.there (.here .nil))
       (by decide) (by simp) (by simp) rfl
       (by rw [ofEff_sched]
-          exact CDerives.append_dead (Γ := []) (Ctx.Dead.cons (Ctx.Dead.cons .nil)) d_swallow)) ?_
+          exact CDerivesIn.append_dead (Γ := []) (Ctx.Dead.cons (Ctx.Dead.cons .nil)) d_swallow)) ?_
   refine .bind (A := Flag) (.right (.dead (.dead .nil))) (.ret (.sumI₂ (.unitI (by cdead)))) ?_
   exact .app (.right (.left (.dead (.dead .nil)))) (.force (.there (.here (by cdead))))
     (.here (by cdead))

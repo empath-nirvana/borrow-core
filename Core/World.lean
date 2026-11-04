@@ -73,6 +73,7 @@ def vShapeE : Option (Nat → SEnt) → VTy → LSub → Val → WProp
   | _, .unk, _, _ => emp
   | _, .int w, _, v => ⌜v.IsInt w⌝
   | _, .opq k, _, v => k.rel v
+  | η, .abs _ A, δ, v => vShapeE η A δ v
   | η, .tvar n, _, v => sEnvP η n v
   | η, .mu A, δ, v => fun ρ => (sClose η (.mu A)).Cl 0 ∧
       ∀ P : Val → WProp,

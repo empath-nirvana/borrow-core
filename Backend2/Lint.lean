@@ -65,7 +65,7 @@ def borrowMode (t : LTy) : Option Bool :=
 
 /-- **A copy at the rule `r`**, its premise read on the LIR type:
 - `dup` (`Ctx.SplitP.dup`): an unrestricted type (`LTy.persistent`, kept by `ofV_persistent`);
-- `const` and `derived` (`CDerives.copy`/`arrCopy`, `copy_derives`): `DerivedCopy`, an `imm`
+- `const` and `derived` (`CDerivesIn.copy`/`arrCopy`, `copy_derives`): `DerivedCopy`, an `imm`
   borrow or a family of them. -/
 def copiesAt : CopyRule → LTy → Bool
   | .dup, t => t.persistent
@@ -125,10 +125,10 @@ def handsOver (p : Prog) (x : Var) : Tm → Option String
   | _ => some "its body does not first bind the k it hands over to, `clos kc [base]`"
 
 /-- A type whose values an `abandon` node at the rule `r` may discard: the premise of `r`, read
-on the LIR type. At a `[let]`'s abort, `CDerives.effLet`'s `hW : S.Weak → Γ₂.Drops`: each slot
+on the LIR type. At a `[let]`'s abort, `CDerivesIn.effLet`'s `hW : S.Weak → Γ₂.Drops`: each slot
 of `N`'s context is at a `VTy.Drop` type, which `LTy.drops` reads (`ofV_drops`), an opaque value
-among them. At `⊤`, `CDerives.topI`, which has no premise: `⊤` absorbs its whole context at every
-type. A raise's payload superseded by a finaliser's: `CDerives.effRaise`'s `hd : o.A.Drop`,
+among them. At `⊤`, `CDerivesIn.topI`, which has no premise: `⊤` absorbs its whole context at every
+type. A raise's payload superseded by a finaliser's: `CDerivesIn.effRaise`'s `hd : o.A.Drop`,
 `LTy.drops` again. No other rule discards an opaque value: no constant forgets it and it has no
 destructor. -/
 def abandonable : Abandon → LTy → Bool

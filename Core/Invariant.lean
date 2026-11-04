@@ -875,6 +875,8 @@ theorem image_dom_mut {x : LifeVar} {δ δ' : LSub} :
       rw [empty_of_pure hc, PMap.empty_get] at e; cases e
   | opq k =>
       rw [empty_of_pure hc, PMap.empty_get] at e; cases e
+  | abs _ _ =>
+      rw [empty_of_pure hc, PMap.empty_get] at e; cases e
   | sum T₁ T₂ =>
       rcases hc with ⟨a, hk⟩ | ⟨a, hk⟩ <;> rcases hR with ⟨b, hk'⟩ | ⟨b, hk'⟩
       · obtain ⟨he, h₁⟩ := pure_sep_iff.mp hk

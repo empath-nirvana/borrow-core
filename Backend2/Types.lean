@@ -260,6 +260,13 @@ def outcomeTy (r : LTy) (aborts : List ((UInt32 × UInt32) × LTy))
       | some p => .sum (p.lift 0) s
     .mu (.sum (r.lift 0) x)
 
+/-- The LIR type of an opaque type. `Tok` is a location owning a unit cell, `Ref 1`'s relation
+(`vCE_tok_eq_ref`), made by `alloc` and released by `free` (`tokMint`, `tokBurn`); its view is
+`Unk` (`Imm̲ 'b Tok`), a pointer read as forgotten (`Layout.joinRe`, `Lower.reVals`). -/
+def ofOpq : Opaque → LTy
+  | .tok => .ref .unit
+  | k => .opq k
+
 mutual
 /-- A value type of the LIR: lifetimes, `[@a]` and `∀` erased, `!` kept; `ms` the program's
 machine operations. -/
@@ -277,11 +284,9 @@ def ofV (ms : MachSet) : VTy → Except String LTy
   | .box _ A => ofV ms A
   | .bang A => return .bang (← ofV ms A)
   | .fam L => return .fam (← ofV ms L)
-  -- `Tok` is a location owning a unit cell, `Ref 1`'s relation (`vCE_tok_eq_ref`), made by
-  -- `alloc` and released by `free` (`tokMint`, `tokBurn`); its view is `Unk` (`Imm̲ 'b Tok`), a
-  -- pointer read as forgotten (`Layout.joinRe`, `Lower.reVals`).
-  | .opq .tok => pure (.ref .unit)
-  | .opq k => pure (.opq k)
+  | .opq k => pure (ofOpq k)
+  -- An abstract type is laid out as its representation, whose relation it has (`vCE_abs_eq_rep`).
+  | .abs _ A => ofV ms A
   | .unk => pure .unk
   | .thunk C => ofU ms false C
 
@@ -398,16 +403,23 @@ theorem ofV_persistent {ms : MachSet} : ∀ {A : VTy} {t : LTy}, A.persistent = 
       simp only [ofV] at h
       cases hA : ofV ms A <;> cases hB : ofV ms B <;> rw [hA, hB] at h <;> cases h
       simp [LTy.persistent, ofV_persistent hp.1 hA, ofV_persistent hp.2 hB]
+  | .abs _ A, t, hp, h => by
+      simp only [ofV] at h
+      exact ofV_persistent (by simpa [VTy.persistent] using hp) h
   | .opq _, _, hp, _ | .thunk _, _, hp, _ | .ref _, _, hp, _ | .imm _ _, _, hp, _
   | .mut _ _, _, hp, _ | .fam _, _, hp, _ => by simp [VTy.persistent] at hp
+
+/-- The LIR type of a host type drops. -/
+theorem ofOpq_drops : ∀ {k : Opaque}, k.Host → (ofOpq k).drops = true
+  | .tok, hk => absurd rfl hk
+  | .input, _ | .output, _ | .clock, _ | .args, _ => rfl
 
 /-- The LIR type of a `VTy.Drop` type drops. -/
 theorem ofV_drops {ms : MachSet} {A : VTy} (hA : A.OwnFree) : ∀ {t : LTy}, ofV ms A = .ok t →
     t.drops = true := by
   induction hA with
   | opq k hk =>
-    intro t h; cases k <;> simp only [ofV] at h <;> cases h <;>
-      first | rfl | exact absurd rfl hk
+    intro t h; simp only [ofV] at h; cases h; exact ofOpq_drops hk
   | unit | zero | int | unk | imm | «mut» =>
       intro t h; simp only [ofV] at h
       first
@@ -432,6 +444,9 @@ def ofJ (ms : MachSet := {}) : Jdg → Except String (Sum LTy LCTy)
 def widthName : Width → String
   | .w32 => "i32" | .w64 => "i64" | .w8 => "u8" | .f32 => "f32" | .f64 => "f64"
 
+def opqName : Opaque → String
+  | .input => "Input" | .output => "Output" | .clock => "Clock" | .args => "Args" | .tok => "Tok"
+
 mutual
 def LTy.pp : LTy → String
   | .unit => "1"
@@ -445,8 +460,7 @@ def LTy.pp : LTy → String
   | .imm a => s!"imm {a.pp}"
   | .mut a => s!"mut {a.pp}"
   | .fam l => s!"[{l.pp}]"
-  | .opq k => match k with
-    | .input => "Input" | .output => "Output" | .clock => "Clock" | .args => "Args" | .tok => "Tok"
+  | .opq k => opqName k
   | .unk => "Unk"
   | .thunk k => s!"U {k.pp}"
   | .bang a => s!"!{a.pp}"

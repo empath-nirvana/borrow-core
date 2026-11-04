@@ -70,7 +70,7 @@ theorem kview {C₁ C₂ : CTy} {A : VTy} (h : VView (.thunk (.amp C₁ C₂)) A
     A.persistent = false ∧ Hnf A (.thunk (.amp C₁ C₂)) := by
   have hh := h.hnf_of (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h))
     (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
-  exact ⟨by rw [hh.persistent]; rfl, hh⟩
+  exact ⟨hh.persistent_false rfl, hh⟩
 
 /-- A view of `κ`'s type at `lin` and `cancel`, bare or boxed (BOXED-κ), is not persistent and has
 the thunk head. -/
@@ -82,7 +82,7 @@ theorem kviewO {C₁ C₂ : CTy} {A : VTy} (ob : Option Lifetime.Life)
     | none => exact hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h)
     | some d => exact .box (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h))
   have hh := h.hnf_of hT (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
-  exact ⟨by rw [hh.persistent]; rfl, hh⟩
+  exact ⟨hh.persistent_false rfl, hh⟩
 
 /-- A type with a thunk head is none of `forget`'s arguments, and no `1`. -/
 theorem kview_not {C : CTy} {A : VTy} (h : Hnf A (.thunk C)) :
@@ -626,7 +626,7 @@ theorem At05Ctx.le {Γ Γ' : Ctx VTy} {W F : Expr} (h : At05Ctx Γ W F) (hle : C
 theorem vview_ref_np {A T : VTy} (h : VView (.ref A) T) : T.persistent = false := by
   have hh := h.hnf_of (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h))
     (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
-  rw [hh.persistent]; rfl
+  exact hh.persistent_false rfl
 
 /-- A view of a `Ref` is no thunk. -/
 theorem vview_ref_thunk {A : VTy} {C : CTy} (h : VView (.ref A) (.thunk C)) : False := by

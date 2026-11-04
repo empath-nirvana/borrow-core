@@ -79,9 +79,20 @@ choice, block layout, a loop counter's representation) needs none of this.
 
 <!-- ANCHOR: growth -->
 The proof burden of the previous language grew until it was unmaintainable
-(`docs/l-lang-kernel-and-lit.md` §2). Three rules (`docs/decisions.md` 19–21):
+(`docs/l-lang-kernel-and-lit.md` §2). The rules (`docs/decisions.md` 19–21; #798):
 
+- **No new judgment.** The set of typing judgments is frozen by `scripts/check-judgments.sh`
+  against `scripts/judgments.allow`. A new coordinate goes into an existing judgment's index, a
+  type former, or the model; renaming a judgment renames its allowlist line.
 - **No new index on `CDerives`.** Put a new coordinate in a type former or in the model.
+  Exceptions are listed here, each signed off by the user, and each keeps `CDerives` as an
+  abbreviation so that no existing statement changes. An exception is an index on an existing
+  judgment, not a new judgment, so the judgment count stays as `check-judgments.sh` freezes it:
+  - **The provider set** (`CDerivesIn P`, #778, SPEC §63): which abstract types a derivation may
+    open. `CDerives := CDerivesIn (fun _ => True)`. Only `absSeal`/`absUnseal` read it. The tied
+    and pinned judgments carry the same index (`CDerivesAtIn`, `CDerivesPIn`), with
+    `CDerivesAt` and `CDerivesP` their instances inside every provider. They are `CDerives`,
+    `CDerivesAt` and `CDerivesP` indexed, and replace them in `judgments.allow` line for line.
 - **Generalize by deleting.** A general former lands in the same change that turns the fixed
   formers it replaces into abbreviations.
 - **Do not invert `CDerives` casually.** Inversion lemmas, substitution over derivations, checker

@@ -118,15 +118,15 @@ theorem VScoped.extend {Δ : LifeCtx} {A : VTy} (h : VScoped Δ A) (x : LifeVar)
 
 /-! ### Side conditions -/
 
-/-- What a family at `M` needs of `CDerives`: `withbor` at `M` (with the side condition `side`:
+/-- What a family at `M` needs of `CDerivesIn`, at every provider set: `withbor` at `M` (with the side condition `side`:
 form (2)'s `Δ ⊢ S ⊐ @b` at `Mut`, form (1)'s scoping at `Imm`) and `⊑M`. -/
 structure Borrows (M : Lifetime.Life → VTy → VTy) (side : LifeCtx → VTy → Prop) : Prop where
-  ax : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {S T₂ : VTy} (z : LifeVar), Ctx.Dead Γ → Δ.find? z = none →
-    side Δ S → ¬ VFree z S → ¬ VFree z T₂ →
-    CDerives Δ Γ withbor (.val (.lolli (.ref S)
+  ax : ∀ {P : Nat → Prop} {Δ : LifeCtx} {Γ : Ctx VTy} {S T₂ : VTy} (z : LifeVar), Ctx.Dead Γ →
+    Δ.find? z = none → side Δ S → ¬ VFree z S → ¬ VFree z T₂ →
+    CDerivesIn P Δ Γ withbor (.val (.lolli (.ref S)
       (.lolli (.all z Δ.meetOfDom (.lolli (M (.var z) S) (.box (.var z) T₂))) (.tensor (.ref S) T₂))))
-  sub : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a b : Lifetime.Life} {S : VTy},
-    CDerives Δ Γ e (.val (M b S)) → Δ.EntailsLe a b → CDerives Δ Γ e (.val (M a S))
+  sub : ∀ {P : Nat → Prop} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a b : Lifetime.Life} {S : VTy},
+    CDerivesIn P Δ Γ e (.val (M b S)) → Δ.EntailsLe a b → CDerivesIn P Δ Γ e (.val (M a S))
   free : ∀ z a S, VFree z (M a S) ↔ (a.mentions z = true ∨ VFree z S)
 
 /-- Form (2) of `withbor` and `⊑Mut`. -/
@@ -172,9 +172,9 @@ theorem FamSide.hy₁ (s : FamSide M Δ c x y A B T) : (FD₁ Δ x).find? y = no
 
 /-- The inner callback, at `Δ, 'a`: `g` is instantiated at `'b` and applied to `(mx, my)`,
 with `mx` shortened from `'a` to `'b`. -/
-theorem d_inner2 (bw : Borrows M side) (s : FamSide M Δ c x y A B T) {Γ : Ctx VTy}
+theorem d_inner2 {P : Nat → Prop} (bw : Borrows M side) (s : FamSide M Δ c x y A B T) {Γ : Ctx VTy}
     {S₁ S₂ S₃ : VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives (FD₁ Δ x)
+    CDerivesIn P (FD₁ Δ x)
       (⟨M (.var x) A, true⟩ :: ⟨S₁, false⟩ :: ⟨S₂, false⟩ :: ⟨S₃, false⟩ ::
         ⟨cbTy2 M c Δ.meetOfDom A B T, true⟩ :: Γ)
       inner2 (.val (.all y (FD₁ Δ x).meetOfDom (.lolli (M (.var y) B) (.box (.var y) T)))) := by
@@ -192,19 +192,19 @@ theorem d_inner2 (bw : Borrows M side) (s : FamSide M Δ c x y A B T) {Γ : Ctx 
     · exact s.hcby
     · exact dead_noLive hΓ (P := fun t => ¬ VFree y t.ty) t ht hl
   have key : ∀ {Γ' : Ctx VTy}, Ctx.Solo Γ' 6 (cbTy2 M c Δ.meetOfDom A B T) →
-      CDerives (FD₂ Δ x y) Γ' (.app (.var 6) unit')
+      CDerivesIn P (FD₂ Δ x y) Γ' (.app (.var 6) unit')
         (.val (.lolli (famTy2 M (.var y) A B) (.box (.var y) T))) := fun h => by
-    have := CDerives.allEV (a := .var y) (.var h.toP) (entailsLt_inner Δ x y)
+    have := CDerivesIn.allEV (P := P) (a := .var y) (.var h.toP) (entailsLt_inner Δ x y)
     rwa [s.hinst] at this
   exact appW (pairW (bw.sub (.var (by csolo)) (entailsLe_inner Δ x y)) (.var (by csolo)))
     (key (by csolo))
 
 /-- The outer callback, at `Δ`: the inner `withbor` borrows `y` at `'b`, and `[]I` at `'a`
 boxes what it returns once `mx` and `g` are consumed. -/
-theorem d_outer2 (bw : Borrows M side) (s : FamSide M Δ c x y A B T)
+theorem d_outer2 {P : Nat → Prop} (bw : Borrows M side) (s : FamSide M Δ c x y A B T)
     (hsideB : side (FD₁ Δ x) B) (hBo : VOutlives (FD₁ Δ x) (.var x) B)
     (hTo : VOutlives (FD₁ Δ x) (.var x) T) {Γ : Ctx VTy} {S₁ S₂ : VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives Δ
+    CDerivesIn P Δ
       (⟨.ref B, true⟩ :: ⟨S₁, false⟩ :: ⟨cbTy2 M c Δ.meetOfDom A B T, true⟩ :: ⟨S₂, false⟩ :: Γ)
       outer2
       (.val (.all x Δ.meetOfDom (.lolli (M (.var x) A) (.box (.var x) (.tensor (.ref B) T))))) := by
@@ -227,10 +227,10 @@ theorem d_outer2 (bw : Borrows M side) (s : FamSide M Δ c x y A B T)
 
 /-- **The derived rule.**  `withborF2 : Ref A ⊗ Ref B ⊸ (∀'c ⊏ ⊓Δ. M 'c A ⊗ M 'c B ⊸ ['c] T) ⊸
 (Ref A ⊗ Ref B) ⊗ T`, at `M = Mut` (`withborM2_wf`) and `M = Imm` (`withborI2_wf`). -/
-theorem withborF2_wf (bw : Borrows M side) (s : FamSide M Δ c x y A B T) (hsideA : side Δ A)
+theorem withborF2_wf {P : Nat → Prop} (bw : Borrows M side) (s : FamSide M Δ c x y A B T) (hsideA : side Δ A)
     (hsideB : side (FD₁ Δ x) B) (hBo : VOutlives (FD₁ Δ x) (.var x) B)
     (hTo : VOutlives (FD₁ Δ x) (.var x) T) {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives Δ Γ withborF2 (.val (withborF2Ty M c Δ.meetOfDom A B T)) := by
+    CDerivesIn P Δ Γ withborF2 (.val (withborF2Ty M c Δ.meetOfDom A B T)) := by
   refine .lamV (.lamV ?_)
   exact letW (A := .ref A) (B := .ref B) (.var (by csolo)) <|
     letW (A := .ref A) (B := .tensor (.ref B) T)
@@ -244,20 +244,20 @@ end
 
 /-- The `Mut` family.  `A` needs `withbor` form (2)'s side condition at `Δ`; `B` and `T` need to
 outlive the outer lifetime `'a`, which also gives `B` its form (2) side condition.  `[spec §5]` -/
-theorem withborM2_wf {Δ : LifeCtx} {c x y : LifeVar} {A B T : VTy}
+theorem withborM2_wf {P : Nat → Prop} {Δ : LifeCtx} {c x y : LifeVar} {A B T : VTy}
     (s : FamSide mutM Δ c x y A B T) (hA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
     (hBo : VOutlives (FD₁ Δ x) (.var x) B) (hTo : VOutlives (FD₁ Δ x) (.var x) T)
     {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives Δ Γ withborF2 (.val (withborF2Ty mutM c Δ.meetOfDom A B T)) :=
+    CDerivesIn P Δ Γ withborF2 (.val (withborF2Ty mutM c Δ.meetOfDom A B T)) :=
   withborF2_wf borrowsMut s hA ⟨.var x, LifeCtx.defines_of_wf (wf_var_self _ _ _), hBo.toLe⟩ hBo hTo
     hΓ
 
 /-- The `Imm` family.  `[spec §5]` -/
-theorem withborI2_wf {Δ : LifeCtx} {c x y : LifeVar} {A B T : VTy}
+theorem withborI2_wf {P : Nat → Prop} {Δ : LifeCtx} {c x y : LifeVar} {A B T : VTy}
     (s : FamSide immM Δ c x y A B T) (hA : VScoped Δ A) (hB : VScoped Δ B)
     (hBo : VOutlives (FD₁ Δ x) (.var x) B) (hTo : VOutlives (FD₁ Δ x) (.var x) T)
     {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives Δ Γ withborF2 (.val (withborF2Ty immM c Δ.meetOfDom A B T)) :=
+    CDerivesIn P Δ Γ withborF2 (.val (withborF2Ty immM c Δ.meetOfDom A B T)) :=
   withborF2_wf borrowsImm s hA (hB.extend x _) hBo hTo hΓ
 
 /-! ### Semantic typing: the Fundamental Property at the derivation -/

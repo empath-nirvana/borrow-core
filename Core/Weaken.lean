@@ -67,8 +67,8 @@ theorem dead_append_dead {Γ Γ' : Ctx VTy} (h : Ctx.Dead Γ) (h' : Ctx.Dead Γ'
   | cons _ ih => exact .cons ih
 
 /-- **Weakening** by consumed slots at the end. -/
-theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
-    (h : CDerives Δ Γ e j) : CDerives Δ (Γ ++ Γ') e j := by
+theorem CDerivesIn.append_dead {P : Nat → Prop} (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
+    (h : CDerivesIn P Δ Γ e j) : CDerivesIn P Δ (Γ ++ Γ') e j := by
   induction h with
   | var hs => exact .var (soloP_append h' hs)
   | unitI hd => exact .unitI (deadP_append h' hd)
@@ -106,6 +106,8 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | free hΓ => exact .free (deadP_append h' hΓ)
   | tokMint hΓ => exact .tokMint (deadP_append h' hΓ)
   | tokBurn hΓ => exact .tokBurn (deadP_append h' hΓ)
+  | absSeal hn _ ih => exact .absSeal hn ih
+  | absUnseal hn _ ih => exact .absUnseal hn ih
   | swap hΓ => exact .swap (deadP_append h' hΓ)
   | copy hΓ => exact .copy (deadP_append h' hΓ)
   | forgetImm hΓ => exact .forgetImm (deadP_append h' hΓ)

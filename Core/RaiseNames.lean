@@ -1299,10 +1299,10 @@ theorem rcE_tEG (ks : List FoldP.Bnd) (Bs : FoldP.Stack) :
       simp only [FoldP.tE]; split
       · rfl
       · simp [FoldP.callE, rcE, rcE_tagE _ (e := .var 0) rfl]
-  | .unit | .zero | .thunk _ | .imm _ _ | .mut _ _ | .box _ _ | .bang _ | .unk | .int _ | .opq _ => rfl
+  | .unit | .zero | .thunk _ | .imm _ _ | .mut _ _ | .box _ _ | .bang _ | .unk | .int _ | .opq _ | .abs _ _ => rfl
   | .fam .unit | .fam (.tensor _ _) | .fam .zero | .fam (.sum _ _) | .fam (.thunk _)
   | .fam (.imm _ _) | .fam (.mut _ _) | .fam (.box _ _) | .fam (.bang _) | .fam .unk
-  | .fam (.tvar _) | .fam (.mu _) | .fam (.int _) | .fam (.fam _) | .fam (.opq _) => rfl
+  | .fam (.tvar _) | .fam (.mu _) | .fam (.int _) | .fam (.fam _) | .fam (.opq _) | .fam (.abs _ _) => rfl
 
 theorem rcE_travB (ks : List FoldP.Bnd) : ∀ k, rcE q (FoldP.travB ks k).1 = true
   | .mu [] => rfl
@@ -1336,7 +1336,7 @@ theorem rcE_mapV : ∀ A : VTy, rcE q (mapV A).1 = true
   | .sum A B => by simp [mapV, rcE, rcE_app, rcE_mapV A, rcE_mapV B]
   | .box _ A => rcE_mapV A
   | .tvar (_ + 1) | .unit | .zero | .thunk _ | .ref _ | .imm _ _ | .mut _ _
-  | .bang _ | .unk | .mu _ | .int _ | .opq _ | .fam _ => rfl
+  | .bang _ | .unk | .mu _ | .int _ | .opq _ | .abs _ _ | .fam _ => rfl
 
 theorem rcE_nodeV : ∀ C : CTy, rcE q (nodeV C).1 = true
   | .ret A => by simp [nodeV, bindE, rcE, rcE_app, rcE_mapV]

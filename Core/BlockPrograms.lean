@@ -411,7 +411,7 @@ theorem d_crossPack : CDerives LifeCtx.empty [] crossPack (.val .unit) :=
   letW (A := .ref BB) (B := .ref BB) (.var (by csolo)) <|
   letW (A := .ref BB) (B := .ref BB) (.var (by csolo)) <|
   letW (A := σ2.refTy) (B := .unit)
-    (appW (CDerives.append_dead (by cdead) d_swapCbB)
+    (appW (CDerivesIn.append_dead (by cdead) d_swapCbB)
       (appW (pairW (.var (by csolo)) (.var (by csolo))) (d_withborS2 (by cdead) rfl))) <|
   seqW (.var (by csolo)) <|
   seqW

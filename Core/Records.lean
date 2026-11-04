@@ -48,33 +48,33 @@ The eliminators of `CDerives` are at computation types; at a value judgment they
 back through `ofRet`, as the embedding does. -/
 
 /-- `λx. b : U(A ⊸ F B)` from `b : B`. -/
-theorem CDerives.lamV {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A B : VTy}
-    (h : CDerives Δ (⟨A, true⟩ :: Γ) M (.val B)) :
-    CDerives Δ Γ (.val (.lam M)) (.val (.lolli A B)) :=
+theorem CDerivesIn.lamV {P : Nat → Prop} {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A B : VTy}
+    (h : CDerivesIn P Δ (⟨A, true⟩ :: Γ) M (.val B)) :
+    CDerivesIn P Δ Γ (.val (.lam M)) (.val (.lolli A B)) :=
   .thunkV rfl (.lam (.ret h))
 
-theorem CDerives.letpairV {Δ : LifeCtx} {Γ Γp Γb : Ctx VTy} {V M : Expr} {A B C : VTy}
-    (hs : Ctx.SplitP Γ Γp Γb) (hV : CDerives Δ Γp V (.val (.tensor A B)))
-    (hM : CDerives Δ (⟨B, true⟩ :: ⟨A, true⟩ :: Γb) M (.val C)) :
-    CDerives Δ Γ (.letpair V M) (.val C) :=
+theorem CDerivesIn.letpairV {P : Nat → Prop} {Δ : LifeCtx} {Γ Γp Γb : Ctx VTy} {V M : Expr} {A B C : VTy}
+    (hs : Ctx.SplitP Γ Γp Γb) (hV : CDerivesIn P Δ Γp V (.val (.tensor A B)))
+    (hM : CDerivesIn P Δ (⟨B, true⟩ :: ⟨A, true⟩ :: Γb) M (.val C)) :
+    CDerivesIn P Δ Γ (.letpair V M) (.val C) :=
   .ofRet (.tensorE hs hV (.ret hM))
 
-theorem CDerives.seqV {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {V M : Expr} {C : VTy}
-    (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hV : CDerives Δ Γ₁ V (.val .unit))
-    (hM : CDerives Δ Γ₂ M (.val C)) : CDerives Δ Γ (.seq V M) (.val C) :=
+theorem CDerivesIn.seqV {P : Nat → Prop} {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {V M : Expr} {C : VTy}
+    (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hV : CDerivesIn P Δ Γ₁ V (.val .unit))
+    (hM : CDerivesIn P Δ Γ₂ M (.val C)) : CDerivesIn P Δ Γ (.seq V M) (.val C) :=
   .ofRet (.unitE hs hV (.ret hM))
 
-theorem CDerives.caseV {Δ : LifeCtx} {Γ Γs Γb : Ctx VTy} {V M₁ M₂ : Expr} {A B C : VTy}
-    (hs : Ctx.SplitP Γ Γs Γb) (hV : CDerives Δ Γs V (.val (.sum A B)))
-    (h₁ : CDerives Δ (⟨A, true⟩ :: Γb) M₁ (.val C))
-    (h₂ : CDerives Δ (⟨B, true⟩ :: Γb) M₂ (.val C)) :
-    CDerives Δ Γ (.case V M₁ M₂) (.val C) :=
+theorem CDerivesIn.caseV {P : Nat → Prop} {Δ : LifeCtx} {Γ Γs Γb : Ctx VTy} {V M₁ M₂ : Expr} {A B C : VTy}
+    (hs : Ctx.SplitP Γ Γs Γb) (hV : CDerivesIn P Δ Γs V (.val (.sum A B)))
+    (h₁ : CDerivesIn P Δ (⟨A, true⟩ :: Γb) M₁ (.val C))
+    (h₂ : CDerivesIn P Δ (⟨B, true⟩ :: Γb) M₂ (.val C)) :
+    CDerivesIn P Δ Γ (.case V M₁ M₂) (.val C) :=
   .ofRet (.sumE hs hV (.ret h₁) (.ret h₂))
 
 /-- `let x = e in b`, written `(λx. b) e`. -/
-theorem CDerives.eletV {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {e b : Expr} {A C : VTy}
-    (hs : Ctx.SplitP Γ Γ₁ Γ₂) (he : CDerives Δ Γ₁ e (.val A))
-    (hb : CDerives Δ (⟨A, true⟩ :: Γ₂) b (.val C)) : CDerives Δ Γ (elet e b) (.val C) :=
+theorem CDerivesIn.eletV {P : Nat → Prop} {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {e b : Expr} {A C : VTy}
+    (hs : Ctx.SplitP Γ Γ₁ Γ₂) (he : CDerivesIn P Δ Γ₁ e (.val A))
+    (hb : CDerivesIn P Δ (⟨A, true⟩ :: Γ₂) b (.val C)) : CDerivesIn P Δ Γ (elet e b) (.val C) :=
   .lolliE hs he (.lamV hb)
 
 /-! ### Contexts -/
@@ -353,6 +353,7 @@ theorem forgettable_immReborrow (b : Lifetime.Life) : ∀ A : VTy, A.SpineMuFree
   | .sum A B, ⟨h₁, h₂⟩ => .sum (forgettable_immReborrow b A h₁) (forgettable_immReborrow b B h₂)
   | .thunk _, _ => .unk
   | .opq _, _ => .unk
+  | .abs _ _, _ => .unk
   | .ref _, _ => .imm
   | .imm _ _, _ => .imm
   | .mut _ _, _ => .imm

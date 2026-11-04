@@ -19,7 +19,7 @@ R, FP, adequacy, `PinLaw`'s theorems) holds of `t.erase`.
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt CDerivesP Jdg EffCtx RowAt SigsAt Ctx.Banged
+open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt CDerivesAtIn CDerivesP Jdg EffCtx RowAt SigsAt Ctx.Banged
   CtxOutlives HasDtor dtorE dtor_wf rowAt_of_sigsAt)
 
 /-- **A typed derivation tied at every effect context at which the list `s` is**.  `[spec §19]` -/
@@ -302,7 +302,7 @@ theorem effLet (u : Masks) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : 
       (hN.1 (nilR hn) Ξ (sigsAt_union_right h)),
     .effLet hs hm hcv hW hU hM.2 hN.2⟩
 
-/-- `[then]` with its finaliser at the pure row, as `CDerivesAt.effThenA`.  `[spec §24, §27]` -/
+/-- `[then]` with its finaliser at the pure row, as `CDerivesAtIn.effThenA`.  `[spec §24, §27]` -/
 theorem effThenA (u : Masks) {p₁ p₂ p₃ : Pins} {s₁ s₂ s₃ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tM tN tD : TExpr}
     {A B : CVTy} {S : CRow} (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
     (hcv : Covers u.u₁ 0 tM.erase ∧ Covers u.u₂ 1 tN.erase ∧ Covers u.u₂ 1 tD.erase) (hNZ : S.NZ)
@@ -325,7 +325,7 @@ theorem effThenA (u : Masks) {p₁ p₂ p₃ : Pins} {s₁ s₂ s₃ : CRow} {Γ
     .effThen hs hm hcv hNZ hUq hU (BoCa.Fig16.LogRel.Core.RowLe.refl S)
       (BoCa.Fig16.LogRel.Core.RowLe.nil S) hfin hP rfl hM.2 hN.2 hD.2⟩
 
-/-- `[handle]` reads its handled row, as `CDerivesAt.effHandleV`: the handler's pair `tc` a value
+/-- `[handle]` reads its handled row, as `CDerivesAtIn.effHandleV`: the handler's pair `tc` a value
 form over a part `Γ₁` of the context whose live slots are persistent.  `[spec §19]` -/
 theorem effHandle (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind)
     (site : Option HSite) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tc te : TExpr}
@@ -347,7 +347,7 @@ theorem effHandle (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKin
       (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right h))) rfl,
     .effHandleV hs hm hcv hd hH hc.2 hn0 hnS hlen hdv he.2 rfl⟩
 
-/-- BOXED-κ reads its handled row, as `CDerivesAt.effHandleB`.  `[spec §28]` -/
+/-- BOXED-κ reads its handled row, as `CDerivesAtIn.effHandleB`.  `[spec §28]` -/
 theorem effHandleB (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind)
     (site : Option HSite) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tc te : TExpr}
     {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R : CVTy} {d : CLife}
@@ -398,7 +398,7 @@ theorem reify {p : Pins} {s : CRow} {t : TExpr} (S : CRow) (B R : CVTy) (res : B
     .reify S B R res hS hcl h.2 q hΓ⟩
 
 /-- `[handle]` at clauses that resume `κ` in tail position reads its handled row, as
-`CDerivesAt.effHandleT`.  `[spec §14, §19]` -/
+`CDerivesAtIn.effHandleT`.  `[spec §14, §19]` -/
 theorem effHandleT (u : Masks) (site : Option HSite) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy}
     {tc te : TExpr} {Hr Hc : BoCa.Expr} {S SN : CRow} {E : List (CQual × CVTy × CVTy)}
     {fs : Nat → CCTy} {n : UInt32} {A R : CVTy}

@@ -84,6 +84,8 @@ theorem reborrow_vShape {α : Life} {x : LifeVar} {δ : LSub}
       exact reborrow_emp_box α _ ρ hρ
   | opq _ =>
       exact reborrow_emp_box α _ ρ hρ
+  | abs _ _ =>
+      exact reborrow_emp_box α _ ρ hρ
   | zero =>
       exact False.elim hρ.1
   | box a T =>

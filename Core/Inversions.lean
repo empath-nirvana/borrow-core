@@ -20,7 +20,7 @@ the two thunk rules conclude with their premise's term.  So:
 
 **Views keep the head** (`VView.hnf`).  A view of `T` has `T`'s head (`Hnf`: boxes stripped, `μ`
 unrolled), unless that head is `!` (dereliction reaches its content), `Imm` or `Mut` (`⊑` changes
-the lifetime).  Persistence is a property of the head (`Hnf.persistent`).
+the lifetime).  A persistent type has a persistent head (`Hnf.persistent`).
 
 **The inversions.**  A variable is read at a view of its live slot's type (`der_var`); a pair at the
 views of a tensor of its parts' types (`der_pair`); `inj₁ a` at the views of a sum, `a` typed in the
@@ -67,7 +67,7 @@ open BoCa.Programs (alloc' free')
 /-! ### Views of a value type -/
 
 /-- One value-level same-term step, at the types alone: `!E`, `[]I`, `[]E`, `⊑` at `Imm` and
-`Mut`, `roll`, `unroll`. -/
+`Mut`, `roll`, `unroll`, and the provider's iso. -/
 inductive VS : VTy → VTy → Prop
   | bang (A : VTy) : VS (.bang A) A
   | boxI (a : Lifetime.Life) (A : VTy) : VS A (.box a A)
@@ -76,35 +76,47 @@ inductive VS : VTy → VTy → Prop
   | mutS (a b : Lifetime.Life) (A : VTy) : VS (.mut b A) (.mut a A)
   | roll (A : VTy) : VS (VTy.inst (.mu A) A) (.mu A)
   | unroll (A : VTy) : VS (.mu A) (VTy.inst (.mu A) A)
+  /-- `absSeal`, inside the abstract type's provider (SPEC §63). -/
+  | absSeal (n : Nat) (A : VTy) : VS A (.abs n A)
+  /-- `absUnseal`, inside the abstract type's provider (SPEC §63). -/
+  | absUnseal (n : Nat) (A : VTy) : VS (.abs n A) A
 
 /-- The views of a value type. -/
 abbrev VView := Relation.ReflTransGen VS
 
-/-- The head of a value type: boxes stripped and `μ` unrolled. -/
+/-- The head of a value type: boxes and abstract types stripped, `μ` unrolled. An abstract type's
+head is its representation's: the views here are inside every provider, where the iso holds. -/
 inductive Hnf : VTy → VTy → Prop
   | box {a : Lifetime.Life} {A h : VTy} : Hnf A h → Hnf (.box a A) h
   | mu {A h : VTy} : Hnf (VTy.inst (.mu A) A) h → Hnf (.mu A) h
-  | base {T : VTy} : (∀ a A, T ≠ .box a A) → (∀ A, T ≠ .mu A) → Hnf T T
+  | abs {n : Nat} {A h : VTy} : Hnf A h → Hnf (.abs n A) h
+  | base {T : VTy} (hb : ∀ a A, T ≠ .box a A) (hm : ∀ A, T ≠ .mu A)
+      (ha : ∀ n A, T ≠ .abs n A := by intro _ _ h; cases h) : Hnf T T
 
 theorem Hnf.unique {T h h' : VTy} (hh : Hnf T h) (hh' : Hnf T h') : h = h' := by
   induction hh generalizing h' with
   | box _ ih => cases hh' with
     | box hh' => exact ih hh'
-    | base hb _ => exact absurd rfl (hb _ _)
+    | base hb _ _ => exact absurd rfl (hb _ _)
   | mu _ ih => cases hh' with
     | mu hh' => exact ih hh'
-    | base _ hm => exact absurd rfl (hm _)
-  | base hb hm => cases hh' with
+    | base _ hm _ => exact absurd rfl (hm _)
+  | abs _ ih => cases hh' with
+    | abs hh' => exact ih hh'
+    | base _ _ ha => exact absurd rfl (ha _ _)
+  | base hb hm ha => cases hh' with
     | box _ => exact absurd rfl (hb _ _)
     | mu _ => exact absurd rfl (hm _)
-    | base _ _ => rfl
+    | abs _ => exact absurd rfl (ha _ _)
+    | base _ _ _ => rfl
 
-/-- The head of a type that is neither a box nor a `μ` is the type itself. -/
-theorem Hnf.eq_self {T h : VTy} (hh : Hnf T h) (hb : ∀ a A, T ≠ .box a A) (hm : ∀ A, T ≠ .mu A) :
-    h = T :=
-  hh.unique (.base hb hm)
+/-- The head of a type that is neither a box, a `μ` nor an abstract type is the type itself. -/
+theorem Hnf.eq_self {T h : VTy} (hh : Hnf T h) (hb : ∀ a A, T ≠ .box a A) (hm : ∀ A, T ≠ .mu A)
+    (ha : ∀ n A, T ≠ .abs n A := by intro _ _ h; cases h) : h = T :=
+  hh.unique (.base hb hm ha)
 
-theorem hnf_self {T : VTy} (hb : ∀ a A, T ≠ .box a A) (hm : ∀ A, T ≠ .mu A) : Hnf T T := .base hb hm
+theorem hnf_self {T : VTy} (hb : ∀ a A, T ≠ .box a A) (hm : ∀ A, T ≠ .mu A)
+    (ha : ∀ n A, T ≠ .abs n A := by intro _ _ h; cases h) : Hnf T T := .base hb hm ha
 
 /-- **Views keep the head**, unless the head is `!` (whose content is then viewed), `Imm` or
 `Mut`. -/
@@ -121,7 +133,7 @@ theorem VView.hnf {T T' h : VTy} (hv : VView T T') (hT : Hnf T h) :
         | boxI a A => exact .inl (.box h₁)
         | boxE a A => cases h₁ with
           | box h₁ => exact .inl h₁
-          | base hb _ => exact absurd rfl (hb _ _)
+          | base hb _ _ => exact absurd rfl (hb _ _)
         | immS a b A =>
             obtain rfl := h₁.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)
             exact .inr (.inr (.inl ⟨b, A, rfl⟩))
@@ -131,7 +143,11 @@ theorem VView.hnf {T T' h : VTy} (hv : VView T T') (hT : Hnf T h) :
         | roll A => exact .inl (.mu h₁)
         | unroll A => cases h₁ with
           | mu h₁ => exact .inl h₁
-          | base _ hm => exact absurd rfl (hm _)
+          | base _ hm _ => exact absurd rfl (hm _)
+        | absSeal n A => exact .inl (.abs h₁)
+        | absUnseal n A => cases h₁ with
+          | abs h₁ => exact .inl h₁
+          | base _ _ ha => exact absurd rfl (ha _ _)
       · exact .inr (.inl ⟨A, rfl, hA.tail hs⟩)
       · exact .inr (.inr (.inl hi))
       · exact .inr (.inr (.inr hm))
@@ -149,9 +165,11 @@ theorem VView.hnf_of {T T' h : VTy} (hv : VView T T') (hT : Hnf T h) (hb : ∀ A
 their own heads too. -/
 theorem VView.eq_of_heads {T T' : VTy} (hv : VView T T') (hTb : ∀ a A, T ≠ .box a A)
     (hTm : ∀ A, T ≠ .mu A) (hb : ∀ A, T ≠ .bang A) (hi : ∀ a A, T ≠ .imm a A)
-    (hmu : ∀ a A, T ≠ .mut a A) (hT'b : ∀ a A, T' ≠ .box a A) (hT'm : ∀ A, T' ≠ .mu A) :
+    (hmu : ∀ a A, T ≠ .mut a A) (hT'b : ∀ a A, T' ≠ .box a A) (hT'm : ∀ A, T' ≠ .mu A)
+    (hTa : ∀ n A, T ≠ .abs n A := by intro _ _ h; cases h)
+    (hT'a : ∀ n A, T' ≠ .abs n A := by intro _ _ h; cases h) :
     T' = T :=
-  ((hv.hnf_of (hnf_self hTb hTm) hb hi hmu).eq_self hT'b hT'm).symm
+  ((hv.hnf_of (hnf_self hTb hTm hTa) hb hi hmu).eq_self hT'b hT'm hT'a).symm
 
 /-! ### Persistence is a property of the head -/
 
@@ -159,7 +177,7 @@ theorem persistent_rename (r : Nat → Nat) : ∀ A : VTy, (A.rename r).persiste
   | .unit | .zero | .unk | .int _ | .opq _ | .tvar _ | .thunk _ => rfl
   | .tensor A B | .sum A B => by
       simp only [VTy.rename, VTy.persistent, persistent_rename r A, persistent_rename r B]
-  | .ref _ | .imm _ _ | .mut _ _ | .fam _ | .bang _ => rfl
+  | .ref _ | .imm _ _ | .mut _ _ | .fam _ | .bang _ | .abs _ _ => rfl
   | .box _ A => by simp only [VTy.rename, VTy.persistent, persistent_rename r A]
   | .mu A => by simp only [VTy.rename, VTy.persistent, persistent_rename _ A]
 
@@ -167,8 +185,8 @@ theorem persistent_subst_false : ∀ (A : VTy) (σ : Nat → VTy), A.persistent 
     (A.subst σ).persistent = false
   | .unit, _, h | .zero, _, h | .unk, _, h | .int _, _, h | .tvar _, _, h | .bang _, _, h => by
       simp [VTy.persistent] at h
-  | .opq _, _, _ | .thunk _, _, _ | .ref _, _, _ | .imm _ _, _, _ | .mut _ _, _, _ | .fam _, _, _ =>
-      rfl
+  | .opq _, _, _ | .thunk _, _, _ | .ref _, _, _ | .imm _ _, _, _ | .mut _ _, _, _ | .fam _, _, _
+  | .abs _ _, _, _ => rfl
   | .tensor A B, σ, h | .sum A B, σ, h => by
       simp only [VTy.persistent, Bool.and_eq_false_iff] at h
       simp only [VTy.subst, VTy.persistent, Bool.and_eq_false_iff]
@@ -187,7 +205,7 @@ theorem persistent_subst_true : ∀ (A : VTy) (σ : Nat → VTy), A.persistent =
   | .unit, _, _, _ | .zero, _, _, _ | .unk, _, _, _ | .int _, _, _, _ | .bang _, _, _, _ => rfl
   | .tvar n, σ, _, hσ => hσ n
   | .opq _, _, h, _ | .thunk _, _, h, _ | .ref _, _, h, _ | .imm _ _, _, h, _ | .mut _ _, _, h, _
-  | .fam _, _, h, _ => by simp [VTy.persistent] at h
+  | .fam _, _, h, _ | .abs _ _, _, h, _ => by simp [VTy.persistent] at h
   | .tensor A B, σ, h, hσ | .sum A B, σ, h, hσ => by
       simp only [VTy.persistent, Bool.and_eq_true] at h
       simp only [VTy.subst, VTy.persistent, Bool.and_eq_true]
@@ -215,12 +233,23 @@ theorem persistent_inst_mu (A : VTy) : (VTy.inst (.mu A) A).persistent = A.persi
       | zero => simpa [VTy.scons, VTy.persistent] using hA
       | succ n => rfl
 
-/-- **A type is persistent exactly when its head is.** -/
-theorem Hnf.persistent {T h : VTy} (hh : Hnf T h) : T.persistent = h.persistent := by
+/-- **A persistent type has a persistent head.** The converse fails only through an abstract
+type: `Hnf` strips `abs n A` to `A`'s head, and `abs n A` is never persistent while `A` may be.
+`[spec §10, §63]` -/
+theorem Hnf.persistent {T h : VTy} (hh : Hnf T h) (hT : T.persistent = true) :
+    h.persistent = true := by
   induction hh with
-  | box _ ih => simpa [VTy.persistent] using ih
-  | mu _ ih => rw [← ih, persistent_inst_mu]; rfl
-  | base => rfl
+  | box _ ih => exact ih (by simpa [VTy.persistent] using hT)
+  | mu _ ih => exact ih (by rw [persistent_inst_mu]; simpa [VTy.persistent] using hT)
+  | abs _ _ => simp [VTy.persistent] at hT
+  | base => exact hT
+
+/-- A type whose head is not persistent is not persistent. -/
+theorem Hnf.persistent_false {T h : VTy} (hh : Hnf T h) (hf : h.persistent = false) :
+    T.persistent = false := by
+  cases hT : T.persistent with
+  | false => rfl
+  | true => rw [hh.persistent hT] at hf; cases hf
 
 /-! ### The same-term rules, at the judgements -/
 
@@ -836,6 +865,7 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | foldOwnG => intro k hk; exact absurd hk (not_hasVar_closed (FoldP.foldOwnGV_closed _))
   | foldReuse => intro k hk; exact absurd hk (not_hasVar_closed (foldReuseV_closed _))
   | unfoldN => intro k hk; exact absurd hk (not_hasVar_closed (unfoldV_closed _))
+  | absSeal _ _ ih | absUnseal _ _ ih => exact ih
   | _ => intro k hk; exact absurd hk (not_hasVar_closed (by rfl))
 
 /-! ### Inversions -/
@@ -927,6 +957,10 @@ theorem der_var {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.val (VS.boxI _ _))⟩
   | boxE _ ih =>
       intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.val (VS.boxE _ _))⟩
+  | absSeal _ _ ih =>
+      intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.val (VS.absSeal _ _))⟩
+  | absUnseal _ _ ih =>
+      intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.val (VS.absUnseal _ _))⟩
   | immSub _ _ ih =>
       intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.val (VS.immS _ _ _))⟩
   | mutSub _ _ ih =>
@@ -987,6 +1021,16 @@ theorem der_pair {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       rcases ih a b he with ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc⟩ | h
       · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.val (VS.boxE _ _))⟩
       · exact .inr h
+  | absSeal _ _ ih =>
+      intro a b he
+      rcases ih a b he with ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc⟩ | h
+      · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.val (VS.absSeal _ _))⟩
+      · exact .inr h
+  | absUnseal _ _ ih =>
+      intro a b he
+      rcases ih a b he with ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc⟩ | h
+      · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.val (VS.absUnseal _ _))⟩
+      · exact .inr h
   | immSub _ _ ih =>
       intro a b he
       rcases ih a b he with ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc⟩ | h
@@ -1035,6 +1079,12 @@ theorem der_inj₁ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeri
   | boxE _ ih =>
       intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he
       exact ⟨A, B, ha, hc.step (JS.val (VS.boxE _ _))⟩
+  | absSeal _ _ ih =>
+      intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he
+      exact ⟨A, B, ha, hc.step (JS.val (VS.absSeal _ _))⟩
+  | absUnseal _ _ ih =>
+      intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he
+      exact ⟨A, B, ha, hc.step (JS.val (VS.absUnseal _ _))⟩
   | immSub _ _ ih =>
       intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he
       exact ⟨A, B, ha, hc.step (JS.val (VS.immS _ _ _))⟩
@@ -1088,6 +1138,14 @@ theorem der_unit {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       intro he; rcases ih he with ⟨hd, hc⟩ | hr
       · exact .inl ⟨hd, hc.step (JS.val (VS.boxE _ _))⟩
       · exact .inr (hr.tail (JS.val (VS.boxE _ _)))
+  | absSeal _ _ ih =>
+      intro he; rcases ih he with ⟨hd, hc⟩ | hr
+      · exact .inl ⟨hd, hc.step (JS.val (VS.absSeal _ _))⟩
+      · exact .inr (hr.tail (JS.val (VS.absSeal _ _)))
+  | absUnseal _ _ ih =>
+      intro he; rcases ih he with ⟨hd, hc⟩ | hr
+      · exact .inl ⟨hd, hc.step (JS.val (VS.absUnseal _ _))⟩
+      · exact .inr (hr.tail (JS.val (VS.absUnseal _ _)))
   | immSub _ _ ih =>
       intro he; rcases ih he with ⟨hd, hc⟩ | hr
       · exact .inl ⟨hd, hc.step (JS.val (VS.immS _ _ _))⟩
@@ -1120,6 +1178,8 @@ theorem der_prim_alloc {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : C
   | bangE _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.bang _))⟩
   | boxI _ _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.boxI _ _))⟩
   | boxE _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.boxE _ _))⟩
+  | absSeal _ _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.absSeal _ _))⟩
+  | absUnseal _ _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.absUnseal _ _))⟩
   | immSub _ _ ih =>
       intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.immS _ _ _))⟩
   | mutSub _ _ ih =>
@@ -1132,27 +1192,27 @@ theorem der_prim_alloc {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : C
 /-! #### Applications -/
 
 /-- The rules that conclude with an application `X Y`, at the judgement each gives. -/
-def AppBase (Δ : LifeCtx) (Γ : Ctx VTy) (X Y : Expr) (j₀ : Jdg) : Prop :=
+def AppBaseIn (P : Nat → Prop) (Δ : LifeCtx) (Γ : Ctx VTy) (X Y : Expr) (j₀ : Jdg) : Prop :=
   -- `⊸E`
-  (∃ Γ₁ Γ₂ A B, Ctx.SplitP Γ Γ₁ Γ₂ ∧ CDerives Δ Γ₁ Y (.val A) ∧
-    CDerives Δ Γ₂ X (.val (.lolli A B)) ∧ j₀ = .val B) ∨
+  (∃ Γ₁ Γ₂ A B, Ctx.SplitP Γ Γ₁ Γ₂ ∧ CDerivesIn P Δ Γ₁ Y (.val A) ∧
+    CDerivesIn P Δ Γ₂ X (.val (.lolli A B)) ∧ j₀ = .val B) ∨
   -- `[app]`: the argument a variable
-  (∃ Γ₁ Γ₂ i A C, Y = .var i ∧ Ctx.SplitP Γ Γ₁ Γ₂ ∧ CDerives Δ Γ₁ X (.comp (.arr A C)) ∧
+  (∃ Γ₁ Γ₂ i A C, Y = .var i ∧ Ctx.SplitP Γ Γ₁ Γ₂ ∧ CDerivesIn P Δ Γ₁ X (.comp (.arr A C)) ∧
     Ctx.SoloP Γ₂ i A ∧ j₀ = .comp C) ∨
   -- `[let]`, at the empty row or at a row
-  (∃ N Γ₁ Γ₂ A S C, X = .lam N ∧ Ctx.SplitP Γ Γ₁ Γ₂ ∧ CDerives Δ Γ₁ Y (.comp (CTy.effOf S A)) ∧
-    CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp C) ∧ j₀ = .comp C) ∨
+  (∃ N Γ₁ Γ₂ A S C, X = .lam N ∧ Ctx.SplitP Γ Γ₁ Γ₂ ∧ CDerivesIn P Δ Γ₁ Y (.comp (CTy.effOf S A)) ∧
+    CDerivesIn P Δ (⟨A, true⟩ :: Γ₂) N (.comp C) ∧ j₀ = .comp C) ∨
   -- `[let-poly]`
   (∃ N b C, X = .lam N ∧ Y = .lam b ∧ closedAt 0 (Expr.lam b) = true ∧
-    (∃ j', CDerives Δ [] (.lam b) j') ∧
-    CDerives Δ (⟨.unit, false⟩ :: Γ) ((N.subst 0 (Val.lam b)).shift 1 0) (.comp C) ∧
+    (∃ j', CDerivesIn P Δ [] (.lam b) j') ∧
+    CDerivesIn P Δ (⟨.unit, false⟩ :: Γ) ((N.subst 0 (Val.lam b)).shift 1 0) (.comp C) ∧
     j₀ = .comp C) ∨
   -- `∀E`, at a computation and at a value
-  (∃ x b C a, Y = .unit ∧ CDerives Δ Γ X (.comp (.all x b C)) ∧ j₀ = .comp (C.instLife x a)) ∨
-  (∃ x b A a, Y = .unit ∧ CDerives Δ Γ X (.val (VTy.all x b A)) ∧ j₀ = .val (A.instLife x a)) ∨
+  (∃ x b C a, Y = .unit ∧ CDerivesIn P Δ Γ X (.comp (.all x b C)) ∧ j₀ = .comp (C.instLife x a)) ∨
+  (∃ x b A a, Y = .unit ∧ CDerivesIn P Δ Γ X (.val (VTy.all x b A)) ∧ j₀ = .val (A.instLife x a)) ∨
   -- the projections
-  (∃ C D, Y = .inj₁ .unit ∧ CDerives Δ Γ X (.comp (.amp C D)) ∧ j₀ = .comp C) ∨
-  (∃ C D, Y = .inj₂ .unit ∧ CDerives Δ Γ X (.comp (.amp C D)) ∧ j₀ = .comp D) ∨
+  (∃ C D, Y = .inj₁ .unit ∧ CDerivesIn P Δ Γ X (.comp (.amp C D)) ∧ j₀ = .comp C) ∨
+  (∃ C D, Y = .inj₂ .unit ∧ CDerivesIn P Δ Γ X (.comp (.amp C D)) ∧ j₀ = .comp D) ∨
   -- `force` at a returner, and the effect forms
   (Y = .unit ∧ ∃ i, X = .var i) ∨
   X = .prim .perform ∨ X = .prim .raise ∨ (∃ Z, X = .app (.prim .ubind) Z) ∨
@@ -1161,9 +1221,13 @@ def AppBase (Δ : LifeCtx) (Γ : Ctx VTy) (X Y : Expr) (j₀ : Jdg) : Prop :=
   (∃ n, X = .lam (.case (.var 0) (.var 0) (BoCa.BoLo.raiseE (opArgE n 1 (.var 0)))) ∧
     Y = BoCa.BoLo.performE (opArgE n 0 (.val .unit)) ∧ Ctx.Dead Γ)
 
+/-- `AppBaseIn` inside every provider. -/
+abbrev AppBase (Δ : LifeCtx) (Γ : Ctx VTy) (X Y : Expr) (j₀ : Jdg) : Prop :=
+  AppBaseIn (fun _ => True) Δ Γ X Y j₀
+
 /-- **An application is typed by a rule that concludes with one, then the same-term rules.** -/
-theorem der_app {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
-    ∀ X Y, e = .app X Y → ∃ j₀, AppBase Δ Γ X Y j₀ ∧ JR j₀ j := by
+theorem der_app {P : Nat → Prop} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerivesIn P Δ Γ e j) :
+    ∀ X Y, e = .app X Y → ∃ j₀, AppBaseIn P Δ Γ X Y j₀ ∧ JR j₀ j := by
   induction h with
   | lolliE hs ha hf =>
       intro X Y he; cases he
@@ -1239,6 +1303,12 @@ theorem der_app {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | boxE _ ih =>
       intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.boxE _ _))⟩
+  | absSeal _ _ ih =>
+      intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.absSeal _ _))⟩
+  | absUnseal _ _ ih =>
+      intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.absUnseal _ _))⟩
   | immSub _ _ ih =>
       intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.immS _ _ _))⟩
@@ -1286,6 +1356,12 @@ theorem der_letpair {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDer
   | boxE _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr⟩ := ih V M he
       exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.val (VS.boxE _ _))⟩
+  | absSeal _ _ ih =>
+      intro V M he; obtain ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr⟩ := ih V M he
+      exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.val (VS.absSeal _ _))⟩
+  | absUnseal _ _ ih =>
+      intro V M he; obtain ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr⟩ := ih V M he
+      exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.val (VS.absUnseal _ _))⟩
   | immSub _ _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr⟩ := ih V M he
       exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.val (VS.immS _ _ _))⟩
@@ -1332,6 +1408,12 @@ theorem der_seq {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | boxE _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, C, hs, hV, hM, hr⟩ := ih V M he
       exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.val (VS.boxE _ _))⟩
+  | absSeal _ _ ih =>
+      intro V M he; obtain ⟨Γ₁, Γ₂, C, hs, hV, hM, hr⟩ := ih V M he
+      exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.val (VS.absSeal _ _))⟩
+  | absUnseal _ _ ih =>
+      intro V M he; obtain ⟨Γ₁, Γ₂, C, hs, hV, hM, hr⟩ := ih V M he
+      exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.val (VS.absUnseal _ _))⟩
   | immSub _ _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, C, hs, hV, hM, hr⟩ := ih V M he
       exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.val (VS.immS _ _ _))⟩
@@ -1457,7 +1539,8 @@ theorem der_hnd {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       intro n Q H M he; simp only [Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
       exact (not_der_app_prim hM _ _ rfl id (by decide) (by decide)).elim
   | ret _ ih | ofRet _ ih | effSub _ _ ih | nuIn _ _ ih | nuOut _ _ ih | bangE _ ih | boxI _ _ ih
-  | boxE _ ih | immSub _ _ ih | mutSub _ _ ih | roll _ _ _ ih | unroll _ ih => exact ih
+  | boxE _ ih | immSub _ _ ih | mutSub _ _ ih | roll _ _ _ ih | unroll _ ih | absSeal _ _ ih
+  | absUnseal _ _ ih => exact ih
   | _ => intro n Q H M he; cd_at he
 
 /-! #### λ-values -/
@@ -1528,18 +1611,23 @@ theorem LamCls.bangThunkV {Γ : Ctx VTy} {D C : CTy} (h : LamCls Γ D (.comp C))
 /-- **How a λ-value is typed**: its body under a live binder (`[⊸I]`), under a dead binder at a
 row's `1 ⊸` (`[λ-dead]`), under a dead binder at a `∀` (`[∀I]`) or at a returner (the thunk of
 `F A`); as the pair `⟨M, N⟩`; or as a λ-constant. -/
-def LamInv (Δ : LifeCtx) (Γ : Ctx VTy) (M : Expr) (j : Jdg) : Prop :=
-  (∃ A D, CDerives Δ (⟨A, true⟩ :: Γ) M (.comp D) ∧ LamCls Γ (.arr A D) j) ∨
-  (∃ S B, CDerives Δ (⟨.unit, false⟩ :: Γ) M (.comp (CTy.effOf S B)) ∧
+def LamInvIn (P : Nat → Prop) (Δ : LifeCtx) (Γ : Ctx VTy) (M : Expr) (j : Jdg) : Prop :=
+  (∃ A D, CDerivesIn P Δ (⟨A, true⟩ :: Γ) M (.comp D) ∧ LamCls Γ (.arr A D) j) ∨
+  (∃ S B, CDerivesIn P Δ (⟨.unit, false⟩ :: Γ) M (.comp (CTy.effOf S B)) ∧
     LamCls Γ (.arr .unit (CTy.effOf S B)) j) ∨
-  (∃ x b Δ' S C, CDerives Δ' (⟨S, false⟩ :: Γ) M (.comp C) ∧ LamCls Γ (.all x b C) j) ∨
-  (∃ A, CDerives Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A)) ∧
+  (∃ x b Δ' S C, CDerivesIn P Δ' (⟨S, false⟩ :: Γ) M (.comp C) ∧ LamCls Γ (.all x b C) j) ∨
+  (∃ A, CDerivesIn P Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A)) ∧
     (ValCls (.thunk (.ret A)) j ∨ (Ctx.Banged Γ ∧ ValCls (.bang (.thunk (.ret A))) j))) ∨
   (∃ M₁ M₂, Expr.lam M = withPair M₁ M₂) ∨
   LamAx (.lam M) j
 
-theorem LamInv.step {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {j j' : Jdg} (hs : JS j j')
-    (h : LamInv Δ Γ M j) : LamInv Δ Γ M j' := by
+/-- `LamInvIn` inside every provider. -/
+abbrev LamInv (Δ : LifeCtx) (Γ : Ctx VTy) (M : Expr) (j : Jdg) : Prop :=
+  LamInvIn (fun _ => True) Δ Γ M j
+
+theorem LamInvIn.step {P : Nat → Prop} {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {j j' : Jdg}
+    (hs : JS j j')
+    (h : LamInvIn P Δ Γ M j) : LamInvIn P Δ Γ M j' := by
   rcases h with ⟨A, D, hM, hc⟩ | ⟨S, B, hM, hc⟩ | ⟨x, b, Δ', S, C, hM, hc⟩ | ⟨A, hM, hc⟩ | hw | hx
   · exact .inl ⟨A, D, hM, hc.step hs (rigid_arr _ _)⟩
   · exact .inr (.inl ⟨S, B, hM, hc.step hs (rigid_arr _ _)⟩)
@@ -1550,8 +1638,9 @@ theorem LamInv.step {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {j j' : Jdg} (hs : 
   · exact .inr (.inr (.inr (.inr (.inl hw))))
   · exact .inr (.inr (.inr (.inr (.inr (hx.step hs)))))
 
-theorem LamInv.thunkV {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy}
-    (h : LamInv Δ Γ M (.comp C)) (hC : C.isRet = false) : LamInv Δ Γ M (.val (.thunk C)) := by
+theorem LamInvIn.thunkV {P : Nat → Prop} {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy}
+    (h : LamInvIn P Δ Γ M (.comp C)) (hC : C.isRet = false) :
+    LamInvIn P Δ Γ M (.val (.thunk C)) := by
   rcases h with ⟨A, D, hM, hc⟩ | ⟨S, B, hM, hc⟩ | ⟨x, b, Δ', S, C', hM, hc⟩ | ⟨A, hM, hc⟩ | hw | hx
   · exact .inl ⟨A, D, hM, hc.thunkV hC⟩
   · exact .inr (.inl ⟨S, B, hM, hc.thunkV hC⟩)
@@ -1560,9 +1649,9 @@ theorem LamInv.thunkV {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy}
   · exact .inr (.inr (.inr (.inr (.inl hw))))
   · rw [hx.not_comp] at hC; cases hC
 
-theorem LamInv.bangThunkV {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy}
-    (h : LamInv Δ Γ M (.comp C)) (hC : C.isRet = false) (hp : Ctx.Banged Γ) :
-    LamInv Δ Γ M (.val (.bang (.thunk C))) := by
+theorem LamInvIn.bangThunkV {P : Nat → Prop} {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy}
+    (h : LamInvIn P Δ Γ M (.comp C)) (hC : C.isRet = false) (hp : Ctx.Banged Γ) :
+    LamInvIn P Δ Γ M (.val (.bang (.thunk C))) := by
   rcases h with ⟨A, D, hM, hc⟩ | ⟨S, B, hM, hc⟩ | ⟨x, b, Δ', S, C', hM, hc⟩ | ⟨A, hM, hc⟩ | hw | hx
   · exact .inl ⟨A, D, hM, hc.bangThunkV hC hp⟩
   · exact .inr (.inl ⟨S, B, hM, hc.bangThunkV hC hp⟩)
@@ -1571,8 +1660,9 @@ theorem LamInv.bangThunkV {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy}
   · exact .inr (.inr (.inr (.inr (.inl hw))))
   · rw [hx.not_comp] at hC; cases hC
 
-theorem LamInv.ofAx {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {j : Jdg} (h : LamAx (.lam M) j) :
-    LamInv Δ Γ M j :=
+theorem LamInvIn.ofAx {P : Nat → Prop} {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {j : Jdg}
+    (h : LamAx (.lam M) j) :
+    LamInvIn P Δ Γ M j :=
   .inr (.inr (.inr (.inr (.inr h))))
 
 theorem otherLam_mint : OtherLam mintE := by simp [OtherLam]
@@ -1589,8 +1679,8 @@ theorem lamAx_withborU (d : Expr) {T : VTy} (h : WithborUTy T) : LamAx (withborU
   .inr (.inl ⟨d, rfl, T, h, ValCls.refl T⟩)
 
 /-- **A λ-value is typed through the rule that types its body, or as a λ-constant.** -/
-theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
-    ∀ M, e = .lam M → LamInv Δ Γ M j := by
+theorem der_lam {P : Nat → Prop} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerivesIn P Δ Γ e j) :
+    ∀ M, e = .lam M → LamInvIn P Δ Γ M j := by
   induction h with
   | lam h => intro M he; cases he; exact .inl ⟨_, _, h, .inl rfl⟩
   | lamDead h => intro M he; cases he; exact .inr (.inl ⟨_, _, h, .inl rfl⟩)
@@ -1609,93 +1699,95 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | bangE _ ih => intro M he; exact (ih M he).step (JS.val (VS.bang _))
   | boxI _ _ ih => intro M he; exact (ih M he).step (JS.val (VS.boxI _ _))
   | boxE _ ih => intro M he; exact (ih M he).step (JS.val (VS.boxE _ _))
+  | absSeal _ _ ih => intro M he; exact (ih M he).step (JS.val (VS.absSeal _ _))
+  | absUnseal _ _ ih => intro M he; exact (ih M he).step (JS.val (VS.absUnseal _ _))
   | immSub _ _ ih => intro M he; exact (ih M he).step (JS.val (VS.immS _ _ _))
   | mutSub _ _ ih => intro M he; exact (ih M he).step (JS.val (VS.mutS _ _ _))
   | roll _ _ _ ih => intro M he; exact (ih M he).step (JS.val (VS.roll _))
   | unroll _ ih => intro M he; exact (ih M he).step (JS.val (VS.unroll _))
-  | copyBang => intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inl rfl) _)
-  | copy => intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inl rfl) _)
-  | arrCopy => intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inl rfl) _)
-  | swap => intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inl rfl)) _)
+  | copyBang => intro M he; exact LamInvIn.ofAx (he ▸ lamAx_other (.inl rfl) _)
+  | copy => intro M he; exact LamInvIn.ofAx (he ▸ lamAx_other (.inl rfl) _)
+  | arrCopy => intro M he; exact LamInvIn.ofAx (he ▸ lamAx_other (.inl rfl) _)
+  | swap => intro M he; exact LamInvIn.ofAx (he ▸ lamAx_other (.inr (.inl rfl)) _)
   | sliceBorrowM | sliceBorrowI | withbor1 | withbor2 | withbor3 =>
-      intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inr (.inl rfl))) _)
+      intro M he; exact LamInvIn.ofAx (he ▸ lamAx_other (.inr (.inr (.inl rfl))) _)
   | withload | withloadU =>
-      intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inr (.inr (.inl rfl)))) _)
+      intro M he; exact LamInvIn.ofAx (he ▸ lamAx_other (.inr (.inr (.inr (.inl rfl)))) _)
   | withswap =>
-      intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inr (.inr (.inr (.inl rfl))))) _)
+      intro M he; exact LamInvIn.ofAx (he ▸ lamAx_other (.inr (.inr (.inr (.inr (.inl rfl))))) _)
   | arrSize | sliceLenM =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inr (.inr (.inr (.inr (.inl rfl)))))) _)
+      exact LamInvIn.ofAx (he ▸ lamAx_other (.inr (.inr (.inr (.inr (.inr (.inl rfl)))))) _)
   | arrReplace | sliceReplaceM =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inr (.inr (.inr (.inr (.inr (.inl rfl))))))) _)
+      exact LamInvIn.ofAx (he ▸ lamAx_other (.inr (.inr (.inr (.inr (.inr (.inr (.inl rfl))))))) _)
   | arrLen =>
       intro M he
-      exact LamInv.ofAx
+      exact LamInvIn.ofAx
         (he ▸ lamAx_other (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl rfl)))))))) _)
   | sliceSwapM =>
       intro M he
-      exact LamInv.ofAx
+      exact LamInvIn.ofAx
         (he ▸ lamAx_other (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl rfl))))))))) _)
   | foldImm =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_other
+      exact LamInvIn.ofAx (he ▸ lamAx_other
         (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl ⟨_, rfl⟩)))))))))) _)
   | foldOwn =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_other
+      exact LamInvIn.ofAx (he ▸ lamAx_other
         (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl ⟨_, rfl⟩))))))))))) _)
   | foldReuse =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_other
+      exact LamInvIn.ofAx (he ▸ lamAx_other
         (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
           (.inl ⟨_, rfl⟩)))))))))))) _)
   | unfoldN =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_other
+      exact LamInvIn.ofAx (he ▸ lamAx_other
         (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
           (.inr (.inl ⟨_, rfl⟩))))))))))))) _)
   | divFuel =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_other
+      exact LamInvIn.ofAx (he ▸ lamAx_other
         (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
           (.inr (.inr (.inl rfl)))))))))))))) _)
   | reify =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_other
+      exact LamInvIn.ofAx (he ▸ lamAx_other
         (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
           (.inr (.inr (.inr (.inl ⟨_, rfl⟩))))))))))))))) _)
   | foldOwnG =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_other
+      exact LamInvIn.ofAx (he ▸ lamAx_other
         (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
           (.inr (.inr (.inr (.inr (.inl ⟨_, rfl⟩)))))))))))))))) _)
-  | tokMint => intro M he; exact LamInv.ofAx (he ▸ lamAx_other otherLam_mint _)
-  | tokBurn => intro M he; exact LamInv.ofAx (he ▸ lamAx_other otherLam_burn _)
-  | forgetBang => intro M he; exact LamInv.ofAx (he ▸ lamAx_forget (.inl ⟨_, rfl, .inl ⟨_, rfl⟩⟩))
+  | tokMint => intro M he; exact LamInvIn.ofAx (he ▸ lamAx_other otherLam_mint _)
+  | tokBurn => intro M he; exact LamInvIn.ofAx (he ▸ lamAx_other otherLam_burn _)
+  | forgetBang => intro M he; exact LamInvIn.ofAx (he ▸ lamAx_forget (.inl ⟨_, rfl, .inl ⟨_, rfl⟩⟩))
   | forgetImm =>
-      intro M he; exact LamInv.ofAx (he ▸ lamAx_forget (.inl ⟨_, rfl, .inr (.inl ⟨_, _, rfl⟩)⟩))
+      intro M he; exact LamInvIn.ofAx (he ▸ lamAx_forget (.inl ⟨_, rfl, .inr (.inl ⟨_, _, rfl⟩)⟩))
   | forgetMut =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_forget (.inl ⟨_, rfl, .inr (.inr (.inl ⟨_, _, rfl⟩))⟩))
+      exact LamInvIn.ofAx (he ▸ lamAx_forget (.inl ⟨_, rfl, .inr (.inr (.inl ⟨_, _, rfl⟩))⟩))
   | forgetUnk =>
-      intro M he; exact LamInv.ofAx (he ▸ lamAx_forget (.inl ⟨_, rfl, .inr (.inr (.inr rfl))⟩))
-  | arrForget => intro M he; exact LamInv.ofAx (he ▸ lamAx_forget (.inr ⟨_, _, rfl⟩))
+      intro M he; exact LamInvIn.ofAx (he ▸ lamAx_forget (.inl ⟨_, rfl, .inr (.inr (.inr rfl))⟩))
+  | arrForget => intro M he; exact LamInvIn.ofAx (he ▸ lamAx_forget (.inr ⟨_, _, rfl⟩))
   | withbor1U x =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, rfl, rfl⟩)
+      exact LamInvIn.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, rfl, rfl⟩)
   | withbor2U x =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, rfl, rfl⟩)
+      exact LamInvIn.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, rfl, rfl⟩)
   | withbor3U x =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, rfl, rfl⟩)
+      exact LamInvIn.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, rfl, rfl⟩)
   | sliceBorrowMU x =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, rfl, rfl⟩)
+      exact LamInvIn.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, rfl, rfl⟩)
   | sliceBorrowIU x =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, rfl, rfl⟩)
+      exact LamInvIn.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, rfl, rfl⟩)
   | force => intro M he; rcases forceE_var he with h | h <;> cases h
   | _ => intro M he; cd_at he
 
@@ -1773,9 +1865,9 @@ theorem LamCls.comp_rigid {Γ : Ctx VTy} {D C : CTy} (h : LamCls Γ D (.comp C))
   · obtain ⟨S, Y, rfl, -⟩ := h; exact (hC.1 S Y rfl).elim
 
 /-- **A λ-value that is no λ-constant and no `⟨M, N⟩` has its body typed.** -/
-theorem LamInv.body {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {j : Jdg} (h : LamInv Δ Γ M j)
+theorem LamInvIn.body {P : Nat → Prop} {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {j : Jdg} (h : LamInvIn P Δ Γ M j)
     (hw : ∀ M₁ M₂, Expr.lam M ≠ withPair M₁ M₂) (hx : ¬ LamAx (.lam M) j) :
-    ∃ Δ' Γ' j', CDerives Δ' Γ' M j' := by
+    ∃ Δ' Γ' j', CDerivesIn P Δ' Γ' M j' := by
   rcases h with ⟨A, D, hM, -⟩ | ⟨S, B, hM, -⟩ | ⟨x, b, Δ', S, C, hM, -⟩ | ⟨A, hM, -⟩ |
     ⟨M₁, M₂, h⟩ | h
   · exact ⟨_, _, _, hM⟩
@@ -1799,12 +1891,12 @@ theorem NotConst.notAx {e : Expr} (h : NotConst e) (j : Jdg) : ¬ LamAx e j := b
 /-- **A `let` of a term that is no variable, λ-value, `()` or injection of `()`, split**: the term
 is typed at a row over the slot's type in one part of a split, and the body under the slot in the
 other. -/
-theorem der_bind_split {Δ : LifeCtx} {Γ : Ctx VTy} {N M : Expr} {j : Jdg}
-    (h : CDerives Δ Γ (.app (.lam N) M) j) (hMv : ∀ i, M ≠ .var i) (hMl : ∀ b, M ≠ .lam b)
+theorem der_bind_split {P : Nat → Prop} {Δ : LifeCtx} {Γ : Ctx VTy} {N M : Expr} {j : Jdg}
+    (h : CDerivesIn P Δ Γ (.app (.lam N) M) j) (hMv : ∀ i, M ≠ .var i) (hMl : ∀ b, M ≠ .lam b)
     (hMu : M ≠ .unit) (hM₁ : M ≠ .inj₁ .unit) (hM₂ : M ≠ .inj₂ .unit)
     (hw : ∀ M₁ M₂, Expr.lam N ≠ withPair M₁ M₂) (hc : NotConst (.lam N)) :
-    ∃ Γ₁ Γ₂ T b S j', Ctx.SplitP Γ Γ₁ Γ₂ ∧ CDerives Δ Γ₁ M (.comp (CTy.effOf S T)) ∧
-      CDerives Δ (⟨T, b⟩ :: Γ₂) N j' := by
+    ∃ Γ₁ Γ₂ T b S j', Ctx.SplitP Γ Γ₁ Γ₂ ∧ CDerivesIn P Δ Γ₁ M (.comp (CTy.effOf S T)) ∧
+      CDerivesIn P Δ (⟨T, b⟩ :: Γ₂) N j' := by
   obtain ⟨j₀, hb, -⟩ := der_app h _ _ rfl
   rcases hb with ⟨Γ₁, Γ₂, A, B, hs, hM, hf, -⟩ | ⟨-, -, i, -, -, hi, -⟩ |
     ⟨N', Γ₁, Γ₂, A, S, C, hN, hs, hM, hN', -⟩ | ⟨-, b, -, -, hb, -⟩ |
@@ -1853,12 +1945,12 @@ theorem der_bind_split {Δ : LifeCtx} {Γ : Ctx VTy} {N M : Expr} {j : Jdg}
 
 /-- **A `let` of a term that is no variable, λ-value, `()` or injection of `()`**: the term is typed
 at a row over the slot's type, and the body under the slot. -/
-theorem der_bind {Δ : LifeCtx} {Γ : Ctx VTy} {N M : Expr} {j : Jdg}
-    (h : CDerives Δ Γ (.app (.lam N) M) j) (hMv : ∀ i, M ≠ .var i) (hMl : ∀ b, M ≠ .lam b)
+theorem der_bind {P : Nat → Prop} {Δ : LifeCtx} {Γ : Ctx VTy} {N M : Expr} {j : Jdg}
+    (h : CDerivesIn P Δ Γ (.app (.lam N) M) j) (hMv : ∀ i, M ≠ .var i) (hMl : ∀ b, M ≠ .lam b)
     (hMu : M ≠ .unit) (hM₁ : M ≠ .inj₁ .unit) (hM₂ : M ≠ .inj₂ .unit)
     (hw : ∀ M₁ M₂, Expr.lam N ≠ withPair M₁ M₂) (hc : NotConst (.lam N)) :
-    ∃ Γ₁ Γ' T b S j', CtxLe Γ₁ Γ ∧ CtxLe Γ' Γ ∧ CDerives Δ Γ₁ M (.comp (CTy.effOf S T)) ∧
-      CDerives Δ (⟨T, b⟩ :: Γ') N j' := by
+    ∃ Γ₁ Γ' T b S j', CtxLe Γ₁ Γ ∧ CtxLe Γ' Γ ∧ CDerivesIn P Δ Γ₁ M (.comp (CTy.effOf S T)) ∧
+      CDerivesIn P Δ (⟨T, b⟩ :: Γ') N j' := by
   obtain ⟨Γ₁, Γ₂, T, b, S, j', hs, hM, hN⟩ := der_bind_split h hMv hMl hMu hM₁ hM₂ hw hc
   exact ⟨Γ₁, Γ₂, T, b, S, j', splitP_le_left hs, splitP_le_right hs, hM, hN⟩
 
@@ -1985,6 +2077,10 @@ theorem der_swap {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.boxI _ _))⟩
   | boxE _ ih =>
       intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.boxE _ _))⟩
+  | absSeal _ _ ih =>
+      intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.absSeal _ _))⟩
+  | absUnseal _ _ ih =>
+      intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.absUnseal _ _))⟩
   | immSub _ _ ih =>
       intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.immS _ _ _))⟩
   | mutSub _ _ ih =>
@@ -2294,6 +2390,12 @@ theorem der_hndJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
   | boxE _ ih =>
       intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.boxE _ _))⟩
+  | absSeal _ _ ih =>
+      intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.absSeal _ _))⟩
+  | absUnseal _ _ ih =>
+      intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.absUnseal _ _))⟩
   | immSub _ _ ih =>
       intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.immS _ _ _))⟩
@@ -2403,6 +2505,12 @@ theorem der_thenJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeriv
   | boxE _ ih =>
       intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.boxE _ _))⟩
+  | absSeal _ _ ih =>
+      intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.absSeal _ _))⟩
+  | absUnseal _ _ ih =>
+      intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.absUnseal _ _))⟩
   | immSub _ _ ih =>
       intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.immS _ _ _))⟩
@@ -2466,6 +2574,12 @@ theorem der_performJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDe
   | boxE _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.boxE _ _))⟩
+  | absSeal _ _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.absSeal _ _))⟩
+  | absUnseal _ _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.absUnseal _ _))⟩
   | immSub _ _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.immS _ _ _))⟩
@@ -2529,6 +2643,12 @@ theorem der_raiseJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeri
   | boxE _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.boxE _ _))⟩
+  | absSeal _ _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.absSeal _ _))⟩
+  | absUnseal _ _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.absUnseal _ _))⟩
   | immSub _ _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.immS _ _ _))⟩
@@ -2641,6 +2761,16 @@ theorem der_letJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       intro N M he h₁ h₂ h₃ h₄ h₅ h₆
       rcases ih N M he h₁ h₂ h₃ h₄ h₅ h₆ with ⟨j₀, hb, hr⟩ | h
       · exact .inl ⟨j₀, hb, hr.tail (JS.val (VS.boxE _ _))⟩
+      · exact .inr h
+  | absSeal _ _ ih =>
+      intro N M he h₁ h₂ h₃ h₄ h₅ h₆
+      rcases ih N M he h₁ h₂ h₃ h₄ h₅ h₆ with ⟨j₀, hb, hr⟩ | h
+      · exact .inl ⟨j₀, hb, hr.tail (JS.val (VS.absSeal _ _))⟩
+      · exact .inr h
+  | absUnseal _ _ ih =>
+      intro N M he h₁ h₂ h₃ h₄ h₅ h₆
+      rcases ih N M he h₁ h₂ h₃ h₄ h₅ h₆ with ⟨j₀, hb, hr⟩ | h
+      · exact .inl ⟨j₀, hb, hr.tail (JS.val (VS.absUnseal _ _))⟩
       · exact .inr h
   | immSub _ _ ih =>
       intro N M he h₁ h₂ h₃ h₄ h₅ h₆

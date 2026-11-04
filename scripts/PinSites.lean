@@ -50,9 +50,9 @@ structure Cite where
 /-- **The rules**, each cited. -/
 def cites : List Cite := [
   -- Backend2: the LIR's `drop` (`Backend2.DropRule`).
-  ⟨``Backend2.DropRule.dead, [``Ctx.DeadP.drop, ``Ctx.SoloP.skip, ``CDerives.effHandleV], none⟩,
-  ⟨``Backend2.DropRule.forget, [``CDerives.forgetImm, ``CDerives.forgetMut, ``CDerives.forgetUnk,
-    ``CDerives.arrForget], none⟩,
+  ⟨``Backend2.DropRule.dead, [``Ctx.DeadP.drop, ``Ctx.SoloP.skip, ``CDerivesIn.effHandleV], none⟩,
+  ⟨``Backend2.DropRule.forget, [``CDerivesIn.forgetImm, ``CDerivesIn.forgetMut, ``CDerivesIn.forgetUnk,
+    ``CDerivesIn.arrForget], none⟩,
   ⟨``Backend2.DropRule.dtor, [``drop_derives, ``dtor_wf, ``HasDtor.arrayMut,
     ``Check.TDerivesP.dtor_hasDtor], none⟩,
   ⟨``Backend2.DropRule.unused, [``Ctx.DeadP.drop, ``vP_empty_of_persistent,
@@ -60,22 +60,22 @@ def cites : List Cite := [
   ⟨``Backend2.DropRule.stackK, [], some ``Backend2.StackKHandOver⟩,
   -- Backend2: the LIR's `copy` (`Backend2.CopyRule`).
   ⟨``Backend2.CopyRule.dup, [``Ctx.SplitP.dup, ``Check.SplitMasks.both_persistent], none⟩,
-  ⟨``Backend2.CopyRule.const, [``CDerives.copy, ``CDerives.arrCopy], none⟩,
+  ⟨``Backend2.CopyRule.const, [``CDerivesIn.copy, ``CDerivesIn.arrCopy], none⟩,
   ⟨``Backend2.CopyRule.derived, [``copy_derives, ``DerivedCopy], none⟩,
   -- Backend2: the LIR's `abandon` (`Backend2.Abandon`).
-  ⟨``Backend2.Abandon.letAbort, [``CDerives.effLet, ``vC_noOwn_of_ownFree], none⟩,
-  ⟨``Backend2.Abandon.top, [``CDerives.topI], none⟩,
-  ⟨``Backend2.Abandon.superseded, [``CDerives.effRaise, ``vC_noOwn_of_ownFree], none⟩,
+  ⟨``Backend2.Abandon.letAbort, [``CDerivesIn.effLet, ``vC_noOwn_of_ownFree], none⟩,
+  ⟨``Backend2.Abandon.top, [``CDerivesIn.topI], none⟩,
+  ⟨``Backend2.Abandon.superseded, [``CDerivesIn.effRaise, ``vC_noOwn_of_ownFree], none⟩,
   -- The old backend (`Backend.Clos.Licence`): none read from the typed term.
   ⟨``Backend.Clos.Licence.word, [``Ctx.DeadP.drop, ``Ctx.SplitP.dup], some ``Backend.Clos.WordSound⟩,
   ⟨``Backend.Clos.Licence.clauses, [``clausesTy_persistent], some ``Backend.Clos.ClausesSound⟩,
-  ⟨``Backend.Clos.Licence.const, [``CDerives.swap], some ``Backend.Clos.ConstSound⟩,
-  ⟨``Backend.Clos.Licence.payload, [``CDerives.effRaise], some ``Backend.Clos.PayloadSound⟩,
-  ⟨``Backend.Clos.Licence.split, [``Ctx.SplitP.dup, ``CDerives.copy, ``CDerives.arrCopy],
+  ⟨``Backend.Clos.Licence.const, [``CDerivesIn.swap], some ``Backend.Clos.ConstSound⟩,
+  ⟨``Backend.Clos.Licence.payload, [``CDerivesIn.effRaise], some ``Backend.Clos.PayloadSound⟩,
+  ⟨``Backend.Clos.Licence.split, [``Ctx.SplitP.dup, ``CDerivesIn.copy, ``CDerivesIn.arrCopy],
     some ``Backend.Clos.SplitSound⟩,
-  ⟨``Backend.Clos.Licence.unused, [``Ctx.DeadP.drop, ``CDerives.topI, ``CDerives.zeroE],
+  ⟨``Backend.Clos.Licence.unused, [``Ctx.DeadP.drop, ``CDerivesIn.topI, ``CDerivesIn.zeroE],
     some ``Backend.Clos.UnusedSound⟩,
-  ⟨``Backend.Clos.Licence.abort, [``CDerives.effLet], some ``Backend.Clos.AbortSound⟩,
+  ⟨``Backend.Clos.Licence.abort, [``CDerivesIn.effLet], some ``Backend.Clos.AbortSound⟩,
   ⟨``Backend.Clos.Licence.kappa, [``kTy_unr, ``kTy_cancel_hasDtor_iff], some ``Backend.Clos.KappaSound⟩,
   ⟨``Backend.Clos.Licence.step, [``Ctx.SplitP.dup], some ``Backend.Clos.StepSound⟩]
 
@@ -179,10 +179,10 @@ def elabConsts : List Name := [``Frontend.Const.copy, ``Frontend.Const.copyBang,
 /-- **The elaboration's emitters of those constants**, each with the rule the checker then types
 it by. The maps and tests over every constant rebuild the constant they read. -/
 def elabSites : List (Name × List Name × List Name) := [
-  -- `array_copy` of an `imm` view in a template: the constant, `CDerives.arrCopy`.
-  (``Frontend.Sugar.surfV, [``Frontend.Const.arrayCopy], [``CDerives.arrCopy]),
-  -- The burn at a written `match` (`burnCallers`): `CDerives.tokBurn`.
-  (``Frontend.Data.burnBind, [``Frontend.Const.tokBurn], [``CDerives.tokBurn]),
+  -- `array_copy` of an `imm` view in a template: the constant, `CDerivesIn.arrCopy`.
+  (``Frontend.Sugar.surfV, [``Frontend.Const.arrayCopy], [``CDerivesIn.arrCopy]),
+  -- The burn at a written `match` (`burnCallers`): `CDerivesIn.tokBurn`.
+  (``Frontend.Data.burnBind, [``Frontend.Const.tokBurn], [``CDerivesIn.tokBurn]),
   (``Frontend.Const.renameLife, elabConsts, []), (``Frontend.Const.respan, elabConsts, []),
   (``Frontend.Const.subst, elabConsts, []), (``Frontend.Elab.Instances.safeDivisor, elabConsts, []),
   (``Frontend.Sugar.safeDivisor, elabConsts, []), (``Frontend.Sugar.Const.unwinding, elabConsts, []),

@@ -95,7 +95,7 @@ theorem letDE_none_cancel (μ : Heap) (k : Nat) (N : Expr) {err : Option Val} (K
 
 /-- **An own-free type has a destructor**, at every row, once each host type in it has a declared
 one: its derived drop, or `⊗`/`⊕` of them.  `[spec §62]` -/
-theorem DropOk.ofOwnFree {Δ : LifeCtx} {SD : Row} {decl : Opaque → Option Expr}
+theorem DropOk.ofOwnFree {Δ : LifeCtx} {SD : Row} {decl : VTy → Option Expr}
     (hhost : ∀ k, k.Host → DropOk Δ SD decl (.opq k)) :
     ∀ {T : VTy}, T.OwnFree → DropOk Δ SD decl T
   | _, .unit => .derived rfl .unit
@@ -113,7 +113,7 @@ theorem DropOk.ofOwnFree {Δ : LifeCtx} {SD : Row} {decl : Opaque → Option Exp
 own-free, so each of its live slots has a destructor (`DropOk.ofOwnFree`); with `[then]`'s
 conditions on the row, `[let-dtor]` types the same `M` and `N`.  `[spec §62]` -/
 theorem effLet_as_effLetD {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B : VTy}
-    {S : Row} {decl : Opaque → Option Expr}
+    {S : Row} {decl : VTy → Option Expr}
     (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hW : S.Cancels → Γ₂.OwnFree) (hc : S.Cancels)
     (hhost : ∀ k, k.Host → DropOk Δ [] decl (.opq k))
     (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂)
@@ -129,7 +129,7 @@ theorem effLet_as_effLetD {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr}
 /-- **`U(F 1)` has no destructor**: a thunk of a computation that is not `C & D` is disposed of
 only by running it. `[let]` at a row that does not cancel holds such a slot; `[let-dtor]` does
 not.  `[spec §12, §62]` -/
-theorem not_dropOk_thunkRet {Δ : LifeCtx} {SD : Row} {decl : Opaque → Option Expr} :
+theorem not_dropOk_thunkRet {Δ : LifeCtx} {SD : Row} {decl : VTy → Option Expr} :
     ¬ DropOk Δ SD decl (.thunk (.ret .unit)) := by
   intro h
   cases h with

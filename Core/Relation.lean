@@ -141,6 +141,7 @@ def vCE : Option (Nat → TEnt) → Bool → VTy → List SRec → LSub → Val 
   | _, _, .unk, _, _, _ => emp
   | _, _, .int w, _, _, v => ⌜v.IsInt w⌝
   | _, _, .opq k, _, _, v => k.rel v
+  | η, b, .abs _ A, ls, δ, v => vCE η b A ls δ v
   | η, b, .tvar n, ls, _, v => tEnvP η n b ls v
   | η, b, .mu A, ls, δ, v => fun ρ => VTy.NoMut 0 A ∧ (tClose η (.mu A)).Cl 0 ∧
       ∀ P : Bool → List SRec → Val → WProp,

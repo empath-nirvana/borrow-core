@@ -118,6 +118,7 @@ import Core.Mentions
 import Core.LetDtor
 import Core.LetDtorSafety
 import Core.LetDtorFiles
+import Core.Abstract
 import Core.LetDtorCancel
 import Core.LetDtorLoop
 import Core.LetDtorLend

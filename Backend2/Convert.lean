@@ -306,6 +306,7 @@ def formersV (acc : List String) : VTy → List String
   | .bang A => formersV ("V.bang" :: acc) A
   | .mu A => formersV ("V.mu" :: acc) A
   | .fam A => formersV ("V.fam" :: acc) A
+  | .abs _ A => formersV ("V.abs" :: acc) A
   | .unit => "V.unit" :: acc
   | .zero => "V.zero" :: acc
   | .unk => "V.unk" :: acc
@@ -885,7 +886,7 @@ def abortK (F : OutInfo) : Kont → List Var → Var → CM Tm
         let e' ← fresh pF; let u ← fresh .unit; let e₂ ← fresh pdT
         let sup ← coercePay pd F.pay e₂ fun v => pure (.var v)
         -- The superseded payload `e` is abandoned: a raise's payload holds no owned cell
-        -- (`CDerives.effRaise`'s `hd : o.A.Drop`).
+        -- (`CDerivesIn.effRaise`'s `hd : o.A.Drop`).
         return .letv d (.call fnD own) (.letv e' (.case d u (.drop .dead u (.var e)) e₂ (.abandon .superseded e sup))
           (← abortK F rest more e'))
     | .cellF => match own with
@@ -921,7 +922,7 @@ def cancelK (cp : Pay) : Kont → List Var → Var → CM Tm
         let u₁ ← fresh .unit; let e₁ ← fresh pdT; let u₂ ← fresh .unit; let e₂ ← fresh pdT
         let sup ← coercePay pd cp e₁ fun v => pure (.inj true v)
         -- The error not kept (`e₀` superseded, or the finaliser's `e₂` after a kept one) is
-        -- abandoned: a raise's payload holds no owned cell (`CDerives.effRaise`'s
+        -- abandoned: a raise's payload holds no owned cell (`CDerivesIn.effRaise`'s
         -- `hd : o.A.Drop`).
         let kept : Tm := .case err u₀ (.case d u₁ (.drop .dead u₁ (.inj false u₀)) e₁ (.drop .dead u₀ sup))
           e₀ (.case d u₂ (.drop .dead u₂ (.inj true e₀)) e₂ (.abandon .superseded e₂ (.inj true e₀)))

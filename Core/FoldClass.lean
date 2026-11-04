@@ -42,6 +42,7 @@ def clB : Nat → VTy → Bool
   | k, .box _ A => clB k A
   | k, .bang A => clB k A
   | k, .fam A => clB k A
+  | k, .abs _ A => clB k A
   | k, .tvar n => decide (n < k)
   | k, .mu A => clB (k + 1) A
   | _, .unit => true
@@ -60,6 +61,7 @@ theorem clB_iff : ∀ (k : Nat) (A : VTy), clB k A = true ↔ A.Cl k
   | k, .box _ A => by simp [clB, VTy.Cl, clB_iff k A]
   | k, .bang A => by simp [clB, VTy.Cl, clB_iff k A]
   | k, .fam A => by simp [clB, VTy.Cl, clB_iff k A]
+  | k, .abs _ A => by simp [clB, VTy.Cl, clB_iff k A]
   | k, .tvar n => by simp [clB, VTy.Cl]
   | k, .mu A => by simp [clB, VTy.Cl, clB_iff (k + 1) A]
   | _, .unit => by simp [clB, VTy.Cl]
@@ -104,7 +106,7 @@ theorem headB_iff : ∀ B : VTy, headB B = true ↔ head B
   | .tvar _ => by simp [headB, head]
   | .mu B => by simp [headB, head, headB_iff B]
   | .unit | .tensor _ _ | .zero | .sum _ _ | .thunk _ | .ref _ | .imm _ _ | .mut _ _ | .box _ _
-  | .bang _ | .unk | .int _ | .fam _ | .opq _ => by simp [headB, head]
+  | .bang _ | .unk | .int _ | .fam _ | .opq _ | .abs _ _ => by simp [headB, head]
 
 /-- `P` as a `Bool`. -/
 def PB : Nat → VTy → Bool
@@ -126,10 +128,10 @@ theorem PB_iff : ∀ (d : Nat) (A : VTy), PB d A = true ↔ P d A
   | d, .fam (.unit) | d, .fam (.tensor _ _) | d, .fam (.zero) | d, .fam (.sum _ _)
   | d, .fam (.thunk _) | d, .fam (.imm _ _) | d, .fam (.mut _ _) | d, .fam (.box _ _)
   | d, .fam (.bang _) | d, .fam (.unk) | d, .fam (.tvar _) | d, .fam (.mu _) | d, .fam (.int _)
-  | d, .fam (.fam _) | d, .fam (.opq _) => by simp only [PB, P, clB_iff]
+  | d, .fam (.fam _) | d, .fam (.opq _) | d, .fam (.abs _ _) => by simp only [PB, P, clB_iff]
   | d, .mu B => by simp [PB, P, PB_iff (d + 1) B, clB_iff, headB_iff, Hd]
   | _, .unit | _, .zero | _, .thunk _ | _, .imm _ _ | _, .mut _ _ | _, .box _ _ | _, .bang _
-  | _, .unk | _, .int _ | _, .opq _ => by simp only [PB, P, clB_iff]
+  | _, .unk | _, .int _ | _, .opq _ | _, .abs _ _ => by simp only [PB, P, clB_iff]
 
 /-- `PBody` as a `Bool`. -/
 def pBodyB (B : VTy) : Bool := PB 1 B && (clB 0 B || headB B)
@@ -151,10 +153,10 @@ theorem P_of_closed : ∀ {A : VTy} (d : Nat), A.Cl 0 → P d A
   | .fam (.unit), _, h | .fam (.tensor _ _), _, h | .fam (.zero), _, h | .fam (.sum _ _), _, h
   | .fam (.thunk _), _, h | .fam (.imm _ _), _, h | .fam (.mut _ _), _, h | .fam (.box _ _), _, h
   | .fam (.bang _), _, h | .fam (.unk), _, h | .fam (.tvar _), _, h | .fam (.mu _), _, h
-  | .fam (.int _), _, h | .fam (.fam _), _, h | .fam (.opq _), _, h => h
+  | .fam (.int _), _, h | .fam (.fam _), _, h | .fam (.opq _), _, h | .fam (.abs _ _), _, h => h
   | .mu _, _, h => Or.inl h
   | .unit, _, h | .zero, _, h | .thunk _, _, h | .imm _ _, _, h | .mut _ _, _, h | .box _ _, _, h
-  | .bang _, _, h | .unk, _, h | .int _, _, h | .opq _, _, h => h
+  | .bang _, _, h | .unk, _, h | .int _, _, h | .opq _, _, h | .abs _ _, _, h => h
 
 /-- **`P ⊇ FShape`**: every body of the class `FShape` is a body of `P`. -/
 theorem P_of_FShape : ∀ {F : FShape}, F.WF → P 1 F.ty
@@ -184,14 +186,15 @@ theorem Cl_of_P : ∀ {A : VTy} {d : Nat}, P d A → A.Cl d
   | .fam (.unit), d, h | .fam (.tensor _ _), d, h | .fam (.zero), d, h | .fam (.sum _ _), d, h
   | .fam (.thunk _), d, h | .fam (.imm _ _), d, h | .fam (.mut _ _), d, h | .fam (.box _ _), d, h
   | .fam (.bang _), d, h | .fam (.unk), d, h | .fam (.tvar _), d, h | .fam (.mu _), d, h
-  | .fam (.int _), d, h | .fam (.fam _), d, h | .fam (.opq _), d, h =>
+  | .fam (.int _), d, h | .fam (.fam _), d, h | .fam (.opq _), d, h | .fam (.abs _ _), d, h =>
       VTy.Cl_mono _ h (Nat.zero_le d)
   | .mu B, d, h => by
       rcases h with h | ⟨h, -⟩
       · exact VTy.Cl_mono B h (by omega)
       · exact Cl_of_P (A := B) h
   | .unit, d, h | .zero, d, h | .thunk _, d, h | .imm _ _, d, h | .mut _ _, d, h | .box _ _, d, h
-  | .bang _, d, h | .unk, d, h | .int _, d, h | .opq _, d, h => VTy.Cl_mono _ h (Nat.zero_le d)
+  | .bang _, d, h | .unk, d, h | .int _, d, h | .opq _, d, h | .abs _ _, d, h =>
+      VTy.Cl_mono _ h (Nat.zero_le d)
 
 /-! ### Binders and the closed types in scope -/
 

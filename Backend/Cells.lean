@@ -38,7 +38,7 @@ def vWords : Nat → VTy → Option Nat
   | n + 1, .sum A B => do pure (1 + max (← vWords n A) (← vWords n B))
   | _ + 1, .ref _ | _ + 1, .imm _ _ | _ + 1, .mut _ _ => some 1
   | _ + 1, .fam _ => some 2
-  | n + 1, .box _ A | n + 1, .bang A => vWords n A
+  | n + 1, .box _ A | n + 1, .bang A | n + 1, .abs _ A => vWords n A
   | _ + 1, .thunk _ | _ + 1, .opq _ => none
   | _ + 1, .tvar _ => some 1
   | n + 1, .mu A => vWords n A

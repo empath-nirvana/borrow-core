@@ -224,27 +224,38 @@ inductive TDerivesP : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
       {t : TExpr} (h : TDerivesP Δ Γ t j) (hab : ab = t.absF Δ) :
       TDerivesP Δ Γ (TExpr.use info j name decl targs ab t) j
 
-/-- **A typed derivation is a derivation of the erasure**, tied.  `[spec §19]` -/
-theorem TDerivesAt.erase {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
-    (h : TDerivesAt Ξ Δ Γ t j) : CDerivesAt Ξ Δ Γ t.erase j := by
+/-- **A typed derivation is a derivation of the erasure**, tied, at every provider set: no node is
+a provider's rule (SPEC §63), so a checked term is outside every abstract type's provider.
+`[spec §19, §63]` -/
+theorem TDerivesAt.eraseIn {P : Nat → Prop} {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr}
+    {j : Jdg} (h : TDerivesAt Ξ Δ Γ t j) : CDerivesAtIn P Ξ Δ Γ t.erase j := by
   induction h with
 --@AT_ERASE@
-  | dtor hA _ he hΓ => exact CDerivesAt.ofEffFree (dtor_wf hA hΓ) he
-  | allocS σ he hΓ => exact CDerivesAt.ofEffFree (d_allocS σ hΓ) he
-  | freeS σ he hΓ => exact CDerivesAt.ofEffFree (d_freeS σ hΓ) he
-  | withborSM σ c _ hσ hT hΔ hc _ he hΓ => exact CDerivesAt.ofEffFree (withborSM_wf hσ c hT hΔ hc hΓ) he
-  | withborSI σ c _ hσ hT hΔ hc _ he hΓ => exact CDerivesAt.ofEffFree (withborSI_wf hσ c hT hΔ hc hΓ) he
-  | withborF2M s hA hBo hTo he hΓ => exact CDerivesAt.ofEffFree (withborM2_wf s hA hBo hTo hΓ) he
+  | dtor hA _ he hΓ => exact CDerivesAtIn.ofEffFree (dtor_wf hA hΓ) he
+  | allocS σ he hΓ => exact CDerivesAtIn.ofEffFree (d_allocS σ hΓ) he
+  | freeS σ he hΓ => exact CDerivesAtIn.ofEffFree (d_freeS σ hΓ) he
+  | withborSM σ c _ hσ hT hΔ hc _ he hΓ =>
+      exact CDerivesAtIn.ofEffFree (withborSM_wf hσ c hT hΔ hc hΓ) he
+  | withborSI σ c _ hσ hT hΔ hc _ he hΓ =>
+      exact CDerivesAtIn.ofEffFree (withborSI_wf hσ c hT hΔ hc hΓ) he
+  | withborF2M s hA hBo hTo he hΓ => exact CDerivesAtIn.ofEffFree (withborM2_wf s hA hBo hTo hΓ) he
   | withborF2I s hA hB hBo hTo he hΓ =>
-      exact CDerivesAt.ofEffFree (withborI2_wf s hA hB hBo hTo hΓ) he
+      exact CDerivesAtIn.ofEffFree (withborI2_wf s hA hB hBo hTo hΓ) he
   | litFn _ _ _ ih => exact ih
   | divLit _ _ _ ih | walk _ _ _ ih | walkGet _ _ ih | selfCall _ _ ih | lendCell _ _ _ ih | nuEta _ _ ih => exact ih
   | lendScope _ _ _ ih | litView _ _ ih | unfoldStep _ _ ih => exact ih
   | use _ _ ih => exact ih
 
-/-- **A typed derivation is a derivation of the erasure**, in `CDerivesP`.  `[spec §29]` -/
-theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
-    (h : TDerivesP Δ Γ t j) : CDerivesP Δ Γ t.erase j := by
+/-- **A typed derivation is a derivation of the erasure**, tied.  `[spec §19]` -/
+theorem TDerivesAt.erase {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
+    (h : TDerivesAt Ξ Δ Γ t j) : CDerivesAt Ξ Δ Γ t.erase j :=
+  h.eraseIn
+
+/-- **A typed derivation is a derivation of the erasure**, in `CDerivesPIn`, at every provider
+set: no node is a provider's rule (SPEC §63), so a checked term, pinned or not, is outside every
+abstract type's provider.  `[spec §29, §63]` -/
+theorem TDerivesP.eraseIn {P : Nat → Prop} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
+    (h : TDerivesP Δ Γ t j) : CDerivesPIn P Δ Γ t.erase j := by
   induction h with
 --@P_ERASE@
   | dtor hA _ _ hΓ => exact CDerivesP.ofC (dtor_wf hA hΓ)
@@ -258,6 +269,11 @@ theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | divLit _ _ _ ih | walk _ _ _ ih | walkGet _ _ ih | selfCall _ _ ih | lendCell _ _ _ ih | nuEta _ _ ih => exact ih
   | lendScope _ _ _ ih | litView _ _ ih | unfoldStep _ _ ih => exact ih
   | use _ _ ih => exact ih
+
+/-- **A typed derivation is a derivation of the erasure**, in `CDerivesP`.  `[spec §29]` -/
+theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
+    (h : TDerivesP Δ Γ t j) : CDerivesP Δ Γ t.erase j :=
+  h.eraseIn
 
 /-- A tied typed derivation is one of `TDerivesP`, at the same node. -/
 theorem TDerivesAt.toP {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}

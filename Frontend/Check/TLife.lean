@@ -67,6 +67,7 @@ theorem VOutlivesR.mono {Rb Rr Rb' Rr' : Lifetime.Life → Prop} (hb : ∀ b, Rb
   | int => exact .int
   | opq => exact .opq
   | fam _ ih => exact .fam ih
+  | abs _ ih => exact .abs ih
 
 theorem LeΔ.vOutlives {Δ Δ' : LifeCtx} (h : LeΔ Δ Δ') {a : Lifetime.Life} {A : VTy}
     (ho : VOutlives Δ a A) : VOutlives Δ' a A :=

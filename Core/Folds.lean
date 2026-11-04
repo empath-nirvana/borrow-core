@@ -67,9 +67,9 @@ theorem d_algI {Γ : Ctx VTy} {A R : VTy} {M : Expr} (hΓ : Ctx.Dead Γ)
       (dead_noLive hΓ) (.ret (.thunkV rfl (.lam h))))
 
 /-- `λr. M`, promoted, at a dead context: the shape of every algebra of `foldOwn`. -/
-theorem d_algO {Δ : LifeCtx} {Γ : Ctx VTy} {A R : VTy} {M : Expr} (hΓ : Ctx.Dead Γ)
-    (h : CDerives Δ (⟨A, true⟩ :: Γ) M (.comp (.ret R))) :
-    CDerives Δ Γ (.val (.lam M)) (.val (.bang (VTy.lolli A R))) :=
+theorem d_algO {P : Nat → Prop} {Δ : LifeCtx} {Γ : Ctx VTy} {A R : VTy} {M : Expr} (hΓ : Ctx.Dead Γ)
+    (h : CDerivesIn P Δ (⟨A, true⟩ :: Γ) M (.comp (.ret R))) :
+    CDerivesIn P Δ Γ (.val (.lam M)) (.val (.bang (VTy.lolli A R))) :=
   .bangThunkV (banged_dead hΓ) rfl (.lam h)
 
 /-- `case r {inj₁ u. u; 0 | inj₂ n. n + 1}`. -/

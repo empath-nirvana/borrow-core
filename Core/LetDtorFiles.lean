@@ -4,9 +4,11 @@ import Core.Tok
 /-!
 # Core — two files open across a raise, closed by their effectful destructors  `[spec §62]`
 
-A file is an abstract linear handle: `File = Tok` (`Core/Tok.lean`), a location owning a unit cell
-with no derived drop, not own-free and not persistent (`file_no_derived_drop`,
-`file_not_ownFree`), whose one Core eliminator is `burn`. The platform's effect `Fs` has two
+A file is an abstract linear handle: `File = abs fileName Tok` (SPEC §63), represented by `Tok`
+(`Core/Tok.lean`), a location owning a unit cell with no derived drop, not own-free and not
+persistent (`file_no_derived_drop`, `file_not_ownFree`). Its provider is the platform's `with_fs`,
+typed inside `File`'s provider: only there does a `File` become a `Tok` (`absUnseal`), which
+`burn` takes, or a minted `Tok` a `File` (`absSeal`). The platform's effect `Fs` has two
 must-resume operations,
 
     close : File ↠^lin 1        open : I32 ↠^lin File
@@ -54,8 +56,11 @@ open BoCa.Programs (alloc' free')
 
 abbrev I32 : VTy := .int .w32
 
-/-- A file: the abstract linear handle `Tok`. -/
-abbrev File : VTy := tokTy
+/-- A file: the abstract linear handle `abs fileName Tok`, represented by `Tok`, a location owning
+a unit cell. The platform's `File` (branch `dtor-wire`, SPEC §34) is the same abstract type at the
+representation `Ref I32`, whose cell holds the descriptor: `abs fileName (Ref I32)`, provided by
+the `Fs` externs' models (`Core/Abstract.lean`, `fileC`).  `[spec §63]` -/
+abbrev File : VTy := absTy fileName tokTy
 
 /-- `close : File ↠^lin 1`, the operation `0` of the name `4`: must resume, so it never fails. -/
 def fcloseSig : OpSig := ⟨4, 0, .lin, File, .unit, .ret .unit, false⟩
@@ -84,8 +89,7 @@ theorem file_no_derived_drop : ¬ HasDtor File := fun h => by cases h
 
 /-- **The handle owns its cell**: an abort may not abandon it (`[let]`'s `hW`, `[raise]`'s `hd`). -/
 theorem file_not_ownFree : ¬ File.OwnFree := fun h => by
-  cases h with
-  | opq _ hk => exact hk rfl
+  cases h
 
 theorem file_not_persistent : File.persistent = false := rfl
 
@@ -94,9 +98,9 @@ theorem file_not_persistent : File.persistent = false := rfl
 /-- `close f`, the destructor's body. -/
 def closeB : Expr := performE (opArgE 4 0 (.var 0))
 
-/-- **The program's declaration**: `Tok`'s destructor is `close`. -/
-def fsDecl : Opaque → Option Expr
-  | .tok => some closeB
+/-- **The program's declaration**: `File`'s destructor is `close`. -/
+def fsDecl : VTy → Option Expr
+  | .abs 0 (.opq .tok) => some closeB
   | _ => none
 
 theorem dropOf_file : dropOf fsDecl File = some closeB := rfl
@@ -106,7 +110,7 @@ theorem d_closeB {Δ : LifeCtx} (Γ : Ctx VTy) (hΓ : Ctx.Dead Γ) :
   .lam (.effPerform (S := SD) (o := fcloseSig) rfl rfl rfl (.var (.here hΓ.toP)))
 
 /-- `File` has a destructor at `{close}`, its declared one. -/
-theorem fileOk {Δ : LifeCtx} : DropOk Δ SD fsDecl File := .opq rfl d_closeB
+theorem fileOk {Δ : LifeCtx} : DropOk Δ SD fsDecl File := .abs rfl d_closeB
 
 /-- The destructors never fail: `close` must resume. -/
 theorem SD_not_cancels : ¬ SD.Cancels := by
@@ -300,12 +304,12 @@ theorem files_raise_run (k : Nat) (μ : Heap) (N : Expr) {f₁ f₂ : Val} {γ�
 /-- `with_fs`'s answer clause `λx. return x`. -/
 def hrF : Expr := .val (.lam (.var 0))
 
-/-- `close`'s clause: `λ(f, κ). u ← burn f; κ.1 u`. -/
+/-- `close`'s clause: `λ(f, κ). u ← burn f; κ.1 u`, the file unsealed to its `Tok`. -/
 def clF : Expr :=
   .val (.lam (.letpair (.var 0)
     (bindE (.app burnE (.var 1)) (.app (.app (.var 1) (.val (.inj₁ .unit))) (.var 0)))))
 
-/-- `open`'s clause: `λ(n, κ). f ← mint (); κ.1 f`. -/
+/-- `open`'s clause: `λ(n, κ). f ← mint (); κ.1 f`, the minted `Tok` sealed as a file. -/
 def clO : Expr :=
   .val (.lam (.letpair (.var 0)
     (bindE (.app mintE (.val .unit)) (.app (.app (.var 1) (.val (.inj₁ .unit))) (.var 0)))))
@@ -325,7 +329,7 @@ theorem d_clF {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} (hΓ : Ctx.Dead 
   refine .bangThunkV (dead_noLive hΓ) rfl (.lam ?_)
   refine .tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_
   refine .bind (A := .unit) (.right (.left (.dead (deadSplit hΓ))))
-    (.ret (appW (.var (by csolo)) (.tokBurn (by cdead)))) ?_
+    (.ret (appW (.absUnseal (n := fileName) trivial (.var (by csolo))) (.tokBurn (by cdead)))) ?_
   exact .app (.right (.left (.dead (.dead (deadSplit hΓ)))))
     (.proj₁ (.force (C := .amp (.arr .unit (CTy.effOf S A)) .top) (.there (.here (by cdead)))))
     (.here (by cdead))
@@ -335,7 +339,7 @@ theorem d_clO {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} (hΓ : Ctx.Dead 
   refine .bangThunkV (dead_noLive hΓ) rfl (.lam ?_)
   refine .tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_
   refine .bind (A := File) (.right (.right (.dead (deadSplit hΓ))))
-    (.ret (appW (.unitI (by cdead)) (.tokMint (by cdead)))) ?_
+    (.ret (.absSeal trivial (appW (.unitI (by cdead)) (.tokMint (by cdead))))) ?_
   exact .app (.right (.left (.right (.dead (deadSplit hΓ)))))
     (.proj₁ (.force (C := .amp (.arr File (CTy.effOf S A)) .top) (.there (.here (by cdead)))))
     (.here (.cons (.drop rfl (.cons hΓ.toP))))

@@ -67,7 +67,7 @@ theorem mapV_closed : ∀ A : VTy, closedAt 0 (mapV A).1 = true
         closedAt_mono _ (mapV_closed B) (Nat.zero_le _)]
   | .box _ A => mapV_closed A
   | .tvar (_ + 1) | .unit | .zero | .thunk _ | .ref _ | .imm _ _ | .mut _ _
-  | .bang _ | .unk | .mu _ | .int _ | .opq _ | .fam _ => rfl
+  | .bang _ | .unk | .mu _ | .int _ | .opq _ | .fam _ | .abs _ _ => rfl
 
 /-- `λ_. c () o`: the step's computation at the child `o` of the node `c` runs. -/
 def childV (c o : Val) : Val := .lam (.app (.app (.val (c.shift 1 0)) (.val .unit)) (.val o))
@@ -384,7 +384,7 @@ theorem map_ok (C : CTy) (g : Val) (S : VTy) (δ : LSub) :
   | .ref _, hP, _, w, _, hw | .imm _ _, hP, _, w, _, hw | .mut _ _, hP, _, w, _, hw
   | .bang _, hP, _, w, _, hw | .unk, hP, _, w, _, hw
   | .mu _, hP, _, w, _, hw | .int _, hP, _, w, _, hw | .opq _, hP, _, w, _, hw
-  | .fam _, hP, _, w, _, hw =>
+  | .fam _, hP, _, w, _, hw | .abs _ _, hP, _, w, _, hw =>
       ⟨w, mapV_id_steps rfl _ w, by rw [← vCE_envS_nuEnv hP]; exact hw⟩
 
 /-- Pure steps in front of an `ewpTS`. -/

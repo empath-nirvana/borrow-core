@@ -258,10 +258,12 @@ theorem tE_closed (ks : List Bnd) (Bs : Stack) :
       simp only [tE]; split
       · rfl
       · exact callE_closed ks _
-  | .unit | .zero | .thunk _ | .imm _ _ | .mut _ _ | .box _ _ | .bang _ | .unk | .int _ | .opq _ => rfl
+  | .unit | .zero | .thunk _ | .imm _ _ | .mut _ _ | .box _ _ | .bang _ | .unk | .int _ | .opq _
+  | .abs _ _ => rfl
   | .fam .unit | .fam (.tensor _ _) | .fam .zero | .fam (.sum _ _) | .fam (.thunk _)
   | .fam (.imm _ _) | .fam (.mut _ _) | .fam (.box _ _) | .fam (.bang _) | .fam .unk
-  | .fam (.tvar _) | .fam (.mu _) | .fam (.int _) | .fam (.fam _) | .fam (.opq _) => rfl
+  | .fam (.tvar _) | .fam (.mu _) | .fam (.int _) | .fam (.fam _) | .fam (.opq _)
+  | .fam (.abs _ _) => rfl
 
 theorem trav_closed (ks : List Bnd) (Bs : Stack) (A : VTy) :
     closedAt 0 (trav ks Bs A).1 = true := travOf_closed (tE_closed ks Bs A)
@@ -319,11 +321,11 @@ theorem tE_leaf (ks : List Bnd) (Bs : Stack) :
   | .fam (.ref _), h => by simp only [clB] at h; simp only [tE, if_pos h]
   | .mu _, h => by simp only [tE, if_pos h]
   | .unit, _ | .zero, _ | .thunk _, _ | .imm _ _, _ | .mut _ _, _ | .box _ _, _ | .bang _, _
-  | .unk, _ | .int _, _ | .opq _, _ => rfl
+  | .unk, _ | .int _, _ | .opq _, _ | .abs _ _, _ => rfl
   | .fam .unit, _ | .fam (.tensor _ _), _ | .fam .zero, _ | .fam (.sum _ _), _
   | .fam (.thunk _), _ | .fam (.imm _ _), _ | .fam (.mut _ _), _ | .fam (.box _ _), _
   | .fam (.bang _), _ | .fam .unk, _ | .fam (.tvar _), _ | .fam (.mu _), _ | .fam (.int _), _
-  | .fam (.fam _), _ | .fam (.opq _), _ => rfl
+  | .fam (.fam _), _ | .fam (.opq _), _ | .fam (.abs _ _), _ => rfl
 
 /-- A closed position's result is itself. -/
 theorem resO_leaf (G : Algs) (Bs : Stack) :
@@ -335,11 +337,11 @@ theorem resO_leaf (G : Algs) (Bs : Stack) :
   | .fam (.ref _), h => by simp only [clB] at h; simp only [resO, if_pos h]
   | .mu _, h => by simp only [resO, if_pos h]
   | .unit, _ | .zero, _ | .thunk _, _ | .imm _ _, _ | .mut _ _, _ | .box _ _, _ | .bang _, _
-  | .unk, _ | .int _, _ | .opq _, _ => rfl
+  | .unk, _ | .int _, _ | .opq _, _ | .abs _ _, _ => rfl
   | .fam .unit, _ | .fam (.tensor _ _), _ | .fam .zero, _ | .fam (.sum _ _), _
   | .fam (.thunk _), _ | .fam (.imm _ _), _ | .fam (.mut _ _), _ | .fam (.box _ _), _
   | .fam (.bang _), _ | .fam .unk, _ | .fam (.tvar _), _ | .fam (.mu _), _ | .fam (.int _), _
-  | .fam (.fam _), _ | .fam (.opq _), _ => rfl
+  | .fam (.fam _), _ | .fam (.opq _), _ | .fam (.abs _ _), _ => rfl
 
 end BoCa.Fig16.LogRel.Core.FoldP
 

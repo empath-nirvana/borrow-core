@@ -818,7 +818,7 @@ theorem d_producer {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ producer (.comp (CTy.effOf [yieldSig] .unit)) := by
   refine .bind (A := .ref Flag) (deadSplit hΓ)
     (.ret (appW (.sumI₁ (.unitI (by cdead))) (.alloc (by cdead)))) ?_
-  refine CDerives.effThenA (A := .unit) (.right (deadSplit hΓ)) (by simp [Row.NZ, yieldSig])
+  refine CDerivesIn.effThenA (A := .unit) (.right (deadSplit hΓ)) (by simp [Row.NZ, yieldSig])
     (by simp [Row.Uniq]) (fun h => absurd h yield_not_unrD) ?_ ?_ ?_
   · refine .effLet (A := .unit) (deadSplit (Ctx.Dead.cons hΓ)) (fun _ => Ctx.Dead.drops (Ctx.Dead.cons hΓ))
       (fun h => absurd h yield_not_unr) (d_yieldE (Ctx.Dead.cons hΓ).toP) ?_
@@ -933,7 +933,7 @@ theorem d_performer {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ performer (.comp (CTy.effOf [suspSig] .unit)) := by
   refine .bind (A := .ref Flag) (deadSplit hΓ)
     (.ret (appW (.sumI₁ (.unitI (by cdead))) (.alloc (by cdead)))) ?_
-  refine CDerives.effThenA (A := .unit) (.right (deadSplit hΓ)) (by simp [Row.NZ, suspSig])
+  refine CDerivesIn.effThenA (A := .unit) (.right (deadSplit hΓ)) (by simp [Row.NZ, suspSig])
     (by simp [Row.Uniq]) (fun h => absurd h susp_not_unrD)
     (.effPerform (o := suspSig) rfl rfl rfl (.unitI (Ctx.Dead.cons hΓ).toP)) ?_ ?_
   · refine .unitE (.right (.left (deadSplit hΓ)))

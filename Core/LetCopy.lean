@@ -4,7 +4,7 @@ import Core.InsertDead
 # Core — a function copied at each use is `[let-poly]`'s premise  `[spec §18, §24]`
 
 `[let-poly]` types `let x = λy. b in N` from `N` with the λ-value at each occurrence of `x`, `x`'s
-slot dead (`CDerives.letPoly`).  A term with a closed λ-value at some of its places, as a function
+slot dead (`CDerivesIn.letPoly`).  A term with a closed λ-value at some of its places, as a function
 is copied at each of its uses (a `def` re-checked at each use, §18's copies, decision 45), is that
 premise term for the let that binds the λ-value once:
 

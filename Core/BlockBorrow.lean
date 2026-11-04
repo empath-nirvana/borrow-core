@@ -447,10 +447,10 @@ section
 variable {M : Lifetime.Life → VTy → VTy} {side : LifeCtx → VTy → Prop}
 
 /-- `⇓σ`: a family moved to a shorter lifetime, leaf by leaf.  `[spec §5]` -/
-theorem shortenE_wf (F : Former M side) : ∀ {σ : Shape}, σ.plain = true →
+theorem shortenE_wf {P : Nat → Prop} (F : Former M side) : ∀ {σ : Shape}, σ.plain = true →
     ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a b : Lifetime.Life},
-    CDerives Δ Γ e (.val (σ.famTy M b)) → Δ.EntailsLe a b →
-    CDerives Δ Γ (shortenE σ e) (.val (σ.famTy M a))
+    CDerivesIn P Δ Γ e (.val (σ.famTy M b)) → Δ.EntailsLe a b →
+    CDerivesIn P Δ Γ (shortenE σ e) (.val (σ.famTy M a))
   | .leaf _, _, _, _, _, _, _, h, hle => F.bw.sub h hle
   | .node s₁ s₂, hσ, _, Γ, _, _, _, h, hle => by
       simp only [Shape.plain, Bool.and_eq_true] at hσ
@@ -469,9 +469,9 @@ theorem nf_cons {x : LifeVar} {Γ : Ctx VTy} {S : VTy} {l : Bool} (h : l = true 
 
 /-- **The derived rule.**  `withborS σ : refTy σ ⊸ (∀'c ⊏ ⊓Δ. famTy M 'c σ ⊸ ['c] T) ⊸
 refTy σ ⊗ T`, at `M = Mut` (`formerMut`) and `M = Imm` (`formerImm`).  `[spec §5]` -/
-theorem withborS_wf (F : Former M side) : ∀ {σ : Shape}, σ.plain = true →
+theorem withborS_wf {P : Nat → Prop} (F : Former M side) : ∀ {σ : Shape}, σ.plain = true →
     ∀ {Δ : LifeCtx} {Γ : Ctx VTy} (c : LifeVar) {T : VTy}, plainV T = true → Δ.Ok →
-    Δ.find? c = none → Ctx.Dead Γ → CDerives Δ Γ (withborS σ) (.val (wTy M c Δ.meetOfDom σ T))
+    Δ.find? c = none → Ctx.Dead Γ → CDerivesIn P Δ Γ (withborS σ) (.val (wTy M c Δ.meetOfDom σ T))
   | .leaf S, hσ, Δ, _, c, T, hT, _, hc, hΓ =>
       F.bw.ax c hΓ hc (F.side_plain Δ S hσ) (plain_noFree hσ) (plain_noFree hT)
   | .node s₁ s₂, hσ, Δ, Γ, c, T, hT, hΔ, hc, hΓ => by
@@ -492,7 +492,7 @@ theorem withborS_wf (F : Former M side) : ∀ {σ : Shape}, σ.plain = true →
       have hby : Δ.meetOfDom.mentions y = false :=
         Lifetime.Life.mentions_false_of_wf hyΔ (Lifetime.meetOfDomL_wf _)
       -- the inner callback, at `Δ, 'x`
-      have hinner : CDerives (FD₁ Δ x)
+      have hinner : CDerivesIn P (FD₁ Δ x)
           (⟨s₁.famTy M (.var x), true⟩ :: ⟨.unit, false⟩ :: ⟨s₂.refTy, false⟩ ::
             ⟨s₁.refTy, false⟩ :: ⟨cbT M c Δ.meetOfDom (.node s₁ s₂) T, true⟩ ::
             ⟨(Shape.node s₁ s₂).refTy, false⟩ :: Γ)
@@ -505,7 +505,7 @@ theorem withborS_wf (F : Former M side) : ∀ {σ : Shape}, σ.plain = true →
               (nf_cons (by simp) (dead_noLive hΓ (P := fun s => ¬ VFree y s.ty))))))) 
           have := famTy_free F hp₁ h
           simp [Lifetime.Life.mentions] at this; exact hxy this.symm
-        have hg := CDerives.allEV (Δ := FD₂ Δ x y) (a := .var y)
+        have hg := CDerivesIn.allEV (P := P) (Δ := FD₂ Δ x y) (a := .var y)
           (Γ := ⟨s₂.famTy M (.var y), false⟩ :: ⟨.unit, false⟩ :: ⟨s₁.famTy M (.var x), false⟩ ::
             ⟨.unit, false⟩ :: ⟨s₂.refTy, false⟩ :: ⟨s₁.refTy, false⟩ ::
             ⟨cbT M c Δ.meetOfDom (.node s₁ s₂) T, true⟩ :: ⟨(Shape.node s₁ s₂).refTy, false⟩ :: Γ)
@@ -519,7 +519,7 @@ theorem withborS_wf (F : Former M side) : ∀ {σ : Shape}, σ.plain = true →
         exact shortenE_wf F hp₁ (.var (.there (.there (.here (by cdead)))))
           (entailsLe_inner Δ x y)
       -- the outer callback, at `Δ`
-      have houter : CDerives Δ
+      have houter : CDerivesIn P Δ
           (⟨s₂.refTy, true⟩ :: ⟨s₁.refTy, false⟩ :: ⟨cbT M c Δ.meetOfDom (.node s₁ s₂) T, true⟩ ::
             ⟨(Shape.node s₁ s₂).refTy, false⟩ :: Γ)
           (outerS s₁ s₂) (.val (cbT M x Δ.meetOfDom s₁ (.tensor s₂.refTy T))) := by
@@ -553,15 +553,15 @@ theorem withborS_wf (F : Former M side) : ∀ {σ : Shape}, σ.plain = true →
         (.var (.here (by cdead)))
 
 /-- `withborS` at `Mut`: every leaf mutably borrowed at one lifetime.  `[spec §5]` -/
-theorem withborSM_wf {σ : Shape} (hσ : σ.plain = true) {Δ : LifeCtx} {Γ : Ctx VTy} (c : LifeVar)
+theorem withborSM_wf {P : Nat → Prop} {σ : Shape} (hσ : σ.plain = true) {Δ : LifeCtx} {Γ : Ctx VTy} (c : LifeVar)
     {T : VTy} (hT : plainV T = true) (hΔ : Δ.Ok) (hc : Δ.find? c = none) (hΓ : Ctx.Dead Γ) :
-    CDerives Δ Γ (withborS σ) (.val (wTy mutM c Δ.meetOfDom σ T)) :=
+    CDerivesIn P Δ Γ (withborS σ) (.val (wTy mutM c Δ.meetOfDom σ T)) :=
   withborS_wf formerMut hσ c hT hΔ hc hΓ
 
 /-- `withborS` at `Imm`: every leaf immutably borrowed at one lifetime.  `[spec §5]` -/
-theorem withborSI_wf {σ : Shape} (hσ : σ.plain = true) {Δ : LifeCtx} {Γ : Ctx VTy} (c : LifeVar)
+theorem withborSI_wf {P : Nat → Prop} {σ : Shape} (hσ : σ.plain = true) {Δ : LifeCtx} {Γ : Ctx VTy} (c : LifeVar)
     {T : VTy} (hT : plainV T = true) (hΔ : Δ.Ok) (hc : Δ.find? c = none) (hΓ : Ctx.Dead Γ) :
-    CDerives Δ Γ (withborS σ) (.val (wTy immM c Δ.meetOfDom σ T)) :=
+    CDerivesIn P Δ Γ (withborS σ) (.val (wTy immM c Δ.meetOfDom σ T)) :=
   withborS_wf formerImm hσ c hT hΔ hc hΓ
 end
 

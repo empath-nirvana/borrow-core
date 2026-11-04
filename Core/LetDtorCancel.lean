@@ -181,7 +181,7 @@ theorem d_schedG {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {e : Expr}
   refine .bind (.right (split_kill Γ).toP) (.ret (d_hrS (.cons (kill_dead Γ)))) ?_
   refine .effLet (A := StR) (.left (.left (split_kill Γ).toP))
     (fun h => absurd h SO_not_cancels) (fun h => absurd h SO_not_unr) ?_ ?_
-  · refine CDerives.effHandleCs (S := SO) (E := Esched) (n := 1) (A := .unit) (R := StR) fs2 csSched
+  · refine CDerivesIn.effHandleCs (S := SO) (E := Esched) (n := 1) (A := .unit) (R := StR) fs2 csSched
       (.left (.left (deadSplit (kill_dead Γ)))) (.left (.right (deadSplit (kill_dead Γ))))
       (.here (.cons (kill_dead Γ).toP)) (.there (.here (kill_dead Γ).toP))
       (by decide) (by simp [fcloseSig, fopenSig]) (by simp) (by decide) ?_

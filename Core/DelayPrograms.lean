@@ -41,12 +41,12 @@ def driveE : ℕ → Expr
   | 0 => bindE (.app (.var 0) (.val (.inj₂ .unit))) (.inj₂ (.var 0))
   | n + 1 => bindE (.app (.var 0) (.val (.inj₁ .unit))) (.case (.var 0) (.inj₁ (.var 0)) (driveE n))
 
-theorem CDerives.loopOut {Δ Γ e A B} (h : CDerives Δ Γ e (.comp (.loop A B))) :
-    CDerives Δ Γ e (.comp (loopUnroll A B)) := by
+theorem CDerivesIn.loopOut {P : Nat → Prop} {Δ Γ e A B} (h : CDerivesIn P Δ Γ e (.comp (.loop A B))) :
+    CDerivesIn P Δ Γ e (.comp (loopUnroll A B)) := by
   rw [← CTy.loop_unroll]; exact .nuOut (CTy.loopBody_nuOk A B) h
 
-theorem CDerives.loopIn {Δ Γ e A B} (h : CDerives Δ Γ e (.comp (loopUnroll A B))) :
-    CDerives Δ Γ e (.comp (.loop A B)) :=
+theorem CDerivesIn.loopIn {P : Nat → Prop} {Δ Γ e A B} (h : CDerivesIn P Δ Γ e (.comp (loopUnroll A B))) :
+    CDerivesIn P Δ Γ e (.comp (.loop A B)) :=
   .nuIn (CTy.loopBody_nuOk A B) (by rw [CTy.loop_unroll]; exact h)
 
 /-- `d : U(Loop A B) ⊢ driveE n : F(A ⊕ B)`: observe at most `n` times, and close with the
@@ -224,7 +224,7 @@ theorem d_countDownStep {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
   refine .bangThunkV (banged_dead hΓ) rfl (.lam (.withI ?_ ?_))
   · refine .tensorE (.dead (.dead (.left (deadSplit hΓ)))) (.var (.there (.there (.here hΓ)))) ?_
     refine .sumE (.right (.left (.dead (.dead (.dead (deadSplit hΓ))))))
-      (natN_unroll ▸ CDerives.unroll (A := natBody) (.var (.there (.here (.cons (.cons (.cons hΓ))))))) ?_ ?_
+      (natN_unroll ▸ CDerivesIn.unroll (A := natBody) (.var (.there (.here (.cons (.cons (.cons hΓ))))))) ?_ ?_
     · exact .unitE (.left (.right (.dead (.dead (.dead (.dead (deadSplit hΓ)))))))
         (.var (.here (.cons (.cons (.cons (.cons (.cons hΓ)))))))
         (.ret (.sumI₁ (.var (.there (.here (.cons (.cons (.cons (.cons hΓ)))))))))

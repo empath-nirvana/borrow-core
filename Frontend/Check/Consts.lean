@@ -19,7 +19,7 @@ A fold's shape argument is a type with the recursive position `X`, decoded to an
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt CDerivesP Jdg VFree VOutlives VOutlivesLe FShape FD₁ mutM immM
+open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt CDerivesAtIn CDerivesP Jdg VFree VOutlives VOutlivesLe FShape FD₁ mutM immM
   d_allocS d_freeS withborSM_wf withborSI_wf withborM2_wf withborI2_wf FamSide cbTy2 famTy2
   plainV HasDtor dtorE dtor_wf withborUE withbor1UTy withbor2UTy withbor3UTy withloadUTy
   sliceBorrowMUTy sliceBorrowIUTy closedAt dtorE_closed dtorE_effFree)
@@ -54,7 +54,7 @@ def elabFShape (E : Env) (Δ : LifeCtx) (sp : Span) (F : VTy) :
 /-! ### Building a constant's result -/
 
 open BoCa.Fig16.LogRel.Core (fixDTy unfoldSTy unfoldTy) in
-/-- `fixD` (`CDerives.fixD`): the `unfold` node at the delay type's body, at its type `fixDTy`. -/
+/-- `fixD` (`CDerivesIn.fixD`): the `unfold` node at the delay type's body, at its type `fixDTy`. -/
 theorem tFixD {Ξ : BoCa.Fig16.LogRel.Core.EffCtx} {Δ : LifeCtx} {Γ : Ctx CVTy} {i : TInfo} {A S : CVTy}
     (hΓ : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ) :
     TDerivesAt Ξ Δ Γ (.unfoldN i (.val (fixDTy A S)) (BoCa.Fig16.LogRel.Core.CTy.delayBody A) S)
@@ -64,7 +64,7 @@ theorem tFixD {Ξ : BoCa.Fig16.LogRel.Core.EffCtx} {Δ : LifeCtx} {Γ : Ctx CVTy
   rwa [unfoldTy, BoCa.Fig16.LogRel.Core.CTy.delayBody_instT] at h
 
 open BoCa.Fig16.LogRel.Core (fixDTy unfoldSTy unfoldTy) in
-/-- `unfoldS` (`CDerives.unfoldS`): the `unfold` node at the stream type's body, at `unfoldSTy`. -/
+/-- `unfoldS` (`CDerivesIn.unfoldS`): the `unfold` node at the stream type's body, at `unfoldSTy`. -/
 theorem tUnfoldS {Ξ : BoCa.Fig16.LogRel.Core.EffCtx} {Δ : LifeCtx} {Γ : Ctx CVTy} {i : TInfo} {A S : CVTy}
     (hΓ : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ) :
     TDerivesAt Ξ Δ Γ (.unfoldN i (.val (unfoldSTy A S)) (BoCa.Fig16.LogRel.Core.CTy.streamBody A) S)

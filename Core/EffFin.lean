@@ -1594,7 +1594,7 @@ theorem then_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A
       (fun hu _ _ h => gDenC_persistent (hU hu) h) hQd hD' (fun ls v => vC true A ls δ v) _ hk
       hM'' hg₂ hc
 
-/-- **`[then]` with a finaliser whose row holds `Div`** (`CDerivesP.effThenDiv`, #750): `M` at `Σ_M`
+/-- **`[then]` with a finaliser whose row holds `Div`** (`CDerivesPIn.effThenDiv`, #750): `M` at `Σ_M`
 with no capturable operation, `D` at `Σ_D ≤ Σ` holding `Div`, so `Σ` holds it and the relation at
 `Σ` is `cwp`. `D` at `cwp` at its row (`effWp`), and `[then]` at `cwp` with a finaliser at `cwp`
 (`cwp_then_div`). The cancel-row record `hfin` is not read: no cancel run reaches `D`.

@@ -59,23 +59,23 @@ theorem part_dead (e : Expr) : ∀ {i : Nat} {Γ : Ctx VTy}, Ctx.Dead Γ →
 
 variable {Δ : LifeCtx} {Γ : Ctx VTy}
 
-theorem appW {f a : Expr} {A B : VTy} (ha : CDerives Δ (part a 0 Γ).1 a (.val A))
-    (hf : CDerives Δ (part a 0 Γ).2 f (.val (.lolli A B))) : CDerives Δ Γ (.app f a) (.val B) :=
+theorem appW {P : Nat → Prop} {f a : Expr} {A B : VTy} (ha : CDerivesIn P Δ (part a 0 Γ).1 a (.val A))
+    (hf : CDerivesIn P Δ (part a 0 Γ).2 f (.val (.lolli A B))) : CDerivesIn P Δ Γ (.app f a) (.val B) :=
   .lolliE (part_split a 0 Γ) ha hf
 
 theorem seqW {e₁ e₂ : Expr} {C : VTy} (h₁ : CDerives Δ (part e₁ 0 Γ).1 e₁ (.val .unit))
     (h₂ : CDerives Δ (part e₁ 0 Γ).2 e₂ (.val C)) : CDerives Δ Γ (.seq e₁ e₂) (.val C) :=
   .seqV (part_split e₁ 0 Γ) h₁ h₂
 
-theorem pairW {e₁ e₂ : Expr} {A B : VTy} (h₁ : CDerives Δ (part e₁ 0 Γ).1 e₁ (.val A))
-    (h₂ : CDerives Δ (part e₁ 0 Γ).2 e₂ (.val B)) :
-    CDerives Δ Γ (.pair e₁ e₂) (.val (.tensor A B)) :=
+theorem pairW {P : Nat → Prop} {e₁ e₂ : Expr} {A B : VTy} (h₁ : CDerivesIn P Δ (part e₁ 0 Γ).1 e₁ (.val A))
+    (h₂ : CDerivesIn P Δ (part e₁ 0 Γ).2 e₂ (.val B)) :
+    CDerivesIn P Δ Γ (.pair e₁ e₂) (.val (.tensor A B)) :=
   .tensorI (part_split e₁ 0 Γ) h₁ h₂
 
-theorem letW {ep eb : Expr} {A B C : VTy}
-    (hp : CDerives Δ (part ep 0 Γ).1 ep (.val (.tensor A B)))
-    (hb : CDerives Δ (⟨B, true⟩ :: ⟨A, true⟩ :: (part ep 0 Γ).2) eb (.val C)) :
-    CDerives Δ Γ (.letpair ep eb) (.val C) :=
+theorem letW {P : Nat → Prop} {ep eb : Expr} {A B C : VTy}
+    (hp : CDerivesIn P Δ (part ep 0 Γ).1 ep (.val (.tensor A B)))
+    (hb : CDerivesIn P Δ (⟨B, true⟩ :: ⟨A, true⟩ :: (part ep 0 Γ).2) eb (.val C)) :
+    CDerivesIn P Δ Γ (.letpair ep eb) (.val C) :=
   .letpairV (part_split ep 0 Γ) hp hb
 
 theorem caseW {es e₁ e₂ : Expr} {A B C : VTy}

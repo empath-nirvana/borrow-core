@@ -11,7 +11,7 @@ shifted (`TDerivesP.weaken`, `TDerivesAt.weaken`). A `def`'s body is checked onc
 persistent externs, and this places it at each use (`TTied.weaken`): the slots bound between the
 externs and the use are `Γp`, its live ones those the enclosing rules give the use.
 
-`Core`'s weakening lemmas insert dead slots only (`CDerives.insert_dead`, `CDerives.append_dead`).
+`Core`'s weakening lemmas insert dead slots only (`CDerives.insert_dead`, `CDerivesIn.append_dead`).
 A use may be given live ones: the checker lets a `def`'s body absorb an unused live slot of the
 use's context wherever its rules can, as the slot's leaf drops it (a persistent slot at `DeadP`)
 or `⟨⟩` takes it. The absorption is that set of slots, read off the typed term, so the use is
