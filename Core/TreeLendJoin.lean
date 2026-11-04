@@ -16,7 +16,8 @@ cell, so `twp_lendEnd`'s statement is unchanged:
   `view_at_lender` at that frame lifetime. Every cell any part of the world holds at `ℓ`, while
   `lendRec ℓ` is a record proper tagged `α`, has lifetime set `{α}`.
 * **End at the composed copies** (`twp_lendEnd_imm`): the run holds `ℓ ↦ imm(S, (), ∅)` and the
-  list tags `lendRec ℓ` at `α`; at every start world `S = {α}`, and `twp_lendEnd` applies there.
+  list carries `lendRec ℓ` at a tag `α`; at every start world `S = {α}`, and `twp_lendEnd` applies
+  there.
 -/
 
 noncomputable section
@@ -72,10 +73,10 @@ theorem viewResS_compS {K : WCactus} (S T : TSet) (l : BoCa.Loc) :
     (emptyT_inStratum _) (emptyT_inStratum _)
 
 /-- **End a lend at its copies composed.** `twp_lendEnd` with the run holding
-`ℓ ↦ imm(S, (), ∅)` for the lend cell, the list tagging `lendRec ℓ` at `α`. -/
+`ℓ ↦ imm(S, (), ∅)` for the lend cell, the list carrying `lendRec ℓ` at some tag. -/
 theorem twp_lendEnd_imm {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls ls₁ : List (SRecT w.K)}
-    {O O₁ : List (FrameRecT w.K)} {e : Expr} {Z ρ ρ₁ : TRes w.K} {l : BoCa.Loc} {α : Life}
-    {S : TSet} (hρ : ResUT.CompS Z (viewResS S l) ρ) (hα : (lendRec l, α) ∈ ls)
+    {O O₁ : List (FrameRecT w.K)} {e : Expr} {Z ρ ρ₁ : TRes w.K} {l : BoCa.Loc}
+    {S : TSet} (hρ : ResUT.CompS Z (viewResS S l) ρ) (hα : lendRec l ∈ rsOfT ls)
     (hρ₁ : ResUT.CompS Z (ResUT.single l (CellUT.ownOf BoCa.Val.unit)) ρ₁)
     (hvZ : ResUT.Valid Z) (hZ : NoneAt (· = l) Z)
     (hF : ∀ w' ρf, F w' ρf → NoneAt (· = l) ρf)
@@ -85,6 +86,9 @@ theorem twp_lendEnd_imm {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls ls₁ :
     (h : twp (ℍ := ℍ) F Q n w ls₁ O₁ e ρ₁) :
     twp (ℍ := ℍ) F Q n w ls O e ρ := by
   intro w₀ ρ₀ ρf fρ ls₀ O₀ ps psF μ hE hr hl hOr hFρ hf hc hS hR hI
+  obtain ⟨⟨r, α⟩, hα', hrα⟩ := List.mem_map.mp hα
+  simp only at hrα
+  subst hrα
   -- at the start world, the copy's lifetime set is the lend's tag
   have hS1 : S = TSet.single α := by
     obtain ⟨σZ, hσZ⟩ := hvZ
@@ -98,7 +102,7 @@ theorem twp_lendEnd_imm {F : TFrame} {Q : TPost} {n : Nat} {w : TWd} {ls ls₁ :
       rwa [RecRR.func hry (lendRec_rr l)] at hy
     have hpps : lendRec l ∈ ps := (hS.1 _).mpr (Or.inl hp₀)
     have hx₀ : (lendRec l, α) ∈ ls₀ := by
-      obtain ⟨y, hy, hry, hyt⟩ := forall₂_mem_left hl hα
+      obtain ⟨y, hy, hry, hyt⟩ := forall₂_mem_left hl hα'
       have : y = (lendRec l, α) := Prod.ext (RecRR.func hry (lendRec_rr l)) hyt
       exact this ▸ hy
     exact proper_view_single hR hpps hx₀ (ResUT.CompS.comm hc) e' (CellUT.lsOf_immOf _ _ _ _)
