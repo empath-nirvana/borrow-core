@@ -164,9 +164,13 @@ theorem twp_frame_keep {F F₁ : TFrame} {P : TPost} {R : TRProp} (hR : R.Mono) 
   obtain ⟨ρ', hρ', hfρ'⟩ := reassoc_in hy' g₄
   have hR₂₀ : R w₀ O₂₀ ρ₂₀ := hR _ _ _ _ _ _ hE₂ h₂₀ hO₂ hR₂
   have hvy' : ResUT.Valid y' := (ResUT.Valid.split g₄ g₇.valid).1
-  have hu : UpdX (sem w'.Θ) (recMask O₁₀) (recMask O₁') ρ₀ ρ' :=
-    UpdX.frame g₀.1 g₉ h₂' hc₀ hρ' (cov_valid hc hI) (cov_valid hfρ' g₇)
-      (g₁₀.of_compS_right hy' hvy')
+  have hu : UpdA (sem w'.Θ) (recMask O₁₀) (recMask O₁') ρ₀ ρ' fρ' :=
+    UpdA.frame g₀.1 g₉ h₂' hc₀ hρ' (cov_valid hc hI) hfρ' (g₁₀.of_compS_right hy' hvy')
+      (TWNT.mutOne hRi.1) (fun _ _ h k => h.of_compS_right hc (kind_mut_ne_imm k))
+      (TWNT.mutOne g₆.1) (fun _ _ h k => h.of_compS_right hfρ' (kind_mut_ne_imm k))
+  have hcl : ImmMaskClosed (fun l => recMask O₁₀ l ∨ recMask O₂₀ l) ρ₀ :=
+    ImmMaskClosed.congr (fun l => (recMask_append l).symm)
+      (recMaskClosed w₀ fρ ρf ρ₀ ps (O₁₀ ++ O₂₀) psF ls₀ hRi hc hS)
   have hmask : ∀ x, MaskDiff (recMask (O₁₀ ++ O₂₀)) (recMask (O₁' ++ O₂')) x →
       MaskDiff (recMask O₁₀) (recMask O₁') x := fun x hx => by
     unfold MaskDiff at hx ⊢
@@ -207,16 +211,18 @@ theorem twp_frame_keep {F F₁ : TFrame} {P : TPost} {R : TRProp} (hR : R.Mono) 
       (List.mem_append_left _ hq))) fun q' hq' => ?_
     obtain ⟨q, hq, hqq⟩ := forall₂_mem_right hO₂' hq'
     have hq₀ : q ∈ ps := (hS.1 q).mpr (Or.inl (List.mem_append_right _ hq))
-    exact fdEsc_of_updX g₀.1 (hvesc q hq₀) (fdEsc_of_noneAt hRi.1 hq hq₀ hesc₂₀) g₆.1 g₄ g₅
+    exact fdEsc_of_updA g₀.1 (hvesc q hq₀) (fdEsc_of_noneAt hRi.1 hq hq₀ hesc₂₀) g₆.1 g₄ g₅
       (List.mem_append_left _ hq') hqq g₉
   refine ⟨w', ρf', ρ', fρ', psF', ps', O₁' ++ O₂', ls', g₀.of_compS_left hy, hf', hpsF',
     ResUT.hash_symm (hash_of_inv hfρ' g₇), hfρ', ⟨fun p => ?_, fun p hp q hq => ?_⟩, g₆, g₇,
     ⟨O₁', O₂', ρ₁', ρ₂', rfl, hρ', g₈, hR _ _ _ _ _ _ (g₀.of_compS_right hy) h₂' hO₂' hR₂₀,
       hkeep, hb, ha, fun p hp q hq => g₅.2 p hp q (List.mem_append_left _ hq)⟩,
-    (hu.widen (recMask O₂₀)).congr (fun l => recMask_append l)
-      (fun l => by rw [recMask_append, recMask_rr hO₂' l]),
+    UpdA.congr (fun l => recMask_append l) (fun l => by rw [recMask_append, recMask_rr hO₂' l])
+      (UpdA.widen (recMask O₂₀) hu hfρ' (TWNT.mutOne hRi.1)
+        (fun _ _ h k => h.of_compS_right hc (kind_mut_ne_imm k)) hcl),
     (g₁₀.of_compS_left hy' hvy').mono hmask,
-    (g₁₁.mono fun l h => (recMask_append l).mpr (Or.inl h)).frame hc₀ (TWNT.mutOne hRi.1)
+    (InvKeptA.mono (fun l h => (recMask_append l).mpr (Or.inl h)) g₁₁).frame hc₀
+      (TWNT.mutOne hRi.1)
       (fun _ _ h k => (h.of_compS_right hc₀ (kind_mut_ne_imm k)).of_compS_right hc
         (kind_mut_ne_imm k))
       (AgreeOn.of_compS_right hy g₀.2)⟩

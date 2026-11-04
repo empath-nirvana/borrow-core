@@ -284,8 +284,12 @@ theorem twp_alloc {F : TFrame} {Q : TPost} (hQ : Q.Down) (Kc : Kont) (v : BoCa.V
       (RecsRR.refl fun r hr' => hR₁.cov_ps r (hS.left r hr')) hFρ (hash_of_inv hfρ₁' hI₁) hfρ₁'
       hS hR₁ hI₁ (finDom_upd hfd l v) j' μ' e' (by omega) t hfin
   exact ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇,
-    hQ.le (by omega) _ _ _ _ _ g₈, UpdX.trans g₀.1 hu g₉, g₁₀,
-    (InvKept.refl _ _ _).trans hu g₁₁⟩
+    hQ.le (by omega) _ _ _ _ _ g₈,
+    hu.transA (WCactus.Ext.refl _) g₀.1 g₉ (TWNT.mutOne hR.1)
+      (fun _ _ h k => h.of_compS_right hc (kind_mut_ne_imm k)) (TWNT.mutOne hR₁.1)
+      (fun _ _ h k => h.of_compS_right hfρ₁' (kind_mut_ne_imm k))
+      (recMaskClosed w₀ fρ₁ ρf ρ₁ ps O₀ psF ls₀ hR₁ hfρ₁' hS), g₁₀,
+    (InvKeptA.refl _ _ _).trans (WCactus.Ext.refl _) hu g₁₁⟩
 
 /-- **Release at `twp`** (row 6.142): the run gives up `ℓ ↦ own(v)` and continues from `Kc[v]`. -/
 theorem twp_free {F : TFrame} {Q : TPost} (hQ : Q.Down) (Kc : Kont) (l : BoCa.Loc)
@@ -334,8 +338,12 @@ theorem twp_free {F : TFrame} {Q : TPost} (hQ : Q.Down) (Kc : Kont) (l : BoCa.Lo
       (hash_of_inv hfρ₂ hI₂) hfρ₂ hS hR₂ hI₂ (by rw [← hdel]; exact finDom_del hfd l) j' μ' e'
       (by omega) t hfin
   exact ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇,
-    hQ.le (by omega) _ _ _ _ _ g₈, UpdX.trans g₀.1 hu g₉, g₁₀,
-    (InvKept.refl _ _ _).trans hu g₁₁⟩
+    hQ.le (by omega) _ _ _ _ _ g₈,
+    hu.transA (WCactus.Ext.refl _) g₀.1 g₉ (TWNT.mutOne hR.1)
+      (fun _ _ h k => h.of_compS_right hc (kind_mut_ne_imm k)) (TWNT.mutOne hR₂.1)
+      (fun _ _ h k => h.of_compS_right hfρ₂ (kind_mut_ne_imm k))
+      (recMaskClosed w₀ fρ₂ ρf ρ₂₀ ps O₀ psF ls₀ hR₂ hfρ₂ hS), g₁₀,
+    (InvKeptA.refl _ _ _).trans (WCactus.Ext.refl _) hu g₁₁⟩
 
 /-- An `own` cell holds no `mut` cell. -/
 theorem not_holdsMut_own {K : WCactus} {l l' : BoCa.Loc} {v : BoCa.Val} :
@@ -533,8 +541,12 @@ theorem twp_store {F : TFrame} {Q : TPost} (hQ : Q.Down) (Kc : Kont) (l : BoCa.L
     h w₀ ρx ρf fρ' ls₀ O₀ ps psF _ hE' hrx hl hO hFρ (hash_of_inv hfρ₀' hI') hfρ₀' hS hR' hI'
       (by rw [← hupd]; exact finDom_upd hfd l v₂) j' μ' e' (by omega) t hfin
   exact ⟨w', ρf', ρ'', fρ'', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇,
-    hQ.le (by omega) _ _ _ _ _ g₈, UpdX.trans g₀.1 hu g₉, g₁₀,
-    (InvKept.refl _ _ _).trans hu g₁₁⟩
+    hQ.le (by omega) _ _ _ _ _ g₈,
+    hu.transA (WCactus.Ext.refl _) g₀.1 g₉ (TWNT.mutOne hR.1)
+      (fun _ _ h k => h.of_compS_right hc (kind_mut_ne_imm k)) (TWNT.mutOne hR'.1)
+      (fun _ _ h k => h.of_compS_right hfρ₀' (kind_mut_ne_imm k))
+      (recMaskClosed w₀ fρ' ρf ρx ps O₀ psF ls₀ hR' hfρ₀' hS), g₁₀,
+    (InvKeptA.refl _ _ _).trans (WCactus.Ext.refl _) hu g₁₁⟩
 
 end BoCa.Fig16.Tree.Wp
 

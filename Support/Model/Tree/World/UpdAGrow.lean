@@ -119,6 +119,65 @@ theorem UpdX.transA {K'' : WCactus} {Θ₁ Θ₂ : LocTy} (hK₁ : K.Ext K') (hK
       obtain rfl := ResUT.Flat.functional hτw' flat_empty
       simp at e)
 
+/-! ### Masks -/
+
+/-- The masks may be replaced by equal ones. -/
+theorem UpdA.congr {Θ : LocTy} {E E' F F' : BoCa.Loc → Prop} (hF : ∀ l, F l ↔ E l)
+    (hF' : ∀ l, F' l ↔ E' l) {ρ : TRes K} {ρ' fρ' : TRes K'} (h : UpdA Θ E E' ρ ρ' fρ') :
+    UpdA Θ F F' ρ ρ' fρ' := by
+  obtain ⟨σ, σ', τw, hσ, hσ', hτw, hx⟩ := h
+  refine ⟨σ, σ', τw, hσ, hσ', hτw, fun l => ⟨fun ψ e hk hE₀ => ?_, fun ψ' e hk hE₀ => ?_⟩⟩
+  · obtain ⟨h₁, rest⟩ := (hx l).1 ψ e hk (fun c => hE₀ ((hF l).mpr c))
+    refine ⟨fun c => h₁ ((hF' l).mp c), ?_⟩
+    rcases rest with r | r | ⟨hkm, m, ζ, χ, hEm, hb, eχ, ha⟩
+    · exact Or.inl r
+    · exact Or.inr (Or.inl r)
+    · exact Or.inr (Or.inr ⟨hkm, m, ζ, χ, fun c => hEm ((hF m).mp c), hb, eχ, ha⟩)
+  · obtain ⟨h₁, rest⟩ := (hx l).2 ψ' e hk (fun c => hE₀ ((hF' l).mpr c))
+    exact ⟨fun c => h₁ ((hF l).mp c), rest⟩
+
+/-- A closed mask may be replaced by an equal one. -/
+theorem ImmMaskClosed.congr {E F : BoCa.Loc → Prop} (hF : ∀ l, F l ↔ E l) {ρ : TRes K}
+    (h : ImmMaskClosed E ρ) : ImmMaskClosed F ρ :=
+  fun y ζ c k hy ev hev x ξ hx => (hF x).mpr (h y ζ c k ((hF y).mp hy) ev hev x ξ hx)
+
+/-- **Masking a location on both sides keeps `UpdA`**, the run's end a part of the end world and
+the start closed at the widened mask. A `mut` cell leaving with an ancestor the new mask covers
+sits beneath an ancestor it does not (`Beneath.unmasked`, the re-anchoring of `UpdA.trans`); that
+ancestor is an `imm` cell of `⦇ρ⦈` unmasked by the run, so the run keeps it into `⦇ρ′⦈`, below
+the end world's cell, or gives it up to the end world. -/
+theorem UpdA.widen {Θ : LocTy} {E E' : BoCa.Loc → Prop} (F : BoCa.Loc → Prop) {ρ : TRes K}
+    {ρ' f' fρ' : TRes K'} (h : UpdA Θ E E' ρ ρ' fρ') (hw : ResUT.CompS f' ρ' fρ')
+    {W : TRes K} (hW : MutOne W) (hsub : ∀ y φ, CellAt ρ y φ → φ.kind = Kind.mut → CellAt W y φ)
+    (hcl : ImmMaskClosed (fun l => E l ∨ F l) ρ) :
+    UpdA Θ (fun l => E l ∨ F l) (fun l => E' l ∨ F l) ρ ρ' fρ' := by
+  obtain ⟨σ, σ', τw, hσ, hσ', hτw, hx⟩ := h
+  obtain ⟨σf, σ₂, -, hσ₂, hcw⟩ := BoLo.flat_compR hw hτw
+  obtain rfl := ResUT.Flat.functional hσ' hσ₂
+  -- an `imm` cell of the start unmasked by the run is absorbed by the end world
+  have absA : ∀ m φ, ¬ E m → σ.get m = some φ → φ.kind = Kind.imm →
+      ∃ χ, τw.get m = some χ ∧ CellAbs Θ φ χ := by
+    intro m φ hEm e hk
+    obtain ⟨-, hd⟩ := (hx m).1 φ e (by rw [hk]; decide) hEm
+    rcases hd with ⟨φ', e', hxc⟩ | ha | ⟨hkm, -⟩
+    · obtain ⟨χ, eχ, hle⟩ := compR_get_imm hcw (Or.inr e') (hxc.1.trans hk)
+      exact ⟨χ, eχ, hxc.abs_of_le hk hle⟩
+    · exact ha
+    · rw [hk] at hkm; cases hkm
+  refine ⟨σ, σ', τw, hσ, hσ', hτw, fun l => ⟨fun ψ e hk hE₀ => ?_, fun ψ' e hk hE₀ => ?_⟩⟩
+  · have hEl : ¬ E l := fun c => hE₀ (Or.inl c)
+    have hFl : ¬ F l := fun c => hE₀ (Or.inr c)
+    obtain ⟨h₁, rest⟩ := (hx l).1 ψ e hk hEl
+    refine ⟨fun c => c.elim h₁ hFl, ?_⟩
+    rcases rest with r | r | ⟨hkm, m, ζ, χ, -, hb, -, -⟩
+    · exact Or.inl r
+    · exact Or.inr (Or.inl r)
+    · obtain ⟨m₂, ζ₂, hEm₂, hb₂⟩ := hb.unmasked hW hσ hsub hcl hkm hE₀
+      obtain ⟨χ₂, eχ₂, ha₂⟩ := absA m₂ ζ₂ (fun c => hEm₂ (Or.inl c)) hb₂.1 hb₂.2.1
+      exact Or.inr (Or.inr ⟨hkm, m₂, ζ₂, χ₂, hEm₂, hb₂, eχ₂, ha₂⟩)
+  · obtain ⟨h₁, rest⟩ := (hx l).2 ψ' e hk (fun c => hE₀ (Or.inl c))
+    exact ⟨fun c => c.elim h₁ (fun f => hE₀ (Or.inr f)), rest⟩
+
 end BoCa.Fig16.Tree.Wp
 
 end
