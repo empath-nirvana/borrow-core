@@ -178,6 +178,8 @@ for-yield-branch 3 0 0 3 3 0
 format 4 0 0 40 33 21
 fs-cat 7 2 0 133 88 21
 fs-fake-exit 11 11 0 89 35 28
+fs-nested-order 15 16 0 126 47 38
+fs-nested-sites 15 1 0 66 47 38
 fs-raise-two 5 2 0 52 36 33
 gen-adapters 8 0 0 18 18 0
 gen-adapters-fail 11 0 0 27 27 0

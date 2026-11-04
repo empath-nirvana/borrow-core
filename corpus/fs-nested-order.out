@@ -1,0 +1,8 @@
+close 3
+close 2
+close 3
+close 2
+close 5
+close 4
+(inl i32[7], (inl i32[7], inr (inl ())))
+live 0

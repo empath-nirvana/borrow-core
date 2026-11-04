@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.31 · 2026-11-03
+Version 1.32 · 2026-11-03
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -8660,6 +8660,15 @@ No change: no type, rule, term, typing, elaboration or semantics.
   - holds one closed clause for it (`closedAt 0` of the node's clause), at one outer row and one
     signature, so the clause a `perform` reaches is the same code at every node and needs nothing
     from its handler's frame.
+  - and every `perform` of the operation (`pnodes`) is typed at a row that holds each machine
+    operation of the node's outer row (§49): the work runs at the `perform`, so a suspension of
+    the work at one of them is one of the computation the `perform` is in, whose outcome has a
+    summand only for its own row's operations. An operation that fails this is a machine
+    operation, which may make another fail: the facts are the greatest solution, reached by
+    removing such operations until none fails. Two nested handler sites of one effect, the outer
+    one's operations machine operations, meet it only where the `perform`'s row names the outer
+    site, so a `def` at the inner site's row runs the inner clauses as machine operations
+    (`corpus/fs-nested-sites.bc`).
 
   The clause's work `M'` (`M` with each resume `κ.1 y` replaced by `y`, read along the paths of
   `TailResumesAt` through `[⊕E]`, `[⊗E]`, `[1E]`, `[let]` and `[sub]`, the right unit and the
@@ -10447,11 +10456,20 @@ finaliser must be recorded in; a row with such an operation is refused. Every fr
 checked against **the certificate** (`frameCert`, `Frontend/Check/LetDtor.lean`): its finaliser's
 erasure is `dropCtxE (ctxDrops decl Γ₂) 1`, with `decl` read off the checked destructors (`declOf`)
 and `Γ₂` the slots the rest uses, and each destructor is closed. A frame that passes is
-`letDT decl Γ₂ N M` (`frameCert_letDT`), so its derivation is one of `CDerives.effLetD`'s
-conclusion, and on a raise or a cancel of `M` it runs every slot's destructor, the slot bound last
-first, before the error goes on (`certFrame_raise`, `certFrame_cancel`, from `letDE_raise_exit`,
-`letDE_cancel_exit`). Where every such slot has a derived drop, the binding is §19's `[then]` with
-the pure finaliser `finalOf`, as before.
+`letDT decl Γ₂ N M` (`frameCert_letDT`): its derivation is `[then]`'s (`CDerives.effThen`, built by
+`rEffThenD`, `TTied.effThenD`) at a term equal to `letDT decl Γ₂ N M`, the term
+`CDerives.effLetD` types; `effLetD`'s premise `hds` (each slot of `Γ₂` that is not persistent has
+a destructor) is not discharged by the builders. On a raise or a cancel of `M` the frame reaches
+the chain `dropChain (ctxDrops decl Γ₂) γ` before the error goes on, its first redex slot 0's
+destructor, the slot bound last (`certFrame_raise`, `certFrame_cancel`, from `letDE_raise_run`,
+`letDE_cancel_run`); and where the chain runs to a value without leaving its context, every
+slot's destructor ran on its value, the slot bound last first (`DropsRan`, from
+`letDE_raise_exit`, `letDE_cancel_exit`). That is the case for destructors that do not perform.
+A destructor that performs, as `File`'s `close` does (`fs_close`), suspends to its handler, and
+the theorems give only that the frame reaches the chain with slot 0's destructor first; that the
+rest of the chain runs after the handler resumes it is not proved (`Core/LetDtorSafety.lean`).
+Where every such slot has a derived drop, the binding is §19's `[then]` with the pure finaliser
+`finalOf`, as before.
 
 **The normal exit.** A binder's live slot whose type has no derived drop and is built through an
 opaque type (`dtorShape`) is owed to a declared destructor (`Env.dOwn`, beside §12's `own`). At a
@@ -10489,12 +10507,26 @@ rest of the continuation (`then_fin`), its own abort supersedes it (`unwind_pref
 suspension inside it suspends the machine with the unwind as its state, resumed by `files`' drive
 as any other point. Under a cancel such a frame is outside the fragment: a cancel row holds no
 machine operation (`Types.ofFin`), and a finaliser's row is within the cancel row of every
-operation it is live across (`hSDc`). A must-resume operation's cancel entry is never run
-(`OutInfo.lins`, `capB`). The old backend still refuses such a finaliser (§27).
+operation it is live across (`effThen`'s `hfin`, discharged by `thenItD` through `hnr`). A must-resume operation's cancel entry is never run
+(`OutInfo.lins`): its continuation is `kTy S R .lin B F = U((B ⊸ F_Σ R) & ⊤)` (`kTy`), whose
+cancel component is `⊤`, and it has no derived drop (`kTy_lin`). The old backend still refuses such a finaliser (§27).
 
 Programs (`corpus/`, marked `old-backend-refuses`): `fs-raise-two` (two files open when an open
-raises), `fs-exit-two` (two files open at a scope's normal exit), `fs-cat` and `json-field`; each
+raises), `fs-fake-exit` (two files open at a scope's normal exit), `fs-nested-sites` (files held across an
+operation under two nested handler sites of `Fs`, the inner one's clauses run as machine
+operations: §47 *A direct call*), `fs-nested-order` (the same with the sites swapped, so the
+closes print), `fs-cat` and `json-field`; each
 at its golden at the source stage, the LIR, Wasm and natively.
+
+*Open*: the compile time of a program holding many files. Each frame's finaliser drops every
+slot the rest uses (`finalOfD`), so a function that opens `N` files has `O(N²)` destructor
+applications in its checked term (6, 20 and 72 at `N` = 2, 4, 8), each converted where it stands,
+and Backend2's conversion and layouts take time superlinear in `N` (about 2 s, 9 s and 130 s at
+`N` = 2, 4, 8). Three ways of sharing were measured and not kept: one step per frame for the
+aborts that reach it (no change in compile time, and four more indirect calls in `fs-fake-exit`);
+a destructor's machine shared between its applications (fewer functions, slower layouts, whose
+classes it joins); a chain's suffix shared between frames (a machine per destructor at run time,
+and still `O(N²)` pads where the slots are interleaved, as paths held beside files are).
 
 *Not built*: `corpus/pending/fs-loop-early.bc` (a `loop` that holds a file and ends early) now
 passes the scope exit and is refused by a type mismatch at `main`'s body.
@@ -10503,8 +10535,14 @@ passes the scope exit and is refused by a type mismatch at `main`'s body.
 that holds its descriptor, `Ref I32` with the rules taken away (`vCE_file_eq_ref`), so it is not
 own-free, has no derived drop and is not persistent. `file_mk : I32 ⊸ F File` and
 `file_take : File ⊸ F I32` (models `λx. alloc x`, `λc. free c`; `fileMk_meets`, `fileTake_meets`)
-are its only eliminator and introduction, used by the platform's handler; no Core constant takes
-one apart. `Fs` is a control effect whose operations must resume (`lib/fs.bc`), so a destructor
+are its introduction and eliminator, which the platform's handler uses; no Core constant takes one
+apart. They are public externs of `lib/fs.bc` (`extern file_mk`, `extern file_take`), persistent
+and in scope for every program that includes `fs`: a program may make a `File` of any descriptor
+(`file_mk(1)`, closed at its scope's exit, closes standard output) or take one apart and drop its
+descriptor (`file_take`). Their contracts are about memory (the cell's alloc and free), not
+descriptors. So "a program holding files closes every one" holds only for programs that never call
+`file_mk` or `file_take`; it is a convention until #797's abstraction makes the externs the
+platform provider's alone. `Fs` is a control effect whose operations must resume (`lib/fs.bc`), so a destructor
 may perform `fs_close`; `main`'s body is served by `files` from its first statement that performs
 `Fs` (`filesMain`), whose clauses perform `FsHost`, the answering effect the platform serves on
 the capability `fs` with the file externs. A destructor is closed, so it reaches the file system
@@ -11154,6 +11192,12 @@ theorems); `dtor` declarations in `Frontend/Syntax.lean`, `Frontend/Parser.lean`
 
 ## Changelog
 
+- **1.32** (2026-11-03) — §47: a direct call needs every `perform` of its operation at a row that
+  holds its handler's outer machine operations (`directFacts`, the greatest solution); two nested
+  sites of `Fs` with a file held across an operation compile (`fs-nested-sites`,
+  `fs-nested-order`). §62: `certFrame_raise`/`certFrame_cancel` scoped to destructors that do not
+  perform; the frame's derivation stated as `[then]`'s at `letDT`'s term; `file_mk`/`file_take`
+  stated as public externs; the compile time of many live files recorded as open.
 - **1.31** (2026-11-03) — §62 (#771 row 7): the normal exit's destructor (`exitDtor`,
   `bindExitD`); a thunk owes the owed slots it captures (`Env.capture`); `handle` passes what is owed on to its handled computation; a stateful handler
   site applies its answer inside the blocks that lend its body capabilities; Backend2 lowers a

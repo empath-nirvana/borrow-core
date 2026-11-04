@@ -14,12 +14,17 @@ every such frame it emits, and what the check gives:
   (`dropOfB_eq`, `ctxDropsB_eq`);
 * `frameCert decl Γ₂ D`: the finaliser `D` is `drop_ctx` of `Γ₂` by type, `dropCtxE (ctxDrops decl
   Γ₂) 1`, and each destructor is closed. Then the frame's term is `[let-dtor]`'s,
-  `thenE N D M = letDT decl Γ₂ N M` (`frameCert_letDT`), so the derivation the checker's builders
-  give for it is a `CDerives` derivation of `CDerives.effLetD`'s conclusion;
-* **no destructor is skipped on an error exit** (`certFrame_raise`, `certFrame_cancel`): at a frame
-  that passes the check, a raise or a cancel of `M` reaches the error only through `drop_ctx`, and
-  every run past it ran each slot's destructor on its value, the slot bound last first
-  (`letDE_raise_exit`, `letDE_cancel_exit`).
+  `thenE N D M = letDT decl Γ₂ N M` (`frameCert_letDT`). The checker's builders derive it by
+  `[then]` (`CDerives.effThen`, `rEffThenD`, `TTied.effThenD`) at that term, the term
+  `CDerives.effLetD` types; `effLetD`'s premise `hds` is not discharged;
+* **the error exit goes through the chain** (`certFrame_raise`, `certFrame_cancel`): at a frame
+  that passes the check, a raise or a cancel of `M` reaches `drop_ctx` before the error, its first
+  redex slot 0's destructor (the slot bound last); and a run of the chain to a value without
+  leaving its context ran each slot's destructor on its value, the slot bound last first
+  (`letDE_raise_exit`, `letDE_cancel_exit`, `DropsRan`). That is a run for destructors that do
+  not perform. For one that performs, as `File`'s `close` does, the chain suspends to the
+  handler, and the theorems give only that the frame reaches the chain with slot 0's destructor
+  first (`Core/LetDtorSafety.lean`).
 
 `Γ₂` is the context of the slots the rest of the computation uses (`mkCtx T u`), the slots the
 finaliser drops. `decl` is the program's destructors at its opaque types, read off the checked
@@ -61,7 +66,7 @@ theorem frameCert_closed {decl : Opaque → Option BoCa.Expr} {Γ₂ : Ctx CVTy}
   rw [← ctxDropsB_eq] at hb
   simpa using h.2 _ hb
 
-/-- **A frame that passes the check is `[let-dtor]`'s**: `M then x. N unwind D` is
+/-- **A frame that passes the check has `[let-dtor]`'s term**: `M then x. N unwind D` is
 `letDT decl Γ₂ N M`, the term `CDerives.effLetD` types.  `[spec §62]` -/
 theorem frameCert_letDT {decl : Opaque → Option BoCa.Expr} {Γ₂ : Ctx CVTy} {N D M : BoCa.Expr}
     (h : frameCert decl Γ₂ D = true) : thenE N D M = letDT decl Γ₂ N M := by
@@ -76,12 +81,17 @@ theorem frameCert_frameOk {decl : Opaque → Option BoCa.Expr} {Γ₂ : Ctx CVTy
 
 variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 
-/-- **No destructor is skipped on a raise.** At a frame that passes the check, if `M`, at the
+/-- **A raise goes through the chain.** At a frame that passes the check, if `M`, at the
 closing values `γ`, reaches a raise `p` through a context that catches nothing of its name, the
-frame reaches `drop_ctx; raise p` (`letDE_raise_run`); and every run from there to a
-configuration past the chain first runs the chain to a term that takes no step, which, if it is a
-value, ran each live slot's destructor on its value, the slot bound last first, before the raise
-(`letDE_raise_exit`, `DropsRan`).  `[spec §62]` -/
+frame reaches `drop_ctx; raise p` (`letDE_raise_run`), whose first redex is slot 0's destructor;
+and every run from there to a configuration past the chain first runs the chain to a term that
+takes no step, which, if it is a value, ran each live slot's destructor on its value, the slot
+bound last first, before the raise (`letDE_raise_exit`, `DropsRan`).
+
+The last part is read off a run of the chain to a value, which a destructor that does not perform
+gives. A destructor that performs (`File`'s `close`, by `fs_close`) suspends to its handler: the
+chain's term is then not a value, and the theorem gives only that the frame reaches the chain
+with slot 0's destructor first.  `[spec §62]` -/
 theorem certFrame_raise {decl : Opaque → Option BoCa.Expr} {Γ₂ : Ctx CVTy} {N D M : BoCa.Expr}
     {γ : List BoCa.Val} {μ μ' : Heap} (hc : frameCert decl Γ₂ D = true)
     (hγ : ∀ v ∈ γ, closedAt 0 v.1 = true) (hl : Γ₂.length ≤ γ.length)
@@ -101,9 +111,10 @@ theorem certFrame_raise {decl : Opaque → Option BoCa.Expr} {Γ₂ : Ctx CVTy} 
   rw [frameCert_letDT hc]
   exact ⟨letDE_raise_run hok K K' hn hK hM, fun hrun hF => letDE_raise_exit hok K hrun hF⟩
 
-/-- **No destructor is skipped on a cancel**: as `certFrame_raise`, for a cancel reaching the frame
-through a context that catches nothing of name `0` (`letDE_cancel_run`, `letDE_cancel_exit`).
-`[spec §62]` -/
+/-- **A cancel goes through the chain**: as `certFrame_raise`, for a cancel reaching the frame
+through a context that catches nothing of name `0` (`letDE_cancel_run`, `letDE_cancel_exit`), with
+the same scope: every slot's destructor ran only where the chain runs to a value, which a
+destructor that performs does not.  `[spec §62]` -/
 theorem certFrame_cancel {decl : Opaque → Option BoCa.Expr} {Γ₂ : Ctx CVTy} {N D M : BoCa.Expr}
     {γ : List BoCa.Val} {μ μ' : Heap} (hc : frameCert decl Γ₂ D = true)
     (hγ : ∀ v ∈ γ, closedAt 0 v.1 = true) (hl : Γ₂.length ≤ γ.length)

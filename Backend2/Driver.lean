@@ -70,17 +70,19 @@ def hnodes : Nat → TExpr → List HNode
       | _ => []
     here ++ t.children.flatMap fun (_, c) => hnodes f c
 
-/-- **The direct calls the checked facts license**  `[spec §47]`: for each static name, for each of
-its operations, whether every `handle` node of the name
-- classifies the operation's clause `tail` (`ks`, `classifyHandler_sound`),
-- holds names of the clause's own code (`handlerNames`; its row's names where it has none) that
-  `main`'s flow record cannot catch (`cond2B` at `Checked.flows`, which gives
-  `Checked.unhandledNames`: no frame between a `perform` and its handler catches them), and
-- holds one clause for it, closed (`closedAt 0`), at one outer row and one signature,
-so that the clause a `perform` reaches is known and needs nothing from its handler's frame. -/
-def directFacts (c : Frontend.Check.Checked) : Std.HashMap UInt32 (List Bool) := Id.run do
-  let nodes := hnodes Frontend.Check.copiesFuel c.t
-  let flows := c.flows
+/-- The `perform` nodes of a typed term, within the depth `fuel`: each one's operation and the row
+it is typed at. -/
+def pnodes : Nat → TExpr → List ((UInt32 × UInt32) × Row)
+  | 0, _ => []
+  | f + 1, t =>
+    let here := match t with
+      | .effPerform _ _ S o _ => [((o.n, o.i), S)]
+      | _ => []
+    here ++ t.children.flatMap fun (_, c) => pnodes f c
+
+/-- The direct calls the nodes' own facts license (`directFacts`'s first three conditions). -/
+def directFacts₀ (nodes : List HNode) (flows : ClauseKinds.HIn) :
+    Std.HashMap UInt32 (List Bool) := Id.run do
   let mut out : Std.HashMap UInt32 (List Bool) := {}
   for h in nodes do
     if out.contains h.n then continue
@@ -100,20 +102,62 @@ def directFacts (c : Frontend.Check.Checked) : Std.HashMap UInt32 (List Bool) :=
     out := out.insert h.n ok
   return out
 
-/-- **The program's machine operations**  `[spec §49]`: each control operation `(n, j)` whose
-clause at some `handle` node of `n` is neither abortive nor called where it is performed
-(`directFacts`): its `perform` suspends the computation, and the node's drive runs the clause on
-the argument and `κ`. Read off the nodes' kinds (`ks`, `classifyHandler_sound`) and the direct
-calls' facts. -/
-def machineOps (c : Frontend.Check.Checked) : MachSet := Id.run do
-  let nodes := hnodes Frontend.Check.copiesFuel c.t
-  let direct := directFacts c
+/-- The machine operations at the direct calls `direct`: each control operation `(n, j)` whose
+clause at some `handle` node of `n` is neither abortive nor called where it is performed. -/
+def machineOpsAt (nodes : List HNode) (direct : Std.HashMap UInt32 (List Bool)) : MachSet := Id.run do
   let mut out : MachSet := {}
   for h in nodes do
     for (k, j) in h.ks.zipIdx do
       unless k.kind == .abortive || (k.kind == .tail && (direct.getD h.n [])[j]? == some true) do
         out := out.insert (h.n, j.toUInt32)
   return out
+
+/-- **The direct calls the checked facts license**  `[spec §47]`: for each static name, for each of
+its operations, whether every `handle` node of the name
+- classifies the operation's clause `tail` (`ks`, `classifyHandler_sound`),
+- holds names of the clause's own code (`handlerNames`; its row's names where it has none) that
+  `main`'s flow record cannot catch (`cond2B` at `Checked.flows`, which gives
+  `Checked.unhandledNames`: no frame between a `perform` and its handler catches them), and
+- holds one clause for it, closed (`closedAt 0`), at one outer row and one signature,
+so that the clause a `perform` reaches is known and needs nothing from its handler's frame; and
+- every `perform` of the operation is typed at a row (the node's `S`) that holds each machine
+  operation of the node's outer row: the clause's work runs at the `perform` (`tail_resumes`), so
+  a suspension of the work at one of those operations is one of the computation the `perform` is
+  in, whose outcome has a summand only for its own row's operations (SPEC §49, *Work at a machine
+  row*).
+
+The last condition reads the machine operations, which read the direct calls: an operation that
+fails it is a machine operation, which may make another fail. The facts are the greatest solution,
+reached from the first three conditions by removing, until none fails, each operation that fails
+the last; each round removes one at least, so there are at most as many rounds as operations. -/
+def directFacts (c : Frontend.Check.Checked) : Std.HashMap UInt32 (List Bool) := Id.run do
+  let nodes := hnodes Frontend.Check.copiesFuel c.t
+  let performs := pnodes Frontend.Check.copiesFuel c.t
+  let mut direct := directFacts₀ nodes c.flows
+  let rounds := (nodes.map (·.E.length)).sum + 1
+  for _ in [0:rounds] do
+    let ms := machineOpsAt nodes direct
+    let mut changed := false
+    for h in nodes do
+      let some ok := direct[h.n]? | continue
+      let outerMs := (h.S.filter fun o => !o.abort && ms.contains (o.n, o.i)).map fun o => (o.n, o.i)
+      if outerMs.isEmpty then continue
+      let ok' := ok.zipIdx.map fun (b, j) =>
+        b && performs.all fun (key, R) =>
+          key != (h.n, j.toUInt32) || outerMs.all fun k => R.any fun o => (o.n, o.i) == k
+      if ok' != ok then
+        direct := direct.insert h.n ok'
+        changed := true
+    unless changed do break
+  return direct
+
+/-- **The program's machine operations**  `[spec §49]`: each control operation `(n, j)` whose
+clause at some `handle` node of `n` is neither abortive nor called where it is performed
+(`directFacts`): its `perform` suspends the computation, and the node's drive runs the clause on
+the argument and `κ`. Read off the nodes' kinds (`ks`, `classifyHandler_sound`) and the direct
+calls' facts. -/
+def machineOps (c : Frontend.Check.Checked) : MachSet :=
+  machineOpsAt (hnodes Frontend.Check.copiesFuel c.t) (directFacts c)
 
 /-- **The operations whose every `handle` node keeps `κ` boxed** (SPEC §52): each machine operation
 `(n, j)` whose clause at every node of `n` is `stored`, every node of `n` is `effHandleVB` (BOXED-κ,

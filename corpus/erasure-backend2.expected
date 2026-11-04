@@ -178,6 +178,8 @@ for-yield-branch erased handles 0 performs 0 raises 0 machines 6 suspends 3 left
 format erased handles 0 performs 0 raises 0 left 0 0
 fs-cat erased handles 0 performs 0 raises 0 machines 1 suspends 3 left 0 0
 fs-fake-exit erased handles 0 performs 0 raises 3 machines 3 suspends 16 left 0 0
+fs-nested-order erased handles 0 performs 0 raises 5 machines 5 suspends 22 left 0 0
+fs-nested-sites erased handles 0 performs 0 raises 5 machines 5 suspends 22 left 0 0
 fs-raise-two erased handles 0 performs 0 raises 2 machines 2 suspends 8 left 0 0
 gen-adapters erased handles 0 performs 0 raises 0 machines 38 suspends 22 left 0 0
 gen-adapters-fail erased handles 0 performs 0 raises 0 machines 46 suspends 27 left 0 0

@@ -84,7 +84,9 @@ structure OutInfo where
   /-- The machine operations at the qualifier `unr`, whose continuation may be copied. -/
   unrs : List Key := []
   /-- The machine operations at the qualifier `lin` (must-resume): a continuation captured at one
-  has no cancel branch (`capB`), so its cancel entry is never run. -/
+  is `kTy S R .lin B F = U((B ⊸ F_Σ R) & ⊤)` (`Core/EffRules.lean`, `kTy`), whose cancel component
+  is `⊤`, which no rule eliminates, and which has no derived drop (`Core/Classes.lean`, `kTy_lin`):
+  no term runs its cancel, so its cancel entry is never run. -/
   lins : List Key := []
   deriving Inhabited, BEq
 
@@ -1090,7 +1092,8 @@ def cancelK (cp : Pay) : Kont → List Var → Var → CM Tm
     match f with
     | .thenF _ _ _ _ (some _) =>
       -- A cancel row holds no machine operation (`Types.ofFin`), and a finaliser's row is within
-      -- the cancel row of every operation it is live across (`effThen`'s `hSDc`).
+      -- the cancel row of every operation it is live across (`effThen`'s `hfin`, which `thenItD`
+      -- discharges through `hnr`).
       throw "LIR: a finaliser that may suspend, under a cancel: outside the fragment"
     | .raiseF => match own with
       -- The finaliser's abort is superseded by the cancel: a raise's payload holds no owned cell.
@@ -1294,8 +1297,8 @@ def genMach (m : Mach) (cellOps : List Key := []) : CM (List (Key × Nat)) := do
         | _, _ => resumeTm F p fs y reuse
     setFn rres { name := s!"resume {op.1}.{op.2}", params := [s₁, y], body := rb, ret := F.ty }
     let s₂ ← fresh envTy
-    -- At a cancel row `⊤`, or at a must-resume operation (`OutInfo.lins`: its continuation has
-    -- no cancel branch, `capB`), the cancel entry is never run.
+    -- At a cancel row `⊤`, or at a must-resume operation (`OutInfo.lins`: its continuation's
+    -- cancel component is `⊤`, `kTy`, `kTy_lin`), the cancel entry is never run.
     let cb ← match (if F.lins.contains op then none else cp) with
       | none => pure (.prim .unreachable [s₂])
       | some cp => withState s₂ fun c st => do

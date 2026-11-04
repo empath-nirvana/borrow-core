@@ -1163,10 +1163,11 @@ def markIt {j : Jdg} (sp : Span) (k : SchemeMark) (r : Res Δ T j) : Except Erro
 
 /-! ### Destructors by type: `[let-dtor]`  `[spec §62]`
 
-Where a slot live across a computation that may abort has no derived drop, the frame is
-`[let-dtor]`'s (`CDerives.effLetD`): `[then]` at the finaliser `drop_ctx` (`dropCtxE`), each live
-slot that is not persistent dropped by the destructor of its type (`dropOf`), the slot bound last
-first, at a row of destructors `Σ_D ≤ Σ`. The builders follow `dropOf` former by former, so the
+Where a slot live across a computation that may abort has no derived drop, the frame has
+`[let-dtor]`'s term (`letDT`, the term `CDerives.effLetD` types), derived by `[then]` at the
+finaliser `drop_ctx` (`dropCtxE`), each live slot that is not persistent dropped by the
+destructor of its type (`dropOf`), the slot bound last first, at a row of destructors
+`Σ_D ≤ Σ`. The builders follow `dropOf` former by former, so the
 finaliser's erasure is `dropCtxE (ctxDrops decl Γ₂) 1` (`Frontend/Check/LetDtor.lean`,
 `frameCert`), with `decl` the program's destructors at its opaque types. -/
 

@@ -1,0 +1,77 @@
+-- check: old-backend-refuses
+-- Destructors under two nested handler sites of `Fs` (SPEC §62). `fake` is the outer site, whose
+-- clauses print and so are machine operations; `quiet` is the inner one, which handles every
+-- operation the functions perform and prints nothing. Each function holds a file across an
+-- operation of `Fs`: `exit_two` leaves two files open at its scope's normal exit, `close_two`
+-- closes them itself, and `raise_two` raises while two are open. `quiet`'s clauses are
+-- tail-resumptive, but a function's row does not hold `fake`'s machine operations, so the new
+-- backend runs them as machine operations, not as direct calls (SPEC §47, *A direct call*).
+-- Every file is closed: `live 0`.
+include fs
+include textio
+
+handler quiet[A]: Fs, A -> A = {
+  return(a) = a;
+  fs_open(p, m, k) = {
+    let (a, n) = p;
+    if n == 0 { k(((a, n), (inr NotFound : File + FsError))) } else { k(((a, n), (inl file_mk(n) : File + FsError))) }
+  };
+  fs_read(f, b, k) = { k((f, (b, (inl 0 : i32 + FsError)))) };
+  fs_write(f, b, k) = { k((f, (b, (inl () : 1 + FsError)))) };
+  fs_size(f, k) = { k((f, (inl 0 : i32 + FsError))) };
+  fs_close(f, k) = {
+    let d = file_take(f);
+    k((inl () : 1 + FsError))
+  }
+}
+
+handler fake[A]: Fs, A -> A = {
+  return(a) = a;
+  fs_open(p, m, k) = {
+    let (a, n) = p;
+    if n == 0 { k(((a, n), (inr NotFound : File + FsError))) } else { k(((a, n), (inl file_mk(n) : File + FsError))) }
+  };
+  fs_read(f, b, k) = { k((f, (b, (inl 0 : i32 + FsError)))) };
+  fs_write(f, b, k) = { k((f, (b, (inl () : 1 + FsError)))) };
+  fs_size(f, k) = { k((f, (inl 0 : i32 + FsError))) };
+  fs_close(f, k) = {
+    let d = file_take(f);
+    print_lit("close ");
+    print_dec(d);
+    print_lit("\n");
+    k((inl () : 1 + FsError))
+  }
+}
+
+fn exit_two() -> i32 with Fs, Fail[FsError] =
+  let (p, a) = open(string_of_lit("ab"), Reading);
+  let (q, b) = open(string_of_lit("abc"), Reading);
+  let (b, n) = fs_size(b);
+  7
+
+fn close_two() -> i32 with Fs, Fail[FsError] =
+  let (p, a) = open(string_of_lit("ab"), Reading);
+  let (q, b) = open(string_of_lit("abc"), Reading);
+  let (b, n) = fs_size(b);
+  close(b);
+  close(a);
+  7
+
+fn raise_two() -> i32 with Fs, Fail[FsError] =
+  let (p, a) = open(string_of_lit("abcd"), Reading);
+  let (q, b) = open(string_of_lit("abcde"), Reading);
+  let (r, c) = open(string_of_lit(""), Reading);
+  close(c);
+  close(b);
+  close(a);
+  0
+
+main -> (i32 + FsError) * ((i32 + FsError) * (i32 + FsError)) =
+  with fake {
+    with quiet {
+      let x = with to_result { exit_two() };
+      let y = with to_result { close_two() };
+      let z = with to_result { raise_two() };
+      (x, (y, z))
+    }
+  }
