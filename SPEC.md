@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.31 · 2026-11-04
+Version 1.32 · 2026-11-04
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -10354,7 +10354,8 @@ re-read there and the start and end related by row 5.27's `↭` masked at the ru
 changes at a segment's start (`twp_extend`, `twp_update`), and row 5.27's `mut` clause at every end
 (`endT_inv`). `cerwpT` adds operations: a stop at a non-abortive entry of the table leaves a
 continuation share (`contShareT`), a Kripke wand resumed at any extension and any list keeping
-the records it reads (`KeepRel`, `contShareT_resume`). `CactusInvT` is kept by a step, by tree growth, by moving a part
+the re-readings of the stop list's records the share reads (`KeepRel`, `contShareT_resume`; the
+whole-list condition with `extFT` against it implies it, `contShareT_resume_ext`). `CactusInvT` is kept by a step, by tree growth, by moving a part
 between branches, by spawn and by join (`cactusT_step`, `cactusT_extend`, `cactusT_move`,
 `cactusT_spawn`, `cactusT_join`). Proved at one branch (`Core/TreeHeadlines.lean`):
 - **adequacy** (`topAdequacyT`, `cerwpT_adequacy`): a closed program at `cerwpT` at the empty table,
@@ -10557,26 +10558,121 @@ deriving the property for `PoolT`/`KapAtT` shares is open (#789).
   (#795); spawning from a child (a step-indexed table fixpoint); a FIFO scheduling policy (a
   recursive append in the clause); `pingpong-mut`'s relay is not yet written through the pool.
 
-### Semantic types read at the tree
+### Semantic types read at the tree (#782)
 
-The relation's types are read at the current tree and are monotone along its extension. This is
-proved for `1`, `+`, `Imm`, `ref` and `[a]` (box), each from its components' (`kmono_unit`,
-`kmono_sum`, `kmono_imm`, `kmono_ref`, `kmono_box`). `kmono_mut` and `kmono_thunk` hold for
-every `τ` (for thunks, every computation predicate) by the definitions of `vMut` and `vThunk`:
-they are not results about the contents of a `mut` cell or a thunk.
-A `mut` cell's invariant is its store type, re-read when the tree grows (`reread`), not a fixed
-predicate. Carried unchanged, a cell leaves `Mut`'s meaning (`trU_not_kmono`). Re-read, a stored
-task may write the handler's newer borrow into a cell it made before the graft (for example
-`round7_write`). Store types are syntactic codes read at the tree. The store typing grows at a
-`mut` lend of a location it does not type, and a location keeps its type for the run
-(`TWd.addTy_ext`, `Cov.mono`, `RR.mono` on `tree-wp`, over semantic types). Re-reading and the
-codes are in the library (`Support/Model/Tree/Reread.lean`, `World/Codes.lean`: `RR`, `KTy`,
-`interp_retype`, `RR.exists_retype`); a code's meaning is carried along the re-reading of a
-covered resource, at every re-typing that agrees on the locations it holds a `mut` cell at. One `mut` cell per location at any depth is an
-invariant of the typed tree world (`TWNT.mutOne`); without it clause 3 of two covered cells is not
-covered (`clause3_not_cov`).
+The relation's types are read at the current tree and are monotone along its extension. Two
+layers (`docs/new-core/scope-782.md`):
 
-*Open*: monotonicity at μ, ν, ∀, ⊗ and families; store typing growth at the codes.
+- **Store types** are syntactic codes (`KTy`: `1`, `+`, `Imm`, `Mut`, `[a]`, `ref`) read at the
+  tree; a `mut` cell's invariant is its location's code read at the current tree, re-read when the
+  tree grows. A code's meaning is carried along the re-reading of a covered resource, at every
+  re-typing that agrees on the locations it holds a `mut` cell at (`interp_retype`,
+  `RR.exists_retype`; `Support/Model/Tree/Reread.lean`, `World/Codes.lean`).
+- **The relation's value types** (`STy`, `Core/TreeSem.lean`) are step-indexed predicates at the
+  tree world and the record list, each downward closed in the index and monotone along world
+  extension, on the re-reading, at every list keeping the re-readings of the records of the old
+  list the resource reads (`KeepRel`: records it does not read may have been ended, and records
+  opened, by other branches). Every former is one, each law proved from the components': codes, `1`, `0`, `+`,
+  `⊗`, `Imm`, `Mut` (at a store code), `[a]`, `ref`, `!`, `Unk`, the integers, the opaque types,
+  the families `[L]`, thunks, `μ` (least fixed point over value-type candidates, with fold and
+  unfold at a monotone body: every former `VTy.NoMut` lets `X` occur under is monotone in it, and
+  `μ` in its body (`STy.mu_le`), shown at `STy.allBody_mono`; `List`'s cons folds,
+  `STy.list_cons`; a map from `NoMut` bodies to monotone bodies is not built) and type variables. A value stored
+  before a graft meets its type after it (`STy.reread`; at a proper extension, on a view nested
+  three deep, `reread_v3`). **The computation types** (`SCmp`,
+  `Core/TreeSemC.lean`) are downward closed: `F A` (`SCmp.ret`), `⊸`, `&`, `⊤`, `∀α ⊏ c` over the
+  lifetimes below `c` in the current tree, and `ν` (greatest fixed point over candidates).
+- **`F A` is Kripke along `KeepRel`** (`SCmp.ret_kripke`): over a covered resource, `F A` is a
+  `cerwpT` run at every extension, on the re-reading, at every list keeping the records the
+  resource reads, so a run of `F A` at a list is one at every later such list, by `KeepRel.trans`,
+  uniformly in the table, the frame conditions and `A`. The quantifier is needed: a bare `cerwpT`
+  run owning no records, the records `F A` runs at, is not Kripke along `KeepRel`
+  (`Obs.cerwpT_not_keepKripkeNil`, `Core/TreeSemObs.lean`). `cerwpT` quantifies over starts whose
+  list re-reads its list whole, a resource holding a view has none at `[]` (`cerwpT_nil_of_imm`),
+  and the property would make the stuck `() ()` over a lend's view a run at the lend's list owning
+  no records; framed beside the lend's record (`twp_frame`), `let a = alloc () in () ()` would be
+  a run at the empty world, which adequacy (`cerwpT_adequacy`) refutes. Over a resource that is
+  not covered, `F A` holds of every term: its runs are read only over covered resources. `F A` is monotone in `A`
+  (`SCmp.ret_le`, from `cerwpT_post_mono`), and `U` in its computation type (`STy.thunkC_le`).
+  As in Core, a computation type reaches a value only under `U`, whose quantifier over world
+  extensions and lists keeping what the thunk reads makes the thunk monotone: a thunk of `F A`
+  from a run at the current world and list (`STy.thunkRet_intro`), of any computation type Kripke
+  along `KeepRel` (`STy.thunk_intro`; `&` of Kripke types is one, `SCmp.amp_kripke`), of a value
+  (`STy.thunkC_val`). `⊸`, `∀` and `ν` are not Kripke: a thunk of one is proved at every extension
+  directly. `ν` folds and unfolds at Core's body shape `F(A ⊕ U X) & F B` (`SCmp.loopBody_mono`),
+  and is not empty there (`SCmp.loop_nonempty`).
+- **Continuation and task types** (`Core/TreeSemK.lean`) are thunks and boxed thunks, no new
+  former: a continuation is `U (B ⊸ C)` (`STy.kont`), boxed at `@d` by BOXED-κ (`STy.kontBox`),
+  a task `[@d] U C` (`STy.task`). The value types read the record list because a thunk is a run,
+  and a run is at a list: read at a list fixed in advance (`[]`), a thunk type holds of every
+  thunk holding a borrow, since no world with an empty list holds an `imm` cell
+  (`cerwpT_nil_of_imm`; a stuck thunk is one, `nilRun_stuck`). Read at the list, a thunk's
+  quantifier is the resume condition of the relation's continuation share (`contShareT`, per
+  branch: `KeepRel`), so **a continuation captured at a stop, holding a view of an open lend, is a
+  value of its type** at every answer type, result type, lifetime and nesting
+  (`STy.kont_of_share`); boxed at a lifetime its share outlives, it is carried along any extension
+  in which other branches opened and ended records of their own, and resumed there at its type
+  (`STy.kontBox_resume_after`): the resume is read off the carried value (`STy.kont_resume`,
+  `SCmp.ret_run`), over a covered composite at a list whose records are covered, which a start
+  provides (`cov_of_comp`, `RecInv.cov_ls`). Instances (`Core/TreeSemKEx.lean`) at a proper
+  extension of the tree (a fresh child grafted into a chain, `dExt`, `dExt_proper`), with the
+  resume list adding a record at the lifetime the extension opened and not a re-reading of the stop
+  list: a lend at depth 1 (`kontBox_depth1`), and a view whose witness holds the views of its two
+  enclosing lends (`kontBox_depth3`), whose share reads all three records, re-read at the new tree
+  while a fourth is dropped (`relFT_d3`, `keep_d3`). The instances use an empty operation table
+  (`tbE`), a must-resume entry (`q = .lin`, so the cancel branch is vacuous) and the answer `()`
+  at type `1`. The depth-1 resume configuration has starts (`Obs.d1_nonvacuous`: else
+  `let a = alloc () in let b = alloc () in () ()`, opening its two lends, would be a run at the
+  empty world); for the depth-3 one no start is exhibited, since no rule yet builds a view whose
+  witness holds views (no reborrow rule at the tree, row 6). A continuation owning the records of lends its own branch opened is row
+  6's: the value types own no records. These are results about one share at `KeepRel`; a
+  scheduler's stored shares are carried in pool form (`KapSchedT`, `PoolT`, decision 74), each
+  resuming at the same `KeepRel`, and borrows shared across tasks are excluded by the pool
+  invariant (#795).
+
+On the semantic store typing (`KSem`, `Support/Model/Tree/KSem.lean`) monotonicity is proved for
+`1`, `+`, `Imm`, `ref` and `[a]`, each from its components' (`kmono_unit`, `kmono_sum`,
+`kmono_imm`, `kmono_ref`, `kmono_box`), and the re-reading exists when every assigned type is
+monotone (`reread`). `kmono_mut` and `kmono_thunk` hold for every `τ` (for thunks, every
+computation predicate) by the definitions of `vMut` and `vThunk`: they are not results about the
+contents of a `mut` cell or a thunk. That a re-read cell's invariant is its location's code read
+at the new tree (`RC.mut_inv`), that a lender reads back a value of the store type
+(`RC.mut_readback`) and that another invariant is not a re-reading (`not_rc_of_inv_ne`) hold by
+`RC`'s definition. What carries `Mut` is that the re-reading exists (`RR.exists_retype`) and that
+it holds wherever the old invariant held on carried resources (`RC.mut_extends`,
+`reread_extends`); at round 7's cell, at codes, along the graft, the re-read invariant admits the
+value stored before it and the handler's borrow the old reading refuses (`round7_codes`). Carried by `trU` (row 5.57's extension by falsity), a cell is not a value of
+this `Mut`, whose invariant is the store type read at the current tree (`trU_not_kmono`): that
+rules out `trU` with this `Mut`. Against a `Mut` that keeps the predicate a cell was stored with,
+the evidence is expressiveness: it refuses round 7's write (`graft_carried_refuses`, against
+`round7_write`).
+
+What this rules out:
+- **a value type not monotone along extension**: every `STy` carries monotonicity as a field;
+- **a bare run read as `F A`**: `F A` at `[]` over a view would otherwise hold of the stuck
+  `() ()` (`cerwpT_nil_of_imm`, `nilRun_stuck`); read at every later list it asks the run at the
+  lend's own list too, where a bare run is refuted (`Obs.cerwpT_not_keepKripkeNil`).
+- **a continuation stored past its lend**: a boxed value holding a view at `α` is not of `[@d] A`
+  unless `d` is strictly below `α` (`STy.not_box_of_view`, `STy.not_kontBox_of_view`): the `κ`
+  above boxed at its lend's lifetime or at the root is not of its type (`not_kontBox_at_lend`,
+  `not_kontBox_at_root`).
+
+Re-read, a stored task may write the handler's newer borrow into a cell it made before the graft
+(`round7_write`). The store typing grows at a `mut` lend of a location it does not type, and a
+location keeps its type for the run (`TWd.addTy_ext`, `Cov.mono`, `RR.mono` on `tree-wp`, over
+semantic types). One `mut` cell per location at any depth is an invariant of the typed tree world
+(`TWNT.mutOne`); without it clause 3 of two covered cells is not covered (`clause3_not_cov`).
+
+Departures: `Mut`'s payload is a store code, since a cell's invariant is index-free and a
+step-indexed payload (a thunk in a cell) would need step-indexed cell invariants; one mode (no
+observable view at `Imm`); the value types read the record list but own no records, and a thunk
+runs owning none; `⊸` reads its argument at every index up to `n`.
+
+*Open*: store typing growth at the codes; `Mut` at a payload that is not a store code (#790); a
+continuation owning the records of lends its own branch opened (row 6); effect rows (`F_Σ`,
+`CTy.eff`): no `SCmp` former, since `SCmp.ret` takes a table with its `Local` and `Down` proofs
+and nothing yet builds a row's table with its entries downward closed (`opTableT_down` does it
+given the entries'); the typing rules and the fundamental theorem over these types.
 
 ### Typing: suspension, scoped spawn, join
 
@@ -11099,6 +11195,17 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
 
 ## Changelog
 
+- **1.32** (2026-11-04) — §62 (#782): the relation's types at the tree (*Semantic types read at
+  the tree*): value types (`STy`) read the record list, downward closed and monotone along
+  extension and `KeepRel` for every former (`Mut` at a store code); computation types (`SCmp`)
+  downward closed, `F A` Kripke along `KeepRel` (`SCmp.ret_kripke`; a bare `cerwpT` run owning
+  no records is not, `Obs.cerwpT_not_keepKripkeNil`); continuation and task types as thunks and
+  boxed thunks, a captured `κ` a value of its type (`STy.kont_of_share`,
+  `STy.kontBox_resume_after`), with instances at a proper extension of the tree. In *The safety
+  relation*, `contShareT_resume`'s list condition reads "the re-readings of the stop list's
+  records the share reads", with `contShareT_resume_ext` for the whole-list condition. No change to
+  `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, `twp`, `cerwpT`, the checker, the backends
+  or the corpus.
 - **1.31** (2026-11-04) — §62 (#781, slice (d)): the per-branch share (`KeepRel`) in
   `contShareT_resume`'s list condition; a lend's open and end at `twp` (`twp_lendOpen`,
   `twp_lendEnd`); `[handle]` for a scheduler at the program's top (`cerwpT_schedHandle`) and

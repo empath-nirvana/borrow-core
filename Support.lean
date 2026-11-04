@@ -59,6 +59,8 @@ import Support.Model.Tree.ChainSix4
 import Support.Model.Tree.ChainUpd
 import Support.Model.Tree.Comparability
 import Support.Model.Tree.Graft
+import Support.Model.Tree.KSem
+import Support.Model.Tree.KSemGraft
 import Support.Model.Tree.Order
 import Support.Model.Tree.Parent
 import Support.Model.Tree.Port.AgBeneath
