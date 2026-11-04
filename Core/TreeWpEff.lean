@@ -26,7 +26,7 @@ relation with operations read at the tree world:
 * **The share keeps the operation's qualifier** (`contShareT`'s first and last clauses). At an
   unrestricted operation the share is empty; at an operation that is not strictly linear the share
   carries the entry's cancel obligation `fin`, run at the continuation's dead context from
-  `raise (cancel)`. At a strictly linear (`lin`) operation it carries no cancel obligation: the
+  `raise (cancel)`, at the entry's cancel row (`cn`) and answering `()` owning nothing (`Qunit`). At a strictly linear (`lin`) operation it carries no cancel obligation: the
   continuation can only be resumed.
 * **Owned records** (`O`, `oc`): `oc` says what the stopped branch may own at the stop, read at
   the stop's world.

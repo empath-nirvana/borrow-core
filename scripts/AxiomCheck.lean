@@ -1259,6 +1259,8 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.FwdProgs.progFwd_safe
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.FwdProgs.progFwdCancel_safe
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.FwdProgs.progFwdCancel3_safe
+#print axioms BoCa.Fig16.Tree.Wp.SchedProgs.FwdProgs.handleC_ok
+#print axioms BoCa.Fig16.Tree.Wp.SchedProgs.FwdProgs.TCk_cancels
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.SpawnProgs.progDepth3_safe
 #print axioms BoCa.Fig16.Tree.chain_ResU_compS_defined_iff
 #print axioms BoCa.Fig16.Tree.chain_ResU_Valid_split

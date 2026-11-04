@@ -33,6 +33,7 @@ open BoCa.Fig16.Tree.Wp.SchedProgs.Park
 open BoCa.Fig16.Tree.Wp.SchedProgs.Stack
 open BoCa.Fig16.Tree.Wp.SchedProgs.Spawn
 open BoCa.Fig16.Tree.Wp.SchedProgs.SpawnProgs
+open BoCa.Fig16.Tree.Wp.SchedProgs (compS_empty_left_eq)
 open BoCa.Fig16.BoLo
 open BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Step1 Head Kont performE opPayload hndE hndVal capTag clauseAt)
@@ -139,6 +140,87 @@ theorem progFwdCancel3_safe : OrDiverges (ℍ := ℍ) (progFwd (ℍ := ℍ) [7, 
   progFwd_safe [7, 8, 9] (by
     intro x hx; simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
     rcases hx with rfl | rfl | rfl <;> decide)
+
+/-! ### A clause that cancels -/
+
+/-- The name of the cancelling handler's operation. -/
+abbrev nC : UInt32 := 11
+
+/-- The clause `λ(h, κ). hnd h (κ (inj₂ ()))`: cancel the stored continuation under the handler
+`h` the payload names. -/
+def clC : Val := Val.lam (.letpair (.var 0)
+  (.app (.app (.prim .hnd) (.var 1)) (.app (.var 0) (.inj₂ .unit))))
+
+def qsC : Val := Val.pair (Val.i32 1) Val.unit
+def hsC : Val := Val.pair clC Val.unit
+/-- **The cancelling handler**: every stop at `nC` is cancelled, its unwinding run under the
+handler again. -/
+def HC : Val := hndVal nC qsC idV hsC
+
+/-- `nC`: cancellable, its cancel owed; the payload the handler; its unwinding may perform `nC`. -/
+def enC : OpEntT where
+  q := .cancel
+  abort := false
+  PA := fun _ _ _ v ρ => v = HC ∧ ρ = PMap.empty
+  PBv := fun _ _ _ _ a σ => a = Val.unit ∧ σ = PMap.empty
+  fin := true
+  fd := fdJoinT
+  oc := fun _ O => O = []
+  cn := fun m i => m = nC ∧ i = 0
+
+def TCk : OpTabT := fun m i => if m = nC ∧ i = 0 then some enC else none
+
+theorem TCk_some {m i : UInt32} {en : OpEntT} (h : TCk m i = some en) :
+    m = nC ∧ i = 0 ∧ en = enC := by
+  unfold TCk at h
+  split at h
+  · rename_i hm; cases h; exact ⟨hm.1, hm.2, rfl⟩
+  · cases h
+
+theorem PADown_empty : PADown OpTabT.empty := fun _ _ _ h => by cases h
+
+theorem retC_ok (Fbo : TFrame) : RetT (ℍ := ℍ) OpTabT.empty Qunit Qunit Fbo idV := by
+  intro F k w ls O v ρ _ _ _ _ _ ⟨hv, hO, hρ⟩
+  subst hv; subst hO; subst hρ
+  exact cerwpT_det (cerwpPostT_down (fun _ _ _ _ _ _ h => h) PADown_empty)
+    (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) cerwpT_unit
+
+/-- **The clause cancels the stored continuation under the handler**: `KapT`'s cancel, one step
+below. -/
+theorem clC_ok (Fbo : TFrame) : ClauseT (ℍ := ℍ) OpTabT.empty HC Qunit Fbo enC clC := by
+  rintro F k w ls O v κ ρ hFm hoc hFM hcov hls _ ⟨ρa, ρk, hc, ⟨rfl, rfl⟩, hκ⟩
+  change O = [] at hoc
+  subst hoc
+  obtain rfl := compS_empty_left_eq hc
+  cases k with
+  | zero => exact cerwpT_zero
+  | succ k₀ =>
+  have h := hκ.2.2 w ρ ls [] (TWd.Ext.refl _ _) (RR.refl hcov)
+    (KeepRel.of_srecsRR (SRecsRR.refl hls) _) .nil (by decide) rfl k₀ (by omega) F hFm hFM
+  rw [cerwpT_eq]
+  refine twp_step (fun μ => step1Only_plug (Head.beta μ _ (Val.pair HC κ)) rfl .hole) ?_
+  simp only [Kont.plug, Expr.subst]
+  refine twp_det (cerwpPostT_down (fun _ _ _ _ _ _ h => h) PADown_empty)
+    (fun μ => step1Only_plug (Head.letpair μ HC κ _) rfl .hole) ?_
+  have e₂ : Expr.subst 0 HC (Expr.shift 1 0 κ.1) = κ.1 := by
+    rw [Expr.subst_shift 0 0 0 HC κ.1 (le_refl 0) (le_refl 0), Expr.shift_zero]
+  have h' := cerwpT_unfold_at (opTableT_local _) (Nat.le_succ k₀) h
+  convert h' using 2
+  simp [Kont.plug, Expr.subst, hndE, Val.shift, e₂]
+
+/-- **The cancelling handler meets `HandleOKT`** at the empty outer table, its operation
+cancellable, so its return clause is asked at `Qunit` too. -/
+theorem handleC_ok (Fbo : TFrame) :
+    HandleOKT (ℍ := ℍ) TCk OpTabT.empty nC qsC idV hsC Qunit Qunit Fbo := by
+  refine ⟨fun m i en hm h => absurd (TCk_some h).1 hm, fun i en h _ => ?_,
+    fun m i en h v w O ρf => ?_, fun _ _ _ _ _ _ h => h, PADown_empty, retC_ok Fbo,
+    fun _ => retC_ok Fbo, fun i en h => ?_⟩
+  · obtain ⟨-, rfl, rfl⟩ := TCk_some h; rfl
+  · obtain ⟨-, -, rfl⟩ := TCk_some h; exact Iff.rfl
+  · obtain ⟨-, rfl, rfl⟩ := TCk_some h
+    exact ⟨clC, by simp [clauseAt, hsC, Val.pair, clC, Val.lam, IsVal.lam], clC_ok Fbo⟩
+
+theorem TCk_cancels : TCk.Cancels nC := ⟨0, enC, by simp [TCk], by decide, rfl⟩
 
 end BoCa.Fig16.Tree.Wp.SchedProgs.FwdProgs
 

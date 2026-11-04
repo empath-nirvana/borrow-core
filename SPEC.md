@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.33 · 2026-11-04
+Version 1.34 · 2026-11-04
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -10386,9 +10386,11 @@ between branches, by spawn and by join (`cactusT_step`, `cactusT_extend`, `cactu
   `extLT_admits_drop`, `not_extLT_drop_relevant` and `not_extLT_drop_longer` show what each clause
   admits and refuses.
 
-**Over several branches** (`Core/TreeHeap.lean`, `Core/TreeHandle.lean`, `Core/TreeSched.lean`):
-`[handle]` without `hdv` at `cerwpT` for a scheduler at the program's top (`cerwpT_schedHandle`,
-by induction on the index), with `κ`'s cell, resume and cancel at `twp` (`twp_kappaCell`,
+**Over several branches** (`Core/TreeHeap.lean`, `Core/TreeHandle.lean`, `Core/TreeSched.lean`,
+`Core/TreeHandleFwd.lean`): `[handle]` without `hdv` at `cerwpT` for every handler between a table
+`T` and an outer table `To`, forwarding included (`cerwpT_handle`, by induction on the index; its
+conclusion again `cerwpT` at `To`, so a stack of any depth is one induction on the stack,
+`cerwpT_handleStack`); for a scheduler at the program's top, `cerwpT_schedHandle`; with `κ`'s cell, resume and cancel at `twp` (`twp_kappaCell`,
 `twp_kappaC_resume`, `twp_kappa_cancel`, `twp_kappaC_cancel`) and allocation, freeing, load and
 store at `twp` (`twp_alloc`, `twp_free`, `twp_load`, `twp_store`). A scheduler meets `SchedOKT`:
 every operation of the tasks' table is its own, each continuation tag is its entry's qualifier, the
@@ -10453,11 +10455,30 @@ asks anything of `α`. Escrows that hand out views of their contents (`TWNT.reb`
 
 **Cancel in the scheduler interface.** A cancel is a resume into the continuation's cancel branch.
 At a cancellable entry (`q ≠ lin`, `OpEntT.fin`), `contShareT` owes the unwinding
-`ccatch (K†[raise …])` as a continuation, below the index, like a resume; `KapSchedT` (naming its
-scheduler `H`) offers `hnd H (κ (inj₂ ()))` at `cerwpT` at the empty table, under the same frames
-as a resume. An unwinding that performs one of `H`'s operations (an effectful finaliser) stops and
-comes back to `H`'s clause as an ordinary stored continuation. `cerwpT_schedHandle` proves the
-offering by its induction hypothesis (`twp_kappa_cancel_in`, `twp_kappaC_cancel_in`).
+`ccatch (K†[raise …])` (`unwindE`) as a continuation, below the index, like a resume, at the
+entry's **cancel row**: the stopper's table restricted to the operations the unwinding may perform
+(`OpEntT.cn`, `OpTabT.restrict`), answering `()` owning nothing and no records (`Qunit`), at every
+base frame condition every valid frame meets. This is Core's `OpEnt.fin` (§27: the cancel
+obligation a run at the cancel row's table, answering `1`); whoever runs the cancel includes the
+row (Core's `ewp_ccatch`, `T.Le Tout`; here `cerwpT_table_mono`). The row, not the stopper's whole
+table, because `K†` has no handler frames: a handler a stop passed outward is gone from the
+unwinding. `cerwpT` recurses on the index alone, since the cancel is owed at another table.
+`KapSchedT` (naming its scheduler `H`) offers `hnd H (κ (inj₂ ()))` at `cerwpT` at the empty table,
+under the same frames as a resume. An unwinding that performs one of `H`'s operations (an effectful
+finaliser) stops and comes back to `H`'s clause as an ordinary stored continuation.
+`cerwpT_schedHandle` proves the offering by its induction hypothesis at `Qunit`
+(`twp_kappa_cancel_in`, `twp_kappaC_cancel_in`); `SchedOKT` asks the return clause at `Qunit` when
+one of `H`'s operations owes a cancel branch (`OpTabT.Cancels`).
+
+**Forwarding** (`Core/TreeHandleFwd.lean`, #792). `cerwpT_handle` reads `HandleOKT`: operations of
+other names are `To`'s, the same entry, and so are the entries of `T` in their cancel rows (rows
+grow outward, Core's `[sub]`); tags; every entry's `fd` is the join's; `Qout` and `To`'s payloads
+downward closed; the return clause at the inner answer, and at `Qunit` when an own operation owes a
+cancel; the clauses (`ClauseT`, `κ` read by `KapT`, `KapSchedT` at `To`). A forwarded stop's
+resume is the induction hypothesis; its cancel is owed at the same row of the same unwinding
+(`unwindE_hndK`). Instances: `progFwdCancel_safe`, `progFwdCancel3_safe` (`LC` under one and three
+forwarding handlers, cancelled by `HS` with its lend open, its finaliser parking again), and
+`handleC_ok` (a clause that cancels under its handler).
 `MultiBranchAdequacyT`'s statement is unchanged. The unwinding is §19's: the raise passes
 `[then]` frames, which run their finalisers, and the unwinding borrow forms (`withborU`), which end
 the branch's lends; there is no per-type close (decision 73). #793 keeps this rule: a cancelled task
@@ -11202,6 +11223,22 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
 ---
 
 ## Changelog
+
+- **1.34** (2026-11-04) — §62 (#792): `[handle]` without `hdv` at `cerwpT` for every handler,
+  forwarding included (`cerwpT_handle`), and for a stack of any depth (`cerwpT_handleStack`).
+  `contShareT` owes a cancellable stop's unwinding at the entry's cancel row (`OpEntT.cn`, the
+  stopper's table restricted to it, `OpTabT.restrict`), answering `()` owning nothing (`Qunit`),
+  at every base every valid frame meets: Core's `OpEnt.fin`, with the row's inclusion where the
+  cancel is run (`cerwpT_table_mono`). `cerwpT` takes its table, answer and base after the colon
+  and recurses on the index; `TableT`, `cerwpPostT` and `TableT.Local`/`Down` read the cancel
+  relation (`ContP`, `cerwpTK`); `TableT.Incl` and `opTableT_incl` are retired for
+  `cerwpT_table_mono` over operation tables. `SchedOKT`/`SchedOKTLe` ask the return clause at
+  `Qunit` when an operation owes a cancel branch (`OpTabT.Cancels`). `twp` and `EndT` keep their
+  statements. A cancel no longer hands resources back in the task's answer:
+  `Park.taskA_cerwpT` (a task holding a borrowed view copy across a cancellable park, its cancel
+  answering the copy) is retired. Instances: `progFwdCancel_safe`, `progFwdCancel3_safe`,
+  `handleC_ok`. No change to `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the checker,
+  the backends or the corpus.
 
 - **1.33** (2026-11-04) — §62 (#806): `EndT` reads row 5.27's `↭` along the walks (`UpdA`), with
   row 5.27's `mut` clause read by `InvKeptA`: an `imm` cell may be given up to the end world while
