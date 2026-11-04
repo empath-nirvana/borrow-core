@@ -1,0 +1,21 @@
+# Typing judgments that exist today (#798). Frozen: do not add lines; fold judgments instead.
+# Format: path name
+Core/Fundamental.lean CDerives
+Core/PinDerives.lean CDerivesP
+Core/Tied.lean CDerivesAt
+experiments/Affine/Affine/Elab.lean ADerives
+experiments/CBPVCore/CBPVCore/Fundamental.lean CDerives
+experiments/CBPVMu/CBPVMu/Fundamental.lean CDerives
+experiments/CBPVWorld/CBPVWorld/Fundamental.lean CDerives
+experiments/Grades/Grades/Judgment.lean GDerives
+experiments/HandlersAsBorrows/HandlersAsBorrows/Source.lean VDerives
+experiments/HandlersAsBorrows/HandlersAsBorrows/Source.lean XDerives
+experiments/Outlives/Outlives/Derives.lean LDerives
+Frontend/Check/TDerives.lean TDerivesAt
+Frontend/Check/TDerives.lean TDerivesP
+Paper/S2_Statics/Definitions.lean Derives
+scripts/pin/CDerivesP.tmpl.lean CDerivesP
+scripts/pin/TDerives.tmpl.lean TDerivesAt
+scripts/pin/TDerives.tmpl.lean TDerivesP
+Support/LogicalRelation/Compatibility.lean DerivesIn
+Support/Statics/Presupposed.lean DerivesWf
