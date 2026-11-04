@@ -83,7 +83,10 @@ structure OutInfo where
   ms : List (Key × LTy × LTy × Option Pay)
   /-- The machine operations at the qualifier `unr`, whose continuation may be copied. -/
   unrs : List Key := []
-  deriving Inhabited
+  /-- The machine operations at the qualifier `lin` (must-resume): a continuation captured at one
+  has no cancel branch (`capB`), so its cancel entry is never run. -/
+  lins : List Key := []
+  deriving Inhabited, BEq
 
 /-- **A frame of a machine's continuation** (SPEC §49): what is done, inside one machine, with the
 value of the computation being converted, up to the machine's own answer. Each frame owns the
@@ -95,8 +98,12 @@ inductive Frame where
   arguments an abort drops by their types. -/
   | letF (fn : Nat) (own : Nat) (abort : Option Abandon)
   /-- `[·] then x. N unwind D`: `N` the join `fnN`; `D` the finaliser `fnD`, on the frame's own
-  arguments, answering at its row's payload `pd`. -/
-  | thenF (fnN fnD : Nat) (own : Nat) (pd : Pay)
+  arguments, answering at its row's payload `pd`. With `md`, the finaliser's row holds machine
+  operations: `fnD` is a machine of that outcome, called at a point of the unwind (`abortKf`). -/
+  | thenF (fnN fnD : Nat) (own : Nat) (pd : Pay) (md : Option OutInfo)
+  /-- **A finaliser's re-raise frame**: its one argument is the abort the finaliser runs under,
+  handed on through the rest of the continuation when the finaliser answers (`then_fin`). -/
+  | raiseF
   /-- Arguments dropped when the machine is cancelled; a forwarding drive's handler values. -/
   | dropF (own : Nat)
   /-- **The level's state cell** (SPEC §50), the bottom frame of a machine whose state is a cell
@@ -113,8 +120,8 @@ inductive Frame where
   deriving Inhabited, BEq
 
 def Frame.own : Frame → Nat
-  | .letF _ k _ | .thenF _ _ k _ | .dropF k => k
-  | .cellF | .stackH => 1
+  | .letF _ k _ | .thenF _ _ k _ _ | .dropF k => k
+  | .cellF | .stackH | .raiseF => 1
   | .stackF => 2
 
 abbrev Kont := List Frame
@@ -729,7 +736,8 @@ def outInfo? (r : LTy) (S : Row) : CM (Option OutInfo) := do
   let pay ← rowPay S
   let ty := outcomeTy r pay ms
   let unrs := (S.filter fun o => o.q == .unr).map fun o => (o.n, o.i)
-  let o : OutInfo := { ty, r, pay, ms, unrs }
+  let lins := (S.filter fun o => o.q == .lin).map fun o => (o.n, o.i)
+  let o : OutInfo := { ty, r, pay, ms, unrs, lins }
   match ty with
   | .mu b => unless (LTy.unrollMu b).sameRep o.body do throw s!"LIR: the outcome {ty} does not unroll to {o.body}"
   | _ => throw "LIR: an outcome that is not a μ"
@@ -853,91 +861,6 @@ def freeStackThen (h : Var) (b : Tm) : CM Tm := do
   let u ← fresh .unit
   return .letv u (.prim .stackFree [h]) (.drop .dead u b)
 
-/-- The value `x` handed to the continuation `K` over its arguments: the innermost frame's join,
-or the machine's answer (its cell released, or its frame popped, first). -/
-def applyK (F : OutInfo) : Kont → List Var → Var → CM Tm
-  | [], [], x => outValue F x
-  | [], _, _ => throw "LIR: a machine's answer with arguments left"
-  | [.cellF], [c], x => do releaseOpt c (← outValue F x)
-  | .cellF :: _, _, _ => throw "LIR: a level's cell above the bottom of its continuation"
-  | [.stackF], [f, d], x => do popThen f d (← outValue F x)
-  | .stackF :: _, _, _ => throw "LIR: a level's frame above the bottom of its continuation"
-  | .stackH :: _, _, _ => throw "LIR: a value at a site's stack"
-  | .letF fn _ _ :: _, args, x | .thenF fn _ _ _ :: _, args, x => pure (.call fn (args ++ [x]))
-  | .dropF _ :: _, _, _ => throw "LIR: a value at a frame that only drops"
-
-/-- The abort `e` (at the machine's payload) through `K`: each frame's arguments abandoned at the
-frame's rule (a `[let]`'s, `hW`) or dropped, a finaliser run, its own abort superseding
-(`then_fin`, `unwind_prefix`); then the machine's answer. A `raise` (`effRaise`) abandons nothing
-itself: its whole context is its argument's, carried in the abort. -/
-def abortK (F : OutInfo) : Kont → List Var → Var → CM Tm
-  | [], _, e => outAbort F e
-  | f :: rest, args, e => do
-    let own := args.take f.own
-    let more := args.drop f.own
-    match f with
-    | .thenF _ fnD _ pd =>
-      let d ← fresh (resTy .unit pd)
-      match payTy pd with
-      | none => return .letv d (.call fnD own) (.drop .dead d (← abortK F rest more e))
-      | some pdT =>
-        let some pF := payTy F.pay | throw "LIR: a finaliser's abort where the row holds none"
-        let e' ← fresh pF; let u ← fresh .unit; let e₂ ← fresh pdT
-        let sup ← coercePay pd F.pay e₂ fun v => pure (.var v)
-        -- The superseded payload `e` is abandoned: a raise's payload holds no owned cell
-        -- (`CDerives.effRaise`'s `hd : o.A.Drop`).
-        return .letv d (.call fnD own) (.letv e' (.case d u (.drop .dead u (.var e)) e₂ (.abandon .superseded e sup))
-          (← abortK F rest more e'))
-    | .cellF => match own with
-      | [c] => releaseOpt c (← abortK F rest more e)
-      | _ => throw "LIR: a level's cell frame without its cell"
-    | .stackF => match own with
-      | [fr, d] => popThen fr d (← abortK F rest more e)
-      | _ => throw "LIR: a level's frame without its cell"
-    | .stackH => match own with
-      | [h] => freeStackThen h (← abortK F rest more e)
-      | _ => throw "LIR: a site's stack frame without its stack"
-    | .letF _ _ (some r) => return abandons r own (← abortK F rest more e)
-    | _ => return drops .dead own (← abortK F rest more e)
-
-/-- The cancel of `K`, `err` the error kept so far (`1 ⊕ P`, `cp` the cancel row's payload `P`):
-each frame's arguments abandoned at the frame's rule (a `[let]`'s, `hW`) or dropped, a finaliser
-run under the cancel, the first error kept (§19 *Cancels*, `[cfin-raise]`); a finaliser's error
-is one of the cancel row's (§27). -/
-def cancelK (cp : Pay) : Kont → List Var → Var → CM Tm
-  | [], _, err => pure (.var err)
-  | f :: rest, args, err => do
-    let own := args.take f.own
-    let more := args.drop f.own
-    match f with
-    | .thenF _ fnD _ pd =>
-      let d ← fresh (resTy .unit pd)
-      match payTy cp, payTy pd with
-      | _, none => return .letv d (.call fnD own) (.drop .dead d (← cancelK cp rest more err))
-      | none, some _ => throw "LIR: a finaliser's error outside its operation's cancel row"
-      | some pF, some pdT =>
-        let err' ← fresh (resTy .unit cp)
-        let u₀ ← fresh .unit; let e₀ ← fresh pF
-        let u₁ ← fresh .unit; let e₁ ← fresh pdT; let u₂ ← fresh .unit; let e₂ ← fresh pdT
-        let sup ← coercePay pd cp e₁ fun v => pure (.inj true v)
-        -- The error not kept (`e₀` superseded, or the finaliser's `e₂` after a kept one) is
-        -- abandoned: a raise's payload holds no owned cell (`CDerives.effRaise`'s
-        -- `hd : o.A.Drop`).
-        let kept : Tm := .case err u₀ (.case d u₁ (.drop .dead u₁ (.inj false u₀)) e₁ (.drop .dead u₀ sup))
-          e₀ (.case d u₂ (.drop .dead u₂ (.inj true e₀)) e₂ (.abandon .superseded e₂ (.inj true e₀)))
-        return .letv d (.call fnD own) (.letv err' kept (← cancelK cp rest more err'))
-    | .cellF => match own with
-      | [c] => releaseOpt c (← cancelK cp rest more err)
-      | _ => throw "LIR: a level's cell frame without its cell"
-    | .stackF => match own with
-      | [fr, d] => popThen fr d (← cancelK cp rest more err)
-      | _ => throw "LIR: a level's frame without its cell"
-    | .stackH => match own with
-      | [h] => freeStackThen h (← cancelK cp rest more err)
-      | _ => throw "LIR: a site's stack frame without its stack"
-    | .letF _ _ (some r) => return abandons r own (← cancelK cp rest more err)
-    | _ => return drops .dead own (← cancelK cp rest more err)
-
 /-! #### Resumption points -/
 
 def curMach : CM OutInfo := do
@@ -996,12 +919,91 @@ structure Reuse where
   pts : List MPoint
   mkCells : Std.HashMap Nat Nat
 
+
+/-- Why a call point's step is inlined (SPEC §50): it is the machine's code after the call, one code
+with the machine (SPEC §49), a function only so that the resume entry can enter it again. -/
+def stepInline : String :=
+  "a call point's step: the machine's code after the call, one code with its machine (SPEC §49)"
+
+
+mutual
+
+/-- The value `x` handed to the continuation `K` over its arguments: the innermost frame's join,
+or the machine's answer (its cell released, or its frame popped, first). At a finaliser's
+re-raise frame (`Frame.raiseF`), the finaliser has answered: the abort it ran under goes on. -/
+def applyKf (fuel : Nat) (F : OutInfo) : Kont → List Var → Var → CM Tm
+  | [], [], x => outValue F x
+  | [], _, _ => throw "LIR: a machine's answer with arguments left"
+  | [.cellF], [c], x => do releaseOpt c (← outValue F x)
+  | .cellF :: _, _, _ => throw "LIR: a level's cell above the bottom of its continuation"
+  | [.stackF], [f, d], x => do popThen f d (← outValue F x)
+  | .stackF :: _, _, _ => throw "LIR: a level's frame above the bottom of its continuation"
+  | .stackH :: _, _, _ => throw "LIR: a value at a site's stack"
+  | .letF fn _ _ :: _, args, x | .thenF fn _ _ _ _ :: _, args, x => pure (.call fn (args ++ [x]))
+  | .dropF _ :: _, _, _ => throw "LIR: a value at a frame that only drops"
+  | .raiseF :: rest, e :: more, x => match fuel with
+    | 0 => throw "LIR: the continuation is too deep"
+    | fuel + 1 => do return .drop .dead x (← abortKf fuel F rest more e)
+  | .raiseF :: _, [], _ => throw "LIR: a re-raise frame without its abort"
+
+/-- The abort `e` (at the machine's payload) through `K`: each frame's arguments abandoned at the
+frame's rule (a `[let]`'s, `hW`) or dropped, a finaliser run, its own abort superseding
+(`then_fin`, `unwind_prefix`); then the machine's answer. A `raise` (`effRaise`) abandons nothing
+itself: its whole context is its argument's, carried in the abort.
+
+A finaliser that may suspend (its row holds machine operations: `Frame.thenF`'s `md`) is a call
+point of the machine (`pointKf`) whose continuation is the re-raise frame `Frame.raiseF` over
+`e`: when the finaliser answers, the abort goes on through the rest of `K` (`then_fin`); its own
+abort supersedes `e`; a suspension inside it suspends the machine, the unwind its state. -/
+def abortKf (fuel : Nat) (F : OutInfo) : Kont → List Var → Var → CM Tm
+  | [], _, e => outAbort F e
+  | f :: rest, args, e => match fuel with
+  | 0 => throw "LIR: the continuation is too deep"
+  | fuel + 1 => do
+    let own := args.take f.own
+    let more := args.drop f.own
+    match f with
+    | .thenF _ fnD _ _ (some MD) =>
+      readFact "effThen:finaliser call point"
+      pointKf fuel (.raiseF :: rest) (e :: more) (.call fnD own) MD
+    | .thenF _ fnD _ pd none =>
+      let d ← fresh (resTy .unit pd)
+      match payTy pd with
+      | none => return .letv d (.call fnD own) (.drop .dead d (← abortKf fuel F rest more e))
+      | some pdT =>
+        let some pF := payTy F.pay | throw "LIR: a finaliser's abort where the row holds none"
+        let e' ← fresh pF; let u ← fresh .unit; let e₂ ← fresh pdT
+        let sup ← coercePay pd F.pay e₂ fun v => pure (.var v)
+        -- The superseded payload `e` is abandoned: a raise's payload holds no owned cell
+        -- (`CDerives.effRaise`'s `hd : o.A.Drop`).
+        return .letv d (.call fnD own) (.letv e' (.case d u (.drop .dead u (.var e)) e₂ (.abandon .superseded e sup))
+          (← abortKf fuel F rest more e'))
+    | .raiseF => match own with
+      -- The finaliser's own abort `e` supersedes the one it ran under, `e₀`, which is abandoned:
+      -- a raise's payload holds no owned cell (`CDerives.effRaise`'s `hd : o.A.Drop`).
+      | [e₀] => return .abandon .superseded e₀ (← abortKf fuel F rest more e)
+      | _ => throw "LIR: a re-raise frame without its abort"
+    | .cellF => match own with
+      | [c] => releaseOpt c (← abortKf fuel F rest more e)
+      | _ => throw "LIR: a level's cell frame without its cell"
+    | .stackF => match own with
+      | [fr, d] => popThen fr d (← abortKf fuel F rest more e)
+      | _ => throw "LIR: a level's frame without its cell"
+    | .stackH => match own with
+      | [h] => freeStackThen h (← abortKf fuel F rest more e)
+      | _ => throw "LIR: a site's stack frame without its stack"
+    | .letF _ _ (some r) => return abandons r own (← abortKf fuel F rest more e)
+    | _ => return drops .dead own (← abortKf fuel F rest more e)
+
 /-- The step at a call point: the callee's outcome `o` (of `M`) taken apart. A value goes to `K`,
 an abort through `K`'s frames, a suspension suspends the machine at this point, its state the
 callee's `k` and `K`'s arguments. With `reuse` (the resume entry of a machine whose state is a cell), a suspension
 again at the cell's operation writes the cell in place. -/
-def stepTm (F : OutInfo) (K : Kont) (args : List Var) (o : Var) (M : OutInfo) (stepFn : Nat)
+def stepTmf (fuel : Nat) (F : OutInfo) (K : Kont) (args : List Var) (o : Var) (M : OutInfo) (stepFn : Nat)
     (reuse : Option Reuse := none) : CM Tm := do
+  match fuel with
+  | 0 => throw "LIR: the continuation is too deep"
+  | fuel + 1 =>
   let w ← fresh M.body; let x ← fresh M.r; let ex ← fresh M.xTy
   let (K', args', _) := stripCell K args
   let argTys ← args'.mapM tyOf
@@ -1012,7 +1014,7 @@ def stepTm (F : OutInfo) (K : Kont) (args : List Var) (o : Var) (M : OutInfo) (s
   let abortArm (e : Var) : CM Tm := do
     let some pF := payTy F.pay | throw "LIR: an abort where the machine's row holds none"
     let e' ← fresh pF
-    released (.letv e' (← coercePay M.pay F.pay e fun v => pure (.var v)) (← abortK F K args e'))
+    released (.letv e' (← coercePay M.pay F.pay e fun v => pure (.var v)) (← abortKf fuel F K args e'))
   let suspArms (s : Var) : CM Tm := casePay M.sPay s fun j sv => do
     let some (op, _, b, cp) := M.ms[j]? | throw "LIR: a suspension's summand"
     letpairM sv fun v k => do
@@ -1034,19 +1036,17 @@ def stepTm (F : OutInfo) (K : Kont) (args : List Var) (o : Var) (M : OutInfo) (s
     | some pT => do
       let e ← fresh pT; let s ← fresh M.sTy
       pure (Tm.case ex e (← abortArm e) s (← suspArms s))
-  return .letv w (.prim .unroll [o]) (.case w x (← released (← applyK F K args x)) ex exits)
-
-/-- Why a call point's step is inlined (SPEC §50): it is the machine's code after the call, one code
-with the machine (SPEC §49), a function only so that the resume entry can enter it again. -/
-def stepInline : String :=
-  "a call point's step: the machine's code after the call, one code with its machine (SPEC §49)"
+  return .letv w (.prim .unroll [o]) (.case w x (← released (← applyKf fuel F K args x)) ex exits)
 
 /-- **A call point**: `e` answers the callee's outcome (of `M`), handed to `K`: a step function,
 which the resume entry calls again, so the callee's `k` is in the machine's state and the machine
 is one code. In tail position at the machine's own outcome the step is made when the machine is
 complete (`withMachine`): a machine with that call and no other point passes its callee's
 outcome on; a call that closes a loop of tail calls passes it on too (`tailPass`). -/
-def pointK (K : Kont) (args : List Var) (e : Tm) (M : OutInfo) : CM Tm := do
+def pointKf (fuel : Nat) (K : Kont) (args : List Var) (e : Tm) (M : OutInfo) : CM Tm := do
+  match fuel with
+  | 0 => throw "LIR: the continuation is too deep"
+  | fuel + 1 =>
   let F ← curMach
   if K.isEmpty && args.isEmpty && M.ty.sameRep F.ty && M.keys == F.keys then
     let fn ← reserveFn "tail"
@@ -1061,10 +1061,68 @@ def pointK (K : Kont) (args : List Var) (e : Tm) (M : OutInfo) : CM Tm := do
   let stepFn ← reserveFn "step"
   let argPs ← args.mapM freshLike
   let oP ← fresh M.ty
-  let body ← stepTm F K argPs oP M stepFn
+  let body ← stepTmf fuel F K argPs oP M stepFn
   setFn stepFn { name := "step", params := argPs ++ [oP], body, ret := F.ty, inline := some stepInline }
   readFact "machine:call point"
   return .letv o e (.call stepFn (args ++ [o]))
+
+end
+
+/-- The bound on a continuation's frames the conversion walks: each frame, and each finaliser's
+call point, takes one. -/
+def kontFuel : Nat := 100000
+
+def applyK (F : OutInfo) (K : Kont) (args : List Var) (x : Var) : CM Tm := applyKf kontFuel F K args x
+def abortK (F : OutInfo) (K : Kont) (args : List Var) (e : Var) : CM Tm := abortKf kontFuel F K args e
+def stepTm (F : OutInfo) (K : Kont) (args : List Var) (o : Var) (M : OutInfo) (stepFn : Nat)
+    (reuse : Option Reuse := none) : CM Tm := stepTmf kontFuel F K args o M stepFn reuse
+def pointK (K : Kont) (args : List Var) (e : Tm) (M : OutInfo) : CM Tm := pointKf kontFuel K args e M
+
+/-- The cancel of `K`, `err` the error kept so far (`1 ⊕ P`, `cp` the cancel row's payload `P`):
+each frame's arguments abandoned at the frame's rule (a `[let]`'s, `hW`) or dropped, a finaliser
+run under the cancel, the first error kept (§19 *Cancels*, `[cfin-raise]`); a finaliser's error
+is one of the cancel row's (§27). -/
+def cancelK (cp : Pay) : Kont → List Var → Var → CM Tm
+  | [], _, err => pure (.var err)
+  | f :: rest, args, err => do
+    let own := args.take f.own
+    let more := args.drop f.own
+    match f with
+    | .thenF _ _ _ _ (some _) =>
+      -- A cancel row holds no machine operation (`Types.ofFin`), and a finaliser's row is within
+      -- the cancel row of every operation it is live across (`effThen`'s `hSDc`).
+      throw "LIR: a finaliser that may suspend, under a cancel: outside the fragment"
+    | .raiseF => match own with
+      -- The finaliser's abort is superseded by the cancel: a raise's payload holds no owned cell.
+      | [e₀] => return .abandon .superseded e₀ (← cancelK cp rest more err)
+      | _ => throw "LIR: a re-raise frame without its abort"
+    | .thenF _ fnD _ pd none =>
+      let d ← fresh (resTy .unit pd)
+      match payTy cp, payTy pd with
+      | _, none => return .letv d (.call fnD own) (.drop .dead d (← cancelK cp rest more err))
+      | none, some _ => throw "LIR: a finaliser's error outside its operation's cancel row"
+      | some pF, some pdT =>
+        let err' ← fresh (resTy .unit cp)
+        let u₀ ← fresh .unit; let e₀ ← fresh pF
+        let u₁ ← fresh .unit; let e₁ ← fresh pdT; let u₂ ← fresh .unit; let e₂ ← fresh pdT
+        let sup ← coercePay pd cp e₁ fun v => pure (.inj true v)
+        -- The error not kept (`e₀` superseded, or the finaliser's `e₂` after a kept one) is
+        -- abandoned: a raise's payload holds no owned cell (`CDerives.effRaise`'s
+        -- `hd : o.A.Drop`).
+        let kept : Tm := .case err u₀ (.case d u₁ (.drop .dead u₁ (.inj false u₀)) e₁ (.drop .dead u₀ sup))
+          e₀ (.case d u₂ (.drop .dead u₂ (.inj true e₀)) e₂ (.abandon .superseded e₂ (.inj true e₀)))
+        return .letv d (.call fnD own) (.letv err' kept (← cancelK cp rest more err'))
+    | .cellF => match own with
+      | [c] => releaseOpt c (← cancelK cp rest more err)
+      | _ => throw "LIR: a level's cell frame without its cell"
+    | .stackF => match own with
+      | [fr, d] => popThen fr d (← cancelK cp rest more err)
+      | _ => throw "LIR: a level's frame without its cell"
+    | .stackH => match own with
+      | [h] => freeStackThen h (← cancelK cp rest more err)
+      | _ => throw "LIR: a site's stack frame without its stack"
+    | .letF _ _ (some r) => return abandons r own (← cancelK cp rest more err)
+    | _ => return drops .dead own (← cancelK cp rest more err)
 
 /-- A result that is not an outcome (`a` at the payload `p`) handed to `K`. -/
 def resultK (K : Kont) (args : List Var) (e : Tm) (a : LTy) (p : Pay) : CM Tm := do
@@ -1236,8 +1294,9 @@ def genMach (m : Mach) (cellOps : List Key := []) : CM (List (Key × Nat)) := do
         | _, _ => resumeTm F p fs y reuse
     setFn rres { name := s!"resume {op.1}.{op.2}", params := [s₁, y], body := rb, ret := F.ty }
     let s₂ ← fresh envTy
-    -- At a cancel row `⊤` (a must-resume operation) the cancel entry is never run.
-    let cb ← match cp with
+    -- At a cancel row `⊤`, or at a must-resume operation (`OutInfo.lins`: its continuation has
+    -- no cancel branch, `capB`), the cancel entry is never run.
+    let cb ← match (if F.lins.contains op then none else cp) with
       | none => pure (.prim .unreachable [s₂])
       | some cp => withState s₂ fun c st => do
         let arms ← casePay stPay st fun i fv => do
@@ -2820,16 +2879,23 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
   | .effThen _ _ A _ _ _ SD u tM tN tD => do
     readFact "effThen:machine join"
     let (pre, c₁, c₂) ← splitCtx ctx u "effThen"
-    unless (← rowMs SD).isEmpty do
-      throw "LIR: a finaliser that may suspend is outside the fragment"
     let fn ← joinFn fuel c₂ A tN K args
     let pd ← rowPay SD
     let (_, inner, cD) ← envOf c₂
     let fnD ← reserveFn "finaliser"
-    let dTm ← conv fuel (none :: cD) tD
-    setFn fnD { name := "finaliser", params := inner, body := dTm, ret := resTy .unit pd }
+    -- A finaliser whose row holds machine operations is a machine of its own outcome, called at
+    -- a point of the unwind (`abortKf`); otherwise a function answering at its payload.
+    let md ← outInfo? .unit SD
+    match md with
+    | some MD =>
+      readFact "effThen:finaliser machine"
+      let dTm ← withMachineK MD (convK fuel (none :: cD) tD)
+      setFn fnD { name := "finaliser", params := inner, body := dTm, ret := MD.ty }
+    | none =>
+      let dTm ← conv fuel (none :: cD) tD
+      setFn fnD { name := "finaliser", params := inner, body := dTm, ret := resTy .unit pd }
     let own := live c₂
-    return pre (← convK fuel c₁ tM (.thenF fn fnD own.length pd :: K) (own ++ args))
+    return pre (← convK fuel c₁ tM (.thenF fn fnD own.length pd md :: K) (own ++ args))
   | .bind _ _ A _ u tM tN => do
     let (pre, c₁, c₂) ← splitCtx ctx u "bind"
     let unf := tM matches .unfoldStep ..
@@ -2909,7 +2975,7 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
     setFn fnN { name := "join", params := [oN] ++ argsN ++ [b],
                 body := .letv pv (.pair oN b) (← applyK F K argsN pv), ret := F.ty }
     let pr ← fresh (.pair rT mT); let o ← fresh rT; let m ← fresh mT
-    let body ← convK fuel [some m] tM (.thenF fnN fnD 1 [] :: K) (o :: args)
+    let body ← convK fuel [some m] tM (.thenF fnN fnD 1 [] none :: K) (o :: args)
     readFact "lend"
     return leaf ctx (some 0) (.letv pr (.prim (.lend true) [r]) (.letpair o m pr body))
   | .lendScope _ _ rel c => withScope rel (convK fuel ctx c K args)
