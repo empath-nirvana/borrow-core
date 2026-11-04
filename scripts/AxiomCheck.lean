@@ -1135,6 +1135,10 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.CactusInvT.part
 #print axioms BoCa.Fig16.Tree.Wp.view_at_lender
 #print axioms BoCa.Fig16.Tree.Wp.lender_view_carries
+#print axioms BoCa.Fig16.Tree.Wp.frameLife_of_tagged
+#print axioms BoCa.Fig16.Tree.Wp.proper_view_single
+#print axioms BoCa.Fig16.Tree.Wp.viewResS_compS
+#print axioms BoCa.Fig16.Tree.Wp.twp_lendEnd_imm
 #print axioms BoCa.Fig16.Tree.Wp.recWInv_alloc
 #print axioms BoCa.Fig16.Tree.Wp.recWInv_lend
 #print axioms BoCa.Fig16.Tree.Wp.recWInv_lendStep
