@@ -10,7 +10,7 @@ value:
 | former | action |
 |---|---|
 | closed leaf | `w` |
-| `tvar i` | `s (tag (mu (Bs.drop i)) w)`: the handle of the variable's binder |
+| `tvar i` | `s (tag (mu (Bs.consume i)) w)`: the handle of the variable's binder |
 | `⊗`, `⊕` | componentwise |
 | `Ref S` | `free w`, then the traversal of `S` |
 | `[Ref S]` | a `count` loop over the slots: `idx`, take the slot's value out (`swap` with `()`), traverse it, step the algebra `s (tag (arr Bs S) (inj₂ (acc, r)))`; seed `s (tag (arr Bs S) (inj₁ ()))`; then `drop` the emptied array, its buffer at once |

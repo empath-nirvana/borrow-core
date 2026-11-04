@@ -141,7 +141,7 @@ theorem d_swapBoth {e₁ e₂ consumeSlotE : Expr} (hA : ∀ z, ¬ VFree z A) (h
 
 end
 
-/-- `λb. drop b`. -/
+/-- `λb. consume b`. -/
 def dropBF : Expr := .val (.lam (dropB (.var 0)))
 
 theorem d_dropBF {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
@@ -275,7 +275,7 @@ def readCb : Expr := lam2 (.letpair (.var 0) (.letpair (.app copy (.var 1)) read
 /-- `B ⊗ (B ⊗ B)`. -/
 abbrev B3 : VTy := .tensor BB (.tensor BB BB)
 
-/-- `let (x, yz) = w; drop x; let (y, z) = yz; drop y; drop z`, with `w` at index `i`. -/
+/-- `let (x, yz) = w; consume x; let (y, z) = yz; consume y; consume z`, with `w` at index `i`. -/
 def dropB3 (i : Nat) : Expr :=
   .letpair (.var i) (.seq (dropB (.var 1)) (.letpair (.var 0) (.seq (dropB (.var 1)) (dropB (.var 0)))))
 
@@ -432,7 +432,7 @@ def allocPair (e₁ e₂ : Expr) : Expr := .pair (.app alloc' e₁) (.app alloc'
 
 def slice4 : Expr := .pair (allocPair (.inj₁ unit') (.inj₂ unit')) (allocPair (.inj₁ unit') (.inj₂ unit'))
 
-/-- `let (ra, rb) = r; drop (free ra); drop (free rb)`, with `r` at index `i`. -/
+/-- `let (ra, rb) = r; consume (free ra); consume (free rb)`, with `r` at index `i`. -/
 def freePair (i : Nat) : Expr :=
   .letpair (.var i) (.seq (dropB (.app free' (.var 1))) (dropB (.app free' (.var 0))))
 

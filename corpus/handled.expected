@@ -338,9 +338,9 @@ corpus/clause-captures.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/clause-captures.bc 1.0 tail+state: machine; condition 2 holds; -
 corpus/clo-capture.bc flows [0, 4294967295]; main []
 corpus/clo-coerce.bc flows [0, 4294967295]; main []
+corpus/clo-consume.bc flows [0, 4294967295]; main []
 corpus/clo-counter.bc flows [0, 4294967295]; main []
 corpus/clo-depth.bc flows [0, 4294967295]; main []
-corpus/clo-consume.bc flows [0, 4294967295]; main []
 corpus/clo-higher.bc flows [0, 4294967295]; main []
 corpus/clone-reuse.bc flows [0, 4294967295]; main []
 corpus/comp-param.bc flows [0, 3, 5, 4294967295]; main [2, 3, 4, 5, 6]

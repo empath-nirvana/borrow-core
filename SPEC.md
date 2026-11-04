@@ -9430,7 +9430,7 @@ One rule per construct:
   its slot in place (`array_replace`): no list node per `await`, and a queue slot is a task's two
   words. `push`, `queue` and the types are unchanged; `run_logged` and `run_in` keep their lists.
   The old backend's `array_replace` (`Core/Arrays.lean`, `replaceV`: `(λold. store c x; old)
-  (load c)`) is a swap at the slot, its copy and drop cancelled as the axiom `swap`'s are
+  (load c)`) is a swap at the slot, its copy and consume cancelled as the axiom `swap`'s are
   (`Backend/Clos/Convert.lean`, `Op.swapSlot`, whose contents keep their type).
 - **Frame pointers.** The native target's typed mode marks each function `"frame-pointer"="all"`,
   so a profiler's backtraces reach past `bc_entry` (#664's method note). On the three async

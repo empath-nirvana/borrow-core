@@ -912,7 +912,7 @@ obstruction exist unless a Lean name is given.
 ### T18. `Releasable` at recursive types
 
 - **Statement.** A lemma that `Imm̲ 'b` of a `μ`-typed field is weakenable (e.g. `Imm̲ 'b N =
-  μY. 1 ⊕ Y` needs a recursive drop), so projection past an unboxed `μ`-typed field is available.
+  μY. 1 ⊕ Y` needs a recursive consume), so projection past an unboxed `μ`-typed field is available.
 - **Origin.** SPEC §5; `docs/consolidation-audit.md` §5.
 - **Issue:** [#10].
 

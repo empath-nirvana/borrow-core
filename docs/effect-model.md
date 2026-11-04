@@ -112,7 +112,7 @@ A call-by-push-value calculus with names.
   - `lend c as x in M` runs `M` against the owned capability `c`: the comodel–model tensor.
 - **Resources:**
   - `using x = acquire n in M`: a frame owns the resource and runs its consume;
-  - `drop s`: a stream's consume.
+  - `consume s`: a stream's consume.
 
 ### 1.2 Typing (`Typing.lean`)
 

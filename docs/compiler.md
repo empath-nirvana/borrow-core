@@ -156,7 +156,7 @@ substitute. "From the typed term" is what compiling from it gives. All by inspec
 | T3 | operations' answer types | the row at `[perform]` (`OpSig.B`) | erasure | `lowerEffects`' retry with answers as variants when unification fails (`Driver.lean:93–101`; `Ops.wrapsAnswers`, `Capture.lean:162–168`); `freshCopy` so a clause may take other layouts (`:685–689`) | the answer type at each `perform`; no retry |
 | T4 | recursive types and which fields close a cycle | `roll`/`unroll` at `μ` | erasure ("regular trees, as the erasure leaves them", `Types.lean:30`) | `sccs`, `backEdges`, `sumBoxes` (`Types.lean:563–693`) | the `μ` in the type; the boxing choice stays a layout decision |
 | T5 | a value's width, and whether copying or consuming it does anything | `VTy`; `persistent`, `consumableB` | erasure | `width`, `trivial` (`Types.lean:756–771`), read by `copyVals`/`consumeVals` (`Flat/Lower.lean:357–365`) | from the type: `i32` slots of 4 bytes (#537 fix 8) |
-| T6 | `seq`'s first part is `1` | `[unit-E]` | erasure | not used: `drop u` always (`Convert.lean:669–674`) | no consume of `()` |
+| T6 | `seq`'s first part is `1` | `[unit-E]` | erasure | not used: `consume u` always (`Convert.lean:669–674`) | no consume of `()` |
 
 **Rows, operations and handlers**
 

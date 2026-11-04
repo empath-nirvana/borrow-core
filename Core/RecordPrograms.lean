@@ -75,7 +75,7 @@ def readBody : Expr :=
 
 def readBorrower : Expr := .val (.lam (.val (.lam readBody)))
 
-/-- `let {flag, cell} = free r; drop flag; drop (free cell)`, with `r` at index `i`. -/
+/-- `let {flag, cell} = free r; consume flag; consume (free cell)`, with `r` at index `i`. -/
 def freePt (i : Nat) : Expr :=
   recLet Pt (.app free' (.var i)) (.seq (dropB (.var 0)) (dropB (.app free' (.var 1))))
 
@@ -174,7 +174,7 @@ own cell, taken by `withbor` on the `Ref` the callback holds (`pokeG`). -/
 /-- `λb. (case b {x ⇒ inj₂ x, y ⇒ inj₁ y}, ())`. -/
 def flipG : Expr := .val (.lam (.pair (.case (.var 0) (.inj₂ (.var 0)) (.inj₁ (.var 0))) unit'))
 
-/-- `λb. (inj₂ (), drop b)`. -/
+/-- `λb. (inj₂ (), consume b)`. -/
 def setG : Expr := .val (.lam (.pair (.inj₂ unit') (dropB (.var 0))))
 
 /-- `λc. withbor c (Λ. λm. let (m′, u) = withswap m setG; u; forget m′; ())`. -/

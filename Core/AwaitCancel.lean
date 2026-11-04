@@ -196,7 +196,7 @@ theorem not_unrD_rowAwait : ¬ Row.UnrD rowAwait := by
     · simp [capB, cancelled, VTy.isZero] at hc
 
 /-- **A cell held across a cancellable wait, freed on every exit**:
-`r ← alloc (inj₁ ()); await_1 then x. drop (free r); x unwind drop (free r)`. The finaliser frees
+`r ← alloc (inj₁ ()); await_1 then x. consume (free r); x unwind consume (free r)`. The finaliser frees
 the cell on the `cancelled` unwind, the continuation on the normal exit.  `[spec §29a]` -/
 theorem d_closeOnCancel {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ

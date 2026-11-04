@@ -328,12 +328,12 @@ theorem vview_ref_bang {A X : VTy} (h : VView (.ref A) (.bang X)) : False := by
     (fun _ _ h => by cases h) (fun _ h => by cases h)
   cases this
 
-/-- AT06's clause: `λ(a, κ). drop (free c); κ.resume ()`, `c` the cell bound outside. -/
+/-- AT06's clause: `λ(a, κ). consume (free c); κ.resume ()`, `c` the cell bound outside. -/
 abbrev at06Cl : Expr :=
   .lam (.letpair (.var 0) (.seq (dropB (.app free' (.var 3)))
     (.app (.app (.var 0) (.val (.inj₁ .unit))) (.val .unit))))
 
-/-- AT06's handled body: `foo (); drop (free c)`. -/
+/-- AT06's handled body: `foo (); consume (free c)`. -/
 abbrev at06Body : Expr := bindE fooE (dropB (.app free' (.var 3)))
 
 /-- **AT06**: a clause that writes a place the suspended body uses.  The clause captures the cell

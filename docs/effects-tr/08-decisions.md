@@ -44,7 +44,7 @@ weakening point… The kernel checks it; the elaborator establishes it").
    his system (*Resource Polymorphism*, arXiv 1803.02796, 2018) [recalled].
 5. **It costs nothing at run time.** The reachability check was a model artefact (phase A §6:
    "`clauseEnd` reachability, leak tracking: model artifacts; with static weakening …, a consumed
-   `κ` is a static drop call").
+   `κ` is a static consume call").
 
 **What changes in phase A's model.**
 
@@ -57,7 +57,7 @@ weakening point… The kernel checks it; the elaborator establishes it").
   placement; it is the elaborator's choice, and a different placement can reorder a `free` with an
   `emit` in the same clause.
 - Phase A's stream had to be linear with an explicit `drop` because it had no static weakening
-  points (`docs/effect-model.md` §3.2: "if streams had a derived drop, an implicit drop would have to run the drop").
+  points (`docs/effect-model.md` §3.2: "if streams were consumable, an implicit consume would have to run the consume").
   With static weakening the same holds for every value holding a one-shot continuation: it is
   linear, and its consume is called where the elaborator consumes it. This calculus gives a
   consume to continuations (`cancel`) and to streams (`drop`) only. A general consume per

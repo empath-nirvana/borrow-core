@@ -487,7 +487,7 @@ def peekV (x : Var) : IM LV := do
 /-! ### The stack machine's hand-over (#746 F3)
 
 A stack machine's `stackK` consume (`ConsumeRule.stackK`) hands a level's suspended computation over
-to the machine's `k` at a lower frame: the node is `drop x (let k₂ = clos kc [base] in …)`. -/
+to the machine's `k` at a lower frame: the node is `consume x (let k₂ = clos kc [base] in …)`. -/
 
 /-- The frames of the current task stack, the bottom first. -/
 def St.curFrames (s : St) : List Nat := (s.taskStacks.getD s.cur #[]).toList

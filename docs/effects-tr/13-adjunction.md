@@ -54,7 +54,7 @@ and that law holds only at linear operations.
                ≜  thunk_m ⟨λy. K[ret y],  K^consume⟩             if W ∈ q_o
     resume(κ)  ≜  [·] to y. resume κ y                         (a stack again)
 
-Here `m` is D1.8's mode, and `K^drop` is the segment's consume: run `consumes(S_κ)` (D3.4) and
+Here `m` is D1.8's mode, and `K^consume` is the segment's consume: run `consumes(S_κ)` (D3.4) and
 answer `()`. The machine's capture in D3.6 is `freeze` of the segment. Its `force` of a
 continuation is `resume`.
 

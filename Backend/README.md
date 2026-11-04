@@ -143,7 +143,7 @@ representation of Rust's `Result` and `?`:
 - A code that raises answers a sum: `inl v` when it returns `v`, `inr p` when it raises `p`. The
   codes called at one site share a convention: a class with a raising code answers sums.
 - A term that may raise is computed as such a sum. `let x = e in b`, `e` raising, is
-  `case e {inl x ⇒ b | inr p ⇒ drop (b's variables); inr p}`; a term that cannot raise is not
+  `case e {inl x ⇒ b | inr p ⇒ consume (b's variables); inr p}`; a term that cannot raise is not
   touched, so a call branches exactly when its callee may raise, and a tail call passes the sum
   on with no branch. A `catch n` cases on its body's sum (a compare of the name when the body
   raises more than one), and passes any other name on. A finaliser frame runs its finaliser on

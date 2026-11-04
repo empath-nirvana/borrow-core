@@ -114,7 +114,7 @@ def rForce (k : Nat) (C : CCTy) (h : T[k]? = some (.thunk C)) : Res Δ T (.comp 
 /-! ### A `def` at its use  `[spec §10]`
 
 A `def`'s body is checked once per key at a context `Tc` of persistent externs, and placed at a use
-whose context `T` is `Tc` under `m` more slots (`T.drop m = Tc`): the use's slots before `Tc` are
+whose context `T` is `Tc` under `m` more slots (`T.consume m = Tc`): the use's slots before `Tc` are
 unused by the body, and each may be given to it, live, where the body's absorption holds of its
 type (`TTied.weaken`). -/
 

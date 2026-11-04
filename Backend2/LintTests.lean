@@ -10,7 +10,7 @@ import Backend2.Flow
 LIR programs no checked term converts to, each refused by `Lint.lint` for what the type of one
 variable says, beside the program that differs only in that type and is accepted. A function
 `f0` takes `x0` at the type under test and either copies it (`copy x0 -> x1`, answering the pair
-of both) or consumes it (`drop x0`, answering `()`). The `!` read here is the one `Types.ofV` keeps.
+of both) or consumes it (`consume x0`, answering `()`). The `!` read here is the one `Types.ofV` keeps.
 -/
 
 namespace Backend2.LintTests
@@ -24,7 +24,7 @@ def copyProg (t : LTy) (r : CopyRule := .dup) : Prog where
   mainTy := .unit
   ty := (({} : Std.HashMap Var LTy).insert 0 t).insert 1 t
 
-/-- `f0 (x0 : t) = drop x0 (at the rule r); ()`. -/
+/-- `f0 (x0 : t) = consume x0 (at the rule r); ()`. -/
 def consumeProg (t : LTy) (r : ConsumeRule := .dead) : Prog where
   fns := #[{ name := "consumes", params := [0], ret := .unit, body := .consume r 0 .unit }]
   codes := #[]
@@ -188,7 +188,7 @@ def handProg (body : Tm) (t : LTy := kT) (baseT : LTy := addrT) (kind : CodeKind
   ty := [(0, t), (1, baseT), (2, kT), (3, addrT), (4, kT), (5, addrT), (10, entryT),
     (11, entryT), (12, .unit)].foldl (fun m (x, t) => m.insert x t) {}
 
-/-- `drop x0 (stack k); let x2 = clos c0 [x1]; x2`: `x0` handed over to `clos c0 [x1]`. -/
+/-- `consume x0 (stack k); let x2 = clos c0 [x1]; x2`: `x0` handed over to `clos c0 [x1]`. -/
 def handsOverTo : Tm := .consume .stackK 0 (.letv 2 (.clos 0 [1]) (.var 2))
 
 #guard accepts (handProg handsOverTo)

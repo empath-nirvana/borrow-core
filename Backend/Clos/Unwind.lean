@@ -21,7 +21,7 @@ import Backend.Clos.Convert
   when it raises `p`. Codes that a call may call alike share one convention (a class of the
   codes called at one site): a class with a raising code answers sums throughout.
 - **The rewrite.** A term that may raise is computed as such a sum. `let x = e in b`, with `e`
-  raising, is `case e {inl x ⇒ b | inr p ⇒ drop (the rest's variables); inr p}`; a call of a
+  raising, is `case e {inl x ⇒ b | inr p ⇒ consume (the rest's variables); inr p}`; a call of a
   non-raising code, or a term that cannot raise, is not touched, so a call pays a branch exactly
   when its callee may raise. A tail call passes the callee's sum on with no branch. A call of a
   code that answers sums, at a projection that raises nothing, is a `case` whose `inr` is

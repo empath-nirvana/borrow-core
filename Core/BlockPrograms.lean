@@ -76,11 +76,11 @@ theorem d_vals3 {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) (x y b : Bool)
     CDerives Δ Γ (vals3 x y b).1 (.val σ3.valTy) :=
   .tensorI (deadSplit hΓ) (.tensorI (deadSplit hΓ) (d_bval hΓ x) (d_bval hΓ y)) (d_bval hΓ b)
 
-/-- `let (a, b) = freeS σ2 r; drop a; drop b`, with `r` at index `i`: the block freed whole. -/
+/-- `let (a, b) = freeS σ2 r; consume a; consume b`, with `r` at index `i`: the block freed whole. -/
 def freeB2 (i : Nat) : Expr :=
   .letpair (.app (freeS σ2) (.var i)) (.seq (dropB (.var 1)) (dropB (.var 0)))
 
-/-- `let (ab, c) = freeS σ3 r; let (a, b) = ab; drop a; drop b; drop c`. -/
+/-- `let (ab, c) = freeS σ3 r; let (a, b) = ab; consume a; consume b; consume c`. -/
 def freeB3 (i : Nat) : Expr :=
   .letpair (.app (freeS σ3) (.var i))
     (.letpair (.var 1) (.seq (dropB (.var 1)) (.seq (dropB (.var 0)) (dropB (.var 2)))))
