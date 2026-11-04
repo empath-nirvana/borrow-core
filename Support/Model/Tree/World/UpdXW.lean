@@ -53,7 +53,7 @@ def UpdXW (Θ : LocTy) (E E' : BoCa.Loc → Prop) (ρ : TRes K) (ρ' fρ' : TRes
   ∃ σ σ' τw, ResUT.Flat ρ σ ∧ ResUT.Flat ρ' σ' ∧ ResUT.Flat fρ' τw ∧
     ∀ l, XOptW Θ (E l) (E' l) (σ.get l) (σ'.get l) (τw.get l)
 
-/-- The old clause implies the relaxed one at any valid end world. -/
+/-- `UpdX` implies `UpdXW` at any valid end world. -/
 theorem UpdX.toW {Θ : LocTy} {E E' : BoCa.Loc → Prop} {ρ : TRes K} {ρ' fρ' : TRes K'}
     (h : UpdX Θ E E' ρ ρ') (hv : ResUT.Valid fρ') : UpdXW Θ E E' ρ ρ' fρ' := by
   obtain ⟨σ, σ', hσ, hσ', hx⟩ := h

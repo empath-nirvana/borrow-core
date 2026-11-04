@@ -551,7 +551,10 @@ theorem child_cond_view :
       (viewRes (lfE 1) 1) :=
   ⟨fdMask_false_view, holdsCopy_view⟩
 
-/-! ### `not_xoptWFrameAt`'s configuration, admitted along the walks -/
+/-! ### A given-up `imm` cell beside a framed `mut` cell (`imm ○ mut`), admitted along the walks
+
+The configuration of the retired `not_xoptWFrameAt`
+(`git show a66b0538:Support/Model/Tree/World/UpdXW.lean`, lines 140–186). -/
 
 section FrameAt
 
@@ -689,7 +692,8 @@ theorem acF_valid : ResUT.Valid acF := by
     simp only [acF, PMap.pair_get] at e
     split_ifs at e <;> cases e <;> rfl), hAg, ResUT.comp_empty_left _⟩
 
-/-- **`UpdA` admits `not_xoptWFrameAt`'s configuration** (`docs/new-core/scope-806.md` §4), at
+/-- **`UpdA` admits a given-up `imm` cell beside a framed `mut` cell** (`docs/new-core/scope-806.md`
+§4; the configuration of the retired `not_xoptWFrameAt`), at
 resources. The run gives up its copy `x` at `ℓ`, the end world (the start composite, the frame
 keeping `x`'s copy) absorbing it; the framed part `n ↦ ζ` holds `y = mut(…)` at `ℓ` beneath its
 `imm` ancestor `ζ`. The start composite reads `x ○ y = x` at `ℓ`, the end reads `y`: no relation

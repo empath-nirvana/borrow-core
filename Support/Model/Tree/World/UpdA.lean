@@ -46,7 +46,7 @@ def UpdA (Θ : LocTy) (E E' : BoCa.Loc → Prop) (ρ : TRes K) (ρ' fρ' : TRes 
   ∃ σ σ' τw, ResUT.Flat ρ σ ∧ ResUT.Flat ρ' σ' ∧ ResUT.Flat fρ' τw ∧
     ∀ l, XOptA Θ E E' σ σ' τw l
 
-/-- The old clause implies `UpdA` at any valid end world. -/
+/-- `UpdX` implies `UpdA` at any valid end world. -/
 theorem UpdX.toA {Θ : LocTy} {E E' : BoCa.Loc → Prop} {ρ : TRes K} {ρ' fρ' : TRes K'}
     (h : UpdX Θ E E' ρ ρ') (hv : ResUT.Valid fρ') : UpdA Θ E E' ρ ρ' fρ' := by
   obtain ⟨σ, σ', hσ, hσ', hx⟩ := h

@@ -505,7 +505,12 @@ theorem Beneath.of_get {σ τ : TRes K} {m n : BoCa.Loc} {ζ ξ : TCell K} (h : 
 is masked. `MutOne` of a world holding the start composite and of one holding the end composite
 (both from `RecInv`, `TWNT.mutOne`) make a `mut` cell of each composite a single contribution.
 
-The cases are `updV_frame`'s aliasable ones, at the framed part's cell.
+The proof splits on cell kinds at each location, on each side: an `own` cell is not read; an
+`imm` cell is absorbed or kept; a `mut` cell is split on whether the frame's flattening holds a
+`mut` cell there (the frame's cell or the run's). The walk split (`Flat.split_factors`:
+`ex(c)_●` holds no `imm` cell, `ExST.immFree`, so an `imm` cell of `c` is in `ag(c)`) and the
+ancestor technique (`AgW.mut_beneath`, `Beneath.lift`) are used inside the `mut` cases, where the
+other operand's cell is `imm`.
 * An `imm` cell of the start composite is absorbed by the end world: each `imm` operand is
   (`cellAbs_compR`), the run's by the inner clause and the frame's by being re-read into the end
   composite, a part of the end world.
@@ -514,7 +519,7 @@ The cases are `updV_frame`'s aliasable ones, at the framed part's cell.
   ancestor leaves with the ancestor's composite (`Beneath.lift`), which the end world absorbs.
 * An `imm` cell of the end composite is absorbed by the start's (`cellSub_compR`).
 * A `mut` cell of the end composite is the frame's or the run's. The frame's cell faces an `imm`
-  cell of the run's start (the configuration of `not_xoptWFrameAt`) only from `ag(c)`: an
+  cell of the run's start (a run's `imm` cell given up beside a framed `mut` cell, `imm ○ mut`) only from `ag(c)`: an
   exclusive `mut` cell is not `▶◀` with an `imm` one. There it sits beneath an `imm` cell of
   `ag(c)` (`AgW.mut_beneath`), which the start composite carries (`Beneath.lift_right`). -/
 theorem UpdA.frame (hE : K.Ext K') {E E' : BoCa.Loc → Prop} {a c ac : TRes K}

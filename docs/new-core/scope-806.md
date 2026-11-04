@@ -1,9 +1,8 @@
 # Scope: a run may give up an `imm` view copy held outside it (#806), along the walks
 
-Part of #771; needed before #789's compatibility step. Branch `updx-806` (stretch stack, on
-`si-782`). This is revision 2. The user chose option C (compare walks, `[TR]` 6.48's ancestor
-technique) after the flattening-pointwise relation `UpdXW` failed its frame step. No proof work
-until this is reviewed.
+Part of #771; needed before #789's compatibility step. Branch `tree-806`, on `tree-core` (built
+on `updx-806`). This is revision 2. The user chose option C (compare walks, `[TR]` 6.48's ancestor
+technique) after the flattening-pointwise relation `UpdXW` failed its frame step.
 
 **Evidence kept.**
 - `Support/Model/Tree/World/UpdXW.lean`: the pointwise relation `UpdXW` and its composition (`XOptW.trans`). `not_xoptWFrameAt`, which refuted `xopt_comp`'s route at it, is retired (see "Retired results").
@@ -84,7 +83,7 @@ In `EndT`, `UpdX (sem w′.Θ) (recMask O₀) (recMask O′) ρ₀ ρ′` become
 
 `UpdX` does **not** move to the walk form.
 - **Why it can stay:** `UpdX` is the relation every segment-start update builds: `twp_update`'s premise, `twp_lendOpen`, `twp_lendEnd`, the heap rules, `UpdX.of_rr`. None of those gives a cell up, and `UpdX.toA` lifts `UpdX` to `UpdA`.
-- **`UpdX.frame`'s proof survives:** its current proof (D5's pointwise route through `xopt_comp`) is unchanged. With no cell given up, `not_xoptWFrameAt`'s failing case cannot arise: `XOpt` keeps `x`, so the composite end reads `x ○ y′ = x`.
+- **`UpdX.frame`'s proof survives:** its current proof (D5's pointwise route through `xopt_comp`) is unchanged. With no cell given up, `not_xoptWFrameAt`'s failing case cannot arise: `XOpt` keeps `x`, so the composite end reads `x ○ y′ = x`. (Superseded: `UpdX.frame` was retired once off `EndT`'s path; see "Retired results".)
 - **D5 is now forced for `UpdA.frame`:** D5 recommended proving the frame step along `Port/Six48`'s route (walk split, then ancestor) rather than pointwise. For `UpdA.frame` that is now required. Whether to re-prove `UpdX.frame` the same way, so that D5 closes, is design choice C-2.
 
 ## 3. Results to re-prove
@@ -158,7 +157,7 @@ T1–T3 are as approved (D-1: frame conditions strengthened by `HoldsView`), and
 
 ## 6. Not doing
 
-- **Per-location splits.** No proof of `UpdA.frame` or `UpdA.trans` through a lemma about the three cells at `l` (`xopt_comp`'s shape); `not_xoptWFrameAt` shows that route fails. Case splits follow `updV_frame`'s (the walk split and its three domains), not new splits on cell kinds.
+- **Per-location splits.** No proof of `UpdA.frame` or `UpdA.trans` through a lemma about the three cells at `l` (`xopt_comp`'s shape); `not_xoptWFrameAt` shows that route fails. `UpdA.frame`'s proof splits on cell kinds at each location (an `own` cell is not read; an `imm` cell is absorbed or kept; a `mut` cell is the frame's or the run's), with the walk split (`Flat.split_factors`, `ex(c)_●` holding no `imm` cell) and the ancestor technique (`AgW.mut_beneath`, `Beneath.lift`) inside the `mut` cases where the other operand's cell is `imm`. These kind splits are ours, not `updV_frame`'s.
 - **Option B.** No end case "`mut` where the start read `imm`" without a start ancestor.
 - **Hypotheses on `twp_frame`**, and no statement change outside `EndT`, `endT_inv`, `fdEsc_of_updX` and `StepKeepsFdEsc`.
 - **Restoring ρ⁺.**
@@ -407,6 +406,9 @@ the ancestor technique at `P̂`. It composes along every rule:
   is `twp_own_any`: a run owning one `own` cell, alone and with no records, ends at every final
   state, its end world owning the final memory (`ownWorldT_of_list`). Not vacuous:
   `twp_lendEnd_after_framed_consume_inst_ends` runs it from the lend opened at the empty world.
+  The instance is minimal: the lender alone (empty frame) and the hole continuation. The
+  `Beneath` ancestor disjuncts of `UpdA` are exercised only at resources
+  (`updA_admits_frameAt`), not in a `twp`-level instance.
 
 **Not done.**
 - **C-2:** resolved by retiring `UpdX.frame` (see "Retired results").
@@ -447,3 +449,10 @@ Each entry names what was removed, why, and how to restore it.
   - `HoldsView` and `StmtConsumeFramed`, the targets T1 was planned against.
 
   Restore: `git show a66b0538:docs/new-core/scope-806/Clause.lean`.
+
+### Kept, unused on `EndT`'s path
+
+- **`XOptW.trans`, `UpdX.toW`, `UpdXW.toA`** (`World/UpdXW.lean`). `EndT` reads `UpdA`, and no
+  rule uses these. They stay as the record of the pointwise relation `UpdXW`: it composes and
+  embeds in `UpdA`, and fails only at the frame step (the `imm ○ mut` configuration
+  `updA_admits_frameAt` admits).
