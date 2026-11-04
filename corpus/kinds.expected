@@ -382,6 +382,7 @@ corpus/json-field.bc 1.3 must-resume tail+state: error: capture: a finaliser tha
 corpus/json-field.bc 1.4 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
 corpus/json-field.bc 2.0 cancellable abortive: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
 corpus/key-value.bc 1.0 cancellable abortive: branch; agree
+corpus/lc-0039-combination-sum.bc 1.0 cancellable abortive: branch; agree
 corpus/leetcode/dp/0039-combination-sum.bc 1.0 cancellable abortive: branch; agree
 corpus/leetcode/dp/0070-climbing-stairs.bc 1.0 cancellable abortive: branch; agree
 corpus/leetcode/graphs/0200-number-of-islands.bc 1.0 cancellable abortive: branch; agree
@@ -463,6 +464,7 @@ corpus/rec-even-odd.bc 1.0 cancellable abortive: branch; agree
 corpus/rec-fib.bc 1.0 cancellable abortive: branch; agree
 corpus/rec-generic-layer.bc 1.0 cancellable abortive: branch; agree
 corpus/rec-generic-mutual.bc 1.0 cancellable abortive: branch; agree
+corpus/rec-in-for-linear.bc 1.0 cancellable abortive: branch; agree
 corpus/rec-layer.bc 2.0 cancellable abortive: branch; agree
 corpus/rec-layer.bc 1.0 cancellable abortive: branch; agree
 corpus/rec-lifetimes.bc 3.0 cancellable abortive: branch; agree
@@ -519,6 +521,8 @@ corpus/sort-lines.bc 1.0 cancellable abortive: branch; agree
 corpus/state-machine-audit.bc 1.0 cancellable abortive: branch; agree
 corpus/state-machine.bc 2.0 cancellable abortive: branch; agree
 corpus/state-machine.bc 1.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/state-under-capability.bc 1.0 must-resume tail+state: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/state-under-capability.bc 1.1 must-resume tail+state: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/storage-array.bc 1.0 cancellable abortive: branch; agree
 corpus/sugar/data-box-tree.lowered.bc 1.0 cancellable abortive: branch; agree
 corpus/sugar/data-config.lowered.bc 1.0 cancellable abortive: branch; agree
