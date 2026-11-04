@@ -13,7 +13,7 @@ nothing else of the run.
 **`StepKeepsFdEsc`** is that requirement at the escrow's frame condition: a branch stepping at
 `twp` beside a record proper of its frame, holding nothing at the record's location or escrow
 (`FdEsc`), still holds nothing there in every post-configuration `EndT` admits. It holds
-(`stepKeepsFdEsc`), by `fdEsc_of_updX` (`Support/Model/Tree/World/StepKeep.lean`): `EndT` relates
+(`stepKeepsFdEsc`), by `fdEsc_of_updA` (`Support/Model/Tree/World/UpdAInv.lean`): `EndT` relates
 the run's start and end by row 5.27's `↭`, masked only at the run's own records.
 
 **Without `↭` it fails** (`not_stepKeepsFdEscNoUpd`). `StepKeepsFdEscNoUpd` is the same
@@ -24,7 +24,8 @@ sit at a point. The post-configuration in which the branch holds a copy of the f
 `ℓ ↦ imm({α}, …)` meets every one of those clauses: the world is the start's (an `imm` cell
 composes with itself, `compS_self_of_imm`), so `RecInv` and `WInv` are the start's. In it the
 branch fails `FdEsc` at `ℓ`, and every point its resource sits on is inside `α` (`copy_inside`), so
-`JoinPtT` fails too. `↭` refuses that end (`copy_end_refused`), and no run at `twp` beside the
+`JoinPtT` fails too. `↭` refuses that end (`copy_end_refused`, and along the walks
+`copy_not_updA`), and no run at `twp` beside the
 parent ends holding anything of its lend (`copy_run_keeps_fdEsc`).
 
 `copy_config` states the same step at `CactusInvT`: the invariant holds before and after, the
@@ -62,7 +63,7 @@ def StepKeepsFdEsc : Prop :=
       w.Ext w' ρf → RRw (w := w) (w' := w') ρf ρf' → RecsRR w'.Θ psF psF' →
       ResUT.Hash ρ' ρf' → ResUT.CompS ρf' ρ' fρ' → SplitT ps' O' psF' →
       RecInv w' fρ' ps' ls' → WInv w' fρ' μ' → Q (n - j) w' ls' O' e' ρ' →
-      UpdX (sem w'.Θ) (recMask O) (recMask O') ρ ρ' →
+      UpdA (sem w'.Θ) (recMask O) (recMask O') ρ ρ' fρ' →
       NoneAt (MaskDiff (recMask O) (recMask O')) ρf' →
       ∀ p' ∈ psF', RecRR w'.Θ p p' → FdEsc p'.le p'.R ρ'
 
@@ -70,7 +71,7 @@ def StepKeepsFdEsc : Prop :=
 theorem stepKeepsFdEsc : StepKeepsFdEsc (ℍ := ℍ) := by
   intro w F Q n ls O ps psF e ρ ρf fρ μ p _ _ _ _ hS hR _ _ hp h₀ _ _ _ _ _ _ w' ρf' ρ' fρ' psF'
     ps' O' ls' hE _ _ _ hc hS' hR' _ _ hu _ p' hp' hpp
-  exact fdEsc_of_updX hE.1 (TWNT.esc_valid hR.1 p (hS.right p hp)) h₀ hR'.1 hc hS' hp' hpp hu
+  exact fdEsc_of_updA hE.1 (TWNT.esc_valid hR.1 p (hS.right p hp)) h₀ hR'.1 hc hS' hp' hpp hu
 
 /-- `StepKeepsFdEsc` at `EndT`'s clauses less `↭` and the frame clause: the post-configuration
 `crwpG` asked for. -/
@@ -210,6 +211,20 @@ theorem copy_not_updX {K' : WCactus} {Θ : LocTy} {ρ' : TRes K'}
   have := noneAt_empty (K := KC) (fun _ => True) σ hσ ℓC trivial
   rw [this] at e₀; cases e₀
 
+/-- **`↭` along the walks refuses the copy too**: the start is empty, so an end borrow has no
+start cell and no start ancestor, at any end world. -/
+theorem copy_not_updA {K' : WCactus} {Θ : LocTy} {ρ' fρ' : TRes K'}
+    (hρ' : ∃ τ, ResUT.Flat ρ' τ ∧ ∃ ψ, τ.get ℓC = some ψ ∧ ψ.kind ≠ Kind.own) :
+    ¬ UpdA (K := KC) Θ (recMask ([] : List (FrameRecT KC)))
+      (recMask ([] : List (FrameRecT K'))) PMap.empty ρ' fρ' := by
+  rintro ⟨σ, σ', τw, hσ, hσ', -, hx⟩
+  obtain ⟨τ, hτ, ψ, eψ, hk⟩ := hρ'
+  obtain rfl := ResUT.Flat.functional hτ hσ'
+  have hσe := noneAt_empty (K := KC) (fun _ => True) σ hσ
+  obtain ⟨-, ⟨ψ₀, e₀, -⟩ | ⟨-, m, ζ, ξ, hb, -⟩⟩ := (hx ℓC).2 ψ eψ hk (by simp [recMask])
+  · rw [hσe ℓC trivial] at e₀; cases e₀
+  · have := hb.1; rw [hσe m trivial] at this; cases this
+
 /-- The parent's lent cell sits in its flattening at `ℓ`, an `imm` cell. -/
 theorem flat_parentRes_imm : ∃ τ, ResUT.Flat (parentRes : TRes KC) τ ∧
     ∃ ψ, τ.get ℓC = some ψ ∧ ψ.kind ≠ Kind.own := by
@@ -248,8 +263,8 @@ theorem copy_run_keeps_fdEsc :
         RecsRR w'.Θ [recE (K := wC.K) ℓC mC] psF' →
         ResUT.Hash ρ' ρf' → ResUT.CompS ρf' ρ' fρ' → SplitT ps' O' psF' →
         RecInv w' fρ' ps' ls' → WInv w' fρ' μ' →
-        UpdX (sem w'.Θ) (recMask ([] : List (FrameRecT wC.K))) (recMask O')
-          (PMap.empty : TRes wC.K) ρ' →
+        UpdA (sem w'.Θ) (recMask ([] : List (FrameRecT wC.K))) (recMask O')
+          (PMap.empty : TRes wC.K) ρ' fρ' →
         NoneAt (MaskDiff (recMask ([] : List (FrameRecT wC.K))) (recMask O')) ρf' →
         ∀ p' ∈ psF', RecRR w'.Θ (recE (K := wC.K) ℓC mC) p' → FdEsc p'.le p'.R ρ' := by
   obtain ⟨W, μ, hW, hI⟩ := cactusT_config
@@ -270,8 +285,8 @@ theorem copy_run_keeps_fdEsc :
     [recE ℓC mC] [recE ℓC mC] (Val.unit).1 PMap.empty W W μ (recE ℓC mC)
     (twp_here (fun μ => final_val μ Val.unit) fun _ _ _ _ _ _ _ _ => trivial) trivial
     (ResUT.Hash.of_compS hWW hv) hWW hS hR hWI hfd (List.mem_singleton_self _) hFd₀ j μ' e' hj
-    hrun hfin w' ρf' ρ' fρ' psF' ps' O' ls' hE hr hrecs hh hc hS' hR' hI' trivial hu hn p' hp'
-    hpp
+    hrun hfin w' ρf' ρ' fρ' psF' ps' O' ls' hE hr hrecs hh hc hS' hR' hI' trivial
+    hu hn p' hp' hpp
 
 /-! ### At the scheduler-wide invariant -/
 

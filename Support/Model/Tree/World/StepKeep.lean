@@ -173,21 +173,24 @@ theorem recMask_apart {Θ : CodeTy} {tc : TChoice K} {W : TRes K} {ps rs : List 
 
 /-! ### The frame condition along `↭` -/
 
-/-- **`FdEsc` along `↭`.** A run from `ρ` holding nothing at the lent location and escrow of a
-record proper `p` of its frame, ending at `ρ′` beside the re-read frame in a world of the typed
-world, `↭`-related to `ρ` across the re-reading and masked at its own records, holds nothing there
-either. -/
-theorem fdEsc_of_updX {w w' : TWd} (_hE : w.K.Ext w'.K) {ρ : TRes w.K} {O : List (FrameRecT w.K)}
+/-- **`FdEsc` at an end whose borrows come from the start.** A run from `ρ` holding nothing at
+the lent location and escrow of a record proper `p` of its frame, ending at `ρ′` beside the
+re-read frame in a world of the typed world, where every non-`own` cell of `⦇ρ′⦈` outside the
+end's own records' mask is at a location `⦇ρ⦈` holds a cell at, holds nothing there either.
+`↭` gives the last clause (`fdEsc_of_updX`, `fdEsc_of_updA`). -/
+theorem fdEsc_of_end {w w' : TWd} {ρ : TRes w.K} {O' : List (FrameRecT w'.K)}
     {p : FrameRecT w.K} (hpv : ResUT.Valid p.R) (h₀ : FdEsc p.le p.R ρ)
-    {ρf' ρ' fρ' : TRes w'.K} {ps' O' psF' : List (FrameRecT w'.K)} {rs' : List (FrameRecT w'.K)}
+    {ρf' ρ' fρ' : TRes w'.K} {ps' psF' : List (FrameRecT w'.K)} {rs' : List (FrameRecT w'.K)}
     (hT : TWNT w'.K w'.Θ w'.tc fρ' ps' rs') (hc : ResUT.CompS ρf' ρ' fρ')
     (hS : SplitT ps' O' psF') {p' : FrameRecT w'.K} (hp' : p' ∈ psF') (hpp : RecRR w'.Θ p p')
-    (hu : UpdX (sem w'.Θ) (recMask O) (recMask O') ρ ρ') : FdEsc p'.le p'.R ρ' := by
+    (hend : ∃ σ σ', ResUT.Flat ρ σ ∧ ResUT.Flat ρ' σ' ∧ ∀ x, ¬ recMask O' x → ∀ ψ,
+      σ'.get x = some ψ → ψ.kind ≠ Kind.own → ∃ ψ₀, σ.get x = some ψ₀) :
+    FdEsc p'.le p'.R ρ' := by
   have hTI := hT.inv
   have hv := hT.valid
   have hp's : p' ∈ ps' := hS.right p' hp'
   have hp'rs : p' ∈ rs' := (hTI.2.2.2.2.2.2.1 p').mpr ⟨p', hp's, [], .nil p'⟩
-  obtain ⟨σ, σ', hσ, hσ', hx⟩ := hu
+  obtain ⟨σ, σ', hσ, hσ', hx⟩ := hend
   obtain ⟨σR, eR, aR, heR, -, -⟩ := hpv
   -- no own record of the run masks a location `FdEsc` reads of `p′`
   have hnm : ∀ x, (x = p'.le ∨ LinLocT p' x) → ¬ recMask O' x := by
@@ -202,7 +205,7 @@ theorem fdEsc_of_updX {w w' : TWd} (_hE : w.K.Ext w'.K) {ρ : TRes w.K} {O : Lis
   have hborrow : ∀ x, (x = p'.le ∨ LinLocT p' x) → ∀ ψ, σ'.get x = some ψ →
       ψ.kind ≠ Kind.own → False := by
     intro x hxp ψ e hk
-    obtain ⟨-, ψ₀, e₀, -⟩ := (hx x).2 ψ e hk (hnm x hxp)
+    obtain ⟨ψ₀, e₀⟩ := hx x (hnm x hxp) ψ e hk
     rw [hstart x hxp] at e₀; cases e₀
   intro τ hτ
   obtain rfl := ResUT.Flat.functional hτ hσ'
@@ -274,6 +277,21 @@ theorem fdEsc_of_updX {w w' : TWd} (_hE : w.K.Ext w'.K) {ρ : TRes w.K} {O : Lis
           rw [CellUT.CompS.kind hC]; simp
       exact hborrow m₁ hloc ξ eξ hξ
     · exact hborrow x (Or.inr hlin) ψ hg hk
+
+/-- **`FdEsc` along `↭`.** A run from `ρ` holding nothing at the lent location and escrow of a
+record proper `p` of its frame, ending at `ρ′` beside the re-read frame in a world of the typed
+world, `↭`-related to `ρ` across the re-reading and masked at its own records, holds nothing there
+either. -/
+theorem fdEsc_of_updX {w w' : TWd} (_hE : w.K.Ext w'.K) {ρ : TRes w.K} {O : List (FrameRecT w.K)}
+    {p : FrameRecT w.K} (hpv : ResUT.Valid p.R) (h₀ : FdEsc p.le p.R ρ)
+    {ρf' ρ' fρ' : TRes w'.K} {ps' O' psF' : List (FrameRecT w'.K)} {rs' : List (FrameRecT w'.K)}
+    (hT : TWNT w'.K w'.Θ w'.tc fρ' ps' rs') (hc : ResUT.CompS ρf' ρ' fρ')
+    (hS : SplitT ps' O' psF') {p' : FrameRecT w'.K} (hp' : p' ∈ psF') (hpp : RecRR w'.Θ p p')
+    (hu : UpdX (sem w'.Θ) (recMask O) (recMask O') ρ ρ') : FdEsc p'.le p'.R ρ' := by
+  obtain ⟨σ, σ', hσ, hσ', hx⟩ := hu
+  refine fdEsc_of_end hpv h₀ hT hc hS hp' hpp ⟨σ, σ', hσ, hσ', fun x hx' ψ e hk => ?_⟩
+  obtain ⟨-, ψ₀, e₀, -⟩ := (hx x).2 ψ e hk hx'
+  exact ⟨ψ₀, e₀⟩
 
 end BoCa.Fig16.Tree.Wp
 

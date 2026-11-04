@@ -120,7 +120,14 @@ theorem twp_bind_fd {F Fe : TFrame} (hFm : F.Mono) (hFe : ∀ w ρf, F w ρf →
         (RecsRR.refl fun r hr => g₆.cov_ps r (g₅.left r hr)) hF₁ (ResUT.hash_symm g₃) g₄ g₅ g₆
         g₇ (fd_stepsN hrun₁ hfd) j₂ μ' E (by omega) hrun₂ hfin
     refine ⟨w₂, ρf₂, ρ₂, fρ₂, psF₂, ps₂, O₂, ls₂, g₀.trans g₁ k₀, RRw.trans k₀.1 g₁ k₁,
-      g₂.trans k₀.1 k₂, k₃, k₄, k₅, k₆, k₇, ?_, UpdX.trans k₀.1 g₉ k₉, ?_, g₁₁.trans g₉ k₁₁⟩
+      g₂.trans k₀.1 k₂, k₃, k₄, k₅, k₆, k₇, ?_,
+      UpdA.trans g₀.1 k₀.1 g₉ k₉ (TWNT.mutOne hR.1)
+        (fun _ _ h k => h.of_compS_right hc (kind_mut_ne_imm k)) (TWNT.mutOne g₆.1)
+        (fun _ _ h k => h.of_compS_right g₄ (kind_mut_ne_imm k))
+        (recMaskClosed w₁ fρ₁ ρf₁ ρ₁ ps₁ O₁ psF₁ ls₁ g₆ g₄ g₅) (UpdA.grow k₀.1 k₉ k₁ g₄ k₄ k₁₀),
+      ?_,
+      g₁₁.transA g₀.1 g₉ k₁₁ g₄ (TWNT.mutOne g₆.1)
+        (fun _ _ h k => h.of_compS_left g₄ (kind_mut_ne_imm k)) k₀.2⟩
     · rwa [show n - j₁ - j₂ = n - j by omega] at k₈
     · have hf₂ : NoneAt (MaskDiff (recMask O₀) (recMask O₁)) ρf₂ :=
         g₁₀.rr k₀.1 (covf_valid g₄ g₇) k₁

@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.33 · 2026-11-04
+Version 1.34 · 2026-11-04
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -10348,8 +10348,15 @@ tested by programs with one child and a fixed order of events (`CrossProg`, `Cro
 `Core/TreeWpEff.lean`, `Core/TreeCactus.lean`, `Core/TreeStepKeep.lean`, `Core/TreeHeadlines.lean`).
 `twp` is the step-indexed relation at a world that grows: a run starts at any extension of its
 world, from the re-reading of its resource, and ends at an extension of the start, the frame
-re-read there and the start and end related by row 5.27's `↭` masked at the run's own records
-(`EndT`, `UpdX`). Its rules: downward closure, the Kripke rule, bind, the frame (`twp_frame`, and
+re-read there and the start and end related by row 5.27's `↭` masked at the run's own records,
+read along the walks (`EndT`, `UpdA`, #806): an `imm` cell may be given up to the end world while
+another part holds a copy, and a `mut` cell is read through the `imm` cell it sits beneath
+(`[TR]` 6.48's ancestor technique; `UpdA.frame`, `UpdA.trans`). A run gives up a copy of a view
+another part holds (`twp_consume_view_framed`; a callee, `twp_frame_callee_consume`; a spawned
+task, `twp_child_consume`, each at a frame condition holding a copy); the last copy is refused
+(`twp_refuses_last_copy`), a lend does not end while another part holds a live copy
+(`twp_refuses_lendEnd_live_copy`), and ends by `twp_lendEnd` as it stands once every copy is
+back (`twp_lendEnd_after_framed_consume`). Its rules: downward closure, the Kripke rule, bind, the frame (`twp_frame`, and
 `twp_frame_w`, whose frame obligation also reads the start world's invariants), world and resource
 changes at a segment's start (`twp_extend`, `twp_update`), and row 5.27's `mut` clause at every end
 (`endT_inv`). `cerwpT` adds operations: a stop at a non-abortive entry of the table leaves a
@@ -10395,10 +10402,11 @@ its present frame condition avoids them, its base need not. **Multi-branch adequ
 every scheduler `H` meeting `SchedOKT` and every task `e₀` at its table (`SchedOKT` fixes neither
 how many continuations a clause holds nor which it resumes); derived through `cerwpT_adequacy` at
 one branch (`cactusT_step`, the running branch alone in `CactusInvT`). The stored continuations are
-not branches of `CactusInvT`: `KapSchedT` (and `PoolT`, below) carries them through
+not branches of `CactusInvT`: `KapSchedT` (and `PoolTJ`, below) carries them through
 `cerwpT_schedHandle`'s induction on the index. The invariant over them is in pool form, each share
-resuming at `KeepRel` and every two apart at each other's record masks (`fdMask`, `recMask`), with
-no branch points (decision 74), since branch points are not kept
+resuming at `KeepRel` and each entry of the stack apart from those below it at their record masks
+(`fdMask`, `recMask`) except at what its nearest joiner shares, with no branch points (decision
+74), since branch points are not kept
 along tree extension (`not_joinPtKeptT`) and locations are (`fdMask_mono`). The
 task runs at any base and present frame conditions every valid frame meets (`⊤` among them): the
 scheduler's state is in the resumed branch's frame, and a valid frame avoids the task's records
@@ -10494,9 +10502,10 @@ and `topAdequacyT`. It is tied to one representation of the scheduler's state an
 the form `PoolAns`; `MultiBranchAdequacyT` is the general statement, with no state representation
 fixed. Every condition is per record and is kept by every run beside the stack (`twp_keepsPoolJ`,
 from `twp_frame_keep_sh`, `twp_frame_keep` with the separation from the frame read record by record
-and the shared records exempt, and `twp_holdsIn`, which every run keeps by `UpdX`'s converse
-clause). A clause proves its answer by the stack's moves, each a preservation lemma: run a task
-beside the stack (`poolAns_run`, `poolAns_run_le`), park the stopped task as a ready task or a
+and the shared records exempt, and `twp_holdsIn`, which every run keeps by `UpdA`'s end clause:
+an end `imm` cell is kept or absorbed by a start `imm` cell, and a cell from beneath a start
+ancestor is `mut`). A clause proves its answer by the stack's moves, each a preservation lemma:
+run a task beside the stack (`poolAns_run`, `poolAns_run_le`), park the stopped task as a ready task or a
 joiner (`poolAns_park`), resume the top with what it has collected (`poolAns_resume`,
 `poolTJ_resume`), resume or cancel the second with the first in its place, neither a joiner
 (`poolAns_resumeSnd`, `poolAns_cancelSnd`, `PoolTJ.swap`), cancel the top (`poolAns_cancel`,
@@ -10579,7 +10588,8 @@ deriving the property for `PoolT`/`KapAtT` shares is open (#789).
 - the frame rules as instances of capture;
 - one relation with abortive stops and forwarding (the two relations `erwp`/`cerwp` merge);
 - the lend rules at `twp` over the tree for escrows with contents (reborrows, `TWNT.reb`), and
-  multi-branch programs whose tasks borrow each other's lends;
+  multi-branch programs whose tasks borrow each other's lends other than as views of what a
+  joiner below them shares (`PoolTJ`);
 - borrow edges to ancestors for the scheduler's stored shares (`PoolT`/`KapAtT`, #789);
 - a FIFO scheduling policy (a recursive append in the clause); `pingpong-mut`'s relay is not yet
   written through the pool.
@@ -10721,7 +10731,8 @@ given the entries'); the typing rules and the fundamental theorem over these typ
   (`immEnd_valid_of_fdEsc`); the condition at the lent location alone does not
   (`immEnd_esc_config`). It follows from a branch point not inside the frame (`fdEscOfBranch`,
   `escBeneathT`, `fdEsc_of_points`), and a run whose start and end are related by row 5.27's `↭`
-  masked at the run's own records (`UpdX`) keeps it (`fdEsc_of_updX`). The mask is needed
+  masked at the run's own records keeps it (`fdEsc_of_updX`; along the walks, `fdEsc_of_updA`).
+  The mask is needed
   (`lend_open_needs_mask`). The condition holds at a join from the cactus invariant
   (`fdEsc_at_join`), other branches' steps keep it (`stepKeepsFdEsc`), and an end of the lend is
   valid only where it holds (`fdEsc_of_end_valid`).
@@ -11220,14 +11231,28 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
 
 ## Changelog
 
-- **1.33** (2026-11-04) — §62 (#795): the scheduler interface over the running task and a stack
+- **1.34** (2026-11-04) — §62 (#795): the scheduler interface over the running task and a stack
   pool (`PoolTJ`, `PoolAns`): tasks above a joiner hold views of what it shares, hand them back at
   their end (`PoolTJ.deposit`), and the joiner is resumed with them; `poolSchedAdequacyT` at the new
   interface. A lend ended at its copies composed (`twp_lendEnd_imm`, through `twp_lendEnd`
   unchanged). `HS` with `par` (a joiner and an unstarted child, `κU`) and indexed tables, so
-  children spawn and join at every depth; `progJoin_safe` at every depth. No change to `twp`'s
-  rules, `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the checker, the backends or the
+  children spawn and join at every depth; `progJoin_safe` at every depth. `twp_frame_keep_sh` and
+  `twp_holdsIn` read `EndT` at `UpdA` and `InvKeptA` (1.33). No change to `twp`'s rules, `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the checker, the backends or the
   corpus.
+- **1.33** (2026-11-04) — §62 (#806): `EndT` reads row 5.27's `↭` along the walks (`UpdA`), with
+  row 5.27's `mut` clause read by `InvKeptA`: an `imm` cell may be given up to the end world while
+  another part holds a copy, and a `mut` cell is read through the `imm` cell it sits beneath
+  (`[TR]` 6.48's ancestor technique; `UpdA.frame`, `UpdA.trans`, `recMaskClosed`). Every `twp` rule
+  keeps its statement. A run gives up a copy of a view another part holds
+  (`twp_consume_view_framed`, at a frame holding a copy, `HoldsCopy`; through a callee,
+  `twp_frame_callee_consume`; with a spawned task, `twp_child_consume`); a lend does not end while
+  another part holds a live copy (`twp_refuses_lendEnd_live_copy`) and ends by `twp_lendEnd` once
+  every copy is back (`twp_lendEnd_after_framed_consume`). `endT_inv`, `StepKeepsFdEsc` and
+  `copy_run_keeps_fdEsc` read `UpdA`. `UpdX.frame`, `xopt_comp`, `xcell_compR` and
+  `not_xoptWFrameAt` are retired with #793's refusals (`docs/new-core/scope-806.md`, *Retired
+  results*). Open, #789: the consume at a frame holding the copy only inside another view's
+  witness (`HoldsView`). No change to `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the
+  checker, the backends or the corpus.
 - **1.32** (2026-11-04) — §62 (#782): the relation's types at the tree (*Semantic types read at
   the tree*): value types (`STy`) read the record list, downward closed and monotone along
   extension and `KeepRel` for every former (`Mut` at a store code); computation types (`SCmp`)

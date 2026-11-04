@@ -134,8 +134,8 @@ does not rest on `CactusInvT` over several branches. The results here are about 
 at `KeepRel`; the instances (`Core/TreeSemKEx.lean`) are configurations of that condition, not of
 a pool. Borrows shared across tasks are excluded by the pool invariant itself (#795); the view
 the instances' `κ` holds is of a lend whose record is in its own stop list. The tree has no `withborU` rule yet (row 6).
-A run giving up a copy of an `imm` view held elsewhere (D4) is in progress at #806; nothing here
-depends on it.
+A run giving up a copy of an `imm` view held elsewhere (D4) is resolved by #806 (`EndT` reads
+`UpdA`); nothing here depends on it.
 
 Headline hypotheses, classified: (a) the situation the statement is about; (s) a side condition
 the library discharges by a named result. None stands in for an unproved fact.

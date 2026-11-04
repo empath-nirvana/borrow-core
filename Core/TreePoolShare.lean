@@ -18,8 +18,8 @@ instead (`PoolTJ`), in which tasks above a **joiner** may hold views of what the
 
 Every condition is per record and is carried by every run beside the pool (`twp_keepsPoolJ`):
 from `twp_frame_keep_sh` (`twp_frame_keep` with the separation from the frame read record by
-record, the shared records exempt) and `twp_holdsIn` (every run keeps `HoldsIn`, from `UpdX`'s
-converse clause). The stack's moves at `twp`: resume the top (`poolTJ_resume`, its accumulator
+record, the shared records exempt) and `twp_holdsIn` (every run keeps `HoldsIn`, from `UpdA`'s
+end clause). The stack's moves at `twp`: resume the top (`poolTJ_resume`, its accumulator
 handed with the answer), cancel the top (`poolTJ_cancel`), exchange the two top entries when
 neither is a joiner (`PoolTJ.swap`), deposit a finished task's views at the nearest joiner
 (`PoolTJ.deposit`).
@@ -93,9 +93,13 @@ theorem twp_frame_keep_sh {S : BoCa.Loc → Prop} {F F₁ : TFrame} {P : TPost} 
   obtain ⟨ρ', hρ', hfρ'⟩ := reassoc_in hy' g₄
   have hR₂₀ : R w₀ O₂₀ ρ₂₀ := hR _ _ _ _ _ _ hE₂ h₂₀ hO₂ hR₂
   have hvy' : ResUT.Valid y' := (ResUT.Valid.split g₄ g₇.valid).1
-  have hu : UpdX (sem w'.Θ) (recMask O₁₀) (recMask O₁') ρ₀ ρ' :=
-    UpdX.frame g₀.1 g₉ h₂' hc₀ hρ' (cov_valid hc hI) (cov_valid hfρ' g₇)
-      (g₁₀.of_compS_right hy' hvy')
+  have hu : UpdA (sem w'.Θ) (recMask O₁₀) (recMask O₁') ρ₀ ρ' fρ' :=
+    UpdA.frame g₀.1 g₉ h₂' hc₀ hρ' (cov_valid hc hI) hfρ' (g₁₀.of_compS_right hy' hvy')
+      (TWNT.mutOne hRi.1) (fun _ _ h k => h.of_compS_right hc (kind_mut_ne_imm k))
+      (TWNT.mutOne g₆.1) (fun _ _ h k => h.of_compS_right hfρ' (kind_mut_ne_imm k))
+  have hcl : ImmMaskClosed (fun l => recMask O₁₀ l ∨ recMask O₂₀ l) ρ₀ :=
+    ImmMaskClosed.congr (fun l => (recMask_append l).symm)
+      (recMaskClosed w₀ fρ ρf ρ₀ ps (O₁₀ ++ O₂₀) psF ls₀ hRi hc hS)
   have hmask : ∀ x, MaskDiff (recMask (O₁₀ ++ O₂₀)) (recMask (O₁' ++ O₂')) x →
       MaskDiff (recMask O₁₀) (recMask O₁') x := fun x hx => by
     unfold MaskDiff at hx ⊢
@@ -139,7 +143,7 @@ theorem twp_frame_keep_sh {S : BoCa.Loc → Prop} {F F₁ : TFrame} {P : TPost} 
     have hn : NoneAt (recMask [q]) ρ₁₀ :=
       ((hesc₂ q₂ hq₂ hn₂).rr hE.1 hv₁ h₁₀).mono fun x hx =>
         (recMask_rr (List.Forall₂.cons hqq₂ .nil) x).mpr hx
-    exact fdEsc_of_updX g₀.1 (hvesc q hq₀) (fdEsc_of_noneAt hRi.1 (List.mem_singleton_self q) hq₀ hn)
+    exact fdEsc_of_updA g₀.1 (hvesc q hq₀) (fdEsc_of_noneAt hRi.1 (List.mem_singleton_self q) hq₀ hn)
       g₆.1 g₄ g₅ (List.mem_append_left _ hq') hqq g₉
   -- each side's lent locations are outside the other's masks
   have hout : ∀ q ∈ O₂', ¬ recMask O₁' q.le := by
@@ -164,10 +168,12 @@ theorem twp_frame_keep_sh {S : BoCa.Loc → Prop} {F F₁ : TFrame} {P : TPost} 
     ResUT.hash_symm (hash_of_inv hfρ' g₇), hfρ', ⟨fun p => ?_, fun p hp q hq => ?_⟩, g₆, g₇,
     ⟨O₁', O₂', ρ₁', ρ₂', rfl, hρ', g₈, hR _ _ _ _ _ _ (g₀.of_compS_right hy) h₂' hO₂' hR₂₀,
       hkeep, hb, ha, fun p hp q hq => g₅.2 p hp q (List.mem_append_left _ hq), hout, hout'⟩,
-    (hu.widen (recMask O₂₀)).congr (fun l => recMask_append l)
-      (fun l => by rw [recMask_append, recMask_rr hO₂' l]),
+    UpdA.congr (fun l => recMask_append l) (fun l => by rw [recMask_append, recMask_rr hO₂' l])
+      (UpdA.widen (recMask O₂₀) hu hfρ' (TWNT.mutOne hRi.1)
+        (fun _ _ h k => h.of_compS_right hc (kind_mut_ne_imm k)) hcl),
     (g₁₀.of_compS_left hy' hvy').mono hmask,
-    (g₁₁.mono fun l h => (recMask_append l).mpr (Or.inl h)).frame hc₀ (TWNT.mutOne hRi.1)
+    (InvKeptA.mono (fun l h => (recMask_append l).mpr (Or.inl h)) g₁₁).frame hc₀
+      (TWNT.mutOne hRi.1)
       (fun _ _ h k => (h.of_compS_right hc₀ (kind_mut_ne_imm k)).of_compS_right hc
         (kind_mut_ne_imm k))
       (AgreeOn.of_compS_right hy g₀.2)⟩
@@ -274,8 +280,10 @@ theorem HoldsIn.congr {A : BoCa.Loc → Prop} {O O' : List (FrameRecT K)}
 
 end Holds
 
-/-- **Kept by every run**: a cell of the end's flattening outside the end's masks is one of the
-start's, outside the start's masks (`UpdX`, its converse clause). -/
+/-- **Kept by every run**: an `imm` cell of the end's flattening outside the end's masks comes
+from an `imm` cell of the start's at the same location, outside the start's masks (`UpdA`'s end
+clause: kept, `XCell`, or absorbed by the start's, `CellSub`). Its third disjunct, a cell from
+beneath a start ancestor, is a `mut` cell, so `HoldsIn` does not read it. -/
 theorem twp_holdsIn {A : BoCa.Loc → Prop} {F : TFrame} {P : TPost} {n : Nat} {w : TWd}
     {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {e : Expr} {ρ : TRes w.K}
     (hv : ResUT.Valid ρ) (hA : HoldsIn A O ρ) (h : twp (ℍ := ℍ) F P n w ls O e ρ) :
@@ -287,12 +295,15 @@ theorem twp_holdsIn {A : BoCa.Loc → Prop} {F : TFrame} {P : TPost} {n : Nat} {
   refine ⟨w', ρf', ρ', fρ', psF', ps', O', ls', g₀, g₁, g₂, g₃, g₄, g₅, g₆, g₇, ⟨g₈, ?_⟩, g₉,
     g₁₀, g₁₁⟩
   intro τ' hτ' x ψ' eψ k
-  obtain ⟨σ, σ', hσ, hσ', hx⟩ := g₉
+  obtain ⟨σ, σ', τw, hσ, hσ', -, hx⟩ := g₉
   obtain rfl := ResUT.Flat.functional hσ' hτ'
   by_cases hm : recMask O' x
   · exact Or.inl hm
-  · obtain ⟨hm₀, ψ, eψ₀, hX⟩ := (hx x).2 ψ' eψ (by rw [k]; decide) hm
-    exact (hA₀ σ hσ x ψ eψ₀ (hX.1.symm.trans k)).resolve_left hm₀ |> Or.inr
+  · obtain ⟨hm₀, hd⟩ := (hx x).2 ψ' eψ (by rw [k]; decide) hm
+    rcases hd with ⟨ψ, eψ₀, hX | hX⟩ | ⟨hkm, -⟩
+    · exact (hA₀ σ hσ x ψ eψ₀ (hX.1.symm.trans k)).resolve_left hm₀ |> Or.inr
+    · exact (hA₀ σ hσ x ψ eψ₀ hX.1).resolve_left hm₀ |> Or.inr
+    · rw [k] at hkm; cases hkm
 
 /-! ### Copies of lends -/
 

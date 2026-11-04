@@ -78,3 +78,15 @@ at its location has lifetime set `{α}`, `view_at_lender`), `twp_lendEnd_imm` (e
 carried by every run (`twp_holdsIn`), so no task proves it: a task starts with it (the root and a
 spawned child hold nothing; a `par` child holds copies at what its parent shares) and every run
 keeps it. `L` and `LC` meet it with no change to their proofs.
+
+**Over #806's `EndT`.** `tree-795` is merged with `tree-core` after #806, whose `EndT` reads `↭`
+along the walks (`UpdA`) and row 5.27's `mut` clause by `InvKeptA`. No #795 statement changed.
+Two proofs read `EndT`'s clauses:
+- `twp_frame_keep_sh` takes `twp_frame_keep`'s new steps: `UpdA.frame` (with `MutOne` at both
+  ends), `UpdA.widen` at `recMaskClosed`, `InvKeptA.frame`, and `fdEsc_of_updA` for the framed
+  records not at `S`.
+- `twp_holdsIn` reads `UpdA`'s end clause. An end `imm` cell outside the end's masks is kept from
+  a start `imm` cell (`XCell`) or absorbed by one (`CellSub`); the third disjunct, a cell from
+  beneath a start ancestor, is a `mut` cell, which `HoldsIn` does not read. The `imm` cell
+  absorbed by the end world is a start-side disjunct, which `HoldsIn` does not read either. So
+  `UpdA` forced no new case.
