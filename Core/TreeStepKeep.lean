@@ -263,8 +263,8 @@ theorem copy_run_keeps_fdEsc :
         RecsRR w'.Θ [recE (K := wC.K) ℓC mC] psF' →
         ResUT.Hash ρ' ρf' → ResUT.CompS ρf' ρ' fρ' → SplitT ps' O' psF' →
         RecInv w' fρ' ps' ls' → WInv w' fρ' μ' →
-        UpdX (sem w'.Θ) (recMask ([] : List (FrameRecT wC.K))) (recMask O')
-          (PMap.empty : TRes wC.K) ρ' →
+        UpdA (sem w'.Θ) (recMask ([] : List (FrameRecT wC.K))) (recMask O')
+          (PMap.empty : TRes wC.K) ρ' fρ' →
         NoneAt (MaskDiff (recMask ([] : List (FrameRecT wC.K))) (recMask O')) ρf' →
         ∀ p' ∈ psF', RecRR w'.Θ (recE (K := wC.K) ℓC mC) p' → FdEsc p'.le p'.R ρ' := by
   obtain ⟨W, μ, hW, hI⟩ := cactusT_config
@@ -286,7 +286,7 @@ theorem copy_run_keeps_fdEsc :
     (twp_here (fun μ => final_val μ Val.unit) fun _ _ _ _ _ _ _ _ => trivial) trivial
     (ResUT.Hash.of_compS hWW hv) hWW hS hR hWI hfd (List.mem_singleton_self _) hFd₀ j μ' e' hj
     hrun hfin w' ρf' ρ' fρ' psF' ps' O' ls' hE hr hrecs hh hc hS' hR' hI' trivial
-    (hu.toA hI'.valid) hn p' hp' hpp
+    hu hn p' hp' hpp
 
 /-! ### At the scheduler-wide invariant -/
 

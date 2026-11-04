@@ -6,8 +6,8 @@ technique) after the flattening-pointwise relation `UpdXW` failed its frame step
 until this is reviewed.
 
 **Evidence kept.**
-- `Support/Model/Tree/World/UpdXW.lean`: the pointwise relation `UpdXW`, its composition (`XOptW.trans`), and `not_xoptWFrameAt`, which refutes `xopt_comp`'s route at it.
-- `docs/new-core/scope-806/Clause.lean`: `twp_refuses_last_copy` and `twp_refuses_lendEnd_live_copy`. Both are proved, and neither reads `UpdX`.
+- `Support/Model/Tree/World/UpdXW.lean`: the pointwise relation `UpdXW` and its composition (`XOptW.trans`). `not_xoptWFrameAt`, which refuted `xopt_comp`'s route at it, is retired (see "Retired results").
+- `twp_refuses_last_copy` and `twp_refuses_lendEnd_live_copy`, now in `Core/TreeConsume.lean`. Neither reads `↭`.
 - `Core/TreeConsume.lean` (#793).
 
 All `#print axioms` are ⊆ [propext, Classical.choice, Quot.sound].
@@ -402,10 +402,41 @@ the ancestor technique at `P̂`. It composes along every rule:
   4. `twp_lendEnd` as it stands, at the callee's end world.
 
 **Not done.**
-- **C-2.** `UpdA.frame`'s walk proof reads `MutOne` at both ends (C-3), and `UpdX.frame`'s
-  statement carries none, so "`UpdA.frame` with the absorbed branches unused" does not prove
-  `UpdX.frame` as stated. `UpdX.frame` is off `EndT`'s path. D5's row records this.
-- **`not_xoptWFrameAt`'s configuration admitted in Lean.** It is worked by hand in §4. It is not
-  built as a Lean witness.
-- **`Clause.lean` no longer elaborates** beside `UpdXW.lean`, because `CellAbs` and the moved
-  theorems are defined twice. It is kept as evidence.
+- **C-2:** resolved by retiring `UpdX.frame` (see "Retired results").
+- **`not_xoptWFrameAt`'s configuration admitted in Lean:** done, `updA_admits_frameAt` (`Core/TreeConsume.lean`). At the graft cactus, the run's copy `ℓ ↦ x` is given up beside the frame's `n ↦ imm(…, ℓ ↦ y)`. The world is the start composite, which is valid (`acF_valid`, walks built cell by cell) and `MutOne`. The proof is `updA_consume_view` (`UpdA.frame`).
+- **`Clause.lean`** was deleted (see "Retired results").
+
+### The user's decisions (2026-11-04)
+
+1. **`InvKeptA` in `EndT`: approved.** `EndT`'s codes clause is `InvKeptA = InvKept ∧
+   InvBeneath`. The reason: it is the ancestor technique applied to `P̂`. A code is kept at a
+   `mut` cell beneath an unmasked `imm` ancestor, as `UpdA` keeps the cell itself.
+2. **T1 at `HoldsCopy`: accepted.** **Open:** T1 at the flattening-level `HoldsView`, where the
+   frame holds the copy only at depth, inside another view's witness. #789's compatibility
+   lemmas are where it would be needed, if a frame condition there supplies only `HoldsView`.
+   This is also in `scope-781.md`'s open list.
+3. **C-2: `UpdX.frame` deleted.** It was unused after #806. See below.
+
+### Retired results
+
+Each entry names what was removed, why, and how to restore it.
+
+- **`UpdX.frame`**, with `xopt_comp` and `xcell_compR`, which existed only for it.
+  - **What it stated:** a frame re-read beside an update is kept. From `UpdX Θ E E′ a a′`,
+    `RR Θ c c′`, `a ● c = ac`, `a′ ● c′ = ac′`, `✓ac`, `✓ac′` and `NoneAt (MaskDiff E E′) c′`, it
+    gave `UpdX Θ E E′ ac ac′`. This is `[TR]` 6.48 at the masked cross-world `↭`, proved
+    pointwise (D5).
+  - **Why it was removed:** it is off `EndT`'s path after #806. `UpdA.frame`, proved along the
+    walks, replaces it.
+  - **Restore:** `git show a66b0538:Support/Model/Tree/World/UpdX.lean`, lines 212–413.
+- **`XOptWFrameAt` and `not_xoptWFrameAt`.** These were the pointwise frame step at `XOptW` and
+  its refutation: a given-up `imm` cell beside a framed `mut` cell (`imm ○ mut`). They restated
+  `xopt_comp`'s route. Restore: `git show a66b0538:Support/Model/Tree/World/UpdXW.lean`, lines
+  140–186.
+- **`docs/new-core/scope-806/Clause.lean`.** It no longer elaborated, because its names are now
+  defined twice. Its useful results:
+  - `twp_refuses_last_copy` and `twp_refuses_lendEnd_live_copy`, now in `Core/TreeConsume.lean`;
+  - `CellAbs`, `CellSub`, `XOptW`, `UpdXW` and `UpdX.toW`, now in `World/UpdXW.lean`;
+  - `HoldsView` and `StmtConsumeFramed`, the targets T1 was planned against.
+
+  Restore: `git show a66b0538:docs/new-core/scope-806/Clause.lean`.

@@ -10,13 +10,11 @@ least the cell's); an unmasked `imm` cell of the end's flattening is a cell of t
 start cell absorbs it (`CellSub`). `mut` cells read `XCell` exactly (`CellAbs` and `CellSub` force
 `imm`).
 
-**The frame, pointwise.** `UpdX.frame`'s route is `xopt_comp`, one location at a time. At
-`UpdXW` that route is refuted (`not_xoptWFrameAt`): a run gives up an `imm` cell at `ℓ` whose
-framed neighbour's flattening holds a `mut` cell at `ℓ` (the clause `imm ○ mut = imm` of `○`).
-The composite start reads `imm` at `ℓ`, the composite end reads the framed `mut` cell, and neither
-`XCell` nor `CellSub` relates an `imm` cell to a `mut` cell. Whether `UpdXW.frame` fails at
-resources (where the `mut` cell sits beneath an `imm` ancestor of the frame) is not derived; no
-obstruction at resources is verified.
+**The frame.** A frame step for `UpdXW` one location at a time does not go through where a run
+gives up an `imm` cell at `ℓ` whose framed neighbour's flattening holds a `mut` cell at `ℓ` (the
+clause `imm ○ mut = imm` of `○`): no relation between the two cells at `ℓ` alone accepts it.
+`EndT` reads `UpdA` (`World/UpdA.lean`), which accounts for that `mut` cell by its `imm` ancestor
+(`UpdA.frame`); `UpdA` admits the configuration (`updA_admits_frameAt`, `Core/TreeConsume.lean`).
 -/
 
 noncomputable section
@@ -136,53 +134,6 @@ theorem XOptW.trans {Θ₁ Θ₂ : LocTy} (hE : K'.Ext K'') {E E' E'' : Prop} {o
       · rw [hx'.1]; exact fun c => Kind.noConfusion c
     obtain ⟨hE₂, ψ, e₀, hx⟩ := h.2 ψ' e' hk' hE₁
     exact ⟨hE₂, ψ, e₀, xsub_trans hE hx hx'⟩
-
-/-! ### The frame at one location: `xopt_comp`'s route at `XOptW` -/
-
-/-- **`xopt_comp` at `XOptW`**: the statement `UpdX.frame` proves one location at a time, with the
-end world's flattening `ow` at the location. -/
-def XOptWFrameAt : Prop :=
-  ∀ (K K' : WCactus) (Θ : LocTy), K.Ext K' → ∀ (E E' : Prop) (oa oc o : Option (TCell K))
-    (oa' oc' o' ow : Option (TCell K')),
-    XOptW Θ E E' oa oa' ow → Option.Rel (LsSim Θ) oc' oc → ((E ∧ ¬ E') ∨ (E' ∧ ¬ E) → oc' = none) →
-    G.OptComp CellUT.CompR oa oc o → G.OptComp CellUT.CompR oa' oc' o' →
-    XOptW Θ E E' o o' ow
-
-/-- **The pointwise route is refuted.** At one carrier, unmasked: the run's part gives up the
-`imm` cell `x = imm({α}, (), ∅)`, the end world absorbs it (`ow = x`), the framed part holds
-`y = mut({α}, (), ∅, ⊤)` at the same location, re-read to itself. The composite start is
-`x ○ y = x` (`○` clause (5)); the composite end is `y`. -/
-theorem not_xoptWFrameAt : ¬ XOptWFrameAt := by
-  intro h
-  let K : WCactus := WCactus.ofParent ⟨fun n => n - 1, fun n => n, rfl, fun n hn => by omega⟩
-  let a : Life := default
-  let x : TCell K := CellUT.immOf (TSet.single a) BoCa.Val.unit PMap.empty (ResUT.inStratum_empty _)
-  let y : TCell K := CellUT.mutOf (TSet.single a) BoCa.Val.unit PMap.empty (ResUT.inStratum_empty _)
-    (fun _ _ => True) trivial
-  have hxk : x.kind = Kind.imm := rfl
-  have hyk : y.kind = Kind.mut := rfl
-  have hx : XOptW (K := K) (K' := K) (sem (fun _ => none)) False False (some x) none (some x) :=
-    ⟨fun ψ e _ _ => by
-      cases e
-      exact ⟨not_false, Or.inr ⟨x, rfl, hxk, hxk, rfl, RR.empty, TSet.single a, TSet.single a,
-        rfl, rfl, subset_refl _⟩⟩,
-     fun ψ' e => by cases e⟩
-  have hy : Option.Rel (LsSim (sem (fun _ => none))) (some y) (some y) :=
-    Option.Rel.some ⟨rfl, rfl, RR.empty, by
-      have hm := K.minS_self (s := TSet.single a) Fact.out
-      rw [TSet.union_self] at hm
-      show some (TSet.single a) = some (K.minS (TSet.single a)); rw [hm]⟩
-  have hc : G.OptComp CellUT.CompR (some x) (some y) (some x) :=
-    ⟨x, rfl, CellUT.CompR.immMut (TSet.single a) BoCa.Val.unit PMap.empty (ResUT.inStratum_empty _)
-      (TSet.single a) (ResUT.inStratum_empty _) (fun _ _ => True) trivial⟩
-  have hc' : G.OptComp CellUT.CompR (none : Option (TCell K)) (some y) (some y) := rfl
-  obtain ⟨-, ψ, e, hr⟩ := (h K K (sem (fun _ => none)) (WCactus.Ext.refl K) False False _ _ _ _ _ _
-    _ hx hy (fun c => by simp at c) hc hc').2 y rfl (by rw [hyk]; exact fun c => Kind.noConfusion c)
-    not_false
-  cases e
-  rcases hr with hr | hr
-  · exact Kind.noConfusion (hyk.symm.trans (hr.1.trans hxk))
-  · exact Kind.noConfusion (hyk.symm.trans hr.2.1)
 
 end BoCa.Fig16.Tree.Wp
 

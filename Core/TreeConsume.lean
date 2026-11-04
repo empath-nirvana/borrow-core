@@ -551,6 +551,156 @@ theorem child_cond_view :
       (viewRes (lfE 1) 1) :=
   ⟨fdMask_false_view, holdsCopy_view⟩
 
+/-! ### `not_xoptWFrameAt`'s configuration, admitted along the walks -/
+
+section FrameAt
+
+/-- The run's copy `x = imm({β}, (), ∅)` at `ℓ = 1`, at the graft cactus (`K₁`, where `α < β`). -/
+abbrev xF : TCell K₁ := viewCell βL
+
+/-- The framed `mut` cell `y = mut({β}, (), ∅, ⊤)`: the value and witness of `x` (`○` clause (5)). -/
+def yF : TCell K₁ :=
+  CellUT.mutOf (TSet.single βL) BoCa.Val.unit PMap.empty (ResUT.inStratum_empty _) (fun _ _ => True)
+    trivial
+
+/-- `ℓ ↦ y`, at the stratum of `{α}`. -/
+theorem single_yF_inStratum : (ResUT.single 1 yF).InStratum (TSet.single αL) :=
+  ResUT.inStratum_single 1 fun x hx z hz => by
+    rw [Finset.mem_singleton.mp hx, Finset.mem_singleton.mp hz]
+    exact K₁_lt
+
+/-- The frame's ancestor `ζ = imm({α}, (), ℓ ↦ y)` at `n = 2`. -/
+def ζF : TCell K₁ :=
+  CellUT.immOf (TSet.single αL) BoCa.Val.unit (ResUT.single 1 yF) single_yF_inStratum
+
+/-- The start composite: the frame's `n ↦ ζ` beside the run's copy `ℓ ↦ x`. -/
+def acF : TRes K₁ := PMap.pair 2 ζF 1 xF
+
+theorem acF_comp : ResUT.CompS (ResUT.single 2 ζF) (viewRes βL 1) acF :=
+  G.comp_sng_sng (by decide) _ _
+
+/-- The location typing covering `ℓ` with the trivial type. -/
+def ΘF : LocTy := fun _ => some ⟨fun _ _ _ => True⟩
+
+theorem cov_cF : CovR ΘF K₁ (ResUT.single 2 ζF) := by
+  intro l ψ e
+  obtain ⟨rfl, rfl⟩ := ResUT.single_get_eq_some e
+  refine Cov.immOf_iff.mpr fun m φ h => ?_
+  obtain ⟨rfl, rfl⟩ := ResUT.single_get_eq_some h
+  exact Cov.mut _ _ _ rfl (fun _ _ => ⟨fun _ => trivial, fun _ => trivial⟩)
+    (fun k φ h => absurd (show yF.wit.get k = some φ from h) (by rw [yF, CellUT.wit_mutOf]; simp))
+
+/-- The only `mut` cell at depth of the start composite is `y`. -/
+theorem acF_mut {l : BoCa.Loc} {φ : TCell K₁} (h : CellAt acF l φ) (hk : φ.kind = Kind.mut) :
+    φ = yF := by
+  cases h with
+  | top e =>
+      simp only [acF, PMap.pair_get] at e
+      split_ifs at e <;> cases e <;> simp [ζF, xF, viewCell] at hk
+  | nest e h' =>
+      simp only [acF, PMap.pair_get] at e
+      split_ifs at e <;> cases e
+      · simp only [ζF, CellUT.wit_immOf] at h'
+        cases h' with
+        | top e' => obtain ⟨-, rfl⟩ := ResUT.single_get_eq_some e'; rfl
+        | nest e' h'' =>
+            obtain ⟨-, rfl⟩ := ResUT.single_get_eq_some e'
+            simp only [yF, CellUT.wit_mutOf] at h''
+            cases h'' with
+            | top e'' => simp at e''
+            | nest e'' _ => simp at e''
+      · simp only [xF, viewCell, CellUT.wit_immOf] at h'
+        cases h' with
+        | top e' => simp at e'
+        | nest e' _ => simp at e'
+
+theorem acF_mutOne : MutOne acF :=
+  fun _ _ _ h₁ h₂ k₁ k₂ => (acF_mut h₁ k₁).trans (acF_mut h₂ k₂).symm
+
+/-- `ex(ℓ ↦ y)_○ = ℓ ↦ y`. -/
+theorem exR_single_yF : ExRT (ResUT.single 1 yF) (ResUT.single 1 yF) := by
+  refine G.ExW.mk (w := [(1, PMap.empty)]) (b := PMap.empty) (nm := ResUT.single 1 yF)
+    (G.sites_sng _ 1 yF _ rfl)
+    (G.ExWits.cons yF (by simp) rfl (by simp only [yF, CellUT.wit_mutOf]; exact exW_empty)
+      G.ExWits.nil) (G.BigComp.cons G.BigComp.nil (G.comp_empty_right _)) ?_
+    (G.comp_empty_right _)
+  rw [ResUT.restrict_single_other (k := Kind.own) (fun e => Kind.noConfusion e),
+    ResUT.restrict_single_self (k := Kind.mut) rfl]
+  exact G.comp_empty_left _
+
+/-- `ag(ℓ ↦ y) = ∅`. -/
+theorem ag_single_yF : AgWT (ResUT.single 1 yF) PMap.empty := by
+  refine G.AgW.mk (wm := [(1, PMap.empty)]) (wi := []) (a := PMap.empty) (bm := PMap.empty)
+    (bi := PMap.empty) (G.sites_sng _ 1 yF _ rfl)
+    (ResUT.sites_single_other (fun e => Kind.noConfusion e))
+    (G.AgWitsM.cons yF (by simp) rfl (by simp only [yF, CellUT.wit_mutOf]; exact agW_empty)
+      G.AgWitsM.nil) G.AgWitsI.nil (G.BigComp.cons G.BigComp.nil (G.comp_empty_right _))
+    G.BigComp.nil ?_ (G.comp_empty_right _)
+  rw [ResUT.restrict_single_other (k := Kind.imm) (fun e => Kind.noConfusion e)]
+  exact G.comp_empty_right _
+
+open Classical in
+theorem sites_acF_imm : G.Sites CellUT.kind acF Kind.imm [2, 1] := by
+  refine ⟨by simp, fun l => ?_⟩
+  simp only [List.mem_cons, List.not_mem_nil, or_false, acF, PMap.pair_get]
+  constructor
+  · rintro (rfl | rfl)
+    · exact ⟨ζF, by simp, rfl⟩
+    · exact ⟨xF, by simp, rfl⟩
+  · rintro ⟨ψ, e, -⟩
+    by_cases h₂ : l = 2
+    · exact Or.inl h₂
+    · by_cases h₁ : l = 1
+      · exact Or.inr h₁
+      · simp [h₂, h₁] at e
+
+open Classical in
+theorem sites_acF_mut : G.Sites CellUT.kind acF Kind.mut [] := by
+  refine ⟨by simp, fun l => ?_⟩
+  simp only [List.not_mem_nil, false_iff, acF, PMap.pair_get]
+  rintro ⟨ψ, e, hk⟩
+  split_ifs at e <;> cases e <;> simp [ζF, xF, viewCell] at hk
+
+/-- **`✓` of the start composite**: `⦇n ↦ ζ, ℓ ↦ x⦈ = {n ↦ ζ, ℓ ↦ x ○ y}`. -/
+theorem acF_valid : ResUT.Valid acF := by
+  have hR : ResUT.CompatR (G.restrict CellUT.kind acF Kind.imm) (ResUT.single 1 yF) := by
+    intro l ψ₁ ψ₂ e₁ e₂
+    obtain ⟨rfl, rfl⟩ := ResUT.single_get_eq_some e₂
+    have e := (ResUT.restrict_eq_some.mp e₁).1
+    simp only [acF, PMap.pair_get] at e
+    simp at e
+    subst e
+    exact ⟨_, CellUT.CompR.immMut (TSet.single βL) BoCa.Val.unit PMap.empty _ (TSet.single βL)
+      (ResUT.inStratum_empty _) (fun _ _ => True) trivial⟩
+  obtain ⟨σ, hσ⟩ := (ResUT.compR_defined_iff _ _).mpr hR
+  have hAg : AgWT acF σ := by
+    refine G.AgW.mk (wm := []) (wi := [(2, ResUT.single 1 yF), (1, PMap.empty)])
+      sites_acF_mut sites_acF_imm G.AgWitsM.nil ?_ G.BigComp.nil
+      (G.BigComp.cons (G.BigComp.cons G.BigComp.nil (G.comp_empty_right _))
+        (G.comp_empty_right _)) (G.comp_empty_right _) hσ
+    refine G.AgWitsI.cons ζF (by simp [acF, PMap.pair_get]) rfl (ResUT.single 1 yF) PMap.empty
+      (by simp only [ζF, CellUT.wit_immOf]; exact exR_single_yF)
+      (by simp only [ζF, CellUT.wit_immOf]; exact ag_single_yF) (G.comp_empty_right _) ?_
+    refine G.AgWitsI.cons xF (by simp [acF, PMap.pair_get]) rfl PMap.empty PMap.empty
+      (by simp only [xF, viewCell, CellUT.wit_immOf]; exact exW_empty)
+      (by simp only [xF, viewCell, CellUT.wit_immOf]; exact agW_empty) (G.comp_empty_right _)
+      G.AgWitsI.nil
+  exact ⟨σ, PMap.empty, σ, exST_all_imm (fun l ψ e => by
+    simp only [acF, PMap.pair_get] at e
+    split_ifs at e <;> cases e <;> rfl), hAg, ResUT.comp_empty_left _⟩
+
+/-- **`UpdA` admits `not_xoptWFrameAt`'s configuration** (`docs/new-core/scope-806.md` §4), at
+resources. The run gives up its copy `x` at `ℓ`, the end world (the start composite, the frame
+keeping `x`'s copy) absorbing it; the framed part `n ↦ ζ` holds `y = mut(…)` at `ℓ` beneath its
+`imm` ancestor `ζ`. The start composite reads `x ○ y = x` at `ℓ`, the end reads `y`: no relation
+between the two cells at `ℓ` alone accepts that, and `UpdA` accounts for `y` by `ζ`. Masks empty. -/
+theorem updA_admits_frameAt :
+    UpdA ΘF (fun _ => False) (fun _ => False) acF (ResUT.single 2 ζF) acF :=
+  updA_consume_view acF_comp cov_cF acF_valid acF_comp (ResUT.CompS.comm acF_comp) acF_valid
+    acF_mutOne (fun _ _ h _ => h) (fun _ _ h k => h.of_compS_left acF_comp (kind_mut_ne_imm k))
+
+end FrameAt
+
 end BoCa.Fig16.Tree.Wp
 
 end
