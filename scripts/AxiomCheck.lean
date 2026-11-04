@@ -1249,6 +1249,16 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.SpawnProgs.LC_cerwpT
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.SpawnProgs.progLoan_safe
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.SpawnProgs.progCancel_safe
+#print axioms BoCa.Fig16.Tree.Wp.cerwpT_schedHandle_leQ
+#print axioms BoCa.Fig16.Tree.Wp.twp_bind_fdAt
+#print axioms BoCa.Fig16.Tree.Wp.cerwpT_handleQ
+#print axioms BoCa.Fig16.Tree.Wp.cerwpT_handle
+#print axioms BoCa.Fig16.Tree.Wp.cerwpT_handleStack
+#print axioms BoCa.Fig16.Tree.Wp.SchedProgs.FwdProgs.hFw_ok
+#print axioms BoCa.Fig16.Tree.Wp.SchedProgs.FwdProgs.rootFwd_cerwpT
+#print axioms BoCa.Fig16.Tree.Wp.SchedProgs.FwdProgs.progFwd_safe
+#print axioms BoCa.Fig16.Tree.Wp.SchedProgs.FwdProgs.progFwdCancel_safe
+#print axioms BoCa.Fig16.Tree.Wp.SchedProgs.FwdProgs.progFwdCancel3_safe
 #print axioms BoCa.Fig16.Tree.Wp.SchedProgs.SpawnProgs.progDepth3_safe
 #print axioms BoCa.Fig16.Tree.chain_ResU_compS_defined_iff
 #print axioms BoCa.Fig16.Tree.chain_ResU_Valid_split
