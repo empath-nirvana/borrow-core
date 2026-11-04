@@ -1040,6 +1040,11 @@ Each entry: the decision, and why. Newest last.
       `cerwpT_adequacy` at one branch, and the stored continuations are carried by `KapSchedT` and
       `PoolT` in `cerwpT_schedHandle`'s induction, each share resuming at `KeepRel` and every two
       apart at each other's record masks (`fdMask`, `recMask`).
+    - Since #795 (SPEC 1.34) the pool is a stack, `PoolTJ` (`Core/TreePoolShare.lean`): each entry
+      is apart from the entries below it at their record masks except at the lent locations its
+      nearest joiner shares, so tasks above a joiner hold views of what it shares and hand them
+      back at their end. The pool form, the per-branch share `KeepRel` and the absence of branch
+      points are unchanged.
     - The merge rule for the stretch track (refined 2026-11-03): it merges only when every important
       gap has a demonstrated route.
     - The integration branch (2026-11-04): stretch-track PRs target `tree-core`, not `main`.

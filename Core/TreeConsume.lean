@@ -304,7 +304,8 @@ theorem holdsCopy_compS {K : WCactus} {β : Life} {l : BoCa.Loc} {a b c : TRes K
   exact ⟨x, hxv⟩
 
 /-- **(T3) A spawned task gives up a copy its parent holds**: `twp_consume_view_framed` at the
-child's frame condition, `fdMask` at the empty mask (`enSpawn`'s `Fe`) strengthened by
+child's frame condition, `fdMask` at the empty mask (the present condition `Fe` a child is verified at, `ChildOK`)
+strengthened by
 `HoldsCopy` (design choice D-1). -/
 theorem twp_child_consume {Q : TPost} {n : Nat} {w : TWd} {ls : List (SRecT w.K)}
     {O : List (FrameRecT w.K)} {e : Expr} {β : Life} {l : BoCa.Loc}
@@ -540,8 +541,8 @@ theorem twp_lendEnd_after_framed_consume {F : TFrame} (hFm : F.Mono) {Q : TPost}
     (hrest k w' _ O'' t Z' ρo (hE.of_compS_left hρ₁) hZr hOr hρo
       (fun x hx => by simpa using (List.mem_filter.mp hx).2))
 
-/-- The configuration's frame meets a spawned child's frame condition at the empty mask
-(`enSpawn`'s `Fe`). -/
+/-- The configuration's frame meets a spawned child's frame condition at the empty mask (the
+present condition `Fe` a child is verified at, `ChildOK`). -/
 theorem fdMask_false_view : fdMask (fun _ => False) wE (viewRes (lfE 1) 1) :=
   ⟨valid_view _ _, fun _ _ _ h => h.elim⟩
 
