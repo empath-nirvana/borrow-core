@@ -10397,7 +10397,7 @@ one branch (`cactusT_step`, the running branch alone in `CactusInvT`). The store
 not branches of `CactusInvT`: `KapSchedT` (and `PoolT`, below) carries them through
 `cerwpT_schedHandle`'s induction on the index. The invariant over them is in pool form, each share
 resuming at `KeepRel` and every two apart at each other's record masks (`fdMask`, `recMask`), with
-no branch points: the route the user approved on 2026-11-03, since branch points are not kept
+no branch points (decision 74), since branch points are not kept
 along tree extension (`not_joinPtKeptT`) and locations are (`fdMask_mono`). The
 task runs at any base and present frame conditions every valid frame meets (`⊤` among them): the
 scheduler's state is in the resumed branch's frame, and a valid frame avoids the task's records
@@ -10409,7 +10409,7 @@ a state of its own, its cells owned rather than borrowed. For `pingpong-mut` the
 runs under meets `SchedOKT` (`schedS_ok`, its answers a step-indexed fixpoint) and both tasks are
 proved; the relay that hands the borrow between them is not.
 
-**The resume condition reads only the share's own lineage** (D12): `contShareT` and `KapSchedT`
+**The resume condition reads only the share's own lineage** (D13): `contShareT` and `KapSchedT`
 resume at any list keeping the re-readings of the stop list's records the share is relevant to
 (`KeepRel`, `Support/Model/Tree/World/ExtF.lean`); the whole-list condition implies it
 (`keepRel_of_extFT`, `contShareT_resume_ext`), and a share is carried along `KeepRel`
@@ -11104,8 +11104,8 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
   `twp_lendEnd`); `[handle]` for a scheduler at the program's top (`cerwpT_schedHandle`) and
   adequacy over several branches (`multiBranchAdequacyT`), through `cerwpT_adequacy` at one branch
   with the stored continuations in pool form (`KapSchedT`, `PoolT`, `poolT_park`, `poolT_resume`,
-  `poolT_cancel`; the user's decision of 2026-11-03); `PoolSchedAdequacyT` at one state
-  representation; a cancel as a resume into the cancel branch (D14). Cross-task borrows are
+  `poolT_cancel`; decision 74); `PoolSchedAdequacyT` at one state
+  representation; a cancel as a resume into the cancel branch (D15). Cross-task borrows are
   excluded by the pool invariant. Borrow edges to ancestors are properties of `CactusInvT`
   configurations, with no scheduler instance. No change to `CDerives`, `fundamentalC`,
   `adequacyC`, `adequacyD`, the checker, the backends or the corpus.

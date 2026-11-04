@@ -90,7 +90,7 @@ The operations, each to be proved to preserve it:
 - **capture:** a branch, with its live lends' records, goes into a one-shot κ;
 - **graft:** resuming κ attaches its branch, possibly under frames opened since, or under another
   parent; the tree grows and every branch is re-read;
-- **unwind:** a raise, or a cancel (a resume into the continuation's cancel branch, §62 D14),
+- **unwind:** a raise, or a cancel (a resume into the continuation's cancel branch, §62 D15),
   runs the branch's `[then]` finalisers, and its unwinding borrow forms (`withborU`) end its lends
   in order. The tree has no `withborU` rule yet (row 6): the closed programs end their lends
   through `ubind` finalisers in the program and `twp_lendEnd` in the proof;
@@ -105,7 +105,7 @@ join, and `cerwpT_adequacy` is derived through `cactusT_step` at one branch. Ade
 branches (`multiBranchAdequacyT`, `poolSchedAdequacyT`) goes through `cerwpT_adequacy` at one
 branch, the stored branches carried in pool form (`KapSchedT`, `PoolT`: each share resuming at
 `KeepRel`, every two apart at each other's record masks, no branch points), not as branches of
-`CactusInvT`; this is the user's decision of 2026-11-03 (`scope-781.md` §4). Open: adequacy at the
+`CactusInvT`; this is decision 74 (`scope-781.md` §4). Open: adequacy at the
 relation the typing rules use; the frame rules as instances of capture (condition 20).
 
 Threads: the invariant is per computation. The two dependencies on sequential scheduling (a frame

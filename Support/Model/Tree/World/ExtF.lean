@@ -56,7 +56,7 @@ def RelFT (r : FrameRecT K) (ρ : TRes K) : Prop := ∃ m, FrzT ρ m ∧ RelAtT 
 /-- **The world condition of a resumed continuation**: the records of `ls` relevant to the
 share `ρ` are in `ls′`.
 
-**Departure (D9, `docs/new-core/scope-781.md` §8).** An in-house design, not a transcription:
+**Departure (D10, `docs/new-core/scope-781.md` §8).** An in-house design, not a transcription:
 a stored continuation may resume at any list `extFT` allows. No printed lemma reads it, so no
 printed technique is replaced. -/
 def extFT (ls ls' : List (SRecT K)) (ρ : TRes K) : Prop :=
@@ -241,7 +241,7 @@ theorem extFT.rr {Θ' : CodeTy} {ls ls₂ : List (SRecT K)} {ls' ls₂' : List (
 relevant to the share `ρ` (`RelFT`, read at the stop) has its re-reading in `ls′`. Records of `ls`
 the share does not read are not asked for: another branch may end them.
 
-**Departure (D12, `docs/new-core/scope-781.md` §8).** In-house, as `extFT` (D9): the resume
+**Departure (D13, `docs/new-core/scope-781.md` §8).** In-house, as `extFT` (D10): the resume
 condition of a stored continuation depends only on the records its share reads. `extFT` asked
 for a re-reading of the whole stop list first, which fails at a resume after another branch ended
 a record of its own that was open at the stop. -/

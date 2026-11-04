@@ -18,10 +18,10 @@ relation with operations read at the tree world:
   records the continuation owns re-read there (`contShareT`): the continuation is a Kripke wand.
   At `RR.refl` the resume is at the stop's own world, list and records.
 * **The resume list is any list keeping the re-readings of the stop list's records the share
-  reads** (`KeepRel`, `Support/Model/Tree/World/ExtF.lean`, departure D12 of
+  reads** (`KeepRel`, `Support/Model/Tree/World/ExtF.lean`, departure D13 of
   `docs/new-core/scope-781.md` §8): a resumer whose world holds records opened since the stop, or
   no longer holds records the share does not read, ended by another branch, resumes at its own
-  list. The stop list's re-reading with `extFT` against it (D9) is one such list
+  list. The stop list's re-reading with `extFT` against it (D10) is one such list
   (`contShareT_resume_ext`), the stop's re-read list another (`contShareT_resume_rr`).
 * **The share keeps the operation's qualifier** (`contShareT`'s first and last clauses). At an
   unrestricted operation the share is empty; at an operation that is not strictly linear the share
@@ -123,7 +123,7 @@ finaliser) and come back as a stored continuation.
 
 The resume list's condition reads only the stop list's records the share is relevant to: another
 branch may end a record of its own that was open at the stop, and the share still resumes
-(departure D12). -/
+(departure D13). -/
 def contShareT (en : OpEntT) (F : TFrame) (k : Nat) (w : TWd) (ls : List (SRecT w.K))
     (O : List (FrameRecT w.K)) (K : Kont) (v : Val) (Ψ : ContT) : TRes w.K → Prop := fun ρ =>
   (en.q = .unr → ρ = PMap.empty) ∧
@@ -319,7 +319,7 @@ theorem contShareT_kripke {en : OpEntT} {F : TFrame} {k : Nat} {w w₁ : TWd}
     (RRw.trans hE'.1 hr hr') (hl.trans hE'.1 hr hx) (hO.trans hE'.1 hO')⟩
 
 /-- **The whole-list resume condition is admitted**: a resume at a re-reading `lsR` of the stop
-list and any list `extFT` allows against it (the condition before D12) is a resume the share
+list and any list `extFT` allows against it (the condition before D13) is a resume the share
 admits (`keepRel_of_extFT`). -/
 theorem contShareT_resume_ext {en : OpEntT} {F : TFrame} {k : Nat} {w w' : TWd}
     {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {lsR ls' : List (SRecT w'.K)}

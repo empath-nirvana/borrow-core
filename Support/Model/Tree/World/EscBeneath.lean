@@ -411,7 +411,7 @@ theorem innermost_view {Θ : CodeTy} {tc : TChoice K} {W ρo ρrest : TRes K}
 record proper `p` holding a non-`imm` cell does not exist when those branches sit on a point not
 inside `p`'s frame.
 
-**Departure (D7, `docs/new-core/scope-781.md` §8).** A new derivation, not a port of a printed
+**Departure (D8, `docs/new-core/scope-781.md` §8).** A new derivation, not a port of a printed
 proof: no printed lemma states it. Its case splits are ours: the innermost view above the cell
 against an all-`mut` path to the top (`cellAt_split`), and that view's record against `p` in the
 lineage order (`desc_comparable`). No printed technique is replaced by it. -/

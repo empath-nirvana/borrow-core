@@ -27,9 +27,10 @@ branches are not branches of `CactusInvT`: each is a continuation the scheduler'
 read by `KapSchedT` (and, for a scheduler keeping a pool, by `PoolT`, `Core/TreeSchedPool.lean`),
 and `cerwpT_schedHandle`'s induction on the index carries them. The invariant over them is in pool
 form: each stored share resumes at `KeepRel`, and every two are apart (`fdMask`, `recMask`, with no
-branch points), the route the user approved on 2026-11-03 (`docs/new-core/scope-781.md` §4). Each resume goes through `contShareT_resume`; the frame a stopped branch's clause
-runs under is told the branch's masks by `twp_bind_fd` (`noneAt_recMask_end`: a record the branch
-opened during the segment is avoided by the frame from its opening).
+branch points), as decision 74 records (`docs/new-core/scope-781.md` §4).
+Each resume goes through `contShareT_resume`; the frame a stopped branch's clause runs under is
+told the branch's masks by `twp_bind_fd` (`noneAt_recMask_end`: a record the branch opened during
+the segment is avoided by the frame from its opening).
 
 **The task's frame conditions.** The task runs at base and present frame conditions every valid
 frame meets (`⊤` among them), not at the empty frame. A scheduler that keeps a state beside a
