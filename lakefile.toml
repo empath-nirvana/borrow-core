@@ -189,4 +189,4 @@ roots = ["NestedFold"]
 [[lean_lib]]
 name = "RebSpike"
 srcDir = "experiments/RebSpike"
-roots = ["RebSpike"]
+roots = ["RebSpike", "RebSpikeC"]
