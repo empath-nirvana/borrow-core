@@ -280,7 +280,7 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | t@(.iterate ..) => t
   | t@(.divFuel ..) => t
   | t@(.reify ..) => t
-  | t@(.dtor ..) => t
+  | t@(.dropFn ..) => t
   | t@(.allocS ..) => t
   | t@(.freeS ..) => t
   | t@(.withborSM ..) => t
@@ -331,7 +331,7 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   -- `[handle]` and `[handle-last]` of `Div`'s rows, and `[let-poly]`, whose copies are `use`
   -- nodes).
   | .effHandleT .. | .effHandleL .. | .letPoly .. => none
-  | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
+  | .dropFn .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => some .ff
   | .use _ _ _ _ _ ab _ => ab
   | .var .. | .force .. | .unitI .. | .copyBang .. | .forgetBang .. | .alloc .. | .free ..

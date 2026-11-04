@@ -29,8 +29,8 @@ mechanization of Wagner, Gierczak, Marshall, Li and Ahmed, *From Linearity to Bo
 - **Externs and standard I/O:** `stdin`, `stdout`, `stderr` as capabilities with opaque
   content, `read_byte`/`write_byte` on `mut` borrows of them, proved against their model and
   compiled to WASI `fd_read`/`fd_write` (§11).
-- **Implicit destructors:** an owned value a path leaves unused is freed or closed by a
-  destructor the checker inserts (§12).
+- **Implicit drops:** an owned value a path leaves unused is freed or closed by a
+  drop the checker inserts (§12).
 - **Divergence as an effect:** a function whose body may loop without bound has a loop in its
   type; this is inferred, and `total def` asserts its absence (§14).
 - **Generators:** `gen fn` with `yield`; each generator body is one state machine, and generic

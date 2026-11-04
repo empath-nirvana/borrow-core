@@ -1,5 +1,5 @@
 import Core.IntPrograms
-import Core.Dtor
+import Core.Drop
 
 /-!
 # Core — a program over an array  `[spec §9]`

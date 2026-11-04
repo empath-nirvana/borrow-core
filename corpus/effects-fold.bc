@@ -10,7 +10,7 @@
 -- `corpus/effects-fold-sum.bc` is the same program with the sums written by hand.
 --
 -- `doubled` builds a buffer and raises halfway: the buffer is dropped when the abort unwinds, by
--- its destructor (SPEC §12, §19), and `live 0` after the run says so.
+-- its drop (SPEC §12, §19), and `live 0` after the run says so.
 --
 -- Answer: `(inl i32[100], (inr (inl i32[3]), (inr (inr ()), (i32[4294967295], (i32[4294967295],
 -- i32[10])))))`: the sum 0 + 10 + … + 40; element 3 of `bad` is negative; three times 2·10⁹

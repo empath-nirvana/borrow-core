@@ -17,7 +17,7 @@ proposes spec entries, and names the theorems each needs.
 | S2 K4 | built with S2: `slice_get_mut`, `slice_len_mut` (a `mut` family is unusable without them) | `Core/Slices.lean` |
 | S3 K3 | built, **as a machine step** `split`, not a term over the host's `le_u`/`sub` (as K0); `slice_split_imm`/`_mut`, and `slice_empty_imm`/`_mut` typed `[L]` (not `![L]`) | SPEC §9, `Core/SliceOps.lean` (`famSplit_compatX`, `famEmpty_compatX`), `corpus/slice-split.bc` |
 | S3 K5 | built: `slice_replace_mut` (Mut Anti-Frame on the leaf), `slice_swap_mut` (two nested Anti-Frames, `sepRange_pick2N`; one leaf at `i = j`) | `Core/SliceOps.lean` (`sliceReplaceM_compatX`, `sliceSwapM_compatX`) |
-| S3 destructor | built: `array_mut @a A` has one, derived from `slice_get_mut` and `forget` (no kernel change) | SPEC §9, §12, `Core/Dtor.lean` |
+| S3 drop | built: `array_mut @a A` has one, derived from `slice_get_mut` and `forget` (no kernel change) | SPEC §9, §12, `Core/Drop.lean` |
 | S3 backend | built: `split` is a compare and pointer and length arithmetic, no allocation; the empty family's base is `0` | `Backend/Flat/Lower.lean`, `Backend/Clos/` |
 | S3 library | built: `lib/slice.bc`, generic in the element type, comparisons as arguments; `sort` is an insertion sort; `iter_imm`/`iter_mut` are codata over the rest of the view | SPEC §9, `docs/decisions.md` 44 |
 | P10 | as written but for `read_all` (a 64-byte buffer filled from the input) and `iter_mut` driven by a counted loop (no total `for` yet) | `corpus/split-at-mut.bc` |
@@ -239,7 +239,7 @@ Forces:
 - formatting an integer *into* a buffer (`push_dec`; today `put_dec` writes to an output);
 - encoding a character as UTF-8 (`push_char`);
 - `&s` lending a string to a text parameter;
-- the implicit destructor freeing `s` at the end.
+- the implicit drop freeing `s` at the end.
 
 ### P5 `utf8-count` — chars vs bytes, with validation
 
@@ -484,7 +484,7 @@ fn push_json_str<'a>(out: string, t: str 'a) -> string =
 Forces:
 
 - a sum of a view and an owned string as the return type, which is Rust's `Cow<'a, str>` with
-  no type of its own. Its destructor is componentwise (§12): the view side forgets, the owned
+  no type of its own. Its drop is componentwise (§12): the view side forgets, the owned
   side frees;
 - `chars` and `push_char`.
 
@@ -630,7 +630,7 @@ Not provided, each for a reason:
 | `&'static str` | literal | `lit`, viewed by `&"…"` | persistent data, not a borrow (§5.7) |
 | `Box<str>` | owned, fixed, one word smaller | `string` | not worth a type (§2.2) |
 | `Rc<str>`, `Arc<str>` | shared ownership | none; indices into an arena of strings (#94) | no RC (standing constraint) |
-| `Cow<'a, str>` | borrowed or owned | `str 'a + string` | a plain sum; its destructor is componentwise; P13 |
+| `Cow<'a, str>` | borrowed or owned | `str 'a + string` | a plain sum; its drop is componentwise; P13 |
 | `Vec<u8>` | growable bytes | `buf u8` | |
 | `Box<[u8]>` | owned fixed bytes | `array u8` | |
 | `&[u8]`, `&mut [u8]` | byte views | `slice 'a u8`, `slice mut 'a u8` | |
@@ -652,7 +652,7 @@ Not provided, each for a reason:
   becomes one, the conversion belongs in the `Args`/`Env`/`Fs` externs, which hand out bytes.
   The honest cost is that Windows paths could not round-trip without that extern-level
   encoding.
-- **`Cow` disappears only because sums and destructors do its job.** What moves is the `match`
+- **`Cow` disappears only because sums and drops do its job.** What moves is the `match`
   at each use (P13's `push_json_str`). Rust's `Deref` hides that `match`. Here it is written,
   about one line per use.
 - **Losing `Box<str>` costs a word per owned string.**
@@ -978,7 +978,7 @@ routine.
 - **`iter_mut` over `[Mut 'c A]`** is `unfold` at `Iter (Mut 'c A) 1 1` (§7) with state
   `[Mut 'c A]`:
   - `next` splits off the first leaf and yields it with the rest (K3, K4);
-  - `close` forgets the rest (a `mut` family has no `own` cell, so its destructor is `forget`).
+  - `close` forgets the rest (a `mut` family has no `own` cell, so its drop is `forget`).
 
   The element type `Mut 'c A` does not mention `X`, so the body is in `NuOk`. It is library
   code with no rule.
@@ -1013,11 +1013,11 @@ is `0`. For views it is the empty view (`slice_empty`). For owned strings it is 
 capacity 0, which allocates nothing (see §7).
 
 - `push` is `array_replace` at the length (the filler comes back, and is persistent or dropped
-  by its destructor).
+  by its drop).
 - `pop` is `array_replace` with the filler.
 - Growth is `box array(cap′, filler)`, then `len` element moves by `array_replace` on both
   arrays (the old slots get fillers back), then `array_free` of the old array. The filler
-  destructor runs on the old slots.
+  drop runs on the old slots.
 
 **Sound under every allocator, with nothing new.** `tab` places its block at the allocator's
 pick on every run (§13: `alloc_block`, `wpTS_tab` for every `A` and `k`). `array_replace` and
@@ -1287,7 +1287,7 @@ exists.
 
 | choice | follows from | notes |
 |---|---|---|
-| no RC, no `Rc<str>`; strings freed by destructors | no GC or RC; decision 23 | shared strings are arena indices (#94) |
+| no RC, no `Rc<str>`; strings freed by drops | no GC or RC; decision 23 | shared strings are arena indices (#94) |
 | `box` at every allocation site | heap allocation is explicit | growth inside `push` is the exception (Q2) |
 | `str mut` allows only UTF-8-preserving writes; no shared mutable text | no interior mutability | |
 | `&`, `borrow`, `for`, literals, capability threading are elaboration | sugar is elaboration only; decisions 26, 33, 37, 38 | the §5.1 table gains one row |

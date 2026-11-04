@@ -2,7 +2,7 @@
 -- `struct Trie { end: bool, kids: Vec<Option<Trie>> }` written as a `data` declaration:
 -- `data Trie = Trie(bool, Vec[Option[Trie]])`. `Trie` occurs under the array of `Vec`'s buffer, so
 -- the constructor is not a block and needs no `box` (SPEC §42, §61): it elaborates to
--- `mu X. bool * (array (X + 1) * i32)`, in the fold class `P` (§6), and its derived destructor
+-- `mu X. bool * (array (X + 1) * i32)`, in the fold class `P` (§6), and its derived drop
 -- drops each node's children, then the node's array, at once, as Rust drops a `Vec`. The same
 -- program over a `type` with `array (1 + X)` is `0208-implement-trie-boxed.bc`, and the arena form
 -- is `0208-implement-trie.bc`.

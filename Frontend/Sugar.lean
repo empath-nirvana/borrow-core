@@ -305,7 +305,7 @@ Everything here is decided by types (`Frontend.Elab.TCx`, docs/typed-elaboration
   the variables the body reads, at their inferred types; then the same bind.
 * **A terminal** `return V` becomes the loop that finishes with `V` at its first observation.
 * **The residual** `R` is `K * 1`, where `K` is the components of the result type `B` that have
-  no destructor (SPEC §12), or `1` when there are none: a loop closed early hands back what it
+  no derived drop (SPEC §12), or `1` when there are none: a loop closed early hands back what it
   cannot drop. The variables that hold `K` are the ones a terminal `return` puts there.
 -/
 
@@ -539,7 +539,7 @@ def varsFor (A : CVTy) : Val → Option (List (String × CVTy))
 def noDerivedDrop (A : CVTy) : Bool := Class.of A == .linear false
 
 /-- The variables a terminal `return V` of the body puts in each component of the result that
-has no destructor, as the loops' states hold them: a variable the terminal names by a copy made
+has no derived drop, as the loops' states hold them: a variable the terminal names by a copy made
 after the last loop, `x1 <- return x`, is `x` there. The residual is identified by its binder,
 followed through its copies, not by the name the terminal gives it (SPEC §41, #617). -/
 def termParts (parts : List CVTy) (ρ : List (String × String)) :
@@ -804,7 +804,7 @@ def normExits : Nat → Comp → Except Error Comp
 
 /-- A terminal `T` of a div body: `io_v : B <- T`, then the loop that finishes with `io_v` at
 its first observation; closed instead, it hands back the components of `io_v` that have no
-destructor, and the checker drops the others. -/
+drop, and the checker drops the others. -/
 def dret (cx : LoopCx) (T : Comp) : SM Comp := do
   let parts := spineT cx.B
   let lin := parts.map noDerivedDrop

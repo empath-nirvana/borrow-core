@@ -5,7 +5,7 @@
 -- once writes `>0`.
 --
 -- Blocked by the kernel, as `pending/gen-digits.bc` is: `ticks` holds the output capability
--- (no destructor, §12) across `yield`, whose continuation may be cancelled; and a stored
+-- (no derived drop, §12) across `yield`, whose continuation may be cancelled; and a stored
 -- generator's `close` cancels the continuation, which answers `()`, so the capability could not
 -- come back.
 --

@@ -3,7 +3,7 @@ import Core.PinDerives
 import Core.ClauseKinds
 import Core.HandledNames
 import Core.BlockBorrow
-import Core.Dtor
+import Core.Drop
 import Frontend.Check.Masks
 import Core.LetCopy
 import Support.Dynamics.Interpreter
@@ -40,7 +40,7 @@ definition. `TDerivesAt`/`TDerivesP` (`Frontend/Check/TDerives.lean`) are the de
 The nodes that are not rules:
 
 * **derived nodes**, one per fixed scheme that `Core/` types by a lemma at a consumed context: a
-  destructor (`dtor`, `dtor_wf`), a block's allocation and release (`allocS`, `freeS`,
+  drop (`dropFn`, `dropFn_wf`), a block's allocation and release (`allocS`, `freeS`,
   `d_allocS`, `d_freeS`), a block borrow (`withborSM`, `withborSI`, `withborSM_wf`,
   `withborSI_wf`) and a family's two-lifetime borrow (`withborF2M`, `withborF2I`,
   `withborM2_wf`, `withborI2_wf`). Each erases to the scheme's term, and its typed rule's premises
@@ -543,8 +543,8 @@ inductive TExpr where
   | lendR (info : TInfo) (jdg : Jdg) (x : LifeVar) (b : Lifetime.Life) (T : VTy) (B : VTy) (S : Row) (td tM : TExpr)
   | lendLoopR (info : TInfo) (jdg : Jdg) (x : LifeVar) (A : VTy) (S : VTy) (B : VTy) (R : VTy) (tN tK ts0 : TExpr)
   | nilDead (info : TInfo) (jdg : Jdg) (j : Jdg) (t : TExpr)
-  /-- **Derived**: the destructor of `A` (`dtorE`, SPEC §12), a finaliser or a drop. -/
-  | dtor (info : TInfo) (jdg : Jdg) (A : VTy)
+  /-- **Derived**: the drop of `A` (`dropFnE`, SPEC §12), a finaliser or a drop. -/
+  | dropFn (info : TInfo) (jdg : Jdg) (A : VTy)
   /-- **Derived**: a block's allocation at the shape `σ` (`allocS`, SPEC §5). -/
   | allocS (info : TInfo) (jdg : Jdg) (σ : Shape)
   /-- **Derived**: a block's release at the shape `σ` (`freeS`, SPEC §5). -/
@@ -702,7 +702,7 @@ def TExpr.erase : TExpr → Expr
   | .lendR _ _ _ _ _ _ _ td tM => (.app (.app (.val (withborUV (td.erase))) (.var 0)) (.val (lendCb (tM.erase))))
   | .lendLoopR _ _ _ A _ B R tN tK ts0 => (lendLoopApp A B R (tN.erase) (tK.erase) (ts0.erase))
   | .nilDead _ _ _ t => t.erase
-  | .dtor _ _ A => dtorE A
+  | .dropFn _ _ A => dropFnE A
   | .allocS _ _ σ => BoCa.Fig16.LogRel.Core.allocS σ
   | .freeS _ _ σ => BoCa.Fig16.LogRel.Core.freeS σ
   | .withborSM _ _ σ _ _ | .withborSI _ _ σ _ _ => withborS σ
@@ -820,7 +820,7 @@ def TExpr.info : TExpr → TInfo
   | .lendR i _ _ _ _ _ _ _ _ => i
   | .lendLoopR i _ _ _ _ _ _ _ _ _ => i
   | .nilDead i _ _ _ => i
-  | .dtor i _ _ | .allocS i _ _ | .freeS i _ _ | .withborSM i _ _ _ _ | .withborSI i _ _ _ _
+  | .dropFn i _ _ | .allocS i _ _ | .freeS i _ _ | .withborSM i _ _ _ _ | .withborSI i _ _ _ _
   | .withborF2M i _ _ _ _ _ _ _ | .withborF2I i _ _ _ _ _ _ _ | .litFn i _ _ _ => i
   | .divLit i _ _ _ _ | .walk i _ _ _ _ | .walkGet i _ _ _ | .selfCall i _ _ _ _ | .lendCell i _ _ _ | .nuEta i _ _ _ _ => i
   | .lendScope i _ _ _ | .litView i _ _ | .unfoldStep i _ _ => i
@@ -934,7 +934,7 @@ def TExpr.jdg : TExpr → Jdg
   | .lendR _ j _ _ _ _ _ _ _ => j
   | .lendLoopR _ j _ _ _ _ _ _ _ _ => j
   | .nilDead _ j _ _ => j
-  | .dtor _ j _ | .allocS _ j _ | .freeS _ j _ | .withborSM _ j _ _ _ | .withborSI _ j _ _ _
+  | .dropFn _ j _ | .allocS _ j _ | .freeS _ j _ | .withborSM _ j _ _ _ | .withborSI _ j _ _ _
   | .withborF2M _ j _ _ _ _ _ _ | .withborF2I _ j _ _ _ _ _ _ | .litFn _ j _ _ => j
   | .divLit _ j _ _ _ | .walk _ j _ _ _ | .walkGet _ j _ _ | .selfCall _ j _ _ _ | .lendCell _ j _ _ | .nuEta _ j _ _ _ => j
   | .lendScope _ j _ _ | .litView _ j _ | .unfoldStep _ j _ => j
@@ -1056,7 +1056,7 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .lendR _ _ _ _ _ _ _ td tM => [(.fresh 0, td), (.fresh 1, tM)]
   | .lendLoopR _ _ _ _ _ _ _ tN tK ts0 => [(.fresh 1, tN), (.fresh 1, tK), (.fresh 0, ts0)]
   | .nilDead _ _ _ t => [(.fresh 0, t)]
-  | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
+  | .dropFn .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => []
   | .litFn _ _ _ t => [(.push 0, t)]
   | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t => [(.push 0, t)]
@@ -1192,7 +1192,7 @@ def TExpr.isLam : TExpr → Bool
   | .lendR _ _ _ _ _ _ _ _ _ => false
   | .lendLoopR _ _ _ A _ B R tN tK ts0 => (((lendLoopApp A B R (tN.erase) (tK.erase) (ts0.erase)) : Expr) matches .lam _)
   | .nilDead _ _ _ t => t.isLam
-  | .dtor _ _ A => (dtorE A matches .lam _)
+  | .dropFn _ _ A => (dropFnE A matches .lam _)
   | .allocS _ _ σ => (BoCa.Fig16.LogRel.Core.allocS σ matches .lam _)
   | .freeS _ _ σ => (BoCa.Fig16.LogRel.Core.freeS σ matches .lam _)
   | .withborSM _ _ σ _ _ | .withborSI _ _ σ _ _ => (withborS σ matches .lam _)
@@ -1310,7 +1310,7 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .lendR _ _ _ _ _ _ _ _ _ => rfl
   | .lendLoopR _ _ _ _ _ _ _ _ _ _ => rfl
   | .nilDead _ _ _ t => isLam_eq t
-  | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
+  | .dropFn .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => rfl
   | .litFn _ _ _ t => isLam_eq t
   | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t => isLam_eq t

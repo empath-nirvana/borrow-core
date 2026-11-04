@@ -321,7 +321,7 @@ def mainResult : String := "io_main_result"
 /-- **The entry discards `main`'s result by its derived drop** (SPEC §42): a program with no
 externs whose `main : F A` answers a value `A` that is neither unrestricted nor a loop the driver
 runs (`U (νX. …)`) is entered as `main : F 1 = io_main_result : A <- M; return ()`. The checker
-drops the result by its derived drop (`drop_derives`, at a `dtor` node; `entry_derives` in
+drops the result by its derived drop (`drop_derives`, at a `dropFn` node; `entry_derives` in
 `Core/Decl.lean`), and the run ends with every cell freed (`entry_runs`). At a type with no
 derived drop, a declared type's among them, no rule consumes the result and the program is
 refused. `none` when `main` is entered as it is. -/

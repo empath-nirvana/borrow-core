@@ -1,4 +1,4 @@
--- An unused owned value with no destructor: the thunk `k : U (F (1 + 1))` can be disposed of
+-- An unused owned value with no derived drop: the thunk `k : U (F (1 + 1))` can be disposed of
 -- only by running it, so it is not dropped implicitly (SPEC §12) and must be consumed.
 type B = 1 + 1
 

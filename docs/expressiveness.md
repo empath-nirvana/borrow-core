@@ -116,7 +116,7 @@ first; within them, the one whose fix is the deeper foundation comes first.
 | B1 shared service across tasks | **a per-turn lend**: the scheduler owns the service and lends it to the task it resumes, for one turn, which hands it back at its `await`. It reuses §14's per-observation lend with the turn as the step, read as Balzer–Pfenning's acquire/release; that it needs no new lemma is a hypothesis, settled by spike S-B (§9) | no. Rust uses `Rc<RefCell<_>>` (run-time flag) or `Arc<Mutex<_>>`; ours is static and free on one thread |
 | B7 elaboration refusals | the already-designed units: loops U2–U4, ergonomics E1, #586's write rule | n/a |
 | B3 records, variants, nested data | data declarations (#489) whose nested containers **elaborate to one recursive type**, as Lean elaborates nested inductives into mutual ones | partly: Rust's enums and structs, without its `Box` ceremony |
-| B4 suspended computations owning capabilities | the close-with-residual that S0 proved for loops ("unknown 2: the residual … proved", `experiments/DivEffect/README.md`: a loop closed early hands back its residual by a resume with `close`, not a cancel), applied to generators | no: Rust relies on `Drop`; we have no destructor for a capability |
+| B4 suspended computations owning capabilities | the close-with-residual that S0 proved for loops ("unknown 2: the residual … proved", `experiments/DivEffect/README.md`: a loop closed early hands back its residual by a resume with `close`, not a cancel), applied to generators | no: Rust relies on `Drop`; we have no derived drop for a capability |
 | B5 borrows across a suspension (**closed, decision 71**: [tombstone](tombstones/lends-across-suspensions.md)) | for tasks, **the lend split at each `await`** (measured: the split program runs `unconditional`, with no `PinLaw`); for generators, **a lending cursor**, whose state is owned (an index) and which is lent the source at each pull. The spanning lend K1 (#172) is not needed for the target set | Rust's own answer for generators is the same index cursor; its self-borrowing generators are not stable |
 
 **The research threads** (§7): used — handler-owned state, SILL_S manifest sharing (as the reading
@@ -295,7 +295,7 @@ report for T01, T02, T07, T09 and T10 are correct; T08's and T14's were checked 
 | B1 | a capability is a `mut` borrow; a task of `spawn_in` is given it until it ends, so two tasks cannot both use it; a task of `spawn` cannot hold a borrow (`κ` boxed at `top`); a task's observations have the empty row, so it cannot perform an outer control effect | SPEC §34 *Tasks* (PROPOSED), §30 *Open*; `lib/async.bc:31`; measured `op-a`, `op-d` |
 | B2 | a handler around a div computation is not provided | SPEC §21 *Open*; measured `op-e` |
 | B3 | no `data` declarations; a `mu` nested in a `mu` must be closed; record fields and variants in place are limited | parser; SPEC §5 *Open*, §31 *Open*; #182, #32, #19; measured `json2` |
-| B4 | `yield` is cancellable; what is live across it must drop; a capability has no destructor; a cancel answers `()` | SPEC §15 *Open*, §19 `[let]`; measured `gen-*` |
+| B4 | `yield` is cancellable; what is live across it must drop; a capability has no derived drop; a cancel answers `()` | SPEC §15 *Open*, §19 `[let]`; measured `gen-*` |
 | B5 | a resuming operation cannot cross a borrow (T1, permanent by decision 71); R1 relaxes it only for a body closed but for its view, and is frozen | SPEC §19, §29; [tombstone](tombstones/lends-across-suspensions.md) |
 | B6 | a call lends one place; a looping callee takes one borrow, re-lent each step; a lend in a capability-threading call, and a capability through `for … in &a`, are not provided | SPEC §14 *Open*, §18 *Not provided* and *Open* |
 | B7 | elaboration decisions taken too early or by name (loop class before typing, threaded variables by name, assignments outside joins) | `docs/loops.md` §1; `docs/ergonomics.md` §7.1; #586 |
@@ -444,13 +444,13 @@ nesting elaboration, behind the yes/no spike S-D (§9).
 computation that may abort, and its type is linear with no derived drop, and an abort abandons
 only a value that holds no owned cell" (measured, `gen-digits`, `gen-lines`, `gen-adapters-io`;
 `gen-lazy` for `ref output`). `yield` is cancellable, so what is live across it must drop; a
-capability has no destructor and must be handed back; a cancel answers `()` (SPEC §15
+capability has no derived drop and must be handed back; a cancel answers `()` (SPEC §15
 *Open*). North-star stage 3 is this shape: a watch stream decoded from a socket the stream owns.
 
 | way | performance | proof cost | ergonomics | verdict |
 |---|---|---|---|---|
-| Rust's way: the iterator owns the handle; `Drop` closes it | parity | n/a: a capability has no destructor by design (§12) | good | not available as is |
-| give the capability a destructor | parity | lemma; changes §12's group 3 | fair: a dropped stream silently closes the input | rejected: the user's linear-obligation goals (#209, #210) want the capability back |
+| Rust's way: the iterator owns the handle; `Drop` closes it | parity | n/a: a capability has no derived drop by design (§12) | good | not available as is |
+| give the capability a drop | parity | lemma; changes §12's group 3 | fair: a dropped stream silently closes the input | rejected: the user's linear-obligation goals (#209, #210) want the capability back |
 | **close hands back a residual**: cancelling the generator resumes it with `close`, and it returns what it owns | parity | lemma or less: S0 proved it for loops (unknown 2, `experiments/DivEffect/README.md`); generators need the same close at their `yield`'s observation | best | **recommended**: one mechanism with B2 |
 | a `must_resume ctl` iteration effect (no `break`) | parity | lemma | poor: no early exit | a fallback named by SPEC §15 |
 | pass the capability per pull (the per-turn lend of B1) | parity | none or lemma (as B1) | fair | the same mechanism as B1; good where the consumer owns the capability anyway |
@@ -766,7 +766,7 @@ gen-lines.bc: gen-lines.bc:23:18: `io_it1`, of type `U (iter u8 (ref input) (ref
 io-two-tasks.bc: io-two-tasks.bc:22:11: two tasks spawned in this block are given the capability of `Stdout`: a capability is lent to one task at
 lc-0039-combination-sum.bc: lc-0039-combination-sum.bc:58:28: in this `case`, `out` is consumed in the `inr` arm but not in the `inl` arm
 lc-0070-climbing-stairs-memo.bc: lc-0070-climbing-stairs-memo.bc:38:32: no handler `memo` is declared before this `with`
-lc-0208-trie-boxed.bc: runs since #722, as `corpus/leetcode/trees/0208-implement-trie-boxed.bc` (the destructor at the class `P`, SPEC §61); its error was `io_d23` is not consumed in its scope, and its type `(1 + (mu X. (1 + 1) * array (1 + X))) + 
+lc-0208-trie-boxed.bc: runs since #722, as `corpus/leetcode/trees/0208-implement-trie-boxed.bc` (the drop at the class `P`, SPEC §61); its error was `io_d23` is not consumed in its scope, and its type `(1 + (mu X. (1 + 1) * array (1 + X))) + 
 lend-nested.bc: lend-nested.bc:33:38: type mismatch: expected `i32`, but this has type `ref array i32 * i32`
 lend-two.bc: lend-two.bc:31:14: type mismatch: expected `ref output`, but this has type `imm 'io_lb31_3 i32`
 loop-handler-binder.bc: loop-handler-binder.bc:18:3: `e` is used twice here, and its type `array_imm 'a u8` is linear
@@ -1857,7 +1857,7 @@ Every one runs; four need an arena for an object graph.
 | Bounce | balls in an array, mutated in place | natural | `for b in &mut balls { modify b { … } }` | — | 1 / 0 | `awfy/bounce.bc` |
 | List | build lists, compare lengths, Takeuchi over lists | workaround: `clone` per extra use (9830 copies) | "`y` is used again …, so this use copies it, and its type … holds recursive data: the copy allocates every node" | B9 (shared immutable data) | 75374 / 0 | `awfy/list.bc` |
 | Permute, Queens | recursive search over arrays | natural | — | — | 1 / 0, 40 / 0 | `awfy/permute_natural.bc`, `awfy/queens.bc` |
-| Storage | a tree of arrays of arrays, built recursively | workaround: four children as a tuple; natural since #722 | children in an array: runs with its derived destructor (SPEC §61) at Rust's 5461 allocations; it was "`io_d23` is not consumed in its scope, and its type … has no destructor" | B14 (closed for the owned destructor) | 5461 / 0 | `awfy/storage.bc`, `corpus/storage-array.bc` |
+| Storage | a tree of arrays of arrays, built recursively | workaround: four children as a tuple; natural since #722 | children in an array: runs with its derived drop (SPEC §61) at Rust's 5461 allocations; it was "`io_d23` is not consumed in its scope, and its type … has no derived drop" | B14 (closed for the owned drop) | 5461 / 0 | `awfy/storage.bc`, `corpus/storage-array.bc` |
 | Towers | Hanoi with piles as linked lists | natural | — | — (cost: a box per push) | 86383 / 0 | `awfy/towers.bc` |
 
 ### 12.2 The Benchmarks Game
@@ -1908,7 +1908,7 @@ keyed by views), is refused by #491 and #492, both B7. So the AoC subset gates o
 | program | status | the refusal, or the workaround | blocker | probe |
 |---|---|---|---|---|
 | hash map | natural (`lib/map.bc`: generic, insert, lookup, remove, a view by `map_get`, iteration) | iterating a map whose keys are owned strings: "type mismatch: expected `array u8 * i32`, but this has type `array_imm 'y u8 * i32`" (at `lib/map.bc:230`) | B16 | `ds/hashmap.bc` |
-| B-tree | workaround: arena, generic with a comparator (2000 keys, height 6); natural since #722 | nodes owning arrays of children: runs with its derived destructor (SPEC §61), 200 keys, at Rust's 77 allocations (792 at 2000 keys); it was "`e` is not consumed in its scope, and its type `1 + (mu X. …)` has no destructor" | B14 (closed for the owned destructor) | `ds/btree.bc`, `corpus/btree-boxed.bc` |
+| B-tree | workaround: arena, generic with a comparator (2000 keys, height 6); natural since #722 | nodes owning arrays of children: runs with its derived drop (SPEC §61), 200 keys, at Rust's 77 allocations (792 at 2000 keys); it was "`e` is not consumed in its scope, and its type `1 + (mu X. …)` has no derived drop" | B14 (closed for the owned drop) | `ds/btree.bc`, `corpus/btree-boxed.bc` |
 | LRU cache | workaround: arena list with a sentinel plus `Map[i32, i32]`; LeetCode 146's example | the classic map-to-node plus linked nodes: "`n` is used twice here, and its type `ref (mu X. (i32 * i32) * (1 + ref X) * (1 + ref X))` is linear" | B13 | `ds/lru-arena.bc`, `ds/lru-cells.bc` |
 | doubly linked list | workaround: arena | linking cells both ways: "`a` is used twice here …" | B13 | `ds/dll-cells.bc` |
 | union-find, ring buffer, arena allocator | natural | ids are aliases, not distinct types (no `data`) | B3 | `ds/unionfind.bc`, `ds/ringbuf.bc`, `ds/arena.bc` |
@@ -1934,8 +1934,8 @@ keyed by views), is refused by #491 and #492, both B7. So the AoC subset gates o
   from two places and mutated) is refused with "used twice". The premise's limited checker refuses
   it by design, as Rust's does without `Rc<RefCell<_>>`.
 - **B14, recursive data under an array.** Storage, a B-tree whose nodes own child arrays, a buffer
-  of AST nodes, `lc-0208-trie-boxed`: no destructor and no filler for `mu X. … array X …` (#182).
-  The destructor and the owned fold at the class `P` are built (#722, SPEC §61): Storage, the
+  of AST nodes, `lc-0208-trie-boxed`: no derived drop and no filler for `mu X. … array X …` (#182).
+  The drop and the owned fold at the class `P` are built (#722, SPEC §61): Storage, the
   B-tree and the trie run in natural form at Rust's allocation counts. A filler at `μ` and the
   borrowed fold remain.
 - **B15, containers of `!` functions.** Richards' task functions, Lox's native functions: "`i` is
@@ -1987,7 +1987,7 @@ bg/mut-name-capture-renamed.bc: runs
 bg/pidigits.bc: runs
 ds/lru-cells.bc: lru-cells.bc:14:3: `n` is used twice here, and its type `ref (mu X. (i32 * i32) * (1 + ref X) * (1 + ref X))` is linear
 ds/dll-cells.bc: dll-cells.bc:19:3: `a` is used twice here, and its type `ref (mu X. i32 * (1 + ref X) * (1 + ref X))` is linear
-ds/btree-boxed.bc: runs since #722, as `corpus/btree-boxed.bc` (200 keys there; `2000 0 6` and Rust's 792 allocations at 2000); its error was `e` is not consumed in its scope, and its type `1 + (mu X. (array i32 * i32) * array (1 + X) * i32)` has no destructor
+ds/btree-boxed.bc: runs since #722, as `corpus/btree-boxed.bc` (200 keys there; `2000 0 6` and Rust's 792 allocations at 2000); its error was `e` is not consumed in its scope, and its type `1 + (mu X. (array i32 * i32) * array (1 + X) * i32)` has no derived drop
 ds/lru-arena.bc: runs
 conc/worker-pool-port.bc: ((i32[3], i32[2]), inr (i32[51], inr (i32[42], inr (i32[31], inr (i32[22], inr (i32[11], inl ()))))))
 lox/tree-arena.bc, lox/clox-vm.bc, ns/yaml-indent.bc: run
@@ -2001,7 +2001,7 @@ corpus/aoc/*.bc (13 files): all check
 | way | performance | proof cost | ergonomics | verdict |
 |---|---|---|---|---|
 | Rust's way: `std::net` over OS sockets, `Drop` closes | parity | n/a | good | its *surface* is not ours: a socket here is a linear capability, and its close returns the error (#210) |
-| **`Net` as an effect served by the platform's outermost handler** (SPEC §34's model for `Stdout`), a connection a linear handle (no destructor; `close` hands back the error), the extern contract proved as stdio's is (`externs_loop_every_run`, SPEC §11) | parity: a direct call to the host (`effect handling is erased`) | lemma per extern, by the stdio pattern | good | **recommended** |
+| **`Net` as an effect served by the platform's outermost handler** (SPEC §34's model for `Stdout`), a connection a linear handle (no derived drop; `close` hands back the error), the extern contract proved as stdio's is (`externs_loop_every_run`, SPEC §11) | parity: a direct call to the host (`effect handling is erased`) | lemma per extern, by the stdio pattern | good | **recommended** |
 | session-typed HTTP over it (#209) | parity | relation (sessions) | best | later; not needed to run the operator |
 
 The elaboration candidate: `with net { let c = connect(addr); … }` elaborates to the platform's
@@ -2042,7 +2042,7 @@ as an arena does.
 | way | performance | proof cost | ergonomics | verdict |
 |---|---|---|---|---|
 | Rust's way: `Vec<Box<Node>>` with `Drop` | parity | n/a | good | the target |
-| **a destructor and fold for `mu` with `X` under `array`** (#182 item 2) | parity | lemma: one more `FShape` case for `foldOwn` and its destructor | good | **recommended**, behind spike S-H |
+| **a drop and fold for `mu` with `X` under `array`** (#182 item 2) | parity | lemma: one more `FShape` case for `foldOwn` and its drop | good | **recommended**, behind spike S-H |
 | children as a tuple, or in an arena | parity | none | fair | today's workaround |
 
 ### 13.5 B15: containers of `!` functions
@@ -2168,7 +2168,7 @@ is written naturally only after it).
 |---|---|---|---|---|
 | C-1 | **`Arena[T]` with `Id[T]` newtypes** in `lib/`, and the `region` elaboration of §13.2 in its unbranded form | B13 | Richards, DeltaBlue, Havlak, CD, LRU, the doubly linked list, jlox, clox, the B-tree, each as a corpus program over the library | all ten run with goldens, and none indexes a raw `array i32` by hand |
 | C-2 | **spike S-G** (#119): yes/no — do branded handles into a handler-owned region make every access in bounds by the region-length Kripke fact, as one lemma with no change to the relation? | B13 (bounds) | DeltaBlue over C-1 with its bounds checks gone | **yes**: build it; `bcc-counts` bounds per access drop to 0. **Kill**: checked indices stay, documented as the arena's cost |
-| C-3 | **spike S-H**: yes/no — is a destructor and fold for `mu` with `X` under `array` one more `FShape` case of `foldOwn`, one lemma? | B14 | `awfy/storage_array.bc`, `ds/btree-boxed.bc`, `lc-0208-trie-boxed` | **yes**: build it and the three run. **Kill**: tuple children and arenas are the way, documented in SPEC §6. Answered by #595's design and #722: not one case, a class `P` and one generated fold (SPEC §61); the three run as `corpus/storage-array.bc`, `corpus/btree-boxed.bc`, `corpus/leetcode/trees/0208-implement-trie-boxed.bc` |
+| C-3 | **spike S-H**: yes/no — is a drop and fold for `mu` with `X` under `array` one more `FShape` case of `foldOwn`, one lemma? | B14 | `awfy/storage_array.bc`, `ds/btree-boxed.bc`, `lc-0208-trie-boxed` | **yes**: build it and the three run. **Kill**: tuple children and arenas are the way, documented in SPEC §6. Answered by #595's design and #722: not one case, a class `P` and one generated fold (SPEC §61); the three run as `corpus/storage-array.bc`, `corpus/btree-boxed.bc`, `corpus/leetcode/trees/0208-implement-trie-boxed.bc` |
 | C-4 | **containers of `!` functions**: SPEC §26's weakening by a dead persistent binder, or an elaboration of the tabulator that does not need it | B15 | `awfy/fn_array.bc`, `richards_fnfield.bc`, `lox/fn-in-array.bc`, `lox/map-closures.bc` | those run |
 | C-5 | **#58 and #142, implicit copies of `imm`**, and **a borrowed walk of `mu`** (`unroll` at an `imm` view) | B9 | List without `clone`; AWFY Json's lookup returning a view; DeltaBlue's two views; T05 | those run, and List's `copies` are 0 |
 | C-6 | **spike S-F** (#174): yes/no — does `axWithborMITy` follow from the anti-frame and a variant of `wpTS_I_frameX` with `hQ` stated at the drop step? | B9 | T04 with `len(&v)` at a `mut` parameter | **yes**: build K2′. **Kill**: `mut`-taking read functions stay the API |
@@ -2548,7 +2548,7 @@ acceptance of the units that reach them.
 | 2 | **spike S-B**: yes/no — is the per-turn task type derivable from §22's `Clo` closure with an argument and §32's threading, with no new compatibility lemma? Kill path: the port as a library (it runs today, `conc/worker-pool-port.bc`) | B1 (form) | — |
 | 3 | **the shared service** (the per-turn lend, or the port) | B1 | `operator-reconcile.bc` with three tasks; the worker pool and the task pipeline over channels; `informer-cache`; `io-two-tasks`. Each within Rust's executor counts after unit 18 (allocations) and N3 (indirect) |
 | 4 | **data declarations** (#489 part 1) | B3 | T07, T09, T10, T11; Richards, DeltaBlue, CD (records, with C-5's view copies); union-find, the arena allocator, the LRU cache's nodes; n-body's bodies |
-| 5 | **spike S-H**: yes/no — is a destructor and fold for `mu` with `X` under `array` one more `FShape` case of `foldOwn`? Kill path: kernel nested `mu` and arrays of it as their own SPEC entry (#182), because B14 is out of reach without one of them | B14 | — |
+| 5 | **spike S-H**: yes/no — is a drop and fold for `mu` with `X` under `array` one more `FShape` case of `foldOwn`? Kill path: kernel nested `mu` and arrays of it as their own SPEC entry (#182), because B14 is out of reach without one of them | B14 | — |
 | 6 | **recursive data under arrays**, by S-H's answer, and nested declarations (S-D) | B14 | AWFY Json at Rust's 13 allocations (a `Vec` of values, not a box per element); Storage with its children in an array; the boxed B-tree; YAML |
 | 7 | **JSON and YAML libraries** over units 4 and 6, raising across the input's borrow (unit 8) | B3, B14, B10 | `json-roundtrip`, `yaml-roundtrip` within a Rust reference's counts (an `enum` with `Vec` children, hand-written parser) |
 | 8 | **aborts across buffer and literal borrows**; `fold_lines` over `count_try` | B10 | `abort1.bc`, `config-parse` |

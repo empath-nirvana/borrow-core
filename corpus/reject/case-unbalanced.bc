@@ -1,5 +1,5 @@
 -- The arms of a `case` consume different variables: the thunk `k` is run in one arm only. A
--- cell would be dropped in the other arm (SPEC §12), but a thunk has no destructor.
+-- cell would be dropped in the other arm (SPEC §12), but a thunk has no derived drop.
 type B = 1 + 1
 
 main : F B =

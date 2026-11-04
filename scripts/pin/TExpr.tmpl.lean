@@ -3,7 +3,7 @@ import Core.PinDerives
 import Core.ClauseKinds
 import Core.HandledNames
 import Core.BlockBorrow
-import Core.Dtor
+import Core.Drop
 import Frontend.Check.Masks
 import Core.LetCopy
 import Support.Dynamics.Interpreter
@@ -40,7 +40,7 @@ definition. `TDerivesAt`/`TDerivesP` (`Frontend/Check/TDerives.lean`) are the de
 The nodes that are not rules:
 
 * **derived nodes**, one per fixed scheme that `Core/` types by a lemma at a consumed context: a
-  destructor (`dtor`, `dtor_wf`), a block's allocation and release (`allocS`, `freeS`,
+  drop (`dropFn`, `dropFn_wf`), a block's allocation and release (`allocS`, `freeS`,
   `d_allocS`, `d_freeS`), a block borrow (`withborSM`, `withborSI`, `withborSM_wf`,
   `withborSI_wf`) and a family's two-lifetime borrow (`withborF2M`, `withborF2I`,
   `withborM2_wf`, `withborI2_wf`). Each erases to the scheme's term, and its typed rule's premises
@@ -438,8 +438,8 @@ theorem Expr.letBody_shift (M b : Expr) :
 /-- **The typed term**: one node per rule application of the checked derivation.  `[spec §3]` -/
 inductive TExpr where
 --@TEXPR_CTORS@
-  /-- **Derived**: the destructor of `A` (`dtorE`, SPEC §12), a finaliser or a drop. -/
-  | dtor (info : TInfo) (jdg : Jdg) (A : VTy)
+  /-- **Derived**: the drop of `A` (`dropFnE`, SPEC §12), a finaliser or a drop. -/
+  | dropFn (info : TInfo) (jdg : Jdg) (A : VTy)
   /-- **Derived**: a block's allocation at the shape `σ` (`allocS`, SPEC §5). -/
   | allocS (info : TInfo) (jdg : Jdg) (σ : Shape)
   /-- **Derived**: a block's release at the shape `σ` (`freeS`, SPEC §5). -/
@@ -492,7 +492,7 @@ inductive TExpr where
 /-- **The erasure**: the term the node's rule concludes with. -/
 def TExpr.erase : TExpr → Expr
 --@ERASE_CASES@
-  | .dtor _ _ A => dtorE A
+  | .dropFn _ _ A => dropFnE A
   | .allocS _ _ σ => BoCa.Fig16.LogRel.Core.allocS σ
   | .freeS _ _ σ => BoCa.Fig16.LogRel.Core.freeS σ
   | .withborSM _ _ σ _ _ | .withborSI _ _ σ _ _ => withborS σ
@@ -505,7 +505,7 @@ def TExpr.erase : TExpr → Expr
 /-- The node's source. -/
 def TExpr.info : TExpr → TInfo
 --@INFO_CASES@
-  | .dtor i _ _ | .allocS i _ _ | .freeS i _ _ | .withborSM i _ _ _ _ | .withborSI i _ _ _ _
+  | .dropFn i _ _ | .allocS i _ _ | .freeS i _ _ | .withborSM i _ _ _ _ | .withborSI i _ _ _ _
   | .withborF2M i _ _ _ _ _ _ _ | .withborF2I i _ _ _ _ _ _ _ | .litFn i _ _ _ => i
   | .divLit i _ _ _ _ | .walk i _ _ _ _ | .walkGet i _ _ _ | .selfCall i _ _ _ _ | .lendCell i _ _ _ | .nuEta i _ _ _ _ => i
   | .lendScope i _ _ _ | .litView i _ _ | .unfoldStep i _ _ => i
@@ -514,7 +514,7 @@ def TExpr.info : TExpr → TInfo
 /-- The node's judgment. -/
 def TExpr.jdg : TExpr → Jdg
 --@JDG_CASES@
-  | .dtor _ j _ | .allocS _ j _ | .freeS _ j _ | .withborSM _ j _ _ _ | .withborSI _ j _ _ _
+  | .dropFn _ j _ | .allocS _ j _ | .freeS _ j _ | .withborSM _ j _ _ _ | .withborSI _ j _ _ _
   | .withborF2M _ j _ _ _ _ _ _ | .withborF2I _ j _ _ _ _ _ _ | .litFn _ j _ _ => j
   | .divLit _ j _ _ _ | .walk _ j _ _ _ | .walkGet _ j _ _ | .selfCall _ j _ _ _ | .lendCell _ j _ _ | .nuEta _ j _ _ _ => j
   | .lendScope _ j _ _ | .litView _ j _ | .unfoldStep _ j _ => j
@@ -531,7 +531,7 @@ inductive TScope where
 /-- The node's children, in the rule's order, each with the context its premise is at. -/
 def TExpr.children : TExpr → List (TScope × TExpr)
 --@CHILDREN_CASES@
-  | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
+  | .dropFn .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => []
   | .litFn _ _ _ t => [(.push 0, t)]
   | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t => [(.push 0, t)]
@@ -548,7 +548,7 @@ head is a constructor, and through the child where the rule keeps its premise's 
 erasure is computed only where the rule's term is a definition's. -/
 def TExpr.isLam : TExpr → Bool
 --@ISLAM_CASES@
-  | .dtor _ _ A => (dtorE A matches .lam _)
+  | .dropFn _ _ A => (dropFnE A matches .lam _)
   | .allocS _ _ σ => (BoCa.Fig16.LogRel.Core.allocS σ matches .lam _)
   | .freeS _ _ σ => (BoCa.Fig16.LogRel.Core.freeS σ matches .lam _)
   | .withborSM _ _ σ _ _ | .withborSI _ _ σ _ _ => (withborS σ matches .lam _)
@@ -561,7 +561,7 @@ def TExpr.isLam : TExpr → Bool
 /-- `isLam` is the erasure's head. -/
 theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
 --@ISLAM_EQ@
-  | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
+  | .dropFn .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => rfl
   | .litFn _ _ _ t => isLam_eq t
   | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t => isLam_eq t

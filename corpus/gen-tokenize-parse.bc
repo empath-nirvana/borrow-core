@@ -7,7 +7,7 @@
 -- Exercises: a generator over a borrowed view, a stored generator threaded through a recursive
 -- group, `Fail` across the pulls, and a borrow of a literal that the whole pipeline lives inside.
 --
--- The stored generator has no destructor, so the parser closes it itself before it raises.
+-- The stored generator has no derived drop, so the parser closes it itself before it raises.
 --
 -- Answer: `(inl i32[44], inr i32[2])`: `2*(3+4)+5*6` is 44, and `2*(3+4` misses its `)`;
 -- `live 0`. A parser that lost its lookahead across a pull gives another value.

@@ -1,6 +1,6 @@
 import Core.EffExamples
 import Core.RecordPrograms
-import Core.Dtor
+import Core.Drop
 import Core.DelayPrograms
 
 /-!
@@ -181,7 +181,7 @@ The function body logs and raises:
   raise there; the borrow returns, and the program answers the log state beside the error,
   `(free r, inj₂ ())`. The logs are kept.
 * **`Fail` outside** (`failOutside`): the raise crosses the borrow of `r`, by its unwinding
-  form. The lend ends and `r`'s destructor frees the cell; `to_result` answers `inj₂ ()`, and the
+  form. The lend ends and `r`'s drop frees the cell; `to_result` answers `inj₂ ()`, and the
   log state is gone. The logs are lost.
 
 `logRaise`'s answer type is `0`, so in both orders the error is the only answer the types allow,
@@ -267,8 +267,8 @@ theorem logOutside_answers {μ₁ : Heap} {e₁ : Expr}
 
 /-! #### `Fail` outside -/
 
-/-- The finaliser of `r : Ref Flag`: its destructor. -/
-abbrev dFlag : Expr := dtorE (.ref Flag)
+/-- The finaliser of `r : Ref Flag`: its drop. -/
+abbrev dFlag : Expr := dropFnE (.ref Flag)
 
 theorem dFlag_closed : closedAt 0 dFlag = true := by decide
 
@@ -301,7 +301,7 @@ theorem d_failOutsideBody :
   refine .bind (.right (.right (.dead (.dead .nil))))
     (.ret (.withbor2U (A := Flag) (B := .zero) (S := Sf) 0 (by cdead) rfl
       ⟨.top, LifeCtx.defines_of_wf rfl, (outlives_of_dataB rfl).toLe⟩ (by simp [VFree]) (by simp [VFree])
-      (Sf_unwind 0) dFlag_closed (dtor_wf (.ref (.sum .unit .unit)) (by cdead)))) ?_
+      (Sf_unwind 0) dFlag_closed (dropFn_wf (.ref (.sum .unit .unit)) (by cdead)))) ?_
   refine .effLet (A := .tensor (.ref Flag) .zero) (.left (.left (.left (.dead (.dead .nil)))))
     (fun _ => Ctx.Dead.drops (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
   · refine .app (.left (.right (.left (.dead (.dead .nil))))) ?_ (.there (.here (by cdead)))
@@ -388,7 +388,7 @@ theorem d_reborrowRaiseBody :
   refine .bind (.right (.right (.dead (.dead .nil))))
     (.ret (.withbor2U (A := Flag) (B := .zero) (S := Sf) 0 (by cdead) rfl
       ⟨.top, LifeCtx.defines_of_wf rfl, (outlives_of_dataB rfl).toLe⟩ (by simp [VFree]) (by simp [VFree])
-      (Sf_unwind 0) dFlag_closed (dtor_wf (.ref (.sum .unit .unit)) (by cdead)))) ?_
+      (Sf_unwind 0) dFlag_closed (dropFn_wf (.ref (.sum .unit .unit)) (by cdead)))) ?_
   refine .effLet (A := .tensor (.ref Flag) .zero) (.left (.left (.left (.dead (.dead .nil)))))
     (fun _ => Ctx.Dead.drops (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
   · refine .app (.left (.right (.left (.dead (.dead .nil))))) ?_ (.there (.here (by cdead)))

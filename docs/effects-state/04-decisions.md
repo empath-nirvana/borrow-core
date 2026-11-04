@@ -404,7 +404,7 @@ These are detailed under each topic below (the IDs in brackets).
   `ν` codata … not a separate construct unless a target needs it" (`SPEC.md:2975`). Decision 15
   is not marked revised. Nothing records whether the user revisited it.
 
-**C6. Static destructor placement for a dropped continuation (effects TR §8.1).**
+**C6. Static drop placement for a dropped continuation (effects TR §8.1).**
 - Content: the elaborator inserts `cancel k` at the weakening point; there is no dynamic
   reachability check.
 - Words: none.
@@ -585,8 +585,8 @@ inferred from names.**
 - Source: decision 55 (`docs/decisions.md:692`); `SPEC.md` §18 *Open*.
 
 **E6. Early exit and file handles.**
-- Content: "Leaning: 3 [a scoped provider] as the idiom, 1 [an infallible destructor] as the
-  default destructor."
+- Content: "Leaning: 3 [a scoped provider] as the idiom, 1 [an infallible drop] as the
+  default drop."
 - Strength: agent-recorded leaning, "Not settled".
 - Scope: surface.
 - Source: #18 comment 2026-09-28T22:19 (issuecomment-5879782777).

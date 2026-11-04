@@ -1,7 +1,7 @@
-# Implicit destructors
+# Implicit drops
 
 Types stay linear, but a program does not have to free every value by hand. Where an owned value
-goes unused, the checker inserts a call of its **destructor**, and that call is the value's one
+goes unused, the checker inserts a call of its **drop**, and that call is the value's one
 use. The program the checker returns is still an ordinary linear program, so the leak-freedom
 theorem applies to it unchanged.
 
@@ -16,18 +16,18 @@ main : F i32 =
 
 `r` is never used, so the checker frees it before `main` returns: `live 0`.
 
-## Which types have a destructor
+## Which types have a derived drop
 
-| type | destructor |
+| type | drop |
 |---|---|
 | persistent types, `imm 'a A`, `mut 'a A` | nothing: they are discarded |
-| `ref A` | `free`, then the destructor of `A` |
-| `A * B`, `A + B`, `box 'a A` | the destructors of the parts |
+| `ref A` | `free`, then the drop of `A` |
+| `A * B`, `A + B`, `box 'a A` | the drops of the parts |
 | a `mu` type whose recursion is under `*`, `+`, `ref`, arrays and inner `mu`s (the class `P`, SPEC §61) | an owned fold that destroys each layer: a node's children, then its cells; an array's elements, then its buffer, at once |
 | `U (C & F 1)` | `close`: force it and run `.2` |
-| `U (stream A)`, `U (delay A)`, `U (iter A R R')` | `close`, then the destructor of the residual |
+| `U (stream A)`, `U (delay A)`, `U (iter A R R')` | `close`, then the drop of the residual |
 
-A thunk of any other type has no destructor: disposing of it means running it, which has effects
+A thunk of any other type has no derived drop: disposing of it means running it, which has effects
 and may need an argument. Such a value must be used, and leaving it unused is an error that names
 its type:
 
@@ -40,12 +40,12 @@ main : F 1 =
 
 ## Where the call goes
 
-- **At the end of the path.** The destructor calls go just before the path's last computation
+- **At the end of the path.** The drop calls go just before the path's last computation
   (a `return`, a `force`, a call, a projection), after every effect of the path. A value never
   used is dropped at the end of its binder's scope.
 - **Most recently bound first.**
 - **Per branch.** A `case` arm or a `<M, N>` component that does not use a value drops it; one
-  that does, does not. A value with no destructor must be used in every arm or in none:
+  that does, does not. A value with no derived drop must be used in every arm or in none:
 
 ```bc,reject
 main : F i32 =

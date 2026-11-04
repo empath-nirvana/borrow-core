@@ -7,7 +7,7 @@
 -- input's iterator holds the input capability, `ref input`, which is linear with no derived drop
 -- (§12): it must be handed back, and a cancel answers `()`, with no residual. A `must_resume ctl`
 -- operation would allow it, without `break` (its continuation cannot be cancelled). What is missing
--- is a continuation whose cancel hands back a residual, or a capability with a destructor.
+-- is a continuation whose cancel hands back a residual, or a capability with a derived drop.
 --
 -- now: 18:27: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across an operation that may be cancelled: the cancel runs a finaliser (`[then]`) that consumes it by its derived drop, and its type is linear with no derived drop
 

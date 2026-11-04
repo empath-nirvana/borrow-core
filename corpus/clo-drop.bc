@@ -1,6 +1,6 @@
 -- Dropping a closure (SPEC §22) runs its `close`. A closure is linear, with a derived drop
 -- (SPEC §12, group 2): `close`, which disposes of the state. `k` is never called and `k2`'s rest
--- is never used again, so the checker inserts their destructors at the end of the scope, and each
+-- is never used again, so the checker inserts their drops at the end of the scope, and each
 -- `close` frees its counter's cell. `nest` is a closure whose state is another closure: its
 -- `close` closes the closure it holds, so dropping it frees that counter's cell too. Its bound is
 -- the bound `'c` of the closure it holds (SPEC §23, the box rule non-strict); it is built with

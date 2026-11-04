@@ -39,7 +39,7 @@ when N2 lands.
 | stage | module | reads from the typed term |
 |---|---|---|
 | specialise | `Convert` | `use` nodes: one LIR body per key (declaration, type arguments, `TInfo.key`), shared by every use; a body whose free variables reach past the externs is compiled at its use |
-| closure conversion | `Convert` | binder types and judgments (every variable's `LTy`); the split masks `u` at `tensorI`, `bind`, `app`, `unitE`, `tensorE`, `sumE`, `zeroE`, `lolliE`: a slot both parts use is copied, a live slot neither uses is dropped, every other is moved; `dtor A` as the drop of `A` |
+| closure conversion | `Convert` | binder types and judgments (every variable's `LTy`); the split masks `u` at `tensorI`, `bind`, `app`, `unitE`, `tensorE`, `sumE`, `zeroE`, `lolliE`: a slot both parts use is copied, a live slot neither uses is dropped, every other is moved; `dropFn A` as the drop of `A` |
 | derived nodes | `Convert` | `selfCall` (a direct call of the group member), `litFn` (the literal's bytes), `divLit` (no error arm), `walk` (the index bound: no bounds check), `foldOwn`/`foldReuse`/`foldImm` (`F`, `R`), `unfoldN` (`C`, `S`), `arrReplace`/`sliceReplaceM`/`sliceSwapM` (a slot swap), `allocS`/`freeS`/`withborSM` (a block as one object), `lendCell` |
 | constants | `Convert` | each constant node's type arguments: the primitive's layout |
 | lint | `Lint` | verifies: every variable typed and consumed once, every node's type agreeing with its children's |

@@ -137,7 +137,7 @@ def LCTy.unrollNu (k : LCTy) : LCTy := LCTy.subst 0 (.thunk (.nu k)) k
 `!A` is represented as `A`. A decision about a value's representation (its layout, its words, which
 closure it is) reads its type through `peel`, the top-level `!`s removed; one that compares two
 types for a representation compares them with `!` erased throughout (`unbang`, `sameRep`). `Lint`
-reads `!` itself, and the conversion's keys keep it (a `use` body's, a destructor's: a key fixes
+reads `!` itself, and the conversion's keys keep it (a `use` body's, a drop's: a key fixes
 the LIR types of what it converts). -/
 
 /-- The address of a task stack's frame (SPEC §52): one word. -/

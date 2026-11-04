@@ -20,7 +20,7 @@ namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
 open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt CDerivesP Jdg EffCtx RowAt SigsAt Ctx.Banged
-  CtxOutlives HasDtor dtorE dtor_wf rowAt_of_sigsAt)
+  CtxOutlives HasDrop dropFnE dropFn_wf rowAt_of_sigsAt)
 
 /-- **A typed derivation tied at every effect context at which the list `s` is**.  `[spec §19]` -/
 def TTiedAt (s : CRow) (Δ : LifeCtx) (Γ : Ctx CVTy) (t : TExpr) (j : Jdg) : Prop :=
@@ -423,20 +423,20 @@ theorem effHandleT (u : Masks) (site : Option HSite) {p₁ p₂ : Pins} {s₁ s�
 
 /-! ### Derived forms -/
 
-/-- `dtorE T xᵢ; M`, as `drop_derives`: `unitE` over `lolliE` of the variable and the
-destructor's derived node.  `[spec §12]` -/
+/-- `dropFnE T xᵢ; M`, as `drop_derives`: `unitE` over `lolliE` of the variable and the
+drop's derived node.  `[spec §12]` -/
 theorem drop (ix : TInfo) (u₁ u₂ : List Bool) {p : Pins} {s : CRow} {Γ₁ Γ₂ : Ctx CVTy} {k : Nat}
     {T : CVTy} {t : TExpr} {C : CCTy} (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂)
     (hm : SplitMasks Γ₁ Γ₂ u₁ u₂) (hcv : Covers u₁ 0 (.var k) ∧ Covers u₂ 0 t.erase)
-    (hx : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γ₁ k T) (hT : HasDtor T)
-    (hc : BoCa.Fig16.LogRel.Core.closedAt 0 (dtorE T) = true) (hE : (dtorE T).effFree = true)
+    (hx : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γ₁ k T) (hT : HasDrop T)
+    (hc : BoCa.Fig16.LogRel.Core.closedAt 0 (dropFnE T) = true) (hE : (dropFnE T).effFree = true)
     (h : TTied p s Δ Γ₂ t (.comp C)) :
     TTied p s Δ Γ (.unitE i (.comp C) C (Masks.of u₁ u₂)
         (.lolliE ix (.val .unit) T .unit (Masks.of u₁ (noUse u₁)) (.var ix (.val T) k T)
-          (.dtor ix (.val (.lolli T .unit)) T)) t) (.comp C) := by
-  have hd : TTied [] [] Δ (BoCa.Fig16.LogRel.Core.kill Γ₁) (.dtor ix (.val (.lolli T .unit)) T)
+          (.dropFn ix (.val (.lolli T .unit)) T)) t) (.comp C) := by
+  have hd : TTied [] [] Δ (BoCa.Fig16.LogRel.Core.kill Γ₁) (.dropFn ix (.val (.lolli T .unit)) T)
       (.val (.lolli T .unit)) :=
-    ofAt fun _ => .dtor hT hc hE (BoCa.Fig16.LogRel.Core.kill_dead Γ₁)
+    ofAt fun _ => .dropFn hT hc hE (BoCa.Fig16.LogRel.Core.kill_dead Γ₁)
   have hl₁ : u₁.length = (noUse u₁).length := by simp [noUse]
   have hl₂ : u₁.length = u₂.length := by have := hm.length; omega
   have hl := lolliE (Δ := Δ) ix (Masks.of u₁ (noUse u₁)) (BoCa.Fig16.LogRel.Core.split_kill' Γ₁).toP

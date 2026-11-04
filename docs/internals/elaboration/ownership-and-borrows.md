@@ -58,7 +58,7 @@ main : F i32 =
 ```
 
 Leaving an owned value unused is not always an error: the checker frees an unused cell for you
-(see [Implicit destructors](implicit-destructors.md)).
+(see [Implicit drops](implicit-drops.md)).
 
 ## Cells
 
@@ -174,7 +174,7 @@ main : F i32 =
 ```
 
 `withswap` hands the borrow back as `m2`. It is not used again, so the checker discards it (a
-borrow's destructor does nothing). `withbor2`'s second bracket argument, here `top`, is a
+borrow's drop does nothing). `withbor2`'s second bracket argument, here `top`, is a
 lifetime that the contents' type lasts at least as long as.
 
 A mutable borrow cannot be copied, so two mutable borrows of one cell are never live together:

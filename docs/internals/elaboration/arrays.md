@@ -36,8 +36,8 @@ main : F (i32 * ((i32 + i32) * (i32 + i32))) =
 ```
 
 The array `a3` is not used again, so the checker frees it at the end of `main`
-([Implicit destructors](implicit-destructors.md)). `array A` has a destructor whenever `A` has
-one: every element goes to `A`'s destructor, and then the cells are freed. The explicit form is
+([Implicit drops](implicit-drops.md)). `array A` has a derived drop whenever `A` has
+one: every element goes to `A`'s drop, and then the cells are freed. The explicit form is
 `array_free[A]`, which takes the consumer to call on each element:
 
 ```bc

@@ -79,7 +79,7 @@ under `self` and `x`, is one code `c`, `λx. B[self := clos c []]`: it captures 
 `self` is a closure of its own code, built where it is used (it is never captured, copied or
 dropped), so the recursion is a call of `c` by its code index. Applied to an argument,
 `selfV B a` is that call, not a `let`. Every fixed point of the core is built this
-way: `fold_imm`, `fold_own`, `fold_reuse`, the general owned fold `foldOwnG` of the destructors
+way: `fold_imm`, `fold_own`, `fold_reuse`, the general owned fold `foldOwnG` of the drops
 outside `FShape` (SPEC §6), `unfold` (so `ν`, loops, `fixd`, streams and iterators) and the
 programs of `Core/`. **η** `λv. y v` of a variable `y` is `y` itself, as
 `unfold`'s map at a recursive position forwards the rest of the codata: no closure wraps a closure
@@ -490,8 +490,8 @@ What does not:
   reformulation where the algebra allows, would remove it.
 - **Owned folds over non-linear shapes** (trees, with a recursive position on both sides of a
   `⊗`) or whose child is reached through more than one pointer recurse natively.
-- **The general owned fold** `foldOwnG` (SPEC §6), the destructor of a `μ` outside `FShape`
-  (`Core/Dtor.lean`), recurses natively. Its term is one fixed point whose body dispatches on the
+- **The general owned fold** `foldOwnG` (SPEC §6), the drop of a `μ` outside `FShape`
+  (`Core/Drop.lean`), recurses natively. Its term is one fixed point whose body dispatches on the
   tag of the key it is called at (Bekič's simultaneous fixed point), so each call is a direct call
   of that one code and a `case` on the tag word; each key's traversal is a code of its own. An
   array key's step is a `count` loop of tail calls that moves each element out (`swap` with

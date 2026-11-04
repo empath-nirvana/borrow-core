@@ -375,7 +375,7 @@ def notP (d : Nat) : BoCa.Fig16.LogRel.Core.VTy → Option String
 
 open BoCa.Fig16.LogRel.Core.FoldP (PB) in
 /-- The opened type `A` of a field, a cell when `cell`, is in §6's class `P` over `X`
-(`FoldP.PB`), the class the destructor and the owned fold are defined at (SPEC §61); otherwise
+(`FoldP.PB`), the class the drop and the owned fold are defined at (SPEC §61); otherwise
 why not. -/
 def pClass (X : String) (cell : Bool) (A : VTy) : Option String :=
   let K := pTy [X] 64 A

@@ -75,7 +75,7 @@ forms (`fn`, `let`, `f(e)`, `{ … }`) are added to the same AST (stage 5, §7).
 - its span;
 - its type: a value or computation type, over a mirror of `CVTy`/`CCTy` with one extra
   constructor for a metavariable, `?n`;
-- at a binder, the variable's *identity* and its *class*: persistent, has a destructor, or has
+- at a binder, the variable's *identity* and its *class*: persistent, has a derived drop, or has
   none (SPEC §12's three classes, decided by the checker's own functions);
 - the summaries lowering needs: the node's *effect* (total or div), and the `let mut` variables
   it assigns and reads.
@@ -130,7 +130,7 @@ declarations see.
 | injection types | the expected type (check mode), or a metavariable resolved later | `(inl V : A + B)`, `(roll V : μ…)`, `absurd` |
 | computation types | the declared result, plus the body's effect | `F B` or `U (Loop B R)`; `thunk` or `thunkv` and the eta form a `{ … }` needs (removes draft 0's S08) |
 | effects | a two-point lattice per arrow, `total ⊑ div` (§2.4) | div inference, `total fn` checking, HOF specialization |
-| residuals | the destructor-less part of the result type, by identity (§2.4) | `R` in `Loop B R`, the close paths |
+| residuals | the strictly linear part of the result type, by identity (§2.4) | `R` in `Loop B R`, the close paths |
 | lifetime holes | fresh at binders; matching at instantiations (§2.3) | `'x` of every borrow block, `[@]` instantiations, `@b`/`@w` witnesses, `boxed['x]` |
 
 ### 1.4 Relation to the checker
@@ -274,27 +274,27 @@ two components capture the same variables additively, as `div_bind`'s continuati
 `{ f(x) }` is the instance `S = f(x)`, so its `start` is the call `f V`.
 
 **The residual, from the type.** A loop closed early must release what it holds. Anything with
-a destructor is dropped by the checker, on the close path, like any unused value (SPEC §12). What
-has no destructor (a capability, a `ref` of an opaque type) must be handed back. So:
+a drop is dropped by the checker, on the close path, like any unused value (SPEC §12). What
+has no derived drop (a capability, a `ref` of an opaque type) must be handed back. So:
 
 > The residual of a div function with result `B` is `K ⊗ 1`, where `K` is the tuple of the
-> components of `B` that have no destructor (SPEC §12, group 3), in their order in `B`; or `1`
+> components of `B` that have no derived drop (SPEC §12, group 3), in their order in `B`; or `1`
 > when there are none.
 
-This is decided by the `HasDtor` classes, not by the names `In`/`Out`. It gives today's answer on
+This is decided by the `HasDrop` classes, not by the names `In`/`Out`. It gives today's answer on
 every corpus program. It also covers any future capability type (`Args`, `Fs`, a user handle)
 with no list to update.
 
 At each close point, lowering must name the variables that hold `K`. It uses identities, not names:
 
-- every destructor-less resource bound in the body gets an identity when it is bound (a
+- every strictly linear resource bound in the body gets an identity when it is bound (a
   parameter, an extern, a pattern);
 - rebinding keeps the identity (`&mut c`, the `for` hand-back, `let mut`);
 - the body's terminals determine which identity fills each position of `K`, and every terminal
   must agree;
 - at a close point, the live variable with that identity is returned in that position.
 
-If a destructor-less resource is live at a close point but has no position in `K`, or a position
+If a strictly linear resource is live at a close point but has no position in `K`, or a position
 has no live resource, closing would leak or invent one. That is reported as "closing the loop
 here would leave `c : ref output` unreleased". This replaces `termCaps`, `capNorm` and the
 restriction that a div call "must lend with `&c` or hand back exactly the caller's residual". A
@@ -396,7 +396,7 @@ that span (`for`, `&mut`, `let mut`, a div call, a residual close path). The spa
 | effect: `total fn` that loops; a loop body that loops | infer | as today (`total-loops.bc`) |
 | lend that cannot come back; a second use | infer (lint) | "`&mut c` needs `c` to be a place; this is an expression" |
 | residual mismatch at a close point | lower | "closing the loop here would leave `stderr` unreleased" |
-| borrow escape, overlap, outlives, missing destructor | check | "`b` escapes its borrow block" (the checker's message, at the block's span) |
+| borrow escape, overlap, outlives, missing drop | check | "`b` escapes its borrow block" (the checker's message, at the block's span) |
 
 A checker error on a program that inference accepted is expected for the last row only: borrow
 discipline and ownership, which the elaborator does not model. For any other kind (a type
@@ -412,7 +412,7 @@ generated-code error to pin the rendering.
 
 | shortcut (today) | where | mechanism | |
 |---|---|---|---|
-| **Residual by syntax**: the capability part of a result is recognised by the names `In`, `Out`, `ref input`, `ref output` (decision 36) | `isCapTy`, `capPart`, `capNorm`, `termCaps` | The residual is the destructor-less part of the result type, by SPEC §12's classes (§2.4). Close paths fill it by resource identity, not by name. A callee's residual is converted by identity, so "lend with `&c` or hand back exactly the caller's residual" goes. | SPEC §14's paragraph on the residual is restated, with the same result on the corpus. |
+| **Residual by syntax**: the capability part of a result is recognised by the names `In`, `Out`, `ref input`, `ref output` (decision 36) | `isCapTy`, `capPart`, `capNorm`, `termCaps` | The residual is the strictly linear part of the result type, by SPEC §12's classes (§2.4). Close paths fill it by resource identity, not by name. A callee's residual is converted by identity, so "lend with `&c` or hand back exactly the caller's residual" goes. | SPEC §14's paragraph on the residual is restated, with the same result on the corpus. |
 | **Typed `for` locals**: `n : T <- …` on every threaded variable (`io-for-untyped.bc`) | `forLoop`, `latest` | The TIR has every variable's type. The loop threads the `let mut` variables its body assigns or reads, at their inferred types. | `corpus/reject/io-for-untyped.bc` becomes a pair. |
 | **Injection ascriptions**: `(inl () : B)` | checker's `synV` on `inl`/`inr` | Checked against the expected type (§2.1), or a metavariable solved by a later use (§2.2). Lowering writes the ascription out. | `bool`'s `true`/`false` need none (§5). |
 | **Narrow direct-style div calls**: only a head `return (f V)` or `return ((unbang f) V)`, at most one `&c` | `callee`, `divCall`, `loopBody` | Every call is typed. In a div body, lowering puts nested div calls in A-normal form, left to right, and `div_bind`s each. `{ f(x) }` takes the loop as a value (§2.4). | Several lends per call are allowed (§5). |
@@ -620,7 +620,7 @@ main -> i32 * (i32 * i32) =
 What inference decides:
 
 - `count` has a `for` over `U (iter i32 In In)`, which is codata, so it is div.
-- Its residual is `In * 1`: the destructor-less part of its result is `In`, whose identity is
+- Its residual is `In * 1`: the strictly linear part of its result is `In`, whose identity is
   `c`.
 - `main` calls `count` directly, so it is div too.
 - `count(&mut stdin)` is row 6 of §5.1 (move and rebind), because `count` takes `In` and hands it
@@ -682,7 +682,7 @@ main : F (U (loop ((In * Out) * (i32 * (i32 * i32))) ((In * Out) * 1))) =
         fun (el_c : In * 1) -> let (stdin, u) = el_c; return ((stdin, stdout), ()) >))
 ```
 
-`main`'s residual `(In * Out) * 1` comes from its result type, whose destructor-less part is
+`main`'s residual `(In * Out) * 1` comes from its result type, whose strictly linear part is
 `In * Out`. The continuation's close observation fills it by identity: `stdin` comes from the
 callee's residual, and `stdout` is the caller's own.
 
@@ -837,7 +837,7 @@ so far, so a div function has its loop type and a call of it in direct style bin
 `B`. The syntactic `isCapTy`, `capPart`, `capNorm`, `residual`, `termCaps`, `callee`, `divCall`,
 `divCallAt`, `fnTy`, `pairTypes` and the `bytes` pattern are deleted:
 
-- **The residual** is the destructor-less components of the result (`noDerivedDrop`, `loopCxOf`),
+- **The residual** is the strictly linear components of the result (`noDerivedDrop`, `loopCxOf`),
   named by the terminal's variables (`termParts`) (`corpus/sugar/residual-alias.bc`).
 - **A call in direct style** is any application of loop type where that loop is not expected
   (`directCall`, `callIn`), and nested calls are lifted in evaluation order (`liftApps`)

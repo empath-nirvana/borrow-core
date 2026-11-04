@@ -345,13 +345,13 @@ below). It ends at `t`:
      (★) at `(bind :: S₁, rt w)` with `S_e'` for `S_e`: the induction hypothesis, given by the
      protocol's resumption conjunct.
    - **cancel** (eliminations `prj₂ :: S_e'`, only if `W ∈ q_o`): the machine runs
-     `dtors(S_κ)`, which are those of `bind :: S₁` (`f_H` has none). `Cancel(bind :: S₁)(r'')` by
+     `drops(S_κ)`, which are those of `bind :: S₁` (`f_H` has none). `Cancel(bind :: S₁)(r'')` by
      the protocol: each `fin` frame's resource is in `r''`, so each free succeeds (L5.2.6, 6.142),
      leaving `r₀ ∈ NoOwn`; `R_H ∈ NoOwn` because `W ∈ q_o ≤ ⨆ q_o` (L4.2.3). Then `rt ()` at
      `V⟦1⟧`, and L5.3 drops the rest.
    Then `N_o`'s hypothesis, at `R_many` (shared, `Pers`) and the `κ` resource, gives (★).
 3. **An abortive stop on `j`**, segment `S₁`, with `Cancel(S₁)(r'')`: the machine runs
-   `dtors(S₁)` and enters `N_a`. As the cancel case of 2, then `N_a`'s hypothesis at `R_a ⊆ R_H`
+   `drops(S₁)` and enters `N_a`. As the cancel case of 2, then `N_a`'s hypothesis at `R_a ⊆ R_H`
    with the rest dropped (L5.5.2, L5.3).
 4. **A stop on `j' ≠ j`**, `(j', E') ∈ Tab(ρ)`. The composite is at a stop with segment
    `S₁ ++ f_H :: S_e` and resource `r'' ● R_H ● r_e`. This is L5.6's stop case with
@@ -379,7 +379,7 @@ in the fixed point and every state `s`:
    - `inl (w, s')`: the cell is written (6.145) and the machine continues at
      `⟨bind :: S₁ ++ f_L :: S_e ; rt w⟩`: (★) at `s'`, from the protocol's resumption conjunct.
    - `inr (e, s')`: only if `o` is fallible (`E_o = int`), so `W ∈ q_o` and the protocol gives
-     `Cancel(bind :: S₁)(r'')`. The cell is written, `dtors(bind :: S₁)` run (as in L5.14.2's
+     `Cancel(bind :: S₁)(r'')`. The cell is written, `drops(bind :: S₁)` run (as in L5.14.2's
      cancel), and the lend answers `(cap(ℓ, co), inr e)` at `Cap(ℓ, s')`.
 3. **A stop on `j' ≠ j`**: L5.6's stop case with `S₀ = f_L :: S_e`, `R₀ = Cap(ℓ, s) ● r_e`.
    Compatibility is vacuous: the premise `bound(ρ).req = lin` gives `bnd(Tab(ρ)).req = lin`, so
@@ -435,7 +435,7 @@ L5.7–L5.17. Sub-derivations have admissible usages by L2.1. ∎
 2. a cell is removed only if present, so at most once;
 3. `cell(_)` cells are created only by `newcap` and removed only by `getcap`; `rsrc(ℓ)` cells
    are created only by `using` (with event `acq ℓ`) and removed only by a `fin` frame's return
-   or by `dtors` (each with event `free ℓ`); `seg(_)` cells are created only at a one-shot
+   or by `drops` (each with event `free ℓ`); `seg(_)` cells are created only at a one-shot
    capture and removed only by forcing the continuation.
 
 *Proof.* By inspection of D3.6: each row that changes the heap is listed. ∎
@@ -475,7 +475,7 @@ continuation's capture creates are discharged by L5.4 alone, through L5.6:
 |---|---|
 | copyable (`C ∈ m`): only `Pers` | L5.4.2 at [to], [app], [op], [handle], [bfix]; L4.2.4 |
 | droppable (`W ∈ m`): only `NoOwn`, beyond what its `fin` frames own | L5.4.2; L4.2.3; D4.5 |
-| a capability (no destructor): only under `lin` | [lend] premise, L5.15.3 |
-| a resource (a destructor): not under `C` | [using] premise, L5.16.3 |
+| a capability (no derived drop): only under `lin` | [lend] premise, L5.15.3 |
+| a resource (a drop): not under `C` | [using] premise, L5.16.3 |
 
 *Proof.* Inspection of L5.10–L5.17: these are every use of L5.6's compatibility. ∎

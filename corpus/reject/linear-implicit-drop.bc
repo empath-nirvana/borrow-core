@@ -1,6 +1,6 @@
 -- A declared type with no derived drop (SPEC §42), left unused at the end of its scope. The
--- checker inserts a drop only as a `dtor` node, whose derivation carries `HasDtor`
--- (`TDerivesP.dtor_hasDtor`, `drop_derives`), and `Txn` has none (`decl_linear`). Refused.
+-- checker inserts a drop only as a `dropFn` node, whose derivation carries `HasDrop`
+-- (`TDerivesP.dropFn_hasDrop`, `drop_derives`), and `Txn` has none (`decl_linear`). Refused.
 data Txn = { id: i32, must_close(commit) log: i32 }
 
 fn begin(id: i32) -> Txn = Txn { id: id, log: 0 }

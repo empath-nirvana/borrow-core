@@ -428,12 +428,12 @@ computation that ticks forever is not in it. That is why today's div is `ν` cod
   `reify` and `div_fuel`, and any borrow frame at a `Div` row would have to be indexed. None is
   needed while `tick` obeys T1. It is used only if the greatest fixed point fails at items 1–5.
 
-**Unknown 2: the residual.** A loop closed early hands back what has no destructor (SPEC §14). The
+**Unknown 2: the residual.** A loop closed early hands back what has no derived drop (SPEC §14). The
 cancel of a cancellable continuation answers `()`, and a cancel that answered the residual would
 change "the canceller sees `()`" (algebra, *Cancel*).
 - **Candidate** (hypothesis): `tick`'s continuation is linear, so closing is `κ close`, a resume.
   The code after the tick returns `inr` of the residual by name (§3.2).
-- **To show**: a kernel program whose loop holds a capability with no destructor is closed by
+- **To show**: a kernel program whose loop holds a capability with no derived drop is closed by
   `div_fuel 3` and hands the capability back. It needs a tied derivation, a run, and its compiled
   form with `live 0`. This is `corpus/io-fuel.bc`'s `collatz_within` in the kernel.
 
@@ -617,7 +617,7 @@ No step of this design changes a decided equation, if S0's candidates hold. Thes
 
 | candidate | law | change | programs | where it stands |
 |---|---|---|---|---|
-| closing a loop by a cancel that answers the residual | *Cancel*: "the canceller sees `()`" | a cancel answering `R` | every `div_fuel` over a loop holding a capability with no destructor: `corpus/io-fuel.bc`, `lend-lib-loop.bc`, `lend-lib-each.bc` | avoided by the must-resume `tick` (S0, unknown 2); a stop if S0 kills it |
+| closing a loop by a cancel that answers the residual | *Cancel*: "the canceller sees `()`" | a cancel answering `R` | every `div_fuel` over a loop holding a capability with no derived drop: `corpus/io-fuel.bc`, `lend-lib-loop.bc`, `lend-lib-each.bc` | avoided by the must-resume `tick` (S0, unknown 2); a stop if S0 kills it |
 | ticks other than at today's skips | hard-stop item 2 | `div_fuel`'s counts and the skips a pull consumer sees | the `div_fuel` programs of §4.1 and the pull consumers, e.g. `for-data-div.bc`'s `first_two` | avoided by placement (S0, unknown 3); a stop if no placement matches |
 
 **A restriction to record**: a program's handler of `Div` at a row without `Div` (§4.2). No

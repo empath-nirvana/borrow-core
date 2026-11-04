@@ -503,7 +503,7 @@ properties, and EffModelRel's theorems supersede them as evidence.
 **PROVED.**
 - Binary FP and soundness: `fundamental` Fundamental.lean:278 and `soundness : LR M N → CtxEq M N`
   Adequacy.lean:258.
-- Algebraicity: `alg_bind` Laws.lean:67 through `alg_dtor` :114 (the destructor form).
+- Algebraicity: `alg_bind` Laws.lean:67 through `alg_dtor` :114 (the drop form).
 - Handler laws: `h_ret` :148, `h_op` :164, `h_fwd` :202 and `h_fwd_ab` :227.
 - Absorption: `absorb_pure` Tensor.lean:204 and `absorb_writer` Examples.lean:115. The failures
   under other nestings are proved as `¬CtxEq` at Examples.lean:136–155.
@@ -622,7 +622,7 @@ and control.
 **OPEN.**
 - K-a (native capture), "stated with its obligations, not built".
 - K-b (`μX` with X under `⊸`, T15).
-- K-c (destructors for continuations).
+- K-c (drops for continuations).
 - The InvalML-style "in use" elaboration: "not derived … no obstruction verified".
 
 **Kernel.**
@@ -846,14 +846,14 @@ pre-#76 `wpTS`. I did not build to confirm this.
 
 | experiment | effects relevance | world | proved (key) | refuted | open | kernel |
 |---|---|---|---|---|---|---|
-| **FnMut** (#236, PR #238; kernel #239, PR #240, merged 2026-10-02) | the closure `Clo^c A B = νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`; #274's `[gen]` types a continuation at it | K, `cC` with ν, no row | now in Core: `cloBody_nuOk` Core/Clo.lean:53, `cC_clo_iff` :72, `clo_coind` :83, `hasDtor_clo` :108, `not_forgettable_clo` :128 | none | `[gen]` (see §11, lift-stage1) | **promoted**: SPEC §22, `Core/Aff*.lean`, `lib/clo.bc`; the fork is at `60936af`; the directory has no Lean |
+| **FnMut** (#236, PR #238; kernel #239, PR #240, merged 2026-10-02) | the closure `Clo^c A B = νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`; #274's `[gen]` types a continuation at it | K, `cC` with ν, no row | now in Core: `cloBody_nuOk` Core/Clo.lean:53, `cC_clo_iff` :72, `clo_coind` :83, `hasDrop_clo` :108, `not_forgettable_clo` :128 | none | `[gen]` (see §11, lift-stage1) | **promoted**: SPEC §22, `Core/Aff*.lean`, `lib/clo.bc`; the fork is at `60936af`; the directory has no Lean |
 | **Recursion** (borrow_lang `bb5de9b`, 2026-09-25) | ν/codata, coiteration | TW-old (CBPVWorld) | `unfold_sem` Nu.lean:281, `take2Close_runs` :403, `build3Free_runs` Mu.lean:221, `immReborrow_unroll` ImmMu.lean:414 | `naive_ne` ImmMu.lean:469 (syntactic inequality) | chooser and 6.131 at `μ`; observation depth | ancestor of SPEC §6/§7 (`SPEC.md:274`, `:386`) |
 | **CBPVMu** | folds, fuel-free borrowed fold | TW-old | `vC_mu_iff` RelMu.lean:347, `vC_ind` :425, `fundamentalC`/`adequacyC` Fundamental.lean:211/:329 | none | `WpChainCommutes`, continuity | assembled into Core |
 | **CBPVWorld** (borrow_lang `534637e`/`a31b498`, 2026-09-24) | none; ancestor of K | TW-old | `fundamentalC` Fundamental.lean:160, `adequacyC` :270 | none | `⊸E`/`∀E` on subterms | assembled into Core |
 | **BorrowedClosures** | closures | PAPER | `reb_self_of_imm` Reborrow.lean:43, `reborrow_self_of_imm` :99, `envShape_unlinked` EnvCheck.lean:18 | none | stage 2 | superseded by `!T` (SPEC §2); stage 1 in `Support/Model/Unr.lean` |
 | **Bang** (borrow_lang `c790ff9`) | `!` for closed code | PAPER | became the library | none | none | archived into `Paper/`, `Support/`, `Examples/Closures.lean` |
 | **Grades** (#23, PR #42, merged 2026-09-26) | erasing capability tokens | K-pure | `cderives_iff_graded` Judgment.lean:349, `fundamentalG` Soundness.lean:327, `prog_runs_any` Erasure.lean:136 | none | migrating Core; graded checker | not adopted (decision 19) |
-| **Affine** (#43, PR #45, merged 2026-09-27) | destructors; SPEC:1106 says `dtorE` is "total and pure" (no effectful finaliser) | K-pure | `ADerives.elab` Elab.lean:136, `fundamentalA` :177, `adequacyA` :183 | none | effectful destructors (out of scope) | **promoted**: SPEC §12, `Core/Dtor.lean` |
+| **Affine** (#43, PR #45, merged 2026-09-27) | drops; SPEC:1106 says `dropFnE` is "total and pure" (no effectful finaliser) | K-pure | `ADerives.elab` Elab.lean:136, `fundamentalA` :177, `adequacyA` :183 | none | effectful drops (out of scope) | **promoted**: SPEC §12, `Core/Drop.lean` |
 | **Optics** (#27, PRs #28/#35) | laws at effectful callbacks open | K-pure | `Optic.lift_cell` Lens.lean:326, `over_id`/`over_fuse` Laws.lean:131/:235 (under `PureFn`), `iterMut_shape` Shape.lean:503 | none | `AllAtOnceGoal` Traversal.lean:209 (L2, #176); effectful laws; "6.65/6.66 as an optic … not attempted" | not promoted (decision 22) |
 | **Relaxed / FrameEnd / Projection** | none directly; FrameEnd's 6.64 exit is background for GhostEnd | TW-old | fundamental property and adequacy; `frame_image_empty` FrameEnd/FrameRules.lean:68 | `no_projection`, `frame_view_excluded`, `imm_view_rejected`, `mut_view_rejected`; no claim either way about arising | same-lifetime views | Relaxed became SPEC §4; the exclusions are cited in SPEC §5 |
 | **ModesLabels**, **CBPVSplit** | none | PAPER | `weaken_sound`/`contract_sound`/`dup_sound`; `semX_iff_semC` | none | mode-indexed calculus | parts in Support; superseded by Core |
@@ -1014,7 +1014,7 @@ ModesLabels (ownership kinds as adjoint modes) are what HandlersAsBorrows later 
 | TwoRun | K-pure (pre-#76 `wpTS`) | `freshRun_det`, `wpTS_footprint_fresh` | `not_everyRunFootprint`, `not_everyRunFootprintRen`, `not_readFootprint` (none arise) | `ReadFootprintTyped` | no; probably stale against current `wpTS` |
 | FnMut | K, ν | `cC_clo_iff`, `clo_coind` (now in Core) | none | `[gen]` (lift-stage1) | **yes**: SPEC §22 |
 | Recursion / CBPVMu / CBPVWorld | TW-old | ν coiteration, μ folds, FP | `naive_ne` (syntactic) | `WpChainCommutes` etc. | **yes**: assembled into Core |
-| Affine | K-pure | `ADerives.elab`, `fundamentalA` | none | effectful destructors | **yes**: SPEC §12 |
+| Affine | K-pure | `ADerives.elab`, `fundamentalA` | none | effectful drops | **yes**: SPEC §12 |
 | Grades | K-pure | `cderives_iff_graded`, `prog_runs_any` | none | migrating Core | no (decision 19) |
 | Optics | K-pure | `lift_cell`, `over_fuse` (pure) | none | effectful laws; `AllAtOnceGoal` | no (decision 22) |
 | Outlives | `LDerives` (K-pure fork) | `fundamentalL`, `boxIL_compatC` | `not_vC_outlives_le` (no run shown), `no_nonstrict_stratum` | non-strict ∀ | **yes**: SPEC §23 |

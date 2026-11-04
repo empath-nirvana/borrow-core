@@ -9,7 +9,7 @@
 -- every lifetime. So the borrowed list is copied out by a `fold_imm` into an owned list, inside
 -- one lend of the cell, and the copy is consumed by a `fold_own` into a writer
 -- (`corpus/axes/data-effects.bc`), which writes each element, head first, and answers the sum.
--- The borrowed list is never consumed; its destructor frees it at the end of `main`.
+-- The borrowed list is never consumed; its drop frees it at the end of `main`.
 --
 -- Answer: the line `100 20 3 `, then `i32[123]`; `live 0`. A writer that ran the tail before the
 -- head prints `3 20 100 `; a copy that dropped a node prints two numbers and a smaller sum.

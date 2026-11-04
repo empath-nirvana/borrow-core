@@ -8,7 +8,7 @@
 -- environment used twice is copied by hand (`dup_env`, with `dup_val` and `dup_tm`).
 --
 -- Answer: i32[42], `(\x. x + 1) 41`; `live 0`: every cell a run allocates is freed, the copies
--- included, those the evaluation does not consume by their derived destructors (SPEC §12).
+-- included, those the evaluation does not consume by their derived drops (SPEC §12).
 include rec
 
 data Tm = Lit(i32) | Var(i32) | Lam(Tm) | App(Tm, Tm) | Add(Tm, Tm)

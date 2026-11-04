@@ -5,7 +5,7 @@
 -- builds an `iter i32 1 1` whose state is the borrow `mut 'x output` and a counter: each `next`
 -- writes the counter's digit and a newline through the borrow (`write_byte` at `'x`) and yields
 -- the counter. The block pulls three elements, and the rest of the iterator is closed by its
--- destructor inside the block, which drops the borrow; the block then hands `stdout` back. The
+-- drop inside the block, which drops the borrow; the block then hands `stdout` back. The
 -- iterator cannot outlive the block: its state holds a borrow at `'x`.
 --
 -- Answer: the lines `1`, `2`, `3`, and `i32[6]`. An iterator that wrote at `close` too prints a

@@ -9,7 +9,7 @@
 -- 26 zeros pushed onto `kids` and a `false` onto `ends`. Rust's
 -- `Trie { children: [Option<Box<Trie>>; 26], end: bool }` would be `mu X. bool * array (1 + X)`
 -- here, a node owning an array of its children. That type checks, but it is outside the folds'
--- and destructors' class (`FShape`: `X` under `array`, #182), so a trie has no destructor and
+-- and drops' class (`FShape`: `X` under `array`, #182), so a trie has no derived drop and
 -- must be consumed by hand, by a recursion over each node's array that is refused today (#492,
 -- #161); the program is `corpus/pending/lc-0208-trie-boxed.bc`. The arena is also how a Rust
 -- solution avoids a `Box` per node (`Vec<[u32; 26]>`).

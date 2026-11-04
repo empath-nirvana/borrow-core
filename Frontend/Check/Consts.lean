@@ -21,8 +21,8 @@ open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
 open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt CDerivesP Jdg VFree VOutlives VOutlivesLe FShape FD₁ mutM immM
   d_allocS d_freeS withborSM_wf withborSI_wf withborM2_wf withborI2_wf FamSide cbTy2 famTy2
-  plainV HasDtor dtorE dtor_wf withborUE withbor1UTy withbor2UTy withbor3UTy withloadUTy
-  sliceBorrowMUTy sliceBorrowIUTy closedAt dtorE_closed dtorE_effFree)
+  plainV HasDrop dropFnE dropFn_wf withborUE withbor1UTy withbor2UTy withbor3UTy withloadUTy
+  sliceBorrowMUTy sliceBorrowIUTy closedAt dropFnE_closed dropFnE_effFree)
 
 /-! ### Fold shapes -/
 
@@ -140,16 +140,16 @@ def famSide (sp : Span) (M : CLife → CVTy → CVTy) (c x y : LifeVar) (A B T' 
       by simpa using hxy, hAx, hBx, hTx, hAy, hBy, hTy, hcbx, hcby, hinst⟩⟩
   else err sp "the callback's family is not generic in its lifetime"
 
-/-- The finaliser of an unwinding borrow: the destructor of its source, closed.  `[spec §19]` -/
+/-- The finaliser of an unwinding borrow: the drop of its source, closed.  `[spec §19]` -/
 def finaliser (sp : Span) (src : CVTy) :
-    Except Error (PLift (HasDtor src ∧ closedAt 0 (dtorE src) = true ∧ (dtorE src).effFree = true)) :=
-  if h : hasDtorB src = true then
-    pure ⟨hasDtorB_sound h, dtorE_closed (hasDtorB_sound h), dtorE_effFree src⟩
-  else err sp (s!"the source `{ppVTy src}` has no destructor, so it cannot be finalised when " ++
+    Except Error (PLift (HasDrop src ∧ closedAt 0 (dropFnE src) = true ∧ (dropFnE src).effFree = true)) :=
+  if h : hasDropB src = true then
+    pure ⟨hasDropB_sound h, dropFnE_closed (hasDropB_sound h), dropFnE_effFree src⟩
+  else err sp (s!"the source `{ppVTy src}` has no derived drop, so it cannot be finalised when " ++
     "the callback aborts")
 
-/-- The finaliser's node: the source's destructor. -/
-def finNode (sp : Span) (src : CVTy) : TExpr := .dtor (at_ sp) (.val (.lolli src .unit)) src
+/-- The finaliser's node: the source's drop. -/
+def finNode (sp : Span) (src : CVTy) : TExpr := .dropFn (at_ sp) (.val (.lolli src .unit)) src
 
 /-- The row of an unwinding callback: `Row.Unwind`.  `[spec §19]` -/
 def unwindRow (sp : Span) (x : LifeVar) (S : CRow) : Except Error (PLift (S.Unwind x)) :=
@@ -164,7 +164,7 @@ def plainShape (sp : Span) (s : CShape) : Except Error (PLift (s.plain = true)) 
 
 /-! ### Constants -/
 
-/-- The unwinding borrows: each at a consumed context, its finaliser the destructor of its
+/-- The unwinding borrows: each at a consumed context, its finaliser the drop of its
 source.  `[spec §19]` -/
 def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
     Const → Except Error (Σ A : CVTy, Res Δ T (.val A))
@@ -179,7 +179,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A)
       (cDeadStrict (fun j => .withbor1U (at_ sp) j A B S x (finNode sp (.ref A))) fun hd _ =>
         .withbor1U x hd.toP hx (scopedB_sound hsc) h₁ h₂ hS hdc
-          (.dtor hdt hdc hde hd))
+          (.dropFn hdt hdc hde hd))
   | .withbor2U _ b A B r => do
       let b ← E.elabL Δ b
       let A ← E.elabV Δ A
@@ -192,7 +192,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A)
       (cDeadStrict (fun j => .withbor2U (at_ sp) j A B S x (finNode sp (.ref A))) fun hd _ =>
         .withbor2U x hd.toP hx hside h₁ h₂ hS hdc
-          (.dtor hdt hdc hde hd))
+          (.dropFn hdt hdc hde hd))
   | .withbor3U a _ A B r => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
@@ -204,7 +204,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.mut a A)
       (cDeadStrict (fun j => .withbor3U (at_ sp) j a A B S x (finNode sp (.mut a A))) fun hd _ =>
         .withbor3U x hd.toP hx h₁ h₂ hS hdc
-          (.dtor hdt hdc hde hd))
+          (.dropFn hdt hdc hde hd))
   | .withloadU a _ A B r => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
@@ -228,7 +228,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.fam (.ref A))
       (cDeadStrict (fun j => .sliceBorrowMU (at_ sp) j A B S x (finNode sp (.fam (.ref A))))
         fun hd _ => .sliceBorrowMU x hd.toP hA hB h₁ h₂ hS hdc
-          (.dtor hdt hdc hde hd))
+          (.dropFn hdt hdc hde hd))
   | .sliceBorrowImmU _ b A B r => do
       let b ← E.elabL Δ b
       let A ← E.elabV Δ A
@@ -243,7 +243,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.fam (.ref A))
       (cDeadStrict (fun j => .sliceBorrowIU (at_ sp) j A B S x (finNode sp (.fam (.ref A))))
         fun hd _ => .sliceBorrowIU x hd.toP (scopedB_sound hsc) hA hB h₁ h₂ hS hdc
-          (.dtor hdt hdc hde hd))
+          (.dropFn hdt hdc hde hd))
   | _ => err sp "internal error: not an unwinding borrow"
 
 

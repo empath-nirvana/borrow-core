@@ -10,7 +10,7 @@ four side conditions, all phase A's:
 - **independence**: at every place something is captured, every captured variable has a mode
   `≥` the capturer's (D2.6);
 - **scope**: an instance never appears in a type outside its binder;
-- **frame captures**: a frame that owns something without a destructor is captured only by
+- **frame captures**: a frame that owns something without a drop is captured only by
   continuations that must be resumed (rules [lend], [using]).
 
 Phase A's fifth check, T1, is not a premise here. §9.3 shows the owning `lend` does not need it
@@ -91,8 +91,8 @@ The capturers and their modes:
 | an operation's own continuation | `b_x.req` | [op] |
 | a handler's clauses, forwarded through by `ρ` | `bound(ρ).req` | [handle] |
 | a resuming clause (run once per operation) | `unr` | [handle] |
-| a `using` frame (linear, with a destructor) | `cancel ≥ bound(ρ).req` | [using] |
-| a `lend` frame (linear: the capability has no destructor) | `lin = bound(ρ).req` | [lend] |
+| a `using` frame (linear, with a derived drop) | `cancel ≥ bound(ρ).req` | [using] |
+| a `lend` frame (linear: the capability has no derived drop) | `lin = bound(ρ).req` | [lend] |
 
 **Lemma L2.2 (order facts).** For modes `m, k, m'` and bounds `b, b'`:
 

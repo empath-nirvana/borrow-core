@@ -145,7 +145,7 @@ handler prometheus(reg: &mut Registry) for Metrics {
 -- --------------------------------------------------------------------------------------------
 
 -- `Iter<T, R>` is the core's `iter` (SPEC §7): each `next` yields a `T` or finishes with `R`;
--- `close` (run by the destructor when an iterator is dropped) releases its state. There is no
+-- `close` (run by the drop when an iterator is dropped) releases its state. There is no
 -- `Stream`: an iterator whose `next` waits on the network is an `Iter` whose `next` performs
 -- `Async`. An adapter is written once; its copy at a suspending source suspends, its copy at a
 -- fallible source fails, its copy at a pure source is a plain loop. [G1, G6, G8]
@@ -185,7 +185,7 @@ fn timeout<T>(d: Duration, body: { -> T }) -> Option<T> =
   match race(body, { sleep(d) }) { Left(v) -> Some(v) | Right(()) -> None }
   -- `race` (1.8) observes both; each `wait` of the body is combined with the deadline. When the
   -- deadline wins, the body is not resumed. Not resuming is how every cancellation works: the
-  -- body unwinds as if it had raised, its destructors run (its connection closes, its borrows
+  -- body unwinds as if it had raised, its drops run (its connection closes, its borrows
   -- end), and nothing is left running. Under simulated time it cancels in virtual time. [G3, G5]
 
 -- Text and bytes: `docs/strings-slices-design.md` (u8, `slice 'a A`, `buf A`, `string`,
@@ -441,7 +441,7 @@ data Backoff = { base: Duration, cap: Duration, factor: i32, attempt: i32 }
 -- Runs `body`; on a failure `retryable` accepts, sleeps with exponential backoff and runs it
 -- again, up to `max` attempts. A failed attempt's resources (its connection, the partial body
 -- it was reading, the borrows it held) are released before the sleep: unwinding runs the
--- destructors. `body` is called several times, so it is `fn` rather than a one-shot block.
+-- drops. `body` is called several times, so it is `fn` rather than a one-shot block.
 fn retry<T, E>(policy: Backoff, max: i32, retryable: fn(&E) -> bool,
                body: fn() -> T / {Fail<E>, ..}) -> T / {Fail<E>} =
   let mut b = policy;
@@ -463,8 +463,8 @@ fn retry<T, E>(policy: Backoff, max: i32, retryable: fn(&E) -> bool,
 -- `scope` is the scheduler: it handles `Async` for the tasks spawned in it, and returns when
 -- all of them have finished. A task may borrow anything that outlives the scope, so there is
 -- no `Arc` and no `'static`. Cancelling a task is observing `close` on its state machine:
--- its destructors run (connections close, borrows end, owned buffers are freed) and it hands
--- back what has no destructor. [G3, G9]
+-- its drops run (connections close, borrows end, owned buffers are freed) and it hands
+-- back what has no derived drop. [G3, G9]
 --   not-think: `Send + 'static`, `Arc<Context>`, `JoinHandle`s that can be forgotten.
 --   types-tell: the tasks' effects appear in the scope's row, except `Async`, which the scope
 --               handles only when it is the outermost scheduler.

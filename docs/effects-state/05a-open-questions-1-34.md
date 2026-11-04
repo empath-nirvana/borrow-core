@@ -618,7 +618,7 @@ be deferred.
 
 ### OQ-21. What a finaliser may perform, and the cancel error policy
 
-*Question.* Keep as built (a), or restrict destructors to answering operations (b)?
+*Question.* Keep as built (a), or restrict drops to answering operations (b)?
 
 *Class.* **MIS-POSED.** Its option (a), "as built", conflicts with the recorded decision (F4).
 
@@ -628,7 +628,7 @@ continues to the canceller, which always receives 'cancelled'." The kernel (SPEC
 `SPEC.md:2509-2515`; `Core/EffCancel.lean` `prog₃`) re-raises the first error of a name outside
 the region at the canceller.
 
-Option (b) comes from #245's brief of 2026-10-02 ("Destructors may perform only answering
+Option (b) comes from #245's brief of 2026-10-02 ("Drops may perform only answering
 operations; handler-level finalisers may perform anything in the outer row… decide them
 deliberately"). That is an agent consolidation, not a user decision.
 

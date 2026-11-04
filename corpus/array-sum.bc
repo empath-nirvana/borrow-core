@@ -2,7 +2,7 @@
 -- summed by a loop of 1024 steps: `twice` composes a step with itself, ten times over. Each
 -- step reads the element at the index by `array_replace` (writing 0, then the element back)
 -- and adds it; past the end `array_replace` takes the error branch and the step does nothing.
--- The array is freed implicitly at the end of `main` (SPEC §12): its destructor frees every
+-- The array is freed implicitly at the end of `main` (SPEC §12): its drop frees every
 -- cell.
 --
 -- Answer: (i32[500500], i32[1000]): 1 + 2 + … + 1000, and the number of elements read. An

@@ -30,7 +30,7 @@ every lifetime.
 
 `Input` and `Output` are one constructor, `VTy.opq k` (`Opaque.lean`, `[spec §11]`): a leaf with
 no rule, whose relation is the model `k.Holds` in both modes (a byte list; a descriptor and the
-bytes written), with `Imm̲ = Unk`, not persistent and with no destructor.
+bytes written), with `Imm̲ = Unk`, not persistent and with no derived drop.
 
 `νX. C` (`[spec §7]`) has `U X` as the type variable `0` of `C`'s value types, and at a positive
 `C` (`CTy.NuOk`) is interpreted as a greatest fixed point equal to its unrolling (`NuRel.lean`,
@@ -105,7 +105,7 @@ The machine's steps `tab`, `idx`, `drop` (`Paper/S3_Dynamics/Definitions.lean`,
 allocator's block, `alloc_block`), `wpTS_idx` and `wpTS_dropStep` (`ArrayWp.lean`). The constants and
 their compatibility lemmas are `Arrays.lean`: `array_new` (`tabFill_wp`), `array_free`
 (`dropFill_wp`), `array_size`, `array_replace`, and on families `array_len`, `array_get`,
-`array_copy`, `array_forget`. `HasDtor` has `Array A`, `ArrayImm @a A` and `ArrayMut @a A` (`Dtor.lean`).
+`array_copy`, `array_forget`. `HasDrop` has `Array A`, `ArrayImm @a A` and `ArrayMut @a A` (`Drop.lean`).
 `ArrayPrograms.lean` runs one program by adequacy and by the interpreter. The relation's
 clause carries the length bound `c < 2³¹`, so a family has `tab`'s length (`arrLen_of_bound`).
 
@@ -117,7 +117,7 @@ one callback, by induction on the list of places (`wpTS_M_frameList`, `wpTS_I_fr
 borrowed family is split at a run-time index by the step `split` (`famSplit_compatX`, from
 `vP_fam_split`), `(0, 0)` is the empty family (`famEmpty_compatX`), and a `mut` family is
 written at an index by Mut Anti-Frame on the leaf (`sliceReplaceM_compatX`,
-`sliceSwapM_compatX`, two leaves by `sepRange_pick2N`). `HasDtor` has `ArrayMut @a A`, derived
+`sliceSwapM_compatX`, two leaves by `sepRange_pick2N`). `HasDrop` has `ArrayMut @a A`, derived
 from `slice_get_mut` and `forget`.
 
 ### Standard I/O  `[spec §11]`
@@ -299,8 +299,8 @@ with no new case.
 | family borrow `withborF2 : Ref A ⊗ Ref B ⊸ (∀'c ⊏ ⊓Δ. M 'c A ⊗ M 'c B ⊸ ['c] T) ⊸ …`, `M = Mut`/`Imm`: `withborM2_wf`, `withborI2_wf` | `Family.lean` |
 | block borrow `withborS σ : refTy σ ⊸ (∀'c ⊏ ⊓Δ. famTy M 'c σ ⊸ ['c] T) ⊸ refTy σ ⊗ T`, `shortenE`: `withborS_wf`, `withborSM_wf`, `withborSI_wf`, `shortenE_wf` | `BlockBorrow.lean` |
 | block allocation and free: `allocS`, `freeS` (`d_allocS`, `d_freeS`) | `Blocks.lean` |
-| destructors `dtorE T : T ⊸ F 1` at every `HasDtor T` (forgettable types, `Ref`, `⊗`/`⊕`/`[@a]`, `μ` of the class `P` by `foldOwn` or `foldOwnG`, codata by `close`), and the drop `dropE T i e = (dtorE T xᵢ; e)`: `dtor_wf`, `drop_derives` (SPEC §12, §61) | `Dtor.lean` |
-| the two classes of value type, unrestricted (`VTy.Persistent`) and linear: contraction and weakening exactly at unrestricted types (`Ctx.SplitP.both_live_iff`, `Ctx.DeadP.live_iff`, `Ctx.SoloP.live_succ_iff`); the derived drop `DerivedDrop`, pure at the row (`dtor_wf`, `HasDtor.close`/`.nu`, `kTy_cancel_hasDtor_iff`), its term holding no operation and closed (`dtorE_effFree`, `dtorE_closed`); the derived copy at `Imm` (`DerivedCopy`, `copy_derives`); the classes of `κ` (`kTy_lin`, `kTy_cancel_linear`, `kTy_cancel_hasDtor_iff`, `kTy_unr`); `forgettable_iff` (SPEC §10, §12, §19) | `Classes.lean` |
+| drops `dropFnE T : T ⊸ F 1` at every `HasDrop T` (forgettable types, `Ref`, `⊗`/`⊕`/`[@a]`, `μ` of the class `P` by `foldOwn` or `foldOwnG`, codata by `close`), and the drop `dropE T i e = (dropFnE T xᵢ; e)`: `dropFn_wf`, `drop_derives` (SPEC §12, §61) | `Drop.lean` |
+| the two classes of value type, unrestricted (`VTy.Persistent`) and linear: contraction and weakening exactly at unrestricted types (`Ctx.SplitP.both_live_iff`, `Ctx.DeadP.live_iff`, `Ctx.SoloP.live_succ_iff`); the derived drop `DerivedDrop`, pure at the row (`dropFn_wf`, `HasDrop.close`/`.nu`, `kTy_cancel_hasDrop_iff`), its term holding no operation and closed (`dropFnE_effFree`, `dropFnE_closed`); the derived copy at `Imm` (`DerivedCopy`, `copy_derives`); the classes of `κ` (`kTy_lin`, `kTy_cancel_linear`, `kTy_cancel_hasDrop_iff`, `kTy_unr`); `forgettable_iff` (SPEC §10, §12, §19) | `Classes.lean` |
 
 These facts are stated at the typed world:
 
@@ -329,7 +329,7 @@ interpreter (`…_eval`, kernel-checked by `decide`) with its result checked (`�
 | `StreamPrograms.lean` | `take_runs` (every closed `U(Stream 1)` observed `n` times and closed), `takeCloseR`, `natsSum` (`0 + 1 + 2 = 3`) |
 | `IntPrograms.lean` | `sumToProg` (`fixD` over `I32 ⊗ I32`, `1 + … + 10 = 55`), `sumListProg` (`[100, 20, 3]` as `μX. 1 ⊕ Ref (I32 ⊗ X)`, read by `withload` inside an immutable borrow, `foldImm` sum `123`), `signProg` (`div_s`/`div_u` of `-7` by `2`, a wrapping `mul`, `div_u` by zero taking the error branch) |
 | `ArrayPrograms.lean` | `arrProg`: `array_new` of three elements, `array_replace` at index 1, `array_size`, `array_free`; observed `(inl 11, 3)` and no cell left |
-| `NestedPrograms.lean` | `nestProg`: two values of `μX. I32 ⊗ Array (μY. 1 ⊕ (Ref X ⊗ Ref Y))`, nested three deep, built, one summed by `foldOwnG` and one dropped by its destructor; observed `34` and no cell left (the kernel program `nested-fold`) |
+| `NestedPrograms.lean` | `nestProg`: two values of `μX. I32 ⊗ Array (μY. 1 ⊕ (Ref X ⊗ Ref Y))`, nested three deep, built, one summed by `foldOwnG` and one dropped by its drop; observed `34` and no cell left (the kernel program `nested-fold`) |
 
 The `IntPrograms.lean` runs are theorems at every host; the interpreter's results are at
 `wasmHost`.
@@ -394,7 +394,7 @@ Name collisions settled:
   `Imm @e`/`Mut @e`/`[@e]` leaves and results that outlive the outer lifetime. I have not
   derived `withborS` at such leaves, and I have not verified that any obstruction to it is real.
 - **Arrays.** `split_at` (K3), the writes that keep a `mut` family (K5), `iter`/`iter_mut`,
-  `Vec`, `Str` are not built, and `[Mut @a A]` has no destructor (`SPEC.md` §9 Open). `[L]` is not
+  `Vec`, `Str` are not built, and `[Mut @a A]` has no derived drop (`SPEC.md` §9 Open). `[L]` is not
   in `SpineMuFree`, so an `Imm` record cannot be projected past an array field.
 - **Streams.** Only `A = 1` has a generic consumer with a stated adequacy theorem (`take_runs`).
   Every other stream program is a single closed derivation.

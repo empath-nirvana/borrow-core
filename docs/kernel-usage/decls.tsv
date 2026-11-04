@@ -56,10 +56,10 @@ rule	Core.Count	BoCa.Fig16.LogRel.Core.d_c₀	0		0
 rule	Core.Count	BoCa.Fig16.LogRel.Core.d_num	0		0	
 rule	Core.Count	BoCa.Fig16.LogRel.Core.d_step	0		0	
 rule	Core.CountFree	BoCa.Fig16.LogRel.Core.countFreeProg_derives	0		0	
-rule	Core.Dtor	BoCa.Fig16.LogRel.Core.close_body	0		0	
-rule	Core.Dtor	BoCa.Fig16.LogRel.Core.drop_derives	0		0	
-rule	Core.Dtor	BoCa.Fig16.LogRel.Core.dtor_wf	4	Frontend.Check.TiedAt.drop BoCa.Fig16.LogRel.Core.Check.TDerivesAt.erase BoCa.Fig16.LogRel.Core.Check.TDerivesP.erase	0	
-rule	Core.Dtor	BoCa.Fig16.LogRel.Core.forget_persistent	0		0	
+rule	Core.Drop	BoCa.Fig16.LogRel.Core.close_body	0		0	
+rule	Core.Drop	BoCa.Fig16.LogRel.Core.drop_derives	0		0	
+rule	Core.Drop	BoCa.Fig16.LogRel.Core.dropFn_wf	4	Frontend.Check.TiedAt.drop BoCa.Fig16.LogRel.Core.Check.TDerivesAt.erase BoCa.Fig16.LogRel.Core.Check.TDerivesP.erase	0	
+rule	Core.Drop	BoCa.Fig16.LogRel.Core.forget_persistent	0		0	
 rule	Core.EffCancelTyped	BoCa.Fig16.LogRel.Core.CancelIntercept.d_cancelCT	0		0	
 rule	Core.EffCancelTyped	BoCa.Fig16.LogRel.Core.CancelIntercept.d_cancelKeptT	0		0	
 rule	Core.EffCancelTyped	BoCa.Fig16.LogRel.Core.CancelIntercept.d_constC_op	0		0	
@@ -328,10 +328,10 @@ term	Core.DivRuntime	BoCa.Fig16.LogRel.Core.DivRuntime.kap	0		0
 term	Core.DivRuntime	BoCa.Fig16.LogRel.Core.DivRuntime.rtC	0		0	
 term	Core.DivRuntime	BoCa.Fig16.LogRel.Core.DivRuntime.rtH	0		0	
 term	Core.DivRuntime	BoCa.Fig16.LogRel.Core.DivRuntime.rtR	0		0	
-term	Core.Dtor	BoCa.Fig16.LogRel.Core.algE	0		0	
-term	Core.Dtor	BoCa.Fig16.LogRel.Core.dropE	2	Frontend.Check.TiedAt.drop Frontend.Check.TiedDer.drop	0	
-term	Core.Dtor	BoCa.Fig16.LogRel.Core.dtorAt	0		0	
-term	Core.Dtor	BoCa.Fig16.LogRel.Core.dtorE	68	BoCa.Fig16.LogRel.Core.Check.TDerivesAt.casesOn Frontend.Check.synConstU._proof_3 BoCa.Fig16.LogRel.Core.Check.TDerivesP.jdg_eq	0	
+term	Core.Drop	BoCa.Fig16.LogRel.Core.algE	0		0	
+term	Core.Drop	BoCa.Fig16.LogRel.Core.dropE	2	Frontend.Check.TiedAt.drop Frontend.Check.TiedDer.drop	0	
+term	Core.Drop	BoCa.Fig16.LogRel.Core.dropFnAt	0		0	
+term	Core.Drop	BoCa.Fig16.LogRel.Core.dropFnE	68	BoCa.Fig16.LogRel.Core.Check.TDerivesAt.casesOn Frontend.Check.synConstU._proof_3 BoCa.Fig16.LogRel.Core.Check.TDerivesP.jdg_eq	0	
 term	Core.EffBorrow	BoCa.Fig16.LogRel.Core.withborUE	15	BoCa.Fig16.LogRel.Core.Check.TDerivesP.weaken BoCa.Fig16.LogRel.Core.Check.TExpr.erase._unsafe_rec BoCa.Fig16.LogRel.Core.Check.TExpr.erase._f	0	
 term	Core.EffBorrow	BoCa.Fig16.LogRel.Core.withborUV	7	BoCa.Fig16.LogRel.Core.Check.TExpr.erase._unsafe_rec BoCa.Fig16.LogRel.Core.Check.TExpr.erase._f Frontend.Check.lendRE	0	
 term	Core.EffBorrow	BoCa.Fig16.LogRel.Core.withloadV	0		0	
@@ -650,7 +650,7 @@ type	Core.FoldImm	BoCa.Fig16.LogRel.Core.FShape.resRH	0		0
 type	Core.FoldImm	BoCa.Fig16.LogRel.Core.FShape.ty	39	BoCa.Fig16.LogRel.Core.Check.TDerivesAt.casesOn BoCa.Fig16.LogRel.Core.Check.TDerivesP.jdg_eq BoCa.Fig16.LogRel.Core.Check.TDerivesP.weaken	0	
 type	Core.FoldImm	BoCa.Fig16.LogRel.Core.algTy	34	BoCa.Fig16.LogRel.Core.Check.TDerivesAt.casesOn BoCa.Fig16.LogRel.Core.Check.TDerivesP.jdg_eq BoCa.Fig16.LogRel.Core.Check.TDerivesP.weaken	0	
 type	Core.FoldImm	BoCa.Fig16.LogRel.Core.foldTy	34	BoCa.Fig16.LogRel.Core.Check.TDerivesAt.casesOn BoCa.Fig16.LogRel.Core.Check.TDerivesP.jdg_eq BoCa.Fig16.LogRel.Core.Check.TDerivesP.weaken	0	
-type	Core.FoldOwn	BoCa.Fig16.LogRel.Core.FShape.resO	2	Frontend.Check.dtorB_sound._f Frontend.Check.dtorB_sound	0	
+type	Core.FoldOwn	BoCa.Fig16.LogRel.Core.FShape.resO	2	Frontend.Check.hasDropAtB_sound._f Frontend.Check.hasDropAtB_sound	0	
 type	Core.FoldOwn	BoCa.Fig16.LogRel.Core.algOTy	34	BoCa.Fig16.LogRel.Core.Check.TDerivesAt.casesOn BoCa.Fig16.LogRel.Core.Check.TDerivesP.jdg_eq BoCa.Fig16.LogRel.Core.Check.TDerivesP.weaken	0	
 type	Core.FoldOwn	BoCa.Fig16.LogRel.Core.foldOTy	39	BoCa.Fig16.LogRel.Core.Check.TDerivesAt.casesOn BoCa.Fig16.LogRel.Core.Check.TDerivesP.jdg_eq BoCa.Fig16.LogRel.Core.Check.TDerivesP.weaken	0	
 type	Core.FoldReuse	BoCa.Fig16.LogRel.Core.FShape.resR	0		0	

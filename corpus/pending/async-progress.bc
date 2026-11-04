@@ -11,7 +11,7 @@
 --
 -- Blocked by: a capability in a task. `stdout` is `main`'s, and a `with spawn { … }` whose body
 -- lends it is rejected: "the body of `with spawn` … lends a place declared outside it: a control
--- handler's body may be abandoned, and does not hand them back". A capability has no destructor,
+-- handler's body may be abandoned, and does not hand them back". A capability has no derived drop,
 -- so a task that holds one cannot be cancelled (`lib/yield.bc`'s note: a generator cannot hold
 -- one across a `yield`), and two tasks cannot both be given it. A task that writes through
 -- `Stdout` (SPEC §34) is given a borrow of the stream instead, which it can drop when cancelled

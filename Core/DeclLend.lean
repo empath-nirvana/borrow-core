@@ -16,10 +16,10 @@ decides what the kernel asks for:
 
 At the unwinding form any closed `d` of that type is accepted, and one that consumes the value is
 derived: `declFin` frees the cell and burns the token (`d_declFin`, at payload `1`), and at any
-payload with a derived drop `declFinOf` drops the payload by its destructor and burns the token
+payload with a derived drop `declFinOf` drops the payload by its drop and burns the token
 (`d_declFinOf`). The checker passes the
-source's derived destructor `dtorE (Ref N)` (`Frontend/Check/Consts.lean`, `finaliser`), which a
-declared type has none of (`decl_ref_no_dtor`).
+source's derived drop `dropFnE (Ref N)` (`Frontend/Check/Consts.lean`, `finaliser`), which a
+declared type has none of (`decl_ref_no_drop`).
 
 Both programs run, under every allocator, to their answer at the empty memory: the token is
 burned on each path (`declInside_runs`, `declAcross_answers`).
@@ -48,9 +48,9 @@ theorem decl_loan_ownFree (a : Lifetime.Life) (A : VTy) :
   ⟨.imm a _, .mut a _⟩
 
 /-- **The checker's finaliser does not exist at a declared type**: the unwinding lend's finaliser
-the checker passes is the source's derived destructor, and `Ref N` has none.  `[spec §19, §42]` -/
-theorem decl_ref_no_dtor (A : VTy) : ¬ HasDtor (.ref (declTy A)) :=
-  not_hasDtor_ref (decl_linear A).2
+the checker passes is the source's derived drop, and `Ref N` has none.  `[spec §19, §42]` -/
+theorem decl_ref_no_drop (A : VTy) : ¬ HasDrop (.ref (declTy A)) :=
+  not_hasDrop_ref (decl_linear A).2
 
 /-! ### The declared value -/
 
@@ -153,20 +153,20 @@ theorem d_declFin {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     (seqW (.var (by csolo)) (appW (.var (by csolo)) (.tokBurn (by cdead)))))))
 
 /-- The written finaliser at a payload `A` with a derived drop:
-`λr. let (a, t) = free r; dtor a; burn t`. -/
+`λr. let (a, t) = free r; dropFn a; burn t`. -/
 def declFinOf (A : VTy) : Expr :=
-  .val (.lam (.letpair (.app free' (.var 0)) (.seq (.app (dtorE A) (.var 1)) (.app burnE (.var 0)))))
+  .val (.lam (.letpair (.app free' (.var 0)) (.seq (.app (dropFnE A) (.var 1)) (.app burnE (.var 0)))))
 
 /-- **A finaliser that consumes a declared value whose payload has a derived drop**: the payload
-by its destructor, the token by `burn`. -/
-theorem d_declFinOf {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hA : HasDtor A) (hΓ : Ctx.Dead Γ) :
+by its drop, the token by `burn`. -/
+theorem d_declFinOf {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hA : HasDrop A) (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ (declFinOf A) (.val (.lolli (.ref (declTy A)) .unit)) :=
   .thunkV rfl (.lam (.ret (letW (appW (.var (by csolo)) (.free (by cdead)))
     (.seqV (.right (.left (deadSplit (by cdead))))
-      (.lolliE (.dead (.left (deadSplit (by cdead)))) (.var (by csolo)) (dtor_wf hA (by cdead)))
+      (.lolliE (.dead (.left (deadSplit (by cdead)))) (.var (by csolo)) (dropFn_wf hA (by cdead)))
       (appW (.var (by csolo)) (.tokBurn (by cdead)))))))
 
-theorem declFinOf_closed {A : VTy} (hA : HasDtor A) : closedAt 0 (declFinOf A) = true :=
+theorem declFinOf_closed {A : VTy} (hA : HasDrop A) : closedAt 0 (declFinOf A) = true :=
   closedAt_of_derives (d_declFinOf (Δ := default) hA (Γ := []) .nil)
 
 /-- `Λ. λv. forget v; raise ()`, at the unwinding row. -/

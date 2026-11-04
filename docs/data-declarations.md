@@ -309,7 +309,7 @@ type:
 - An observation at mode `mut` or `imm` is `Aₘ ⊸ F_Σₘ (Bₘ ⊗ [@c] U X)`: it hands back the rest, as
   `Clo`'s `call` does (SPEC §22).
 - A consuming observation is `Aₘ ⊸ F_Σₘ Bₘ`.
-- `F 1` is `close`, which runs the state's destructor (SPEC §12, group 2).
+- `F 1` is `close`, which runs the state's drop (SPEC §12, group 2).
 - The value is `unfold step s` over the state `s`, with `step` built from `N`'s face.
 - An observation through a `mut` borrow of the object is `withswap` around the call (`d_callMut`,
   SPEC §22).
@@ -836,11 +836,11 @@ Automatic boxing, one box a node placed by rule, is rejected for declarations.
   cell `ref (X ⊕ 1)`.
 - Recursion under an array (`Arr(Vec[Json])`, `Trie(bool, Vec[Option[Trie]])`,
   `Node(array (i32 * T))`) is under the array's allocation, the other written heap allocation §5.3
-  names. It needs no `box` (built, SPEC §61, #722). Its destructor is the owned fold at the class
+  names. It needs no `box` (built, SPEC §61, #722). Its drop is the owned fold at the class
   `P` (§61); the borrowed fold and a fold block over it wait (U2 of #595).
 - **Which positions are accepted is the kernel's class**: a declaration's recursion is accepted
   exactly when its `μ` body is in SPEC §6's class `P` (`FoldP.PB`, `pBodyB`), the types a
-  destructor is defined at. A recursive type under a borrow (`imm`, `mut`, a view), `!`, a lifetime
+  drop is defined at. A recursive type under a borrow (`imm`, `mut`, a view), `!`, a lifetime
   box or an array of borrows is refused at the declaration, the message naming the former. Under
   a function type it is a leaf of `P`, and the checker refuses it (a `μ` variable under `U`); under
   another recursive declaration it is refused as a `μ` nested in a `μ` (B14, U3 of #595).
@@ -980,13 +980,13 @@ This is the key-projection idea of #489's C5, applied to the codec.
 
 `data Json = Null | Bool(bool) | Num(i64) | Str(string) | Arr(Vec[Json]) | Obj(Map[string, Json])`
 puts `Json` under an array. That is outside `FShape` (SPEC §6), so today it has no fold and no
-destructor.
+drop.
 
 - Two routes are on the list:
   - spike S-D: inline the container's constructors into one `μ` (elaboration);
   - spike S-H: `FShape` over arrays (a kernel lemma).
 - **The typed resource needs neither.** Its `Vec`s are of non-recursive records, and a `buf` of a
-  non-recursive type has a destructor today (E, `resource.bc`).
+  non-recursive type has a derived drop today (E, `resource.bc`).
 - Only the untyped value waits on B14, with `@json(flatten) extra: Map[string, Json]` for unknown
   fields.
 

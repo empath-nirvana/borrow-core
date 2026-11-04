@@ -2,7 +2,7 @@
 -- result, without a `Cow` type. `escape` answers the text itself when nothing in it needs
 -- escaping, and a new, escaped string otherwise: the sum `text 'a + string`. `push_json_str`
 -- matches on it: the view side is appended and forgotten, and the owned side is lent to the
--- append and freed by its destructor (§12), which is the componentwise destructor Rust's `Cow`
+-- append and freed by its drop (§12), which is the componentwise drop Rust's `Cow`
 -- has. The escaped string is built character by character (`char_at`, UTF-8 decoding, and
 -- `push_char`), a counted loop over the view's length. Labels and values are literal views.
 --

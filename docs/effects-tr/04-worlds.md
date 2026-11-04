@@ -118,10 +118,10 @@ protocol (D4.6), and it is discharged by independence (L5.4).
 
     Cancel(S₁)(r)  ≜  ∃ r₀ ∈ NoOwn.  r = (●_{fin(j, ℓ_r, ℓ) ∈ S₁} ℓ_r ↦ own(rsrc ℓ)) ● r₀
 
-`Cancel(S₁)` holds exactly of the resources that running `dtors(S₁)` (D3.4) disposes of: it frees
+`Cancel(S₁)` holds exactly of the resources that running `drops(S₁)` (D3.4) disposes of: it frees
 each owned resource of a `fin` frame of `S₁`, and what remains may be dropped. Cancelling a
 continuation, unwinding to an abortive operation's handler, and failing a co-operation all run
-`dtors` of a segment, so all three owe `Cancel` of it.
+`drops` of a segment, so all three owe `Cancel` of it.
 
 **Definition D4.6 (protocols).** The protocol of an instance of effect `E` describes what a
 computation owes at a stop on that instance. For a resuming operation `o`, an argument

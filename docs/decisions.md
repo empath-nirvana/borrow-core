@@ -58,16 +58,16 @@ Each entry: the decision, and why. Newest last.
     (`experiments/Optics`), but they do not explain why borrows are safe: every law that matters
     needs a frame fact that comes from lifetimes and typing. The search for the underlying
     abstraction continues at the frame guarantee (lifetime parametricity).
-23. **Implicit destructors are derived drops of linear values (revised by #746).** The kernel has
+23. **Implicit drops are derived drops of linear values (revised by #746).** The kernel has
     two classes of value type: unrestricted (`VTy.Persistent`, where contraction and weakening are
     rules) and linear (every other type). An owned value that goes unused is consumed by its
-    derived destructor, which the checker inserts (SPEC §12, `drop_derives`), so the elaborated
+    derived drop, which the checker inserts (SPEC §12, `drop_derives`), so the elaborated
     program stays linear and leak freedom is `adequacyC` on it. A derived drop is a property of a
-    linear type (`DerivedDrop A := Linear A ∧ HasDtor A`), not a third class. A destructor that
+    linear type (`DerivedDrop A := Linear A ∧ HasDrop A`), not a third class. A drop that
     frees or closes is an action whose placement can be observed: it goes at the end of each path,
     never earlier than an effect. Four decisions of #746 (2026-10-29) fix the rest:
-    1. **A derived drop is pure at the row** (`dtor_wf`'s type, `HasDtor.close`/`.nu`,
-       `kTy_cancel_hasDtor_iff`). The cancel of a continuation whose cancel row is not empty is a
+    1. **A derived drop is pure at the row** (`dropFn_wf`'s type, `HasDrop.close`/`.nu`,
+       `kTy_cancel_hasDrop_iff`). The cancel of a continuation whose cancel row is not empty is a
        use, written or emitted as `(force κ).2`, not a derived drop.
     2. **An abort's abandonment is not a drop.** `⊤`, `absurd` and an abort absorb a context; an
        abort abandons only slots that hold no owned cell (`VTy.OwnFree`, which is not narrowed), so
@@ -77,11 +77,11 @@ Each entry: the decision, and why. Newest last.
        (SPEC §12, *The derived copy at `imm`*; #746).
     4. **A declared type may have no derived drop.** Its payload is paired with a token of the
        opaque kind `tok` (`A ⊗ Tok`, minted at construction and burned at a written `match`), so
-       `HasDtor` fails at it and the checker cannot drop it; borrows of it still have a derived
+       `HasDrop` fails at it and the checker cannot drop it; borrows of it still have a derived
        drop.
 
     *Status (decision 72):* these choices on linearity and drops are released as design; SPEC
-    §62's destructors may perform operations, replacing item 1, and `must_close` (item 4) is void.
+    §62's drops may perform operations, replacing item 1, and `must_close` (item 4) is void.
     What is built stays the checker's behaviour until §62's PRs land.
 24. **Recursion is the fixed point of a generator, called directly (revised twice; first read
     "recursion is always structured, no general direct recursion", then "recursion is an
@@ -151,7 +151,7 @@ Each entry: the decision, and why. Newest last.
     capability can later be served by a user-defined handler (#18) instead of the host.
 31. **Host resources are opaque types with a model.** One leaf former, `VTy.opq k`, whose
     relation is a predicate `k.Holds` on values and whose `Imm̲` is `Unk`: not persistent, no
-    destructor, no rule. Its values can only be moved and handed to externs, so a handle is never
+    drop, no rule. Its values can only be moved and handed to externs, so a handle is never
     copied (l_lang's L-199) and the model and the host can represent it differently (a byte list,
     a file descriptor). A new host resource is a new `k`, not a new former.
 32. **Provisional (SPEC §11, to be confirmed by the user).**
@@ -208,7 +208,7 @@ Each entry: the decision, and why. Newest last.
       written. In draft 0's surface they would be `total fn` and `div fn` (or `-> div T`).
     - *Withdrawn* (typed elaboration, stage 2): the residual was recognized by the names `In`,
       `Out`, `ref input` and `ref output`. It is now read off the result type: the components
-      with no destructor (SPEC §12), paired with `()`, or `1` (SPEC §14).
+      with no derived drop (SPEC §12), paired with `()`, or `1` (SPEC §14).
     - *Withdrawn* (stage 4): a `main` that looped but used no capability was given `stdout`
       ambiently, so the runtime could drive it. The runtime now drives a loop with no
       capabilities (SPEC §11).
@@ -333,7 +333,7 @@ Each entry: the decision, and why. Newest last.
     - **Pipelines over a borrowed source are not rewritten.** Moving the owner into the source
       needs the pipeline to hand it back: adapters generic in the source's finishing value and
       residual, a `for` that binds the finishing value (#109), and a residual that hands back an
-      owner with a destructor. A pipeline over owned sources, with a body that uses the borrow,
+      owner with a derived drop. A pipeline over owned sources, with a body that uses the borrow,
       is covered.
     - `|>` is not provided: draft 0 puts the piped value last (#17), and #109's adapters take the
       source first; the two are to be reconciled with it.
@@ -419,7 +419,7 @@ Each entry: the decision, and why. Newest last.
     - **The nested binds stay as the fallback.** `gen_bind`, `gen_bind_loop` and `div_bind`
       elaborate a body the machine does not cover (a variable of undetermined type live at a
       point, a delegate's residual that is neither `()`, a lent capability nor the body's, a
-      capability-less extern with no destructor used across a point) and report the errors of a
+      capability-less extern with no derived drop used across a point) and report the errors of a
       body the elaboration rejects. The alternative, deleting them, would need every such error
       rebuilt in the machine; no accepted program of the corpus takes the fallback.
     - **The divergence library is emitted only when the elaborated program names it**, as the
@@ -457,7 +457,7 @@ Each entry: the decision, and why. Newest last.
       `slice_empty_mut[@a, A]`**, **`slice_replace_mut[@a, A]`**, **`slice_swap_mut[@a, A]`**
       are the core constants. The empty family is typed `[L]`, not the design's `![L]`: a
       constant at a dead context is already used at will.
-    - **`array_mut @a A` has a destructor**, derived (`slice_get_mut` past every length, then
+    - **`array_mut @a A` has a derived drop**, derived (`slice_get_mut` past every length, then
       `forget`), so it needs no new constant; the alternative, a `slice_forget_mut` constant, is
       a kernel change for the same effect.
     - **The library `lib/slice.bc`** (`include slice`) is generic in the element type, called
@@ -627,7 +627,7 @@ Each entry: the decision, and why. Newest last.
 48. **Effects: the scoping of #18 (`docs/effects-scoping.md`, #151). The user's decisions.**
     - **Handlers are defined by elaboration** into existing core terms: a capability lent by
       `withbor`, a handler as state plus `!` clauses, resume-once as a call, abort as a sum exit,
-      suspension as `ν` codata, finalisation as the §12 destructors. Effect safety follows from the
+      suspension as `ν` codata, finalisation as the §12 drops. Effect safety follows from the
       Fundamental Property. Keeping effect rows out of the core was this stage's scope, not a
       standing rule: the user did not decide that rows never enter the core. Superseded by the
       user's decision (2026-09-30) that effects are core, built on a literature-backed
@@ -686,7 +686,7 @@ Each entry: the decision, and why. Newest last.
       a call of it is a branch, and an abort in a loop's body is the loop's exit. `try` of a call
       in tail position is the call's own sum. So a fallible program is the sum program a user
       would write by hand (`corpus/effects-fold.bc`, `effects-fold-sum.bc`).
-    - **An abort cannot abandon a value with no destructor**; the checker's error names the
+    - **An abort cannot abandon a value with no derived drop**; the checker's error names the
       abort (SPEC §12's group 3). The residual form, handing it to the handler, is later (E9).
     - **Errors are raised** in the library: decision 46's "errors are sums (provisional until the
       error effect)" is withdrawn for errors; a search that finds nothing still answers a sum.
@@ -723,7 +723,7 @@ Each entry: the decision, and why. Newest last.
     - **Errors are `Fail[E]` in `lib/fail.bc`**, `ctl raise(e: E) -> never`, with `to_result`, `default` and `map_err` (`include fail`). `retry` waits for functions over computations (#161). An error holds nothing owned (§19's `[raise]`): `from_utf8` raises the index and drops the buffer, provisionally: the error should hand the buffer back once an abortive payload may be linear (#215).
     - **Static names are per `with` site**, numbered from 1 in the order the elaboration meets them; a function performing a control effect is copied per site, `f__n3`.
     - **The textual core**: `F[n.i q A ~> B, …] T`, `perform[n.i] V`, `abort[n.i] V`, `handle_with[n](hr, hc) M`, `x <- M unwind (D); N`, and `withbor1u`, `withbor2u`, `withbor3u`, `withloadu`, `slice_borrow_mut_u`, `slice_borrow_imm_u` with the callback's row as a bracket argument (`handle` is a name in the corpus).
-    - **Drop glue is the checker's**, as §12's destructors are: a binding whose head may abort gets a `[then]` finaliser of the destructors of what the rest uses.
+    - **Drop glue is the checker's**, as §12's drops are: a binding whose head may abort gets a `[then]` finaliser of the drops of what the rest uses.
     - Not taken from the guidance yet: `run() |> to_result |> stderr_log` (`|>` at a computation parameter waits for #161) and named instances `with a: Kube = …` (#155).
 56. **Provisional (generators on the iteration effect, #188 stage 2, SPEC §15; the user's binding decisions of 2026-10-01 — effects are core, iteration is `Yield` with no iterator trait, the old generator system goes — and the spellings below, to be settled after rewriting a sample of the corpus).** Revises decisions 41 and 42 where they name `gen fn`, `gen { }`, `yield from` and the generator machine.
     - **`Yield[T]` is a library effect**, `effect Yield[T] { ctl yield(x: T) }` in `lib/yield.bc` (`include yield`), cancellable. A generator is a function that performs it and writes it in its row, `fn range(lo: i32, hi: i32) -> 1 with Yield[i32]`; `yield(x)` is an operation call (no keyword, decision 49).
@@ -734,7 +734,7 @@ Each entry: the decision, and why. Newest last.
     - **A generator's loops are a div body's at its row** (`Loop_Σ`), which runs nothing when called; `while` and `loop` are loops of any div body, and a loop's body may loop, except a counted loop's and a clause.
     - **Adapters** (`lib/adapters.bc`) are generic generators over stored generators, with the names of decision 41 but `from_iter` (an iterator over the input holds a capability, below). Alternative not taken: adapters as handlers over a computation, which need a handler's state threaded through the operation and functions over computations (#161).
     - **Withdrawn**: `gen fn`, `gen { }`, `yield from`, the `gen` type, callbacks that yield (they need effectful callbacks, #161; `corpus/pending/yield-callback.bc`), the generator machine and the fallback to nested binds (`gen_bind`, `lib/gen.bc`): a body the machine does not cover is an error that names it.
-    - **A generator cannot hold a capability across `yield`** (`corpus/pending/gen-digits.bc`): the kernel's `[let]` asks what is live across a cancellable operation to drop, and a capability has no destructor; a cancel answers `()`, with no residual. Not taken: a `must_resume ctl` iteration effect, which allows it but not `break`.
+    - **A generator cannot hold a capability across `yield`** (`corpus/pending/gen-digits.bc`): the kernel's `[let]` asks what is live across a cancellable operation to drop, and a capability has no derived drop; a cancel answers `()`, with no residual. Not taken: a `must_resume ctl` iteration effect, which allows it but not `break`.
 57. **Effect polymorphism and functions over computations (#161, `docs/effect-polymorphism.md`; the user's decisions of 2026-10-01; spellings provisional).**
     - *Superseded by decision 62: the kernel has row variables.* **No row variables in the kernel (Option 2).** A function type states only what the callee provides. The kernel stays first-order in rows: no new `CTy` former, relation clause or `CDerives` rule.
     - **Provided and tunneled rows.** A computation parameter's written row is what the callee serves; its control effects are at **ports**, static names fixed by the parameter's declaration. Every other effect of the argument tunnels to the handlers in scope where the argument was written.
@@ -841,7 +841,7 @@ Each entry: the decision, and why. Newest last.
     - **Cancellation is what SPEC §19 and the unwinding effects do as built.** In the user's words: "Whatever they do is what we decided."
     - **No hard-stop phase while planning.** The tier-2 hard-stop rule is not in force. In the user's words: "There's no hard stop phase now we are just planning."
     - *Status (decision 72):* the cancellation bullet is released as a fixed design; in SPEC §62 a
-      cancel is one of the exits that run the live destructors. The other bullets stand.
+      cancel is one of the exits that run the live drops. The other bullets stand.
 63. **Multi-shot continuations are not a design goal (the user's decision of 2026-10-04).**
     - In the user's words: "TOTALLY IGNORE MULTISHOT AS A DESIGN GOAL. If it works it works, if it doesn't, it doesn't, I don't care either way."
     - It supersedes "we also don't need multishot unless we get it for free" (2026-10-02).
@@ -929,8 +929,7 @@ Each entry: the decision, and why. Newest last.
       #564 does not lift it.
     - The theorem that every run of a finaliser terminates, the handler clauses its operations
       reach included, is open (SPEC §14 *Open*).
-    - *Status (decision 72):* released as a fixed design. SPEC §62's `[let-dtor]` keeps
-      `hSDd` (no `Div` in the destructors' row) as a premise for now; relaxing it is §62 *Open*.
+    - *Status (decision 72):* released as a fixed design.
 70. **Allocation is an effect (the user's decisions of 2026-09-28, 2026-10-20 and 2026-10-29; #763; not built).**
     - Every heap allocation is written in the program. The marker need not be `box`: `box`,
       `buf_new`, `array_tab` and any allocator a library writes all count. No elaboration rule
@@ -1006,3 +1005,13 @@ Each entry: the decision, and why. Newest last.
     - The goal, in the user's words: a destructor and "a guarantee that it runs it every exit but
       no guarantee that it ever exits". The target theorem is SPEC §62's: every reachable state
       steps or is final with an empty heap.
+73. **No per-type release in the kernel (the user's decision of 2026-11-04; #771).**
+    - The kernel guarantees that every linear value is used and that no memory leaks: every
+      reachable state steps or is final with an empty heap. It makes no guarantee about releasing
+      any other resource. Closing a file is the file effect's API, written with linear types in the
+      library; it is not kernel work.
+    - SPEC §62's frame form that ran a per-type finaliser on every exit, its programs and its file
+      handle are removed (SPEC 1.30). PR #799, which had the checker emit it, was closed unmerged.
+    - The vocabulary is linear: a value is consumed, by a rule or by its type's drop, which frees
+      its cells (SPEC §12, *Vocabulary*). A value type is unrestricted or linear, with no third
+      class.

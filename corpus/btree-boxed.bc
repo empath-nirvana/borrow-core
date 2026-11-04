@@ -4,7 +4,7 @@
 -- `struct Node { keys: Vec<i32>, kids: Vec<Option<Node>> }`. Insertion is CLRS's: a full root is
 -- split first, and each full child is split before the descent enters it. A child is taken out of
 -- its parent's buffer (`inl ()` left in its place) and put back. The tree is dropped by its
--- derived destructor (SPEC §12): each node's children, then its buffers, each at once.
+-- derived drop (SPEC §12): each node's children, then its buffers, each at once.
 --
 -- Answer: `200 0 4` (every one of the 200 inserted keys found, an absent key not, height 4),
 -- `i32[200]` (the number of keys), `live 0`. 77 allocations, Rust's count for the same tree

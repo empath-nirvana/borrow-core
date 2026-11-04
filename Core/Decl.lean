@@ -13,7 +13,7 @@ type former and no new class: `N` is a linear type with no derived drop.
 | fact | statement |
 |---|---|
 | `Tok` is linear with no derived drop | `tok_linear` |
-| a field with no derived drop makes its container linear with none | `not_hasDtor_tensor_left`, `_right`, `_sum_left`, `_right`, `_box`, `_ref`, `_array`, `_mu_body`, `_mu_key`, and the `not_persistent_*` lemmas |
+| a field with no derived drop makes its container linear with none | `not_hasDrop_tensor_left`, `_right`, `_sum_left`, `_right`, `_box`, `_ref`, `_array`, `_mu_body`, `_mu_key`, and the `not_persistent_*` lemmas |
 | `N` is linear with no derived drop | `decl_linear` |
 | a borrow of `N` is linear with a derived drop: a loan ends, `N` is not consumed | `decl_imm_drop`, `decl_mut_drop` |
 | an abort cannot abandon `N` | `decl_not_ownFree` (`[let]`'s `hW`, `[raise]`'s `hd`) |
@@ -24,7 +24,7 @@ The guarantee is `N`'s linearity: used exactly once, never copied or dropped by 
 abandoned at an abort. Which function consumes it is the program's choice. Every run ends with every
 cell freed (`adequacyC`), the token's among them.
 
-The checker inserts a drop only at a `dtor` node, which carries `HasDtor` (`TDerivesP.dtor_hasDtor`,
+The checker inserts a drop only at a `dropFn` node, which carries `HasDrop` (`TDerivesP.dropFn_hasDrop`,
 `Frontend/Check/TDerives.lean`), so it inserts none at `N`.
 -/
 
@@ -41,7 +41,7 @@ open BoCa.Lifetime (LifeCtx)
 /-! ### Classes -/
 
 /-- **`Tok` is linear with no derived drop.**  `[spec §11, §12]` -/
-theorem tok_linear : Linear tokTy ∧ ¬ HasDtor tokTy :=
+theorem tok_linear : Linear tokTy ∧ ¬ HasDrop tokTy :=
   ⟨by simp [Linear, VTy.Persistent, VTy.persistent], fun h => nomatch h⟩
 
 /-- `Tok` holds an owned cell: an abort cannot abandon it. -/
@@ -49,37 +49,37 @@ theorem tok_not_ownFree : ¬ tokTy.OwnFree := by
   intro h; cases h with
   | opq _ hk => exact Opaque.tok_not_host hk
 
-theorem not_hasDtor_tensor_right {A B : VTy} (h : ¬ HasDtor B) : ¬ HasDtor (.tensor A B) := by
+theorem not_hasDrop_tensor_right {A B : VTy} (h : ¬ HasDrop B) : ¬ HasDrop (.tensor A B) := by
   intro h'; cases h' with | tensor _ hB => exact h hB
 
-theorem not_hasDtor_tensor_left {A B : VTy} (h : ¬ HasDtor A) : ¬ HasDtor (.tensor A B) := by
+theorem not_hasDrop_tensor_left {A B : VTy} (h : ¬ HasDrop A) : ¬ HasDrop (.tensor A B) := by
   intro h'; cases h' with | tensor hA _ => exact h hA
 
-theorem not_hasDtor_sum_right {A B : VTy} (h : ¬ HasDtor B) : ¬ HasDtor (.sum A B) := by
+theorem not_hasDrop_sum_right {A B : VTy} (h : ¬ HasDrop B) : ¬ HasDrop (.sum A B) := by
   intro h'; cases h' with | sum _ hB => exact h hB
 
-theorem not_hasDtor_sum_left {A B : VTy} (h : ¬ HasDtor A) : ¬ HasDtor (.sum A B) := by
+theorem not_hasDrop_sum_left {A B : VTy} (h : ¬ HasDrop A) : ¬ HasDrop (.sum A B) := by
   intro h'; cases h' with | sum hA _ => exact h hA
 
-theorem not_hasDtor_box {a : Lifetime.Life} {A : VTy} (h : ¬ HasDtor A) : ¬ HasDtor (.box a A) := by
+theorem not_hasDrop_box {a : Lifetime.Life} {A : VTy} (h : ¬ HasDrop A) : ¬ HasDrop (.box a A) := by
   intro h'; cases h' with | box hA => exact h hA
 
-theorem not_hasDtor_ref {A : VTy} (h : ¬ HasDtor A) : ¬ HasDtor (.ref A) := by
+theorem not_hasDrop_ref {A : VTy} (h : ¬ HasDrop A) : ¬ HasDrop (.ref A) := by
   intro h'; cases h' with | ref hA => exact h hA
 
 /-- An array of a type with no derived drop has none. -/
-theorem not_hasDtor_array {A : VTy} (h : ¬ HasDtor A) : ¬ HasDtor (.fam (.ref A)) := by
+theorem not_hasDrop_array {A : VTy} (h : ¬ HasDrop A) : ¬ HasDrop (.fam (.ref A)) := by
   intro h'; cases h' with | array hA => exact h hA
 
-/-- At `μX. A`: the body, its recursive positions at the destructor's results, has no derived drop. -/
-theorem not_hasDtor_mu_body {A : VTy} (h : ¬ HasDtor (FoldP.resO dtorAlgs [A] A)) :
-    ¬ HasDtor (.mu A) := by
+/-- At `μX. A`: the body, its recursive positions at the drop's results, has no derived drop. -/
+theorem not_hasDrop_mu_body {A : VTy} (h : ¬ HasDrop (FoldP.resO dropAlgs [A] A)) :
+    ¬ HasDrop (.mu A) := by
   intro h'; cases h' with | mu _ hA _ _ => exact h hA
 
 /-- At `μX. A`: a key of the body (`keysIn`) whose body has no derived drop. -/
-theorem not_hasDtor_mu_key {A B : VTy} {Bs : FoldP.Stack}
+theorem not_hasDrop_mu_key {A B : VTy} {Bs : FoldP.Stack}
     (hm : FoldP.Bnd.mu (B :: Bs) ∈ FoldP.keysIn [A] A)
-    (h : ¬ HasDtor (FoldP.resO dtorAlgs (B :: Bs) B)) : ¬ HasDtor (.mu A) := by
+    (h : ¬ HasDrop (FoldP.resO dropAlgs (B :: Bs) B)) : ¬ HasDrop (.mu A) := by
   intro h'; cases h' with | mu _ _ hmu _ => exact h (hmu B Bs hm)
 
 theorem not_persistent_tensor_right {A B : VTy} (h : ¬ B.Persistent) :
@@ -126,8 +126,8 @@ theorem not_ownFree_sum_left {A B : VTy} (h : ¬ A.OwnFree) : ¬ (VTy.sum A B).O
 abbrev declTy (A : VTy) : VTy := .tensor A tokTy
 
 /-- **A declared type is linear with no derived drop.**  `[spec §12, §42]` -/
-theorem decl_linear (A : VTy) : Linear (declTy A) ∧ ¬ HasDtor (declTy A) :=
-  ⟨not_persistent_tensor_right tok_linear.1, not_hasDtor_tensor_right tok_linear.2⟩
+theorem decl_linear (A : VTy) : Linear (declTy A) ∧ ¬ HasDrop (declTy A) :=
+  ⟨not_persistent_tensor_right tok_linear.1, not_hasDrop_tensor_right tok_linear.2⟩
 
 /-- **A declared value cannot be abandoned at an abort**: `[let]`'s `hW` and `[raise]`'s `hd` ask
 for `OwnFree`.  `[spec §19, §42]` -/
@@ -158,15 +158,15 @@ theorem burn_step (μ : Heap) (ℓ : Loc) (h : μ ℓ = some .unit) :
 /-! ### The entry: `main`'s result discarded by its derived drop
 
 A program's entry discards `main`'s result by its derived drop (`drop_derives`), not by leaving it
-to the host: `x <- main; dtorE A x; return ()`. It is a derivation exactly when the result has a
+to the host: `x <- main; dropFnE A x; return ()`. It is a derivation exactly when the result has a
 derived drop; at a declared type it has none (`decl_linear`), so no rule consumes it.  `[spec §42]` -/
 
-/-- The entry around `main : F A`: `x <- e; dtorE A x; return ()`. -/
+/-- The entry around `main : F A`: `x <- e; dropFnE A x; return ()`. -/
 def entryE (A : VTy) (e : Expr) : Expr := .app (.val (.lam (dropE A 0 (.val .unit)))) e
 
 /-- **The entry is a derivation at a result with a derived drop.**  `[spec §42]` -/
 theorem entry_derives {Δ : LifeCtx} {e : Expr} {A : VTy}
-    (h : CDerives Δ [] e (.comp (.ret A))) (hA : HasDtor A) :
+    (h : CDerives Δ [] e (.comp (.ret A))) (hA : HasDrop A) :
     CDerives Δ [] (entryE A e) (.comp (.ret .unit)) :=
   .bind .nil h (drop_derives (Γ₁ := [⟨A, true⟩]) (Γ₂ := [⟨A, false⟩]) (.left .nil) (.here .nil) hA
     (.ret (.unitI (.cons .nil))))
@@ -175,11 +175,11 @@ theorem entry_derives {Δ : LifeCtx} {e : Expr} {A : VTy}
 (`adequacyC` at `entry_derives`), so a result with a derived drop is freed, not left to the
 host.  `[spec §42]` -/
 theorem entry_runs {e : Expr} {A : VTy} (h : CDerives LifeCtx.empty [] e (.comp (.ret A)))
-    (hA : HasDtor A) :
+    (hA : HasDrop A) :
     Steps Adequacy.emptyMem (entryE A e) Adequacy.emptyMem (.val .unit) :=
   adequacyC (entry_derives h hA)
 
 /-- At a declared type the entry has no derived drop to use: `main`'s result is refused. -/
-theorem entry_decl_no_drop (A : VTy) : ¬ HasDtor (declTy A) := (decl_linear A).2
+theorem entry_decl_no_drop (A : VTy) : ¬ HasDrop (declTy A) := (decl_linear A).2
 
 end BoCa.Fig16.LogRel.Core

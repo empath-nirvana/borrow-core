@@ -161,7 +161,7 @@ inductive CodeKind where
   deriving Inhabited, BEq, Repr
 
 /-- **The rule an `abandon` node is at** (decision 2): a computation that does not return to its
-context absorbs it. Not a drop: no destructor runs. `Lint.abandonable` checks each rule's premise:
+context absorbs it. Not a drop: no derived drop runs. `Lint.abandonable` checks each rule's premise:
 at a `[let]`'s abort, the abandoned values hold no owned cell (`VTy.OwnFree`, `vC_noOwn_of_ownFree`);
 `⊤` has none. -/
 inductive Abandon where
@@ -190,11 +190,11 @@ inductive DropRule where
   /-- A `forget` constant applied (`CDerives.forgetImm`, `forgetMut`, `forgetUnk`, `arrForget`):
   a borrow, `Unk`, or a family of `imm` borrows. -/
   | forget
-  /-- A piece of the destructor of a `dtor` node's type (`drop_derives` over `dtor_wf`): each leaf
-  the type's `HasDtor` derivation forgets, among them a family of `mut` borrows
-  (`HasDtor.arrayMut`, whose `dtorAt` is `idx` then `forget`). Only in a destructor function
-  (`Prog.dtorFns`). -/
-  | dtor
+  /-- A piece of the drop of a `dropFn` node's type (`drop_derives` over `dropFn_wf`): each leaf
+  the type's `HasDrop` derivation forgets, among them a family of `mut` borrows
+  (`HasDrop.arrayMut`, whose `dropFnAt` is `idx` then `forget`). Only in a drop function
+  (`Prog.dropFns`). -/
+  | dropFn
   /-- A live slot of a split's context that neither part's mask holds: weakened
   (`Ctx.DeadP.drop`), at a persistent type, where the kernel weakens it at the leaves of the part
   that receives it. The kernel may instead absorb it (`⊤`, `absurd`); `Lint` refuses such a drop
@@ -211,7 +211,7 @@ inductive DropRule where
   deriving Inhabited, BEq, Repr
 
 def DropRule.name : DropRule → String
-  | .dead => "dead" | .forget => "forget" | .dtor => "dtor" | .unused => "unused"
+  | .dead => "dead" | .forget => "forget" | .dropFn => "dropFn" | .unused => "unused"
   | .stackK => "stack k"
 
 /-- **The rule a `copy` node is at.** `Lint.copiesAt` checks each rule's premise on the LIR type. -/
@@ -255,7 +255,7 @@ inductive Tm where
   | absurd (s : Var)
   /-- `x'` a copy of `x` at the rule `r`; `x` stays owned. -/
   | copy (r : CopyRule) (x x' : Var) (b : Tm)
-  /-- `x` consumed at the rule `r`: its destructor. -/
+  /-- `x` consumed at the rule `r`: its drop. -/
   | drop (r : DropRule) (x : Var) (b : Tm)
   /-- `x` abandoned at the rule `r`, which the typed term applies here (`Abandon`): nothing runs.
   `Lint` admits an opaque value here and at no `drop`. -/
@@ -317,9 +317,9 @@ structure Prog where
   /-- `main` is served `Fail[DivError]` by the platform's handler (`Checked.exitsOnDivError`,
   SPEC §39): its value is `inl v`, whose `v` is reported, or `inr ()`, the exit status `1`. -/
   exits : Bool := false
-  /-- The functions that drop a leaf of a `dtor` node's destructor (`Convert.leafDtor`): the only
-  functions where `Lint` admits a `drop` at the rule `dtor`. -/
-  dtorFns : Std.HashSet Nat := {}
+  /-- The functions that drop a leaf of a `dropFn` node's drop (`Convert.leafDrop`): the only
+  functions where `Lint` admits a `drop` at the rule `dropFn`. -/
+  dropFns : Std.HashSet Nat := {}
   deriving Inhabited
 
 end Backend2

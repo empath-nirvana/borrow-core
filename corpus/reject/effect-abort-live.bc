@@ -1,4 +1,4 @@
--- An abort while a value with no destructor is live (SPEC §19): the thunk `k` can be disposed of
+-- An abort while a value with no derived drop is live (SPEC §19): the thunk `k` can be disposed of
 -- only by running it (SPEC §12, group 3), and the call of `fail_if` may abort while it is live, so
 -- the finaliser of that abort cannot drop it. Handing such a value to the handler with the error
 -- is not provided.

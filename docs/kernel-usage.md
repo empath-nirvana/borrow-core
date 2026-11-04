@@ -85,7 +85,7 @@ converts 315, `data-option` failing its check here). The census converts each pr
 conversion reads of the typed term, by rule and fact: the `read` lines of
 `docs/kernel-usage/census.tsv` (`scripts/KernelCensus.lean`, `backend2Reads`; the facts recorded
 by `Backend2.readFact`). The rows N1 was given are class A by that backend's reading: the masks
-at every split, the destructor's type, the slot swap, the fold's shape, the literal's bytes, the
+at every split, the drop's type, the slot swap, the fold's shape, the literal's bytes, the
 safe divisor, the `use` keys, and every type former a layout is built from. The old backend, the
 default until N6, reads what this section's first paragraph says; the classes below are the new
 backend's where they changed. Part 2 (SPEC §44–§46) adds: `allI`'s body a λ-value (the `Λ` erased), the
@@ -237,7 +237,7 @@ ones have their run facts (`Frontend/Check/Derived.lean`).
 
 | # | rule | §  | progs | static | expanded | read by the backend | class | what would change it |
 |---|---|---|---|---|---|---|---|---|
-| 100 | [`dtor`](../Frontend/Check/TExpr.lean#L364) | §12 | 288 | 3498 | 6213 | the new backend reads `A` from the node: the destructor `dtorAt` gives, a cell freed, a `μ` by its fold, `close` at codata (`genDtor`, `Backend2/Convert.lean:676`) | **A** | — |
+| 100 | [`dropFn`](../Frontend/Check/TExpr.lean#L364) | §12 | 288 | 3498 | 6213 | the new backend reads `A` from the node: the drop `dropFnAt` gives, a cell freed, a `μ` by its fold, `close` at codata (`genDrop`, `Backend2/Convert.lean:676`) | **A** | — |
 | 101 | [`allocS`](../Frontend/Check/TExpr.lean#L366) | §5 | 13 | 15 | 43 | erasure only (no recogniser for `allocS`) | **B** | N5: frame slots by rule |
 | 102 | [`freeS`](../Frontend/Check/TExpr.lean#L368) | §5 | 1 | 1 | 1 | erasure only | **B** | N5 |
 | 103 | [`withborSM`](../Frontend/Check/TExpr.lean#L371) | §5 | 1 | 1 | 1 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5 |
@@ -345,7 +345,7 @@ None is filed as an issue. This list is for the user.
 
 **N1 (new backend, pure fragment; #555 acceptance):** done in `Backend2/` for its fragment (§1,
 *What the new backend reads*): the masks of `tensorI`, `bind`, `app`, `unitE`, `tensorE`, `sumE`,
-`zeroE`, `lolliE`; `dtor`; `arrReplace`'s slot swap (#608); every former in §6 that the fragment
+`zeroE`, `lolliE`; `dropFn`; `arrReplace`'s slot swap (#608); every former in §6 that the fragment
 produces, and `withI`'s code kind; `foldOwn`, `foldReuse`; `litFn`, `divLit`; `use` keys. Left:
 - `effLet`'s masks with its row (N2), and `selfCall`/`selfV`, which only bounded recursions
   produce, every one under `Exhausted` (N2);

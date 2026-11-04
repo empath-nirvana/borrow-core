@@ -71,22 +71,22 @@ def closT : LTy := .thunk (.arr .unit (.ret .unit))
 -- A drop of a variable that may own a cell, or of a linear closure, at every rule.
 #guard refuses (dropProg (.ref i32T)) "dropped at ref i32 (dead), where the rule's premise does not hold"
 #guard refuses (dropProg closT .unused) "(unused), where the rule's premise does not hold"
-#guard refuses ({ dropProg (.fam (.ref i32T)) .dtor with dtorFns := ({} : Std.HashSet Nat).insert 0 })
-  "(dtor), where the rule's premise does not hold"
+#guard refuses ({ dropProg (.fam (.ref i32T)) .dropFn with dropFns := ({} : Std.HashSet Nat).insert 0 })
+  "(dropFn), where the rule's premise does not hold"
 
 -- Weakening (`dead`) is at a persistent type only: a borrow is dropped by a `forget` constant or
--- a destructor's leaf.
+-- a drop's leaf.
 #guard accepts (dropProg (.bang closT))
 #guard refuses (dropProg (.mut i32T)) "(dead), where the rule's premise does not hold"
 #guard accepts (dropProg (.mut i32T) .forget)
 #guard accepts (dropProg (.imm i32T) .forget)
 #guard accepts (dropProg (.fam (.imm i32T)) .forget)
--- F7: a family of `mut` borrows is dropped only by a destructor (`HasDtor.arrayMut`, at a `dtor`
+-- F7: a family of `mut` borrows is dropped only by a drop (`HasDrop.arrayMut`, at a `dropFn`
 -- node); no constant forgets it.
-#guard accepts { dropProg (.fam (.mut i32T)) .dtor with dtorFns := ({} : Std.HashSet Nat).insert 0 }
--- …and only in a destructor function: the same drop in a function `Convert` did not register as
+#guard accepts { dropProg (.fam (.mut i32T)) .dropFn with dropFns := ({} : Std.HashSet Nat).insert 0 }
+-- …and only in a drop function: the same drop in a function `Convert` did not register as
 -- one is refused.
-#guard refuses (dropProg (.fam (.mut i32T)) .dtor) "outside a destructor function"
+#guard refuses (dropProg (.fam (.mut i32T)) .dropFn) "outside a drop function"
 #guard refuses (dropProg (.fam (.mut i32T)) .forget) "(forget), where the rule's premise does not hold"
 #guard refuses (dropProg (.fam (.mut i32T)) .unused) "(unused), where the rule's premise does not hold"
 -- A slot no mask holds is weakened, at a persistent type only: a borrow there is one the kernel
@@ -95,10 +95,10 @@ def closT : LTy := .thunk (.arr .unit (.ret .unit))
 #guard refuses (dropProg (.imm i32T) .unused) "(unused), where the rule's premise does not hold"
 
 -- A drop of an opaque value, or of a pair holding one: refused at every rule. No constant forgets
--- an opaque value and it has no destructor, so only an `abandon` node discards one.
+-- an opaque value and it has no derived drop, so only an `abandon` node discards one.
 #guard refuses (dropProg (.opq .output)) "where the rule's premise does not hold"
 #guard refuses (dropProg (.opq .output) .unused) "where the rule's premise does not hold"
-#guard refuses ({ dropProg (.opq .output) .dtor with dtorFns := ({} : Std.HashSet Nat).insert 0 })
+#guard refuses ({ dropProg (.opq .output) .dropFn with dropFns := ({} : Std.HashSet Nat).insert 0 })
   "where the rule's premise does not hold"
 #guard refuses (dropProg (.pair i32T (.opq .input)) .unused) "where the rule's premise does not hold"
 

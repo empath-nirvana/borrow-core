@@ -294,9 +294,9 @@ The kernel already has the rule, and cancel-by-resume reaches it with no new pre
   ordinary exit typed by the same `hW`.
 - **Only values with no derived drop need written code.** An owned `Ref`, `Array` or thunk held across an
   `await` gets its derived drop as a finaliser on the cancel unwind, exactly as for errors. The checker
-  inserts that drop at a `dtor` node (`TDerivesP.dtor_hasDtor`), and nothing new is needed: the cancel
+  inserts that drop at a `dropFn` node (`TDerivesP.dropFn_hasDrop`), and nothing new is needed: the cancel
   unwind is an ordinary raise. A value with no derived drop (`declTy`, `must_close`, a borrowing task
-  under route (a)) has no `dtor` node, so the program must close it.
+  under route (a)) has no `dropFn` node, so the program must close it.
 - The lend frame is also an exit. Under the widened `ResumeOC`, `cancelled` unwinds through `lendR`, and
   its `d` closes the lent place.
 - **Scope.** `hW` asks every value held across an `await` to be `OwnFree`, or to be under a finaliser.
@@ -354,7 +354,7 @@ Each comes with `#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
 - The nursery: `tick` in `ResumeOC` (#743).
 - The lowering of a suspending finaliser (Backend2), and machine steps.
 - An `await` with an argument. `[await-c]` is at `a.A = 1`, as in the spike.
-- Any change to the derived drops or to a task's destructor.
+- Any change to the derived drops or to a task's drop.
 - Any change to `Qual`, the relation or the machine. `CDerives.effThen` changes only by reading `hfin` at
   `finRead`. That is a premise strengthening at marked operations, and none exist yet.
 - A premise refusing marked operations in a finaliser's row (`∀ o ∈ SD, o.rc = false`). It is not added

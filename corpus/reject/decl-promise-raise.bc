@@ -2,7 +2,7 @@
 -- between the requests and the answers, with no finaliser. `Queue` holds `Promise`, which holds a
 -- token's cell, so it is not `OwnFree` and `[let]`'s `hW` fails; the `[then]` the checker would
 -- build instead needs `Queue`'s derived drop, and a type that holds a field with none has none
--- (`not_hasDtor_mu_body`, `decl_linear`). Refused.
+-- (`not_hasDrop_mu_body`, `decl_linear`). Refused.
 include fail
 
 data Promise = { must_close(answer) id: i32 }

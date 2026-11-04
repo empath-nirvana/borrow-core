@@ -63,7 +63,7 @@ where
 any binder's (`Env.pushOwn`) and the other copy hidden and not owed. -/
 def Env.copyAt (E : Env) (T : List CVTy) (i : Nat) (x : String) (A : CVTy) (fst : Bool) : Env :=
   let E₀ := (E.minus (oneL T i)).push none
-  let own := !A.persistent && hasDtorB A
+  let own := !A.persistent && hasDropB A
   if fst then { E₀ with vars := none :: some x :: E₀.vars, own := false :: own :: E₀.own }
   else { E₀ with vars := some x :: none :: E₀.vars, own := own :: false :: E₀.own }
 

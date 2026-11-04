@@ -336,9 +336,9 @@ be free per use.**
 
 - Forced by: 14, 15 (unknown opcode), 26 (ran out is the same path).
 - A non-resuming operation inside the recursion ends the machine and drops its frames. Frames
-  hold linear data (11: owned subtrees), so dropping them runs their destructors. The error
+  hold linear data (11: owned subtrees), so dropping them runs their drops. The error
   then leaves through every layer.
-- A frame holding something with no destructor (a capability) could not be dropped. As lowered,
+- A frame holding something with no derived drop (a capability) could not be dropped. As lowered,
   capabilities stay in the state, never in frames. I have not tried one in a frame (§9).
 
 **R12. Groups.**
@@ -431,7 +431,7 @@ per-member layers of a group (17) are the one place where attachment is awkward:
   not traced which copy allocates.
 - Whether `deep`'s frame stack could be a growable array instead of a list, so that it
   allocates only on growth. Only the list was written.
-- Whether frames holding a capability (a value with no destructor) can be dropped on a stop.
+- Whether frames holding a capability (a value with no derived drop) can be dropped on a stop.
   No lowering puts one in a frame.
 - The exact host-stack limit, beyond 04's step running at 3000 and failing at 3500.
 - Whether the unrolled open form (§3.2) could be made cheap by the elaborator in general. 06

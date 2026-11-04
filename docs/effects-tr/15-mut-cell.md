@@ -149,8 +149,8 @@ suspended lifetimes in the world", #245).
   2. call it at `a` (`κ (inj₁ ()) a`), which resumes `K` under `H_gen` up to the next `yield` or
      the end of the body;
   3. swap the rest in.
-- **Drop** is `close`: `κ (inj₂ ())`, which is cancel. It is reached as the destructor of the cell's
-  content (`hasDtor_clo`, `hasDtor_cloBox`; SPEC §12 group 2) or by `d_closeBox`.
+- **Drop** is `close`: `κ (inj₂ ())`, which is cancel. It is reached as the drop of the cell's
+  content (`hasDrop_clo`, `hasDrop_cloBox`; SPEC §12 group 2) or by `d_closeBox`.
 
 ## 14.2 Rebasing is forced by `↭`
 
@@ -511,7 +511,7 @@ other suspension.
 Everything else is cited by name: `cC_clo_iff`, `clo_coind`, `nuF_mono`, `nuRel_out`,
 `KapRel`, `ewp_kappa_resume`, `ewp_kappa_cancel`, `ewp_ccatch`, `cC_effOf`, `wpTS_box`,
 `updV_outlives`, `outlives_comp`, `vC_outlives`, `d_callMut`, `withswap_compatX`,
-`hasDtor_cloBox`, `not_persistent_affBox`, `fundamentalC`. No `CDerives` index is added. D14.7
+`hasDrop_cloBox`, `not_persistent_affBox`, `fundamentalC`. No `CDerives` index is added. D14.7
 is one rule.
 
 **Hypotheses, and where each is spent.**

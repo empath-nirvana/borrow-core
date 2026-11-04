@@ -15,7 +15,7 @@
 -- none (`filler`, SPEC §17), so `V` has one: integers, views, arrays, buffers, and pairs and sums
 -- of them. A key may be a view (`text 't`): the map's type then mentions its lifetime, and the
 -- map does not outlive what its keys borrow. A linear `K` or `V` makes the map linear: it has a
--- destructor exactly when its keys and values do.
+-- drop exactly when its keys and values do.
 --
 -- The key sought is given by value and dropped after the search (a persistent key or a view costs
 -- nothing); it is lent to the search, a cell of the caller's frame. `map_insert` answers the

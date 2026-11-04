@@ -34,19 +34,19 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
 
 ## Experiments
 
-### Implicit destructors (`experiments/Affine`)
+### Implicit drops (`experiments/Affine`)
 
 - **Question:** "Can an owned value (`Ref A`, a block, a list, a codata thunk) go unused, with
-  the elaborator inserting its destructor so the result is an ordinary linear core program?"
+  the elaborator inserting its drop so the result is an ordinary linear core program?"
   (#43)
-- **Answer:** "yes, with no model change and no new invariant. Every droppable type's destructor
+- **Answer:** "yes, with no model change and no new invariant. Every droppable type's drop
   is a closed `CDerives` derivation. The experiment's judgment `ADerives` elaborates into `CDerives`
   by a translation that never inverts `CDerives`."
-- **Status:** proved; promoted (SPEC §12, `Core/Dtor.lean`, `Frontend/Check`).
-- **Key results:** `dtor_wf`, `hasDtor_of_forgettable`, `ADerives.elab`, `fundamentalA`,
+- **Status:** proved; promoted (SPEC §12, `Core/Drop.lean`, `Frontend/Check`).
+- **Key results:** `dropFn_wf`, `hasDrop_of_forgettable`, `ADerives.elab`, `fundamentalA`,
   `adequacyA`, `owner_not_shared`, `drop_needs_live`, `sumAff_leaks`, `blockAff_leaks`.
-- **Feeds:** SPEC §12; K3 (destructors that perform I/O, [T9](#t9-destructors-that-perform-io-or-fail-k3));
-  decision 23; `U C` has no destructor, which is why `ν` needs `close`.
+- **Feeds:** SPEC §12; K3 (drops that perform I/O, [T9](#t9-drops-that-perform-io-or-fail-k3));
+  decision 23; `U C` has no derived drop, which is why `ν` needs `close`.
 - **Links:** [`experiments/Affine/README.md`](../experiments/Affine/README.md).
 
 ### Bang
@@ -628,7 +628,7 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
   form of §7.3 has a derived type in the core" and the handler laws beyond one effect.
 - **Status:** design; S1 built (SPEC §18).
 - **Open kernel items:** K1 → [T1](#t1-the-spanning-lend-k1) (closed, decision 71); K2 → [T8](#t8-observations-that-take-input-k2);
-  K3 → [T9](#t9-destructors-that-perform-io-or-fail-k3); K4 → [T10](#t10-early-exit-from-a-kernel-fold-k4);
+  K3 → [T9](#t9-drops-that-perform-io-or-fail-k3); K4 → [T10](#t10-early-exit-from-a-kernel-fold-k4);
   K5 → [T11](#t11-structural-and-borrowed-descent-for-rec-k5); projection operations →
   [T21](#t21-the-derived-type-of-projection-operations).
 - **Links:** [`docs/effects-scoping.md`](effects-scoping.md); [#151], decisions 48–53.
@@ -661,7 +661,7 @@ obstruction exist unless a Lean name is given.
 | T6 | Widening promotion | [#9] |
 | T7 | Conservative extension, agreement of the worlds | [#177] |
 | T8 | Observations that take input (K2) | [#96] |
-| T9 | Destructors that perform I/O or fail (K3) | [#162] |
+| T9 | Drops that perform I/O or fail (K3) | [#162] |
 | T10 | Early exit from a kernel fold (K4) | [#178] |
 | T11 | Structural and borrowed descent for `rec` (K5) | [#179] |
 | T12 | Non-tail recursion, a direct `fix` | [#12] |
@@ -809,10 +809,10 @@ obstruction exist unless a Lean name is given.
   monotone, so no step index is needed. The estimate is a few hundred lines". Not built.
 - **Issue:** [#96]. Related: [#162], [#68].
 
-### T9. Destructors that perform I/O or fail (K3)
+### T9. Drops that perform I/O or fail (K3)
 
-- **Statement.** Whether a host resource type gets an implicit destructor that performs I/O or
-  can fail, and what a failing one does, with `dtor_wf` at the extern context.
+- **Statement.** Whether a host resource type gets an implicit drop that performs I/O or
+  can fail, and what a failing one does, with `dropFn_wf` at the extern context.
 - **Origin.** SPEC §12 Open, §11 Open; effects-scoping K3, §7.10.
 - **Known partial results.** "The platform draft (§2.3) calls its kernel side 'small'"; S1
   rejects an abort while a class-3 value is live.

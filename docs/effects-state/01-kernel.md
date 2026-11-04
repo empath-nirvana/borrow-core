@@ -278,7 +278,7 @@ Section numbers are SPEC's `§N`; entry numbers are `N − 1`.
 | § (entry) | specifies | Lean matches? |
 |---|---|---|
 | §11 (10) Externs and standard I/O, `SPEC.md:732` | capabilities are externs; `read_byte`/`write_byte` are `withswap` on a lent cell; end-to-end `externs_every_run` | Matches. The capabilities are `withswap` code (`Core/Stdio.lean:146-161`). No op table checks them: answering effects never become a row |
-| §12 (11) Destructors, :1026 | `dtorE`, used as the unwinding forms' finaliser | Matches (`Core/Dtor.lean`; finaliser premise `hd` at `Core/Fundamental.lean:260`) |
+| §12 (11) Drops, :1026 | `dropFnE`, used as the unwinding forms' finaliser | Matches (`Core/Drop.lean`; finaliser premise `hd` at `Core/Fundamental.lean:260`) |
 | §13 (12) Every run is safe, :1119 | allocators, `wpTSD`, `adequacyD` | Matches (`Core/Alloc.lean`, `Core/Demonic.lean`). Effects add the capture cases to determinism (`head_det_eff`) |
 | §14 (13) Divergence as an effect, :1190 | `A ⇒ div B ≜ U(A ⊸ F(U(Loop B R)))`; `div_bind`/`div_fuel`/`div_defer` library code; inference; one state machine per body; totality | No `CDerives` change, as stated. Totality theorems present (`Core/Totality.lean`). "`div_fuel` is `driveE` by construction, not by a proved equation" (:1494) |
 | §15 (14) Generators, :1497 | `Yield` library effect; `for` as a handler site; stored generators `pull`; adapters; no kernel change | No `CDerives` change, as stated. `pull` has no Core counterpart (SPEC says so, :1585) |
@@ -398,7 +398,7 @@ meets the user's requirement of 2026-09-30, "Part of 18 needs to be effect handl
 - **Abortive ops: branch per call** (`Unwind.lean`: `UFacts.raises` :123, `finalise` :206,
   `Prog.unwind` :375).
 - **Control ops: state machines** (`Capture.lean`: `machine` :940, `resumeArm` :861, `cancelArm`
-  :893). Cancel is the state's destructor. Masks reject a handler named ≥ 64 (:986-994).
+  :893). Cancel is the state's drop. Masks reject a handler named ≥ 64 (:986-994).
 - **Tail-resumptive op: direct call** (`tailClause?` :542, `tailResumptive` :631).
 - **Suspension per projection** (`Ops.selArg` :357, `SFacts.keysAt` :363).
 - **Rejected:** a name that has both control and abortive ops (:165).

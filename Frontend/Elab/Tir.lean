@@ -32,37 +32,37 @@ def Ty.known : Ty → Bool
 
 /-- The kernel's two classes of value type (`Core/Classes.lean`): unrestricted (copied and
 dropped by the kernel's own contraction and weakening), and linear, with the bit `drop` when it
-has a derived drop (`HasDtor`: the checker drops it where it goes unused).  `[spec §10, §12]` -/
+has a derived drop (`HasDrop`: the checker drops it where it goes unused).  `[spec §10, §12]` -/
 inductive Class where
   | unrestricted
   | linear (drop : Bool)
   deriving DecidableEq, Repr, Inhabited
 
 def Class.of (A : CVTy) : Class :=
-  if A.persistent then .unrestricted else .linear (hasDtorB A)
+  if A.persistent then .unrestricted else .linear (hasDropB A)
 
 def Class.name : Class → String
   | .unrestricted => "unrestricted"
   | .linear true => "linear, with a derived drop"
   | .linear false => "linear, with no derived drop"
 
-open BoCa.Fig16.LogRel.Core (Unrestricted Linear HasDtor) in
+open BoCa.Fig16.LogRel.Core (Unrestricted Linear HasDrop) in
 /-- `Class.of` computes the unrestricted class. -/
 theorem Class.of_unrestricted (A : CVTy) : Class.of A = .unrestricted ↔ Unrestricted A := by
   unfold Class.of
   cases h : A.persistent <;> simp [h, Unrestricted, BoCa.Fig16.LogRel.Core.VTy.Persistent]
 
-open BoCa.Fig16.LogRel.Core (Unrestricted Linear HasDtor) in
+open BoCa.Fig16.LogRel.Core (Unrestricted Linear HasDrop) in
 /-- `Class.of` computes the linear class and its derived-drop bit. -/
 theorem Class.of_linear (A : CVTy) (d : Bool) :
-    Class.of A = .linear d ↔ Linear A ∧ (d = true ↔ HasDtor A) := by
+    Class.of A = .linear d ↔ Linear A ∧ (d = true ↔ HasDrop A) := by
   unfold Class.of
   cases h : A.persistent
-  · simp only [Bool.false_eq_true, if_false, Class.linear.injEq, ← hasDtorB_iff]
+  · simp only [Bool.false_eq_true, if_false, Class.linear.injEq, ← hasDropB_iff]
     constructor
     · rintro rfl; exact ⟨by simp [h], Iff.rfl⟩
     · rintro ⟨-, hd⟩
-      cases d <;> cases hb : hasDtorB A <;> simp_all
+      cases d <;> cases hb : hasDropB A <;> simp_all
   · simp [h]
 
 /-- A variable a node binds: its name, identity, type and class. -/

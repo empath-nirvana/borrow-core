@@ -28,7 +28,7 @@ in one direction only, to know that the trees describe the machine.
 2. **The resource handle had to become an instance.** Phase A's `resD` was a value on the
    resource side; a continuation could carry it past its frame (§10.2). Making it an instance of
    `Res` (D1.3) confines it by rows, the control side's scoping discipline, while its ownership
-   stays a resource of the `fin` frame (L5.16). So "resources with destructors" sit at the
+   stays a resource of the `fin` frame (L5.16). So "resources with drops" sit at the
    boundary: owned on the resource side, *named* on the control side.
 3. **The lend had to own.** Phase A's lend left the capability with its owner while the body ran
    (a place-based borrow). That form is unsound once the place has been moved (§10.1). The owning
@@ -55,9 +55,9 @@ in one direction only, to know that the trees describe the machine.
 |---|---|
 | independence governs what a multi-shot continuation may hold | L5.4, L5.6: a continuation at a `C` qualifier holds only `Pers`; T5.2 |
 | T1 governs resuming while holding a lend | §9.3: not needed in this calculus (T9.1); needed for a borrowed source in the kernel lift (T9.2) |
-| cancellation runs destructors | D4.5, L5.14 case 2, T5.2.3 |
+| cancellation runs drops | D4.5, L5.14 case 2, T5.2.3 |
 | instances, handlers and the laws stay local | §6, §7 over names alone, except O1 |
-| capability store and destructor frames become BoLo's resource world | `Cap`, `rsrc` cells, `fin` frames own them (§4.2) |
+| capability store and drop frames become BoLo's resource world | `Cap`, `rsrc` cells, `fin` frames own them (§4.2) |
 | only the instance supply is new | D4.7 (phase B) and D4.8 |
 
 ## 9.3 T1

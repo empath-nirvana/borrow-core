@@ -87,7 +87,7 @@ Each design choice in `operator.bc` is tagged with the goals it serves. Two note
 |---|---|---|---|
 | **G1** | One function for every context. | async or sync; which runtime; `.await`; `Pin`; `Send` | the inferred effect row: `Async` means it may wait |
 | **G2** | Failure is handled where it is handled. | `?`, `map_err`, `From` impls at each call | `Fail<E>` in the row, with its `E` |
-| **G3** | Cleanup is automatic on every exit: return, raise, timeout, cancellation, shutdown. | which exit paths close which connection; async `Drop` | which values have destructors (SPEC §12) and which must be handed back |
+| **G3** | Cleanup is automatic on every exit: return, raise, timeout, cancellation, shutdown. | which exit paths close which connection; async `Drop` | which values have drops (SPEC §12) and which must be handed back |
 | **G4** | Ambient services (log, clock, metrics) reach code without being threaded through it. | passing a logger or a context struct everywhere | `Log`, `Clock` and `Metrics` in the row |
 | **G5** | Tests replace the world by handlers. | mocking traits, dependency injection, paused runtimes, real time | which effects a test must handle (the row of what it calls) |
 | **G6** | A stream is an iterator. | `Stream` vs `Iterator` vs `TryStream`; `StreamExt` vs `TryStreamExt`; `boxed()` | the element type, and the effects of `next` |
@@ -117,7 +117,7 @@ Operations come in two kinds, told apart by what the handler must do.
    performs them, and that is the part that colours functions in other languages. Each one is a
    shape of the one codata former the core already has:
    - `Fail<E>`: the result is `F (B + E)`. `raise` is an injection, and unwinding is the implicit
-     destructors (SPEC §12).
+     drops (SPEC §12).
    - `Yield<T>`: the result is `U (iter T B K)`. A generator is `unfold` (SPEC §7, decision 25).
    - `Async`: the result is `U (iter Wait B K)`. A task is an iterator of what it waits for, and a
      scheduler is its consumer. This is #52's "a future is codata", with the yield type made
@@ -154,8 +154,8 @@ polymorphism in the core.
   It is also the codata reading: a suspension is yielded to the observer.
 
 **Cancellation is not resuming.** A handler that does not resume its continuation abandons it.
-A timeout, a lost `race`, shutdown and a raise all unwind the same way: the destructors run, the
-borrows end, and whatever has no destructor goes back in the residual (SPEC §14). So G3 has one
+A timeout, a lost `race`, shutdown and a raise all unwind the same way: the drops run, the
+borrows end, and whatever has no derived drop goes back in the residual (SPEC §14). So G3 has one
 mechanism, not four.
 
 **Shared mutable state lives in a handler, not in a lock.** Consider the metrics registry, the
@@ -344,10 +344,10 @@ and observable.
 **Ours.**
 
 - `timeout(d, body)` is `race(body, { sleep(d) })`, and the loser unwinds like a raise.
-- A connection is a value with a destructor. Every exit closes it: `return`, `raise`, timeout,
+- A connection is a value with a derived drop. Every exit closes it: `return`, `raise`, timeout,
   shutdown.
 - The fourth test asserts it (`open == 0`).
-- What is still open is a destructor that must *perform* I/O and can fail (SPEC §12 Open; §5,
+- What is still open is a drop that must *perform* I/O and can fail (SPEC §12 Open; §5,
   N6).
 
 ### 4.5 Logging
@@ -477,7 +477,7 @@ behind it.
 | an `interface` for `T: Json` and `K: Resource` | `decode<T: Json>` | **(c)** | N8: decision 8 re-checks generics, but has no overloading on `T` |
 | `Args`, `Env`, `Clock`, `Signals`, `Net` capabilities | `main` | **(b)** SPEC §11 "Designed", #66 | `Signals` is new but follows the same pattern |
 | TLS; service-account token and CA | in-cluster `http_client` | **(b)** #67 step 5 | host or FFI boundary (decision 27) |
-| a destructor that performs I/O | `Conn`, `Listener`, `Body` | **(c)** | N6, SPEC §12 Open |
+| a drop that performs I/O | `Conn`, `Listener`, `Body` | **(c)** | N6, SPEC §12 Open |
 | multi-shot continuations | not used | none | `retry` re-runs a `fn`, not a continuation |
 
 ### 5.2 The obstacles in the engine
@@ -561,7 +561,7 @@ elaboration decision 6).
 - **Where the operator meets it.** Every raise under a borrow (`call(cfg, || get(&api, …))`), and
   every cancellation (§2: cancellation is not resuming).
 - **The questions.**
-  - What happens to a live value with no destructor (a capability, a thunk, SPEC §12 group 3)?
+  - What happens to a live value with no derived drop (a capability, a thunk, SPEC §12 group 3)?
     Either raise is illegal while one is live, or the handler receives it with the error, as
     `close` hands back a residual. The operator's capabilities live in handlers, not in bodies,
     so a body holds only borrows of them, and a borrow just ends. That makes the second answer
@@ -603,8 +603,8 @@ elaboration decision 6).
   - The operator needs nothing more.
 - **N5. `return` and `break` as `Fail`** with a private error, handled at the function's or the
   loop's boundary. SPEC §11 Open notes that `for` has no early exit today.
-- **N6. Destructors that perform I/O.** `Conn` and `Listener` must close sockets on every exit.
-  - Is a host resource's destructor an extern with a contract?
+- **N6. Drops that perform I/O.** `Conn` and `Listener` must close sockets on every exit.
+  - Is a host resource's drop an extern with a contract?
   - What does a failing close do: ignore, as Rust's `Drop for TcpStream` does, or report to
     `Log`?
 
@@ -652,7 +652,7 @@ experience. Each step is justified by lines of `operator.bc`.
    - The work:
      - `Fail<E>` as the computation type `F (B + E)`, through SPEC §14's three hooks;
      - `raise`, `try`, `map_err`, `return`, `break` (N5);
-     - unwinding by destructors, including through folds (O4, O5).
+     - unwinding by drops, including through folds (O4, O5).
    - Justified by `reconcile`'s early `return AwaitChange`, `raise(ReconcileError::Invalid …)`,
      `reconcile_key`'s `try`, `parse_config`, and the codecs' `JsonError`.
 4. **Collections and JSON.**
@@ -675,7 +675,7 @@ experience. Each step is justified by lines of `operator.bc`.
      - `Args`, `Env`, `Clock`, `Signals` (a signal fd) and `Net` (blocking TCP, #66), following
        the SPEC §11 pattern;
      - `wait` as a blocking host `poll` over an interest set (`block_on`);
-     - destructors for sockets (N6).
+     - drops for sockets (N6).
    - Justified by `parse_config(&args, &env)`, `terminated(&mut signals)`, `http_client(&mut
      net, …)`, and `bind`.
 7. **A sequential operator on a real cluster.**

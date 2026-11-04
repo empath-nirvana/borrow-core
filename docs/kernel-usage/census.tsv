@@ -99,7 +99,7 @@ node	letPoly	0	0	0	0
 node	lendR	10	16	0	16	corpus/async-bank-inbox.bc corpus/async-cancel.bc corpus/async-logged.bc
 node	lendLoopR	0	0	0	0	
 node	nilDead	10	16	0	16	corpus/async-bank-inbox.bc corpus/async-cancel.bc corpus/async-logged.bc
-node	dtor	293	3543	161	6264	corpus/clo-capture.bc corpus/clo-coerce.bc corpus/clo-counter.bc
+node	dropFn	293	3543	161	6264	corpus/clo-capture.bc corpus/clo-coerce.bc corpus/clo-counter.bc
 node	allocS	15	18	0	48	corpus/13-2-sum-prog.bc corpus/block-swap.bc corpus/data-box-tree.bc
 node	freeS	1	1	0	1	corpus/block-swap.bc
 node	withborSM	1	1	0	1	corpus/block-swap.bc
@@ -194,9 +194,9 @@ read	countFold	expand	168	1425
 read	countTry	expand	70	187
 read	divLit	divisor	10	15
 read	divLit	node	10	15
-read	dtor	expand	293	4306
-read	dtor	node	10	16
-read	dtor	type	293	4306
+read	dropFn	expand	293	4306
+read	dropFn	node	10	16
+read	dropFn	type	293	4306
 read	effHandleV	clause tuple	3	8
 read	effHandleV	forward	10	62
 read	effHandleV	join	109	262

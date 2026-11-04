@@ -45,7 +45,7 @@ then closed runs to a value and leaves memory empty (`drive_runs_unit`, `drive_r
 to the proofs of its premises. `checkProgram_sound` in
 [`Frontend/Check/Program.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Frontend/Check/Program.lean) states it, and `checked_sem` and
 `checked_runs` apply the two theorems above to the checked program. The drops that the checker
-inserts ([Implicit destructors](elaboration/implicit-destructors.md)) are part of the derivation.
+inserts ([Implicit drops](elaboration/implicit-drops.md)) are part of the derivation.
 
 **Elaborated handlers mean what their clauses say.** A surface handler (SPEC §18) is defined by
 its elaboration into core terms ([Effects and handlers](../../book/src/guide/effects.md)), so a handled program is safe by the theorems

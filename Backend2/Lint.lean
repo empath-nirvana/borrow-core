@@ -17,8 +17,8 @@ verifies and never fills in:
 - every `copy` meets the premise of the rule the node carries (`copiesAt`): `Ctx.SplitP.dup` at a
   persistent type, `!` read off the LIR type (`Types.ofV` keeps it); the `copy` constants and
   `copy_derives` at an `imm` borrow;
-- every `drop` meets the premise of the rule the node carries (`dropsAt`), a `dtor` one only in a
-  destructor function (`Prog.dtorFns`), a `stackK` one only as a stack machine's hand-over, its
+- every `drop` meets the premise of the rule the node carries (`dropsAt`), a `dropFn` one only in a
+  drop function (`Prog.dropFns`), a `stackK` one only as a stack machine's hand-over, its
   premise read from the node (`handsOver`); no rule drops a type owning an opaque value;
 - no `&` is observed at a `⊤` component (`⊤` has no elimination);
 - a function's lend bits (`Fn.lendEncl`, SPEC §50) are none, or one per parameter;
@@ -76,9 +76,9 @@ def copiesAt : CopyRule → LTy → Bool
 /-- **A drop at the rule `r`**, its premise read on the LIR type:
 - `dead` (`Ctx.DeadP.drop`, `Ctx.SoloP.skip`): an unrestricted type;
 - `forget` (the `forget` constants, `arrForget`): `Imm`, `Mut`, `Unk`, `[Imm A]`;
-- `dtor` (`drop_derives`): only in a destructor function (`Prog.dtorFns`, checked by `lintTm`), a
-  leaf the destructor forgets: an unrestricted type, a borrow, `Unk`, or a family of borrows
-  (`HasDtor.arrayMut` at `[Mut A]`: `dtorAt` is `idx` then `forget`);
+- `dropFn` (`drop_derives`): only in a drop function (`Prog.dropFns`, checked by `lintTm`), a
+  leaf the drop forgets: an unrestricted type, a borrow, `Unk`, or a family of borrows
+  (`HasDrop.arrayMut` at `[Mut A]`: `dropFnAt` is `idx` then `forget`);
 - `unused`: an unrestricted type, the premise of the weakening the part that receives the slot
   applies at its leaves (`Ctx.DeadP.drop`); a persistent value holds no resource
   (`vP_empty_of_persistent`), so dropping it at the split is the same. A slot the part absorbs
@@ -92,7 +92,7 @@ def dropsAt : DropRule → LTy → Bool
   | .forget, t => match t.unbang with
     | .imm _ | .mut _ | .unk | .fam (.imm _) => true
     | _ => false
-  | .dtor, t => t.persistent || match t.unbang with
+  | .dropFn, t => t.persistent || match t.unbang with
     | .imm _ | .mut _ | .unk | .fam (.imm _) | .fam (.mut _) => true
     | _ => false
   | .unused, t => t.persistent
@@ -130,7 +130,7 @@ of `N`'s context is at a `VTy.Drop` type, which `LTy.drops` reads (`ofV_drops`),
 among them. At `⊤`, `CDerives.topI`, which has no premise: `⊤` absorbs its whole context at every
 type. A raise's payload superseded by a finaliser's: `CDerives.effRaise`'s `hd : o.A.Drop`,
 `LTy.drops` again. No other rule discards an opaque value: no constant forgets it and it has no
-destructor. -/
+drop. -/
 def abandonable : Abandon → LTy → Bool
   | .letAbort, t | .superseded, t => t.drops
   | .top, _ => true
@@ -153,7 +153,7 @@ theorem abandonable_ofV_drop {ms : MachSet} {A : VTy} {t : LTy} (hA : A.OwnFree)
   simp [abandonable, ofV_drops hA h]
 
 /-- The variables left after `t`, its value consumed by its context. -/
-def lintTm (w : String) (p : Prog) (inDtor : Bool) : Nat → Std.HashSet Var → Tm → LM Left
+def lintTm (w : String) (p : Prog) (inDropFn : Bool) : Nat → Std.HashSet Var → Tm → LM Left
   | 0, _, _ => bad w "a term too deep"
   | f + 1, env, t => match t with
     | .var x => return some (← use w env x)
@@ -191,17 +191,17 @@ def lintTm (w : String) (p : Prog) (inDtor : Bool) : Nat → Std.HashSet Var →
         | some (.pair _ bT) =>
           if borrowMode bT != some m then bad w s!"x{x}: a lend of kind {m} answers a borrow at {bT}"
         | t => bad w s!"x{x}: a lend answers {t.map (·.pp)}"
-      match ← lintTm w p inDtor f env e with
+      match ← lintTm w p inDropFn f env e with
       | none => return none
-      | some env' => lintTm w p inDtor f (← bindNew w p env' x) b
+      | some env' => lintTm w p inDropFn f (← bindNew w p env' x) b
     | .letpair x y q b => do
       let env ← use w env q
       let env ← bindNew w p env x
-      lintTm w p inDtor f (← bindNew w p env y) b
+      lintTm w p inDropFn f (← bindNew w p env y) b
     | .case sv x b₁ y b₂ => do
       let env ← use w env sv
-      let l₁ ← lintTm w p inDtor f (← bindNew w p env x) b₁
-      let l₂ ← lintTm w p inDtor f (← bindNew w p env y) b₂
+      let l₁ ← lintTm w p inDropFn f (← bindNew w p env x) b₁
+      let l₂ ← lintTm w p inDropFn f (← bindNew w p env y) b₂
       match l₁, l₂ with
       | none, l | l, none => return l
       | some a, some b =>
@@ -215,7 +215,7 @@ def lintTm (w : String) (p : Prog) (inDtor : Bool) : Nat → Std.HashSet Var →
       | some t =>
         if !copiesAt r t then bad w s!"x{x} copied at {t} ({r.name}), where the rule's premise does not hold"
       | none => bad w s!"x{x} has no type"
-      lintTm w p inDtor f (← bindNew w p env x') b
+      lintTm w p inDropFn f (← bindNew w p env x') b
     | .drop r x b => do
       match p.ty[x]? with
       | some t =>
@@ -223,17 +223,17 @@ def lintTm (w : String) (p : Prog) (inDtor : Bool) : Nat → Std.HashSet Var →
           bad w s!"x{x} dropped at {t} ({r.name}), where the rule's premise does not hold"
         if r == .stackK then
           if let some e := handsOver p x b then bad w s!"x{x} dropped at the rule stack k: {e}"
-        if r == .dtor && !inDtor then
-          bad w s!"x{x} dropped at the rule dtor outside a destructor function"
+        if r == .dropFn && !inDropFn then
+          bad w s!"x{x} dropped at the rule dropFn outside a drop function"
       | none => bad w s!"x{x} has no type"
-      lintTm w p inDtor f (← use w env x) b
+      lintTm w p inDropFn f (← use w env x) b
     | .abandon r x b => do
       match p.ty[x]? with
       | some t =>
         if !abandonable r t then
           bad w s!"x{x} abandoned at {t} ({r.name}), where the rule's premise does not hold"
       | none => bad w s!"x{x} has no type"
-      lintTm w p inDtor f (← use w env x) b
+      lintTm w p inDropFn f (← use w env x) b
 
 /-- Lint a program. -/
 def lint (p : Prog) : Except String Unit := do
@@ -244,7 +244,7 @@ def lint (p : Prog) : Except String Unit := do
         bad w s!"{d.lendEncl.length} lend bits for {d.params.length} parameters"
       let mut env : Std.HashSet Var := {}
       for x in d.params do env ← bindNew w p env x
-      match ← lintTm w p (p.dtorFns.contains i) (1 <<< 22) env d.body with
+      match ← lintTm w p (p.dropFns.contains i) (1 <<< 22) env d.body with
       | some rest => if !rest.isEmpty then bad w s!"ends with {rest.toList.map (s!"x{·}")} unconsumed"
       | none => pure ()
     match ← lintTm "main" p false (1 <<< 22) {} p.main with

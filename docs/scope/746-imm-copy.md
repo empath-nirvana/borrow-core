@@ -204,7 +204,7 @@ shape) and the `array_imm` program joins the corpus.
   which rule fired.
 - **STOP:** hoisting every copy to a function's entry, or copying every `imm` parameter up front
   (program-shaped, and copies nothing a nested split needs).
-- **STOP:** dropping an unused copy by anything but its derived drop at a `dtor` node.
+- **STOP:** dropping an unused copy by anything but its derived drop at a `dropFn` node.
 - **STOP:** any copy at a type that is not `DerivedCopy` (a `mut`, an owned value, a declared
   type, a capability). A second use of those staying refused is a linearity HARD STOP if it
   breaks.

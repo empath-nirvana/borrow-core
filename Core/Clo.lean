@@ -1,4 +1,4 @@
-import Core.Dtor
+import Core.Drop
 import Core.RelationFacts
 
 /-!
@@ -104,15 +104,15 @@ theorem immReborrow_cloBox (b c : Lifetime.Life) (A B : VTy) :
 
 /-! ### Structure: linear, with a derived drop -/
 
-/-- A closure has a destructor, `close` (SPEC §12, group 2). -/
-theorem hasDtor_clo {A : VTy} (hA : A.Cl 0) (c : Lifetime.Life) (B : VTy) :
-    HasDtor (cloT c A B) :=
+/-- A closure has a derived drop, `close` (SPEC §12, group 2). -/
+theorem hasDrop_clo {A : VTy} (hA : A.Cl 0) (c : Lifetime.Life) (B : VTy) :
+    HasDrop (cloT c A B) :=
   .nu (C := .arr A (.ret (.tensor (B.rename Nat.succ) (.box c (.tvar 0))))) (R := .unit)
     (cloBody_nuOk hA c B) trivial .unit
 
-theorem hasDtor_cloBox {A : VTy} (hA : A.Cl 0) (c : Lifetime.Life) (B : VTy) :
-    HasDtor (cloBox c A B) :=
-  .box (hasDtor_clo hA c B)
+theorem hasDrop_cloBox {A : VTy} (hA : A.Cl 0) (c : Lifetime.Life) (B : VTy) :
+    HasDrop (cloBox c A B) :=
+  .box (hasDrop_clo hA c B)
 
 /-- A closure is not persistent: no split duplicates it and no promotion takes it. -/
 theorem not_persistent_clo (c : Lifetime.Life) (A B : VTy) :
@@ -124,14 +124,14 @@ theorem not_persistent_cloBox (c : Lifetime.Life) (A B : VTy) :
   simp [VTy.Persistent, VTy.persistent]
 
 /-- A closure is not forgettable (`Forgettable`, SPEC §12 group 1): dropping one runs its `close`,
-so its derived drop is its destructor (group 2), not `forget`. -/
+so its derived drop is its drop (group 2), not `forget`. -/
 theorem not_forgettable_clo (c : Lifetime.Life) (A B : VTy) : ¬ Forgettable (cloT c A B) := by
   intro h; cases h
 
 /-- `U(A ⊸ F B)` is linear with no derived drop (SPEC §12 group 3): it is disposed of only
 by calling it, which needs an `A`.  So it cannot be the state of a closure whose `close`
 must dispose of it, and there is no uniform coercion from `A ⇒ B` to `Clo`. -/
-theorem not_hasDtor_lolli (A B : VTy) : ¬ HasDtor (.lolli A B) := by
+theorem not_hasDrop_lolli (A B : VTy) : ¬ HasDrop (.lolli A B) := by
   intro h; cases h
 
 /-- `obs_transfer` at a closure: its arm at `U C`, where the observable view holds

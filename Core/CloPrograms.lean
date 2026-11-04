@@ -274,7 +274,7 @@ left (`*_eval`, by `decide`).
 * `onceProg` (`Clo` to `A ⇒ B`): the counter over a fresh cell, made a `U(I32 ⊸ F I32)` by
   `onceE` and called with `5`: `5`.  The rest is closed inside `onceE`, which frees the cell.
 * `dropProg` (drop): the counter over a cell holding `7`, never called, dropped by its
-  destructor (`dropE`, SPEC §12): `0`, and the cell is freed by the destructor's `close`.
+  drop (`dropE`, SPEC §12): `0`, and the cell is freed by the drop's `close`.
 * `nestProg` (a closure capturing another): an outer closure whose state is the
   counter, doubling each answer; called with `1` and `2`, closed: `2 + 6 = 8`.  Closing the
   outer closure closes the inner one, which frees its cell.
@@ -418,9 +418,9 @@ theorem onceProg_runs :
 set_option maxRecDepth 100000 in
 theorem onceProg_eval : i32NoLeak (eval onceProg) = some 5 := by decide
 
-/-! ### Drop: the destructor runs `close` -/
+/-! ### Drop: the drop runs `close` -/
 
-/-- `mkBox⊤ (alloc 7) counterStep to bf. dtor bf; 0`. -/
+/-- `mkBox⊤ (alloc 7) counterStep to bf. dropFn bf; 0`. -/
 def dropProg : Expr :=
   mkE .top .i32 .i32 (.app (.val (.prim .alloc)) (i32E 7)) counterStep (dropE FC 0 (i32E 0))
 
@@ -428,7 +428,7 @@ theorem dropProg_derives : CDerives LifeCtx.empty [] dropProg (.comp (.ret .i32)
   have hT : LifeCtx.empty.Defines .top := LifeCtx.defines_of_wf rfl
   refine mkBoxC trivial hT (.ref .int)
     (appP (d_i32 7 (by cdeadP)) (.alloc (by cdeadP))) (d_counterStep hT (kill_dead _)) ?_
-  exact drop_derives (partP_split (.var 0) 0 _) (by csoloP) (hasDtor_cloBox (A := .i32) trivial .top .i32)
+  exact drop_derives (partP_split (.var 0) 0 _) (by csoloP) (hasDrop_cloBox (A := .i32) trivial .top .i32)
     (.ret (d_i32 0 (by cdeadP)))
 
 theorem dropProg_runs :
@@ -436,7 +436,7 @@ theorem dropProg_runs :
   runs_i32 dropProg_derives
 
 set_option maxRecDepth 100000 in
-/-- `0`, and no cell left: the destructor closed the closure, and `close` freed its cell. -/
+/-- `0`, and no cell left: the drop closed the closure, and `close` freed its cell. -/
 theorem dropProg_eval : i32NoLeak (eval dropProg) = some 0 := by decide
 
 /-- Types that outlive `'x` under `Δ₁`: data, and a box at `⊤`. -/

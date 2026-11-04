@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.29 · 2026-11-03
+Version 1.30 · 2026-11-04
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -230,7 +230,7 @@ off the clauses' binding, not the rule's premise (`TDerivesAt.kinds_free`,
 
 **Derived nodes.** A fixed scheme is a node of its own, whose erasure is the scheme's term and
 whose typed rule is the lemma that types it, its side conditions the lemma's premises: the
-destructor of a type (`dtor`, `dtor_wf`; a recursive type's is a fixed point), a block's allocation
+drop of a type (`dropFn`, `dropFn_wf`; a recursive type's is a fixed point), a block's allocation
 and release (`allocS`, `freeS`, `d_allocS`, `d_freeS`), a block borrow (`withborSM`,
 `withborSI`, `withborSM_wf`, `withborSI_wf`) and a family's two-lifetime borrow (`withborF2M`,
 `withborF2I`, `withborM2_wf`, `withborI2_wf`), each at a consumed context. A scheme the
@@ -253,8 +253,8 @@ marked value's typed term with the rule that its erasure is the scheme's:
 
 What each of the last three leaves to the scheme is recorded in `Frontend/Check/TFacts.lean`. The
 fixed points of folds, `unfold`, `count_fold`, `count_try` and `bounded_fix`, and `swap`, are rule
-nodes already. A drop is the rule nodes `unitE` over `lolliE` of the variable and the destructor's
-derived node (`dtor`), and a finaliser the `[then]` node's third child, built of drops.
+nodes already. A drop is the rule nodes `unitE` over `lolliE` of the variable and the drop's
+derived node (`dropFn`), and a finaliser the `[then]` node's third child, built of drops.
 
 **No node holds an untyped term.** A rule argument that is a term fixed by an equation on a
 child's erasure (`effHandleT`'s clauses, `reify`'s residual, `[let-poly]`'s value and body) is not a
@@ -501,11 +501,11 @@ finished: `d : U(Loop A B) ⊢ driveE n : F(A ⊕ B)`, a `CDerives` derivation a
 (`d_driveL`; at the delay, `d_drive`). So a closed program that returns a loop, followed by
 `driveE n`, is a closed program for every `n`, and adequacy covers it.
 
-### Destructor
+### Drop
 
-`U(νX. C & F R)` with `R` closed and in `HasDtor` has a destructor (§12): force, `nuOut`, the
-second projection (`close`), then the destructor of the residual `R`. Delay and stream have
-`R = 1`; an iterator's residual is dropped by its own destructor.
+`U(νX. C & F R)` with `R` closed and in `HasDrop` has a derived drop (§12): force, `nuOut`, the
+second projection (`close`), then the drop of the residual `R`. Delay and stream have
+`R = 1`; an iterator's residual is dropped by its own drop.
 
 ### Adequacy
 
@@ -752,7 +752,7 @@ K5 of `docs/strings-slices-design.md`). With `L` either `Imm @a A` or `Mut @a A`
   leaves are opened by two nested Anti-Frames (`sepRange_pick2N`); at `i = j` the one leaf is read
   and written twice (`sliceSwapM_compatX`).
 
-A `mut` family has a destructor (§12), so a part a program does not use is dropped.
+A `mut` family has a derived drop (§12), so a part a program does not use is dropped.
 
 **Surface and library.** `borrow mut a { 'x, v -> … }` lends `v : array_mut 'x A`; the constants
 act on it, and `lib/slice.bc` (`include slice`) is the slice library over them and `count_fold`
@@ -767,7 +767,7 @@ a parameter `array_mut 'a A` (or `array_imm 'a A`) of a function with the lifeti
 `'a`, is `slice_borrow_mut` (or `slice_borrow_imm`) around the call, at a fresh lifetime, and
 `a` is rebound from the pair, as the lend of a cell is (typed elaboration §5.1): `reverse(&mut a)`,
 `at(&buf, i, d)`. A view the call hands back, as its result or its result's first component, is
-dropped inside the lend (its destructor, §12), so `reverse(&mut a)` is `()`; a result that holds
+dropped inside the lend (its drop, §12), so `reverse(&mut a)` is `()`; a result that holds
 anything else at `'a` is rejected (`corpus/reject/lend-array-result.bc`). `for x in &mut a` lends
 the array around the whole loop (§16). Pair: `corpus/sugar/lend-array.bc`.
 
@@ -826,7 +826,7 @@ The constants, at a dead context; `A ⇒ B` is `U(A ⊸ F B)`:
 
 `array_replace` on `Mut @a (Array A)` is `withswap` with `array_replace` in its callback.
 
-Implicit destructors (§12): `Array A` has one when `A` does, `array_free` with the destructor of
+Implicit drops (§12): `Array A` has one when `A` does, `array_free` with the drop of
 `A` as the consumer; `ArrayImm @a A` is forgettable, by `array_forget`, and `ArrayMut @a A` by
 `slice_get_mut` past every length and `forget` of the leaf it would hand out.
 
@@ -942,7 +942,7 @@ moved, stored in a cell and passed to an extern that takes it; it cannot be insp
 dropped. Each opaque type `k` has a **model**, a predicate `k.Holds` on values, and
 
     𝒱⟦k⟧δ(v) ≜ ⌜k.Holds v⌝                                      (in both modes)
-    Imm̲ 'b k ≜ Unk          Δ ⊢ k ⊐ @a (at every @a)          not persistent, no destructor
+    Imm̲ 'b k ≜ Unk          Δ ⊢ k ⊐ @a (at every @a)          not persistent, no derived drop
 
 - `Input.Holds v`: `v` is a byte list `Bytes = μX. 1 ⊕ (U8 ⊗ X)`, the input not yet read.
 - `Output.Holds v`: `v = (fd, bs)` with `fd : I32` the stream and `bs : Bytes` the bytes written
@@ -982,7 +982,7 @@ constants and the parser reads the type `tok` only in the source the elaboration
 back (its templates, a type printed as surface syntax, the `run_io` wrapper). The elaboration of
 §42's declared types is the one place that names them (`Const.tokMint`, `Const.tokBurn`).
 
-`Tok` is linear with no derived drop (`tok_linear`: `HasDtor` has no `opq` constructor), and it owns
+`Tok` is linear with no derived drop (`tok_linear`: `HasDrop` has no `opq` constructor), and it owns
 its cell, so it is not `VTy.OwnFree` (`tok_not_ownFree`): an abort cannot abandon it (`[let]`'s
 `hW`, `[raise]`'s `hd`), and neither can it abandon a type that holds it. A `Tok` the run did not
 burn keeps its cell, so `adequacyC`'s empty final memory says every one was burned (§42).
@@ -1029,7 +1029,7 @@ the existing ones cannot express it, or cannot at an acceptable cost.
 
 **`main`.** A program with capability externs has `main : F (Caps ⊗ A)`, where `Caps` is its
 capability externs in declaration order (one alone, several as a right-nested tuple). The
-capabilities have no destructor (§12), so `main` hands them back; `run_io` (below) then takes
+capabilities have no derived drop (§12), so `main` hands them back; `run_io` (below) then takes
 them back by the harness. `A` is the program's result; `bcc interp` prints it, so it is persistent.
 
 **Loops.** Recursion is structured (decision 24), so a loop over the input is a step function
@@ -1265,53 +1265,61 @@ elaborate to the same term.
   loop in core (`corpus/io-sections.bc`'s `line_length`).
 - The host implementations agree with the model on the corpus; that is tested, not proved.
 - `wpTSD_frame_own` is about the end of a value run, not intermediate states.
-- Destructors for host resources, which perform I/O and can fail (§12 Open).
+- Drops for host resources, which perform I/O and can fail (§12 Open).
 - `main` with borrowed capabilities (lifetime-parametric externs) is not provided.
 - `Env`, `Exit`, `Fs` and the rest are designed only; `Args` and `Clock` are §34's.
 - `|>` pipelines (#59) are §33's.
 
 ---
 
-## 12. Entry 11 — implicit destructors
+## 12. Entry 11 — implicit drops
 
 Types stay linear. Where a program lets an owned value go unused, the checker inserts a call
-of the value's **destructor**, and that call is the value's one use. The elaborated program is an
+of the value's **drop**, and that call is the value's one use. The elaborated program is an
 ordinary linear core term with an ordinary `CDerives` derivation, so every owned value is still
 consumed exactly once, and leak freedom is `adequacyC` on the elaborated term. No typing rule,
-judgment index or semantic definition changes. The destructors and their derivation are
-`Core/Dtor.lean`'s.
+judgment index or semantic definition changes. The drops and their derivation are
+`Core/Drop.lean`'s.
 
-### Destructors
+**Vocabulary.** A value type is unrestricted or linear; there is no third class. A linear value
+is *consumed*, by a rule that uses it or, at a type with a derived drop, by its **drop**: the
+closed function `dropFnE T` (`HasDrop T`), which frees the value's cells, ends a borrow, or runs a
+codata value's `close`. The checker's drop is a `dropFn` node of the typed term
+(`TExpr.dropFn`), and Backend2 lowers it to drop functions (`Prog.dropFns`). A continuation is
+*resumed* or *cancelled*. Releasing a host resource (closing a file) is not a drop and not a
+kernel rule: it is the API of the resource's effect, written with linear types in the library.
 
-`dtorE T : T ⊸ F 1` is a closed term, defined by one structural recursion on `T`
-(`Core/Dtor.lean`; with `algsIn`, which lists a `μ`'s algebras, one mutual recursion, §61). `HasDtor T` is the class of types it is defined at, and `dtor_wf` types it
+### Drops
+
+`dropFnE T : T ⊸ F 1` is a closed term, defined by one structural recursion on `T`
+(`Core/Drop.lean`; with `algsIn`, which lists a `μ`'s algebras, one mutual recursion, §61). `HasDrop T` is the class of types it is defined at, and `dropFn_wf` types it
 in `CDerives` at every lifetime context and every dead context, using existing rules only.
 The kernel has two classes of value type: **unrestricted** (persistent, §10) and **linear**
-(every other). A derived drop (`DerivedDrop A`: `A` linear with `HasDtor A`) and a derived copy
-are properties of a linear type, not further classes (`Core/Classes.lean`). By their destructor,
+(every other). A derived drop (`DerivedDrop A`: `A` linear with `HasDrop A`) and a derived copy
+are properties of a linear type, not further classes (`Core/Classes.lean`). By their drop,
 value types fall in three groups.
 
-1. **Forgettable types**: the types whose destructor does nothing (the unrestricted ones and
+1. **Forgettable types**: the types whose drop does nothing (the unrestricted ones and
    the borrows): the persistent types (§10: `1`, `0`, `I32`, `I64`, `Unk`, `!A`, and
    `⊗`, `⊕`, `[@a]`, `μ` over them), the borrows `Imm @a A`, `Mut @a A`, and `⊗`, `⊕`, `[@a]`
-   over these. The destructor is `forget = λx. ()` (at a borrow, the `forgetImm`/`forgetMut`
+   over these. The drop is `forget = λx. ()` (at a borrow, the `forgetImm`/`forgetMut`
    constant), componentwise at `⊗`, `⊕`, `[@a]`. Discarding one does
    nothing: it deallocates nothing and runs no code, and ending a loan early is safe. The
    unrestricted ones are already dropped by context splitting (§10), with no call. Every type of
-   `Core/Records.lean`'s `Forgettable` is here (`hasDtor_of_forgettable`).
-2. **Owned types with a derived destructor.** The destructor is an action:
-   | type | destructor |
+   `Core/Records.lean`'s `Forgettable` is here (`hasDrop_of_forgettable`).
+2. **Owned types with a derived drop.** The drop is an action:
+   | type | drop |
    |---|---|
    | `A ⊗ B`, `A ⊕ B`, `[@a] A` | componentwise |
-   | `Ref A` | `free`, then the destructor of `A` |
-   | `μX. T`, `T` in `FShape` (§6) | `foldOwn`, whose algebra is the destructor of `T[1/X]` |
-   | `μX. T`, `T` in `P` (§6, §61), not in `FShape` | `foldOwnG`, whose algebra at each key is the destructor of the key's body (an array key's element type) at results `1` |
+   | `Ref A` | `free`, then the drop of `A` |
+   | `μX. T`, `T` in `FShape` (§6) | `foldOwn`, whose algebra is the drop of `T[1/X]` |
+   | `μX. T`, `T` in `P` (§6, §61), not in `FShape` | `foldOwnG`, whose algebra at each key is the drop of the key's body (an array key's element type) at results `1` |
    | `U(C & F 1)` | `close`: force, then the second projection |
-   | `U(νX. C & F R)`, `R` closed with a destructor (`D A`, `Stream A`, `Iter A R₀ R`, `Clo^c A B`) | `close` (§7), then the destructor of `R` |
+   | `U(νX. C & F R)`, `R` closed with a derived drop (`D A`, `Stream A`, `Iter A R₀ R`, `Clo^c A B`) | `close` (§7), then the drop of `R` |
    These are linear. A value of one of these types that goes unused is consumed by its
-   destructor, which the checker inserts. Because the destructor deallocates memory and, at codata,
+   drop, which the checker inserts. Because the drop deallocates memory and, at codata,
    runs the object's `close` code, where it is inserted can be observed.
-3. **Types with no destructor**: `U C` other than the codata above (a thunk of `F A` or of
+3. **Types with no derived drop**: `U C` other than the codata above (a thunk of `F A` or of
    `A ⊸ C` can be disposed of only by running it, which has effects and may need an argument), `μ`
    outside `P` (§61), a type variable, and anything built from one of these. These are linear
    with no derived drop.
@@ -1324,9 +1332,9 @@ A variable is **owed** to the body of its binder (`x <- M; N`, `let (x, y) = V; 
 arm, `fun (x : A) -> M`) exactly when its type is linear with a derived drop (group 1 or 2, not
 persistent): `Env.pushOwn` owes a slot exactly when `DerivedDrop A` holds (`Env.pushOwn_own`). The
 body must consume an owed variable on every control path; on a path that
-does not, the checker consumes it by its destructor:
+does not, the checker consumes it by its drop:
 
-- **At the end of the path.** The destructor calls go immediately before the path's terminal
+- **At the end of the path.** The drop calls go immediately before the path's terminal
   computation: `return V`, `force x`, an application, a projection, an instantiation,
   `nu_out`. They go after every effect of the path and before the result is
   produced. A value never used is therefore dropped at the end of its binder's scope, and a
@@ -1348,9 +1356,9 @@ does not, the checker consumes it by its destructor:
 transaction that must be committed or aborted, needs a type in group 3, which the program must
 consume on every path. A field marked `must_close` in a data declaration (§42, *Declared types
 with no derived drop*) holds `Tok` (§11), so the declared type is linear with no derived drop
-(`decl_linear`), and so is every type that holds it (`not_hasDtor_tensor_right` and the closure
-lemmas of `Core/Decl.lean`). The checker inserts a drop only as a `dtor` node of the typed term,
-which carries `HasDtor` (`TDerivesP.dtor_hasDtor`), so it inserts none at such a type. A borrow of
+(`decl_linear`), and so is every type that holds it (`not_hasDrop_tensor_right` and the closure
+lemmas of `Core/Decl.lean`). The checker inserts a drop only as a `dropFn` node of the typed term,
+which carries `HasDrop` (`TDerivesP.dropFn_hasDrop`), so it inserts none at such a type. A borrow of
 one, `Imm @a N` or `Mut @a N`, is linear with a derived drop (`decl_imm_drop`, `decl_mut_drop`): the
 loan ends, the value is not consumed.
 
@@ -1409,8 +1417,8 @@ a rule apart from the node it builds; and that the elaboration emits the copy, f
 constants only at the sites it lists. The script's negative tests (a site the table omits, a rule
 chosen in a definition of its own) must be refused (#746):
 
-- **The checker** inserts a drop only as a `dtor` node (`rDrop`, `finNode`), typed by
-  `TDerivesP.dtor`, which carries `HasDtor`; erased, it is `drop_derives`. Every checked program
+- **The checker** inserts a drop only as a `dropFn` node (`rDrop`, `finNode`), typed by
+  `TDerivesP.dropFn`, which carries `HasDrop`; erased, it is `drop_derives`. Every checked program
   projects to `CDerivesP` (`checkProgram_soundP`), so the checker needs no table of sites. It
   inserts a copy only as a `copy` or `array_copy` node (`copyIt`), typed only at `DerivedCopy`
   (`TDerivesP.copy_at`, `TDerivesP.arrCopy_at`); `bcc copies` lists them (above).
@@ -1426,8 +1434,8 @@ chosen in a definition of its own) must be refused (#746):
     `effHandleV`'s `DeadP`, a pure frame's arguments at an abort, the machine's own words) and a
     split's `dup`, at an unrestricted type;
   - the `forget` constants at a borrow, `Unk` or `[Imm A]`;
-  - a destructor's leaves, `[Mut A]` among them (`HasDtor.arrayMut`), only in a function the
-    destructor calls to drop one (`Prog.dtorFns`, checked per function);
+  - a drop's leaves, `[Mut A]` among them (`HasDrop.arrayMut`), only in a function the
+    drop calls to drop one (`Prog.dropFns`, checked per function);
   - the `copy` constants and the derived copy (`copy_derives`) at `DerivedCopy`;
   - `abandon` at `[let]`'s abort (`hW`) and at a superseded raise payload (`effRaise`'s `hd`), at a
     type with no owned cell; at `⊤`, anything.
@@ -1450,16 +1458,16 @@ chosen in a definition of its own) must be refused (#746):
 
 The elaborated term, with drops inserted, is what the checker returns, as the erasure of its typed
 term (§3), with its `CDerives` derivation (`checkProgram_sound`). The drop is `unitE` over `lolliE` of the variable and
-`dtor_wf` (`drop_derives`). `fundamentalC` and `adequacyC` apply unchanged, so the baseline theorems
+`dropFn_wf` (`drop_derives`). `fundamentalC` and `adequacyC` apply unchanged, so the baseline theorems
 (§1) and every theorem of entries 1–10 are preserved; nothing in them is touched. Placement does
-not affect soundness: any placement of a destructor call is a `CDerives` derivation. The policy
+not affect soundness: any placement of a drop call is a `CDerives` derivation. The policy
 fixes when the effect of a drop happens.
 
 ### Open
 
-- **Destructors with effects that can fail.** A host resource (§11), such as a file handle, may
-  need a destructor that performs I/O or can fail. `dtorE` is total and pure apart from
-  deallocation and `close`. Whether such a type gets an implicit destructor, and what a failing
+- **Drops with effects that can fail.** A host resource (§11), such as a file handle, may
+  need a drop that performs I/O or can fail. `dropFnE` is total and pure apart from
+  deallocation and `close`. Whether such a type gets an implicit drop, and what a failing
   one does, is not decided. Until then these are group 3.
 - **Externs** are not owed. `main` must consume every non-persistent extern.
 - **Values** do not drop. The value `V` of `let`/`case` and the operands of value forms consume
@@ -1563,10 +1571,10 @@ is one whose result is `F B` with no loop: `U(A ⊸ F B)`. There is no new forme
 clause: `div` is a reading of `Loop` (§7), which already exists, and the function types are the
 existing ones. `!(A ⇒ div B)` is the persistent form.
 
-**The residual.** A loop closed early must release its state. What has a destructor (§12) is
+**The residual.** A loop closed early must release its state. What has a derived drop (§12) is
 dropped, and what has none, such as a capability (§11), must be handed back. The residual of a
 result `B` is `K ⊗ 1`, where `K` is the tuple of the components of `B` (its right-nested `⊗`)
-whose type has no destructor, in their order in `B`; it is `1` when there are none, so `div B` is
+whose type has no derived drop, in their order in `B`; it is `1` when there are none, so `div B` is
 `D B` for a function that holds no such resource. The residual is read off the type, not
 recognized by names. `main`'s loop `Loop (Caps ⊗ A) (Caps ⊗ 1)` (§11) is the instance.
 
@@ -1588,7 +1596,7 @@ and returns it, the next state. `next` in the second loop observes it and finish
 does. `close` in the first loop closes it and gives its residual to the continuation's second
 observation, which turns it into the whole's; `close` in the second loop closes it. The
 continuation is one linear thunk with two observations, so the variables it captures are used
-by whichever observation runs, and dropped (§12) by the other where they have destructors. If
+by whichever observation runs, and dropped (§12) by the other where they have drops. If
 either loop never finishes, neither does the whole. Nothing in the kernel changes: `div_bind` is
 checked like any `def`, and `fundamentalC` and `adequacyC` cover every use. The elaboration of a
 div body does not nest delay binds: the whole body is one `unfold` whose states are its loops
@@ -1685,7 +1693,7 @@ result `B` and residual `R`:
 - **A terminal** `T` finishes: `v : B <- T; return (inl v)`. Before the first state, when the
   function is called, it is the loop that finishes with `v` at its first observation,
   `thunkv nu_in ⟨return (inl v), close⟩`; `close` hands back the components of `v` that have no
-  destructor.
+  drop.
 
 The variables that hold `K` are named as a terminal `return` names them, or, in an ambient
 `main`, `stdin`, `stdout` and `stderr` (`corpus/sugar/residual-alias.bc`: a residual under a
@@ -1815,7 +1823,7 @@ after it (the rewrite puts the block's bindings in the enclosing body).
 (decision 71, void by decision 72; the checker's rule until §62's PRs land), or needs a construct not built): a pipeline whose source holds the borrow, `for x in map(filter(iter(xs), p), f)` inside `borrow imm v { xs -> … }`. The
 source could be rewritten to hold the owner, but the owner would come back only through the
 pipeline's finishing value and residual: each adapter would pass them on, the `for` would bind
-the finishing value, and the residual would have to hand back an owner that has a destructor. A
+the finishing value, and the residual would have to hand back an owner that has a derived drop. A
 `yield` inside a borrow block is rejected (§15, *Self-reference*). A div
 function called with a borrow that is not lent from a place (a view, a field, a second borrow)
 holds it across its loop. `|>` is §33's.
@@ -2055,7 +2063,7 @@ A generator's body is a function body at a row (§18's copy for its sites). On i
   residual. A move forward (to the loop's head from before it, or to a later point) runs in the
   same observation, and a move back to a loop's head is a skip, so each observation runs one turn
   of a loop and every observation is total. Its residual is `K`, the components of its result with
-  no destructor, as a stored generator's must be (below).
+  no derived drop, as a stored generator's must be (below).
 - **`return e`** inside a loop returns from the generator with `e` from any depth of its loops,
   closing each loop's source on the way out; `break` leaves the innermost loop from any position
   of its body (`corpus/gen-return.bc`).
@@ -2174,7 +2182,7 @@ and §19 is preserved: every construct of this entry is elaborated into core bef
 
 - **A generator that holds a capability across a `yield`.** `yield` is cancellable, so what is
   live across it must hold no owned cell (§19's `[let]`); a capability (`ref input`, `ref output`)
-  has no destructor and must be handed back, and a cancel answers `()` with no residual. So a
+  has no derived drop and must be handed back, and a cancel answers `()` with no residual. So a
   generator over the input, or one that writes as it yields, is rejected by the checker
   (`corpus/pending/gen-digits.bc`, `gen-lines.bc`, `gen-lazy.bc`, `gen-adapters-io.bc`). It needs
   a cancel that hands back a residual, or a `must_resume ctl` iteration effect (no `break`).
@@ -2706,8 +2714,8 @@ names.
   capability it uses (`withbor3`), so that the capability comes back when the body is abandoned.
 
 **Drop glue** is the checker's (§19): a binding whose head may abort, at a row that cancels
-(`Row.Cancels`), puts the destructors of the slots the rest uses in a `[then]` finaliser. A value
-with no destructor (§12, group 3) live across such a binding is rejected, naming it.
+(`Row.Cancels`), puts the drops of the slots the rest uses in a `[then]` finaliser. A value
+with no derived drop (§12, group 3) live across such a binding is rejected, naming it.
 
 **Not provided**, each rejected with a message that says so: an operation inside a closure or
 block that is not run in place, other than a block passed at a parameter of function type (§30),
@@ -2878,15 +2886,15 @@ of three continuation types:
 | qualifier | surface | class | its one use | `κ` is |
 |---|---|---|---|---|
 | **must resume** (`lin`) | `must_resume ctl` | linear | resumed exactly once: a must-complete computation | `U((B ⊸ F_Σ R) & ⊤)` |
-| **cancellable** (`cancel`) | `ctl` | linear | resumed once, or cancelled (the cancel a derived drop when it is pure, `kTy_cancel_hasDtor_iff`) | `U((B ⊸ F_Σ R) & F_Σ 1)` |
+| **cancellable** (`cancel`) | `ctl` | linear | resumed once, or cancelled (the cancel a derived drop when it is pure, `kTy_cancel_hasDrop_iff`) | `U((B ⊸ F_Σ R) & F_Σ 1)` |
 | **unrestricted** (`unr`) | `multi ctl` | unrestricted | resumed any number of times, or cancelled; its captures are persistent (`lam_bang_persistent`) | `!U((B ⊸ F_Σ R) & F_Σ 1)` |
 
-**A cancel has computational content: the continuation's destructor.**
+**A cancel has computational content: the continuation's drop.**
 
 - To cancel `κ` is to **unwind** it: its frames finalise innermost first, and each lend in it
-  ends, as §12 derives a record's destructor from its fields', frame by frame.
+  ends, as §12 derives a record's drop from its fields', frame by frame.
 - `(B ⊸ F_Σ R) & F_Σ 1` is a linear type with a cancel branch, the `A & 1` encoding. The `1`
-  branch, `cancel`, is the destructor. The additive `&` makes the two branches share the one
+  branch, `cancel`, is the drop. The additive `&` makes the two branches share the one
   captured context.
 - A must-resume `κ` has no `1` branch, so it must be resumed.
 
@@ -2926,7 +2934,7 @@ of three continuation types:
   first, which is BoLo's nesting order:
   - when an unwind passes a borrow, that borrow's callback returns, by its unwind path;
   - the lend ends, and the lender regains the place;
-  - the frame's finaliser (§12's destructors) runs, and the unwind continues outward.
+  - the frame's finaliser (§12's drops) runs, and the unwind continues outward.
 
   Nothing is kept alive across a lend: this is not T1, which needs a continuation held while a
   borrow is out. The obligation is stated under *Theorems*.
@@ -2936,7 +2944,7 @@ of three continuation types:
   is T1 (#172).
 
   A cancellable `κ` is consumed by exactly one of its two entries. So "a continuation cannot be
-  dropped" (#185, `forget_not_lolli`) is answered by the destructor `cancel`, not by a `forget`:
+  dropped" (#185, `forget_not_lolli`) is answered by the drop `cancel`, not by a `forget`:
   in Core, `forget κ` has no derivation at `1` (`not_forget_kappa`, *Laws* item 4).
   A must-resume `κ` has no `cancel`, for must-complete computations.
 
@@ -3232,7 +3240,7 @@ Six rules, over `CDerives` with its context premises (§10):
   - `case`, `let (x, y)`, `;`, `λ` and application (an effectful function is `A ⊸ F_Σ B`);
   - `&`, `∀`, and thunks of λ-values (a block `!U(A ⊸ F_Σ B)`).
 - **Unwinding contexts.** `[then]` is `[let]` with a finaliser. `D` runs in the same `Γ₂` as `N`,
-  additively, and disposes it (§12's destructors).
+  additively, and disposes it (§12's drops).
 - **A finaliser's effects** (§27, decisions D2 and D3 of 2026-10-08): `D` is at its own row
   `Σ_D ≤ Σ`, and each operation of `M` whose continuation may be cancelled records `D`'s effects in
   its cancel row. The machine sends a finaliser's raises and operations to the nearest live handler
@@ -3248,7 +3256,7 @@ Six rules, over `CDerives` with its context premises (§10):
   abortive operations. The unwinding form's term is the pure one's with `ubind`: when the callback
   unwinds, the lend ends, the source goes back to the lender, and the lender's finaliser runs:
   - `forget` for a `Mut`/`Imm` source;
-  - the destructor for an owned `Ref A`, at `HasDtor A` (§12).
+  - the drop for an owned `Ref A`, at `HasDrop A` (§12).
 
   Then the unwind continues outward. Non-abortive control operations stay inside a borrow's scope: every
   borrow callback's row is unwind-only.
@@ -3257,7 +3265,7 @@ Six rules, over `CDerives` with its context premises (§10):
   - the unwinding constant is `U(src ⊸ U(∀'x ⊏ ⊓Δ. L ⊸ F_Σ(['x] B)) ⊸ F_Σ R)`, with the pure
     form's source `src`, lend `L` and result `R`;
   - its term is `withborU d = λr. λf. (f [] r) then b. (r, b) unwind d r`, with a closed finaliser
-    `d : src ⊸ F 1` typed by a premise. The elaborator passes the source's destructor `dtorE src`
+    `d : src ⊸ F 1` typed by a premise. The elaborator passes the source's drop `dropFnE src`
     (§12), which is `forget` at `Mut`/`Imm`;
   - `withload`'s source is consumed by its load, so nothing goes back to the lender: its unwinding
     form is `withload`'s own term at the effectful type;
@@ -3887,7 +3895,7 @@ kinds.
 operations when it has more than one (`wrapRaise`), and a handler's clause takes it out of its
 variant: a code that raises two operations of different argument types answers one payload type.
 
-**Cancel** is the state's destructor. The resume code takes `inr ()` and switches on the state:
+**Cancel** is the state's drop. The resume code takes `inr ()` and switches on the state:
 the callee's `k` is cancelled first (innermost), then the point's finalisers run innermost first,
 and every other variable is dropped; borrows' unwinding forms are finaliser frames, so their
 lends end here. A finaliser's error is caught (`catchAll`), and the first one is kept: the
@@ -4334,8 +4342,8 @@ and the rest every call hands back is of that form.
   (4). A closure behind an `Imm` borrow is only forgotten; behind a `Mut` borrow it is held at the
   program's view and called by `withswap`. §12.69's `obs_transfer` takes its `U C` arm
   (`obs_transfer_cloBox`).
-- **Destructor.** §12's `HasDtor.nu`, group 2: dropping a closure runs its `close`
-  (`hasDtor_clo`). It is not `Forgettable` (`not_forgettable_clo`) and not persistent
+- **Drop.** §12's `HasDrop.nu`, group 2: dropping a closure runs its `close`
+  (`hasDrop_clo`). It is not `Forgettable` (`not_forgettable_clo`) and not persistent
   (`not_persistent_clo`).
 
 **Derived rules** (`Core/CloRules.lean`), each a `CDerives` derivation, so `fundamentalC` and
@@ -4351,7 +4359,7 @@ and the rest every call hands back is of that form.
 | unrestricted to `Clo` | `mkE` at the state `!U(A ⊸ F B)` (`d_ofFn`) | the above |
 | `Clo` to `A ⊸ F B` | `λa. call, then close the rest` (`d_once`) | the above |
 
-A linear function has no destructor (`not_hasDtor_lolli`), so it is not the state of a closure
+A linear function has no derived drop (`not_hasDrop_lolli`), so it is not the state of a closure
 whose `close` must dispose of it, and there is no uniform coercion from `A ⊸ F B` to `Clo`.
 
 **Three kinds of function**, three types (cf. Rust's `FnOnce`, `FnMut`, `Fn`):
@@ -4371,7 +4379,7 @@ is non-strict (§23), so a closure bounded by `'x` is lent `mut` inside `'x`'s o
 every host and by the interpreter: a counter called twice through `Mut` (`counterProg`, 4),
 passed through `n` functions with a reborrow (`d_passF` at every `n`; `passProg 3`, 13), nested
 (`nestProg`, 8), returned (`retProg`, 15), a logger capturing a borrow (`logProg`, 12), the two
-coercions (`ofFnProg`, 23; `onceProg`, 5), and a drop by the destructor (`dropProg`, 0).
+coercions (`ofFnProg`, 23; `onceProg`, 5), and a drop by the drop (`dropProg`, 0).
 
 ### The checker
 
@@ -4413,7 +4421,7 @@ it does the unbound form, so a closure has one code and its calls through `mut` 
 | `corpus/clo-depth.bc` | the borrowed closure passed through three functions, with a reborrow |
 | `corpus/clo-higher.bc` | a closure capturing a closure, and a closure taking a closure |
 | `corpus/clo-capture.bc` | a closure capturing `mut 'x i32`, returned from its maker, bounded by `'w ⊏ 'x` |
-| `corpus/clo-drop.bc` | closures dropped by their destructors, which close them and free their cells |
+| `corpus/clo-drop.bc` | closures dropped by their drops, which close them and free their cells |
 | `corpus/clo-coerce.bc` | an unrestricted function as a `Clo`, and a `Clo` as a function called once |
 | `corpus/reject/clo-outlives.bc` | refused: a closure bounded by the lifetime of the borrow it captures |
 | `corpus/reject/clo-copy.bc` | refused: a closure used twice |
@@ -4441,13 +4449,13 @@ axioms are `[propext, Classical.choice, Quot.sound]`.
   at one `δ`. An argument's lifetimes are fixed when the closure's type is written.
 - **An argument mentioning `X`** (a sink of the codata itself) stays outside `NuOk`.
 - **Surface closure sugar**: a closure over a context elaborated to `clo_new` with the captures as
-  the state and their destructors as `close`.
+  the state and their drops as `close`.
 - **Strict outlives**: §23 relaxes the box rule and `withbor`'s side condition, gives `main` a
   lifetime of its own, and bounds a template's lifetime by its type parameters.
 - **Polyvariant flow.** Closures built at two sites that reach one call are dispatched there
   (`clo-higher`).
 - **A linear function as a `Clo`** is refused by inspection of the derived rules, with
-  `not_hasDtor_lolli` its mechanical part; a parametricity statement is not made.
+  `not_hasDrop_lolli` its mechanical part; a parametricity statement is not made.
 - A generic function's lifetime parameters are unrelated to the lifetimes in its type arguments
   unless a bound relates them (§23, `where S: 'c`); `clo_new` returns the closure unboxed, and
   `clo_new_boxed` is the bounded constructor.
@@ -4718,7 +4726,7 @@ closure type: no use dispatches, allocates, or answers for another use's effects
 
 `Paper/`, `Support/`, the machine, `cC`/`vC` and the effectful `wp` are unchanged; no borrow rule
 and no borrow lemma changes. The checker (`Frontend/Check/`) types a finaliser at `F 1`: the drop
-glue (§12's destructors) already was. The checker does not emit `[let-poly]`: it checks a `def` at
+glue (§12's drops) already was. The checker does not emit `[let-poly]`: it checks a `def` at
 each use, which is the rule's premise term, and a checked program's derivation gives the rule's
 derivation of the let (`checkProgram_letPoly`). No program from source has a let used at two rows
 (*Open*).
@@ -5059,7 +5067,7 @@ call a finaliser directly. `Capture` rejects such a finaliser with a message. Th
 finaliser that performs (`progFinOp`), a cancel nested in a cancel (`progNC₁`), and a kept error
 dropped with an unrestricted continuation or resumed (`progDrop`, `progKeep`), are Lean runs
 (`Core/EffCancel.lean`, `Core/EffCancelTyped.lean`) and interpreter runs, not kernel programs. The
-checker emits no such finaliser: its finalisers are destructors at `F 1`. No kernel program and
+checker emits no such finaliser: its finalisers are drops at `F 1`. No kernel program and
 no count changes. Finalisers that raise run at every stage in the kernel programs `e7a`, `e7b`,
 `e7d`, `e8b` and `stored-k-fin` (§19 *Programs*).
 
@@ -5267,7 +5275,7 @@ PRs land.
   `Row.ResumeOC`, which also admits a cancellable wait and its cancel target (§29a), and every row
   `Row.ResumeO` admits (`Row.ResumeO.toC`).
 - The term is §19's unwinding `withbor` (`withborUV d`); only the callback's row differs. `d` is the
-  owner's finaliser, the source's destructor: it runs when a continuation captured inside the
+  owner's finaliser, the source's drop: it runs when a continuation captured inside the
   callback is cancelled.
 - `[lend-R]`'s premise is the callback's derivation in the extended judgment, so a relaxed lend
   may hold another. The rule concludes at the context `r : Ref T` alone. `[nil-dead]` places it
@@ -6322,7 +6330,7 @@ task outlives its `with`, so the capabilities are lent for the innermost borrow 
 spawn, whose lifetime bounds the tasks (§32's `borrow mut d { 'd, … }`): the block takes a borrow of
 each, gives it to the task, and does not hand it back; after the block the capability is `main`'s
 again. A capability is a `mut` borrow, so one task holds it at a time, until it ends or is
-cancelled (a borrow has no destructor to run, so a cancel is safe). Two tasks given one capability
+cancelled (a borrow has no derived drop to run, so a cancel is safe). Two tasks given one capability
 in one block are rejected with a message (`corpus/pending/io-two-tasks.bc`), and so is a task
 spawned outside every borrow block. `corpus/io-task.bc`: a task writes to standard output across
 its `await`s.
@@ -6343,7 +6351,7 @@ its `await`s.
 ### The models
 
 Two new opaque kinds (§11 *Opaque host types*), each a leaf with its model, `Imm̲ = Unk`, no
-destructor:
+drop:
 
 - `clock`: `clock.Holds v ⇔ ∃ t, v = i64[t]`, the time in nanoseconds. Its representation is `I64`
   (`vC_clockRep`).
@@ -6817,8 +6825,8 @@ counted by the table's size; a search ends at an empty slot, which a half-full t
 **Keys and values.** A key sought is given by value and dropped after the search: it is lent to
 the search, a cell of the caller's frame (§35). A key may be a view (`text 't`): the map's type
 then mentions `'t`, and the map cannot outlive what its keys borrow. A linear `K` or `V` makes the
-map linear: it has a destructor exactly when its keys and values do (§12). A replaced key is
-dropped, so `K` has a destructor or is persistent.
+map linear: it has a derived drop exactly when its keys and values do (§12). A replaced key is
+dropped, so `K` has a derived drop or is persistent.
 
 **Generic `data`.** `Map`, `MapRef` and `Set` are generic `type` abbreviations, transparent: there
 are no `data` declarations (§31 *Open*), so the representation is not hidden outside the module.
@@ -8122,12 +8130,12 @@ Written with the kernel's forms today, their counts rise or they are refused:
 - a child cell each, `μX. 1 ⊕ (ref X ⊗ (A ⊗ ref X))`, is two objects a node and one an empty child
   where the rule boxes the sum's payload, one object a node (`rec-tree`: 254 where it is 127);
 - the payload in one cell, `μX. 1 ⊕ ref (X ⊗ (A ⊗ X))`, keeps the count, but `ref` of a type that
-  is not `X` is outside §6's `FShape`, so the type has no fold and no destructor (§12), and a
+  is not `X` is outside §6's `FShape`, so the type has no fold and no derived drop (§12), and a
   program that drops one implicitly is refused;
 - a block, `box Node(…)`, is allocated cell by cell (*Open*): three objects a node.
 
 So A7 waits for a block to be lowered as one object (N1, layouts from types): the block form is in
-`FShape`, has its destructor, and is then one object a node, the rule's count.
+`FShape`, has its drop, and is then one object a node, the rule's count.
 
 ### Declared types with no derived drop (#746, L-D over L-T)
 
@@ -8156,8 +8164,8 @@ a `match` on it (directly, or in the function that consumes it), and every other
 is refused by a kernel fact, not by a check of the elaborator:
 
 - **Unused at the end of its scope**: its type has no derived drop (`decl_linear`), and the
-  checker inserts a drop only as a `dtor` node, which carries `HasDtor`
-  (`TDerivesP.dtor_hasDtor`).
+  checker inserts a drop only as a `dropFn` node, which carries `HasDrop`
+  (`TDerivesP.dropFn_hasDrop`).
 - **Live across a computation that may abort or cancel**: `[let]`'s `hW` asks the rest of the
   context to be `VTy.OwnFree` (§19), and a type holding `Tok` is not (`decl_not_ownFree`). The
   program is accepted when the value is consumed before, lent to a computation that handles the
@@ -8178,10 +8186,10 @@ is refused by a kernel fact, not by a check of the elaborator:
   - *the abort crossing the loan*: the lend is the unwinding form (§19 *Borrows*), whose
     finaliser `d : Ref N ⊸ 1` runs on the source when the abort ends the lend. The kernel admits
     any closed `d` of that type. One that consumes the value is derived at every payload with a
-    derived drop (`declFinOf`: frees the cell, drops the payload by its destructor, burns the
+    derived drop (`declFinOf`: frees the cell, drops the payload by its drop, burns the
     token; `d_declFinOf`), and the whole program runs at payload `1` (`d_declAcross`,
     `declAcross_answers`). The checker passes the
-    source's derived destructor, which `Ref N` has none of (`decl_ref_no_dtor`), and the surface
+    source's derived drop, which `Ref N` has none of (`decl_ref_no_drop`), and the surface
     has no form that writes `d`; so the lend is refused
     (`corpus/reject/decl-lend-abort.bc`). A written finaliser for a lend is *Open*.
 - **Copied**: it is not persistent, so no split duplicates it (`Ctx.SplitP.both_live_iff`).
@@ -8199,7 +8207,7 @@ every cell freed (`adequacyC`, `adequacyD`), the token's cell among them.
 **The entry consumes `main`'s result by its derived drop.** A program with no externs whose
 `main : F A` answers a value that is neither unrestricted nor a loop the driver runs is entered as
 `main : F 1 = io_main_result : A <- M; return ()` (`Frontend.Check.discardEntry`): the checker
-drops the result by its derived drop, at a `dtor` node (`entry_derives`, over `drop_derives`), and
+drops the result by its derived drop, at a `dropFn` node (`entry_derives`, over `drop_derives`), and
 the run ends with every cell freed (`entry_runs`, from `adequacyC`). The host never abandons a
 value. At a declared type there is no derived drop (`entry_decl_no_drop`), so the program is
 refused: "`main`'s result is not consumed in its scope, …". A program with capabilities already
@@ -8209,7 +8217,7 @@ memory does not hold and `burn` frees it (`mint_step`, `burn_step`).
 **A borrow's view.** A view of a marked field forgets the token (`Imm̲ 'b Tok = Unk`). When a
 binder's slot of a view is not used and cannot stay live where its scope ends (under `boxed[@a]`,
 whose context must outlive `@a`, and `Unk` outlives nothing), the checker consumes it by its derived
-drop at the head of its scope (`dropStuck`, `drop_derives` at `HasDtor.unk`); it is not owed and its
+drop at the head of its scope (`dropStuck`, `drop_derives` at `HasDrop.unk`); it is not owed and its
 drop does nothing observable. So `t.id` reads through `imm 'a Txn` (`corpus/decl-view.bc`).
 
 **`finally` on `with`** (user, 2026-10-30: "the syntax should be with open finally"):
@@ -8243,11 +8251,11 @@ message reads the declarations (`Data.Table`); the refusal is the kernel's.
   borrows held across `[then]` (§29's relaxed lend, `PinLaw`), or a finaliser that hands its
   capabilities back, would carry it; neither is in this entry.
 - *A written finaliser for a lend the abort crosses.* The kernel's unwinding lend takes any closed
-  `d : Ref N ⊸ 1` (`d_declAcross`); the checker passes only the source's derived destructor
+  `d : Ref N ⊸ 1` (`d_declAcross`); the checker passes only the source's derived drop
   (`Frontend/Check/Consts.lean`, `finaliser`), so at a declared type the lend is refused. A
   surface form would name the consumer for the unwind, say `borrow imm c { v -> S } unwind f`,
   and the checker would type `f`'s closed body at `Ref N ⊸ 1` (pure: a `lolli`) in place of
-  `dtorE`. The same unit needs a lend of a record or a place at an aborting row: `borrow` takes
+  `dropFnE`. The same unit needs a lend of a record or a place at an aborting row: `borrow` takes
   only a cell or an array, and `&` in the arguments of a call that threads a capability is
   refused for any type, so `let mut t = begin(…); … raise …` stays refused with the finaliser
   alone. Not in this entry: until then, handle the abort inside the loan or use `finally`.
@@ -8276,7 +8284,7 @@ message reads the declarations (`Data.Table`); the refusal is the kernel's.
 | `corpus/decl-view.bc` | `t.id` read through `imm 'a Txn`, the token's view dropped by its derived drop, the transaction committed after | i32[712] |
 | `corpus/decl-lend.bc` | a transaction lent by `&t` to a function whose body is a `with to_result` around a `raise`, the loan read again after it: the abort handled inside the loan, then committed on an answer or rolled back on an error | `(i32[203], i32[7])` |
 | `corpus/reject/effect-lend-capability-call.bc` | a record with a derived drop lent by `&` in the arguments of a call that threads `Fail`'s capability | refused at the surface, for any type |
-| `corpus/reject/decl-lend-abort.bc` | a transaction's cell lent to a borrow block whose body may raise, the abort crossing the lend | refused: the unwinding lend's finaliser is the derived destructor, which `Ref N` has none of (`decl_ref_no_dtor`) |
+| `corpus/reject/decl-lend-abort.bc` | a transaction's cell lent to a borrow block whose body may raise, the abort crossing the lend | refused: the unwinding lend's finaliser is the derived drop, which `Ref N` has none of (`decl_ref_no_drop`) |
 | `corpus/fail/decl-burn-written.bc` | a program that takes a record apart as a tuple and writes `tok_burn` | refused by the parser: `tok`, `tok_mint` and `tok_burn` are read only in the elaboration's own source, so a printed elaboration reads back the same |
 
 Each rule is pinned beside its elaboration written by hand (`scripts/check-sugar.sh`):
@@ -8370,7 +8378,7 @@ refused by the new backend ("outside the pure fragment") and compiled by the old
   (a live slot neither part uses), and a leaf drops its context's other live slots (`DeadP`,
   `SoloP`). No copy or drop is inferred from occurrences. A constant applied to its arguments
   (a spine of `lolliE`) is its operation; used as a value, a closure that applies it.
-- **Derived nodes and constants read**: `dtor A` is `A`'s destructor (`dtorAt`); `array_replace`
+- **Derived nodes and constants read**: `dropFn A` is `A`'s drop (`dropFnAt`); `array_replace`
   and `slice_replace_mut` are a slot swap, the old contents moved out and the new moved in, with
   no copy or drop (#608); `withswap` moves its contents out and back (its load's copy and its
   store's drop cancelled); `divLit` is its division with no error arm (§39); `litFn`'s bytes are
@@ -8425,7 +8433,7 @@ output or a kernel program. `corpus/counts.expected` and `kernel-counts.expected
 - **Codata observations dispatch**: resolved by §45.
 - **Bounds checks in a counted walk** (L-3): resolved by §46.
 - **A block as one object** (§42 *Open*, A7): a block's cells are freed one by one by its type's
-  destructor and by a match that binds them, so one object needs a way to free an interior cell.
+  drop and by a match that binds them, so one object needs a way to free an interior cell.
 - The effectful programs (N2, N3), `bounded_fix`'s budget as a stack-pointer compare (NEW-b),
   pointer reversal for owned folds (B6), frame slots and LLVM attributes by rule (N5).
 
@@ -8576,7 +8584,7 @@ they were bound before it; and the step's read is marked.
 ### The counted loops' index
 
 The loops the new backend generates (`count_fold`, `count_try`, `array_new`'s, `array_free`'s, an
-array's destructor) run their index `i` below a bound under `2³¹` (`arrLen`, `clampLen`), and
+array's drop) run their index `i` below a bound under `2³¹` (`arrLen`, `clampLen`), and
 step it only after `i < n`. Both are `i32`s held zero-extended, so the test is a word compare and
 the step a word add that does not wrap (`Op.cntLt`, `Op.cntSucc`), where they were the 32-bit
 host operations with their truncations. This is the cause of the gap §44's measurement left:
@@ -9148,13 +9156,13 @@ IR's interpreter counts the frame slots a run starts.
   `κ`'s environment is by value, and a level's cell lives as long as its level. It would matter
   where a box's contents are allocated, to place them in the scope the lifetime names.
 - **`!noalias` and `!alias.scope`** (#531), where a parameter attribute is too coarse; Alive2.
-- **The lend bits of the helpers.** The helpers the conversion makes (`extern`, `dtor leaf`,
+- **The lend bits of the helpers.** The helpers the conversion makes (`extern`, `dropFn leaf`,
   `count_fold`, `count_try`, `observe`, `unfold`, `const`, `fold`) are entered as direct calls,
   and with every function's bits set the interpreter refused no helper on the corpus (it refused
   a machine's `suspend` in 9 programs), but their bits are cleared: each needs the step stated for
   it before it is set. Clearing the bits takes the facts from 2850 of the 6852 attributed
   parameter words of the corpus's native builds: the functions that lose them are `extern` 1183,
-  `dtor leaf` 679, `count_fold` 430, `count_try` 88, `observe`, `unfold` and `const` 25, and the
+  `dropFn leaf` 679, `count_fold` 430, `count_try` 88, `observe`, `unfold` and `const` 25, and the
   machines' functions 65.
 - **`LendEnclosesFn` proved** needs lifetimes in the LIR's types (#760's scope, §3a).
 
@@ -9170,7 +9178,7 @@ remain (measured: `docs/scope/760-native-facts.md` §7):
   lowering rather than from LLVM's use of the borrow facts.
 - **SSA emitted directly.** Every local is an `alloca` that SROA/mem2reg recovers; emitting `phi`s
   from the LIR removes the reliance.
-- **The conversion helpers' lend bits** (*Open*, above): the facts of `extern`, `dtor leaf`,
+- **The conversion helpers' lend bits** (*Open*, above): the facts of `extern`, `dropFn leaf`,
   `count_fold`, `count_try` and the others, each once its step is stated.
 - **`memory(...)`** once allocation is in rows (#763): a function's parameter types and row then
   license `memory(argmem: read)` and `memory(none)`.
@@ -9194,7 +9202,7 @@ finaliser.
 
     λ(x, κ).  (w x)  then r. case r { inl y → κ.1 y  |  inr z → κ.2 (); nf z }  unwind κ.2 ()
 
-`κ.2 ()` is the destructor decision 56 says a cancellable continuation lacks: a raise from `w`, or a
+`κ.2 ()` is the drop decision 56 says a cancellable continuation lacks: a raise from `w`, or a
 cancel of an outer continuation captured inside `w`, first cancels `κ`, and so runs the
 handled computation's finalisers.
 
@@ -9671,12 +9679,12 @@ unchanged. The elaborator marks one more scheme (`SchemeMark.litView`).
   node over `[⊗E]` of a `lendCell` node, or `[let]` of `return` of one whose body is `[⊗E]` of its
   variable (`rScope`), and its rule fixes `rel`: on every path of the code after the pair is taken
   apart, the owner's slot, passed to one part at each split by the split's masks, reaches `free`
-  or a cell's destructor and nothing else; a `case` passes it to both arms (`relT`). This covers
+  or a cell's drop and nothing else; a `case` passes it to both arms (`relT`). This covers
   the `case` whose arms consume the owner differently (`t4`, `t18`): `rel` is `false` there.
 - **A literal's view** (`TExpr.litView`, `litViewT`): the elaboration of `borrow imm "…" { v -> S }`
   is marked, and its rule fixes the scheme: the place's table tabulated into an array
   (`array_new`), the array lent by `slice_borrow_imm`, and the array the lend hands back given
-  straight to its destructor.
+  straight to its drop.
 - **`unfold step`** (`TExpr.unfoldStep`, `unfoldAppT`): the checker builds the node over the bound
   computation of a `[let]` that is the `unfoldN` constant applied to a step (`rUnfoldStep`), so
   the `bind` binds `unfold step` (SPEC §45's `nuEta` reads its `f` there).
@@ -9800,7 +9808,7 @@ changes (`Backend2/Types.lean`, `Syntax.lean`): `LTy` gains `bang`, `!A`, which 
   closure it is, the conversion's taking apart of a pair, a sum or a closure type. Where the
   conversion compares two types (an outcome's, a machine's state, a site's closure types, a width
   class's keys), it compares them with every `!` erased (`LTy.sameRep`, `LTy.unbang`;
-  `sameRep_iff`, `sameRep_bang_left`, `sameRep_bang_right`). A `use` body's and a destructor's
+  `sameRep_iff`, `sameRep_bang_left`, `sameRep_bang_right`). A `use` body's and a drop's
   keys keep `!`: a key fixes the LIR types of what it converts.
 - **Copies.** Every `copy` carries its rule (`CopyRule`), and `Lint.copiesAt` checks its premise:
   a split's `dup` at a persistent LIR type (`LTy.persistent`, `VTy.persistent`'s image, and what
@@ -9809,8 +9817,8 @@ changes (`Backend2/Types.lean`, `Syntax.lean`): `LTy` gains `bang`, `!A`, which 
   persistent, so a slot the masks duplicate passes (`Lint.copyable_ofV`).
 - **Drops.** Every `drop` carries its rule (`DropRule`), and `Lint.dropsAt` checks its premise
   (§12, *Every insertion site cites its rule*): weakening at a persistent type
-  (`Ctx.DeadP.drop`); a `forget` constant at a borrow, `Unk` or `[Imm A]`; a destructor's leaves,
-  `[Mut A]` among them (`HasDtor.arrayMut`), in a destructor function only (`Prog.dtorFns`); a live
+  (`Ctx.DeadP.drop`); a `forget` constant at a borrow, `Unk` or `[Imm A]`; a drop's leaves,
+  `[Mut A]` among them (`HasDrop.arrayMut`), in a drop function only (`Prog.dropFns`); a live
   slot no mask holds at a persistent type (the weakening its part applies at its leaves). A
   superseded raise payload is abandoned, not dropped, at a type with no owned cell (`LTy.drops`,
   `VTy.OwnFree`'s image; `ofV_drops`). The one exception is a stack machine's drop
@@ -9992,18 +10000,18 @@ exit status, `corpus/counts.expected`, `counts-backend2.expected`, `kernel-count
 
 ---
 
-## 61. Entry 60 — the owned fold and the destructor at the class `P` (#722, U1 of #595)
+## 61. Entry 60 — the owned fold and the drop at the class `P` (#722, U1 of #595)
 
 ### Motivation
 
-§6's folds and §12's destructors are defined for `μ` bodies in the class `FShape`, whose leaves
+§6's folds and §12's drops are defined for `μ` bodies in the class `FShape`, whose leaves
 are closed. A node that owns an array of its children (`μX. array i32 + array X`, AWFY's Storage;
 `μX. buf i32 * buf (1 + X)`, a B-tree; `μX. bool * array (1 + X)`, a trie) or a `μ` nested inside
-another (`μX. I32 ⊗ Array (μY. 1 ⊕ (Ref X ⊗ Ref Y))`) is outside it, so it has no destructor, and
+another (`μX. I32 ⊗ Array (μY. 1 ⊕ (Ref X ⊗ Ref Y))`) is outside it, so it has no derived drop, and
 a program that lets one go unused is refused. The design pass (#595, agreed 2026-10-28; its §4)
 gives one class `P`, one owned fold for every body in it, generated by recursion on the type, and
-the destructor as that fold at results `1`. U0 (#719, `experiments/NestedFold/`) proved the
-traversal; this entry is the kernel constant, the destructor, the checker, the elaborator's
+the drop as that fold at results `1`. U0 (#719, `experiments/NestedFold/`) proved the
+traversal; this entry is the kernel constant, the drop, the checker, the elaborator's
 arrays and both backends.
 
 ### The class `P`
@@ -10056,19 +10064,19 @@ of `μB₀` at every body in `P`. The measure drops at every call: after `⊗`/`
 smaller (a body's head is not a variable), after a cell or an array slot the resource is
 smaller (`dsize_tail_lt`), and at an inner `μ`, at the same value, the body is.
 
-### The destructor
+### The drop
 
-`dtorAt true A` is the destructor of `A⟨1⟩`, `A` at results `1` (`algE_eqP`). `HasDtor.mu`
-(`Core/Dtor.lean`) is restated at `P`: the body is in `P`, `T⟨1⟩` has a destructor, and so has
+`dropFnAt true A` is the drop of `A⟨1⟩`, `A` at results `1` (`algE_eqP`). `HasDrop.mu`
+(`Core/Drop.lean`) is restated at `P`: the body is in `P`, `T⟨1⟩` has a derived drop, and so has
 every key's body (an array key's element type) at `1`. At a body in `FShape` (`fshapeB`) the
-destructor is `foldOwn` with the algebra `T[1/X]`'s destructor, the same term as before, so every
-existing program's destructor, run and counts are unchanged; at any other body of `P` it is
-`foldOwnG`, its algebra at a `μ` key the destructor of the key's body at `1` and at an array key
-the destructor of `1 ⊕ (1 ⊗ S⟨1⟩)` (`keyAlg`, listed by `algsIn` in the order of the keys,
-`algsIn_eq`). `dtor_wf` types it from the destructors of those types; `HasDtor.muF` is the old
-constructor's hypotheses. The checker's `dtorB` mirrors it (`Frontend/Check/Steps.lean`):
-`dtorB true A` decides `A⟨1⟩` and every key inside `A` in one recursion (`AlgDtor`,
-`dtorB_soundA`).
+drop is `foldOwn` with the algebra `T[1/X]`'s drop, the same term as before, so every
+existing program's drop, run and counts are unchanged; at any other body of `P` it is
+`foldOwnG`, its algebra at a `μ` key the drop of the key's body at `1` and at an array key
+the drop of `1 ⊕ (1 ⊗ S⟨1⟩)` (`keyAlg`, listed by `algsIn` in the order of the keys,
+`algsIn_eq`). `dropFn_wf` types it from the drops of those types; `HasDrop.muF` is the old
+constructor's hypotheses. The checker's `hasDropAtB` mirrors it (`Frontend/Check/Steps.lean`):
+`hasDropAtB true A` decides `A⟨1⟩` and every key inside `A` in one recursion (`AlgDrop`,
+`hasDropAtB_soundA`).
 
 ### Declarations
 
@@ -10109,14 +10117,14 @@ the checker's; that one is found at every type with a finite value whose leaves 
 
 ### Lowering
 
-- **Backend2**'s destructor was already generated by type (`genDtor`), and it covers `P` as it
+- **Backend2**'s drop was already generated by type (`genDrop`), and it covers `P` as it
   stands: one function per closed `μ` type the value unrolls to (an inner binder, which names the
   outer one, is its own function calling the outer's), and one loop function per array that
   destroys each element and then frees the buffer once. This entry documents it, marks that it is
-  read off the `dtor` node's type and not compiled from `dtorE`'s term (`UNPROVED:` at the site),
+  read off the `dropFn` node's type and not compiled from `dropFnE`'s term (`UNPROVED:` at the site),
   and gives `foldOwnG` its arity (`constArity`). `array_empty` is the empty family
   (`emptyFam`).
-- **The old backend** compiles `dtorE`'s term: the native fixed point whose body is the `case`
+- **The old backend** compiles `dropFnE`'s term: the native fixed point whose body is the `case`
   on the key's tag, each key's traversal a code of its own, the array's `count` loop of tail
   calls, the buffer freed once by `drop`. Calls are direct and nothing is allocated. Its closure
   IR's interpreter frees the one cell `tab` places at length 0 only when the base is not null:
@@ -10126,7 +10134,7 @@ the checker's; that one is found at every type with a finite value whose leaves 
 
 | program | what it shows | answer | allocations (Rust's) |
 |---|---|---|---|
-| `corpus/storage-array.bc` | AWFY Storage in natural form, a tree of arrays, no hand-written destructor | `i32[5461]` | 5461 (5461) |
+| `corpus/storage-array.bc` | AWFY Storage in natural form, a tree of arrays, no hand-written drop | `i32[5461]` | 5461 (5461) |
 | `corpus/btree-boxed.bc` | a B-tree whose nodes own buffers of keys and children, CLRS insertion of 200 keys | `200 0 4`, `i32[200]` | 77 (77) |
 | `corpus/leetcode/trees/0208-implement-trie-boxed.bc` | a trie whose nodes own arrays of their children | the arena form's answers, `i32[4]` | 58 (58) |
 | `corpus/data-array-tree.bc` | a `data` tree recursive under an array, with no `box` | `i32[12]` | 4 |
@@ -10138,7 +10146,7 @@ the checker's; that one is found at every type with a finite value whose leaves 
 | `corpus/data-option-block.bc` | a block whose cell holds the root inside an option, `tail: Option[List]` | `i32[6]` | 12 |
 | `corpus/filler-mu.bc` | buffers of `μX. Array X` and `μX. i32 ⊗ Array (Array X)`, filled by `roll []` and `roll (0, [])` | `i32[3]` | 3 |
 | `corpus/reject/filler-no-finite-value.bc` | `filler` at `μX. i32 ⊗ X` | refused: no finite value | — |
-| kernel program `nested-fold` (`Core/NestedPrograms.lean`) | `μX. I32 ⊗ Array (μY. 1 ⊕ (Ref X ⊗ Ref Y))`, three keys deep: built, summed by `foldOwnG`, dropped by its destructor; typed (`nestProg_derives`), run (`nestProg_runs`, `nestProg_eval`) | `i32[34]` | 14 |
+| kernel program `nested-fold` (`Core/NestedPrograms.lean`) | `μX. I32 ⊗ Array (μY. 1 ⊕ (Ref X ⊗ Ref Y))`, three keys deep: built, summed by `foldOwnG`, dropped by its drop; typed (`nestProg_derives`), run (`nestProg_runs`, `nestProg_eval`) | `i32[34]` | 14 |
 
 Every stage of both backends prints each program's golden and `live 0`. Rust's counts are the
 programs ported with the same containers and capacities
@@ -10151,7 +10159,7 @@ rule.
 
 `fundamentalC` and `adequacyC` cover the new rules (`foldOwnG_compatX`, `arrEmpty_compatX`);
 `fundamentalC_pin` likewise. No change to the relation, the machine, `Paper/` or `Support/`. The
-destructor of a `μ` in `FShape` is the term it was, so every golden, exit status,
+drop of a `μ` in `FShape` is the term it was, so every golden, exit status,
 `corpus/counts.expected`, `counts-backend2.expected`, `kernel-counts.expected` and
 `cells.expected` entry is unchanged; the new programs get rows. The checker accepts a superset of
 what it did, and so do declarations: `corpus/reject/data-field-box.bc`'s `tail: Option[List]` is
@@ -10162,11 +10170,11 @@ in `P` and runs (`corpus/data-option-block.bc`); the reject is now a field under
 
 - **The borrowed fold** at `P` (U2), the frontend's inner `μ` (U3, B14 and the check that a core
   `μ` type is closed), reuse (U4) and mutual groups with no root (U5).
-- **A user-visible `fold_own` at `P`**: the constant is the kernel's and the destructors', not the
+- **A user-visible `fold_own` at `P`**: the constant is the kernel's and the drops', not the
   surface's; `fold_own[…]` and the fold block (§60) stay at `FShape`.
 - **`FShape`'s constants are not retired** by this entry: the old backend compiles `fold_own`'s
   and `fold_reuse`'s step by pointer reversal, recognizing their term (`Backend/README.md`,
-  *Stack*), and the destructor of an `FShape` body keeps their term so that its counts and stack
+  *Stack*), and the drop of an `FShape` body keeps their term so that its counts and stack
   behaviour stay.
 - **Per-key functions in the old backend**: it keeps the dispatch inside one code. A deep
   structure recurses on the native stack there, as a non-linear `fold_own` does.
@@ -10186,8 +10194,8 @@ in `P` and runs (`corpus/data-option-block.bc`); the reject is now a field under
 ## 62. Entry 61 — the new Core: linear resources and borrows across exits and suspensions (#771)
 
 **Status: design, partly built.** This entry is the target of the series #771–#775 (and its later
-issues). Each part names the PR that lands it. Built: effectful destructors (#775), as a form
-derived from `[then]`, with destructors by type. Nothing else here changes `CDerives` until those PRs land; until then the checker enforces the rules of §14, §19 (T1), §29 and §32 as stated there.
+issues). Each part names the PR that lands it. Nothing here changes `CDerives` until those PRs
+land; until then the checker enforces the rules of §14, §19 (T1), §29 and §32 as stated there.
 Evidence for each part comes from the #770 spikes and is cited by the name of the Lean result
 (`docs/new-core/evidence.md`).
 
@@ -10284,159 +10292,18 @@ cancel-runs results build there too. The two places the library chooses a reborr
 only proofs written by hand. `Core.Stdio` is not covered. This is evidence; Core's chain `TW` is
 not made canonical, and Core moves to the tree world in a later PR of #771.
 
-### Effectful destructors (#775)
+### Resource safety
 
-**Built** (`Core/LetDtor.lean` to `Core/LetDtorLet.lean`). An owned value is dropped, on the
-unwind, by the destructor of its type, which may perform operations. What is proved for each exit
-of a `[let-dtor]` frame (`Core/LetDtorSafety.lean`):
-- **raise**: the frame step `[finalise]` (`letDE_finalise`), and the frame's run to
-  `drop_ctx; raise p` with the slots' values in place, the slot bound last first
-  (`letDE_raise_run`, `dropChain_some`). Every run that goes on to a configuration past the chain
-  first runs the chain to a term that takes no step; if that term is a value, each destructor ran
-  on its slot's value to a value, last bound first, before the raise was reached
-  (`letDE_raise_exit`, `dropChain_ran`, `DropsRan`);
-- **cancel**: the frame step `[finalise-cancel]` (`letDE_finaliseCancel`), the run to
-  `cfin c drop_ctx` (`letDE_cancel_run`), and the same reading of every run past the chain
-  (`letDE_cancel_exit`);
-- **return**: the frame is discarded and the continuation `N` runs with the slots' values, no
-  destructor run (`letDE_return_run`): `N` owns the slots and its derivation consumes each live
-  one. That it consumes a slot by its destructor is shown on examples;
-- **early close of a loop**: shown on examples (a step whose *close* is the state's destructor);
-- **reverse order**: within one frame only.
-
-A destructor is guaranteed to run on every exit, not to exit itself: no termination is assumed,
-and a run that never leaves the chain is not constrained. This rules out a frame that lets the
-error out with a destructor skipped or out of order. Where the chain stops at a term that is not a
-value, a destructor has handed one of its own operations to the handlers of the context (`close`
-to `with_fs`, for the files); the run is not followed through that capture and resume, so for a
-destructor that performs, the theorems give the frame's run up to its first operation, and the
-order of the closes is shown on the programs by `eval`. The frames' side conditions (`FrameOk`:
-closed values, closed destructors, a value per slot) come from typing (`FrameOk.ofDrops`), and are
-discharged at the files' frames (`files_frameOk`, `one_frameOk`; `files_raise_run`,
-`Cancel.files_cancel_run`, `Suspend.y_cancel_run`: `close f₂; close f₁`).
-
-**Destructors by type** (`dropOf`). One destructor per type, from the type and the program's
-declaration `decl` at the opaque types: `⊗` and `⊕` componentwise (`tensorDropB`, `sumDropB`, the
-paper's `drop_{A⊗B}`, `drop_{A⊕B}`; inside `⊗` the second component first, our choice, as
-`drop_ctx`), `Opq k` the declared `decl k`, `U(C & D)` the second component (`closeDropB`, the
-paper's `drop_{↓N} = π₂`), and every other type its derived drop (§12, `HasDtor`). So two frames
-and a loop's *close* that drop the same type run the same destructor. `DropOk` is the condition
-under which `drop_T` is typed at `Σ_D` (`DropOk.derives`); every type with a derived drop meets it
-at every row (`DropOk.ofHasDtor`), and so does a stored `κ` (`dropOk_kappa`).
-
-**The rule.** `[let-dtor]` (`CDerives.effLetD`):
-
-    Γ = Γ₁ ⋈ Γ₂    Γ₁ ⊢ M : F_{Σ_M} A    x : A, Γ₂ ⊢ N : F_Σ B    Σ_M ≤ Σ    Σ_D ≤ Σ
-    each live slot T of Γ₂: T persistent or DropOk_{Σ_D}(T)    ¬ Σ_D.Cancels (hSDc)
-    Div ∉ Σ_D (hSDd)    hfin(Σ_M, Σ_D)    Σ.NZ    Σ.Uniq    Σ.UnrD → !Γ₂
-    ──────────────────────────────────────────────────────────────────────────────
-    Γ ⊢ M then x. N unwind drop_ctx(ctxDrops Γ₂) : F_Σ B
-
-`drop_ctx` (`dropCtxE`) applies each slot's destructor, the slot bound last first
-(`dropCtxE_some`), each bound by `[let]` at `Σ_D` with the slots not yet dropped live across it
-(`dropCtx_derives`). The term is `[then]`'s, `letDT decl Γ₂ N M = thenE N (drop_ctx) M`.
-
-`[let-dtor]` is a **derived form**: it is `[then]` (`CDerives.effThen`) at the finaliser
-`drop_ctx`, which is itself a derivation. No constructor is added to `CDerives`, so
-`fundamentalC`, `adequacyC` and `adequacyD` hold unchanged and cover it (`effLetD_sound`), and
-every induction over `CDerives` (`CDerivesAt`, `CDerivesP`, `Tied`, `PinDerives`, the totality
-results) already has its case, `[then]`'s.
-
-**`[let]` and `[let-dtor]`** (`Core/LetDtorLet.lean`). With no destructor to run, the runs agree up
-to administrative steps on every exit: the return exit of any frame steps to `M to x. N` itself
-(`letDE_return_eq_let`), and at all-`none` destructors a raise or a cancel reaches the same error
-under the same context in three steps (`letDE_none_raise`, `letDE_none_cancel`,
-`let_raise_shape`). At a cancelling row, `[let]`'s premises give `[let-dtor]` at the same `M` and
-`N`: `hW` makes `Γ₂` own-free, and an own-free type has a destructor once each host type in it has
-a declared one (`DropOk.ofOwnFree`, `effLet_as_effLetD`). `[let]` is **not** the instance of
-`[let-dtor]` at all-`none` destructors, for three reasons:
-1. at a row that does not cancel, `[let]` admits any `Γ₂`, a live `U(F 1)` included, and
-   `[let-dtor]` types `drop_ctx` even where no exit runs it; `U(F 1)` has no destructor
-   (`not_dropOk_thunkRet`);
-2. `[let-dtor]` carries `[then]`'s row conditions (`Σ.NZ`, `Σ.Uniq`, `hfin`, `!Γ₂` at `Σ.UnrD`
-   rather than `Σ.Unr`), which `[let]`'s frameless term does not need;
-3. the terms differ, and `CDerives` does not identify them up to administrative steps.
-A form with both as instances would ask the finaliser's premise only where `Σ` cancels and
-`[then]`'s row conditions only where there is a frame: a change to `then_compatC`, not made.
-
-**The premises, and why.**
-- `hSDc : ¬ Σ_D.Cancels`: a destructor does not fail, as the paper's `delete` "releases without
-  fail". `drop_ctx` binds each destructor by `[let]` at `Σ_D` with the slots not yet dropped live;
-  a destructor that raised would abandon them, which `[let]`'s `hW` refuses.
-- `hSDd : Div ∉ Σ_D`: `[then]`'s premise `hSD`. `then_compatC` is a proof in the total relation,
-  which reads the finaliser's run as a terminating one (a cancel run is a least fixed point and
-  reaches the finaliser), and `Div` stays out of the destructor machinery.
-  `CDerives.effLetDDiv` drops it when `Σ_M` has no capturable operation, by `[then]`'s
-  `effThenDiv`.
-- `hfin`: `[then]`'s, at `M`'s row `Σ_M`: the cancel row of each capturable operation and
-  cancellable wait of `Σ_M` records `Σ_D` (§27): a cancel there unwinds through the destructors,
-  which perform `Σ_D`. It holds at every row of errors and must-resume operations
-  (`hfin_of_noRead`).
-- An error carries no resources: `[raise]`'s `hd : o.A.OwnFree`, unchanged.
-
-> *Open*, a choice for the user: **a destructor that can fail.** `hSDc` is the rule today.
-> (a) the error is ignored by the destructor (`d_dFileTry` is an example of this option, not a
-> rule); (b) destructors cannot fail, so a fallible close is handled inside the destructor by the
-> program, through the error machinery; (c) the rest of the context is unwound, then the error is
-> raised, which needs a policy for two errors.
-
-**`resourceSafety`** (`Core/LetDtorSafety.lean`) is `adequacyD` read over cells: for every closed
+**`resourceSafety`** (`Core/ResourceSafety.lean`) is `adequacyD` read over cells: for every closed
 `CDerives` program at a persistent answer, every run from the empty memory, under every allocator,
-continues to a value at the empty memory, and every `free ℓ` it reaches finds `ℓ` allocated. It
-covers every program `[let-dtor]` types because the rule is derived; it says nothing about
-destructors as such, which is what the per-exit theorems above are for. That each allocation is
-released exactly once follows informally (an allocation picks an unheld location,
-`step1_alloc_iff`, a release removes the one it frees, and the run starts and ends empty); no
-theorem counts releases. `rtSafety` is a different statement, at the row `[tickSig]` under the
-runtime's handler: progress and no double free, on terminating and diverging runs alike, without
-leak freedom.
-
-**The file handle** (`Core/LetDtorFiles.lean`). `File = Tok`: a location owning a unit cell, no
-derived drop, not own-free, not persistent (`file_no_derived_drop`, `file_not_ownFree`), whose one
-Core eliminator is `burn`. The platform's `Fs` has `open : I32 ↠^lin File` and
-`close : File ↠^lin 1`, handled by `with_fs` (mint, burn); the program declares `close` as
-`File`'s destructor (`dropOf_file`), and the bodies contain no `burn`, so a `File` leaves them only
-through `close`. `resourceSafety` then gives that every handle's cell is freed, and `eval` that
-each file is closed once, `f₂` before `f₁`. What it does **not** give: Core keeps `burn` available
-to every program (§42's declared types use it), so a program whose declared destructor of `Tok`
-is `burn` types, is resource safe, and closes nothing. `close` is the only eliminator of a
-`File` only where `burn` is withheld from the program text; making it so in Core is #778 (abstract
-types with a single provider).
-
-**Programs**, each a closed derivation under `resourceSafety`; `*_safe` and `*_order`/`*_run` are
-programs, `d_stepD`, `d_lendD` and `d_kDtor` typing lemmas:
-- *Two files across a raise* (`Core/LetDtorFiles.lean`): the handle above, the second `open` and
-  the raise each under a `[let-dtor]` frame; `fsRaise_safe`, `fsReturn_safe`; `f₂` then `f₁` on
-  both exits (`fsRaise_order`, `fsReturn_order`).
-- *A cancel* (`Core/LetDtorCancel.lean`): the files held across `await_1` under the immediate
-  scheduler, whose cancel's raise unwinds through the frames; the wait's cancel row records
-  `{close}` (`hfin_await`); `cancelProg_safe`, `cancel_order`.
-- *A loop closed early* (`Core/LetDtorLoop.lean`): `d_stepD`, a step whose *close* is the state's
-  destructor at the residual `1`; a file as a loop's state under `div_fuel`, `loopProg_safe` at
-  every budget, `loop_close0`, `loop_close3`.
-- *A lend whose callback raises* (`Core/LetDtorLend.lean`): `d_lendD` over `withbor1`/`withbor2`/
-  `withbor3`, its error type `E = o.A` a parameter and the error raised again unchanged
-  (`raise_Γ(e)`); the source dropped by its type's destructor; `mut`, `imm` and nested programs at
-  `E = 1` (`lendMutRaise_safe`, `lendMutReturn_safe`, `lendImmRaise_safe`, `lendNested_safe`, and
-  their runs). The next step: `withborU`'s finaliser generalised to a destructor row `Σ_D`.
-- *Resources across a suspension* (`Core/LetDtorSuspend.lean`): `d_kDtor`; a cancellable `κ` has
-  its type's destructor, its cancel component (`dropOk_kappa`); two files across a suspension,
-  `κ` resumed (`ySeqResume_safe`) or stored and dropped (`ySeqDrop_safe`), closing `f₂` then `f₁`
-  in both (`ySeqResume_order`, `ySeqDrop_order`).
-
-**Not proved at the step index.** `[then]` with a finaliser that performs on the cancel path is
-proved in the total relation only (`then_compatC`); at the step-indexed relation it is unproved,
-the step-indexed relation PR's obligation (`erwp_ubind*`).
-
-**What the checker needs** (issue 7 of #771; the next PR is issue 4): where `[let]`'s `hW` fails,
-elaborate to `letDT`, with `decl` the program's declared destructors at its opaque types, a
-destructor row `Σ_D ≤ Σ` with no cancelling operation and no `Div`, and `hfin` at the cancel rows
-of `Σ_M`.
-
-*Open*: a destructor that can fail (above); relaxing `hSDd` (a destructor that loops); following
-a destructor's run through its operations' capture and resume; the order of releases as a
-program-wide theorem (the paper's ordered judgment, `⊢ₒ`, is not transcribed); `close` as the only eliminator of a host handle in
-Core (#778).
+continues to a value at the empty memory, and every `free ℓ` it reaches finds `ℓ` allocated. That
+each allocation is released exactly once follows informally (an allocation picks an unheld
+location, `step1_alloc_iff`, a release removes the one it frees, and the run starts and ends
+empty); no theorem counts releases. `rtSafety` is a different statement, at the row `[tickSig]`
+under the runtime's handler: progress and no double free, on terminating and diverging runs alike,
+without leak freedom. The kernel guarantees that every linear value is used and that no memory
+leaks; releasing a host resource (closing a file) is the API of the resource's effect, encoded with
+linear types in the library, not a kernel rule.
 
 ### The safety relation
 
@@ -10555,51 +10422,31 @@ covered (`clause3_not_cov`).
 
 ### Closing a branch
 
-One rule, stated in pieces at §12, §19, §27 and `[let-dtor]` above: what may be closed, by whom,
-and what an unwind passes through.
+One rule, stated in pieces at §12, §19 and §27: what may be closed, by whom, and what an unwind
+passes through.
 
-- **Two kinds of linear type; neither is affine.** A type with a destructor is consumed, when not
-  consumed by name, by its destructor (`dropOf`, `DropOk`; typed at the destructor's row,
-  `DropOk.derives`). A strictly linear type has none and is consumed only by name: a declared type
-  with no derived drop (`decl_linear`, `decl_not_ownFree`, §42), a host handle with no declared
-  destructor (`file_no_derived_drop`). Nothing is dropped without running a destructor: the
-  checker inserts a drop only where the type has one (§12, `TDerivesP.dtor_hasDtor`).
+- **Two kinds of linear type.** A type with a derived drop (§12, `HasDrop`) is consumed, when not
+  consumed by name, by its derived drop, which frees its cells. A strictly linear type has none
+  and is consumed only by name: a declared type with no derived drop (`decl_linear`,
+  `decl_not_ownFree`, §42). The checker inserts a drop only where the type has one (§12,
+  `TDerivesP.drop_hasDrop`).
 - **Closeability is a property of the suspension point**, read off the operation's qualifier
   (`Qual`, `kTy`):
-  - at a `cancel` operation the continuation may be closed, and its destructor is its cancel
-    component (`dropOk_kappa`, `dropOf_kappa`); closing it runs the dead region's unwind
-    (`kappaC_cancel`, `letDE_cancel_run`);
-  - at a `lin` operation it must be resumed: `U((B ⊸ F_Σ R) & ⊤)` is strictly linear, not
-    persistent and with no destructor (`kappa_lin_strict`); no clause that cancels it is typed
-    (`refuses_R_clauses`, R3); its cancel branch has no step (`kappaC_cancel_lin`) and is never
-    reached by a typed program (`LiveOK.not_stuck`).
+  - at a `cancel` operation the continuation may be closed by its cancel component; closing it
+    runs the dead region's unwind (`kappaC_cancel`);
+  - at a `lin` operation it must be resumed: `U((B ⊸ F_Σ R) & ⊤)` is linear with no derived drop
+    (`kTy_lin`); no clause that cancels it is typed (`refuses_R_clauses`, R3); its cancel branch
+    has no step (`kappaC_cancel_lin`) and is never reached by a typed program (`LiveOK.not_stuck`).
 - **The typing rule across a closeable point.** Across a cancellable or abortive point (a row that
   `Row.Cancels`: some operation not `lin`; an abortive operation is never `lin`,
-  `OpSig.cancels_of_ent`), every live value is
-  persistent or has a destructor: `[let-dtor]`'s `hds` (`CDerives.effLetD`), and `[let]`'s `hW`
-  (`Γ₂` own-free), which gives a destructor once each host type has a declared one
-  (`DropOk.ofOwnFree`, `effLet_as_effLetD`). The destructors' row neither cancels nor diverges
-  (`hSDc`, `hSDd`), so closing a closeable branch always has a destructor to run for every value it
-  holds, and none of them fails.
-- **A branch paused at a `lin` point is itself strictly linear.** It is not closed by a scope's
-  end or by a parent's unwind; it is joined or resumed. Its continuation value is strictly linear
-  (`kappa_lin_strict`). Typing the branch itself (a stored task, a spawned closure paused at a `lin`
-  point) as strictly linear is a typing rule: #771 row 6.
-- **Raise, cancel and panic unwind only through closeable points.** A raise passes a `[let]` or
-  `[let-dtor]` frame only at a row that cancels, where the rule above holds; a cancel runs `κ.2`,
-  which exists only at a `cancel` operation. Core has no panic: an integer division with no answer
-  raises (§39).
-
-**What #781 slice (b) proves of it, at the relation over the tree world.** The continuation's
-share keeps its entry's qualifier (`contShareT`, `Core/TreeWpEff.lean`): at an unrestricted entry
-the share is empty; at an entry that is not `lin` it carries the entry's cancel obligation `fin`,
-run at the continuation's dead context from `raise (cancel)`; at a `lin` entry it carries none, so
-the continuation can only be resumed. A stop at the table carries the entry it stopped at
-(`opTableT`, `cerwpT_perform`), the share is kept along re-reading with the qualifier's clause
-re-established (`contShareT_kripke`), and only non-abortive entries are admitted, so no run at
-`opTableT` ends at a raise. The table is a premise: that an operation's entry carries the
-operation's declared qualifier, and the typing rules across closeable points and at a `lin`-paused
-branch, are #771 row 6.
+  `OpSig.cancels_of_ent`), every live value is own-free: `[let]`'s `hW`.
+- **A branch paused at a `lin` point is itself linear.** It is not closed by a scope's end or by a
+  parent's unwind; it is joined or resumed. Its continuation value is linear with no derived drop
+  (`kTy_lin`). Typing the branch itself (a stored task, a spawned closure paused at a `lin` point)
+  as linear is a typing rule: #771 row 6.
+- **Raise, cancel and panic unwind only through closeable points.** A raise passes a `[let]` frame
+  only at a row that cancels, where the rule above holds; a cancel runs `κ.2`, which exists only at
+  a `cancel` operation. Core has no panic: an integer division with no answer raises (§39).
 
 ### Not claimed
 
@@ -10635,7 +10482,7 @@ steps in `Paper/` and `Support/`, the checker (`array`, `array_imm`, syntax-core
 backend. Entry 10 (§11) is implemented: the former `VTy.opq` in `Core/Types.lean` and the
 typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the checker (`input`,
 `output`, the `run_io` wrapper) and the backend (`Backend/Clos`, `Backend/Flat`, WASI imports). Entry 11 (§12) is implemented in
-`Core/Dtor.lean` and the checker (`Frontend/Check/`), with no change to `CDerives`. Entry 12
+`Core/Drop.lean` and the checker (`Frontend/Check/`), with no change to `CDerives`. Entry 12
 (§13) is implemented in `Core/Alloc.lean`, `Core/World.lean`, `Core/Demonic.lean` and
 `Core/Stale.lean`. Entry 13 (§14) is implemented in `lib/div.bc`, `lib/lend.bc`, `Frontend/Sugar.lean`,
 `Frontend/Elab/LoopLend.lean` and `Core/Totality.lean`; each div body is one state machine.
@@ -11045,8 +10892,8 @@ Entry 60 (§61) is implemented in `Core/FoldClass.lean`, `Core/FoldOwnGTerm.lean
 `Core/Fundamental.lean`, `CDerivesAt.foldOwnG` in `Core/Tied.lean` and `CDerivesP.foldOwnG` in
 `Core/PinDerives.lean`, with a case in each induction over them (`Core/Closed.lean`,
 `Inversions.lean`, `Mentions.lean`, `InsertDead.lean`, `Weaken.lean`, `RaiseNames.lean`,
-`PinFundamental.lean`, `EffTier1Programs.lean`); the destructor in `Core/Dtor.lean`; the kernel
-program in `Core/NestedPrograms.lean` and `Backend/Kernel.lean`; the checker's `dtorB` in
+`PinFundamental.lean`, `EffTier1Programs.lean`); the drop in `Core/Drop.lean`; the kernel
+program in `Core/NestedPrograms.lean` and `Backend/Kernel.lean`; the checker's `hasDropAtB` in
 `Frontend/Check/Steps.lean`; the declarations' class check in `Frontend/Elab/Data.lean`
 (`openX`, `pTy`, `notP`, `pClass`); the filler in `Frontend/Sugar.lean` (`fillerOf`); the
 constant `array_empty` (`Core/SliceOps.lean`, `arrEmpty_compatX`, the rule `arrEmpty` in the three
@@ -11054,23 +10901,24 @@ judgments and their inductions, the typed term by `scripts/gen-pin.py`, `Fronten
 `Frontend/Check/Consts.lean`, `Backend2/Convert.lean`, `Backend/Clos/Interp.lean`'s `drop`); and
 Backend2's `foldOwnG` arity (`Backend2/Convert.lean`). No change to `Paper/`, `Support/`, the
 relation or the machine.
-Entry 61 (§62): effectful destructors (#775) are implemented in `Core/LetDtor.lean` (`dropOf`,
-`DropOk`, `ctxDrops`, `Dtors`, `dropCtxE`, `CDerives.effLetD`, `CDerives.effLetDDiv`),
-`Core/LetDtorSafety.lean` (the per-exit run theorems, `resourceSafety`, `letDE_finalise`,
-`letDE_finaliseCancel`, `rtSafety`), `Core/LetDtorLet.lean` (`[let]` against `[let-dtor]`) and the
-programs in `Core/LetDtorFiles.lean`, `Core/LetDtorCancel.lean`, `Core/LetDtorLoop.lean`,
-`Core/LetDtorLend.lean` and `Core/LetDtorSuspend.lean`. `[let-dtor]` is derived from `[then]`: no
-change to `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the checker, the backends or the
-corpus. The typed tree world (#781) is in `Support/Model/Tree/World/`, and the step-indexed
+Entry 61 (§62): `resourceSafety` and `rtSafety` are in `Core/ResourceSafety.lean`. The typed tree world (#781) is in `Support/Model/Tree/World/`, and the step-indexed
 relation over it in `Core/StepsN.lean`, `Core/TreeWp.lean`, `Core/TreeWpEff.lean`,
 `Core/TreeCactus.lean`, `Core/TreeStepKeep.lean` and `Core/TreeHeadlines.lean` (adequacy and R1–R4
-at one branch); `kappa_lin_strict` is in `Core/LetDtorSuspend.lean`. No relation the typing rules use
+at one branch). No relation the typing rules use
 reads them yet. The rest of §62 is design.
 
 ---
 
 ## Changelog
 
+- **1.30** (2026-11-04) — §62, §12 (#771): the frame form of 1.27 is removed with its programs
+  and its file handle; Core has no file-specific definition. `resourceSafety` and `rtSafety` keep
+  their statements, in `Core/ResourceSafety.lean`. §12 records the vocabulary: a linear value is
+  consumed, by a rule or by its type's drop (`HasDrop`, `dropFnE`, `dropFn_wf`, the checker's
+  `dropFn` node); releasing a host resource is its effect's API in the library, not a kernel rule.
+  Renames only elsewhere (`Core/Drop.lean`, `hasDropAtB`, `hasDropB`, Backend2's drop functions).
+  No change to `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the relation, the checker's
+  judgments, the backends' output or the corpus outputs.
 - **1.29** (2026-11-03) — §62 (#781, slice (c)): R4 at the tree world (`r4_extExtFT`,
   `ext_extFT`), with `RelT`, `KeepsT`, `CellInT`, `ExtLT` and the examples of what `ExtLT` admits
   and refuses. No change to `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the checker, the
@@ -11080,22 +10928,14 @@ reads them yet. The rest of §62 is design.
   `opTableT`, `CactusInvT` with step, growth, move, spawn and join, `cerwpT_adequacy`,
   `fdEsc_at_join`, `stepKeepsFdEsc`; headlines at one branch: `topAdequacyT`, R1
   (`r1_stepKeepsFdEsc`, with `not_stepKeepsFdEscNoUpd`), R2 (`r2_endBlockedByHolder`), R3
-  (`r3_joinEndNeedsFdEsc`), from `fdEsc_of_end_valid`. A subsection "Closing a branch";
-  `kappa_lin_strict`. No change to `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the
+  (`r3_joinEndNeedsFdEsc`), from `fdEsc_of_end_valid`. A subsection "Closing a branch".
+  No change to `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the
   checker, the backends or the corpus.
-- **1.27** (2026-11-02) — §62 (#775): effectful destructors built. `[let-dtor]`
-  (`CDerives.effLetD`) is derived from `[then]` at the finaliser `drop_ctx`, with destructors by
-  type (`dropOf`, `DropOk`: `⊗`/`⊕` componentwise, declared at opaque types, `π₂` at `U(C & D)`,
-  derived drops elsewhere), `M` at `Σ_M ≤ Σ`, and the premises `hSDc`, `hSDd`, `hfin`;
-  `effLetDDiv` drops `hSDd` where nothing is captured. Per-exit run theorems of a frame
-  (`letDE_raise_run`, `letDE_cancel_run`, `letDE_return_run`, `letDE_raise_exit`,
-  `letDE_cancel_exit`); `[let]` against
-  `[let-dtor]` (`Core/LetDtorLet.lean`); the file handle `File = Tok` with `open`/`close`; a lend
-  with its error type a parameter. A destructor that can fail is *Open*. No change to `CDerives`,
-  the relation, the checker, the backends or the corpus.
+- **1.27** (2026-11-02) — §62 (#775): a frame form derived from `[then]` that ran a per-type
+  finaliser on the unwind, with its programs; withdrawn in 1.30. No change to `CDerives`, the
+  relation, the checker, the backends or the corpus.
 - **1.26** (2026-11-02) — §62 (decision 72, #771–#775): the new Core, as a design not yet built.
-  Lifetimes ordered as a tree, the tree-stratified carrier, canonical images, effectful
-  destructors, a step-indexed safety relation with capture as its own operation and a cactus
+  Lifetimes ordered as a tree, the tree-stratified carrier, canonical images, a step-indexed safety relation with capture as its own operation and a cactus
   invariant, semantic types read at the tree, and scoped spawn; the target theorem is that every
   reachable state steps or is final with an empty heap. Decision 72 voids decision 71: §14, §15,
   §16, §19, §29, §30, §32 and §34 note that their T1, R1 and `PinLaw` rules stay the checker's
@@ -11156,8 +10996,8 @@ reads them yet. The rest of §62 is design.
   (`decl_loan_ownFree`), so an abort handled inside the loan is admitted at the pure `withbor`
   (`d_declInside`; `corpus/decl-lend.bc`). An abort that crosses the loan needs the unwinding
   lend's finaliser `Ref N ⊸ 1`: the kernel admits a closed one that consumes the value
-  (`d_declFinOf`, `d_declAcross`), the checker passes only the derived destructor, which a declared type has none
-  of (`decl_ref_no_dtor`; `corpus/reject/decl-lend-abort.bc`), and a written finaliser for a lend
+  (`d_declFinOf`, `d_declAcross`), the checker passes only the derived drop, which a declared type has none
+  of (`decl_ref_no_drop`; `corpus/reject/decl-lend-abort.bc`), and a written finaliser for a lend
   is *Open*. No rule, relation or machine changes; `fundamentalC`, `adequacyC`, `adequacyD` keep
   their statements.
 - **1.19** (2026-10-31) — §12, §52, §59 (#746, step 4, F3): a stack machine's drop of a level's
@@ -11189,8 +11029,8 @@ reads them yet. The rest of §62 is design.
 - **1.16** (2026-10-30) — §12, §19, §59 (#746, step 3): every site that inserts a drop, a copy or
   an abandonment cites its kernel rule, checked by `scripts/check-pins.sh`. Backend2's `drop` and
   `copy` carry their rule (`DropRule`, `CopyRule`) and `Lint` checks each premise: an `imm` copy
-  only at the constants or `copy_derives`, a `[Mut A]` drop only in a destructor function
-  (`HasDtor.arrayMut`, `Prog.dtorFns`, which a destructor calls to drop each leaf), a live slot no mask
+  only at the constants or `copy_derives`, a `[Mut A]` drop only in a drop function
+  (`HasDrop.arrayMut`, `Prog.dropFns`, which a drop calls to drop each leaf), a live slot no mask
   holds at the rule `unused` at a persistent type only (that no checked program absorbs one of
   another type is `UNPROVED:`, `Check.SplitMasks.NeitherAbsorbed`); a superseded raise payload is
   abandoned (`Abandon.superseded`, `effRaise`'s `hd`); no `⊤` component is observed, and a
@@ -11209,7 +11049,7 @@ reads them yet. The rest of §62 is design.
   `mint : 1 ⊸ Tok` and `burn : Tok ⊸ 1` (`CDerives.tokMint`, `tokBurn`, λs over `alloc` and
   `free`, sound by `[TR]` 6.141 and 6.142). A data field marked `must_close` holds `A * tok`: a
   constructor mints, a written `match` burns, and nothing else does. Every refusal is a kernel
-  fact: no derived drop (`decl_linear`, `TDerivesP.dtor_hasDtor`), not `OwnFree` across an abort
+  fact: no derived drop (`decl_linear`, `TDerivesP.dropFn_hasDrop`), not `OwnFree` across an abort
   (`decl_not_ownFree`). The entry of a program without externs discards a result that is not
   unrestricted by its derived drop (`entry_derives`, `entry_runs`), so a declared result is refused
   and an owned one freed. `tok`, `tok_mint` and `tok_burn` are not surface syntax. A binder's
@@ -11253,13 +11093,13 @@ reads them yet. The rest of §62 is design.
   deleted. Messages, `corpus/kinds.expected` and the corpus reports reworded. No rule added or
   changed; every other program's acceptance and output unchanged.
 
-- **1.11** (2026-10-29) — §61 (#722, U1 of #595): the owned fold and the destructor at the class
+- **1.11** (2026-10-29) — §61 (#722, U1 of #595): the owned fold and the drop at the class
   `P`. The class (`Ref` and arrays of any member, `μ` nested in `μ`), the constant `foldOwnG` with
   one algebra per key passed at run time, its compatibility lemma and `CDerives` rule (and
-  `CDerivesAt`'s, `CDerivesP`'s); `HasDtor.mu` and `dtorAt` at `P`, `FShape` bodies keeping
-  `foldOwn`; the checker's `dtorB`; declarations' recursion accepted exactly at `P`, decided by
+  `CDerivesAt`'s, `CDerivesP`'s); `HasDrop.mu` and `dropFnAt` at `P`, `FShape` bodies keeping
+  `foldOwn`; the checker's `hasDropAtB`; declarations' recursion accepted exactly at `P`, decided by
   the kernel's `PB` (§42), so an array is a recursive position with no `box`; Backend2's existing
-  type-directed destructor documented, with `foldOwnG`'s arity; the constant `array_empty` and the
+  type-directed drop documented, with `foldOwnG`'s arity; the constant `array_empty` and the
   filler computed structurally at `μ`. AWFY Storage, a
   B-tree and a trie whose nodes own arrays run in natural form at Rust's allocation counts
   (`corpus/storage-array.bc`, `btree-boxed.bc`, `leetcode/trees/0208-implement-trie-boxed.bc`,
@@ -11838,7 +11678,7 @@ reads them yet. The rest of §62 is design.
   weakens by consumed slots (`CDerivesAt.append_dead`). §19 *Laws* item 3: static per-site names,
   `tunnel`. §24 *Theorems*: `[let-poly]` types E1, E2d and E10's let-bound functions; §24 *Open*:
   their let forms are not lowered when the uses are under different handlers. §26: the programs'
-  callbacks are `[λ-dead]`'s. §27 *Typing*: E5 and E9 are Core programs at an affine `exn`. New
+  callbacks are `[λ-dead]`'s. §27 *Typing*: E5 and E9 are Core programs at a cancellable `exn`. New
   kernel programs `deep-gen`, `nested-log-outside`, `nested-fail-outside`, `tunnel`, `e7a`, `e7b`,
   `e7d`, `e8b`, `stored-k-resume`, `stored-k-cancel`, `stored-k-fin`, their counts measured (new
   rows of `corpus/kernel-counts.expected`; no existing row changes). No change to the machine, the
@@ -11851,12 +11691,12 @@ reads them yet. The rest of §62 is design.
   rows a computation is read at: `[handle]`, `[then]`, `[perform]`, `[raise]`, `[let]` and `bind` at
   their conclusions, and the rules that conclude with their premise's term only grow rows
   (`Core/Inversions.lean`). §19 *Laws* item 5: `cancel_prefix`'s hypotheses are met by a program
-  whose effect context has no unrestricted abortive operation, `progOutT` at an affine raise of `2`
+  whose effect context has no unrestricted abortive operation, `progOutT` at a cancellable raise of `2`
   (`progOutTA`, `Core/EffCancelRuns.lean`). No change to the machine, the relation, `CDerives` or
   the statement of any theorem.
 
 - **0.50** (2026-10-13) — §19 *Laws* item 4: a continuation is used as its qualifier allows. At a
-  resuming linear or affine operation a clause that drops `κ`, resumes it twice, or cancels and
+  resuming linear or cancellable operation a clause that drops `κ`, resumes it twice, or cancels and
   then resumes it has no derivation, and at a linear one neither has a clause that cancels it;
   `forget κ` has none at `1`. §19 *Programs*: four programs no derivation types (`at05`, `at06`,
   `at08`, `at13`), each by inversion of `CDerives` (`Core/Inversions.lean`,
@@ -11885,7 +11725,7 @@ reads them yet. The rest of §62 is design.
   tied to the effect context `Ξ`, and a tied derivation is a `CDerives` derivation. The checker
   builds every derivation tied to its program's effect context, and rejects a program whose rows
   give one operation two signatures. §18 (decision 63's restriction, 2026-10-12): an abortive
-  operation is affine, so `multi ctl op(…) -> never` and an unrestricted operation answering `0` in
+  operation is cancellable, so `multi ctl op(…) -> never` and an unrestricted operation answering `0` in
   a core row are rejected; §27 records E5 and E9 at an unrestricted `exn` as restricted out and no
   longer *Open*. §19 *Laws* item 9 states that a typed closed program's raises are caught. No
   change to the machine, the relation, `CDerives` or the statement of any theorem; every corpus
@@ -11927,7 +11767,7 @@ reads them yet. The rest of §62 is design.
   so a closed callback body at any row is passed as `λ_. M`. No change to the machine, the relation
   or any borrow rule.
 
-- **0.42** (2026-10-08) — §25 (decision S6): the capture cell. At a linear or affine operation
+- **0.42** (2026-10-08) — §25 (decision S6): the capture cell. At a linear or cancellable operation
   `[op]`'s `κ` owns a unit cell, allocated by the ordinary allocator and freed when `κ` is used; a
   linear `κ`'s cancel branch has no step. The handler value carries its operations' qualifier tags,
   which `[handle]` writes. §19's *Terms and machine* and *Typing* revised, §24's *Open* revised. No
@@ -11946,9 +11786,9 @@ reads them yet. The rest of §62 is design.
   `'main`, and an undetermined lifetime argument is `dom`; a cell of no words allocates nothing; a generic function's lifetime parameter may be
   bounded by a type parameter, `where S: 'c`. §22's *Bounds* and *Open* revised. Decision 61.
 
-- **0.39** (2026-10-02) — §22 (#239, from #236): the affine closure. §7's positivity admits an
+- **0.39** (2026-10-02) — §22 (#239, from #236): the closure. §7's positivity admits an
   observation that takes a closed argument (`A ⊸ D`) and a boxed rest (`[@a] U X`), and the
-  affine closure `Aff^c A B ≜ νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`, with observations `call` and
+  closure `Aff^c A B ≜ νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`, with observations `call` and
   `close`, is an instance: a library declaration (`lib/aff.bc`) with derived introduction, call,
   call through `Mut`, close and coercion rules. A `type` declaration may take type and lifetime
   parameters. §2's closure row is the new type; §7 and §12 name it. No new former, rule or index.
@@ -11987,7 +11827,7 @@ reads them yet. The rest of §62 is design.
   fallback to nested binds, and `lib/gen.bc` are removed; delegation is a call. The adapters
   are generic generators over stored generators. Capture finds suspension per projection and
   keeps one code per suspension; a finaliser frame's clauses are one code. A generator that holds
-  a capability across a `yield` is pending (affine continuations have no residual).
+  a capability across a `yield` is pending (cancellable continuations have no residual).
 
 - **0.35** (2026-10-01) — §18 (#188, stage 1): control effects at the surface are §19's. An
   effect's operations are answering (`fn`) or control (`ctl`, `linear ctl`, `multi ctl`); a
@@ -12022,7 +11862,7 @@ reads them yet. The rest of §62 is design.
   `Core`'s kernel programs at every stage. The lowering of control operations is *Open*.
 - **0.31** (2026-09-30) — §19, stage 4 (#186): the unwinding forms of `withbor` 1–3, `withload`
   and the slice borrows, at a callback row of abortive operations with closed argument types
-  (`Row.Unwind`); the finaliser is a closed term at `src ⊸ F 1`, the source's destructor at the
+  (`Row.Unwind`); the finaliser is a closed term at `src ⊸ F 1`, the source's drop at the
   elaborator; `withswap` has none. `F_Σ A` is an observation leaf of `ν` codata, and
   `Loop_Σ A B` is positive.
 - **0.30** (2026-09-30) — §19, *Cancels* (#186): a cancel is not interceptable. The region's
@@ -12039,8 +11879,8 @@ reads them yet. The rest of §62 is design.
     `[perform]`, `[let]` (control-flow linearity at the unrestricted qualifier) and `[handle]`.
   - **Semantics:** the effectful `wp` `ewpTS` over protocol tables, with `wpTS = ewpTS` at the
     empty table.
-  - **Continuations** carry a structural qualifier: linear, affine, or unrestricted (relevant is
-    Open). Weakening is a continuation's destructor, unwinding. Abortive operations (answer `0`,
+  - **Continuations** carry a structural qualifier: linear, cancellable, or unrestricted (relevant is
+    Open). Weakening is a continuation's drop, unwinding. Abortive operations (answer `0`,
     weakening), used for errors (#168), unwind eagerly. Unwinding uses `ubind` finalisers and
     elaborator-inserted drop glue, and unwinding forms of
     the borrow constants (an unwind crosses a borrow, LIFO, without T1). Every held continuation
@@ -12061,8 +11901,8 @@ reads them yet. The rest of §62 is design.
 - **0.27** (2026-09-30) — Effects S1b (§18, #153): `Fail`, the error effect: `raise`, `try`,
   `catch`, `map_err`, and written rows `with …, Fail[X]`. A function that raises answers a sum,
   a call of it is a branch, and an abort in a loop's body is the loop's exit (`count_try`). The
-  abort law (`abort_passes`, `return_resumes`). Destructors run on abort paths; a value with no
-  destructor cannot be abandoned. The library raises (`parse_i32`, `add_checked`, `mul_checked`,
+  abort law (`abort_passes`, `return_resumes`). Drops run on abort paths; a value with no
+  drop cannot be abandoned. The library raises (`parse_i32`, `add_checked`, `mul_checked`,
   `str_from_utf8`, `from_utf8`); a fallible fold has the counts of its sum version. K4 recorded as
   open. No kernel, rule or checker change.
 
@@ -12110,7 +11950,7 @@ reads them yet. The rest of §62 is design.
   is split at a run-time index into two families at its lifetime (`slice_split_imm`,
   `slice_split_mut`, the machine step `split`, K3), the empty family `slice_empty_imm`/`_mut`,
   and a `mut` family is written at an index keeping the rest (`slice_replace_mut`,
-  `slice_swap_mut`, by Mut Anti-Frame, K5). §12: `ArrayMut @a A` has a destructor, derived from
+  `slice_swap_mut`, by Mut Anti-Frame, K5). §12: `ArrayMut @a A` has a derived drop, derived from
   `slice_get_mut` and `forget`. The slice library `lib/slice.bc` (`include slice`), generic in
   the element type, with `sort`, `binary_search`, searches, comparisons and the iterators
   `iter_imm`/`iter_mut`. The backend lowers `split` to a compare and pointer and length
@@ -12177,7 +12017,7 @@ reads them yet. The rest of §62 is design.
   closures, which are elaborated as div bodies when they loop. No kernel, rule or checker change.
 
 - **0.12** (2026-09-28) — §14's elaboration on types (#54, stage 2 of
-  `docs/typed-elaboration.md`). The residual is the components of the result with no destructor,
+  `docs/typed-elaboration.md`). The residual is the components of the result with no derived drop,
   read off the type; a call of a div function in direct style is any application whose type is a
   loop where that loop is not expected, at any depth, nested calls lifted in evaluation order;
   the variables a `for` threads, and bindings of injections, have inferred types. No kernel,
@@ -12220,11 +12060,11 @@ reads them yet. The rest of §62 is design.
   (`X` only as `U X`, under `⊗`/`⊕` of observation results), `nuIn`/`nuOut` and coiteration
   `unfold : !U(S ⊸ C[S/X]) ⊸ !U(S ⊸ νX. C)`. `D A` and `Stream A` become abbreviations and their
   fixed formers and six rules are deleted (`fixD`, `unfoldS` are `unfold` at their bodies). The
-  finite iterator `Iter A R R'` is the first new instance. §12: `U(νX. C & F R)` has a destructor
+  finite iterator `Iter A R R'` is the first new instance. §12: `U(νX. C & F R)` has a derived drop
   that closes and then drops the residual `R`.
 
-- **0.6** (2026-09-27) — Entry 11: implicit destructors (§12). Types stay linear. The checker
-  inserts a derived destructor (`dtorE`, `Core/Dtor.lean`) where an owned value goes unused: at the
+- **0.6** (2026-09-27) — Entry 11: implicit drops (§12). Types stay linear. The checker
+  inserts a derived drop (`dropFnE`, `Core/Drop.lean`) where an owned value goes unused: at the
   end of each path, in reverse binding order. `linear` opts a binder out. No `CDerives` change.
 
 - **0.5** (2026-09-25) — §8 as implemented: integer literals and host operations are term

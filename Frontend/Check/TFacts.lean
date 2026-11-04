@@ -54,7 +54,7 @@ the elaborator's scheme means beside the shape their rule fixes (`walkB`, `selfC
   `TDerivesAt.lendCell_kind`): the erasure cannot say it, both kinds erase to `withbor`. Where
   the pair the lend answers is taken apart at once, the code after it is a `lendScope` node, whose
   `rel` the rule fixes (`lendRelT`, `TDerivesAt.lendScope_rel`): on every path, by the masks of its
-  splits (themselves fixed, `split_masks`), the owner's slot reaches `free` or a cell's destructor
+  splits (themselves fixed, `split_masks`), the owner's slot reaches `free` or a cell's drop
   and nothing else, a `case` passing it to both arms. Not pinned: that at run time the cell is
   freed there, which a lemma over the machine (`free`'s step at the slot the masks give it) would
   pin; and whether a resumption point lies between the lend and the release, where a backend
@@ -64,7 +64,7 @@ the elaborator's scheme means beside the shape their rule fixes (`walkB`, `selfC
 * **A literal's view.** A `litView` node's rule fixes the elaborator's scheme (`litViewT`,
   `TDerivesAt.litView_shape`): the place's table tabulated into an array, the array lent by
   `slice_borrow_imm` (an `imm` family) and, when the lend hands it back, given straight to its
-  destructor. So the array is reached only through the `imm` family between its tabulation and
+  drop. So the array is reached only through the `imm` family between its tabulation and
   its destruction. Not pinned: that the table is a literal's bytes. The place has the literal's
   type `i32 ⊗ !(i32 ⇒ u8)`, which any table has; which code the table's closure is, is the flow's
   (a backend's 0-CFA), not a typing fact.

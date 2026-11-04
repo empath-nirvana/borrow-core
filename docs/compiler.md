@@ -113,7 +113,7 @@ agreed on #552, and loops U1–U4 are taken as decided and placed in the new pip
   `r.e`, `Rules.lean:109–123`), constants' type arguments, `def` references (inlined), names and
   spans. What survives is the name `n` and the tags `qs` of a handler (`hndTerm`,
   `Core/EffRules.lean:1069`), the key `(n, i)` of an operation (`opArgE`, `:848`), and drops
-  inserted as `dtorE A` code (`Core/Dtor.lean:326`). By inspection.
+  inserted as `dropFnE A` code (`Core/Drop.lean:326`). By inspection.
 - **The program is typed four times and elaborated twice.**
   - Sugar's own inference (`TCx`, `Frontend/Elab/Meta.lean:33`, `:69–75`;
     `Frontend/Elab/Instances.lean:401`).
@@ -155,7 +155,7 @@ substitute. "From the typed term" is what compiling from it gives. All by inspec
 | T2 | the `&` projections of a thunk | `withI`, `proj₁`, `proj₂` | erasure: a `&` is a `case` on a literal injection | `selShape?`/`fwdShape?` (`Types.lean:429–446`); the literal-injection argument as a projection (`:383–393`); the same shapes in `Flow.lean:302–306` | the rule node |
 | T3 | operations' answer types | the row at `[perform]` (`OpSig.B`) | erasure | `lowerEffects`' retry with answers as variants when unification fails (`Driver.lean:93–101`; `Ops.wrapsAnswers`, `Capture.lean:162–168`); `freshCopy` so a clause may take other layouts (`:685–689`) | the answer type at each `perform`; no retry |
 | T4 | recursive types and which fields close a cycle | `roll`/`unroll` at `μ` | erasure ("regular trees, as the erasure leaves them", `Types.lean:30`) | `sccs`, `backEdges`, `sumBoxes` (`Types.lean:563–693`) | the `μ` in the type; the boxing choice stays a layout decision |
-| T5 | a value's width, and whether copying or dropping it does anything | `VTy`; `persistent`, `hasDtorB` | erasure | `width`, `trivial` (`Types.lean:756–771`), read by `copyVals`/`dropVals` (`Flat/Lower.lean:357–365`) | from the type: `i32` slots of 4 bytes (#537 fix 8) |
+| T5 | a value's width, and whether copying or dropping it does anything | `VTy`; `persistent`, `hasDropB` | erasure | `width`, `trivial` (`Types.lean:756–771`), read by `copyVals`/`dropVals` (`Flat/Lower.lean:357–365`) | from the type: `i32` slots of 4 bytes (#537 fix 8) |
 | T6 | `seq`'s first part is `1` | `[unit-E]` | erasure | not used: `drop u` always (`Convert.lean:669–674`) | no drop of `()` |
 
 **Rows, operations and handlers**
@@ -440,7 +440,7 @@ LIR replaces the closure IR and the flat IR. It is target-neutral, as the flat I
   - a linear slot is moved;
   - a persistent slot used on both sides of a split is copied, a word copy at a borrow;
   - a `clone` is a deep copy;
-  - a drop is the checker's `dtorE`, or a persistent slot's end.
+  - a drop is the checker's `dropFnE`, or a persistent slot's end.
 - **Storage.** A cell lent by `withbor*U` is a frame slot of the code that opens the lend, by
   the rule (B3). A pinned lend (R1) keeps its cell in the suspended state (SPEC §29 *Lowering*).
   The interval walk goes.
@@ -814,10 +814,10 @@ are regressions in the corpus: `lend-owner-returned` (`t4`), `swap-cell-width` (
 | `κ` holds a copy of each handler value; a clause's arm drops the other clauses' contexts | `Convert.lean:2983`, `:2926`, `:3129` | read | `[handle]`'s premise `hd : Ctx.DeadP Γ₁` (`Core/Fundamental.lean:431`, and `effHandleVB`) | — | — |
 | copies of a `!` argument in generated loops and folds (tabulator, consumer, algebra, step) | `Convert.lean:1464`, `:1484`, `:1504`, `:1522`, `:1847`, `:1587` (`travF`), `:1779` (`mapStates`), `nodeAt` | read; checked by `Lint` (`Lint.copiesAt`, rule `dup`) on every program compiled (`Driver.lean:383`) | the constants' types: `array_new`, `array_free`, `count_fold`, `count_try`, `bounded_fix`, the folds, `unfold` take `!` (`Core/Fundamental.lean:194–230`, `:363–386`), kept on the LIR type (`ofV_bang`) | — | — |
 | `copy` and `array_copy` as an LIR copy | `Convert.lean:3506` | read; checked by `Lint` (`Lint.copiesAt`, rule `const`: an `imm` borrow or a family of them) | `axCopyTy`, `arrCopyTy` (`imm`) | — | — |
-| every `copy` and `drop` at the premise of the rule it carries (`CopyRule`, `DropRule`; SPEC §12, *Every insertion site cites its rule*) | `Lint.copiesAt`, `Lint.dropsAt` | read (`!` on the LIR type, `Types.lean:274`); checked of every program compiled (`Driver.lean:383`), not proved of `Convert` | `LTy.persistent` and `LTy.drops` are `VTy.persistent`'s and `VTy.OwnFree`'s images: `ofV_persistent`, `ofV_drops`, so the slots `Ctx.SplitP.dup`, `Ctx.DeadP.drop` and `Ctx.OwnFree` allow pass (`Lint.copyable_ofV`, `droppable_ofV_persistent`); a family of borrows, `arrForget` and `HasDtor.arrayMut` inside a destructor | — | — |
+| every `copy` and `drop` at the premise of the rule it carries (`CopyRule`, `DropRule`; SPEC §12, *Every insertion site cites its rule*) | `Lint.copiesAt`, `Lint.dropsAt` | read (`!` on the LIR type, `Types.lean:274`); checked of every program compiled (`Driver.lean:383`), not proved of `Convert` | `LTy.persistent` and `LTy.drops` are `VTy.persistent`'s and `VTy.OwnFree`'s images: `ofV_persistent`, `ofV_drops`, so the slots `Ctx.SplitP.dup`, `Ctx.DeadP.drop` and `Ctx.OwnFree` allow pass (`Lint.copyable_ofV`, `droppable_ofV_persistent`); a family of borrows, `arrForget` and `HasDrop.arrayMut` inside a drop | — | — |
 | a stack machine hands a level's suspended computation (a closure) over to a `k` lower on the stack | `genStackMach` (the step, a point's `mk`) | UNPROVED: no type licenses it; the rule `stackK`, whose premise `Lint` reads from the node (`Lint.handsOver`); the rest is `Backend2.StackKHandOver`, which the LIR interpreter checks at every run (SPEC §52, *The hand-over*) | `stackedOf`'s self-calls, read off the layouts' classes (the stack machines row) | no | — |
 | copying or dropping a cell, borrow or family is its words alone (`trivial`) | `Layout.lean:689` | read: every `copy` and `drop` is checked by its type (the row above but one); a persistent value holds no resource (`vP_empty_of_persistent`), a `VTy.OwnFree` one no owned cell (`vC_noOwn_of_drop`), a family of borrows none. UNPROVED: that a variable's LIR type is its node's checked type (by construction), and the row above | `Lint.copiesAt`, `Lint.dropsAt` | — | — |
-| an owned value's destructor | `Convert.lean:1854` (`genDtor`) | read | the `dtor` node's type (`dtorE`, `Core/Dtor.lean`'s `dtorAt`); the transcription is not proved against `dtorAt` | — | — |
+| an owned value's drop | `Convert.lean:1854` (`genDrop`) | read | the `dropFn` node's type (`dropFnE`, `Core/Drop.lean`'s `dropFnAt`); the transcription is not proved against `dropFnAt` | — | — |
 | a lend's kind, `imm` or `mut`, on `Op.lend` | `Convert.lean:3455`, `:3518`; `Lint.lean:82` checks the borrow it answers | read | the borrow constant (`withbor1`/`withbor2`, `sliceBorrowI`/`M`, the block borrows); `lendCell`'s `m` agrees (`lendKindB`, `TDerivesAt.lendCell_kind`) | — | `t13` (fixed) |
 | a reborrow | `Convert.lean:3520` | read | `withbor3` | — | — |
 | a cell allocated for one lend, and its scope | `Convert.lean:3318` (`convLendCell`), `:2339` (`withScope`), `:278` (`markOwner`) | read | `lendCell` (`lendCellB`); `lendScope`'s `rel` (`relT`, `TDerivesAt.lendScope_rel`) | — | — |

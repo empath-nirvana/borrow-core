@@ -1,6 +1,6 @@
 -- A declared value live across a cancellable operation (`yield`): the rest after it runs only when
 -- the generator is pulled again, so the checker's `[then]` needs a finaliser that consumes the
--- value on a cancel, the destructor of its type (`finalOf`, a `dtor` node, `HasDtor`), and `Txn`
+-- value on a cancel, the drop of its type (`finalOf`, a `dropFn` node, `HasDrop`), and `Txn`
 -- has none (`decl_linear`); `[let]` abandons only what holds no owned cell (`decl_not_ownFree`).
 -- Refused.
 include yield

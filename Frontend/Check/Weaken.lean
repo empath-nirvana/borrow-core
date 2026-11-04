@@ -788,9 +788,9 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
   | lendR => intro _ _ _ _ _ hf _; cases hf
   | lendLoopR => intro _ _ _ _ _ hf _; cases hf
   | nilDead => intro _ _ _ _ _ hf _; cases hf
-  | dtor hA hc he hΓ =>
+  | dropFn hA hc he hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
-      exact ⟨.dtor hA hc he (dead_ins (live_eval_ff hf hp) Γa hΓ), (shift_closed0 hc _ _).symm⟩
+      exact ⟨.dropFn hA hc he (dead_ins (live_eval_ff hf hp) Γa hΓ), (shift_closed0 hc _ _).symm⟩
   | allocS σ he hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.allocS σ he (dead_ins (live_eval_ff hf hp) Γa hΓ),
@@ -1376,9 +1376,9 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
   | effHandleT => intro _ _ _ _ _ hf _; cases hf
   | effHandleL => intro _ _ _ _ _ hf _; cases hf
   | letPoly => intro _ _ _ _ _ hf _; cases hf
-  | dtor hA hc he hΓ =>
+  | dropFn hA hc he hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
-      exact ⟨.dtor hA hc he (dead_ins (live_eval_ff hf hp) Γa hΓ), (shift_closed0 hc _ _).symm⟩
+      exact ⟨.dropFn hA hc he (dead_ins (live_eval_ff hf hp) Γa hΓ), (shift_closed0 hc _ _).symm⟩
   | allocS σ he hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.allocS σ he (dead_ins (live_eval_ff hf hp) Γa hΓ),

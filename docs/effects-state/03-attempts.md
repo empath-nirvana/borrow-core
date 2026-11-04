@@ -215,7 +215,7 @@ precondition `ewpTS` in the de Vilhena–Pottier shape, proving four things:
 - **#204: the six acceptance programs** (`Core/EffPrograms.lean`) and branch-per-call lowering
   of abortive operations.
 - **#206 and #207: the remaining lowering.** State machines for captured continuations, cancel
-  as the state's destructor, and tail-resumptive operations as direct calls. Every acceptance
+  as the state's drop, and tail-resumptive operations as direct calls. Every acceptance
   program compiles with `live 0` at cost parity.
 
 **Proved.** PROVED at Core (σ = []). The kernel FP and every-run adequacy cover the effect
@@ -502,14 +502,14 @@ Several inputs were added after launch, marked "not a change to the running brie
 
 - **A decisive test:** "T1 should be a theorem, not a rule".
 - **External review:** a free-algebra lfp relation, capture rebasing, T1 as a precondition, and
-  destructors limited to answering operations.
+  drops limited to answering operations.
 - **The runner framing.** The user called it "kind of genius" and voiced the concern "wildly
   complex to reason about", with the criterion that it is adopted only if it removes proof work.
 
 **Built and found:**
 
 - **#248, the TR (`docs/effects-tr/` §§1–12, merged 10-02 15:30Z).**
-  - PAPER-ONLY: unary FP, resource safety, operational soundness, the destructor form, and
+  - PAPER-ONLY: unary FP, resource safety, operational soundness, the drop form, and
     writers commute.
   - **Three of phase A's rules let programs go wrong.** Each is machine-checked against phase A's
     model and fixed in the TR's rules.

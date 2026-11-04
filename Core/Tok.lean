@@ -14,7 +14,7 @@ import Core.Compatibility
 lemmas are `[TR]` 6.141 and 6.142 (`wpTS_alloc`, `wpTS_free`, the steps `ewp_alloc` and `ewp_free`
 take at an effect row). `burn` is the only constant that takes a `Tok`.
 
-`Tok` has no derived drop (`HasDtor` has no `opq` constructor) and is not `VTy.OwnFree`, so neither
+`Tok` has no derived drop (`HasDrop` has no `opq` constructor) and is not `VTy.OwnFree`, so neither
 is a type holding it; `[let]`'s `hW` and `[raise]`'s `hd` refuse to abandon one at an abort.
 -/
 

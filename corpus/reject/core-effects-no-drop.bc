@@ -1,4 +1,4 @@
--- SPEC §19's drop glue: a variable live across a call that may abort must have a destructor, which
+-- SPEC §19's drop glue: a variable live across a call that may abort must have a derived drop, which
 -- the finaliser runs when the call aborts. `g`, a thunk with no `close`, has none: an abort of the
 -- call would abandon it.
 -- expect: 12:5: `g`, of type `1 => i32`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell

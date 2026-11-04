@@ -48,7 +48,7 @@ main : F 1 =
 ```
 
 **Unbalanced arms.** The arms of a `case`, or the components of `<M, N>`, consume different
-variables, and one of them has no destructor.
+variables, and one of them has no derived drop.
 
 ```bc,reject
 main : F i32 =

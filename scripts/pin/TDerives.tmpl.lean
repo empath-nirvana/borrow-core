@@ -23,7 +23,7 @@ covers its part (`Covers`, SPEC §55): every slot the part's term mentions is on
   erasure unchanged.
 * `TDerivesAt.toP`: a tied typed derivation is one of `TDerivesP` at the same node.
 * the derived nodes: each a fixed scheme at a consumed context, its premises the ones of the
-  `Core/` lemma that types it, and its projection that lemma (`dtor_wf`, `d_allocS`, `d_freeS`,
+  `Core/` lemma that types it, and its projection that lemma (`dropFn_wf`, `d_allocS`, `d_freeS`,
   `withborSM_wf`, `withborSI_wf`, `withborM2_wf`, `withborI2_wf`), tied as `CDerivesAt.ofEffFree`
   ties a term with no operation; and the derived nodes over a marked scheme's typed term
   (`litFn`), whose premises are that term's derivation and the equation saying which instance of
@@ -44,10 +44,10 @@ open BoCa.Lifetime (LifeCtx LifeVar)
 /-- **`CDerivesAt Ξ` over the typed term**.  `[spec §19]` -/
 inductive TDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
 --@AT_RULES@
-  /-- **Derived**: the destructor of `A` (`dtor_wf`). -/
-  | dtor {Δ Γ A} {info : TInfo} (hA : HasDtor A) (hc : closedAt 0 (dtorE A) = true)
-      (he : (dtorE A).effFree = true) (hΓ : BoCa.Ctx.Dead Γ) :
-      TDerivesAt Ξ Δ Γ (TExpr.dtor info (.val (.lolli A .unit)) A) (.val (.lolli A .unit))
+  /-- **Derived**: the drop of `A` (`dropFn_wf`). -/
+  | dropFn {Δ Γ A} {info : TInfo} (hA : HasDrop A) (hc : closedAt 0 (dropFnE A) = true)
+      (he : (dropFnE A).effFree = true) (hΓ : BoCa.Ctx.Dead Γ) :
+      TDerivesAt Ξ Δ Γ (TExpr.dropFn info (.val (.lolli A .unit)) A) (.val (.lolli A .unit))
   /-- **Derived**: a block's allocation (`d_allocS`). -/
   | allocS {Δ Γ} {info : TInfo} (σ : Shape) (he : (allocS σ).effFree = true)
       (hΓ : BoCa.Ctx.Dead Γ) :
@@ -136,10 +136,10 @@ inductive TDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → TExpr → Jdg → P
 /-- **`CDerivesP` over the typed term**.  `[spec §29]` -/
 inductive TDerivesP : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
 --@P_RULES@
-  /-- **Derived**: the destructor of `A` (`dtor_wf`). -/
-  | dtor {Δ Γ A} {info : TInfo} (hA : HasDtor A) (hc : closedAt 0 (dtorE A) = true)
-      (he : (dtorE A).effFree = true) (hΓ : BoCa.Ctx.Dead Γ) :
-      TDerivesP Δ Γ (TExpr.dtor info (.val (.lolli A .unit)) A) (.val (.lolli A .unit))
+  /-- **Derived**: the drop of `A` (`dropFn_wf`). -/
+  | dropFn {Δ Γ A} {info : TInfo} (hA : HasDrop A) (hc : closedAt 0 (dropFnE A) = true)
+      (he : (dropFnE A).effFree = true) (hΓ : BoCa.Ctx.Dead Γ) :
+      TDerivesP Δ Γ (TExpr.dropFn info (.val (.lolli A .unit)) A) (.val (.lolli A .unit))
   /-- **Derived**: a block's allocation (`d_allocS`). -/
   | allocS {Δ Γ} {info : TInfo} (σ : Shape) (he : (allocS σ).effFree = true)
       (hΓ : BoCa.Ctx.Dead Γ) :
@@ -229,7 +229,7 @@ theorem TDerivesAt.erase {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr}
     (h : TDerivesAt Ξ Δ Γ t j) : CDerivesAt Ξ Δ Γ t.erase j := by
   induction h with
 --@AT_ERASE@
-  | dtor hA _ he hΓ => exact CDerivesAt.ofEffFree (dtor_wf hA hΓ) he
+  | dropFn hA _ he hΓ => exact CDerivesAt.ofEffFree (dropFn_wf hA hΓ) he
   | allocS σ he hΓ => exact CDerivesAt.ofEffFree (d_allocS σ hΓ) he
   | freeS σ he hΓ => exact CDerivesAt.ofEffFree (d_freeS σ hΓ) he
   | withborSM σ c _ hσ hT hΔ hc _ he hΓ => exact CDerivesAt.ofEffFree (withborSM_wf hσ c hT hΔ hc hΓ) he
@@ -247,7 +247,7 @@ theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
     (h : TDerivesP Δ Γ t j) : CDerivesP Δ Γ t.erase j := by
   induction h with
 --@P_ERASE@
-  | dtor hA _ _ hΓ => exact CDerivesP.ofC (dtor_wf hA hΓ)
+  | dropFn hA _ _ hΓ => exact CDerivesP.ofC (dropFn_wf hA hΓ)
   | allocS σ _ hΓ => exact CDerivesP.ofC (d_allocS σ hΓ)
   | freeS σ _ hΓ => exact CDerivesP.ofC (d_freeS σ hΓ)
   | withborSM σ c _ hσ hT hΔ hc _ _ hΓ => exact CDerivesP.ofC (withborSM_wf hσ c hT hΔ hc hΓ)
@@ -264,7 +264,7 @@ theorem TDerivesAt.toP {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {
     (h : TDerivesAt Ξ Δ Γ t j) : TDerivesP Δ Γ t j := by
   induction h with
 --@TOP_CASES@
-  | dtor hA hc he hΓ => exact .dtor hA hc he hΓ
+  | dropFn hA hc he hΓ => exact .dropFn hA hc he hΓ
   | allocS σ he hΓ => exact .allocS σ he hΓ
   | freeS σ he hΓ => exact .freeS σ he hΓ
   | withborSM σ c T hσ hT hΔ hc hcl he hΓ => exact .withborSM σ c T hσ hT hΔ hc hcl he hΓ
@@ -322,18 +322,18 @@ theorem TDerivesP.jdg_eq {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
     (h : TDerivesP Δ Γ t j) : t.jdg = j := by
   cases h <;> rfl
 
-/-- **An inserted drop carries `HasDtor`**: a `dtor` node of the typed term is typed only at a type
-with a derived drop. The checker inserts a drop only as a `dtor` node, so it inserts none at a
+/-- **An inserted drop carries `HasDrop`**: a `dropFn` node of the typed term is typed only at a type
+with a derived drop. The checker inserts a drop only as a `dropFn` node, so it inserts none at a
 linear type with no derived drop, a declared type among them (`decl_linear`).  `[spec §12, §42]` -/
-theorem TDerivesP.dtor_hasDtor {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {j : Jdg} {A : VTy}
-    {j' : Jdg} (h : TDerivesP Δ Γ (.dtor i j A) j') : HasDtor A := by
+theorem TDerivesP.dropFn_hasDrop {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {j : Jdg} {A : VTy}
+    {j' : Jdg} (h : TDerivesP Δ Γ (.dropFn i j A) j') : HasDrop A := by
   cases h with
-  | dtor hA _ _ _ => exact hA
+  | dropFn hA _ _ _ => exact hA
 
 /-- The same at the typed derivation at an effect context. -/
-theorem TDerivesAt.dtor_hasDtor {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {j : Jdg}
-    {A : VTy} {j' : Jdg} (h : TDerivesAt Ξ Δ Γ (.dtor i j A) j') : HasDtor A := by
+theorem TDerivesAt.dropFn_hasDrop {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {j : Jdg}
+    {A : VTy} {j' : Jdg} (h : TDerivesAt Ξ Δ Γ (.dropFn i j A) j') : HasDrop A := by
   cases h with
-  | dtor hA _ _ _ => exact hA
+  | dropFn hA _ _ _ => exact hA
 
 end BoCa.Fig16.LogRel.Core.Check

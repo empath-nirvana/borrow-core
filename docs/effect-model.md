@@ -39,7 +39,7 @@ before any kernel surgery.
   handler's clauses, a `using` frame, and an operation's continuation. Four of our scattered
   rules fall out of it:
   - the multi-shot persistence condition;
-  - "no capability without a destructor across a cancellable operation" (4.A);
+  - "no capability without a drop across a cancellable operation" (4.A);
   - "`!` closures capture only persistent values";
   - the clause-capture rule (#216).
 - **Continuation qualifiers are modes.** An effect's bound (§1.3) carries the qualifier into
@@ -56,7 +56,7 @@ before any kernel surgery.
     clauses.
   - **Second-class instances.** An instance is never data. Thunks may not capture a lent place
     or a frame-owned resource.
-  - **The weakening point of a continuation.** A continuation is weakened (its destructors
+  - **The weakening point of a continuation.** A continuation is weakened (its drops
     run) at the end of the clause that drops it. This is operational, not elaborated.
   - **A stored generator needed a `ν`-type and an explicit `drop`.** Without a recursive type,
     no continuation can leave its clause.
@@ -64,7 +64,7 @@ before any kernel surgery.
 - **Mapping verdicts** (§2):
   - **Confirmed:** adjoint modes and independence; models and handlers into any computation
     type; comodels as state access; the tensor as running; instances and `ν`;
-    destructor-algebraicity; signals as decision C.
+    drop-algebraicity; signals as decision C.
   - **Inferred:** continuations as mode-`m` thunks; the shifts `F`/`U`.
   - **Failed, adapted:** borrow as a mode. It is kept alongside the modes as a scope.
 - **Cost.** The zero-cost lowering survives where it exists today (§6):
@@ -91,8 +91,8 @@ A call-by-push-value calculus with names.
   - `inst E b`, an instance of effect `E` whose continuations are bounded by `b`. It is second
     class;
   - `cap E S`, an owned capability: a comodel of `E` with state `S`. It is linear, with no
-    destructor;
-  - `resD`, a handle on a frame-owned resource with a destructor;
+    drop;
+  - `resD`, a handle on a frame-owned resource with a derived drop;
   - `ticket`, a relevant token;
   - `stream ρ A`, `νX. U ρ (F (A + int × X))`, linear.
 - **Computation types:**
@@ -111,8 +111,8 @@ A call-by-push-value calculus with names.
   - `ieq x y` is Staton's `?=`;
   - `lend c as x in M` runs `M` against the owned capability `c`: the comodel–model tensor.
 - **Resources:**
-  - `using x = acquire n in M`: a frame owns the resource and runs its destructor;
-  - `drop s`: a stream's destructor.
+  - `using x = acquire n in M`: a frame owns the resource and runs its drop;
+  - `drop s`: a stream's drop.
 
 ### 1.2 Typing (`Typing.lean`)
 
@@ -129,7 +129,7 @@ rests on four checks.
    - **the rest of a `to`, an argument frame, a handler's clauses, the algebraic
      continuation:** `Bound.req` of the row that may run meanwhile, i.e. the structural rules a
      handler may apply to the continuation;
-   - **a `using` frame:** the frame is linear, with a destructor, so the row may not duplicate it;
+   - **a `using` frame:** the frame is linear, with a derived drop, so the row may not duplicate it;
    - **a resuming clause:** it runs once per operation, so its captures are unrestricted. The
      return clause and the abortive clauses are alternatives. If a resuming clause may drop its
      continuation, the return clause may not run.
@@ -162,7 +162,7 @@ A CK machine. The stack holds these frames:
 - `handle i`, the handler of instance `i`;
 - `runner i cell`, a lend of a capability;
 - `coopRet`;
-- `fin n`, a destructor frame;
+- `fin n`, a drop frame;
 - `clauseEnd k`.
 
 An operation on instance `i` finds the nearest frame for `i`.
@@ -196,7 +196,7 @@ number, the world trace (`out n`, `acq n`, `use n`, `free n`, `punch n`), and th
 | Running is the comodel–model tensor | **confirmed** for running against a capability | [paper] Plotkin & Power, *Tensors of comodels and models for operational semantics*, MFPS 2008, Thm 4.4: `C ⊗ T_L X = C1 × X`, the universal map being application. `lend` answers `X` and leaves the final state for `getcap`. The same paper: a theory with a constant has only the empty comodel in Set (l.405), so exceptions are combined by the sum, `T_L(X + −)` (after Thm 4.4). That is why `Fail` is a model only, and why only tail-resumptive operations have runners (`newcap` rejects others). |
 | Instances with `ν` | **confirmed** | [paper] Staton, LICS 2013, §IV–V: `idem-ν`, `ν/ν` (l.297–299), `ν/?` (l.307), `new-ν` (l.277). All four hold observationally in every context [run]. |
 | Destructors restore algebraicity of `raise`: `K[raise] ≡ D_K; raise`, LIFO | **confirmed** | [paper] Congard, Munch-Maccagnoni & Douence, ESOP 2026, §1.3–1.4: the exceptional half of the strength needs `Γ → T I`, a destructor; LIFO release (l.295). [run] the law holds in all 40 typed contexts. |
-| Decision C is Ahman & Bauer's signals | **confirmed in shape** | [paper] Ahman & Bauer, ESOP 2020, §3: signals are the tensor (`kill` absorbs state, eq. (1)); exceptions are the coproduct. In the model a cancel runs only destructors; no handler in `κ` sees it. A–B route a signal to the runner's `finally`, and the model routes it to the destructors: the same placement. |
+| Decision C is Ahman & Bauer's signals | **confirmed in shape** | [paper] Ahman & Bauer, ESOP 2020, §3: signals are the tensor (`kill` absorbs state, eq. (1)); exceptions are the coproduct. In the model a cancel runs only drops; no handler in `κ` sees it. A–B route a signal to the runner's `finally`, and the model routes it to the drops: the same placement. |
 | Sum versus tensor is the Log/Fail split | **confirmed** | [paper] A–B, as above; [run] the absorption law holds in exactly the 8 typed contexts where `Fail` is outside a writer `Log`. |
 | `handleAt` (SecondClass) | **extended** | `experiments/SecondClass` proves handling at a run-time name sound given freshness, and lists what is missing: a machine step that chooses the name, and a type that holds a prompt not known statically. Here `ν` is that step (a counter), and `inst E b` in rows is that type. |
 
@@ -212,7 +212,7 @@ Every row is a `#guard` [run]. The matrix is printed by `lake build EffModel`.
 outermost), every combination of their implementations, and four inner frames around the hole:
 
 - nothing;
-- a `using` frame whose destructor is observable;
+- a `using` frame whose drop is observable;
 - a `to` that emits the answer;
 - a handler of an unrelated fresh `Fail` instance, which must not catch anything.
 
@@ -249,7 +249,7 @@ This is a test of the laws, not a proof.
 | L1a with a multi-shot operation (`κ` resumed twice) | 48 | 30 | 30 | pass |
 | L1a at arity 0: `raise to z. N ≡ raise` | 48 | 40 | 40 | pass |
 | L1a at arity 0, function type: `(raise) w ≡ raise` | 48 | 40 | 40 | pass |
-| L1a at arity 0, destructor form: `K[raise] ≡ D_K; raise` | 48 | 40 | 40 | pass |
+| L1a at arity 0, drop form: `K[raise] ≡ D_K; raise` | 48 | 40 | 40 | pass |
 | H-ret: `handle (return v) ≡ h_ret v` | 48 | 48 | 48 | pass |
 | H-op: `handle (op_h v; y.M) ≡ h_op(v, λy. handle M)` | 48 | 48 | 48 | pass |
 | H-fwd: `handle_h (op_l v; y.M) ≡ op_l v; y. handle_h M` | 48 | 48 | 48 | pass |
@@ -269,10 +269,10 @@ below; none is an accident of the suite.
 
 - **An owned capability inside a region that may abort.** A `Log` or `Ctr` runner is placed
   inside a `Fail` handler. The runner's owned capability would be live across a computation
-  that may abort, and it has no destructor (independence at `cancel`). This is the reason in
+  that may abort, and it has no derived drop (independence at `cancel`). This is the reason in
   every arity-0 row and in the "lent state" row.
 - **The multi-shot row:**
-  - a `using` frame under `Choose` (a destructor frame at `unr`);
+  - a `using` frame under `Choose` (a drop frame at `unr`);
   - an owned capability under `Choose` (`lin` at `unr`);
   - a runner inside a multi-shot handler (T1: the all-ways handler is not tail-resumptive).
 
@@ -304,12 +304,12 @@ Each program is typed by `typecheck` and run, with no rule written for it (`Prog
 **The generator decision.** The resource is owned by a `using` frame inside the generator, and
 that frame is in every continuation captured at `yield`.
 
-- **Push.** A consumer that stops drops `κ`, which cancels it and runs the destructor.
+- **Push.** A consumer that stops drops `κ`, which cancels it and runs the drop.
 - **Pull.** The generator is a `stream`, the continuation returned by a handler that keeps it.
   A stream is **linear**: it is pulled to its end or `drop`ped, and `drop` cancels the
   continuations it holds. That is the `A & 1` encoding: our `κ = ⟨resume, cancel⟩`.
 - **Why the stream is linear.** If streams had a derived drop, an implicit drop would have to run
-  the destructor. The model has no static weakening points (§5), so the destructor is made
+  the drop. The model has no static weakening points (§5), so the drop is made
   explicit.
 
 ### 3.3 Refusals
@@ -318,8 +318,8 @@ Each is rejected by the named rule, beside an accepted control that runs (`Refus
 Untyped runs show what each rule prevents [run]:
 
 - **multi-shot over a linear context:** "a capability consumed twice";
-- **no destructor across an abort:** "1 live capabilities", a leak;
-- **no destructor across a cancellable operation:** "1 live capabilities", a leak;
+- **no derived drop across an abort:** "1 live capabilities", a leak;
+- **no derived drop across a cancellable operation:** "1 live capabilities", a leak;
 - **T1:** "a lent capability used after its owner consumed it". Without T1, `t1Harm` *types*,
   so T1 is the only rule that refuses it (`acceptsWithoutT1`).
 
@@ -330,7 +330,7 @@ Untyped runs show what each rule prevents [run]:
 | multi-shot over a linear context | independence: `c` at `lin` captured by a `to` continuation at `unr` |
 | a suspended continuation holding a lend (T1) | T1 |
 | the same, through a callback whose row yields | T1 |
-| an owned value with no destructor across a cancellable operation | independence: `c` at `lin` captured by `y.yield`'s continuation at `cancel` |
+| an owned value with no derived drop across a cancellable operation | independence: `c` at `lin` captured by `y.yield`'s continuation at `cancel` |
 | the same across an abortive operation | independence at `cancel` |
 | a relevant value dropped | grade: `t`, at `rel`, used `[0,0]` |
 | a relevant value captured by a cancellable continuation | independence: `t` at `rel` captured at `cancel`; the control (a relevant continuation resumed twice) is accepted |
@@ -348,7 +348,7 @@ Untyped runs show what each rule prevents [run]:
 - **Handlers into any computation type, and forwarding.** The stack semantics again; rows sit
   on the judgement, so forwarded effects need no annotation.
 - **Multi-shot persistence** (Tang et al.): independence at `unr`.
-- **No capability without a destructor across a cancellable or abortive operation (4.A):**
+- **No capability without a drop across a cancellable or abortive operation (4.A):**
   independence at `cancel`.
 - **The clause-capture rule (#216):** independence, with a resuming clause read as an
   unrestricted thunk. Only the grouping of clauses into alternatives was written by hand.
@@ -406,7 +406,7 @@ Untyped runs show what each rule prevents [run]:
    helper is classified as suspending.
 7. **Polymorphism.** There is no value-type polymorphism, so the programs are monomorphic in
    their answers. Instance arguments must be variables.
-8. **Failing finalisers.** Destructors here only emit, so the K3 policy (a finaliser's raise
+8. **Failing finalisers.** Drops here only emit, so the K3 policy (a finaliser's raise
    supersedes) has nothing to say.
 
 ---
@@ -417,12 +417,12 @@ Untyped runs show what each rule prevents [run]:
 |---|---|---|
 | operation on a runner instance (capability) | direct call of the co-operation on the cell | same as `withswap` answering handlers |
 | operation on a tail-resumptive handler (`susp = false`, `κ` linear) | direct call of the clause, returning to the perform site; no `κ` reified | §19 *Lowering* already does this |
-| abortive operation | branch to the handler, destructors as landing pads, LIFO | same |
+| abortive operation | branch to the handler, drops as landing pads, LIFO | same |
 | suspending handler (stream), cancellable `κ` | state machine; `κ` is the frame record | same as §15 generators |
 | multi-shot handler | `κ` copied: heap frames | not zero cost, today or here |
 | `ν`, instance parameters | an instance is a pointer to its frame or cell; an operation on an instance not known statically is an **indirect call** through it | today: a static copy per site, a direct call. Specialising an instance known at the call site recovers the direct call; this replaces per-row copying as an optimisation rather than a requirement. |
 | row abstraction and application | erased | — |
-| `clauseEnd` reachability, leak tracking | model artifacts; with static weakening (open problem 1), a dropped `κ` is a static destructor call | — |
+| `clauseEnd` reachability, leak tracking | model artifacts; with static weakening (open problem 1), a dropped `κ` is a static drop call | — |
 
 The zero-cost lowering survives for every construct that has one today. The one new cost is the
 indirect call when an instance is passed, and specialising recovers it.
@@ -435,12 +435,12 @@ A binary logical relation for this calculus, with worlds made of:
 
 - an instance supply (Staton's `[Inj, Set]` reading of `ν`);
 - a store of capability cells;
-- the set of live destructor frames.
+- the set of live drop frames.
 
 Then:
 
 1. **Soundness of observational equivalence for the law schemas:**
-   - L1a at every computation type, including the destructor form at arity 0;
+   - L1a at every computation type, including the drop form at arity 0;
    - H-ret, H-op, H-fwd;
    - the four instance laws;
    - commutation of runners over disjoint cells;
@@ -483,7 +483,7 @@ for everything but modes:
   continuation.
 - **Continuations.** `κ` has type `kty q b r C`: at an operation whose qualifier has weakening
   (`q.w`) it is the linear record `⟨resume, cancel⟩`, the `A & 1` encoding of §3.2. This is static
-  destructor placement (§8.6).
+  drop placement (§8.6).
 - **Recursion.** Only `bfix x a v n M`, the `n`-th iterate of `M` from "abort `a` on `x`"; and
   one recursive type, the stream `strm b A = μX. U(F(A + int × X) & F 1)`.
 - **Co-operations may raise.** A comodel's co-operation answers `coRes = (res × s) + (int × s)`.
@@ -491,7 +491,7 @@ for everything but modes:
 **Denotation** (`Tree.lean`, `Denot.lean`). A computation denotes a finite tree with nodes
 `ret`, `op i e o v k d`, `ab i e a v d`, `nu k` and `act a k`:
 
-- `d` lists the destructors between an operation and its eventual handler. Cancelling the
+- `d` lists the drops between an operation and its eventual handler. Cancelling the
   continuation runs `d` and nothing else (decision C).
 - Every computation type is a model: an operation at a function or record type acts pointwise.
 - A handler is the fold of a tree into a model (`Tree.hnd`), a lend the state-passing fold
@@ -524,8 +524,8 @@ world's matching of names. The constructors:
   nothing pending.
 - `nu` matches two allocations. `nuL`/`nuR` and `mL`/`mR` let one side allocate first and match
   later; `gL`/`gR` let a side allocate a name the other never does.
-- `abE` relates an abort carrying destructors `d ++ f` to running `d` first and then aborting
-  with `f`. This is the destructor form of arity-0 algebraicity.
+- `abE` relates an abort carrying drops `d ++ f` to running `d` first and then aborting
+  with `f`. This is the drop form of arity-0 algebraicity.
 
 **Values and computations.** `VR` is defined by recursion on value types, `CRU` on computation
 types, both Kripke at functions, instance abstractions and thunks. The stream type is the one
@@ -541,7 +541,7 @@ environments are related by the world's matching (`IR`), value environments by `
   lends and `finally` (`Compat.lean`: `hnd_rel`, `runL_rel`, `addFin_rel`, `bindC_rel`).
 - **[proved] Soundness**: `soundness : LR M N → CtxEq M N` (`Adequacy.lean`). Adequacy runs two
   related trees against two worlds kept in step by an invariant (`Inv`). Related actions
-  execute alike (`AR.exec_rel`), and related destructor lists unwind alike (`DR.unwind_rel`).
+  execute alike (`AR.exec_rel`), and related drop lists unwind alike (`DR.unwind_rel`).
 - **[proved]** `CtxEq` is an equivalence (`CtxEq.refl`, `symm`, `trans`), and denotational
   equality implies it (`CtxEq.of_den`).
 
@@ -568,7 +568,7 @@ sum and absorption, the tensor, Staton's `ν` laws, and no accidental handling.
 | L1a at a record type | `πᵢ (op x v; y.M) ≡ op x v; y.(πᵢ M)` | **proved** | `alg_prj1`, `alg_prj2` |
 | L1a at an instance abstraction | `(op x v; y.M) b ≡ op x v; y.(M b)` | **proved** | `alg_iapp` |
 | L1a at arity 0 | `abort to z. N ≡ abort`; `(abort) w ≡ abort` | **proved** | `alg_ab_bind`, `alg_ab_app` |
-| L1a at arity 0, destructor form | `K[abort] ≡ D_K; abort`: `using ℓ (abort to z. N) ≡ (using ℓ (return ())); abort` | **proved** | `alg_dtor` |
+| L1a at arity 0, drop form | `K[abort] ≡ D_K; abort`: `using ℓ (abort to z. N) ≡ (using ℓ (return ())); abort` | **proved** | `alg_dtor` |
 | H-ret | `handle (return v) ≡ h_ret v` | **proved** | `h_ret` |
 | H-op | `handle_x (op_x v; y.M) ≡ h_op(v, ⟨λy. handle_x M, cancel⟩)`, the handler at an instance variable `x` | **proved** | `h_op` |
 | H-fwd | `handle_h (op_l v; y.M) ≡ op_l v; y. handle_h M` | **proved** | `h_fwd` |
@@ -604,9 +604,9 @@ one per owned capability. The inductive `TS` says what a tree does with what it 
 - acquiring and creating add a token; freeing and consuming remove one;
 - reading and writing a cell need its token;
 - at an operation, the continuation keeps everything owned. If the operation's qualifier has
-  weakening, the destructors `d` free exactly what it owns (`CancelOK`, `DropOK`). If it has
+  weakening, the drops `d` free exactly what it owns (`CancelOK`, `DropOK`). If it has
   contraction, it owns nothing;
-- an abort's destructors free exactly what it owns.
+- an abort's drops free exactly what it owns.
 
 `Tree.Safe` runs a tree against the world with a ghost count of live tokens. `adequacyU`
 proves that a `TS` tree runs safely.
@@ -617,14 +617,14 @@ its bound: forcing it gives a `TS` tree bounded by the bound's mode.
 **[proved] The key lemma is independence**, `VS.indep`: a value at a mode with weakening or
 contraction owns nothing. A continuation that may be dropped or copied therefore captures
 nothing that owns. That is the whole content of the multi-shot persistence condition, of "no
-destructor-less capability across a cancellable operation", and of "`!` captures only persistent
+strictly linear capability across a cancellable operation", and of "`!` captures only persistent
 values".
 
 **The judgement** (`ModedJ.lean`). `VM`/`CM` is phase A's typing on the intrinsic terms:
 
 - grades: a linear variable is consumed once on every path;
 - independence at every capture point;
-- `using` frames are linear, with a destructor;
+- `using` frames are linear, with a derived drop;
 - bounds cover what is performed;
 - rows are sets of instances with a mode for what thunks perform.
 
@@ -697,15 +697,15 @@ The three tests that depend on T1 have this status:
 - **The stream type with `drop`** is **[proved] sound** for resources:
   - `StrmS` and the `fold`/`unfold` cases of `CM.fp`;
   - `drop` is the stream's `& F 1` component;
-  - a dropped stream runs its continuations' destructors (`mkK_safe`);
+  - a dropped stream runs its continuations' drops (`mkK_safe`);
   - in the binary relation, `StrmRel` and the fundamental property cover it.
 
 ### 8.6 The two settled questions
 
-**Destructor placement: static** (Congard et al.). `κ` at an operation with weakening is the
-linear record `⟨resume, cancel⟩` (`kty`). `cancel` runs exactly the destructors recorded at the
+**Drop placement: static** (after Congard et al.). `κ` at an operation with weakening is the
+linear record `⟨resume, cancel⟩` (`kty`). `cancel` runs exactly the drops recorded at the
 operation. The elaborator places `cancel` at each weakening point, so a dropped `κ` is a static
-destructor call and the machine has no reachability test.
+drop call and the machine has no reachability test.
 
 - **[proved]** The binary relation (`mkK_rel`, `hnd_rel`) and resource safety (`mkK_safe`,
   `hnd_safe`, `resource_safety`) hold with this placement.
@@ -718,13 +718,13 @@ destructor call and the machine has no reachability test.
 `coRes = (res × s) + (int × s)`: an answer and a next state, or an error and a state. When a
 co-operation raises:
 
-1. the runner cancels the client's continuation, running its destructors;
+1. the runner cancels the client's continuation, running its drops;
 2. it writes the state back to the cell;
 3. the lend answers `inr e`.
 
 - **[proved]** The relation is preserved (`runL_rel`), and the resource side by
   `dtors_safe`/`dtorsT_safe`.
-- The write-back is itself a destructor (`Dtor.wb`) on every operation the lend forwards. An
+- The write-back is itself a drop (`Drop.wb`) on every operation the lend forwards. An
   abort that passes through the lend therefore also writes back first. That is
   `not_absorb_runner_inside` and `lent_state_survives`.
 - **[inferred]** An operation whose co-operation can raise must have a qualifier with
@@ -740,9 +740,9 @@ co-operation raises:
 
 | construct | in the kernel | verdict |
 |---|---|---|
-| `κ = ⟨resume, cancel⟩`, static destructors | `kTy` (§19), `& F_Σ 1` at `cancel`, `!` at `unr` | **already present** |
+| `κ = ⟨resume, cancel⟩`, static drops | `kTy` (§19), `& F_Σ 1` at `cancel`, `!` at `unr` | **already present** |
 | raising co-operations, unwinding borrows | `Row.Unwind`, the unwinding `withbor` forms (§19) | **already present**; the model adds the error-with-state answer, which the kernel's capability methods can already return as data |
-| `finally` / `using` | `effThen` (`thenE`), §12's implicit destructors | **already present** |
+| `finally` / `using` | `effThen` (`thenE`), §12's implicit drops | **already present** |
 | the closure `Clo` (§22) | `Clo^c A B = νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`, no new former | **already present**; the model's stream is the same `C & F 1` shape with `drop` as the second component, and its soundness (§8.5) is the shape §22 relies on |
 | outlives K1/K2, `'main` (§23) | `VOutlivesR`, `withbor2Le`, `main`'s lifetime | **already present**, orthogonal: the model has no lifetimes; a lend is scoped syntactically. A lifetime check could replace T1's `susp` test, since a `κ` whose type mentions `'x` cannot leave `'x`; this was phase A's open problem 4 and is still untested |
 | `bounded_fix` (§20/§21) | `boundedFix`, `boundedFix_compatX` | **already present**; the model's `bfix` is the same iterate from the exhausted computation |
@@ -888,15 +888,15 @@ clause `op x.o(p; y. resume k y)`: the same instance, re-performed past the hand
 renaming is involved.
 
 - [proved] Semantically, a handler whose clauses re-perform each operation on the same instance
-  **with the destructors it was performed under** is the identity on related trees (`fwd_id`).
-- [proved] The syntactic clause re-performs with no destructors, so it loses those of the frames
+  **with the drops it was performed under** is the identity on related trees (`fwd_id`).
+- [proved] The syntactic clause re-performs with no drops, so it loses those of the frames
   between the operation and the handler. At a linear operation that is observable only at an
   unhandled operation, where the stack unwinds (`eta_fails_linear`); effect safety excludes it for
   moded programs. At a cancellable operation it is observable when an outer handler cancels: the
   frame's resource leaks (`etaAff_obs`), and the program is not moded (`etaAff_not_moded`; the
   clause's continuation captures `k`, a linear thunk, at a cancellable operation).
 - [inferred] η that forwards cancel, finalisers included, needs a forwarding primitive whose
-  destructor is the cancel of `k`. Phase B's destructors (`Dtor`: free a resource, write a state
+  drop is the cancel of `k`. Phase B's drops (`Drop`: free a resource, write a state
   back) are first order and cannot carry one; `fwd_id` is that primitive's law.
 
 **[proved] Hiding, as parametricity** (`hnd_sim`). Two handlers into state-passing types, of
@@ -983,7 +983,7 @@ that owns its resource needs nothing of the kind (`ownProg_safe`).
 | writers commute (T7.11) | `writers_commute` | `Writers.lean` |
 | `ν/op` fails at a linear operation in `CtxEq` | `nu_op_fails_linear` | `Ownership.lean` |
 | η, semantically | `fwd_id` | `Ownership.lean` |
-| η, the syntactic clause: lost destructors | `eta_fails_linear`, `etaAff_obs`, `etaAff_not_moded` | `Ownership.lean` |
+| η, the syntactic clause: lost drops | `eta_fails_linear`, `etaAff_obs`, `etaAff_not_moded` | `Ownership.lean` |
 | hiding | `hnd_sim`, `hiding_counter` | `Ownership.lean` |
 | the cell lemma | `adequacy` (cases `pnext`, `pdrop`), `Inv.takeOut`, `Inv.putBack`, `Inv.freePl` | `Cell.lean` |
 | safety of the cell model, no leaks | `cell_safety`, `VSt.below`, `Inv.empty` | `Cell.lean` |
@@ -995,8 +995,8 @@ that owns its resource needs nothing of the kind (`ownProg_safe`).
 1. **O1** (`O1` in `Ownership.lean`): `ν/op` over moded contexts at an operation without
    contraction. What is missing is a binary relation in which continuation values own pending
    names (§9.2). Not derived; no obstruction verified.
-2. **η with cancellation.** A forwarding primitive whose destructor is the cancel of its
-   continuation; `Dtor` would need a destructor that runs a tree.
+2. **η with cancellation.** A forwarding primitive whose drop is the cancel of its
+   continuation; `Drop` would need a drop that runs a tree.
 3. **The calculus into the cell model.** A typing that assigns each place its level and its
    return set, so that a moded program denotes a safe tree of the cell model. Levels are
    lifetimes: the lifetime component of a row (§9.1) is where they would come from, and a place's

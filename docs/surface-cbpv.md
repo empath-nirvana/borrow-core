@@ -139,8 +139,8 @@ computation type), and `{C}` abbreviates `U C`, so braces mean "thunk" in both t
 `<-` is required exactly where the right side forces a live object, and a warning elsewhere.
 It is not a monadic bind in the source's types: there are no surface monads (decision 16), and
 the `F` it eliminates is never written. A
-`_` pattern binds a fresh variable that implicit destructors (SPEC §12) drop at the end of the
-path, or reject if its type has no destructor.
+`_` pattern binds a fresh variable that implicit drops (SPEC §12) consume at the end of the
+path, or reject if its type has no derived drop.
 
 ### 2.5 Declarations and computation types in signatures
 
@@ -231,7 +231,7 @@ become one `out`, and observation names come from the codata declaration (`Iter`
   rejected, because it cannot hand it back. Borrowed variables are threaded by reborrowing; see
   open question Q3 for `imm`.
 
-### 2.10 Implicit destructors
+### 2.10 Implicit drops
 
 Unchanged from SPEC §12: an unused owned value is dropped at the end of its path, by its derived
 drop. No binder opts out: a value that must not be dropped has a type with no derived drop (SPEC
@@ -528,7 +528,7 @@ fn main() {
 
 Surviving shifts: none. The borrow callback and the fold algebra are second-class blocks, `*b`
 is a `withload` with the identity callback, and the cell `_` and its list are dropped by their
-destructors. The 14 core lines carrying `<-`, `return`, `thunkv` or `unbang` are all cancelling shifts.
+drops. The 14 core lines carrying `<-`, `return`, `thunkv` or `unbang` are all cancelling shifts.
 
 ### 5.2 In-place map (`corpus/map-reuse.bc`, answer 642)
 
@@ -1136,7 +1136,7 @@ Entries marked *(unverified)* are from memory and have not been checked against 
   one (like Rust's `move`, or Effekt's `box`), or should a tool report it?
 - **Q3. `imm` variables in loop bodies.** A `for` body that uses an `imm` borrow must thread it
   and hand it back, which needs `copy` at each use. The pleasant form needs the checker to
-  insert `copy` for `imm` variables, as it inserts destructors (SPEC §12). That would be a
+  insert `copy` for `imm` variables, as it inserts drops (SPEC §12). That would be a
   spec entry ("implicit copies"), not sugar. Capabilities passed as `imm` borrows (2.11) depend
   on it.
 - **Q4. `!` on calls through parameters of macro-expanded defs.** `f!(c, *x)` in `walk` is

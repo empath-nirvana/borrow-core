@@ -28,7 +28,7 @@ conversion follows the derivation node by node:
   term is kept as a template over the slots it reads, and each later use instantiates it, so the
   codes it makes are made once.
 - **Derived nodes** are read: `divLit` is its division with no error arm, `litFn` a literal's
-  table in the program's data, `walk` a counted walk whose reads are in range, `dtor` the drop of
+  table in the program's data, `walk` a counted walk whose reads are in range, `dropFn` the drop of
   its type.
 - **Effects** are erased by handler law where the checked facts license it (SPEC §47); at the
   machine operations, the stored-continuation sites, a computation answers its outcome and is
@@ -202,10 +202,10 @@ structure CState where
   litPending : Bool := false
   /-- Record the type formers the layouts are read from (`readFormers`). -/
   census : Bool := false
-  /-- The destructors of `μ` types, generated once per type (`genDtor`). -/
-  dtors : Std.HashMap String Nat := {}
-  /-- The functions that drop a destructor's leaf (`leafDtor`, `Prog.dtorFns`). -/
-  dtorFns : Std.HashSet Nat := {}
+  /-- The drops of `μ` types, generated once per type (`genDrop`). -/
+  dropFnOf : Std.HashMap String Nat := {}
+  /-- The functions that drop a drop's leaf (`leafDrop`, `Prog.dropFns`). -/
+  dropFns : Std.HashSet Nat := {}
   /-- The variables bound to `unfold step` (a `bind` whose bound computation is an `unfoldStep`
   node, SPEC §57), and their copies and captures: the `f` a `nuEta` node may call (SPEC §45). -/
   unfolds : Std.HashSet Var := {}
@@ -1920,81 +1920,81 @@ def genFix (sT : LTy) (p : Var) : CM Tm := do
   setFn fi { name := "bounded_fix", params := [s, k, a], body, ret := rT }
   letpairM p fun s r => letpairM r fun k a => pure (.call fi [s, k, a])
 
-/-! ### Destructors (SPEC §12)
+/-! ### Drops (SPEC §12)
 
-`dtor A` (the checker's `dtorE A`, at an owned value that goes unused) is the destructor its type
-gives (`Core/Dtor.lean`, `dtorAt`): nothing at a forgettable type, componentwise, a cell freed
+`dropFn A` (the checker's `dropFnE A`, at an owned value that goes unused) is the drop its type
+gives (`Core/Drop.lean`, `dropFnAt`): nothing at a forgettable type, componentwise, a cell freed
 and its contents destroyed, a `μ` by an owned fold, `close` at codata, `array_free` at an array.
 A `μ` whose body is in the fold class `P` (SPEC §6) gets one function per closed `μ` type it
 unrolls to (memoized by the type, so a binder nested in another, which names the outer one, is
 its own function calling the outer's), and an array of recursive data one loop function that
 destroys each element and then frees the buffer once (`freeArr`), as Rust drops a `Vec`. -/
 
-/-- **A leaf of a destructor** (`dtorAt`'s `forget`, `drop_derives`) on `x`: a call of a function
-that drops it, one per LIR type, registered in `Prog.dtorFns`, the only functions where `Lint`
-admits a drop at the rule `dtor`. -/
-def leafDtor (x : Var) : CM Tm := do
+/-- **A leaf of a drop** (`dropFnAt`'s `forget`, `drop_derives`) on `x`: a call of a function
+that drops it, one per LIR type, registered in `Prog.dropFns`, the only functions where `Lint`
+admits a drop at the rule `dropFn`. -/
+def leafDrop (x : Var) : CM Tm := do
   let xT ← tyOf x
   let key := s!"leaf {xT}"
-  match (← get).dtors[key]? with
+  match (← get).dropFnOf[key]? with
   | some fi => return .call fi [x]
   | none =>
-    let fi ← reserveFn "dtor leaf"
-    modify fun s => { s with dtors := s.dtors.insert key fi, dtorFns := s.dtorFns.insert fi }
+    let fi ← reserveFn "dropFn leaf"
+    modify fun s => { s with dropFnOf := s.dropFnOf.insert key fi, dropFns := s.dropFns.insert fi }
     let u ← fresh xT
-    setFn fi { name := "dtor leaf", params := [u], ret := .unit, body := .drop .dtor u .unit }
+    setFn fi { name := "dropFn leaf", params := [u], ret := .unit, body := .drop .dropFn u .unit }
     return .call fi [x]
 
 mutual
-/-- The destructor of `A` on `x`: a term of type `1`. -/
-def genDtor (fuel : Nat) (A : VTy) (x : Var) : CM Tm := do
+/-- The drop of `A` on `x`: a term of type `1`. -/
+def genDrop (fuel : Nat) (A : VTy) (x : Var) : CM Tm := do
   match fuel with
-  | 0 => throw "LIR: a destructor's type too deep"
+  | 0 => throw "LIR: a drop's type too deep"
   | f + 1 =>
   match A with
   | .tensor A B => letpairM x fun a b => do
       let u ← fresh .unit
-      return .letv u (← genDtor f A a) (.drop .dead u (← genDtor f B b))
+      return .letv u (← genDrop f A a) (.drop .dead u (← genDrop f B b))
   | .sum A B => do
-    let .sum aT bT := (← tyOf x).peel | throw "LIR: a destructor's sum"
+    let .sum aT bT := (← tyOf x).peel | throw "LIR: a drop's sum"
     let a ← fresh aT; let b ← fresh bT
-    return .case x a (← genDtor f A a) b (← genDtor f B b)
+    return .case x a (← genDrop f A a) b (← genDrop f B b)
   | .ref A => do
     let c ← fresh (← vty A)
-    return .letv c (.prim .free [x]) (← genDtor f A c)
-  | .box _ A => genDtor f A x
+    return .letv c (.prim .free [x]) (← genDrop f A c)
+  | .box _ A => genDrop f A x
   | .mu T => do
     -- UNPROVED: that the function generated here from the type frees exactly the cells the
-    -- kernel's destructor `dtorE (.mu T)` frees (`foldOwn`, or `foldOwnG` outside `FShape`, at
+    -- kernel's drop `dropFnE (.mu T)` frees (`foldOwn`, or `foldOwnG` outside `FShape`, at
     -- results `1`), in some order, and observes nothing else. It is read off the type the
-    -- checker's `dtor` node carries, not compiled from `dtorE`'s term; a mismatch shows as a leak
+    -- checker's `dropFn` node carries, not compiled from `dropFnE`'s term; a mismatch shows as a leak
     -- or a double free in `live`, and as a disagreement with the source stage.
     let key := ppVT (.mu T) (← get).mach
-    let fi ← match (← get).dtors[key]? with
+    let fi ← match (← get).dropFnOf[key]? with
       | some fi => pure fi
       | none => do
-        let fi ← reserveFn "dtor"
-        modify fun s => { s with dtors := s.dtors.insert key fi }
+        let fi ← reserveFn "dropFn"
+        modify fun s => { s with dropFnOf := s.dropFnOf.insert key fi }
         let u ← fresh (← vty (.mu T))
         let w ← fresh (← vty (VTy.inst (.mu T) T))
-        let body ← dtorShape f fi (toFShape T) T w
-        setFn fi { name := "dtor", params := [u], ret := .unit,
+        let body ← dropShape f fi (toFShape T) T w
+        setFn fi { name := "dropFn", params := [u], ret := .unit,
                    body := .letv w (.prim .unroll [u]) body }
         pure fi
     return .call fi [x]
   | .thunk (.nu (.amp _ (.ret R))) => do
     let rT ← selTy (← tyOf x) 1
     let r ← fresh rT
-    return .letv r (.sel x 1) (← genDtor f R r)
+    return .letv r (.sel x 1) (← genDrop f R r)
   | .thunk C => do
     if let .nu (.amp _ D) := stripAll C then
       if (← outInfoC D).isSome then
-        throw "LIR: the destructor of codata whose close may suspend is outside the fragment"
+        throw "LIR: the drop of codata whose close may suspend is outside the fragment"
     return .sel x 1
   | .fam (.ref A) => do
     let aT ← tyOf x
-    let .fam (.ref eT) := aT.peel | throw "LIR: an array's destructor"
-    let fi ← reserveFn "array_dtor"
+    let .fam (.ref eT) := aT.peel | throw "LIR: an array's drop"
+    let fi ← reserveFn "array_drop_fn"
     let a ← fresh aT; let i ← fresh i32T; let n ← fresh i32T
     let body ← dup .dup i fun i i₁ => dup .dup n fun n n₁ =>
       ifLt i₁ n₁
@@ -2003,32 +2003,32 @@ def genDtor (fuel : Nat) (A : VTy) (x : Var) : CM Tm := do
           let a' ← fresh aT; let v' ← fresh eT
           let u ← fresh .unit
           return .letv pr (.prim .slotTake [a, i']) (.letpair a' v' pr
-            (.letv u (← genDtor f A v') (.drop .dead u (← add1 i fun i₂ => pure (.call fi [a', i₂, n]))))))
+            (.letv u (← genDrop f A v') (.drop .dead u (← add1 i fun i₂ => pure (.call fi [a', i₂, n]))))))
         (do return .drop .dead i (.drop .dead n (.prim .freeArr [a])))
-    setFn fi { name := "array_dtor", params := [a, i, n], body, ret := .unit }
+    setFn fi { name := "array_drop_fn", params := [a, i, n], body, ret := .unit }
     let pr ← fresh (.pair aT i32T)
     let a' ← fresh aT; let n' ← fresh i32T
     return .letv pr (.prim .size [x]) (.letpair a' n' pr (← lit32 0 fun z => pure (.call fi [a', z, n'])))
-  | _ => leafDtor x
+  | _ => leafDrop x
 
-/-- The destructor at a `μ` body's shape, recursive positions by the type's own destructor `fi`. -/
-def dtorShape (fuel : Nat) (fi : Nat) (F : FShape) (T : VTy) (w : Var) : CM Tm := do
+/-- The drop at a `μ` body's shape, recursive positions by the type's own drop `fi`. -/
+def dropShape (fuel : Nat) (fi : Nat) (F : FShape) (T : VTy) (w : Var) : CM Tm := do
   match fuel with
-  | 0 => throw "LIR: a destructor's shape too deep"
+  | 0 => throw "LIR: a drop's shape too deep"
   | f + 1 =>
   match F with
-  | .leaf A => genDtor f (VTy.inst (.mu T) A) w
+  | .leaf A => genDrop f (VTy.inst (.mu T) A) w
   | .refX => do
     let c ← fresh (← vty (.mu T))
     return .letv c (.prim .free [w]) (.call fi [c])
   | .varX => return .call fi [w]
   | .tensor F G => letpairM w fun a b => do
       let u ← fresh .unit
-      return .letv u (← dtorShape f fi F T a) (.drop .dead u (← dtorShape f fi G T b))
+      return .letv u (← dropShape f fi F T a) (.drop .dead u (← dropShape f fi G T b))
   | .sum F G => do
-    let .sum aT bT := (← tyOf w).peel | throw "LIR: a destructor's sum"
+    let .sum aT bT := (← tyOf w).peel | throw "LIR: a drop's sum"
     let a ← fresh aT; let b ← fresh bT
-    return .case w a (← dtorShape f fi F T a) b (← dtorShape f fi G T b)
+    return .case w a (← dropShape f fi F T a) b (← dropShape f fi G T b)
 end
 
 /-! ### Blocks (SPEC §5, §42) -/
@@ -2177,7 +2177,7 @@ def constArity : TExpr → Option Nat
   | .tokMint .. | .tokBurn ..
   | .arrNew .. | .arrFree .. | .arrSize .. | .arrReplace .. | .arrLen .. | .arrGet .. | .arrCopy ..
   | .arrForget .. | .countFold .. | .countTry .. | .sliceGetM .. | .sliceLenM .. | .sliceSplitI ..
-  | .sliceSplitM .. | .sliceReplaceM .. | .sliceSwapM .. | .dtor .. | .foldImm .. | .foldOwn ..
+  | .sliceSplitM .. | .sliceReplaceM .. | .sliceSwapM .. | .dropFn .. | .foldImm .. | .foldOwn ..
   | .foldOwnG .. | .foldReuse .. | .unfoldN .. | .allocS .. | .freeS .. | .boundedFix .. => some 1
   | .swap .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap ..
   | .sliceBorrowM .. | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M ..
@@ -3652,7 +3652,7 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
   | .copy .., [x] | .arrCopy .., [x] => dup .const x fun x x' => pure (.pair x x')
   | .forgetImm .., [x] | .forgetMut .., [x] | .forgetUnk .., [x] | .arrForget .., [x] =>
     return .drop .forget x .unit
-  | .dtor _ _ A, [x] => do readFact "dtor:type"; genDtor 64 A x
+  | .dropFn _ _ A, [x] => do readFact "dropFn:type"; genDrop 64 A x
   | .hostOp _ _ op, [x] => return .prim (.host op) [x]
   | .arrNew _ j _, [p] => do
     let (pT, aT) ← arrowOf (← repJ j)
@@ -3869,7 +3869,7 @@ def tailPass (s : CState) (loop : Nat × Var × OutInfo × Nat → Bool) : Excep
         setFn fn { name := "tail", params := [oP], body := .var oP, ret := M.ty }
   let ((), s') ← act.run s
   return ({ fns := s'.fns, codes := s'.codes, main := default, mainTy := default, ty := s'.ty,
-            data := s'.data, statics := s'.statics, lits := s'.lits, dtorFns := s'.dtorFns }, s')
+            data := s'.data, statics := s'.statics, lits := s'.lits, dropFns := s'.dropFns }, s')
 
 /-- **State cells** (SPEC §49): each machine operation whose suspended computation's closure class
 holds itself (`recursive`, the layouts' classes that keep their environment on the heap, §35)
@@ -3882,7 +3882,7 @@ def cellPass (s : CState) (recursive : Nat → Bool) : Except String (Prog × CS
         let _ ← genMach m ops
   let ((), s') ← act.run s
   return ({ fns := s'.fns, codes := s'.codes, main := default, mainTy := default, ty := s'.ty,
-            data := s'.data, statics := s'.statics, lits := s'.lits, dtorFns := s'.dtorFns }, s')
+            data := s'.data, statics := s'.statics, lits := s'.lits, dropFns := s'.dropFns }, s')
 
 /-- **The levels whose state cell is passed on** (SPEC §50), from a conversion's machines and the
 layouts' recursive classes (`recursive`, as `cellPass` reads them): each machine whose body takes
@@ -3945,6 +3945,6 @@ def convertProg (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CT
   let ((m, mT), s) ← (convMain exts ctx t C arg loops).run
     { census, direct, mach, threaded, stacked, classes }
   return ({ fns := s.fns, codes := s.codes, main := m, mainTy := mT, ty := s.ty, data := s.data,
-            statics := s.statics, lits := s.lits, dtorFns := s.dtorFns }, s)
+            statics := s.statics, lits := s.lits, dropFns := s.dropFns }, s)
 
 end Backend2

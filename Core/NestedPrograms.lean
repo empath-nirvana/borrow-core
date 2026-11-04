@@ -10,7 +10,7 @@ inner `μ` (`keys_nodeB`), one algebra each.
 
     t₁ ← build;  t₂ ← build;      -- 1 with the children 10, 11, 12, each in a chain of one
     s ← foldOwnG (add, sum, sum) t₁;
-    dtor T t₂;                    -- the derived destructor (SPEC §12): `foldOwnG` at results 1
+    dropFn T t₂;                    -- the derived drop (SPEC §12): `foldOwnG` at results 1
     s
 
 One closed `CDerives` derivation (`nestProg_derives`); it runs by adequacy at every host
@@ -206,38 +206,38 @@ end
 theorem keysIn_nodeB : FoldP.keysIn [nodeB] nodeB = [.arr [nodeB] (.mu chainB), .mu [chainB, nodeB]] := by
   decide
 
-/-- `T` has a destructor: `foldOwnG` at results `1`. -/
-theorem nodeT_hasDtor : HasDtor nodeT := by
+/-- `T` has a derived drop: `foldOwnG` at results `1`. -/
+theorem nodeT_hasDrop : HasDrop nodeT := by
   refine .mu nodeB_P ?_ (fun B Bs hm => ?_) (fun Bs S hm => ?_)
-  · have e : FoldP.resO dtorAlgs [nodeB] nodeB = .tensor .i32 .unit := by decide
+  · have e : FoldP.resO dropAlgs [nodeB] nodeB = .tensor .i32 .unit := by decide
     rw [e]; exact .tensor .int .unit
   · rw [keysIn_nodeB] at hm
     simp only [List.mem_cons, reduceCtorEq, FoldP.Bnd.mu.injEq, List.cons.injEq, List.not_mem_nil,
       false_or, or_false] at hm
     obtain ⟨rfl, rfl⟩ := hm
-    have e : FoldP.resO dtorAlgs [chainB, nodeB] chainB = .sum .unit (.tensor .unit .unit) := by
+    have e : FoldP.resO dropAlgs [chainB, nodeB] chainB = .sum .unit (.tensor .unit .unit) := by
       decide
     rw [e]; exact .sum .unit (.tensor .unit .unit)
   · rw [keysIn_nodeB] at hm
     simp only [List.mem_cons, reduceCtorEq, FoldP.Bnd.arr.injEq, List.not_mem_nil, or_false] at hm
     obtain ⟨rfl, rfl⟩ := hm
-    have e : FoldP.resO dtorAlgs [nodeB] (.mu chainB) = .unit := by decide
+    have e : FoldP.resO dropAlgs [nodeB] (.mu chainB) = .unit := by decide
     rw [e]; exact .unit
 
 /-- The program. -/
 def nestProg : Expr :=
   bindE buildE (bindE buildE
-    (bindE (.app nestSumE (.var 1)) (.seq (.app (dtorE nodeT) (.var 1)) (.var 0))))
+    (bindE (.app nestSumE (.var 1)) (.seq (.app (dropFnE nodeT) (.var 1)) (.var 0))))
 
 theorem nestProg_derives : CDerives LifeCtx.empty [] nestProg (.comp (.ret .i32)) := by
   refine .ret (bindP (A := nodeT) (d_build (by cdead)) ?_)
   refine bindP (A := nodeT) (d_build (by cdead)) ?_
   refine bindP (A := .i32) (appP (.var (by csoloP)) (d_nestSum (by cdead))) ?_
-  refine .seqV (partP_split (.app (dtorE nodeT) (.var 1)) 0 _) ?_ (.var (by csoloP))
-  exact .lolliE (split_kill' _).toP (.var (by csoloP)) (dtor_wf nodeT_hasDtor (kill_dead _))
+  refine .seqV (partP_split (.app (dropFnE nodeT) (.var 1)) 0 _) ?_ (.var (by csoloP))
+  exact .lolliE (split_kill' _).toP (.var (by csoloP)) (dropFn_wf nodeT_hasDrop (kill_dead _))
 
 /-- **The program runs at every host**: from the empty memory to a 32-bit literal and the
-empty memory: every cell the two trees hold is freed, by the fold and by the destructor. -/
+empty memory: every cell the two trees hold is freed, by the fold and by the drop. -/
 theorem nestProg_runs :
     ∃ n, BoCa.BoLo.Steps Adequacy.emptyMem nestProg Adequacy.emptyMem (.val (Val.i32 n)) := by
   have hwp : wpTS [] nestProg (fun _ v => Fig16.BoLo.pure (∃ n, v = Val.i32 n))

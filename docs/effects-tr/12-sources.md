@@ -79,7 +79,7 @@ the #235 reports, so "new" means "not found there", not a claim of priority).
 9. **ν/op's restriction to non-contractible qualifiers** (T7.15): phase B's counterexample, and the
    statement of what a proof needs (O1).
 10. From phase B, new to us before this document: the pending and garbage name statuses
-    (D4.7), `TreeRel.abE` (the destructor form built into the relation), and the relation's
+    (D4.7), `TreeRel.abE` (the drop form built into the relation), and the relation's
     treatment of `ν/ν` and `idem-ν` by them.
 
 **Relation to Biernacki et al.** Their relations (BPPS18–20) are binary relations for handlers in

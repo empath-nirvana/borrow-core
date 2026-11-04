@@ -171,7 +171,7 @@ So 66 of 81 corpus cells, in 52 programs, are mutable locals in all but name.
 |---|---|---|---|---|
 | A1 | `if c { S } else { () }` | `if c { S }` | the parser supplies the `else` arm `return ()` (`Parser.lean:1899–1909`) | 108 of 109 program sites drop it with identical core; the 109th is `loop-labels.bc` (binary) |
 | A2 | `i64[0]` | `0` where `i64` is expected | `VSugar.lit`, typed by the expected type (typed elaboration §5) | 356 of 402 (`u8` 71 of 72, `i64` 71 of 112, every `i32` outside kernel text). Of the 46 left, 40 are "expected `i32`, but this has type `i64`": the width comes from a later use (M2); 4 are in a program written in the kernel text (§7.3); 2 others |
-| A3 | `let _ = free(c); v` | nothing: `c` is dropped at the end of its scope | SPEC §12's inserted destructor, `free` then the content's | 22 of 22 run with the same output |
+| A3 | `let _ = free(c); v` | nothing: `c` is dropped at the end of its scope | SPEC §12's inserted drop, `free` then the content's | 22 of 22 run with the same output |
 | A3′ | `free(c)` read for its content | `*c` | `VSugar.deref` at a cell lends it `imm` around a `withload` (`Sugar.lean:3333–3355`) | by inspection |
 | A4 | `let (x, r) = f(x, …)` | `let r = f(&mut x, …)` | SPEC §11's lend: `io_lend <- f(x, …); let (x, r) = io_lend` (`Comp.elab`, `Sugar.lean:124–135`) | 149 of 177 run with the same output. Refused: 14 where the threaded value is itself a view (`array_mut 'a i32`) or the call also takes a capability, so `&mut` would be a reborrow, which the surface does not provide; 5 results that mention the lent lifetime; 5 calls that also thread a capability; 2 inference gaps; 2 others |
 | A5 | `borrow imm x { v -> f(v) }` | `f(&x)` | `lendCall`/`lendBorrow` (`Sugar.lean:2194`, `:2265`): `withbor1`/`withbor2` of a cell, `slice_borrow_*` of an array, or a cell scoped to the call for a value | 17 of 43. Refused: 13 where the block lends a buffer's initialised prefix or a record's fields and `&x` at the call lends the whole value ("expected `array u8`, but this has type `array u8 * i32`": M4's question at a call); 9 in an annotated binding (SPEC §11 forbids a lend there); 3 closures whose parameter type was read off the block; 1 outlives |
@@ -336,7 +336,7 @@ result in the kernel. Measured only as far as it finds cheap wins:
 **Left for deeper work, not examined further:**
 
 1. whether moving the hand-back earlier is unobservable when the block contains a finaliser or
-   an unwinding form (`withbor2u`). By inspection, the order of destructor calls on the unwinding
+   an unwinding form (`withbor2u`). By inspection, the order of drop calls on the unwinding
    path can change;
 2. error messages that fall back to the lexical reading when an inferred extent is refused;
 3. `imm` blocks after #58, where last use becomes liveness again.

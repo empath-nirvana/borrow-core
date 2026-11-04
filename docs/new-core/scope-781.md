@@ -17,7 +17,7 @@ files read the machine (`Step1`, `Steps`, `Final`, Core's `Steps`/`EffMachine`/`
 `Rel` (from `twp` on), `Eff`, `Cactus`, `StepCopy`, and `fdEsc_at_join` in `EscBeneath`. That
 gives the split. `Support/` never imports `Core/`, so the machine half goes in `Core/`, as flat
 files with a `Tree` prefix (Core has no subdirectories; it groups files by prefix: `Div*`,
-`Eff*`, `LetDtor*`).
+`Eff*`).
 
 | Library file | From (spike) | Contents |
 |---|---|---|

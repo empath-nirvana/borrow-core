@@ -19,8 +19,8 @@ and so a `CDerives` derivation of the term's erasure (`TDerivesAt.erase`,
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (Jdg withPair withCtx absurdE forceE Ctx.Banged CtxOutlives HasDtor
-  dropE dtorE)
+open BoCa.Fig16.LogRel.Core (Jdg withPair withCtx absurdE forceE Ctx.Banged CtxOutlives HasDrop
+  dropE dropFnE)
 
 abbrev CExpr := BoCa.Expr
 
@@ -471,16 +471,16 @@ def rSumE {A B : CVTy} {C : CCTy} {t₁ t₂ : TExpr} {s₁ s₂ : CRow} {p₁ p
       ⟨rV.covers.of₁ hl, (F.covers fun _ h => h.1.covers fun _ hl => liveAt_mkCtx₁ hl).of₂ hl,
         (F.covers fun _ h => h.2.covers fun _ hl => liveAt_mkCtx₁ hl).of₂ hl⟩ h₁ h₂ h₃⟩
 
-/-- `dtorE A xᵢ; M`: the destructor of slot `k` before `M`, which does not use it (SPEC §12).
-`TTied.drop`, as `drop_derives`: `unitE` over `lolliE` of the variable and the destructor. The
+/-- `dropFnE A xᵢ; M`: the drop of slot `k` before `M`, which does not use it (SPEC §12).
+`TTied.drop`, as `drop_derives`: `unitE` over `lolliE` of the variable and the drop. The
 variable's node has the source `ix`. -/
-def rDrop (ix : TInfo) {C : CCTy} (k : Nat) (A : CVTy) (hk : T[k]? = some A) (hA : HasDtor A)
-    (hc : BoCa.Fig16.LogRel.Core.closedAt 0 (dtorE A) = true) (hE : (dtorE A).effFree = true)
+def rDrop (ix : TInfo) {C : CCTy} (k : Nat) (A : CVTy) (hk : T[k]? = some A) (hA : HasDrop A)
+    (hc : BoCa.Fig16.LogRel.Core.closedAt 0 (dropFnE A) = true) (hE : (dropFnE A).effFree = true)
     (r : Res Δ T (.comp C))
     (h : overlapOK T (oneL T k) r.F.u = true) : Res Δ T (.comp C) :=
   ⟨.unitE i (.comp C) C (Masks.of (oneL T k) r.F.u)
       (.lolliE ix (.val .unit) A .unit (Masks.of (oneL T k) (noUse (oneL T k))) (.var ix (.val A) k A)
-        (.dtor ix (.val (.lolli A .unit)) A)) r.t,
+        (.dropFn ix (.val (.lolli A .unit)) A)) r.t,
     r.sigs, r.pins, ((Fam.var T k A hk).split r.F h).map fun _ ⟨_, _, hs, hm, hx, hM⟩ =>
       TTied.drop i ix (oneL T k) r.F.u hs hm ⟨Covers.var (oneL_getD hk), r.covers⟩ hx hA hc hE hM⟩
 

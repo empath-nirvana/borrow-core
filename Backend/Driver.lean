@@ -519,7 +519,7 @@ def Clos.UnusedSound : Prop := Clos.LicenceSound .unused
 `effLet`'s `hW` or weakened. -/
 def Clos.AbortSound : Prop := Clos.LicenceSound .abort
 /-- `UNPROVED:` the licence `kappa`: a continuation dropped at its tail resume is unrestricted or
-has its derived drop (`kTy_unr`, `kTy_cancel_hasDtor_iff`). -/
+has its derived drop (`kTy_unr`, `kTy_cancel_hasDrop_iff`). -/
 def Clos.KappaSound : Prop := Clos.LicenceSound .kappa
 /-- `UNPROVED:` the licence `step`: a step closure copied for the next step is `!`. -/
 def Clos.StepSound : Prop := Clos.LicenceSound .step

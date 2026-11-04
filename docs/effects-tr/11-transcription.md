@@ -111,7 +111,7 @@ item 3, O4).
 | D1.1, D1.2, D1.3 | `Syntax.lean`: `Mode`, `G`, `G.den`, `Sig` |
 | D1.8 | `ktyB`, `kty` |
 | D1.9 | `Val`, `Cmp` (with §1's changes) |
-| D3.8–D3.12 | `Tree.lean`: `Act`, `Dtor`, `Tree`, `Strm`, `CoSem`, `CTy.opA`…`CTy.dtorsA`, `Tree.bind`, `Tree.bindC`, `Tree.hnd`, `catchOp`, `catchAb`, `coK`, `coStep`, `Tree.runL`, `Tree.addFin` |
+| D3.8–D3.12 | `Tree.lean`: `Act`, `Drop`, `Tree`, `Strm`, `CoSem`, `CTy.opA`…`CTy.dtorsA`, `Tree.bind`, `Tree.bindC`, `Tree.hnd`, `catchOp`, `catchAb`, `coK`, `coStep`, `Tree.runL`, `Tree.addFin` |
 | D3.13 | `Denot.lean`: `Val.den`, `Cmp.den`, `mkK`, `iter` |
 | D3.14, D3.15 | `Obs.lean`: `Ev`, `Outcome`, `Obs`, `Wd`, `Act.exec`, `Wd.unwind`, `Tree.obs`, `Context`, `holeTy`, `close`, `CtxEq` |
 | D4.7, L4.3 | `World.lean`: `St`, `W`, `W.le`, `W.sub`, `W.gcP`, the updates and their lemmas |

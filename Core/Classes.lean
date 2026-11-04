@@ -1,4 +1,4 @@
-import Core.Dtor
+import Core.Drop
 import Core.EffRules
 import Core.Closed
 import Core.InsertDead
@@ -9,7 +9,7 @@ import Core.InsertDead
 A value type is **unrestricted** (`VTy.Persistent`) or **linear** (every other type). Contraction
 (`Ctx.SplitP.dup`) and weakening (`Ctx.DeadP.drop`, `Ctx.SoloP.skip`) are rules of `CDerives`
 exactly at the unrestricted types (`Ctx.SplitP.both_live_iff`, `Ctx.DeadP.live_iff`,
-`Ctx.SoloP.live_succ_iff`). A linear type may have a **derived drop** (`DerivedDrop`: `HasDtor`,
+`Ctx.SoloP.live_succ_iff`). A linear type may have a **derived drop** (`DerivedDrop`: `HasDrop`,
 licensed by `drop_derives`) or a **derived copy** (`DerivedCopy`: the constant `copy` at `Imm`,
 licensed by `copy_derives`). Neither is a further class: each is a property of a linear type.
 
@@ -18,13 +18,13 @@ the derived rules over existing rules.
 
 | fact | statement |
 |---|---|
-| a derived drop is pure at the row | `dtor_wf`'s type, `HasDtor.close`, `HasDtor.nu`, `kTy_cancel_hasDtor_iff` |
-| a destructor holds no operation, and a derived drop is closed | `dtorE_effFree`, `dtorE_closed` |
+| a derived drop is pure at the row | `dropFn_wf`'s type, `HasDrop.close`, `HasDrop.nu`, `kTy_cancel_hasDrop_iff` |
+| a drop holds no operation, and a derived drop is closed | `dropFnE_effFree`, `dropFnE_closed` |
 | a derived copy is a derivation | `copy_derives` |
 | `κ` at `lin` is linear with no derived drop | `kTy_lin` |
-| `κ` at the default qualifier is linear; its cancel is a derived drop exactly when pure | `kTy_cancel_linear`, `kTy_cancel_hasDtor_iff` |
+| `κ` at the default qualifier is linear; its cancel is a derived drop exactly when pure | `kTy_cancel_linear`, `kTy_cancel_hasDrop_iff` |
 | `κ` at `unr` is unrestricted | `kTy_unr` |
-| the types whose destructor does nothing (the unrestricted ones and the borrows) | `forgettable_iff` |
+| the types whose drop does nothing (the unrestricted ones and the borrows) | `forgettable_iff` |
 
 Three rules absorb a context without using its slots, and none is a drop: `⊤` introduction
 (`CDerives.topI`), `absurd` (`CDerives.zeroE`), and the abandonment of a `VTy.OwnFree` context at an
@@ -79,13 +79,13 @@ theorem Ctx.SoloP.live_succ_iff {S T : VTy} {Γ : Ctx VTy} {i : Nat} :
 
 /-! ### The derived drop -/
 
-/-- A linear type with a derived drop: `dtorE A : A ⊸ F 1` is a closed `CDerives` term
-(`dtor_wf`), and `drop_derives` licenses every inserted drop.  `[spec §12]` -/
-def DerivedDrop (A : VTy) : Prop := Linear A ∧ HasDtor A
+/-- A linear type with a derived drop: `dropFnE A : A ⊸ F 1` is a closed `CDerives` term
+(`dropFn_wf`), and `drop_derives` licenses every inserted drop.  `[spec §12]` -/
+def DerivedDrop (A : VTy) : Prop := Linear A ∧ HasDrop A
 
-/-! #### Every destructor holds no operation
+/-! #### Every drop holds no operation
 
-`dtorAt` is built from `forget`, the borrow and array constants, `foldOwn` and `foldOwnG`; none
+`dropFnAt` is built from `forget`, the borrow and array constants, `foldOwn` and `foldOwnG`; none
 of them holds `perform`, `raise`, `hnd` or `iterate`. The lemmas follow the closedness lemmas of
 `Core/FoldOwn.lean` and `Core/FoldOwnGTerm.lean`. -/
 
@@ -212,43 +212,43 @@ theorem arrAlgE_effFree {d : Expr} (hd : d.effFree = true) : (arrAlgE d).effFree
   simp [arrAlgE, Expr.effFree, forget_effFree, hd]
 
 mutual
-/-- Every destructor, in either mode, holds no operation. -/
-theorem dtorAt_effFree : ∀ (b : Bool) (A : VTy), (dtorAt b A).effFree = true
+/-- Every drop, in either mode, holds no operation. -/
+theorem dropFnAt_effFree : ∀ (b : Bool) (A : VTy), (dropFnAt b A).effFree = true
   | b, .tensor A B => by
-      simp [dtorAt, Expr.effFree, dtorAt_effFree b A, dtorAt_effFree b B]
+      simp [dropFnAt, Expr.effFree, dropFnAt_effFree b A, dropFnAt_effFree b B]
   | b, .sum A B => by
-      simp [dtorAt, Expr.effFree, dtorAt_effFree b A, dtorAt_effFree b B]
+      simp [dropFnAt, Expr.effFree, dropFnAt_effFree b A, dropFnAt_effFree b B]
   | b, .ref A => by
-      simp only [dtorAt]; split
-      · exact dtorAt_effFree true A
-      · simp [bindE, Expr.effFree, dtorAt_effFree false A]
-  | _, .box _ A => by simp [dtorAt, Expr.effFree, dtorAt_effFree false A]
+      simp only [dropFnAt]; split
+      · exact dropFnAt_effFree true A
+      · simp [bindE, Expr.effFree, dropFnAt_effFree false A]
+  | _, .box _ A => by simp [dropFnAt, Expr.effFree, dropFnAt_effFree false A]
   | b, .mu A => by
-      simp only [dtorAt]; split
+      simp only [dropFnAt]; split
       · rfl
       · split
-        · simp [Expr.effFree, foldOwnV_effFree, dtorAt_effFree true A]
-        · have hs : ∀ e ∈ (Expr.val (.lam (.app (dtorAt true A) (.var 0))) :: algsIn A),
+        · simp [Expr.effFree, foldOwnV_effFree, dropFnAt_effFree true A]
+        · have hs : ∀ e ∈ (Expr.val (.lam (.app (dropFnAt true A) (.var 0))) :: algsIn A),
               e.effFree = true := by
             intro e he
             simp only [List.mem_cons] at he
             rcases he with rfl | he
-            · simp [Expr.effFree, dtorAt_effFree true A]
+            · simp [Expr.effFree, dropFnAt_effFree true A]
             · exact algsIn_effFree A e he
           simp [Expr.effFree, FoldP.foldOwnGV_effFree]
           exact FoldP.tupE_effFree _ hs
   | b, .thunk C => by
-      rw [dtorAt_thunk b C]
+      rw [dropFnAt_thunk b C]
       match C with
-      | .nu (.amp _ (.ret R)) => simp [dtorAt, bindE, Expr.effFree, dtorAt_effFree false R]
+      | .nu (.amp _ (.ret R)) => simp [dropFnAt, bindE, Expr.effFree, dropFnAt_effFree false R]
       | .nu (.amp _ (.arr _ _)) | .nu (.amp _ (.amp _ _)) | .nu (.amp _ .top)
       | .nu (.amp _ (.all _ _ _)) | .nu (.amp _ (.nu _)) | .nu (.amp _ (.eff _ _ _ _ _ _ _ _))
       | .nu (.eff _ _ _ _ _ _ _ _) | .eff _ _ _ _ _ _ _ _ | .nu (.ret _) | .nu (.arr _ _) | .nu .top
       | .nu (.all _ _ _) | .nu (.nu _) | .ret _ | .arr _ _ | .amp _ _ | .top | .all _ _ _ => rfl
   | b, .fam (.ref A) => by
-      simp only [dtorAt]; split
+      simp only [dropFnAt]; split
       · rfl
-      · simp [Expr.effFree, dtorAt_effFree false A]
+      · simp [Expr.effFree, dropFnAt_effFree false A]
   | _, .fam (.mut _ _) => rfl
   | _, .unit | _, .zero | _, .imm _ _ | _, .mut _ _ | _, .bang _ | _, .unk | _, .tvar _
   | _, .int _ | _, .opq _ => rfl
@@ -274,7 +274,7 @@ theorem algsIn_effFree : ∀ (A : VTy), ∀ e ∈ algsIn A, e.effFree = true
       · cases he
       · simp only [List.mem_cons] at he
         rcases he with rfl | he
-        · simp [Expr.effFree, arrAlgE_effFree (dtorAt_effFree true S)]
+        · simp [Expr.effFree, arrAlgE_effFree (dropFnAt_effFree true S)]
         · exact algsIn_effFree S e he
   | .mu B, e, he => by
       simp only [algsIn] at he
@@ -282,7 +282,7 @@ theorem algsIn_effFree : ∀ (A : VTy), ∀ e ∈ algsIn A, e.effFree = true
       · cases he
       · simp only [List.mem_cons] at he
         rcases he with rfl | he
-        · simp [Expr.effFree, dtorAt_effFree true B]
+        · simp [Expr.effFree, dropFnAt_effFree true B]
         · exact algsIn_effFree B e he
   | .unit, _, he | .zero, _, he | .thunk _, _, he | .imm _ _, _, he | .mut _ _, _, he
   | .box _ _, _, he | .bang _, _, he | .unk, _, he | .tvar _, _, he | .int _, _, he
@@ -294,18 +294,18 @@ theorem algsIn_effFree : ∀ (A : VTy), ∀ e ∈ algsIn A, e.effFree = true
   | .fam (.opq _), _, he => by simp [algsIn] at he
 end
 
-/-- `dtorE A` holds no `perform`, `raise`, `hnd` or `iterate`, at every `A`: the syntactic side
+/-- `dropFnE A` holds no `perform`, `raise`, `hnd` or `iterate`, at every `A`: the syntactic side
 condition `TiedDer.ofCDerives` (`Frontend/Check/Tied.lean`) asks of an inserted drop. It is not
-the statement that a derived drop is pure at the row: that is carried by `dtor_wf`'s type
-`A ⊸ F 1` at the empty row, by `HasDtor.close` and `HasDtor.nu` asking a `.ret` cancel
-(`Core/Dtor.lean`), and at `κ` by `kTy_cancel_hasDtor_iff`.  `[spec §12]` -/
-theorem dtorE_effFree (A : VTy) : (dtorE A).effFree = true :=
-  dtorAt_effFree false A
+the statement that a derived drop is pure at the row: that is carried by `dropFn_wf`'s type
+`A ⊸ F 1` at the empty row, by `HasDrop.close` and `HasDrop.nu` asking a `.ret` cancel
+(`Core/Drop.lean`), and at `κ` by `kTy_cancel_hasDrop_iff`.  `[spec §12]` -/
+theorem dropFnE_effFree (A : VTy) : (dropFnE A).effFree = true :=
+  dropFnAt_effFree false A
 
-/-- A derived drop is a closed term: `dtor_wf` types it at the empty context
+/-- A derived drop is a closed term: `dropFn_wf` types it at the empty context
 (`closedAt_of_derives`).  `[spec §12]` -/
-theorem dtorE_closed {A : VTy} (h : HasDtor A) : closedAt 0 (dtorE A) = true :=
-  closedAt_of_derives (dtor_wf (Δ := default) h (Γ := []) .nil)
+theorem dropFnE_closed {A : VTy} (h : HasDrop A) : closedAt 0 (dropFnE A) = true :=
+  closedAt_of_derives (dropFn_wf (Δ := default) h (Γ := []) .nil)
 
 /-! ### The derived copy at `Imm` -/
 
@@ -357,7 +357,7 @@ theorem copy_derives {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {i : Nat} {A : VT
 
 /-- `κ` at `lin` is linear, with no derived drop: it must be resumed. -/
 theorem kTy_lin {S : Row} {R B : VTy} {F : CTy} :
-    Linear (kTy S R .lin B F) ∧ ¬ HasDtor (kTy S R .lin B F) := by
+    Linear (kTy S R .lin B F) ∧ ¬ HasDrop (kTy S R .lin B F) := by
   refine ⟨by simp [kTy, VTy.persistent], fun h => ?_⟩
   simp only [kTy] at h
   cases h
@@ -368,8 +368,8 @@ theorem kTy_cancel_linear {S : Row} {R B : VTy} {F : CTy} : Linear (kTy S R .can
 
 /-- The cancel of `κ` at the default qualifier is a derived drop exactly when it is pure: when
 the cancel row is empty. -/
-theorem kTy_cancel_hasDtor_iff {S : Row} {R B : VTy} {F : CTy} :
-    HasDtor (kTy S R .cancel B F) ↔ cancelTy S F = .ret .unit := by
+theorem kTy_cancel_hasDrop_iff {S : Row} {R B : VTy} {F : CTy} :
+    HasDrop (kTy S R .cancel B F) ↔ cancelTy S F = .ret .unit := by
   simp only [kTy]
   constructor
   · intro h
@@ -383,14 +383,14 @@ theorem kTy_cancel_hasDtor_iff {S : Row} {R B : VTy} {F : CTy} :
 /-- `κ` at `unr` is unrestricted. -/
 theorem kTy_unr {S : Row} {R B : VTy} {F : CTy} : Unrestricted (kTy S R .unr B F) := rfl
 
-/-! ### The types whose destructor does nothing -/
+/-! ### The types whose drop does nothing -/
 
-/-- `Forgettable` (`Core/Records.lean`) is the types that hold no owned cell and have a destructor:
-`VTy.OwnFree` without the opaque host types, which have no destructor.  `[spec §12, §19]` -/
-theorem forgettable_iff {A : VTy} : Forgettable A ↔ A.OwnFree ∧ HasDtor A := by
+/-- `Forgettable` (`Core/Records.lean`) is the types that hold no owned cell and have a derived drop:
+`VTy.OwnFree` without the opaque host types, which have no derived drop.  `[spec §12, §19]` -/
+theorem forgettable_iff {A : VTy} : Forgettable A ↔ A.OwnFree ∧ HasDrop A := by
   constructor
   · intro h
-    refine ⟨?_, hasDtor_of_forgettable h⟩
+    refine ⟨?_, hasDrop_of_forgettable h⟩
     induction h with
     | unit => exact .unit
     | zero => exact .zero

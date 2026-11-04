@@ -13,7 +13,7 @@ rests on a numbered result of this document, on phase B's Lean, or on a cited pa
 **The question.** Phase A destroys a dropped cancellable continuation *dynamically*: when a resuming
 clause ends, the machine checks by reachability whether the clause's result mentions `κ`, and
 cancels `κ` if not (`clauseEnd`, `Val.mentions`). Congard, Munch-Maccagnoni & Douence place the
-destructor call at the weakening point of the typing derivation, *statically*. Which does the
+drop call at the weakening point of the typing derivation, *statically*. Which does the
 calculus use?
 
 **Decision.** Static. A continuation whose qualifier admits weakening has type
@@ -44,7 +44,7 @@ weakening point… The kernel checks it; the elaborator establishes it").
    his system (*Resource Polymorphism*, arXiv 1803.02796, 2018) [recalled].
 5. **It costs nothing at run time.** The reachability check was a model artefact (phase A §6:
    "`clauseEnd` reachability, leak tracking: model artifacts; with static weakening …, a dropped
-   `κ` is a static destructor call").
+   `κ` is a static drop call").
 
 **What changes in phase A's model.**
 
@@ -57,10 +57,10 @@ weakening point… The kernel checks it; the elaborator establishes it").
   placement; it is the elaborator's choice, and a different placement can reorder a `free` with an
   `emit` in the same clause.
 - Phase A's stream had to be linear with an explicit `drop` because it had no static weakening
-  points (`docs/effect-model.md` §3.2: "if streams had a derived drop, an implicit drop would have to run the destructor").
+  points (`docs/effect-model.md` §3.2: "if streams had a derived drop, an implicit drop would have to run the drop").
   With static weakening the same holds for every value holding a one-shot continuation: it is
-  linear, and its destructor is called where the elaborator drops it. This calculus gives a
-  destructor to continuations (`cancel`) and to streams (`drop`) only. A general destructor per
+  linear, and its drop is called where the elaborator drops it. This calculus gives a
+  drop to continuations (`cancel`) and to streams (`drop`) only. A general drop per
   type (Congard et al.'s `δ : A → TI` for every type) is not added; that is the elaborator's drop
   glue over these two.
 
@@ -82,7 +82,7 @@ it handled?
 **Decision.** (b), and only at a **fallible** operation, one whose qualifier admits weakening
 (`W ∈ q_o`, D1.3). A co-operation answers `(B_o ⊗ S) ⊕ (E_o ⊗ S)` with `E_o = int` at a fallible
 operation and `E_o = 0` otherwise (D1.9). On failure the machine writes the state, cancels the
-client's continuation up to the `run` frame (its `fin` frames' destructors, innermost first), and
+client's continuation up to the `run` frame (its `fin` frames' drops, innermost first), and
 the lend answers the capability with `inr e` (D3.6).
 
 **Reasons.**
@@ -97,7 +97,7 @@ the lend answers the capability with `inr e` (D3.6).
 2. **Fallible exactly when weakenable is independence.** A failure discards the client's
    continuation between the operation and the lend, as an abortive operation discards it up to
    its handler. Independence requires everything that continuation holds to be droppable or to
-   have a destructor, which is `W ∈ q_o` at the capture points (L5.15.2 uses the protocol's cancel
+   have a derived drop, which is `W ∈ q_o` at the capture points (L5.15.2 uses the protocol's cancel
    conjunct, present exactly when `W ∈ q_o`). So the runner bound `rbnd(E)` contains `cancel`
    exactly when `E` has a fallible operation, and the frames across a fallible operation are checked
    as frames across a `raise`. No new rule is needed.
@@ -118,5 +118,5 @@ the lend answers the capability with `inr e` (D3.6).
 - **The state on failure** is the co-operation's `s'`. Ahman & Bauer's signals, which discard the
   state (tensor with `kill`), are not modelled; with (b) the lender always regains its capability
   with a state, which is the sum (T7.10's `lent_state_survives`).
-- **Failing finalisers** (phase A open problem 8, SPEC §19 K3): destructors here only free. A
+- **Failing finalisers** (phase A open problem 8, SPEC §19 K3): drops here only free. A
   finaliser that raises is outside this calculus.

@@ -250,7 +250,7 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .lendR ii jj x b T B S td tM => [x] ++ td.lifeBinders ++ tM.lifeBinders
   | .lendLoopR ii jj x A S B R tN tK ts0 => [x] ++ [x] ++ [x] ++ tN.lifeBinders ++ tK.lifeBinders ++ ts0.lifeBinders
   | .nilDead ii jj j t => t.lifeBinders
-  | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
+  | .dropFn .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => []
   | .litFn _ _ _ t | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t
   | .nuEta _ _ _ _ t | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t
@@ -365,7 +365,7 @@ def TExpr.domFree : TExpr → Bool
   | .lendR ii jj x b T B S td tM => false
   | .lendLoopR ii jj x A S B R tN tK ts0 => false
   | .nilDead ii jj j t => t.domFree
-  | .dtor .. | .allocS .. | .freeS .. => true
+  | .dropFn .. | .allocS .. | .freeS .. => true
   | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I .. => false
   | .litFn _ _ _ t | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t
   | .nuEta _ _ _ _ t | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t
@@ -479,7 +479,7 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .lendR ii jj x b T B S td tM => .lendR ii jj x b T B S (td.reAb Δr) (tM.reAb (Δr.extend x b))
   | .lendLoopR ii jj x A S B R tN tK ts0 => .lendLoopR ii jj x A S B R (tN.reAb (Δr.extend x Δr.meetOfDom)) (tK.reAb (Δr.extend x Δr.meetOfDom)) (ts0.reAb (Δr.extend x Δr.meetOfDom))
   | .nilDead ii jj j t => .nilDead ii jj j (t.reAb Δr)
-  | t@(.dtor ..) | t@(.allocS ..) | t@(.freeS ..) | t@(.withborSM ..) | t@(.withborSI ..)
+  | t@(.dropFn ..) | t@(.allocS ..) | t@(.freeS ..) | t@(.withborSM ..) | t@(.withborSI ..)
   | t@(.withborF2M ..) | t@(.withborF2I ..) => t
   | .litFn i j bs t => .litFn i j bs (t.reAb Δr)
   | .divLit i j op c t => .divLit i j op c (t.reAb Δr)
@@ -582,9 +582,9 @@ theorem litBodyT_reAb (Δr : LifeCtx) (t : TExpr) : litBodyT (t.reAb Δr) = litB
                 | _ => rfl
               | _ => rfl
             | _ => rfl
-          have hD : dtorOf1T (tD.reAb Δr) = dtorOf1T tD := by
+          have hD : dropFnOf1T (tD.reAb Δr) = dropFnOf1T tD := by
             cases tD with
-            | lolliE _ _ _ _ _ x h => cases h <;> simp only [TExpr.reAb, dtorOf1T, TExpr.isVarT_reAb]
+            | lolliE _ _ _ _ _ x h => cases h <;> simp only [TExpr.reAb, dropFnOf1T, TExpr.isVarT_reAb]
             | _ => rfl
           simp only [TExpr.reAb, litBodyT, hA, hL, hD, TExpr.isVarT_reAb]
         | _ => rfl
@@ -902,7 +902,7 @@ theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | nilDead a0 a1 ih0 =>
       intro Δ' he hd
       exact TDerivesP.nilDead a0 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
-  | dtor hA hc he hΓ => intro _ _ _; exact .dtor hA hc he hΓ
+  | dropFn hA hc he hΓ => intro _ _ _; exact .dropFn hA hc he hΓ
   | allocS σ he hΓ => intro _ _ _; exact .allocS σ he hΓ
   | freeS σ he hΓ => intro _ _ _; exact .freeS σ he hΓ
   | withborSM => intro _ _ hd; simp [TExpr.domFree] at hd
@@ -1225,7 +1225,7 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
   | letPoly a0 a1 a2 a3 a4 a5 ih0 ih1 =>
       intro Δ' he hd
       exact TDerivesAt.letPoly a0 a1 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a3) (ih1 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a5)
-  | dtor hA hc he hΓ => intro _ _ _; exact .dtor hA hc he hΓ
+  | dropFn hA hc he hΓ => intro _ _ _; exact .dropFn hA hc he hΓ
   | allocS σ he hΓ => intro _ _ _; exact .allocS σ he hΓ
   | freeS σ he hΓ => intro _ _ _; exact .freeS σ he hΓ
   | withborSM => intro _ _ hd; simp [TExpr.domFree] at hd

@@ -335,17 +335,17 @@ types (`VTy.persistent`). It follows that:
 - **Apart from persistent slots, the only discarding forms of the core are `<>` and `absurd V`.**
   `topI` holds at any `Γ` (`Fu:89`), and `zeroE` absorbs every slot that `V` does not use
   (`Fu:103`). Section 11 describes how the checker handles this.
-- **Implicit destructors** (SPEC §12). A variable bound by `x <- M; N`, `let (x, y) = V; M`, a
-  `case` arm or `fun`, whose type has a destructor (`HasDtor`, `Core/Dtor.lean`) and is not
+- **Implicit drops** (SPEC §12). A variable bound by `x <- M; N`, `let (x, y) = V; M`, a
+  `case` arm or `fun`, whose type has a derived drop (`HasDrop`, `Core/Drop.lean`) and is not
   persistent, need not be consumed in the source. On each path that does not consume it, the
-  checker inserts its destructor `dtorE A x` immediately before the path's terminal computation,
+  checker inserts its drop `dropFnE A x` immediately before the path's terminal computation,
   most recently bound variable first. The erasure contains the call, so the core term still uses
   the variable exactly once. Borrows are dropped by `forget`. `ref A` is dropped by `free` followed
-  by the destructor of `A`, a fold-class `mu` by `fold_own`, `U (C & F 1)` by `close` (`.2`), and
+  by the drop of `A`, a fold-class `mu` by `fold_own`, `U (C & F 1)` by `close` (`.2`), and
   `U (nu X. C & F R)` (`delay`, `stream`, `iter A R₀ R`) with `R` closed and droppable by `close`
-  followed by the destructor of the residual `R`. `U C` otherwise has no destructor, so an unused thunk is an error.
+  followed by the drop of the residual `R`. `U C` otherwise has no derived drop, so an unused thunk is an error.
   The same holds for a `case` whose arms consume different variables: arms that differ in a variable
-  with a destructor are balanced by dropping it in the arm that does not use it. Any other
+  with a derived drop are balanced by dropping it in the arm that does not use it. Any other
   difference is an error. Which slots are dropped is a fact of the type: an owned slot of a linear
   type with a derived drop.
 - **Constants and `def`s consume nothing.** They are typed at a dead context.
@@ -465,7 +465,7 @@ dead context, typed at `!(A => B)` like a host operation, so a call is `(unbang 
 - An array is borrowed in a cell: `withbor1`/`withbor2` on a `ref (array A)` lend
   `imm 'x (array A)`/`mut 'x (array A)`. `withload` at the `imm` borrow gives the family
   `view 'y (array A) = array_imm 'y A`; `withswap` at the `mut` borrow lends the array itself.
-- `array A` has a destructor when `A` has one (`array_free` with `A`'s destructor), and
+- `array A` has a derived drop when `A` has one (`array_free` with `A`'s drop), and
   `array_imm @a A` is forgettable (`array_forget`), so both are dropped implicitly (SPEC §12).
 - The erasures: `array_new`, `array_get`, `array_free` are the primitives `tab`, `idx`, `drop`;
   the others are closed λ-terms (`arrLenV`, `sizeV`, `replaceV`, `copyV`, `forgetV`).
@@ -501,7 +501,7 @@ The splits and writes on a borrowed family (`SPEC.md` §9, `Core/SliceOps.lean`)
 - A split past the length hands the family back (`inr`); the erasure of both splits is the
   primitive `split`, of both empties the value `(0, 0)`, of `slice_replace_mut` `replaceV`.
 - `slice_swap_mut` past the length changes nothing; its erasure is the closed λ-term `swapV`.
-- `array_mut @a A` has a destructor (SPEC §12), so an unused part of a split is dropped.
+- `array_mut @a A` has a derived drop (SPEC §12), so an unused part of a split is dropped.
 <!-- ANCHOR_END: arrays -->
 
 ## 8c. Counted loops
@@ -660,7 +660,7 @@ flag.
   be equal. The exception is an arm with slack, which may be extended to the other arm's set
   if its own set is contained in it. If both have slack, the result keeps slack.
 - When a binder's scope closes, its variable must be consumed, or be absorbed by slack in its
-  scope. With implicit destructors (§7) the checker consumes it itself where it can: see §11.1.
+  scope. With implicit drops (§7) the checker consumes it itself where it can: see §11.1.
 - **Side conditions on contexts are read on the consumed context.** They are boxI's
   `CtxOutlives Δ Γ @` (`Ty:1383`), bangThunk's `Ctx.Banged Γ` (`Rl:203`), and allI's `hΓx`
   (`'x` is not free in any live slot). At such a boundary the slack is closed: the body
@@ -696,9 +696,9 @@ The checker's behaviour where it goes beyond the sections above:
 - **Declarations.** A def's type arguments are elaborated at the use site, and a parametric def is
   checked only at its uses. `main`'s context is every extern in the file.
 - **Drops** (§7, SPEC §12). The checker carries the set of variables owed to the current tail
-  position. At a terminal computation it checks the computation, then wraps it in `dtorE A x; …`
+  position. At a terminal computation it checks the computation, then wraps it in `dropFnE A x; …`
   for each owed variable it did not use, lowest index first. The drop is one builder (`rDrop`),
-  `unitE` over `lolliE` of the variable and `dtor_wf`. The head `M` of `x <- M; N` is owed the owed
+  `unitE` over `lolliE` of the variable and `dropFn_wf`. The head `M` of `x <- M; N` is owed the owed
   variables it mentions by name.
 - **Incompleteness.** Lifetime entailment uses only the structural rules, so it misses
   distributivity (`('x \/ 'y) /\ 'z <= ('x /\ 'z) \/ ('y /\ 'z)`). The derived forms stated at
@@ -901,5 +901,5 @@ How this checks:
 14. The worked example is fixed: `all` algebras, `Fun 'y. return (thunkv fun …)`, curried
     `add`, and fold applications as `def`s. A borrow example is added (§13).
 15. Integers and arrays are pending, and the erasure target is an open question (§14).
-16. Implicit destructors (SPEC §12): unused variables of a type with a destructor are
+16. Implicit drops (SPEC §12): unused variables of a type with a derived drop are
     dropped by the checker at the end of each path (§6.2, §7, §11.1).

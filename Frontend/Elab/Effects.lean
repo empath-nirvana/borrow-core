@@ -1813,7 +1813,7 @@ def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
           forSite n cx cs wrap sp ℓ x g gs i f W M N
         else
           -- A body that performs a control operation would hold the continuation across it,
-          -- which has no destructor (its cancel performs at the site's row), and one that loops
+          -- which has no derived drop (its cancel performs at the site's row), and one that loops
           -- cannot be a clause, which is total: the `for` drains the stored generator instead.
           let (bs, V') ← pullSite n cx cs sp g gs i f W
           report sp "lowering" (s!"for over {g}: its body performs a control operation or " ++

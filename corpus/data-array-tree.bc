@@ -1,7 +1,7 @@
 -- A tree declared with `data` whose node owns an array of its children (SPEC §42,
 -- data-declarations §6.11): the recursion is under the array's allocation, so `Node` is not a
 -- block and needs no `box`. `Tree` elaborates to `mu X. i32 + i32 * array X`, outside `FShape`
--- and in the fold class `P`, so it has a derived destructor (SPEC §12): the second tree is
+-- and in the fold class `P`, so it has a derived drop (SPEC §12): the second tree is
 -- dropped by it, each node's children first and then the node's array, its buffer at once.
 --
 -- Answer: i32[12]: the root 1, its first child 2 with three tips of 1, and two tips of 3; `live 0`.

@@ -380,7 +380,7 @@ At a call `h(…, c, …)`, where `c` is at a computation parameter `f : (A) -> 
   captures nothing, and its argument drops. Its cost is a retag on the error path.
 - **Resuming `E`.**
   - The relabel clause `λ(v, κ). y ← perform_m v; (force κ).1 y` holds a cancellable `κ` across a
-    control operation. `κ` has no destructor (SPEC §15, *A body that performs a control
+    control operation. `κ` has no derived drop (SPEC §15, *A body that performs a control
     operation*). So `effLet`'s `S.Cancels → Γ₂.OwnFree` premise fails, and **the clause is not
     typable today**.
   - Two ways out:
@@ -701,7 +701,7 @@ Each scoping construct is a function over a passed computation that installs ord
   handler is outside is T1. It is rejected as today: `Row.Unwind` admits only abortive operations.
   Answering and abortive operations cross. R2e's re-lending uses the unwinding borrows, under the
   same rule.
-- **#215.** `retry` drops the error of a failed attempt: an ordinary destructor once payloads may
+- **#215.** `retry` drops the error of a failed attempt: an ordinary drop once payloads may
   be linear. The last error propagates.
 - **#216.** The retry above needs none. A `default`-style handler over a passed computation needs
   #216, as `default` does today.
@@ -781,7 +781,7 @@ checker. The following carry over unchanged:
    - **type functions in rule conclusions**: lifetime substitution, `unfoldTy` and `ν`'s
      instantiation, the folds' types, the array and slice constants' types;
    - **type predicates that must be invariant**: `OwnFree`, `Persistent`, `Ctx.Banged`,
-     `CtxOutlives`, `Cl`, `NuOk`, `EffLeaf`, `EffFree`, `isRet`, `Ctx.OwnFree`, and the destructor
+     `CtxOutlives`, `Cl`, `NuOk`, `EffLeaf`, `EffFree`, `isRet`, `Ctx.OwnFree`, and the drop
      class.
 
    **Cost (hypothesis).** The size of `Core/Weaken.lean` (172 lines) plus one commutation lemma

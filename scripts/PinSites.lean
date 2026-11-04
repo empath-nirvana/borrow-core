@@ -26,8 +26,8 @@ Backend2's nodes carry their rule, and `Backend2.Lint` checks each rule's premis
 type at every node of every program it compiles (`Lint.copiesAt`, `Lint.dropsAt`,
 `Lint.abandonable`). The old backend converts the erased term, so no stage has a type to check
 its licences against: the licence names the rule the site relies on, and each names its `UNPROVED:`
-statement (`Backend.Clos.LicenceSound`). The checker's drops are typed nodes: a `dtor` node's derivation carries
-`HasDtor` (`TDerivesP.dtor_hasDtor`), and `checkProgram_soundP` projects every checked program to
+statement (`Backend.Clos.LicenceSound`). The checker's drops are typed nodes: a `dropFn` node's derivation carries
+`HasDrop` (`TDerivesP.dropFn_hasDrop`), and `checkProgram_soundP` projects every checked program to
 `CDerivesP`, so the checker inserts no drop no kernel rule licenses; no table of its sites is kept. Its copies
 are the `copy` and `array_copy` constants' nodes (`Frontend/Check/DerivedCopy.lean`), typed only at
 `DerivedCopy` (`TDerivesP.copy_at`, `TDerivesP.arrCopy_at`), so the same holds of them.
@@ -53,8 +53,8 @@ def cites : List Cite := [
   ⟨``Backend2.DropRule.dead, [``Ctx.DeadP.drop, ``Ctx.SoloP.skip, ``CDerives.effHandleV], none⟩,
   ⟨``Backend2.DropRule.forget, [``CDerives.forgetImm, ``CDerives.forgetMut, ``CDerives.forgetUnk,
     ``CDerives.arrForget], none⟩,
-  ⟨``Backend2.DropRule.dtor, [``drop_derives, ``dtor_wf, ``HasDtor.arrayMut,
-    ``Check.TDerivesP.dtor_hasDtor], none⟩,
+  ⟨``Backend2.DropRule.dropFn, [``drop_derives, ``dropFn_wf, ``HasDrop.arrayMut,
+    ``Check.TDerivesP.dropFn_hasDrop], none⟩,
   ⟨``Backend2.DropRule.unused, [``Ctx.DeadP.drop, ``vP_empty_of_persistent,
     ``Check.neitherAbsorbed_of], some ``Check.SplitMasks.NeitherAbsorbed⟩,
   ⟨``Backend2.DropRule.stackK, [], some ``Backend2.StackKHandOver⟩,
@@ -76,7 +76,7 @@ def cites : List Cite := [
   ⟨``Backend.Clos.Licence.unused, [``Ctx.DeadP.drop, ``CDerives.topI, ``CDerives.zeroE],
     some ``Backend.Clos.UnusedSound⟩,
   ⟨``Backend.Clos.Licence.abort, [``CDerives.effLet], some ``Backend.Clos.AbortSound⟩,
-  ⟨``Backend.Clos.Licence.kappa, [``kTy_unr, ``kTy_cancel_hasDtor_iff], some ``Backend.Clos.KappaSound⟩,
+  ⟨``Backend.Clos.Licence.kappa, [``kTy_unr, ``kTy_cancel_hasDrop_iff], some ``Backend.Clos.KappaSound⟩,
   ⟨``Backend.Clos.Licence.step, [``Ctx.SplitP.dup], some ``Backend.Clos.StepSound⟩]
 
 /-- **The sites**: each declaration that builds a node at a rule, and the rules it uses. -/
@@ -98,15 +98,15 @@ def sites : List (Name × List Name) := [
     ``Backend2.Abandon.letAbort]),
   (``Backend2.convWorkK, [``Backend2.DropRule.dead, ``Backend2.DropRule.unused,
     ``Backend2.Abandon.letAbort]),
-  (``Backend2.dtorShape, [``Backend2.DropRule.dead]),
-  (``Backend2.leafDtor, [``Backend2.DropRule.dtor]),
+  (``Backend2.dropShape, [``Backend2.DropRule.dead]),
+  (``Backend2.leafDrop, [``Backend2.DropRule.dropFn]),
   (``Backend2.expand, [``Backend2.DropRule.dead, ``Backend2.DropRule.forget,
     ``Backend2.CopyRule.const]),
   (``Backend2.freeStackThen, [``Backend2.DropRule.dead]),
   (``Backend2.genArrFree, [``Backend2.DropRule.dead, ``Backend2.CopyRule.dup]),
   (``Backend2.genCount, [``Backend2.DropRule.dead, ``Backend2.CopyRule.dup]),
   (``Backend2.genCountTry, [``Backend2.DropRule.dead, ``Backend2.CopyRule.dup]),
-  (``Backend2.genDtor, [``Backend2.DropRule.dead, ``Backend2.CopyRule.dup]),
+  (``Backend2.genDrop, [``Backend2.DropRule.dead, ``Backend2.CopyRule.dup]),
   (``Backend2.genFix, [``Backend2.DropRule.dead, ``Backend2.CopyRule.dup]),
   (``Backend2.genKap, [``Backend2.DropRule.dead]),
   (``Backend2.genLendU, [``Backend2.DropRule.dead]),
@@ -128,7 +128,7 @@ def sites : List (Name × List Name) := [
   (``Backend2.unitThen, [``Backend2.DropRule.dead]),
   (``Backend2.untuple, [``Backend2.DropRule.dead]),
   -- Readers of a rule, which build no node: the lint, and the statements of the `UNPROVED:` ones.
-  (``Backend2.Lint.lintTm, [``Backend2.DropRule.dtor, ``Backend2.DropRule.stackK]),
+  (``Backend2.Lint.lintTm, [``Backend2.DropRule.dropFn, ``Backend2.DropRule.stackK]),
   (``Backend2.enter, [``Backend2.DropRule.stackK]),
   (``Backend2.Tm.hasHandOver, [``Backend2.DropRule.stackK]),
   (``Backend2.StackKHandOver, [``Backend2.DropRule.stackK]),

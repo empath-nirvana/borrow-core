@@ -5,7 +5,7 @@
 -- `insert` and `walk` are recursions that take a node apart, take the child at the next letter out
 -- of its array (`array_replace`, leaving `inl ()`), go on in it, and put it back: the borrow-free
 -- form of walking `&mut` down the trie, and nothing is allocated but the new nodes. The trie, and
--- every `1 + Trie` that `array_replace` hands back, is dropped by its derived destructor (SPEC §12,
+-- every `1 + Trie` that `array_replace` hands back, is dropped by its derived drop (SPEC §12,
 -- `X` under `array` is in the fold class `P`, §6): each node's children, then its array's buffer,
 -- at once, as Rust drops a `Vec`.
 --

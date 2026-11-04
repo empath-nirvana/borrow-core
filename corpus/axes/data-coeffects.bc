@@ -4,7 +4,7 @@
 -- its comultiplication is `copy`, so one borrow `b` serves two readers. `sum` and `len` are
 -- `fold_imm`s over the borrowed list (data), each reading through its own copy of `b`, inside
 -- one borrow block (scope). `sum(&l)` lends the cell a second time, for one call. The list is
--- never consumed; its destructor frees it at the end of `main`.
+-- never consumed; its drop frees it at the end of `main`.
 --
 -- Answer: (i32[123], i32[6]): the sum of [100, 20, 3], then the length read through two copies
 -- of the one borrow, 3 + 3. A fold that dropped a node gives 23, 103 or 120 and 4; a fold that

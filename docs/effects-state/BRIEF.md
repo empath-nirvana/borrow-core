@@ -87,7 +87,7 @@ Effect work is easy to do against the proof model alone and get the implementati
 
 **The pipeline.** `file.bc` is parsed, elaborated and checked into a Core `Expr` with a proof of `CDerives`. It is then compiled through a closure IR and a flat IR to WebAssembly, and run on wasmtime with tail calls. Programs that can't be spelled in the surface, such as §19's capturing handlers, enter at the compile stage (`bcc kernel`).
 
-**Linearity is enforced before the backend.** The check stage inserts the destructor of every owned value that a path leaves unused (SPEC §12). So the `Expr` handed on consumes each value exactly once.
+**Linearity is enforced before the backend.** The check stage inserts the drop of every owned value that a path leaves unused (SPEC §12). So the `Expr` handed on consumes each value exactly once.
 
 **Effects compile with no runtime handlers, the way Rust compiles `async`** (`Clos/Capture.lean`, `Clos/Unwind.lean`). There is no handler stack and no search.
 - **Abortive operations** become branch-per-call propagation, Rust's `Result` and `?`: a code that may raise answers a sum, and a `raise` arrives at the `case` of the frame that catches it.
@@ -102,7 +102,7 @@ Effect work is easy to do against the proof model alone and get the implementati
 
 **The model's "heap" is the abstract store, not malloc.** BoLo's locations are semantic. The backend maps them to words, stack values, state-machine fields, or a real allocation where necessary. `bcc-counts` tracks runtime allocations, indirect calls and deep copies against `corpus/*counts.expected`, and every run prints `live N`, where `live 0` is the runtime leak check. A resource in the model does not imply a runtime allocation.
 
-**Host resources are opaque types** (decision 31): `VTy.opq k`, for example the I/O handles in `Core/Stdio.lean`. They are not persistent and have no destructor, so they can only be moved or handed to externs, never copied or dropped. Their linearity comes from the typing. In the relation an opaque value is a pure predicate, `⌜k.Holds v⌝`, holding no resource, so leak freedom does not cover them today. Captured continuations are in the same position: linear by typing, invisible to the semantics.
+**Host resources are opaque types** (decision 31): `VTy.opq k`, for example the I/O handles in `Core/Stdio.lean`. They are not persistent and have no derived drop, so they can only be moved or handed to externs, never copied or dropped. Their linearity comes from the typing. In the relation an opaque value is a pure predicate, `⌜k.Holds v⌝`, holding no resource, so leak freedom does not cover them today. Captured continuations are in the same position: linear by typing, invisible to the semantics.
 
 **Known runtime cost:** a place that spans a suspension stays a real cell today, one allocation each. Inline placement in a pinned frame is open (P13, synthesis §11).
 
@@ -122,7 +122,7 @@ Effect work is easy to do against the proof model alone and get the implementati
 | non-strict outlives, `'main` | §23 | `lend-*` |
 | externs and I/O capabilities (linear, opaque host resources) | §11, decision 31 | `io-*` |
 | arrays and slices | §9 | `array-*`, `slice-*` |
-| implicit destructors | §12 | throughout |
+| implicit drops | §12 | throughout |
 | zero-size cells cost nothing at run time (`zeroCell`) | §23 | |
 
 So coroutines and generators are already effects with suspension. What is missing is lends held across a suspension (tier 2) and the proofs that tie this to an abstract effect algebra, not the mechanisms.

@@ -17,7 +17,7 @@ trap 'rm -rf "$tmp"' EXIT
   sed -n '/^import /p' scripts/PinSites.lean
   cat <<'LEAN'
 def Backend2.installDrop (x : Backend2.Var) (b : Backend2.Tm) : Backend2.Tm := .drop .unused x b
-def Backend2.theRule : Backend2.DropRule := .dtor
+def Backend2.theRule : Backend2.DropRule := .dropFn
 def Backend2.useRule (x : Backend2.Var) (b : Backend2.Tm) : Backend2.Tm := .drop Backend2.theRule x b
 LEAN
   sed '/^import /d' scripts/PinSites.lean
