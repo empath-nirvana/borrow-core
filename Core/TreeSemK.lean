@@ -123,9 +123,9 @@ the function whose application to an answer is the resumed context (`hκ`) and `
 entry's answer (`hB`): `κ` is a value of `U (B ⊸ F A)` at `w`, `ls`, `ρ` at every index below the
 stop's, `F A` at the frame the share resumes at (`fdNil`).
 
-Every type, lifetime and nesting: `F A` is read at every later list, and the share resumes at every
-later list keeping the records it reads (`kont_run_of_share`), the argument's re-reading split off
-the composite's (`RR.split_retype`). -/
+Every type, lifetime and nesting: `U`'s quantifier is the share's, every later world and list
+keeping the records the share reads, and at each the resume is a run of `F A` there
+(`kont_run_of_share`). -/
 theorem STy.kont_of_share {Tb : TableT} (hL : Tb.Local) (hTb : Tb.Down) {τ τB : STy}
     {en : OpEntT} {Fb : TFrame} {k : Nat} {w : TWd} {ls : List (SRecT w.K)} {K : Kont}
     {v κ : Val} {ρ : TRes w.K}
@@ -134,13 +134,8 @@ theorem STy.kont_of_share {Tb : TableT} (hL : Tb.Local) (hTb : Tb.Down) {τ τB 
     (h : contShareT en Fb k w ls [] K v (cerwpTC (ℍ := ℍ) Tb (postOf τ) Fb k) ρ) {n : Nat}
     (hn : n < k) :
     (STy.kont τB (SCmp.ret (ℍ := ℍ) Tb hL hTb Fb (fdNil en v Fb) τ)).P n w ls κ ρ := by
-  intro w' ρ' ls' hE hr hk j hj a ρa σ hc ha hcσ w'' σ'' ls'' hE' hr' hk'
-  obtain ⟨ρ'', ρa'', h₁, h₂, hc''⟩ := RR.split_retype hE'.1 hc hcσ hE'.2 hr'
-  exact kont_run_of_share hL hκ hB h (hE.trans hr (hE'.of_compS_left hc))
-    (RRw.trans hE'.1 hr h₁) (KeepRel.trans hE'.1 hr hk (KeepRel.of_compS_left hc hk'))
-    (by omega) hc''
-    (τB.mono j w' w'' ls' ls'' a ρa ρa'' (hE'.of_compS_right hc) h₂
-      (KeepRel.of_compS_right hc hk') (CovR.of_compS_right hc hcσ) ha)
+  intro w' ρ' ls' hE hr hk j hj a ρa σ hc ha
+  exact kont_run_of_share hL hκ hB h hE hr hk (by omega) hc ha
 
 /-- **A captured continuation boxed at a lifetime its share outlives** is a value of `[@d] K`:
 BOXED-κ's premise, that the share is in `Res_d` (every borrow cell strictly longer-lived than
@@ -163,9 +158,8 @@ ended, and records opened since may be added, by other branches. There it is a v
 (`[@d] U (B ⊸ F A)` at `w′`, `ls′`), and resuming it at any answer of `B` is a run of `F A`.
 
 The resume is read off the carried value, not off the share: the value at `w′`, `ls′` is forced
-there (`STy.kont_resume` at the reflexive extension), and the run of `F A` it gives is a run at
-`w′`, `ls′` (`SCmp.ret_run`). That reading needs the composite `σ` covered and the records of `ls′`
-covered, which a start provides (`cov_of_comp`, `RecInv.cov_ls`). -/
+there (`STy.kont_resume` at the reflexive extension), and `F A` there is the run. Forcing at the
+reflexive extension needs the records of `ls′` covered, which a start provides (`RecInv.cov_ls`). -/
 theorem STy.kontBox_resume_after {Tb : TableT} (hL : Tb.Local) (hTb : Tb.Down) {τ τB : STy}
     {en : OpEntT} {Fb : TFrame} {k : Nat} {w w' : TWd} {ls : List (SRecT w.K)}
     {ls' : List (SRecT w'.K)} {K : Kont} {v κ : Val} {ρ : TRes w.K} {ρ' : TRes w'.K} {d : Life}
@@ -181,9 +175,8 @@ theorem STy.kontBox_resume_after {Tb : TableT} (hL : Tb.Local) (hTb : Tb.Down) {
         cerwpT (ℍ := ℍ) Tb (postOf τ) Fb (fdNil en v Fb) n w' ls' [] (.app (.val κ) (.val a)) σ := by
   have hb := STy.kontBox_of_share hL hTb hκ hB h hd hn
   have hb' := (STy.kontBox d τB _).mono n w w' ls ls' κ ρ ρ' hE hr hk hc hb
-  refine ⟨hb', fun a ρa σ hcσ hcov ha => ?_⟩
-  exact SCmp.ret_run hcov hls (STy.kont_resume hb'.1 (TWd.Ext.refl w' ρ') (RR.refl hr.cov)
-    (KeepRel.refl hls ρ') le_rfl hcσ ha)
+  exact ⟨hb', fun a ρa σ hcσ _ ha => STy.kont_resume hb'.1 (TWd.Ext.refl w' ρ') (RR.refl hr.cov)
+    (KeepRel.refl hls ρ') le_rfl hcσ ha⟩
 
 /-! ### Rules out: a continuation stored past its lend -/
 

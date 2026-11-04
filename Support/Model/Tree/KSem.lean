@@ -227,9 +227,9 @@ theorem kmono_box {a : Life} {τ : KSem} (hτ : KMono Θ τ) : KMono Θ (vBox a 
 
 /-- A thunk is monotone for every computation predicate. **This holds by the definition of
 `vThunk`**, which quantifies over every extension and re-reading: extensions and re-readings
-compose. It is not a result about the thunk's computation; at the relation, what makes such a
-thunk available from a run at the current tree is the relation's own Kripke rule
-(`Core/TreeSemC.lean`'s `STy.thunk_intro`, from `cerwpT_kripke`). -/
+compose. It is not a result about the thunk's computation; at the relation, a thunk is introduced
+from its computation at every later tree, its environment carried there by the environment type's
+monotonicity (`Core/TreeSemC.lean`'s `STy.thunk_intro`). -/
 theorem kmono_thunk {C : (K : WCactus) → BoCa.Val → TRes K → Prop} : KMono Θ (vThunk Θ C) := by
   intro K K' hE v ρ ρ' _ hr h K'' hE' ρ'' hr'
   exact h K'' (hE.trans hE') ρ'' (Wp.RR.trans_retype hE' hr hr')
