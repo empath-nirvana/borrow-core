@@ -194,3 +194,22 @@ def NoMutAt (l : BoCa.Loc) (ρ : TRes K) : Prop :=
 - **C-1.** The ancestor disjuncts read the ancestor from the **start's** flattening (provenance in the run's start), not from the end world's. Reading the world would also admit a `mut` cell beneath another task's ancestor, which is weaker.
 - **C-2.** Either re-prove `UpdX.frame` along the walks too (closes D5; about 150 more lines), or leave its pointwise proof (it is sound and not on `EndT`'s path).
 - **C-3.** For `UpdA.frame`, either take `MutOne` of the end world as a hypothesis (proposed; it is already in `RecInv`), or handle `mut ○ mut` with mixed provenance by a third ancestor case.
+
+## Appendix: R1 (`UpdA.frame`) proof plan, worked before building
+
+This was worked by hand against the carrier's lemmas; none of it is built yet. Two facts the plan needs go beyond revision 2's text.
+
+1. **`MutOne` of the start composite as well as the end world.** At a location where both `⦇a⦈` and `⦇c⦈` read a `mut` cell, the start composite is `mut ○ mut`. It is the end's re-read cell only if the two operands are one cell, which is what `MutOne` gives (`AgW.mutIn`, `flat_mut_cellAt`). `twp_frame` has `RecInv` at the start too (`TWNT.mutOne`), so no statement changes. This is the start-side half of C-3.
+2. **A `mut`-keeping form of `AgWT.nonimm_beneath_imm`.** `Beneath`'s end-side disjunct asks `XCell ξ ψ′` of the cell `ξ` beneath the ancestor. `nonimm_beneath_imm` gives only `ξ.wit = φ.wit`, `ξ.erase = φ.erase` and `ξ.kind ≠ imm`, so `ξ` may be an `own` contribution under a `mut` walk cell. The variant states that, under `MutUniq (CellAt ρ)`, a `mut` cell `φ` of `ag(ρ)` sits beneath an `imm` ancestor whose witness walk carries `φ` itself. It is the same `G.AgW.rec` induction, with `MutKeep` at each `○` (`mutKeep_compR`), and is about 120 lines.
+
+**The cases**, following `updV_frame`'s split on the fixed part `c`, which is re-read. `o = ⦇ac⦈(l)`, `o′ = ⦇ac′⦈(l)`.
+- **Start side, an `imm` cell:** always the absorbed disjunct. Each `imm` part of `o` is absorbed by the end world. The run's part is absorbed through the inner clause (kept into `⦇ac′⦈ ⊆ ⦇fρ′⦈`, or absorbed). The framed part is absorbed by being re-read into `⦇c′⦈ ⊆ ⦇fρ′⦈`. A union lemma over `lsc` then absorbs `o`.
+- **Start side, a `mut` cell:**
+  - If the framed part has nothing or `own` at `l`, the inner clause decides. When the cell leaves with its ancestor, `Beneath` lifts from `⦇a⦈` to `⦇ac⦈`: the composite at `m` keeps the ancestor's witness. The end world absorbs the lifted ancestor by the same union lemma.
+  - If the framed part is `mut`, start `MutOne` makes `o` that cell, and end `MutOne` makes `o′` its re-reading.
+- **End side, an `imm` cell:** `CellSub`. The run's `imm` part comes from the inner end side, and the framed part is re-read.
+- **End side, a `mut` cell:**
+  - If the cell is the framed part's: when `⦇a⦈(l)` is `imm` (the `not_xoptWFrameAt` case), validity puts the framed `mut` cell in `ag(c)`, not `ex(c)` (an `ex` `mut` cell is not `▶◀` with an `imm` cell). Fact 2 then gives its ancestor in `ag(c)`. The ancestor is `⦇c⦈`'s cell at `m` (`ag_eq_flat_at_imm`) and lifts to `⦇ac⦈`.
+  - If it is the run's part, the inner clause decides.
+
+**Masks.** `¬E′` comes from the framed part through `hn`, or from the inner clause through the run's part.
