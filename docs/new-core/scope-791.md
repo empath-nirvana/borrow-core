@@ -552,7 +552,7 @@ and the composite is undefined there: `MFPostT` holds of every end with a cell a
 (`mfPostT_of_get`), at every `Q`. The configuration: `w1`, `ℓ = 1`, `A = unit`, `α = 1`,
 `D = {2}` (`chain_downOf_one`), the empty table, `fun _ _ => True` for `F` and `Fb`, `Q = False`,
 `e = val ()`. The borrowed run meets `MFPostT` at once; the lender's run, from `wE`, must end in
-`False`. The same holds of `CerwpTMFrame` and `CerwpTMFrameM` (same postcondition).
+`False`. `CerwpTMFrameM` has the same postcondition; the configuration was not built for it.
 
 **`antiInnerVal_retypes` (the Anti-Frame's stop condition).** The inner run of
 `CerwpTMAntiFrameK` is given `ℓ ↦ own(v) ● σ_P`, an `own` cell, which pins no code. So the inner
