@@ -64,27 +64,6 @@ theorem post_down {T : OpTabT}
     {Ψ : ContT} {F : TFrame} : (cerwpPostT (opTableT T) QS Ψ F).Down :=
   cerwpPostT_down QB_down hTd
 
-theorem TS_down : ∀ m i en, TS (ℍ := ℍ) m i = some en →
-    ∀ k w ls v ρ, en.PA (k + 1) w ls v ρ → en.PA k w ls v ρ := by
-  intro m i en h k w ls v ρ hA
-  obtain ⟨-, ⟨-, rfl⟩ | ⟨-, rfl⟩ | ⟨-, rfl⟩⟩ := TS_some h
-  · exact hA
-  · exact ⟨hA.1, fun j hj => hA.2 j (by omega)⟩
-  · exact hA
-
-theorem TC_down : ∀ m i en, TC m i = some en →
-    ∀ k w ls v ρ, en.PA (k + 1) w ls v ρ → en.PA k w ls v ρ := by
-  intro m i en h k w ls v ρ hA
-  have : en = enPark := by
-    unfold TC at h; split at h
-    · split at h
-      · cases h; rfl
-      · split at h
-        · cases h; rfl
-        · cases h
-    · cases h
-  subst this; exact hA
-
 /-- **The resumer's guarantee at a park owning a lend's record** holds nothing at the lent cell. -/
 theorem fdAt_lend {Fb : TFrame} {w' : TWd} {l : BoCa.Loc} :
     ∀ w ρf, fdAt enPark Val.unit Fb [lendRec (K := w'.K) l] w ρf → NoneAt (· = l) ρf :=
@@ -335,40 +314,45 @@ theorem cerwpT_parkThen {T : OpTabT}
     exact cerwpT_det (post_down hTd) (fun μ => step1Only_plug (Head.cancel μ _ rfl) rfl .hole)
       cerwpT_unit
 
-/-- **`(λ_. b) (spawn th)` at the root's table**, owning nothing: the thunk verified at the
-child's table; resumed, `b`; its cancel answers `()`. -/
-theorem cerwpT_spawnThen {th : Val}
-    (hth : ∀ j (w' : TWd) (ls' : List (SRecT w'.K)) (Fb' Fe' : TFrame),
+/-- **`(λ_. b) (spawn th)` at a table `tabOf Tc`**, owning nothing: the thunk verified at the
+children's tables; resumed, `b`; its cancel answers `()`. -/
+theorem cerwpT_spawnThen {Tc : Nat → OpTabT} {th : Val} {n : Nat}
+    (hth : ∀ j, j < n → ∀ (w' : TWd) (ls' : List (SRecT w'.K)) (Fb' Fe' : TFrame),
       (∀ w ρf, ResUT.Valid ρf → Fb' w ρf) → (∀ w ρf, fdMask (fun _ => False) w ρf → Fe' w ρf) →
-      cerwpT (ℍ := ℍ) (opTableT TC) QS Fb' Fe' j w' ls' [] (.app th.1 (.val Val.unit)) PMap.empty)
-    {b : Expr} {Fb F : TFrame} {n : Nat} {w : TWd} {ls : List (SRecT w.K)}
+      cerwpT (ℍ := ℍ) (opTableT (Tc j)) QV Fb' Fe' j w' ls' [] (.app th.1 (.val Val.unit))
+        PMap.empty)
+    {b : Expr} {Fb F : TFrame} {w : TWd} {ls : List (SRecT w.K)}
     (hb : ∀ k', k' < n → ∀ (w' : TWd) (ls' : List (SRecT w'.K)),
-      cerwpT (ℍ := ℍ) (opTableT TS) QS Fb (fdAt enSpawn Val.unit Fb ([] : List (FrameRecT w'.K)))
+      cerwpT (ℍ := ℍ) (opTableT (tabOf (ℍ := ℍ) Tc)) QS Fb
+        (fdAt (enSpawnP (spawnPA (ℍ := ℍ) Tc)) th Fb ([] : List (FrameRecT w'.K)))
         k' w' ls' [] (b.subst 0 Val.unit) PMap.empty) :
-    cerwpT (ℍ := ℍ) (opTableT TS) QS Fb F n w ls [] (.app (.lam b) (spawnE th)) PMap.empty := by
-  show cerwpT (ℍ := ℍ) (opTableT TS) QS Fb F n w ls []
+    cerwpT (ℍ := ℍ) (opTableT (tabOf (ℍ := ℍ) Tc)) QS Fb F n w ls [] (.app (.lam b) (spawnE th))
+      PMap.empty := by
+  show cerwpT (ℍ := ℍ) (opTableT (tabOf (ℍ := ℍ) Tc)) QS Fb F n w ls []
     ((Kont.appR (.lam b) .hole).plug (performE (.val (opPayload nP 1 th)))) PMap.empty
-  refine cerwpT_perform (.appR (.lam b) .hole) rfl (show TS nP 1 = some enSpawn by simp [TS]) rfl ?_
+  refine cerwpT_perform (.appR (.lam b) .hole) rfl (tabOf_spawn Tc) rfl ?_
   intro w₀ ρ₀ ls₀ O₀ _ hr _ hO
   cases hO
   obtain rfl := RR.of_empty hr
   refine ⟨trivial, PMap.empty, PMap.empty, ResUT.compS_empty_right _,
-    ⟨rfl, fun j _ w' ls' Fb' Fe' h₁ h₂ => hth j w' ls' Fb' Fe' h₁ h₂⟩,
+    ⟨rfl, fun j hj w' ρ' ls' _ hr' Fb' Fe' h₁ h₂ => by
+      obtain rfl := RR.of_empty hr'; exact hth j hj w' ls' Fb' Fe' h₁ h₂⟩,
     (⟨(fun _ => rfl), fun w' ρ' ls' O' _ hr' _ hO' => ⟨fun k' hk' a σ σ' hB hcσ => ?_,
-      (fun _ _ k' hk' => ?_)⟩⟩ : contShareT enSpawn Fb n w₀ ls₀ [] (.appR (.lam b) .hole) th
-        (cerwpTC (ℍ := ℍ) (opTableT TS) QS Fb n) PMap.empty)⟩
+      (fun _ _ k' hk' => ?_)⟩⟩ : contShareT (enSpawnP (spawnPA (ℍ := ℍ) Tc)) Fb n w₀ ls₀ []
+        (.appR (.lam b) .hole) th
+        (cerwpTC (ℍ := ℍ) (opTableT (tabOf (ℍ := ℍ) Tc)) QS Fb n) PMap.empty)⟩
   · obtain ⟨rfl, rfl⟩ := hB
     obtain rfl := RR.of_empty hr'
     obtain rfl := compS_empty_right_eq hcσ
     cases hO'
     simp only [cerwpTC, hk', if_true]
-    exact cerwpT_det (post_down TS_down) (fun μ => step1Only_plug (Head.beta μ b Val.unit) rfl
-      .hole) (hb k' hk' w' ls')
+    exact cerwpT_det (post_down (tabOf_down Tc)) (fun μ => step1Only_plug (Head.beta μ b Val.unit)
+      rfl .hole) (hb k' hk' w' ls')
   · obtain rfl := RR.of_empty hr'
     cases hO'
     simp only [cerwpTC, hk', if_true]
-    exact cerwpT_det (post_down TS_down) (fun μ => step1Only_plug (Head.cancel μ _ rfl) rfl .hole)
-      cerwpT_unit
+    exact cerwpT_det (post_down (tabOf_down Tc)) (fun μ => step1Only_plug (Head.cancel μ _ rfl)
+      rfl .hole) cerwpT_unit
 
 /-! ### The programs -/
 
@@ -390,30 +374,43 @@ def thL : Val := Val.lam L
 def Cbody : Expr := .app (.lam (.app (.lam (.val .unit)) cancelE)) parkE
 def thC : Val := Val.lam Cbody
 
-theorem TC_park : TC nP 0 = some enPark := by simp [TC]
-theorem TC_cancel : TC nP 2 = some enPark := by simp [TC]
-theorem TS_park : TS (ℍ := ℍ) nP 0 = some enPark := by simp [TS]
+theorem tabAt_park (j : Nat) : tabAt (ℍ := ℍ) j nP 0 = some enPark := by
+  rw [tabAt_eq]; exact tabOf_park _
+theorem tabAt_cancel (j : Nat) : tabAt (ℍ := ℍ) j nP 2 = some enPark := by
+  rw [tabAt_eq]; exact tabOf_cancel _
+theorem tabAt_down (j : Nat) : ∀ m i en, tabAt (ℍ := ℍ) j m i = some en →
+    ∀ k w ls v ρ, en.PA (k + 1) w ls v ρ → en.PA k w ls v ρ := by
+  rw [tabAt_eq]; exact tabOf_down _
+
+/-- A task answering `QS` answers `QV`. -/
+theorem cerwpT_QV {T : OpTabT} {Fb F : TFrame} {n : Nat} {w : TWd} {ls : List (SRecT w.K)}
+    {O : List (FrameRecT w.K)} {e : Expr} {ρ : TRes w.K}
+    (h : cerwpT (ℍ := ℍ) (opTableT T) QS Fb F n w ls O e ρ) :
+    cerwpT (ℍ := ℍ) (opTableT T) QV Fb F n w ls O e ρ :=
+  cerwpT_post_mono (opTableT_local T) (fun _ _ _ _ _ _ h => QS_QV h) h
 
 theorem thL_ok (j : Nat) (w' : TWd) (ls' : List (SRecT w'.K)) (Fb' Fe' : TFrame) :
-    cerwpT (ℍ := ℍ) (opTableT TC) QS Fb' Fe' j w' ls' [] (.app thL.1 (.val Val.unit)) PMap.empty :=
-  cerwpT_det (post_down TC_down) (fun μ => step1Only_plug (Head.beta μ L Val.unit) rfl .hole)
-    (by rw [Kont.plug, L_closed]; exact L_cerwpT TC_park TC_down α₀ j Fb' Fe' w' ls')
+    cerwpT (ℍ := ℍ) (opTableT (tabAt (ℍ := ℍ) j)) QS Fb' Fe' j w' ls' [] (.app thL.1 (.val Val.unit))
+      PMap.empty :=
+  cerwpT_det (post_down (tabAt_down j)) (fun μ => step1Only_plug (Head.beta μ L Val.unit) rfl .hole)
+    (by rw [Kont.plug, L_closed]; exact L_cerwpT (tabAt_park j) (tabAt_down j) α₀ j Fb' Fe' w' ls')
 
 theorem thC_ok (j : Nat) (w' : TWd) (ls' : List (SRecT w'.K)) (Fb' Fe' : TFrame) :
-    cerwpT (ℍ := ℍ) (opTableT TC) QS Fb' Fe' j w' ls' [] (.app thC.1 (.val Val.unit)) PMap.empty := by
-  refine cerwpT_det (post_down TC_down) (fun μ => step1Only_plug (Head.beta μ Cbody Val.unit) rfl
-    .hole) ?_
+    cerwpT (ℍ := ℍ) (opTableT (tabAt (ℍ := ℍ) j)) QS Fb' Fe' j w' ls' [] (.app thC.1 (.val Val.unit))
+      PMap.empty := by
+  refine cerwpT_det (post_down (tabAt_down j)) (fun μ => step1Only_plug (Head.beta μ Cbody Val.unit)
+    rfl .hole) ?_
   have e : Cbody.subst 0 Val.unit = Cbody := by
     simp [Cbody, parkE, cancelE, Expr.subst, performE, opPayload]
     repeat (first | rfl | constructor)
   rw [Kont.plug, e]
-  refine cerwpT_parkThen TC_down TC_park fun k' _ w'' ls'' => ?_
+  refine cerwpT_parkThen (tabAt_down j) (tabAt_park j) fun k' _ w'' ls'' => ?_
   have e' : (Expr.app (.lam (.val Val.unit)) cancelE).subst 0 Val.unit =
       .app (.lam (.val Val.unit)) (performE (.val (opPayload nP 2 Val.unit))) := by
     simp [cancelE, Expr.subst, performE, opPayload]
     repeat (first | rfl | constructor)
   rw [e']
-  exact cerwpT_parkThen TC_down TC_cancel fun k'' _ w₃ ls₃ => cerwpT_unit
+  exact cerwpT_parkThen (tabAt_down j) (tabAt_cancel j) fun k'' _ w₃ ls₃ => cerwpT_unit
 
 /-- **Root of the loan test**: `let _ = spawn (λ_. L) in L`. -/
 def rootLoan : Expr := .app (.lam L) (spawnE thL)
@@ -422,24 +419,57 @@ def rootCancel : Expr := .app (.lam LC) (spawnE thC)
 /-- **Root of the depth-3 test**: `let _ = spawn (λ_. L) in let _ = spawn (λ_. L) in L`. -/
 def rootDepth3 : Expr := .app (.lam rootLoan) (spawnE thL)
 
-theorem rootLoan_cerwpT (n : Nat) (Fb F : TFrame) (w : TWd) (ls : List (SRecT w.K)) :
-    cerwpT (ℍ := ℍ) (opTableT TS) QS Fb F n w ls [] rootLoan PMap.empty :=
-  cerwpT_spawnThen (fun j w' ls' Fb' Fe' _ _ => thL_ok j w' ls' Fb' Fe') fun k' _ w' ls' => by
-    rw [L_closed]; exact L_cerwpT TS_park TS_down α₀ k' _ _ w' ls'
+/-- A child of a stop at `n ≤ k` at `tabAt k` is verified at its indexed table. -/
+theorem child_trunc {k n : Nat} (hn : n ≤ k) {th : Val}
+    (hth : ∀ j (w' : TWd) (ls' : List (SRecT w'.K)) (Fb' Fe' : TFrame),
+      cerwpT (ℍ := ℍ) (opTableT (tabAt (ℍ := ℍ) j)) QS Fb' Fe' j w' ls' []
+        (.app th.1 (.val Val.unit)) PMap.empty) :
+    ∀ j, j < n → ∀ (w' : TWd) (ls' : List (SRecT w'.K)) (Fb' Fe' : TFrame),
+      (∀ w ρf, ResUT.Valid ρf → Fb' w ρf) → (∀ w ρf, fdMask (fun _ => False) w ρf → Fe' w ρf) →
+      cerwpT (ℍ := ℍ) (opTableT ((fun j => if j < k then tabAt (ℍ := ℍ) j else OpTabT.empty) j))
+        QV Fb' Fe' j w' ls' [] (.app th.1 (.val Val.unit)) PMap.empty := by
+  intro j hj w' ls' Fb' Fe' _ _
+  simp only [show j < k by omega, if_true]
+  exact cerwpT_QV (hth j w' ls' Fb' Fe')
 
-theorem rootCancel_cerwpT (n : Nat) (Fb F : TFrame) (w : TWd) (ls : List (SRecT w.K)) :
-    cerwpT (ℍ := ℍ) (opTableT TS) QS Fb F n w ls [] rootCancel PMap.empty :=
-  cerwpT_spawnThen (fun j w' ls' Fb' Fe' _ _ => thC_ok j w' ls' Fb' Fe') fun k' _ w' ls' => by
-    rw [LC_closed]; exact LC_cerwpT TS_park TS_down α₀ k' _ _ w' ls'
+theorem rootLoan_cerwpT {k n : Nat} (hn : n ≤ k) (Fb F : TFrame) (w : TWd)
+    (ls : List (SRecT w.K)) :
+    cerwpT (ℍ := ℍ) (opTableT (tabAt (ℍ := ℍ) k)) QS Fb F n w ls [] rootLoan PMap.empty := by
+  rw [tabAt_eq]
+  refine cerwpT_spawnThen (child_trunc hn fun j w' ls' Fb' Fe' => thL_ok j w' ls' Fb' Fe')
+    fun k' _ w' ls' => ?_
+  rw [L_closed, ← tabAt_eq]
+  exact L_cerwpT (tabAt_park k) (tabAt_down k) α₀ k' _ _ w' ls'
 
-theorem rootDepth3_cerwpT (n : Nat) (Fb F : TFrame) (w : TWd) (ls : List (SRecT w.K)) :
-    cerwpT (ℍ := ℍ) (opTableT TS) QS Fb F n w ls [] rootDepth3 PMap.empty := by
-  refine cerwpT_spawnThen (fun j w' ls' Fb' Fe' _ _ => thL_ok j w' ls' Fb' Fe') fun k' _ w' ls' => ?_
+theorem rootCancel_cerwpT {k n : Nat} (hn : n ≤ k) (Fb F : TFrame) (w : TWd)
+    (ls : List (SRecT w.K)) :
+    cerwpT (ℍ := ℍ) (opTableT (tabAt (ℍ := ℍ) k)) QS Fb F n w ls [] rootCancel PMap.empty := by
+  rw [tabAt_eq]
+  refine cerwpT_spawnThen (child_trunc hn fun j w' ls' Fb' Fe' => thC_ok j w' ls' Fb' Fe')
+    fun k' _ w' ls' => ?_
+  rw [LC_closed, ← tabAt_eq]
+  exact LC_cerwpT (tabAt_park k) (tabAt_down k) α₀ k' _ _ w' ls'
+
+theorem rootDepth3_cerwpT {k n : Nat} (hn : n ≤ k) (Fb F : TFrame) (w : TWd)
+    (ls : List (SRecT w.K)) :
+    cerwpT (ℍ := ℍ) (opTableT (tabAt (ℍ := ℍ) k)) QS Fb F n w ls [] rootDepth3 PMap.empty := by
+  rw [tabAt_eq]
+  refine cerwpT_spawnThen (child_trunc hn fun j w' ls' Fb' Fe' => thL_ok j w' ls' Fb' Fe')
+    fun k' hk' w' ls' => ?_
   have e : rootLoan.subst 0 Val.unit = rootLoan := by
     simp [rootLoan, spawnE, thL, Expr.subst, performE, opPayload, Val.lam, L_closed]
     repeat (first | rfl | constructor)
-  rw [e]
-  exact rootLoan_cerwpT k' _ _ w' ls'
+  rw [e, ← tabAt_eq]
+  exact rootLoan_cerwpT (by omega) _ _ w' ls'
+
+/-- **A root verified at every indexed table is verified at the scheduler's table**, as a task
+answering `QV`. -/
+theorem root_TJ {e : Expr}
+    (h : ∀ k n, n ≤ k → ∀ (Fb F : TFrame) (w : TWd) (ls : List (SRecT w.K)),
+      cerwpT (ℍ := ℍ) (opTableT (tabAt (ℍ := ℍ) k)) QS Fb F n w ls [] e PMap.empty)
+    (n : Nat) (Fb F : TFrame) (w : TWd) (ls : List (SRecT w.K)) :
+    cerwpT (ℍ := ℍ) (opTableT (TJ (ℍ := ℍ))) QV Fb F n w ls [] e PMap.empty :=
+  cerwpT_QV (cerwpT_tabAt (h n n le_rfl Fb F w ls))
 
 /-- `(hnd HS root) (HS, [])`. -/
 def progOf (root : Expr) : Expr := .app (hndE HS root) (stateVal HS []).1
@@ -455,26 +485,26 @@ and finishes; the root resumes, merges its view, ends its lend and finishes. Eve
 reached steps or is a value; a value is reached only at the empty memory; every `free` finds its
 cell. -/
 theorem progLoan_safe : OrDiverges (ℍ := ℍ) progLoan :=
-  poolSchedAdequacyT beforeP TS nP qsS stackRet hsS QS QS InvS _ _ rootLoan
+  poolSchedAdequacyT beforeP TJ nP qsS stackRet hsS QV QS InvS _ _ rootLoan
     (fun _ _ _ _ _ _ h => h.2.2) (fun _ h => by cases h) hs_schedOK (fun _ _ _ => trivial)
-    (fun _ _ _ => trivial) fun n => rootLoan_cerwpT n _ _ _ _
+    (fun _ _ _ => trivial) fun n => root_TJ (fun k n hn => rootLoan_cerwpT hn) n _ _ _ _
 
 /-- **The cancel test is safe and leak-free, or diverges**, through `PoolSchedAdequacyT`. The root
 spawns `C`; C parks; the root opens its lend and parks holding its view; C cancels the root
 (`cancel`'s clause, `poolAns_cancelSnd`); the root's finaliser parks again, C finishes, the
 finaliser is resumed and ends the lend and frees the cell. -/
 theorem progCancel_safe : OrDiverges (ℍ := ℍ) progCancel :=
-  poolSchedAdequacyT beforeP TS nP qsS stackRet hsS QS QS InvS _ _ rootCancel
+  poolSchedAdequacyT beforeP TJ nP qsS stackRet hsS QV QS InvS _ _ rootCancel
     (fun _ _ _ _ _ _ h => h.2.2) (fun _ h => by cases h) hs_schedOK (fun _ _ _ => trivial)
-    (fun _ _ _ => trivial) fun n => rootCancel_cerwpT n _ _ _ _
+    (fun _ _ _ => trivial) fun n => root_TJ (fun k n hn => rootCancel_cerwpT hn) n _ _ _ _
 
 /-- **The depth-3 test is safe and leak-free, or diverges**, through `PoolSchedAdequacyT`. The
 root spawns two loan tasks and runs a third; when the root parks, three tasks each hold a lend
 open across a park, and each ends its own lend after the others have parked. -/
 theorem progDepth3_safe : OrDiverges (ℍ := ℍ) progDepth3 :=
-  poolSchedAdequacyT beforeP TS nP qsS stackRet hsS QS QS InvS _ _ rootDepth3
+  poolSchedAdequacyT beforeP TJ nP qsS stackRet hsS QV QS InvS _ _ rootDepth3
     (fun _ _ _ _ _ _ h => h.2.2) (fun _ h => by cases h) hs_schedOK (fun _ _ _ => trivial)
-    (fun _ _ _ => trivial) fun n => rootDepth3_cerwpT n _ _ _ _
+    (fun _ _ _ => trivial) fun n => root_TJ (fun k n hn => rootDepth3_cerwpT hn) n _ _ _ _
 
 end BoCa.Fig16.Tree.Wp.SchedProgs.SpawnProgs
 
