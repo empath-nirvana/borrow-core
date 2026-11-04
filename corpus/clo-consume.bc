@@ -1,12 +1,12 @@
--- Dropping a closure (SPEC §22) runs its `close`. A closure is linear, with a derived drop
+-- Consuming a closure (SPEC §22) runs its `close`. A closure is linear and consumable
 -- (SPEC §12, group 2): `close`, which disposes of the state. `k` is never called and `k2`'s rest
--- is never used again, so the checker inserts their drops at the end of the scope, and each
+-- is never used again, so the checker inserts their consumes at the end of the scope, and each
 -- `close` frees its counter's cell. `nest` is a closure whose state is another closure: its
--- `close` closes the closure it holds, so dropping it frees that counter's cell too. Its bound is
+-- `close` closes the closure it holds, so consuming it frees that counter's cell too. Its bound is
 -- the bound `'c` of the closure it holds (SPEC §23, the box rule non-strict); it is built with
 -- `clo_new` and `boxed['c]`, since `clo_new_boxed`'s bound would put its `'c` strictly below.
 --
--- Answer: i32[3], and `live 0`. A drop that forgot a closure without running its `close` leaves
+-- Answer: i32[3], and `live 0`. A consume that forgot a closure without running its `close` leaves
 -- its counter's cell live (`live 3` if none ran).
 
 include clo

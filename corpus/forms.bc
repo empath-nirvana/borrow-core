@@ -29,8 +29,8 @@ def borrowed : !(all 'y < top. imm 'y Nat => Nat) =
     case r { inl u -> return (roll (inl u)) | inr n -> return (roll (inr n)) }))
 
 def consts : 1 =
-  run (a <- return ((copy['a, Nat], copy_bang[Nat]), (forget_imm['a, Nat], forget_mut[top, Nat]));
-       b <- return ((forget_unk, forget_bang[1 + 1]), (fixd[Nat, 1], unfold_s[Nat, Nat]));
+  run (a <- return ((copy['a, Nat], copy_bang[Nat]), (release_imm['a, Nat], release_mut[top, Nat]));
+       b <- return ((release_unk, release_bang[1 + 1]), (fixd[Nat, 1], unfold_s[Nat, Nat]));
        c <- return (withbor3['a, 'x, Nat, 1], withload['a, 'x, Nat, 1]);
        d <- return (withbor_s_imm[Pair, 'c, 1], withbor_f2_imm['c, 'a, 'b, Nat, Nat, 1]);
        e <- return (fold_own[1 + X, 1], (fold_reuse[1 + X * ref X, 1], free_s[Pair]));

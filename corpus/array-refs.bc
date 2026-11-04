@@ -1,11 +1,11 @@
 -- An array of owned cells (SPEC §9, §12): `array_new` allocates a cell per element, holding
 -- 7i + 1. Element 1 is replaced by a fresh cell and the old cell is freed, which returns its
--- contents. The array, still owning three cells, is dropped implicitly at the end of `main`:
--- its drop is `array_free` with the drop of `ref i32` as the consumer, which frees
+-- contents. The array, still owning three cells, is consumed implicitly at the end of `main`:
+-- its consume is `array_free` with the consume of `ref i32` as the consumer, which frees
 -- each element's cell and then the array.
 --
 -- Answer: i32[8], the contents of the cell that was element 1 of [1, 8, 15]. A tabulator
--- applied at the wrong index gives 1 or 15. `live 0` checks that the drop freed the four
+-- applied at the wrong index gives 1 or 15. `live 0` checks that the consume freed the four
 -- cells the array owned at the end and the array itself.
 
 type R = ref i32

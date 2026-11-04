@@ -4,11 +4,11 @@
 -- adapters over it, one line each.
 --
 -- Blocked by the kernel, as `pending/gen-digits.bc` is: the input's iterator, which holds the
--- input capability (no derived drop, §12), is live across `yield`, whose continuation may be
+-- input capability (no consume, §12), is live across `yield`, whose continuation may be
 -- cancelled; and a stored generator's `close` cancels the continuation, which answers `()`, so
 -- the capability could not come back.
 --
--- now: 16:56: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across an operation that may be cancelled: the cancel runs a finaliser (`[then]`) that consumes it by its derived drop, and its type is linear with no derived drop
+-- now: 16:56: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across an operation that may be cancelled: the cancel runs a finaliser (`[then]`) that consumes it by its consume, and its type is linear and not consumable
 
 include adapters
 

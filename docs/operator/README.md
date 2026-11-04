@@ -87,13 +87,13 @@ Each design choice in `operator.bc` is tagged with the goals it serves. Two note
 |---|---|---|---|
 | **G1** | One function for every context. | async or sync; which runtime; `.await`; `Pin`; `Send` | the inferred effect row: `Async` means it may wait |
 | **G2** | Failure is handled where it is handled. | `?`, `map_err`, `From` impls at each call | `Fail<E>` in the row, with its `E` |
-| **G3** | Every connection is closed, on every exit: return, raise, timeout, cancellation, shutdown. | which exit paths close which connection; async `Drop` | a connection is linear, so each exit path consumes it through the connection effect's `close` (decision 73); which values must be handed back |
+| **G3** | Every connection is closed, on every exit: return, raise, timeout, cancellation, shutdown. | which exit paths close which connection; async `Consume` | a connection is linear, so each exit path consumes it through the connection effect's `close` (decision 73); which values must be handed back |
 | **G4** | Ambient services (log, clock, metrics) reach code without being threaded through it. | passing a logger or a context struct everywhere | `Log`, `Clock` and `Metrics` in the row |
 | **G5** | Tests replace the world by handlers. | mocking traits, dependency injection, paused runtimes, real time | which effects a test must handle (the row of what it calls) |
 | **G6** | A stream is an iterator. | `Stream` vs `Iterator` vs `TryStream`; `StreamExt` vs `TryStreamExt`; `boxed()` | the element type, and the effects of `next` |
 | **G7** | A codec is derived once per type and runs over any byte source. | `from_slice` vs `from_reader` vs an async codec; buffering whole bodies | the source's row, plus `Fail<JsonError>` |
 | **G8** | Cost stays readable, as good as Rust. | nothing: see the right-hand column | `box` allocates; `{ … }` suspends; a copy per effect set; `total` promises no effect |
-| **G9** | Concurrency is structured. | `Arc`, `'static`, forgotten `JoinHandle`s | lifetimes; a task cannot outlive its scope |
+| **G9** | Concurrency is structured. | `Arc`, `'static`, released `JoinHandle`s | lifetimes; a task cannot outlive its scope |
 
 ## 2. The one mechanism
 
@@ -117,7 +117,7 @@ Operations come in two kinds, told apart by what the handler must do.
    performs them, and that is the part that colours functions in other languages. Each one is a
    shape of the one codata former the core already has:
    - `Fail<E>`: the result is `F (B + E)`. `raise` is an injection, and unwinding is the implicit
-     drops (SPEC §12).
+     consumes (SPEC §12).
    - `Yield<T>`: the result is `U (iter T B K)`. A generator is `unfold` (SPEC §7, decision 25).
    - `Async`: the result is `U (iter Wait B K)`. A task is an iterator of what it waits for, and a
      scheduler is its consumer. This is #52's "a future is codata", with the yield type made
@@ -154,8 +154,8 @@ polymorphism in the core.
   It is also the codata reading: a suspension is yielded to the observer.
 
 **Cancellation is not resuming.** A handler that does not resume its continuation abandons it.
-A timeout, a lost `race`, shutdown and a raise all unwind the same way: the drops run, the
-borrows end, and whatever has no derived drop goes back in the residual (SPEC §14). So G3 has one
+A timeout, a lost `race`, shutdown and a raise all unwind the same way: the consumes run, the
+borrows end, and whatever is not consumable goes back in the residual (SPEC §14). So G3 has one
 mechanism, not four.
 
 **Shared mutable state lives in a handler, not in a lock.** Consider the metrics registry, the
@@ -195,7 +195,7 @@ deliver this is obstacle O2 (§5.2).
     body mid-watch is the same function.
   - `merge_patch` (RFC 7386) and `diff` are total folds over `Value`.
 - **§1.5 HTTP** is an effect with one answering operation, `send`. The response body is an
-  iterator of chunks, and dropping it closes the connection. `http_client` is the real handler.
+  iterator of chunks, and consuming it closes the connection. `http_client` is the real handler.
 - **§1.6 The Kubernetes client.**
   - `get`, `apply`, `apply_status`, `json_patch`, `list` and `watch` are ordinary functions over
     `Http`.
@@ -337,14 +337,14 @@ and observable.
 **Rust.**
 
 - `tokio::time::timeout` works only for futures.
-- Dropping a future at an `.await` cancels it, but there is no async `Drop`. Cleanup that needs
+- Consuming a future at an `.await` cancels it, but there is no async `Consume`. Cleanup that needs
   I/O, such as removing a finalizer or telling the server, cannot run on cancel.
 - The finalizer helper documents this: the object may be reconciled again.
 
 **Ours.**
 
 - `timeout(d, body)` is `race(body, { sleep(d) })`, and the loser unwinds like a raise.
-- A connection is a linear value with no derived drop. Closing it is the connection effect's
+- A connection is a linear value that is not consumable. Closing it is the connection effect's
   API, written with linear types in the library, so every exit (`return`, `raise`, timeout,
   shutdown) must consume it through `close`; the kernel closes nothing by itself.
 - The fourth test asserts it (`open == 0`).
@@ -561,7 +561,7 @@ elaboration decision 6).
 - **Where the operator meets it.** Every raise under a borrow (`call(cfg, || get(&api, …))`), and
   every cancellation (§2: cancellation is not resuming).
 - **The questions.**
-  - What happens to a live value with no derived drop (a capability, a thunk, SPEC §12 group 3)?
+  - What happens to a live value that is not consumable (a capability, a thunk, SPEC §12 group 3)?
     Either raise is illegal while one is live, or the handler receives it with the error, as
     `close` hands back a residual. The operator's capabilities live in handlers, not in bodies,
     so a body holds only borrows of them, and a borrow just ends. That makes the second answer
@@ -604,9 +604,9 @@ elaboration decision 6).
 - **N5. `return` and `break` as `Fail`** with a private error, handled at the function's or the
   loop's boundary. SPEC §11 Open notes that `for` has no early exit today.
 - **N6. Closing sockets.** `Conn` and `Listener` are linear, and closing them is the connection
-  effect's API, written with linear types in the library (decision 73), not a kernel drop.
+  effect's API, written with linear types in the library (decision 73), not a kernel consume.
   - Is `close` an extern with a contract?
-  - What does a failing close do: ignore, as Rust's `Drop for TcpStream` does, or report to
+  - What does a failing close do: ignore, as Rust's `Consume for TcpStream` does, or report to
     `Log`?
 - **N7. `Metrics.render(out: &mut Buf)`.** An answering operation that lends the *caller's*
   buffer to the handler: is that `needs` with a borrowed argument?
@@ -651,7 +651,7 @@ experience. Each step is justified by lines of `operator.bc`.
    - The work:
      - `Fail<E>` as the computation type `F (B + E)`, through SPEC §14's three hooks;
      - `raise`, `try`, `map_err`, `return`, `break` (N5);
-     - unwinding by drops, including through folds (O4, O5).
+     - unwinding by consumes, including through folds (O4, O5).
    - Justified by `reconcile`'s early `return AwaitChange`, `raise(ReconcileError::Invalid …)`,
      `reconcile_key`'s `try`, `parse_config`, and the codecs' `JsonError`.
 4. **Collections and JSON.**
@@ -674,7 +674,7 @@ experience. Each step is justified by lines of `operator.bc`.
      - `Args`, `Env`, `Clock`, `Signals` (a signal fd) and `Net` (blocking TCP, #66), following
        the SPEC §11 pattern;
      - `wait` as a blocking host `poll` over an interest set (`block_on`);
-     - drops for sockets (N6).
+     - consumes for sockets (N6).
    - Justified by `parse_config(&args, &env)`, `terminated(&mut signals)`, `http_client(&mut
      net, …)`, and `bind`.
 7. **A sequential operator on a real cluster.**

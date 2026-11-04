@@ -17,7 +17,7 @@
 --   2 2 1 → 10*2 + 11*2 + 7*1                                                              49
 -- A `take` that ran one step more gives 174; a `skip` off by one 126 or 94; a `take_until` that
 -- yielded the square above 20 makes its last chunk [4 5], which changes nothing, but a `chunks`
--- that dropped its last partial chunk gives 42.
+-- that consumed its last partial chunk gives 42.
 
 include adapters
 

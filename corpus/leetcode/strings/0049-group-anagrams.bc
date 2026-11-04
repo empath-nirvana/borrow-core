@@ -12,7 +12,7 @@
 -- keyed by the `hash` and `equal` of `string` (`lib/key.bc`, SPEC §36: a buffer's case, which
 -- compares the initialised bytes): `map_new[K, V](cap)`, `map_insert(&mut m, k, v)` answering the
 -- value it displaces, and `map_lookup(&m, k)` a copy of a persistent value. The key sought is given
--- by value, and the lookup drops it; on a word whose group is new, the key is made again for the
+-- by value, and the lookup consumes it; on a word whose group is new, the key is made again for the
 -- insertion (Rust's `get(&k)` borrows it instead).
 --
 -- Answer on `0049-group-anagrams.in`,
@@ -45,7 +45,7 @@ fn words<'t>(l: text 't) -> buf (text 't) =
   let (l, u) = array_copy['t, u8] l;
   let n = len(u);
   let mut out = box buf[text 't](8);
-  if n == 0 { array_forget['t, u8](l); out } else {
+  if n == 0 { array_release['t, u8](l); out } else {
     let mut rest = l;
     for _ in 0..n + 1 {
       match split_once(rest, b' ') {
@@ -53,7 +53,7 @@ fn words<'t>(l: text 't) -> buf (text 't) =
       | inr w -> rest = slice_empty_imm['t, u8]; let (o, _) = push(out, w); out = o; break
       }
     };
-    array_forget['t, u8](rest);
+    array_release['t, u8](rest);
     out
   }
 
@@ -72,7 +72,7 @@ fn add_to<'t>(groups: buf (buf (text 't)), g: i32, w: text 't) -> buf (buf (text
       let (grp, _) = push(grp, w);
       let (a, _) = array_replace[buf (text 't)] (a, g, grp);
       (a, n)
-  | inr e -> array_forget['t, u8](w); (a, n)
+  | inr e -> array_release['t, u8](w); (a, n)
   }
 
 -- The words of a case in groups of rearrangements, in the order of their first words.
@@ -88,7 +88,7 @@ fn group<'t>(words: buf (text 't)) -> buf (buf (text 't)) =
     let (w, v2) = array_copy['t, u8] w;
     let o = map_lookup(&index, key(v));
     match o {
-      inl g -> array_forget['t, u8](v2); groups = add_to(groups, g, w)
+      inl g -> array_release['t, u8](v2); groups = add_to(groups, g, w)
     | inr _ ->
         let (gs, m) = len_of(groups);
         let (gs, _) = push(gs, box buf[text 't](4));

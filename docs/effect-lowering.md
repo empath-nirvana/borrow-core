@@ -62,7 +62,7 @@ lowering visible in the closure or flat IR; every decided law and every borrow g
 | `Poly` | `Clos/Poly.lean` | a polymorphic let used at different rows is converted per use | its own run of the effect analysis | — |
 | `Capture` | `Clos/Capture.lean` | control sites to `drive`/`κ`/`Res` codes; which codes suspend; the conventions; tail-resumptive operations as direct calls; every other suspending code a machine | its own 0-CFA (`SFacts.of`), static names, clause shapes read syntactically | `hnd`/`perform`: afterwards there are only codes answering `inl v` or `inr (p, k)` |
 | `Unwind` | `Clos/Unwind.lean` | raises to branch-per-call sums, `catch`, `fin` | keys `(n, i)`, the flow | `raise`, `catch`, `fin` |
-| `Collapse` | `Clos/Collapse.lean` | a codata thunk's first state built eagerly; codes equal up to renaming merged; dead codes dropped | flow, code text | the replaced codes |
+| `Collapse` | `Clos/Collapse.lean` | a codata thunk's first state built eagerly; codes equal up to renaming merged; dead codes consumed | flow, code text | the replaced codes |
 | layout types | `Clos/Types.lean` | a layout per variable; each closure type's union of codes | unification over the closure IR | — |
 | flow | `Clos/Flow.lean` | the codes each call may reach (monovariant 0-CFA) | the closure IR | — |
 | flat IR | `Flat/Lower.lean` | words, defunctionalisation (a direct call, or the type's `apply` switch), `drive` for `main`'s loop, injections padded with zeros (`mkInj`, `mkCon`) | layout types, flow | closures as values |

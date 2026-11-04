@@ -321,7 +321,7 @@ These are detailed under each topic below (the IDs in brackets).
 - Source: mem:`sugar-never-special-cases-kernel`; decision 33 (`docs/decisions.md:151-157`).
 - Note: the record links `[[typed-sugar]]`, which has no memory file. Decision 26 is the
   type-directed-sugar rule (`docs/decisions.md:88-93`; #54 comment 2026-09-27: "no types in the
-  sugar" dropped).
+  sugar" consumed).
 
 **K17. Decision 30: no ambient authority; one capability per effect.**
 - Strength: decided. The surface names in decisions 32 and 34 are provisional.
@@ -345,7 +345,7 @@ These are detailed under each topic below (the IDs in brackets).
 
 **C1. Continuation modes and qualifiers.**
 - Content: cancellable by default (`ctl`), plus `must_resume ctl` (must resume) and `multi ctl`
-  (unrestricted). A cancellable continuation's derived drop is its `cancel`.
+  (unrestricted). A cancellable continuation's consume is its `cancel`.
 - Words: the user's spelling guidance of 2026-10-01 (decision 55); no quote on the semantics.
 - Strength: provisional (spelling). The qualifier lattice is as built (SPEC §19).
 - Scope: kernel.
@@ -368,7 +368,7 @@ These are detailed under each topic below (the IDs in brackets).
   it falls out for free sure. Otherwise eh…" (2026-10-02). Also "it's worth pursuing why we can't
   have multishot, but it's not a blocker".
 - Strength: default (a priority call, not a ban). Design and prove for must-resume and cancellable;
-  drop multi-shot if it breaks a law or adds a rule.
+  consume multi-shot if it breaks a law or adds a rule.
 - Scope: kernel and lowering.
 - Sources: mem:`multishot-only-if-free`:8-17; #245 comment 2026-10-02T14:48
   (issuecomment-5954971439); #246 body (side question).
@@ -404,7 +404,7 @@ These are detailed under each topic below (the IDs in brackets).
   `ν` codata … not a separate construct unless a target needs it" (`SPEC.md:2975`). Decision 15
   is not marked revised. Nothing records whether the user revisited it.
 
-**C6. Static drop placement for a dropped continuation (effects TR §8.1).**
+**C6. Static consume placement for a consumed continuation (effects TR §8.1).**
 - Content: the elaborator inserts `cancel k` at the weakening point; there is no dynamic
   reachability check.
 - Words: none.

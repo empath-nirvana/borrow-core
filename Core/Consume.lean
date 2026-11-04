@@ -3,38 +3,38 @@ import Core.Folds
 import Core.FoldOwnG
 
 /-!
-# Core — drops  `[spec §12]`
+# Core — consumes  `[spec §12]`
 
-`dropFnE T : T ⊸ F 1` is a closed term for every type `T` with `HasDrop T`, and `dropFn_wf` types it
+`consumeE T : T ⊸ F 1` is a closed term for every type `T` with `Consumable T`, and `consume_wf` types it
 in `CDerives` at every lifetime context and every dead context: it is an ordinary linear program
-built from existing rules. The checker inserts `dropE T i e = (dropFnE T xᵢ; e)` where an owned
-value goes unused (`drop_derives`), so the elaborated term uses the value exactly once.
+built from existing rules. The checker inserts `consumeSlotE T i e = (consumeE T xᵢ; e)` where an owned
+value goes unused (`consumeSlot_derives`), so the elaborated term uses the value exactly once.
 
-| type | drop |
+| type | consume |
 |---|---|
 | `1`, `0`, `I32`, `I64`, `Unk`, `!A` | `forget` (the slot is persistent) |
-| `Imm @a A`, `Mut @a A` | `forget` (the borrow axiom constant: ends the loan, frees nothing) |
+| `Imm @a A`, `Mut @a A` | `forget`, the release constant: the loan ends and returns to its lender, nothing is freed |
 | `A ⊗ B`, `A ⊕ B`, `[@a] A` | componentwise |
-| `Ref A` | `free`, then the drop of `A` |
-| `μX. T`, `T` in `FShape` | `foldOwn` whose algebra is the drop of `T[1/X]` |
-| `μX. T`, `T` in `P`, not in `FShape` | `foldOwnG` whose algebra at each key is the drop of the key's body at results `1` |
+| `Ref A` | `free`, then the consume of `A` |
+| `μX. T`, `T` in `FShape` | `foldOwn` whose algebra is the consume of `T[1/X]` |
+| `μX. T`, `T` in `P`, not in `FShape` | `foldOwnG` whose algebra at each key is the consume of the key's body at results `1` |
 | `U(C & F 1)` | `close`: force, then the second projection |
-| `U(νX. C & F R)`, `R` closed | `close`, then the drop of the residual `R` |
-| `Array A` | `array_free` with the drop of `A` as the consumer |
-| `ArrayImm @a A` | `array_forget` |
+| `U(νX. C & F R)`, `R` closed | `close`, then the consume of the residual `R` |
+| `Array A` | `array_free` with the consume of `A` as the consumer |
+| `ArrayImm @a A` | `array_release` |
 
-The first two rows are the forgettable types, whose drop does nothing; every type of
-`Forgettable` (`Core/Records.lean`) is one (`hasDrop_of_forgettable`). The other rows deallocate or
-run `close` code. `U C` in general has no derived drop: a thunk of `F A` or of `A ⊸ C` can only be
+The first two rows are the releasable types, whose consume does nothing; every type of
+`Releasable` (`Core/Records.lean`) is one (`consumable_of_releasable`). The other rows deallocate or
+run `close` code. `U C` in general is not consumable: a thunk of `F A` or of `A ⊸ C` can only be
 disposed of by running it. Nor does `μ` outside the fold class `P` (for example `X` under `U`).
 
-The `alg` mode `dropFnAt true A` is the drop of `A⟨1⟩` (`FoldP.resO dropAlgs`): `A` with
+The `alg` mode `consumeAt true A` is the consume of `A⟨1⟩` (`FoldP.resO consumeAlgs`): `A` with
 each recursive position (a variable, a `μ` or an array that is not closed) at its result `1`
-(`algE_eqP`). At a `μ` whose body is in `FShape` (`fshapeB`) the drop is `foldOwn`, its
+(`algE_eqP`). At a `μ` whose body is in `FShape` (`fshapeB`) the consume is `foldOwn`, its
 algebra the `alg` mode of the body. At any other body of `P` it is `foldOwnG`, with one
 algebra per key (`FoldP.keys`): the root's and every inner `μ`'s are the `alg` mode of its body,
-an array key's the drop of `1 ⊕ (1 ⊗ S⟨1⟩)` (`arrAlgE`). `algsIn` lists the inner keys'
-algebras by the same recursion as `FoldP.keysIn` (`algsIn_eq`), so `dropFnAt` and `algsIn` are one
+an array key's the consume of `1 ⊕ (1 ⊗ S⟨1⟩)` (`arrAlgE`). `algsIn` lists the inner keys'
+algebras by the same recursion as `FoldP.keysIn` (`algsIn_eq`), so `consumeAt` and `algsIn` are one
 mutual structural recursion on `VTy`.
 -/
 
@@ -99,7 +99,7 @@ theorem toFShape_ty : ∀ A : VTy, (toFShape A).ty = A
   | .opq _ => rfl
   | .fam _ => rfl
 
-/-! ### The drops -/
+/-! ### The consumes -/
 
 /-- `FShape.WF`, decided. -/
 def FShape.wfDec : FShape → Bool
@@ -139,85 +139,85 @@ def isX0 : VTy → Bool
   | .tvar 0 => true
   | _ => false
 
-/-- The drop of `1 ⊕ (1 ⊗ S)`, with `d` the drop of `S`: an array key's algebra. -/
+/-- The consume of `1 ⊕ (1 ⊗ S)`, with `d` the consume of `S`: an array key's algebra. -/
 def arrAlgE (d : Expr) : Expr :=
   .val (.lam (.case (.var 0) (.app forget (.var 0))
     (.app (.val (.lam (.letpair (.var 0) (.seq (.app forget (.var 1)) (.app d (.var 0)))))) (.var 0))))
 
 mutual
-/-- The drop of `T` (`alg = false`), or of `T⟨1⟩` for a position `T` of a `μ` body
+/-- The consume of `T` (`alg = false`), or of `T⟨1⟩` for a position `T` of a `μ` body
 (`alg = true`: `forget` at each recursive position). -/
-def dropFnAt : Bool → VTy → Expr
+def consumeAt : Bool → VTy → Expr
   | alg, .tensor A B => .val (.lam (.letpair (.var 0)
-      (.seq (.app (dropFnAt alg A) (.var 1)) (.app (dropFnAt alg B) (.var 0)))))
-  | alg, .sum A B => .val (.lam (.case (.var 0) (.app (dropFnAt alg A) (.var 0)) (.app (dropFnAt alg B) (.var 0))))
-  | alg, .ref A => if alg && !FoldP.clB 0 A then dropFnAt true A else
-      .val (.lam (bindE (.app (.val (.prim .free)) (.var 0)) (.app (dropFnAt false A) (.var 0))))
-  | _, .box _ A => .val (.lam (.app (dropFnAt false A) (.var 0)))
+      (.seq (.app (consumeAt alg A) (.var 1)) (.app (consumeAt alg B) (.var 0)))))
+  | alg, .sum A B => .val (.lam (.case (.var 0) (.app (consumeAt alg A) (.var 0)) (.app (consumeAt alg B) (.var 0))))
+  | alg, .ref A => if alg && !FoldP.clB 0 A then consumeAt true A else
+      .val (.lam (bindE (.app (.val (.prim .free)) (.var 0)) (.app (consumeAt false A) (.var 0))))
+  | _, .box _ A => .val (.lam (.app (consumeAt false A) (.var 0)))
   | alg, .mu A => if alg && !FoldP.clB 0 (.mu A) then forget else
       if fshapeB A then .val (.lam (.app (.app (.val (foldOwnV (toFShape A)))
-        (.val (.lam (.app (dropFnAt true A) (.var 0))))) (.var 0)))
+        (.val (.lam (.app (consumeAt true A) (.var 0))))) (.var 0)))
       else .val (.lam (.app (.app (.val (FoldP.foldOwnGV A))
-        (FoldP.tupE (.val (.lam (.app (dropFnAt true A) (.var 0))) :: algsIn A))) (.var 0)))
+        (FoldP.tupE (.val (.lam (.app (consumeAt true A) (.var 0))) :: algsIn A))) (.var 0)))
   | _, .thunk (.nu (.amp _ (.ret R))) => .val (.lam
-      (bindE (.app (.var 0) (.val (.inj₂ .unit))) (.app (dropFnAt false R) (.var 0))))
+      (bindE (.app (.var 0) (.val (.inj₂ .unit))) (.app (consumeAt false R) (.var 0))))
   | _, .thunk _ => .val (.lam (.app (.var 0) (.val (.inj₂ .unit))))
   | alg, .fam (.ref A) => if alg && !FoldP.clB 0 A then forget else
       .val (.lam (.app (.val (.prim .drop))
-        (.pair (.val (.lam (.app (dropFnAt false A) (.var 0)))) (.var 0))))
+        (.pair (.val (.lam (.app (consumeAt false A) (.var 0)))) (.var 0))))
   | _, .fam (.mut _ _) => .val (.lam (elet
       (.app (.val (.prim .idx)) (.pair (.var 0) (.val (Val.i32 0xFFFFFFFF))))
       (.case (.var 0) (.app forget (.var 0)) (.var 0))))
   | _, _ => forget
 
 /-- The algebras of the keys of a position, in the order of `FoldP.keysIn`: at a `μ` key, the
-`alg` mode of its body; at an array key, the drop of `1 ⊕ (1 ⊗ S⟨1⟩)`. -/
+`alg` mode of its body; at an array key, the consume of `1 ⊕ (1 ⊗ S⟨1⟩)`. -/
 def algsIn : VTy → List Expr
   | .tensor A B => algsIn A ++ algsIn B
   | .sum A B => algsIn A ++ algsIn B
   | .ref S => algsIn S
   | .fam (.ref S) => if FoldP.clB 0 S then [] else
-      .val (.lam (.app (arrAlgE (dropFnAt true S)) (.var 0))) :: algsIn S
+      .val (.lam (.app (arrAlgE (consumeAt true S)) (.var 0))) :: algsIn S
   | .mu B => if FoldP.clB 0 (.mu B) then [] else
-      .val (.lam (.app (dropFnAt true B) (.var 0))) :: algsIn B
+      .val (.lam (.app (consumeAt true B) (.var 0))) :: algsIn B
   | _ => []
 end
 
-/-- At a thunk the drop does not depend on the mode. -/
-theorem dropFnAt_thunk : ∀ (b : Bool) (C : CTy), dropFnAt b (.thunk C) = dropFnAt false (.thunk C)
+/-- At a thunk the consume does not depend on the mode. -/
+theorem consumeAt_thunk : ∀ (b : Bool) (C : CTy), consumeAt b (.thunk C) = consumeAt false (.thunk C)
   | _, .nu (.amp _ (.ret _)) | _, .nu (.amp _ (.arr _ _)) | _, .nu (.amp _ (.amp _ _))
   | _, .nu (.amp _ .top) | _, .nu (.amp _ (.all _ _ _)) | _, .nu (.amp _ (.nu _))
   | _, .nu (.amp _ (.eff _ _ _ _ _ _ _ _)) | _, .nu (.eff _ _ _ _ _ _ _ _) | _, .eff _ _ _ _ _ _ _ _
   | _, .nu (.ret _) | _, .nu (.arr _ _) | _, .nu .top | _, .nu (.all _ _ _) | _, .nu (.nu _)
   | _, .ret _ | _, .arr _ _ | _, .amp _ _ | _, .top | _, .all _ _ _ => rfl
 
-/-- The drop of `T`, a closed `λ`.  `[spec §12]` -/
-abbrev dropFnE : VTy → Expr := dropFnAt false
+/-- The consume of `T`, a closed `λ`.  `[spec §12]` -/
+abbrev consumeE : VTy → Expr := consumeAt false
 
-/-- The `alg` mode: the drop of a position of a `μ` body at results `1`. -/
-abbrev algE : VTy → Expr := dropFnAt true
+/-- The `alg` mode: the consume of a position of a `μ` body at results `1`. -/
+abbrev algE : VTy → Expr := consumeAt true
 
-/-- The results `1` at every key: the fold the drop is. -/
-def dropAlgs : FoldP.Algs := ⟨fun _ => .unit, fun _ _ => .unit⟩
+/-- The results `1` at every key: the fold the consume is. -/
+def consumeAlgs : FoldP.Algs := ⟨fun _ => .unit, fun _ _ => .unit⟩
 
 /-- At a closed type the two modes agree. -/
-theorem algE_closed : ∀ (A : VTy), FoldP.clB 0 A = true → dropFnAt true A = dropFnAt false A
+theorem algE_closed : ∀ (A : VTy), FoldP.clB 0 A = true → consumeAt true A = consumeAt false A
   | .tensor A B, h => by
       simp only [FoldP.clB, Bool.and_eq_true] at h
-      simp only [dropFnAt]
+      simp only [consumeAt]
       rw [algE_closed A h.1, algE_closed B h.2]
   | .sum A B, h => by
       simp only [FoldP.clB, Bool.and_eq_true] at h
-      simp only [dropFnAt]
+      simp only [consumeAt]
       rw [algE_closed A h.1, algE_closed B h.2]
   | .ref A, h => by
       simp only [FoldP.clB] at h
-      simp [dropFnAt, h]
+      simp [consumeAt, h]
   | .fam (.ref A), h => by
       simp only [FoldP.clB] at h
-      simp [dropFnAt, h]
-  | .mu A, h => by simp [dropFnAt, h]
-  | .thunk C, _ => dropFnAt_thunk true C
+      simp [consumeAt, h]
+  | .mu A, h => by simp [consumeAt, h]
+  | .thunk C, _ => consumeAt_thunk true C
   | .tvar _, h => by simp [FoldP.clB] at h
   | .unit, _ | .zero, _ | .box _ _, _ | .bang _, _ | .unk, _ | .int _, _ | .opq _, _
   | .imm _ _, _ | .mut _ _, _ => rfl
@@ -226,39 +226,39 @@ theorem algE_closed : ∀ (A : VTy), FoldP.clB 0 A = true → dropFnAt true A = 
   | .fam (.bang _), _ | .fam .unk, _ | .fam (.tvar _), _ | .fam (.mu _), _ | .fam (.int _), _
   | .fam (.fam _), _ | .fam (.opq _), _ => rfl
 
-/-- **The algebra is the drop of the position at results `1`.** -/
+/-- **The algebra is the consume of the position at results `1`.** -/
 theorem algE_eqP (Bs : FoldP.Stack) :
-    ∀ A : VTy, dropFnAt true A = dropFnAt false (FoldP.resO dropAlgs Bs A)
+    ∀ A : VTy, consumeAt true A = consumeAt false (FoldP.resO consumeAlgs Bs A)
   | .tvar _ => rfl
   | .tensor A B => by
       by_cases h : FoldP.clB 0 (.tensor A B) = true
-      · rw [FoldP.resO_leaf dropAlgs Bs h]; exact algE_closed _ h
+      · rw [FoldP.resO_leaf consumeAlgs Bs h]; exact algE_closed _ h
       · simp only [FoldP.resO, if_neg h]
-        simp only [dropFnAt]
+        simp only [consumeAt]
         rw [algE_eqP Bs A, algE_eqP Bs B]
   | .sum A B => by
       by_cases h : FoldP.clB 0 (.sum A B) = true
-      · rw [FoldP.resO_leaf dropAlgs Bs h]; exact algE_closed _ h
+      · rw [FoldP.resO_leaf consumeAlgs Bs h]; exact algE_closed _ h
       · simp only [FoldP.resO, if_neg h]
-        simp only [dropFnAt]
+        simp only [consumeAt]
         rw [algE_eqP Bs A, algE_eqP Bs B]
   | .ref S => by
       by_cases h : FoldP.clB 0 S = true
       · have h' : FoldP.clB 0 (.ref S) = true := h
-        rw [FoldP.resO_leaf dropAlgs Bs h']; exact algE_closed _ h'
+        rw [FoldP.resO_leaf consumeAlgs Bs h']; exact algE_closed _ h'
       · simp only [FoldP.resO, if_neg h]
-        simp only [dropFnAt, h, Bool.not_false, Bool.and_self, if_true]
+        simp only [consumeAt, h, Bool.not_false, Bool.and_self, if_true]
         exact algE_eqP Bs S
   | .fam (.ref S) => by
       by_cases h : FoldP.clB 0 S = true
       · have h' : FoldP.clB 0 (.fam (.ref S)) = true := h
-        rw [FoldP.resO_leaf dropAlgs Bs h']; exact algE_closed _ h'
-      · simp [FoldP.resO, h, dropFnAt, dropAlgs]
+        rw [FoldP.resO_leaf consumeAlgs Bs h']; exact algE_closed _ h'
+      · simp [FoldP.resO, h, consumeAt, consumeAlgs]
   | .mu B => by
       by_cases h : FoldP.clB 0 (.mu B) = true
-      · rw [FoldP.resO_leaf dropAlgs Bs h]; exact algE_closed _ h
-      · simp [FoldP.resO, h, dropFnAt, dropAlgs]
-  | .thunk C => dropFnAt_thunk true C
+      · rw [FoldP.resO_leaf consumeAlgs Bs h]; exact algE_closed _ h
+      · simp [FoldP.resO, h, consumeAt, consumeAlgs]
+  | .thunk C => consumeAt_thunk true C
   | .unit | .zero | .box _ _ | .bang _ | .unk | .int _ | .opq _ | .imm _ _ | .mut _ _ => rfl
   | .fam .unit | .fam (.tensor _ _) | .fam .zero | .fam (.sum _ _) | .fam (.thunk _)
   | .fam (.imm _ _) | .fam (.mut _ _) | .fam (.box _ _) | .fam (.bang _) | .fam .unk
@@ -283,21 +283,21 @@ theorem toFShape_resO_closed (R : VTy) : ∀ {A : VTy}, FoldP.clB 0 A = true →
 
 /-- At a body in `FShape`, the result type at `1` is the `FShape` one. -/
 theorem resO_toFShape (Bs : FoldP.Stack) :
-    ∀ (A : VTy), (toFShape A).WF → FoldP.resO dropAlgs Bs A = (toFShape A).resO .unit
+    ∀ (A : VTy), (toFShape A).WF → FoldP.resO consumeAlgs Bs A = (toFShape A).resO .unit
   | .tensor A B, h => by
       by_cases hc : FoldP.clB 0 (.tensor A B) = true
-      · rw [FoldP.resO_leaf dropAlgs Bs hc, toFShape_resO_closed .unit hc]
+      · rw [FoldP.resO_leaf consumeAlgs Bs hc, toFShape_resO_closed .unit hc]
       · simp only [toFShape, FShape.WF] at h
         simp only [FoldP.resO, if_neg hc, toFShape, FShape.resO, resO_toFShape Bs A h.1,
           resO_toFShape Bs B h.2]
   | .sum A B, h => by
       by_cases hc : FoldP.clB 0 (.sum A B) = true
-      · rw [FoldP.resO_leaf dropAlgs Bs hc, toFShape_resO_closed .unit hc]
+      · rw [FoldP.resO_leaf consumeAlgs Bs hc, toFShape_resO_closed .unit hc]
       · simp only [toFShape, FShape.WF] at h
         simp only [FoldP.resO, if_neg hc, toFShape, FShape.resO, resO_toFShape Bs A h.1,
           resO_toFShape Bs B h.2]
-  | .ref (.tvar 0), _ => by simp [FoldP.resO, FoldP.clB, toFShape, FShape.resO, dropAlgs]
-  | .tvar 0, _ => by simp [FoldP.resO, toFShape, FShape.resO, dropAlgs]
+  | .ref (.tvar 0), _ => by simp [FoldP.resO, FoldP.clB, toFShape, FShape.resO, consumeAlgs]
+  | .tvar 0, _ => by simp [FoldP.resO, toFShape, FShape.resO, consumeAlgs]
   | .tvar (_ + 1), h => by simp [toFShape, FShape.WF, VTy.Cl] at h
   | .ref (.tvar (_ + 1)), h => by simp [toFShape, FShape.WF, VTy.Cl] at h
   | .ref .unit, h | .ref (.tensor _ _), h | .ref .zero, h | .ref (.sum _ _), h
@@ -307,12 +307,12 @@ theorem resO_toFShape (Bs : FoldP.Stack) :
   | .mut _ _, h | .box _ _, h | .bang _, h | .unk, h | .mu _, h | .int _, h | .opq _, h
   | .fam _, h => by
       have hc := (FoldP.clB_iff 0 _).mpr h
-      rw [FoldP.resO_leaf dropAlgs Bs hc]
+      rw [FoldP.resO_leaf consumeAlgs Bs hc]
       exact (toFShape_resO_closed .unit hc).symm
 
-/-- The algebra is the drop of `T[1/X]`, at a body in `FShape`. -/
-theorem algE_eq {A : VTy} (h : (toFShape A).WF) : algE A = dropFnE ((toFShape A).resO .unit) := by
-  show dropFnAt true A = dropFnAt false _
+/-- The algebra is the consume of `T[1/X]`, at a body in `FShape`. -/
+theorem algE_eq {A : VTy} (h : (toFShape A).WF) : algE A = consumeE ((toFShape A).resO .unit) := by
+  show consumeAt true A = consumeAt false _
   rw [algE_eqP [A] A, resO_toFShape [A] A h]
 
 /-- A body in `FShape` has no key inside it. -/
@@ -355,8 +355,8 @@ where
 /-- The algebra of a key. -/
 def keyAlg : FoldP.Bnd → Expr
   | .mu [] => .unit
-  | .mu (B :: _) => .val (.lam (.app (dropFnAt true B) (.var 0)))
-  | .arr _ S => .val (.lam (.app (arrAlgE (dropFnAt true S)) (.var 0)))
+  | .mu (B :: _) => .val (.lam (.app (consumeAt true B) (.var 0)))
+  | .arr _ S => .val (.lam (.app (arrAlgE (consumeAt true S)) (.var 0)))
 
 /-- `algsIn` lists the algebras of `keysIn`'s keys. -/
 theorem algsIn_eq : ∀ (A : VTy) (Bs : FoldP.Stack), algsIn A = (FoldP.keysIn Bs A).map keyAlg
@@ -378,66 +378,66 @@ theorem algsIn_eq : ∀ (A : VTy) (Bs : FoldP.Stack), algsIn A = (FoldP.keysIn B
   | .fam (.bang _), _ | .fam .unk, _ | .fam (.tvar _), _ | .fam (.mu _), _ | .fam (.int _), _
   | .fam (.fam _), _ | .fam (.opq _), _ => rfl
 
-/-- The drop of a `μ` whose body is in `FShape`: `foldOwn` with the `alg` mode. -/
-theorem dropFnE_mu_F {A : VTy} (h : fshapeB A = true) :
-    dropFnE (.mu A) = .val (.lam (.app (.app (.val (foldOwnV (toFShape A)))
+/-- The consume of a `μ` whose body is in `FShape`: `foldOwn` with the `alg` mode. -/
+theorem consumeE_mu_F {A : VTy} (h : fshapeB A = true) :
+    consumeE (.mu A) = .val (.lam (.app (.app (.val (foldOwnV (toFShape A)))
       (.val (.lam (.app (algE A) (.var 0))))) (.var 0))) := by
-  simp [dropFnE, dropFnAt, h]
+  simp [consumeE, consumeAt, h]
 
-/-- The drop of a `μ` whose body is in `P` and not in `FShape`: `foldOwnG` with one algebra
+/-- The consume of a `μ` whose body is in `P` and not in `FShape`: `foldOwnG` with one algebra
 per key. -/
-theorem dropFnE_mu_P {A : VTy} (h : fshapeB A = false) :
-    dropFnE (.mu A) = .val (.lam (.app (.app (.val (FoldP.foldOwnGV A))
+theorem consumeE_mu_P {A : VTy} (h : fshapeB A = false) :
+    consumeE (.mu A) = .val (.lam (.app (.app (.val (FoldP.foldOwnGV A))
       (FoldP.tupE ((FoldP.keys A).map keyAlg))) (.var 0))) := by
-  simp only [dropFnE, dropFnAt, Bool.false_and, Bool.false_eq_true, if_false, h]
+  simp only [consumeE, consumeAt, Bool.false_and, Bool.false_eq_true, if_false, h]
   rw [algsIn_eq A [A]]
   rfl
 
-/-- An array key's algebra is the drop of `1 ⊕ (1 ⊗ S⟨1⟩)`. -/
-theorem arrAlgE_eq (T : VTy) : arrAlgE (dropFnE T) = dropFnE (.sum .unit (.tensor .unit T)) := rfl
+/-- An array key's algebra is the consume of `1 ⊕ (1 ⊗ S⟨1⟩)`. -/
+theorem arrAlgE_eq (T : VTy) : arrAlgE (consumeE T) = consumeE (.sum .unit (.tensor .unit T)) := rfl
 
 /-! ### Which types have one -/
 
-/-- `T` has a derived drop: `dropFnE T` consumes a value of `T`.  `[spec §12]` -/
-inductive HasDrop : VTy → Prop where
-  | unit : HasDrop .unit
-  | zero : HasDrop .zero
-  | int {w} : HasDrop (.int w)
-  | unk : HasDrop .unk
-  | bang {A} : HasDrop (.bang A)
-  | imm {a A} : HasDrop (.imm a A)
-  | «mut» {a A} : HasDrop (.mut a A)
-  | tensor {A B} : HasDrop A → HasDrop B → HasDrop (.tensor A B)
-  | sum {A B} : HasDrop A → HasDrop B → HasDrop (.sum A B)
-  | box {a A} : HasDrop A → HasDrop (.box a A)
-  /-- An owned cell: freed, then its content dropped. -/
-  | ref {A} : HasDrop A → HasDrop (.ref A)
+/-- `T` is consumable: `consumeE T` consumes a value of `T`.  `[spec §12]` -/
+inductive Consumable : VTy → Prop where
+  | unit : Consumable .unit
+  | zero : Consumable .zero
+  | int {w} : Consumable (.int w)
+  | unk : Consumable .unk
+  | bang {A} : Consumable (.bang A)
+  | imm {a A} : Consumable (.imm a A)
+  | «mut» {a A} : Consumable (.mut a A)
+  | tensor {A B} : Consumable A → Consumable B → Consumable (.tensor A B)
+  | sum {A B} : Consumable A → Consumable B → Consumable (.sum A B)
+  | box {a A} : Consumable A → Consumable (.box a A)
+  /-- An owned cell: freed, then its content consumed. -/
+  | ref {A} : Consumable A → Consumable (.ref A)
   /-- An inductive type of the fold class `P`: the owned fold with results `1`, its algebra at
-  each key the drop of the key's body (an array key's element type) at results `1`.
+  each key the consume of the key's body (an array key's element type) at results `1`.
   `[spec §6, §12]` -/
-  | mu {A} (hP : FoldP.PBody A) (h : HasDrop (FoldP.resO dropAlgs [A] A))
+  | mu {A} (hP : FoldP.PBody A) (h : Consumable (FoldP.resO consumeAlgs [A] A))
       (hmu : ∀ B Bs, FoldP.Bnd.mu (B :: Bs) ∈ FoldP.keysIn [A] A →
-        HasDrop (FoldP.resO dropAlgs (B :: Bs) B))
+        Consumable (FoldP.resO consumeAlgs (B :: Bs) B))
       (harr : ∀ Bs S, FoldP.Bnd.arr Bs S ∈ FoldP.keysIn [A] A →
-        HasDrop (FoldP.resO dropAlgs Bs S)) : HasDrop (.mu A)
+        Consumable (FoldP.resO consumeAlgs Bs S)) : Consumable (.mu A)
   /-- A computation with a `close` component. -/
-  | close {C} : HasDrop (.thunk (.amp C (.ret .unit)))
-  /-- Codata `νX. C & F R` whose `close` returns a closed residual `R` with a derived drop:
-  `close`, then the drop of `R`.  `[spec §7, §12]` -/
-  | nu {C R} (hC : (CTy.amp C (.ret R)).NuOk) (hRc : R.Cl 0) (h : HasDrop R) :
-      HasDrop (.thunk (.nu (.amp C (.ret R))))
-  /-- An array: each element to the drop of `A`, then the cells freed (`array_free`).
+  | close {C} : Consumable (.thunk (.amp C (.ret .unit)))
+  /-- Codata `νX. C & F R` whose `close` returns a closed residual `R` that is consumable:
+  `close`, then the consume of `R`.  `[spec §7, §12]` -/
+  | nu {C R} (hC : (CTy.amp C (.ret R)).NuOk) (hRc : R.Cl 0) (h : Consumable R) :
+      Consumable (.thunk (.nu (.amp C (.ret R))))
+  /-- An array: each element to the consume of `A`, then the cells freed (`array_free`).
   `[spec §9, §12]` -/
-  | array {A} (h : HasDrop A) : HasDrop (.fam (.ref A))
-  /-- A family of leaf views, forgotten (`array_forget`).  `[spec §9, §12]` -/
-  | arrayImm {a A} : HasDrop (.fam (.imm a A))
-  /-- A family of `mut` leaves, forgotten: `slice_get_mut` at an index past every family's
+  | array {A} (h : Consumable A) : Consumable (.fam (.ref A))
+  /-- A family of leaf views, released (`array_release`).  `[spec §9, §12]` -/
+  | arrayImm {a A} : Consumable (.fam (.imm a A))
+  /-- A family of `mut` leaves, released: `slice_get_mut` at an index past every family's
   length (`2³² − 1`) consumes it, and `forget` ends the leaf it would hand out.  `[spec §9, §12]` -/
-  | arrayMut {a A} : HasDrop (.fam (.mut a A))
+  | arrayMut {a A} : Consumable (.fam (.mut a A))
 
-/-- **`HasDrop.mu` at `FShape`**: a body in `FShape` whose `T[1/X]` has a derived drop. -/
-theorem HasDrop.muF {A : VTy} (hF : (toFShape A).WF) (hG : (toFShape A).Guarded)
-    (h : HasDrop ((toFShape A).resO .unit)) : HasDrop (.mu A) := by
+/-- **`Consumable.mu` at `FShape`**: a body in `FShape` whose `T[1/X]` is consumable. -/
+theorem Consumable.muF {A : VTy} (hF : (toFShape A).WF) (hG : (toFShape A).Guarded)
+    (h : Consumable ((toFShape A).resO .unit)) : Consumable (.mu A) := by
   have hP : FoldP.PBody A := by
     have := FoldP.pBody_of_FShape hF hG
     rwa [toFShape_ty] at this
@@ -445,7 +445,7 @@ theorem HasDrop.muF {A : VTy} (hF : (toFShape A).WF) (hG : (toFShape A).Guarded)
   · rw [keysIn_toFShape [A] A hF] at hm; cases hm
   · rw [keysIn_toFShape [A] A hF] at hm; cases hm
 
-theorem hasDrop_of_forgettable {A : VTy} (h : Forgettable A) : HasDrop A := by
+theorem consumable_of_releasable {A : VTy} (h : Releasable A) : Consumable A := by
   induction h with
   | unit => exact .unit
   | zero => exact .zero
@@ -457,12 +457,12 @@ theorem hasDrop_of_forgettable {A : VTy} (h : Forgettable A) : HasDrop A := by
   | bang => exact .bang
   | int => exact .int
 
-/-! ### The drops are `CDerives` derivations -/
+/-! ### The consumes are `CDerives` derivations -/
 
-/-- `forget : T ⊸ 1` at a persistent `T`, from `λ` and `Ctx.DeadP.drop`. -/
-theorem forget_persistent {Δ : LifeCtx} {Γ : Ctx VTy} {T : VTy} (hT : T.Persistent)
+/-- `forget : T ⊸ 1` at a persistent `T`, from `λ` and `Ctx.DeadP.weaken`. -/
+theorem release_persistent {Δ : LifeCtx} {Γ : Ctx VTy} {T : VTy} (hT : T.Persistent)
     (hΓ : Ctx.Dead Γ) : CDerives Δ Γ forget (.val (.lolli T .unit)) :=
-  .thunkV rfl (.lam (.ret (.unitI (.drop hT hΓ.toP))))
+  .thunkV rfl (.lam (.ret (.unitI (.weaken hT hΓ.toP))))
 
 /-- `λx. close x : U(C & F 1) ⊸ F 1` body, from `force`/`proj₂`. -/
 theorem close_body {Δ : LifeCtx} {Γ : Ctx VTy} {C : CTy} (hΓ : Ctx.Dead Γ) :
@@ -470,12 +470,12 @@ theorem close_body {Δ : LifeCtx} {Γ : Ctx VTy} {C : CTy} (hΓ : Ctx.Dead Γ) :
       (.comp (.ret .unit)) :=
   .proj₂ (C := C) (.force (C := .amp C (.ret .unit)) (.here hΓ.toP))
 
-/-- The drop of `A ⊗ B`, from the drops of `A` and `B`. -/
-theorem dropFn_tensor_wf {Δ : LifeCtx} {A B : VTy}
-    (ih₁ : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ Γ (dropFnE A) (.val (.lolli A .unit)))
-    (ih₂ : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ Γ (dropFnE B) (.val (.lolli B .unit)))
+/-- The consume of `A ⊗ B`, from the consumes of `A` and `B`. -/
+theorem consume_tensor_wf {Δ : LifeCtx} {A B : VTy}
+    (ih₁ : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ Γ (consumeE A) (.val (.lolli A .unit)))
+    (ih₂ : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ Γ (consumeE B) (.val (.lolli B .unit)))
     {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives Δ Γ (dropFnE (.tensor A B)) (.val (.lolli (.tensor A B) .unit)) :=
+    CDerives Δ Γ (consumeE (.tensor A B)) (.val (.lolli (.tensor A B) .unit)) :=
   .lamV (.letpairV (.left (deadSplit hΓ)) (.var (.here hΓ.toP))
     (.seqV (.right (.left (.dead (deadSplit hΓ))))
       (.lolliE (.dead (.left (.dead (deadSplit hΓ)))) (.var (.there (.here (.cons hΓ.toP))))
@@ -483,20 +483,20 @@ theorem dropFn_tensor_wf {Δ : LifeCtx} {A B : VTy}
       (.lolliE (.left (.dead (.dead (deadSplit hΓ)))) (.var (.here (.cons (.cons hΓ.toP))))
         (ih₂ (.cons (.cons (.cons hΓ)))))))
 
-/-- The drop of `A ⊕ B`, from the drops of `A` and `B`. -/
-theorem dropFn_sum_wf {Δ : LifeCtx} {A B : VTy}
-    (ih₁ : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ Γ (dropFnE A) (.val (.lolli A .unit)))
-    (ih₂ : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ Γ (dropFnE B) (.val (.lolli B .unit)))
+/-- The consume of `A ⊕ B`, from the consumes of `A` and `B`. -/
+theorem consume_sum_wf {Δ : LifeCtx} {A B : VTy}
+    (ih₁ : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ Γ (consumeE A) (.val (.lolli A .unit)))
+    (ih₂ : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ Γ (consumeE B) (.val (.lolli B .unit)))
     {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives Δ Γ (dropFnE (.sum A B)) (.val (.lolli (.sum A B) .unit)) :=
+    CDerives Δ Γ (consumeE (.sum A B)) (.val (.lolli (.sum A B) .unit)) :=
   .lamV (.caseV (.left (deadSplit hΓ)) (.var (.here hΓ.toP))
     (.lolliE (.left (.dead (deadSplit hΓ))) (.var (.here (.cons hΓ.toP)))
       (ih₁ (.cons (.cons hΓ))))
     (.lolliE (.left (.dead (deadSplit hΓ))) (.var (.here (.cons hΓ.toP)))
       (ih₂ (.cons (.cons hΓ)))))
 
-/-- `λr. d r`, promoted, at `!(A ⊸ 1)`, from the drop `d` of `A`. -/
-theorem d_alg_of_dropFn {Δ : LifeCtx} {A : VTy} {d : Expr}
+/-- `λr. d r`, promoted, at `!(A ⊸ 1)`, from the consume `d` of `A`. -/
+theorem d_alg_of_consume {Δ : LifeCtx} {A : VTy} {d : Expr}
     (ih : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ Γ d (.val (.lolli A .unit)))
     {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ (.val (.lam (.app d (.var 0)))) (.val (.bang (VTy.lolli A .unit))) :=
@@ -511,22 +511,22 @@ theorem d_tup {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {α : Type} (f :
   | k :: k' :: r, h => .tensorI (deadSplit hΓ) (h k (by simp))
       (d_tup hΓ f g (k' :: r) (fun x hx => h x (List.mem_cons_of_mem _ hx)))
 
-theorem algsOf_nil (ks : List FoldP.Bnd) : FoldP.algsOf ks [] = dropAlgs := rfl
+theorem algsOf_nil (ks : List FoldP.Bnd) : FoldP.algsOf ks [] = consumeAlgs := rfl
 
-/-- **Every drop is a closed `CDerives` derivation**, at every lifetime context and every
+/-- **Every consume is a closed `CDerives` derivation**, at every lifetime context and every
 dead context.  `[spec §12]` -/
-theorem dropFn_wf {Δ : LifeCtx} {T : VTy} (hT : HasDrop T) :
-    ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ Γ (dropFnE T) (.val (.lolli T .unit)) := by
+theorem consume_wf {Δ : LifeCtx} {T : VTy} (hT : Consumable T) :
+    ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ Γ (consumeE T) (.val (.lolli T .unit)) := by
   induction hT generalizing Δ with
-  | unit => intro Γ hΓ; exact forget_persistent rfl hΓ
-  | zero => intro Γ hΓ; exact forget_persistent rfl hΓ
-  | int => intro Γ hΓ; exact forget_persistent rfl hΓ
-  | unk => intro Γ hΓ; exact forget_persistent rfl hΓ
-  | bang => intro Γ hΓ; exact forget_persistent rfl hΓ
-  | imm => intro Γ hΓ; exact .forgetImm hΓ.toP
-  | «mut» => intro Γ hΓ; exact .forgetMut hΓ.toP
-  | tensor _ _ ih₁ ih₂ => intro Γ hΓ; exact dropFn_tensor_wf ih₁ ih₂ hΓ
-  | sum _ _ ih₁ ih₂ => intro Γ hΓ; exact dropFn_sum_wf ih₁ ih₂ hΓ
+  | unit => intro Γ hΓ; exact release_persistent rfl hΓ
+  | zero => intro Γ hΓ; exact release_persistent rfl hΓ
+  | int => intro Γ hΓ; exact release_persistent rfl hΓ
+  | unk => intro Γ hΓ; exact release_persistent rfl hΓ
+  | bang => intro Γ hΓ; exact release_persistent rfl hΓ
+  | imm => intro Γ hΓ; exact .releaseImm hΓ.toP
+  | «mut» => intro Γ hΓ; exact .releaseMut hΓ.toP
+  | tensor _ _ ih₁ ih₂ => intro Γ hΓ; exact consume_tensor_wf ih₁ ih₂ hΓ
+  | sum _ _ ih₁ ih₂ => intro Γ hΓ; exact consume_sum_wf ih₁ ih₂ hΓ
   | box _ ih =>
       intro Γ hΓ
       exact .lamV (.lolliE (.left (deadSplit hΓ)) (.boxE (.var (.here hΓ.toP)))
@@ -542,12 +542,12 @@ theorem dropFn_wf {Δ : LifeCtx} {T : VTy} (hT : HasDrop T) :
       cases hF : fshapeB A with
       | true =>
           obtain ⟨hW, hG⟩ := fshapeB_sound hF
-          rw [dropFnE_mu_F hF]
+          rw [consumeE_mu_F hF]
           have halg : CDerives Δ (⟨.mu A, false⟩ :: Γ) (.val (.lam (.app (algE A) (.var 0))))
               (.val (algOTy (toFShape A) .unit)) := by
             simp only [algE]
             rw [algE_eqP [A] A]
-            have h := d_alg_of_dropFn (Δ := Δ) ihr (Γ := ⟨.mu A, false⟩ :: Γ) (.cons hΓ)
+            have h := d_alg_of_consume (Δ := Δ) ihr (Γ := ⟨.mu A, false⟩ :: Γ) (.cons hΓ)
             rw [resO_toFShape [A] A hW] at h ⊢
             exact h
           have hfold : CDerives Δ (⟨.mu A, false⟩ :: Γ)
@@ -558,7 +558,7 @@ theorem dropFn_wf {Δ : LifeCtx} {T : VTy} (hT : HasDrop T) :
             rwa [toFShape_ty] at h
           exact .lamV (.lolliE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) hfold)
       | false =>
-          rw [dropFnE_mu_P hF]
+          rw [consumeE_mu_P hF]
           have hΓ' : Ctx.Dead (⟨.mu A, false⟩ :: Γ) := .cons hΓ
           have hkey : ∀ k ∈ FoldP.keys A, CDerives Δ (⟨.mu A, false⟩ :: Γ) (keyAlg k)
               (.val (FoldP.algTy (FoldP.algsOf (FoldP.keys A) []) k)) := by
@@ -568,23 +568,23 @@ theorem dropFn_wf {Δ : LifeCtx} {T : VTy} (hT : HasDrop T) :
             rcases hk with rfl | hk
             · simp only [keyAlg]
               rw [algE_eqP [A] A]
-              exact d_alg_of_dropFn (Δ := Δ) ihr hΓ'
+              exact d_alg_of_consume (Δ := Δ) ihr hΓ'
             · have hKP := FoldP.keysIn_P A [A] hP.1 k hk
               match k, hk, hKP with
               | .mu (B :: Bs), hk, _ =>
                   simp only [keyAlg]
                   rw [algE_eqP (B :: Bs) B]
-                  exact d_alg_of_dropFn (Δ := Δ) (ihm B Bs hk) hΓ'
+                  exact d_alg_of_consume (Δ := Δ) (ihm B Bs hk) hΓ'
               | .arr Bs S, hk, _ =>
                   have hd : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ →
                       CDerives Δ Γ (arrAlgE (algE S))
-                        (.val (.lolli (.sum .unit (.tensor .unit (FoldP.resO dropAlgs Bs S))) .unit)) := by
+                        (.val (.lolli (.sum .unit (.tensor .unit (FoldP.resO consumeAlgs Bs S))) .unit)) := by
                     intro Γ hΓ
                     simp only [algE]
                     rw [algE_eqP Bs S, arrAlgE_eq]
-                    exact dropFn_sum_wf (fun h => forget_persistent rfl h)
-                      (dropFn_tensor_wf (fun h => forget_persistent rfl h) (iha Bs S hk)) hΓ
-                  exact d_alg_of_dropFn (Δ := Δ) hd hΓ'
+                    exact consume_sum_wf (fun h => release_persistent rfl h)
+                      (consume_tensor_wf (fun h => release_persistent rfl h) (iha Bs S hk)) hΓ
+                  exact d_alg_of_consume (Δ := Δ) hd hΓ'
           have htup := d_tup hΓ' keyAlg (FoldP.algTy (FoldP.algsOf (FoldP.keys A) [])) (FoldP.keys A) hkey
           have hfold : CDerives Δ (⟨.mu A, false⟩ :: Γ)
               (.app (.val (FoldP.foldOwnGV A)) (FoldP.tupE ((FoldP.keys A).map keyAlg)))
@@ -610,7 +610,7 @@ theorem dropFn_wf {Δ : LifeCtx} {T : VTy} (hT : HasDrop T) :
               (.var (.here (Ctx.Dead.cons hΓ).toP)) (ih (.cons (.cons hΓ)))))))
           (.var (.here hΓ.toP)))
         (.bangE (.arrFree _ (Ctx.Dead.cons hΓ).toP)))
-  | arrayImm => intro Γ hΓ; exact .bangE (.arrForget _ _ hΓ.toP)
+  | arrayImm => intro Γ hΓ; exact .bangE (.arrRelease _ _ hΓ.toP)
   | arrayMut =>
       intro Γ hΓ
       exact .lamV (.eletV (.left (deadSplit hΓ))
@@ -621,28 +621,28 @@ theorem dropFn_wf {Δ : LifeCtx} {T : VTy} (hT : HasDrop T) :
         (.caseV (.left (deadSplit (Ctx.Dead.cons hΓ))) (.var (.here (Ctx.Dead.cons hΓ).toP))
           (.lolliE (.left (.dead (deadSplit (Ctx.Dead.cons hΓ))))
             (.var (.here (Ctx.Dead.cons (Ctx.Dead.cons hΓ)).toP))
-            (.forgetMut (Ctx.Dead.cons (Ctx.Dead.cons (Ctx.Dead.cons hΓ))).toP))
+            (.releaseMut (Ctx.Dead.cons (Ctx.Dead.cons (Ctx.Dead.cons hΓ))).toP))
           (.var (.here (Ctx.Dead.cons (Ctx.Dead.cons hΓ)).toP))))
 
-/-! ### A borrow's drop frees nothing -/
+/-! ### A borrow's consume frees nothing -/
 
-/-- At `Imm @a A` and `Mut @a A` the drop is `forget = λx. ()`: dropping a borrow ends the
+/-- At `Imm @a A` and `Mut @a A` the consume is `forget = λx. ()`: consuming a borrow ends the
 loan and deallocates nothing. -/
-theorem dropFnE_imm (a : Lifetime.Life) (A : VTy) : dropFnE (.imm a A) = forget := rfl
+theorem consumeE_imm (a : Lifetime.Life) (A : VTy) : consumeE (.imm a A) = forget := rfl
 
-theorem dropFnE_mut (a : Lifetime.Life) (A : VTy) : dropFnE (.mut a A) = forget := rfl
+theorem consumeE_mut (a : Lifetime.Life) (A : VTy) : consumeE (.mut a A) = forget := rfl
 
-/-! ### Dropping a slot -/
+/-! ### Consuming a slot -/
 
-/-- `dropFnE T xᵢ; e`: the drop of the variable `i` at `T`, before `e`. -/
-def dropE (T : VTy) (i : Nat) (e : Expr) : Expr := .seq (.app (dropFnE T) (.var i)) e
+/-- `consumeE T xᵢ; e`: the consume of the variable `i` at `T`, before `e`. -/
+def consumeSlotE (T : VTy) (i : Nat) (e : Expr) : Expr := .seq (.app (consumeE T) (.var i)) e
 
-/-- **A drop is a `CDerives` derivation**: `unitE` over the drop applied to the slot.
+/-- **A consume is a `CDerives` derivation**: `unitE` over the consume applied to the slot.
 `[spec §12]` -/
-theorem drop_derives {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {i : Nat} {T : VTy} {e : Expr} {C : CTy}
-    (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hx : Ctx.SoloP Γ₁ i T) (hT : HasDrop T)
-    (h : CDerives Δ Γ₂ e (.comp C)) : CDerives Δ Γ (dropE T i e) (.comp C) :=
-  .unitE hs (.lolliE (split_kill' Γ₁).toP (.var hx) (dropFn_wf hT (kill_dead Γ₁))) h
+theorem consumeSlot_derives {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {i : Nat} {T : VTy} {e : Expr} {C : CTy}
+    (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hx : Ctx.SoloP Γ₁ i T) (hT : Consumable T)
+    (h : CDerives Δ Γ₂ e (.comp C)) : CDerives Δ Γ (consumeSlotE T i e) (.comp C) :=
+  .unitE hs (.lolliE (split_kill' Γ₁).toP (.var hx) (consume_wf hT (kill_dead Γ₁))) h
 
 end BoCa.Fig16.LogRel.Core
 

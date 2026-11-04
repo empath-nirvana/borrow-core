@@ -81,7 +81,7 @@ def deep_obs[A, B, K, S, Z] :
         }
     }
 
--- Closed early, it drops the state and the pending frames.
+-- Closed early, it consumes the state and the pending frames.
 def deep[A, B, K, S, Z] :
     !(S * A => S * (B + ((A * (K + 1)) + Z)))
       * (!(S * (K * B) => S * (B + ((A * (K + 1)) + Z))) * (S * A))

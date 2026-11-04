@@ -1,8 +1,8 @@
 -- A tree declared with `data` whose node owns an array of its children (SPEC §42,
 -- data-declarations §6.11): the recursion is under the array's allocation, so `Node` is not a
 -- block and needs no `box`. `Tree` elaborates to `mu X. i32 + i32 * array X`, outside `FShape`
--- and in the fold class `P`, so it has a derived drop (SPEC §12): the second tree is
--- dropped by it, each node's children first and then the node's array, its buffer at once.
+-- and in the fold class `P`, so it is consumable (SPEC §12): the second tree is
+-- consumed by it, each node's children first and then the node's array, its buffer at once.
 --
 -- Answer: i32[12]: the root 1, its first child 2 with three tips of 1, and two tips of 3; `live 0`.
 include rec
@@ -14,7 +14,7 @@ data Tree = Tip(i32) | Node(i32, array Tree)
 fn bush(v: i32, n: i32) -> Tree = Node(v, array_new[Tree](n, !{ i -> Tip(1) }))
 
 -- The sum of a tree, consuming it: each child taken out of its node's array (`inr` answers an
--- index out of range, the value handed back), a tip left in its place, and the array dropped.
+-- index out of range, the value handed back), a tip left in its place, and the array consumed.
 fn sum(t: Tree) -> i32 =
   match t {
     Tip(v) -> v

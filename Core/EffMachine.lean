@@ -15,23 +15,23 @@ that is its configuration's only step (`Step1Only`: unique decomposition and det
   does not hold, any such, and make `κ` `kappaC` at `ℓ`, cancellable exactly at a cancellable
   operation (`catch_cell`); every run from the catch is a prefix of those three steps or goes on
   from them (`catchEv_cell`).
-* **Deep resume and cancel at the cell.**  Resuming `kappaC` at `ℓ` releases `ℓ` and runs
-  `hnd (n, H) K[w]` (`kappaC_resume`): three steps reach the release, and after it `κ` resumes as
+* **Deep resume and cancel at the cell.**  Resuming `kappaC` at `ℓ` frees `ℓ` and runs
+  `hnd (n, H) K[w]` (`kappaC_resume`): three steps reach the `free`, and after it `κ` resumes as
   `kappa` does (`kappaC_resume_parts`, `kappa_resume_kResume`).  Cancelling a cancellable `κ`
-  releases `ℓ` and runs `κ`'s cancel run (`kappaC_cancel`, `kappaC_cancel_parts`); a must-resume
+  frees `ℓ` and runs `κ`'s cancel run (`kappaC_cancel`, `kappaC_cancel_parts`); a must-resume
   `κ`'s cancel branch has no step (`kappaC_cancel_lin`).  On a run to a value, a use of `κ` at its
-  cell releases the cell three steps later (`use_frees_cell`).
+  cell frees the cell three steps later (`use_frees_cell`).
 * **H-fwd** (`catch_fwd`): an operation passes a handler of another name, which takes no step on
   it; the nearest handler of its name catches it, and `κ` holds the passed handler, so resuming
   `κ` reinstalls both (`fwd_resume`).  An abortive operation steps as if the passed handler were
   not there (`fwd_abort`).
 * **`[unwind]`, `[then]`, `[finalise]`** (`catch_abort`, `then_ret`, `then_fin`).
 * **A2** (`abort_absorbs`): `raise p` under frames that catch nothing of its name steps, in every
-  context, exactly as `raise p` steps there, the frame that catches it dropping them:
+  context, exactly as `raise p` steps there, the frame that catches it consuming them:
   `raise e to x. N = raise e` (`abort_to`) and `(raise e) w = raise e` (`abort_app`).
 
 The facts they read: a stuck redex takes no step (`StuckAt`, `stuck_no_step`); the steps of an
-allocation and of a release (`step1_alloc_iff`, `step1_free_iff`); an operation whose context
+allocation and of a `free` (`step1_alloc_iff`, `step1_free_iff`); an operation whose context
 catches nothing of it takes no step (`opPlug_no_step`); and a redex that holds a raise is a frame
 that catches it, its step the same around every context that catches nothing of its name
 (`head_raise_ctx`).
@@ -264,7 +264,7 @@ theorem stuck_not_steps_val {s : Expr} (hs : StuckAt (ℍ := ℍ) s) (K : Kont) 
   | refl => exact hs.not_val (K.isVal_of_plug (hE ▸ v.2))
   | more h _ => exact stuck_no_step hs K h
 
-/-! ### Allocation and release -/
+/-! ### Allocation and free -/
 
 /-- An allocation's head steps: `v` at a location the memory does not hold. -/
 theorem head_alloc_inv {μ μ' : Heap} {v : Val} {a' : Expr}
@@ -292,7 +292,7 @@ theorem step1_alloc_iff {μ μ₁ : Heap} {e₁ : Expr} (K : Kont) (v : Val) :
   · rintro ⟨ℓ, hℓ, rfl, rfl⟩
     exact ⟨K, _, _, rfl, rfl, Head.alloc μ v ℓ hℓ⟩
 
-/-- A release's head steps: a location the memory holds, answering its contents. -/
+/-- A `free`'s head steps: a location the memory holds, answering its contents. -/
 theorem head_free_inv {μ μ' : Heap} {ℓ : Loc} {a' : Expr}
     (h : Head (ℍ := ℍ) μ (freeE (.val (Val.loc ℓ))) μ' a') :
     ∃ u, μ ℓ = some u ∧ μ' = μ.del ℓ ∧ a' = .val u := by
@@ -305,7 +305,7 @@ theorem head_free_inv {μ μ' : Heap} {ℓ : Loc} {a' : Expr}
       exact ⟨u, hk, rfl, rfl⟩
   | _ => simp_all [freeE, hndE, ubindE, ccatchE, cfinE, Expr.val, Val.prim]
 
-/-- **The steps of a release**, in every context: it releases a location the memory holds, and
+/-- **The steps of a `free`**, in every context: it frees a location the memory holds, and
 answers its contents; at a location the memory does not hold there is none. -/
 theorem step1_free_iff {μ μ₁ : Heap} {e₁ : Expr} (K : Kont) (ℓ : Loc) :
     Step1 (ℍ := ℍ) μ (K.plug (freeE (.val (Val.loc ℓ)))) μ₁ e₁ ↔
@@ -569,7 +569,7 @@ theorem kappaC_case₂ (μ : Heap) (hasCancel : Bool) (ℓ : Loc) (H : Val) (K :
   step1Only_plug (Head.case₂ μ a _ _) rfl K₀
 
 /-- **Resuming `κ` at its cell `ℓ`** (`kappaC_resume_parts`): three steps that keep every store
-choose the resume branch and reach the release of `ℓ`; from the release's answer `()` one step
+choose the resume branch and reach the `free` of `ℓ`; from the `free`'s answer `()` one step
 that keeps every store reaches `kResume H K` applied to `w`, where resuming `kappa H K` stands
 after its three steps (`kappa_resume_kResume`).  `[spec §25]` -/
 theorem kappaC_resume_parts (hasCancel : Bool) (ℓ : Loc) (H : Val) (K : Kont) (w : Val) :
@@ -583,7 +583,7 @@ theorem kappaC_resume_parts (hasCancel : Bool) (ℓ : Loc) (H : Val) (K : Kont) 
   exact .one ((Step1.head (Head.seq μ _)).plug (.appL .hole w))
 
 /-- **H-op's deep resume at a cell** (`kappaC_resume`): at a store holding `ℓ` with `()`, resuming
-`kappaC` at `ℓ` releases `ℓ` and runs `hnd H K[w]`, in every context.  `[spec §19, §25]` -/
+`kappaC` at `ℓ` frees `ℓ` and runs `hnd H K[w]`, in every context.  `[spec §19, §25]` -/
 theorem kappaC_resume {μ : Heap} {ℓ : Loc} (hℓ : μ ℓ = some Val.unit) (hasCancel : Bool) (H : Val)
     (K : Kont) (w : Val) (K₀ : Kont) :
     Steps (ℍ := ℍ) μ
@@ -597,7 +597,7 @@ theorem kappaC_resume {μ : Heap} {ℓ : Loc} (hℓ : μ ℓ = some Val.unit) (h
     (.one ((Step1.head (kResume_beta _ H K w)).plug K₀))))
 
 /-- **Cancelling a cancellable `κ` at its cell `ℓ`** (`kappaC_cancel_parts`): three steps that keep
-every store choose the cancel branch and reach the release of `ℓ`; from the release's answer
+every store choose the cancel branch and reach the `free` of `ℓ`; from the `free`'s answer
 `()` one step reaches `ccatch (K†[raise (0, (0, none))])`, where cancelling `kappa H K` stands
 after its three steps (`kappa_cancel_steps`).  `[spec §25]` -/
 theorem kappaC_cancel_parts (ℓ : Loc) (H : Val) (K : Kont) :
@@ -614,7 +614,7 @@ theorem kappaC_cancel_parts (ℓ : Loc) (H : Val) (K : Kont) :
   exact .more h (.one (Step1.head (Head.seq μ _)))
 
 /-- **Cancelling a cancellable `κ` at its cell** (`kappaC_cancel`): at a store holding `ℓ` with
-`()`, it releases `ℓ` and runs `κ`'s cancel run `ccatch (K†[raise (0, (0, none))])`, in every
+`()`, it frees `ℓ` and runs `κ`'s cancel run `ccatch (K†[raise (0, (0, none))])`, in every
 context. `[spec §19, §25]` -/
 theorem kappaC_cancel {μ : Heap} {ℓ : Loc} (hℓ : μ ℓ = some Val.unit) (H : Val) (K : Kont)
     (K₀ : Kont) :
@@ -637,7 +637,7 @@ theorem kappaC_cancel_lin (μ : Heap) (ℓ : Loc) (H : Val) (K : Kont) (K₀ : K
   exact stuck_no_step (stuckAt_unit_app Val.unit) K₀
 
 /-- A complete run from `a; free ℓ; R`: `a` is `()` and `ℓ` holds `()`; the run takes the `;`,
-keeping the store, then releases `ℓ`, each its configuration's only step, and goes on from
+keeping the store, then frees `ℓ`, each its configuration's only step, and goes on from
 `(); R`. -/
 theorem steps_seq_free {μ μ' : Heap} {K₀ : Kont} {a : Val} {ℓ : Loc} {R : Expr} {v : Val}
     (hs : Steps (ℍ := ℍ) μ (K₀.plug (.seq (.val a) (.seq (freeE (.val (Val.loc ℓ))) R))) μ'
@@ -681,11 +681,11 @@ theorem steps_seq_free {μ μ' : Heap} {K₀ : Kont} {a : Val} {ℓ : Loc} {R : 
       subst hu
       exact ⟨rfl, rfl, hseq, hfr, hs₂⟩
 
-/-- **A use of `κ` releases its cell three steps later** (`use_frees_cell`).  On a run to a value
+/-- **A use of `κ` frees its cell three steps later** (`use_frees_cell`).  On a run to a value
 from `κ` at its cell `ℓ` applied to a value `w`, in any context: `w` is `inj₁ ()`, or `inj₂ ()` at
 a cancellable `κ` (a must-resume `κ`'s cancel branch has no step); the memory holds `ℓ` with `()`;
 and the run takes `κ`'s β-step, its `case` and its `;`, each keeping the store and its
-configuration's only step, then releases `ℓ`, and goes on.  `[spec §25]` -/
+configuration's only step, then frees `ℓ`, and goes on.  `[spec §25]` -/
 theorem use_frees_cell {μ μ' : Heap} {K₀ : Kont} {hasCancel : Bool} {ℓ : Loc} {H : Val} {K : Kont}
     {w v : Val}
     (hs : Steps (ℍ := ℍ) μ (K₀.plug (.app (kappaC hasCancel ℓ H K) (.val w))) μ' (.val v)) :
@@ -927,7 +927,7 @@ theorem head_raise_ctx {μ μ' : Heap} {K' : Kont} {p : Val} {n : UInt32} {a' : 
 
 /-- **A2: an abort absorbs the frames it passes** (`abort_absorbs`).  `raise p` under frames that
 catch nothing of `p`'s name steps, in every context, exactly as `raise p` steps there: the frame
-that catches it drops them, by `[unwind]`, `[finalise]`, `[finalise-cancel]`, `[cfin-raise]`,
+that catches it consumes them, by `[unwind]`, `[finalise]`, `[finalise-cancel]`, `[cfin-raise]`,
 `[cfin-cancel]`, `[cancel]` or `[cancel-raise]`.  `[spec §19]` -/
 theorem abort_absorbs {p : Val} {n : UInt32} (hn : payloadName p = some n) {K : Kont}
     (hK : K.Catches n = false) (K₁ : Kont) {μ μ' : Heap} {E : Expr} :

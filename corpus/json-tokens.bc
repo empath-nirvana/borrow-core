@@ -17,8 +17,8 @@ fn get_byte<'a>(t: text 'a, i: i32) -> u8 + 1 = match get(t, i) { inl g -> inl *
 
 -- The view of the bytes `[i, j)` of `t`, clamped to it.
 fn sub<'a>(t: text 'a, i: i32, j: i32) -> text 'a =
-  let left = match split_at(t, j) { inl (l, r) -> array_forget['a, u8](r); l | inr t -> t };
-  match split_at(left, i) { inl (l, r) -> array_forget['a, u8](l); r | inr l -> array_forget['a, u8](l); slice_empty_imm['a, u8] }
+  let left = match split_at(t, j) { inl (l, r) -> array_release['a, u8](r); l | inr t -> t };
+  match split_at(left, i) { inl (l, r) -> array_release['a, u8](l); r | inr l -> array_release['a, u8](l); slice_empty_imm['a, u8] }
 
 -- The index of the first byte at or after `i` that is not white space.
 fn skip_ws<'a>(t: text 'a, i: i32) -> i32 =
@@ -29,7 +29,7 @@ fn skip_ws<'a>(t: text 'a, i: i32) -> i32 =
       let sp = is_space(at(w, k, b'x'));
       if go && sp { (t, (k + 1, true)) } else { (t, (j, false)) } },
     len(u), i, (t, (i, true)));
-  array_forget['a, u8](t);
+  array_release['a, u8](t);
   j
 
 -- The index of the quote closing a string whose body starts at `i`, or `inr` of the length when
@@ -49,7 +49,7 @@ fn scan_string<'a>(t: text 'a, i: i32) -> i32 + i32 =
           else { if c == b'"' { (t, (false, inl k)) } else { (t, (false, inr ())) } } }
       } },
     n, i, (t, (false, inr ())));
-  array_forget['a, u8](t);
+  array_release['a, u8](t);
   match r { inl j -> inl j | inr u -> inr n }
 
 -- A number at `i`, an optional `-` and its digits, and the index after it.
@@ -65,7 +65,7 @@ fn scan_int<'a>(t: text 'a, i: i32) -> i32 * i32 =
       if go && b'0' <= c && c <= b'9' { (t, (v * 10 + to_i32(c) - 48, (k + 1, true))) }
       else { (t, (v, (j, false))) } },
     len(w), start, (t, (0, (start, true))));
-  array_forget['a, u8](t);
+  array_release['a, u8](t);
   let v = if neg { 0 - v } else { v };
   (v, j)
 
@@ -78,7 +78,7 @@ fn scan_word<'a>(t: text 'a, i: i32) -> i32 =
       let c = at(w, k, b'0');
       if go && b'a' <= c && c <= b'z' { (t, (k + 1, true)) } else { (t, (j, false)) } },
     len(u), i, (t, (i, true)));
-  array_forget['a, u8](t);
+  array_release['a, u8](t);
   j
 
 -- The token at byte `i` of `t` and the index after it: `Punct(c)`, `Str(view)`, `Num(n)`,
@@ -90,12 +90,12 @@ fn token<'a>(t: text 'a, i: i32) -> (u8 + (text 'a + (i32 + (text 'a + (1 + i32)
   match get_byte(w, i) {
     inl c ->
       if c == b'{' || c == b'}' || c == b'[' || c == b']' || c == b':' || c == b',' {
-        array_forget['a, u8](t); (inl c, i + 1) }
+        array_release['a, u8](t); (inl c, i + 1) }
       else { if c == b'"' {
         let (t, x) = array_copy['a, u8] t;
         match scan_string(x, i + 1) {
           inl j -> (inr (inl (sub(t, i + 1, j))), j + 1)
-        | inr j -> array_forget['a, u8](t); (inr (inr (inr (inr (inr i)))), j)
+        | inr j -> array_release['a, u8](t); (inr (inr (inr (inr (inr i)))), j)
         } }
       else { if (b'0' <= c && c <= b'9') || c == b'-' {
         let (n, j) = scan_int(t, i); (inr (inr (inl n)), j) }
@@ -103,8 +103,8 @@ fn token<'a>(t: text 'a, i: i32) -> (u8 + (text 'a + (i32 + (text 'a + (1 + i32)
         let (t, x) = array_copy['a, u8] t;
         let j = scan_word(x, i);
         (inr (inr (inr (inl (sub(t, i, j))))), j) }
-      else { array_forget['a, u8](t); (inr (inr (inr (inr (inr i)))), i + 1) } } } }
-  | inr u -> array_forget['a, u8](t); (inr (inr (inr (inr (inl ())))), i)
+      else { array_release['a, u8](t); (inr (inr (inr (inr (inr i)))), i + 1) } } } }
+  | inr u -> array_release['a, u8](t); (inr (inr (inr (inr (inl ())))), i)
   }
 
 -- One token written on a line; the state is the view, the index, the output and the count.
@@ -142,5 +142,5 @@ main -> i32 =
   borrow imm inp { 't, t ->
     let (t, (_, (stdout, (n, _)))) = count_fold[text 't * (i32 * (Out * (i32 * bool)))](
       !{ (k, st) -> step(k, st) }, m + 1, 0, (t, (0, (stdout, (0, true)))));
-    array_forget['t, u8](t);
+    array_release['t, u8](t);
     n }

@@ -1,4 +1,4 @@
-import Core.Drop
+import Core.Consume
 
 /-!
 # NestedFold — the design pass's probe (#595)

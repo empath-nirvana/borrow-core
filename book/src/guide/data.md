@@ -95,7 +95,7 @@ main -> 1 =
 -- output: 3 1
 ```
 
-`first` keeps the head and drops the rest of the list, which the compiler frees.
+`first` keeps the head and consumes the rest of the list, which the compiler frees.
 
 ## Collections of recursive data
 

@@ -8,18 +8,18 @@ rests on a numbered result of this document, on phase B's Lean, or on a cited pa
 
 ---
 
-## 8.1 Where a dropped continuation is destroyed: statically
+## 8.1 Where a consumed continuation is destroyed: statically
 
-**The question.** Phase A destroys a dropped cancellable continuation *dynamically*: when a resuming
+**The question.** Phase A destroys a consumed cancellable continuation *dynamically*: when a resuming
 clause ends, the machine checks by reachability whether the clause's result mentions `κ`, and
 cancels `κ` if not (`clauseEnd`, `Val.mentions`). Congard, Munch-Maccagnoni & Douence place the
-drop call at the weakening point of the typing derivation, *statically*. Which does the
+consume call at the weakening point of the typing derivation, *statically*. Which does the
 calculus use?
 
 **Decision.** Static. A continuation whose qualifier admits weakening has type
 `K(q, B, ρ', C) = U_m^∅((B ⇒^{ρ'} C) & F 1)` (D1.8), a **linear** thunk when `C ∉ q`: the clause
-must take exactly one of `resume` and `cancel`. A clause that drops `κ` calls `cancel k`, which the
-elaborator inserts at the weakening point, as it inserts every other drop glue (SPEC §19:
+must take exactly one of `resume` and `cancel`. A clause that consumes `κ` calls `cancel k`, which the
+elaborator inserts at the weakening point, as it inserts every other consume glue (SPEC §19:
 "the elaborator inserts a `[then]` finaliser for every owned local in scope at a possible
 weakening point… The kernel checks it; the elaborator establishes it").
 
@@ -29,38 +29,38 @@ weakening point… The kernel checks it; the elaborator establishes it").
    value's relation, `V⟦K(q, B, ρ', C)⟧`, which is a statement about the clause's *type*. A
    dynamic rule makes the obligation "if the clause's result does not mention `κ`, cancel `κ`",
    a property of a run, not of a type, and it is not preserved by putting `κ` in a data
-   structure the program later drops (phase A's own open problem 1: "a droppable thunk holding a
-   continuation leaks when dropped"). With the static rule, exactly-once finalisation is
+   structure the program later consumes (phase A's own open problem 1: "a weakenable thunk holding a
+   continuation leaks when consumed"). With the static rule, exactly-once finalisation is
    linearity (T5.2.4): the one-shot continuation is a heap cell that its one use frees, and a
    cell left over violates `wp`'s `ρ⁺|own = ∅`.
 2. **Phase B already does it.** Phase B's denotation types the continuation with `ktyB`, the pair
    `⟨resume, cancel⟩` at mode `lin` (or `unr`), and its Fundamental Property covers it (`mkK_rel`,
    `dtorsT_rel`). The static rule is what phase B proved sound.
 3. **The kernel already does it.** SPEC §19's `κ = ⟨resume, cancel⟩ : U((B ⊸ F_Σ R) & F_Σ 1)` and
-   its drop glue are the static rule.
+   its consume glue are the static rule.
 4. **It is the source's construction.** Congard et al. make weakening an effect performed at the
    weakening points, which is what restores the strength `T(− ⊕ E)` needs in a linear setting, and
    with it T7.3. The `A & 1` encoding is Munch-Maccagnoni's, who reads it as an affine type in
    his system (*Resource Polymorphism*, arXiv 1803.02796, 2018) [recalled].
 5. **It costs nothing at run time.** The reachability check was a model artefact (phase A §6:
-   "`clauseEnd` reachability, leak tracking: model artifacts; with static weakening …, a dropped
+   "`clauseEnd` reachability, leak tracking: model artifacts; with static weakening …, a consumed
    `κ` is a static drop call").
 
 **What changes in phase A's model.**
 
 - The `clauseEnd` frame goes, and the machine's cancel happens only at `prj₂ (force κ)`, an
   abortive operation, or a co-operation's failure (D3.6).
-- A clause that drops `κ` must say `cancel k`. Phase A's `hTake`, `hTimeout` and `hStream`
-  (the drop branch of a stream) each gain one. The observable order is phase A's when the
-  elaborator places the cancel at the end of the clause's scope, as Rust places drops; phase A
+- A clause that consumes `κ` must say `cancel k`. Phase A's `hTake`, `hTimeout` and `hStream`
+  (the consume branch of a stream) each gain one. The observable order is phase A's when the
+  elaborator places the cancel at the end of the clause's scope, as Rust places consumes; phase A
   cancelled at the clause's end, after the clause's other actions. The kernel accepts either
   placement; it is the elaborator's choice, and a different placement can reorder a `free` with an
   `emit` in the same clause.
 - Phase A's stream had to be linear with an explicit `drop` because it had no static weakening
   points (`docs/effect-model.md` §3.2: "if streams had a derived drop, an implicit drop would have to run the drop").
   With static weakening the same holds for every value holding a one-shot continuation: it is
-  linear, and its drop is called where the elaborator drops it. This calculus gives a
-  drop to continuations (`cancel`) and to streams (`drop`) only. A general drop per
+  linear, and its consume is called where the elaborator consumes it. This calculus gives a
+  consume to continuations (`cancel`) and to streams (`drop`) only. A general consume per
   type (Congard et al.'s `δ : A → TI` for every type) is not added; that is the elaborator's drop
   glue over these two.
 
@@ -82,7 +82,7 @@ it handled?
 **Decision.** (b), and only at a **fallible** operation, one whose qualifier admits weakening
 (`W ∈ q_o`, D1.3). A co-operation answers `(B_o ⊗ S) ⊕ (E_o ⊗ S)` with `E_o = int` at a fallible
 operation and `E_o = 0` otherwise (D1.9). On failure the machine writes the state, cancels the
-client's continuation up to the `run` frame (its `fin` frames' drops, innermost first), and
+client's continuation up to the `run` frame (its `fin` frames' consumes, innermost first), and
 the lend answers the capability with `inr e` (D3.6).
 
 **Reasons.**
@@ -96,8 +96,8 @@ the lend answers the capability with `inr e` (D3.6).
    on #235]).
 2. **Fallible exactly when weakenable is independence.** A failure discards the client's
    continuation between the operation and the lend, as an abortive operation discards it up to
-   its handler. Independence requires everything that continuation holds to be droppable or to
-   have a derived drop, which is `W ∈ q_o` at the capture points (L5.15.2 uses the protocol's cancel
+   its handler. Independence requires everything that continuation holds to be weakenable or to
+   are consumable, which is `W ∈ q_o` at the capture points (L5.15.2 uses the protocol's cancel
    conjunct, present exactly when `W ∈ q_o`). So the runner bound `rbnd(E)` contains `cancel`
    exactly when `E` has a fallible operation, and the frames across a fallible operation are checked
    as frames across a `raise`. No new rule is needed.
@@ -118,5 +118,5 @@ the lend answers the capability with `inr e` (D3.6).
 - **The state on failure** is the co-operation's `s'`. Ahman & Bauer's signals, which discard the
   state (tensor with `kill`), are not modelled; with (b) the lender always regains its capability
   with a state, which is the sum (T7.10's `lent_state_survives`).
-- **Failing finalisers** (phase A open problem 8, SPEC §19 K3): drops here only free. A
+- **Failing finalisers** (phase A open problem 8, SPEC §19 K3): consumes here only free. A
   finaliser that raises is outside this calculus.

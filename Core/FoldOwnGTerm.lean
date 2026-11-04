@@ -57,7 +57,7 @@ def tagV : Nat → Val → Val
   | 0, w => .inj₁ w
   | k + 1, w => .inj₂ (tagV k w)
 
-/-- `λ_. ()`, the consumer the emptied array is dropped with. -/
+/-- `λ_. ()`, the consumer the emptied array is consumed with. -/
 def unitF : Val := .lam (.val .unit)
 
 /-- One step of the array loop, at the state `(i, (acc, (w, s)))`: the `i`-th slot of `w` is

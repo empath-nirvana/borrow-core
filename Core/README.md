@@ -30,7 +30,7 @@ every lifetime.
 
 `Input` and `Output` are one constructor, `VTy.opq k` (`Opaque.lean`, `[spec §11]`): a leaf with
 no rule, whose relation is the model `k.Holds` in both modes (a byte list; a descriptor and the
-bytes written), with `Imm̲ = Unk`, not persistent and with no derived drop.
+bytes written), with `Imm̲ = Unk`, not persistent and that is not consumable.
 
 `νX. C` (`[spec §7]`) has `U X` as the type variable `0` of `C`'s value types, and at a positive
 `C` (`CTy.NuOk`) is interpreted as a greatest fixed point equal to its unrolling (`NuRel.lean`,
@@ -61,7 +61,7 @@ returns a residual, and `D A = Loop A 1`; the driver `driveE n` is typed at ever
 Its context premises are `Ctx.SplitP`, `Ctx.DeadP` and `Ctx.SoloP` (`Persistent.lean`,
 `[spec §10]`), which extend the paper's `Ctx.Split`, `Ctx.Dead` and `Ctx.Solo`: a live slot of
 persistent type (`VTy.persistent`: `1`, `0`, `Unk`, `I32`, `I64`, `!A`, and `⊗`, `⊕`, `[@a]`,
-`μ` over persistent types) may go to both sides of a split and may be dropped at a leaf. The
+`μ` over persistent types) may go to both sides of a split and may be consumed at a leaf. The
 relation holds such a value only at `∅` (`vP_empty_of_persistent`).
 
 ### Integers and the host  `[spec §8]`
@@ -105,7 +105,7 @@ The machine's steps `tab`, `idx`, `drop` (`Paper/S3_Dynamics/Definitions.lean`,
 allocator's block, `alloc_block`), `wpTS_idx` and `wpTS_dropStep` (`ArrayWp.lean`). The constants and
 their compatibility lemmas are `Arrays.lean`: `array_new` (`tabFill_wp`), `array_free`
 (`dropFill_wp`), `array_size`, `array_replace`, and on families `array_len`, `array_get`,
-`array_copy`, `array_forget`. `HasDrop` has `Array A`, `ArrayImm @a A` and `ArrayMut @a A` (`Drop.lean`).
+`array_copy`, `array_release`. `Consumable` has `Array A`, `ArrayImm @a A` and `ArrayMut @a A` (`Consume.lean`).
 `ArrayPrograms.lean` runs one program by adequacy and by the interpreter. The relation's
 clause carries the length bound `c < 2³¹`, so a family has `tab`'s length (`arrLen_of_bound`).
 
@@ -117,7 +117,7 @@ one callback, by induction on the list of places (`wpTS_M_frameList`, `wpTS_I_fr
 borrowed family is split at a run-time index by the step `split` (`famSplit_compatX`, from
 `vP_fam_split`), `(0, 0)` is the empty family (`famEmpty_compatX`), and a `mut` family is
 written at an index by Mut Anti-Frame on the leaf (`sliceReplaceM_compatX`,
-`sliceSwapM_compatX`, two leaves by `sepRange_pick2N`). `HasDrop` has `ArrayMut @a A`, derived
+`sliceSwapM_compatX`, two leaves by `sepRange_pick2N`). `Consumable` has `ArrayMut @a A`, derived
 from `slice_get_mut` and `forget`.
 
 ### Standard I/O  `[spec §11]`
@@ -168,10 +168,10 @@ effect).
   allocation. H-ret (`catch_ret`); H-op: the catch hands the clause `kappa` at an unrestricted
   operation (`catch_unr`), and at a must-resume or cancellable one allocates `κ`'s cell at a free
   location and hands `kappaC` there (`catch_cell`), every run from the catch a prefix of those three
-  steps or going on from them (`catchEv_cell`); resuming `kappaC` releases the cell and runs
+  steps or going on from them (`catchEv_cell`); resuming `kappaC` frees the cell and runs
   `hnd H K[w]` (`kappaC_resume`), a cancellable `κ`'s cancel releases it and cancels
   (`kappaC_cancel`), a must-resume one's has no step (`kappaC_cancel_lin`), and on a run to a value
-  a use of `κ` releases its cell three steps later (`use_frees_cell`); H-fwd (`catch_fwd`,
+  a use of `κ` frees its cell three steps later (`use_frees_cell`); H-fwd (`catch_fwd`,
   `fwd_resume`, `fwd_abort`); `[unwind]`, `[then]` and `[finalise]` (`catch_abort`, `then_ret`,
   `then_fin`). A2: `raise p` under frames that catch nothing of its name steps, in every context, as
   `raise p` does (`abort_absorbs`, `abort_to`, `abort_app`).
@@ -222,7 +222,7 @@ effect).
   pending under frames with no running finaliser's `cfin`, every path is a prefix of the unwind
   trace (`unwind_prefix`, `UnwindTr`): the finalisers fire innermost first, each running alone, one
   that returns `()` hands the raise on and one whose raise escapes supersedes it. From the start of
-  a continuation's cancel run, `kappa H K` or `kappaC` at its cell after its cell's release, in a
+  a continuation's cancel run, `kappa H K` or `kappaC` at its cell after its cell's free, in a
   run of a tied term, every path is a prefix of the cancel trace of `K†` (`cancel_prefix`,
   `CancelTr`): `K`'s finalisers fire innermost first, a running finaliser's `cfin` is passed by
   `[cfin-cancel]`, the first kept error wins, and the canceller gets `()` or the kept error, of a
@@ -239,7 +239,7 @@ effect).
   a view of its live slot's type (`der_var`), an application is typed by a rule that concludes with
   one (`der_app`), a λ-value through the rule that types its body or as a constant (`der_lam`),
   `swap` at its axiom alone (`der_swap`), and every free variable of a typed term has a live slot
-  (`fv_live`). A clause's must-resume or cancellable `κ` is neither dropped nor used twice, nor
+  (`fv_live`). A clause's must-resume or cancellable `κ` is neither consumed nor used twice, nor
   cancelled at a must-resume operation (`refuses_R_clauses`, `clauseRefusals_pinned`), and `at05`,
   `at06`, `at08` and `at13` have no derivation at all (`not_der_at05`, …). `at08Once`, `at08` with
   the copy used once, is typed and every run of it ends at `()` (`d_at08Once`, `at08Once_runs`; the
@@ -299,8 +299,8 @@ with no new case.
 | family borrow `withborF2 : Ref A ⊗ Ref B ⊸ (∀'c ⊏ ⊓Δ. M 'c A ⊗ M 'c B ⊸ ['c] T) ⊸ …`, `M = Mut`/`Imm`: `withborM2_wf`, `withborI2_wf` | `Family.lean` |
 | block borrow `withborS σ : refTy σ ⊸ (∀'c ⊏ ⊓Δ. famTy M 'c σ ⊸ ['c] T) ⊸ refTy σ ⊗ T`, `shortenE`: `withborS_wf`, `withborSM_wf`, `withborSI_wf`, `shortenE_wf` | `BlockBorrow.lean` |
 | block allocation and free: `allocS`, `freeS` (`d_allocS`, `d_freeS`) | `Blocks.lean` |
-| drops `dropFnE T : T ⊸ F 1` at every `HasDrop T` (forgettable types, `Ref`, `⊗`/`⊕`/`[@a]`, `μ` of the class `P` by `foldOwn` or `foldOwnG`, codata by `close`), and the drop `dropE T i e = (dropFnE T xᵢ; e)`: `dropFn_wf`, `drop_derives` (SPEC §12, §61) | `Drop.lean` |
-| the two classes of value type, unrestricted (`VTy.Persistent`) and linear: contraction and weakening exactly at unrestricted types (`Ctx.SplitP.both_live_iff`, `Ctx.DeadP.live_iff`, `Ctx.SoloP.live_succ_iff`); the derived drop `DerivedDrop`, pure at the row (`dropFn_wf`, `HasDrop.close`/`.nu`, `kTy_cancel_hasDrop_iff`), its term holding no operation and closed (`dropFnE_effFree`, `dropFnE_closed`); the derived copy at `Imm` (`DerivedCopy`, `copy_derives`); the classes of `κ` (`kTy_lin`, `kTy_cancel_linear`, `kTy_cancel_hasDrop_iff`, `kTy_unr`); `forgettable_iff` (SPEC §10, §12, §19) | `Classes.lean` |
+| consumes `consumeE T : T ⊸ F 1` at every `Consumable T` (releasable types, `Ref`, `⊗`/`⊕`/`[@a]`, `μ` of the class `P` by `foldOwn` or `foldOwnG`, codata by `close`), and the consume `consumeSlotE T i e = (consumeE T xᵢ; e)`: `consume_wf`, `consumeSlot_derives` (SPEC §12, §61) | `Consume.lean` |
+| the two classes of value type, unrestricted (`VTy.Persistent`) and linear: contraction and weakening exactly at unrestricted types (`Ctx.SplitP.both_live_iff`, `Ctx.DeadP.live_iff`, `Ctx.SoloP.live_succ_iff`); the consume `LinearConsumable`, pure at the row (`consume_wf`, `Consumable.close`/`.nu`, `kTy_cancel_consumable_iff`), its term holding no operation and closed (`consumeE_effFree`, `consumeE_closed`); the derived copy at `Imm` (`DerivedCopy`, `copy_derives`); the classes of `κ` (`kTy_lin`, `kTy_cancel_linear`, `kTy_cancel_consumable_iff`, `kTy_unr`); `releasable_iff` (SPEC §10, §12, §19) | `Classes.lean` |
 
 These facts are stated at the typed world:
 
@@ -329,7 +329,7 @@ interpreter (`…_eval`, kernel-checked by `decide`) with its result checked (`�
 | `StreamPrograms.lean` | `take_runs` (every closed `U(Stream 1)` observed `n` times and closed), `takeCloseR`, `natsSum` (`0 + 1 + 2 = 3`) |
 | `IntPrograms.lean` | `sumToProg` (`fixD` over `I32 ⊗ I32`, `1 + … + 10 = 55`), `sumListProg` (`[100, 20, 3]` as `μX. 1 ⊕ Ref (I32 ⊗ X)`, read by `withload` inside an immutable borrow, `foldImm` sum `123`), `signProg` (`div_s`/`div_u` of `-7` by `2`, a wrapping `mul`, `div_u` by zero taking the error branch) |
 | `ArrayPrograms.lean` | `arrProg`: `array_new` of three elements, `array_replace` at index 1, `array_size`, `array_free`; observed `(inl 11, 3)` and no cell left |
-| `NestedPrograms.lean` | `nestProg`: two values of `μX. I32 ⊗ Array (μY. 1 ⊕ (Ref X ⊗ Ref Y))`, nested three deep, built, one summed by `foldOwnG` and one freed by its derived drop; observed `34` and no cell left (the kernel program `nested-fold`) |
+| `NestedPrograms.lean` | `nestProg`: two values of `μX. I32 ⊗ Array (μY. 1 ⊕ (Ref X ⊗ Ref Y))`, nested three deep, built, one summed by `foldOwnG` and one consumed implicitly; observed `34` and no cell left (the kernel program `nested-fold`) |
 
 The `IntPrograms.lean` runs are theorems at every host; the interpreter's results are at
 `wasmHost`.
@@ -375,9 +375,9 @@ Name collisions settled:
   - Neither is excluded by typing. The model is sound either way, but lowering a handle to one
     word needs both excluded.
 - **Records.**
-  - `getAt`/`loadField` need the dropped fields `Forgettable`. `Imm̲ 'b A` is shown forgettable only
-    when `A`'s `⊗`/`⊕`/`[@a]` spine holds no `μ` or type variable (`forgettable_immReborrow` with
-    `VTy.SpineMuFree`), because `Forgettable` has no `μ` case. So an `Imm` record cannot yet be
+  - `getAt`/`loadField` need the consumed fields `Releasable`. `Imm̲ 'b A` is shown releasable only
+    when `A`'s `⊗`/`⊕`/`[@a]` spine holds no `μ` or type variable (`releasable_immReborrow` with
+    `VTy.SpineMuFree`), because `Releasable` has no `μ` case. So an `Imm` record cannot yet be
     projected past an unboxed `μ`-typed field. `swapField`, `recE` and `loadCase` do not need
     this: `bagProg` updates a list field through `Mut`.
   - Variants in place: `Ref` does not distribute over `⊕`.
@@ -394,7 +394,7 @@ Name collisions settled:
   `Imm @e`/`Mut @e`/`[@e]` leaves and results that outlive the outer lifetime. I have not
   derived `withborS` at such leaves, and I have not verified that any obstruction to it is real.
 - **Arrays.** `split_at` (K3), the writes that keep a `mut` family (K5), `iter`/`iter_mut`,
-  `Vec`, `Str` are not built, and `[Mut @a A]` has no derived drop (`SPEC.md` §9 Open). `[L]` is not
+  `Vec`, `Str` are not built, and `[Mut @a A]` is not consumable (`SPEC.md` §9 Open). `[L]` is not
   in `SpineMuFree`, so an `Imm` record cannot be projected past an array field.
 - **Streams.** Only `A = 1` has a generic consumer with a stated adequacy theorem (`take_runs`).
   Every other stream program is a single closed derivation.

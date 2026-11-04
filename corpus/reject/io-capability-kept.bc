@@ -2,5 +2,5 @@
 extern stdin : ref input
 extern stdout : ref output
 
--- A capability has no derived drop: `main` must hand `stdout` back.
+-- A capability is not consumable: `main` must hand `stdout` back.
 main : F (ref input * 1) = return (stdin, ())

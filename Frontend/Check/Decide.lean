@@ -1,5 +1,5 @@
 import Core.Fundamental
-import Core.Drop
+import Core.Consume
 import Core.LetCopy
 
 /-!

@@ -9,8 +9,8 @@ closures as values:
 
 - **Variables** are numbered uniquely in the program, and each has its `LTy` (`Prog.ty`).
 - **Ownership is explicit.** Every variable is consumed exactly once on every path: by an
-  operation that takes it, by `drop`, or by being the term's value. `copy x x'` makes `x'` a copy
-  of `x`, which stays owned. Closure conversion places copies and drops from the typed term's
+  operation that takes it, by `consume`, or by being the term's value. `copy x x'` makes `x'` a copy
+  of `x`, which stays owned. Closure conversion places copies and consumes from the typed term's
   split masks (`Backend2/Convert.lean`), not from occurrences.
 - **Functions** (`Fn`) take parameters and answer a value. A closure code's function takes the
   captured values, then its argument when it has one. A closure is `clos c env`: code `c`, its
@@ -96,7 +96,7 @@ inductive Op where
   /-- The empty family `(0, 0)`. -/
   | emptyFam
   /-- `replace v i x`: `(v, inl old)` with `x` moved into slot `i` when `i < n`, else
-  `(v, inr x)`: a slot swap (#608), no copy and no drop of either value. -/
+  `(v, inr x)`: a slot swap (#608), no copy and no consume of either value. -/
   | replace
   /-- `swapSlots v i j`: slots `i` and `j` exchanged when both are below `n`; the result is `v`. -/
   | swapSlots
@@ -161,17 +161,17 @@ inductive CodeKind where
   deriving Inhabited, BEq, Repr
 
 /-- **The rule an `abandon` node is at** (decision 2): a computation that does not return to its
-context absorbs it. Not a drop: no derived drop runs. `Lint.abandonable` checks each rule's premise:
+context absorbs it. Not a consume: no consume runs. `Lint.abandonable` checks each rule's premise:
 at a `[let]`'s abort, the abandoned values hold no owned cell (`VTy.OwnFree`, `vC_noOwn_of_ownFree`);
 `⊤` has none. -/
 inductive Abandon where
-  /-- `[let]`'s abort (`CDerives.effLet`'s `hW : S.Weak → Γ₂.Drops`): `N`'s context, at the abort
+  /-- `[let]`'s abort (`CDerives.effLet`'s `hW : S.Weak → Γ₂.Consumes`): `N`'s context, at the abort
   branch of the `[let]` or of a frame it pushed. -/
   | letAbort
   /-- `⊤`'s introduction (`CDerives.topI`): the whole context. -/
   | top
   /-- A raise's payload superseded by a finaliser's (`then_fin`, `unwind_prefix`): the payload
-  of a raise holds no owned cell (`CDerives.effRaise`'s `hd : o.A.Drop`). -/
+  of a raise holds no owned cell (`CDerives.effRaise`'s `hd : o.A.Consume`). -/
   | superseded
   deriving Inhabited, BEq, Repr
 
@@ -180,38 +180,38 @@ def Abandon.name : Abandon → String
   | .top => "top"
   | .superseded => "superseded"
 
-/-- **The rule a `drop` node is at**: the kernel rule that discards the value there. `Lint.dropsAt`
+/-- **The rule a `consume` node is at**: the kernel rule that discards the value there. `Lint.consumesAt`
 checks each rule's premise on the variable's LIR type. -/
-inductive DropRule where
-  /-- Weakening at an unrestricted type (`Ctx.DeadP.drop`, `Ctx.SoloP.skip`): a leaf's other slots,
+inductive ConsumeRule where
+  /-- Weakening at an unrestricted type (`Ctx.DeadP.weaken`, `Ctx.SoloP.skip`): a leaf's other slots,
   a `use`'s slots it does not read, a handler's values (`effHandleV`'s `DeadP`), a pure frame's
   arguments at an abort, and the machine's own words (a unit, a counter). -/
   | dead
-  /-- A `forget` constant applied (`CDerives.forgetImm`, `forgetMut`, `forgetUnk`, `arrForget`):
+  /-- A `release` constant applied (`CDerives.releaseImm`, `releaseMut`, `releaseUnk`, `arrRelease`):
   a borrow, `Unk`, or a family of `imm` borrows. -/
-  | forget
-  /-- A piece of the drop of a `dropFn` node's type (`drop_derives` over `dropFn_wf`): each leaf
-  the type's `HasDrop` derivation forgets, among them a family of `mut` borrows
-  (`HasDrop.arrayMut`, whose `dropFnAt` is `idx` then `forget`). Only in a drop function
-  (`Prog.dropFns`). -/
-  | dropFn
+  | release
+  /-- A piece of the consume of a `consume` node's type (`consumeSlot_derives` over `consume_wf`): each leaf
+  the type's `Consumable` derivation releases, among them a family of `mut` borrows
+  (`Consumable.arrayMut`, whose `consumeAt` is `idx` then `forget`). Only in a consume function
+  (`Prog.consumeFns`). -/
+  | consume
   /-- A live slot of a split's context that neither part's mask holds: weakened
-  (`Ctx.DeadP.drop`), at a persistent type, where the kernel weakens it at the leaves of the part
-  that receives it. The kernel may instead absorb it (`⊤`, `absurd`); `Lint` refuses such a drop
+  (`Ctx.DeadP.weaken`), at a persistent type, where the kernel weakens it at the leaves of the part
+  that receives it. The kernel may instead absorb it (`⊤`, `absurd`); `Lint` refuses such a consume
   at a type that is not persistent. `UNPROVED:` that no checked program has one
   (`Check.SplitMasks.NeitherAbsorbed`). -/
   | unused
   /-- A stack machine's hand-over (`genStackMach`): a level's suspended computation, a closure
-  `clos kc [a]` of the machine's code over a frame's address, dropped for `clos kc [base]`, which
+  `clos kc [a]` of the machine's code over a frame's address, consumed for `clos kc [base]`, which
   the node's body binds first (`let k₂ = clos kc [base] in …`). `Lint.handsOver` checks that shape
   from the node. `UNPROVED:` that `base` is at or below `a` on the task stack, so that `k₂` takes
-  over the frames the dropped `k` stands for (`Backend2.StackKHandOver`; #755 is the route to a
+  over the frames the consumed `k` stands for (`Backend2.StackKHandOver`; #755 is the route to a
   proof). -/
   | stackK
   deriving Inhabited, BEq, Repr
 
-def DropRule.name : DropRule → String
-  | .dead => "dead" | .forget => "forget" | .dropFn => "dropFn" | .unused => "unused"
+def ConsumeRule.name : ConsumeRule → String
+  | .dead => "dead" | .release => "release" | .consume => "consume" | .unused => "unused"
   | .stackK => "stack k"
 
 /-- **The rule a `copy` node is at.** `Lint.copiesAt` checks each rule's premise on the LIR type. -/
@@ -255,10 +255,10 @@ inductive Tm where
   | absurd (s : Var)
   /-- `x'` a copy of `x` at the rule `r`; `x` stays owned. -/
   | copy (r : CopyRule) (x x' : Var) (b : Tm)
-  /-- `x` consumed at the rule `r`: its drop. -/
-  | drop (r : DropRule) (x : Var) (b : Tm)
+  /-- `x` consumed at the rule `r`: its consume. -/
+  | consume (r : ConsumeRule) (x : Var) (b : Tm)
   /-- `x` abandoned at the rule `r`, which the typed term applies here (`Abandon`): nothing runs.
-  `Lint` admits an opaque value here and at no `drop`. -/
+  `Lint` admits an opaque value here and at no `consume`. -/
   | abandon (r : Abandon) (x : Var) (b : Tm)
   deriving Inhabited
 
@@ -317,9 +317,9 @@ structure Prog where
   /-- `main` is served `Fail[DivError]` by the platform's handler (`Checked.exitsOnDivError`,
   SPEC §39): its value is `inl v`, whose `v` is reported, or `inr ()`, the exit status `1`. -/
   exits : Bool := false
-  /-- The functions that drop a leaf of a `dropFn` node's drop (`Convert.leafDrop`): the only
-  functions where `Lint` admits a `drop` at the rule `dropFn`. -/
-  dropFns : Std.HashSet Nat := {}
+  /-- The functions that consume a leaf of a `consume` node's consume (`Convert.leafConsume`): the only
+  functions where `Lint` admits a `consume` at the rule `consume`. -/
+  consumeFns : Std.HashSet Nat := {}
   deriving Inhabited
 
 end Backend2

@@ -23,7 +23,7 @@ namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
 open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt CDerivesP Jdg EffCtx RowAt SigsAt OpAt Ctx.Banged
-  CtxOutlives HasDrop dropFnE dropE dropFn_wf rowAt_of_sigsAt)
+  CtxOutlives Consumable consumeE consumeSlotE consume_wf rowAt_of_sigsAt)
 
 /-- **A derivation tied at every effect context at which the list `s` is**: `s` holds the rows the
 derivation reads at `[perform]`, `[raise]` and `[handle]`.  `[spec §19]` -/
@@ -285,15 +285,15 @@ theorem effHandleB {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {e : BoCa.Expr} {
 theorem ofCDerives {e : BoCa.Expr} {j : Jdg} (h : CDerives Δ Γ e j) (he : e.effFree = true) :
     TiedAt [] Δ Γ e j := fun _ _ => CDerivesAt.ofEffFree h he
 
-/-- `dropFnE T xᵢ; e`, as `drop_derives`: `unitE` over the drop applied to the slot.
+/-- `consumeE T xᵢ; e`, as `consumeSlot_derives`: `unitE` over the consume applied to the slot.
 `[spec §12]` -/
-theorem drop {s : CRow} {Γ₁ Γ₂ : Ctx CVTy} {i : Nat} {T : CVTy} {e : BoCa.Expr} {C : CCTy}
+theorem consume {s : CRow} {Γ₁ Γ₂ : Ctx CVTy} {i : Nat} {T : CVTy} {e : BoCa.Expr} {C : CCTy}
     (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂)
-    (hx : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γ₁ i T) (hT : HasDrop T)
-    (hE : (dropFnE T).effFree = true) (h : TiedAt s Δ Γ₂ e (.comp C)) :
-    TiedAt s Δ Γ (dropE T i e) (.comp C) :=
+    (hx : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γ₁ i T) (hT : Consumable T)
+    (hE : (consumeE T).effFree = true) (h : TiedAt s Δ Γ₂ e (.comp C)) :
+    TiedAt s Δ Γ (consumeSlotE T i e) (.comp C) :=
   fun Ξ hΞ => .unitE hs (.lolliE (BoCa.Fig16.LogRel.Core.split_kill' Γ₁).toP (.var hx)
-    (CDerivesAt.ofEffFree (dropFn_wf hT (BoCa.Fig16.LogRel.Core.kill_dead Γ₁)) hE)) (h Ξ hΞ)
+    (CDerivesAt.ofEffFree (consume_wf hT (BoCa.Fig16.LogRel.Core.kill_dead Γ₁)) hE)) (h Ξ hΞ)
 
 end TiedAt
 
@@ -626,15 +626,15 @@ theorem effHandleB {p : Pins} {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {e : B
 theorem ofCDerives {e : BoCa.Expr} {j : Jdg} (h : CDerives Δ Γ e j) (he : e.effFree = true) :
     TiedDer [] [] Δ Γ e j := ⟨fun _ => TiedAt.ofCDerives h he, CDerivesP.ofC h⟩
 
-/-- `dropFnE T xᵢ; e`, as `drop_derives`.  `[spec §12]` -/
-theorem drop {p : Pins} {s : CRow} {Γ₁ Γ₂ : Ctx CVTy} {i : Nat} {T : CVTy} {e : BoCa.Expr}
+/-- `consumeE T xᵢ; e`, as `consumeSlot_derives`.  `[spec §12]` -/
+theorem consume {p : Pins} {s : CRow} {Γ₁ Γ₂ : Ctx CVTy} {i : Nat} {T : CVTy} {e : BoCa.Expr}
     {C : CCTy} (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂)
-    (hx : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γ₁ i T) (hT : HasDrop T)
-    (hE : (dropFnE T).effFree = true) (h : TiedDer p s Δ Γ₂ e (.comp C)) :
-    TiedDer p s Δ Γ (dropE T i e) (.comp C) :=
-  ⟨fun hn => TiedAt.drop hs hx hT hE (h.1 hn),
+    (hx : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γ₁ i T) (hT : Consumable T)
+    (hE : (consumeE T).effFree = true) (h : TiedDer p s Δ Γ₂ e (.comp C)) :
+    TiedDer p s Δ Γ (consumeSlotE T i e) (.comp C) :=
+  ⟨fun hn => TiedAt.consume hs hx hT hE (h.1 hn),
     .unitE hs (.lolliE (BoCa.Fig16.LogRel.Core.split_kill' Γ₁).toP (.var hx)
-      (CDerivesP.ofC (dropFn_wf hT (BoCa.Fig16.LogRel.Core.kill_dead Γ₁)))) h.2⟩
+      (CDerivesP.ofC (consume_wf hT (BoCa.Fig16.LogRel.Core.kill_dead Γ₁)))) h.2⟩
 
 end TiedDer
 

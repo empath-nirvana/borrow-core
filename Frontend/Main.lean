@@ -20,7 +20,7 @@ import Backend2.Driver
                                 compile to LLVM IR for the host (`Backend/Native/`, SPEC §40)
     lake exe bcc run <file> [arg…]
                                 compile, and run under `wasmtime` with the arguments: `main`'s
-                                value, then the number of live objects after it is dropped
+                                value, then the number of live objects after it is consumed
     lake exe bcc run --native <file> [arg…]
                                 compile to LLVM IR, build it with `clang` beside the native
                                 runtime, and run it with the arguments

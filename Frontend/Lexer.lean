@@ -68,15 +68,15 @@ def keywords : List String :=
     "for", "in",
     "node", "array", "array_imm", "array_mut",
     -- constants and derived forms
-    "alloc", "free", "swap", "copy", "copy_bang", "forget_imm", "forget_mut", "forget_unk",
-    "forget_bang", "withbor1", "withbor2", "withbor3", "withload", "withswap",
+    "alloc", "free", "swap", "copy", "copy_bang", "release_imm", "release_mut", "release_unk",
+    "release_bang", "withbor1", "withbor2", "withbor3", "withload", "withswap",
     "fold_imm", "fold_own", "fold_reuse", "fixd", "unfold_s", "unfold", "host",
     "alloc_s", "free_s", "withbor_s_mut", "withbor_s_imm", "withbor_f2_mut", "withbor_f2_imm",
     "shorten_mut", "shorten_imm", "array_new", "array_empty", "array_free", "array_size", "array_replace",
     "slice_borrow_mut", "slice_borrow_imm", "slice_get_mut", "slice_len_mut", "count_fold", "count_try", "bounded_fix",
     "slice_split_imm", "slice_split_mut", "slice_empty_imm", "slice_empty_mut",
     "slice_replace_mut", "slice_swap_mut",
-    "array_len", "array_get", "array_copy", "array_forget",
+    "array_len", "array_get", "array_copy", "array_release",
     "withbor1u", "withbor2u", "withbor3u", "withloadu", "slice_borrow_mut_u", "slice_borrow_imm_u" ]
 
 /-- The reserved upper-case words. -/

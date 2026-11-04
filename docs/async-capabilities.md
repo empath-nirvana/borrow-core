@@ -218,7 +218,7 @@ GhostEnd (`experiments/GhostEnd`, on `main`) keeps both conjuncts and changes wh
 - **At the resumption, the lender lends the place again** at a fresh lifetime below the bound,
   6.65 re-applied at each resumption (`ewpTS_M_frameR`; `imm` lends: `ewpTS_I_frameR`). PROVED.
 - **Cancelled at a stop**, the continuation unwinds and the owner goes to the lender's finaliser:
-  `withborR_compat`, the unwinding `withbor` at a resuming row (`GhostEnd/Drop.lean:126`). PROVED.
+  `withborR_compat`, the unwinding `withbor` at a resuming row (`GhostEnd/Consume.lean:126`). PROVED.
 - **The borrower's view needs no change**: it is the location `ℓ`, and the fresh cell at `ℓ` puts
   it back in the relation at the new lifetime (`mutView`). PROVED.
 
@@ -315,7 +315,7 @@ held borrow (`n4`). Both are design limits with open questions (OQ-3, OQ-1), not
 |---|---|---|
 | A `!Unpin` future must not move after its first poll (`Pin<P>`) | a self-referential future holds a reference into its own field; moving the future by `memcpy` leaves the reference dangling | **No, in the model**: a borrow is the location of a cell, and a task's state holds the cell's owner (a pointer). Moving or swapping a suspended task moves pointers (`accept/m1`). **In the lowering, it is an obligation**: SPEC §19 lowers a continuation to a state record of statically known size, moved by value. A lent cell must not be inlined into a record that is later moved. Either the cell stays out of line (today: `alloc` is a heap cell), or the record is allocated once per task and never moved after the first suspension (Rust's `Box::pin`, which `tokio::spawn` also pays). The compiler enforces this; the programmer writes nothing. DESIGNED (U5's lowering note). |
 | No `&mut T` from `Pin<&mut T>` for `!Unpin` (`get_mut` is `unsafe`), so `mem::swap`/`mem::replace` cannot move the pinned value | swapping the pinned value out moves it | **No**: the owner of a lent cell is inside the suspended continuation, so no code outside the task can name it. The task's own code reaches the cell only through the view, which `withswap` swaps the *contents* of, at the cell's fixed location. |
-| `Drop` must run before a pinned value's memory is invalidated (the drop guarantee) | intrusive structures (wakers, linked lists) point into pinned memory; freeing without drop leaves them dangling | **No `mem::forget` exists for a continuation**: `forget κ` has no derivation (`not_forget_kappa`), cancelling runs the finalisers innermost first, and adequacy ends at the empty memory (`adequacyD`, and `adequacyD_pin`). A program that never ends never drops its tasks, as in Rust. |
+| `Consume` must run before a pinned value's memory is invalidated (the drop guarantee) | intrusive structures (wakers, linked lists) point into pinned memory; freeing without drop leaves them dangling | **No `mem::forget` exists for a continuation**: `forget κ` has no derivation (`not_release_kappa`), cancelling runs the finalisers innermost first, and adequacy ends at the empty memory (`adequacyD`, and `adequacyD_pin`). A program that never ends never consumes its tasks, as in Rust. |
 | `Unpin` auto trait | marks types safe to move when pinned | No analogue needed. |
 | Pin projection (structural pinning of fields) | a field of a pinned struct must be treated as pinned or not, consistently | No analogue: a field that is borrowed is its own cell or a leaf of a family, lent by its own lend. |
 | `async fn` cannot hold a borrow of its own local across `.await` without `Pin` (E0626 for movable generators) | the generator's frame is self-referential | **Sound under ghost end**: R1 (`PinLaw.stop`), or L0 with no assertion. |
@@ -639,7 +639,7 @@ Ordered; each unit is one PR and turns the programs named green. No unit but U1 
 > **OQ-1. An abortive operation crossing a relaxed lend.** `borrow mut b { … await(); …?… }`
 > with the error handled outside the block is rejected in v1 (`n4`). Options: (a) extend
 > `Row.ResumeO` to rows mixing resuming and abortive operations, widening `LendFrame`'s row
-> (believed by the LIFO frame lemmas `wpTS_M_frameU` with GhostEnd's `Drop`; not checked); (b)
+> (believed by the LIFO frame lemmas `wpTS_M_frameU` with GhostEnd's `Consume`; not checked); (b)
 > keep v1 and have the elaborator move the handler inside the block where the error's type
 > allows. (a) grows `PinLaw`; (b) costs programs. **Taken as (a) for the cancel path only**
 > (#750, SPEC §29a): `Row.ResumeOC` admits the marked cancel target that `[await-c]` raises on a
@@ -676,7 +676,7 @@ Ordered; each unit is one PR and turns the programs named green. No unit but U1 
   `Core/EffRules.lean:642` (`KapRel`), `:755` (`ewp_handle`), `Core/Fundamental.lean:508`
   (`fundamentalC`), `:668` (`adequacyC`), `Core/Demonic.lean:284`, `:312` (`fundamentalD`,
   `adequacyD`), `Core/Alloc.lean`, `Core/Run.lean`, `Paper/S3_Dynamics/Definitions.lean:247`–`256`.
-- `experiments/GhostEnd` (`Open.lean`, `Drop.lean`, `ImmLend.lean`, `Relend.lean`, README);
+- `experiments/GhostEnd` (`Open.lean`, `Consume.lean`, `ImmLend.lean`, `Relend.lean`, README);
   `experiments/LoopBorrow` (README, `Dormant.lean`); `experiments/HandlersAsBorrows`,
   `experiments/SecondClass`, `experiments/HandlersControl` READMEs.
 - Branch `nominal-lifetimes`: `experiments/BoxedKappa` (README, `Stop.lean`, `Handle.lean`,

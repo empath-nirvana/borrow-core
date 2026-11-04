@@ -27,7 +27,7 @@ fn coins<'c>(cs: array_imm 'c i32, amount: i32) -> i64 =
       } else { () }
     }
   };
-  array_forget['c, i32](cs);
+  array_release['c, i32](cs);
   let r = at(&dp, amount, big);
   if r == big { i64[0] - i64[1] } else { r }
 

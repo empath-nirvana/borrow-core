@@ -132,7 +132,7 @@ LL, LW, RA, RR, WL, WW). The others are S1/S2 (6), S3 (AA) and S4 (8).
 | issue | measured on `main` | symptom of the split? |
 |---|---|---|
 | #491 | as filed | **yes**: `LoopLend` decides "loops" before the source is typed, so a typed view is read as a drain (S13). Reproduction 2's `spinePattern` failure is a second cause: the parameter tuple is not matched. Deciding from the typed subtree removes both, since neither pattern is needed |
-| #492 | as filed (§7.3 `i492`); without the loop it runs (`i492b`: `i32[5]`) | **independent**. `bcc desugar` shows the generated `case fx_self { inl -> abort[1.0] () \| inr -> …(a, …) }` of §20's budget inside the `handle_with` that `count_try`'s step installs for abortive operations, with no drop of `a` in the `abort` arm. It concerns drop placement in that generated code, not where the loop may stand. Not predicted fixed here |
+| #492 | as filed (§7.3 `i492`); without the loop it runs (`i492b`: `i32[5]`) | **independent**. `bcc desugar` shows the generated `case fx_self { inl -> abort[1.0] () \| inr -> …(a, …) }` of §20's budget inside the `handle_with` that `count_try`'s step installs for abortive operations, with no consume of `a` in the `abort` arm. It concerns consume placement in that generated code, not where the loop may stand. Not predicted fixed here |
 | #493 | as filed | **independent in mechanism, fixed by U3**: the threaded variables are chosen by name (`mentionsC y M`) without the body's own binders. Live variables computed with scope (U3) choose the binding, not the name |
 | #501 | as filed | **yes**: as #491 |
 | #502 | as filed | **yes**: a loop that threads `a` inside an `if` that is the head of `;` rebinds `a` in the arm, and the rebinding does not reach the rest. A join point for the rest (U3) passes it |
@@ -267,7 +267,7 @@ nested heads, a degenerate blowup:
 | option | how | for | against |
 |---|---|---|---|
 | J1: keep duplication where it applies today; join points only for heads it refuses | narrowest | every accepted program desugars as before | two mechanisms |
-| **J2: join points everywhere** (recommended, after U3 measures it) | one mechanism | no duplication | changes the core of every program with an exit in a head. Counts may only drop, and each change is explained |
+| **J2: join points everywhere** (recommended, after U3 measures it) | one mechanism | no duplication | changes the core of every program with an exit in a head. Counts may only consume, and each change is explained |
 
 Recommendation: J1 inside U3, so U3's invariant is "desugar unchanged". Then J2 as a separate,
 measured step.
@@ -291,7 +291,7 @@ be checked by U4's desugar diff.
 - a generator site's cancel `(force k).2`, which runs the generator's finalisers (§19, laws 5–6);
 - a lend's end (the borrow block's).
 
-Then the variables not passed are dropped (§12). Machine loops do this today for `return` and
+Then the variables not passed are consumed (§12). Machine loops do this today for `return` and
 `break` (`held`'s `closeSrc`). Total loops do it lexically: the borrow block ends with the fold,
 and the clause cancels `κ` (`leave`). For labelled exits the order is the nesting order, which
 `unwind_prefix` and the finally law already fix for raises: innermost first. This is Rust's drop
@@ -333,7 +333,7 @@ induction on `len − i`. Hypothesis until U2.
 | option | how | for | against |
 |---|---|---|---|
 | **A1: as today** (recommended) | the step handles the operation and leaves by `inr`, re-raised after the loop | no change to existing core | `raise-small`'s cost. Effect-lowering unit 8 (#542 §2.2) fixes it in the backend |
-| A2: perform in place | `bounded_fix` at the row, as `rowLoop` | no reification | changes the core of every counted loop that raises; the order of drops could move across a `close`, which hard-stop item 2 would have to clear program by program; duplicates unit 8 |
+| A2: perform in place | `bounded_fix` at the row, as `rowLoop` | no reification | changes the core of every counted loop that raises; the order of consumes could move across a `close`, which hard-stop item 2 would have to clear program by program; duplicates unit 8 |
 
 **Generators over finite data.** `fn gen(n) -> 1 with Yield[i32] = for k in 0..n { yield(k) }` is
 div today (measured: `main : F U (delay i32)` for GR, and "`for` is div: `gen` loops"), because
@@ -367,7 +367,7 @@ div today (measured: `main : F U (delay i32)` for GR, and "`for` is div: `gen` l
     remain.
   - The `let mut` variables live after the loop still travel in the raise's payload. The payload
     is the same set as a join point's parameters.
-  - At a generator site the clause holds a cancellable `κ`, which has no derived drop. It must cancel
+  - At a generator site the clause holds a cancellable `κ`, which is not consumable. It must cancel
     `κ` before raising, as `leave` does today, so nothing is saved there.
 
 | option | exits | covers | decision needed |
@@ -426,7 +426,7 @@ programs. Recommendation: E1 with #58. E2 and E3 follow after the user decides o
 
 | system | loops and exits | how exits are lowered | fit |
 |---|---|---|---|
-| Rust MIR (rustc's HIR→MIR lowering of `loop`/`while`/`for`, labelled `break 'l v`/`continue 'l`) | one `loop` form; `while` and `for` desugar to it (`for` over `IntoIterator::next`); only `loop` has a value | a CFG: each exit is a `goto` to the labelled scope's exit block, with drop elaboration inserting the drops of every scope left on that edge | the model's edges and close-on-exit are this. Rust has no total/div distinction, so every loop is a CFG loop; here a total loop is a fold, because totality is a theorem (§14) |
+| Rust MIR (rustc's HIR→MIR lowering of `loop`/`while`/`for`, labelled `break 'l v`/`continue 'l`) | one `loop` form; `while` and `for` desugar to it (`for` over `IntoIterator::next`); only `loop` has a value | a CFG: each exit is a `goto` to the labelled scope's exit block, with drop elaboration inserting the consumes of every scope left on that edge | the model's edges and close-on-exit are this. Rust has no total/div distinction, so every loop is a CFG loop; here a total loop is a fold, because totality is a theorem (§14) |
 | Zig (labelled blocks `blk: { break :blk v }`, `while (c) : (step) { } else { }`, `for … else`, `continue :outer`) | every loop an expression; `else` when the condition fails or the source ends | lowered to branches | §2.5's value rule is Zig's, extended to a source's result; the `:label` spelling avoids S11's ambiguity |
 | Koka (`final ctl` effects; loops as library functions over closures) | no built-in `break`. A program declares an effect with a `final ctl` operation and handles it around the loop | evidence passing; `final ctl` does not resume | X2. Koka's exits work through callbacks because they are effects; its handler is found at run time, ours would be static |
 | Effekt (*Effects as Capabilities*, OOPSLA 2020; the standard library's loops with a control capability) | `break`/`continue` as operations of a capability the loop passes to its body block | lexical capability passing; the staging work removes the overhead when handlers are known | X2's closest fit: a label as a capability, second-class blocks as §32's. Fits exits across blocks, the case X1 does not reach |
@@ -456,7 +456,7 @@ Expected values for §5.1's `s` programs are by hand, from the programs in §7.3
   goldens, `counts.expected` and `kernel-counts.expected` are unchanged. A program's class equals
   the form it already has, by §2.3's last column.
 - **U3** (live variables per edge): threaded tuples may shrink, so core may change. Every change
-  is listed. `allocs`, `indirect` and `copies` may only drop. Loads and stores may change, and
+  is listed. `allocs`, `indirect` and `copies` may only consume. Loads and stores may change, and
   each rise is explained.
 - **Reject programs that change (hard-stop item 2, for confirmation):**
   - `corpus/reject/for-data-gen-loop.bc` is accepted by U2. #545 asks for exactly this shape (RG).
@@ -602,7 +602,7 @@ nothing here is measured.
 
 **Unspent and unverified.**
 
-- I have not traced #492's missing drop to its line. It is attributed by `bcc desugar` and by
+- I have not traced #492's missing consume to its line. It is attributed by `bcc desugar` and by
   `i492b` running.
 - §2.6's three laws are hypotheses until U2 and U4 prove them.
 - G2's effect on skip-observing consumers is not measured.

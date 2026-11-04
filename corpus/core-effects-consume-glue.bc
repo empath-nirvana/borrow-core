@@ -1,6 +1,6 @@
--- SPEC §19's drop glue in the core text: an owned cell `c` is live across a call of `check`, at
+-- SPEC §19's consume glue in the core text: an owned cell `c` is live across a call of `check`, at
 -- the row of the abortive operation `1.0 cancel i32 ~> 0`. The checker binds the call by `[then]`
--- with a finaliser it inserts, the cell's drop, as it inserts SPEC §12's drops: when
+-- with a finaliser it inserts, the cell's consume, as it inserts SPEC §12's consumes: when
 -- the call aborts, the rest does not run and the finaliser frees `c`. When the call returns, the
 -- rest frees `c` itself.
 --

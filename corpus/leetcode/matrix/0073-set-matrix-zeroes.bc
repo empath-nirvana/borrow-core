@@ -40,7 +40,7 @@ fn set_zeroes(a: array i32, n: i32, w: i32) -> array i32 =
 -- The width of a matrix written row by row, separated by `;`: the numbers before the first `;`.
 fn width<'t>(l: text 't) -> i32 =
   match split_once(l, b';') {
-    inl (h, t) -> array_forget['t, u8](t); fold_i32s(h, !{ (x, n) -> n + 1 }, 0)
+    inl (h, t) -> array_release['t, u8](t); fold_i32s(h, !{ (x, n) -> n + 1 }, 0)
   | inr l -> fold_i32s(l, !{ (x, n) -> n + 1 }, 0)
   }
 
@@ -65,17 +65,17 @@ fn print_matrix(a: array i32, n: i32, w: i32) -> array i32 =
 fn case_at<'t>(t: text 't, pos: i32) -> ((buf i32 * i32) * i32) + 1 =
   match split_at(t, pos) {
     inl (h, rest) ->
-      array_forget['t, u8](h);
+      array_release['t, u8](h);
       match next_line(rest) {
         inl (l, r) ->
-          array_forget['t, u8](r);
+          array_release['t, u8](r);
           let (l, m) = array_copy['t, u8] l;
           let (l, l2) = array_copy['t, u8] l;
           let c = (nums(l), width(l2));
           inl (c, pos + len(m) + 1)
       | inr u -> inr ()
       }
-  | inr t -> array_forget['t, u8](t); inr ()
+  | inr t -> array_release['t, u8](t); inr ()
   }
 
 -- Each line of the input a case. The number of cases.

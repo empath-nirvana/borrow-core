@@ -23,7 +23,7 @@ covers its part (`Covers`, SPEC §55): every slot the part's term mentions is on
   erasure unchanged.
 * `TDerivesAt.toP`: a tied typed derivation is one of `TDerivesP` at the same node.
 * the derived nodes: each a fixed scheme at a consumed context, its premises the ones of the
-  `Core/` lemma that types it, and its projection that lemma (`dropFn_wf`, `d_allocS`, `d_freeS`,
+  `Core/` lemma that types it, and its projection that lemma (`consume_wf`, `d_allocS`, `d_freeS`,
   `withborSM_wf`, `withborSI_wf`, `withborM2_wf`, `withborI2_wf`), tied as `CDerivesAt.ofEffFree`
   ties a term with no operation; and the derived nodes over a marked scheme's typed term
   (`litFn`), whose premises are that term's derivation and the equation saying which instance of
@@ -97,8 +97,8 @@ inductive TDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → TExpr → Jdg → P
       TDerivesAt Ξ Δ Γ (TExpr.bangE (info := info) (jdg := (.val A)) (A := A) (t := t)) (.val A)
   | copyBang {Δ Γ A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
       TDerivesAt Ξ Δ Γ (TExpr.copyBang (info := info) (jdg := (.val (.thunk (.arr (.bang A) (.ret (.tensor (.bang A) (.bang A))))))) (A := A)) (.val (.thunk (.arr (.bang A) (.ret (.tensor (.bang A) (.bang A))))))
-  | forgetBang {Δ Γ A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-      TDerivesAt Ξ Δ Γ (TExpr.forgetBang (info := info) (jdg := (.val (.thunk (.arr (.bang A) (.ret .unit))))) (A := A)) (.val (.thunk (.arr (.bang A) (.ret .unit))))
+  | releaseBang {Δ Γ A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
+      TDerivesAt Ξ Δ Γ (TExpr.releaseBang (info := info) (jdg := (.val (.thunk (.arr (.bang A) (.ret .unit))))) (A := A)) (.val (.thunk (.arr (.bang A) (.ret .unit))))
   | boxI {Δ Γ a A} {info : TInfo} {t : TExpr} (h : TDerivesAt Ξ Δ Γ t (.val A)) (hΓ : CtxOutlives Δ Γ a) :
       TDerivesAt Ξ Δ Γ (TExpr.boxI (info := info) (jdg := (.val (.box a A))) (a := a) (A := A) (t := t)) (.val (.box a A))
   | boxE {Δ Γ a A} {info : TInfo} {t : TExpr} (h : TDerivesAt Ξ Δ Γ t (.val (.box a A))) :
@@ -119,12 +119,12 @@ inductive TDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → TExpr → Jdg → P
       TDerivesAt Ξ Δ Γ (TExpr.swap (info := info) (jdg := (.val (axSwapTy A B))) (A := A) (B := B)) (.val (axSwapTy A B))
   | copy {Δ Γ a A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
       TDerivesAt Ξ Δ Γ (TExpr.copy (info := info) (jdg := (.val (axCopyTy a A))) (a := a) (A := A)) (.val (axCopyTy a A))
-  | forgetImm {Δ Γ a A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-      TDerivesAt Ξ Δ Γ (TExpr.forgetImm (info := info) (jdg := (.val (axForgetImmTy a A))) (a := a) (A := A)) (.val (axForgetImmTy a A))
-  | forgetMut {Δ Γ a A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-      TDerivesAt Ξ Δ Γ (TExpr.forgetMut (info := info) (jdg := (.val (axForgetMutTy a A))) (a := a) (A := A)) (.val (axForgetMutTy a A))
-  | forgetUnk {Δ Γ} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-      TDerivesAt Ξ Δ Γ (TExpr.forgetUnk (info := info) (jdg := (.val axForgetUnkTy))) (.val axForgetUnkTy)
+  | releaseImm {Δ Γ a A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
+      TDerivesAt Ξ Δ Γ (TExpr.releaseImm (info := info) (jdg := (.val (axForgetImmTy a A))) (a := a) (A := A)) (.val (axForgetImmTy a A))
+  | releaseMut {Δ Γ a A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
+      TDerivesAt Ξ Δ Γ (TExpr.releaseMut (info := info) (jdg := (.val (axForgetMutTy a A))) (a := a) (A := A)) (.val (axForgetMutTy a A))
+  | releaseUnk {Δ Γ} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
+      TDerivesAt Ξ Δ Γ (TExpr.releaseUnk (info := info) (jdg := (.val axForgetUnkTy))) (.val axForgetUnkTy)
   | lit {Δ Γ} {info : TInfo} (c : IntLit) (hΓ : Ctx.DeadP Γ) :
       TDerivesAt Ξ Δ Γ (TExpr.lit (info := info) (jdg := (.val (.int c.width))) (c := c)) (.val (.int c.width))
   | hostOp {Δ Γ} {info : TInfo} (op : HostOp) (hΓ : Ctx.DeadP Γ) :
@@ -143,8 +143,8 @@ inductive TDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → TExpr → Jdg → P
       TDerivesAt Ξ Δ Γ (TExpr.arrGet (info := info) (jdg := (.val (arrGetTy a A))) (a := a) (A := A)) (.val (arrGetTy a A))
   | arrCopy {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
       TDerivesAt Ξ Δ Γ (TExpr.arrCopy (info := info) (jdg := (.val (arrCopyTy a A))) (a := a) (A := A)) (.val (arrCopyTy a A))
-  | arrForget {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      TDerivesAt Ξ Δ Γ (TExpr.arrForget (info := info) (jdg := (.val (arrForgetTy a A))) (a := a) (A := A)) (.val (arrForgetTy a A))
+  | arrRelease {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      TDerivesAt Ξ Δ Γ (TExpr.arrRelease (info := info) (jdg := (.val (arrReleaseTy a A))) (a := a) (A := A)) (.val (arrReleaseTy a A))
   | countFold {Δ Γ} {info : TInfo} (S : VTy) (hΓ : Ctx.DeadP Γ) :
       TDerivesAt Ξ Δ Γ (TExpr.countFold (info := info) (jdg := (.val (countFoldTy S))) (S := S)) (.val (countFoldTy S))
   | countTry {Δ Γ} {info : TInfo} (S E : VTy) (hΓ : Ctx.DeadP Γ) :
@@ -249,10 +249,10 @@ inductive TDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → TExpr → Jdg → P
       TDerivesAt Ξ Δ Γ (TExpr.effHandleL (info := info) (jdg := (.comp (CTy.effOf S R))) (S := S) (SW := SW) (E := E) (fs := fs) (Xs := Xs) (n := n) (A := A) (R := R) (u := u) (site := site) (inside := inside) (tc := tc) (te := te)) (.comp (CTy.effOf S R))
   | letPoly {N : Expr} {info : TInfo} {tV tN : TExpr} {Δ Γ C} {j : Jdg} (b : Expr) (hcl : closedAt 0 (Val.lam b).1 = true) (hV : TDerivesAt Ξ Δ [] tV j) (qV : tV.erase = ((.val (.lam b)) : Expr)) (hN : TDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ) tN (.comp C)) (qN : tN.erase = (((N.subst 0 (Val.lam b)).shift 1 0) : Expr)) :
       TDerivesAt Ξ Δ Γ (TExpr.letPoly (info := info) (jdg := (.comp C)) (C := C) (j := j) (tV := tV) (tN := tN)) (.comp C)
-  /-- **Derived**: the drop of `A` (`dropFn_wf`). -/
-  | dropFn {Δ Γ A} {info : TInfo} (hA : HasDrop A) (hc : closedAt 0 (dropFnE A) = true)
-      (he : (dropFnE A).effFree = true) (hΓ : BoCa.Ctx.Dead Γ) :
-      TDerivesAt Ξ Δ Γ (TExpr.dropFn info (.val (.lolli A .unit)) A) (.val (.lolli A .unit))
+  /-- **Derived**: the consume of `A` (`consume_wf`). -/
+  | consume {Δ Γ A} {info : TInfo} (hA : Consumable A) (hc : closedAt 0 (consumeE A) = true)
+      (he : (consumeE A).effFree = true) (hΓ : BoCa.Ctx.Dead Γ) :
+      TDerivesAt Ξ Δ Γ (TExpr.consume info (.val (.lolli A .unit)) A) (.val (.lolli A .unit))
   /-- **Derived**: a block's allocation (`d_allocS`). -/
   | allocS {Δ Γ} {info : TInfo} (σ : Shape) (he : (allocS σ).effFree = true)
       (hΓ : BoCa.Ctx.Dead Γ) :
@@ -394,8 +394,8 @@ inductive TDerivesP : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
       TDerivesP Δ Γ (TExpr.bangE (info := info) (jdg := (.val A)) (A := A) (t := t)) (.val A)
   | copyBang {Δ Γ A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
       TDerivesP Δ Γ (TExpr.copyBang (info := info) (jdg := (.val (.thunk (.arr (.bang A) (.ret (.tensor (.bang A) (.bang A))))))) (A := A)) (.val (.thunk (.arr (.bang A) (.ret (.tensor (.bang A) (.bang A))))))
-  | forgetBang {Δ Γ A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-      TDerivesP Δ Γ (TExpr.forgetBang (info := info) (jdg := (.val (.thunk (.arr (.bang A) (.ret .unit))))) (A := A)) (.val (.thunk (.arr (.bang A) (.ret .unit))))
+  | releaseBang {Δ Γ A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
+      TDerivesP Δ Γ (TExpr.releaseBang (info := info) (jdg := (.val (.thunk (.arr (.bang A) (.ret .unit))))) (A := A)) (.val (.thunk (.arr (.bang A) (.ret .unit))))
   | boxI {Δ Γ a A} {info : TInfo} {t : TExpr} (h : TDerivesP Δ Γ t (.val A)) (hΓ : CtxOutlives Δ Γ a) :
       TDerivesP Δ Γ (TExpr.boxI (info := info) (jdg := (.val (.box a A))) (a := a) (A := A) (t := t)) (.val (.box a A))
   | boxE {Δ Γ a A} {info : TInfo} {t : TExpr} (h : TDerivesP Δ Γ t (.val (.box a A))) :
@@ -416,12 +416,12 @@ inductive TDerivesP : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
       TDerivesP Δ Γ (TExpr.swap (info := info) (jdg := (.val (axSwapTy A B))) (A := A) (B := B)) (.val (axSwapTy A B))
   | copy {Δ Γ a A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
       TDerivesP Δ Γ (TExpr.copy (info := info) (jdg := (.val (axCopyTy a A))) (a := a) (A := A)) (.val (axCopyTy a A))
-  | forgetImm {Δ Γ a A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-      TDerivesP Δ Γ (TExpr.forgetImm (info := info) (jdg := (.val (axForgetImmTy a A))) (a := a) (A := A)) (.val (axForgetImmTy a A))
-  | forgetMut {Δ Γ a A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-      TDerivesP Δ Γ (TExpr.forgetMut (info := info) (jdg := (.val (axForgetMutTy a A))) (a := a) (A := A)) (.val (axForgetMutTy a A))
-  | forgetUnk {Δ Γ} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-      TDerivesP Δ Γ (TExpr.forgetUnk (info := info) (jdg := (.val axForgetUnkTy))) (.val axForgetUnkTy)
+  | releaseImm {Δ Γ a A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
+      TDerivesP Δ Γ (TExpr.releaseImm (info := info) (jdg := (.val (axForgetImmTy a A))) (a := a) (A := A)) (.val (axForgetImmTy a A))
+  | releaseMut {Δ Γ a A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
+      TDerivesP Δ Γ (TExpr.releaseMut (info := info) (jdg := (.val (axForgetMutTy a A))) (a := a) (A := A)) (.val (axForgetMutTy a A))
+  | releaseUnk {Δ Γ} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
+      TDerivesP Δ Γ (TExpr.releaseUnk (info := info) (jdg := (.val axForgetUnkTy))) (.val axForgetUnkTy)
   | lit {Δ Γ} {info : TInfo} (c : IntLit) (hΓ : Ctx.DeadP Γ) :
       TDerivesP Δ Γ (TExpr.lit (info := info) (jdg := (.val (.int c.width))) (c := c)) (.val (.int c.width))
   | hostOp {Δ Γ} {info : TInfo} (op : HostOp) (hΓ : Ctx.DeadP Γ) :
@@ -440,8 +440,8 @@ inductive TDerivesP : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
       TDerivesP Δ Γ (TExpr.arrGet (info := info) (jdg := (.val (arrGetTy a A))) (a := a) (A := A)) (.val (arrGetTy a A))
   | arrCopy {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
       TDerivesP Δ Γ (TExpr.arrCopy (info := info) (jdg := (.val (arrCopyTy a A))) (a := a) (A := A)) (.val (arrCopyTy a A))
-  | arrForget {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      TDerivesP Δ Γ (TExpr.arrForget (info := info) (jdg := (.val (arrForgetTy a A))) (a := a) (A := A)) (.val (arrForgetTy a A))
+  | arrRelease {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      TDerivesP Δ Γ (TExpr.arrRelease (info := info) (jdg := (.val (arrReleaseTy a A))) (a := a) (A := A)) (.val (arrReleaseTy a A))
   | countFold {Δ Γ} {info : TInfo} (S : VTy) (hΓ : Ctx.DeadP Γ) :
       TDerivesP Δ Γ (TExpr.countFold (info := info) (jdg := (.val (countFoldTy S))) (S := S)) (.val (countFoldTy S))
   | countTry {Δ Γ} {info : TInfo} (S E : VTy) (hΓ : Ctx.DeadP Γ) :
@@ -552,10 +552,10 @@ inductive TDerivesP : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
       TDerivesP Δ [⟨.ref A, true⟩] (TExpr.lendLoopR (info := info) (jdg := (.comp (CTy.loop (.tensor (.ref A) B) (.tensor (.ref A) R)))) (x := x) (A := A) (S := S) (B := B) (R := R) (tN := tN) (tK := tK) (ts0 := ts0)) (.comp (CTy.loop (.tensor (.ref A) B) (.tensor (.ref A) R)))
   | nilDead {Δ : LifeCtx} {info : TInfo} {t : TExpr} {Γ : Ctx VTy} {j : Jdg} (hΓ : Ctx.Dead Γ) (h : TDerivesP Δ [] t j) :
       TDerivesP Δ Γ (TExpr.nilDead (info := info) (jdg := j) (j := j) (t := t)) j
-  /-- **Derived**: the drop of `A` (`dropFn_wf`). -/
-  | dropFn {Δ Γ A} {info : TInfo} (hA : HasDrop A) (hc : closedAt 0 (dropFnE A) = true)
-      (he : (dropFnE A).effFree = true) (hΓ : BoCa.Ctx.Dead Γ) :
-      TDerivesP Δ Γ (TExpr.dropFn info (.val (.lolli A .unit)) A) (.val (.lolli A .unit))
+  /-- **Derived**: the consume of `A` (`consume_wf`). -/
+  | consume {Δ Γ A} {info : TInfo} (hA : Consumable A) (hc : closedAt 0 (consumeE A) = true)
+      (he : (consumeE A).effFree = true) (hΓ : BoCa.Ctx.Dead Γ) :
+      TDerivesP Δ Γ (TExpr.consume info (.val (.lolli A .unit)) A) (.val (.lolli A .unit))
   /-- **Derived**: a block's allocation (`d_allocS`). -/
   | allocS {Δ Γ} {info : TInfo} (σ : Shape) (he : (allocS σ).effFree = true)
       (hΓ : BoCa.Ctx.Dead Γ) :
@@ -729,9 +729,9 @@ theorem TDerivesAt.erase {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr}
   | copyBang a0 =>
       dsimp only [TExpr.erase]
       exact CDerivesAt.copyBang a0
-  | forgetBang a0 =>
+  | releaseBang a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesAt.forgetBang a0
+      exact CDerivesAt.releaseBang a0
   | boxI a0 a1 ih0 =>
       dsimp only [TExpr.erase]
       exact CDerivesAt.boxI ih0 a1
@@ -762,15 +762,15 @@ theorem TDerivesAt.erase {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr}
   | copy a0 =>
       dsimp only [TExpr.erase]
       exact CDerivesAt.copy a0
-  | forgetImm a0 =>
+  | releaseImm a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesAt.forgetImm a0
-  | forgetMut a0 =>
+      exact CDerivesAt.releaseImm a0
+  | releaseMut a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesAt.forgetMut a0
-  | forgetUnk a0 =>
+      exact CDerivesAt.releaseMut a0
+  | releaseUnk a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesAt.forgetUnk a0
+      exact CDerivesAt.releaseUnk a0
   | lit a0 a1 =>
       dsimp only [TExpr.erase]
       exact CDerivesAt.lit a0 a1
@@ -798,9 +798,9 @@ theorem TDerivesAt.erase {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr}
   | arrCopy a0 a1 a2 =>
       dsimp only [TExpr.erase]
       exact CDerivesAt.arrCopy a0 a1 a2
-  | arrForget a0 a1 a2 =>
+  | arrRelease a0 a1 a2 =>
       dsimp only [TExpr.erase]
-      exact CDerivesAt.arrForget a0 a1 a2
+      exact CDerivesAt.arrRelease a0 a1 a2
   | countFold a0 a1 =>
       dsimp only [TExpr.erase]
       exact CDerivesAt.countFold a0 a1
@@ -967,7 +967,7 @@ theorem TDerivesAt.erase {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr}
       rw [a5] at ih1
       rw [a3, a5, Expr.letBody_shift, Expr.lamBody_lam]
       exact CDerivesAt.letPoly a0 a1 ih0 (by rw [subst_unfill a1]; exact ih1)
-  | dropFn hA _ he hΓ => exact CDerivesAt.ofEffFree (dropFn_wf hA hΓ) he
+  | consume hA _ he hΓ => exact CDerivesAt.ofEffFree (consume_wf hA hΓ) he
   | allocS σ he hΓ => exact CDerivesAt.ofEffFree (d_allocS σ hΓ) he
   | freeS σ he hΓ => exact CDerivesAt.ofEffFree (d_freeS σ hΓ) he
   | withborSM σ c _ hσ hT hΔ hc _ he hΓ => exact CDerivesAt.ofEffFree (withborSM_wf hσ c hT hΔ hc hΓ) he
@@ -1069,9 +1069,9 @@ theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | copyBang a0 =>
       dsimp only [TExpr.erase]
       exact CDerivesP.copyBang a0
-  | forgetBang a0 =>
+  | releaseBang a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.forgetBang a0
+      exact CDerivesP.releaseBang a0
   | boxI a0 a1 ih0 =>
       dsimp only [TExpr.erase]
       exact CDerivesP.boxI ih0 a1
@@ -1102,15 +1102,15 @@ theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | copy a0 =>
       dsimp only [TExpr.erase]
       exact CDerivesP.copy a0
-  | forgetImm a0 =>
+  | releaseImm a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.forgetImm a0
-  | forgetMut a0 =>
+      exact CDerivesP.releaseImm a0
+  | releaseMut a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.forgetMut a0
-  | forgetUnk a0 =>
+      exact CDerivesP.releaseMut a0
+  | releaseUnk a0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.forgetUnk a0
+      exact CDerivesP.releaseUnk a0
   | lit a0 a1 =>
       dsimp only [TExpr.erase]
       exact CDerivesP.lit a0 a1
@@ -1138,9 +1138,9 @@ theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | arrCopy a0 a1 a2 =>
       dsimp only [TExpr.erase]
       exact CDerivesP.arrCopy a0 a1 a2
-  | arrForget a0 a1 a2 =>
+  | arrRelease a0 a1 a2 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.arrForget a0 a1 a2
+      exact CDerivesP.arrRelease a0 a1 a2
   | countFold a0 a1 =>
       dsimp only [TExpr.erase]
       exact CDerivesP.countFold a0 a1
@@ -1316,7 +1316,7 @@ theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | nilDead a0 a1 ih0 =>
       dsimp only [TExpr.erase]
       exact CDerivesP.nilDead a0 ih0
-  | dropFn hA _ _ hΓ => exact CDerivesP.ofC (dropFn_wf hA hΓ)
+  | consume hA _ _ hΓ => exact CDerivesP.ofC (consume_wf hA hΓ)
   | allocS σ _ hΓ => exact CDerivesP.ofC (d_allocS σ hΓ)
   | freeS σ _ hΓ => exact CDerivesP.ofC (d_freeS σ hΓ)
   | withborSM σ c _ hσ hT hΔ hc _ _ hΓ => exact CDerivesP.ofC (withborSM_wf hσ c hT hΔ hc hΓ)
@@ -1359,7 +1359,7 @@ theorem TDerivesAt.toP {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {
   | bangThunkV a0 a1 a2 a3 ih0 => exact TDerivesP.bangThunkV a0 a1 ih0 a3
   | bangE a0 ih0 => exact TDerivesP.bangE ih0
   | copyBang a0 => exact TDerivesP.copyBang a0
-  | forgetBang a0 => exact TDerivesP.forgetBang a0
+  | releaseBang a0 => exact TDerivesP.releaseBang a0
   | boxI a0 a1 ih0 => exact TDerivesP.boxI ih0 a1
   | boxE a0 ih0 => exact TDerivesP.boxE ih0
   | immSub a0 a1 ih0 => exact TDerivesP.immSub ih0 a1
@@ -1370,9 +1370,9 @@ theorem TDerivesAt.toP {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {
   | tokBurn a0 => exact TDerivesP.tokBurn a0
   | swap a0 => exact TDerivesP.swap a0
   | copy a0 => exact TDerivesP.copy a0
-  | forgetImm a0 => exact TDerivesP.forgetImm a0
-  | forgetMut a0 => exact TDerivesP.forgetMut a0
-  | forgetUnk a0 => exact TDerivesP.forgetUnk a0
+  | releaseImm a0 => exact TDerivesP.releaseImm a0
+  | releaseMut a0 => exact TDerivesP.releaseMut a0
+  | releaseUnk a0 => exact TDerivesP.releaseUnk a0
   | lit a0 a1 => exact TDerivesP.lit a0 a1
   | hostOp a0 a1 => exact TDerivesP.hostOp a0 a1
   | arrNew a0 a1 => exact TDerivesP.arrNew a0 a1
@@ -1382,7 +1382,7 @@ theorem TDerivesAt.toP {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {
   | arrLen a0 a1 a2 => exact TDerivesP.arrLen a0 a1 a2
   | arrGet a0 a1 a2 => exact TDerivesP.arrGet a0 a1 a2
   | arrCopy a0 a1 a2 => exact TDerivesP.arrCopy a0 a1 a2
-  | arrForget a0 a1 a2 => exact TDerivesP.arrForget a0 a1 a2
+  | arrRelease a0 a1 a2 => exact TDerivesP.arrRelease a0 a1 a2
   | countFold a0 a1 => exact TDerivesP.countFold a0 a1
   | countTry a0 a1 a2 => exact TDerivesP.countTry a0 a1 a2
   | boundedFix a0 a1 a2 => exact TDerivesP.boundedFix a0 a1 a2
@@ -1435,7 +1435,7 @@ theorem TDerivesAt.toP {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {
   | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 ih0 ih1 => exact TDerivesP.effHandleT a1 a2 a3 a4 a5 a6 ih0 a8 a9 a10 a11 a12 a13 a14 ih1 a16
   | effHandleL a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20 ih0 ih1 => exact TDerivesP.effHandleL a1 a2 a3 a4 a5 a6 a7 ih0 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 ih1 a20
   | letPoly a0 a1 a2 a3 a4 a5 ih0 ih1 => exact TDerivesP.letPoly a0 a1 ih0 a3 ih1 a5
-  | dropFn hA hc he hΓ => exact .dropFn hA hc he hΓ
+  | consume hA hc he hΓ => exact .consume hA hc he hΓ
   | allocS σ he hΓ => exact .allocS σ he hΓ
   | freeS σ he hΓ => exact .freeS σ he hΓ
   | withborSM σ c T hσ hT hΔ hc hcl he hΓ => exact .withborSM σ c T hσ hT hΔ hc hcl he hΓ
@@ -1493,18 +1493,18 @@ theorem TDerivesP.jdg_eq {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
     (h : TDerivesP Δ Γ t j) : t.jdg = j := by
   cases h <;> rfl
 
-/-- **An inserted drop carries `HasDrop`**: a `dropFn` node of the typed term is typed only at a type
-with a derived drop. The checker inserts a drop only as a `dropFn` node, so it inserts none at a
-linear type with no derived drop, a declared type among them (`decl_linear`).  `[spec §12, §42]` -/
-theorem TDerivesP.dropFn_hasDrop {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {j : Jdg} {A : VTy}
-    {j' : Jdg} (h : TDerivesP Δ Γ (.dropFn i j A) j') : HasDrop A := by
+/-- **An inserted consume carries `Consumable`**: a `consume` node of the typed term is typed only at a type
+that is consumable. The checker inserts a consume only as a `consume` node, so it inserts none at a
+linear type that is not consumable, a declared type among them (`decl_linear`).  `[spec §12, §42]` -/
+theorem TDerivesP.consume_consumable {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {j : Jdg} {A : VTy}
+    {j' : Jdg} (h : TDerivesP Δ Γ (.consume i j A) j') : Consumable A := by
   cases h with
-  | dropFn hA _ _ _ => exact hA
+  | consume hA _ _ _ => exact hA
 
 /-- The same at the typed derivation at an effect context. -/
-theorem TDerivesAt.dropFn_hasDrop {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {j : Jdg}
-    {A : VTy} {j' : Jdg} (h : TDerivesAt Ξ Δ Γ (.dropFn i j A) j') : HasDrop A := by
+theorem TDerivesAt.consume_consumable {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {j : Jdg}
+    {A : VTy} {j' : Jdg} (h : TDerivesAt Ξ Δ Γ (.consume i j A) j') : Consumable A := by
   cases h with
-  | dropFn hA _ _ _ => exact hA
+  | consume hA _ _ _ => exact hA
 
 end BoCa.Fig16.LogRel.Core.Check

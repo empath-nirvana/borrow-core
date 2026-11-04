@@ -33,7 +33,7 @@ fn summed<'a>(xs: array_imm 'a i32) -> i32 + Bad = checked_sum(xs)
 
 fn summed_or<'a>(xs: array_imm 'a i32, d: i32) -> i32 = match checked_sum(xs) { inl v -> v | inr e -> d }
 
--- The elements doubled, into a new buffer, or the error; the buffer is dropped on the error.
+-- The elements doubled, into a new buffer, or the error; the buffer is consumed on the error.
 fn doubled<'a>(xs: array_imm 'a i32) -> buf i32 + Bad =
   let mut b = box buf[i32](2);
   let mut i = 0;

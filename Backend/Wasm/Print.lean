@@ -108,7 +108,7 @@ def printInstr (d : Nat) : Instr → List String
   | .br k => [indent d ++ s!"br {k}"]
   | .brTable ts k => [indent d ++ "br_table" ++ String.join (ts.map (s!" {·}")) ++ s!" {k}"]
   | .ret => [indent d ++ "return"]
-  | .drop => [indent d ++ "drop"]
+  | .drop => [indent d ++ "consume"]
   | .unreachable => [indent d ++ "unreachable"]
   | .globalGet g => [indent d ++ s!"global.get {g}"]
   | .globalSet g => [indent d ++ s!"global.set {g}"]

@@ -32,7 +32,7 @@ def bump : !(ref i32 => ref i32 * i32) =
     q <- return (withbor2['x, top, i32, i32] c (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x i32) ->
            z <- return (withswap['x, i32, i32] m (thunkv fun (v : i32) -> return (plus (v, i32[1]), v)));
            let (m, old) = z;
-           u <- return (forget_mut['x, i32] m);
+           u <- return (release_mut['x, i32] m);
            let () = u;
            return (boxed['x] old))));
     return q
@@ -98,7 +98,7 @@ def close_alg : !(1 + (E * 1) => 1) =
     | inr p -> let (t, u) = p; let () = u; g <- return (unbox t); (nu_out (force g)).2
     }
 
-def drop_q : !(Q => 1) =
+def consume_q : !(Q => 1) =
   !thunkv fun (s : Q) ->
     let (fb, m) = s;
     let (f, b) = fb;
@@ -150,17 +150,17 @@ def sched_step : !U (ref Q * i32 -o F (i32 + ref Q * i32) & F 1) =
       o <- return (withbor2['q, top, Q, i32 + i32] r (thunkv Fun 'q < dom. return (thunkv fun (mq : mut 'q Q) ->
              z <- return (withswap['q, Q, i32 + i32] mq (thunkv fun (s : Q) -> return ((unbang round) (s, acc))));
              let (mq, res) = z;
-             u <- return (forget_mut['q, Q] mq);
+             u <- return (release_mut['q, Q] mq);
              let () = u;
              return (boxed['q] res))));
       let (r, res) = o;
       case res {
-        inl fin -> d <- return (free[Q] r); u <- return ((unbang drop_q) d); let () = u; return (inl fin)
+        inl fin -> d <- return (free[Q] r); u <- return ((unbang consume_q) d); let () = u; return (inl fin)
       | inr acc2 -> return (inr (r, acc2))
       },
       let (r, acc) = p;
       d <- return (free[Q] r);
-      (unbang drop_q) d >
+      (unbang consume_q) d >
 
 -- A driver: observe a loop at most `n` times (a unary count), and close it if it has not
 -- finished (`experiments/LoopBorrow/bc/lend-config-imm.bc`'s).

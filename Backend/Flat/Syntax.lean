@@ -151,7 +151,7 @@ structure Fn where
 
 structure Prog where
   fns : Array Fn
-  /-- Runs `main`, prints its value, drops it, and prints the live count. -/
+  /-- Runs `main`, prints its value, consumes it, and prints the live count. -/
   entry : Nat
   /-- The literals' bytes, read-only data at `dataBase` (`Backend.Clos.Prog.data`). -/
   data : Array UInt8 := #[]

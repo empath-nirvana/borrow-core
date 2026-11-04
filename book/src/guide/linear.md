@@ -2,17 +2,17 @@
 
 Every value has one of two kinds of type. An **unrestricted** type (a number, `bool`, `1`, a
 `!` function, tuples and sums of these, and recursive data of these, whose copy is written
-`clone`) can be copied and forgotten freely. Every other type is **linear**: a value of it is
+`clone`) can be copied and released freely. Every other type is **linear**: a value of it is
 used exactly once. There is no third kind. [Ownership and borrows](ownership.md) introduced the
 two; this chapter says what linearity means for the data, handlers, errors and tasks of the
 chapters since.
 
-Most linear values don't feel that way, because most linear types have a **derived drop**: a way
-to consume a value that the compiler works out from the type's structure. A cell's drop frees it
-and then drops what it held; a tuple's or a record's drops each field; a task's cancels it. Where
-a value goes unused, the checker inserts its derived drop at the end of its scope, and that drop
-is the value's one use. Every drop in a program is derived from a type; there are no written
-drops.
+Most linear values don't feel that way, because most linear types have a **consume**: a way
+to consume a value that the compiler works out from the type's structure. A cell's consume frees it
+and then consumes what it held; a tuple's or a record's consumes each field; a task's cancels it. Where
+a value goes unused, the checker inserts its consume at the end of its scope, and that consume
+is the value's one use. Every consume in a program is derived from a type; there are no written
+consumes.
 
 ```bc
 include textio
@@ -28,12 +28,12 @@ main -> 1 =
 -- output: 42
 ```
 
-`n` is never used, so the checker inserts `Note`'s derived drop where `main` ends: it frees the
+`n` is never used, so the checker inserts `Note`'s consume where `main` ends: it frees the
 cell in `body`, and the run ends with nothing allocated.
 
-A shared borrow `imm 'a A` is linear too. Its derived drop ends the loan, and it also has a
+A shared borrow `imm 'a A` is linear too. Its consume ends the loan, and it also has a
 **derived copy**: one shared borrow can be split into two. A use of a borrow after its first is
-its derived copy, which the checker inserts the way it inserts a derived drop. Ownership's
+its derived copy, which the checker inserts the way it inserts a consume. Ownership's
 `twice` reads one borrow twice; a borrow can be passed on as often, too:
 
 ```bc
@@ -57,9 +57,9 @@ lists every copy the checker inserted, a function's once for each call of it tha
 reaches. The copy is the borrow's alone: a second use of a `mut` borrow, an owned value or a
 declared value is still an error, "`x` is used twice here, and its type `…` is linear".
 
-## Linear types with no derived drop
+## Linear types that is not consumable
 
-Some linear types have no derived drop. Consuming a value of one means doing something the
+Some linear types are not consumable. Consuming a value of one means doing something the
 program has to say: calling it, resuming it, closing it. They are:
 
 - **Capabilities**: standard input, standard output and the other host capabilities (the clock,
@@ -81,7 +81,7 @@ handler skip: Ask, i32 -> i32 = {
 }
 
 main -> i32 = with skip { ask() + 1 }
--- expect: 5:7: `k` is not consumed in its scope, and its type `U ((i32 -o F i32) & top)` is linear and has no derived drop
+-- expect: 5:7: `k` is not consumed in its scope, and its type `U ((i32 -o F i32) & top)` is linear and is not consumable
 ```
 
 Messages print types as the core sees them: `U ((i32 -o F i32) & top)` is the continuation, a
@@ -94,16 +94,16 @@ fn adder(k: i32) -> i32 => i32 = { x -> x + k }
 main -> i32 =
   let f = adder(5);
   5
--- expect: 4:7: `f` is not consumed in its scope, and its type `i32 => i32` is linear and has no derived drop
+-- expect: 4:7: `f` is not consumed in its scope, and its type `i32 => i32` is linear and is not consumable
 ```
 
 ### Declared types
 
-Marking a field `must_close` puts the whole type among the linear types with no derived drop.
+Marking a field `must_close` puts the whole type among the linear types that is not consumable.
 Use it for a value whose silent disappearance would be a bug: a transaction that has to be
 committed, a guard that has to be released. `must_close(commit)` also names the function that
 consumes it, which the error messages point at. In a message, a marked field carries a `tok`,
-the token that makes the type linear with no derived drop:
+the token that makes the type linear and not consumable:
 
 ```bc,reject
 data Txn = { id: i32, must_close(commit) log: i32 }
@@ -115,7 +115,7 @@ fn commit(t: Txn) -> i32 = match t { Txn { id, log } -> id * 100 + log }
 main -> i32 =
   let t = begin(7);
   5
--- expect: 8:7: `t` is not consumed in its scope, and its type `i32 * i32 * tok` is linear and has no derived drop: `Txn` holds the field `log`, marked `must_close`; pass it to `commit` before its scope ends
+-- expect: 8:7: `t` is not consumed in its scope, and its type `i32 * i32 * tok` is linear and is not consumable: `Txn` holds the field `log`, marked `must_close`; pass it to `commit` before its scope ends
 ```
 
 Naming `commit` doesn't make anything call it: the program does, by writing the call. A `match`
@@ -139,7 +139,7 @@ main -> i32 =
 -- answer: i32[712]
 ```
 
-A type that holds a declared value has no derived drop either, so a record that stores a guard
+A type that holds a declared value is not consumable either, so a record that stores a guard
 beside its data has to be consumed as well. A borrow of a declared value does have one: the loan
 ends and the value is still there, so `&t` can be passed to functions that read its fields
 before `t` is committed.
@@ -184,7 +184,7 @@ the program wrote it.
 
 For cleanup of your own, put `finally { … }` after a `with`. The block runs when the `with` is
 left, whether it answered or an error passed through it. It is written once and placed on both
-exits; each placement is a call you wrote, checked like any other code, so it is not a drop.
+exits; each placement is a call you wrote, checked like any other code, so it is not a consume.
 
 ```bc
 include textio
@@ -224,16 +224,16 @@ The second call raises inside `counted`, the error passes through it to `to_resu
 `finally` releases the guard on the way. Both runs end with nothing allocated. A `finally` block
 can't do I/O yet.
 
-## Values a program wants to forget
+## Values a program wants to release
 
-When you want a value to be droppable, there are three ways to get there, and each is something
+When you want a value to be weakenable, there are three ways to get there, and each is something
 the compiler derives or something you write.
 
-**Keep the type's fields droppable.** A record or variant whose fields all have derived drops
+**Keep the type's fields weakenable.** A record or variant whose fields all have derived consumes
 has one too, built from theirs, and the checker inserts it (`Note` above).
 
 **Use a task, or declare the operation plain `ctl`.** A task can be run to the end or
-cancelled, and cancelling it is its derived drop: it frees what the task owns. An unused task is
+cancelled, and cancelling it is its consume: it frees what the task owns. An unused task is
 cancelled where its scope ends:
 
 ```bc
@@ -258,10 +258,10 @@ main -> 1 =
 ```
 
 `with spawn` runs each lookup to its first `await`, so both have allocated their cell. `b` is
-never resumed, and where `main` ends its derived drop cancels it, which frees that cell. The
+never resumed, and where `main` ends its consume cancels it, which frees that cell. The
 continuation of an operation declared plain `ctl` has a cancel branch in the same way: a clause
 that doesn't call `k` cancels the rest of the block, and when that cancel performs no operation
-it is `k`'s derived drop
+it is `k`'s consume
 ([Control operations](effects.md#control-operations-and-their-continuation)).
 
 **Consume it with a function you write.** A declared value is consumed by any `match` on it, so
@@ -287,13 +287,13 @@ The call is in the program, where a reader can see it.
 ## What an abort does
 
 When a `raise` leaves a computation, or a block is cancelled, the rest of it doesn't run. The
-abort itself drops nothing. A value in scope that holds no owned cell (a number, a borrow, a `!`
+abort itself consumes nothing. A value in scope that holds no owned cell (a number, a borrow, a `!`
 function, data made of these) is **abandoned**: nothing runs for it, and that is safe because
-there is nothing to free. A value that owns a cell is consumed by its derived drop, in a finaliser
+there is nothing to free. A value that owns a cell is consumed by its consume, in a finaliser
 the compiler places around the computation that may abort, so it is freed on the way out
 ([Errors](errors.md)).
 
-A value with no derived drop has neither, so it can't be live across a computation that may
+A value that is not consumable has neither, so it can't be live across a computation that may
 abort. Consume it before, or close it in a `finally`:
 
 ```bc,reject
@@ -314,7 +314,7 @@ fn guarded(x: i32) -> i32 + i32 =
   }
 
 main -> i32 = match guarded(7) { inl v -> v | inr e -> 0 }
--- expect: 12:13: `g`, of type `i32 * tok`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell: `Guard` holds the field `lock`, marked `must_close`; pass it to `release` before the computation that may abort, or close it in a `finally`
+-- expect: 12:13: `g`, of type `i32 * tok`, is live across a computation that may abort, and its type is linear and not consumable, and an abort abandons only a value that holds no owned cell: `Guard` holds the field `lock`, marked `must_close`; pass it to `release` before the computation that may abort, or close it in a `finally`
 ```
 
 The `finally` version is the one in [Resources are handlers](#finally).
@@ -380,26 +380,26 @@ fn run_it(x: i32) -> i32 + i32 =
   }
 
 main -> i32 = match run_it(5) { inl v -> v | inr e -> 0 - e }
--- expect: 13:34: `t`, of type `i32 * i32 * tok`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell: `Txn` holds the field `log`, marked `must_close`; pass it to `commit` before the computation that may abort, or close it in a `finally`
+-- expect: 13:34: `t`, of type `i32 * i32 * tok`, is live across a computation that may abort, and its type is linear and not consumable, and an abort abandons only a value that holds no owned cell: `Txn` holds the field `log`, marked `must_close`; pass it to `commit` before the computation that may abort, or close it in a `finally`
 ```
 
 ## Compared with Rust
 
 Rust's non-`Copy` types are *affine*: a value may be used at most once, and any value may go
-unused. A type can say what happens when it goes unused by implementing `Drop`, written by hand
+unused. A type can say what happens when it goes unused by implementing `Consume`, written by hand
 and free to do anything, and leaking a value (`mem::forget`) is safe. There is no way for a type
 to insist on being consumed; `#[must_use]` is a warning.
 
 Here every type that isn't unrestricted is linear, and the difference shows in three places:
 
-- **Drops are derived, never written.** A drop frees memory and closes codata by the type's
+- **Consumes are derived, never written.** A consume frees memory and closes codata by the type's
   structure, and does nothing else. Cleanup that does something more is a call the program
   writes, in a `finally`, a handler or a consuming function.
-- **A type can have no drop.** `must_close`, `must_resume ctl` and one-shot functions are linear
-  with no derived drop, and leaving one unused is a type error, not a lint.
-- **An abort runs only derived drops.** What an abort passes over either holds no owned cell and
-  is abandoned, or is freed by its derived drop in a finaliser the compiler places, or is
-  refused. No code a type wrote runs on the way out; Rust unwinds by running each value's `Drop`.
+- **A type can have no consume.** `must_close`, `must_resume ctl` and one-shot functions are linear
+  that is not consumable, and leaving one unused is a type error, not a lint.
+- **An abort runs only derived consumes.** What an abort passes over either holds no owned cell and
+  is abandoned, or is consumed implicitly in a finaliser the compiler places, or is
+  refused. No code a type wrote runs on the way out; Rust unwinds by running each value's `Consume`.
 
-Most programs see little of this: a cell, a string or a record of them is dropped where its scope
+Most programs see little of this: a cell, a string or a record of them is consumed where its scope
 ends, as in Rust.

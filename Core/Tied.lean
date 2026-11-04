@@ -139,7 +139,7 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
   | bangE {Δ Γ e A} (h : CDerivesAt Ξ Δ Γ e (.val (.bang A))) : CDerivesAt Ξ Δ Γ e (.val A)
   | copyBang {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
       CDerivesAt Ξ Δ Γ copy (.val (.thunk (.arr (.bang A) (.ret (.tensor (.bang A) (.bang A))))))
-  | forgetBang {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
+  | releaseBang {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
       CDerivesAt Ξ Δ Γ forget (.val (.thunk (.arr (.bang A) (.ret .unit))))
   /-- `[]I`. -/
   | boxI {Δ Γ e a A} (h : CDerivesAt Ξ Δ Γ e (.val A)) (hΓ : CtxOutlives Δ Γ a) :
@@ -160,9 +160,9 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
   | tokBurn {Δ Γ} (hΓ : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ burnE (.val burnTy)
   | swap {Δ Γ A B} (hΓ : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ swap (.val (axSwapTy A B))
   | copy {Δ Γ a A} (hΓ : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ copy (.val (axCopyTy a A))
-  | forgetImm {Δ Γ a A} (hΓ : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ forget (.val (axForgetImmTy a A))
-  | forgetMut {Δ Γ a A} (hΓ : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ forget (.val (axForgetMutTy a A))
-  | forgetUnk {Δ Γ} (hΓ : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ forget (.val axForgetUnkTy)
+  | releaseImm {Δ Γ a A} (hΓ : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ forget (.val (axForgetImmTy a A))
+  | releaseMut {Δ Γ a A} (hΓ : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ forget (.val (axForgetMutTy a A))
+  | releaseUnk {Δ Γ} (hΓ : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ forget (.val axForgetUnkTy)
   /-- An integer literal at its width.  `[spec §8]` -/
   | lit {Δ Γ} (c : IntLit) (hΓ : Ctx.DeadP Γ) :
       CDerivesAt Ξ Δ Γ (.val ⟨.prim (.lit c), .prim⟩) (.val (.int c.width))
@@ -189,9 +189,9 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
   /-- `array_copy : !(ArrayImm @a A ⇒ ArrayImm @a A ⊗ ArrayImm @a A)`.  `[spec §9]` -/
   | arrCopy {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
       CDerivesAt Ξ Δ Γ (.val copyV) (.val (arrCopyTy a A))
-  /-- `array_forget : !(ArrayImm @a A ⇒ 1)`.  `[spec §9]` -/
-  | arrForget {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val forgetV) (.val (arrForgetTy a A))
+  /-- `array_release : !(ArrayImm @a A ⇒ 1)`.  `[spec §9]` -/
+  | arrRelease {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      CDerivesAt Ξ Δ Γ (.val releaseV) (.val (arrReleaseTy a A))
   /-- `count_fold : !(!(I32 ⊗ S ⇒ S) ⊗ (I32 ⊗ (I32 ⊗ S)) ⇒ S)`, the step `count`: the counted
   loop, total at every host.  `[spec §16]` -/
   | countFold {Δ Γ} (S : VTy) (hΓ : Ctx.DeadP Γ) :
@@ -382,14 +382,14 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       (hfa : Row.find S n 0 = some a) (ha : a.Cancellable) (haA : a.A = .unit)
       (hfc : Row.find S n 1 = some c) (hc : c.CancelTarget) :
       CDerivesAt Ξ Δ Γ (awaitE n) (.comp (CTy.effOf S .unit))
-  /-- `[raise]`: an abortive, unmarked operation of the row, at any answer, its argument dropping,
+  /-- `[raise]`: an abortive, unmarked operation of the row, at any answer, its argument consuming,
   the row tied to `Ξ`.  `[spec §19, §29a]` -/
   | effRaise {Δ Γ V} {S : Row} {o : OpSig} {B : VTy} (hAt : RowAt Ξ S)
       (hf : Row.find S o.n o.i = some o)
       (ha : o.abort = true) (hrc : o.rc = false) (hd : o.A.OwnFree)
       (h : CDerivesAt Ξ Δ Γ V (.val o.A)) :
       CDerivesAt Ξ Δ Γ (BoCa.BoLo.raiseE (opArgE o.n o.i V)) (.comp (CTy.effOf S B))
-  /-- `[let]`: `M to x. N` at a row; `N`'s context drops at a row with weakening and is
+  /-- `[let]`: `M to x. N` at a row; `N`'s context consumes at a row with weakening and is
   persistent at an unrestricted row.  `[spec §19]` -/
   | effLet {Δ Γ Γ₁ Γ₂ M N A B} {S : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
       (hW : S.Cancels → Γ₂.OwnFree) (hU : S.Unr → Ctx.Banged Γ₂)
@@ -512,7 +512,7 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | bangThunkV hp hC _ ih1 => exact .bangThunkV hp hC ih1
   | bangE _ ih1 => exact .bangE ih1
   | copyBang hΓ => exact .copyBang hΓ
-  | forgetBang hΓ => exact .forgetBang hΓ
+  | releaseBang hΓ => exact .releaseBang hΓ
   | boxI _ hΓ ih1 => exact .boxI ih1 hΓ
   | boxE _ ih1 => exact .boxE ih1
   | immSub _ hle ih1 => exact .immSub ih1 hle
@@ -523,9 +523,9 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | tokBurn hΓ => exact .tokBurn hΓ
   | swap hΓ => exact .swap hΓ
   | copy hΓ => exact .copy hΓ
-  | forgetImm hΓ => exact .forgetImm hΓ
-  | forgetMut hΓ => exact .forgetMut hΓ
-  | forgetUnk hΓ => exact .forgetUnk hΓ
+  | releaseImm hΓ => exact .releaseImm hΓ
+  | releaseMut hΓ => exact .releaseMut hΓ
+  | releaseUnk hΓ => exact .releaseUnk hΓ
   | lit c hΓ => exact .lit c hΓ
   | hostOp op hΓ => exact .hostOp op hΓ
   | arrNew A hΓ => exact .arrNew A hΓ
@@ -535,7 +535,7 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | arrLen a A hΓ => exact .arrLen a A hΓ
   | arrGet a A hΓ => exact .arrGet a A hΓ
   | arrCopy a A hΓ => exact .arrCopy a A hΓ
-  | arrForget a A hΓ => exact .arrForget a A hΓ
+  | arrRelease a A hΓ => exact .arrRelease a A hΓ
   | countFold S hΓ => exact .countFold S hΓ
   | countTry S E hΓ => exact .countTry S E hΓ
   | boundedFix A C hΓ => exact .boundedFix A C hΓ
@@ -894,7 +894,7 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | bangThunkV hp hC _ ih1 => exact .bangThunkV hp hC (ih1 he)
   | bangE _ ih1 => exact .bangE (ih1 he)
   | copyBang hΓ => exact .copyBang hΓ
-  | forgetBang hΓ => exact .forgetBang hΓ
+  | releaseBang hΓ => exact .releaseBang hΓ
   | boxI _ hΓ ih1 => exact .boxI (ih1 he) hΓ
   | boxE _ ih1 => exact .boxE (ih1 he)
   | immSub _ hle ih1 => exact .immSub (ih1 he) hle
@@ -905,9 +905,9 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | tokBurn hΓ => exact .tokBurn hΓ
   | swap hΓ => exact .swap hΓ
   | copy hΓ => exact .copy hΓ
-  | forgetImm hΓ => exact .forgetImm hΓ
-  | forgetMut hΓ => exact .forgetMut hΓ
-  | forgetUnk hΓ => exact .forgetUnk hΓ
+  | releaseImm hΓ => exact .releaseImm hΓ
+  | releaseMut hΓ => exact .releaseMut hΓ
+  | releaseUnk hΓ => exact .releaseUnk hΓ
   | lit c hΓ => exact .lit c hΓ
   | hostOp op hΓ => exact .hostOp op hΓ
   | arrNew A hΓ => exact .arrNew A hΓ
@@ -917,7 +917,7 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | arrLen a A hΓ => exact .arrLen a A hΓ
   | arrGet a A hΓ => exact .arrGet a A hΓ
   | arrCopy a A hΓ => exact .arrCopy a A hΓ
-  | arrForget a A hΓ => exact .arrForget a A hΓ
+  | arrRelease a A hΓ => exact .arrRelease a A hΓ
   | countFold S hΓ => exact .countFold S hΓ
   | countTry S E hΓ => exact .countTry S E hΓ
   | boundedFix A C hΓ => exact .boundedFix A C hΓ

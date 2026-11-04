@@ -11,7 +11,7 @@
 -- recursion under `bounded` (`lib/rec.bc`). That is two cells per node, its subtrees', the empty
 -- ones included, where Rust's `Option<Box<TreeNode>>` allocates one box per node and an empty
 -- subtree is a null pointer. A cell for the whole node, `1 + ref (X * (i32 * X))`, is a `ref` of
--- a compound, outside the folds' and drops' class (`FShape`, #182); the node as one block
+-- a compound, outside the folds' and consumes' class (`FShape`, #182); the node as one block
 -- (`alloc_s`, SPEC §5) is three cells in the backend today (#77).
 --
 -- Allocations per case: two cells per node, the lend's cell, and the line's buffer of tokens.
@@ -51,7 +51,7 @@ fn tokens<'t>(l: text 't) -> buf (i32 + 1) =
 fn cases<'t>(t: text 't) -> buf (buf (i32 + 1)) =
   fold_lines(t, !{ (l, cs) ->
     let (l, m) = array_copy['t, u8] l;
-    if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, tokens(l)); cs } },
+    if len(m) == 0 { array_release['t, u8](l); cs } else { let (cs, _) = push(cs, tokens(l)); cs } },
     box buf[buf (i32 + 1)](8))
 
 -- A binary tree: empty, or a node of a value and a cell for each subtree, the cells being Rust's

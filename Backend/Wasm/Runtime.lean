@@ -132,7 +132,7 @@ def runtimeWat : String := "
     (i32.store8 (i32.const 16) (i32.wrap_i64 (local.get $b)))
     (i32.store (i32.const 0) (i32.const 16))
     (i32.store (i32.const 4) (i32.const 1))
-    (drop (call $fd_write (i32.wrap_i64 (local.get $fd))
+    (consume (call $fd_write (i32.wrap_i64 (local.get $fd))
       (i32.const 0) (i32.const 1) (i32.const 24))))
 
   (func $reserve (param $n i32) (result i32)
@@ -232,7 +232,7 @@ def runtimeWat : String := "
     (i64.extend_i32_u (local.get $got)))
 
   (func $mono (result i64)
-    (drop (call $clock_time_get (i32.const 1) (i64.const 1000) (i32.const 64)))
+    (consume (call $clock_time_get (i32.const 1) (i64.const 1000) (i32.const 64)))
     (i64.load (i32.const 64)))
 
   (func $now (param $c i64) (result i64)
@@ -248,7 +248,7 @@ def runtimeWat : String := "
     (memory.fill (i32.const 128) (i32.const 0) (i32.const 104))
     (i64.store (i32.const 152) (local.get $ns))
     (i32.store (i32.const 144) (i32.const 1))
-    (drop (call $poll_oneoff (i32.const 128) (i32.const 192) (i32.const 1) (i32.const 224))))
+    (consume (call $poll_oneoff (i32.const 128) (i32.const 192) (i32.const 1) (i32.const 224))))
 "
 
 end Backend.Wasm

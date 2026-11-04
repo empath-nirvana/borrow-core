@@ -56,7 +56,7 @@ def Tm.pp (ty : Var → String) : Nat → Tm → List String
       [ind d ++ s!"| inr {v y} ->"] ++ Tm.pp ty (d + 1) b₂
   | d, .absurd s => [ind d ++ s!"absurd {v s}"]
   | d, .copy r x x' b => (ind d ++ s!"copy {v x} -> {v x'} ({r.name})") :: Tm.pp ty d b
-  | d, .drop r x b => (ind d ++ s!"drop {v x} ({r.name})") :: Tm.pp ty d b
+  | d, .consume r x b => (ind d ++ s!"consume {v x} ({r.name})") :: Tm.pp ty d b
   | d, .abandon r x b => (ind d ++ s!"abandon {v x} ({r.name})") :: Tm.pp ty d b
 
 def Prog.pp (p : Prog) : List String :=

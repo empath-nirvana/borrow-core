@@ -13,7 +13,7 @@ in a finite suite of contexts; here each holds in every context.
 |---|---|---|
 | L1a at `to`, `⇒`, `&`, `Π` | T7.1 | phase B (Lean) |
 | L1a at arity 0 | T7.2 | phase B (Lean) |
-| L1a, drop form, any context | T7.3 | here; phase B proved one frame |
+| L1a, consume form, any context | T7.3 | here; phase B proved one frame |
 | H-ret, H-op, H-fwd, H-fwd at arity 0 | T7.4–T7.7 | phase B (Lean) |
 | tensor: disjoint capabilities commute | T7.8 | phase B (Lean) |
 | absorption by a pure model | T7.9 | phase B (Lean) |
@@ -60,7 +60,7 @@ In a linear setting `K[raise] ≡ raise` discards `K`'s context, which is unsoun
 something; T7.2 holds because `to`, an argument and a projection own nothing a cancel must run.
 T7.3 is the general form.
 
-**Definition D7.1 (evaluation contexts and their drops).** An evaluation context is
+**Definition D7.1 (evaluation contexts and their consumes).** An evaluation context is
 
     K ::= [] | K to z. N | K W | prjᵢ K | K z | K [σ]
         | using x' = acquire ℓ in K | handleAt y with H in K | handle y : E with H in K
@@ -71,7 +71,7 @@ with the hole not under a binder of the instance it is applied to (below, `x ≠
     []^fin = ret ()      (using x' = acquire ℓ in K)^fin = using x' = acquire ℓ in K^fin
     and K^fin = (K')^fin for every other frame around K'
 
-**Theorem T7.3 (algebraicity at arity 0, drop form).** For `K` with no `lend` frame and
+**Theorem T7.3 (algebraicity at arity 0, consume form).** For `K` with no `lend` frame and
 `x` not bound by `K`:
 
     K[ab x.a(V)]  ≡  K^fin ; ab x.a(V)
@@ -103,8 +103,8 @@ write-back of the current state, which is no term. In the moded calculus the cas
 an abortive operation inside a lend's body violates [lend]'s `bound(ρ).req = lin`.
 
 *Source.* Congard, Munch-Maccagnoni & Douence, *Linear effects, exceptions, and resource safety:
-a Curry–Howard correspondence for drops* (ESOP 2026, arXiv 2510.23517): in a linear
-setting the strength of `T(− ⊕ E)` needs drops, which makes the law
+a Curry–Howard correspondence for consumes* (ESOP 2026, arXiv 2510.23517): in a linear
+setting the strength of `T(− ⊕ E)` needs consumes, which makes the law
 `K[raise e] ≡ D_K; raise e` (abstract and §1, as read for phase A; the section numbers of the
 published version are **not re-verified here**).
 
@@ -172,7 +172,7 @@ is `λs. k (ans v) (next v s)`), and `f ≠ E`. Then
 
 *Proof.* [PB `absorb_pure`, `absorb_writer`, `writer_pure`.] Equal denotations: the handler
 catches `o` (`hnd_op_self`) and the pure clause resumes at once with the next state; the abort of
-another effect passes the handler (`hnd_ab_other`), carrying no derived drop of the model, so the
+another effect passes the handler (`hnd_ab_other`), carrying no consume of the model, so the
 state is lost with it. ∎
 
 **Theorem T7.10 (the sum: where absorption and commutation fail).** Each of the following pairs is
@@ -192,7 +192,7 @@ With T7.9 this is phase A's finding exactly: absorption holds where `Fail` is ou
 `Log` and in none of the other placements of phase A's family (`docs/effect-model.md` §3.1, "holds
 exactly with `Fail` outside a writer `Log`"). The runner-inside placement is a closed un-moded
 program: under §2's [lend], a lend whose body may abort is refused (its capability has no
-drop). So in the moded calculus that placement is not a context at all, and the other four
+consume). So in the moded calculus that placement is not a context at all, and the other four
 negative rows are. [Hyland, Plotkin & Power 2006, as restated by Ahman & Bauer, *Runners in
 action*, ESOP 2020, §3 [via phase A]: exceptions combine by sum, signals by tensor.]
 

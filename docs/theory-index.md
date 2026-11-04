@@ -34,19 +34,19 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
 
 ## Experiments
 
-### Implicit drops (`experiments/Affine`)
+### Implicit consumes (`experiments/Affine`)
 
 - **Question:** "Can an owned value (`Ref A`, a block, a list, a codata thunk) go unused, with
-  the elaborator inserting its drop so the result is an ordinary linear core program?"
+  the elaborator inserting its consume so the result is an ordinary linear core program?"
   (#43)
-- **Answer:** "yes, with no model change and no new invariant. Every droppable type's drop
+- **Answer:** "yes, with no model change and no new invariant. Every weakenable type's consume
   is a closed `CDerives` derivation. The experiment's judgment `ADerives` elaborates into `CDerives`
   by a translation that never inverts `CDerives`."
-- **Status:** proved; promoted (SPEC §12, `Core/Drop.lean`, `Frontend/Check`).
-- **Key results:** `dropFn_wf`, `hasDrop_of_forgettable`, `ADerives.elab`, `fundamentalA`,
-  `adequacyA`, `owner_not_shared`, `drop_needs_live`, `sumAff_leaks`, `blockAff_leaks`.
-- **Feeds:** SPEC §12; K3 (retired, [T9](#t9-retired-drops-that-perform-io-or-fail-k3));
-  decision 23; `U C` has no derived drop, which is why `ν` needs `close`.
+- **Status:** proved; promoted (SPEC §12, `Core/Consume.lean`, `Frontend/Check`).
+- **Key results:** `consume_wf`, `consumable_of_releasable`, `ADerives.elab`, `fundamentalA`,
+  `adequacyA`, `owner_not_shared`, `consume_needs_live`, `sumAff_leaks`, `blockAff_leaks`.
+- **Feeds:** SPEC §12; K3 (retired, [T9](#t9-retired-consumes-that-perform-io-or-fail-k3));
+  decision 23; `U C` is not consumable, which is why `ν` needs `close`.
 - **Links:** [`experiments/Affine/README.md`](../experiments/Affine/README.md).
 
 ### Bang
@@ -206,12 +206,12 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
   kernel change is described, not made. Open: a lifetime-polymorphic argument (`∀` in
   observation trees), the closure sugar, the lowering.
 - **Key results:** `cC_fnMut_iff`, `obs_transfer_fnBox`, `immReborrow_fnMut`, `d_callMut`,
-  `d_passF`, `d_fromFn`, `d_once`, `logState_not_outlives`, `not_forgettable_clo`; the programs
+  `d_passF`, `d_fromFn`, `d_once`, `logState_not_outlives`, `not_releasable_clo`; the programs
   `counterProg`, `passProg`, `nestProg`, `retProg`, `logProg`, `fromFnProg`, `onceProg`,
-  `dropProg`.
+  `consumeProg`.
 - **Feeds:** SPEC §2's closure table and §7's positivity; #233 and
   `docs/effect-polymorphism.md` R2a (the environment type hidden); [ModesLabels](#modeslabels)
-  (a `Clo` closure is droppable by an action, not forgettable).
+  (a `Clo` closure is weakenable by an action, not releasable).
 - **Links:** [`docs/fnmut.md`](fnmut.md);
   [`experiments/FnMut/README.md`](../experiments/FnMut/README.md).
 
@@ -225,7 +225,7 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
   rider: no". "No resource entailment can produce the view … No term can produce it either,
   because every `wpTS` run ends in a `↭`."
 - **Status:** refuted for the projection in this model (the frame-end change is proved sound but
-  unused); dropped by the consolidation audit.
+  unused); consumed by the consolidation audit.
 - **Key results:** `FrameEnd.fundamentalProperty`, `frame_image_empty`, `ti_sub`,
   `Views.imm_view_rejected`, `Views.mut_view_rejected`, `Projection.no_projection`.
 - **Feeds:** SPEC §5 Open; decision 5; [T4](#t4-same-lifetime-views-through-a-pointer);
@@ -262,7 +262,7 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
   Open.
 - **Key results:** `cderives_iff_graded`, `splitP_iff`, `deadP_iff`, `soloP_iff`,
   `persistent_iff`, `fundamentalG`, `fundamentalGraded`, `bangThunkF_compatG`, `promote_int`,
-  `promote_int_not_core`, `semC_weak`, `copyBang_core`, `forgetBang_core`, `forgetUnk_core`,
+  `promote_int_not_core`, `semC_weak`, `copyBang_core`, `releaseBang_core`, `releaseUnk_core`,
   `prog_runs_any`, `scale_nonpersistent_rejected`.
 - **Feeds:** [#9] ([T6](#t6-widening-promotion)); decisions 19, 20; [#52] (erased
   capabilities); `docs/prior-art-sessions.md` S5.
@@ -399,11 +399,11 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
   same-lifetime projection).
 - **Status:** proved; promoted (SPEC §5, with the encoding changed to "no trailing `1`").
 - **Key results:** `immReborrow_recTy`, `outlives_recTy`, `reborrow_vDen_recTy`,
-  `vX_outlives_recTy`, `forgettable_immReborrow`, `loadField_sem`, `swapField_sem`,
+  `vX_outlives_recTy`, `releasable_immReborrow`, `loadField_sem`, `swapField_sem`,
   `not_outlives_own_view`.
 - **Not derived:** "The `Mut` analogue for a boxed field … is not attempted" (the fresh-lifetime
   form was later derived by Optics' `fstLens`/`splitMut`).
-- **Feeds:** [#10] ([T18](#t18-forgettable-at-recursive-types)), [T4](#t4-same-lifetime-views-through-a-pointer).
+- **Feeds:** [#10] ([T18](#t18-releasable-at-recursive-types)), [T4](#t4-same-lifetime-views-through-a-pointer).
 - **Links:** [`experiments/Records/README.md`](../experiments/Records/README.md).
 
 ### Recursion
@@ -497,7 +497,7 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
 - **Answer:** "Pursue (ii), and probe it first as (iii)." The decisive step is `six38_img`, not
   built. L3/L2 by this route: "machine-checked to fail for `mut`" (`mut_lens_beside_parent_invalid`).
   "Main risk: row 4.8 has to carry the image."
-- **Status:** open; dropped from the consolidation plan (`docs/consolidation-audit.md`: "Drop
+- **Status:** open; consumed from the consolidation plan (`docs/consolidation-audit.md`: "Consume
   option B (never built)").
 - **Key results (scratch, not committed):** `entry_valid`, `entry_heap`, `view_accepted`,
   `six52_H1_frame`, `reb_frame_absImm_local`, `mut_lens_beside_parent_invalid`.
@@ -534,12 +534,12 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
 - **Question:** check the plan to consolidate the experiments into one world, claim by claim.
 - **Answer:** the base is `CBPVMu`; "`Relaxed` transfers cleanly, but nothing uses it"; "`embed`
   transfers typings at `cbv` images only"; loose ends: outlives at `U C`/`Unk`, `NoMut`, the
-  fold class, variants in place, `Forgettable` at `μ`, reuse tokens, same-lifetime projection, the
+  fold class, variants in place, `Releasable` at `μ`, reuse tokens, same-lifetime projection, the
   delay type.
 - **Status:** done (the work list became SPEC §3–§7); its §5 loose ends are indexed below.
 - **Feeds:** [T2](#t2-an-outlives-rule-for-thunks-u-c), [T4](#t4-same-lifetime-views-through-a-pointer),
   [T7](#t7-conservative-extension-and-agreement-of-the-worlds), [T15](#t15-recursive-types-and-folds-beyond-fshape),
-  [T18](#t18-forgettable-at-recursive-types), [#19], [#20], [#77].
+  [T18](#t18-releasable-at-recursive-types), [#19], [#20], [#77].
 - **Links:** [`docs/consolidation-audit.md`](consolidation-audit.md).
 
 ---
@@ -628,7 +628,7 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
   form of §7.3 has a derived type in the core" and the handler laws beyond one effect.
 - **Status:** design; S1 built (SPEC §18).
 - **Open kernel items:** K1 → [T1](#t1-the-spanning-lend-k1) (closed, decision 71); K2 → [T8](#t8-observations-that-take-input-k2);
-  K3 → [T9](#t9-retired-drops-that-perform-io-or-fail-k3) (retired); K4 → [T10](#t10-early-exit-from-a-kernel-fold-k4);
+  K3 → [T9](#t9-retired-consumes-that-perform-io-or-fail-k3) (retired); K4 → [T10](#t10-early-exit-from-a-kernel-fold-k4);
   K5 → [T11](#t11-structural-and-borrowed-descent-for-rec-k5); projection operations →
   [T21](#t21-the-derived-type-of-projection-operations).
 - **Links:** [`docs/effects-scoping.md`](effects-scoping.md); [#151], decisions 48–53.
@@ -661,7 +661,7 @@ obstruction exist unless a Lean name is given.
 | T6 | Widening promotion | [#9] |
 | T7 | Conservative extension, agreement of the worlds | [#177] |
 | T8 | Observations that take input (K2) | [#96] |
-| T9 | Retired: drops that perform I/O or fail (K3) | [#162] |
+| T9 | Retired: consumes that perform I/O or fail (K3) | [#162] |
 | T10 | Early exit from a kernel fold (K4) | [#178] |
 | T11 | Structural and borrowed descent for `rec` (K5) | [#179] |
 | T12 | Non-tail recursion, a direct `fix` | [#12] |
@@ -670,7 +670,7 @@ obstruction exist unless a Lean name is given.
 | T15 | Recursive types and folds beyond `FShape` | [#182] |
 | T16 | Read footprint and two-run laws | [#41] |
 | T17 | Side conditions of family borrows | [#183] |
-| T18 | `Forgettable` at recursive types | [#10] |
+| T18 | `Releasable` at recursive types | [#10] |
 | T19 | Tasks holding borrows at different lifetimes | [#52] |
 | T20 | Lexically scoped handlers as borrows | [#170] |
 | T21 | The derived type of projection operations | [#160] |
@@ -733,7 +733,7 @@ obstruction exist unless a Lean name is given.
 - **Known partial results.** Shifts: the lemma would be "anti-frame + `Imm` frame"; it "does not
   compose as stated" because `wpTS_I_frameX`'s `hQ` asks `Ext`-stability of a postcondition
   holding `ptoMutS l α₀ ls'' _ ─⋆ Q`; route: "a variant of `wpTS_I_frameX` whose `hQ` is stated
-  at the drop step". PositiveArrays: K2′ is "the same list induction with `withbor3`'s anti-frame
+  at the consume step". PositiveArrays: K2′ is "the same list induction with `withbor3`'s anti-frame
   per leaf, and was not attempted". Neither derived; no obstruction verified.
 - **Why it matters.** `peek` and `sort` in `lib/slice.bc` take a filler meanwhile; `imm` access
   through `mut` capabilities and handler state.
@@ -779,7 +779,7 @@ obstruction exist unless a Lean name is given.
   "Promotion at every value. Needs `wp` at a value to leave the resource in place; not proved."
 - **Origin.** SPEC §10 Open, §2 Open; `experiments/Grades`.
 - **Known partial results.** (a) is sound: `bangThunkF_compatG`, `promote_int`; measured "≈
-  −23" lines with no grades. Conflict noted: "(b) and (c) conflict: if `DeadP` drops `Imm`,
+  −23" lines with no grades. Conflict noted: "(b) and (c) conflict: if `DeadP` consumes `Imm`,
   promotion needs its own 'live slots persistent' predicate back". (b) not derived.
   CoeffectsStrict: promotion at a *computation* would need `!(T A) → T(!A)`, which `alloc`
   refutes.
@@ -809,9 +809,9 @@ obstruction exist unless a Lean name is given.
   monotone, so no step index is needed. The estimate is a few hundred lines". Not built.
 - **Issue:** [#96]. Related: [#162], [#68].
 
-### T9. Retired: drops that perform I/O or fail (K3)
+### T9. Retired: consumes that perform I/O or fail (K3)
 
-- **Retired by decision 73.** A host resource type gets no drop. Releasing it is the API of the
+- **Retired by decision 73.** A host resource type gets no consume. Closing it is the API of the
   resource's effect, written with linear types in the library, not kernel work (SPEC §12 Open).
 - **Issue:** [#162].
 
@@ -909,9 +909,9 @@ obstruction exist unless a Lean name is given.
   (SPEC §17 Open).
 - **Issue:** [#183]. Related: [#11].
 
-### T18. `Forgettable` at recursive types
+### T18. `Releasable` at recursive types
 
-- **Statement.** A lemma that `Imm̲ 'b` of a `μ`-typed field is droppable (e.g. `Imm̲ 'b N =
+- **Statement.** A lemma that `Imm̲ 'b` of a `μ`-typed field is weakenable (e.g. `Imm̲ 'b N =
   μY. 1 ⊕ Y` needs a recursive drop), so projection past an unboxed `μ`-typed field is available.
 - **Origin.** SPEC §5; `docs/consolidation-audit.md` §5.
 - **Issue:** [#10].
@@ -1012,7 +1012,7 @@ Results later work can rely on. Each is machine-checked unless marked.
   `envValue_unlinked`); `!T` has image `∅`.
 - **The per-observation lend needs no new rule**, and a pull-form lending yield is excluded
   (`not_lendingYield_mut`, `not_lendingYield_imm`).
-- **Implicit drops are elaboration** (`ADerives.elab`); grades are not net-negative as a context
+- **Implicit consumes are elaboration** (`ADerives.elab`); grades are not net-negative as a context
   coordinate and erase at `0` (`cderives_iff_graded`, `prog_runs_any`).
 - **Ownership kinds are adjoint modes** at the model (`weaken_sound`, `dup_sound`,
   `mode_immReborrow`).

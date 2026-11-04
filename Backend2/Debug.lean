@@ -57,7 +57,7 @@ def nodeFields : TExpr → String
   | .lendCell _ _ m _ => s!"mut {m}"
   | .lendScope _ _ r _ => s!"released {r}"
   | .nuEta _ _ f s _ => "f #" ++ toString f ++ (match s with | some k => " s #" ++ toString k | none => "")
-  | .dropFn _ _ A => ppVT A
+  | .consume _ _ A => ppVT A
   | t => match t.masks? with
     | some m => ppMasks m
     | none => ""

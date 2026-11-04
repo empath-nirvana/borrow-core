@@ -1,5 +1,5 @@
 -- The arms of a `case` consume different variables: the thunk `k` is run in one arm only. A
--- cell would be dropped in the other arm (SPEC §12), but a thunk has no derived drop.
+-- cell would be consumed in the other arm (SPEC §12), but a thunk is not consumable.
 type B = 1 + 1
 
 main : F B =
@@ -9,4 +9,4 @@ main : F B =
     inl u -> force k
   | inr u -> return (inr u : B)
   }
--- expect: 8:3: in this `case`, `k` is consumed in the `inl` arm but not in the `inr` arm, and its type `U (F (1 + 1))` is linear and has no derived drop
+-- expect: 8:3: in this `case`, `k` is consumed in the `inl` arm but not in the `inr` arm, and its type `U (F (1 + 1))` is linear and is not consumable

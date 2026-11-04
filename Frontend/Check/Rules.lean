@@ -19,8 +19,8 @@ and so a `CDerives` derivation of the term's erasure (`TDerivesAt.erase`,
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (Jdg withPair withCtx absurdE forceE Ctx.Banged CtxOutlives HasDrop
-  dropE dropFnE)
+open BoCa.Fig16.LogRel.Core (Jdg withPair withCtx absurdE forceE Ctx.Banged CtxOutlives Consumable
+  consumeSlotE consumeE)
 
 abbrev CExpr := BoCa.Expr
 
@@ -471,18 +471,18 @@ def rSumE {A B : CVTy} {C : CCTy} {t₁ t₂ : TExpr} {s₁ s₂ : CRow} {p₁ p
       ⟨rV.covers.of₁ hl, (F.covers fun _ h => h.1.covers fun _ hl => liveAt_mkCtx₁ hl).of₂ hl,
         (F.covers fun _ h => h.2.covers fun _ hl => liveAt_mkCtx₁ hl).of₂ hl⟩ h₁ h₂ h₃⟩
 
-/-- `dropFnE A xᵢ; M`: the drop of slot `k` before `M`, which does not use it (SPEC §12).
-`TTied.drop`, as `drop_derives`: `unitE` over `lolliE` of the variable and the drop. The
+/-- `consumeE A xᵢ; M`: the consume of slot `k` before `M`, which does not use it (SPEC §12).
+`TTied.consume`, as `consumeSlot_derives`: `unitE` over `lolliE` of the variable and the consume. The
 variable's node has the source `ix`. -/
-def rDrop (ix : TInfo) {C : CCTy} (k : Nat) (A : CVTy) (hk : T[k]? = some A) (hA : HasDrop A)
-    (hc : BoCa.Fig16.LogRel.Core.closedAt 0 (dropFnE A) = true) (hE : (dropFnE A).effFree = true)
+def rConsume (ix : TInfo) {C : CCTy} (k : Nat) (A : CVTy) (hk : T[k]? = some A) (hA : Consumable A)
+    (hc : BoCa.Fig16.LogRel.Core.closedAt 0 (consumeE A) = true) (hE : (consumeE A).effFree = true)
     (r : Res Δ T (.comp C))
     (h : overlapOK T (oneL T k) r.F.u = true) : Res Δ T (.comp C) :=
   ⟨.unitE i (.comp C) C (Masks.of (oneL T k) r.F.u)
       (.lolliE ix (.val .unit) A .unit (Masks.of (oneL T k) (noUse (oneL T k))) (.var ix (.val A) k A)
-        (.dropFn ix (.val (.lolli A .unit)) A)) r.t,
+        (.consume ix (.val (.lolli A .unit)) A)) r.t,
     r.sigs, r.pins, ((Fam.var T k A hk).split r.F h).map fun _ ⟨_, _, hs, hm, hx, hM⟩ =>
-      TTied.drop i ix (oneL T k) r.F.u hs hm ⟨Covers.var (oneL_getD hk), r.covers⟩ hx hA hc hE hM⟩
+      TTied.consume i ix (oneL T k) r.F.u hs hm ⟨Covers.var (oneL_getD hk), r.covers⟩ hx hA hc hE hM⟩
 
 /-- `absurd V`: the rest of the context is absorbed. -/
 def rZeroE (C : CCTy) (rV : Res Δ T (.val .zero)) (h : overlapOK T rV.F.u (Fam.top T).u = true) :
@@ -532,7 +532,7 @@ def rPerform {S : CRow} {o : COpSig} (hf : BoCa.Fig16.LogRel.Core.Row.find S o.n
     r.F.map fun _ h => TTied.effPerform i hf hna hac h⟩
 
 /-- The abortive rule (SPEC §19): an abortive operation of the row, at any answer `B`; its argument
-drops. It reads the row. -/
+consumes. It reads the row. -/
 def rRaise {S : CRow} {o : COpSig} (B : CVTy)
     (hf : BoCa.Fig16.LogRel.Core.Row.find S o.n o.i = some o) (ha : o.abort = true)
     (hrc : o.rc = false) (hd : ownFreeB o.A = true) (r : Res Δ T (.val o.A)) :
@@ -540,7 +540,7 @@ def rRaise {S : CRow} {o : COpSig} (B : CVTy)
   ⟨.effRaise i (.comp (effOf S B)) S o B r.t, S ∪ r.sigs, r.pins,
     r.F.map fun _ h => TTied.effRaise i hf ha hrc (ownFreeB_sound _ hd) h⟩
 
-/-- `[let]`: `M to x. N` at a row, `N`'s context dropping at a row with weakening and persistent
+/-- `[let]`: `M to x. N` at a row, `N`'s context consuming at a row with weakening and persistent
 at an unrestricted row. -/
 def rEffLet {S : CRow} {A B : CVTy} {tN : TExpr} {sN : CRow} {pN : Pins}
     (rM : Res Δ T (.comp (effOf S A)))
@@ -626,7 +626,7 @@ theorem deadP_of_live : ∀ {Γ : Ctx CVTy}, (∀ s ∈ Γ, s.live = true → s.
   | [], _ => .nil
   | ⟨_, false⟩ :: _, h => .cons (deadP_of_live fun s hs => h s (List.mem_cons_of_mem _ hs))
   | ⟨_, true⟩ :: _, h =>
-      .drop (h _ List.mem_cons_self rfl) (deadP_of_live fun s hs => h s (List.mem_cons_of_mem _ hs))
+      .weaken (h _ List.mem_cons_self rfl) (deadP_of_live fun s hs => h s (List.mem_cons_of_mem _ hs))
 
 /-- The family, with each liveness it holds at using the slots `u`. -/
 def _root_.BoCa.Fig16.LogRel.Core.Check.Fam.withUse {P : List Bool → Prop} (F : Fam T P) :

@@ -7,12 +7,12 @@
 -- type, so a function over closures names no environment type. `'c` is the bound: a closure that
 -- outlives `'c` is `box 'c Clo[A, B]<'c>`, the form in which one is stored, lent `mut` and
 -- returned, and the rest every call hands back is again of that form. A closure is linear, with a
--- derived drop: dropping one runs its `close` (SPEC §12, group 2). The three kinds of function
+-- consume: consuming one runs its `close` (SPEC §12, group 2). The three kinds of function
 -- (cf. Rust's `FnOnce`, `FnMut`, `Fn`):
 --
---     linear, no derived drop      A => B                  called once
---     linear, with a derived drop  box 'c Clo[A, B]<'c>     called any number of times, then closed
---     unrestricted                 !(A => B)               copied and forgotten freely
+--     linear, no consume      A => B                  called once
+--     linear and consumable  box 'c Clo[A, B]<'c>     called any number of times, then closed
+--     unrestricted                 !(A => B)               copied and released freely
 --
 -- with `clo_of_fn` (from `!(A => B)`) and `clo_once` (to `A => B`). The name `Clo` is
 -- provisional (decision 60). `include clo` puts these in scope.

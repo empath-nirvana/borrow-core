@@ -132,11 +132,11 @@ theorem cbv_immReborrow (b : Lifetime.Life) : ∀ T : Ty,
 theorem cbv_axSwapTy (T₁ T₂ : Ty) : cbv (BoCa.axSwapTy T₁ T₂) = axSwapTy (cbv T₁) (cbv T₂) := rfl
 theorem cbv_axCopyTy (a : Lifetime.Life) (T : Ty) :
     cbv (BoCa.axCopyTy a T) = axCopyTy a (cbv T) := rfl
-theorem cbv_axForgetImmTy (a : Lifetime.Life) (T : Ty) :
+theorem cbv_axReleaseImmTy (a : Lifetime.Life) (T : Ty) :
     cbv (BoCa.axForgetImmTy a T) = axForgetImmTy a (cbv T) := rfl
-theorem cbv_axForgetMutTy (a : Lifetime.Life) (T : Ty) :
+theorem cbv_axReleaseMutTy (a : Lifetime.Life) (T : Ty) :
     cbv (BoCa.axForgetMutTy a T) = axForgetMutTy a (cbv T) := rfl
-theorem cbv_axForgetUnkTy : cbv BoCa.axForgetUnkTy = axForgetUnkTy := rfl
+theorem cbv_axReleaseUnkTy : cbv BoCa.axForgetUnkTy = axForgetUnkTy := rfl
 theorem cbv_axWithbor1Ty (x : LifeVar) (bnd : Lifetime.Life) (T₁ T₂ : Ty) :
     cbv (BoCa.axWithbor1Ty x bnd T₁ T₂) = axWithbor1Ty x bnd (cbv T₁) (cbv T₂) := rfl
 theorem cbv_axWithbor2Ty (x : LifeVar) (bnd : Lifetime.Life) (T₁ T₂ : Ty) :
@@ -281,9 +281,9 @@ theorem embed {Δ : LifeCtx} {Γ : Ctx Ty} {e : Expr} {T : Ty} (h : DerivesWf Δ
   | freeAx hΓd => intro _ _; exact .free (dead_cbvCtx hΓd)
   | swapAx hΓd => intro _ _; rw [cbv_axSwapTy]; exact .swap (dead_cbvCtx hΓd)
   | copyAx hΓd => intro _ _; rw [cbv_axCopyTy]; exact .copy (dead_cbvCtx hΓd)
-  | forgetImmAx hΓd => intro _ _; rw [cbv_axForgetImmTy]; exact .forgetImm (dead_cbvCtx hΓd)
-  | forgetMutAx hΓd => intro _ _; rw [cbv_axForgetMutTy]; exact .forgetMut (dead_cbvCtx hΓd)
-  | forgetUnkAx hΓd => intro _ _; rw [cbv_axForgetUnkTy]; exact .forgetUnk (dead_cbvCtx hΓd)
+  | forgetImmAx hΓd => intro _ _; rw [cbv_axReleaseImmTy]; exact .releaseImm (dead_cbvCtx hΓd)
+  | forgetMutAx hΓd => intro _ _; rw [cbv_axReleaseMutTy]; exact .releaseMut (dead_cbvCtx hΓd)
+  | forgetUnkAx hΓd => intro _ _; rw [cbv_axReleaseUnkTy]; exact .releaseUnk (dead_cbvCtx hΓd)
   | withbor1Ax hΓd x hx hwf =>
       intro _ _
       obtain ⟨h₁, h₂⟩ := BoCa.scopedB_axWithbor1Ty hwf
@@ -319,7 +319,7 @@ theorem embed {Δ : LifeCtx} {Γ : Ctx Ty} {e : Expr} {T : Ty} (h : DerivesWf Δ
         (not_vFree_cbvCtx hside.2.2) (.ret (ih (hΔ.extend hx hb) (Ctx.ScopedB.allI hnb hΓ))))
   | bangE _ ih => intro hΔ hΓ; exact .bangE (ih hΔ hΓ)
   | copyBangAx hΓd => intro _ _; exact .copyBang (dead_cbvCtx hΓd)
-  | forgetBangAx hΓd => intro _ _; exact .forgetBang (dead_cbvCtx hΓd)
+  | forgetBangAx hΓd => intro _ _; exact .releaseBang (dead_cbvCtx hΓd)
 
 /-- **Adequacy of BoLo through the CBPV core.**  A closed BoLo program of type `1` runs from
 the empty memory to `()` and the empty memory: `embed`, then `adequacyC`.  `[spec §3]` -/

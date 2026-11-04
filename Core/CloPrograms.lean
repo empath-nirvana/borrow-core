@@ -4,13 +4,13 @@ import Core.Weaken
 /-!
 # The closure `Clo` — a counter, called through a `Mut` borrow  `[spec §22]`
 
-    alloc () to d₀. withbor d₀ (Λ'x. λd. forget d;
+    alloc () to d₀. withbor d₀ (Λ'x. λd. release d;
       mkBox⊤ (alloc 0) counterStep to f.          -- f : [@⊤] U(Clo^⊤ I32 I32), owning a cell
       alloc f to r.
       withbor r (Λ'w. λm.                         -- m : Mut 'w ([@⊤] U(Clo^⊤ I32 I32))
         1 to a. callMut m a to (m, x₁).           -- the state persists between the calls
         2 to a. callMut m a to (m, x₂).
-        forget m; [x₁ + x₂]) to (r, t).
+        release m; [x₁ + x₂]) to (r, t).
       free r to f. f to g. g π₂;                   -- close: frees the cell
       [t]) to (d₀, t). free d₀; t
 
@@ -87,7 +87,7 @@ theorem d_counterStep {Δ : LifeCtx} {Γ : Ctx VTy} {c : Lifetime.Life} (hc : Δ
         hout)
   · exact .eletV (.dead (.dead (.left (deadSplit hΓ))))
       (.lolliE (split_kill' _).toP (.var (.there (.there (.here hΓ.toP)))) (.free (kill_dead _).toP))
-      (.unitI (.drop rfl (.cons (.cons (.cons hΓ.toP)))))
+      (.unitI (.weaken rfl (.cons (.cons (.cons hΓ.toP)))))
 
 /-! ### The borrower: two calls through `Mut` -/
 
@@ -118,7 +118,7 @@ theorem d_cntBody {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
   refine .seqV (.right (.left (.dead (.right (.dead (.dead (.dead (.dead (deadSplit hΓ)))))))))
     (.lolliE (split_kill' _).toP
       (.var (.there (.here (.cons (.cons (.cons (.cons (.cons (.cons hΓ.toP)))))))))
-      (.forgetMut (kill_dead _).toP)) ?_
+      (.releaseMut (kill_dead _).toP)) ?_
   have hout : CtxOutlives Δ₂ (⟨.i32, true⟩ :: ⟨.mut (.var 1) PC, false⟩ :: ⟨.i32, false⟩ ::
       ⟨.i32, true⟩ :: ⟨.mut (.var 1) PC, false⟩ :: ⟨.i32, false⟩ :: ⟨.mut (.var 1) PC, false⟩ ::
       ⟨.unit, false⟩ :: Γ) (.var 1) :=
@@ -215,7 +215,7 @@ theorem d_scopeProg {body : Expr} (h : CDerives Δ₁ ΓS body (.comp (.ret (.bo
   have hcb : CDerives LifeCtx.empty [⟨.ref .unit, false⟩] (scopeCbOf body)
       (.val (.all 0 LifeCtx.empty.meetOfDom (.lolli (.imm (.var 0) .unit) (.box (.var 0) .i32)))) :=
     callbackW rfl rfl (.cons .nil) (.seqV (.left (.dead (deadSplit (.cons .nil))))
-      (.lolliE (split_kill' _).toP (.var (.here (.cons (.cons .nil)))) (.forgetImm (kill_dead _).toP))
+      (.lolliE (split_kill' _).toP (.var (.here (.cons (.cons .nil)))) (.releaseImm (kill_dead _).toP))
       (.ofRet h))
   refine .bind .nil (.ret (.lolliE .nil (.unitI .nil) (.alloc (A := .unit) .nil))) ?_
   refine .tensorE (.left .nil)
@@ -262,7 +262,7 @@ end
 
 
 /-!
-# The closure `Clo` — coercions, drop, nesting  `[spec §22]`
+# The closure `Clo` — coercions, consume, nesting  `[spec §22]`
 
 Each program is one closed `CDerives` derivation at `F I32`.  It runs at every host from the
 empty memory to a 32-bit literal and the empty memory (`*_runs`, by `theorem32` over
@@ -273,8 +273,8 @@ left (`*_eval`, by `decide`).
   (`d_ofFn`), called with `1` and `2`, closed: `11 + 12 = 23`.
 * `onceProg` (`Clo` to `A ⇒ B`): the counter over a fresh cell, made a `U(I32 ⊸ F I32)` by
   `onceE` and called with `5`: `5`.  The rest is closed inside `onceE`, which frees the cell.
-* `dropProg` (drop): the counter over a cell holding `7`, never called, dropped by its
-  drop (`dropE`, SPEC §12): `0`, and the cell is freed by the drop's `close`.
+* `consumeProg` (consume): the counter over a cell holding `7`, never called, consumed by its
+  consume (`consumeSlotE`, SPEC §12): `0`, and the cell is freed by the consume's `close`.
 * `nestProg` (a closure capturing another): an outer closure whose state is the
   counter, doubling each answer; called with `1` and `2`, closed: `2 + 6 = 8`.  Closing the
   outer closure closes the inner one, which frees its cell.
@@ -418,26 +418,26 @@ theorem onceProg_runs :
 set_option maxRecDepth 100000 in
 theorem onceProg_eval : i32NoLeak (eval onceProg) = some 5 := by decide
 
-/-! ### The derived drop runs `close` -/
+/-! ### The consume runs `close` -/
 
-/-- `mkBox⊤ (alloc 7) counterStep to bf. dropFn bf; 0`. -/
-def dropProg : Expr :=
-  mkE .top .i32 .i32 (.app (.val (.prim .alloc)) (i32E 7)) counterStep (dropE FC 0 (i32E 0))
+/-- `mkBox⊤ (alloc 7) counterStep to bf. consume bf; 0`. -/
+def consumeProg : Expr :=
+  mkE .top .i32 .i32 (.app (.val (.prim .alloc)) (i32E 7)) counterStep (consumeSlotE FC 0 (i32E 0))
 
-theorem dropProg_derives : CDerives LifeCtx.empty [] dropProg (.comp (.ret .i32)) := by
+theorem consumeProg_derives : CDerives LifeCtx.empty [] consumeProg (.comp (.ret .i32)) := by
   have hT : LifeCtx.empty.Defines .top := LifeCtx.defines_of_wf rfl
   refine mkBoxC trivial hT (.ref .int)
     (appP (d_i32 7 (by cdeadP)) (.alloc (by cdeadP))) (d_counterStep hT (kill_dead _)) ?_
-  exact drop_derives (partP_split (.var 0) 0 _) (by csoloP) (hasDrop_cloBox (A := .i32) trivial .top .i32)
+  exact consumeSlot_derives (partP_split (.var 0) 0 _) (by csoloP) (consumable_cloBox (A := .i32) trivial .top .i32)
     (.ret (d_i32 0 (by cdeadP)))
 
-theorem dropProg_runs :
-    ∃ n, BoCa.BoLo.Steps Adequacy.emptyMem dropProg Adequacy.emptyMem (.val (Val.i32 n)) :=
-  runs_i32 dropProg_derives
+theorem consumeProg_runs :
+    ∃ n, BoCa.BoLo.Steps Adequacy.emptyMem consumeProg Adequacy.emptyMem (.val (Val.i32 n)) :=
+  runs_i32 consumeProg_derives
 
 set_option maxRecDepth 100000 in
-/-- `0`, and no cell left: the drop closed the closure, and `close` freed its cell. -/
-theorem dropProg_eval : i32NoLeak (eval dropProg) = some 0 := by decide
+/-- `0`, and no cell left: the consume closed the closure, and `close` freed its cell. -/
+theorem consumeProg_eval : i32NoLeak (eval consumeProg) = some 0 := by decide
 
 /-- Types that outlive `'x` under `Δ₁`: data, and a box at `⊤`. -/
 def outX : VTy → Bool
@@ -599,7 +599,7 @@ theorem d_reCb : CDerives Δ₂ [] reCb
   refine callbackW rfl rfl .nil ?_
   refine bindP (d_i32 3 (by cdeadP)) ?_
   refine letP (callMutW (A := .i32) (B := .i32) (c := .top) trivial (by csoloP) (by csolo)) ?_
-  exact seqW (appW (.var (by csolo)) (.forgetMut (by cdead)))
+  exact seqW (appW (.var (by csolo)) (.releaseMut (by cdead)))
     (.boxI (.var (by csoloP)) (outlives_ctx (LifeCtx.defines_of_wf rfl) (by decide)))
 
 /-- `λm. withbor m reCb`: `m` reborrowed for one call, and returned. -/
@@ -646,7 +646,7 @@ theorem d_passCb (n : ℕ) : CDerives Δ₁ [] (passCb n) (.val cntCbTy) := by
     ?_
   exact .seqV (.right (.left (.dead (.dead .nil))))
     (.lolliE (split_kill' _).toP (.var (.there (.here (.cons (.cons .nil)))))
-      (.forgetMut (kill_dead _).toP))
+      (.releaseMut (kill_dead _).toP))
     (.boxI (.var (.here (.cons (.cons (.cons .nil)))))
       (outlives_ctx (LifeCtx.defines_of_wf rfl) (by decide)))
 
@@ -679,7 +679,7 @@ end
 * `logProg`: a logger capturing a borrow.  `log : Ref I32` is lent as `ml : Mut 'x I32`; inside a
   scope `'w ⊏ 'x` the logger is made with state `ml`, so it is `[@'w] U(Clo^'w I32 I32)`:
   it outlives `'w` because its state does (`'w ⊏ 'x`).  Each call adds its argument to the log
-  through `ml` (`withswap`); `close` forgets `ml`.  Called with `5` and `7` and closed; after the
+  through `ml` (`withswap`); `close` releases `ml`.  Called with `5` and `7` and closed; after the
   borrow ends the owner frees the log: `12`.
 * The bound is the captured borrow's lifetime: the logger's state does not outlive `'x`
   (`logState_not_outlives`), so `[]I` at `'x` over the state, the premise of `d_mkBox`, is
@@ -777,7 +777,7 @@ def logStep : Val :=
 
 /-- The scope `'w`, capturing `ml` (at `3`):
 
-    forget d; mkBox'w ml logStep to lg. callBox lg 5 to (x, lg). callBox lg 7 to (y, lg).
+    release d; mkBox'w ml logStep to lg. callBox lg 5 to (x, lg). callBox lg 7 to (y, lg).
     close lg; [x + y]                                                                  -/
 def logInner : Expr :=
   .seq (.app forget (.var 0))
@@ -794,7 +794,7 @@ theorem d_logInner :
       (.val (.all 1 Δ₁.meetOfDom (.lolli (.imm (.var 1) .unit) (.box (.var 1) .i32)))) := by
   refine callbackCap rfl rfl (by intro s hs hl; simp at hs; rcases hs with rfl | rfl | rfl <;>
     simp_all [VFree, Lifetime.Life.mentions]) (.ofRet ?_)
-  refine seqC (appP (.var (by csoloP)) (.forgetImm (by cdeadP))) ?_
+  refine seqC (appP (.var (by csoloP)) (.releaseImm (by cdeadP))) ?_
   refine mkBoxC trivial (LifeCtx.defines_of_wf rfl) (.mut lt_w_x) (.var (by csoloP)) ?_ ?_
   · -- the logger's step
     refine .bangThunkV (banged_dead (kill_dead _)) rfl (.lam (.withI (.lam ?_) ?_))
@@ -802,7 +802,7 @@ theorem d_logInner :
           (.var (by csoloP))) (by cdeadP)) (pairP (.var (by csoloP)) (.var (by csoloP)))))))
         (appP (.var (by csoloP)) (.withswap (by cdeadP)))) ?_
       exact .ret (pairP (.var (by csoloP)) (.boxI (.var (by csoloP)) (outlives_ctxW (by decide))))
-    · exact .ret (appP (.var (by csoloP)) (.forgetMut (by cdeadP)))
+    · exact .ret (appP (.var (by csoloP)) (.releaseMut (by cdeadP)))
   refine bindC (.ret (d_i32 5 (by cdeadP))) ?_
   refine bindC (unboxC (by csoloP)
     (callC (A := .i32) (B := .i32) (c := .var 1) trivial (by csoloP) (by csoloP))) ?_

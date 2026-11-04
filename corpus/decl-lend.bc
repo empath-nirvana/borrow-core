@@ -1,4 +1,4 @@
--- A declared value (SPEC §42, *Declared types with no derived drop*) lent into a computation that
+-- A declared value (SPEC §42, *Declared types that is not consumable*) lent into a computation that
 -- may abort, the abort handled inside the loan: `&t` lends the transaction to `guarded`, whose body
 -- is the `with to_result`. Its body reads `t.id` again after the call of `check` that may raise, so the
 -- loan `imm 'a Txn` is live across the raise; it holds no owned cell (`decl_loan_ownFree`), so

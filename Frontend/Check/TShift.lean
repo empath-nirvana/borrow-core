@@ -16,10 +16,10 @@ use:
   erasure of the shifted term is the shifted erasure).
 * `TExpr.absF Δ t` is the body's **absorption**: a formula over a slot's type (`AbsF`) that says
   when an unused live slot of that type can be given to `t`'s derivation. It is read off the
-  rules' premises on the context's live slots: a leaf drops a persistent slot (`Ctx.DeadP`,
+  rules' premises on the context's live slots: a leaf consumes a persistent slot (`Ctx.DeadP`,
   `Ctx.SoloP`), `⟨⟩` absorbs any (`topI`), a split gives the slot to either part, two premises at
   one context both take it, and a premise on every live slot (`Ctx.Banged`, `CtxOutlives`, `∀I`'s
-  freshness, `[let]`'s drops) conjoins its condition. `none` is a node whose derivation cannot be
+  freshness, `[let]`'s consumes) conjoins its condition. `none` is a node whose derivation cannot be
   placed at a wider context at all: the relaxed rules at their fixed contexts (SPEC §29).
 
 `TDerivesAt.weaken` and `TDerivesP.weaken` (`Frontend/Check/Weaken.lean`) are the lemmas these
@@ -40,7 +40,7 @@ open BoCa.Lifetime (LifeCtx LifeVar)
 def Atom.eval : Atom → VTy → Bool
   | .pers, A => A.persistent
   | .bang, A => isBangB A
-  | .drop, A => ownFreeB A
+  | .ownFree, A => ownFreeB A
   | .nfree x, A => !vfreeB x A
   | .outl Δ a, A => outlivesB Δ a A
 
@@ -59,7 +59,7 @@ def AbsF.atom (a : Atom) : AbsF := [[a]]
 /-- The clause `c'` holds where `c` does: every atom of `c'` is one of `c`. -/
 def AbsF.within (c' c : List Atom) : Bool := c'.all (c.contains ·)
 
-/-- A clause added to a disjunction: dropped when a clause within it is there, and dropping the
+/-- A clause added to a disjunction: consumed when a clause within it is there, and consuming the
 clauses it is within. -/
 def AbsF.add (f : AbsF) (c : List Atom) : AbsF :=
   if f.any (AbsF.within · c) then f else c :: f.filter (fun d => !AbsF.within c d)
@@ -231,14 +231,14 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | t@(.unitI ..) => t
   | t@(.topI ..) => t
   | t@(.copyBang ..) => t
-  | t@(.forgetBang ..) => t
+  | t@(.releaseBang ..) => t
   | t@(.alloc ..) => t
   | t@(.free ..) => t
   | t@(.swap ..) => t
   | t@(.copy ..) => t
-  | t@(.forgetImm ..) => t
-  | t@(.forgetMut ..) => t
-  | t@(.forgetUnk ..) => t
+  | t@(.releaseImm ..) => t
+  | t@(.releaseMut ..) => t
+  | t@(.releaseUnk ..) => t
   | t@(.tokMint ..) => t
   | t@(.tokBurn ..) => t
   | t@(.lit ..) => t
@@ -250,7 +250,7 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | t@(.arrLen ..) => t
   | t@(.arrGet ..) => t
   | t@(.arrCopy ..) => t
-  | t@(.arrForget ..) => t
+  | t@(.arrRelease ..) => t
   | t@(.countFold ..) => t
   | t@(.countTry ..) => t
   | t@(.boundedFix ..) => t
@@ -280,7 +280,7 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | t@(.iterate ..) => t
   | t@(.divFuel ..) => t
   | t@(.reify ..) => t
-  | t@(.dropFn ..) => t
+  | t@(.consume ..) => t
   | t@(.allocS ..) => t
   | t@(.freeS ..) => t
   | t@(.withborSM ..) => t
@@ -331,14 +331,14 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   -- `[handle]` and `[handle-last]` of `Div`'s rows, and `[let-poly]`, whose copies are `use`
   -- nodes).
   | .effHandleT .. | .effHandleL .. | .letPoly .. => none
-  | .dropFn .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
+  | .consume .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => some .ff
   | .use _ _ _ _ _ ab _ => ab
-  | .var .. | .force .. | .unitI .. | .copyBang .. | .forgetBang .. | .alloc .. | .free ..
-  | .swap .. | .copy .. | .forgetImm .. | .forgetMut .. | .forgetUnk .. | .tokMint .. | .tokBurn .. | .lit ..
+  | .var .. | .force .. | .unitI .. | .copyBang .. | .releaseBang .. | .alloc .. | .free ..
+  | .swap .. | .copy .. | .releaseImm .. | .releaseMut .. | .releaseUnk .. | .tokMint .. | .tokBurn .. | .lit ..
   | .hostOp ..
   | .arrNew .. | .arrFree .. | .arrSize .. | .arrReplace .. | .arrLen .. | .arrGet ..
-  | .arrCopy .. | .arrForget .. | .countFold .. | .countTry .. | .boundedFix ..
+  | .arrCopy .. | .arrRelease .. | .countFold .. | .countTry .. | .boundedFix ..
   | .sliceBorrowM .. | .sliceBorrowI .. | .sliceGetM .. | .sliceLenM .. | .sliceSplitI ..
   | .sliceSplitM .. | .sliceEmptyI .. | .sliceEmptyM .. | .arrEmpty .. | .sliceReplaceM .. | .sliceSwapM ..
   | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap .. | .withloadU ..
@@ -346,10 +346,10 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .reify .. =>
       some (.atom .pers)
 where
-  /-- `[let]`'s premise on the rest's live slots: they drop at a row with weakening, and are `!`
+  /-- `[let]`'s premise on the rest's live slots: they consume at a row with weakening, and are `!`
   at an unrestricted row. -/
   letCond (S : Row) : AbsF :=
-    if Row.cancelsB S then (AbsF.atom .drop).and (if Row.unrB S then .atom .bang else .tt) else .tt
+    if Row.cancelsB S then (AbsF.atom .ownFree).and (if Row.unrB S then .atom .bang else .tt) else .tt
 
 theorem TExpr.absF_shift (d : Nat) : ∀ (t : TExpr) (c : Nat) (Δ : LifeCtx),
     (t.shift d c).absF Δ = t.absF Δ := by

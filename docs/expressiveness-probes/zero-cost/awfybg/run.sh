@@ -15,7 +15,7 @@ for x in richards:awfy/richards.bc deltablue:awfy/deltablue.bc havlak:awfy/havla
          queens:awfy/queens.bc storage:awfy/storage.bc towers:awfy/towers.bc fannkuch:bg/fannkuch.bc fasta:bg/fasta.bc \
          pidigits:bg/pidigits.bc; do row ${x%%:*} $P/${x#*:}; done
 for x in knuc:bg/knuc.bc regex:bg/regex.bc revcomp:bg/revcomp.bc; do STDIN=$IN row ${x%%:*} $P/${x#*:}; done
-# Nested recursion (#722): nodes owning arrays of their children, freed by the derived drop.
+# Nested recursion (#722): nodes owning arrays of their children, consumed implicitly.
 K=$(cd "$D/../../../.." && pwd)/corpus
 row storage $K/storage-array.bc
 row btree_boxed $K/btree-boxed.bc

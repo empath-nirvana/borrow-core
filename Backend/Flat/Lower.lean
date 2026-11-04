@@ -31,11 +31,11 @@ The lowering is type-directed (`Backend/Clos/Types.lean`): a closure-IR variable
 - **Cells and array slots** hold their contents' words, `max 1 |A|` words for a cell and `|A|`
   per slot. A scoped cell no suspension crosses is a slot of its function's frame, and a
   capability's cell a word of the program's data (Frame slots, below; `[spec §35]`).
-- `copy`, `drop`, the printer, the array primitives, the loop driver and the dispatchers are
+- `copy`, `consume`, the printer, the array primitives, the loop driver and the dispatchers are
   functions generated on demand per layout type (`Helper`); at a trivial type a copy is the words
-  themselves and a drop is nothing. Copying or dropping a closure switches on its tag and copies
-  or drops that code's captured values; at a recursive closure type, a word `2t + 1` needs
-  nothing, and an object is copied or dropped by its code's `closCopy` or `closDrop`.
+  themselves and a consume is nothing. Copying or consuming a closure switches on its tag and copies
+  or consumes that code's captured values; at a recursive closure type, a word `2t + 1` needs
+  nothing, and an object is copied or consumed by its code's `closCopy` or `closConsume`.
 
 Function indices: `print_dec`, the closure codes in code order, `main`, the entry, then the
 generated helpers in the order they are first asked for.
@@ -47,17 +47,17 @@ open BoCa Backend.Clos
 /-- A function generated per layout type (types are representatives). -/
 inductive Helper where
   | copy (n : Nat)
-  | drop (n : Nat)
+  | consume (n : Nat)
   | print (n : Nat)
-  /-- Copy and drop the heap environment of a closure of code `c`, at a recursive closure type. -/
+  /-- Copy and consume the heap environment of a closure of code `c`, at a recursive closure type. -/
   | closCopy (c : Nat)
-  | closDrop (c : Nat)
+  | closConsume (c : Nat)
   /-- `tab` and its loop, at element location type `a` and tabulator type `f`. -/
   | tab (a f : Nat)
   | tabLoop (a f : Nat)
   /-- `drop` of an array and its loop, at element location type `a` and consumer type `f`. -/
-  | arrDrop (a f : Nat)
-  | arrDropLoop (a f : Nat)
+  | arrConsume (a f : Nat)
+  | arrConsumeLoop (a f : Nat)
   /-- `count` and its loop, at step type `f` and state type `s` (SPEC §16). -/
   | count (f s : Nat)
   | countLoop (f s : Nat)
@@ -158,9 +158,9 @@ def bindFresh (x : Var) : LM (List Nat) := do
 def helper (h : Helper) : LM Nat := do
   let T ← T
   let h := match h with
-    | .copy n => .copy (T.r n) | .drop n => .drop (T.r n) | .print n => .print (T.r n)
+    | .copy n => .copy (T.r n) | .consume n => .consume (T.r n) | .print n => .print (T.r n)
     | .tab a f => .tab (T.r a) (T.r f) | .tabLoop a f => .tabLoop (T.r a) (T.r f)
-    | .arrDrop a f => .arrDrop (T.r a) (T.r f) | .arrDropLoop a f => .arrDropLoop (T.r a) (T.r f)
+    | .arrConsume a f => .arrConsume (T.r a) (T.r f) | .arrConsumeLoop a f => .arrConsumeLoop (T.r a) (T.r f)
     | .count f s => .count (T.r f) (T.r s) | .countLoop f s => .countLoop (T.r f) (T.r s)
     | .countTry f s => .countTry (T.r f) (T.r s)
     | .countTryLoop f s => .countTryLoop (T.r f) (T.r s)
@@ -352,7 +352,7 @@ def onCode (n : Nat) (ls : List Nat) (imm : List Stmt) (act : Nat → LM (List S
   if !T.isRec n then return [.switch f cases [.trap]]
   return [.ite (wrap (and64 f (.c64 1))) imm [.switch (.load f 0) cases [.trap]]]
 
-/-! ### Copy and drop -/
+/-! ### Copy and consume -/
 
 /-- A copy of the words `ls` of type `n`. -/
 def copyVals (n : Nat) (ls : List Nat) : LM (List Stmt × List Nat) := do
@@ -360,9 +360,9 @@ def copyVals (n : Nat) (ls : List Nat) : LM (List Stmt × List Nat) := do
   let ts ← fresh (← words n)
   return ([.call ts (← helper (.copy n)) (locs ls)], ts)
 
-def dropVals (n : Nat) (ls : List Nat) : LM (List Stmt) := do
+def consumeVals (n : Nat) (ls : List Nat) : LM (List Stmt) := do
   if ← triv n then return []
-  return [.call [] (← helper (.drop n)) (locs ls)]
+  return [.call [] (← helper (.consume n)) (locs ls)]
 
 /-! ### Terms -/
 
@@ -528,7 +528,7 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
       let a ← vty v
       let p := Exp.loc ((← vals l).headD 0)
       let (s, old) ← loadCell (← vty l) p (← words a)
-      let dr ← dropVals a old
+      let dr ← consumeVals a old
       let s := if dr.isEmpty then [] else s ++ dr
       return s ++ (← storeCell (← vty l) p (locs (← vals v))) ++ (← emit d [])
   | .swap, [l, v], d | .swapSlot, [l, v], d => do
@@ -615,7 +615,7 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
       let n ← vty v
       let f := (T.field n 0).1
       let l := (T.field (T.field n 1).1 0).1
-      return [.call [] (← helper (.arrDrop l f)) (locs (← vals v))] ++ (← emit d [])
+      return [.call [] (← helper (.arrConsume l f)) (locs (← vals v))] ++ (← emit d [])
   | .count, [v], d => do
       let T ← T
       let n ← vty v
@@ -807,8 +807,8 @@ def lowerTm : Tm → Dest → LM (List Stmt)
       bindVals x' ls
       let tk : List Stmt := if s.isEmpty then [] else [.tickCopy]
       return tk ++ s ++ (← lowerTm b d)
-  | .drop _ x b, d => do
-      let s ← dropVals (← vty x) (← vals x)
+  | .consume _ x b, d => do
+      let s ← consumeVals (← vty x) (← vals x)
       return s ++ (← lowerTm b d)
   | .raise _, _ | .hnd .., _ | .ubind .., _ | .perform _, _ | .catch .., _ | .fin .., _
   | .catchAll _, _ | .reraise .., _ | .run .., _ | .await .., _ =>
@@ -896,7 +896,7 @@ where
   callsOf : Tm → List Var
     | .app f _ => [f]
     | .letv _ e b => callsOf e ++ callsOf b
-    | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b => callsOf b
+    | .letpair _ _ _ b | .copy _ _ _ b | .consume _ _ b => callsOf b
     | .case _ _ b₁ _ b₂ => callsOf b₁ ++ callsOf b₂
     | _ => []
 
@@ -1016,7 +1016,7 @@ def foldUpFn (k : Nat) (c : Code) (P : FoldPlan) : LM Fn := do
         pure ([.set next (.loc j)] ++ sa ++ (if P.fc.reuse then [] else [.free up]) ++ sc ++
           [.tailCall (← helper (.foldUp k)) (locs gl ++ [.loc next] ++ locs rs)])
       | none => pure [.trap]
-    pure [.ite (eqz64 up) ((← dropVals P.g gl) ++ [.ret r]) (ld ++ step)]
+    pure [.ite (eqz64 up) ((← consumeVals P.g gl) ++ [.ret r]) (ld ++ step)]
   pure { name := s!"fold_up{k}", params := gw + 1 + P.res, results := P.ans, locals := nloc,
          body := body ++ [.trap] }
 
@@ -1040,14 +1040,14 @@ def lowerCode (k : Nat) (c : Code) : LM Fn := do
     let pw := T.words P.m
     let (body, nloc) ← inFn (ew + pw) do
       let mut off := 0
-      let mut drops : List Stmt := []
+      let mut consumes : List Stmt := []
       let mut gl : List Nat := []
       for x in c.env do
         let w ← words (← vty x)
         if x == P.gVar then gl := List.range' off w
-        else drops := drops ++ (← dropVals (← vty x) (List.range' off w))
+        else consumes := consumes ++ (← consumeVals (← vty x) (List.range' off w))
         off := off + w
-      pure (drops ++ [.tailCall (← helper (.foldDown k))
+      pure (consumes ++ [.tailCall (← helper (.foldDown k))
         (locs gl ++ [.c64 0] ++ locs (List.range' ew pw))])
     return { name := s!"code{k}", params := ew + pw, results := P.ans, locals := nloc, body }
   let fTy := T.codeTy[k]!
@@ -1095,7 +1095,7 @@ def countsReport : List Stmt :=
     [.call [] fPrintDec [.stat 2]] ++ outStr "\n"
 
 /-- Run `main` (driving it, when it returns a loop: its value is the one the loop finishes
-with), print the value, drop it, print the live count, and with `counts` the run's counts. With
+with), print the value, consume it, print the live count, and with `counts` the run's counts. With
 `exits`, `main`'s value is `inl v`, whose `v` is printed, or `inr ()`, which prints nothing and
 ends the run with exit status `1` (SPEC §39). -/
 def entryFn (fMain : Nat) (drives : Bool) (counts : Bool) (exits : Bool := false) : LM Fn := do
@@ -1110,7 +1110,7 @@ def entryFn (fMain : Nat) (drives : Bool) (counts : Bool) (exits : Bool := false
         pure ([Stmt.call m fMain [], .call rs (← helper (.drive T.mainTy)) (locs m)],
           rs.take (T.words T.resTy))
       else pure ([Stmt.call m fMain []], m)
-    let dr ← dropVals T.resTy v
+    let dr ← consumeVals T.resTy v
     let (shown, status) ← if exits then do
         let .sum .. := T.ty T.resTy | throw "flat IR: `main`'s value is not `inl v` or `inr ()`"
         let tag := Exp.loc (v.headD 0)
@@ -1147,11 +1147,11 @@ def copyField (n i : Nat) (ls : List Nat) : LM (List Stmt × List Exp) := do
   let (s₃, out) ← putField n i (locs vs)
   pure (s₁ ++ s₂ ++ s₃, out)
 
-/-- Drop field `i` of `n`, from the field's locals. -/
-def dropField (n i : Nat) (ls : List Nat) : LM (List Stmt) := do
+/-- Consume field `i` of `n`, from the field's locals. -/
+def consumeField (n i : Nat) (ls : List Nat) : LM (List Stmt) := do
   let (c, _) := (← T).field n i
   let (s₁, vs) ← getField n i ls true
-  pure (s₁ ++ (← dropVals c vs))
+  pure (s₁ ++ (← consumeVals c vs))
 
 /-- Print field `i` of `n`; as an `atom` (the operand of `inl`/`inr`), an injection is
 parenthesized. -/
@@ -1213,7 +1213,7 @@ def genHelper (h : Helper) : LM Fn := do
         pure [.switch (.loc 0) cases [.trap]]
       | _ => pure [.ret (locs ps)]
     pure { name := "copy", params := w, results := w, locals := nloc, body := body ++ [.trap] }
-  | .drop n =>
+  | .consume n =>
     let w := T.words n
     let (body, nloc) ← inFn w do
       let ps := List.range w
@@ -1222,25 +1222,25 @@ def genHelper (h : Helper) : LM Fn := do
         let s ← onCode n ps [] fun c => do
           if T.isRec n then
             if (T.env c).isEmpty then return [.trap]
-            return [.call [] (← helper (.closDrop c)) [.loc 0]]
+            return [.call [] (← helper (.closConsume c)) [.loc 0]]
           let mut s : List Stmt := []
           let mut off := 1
           for e in T.env c do
-            s := s ++ (← dropVals e (List.range' off (T.words e)))
+            s := s ++ (← consumeVals e (List.range' off (T.words e)))
             off := off + T.words e
           return s
         pure (s ++ [.ret []])
       | .pair .. => do
-        pure ((← dropField n 0 (← fieldLocals n 0 ps)) ++ (← dropField n 1 (← fieldLocals n 1 ps)) ++
+        pure ((← consumeField n 0 (← fieldLocals n 0 ps)) ++ (← consumeField n 1 (← fieldLocals n 1 ps)) ++
           [.ret []])
       | .sum .. => do
-        pure [.ite (eqz64 (.loc 0)) (← dropField n 0 (← fieldLocals n 0 ps))
-          (← dropField n 1 (← fieldLocals n 1 ps)), .ret []]
+        pure [.ite (eqz64 (.loc 0)) (← consumeField n 0 (← fieldLocals n 0 ps))
+          (← consumeField n 1 (← fieldLocals n 1 ps)), .ret []]
       | .sumN fs => do
-        let cases ← (List.range fs.length).mapM fun k => do dropField n k (← fieldLocals n k ps)
+        let cases ← (List.range fs.length).mapM fun k => do consumeField n k (← fieldLocals n k ps)
         pure [.switch (.loc 0) cases [.trap], .ret []]
       | _ => pure [.ret []]
-    pure { name := "drop", params := w, results := 0, locals := nloc, body }
+    pure { name := "consume", params := w, results := 0, locals := nloc, body }
   | .print n =>
     let w := T.words n
     let (body, nloc) ← inFn w do
@@ -1280,7 +1280,7 @@ def genHelper (h : Helper) : LM Fn := do
         off := off + ls.length
       pure (s ++ [.ret [.loc t]])
     pure { name := s!"copy_code{c}", params := 1, results := 1, locals := nloc, body }
-  | .closDrop c =>
+  | .closConsume c =>
     let some code := (← read).codes[c]? | throw "flat IR: no code"
     let (body, nloc) ← inFn 1 do
       let mut s : List Stmt := []
@@ -1290,10 +1290,10 @@ def genHelper (h : Helper) : LM Fn := do
         let w ← words n
         if !(← triv n) then
           let (s₁, ls) ← loadAt (.loc 0) off w
-          s := s ++ s₁ ++ (← dropVals n ls)
+          s := s ++ s₁ ++ (← consumeVals n ls)
         off := off + w
       pure (s ++ [.free (.loc 0), .ret []])
-    pure { name := s!"drop_code{c}", params := 1, results := 0, locals := nloc, body }
+    pure { name := s!"consume_code{c}", params := 1, results := 0, locals := nloc, body }
   | .tab a f =>
     -- `tab (c, f)`: `len(c)` slots of `|a|` words (a byte each for a byte slot), filled by
     -- `f i` in order. An empty array allocates nothing: its base is `0`.
@@ -1304,7 +1304,7 @@ def genHelper (h : Helper) : LM Fn := do
       let sz ← fresh1
       let b ← fresh1
       let loop ← helper (.tabLoop a f)
-      let dr ← dropVals f fls
+      let dr ← consumeVals f fls
       let words : Exp := if T.byteCell a then shr64 (add64 n (.c64 7)) (.c64 3)
         else mul64 n (.c64 (T.cellWords a).toUInt64)
       pure ([.ite (ltu64 n (.c64 0x80000000)) [] [.set 0 (.c64 0)],
@@ -1330,19 +1330,19 @@ def genHelper (h : Helper) : LM Fn := do
           [.tailCall (← helper (.tabLoop a f)) ([.loc 0] ++ locs fls ++ [add64 i (.c64 1), n])])
         [], .ret []]
     pure { name := "array_tab_loop", params := 3 + fw, results := 0, locals := nloc, body }
-  | .arrDrop a f =>
+  | .arrConsume a f =>
     -- `f b n`: each element to a copy of `f`, in order, then the range freed.
     let fw := T.words f
     let fls := List.range fw
     let (body, nloc) ← inFn (fw + 2) do
-      pure ([.call [] (← helper (.arrDropLoop a f))
+      pure ([.call [] (← helper (.arrConsumeLoop a f))
           ([.loc fw] ++ locs fls ++ [.c64 0, .loc (fw + 1)])] ++
-        (← dropVals f fls) ++
+        (← consumeVals f fls) ++
         -- An empty array, and an array of slots of no words, allocated nothing.
         (if T.cellWords a == 0 && !T.byteCell a then [] else
           [.ite (eqz64 (.loc (fw + 1))) [] [.free (.loc fw)]]) ++ [.ret []])
-    pure { name := "array_drop", params := fw + 2, results := 0, locals := nloc, body }
-  | .arrDropLoop a f =>
+    pure { name := "array_consume", params := fw + 2, results := 0, locals := nloc, body }
+  | .arrConsumeLoop a f =>
     -- `b f i n`: slot `i`'s contents, moved out, to a copy of `f`, for `i < n`.
     let (_, r, k) ← fnParts f
     let w ← words (← locElem a)
@@ -1357,12 +1357,12 @@ def genHelper (h : Helper) : LM Fn := do
       let rs ← fresh k
       pure [.ite (ltu64 i n)
         (cs ++ ls ++ (← callClosure rs f fc (locs es)) ++
-          (← dropVals r (rs.take (T.words r))) ++
-          [.tailCall (← helper (.arrDropLoop a f)) ([.loc 0] ++ locs fls ++ [add64 i (.c64 1), n])])
+          (← consumeVals r (rs.take (T.words r))) ++
+          [.tailCall (← helper (.arrConsumeLoop a f)) ([.loc 0] ++ locs fls ++ [add64 i (.c64 1), n])])
         [], .ret []]
-    pure { name := "array_drop_loop", params := 3 + fw, results := 0, locals := nloc, body }
+    pure { name := "array_consume_loop", params := 3 + fw, results := 0, locals := nloc, body }
   | .count f s =>
-    -- `count (f, (n, (i, s)))`: `len(n)`, the loop, then `f` dropped.
+    -- `count (f, (n, (i, s)))`: `len(n)`, the loop, then `f` consumed.
     let fw := T.words f
     let sw := T.words s
     let (body, nloc) ← inFn (fw + 2 + sw) do
@@ -1371,7 +1371,7 @@ def genHelper (h : Helper) : LM Fn := do
       let rs ← fresh sw
       pure ([.ite (ltu64 n (.c64 0x80000000)) [] [.set fw (.c64 0)],
         .call rs (← helper (.countLoop f s)) (locs (List.range (fw + 2 + sw)))] ++
-        (← dropVals f fls) ++ [.ret (locs rs)])
+        (← consumeVals f fls) ++ [.ret (locs rs)])
     pure { name := "count", params := fw + 2 + sw, results := sw, locals := nloc, body }
   | .countLoop f s =>
     -- `f n i s`: while `i < n`, the state goes to a copy of `f` with `i`.
@@ -1394,7 +1394,7 @@ def genHelper (h : Helper) : LM Fn := do
     pure { name := "count_loop", params := fw + 2 + sw, results := sw, locals := nloc,
            body := body ++ [.trap] }
   | .countTry f s =>
-    -- `count_try (f, (n, (i, s)))`: `len(n)`, the loop, then `f` dropped.
+    -- `count_try (f, (n, (i, s)))`: `len(n)`, the loop, then `f` consumed.
     let (_, r, _) ← fnParts f
     let fw := T.words f
     let sw := T.words s
@@ -1405,7 +1405,7 @@ def genHelper (h : Helper) : LM Fn := do
       let rs ← fresh rw
       pure ([.ite (ltu64 n (.c64 0x80000000)) [] [.set fw (.c64 0)],
         .call rs (← helper (.countTryLoop f s)) (locs (List.range (fw + 2 + sw)))] ++
-        (← dropVals f fls) ++ [.ret (locs rs)])
+        (← consumeVals f fls) ++ [.ret (locs rs)])
     pure { name := "count_try", params := fw + 2 + sw, results := rw, locals := nloc, body }
   | .countTryLoop f s =>
     -- `f n i s`: while `i < n`, the state goes to a copy of `f` with `i`; its `inl` goes on, its
@@ -1477,7 +1477,7 @@ def genHelper (h : Helper) : LM Fn := do
 def callsOf : Tm → List Var
   | .app f _ => [f]
   | .letv _ e b => callsOf e ++ callsOf b
-  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b => callsOf b
+  | .letpair _ _ _ b | .copy _ _ _ b | .consume _ _ b => callsOf b
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => callsOf b₁ ++ callsOf b₂
   | _ => []
 
@@ -1530,7 +1530,7 @@ A scoped cell (`Backend.Clos.Op.scopedAlloc`) lives from its `alloc` to its scop
 no resumption point of its code lies between them (`Clos.Prog.suspendedScopes`), the cell's life
 is inside one call of the code that holds both: a flat-IR function has no loop, a code that may
 suspend is copied whole into its resume code where it resumes (`Capture`), and a raise returns
-with the cell dropped. Such a cell is a slot of the code's frame (`Exp.slot`), as C and Rust place
+with the cell consumed. Such a cell is a slot of the code's frame (`Exp.slot`), as C and Rust place
 a local whose address is taken: no allocation and no live range. A scoped cell whose scope a
 suspension crosses is allocated: its address is held in the suspended computation's state, which
 outlives the frame. -/
@@ -1540,7 +1540,7 @@ def scopesOf : Tm → List (Nat × Bool)
   | .prim (.scopedAlloc k) _ => [(k, true)]
   | .prim (.scopedFree k) _ => [(k, false)]
   | .letv _ e b => scopesOf e ++ scopesOf b
-  | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b | .catch _ b | .fin _ _ b | .catchAll b
+  | .letpair _ _ _ b | .copy _ _ _ b | .consume _ _ b | .catch _ b | .fin _ _ b | .catchAll b
   | .hnd _ _ _ b | .ubind _ _ b => scopesOf b
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => scopesOf b₁ ++ scopesOf b₂
   | _ => []

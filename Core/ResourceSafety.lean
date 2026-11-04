@@ -10,12 +10,12 @@ import Core.Closed
 persistent answer, every run from the empty memory, under every allocator, continues to a value at
 the empty memory (every cell it allocated is freed), and every `free ℓ` it reaches at an
 evaluation position finds `ℓ` allocated (`step1_free_iff`), so its step removes `ℓ` and no cell is
-freed twice. It sees memory only: a host resource counts as released only if its handle owns a
-cell and its type is linear with the release its one eliminator.
+freed twice. It sees memory only: a host resource counts as closed only if its handle owns a
+cell and its type is linear with its close its one eliminator.
 
-That each allocation is released exactly once follows informally: an allocation picks a location
-the memory does not hold (`step1_alloc_iff`), a release removes the one it frees, and the run
-starts and ends at the empty memory. No theorem counts releases.
+That each allocation is freed exactly once follows informally: an allocation picks a location
+the memory does not hold (`step1_alloc_iff`), a `free` removes the cell it frees, and the run
+starts and ends at the empty memory. No theorem counts frees.
 
 **At `[tickSig]`** (`rtSafety`): under the runtime's handler, every configuration a run of a
 closed program at the row `{tick}` reaches is a value or steps, and every `free` it reaches finds
@@ -36,7 +36,7 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-- **Resource safety** of every closed program at a persistent answer, `adequacyD` read over
 cells: every run from the empty memory continues to a value at the empty memory (every cell
-allocated is freed), and every release it reaches finds its cell allocated (none is freed twice).
+allocated is freed), and every `free` it reaches finds its cell allocated (none is freed twice).
 `[spec §13]` -/
 theorem resourceSafety {e : Expr} {A : VTy} (hA : A.Persistent)
     (h : CDerives LifeCtx.empty [] e (.comp (.ret A)))

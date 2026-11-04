@@ -3,7 +3,7 @@ import Core.PinDerives
 import Core.ClauseKinds
 import Core.HandledNames
 import Core.BlockBorrow
-import Core.Drop
+import Core.Consume
 import Frontend.Check.Masks
 import Core.LetCopy
 import Support.Dynamics.Interpreter
@@ -40,7 +40,7 @@ definition. `TDerivesAt`/`TDerivesP` (`Frontend/Check/TDerives.lean`) are the de
 The nodes that are not rules:
 
 * **derived nodes**, one per fixed scheme that `Core/` types by a lemma at a consumed context: a
-  drop (`dropFn`, `dropFn_wf`), a block's allocation and release (`allocS`, `freeS`,
+  consume (`consume`, `consume_wf`), a block's allocation and release (`allocS`, `freeS`,
   `d_allocS`, `d_freeS`), a block borrow (`withborSM`, `withborSI`, `withborSM_wf`,
   `withborSI_wf`) and a family's two-lifetime borrow (`withborF2M`, `withborF2I`,
   `withborM2_wf`, `withborI2_wf`). Each erases to the scheme's term, and its typed rule's premises
@@ -84,7 +84,7 @@ inductive Atom where
   /-- A `!` type (`Ctx.Banged`). -/
   | bang
   /-- `VTy.OwnFree`, as `ownFreeB` decides it (`Ctx.OwnFree`). -/
-  | drop
+  | ownFree
   /-- The lifetime variable is not free in it (`∀I`'s premise). -/
   | nfree (x : LifeVar)
   /-- It outlives `@a` under `Δ`, as `outlivesB` decides it (`CtxOutlives`). -/
@@ -426,7 +426,7 @@ def Expr.lamBody : Expr → Expr
 theorem Expr.lamBody_lam (b : Expr) : Expr.lamBody ((.val (.lam b)) : Expr) = b := rfl
 
 /-- `[let-poly]`'s body, from its premise's term `eN` (the copy, under the bound slot) and the
-λ-value `eV`: the copy with the slot dropped and the λ-value's occurrences replaced by the bound
+λ-value `eV`: the copy with the slot consumed and the λ-value's occurrences replaced by the bound
 variable (`Expr.unfill`). -/
 def Expr.letBody (eN eV : Expr) : Expr := (eN.subst 0 Val.unit).unfill (Expr.lamBody eV) 0
 
@@ -464,7 +464,7 @@ inductive TExpr where
   | bangThunkV (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
   | bangE (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr)
   | copyBang (info : TInfo) (jdg : Jdg) (A : VTy)
-  | forgetBang (info : TInfo) (jdg : Jdg) (A : VTy)
+  | releaseBang (info : TInfo) (jdg : Jdg) (A : VTy)
   | boxI (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (t : TExpr)
   | boxE (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (t : TExpr)
   | immSub (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (b : Lifetime.Life) (A : VTy) (t : TExpr)
@@ -475,9 +475,9 @@ inductive TExpr where
   | tokBurn (info : TInfo) (jdg : Jdg)
   | swap (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy)
   | copy (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
-  | forgetImm (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
-  | forgetMut (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
-  | forgetUnk (info : TInfo) (jdg : Jdg)
+  | releaseImm (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
+  | releaseMut (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
+  | releaseUnk (info : TInfo) (jdg : Jdg)
   | lit (info : TInfo) (jdg : Jdg) (c : IntLit)
   | hostOp (info : TInfo) (jdg : Jdg) (op : HostOp)
   | arrNew (info : TInfo) (jdg : Jdg) (A : VTy)
@@ -487,7 +487,7 @@ inductive TExpr where
   | arrLen (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
   | arrGet (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
   | arrCopy (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
-  | arrForget (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
+  | arrRelease (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
   | countFold (info : TInfo) (jdg : Jdg) (S : VTy)
   | countTry (info : TInfo) (jdg : Jdg) (S : VTy) (E : VTy)
   | boundedFix (info : TInfo) (jdg : Jdg) (A : VTy) (C : CTy)
@@ -543,8 +543,8 @@ inductive TExpr where
   | lendR (info : TInfo) (jdg : Jdg) (x : LifeVar) (b : Lifetime.Life) (T : VTy) (B : VTy) (S : Row) (td tM : TExpr)
   | lendLoopR (info : TInfo) (jdg : Jdg) (x : LifeVar) (A : VTy) (S : VTy) (B : VTy) (R : VTy) (tN tK ts0 : TExpr)
   | nilDead (info : TInfo) (jdg : Jdg) (j : Jdg) (t : TExpr)
-  /-- **Derived**: the drop function of `A` (`dropFnE`, SPEC §12), applied as an implicit drop or as a finaliser. -/
-  | dropFn (info : TInfo) (jdg : Jdg) (A : VTy)
+  /-- **Derived**: the consume function of `A` (`consumeE`, SPEC §12), applied as an implicit consume or as a finaliser. -/
+  | consume (info : TInfo) (jdg : Jdg) (A : VTy)
   /-- **Derived**: a block's allocation at the shape `σ` (`allocS`, SPEC §5). -/
   | allocS (info : TInfo) (jdg : Jdg) (σ : Shape)
   /-- **Derived**: a block's release at the shape `σ` (`freeS`, SPEC §5). -/
@@ -623,7 +623,7 @@ def TExpr.erase : TExpr → Expr
   | .bangThunkV _ _ _ t => t.erase
   | .bangE _ _ _ t => t.erase
   | .copyBang _ _ _ => BoCa.copy
-  | .forgetBang _ _ _ => forget
+  | .releaseBang _ _ _ => forget
   | .boxI _ _ _ _ t => t.erase
   | .boxE _ _ _ _ t => t.erase
   | .immSub _ _ _ _ _ t => t.erase
@@ -634,9 +634,9 @@ def TExpr.erase : TExpr → Expr
   | .tokBurn _ _ => burnE
   | .swap _ _ _ _ => BoCa.swap
   | .copy _ _ _ _ => BoCa.copy
-  | .forgetImm _ _ _ _ => forget
-  | .forgetMut _ _ _ _ => forget
-  | .forgetUnk _ _ => forget
+  | .releaseImm _ _ _ _ => forget
+  | .releaseMut _ _ _ _ => forget
+  | .releaseUnk _ _ => forget
   | .lit _ _ c => (.val ⟨.prim (.lit c), .prim⟩)
   | .hostOp _ _ op => (.val (.prim (.host op)))
   | .arrNew _ _ _ => (.val (.prim .tab))
@@ -646,7 +646,7 @@ def TExpr.erase : TExpr → Expr
   | .arrLen _ _ _ _ => (.val arrLenV)
   | .arrGet _ _ _ _ => (.val (.prim .idx))
   | .arrCopy _ _ _ _ => (.val copyV)
-  | .arrForget _ _ _ _ => (.val forgetV)
+  | .arrRelease _ _ _ _ => (.val releaseV)
   | .countFold _ _ _ => (.val (.prim .count))
   | .countTry _ _ _ _ => (.val (.prim .countTry))
   | .boundedFix _ _ _ _ => (.val (.prim .boundedFix))
@@ -702,7 +702,7 @@ def TExpr.erase : TExpr → Expr
   | .lendR _ _ _ _ _ _ _ td tM => (.app (.app (.val (withborUV (td.erase))) (.var 0)) (.val (lendCb (tM.erase))))
   | .lendLoopR _ _ _ A _ B R tN tK ts0 => (lendLoopApp A B R (tN.erase) (tK.erase) (ts0.erase))
   | .nilDead _ _ _ t => t.erase
-  | .dropFn _ _ A => dropFnE A
+  | .consume _ _ A => consumeE A
   | .allocS _ _ σ => BoCa.Fig16.LogRel.Core.allocS σ
   | .freeS _ _ σ => BoCa.Fig16.LogRel.Core.freeS σ
   | .withborSM _ _ σ _ _ | .withborSI _ _ σ _ _ => withborS σ
@@ -741,7 +741,7 @@ def TExpr.info : TExpr → TInfo
   | .bangThunkV i _ _ _ => i
   | .bangE i _ _ _ => i
   | .copyBang i _ _ => i
-  | .forgetBang i _ _ => i
+  | .releaseBang i _ _ => i
   | .boxI i _ _ _ _ => i
   | .boxE i _ _ _ _ => i
   | .immSub i _ _ _ _ _ => i
@@ -752,9 +752,9 @@ def TExpr.info : TExpr → TInfo
   | .tokBurn i _ => i
   | .swap i _ _ _ => i
   | .copy i _ _ _ => i
-  | .forgetImm i _ _ _ => i
-  | .forgetMut i _ _ _ => i
-  | .forgetUnk i _ => i
+  | .releaseImm i _ _ _ => i
+  | .releaseMut i _ _ _ => i
+  | .releaseUnk i _ => i
   | .lit i _ _ => i
   | .hostOp i _ _ => i
   | .arrNew i _ _ => i
@@ -764,7 +764,7 @@ def TExpr.info : TExpr → TInfo
   | .arrLen i _ _ _ => i
   | .arrGet i _ _ _ => i
   | .arrCopy i _ _ _ => i
-  | .arrForget i _ _ _ => i
+  | .arrRelease i _ _ _ => i
   | .countFold i _ _ => i
   | .countTry i _ _ _ => i
   | .boundedFix i _ _ _ => i
@@ -820,7 +820,7 @@ def TExpr.info : TExpr → TInfo
   | .lendR i _ _ _ _ _ _ _ _ => i
   | .lendLoopR i _ _ _ _ _ _ _ _ _ => i
   | .nilDead i _ _ _ => i
-  | .dropFn i _ _ | .allocS i _ _ | .freeS i _ _ | .withborSM i _ _ _ _ | .withborSI i _ _ _ _
+  | .consume i _ _ | .allocS i _ _ | .freeS i _ _ | .withborSM i _ _ _ _ | .withborSI i _ _ _ _
   | .withborF2M i _ _ _ _ _ _ _ | .withborF2I i _ _ _ _ _ _ _ | .litFn i _ _ _ => i
   | .divLit i _ _ _ _ | .walk i _ _ _ _ | .walkGet i _ _ _ | .selfCall i _ _ _ _ | .lendCell i _ _ _ | .nuEta i _ _ _ _ => i
   | .lendScope i _ _ _ | .litView i _ _ | .unfoldStep i _ _ => i
@@ -855,7 +855,7 @@ def TExpr.jdg : TExpr → Jdg
   | .bangThunkV _ j _ _ => j
   | .bangE _ j _ _ => j
   | .copyBang _ j _ => j
-  | .forgetBang _ j _ => j
+  | .releaseBang _ j _ => j
   | .boxI _ j _ _ _ => j
   | .boxE _ j _ _ _ => j
   | .immSub _ j _ _ _ _ => j
@@ -866,9 +866,9 @@ def TExpr.jdg : TExpr → Jdg
   | .tokBurn _ j => j
   | .swap _ j _ _ => j
   | .copy _ j _ _ => j
-  | .forgetImm _ j _ _ => j
-  | .forgetMut _ j _ _ => j
-  | .forgetUnk _ j => j
+  | .releaseImm _ j _ _ => j
+  | .releaseMut _ j _ _ => j
+  | .releaseUnk _ j => j
   | .lit _ j _ => j
   | .hostOp _ j _ => j
   | .arrNew _ j _ => j
@@ -878,7 +878,7 @@ def TExpr.jdg : TExpr → Jdg
   | .arrLen _ j _ _ => j
   | .arrGet _ j _ _ => j
   | .arrCopy _ j _ _ => j
-  | .arrForget _ j _ _ => j
+  | .arrRelease _ j _ _ => j
   | .countFold _ j _ => j
   | .countTry _ j _ _ => j
   | .boundedFix _ j _ _ => j
@@ -934,7 +934,7 @@ def TExpr.jdg : TExpr → Jdg
   | .lendR _ j _ _ _ _ _ _ _ => j
   | .lendLoopR _ j _ _ _ _ _ _ _ _ => j
   | .nilDead _ j _ _ => j
-  | .dropFn _ j _ | .allocS _ j _ | .freeS _ j _ | .withborSM _ j _ _ _ | .withborSI _ j _ _ _
+  | .consume _ j _ | .allocS _ j _ | .freeS _ j _ | .withborSM _ j _ _ _ | .withborSI _ j _ _ _
   | .withborF2M _ j _ _ _ _ _ _ | .withborF2I _ j _ _ _ _ _ _ | .litFn _ j _ _ => j
   | .divLit _ j _ _ _ | .walk _ j _ _ _ | .walkGet _ j _ _ | .selfCall _ j _ _ _ | .lendCell _ j _ _ | .nuEta _ j _ _ _ => j
   | .lendScope _ j _ _ | .litView _ j _ | .unfoldStep _ j _ => j
@@ -977,7 +977,7 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .bangThunkV _ _ _ t => [(.push 0, t)]
   | .bangE _ _ _ t => [(.push 0, t)]
   | .copyBang _ _ _ => []
-  | .forgetBang _ _ _ => []
+  | .releaseBang _ _ _ => []
   | .boxI _ _ _ _ t => [(.push 0, t)]
   | .boxE _ _ _ _ t => [(.push 0, t)]
   | .immSub _ _ _ _ _ t => [(.push 0, t)]
@@ -988,9 +988,9 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .tokBurn _ _ => []
   | .swap _ _ _ _ => []
   | .copy _ _ _ _ => []
-  | .forgetImm _ _ _ _ => []
-  | .forgetMut _ _ _ _ => []
-  | .forgetUnk _ _ => []
+  | .releaseImm _ _ _ _ => []
+  | .releaseMut _ _ _ _ => []
+  | .releaseUnk _ _ => []
   | .lit _ _ _ => []
   | .hostOp _ _ _ => []
   | .arrNew _ _ _ => []
@@ -1000,7 +1000,7 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .arrLen _ _ _ _ => []
   | .arrGet _ _ _ _ => []
   | .arrCopy _ _ _ _ => []
-  | .arrForget _ _ _ _ => []
+  | .arrRelease _ _ _ _ => []
   | .countFold _ _ _ => []
   | .countTry _ _ _ _ => []
   | .boundedFix _ _ _ _ => []
@@ -1056,7 +1056,7 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .lendR _ _ _ _ _ _ _ td tM => [(.fresh 0, td), (.fresh 1, tM)]
   | .lendLoopR _ _ _ _ _ _ _ tN tK ts0 => [(.fresh 1, tN), (.fresh 1, tK), (.fresh 0, ts0)]
   | .nilDead _ _ _ t => [(.fresh 0, t)]
-  | .dropFn .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
+  | .consume .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => []
   | .litFn _ _ _ t => [(.push 0, t)]
   | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t => [(.push 0, t)]
@@ -1113,7 +1113,7 @@ def TExpr.isLam : TExpr → Bool
   | .bangThunkV _ _ _ t => t.isLam
   | .bangE _ _ _ t => t.isLam
   | .copyBang _ _ _ => ((BoCa.copy : Expr) matches .lam _)
-  | .forgetBang _ _ _ => ((forget : Expr) matches .lam _)
+  | .releaseBang _ _ _ => ((forget : Expr) matches .lam _)
   | .boxI _ _ _ _ t => t.isLam
   | .boxE _ _ _ _ t => t.isLam
   | .immSub _ _ _ _ _ t => t.isLam
@@ -1124,9 +1124,9 @@ def TExpr.isLam : TExpr → Bool
   | .tokBurn _ _ => ((burnE : Expr) matches .lam _)
   | .swap _ _ _ _ => ((BoCa.swap : Expr) matches .lam _)
   | .copy _ _ _ _ => ((BoCa.copy : Expr) matches .lam _)
-  | .forgetImm _ _ _ _ => ((forget : Expr) matches .lam _)
-  | .forgetMut _ _ _ _ => ((forget : Expr) matches .lam _)
-  | .forgetUnk _ _ => ((forget : Expr) matches .lam _)
+  | .releaseImm _ _ _ _ => ((forget : Expr) matches .lam _)
+  | .releaseMut _ _ _ _ => ((forget : Expr) matches .lam _)
+  | .releaseUnk _ _ => ((forget : Expr) matches .lam _)
   | .lit _ _ _ => false
   | .hostOp _ _ _ => false
   | .arrNew _ _ _ => false
@@ -1136,7 +1136,7 @@ def TExpr.isLam : TExpr → Bool
   | .arrLen _ _ _ _ => (((.val arrLenV) : Expr) matches .lam _)
   | .arrGet _ _ _ _ => false
   | .arrCopy _ _ _ _ => (((.val copyV) : Expr) matches .lam _)
-  | .arrForget _ _ _ _ => (((.val forgetV) : Expr) matches .lam _)
+  | .arrRelease _ _ _ _ => (((.val releaseV) : Expr) matches .lam _)
   | .countFold _ _ _ => false
   | .countTry _ _ _ _ => false
   | .boundedFix _ _ _ _ => false
@@ -1192,7 +1192,7 @@ def TExpr.isLam : TExpr → Bool
   | .lendR _ _ _ _ _ _ _ _ _ => false
   | .lendLoopR _ _ _ A _ B R tN tK ts0 => (((lendLoopApp A B R (tN.erase) (tK.erase) (ts0.erase)) : Expr) matches .lam _)
   | .nilDead _ _ _ t => t.isLam
-  | .dropFn _ _ A => (dropFnE A matches .lam _)
+  | .consume _ _ A => (consumeE A matches .lam _)
   | .allocS _ _ σ => (BoCa.Fig16.LogRel.Core.allocS σ matches .lam _)
   | .freeS _ _ σ => (BoCa.Fig16.LogRel.Core.freeS σ matches .lam _)
   | .withborSM _ _ σ _ _ | .withborSI _ _ σ _ _ => (withborS σ matches .lam _)
@@ -1231,7 +1231,7 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .bangThunkV _ _ _ t => isLam_eq t
   | .bangE _ _ _ t => isLam_eq t
   | .copyBang _ _ _ => rfl
-  | .forgetBang _ _ _ => rfl
+  | .releaseBang _ _ _ => rfl
   | .boxI _ _ _ _ t => isLam_eq t
   | .boxE _ _ _ _ t => isLam_eq t
   | .immSub _ _ _ _ _ t => isLam_eq t
@@ -1242,9 +1242,9 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .tokBurn _ _ => rfl
   | .swap _ _ _ _ => rfl
   | .copy _ _ _ _ => rfl
-  | .forgetImm _ _ _ _ => rfl
-  | .forgetMut _ _ _ _ => rfl
-  | .forgetUnk _ _ => rfl
+  | .releaseImm _ _ _ _ => rfl
+  | .releaseMut _ _ _ _ => rfl
+  | .releaseUnk _ _ => rfl
   | .lit _ _ _ => rfl
   | .hostOp _ _ _ => rfl
   | .arrNew _ _ _ => rfl
@@ -1254,7 +1254,7 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .arrLen _ _ _ _ => rfl
   | .arrGet _ _ _ _ => rfl
   | .arrCopy _ _ _ _ => rfl
-  | .arrForget _ _ _ _ => rfl
+  | .arrRelease _ _ _ _ => rfl
   | .countFold _ _ _ => rfl
   | .countTry _ _ _ _ => rfl
   | .boundedFix _ _ _ _ => rfl
@@ -1310,7 +1310,7 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .lendR _ _ _ _ _ _ _ _ _ => rfl
   | .lendLoopR _ _ _ _ _ _ _ _ _ _ => rfl
   | .nilDead _ _ _ t => isLam_eq t
-  | .dropFn .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
+  | .consume .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => rfl
   | .litFn _ _ _ t => isLam_eq t
   | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t => isLam_eq t

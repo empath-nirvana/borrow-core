@@ -62,7 +62,7 @@ main : F (i32 * i32) =
 ```
 
 The rest of the stream, `t2`, is never used, so the checker closes it (see
-[Implicit drops](implicit-drops.md)).
+[Implicit consumes](implicit-consumes.md)).
 
 ## Finite iterators
 

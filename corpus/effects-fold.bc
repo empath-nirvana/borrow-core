@@ -9,13 +9,13 @@
 -- in its body is handled at the step, leaves the loop by its exit, and is raised again after it.
 -- `corpus/effects-fold-sum.bc` is the same program with the sums written by hand.
 --
--- `doubled` builds a buffer and raises halfway: the buffer is dropped when the abort unwinds, by
--- its drop (SPEC §12, §19), and `live 0` after the run says so.
+-- `doubled` builds a buffer and raises halfway: the buffer is consumed when the abort unwinds, by
+-- its consume (SPEC §12, §19), and `live 0` after the run says so.
 --
 -- Answer: `(inl i32[100], (inr (inl i32[3]), (inr (inr ()), (i32[4294967295], (i32[4294967295],
 -- i32[10])))))`: the sum 0 + 10 + … + 40; element 3 of `bad` is negative; three times 2·10⁹
 -- overflows; `default` gives −1 for `bad`; `doubled` aborts on `bad` (−1), and on `good`
--- builds five elements (twice that, 10). A buffer not dropped on the abort would leave `live 1`.
+-- builds five elements (twice that, 10). A buffer not consumed on the abort would leave `live 1`.
 
 include buf
 include text

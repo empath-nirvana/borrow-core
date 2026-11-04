@@ -13,7 +13,7 @@ externs and the use are `Γp`, its live ones those the enclosing rules give the 
 
 `Core`'s weakening lemmas insert dead slots only (`CDerives.insert_dead`, `CDerives.append_dead`).
 A use may be given live ones: the checker lets a `def`'s body absorb an unused live slot of the
-use's context wherever its rules can, as the slot's leaf drops it (a persistent slot at `DeadP`)
+use's context wherever its rules can, as the slot's leaf consumes it (a persistent slot at `DeadP`)
 or `⟨⟩` takes it. The absorption is that set of slots, read off the typed term, so the use is
 given exactly the slots its body's derivation takes.
 
@@ -104,7 +104,7 @@ theorem deadP_prep (hp : LiveP VTy.persistent Γp) {Γ : Ctx VTy} (h : Ctx.DeadP
       obtain ⟨A, l⟩ := s
       cases l with
       | false => exact .cons (ih hp.tail)
-      | true => exact .drop (hp.head rfl) (ih hp.tail)
+      | true => exact .weaken (hp.head rfl) (ih hp.tail)
 
 theorem deadP_ins (hp : LiveP VTy.persistent Γp) : ∀ (Γa : Ctx VTy) {Γb : Ctx VTy},
     Ctx.DeadP (Γa ++ Γb) → Ctx.DeadP (Γa ++ Γp ++ Γb)
@@ -113,7 +113,7 @@ theorem deadP_ins (hp : LiveP VTy.persistent Γp) : ∀ (Γa : Ctx VTy) {Γb : C
       rw [List.cons_append] at h
       cases h with
       | cons h => exact .cons (deadP_ins hp Γa h)
-      | drop hT h => exact .drop hT (deadP_ins hp Γa h)
+      | weaken hT h => exact .weaken hT (deadP_ins hp Γa h)
 
 theorem dead_ins (hp : BoCa.Ctx.Dead Γp) : ∀ (Γa : Ctx VTy) {Γb : Ctx VTy},
     BoCa.Ctx.Dead (Γa ++ Γb) → BoCa.Ctx.Dead (Γa ++ Γp ++ Γb)
@@ -430,9 +430,9 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
   | copyBang hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.copyBang (deadP_ins (live_eval_atom hf hp) Γa hΓ), (shift_closed0 (by rfl) _ _).symm⟩
-  | forgetBang hΓ =>
+  | releaseBang hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
-      exact ⟨.forgetBang (deadP_ins (live_eval_atom hf hp) Γa hΓ),
+      exact ⟨.releaseBang (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (by rfl) _ _).symm⟩
   | boxI _ hΓ ih =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
@@ -463,17 +463,17 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
   | copy hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.copy (deadP_ins (live_eval_atom hf hp) Γa hΓ), (shift_closed0 (by rfl) _ _).symm⟩
-  | forgetImm hΓ =>
+  | releaseImm hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
-      exact ⟨.forgetImm (deadP_ins (live_eval_atom hf hp) Γa hΓ),
+      exact ⟨.releaseImm (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (by rfl) _ _).symm⟩
-  | forgetMut hΓ =>
+  | releaseMut hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
-      exact ⟨.forgetMut (deadP_ins (live_eval_atom hf hp) Γa hΓ),
+      exact ⟨.releaseMut (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (by rfl) _ _).symm⟩
-  | forgetUnk hΓ =>
+  | releaseUnk hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
-      exact ⟨.forgetUnk (deadP_ins (live_eval_atom hf hp) Γa hΓ),
+      exact ⟨.releaseUnk (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (by rfl) _ _).symm⟩
   | tokMint hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
@@ -514,9 +514,9 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.arrCopy a A (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (by rfl) _ _).symm⟩
-  | arrForget a A hΓ =>
+  | arrRelease a A hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
-      exact ⟨.arrForget a A (deadP_ins (live_eval_atom hf hp) Γa hΓ),
+      exact ⟨.arrRelease a A (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (by rfl) _ _).symm⟩
   | countFold S hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
@@ -788,9 +788,9 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
   | lendR => intro _ _ _ _ _ hf _; cases hf
   | lendLoopR => intro _ _ _ _ _ hf _; cases hf
   | nilDead => intro _ _ _ _ _ hf _; cases hf
-  | dropFn hA hc he hΓ =>
+  | consume hA hc he hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
-      exact ⟨.dropFn hA hc he (dead_ins (live_eval_ff hf hp) Γa hΓ), (shift_closed0 hc _ _).symm⟩
+      exact ⟨.consume hA hc he (dead_ins (live_eval_ff hf hp) Γa hΓ), (shift_closed0 hc _ _).symm⟩
   | allocS σ he hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.allocS σ he (dead_ins (live_eval_ff hf hp) Γa hΓ),
@@ -1021,9 +1021,9 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
   | copyBang hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.copyBang (deadP_ins (live_eval_atom hf hp) Γa hΓ), (shift_closed0 (by rfl) _ _).symm⟩
-  | forgetBang hΓ =>
+  | releaseBang hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
-      exact ⟨.forgetBang (deadP_ins (live_eval_atom hf hp) Γa hΓ),
+      exact ⟨.releaseBang (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (by rfl) _ _).symm⟩
   | boxI _ hΓ ih =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
@@ -1054,17 +1054,17 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
   | copy hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.copy (deadP_ins (live_eval_atom hf hp) Γa hΓ), (shift_closed0 (by rfl) _ _).symm⟩
-  | forgetImm hΓ =>
+  | releaseImm hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
-      exact ⟨.forgetImm (deadP_ins (live_eval_atom hf hp) Γa hΓ),
+      exact ⟨.releaseImm (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (by rfl) _ _).symm⟩
-  | forgetMut hΓ =>
+  | releaseMut hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
-      exact ⟨.forgetMut (deadP_ins (live_eval_atom hf hp) Γa hΓ),
+      exact ⟨.releaseMut (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (by rfl) _ _).symm⟩
-  | forgetUnk hΓ =>
+  | releaseUnk hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
-      exact ⟨.forgetUnk (deadP_ins (live_eval_atom hf hp) Γa hΓ),
+      exact ⟨.releaseUnk (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (by rfl) _ _).symm⟩
   | tokMint hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
@@ -1105,9 +1105,9 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.arrCopy a A (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (by rfl) _ _).symm⟩
-  | arrForget a A hΓ =>
+  | arrRelease a A hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
-      exact ⟨.arrForget a A (deadP_ins (live_eval_atom hf hp) Γa hΓ),
+      exact ⟨.arrRelease a A (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (by rfl) _ _).symm⟩
   | countFold S hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
@@ -1376,9 +1376,9 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
   | effHandleT => intro _ _ _ _ _ hf _; cases hf
   | effHandleL => intro _ _ _ _ _ hf _; cases hf
   | letPoly => intro _ _ _ _ _ hf _; cases hf
-  | dropFn hA hc he hΓ =>
+  | consume hA hc he hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
-      exact ⟨.dropFn hA hc he (dead_ins (live_eval_ff hf hp) Γa hΓ), (shift_closed0 hc _ _).symm⟩
+      exact ⟨.consume hA hc he (dead_ins (live_eval_ff hf hp) Γa hΓ), (shift_closed0 hc _ _).symm⟩
   | allocS σ he hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.allocS σ he (dead_ins (live_eval_ff hf hp) Γa hΓ),

@@ -19,14 +19,14 @@ inductive ArgKind where
 
 /-- The keywords of constants. -/
 inductive CKw where
-  | alloc | free | swap | copy | copyBang | forgetImm | forgetMut | forgetUnk | forgetBang
+  | alloc | free | swap | copy | copyBang | releaseImm | releaseMut | releaseUnk | releaseBang
   | tokMint | tokBurn
   | withbor1 | withbor2 | withbor3 | withload | withswap
   | foldImm | foldOwn | foldReuse | fixd | unfoldS | unfold
   | i32 | i64 | u8 | f32 | f64 | host
   | allocS | freeS | withborSMut | withborSImm | withborF2Mut | withborF2Imm
   | arrayNew | arrayEmpty | arrayFree | arraySize | arrayReplace | arrayLen | arrayGet | arrayCopy
-  | arrayForget | sliceBorrowMut | sliceBorrowImm | sliceGetMut | sliceLenMut
+  | arrayRelease | sliceBorrowMut | sliceBorrowImm | sliceGetMut | sliceLenMut
   | sliceSplitImm | sliceSplitMut | sliceEmptyImm | sliceEmptyMut | sliceReplaceMut | sliceSwapMut
   | countFold | countTry | boundedFix
   | withbor1U | withbor2U | withbor3U | withloadU | sliceBorrowMutU | sliceBorrowImmU
@@ -35,8 +35,8 @@ inductive CKw where
 /-- A constant keyword's spelling. -/
 def CKw.str : CKw → String
   | .alloc => "alloc" | .free => "free" | .swap => "swap" | .copy => "copy"
-  | .copyBang => "copy_bang" | .forgetImm => "forget_imm" | .forgetMut => "forget_mut"
-  | .forgetUnk => "forget_unk" | .forgetBang => "forget_bang"
+  | .copyBang => "copy_bang" | .releaseImm => "release_imm" | .releaseMut => "release_mut"
+  | .releaseUnk => "release_unk" | .releaseBang => "release_bang"
   | .tokMint => "tok_mint" | .tokBurn => "tok_burn"
   | .withbor1 => "withbor1" | .withbor2 => "withbor2" | .withbor3 => "withbor3"
   | .withload => "withload" | .withswap => "withswap"
@@ -49,7 +49,7 @@ def CKw.str : CKw → String
   | .withborF2Mut => "withbor_f2_mut" | .withborF2Imm => "withbor_f2_imm"
   | .arrayNew => "array_new" | .arrayEmpty => "array_empty" | .arrayFree => "array_free" | .arraySize => "array_size"
   | .arrayReplace => "array_replace" | .arrayLen => "array_len" | .arrayGet => "array_get"
-  | .arrayCopy => "array_copy" | .arrayForget => "array_forget"
+  | .arrayCopy => "array_copy" | .arrayRelease => "array_release"
   | .sliceBorrowMut => "slice_borrow_mut" | .sliceBorrowImm => "slice_borrow_imm"
   | .sliceGetMut => "slice_get_mut" | .sliceLenMut => "slice_len_mut"
   | .sliceSplitImm => "slice_split_imm" | .sliceSplitMut => "slice_split_mut"
@@ -62,13 +62,13 @@ def CKw.str : CKw → String
   | .sliceBorrowImmU => "slice_borrow_imm_u"
 
 def CKw.all : List CKw :=
-  [.alloc, .free, .swap, .copy, .copyBang, .forgetImm, .forgetMut, .forgetUnk, .forgetBang,
+  [.alloc, .free, .swap, .copy, .copyBang, .releaseImm, .releaseMut, .releaseUnk, .releaseBang,
    .tokMint, .tokBurn,
    .withbor1, .withbor2, .withbor3, .withload, .withswap,
    .foldImm, .foldOwn, .foldReuse, .fixd, .unfoldS, .unfold, .i32, .i64, .u8, .f32, .f64, .host,
    .allocS, .freeS, .withborSMut, .withborSImm, .withborF2Mut, .withborF2Imm,
    .arrayNew, .arrayEmpty, .arrayFree, .arraySize, .arrayReplace, .arrayLen, .arrayGet, .arrayCopy,
-   .arrayForget, .sliceBorrowMut, .sliceBorrowImm, .sliceGetMut, .sliceLenMut,
+   .arrayRelease, .sliceBorrowMut, .sliceBorrowImm, .sliceGetMut, .sliceLenMut,
    .sliceSplitImm, .sliceSplitMut, .sliceEmptyImm, .sliceEmptyMut, .sliceReplaceMut,
    .sliceSwapMut,
    .countFold, .countTry, .boundedFix,
@@ -80,9 +80,9 @@ open ArgKind in
 /-- The kinds of a constant's bracket arguments, in order. A constant with none is written
     without brackets. -/
 def CKw.sig : CKw → List ArgKind
-  | .alloc | .free | .copyBang | .forgetBang => [ty]
+  | .alloc | .free | .copyBang | .releaseBang => [ty]
   | .arrayNew | .arrayEmpty | .arrayFree | .arraySize | .arrayReplace | .countFold => [ty]
-  | .arrayLen | .arrayGet | .arrayCopy | .arrayForget => [life, ty]
+  | .arrayLen | .arrayGet | .arrayCopy | .arrayRelease => [life, ty]
   | .sliceGetMut | .sliceLenMut => [life, ty]
   | .sliceSplitImm | .sliceSplitMut | .sliceEmptyImm | .sliceEmptyMut | .sliceReplaceMut
   | .sliceSwapMut => [life, ty]
@@ -90,8 +90,8 @@ def CKw.sig : CKw → List ArgKind
   | .swap | .foldOwn | .foldReuse | .fixd | .unfoldS | .countTry => [ty, ty]
   | .unfold => [cty, ty]
   | .boundedFix => [ty, cty]
-  | .copy | .forgetImm | .forgetMut => [life, ty]
-  | .forgetUnk | .tokMint | .tokBurn => []
+  | .copy | .releaseImm | .releaseMut => [life, ty]
+  | .releaseUnk | .tokMint | .tokBurn => []
   | .withbor1 => [binder, ty, ty]
   | .withbor2 => [binder, life, ty, ty]
   | .withbor3 | .withload => [life, binder, ty, ty]
@@ -114,12 +114,12 @@ def Const.ofArgs : CKw → List Arg → Option Const
   | .swap, [.ty A, .ty B] => some (.swap A B)
   | .copy, [.life a, .ty A] => some (.copy a A)
   | .copyBang, [.ty A] => some (.copyBang A)
-  | .forgetImm, [.life a, .ty A] => some (.forgetImm a A)
-  | .forgetMut, [.life a, .ty A] => some (.forgetMut a A)
-  | .forgetUnk, [] => some .forgetUnk
+  | .releaseImm, [.life a, .ty A] => some (.releaseImm a A)
+  | .releaseMut, [.life a, .ty A] => some (.releaseMut a A)
+  | .releaseUnk, [] => some .releaseUnk
   | .tokMint, [] => some .tokMint
   | .tokBurn, [] => some .tokBurn
-  | .forgetBang, [.ty A] => some (.forgetBang A)
+  | .releaseBang, [.ty A] => some (.releaseBang A)
   | .withbor1, [.binder x, .ty A, .ty B] => some (.withbor1 x A B)
   | .withbor2, [.binder x, .life b, .ty A, .ty B] => some (.withbor2 x b A B)
   | .withbor3, [.life a, .binder x, .ty A, .ty B] => some (.withbor3 a x A B)
@@ -153,7 +153,7 @@ def Const.ofArgs : CKw → List Arg → Option Const
   | .arrayLen, [.life a, .ty A] => some (.arrayLen a A)
   | .arrayGet, [.life a, .ty A] => some (.arrayGet a A)
   | .arrayCopy, [.life a, .ty A] => some (.arrayCopy a A)
-  | .arrayForget, [.life a, .ty A] => some (.arrayForget a A)
+  | .arrayRelease, [.life a, .ty A] => some (.arrayRelease a A)
   | .sliceBorrowMut, [.binder x, .life b, .ty A, .ty B] => some (.sliceBorrowMut x b A B)
   | .sliceBorrowImm, [.binder x, .life b, .ty A, .ty B] => some (.sliceBorrowImm x b A B)
   | .sliceGetMut, [.life a, .ty A] => some (.sliceGetMut a A)
@@ -184,12 +184,12 @@ def Const.toArgs : Const → CKw × List Arg
   | .swap A B => (.swap, [.ty A, .ty B])
   | .copy a A => (.copy, [.life a, .ty A])
   | .copyBang A => (.copyBang, [.ty A])
-  | .forgetImm a A => (.forgetImm, [.life a, .ty A])
-  | .forgetMut a A => (.forgetMut, [.life a, .ty A])
-  | .forgetUnk => (.forgetUnk, [])
+  | .releaseImm a A => (.releaseImm, [.life a, .ty A])
+  | .releaseMut a A => (.releaseMut, [.life a, .ty A])
+  | .releaseUnk => (.releaseUnk, [])
   | .tokMint => (.tokMint, [])
   | .tokBurn => (.tokBurn, [])
-  | .forgetBang A => (.forgetBang, [.ty A])
+  | .releaseBang A => (.releaseBang, [.ty A])
   | .withbor1 x A B => (.withbor1, [.binder x, .ty A, .ty B])
   | .withbor2 x b A B => (.withbor2, [.binder x, .life b, .ty A, .ty B])
   | .withbor3 a x A B => (.withbor3, [.life a, .binder x, .ty A, .ty B])
@@ -223,7 +223,7 @@ def Const.toArgs : Const → CKw × List Arg
   | .arrayLen a A => (.arrayLen, [.life a, .ty A])
   | .arrayGet a A => (.arrayGet, [.life a, .ty A])
   | .arrayCopy a A => (.arrayCopy, [.life a, .ty A])
-  | .arrayForget a A => (.arrayForget, [.life a, .ty A])
+  | .arrayRelease a A => (.arrayRelease, [.life a, .ty A])
   | .sliceBorrowMut x b A B => (.sliceBorrowMut, [.binder x, .life b, .ty A, .ty B])
   | .sliceBorrowImm x b A B => (.sliceBorrowImm, [.binder x, .life b, .ty A, .ty B])
   | .sliceGetMut a A => (.sliceGetMut, [.life a, .ty A])

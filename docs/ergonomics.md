@@ -30,7 +30,7 @@ before matching.
   |---|---|---|---|
   | `else { () }` | `if c { S }` (`Parser.lean:1899–1909`) | 109 | 108, and 108 with identical core |
   | `i64[0]`, `u8[200]`, `i32[7]` | a bare literal where the type is expected | 402 | 356, identical core |
-  | `let _ = free(c); v` | the drop at the scope's end (SPEC §12) | 22 | 22 |
+  | `let _ = free(c); v` | the consume at the scope's end (SPEC §12) | 22 | 22 |
   | `let (x, r) = f(x, …)` | `let r = f(&mut x, …)` (SPEC §11) | 177 | 149 |
   | `(inl e : A + B)` | `inl e` where the type is expected | 45 | 27 |
   | `borrow imm x { v -> f(v) }` | `f(&x)` (SPEC §11) | 43 | 17 |
@@ -69,7 +69,7 @@ before matching.
 - **The five pitch examples** (§5) are rewritten in the target surface. Each sugar was expanded by
   its rule, and every expansion runs with the golden output (measured).
 - **Corrections to the issue's premises** (§7.2):
-  - drops at the scope's end exist;
+  - consumes at the scope's end exist;
   - `*m` at a `mut` borrow does not need #58;
   - the bitwise operators do not exist at the surface.
 
@@ -169,9 +169,9 @@ So 66 of 81 corpus cells, in 52 programs, are mutable locals in all but name.
 
 | # | today | provided form | mechanism | measured |
 |---|---|---|---|---|
-| A1 | `if c { S } else { () }` | `if c { S }` | the parser supplies the `else` arm `return ()` (`Parser.lean:1899–1909`) | 108 of 109 program sites drop it with identical core; the 109th is `loop-labels.bc` (binary) |
+| A1 | `if c { S } else { () }` | `if c { S }` | the parser supplies the `else` arm `return ()` (`Parser.lean:1899–1909`) | 108 of 109 program sites consume it with identical core; the 109th is `loop-labels.bc` (binary) |
 | A2 | `i64[0]` | `0` where `i64` is expected | `VSugar.lit`, typed by the expected type (typed elaboration §5) | 356 of 402 (`u8` 71 of 72, `i64` 71 of 112, every `i32` outside kernel text). Of the 46 left, 40 are "expected `i32`, but this has type `i64`": the width comes from a later use (M2); 4 are in a program written in the kernel text (§7.3); 2 others |
-| A3 | `let _ = free(c); v` | nothing: `c` is dropped at the end of its scope | SPEC §12's inserted drop, `free` then the content's | 22 of 22 run with the same output |
+| A3 | `let _ = free(c); v` | nothing: `c` is consumed at the end of its scope | SPEC §12's inserted consume, `free` then the content's | 22 of 22 run with the same output |
 | A3′ | `free(c)` read for its content | `*c` | `VSugar.deref` at a cell lends it `imm` around a `withload` (`Sugar.lean:3333–3355`) | by inspection |
 | A4 | `let (x, r) = f(x, …)` | `let r = f(&mut x, …)` | SPEC §11's lend: `io_lend <- f(x, …); let (x, r) = io_lend` (`Comp.elab`, `Sugar.lean:124–135`) | 149 of 177 run with the same output. Refused: 14 where the threaded value is itself a view (`array_mut 'a i32`) or the call also takes a capability, so `&mut` would be a reborrow, which the surface does not provide; 5 results that mention the lent lifetime; 5 calls that also thread a capability; 2 inference gaps; 2 others |
 | A5 | `borrow imm x { v -> f(v) }` | `f(&x)` | `lendCall`/`lendBorrow` (`Sugar.lean:2194`, `:2265`): `withbor1`/`withbor2` of a cell, `slice_borrow_*` of an array, or a cell scoped to the call for a value | 17 of 43. Refused: 13 where the block lends a buffer's initialised prefix or a record's fields and `&x` at the call lends the whole value ("expected `array u8`, but this has type `array u8 * i32`": M4's question at a call); 9 in an annotated binding (SPEC §11 forbids a lend there); 3 closures whose parameter type was read off the block; 1 outlives |
@@ -245,7 +245,7 @@ By inspection, every form the user's decisions name is built for a cell or an ar
 - `let r = &mut x` to the end of the enclosing scope (SPEC §14, decision 40, `lendLet`). After it,
   `x` may not be named: "`x` is lent to `r` for the rest of the block, so it cannot be used after
   `let r = &mut x`" (measured).
-- drops at the scope's end (SPEC §12).
+- consumes at the scope's end (SPEC §12).
 
 `corpus/async-logged.bc` written with `let m = &mut c` and without the block, the `else { () }`
 and the `free` runs today with its golden output (measured; the program is in §9.4).
@@ -336,7 +336,7 @@ result in the kernel. Measured only as far as it finds cheap wins:
 **Left for deeper work, not examined further:**
 
 1. whether moving the hand-back earlier is unobservable when the block contains a finaliser or
-   an unwinding form (`withbor2u`). By inspection, the order of drop calls on the unwinding
+   an unwinding form (`withbor2u`). By inspection, the order of consume calls on the unwinding
    path can change;
 2. error messages that fall back to the lexical reading when an inferred extent is refused;
 3. `imm` blocks after #58, where last use becomes liveness again.
@@ -768,7 +768,7 @@ precedence.
 | convenience | Rust | Koka | Effekt | Swift | Hylo | Lean 4 `do` | fit here |
 |---|---|---|---|---|---|---|---|
 | mutable locals, borrowed in place | `let mut`, `&mut x`; lexical extents before the 2018 NLL, inferred after | `var x := …`, local state that cannot escape (a type rule), no borrows | `var` in a region | `var`, `inout` with `&x` for one call; exclusivity checked statically, dynamically where it cannot be | `inout` for one call or a projection; no first-class references | `let mut`, rebinding desugared to pure code | Rust's pre-NLL form, which the user chose. Swift's and Hylo's per-call `&x` is exactly A5 |
-| destruction at the scope's end | `Drop`, at the scope's end, explicit `drop(x)` | reference counting (Perceus) | — | ARC | at the value's last use (hypothesis: not verified here) | GC | SPEC §12 is Rust's; Hylo's earlier placement is SPEC §12's *Open* item |
+| destruction at the scope's end | `Consume`, at the scope's end, explicit `drop(x)` | reference counting (Perceus) | — | ARC | at the value's last use (hypothesis: not verified here) | GC | SPEC §12 is Rust's; Hylo's earlier placement is SPEC §12's *Open* item |
 | compound assignment, unary minus, bitwise operators | all, by traits; `&` binds tighter than `==` | most, by overloading | most | all, by protocols | all | all | by §36 families, one provider per type, no traits |
 | reading and writing through a reference | `*m`, `*m = e` | — | — | implicit (`inout` is a variable) | implicit | — | N2: Rust's spelling over `withswap` |
 | lambda | `\|x\| e`; closure kind inferred from the body | `fn(x) e`, trailing lambdas | `{ x => e }`, second-class blocks | `{ x in e }`, `$0` | `{ x in e }` | `fun x => e` | N7: the kind from the expected type, as Rust infers it from the body |
@@ -818,7 +818,7 @@ Not filed (this unit files no issues).
 
 ### 7.2 Corrections to the issue's premises
 
-- **"Drops at scope end (implicit destruction against the explicitness rules)"** are SPEC §12,
+- **"Consumes at scope end (implicit destruction against the explicitness rules)"** are SPEC §12,
   built. `let _ = free(c)` is removable at all 22 sites (measured). What SPEC §12 leaves open is
   earlier placement, and class-3 types (`U C`, type variables), which must be consumed.
 - **"`*m` reads (#58, E1)"**: a read through a `mut` borrow of a persistent content is
@@ -1421,7 +1421,7 @@ def rw_else_unit(src):
     for m in re.finditer(r'\s*else\s*\{\s*\(\s*\)\s*\}', src): yield m.start(), m.end(), ''
 
 def rw_free_unit(src):
-    """`let _ = free(c);` removed: the cell is dropped at the end of its scope (SPEC §12)."""
+    """`let _ = free(c);` removed: the cell is consumed at the end of its scope (SPEC §12)."""
     for m in re.finditer(r'\n[ \t]*let\s+_\s*=\s*free\s*\(\s*\w+\s*\)\s*;', src): yield m.start(), m.end(), ''
 
 def rw_inj_ascribe(src):

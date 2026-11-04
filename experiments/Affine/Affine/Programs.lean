@@ -12,7 +12,7 @@ host; the interpreter (`eval`, Wasm's host) computes the answer by `decide`.
 `foldImm`'s sum, get it back) with both explicit frees removed. The source ends
 `let (r′, n) = p in return n`; the owner `r′ : Ref L` comes back from the loan and is dropped
 at the end of its scope. Its destructor is `free`, then `foldOwn` with the algebra that frees
-each node's value cell (`HasDrop.ref (.mu …)`). Answer `123`, no cell left, as
+each node's value cell (`Consumable.ref (.mu …)`). Answer `123`, no cell left, as
 `sumListProg_eval`.
 
 **`blockAff b`**: a block `{a : I32, b : I32}` (one allocation, two leaves), then a branch. The
@@ -33,7 +33,7 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-! ### The list's destructor -/
 
-theorem hasDtor_ilistL : HasDrop ilistL :=
+theorem hasDtor_ilistL : Consumable ilistL :=
   .muF (A := ilistF.ty) ilistF_WF trivial
     (.sum .unit (.tensor (.ref .int) .unit))
 
@@ -73,7 +73,7 @@ def openWith (build K : Expr) : Expr :=
 def sumAff : Expr := bindE sumIE (openWith (buildI [100, 20, 3]) (.var 0))
 
 /-- The elaboration: `r′` (index `1`) dropped before `return n`. -/
-def sumAffE : Expr := bindE sumIE (openWith (buildI [100, 20, 3]) (dropE (.ref ilistL) 1 (.var 0)))
+def sumAffE : Expr := bindE sumIE (openWith (buildI [100, 20, 3]) (consumeSlotE (.ref ilistL) 1 (.var 0)))
 
 theorem ilistL_closed : ∀ z, ¬ VFree z ilistL := fun _ => by simp [VFree, FShape.ty]
 
@@ -133,7 +133,7 @@ def blockAff (b : Bool) : Expr := blockWith b (.var 0) (i32E 0)
 /-- The elaboration: the field `b` (index `1`) dropped before `return m`; the block (index `1`)
 dropped before `return 0`. -/
 def blockAffE (b : Bool) : Expr :=
-  blockWith b (dropE (.ref .i32) 1 (.var 0)) (dropE σB.refTy 1 (i32E 0))
+  blockWith b (consumeSlotE (.ref .i32) 1 (.var 0)) (consumeSlotE σB.refTy 1 (i32E 0))
 
 theorem blockAff_derives (b : Bool) :
     ADerives LifeCtx.empty [] (blockAff b) (blockAffE b) (.comp (.ret .i32)) := by

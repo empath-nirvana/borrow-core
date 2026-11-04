@@ -1,6 +1,6 @@
 -- Errors (SPEC §19): `Fail[E]` is an ordinary control effect. Its one operation, `raise`, answers
 -- `never` (the empty type `0`), so it never resumes: it is abortive, and its handler receives the
--- error with nothing to resume. Unwinding runs the drops of what the abandoned computation
+-- error with nothing to resume. Unwinding runs the consumes of what the abandoned computation
 -- owned and ends the borrows it was inside. An error holds nothing owned: data, borrows or `!`
 -- values.
 --
@@ -8,7 +8,7 @@
 --
 -- * `to_result`: the body's value `inl a`, or the error `inr e`;
 -- * `default(d)`: the body's value, or `d`. Every operation of `Fail` is abortive, so its clauses
---   run after the handler, at most once (SPEC §19): `d` is an ordinary value, owned, dropped when
+--   run after the handler, at most once (SPEC §19): `d` is an ordinary value, owned, consumed when
 --   the body answers;
 -- * `map_err(f)`: the body's value, or the error `f(e)` raised to the handler around the `with`.
 --

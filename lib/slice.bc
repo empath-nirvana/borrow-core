@@ -12,7 +12,7 @@
 -- at any other. A search or a comparison takes the element comparison as an argument (`eq_u8`,
 -- `cmp_i32`, …, below): there are no traits.
 --
--- A view is not copied or dropped by these functions without saying so: an exclusive view is
+-- A view is not copied or consumed by these functions without saying so: an exclusive view is
 -- handed back, and a shared one is copied with `array_copy` where it is read twice. Loops are
 -- `count_fold`s whose step is a closure `!{ … }` over the loop's state that captures nothing,
 -- so a loop allocates nothing and calls its step directly. An index is checked where it is
@@ -65,7 +65,7 @@ fn peek[A]<'a>(v: array_mut 'a A, i: i32, d: A) -> array_mut 'a A * A =
   | inr _ -> (v, d)
   }
 
--- `x` in slot `i`; the element that was there is dropped. Past the end, nothing changes.
+-- `x` in slot `i`; the element that was there is consumed. Past the end, nothing changes.
 fn set[A]<'a>(v: array_mut 'a A, i: i32, x: A) -> array_mut 'a A =
   let (v, _) = replace(v, i, x);
   v
@@ -76,7 +76,7 @@ fn swap_at[A]<'a>(v: array_mut 'a A, i: i32, j: i32) -> array_mut 'a A =
 
 -- The view given up.
 fn discard_mut[A]<'a>(v: array_mut 'a A) -> 1 =
-  match get_mut(v, 0 - 1) { inl m -> forget_mut['a, A](m) | inr u -> u }
+  match get_mut(v, 0 - 1) { inl m -> release_mut['a, A](m) | inr u -> u }
 
 -- ### Splitting
 
@@ -98,9 +98,9 @@ fn split_first[A]<'a>(v: array_imm 'a A) -> imm 'a A * array_imm 'a A + 1 =
   match split_at(v, 1) {
     inl (h, t) -> match get(h, 0) {
                     inl e -> inl (e, t)
-                  | inr u -> array_forget['a, A](t); inr u
+                  | inr u -> array_release['a, A](t); inr u
                   }
-  | inr w -> array_forget['a, A](w); inr ()
+  | inr w -> array_release['a, A](w); inr ()
   }
 
 fn split_first_mut[A]<'a>(v: array_mut 'a A) -> mut 'a A * array_mut 'a A + 1 =
@@ -118,9 +118,9 @@ fn split_last[A]<'a>(v: array_imm 'a A) -> imm 'a A * array_imm 'a A + 1 =
   match split_at(v, len(w) - 1) {
     inl (t, h) -> match get(h, 0) {
                     inl e -> inl (e, t)
-                  | inr u -> array_forget['a, A](t); inr u
+                  | inr u -> array_release['a, A](t); inr u
                   }
-  | inr w -> array_forget['a, A](w); inr ()
+  | inr w -> array_release['a, A](w); inr ()
   }
 
 fn split_last_mut[A]<'a>(v: array_mut 'a A) -> mut 'a A * array_mut 'a A + 1 =
@@ -160,7 +160,7 @@ fn copy_from[A]<'a, 'b>(dst: array_mut 'a A, src: array_imm 'b A) -> array_mut '
       let (w, r) = array_copy['b, A](w);
       match get(r, i) { inl g -> (set(v, i, *g), w) | inr u -> (v, w) } },
     k, 0, (v, w));
-  array_forget['b, A](w);
+  array_release['b, A](w);
   v
 
 -- ### Searching
@@ -181,7 +181,7 @@ fn find[A]<'a>(v: array_imm 'a A, x: A, eq: !(A * A => bool)) -> i32 + 1 =
           }
       } },
     len(w), 0, (v, (x, (eq, inr ()))));
-  array_forget['a, A](v);
+  array_release['a, A](v);
   r
 
 -- Whether an element equals `x` under `eq`.
@@ -212,7 +212,7 @@ fn binary_search[A]<'a>(v: array_imm 'a A, x: A, c: !(A * A => i32)) -> i32 + i3
           } else { (v, (x, (c, (lo, (hi, inr n))))) }
       } },
     32, 0, (v, (x, (c, (0, (len(w), inr ()))))));
-  array_forget['a, A](v);
+  array_release['a, A](v);
   match r { inl i -> inl i | inr m -> inr lo }
 
 -- ### Comparing
@@ -240,8 +240,8 @@ fn cmp[A]<'a, 'b>(v: array_imm 'a A, w: array_imm 'b A, c: !(A * A => i32)) -> i
         }
       } else { (v, (w, (c, r))) } },
     k, 0, (v, (w, (c, 0))));
-  array_forget['a, A](v);
-  array_forget['b, A](w);
+  array_release['a, A](v);
+  array_release['b, A](w);
   if r == 0 { if n < m { 0 - 1 } else { if m < n { 1 } else { 0 } } } else { r }
 
 -- Whether two views have the same elements under `eq`.
@@ -264,17 +264,17 @@ fn eq[A]<'a, 'b>(v: array_imm 'a A, w: array_imm 'b A, e: !(A * A => bool)) -> b
           }
         } else { (v, (w, (e, r))) } },
       n, 0, (v, (w, (e, true))));
-    array_forget['a, A](v);
-    array_forget['b, A](w);
+    array_release['a, A](v);
+    array_release['b, A](w);
     r
-  } else { array_forget['a, A](v); array_forget['b, A](w); false }
+  } else { array_release['a, A](v); array_release['b, A](w); false }
 
 -- Whether `v` begins with the elements of `p` under `eq`.
 fn starts_with[A]<'a, 'b>(v: array_imm 'a A, p: array_imm 'b A, e: !(A * A => bool)) -> bool =
   let (p, p2) = array_copy['b, A](p);
   match split_at(v, len(p2)) {
-    inl (h, t) -> array_forget['a, A](t); eq(h, p, e)
-  | inr w -> array_forget['a, A](w); array_forget['b, A](p); false
+    inl (h, t) -> array_release['a, A](t); eq(h, p, e)
+  | inr w -> array_release['a, A](w); array_release['b, A](p); false
   }
 
 -- Whether `v` ends with the elements of `p` under `eq`.
@@ -285,10 +285,10 @@ fn ends_with[A]<'a, 'b>(v: array_imm 'a A, p: array_imm 'b A, e: !(A * A => bool
   let n = len(v2);
   if m <= n {
     match split_at(v, n - m) {
-      inl (h, t) -> array_forget['a, A](h); eq(t, p, e)
-    | inr w -> array_forget['a, A](w); array_forget['b, A](p); false
+      inl (h, t) -> array_release['a, A](h); eq(t, p, e)
+    | inr w -> array_release['a, A](w); array_release['b, A](p); false
     }
-  } else { array_forget['a, A](v); array_forget['b, A](p); false }
+  } else { array_release['a, A](v); array_release['b, A](p); false }
 
 -- ### Sorting
 
@@ -322,7 +322,7 @@ fn sort[A]<'a>(v: array_mut 'a A, c: !(A * A => i32), d: A) -> array_mut 'a A =
 -- `nu_out`, as any codata.
 fn iter_imm[A]<'a>(v: array_imm 'a A) -> U (iter (imm 'a A) 1 1) =
   f <- return (unbang (unfold[iter (imm 'a A) 1 1, array_imm 'a A]
-    (!thunkv fun (v : array_imm 'a A) -> < split_first(v), array_forget['a, A](v) >)));
+    (!thunkv fun (v : array_imm 'a A) -> < split_first(v), array_release['a, A](v) >)));
   thunkv nu_in < (nu_out (force f v)).1, (nu_out (force f v)).2 >
 
 -- The same over an exclusive view: each element is lent `mut`, one at a time, and the rest of

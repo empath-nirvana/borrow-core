@@ -62,7 +62,7 @@ In `Res_own`, `NoOwn = Pers = {∅}`.
 
 1. `m ≥ k ⇒ ⟦m⟧ ⊆ ⟦k⟧`.
 2. `∅ ∈ ⟦m⟧`, and `⟦m⟧` is closed under `●` where it is defined.
-3. `W ∈ m ⇒ ⟦m⟧ ⊆ NoOwn` (what a mode with weakening holds may be dropped).
+3. `W ∈ m ⇒ ⟦m⟧ ⊆ NoOwn` (what a mode with weakening holds may be consumed).
 4. `C ∈ m ⇒ ⟦m⟧ ⊆ Pers`, and `r ∈ Pers ⇒ r = r ● r` (what a mode with contraction holds may be
    duplicated).
 
@@ -75,13 +75,13 @@ In `Res_own`, `NoOwn = Pers = {∅}`.
 `C ∈ m` gives `m ∈ {rel, unr}`. ∎
 
 `NoOwn` is what BoLo's `wp` lets a run leave behind (`ρ⁺|own = ∅`, [TR] p. 6) and what the
-forget rules drop ([TR] 6.148, 6.149). `Pers` is BoLo's persistence: `!P ≜ emp ∧ P` holds of
+release rules consume ([TR] 6.148, 6.149). `Pers` is BoLo's persistence: `!P ≜ emp ∧ P` holds of
 `∅`, and an `imm` cell is idempotent ([TR] 6.43 at `α = β`, 6.116). In the lift, `⟦cancel⟧`
 contains `mut` and `imm` borrows and `⟦unr⟧` contains `imm` borrows.
 
 *Source.* The reading of a mode as a set of resources closed under composition is ours. It is
 how adjoint logic's structural rules (Pruiksma et al. §2, `σ(m)`) become semantic: `W` is
-`⊆ NoOwn` (dropping is a forget) and `C` is `⊆ Pers` (copying is idempotence).
+`⊆ NoOwn` (consuming is a release) and `C` is `⊆ Pers` (copying is idempotence).
 
 ## 4.2 The three meeting points
 
@@ -118,10 +118,10 @@ protocol (D4.6), and it is discharged by independence (L5.4).
 
     Cancel(S₁)(r)  ≜  ∃ r₀ ∈ NoOwn.  r = (●_{fin(j, ℓ_r, ℓ) ∈ S₁} ℓ_r ↦ own(rsrc ℓ)) ● r₀
 
-`Cancel(S₁)` holds exactly of the resources that running `drops(S₁)` (D3.4) disposes of: it frees
-each owned resource of a `fin` frame of `S₁`, and what remains may be dropped. Cancelling a
+`Cancel(S₁)` holds exactly of the resources that running `consumes(S₁)` (D3.4) disposes of: it frees
+each owned resource of a `fin` frame of `S₁`, and what remains may be consumed. Cancelling a
 continuation, unwinding to an abortive operation's handler, and failing a co-operation all run
-`drops` of a segment, so all three owe `Cancel` of it.
+`consumes` of a segment, so all three owe `Cancel` of it.
 
 **Definition D4.6 (protocols).** The protocol of an instance of effect `E` describes what a
 computation owes at a stop on that instance. For a resuming operation `o`, an argument

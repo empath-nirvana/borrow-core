@@ -229,7 +229,7 @@ def regular (g : List String) (d : DataDecl) : VTy → Except String Unit
     go 64 A
 
 /-- `A` with each application `N[…]` of a name of `σ` replaced by its value: the group's members
-occur at their own parameters (`regular`), so the arguments are dropped. -/
+occur at their own parameters (`regular`), so the arguments are consumed. -/
 def substHeads (σ : TySubst) : Nat → VTy → VTy
   | 0, A => A
   | j + 1, A => match headOf A with
@@ -375,7 +375,7 @@ def notP (d : Nat) : BoCa.Fig16.LogRel.Core.VTy → Option String
 
 open BoCa.Fig16.LogRel.Core.FoldP (PB) in
 /-- The opened type `A` of a field, a cell when `cell`, is in §6's class `P` over `X`
-(`FoldP.PB`), the class the drop and the owned fold are defined at (SPEC §61); otherwise
+(`FoldP.PB`), the class the consume and the owned fold are defined at (SPEC §61); otherwise
 why not. -/
 def pClass (X : String) (cell : Bool) (A : VTy) : Option String :=
   let K := pTy [X] 64 A
@@ -425,7 +425,7 @@ def typeDecls (t : Table) (sp : Span) (d : DataDecl) : Except Error (List Decl) 
         | none => pure ()
         | some why =>
           err <| s!"{what}, of type `{f.ty.pp}`, holds `{root}` {why}: outside §6's class " ++
-            "`P`, the recursive types a derived drop is defined at (SPEC §61)"
+            "`P`, the recursive types a consume is defined at (SPEC §61)"
   if rec_ then for m in members do checkFields m
   let rootS ← match structOf t g root (if rec_ then some X else none) 64 root with
     | .ok S => pure S
@@ -437,7 +437,7 @@ def typeDecls (t : Table) (sp : Span) (d : DataDecl) : Except Error (List Decl) 
   if rec_ && !BoCa.Fig16.LogRel.Core.FoldP.pBodyB (pTy [X] 64 rootS) then
     err <| s!"`{root}`'s recursive type is outside §6's class `P` " ++
       s!"({(notP 1 (pTy [X] 64 rootS)).getD "its body is headed by its variable"}): " ++
-      "a derived drop is defined only in the class (SPEC §61)"
+      "a consume is defined only in the class (SPEC §61)"
   let rootT : VTy := if rec_ then .mu sp ⟨X, sp⟩ rootS else rootS
   let mut out : List Decl := [mk root rootT]
   -- The other members, each after the members it names.

@@ -1,6 +1,6 @@
 -- A div helper whose residual comes from its type (SPEC §14, docs/typed-elaboration.md §2.4).
 -- `count` loops over the input and hands back the capability with the count. Its result
--- `Src * i32` holds `Src`, a name this program gives `ref input`: `Src` has no derived drop, so a
+-- `Src * i32` holds `Src`, a name this program gives `ref input`: `Src` is not consumable, so a
 -- loop closed early must hand it back, and the residual is `Src * 1`. The residual is read off
 -- the type, not recognized by the names `In`, `Out`, `ref input` or `ref output`.
 -- `residual-alias.core.bc` is its elaboration in core, as `bcc desugar` prints it.

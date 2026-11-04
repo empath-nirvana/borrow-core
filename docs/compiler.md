@@ -36,7 +36,7 @@ agreed on #552, and loops U1–U4 are taken as decided and placed in the new pip
   - layouts, by unification, with a retry;
   - rows, by two least fixed points over a 0-CFA;
   - clause kinds, by syntactic recognisers;
-  - copies and drops, from free variables;
+  - copies and consumes, from free variables;
   - stack slots, from a syntactic pattern and an interval walk.
 
   Nothing in `Backend/` reads a type, a mode, a lifetime or a qualifier. §1.2 lists 24 facts
@@ -76,7 +76,7 @@ agreed on #552, and loops U1–U4 are taken as decided and placed in the new pip
   emitters are kept and rewritten at typed input.
 - **Hard stops** (§7.1). None in the recommended path. One is conditional: the kernel programs
   `Backend/Kernel.lean:35` calls untyped. A compiler of typed terms cannot compile an untypable
-  one, and dropping it is hard-stop item 2. One tension needs the user: #555 asks that
+  one, and consuming it is hard-stop item 2. One tension needs the user: #555 asks that
   `kernel-counts.expected` be unchanged, and the new lowering lowers some of those counts.
 - **Defects** (§7.2). Eight, each with its root fix. The largest:
   - the checker discards the types it computes;
@@ -84,7 +84,7 @@ agreed on #552, and loops U1–U4 are taken as decided and placed in the new pip
     root of #509 and of most of the check time of `corpus/float-arith.bc` (measured in C2: the
     `check` stage 898 ms of 1217 ms, and 325 ms of 634 ms once each `def` is checked once per
     key; the 44.6 s of 65.8 s first given here did not reproduce);
-  - every copy and drop is inferred from free variables;
+  - every copy and consume is inferred from free variables;
   - the stack-slot decision re-derives T1.
 
 ## 1. What the checker establishes, and where it is lost
@@ -106,14 +106,14 @@ agreed on #552, and loops U1–U4 are taken as decided and placed in the new pip
   them:
   - `hndExpr` (`Core/EffRules.lean:1179`), `thenE` (`:1018`);
   - `withborE = λℓ.λf.(ℓ, f () ℓ)` (`Backend/Clos/Convert.lean:493–494`);
-  - the copy and forget axioms, `λx.(x, x)` and `λx.()` (`Paper/S3_Dynamics/Definitions.lean:624`,
+  - the copy and release axioms, `λx.(x, x)` and `λx.()` (`Paper/S3_Dynamics/Definitions.lean:624`,
     `:629`).
 
-  The erasure drops binder types, ascriptions, every lifetime (`rImmSub` and the others erase to
+  The erasure consumes binder types, ascriptions, every lifetime (`rImmSub` and the others erase to
   `r.e`, `Rules.lean:109–123`), constants' type arguments, `def` references (inlined), names and
   spans. What survives is the name `n` and the tags `qs` of a handler (`hndTerm`,
-  `Core/EffRules.lean:1069`), the key `(n, i)` of an operation (`opArgE`, `:848`), and drops
-  inserted as `dropFnE A` code (`Core/Drop.lean:326`). By inspection.
+  `Core/EffRules.lean:1069`), the key `(n, i)` of an operation (`opArgE`, `:848`), and consumes
+  inserted as `consumeE A` code (`Core/Consume.lean:326`). By inspection.
 - **The program is typed four times and elaborated twice.**
   - Sugar's own inference (`TCx`, `Frontend/Elab/Meta.lean:33`, `:69–75`;
     `Frontend/Elab/Instances.lean:401`).
@@ -144,7 +144,7 @@ agreed on #552, and loops U1–U4 are taken as decided and placed in the new pip
 
 ### 1.2 Fact by fact
 
-"Proved at" is the checker step. "Lost at" is where it is dropped. "Rebuilt by" is the backend's
+"Proved at" is the checker step. "Lost at" is where it is consumed. "Rebuilt by" is the backend's
 substitute. "From the typed term" is what compiling from it gives. All by inspection.
 
 **Types and layouts**
@@ -155,8 +155,8 @@ substitute. "From the typed term" is what compiling from it gives. All by inspec
 | T2 | the `&` projections of a thunk | `withI`, `proj₁`, `proj₂` | erasure: a `&` is a `case` on a literal injection | `selShape?`/`fwdShape?` (`Types.lean:429–446`); the literal-injection argument as a projection (`:383–393`); the same shapes in `Flow.lean:302–306` | the rule node |
 | T3 | operations' answer types | the row at `[perform]` (`OpSig.B`) | erasure | `lowerEffects`' retry with answers as variants when unification fails (`Driver.lean:93–101`; `Ops.wrapsAnswers`, `Capture.lean:162–168`); `freshCopy` so a clause may take other layouts (`:685–689`) | the answer type at each `perform`; no retry |
 | T4 | recursive types and which fields close a cycle | `roll`/`unroll` at `μ` | erasure ("regular trees, as the erasure leaves them", `Types.lean:30`) | `sccs`, `backEdges`, `sumBoxes` (`Types.lean:563–693`) | the `μ` in the type; the boxing choice stays a layout decision |
-| T5 | a value's width, and whether copying or dropping it does anything | `VTy`; `persistent`, `hasDropB` | erasure | `width`, `trivial` (`Types.lean:756–771`), read by `copyVals`/`dropVals` (`Flat/Lower.lean:357–365`) | from the type: `i32` slots of 4 bytes (#537 fix 8) |
-| T6 | `seq`'s first part is `1` | `[unit-E]` | erasure | not used: `drop u` always (`Convert.lean:669–674`) | no drop of `()` |
+| T5 | a value's width, and whether copying or consuming it does anything | `VTy`; `persistent`, `consumableB` | erasure | `width`, `trivial` (`Types.lean:756–771`), read by `copyVals`/`consumeVals` (`Flat/Lower.lean:357–365`) | from the type: `i32` slots of 4 bytes (#537 fix 8) |
+| T6 | `seq`'s first part is `1` | `[unit-E]` | erasure | not used: `drop u` always (`Convert.lean:669–674`) | no consume of `()` |
 
 **Rows, operations and handlers**
 
@@ -181,7 +181,7 @@ substitute. "From the typed term" is what compiling from it gives. All by inspec
 | B1 | a value is an `imm` or `mut` borrow, at a lifetime | `withbor1`/`2`/`3`, `withload`, `withswap`, slices (`Consts.lean:253–282`, `:146–203`, `:332–430`); `immSub`/`mutSub` | erasure: a borrow is a location word | never consulted. The falsifier cannot tell `withbor1` from `withbor2` (`Backend/Falsify.lean:36–38`). LLVM gets `inttoptr` at every access and no attribute (`Native/Lower.lean:98–101`; no `noalias`, `readonly`, `nonnull`, `dereferenceable` anywhere) | `noalias`/`readonly`/`dereferenceable`/`nonnull` (#531); typed pointers with `getelementptr` (#537 fix 5); lend kinds in the falsifier |
 | B2 | an array is only read | the `imm` family's type | erasure | `litView?` guesses `imm` from the callback's `λx.(x, x)` shape (`Convert.lean:401–417`), then a run-time test on tag and length (`Flat/Lower.lean:574–595`) | the type |
 | B3 | a lend's lifetime ends inside its block, and no resumption point crosses it | `withbor*U`: a fresh `x` (`hx : Δ.find? x = none`) and the callback at an unwind-only row (`Row.Unwind`, T1) | erasure | `markScoped`, a syntactic match of `let (c, r) = withbor (alloc v) cb; b` with one `free` (`Convert.lean:528–563`); `crossedScopes`, an interval walk over `pollAt` (`Capture.lean:1042–1061`); `frameScopes` (`Flat/Lower.lean:1577–1580`). SPEC §35 says of the crossing case: "No program has one: the typing refuses a resuming operation across a borrow block's body" | a frame slot by the rule. The exception is R1 (`lendR`, a pin), which keeps the cell in the state (SPEC §29) |
-| B4 | which slots each subterm consumes | the masks `u`, `w` of `Fam` (`Fam.lean:49–54`); `Ctx.SplitP` | erasure | `plan2` copies every index free in both parts (`Convert.lean:199–210`); drops at unused binders (`:680–682`, `:695–697`, `:802`, `:835`, `:850`); more copies and drops in `Capture` and `Unwind` (`Capture.lean:199–214`, `:998`; `Unwind.lean:217`, `:226`, `:244–249`, `:294`) | a move where the slot is linear, a copy only of a persistent slot used on both sides, and its cost from its type |
+| B4 | which slots each subterm consumes | the masks `u`, `w` of `Fam` (`Fam.lean:49–54`); `Ctx.SplitP` | erasure | `plan2` copies every index free in both parts (`Convert.lean:199–210`); consumes at unused binders (`:680–682`, `:695–697`, `:802`, `:835`, `:850`); more copies and consumes in `Capture` and `Unwind` (`Capture.lean:199–214`, `:998`; `Unwind.lean:217`, `:226`, `:244–249`, `:294`) | a move where the slot is linear, a copy only of a persistent slot used on both sides, and its cost from its type |
 | B5 | a copy is of an `imm` borrow, a `!` value or `clone` | `copy`, `copyBang` (`Consts.lean:234`, `:238`); `clone` by elaboration (`Sugar.lean:3298–3304`) | erasure; `clone` lives in the origins (`cloneOrigin`, `Sugar.lean:563–564`) | not recognised: the axiom's `copy` comes from `plan2` because index 0 is free in both halves (by inspection of `plan2` against `Paper/S3_Dynamics/Definitions.lean:624`) | the rule node: a word copy for `imm`, a deep copy only where the type has one |
 | B6 | the owned structure a fold walks has no other pointer into it | `foldOwn`, `foldReuse` | erasure | `travShape?`/`foldShape?` (`Convert.lean:308–335`); pointer reversal "safe because the fold owns the structure" (`Flat/Lower.lean:853–855`), an assumption, not a check | the rule node, whose premise is the ownership |
 | B7 | a cell is moved by `swap` | the `swap` axiom | erasure | `isSwap` (`Convert.lean:280–290`) | the rule node |
@@ -386,7 +386,7 @@ needs it.
 | specialise | `t` | `t` with one body per (definition, type arguments, site assignment, closure codes of its function-typed arguments) (#541 decision) | `use` nodes (B8); closure codes lexically, and from the 0-CFA where an argument's code is not lexical |
 | effect erasure (#552) | specialised `t` | a typed middle IR (MIR): no `handle`/`perform` except at named stored-continuation sites; join points; local cells for handler state; `iterate`, `count_try` and `bounded_fix` as loops | sites `n`, signatures, clause kinds, rows, qualifiers (E1–E9) |
 | state machines | MIR | MIR with each stored-continuation site's machine | qualifiers (E4: no cancel arm for a must-resume `κ`), the live variables' types |
-| closure conversion | MIR | typed low IR (LIR): ANF with codes and environments, explicit moves, copies and drops, typed pointers, frame slots | use masks (B4), copy rules (B5), modes and lend scopes (B1, B3), folds (B6) |
+| closure conversion | MIR | typed low IR (LIR): ANF with codes and environments, explicit moves, copies and consumes, typed pointers, frame slots | use masks (B4), copy rules (B5), modes and lend scopes (B1, B3), folds (B6) |
 | layout and defunctionalisation | LIR | LIR with layouts and each closure type's union of codes | types (T1–T5); the 0-CFA for unions |
 | targets | LIR | Wasm; LLVM IR | modes (B1) for attributes; tail calls; frame slots |
 
@@ -435,12 +435,12 @@ LIR replaces the closure IR and the flat IR. It is target-neutral, as the flat I
   pointer that records its mode (`imm`, `mut`), the lend it came from, and the cell's
   allocation class (frame slot, heap, static).
 - **Ownership.** Each variable is consumed once, as in the closure IR today (`Clos/Syntax.lean`,
-  header). Moves, copies and drops are placed by closure conversion from the masks and the copy
+  header). Moves, copies and consumes are placed by closure conversion from the masks and the copy
   rules, not from free variables:
   - a linear slot is moved;
   - a persistent slot used on both sides of a split is copied, a word copy at a borrow;
   - a `clone` is a deep copy;
-  - a drop is the checker's `dropFnE`, or a persistent slot's end.
+  - a consume is the checker's `consumeE`, or a persistent slot's end.
 - **Storage.** A cell lent by `withbor*U` is a frame slot of the code that opens the lend, by
   the rule (B3). A pinned lend (R1) keeps its cell in the suspended state (SPEC §29 *Lowering*).
   The interval walk goes.
@@ -535,7 +535,7 @@ erases what the old stage cannot hold. The order runs front to back: types into 
 - **The backend changes at every level at once.** Its input type changes (`Expr` → `TExpr`).
   Every IR becomes typed. The effect lowering moves ahead of closure conversion. Almost every
   pass is deleted or rewritten (§3.6). Under S, each intermediate state runs a typed stage
-  feeding an untyped one, and the untyped one reconstructs what the adapter dropped. That is
+  feeding an untyped one, and the untyped one reconstructs what the adapter consumed. That is
   #555's defect, kept alive on purpose for the length of the migration.
 - **The planned backend work is the new backend.** B3, effect-lowering units 3–8, #531's
   attributes, #509's sharing and #540's narrowing are §3.2–§3.4. Building any of them in the old
@@ -563,7 +563,7 @@ erases what the old stage cannot hold. The order runs front to back: types into 
 
 - Every corpus program's output, every golden, every exit status and `live 0` are unchanged, on
   both backends.
-- `counts.expected`: `allocs`, `indirect` and `copies` only drop.
+- `counts.expected`: `allocs`, `indirect` and `copies` only consume.
 - `kernel-counts.expected`: #555 says unchanged. CLAUDE.md's *Changing Core* allows "a changed
   count is explained". The new lowering lowers some kernel counts, for example `nested-log-outside
   0 2 0`, where `withLog`'s answer is a state-passing closure, and `take 2 2 0`. This is §8
@@ -675,7 +675,7 @@ N3, N4 (after B2), N5 → N6. Frontend loop units U2–U4 and #58 go as their ow
 | B1 | **kept** | after S0 |
 | B2 | **kept**, merged with "no string templates" | after B1, U1, C1 |
 | B3 | **merged** into N2 and N4 | the new backend |
-| N3 site table (effect-lowering unit 9) | **dropped** | its entries are fields of the typed term: clause kinds (C3), copy groups (`use`), handler state (E11) |
+| N3 site table (effect-lowering unit 9) | **consumed** | its entries are fields of the typed term: clause kinds (C3), copy groups (`use`), handler state (E11) |
 | effect-lowering 3 (classify; native handler state) | **merged** into N2 | — |
 | 4 (resume or cancel in place) | **merged** into N2 | — |
 | 5 (one code per codata value; copies merged) | **merged** into N3 and N1 | copies merged by `use` keys, not by comparing code |
@@ -687,7 +687,7 @@ N3, N4 (after B2), N5 → N6. Frontend loop units U2–U4 and #58 go as their ow
 | U3 (#550), U4 (#551) | **kept**, frontend | after U2 |
 | L3 #531 | **merged** into N5, with its performance goal moved into LIR (§3.4, choice 6) | — |
 | L4 #532 | **kept**, after N6: debug info from the typed term's spans; stack-depth guard and C linking unchanged | — |
-| #216 (clause multiplicity) | **kept**, kernel unit, independent; its grade is a field of the `handle` node, read by N2 (a capture with a derived drop moved into a branch) | after C3 |
+| #216 (clause multiplicity) | **kept**, kernel unit, independent; its grade is a field of the `handle` node, read by N2 (a capture that is consumable moved into a branch) | after C3 |
 | #58 (implicit copies of `imm`, E1) | **kept**, frontend, independent; the inserted copy is a `copy` node, a word copy by type | any time |
 | #509 | **fixed** by C2 (`use`) and N1 (one body per key); choice 7 for check time | — |
 
@@ -709,7 +709,7 @@ No step of the recommended path changes a decided equation:
 
 I have not checked which of these have a typing. Each one that has a typing is given its typed
 term in N1–N3. One that has none would leave the compiled set, which is item 2. It is reported to
-the user, not dropped, and the old backend stays its oracle until the user decides (§8 choice 3).
+the user, not consumed, and the old backend stays its oracle until the user decides (§8 choice 3).
 
 **Not a stop, a tension.** #555 requires `kernel-counts.expected` unchanged, and the new lowering
 lowers some counts (§5.1). §8 choice 5.
@@ -724,7 +724,7 @@ lowers some counts (§5.1). §8 choice 5.
    the root of #509 (the backend README's "a definition is substituted at each use") and the
    likely cause of most of `float-arith`'s check time. Root fix: C2's `use` node and choice 7
    (landed: each `def` checked once per key; the erasure keeps a copy per use until N1).
-3. **Every copy and drop is inferred from free variables** (`plan2`, `Convert.lean:199–210`), not
+3. **Every copy and consume is inferred from free variables** (`plan2`, `Convert.lean:199–210`), not
    read from the derivation's splits. Whether a copy does anything is decided by layout
    triviality (`Types.lean:757–769`), and `imm` against `mut` is never consulted. Correct for a
    well-typed term, by the derivation's splits, but nothing ties the two. Root fix: N1 from the
@@ -763,7 +763,7 @@ beyond their branches' heads.
    them (hard-stop item 2, needs a decision).
 4. **Where effect erasure runs**: **on the typed term, before closure conversion
    (recommended)**, so each law is stated over Core terms; or on LIR, where `Capture` runs today.
-5. **`kernel-counts.expected`**: **drops allowed, each explained, as `counts.expected` and
+5. **`kernel-counts.expected`**: **consumes allowed, each explained, as `counts.expected` and
    CLAUDE.md's *Changing Core* allow (recommended)**, or held unchanged as #555 states. Holding them
    would keep those programs on today's lowering.
 6. **`noalias` and its kin**: **emitted as cited facts, with no performance target resting on
@@ -808,16 +808,16 @@ are regressions in the corpus: `lend-owner-returned` (`t4`), `swap-cell-width` (
 
 | fact | where decided | class | source or lemma | readable instead? | known bug |
 |---|---|---|---|---|---|
-| copies and drops at a split | `Convert.lean:358` (`splitCtx`) | read | `TExpr.masks?`; `TDerivesAt.split_masks` (a slot both parts use is `Ctx.SplitP`'s persistent one) | — | — |
-| drops at a leaf, of a dead λ's parameter, at `[nil-dead]` | `Convert.lean:352` (`leaf`), `:2391`, `:2580` | read | the node's rule: `Ctx.DeadP`, `SoloP`; `lamDead`, `nilDead` | — | — |
-| a join's context dropped on an abort or a cancel | `Convert.lean:2422`, `:824` (`abortK`), `:854` (`cancelK`) | read | `[let]`'s premise `hW : S.Cancels → Γ₂.OwnFree` (`Core/Fundamental.lean:401`), `VTy.OwnFree` holds no owned cell (`vC_noOwn_of_drop`); a `[then]` frame hands its context to the finaliser (`hD`) | — | — |
-| `κ` holds a copy of each handler value; a clause's arm drops the other clauses' contexts | `Convert.lean:2983`, `:2926`, `:3129` | read | `[handle]`'s premise `hd : Ctx.DeadP Γ₁` (`Core/Fundamental.lean:431`, and `effHandleVB`) | — | — |
+| copies and consumes at a split | `Convert.lean:358` (`splitCtx`) | read | `TExpr.masks?`; `TDerivesAt.split_masks` (a slot both parts use is `Ctx.SplitP`'s persistent one) | — | — |
+| consumes at a leaf, of a dead λ's parameter, at `[nil-dead]` | `Convert.lean:352` (`leaf`), `:2391`, `:2580` | read | the node's rule: `Ctx.DeadP`, `SoloP`; `lamDead`, `nilDead` | — | — |
+| a join's context consumed on an abort or a cancel | `Convert.lean:2422`, `:824` (`abortK`), `:854` (`cancelK`) | read | `[let]`'s premise `hW : S.Cancels → Γ₂.OwnFree` (`Core/Fundamental.lean:401`), `VTy.OwnFree` holds no owned cell (`vC_noOwn_of_consume`); a `[then]` frame hands its context to the finaliser (`hD`) | — | — |
+| `κ` holds a copy of each handler value; a clause's arm consumes the other clauses' contexts | `Convert.lean:2983`, `:2926`, `:3129` | read | `[handle]`'s premise `hd : Ctx.DeadP Γ₁` (`Core/Fundamental.lean:431`, and `effHandleVB`) | — | — |
 | copies of a `!` argument in generated loops and folds (tabulator, consumer, algebra, step) | `Convert.lean:1464`, `:1484`, `:1504`, `:1522`, `:1847`, `:1587` (`travF`), `:1779` (`mapStates`), `nodeAt` | read; checked by `Lint` (`Lint.copiesAt`, rule `dup`) on every program compiled (`Driver.lean:383`) | the constants' types: `array_new`, `array_free`, `count_fold`, `count_try`, `bounded_fix`, the folds, `unfold` take `!` (`Core/Fundamental.lean:194–230`, `:363–386`), kept on the LIR type (`ofV_bang`) | — | — |
 | `copy` and `array_copy` as an LIR copy | `Convert.lean:3506` | read; checked by `Lint` (`Lint.copiesAt`, rule `const`: an `imm` borrow or a family of them) | `axCopyTy`, `arrCopyTy` (`imm`) | — | — |
-| every `copy` and `drop` at the premise of the rule it carries (`CopyRule`, `DropRule`; SPEC §12, *Every insertion site cites its rule*) | `Lint.copiesAt`, `Lint.dropsAt` | read (`!` on the LIR type, `Types.lean:274`); checked of every program compiled (`Driver.lean:383`), not proved of `Convert` | `LTy.persistent` and `LTy.drops` are `VTy.persistent`'s and `VTy.OwnFree`'s images: `ofV_persistent`, `ofV_drops`, so the slots `Ctx.SplitP.dup`, `Ctx.DeadP.drop` and `Ctx.OwnFree` allow pass (`Lint.copyable_ofV`, `droppable_ofV_persistent`); a family of borrows, `arrForget` and `HasDrop.arrayMut` inside a drop | — | — |
+| every `copy` and `consume` at the premise of the rule it carries (`CopyRule`, `ConsumeRule`; SPEC §12, *Every insertion site cites its rule*) | `Lint.copiesAt`, `Lint.consumesAt` | read (`!` on the LIR type, `Types.lean:274`); checked of every program compiled (`Driver.lean:383`), not proved of `Convert` | `LTy.persistent` and `LTy.consumes` are `VTy.persistent`'s and `VTy.OwnFree`'s images: `ofV_persistent`, `ofV_consumes`, so the slots `Ctx.SplitP.dup`, `Ctx.DeadP.weaken` and `Ctx.OwnFree` allow pass (`Lint.copyable_ofV`, `weakenable_ofV_persistent`); a family of borrows, `arrRelease` and `Consumable.arrayMut` inside a consume | — | — |
 | a stack machine hands a level's suspended computation (a closure) over to a `k` lower on the stack | `genStackMach` (the step, a point's `mk`) | UNPROVED: no type licenses it; the rule `stackK`, whose premise `Lint` reads from the node (`Lint.handsOver`); the rest is `Backend2.StackKHandOver`, which the LIR interpreter checks at every run (SPEC §52, *The hand-over*) | `stackedOf`'s self-calls, read off the layouts' classes (the stack machines row) | no | — |
-| copying or dropping a cell, borrow or family is its words alone (`trivial`) | `Layout.lean:689` | read: every `copy` and `drop` is checked by its type (the row above but one); a persistent value holds no resource (`vP_empty_of_persistent`), a `VTy.OwnFree` one no owned cell (`vC_noOwn_of_drop`), a family of borrows none. UNPROVED: that a variable's LIR type is its node's checked type (by construction), and the row above | `Lint.copiesAt`, `Lint.dropsAt` | — | — |
-| an owned value's drop | `Convert.lean:1854` (`genDrop`) | read | the `dropFn` node's type (`dropFnE`, `Core/Drop.lean`'s `dropFnAt`); the transcription is not proved against `dropFnAt` | — | — |
+| copying or consuming a cell, borrow or family is its words alone (`trivial`) | `Layout.lean:689` | read: every `copy` and `consume` is checked by its type (the row above but one); a persistent value holds no resource (`vP_empty_of_persistent`), a `VTy.OwnFree` one no owned cell (`vC_noOwn_of_consume`), a family of borrows none. UNPROVED: that a variable's LIR type is its node's checked type (by construction), and the row above | `Lint.copiesAt`, `Lint.consumesAt` | — | — |
+| an owned value's consume | `Convert.lean:1854` (`genConsume`) | read | the `consume` node's type (`consumeE`, `Core/Consume.lean`'s `consumeAt`); the transcription is not proved against `consumeAt` | — | — |
 | a lend's kind, `imm` or `mut`, on `Op.lend` | `Convert.lean:3455`, `:3518`; `Lint.lean:82` checks the borrow it answers | read | the borrow constant (`withbor1`/`withbor2`, `sliceBorrowI`/`M`, the block borrows); `lendCell`'s `m` agrees (`lendKindB`, `TDerivesAt.lendCell_kind`) | — | `t13` (fixed) |
 | a reborrow | `Convert.lean:3520` | read | `withbor3` | — | — |
 | a cell allocated for one lend, and its scope | `Convert.lean:3318` (`convLendCell`), `:2339` (`withScope`), `:278` (`markOwner`) | read | `lendCell` (`lendCellB`); `lendScope`'s `rel` (`relT`, `TDerivesAt.lendScope_rel`) | — | — |
@@ -833,7 +833,7 @@ are regressions in the corpus: `lend-owner-returned` (`t4`), `swap-cell-width` (
 | a swap through a `mut` borrow; a fold's cell freed or emptied | `Convert.lean:1546`, `:1570` | read | `withswap`; `foldOwn`, `foldReuse` at their shape | — | — |
 | a relaxed lend: `mut`, its finaliser on a cancel | `Convert.lean:2716` | read | `lendR` | — | — |
 | the capabilities made and taken back | `Convert.lean` (`mkClosOf`, `takeClosOf`; `convMain`) | read: `run_io` (SPEC §11) compiled, its harness externs the host functions | `IORun`, `externs_every_run` at `ExternsMeet` (the host functions' claim) | — | — |
-| an opaque value abandoned | `Convert.lean` (`abandons`, `Frame.letF`'s rule, `abortK`); `Lint.lean` (`abandonable`) | read: an `abandon` node at the rule the typed term applies there (`[let]`'s abort arm, `hW`, on the branch or a frame's; `topI`), the rule carried on the frame; Lint admits an opaque value at no `drop` | `Ctx.Drops`; `topI` | — | — |
+| an opaque value abandoned | `Convert.lean` (`abandons`, `Frame.letF`'s rule, `abortK`); `Lint.lean` (`abandonable`) | read: an `abandon` node at the rule the typed term applies there (`[let]`'s abort arm, `hW`, on the branch or a frame's; `topI`), the rule carried on the frame; Lint admits an opaque value at no `consume` | `Ctx.Consumes`; `topI` | — | — |
 | the closure classes: which codes reach a place; each class's codes, tags and width | `Layout.lean:406` (`places`, `join`), `:608` (`resolve`) | UNPROVED: the analysis. Its result is checked on every compile (`Driver.lean:211`, `checkedLayouts`, §10.1): a solution of the program's constraints, before anything reads it | joins over every move; not a typing fact | no: #674 replaces it | — |
 | boxed fields; heap closure environments | `Layout.lean:642`; read flat at `Lower.lean:451` (host, `divLit` and I/O operations), `:558` (`tabLit`) | UNPROVED: one owner (by LIR linearity, which `Lint` checks), and the flat readings at `Lower.lean:451`, `:558`. Checked on every compile (§10.1): every box and heap class on a cycle of the fields (SPEC §35's rule, which guards those readings), no cycle left inline, and the widths and triviality their equations; not that they are the fewest | SPEC §35's rule | no: the classes are not a typing fact | — |
 | a direct call of a known code (the 0-CFA) | `Flow.lean:119`, `:168`; read at `Lower.lean:346` | UNPROVED: the analysis, cut at its fuel. Its result is checked on every compile (`Driver.lean:226`, `checkedFlow`, §10.1): the sets satisfy the flow's inclusions, and each direct call's set is its one code | not a typing fact | no: #674 replaces it | the solver linked one site per (variable, component, code) (fixed, §10.1) |
@@ -841,7 +841,7 @@ are regressions in the corpus: `lend-owner-returned` (`t4`), `swap-cell-width` (
 | a machine's state in a cell, written in place | `Convert.lean:1140`; `:3711` (`cellPass`), `:3726` (`threadedOf`) | UNPROVED | the qualifier (`OutInfo.unrs`) is read; the cell is chosen from the layouts' recursive classes | the qualifier is; the class is not | — |
 | a stack machine's frames on the task stack | `Convert.lean:3744` (`stackedOf`), `:1238` | UNPROVED | `stackOps` is read (`Driver.lean:107`: clause kinds, `effHandleVB`, qualifiers); the self-calls come from the layouts' classes | no | — |
 | a stored site's own stack and `κ`'s region | `Convert.lean:2903` | read, given the stack machines row | clause kinds (`classifyHandler_sound`), `effHandleVB`, qualifiers | — | — |
-| a `use` body shared by the uses of its key | `Convert.lean:3360` (`convUse`) | UNPROVED | `useKey`; the extra live slots dropped | — | — |
+| a `use` body shared by the uses of its key | `Convert.lean:3360` (`convUse`) | UNPROVED | `useKey`; the extra live slots consumed | — | — |
 | an η-thunk of `unfold step` called where it is made | `Convert.lean:2597`, `:2664`, `:2559` | read | the `bind`'s `unfoldStep` node (`TDerivesAt.unfoldStep_shape`), carried with the slot's variable (`CState.unfolds`); `nuEta_unfold` | — | — |
 | machine operations; direct calls of clauses | `Driver.lean:65`, `:92` | read | clause kinds (`classifyHandler_sound`), `Checked.flows` (`cond2B`) | — | — |
 | a borrow's mode on the LIR type; lifetimes and `[@a]` erased, `!` kept | `Types.lean:270–274` | read | `ofV` of the checked `VTy` (`ofV_bang`) | — | — |
@@ -854,7 +854,7 @@ are regressions in the corpus: `lend-owner-returned` (`t4`), `swap-cell-width` (
 `Layouts` (`Backend2/Layout.lean`) is a whole-program analysis: a union-find over the places a
 value moves between, then a resolution into closure classes, boxes, widths and bytes. The closure
 flow (`Backend2/Flow.lean`) is an inclusion-based 0-CFA over it. `Lower` reads both for every
-node's words, copies, drops, boxes and cells, every closure's tag and environment, and every direct
+node's words, copies, consumes, boxes and cells, every closure's tag and environment, and every direct
 call. Neither analysis is proved, and neither is a typing fact: the typed term gives a closure's
 type, not which λ made it. #674 step 1 makes their *results* checked facts.
 `Backend2/LayoutCheck.lean` verifies on every compile that the result is a solution of the
@@ -919,7 +919,7 @@ machines. It does not use the analyses' solvers (`find`, `join`, `walk`, `resolv
 - **Reject tests** (`scripts/check-layout-reject.sh`, a gate step, through `bcc lir
   --layout-reject`). Each perturbs one fact of a program's computed layouts or flow, aimed at one
   family of the checks, and must be refused by that family's own message, on one of ten programs:
-  - places and classes: drop a code from a class or from `codeClass`; split a variable's node;
+  - places and classes: consume a code from a class or from `codeClass`; split a variable's node;
   - codes: move a code's environment, argument or answer node to a fresh node of its shape;
   - widths and triviality: merge two classes of one shape, node for node, the wider into the
     narrower; change a width; call a non-trivial class trivial;
@@ -932,7 +932,7 @@ machines. It does not use the analyses' solvers (`find`, `join`, `walk`, `resolv
   - reads through a shared borrow: move a reborrowed read's node; move a pointer read's contents
     (on `tree-view-tasks`, where the reading and the cell's pointer are both `ref` nodes: the arm
     `join`'s shared nodes need);
-  - the flow: drop a code from a flow set; drop a code from a call's answer (the link the
+  - the flow: consume a code from a flow set; consume a code from a call's answer (the link the
     solver's bug broke); claim a direct call where two codes reach.
 - **Cost** (`bcc compile --backend new --timings` on `scripts/compile-scaling.sh`'s body; the
   `lir` stage includes the checks of the state machines' layouts):

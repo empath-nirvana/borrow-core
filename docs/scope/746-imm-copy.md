@@ -44,7 +44,7 @@ The rule is stated once, for every node at which the checker splits its context 
 >
 > with the first part checked where `x` names `x₁` and the second where `x` names `x₂`. The
 > original slot is no longer owed (the copy consumes it); `x₁` and `x₂` are owed to the node as
-> any binder of a type with a derived drop is (`Env.pushOwn`, SPEC §12). Several such variables
+> any binder of a type that is consumable is (`Env.pushOwn`, SPEC §12). Several such variables
 > nest, in slot order.
 
 "Mention" is the checker's existing `mentionsV`/`mentionsC`, which respects binders (the same test
@@ -52,15 +52,15 @@ The rule is stated once, for every node at which the checker splits its context 
 
 - *mention ⊆ use*: every occurrence is a `var` leaf, whose mask is `oneL i`; `Fam.merge` takes the
   union of the parts' masks, and `⊤` (`Fam.top`) absorbs only slots no one mentions;
-- *use ⊆ mention*: the checker inserts drops only for slots a part owns (`ownIn` at a binding's
+- *use ⊆ mention*: the checker inserts consumes only for slots a part owns (`ownIn` at a binding's
   head, `E.minus` for a second part, nothing owed at a terminal `M x` or in a value), so no part
   uses a slot it does not mention.
 
 So the rule is the split's own masks, read before the parts are checked: it fires exactly where
 `overlapOK` would refuse a `DerivedCopy` slot, and nowhere else, so every program accepted today
-checks to the same term. `copyUsed` checks on every insertion that each copy is used or dropped
-by its part: a copy neither used nor dropped is an internal error. A dropped unused copy cannot
-arise, since a part drops only what it mentions. The second half needs no check: a missed
+checks to the same term. `copyUsed` checks on every insertion that each copy is used or consumed
+by its part: a copy neither used nor consumed is an internal error. A consumed unused copy cannot
+arise, since a part consumes only what it mentions. The second half needs no check: a missed
 copy is refused by the split, as today. Deciding before the parts are checked means each is
 checked once; inserting after a failure would check a part again at each enclosing split,
 exponentially in the nesting.
@@ -82,7 +82,7 @@ continuation and finaliser) needs no copy: each side of a merge uses the variabl
 | `M y` | `M`, the variable `y` | before it | `M`: `x₁`, `y`: `x₂` |
 
 `thenIt` and `effBind` (`Steps.lean`) are reached through the `bind` and `unwind` rows; `caseIt`
-and `appIt` through `case` and `M y`. The other `overlapOK` sites are `dropOne` (a drop's own
+and `appIt` through `case` and `M y`. The other `overlapOK` sites are `consumeOne` (a consume's own
 split), the relaxed lend's (its body sees only its view), `absurd` (absorbs) and `handle` below.
 
 A value split cannot hold a binding, so its copy is under `run` (`[ret]`'s elimination `ofRet`), a
@@ -204,7 +204,7 @@ shape) and the `array_imm` program joins the corpus.
   which rule fired.
 - **STOP:** hoisting every copy to a function's entry, or copying every `imm` parameter up front
   (program-shaped, and copies nothing a nested split needs).
-- **STOP:** dropping an unused copy by anything but its derived drop at a `dropFn` node.
+- **STOP:** consuming an unused copy by anything but its consume at a `consume` node.
 - **STOP:** any copy at a type that is not `DerivedCopy` (a `mut`, an owned value, a declared
   type, a capability). A second use of those staying refused is a linearity HARD STOP if it
   breaks.
@@ -227,7 +227,7 @@ One review, one targeted fix check; a Fatal finding gets one more full review.
 
 ## 8. The SPEC §42 handler-state mismatch
 
-SPEC §42, *Declared types with no derived drop*: "The program is accepted when the value is
+SPEC §42, *Declared types that is not consumable*: "The program is accepted when the value is
 consumed before, lent into the computation, held as a handler's state, or under a `[then]` whose
 written finaliser consumes it", and later "'commit in the body, roll back on an abort' lends the
 value into `M` or holds it as a handler's state". The book's program holds a `Txn` as `in_txn`'s
@@ -237,7 +237,7 @@ state and lets a `Fail` raise pass the handler; the checker refuses it.
 site handles the body, then applies the answer to the initial state. The state is a value of the
 context of that binding while the handled body runs. When the handler's outer row has an operation
 that may abort (the `Fail` the body raises and the handler does not handle), `[let]`'s `hW` asks
-that context to be `VTy.OwnFree`, or `[then]`'s finaliser to consume it by derived drops; a type
+that context to be `VTy.OwnFree`, or `[then]`'s finaliser to consume it by derived consumes; a type
 holding `Tok` has neither (`decl_not_ownFree`, `decl_linear`). So the kernel refuses it, and the
 checker agrees with the kernel. The SPEC sentence is wrong as stated.
 

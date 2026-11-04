@@ -172,7 +172,7 @@ Both merged 09-30 21:20Z.
 - **The reentry rule is admissible.** It is linearity of the state token
   (`not_borrowSpansForward`).
 - **Continuation modes.** Multi-shot holds iff captures are persistent (`lam_bang_persistent`),
-  and `forget` has no typing at `⊸` (`forget_not_lolli`).
+  and `forget` has no typing at `⊸` (`release_not_lolli`).
 - **The capture-bounded closure is BoLo's box.** `box_lolli_outlives_iff`.
 
 **Why it moved on.** It succeeded. #186 (the kernel follow-up) was opened at 21:21Z.
@@ -215,7 +215,7 @@ precondition `ewpTS` in the de Vilhena–Pottier shape, proving four things:
 - **#204: the six acceptance programs** (`Core/EffPrograms.lean`) and branch-per-call lowering
   of abortive operations.
 - **#206 and #207: the remaining lowering.** State machines for captured continuations, cancel
-  as the state's drop, and tail-resumptive operations as direct calls. Every acceptance
+  as the state's consume, and tail-resumptive operations as direct calls. Every acceptance
   program compiles with `live 0` at cost parity.
 
 **Proved.** PROVED at Core (σ = []). The kernel FP and every-run adequacy cover the effect
@@ -280,7 +280,7 @@ theory (#172).
 System C spike reports … #227's `rec` elaboration is provisional."
 
 **Reusable.** The library effects (`Fail`, `Yield`), the certifying checker's effect rules, the
-drop-glue insertion, and the corpus at parity.
+consume-glue insertion, and the corpus at parity.
 
 ---
 
@@ -442,7 +442,7 @@ unmoded `CtxEq`. The audit's C3: "Every algebraic law lives off the kernel."
 
 **Goal.** #236: a `Clo` closure callable through a `Mut` borrow, "higher-order from the
 start". Requirements: called repeatedly, passed at any depth, nested, stored or returned within
-captured lifetimes, dropped, and coerced between the three modes. The issue says it is "what
+captured lifetimes, consumed, and coerced between the three modes. The issue says it is "what
 every higher-order effect attempt (#161, #233) built by hand".
 
 **Built.**
@@ -502,14 +502,14 @@ Several inputs were added after launch, marked "not a change to the running brie
 
 - **A decisive test:** "T1 should be a theorem, not a rule".
 - **External review:** a free-algebra lfp relation, capture rebasing, T1 as a precondition, and
-  drops limited to answering operations.
+  consumes limited to answering operations.
 - **The runner framing.** The user called it "kind of genius" and voiced the concern "wildly
   complex to reason about", with the criterion that it is adopted only if it removes proof work.
 
 **Built and found:**
 
 - **#248, the TR (`docs/effects-tr/` §§1–12, merged 10-02 15:30Z).**
-  - PAPER-ONLY: unary FP, resource safety, operational soundness, the drop form, and
+  - PAPER-ONLY: unary FP, resource safety, operational soundness, the consume form, and
     writers commute.
   - **Three of phase A's rules let programs go wrong.** Each is machine-checked against phase A's
     model and fixed in the TR's rules.
@@ -524,7 +524,7 @@ Several inputs were added after launch, marked "not a change to the running brie
   - **REFUTED at EffModelRel:** ν/op at a linear operation too (`nu_op_fails_linear`,
     `Ownership.lean:72`). O1 restated over moded contexts, OPEN.
   - **The cell lemma** is PROVED in a stratified model of places (`Cell.lean`). T1 is the return
-    of a borrow at the place's drop.
+    of a borrow at the place's consume.
   - **T15 appears only without strata** (`no_place_store`, `Cell.lean:1239`).
   - The typing from the calculus into the cell model is "not built".
 - **#252, the adjunction framing (#250, `docs/effects-tr/13-adjunction.md`,
@@ -572,8 +572,8 @@ Core:
 
 | PR (issue) | proved | left open |
 |---|---|---|
-| #259 (#258) | `segment_fundamental`; `ewpTS_M_frameR` (6.65 at a resuming table); straight-line borrowers; `spans_two_yields` | general typed borrowers; drop at cancellable yields; nested lends; 6.64/6.66/6.150 lifts |
-| #261 (#260) | `Open`/`RBody`; loops (`loop_spans_yields`); drop (`withborR_compat`); `ewpTS_M_antiFrameR` | frames holding `'x`-values; rules with effectful premises |
+| #259 (#258) | `segment_fundamental`; `ewpTS_M_frameR` (6.65 at a resuming table); straight-line borrowers; `spans_two_yields` | general typed borrowers; consume at cancellable yields; nested lends; 6.64/6.66/6.150 lifts |
+| #261 (#260) | `Open`/`RBody`; loops (`loop_spans_yields`); consume (`withborR_compat`); `ewpTS_M_antiFrameR` | frames holding `'x`-values; rules with effectful premises |
 | #263 (#262) | lend table `TabAt`; tuples (`LOk`); closures by re-derivation (`TV`, `CloL`) | "a pure piece handed a `CloL` closure": not routine; `KernelInvariant` |
 | #265 (#264) | `KapRelR` positive; route (b) `vRL`/`cRL` defined | every route meets `URelend` |
 | #267 (#266) | key steps of non-routine compat lemmas at `vRL`/`cRL`; **REFUTED** for `vRL` as merged: `thunkF_RL_fails_below_at` (`RLCompat.lean:471`, hypotheses discharged at numerals; arising not checked); fix `vRLg` | nested lend spanning a stop; `Imm` lend spanning a stop |

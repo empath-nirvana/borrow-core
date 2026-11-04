@@ -16,10 +16,10 @@ decides what the kernel asks for:
 
 At the unwinding form any closed `d` of that type is accepted, and one that consumes the value is
 derived: `declFin` frees the cell and burns the token (`d_declFin`, at payload `1`), and at any
-payload with a derived drop `declFinOf` drops the payload by its drop and burns the token
+payload that is consumable `declFinOf` consumes the payload by its consume and burns the token
 (`d_declFinOf`). The checker passes the
-source's derived drop `dropFnE (Ref N)` (`Frontend/Check/Consts.lean`, `finaliser`), which a
-declared type has none of (`decl_ref_no_drop`).
+source's consume `consumeE (Ref N)` (`Frontend/Check/Consts.lean`, `finaliser`), which a
+declared type has none of (`decl_ref_not_consumable`).
 
 Both programs run, under every allocator, to their answer at the empty memory: the token is
 burned on each path (`declInside_runs`, `declAcross_answers`).
@@ -48,9 +48,9 @@ theorem decl_loan_ownFree (a : Lifetime.Life) (A : VTy) :
   ⟨.imm a _, .mut a _⟩
 
 /-- **The checker's finaliser does not exist at a declared type**: the unwinding lend's finaliser
-the checker passes is the source's derived drop, and `Ref N` has none.  `[spec §19, §42]` -/
-theorem decl_ref_no_drop (A : VTy) : ¬ HasDrop (.ref (declTy A)) :=
-  not_hasDrop_ref (decl_linear A).2
+the checker passes is the source's consume, and `Ref N` has none.  `[spec §19, §42]` -/
+theorem decl_ref_not_consumable (A : VTy) : ¬ Consumable (.ref (declTy A)) :=
+  not_consumable_ref (decl_linear A).2
 
 /-! ### The declared value -/
 
@@ -67,7 +67,7 @@ theorem d_mkDecl {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
 /-! ### The abort handled inside the loan
 
     r ← alloc ((), mint ());
-    let (r, res) = withbor r (Λ. λv. to_result (y ← raise (); y; forget v) to s. [s]);
+    let (r, res) = withbor r (Λ. λv. to_result (y ← raise (); y; release v) to s. [s]);
     let (u, t) = free r; u; burn t; res
 
 `v : Imm 'x N₁` is live across the raise (`[let]` at `Fail`'s row): `hW` holds, the loan being
@@ -92,7 +92,7 @@ theorem d_holdRaise {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {T₁ T₂
     · simp at hl
     · exact dead_noLive (P := fun s => s.ty.OwnFree) hΓ s hs hl
   · exact .effSub (S := []) (fun _ _ _ h => by simp [Row.find] at h)
-      (.ret (seqW (.var (by csolo)) (appW (.var (by csolo)) (.forgetImm (by cdead)))))
+      (.ret (seqW (.var (by csolo)) (appW (.var (by csolo)) (.releaseImm (by cdead)))))
 
 /-- `Λ. λv. to_result holdRaise to s. [s]`. -/
 def declInCb : Expr := .val (.lam (.val (.lam (bindE (toResult holdRaise) (.var 0)))))
@@ -134,7 +134,7 @@ theorem declInside_runs {μ₁ : Heap} {e₁ : Expr} (hs : Steps Adequacy.emptyM
 
     to_result {
       r ← alloc ((), mint ());
-      (r, z) ← withborU declFin r (Λ. λv. forget v; raise ());
+      (r, z) ← withborU declFin r (Λ. λv. release v; raise ());
       absurd z }
 
 The raise crosses the lend, by its unwinding form: the lend ends, `declFin` runs on `r`, freeing
@@ -152,21 +152,21 @@ theorem d_declFin {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
   .thunkV rfl (.lam (.ret (letW (appW (.var (by csolo)) (.free (by cdead)))
     (seqW (.var (by csolo)) (appW (.var (by csolo)) (.tokBurn (by cdead)))))))
 
-/-- The written finaliser at a payload `A` with a derived drop:
-`λr. let (a, t) = free r; dropFn a; burn t`. -/
+/-- The written finaliser at a payload `A` that is consumable:
+`λr. let (a, t) = free r; consume a; burn t`. -/
 def declFinOf (A : VTy) : Expr :=
-  .val (.lam (.letpair (.app free' (.var 0)) (.seq (.app (dropFnE A) (.var 1)) (.app burnE (.var 0)))))
+  .val (.lam (.letpair (.app free' (.var 0)) (.seq (.app (consumeE A) (.var 1)) (.app burnE (.var 0)))))
 
-/-- **A finaliser that consumes a declared value whose payload has a derived drop**: the payload
-by its drop, the token by `burn`. -/
-theorem d_declFinOf {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hA : HasDrop A) (hΓ : Ctx.Dead Γ) :
+/-- **A finaliser that consumes a declared value whose payload is consumable**: the payload
+by its consume, the token by `burn`. -/
+theorem d_declFinOf {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hA : Consumable A) (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ (declFinOf A) (.val (.lolli (.ref (declTy A)) .unit)) :=
   .thunkV rfl (.lam (.ret (letW (appW (.var (by csolo)) (.free (by cdead)))
     (.seqV (.right (.left (deadSplit (by cdead))))
-      (.lolliE (.dead (.left (deadSplit (by cdead)))) (.var (by csolo)) (dropFn_wf hA (by cdead)))
+      (.lolliE (.dead (.left (deadSplit (by cdead)))) (.var (by csolo)) (consume_wf hA (by cdead)))
       (appW (.var (by csolo)) (.tokBurn (by cdead)))))))
 
-theorem declFinOf_closed {A : VTy} (hA : HasDrop A) : closedAt 0 (declFinOf A) = true :=
+theorem declFinOf_closed {A : VTy} (hA : Consumable A) : closedAt 0 (declFinOf A) = true :=
   closedAt_of_derives (d_declFinOf (Δ := default) hA (Γ := []) .nil)
 
 /-- `Λ. λv. forget v; raise ()`, at the unwinding row. -/
@@ -176,7 +176,7 @@ theorem d_declRaiseCb {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ declRaiseCb (.val (cbUTy 0 LifeCtx.empty.meetOfDom
       (.imm (.var 0) N₁) .zero Sf)) :=
   callbackUW ok_empty rfl hΓ
-    (.unitE (.left (.dead (deadSplit hΓ))) (appW (.var (by csolo)) (.forgetImm (by cdead)))
+    (.unitE (.left (.dead (deadSplit hΓ))) (appW (.var (by csolo)) (.releaseImm (by cdead)))
       (d_raiseU rfl (by cdead)))
 
 /-- The handled body: `r ← alloc ((), mint ()); (r, z) ← withborU declFin r declRaiseCb;
@@ -202,7 +202,7 @@ theorem d_declAcrossBody :
     (.ret (.withbor1U (A := N₁) (B := .zero) (S := Sf) 0 (by cdead) rfl (fun _ h => by rcases h with h | h <;> simp [VFree] at h)
       (by simp [VFree]) (by simp [VFree]) (Sf_unwind 0) declFin_closed (d_declFin (by cdead)))) ?_
   refine .effLet (A := .tensor (.ref N₁) .zero) (.left (.left (.left (.dead (.dead .nil)))))
-    (fun _ => Ctx.Dead.drops (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
+    (fun _ => Ctx.Dead.consumes (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
   · refine .app (.left (.right (.left (.dead (.dead .nil))))) ?_ (.there (.here (by cdead)))
     exact .app (.left (.dead (.right (.dead (.dead .nil))))) (.force (.here (by cdead)))
       (.there (.there (.here (by cdead))))

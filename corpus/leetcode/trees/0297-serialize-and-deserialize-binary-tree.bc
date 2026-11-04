@@ -53,7 +53,7 @@ fn tokens<'t>(l: text 't) -> buf (i32 + 1) =
 fn cases<'t>(t: text 't) -> buf (buf (i32 + 1)) =
   fold_lines(t, !{ (l, cs) ->
     let (l, m) = array_copy['t, u8] l;
-    if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, tokens(l)); cs } },
+    if len(m) == 0 { array_release['t, u8](l); cs } else { let (cs, _) = push(cs, tokens(l)); cs } },
     box buf[buf (i32 + 1)](8))
 
 -- A binary tree: empty, or a node of a value and a cell for each subtree, the cells being Rust's

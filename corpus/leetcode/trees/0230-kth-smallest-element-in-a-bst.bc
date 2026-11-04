@@ -3,7 +3,7 @@
 -- `kth` answers the `k`-th smallest value of a search tree: an in-order traversal, a recursive
 -- generator (`Yield[i32]`, `lib/yield.bc`) that yields the left subtree's values, the node's and
 -- the right's, and a `for` over it that stops at the `k`-th. The `break` abandons the generator,
--- and with it the part of the tree not yet walked, which its drop frees. The traversal is a
+-- and with it the part of the tree not yet walked, which its consume frees. The traversal is a
 -- push generator over an owned tree, so it consumes the tree; the Rust walks `&TreeNode` with an
 -- explicit stack of references, and an iterator over a borrowed tree, whose state is views of
 -- the subtrees still to walk, holds borrows across the loop's ticks, which decision 71 rules out
@@ -57,7 +57,7 @@ fn tokens<'t>(l: text 't) -> buf (i32 + 1) =
 fn cases<'t>(t: text 't) -> buf (buf (i32 + 1)) =
   fold_lines(t, !{ (l, cs) ->
     let (l, m) = array_copy['t, u8] l;
-    if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, tokens(l)); cs } },
+    if len(m) == 0 { array_release['t, u8](l); cs } else { let (cs, _) = push(cs, tokens(l)); cs } },
     box buf[buf (i32 + 1)](8))
 
 -- A binary tree: empty, or a node of a value and a cell for each subtree, the cells being Rust's

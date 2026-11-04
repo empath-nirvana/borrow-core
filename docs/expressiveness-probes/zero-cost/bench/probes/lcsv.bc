@@ -30,8 +30,8 @@ fn lcs<'x, 'y>(x: text 'x, y: text 'y) -> i32 =
     prev = cur;
     cur = t
   };
-  array_forget['x, u8](x);
-  array_forget['y, u8](y);
+  array_release['x, u8](x);
+  array_release['y, u8](y);
   let r = at(&prev, n, 0);
   r
 main -> i32 * i32 =

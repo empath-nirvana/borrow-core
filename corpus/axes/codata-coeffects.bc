@@ -7,7 +7,7 @@
 -- other, read the one borrow at once. `step` pulls both and counts the places where the array
 -- increases; eight steps cover the array. Everything runs inside the borrow of the array's cell
 -- and the `withload` that turns it into the family (scope), and the cursors are closed there by
--- their drops.
+-- their consumes.
 --
 -- Answer: i32[5]. The array is i * i - 4 * i for i < 8, that is 0, -3, -4, -3, 0, 5, 12, 21,
 -- which increases five times. Two cursors at the same index give 0; a `next` that did not

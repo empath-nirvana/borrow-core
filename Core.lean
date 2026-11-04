@@ -75,7 +75,7 @@ import Core.DelayNaive
 import Core.StreamPrograms
 import Core.Integers
 import Core.IntPrograms
-import Core.Drop
+import Core.Consume
 import Core.Classes
 import Core.Tok
 import Core.Decl

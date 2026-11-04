@@ -6,7 +6,7 @@
 -- `for_each__b1n1`, takes it with its arguments and passes it at each call of the block. The
 -- block's `yield` goes to the site where it is written, `main`'s `for`; `for_each` handles none.
 --
--- Answer: `i32[30]`, 0 + 10 + 20; `live 0`. A block that dropped a yield, or the threaded
+-- Answer: `i32[30]`, 0 + 10 + 20; `live 0`. A block that consumed a yield, or the threaded
 -- variable, gives less.
 include yield
 

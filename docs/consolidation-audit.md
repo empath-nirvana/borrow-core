@@ -17,13 +17,13 @@ being written. Nothing below depends on it.
 | Fold rules `foldImm`/`foldOwn`/`foldReuse` | **true** | `CDerives` constructors at `Fundamental.lean:183-195`; soundness in `FoldImm.lean`, `FoldOwn.lean`, `FoldReuse.lean`; covered by `fundamentalC` |
 | `Sized.lean`, `Blocks.lean` | **true** | `Sized.lean` (215 lines: `dsize`, `rebChooseTW_sized`, `withload_sized`); `Blocks.lean` (343 lines) |
 | Merge `Relaxed`'s non-strict `FrameLife` and `TW.reb` `StratumLe` premise | **true that it transfers; no consumer exists.** Correction below | §2.1 |
-| `!T` is present in the CBPV world | **true** | `VTy.bang`; `bangThunkF`, `bangThunkV`, `bangE`, `copyBang`, `forgetBang` (`CBPVMu/Fundamental.lean:114-127`); `Imm̲ (!A) = !A` (`Types.lean:1070`); `VOutlives.bang` (`Types.lean:1320`). Promotion is of thunks only (`!U C`), matching `SPEC.md` §2's "promotion is for `λ` and `Λ` only" |
+| `!T` is present in the CBPV world | **true** | `VTy.bang`; `bangThunkF`, `bangThunkV`, `bangE`, `copyBang`, `releaseBang` (`CBPVMu/Fundamental.lean:114-127`); `Imm̲ (!A) = !A` (`Types.lean:1070`); `VOutlives.bang` (`Types.lean:1320`). Promotion is of thunks only (`!U C`), matching `SPEC.md` §2's "promotion is for `λ` and `Λ` only" |
 | Records/variants as derived forms, on the base BoLo calculus | **true** | `recTy`/`varTy` at `Ty` (`Records/Encoding.lean:37-45`); every rule is a `DerivesWf` lemma; semantic facts at the library's typed world (`Records/Borrows.lean`, `Typed.*`) |
 | `withbor2` family borrows (`Places`) on the base calculus, using `⊑Mut` subsumption | **true** | `Places/Family.lean:170` (`.mutSub`), `:174` (`.immSub`); `withbor2_wf` `:249`, `withborM2_wf` `:270` |
 | LeafPlaces' block view partly ported to `CBPVMu/Blocks.lean`; `withborS` not ported | **true** | Ported: `Shape`, `size`, `refTy`, `valTy`, `addr`, `allocS`/`freeS`, `d_allocS`/`d_freeS`, `Packed`, `packed_node`, `WpAt`, `wpAt_alloc`, `wpAt_allocS`, `wpTS_allocS` (`Blocks.lean:39-343`). Not ported, with no occurrence anywhere in `CBPVMu/`: `famTy`, `shortenE`, `withborS`, `withborS_wf`, the `Steps`/`Track` toolkit, `withborS_ret`, `withborS_packed`, `wpTS_allocBorrow`, `DerivesWf.append_dead`, `crossPack` |
 | ν with `close` and the delay type are hand-written relations in `Recursion`, not a `CTy` former | **partly outdated.** Correction below | §2.4 |
-| Drop `FrameEnd`'s frame-end change (no gain) | **true** | `FrameEnd/README.md` §1: at 6.64's end the subtraction is empty (`frame_image_empty`). §2–4: projection, L3 and L2 are still refuted, by `↭` at the projecting run (`imm_view_rejected`, `mut_view_rejected`). Its only planned consumer is option B (`docs/scope-deep-freeze.md:138`) |
-| Drop option B (never built) | **true** | `six38_img`, option B's first work item (`docs/scope-deep-freeze.md:217`, `:248`), does not occur in any `.lean` file |
+| Consume `FrameEnd`'s frame-end change (no gain) | **true** | `FrameEnd/README.md` §1: at 6.64's end the subtraction is empty (`frame_image_empty`). §2–4: projection, L3 and L2 are still refuted, by `↭` at the projecting run (`imm_view_rejected`, `mut_view_rejected`). Its only planned consumer is option B (`docs/scope-deep-freeze.md:138`) |
+| Consume option B (never built) | **true** | `six38_img`, option B's first work item (`docs/scope-deep-freeze.md:217`, `:248`), does not occur in any `.lean` file |
 | `CBPVMu` omitted CBPVWorld's embedding files | **true** | `CBPVMu/README.md:10-12`; `CBPVMu.lean` imports neither `Embedding` nor `EmbeddingExamples` |
 | Re-port the embedding, so BoLo-derived rules (Records, Places, LeafPlaces) transfer via `embed` | **the re-port is mechanical, but `embed` transfers much less than claimed.** Correction below | §2.3 |
 | Block provenance (`crossPack`, reuse holes) is a design decision: checker rule or types | **true** | `LeafPlaces/Programs.lean:352` (`crossPack`), `:391` (`crossPack_not_packed`); `CBPVMu/Blocks.lean:21-24`; `CBPVMu/README.md`, "Not done" under *The owned fold with reuse* |
@@ -80,7 +80,7 @@ None of them occurs in `Sized`, `FoldImm`, `FoldOwn`, `FoldReuse`, `ShapeMu`, `R
 README says the same-lifetime projection is still refuted, by 6.38 rather than by the strict
 bound (`Relaxed/README.md`, *Result*). The only planned consumer is option B:
 `docs/scope-deep-freeze.md:96-97` and `:136` list `Relaxed`'s `StratumLe` and non-strict
-`FrameLife` as option B's prerequisites. The plan drops option B, so merging `Relaxed` weakens an
+`FrameLife` as option B's prerequisites. The plan consumes option B, so merging `Relaxed` weakens an
 invariant for nothing. Either merge it knowingly as harmless slack, since FP holds with it, or
 leave it out until a rule needs it. This is a design decision, not a work item.
 
@@ -89,7 +89,7 @@ leave it out until a rule needs it. This is a design decision, not a work item.
 | Suspected pair | Finding |
 |---|---|
 | `Relaxed` × μ/folds | None. See §2.1 |
-| `Relaxed` × `FrameEnd` | Moot, because `FrameEnd` is dropped. It builds on `Relaxed` (`FrameEnd/README.md:22`) |
+| `Relaxed` × `FrameEnd` | Moot, because `FrameEnd` is consumed. It builds on `Relaxed` (`FrameEnd/README.md:22`) |
 | `LeafPlaces` block view × `foldReuse` | Semantically compatible: the model accepts any family of leaves (`LeafPlaces/README.md` §2). The two conflict only at the **lowering**: a reuse token (`Ref 1`) may be refilled into another node, and `crossPack` re-pairs leaves across blocks. Either breaks the one-word handle. This is the provenance decision in §4, not a soundness conflict |
 | Records' encoding × LeafPlaces' `Shape` | **Two record encodings that differ** (§2.5). A design decision, not a semantic conflict |
 | `Ref (A ⊗ B)` as one cell × `refTy` block | Both exist in `CBPVMu`. `L′ = μX. 1 ⊕ Ref (N ⊗ X)` uses one cell holding a pair (`MapMut.lean`), and `CommonList.lean` uses `refTy (node …) = Ref N ⊗ Ref X`. They are different types with different layouts, so they do not conflict. The surface syntax must say which one `Box<struct>` means |
@@ -191,7 +191,7 @@ contain nothing but μ re-proofs.
 - **`Relaxed`**: `FrameLife`, `TW.reb` (§2.1). Nothing else.
 - **`FrameEnd`**: on top of `Relaxed`, it changes `TW.immEnd` and adds `ti_sub`,
   `single_imm_get`, `linLife_sub` and `frame_image_empty`, and weakens `ti_endReb`'s premise
-  (`FrameEnd/README.md`, §1 table). It is dropped.
+  (`FrameEnd/README.md`, §1 table). It is consumed.
 - **`Records`, `Places`, `LeafPlaces`**: no definition changed. They assume BoLo's `Ty`,
   `DerivesWf` and the library's typed world (`Typed.fundamentalProperty`, `Typed.adequacy`).
   - LeafPlaces restricts leaves to `plainB` (`1`, `⊕`, `⊗`, `Ref`; `Layout.lean`). CBPVMu's
@@ -214,7 +214,7 @@ Sizes are source lines of the code to port or write, measured with `wc -l`.
 | 2 | Re-port `Embedding.lean` and `EmbeddingExamples.lean` (§2.3) | mechanical **[unverified]** | 329 + 58 |
 | 3 | Decide `Relaxed` (§2.1). If kept: the edits at the sites in §2.1's table | design decision, then mechanical | ~20 |
 | 4 | Decide the record encoding (§2.5), the meaning of `Ref (A ⊗ B)` (one cell or block), and the names in §2.2 | design decision | — |
-| 5 | Records at `VTy` in `CDerives`: `recI`, `recE`, `getAt`, `injAt`, `vcase`, `loadField`, `loadCase`, `swapField`, `Splits`. Semantic facts as instances of `CBPVMu`'s `reborrow_vShape`/`vC_outlives`. `Forgettable`/`forgetT` at `μ` is new work (§5) | mostly mechanical; real at `Forgettable` | `Encoding` 381 + `Borrows` 250 + `Splits` 94; programs 413 optional |
+| 5 | Records at `VTy` in `CDerives`: `recI`, `recE`, `getAt`, `injAt`, `vcase`, `loadField`, `loadCase`, `swapField`, `Splits`. Semantic facts as instances of `CBPVMu`'s `reborrow_vShape`/`vC_outlives`. `Releasable`/`releaseT` at `μ` is new work (§5) | mostly mechanical; real at `Releasable` | `Encoding` 381 + `Borrows` 250 + `Splits` 94; programs 413 optional |
 | 6 | Places' family borrow in `CDerives` at `VTy`, with `VOutlives` side conditions | real (re-derivation, same proof shape) | `Family.lean` 310; programs 562 optional |
 | 7 | LeafPlaces' `famTy`, `shortenE`, `withborS`, `withborS_wf` and `append_dead` in `CDerives`. Port `Steps.lean`/`Track.lean` (they mention no types; only `Shape`'s leaf type changes) for `withborS_ret`. Port `withborS_packed`/`wpTS_allocBorrow` by `fundamentalC` | `Steps`/`Track` mechanical; typing and `packed` real | `Terms` 270 + `Typing` 223 + `Weaken` 98 + `Steps` 296 + `Track` 168 + rest of `Packed` ~150; programs 400 optional |
 | 8 | Resolved in SPEC 0.7 (§7): a general `νX. C`, with `D` and `Stream` as abbreviations. ν: a general `νX. B : CTy` with `CTy` variables, or `stream` as a second fixed former. Port `Nu.lean`'s `stRel`, `unfold_sem` and `take2Close` accordingly | design decision, then real | `Nu.lean` 414 to port as a fixed former; a general `ν` is larger and **[not estimated]** |
@@ -251,9 +251,9 @@ adequacy through `embed` (`adequacy_of_derivesWf`), and FP only as `fundamentalC
 - **Variants in place.** `Ref` does not distribute over `⊕`, because the leaf layout depends on
   the tag (`CBPVMu/README.md`, *The common list shape*; `LeafPlaces/README.md` §4). Borrowing a
   payload place while the tag is fixed is open (`docs/dream-properties.md` P6).
-- **`Forgettable` at `μ` and `U`.** `Forgettable` (`Records/Encoding.lean:228-235`) has no `μ` or
-  `U` case. `forgettable_immReborrow` holds at BoLo's `Ty`, but `Imm̲ 'b N = μY. 1 ⊕ Y` needs a
-  recursive drop (a `foldOwn`). So "project one field of an `Imm` record" at μ-typed fields needs a
+- **`Releasable` at `μ` and `U`.** `Releasable` (`Records/Encoding.lean:228-235`) has no `μ` or
+  `U` case. `releasable_immReborrow` holds at BoLo's `Ty`, but `Imm̲ 'b N = μY. 1 ⊕ Y` needs a
+  recursive consume (a `foldOwn`). So "project one field of an `Imm` record" at μ-typed fields needs a
   new lemma. **[unverified]**: not attempted.
 - **Reuse tokens.**
   - A `foldReuse` token is not tied to its node.

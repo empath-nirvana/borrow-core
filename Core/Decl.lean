@@ -4,27 +4,27 @@ import Core.EffPrograms
 import Core.Demonic
 
 /-!
-# Core — declared types with no derived drop  `[spec §11, §12, §42]`
+# Core — declared types that is not consumable  `[spec §11, §12, §42]`
 
-A declared type with no derived drop `N` with payload `A` is `A ⊗ Tok` (SPEC §42), `Tok` the token
-of `Core/Tok.lean`: a location owning a unit cell, made by `mint` and released by `burn`. No new
-type former and no new class: `N` is a linear type with no derived drop.
+A declared type that is not consumable `N` with payload `A` is `A ⊗ Tok` (SPEC §42), `Tok` the token
+of `Core/Tok.lean`: a location owning a unit cell, made by `mint` and consumed by `burn`. No new
+type former and no new class: `N` is a linear type that is not consumable.
 
 | fact | statement |
 |---|---|
-| `Tok` is linear with no derived drop | `tok_linear` |
-| a field with no derived drop makes its container linear with none | `not_hasDrop_tensor_left`, `_right`, `_sum_left`, `_right`, `_box`, `_ref`, `_array`, `_mu_body`, `_mu_key`, and the `not_persistent_*` lemmas |
-| `N` is linear with no derived drop | `decl_linear` |
-| a borrow of `N` is linear with a derived drop: a loan ends, `N` is not consumed | `decl_imm_drop`, `decl_mut_drop` |
+| `Tok` is linear and not consumable | `tok_linear` |
+| a field that is not consumable makes its container linear with none | `not_consumable_tensor_left`, `_right`, `_sum_left`, `_right`, `_box`, `_ref`, `_array`, `_mu_body`, `_mu_key`, and the `not_persistent_*` lemmas |
+| `N` is linear and not consumable | `decl_linear` |
+| a borrow of `N` is linear and consumable: a loan ends, `N` is not consumed | `decl_imm_consume`, `decl_mut_consume` |
 | an abort cannot abandon `N` | `decl_not_ownFree` (`[let]`'s `hW`, `[raise]`'s `hd`) |
 | `mint` allocates the token's cell; `burn` frees it | `mint_step`, `burn_step` |
-| the entry discards `main`'s result by its derived drop, which a declared type has none of | `entry_derives`, `entry_runs`, `entry_decl_no_drop` |
+| the entry discards `main`'s result by its consume, which a declared type has none of | `entry_derives`, `entry_runs`, `entry_decl_not_consumable` |
 
-The guarantee is `N`'s linearity: used exactly once, never copied or dropped by the checker, never
+The guarantee is `N`'s linearity: used exactly once, never copied or consumed by the checker, never
 abandoned at an abort. Which function consumes it is the program's choice. Every run ends with every
 cell freed (`adequacyC`), the token's among them.
 
-The checker inserts a drop only at a `dropFn` node, which carries `HasDrop` (`TDerivesP.dropFn_hasDrop`,
+The checker inserts a consume only at a `consume` node, which carries `Consumable` (`TDerivesP.consume_consumable`,
 `Frontend/Check/TDerives.lean`), so it inserts none at `N`.
 -/
 
@@ -40,8 +40,8 @@ open BoCa.Lifetime (LifeCtx)
 
 /-! ### Classes -/
 
-/-- **`Tok` is linear with no derived drop.**  `[spec §11, §12]` -/
-theorem tok_linear : Linear tokTy ∧ ¬ HasDrop tokTy :=
+/-- **`Tok` is linear and not consumable.**  `[spec §11, §12]` -/
+theorem tok_linear : Linear tokTy ∧ ¬ Consumable tokTy :=
   ⟨by simp [Linear, VTy.Persistent, VTy.persistent], fun h => nomatch h⟩
 
 /-- `Tok` holds an owned cell: an abort cannot abandon it. -/
@@ -49,37 +49,37 @@ theorem tok_not_ownFree : ¬ tokTy.OwnFree := by
   intro h; cases h with
   | opq _ hk => exact Opaque.tok_not_host hk
 
-theorem not_hasDrop_tensor_right {A B : VTy} (h : ¬ HasDrop B) : ¬ HasDrop (.tensor A B) := by
+theorem not_consumable_tensor_right {A B : VTy} (h : ¬ Consumable B) : ¬ Consumable (.tensor A B) := by
   intro h'; cases h' with | tensor _ hB => exact h hB
 
-theorem not_hasDrop_tensor_left {A B : VTy} (h : ¬ HasDrop A) : ¬ HasDrop (.tensor A B) := by
+theorem not_consumable_tensor_left {A B : VTy} (h : ¬ Consumable A) : ¬ Consumable (.tensor A B) := by
   intro h'; cases h' with | tensor hA _ => exact h hA
 
-theorem not_hasDrop_sum_right {A B : VTy} (h : ¬ HasDrop B) : ¬ HasDrop (.sum A B) := by
+theorem not_consumable_sum_right {A B : VTy} (h : ¬ Consumable B) : ¬ Consumable (.sum A B) := by
   intro h'; cases h' with | sum _ hB => exact h hB
 
-theorem not_hasDrop_sum_left {A B : VTy} (h : ¬ HasDrop A) : ¬ HasDrop (.sum A B) := by
+theorem not_consumable_sum_left {A B : VTy} (h : ¬ Consumable A) : ¬ Consumable (.sum A B) := by
   intro h'; cases h' with | sum hA _ => exact h hA
 
-theorem not_hasDrop_box {a : Lifetime.Life} {A : VTy} (h : ¬ HasDrop A) : ¬ HasDrop (.box a A) := by
+theorem not_consumable_box {a : Lifetime.Life} {A : VTy} (h : ¬ Consumable A) : ¬ Consumable (.box a A) := by
   intro h'; cases h' with | box hA => exact h hA
 
-theorem not_hasDrop_ref {A : VTy} (h : ¬ HasDrop A) : ¬ HasDrop (.ref A) := by
+theorem not_consumable_ref {A : VTy} (h : ¬ Consumable A) : ¬ Consumable (.ref A) := by
   intro h'; cases h' with | ref hA => exact h hA
 
-/-- An array of a type with no derived drop has none. -/
-theorem not_hasDrop_array {A : VTy} (h : ¬ HasDrop A) : ¬ HasDrop (.fam (.ref A)) := by
+/-- An array of a type that is not consumable has none. -/
+theorem not_consumable_array {A : VTy} (h : ¬ Consumable A) : ¬ Consumable (.fam (.ref A)) := by
   intro h'; cases h' with | array hA => exact h hA
 
-/-- At `μX. A`: the body, its recursive positions at the drop's results, has no derived drop. -/
-theorem not_hasDrop_mu_body {A : VTy} (h : ¬ HasDrop (FoldP.resO dropAlgs [A] A)) :
-    ¬ HasDrop (.mu A) := by
+/-- At `μX. A`: the body, its recursive positions at the consume's results, is not consumable. -/
+theorem not_consumable_mu_body {A : VTy} (h : ¬ Consumable (FoldP.resO consumeAlgs [A] A)) :
+    ¬ Consumable (.mu A) := by
   intro h'; cases h' with | mu _ hA _ _ => exact h hA
 
-/-- At `μX. A`: a key of the body (`keysIn`) whose body has no derived drop. -/
-theorem not_hasDrop_mu_key {A B : VTy} {Bs : FoldP.Stack}
+/-- At `μX. A`: a key of the body (`keysIn`) whose body is not consumable. -/
+theorem not_consumable_mu_key {A B : VTy} {Bs : FoldP.Stack}
     (hm : FoldP.Bnd.mu (B :: Bs) ∈ FoldP.keysIn [A] A)
-    (h : ¬ HasDrop (FoldP.resO dropAlgs (B :: Bs) B)) : ¬ HasDrop (.mu A) := by
+    (h : ¬ Consumable (FoldP.resO consumeAlgs (B :: Bs) B)) : ¬ Consumable (.mu A) := by
   intro h'; cases h' with | mu _ _ hmu _ => exact h (hmu B Bs hm)
 
 theorem not_persistent_tensor_right {A B : VTy} (h : ¬ B.Persistent) :
@@ -125,22 +125,22 @@ theorem not_ownFree_sum_left {A B : VTy} (h : ¬ A.OwnFree) : ¬ (VTy.sum A B).O
 /-- A declared type with payload `A`.  `[spec §42]` -/
 abbrev declTy (A : VTy) : VTy := .tensor A tokTy
 
-/-- **A declared type is linear with no derived drop.**  `[spec §12, §42]` -/
-theorem decl_linear (A : VTy) : Linear (declTy A) ∧ ¬ HasDrop (declTy A) :=
-  ⟨not_persistent_tensor_right tok_linear.1, not_hasDrop_tensor_right tok_linear.2⟩
+/-- **A declared type is linear and not consumable.**  `[spec §12, §42]` -/
+theorem decl_linear (A : VTy) : Linear (declTy A) ∧ ¬ Consumable (declTy A) :=
+  ⟨not_persistent_tensor_right tok_linear.1, not_consumable_tensor_right tok_linear.2⟩
 
 /-- **A declared value cannot be abandoned at an abort**: `[let]`'s `hW` and `[raise]`'s `hd` ask
 for `OwnFree`.  `[spec §19, §42]` -/
 theorem decl_not_ownFree (A : VTy) : ¬ (declTy A).OwnFree :=
   not_ownFree_tensor_right tok_not_ownFree
 
-/-- **A shared borrow of a declared value is linear with a derived drop**: the loan ends; the
+/-- **A shared borrow of a declared value is linear and consumable**: the loan ends; the
 value is not consumed.  `[spec §12, §42]` -/
-theorem decl_imm_drop (a : Lifetime.Life) (A : VTy) : DerivedDrop (.imm a (declTy A)) :=
+theorem decl_imm_consume (a : Lifetime.Life) (A : VTy) : LinearConsumable (.imm a (declTy A)) :=
   ⟨by simp [Linear, VTy.Persistent, VTy.persistent], .imm⟩
 
-/-- **A mutable borrow of a declared value is linear with a derived drop.**  `[spec §12, §42]` -/
-theorem decl_mut_drop (a : Lifetime.Life) (A : VTy) : DerivedDrop (.mut a (declTy A)) :=
+/-- **A mutable borrow of a declared value is linear and consumable.**  `[spec §12, §42]` -/
+theorem decl_mut_consume (a : Lifetime.Life) (A : VTy) : LinearConsumable (.mut a (declTy A)) :=
   ⟨by simp [Linear, VTy.Persistent, VTy.persistent], .mut⟩
 
 /-! ### `mint` and `burn` on the machine -/
@@ -155,31 +155,31 @@ theorem burn_step (μ : Heap) (ℓ : Loc) (h : μ ℓ = some .unit) :
     Steps μ (.app burnE (.val (.loc ℓ))) (μ.del ℓ) (.val .unit) :=
   .more (Step1.head (Head.beta μ _ _)) (.more (Step1.head (Head.free μ ℓ .unit h)) (.refl _ _))
 
-/-! ### The entry: `main`'s result discarded by its derived drop
+/-! ### The entry: `main`'s result discarded by its consume
 
-A program's entry discards `main`'s result by its derived drop (`drop_derives`), not by leaving it
-to the host: `x <- main; dropFnE A x; return ()`. It is a derivation exactly when the result has a
-derived drop; at a declared type it has none (`decl_linear`), so no rule consumes it.  `[spec §42]` -/
+A program's entry discards `main`'s result by its consume (`consumeSlot_derives`), not by leaving it
+to the host: `x <- main; consumeE A x; return ()`. It is a derivation exactly when the result has a
+consume; at a declared type it has none (`decl_linear`), so no rule consumes it.  `[spec §42]` -/
 
-/-- The entry around `main : F A`: `x <- e; dropFnE A x; return ()`. -/
-def entryE (A : VTy) (e : Expr) : Expr := .app (.val (.lam (dropE A 0 (.val .unit)))) e
+/-- The entry around `main : F A`: `x <- e; consumeE A x; return ()`. -/
+def entryE (A : VTy) (e : Expr) : Expr := .app (.val (.lam (consumeSlotE A 0 (.val .unit)))) e
 
-/-- **The entry is a derivation at a result with a derived drop.**  `[spec §42]` -/
+/-- **The entry is a derivation at a result that is consumable.**  `[spec §42]` -/
 theorem entry_derives {Δ : LifeCtx} {e : Expr} {A : VTy}
-    (h : CDerives Δ [] e (.comp (.ret A))) (hA : HasDrop A) :
+    (h : CDerives Δ [] e (.comp (.ret A))) (hA : Consumable A) :
     CDerives Δ [] (entryE A e) (.comp (.ret .unit)) :=
-  .bind .nil h (drop_derives (Γ₁ := [⟨A, true⟩]) (Γ₂ := [⟨A, false⟩]) (.left .nil) (.here .nil) hA
+  .bind .nil h (consumeSlot_derives (Γ₁ := [⟨A, true⟩]) (Γ₂ := [⟨A, false⟩]) (.left .nil) (.here .nil) hA
     (.ret (.unitI (.cons .nil))))
 
 /-- **The entry frees every cell**: from the empty memory it runs to `()` at the empty memory
-(`adequacyC` at `entry_derives`), so a result with a derived drop is freed, not left to the
+(`adequacyC` at `entry_derives`), so a result that is consumable is freed, not left to the
 host.  `[spec §42]` -/
 theorem entry_runs {e : Expr} {A : VTy} (h : CDerives LifeCtx.empty [] e (.comp (.ret A)))
-    (hA : HasDrop A) :
+    (hA : Consumable A) :
     Steps Adequacy.emptyMem (entryE A e) Adequacy.emptyMem (.val .unit) :=
   adequacyC (entry_derives h hA)
 
-/-- At a declared type the entry has no derived drop to use: `main`'s result is refused. -/
-theorem entry_decl_no_drop (A : VTy) : ¬ HasDrop (declTy A) := (decl_linear A).2
+/-- At a declared type the entry is not consumable to use: `main`'s result is refused. -/
+theorem entry_decl_not_consumable (A : VTy) : ¬ Consumable (declTy A) := (decl_linear A).2
 
 end BoCa.Fig16.LogRel.Core

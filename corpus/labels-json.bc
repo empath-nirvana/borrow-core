@@ -1,7 +1,7 @@
 -- P13 of `docs/strings-slices-design.md` (§1), `labels-json`: escaping with a borrowed-or-owned
 -- result, without a `Cow` type. `escape` answers the text itself when nothing in it needs
 -- escaping, and a new, escaped string otherwise: the sum `text 'a + string`. `push_json_str`
--- matches on it: the view side is appended and forgotten, and the owned side is lent to the
+-- matches on it: the view side is appended and released, and the owned side is lent to the
 -- append and freed by its drop (§12), which is the componentwise drop Rust's `Cow`
 -- has. The escaped string is built character by character (`char_at`, UTF-8 decoding, and
 -- `push_char`), a counted loop over the view's length. Labels and values are literal views.
@@ -24,7 +24,7 @@ fn any_byte<'a>(t: text 'a, p: !(u8 => bool)) -> bool =
       let h = p(at(w, i, 0));
       (t, (p, r || h)) },
     len(u), 0, (t, (p, false)));
-  array_forget['a, u8](t);
+  array_release['a, u8](t);
   r
 
 -- The text itself when it needs no escaping; otherwise a new, escaped string.
@@ -43,7 +43,7 @@ fn escape<'a>(t: text 'a) -> text 'a + string =
           (s, (t, (i + w, n)))
         } else { (s, (t, (i, n))) } },
       n, 0, (box string(n + 8), (t, (0, n))));
-    array_forget['a, u8](t);
+    array_release['a, u8](t);
     inr s
   }
 

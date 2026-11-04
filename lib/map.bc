@@ -15,11 +15,11 @@
 -- none (`filler`, SPEC §17), so `V` has one: integers, views, arrays, buffers, and pairs and sums
 -- of them. A key may be a view (`text 't`): the map's type then mentions its lifetime, and the
 -- map does not outlive what its keys borrow. A linear `K` or `V` makes the map linear: it has a
--- drop exactly when its keys and values do.
+-- consume exactly when its keys and values do.
 --
--- The key sought is given by value and dropped after the search (a persistent key or a view costs
+-- The key sought is given by value and consumed after the search (a persistent key or a view costs
 -- nothing); it is lent to the search, a cell of the caller's frame. `map_insert` answers the
--- value it displaces; a key already present keeps its first key, and the new one is dropped.
+-- value it displaces; a key already present keeps its first key, and the new one is consumed.
 --
 -- Every loop is counted, at most the table's size; the table is at most half full, so a search
 -- ends at an empty slot.
@@ -71,13 +71,13 @@ fn map_probe[K]<'k, 'q>(ks: array_imm 'k (1 + (i32 * K)), q: imm 'q K, h: i32) -
     match get(r0, i) {
       inl g ->
         let found = borrow imm *g { 'y, s -> match s {
-            inl u -> forget_imm['q, K](c0); 0
+            inl u -> release_imm['q, K](c0); 0
           | inr (hs, kv) ->
               if hs == h { let same = borrow imm *c0 { 'u, qv -> equal[K](kv, qv) }; if same { 1 } else { 2 } }
-              else { forget_imm['q, K](c0); 2 } } };
+              else { release_imm['q, K](c0); 2 } } };
         if found == 0 { res = (inr i : i32 + i32); break } else {
           if found == 1 { res = (inl i : i32 + i32); break } else { i = host[and32](i + 1, cap - 1) } }
-    | inr u -> forget_imm['q, K](c0); break
+    | inr u -> release_imm['q, K](c0); break
     }
   };
   res
@@ -211,7 +211,7 @@ fn map_get[K, V]<'k, 'x>(r: MapRef[K, V]<'k, 'x>, k: K) -> imm 'x V + 1 =
   let ((ks, vs), n) = r;
   let mut k = k;
   let o = map_probe_key(ks, &k);
-  match o { inl i -> get(vs, i) | inr i -> array_forget['x, V](vs); inr () }
+  match o { inl i -> get(vs, i) | inr i -> array_release['x, V](vs); inr () }
 
 -- The number of entries of a lent map.
 fn map_size[K, V]<'k, 'x>(r: MapRef[K, V]<'k, 'x>) -> i32 = let (d, n) = r; n
@@ -232,9 +232,9 @@ fn map_iter[K, V]<'k, 'x>(r: MapRef[K, V]<'k, 'x>)
           inl key -> match get(v0, i) {
               inl vw -> (((ks, vs), i + 1), inl (key, vw))
             | inr u -> (((ks, vs), i + 1), inr (inl ())) }
-        | inr u -> array_forget['x, V](v0); (((ks, vs), i + 1), inr (inl ()))
+        | inr u -> array_release['x, V](v0); (((ks, vs), i + 1), inr (inl ()))
         }
-    | inr u -> array_forget['x, V](v0); (((ks, vs), i), inr (inr ()))
+    | inr u -> array_release['x, V](v0); (((ks, vs), i), inr (inr ()))
     } }))
 
 -- ### Removing

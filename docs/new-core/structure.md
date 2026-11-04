@@ -90,7 +90,7 @@ The operations, each to be proved to preserve it:
 - **capture:** a branch, with its live lends' records, goes into a one-shot κ;
 - **graft:** resuming κ attaches its branch, possibly under frames opened since, or under another
   parent; the tree grows and every branch is re-read;
-- **unwind:** cancel or raise runs a branch's drops and ends its lends in order;
+- **unwind:** cancel or raise runs a branch's consumes and ends its lends in order;
 - **spawn / join:** a lend's record is shared into children and passes back at the join.
 
 **Adequacy is derived from preservation** (LinearActris Thm 5.4 shape), and the frame rules are
@@ -173,7 +173,7 @@ Each test must go through §5, not around it:
   `foldImm` across stops; `withswap` with a callback that stops.
 - The recorded unreconciled point on 6.150.
 - Lowering: per-task state machines, self-reference (pinning or a movability mode), per-state
-  drop glue.
+  consume glue.
 - Threads: a concurrent semantics and the multi-thread adequacy.
 
 ## 11. Not doing / tempting shortcuts (stop and report)

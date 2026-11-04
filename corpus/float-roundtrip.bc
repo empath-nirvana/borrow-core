@@ -69,7 +69,7 @@ fn read_bits<'a>(t: text 'a, wide: bool) -> i64 + 1 =
 fn line<'t>(l: text 't) -> 1 =
   let (l, u) = array_copy['t, u8] l;
   let c = at(u, 0, u8[0]);
-  let rest = match split_at(l, 2) { inl (h, r) -> array_forget['t, u8](h); r | inr l -> l };
+  let rest = match split_at(l, 2) { inl (h, r) -> array_release['t, u8](h); r | inr l -> l };
   let wide = c == b'd' || c == b'p';
   let given = c == b'd' || c == b'f';
   let r = if given { inl dec_u64(rest) } else { read_bits(rest, wide) };

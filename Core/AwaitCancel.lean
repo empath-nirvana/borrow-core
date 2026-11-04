@@ -20,7 +20,7 @@ The cancelled state is the task handler's: level-triggered cancellation needs no
 | `[perform]` and `[raise]` refuse the marked pair | `perform_refuses_await`, `raise_refuses_cancelled` |
 | R1's cancel-path row | `resumeOC_await`; a marked `tick` is refused (`not_resumeOC_markedTick`), so is another abortive operation (`not_resumeOC_raise`) |
 | an `await` row cancels | `Row.cancels_of_await` |
-| a value with no derived drop is not held across an `await` by `[let]` | `let_refuses_decl_across_await` |
+| a value that is not consumable is not held across an `await` by `[let]` | `let_refuses_decl_across_await` |
 | `[perform]`/`[raise]` refuse the marked pair at every row that finds it | `not_der_perform_await`, `not_der_raise_cancelled` |
 | `effThenDiv`, proved: a cancel unwinding through a ticking finaliser; a closed program that runs | `d_thenTickAwait`, `d_thenDivFuel`, `thenDivFuel_runs` |
 | a cell held across an `await` under a finaliser that frees it is typed | `d_closeOnCancel` |
@@ -158,7 +158,7 @@ theorem not_resumeOC_raise (x : LifeVar) : ¬ Row.ResumeOC [awaitF (.ret .unit),
   · exact absurd h₁.1.1 (by simp [raise2])
   · exact absurd h₁.1.1 (by simp [raise2])
 
-/-! ### A value with no derived drop across a cancellable wait -/
+/-! ### A value that is not consumable across a cancellable wait -/
 
 /-- **A row that admits `[await-c]` at some name cancels**: its cancel target is abortive, so not
 `lin`. `[let]`'s `hW` then asks the context held across the wait to be `OwnFree`. -/
@@ -168,8 +168,8 @@ theorem Row.cancels_of_await {S : Row} {n : UInt32} {c : OpSig} (hfc : Row.find 
   have := hc.2.1
   simp [OpSig.abort, hq] at this
 
-/-- **`[let]` refuses a value with no derived drop held across a cancellable wait**: at a row with
-a cancel target, `hW` asks for `OwnFree`, which a declared type with no derived drop is not
+/-- **`[let]` refuses a value that is not consumable held across a cancellable wait**: at a row with
+a cancel target, `hW` asks for `OwnFree`, which a declared type that is not consumable is not
 (`decl_not_ownFree`). The way out is a finaliser that consumes it, on every exit, the cancel
 included (`d_closeOnCancel` for a cell).  `[spec §29a]` -/
 theorem let_refuses_decl_across_await {S : Row} {n : UInt32} {c : OpSig}
@@ -734,7 +734,7 @@ theorem d_hrS {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
 theorem d_ccS {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ ccS (.val (clauseTy [] StR (.cancel, .unit, .zero))) :=
   .bangThunkV (banged_dead hΓ) rfl (.lam (.ret (.thunkV rfl (.lam (.ret (.sumI₂
-    (.unitI (.drop rfl (.drop rfl hΓ.toP)))))))))
+    (.unitI (.weaken rfl (.weaken rfl hΓ.toP)))))))))
 
 theorem d_clS {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ clS
@@ -748,7 +748,7 @@ theorem d_clS {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
         (.there (.here (by cdead)))))
       (.here (by cdead))) ?_
   exact .app (.left (.right (.dead (.right (.dead (deadSplit hΓ))))))
-    (.force (.here (by cdead))) (.there (.here (.cons (.drop rfl (.cons hΓ.toP)))))
+    (.force (.here (by cdead))) (.there (.here (.cons (.weaken rfl (.cons hΓ.toP)))))
 
 /-- **The immediate scheduler is typed**: a closed `CDerives` derivation at `F Flag`, its handler
 at the marked pair (`csSched`). -/
@@ -817,7 +817,7 @@ theorem d_tickUnit {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     (.effPerform (o := tickSig) rfl rfl rfl (.unitI hΓ.toP)) ?_
   · simp [tickSig] at ho; subst ho; exact absurd rfl hq
   · simp [tickSig] at ho; subst ho; cases hq
-  · exact .effSub (RowLe.nil _) (.ret (.unitI (.drop rfl hΓ.toP)))
+  · exact .effSub (RowLe.nil _) (.ret (.unitI (.weaken rfl hΓ.toP)))
 
 /-- **`[then]` with a ticking finaliser is typed**, by `effThenDiv`. -/
 theorem d_thenTick {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :

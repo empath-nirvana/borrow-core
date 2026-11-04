@@ -4,7 +4,7 @@
 -- `lib/slice.bc` does of an element: two views are live at once, passed to a function and read
 -- through a load (`borrow imm *v`), with no copy of the buffers and no block per lookup.
 -- `map_iter(r)` visits every entry. A map of buffers holds what they own, so it has a
--- drop: the map dropped at the end frees every buffer (`live 0`).
+-- consume: the map consumed at the end frees every buffer (`live 0`).
 --
 -- Then removal: 200 keys that collide in long runs (multiples of 64) are inserted, every third is
 -- removed (each removal shifts the run back over its hole), and each key is looked up again.

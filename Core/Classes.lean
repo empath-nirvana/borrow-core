@@ -1,4 +1,4 @@
-import Core.Drop
+import Core.Consume
 import Core.EffRules
 import Core.Closed
 import Core.InsertDead
@@ -7,10 +7,10 @@ import Core.InsertDead
 # Core — the two classes of value type  `[spec §10, §12, §19]`
 
 A value type is **unrestricted** (`VTy.Persistent`) or **linear** (every other type). Contraction
-(`Ctx.SplitP.dup`) and weakening (`Ctx.DeadP.drop`, `Ctx.SoloP.skip`) are rules of `CDerives`
+(`Ctx.SplitP.dup`) and weakening (`Ctx.DeadP.weaken`, `Ctx.SoloP.skip`) are rules of `CDerives`
 exactly at the unrestricted types (`Ctx.SplitP.both_live_iff`, `Ctx.DeadP.live_iff`,
-`Ctx.SoloP.live_succ_iff`). A linear type may have a **derived drop** (`DerivedDrop`: `HasDrop`,
-licensed by `drop_derives`) or a **derived copy** (`DerivedCopy`: the constant `copy` at `Imm`,
+`Ctx.SoloP.live_succ_iff`). A linear type may have a **consume** (`LinearConsumable`: `Consumable`,
+licensed by `consumeSlot_derives`) or a **derived copy** (`DerivedCopy`: the constant `copy` at `Imm`,
 licensed by `copy_derives`). Neither is a further class: each is a property of a linear type.
 
 This file adds no rule to `CDerives` and no semantic definition. It names the classes and states
@@ -18,15 +18,15 @@ the derived rules over existing rules.
 
 | fact | statement |
 |---|---|
-| a derived drop is pure at the row | `dropFn_wf`'s type, `HasDrop.close`, `HasDrop.nu`, `kTy_cancel_hasDrop_iff` |
-| a drop holds no operation, and a derived drop is closed | `dropFnE_effFree`, `dropFnE_closed` |
+| a consume is pure at the row | `consume_wf`'s type, `Consumable.close`, `Consumable.nu`, `kTy_cancel_consumable_iff` |
+| a consume holds no operation, and a consume is closed | `consumeE_effFree`, `consumeE_closed` |
 | a derived copy is a derivation | `copy_derives` |
-| `κ` at `lin` is linear with no derived drop | `kTy_lin` |
-| `κ` at the default qualifier is linear; its cancel is a derived drop exactly when pure | `kTy_cancel_linear`, `kTy_cancel_hasDrop_iff` |
+| `κ` at `lin` is linear and not consumable | `kTy_lin` |
+| `κ` at the default qualifier is linear; its cancel is a consume exactly when pure | `kTy_cancel_linear`, `kTy_cancel_consumable_iff` |
 | `κ` at `unr` is unrestricted | `kTy_unr` |
-| the types whose drop does nothing (the unrestricted ones and the borrows) | `forgettable_iff` |
+| the types whose consume does nothing (the unrestricted ones and the borrows) | `releasable_iff` |
 
-Three rules absorb a context without using its slots, and none is a drop: `⊤` introduction
+Three rules absorb a context without using its slots, and none is a consume: `⊤` introduction
 (`CDerives.topI`), `absurd` (`CDerives.zeroE`), and the abandonment of a `VTy.OwnFree` context at an
 abort (`CDerives.effLet`'s `hW`, `CDerives.effRaise`'s `hd`; `vC_noOwn_of_ownFree`).
 -/
@@ -42,7 +42,7 @@ open BoCa.Lifetime (LifeCtx)
 /-! ### Two classes -/
 
 /-- Unrestricted: contraction and weakening are rules of `CDerives` at `A` (`Ctx.SplitP.dup`,
-`Ctx.DeadP.drop`, `Ctx.SoloP.skip`); a value holds `∅` (`vP_empty_of_persistent`).
+`Ctx.DeadP.weaken`, `Ctx.SoloP.skip`); a value holds `∅` (`vP_empty_of_persistent`).
 `[spec §10]` -/
 abbrev Unrestricted (A : VTy) : Prop := A.Persistent
 
@@ -66,8 +66,8 @@ theorem Ctx.DeadP.live_iff {T : VTy} {Γ : Ctx VTy} :
     Ctx.DeadP (⟨T, true⟩ :: Γ) ↔ Unrestricted T ∧ Ctx.DeadP Γ := by
   constructor
   · intro h; cases h with
-    | drop hT h => exact ⟨hT, h⟩
-  · intro ⟨hT, h⟩; exact .drop hT h
+    | weaken hT h => exact ⟨hT, h⟩
+  · intro ⟨hT, h⟩; exact .weaken hT h
 
 /-- Weakening beside a variable is a rule exactly at unrestricted types. -/
 theorem Ctx.SoloP.live_succ_iff {S T : VTy} {Γ : Ctx VTy} {i : Nat} :
@@ -77,15 +77,15 @@ theorem Ctx.SoloP.live_succ_iff {S T : VTy} {Γ : Ctx VTy} {i : Nat} :
     | skip hS h => exact ⟨hS, h⟩
   · intro ⟨hS, h⟩; exact .skip hS h
 
-/-! ### The derived drop -/
+/-! ### The consume -/
 
-/-- A linear type with a derived drop: `dropFnE A : A ⊸ F 1` is a closed `CDerives` term
-(`dropFn_wf`), and `drop_derives` licenses every inserted drop.  `[spec §12]` -/
-def DerivedDrop (A : VTy) : Prop := Linear A ∧ HasDrop A
+/-- A linear type that is consumable: `consumeE A : A ⊸ F 1` is a closed `CDerives` term
+(`consume_wf`), and `consumeSlot_derives` licenses every inserted consume.  `[spec §12]` -/
+def LinearConsumable (A : VTy) : Prop := Linear A ∧ Consumable A
 
-/-! #### Every drop holds no operation
+/-! #### Every consume holds no operation
 
-`dropFnAt` is built from `forget`, the borrow and array constants, `foldOwn` and `foldOwnG`; none
+`consumeAt` is built from `forget`, the borrow and array constants, `foldOwn` and `foldOwnG`; none
 of them holds `perform`, `raise`, `hnd` or `iterate`. The lemmas follow the closedness lemmas of
 `Core/FoldOwn.lean` and `Core/FoldOwnGTerm.lean`. -/
 
@@ -206,49 +206,49 @@ theorem tupE_effFree : ∀ (es : List Expr), (∀ e ∈ es, e.effFree = true) �
 
 end FoldP
 
-theorem forget_effFree : forget.effFree = true := rfl
+theorem release_effFree : forget.effFree = true := rfl
 
 theorem arrAlgE_effFree {d : Expr} (hd : d.effFree = true) : (arrAlgE d).effFree = true := by
-  simp [arrAlgE, Expr.effFree, forget_effFree, hd]
+  simp [arrAlgE, Expr.effFree, release_effFree, hd]
 
 mutual
-/-- Every drop, in either mode, holds no operation. -/
-theorem dropFnAt_effFree : ∀ (b : Bool) (A : VTy), (dropFnAt b A).effFree = true
+/-- Every consume, in either mode, holds no operation. -/
+theorem consumeAt_effFree : ∀ (b : Bool) (A : VTy), (consumeAt b A).effFree = true
   | b, .tensor A B => by
-      simp [dropFnAt, Expr.effFree, dropFnAt_effFree b A, dropFnAt_effFree b B]
+      simp [consumeAt, Expr.effFree, consumeAt_effFree b A, consumeAt_effFree b B]
   | b, .sum A B => by
-      simp [dropFnAt, Expr.effFree, dropFnAt_effFree b A, dropFnAt_effFree b B]
+      simp [consumeAt, Expr.effFree, consumeAt_effFree b A, consumeAt_effFree b B]
   | b, .ref A => by
-      simp only [dropFnAt]; split
-      · exact dropFnAt_effFree true A
-      · simp [bindE, Expr.effFree, dropFnAt_effFree false A]
-  | _, .box _ A => by simp [dropFnAt, Expr.effFree, dropFnAt_effFree false A]
+      simp only [consumeAt]; split
+      · exact consumeAt_effFree true A
+      · simp [bindE, Expr.effFree, consumeAt_effFree false A]
+  | _, .box _ A => by simp [consumeAt, Expr.effFree, consumeAt_effFree false A]
   | b, .mu A => by
-      simp only [dropFnAt]; split
+      simp only [consumeAt]; split
       · rfl
       · split
-        · simp [Expr.effFree, foldOwnV_effFree, dropFnAt_effFree true A]
-        · have hs : ∀ e ∈ (Expr.val (.lam (.app (dropFnAt true A) (.var 0))) :: algsIn A),
+        · simp [Expr.effFree, foldOwnV_effFree, consumeAt_effFree true A]
+        · have hs : ∀ e ∈ (Expr.val (.lam (.app (consumeAt true A) (.var 0))) :: algsIn A),
               e.effFree = true := by
             intro e he
             simp only [List.mem_cons] at he
             rcases he with rfl | he
-            · simp [Expr.effFree, dropFnAt_effFree true A]
+            · simp [Expr.effFree, consumeAt_effFree true A]
             · exact algsIn_effFree A e he
           simp [Expr.effFree, FoldP.foldOwnGV_effFree]
           exact FoldP.tupE_effFree _ hs
   | b, .thunk C => by
-      rw [dropFnAt_thunk b C]
+      rw [consumeAt_thunk b C]
       match C with
-      | .nu (.amp _ (.ret R)) => simp [dropFnAt, bindE, Expr.effFree, dropFnAt_effFree false R]
+      | .nu (.amp _ (.ret R)) => simp [consumeAt, bindE, Expr.effFree, consumeAt_effFree false R]
       | .nu (.amp _ (.arr _ _)) | .nu (.amp _ (.amp _ _)) | .nu (.amp _ .top)
       | .nu (.amp _ (.all _ _ _)) | .nu (.amp _ (.nu _)) | .nu (.amp _ (.eff _ _ _ _ _ _ _ _))
       | .nu (.eff _ _ _ _ _ _ _ _) | .eff _ _ _ _ _ _ _ _ | .nu (.ret _) | .nu (.arr _ _) | .nu .top
       | .nu (.all _ _ _) | .nu (.nu _) | .ret _ | .arr _ _ | .amp _ _ | .top | .all _ _ _ => rfl
   | b, .fam (.ref A) => by
-      simp only [dropFnAt]; split
+      simp only [consumeAt]; split
       · rfl
-      · simp [Expr.effFree, dropFnAt_effFree false A]
+      · simp [Expr.effFree, consumeAt_effFree false A]
   | _, .fam (.mut _ _) => rfl
   | _, .unit | _, .zero | _, .imm _ _ | _, .mut _ _ | _, .bang _ | _, .unk | _, .tvar _
   | _, .int _ | _, .opq _ => rfl
@@ -274,7 +274,7 @@ theorem algsIn_effFree : ∀ (A : VTy), ∀ e ∈ algsIn A, e.effFree = true
       · cases he
       · simp only [List.mem_cons] at he
         rcases he with rfl | he
-        · simp [Expr.effFree, arrAlgE_effFree (dropFnAt_effFree true S)]
+        · simp [Expr.effFree, arrAlgE_effFree (consumeAt_effFree true S)]
         · exact algsIn_effFree S e he
   | .mu B, e, he => by
       simp only [algsIn] at he
@@ -282,7 +282,7 @@ theorem algsIn_effFree : ∀ (A : VTy), ∀ e ∈ algsIn A, e.effFree = true
       · cases he
       · simp only [List.mem_cons] at he
         rcases he with rfl | he
-        · simp [Expr.effFree, dropFnAt_effFree true B]
+        · simp [Expr.effFree, consumeAt_effFree true B]
         · exact algsIn_effFree B e he
   | .unit, _, he | .zero, _, he | .thunk _, _, he | .imm _ _, _, he | .mut _ _, _, he
   | .box _ _, _, he | .bang _, _, he | .unk, _, he | .tvar _, _, he | .int _, _, he
@@ -294,18 +294,18 @@ theorem algsIn_effFree : ∀ (A : VTy), ∀ e ∈ algsIn A, e.effFree = true
   | .fam (.opq _), _, he => by simp [algsIn] at he
 end
 
-/-- `dropFnE A` holds no `perform`, `raise`, `hnd` or `iterate`, at every `A`: the syntactic side
-condition `TiedDer.ofCDerives` (`Frontend/Check/Tied.lean`) asks of an inserted drop. It is not
-the statement that a derived drop is pure at the row: that is carried by `dropFn_wf`'s type
-`A ⊸ F 1` at the empty row, by `HasDrop.close` and `HasDrop.nu` asking a `.ret` cancel
-(`Core/Drop.lean`), and at `κ` by `kTy_cancel_hasDrop_iff`.  `[spec §12]` -/
-theorem dropFnE_effFree (A : VTy) : (dropFnE A).effFree = true :=
-  dropFnAt_effFree false A
+/-- `consumeE A` holds no `perform`, `raise`, `hnd` or `iterate`, at every `A`: the syntactic side
+condition `TiedDer.ofCDerives` (`Frontend/Check/Tied.lean`) asks of an inserted consume. It is not
+the statement that a consume is pure at the row: that is carried by `consume_wf`'s type
+`A ⊸ F 1` at the empty row, by `Consumable.close` and `Consumable.nu` asking a `.ret` cancel
+(`Core/Consume.lean`), and at `κ` by `kTy_cancel_consumable_iff`.  `[spec §12]` -/
+theorem consumeE_effFree (A : VTy) : (consumeE A).effFree = true :=
+  consumeAt_effFree false A
 
-/-- A derived drop is a closed term: `dropFn_wf` types it at the empty context
+/-- A consume is a closed term: `consume_wf` types it at the empty context
 (`closedAt_of_derives`).  `[spec §12]` -/
-theorem dropFnE_closed {A : VTy} (h : HasDrop A) : closedAt 0 (dropFnE A) = true :=
-  closedAt_of_derives (dropFn_wf (Δ := default) h (Γ := []) .nil)
+theorem consumeE_closed {A : VTy} (h : Consumable A) : closedAt 0 (consumeE A) = true :=
+  closedAt_of_derives (consume_wf (Δ := default) h (Γ := []) .nil)
 
 /-! ### The derived copy at `Imm` -/
 
@@ -355,9 +355,9 @@ theorem copy_derives {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {i : Nat} {A : VT
 
 /-! ### Continuation qualifiers  `[spec §19, §27]` -/
 
-/-- `κ` at `lin` is linear, with no derived drop: it must be resumed. -/
+/-- `κ` at `lin` is linear and not consumable: it must be resumed. -/
 theorem kTy_lin {S : Row} {R B : VTy} {F : CTy} :
-    Linear (kTy S R .lin B F) ∧ ¬ HasDrop (kTy S R .lin B F) := by
+    Linear (kTy S R .lin B F) ∧ ¬ Consumable (kTy S R .lin B F) := by
   refine ⟨by simp [kTy, VTy.persistent], fun h => ?_⟩
   simp only [kTy] at h
   cases h
@@ -366,10 +366,10 @@ theorem kTy_lin {S : Row} {R B : VTy} {F : CTy} :
 theorem kTy_cancel_linear {S : Row} {R B : VTy} {F : CTy} : Linear (kTy S R .cancel B F) := by
   simp [kTy, VTy.persistent]
 
-/-- The cancel of `κ` at the default qualifier is a derived drop exactly when it is pure: when
+/-- The cancel of `κ` at the default qualifier is a consume exactly when it is pure: when
 the cancel row is empty. -/
-theorem kTy_cancel_hasDrop_iff {S : Row} {R B : VTy} {F : CTy} :
-    HasDrop (kTy S R .cancel B F) ↔ cancelTy S F = .ret .unit := by
+theorem kTy_cancel_consumable_iff {S : Row} {R B : VTy} {F : CTy} :
+    Consumable (kTy S R .cancel B F) ↔ cancelTy S F = .ret .unit := by
   simp only [kTy]
   constructor
   · intro h
@@ -383,14 +383,14 @@ theorem kTy_cancel_hasDrop_iff {S : Row} {R B : VTy} {F : CTy} :
 /-- `κ` at `unr` is unrestricted. -/
 theorem kTy_unr {S : Row} {R B : VTy} {F : CTy} : Unrestricted (kTy S R .unr B F) := rfl
 
-/-! ### The types whose drop does nothing -/
+/-! ### The types whose consume does nothing -/
 
-/-- `Forgettable` (`Core/Records.lean`) is the types that hold no owned cell and have a derived drop:
-`VTy.OwnFree` without the opaque host types, which have no derived drop.  `[spec §12, §19]` -/
-theorem forgettable_iff {A : VTy} : Forgettable A ↔ A.OwnFree ∧ HasDrop A := by
+/-- `Releasable` (`Core/Records.lean`) is the types that hold no owned cell and are consumable:
+`VTy.OwnFree` without the opaque host types, which are not consumable.  `[spec §12, §19]` -/
+theorem releasable_iff {A : VTy} : Releasable A ↔ A.OwnFree ∧ Consumable A := by
   constructor
   · intro h
-    refine ⟨?_, hasDrop_of_forgettable h⟩
+    refine ⟨?_, consumable_of_releasable h⟩
     induction h with
     | unit => exact .unit
     | zero => exact .zero

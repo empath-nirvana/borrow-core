@@ -12,13 +12,13 @@ scripted standard input, the arguments' stream, and collected standard output an
 
 - every variable is consumed once on each path: a use consumes it, a consumed variable is not
   used again, and a function returns with its frame empty;
-- a `copy` or a `drop` is never of a type that owns a cell (`ref`, an array) or of a `mut`
-  borrow: copies and drops are of persistent values and borrows only;
+- a `copy` or a `consume` is never of a type that owns a cell (`ref`, an array) or of a `mut`
+  borrow: copies and consumes are of persistent values and borrows only;
 - a cell or slot is read only when written, and written by `put` and `slotPut` only when
   unwritten (the moves of `take`, `replace` and `withswap`), and an array is freed only when
   every slot is unwritten;
 - every heap access is to a live object;
-- every `stackK` drop is a stack machine's hand-over (`handOverB`, `HandOver`);
+- every `stackK` consume is a stack machine's hand-over (`handOverB`, `HandOver`);
 - at every call, a borrow a parameter whose lend bit is set (`Fn.lendEncl`) holds is not beside
   its cell's owner among the parameters, nor beside another borrow of the cell but an `imm` one
   beside an `imm` one (`enclosesB`, `EnclosesAt`), and its cell is live when the call returns:
@@ -204,7 +204,7 @@ def hostOp (op : HostOp) (v : LV) : IM LV := do
 /-! ### Types -/
 
 /-- A type that owns a cell (`ref`, an array), or with `mutB` also one that holds a `mut` borrow:
-a `drop` may not be at the first, a `copy` at either. -/
+a `consume` may not be at the first, a `copy` at either. -/
 def LTy.ownsN (mutB : Bool) : Nat → LTy → Bool
   | 0, _ => false
   | f + 1, t => match t with
@@ -486,7 +486,7 @@ def peekV (x : Var) : IM LV := do
 
 /-! ### The stack machine's hand-over (#746 F3)
 
-A stack machine's `stackK` drop (`DropRule.stackK`) hands a level's suspended computation over
+A stack machine's `stackK` consume (`ConsumeRule.stackK`) hands a level's suspended computation over
 to the machine's `k` at a lower frame: the node is `drop x (let k₂ = clos kc [base] in …)`. -/
 
 /-- The frames of the current task stack, the bottom first. -/
@@ -502,7 +502,7 @@ def TakesOver (s : St) (base a : Nat) : Prop :=
   ∃ i j, i ≤ j ∧ s.curFrames[i]? = some base ∧ s.curFrames[j]? = some a ∧
     ∀ f ∈ s.framesFrom j, ∃ v, s.mem[f]? = some (some v)
 
-/-- **The hand-over at a `stackK` drop of `x` whose body is `b`**, at the state `s`: `b` binds
+/-- **The hand-over at a `stackK` consume of `x` whose body is `b`**, at the state `s`: `b` binds
 `clos kc [base]` first, `x` is `clos kc [a]` of the same code, and `base` is at or below `a`
 on the current task stack, the frames from the top down to `a` written (`TakesOver`). -/
 def HandOver (s : St) (x : Var) : Tm → Prop
@@ -510,7 +510,7 @@ def HandOver (s : St) (x : Var) : Tm → Prop
       s.frame[base]? = some (.int b) ∧ TakesOver s b.toNat a.toNat
   | _ => False
 
-/-- `HandOver`, decided: the LIR interpreter's check at every `stackK` drop. -/
+/-- `HandOver`, decided: the LIR interpreter's check at every `stackK` consume. -/
 def handOverB (s : St) (x : Var) : Tm → Bool
   | .letv _ (.clos kc [base]) _ =>
     match s.frame[x]?, s.frame[base]? with
@@ -525,9 +525,9 @@ def handOverB (s : St) (x : Var) : Tm → Bool
 
 /-! ### Terms -/
 
-/-- **A node's own step**: at a `letpair`, `case`, `copy`, `drop` or `abandon`, what `eval` does
+/-- **A node's own step**: at a `letpair`, `case`, `copy`, `consume` or `abandon`, what `eval` does
 before it continues, in tail position, with the sub-term this answers; `none` at any other node.
-At a `stackK` drop it checks the hand-over (`handOverB`). -/
+At a `stackK` consume it checks the hand-over (`handOverB`). -/
 def enter (p : Prog) (t : Tm) : IM (Option Tm) := match t with
   | .letpair x y q b => do
     match ← takeV q with
@@ -543,16 +543,16 @@ def enter (p : Prog) (t : Tm) : IM (Option Tm) := match t with
     if t.ownsN true 64 then bad s!"a copy of x{x} at {t}, which owns a cell or holds a mut borrow"
     bindV x' (← peekV x)
     pure (some b)
-  | .drop r x b => do
+  | .consume r x b => do
     let t ← tyIn p x
-    if t.ownsN false 64 then bad s!"a drop of x{x} at {t}, which owns a cell"
+    if t.ownsN false 64 then bad s!"a consume of x{x} at {t}, which owns a cell"
     if r == .stackK && !handOverB (← get) x b then
-      bad s!"a drop of x{x} at the rule stack k, where the hand-over does not hold"
+      bad s!"a consume of x{x} at the rule stack k, where the hand-over does not hold"
     let _ ← takeV x
     pure (some b)
   | .abandon _ x b => do
     let t ← tyIn p x
-    if t.ownsN false 64 then bad s!"a drop of x{x} at {t}, which owns a cell"
+    if t.ownsN false 64 then bad s!"a consume of x{x} at {t}, which owns a cell"
     let _ ← takeV x
     pure (some b)
   | _ => pure none
@@ -739,7 +739,7 @@ def eval (p : Prog) : Nat → LTy → Tm → IM LV
       let v ← eval p f (← tyIn p x) e
       bindV x v
       eval p f rt b
-    | .letpair .. | .case .. | .copy .. | .drop .. | .abandon .. => do
+    | .letpair .. | .case .. | .copy .. | .consume .. | .abandon .. => do
       match ← enter p t with
       | some b => eval p f rt b
       | none => bad "a node with no step"
@@ -781,9 +781,9 @@ inductive Visits (p : Prog) : St → Tm → St → Tm → Prop
 /-! ### What the hand-over gives
 
 Two facts, and only these: under `HandOver` the frame range of the `k` that takes over contains
-the dropped `k`'s (`TakesOver.suffix`, from the order alone); and a `stackK` drop's step, as every
-drop's, touches no heap (`enter_stackK_keeps`, with no hypothesis). That every configuration a
-converted program reaches at a `stackK` drop is a hand-over, and that the `k` taking over then
+the consumed `k`'s (`TakesOver.suffix`, from the order alone); and a `stackK` consume's step, as every
+consume's, touches no heap (`enter_stackK_keeps`, with no hypothesis). That every configuration a
+converted program reaches at a `stackK` consume is a hand-over, and that the `k` taking over then
 releases those frames, is `UNPROVED:` (`Backend2.StackKHandOver`). -/
 
 /-- The frames `clos kc [a]` stands for are a suffix of those `clos kc [base]` stands for. -/
@@ -875,10 +875,10 @@ theorem Keeps.takeV' (x : Var) : Keeps (takeV x) := by
   · exact Keeps.bind' (Keeps.modify' _ fun _ => ⟨rfl, rfl, rfl, rfl⟩) fun _ => Keeps.pure' _
   · exact Keeps.bad' _
 
-/-- The step of a `stackK` drop changes no object, cell, task stack or region; it consumes the
-variable alone. It needs no hand-over: the interpreter's every drop is the same step. -/
+/-- The step of a `stackK` consume changes no object, cell, task stack or region; it consumes the
+variable alone. It needs no hand-over: the interpreter's every consume is the same step. -/
 theorem enter_stackK_keeps {p : Prog} {x : Var} {b : Tm} :
-    Keeps (enter p (.drop .stackK x b)) := by
+    Keeps (enter p (.consume .stackK x b)) := by
   have tail : Keeps (do let _ ← takeV x; pure (some b) : IM (Option Tm)) :=
     Keeps.bind' (Keeps.takeV' x) fun _ => Keeps.pure' _
   unfold enter

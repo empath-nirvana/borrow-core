@@ -15,7 +15,7 @@ end, and answers the loop there.  It is a deep handler of `Div`:
 
 * `done b` finishes at its first observation with `b`; closed, it hands back `res b`.  `res` is
   the residual of a result, read off its type (SPEC §14 *The residual*): what `B` holds with no
-  drop.  It is a closed term of the constant, typed at the empty context.
+  consume.  It is a closed term of the constant, typed at the empty context.
 * `closed r` is the loop of a computation that ended with its residual: every *next* skips, and
   *close* hands `r` back.
 * At a tick the handler answers the loop whose *next* resumes `κ` with *next*, which runs the

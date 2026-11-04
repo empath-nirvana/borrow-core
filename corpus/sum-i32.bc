@@ -1,10 +1,10 @@
 -- The i32 counterpart of sumProg (syntax-core.md §13.2): a list of i32 cells, each node one
 -- block, borrowed `imm` by withbor1 and summed by a fold_imm whose algebra reads each element
--- through its borrow with withload. The cell and the list are then dropped implicitly (SPEC
--- §12): the drop of `ref List` frees the cell, then frees the list by a fold_own.
+-- through its borrow with withload. The cell and the list are then consumed implicitly (SPEC
+-- §12): the consume of `ref List` frees the cell, then frees the list by a fold_own.
 --
 -- Answer: i32[123], the sum of [100, 20, 3]. Each element is counted exactly once: a fold
--- that drops an element gives 23, 103 or 120, and one that counts an element twice gives
+-- that consumes an element gives 23, 103 or 120, and one that counts an element twice gives
 -- 223, 143 or 126.
 
 type List = mu X. 1 + (ref i32 * ref X)

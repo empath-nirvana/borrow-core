@@ -25,10 +25,10 @@ item 10 and D1, `docs/decisions.md` 67). This design takes that plan as its base
 - **What is lost, and where** (§1). The frontend decides each construct's shape, then emits a
   kernel term chosen for the proofs: a `ν` machine for every div body, whoever consumes it; a
   handler site with a captured `κ` for each `for` over a generator; a state-passing closure for
-  each stateful handler; a copy per site. The erasure drops the types, and the backend compiles
+  each stateful handler; a copy per site. The erasure consumes the types, and the backend compiles
   what is left and recovers the structure. §1.2 lists 31 such places, in four groups:
   - choices of the elaborator, recovered by searching user code (A1–A11);
-  - checked facts the erasure drops (B1–B6);
+  - checked facts the erasure consumes (B1–B6);
   - recognisers of fixed schemes, which are exact and stay (C1–C7);
   - re-derivations inside the frontend (D1–D7).
 - **The principle** (§1.4). Recognising a fixed scheme is exact. Recognising a property of user
@@ -55,7 +55,7 @@ item 10 and D1, `docs/decisions.md` 67). This design takes that plan as its base
   Its acceptance and kill criteria are given. If S0 is killed, §3.6's fallback (the previous
   revision's carry-then-verify path) applies.
 - **What remains of carry-then-verify** (§3.5):
-  - **dropped**: the loop entries, call modes, the span channel and N4. Loops are kernel terms,
+  - **consumed**: the loop entries, call modes, the span channel and N4. Loops are kernel terms,
     and their consumers are handlers;
   - **merged**: N1 (typed schemes) into the frontend build unit; N2 shrinks to keeping `qs` and
     passing the effect context on;
@@ -73,7 +73,7 @@ item 10 and D1, `docs/decisions.md` 67). This design takes that plan as its base
   their law and programs: closing by a cancel that answers the residual; ticks off today's skip
   points. One restriction needs a recorded decision: a handler of `Div` typed at a row without
   `Div` would contradict `total_every_run`.
-- **Defects** (§9.2). All three are kept: the qualifier dropped at conversion (it matters more,
+- **Defects** (§9.2). All three are kept: the qualifier consumed at conversion (it matters more,
   since `tick` is linear); string schemes (most are deleted with the machine, the rest still
   block laws); the lowering report that is not the lowering.
 
@@ -81,7 +81,7 @@ item 10 and D1, `docs/decisions.md` 67). This design takes that plan as its base
 
 ### 1.1 The pipeline as built
 
-| stage | file | input → output | keeps | drops |
+| stage | file | input → output | keeps | consumes |
 |---|---|---|---|---|
 | effects | `Frontend/Elab/Effects.lean` | surface → surface with sites | site names, `forSite`/`pullSite` nodes (`:2680–2754`), copies per assignment, rows | — |
 | sugar | `Frontend/Sugar.lean` (`elaborateS`, `:5556`) | surface → core, by typed elaboration (`TCx`) and string templates (`template`, `:570`; `mTemplate`, `:1057`) | names in `perform`/`handle` | the site nodes' kinds, loop nodes, which call is direct-style |
@@ -122,7 +122,7 @@ loss.
 | A10 | the consumer of a loop: a complete driver, `div_fuel`, a stored value | lost | the expected type at the call: "a call checked against its own loop type is the loop as a value" (SPEC §14) | #540, kill criterion 6 |
 | A11 | a let used at several rows | `Poly` converts once, runs `Prog.effects`, compares codes, converts again (`Poly.lean`, header) | the copies per row assignment | — |
 
-**B. Checked facts the erasure drops**
+**B. Checked facts the erasure consumes**
 
 | # | fact | how the backend gets it | who knew it | units |
 |---|---|---|---|---|
@@ -339,7 +339,7 @@ the count of ticks is the meaning, and the counter is in the code.
 ### 3.4 What the erasure keeps, and what is verified
 
 - **Kept**: static names, as now; `iterate`, as a primitive; the qualifier tags `qs`, which
-  `Convert` drops today; `Checked.sigs`, extended per name with each operation's clause kind.
+  `Convert` consumes today; `Checked.sigs`, extended per name with each operation's clause kind.
 - **Classified by the checker**: clause kinds. `[handle]`'s builder sees each clause value, and
   the schemes are fixed, so this is exact (§8 choice 6).
 - **Verified in the backend**: the site table's whole-program entries (copy groups, condition 2,
@@ -353,8 +353,8 @@ the count of ticks is the meaning, and the counter is in the code.
 
 | piece (previous revision) | now |
 |---|---|
-| loop entries, call modes, native lowering of machines from a complete root (N4) | **dropped**: loops are `iterate`, and consumers are handlers |
-| the span array (the previous revision's channel option C2) | **dropped** from this design; keys are static names. A span array may still come with #532's debug info |
+| loop entries, call modes, native lowering of machines from a complete root (N4) | **consumed**: loops are `iterate`, and consumers are handlers |
+| the span array (the previous revision's channel option C2) | **consumed** from this design; keys are static names. A span array may still come with #532's debug info |
 | N1 typed schemes | **merged into B2**: the per-body machine's templates are deleted, not converted. The new elaboration is written as typed schemes. The remaining templates (`forData`, `forYield`, `pullView`) are converted when a unit owes a law over them |
 | N2 the channel | **merged into B3**: keep `qs`, pass `Checked.sigs` on |
 | N3 the site table | **kept** (effect-lowering unit 9): user `for` bodies' kinds, copy groups, handler state, condition 2 |
@@ -366,7 +366,7 @@ The previous revision of this document applies. The meaning stays a machine. Loo
 call modes travel in a table, verified against the term. Native lowering runs from complete
 roots (N4), and loops U2 is built as filed. It is kept in the PR's history (commit `908f122`).
 
-### 3.7 Units, kept, merged or dropped
+### 3.7 Units, kept, merged or consumed
 
 | unit | verdict | how |
 |---|---|---|
@@ -380,11 +380,11 @@ roots (N4), and loops U2 is built as filed. It is kept in the PR's history (comm
 | 8 abortive pass-through, loop exit | kept | — |
 | 9 site table (N3) | kept, after 3 | user-code clause kinds |
 | loops U1 (#548, running) | kept | the node |
-| U2 (#549) | **class pass merged into B2**, as `Div` inference; **counted machine loops dropped** | a counted loop with `Div` in its body is `bounded_fix` at the row |
+| U2 (#549) | **class pass merged into B2**, as `Div` inference; **counted machine loops consumed** | a counted loop with `Div` in its body is `bounded_fix` at the row |
 | U3 (#550) | kept, simpler | every loop is `iterate` or a fold, so an edge is `inr` per level |
 | U4 (#551) | kept, simpler | moves between machine points are gone; exits are `up` sums per level |
 | U5 (#58) | independent | — |
-| N1, N2, N4 | merged, merged, dropped | §3.5 |
+| N1, N2, N4 | merged, merged, consumed | §3.5 |
 
 New units:
 
@@ -393,7 +393,7 @@ New units:
 | **S0** | **the proof spike** (§4.1) | — | §4.1 |
 | B1 | **kernel**: `cwp` at rows with `Div`, `iterate`, `reify`, `div_fuel`; FP and adequacy at those rows; SPEC §14 and §19 rewritten | S0 | FP, adequacy, `total_every_run` with their statements; axioms within the three |
 | B2 | **frontend**: the `Div` elaboration (§3.2) as typed schemes; the per-body machine, `div_bind`/`div_defer` emission and §14's specialisation deleted; loops U2's class pass as `Div` inference | B1, U1 | every output, golden, exit status, `live 0` and `div_fuel` answer unchanged; loops' matrix (24 non-AA cells) and `return` matrix run; sugar pairs' core forms rewritten, each diff listed |
-| B3 | **backend**: `qs` kept, `Checked.sigs` passed on; `iterate` lowered natively; `Div`'s runtime clause as a direct call; `reify` through `Capture` | B2, unit 3 | sieve ≤ 1.4×, chain-yield ≤ 1.2×; `allocs`, `indirect`, `copies` only drop |
+| B3 | **backend**: `qs` kept, `Checked.sigs` passed on; `iterate` lowered natively; `Div`'s runtime clause as a direct call; `reify` through `Capture` | B2, unit 3 | sieve ≤ 1.4×, chain-yield ≤ 1.2×; `allocs`, `indirect`, `copies` only consume |
 
 **Order.** U1 (running) and #540 (running) finish. Then S0. If S0 passes: B1 → B2 → unit 3 →
 B3 → units 4, 5, 9 → U3 → U4 → 7 → 8, 6. #216 can go any time after unit 9.
@@ -428,12 +428,12 @@ computation that ticks forever is not in it. That is why today's div is `ν` cod
   `reify` and `div_fuel`, and any borrow frame at a `Div` row would have to be indexed. None is
   needed while `tick` obeys T1. It is used only if the greatest fixed point fails at items 1–5.
 
-**Unknown 2: the residual.** A loop closed early hands back what has no derived drop (SPEC §14). The
+**Unknown 2: the residual.** A loop closed early hands back what is not consumable (SPEC §14). The
 cancel of a cancellable continuation answers `()`, and a cancel that answered the residual would
 change "the canceller sees `()`" (algebra, *Cancel*).
 - **Candidate** (hypothesis): `tick`'s continuation is linear, so closing is `κ close`, a resume.
   The code after the tick returns `inr` of the residual by name (§3.2).
-- **To show**: a kernel program whose loop holds a capability with no derived drop is closed by
+- **To show**: a kernel program whose loop holds a capability that is not consumable is closed by
   `div_fuel 3` and hands the capability back. It needs a tied derivation, a run, and its compiled
   form with `live 0`. This is `corpus/io-fuel.bc`'s `collatz_within` in the kernel.
 
@@ -512,7 +512,7 @@ Only the site table remains in M (N3: user clause kinds' codes, copy groups, con
 - *Grades*: `{1, ω}` per clause, from the qualifier and the answer type: an abortive operation's
   clause is graded 1, a resuming one's ω.
 - *Typing*: `[handle]`'s premise that the clauses' context is persistent holds where the clause
-  is graded ω. Where it is graded 1, the context drops.
+  is graded ω. Where it is graded 1, the context consumes.
 - *Law*: a clause graded 1 runs at most once per instance of its handler (`catch_abort`).
 - *Proofs*: `handle_compatC`'s abortive case with an environment that holds no owned cell
   (`Ctx.OwnFree`).
@@ -574,7 +574,7 @@ Only the site table remains in M (N3: user clause kinds' codes, copy groups, con
 | handlers-di, raise-large | 0.98×, 1.03× | unchanged | — | — |
 
 §1.3's `while` program compiles to about the counted version's size: 10 code functions rather
-than 51. Hypothesis. `allocs`, `indirect` and `copies` only drop. The count of `drive`s outside
+than 51. Hypothesis. `allocs`, `indirect` and `copies` only consume. The count of `drive`s outside
 `reify` and hand-written core is 0 on the corpus and `bench/`.
 
 ### 6.3 Kill criteria
@@ -617,7 +617,7 @@ No step of this design changes a decided equation, if S0's candidates hold. Thes
 
 | candidate | law | change | programs | where it stands |
 |---|---|---|---|---|
-| closing a loop by a cancel that answers the residual | *Cancel*: "the canceller sees `()`" | a cancel answering `R` | every `div_fuel` over a loop holding a capability with no derived drop: `corpus/io-fuel.bc`, `lend-lib-loop.bc`, `lend-lib-each.bc` | avoided by the must-resume `tick` (S0, unknown 2); a stop if S0 kills it |
+| closing a loop by a cancel that answers the residual | *Cancel*: "the canceller sees `()`" | a cancel answering `R` | every `div_fuel` over a loop holding a capability that is not consumable: `corpus/io-fuel.bc`, `lend-lib-loop.bc`, `lend-lib-each.bc` | avoided by the must-resume `tick` (S0, unknown 2); a stop if S0 kills it |
 | ticks other than at today's skips | hard-stop item 2 | `div_fuel`'s counts and the skips a pull consumer sees | the `div_fuel` programs of §4.1 and the pull consumers, e.g. `for-data-div.bc`'s `first_two` | avoided by placement (S0, unknown 3); a stop if no placement matches |
 
 **A restriction to record**: a program's handler of `Div` at a row without `Div` (§4.2). No

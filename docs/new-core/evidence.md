@@ -10,7 +10,7 @@ proved at that part's rules, not a result of its own. Every other name is a Lean
 
 | Part | Result (Lean name) | Branch, commit |
 |---|---|---|
-| Step-indexed `ewp`; storing scheduler, unbounded loop, no fuel | `ewp_handle`, `adequacy`, `progStore_orDiverges`, `progDrop_orDiverges` | `dtor-unwind` 9f0571da |
+| Step-indexed `ewp`; storing scheduler, unbounded loop, no fuel | `ewp_handle`, `adequacy`, `progStore_orDiverges`, `progConsume_orDiverges` | `dtor-unwind` 9f0571da |
 | `[handle]` at Core's borrow-free types without `hdv` | `handle_sem`, `kap_sem` | `dtor-unwind` 6969c14f |
 | Index-relative `mut` cells; 6.48, 6.59 at the index | `UpdMutN`, `not_mutMutMemberStep`, `updVN_frame`, `six59VN` | `dtor-unwind` 99fc8d04, 20641658 |
 | Handlers over Core's worlds | `erwp_handle`, `erwp_ccatch`, `erwp_safe` (progress only) | `dtor-unwind` f0b46033 |
@@ -54,7 +54,7 @@ proved at that part's rules, not a result of its own. Every other name is a Lean
 | The resume condition at the escrow's exclusive locations, at a join, from the cactus invariant and the other branches' points; without points it fails | `fdEsc_at_join`; `cactusT_config`, `cactusT_not_fdEsc`, `config_not_joinPt` | library: `Core/TreeCactus.lean` |
 | Other branches' steps keep that condition; without the printed `↭` at `twp`'s end they need not (refuted) | `stepKeepsFdEsc`; `not_stepKeepsFdEscNoUpd`, `copy_end_refused`, `copy_config` | library: `Core/TreeStepKeep.lean` |
 | Headlines at one branch: adequacy; a step keeps others' open lends (R1); a lend is not ended while a stored branch holds part of it (R2); a join's valid end leaves the others nothing of the lend (R3) | `topAdequacyT`, `r1_stepKeepsFdEsc`, `r2_endBlockedByHolder`, `r3_joinEndNeedsFdEsc`, `fdEsc_of_end_valid`, `config_end_refused` | library: `Core/TreeHeadlines.lean` |
-| A must-resume `κ` is linear with no derived drop | `kTy_lin` | library: `Core/Classes.lean` |
+| A must-resume `κ` is linear and not consumable | `kTy_lin` | library: `Core/Classes.lean` |
 | World operations over the tree world; store typing growth | `TWd.addTy_ext`, `Cov.mono`, `RR.mono`, `winv_swap` | `tree-wp` fc49ed48, 44667d04 |
 
 The target programs are in `corpus/pending/` on the local branch `pending-770`, stacked on

@@ -75,7 +75,7 @@ forms (`fn`, `let`, `f(e)`, `{ … }`) are added to the same AST (stage 5, §7).
 - its span;
 - its type: a value or computation type, over a mirror of `CVTy`/`CCTy` with one extra
   constructor for a metavariable, `?n`;
-- at a binder, the variable's *identity* and its *class*: persistent, has a derived drop, or has
+- at a binder, the variable's *identity* and its *class*: persistent, is consumable, or has
   none (SPEC §12's three classes, decided by the checker's own functions);
 - the summaries lowering needs: the node's *effect* (total or div), and the `let mut` variables
   it assigns and reads.
@@ -194,7 +194,7 @@ Lifetimes are not unification variables (§2.3). Computation types are not eithe
 unknown in a computation type is its effect, which §2.4 solves on its own lattice.
 
 A metavariable has an unknown class, so inference treats it as linear until it is solved. This
-matters only to the linearity lint (§2.5): the checker decides drops and persistence on the final
+matters only to the linearity lint (§2.5): the checker decides consumes and persistence on the final
 types.
 
 ### 2.3 Lifetimes: lexical, fresh, matched
@@ -274,14 +274,14 @@ two components capture the same variables additively, as `div_bind`'s continuati
 `{ f(x) }` is the instance `S = f(x)`, so its `start` is the call `f V`.
 
 **The residual, from the type.** A loop closed early must release what it holds. Anything with
-a drop is dropped by the checker, on the close path, like any unused value (SPEC §12). What
-has no derived drop (a capability, a `ref` of an opaque type) must be handed back. So:
+a consume is consumed by the checker, on the close path, like any unused value (SPEC §12). What
+is not consumable (a capability, a `ref` of an opaque type) must be handed back. So:
 
 > The residual of a div function with result `B` is `K ⊗ 1`, where `K` is the tuple of the
-> components of `B` that have no derived drop (SPEC §12, group 3), in their order in `B`; or `1`
+> components of `B` that are not consumable (SPEC §12, group 3), in their order in `B`; or `1`
 > when there are none.
 
-This is decided by the `HasDrop` classes, not by the names `In`/`Out`. It gives today's answer on
+This is decided by the `Consumable` classes, not by the names `In`/`Out`. It gives today's answer on
 every corpus program. It also covers any future capability type (`Args`, `Fs`, a user handle)
 with no list to update.
 
@@ -343,7 +343,7 @@ its own errors come first and the checker's split errors do not point at generat
    name, and the old binding is consumed: `&mut x`, `&x`, `*r`, borrow blocks, `modify`, `for`
    over `bytes(&mut c)`, and a `let mut` variable a loop threads. The reader keeps using `x`; the
    core has `let (x, v) = …`.
-4. **No inserted copies or drops.** Drops are the checker's (SPEC §12). Implicit copies of `imm`
+4. **No inserted copies or consumes.** Consumes are the checker's (SPEC §12). Implicit copies of `imm`
    borrows are #58, a separate spec entry. If it lands, it is one more lowering rule, which
    decision 26 permits.
 5. **A use-count lint on the TIR.** Before lowering, each non-persistent variable is counted per
@@ -396,7 +396,7 @@ that span (`for`, `&mut`, `let mut`, a div call, a residual close path). The spa
 | effect: `total fn` that loops; a loop body that loops | infer | as today (`total-loops.bc`) |
 | lend that cannot come back; a second use | infer (lint) | "`&mut c` needs `c` to be a place; this is an expression" |
 | residual mismatch at a close point | lower | "closing the loop here would leave `stderr` unreleased" |
-| borrow escape, overlap, outlives, missing drop | check | "`b` escapes its borrow block" (the checker's message, at the block's span) |
+| borrow escape, overlap, outlives, missing consume | check | "`b` escapes its borrow block" (the checker's message, at the block's span) |
 
 A checker error on a program that inference accepted is expected for the last row only: borrow
 discipline and ownership, which the elaborator does not model. For any other kind (a type
@@ -471,7 +471,7 @@ in the head of a bind", because the A-normal form of §2.4 gives every call a bi
 - **Borrowed.** `&mut x` / `&x` on a `let mut` value is a cell scoped to that one construct
   (§5.1). Cells are stack slots; placement belongs to the backend (#15, decision on `box`).
 - A `let mut` variable is linear or persistent by its type, like any other. Assigning a linear
-  variable consumes its old value, which the checker drops if unused.
+  variable consumes its old value, which the checker consumes if unused.
 
 ### 5.3 `data` and `box`
 
@@ -780,7 +780,7 @@ What inference decides:
   `@w = top` (`i32` has no lifetime), `A = B = i32` from the cells' types, and `T = 1` from the
   body.
 - The block rebinds `ra` and `rb`, and its `1` result is elided.
-- The inner `modify mb { y -> (x, y) }` returns `(mb, y)`: `mb` is rebound (and later dropped by
+- The inner `modify mb { y -> (x, y) }` returns `(mb, y)`: `mb` is rebound (and later consumed by
   the checker), and `y` is the value.
 - The outer body's tail `y` checks against `i32 * ?B`, fails, and elides to `(y, ())`, so
   `B = 1`.
@@ -837,7 +837,7 @@ so far, so a div function has its loop type and a call of it in direct style bin
 `B`. The syntactic `isCapTy`, `capPart`, `capNorm`, `residual`, `termCaps`, `callee`, `divCall`,
 `divCallAt`, `fnTy`, `pairTypes` and the `bytes` pattern are deleted:
 
-- **The residual** is the strictly linear components of the result (`noDerivedDrop`, `loopCxOf`),
+- **The residual** is the strictly linear components of the result (`strictlyLinear`, `loopCxOf`),
   named by the terminal's variables (`termParts`) (`corpus/sugar/residual-alias.bc`).
 - **A call in direct style** is any application of loop type where that loop is not expected
   (`directCall`, `callIn`), and nested calls are lifted in evaluation order (`liftApps`)

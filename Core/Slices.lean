@@ -29,7 +29,7 @@ The element operations on a `mut` family (K4), with the terms of their `imm` cou
 | `slice_get_mut` | `!([Mut @a A] ⊗ I32 ⇒ Mut @a A ⊕ 1)` | `idx` |
 | `slice_len_mut` | `!([Mut @a A] ⇒ [Mut @a A] ⊗ I32)` | `array_size`'s |
 
-`slice_get_mut` consumes the family and hands out one leaf: the others are forgotten, since a
+`slice_get_mut` consumes the family and hands out one leaf: the others are released, since a
 `mut` leaf holds no `own` cell (`noOwn_mut`). A `mut` family is not duplicable, so its length is
 read by handing the family back.
 -/
@@ -270,7 +270,7 @@ theorem noOwn_mut {a : Lifetime.Life} {A : VTy} {ls : List SRec} {δ : LSub} {v 
   exact ResU.restrict_single_other (by simp)
 
 /-- `idx` on a family whose leaves hold no `own` cell: the leaf at the index, the rest
-forgotten.  `[spec §9]` -/
+released.  `[spec §9]` -/
 theorem famGet_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {L : VTy} (hΓ : Ctx.DeadP Γ)
     (hL : ∀ ls δ m ρ, vP L ls δ (.loc m) ρ → NoOwn ρ) :
     SemV Δ Γ (.val (.prim .idx)) (.bang (.lolli (.tensor (.fam L) (.int .w32)) (.sum L .unit))) := by

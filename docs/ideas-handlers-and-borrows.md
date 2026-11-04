@@ -19,7 +19,7 @@ It is one kind of handler, not all of them. Handlers differ in what they do with
 |---|---|---|
 | resumes once, immediately | state, I/O, maps, logging, clock, allocator, mocks | a borrow |
 | resumes once, then does more work | `finally`, transactions, timing a region | a borrow with an epilogue |
-| never resumes | exceptions, early exit, cancellation | unwinding (drop the continuation: drops run, borrows end) |
+| never resumes | exceptions, early exit, cancellation | unwinding (consume the continuation: consumes run, borrows end) |
 | stores `k` and resumes once, later | generators, async, coroutines | codata (`k` is the one-shot `U X`) |
 | resumes many times | backtracking, nondeterminism | copying `k`; only when what it holds is persistent (`!`) |
 
@@ -48,7 +48,7 @@ also decides what the handler may touch:
 
 | row | `U k` is | grade |
 |---|---|---|
-| exceptions, early exit | dropped (drops run) | 0 |
+| exceptions, early exit | consumed (consumes run) | 0 |
 | generators, async | used once, possibly later | 1 |
 | backtracking | used many times; only if `k` is persistent | ω |
 

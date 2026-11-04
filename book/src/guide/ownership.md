@@ -2,11 +2,11 @@
 
 Every value is either **unrestricted** or **linear**. An unrestricted value holds no resource,
 and may be copied and used any number of times or not at all. A linear value is used exactly
-once: passed on, taken apart, or consumed by its drop. Most linear values own something (memory,
-a capability, a suspended computation), and a borrow is linear too. Most linear types have a drop
+once: passed on, taken apart, or consumed by its consume. Most linear values own something (memory,
+a capability, a suspended computation), and a borrow is linear too. Most linear types have a consume
 that the compiler derives from their structure, and the checker inserts it where a value goes
 unused, so an owned cell behaves much as it does in Rust. The difference is that Rust lets any
-value go unused, while here a value goes unused only through its derived drop, and some types
+value go unused, while here a value goes unused only through its consume, and some types
 have none ([Linear values](linear.md)). Borrowing lends a value for a while without giving it up.
 A program that type-checks has no use after free, no double free and no leak
 ([Safety guarantees](../safety.md)).
@@ -50,8 +50,8 @@ main -> i32 =
 ```
 
 The second use is an error, so there is no use after free and no double free. A value that is
-never used is not an error: the checker inserts its derived drop where its scope ends, which
-frees it, much as Rust drops it.
+never used is not an error: the checker inserts its consume where its scope ends, which
+frees it, much as Rust consumes it.
 
 ```bc
 include textio
@@ -64,7 +64,7 @@ main -> 1 =
 -- output: 42
 ```
 
-The run ends with `live 0`: both cells were freed. A value whose type has no derived drop (a
+The run ends with `live 0`: both cells were freed. A value whose type is not consumable (a
 capability, a one-shot closure that must be called, a declared type that must be closed) must be
 used, and leaving it unused is an error that names it ([Linear values](linear.md)).
 

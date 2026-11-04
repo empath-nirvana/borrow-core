@@ -30,7 +30,7 @@ rule is needed.
 **Representation is not a blocker** (the user, 2026-10-19): "on the back end mut view being a swap is
 sort of a lowering choice … the fact that the proof was represented that way doesn't mean we need
 to compile it that way." So a cost that comes from how the kernel *represents* an operation (a read
-through `mut` as two swaps, a write as a replace that drops the old value, a `while` as a driven
+through `mut` as two swaps, a write as a replace that consumes the old value, a `while` as a driven
 state machine) is filed in §5 as a lowering unit, not as an expressiveness blocker.
 
 **Definition of done** (the user, 2026-10-19): no open-ended experimenting. §9 is a fixed list of
@@ -116,7 +116,7 @@ first; within them, the one whose fix is the deeper foundation comes first.
 | B1 shared service across tasks | **a per-turn lend**: the scheduler owns the service and lends it to the task it resumes, for one turn, which hands it back at its `await`. It reuses §14's per-observation lend with the turn as the step, read as Balzer–Pfenning's acquire/release; that it needs no new lemma is a hypothesis, settled by spike S-B (§9) | no. Rust uses `Rc<RefCell<_>>` (run-time flag) or `Arc<Mutex<_>>`; ours is static and free on one thread |
 | B7 elaboration refusals | the already-designed units: loops U2–U4, ergonomics E1, #586's write rule | n/a |
 | B3 records, variants, nested data | data declarations (#489) whose nested containers **elaborate to one recursive type**, as Lean elaborates nested inductives into mutual ones | partly: Rust's enums and structs, without its `Box` ceremony |
-| B4 suspended computations owning capabilities | the close-with-residual that S0 proved for loops ("unknown 2: the residual … proved", `experiments/DivEffect/README.md`: a loop closed early hands back its residual by a resume with `close`, not a cancel), applied to generators | no: Rust relies on `Drop`; we have no derived drop for a capability |
+| B4 suspended computations owning capabilities | the close-with-residual that S0 proved for loops ("unknown 2: the residual … proved", `experiments/DivEffect/README.md`: a loop closed early hands back its residual by a resume with `close`, not a cancel), applied to generators | no: Rust relies on `Consume`; we have no derived drop for a capability |
 | B5 borrows across a suspension (**closed, decision 71**: [tombstone](tombstones/lends-across-suspensions.md)) | for tasks, **the lend split at each `await`** (measured: the split program runs `unconditional`, with no `PinLaw`); for generators, **a lending cursor**, whose state is owned (an index) and which is lent the source at each pull. The spanning lend K1 (#172) is not needed for the target set | Rust's own answer for generators is the same index cursor; its self-borrowing generators are not stable |
 
 **The research threads** (§7): used — handler-owned state, SILL_S manifest sharing (as the reading
@@ -198,7 +198,7 @@ blocker. "Runs (shape)" means it runs only in a shape the language forces, named
 
 | functionality | program | today | target |
 |---|---|---|---|
-| a generator that reads its input and yields digits, lines or tokens, then hands the input back | `gen-digits`, `gen-lines`, `gen-adapters-io` | refused: the iterator holding `ref input` "is live across a computation that may abort, and its type is linear with no derived drop" (measured) | north star stage 3 (a watch stream) |
+| a generator that reads its input and yields digits, lines or tokens, then hands the input back | `gen-digits`, `gen-lines`, `gen-adapters-io` | refused: the iterator holding `ref input` "is live across a computation that may abort, and its type is linear and not consumable" (measured) | north star stage 3 (a watch stream) |
 | a generator that writes as it yields | `gen-lazy` | refused, the same for `ref output` (measured) | outside |
 
 **B5: a borrow held across a resuming operation.**
@@ -295,7 +295,7 @@ report for T01, T02, T07, T09 and T10 are correct; T08's and T14's were checked 
 | B1 | a capability is a `mut` borrow; a task of `spawn_in` is given it until it ends, so two tasks cannot both use it; a task of `spawn` cannot hold a borrow (`κ` boxed at `top`); a task's observations have the empty row, so it cannot perform an outer control effect | SPEC §34 *Tasks* (PROPOSED), §30 *Open*; `lib/async.bc:31`; measured `op-a`, `op-d` |
 | B2 | a handler around a div computation is not provided | SPEC §21 *Open*; measured `op-e` |
 | B3 | no `data` declarations; a `mu` nested in a `mu` must be closed; record fields and variants in place are limited | parser; SPEC §5 *Open*, §31 *Open*; #182, #32, #19; measured `json2` |
-| B4 | `yield` is cancellable; what is live across it must drop; a capability has no derived drop; a cancel answers `()` | SPEC §15 *Open*, §19 `[let]`; measured `gen-*` |
+| B4 | `yield` is cancellable; what is live across it must consume; a capability is not consumable; a cancel answers `()` | SPEC §15 *Open*, §19 `[let]`; measured `gen-*` |
 | B5 | a resuming operation cannot cross a borrow (T1, permanent by decision 71); R1 relaxes it only for a body closed but for its view, and is frozen | SPEC §19, §29; [tombstone](tombstones/lends-across-suspensions.md) |
 | B6 | a call lends one place; a looping callee takes one borrow, re-lent each step; a lend in a capability-threading call, and a capability through `for … in &a`, are not provided | SPEC §14 *Open*, §18 *Not provided* and *Open* |
 | B7 | elaboration decisions taken too early or by name (loop class before typing, threaded variables by name, assignments outside joins) | `docs/loops.md` §1; `docs/ergonomics.md` §7.1; #586 |
@@ -372,7 +372,7 @@ owning its own state (`corpus/async-bank-inbox.bc`); read-only sharing (`async-w
 **The elaboration candidate.**
 - *What the user writes:* `operator-reconcile.bc` unchanged: `with fake_api(&mut st) { … with spawn { reconcile(1, 3) } … run_until_empty(q) }`, the tasks calling `observed` and `update`.
 - *What it elaborates to:* `spawn_with[S]`: a spawn whose clauses keep `κ` at `'d` (as `spawn_in`'s do) and whose task type takes the capability at each observation and answers it back with the step; `run_until_empty` threads the capability through every `resume`, as §32 threads a block's capabilities (`!U(C ⊗ A ⊸ F_Σ(C ⊗ B))`) and §15 a `for`'s variables through its site.
-- *Which rule checks it:* §22's `Clo` closure with an argument, §28/§32's BOXED-κ at `'d`, and §32's capability threading. The task never holds the borrow across `await`: it hands it back there. So T1 is not crossed, R1 and `PinLaw` are not used, and the Links hazard (Tang et al., cited: a handler dropping a continuation that holds a linear resource) does not arise, because a suspended task holds no lend.
+- *Which rule checks it:* §22's `Clo` closure with an argument, §28/§32's BOXED-κ at `'d`, and §32's capability threading. The task never holds the borrow across `await`: it hands it back there. So T1 is not crossed, R1 and `PinLaw` are not used, and the Links hazard (Tang et al., cited: a handler consuming a continuation that holds a linear resource) does not arise, because a suspended task holds no lend.
 - *Memory management at the surface:* none.
 
 **Recommendation.** The per-turn lend. It is the strongest foundation of the options because it is
@@ -396,7 +396,7 @@ has a filed issue and most have a designed unit (`docs/loops.md`, `docs/ergonomi
 | a `for` over a view that is not a typed parameter is taken to loop | #491, #501 | U2 |
 | a recursive call inside a counted `for` threading an array | #492 | not predicted fixed by the loops units (`docs/loops.md` §1.4) |
 | `return` from inside some nests; `loop`/`while` as values | S4, S10, S11 | U3, U4 (#551) |
-| a write to a captured `let mut` is lost silently | #586 | the mutation report's D2: threaded or refused, never dropped |
+| a write to a captured `let mut` is lost silently | #586 | the mutation report's D2: threaded or refused, never consumed |
 | an assignment to a shadowing `let` reaches the `let mut` | #504 | D2's name-resolution clause (G1) |
 | an owner borrowed inside another borrow block is not handed back | #495 | elaboration |
 | `let mut` lent outside a call (the value place); `let (x, r) = f(x, …)` plumbing | #582 (E1, N1/N10) | ergonomics E1 |
@@ -416,7 +416,7 @@ are the prerequisite for writing most of T01–T14 naturally (§2.2).
 … found name `data`"). A recursive type inside another must be closed (measured, `json2.bc`: "`mu
 Y. …` must be closed: it mentions an enclosing type variable"), so `mu X. … List[X] …`, the natural
 JSON value, is not a type. Fields of a borrowed record are lent only when every other field is
-`Forgettable`, and variants in place are open (SPEC §5 *Open*, #19). n-body has no fixed-size arrays
+`Releasable`, and variants in place are open (SPEC §5 *Open*, #19). n-body has no fixed-size arrays
 (#72, #496), which is where Rust's 1.56× over C comes from (recorded, `bench/README.md`).
 
 What works (measured): the same document with arrays encoded in the one `mu` (`json3.bc`, `i32[7]`,
@@ -441,16 +441,16 @@ nesting elaboration, behind the yes/no spike S-D (§9).
 ### 4.5 B4: a suspended computation that owns a capability
 
 **What fails.** "`io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a
-computation that may abort, and its type is linear with no derived drop, and an abort abandons
+computation that may abort, and its type is linear and not consumable, and an abort abandons
 only a value that holds no owned cell" (measured, `gen-digits`, `gen-lines`, `gen-adapters-io`;
-`gen-lazy` for `ref output`). `yield` is cancellable, so what is live across it must drop; a
-capability has no derived drop and must be handed back; a cancel answers `()` (SPEC §15
+`gen-lazy` for `ref output`). `yield` is cancellable, so what is live across it must consume; a
+capability is not consumable and must be handed back; a cancel answers `()` (SPEC §15
 *Open*). North-star stage 3 is this shape: a watch stream decoded from a socket the stream owns.
 
 | way | performance | proof cost | ergonomics | verdict |
 |---|---|---|---|---|
-| Rust's way: the iterator owns the handle; `Drop` closes it | parity | n/a: a capability has no derived drop by design (§12) | good | not available as is |
-| give the capability a drop | parity | lemma; changes §12's group 3 | fair: a dropped stream silently closes the input | rejected: the user's linear-obligation goals (#209, #210) want the capability back |
+| Rust's way: the iterator owns the handle; `Consume` closes it | parity | n/a: a capability has no derived drop by design (§12) | good | not available as is |
+| give the capability a consume | parity | lemma; changes §12's group 3 | fair: a consumed stream silently closes the input | rejected: the user's linear-obligation goals (#209, #210) want the capability back |
 | **close hands back a residual**: cancelling the generator resumes it with `close`, and it returns what it owns | parity | lemma or less: S0 proved it for loops (unknown 2, `experiments/DivEffect/README.md`); generators need the same close at their `yield`'s observation | best | **recommended**: one mechanism with B2 |
 | a `must_resume ctl` iteration effect (no `break`) | parity | lemma | poor: no early exit | a fallback named by SPEC §15 |
 | pass the capability per pull (the per-turn lend of B1) | parity | none or lemma (as B1) | fair | the same mechanism as B1; good where the consumer owns the capability anyway |
@@ -571,7 +571,7 @@ lowering rule, and where the rule relies on a law, a proof of that law over Core
 | cost | where it shows | representation | lowering | its justification | unit |
 |---|---|---|---|---|---|
 | a read through a `mut` view is two swaps (`peek`, `modify m { x -> (x, x) }`) | quicksort 1.24×, sort-generic 1.29×; `bcc-counts` quicksort `loads 87529 stores 83522` (measured): a store per read | `withswap` / `slice_replace_mut` | a load, when the contents are persistent | the lens laws (get-put, put-get) for one location; a derived node on the typed term ("contents persistent"), as C2b's `divLit` is, and an erasure-pass rule with its proof over Core | L-1 |
-| a write is a replace that drops the old value | n-body, prefix | `array_replace`, `swapField` | a store, when the old value is persistent (its drop is a no-op) | put-put plus "drop at a persistent type is the identity" | L-1 |
+| a write is a replace that consumes the old value | n-body, prefix | `array_replace`, `swapField` | a store, when the old value is persistent (its consume is a no-op) | put-put plus "consume at a persistent type is the identity" | L-1 |
 | `while`, `loop` and a generator's body run as a driven state machine | sieve 5.63×, chain-yield 2.10×, chain-gen 21.5× (recorded) | `ν` / `delay` codata, one observation per turn | a native loop wherever the turn does not suspend | #540 (L2b); under S0, `tick`'s clause is tail-resumptive, so the loop is a direct loop (`docs/pipeline-architecture.md` §0) | L-2 (#540) |
 | bounds checks at every access | n-body 1.78× (1.16× of C), quicksort, sieve-for | `idx` checks | none where the index is the loop's own counter over the view's length | #213 item 2; a typed fact (the counter is below `len`), carried on the typed term | L-3 |
 | addresses as `inttoptr` integers; `malloc + 8` alignment | sum 1.88× (not vectorised) | flat IR words | `getelementptr` from a pointer base; 16-byte aligned arrays | backend only (`bench/repro/vectorize.ll`) | L-4 |
@@ -615,7 +615,7 @@ foundation its fix is. Every count is from §2.
 | adjoint modes | graded-adjoint report §3; `experiments/Shifts` | B9: #174 is the missing shift from adjoint logic's affine mode to its unrestricted one | the full adjoint re-presentation is set aside: it is a reframing with no target program behind it |
 | explicit RC plus arenas | #94, #119 comment, `docs/prior-art-memory-model.md` | B1's comparison column | set aside for the target set; arenas already work as library code (`corpus/leetcode/trees/0208-implement-trie.bc` is accepted) |
 | fork-join with a named assumption | #212's scoping (Route 0) | — | set aside: threads are outside the target set. The per-turn lend is designed so that #212's lock-backed handler can serve the same task type |
-| the Links soundness hazard | session-types report §9 (Tang et al., POPL 2024) | B1 and B4: the per-turn lend holds no lend at a suspension, and the residual close hands back every linear resource, so no handler can drop a continuation that holds one | — |
+| the Links soundness hazard | session-types report §9 (Tang et al., POPL 2024) | B1 and B4: the per-turn lend holds no lend at a suspension, and the residual close hands back every linear resource, so no handler can consume a continuation that holds one | — |
 | the ownership-plumbing finding | mutation report C16 | B7 (E1, N1/N10) | — |
 
 ## 8. Surprises
@@ -667,7 +667,7 @@ intended).
 | # | unit | removes | acceptance | done when |
 |---|---|---|---|---|
 | 4 | **loops U2, U3, U4** (#549, #550, #551) as `docs/loops.md` plans them | B7 (loops) | `docs/loops.md` §5's matrix; `for-in-if-lend`, `for-view-local`, `for-view-effect-copy`, `for-buf-borrow`, `loop-shadow-*`, `loop-handler-binder`; T02, T07, T10 | `docs/loops.md` §5.1's programs run, and the listed pending programs move to `corpus/` |
-| 5 | **ergonomics E1** (#582) and **the write rule** (#586, #504) as the mutation report's D2 specifies (threaded or refused, never dropped; name resolution; the abort column G2) | B7 (writes, plumbing) | T01, T03, T12 (1) and (2) with 52 and 5102; the stored-thunk case in `corpus/reject/`; `borrow-nested-handback` (#495) | every #586 form gives its D2 answer or its D2 refusal, and no corpus output changes except those listed |
+| 5 | **ergonomics E1** (#582) and **the write rule** (#586, #504) as the mutation report's D2 specifies (threaded or refused, never consumed; name resolution; the abort column G2) | B7 (writes, plumbing) | T01, T03, T12 (1) and (2) with 52 and 5102; the stored-thunk case in `corpus/reject/`; `borrow-nested-handback` (#495) | every #586 form gives its D2 answer or its D2 refusal, and no corpus output changes except those listed |
 
 **Track 3: data and JSON** (north-star stage 1).
 
@@ -685,7 +685,7 @@ intended).
 | 10 | **lends per call**: several lends in one call (nested, hand-backs threaded); a `&mut` lend in a call that threads a capability; a capability through `for … in &a` (§18's rows) | B6 | `lend-two.bc`; T04, T14 (`fill(&mut buf)` under the RNG and logger handlers) | those run, and §14 *Open*'s "a call lends at most one capability" and §18's two rows are removed |
 | 11 | **spike S-E**: yes/no — is §14's per-step re-lend at a pair of cells one compatibility lemma by the single cell's proof (as `withborF2` is to `withbor2`)? | B6 (looping callees) | `reject/lend-div-two.bc`'s program | **yes**: build it, and the program moves to `corpus/` (hard-stop item 2 applies: a `reject/` program changes). **Kill**: "a looping callee takes one borrow" stays, documented in SPEC §14 as a limit |
 | 12 | **#58 implicit copies of `imm`**, with `array_imm` views (#142) after the user's decision on `reject/double-use-in-callee.bc` (`docs/loops.md` §3, E2) | B9 (copies) | T05; `quicksort` and `sum` without `array_copy`; the loops matrix's AA cell | those run with goldens and counts unchanged |
-| 13 | **spike S-F** (#174): yes/no — does `axWithborMITy` follow from the anti-frame and a variant of `wpTS_I_frameX` whose `hQ` is stated at the drop step (#174's proposed route)? | B9 (reborrow) | T04 with `len(&v)` at an `array_mut` parameter | **yes**: build K2′, `len`/`at` through `&*v`. **Kill**: `mut`-taking read functions (`len_mut`) are the API, documented as the premise's limited checker |
+| 13 | **spike S-F** (#174): yes/no — does `axWithborMITy` follow from the anti-frame and a variant of `wpTS_I_frameX` whose `hQ` is stated at the consume step (#174's proposed route)? | B9 (reborrow) | T04 with `len(&v)` at an `array_mut` parameter | **yes**: build K2′, `len`/`at` through `&*v`. **Kill**: `mut`-taking read functions (`len_mut`) are the API, documented as the premise's limited checker |
 | 14 | **generic answering effects and the map's upsert**: type parameters on answering effects, instantiated per instance; `update_with(&mut m, k, d, f)`; the `memo` layer | B8 | T06, T08; `effects-generic-store.bc`; `lc-0070-climbing-stairs-memo.bc` | those run with goldens; SPEC §18's "type parameters on an answering effect" is removed |
 
 **Track 5: suspended computations** (north-star stage 3, outside `operator-reconcile`).
@@ -701,7 +701,7 @@ intended).
 
 | # | unit | acceptance | done when |
 |---|---|---|---|
-| L-1 | reads and writes through `mut` at persistent contents as loads and stores: a derived node on the typed term, an erasure-pass rule, and its proof over Core | quicksort, sort-generic, prefix; `bcc-counts` stores per read drop to 0 | each row within the user's bound |
+| L-1 | reads and writes through `mut` at persistent contents as loads and stores: a derived node on the typed term, an erasure-pass rule, and its proof over Core | quicksort, sort-generic, prefix; `bcc-counts` stores per read consume to 0 | each row within the user's bound |
 | L-2 | div loops as loops (#540) | sieve, chain-yield, chain-gen | the same |
 | L-3 | bounds checks removed where the index is the loop's counter | n-body, sieve-for, quicksort | the same |
 | L-4 | pointer addressing and aligned arrays | sum | the same |
@@ -761,12 +761,12 @@ for-view-effect-copy.bc: for-view-effect-copy.bc:16:1: `show__wasi_stdout_cell` 
 for-view-local.bc: for-view-local.bc:14:1: `count` loops, so it is called in direct style one step at a time, and a borrow at `'a` cannot stay op
 gen-adapters-io.bc: gen-adapters-io.bc:16:56: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abor
 gen-digits.bc: gen-digits.bc:18:27: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abort, and its
-gen-lazy.bc: gen-lazy.bc:22:5: `o`, of type `ref output`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell
+gen-lazy.bc: gen-lazy.bc:22:5: `o`, of type `ref output`, is live across a computation that may abort, and its type is linear and not consumable, and an abort abandons only a value that holds no owned cell
 gen-lines.bc: gen-lines.bc:23:18: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abort, and its t
 io-two-tasks.bc: io-two-tasks.bc:22:11: two tasks spawned in this block are given the capability of `Stdout`: a capability is lent to one task at
 lc-0039-combination-sum.bc: lc-0039-combination-sum.bc:58:28: in this `case`, `out` is consumed in the `inr` arm but not in the `inl` arm
 lc-0070-climbing-stairs-memo.bc: lc-0070-climbing-stairs-memo.bc:38:32: no handler `memo` is declared before this `with`
-lc-0208-trie-boxed.bc: runs since #722, as `corpus/leetcode/trees/0208-implement-trie-boxed.bc` (the drop at the class `P`, SPEC §61); its error was `io_d23` is not consumed in its scope, and its type `(1 + (mu X. (1 + 1) * array (1 + X))) + 
+lc-0208-trie-boxed.bc: runs since #722, as `corpus/leetcode/trees/0208-implement-trie-boxed.bc` (the consume at the class `P`, SPEC §61); its error was `io_d23` is not consumed in its scope, and its type `(1 + (mu X. (1 + 1) * array (1 + X))) + 
 lend-nested.bc: lend-nested.bc:33:38: type mismatch: expected `i32`, but this has type `ref array i32 * i32`
 lend-two.bc: lend-two.bc:31:14: type mismatch: expected `ref output`, but this has type `imm 'io_lb31_3 i32`
 loop-handler-binder.bc: loop-handler-binder.bc:18:3: `e` is used twice here, and its type `array_imm 'a u8` is linear
@@ -1213,7 +1213,7 @@ fn coins<'c>(cs: array_imm 'c i32, amount: i32) -> i64 =
       } else { () }
     }
   };
-  array_forget['c, i32](cs);
+  array_release['c, i32](cs);
   let r = at(&dp, amount, big);
   if r == big { i64[0] - i64[1] } else { r }
 
@@ -1269,8 +1269,8 @@ include text
 
 fn slice<'t>(t: text 't, i: i32, k: i32) -> text 't =
   match split_at(t, i) {
-    inl (h, r) -> array_forget['t, u8](h);
-      match split_at(r, k) { inl (w, rest) -> array_forget['t, u8](rest); w | inr r -> r }
+    inl (h, r) -> array_release['t, u8](h);
+      match split_at(r, k) { inl (w, rest) -> array_release['t, u8](rest); w | inr r -> r }
   | inr t -> t
   }
 
@@ -1283,7 +1283,7 @@ fn bump<'t>(freq: Map[text 't, i32], order: buf (text 't), word: text 't)
   let old = map_lookup(&freq, k);
   let c = match old { inl c -> c | inr u -> 0 };
   let (word, k2) = array_copy['t, u8] word;
-  let (o, u) = if c == 0 { push(order, k2) } else { array_forget['t, u8](k2); (order, ()) };
+  let (o, u) = if c == 0 { push(order, k2) } else { array_release['t, u8](k2); (order, ()) };
   let prev = map_insert(&mut freq, word, c + 1);
   (freq, o)
 
@@ -1304,12 +1304,12 @@ fn freq<'t>(t: text 't) -> string =
     t = t2;
     let word = slice(w, start, i - start);
     let (f, o) = if b == b' ' && start < i { bump(freq, order, word) }
-                 else { array_forget['t, u8](word); (freq, order) };
+                 else { array_release['t, u8](word); (freq, order) };
     freq = f;
     order = o;
     if b == b' ' { start = i + 1 } else { () }
   };
-  array_forget['t, u8](t);
+  array_release['t, u8](t);
   let (order, k) = len_of(order);
   let mut order = order;
   let mut out = string_new(32);
@@ -1485,8 +1485,8 @@ type Cfg = i32 * (i32 * (string * bool))
 
 fn slice<'t>(t: text 't, i: i32, k: i32) -> text 't =
   match split_at(t, i) {
-    inl (h, r) -> array_forget['t, u8](h);
-      match split_at(r, k) { inl (w, rest) -> array_forget['t, u8](rest); w | inr r -> r }
+    inl (h, r) -> array_release['t, u8](h);
+      match split_at(r, k) { inl (w, rest) -> array_release['t, u8](rest); w | inr r -> r }
   | inr t -> t
   }
 
@@ -1526,12 +1526,12 @@ fn parse<'t>(t: text 't, cfg: Cfg) -> Cfg * i32 =
     t = t2;
     let word = slice(w, start, i - start);
     let (c, k) = if b == b' ' && start < i { apply(cfg, word) }
-                 else { array_forget['t, u8](word); (cfg, 0) };
+                 else { array_release['t, u8](word); (cfg, 0) };
     cfg = c;
     unknown = unknown + k;
     if b == b' ' { start = i + 1 } else { () }
   };
-  array_forget['t, u8](t);
+  array_release['t, u8](t);
   (cfg, unknown)
 
 main -> (i32 * (i32 * bool)) * (i32 * i32) =
@@ -1848,7 +1848,7 @@ Every one runs; four need an arena for an object graph.
 
 | program | what it does | status | the refusal, or the workaround | blocker | allocs / indirect | probe |
 |---|---|---|---|---|---|---|
-| Richards | a scheduler over task records in a linked list, packets in linked queues; tasks change other tasks' state | workaround: task records in an arena (`array i32`, links are indices); packets owned, moved queue to queue (`richards_mu.bc`) | the shared record: "`t` is used twice here, and its type `ref (i32 * i32)` is linear"; the per-task function field: "`i` is not consumed in its scope, and it cannot be dropped where its scope ends" (an array of `!` functions); a div helper in an `if` arm returning an owned array, refused in generated code | B13, B15, B7 | 2 / 0 | `awfy/richards.bc` (23246 / 9297, the reference counts) |
+| Richards | a scheduler over task records in a linked list, packets in linked queues; tasks change other tasks' state | workaround: task records in an arena (`array i32`, links are indices); packets owned, moved queue to queue (`richards_mu.bc`) | the shared record: "`t` is used twice here, and its type `ref (i32 * i32)` is linear"; the per-task function field: "`i` is not consumed in its scope, and it cannot be consumed where its scope ends" (an array of `!` functions); a div helper in an `if` arm returning an owned array, refused in generated code | B13, B15, B7 | 2 / 0 | `awfy/richards.bc` (23246 / 9297, the reference counts) |
 | DeltaBlue | a constraint graph: variables and constraints point at each other; the planner walks and mutates strengths | workaround: arena | a constraint in two variables' lists: the same "used twice"; two `imm` views of one cell: "`v` is used twice here, and its type `imm 'a i32` is linear" | B13, B9 | 416 / 0 | `awfy/deltablue.bc` (chain test: 100 of 100, plan length 101) |
 | Havlak | loop recognition: a CFG with edge lists, DFS numbering, union-find, a loop forest with parent pointers | workaround: arena, explicit DFS stack | the recursive DFS inside the `for` over out-edges: "in this `case`, `last` is consumed in the `inr` arm but not in the `inl` arm" (#492) | B13, B7 | 1806 / 0 | `awfy/havlak.bc` |
 | CD | collision detection over a red-black tree keyed by call sign (parent pointers, rotations) | workaround: arena tree with a sentinel | a child holding its parent: "`parent` is used twice here, and its type `ref i32` is linear" | B13 | 2 / 0 | `awfy/cd_rbtree.bc` (the tree part only) |
@@ -1934,12 +1934,12 @@ keyed by views), is refused by #491 and #492, both B7. So the AoC subset gates o
   from two places and mutated) is refused with "used twice". The premise's limited checker refuses
   it by design, as Rust's does without `Rc<RefCell<_>>`.
 - **B14, recursive data under an array.** Storage, a B-tree whose nodes own child arrays, a buffer
-  of AST nodes, `lc-0208-trie-boxed`: no derived drop and no filler for `mu X. … array X …` (#182).
-  The drop and the owned fold at the class `P` are built (#722, SPEC §61): Storage, the
+  of AST nodes, `lc-0208-trie-boxed`: no consume and no filler for `mu X. … array X …` (#182).
+  The consume and the owned fold at the class `P` are built (#722, SPEC §61): Storage, the
   B-tree and the trie run in natural form at Rust's allocation counts. A filler at `μ` and the
   borrowed fold remain.
 - **B15, containers of `!` functions.** Richards' task functions, Lox's native functions: "`i` is
-  not consumed in its scope, and it cannot be dropped where its scope ends" at `array_new[!(i32 =>
+  not consumed in its scope, and it cannot be consumed where its scope ends" at `array_new[!(i32 =>
   i32)](n, !{ i -> f })`, and "`io_else` is not consumed …" at `if c { f } else { g }` with a `!`
   result. A pair of `!` functions, and a `mu` list of them, work. By inspection this is SPEC §26
   *Open*: "weakening by an unused live slot of a persistent type, as a derived rule of the kernel:
@@ -1980,7 +1980,7 @@ awfy/deltablue.bc: (i32[100], i32[101])
 awfy/havlak.bc: (i32[75], (i32[74], i32[122]))
 awfy/cd_rbtree.bc: (i32[877], (i32[1], f64[…]))
 awfy/json.bc: i32[12]
-awfy/fn_array.bc: fn_array.bc:5:44: `i` is not consumed in its scope, and it cannot be dropped where its scope ends
+awfy/fn_array.bc: fn_array.bc:5:44: `i` is not consumed in its scope, and it cannot be consumed where its scope ends
 awfy/modify_assign.bc: (i32[6], i32[0])
 bg/mut-name-capture.bc: mut-name-capture.bc:14:14: `tbl` is used twice here, and its type `array u8` is linear
 bg/mut-name-capture-renamed.bc: runs
@@ -2000,8 +2000,8 @@ corpus/aoc/*.bc (13 files): all check
 
 | way | performance | proof cost | ergonomics | verdict |
 |---|---|---|---|---|
-| Rust's way: `std::net` over OS sockets, `Drop` closes | parity | n/a | good | its *surface* is not ours: a socket here is a linear capability, and its close returns the error (#210) |
-| **`Net` as an effect served by the platform's outermost handler** (SPEC §34's model for `Stdout`), a connection a linear handle (no derived drop; `close` hands back the error), the extern contract proved as stdio's is (`externs_loop_every_run`, SPEC §11) | parity: a direct call to the host (`effect handling is erased`) | lemma per extern, by the stdio pattern | good | **recommended** |
+| Rust's way: `std::net` over OS sockets, `Consume` closes | parity | n/a | good | its *surface* is not ours: a socket here is a linear capability, and its close returns the error (#210) |
+| **`Net` as an effect served by the platform's outermost handler** (SPEC §34's model for `Stdout`), a connection a linear handle (no consume; `close` hands back the error), the extern contract proved as stdio's is (`externs_loop_every_run`, SPEC §11) | parity: a direct call to the host (`effect handling is erased`) | lemma per extern, by the stdio pattern | good | **recommended** |
 | session-typed HTTP over it (#209) | parity | relation (sessions) | best | later; not needed to run the operator |
 
 The elaboration candidate: `with net { let c = connect(addr); … }` elaborates to the platform's
@@ -2041,8 +2041,8 @@ as an arena does.
 
 | way | performance | proof cost | ergonomics | verdict |
 |---|---|---|---|---|
-| Rust's way: `Vec<Box<Node>>` with `Drop` | parity | n/a | good | the target |
-| **a drop and fold for `mu` with `X` under `array`** (#182 item 2) | parity | lemma: one more `FShape` case for `foldOwn` and its drop | good | **recommended**, behind spike S-H |
+| Rust's way: `Vec<Box<Node>>` with `Consume` | parity | n/a | good | the target |
+| **a consume and fold for `mu` with `X` under `array`** (#182 item 2) | parity | lemma: one more `FShape` case for `foldOwn` and its consume | good | **recommended**, behind spike S-H |
 | children as a tuple, or in an arena | parity | none | fair | today's workaround |
 
 ### 13.5 B15: containers of `!` functions
@@ -2167,11 +2167,11 @@ is written naturally only after it).
 | # | unit | removes | acceptance | done when |
 |---|---|---|---|---|
 | C-1 | **`Arena[T]` with `Id[T]` newtypes** in `lib/`, and the `region` elaboration of §13.2 in its unbranded form | B13 | Richards, DeltaBlue, Havlak, CD, LRU, the doubly linked list, jlox, clox, the B-tree, each as a corpus program over the library | all ten run with goldens, and none indexes a raw `array i32` by hand |
-| C-2 | **spike S-G** (#119): yes/no — do branded handles into a handler-owned region make every access in bounds by the region-length Kripke fact, as one lemma with no change to the relation? | B13 (bounds) | DeltaBlue over C-1 with its bounds checks gone | **yes**: build it; `bcc-counts` bounds per access drop to 0. **Kill**: checked indices stay, documented as the arena's cost |
-| C-3 | **spike S-H**: yes/no — is a drop and fold for `mu` with `X` under `array` one more `FShape` case of `foldOwn`, one lemma? | B14 | `awfy/storage_array.bc`, `ds/btree-boxed.bc`, `lc-0208-trie-boxed` | **yes**: build it and the three run. **Kill**: tuple children and arenas are the way, documented in SPEC §6. Answered by #595's design and #722: not one case, a class `P` and one generated fold (SPEC §61); the three run as `corpus/storage-array.bc`, `corpus/btree-boxed.bc`, `corpus/leetcode/trees/0208-implement-trie-boxed.bc` |
+| C-2 | **spike S-G** (#119): yes/no — do branded handles into a handler-owned region make every access in bounds by the region-length Kripke fact, as one lemma with no change to the relation? | B13 (bounds) | DeltaBlue over C-1 with its bounds checks gone | **yes**: build it; `bcc-counts` bounds per access consume to 0. **Kill**: checked indices stay, documented as the arena's cost |
+| C-3 | **spike S-H**: yes/no — is a consume and fold for `mu` with `X` under `array` one more `FShape` case of `foldOwn`, one lemma? | B14 | `awfy/storage_array.bc`, `ds/btree-boxed.bc`, `lc-0208-trie-boxed` | **yes**: build it and the three run. **Kill**: tuple children and arenas are the way, documented in SPEC §6. Answered by #595's design and #722: not one case, a class `P` and one generated fold (SPEC §61); the three run as `corpus/storage-array.bc`, `corpus/btree-boxed.bc`, `corpus/leetcode/trees/0208-implement-trie-boxed.bc` |
 | C-4 | **containers of `!` functions**: SPEC §26's weakening by a dead persistent binder, or an elaboration of the tabulator that does not need it | B15 | `awfy/fn_array.bc`, `richards_fnfield.bc`, `lox/fn-in-array.bc`, `lox/map-closures.bc` | those run |
 | C-5 | **#58 and #142, implicit copies of `imm`**, and **a borrowed walk of `mu`** (`unroll` at an `imm` view) | B9 | List without `clone`; AWFY Json's lookup returning a view; DeltaBlue's two views; T05 | those run, and List's `copies` are 0 |
-| C-6 | **spike S-F** (#174): yes/no — does `axWithborMITy` follow from the anti-frame and a variant of `wpTS_I_frameX` with `hQ` stated at the drop step? | B9 | T04 with `len(&v)` at a `mut` parameter | **yes**: build K2′. **Kill**: `mut`-taking read functions stay the API |
+| C-6 | **spike S-F** (#174): yes/no — does `axWithborMITy` follow from the anti-frame and a variant of `wpTS_I_frameX` with `hQ` stated at the consume step? | B9 | T04 with `len(&v)` at a `mut` parameter | **yes**: build K2′. **Kill**: `mut`-taking read functions stay the API |
 | C-7 | **lends per call**, and **spike S-E** for a looping callee's second borrow | B6 | T04, T14 (`fill(&mut buf)` under the services), `lend-two`; `lend-div-two` if S-E says yes | those run; S-E's kill keeps one borrow per looping callee, documented in SPEC §14 |
 | C-8 | **generic answering effects** and `update_with` | B8 | T06, T08, `effects-generic-store`, `lc-0070` | those run |
 | C-9 | **libraries**: signed bignum, regex (#225), `%.Nf`, O(n log n) comparator sort and comparator heap over owned elements (#497), map iteration over owned keys; lookup at another lifetime by SPEC §36's constant | B16 | pidigits, regex-redux, k-nucleotide (Game output exactly), n-body and spectral-norm with `%.9f`, `ds/pq.bc` over strings | the Benchmarks Game programs print the Game's exact output |
@@ -2505,7 +2505,7 @@ become acceptance rows on the units in §19.
   within reach 67.
 - **Twenty-one programs are out of reach.** Their blockers are mostly not the ones §14 ranked by
   "gated".
-- **B7 drops out of the ranking.** It was ranked first by programs gated, but every program it
+- **B7 consumes out of the ranking.** It was ranked first by programs gated, but every program it
   gates is within reach: its units are planned.
 - **The same holds for B3 (records, newtypes):** data declarations are an elaboration with no
   kernel change.
@@ -2548,7 +2548,7 @@ acceptance of the units that reach them.
 | 2 | **spike S-B**: yes/no — is the per-turn task type derivable from §22's `Clo` closure with an argument and §32's threading, with no new compatibility lemma? Kill path: the port as a library (it runs today, `conc/worker-pool-port.bc`) | B1 (form) | — |
 | 3 | **the shared service** (the per-turn lend, or the port) | B1 | `operator-reconcile.bc` with three tasks; the worker pool and the task pipeline over channels; `informer-cache`; `io-two-tasks`. Each within Rust's executor counts after unit 18 (allocations) and N3 (indirect) |
 | 4 | **data declarations** (#489 part 1) | B3 | T07, T09, T10, T11; Richards, DeltaBlue, CD (records, with C-5's view copies); union-find, the arena allocator, the LRU cache's nodes; n-body's bodies |
-| 5 | **spike S-H**: yes/no — is a drop and fold for `mu` with `X` under `array` one more `FShape` case of `foldOwn`? Kill path: kernel nested `mu` and arrays of it as their own SPEC entry (#182), because B14 is out of reach without one of them | B14 | — |
+| 5 | **spike S-H**: yes/no — is a consume and fold for `mu` with `X` under `array` one more `FShape` case of `foldOwn`? Kill path: kernel nested `mu` and arrays of it as their own SPEC entry (#182), because B14 is out of reach without one of them | B14 | — |
 | 6 | **recursive data under arrays**, by S-H's answer, and nested declarations (S-D) | B14 | AWFY Json at Rust's 13 allocations (a `Vec` of values, not a box per element); Storage with its children in an array; the boxed B-tree; YAML |
 | 7 | **JSON and YAML libraries** over units 4 and 6, raising across the input's borrow (unit 8) | B3, B14, B10 | `json-roundtrip`, `yaml-roundtrip` within a Rust reference's counts (an `enum` with `Vec` children, hand-written parser) |
 | 8 | **aborts across buffer and literal borrows**; `fold_lines` over `count_try` | B10 | `abort1.bc`, `config-parse` |

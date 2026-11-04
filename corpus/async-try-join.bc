@@ -12,7 +12,7 @@
 -- group's jobs answer 6 and 20; in the second, job 13 fails at its second step, and the long job,
 -- which owns a cell, is cancelled by `cancel_all`. The third is the second in the other order:
 -- the long job's rest is held by `step_all`'s frame when job 13's error is raised past it, and
--- the unwinding cancels it, a task's drop being its cancel (SPEC §12). `live 0`.
+-- the unwinding cancels it, a task's consume being its cancel (SPEC §12). `live 0`.
 
 include async
 include fail

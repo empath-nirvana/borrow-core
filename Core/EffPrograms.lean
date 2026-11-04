@@ -1,6 +1,6 @@
 import Core.EffExamples
 import Core.RecordPrograms
-import Core.Drop
+import Core.Consume
 import Core.DelayPrograms
 
 /-!
@@ -165,7 +165,7 @@ theorem callbackUW {Δ : LifeCtx} {Γ : Ctx VTy} {body : Expr} {x : LifeVar} {L 
     CDerives Δ Γ (.val (.lam (.val (.lam body)))) (.val (cbUTy x Δ.meetOfDom L B S)) :=
   .thunkV rfl (allI_fresh hΔ hx hΓ (.lam h))
 
-theorem Ctx.Dead.drops {Γ : Ctx VTy} (h : Ctx.Dead Γ) : Γ.OwnFree :=
+theorem Ctx.Dead.consumes {Γ : Ctx VTy} (h : Ctx.Dead Γ) : Γ.OwnFree :=
   fun s hs hl => dead_noLive (P := fun s => s.ty.OwnFree) h s hs hl
 
 /-! ### Program 1: `Log` and `Fail` in both nesting orders
@@ -175,13 +175,13 @@ handler a borrow of `r`, and `log m` a call on the capability `m : Mut 'x Flag` 
 `inj₂ ()` (`withswap m set`). `Fail` is abortive: `raise : 1 ↠^cancel 0`, handled by `to_result`.
 The function body logs and raises:
 
-    logRaise m = let (m, u) = withswap m set; u; forget m; raise ()
+    logRaise m = let (m, u) = withswap m set; u; release m; raise ()
 
 * **`Log` outside** (`logOutside`): `to_result` runs inside the borrow of `r` and catches the
   raise there; the borrow returns, and the program answers the log state beside the error,
   `(free r, inj₂ ())`. The logs are kept.
 * **`Fail` outside** (`failOutside`): the raise crosses the borrow of `r`, by its unwinding
-  form. The lend ends and `r`'s drop frees the cell; `to_result` answers `inj₂ ()`, and the
+  form. The lend ends and `r`'s consume frees the cell; `to_result` answers `inj₂ ()`, and the
   log state is gone. The logs are lost.
 
 `logRaise`'s answer type is `0`, so in both orders the error is the only answer the types allow,
@@ -199,7 +199,7 @@ theorem d_logRaise0 {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {B : VTy} 
     (appW (d_setG (by cdead)) (appW (.var (by csolo)) (.withswap (by cdead)))) ?_
   refine .unitE (.left (.right (.dead (.dead (deadSplit hΓ))))) (.var (by csolo)) ?_
   refine .unitE (.dead (.left (.dead (.dead (deadSplit hΓ)))))
-    (appW (.var (by csolo)) (.forgetMut (by cdead))) ?_
+    (appW (.var (by csolo)) (.releaseMut (by cdead))) ?_
   exact d_raiseU rfl (by cdead)
 
 /-- `logRaise 2` under `to_result`'s two bindings, in a callback's context. -/
@@ -212,7 +212,7 @@ theorem d_logRaise2 {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {B T₁ T�
   refine .unitE (.left (.right (.dead (.dead (.dead (.dead (deadSplit hΓ)))))))
     (.var (by csolo)) ?_
   refine .unitE (.dead (.left (.dead (.dead (.dead (.dead (deadSplit hΓ)))))))
-    (appW (.var (by csolo)) (.forgetMut (by cdead))) ?_
+    (appW (.var (by csolo)) (.releaseMut (by cdead))) ?_
   exact d_raiseU rfl (by cdead)
 
 /-! #### `Log` outside -/
@@ -267,8 +267,8 @@ theorem logOutside_answers {μ₁ : Heap} {e₁ : Expr}
 
 /-! #### `Fail` outside -/
 
-/-- The finaliser of `r : Ref Flag`: its drop. -/
-abbrev dFlag : Expr := dropFnE (.ref Flag)
+/-- The finaliser of `r : Ref Flag`: its consume. -/
+abbrev dFlag : Expr := consumeE (.ref Flag)
 
 theorem dFlag_closed : closedAt 0 dFlag = true := by decide
 
@@ -301,9 +301,9 @@ theorem d_failOutsideBody :
   refine .bind (.right (.right (.dead (.dead .nil))))
     (.ret (.withbor2U (A := Flag) (B := .zero) (S := Sf) 0 (by cdead) rfl
       ⟨.top, LifeCtx.defines_of_wf rfl, (outlives_of_dataB rfl).toLe⟩ (by simp [VFree]) (by simp [VFree])
-      (Sf_unwind 0) dFlag_closed (dropFn_wf (.ref (.sum .unit .unit)) (by cdead)))) ?_
+      (Sf_unwind 0) dFlag_closed (consume_wf (.ref (.sum .unit .unit)) (by cdead)))) ?_
   refine .effLet (A := .tensor (.ref Flag) .zero) (.left (.left (.left (.dead (.dead .nil)))))
-    (fun _ => Ctx.Dead.drops (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
+    (fun _ => Ctx.Dead.consumes (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
   · refine .app (.left (.right (.left (.dead (.dead .nil))))) ?_ (.there (.here (by cdead)))
     exact .app (.left (.dead (.right (.dead (.dead .nil))))) (.force (.here (by cdead)))
       (.there (.there (.here (by cdead))))
@@ -327,7 +327,7 @@ theorem failOutside_answers {μ₁ : Heap} {e₁ : Expr}
     to_result {
       r ← alloc (inj₁ ());
       (r, z) ← withborU dFlag r (Λ. λm.
-                 (m, z′) ← withborU forget m (Λ. λm₂. logRaise m₂);
+                 (m, z′) ← withborU release m (Λ. λm₂. logRaise m₂);
                  absurd z′);
       absurd z }
 
@@ -368,10 +368,10 @@ theorem d_outerCb {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
       (d_logRaise0 (.cons (.cons hΓ))))) ?_
   refine .bind (.right (.right (.dead (deadSplit hΓ))))
     (.ret (.withbor3U (a := .var 0) (A := Flag) (B := .zero) (S := Sf) (d := forget) 1 (by cdead)
-      rfl (by simp [VFree]) (by simp [VFree]) (Sf_unwind 1) rfl (.forgetMut (by cdead)))) ?_
+      rfl (by simp [VFree]) (by simp [VFree]) (Sf_unwind 1) rfl (.releaseMut (by cdead)))) ?_
   refine .effLet (A := .tensor (.mut (.var 0) Flag) .zero)
     (.left (.left (.left (.dead (deadSplit hΓ)))))
-    (fun _ => Ctx.Dead.drops (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
+    (fun _ => Ctx.Dead.consumes (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
   · refine .app (.left (.right (.left (.dead (deadSplit hΓ))))) ?_ (.there (.here (by cdead)))
     exact .app (.left (.dead (.right (.dead (deadSplit hΓ))))) (.force (.here (by cdead)))
       (.there (.there (.here (by cdead))))
@@ -388,9 +388,9 @@ theorem d_reborrowRaiseBody :
   refine .bind (.right (.right (.dead (.dead .nil))))
     (.ret (.withbor2U (A := Flag) (B := .zero) (S := Sf) 0 (by cdead) rfl
       ⟨.top, LifeCtx.defines_of_wf rfl, (outlives_of_dataB rfl).toLe⟩ (by simp [VFree]) (by simp [VFree])
-      (Sf_unwind 0) dFlag_closed (dropFn_wf (.ref (.sum .unit .unit)) (by cdead)))) ?_
+      (Sf_unwind 0) dFlag_closed (consume_wf (.ref (.sum .unit .unit)) (by cdead)))) ?_
   refine .effLet (A := .tensor (.ref Flag) .zero) (.left (.left (.left (.dead (.dead .nil)))))
-    (fun _ => Ctx.Dead.drops (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
+    (fun _ => Ctx.Dead.consumes (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
   · refine .app (.left (.right (.left (.dead (.dead .nil))))) ?_ (.there (.here (by cdead)))
     exact .app (.left (.dead (.right (.dead (.dead .nil))))) (.force (.here (by cdead)))
       (.there (.there (.here (by cdead))))
@@ -416,7 +416,7 @@ theorem reborrowRaise_answers {μ₁ : Heap} {e₁ : Expr}
 happened:
 
     with_log e = handle_2 e with (λx. (x, inj₁ ()),
-                                  λ(v, κ). let (x, f) = κ.resume v in drop f; (x, inj₂ ()))
+                                  λ(v, κ). let (x, f) = κ.resume v in consume f; (x, inj₂ ()))
 
 The body `log (); raise ()` runs at the row `{Fail, Log}`.
 
@@ -460,7 +460,7 @@ theorem d_clL {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} (hΓ : Ctx.Dead 
   refine .bangThunkV (dead_noLive hΓ) rfl (.lam ?_)
   refine .tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_
   refine .effLet (A := .tensor A Flag) (.left (.left (.dead (deadSplit hΓ))))
-    (fun _ => Ctx.Dead.drops (by cdead)) (fun _ => dead_noLive (by cdead)) ?_ ?_
+    (fun _ => Ctx.Dead.consumes (by cdead)) (fun _ => dead_noLive (by cdead)) ?_ ?_
   · refine .app (.left (.right (.dead (deadSplit hΓ)))) ?_ (.there (.here (by cdead)))
     exact .proj₁ (.force (C := .amp (.arr .unit (CTy.effOf S (.tensor A Flag))) (CTy.effOf S .unit))
       (.here (by cdead)))
@@ -492,9 +492,9 @@ theorem d_logThenRaise {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {B : VTy}
     (hl : Row.find S 2 0 = some logSig) (hf : Row.find S 1 0 = some failSig)
     (hU : ¬ S.Unr) (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ logThenRaise (.comp (CTy.effOf S B)) :=
-  .effLet (A := .unit) (deadSplit hΓ) (fun _ => Ctx.Dead.drops hΓ) (fun h => absurd h hU)
+  .effLet (A := .unit) (deadSplit hΓ) (fun _ => Ctx.Dead.consumes hΓ) (fun h => absurd h hU)
     (.effPerform (o := logSig) hl rfl rfl (.unitI hΓ.toP))
-    (d_raiseU hf (.drop rfl hΓ.toP))
+    (d_raiseU hf (.weaken rfl hΓ.toP))
 
 /-- **Program 1 with a native `log`, `Log` outside `Fail`.** -/
 def nLogOutside : Expr := withLog (toResult logThenRaise)
@@ -544,7 +544,7 @@ theorem nFailOutside_answers {μ₁ : Heap} {e₁ : Expr}
     s ← alloc (inj₁ ());  b ← alloc (inj₁ ());
     let (s, p) = withbor s (Λ. λl.                       -- the `Log` handler: a borrow of `s`
                    let q = withbor b (Λ. λm.             -- `borrow mut b`
-                             log l; write m; forget l; forget m; ()) in q) in
+                             log l; write m; release l; release m; ()) in q) in
     let (b, u) = p; u; (free s, free b)
 
 `log` is answering: a call on the capability `l` that the inner borrow's callback captures, an
@@ -606,8 +606,8 @@ theorem d_innerLogBody {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
   refine seqW (.var (by csolo)) ?_
   refine letW (appW (d_setG (by cdead)) (appW (.var (by csolo)) (.withswap (by cdead)))) ?_
   refine seqW (.var (by csolo)) ?_
-  refine seqW (appW (.var (by csolo)) (.forgetMut (by cdead))) ?_
-  refine seqW (appW (.var (by csolo)) (.forgetMut (by cdead))) ?_
+  refine seqW (appW (.var (by csolo)) (.releaseMut (by cdead))) ?_
+  refine seqW (appW (.var (by csolo)) (.releaseMut (by cdead))) ?_
   exact .boxI (.unitI (by cdead)) ⟨LifeCtx.defines_of_wf rfl, dead_noLive (by cdead)⟩
 
 theorem d_outerLogBody {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
@@ -761,7 +761,7 @@ theorem tickProg_runs (n : ℕ) {μ₁ : Heap} {e₁ : Expr}
 three times, and frees the cell, with a finaliser that frees it when the producer is cancelled:
 
     producer = r ← alloc (inj₁ ());
-               (yield (); yield (); yield ()) then x. drop (free r); x unwind drop (free r)
+               (yield (); yield (); yield ()) then x. consume (free r); x unwind consume (free r)
 
 `take n` handles `yield` with a counter, the state-passing answer `U(N ⊸ F(1 ⊕ 1))`: at each
 `yield` it resumes `κ` with the count decreased, and at zero it cancels `κ`. Cancelling unwinds the
@@ -820,15 +820,15 @@ theorem d_producer {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     (.ret (appW (.sumI₁ (.unitI (by cdead))) (.alloc (by cdead)))) ?_
   refine CDerives.effThenA (A := .unit) (.right (deadSplit hΓ)) (by simp [Row.NZ, yieldSig])
     (by simp [Row.Uniq]) (fun h => absurd h yield_not_unrD) ?_ ?_ ?_
-  · refine .effLet (A := .unit) (deadSplit (Ctx.Dead.cons hΓ)) (fun _ => Ctx.Dead.drops (Ctx.Dead.cons hΓ))
+  · refine .effLet (A := .unit) (deadSplit (Ctx.Dead.cons hΓ)) (fun _ => Ctx.Dead.consumes (Ctx.Dead.cons hΓ))
       (fun h => absurd h yield_not_unr) (d_yieldE (Ctx.Dead.cons hΓ).toP) ?_
     exact .effLet (A := .unit) (.dup rfl (deadSplit (Ctx.Dead.cons hΓ)))
       (fun _ s hs hl => by
         rcases List.mem_cons.mp hs with rfl | hs
         · exact .unit
         · exact (dead_noLive (P := fun _ => False) (Ctx.Dead.cons hΓ) s hs hl).elim)
-      (fun h => absurd h yield_not_unr) (d_yieldE (.drop rfl (Ctx.Dead.cons hΓ).toP))
-      (d_yieldE (.drop rfl (.drop rfl (Ctx.Dead.cons hΓ).toP)))
+      (fun h => absurd h yield_not_unr) (d_yieldE (.weaken rfl (Ctx.Dead.cons hΓ).toP))
+      (d_yieldE (.weaken rfl (.weaken rfl (Ctx.Dead.cons hΓ).toP)))
   · refine .unitE (.right (.left (deadSplit hΓ)))
       (d_dropB (appW (.var (by csolo)) (.free (by cdead))) (by cdead)) ?_
     exact .effSub (S := []) (fun _ _ _ h => by simp [Row.find] at h) (.ret (.var (by csolo)))
@@ -852,7 +852,7 @@ theorem d_clT {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
   · refine .bind (.right (.dead (.left (.right (.dead (deadSplit hΓ))))))
       (.proj₂ (.force (C := .amp (.arr .unit (CTy.effOf [] TakeR)) (CTy.effOf [] .unit))
         (.there (.there (.here (by cdead)))))) ?_
-    exact .ret (.sumI₂ (.unitI (.drop rfl (.drop rfl (.cons (.cons (.drop rfl
+    exact .ret (.sumI₂ (.unitI (.weaken rfl (.weaken rfl (.cons (.cons (.weaken rfl
       (.cons hΓ.toP))))))))
   · refine .bind (.right (.dead (.left (.left (.dead (deadSplit hΓ))))))
       (.app (.dead (.dead (.left (.right (.dead (deadSplit hΓ))))))
@@ -887,7 +887,7 @@ theorem takeProg_runs (n : ℕ) {μ₁ : Heap} {e₁ : Expr}
 `susp : 1 ↠^cancel 1`, the operation `0` of the name `4`. The performer holds a cell, with a
 finaliser, and suspends once:
 
-    performer = r ← alloc (inj₁ ()); susp () then x. drop (free r); x unwind drop (free r)
+    performer = r ← alloc (inj₁ ()); susp () then x. consume (free r); x unwind consume (free r)
 
 The handler stores `κ` in a cell, takes it back, and cancels it instead of resuming it:
 
@@ -977,7 +977,7 @@ theorem storeCancel_runs {μ₁ : Heap} {e₁ : Expr}
 `Loop 0 (Ref Flag)`: the loop's state is the log cell, and each observation logs by an answering
 call, a borrow of the state:
 
-    step s = ⟨let (s, u) = withbor s (Λ. λm. log m; forget m; ()) in u; inj₂ s, return s⟩
+    step s = ⟨let (s, u) = withbor s (Λ. λm. log m; release m; ()) in u; inj₂ s, return s⟩
 
 `tickAnsProg n` drives `n` observations (`driveE`), then frees the cell the loop closes with. -/
 
@@ -997,7 +997,7 @@ theorem d_logCb {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
   refine callbackW ok_empty rfl hΓ ?_
   refine letW (appW (d_setG (by cdead)) (appW (.var (by csolo)) (.withswap (by cdead)))) ?_
   refine seqW (.var (by csolo)) ?_
-  refine seqW (appW (.var (by csolo)) (.forgetMut (by cdead))) ?_
+  refine seqW (appW (.var (by csolo)) (.releaseMut (by cdead))) ?_
   exact .boxI (.unitI (by cdead)) ⟨LifeCtx.defines_of_wf rfl, dead_noLive (by cdead)⟩
 
 theorem d_tickAnsStep {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :

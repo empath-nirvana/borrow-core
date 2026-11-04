@@ -402,7 +402,7 @@ theorem bangThunkV_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy} (h
   rw [forceE_of_not_ret hC]
   exact h δ γ ls' ρ hδ (gDenC_local hext hg)
 
-/-- Dereliction: forget the `ρ = ∅` (`bangE_compatX`). -/
+/-- Dereliction: release the `ρ = ∅` (`bangE_compatX`). -/
 theorem bangE_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy}
     (h : SemV Δ Γ e (.bang A)) : SemV Δ Γ e A := by
   intro δ γ ls ρ hδ hg
@@ -428,7 +428,7 @@ theorem copyBang_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.Dead
   exact ⟨v, v, pure_sep_mk rfl ⟨PMap.empty, PMap.empty, ResU.comp_empty_right _, hv, hv⟩⟩
 
 /-- `forget : U (!A ⊸ F 1)`: nothing to release (`forgetBang_compatX`). -/
-theorem forgetBang_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ) :
+theorem releaseBang_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ) :
     SemV Δ Γ forget (.thunk (.arr (.bang A) (.ret .unit))) := by
   intro δ γ ls ρ _ hg
   have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2

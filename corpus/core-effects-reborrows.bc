@@ -1,7 +1,7 @@
 -- SPEC §19's other unwinding borrows in the core text: `slice_borrow_imm_u` lends an array as a
 -- family of views; inside `borrow mut` and `borrow imm` blocks, `withbor3u` reborrows a `mut`
 -- borrow and `withloadu` lends a view of an `imm` one. Each callback aborts, caught at the
--- borrow it is lent from: the array is freed by the finaliser, the reborrow is forgotten, and the
+-- borrow it is lent from: the array is freed by the finaliser, the reborrow is released, and the
 -- loaded view ends.
 --
 -- Answer: (inr i32[43], (inr i32[44], inr i32[45])), and `live 0`.

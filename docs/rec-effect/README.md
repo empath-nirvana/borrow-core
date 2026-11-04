@@ -219,7 +219,7 @@ Each entry is an observed checker error or run failure. Line numbers are those `
 | 22b-break-arith | `internal error: a surface form was not elaborated before checking` at `break 0 - 1 - i` (a bug; binding the value by `let` first checks) |
 | 24-never-ends-empty | `` type mismatch: expected `0`, but this has type `i32` `` |
 | 27-fuel-layer-not-total | `` `ack_fuel` is declared `total`, but it calls a div function (SPEC §14) `` |
-| 02 (while writing it) | `` `i` is not consumed in its scope, and it cannot be dropped where its scope ends `` — promoting a `!` closure in a function whose `i : i32` parameter is live; the promotion was moved to its own function |
+| 02 (while writing it) | `` `i` is not consumed in its scope, and it cannot be consumed where its scope ends `` — promoting a `!` closure in a function whose `i : i32` parameter is live; the promotion was moved to its own function |
 | 14, 26 (while writing them) | `a pair is checked against \`i32\`, which is not a \`*\` type` — `deep`'s type arguments were not inferred when `A` is a pair; they are written |
 | 20 (while writing it) | `` type mismatch: expected `!(i32 * array_imm 'x i32 * i32 => …)`, but this has type `!(all 'l1 < top. …)` `` — a lifetime-generic step passed to `count_fold`; wrapped in a closure |
 | rec.bc (while writing it) | `` the type `A` of `fix_obs` is not determined by its arguments `` — a generic `fn` called from a generic `def` at the def's type variables; the driver's observation is written as a core `def` instead |
@@ -335,10 +335,10 @@ be free per use.**
 **R11. Errors escape the recursion as a stop, through the layers.**
 
 - Forced by: 14, 15 (unknown opcode), 26 (ran out is the same path).
-- A non-resuming operation inside the recursion ends the machine and drops its frames. Frames
-  hold linear data (11: owned subtrees), so dropping them runs their drops. The error
+- A non-resuming operation inside the recursion ends the machine and consumes its frames. Frames
+  hold linear data (11: owned subtrees), so consuming them runs their consumes. The error
   then leaves through every layer.
-- A frame holding something with no derived drop (a capability) could not be dropped. As lowered,
+- A frame holding something that is not consumable (a capability) could not be consumed. As lowered,
   capabilities stay in the state, never in frames. I have not tried one in a frame (§9).
 
 **R12. Groups.**
@@ -431,7 +431,7 @@ per-member layers of a group (17) are the one place where attachment is awkward:
   not traced which copy allocates.
 - Whether `deep`'s frame stack could be a growable array instead of a list, so that it
   allocates only on growth. Only the list was written.
-- Whether frames holding a capability (a value with no derived drop) can be dropped on a stop.
+- Whether frames holding a capability (a value that is not consumable) can be consumed on a stop.
   No lowering puts one in a frame.
 - The exact host-stack limit, beyond 04's step running at 3000 and failing at 3500.
 - Whether the unrolled open form (§3.2) could be made cheap by the elaborator in general. 06

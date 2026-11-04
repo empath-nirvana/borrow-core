@@ -9,7 +9,7 @@
 --
 -- Answer: the line `126`, and `i32[126]`: [100, 20, 3] incremented is [101, 21, 4]. A
 -- `fold_reuse` that lost the new content gives 123; one that incremented a node twice gives 127,
--- 128 or 129; a block that dropped the capability does not check.
+-- 128 or 129; a block that consumed the capability does not check.
 
 type List = mu X. 1 + (ref i32 * ref X)
 shape Node = node (leaf i32) (leaf List)

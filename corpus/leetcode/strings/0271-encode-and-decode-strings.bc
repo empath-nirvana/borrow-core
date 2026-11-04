@@ -24,7 +24,7 @@ fn fields<'t>(l: text 't) -> buf (text 't) =
   let (l, u) = array_copy['t, u8] l;
   let n = len(u);
   let mut out = box buf[text 't](8);
-  if n == 0 { array_forget['t, u8](l); out } else {
+  if n == 0 { array_release['t, u8](l); out } else {
     let mut rest = l;
     for _ in 0..n + 1 {
       match split_once(rest, b'|') {
@@ -32,7 +32,7 @@ fn fields<'t>(l: text 't) -> buf (text 't) =
       | inr w -> rest = slice_empty_imm['t, u8]; let (o, _) = push(out, w); out = o; break
       }
     };
-    array_forget['t, u8](rest);
+    array_release['t, u8](rest);
     out
   }
 
@@ -65,13 +65,13 @@ fn decode<'e>(code: text 'e) -> buf (text 'e) =
           let k = with default(0) { parse_i32(num) };
           match split_at(after, k) {
             inl (w, r2) -> rest = r2; let (o, _) = push(out, w); out = o
-          | inr after -> rest = slice_empty_imm['e, u8]; array_forget['e, u8](after); break
+          | inr after -> rest = slice_empty_imm['e, u8]; array_release['e, u8](after); break
           }
-      | inr r -> rest = slice_empty_imm['e, u8]; array_forget['e, u8](r); break
+      | inr r -> rest = slice_empty_imm['e, u8]; array_release['e, u8](r); break
       }
     }
   };
-  array_forget['e, u8](rest);
+  array_release['e, u8](rest);
   out
 
 -- The strings of a list, joined by `|`, to standard output.

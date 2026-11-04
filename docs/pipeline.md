@@ -14,7 +14,7 @@ file.bc ──parse──▶ AST ──check──▶ Expr + proof of CDerives �
 | interpret | `Support`'s interpreter, or a backend stage's | `lake exe bcc interp [--stage source\|clos\|flat] file.bc` |
 | count | `Backend/Counts.lean`: allocations, indirect calls and deep copies | `lake exe bcc-counts file.bc` |
 
-The check stage also inserts the drop of every owned value that a path leaves unused (SPEC
+The check stage also inserts the consume of every owned value that a path leaves unused (SPEC
 §12), so the `Expr` it hands on consumes each value exactly once, and the compiler lowers the
 inserted calls as ordinary code.
 
