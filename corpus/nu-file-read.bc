@@ -1,21 +1,18 @@
--- pending: #808 — a type with a `forall` observation, elaborated in two lifetime contexts, gets two binder names, and the checker compares types syntactically
--- now: 69:52: type mismatch: expected `box ('main /\ top) U (nu X. ((forall 'l4 < top. mut 'l4 i32 -o F (i32 * box ('main /\ top) U X)) & (forall 'l4 < top. imm 'l4 i32 -o F (i32 * box ('main /\ top) U X))) & F i32)`, but this has type `box ('main /\ top) U (nu X. ((forall 'l2 < top. mut 'l2 i32 -o F (i32 * box ('main /\ top) U X)) & (forall 'l2 < top. imm 'l2 i32 -o F (i32 * box ('main /\ top) U X))) & F i32)`
---
 -- SPEC §7, §22 (#808): codata whose observations take borrowed arguments. `File<'c>` is a
 -- protocol object with three observations: `read` is lent a buffer `mut` for the call, `write`
 -- is lent one `imm`, and `close` ends it. Each of `read` and `write` is an observation
 -- `forall 'x < top. … 'x … -o …`, so the borrow is lent per call. Each hands back the rest of
 -- the object boxed at its bound `'c`, so the object outlives every lend it is called in.
 --
--- The state is an owned cell, the file's content. `read` adds the content to the buffer and
+-- The state is an owned cell, the file's content, and the number of reads. `read` adds the content to the buffer and
 -- answers the number of reads so far; `write` stores the buffer into the content.
 --
 -- `main` lends the buffer `mut` to `read`, takes it back, lends it `imm` to `write`, closes the
 -- file (its `close` frees the content) and frees the buffer.
 --
--- Answer: i32[12107]: the buffer is 7 + 5 = 12 after the read, the read answers 1, and the
--- content after the write is 12 (12 * 1000 + 1 * 100 + 7, the content freed by `close` read
--- back through the write's answer); `live 0`.
+-- Answer: i32[121215]: the buffer is 7 + 5 = 12 after the read (and freed at 12), the content
+-- after the write is 12 (`close` frees it and answers it), the read answers 1 (the first read)
+-- and the write answers the old content 5; `live 0`.
 
 type File<'c> = U (nu X. ((forall 'x < top. mut 'x i32 -o F (i32 * box 'c U X))
                         & (forall 'x < top. imm 'x i32 -o F (i32 * box 'c U X))) & F i32)

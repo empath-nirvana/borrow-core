@@ -1,12 +1,10 @@
--- pending: #808 — a type with a `forall` observation, elaborated in two lifetime contexts, gets two binder names, and the checker compares types syntactically
--- now: 61:53: type mismatch: expected `box ('main /\ top) U (nu X. ((forall 'l5 < top. mut 'l5 i32 -o F (i32 * box ('main /\ top) U X)) & (forall 'l5 < top. imm 'l5 i32 -o F (i32 * box ('main /\ top) U X))) & F i32)`, but this has type `box ('main /\ top) U (nu X. ((forall 'l2 < top. mut 'l2 i32 -o F (i32 * box ('main /\ top) U X)) & (forall 'l2 < top. imm 'l2 i32 -o F (i32 * box ('main /\ top) U X))) & F i32)`
---
 -- SPEC §22 (#808): the object of `nu-file-read.bc` called twice inside one lend of the buffer,
 -- the first call through a reborrow (`borrow mut m`), the second through the lend itself, and
 -- once more in a second lend. The rest crosses each lend boxed at `'c`; the state persists from
 -- call to call.
 --
--- Answer: see `nu-file-twice.out`; `live 0`.
+-- Answer: i32[72123]: the reads add the content 2 to the buffer 1 three times (7), answer 1, 2
+-- and 3, and `close` answers the content 2; `live 0`.
 
 type File<'c> = U (nu X. ((forall 'x < top. mut 'x i32 -o F (i32 * box 'c U X))
                         & (forall 'x < top. imm 'x i32 -o F (i32 * box 'c U X))) & F i32)

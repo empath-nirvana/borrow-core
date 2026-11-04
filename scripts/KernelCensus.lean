@@ -237,6 +237,6 @@ def main (files : List String) : IO UInt32 := do
     IO.println s!"qual\t{k}\t{qprogs.getD k 0}\t{qops.getD k 0}"
   for (k, n) in (rcount.toList.mergeSort (fun a b => a.1 ≤ b.1)) do
     let parts := k.splitOn ":"
-    IO.println s!"read\t{parts.headD k}\t{(parts.consume 1).headD ""}\t{rprogs.getD k 0}\t{n}"
+    IO.println s!"read\t{parts.headD k}\t{parts.tail.headD ""}\t{rprogs.getD k 0}\t{n}"
   IO.println s!"programs\t{files.length - fails}\tfailed\t{fails}\tbackend2\t{inFrag}"
   return 0

@@ -298,6 +298,34 @@ mention none of its binders. Two kinds of body are still checked once per lifeti
 In #509's reproduction (`print_f64` twice) that is 179 keys and 249 checks, of which 36 are bodies
 with a borrow and 34 bodies whose type has a binder.
 
+**Lifetime binders inside a computation type (#808).** A term's lifetime context numbers its
+variables from `0`: a function's lifetime parameters, `Fun`, a borrow's lifetime, `'main`
+(`Δ.freshVar`). A binder of a computation type, `forall 'x < @b. C`, is named by its body instead:
+`CTy.canonBinder 'x C = max binderBase (lifeBound C[⊤/'x])`, one past every lifetime index of `C`
+other than `'x`, binders included, and at least `binderBase = 65536` (`Core/Types.lean`). The
+checker elaborates the body with `'x` numbered from the context, then renames it to that name
+(`elabC`); the unwinding borrows, whose callback is a computation type `U (∀'x ⊏ @b. C)`, name
+their binder the same way (`canonFor`, `Frontend/Check/Consts.lean`).
+
+- **One term everywhere.** The name is a function of the body up to the binder's own name. While a
+  context's variables are below `binderBase`, every name inside a type is `binderBase` plus the
+  nesting of binders below it, so a type such as `File<'c>` (§22) elaborates to the same `CTy` in
+  every function, and `∀E` and `[sub]` at a context's lifetimes leave those names as they are:
+  `applyLSub` renames a binder only where a substituted lifetime mentions it, and none mentions a
+  name at or above `binderBase`.
+- **No capture.** The name is above every variable of the body other than `'x`, free or bound, so
+  renaming `'x` to it captures nothing, and an inner binder's name is below the outer's. `NuOk`'s
+  freshness (no `∀` leaf binder free in the body) holds of a written `nu` type whose other leaves
+  mention no name at or above the leaf's, and `unfold`'s (`BindsFresh`) of every state type with
+  the context's variables only; the checker decides both (`nuOkB`, `bindsFreshB`).
+- **Where the names are not canonical.** A `Fun` checked against a computation type takes the
+  type's binder name into its body's context, so inside it a type that mentions that lifetime has
+  names above it; and `instT` (the unrolling, `unfold`'s step type) keeps a leaf's name when it puts
+  a type with binders under it. Both are compared with types built by the same operations, never
+  with a type written elsewhere. A value type `all 'x < @b. A` (a function's lifetime parameters)
+  keeps the context's numbering: its binder is the variable the function's body is checked at.
+  The kernel's rules are unchanged; `CDerives` compares types as they are.
+
 **The elaborator's keys.** A `use` node records the elaborator's key of the `def` (`TInfo.key`,
 `Frontend.DefKey`), when the elaboration generated it: a template instance's template and type
 arguments, or a copy's function and keys (the handlers and sites that serve its effects, its
@@ -4366,7 +4394,7 @@ it an observation takes a borrow lent for one call: `∀'x ⊏ ⊤. Mut 'x A ⊸
 - **Positivity.** `NuOk C` is `NuShape C` and binder freshness: no `'x` bound by a `∀` leaf is free
   in `C` (`CTy.LeafBinds`). `unfold` asks the same of its state type (`CTy.BindsFresh`). The
   checker decides both (`CTy.nuOkB`, `CTy.bindsFreshB`); a written type is fresh by construction,
-  since a binder is named `Δ.freshVar` at its elaboration.
+  since a binder is named above every other index of its body (§3, `CTy.canonBinder`).
 - **Relation.** `cB` at `∀'x ⊏ @c. D` is `cC`'s `∀` clause:
   `∀α, ⌜δ ⊨ α ⊏ c⌝ ─⋆ cB η D (δ[x ↦ α]) (e ())`. The candidate for `U X` is read at no lifetime
   substitution (`nuP`), so the rest an observation answers does not depend on `α`. One
@@ -4386,21 +4414,21 @@ it an observation takes a borrow lent for one call: `∀'x ⊏ ⊤. Mut 'x A ⊸
   lend's existing compatibility lemma returns the lent cell.
 - **Surface.** `forall 'x < @b. C` in a `nu` body, `Fun 'x < @b. M` for the observation, `M['a]` to
   instantiate it; a call with `&mut buf` is `borrow mut buf { 'w, m -> f(…, m) }` over a function
-  that instantiates the observation at its own lifetime parameter (pending, below). No judgment,
-  rule or elaboration is added.
+  that instantiates the observation at its own lifetime parameter. No judgment, rule or
+  elaboration is added.
 - **Kernel derivations** (`Core/NuBorrow.lean`): `File^c`'s body is positive (`fileBody_nuOk`);
   a `read` called on a lent `Mut 'y I32` and a `write` on a lent `Imm 'y I32` derive in `CDerives`
   at `F(I32 ⊗ [@c] File^c)` (`d_fileRead`, `d_fileWrite`), covered by `fundamentalC`
   (`fileRead_sem`, `fileWrite_sem`); `∀E` at the lend's lifetime leaves the rest's type
   `File^c` (`fileRead_inst`, `fileWrite_inst`).
-- **Programs: pending.** `corpus/pending/nu-file-read.bc` (lend `mut` to `read`, the buffer back,
-  lend `imm` to `write`, `close`, free), `corpus/pending/nu-file-twice.bc` (two reads inside one
-  lend, one after) and `corpus/pending/nu-file-consumed.bc` (the implicit consume) are refused by
-  the checker. Their object, step and observations check; the refusal is at a call of a helper
-  function: the checker compares types syntactically, a `∀` binder in a type is named from the
-  lifetime context it is elaborated in (`Δ.freshVar`), and `∀E` renames a binder its argument
-  would capture, so `File<'c>` elaborated in two functions of different lifetime contexts gets two
-  binder names. Types equal up to renaming a `∀` binder are not one type to `CDerives`. Open.
+- **Programs** (each at its golden from `bcc interp`, through every stage and backend):
+  `corpus/nu-file-read.bc` (lend `mut` to `read`, the buffer back, lend `imm` to `write`, `close`,
+  free: `i32[121215]`), `corpus/nu-file-twice.bc` (two reads inside one lend, the first through a
+  reborrow, one after: `i32[72123]`) and `corpus/nu-file-consumed.bc` (the object closed by its
+  implicit consume: `i32[71]`). Each calls the observations through functions of their own
+  lifetime parameters (`file_read<'a, 'c>`), so `File<'c>` is elaborated in several lifetime
+  contexts; it is one `CTy` in all of them because its `forall` binders are named by their bodies
+  (§3, *Lifetime binders inside a computation type*).
 - **Baseline.** `fundamentalC`, `adequacyC`, `adequacyD`, `resourceSafety`, `fundamentalC_pin` and
   `adequacyC_pin` keep their statements. Changed statements: `CTy.NuLeaf` (the `∀` case),
   `CTy.instT` (passes under `∀`), `CTy.NuOk` (`NuShape` and freshness), `cB` (the `∀` clause),
@@ -11007,10 +11035,11 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
   `cB_step`, `cB_bind` and `node_ok` extended. §7 corrects the earlier reading of `X ∉ A`: it
   keeps `X` out of a negative position and was never a restriction on lifetimes; the missing
   piece was the `∀` case. `fundamentalC`, `adequacyC`, `adequacyD` and `resourceSafety` keep their
-  statements. `Core/NuBorrow.lean` derives `read`/`write` calls on lent buffers. The programs
-  `nu-file-read`, `nu-file-twice`, `nu-file-consumed` are pending: the checker compares types
-  syntactically, and a type with a `∀` observation gets different binder names in different
-  lifetime contexts (§22).
+  statements. `Core/NuBorrow.lean` derives `read`/`write` calls on lent buffers. §3: a binder of a
+  computation type is named by its body (`CTy.canonBinder`, at or above `binderBase`), in the
+  checker's `elabC` and the unwinding borrows' callbacks, so a type with a `forall` observation is
+  one `CTy` in every lifetime context. Programs `nu-file-read`, `nu-file-twice`,
+  `nu-file-consumed`.
 - **1.30** (2026-11-04) — §62, §12 (#771): the frame form of 1.27 is removed with its programs
   and its file handle; Core has no file-specific definition. `resourceSafety` and `rtSafety` keep
   their statements, in `Core/ResourceSafety.lean`. `kappa_lin_strict` (a must-resume `κ` is

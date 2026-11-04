@@ -1670,6 +1670,19 @@ def CTy.applyLSub (σ : LSubst) : CTy → CTy
       .eff n i q (A.applyLSub σ) (B.applyLSub σ) (fin.applyLSub σ) rc (C.applyLSub σ)
 end
 
+/-- The first name of a type's internal lifetime binders: the lifetime context of a term numbers
+its variables from `0` (`Δ.freshVar`), and a binder inside a type is named at or above this, by
+its body (`CTy.canonBinder`).  `[spec §3]` -/
+def CTy.binderBase : LifeVar := 65536
+
+/-- **The name of a type's internal `∀` binder `'x` over the body `C`**: one past every lifetime
+index of `C` other than `'x` itself (`C[⊤/'x]`), binders included, and at least `binderBase`.  It
+is a function of the body up to the binder's own name, so a type is one term wherever it is
+elaborated while the context's variables are below `binderBase`; it is above every other
+variable of `C`, so renaming `'x` to it captures nothing.  `[spec §3]` -/
+def CTy.canonBinder (x : LifeVar) (C : CTy) : LifeVar :=
+  max CTy.binderBase (C.applyLSub [(x, .top)]).lifeBound
+
 /-- `A[@a/'x]`. -/
 def VTy.instLife (x : LifeVar) (a : Lifetime.Life) (A : VTy) : VTy := A.applyLSub [(x, a)]
 

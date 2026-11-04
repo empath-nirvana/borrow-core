@@ -378,7 +378,11 @@ def elabC : Nat → TyEnv → CTy → Except Error CCTy
         let bl ← E.life b
         let v := E.Δn.freshVar
         let E' := { E with Δn := E.Δn.extend v bl, lenv := (x.name, v) :: E.lenv }
-        pure (.all v bl (← elabC n E' C))
+        let C' ← elabC n E' C
+        -- The binder is renamed to its canonical name (`CTy.canonBinder`, SPEC §3), above every
+        -- index in the body, so the renaming captures nothing.
+        let k := BoCa.Fig16.LogRel.Core.CTy.canonBinder v C'
+        pure (.all k bl (C'.applyLSub [(v, .var k)]))
     | .nu sp X C => do
         let B ← elabC n { E.enterU with mu := ["U " ++ X.name] } C
         -- A template's type, elaborated with its type parameters as placeholders to match a call

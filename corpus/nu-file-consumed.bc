@@ -1,10 +1,8 @@
--- pending: #808 — a type with a `forall` observation, elaborated in two lifetime contexts, gets two binder names, and the checker compares types syntactically
--- now: 58:52: type mismatch: expected `box ('main /\ top) U (nu X. ((forall 'l4 < top. mut 'l4 i32 -o F (i32 * box ('main /\ top) U X)) & (forall 'l4 < top. imm 'l4 i32 -o F (i32 * box ('main /\ top) U X))) & F i32)`, but this has type `box ('main /\ top) U (nu X. ((forall 'l2 < top. mut 'l2 i32 -o F (i32 * box ('main /\ top) U X)) & (forall 'l2 < top. imm 'l2 i32 -o F (i32 * box ('main /\ top) U X))) & F i32)`
---
 -- SPEC §12, §22 (#808): the object of `nu-file-read.bc` used once and then left: its implicit
 -- consume runs its `close` (`Consumable.nu`, group 2), which frees the content cell.
 --
--- Answer: see `nu-file-consumed.out`; `live 0`.
+-- Answer: i32[71]: the buffer is 3 + 4 = 7, the read answers 1, and the object's consume frees
+-- the content cell (`live 0`).
 
 type File<'c> = U (nu X. ((forall 'x < top. mut 'x i32 -o F (i32 * box 'c U X))
                         & (forall 'x < top. imm 'x i32 -o F (i32 * box 'c U X))) & F i32)

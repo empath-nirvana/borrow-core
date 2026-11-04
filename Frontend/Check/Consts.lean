@@ -166,6 +166,34 @@ def plainShape (sp : Span) (s : CShape) : Except Error (PLift (s.plain = true)) 
 
 /-! ### Constants -/
 
+mutual
+/-- The body of the `∀` binding `'x` in a constant's type. -/
+def findAllV (x : LifeVar) : CVTy → Option CCTy
+  | .tensor A B | .sum A B => (findAllV x A).orElse fun _ => findAllV x B
+  | .thunk C => findAllC x C
+  | .ref A | .bang A | .fam A | .box _ A | .imm _ A | .mut _ A | .mu A => findAllV x A
+  | _ => none
+/-- The body of the `∀` binding `'x` in a computation type. -/
+def findAllC (x : LifeVar) : CCTy → Option CCTy
+  | .all y _ C => if y == x then some C else findAllC x C
+  | .ret A => findAllV x A
+  | .arr A C => (findAllV x A).orElse fun _ => findAllC x C
+  | .amp C D => (findAllC x C).orElse fun _ => findAllC x D
+  | .nu C => findAllC x C
+  | .eff _ _ _ A B fin _ C =>
+      (findAllV x A).orElse fun _ => (findAllV x B).orElse fun _ =>
+        (findAllC x fin).orElse fun _ => findAllC x C
+  | .top => none
+end
+
+/-- The binder of a constant whose callback is a computation type `U (∀'x ⊏ @b. C)`: the
+canonical name of `C`'s binder (`CTy.canonBinder`, SPEC §3), so that the callback's type is the
+one the program writes as `U (forall 'x < @b. C)`. -/
+def canonFor (ty : LifeVar → CVTy) (x₀ : LifeVar) : LifeVar :=
+  match findAllV x₀ (ty x₀) with
+  | some C => BoCa.Fig16.LogRel.Core.CTy.canonBinder x₀ C
+  | none => x₀
+
 /-- The unwinding borrows: each at a consumed context, its finaliser the consume of its
 source.  `[spec §19]` -/
 def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
@@ -174,7 +202,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B
       let S ← E.elabRow Δ sp r
-      let x := Δ.freshVar
+      let x := canonFor (fun x => withbor1UTy x Δ.meetOfDom A B S) Δ.freshVar
       let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
       let ⟨hsc⟩ ← needB sp (scopedB Δ A) s!"`{ppVTy A}` mentions a lifetime not in scope"
       let ⟨hS⟩ ← unwindRow sp x S
@@ -187,7 +215,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B
       let S ← E.elabRow Δ sp r
-      let x := Δ.freshVar
+      let x := canonFor (fun x => withbor2UTy x Δ.meetOfDom A B S) Δ.freshVar
       let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
       let ⟨hside⟩ ← outlivesWitness sp b A
       let ⟨hS⟩ ← unwindRow sp x S
@@ -200,7 +228,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B
       let S ← E.elabRow Δ sp r
-      let x := Δ.freshVar
+      let x := canonFor (fun x => withbor3UTy a x Δ.meetOfDom A B S) Δ.freshVar
       let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
       let ⟨hS⟩ ← unwindRow sp x S
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.mut a A)
@@ -212,7 +240,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B
       let S ← E.elabRow Δ sp r
-      let x := Δ.freshVar
+      let x := canonFor (fun x => withloadUTy a x Δ.meetOfDom A B S) Δ.freshVar
       let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
       let ⟨hS⟩ ← unwindRow sp x S
       (cDead (fun j => .withloadU (at_ sp) j a A B S x) fun hd _ =>
@@ -222,7 +250,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B
       let S ← E.elabRow Δ sp r
-      let x := Δ.freshVar
+      let x := canonFor (fun x => sliceBorrowMUTy x Δ.meetOfDom A B S) Δ.freshVar
       let ⟨⟨_, h₁, h₂⟩⟩ ← freshFor (Δ := Δ) sp x A B
       let ⟨hA⟩ ← outlivesWitness sp b A
       let ⟨hB⟩ ← outlivesWitness sp b B
@@ -236,7 +264,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B
       let S ← E.elabRow Δ sp r
-      let x := Δ.freshVar
+      let x := canonFor (fun x => sliceBorrowIUTy x Δ.meetOfDom A B S) Δ.freshVar
       let ⟨⟨_, h₁, h₂⟩⟩ ← freshFor (Δ := Δ) sp x A B
       let ⟨hsc⟩ ← needB sp (scopedB Δ A) s!"`{ppVTy A}` mentions a lifetime not in scope"
       let ⟨hA⟩ ← outlivesWitness sp b A

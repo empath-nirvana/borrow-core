@@ -81,6 +81,9 @@ clause-captures erased handles 2 performs 0 raises 2 machines 1 suspends 2 left 
 clo-capture erased handles 0 performs 0 raises 0 left 0 0
 clo-coerce erased handles 0 performs 0 raises 0 left 0 0
 clo-counter erased handles 0 performs 0 raises 0 left 0 0
+nu-file-read erased handles 0 performs 0 raises 0 left 0 0
+nu-file-twice erased handles 0 performs 0 raises 0 left 0 0
+nu-file-consumed erased handles 0 performs 0 raises 0 left 0 0
 clo-depth erased handles 0 performs 0 raises 0 left 0 0
 clo-consume erased handles 0 performs 0 raises 0 left 0 0
 clo-higher erased handles 0 performs 0 raises 0 left 0 0
