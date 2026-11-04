@@ -11,7 +11,7 @@ The tree is the chain `0 ⊐ 1 ⊐ 2 ⊐ ⋯` (`chainP`): the lifetime `α` is n
 lifetime below it as a number. `κ = λy. K[y]` with `K = [·]; ℓ` (`kontV`), captured at a stop
 owning no records, its share the view `ℓ ↦ imm({α}, (), ∅)` of a lend of a unit cell at `ℓ`
 (`viewR`) whose record is in the stop list. The stop list also holds records `κ` does not read;
-the resume list drops them (ended by another branch) and adds one opened since, so it is not a
+the resume list leaves them out (ended by another branch) and adds one opened since, so it is not a
 re-reading of the stop list (`¬ SRecsRR`), and `KeepRel` holds. Boxed at `α + 1`, strictly inside
 the lend, `κ` is a value of `[@α+1] U (1 ⊸ F (Imm @α 1))` there and is resumed; boxed at `α` or at
 the root it is not of that type.
@@ -210,7 +210,7 @@ theorem share_viewR (l : BoCa.Loc) (α : Life) (k : Nat) (ls : List (SRecT wCh.K
 
 /-! ### The hardest case, discharged -/
 
-/-- **`κ` holding a view of the lend at `α`, boxed at `α + 1`, carried to a list that drops the
+/-- **`κ` holding a view of the lend at `α`, boxed at `α + 1`, carried to a list that leaves out the
 records it does not read and adds one, is a value of its type there and is resumed.** Every
 hypothesis of `STy.kontBox_resume_after` discharged; uniform in `α`, the instances below fix
 the depth. -/

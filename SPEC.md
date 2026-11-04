@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.31 · 2026-11-04
+Version 1.32 · 2026-11-04
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -10610,7 +10610,10 @@ layers (`docs/new-core/scope-782.md`):
   (`STy.kontBox_resume_after`). Instances at a lend at depth 1 and nested two deep, with the resume
   list not a re-reading of the stop list (`kontBox_depth1`, `kontBox_depth3`,
   `Core/TreeSemKEx.lean`). A continuation owning the records of lends its own branch opened is row
-  6's: the value types own no records.
+  6's: the value types own no records. These are results about one share at `KeepRel`; a
+  scheduler's stored shares are carried in pool form (`KapSchedT`, `PoolT`, decision 74), each
+  resuming at the same `KeepRel`, and borrows shared across tasks are excluded by the pool
+  invariant (#795).
 
 On the semantic store typing (`KSem`, `Support/Model/Tree/KSem.lean`) monotonicity is proved for
 `1`, `+`, `Imm`, `ref` and `[a]`, each from its components' (`kmono_unit`, `kmono_sum`,
@@ -11176,6 +11179,14 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
 
 ## Changelog
 
+- **1.32** (2026-11-04) — §62 (#782): the relation's types at the tree (*Semantic types read at
+  the tree*): value types (`STy`) read the record list, downward closed and monotone along
+  extension and `KeepRel` for every former (`Mut` at a store code); computation types (`SCmp`)
+  downward closed, `F A` Kripke along `KeepRel` (`SCmp.ret_kripke`; a bare `cerwpT` run is not,
+  `Obs.cerwpT_not_keepKripke`); continuation and task types as thunks and boxed thunks, a captured
+  `κ` a value of its type (`STy.kont_of_share`, `STy.kontBox_resume_after`). No change to
+  `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, `twp`, `cerwpT`, the checker, the backends
+  or the corpus.
 - **1.31** (2026-11-04) — §62 (#781, slice (d)): the per-branch share (`KeepRel`) in
   `contShareT_resume`'s list condition; a lend's open and end at `twp` (`twp_lendOpen`,
   `twp_lendEnd`); `[handle]` for a scheduler at the program's top (`cerwpT_schedHandle`) and

@@ -55,7 +55,7 @@ second layer over it, step-indexed and read at the tree world:
 | `Core/TreeSemC.lean` | `cerwpT_le`, `opTableT_down`; `cerwpT_nil_of_imm`; `SCmp`, the computation formers; thunks at `cerwpT`; `ν`; `∀` over lifetimes |
 | `Core/TreeSemK.lean` | continuation and task types; `STy.kont_of_share`, `STy.kontBox_resume_after`, `STy.not_kontBox_of_view` |
 | `Core/TreeSemKEx.lean` | the instances: `κ = λy. K[y]` (`kontV_step`), a share holding a view built (`share_viewR`), depth 1 and depth 3 (`kontBox_depth1`, `kontBox_depth3`), the rules-out instances, `nilRun_stuck` |
-| `Support/Model/Tree/World/ExtF.lean`, `Core/TreeWpEff.lean` | ported from `si-781d` (commit `5b6b4a0c`, D13): `KeepRel`, `contShareT` resumed at any list keeping the records the share reads |
+| `Support/Model/Tree/World/ExtF.lean`, `Core/TreeWpEff.lean` | slice (d)'s (#807, D13 of `scope-781.md`), unchanged here: `KeepRel`, `contShareT` resumed at any list keeping the records the share reads |
 
 `Core/` because the computation types read `cerwpT` and the opaque types read `Core.Opaque`.
 
@@ -99,6 +99,17 @@ types are downward closed, `F A` Kripke along `KeepRel` (`SCmp.ret_kripke`) and 
 proved at every extension directly. `μ` folds at every body `VTy.NoMut` admits
 (`STy.allBody_mono`, `STy.list_cons`); `ν` at Core's shape `F(A ⊕ U X) & F B`
 (`SCmp.loopBody_mono`, `SCmp.loop_nonempty`).
+
+**What the rest of the relation provides** (`scope-781.md`, SPEC §62, decision 74). Adequacy over
+several branches (`multiBranchAdequacyT`) goes through `cerwpT_adequacy` at one branch, with the
+stored continuations in pool form (`KapSchedT`, `PoolT`): each share resumes at `KeepRel`, the
+condition the value types here read, and every two are apart at each other's record masks. It
+does not rest on `CactusInvT` over several branches. The results here are about one continuation
+at `KeepRel`; the instances (`Core/TreeSemKEx.lean`) are configurations of that condition, not of
+a pool. Borrows shared across tasks are excluded by the pool invariant itself (#795); the view
+the instances' `κ` holds is of a lend whose record is in its own stop list. The tree has no `withborU` rule yet (row 6).
+A run giving up a copy of an `imm` view held elsewhere (D4) is in progress at #806; nothing here
+depends on it.
 
 Headline hypotheses, classified: (a) the situation the statement is about; (s) a side condition
 the library discharges by a named result. None stands in for an unproved fact.
@@ -149,9 +160,9 @@ type cannot express: its thunk type holds of every thunk holding a borrow, resum
 
 **The change.** `STy`'s predicate reads the list (`P n w ls v ρ`), and its monotonicity is along
 extension at every list keeping the re-readings of the records of `ls` the resource reads
-(`KeepRel`, the per-branch condition of the continuation share, D13 of `scope-781.md`, ported from
-`si-781d` commit `5b6b4a0c`: `Support/Model/Tree/World/ExtF.lean`'s `KeepRel` block and
-`Core/TreeWpEff.lean`'s `contShareT`). Every former's downward closure and monotonicity is
+(`KeepRel`, the per-branch condition of the continuation share, D13 of `scope-781.md`, slice (d)'s
+(#807): `Support/Model/Tree/World/ExtF.lean`'s `KeepRel` block and `Core/TreeWpEff.lean`'s
+`contShareT`). Every former's downward closure and monotonicity is
 re-proved: the formers other than thunks pass the list to their components, at parts of the
 resource (`KeepRel.of_compS_left`/`_right`, `KeepRel.of_imm_res`, `KeepRel.of_get_sub`); thunks
 quantify over it (`KeepRel.trans`). The answer depends on `KeepRel`: a whole-list re-reading
