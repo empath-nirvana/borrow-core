@@ -22,7 +22,7 @@ the thunk monotone (`STy.thunk`).
 * **The formers**: `F A` (`SCmp.ret`): over a covered resource, a run of `cerwpT` at every
   extension and every list keeping the records the resource reads, so Kripke along `KeepRel`
   (`SCmp.ret_kripke`) and monotone in `A` (`SCmp.ret_le`, from `cerwpT_post_mono`). A bare
-  `cerwpT` run is not Kripke along `KeepRel` (`Obs.cerwpT_not_keepKripke`,
+  `cerwpT` run owning no records is not Kripke along `KeepRel` (`Obs.cerwpT_not_keepKripkeNil`,
   `Core/TreeSemObs.lean`). `A ⊸ C` (`SCmp.arr`), `C & D` (`SCmp.amp`), `⊤` (`SCmp.top`),
   `∀α ⊏ c. C` over the lifetimes below `c` in the current tree (`SCmp.all`), and `νX. C`, the
   greatest fixed point over candidates (`SCmp.nu`, fold and unfold at a monotone body), shown at
@@ -182,12 +182,16 @@ def RunRet (Tb : TableT) (Fb F : TFrame) (τ : STy) : CSem :=
 extension of the world, on the re-reading, at every list there keeping the records of `ls` the
 resource reads (`KeepRel`).
 
-The quantifier is `U`'s (`STy.thunk`), and it is needed here: a bare run at a list is not one at
-a later list keeping the records its resource reads (`Obs.cerwpT_not_keepKripke`,
-`Core/TreeSemObs.lean`). `cerwpT` quantifies over the starts whose list re-reads `ls` whole; at a
-list no world holding the resource's cells has, `[]` under a view, there is no such start, and
-every term is a run there (`cerwpT_nil_of_imm`). `F A` at `[]` asks the run at every later list,
-the lend's own among them. -/
+The quantifier is `U`'s (`STy.thunk`), and it is needed here: a bare run owning no records at a
+list is not one at a later list keeping the records its resource reads, with a lend's record in
+the later list and not owned (`Obs.cerwpT_not_keepKripkeNil`, `Core/TreeSemObs.lean`). `cerwpT`
+quantifies over the starts whose list re-reads `ls` whole; at a list no world holding the
+resource's cells has, `[]` under a view, there is no such start, and every term is a run there
+(`cerwpT_nil_of_imm`). `F A` at `[]` asks the run at every later list, the lend's own among them.
+
+Over a resource that is not covered, `F A` holds of every term: the coverage premise is the
+coverage every start provides (`cov_of_comp`), and `SCmp.ret_run`, `SCmp.ret_kripke` and
+`STy.thunkRet_intro` read the run only over a covered resource. -/
 def SCmp.ret (Tb : TableT) (hL : Tb.Local) (hTb : Tb.Down) (Fb F : TFrame) (τ : STy) : SCmp where
   P n w ls e ρ := CovR (sem w.Θ) w.K ρ → ∀ (w' : TWd) (ρ' : TRes w'.K) (ls' : List (SRecT w'.K)),
     w.Ext w' ρ → RRw (w := w) (w' := w') ρ ρ' → KeepRel w'.Θ ls ls' ρ →

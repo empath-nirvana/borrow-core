@@ -149,7 +149,9 @@ condition Core lacks.
 Over the single relation:
 1. `Row.tabN`, then 𝒱/𝒞 for every type: Imm, Mut (`vMut`), boxes, lifetimes, thunks
    (`vThunk`/`Covers`), μ, ν, ∀, type variables, families, opaque types, κ and task types. All
-   downward closed and monotone along the tree. Done at the tree (`STy`, `SCmp`, κ and task
+   downward closed; the value types, thunks included, monotone along the tree and `KeepRel`. Of
+   the computation types, `F A` and `&` of Kripke types are Kripke along `KeepRel`; `⊸`, `∀` and
+   `ν` are not, and a thunk of one is monotone by `U`'s quantifier. Done at the tree (`STy`, `SCmp`, κ and task
    types, `Core/TreeSem.lean`, `Core/TreeSemC.lean`, `Core/TreeSemK.lean`) for every former but
    `Mut` at a payload that is not a store code (#790) and effect rows (`CTy.eff`).
 2. `SemJ`, then compatibility for every `CDerives` rule. The new rules are lend/reborrow/Anti-Frame

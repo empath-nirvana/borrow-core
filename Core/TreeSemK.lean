@@ -160,7 +160,12 @@ captured at a stop (its share `ρ`, owning no records, at the stop list `ls`), b
 carried to any extension `w′` of the stop's world, at any list `ls′` there keeping the re-readings
 of the records of `ls` the share reads: records of `ls` the share does not read may have been
 ended, and records opened since may be added, by other branches. There it is a value of its type
-(`[@d] U (B ⊸ F A)` at `w′`, `ls′`), and resuming it at any answer of `B` is a run of `F A`. -/
+(`[@d] U (B ⊸ F A)` at `w′`, `ls′`), and resuming it at any answer of `B` is a run of `F A`.
+
+The resume is read off the carried value, not off the share: the value at `w′`, `ls′` is forced
+there (`STy.kont_resume` at the reflexive extension), and the run of `F A` it gives is a run at
+`w′`, `ls′` (`SCmp.ret_run`). That reading needs the composite `σ` covered and the records of `ls′`
+covered, which a start provides (`cov_of_comp`, `RecInv.cov_ls`). -/
 theorem STy.kontBox_resume_after {Tb : TableT} (hL : Tb.Local) (hTb : Tb.Down) {τ τB : STy}
     {en : OpEntT} {Fb : TFrame} {k : Nat} {w w' : TWd} {ls : List (SRecT w.K)}
     {ls' : List (SRecT w'.K)} {K : Kont} {v κ : Val} {ρ : TRes w.K} {ρ' : TRes w'.K} {d : Life}
@@ -168,13 +173,17 @@ theorem STy.kontBox_resume_after {Tb : TableT} (hL : Tb.Local) (hTb : Tb.Down) {
     (hB : ∀ j (w' : TWd) ls' a σ, τB.P j w' ls' a σ → en.PBv v j w' ls' a σ)
     (h : contShareT en Fb k w ls [] K v (cerwpTC (ℍ := ℍ) Tb (postOf τ) Fb k) ρ)
     (hd : ρ.InStratum (TSet.single d)) (hc : CovR (sem w.Θ) w.K ρ) (hE : w.Ext w' ρ)
-    (hr : RRw (w := w) (w' := w') ρ ρ') (hk : KeepRel w'.Θ ls ls' ρ) {n : Nat} (hn : n < k) :
+    (hr : RRw (w := w) (w' := w') ρ ρ') (hk : KeepRel w'.Θ ls ls' ρ)
+    (hls : ∀ x ∈ ls', CovR (sem w'.Θ) w'.K x.1.R) {n : Nat} (hn : n < k) :
     (STy.kontBox d τB (SCmp.ret (ℍ := ℍ) Tb hL hTb Fb (fdNil en v Fb) τ)).P n w' ls' κ ρ' ∧
-      ∀ (a : Val) (ρa σ : TRes w'.K), ResUT.CompS ρ' ρa σ → τB.P n w' ls' a ρa →
+      ∀ (a : Val) (ρa σ : TRes w'.K), ResUT.CompS ρ' ρa σ → CovR (sem w'.Θ) w'.K σ →
+        τB.P n w' ls' a ρa →
         cerwpT (ℍ := ℍ) Tb (postOf τ) Fb (fdNil en v Fb) n w' ls' [] (.app (.val κ) (.val a)) σ := by
   have hb := STy.kontBox_of_share hL hTb hκ hB h hd hn
   have hb' := (STy.kontBox d τB _).mono n w w' ls ls' κ ρ ρ' hE hr hk hc hb
-  exact ⟨hb', fun a ρa σ hcσ ha => kont_run_of_share hL hκ hB h hE hr hk hn hcσ ha⟩
+  refine ⟨hb', fun a ρa σ hcσ hcov ha => ?_⟩
+  exact SCmp.ret_run hcov hls (STy.kont_resume hb'.1 (TWd.Ext.refl w' ρ') (RR.refl hr.cov)
+    (KeepRel.refl hls ρ') le_rfl hcσ ha)
 
 /-! ### Rules out: a continuation stored past its lend -/
 
