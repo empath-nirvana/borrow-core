@@ -8,7 +8,7 @@
 -- whose block spawns; and generic `map`/`fold` over the results.
 --
 -- Answer: `(inr (i32[9], inr (i32[3], inr (i32[12], inl ()))), i32[24])`: the partial sums
--- [9, 3, 12] and their total 24; `live 0`. A scheduler that dropped a task, or a sum that lost a
+-- [9, 3, 12] and their total 24; `live 0`. A scheduler that consumed a task, or a sum that lost a
 -- word across an `await`, gives other numbers.
 
 include async

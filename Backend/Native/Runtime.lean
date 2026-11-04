@@ -17,7 +17,7 @@ allocator), so that `live` and the counts agree:
   literal's view; `bc_init` gives its bounds) are not freed.
 - `bc_putc fd b` writes the low byte of `b` to `fd`, and `bc_putv fd p n` the `n` bytes at `p`,
   calling `write(2)` again after a short write; both are unbuffered, as the Wasm runtime's are,
-  and a write's error is dropped (`SIGPIPE` is ignored).
+  and a write's error is consumed (`SIGPIPE` is ignored).
 - `bc_getc fd` reads one byte with `read(2)`, or answers `-1` at the end or on an error;
   `bc_getv fd p n` reads into the `n` bytes at `p` until they are full or a read answers
   nothing, and answers the count.

@@ -48,7 +48,7 @@ partition: every `own(u)` becomes `imm({α}, u, ∅)`. Every `mut(β, u, χ, P̂
 
 - **The view.** It is a `●`-factor of the start, so `↭` accepts it (`UpdV.refl`). The view is
   not produced: it was handed over.
-- **6.38's restore.** Nothing in the returned cells pins `ρv` any more. `imm(α, u, χ)` forgets a
+- **6.38's restore.** Nothing in the returned cells pins `ρv` any more. `imm(α, u, χ)` releases a
   `mut` cell's `β` and `P̂`. The restore would have to come from the frame's record at the
   meta level. 6.29 (the frame cell comes back *with its witness*), 6.38 and 6.39 all argue
   through that witness, and each would need a real re-proof.
@@ -56,7 +56,7 @@ partition: every `own(u)` becomes `imm({α}, u, ∅)`. Every `mut(β, u, χ, P̂
   `ℓ ↦ Imm α P̂` has to be restated over the lifted siblings. Every reader of an `imm` witness
   changes with it: 6.150, 6.52–6.59, and the typed world's escrow (`LeInvW`).
 - **Linearity on the owner.** Kept in principle. The views are `imm`, so `ρ⁺∣own = ∅` lets them
-  be dropped, and the restore comes from the record. But the record is now the only copy of
+  be consumed, and the restore comes from the record. But the record is now the only copy of
   `ρv`.
 
 ### (ii) Keep the witness, add the image beside it ("both")
@@ -87,7 +87,7 @@ for `Imm 'a A`.
   image. The view has to be in the run's *own* resource `ρ`, because `wpTS` checks `ρ ↭ ρ′ ● ρ⁺`
   on `ρ` alone (`World.lean:138`). A copy of the image sitting in the frame `ρ_f` does not
   count.
-- **Linearity on the owner: kept.** The views are `imm` and can be forgotten in `ρ⁺`. The
+- **Linearity on the owner: kept.** The views are `imm` and can be released in `ρ⁺`. The
   restore comes from `ℓᵢ`'s own witness `ρv`, as the survey's §3 pattern requires.
 
 ### (iii) One level: only what `reb_α`'s `π` gives in one step
@@ -245,7 +245,7 @@ additionally hands over its `reb_α` image at the frame's own lifetime. At the e
 6.59 subtract the image, which is the reborrow's own surgery, run at `α`. No model definition
 changes, and the owner's restore still comes from the frame's witness.
 
-The first work item is the RA-level `six38_img` in §4. Drop L3 (and L2) from this line: the
+The first work item is the RA-level `six38_img` in §4. Consume L3 (and L2) from this line: the
 "both" representation is machine-checked to fail for `mut`.
 
 **Main risk:** row 4.8 has to carry the image. That forces 6.150 to hand out views with their

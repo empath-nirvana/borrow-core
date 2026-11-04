@@ -20,7 +20,7 @@ is one (`path_of_steps`).
   the raise on; one whose own raise escapes supersedes it.  The trace is over where a handler of
   the raise's name catches it, or where the raise leaves `K`.
 * **The cancel, read prefix-closed, under frame deadness** (`cancel_prefix`).  The start is the
-  cancel run of a continuation `kappa H K`, or of `kappaC hasCancel ℓ H K` after its cell's release.
+  cancel run of a continuation `kappa H K`, or of `kappaC hasCancel ℓ H K` after its cell's free.
   Every path from there is a prefix of the cancel trace of the dead region `K†` (`CancelTr`).
   `K†` holds no handler and no `ccatch` frame (`hasHnd_dead`, `noCC_dead`), so nothing in the
   region intercepts the cancel.  It fires `K`'s finalisers innermost first, each by

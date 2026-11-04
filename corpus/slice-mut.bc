@@ -1,6 +1,6 @@
 -- An owned array lent as a family of `mut` leaf borrows, with no cell (SPEC §9,
 -- `slice_borrow_mut`). `borrow mut a { 'x, v -> … }` on an array lends `array_mut 'x i32`;
--- `slice_get_mut` takes the leaf at an index (the rest of the family is forgotten: a `mut`
+-- `slice_get_mut` takes the leaf at an index (the rest of the family is released: a `mut`
 -- leaf holds no cell of its own), and `modify` writes through it. Each lend hands the array
 -- back. `slice_len_mut` reads the length and hands the family back.
 --

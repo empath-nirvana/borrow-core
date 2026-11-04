@@ -44,7 +44,7 @@ The user's decisions on §11 are recorded there and in `docs/decisions.md` entry
        existential type.
 - **Code size** is that of one body per (higher-order function, **profile** of the callback's
   tunneled row). A profile is which of abort, suspension and multi-shot the row contains, because
-  those change drop glue and the state machine. Inlined copies are added where the heuristic
+  those change consume glue and the state machine. Inlined copies are added where the heuristic
   chooses them. Effects add no copies of their own beyond the profile. **Hypothesis:** this is
   Rust's size or less.
 - **Accidental handling.** Static names already prevent it, given one added check and one rule:
@@ -135,7 +135,7 @@ Each target is given as the kernel term the design must produce, and then as a s
     calls the closure value at each element.
   - With the closure inlined (R2b), it is the term the hand-written `for x in it { yield(x * 10) }`
     elaborates to (`Loop_{n_t:Yield}`, SPEC §15).
-- **Surface sketch.** The pending program with the `!` dropped from `f`'s type:
+- **Surface sketch.** The pending program with the `!` consumed from `f`'s type:
   `fn for_each(it: U (pull i32 1 1), f: (i32) -> 1) -> 1`.
 
 **Target 4: stored callbacks.** An event registry, and a manager holding several controllers'
@@ -377,10 +377,10 @@ At a call `h(…, c, …)`, where `c` is at a computation parameter `f : (A) -> 
 - If `f(v)` is not under a site of `h` for `E ∈ P`, then `E` reaches `h`'s own row, served by
   `h`'s caller at a name `m`. The port `p_E` must be relabelled to `m` at that call.
 - **Abortive `E`.** `hnd (p_E, (return, λv. raise_m v)) (f v)`. Typable today: the clause is `!`,
-  captures nothing, and its argument drops. Its cost is a retag on the error path.
+  captures nothing, and its argument consumes. Its cost is a retag on the error path.
 - **Resuming `E`.**
   - The relabel clause `λ(v, κ). y ← perform_m v; (force κ).1 y` holds a cancellable `κ` across a
-    control operation. `κ` has no destructor (SPEC §15, *A body that performs a control
+    control operation. `κ` is not consumable (SPEC §15, *A body that performs a control
     operation*). So `effLet`'s `S.Cancels → Γ₂.OwnFree` premise fails, and **the clause is not
     typable today**.
   - Two ways out:
@@ -417,7 +417,7 @@ At a call `h(…, c, …)`, where `c` is at a computation parameter `f : (A) -> 
   - So a callback called more than once, with linear captures, must carry them in an environment
     passed beside the code: SPEC §2's `FnMut` row.
 - **It does not work if the environment is passed by value and handed back.** An abort of the
-  callee's call abandons it: its owned parts are dropped and its borrows end. That is the
+  callee's call abandons it: its owned parts are consumed and its borrows end. That is the
   unwinding `[let]`/`[then]`'s meaning.
   - So the environment must be behind a location exactly when `h` serves an abortive provided
     operation and may call `f` after it.
@@ -545,7 +545,7 @@ code cost. It is three separate things.
 - **The default.** One body per (function, profile of `T`), with each callback a closure value.
   - The **profile** changes code: whether `h` branches after calling `f` (abort); whether `h` is a
     state machine (suspension); whether `h`'s context across the call must be persistent
-    (multi-shot); and the drop glue around the call.
+    (multi-shot); and the consume glue around the call.
   - The **shape** of `T` within a profile does not change code: tunneled answering effects are in
     `Env_c`; tunneled control operations pass through; the payload variant is program-wide.
 - **Typing per shape.** Instances that differ in `T`'s shape but not its profile are still
@@ -701,7 +701,7 @@ Each scoping construct is a function over a passed computation that installs ord
   handler is outside is T1. It is rejected as today: `Row.Unwind` admits only abortive operations.
   Answering and abortive operations cross. R2e's re-lending uses the unwinding borrows, under the
   same rule.
-- **#215.** `retry` drops the error of a failed attempt: an ordinary destructor once payloads may
+- **#215.** `retry` consumes the error of a failed attempt: an ordinary consume once payloads may
   be linear. The last error propagates.
 - **#216.** The retry above needs none. A `default`-style handler over a passed computation needs
   #216, as `default` does today.
@@ -781,7 +781,7 @@ checker. The following carry over unchanged:
    - **type functions in rule conclusions**: lifetime substitution, `unfoldTy` and `ν`'s
      instantiation, the folds' types, the array and slice constants' types;
    - **type predicates that must be invariant**: `OwnFree`, `Persistent`, `Ctx.Banged`,
-     `CtxOutlives`, `Cl`, `NuOk`, `EffLeaf`, `EffFree`, `isRet`, `Ctx.OwnFree`, and the destructor
+     `CtxOutlives`, `Cl`, `NuOk`, `EffLeaf`, `EffFree`, `isRet`, `Ctx.OwnFree`, and the consume
      class.
 
    **Cost (hypothesis).** The size of `Core/Weaken.lean` (172 lines) plus one commutation lemma

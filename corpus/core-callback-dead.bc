@@ -1,7 +1,7 @@
 -- SPEC §26 in the core text: a callback `λ_. M` whose binder is dead. `apply` calls its callback
 -- at `()` and applies the persistent function it answers to 41. The callback's answer is a `!`
 -- promotion, which asks that every live slot of its context be at a `!` type, so the callback's
--- binder, of type `1`, cannot be dropped inside it: typed live (`[λ]`), the binder is not
+-- binder, of type `1`, cannot be consumed inside it: typed live (`[λ]`), the binder is not
 -- consumed. The body does not use it, so the checker types the callback with the binder dead
 -- (`[λ-dead]`).
 --

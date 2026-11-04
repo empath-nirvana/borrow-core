@@ -10,7 +10,7 @@ fn counter<'x, 'w < 'x>(ml: mut 'x i32) -> box 'w Clo[i32, i32]<'w> =
         q <- return (withswap['x, i32, i32] m (thunkv fun (v : i32) -> return (v + a, v + a)));
         let (m, t) = q;
         return (t, m),
-      return (forget_mut['x, i32] m) >)
+      return (release_mut['x, i32] m) >)
 
 main -> i32 =
   let i = alloc(0);

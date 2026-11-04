@@ -145,7 +145,7 @@ handler prometheus(reg: &mut Registry) for Metrics {
 -- --------------------------------------------------------------------------------------------
 
 -- `Iter<T, R>` is the core's `iter` (SPEC §7): each `next` yields a `T` or finishes with `R`;
--- `close` (run by the destructor when an iterator is dropped) releases its state. There is no
+-- `close` (run by the consume when an iterator is consumed) releases its state. There is no
 -- `Stream`: an iterator whose `next` waits on the network is an `Iter` whose `next` performs
 -- `Async`. An adapter is written once; its copy at a suspending source suspends, its copy at a
 -- fallible source fails, its copy at a pure source is a plain loop. [G1, G6, G8]
@@ -185,8 +185,9 @@ fn timeout<T>(d: Duration, body: { -> T }) -> Option<T> =
   match race(body, { sleep(d) }) { Left(v) -> Some(v) | Right(()) -> None }
   -- `race` (1.8) observes both; each `wait` of the body is combined with the deadline. When the
   -- deadline wins, the body is not resumed. Not resuming is how every cancellation works: the
-  -- body unwinds as if it had raised, its destructors run (its connection closes, its borrows
-  -- end), and nothing is left running. Under simulated time it cancels in virtual time. [G3, G5]
+  -- body unwinds as if it had raised, its borrows end and its owned buffers are freed, its
+  -- connection is handed back to be closed through the connection effect's `close`, and nothing
+  -- is left running. Under simulated time it cancels in virtual time. [G3, G5]
 
 -- Text and bytes: `docs/strings-slices-design.md` (u8, `slice 'a A`, `buf A`, `string`,
 -- `str 'a`, `lit`). `Vec<T>` is `buf T`. `Map<K, V>` is #64, ordered.
@@ -292,7 +293,7 @@ data Request<'a> = { method: Method, path: str 'a, query: slice 'a (lit * str 'a
                      content_type: lit, body: slice 'a u8 }
 data Response = { status: i32, body: Body }
 
--- The body streams: it is an iterator of chunks, and dropping it closes the connection (or
+-- The body streams: it is an iterator of chunks, and consuming it closes the connection (or
 -- returns it to the pool), on every path, including a raise or a cancellation in the middle
 -- of reading it. [G3, G6]
 type Body = Iter<Bytes, ()>
@@ -307,7 +308,7 @@ data HttpError derives Json = Connect(string) | Status(i32, string) | Protocol(s
 -- has those in its row when this handler is installed, and not when a fake is. [G1, G5]
 handler http_client(net: &mut Net, base: &Endpoint, pool: &mut Pool) for Http {
   send(req) ->
-    let mut conn = pool.checkout(net, base);           -- `Conn` closes its socket when dropped
+    let mut conn = pool.checkout(net, base);           -- `Conn` closes its socket when consumed
     write_request(&mut conn, req);
     let head = read_head(&mut conn);                   -- raises `Protocol` on garbage
     Response { status: head.status, body: body_of(conn, head) }
@@ -380,7 +381,7 @@ fn delete<K: Resource + Json>(api: &Api<K>, name: str) -> ()
 fn list<K: Resource + Json>(api: &Api<K>, sel: &Selector) -> (Vec<K>, string)   -- items, resourceVersion
 
 -- A watch is a generator over a streaming body: one JSON object per line. Written in direct
--- style; `generate` makes it a state machine; dropping it closes the connection. [G3, G6, G7]
+-- style; `generate` makes it a state machine; consuming it closes the connection. [G3, G6, G7]
 data WatchEvent<K> derives Json = { type_: string @json("type"), object: K }
 
 fn watch<K: Resource + Json>(api: &Api<K>, sel: &Selector, rv: str, timeout_s: i32) -> Iter<WatchEvent<K>, ()> =
@@ -399,7 +400,7 @@ fn watch<K: Resource + Json>(api: &Api<K>, sel: &Selector, rv: str, timeout_s: i
   }
 
 -- kube-runtime's `watcher`: list, then watch from the list's resourceVersion; on a `410 Gone`
--- or a dropped connection, relist; on errors, back off. Emits `Apply` and `Delete`, and a
+-- or a consumed connection, relist; on errors, back off. Emits `Apply` and `Delete`, and a
 -- `Resync` after every relist so the consumer can reconcile everything again.
 data Event<K> = Apply(K) | Delete(K) | Resync
 
@@ -441,7 +442,7 @@ data Backoff = { base: Duration, cap: Duration, factor: i32, attempt: i32 }
 -- Runs `body`; on a failure `retryable` accepts, sleeps with exponential backoff and runs it
 -- again, up to `max` attempts. A failed attempt's resources (its connection, the partial body
 -- it was reading, the borrows it held) are released before the sleep: unwinding runs the
--- destructors. `body` is called several times, so it is `fn` rather than a one-shot block.
+-- consumes. `body` is called several times, so it is `fn` rather than a one-shot block.
 fn retry<T, E>(policy: Backoff, max: i32, retryable: fn(&E) -> bool,
                body: fn() -> T / {Fail<E>, ..}) -> T / {Fail<E>} =
   let mut b = policy;
@@ -463,9 +464,9 @@ fn retry<T, E>(policy: Backoff, max: i32, retryable: fn(&E) -> bool,
 -- `scope` is the scheduler: it handles `Async` for the tasks spawned in it, and returns when
 -- all of them have finished. A task may borrow anything that outlives the scope, so there is
 -- no `Arc` and no `'static`. Cancelling a task is observing `close` on its state machine:
--- its destructors run (connections close, borrows end, owned buffers are freed) and it hands
--- back what has no destructor. [G3, G9]
---   not-think: `Send + 'static`, `Arc<Context>`, `JoinHandle`s that can be forgotten.
+-- its consumes run (borrows end, owned buffers are freed) and it hands back what has no derived
+-- consume, its connections among them, to be closed through the connection effect's `close`. [G3, G9]
+--   not-think: `Send + 'static`, `Arc<Context>`, `JoinHandle`s that can be released.
 --   types-tell: the tasks' effects appear in the scope's row, except `Async`, which the scope
 --               handles only when it is the outermost scheduler.
 fn scope<T>(body: fn(&mut Spawner) -> T) -> T
@@ -846,7 +847,7 @@ main =
   };
   let mut registry = Registry::new();
   let mut pool = Pool::new(8);
-  let listener = bind(&mut net, cfg.metrics_port);      -- owned; closed when dropped
+  let listener = bind(&mut net, cfg.metrics_port);      -- owned; closed when consumed
   let stop = terminated(&mut signals);                  -- finishes on SIGTERM or SIGINT
 
   with json_lines(&mut stderr, cfg.log_level),
@@ -967,7 +968,7 @@ test "a slow API server times out, and the cancelled request leaves nothing open
   let mut t = Instant::zero();
   let mut open = 0;
   -- A fake whose GET of the Deployment streams its body slowly: each chunk sleeps 1s in virtual
-  -- time, and the body counts itself open until it is dropped (closed). Each attempt times out
+  -- time, and the body counts itself open until it is consumed (closed). Each attempt times out
   -- at 2s and is retried (a timeout is transient) until `call` gives up after four.
   let r = simulated(&mut t, &mut Vec::new(), {
     with slow_body_apiserver(&mut st, 1.s, &mut open), capture_logs(&mut Vec::new()), no_metrics() {

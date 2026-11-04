@@ -22,7 +22,7 @@ variable {Γ' : Ctx VTy}
 theorem deadP_append (h' : Ctx.Dead Γ') : ∀ {Γ : Ctx VTy}, Ctx.DeadP Γ → Ctx.DeadP (Γ ++ Γ')
   | [], _ => h'.toP
   | _ :: _, .cons h => .cons (deadP_append h' h)
-  | _ :: _, .drop hT h => .drop hT (deadP_append h' h)
+  | _ :: _, .weaken hT h => .weaken hT (deadP_append h' h)
 
 theorem splitP_append (h' : Ctx.Dead Γ') : ∀ {Γ Γ₁ Γ₂ : Ctx VTy}, Ctx.SplitP Γ Γ₁ Γ₂ →
     Ctx.SplitP (Γ ++ Γ') (Γ₁ ++ Γ') (Γ₂ ++ Γ')
@@ -97,7 +97,7 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | bangThunkV hp hC _ ih => exact .bangThunkV (banged_append h' hp) hC ih
   | bangE _ ih => exact .bangE ih
   | copyBang hΓ => exact .copyBang (deadP_append h' hΓ)
-  | forgetBang hΓ => exact .forgetBang (deadP_append h' hΓ)
+  | releaseBang hΓ => exact .releaseBang (deadP_append h' hΓ)
   | boxI _ hΓ ih => exact .boxI ih (ctxOutlives_append h' hΓ)
   | boxE _ ih => exact .boxE ih
   | immSub _ hle ih => exact .immSub ih hle
@@ -108,9 +108,9 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | tokBurn hΓ => exact .tokBurn (deadP_append h' hΓ)
   | swap hΓ => exact .swap (deadP_append h' hΓ)
   | copy hΓ => exact .copy (deadP_append h' hΓ)
-  | forgetImm hΓ => exact .forgetImm (deadP_append h' hΓ)
-  | forgetMut hΓ => exact .forgetMut (deadP_append h' hΓ)
-  | forgetUnk hΓ => exact .forgetUnk (deadP_append h' hΓ)
+  | releaseImm hΓ => exact .releaseImm (deadP_append h' hΓ)
+  | releaseMut hΓ => exact .releaseMut (deadP_append h' hΓ)
+  | releaseUnk hΓ => exact .releaseUnk (deadP_append h' hΓ)
   | lit c hΓ => exact .lit c (deadP_append h' hΓ)
   | hostOp op hΓ => exact .hostOp op (deadP_append h' hΓ)
   | arrNew A hΓ => exact .arrNew A (deadP_append h' hΓ)
@@ -120,7 +120,7 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | arrLen a A hΓ => exact .arrLen a A (deadP_append h' hΓ)
   | arrGet a A hΓ => exact .arrGet a A (deadP_append h' hΓ)
   | arrCopy a A hΓ => exact .arrCopy a A (deadP_append h' hΓ)
-  | arrForget a A hΓ => exact .arrForget a A (deadP_append h' hΓ)
+  | arrRelease a A hΓ => exact .arrRelease a A (deadP_append h' hΓ)
   | countFold S hΓ => exact .countFold S (deadP_append h' hΓ)
   | countTry S E hΓ => exact .countTry S E (deadP_append h' hΓ)
   | boundedFix A C hΓ => exact .boundedFix A C (deadP_append h' hΓ)

@@ -338,9 +338,9 @@ corpus/clause-captures.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/clause-captures.bc 1.0 tail+state: machine; condition 2 holds; -
 corpus/clo-capture.bc flows [0, 4294967295]; main []
 corpus/clo-coerce.bc flows [0, 4294967295]; main []
+corpus/clo-consume.bc flows [0, 4294967295]; main []
 corpus/clo-counter.bc flows [0, 4294967295]; main []
 corpus/clo-depth.bc flows [0, 4294967295]; main []
-corpus/clo-drop.bc flows [0, 4294967295]; main []
 corpus/clo-higher.bc flows [0, 4294967295]; main []
 corpus/clone-reuse.bc flows [0, 4294967295]; main []
 corpus/comp-param.bc flows [0, 3, 5, 4294967295]; main [2, 3, 4, 5, 6]
@@ -362,10 +362,10 @@ corpus/core-effects-borrows.bc flows [0, 4294967295], finaliser; main [1], final
 corpus/core-effects-borrows.bc 9:9: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/core-effects-borrows.bc 17:9: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/core-effects-borrows.bc 1.0 abortive: branch; condition 2 holds; -
-corpus/core-effects-drop-glue.bc flows [0, 4294967295], finaliser; main [1], finaliser
-corpus/core-effects-drop-glue.bc 30:9: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
-corpus/core-effects-drop-glue.bc 34:9: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
-corpus/core-effects-drop-glue.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/core-effects-consume-glue.bc flows [0, 4294967295], finaliser; main [1], finaliser
+corpus/core-effects-consume-glue.bc 30:9: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/core-effects-consume-glue.bc 34:9: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/core-effects-consume-glue.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/core-effects-loop.bc flows [0, 3, 4294967295]; main [3]
 corpus/core-effects-loop.bc 27:3: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
 corpus/core-effects-loop.bc 3.0 tail: direct; condition 2 holds; agree
@@ -963,7 +963,7 @@ corpus/hygiene-handler-state.bc 1.0 tail+state: machine; condition 2 holds; -
 corpus/hygiene-local-fn.bc flows [0, 4294967295]; main []
 corpus/imm-copy-view.bc flows [0, 4294967295]; main []
 corpus/imm-copy.bc flows [0, 4294967295]; main []
-corpus/implicit-drops.bc flows [0, 4294967295]; main []
+corpus/implicit-consumes.bc flows [0, 4294967295]; main []
 corpus/int-arith.bc flows [0, 4294967295]; main []
 corpus/int-ops.bc flows [0, 4294967295]; main []
 corpus/int-slash.bc flows [0, 4294967295]; main []

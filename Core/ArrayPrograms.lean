@@ -1,5 +1,5 @@
 import Core.IntPrograms
-import Core.Dtor
+import Core.Consume
 
 /-!
 # Core — a program over an array  `[spec §9]`
@@ -37,18 +37,18 @@ theorem d_tab10 {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     (.bangE (.hostOp _ (Ctx.Dead.cons hΓ).toP)))))
 
 /-- `λx. ()`, the consumer of an `I32`. -/
-def dropI32V : Val := .lam (.val .unit)
+def consumeI32V : Val := .lam (.val .unit)
 
-theorem d_dropI32 {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives LifeCtx.empty Γ (.val dropI32V) (.val (.bang (.lolli .i32 .unit))) :=
-  .bangThunkV (banged_dead hΓ) rfl (.lam (.ret (.unitI (.drop rfl hΓ.toP))))
+theorem d_consumeI32 {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
+    CDerives LifeCtx.empty Γ (.val consumeI32V) (.val (.bang (.lolli .i32 .unit))) :=
+  .bangThunkV (banged_dead hΓ) rfl (.lam (.ret (.unitI (.weaken rfl hΓ.toP))))
 
 /-- The program. -/
 def arrProg : Expr :=
   bindE (.app (.val (.prim .tab)) (.pair (i32E 3) (.val tab10V)))
     (.letpair (.app (.val replaceV) (.pair (.var 0) (.pair (i32E 1) (i32E 42))))
       (.letpair (.app (.val sizeV) (.var 1))
-        (.seq (.app (.val (.prim .drop)) (.pair (.val dropI32V) (.var 1)))
+        (.seq (.app (.val (.prim .drop)) (.pair (.val consumeI32V) (.var 1)))
           (.pair (.var 2) (.var 0)))))
 
 theorem arrProg_derives :
@@ -60,9 +60,9 @@ theorem arrProg_derives :
         (.bangE (.arrReplace .i32 (by cdeadP)))
     · refine letP (A := .array .i32) (B := .i32) ?_ ?_
       · exact appP (.var (by csoloP)) (.bangE (.arrSize .i32 (by cdeadP)))
-      · refine .seqV (partP_split (.app (.val (.prim .drop)) (.pair (.val dropI32V) (.var 1))) 0 _)
+      · refine .seqV (partP_split (.app (.val (.prim .drop)) (.pair (.val consumeI32V) (.var 1))) 0 _)
           ?_ ?_
-        · refine appP (.tensorI (split_kill _).toP (d_dropI32 (kill_dead _)) (.var (by csoloP)))
+        · refine appP (.tensorI (split_kill _).toP (d_consumeI32 (kill_dead _)) (.var (by csoloP)))
             (.bangE (.arrFree .i32 (by cdeadP)))
         · exact pairP (.var (by csoloP)) (.var (by csoloP))
 

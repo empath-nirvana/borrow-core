@@ -60,10 +60,10 @@ main -> 1 =
 - the built-in types and operations: `alloc`, `array`, `array_imm`, `array_mut`, `array_new`,
   `f32`, `f64`, `free`, `host`, `i32`, `i64`, `ref`, `swap`, `u8`;
 - words reserved for the compiler's internal forms: `abort`, `absurd`, `all`, `alloc_s`,
-  `array_copy`, `array_empty`, `array_forget`, `array_free`, `array_get`, `array_len`,
+  `array_copy`, `array_empty`, `array_release`, `array_free`, `array_get`, `array_len`,
   `array_replace`, `array_size`, `block`, `bounded_fix`, `boxed`, `case`, `copy`, `copy_bang`,
   `count_fold`, `count_try`, `delay`, `delay_in`, `delay_out`, `dom`, `extern`, `fam`, `fixd`,
-  `forall`, `force`, `forget_bang`, `forget_imm`, `forget_mut`, `forget_unk`, `free_s`, `fun`,
+  `forall`, `force`, `release_bang`, `release_imm`, `release_mut`, `release_unk`, `free_s`, `fun`,
   `handle_with`, `input`, `iter`, `leaf`, `mu`, `node`, `nu`, `nu_in`, `nu_out`, `output`,
   `perform`, `roll`, `run`, `shape`, `shorten_imm`, `shorten_mut`, `sized`, `stream`,
   `stream_in`, `stream_out`, `str`, `thunk`, `thunkv`, `top`, `unbang`, `unbox`, `unfold`,
@@ -286,7 +286,7 @@ no guards and no or-patterns.
 | loop | runs | guide |
 |---|---|---|
 | `for i in a..b { … }` | for `i` from `a` up to `b - 1` | [`for` over data](guide/iteration.md#for-over-data) |
-| `for x in a { … }` | over an owned array: each element copied out, then the array dropped | [`for` over data](guide/iteration.md#for-over-data) |
+| `for x in a { … }` | over an owned array: each element copied out, then the array consumed | [`for` over data](guide/iteration.md#for-over-data) |
 | `for p in &a { … }`, `for p in &mut a { … }` | each element of `a` lent `imm` or `mut` | [`for` over data](guide/iteration.md#for-over-data) |
 | `for p in v { … }` | each element of the view `v` lent | [`for` over data](guide/iteration.md#for-over-data) |
 | `for x in g(…) { … }` | the body runs at each `yield` of the generator `g` | [Generators](guide/iteration.md#generators) |

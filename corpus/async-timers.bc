@@ -33,7 +33,7 @@ handler timed[A]: Timer, A -> Step[A] = {
 
 fn wake[A](t: Susp[A]) -> Step[A] = g <- return (unbox t); (nu_out (force g)).1
 
-fn drop_task[A](t: Susp[A]) -> 1 = g <- return (unbox t); (nu_out (force g)).2
+fn consume_task[A](t: Susp[A]) -> 1 = g <- return (unbox t); (nu_out (force g)).2
 
 -- The tasks.
 fn fetch(id: i32, latency: i32) -> i32 with Timer = sleep(latency); id * 100
@@ -72,7 +72,7 @@ fn tick(now: i32, es: List[Entry]) -> List[Entry] * List[Done] =
       let (pending, done) = tick(now, rest);
       let (id, (deadline, (at, t))) = e;
       if now >= deadline {
-        drop_task(t);
+        consume_task(t);
         (pending, cons((id, ((inr () : i32 + 1), now)), done))
       } else {
         if at > now { (cons((id, (deadline, (at, t))), pending), done) }
@@ -92,7 +92,7 @@ fn start(id: i32, deadline: i32, s: Step[i32], es: List[Entry]) -> List[Entry] =
 fn cancel_all(es: List[Entry]) -> 1 =
   match unroll es {
     inl u -> ()
-  | inr (e, rest) -> let (id, (dl, (at, t))) = e; drop_task(t); cancel_all(rest)
+  | inr (e, rest) -> let (id, (dl, (at, t))) = e; consume_task(t); cancel_all(rest)
   }
 
 main -> List[Done] =

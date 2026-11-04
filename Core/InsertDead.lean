@@ -134,7 +134,7 @@ theorem deadP_insert (hd : Ctx.Dead Γd) : ∀ (Γa : Ctx VTy) {Γb : Ctx VTy},
       rw [List.cons_append] at h
       cases h with
       | cons h => exact .cons (deadP_insert hd Γa h)
-      | drop hT h => exact .drop hT (deadP_insert hd Γa h)
+      | weaken hT h => exact .weaken hT (deadP_insert hd Γa h)
 
 theorem splitP_prepend (hd : Ctx.Dead Γd) {Γ Γ₁ Γ₂ : Ctx VTy} (h : Ctx.SplitP Γ Γ₁ Γ₂) :
     Ctx.SplitP (Γd ++ Γ) (Γd ++ Γ₁) (Γd ++ Γ₂) := by
@@ -323,9 +323,9 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
   | copyBang hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := BoCa.copy) (by rfl)]; exact .copyBang (deadP_insert hd Γa hΓ)
-  | forgetBang hΓ =>
+  | releaseBang hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := forget) (by rfl)]; exact .forgetBang (deadP_insert hd Γa hΓ)
+      rw [shift_closed0 (e := forget) (by rfl)]; exact .releaseBang (deadP_insert hd Γa hΓ)
   | boxI _ hΓ ih =>
       intro Γa Γb hΓ'; subst hΓ'
       exact .boxI (ih Γa Γb rfl) ⟨hΓ.1, live_insert hd hΓ.2⟩
@@ -346,15 +346,15 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
   | copy hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := BoCa.copy) (by rfl)]; exact .copy (deadP_insert hd Γa hΓ)
-  | forgetImm hΓ =>
+  | releaseImm hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := forget) (by rfl)]; exact .forgetImm (deadP_insert hd Γa hΓ)
-  | forgetMut hΓ =>
+      rw [shift_closed0 (e := forget) (by rfl)]; exact .releaseImm (deadP_insert hd Γa hΓ)
+  | releaseMut hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := forget) (by rfl)]; exact .forgetMut (deadP_insert hd Γa hΓ)
-  | forgetUnk hΓ =>
+      rw [shift_closed0 (e := forget) (by rfl)]; exact .releaseMut (deadP_insert hd Γa hΓ)
+  | releaseUnk hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := forget) (by rfl)]; exact .forgetUnk (deadP_insert hd Γa hΓ)
+      rw [shift_closed0 (e := forget) (by rfl)]; exact .releaseUnk (deadP_insert hd Γa hΓ)
   | lit c hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .lit c (deadP_insert hd Γa hΓ)
   | hostOp op hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .hostOp op (deadP_insert hd Γa hΓ)
   | arrNew A hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .arrNew A (deadP_insert hd Γa hΓ)
@@ -372,9 +372,9 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
   | arrCopy a A hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := copyV.1) (by rfl)]; exact .arrCopy a A (deadP_insert hd Γa hΓ)
-  | arrForget a A hΓ =>
+  | arrRelease a A hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := forgetV.1) (by rfl)]; exact .arrForget a A (deadP_insert hd Γa hΓ)
+      rw [shift_closed0 (e := releaseV.1) (by rfl)]; exact .arrRelease a A (deadP_insert hd Γa hΓ)
   | countFold S hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .countFold S (deadP_insert hd Γa hΓ)
   | countTry S E hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .countTry S E (deadP_insert hd Γa hΓ)
   | boundedFix A C hΓ =>
@@ -702,9 +702,9 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
   | copyBang hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := BoCa.copy) (by rfl)]; exact .copyBang (deadP_insert hd Γa hΓ)
-  | forgetBang hΓ =>
+  | releaseBang hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := forget) (by rfl)]; exact .forgetBang (deadP_insert hd Γa hΓ)
+      rw [shift_closed0 (e := forget) (by rfl)]; exact .releaseBang (deadP_insert hd Γa hΓ)
   | boxI _ hΓ ih =>
       intro Γa Γb hΓ'; subst hΓ'
       exact .boxI (ih Γa Γb rfl) ⟨hΓ.1, live_insert hd hΓ.2⟩
@@ -725,15 +725,15 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
   | copy hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := BoCa.copy) (by rfl)]; exact .copy (deadP_insert hd Γa hΓ)
-  | forgetImm hΓ =>
+  | releaseImm hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := forget) (by rfl)]; exact .forgetImm (deadP_insert hd Γa hΓ)
-  | forgetMut hΓ =>
+      rw [shift_closed0 (e := forget) (by rfl)]; exact .releaseImm (deadP_insert hd Γa hΓ)
+  | releaseMut hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := forget) (by rfl)]; exact .forgetMut (deadP_insert hd Γa hΓ)
-  | forgetUnk hΓ =>
+      rw [shift_closed0 (e := forget) (by rfl)]; exact .releaseMut (deadP_insert hd Γa hΓ)
+  | releaseUnk hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := forget) (by rfl)]; exact .forgetUnk (deadP_insert hd Γa hΓ)
+      rw [shift_closed0 (e := forget) (by rfl)]; exact .releaseUnk (deadP_insert hd Γa hΓ)
   | lit c hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .lit c (deadP_insert hd Γa hΓ)
   | hostOp op hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .hostOp op (deadP_insert hd Γa hΓ)
   | arrNew A hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .arrNew A (deadP_insert hd Γa hΓ)
@@ -751,9 +751,9 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
   | arrCopy a A hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := copyV.1) (by rfl)]; exact .arrCopy a A (deadP_insert hd Γa hΓ)
-  | arrForget a A hΓ =>
+  | arrRelease a A hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := forgetV.1) (by rfl)]; exact .arrForget a A (deadP_insert hd Γa hΓ)
+      rw [shift_closed0 (e := releaseV.1) (by rfl)]; exact .arrRelease a A (deadP_insert hd Γa hΓ)
   | countFold S hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .countFold S (deadP_insert hd Γa hΓ)
   | countTry S E hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .countTry S E (deadP_insert hd Γa hΓ)
   | boundedFix A C hΓ =>

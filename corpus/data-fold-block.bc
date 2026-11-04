@@ -6,7 +6,7 @@
 -- `l` and `r` and the view `v : imm 'y i32` of the node's value cell, read with `*`.
 -- `corpus/sugar/data-fold-block.lowered.bc` writes the same program with the constant.
 --
--- Answer: the tree 1 ← 2 → 3 sums to 6, `i32[6]`; `live 0`: the tree's destructor frees its
+-- Answer: the tree 1 ← 2 → 3 sums to 6, `i32[6]`; `live 0`: the tree's consume frees its
 -- three nodes. A fold that skips a node gives less, one that counts a node twice more.
 
 data Tree = Leaf | Node(left: Tree, val: i32, right: Tree)

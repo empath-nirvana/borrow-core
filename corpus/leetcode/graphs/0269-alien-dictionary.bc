@@ -124,7 +124,7 @@ fn order<'a>(l: text 'a) -> string =
       s = i + 1
     } else { () }
   };
-  array_forget['a, u8](l);
+  array_release['a, u8](l);
   take_order(g)
 
 main -> i32 =
@@ -132,7 +132,7 @@ main -> i32 =
   let r = borrow imm s { 't, t ->
     fold_lines(t, !{ (l, rs) ->
       let (l, m) = array_copy['t, u8] l;
-      if len(m) == 0 { array_forget['t, u8](l); rs } else { let (rs, _) = push(rs, order(l)); rs } },
+      if len(m) == 0 { array_release['t, u8](l); rs } else { let (rs, _) = push(rs, order(l)); rs } },
       box buf[string](8)) };
   let (rs, n) = r;
   let mut rs = rs;

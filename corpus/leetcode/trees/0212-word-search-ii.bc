@@ -172,7 +172,7 @@ main -> i32 =
   let cs = borrow imm s { 't, t ->
     fold_lines(t, !{ (l, cs) ->
       let (l, m) = array_copy['t, u8] l;
-      if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, words(l)); cs } },
+      if len(m) == 0 { array_release['t, u8](l); cs } else { let (cs, _) = push(cs, words(l)); cs } },
       box buf[buf string](8)) };
   let (cs, n) = cs;
   let mut cs = cs;

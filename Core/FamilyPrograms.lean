@@ -30,9 +30,9 @@ open BoCa.Programs (alloc' free' app2 unitNoLeak entailsLt_top interp_meet_left)
                    let (ma, mb) = m;
                    let (ma′, u₁) = withswap ma (λva.
                                      let (mb′, vb) = withswap mb (λvb. (va, vb));
-                                     forget mb′; (vb, ()));
-                   u₁; forget ma′; ());
-    u; let (ra, rb) = s; drop (free ra); drop (free rb) -/
+                                     release mb′; (vb, ()));
+                   u₁; release ma′; ());
+    u; let (ra, rb) = s; consume (free ra); consume (free rb) -/
 
 /-- `λvb. (va, vb)`, `va` at index 1. -/
 def swapIn : Expr := .val (.lam (.pair (.var 1) (.var 0)))
@@ -48,11 +48,11 @@ def swapBody : Expr :=
 
 def swapCb : Expr := .val (.lam (.val (.lam (.letpair (.var 0) swapBody))))
 
-/-- The program at payload values `e₁`, `e₂` and a consumer `dropE : A ⊸ 1`. -/
-def swapBoth (e₁ e₂ dropE : Expr) : Expr :=
+/-- The program at payload values `e₁`, `e₂` and a consumer `consumeSlotE : A ⊸ 1`. -/
+def swapBoth (e₁ e₂ consumeSlotE : Expr) : Expr :=
   .letpair (app2 withborF2 (.pair (.app alloc' e₁) (.app alloc' e₂)) swapCb)
     (.seq (.var 0) (.letpair (.var 1)
-      (.seq (.app dropE (.app free' (.var 1))) (.app dropE (.app free' (.var 0))))))
+      (.seq (.app consumeSlotE (.app free' (.var 1))) (.app consumeSlotE (.app free' (.var 0))))))
 
 /-- The same run, returning the contents, each through `outE`. -/
 def swapBothObs (e₁ e₂ outE : Expr) : Expr :=
@@ -72,7 +72,7 @@ theorem d_swapOut {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} (hΓ : Ctx.D
   .lamV <|
     letW (A := .mut a A) (B := A)
       (appW (d_swapIn (by cdead)) (appW (.var (by csolo)) (.withswap (by cdead)))) <|
-    seqW (appW (.var (by csolo)) (.forgetMut (by cdead))) (pairW (.var (by csolo)) (.unitI (by cdead)))
+    seqW (appW (.var (by csolo)) (.releaseMut (by cdead))) (pairW (.var (by csolo)) (.unitI (by cdead)))
 
 theorem d_swapCb (hA : ∀ z, ¬ VFree z A) :
     CDerives LifeCtx.empty [] swapCb (.val (cbTy2 mutM 0 LifeCtx.empty.meetOfDom A A .unit)) :=
@@ -81,7 +81,7 @@ theorem d_swapCb (hA : ∀ z, ¬ VFree z A) :
     letW (A := .mut (.var 0) A) (B := .unit)
       (appW (d_swapOut (by cdead)) (appW (.var (by csolo)) (.withswap (by cdead)))) <|
     seqW (.var (by csolo)) <|
-    seqW (appW (.var (by csolo)) (.forgetMut (by cdead)))
+    seqW (appW (.var (by csolo)) (.releaseMut (by cdead)))
       (.boxI (.unitI (by cdead)) ⟨LifeCtx.defines_of_wf rfl, dead_noLive (by cdead)⟩)
 
 /-- `FamSide` at `Δ = ∅`, binders `'c = 0`, `'a = 1`, `'b = 2`, a closed payload. -/
@@ -115,13 +115,13 @@ theorem d_withborM2A (hA : ∀ z, ¬ VFree z A) (hAo : ∀ Δ a, VOutlives Δ a 
   withborM2_wf (famSide0 mutM .unit hA (fun _ h => h) (fun _ _ _ => Iff.rfl) hinst)
     ⟨.top, LifeCtx.defines_of_wf rfl, (hAo _ _).toLe⟩ (hAo _ _) .unit hΓ
 
-theorem d_swapBoth {e₁ e₂ dropE : Expr} (hA : ∀ z, ¬ VFree z A) (hAo : ∀ Δ a, VOutlives Δ a A)
+theorem d_swapBoth {e₁ e₂ consumeSlotE : Expr} (hA : ∀ z, ¬ VFree z A) (hAo : ∀ Δ a, VOutlives Δ a A)
     (hinst : VTy.instLife 0 (.var 2) (.lolli (famTy2 mutM (.var 0) A A) (.box (.var 0) .unit))
       = .lolli (famTy2 mutM (.var 2) A A) (.box (.var 2) .unit))
     (h₁ : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives LifeCtx.empty Γ e₁ (.val A))
     (h₂ : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives LifeCtx.empty Γ e₂ (.val A))
-    (hd : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives LifeCtx.empty Γ dropE (.val (.lolli A .unit))) :
-    CDerives LifeCtx.empty [] (swapBoth e₁ e₂ dropE) (.val .unit) := by
+    (hd : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives LifeCtx.empty Γ consumeSlotE (.val (.lolli A .unit))) :
+    CDerives LifeCtx.empty [] (swapBoth e₁ e₂ consumeSlotE) (.val .unit) := by
   refine letW (A := refs2 A A) (B := .unit)
     (appW (d_swapCb hA)
       (appW (pairW (appW (h₁ (by cdead)) (.alloc (by cdead)))
@@ -141,7 +141,7 @@ theorem d_swapBoth {e₁ e₂ dropE : Expr} (hA : ∀ z, ¬ VFree z A) (hAo : �
 
 end
 
-/-- `λb. drop b`. -/
+/-- `λb. consume b`. -/
 def dropBF : Expr := .val (.lam (dropB (.var 0)))
 
 theorem d_dropBF {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
@@ -209,7 +209,7 @@ theorem swapBothLObs_eval :
                    let v = readOne () ia₂;           -- sub-family s.a, at 'c
                    let w = readBoth () (ia₁, ib);     -- whole family, at 'c
                    (v, w));
-    drop w; let (ra, rb) = s; drop (free ra); drop (free rb) -/
+    consume w; let (ra, rb) = s; consume (free ra); consume (free rb) -/
 
 /-- `Λ. λi. withload i (Λ. λv. v)`. -/
 def readOne : Expr := lam2 (app2 withload (.var 0) (lam2 (.var 0)))
@@ -275,7 +275,7 @@ def readCb : Expr := lam2 (.letpair (.var 0) (.letpair (.app copy (.var 1)) read
 /-- `B ⊗ (B ⊗ B)`. -/
 abbrev B3 : VTy := .tensor BB (.tensor BB BB)
 
-/-- `let (x, yz) = w; drop x; let (y, z) = yz; drop y; drop z`, with `w` at index `i`. -/
+/-- `let (x, yz) = w; consume x; let (y, z) = yz; consume y; consume z`, with `w` at index `i`. -/
 def dropB3 (i : Nat) : Expr :=
   .letpair (.var i) (.seq (dropB (.var 1)) (.letpair (.var 0) (.seq (dropB (.var 1)) (dropB (.var 0)))))
 
@@ -352,7 +352,7 @@ the family:
     swapHalves : ∀'d ⊏ ⊤. (Mut 'd B ⊗ Mut 'd B) ⊗ (Mut 'd B ⊗ Mut 'd B) ⊸ 1
     swapHalves ≜ Λ. λf. let (lo, hi) = f;
                         let (l₀, l₁) = swapFn () lo; let (h₀, h₁) = swapFn () hi;
-                        forget l₀; forget l₁; forget h₀; forget h₁ -/
+                        release l₀; release l₁; release h₀; release h₁ -/
 
 /-- `λva. let (mb′, vb) = withswap mb swapIn; (vb, mb′)`, `mb` at index 1. -/
 def swapOutK : Expr :=
@@ -407,10 +407,10 @@ theorem d_swapHalves {Δ : LifeCtx} {Γ : Ctx VTy} (hΔ : Δ.Ok) (hΓ : Ctx.Dead
       (appW (.var (by csolo)) (d_swapFnAtVar hΔ' (by cdead) d d' hx hd' hinst)) <|
     letW (A := .mut (.var d) BB) (B := .mut (.var d) BB)
       (appW (.var (by csolo)) (d_swapFnAtVar hΔ' (by cdead) d d' hx hd' hinst)) <|
-    seqW (appW (.var (by csolo)) (.forgetMut (by cdead))) <|
-    seqW (appW (.var (by csolo)) (.forgetMut (by cdead))) <|
-    seqW (appW (.var (by csolo)) (.forgetMut (by cdead)))
-      (appW (.var (by csolo)) (.forgetMut (by cdead)))
+    seqW (appW (.var (by csolo)) (.releaseMut (by cdead))) <|
+    seqW (appW (.var (by csolo)) (.releaseMut (by cdead))) <|
+    seqW (appW (.var (by csolo)) (.releaseMut (by cdead)))
+      (appW (.var (by csolo)) (.releaseMut (by cdead)))
 
 /-- `'y ⊑ 'x` when `'y` is bound below `'x ⊓ u`. -/
 theorem entailsLe_of_meet {Δ : LifeCtx} {x y : LifeVar} {u : Lifetime.Life}
@@ -432,7 +432,7 @@ def allocPair (e₁ e₂ : Expr) : Expr := .pair (.app alloc' e₁) (.app alloc'
 
 def slice4 : Expr := .pair (allocPair (.inj₁ unit') (.inj₂ unit')) (allocPair (.inj₁ unit') (.inj₂ unit'))
 
-/-- `let (ra, rb) = r; drop (free ra); drop (free rb)`, with `r` at index `i`. -/
+/-- `let (ra, rb) = r; consume (free ra); consume (free rb)`, with `r` at index `i`. -/
 def freePair (i : Nat) : Expr :=
   .letpair (.var i) (.seq (dropB (.app free' (.var 1))) (dropB (.app free' (.var 0))))
 

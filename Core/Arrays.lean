@@ -23,11 +23,11 @@ proves each sound at every host:
 | `array_len` | `!(ArrayImm @a A ⇒ I32)` | `λp. let (b, n) = p in n` |
 | `array_get` | `!(ArrayImm @a A ⊗ I32 ⇒ Imm @a A ⊕ 1)` | `idx` |
 | `array_copy` | `!(ArrayImm @a A ⇒ ArrayImm @a A ⊗ ArrayImm @a A)` | `λp. (p, p)` |
-| `array_forget` | `!(ArrayImm @a A ⇒ 1)` | `λp. ()` |
+| `array_release` | `!(ArrayImm @a A ⇒ 1)` | `λp. ()` |
 
 **Why a leaf view is sound.** A family of leaf views holds each leaf's `imm` cell at the top level
 of its resource (`sepRange`); no cell of it owns another. `array_get` hands out one leaf's cell, by
-`idx` (a pure step), and forgets the others, which hold no `own` cell (`noOwn_fam`). No run
+`idx` (a pure step), and releases the others, which hold no `own` cell (`noOwn_fam`). No run
 returns a view below a parent cell, so the update relation is never asked to accept one: that is
 the view `experiments/FrameEnd` excludes (`imm_view_rejected`), which a leaf view taken at `@a`
 from `Imm @a (Array A)` would be.
@@ -104,7 +104,7 @@ theorem noOwn_right {a b c : WRes} (hc : ResU.CompS a b c) (h : NoOwn c) : NoOwn
     obtain ⟨ψ', e', k', -, -⟩ := compS_get_right' hc hl
     rw [← k']; exact noOwn_iff.mp h l ψ' e'
 
-/-- A resource with no `own` cell may be dropped in front of a run. -/
+/-- A resource with no `own` cell may be consumed in front of a run. -/
 theorem wpTS_drop {ls : List SRec} {e : Expr} {Q : List SRec → Val → WProp} {σ τ ρ : WRes}
     (hσ : NoOwn σ) (hc : ResU.CompS σ τ ρ) (h : wpTS ls e Q τ) : wpTS ls e Q ρ :=
   wpTS_frame_noOwn (R := fun ρ' => ρ' = σ) (fun _ e => e ▸ hσ) ls e Q ρ ⟨σ, τ, hc, rfl, h⟩
@@ -188,7 +188,7 @@ theorem arrGet_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VT
     refine wpTS_drop hσ (ResU.comp_empty_right σ) ?_
     exact wpTS_val ls' _ _ _ (Or.inr ⟨.unit, pure_sep_mk rfl ⟨rfl, rfl⟩⟩)
 
-/-! ### `array_copy` and the forgets -/
+/-! ### `array_copy` and the releases -/
 
 /-- A duplicable leaf predicate gives a duplicable range. -/
 theorem sepRange_dup {P : Loc → WProp}
@@ -233,16 +233,16 @@ theorem arrCopy_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : V
   obtain ⟨τ₁, τ₂, hc, h₁, h₂⟩ := sepRange_dup (fun _ _ h => vP_imm_dup h) hs
   exact ⟨_, _, pure_sep_mk rfl ⟨τ₁, τ₂, hc, vP_fam_mk hn h₁, vP_fam_mk hn h₂⟩⟩
 
-/-- `array_forget : !(ArrayImm @a A ⇒ 1)`.  `[spec §9]` -/
-abbrev arrForgetTy (a : Lifetime.Life) (A : VTy) : VTy := .bang (.lolli (.arrayImm a A) .unit)
+/-- `array_release : !(ArrayImm @a A ⇒ 1)`.  `[spec §9]` -/
+abbrev arrReleaseTy (a : Lifetime.Life) (A : VTy) : VTy := .bang (.lolli (.arrayImm a A) .unit)
 
 /-- `λp. ()`. -/
-def forgetV : Val := .lam (.val .unit)
+def releaseV : Val := .lam (.val .unit)
 
-/-- A family whose leaves hold no `own` cell is forgotten by `λp. ()`. -/
-theorem forget_fam_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {L : VTy} (hΓ : Ctx.DeadP Γ)
+/-- A family whose leaves hold no `own` cell is released by `λp. ()`. -/
+theorem release_fam_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {L : VTy} (hΓ : Ctx.DeadP Γ)
     (hL : ∀ ls δ m ρ, vP L ls δ (.loc m) ρ → NoOwn ρ) :
-    SemV Δ Γ (.val forgetV) (.bang (.lolli (.fam L) .unit)) := by
+    SemV Δ Γ (.val releaseV) (.bang (.lolli (.fam L) .unit)) := by
   refine sem_const hΓ rfl fun δ ls _ => ⟨rfl, ?_⟩
   intro ls' _ v σ τ hv hcomp
   rw [eq_of_compS_empty_left hcomp]
@@ -250,9 +250,9 @@ theorem forget_fam_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {L : VTy} (hΓ : Ctx.De
   refine wpTS_lolli ls' _ _ _ _ ?_
   exact wpTS_val ls' .unit _ _ ⟨rfl, rfl⟩
 
-theorem arrForget_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
-    (hΓ : Ctx.DeadP Γ) : SemV Δ Γ (.val forgetV) (arrForgetTy a A) :=
-  forget_fam_compatX hΓ fun _ _ _ _ h => noOwn_imm h
+theorem arrRelease_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
+    (hΓ : Ctx.DeadP Γ) : SemV Δ Γ (.val releaseV) (arrReleaseTy a A) :=
+  release_fam_compatX hΓ fun _ _ _ _ h => noOwn_imm h
 
 /-! ### `array_size` -/
 

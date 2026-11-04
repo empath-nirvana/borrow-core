@@ -3,7 +3,7 @@
 -- whoever runs it. Its one operation resumes and answers `()`, which makes it an iteration effect:
 --
 -- * `for x in range(1, 10) { … }` handles it: the body is the operation's clause, run at each
---   `yield`, and `break` or `return` cancels the rest of the generator, which drops what it holds;
+--   `yield`, and `break` or `return` cancels the rest of the generator, which consumes what it holds;
 -- * a call at a parameter of type `pull A B R`, or bound as one, is the generator stored: its
 --   clause keeps the continuation, the next observation resumes it, and `close` cancels it.
 --

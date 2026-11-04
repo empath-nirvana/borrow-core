@@ -319,12 +319,12 @@ paper's `Ctx.Split`/`Dead`/`Solo` with one case each for **persistent** slots. A
 when it holds no resource: `1`, `0`, `unk`, `!A`, and `*`, `+`, `box @` and `mu` over persistent
 types (`VTy.persistent`). It follows that:
 
-- **Persistent variables are copied and dropped implicitly.** A split may send a persistent live
-  slot to both sides, and a dead-context rule or a variable leaf may drop one.
-  `copy_bang[A]`/`forget_bang[A]` (`Fu:125,127`) remain, to make it explicit.
+- **Persistent variables are copied and consumed implicitly.** A split may send a persistent live
+  slot to both sides, and a dead-context rule or a variable leaf may consume one.
+  `copy_bang[A]`/`release_bang[A]` (`Fu:125,127`) remain, to make it explicit.
 - **Every other variable is used exactly once.** `imm @ A` has `copy[@, A]` and
-  `forget_imm[@, A]`; `mut @ A` has `forget_mut[@, A]`; `ref A`, `U C` and `box @ A` over a
-  non-persistent `A` have no forget. `U C` is not persistent, because a thunk holds its closure's
+  `release_imm[@, A]`; `mut @ A` has `release_mut[@, A]`; `ref A`, `U C` and `box @ A` over a
+  non-persistent `A` have no release. `U C` is not persistent, because a thunk holds its closure's
   resource.
 - **Every `case` arm consumes the same non-persistent live variables.** `sumE` gives both arms the same
   `Γb` (`Fu:97`), so a variable live in `Γb` is consumed by each arm or by neither.
@@ -335,19 +335,19 @@ types (`VTy.persistent`). It follows that:
 - **Apart from persistent slots, the only discarding forms of the core are `<>` and `absurd V`.**
   `topI` holds at any `Γ` (`Fu:89`), and `zeroE` absorbs every slot that `V` does not use
   (`Fu:103`). Section 11 describes how the checker handles this.
-- **Implicit destructors** (SPEC §12). A variable bound by `x <- M; N`, `let (x, y) = V; M`, a
-  `case` arm or `fun`, whose type has a destructor (`HasDtor`, `Core/Dtor.lean`) and is not
+- **Implicit consumes** (SPEC §12). A variable bound by `x <- M; N`, `let (x, y) = V; M`, a
+  `case` arm or `fun`, whose type is consumable (`Consumable`, `Core/Consume.lean`) and is not
   persistent, need not be consumed in the source. On each path that does not consume it, the
-  checker inserts its destructor `dtorE A x` immediately before the path's terminal computation,
+  checker inserts its consume `consumeE A x` immediately before the path's terminal computation,
   most recently bound variable first. The erasure contains the call, so the core term still uses
-  the variable exactly once. Borrows are dropped by `forget`. `ref A` is dropped by `free` followed
-  by the destructor of `A`, a fold-class `mu` by `fold_own`, `U (C & F 1)` by `close` (`.2`), and
-  `U (nu X. C & F R)` (`delay`, `stream`, `iter A R₀ R`) with `R` closed and droppable by `close`
-  followed by the destructor of the residual `R`. `U C` otherwise has no destructor, so an unused thunk is an error.
+  the variable exactly once. Borrows are consumed by `forget`. `ref A` is consumed by `free` followed
+  by the consume of `A`, a fold-class `mu` by `fold_own`, `U (C & F 1)` by `close` (`.2`), and
+  `U (nu X. C & F R)` (`delay`, `stream`, `iter A R₀ R`) with `R` closed and weakenable by `close`
+  followed by the consume of the residual `R`. `U C` otherwise is not consumable, so an unused thunk is an error.
   The same holds for a `case` whose arms consume different variables: arms that differ in a variable
-  with a destructor are balanced by dropping it in the arm that does not use it. Any other
-  difference is an error. Which slots are dropped is a fact of the type: an owned slot of a linear
-  type with a derived drop.
+  that is consumable are balanced by consuming it in the arm that does not use it. Any other
+  difference is an error. Which slots are consumed is a fact of the type: an owned slot of a linear
+  type that is consumable.
 - **Constants and `def`s consume nothing.** They are typed at a dead context.
 <!-- ANCHOR_END: linearity -->
 
@@ -367,10 +367,10 @@ constant.
 | `swap[A, B]` | `ref A => B => ref B * A` | `swap` `Fu:141`, `Ty:1395` | none |
 | `copy[@a, A]` | `imm @a A => imm @a A * imm @a A` | `copy` `Fu:142`, `Ty:1398` | none |
 | `copy_bang[A]` | `!A => !A * !A` | `copyBang` `Fu:125` | none |
-| `forget_imm[@a, A]` | `imm @a A => 1` | `forgetImm` `Fu:143` | none |
-| `forget_mut[@a, A]` | `mut @a A => 1` | `forgetMut` `Fu:144` | none |
-| `forget_unk` | `unk => 1` | `forgetUnk` `Fu:145` | none |
-| `forget_bang[A]` | `!A => 1` | `forgetBang` `Fu:127` | none |
+| `release_imm[@a, A]` | `imm @a A => 1` | `releaseImm` `Fu:143` | none |
+| `release_mut[@a, A]` | `mut @a A => 1` | `releaseMut` `Fu:144` | none |
+| `release_unk` | `unk => 1` | `releaseUnk` `Fu:145` | none |
+| `release_bang[A]` | `!A => 1` | `releaseBang` `Fu:127` | none |
 | `withbor1['x, A, B]` | `ref A => (all 'x < dom. imm 'x A => box 'x B) => ref A * B` | `withbor1` `Fu:146`, `Ty:1411` | `x` fresh; `VScoped Δ A`; `'x ∉ FV(A), FV(B)` |
 | `withbor2['x, @b, A, B]` | `ref A => (all 'x < dom. mut 'x A => box 'x B) => ref A * B` | `withbor2` `Fu:149`, `Ty:1416` | `x` fresh; `Δ ⊨ @b` and `Δ ⊢ A ⊒ @b` (the `∃ b` witness, non-strict, SPEC §23); `'x ∉ FV(A), FV(B)` |
 | `withbor3[@a, 'x, A, B]` | `mut @a A => (all 'x < dom. mut 'x A => box 'x B) => mut @a A * B` | `withbor3` `Fu:153`, `Ty:1421` | `x` fresh; `'x ∉ FV(A), FV(B)` |
@@ -395,7 +395,7 @@ Notes on the table:
   with the computed ones.
 - The erasures are the terms of `[TR]`/the library: `alloc`/`free` are `.prim`; `swap`
   (`S2:74`); `copy` and `copy_bang` are both `copy` (`Paper/S3_Dynamics/Definitions.lean:317`);
-  every `forget_*` is `forget` (`…:322`); `withbor1/2/3` are all `withbor` (`S2:129`);
+  every `release_*` is `forget` (`…:322`); `withbor1/2/3` are all `withbor` (`S2:129`);
   `withload` is `S2:186`; `withswap` is `…/S3_Dynamics/Definitions.lean:343`;
   `foldImmV (dec F)` is `FI:152`; `foldOwnV` is `FO:100`; `foldReuseV` is `FR:149`; `unfoldV C` is
   `Nu:117`; `fixDV A` and `unfoldSV A` are `unfoldV` at the delay and stream bodies (`Fu:232,242`).
@@ -415,7 +415,7 @@ Integer literals and operations are constants (`SPEC.md` §8, `Core/Integers.lea
   `host[add32] (x, y)`.
 - **Results:** tests return `1 + 1` with `inr ()` as true, and partial operations return
   `i32 + 1` with `inr ()` where Wasm traps.
-- `i32`/`i64` are persistent (section 7), so integer variables are reused and dropped freely.
+- `i32`/`i64` are persistent (section 7), so integer variables are reused and consumed freely.
 - **Bytes:** the type `u8`, the literal `u8[n]` (read modulo 2^8) and the byte literal `b'c'`
   (a printable ASCII character, or `b'\n'`, `b'\t'`, `b'\r'`, `b'\0'`, `b'\\'`, `b'\''`), which
   the lexer reads as `u8[n]`. The byte's operations are its conversions, `host[wrap8]`
@@ -457,7 +457,7 @@ dead context, typed at `!(A => B)` like a host operation, so a call is `(unbang 
 | `array_len[@a, A]` | `!(array_imm @a A => i32)` | `arrLen` |
 | `array_get[@a, A]` | `!(array_imm @a A * i32 => imm @a A + 1)` | `arrGet` |
 | `array_copy[@a, A]` | `!(array_imm @a A => array_imm @a A * array_imm @a A)` | `arrCopy` |
-| `array_forget[@a, A]` | `!(array_imm @a A => 1)` | `arrForget` |
+| `array_release[@a, A]` | `!(array_imm @a A => 1)` | `arrRelease` |
 
 - A negative length makes the empty array; an index is compared unsigned, so a negative index
   is out of range and takes `inr`.
@@ -465,10 +465,10 @@ dead context, typed at `!(A => B)` like a host operation, so a call is `(unbang 
 - An array is borrowed in a cell: `withbor1`/`withbor2` on a `ref (array A)` lend
   `imm 'x (array A)`/`mut 'x (array A)`. `withload` at the `imm` borrow gives the family
   `view 'y (array A) = array_imm 'y A`; `withswap` at the `mut` borrow lends the array itself.
-- `array A` has a destructor when `A` has one (`array_free` with `A`'s destructor), and
-  `array_imm @a A` is forgettable (`array_forget`), so both are dropped implicitly (SPEC §12).
+- `array A` is consumable when `A` has one (`array_free` with `A`'s consume), and
+  `array_imm @a A` is releasable (`array_release`), so both are consumed implicitly (SPEC §12).
 - The erasures: `array_new`, `array_get`, `array_free` are the primitives `tab`, `idx`, `drop`;
-  the others are closed λ-terms (`arrLenV`, `sizeV`, `replaceV`, `copyV`, `forgetV`).
+  the others are closed λ-terms (`arrLenV`, `sizeV`, `replaceV`, `copyV`, `releaseV`).
 
 The slice borrows (`SPEC.md` §9, `Core/Slices.lean`): an owned array lent as a family of leaf
 borrows, with no cell. The two borrows are curried, as `withbor2` is; the element operations are
@@ -483,7 +483,7 @@ typed at `!(A => B)`:
 
 - `A` and `B` must outlive `@b`, a lifetime defined here (`top` at a closed `main`); at
   `imm`, `A` must be scoped. The erasure of both borrows is `withbor`'s term.
-- `slice_get_mut` forgets the rest of the family; `slice_len_mut` hands it back.
+- `slice_get_mut` releases the rest of the family; `slice_len_mut` hands it back.
 - `borrow imm a { 'x, v -> S }` / `borrow mut a { 'x, v -> S }` on an array `a` are these
   borrows at `@b = top` (draft 0's borrow blocks).
 
@@ -501,7 +501,7 @@ The splits and writes on a borrowed family (`SPEC.md` §9, `Core/SliceOps.lean`)
 - A split past the length hands the family back (`inr`); the erasure of both splits is the
   primitive `split`, of both empties the value `(0, 0)`, of `slice_replace_mut` `replaceV`.
 - `slice_swap_mut` past the length changes nothing; its erasure is the closed λ-term `swapV`.
-- `array_mut @a A` has a destructor (SPEC §12), so an unused part of a split is dropped.
+- `array_mut @a A` is consumable (SPEC §12), so an unused part of a split is consumed.
 <!-- ANCHOR_END: arrays -->
 
 ## 8c. Counted loops
@@ -600,7 +600,7 @@ keyword because each mode is a separate theorem.
 - **`extern name : A`** adds a live slot of type `A` to `main`'s initial context. The last
   declared extern gets index 0. `A` must be closed (no free lifetime variables). `main` must
   consume every non-persistent extern; persistent externs (such as `!`-typed ones) may go unused.
-  Externs are never dropped implicitly (§7). A `def` may use the persistent externs declared
+  Externs are never consumed implicitly (§7). A `def` may use the persistent externs declared
   before it, never a non-persistent one (SPEC §11): it is checked at them, and at each use it
   sees `main`'s slots of them. The standard externs (`stdin`, `stdout`, `stderr`, `clock`, `args`,
   `read_byte`, `write_byte`, `write_all`, `read_into`, `clock_now`, `clock_sleep`, `read_arg`, and
@@ -660,7 +660,7 @@ flag.
   be equal. The exception is an arm with slack, which may be extended to the other arm's set
   if its own set is contained in it. If both have slack, the result keeps slack.
 - When a binder's scope closes, its variable must be consumed, or be absorbed by slack in its
-  scope. With implicit destructors (§7) the checker consumes it itself where it can: see §11.1.
+  scope. With implicit consumes (§7) the checker consumes it itself where it can: see §11.1.
 - **Side conditions on contexts are read on the consumed context.** They are boxI's
   `CtxOutlives Δ Γ @` (`Ty:1383`), bangThunk's `Ctx.Banged Γ` (`Rl:203`), and allI's `hΓx`
   (`'x` is not free in any live slot). At such a boundary the slack is closed: the body
@@ -695,14 +695,14 @@ The checker's behaviour where it goes beyond the sections above:
   type's binder number, not `Δ.freshVar`.
 - **Declarations.** A def's type arguments are elaborated at the use site, and a parametric def is
   checked only at its uses. `main`'s context is every extern in the file.
-- **Drops** (§7, SPEC §12). The checker carries the set of variables owed to the current tail
-  position. At a terminal computation it checks the computation, then wraps it in `dtorE A x; …`
-  for each owed variable it did not use, lowest index first. The drop is one builder (`rDrop`),
-  `unitE` over `lolliE` of the variable and `dtor_wf`. The head `M` of `x <- M; N` is owed the owed
+- **Consumes** (§7, SPEC §12). The checker carries the set of variables owed to the current tail
+  position. At a terminal computation it checks the computation, then wraps it in `consumeE A x; …`
+  for each owed variable it did not use, lowest index first. The consume is one builder (`rConsume`),
+  `unitE` over `lolliE` of the variable and `consume_wf`. The head `M` of `x <- M; N` is owed the owed
   variables it mentions by name.
 - **Incompleteness.** Lifetime entailment uses only the structural rules, so it misses
   distributivity (`('x \/ 'y) /\ 'z <= ('x /\ 'z) \/ ('y /\ 'z)`). The derived forms stated at
-  `Ctx.Dead` (`alloc_s`, `free_s`, `withbor_s_*`, `withbor_f2_*`) cannot drop persistent slots. The
+  `Ctx.Dead` (`alloc_s`, `free_s`, `withbor_s_*`, `withbor_f2_*`) cannot consume persistent slots. The
   full list is in `Frontend/README.md`.
 
 ## 12. Proof obligations for the checker
@@ -881,7 +881,7 @@ How this checks:
 3. There are two thunk keywords, `thunk` and `thunkv`, and two promoted ones. The de Bruijn
    layout is given, along with `thunkv`'s literal-λ restriction and the eta workaround
    (§6.3–§6.4).
-4. Linearity: implicit copy/drop only at persistent types (SPEC §10), exact use otherwise, equal
+4. Linearity: implicit copy/consume only at persistent types (SPEC §10), exact use otherwise, equal
    consumption across `case` arms and `<,>` components, and `<>`/`absurd` as the only discards
    (§7).
 5. Constants with complete brackets, one keyword per rule, and their side conditions. Derived
@@ -901,5 +901,5 @@ How this checks:
 14. The worked example is fixed: `all` algebras, `Fun 'y. return (thunkv fun …)`, curried
     `add`, and fold applications as `def`s. A borrow example is added (§13).
 15. Integers and arrays are pending, and the erasure target is an open question (§14).
-16. Implicit destructors (SPEC §12): unused variables of a type with a destructor are
-    dropped by the checker at the end of each path (§6.2, §7, §11.1).
+16. Implicit consumes (SPEC §12): unused variables of a type that is consumable are
+    consumed by the checker at the end of each path (§6.2, §7, §11.1).

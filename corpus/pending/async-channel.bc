@@ -35,7 +35,7 @@ fn snoc[A](xs: List[A], x: A) -> List[A] with Exhausted =
   | inr (y, rest) -> cons(y, snoc(rest, x))
   }
 
--- `snoc` with its recursion's budget handled: a buffer too long to extend is dropped.
+-- `snoc` with its recursion's budget handled: a buffer too long to extend is consumed.
 fn append(xs: List[i32], x: i32) -> List[i32] = with on_exhausted(!{ u -> nil() }) { snoc(xs, x) }
 
 handler channel(mut buf: List[i32]): Chan = {

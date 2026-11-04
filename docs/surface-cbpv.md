@@ -35,7 +35,7 @@ Line counts for the examples of section 5 (non-blank, non-comment lines):
 | 5.3 family swap | 19 | 7 | 6 |
 | 5.4 delay loop | 55 | 21 | 12 |
 | 5.5 stream pipeline, take and sum | 16 | 2 (7 without the zoo) | 4 |
-| 5.6 implicit drops | 43 | 22 | 17 |
+| 5.6 implicit consumes | 43 | 22 | 17 |
 | 5.7 effects as capabilities (sketch, #18) | — | 11 | 6 |
 | **total, 5.1–5.6** | **203** | **81** | **67** |
 
@@ -139,8 +139,8 @@ computation type), and `{C}` abbreviates `U C`, so braces mean "thunk" in both t
 `<-` is required exactly where the right side forces a live object, and a warning elsewhere.
 It is not a monadic bind in the source's types: there are no surface monads (decision 16), and
 the `F` it eliminates is never written. A
-`_` pattern binds a fresh variable that implicit destructors (SPEC §12) drop at the end of the
-path, or reject if its type has no destructor.
+`_` pattern binds a fresh variable that implicit consumes (SPEC §12) consume at the end of the
+path, or reject if its type is not consumable.
 
 ### 2.5 Declarations and computation types in signatures
 
@@ -231,11 +231,11 @@ become one `out`, and observation names come from the codata declaration (`Iter`
   rejected, because it cannot hand it back. Borrowed variables are threaded by reborrowing; see
   open question Q3 for `imm`.
 
-### 2.10 Implicit destructors
+### 2.10 Implicit consumes
 
-Unchanged from SPEC §12: an unused owned value is dropped at the end of its path, by its derived
-drop. No binder opts out: a value that must not be dropped has a type with no derived drop (SPEC
-§42, a field marked `must_close`). The surface adds only `_` patterns. A drop of codata runs its
+Unchanged from SPEC §12: an unused owned value is consumed at the end of its path, by its derived
+consume. No binder opts out: a value that must not be consumed has a type that is not consumable (SPEC
+§42, a field marked `must_close`). The surface adds only `_` patterns. A consume of codata runs its
 `close`, which is a force of a live object that the programmer does not write; open question Q6
 asks whether that needs a mark.
 
@@ -326,7 +326,7 @@ Everything below reads only the syntax: no type is consulted.
 | `let x = e; S` | `x <- return ⟦e⟧; ⟦S⟧` (`x <- ⟦e⟧; ⟦S⟧` when `e` is a computation form) |
 | `let (p, q) = e; S` | `let (y#, z#) = ⟦e⟧;` then `p`, `q` bound from `y#`, `z#` |
 | `let () = e; S`, `e; S` | `let () = ⟦e⟧; ⟦S⟧` |
-| `let _ = e; S` | `y# <- return ⟦e⟧; ⟦S⟧` (`y#` is dropped by SPEC §12) |
+| `let _ = e; S` | `y# <- return ⟦e⟧; ⟦S⟧` (`y#` is consumed by SPEC §12) |
 | `p <- M; S` | `y# <- ⟦M⟧; ⟦let p = y#; S⟧` |
 | tail `e` | `return ⟦e⟧` |
 | `t!` | `force t` |
@@ -527,8 +527,8 @@ fn main() {
 ```
 
 Surviving shifts: none. The borrow callback and the fold algebra are second-class blocks, `*b`
-is a `withload` with the identity callback, and the cell `_` and its list are dropped by their
-destructors. The 14 core lines carrying `<-`, `return`, `thunkv` or `unbang` are all cancelling shifts.
+is a `withload` with the identity callback, and the cell `_` and its list are consumed by their
+consumes. The 14 core lines carrying `<-`, `return`, `thunkv` or `unbang` are all cancelling shifts.
 
 ### 5.2 In-place map (`corpus/map-reuse.bc`, answer 642)
 
@@ -702,7 +702,7 @@ fn main() {
 ```
 
 Surviving shifts: none. The two `modify` blocks are the two `withswap` callbacks; the family's
-borrows `_` are dropped by `forget`. A library `swap_cells` would make it as short as
+borrows `_` are consumed by `forget`. A library `swap_cells` would make it as short as
 `mem::swap`.
 
 ### 5.4 A delay loop (`corpus/count-down.bc`, answer (inl 321, inr ()))
@@ -888,7 +888,7 @@ Surviving shifts: `unfold … from` (the stream's state), and in the second vers
 on `<-` lines. In the pipeline they are inside `take` and `sum`, library code over codata whose
 types say `stream`. After fusion (C1) the pipeline is one loop.
 
-### 5.6 Implicit drops (`corpus/implicit-drops.bc`, answer 6047)
+### 5.6 Implicit consumes (`corpus/implicit-consumes.bc`, answer 6047)
 
 <details><summary>core, 43 lines</summary>
 
@@ -904,7 +904,7 @@ def nil : List = roll (inl ())
 def cons : i32 * List => List =
   thunkv fun (p : i32 * List) -> return (roll (inr (alloc_s[Node] p)))
 
--- The first element, or 0. The tail `t` is dropped.
+-- The first element, or 0. The tail `t` is consumed.
 def head : List => i32 =
   thunkv fun (l : List) ->
     case (unroll l) {
@@ -912,7 +912,7 @@ def head : List => i32 =
     | inr p -> let (c, t) = p; return (free[i32] c)
     }
 
--- Emit the cell's value and store the next one; the close drops the cell.
+-- Emit the cell's value and store the next one; the close consumes the cell.
 def cell_step : !U (ref i32 -o F (i32 * ref i32) & F 1) =
   !thunkv fun (s : ref i32) ->
     < cx <- return (swap[i32, 1] s ());
@@ -1003,7 +1003,7 @@ fn main() {
 }
 ```
 
-Surviving shifts: `unfold … from` and one `.next`. The drops are the core's: `r`, the list not
+Surviving shifts: `unfold … from` and one `.next`. The consumes are the core's: `r`, the list not
 taken by each `match`, `head`'s tail `_`, and the stream `t` (its `close` frees the cell). Rust
 has no `linear`; `q` is an ordinary `Box`.
 
@@ -1136,7 +1136,7 @@ Entries marked *(unverified)* are from memory and have not been checked against 
   one (like Rust's `move`, or Effekt's `box`), or should a tool report it?
 - **Q3. `imm` variables in loop bodies.** A `for` body that uses an `imm` borrow must thread it
   and hand it back, which needs `copy` at each use. The pleasant form needs the checker to
-  insert `copy` for `imm` variables, as it inserts destructors (SPEC §12). That would be a
+  insert `copy` for `imm` variables, as it inserts consumes (SPEC §12). That would be a
   spec entry ("implicit copies"), not sugar. Capabilities passed as `imm` borrows (2.11) depend
   on it.
 - **Q4. `!` on calls through parameters of macro-expanded defs.** `f!(c, *x)` in `walk` is
@@ -1144,9 +1144,9 @@ Entries marked *(unverified)* are from memory and have not been checked against 
   cancels. The mark is conservative. Is it noise?
 - **Q5. Integer widths.** Operators are `i32`. Overloading by width needs the checker to
   resolve it (a typed elaboration, like holes).
-- **Q6. Implicit `close`.** An implicit drop of codata forces it and runs `close`, a surviving
+- **Q6. Implicit `close`.** An implicit consume of codata forces it and runs `close`, a surviving
   force the programmer did not write. SPEC §12 places it at the end of the path. Should the
-  surface mark scopes that end with a codata drop?
+  surface mark scopes that end with a codata consume?
 - **Q7. The effect forms.** `cap`, `handle`, `suspend` and `generate` (2.11) are a sketch. Their
   core is #18 (shallow handlers on general `ν`, one-shot continuations with a `close` path).
   Whether a handler-side signature with a continuation parameter is the whole polarity story,

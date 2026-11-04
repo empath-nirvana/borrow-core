@@ -10,7 +10,7 @@ type `CTy` an `LCTy`, constructor for constructor (`ofV`, `ofC`): no type is inf
 the image of a type the checker put on a node of the typed term.
 
 * `!A` is kept (`bang`): it has no run-time content (its value is `A`'s), but it is the type's
-  statement that the value is persistent, which `Lint` reads at every copy and drop.
+  statement that the value is persistent, which `Lint` reads at every copy and consume.
 * `U C` is a closure, `thunk K`. A closure of `F A` takes no argument (the erasure's `λ_. M`,
   applied to `()`), a closure of `A ⊸ C` takes an `A`, and a closure of `C & D` is observed at one
   of its two components. `νX. C` is its unrolling: `U X` is the type variable `0` of `C`'s value
@@ -137,7 +137,7 @@ def LCTy.unrollNu (k : LCTy) : LCTy := LCTy.subst 0 (.thunk (.nu k)) k
 `!A` is represented as `A`. A decision about a value's representation (its layout, its words, which
 closure it is) reads its type through `peel`, the top-level `!`s removed; one that compares two
 types for a representation compares them with `!` erased throughout (`unbang`, `sameRep`). `Lint`
-reads `!` itself, and the conversion's keys keep it (a `use` body's, a destructor's: a key fixes
+reads `!` itself, and the conversion's keys keep it (a `use` body's, a consume's: a key fixes
 the LIR types of what it converts). -/
 
 /-- The address of a task stack's frame (SPEC §52): one word. -/
@@ -279,7 +279,7 @@ def ofV (ms : MachSet) : VTy → Except String LTy
   | .fam L => return .fam (← ofV ms L)
   -- `Tok` is a location owning a unit cell, `Ref 1`'s relation (`vCE_tok_eq_ref`), made by
   -- `alloc` and released by `free` (`tokMint`, `tokBurn`); its view is `Unk` (`Imm̲ 'b Tok`), a
-  -- pointer read as forgotten (`Layout.joinRe`, `Lower.reVals`).
+  -- pointer read as released (`Layout.joinRe`, `Lower.reVals`).
   | .opq .tok => pure (.ref .unit)
   | .opq k => pure (.opq k)
   | .unk => pure .unk
@@ -345,11 +345,11 @@ theorem ofV_bang (ms : MachSet) (A : VTy) : ofV ms (.bang A) = (ofV ms A).map .b
   simp only [ofV]
   cases ofV ms A <;> rfl
 
-/-! ### What `Lint` reads at a copy and a drop
+/-! ### What `Lint` reads at a copy and a consume
 
 The two predicates are the checker's, on the LIR type: `VTy.persistent` (a slot a split may
-duplicate and a leaf may drop, `Ctx.SplitP.dup`, `Ctx.DeadP.drop`) and `VTy.Drop` (a slot an abort
-may drop, `[let]`'s `Ctx.Drops`). `ofV` keeps both (`ofV_persistent`, `ofV_drops`): `!` is on the
+duplicate and a leaf may consume, `Ctx.SplitP.dup`, `Ctx.DeadP.weaken`) and `VTy.Consume` (a slot an abort
+may consume, `[let]`'s `Ctx.Consumes`). `ofV` keeps both (`ofV_persistent`, `ofV_consumes`): `!` is on the
 LIR type, and what `ofV` erases (lifetimes, `[@a]`, `∀`) neither predicate reads. -/
 
 /-- `VTy.persistent` on the LIR type: values that hold no resource. -/
@@ -360,17 +360,17 @@ def LTy.persistent : LTy → Bool
   | .opq _ | .ref _ | .imm _ | .mut _ | .fam _ | .thunk _ => false
 
 /-- The type holds an opaque value (`.opq`) it owns: one no rule but a `[let]`'s abort (`effLet`'s
-`hW`, `Ctx.Drops`), `⊤` (`topI`) or `0` (`zeroE`) discards. -/
+`hW`, `Ctx.Consumes`), `⊤` (`topI`) or `0` (`zeroE`) discards. -/
 def LTy.ownsOpq : LTy → Bool
   | .opq _ => true
   | .pair a b | .sum a b => a.ownsOpq || b.ownsOpq
   | .mu a => a.ownsOpq
   | _ => false
 
-/-- `VTy.Drop` on the LIR type: values that hold no owned cell. -/
-def LTy.drops : LTy → Bool
+/-- `VTy.Consume` on the LIR type: values that hold no owned cell. -/
+def LTy.consumes : LTy → Bool
   | .unit | .zero | .int _ | .unk | .opq _ | .bang _ | .imm _ | .mut _ => true
-  | .pair a b | .sum a b => a.drops && b.drops
+  | .pair a b | .sum a b => a.consumes && b.consumes
   | .mu _ | .tvar _ | .ref _ | .fam _ | .thunk _ => false
 
 /-- The LIR type of a persistent type is persistent. -/
@@ -401,9 +401,9 @@ theorem ofV_persistent {ms : MachSet} : ∀ {A : VTy} {t : LTy}, A.persistent = 
   | .opq _, _, hp, _ | .thunk _, _, hp, _ | .ref _, _, hp, _ | .imm _ _, _, hp, _
   | .mut _ _, _, hp, _ | .fam _, _, hp, _ => by simp [VTy.persistent] at hp
 
-/-- The LIR type of a `VTy.Drop` type drops. -/
-theorem ofV_drops {ms : MachSet} {A : VTy} (hA : A.OwnFree) : ∀ {t : LTy}, ofV ms A = .ok t →
-    t.drops = true := by
+/-- The LIR type of a `VTy.Consume` type consumes. -/
+theorem ofV_consumes {ms : MachSet} {A : VTy} (hA : A.OwnFree) : ∀ {t : LTy}, ofV ms A = .ok t →
+    t.consumes = true := by
   induction hA with
   | opq k hk =>
     intro t h; cases k <;> simp only [ofV] at h <;> cases h <;>
@@ -419,7 +419,7 @@ theorem ofV_drops {ms : MachSet} {A : VTy} (hA : A.OwnFree) : ∀ {t : LTy}, ofV
   | @tensor A B _ _ ihA ihB | @sum A B _ _ ihA ihB =>
       intro t h; simp only [ofV] at h
       cases hA : ofV ms A <;> cases hB : ofV ms B <;> rw [hA, hB] at h <;> cases h
-      simp [LTy.drops, ihA hA, ihB hB]
+      simp [LTy.consumes, ihA hA, ihB hB]
 
 /-- The LIR type of a judgment: a value type, or the closure type a computation's value has
 (`rep`). -/

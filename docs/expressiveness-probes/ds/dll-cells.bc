@@ -8,7 +8,7 @@ type Node = mu X. i32 * ((1 + ref X) * (1 + ref X))
 
 fn none() -> 1 + ref Node = inl ()
 
--- The node's `next` set to `b`; its value. (The old `next` is dropped.)
+-- The node's `next` set to `b`; its value. (The old `next` is consumed.)
 fn set_next<'a>(m: mut 'a Node, b: ref Node) -> i32 =
   modify m { v -> let (x, (p, q)) = unroll v; let w : Node = roll (x, (p, inr b)); (w, x) }
 

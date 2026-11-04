@@ -12,19 +12,19 @@ translation that never inverts `CDerives`. Two programs with their frees removed
 same answers with no cell left.
 
 Build: `lake build Affine`. The library imports `Core` and nothing imports it. The destructors
-have moved into the library (`Core/Dtor.lean`, SPEC §12), and the checker inserts them
+have moved into the library (`Core/Consume.lean`, SPEC §12), and the checker inserts them
 (`Frontend/Check`). `CDerives` is unchanged. Every declaration's
 axioms are within `[propext, Classical.choice, Quot.sound]`.
 
 | file | contents |
 |---|---|
-| `Core/Dtor.lean` (library, SPEC §12) | `dtorE T : T ⊸ F 1`, `HasDtor` (the types with a destructor), `dtor_wf` (each destructor is a `CDerives` derivation), `hasDtor_of_affine`, `dtorE_imm`/`dtorE_mut`, `dropE`/`drop_derives` |
+| `Core/Consume.lean` (library, SPEC §12) | `consumeE T : T ⊸ F 1`, `Consumable` (the types with a destructor), `consume_wf` (each destructor is a `CDerives` derivation), `hasDtor_of_affine`, `consumeE_imm`/`consumeE_mut`, `dropE`/`drop_derives` |
 | `Elab.lean` | `ADerives` (`CDerives` plus `drop`, indexed by the elaborated term), `ADerives.elab`, `fundamentalA`/`adequacyA`/`runsA`, `owner_not_shared`, `drop_needs_live` |
 | `Programs.lean` | `sumAff` (the i32 list sum with no frees) and `blockAff b` (a field and a block dropped in the arms that do not use them): derivations, adequacy, interpreter runs, and the leak without the drops |
 
 ## Step 1: destructors
 
-`dtorE T` is a closed `λ` built by one structural recursion on `T`. `dtor_wf` types it at every
+`consumeE T` is a closed `λ` built by one structural recursion on `T`. `consume_wf` types it at every
 lifetime context and every dead context, using existing rules only:
 
 | type | destructor | rules |
@@ -32,11 +32,11 @@ lifetime context and every dead context, using existing rules only:
 | `1`, `0`, `I32`, `I64`, `Unk`, `!A` | `forget = λx. ()` | `λ`, `Ctx.DeadP.drop` (persistent) |
 | `Imm @a A`, `Mut @a A` | `forget` | the `forgetImm`/`forgetMut` constants |
 | `A ⊗ B`, `A ⊕ B`, `[@a] A` | componentwise | `letpair`/`case`/`[]E`, `lolliE` |
-| `Ref A` | `free`, then `dtorE A` | `free`, `elet` |
-| `μX. T`, `T` in `FShape` | `foldOwn (λr. dtorE (T[1/X]) r)` | `foldOwn`, promotion over a dead context |
+| `Ref A` | `free`, then `consumeE A` | `free`, `elet` |
+| `μX. T`, `T` in `FShape` | `foldOwn (λr. consumeE (T[1/X]) r)` | `foldOwn`, promotion over a dead context |
 | `U(C & F 1)`, `U(D A)`, `U(Stream A)` | `close`: force, then `π₂` | `force`, `delayOut`/`streamOut`, `proj₂` |
 
-**Droppable** means `HasDtor T`. The forgettable types of `Core/Records.lean` (`Affine`: borrows,
+**Droppable** means `Consumable T`. The forgettable types of `Core/Records.lean` (`Affine`: borrows,
 `Unk`, persistent types) are droppable (`hasDtor_of_affine`). The following have no destructor:
 
 * `U C` in general. A thunk of `F A` or of `A ⊸ C` can be disposed of only by running it, which
@@ -46,7 +46,7 @@ lifetime context and every dead context, using existing rules only:
 
 At `μ`, `toFShape` reads the fold's shape back from the body (`toFShape_ty : (toFShape A).ty =
 A`). The algebra is the same recursion in its `alg` mode, which gives `forget` at `Ref X` and
-`X`. `algE_eq` identifies it with `dtorE (T[1/X])`.
+`X`. `algE_eq` identifies it with `consumeE (T[1/X])`.
 
 ## Step 2: the elaboration
 
@@ -55,9 +55,9 @@ Every `CDerives` rule with a subderivation is repeated with `ADerives` premises.
 any `CDerives` derivation unchanged. There is one new rule:
 
 ```
-drop:  Ctx.SplitP Γ Γ₁ Γ₂    Ctx.SoloP Γ₁ i T    HasDtor T    ADerives Δ Γ₂ e e' (comp C)
+drop:  Ctx.SplitP Γ Γ₁ Γ₂    Ctx.SoloP Γ₁ i T    Consumable T    ADerives Δ Γ₂ e e' (comp C)
        ─────────────────────────────────────────────────────────────────────────────────
-       ADerives Δ Γ e (dtorE T xᵢ; e') (comp C)
+       ADerives Δ Γ e (consumeE T xᵢ; e') (comp C)
 ```
 
 A discard is therefore available at any computation judgment, under any former: at the end of a
@@ -71,8 +71,8 @@ adequacyA     : ADerives ∅ [] e e' (F 1) → e' runs from the empty memory to 
 runsA         : the same at any result type R, the value in vP R
 ```
 
-In `elab`, the `drop` case is `unitE` over `lolliE (dtor_wf …) (var …)` (`drop_derives`,
-`Core/Dtor.lean`). Every
+In `elab`, the `drop` case is `unitE` over `lolliE (consume_wf …) (var …)` (`drop_derives`,
+`Core/Consume.lean`). Every
 other case is the constructor it copies. No case inverts `CDerives` (decision 21), and
 `CDerives` gains no index or rule (decision 19). The cost is one judgment that copies the
 structural rules (≈ 100 lines) and a 40-line induction.
@@ -86,7 +86,7 @@ A value cannot be dropped while it is lent, and nothing has to be added to enfor
   callback's context, where a `drop` inside the loan would look for `r`, has it dead, and
   `drop` needs a live solo slot (`drop_needs_live`).
 * During the loan the callback holds `Imm 'x A` or `Mut 'x A`. Both are droppable, and their
-  destructor is `forget` (`dtorE_imm`, `dtorE_mut`): ending a loan early deallocates nothing.
+  destructor is `forget` (`consumeE_imm`, `consumeE_mut`): ending a loan early deallocates nothing.
 * The owner comes back in `withbor`'s result and can be dropped after the loan. `sumAff` does
   exactly this.
 
@@ -98,7 +98,7 @@ a `free` there, and `fundamentalC` covers the result.
 
 | program | source | elaboration | interpreter | without the drops |
 |---|---|---|---|---|
-| `sumAff` | `IntPrograms.sumListProg` with both frees removed: `… let (r′, n) = p in return n` | `r′` dropped before `return n`: `free`, then `foldOwn` over the list (`HasDtor.ref hasDtor_ilistL`) | `123`, no cell left (`sumAffE_eval`, the same answer as `sumListProg_eval`) | leaks (`sumAff_leaks`) |
+| `sumAff` | `IntPrograms.sumListProg` with both frees removed: `… let (r′, n) = p in return n` | `r′` dropped before `return n`: `free`, then `foldOwn` over the list (`Consumable.ref hasDtor_ilistL`) | `123`, no cell left (`sumAffE_eval`, the same answer as `sumListProg_eval`) | leaks (`sumAff_leaks`) |
 | `blockAff false` | block `{a : I32, b : I32}`; the first arm moves `a` out and returns it | field `b` dropped before `return m` | `7`, no cell left (`blockAffE_eval₁`) | leaks (`blockAff_leaks`) |
 | `blockAff true` | the second arm uses nothing | the whole block (`Ref I32 ⊗ Ref I32`) dropped before `return 0` | `0`, no cell left (`blockAffE_eval₂`) | leaks |
 
@@ -133,7 +133,7 @@ End of scope is chosen because it is predictable where the order is observable: 
 | type | surface grade | written? |
 |---|---|---|
 | persistent | `[0,∞]` | no |
-| droppable (`HasDtor`), including owned types with a destructor | `[0,1]`: may go unused; the drop is inserted | no |
+| droppable (`Consumable`), including owned types with a destructor | `[0,1]`: may go unused; the drop is inserted | no |
 | owned without a destructor (`U(F A)`, `U(A ⊸ C)`, `μ` outside `FShape`) | `[1,1]`: must be used; an unused one is a type error naming the type | no |
 | any type, opted in | `[1,1]` via `linear`, for handles whose silent drop is a bug (a transaction, a lock guard with a result) | yes |
 
@@ -150,7 +150,7 @@ implements.
   `free`/`foldOwn` at every discard point and on every branch. `sumAff_leaks` and
   `blockAff_leaks` show the source terms leak when run as they are.
 * **U2 (proof once).** Soundness and leak freedom for every placement of every drop is one
-  theorem, `ADerives.elab`, plus the one destructor lemma `dtor_wf`. No drop needs a
+  theorem, `ADerives.elab`, plus the one destructor lemma `consume_wf`. No drop needs a
   compatibility lemma, and neither the model, `SemJ`, nor any invariant is touched.
 * **U3 (optimization).** Placement is free for the optimizer (see Step 5). Dropping at last use
   instead of end of scope shortens lifetimes and lowers peak memory, and it is sound by the same
@@ -159,7 +159,7 @@ implements.
 * **U4 (fewer mechanisms).** Drop elaboration subsumes the forget constants at the surface:
   `forget` at `Imm`/`Mut`/`Unk`/`!A` becomes the destructor that `drop` inserts, and the user
   never writes it. Hand-written free functions for data in the fold class (`freeIE`, `freeCE`)
-  are generated (`dtorE` at `μ`). In the core itself, `ADerives` is an addition, not a
+  are generated (`consumeE` at `μ`). In the core itself, `ADerives` is an addition, not a
   deletion. It lives beside `CDerives` and is not a new index on it.
 
 ## Not done
@@ -169,10 +169,10 @@ implements.
   (`wrapDrops`). The drops here are core terms (`free`, `foldOwn`, `close`), so they lower like
   any other code. A dedicated deep-free primitive for `μ` would replace the `foldOwn` traversal.
 * **`Buf`/`Str`** (SPEC §9). These are opaque extern types, not `VTy` formers, so they are
-  outside `HasDtor` here. Their destructors are the externs `str_free` and `buf_free`.
+  outside `Consumable` here. Their destructors are the externs `str_free` and `buf_free`.
   `buf_free` is typed only at a persistent element type, so a `Buf` of owned elements needs a
   drain (a `pop` loop dropping each element) before it can be freed. Each would be one
-  `HasDtor` case, with its destructor an extern call.
+  `Consumable` case, with its destructor an extern call.
 * **A syntactic elaborator** (a function from source to elaborated term following the policy).
   `ADerives` is declarative: the derivation chooses the placement, and the programs follow the
   policy by hand.

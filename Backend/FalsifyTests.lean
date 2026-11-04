@@ -63,7 +63,7 @@ def aliasedWrite : Expr :=
   .seq (letE (freeE (.var 3)) .unit) (.var 0)
 
 /-- The handler of name `5` whose one clause receives `(w, κ)`, reads `w`, and resumes `κ` with
-`()` (`resume = true`), or answers `0` and drops `κ`. -/
+`()` (`resume = true`), or answers `0` and consumes `κ`. -/
 def hnd5 (resume : Bool) : Val :=
   let clause : Expr :=
     if resume then
@@ -89,9 +89,9 @@ def immWrite : Expr :=
   letE (freeE (.var 1)) <|
   freeE (.var 0)
 
-/-- A lend whose callback performs `5`, whose handler drops the continuation: the lend never
+/-- A lend whose callback performs `5`, whose handler consumes the continuation: the lend never
 ends, and the owner is lost with the continuation (`live 1`). -/
-def droppedLend : Expr :=
+def consumedLend : Expr :=
   letE (allocE (lit 5)) <|
   BoLo.hndE (hnd5 false)
     (borrowE (.var 0)
@@ -117,7 +117,7 @@ def negatives : List (String × Expr × String × String × String) :=
       "i32[2]"),
    ("neg-suspended-view", suspendedView, "tags", "while its lend is suspended", "i32[5]"),
    ("neg-imm-write", immWrite, "tags", "write of location 0 through an imm tag", "i32[9]"),
-   ("neg-dropped-lend", droppedLend, "tags", "never ended", "live 1"),
+   ("neg-consumed-lend", consumedLend, "tags", "never ended", "live 1"),
    ("neg-active-at-boundary", activeAtBoundary, "tags", "active at an observation boundary",
       "source interpreter: stuck")]
 

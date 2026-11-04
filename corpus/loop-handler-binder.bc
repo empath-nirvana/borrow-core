@@ -12,7 +12,7 @@ include text
 -- The number `t` holds, parsed three times in a loop, after an earlier use of a view named `e`.
 fn thrice<'a>(t: text 'a) -> i32 =
   let (e, u) = array_copy['a, u8] t;
-  array_forget['a, u8](u);
+  array_release['a, u8](u);
   let mut v = e;
   let mut k = 0;
   for _ in 0..3 {
@@ -20,7 +20,7 @@ fn thrice<'a>(t: text 'a) -> i32 =
     v = w;
     k = k + with default(0) { parse_i32(x) }
   };
-  array_forget['a, u8](v);
+  array_release['a, u8](v);
   k
 
 main -> i32 =

@@ -78,8 +78,8 @@ Case (E) needs no new idea.
   the full carrier.
 - **Cancelling** a frozen continuation is "resuming it into `raise`" (SPEC §19,
   `cancel_compatC`). It ends the borrows inside it by the mechanised LIFO frame lemmas
-  `ewpTS_I_frameU`, `ewpTS_M_frameU` and `ewpTS_M_antiFrameU`. Its external borrows are dropped
-  by [TR] 6.148 and 6.149 (forget).
+  `ewpTS_I_frameU`, `ewpTS_M_frameU` and `ewpTS_M_antiFrameU`. Its external borrows are consumed
+  by [TR] 6.148 and 6.149 (release).
 
 This is the route #249 tests: T1 by lifetime bounding. It needs a premise and its compatibility
 lemma, and both are small. The structure under test does not change it.
@@ -240,20 +240,20 @@ Then `step(w)` is sound, and it leaves `Cell(ℓ, γ, c)` in place.
 
 *Why not abortive outer operations.* SPEC §19 gives `withswap` no unwinding form: "its callback
 takes the payload by value, and an unwind would abandon it". An abort inside the resumed segment
-would unwind the segment, running its destructors and consuming `κ`, and leave the cell with no
+would unwind the segment, running its consumes and consuming `κ`, and leave the cell with no
 content satisfying `I_c`. The step that is missing is an unwinding form of `withswap` that writes
-back `inl ()` once the payload's own destructors have run. It is not defined here. It is part of
+back `inl ()` once the payload's own consumes have run. It is not defined here. It is part of
 O8.
 
-**Lemma L14.9 (closed under drop).** Dropping the cell's owner runs
+**Lemma L14.9 (closed under consume).** Consuming the cell's owner runs
 `case v of inl _ ⇒ () | inr κ ⇒ cancel κ`, and that finalises everything `κ` holds, exactly once.
 
 *Proof (proved here at the level of its steps; conditional on L14.4).* `cancel κ` is a resume into
 `raise` (SPEC §19, `cancel_compatC`). By L14.5's first step the internal frames restart fresh.
 The LIFO frame lemmas (`ewpTS_I_frameU`, `ewpTS_M_frameU`, `ewpTS_M_antiFrameU`, mechanised) then
 end them innermost first. The places return to their owners inside the segment, and those
-owners' drop glue frees them (SPEC §12). The segment's `fin` frames free their resources (D4.5).
-External borrows are forgotten (6.148, 6.149). ∎
+owners' consume glue frees them (SPEC §12). The segment's `fin` frames free their resources (D4.5).
+External borrows are released (6.148, 6.149). ∎
 
 **What the lemma yields.** Each item is conditional on L14.4 (O5) and on L14.8's hypothesis that
 the resumed segment's outside operations are answering. A generator that may raise or await
@@ -262,7 +262,7 @@ across `next` needs O8.
 | target | how | further condition |
 |---|---|---|
 | **generator objects** | `Gen ≜ Ref(1 ⊕ κ°)`, with `next ≜ step` an answering operation. The recursion moves into the heap, and the type is inductive: no `μ` under `U`, unlike `strm` (D1.6), and no positivity premise. | none beyond the two above |
-| **capabilities held across `yield`** | an owned capability inside the segment is an `own` cell of `r_o` or `r_e` | across a **linear** yield, none. Across a **cancellable** yield (a generator that may be dropped), the capability needs a destructor, and §2's `cap` has none (D2.4, T5.2.2). A lend frame inside the segment needs one too, which [lend]'s `bound(ρ).req = lin` refuses today. This is #245's fourth seam (which effects destructors may perform), and it is a decision, not a lemma. |
+| **capabilities held across `yield`** | an owned capability inside the segment is an `own` cell of `r_o` or `r_e` | across a **linear** yield, none. Across a **cancellable** yield (a generator that may be consumed), the capability needs a consume, and §2's `cap` has none (D2.4, T5.2.2). A lend frame inside the segment needs one too, which [lend]'s `bound(ρ).req = lin` refuses today. This is #245's fourth seam (which effects consumes may perform), and it is a decision, not a lemma. |
 | **task queues** | `Ref(List κ°)`, with `I_c` lifted pointwise by a separating list. `step` pops, resumes and pushes. | every task's external footprint in `Res_c` |
 | **handler state** | the handler's state in a cell. The clause owns it while the body is suspended (`withswap`); the body has it lent while it runs. This is linear state in Møgelberg & Staton's sense, with the continuation as its user (*Linear usage of state*, LMCS 10(1:17), 2014 [via phase A]). | as for generators |
 | **T1** | T14.10 | as above |
@@ -321,11 +321,11 @@ a few new steps; **L** touches every definition of the relation.
 |---|---|---|---|
 | β | T7.1 and T7.5 (mechanised) | T13.2: no new obligation | 0 |
 | η | absent | T13.8(a), (c): one tree induction | 1 S |
-| η at cancellable operations (forwarding a cancel) | absent | D13.7's frame: machine row, typing rule, L13.9, `Dtor.run` and `DR` flattening, cases of L6.2, L6.3, L6.5 | about 5 S |
+| η at cancellable operations (forwarding a cancel) | absent | D13.7's frame: machine row, typing rule, L13.9, `Consume.run` and `DR` flattening, cases of L6.2, L6.3, L6.5 | about 5 S |
 | η at linear operations in general | — | open (O6) | — |
 | interaction law | absent | T13.13 (special case); P13.14 (fails at cancellable); general open (O6) | 1 S |
 | hiding, binary | absent | open (O7); no law needs it | — |
-| tensor, instance parametricity, destructor form, contraction | proved (§7) | unchanged; no proof shortened (§13.6) | 0 |
+| tensor, instance parametricity, consume form, contraction | proved (§7) | unchanged; no proof shortened (§13.6) | 0 |
 
 **The verdict.**
 
@@ -349,7 +349,7 @@ a few new steps; **L** touches every definition of the relation.
 4. **One missing construct recurs in three places.** O1 (ν/op), O6 (η at linear operations with
    `using` frames; the interaction law in general) and P13.9 all wait on a **binary relation that
    reads qualifiers**:
-   - D6.2 relates destructor lists at every operation, but a moded program runs only those of
+   - D6.2 relates consume lists at every operation, but a moded program runs only those of
      weakenable ones;
    - D6.2 does not know a continuation is forced at most once.
 
@@ -362,7 +362,7 @@ a few new steps; **L** touches every definition of the relation.
   for case (I). §14.2 argues that lifetime bounding settles case (E) and leaves case (I) at O3.
 - Add η and the interaction law to the TR's laws, with the limits proved here, if they are
   wanted.
-- Take D13.7 up with the fourth-seam decision: which effects a destructor may perform, and
+- Take D13.7 up with the fourth-seam decision: which effects a consume may perform, and
   whether a frame may own a continuation.
 
 ## 14.6 Open problems added
@@ -370,7 +370,7 @@ a few new steps; **L** touches every definition of the relation.
 | | statement | where | the step that does not go through |
 |---|---|---|---|
 | O5 | L14.4, re-stratification of a stack segment | §14.3 | a transport of the relation along fresh internal lifetimes on `ℕᵒᵈ`, which has no automorphism (risk: `↓α = α + 1`), and the ghost end of a suspended frame |
-| O6 | η at linear operations whose segment crosses a `using` frame; the interaction law at linear operations in general; both as `CtxEq_op` | P13.9, §13.5 | D6.2 relates destructor lists of operations that a moded program never cancels; `LR` fails, and `CtxEq_den` fails at unhandled operations (P13.9) |
+| O6 | η at linear operations whose segment crosses a `using` frame; the interaction law at linear operations in general; both as `CtxEq_op` | P13.9, §13.5 | D6.2 relates consume lists of operations that a moded program never cancels; `LR` fails, and `CtxEq_den` fails at unhandled operations (P13.9) |
 | O7 | binary hiding (D13.11) | §13.4 | `VR` has no relational parameter for a state type, and worlds match cells by equal contents |
 | O8 | the continuation cell when the resumed segment raises or suspends outside itself | L14.8, T14.10 | an abort: `withswap` has no unwinding form (SPEC §19), and one that writes back `inl ()` is not defined. A suspension: Anti Frame (`ewpTS_M_antiFrameU`) at a suspending table, not derived (6.66 opens no lifetime, so O3's step does not arise) |
 
@@ -388,7 +388,7 @@ O3 is not withdrawn: it stands, reduced to O5 and O2 by T14.6.
 | ADR09 | Ahmed, Dreyer & Rossberg, *State-dependent representation independence*, POPL 2009, DOI 10.1145/1480881.1480925 | [verified via Crossref]; content recalled | worlds with per-cell relations (O7) |
 | HLPP07 | Hyland, Levy, Plotkin & Power, *Combining algebraic effects with continuations*, TCS, 2007, DOI 10.1016/j.tcs.2006.12.026 | [verified via Crossref]; content via #245 | the one-shot/multi-shot dichotomy (contraction, §13.6) |
 | Has02 | Hasegawa, *Linearly used effects: monadic and CPS transformations into the linear lambda calculus*, LNCS, 2002, DOI 10.1007/3-540-45788-7_10 | [verified via Crossref]; content via #245 | the same |
-| PP08, PP13, MS14, Sta13, CMD26 | as §12 | as §12 | tensor; handlers as folds; linear state; ν/op; destructors |
+| PP08, PP13, MS14, Sta13, CMD26 | as §12 | as §12 | tensor; handlers as folds; linear state; ν/op; consumes |
 | [TR] | as §12 | 6.64–6.66, 6.104, 6.112, 6.131, 6.148, 6.149, 6.176, p. 5 (`Mut_α`, `↓α`), p. 6 (`fresh`) | §14 |
 
 **New to us** (in the sense of §12.3: not found in the sources above and the #235 and #245

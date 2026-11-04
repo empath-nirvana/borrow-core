@@ -9,14 +9,14 @@ of a derived node's typed rule (`Frontend/Check/TDerives.lean`), so that a deriv
 * **A lend's kind** (`lendKindB`): a `lendCell` node's `m` is the kind of the borrow constant at
   the head of its term, `withbor2` (`mut`) or `withbor1` (`imm`). The erasure cannot say it:
   both erase to `withbor`.
-* **A lent cell's release** (`lendScopeT`, `lendRelB`): a `lendScope` node is over the code that
+* **A lent cell's free** (`lendScopeT`, `lendRelB`): a `lendScope` node is over the code that
   takes apart the pair a `lendCell` node answers; its `rel` says whether, on every path of that
   code, the owner (the pair's first component) is released by `free` where it is used, and used
   nowhere else (`relAt`). A `case` is two paths, each of which must release it.
 * **A literal's view** (`litViewT`): a `litView` node is over the elaborator's scheme for
   `borrow imm "…" { v -> S }`: the literal's table tabulated into an array (`array_new`), the
   array lent as an `imm` family (`slice_borrow_imm`), and the array the lend hands back
-  destroyed (`dtor`) before anything else. Between the tabulation and the destruction the array
+  destroyed (`consume`) before anything else. Between the tabulation and the destruction the array
   is reached only through the `imm` family.
 * **`unfold step`** (`unfoldAppT`): an `unfoldStep` node is over the `unfoldN` constant applied to
   its step. A `bind` whose bound computation is one binds a variable to `unfold step`, which is
@@ -84,16 +84,16 @@ def immLendT : TExpr → Bool
   | .ret _ _ _ (.lolliE _ _ _ _ _ _ (.lolliE _ _ _ _ _ x (.sliceBorrowI ..))) => x.isVarT 0
   | _ => false
 
-/-- The destructor applied to the variable `1`. -/
-def dtorOf1T : TExpr → Bool
-  | .lolliE _ _ _ _ _ x (.dtor ..) => x.isVarT 1
+/-- The consume applied to the variable `1`. -/
+def consumeOf1T : TExpr → Bool
+  | .lolliE _ _ _ _ _ x (.consume ..) => x.isVarT 1
   | _ => false
 
 /-- The view's body: `a <- array_new …; r <- slice_borrow_imm a cb; let (a', v) = r;
-dtor a'; …`. -/
+consume a'; …`. -/
 def litBodyT : TExpr → Bool
   | .bind _ _ _ _ _ tA (.bind _ _ _ _ _ tL (.tensorE _ _ _ _ _ _ tP (.unitE _ _ _ _ tD _))) =>
-      tabT tA && immLendT tL && tP.isVarT 0 && dtorOf1T tD
+      tabT tA && immLendT tL && tP.isVarT 0 && consumeOf1T tD
   | _ => false
 
 /-- **A literal's view**: `p <- return lit; let (n, t) = p; …`, the body `litBodyT`. -/
@@ -112,19 +112,19 @@ def unfoldAppT : TExpr → Bool
   | .ret _ _ _ t | .bangE _ _ _ t | .ofRet _ _ _ t => unfoldAppT t
   | _ => false
 
-/-! ### A lent cell's release -/
+/-! ### A lent cell's free -/
 
 /-- The slot `k`'s pair in a split's masks: whether each part uses it (`false` past their end). -/
 def Masks.at (m : Masks) (k : Nat) : Bool × Bool := m.ms.getD k (false, false)
 
-/-- The node releases a cell: `free`, or the destructor of a cell. -/
+/-- The node frees a cell: `free`, or the consume of a cell. -/
 def TExpr.isRelease : TExpr → Bool
   | .free .. => true
-  | .dtor _ _ (.ref _) => true
+  | .consume _ _ (.ref _) => true
   | _ => false
 
 /-- **The slot `k` is released on every path of the node**: each path passes it, by the masks of
-its splits, to one part, until it is the operand of `free` or of a cell's destructor (`isRelease`);
+its splits, to one part, until it is the operand of `free` or of a cell's consume (`isRelease`);
 a `case` passes it to both arms, each of which must release it. Any other use (a return, a call,
 a capture, a field of a value) is not a release.  `[spec §57]` -/
 def relT (k : Nat) : TExpr → Bool
@@ -210,9 +210,9 @@ theorem immLendT_shift {d c : Nat} (hc : 0 < c) (t : TExpr) : immLendT (t.shift 
     | _ => rfl
   | _ => rfl
 
-theorem dtorOf1T_shift {d c : Nat} (hc : 1 < c) (t : TExpr) : dtorOf1T (t.shift d c) = dtorOf1T t := by
+theorem consumeOf1T_shift {d c : Nat} (hc : 1 < c) (t : TExpr) : consumeOf1T (t.shift d c) = consumeOf1T t := by
   cases t with
-  | lolliE _ _ _ _ _ x h => cases h <;> simp only [TExpr.shift, dtorOf1T, TExpr.isVarT_shift hc]
+  | lolliE _ _ _ _ _ x h => cases h <;> simp only [TExpr.shift, consumeOf1T, TExpr.isVarT_shift hc]
   | _ => rfl
 
 theorem litBodyT_shift (d c : Nat) (t : TExpr) : litBodyT (t.shift d c) = litBodyT t := by
@@ -226,7 +226,7 @@ theorem litBodyT_shift (d c : Nat) (t : TExpr) : litBodyT (t.shift d c) = litBod
         | unitE _ _ _ _ tD _ =>
           simp only [TExpr.shift, litBodyT, tabT_shift, immLendT_shift (Nat.succ_pos c),
             TExpr.isVarT_shift (show 0 < c + 1 + 1 by omega),
-            dtorOf1T_shift (show 1 < c + 1 + 1 + 2 by omega)]
+            consumeOf1T_shift (show 1 < c + 1 + 1 + 2 by omega)]
         | _ => rfl
       | _ => rfl
     | _ => rfl

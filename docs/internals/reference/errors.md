@@ -36,19 +36,19 @@ main : F (i32 * i32) =
 after a use that would therefore copy it; that use is written `clone(x)` (see [Ownership and
 borrows](../../../book/src/guide/ownership.md)). The message names the use after it.
 
-**Not consumed.** A variable is left unused and cannot be dropped: its type is linear and has no
-derived drop, or it cannot be dropped where its scope ends (inside a value, where no
-drop is inserted).
+**Not consumed.** A variable is left unused and cannot be consumed: its type is linear and has no
+consume, or it cannot be consumed where its scope ends (inside a value, where no
+consume is inserted).
 
 ```bc,reject
 main : F 1 =
   k <- return (thunk (return i32[1]));
   return ()
--- expect: 2:3: `k` is not consumed in its scope, and its type `U (F i32)` is linear and has no derived drop
+-- expect: 2:3: `k` is not consumed in its scope, and its type `U (F i32)` is linear and is not consumable
 ```
 
 **Unbalanced arms.** The arms of a `case`, or the components of `<M, N>`, consume different
-variables, and one of them has no destructor.
+variables, and one of them is not consumable.
 
 ```bc,reject
 main : F i32 =
@@ -58,7 +58,7 @@ main : F i32 =
     inl u -> force k
   | inr u -> return i32[2]
   }
--- expect: 4:3: in this `case`, `k` is consumed in the `inl` arm but not in the `inr` arm, and its type `U (F i32)` is linear and has no derived drop
+-- expect: 4:3: in this `case`, `k` is consumed in the `inl` arm but not in the `inr` arm, and its type `U (F i32)` is linear and is not consumable
 ```
 
 **Promotion.** `!thunk` and `!thunkv` build a value that holds no resource, so their body may use
@@ -84,7 +84,7 @@ main : F 1 =
   r <- return (alloc[i32] i32[1]);
   q <- return (withbor1['x, i32, 1 => 1] r
          (thunkv Fun 'x < top. return (thunkv fun (b : imm 'x i32) ->
-            return (boxed['x] (thunkv fun (u : 1) -> return (forget_imm['x, i32] b))))));
+            return (boxed['x] (thunkv fun (u : 1) -> return (release_imm['x, i32] b))))));
   return ()
 -- expect: 5:21: `boxed['x]`: `b`, of type `imm 'x i32`, is used inside, and it cannot be shown to outlive `'x`
 ```
@@ -203,5 +203,5 @@ Integer leaves are not yet plain (planned: #11).
 A program can be well typed and still be rejected: the checker does not search for every
 derivation. The known cases are listed in `Frontend/README.md` under *Incompleteness*: modes that
 need an ascription, types compared without α-conversion, rules that apply only where written,
-lifetime entailment without distributivity, and derived forms that cannot drop persistent
+lifetime entailment without distributivity, and derived forms that cannot consume persistent
 variables.

@@ -36,7 +36,7 @@ one there, the difference is in the setting, and it is named.
 | MM18 | Munch-Maccagnoni, *Resource polymorphism*, arXiv 1803.02796, 2018 | [via #235]; `A & 1` [recalled] | the cancellable continuation as `A & 1` (D1.8) |
 | PS93 | Pitts & Stark, *Observable properties of higher order functions that dynamically create local names, or: What's new?*, MFCS 1993, LNCS 711, DOI 10.1007/3-540-57182-5_8 | [verified]; content [recalled] | partial bijections of names as worlds (D4.7) |
 | dVP21 | de Vilhena & Pottier, *A separation logic for effect handlers*, PACMPL 5 (POPL 2021), DOI 10.1145/3434314 | [verified]; content [recalled] | `ewp` with protocols, the shape SPEC §19 and D5.3 follow (§12.3) |
-| SPEC | borrow-core `SPEC.md` §19 (native capture), §20 (`bounded_fix`) | read | `ewpTS`, protocols, the static continuation, drop glue, `bounded_fix` |
+| SPEC | borrow-core `SPEC.md` §19 (native capture), §20 (`bounded_fix`) | read | `ewpTS`, protocols, the static continuation, consume glue, `bounded_fix` |
 | PA | phase A: `experiments/EffModel/`, `docs/effect-model.md` | read; run | the calculus |
 | PB | phase B: `experiments/EffModelRel/` (branch `effmodel-rel`, `~/repos/borrow-core-effmodel-rel` at `19d0ae9`) | read | the binary relation, the laws |
 
@@ -48,7 +48,7 @@ one there, the difference is in the setting, and it is named.
 |---|---|---|
 | the resource world, `wp` (total correctness, frame-quantified), compatibility-lemma structure of the FP | [TR] | §4.1, §5 (at the own fragment) |
 | `ewp` with protocol tables, as a least fixed point in `Prop` | SPEC §19, borrow-core `Core/EffDefs.lean`; the idea of protocols is dVP21's [recalled] | D5.3, D4.6 |
-| the static continuation `⟨resume, cancel⟩`, drop glue | SPEC §19; MM18's `A & 1`; CMD26's weakening as an effect | D1.8, §8.1 |
+| the static continuation `⟨resume, cancel⟩`, consume glue | SPEC §19; MM18's `A & 1`; CMD26's weakening as an effect | D1.8, §8.1 |
 | every computation type a model; handlers as folds | PP13 | D3.11, D3.12 |
 | the free-model tree semantics, the binary relation, its worlds, FP, adequacy, soundness, and most laws | phase B | §3.2, §6, §7 |
 | partial bijections of names | PS93; Staton's `[Inj, Set]` | D4.7 |
@@ -79,7 +79,7 @@ the #235 reports, so "new" means "not found there", not a claim of priority).
 9. **ν/op's restriction to non-contractible qualifiers** (T7.15): phase B's counterexample, and the
    statement of what a proof needs (O1).
 10. From phase B, new to us before this document: the pending and garbage name statuses
-    (D4.7), `TreeRel.abE` (the destructor form built into the relation), and the relation's
+    (D4.7), `TreeRel.abE` (the consume form built into the relation), and the relation's
     treatment of `ν/ν` and `idem-ν` by them.
 
 **Relation to Biernacki et al.** Their relations (BPPS18–20) are binary relations for handlers in

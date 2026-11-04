@@ -10,7 +10,7 @@ import Backend2.Flow
 LIR programs no checked term converts to, each refused by `Lint.lint` for what the type of one
 variable says, beside the program that differs only in that type and is accepted. A function
 `f0` takes `x0` at the type under test and either copies it (`copy x0 -> x1`, answering the pair
-of both) or drops it (`drop x0`, answering `()`). The `!` read here is the one `Types.ofV` keeps.
+of both) or consumes it (`consume x0`, answering `()`). The `!` read here is the one `Types.ofV` keeps.
 -/
 
 namespace Backend2.LintTests
@@ -24,9 +24,9 @@ def copyProg (t : LTy) (r : CopyRule := .dup) : Prog where
   mainTy := .unit
   ty := (({} : Std.HashMap Var LTy).insert 0 t).insert 1 t
 
-/-- `f0 (x0 : t) = drop x0 (at the rule r); ()`. -/
-def dropProg (t : LTy) (r : DropRule := .dead) : Prog where
-  fns := #[{ name := "drops", params := [0], ret := .unit, body := .drop r 0 .unit }]
+/-- `f0 (x0 : t) = consume x0 (at the rule r); ()`. -/
+def consumeProg (t : LTy) (r : ConsumeRule := .dead) : Prog where
+  fns := #[{ name := "consumes", params := [0], ret := .unit, body := .consume r 0 .unit }]
   codes := #[]
   main := .unit
   mainTy := .unit
@@ -68,39 +68,39 @@ def closT : LTy := .thunk (.arr .unit (.ret .unit))
 #guard accepts (copyProg (.pair i32T (.bang closT)))
 #guard accepts (copyProg i32T)
 
--- A drop of a variable that may own a cell, or of a linear closure, at every rule.
-#guard refuses (dropProg (.ref i32T)) "dropped at ref i32 (dead), where the rule's premise does not hold"
-#guard refuses (dropProg closT .unused) "(unused), where the rule's premise does not hold"
-#guard refuses ({ dropProg (.fam (.ref i32T)) .dtor with dtorFns := ({} : Std.HashSet Nat).insert 0 })
-  "(dtor), where the rule's premise does not hold"
+-- A consume of a variable that may own a cell, or of a linear closure, at every rule.
+#guard refuses (consumeProg (.ref i32T)) "consumed at ref i32 (dead), where the rule's premise does not hold"
+#guard refuses (consumeProg closT .unused) "(unused), where the rule's premise does not hold"
+#guard refuses ({ consumeProg (.fam (.ref i32T)) .consume with consumeFns := ({} : Std.HashSet Nat).insert 0 })
+  "(consume), where the rule's premise does not hold"
 
--- Weakening (`dead`) is at a persistent type only: a borrow is dropped by a `forget` constant or
--- a destructor's leaf.
-#guard accepts (dropProg (.bang closT))
-#guard refuses (dropProg (.mut i32T)) "(dead), where the rule's premise does not hold"
-#guard accepts (dropProg (.mut i32T) .forget)
-#guard accepts (dropProg (.imm i32T) .forget)
-#guard accepts (dropProg (.fam (.imm i32T)) .forget)
--- F7: a family of `mut` borrows is dropped only by a destructor (`HasDtor.arrayMut`, at a `dtor`
--- node); no constant forgets it.
-#guard accepts { dropProg (.fam (.mut i32T)) .dtor with dtorFns := ({} : Std.HashSet Nat).insert 0 }
--- …and only in a destructor function: the same drop in a function `Convert` did not register as
+-- Weakening (`dead`) is at a persistent type only: a borrow is consumed by a `release` constant or
+-- a consume's leaf.
+#guard accepts (consumeProg (.bang closT))
+#guard refuses (consumeProg (.mut i32T)) "(dead), where the rule's premise does not hold"
+#guard accepts (consumeProg (.mut i32T) .release)
+#guard accepts (consumeProg (.imm i32T) .release)
+#guard accepts (consumeProg (.fam (.imm i32T)) .release)
+-- F7: a family of `mut` borrows is consumed only by a consume (`Consumable.arrayMut`, at a `consume`
+-- node); no constant releases it.
+#guard accepts { consumeProg (.fam (.mut i32T)) .consume with consumeFns := ({} : Std.HashSet Nat).insert 0 }
+-- …and only in a consume function: the same consume in a function `Convert` did not register as
 -- one is refused.
-#guard refuses (dropProg (.fam (.mut i32T)) .dtor) "outside a destructor function"
-#guard refuses (dropProg (.fam (.mut i32T)) .forget) "(forget), where the rule's premise does not hold"
-#guard refuses (dropProg (.fam (.mut i32T)) .unused) "(unused), where the rule's premise does not hold"
+#guard refuses (consumeProg (.fam (.mut i32T)) .consume) "outside a consume function"
+#guard refuses (consumeProg (.fam (.mut i32T)) .release) "(release), where the rule's premise does not hold"
+#guard refuses (consumeProg (.fam (.mut i32T)) .unused) "(unused), where the rule's premise does not hold"
 -- A slot no mask holds is weakened, at a persistent type only: a borrow there is one the kernel
--- absorbs, which the conversion does not drop.
-#guard accepts (dropProg i32T .unused)
-#guard refuses (dropProg (.imm i32T) .unused) "(unused), where the rule's premise does not hold"
+-- absorbs, which the conversion does not consume.
+#guard accepts (consumeProg i32T .unused)
+#guard refuses (consumeProg (.imm i32T) .unused) "(unused), where the rule's premise does not hold"
 
--- A drop of an opaque value, or of a pair holding one: refused at every rule. No constant forgets
--- an opaque value and it has no destructor, so only an `abandon` node discards one.
-#guard refuses (dropProg (.opq .output)) "where the rule's premise does not hold"
-#guard refuses (dropProg (.opq .output) .unused) "where the rule's premise does not hold"
-#guard refuses ({ dropProg (.opq .output) .dtor with dtorFns := ({} : Std.HashSet Nat).insert 0 })
+-- A consume of an opaque value, or of a pair holding one: refused at every rule. No constant releases
+-- an opaque value and it is not consumable, so only an `abandon` node discards one.
+#guard refuses (consumeProg (.opq .output)) "where the rule's premise does not hold"
+#guard refuses (consumeProg (.opq .output) .unused) "where the rule's premise does not hold"
+#guard refuses ({ consumeProg (.opq .output) .consume with consumeFns := ({} : Std.HashSet Nat).insert 0 })
   "where the rule's premise does not hold"
-#guard refuses (dropProg (.pair i32T (.opq .input)) .unused) "where the rule's premise does not hold"
+#guard refuses (consumeProg (.pair i32T (.opq .input)) .unused) "where the rule's premise does not hold"
 
 /-- `f0 (x0 : t) = abandon x0 (at the rule r); ()`. -/
 def abandonProg (t : LTy) (r : Abandon := .letAbort) : Prog where
@@ -111,11 +111,11 @@ def abandonProg (t : LTy) (r : Abandon := .letAbort) : Prog where
   ty := ({} : Std.HashMap Var LTy).insert 0 t
 #guard accepts (abandonProg (.opq .output))
 #guard accepts (abandonProg (.pair i32T (.opq .input)))
--- A `[let]`'s abort admits `effLet`'s `hW` (`VTy.Drop`, `LTy.drops`) and no more: an owned cell
+-- A `[let]`'s abort admits `effLet`'s `hW` (`VTy.Consume`, `LTy.consumes`) and no more: an owned cell
 -- is refused.
 #guard refuses (abandonProg (.ref i32T))
   "abandoned at ref i32 (let abort), where the rule's premise does not hold"
--- So is a persistent byte list, which `VTy.Drop` does not hold (`μ`): a type the program may drop,
+-- So is a persistent byte list, which `VTy.Consume` does not hold (`μ`): a type the program may consume,
 -- but not one `hW` abandons.
 #guard refuses (abandonProg (.mu (.sum .unit (.pair (.int .w8) (.tvar 0)))))
   "(let abort), where the rule's premise does not hold"
@@ -125,7 +125,7 @@ def abandonProg (t : LTy) (r : Abandon := .letAbort) : Prog where
 -- `⊤` absorbs its whole context at every type: `topI` has no premise.
 #guard accepts (abandonProg (.ref i32T) .top)
 #guard accepts (abandonProg closT .top)
--- A superseded raise payload is abandoned at `effRaise`'s `hd` (`VTy.Drop`): an opaque value, and
+-- A superseded raise payload is abandoned at `effRaise`'s `hd` (`VTy.Consume`): an opaque value, and
 -- a borrow, but not an owned cell or a family of borrows.
 #guard accepts (abandonProg (.opq .input) .superseded)
 #guard accepts (abandonProg (.imm i32T) .superseded)
@@ -156,18 +156,18 @@ def letArms (ok : Tm) : Prog where
     .unit).insert 3 i32T).insert 4 i32T)
 
 -- The value arm hands the stream on: accepted.
-#guard accepts (letArms (.drop .dead 2 (.inj false 1)))
--- The value arm drops the stream, which the abort arm abandons: refused. The abort arm's
+#guard accepts (letArms (.consume .dead 2 (.inj false 1)))
+-- The value arm consumes the stream, which the abort arm abandons: refused. The abort arm's
 -- abandonment is a node at its own site and licenses nothing in the other arm, so the same
--- variable's drop there is checked by its type alone.
-#guard refuses (letArms (.drop .dead 2 (.drop .unused 1 (.letv 4 (.lit (.i32 0)) (.inj true 4)))))
-  "x1 dropped at Output (unused), where the rule's premise does not hold"
+-- variable's consume there is checked by its type alone.
+#guard refuses (letArms (.consume .dead 2 (.consume .unused 1 (.letv 4 (.lit (.i32 0)) (.inj true 4)))))
+  "x1 consumed at Output (unused), where the rule's premise does not hold"
 
--- A drop no type licenses, of a stack machine's level: refused at every rule but `stackK`, which
+-- A consume no type licenses, of a stack machine's level: refused at every rule but `stackK`, which
 -- admits only a hand-over (`handsOver`, below).
-#guard refuses (dropProg closT) "(dead)"
-#guard refuses (dropProg i32T .stackK) "(stack k), where the rule's premise does not hold"
-#guard refuses (dropProg closT .stackK) "(stack k), where the rule's premise does not hold"
+#guard refuses (consumeProg closT) "(dead)"
+#guard refuses (consumeProg i32T .stackK) "(stack k), where the rule's premise does not hold"
+#guard refuses (consumeProg closT .stackK) "(stack k), where the rule's premise does not hold"
 
 def addrT : LTy := .addr
 /-- A stack machine's `k`: a closure of a `&` code, resumed with `()` or cancelled. -/
@@ -179,8 +179,8 @@ body`, answering `kT`; `main` makes `x0 = clos c0 [5]` and calls `f0 x0 7`, no t
 def handProg (body : Tm) (t : LTy := kT) (baseT : LTy := addrT) (kind : CodeKind := .amp)
     (entryT : LTy := addrT) : Prog where
   fns := #[{ name := "hands over", params := [0, 1], ret := kT, body },
-           { name := "resume entry", params := [10], ret := .unit, body := .drop .dead 10 .unit },
-           { name := "cancel entry", params := [11], ret := .unit, body := .drop .dead 11 .unit }]
+           { name := "resume entry", params := [10], ret := .unit, body := .consume .dead 10 .unit },
+           { name := "cancel entry", params := [11], ret := .unit, body := .consume .dead 11 .unit }]
   codes := #[{ kind, fns := [1, 2], ty := .amp (.arr .unit (.ret .unit)) (.ret .unit) }]
   main := .letv 3 (.lit (.i64 5)) (.letv 4 (.clos 0 [3]) (.letv 5 (.lit (.i64 7))
     (.call 0 [4, 5])))
@@ -188,15 +188,15 @@ def handProg (body : Tm) (t : LTy := kT) (baseT : LTy := addrT) (kind : CodeKind
   ty := [(0, t), (1, baseT), (2, kT), (3, addrT), (4, kT), (5, addrT), (10, entryT),
     (11, entryT), (12, .unit)].foldl (fun m (x, t) => m.insert x t) {}
 
-/-- `drop x0 (stack k); let x2 = clos c0 [x1]; x2`: `x0` handed over to `clos c0 [x1]`. -/
-def handsOverTo : Tm := .drop .stackK 0 (.letv 2 (.clos 0 [1]) (.var 2))
+/-- `consume x0 (stack k); let x2 = clos c0 [x1]; x2`: `x0` handed over to `clos c0 [x1]`. -/
+def handsOverTo : Tm := .consume .stackK 0 (.letv 2 (.clos 0 [1]) (.var 2))
 
 #guard accepts (handProg handsOverTo)
 -- The premise fails: the body does not first bind the `k` taking over; `x0` is not of the code's
 -- closure type; the base is not an address; the code is not a `&`; its entries do not take an
 -- address.
-#guard refuses (handProg (.drop .stackK 0 (.letv 2 (.var 1) (.letv 12 (.drop .dead 2 .unit)
-    (.drop .dead 12 (.clos 0 [1]))))))
+#guard refuses (handProg (.consume .stackK 0 (.letv 2 (.var 1) (.letv 12 (.consume .dead 2 .unit)
+    (.consume .dead 12 (.clos 0 [1]))))))
   "does not first bind the k it hands over to"
 #guard refuses (handProg handsOverTo (t := .thunk (.amp (.arr i32T (.ret .unit)) (.ret .unit))))
   "x0 is not of c0's closure type"
@@ -211,7 +211,7 @@ def runFails (p : Prog) (word : String) : Bool :=
   | .ok _ => false
 
 -- `Lint` reads the hand-over's shape only. `handProg handsOverTo` passes it, but its `x0` is a
--- closure over no frame of a task stack: the interpreter refuses the run at the drop
+-- closure over no frame of a task stack: the interpreter refuses the run at the consume
 -- (`handOverB`). So the hand-over is a fact about the code `Convert` generates
 -- (`StackKHandOver`), not about every program `Lint` accepts.
 #guard runFails (handProg handsOverTo) "at the rule stack k, where the hand-over does not hold"
@@ -222,7 +222,7 @@ def runFails (p : Prog) (word : String) : Bool :=
 `f0`'s parameter has its lend bit set. -/
 def enclProg (bits : List Bool) : Prog where
   fns := #[{ name := "cancel", params := [0], ret := .unit, lendEncl := bits,
-             body := .letpair 6 7 0 (.drop .forget 6 (.letv 9 (.prim .free [7]) (.drop .dead 9 .unit))) }]
+             body := .letpair 6 7 0 (.consume .release 6 (.letv 9 (.prim .free [7]) (.consume .dead 9 .unit))) }]
   codes := #[]
   main := .letv 1 (.lit (.i32 3)) (.letv 2 (.prim (.alloc [i32T]) [1]) (.letv 3 (.prim (.lend true) [2])
     (.letpair 4 5 3 (.letv 8 (.pair 5 4) (.call 0 [8])))))
@@ -243,14 +243,14 @@ def enclProg (bits : List Bool) : Prog where
 
 /-- **A function whose lend bit is set, whose callee frees the cell through an owner it captured**:
 `main` lends the cell `x4` (the owner `x6`, the borrow `x7`), closes `c0` over the owner, and calls
-`f0 (x7, x8)`; `f0` forgets the borrow and forces the closure, whose `f1` frees the cell. No
+`f0 (x7, x8)`; `f0` releases the borrow and forces the closure, whose `f1` frees the cell. No
 parameter of `f0` is the owner (`ownersIn` does not look into a closure's environment), so the
 entry check passes; the cell is gone when `f0` returns. -/
 def enclClosProg (bits : List Bool) : Prog where
   fns := #[{ name := "user", params := [0, 1], ret := .unit, lendEncl := bits,
-             body := .drop .forget 0 (.app0 1) },
+             body := .consume .release 0 (.app0 1) },
            { name := "free", params := [2], ret := .unit,
-             body := .letv 9 (.prim .free [2]) (.drop .dead 9 .unit) }]
+             body := .letv 9 (.prim .free [2]) (.consume .dead 9 .unit) }]
   codes := #[{ kind := .unit, fns := [1], ty := .ret .unit }]
   main := .letv 3 (.lit (.i32 3)) (.letv 4 (.prim (.alloc [i32T]) [3]) (.letv 5 (.prim (.lend true) [4])
     (.letpair 6 7 5 (.letv 8 (.clos 0 [6]) (.call 0 [7, 8])))))
@@ -267,10 +267,10 @@ def enclClosProg (bits : List Bool) : Prog where
 `f0`'s lend bits are `bits`. -/
 def borrowProg (bits : List Bool) : Prog where
   fns := #[{ name := "user", params := [0], ret := .unit, lendEncl := bits,
-             body := .drop .forget 0 .unit }]
+             body := .consume .release 0 .unit }]
   codes := #[]
   main := .letv 1 (.lit (.i32 3)) (.letv 2 (.prim (.alloc [i32T]) [1]) (.letv 3 (.prim (.lend true) [2])
-    (.letpair 4 5 3 (.letv 6 (.call 0 [5]) (.drop .dead 6 (.letv 7 (.prim .free [4]) (.drop .dead 7 .unit)))))))
+    (.letpair 4 5 3 (.letv 6 (.call 0 [5]) (.consume .dead 6 (.letv 7 (.prim .free [4]) (.consume .dead 7 .unit)))))))
   mainTy := .unit
   ty := [(0, .mut i32T), (1, i32T), (2, .ref i32T), (3, .pair (.ref i32T) (.mut i32T)),
     (4, .ref i32T), (5, .mut i32T), (6, .unit), (7, i32T)].foldl (fun m (x, t) => m.insert x t) {}

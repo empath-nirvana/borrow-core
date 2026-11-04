@@ -9,7 +9,7 @@
 -- 26 zeros pushed onto `kids` and a `false` onto `ends`. Rust's
 -- `Trie { children: [Option<Box<Trie>>; 26], end: bool }` would be `mu X. bool * array (1 + X)`
 -- here, a node owning an array of its children. That type checks, but it is outside the folds'
--- and destructors' class (`FShape`: `X` under `array`, #182), so a trie has no destructor and
+-- and consumes' class (`FShape`: `X` under `array`, #182), so a trie is not consumable and
 -- must be consumed by hand, by a recursion over each node's array that is refused today (#492,
 -- #161); the program is `corpus/pending/lc-0208-trie-boxed.bc`. The arena is also how a Rust
 -- solution avoids a `Box` per node (`Vec<[u32; 26]>`).
@@ -129,7 +129,7 @@ fn run_ops<'a>(l: text 'a) -> string =
       s = i + 1
     } else { () }
   };
-  array_forget['a, u8](l);
+  array_release['a, u8](l);
   out
 
 main -> i32 =
@@ -137,7 +137,7 @@ main -> i32 =
   let r = borrow imm s { 't, t ->
     fold_lines(t, !{ (l, rs) ->
       let (l, m) = array_copy['t, u8] l;
-      if len(m) == 0 { array_forget['t, u8](l); rs } else { let (rs, _) = push(rs, run_ops(l)); rs } },
+      if len(m) == 0 { array_release['t, u8](l); rs } else { let (rs, _) = push(rs, run_ops(l)); rs } },
       box buf[string](8)) };
   let (rs, n) = r;
   let mut rs = rs;

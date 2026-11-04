@@ -2,7 +2,7 @@
 --
 -- `doubler(k)` is a closure whose state is the closure `k`: each call calls `k` and doubles its
 -- answer, and closing it closes `k`. Its bound is `k`'s own `'c`: its state `box 'c …` outlives
--- `'c` (SPEC §23); like `clo-drop.bc`'s `nest`, it is built with `clo_new` and `boxed['c]`, since
+-- `'c` (SPEC §23); like `clo-consume.bc`'s `nest`, it is built with `clo_new` and `boxed['c]`, since
 -- `clo_new_boxed`'s bound would put its `'c` strictly below. `runner` is a closure whose call takes
 -- a closure `f` (owned) and calls it with 5, then closes it; its state is the running total of
 -- `f`'s answers. The argument's type names no state, so `runner` takes a counter over a cell and an

@@ -9,7 +9,7 @@ import Backend2.Flow
 `Layouts` (`Backend2/Layout.lean`) is computed by a whole-program analysis: it joins the places a
 value moves between (`places`, by union-find), and resolves the joined graph into classes, boxes
 and widths (`resolve`). The lowering (`Backend2/Lower.lean`) reads the result for every node's
-words, copies, drops, boxes, cells and closure dispatch. The analysis is not proved. This module
+words, copies, consumes, boxes, cells and closure dispatch. The analysis is not proved. This module
 checks its **result** on every compile (`Backend2/Driver.lean`, `checkedLayouts`): the result is
 a solution of the constraints the program generates. It does not run the analysis, and does not
 use its solvers (`find`, `join`, `walk`, `resolve`, `gen`, `solve`); it reads the LIR and the
@@ -225,7 +225,7 @@ def reCompat (w : String) (c d : Nat) : CM Unit := do
         same L w "a pointer read through a shared borrow: its contents" a c
       | .fam a, .fam c => todo := (a, c) :: todo
       | .clos .., .unk | .opq, .unk => pure ()
-      -- `Tok`'s cell read through `Imm̲`: forgotten (`Imm̲ 'b Tok = Unk`).
+      -- `Tok`'s cell read through `Imm̲`: released (`Imm̲ 'b Tok = Unk`).
       | .ref _, .unk => pure ()
       | kx, ky =>
         throw s!"{w}: a read through a shared borrow of contents at node {rx} ({short kx}) as node {ry} ({short ky}): not one node, and not a reading of it"
@@ -374,7 +374,7 @@ def walk (p : Prog) (w : String) : Nat → Tm → Nat → CM Unit
     | .copy _ x x' b => do
       eq s!"a copy of x{x}" (← nv x) (← nv x')
       walk p w f b dst
-    | .drop _ x b | .abandon _ x b => do
+    | .consume _ x b | .abandon _ x b => do
       let _ ← nv x
       walk p w f b dst
 
@@ -779,7 +779,7 @@ def go (w : String) : Nat → Tm → Option Var → Except String Unit
     | .copy _ x x' b => do
       F.sub w x x'
       go w f b dst
-    | .drop _ _ b | .abandon _ _ b => go w f b dst
+    | .consume _ _ b | .abandon _ _ b => go w f b dst
     | .unit | .lit _ | .pair .. | .inj .. | .absurd _ => pure ()
 
 end FCtx
@@ -870,7 +870,7 @@ def binds : Nat → Tm → List (Var × Tm)
   | 0, _ => []
   | f + 1, t => match t with
     | .letv x e b => (x, e) :: (binds f e ++ binds f b)
-    | .letpair _ _ _ b | .copy _ _ _ b | .drop _ _ b | .abandon _ _ b => binds f b
+    | .letpair _ _ _ b | .copy _ _ _ b | .consume _ _ b | .abandon _ _ b => binds f b
     | .case _ _ b₁ _ b₂ => binds f b₁ ++ binds f b₂
     | _ => []
 
@@ -926,10 +926,10 @@ def mergeClasses (L : Layouts) (a b : Nat) : Option Layouts := Id.run do
 def perturbLayouts (p : Prog) (L : Layouts) : List (String × Option Layouts) :=
   let cls := classes L
   let multi := (cls.find? fun R => (L.union.getD R #[]).size ≥ 2).orElse fun _ => cls.head?
-  let dropCode := multi.map fun R =>
+  let removeCode := multi.map fun R =>
     let u := L.union.getD R #[]
     { L with union := L.union.insert R (u.erase u[0]!) }
-  let dropClassOf := cls.head?.map fun R =>
+  let removeClassOf := cls.head?.map fun R =>
     let c := (L.union.getD R #[])[0]!
     { L with codeClass := L.codeClass.erase c }
   -- Two classes of one shape, node for node, the second wider: merged at the first's width.
@@ -1042,8 +1042,8 @@ def perturbLayouts (p : Prog) (L : Layouts) : List (String × Option Layouts) :=
     | .prim .load _ => (freshPtrCopy 8 L (L.node x)).map fun (L', m) =>
       { L' with varNode := L'.varNode.insert x m }
     | _ => none
-  [("drop a code from its class", dropCode),
-   ("drop a code's class", dropClassOf),
+  [("remove a code from its class", removeCode),
+   ("remove a code's class", removeClassOf),
    ("merge two classes of one shape and different widths", merge),
    ("change a class's width", width),
    ("call a class trivial", triv),
@@ -1067,7 +1067,7 @@ def perturbLayouts (p : Prog) (L : Layouts) : List (String × Option Layouts) :=
 def perturbFlow (p : Prog) (sets : Std.HashMap Var (Std.HashSet Nat)) (known : Std.HashMap Var Nat) :
     List (String × Option (Std.HashMap Var (Std.HashSet Nat) × Std.HashMap Var Nat)) :=
   let withCodes := (sortedKeys sets).filter fun x => !(sets.getD x {}).isEmpty
-  let dropSet := withCodes.head?.map fun x =>
+  let removeSet := withCodes.head?.map fun x =>
     let s := sets.getD x {}
     let c := (s.toList.mergeSort (· ≤ ·))[0]!
     (sets.insert x (s.erase c), known)
@@ -1093,8 +1093,8 @@ def perturbFlow (p : Prog) (sets : Std.HashMap Var (Std.HashSet Nat)) (known : S
       let .thunk _ := fd.ret.peel | none
       let c' ← (sets.getD (base + fn) {}).toList.find? sd.contains
       pure (sets.insert d (sd.erase c'), known)
-  [("drop a code from a variable's flow set", dropSet),
-   ("drop a code from a call's answer", answer),
+  [("remove a code from a variable's flow set", removeSet),
+   ("remove a code from a call's answer", answer),
    ("a direct call where several codes reach", wrongKnown)]
 
 end Backend2.LayCheck

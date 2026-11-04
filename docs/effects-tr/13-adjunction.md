@@ -51,10 +51,10 @@ and that law holds only at linear operations.
 `K : F B_o → C` from the operation's answer to the handler's result.
 
     freeze(K)  ≜  thunk_m (λy. K[ret y])                       if W ∉ q_o
-               ≜  thunk_m ⟨λy. K[ret y],  K^dtor⟩             if W ∈ q_o
+               ≜  thunk_m ⟨λy. K[ret y],  K^consume⟩             if W ∈ q_o
     resume(κ)  ≜  [·] to y. resume κ y                         (a stack again)
 
-Here `m` is D1.8's mode, and `K^dtor` is the segment's destructor: run `dtors(S_κ)` (D3.4) and
+Here `m` is D1.8's mode, and `K^consume` is the segment's consume: run `consumes(S_κ)` (D3.4) and
 answer `()`. The machine's capture in D3.6 is `freeze` of the segment. Its `force` of a
 continuation is `resume`.
 
@@ -67,7 +67,7 @@ continuation is `resume`.
 the existence half of `F`'s universal property: a stack is determined by what it does to `ret`.
 `φ ∘ φ⁻¹ = id` is `U`'s η together with `⇒`'s. In the TR's tree semantics `F A` is `Tree A`. That
 is the **free** model on `A` over every instance's operations: D3.9 is an inductive type, and
-D3.11 makes every computation type a model. So `F ⊣ U` there is the free ⊣ forgetful adjunction
+D3.11 makes every computation type a model. So `F ⊣ U` there is the free ⊣ releaseful adjunction
 for models, and its universal property has two halves:
 
 - **existence**: a deep handler is the fold out of `Tree A` (D3.12), and a stack is `bindC`;
@@ -90,7 +90,7 @@ Handlers as the unique homomorphisms out of the free model are Plotkin & Pretnar
 
 **What "resource-carrying delimited thunk" means here.** At the own fragment it is the TR's
 D1.8 type and D4.4's resource. A frozen segment is a thunk value whose resource is the
-segment's. When `W ∈ q` it is an additive pair whose `cancel` entry is the segment's destructor.
+segment's. When `W ∈ q` it is an additive pair whose `cancel` entry is the segment's consume.
 At the kernel lift the resource also contains borrows. Turning a segment that holds borrows into
 a value is §14's re-stratification lemma, and it is the only part of the framing with new
 content.
@@ -116,9 +116,9 @@ free). Then:
 2. The two sides have equal denotations. `⟦resume κ w⟧` is the first component of `mkK` at the
    folded continuation, applied to `⟦w⟧` (PB `kVal_den`, D3.13). That is `hnd(⟦K[M]⟧[y ↦ ⟦w⟧])`.
 3. The cancel component of `mkK` is `Tree.dtors d (ret ())`, where `d` is the operation's
-   destructor list. With no `using` frame in `K`, `d = []`. With `using` frames, `addFin`
+   consume list. With no `using` frame in `K`, `d = []`. With `using` frames, `addFin`
    appends one `free` per frame, innermost first (D3.12). That is `K^fin`'s denotation, as in the
-   first half of T7.3's proof. On the machine, D3.6's cancel row runs `dtors(S_κ)`, which are the
+   first half of T7.3's proof. On the machine, D3.6's cancel row runs `consumes(S_κ)`, which are the
    same frames. ∎
 
 *Status.* Each step cites a mechanised lemma, and the composite takes one line. β adds **no
@@ -158,7 +158,7 @@ operations of an effect that also has abortive ones. §2 is not changed here.
 **Property P13.6 (why the cancellable case fails, in the trees).** Leave typing aside. On an
 operation `op i o v k d` of the handled name, the left side's fold is the clause, which builds
 `op i o v (λy. hnd(k y)) []`. The right side is `op i o v k d`. The re-performed operation carries
-the destructor list `[]`, where the original carried `d`, the destructors of the segment. An
+the consume list `[]`, where the original carried `d`, the consumes of the segment. An
 outer handler that cancels therefore runs `d` on the right and nothing on the left. On the
 machine, the left side's segment cell `ℓ_κ` is never freed. *Computed here by hand from D3.12.*
 
@@ -182,15 +182,15 @@ The pieces it needs:
 
 | piece | definition |
 |---|---|
-| machine | a frame `bindk(γ, y.N, κ)`. It returns as `bind`. D3.4 is extended: running the destructors of a segment that contains `bindk(…, κ¹(ℓ_κ, w))` requires `μ(ℓ_κ) = seg(S')`, removes `ℓ_κ`, and runs `dtors(S')`. The recursion is well founded because `S'` was captured before the frame holding it was pushed, so its cells are older (L5.18.1). |
-| trees | `Dtor` gains a constructor `run t` for `t : Tree 1`, the held continuation's cancel, and the frame appends `run (cancel component of ⟦k⟧)` to the destructors of every operation inside it. `obs` unwinds `run t` by executing `t`. |
+| machine | a frame `bindk(γ, y.N, κ)`. It returns as `bind`. D3.4 is extended: running the consumes of a segment that contains `bindk(…, κ¹(ℓ_κ, w))` requires `μ(ℓ_κ) = seg(S')`, removes `ℓ_κ`, and runs `consumes(S')`. The recursion is well founded because `S'` was captured before the frame holding it was pushed, so its cells are older (L5.18.1). |
+| trees | `Consume` gains a constructor `run t` for `t : Tree 1`, the held continuation's cancel, and the frame appends `run (cancel component of ⟦k⟧)` to the consumes of every operation inside it. `obs` unwinds `run t` by executing `t`. |
 | relation | `DtorR`: `run t ~ run t'` at `TreeRel_⊤`. `DR` gains a flattening rule: `[run (Tree.dtors e (ret ()))] ~ e'` when `e ~ e'`. |
 | unary | D4.5's `Cancel` is extended: a `bindk` frame's resource is `ℓ_κ ↦ own(seg S')` together with its resource, and running it is `Cancel(S')`, recursively. |
 
 **Theorem T13.8 (η).** `handleAt x with Fwd_x in M ≡ M` holds, as `LR`, in each of these cases:
 
 - **(a) linear operations:** `Fwd_x` types (L13.5), and every operation of `M` on `x` carries an
-  empty destructor list, i.e. it crosses no `using` or `lend` frame of `M`;
+  empty consume list, i.e. it crosses no `using` or `lend` frame of `M`;
 - **(b) cancellable operations:** the clause at each `o` with `W ∈ q_o` is written with D13.7,
   `o(p, k). (op x.o(p; y. ret y)) to^k y. resume k y`. This holds for every `M`;
 - **(c) abortive operations:** every `M`.
@@ -212,28 +212,28 @@ where that lemma has it garbage.
   So `DR(w, [], [])` holds, and `TreeRel.op` applies with the induction hypothesis on `k y`.
 - **`op i o v k d`, own name, case (b).** The `bindk` frame appends `run (Tree.dtors d (ret ()))`.
   The flattening rule of D13.7 relates that list to `d'`. Then `TreeRel.op`. The order is right:
-  an outer cancel of the forwarded operation runs `cancel k`, which runs `dtors(S₁)` innermost
-  first, then `dtors(S₂)`. The right side's segment is `S₁ ++ [f_H] ++ S₂`, and its destructors
+  an outer cancel of the forwarded operation runs `cancel k`, which runs `consumes(S₁)` innermost
+  first, then `consumes(S₂)`. The right side's segment is `S₁ ++ [f_H] ++ S₂`, and its consumes
   run in the same order (`f_H` has none).
 - **`ab i a v d`, case (c).** The fold runs `dtorsA d` and then the clause, `ab i a v []`. The
   right side is `ab i' a v d'`. This is `TreeRel.abE` with the split `d ++ []`. ∎
 
-**Property P13.9 (the linear case in general).** Drop (a)'s hypothesis. Take the context
+**Property P13.9 (the linear case in general).** Consume (a)'s hypothesis. Take the context
 `ν x. [·]` (no handler of `x`) and
 `M = using r = acquire 1 in op x.o((); y. ret ())` with `o` linear.
 
 - `⟦M⟧`'s operation node carries `d' = [free 1 r]`.
 - The left side's re-performed node carries `[]`.
-- Both operations reach the top unhandled, and D3.14 unwinds their destructors. The traces are
+- Both operations reach the top unhandled, and D3.14 unwinds their consumes. The traces are
   `[acq 1, free 1]` on the right and `[acq 1]` on the left.
 
 So `CtxEq_den` fails, and with it `LR`: D6.2's `op` rule needs `DR(w, [], [free 1 r'])`, which
 relates lists pointwise. *Computed here by hand from D3.12–D3.14.*
 
 The context is not moded: a moded closed program has no unhandled operation (T5.2). In a moded
-program a linear operation is never cancelled, so its destructor list is never run. Whether
+program a linear operation is never cancelled, so its consume list is never run. Whether
 `CtxEq_op` holds in the linear case is **open (O6)**. The step that does not go through is that
-D6.2 relates the destructor lists of every operation, while a moded program runs only those of
+D6.2 relates the consume lists of every operation, while a moded program runs only those of
 weakenable operations.
 
 **Lemma L13.9 ([to-hold] is compatible).** Under the unary relation of §5, extended by D13.7's
@@ -342,8 +342,8 @@ performs `a`, moving `s` to `s₁`. Both sides then continue with `hnd(⟦M⟧ y
 **Property P13.14 (it fails at a cancellable operation).** Take
 
 - `Ctr` with `inc : 1 ↠^{lin} 1`, run by `co_inc(p, s) = ret (inl ((), s + 1))`;
-- `Stop` with `stop : 1 ↠^{cancel} 1`, handled by `H_drop = (ret z. ret z ; stop(p, k). cancel k ; ret 0)`;
-- `P(body) ≜ newcap_Ctr int co_inc 0 to c. lend c as x in (handle h : Stop with H_drop in body) to z. split z as (c', r). getcap c'`.
+- `Stop` with `stop : 1 ↠^{cancel} 1`, handled by `H_consume = (ret z. ret z ; stop(p, k). cancel k ; ret 0)`;
+- `P(body) ≜ newcap_Ctr int co_inc 0 to c. lend c as x in (handle h : Stop with H_consume in body) to z. split z as (c', r). getcap c'`.
 
 Then:
 
@@ -361,14 +361,14 @@ Both are moded:
 *Computed here by hand from D3.6.*
 
 So the commutation needs the frozen segment to be resumed **exactly once**. Compare ν/op (T7.15),
-which needs **at most once**. An unused name is unobservable (garbage), but a dropped answering
+which needs **at most once**. An unused name is unobservable (garbage), but a consumed answering
 operation is observable through the state.
 
 **The general linear case.** Suppose the clause performs an operation crossing the `run` frame
 before its use of `k`. Under [lend] that operation is linear. `runL` appends `wb c s₁` to that
-operation's destructors on the left and `wb c s` on the right (D3.12). D6.1 relates `wb c s` only
+operation's consumes on the left and `wb c s` on the right (D3.12). D6.1 relates `wb c s` only
 with `wb c' s`, at the same state. So D6.2's `op` rule does not relate the two trees, and `LR`
-fails. The moded program never runs those destructors, because a linear operation is not
+fails. The moded program never runs those consumes, because a linear operation is not
 cancelled. Whether `CtxEq_op` holds is **open (O6)**, with the same missing step as P13.9. In
 placement (ii) the same happens whenever an operation crosses the lend inside the segment.
 
@@ -379,7 +379,7 @@ comonads*, LICS 2020, DOI 10.1145/3373718.3394808 [verified via Crossref; conten
 give the general setting, with runners as an instance. I read T13.13 as their compatibility
 condition at one operation of each. I have not checked that reading against their statement.
 The finding that the law needs exactly-once resumption, and that its `LR` proof stops at the
-destructor lists, is new to us.
+consume lists, is new to us.
 
 **#184 at the boundary.** An answering operation is a call (SPEC §19, *Kinds of operation*):
 under #184 it is `withswap` on the handler's `Mut` state. A freeze cannot happen *inside* one,
@@ -393,10 +393,10 @@ answering operations are atomic with respect to freeze. What remains is T13.13 a
 | consequence | follows from β, η, hiding + frame? | what it actually uses |
 |---|---|---|
 | **tensor of pure models** (two handlers with pure clauses; T7.11) | **yes** | T13.2(1)–(2) at each handler, then the two state updates commute on disjoint components (frame). This is T7.11's proof as written. `PureClause` is a hypothesis on the handlers, not a law. |
-| **tensor of runners** (T7.8) | **only up to destructors** | It would need the identification of a `lend` with a tail-resumptive state-passing handler. The two have equal denotations except for the `wb` destructors `runL` records (D3.12), so they are not `LR`-related (as in §13.5). T7.8's direct proof (`runL_pair`) stays. |
+| **tensor of runners** (T7.8) | **only up to consumes** | It would need the identification of a `lend` with a tail-resumptive state-passing handler. The two have equal denotations except for the `wb` consumes `runL` records (D3.12), so they are not `LR`-related (as in §13.5). T7.8's direct proof (`runL_pair`) stays. |
 | **model ⊗ comodel** (a handler's operation against a runner's) | **no** | It needs the interaction law, a fourth fact. That law holds at linear operations in the case of T13.13, fails at cancellable ones (P13.14), and is open in general (O6). |
 | **instance parametricity** (T7.16) | **no** | It uses generativity: a fresh name is garbage (`gL`), so the fold never fires on it. A route through η exists: handlers that agree on `M`'s operations are equal, then T13.8. But "agree on `M`'s operations" is itself generativity, and the TR's proof does not use η. |
-| **cancellation: the destructor form** (T7.3) | **yes, with one rule** | β's cancel half, T13.2(3), gives `cancel κ = K^fin`. An abort is a cancellable operation at answer `0` whose handler cancels first (SPEC §19 encodes `raise` this way). The binary relation still needs the cancel to be eager at answer `0`, which is the rule `TreeRel.abE`. |
+| **cancellation: the consume form** (T7.3) | **yes, with one rule** | β's cancel half, T13.2(3), gives `cancel κ = K^fin`. An abort is a cancellable operation at answer `0` whose handler cancels first (SPEC §19 encodes `raise` this way). The binary relation still needs the cancel to be eager at answer `0`, which is the rule `TreeRel.abE`. |
 | **cancellation: forwarding a cancel** | **it is η's cancel half** | T13.8(b), which needs the new frame of D13.7. |
 | **cancellation: exactly once** (T5.2.3–4) | **no** | It is unary: a one-shot continuation is a heap cell its one use frees (D4.4). |
 | **contraction** (a continuation copied) | **no** | Independence (L5.4) and the mode algebra (L4.2.4): a copyable continuation holds only `Pers`. In the adjunction reading, a copyable value is under `!`, and `!` is not one of the three facts. Out of scope (#245: multi-shot only if free). |

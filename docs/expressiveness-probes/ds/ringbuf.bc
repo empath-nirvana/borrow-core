@@ -31,7 +31,7 @@ fn ring_pop[A](r: Ring[A]) -> Ring[A] * (A + 1) =
     }
   }
 
--- `x` at the back; a full ring drops its oldest element first.
+-- `x` at the back; a full ring consumes its oldest element first.
 fn ring_push_over[A](r: Ring[A], x: A) -> Ring[A] =
   let (a, (h, n)) = r;
   let (a, cap) = array_size[A](a);

@@ -9,7 +9,7 @@ surface language. [`SPEC.md`](../../SPEC.md) is the precise definition of the la
   and what is not claimed.
 - [`elaboration/`](elaboration/overview.md): how each surface feature elaborates into the core,
   as `bcc desugar` prints it: values and computations, cells and borrows, blocks and families,
-  recursive data and folds, codata, integers and host operations, arrays, implicit destructors,
+  recursive data and folds, codata, integers and host operations, arrays, implicit consumes,
   standard I/O as capabilities, divergence.
 - [`reference/`](reference/README.md): the core syntax, a guide to
   [`docs/syntax-core.md`](../syntax-core.md) section by section, and the checker's errors on core

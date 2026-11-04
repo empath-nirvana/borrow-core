@@ -294,7 +294,7 @@ class Render:
             s2 = dict(spell); s2[x] = x
             return s2
 
-        def drop(x):
+        def minus(x):
             return {q: v for q, v in spell.items() if q != x}
 
         def cond(c):
@@ -326,7 +326,7 @@ class Render:
                     f'else {{ {self.seq(f, spell, fe)} }}'), bind(x)
         if k == 'match':
             x, side, p, t, te, f, fe = s[1:]
-            sp = drop(p)
+            sp = minus(p)
             return (f'let {x} = match ({side} () : 1 + 1) {{ inl {p} -> {self.seq(t, sp, te)} '
                     f'| inr {p} -> {self.seq(f, sp, fe)} }}'), bind(x)
         if k == 'for':
@@ -345,12 +345,12 @@ class Render:
             return f'let {x} = {call}', bind(x)
         if k == 'modify':
             v, u, b, kk = s[1:]
-            su = drop(v); su[u] = u
+            su = minus(v); su[u] = u
             tail = ('bin', '+', ('var', u), ('lit', kk))
             return f'modify &mut {v} {{ {u} -> {self.seq(b, su, tail)} }}', spell
         if k == 'borrow':
             x, m, b, be = s[1:]
-            return f'let {x} = borrow mut cell {{ {m} -> {self.seq(b, drop(m), be)} }}', bind(x)
+            return f'let {x} = borrow mut cell {{ {m} -> {self.seq(b, minus(m), be)} }}', bind(x)
         if k == 'with':
             return (f'with adder(0) {{ tally({self.expr(s[2], spell)}); {self.seq(s[1], spell)} }}',
                     spell)
@@ -420,7 +420,7 @@ class Eval:
             e2 = dict(env); e2[x] = Cell(v)
             return e2
 
-        def drop(x):
+        def minus(x):
             return {q: c for q, c in env.items() if q != x}
         if k in ('assign', 'bindassign'):
             env[s[1]].v = self.expr(s[2], env)
@@ -443,7 +443,7 @@ class Eval:
             return bind(x, self.seq(t, env, te) if yes else self.seq(f, env, fe))
         if k == 'match':
             x, side, p, t, te, f, fe = s[1:]
-            ep = drop(p)
+            ep = minus(p)
             return bind(x, self.seq(t, ep, te) if side == 'inl' else self.seq(f, ep, fe))
         if k in ('for', 'gen'):
             i, n, b = s[1:]
@@ -466,12 +466,12 @@ class Eval:
             return bind(x, wrap(r1 * 10 + r2))
         if k == 'modify':
             v, u, b, kk = s[1:]
-            eu = drop(v); eu[u] = Cell(env[v].v)
+            eu = minus(v); eu[u] = Cell(env[v].v)
             env[v].v = self.seq(b, eu, ('bin', '+', ('var', u), ('lit', kk)))
             return env
         if k == 'borrow':
             x, m, b, be = s[1:]
-            return bind(x, self.seq(b, drop(m), be))
+            return bind(x, self.seq(b, minus(m), be))
         if k == 'with':
             self.expr(s[2], env)
             self.seq(s[1], env)

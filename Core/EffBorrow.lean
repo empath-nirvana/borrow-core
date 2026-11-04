@@ -14,7 +14,7 @@ wrapped in `ubind` (`withborUE`):
 
 When the callback returns, the source is paired with the answer, as the pure form does. When it
 unwinds, the lend ends, the source goes back to the lender, the lender's finaliser `d` runs on it
-(`dtorE` of the source: `forget` for a `Mut`/`Imm` source, `free` and the content's destructor
+(`consumeE` of the source: `forget` for a `Mut`/`Imm` source, `free` and the content's consume
 for an owned `Ref A`, §12), and the unwind continues outward.
 
 **The proofs.** The callback runs under the frame of `[TR]` 6.64/6.65/6.66 over `ewpTS` at an

@@ -15,7 +15,7 @@ before it infers a row, as a program would by hand:
 
 with the `raise` at the division's span, where the table holds its instance. So it is an ordinary
 operation of `Fail[DivError]` for everything the pass does: rows, slots (SPEC §38), copies,
-counted loops, unwinding borrows and drop glue. The other divisions are left as written, and the
+counted loops, unwinding borrows and consume glue. The other divisions are left as written, and the
 typed elaboration gives them the bare operation (`Frontend/Sugar.lean`, `surfOp`).
 
 The rewrite reaches every value and computation of a declaration's body, with the owner the walk

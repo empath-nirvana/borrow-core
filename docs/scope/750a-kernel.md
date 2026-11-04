@@ -17,9 +17,9 @@ operation's signature.
 
 - `OpSig` gains a field `rc : Bool := false`, meaning the operation is cancelled by resuming it.
 - `CTy.eff` gains the same datum, `CTy.eff n i q A B fin rc C`. It has to live in the type: a judgment's
-  type is a `CTy`, so a marker absent from `CTy` could be dropped by `[sub]`, and then `[perform]` could
+  type is a `CTy`, so a marker absent from `CTy` could be consumed by `[sub]`, and then `[perform]` could
   perform the operation plainly. `CTy.rowOf` and `CTy.effOf` carry it, so `rowOf_effOf` still holds.
-- `OpSig.Sig` compares `rc`. `[sub]` therefore neither adds the marker nor drops it.
+- `OpSig.Sig` compares `rc`. `[sub]` therefore neither adds the marker nor consumes it.
 - **Neither the relation nor the machine reads `rc`.** `OpSig.ent` (the `OpEnt` of an operation table)
   has no marker, and `effTab`, `divAt` and the step relation ignore it. The marker is a typing discipline
   on the performer only. That is why it is a `Bool` beside `q`, and not a fourth `Qual`: `Qual` is read
@@ -94,7 +94,7 @@ callers pass `OpSig.finRead_of_capB`. The relation still reads `fin` only at `ca
 - Semantically, the relation ignores `rc`. So the widened domain is OQ-1 option (a)'s belief
   (`docs/async-capabilities.md` §8): an abort, at an operation handled outside the lend, after a
   suspension inside the lend. The evidence is the evidence already cited for OQ-1(a). The LIFO frame
-  lemmas (`wpTS_M_frameU`) with GhostEnd's `Drop` are proved; that they compose across the suspension
+  lemmas (`wpTS_M_frameU`) with GhostEnd's `Consume` are proved; that they compose across the suspension
   is not checked. It is restricted syntactically
   to `[await-c]`'s raise of the marked `cancelled`. SPEC §29's trusted base says this, and
   `docs/async-capabilities.md` §8 OQ-1, §3.4 item 3 and row `n4` are updated to say that OQ-1(a) is now
@@ -206,7 +206,7 @@ is unit B's (below). The cancelled state belongs to the task's handler, not to t
   supersedes `cancelled`. The cancel is then deferred to the next cancellable wait, not lost.
   - `cancelled_n` itself is never caught inside the task: `[op]` needs the context free of `n`, and
     `hnS` makes any inner handler of `n` a nested scheduler of its own body.
-  - Route (i)'s premise `hRC` is dropped. The targeted check's two Fatals, its `divFuel`/`reify` Major
+  - Route (i)'s premise `hRC` is consumed. The targeted check's two Fatals, its `divFuel`/`reify` Major
     and its `hRC` Minors (4, 5, 9) were findings against `hRC`, and they are moot.
 
 **To be ported onto main and rebuilt** (not merged), in `Core/AwaitCancel.lean`. Typed terms:
@@ -274,7 +274,7 @@ is unit B's (below). The cancelled state belongs to the task's handler, not to t
   the task may catch a finaliser's raise that supersedes `cancelled`. It cannot catch `cancelled_n`
   itself.
 
-### 1.8 A value with no derived drop must be closed on every exit, the cancel included
+### 1.8 A value that is not consumable must be closed on every exit, the cancel included
 
 The user's requirement (2026-10-31): a function holds a file handle that must be closed, and it can be
 cancelled. It must close the handle on every exit, including the cancel ("not everything needs to be
@@ -284,7 +284,7 @@ The kernel already has the rule, and cancel-by-resume reaches it with no new pre
 - `[await-c]` needs the abortive `cancelled` in the row, and an abortive operation has `q ≠ .lin`
   (`OpSig.abort`). So the row `Row.Cancels`.
 - `[let]`'s `hW : Σ.Cancels → Γ₂.OwnFree` then refuses any value live across the `await` that is not
-  `OwnFree`. A declared type with no derived drop (`declTy`, a `must_close` field: `A ⊗ Tok`) is not
+  `OwnFree`. A declared type that is not consumable (`declTy`, a `must_close` field: `A ⊗ Tok`) is not
   `OwnFree` (`decl_not_ownFree`).
 - The way out is a `[then]` whose finaliser consumes the value (`finally close(f)`). `Γ₂` goes to both `N`
   and `D`, so the value is closed on the normal exit and on the `cancelled` unwind.
@@ -292,11 +292,11 @@ The kernel already has the rule, and cancel-by-resume reaches it with no new pre
   handles its own body's awaits, which makes it a nested scheduler) together with `[raise]`'s `hrc`. A
   handler that catches a superseding finaliser raise exits through that handler's clause, which is an
   ordinary exit typed by the same `hW`.
-- **Only values with no derived drop need written code.** An owned `Ref`, `Array` or thunk held across an
-  `await` gets its derived drop as a finaliser on the cancel unwind, exactly as for errors. The checker
-  inserts that drop at a `dtor` node (`TDerivesP.dtor_hasDtor`), and nothing new is needed: the cancel
-  unwind is an ordinary raise. A value with no derived drop (`declTy`, `must_close`, a borrowing task
-  under route (a)) has no `dtor` node, so the program must close it.
+- **Only values that is not consumable need written code.** An owned `Ref`, `Array` or thunk held across an
+  `await` gets its consume as a finaliser on the cancel unwind, exactly as for errors. The checker
+  inserts that consume at a `consume` node (`TDerivesP.consume_consumable`), and nothing new is needed: the cancel
+  unwind is an ordinary raise. A value that is not consumable (`declTy`, `must_close`, a borrowing task
+  under route (a)) has no `consume` node, so the program must close it.
 - The lend frame is also an exit. Under the widened `ResumeOC`, `cancelled` unwinds through `lendR`, and
   its `d` closes the lent place.
 - **Scope.** `hW` asks every value held across an `await` to be `OwnFree`, or to be under a finaliser.
@@ -354,7 +354,7 @@ Each comes with `#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
 - The nursery: `tick` in `ResumeOC` (#743).
 - The lowering of a suspending finaliser (Backend2), and machine steps.
 - An `await` with an argument. `[await-c]` is at `a.A = 1`, as in the spike.
-- Any change to the derived drops or to a task's destructor.
+- Any change to the derived consumes or to a task's consume.
 - Any change to `Qual`, the relation or the machine. `CDerives.effThen` changes only by reading `hfin` at
   `finRead`. That is a premise strengthening at marked operations, and none exist yet.
 - A premise refusing marked operations in a finaliser's row (`∀ o ∈ SD, o.rc = false`). It is not added
@@ -369,16 +369,16 @@ Each comes with `#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
 - **Typing the scheduler by capturing the flag cell in a clause.** `[handle]`'s `DeadP` refuses it, and
   the typed form passes the state. Any workaround is a STOP.
 - **An `await` in a target's finaliser where a shielded `complete` is meant.** STOP.
-- **Routes (b) and (c) of §6.1, or keeping the κ.2 drop as a fallback.** STOP.
+- **Routes (b) and (c) of §6.1, or keeping the κ.2 consume as a fallback.** STOP.
 
 - **Keeping the shape test** (`lin ∧ i = 0 ∧ B = 1 ⊕ 1 ∧ n ≠ divEff`) and calling it a marker. STOP.
-- **Putting the marker in `OpSig` but not in `CTy`.** `[sub]` could then forget it. STOP.
+- **Putting the marker in `OpSig` but not in `CTy`.** `[sub]` could then release it. STOP.
 - **Making the marker a fourth `Qual`.** The machine and the relation read `Qual`, and the marker must
   stay a typing datum. STOP.
-- **Leaving `rc` out of `OpSig.Sig`, or letting `RowLe` drop it.** STOP.
+- **Leaving `rc` out of `OpSig.Sig`, or letting `RowLe` consume it.** STOP.
 - **Generalising the handler compatibility proofs case by case.** The transport is one lemma
   (`semC_effOf_rc`); a per-handler patch is a STOP.
-- **Adding `effThenDiv` to `CDerives`, or dropping `hSD` from `CDerives.effThen`.** Either would end
+- **Adding `effThenDiv` to `CDerives`, or consuming `hSD` from `CDerives.effThen`.** Either would end
   decision 69 for the unconditional fragment. STOP.
 - **Stating `PinFin` pointwise over code with no `CDerivesP` premises**, unlike B1's schemas. STOP.
 - **Any `PinLaw` change other than the third field.** STOP. The `ResumeOC` widening of `LendFrame` is the
@@ -386,10 +386,10 @@ Each comes with `#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
 - **Admitting abortive operations other than `cancelled` in `ResumeOC`** (OQ-1). STOP.
 - **A seal or `[then]` frame swallowing a finaliser's raise, or a handler inside the task catching
   `cancelled_n` itself.** STOP. Catching a finaliser's superseding raise is allowed (decision 2).
-- **Touching a task's derived drop** (cross-flag). STOP and report. See §6.1 for unit B.
+- **Touching a task's consume** (cross-flag). STOP and report. See §6.1 for unit B.
 - **`ResumeOC` admitting a row with `Row.divB = true`.** STOP.
 - **`[raise]` admitting a marked operation.** STOP.
-- **Copying or dropping a linear or owed value without a rule.** HARD STOP.
+- **Copying or consuming a linear or owed value without a rule.** HARD STOP.
 - **Putting `_iff` on `resumeOCB` by weakening `outlivesAllB`.** STOP. It stays sound only.
 
 ## 5. What breaks, and why
@@ -428,11 +428,11 @@ General principle: "I am okay with the type checker refusing linearity violation
 should work as long as there is a way to fix it, even if it involves explicitly handling a match or
 whatever."
 
-1. **The derived drop: route (a).**
-   - Under cancel-by-resume, a task that holds borrows has no derived drop. It must be awaited or
+1. **The consume: route (a).**
+   - Under cancel-by-resume, a task that holds borrows is not consumable. It must be awaited or
      cancelled explicitly, and the five accepted leak shapes become refusals.
-   - Decision 1 (derived drops are pure) stands. The κ.2 drop does not stay as a fallback.
-   - `Cancellable`'s `q = .lin` is therefore as intended. Unit A changes no derived drop.
+   - Decision 1 (derived consumes are pure) stands. The κ.2 consume does not stay as a fallback.
+   - `Cancellable`'s `q = .lin` is therefore as intended. Unit A changes no consume.
    - **Unit B obligation:** each refusal message names its fix (await it, or cancel it), so every refused
      program has a written fix.
    - The nursery (#750 item 3, via #743) is the later convenience and is not built.
@@ -453,7 +453,7 @@ whatever."
      carries the marker (`Ξ n` giving `(q, A, B, rc)`), `RowAt` compares it, and the tied handler rules
      derive `cs` from `Ξ`. Then the marker is never correct by convention.
 7. **For the user:** under level-triggered cancellation, `finRead` (§1.3) and `Row.CancelTotal` (§1.6)
-   have no semantic consumer. They are kept because the kernel target names them. Whether to drop them
+   have no semantic consumer. They are kept because the kernel target names them. Whether to consume them
    is a question for the user.
 
 ## 7. Review record
@@ -461,7 +461,7 @@ whatever."
 1. **Review 1.** One Fatal: `ResumeOC` admitted a marked `tick`. Fixed in §1.4. Its Majors and Minors
    are applied.
 2. **Review 2 (full).** Its Fatal was interception through a live region. It is addressed by the user's
-   decision 2 (level-triggered: the cancel is deferred, not lost). Its derived-drop finding is closed by decision 1. Its Major (OQ-1(a)) is in §1.4 and §5.
+   decision 2 (level-triggered: the cancel is deferred, not lost). Its derived-consume finding is closed by decision 1. Its Major (OQ-1(a)) is in §1.4 and §5.
    Its Minors are applied:
    - `finRead` skips abortive operations;
    - the non-vacuity tests cover a marked `tick` and `[raise]`;
@@ -469,7 +469,7 @@ whatever."
    - self-cancel is noted;
    - the sections are renumbered.
 3. **Targeted check** (§1.7, §1.8, §6). It found 2 Fatal, 1 Major and 5 Minor findings against
-   route (i)'s `hRC`. They are moot now that §1.7 is level-triggered and `hRC` is dropped. Its Minors on
+   route (i)'s `hRC`. They are moot now that §1.7 is level-triggered and `hRC` is consumed. Its Minors on
    §1.8, §1.4 and §3 are applied.
 4. **Full review of the level-triggered scope.** No Fatal; 7 Major and 7 Minor findings, all applied.
    The scheduler claim is limited (§1.7). The laws text is fixed (§1.7a). The termination target is

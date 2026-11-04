@@ -222,8 +222,8 @@ theorem subst_unmentioned : ∀ (e : Expr) (j : Nat) (v w : Val), mentions j e =
 /-- `B` resumes `κ`, in the slot `k`, on every path, in tail position, and uses it nowhere else;
 `B'` is `B` with each resume `κ.1 N` replaced by its answer `N`. On the way: the arms of a `case`,
 the body of a `let (x, y)`, a sequence, a `let x = e` with `e` not using `κ`, the right unit
-`(λx. R₀) X`, `R₀` answering `x`, whose frame `B'` drops, and an alias `(λk'. B) κ`, `B` resuming
-`k'` and not using `κ`, whose binding `B'` drops. -/
+`(λx. R₀) X`, `R₀` answering `x`, whose frame `B'` consumes, and an alias `(λk'. B) κ`, `B` resuming
+`k'` and not using `κ`, whose binding `B'` consumes. -/
 inductive TailResumesAt : Nat → Expr → Expr → Prop where
   | resume {k : Nat} {N : Expr} : mentions k N = false →
       TailResumesAt k (.app (resumeAt k) N) N

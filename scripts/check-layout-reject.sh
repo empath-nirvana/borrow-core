@@ -30,8 +30,8 @@ progs=(
 )
 # Each perturbation, and the refusal of its family (an extended regular expression).
 families=(
-  "drop a code from its class|do not hold c[0-9]+"
-  "drop a code's class|'s class is none"
+  "remove a code from its class|do not hold c[0-9]+"
+  "remove a code's class|'s class is none"
   "merge two classes of one shape and different widths|has width [0-9]+, its children give"
   "change a class's width|has width [0-9]+, its children give"
   "call a class trivial|has triviality true, its children give false"
@@ -50,8 +50,8 @@ families=(
   "move a machine's frame node at one access|machine [0-9]+'s frame"
   "move a reborrowed read's node|a read through a shared borrow of contents"
   "split a variable's node from the places it is joined with|which are not joined|is not a layout of"
-  "drop a code from a variable's flow set|whose set does not hold|which its set does not"
-  "drop a code from a call's answer|'s answer: code c[0-9]+ reaches"
+  "remove a code from a variable's flow set|whose set does not hold|which its set does not"
+  "remove a code from a call's answer|'s answer: code c[0-9]+ reaches"
   "a direct call where several codes reach|a direct call of x[0-9]+ at code"
 )
 fail=0

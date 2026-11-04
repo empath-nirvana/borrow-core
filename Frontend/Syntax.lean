@@ -214,7 +214,7 @@ structure DField where
   ty : VTy
   /-- `must_close g: A` (spelling provisional): `some none`, or `some (some f)` for
   `must_close(f)`, which names the function that consumes the value, for the messages only. The
-  field holds `A * tok` (SPEC §42, *Declared types with no derived drop*). -/
+  field holds `A * tok` (SPEC §42, *Declared types that is not consumable*). -/
   close : Option (Option Ident) := none
   deriving DecidableEq, Repr
 
@@ -265,14 +265,14 @@ inductive Const where
   | swap (A B : VTy)
   | copy (a : Life) (A : VTy)
   | copyBang (A : VTy)
-  | forgetImm (a : Life) (A : VTy)
-  | forgetMut (a : Life) (A : VTy)
-  | forgetUnk
+  | releaseImm (a : Life) (A : VTy)
+  | releaseMut (a : Life) (A : VTy)
+  | releaseUnk
   /-- `tok_mint : 1 => tok`: a declared value's token (SPEC §42). -/
   | tokMint
   /-- `tok_burn : tok => 1`: the token released (SPEC §42). -/
   | tokBurn
-  | forgetBang (A : VTy)
+  | releaseBang (A : VTy)
   | withbor1 (x : Ident) (A B : VTy)
   | withbor2 (x : Ident) (b : Life) (A B : VTy)
   | withbor3 (a : Life) (x : Ident) (A B : VTy)
@@ -299,7 +299,7 @@ inductive Const where
   | withborF2Imm (c a b : Ident) (A B T : VTy)
   /-- The array constants of SPEC §9: `array_new[A]`, `array_free[A]`, `array_size[A]`,
       `array_replace[A]`, and on a family of leaf views `array_len[@, A]`, `array_get[@, A]`,
-      `array_copy[@, A]`, `array_forget[@, A]`. -/
+      `array_copy[@, A]`, `array_release[@, A]`. -/
   | arrayNew (A : VTy)
   /-- `array_empty[A]`: the owned array of no cells, which needs no element.  `[spec §9]` -/
   | arrayEmpty (A : VTy)
@@ -309,7 +309,7 @@ inductive Const where
   | arrayLen (a : Life) (A : VTy)
   | arrayGet (a : Life) (A : VTy)
   | arrayCopy (a : Life) (A : VTy)
-  | arrayForget (a : Life) (A : VTy)
+  | arrayRelease (a : Life) (A : VTy)
   /-- The slice borrows of SPEC §9: `slice_borrow_mut['x, @b, A, B]`,
       `slice_borrow_imm['x, @b, A, B]`, and on a `mut` family `slice_get_mut[@, A]`,
       `slice_len_mut[@, A]`. -/
@@ -930,12 +930,12 @@ def Const.strip : Const → Const
   | .swap A B => .swap A.strip B.strip
   | .copy a A => .copy a.strip A.strip
   | .copyBang A => .copyBang A.strip
-  | .forgetImm a A => .forgetImm a.strip A.strip
-  | .forgetMut a A => .forgetMut a.strip A.strip
-  | .forgetUnk => .forgetUnk
+  | .releaseImm a A => .releaseImm a.strip A.strip
+  | .releaseMut a A => .releaseMut a.strip A.strip
+  | .releaseUnk => .releaseUnk
   | .tokMint => .tokMint
   | .tokBurn => .tokBurn
-  | .forgetBang A => .forgetBang A.strip
+  | .releaseBang A => .releaseBang A.strip
   | .withbor1 x A B => .withbor1 x.strip A.strip B.strip
   | .withbor2 x b A B => .withbor2 x.strip b.strip A.strip B.strip
   | .withbor3 a x A B => .withbor3 a.strip x.strip A.strip B.strip
@@ -963,7 +963,7 @@ def Const.strip : Const → Const
   | .arrayLen a A => .arrayLen a.strip A.strip
   | .arrayGet a A => .arrayGet a.strip A.strip
   | .arrayCopy a A => .arrayCopy a.strip A.strip
-  | .arrayForget a A => .arrayForget a.strip A.strip
+  | .arrayRelease a A => .arrayRelease a.strip A.strip
   | .sliceBorrowMut x b A B => .sliceBorrowMut x.strip b.strip A.strip B.strip
   | .sliceBorrowImm x b A B => .sliceBorrowImm x.strip b.strip A.strip B.strip
   | .sliceGetMut a A => .sliceGetMut a.strip A.strip

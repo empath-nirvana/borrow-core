@@ -47,7 +47,7 @@ fn palindrome<'t>(s: text 't) -> bool =
       }
     }
   };
-  array_forget['t, u8](s);
+  array_release['t, u8](s);
   ok
 
 main -> i32 =

@@ -1,7 +1,7 @@
 -- `corpus/decl-txn.bc` with the transaction live across a `raise`: `check` may abort, and `t` is
 -- bound before it and committed after it, with no finaliser. An abort abandons only a value that
 -- holds no owned cell, `[let]`'s `hW` (`Ctx.OwnFree`), and `Txn` holds a token's cell
--- (`decl_not_ownFree`); the `[then]` the checker would build instead needs `Txn`'s derived drop,
+-- (`decl_not_ownFree`); the `[then]` the checker would build instead needs `Txn`'s consume,
 -- which it has none of (`decl_linear`). Refused.
 include fail
 
@@ -19,4 +19,4 @@ main -> i32 + i32 =
     let y = check(5);
     commit(t) + y
   }
--- expect: 19:13: `t`, of type `i32 * i32 * tok`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell: `Txn` holds the field `log`, marked `must_close`; pass it to `commit` before the computation that may abort, or close it in a `finally`
+-- expect: 19:13: `t`, of type `i32 * i32 * tok`, is live across a computation that may abort, and its type is linear and not consumable, and an abort abandons only a value that holds no owned cell: `Txn` holds the field `log`, marked `must_close`; pass it to `commit` before the computation that may abort, or close it in a `finally`

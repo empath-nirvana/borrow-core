@@ -208,7 +208,7 @@ abbrev closedOf (B : VTy) (Bs : Stack) : VTy := .mu (B.subst (VTy.upS (env Bs)))
 
 theorem env_cons_zero (B : VTy) (Bs : Stack) : env (B :: Bs) 0 = closedOf B Bs := rfl
 
-/-- Variable `i` in scope has the closed type of its binder `Bs.drop i`. -/
+/-- Variable `i` in scope has the closed type of its binder `Bs.consume i`. -/
 theorem env_drop : ∀ (Bs : Stack) (i : Nat) (B : VTy) (Bs' : Stack), Bs.drop i = B :: Bs' →
     env Bs i = closedOf B Bs'
   | [], _, _, _, h => by simp at h

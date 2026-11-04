@@ -10,7 +10,7 @@ fn logger<'x>(ml: mut 'x i32) -> box 'x Clo[i32, i32]<'x> =
         q <- return (withswap['x, i32, i32] m (thunkv fun (v : i32) -> return (v + a, v + a)));
         let (m, t) = q;
         return (t, boxed['x] m),
-      return (forget_mut['x, i32] m) >)
+      return (release_mut['x, i32] m) >)
 
 main -> i32 =
   let log = alloc(0);

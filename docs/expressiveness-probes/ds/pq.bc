@@ -14,8 +14,8 @@ fn cmp_at[A](a: array A, i: i32, j: i32) -> array A * i32 =
     match get(v, i) {
       inl gi -> match get(w, j) {
           inl gj -> borrow imm *gi { 'y, xi -> borrow imm *gj { 'z, xj -> order[A](xi, xj) } }
-        | inr u -> forget_imm['x, A](gi); 0 }
-    | inr u -> array_forget['x, A](w); 0
+        | inr u -> release_imm['x, A](gi); 0 }
+    | inr u -> array_release['x, A](w); 0
     } };
   (a, r)
 

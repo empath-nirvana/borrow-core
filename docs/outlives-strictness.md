@@ -327,7 +327,7 @@ is `top` and today's elaboration already is the bounded one), and runs to `clo-c
 
 **Where B1 stops.** B1's bound is strict: `'c < 'q`. A closure whose state is another closure
 bounded by `'c` (`nest`, `doubler`) wants its own bound to be `'c` as well. K1 admits that when
-the closure is made where `'c` is known (`sketches/k1/clo-drop.bc`, `clo-higher.bc`). Through the
+the closure is made where `'c` is known (`sketches/k1/clo-consume.bc`, `clo-higher.bc`). Through the
 generic `clo_new_boxed`, however, it would need the instance's bound to be `'c ⊑ 'q`, which is a
 non-strict binder (§2.8, open). The alternative is an instance specialised at equal lifetimes, an
 elaboration that was not designed further. The sketches keep `clo_new` and `boxed['c]` there.
@@ -346,7 +346,7 @@ and `'v`, `clo-capture`'s `'x`). `boxed[…]` counts annotations in code, not co
 | `clo-depth` | 2 (`'x`, `'y`) | 1 | 0 | 1 → 0 | 2 | 0 |
 | `clo-capture` | 1 (`'w`) | 1 | 1 | 1 → 1 | 2 | 0 |
 | `clo-coerce` | 1 (`'x`) | 1 | 0 | 1 → 0 | 2 | 0 |
-| `clo-drop` | 2 (`'x`, `'y`) | 1 | 0 | 1 → 0 | 4 | 2 |
+| `clo-consume` | 2 (`'x`, `'y`) | 1 | 0 | 1 → 0 | 4 | 2 |
 | `clo-higher` | 2 (`'x`, `'y`) | 1 | 0 | 1 → 0 | 6 | 2 |
 | **total** | **10** | **6** | **1** | **6 → 1** | **18** | **4** |
 

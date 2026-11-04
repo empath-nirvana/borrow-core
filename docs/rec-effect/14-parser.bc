@@ -9,7 +9,7 @@
 -- Each `while peek == '+' { … term … }` loop has a `rec` in its body, so its accumulator lives
 -- in the frame: `inl acc` "in expr's loop, acc so far", `inr inl acc` in term's, `inr inr ()`
 -- "in factor, after `(` expr, expecting `)`". A byte that fits nowhere performs `raise(pos)`:
--- the machine stops with `inr pos`, the pending frames are dropped, and the error comes out of
+-- the machine stops with `inr pos`, the pending frames are consumed, and the error comes out of
 -- the driver as the definition's own result. The input is an array in the state, lent `imm`
 -- per step; 0 marks its end.
 --

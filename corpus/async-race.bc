@@ -1,6 +1,6 @@
 -- Racing two tasks: `race` resumes two tasks in turn until one finishes, then cancels the other.
 -- Cancelling a task runs what it must finalise: here each task owns a buffer (a cell) that it
--- frees when it ends, and the cancelled one's is freed by its drop glue, so the program ends with
+-- frees when it ends, and the cancelled one's is freed by its consume glue, so the program ends with
 -- nothing live. A timeout is a race against a task that only waits.
 --
 -- Exercises: `lib/async.bc`'s `resume` and `cancel` driven by a user-written combinator, a

@@ -1,7 +1,7 @@
--- SPEC §19's drop glue: a variable live across a call that may abort must have a destructor, which
+-- SPEC §19's consume glue: a variable live across a call that may abort must are consumable, which
 -- the finaliser runs when the call aborts. `g`, a thunk with no `close`, has none: an abort of the
 -- call would abandon it.
--- expect: 12:5: `g`, of type `1 => i32`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell
+-- expect: 12:5: `g`, of type `1 => i32`, is live across a computation that may abort, and its type is linear and not consumable, and an abort abandons only a value that holds no owned cell
 def check : !U (i32 -o F[1.0 cancel i32 ~> 0] i32) =
   !thunkv fun (x : i32) -> abort[1.0] x
 

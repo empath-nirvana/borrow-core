@@ -85,12 +85,12 @@ def Const.renameLife (f : Span → String → Life) : Const → Const
   | .swap A B => .swap (A.renameLife f) (B.renameLife f)
   | .copy a A => .copy (a.renameLife f) (A.renameLife f)
   | .copyBang A => .copyBang (A.renameLife f)
-  | .forgetImm a A => .forgetImm (a.renameLife f) (A.renameLife f)
-  | .forgetMut a A => .forgetMut (a.renameLife f) (A.renameLife f)
-  | .forgetUnk => .forgetUnk
+  | .releaseImm a A => .releaseImm (a.renameLife f) (A.renameLife f)
+  | .releaseMut a A => .releaseMut (a.renameLife f) (A.renameLife f)
+  | .releaseUnk => .releaseUnk
   | .tokMint => .tokMint
   | .tokBurn => .tokBurn
-  | .forgetBang A => .forgetBang (A.renameLife f)
+  | .releaseBang A => .releaseBang (A.renameLife f)
   | .withbor1 x A B => .withbor1 (x.renameLife f) (A.renameLife f) (B.renameLife f)
   | .withbor2 x b A B => .withbor2 (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f)
   | .withbor3 a x A B => .withbor3 (a.renameLife f) (x.renameLife f) (A.renameLife f) (B.renameLife f)
@@ -118,7 +118,7 @@ def Const.renameLife (f : Span → String → Life) : Const → Const
   | .arrayLen a A => .arrayLen (a.renameLife f) (A.renameLife f)
   | .arrayGet a A => .arrayGet (a.renameLife f) (A.renameLife f)
   | .arrayCopy a A => .arrayCopy (a.renameLife f) (A.renameLife f)
-  | .arrayForget a A => .arrayForget (a.renameLife f) (A.renameLife f)
+  | .arrayRelease a A => .arrayRelease (a.renameLife f) (A.renameLife f)
   | .sliceBorrowMut x b A B =>
       .sliceBorrowMut (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f)
   | .sliceBorrowImm x b A B =>

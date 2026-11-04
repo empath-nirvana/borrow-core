@@ -2,8 +2,8 @@
 -- `struct Trie { end: bool, kids: Vec<Option<Trie>> }` written as a `data` declaration:
 -- `data Trie = Trie(bool, Vec[Option[Trie]])`. `Trie` occurs under the array of `Vec`'s buffer, so
 -- the constructor is not a block and needs no `box` (SPEC §42, §61): it elaborates to
--- `mu X. bool * (array (X + 1) * i32)`, in the fold class `P` (§6), and its derived destructor
--- drops each node's children, then the node's array, at once, as Rust drops a `Vec`. The same
+-- `mu X. bool * (array (X + 1) * i32)`, in the fold class `P` (§6), and its consume
+-- consumes each node's children, then the node's array, at once, as Rust consumes a `Vec`. The same
 -- program over a `type` with `array (1 + X)` is `0208-implement-trie-boxed.bc`, and the arena form
 -- is `0208-implement-trie.bc`.
 --
@@ -113,7 +113,7 @@ main -> i32 =
   let cs = borrow imm s { 't, t ->
     fold_lines(t, !{ (l, cs) ->
       let (l, m) = array_copy['t, u8] l;
-      if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, words(l)); cs } },
+      if len(m) == 0 { array_release['t, u8](l); cs } else { let (cs, _) = push(cs, words(l)); cs } },
       box buf[buf string](8)) };
   let (cs, n) = cs;
   let mut cs = cs;

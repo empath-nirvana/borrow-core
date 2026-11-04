@@ -3,7 +3,7 @@
 -- `same` answers whether two trees have the same shape and the same values, by a recursion over
 -- both at once that compares the roots and then each pair of subtrees, stopping at the first
 -- difference. It consumes both trees: what it has compared is freed as it goes, and what it has
--- not is dropped by its destructor. The Rust `fn is_same_tree(p: &…, q: &…)` reads both through
+-- not is freed by its derived drop. The Rust `fn is_same_tree(p: &…, q: &…)` reads both through
 -- borrows instead. A recursion over a borrowed tree, each call at the subtree's view, is open
 -- (structural and borrowed descent, K5, #179); the kernel's borrowed fold, `fold_imm`, walks one
 -- tree, and its algebra cannot hold the other. Here the inputs are not needed afterwards, so
@@ -51,7 +51,7 @@ fn tokens<'t>(l: text 't) -> buf (i32 + 1) =
 fn cases<'t>(t: text 't) -> buf (buf (i32 + 1)) =
   fold_lines(t, !{ (l, cs) ->
     let (l, m) = array_copy['t, u8] l;
-    if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, tokens(l)); cs } },
+    if len(m) == 0 { array_release['t, u8](l); cs } else { let (cs, _) = push(cs, tokens(l)); cs } },
     box buf[buf (i32 + 1)](8))
 
 -- A binary tree: empty, or a node of a value and a cell for each subtree, the cells being Rust's

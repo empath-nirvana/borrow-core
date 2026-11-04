@@ -12,5 +12,5 @@ main -> (i32 * i32) * i32 =
   let mut n = 0;
   modify &mut x { v -> n = 7; v + 1 };
   let mut c = alloc(10);
-  let s = borrow mut c { 'l, m -> let (m, seen) = bump(m, 1); forget_mut['l, i32](m); seen };
+  let s = borrow mut c { 'l, m -> let (m, seen) = bump(m, 1); release_mut['l, i32](m); seen };
   ((x, n), free(c) * 10 + s)

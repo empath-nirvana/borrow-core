@@ -24,9 +24,9 @@ main : F (i32 + i32) =
         q <- return (withswap['x, i32, 1] m (thunkv fun (v : i32) -> return (i32[99], ())));
         let (m, z) = q;
         let () = z;
-        return (forget_mut['x, i32] m));
+        return (release_mut['x, i32] m));
       q <- return (withswap['x, i32, i32] m (thunkv fun (v : i32) ->
         return (plus (v, i32[1]), plus (v, i32[1]))));
       let (m, r) = q;
-      let () = forget_mut['x, i32] m;
+      let () = release_mut['x, i32] m;
       return (boxed['x] r)))

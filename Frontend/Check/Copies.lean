@@ -92,7 +92,7 @@ def copiedUses (b : Nat) (copied : Nat → Bool) (sp : Span) (earlier later : Li
     else some (u, (later.find? (·.lvl == u.lvl)).getD { u with sp })
 
 /-- One pass over a node at a context of `d` slots whose `b` outermost slots are the externs: the
-uses free in it (those of the variables a child binds dropped, and none from a child at a context
+uses free in it (those of the variables a child binds consumed, and none from a child at a context
 of its own), and every earlier use that is copied implicitly, with a later use of the same
 variable, in the node and its children. A node's copy set is its masks' `both`: the slots both
 masks hold, the slot at index `i` of its context at level `d - 1 - i`. -/

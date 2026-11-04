@@ -31,7 +31,7 @@ fn request<'a, 'b, 'c>(server: text 'a, path: text 'b, hs: array_imm 'c (lit * l
       (r, hs) },
     len(h0), 0, (r, hs));
   let (r, hs) = r;
-  array_forget['c, lit * lit](hs);
+  array_release['c, lit * lit](hs);
   let (r, _) = push_lit(r, "\r\n");
   r
 

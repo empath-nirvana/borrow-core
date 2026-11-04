@@ -356,7 +356,7 @@ OQ-9, OQ-57 and OQ-58.**
 ## OQ-45: Does the arising guard stay in the clauses?
 
 **Question.** Keep `guard_W` (the table `TabAt`) as a guard at `U`, `⊸` and `∀`, discharged at each
-elimination (a), or drop it with every quantifier restricted to arising worlds (b)? First, is
+elimination (a), or consume it with every quantifier restricted to arising worlds (b)? First, is
 `TabAt_W` a `TW` invariant (`tabAt_of_TW`, T-ARISE.0)?
 
 **Class: EVIDENCED; CONSTRAINED by the arising principle. What is left settles by proof.**
@@ -489,7 +489,7 @@ resource half (no leak or double release) (c)?
 the user.**
 
 - **Today.** `kTy` (`Core/EffRules.lean:976-982`) types the continuation. `NoOwn` (`Core/EffDefs.lean:38`)
-  cannot see a dropped or duplicated `κ` that holds nothing owned.
+  cannot see a consumed or duplicated `κ` that holds nothing owned.
 - **Option (b)'s technique is PAPER-ONLY.** `docs/effects-tr/12-sources.md` §12.3 item 4: "A one-shot
   continuation as a heap cell freed by its use … exactly-once finalisation is linearity (T5.2.3–4)",
   in the TR's calculus (sibling). It is a machine change.

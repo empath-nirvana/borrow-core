@@ -4,12 +4,12 @@ import Examples.FnMut
 
 ## A closure that owns its environment, called through an immutable borrow
 
-    let code = Λ. λp. let (x, u) = p; forget x; u;          -- !(∀'c ⊏ ⊤. (Imm 'c 1 ⊗ 1) ⊸ 1)
+    let code = Λ. λp. let (x, u) = p; release x; u;          -- !(∀'c ⊏ ⊤. (Imm 'c 1 ⊗ 1) ⊸ 1)
     let (c, w) = withbor (alloc (alloc (), code)) (Λ. λy.
                    withload y (Λ. λq.                       -- q : Imm 'b 1 ⊗ !(∀'c …)
                      let (x, f) = q; let (x₁, x₂) = copy x; let (f₁, f₂) = copy f;
                      f₁ [] (x₁, ()); f₂ [] (x₂, ()); ()));
-    w; let (r, g) = free c; free r; forget g
+    w; let (r, g) = free c; free r; release g
 
 The environment is an owned `Ref 1`.  Loading it through a borrow views it as `Imm 'b 1` at the
 load's own lifetime `'b`, so the code is lifetime-polymorphic and closed: `!I` at a `Λ`.
@@ -107,8 +107,8 @@ theorem ownedFn_eval : unitNoLeak (eval ownedFn) = true := by decide
 
     let (c, v) = withbor (alloc (inj₁ (), flip)) (Λ. λm.
                    let (m₁, u₁) = withswap m step; u₁;
-                   let (m₂, u₂) = withswap m₁ step; u₂; forget m₂; ());
-    v; let (e, g) = free c; case e {x ⇒ x, y ⇒ y}; forget g
+                   let (m₂, u₂) = withswap m₁ step; u₂; release m₂; ());
+    v; let (e, g) = free c; case e {x ⇒ x, y ⇒ y}; release g
 
     step = λp. let (e, f) = p; let (f₁, f₂) = copy f; let (e′, r) = f₁ (e, ()); ((e′, f₂), r)
 

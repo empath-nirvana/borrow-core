@@ -9,7 +9,7 @@ main -> i32 =
     es = e1;
     let (e2, _) = push(es, (t, 2));
     es = e2;
-    borrow mut es { v -> discard_mut(sort(v, !{ (x, y) -> let (kx, cx) = x; let (ky, cy) = y; array_forget['t, u8](kx); array_forget['t, u8](ky); cy - cx }, (slice_empty_imm['t, u8], 0))) };
+    borrow mut es { v -> discard_mut(sort(v, !{ (x, y) -> let (kx, cx) = x; let (ky, cy) = y; array_release['t, u8](kx); array_release['t, u8](ky); cy - cx }, (slice_empty_imm['t, u8], 0))) };
     let (b, n) = es;
     print_dec(n) };
   0

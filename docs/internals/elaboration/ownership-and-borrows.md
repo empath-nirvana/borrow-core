@@ -58,7 +58,7 @@ main : F i32 =
 ```
 
 Leaving an owned value unused is not always an error: the checker frees an unused cell for you
-(see [Implicit destructors](implicit-destructors.md)).
+(see [Implicit consumes](implicit-consumes.md)).
 
 ## Cells
 
@@ -150,7 +150,7 @@ main : F i32 =
 ```
 
 An immutable borrow is owned like any other value, so it is used once. `copy[@a, A]` splits it
-into two, and `forget_imm[@a, A]` discards one.
+into two, and `release_imm[@a, A]` discards one.
 
 ### Writing through a mutable borrow
 
@@ -174,7 +174,7 @@ main : F i32 =
 ```
 
 `withswap` hands the borrow back as `m2`. It is not used again, so the checker discards it (a
-borrow's destructor does nothing). `withbor2`'s second bracket argument, here `top`, is a
+borrow's consume does nothing). `withbor2`'s second bracket argument, here `top`, is a
 lifetime that the contents' type lasts at least as long as.
 
 A mutable borrow cannot be copied, so two mutable borrows of one cell are never live together:
@@ -201,7 +201,7 @@ main : F 1 =
   r <- return (alloc[i32] i32[1]);
   q <- return (withbor1['x, i32, 1 => 1] r
          (thunkv Fun 'x < top. return (thunkv fun (b : imm 'x i32) ->
-            return (boxed['x] (thunkv fun (u : 1) -> return (forget_imm['x, i32] b))))));
+            return (boxed['x] (thunkv fun (u : 1) -> return (release_imm['x, i32] b))))));
   return ()
 -- expect: 5:21: `boxed['x]`: `b`, of type `imm 'x i32`, is used inside, and it cannot be shown to outlive `'x`
 ```

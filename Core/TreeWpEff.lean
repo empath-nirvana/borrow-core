@@ -246,7 +246,7 @@ theorem cerwpT_perform {T : OpTabT} {Q : TPostV} {F : TFrame} (K : Kont) {m i : 
 /-- **Resuming a stored continuation at a grown world**, with the share and owned records
 re-read there, at any list keeping the records of the stop's re-read list that the re-read share
 names: records opened by others since the stop may be added, and records the share does not name
-dropped. -/
+consumed. -/
 theorem contShareT_resume {en : OpEntT} {F : TFrame} {k : Nat} {w w' : TWd}
     {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {lsR ls' : List (SRecT w'.K)}
     {O' : List (FrameRecT w'.K)} {K : Kont} {v : Val} {Ψ : ContT} {ρ : TRes w.K}

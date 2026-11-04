@@ -15,7 +15,7 @@ computation types (`F A`, `⊸`, `&`, `∀`, …), related by the shifts `U` (th
 from it: every checker step applies one of its rules.
 
 **`close`** — the observation on codata that releases its state; required, because no rule
-forgets a thunk.
+releases a thunk.
 
 **Delay (`D A`)** — codata that either returns an `A` or asks to be observed again. Loops that may
 not terminate have this type (§7).
@@ -43,7 +43,7 @@ theorem.
 **Lifetime** — a lexical scope, introduced by a borrow's callback. Lifetimes nest.
 
 **Persistent** — a type whose values hold no resource (`1`, `!A`, `i32`, …); its variables are
-copied and dropped freely (§10).
+copied and consumed freely (§10).
 
 **Place** — a location that can be borrowed: a cell, or a leaf of a block.
 
