@@ -971,6 +971,14 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.Wp.updX_refl_imm
 #print axioms BoCa.Fig16.Tree.Wp.UpdX.inv
 #print axioms BoCa.Fig16.Tree.Wp.updX_refl_mut
+#print axioms BoCa.Fig16.Tree.Wp.XOptW.trans
+#print axioms BoCa.Fig16.Tree.Wp.not_xoptWFrameAt
+#print axioms BoCa.Fig16.Tree.Wp.UpdX.toA
+#print axioms BoCa.Fig16.Tree.Wp.UpdXW.toA
+#print axioms BoCa.Fig16.Tree.Wp.AgW.mut_beneath
+#print axioms BoCa.Fig16.Tree.Wp.cellAbs_compR
+#print axioms BoCa.Fig16.Tree.Wp.cellSub_compR
+#print axioms BoCa.Fig16.Tree.Wp.UpdA.frame
 #print axioms BoCa.Fig16.Tree.Wp.InvKept.frame
 #print axioms BoCa.Fig16.Tree.Wp.immEnd_valid_of_fdEsc
 #print axioms BoCa.Fig16.Tree.Wp.escBeneathT
