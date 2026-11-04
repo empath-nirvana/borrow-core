@@ -1813,7 +1813,7 @@ def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
           forSite n cx cs wrap sp ℓ x g gs i f W M N
         else
           -- A body that performs a control operation would hold the continuation across it,
-          -- which has no destructor (its cancel performs at the site's row), and one that loops
+          -- which is not consumable (its cancel performs at the site's row), and one that loops
           -- cannot be a clause, which is total: the `for` drains the stored generator instead.
           let (bs, V') ← pullSite n cx cs sp g gs i f W
           report sp "lowering" (s!"for over {g}: its body performs a control operation or " ++
@@ -2063,7 +2063,7 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
       if let some rk := cx.resume then
         if rk.k == x && rk.stateful then
           throw ⟨sp, s!"the continuation `{x}` of a handler with a state is passed as a value: it " ++
-            "can only be resumed, `{x}(v)`, or dropped"⟩
+            "can only be resumed, `{x}(v)`, or consumed"⟩
       if let some lc := cx.layerCall then
         if lc.name == x then
           throw ⟨sp, s!"`{x}`, the call a layer runs around, is passed as a value: it can only be called"⟩
@@ -2489,11 +2489,11 @@ def withBlk : Nat → Cx → List Cap → Span → Span → Span → HSig → St
       | _ => "in a cell scoped to the block"
     report ksp "lowering" (s!"with {((nm.map (· ++ " = ")).getD "")}{hs.name} ({hs.eff}): a borrow block of its state ({where_}); its " ++
       "operations are calls of the clauses on the capability")
-    -- The body hands back the enclosing capabilities it uses; its own is dropped at its end.
+    -- The body hands back the enclosing capabilities it uses; its own is consumed at its end.
     let body ← trC k cx' outer true M
     let blk := Val.app sp (.app sp₂ (.sugar ksp (.borrow .mut l)) place)
       (.thunkv tsp (.lam lsp b A body))
-    -- The block answers its result alone, the scoped cell dropped, unless it is lent from a
+    -- The block answers its result alone, the scoped cell consumed, unless it is lent from a
     -- place or hands back the variables its body assigns (`Val.rebinds`).
     let alone := (match P' with | .lend .. => false | _ => true) && !M.boundNames.contains "io_bt"
     if outer.isEmpty && !cx.ctlC M && !alone then return (bsP, blk)

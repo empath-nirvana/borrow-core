@@ -2,7 +2,7 @@
 -- and `factor` call one another, so they are one recursive group, driven by `bounded`. The tokens
 -- are an owned list: a digit is itself, `+` is 10, `*` 11, `(` 12 and `)` 13. A malformed input
 -- raises `Fail[i32]`, whose handler is outside the recursion (`to_result` in `main`): the raise
--- unwinds every level, dropping the tokens each holds, and the error leaves the group as any
+-- unwinds every level, consuming the tokens each holds, and the error leaves the group as any
 -- error leaves a call.
 --
 -- Answer: (inl i32[44], inr i32[2]): 2*(3+4)+5*6 is 44, and 2*(3+4 is missing its `)` (error 2).

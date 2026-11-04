@@ -10,9 +10,10 @@ resources at the world's tree, each owning records and each **at a point** of th
 every top cell of its resource carries lifetimes that are the point or enclose it (`OnBranchResT`,
 `Support/Model/Tree/World/Branches.lean`; the strata carry it to every cell beneath). The world is
 the branches' composition, the records proper are the branches' records, apart by location between
-branches (`Apart`), and the world's invariants hold (`RecInv`, `WInv`). The points are departure
-D7 of `docs/new-core/scope-781.md` §8: without them the join condition does not follow
-(`cactusT_not_fdEsc`).
+branches (`Apart`), and the world's invariants hold (`RecInv`, `WInv`). The points are not printed:
+without them the join condition does not follow (`cactusT_not_fdEsc`). They are used by
+`CactusInvT` and top-level adequacy only; the scheduler's stored tasks are held in pool form,
+in location form with no points (`docs/new-core/scope-781.md` §4).
 
 The operations, each proved to keep the invariant, and what each does to the points:
 

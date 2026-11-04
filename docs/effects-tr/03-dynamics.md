@@ -51,8 +51,8 @@ is a use after free: §4.2, meeting point 2.]
 `j` is *handled in* `S` when `S` has a frame `hnd(j, …)`, `run(j, …)` or `fin(j, …)`. For a stack
 `S = S₁ ++ [f] ++ S₂` with `f` the topmost frame handling `j`, `split_j(S) = (S₁, f, S₂)`.
 
-**Definition D3.4 (destructors of a segment).** For a segment `S₁`, `dtors(S₁)` is the list of
-its `fin(j, ℓ_r, ℓ)` frames, top (innermost) first. *Running* `dtors(S₁)` in `(μ, tr)` frees
+**Definition D3.4 (consumes of a segment).** For a segment `S₁`, `consumes(S₁)` is the list of
+its `fin(j, ℓ_r, ℓ)` frames, top (innermost) first. *Running* `consumes(S₁)` in `(μ, tr)` frees
 each `ℓ_r` in turn: it requires `μ(ℓ_r) = rsrc(ℓ)`, removes `ℓ_r`, and appends `free ℓ` to `tr`.
 Other frames are discarded: a `bind`, `arg`, `prj`, `iarg` holds nothing a cancel must dispose of
 (§5 proves it holds nothing owned), a `hnd` frame's clauses are persistent, and a `run` frame
@@ -75,7 +75,7 @@ increments it. Values in computation position are evaluated by `⟦V⟧γ` in th
 | `rt v̂`, `hnd(j, γ, H) :: S` | `ev(N_ret, γ[z↦v̂])`, `S` |
 | `rt v̂`, `run(j, ℓ, co) :: S` | `rt (cap(ℓ, co), inl v̂)`, `S` |
 | `rt (inl (w, s'))`, `coret(j, ℓ) :: S` | `μ[ℓ ↦ cell(s')]`; `rt w`, `S` |
-| `rt (inr (e, s'))`, `coret(j, ℓ) :: S` | `μ[ℓ ↦ cell(s')]`; with `(S₁, run(j,ℓ,co), S₂) = split_j(S)`: run `dtors(S₁)`; `rt (cap(ℓ, co), inr e)`, `S₂` |
+| `rt (inr (e, s'))`, `coret(j, ℓ) :: S` | `μ[ℓ ↦ cell(s')]`; with `(S₁, run(j,ℓ,co), S₂) = split_j(S)`: run `consumes(S₁)`; `rt (cap(ℓ, co), inr e)`, `S₂` |
 | `rt v̂`, `fin(j, ℓ_r, ℓ) :: S` | requires `μ(ℓ_r) = rsrc(ℓ)`: remove `ℓ_r`, emit `free ℓ`; `rt v̂`, `S` |
 
 *Computations.* (`S` the current stack.)
@@ -118,7 +118,7 @@ increments it. Values in computation position are evaluated by `⟦V⟧γ` in th
 
 - if `w`: requires `S = prjᵢ :: S'`.
   - `i = 1`: requires `S' = arg v̂ :: S''`: `rt v̂`, stack `S_κ ++ S''` (**resume**);
-  - `i = 2`: run `dtors(S_κ)`; `rt ()`, stack `S'` (**cancel**).
+  - `i = 2`: run `consumes(S_κ)`; `rt ()`, stack `S'` (**cancel**).
 - if not `w`: requires `S = arg v̂ :: S'`: `rt v̂`, stack `S_κ ++ S'` (**resume**).
 
 *Operations.* `op x.o(V; y.M)` with `j = γ(x)`, `v̂ = ⟦V⟧γ`. If `j` is not handled in `S`, the
@@ -133,7 +133,7 @@ configuration is final: **unhandled**. Otherwise let `(S₁, f, S₂) = split_j(
   `κ = κ¹(ℓ_κ, W ∈ q_o)`. Then `ev(N_o, γ_h[p↦v̂, k↦κ])`, `S₂`.
 
 `ab x.a(V)` with `j = γ(x)`: unhandled if `j` is not handled in `S`; otherwise
-`(S₁, hnd(j, γ_h, H), S₂) = split_j(S)`, run `dtors(S₁)`, then `ev(N_a, γ_h[p↦v̂])`, `S₂`.
+`(S₁, hnd(j, γ_h, H), S₂) = split_j(S)`, run `consumes(S₁)`, then `ev(N_a, γ_h[p↦v̂])`, `S₂`.
 (A `run` or `fin` frame never handles an abortive operation: `Res` has none, and a capability's
 effect has none, [newcap].)
 
@@ -160,10 +160,10 @@ This section transcribes phase B's semantic domain. Each definition names its Le
 three of §1 that reach the denotation: `lend` pairs its answer with the capability, `use` is a
 world action addressed through the `Res` instance, and `punch` is a world action.
 
-**Definition D3.8 (actions and destructors).** [PB `Act`, `Dtor`, `Dtor.act`.]
+**Definition D3.8 (actions and consumes).** [PB `Act`, `Consume`, `Consume.act`.]
 
     act ::= out n | acq ℓ r | use ℓ r | free ℓ r | new c s | rd c G | wr c s | kill c G | punch n
-    δ   ::= free ℓ r | wb c s                (a destructor: free a resource; write a state back)
+    δ   ::= free ℓ r | wb c s                (a consume: free a resource; write a state back)
 
 `punch n` is added to phase B's `Act`.
 
@@ -172,9 +172,9 @@ world action addressed through the `Res` instance, and `punch` is a world action
     t ::= ret x | op i E o v k d | ab i E a v d | nu k | act α k
 
 with `k` a function from the answer (`⟦B_o⟧`, `ℕ`, or the action's answer) to trees, and `d` a
-list of destructors: those of the frames between the operation and its eventual handler,
+list of consumes: those of the frames between the operation and its eventual handler,
 innermost first. `Strm X` is the inductive type of pairs `(pull : Tree (X + ℤ × Strm X),
-drop : Tree 1)`.
+consume : Tree 1)`.
 
 **Definition D3.10 (semantic types).** [PB `VTy.den`, `CTy.den`.]
 
@@ -203,9 +203,9 @@ each `δ ∈ d`, innermost first), and at `⇒`, `&`, `Π`, `∀` they act point
 - `runL(i, E, c, S, co)`, the lend of cell `c` as instance `i` at state `s` (state-passing): at
   `ret x`, write `s` back and answer `inl x`; at an operation on `i`, run the co-operation, then
   either resume the client with the next state or, on failure `inr (e, s')`, run the client's
-  destructors `d`, write `s'` back and answer `inr e`; at any other operation or abort, append
-  the write-back `wb c s` to its destructors [PB `Tree.runL`, `coStep`, `coK`];
-- `addFin(ℓ, r)`: free `r` on return, and append `free ℓ r` to the destructors of every operation
+  consumes `d`, write `s'` back and answer `inr e`; at any other operation or abort, append
+  the write-back `wb c s` to its consumes [PB `Tree.runL`, `coStep`, `coK`];
+- `addFin(ℓ, r)`: free `r` on return, and append `free ℓ r` to the consumes of every operation
   and abort inside [PB `Tree.addFin`].
 
 **Definition D3.13 (denotation).** `⟦V⟧ η ρ ∈ ⟦A⟧` and `⟦M⟧ η ρ ∈ ⟦C⟧`, for `η` an instance
@@ -239,10 +239,10 @@ finite (well-founded) elements. ∎
 
     ev ::= out n | acq ℓ | use ℓ | free ℓ | mk | fin | punch n
 
-(names erased; labels kept, so the order in which destructors run is observable).
+(names erased; labels kept, so the order in which consumes run is observable).
 `obs(t) = t.obs(render, Wd.init)` runs a tree against a world of a name counter, a store and a
 trace: `nu` takes the next name, `act` executes against the store (`rd`, `wr`, `kill` of a dead
-cell is **stuck**), an `op` or `ab` reaching the top unwinds its destructors and is
+cell is **stuck**), an `op` or `ab` reaching the top unwinds its consumes and is
 **unhandled**. [PB `Ev`, `Outcome`, `Obs`, `Wd`, `Act.exec`, `Wd.unwind`, `Tree.obs`,
 `Prog.obs`.]
 

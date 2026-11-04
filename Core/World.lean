@@ -99,7 +99,7 @@ resource a `wp` runs at, `[TR]` p. 6's `ρ_f ● ρ` — is reached from `∅` b
 printed proofs perform, and `ps` are the frames `[TR]` 6.64 has taken and not ended, `rs` those
 frames with every sub-record of their lineages.  One constructor per operation: `alloc`
 (6.141), `free` (6.142), `store` (6.145), `immFrame`/`immEnd` (6.64's entry and exit, recording
-the frame and its lineage and dropping them), `mutFold`/`mutUnfold` (6.65 and 6.66), and
+the frame and its lineage and consuming them), `mutFold`/`mutUnfold` (6.65 and 6.66), and
 `reb`/`rebDeep` with `rebEnd`/`rebEndDeep` (6.150's entry and exit, at a record's cell or at a
 chain view of one, at any record, a sub-record included).  `reb`'s `β` is at most every lifetime
 of the world (`StratumLe`); `rebDeep`'s is below every lifetime of the world, as 6.150's H11

@@ -14,7 +14,7 @@ comes back as the block's own handle, packed (`wpTSAngelic_allocBorrow`).
 | program | struct | shows |
 |---|---|---|
 | `blockSwap` | `{a : B, b : B}` | `Mut 'c` at `s.a` and `s.b` together, both updated (`mem::swap`), the block freed whole |
-| `nestSwap` | `{a : {x : B, y : B}, b : B}` | `s.a.x` borrowed alone at the lifetime of `s.b`; `s.a.y` dropped |
+| `nestSwap` | `{a : {x : B, y : B}, b : B}` | `s.a.x` borrowed alone at the lifetime of `s.b`; `s.a.y` consumed |
 | `blockRead` | `{a : B, b : B}` | `Imm` of the whole struct at `'c`; `s.a` alone and the whole struct read at `'c` |
 | `nestRead` | `{a : {x : B, y : B}, b : B}` | `Imm`: the sub-struct `s.a` and the leaf `s.b` each read at `'c` |
 | `bagBlock` | `{n : N, items : L}` | a block with a list leaf: `Mut 'c` at `s.items`, a node pushed through it |
@@ -76,11 +76,11 @@ theorem d_vals3 {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) (x y b : Bool)
     CDerives Δ Γ (vals3 x y b).1 (.val σ3.valTy) :=
   .tensorI (deadSplit hΓ) (.tensorI (deadSplit hΓ) (d_bval hΓ x) (d_bval hΓ y)) (d_bval hΓ b)
 
-/-- `let (a, b) = freeS σ2 r; drop a; drop b`, with `r` at index `i`: the block freed whole. -/
+/-- `let (a, b) = freeS σ2 r; consume a; consume b`, with `r` at index `i`: the block freed whole. -/
 def freeB2 (i : Nat) : Expr :=
   .letpair (.app (freeS σ2) (.var i)) (.seq (dropB (.var 1)) (dropB (.var 0)))
 
-/-- `let (ab, c) = freeS σ3 r; let (a, b) = ab; drop a; drop b; drop c`. -/
+/-- `let (ab, c) = freeS σ3 r; let (a, b) = ab; consume a; consume b; consume c`. -/
 def freeB3 (i : Nat) : Expr :=
   .letpair (.app (freeS σ3) (.var i))
     (.letpair (.var 1) (.seq (dropB (.var 1)) (.seq (dropB (.var 0)) (dropB (.var 2)))))
@@ -108,7 +108,7 @@ theorem d_swapCbB : CDerives LifeCtx.empty [] swapCb
 /-! ### Two mutable leaf borrows of one block, used together
 
     let (s, u) = withborS σ2 (allocS σ2 (inj₁ (), inj₂ ())) swapCb;
-    u; let (a, b) = freeS σ2 s; drop a; drop b -/
+    u; let (a, b) = freeS σ2 s; consume a; consume b -/
 
 def blockSwap : Expr :=
   .letpair (app2 (withborS σ2) (.app (allocS σ2) (vals2 false true).1) swapCb)
@@ -150,8 +150,8 @@ theorem blockSwap_block :
 
 /-! ### A nested struct: `s.a.x` alone at the lifetime of `s.b`
 
-    nestCb ≜ Λ. λf. let (sa, mb) = f; let (mx, my) = sa; forget my;
-                    let (mx′, mb′) = swapFn () (mx, mb); forget mx′; forget mb′; () -/
+    nestCb ≜ Λ. λf. let (sa, mb) = f; let (mx, my) = sa; release my;
+                    let (mx′, mb′) = swapFn () (mx, mb); release mx′; release mb′; () -/
 
 def nestCb : Expr :=
   lam2 (.letpair (.var 0) (.letpair (.var 1)
@@ -165,12 +165,12 @@ theorem d_nestCb :
     letW (A := .tensor (.mut (.var 0) BB) (.mut (.var 0) BB)) (B := .mut (.var 0) BB)
       (.var (by csolo)) <|
     letW (A := .mut (.var 0) BB) (B := .mut (.var 0) BB) (.var (by csolo)) <|
-    seqW (appW (.var (by csolo)) (.forgetMut (by cdead))) <|
+    seqW (appW (.var (by csolo)) (.releaseMut (by cdead))) <|
     letW (A := .mut (.var 0) BB) (B := .mut (.var 0) BB)
       (appW (pairW (.var (by csolo)) (.var (by csolo)))
         (d_swapFnAtVar d1_ok (by cdead) 0 5 (u := LifeCtx.empty.meetOfDom) rfl rfl rfl)) <|
-    seqW (appW (.var (by csolo)) (.forgetMut (by cdead))) <|
-    seqW (appW (.var (by csolo)) (.forgetMut (by cdead)))
+    seqW (appW (.var (by csolo)) (.releaseMut (by cdead))) <|
+    seqW (appW (.var (by csolo)) (.releaseMut (by cdead)))
       (.boxI (.unitI (by cdead)) ⟨LifeCtx.defines_of_wf rfl, dead_noLive (by cdead)⟩)
 
 def nestSwap : Expr :=
@@ -324,8 +324,8 @@ theorem nestRead_block :
 
 /-! ### A block with a list leaf
 
-    let (s, u) = withborS bagS (allocS bagS (0, [])) (Λ. λf. let (mn, ml) = f; forget mn;
-                   let (ml′, t) = withswap ml (λl. (7 :: l, ())); t; forget ml′; ());
+    let (s, u) = withborS bagS (allocS bagS (0, [])) (Λ. λf. let (mn, ml) = f; release mn;
+                   let (ml′, t) = withswap ml (λl. (7 :: l, ())); t; release ml′; ());
     u; let (n, l) = freeS bagS s; freeNat n; freeList l -/
 
 /-- `{n : N, items : L}` as a block. -/
@@ -340,11 +340,11 @@ theorem d_bagCb :
     CDerives LifeCtx.empty [] bagCb (.val (cbT mutM 0 LifeCtx.empty.meetOfDom bagS .unit)) :=
   callbackW ok_empty rfl .nil <|
     letW (A := .mut (.var 0) natN) (B := .mut (.var 0) clistL) (.var (by csolo)) <|
-    seqW (appW (.var (by csolo)) (.forgetMut (by cdead))) <|
+    seqW (appW (.var (by csolo)) (.releaseMut (by cdead))) <|
     letW (A := .mut (.var 0) clistL) (B := .unit)
       (appW (d_pushG (by cdead)) (appW (.var (by csolo)) (.withswap (by cdead)))) <|
     seqW (.var (by csolo)) <|
-    seqW (appW (.var (by csolo)) (.forgetMut (by cdead)))
+    seqW (appW (.var (by csolo)) (.releaseMut (by cdead)))
       (.boxI (.unitI (by cdead)) ⟨LifeCtx.defines_of_wf rfl, dead_noLive (by cdead)⟩)
 
 def bagBlock : Expr :=

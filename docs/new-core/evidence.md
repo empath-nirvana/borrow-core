@@ -10,12 +10,7 @@ proved at that part's rules, not a result of its own. Every other name is a Lean
 
 | Part | Result (Lean name) | Branch, commit |
 |---|---|---|
-| Destructors on every exit | rule `CDerives.effLetD`, destructors by type `dropOf`/`DropOk.derives`; per-exit runs `letDE_raise_run`, `letDE_cancel_run`, `letDE_return_run`, exits `letDE_raise_exit`, `letDE_cancel_exit`; `resourceSafety` (`adequacyD` read over cells) | library: `Core/LetDtor.lean`, `Core/LetDtorSafety.lean` |
-| Cancellation; early loop close | *programs* `cancelProg_safe`, `cancel_order`, `loopProg_safe`, `loop_close3`; typing lemma `d_stepD` | library: `Core/LetDtorCancel.lean`, `Core/LetDtorLoop.lean` |
-| A lend whose callback raises | typing lemma `d_lendD`; *programs* `lendMutRaise_safe`, `lendNested_run` | library: `Core/LetDtorLend.lean` |
-| Owned resources across a suspension | typing lemma `d_kDtor`, `dropOk_kappa`; *programs* `ySeqDrop_safe`, `ySeqDrop_order` | library: `Core/LetDtorSuspend.lean` |
-| `hdv` is guardedness | rule `CDerives.effLetDDiv` | library: `Core/LetDtor.lean` |
-| Step-indexed `ewp`; storing scheduler, unbounded loop, no fuel | `ewp_handle`, `adequacy`, `progStore_orDiverges`, `progDrop_orDiverges` | `dtor-unwind` 9f0571da |
+| Step-indexed `ewp`; storing scheduler, unbounded loop, no fuel | `ewp_handle`, `adequacy`, `progStore_orDiverges`, `progConsume_orDiverges` | `dtor-unwind` 9f0571da |
 | `[handle]` at Core's borrow-free types without `hdv` | `handle_sem`, `kap_sem` | `dtor-unwind` 6969c14f |
 | Index-relative `mut` cells; 6.48, 6.59 at the index | `UpdMutN`, `not_mutMutMemberStep`, `updVN_frame`, `six59VN` | `dtor-unwind` 99fc8d04, 20641658 |
 | Handlers over Core's worlds | `erwp_handle`, `erwp_ccatch`, `erwp_safe` (progress only) | `dtor-unwind` f0b46033 |
@@ -42,7 +37,7 @@ proved at that part's rules, not a result of its own. Every other name is a Lean
 | The resume condition at every type, from the branch hypotheses (`hbr`, `hnα`) | `joinFd_of_branch`, `TWNC.noOwnUnder` | `tree-life` bfe33dab, c4addc10 |
 | Re-reading: semantic types read at the tree, `mut` cells re-read as it grows | `RR`, `RR.func`, `RR.refl`, `RR.inStratum`, `RR.exists_of` | library: `Support/Model/Tree/Reread.lean` |
 | Store types as codes; re-typing where no `mut` cell is held | `KTy`, `KTy.interp`, `interp_retype`, `RR.exists_retype`, `RR.trans_retype` | library: `Support/Model/Tree/World/Codes.lean` |
-| The relation's types at the tree: value types downward closed and monotone, computation types downward closed and read at `cerwpT`, `F A` Kripke along `KeepRel` (a bare run is not); a re-read `mut` cell's invariant is its store type (by `RC`'s definition) | `STy`, `STy.reread`, `STy.mu_fold`, `STy.allBody_mono`, `STy.list_cons`, `RC.mut_extends`, `cerwpT_le`, `cerwpT_post_mono`, `SCmp.ret_kripke`, `SCmp.ret_le`, `SCmp.loopBody_mono`, `SCmp.loop_nonempty`, `STy.thunkRet_intro`, `Obs.cerwpT_not_keepKripke` | library: `Core/TreeSem.lean`, `Core/TreeSemC.lean`, `Core/TreeSemObs.lean` |
+| The relation's types at the tree: value types downward closed and monotone, computation types downward closed and read at `cerwpT`, `F A` Kripke along `KeepRel` (a bare run is not); a re-read `mut` cell's invariant is its store type (by `RC`'s definition) | `STy`, `STy.reread`, `STy.mu_fold`, `STy.allBody_mono`, `STy.list_cons`, `RC.mut_extends`, `cerwpT_le`, `cerwpT_post_mono`, `SCmp.ret_kripke`, `SCmp.ret_le`, `SCmp.loopBody_mono`, `SCmp.loop_nonempty`, `STy.thunkRet_intro`, `Obs.cerwpT_not_keepKripkeNil`, `STy.kontBox_resume_after` at a proper extension (`KEx.kontBox_depth1`, `KEx.kontBox_depth3`, `Obs.d1_nonvacuous`), `KEx.round7_codes` | library: `Core/TreeSem.lean`, `Core/TreeSemC.lean`, `Core/TreeSemObs.lean` |
 | The tree world; its extension carries a resource, `●` commutes with re-reading, the world is re-read | `TWd`, `TWd.Ext.trans`, `RR.split_retype`, `WInv.reread` | library: `Support/Model/Tree/World/World.lean` |
 | Frame records and the typed tree world with canonical images; the template choice carried by re-reading and coherent; at the `Classical` choice the images are `canonT`/`canonDT` | `FrameRecT`, `TWNT`, `canonTc`, `canonDTc`, `TWNT.templ_reread`, `TWNT.tcCoherent`, `TWNT.tcCarried_exists`, `canonTc_tmplT`, `canonDTc_tmplT` | library: `Support/Model/Tree/World/Records.lean`, `Templ.lean`, `InvUses.lean` |
 | Every typed tree world satisfies the invariant; one `mut` cell per location; no `own` cell of a lent location beneath a borrow | `twnt_invHolds`, `TWNT.mutOne`, `TWNT.noOwnUnder` | library: `Support/Model/Tree/World/TInvHolds.lean`, `Coherent.lean`, `InvUses.lean` |
@@ -62,7 +57,7 @@ proved at that part's rules, not a result of its own. Every other name is a Lean
 | The resume condition at the escrow's exclusive locations, at a join, from the cactus invariant and the other branches' points; without points it fails | `fdEsc_at_join`; `cactusT_config`, `cactusT_not_fdEsc`, `config_not_joinPt` | library: `Core/TreeCactus.lean` |
 | Other branches' steps keep that condition; without the printed `↭` at `twp`'s end they need not (refuted) | `stepKeepsFdEsc`; `not_stepKeepsFdEscNoUpd`, `copy_end_refused`, `copy_config` | library: `Core/TreeStepKeep.lean` |
 | Headlines at one branch: adequacy; a step keeps others' open lends (R1); a lend is not ended while a stored branch holds part of it (R2); a join's valid end leaves the others nothing of the lend (R3) | `topAdequacyT`, `r1_stepKeepsFdEsc`, `r2_endBlockedByHolder`, `r3_joinEndNeedsFdEsc`, `fdEsc_of_end_valid`, `config_end_refused` | library: `Core/TreeHeadlines.lean` |
-| A must-resume `κ` is strictly linear: not persistent, no destructor | `kappa_lin_strict` | library: `Core/LetDtorSuspend.lean` |
+| A must-resume `κ` is linear and not consumable | `kTy_lin` | library: `Core/Classes.lean` |
 | World operations over the tree world; store typing growth | `TWd.addTy_ext`, `Cov.mono`, `RR.mono`, `winv_swap` | `tree-wp` fc49ed48, 44667d04 |
 
 The target programs are in `corpus/pending/` on the local branch `pending-770`, stacked on

@@ -111,11 +111,11 @@ theorem d_c₀ {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
       (.ret (.thunkV rfl (.lam
         (.unitE (.left (.dead (deadSplit hΓ)))
           (.lolliE (.left (.dead (deadSplit hΓ))) (.var (.here (.cons hΓ)))
-            (.forgetImm (.cons (.cons hΓ))))
+            (.releaseImm (.cons (.cons hΓ))))
           (.ret (.roll natBody_noMut natN_closed (.sumI₁ (.unitI (.cons (.cons hΓ)))))))))))
 
 /-- The callback at a counter `g` (index `4`):
-`Λ. λu. case u {inj₁ w. w; 0 | inj₂ t. g [] t to n. inj₂ n}`.  The `inj₁` branch drops `g`,
+`Λ. λu. case u {inj₁ w. w; 0 | inj₂ t. g [] t to n. inj₂ n}`.  The `inj₁` branch consumes `g`,
 a persistent slot, at its leaf.  `[spec §10]` -/
 def cbE : Expr := .val (.lam (.val (.lam (.case (.var 0)
     (.seq (.var 0) (.inj₁ (.val .unit)))
@@ -141,11 +141,11 @@ theorem d_cb {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     (.unroll (A := VTy.immG (.var 1) (VTy.scons listL .tvar) listBody)
       (.var (.here (hd (hd (hd (hd hΓ)))).toP)))
     ?_ ?_
-  · -- `inj₁ w. w; 0`, dropping `g`
+  · -- `inj₁ w. w; 0`, consuming `g`
     refine .unitE (.left (.dead (.dead (.dead (.dead (.right (deadSplit hΓ)))))))
       (.var (.here (hd (hd (hd (hd (hd hΓ))))).toP)) ?_
     refine .ret (.boxI (.roll natBody_noMut natN_closed
-      (.sumI₁ (.unitI (.cons (.cons (.cons (.cons (.cons (.drop rfl hΓ.toP)))))))))
+      (.sumI₁ (.unitI (.cons (.cons (.cons (.cons (.cons (.weaken rfl hΓ.toP)))))))))
       ⟨LifeCtx.defines_of_wf rfl, fun s hs hl => ?_⟩)
     simp only [List.mem_cons] at hs
     rcases hs with rfl | rfl | rfl | rfl | rfl | rfl | hs

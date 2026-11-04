@@ -20,7 +20,7 @@ resource, with two laws as fields:
   value of its type after it (`STy.reread`: the re-reading exists, and the value meets the type
   there at every such list).
 
-**Why the list** (departure E3 resolved, #794). A thunk's meaning is a run of the relation, and a
+**Why the list.** A thunk's meaning is a run of the relation, and a
 run is at a list. A value type that does not read the list can only run its thunks at a list fixed
 in advance, and the only list every world has is `[]`. At `[]` a run says nothing of a resource
 holding a view: no world with an empty list holds an `imm` cell (`cerwpT_nil_of_imm`,
@@ -32,8 +32,10 @@ Every former is an `STy` constructor, both laws proved from the components': cod
 `1`, `0`, `+`, `⊗`, `Imm`, `Mut` (at a store code, E1), `[a]`, `ref`, `!`, `Unk`, the integers, the
 opaque types, the families `[L]`, thunks (`STy.thunk`), `μ` (`STy.mu`) and type variables
 (`STy.var`). Every former `X` may occur under in a Core `μ` body (`VTy.NoMut`: `+`, `⊗`, `Imm`,
-`[a]`, `ref`, `!`, `[L]`) is monotone in it (`STy.sum_le` … `STy.fam_le`), so `μ` folds and
-unfolds at those bodies (`STy.allBody_mono`; `List`'s cons, `STy.list_cons`). The
+`[a]`, `ref`, `!`, `[L]`) is monotone in it (`STy.sum_le` … `STy.fam_le`), and so is `μ` in its
+body (`STy.mu_le`), so `μ` folds and unfolds at every body built from them: shown at
+`STy.allBody_mono` and `List`'s cons (`STy.list_cons`). A map from `NoMut` bodies to monotone
+bodies is not built. The
 computation types, `ν`, `∀` over lifetimes and thunks read at `cerwpT` are `Core/TreeSemC.lean`.
 Continuation and task types are `Core/TreeSemK.lean`.
 
@@ -432,6 +434,11 @@ theorem STy.mu_fold {Φ : STy → STy} (hΦ : STy.MonoBody Φ) : (Φ (STy.mu Φ)
 /-- **Unfold** at a monotone body. -/
 theorem STy.mu_unfold {Φ : STy → STy} (hΦ : STy.MonoBody Φ) : (STy.mu Φ).Le (Φ (STy.mu Φ)) :=
   STy.mu_least (hΦ _ _ (STy.mu_fold hΦ))
+
+/-- **`μ` is monotone in its body**: a candidate closed under the larger body is closed under the
+smaller one. So a body `μY. G X Y` is monotone in `X` when `G` is. -/
+theorem STy.mu_le {Φ Ψ : STy → STy} (h : ∀ X, (Φ X).Le (Ψ X)) : (STy.mu Φ).Le (STy.mu Ψ) :=
+  fun _ _ _ _ _ hv Y hY => hv Y (STy.le_trans (h Y) hY)
 
 /-- A type variable: an environment entry, a value type. -/
 def STy.var (η : Nat → STy) (i : Nat) : STy := η i

@@ -17,7 +17,7 @@ fn sum<'a>(v: array_imm 'a i32) -> i32 =
     v = w;
     k = k + at(x, i, 0)
   };
-  array_forget['a, i32](v);
+  array_release['a, i32](v);
   k
 
 main -> i32 =

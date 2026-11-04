@@ -10,7 +10,7 @@ kind apart from the other two, and that's how it knows which functions terminate
 `for x in a..b` counts from `a` up to `b - 1`. A `for` over an array or a view visits its
 elements, and the source's type decides how, much like Rust's `IntoIterator`:
 
-- over an owned array, the elements are copied out and the array is dropped after the loop;
+- over an owned array, the elements are copied out and the array is consumed after the loop;
 - over `&a`, each element is lent `imm` and you keep the array;
 - over `&mut a`, each element is lent `mut`, so the loop can change it in place;
 - over a view, each of its elements is lent.
@@ -151,7 +151,7 @@ whose body yields counts as a looping generator, so `squares` is div.
 
 ### Leaving early: `break` and `return`
 
-`break` in a `for`'s body stops the generator, and anything the generator owns is dropped.
+`break` in a `for`'s body stops the generator, and anything the generator owns is consumed.
 `return e` returns from the function around the loop. Inside a generator, `break` leaves the
 innermost loop, and `return` ends the generator from any depth.
 

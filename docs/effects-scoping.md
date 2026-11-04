@@ -27,7 +27,7 @@ Sources.
 today (§1.1): a capability is a linear value lent by `withbor`; a resume-once handler clause is a
 `!` call on that lent value; abort is a sum exit, as `count_try`'s `inr` and `return` through a
 `for` already are; suspension is `ν` codata compiled as one state machine per body (SPEC §15);
-divergence is `Loop` (SPEC §14); finalisation is SPEC §12's destructors and `ν`'s mandatory
+divergence is `Loop` (SPEC §14); finalisation is SPEC §12's consumes and `ν`'s mandatory
 `close`; and polymorphism over effects is SPEC §14's specialisation at the callback's computation
 type. So the recommended principle is: **a handler's meaning is its elaboration into core**. Effect
 safety is then the existing Fundamental Property and adequacy on the elaborated term, with no new
@@ -41,7 +41,7 @@ cost-parity counts (§1.2).
 |---|---|---|
 | K1. a borrow held across a suspension (a spanning lend; closed by decision 71, `docs/tombstones/lends-across-suspensions.md`) | async tasks that borrow; a `yield` under a borrow; projection ops across a `yield` | O1, `experiments/LoopBorrow`, #52 phase 5 |
 | K2. codata observations that take input (resume *with a value*, later) | `await` that answers data; several tasks sharing one `Mut` capability | #96, operator O2 |
-| K3. destructors that perform I/O or can fail | finalising abandoned continuations that hold host handles | SPEC §12 Open, platform §2.3 |
+| K3. consumes that perform I/O or can fail | finalising abandoned continuations that hold host handles | SPEC §12 Open, platform §2.3 |
 | K4. early exit out of a kernel fold (`fold_own`/`fold_imm`) | `raise` inside a fold over `μ` data | operator O5, matrix C2 |
 | K5. structural and borrowed descent for `rec` | total recursion by size; `rec` over a borrowed tree | rec-effect R8, R9; matrix C2, C3 |
 
@@ -55,7 +55,7 @@ suspension with input).
 
 **Recommended first slice** (§3, stage 1): *answering effects and `Fail`, erased, rows inferred*.
 Effect signatures, stateful handlers with tail-resumptive clauses, `raise`/`try`, finalisation on
-abort by the existing destructors, inferred rows with `total` as the only written promise, and
+abort by the existing consumes, inferred rows with `total` as the only written promise, and
 the handler laws for the two classes it has. It makes target example 2 (a fallible fold without
 `try_fold`) and a first form of example 4 (a `Map` interface with two handlers, `get` answering a
 copy) read well, and needs no kernel change.
@@ -99,7 +99,7 @@ has, **(b)** elaboration or lowering work only, or **(c)** new in the kernel or 
 | resume once, not in tail position | a pushed frame: the continuation as defunctionalised data on a driver's stack | (b) | rec-effect R1 and `rec.bc` (hand-lowered, not in the library) |
 | resume more than once | not provided; `copy` exists only at `!` types | excluded | decision (standing) |
 | divergence | `Loop B R`, the delay bind, `div_fuel`; the runtime drives `main` | (a) | SPEC §14 |
-| finalising an abandoned continuation | SPEC §12's derived destructors at the end of each path; `ν`'s mandatory `close`; the residual of what has no destructor | (a) | SPEC §7 *Destructor*, §12, §14 *The residual* |
+| finalising an abandoned continuation | SPEC §12's derived consumes at the end of each path; `ν`'s mandatory `close`; the residual of what is not consumable | (a) | SPEC §7 *Consume*, §12, §14 *The residual* |
 | polymorphism over effects | specialisation of a function at the computation type of a callback argument, then the effect's own inference on the copy | (a) for parameters, (b) beyond | SPEC §14 *Higher-order functions* |
 | an effect row in a type | nothing: answering effects are capability parameters (the context side), control effects are computation types (`F (B ⊕ E)`, `Loop`, `gen`) | (b), surface only | decision 19; operator README §2 |
 | "no capability, no effect" | a theorem | (a) | `wpTSD_frame_own` (SPEC §11 *Theorems*) |
@@ -182,10 +182,10 @@ follows from the existing Fundamental Property. The erasure theorem is then near
 7. **Totality of `rec`.** A `rec` elaborated to a machine under `fix` is div. Total recursion by
    size needs the descent the checker can see (R8) and borrowed descent at one lifetime (R9):
    K5, (c). Deferrable: `fuel` and data-sized drivers give totality meanwhile.
-8. **Finalisation that performs I/O.** Abandoning a continuation runs destructors; a host
-   handle's destructor is an extern that can fail (SPEC §12 Open: "Whether such a type gets an
-   implicit destructor, and what a failing one does, is not decided"). The platform draft (§2.3)
-   calls its kernel side "small: `dtorE` is built from existing rules", with `dtor_wf` taking
+8. **Finalisation that performs I/O.** Abandoning a continuation runs consumes; a host
+   handle's consume is an extern that can fail (SPEC §12 Open: "Whether such a type gets an
+   implicit consume, and what a failing one does, is not decided"). The platform draft (§2.3)
+   calls its kernel side "small: `consumeE` is built from existing rules", with `consume_wf` taking
    the extern context. K3, (c)-small.
 
 **Verdict.** The claim holds for everything the first two stages need. It breaks in exactly
@@ -343,7 +343,7 @@ and a rough proof burden; dependencies; and whether it is a one-way door.
   `catch` (in place), `map_err`; that `?` disappears; the retirement of `A + E` results in the
   library (decision 46: "Errors are sums (provisional until the error effect, #18)"); how an
   abort leaves loops (`count_try`'s exit), `for` bodies, generators and nested handlers; what
-  happens to live values with no destructor on the abort path (E9); `return` and `break` as
+  happens to live values that are not consumable on the abort path (E9); `return` and `break` as
   private aborts (operator N5).
 - **Examples:** 2; the reconciler's `Fail[KubeError]`; the platform draft's `IoError`.
 - **Class:** (a) the sum exit exists; (b) elaboration of a body with `raise` on its spine,
@@ -358,19 +358,19 @@ and a rough proof burden; dependencies; and whether it is a one-way door.
 ### E9. Finalisation and cancellation
 
 - **Decides:** what runs when a continuation is abandoned (abort, `close`, a lost race, a
-  timeout): the destructors of SPEC §12 in reverse binding order; `close` of each held codata;
-  the handing back of values with no destructor (a capability, a class-3 thunk) through the
+  timeout): the consumes of SPEC §12 in reverse binding order; `close` of each held codata;
+  the handing back of values that are not consumable (a capability, a class-3 thunk) through the
   residual, or a rejection of the abort while one is live; `finally` clauses; effectful and
-  failing destructors (K3; #18's design note on files, "Leaning: 3 as the idiom, 1 as the
-  default destructor").
+  failing consumes (K3; #18's design note on files, "Leaning: 3 as the idiom, 1 as the
+  default consume").
 - **Examples:** 5 (`timeout`), 6 (a cancelled watch), the file design note; #52 phase 3 ("the
   close/unwind cancel path").
-- **Class:** (a) destructors, `close` and residuals exist; (b) placing them on abort paths; (c)
+- **Class:** (a) consumes, `close` and residuals exist; (b) placing them on abort paths; (c)
   K3.
-- **Kernel:** K3 only (small, per the platform draft §2.3). **Proof:** `dtor_wf` with the extern
+- **Kernel:** K3 only (small, per the platform draft §2.3). **Proof:** `consume_wf` with the extern
   context.
 - **Depends on:** E4.
-- **One-way door:** *yes*: whether an abort is legal while a value with no destructor is live
+- **One-way door:** *yes*: whether an abort is legal while a value that is not consumable is live
   (reject, or hand it to the handler with the error, as `close` hands back a residual). Operator
   O5 prefers the second.
 
@@ -467,7 +467,7 @@ and a rough proof burden; dependencies; and whether it is a one-way door.
 ### 2.1 Dependency graph
 
 ```
- type declarations (branch type-declarations)     SPEC §14 specialisation   §15 machine   §12 dtors
+ type declarations (branch type-declarations)     SPEC §14 specialisation   §15 machine   §12 consumes
           │                                                │                     │             │
           E1 signatures                                    │                     │             │
           │                                                │                     │             │
@@ -523,7 +523,7 @@ programs, counts.
 
 | stage | pieces | kernel | target examples it makes read well | deliberately deferred |
 |---|---|---|---|---|
-| **S1. Answering effects and `Fail`, erased, rows inferred** | E1, E2, E4 (classes 0 and tail-1), E5 (those two laws), E7 (inferred; `total` the only written promise), E8, E9 (abort paths with existing destructors) | none | **2** (fallible fold, no `try_fold`, no `?`); **4** in a first form (a `Map` effect with two handlers; `get` answers a copy) | names (S2); `raise` stopping a kernel fold early (K4); projections (S4) |
+| **S1. Answering effects and `Fail`, erased, rows inferred** | E1, E2, E4 (classes 0 and tail-1), E5 (those two laws), E7 (inferred; `total` the only written promise), E8, E9 (abort paths with existing consumes) | none | **2** (fallible fold, no `try_fold`, no `?`); **4** in a first form (a `Map` effect with two handlers; `get` answers a copy) | names (S2); `raise` stopping a kernel fold early (K4); projections (S4) |
 | **S2. Named capabilities and platform bundles** | E3 (names, lexical resolution), E14, E7 (written rows, the RBAC report) | none (the `withborS` at `opq` check) | **3** (two clusters, two maps, two caches); **7** (`wasi` and `posix` handlers); **5** without `timeout` (handlers in a chain, tests swap the bottom, RBAC from the row) | stored callbacks with effects |
 | **S3. `rec`, drivers, layers, `|>`** | E10, E11, E4 (non-tail-1), E5 (its law) | none | **1** (`fib |> memo(cache) |> fuel(1000) |> fix`); **5**'s chain order as semantics; #125's `eval_step |> fix` | K5 (total descent) |
 | **S4. `Yield`, effects inside generators, projections, stored callbacks** | E12, E13 (scoped form), E6 (stored callbacks, fold algebras), E4 (later-1 law) | none (K1 rejected with a message) | **4**'s hard case (`get` lends a view to the rest of the block); **6** without `merge` (the watch loop as a `for` over a fallible, suspending source) | K1 |
@@ -726,7 +726,7 @@ Read: Biernacki, Piróg, Polesiuk, Sieczkowski, *Abstracting Algebraic Effects*,
   : X => Unit | get : Unit => X`. Called as a plain function; with an instance, `get 'x ()`.
 - **Handle.** `handle e with | ask () => resume "Dave" | return x => x end`, deep, multi-shot,
   with `finally`.
-- **Types.** POPL 2019: rows with variables (`[Error, Nondet | r]`). POPL 2020 drops them: "we do
+- **Types.** POPL 2019: rows with variables (`[Error, Nondet | r]`). POPL 2020 consumes them: "we do
   not need row types in our calculus, as finite sets of (instances of) effects are sufficient".
 - **Instances.** POPL 2020's contribution: "lexically scoped effects in which each use (an
   “instance”) of an effect can be singled out by name, bound by an enclosing handler and tracked
@@ -802,7 +802,7 @@ Read: the manual, *Language extensions: effect handlers* (5.3); Sivaramakrishnan
   switching, which decision 25 excludes as the semantics.
 - **For us.** The warning case. What OCaml checks dynamically (one-shot) or leaves to the
   programmer (finalising an abandoned continuation) is, here, linearity: a continuation is a
-  linear value, so an abandoned one is dropped by its destructor (§12), and a second resume does
+  linear value, so an abandoned one is consumed implicitly (§12), and a second resume does
   not type. #18's requirement "abandoned continuations are finalised" is exactly the gap OCaml
   documents.
 
@@ -850,7 +850,7 @@ Effects, Ownership, and Borrowing* (2024-02-20) and *Why Algebraic Effects?* (20
   Read (&own mut Box String) effect is considered to borrow from the same effect handler.
   Attempting to retrieve two owned, mutable references from the same handler then would be a
   lifetime error". A reference passed *into* an operation ties the resumption: "we cannot call
-  resume until they are dropped." Resume kinds per operation (`fork.resume: FnMut _ _`).
+  resume until they are consumed." Resume kinds per operation (`fork.resume: FnMut _ _`).
 - **Compiles to.** The 2024 post: "by converting effectful functions to continuation passing
   style (CPS) - like Ante does", and a footnote crediting Effekt's staging. I have not verified
   the current implementation.
@@ -1293,15 +1293,15 @@ accept it, measure it (a code-size column in the counts), and copy per *class* (
 abort, suspend), not per handler, where the handler's own code is a call: two answering
 handlers of `Log` then share one copy of the client.
 
-### 7.10 What to finalise when an abort meets a value with no destructor
+### 7.10 What to finalise when an abort meets a value that is not consumable
 
-A capability, a thunk of `F A` and a `μ` outside `FShape` have no destructor (SPEC §12 class
+A capability, a thunk of `F A` and a `μ` outside `FShape` are not consumable (SPEC §12 class
 3). An abort that abandons one either is rejected, or hands it to the handler with the error.
 The operator (O5) notes that its capabilities live in handlers and bodies hold only borrows,
 "and a borrow just ends". **Recommendation:** S1 rejects the abort while a class-3 value is
 live and names it (honest and reversible); the residual form, as `close` hands back a residual,
 comes with E9 in S4/S5. rec-effect §9 lists the same question for frames: "Whether frames
-holding a capability (a value with no destructor) can be dropped on a stop."
+holding a capability (a value that is not consumable) can be consumed on a stop."
 
 ---
 
@@ -1317,7 +1317,7 @@ under decision 17.
    handlers and one client; tail-1 law on the elaboration schema; counts equal to the
    hand-written capability-passing program. No kernel change.
 2. **Effects S1b: `Fail` as the first effect.** `raise`, `try`, `catch`, `map_err`; abort as a
-   sum exit through `DivSt.exits` and `count_try`; destructors on the abort path; rejection of an
+   sum exit through `DivSt.exits` and `count_try`; consumes on the abort path; rejection of an
    abort while a class-3 value is live. Retire `A + E` results and `?` in `lib/`. Acceptance:
    the fallible fold (target 2) with counts equal to the sum version; the abort law. Records K4
    (early exit from a kernel fold) as open.

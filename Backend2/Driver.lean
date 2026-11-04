@@ -161,7 +161,7 @@ def freeUses : Nat → Tm → List (Var × Bool)
     | .letpair _ _ p b => (p, false) :: freeUses f b
     | .case s _ b₁ _ b₂ => (s, false) :: (freeUses f b₁ ++ freeUses f b₂)
     | .absurd s => [(s, false)]
-    | .copy _ x _ b | .drop _ x b | .abandon _ x b => (x, false) :: freeUses f b
+    | .copy _ x _ b | .consume _ x b | .abandon _ x b => (x, false) :: freeUses f b
 
 /-- The lend scopes a term allocates cells for, and the variables its `letpair`s bind first. -/
 def scopesIn : Nat → Tm → List Nat × List Var
@@ -179,7 +179,7 @@ def scopesIn : Nat → Tm → List Nat × List Var
       let (s₁, x₁) := scopesIn f b₁
       let (s₂, x₂) := scopesIn f b₂
       (s₁ ++ s₂, x₁ ++ x₂)
-    | .copy _ _ _ b | .drop _ _ b | .abandon _ _ b => scopesIn f b
+    | .copy _ _ _ b | .consume _ _ b | .abandon _ _ b => scopesIn f b
     | _ => ([], [])
 
 -- UNPROVED: that a variable its function uses only as the operand of `free` is freed on every
@@ -460,30 +460,30 @@ def interpStage (stage : String) (k : Except String Backend.CheckedProg) (input 
   | _ => throw s!"unknown stage `{stage}`"
 
 /-- `UNPROVED:` (#746 item 5, F3) **the stack machine's hand-over**: at every configuration of
-the LIR interpreter that a run of a converted program reaches at a `stackK` drop of `x`, whose
+the LIR interpreter that a run of a converted program reaches at a `stackK` consume of `x`, whose
 body binds `clos kc [base]` first, `x` is `clos kc [a]` and `base` is at or below `a` on the
 current task stack, the frames from the top down to `a` written (`HandOver`). Proved beside it,
-and only this: the frames of `k₂`'s range contain the dropped `k`'s (`TakesOver.suffix`), and a
-`stackK` drop's step, as every drop's, touches no heap (`enter_stackK_keeps`). That `k₂`, resumed
-or cancelled as its type requires, then releases those frames, so that the drop leaks nothing, is
+and only this: the frames of `k₂`'s range contain the consumed `k`'s (`TakesOver.suffix`), and a
+`stackK` consume's step, as every consume's, touches no heap (`enter_stackK_keeps`). That `k₂`, resumed
+or cancelled as its type requires, then releases those frames, so that the consume leaks nothing, is
 part of what is assumed, not derived.
 
 This is an assumption. It rests on the stack machine's construction (`genStackMach`): each
 level's `mk` answers `clos kc [a]` at its own frame, and its call points call levels of the
 machine itself, whose frames are above it (`stackedOf`). The kernel does not see the task stack,
-so no kernel rule licenses the drop; #755 (task stacks in the kernel) is the route to proving
+so no kernel rule licenses the consume; #755 (task stacks in the kernel) is the route to proving
 it. It is about the code `Convert` generates: an LIR program can carry a `stackK` node that `Lint`
 accepts whose run fails the hand-over (`Backend2/LintTests.lean`), which the interpreter refuses
-(`handOverB`, checked at every `stackK` drop of every run). It covers every checked program,
+(`handOverB`, checked at every `stackK` consume of every run). It covers every checked program,
 those with capabilities (`run_io`) among them: the machine's code is the same there. -/
 def StackKHandOver : Prop :=
   ∀ (k : Backend.CheckedProg) (p : Prog) (c : CState), lirOf k = .ok (p, c) →
     ∀ (input args : List UInt8) (s : St) (x : Var) (b : Tm),
-      Visits p (St.init p input args) p.main s (.drop .stackK x b) → HandOver s x b
+      Visits p (St.init p input args) p.main s (.consume .stackK x b) → HandOver s x b
 
-/-- Whether a node of `t` is a stack machine's hand-over, a drop at the rule `stackK`. -/
+/-- Whether a node of `t` is a stack machine's hand-over, a consume at the rule `stackK`. -/
 def Tm.hasHandOver : Tm → Bool
-  | .drop r _ b => r == .stackK || b.hasHandOver
+  | .consume r _ b => r == .stackK || b.hasHandOver
   | .copy _ _ _ b | .abandon _ _ b => b.hasHandOver
   | .letv _ e b => e.hasHandOver || b.hasHandOver
   | .letpair _ _ _ b => b.hasHandOver
@@ -574,7 +574,7 @@ def nativeAssumptions : List String :=
    "backend (native): the runtime (Backend/Native/Runtime.lean) and clang"]
 
 /-- **What the new backend's code rests on beyond the kernel** (`bcc trusted`, SPEC §29, §50,
-§52): the hand-over `StackKHandOver` at each function of the program's LIR with a `stackK` drop,
+§52): the hand-over `StackKHandOver` at each function of the program's LIR with a `stackK` consume,
 as `typingReport` lists `PinLaw` at each relaxed rule; `LendEnclosesFn` at each function whose
 parameters have borrow facts (`factsFns`); `CallRelated` and `HostStack` at each `willreturn`
 function (`willreturnFns`); and the native target's other assumptions (`nativeAssumptions`) at

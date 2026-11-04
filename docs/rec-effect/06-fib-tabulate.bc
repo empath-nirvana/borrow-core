@@ -53,7 +53,7 @@ fn tie(f: !(array i32 * i32 => array i32 * (i32 + 1))) -> !(array i32 * i32 => a
 -- Depth 3: a call, and its two calls, which hit.
 fn fix3() -> !(array i32 * i32 => array i32 * (i32 + 1)) = tie(tie(tie(bottom)))
 
--- One turn of the tabulation: fib(i), stored by the layer; the answer is dropped.
+-- One turn of the tabulation: fib(i), stored by the layer; the answer is consumed.
 fn tab_at(i: i32, c: array i32) -> array i32 =
   let f = fix3();
   let (c, r) = f(c, i);

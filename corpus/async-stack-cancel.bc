@@ -1,6 +1,6 @@
 -- SPEC §52 stress: a recursive task cancelled while 400 levels deep, its frames over more than one
 -- chunk of its stack. Each level owns a cell it frees after its `await`; the cancel pops the frames
--- from the top down, each level's cell freed by its drop glue, innermost first. A second task is
+-- from the top down, each level's cell freed by its consume glue, innermost first. A second task is
 -- cancelled at its first `await`, before any level below the first.
 --
 -- Answer: `i32[3]`, the three resumes made before the cancels, and `live 0`: every level's cell and

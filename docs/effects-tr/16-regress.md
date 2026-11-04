@@ -75,7 +75,7 @@ internal lend: the position the level had to make valid at a fresh lifetime.
 | 0 | #249, #251 (§15) | the continuation stored in a `Mut` cell | the cell lemma for rebased continuations (T15.5); rebasing is 6.147 (`wpTS_box`) and 6.50 | O15.1, a lend spanning a stop; O15.2, relabelling at `U` | new: a stored continuation. The internal lend is excluded by T1 |
 | 1 | #253 | the cell's stored invariant `P̂` | every definition natural under a re-stratification except `𝒱⟦Mut⟧` (`not_vDenNatural`) | `wp` naturality (`WpNatural`) | the same problem, at a stored predicate. It shows the renaming must re-create cells (re-lend), not move them |
 | 2 | #258 | the frame's code and the root slot `m` | ghost-end (`freeze_at`), 6.65 at a resuming table (`ewpTS_M_frameR`), straight-line borrowers (`withbor_spans_yields_cC`) | general borrowers | new: freeze and re-lend |
-| 3 | #260 | frame slots other than `m` (`StopSafe`) | typed borrowers (`withbor_of_rbody`), loops (`open_boundedFix`), drop at a cancellable yield | frames holding `'x` values; effectful premises | the same problem, one position over |
+| 3 | #260 | frame slots other than `m` (`StopSafe`) | typed borrowers (`withbor_of_rbody`), loops (`open_boundedFix`), consume at a cancellable yield | frames holding `'x` values; effectful premises | the same problem, one position over |
 | 4 | #262 | data (`LOk`), closures the borrower builds (`TV`), closures it calls (`CloL`) | `withbor_of_rbodyT`, `withbor_of_rbodyC`, `callee_spans_yields` | a pure piece handed a `CloL` closure; `KernelInvariant` | the same problem, at data and then at closures |
 | 5 | #264 | any `U` value of the ordinary relation | `URelend` named exactly (`frameThawsD_thunk_iff`); route (b) supplies it by construction | the fundamental lemma at route (b) | the same problem at every `U`. This is the last type position |
 | 6 | #266 | every type former; the views of other internal lends | `uRelendRL`, the key steps of the non-routine compatibility lemmas, the guard `vRLg` | the stack of open lends | new axis: several internal lends. `thunkF_RL_fails_below_at` |
@@ -93,10 +93,10 @@ fresh, shorter lifetime, and the value's relation does not say that it is.
 **The Lean shape.** It is `Relendable` (`RLCompat.lean`), and at the kernel's relation it is
 `URelend` (`Bridge.lean`). Written for a predicate `P` indexed by the lend's lifetime:
 
-    P α ls ρ  ⟹  ∃ d ρz ρn.  ρ = ρz ● ρn  ∧  dropC ℓ d ρn  ∧  ρz ∈ Res_α
+    P α ls ρ  ⟹  ∃ d ρz ρn.  ρ = ρz ● ρn  ∧  consumeC ℓ d ρn  ∧  ρz ∈ Res_α
                    ∧  ∀ ls' ⊒ ls.  ∀ α' ⊑ α.  (vwD ℓ T δ d α' ls' ─⋆ P α' ls') ρz
 
-The value drops the cell, its remainder lies strictly above `α`, and the remainder, handed the
+The value consumes the cell, its remainder lies strictly above `α`, and the remainder, handed the
 fresh view at any `α′ ⊑ α`, satisfies `P` at `α′`. This is the antitone closure of `P` in the
 internal lifetime. It is a unary form of parametricity in `'x`, restricted to renamings that move
 `'x` down.
@@ -234,7 +234,7 @@ The relation:
     cRL_σ (A → C)        ≜ ∀ v. vRL_σ A ─⋆ cRL_σ C (e v);  ∀, &, ⊤, ν as cC's
     vRL_[] = vC,  cRL_[] = cC
 
-`Relendable_σ` drops one cell per entry, and its remainder lies strictly above the cut the
+`Relendable_σ` consumes one cell per entry, and its remainder lies strictly above the cut the
 entries' table allows. `TabAt_σ` is `TabAt` for a stack. The exact form of both is #268's item 3,
 and of their `imm` entries item 2. Neither is fixed here.
 
@@ -374,7 +374,7 @@ remove the residue of (a).
   is no lifetime order, and a generator may hold a loan of its own resource across yields with
   nothing to rename. It needs no step index, but its borrowed resources carry no stored invariant.
 - BoLo's borrows store a predicate `P̂`, and the strata are what make that impredicativity well
-  founded. RustBelt keeps the invariants and drops the strata, and pays with Iris's step-indexing.
+  founded. RustBelt keeps the invariants and consumes the strata, and pays with Iris's step-indexing.
 - The middle option keeps the strata over a well-founded partial order, with freshness relative
   to a lend's dependencies rather than to every live lifetime. It is a hypothesis, not checked.
   The carrier's algebra uses totality at `imm` cells' lifetime sets (`le_total` on joins and

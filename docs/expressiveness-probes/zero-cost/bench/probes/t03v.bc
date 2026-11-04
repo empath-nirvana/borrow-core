@@ -18,6 +18,6 @@ fn parse<'t>(s: text 't) -> buf i32 * i32 =
     if c == b',' { errs = errs + 1 } else { () };
     pos = pos + 1
   };
-  array_forget['t, u8](s);
+  array_release['t, u8](s);
   (vals, errs)
 main -> i32 = let (vals, errs) = borrow imm "12,-3, 40,x,7" { t -> parse(t) }; errs

@@ -10,7 +10,7 @@ typed as any other term, admits `g = skip`:
 
     skip d = ⟨(d π₁) to x. case x {inj₁ a. now a | inj₂ t. t π₁}, d π₂⟩
 
-`skip` drops one `later` of its argument; it is a `CDerives` derivation (`d_skip`), so
+`skip` consumes one `later` of its argument; it is a `CDerives` derivation (`d_skip`), so
 `fundamentalC` gives it its semantic type.  The fixed point `N = later (skip N)` (`NV`, built
 with the Z combinator) is not in `⟦D 1⟧` (`naive_not_delay`, `naive_not_sem`): its first `next`
 returns `later t` (`nv_next_run`), and the `next` of `t` has no terminating run

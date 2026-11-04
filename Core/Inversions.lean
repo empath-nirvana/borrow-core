@@ -43,8 +43,8 @@ at a row only when its cancel row is no `⊤` and below the row (`cancelTy_rowLe
 
 **A continuation is used once.**  At a resuming must-resume or cancellable operation, a clause's `κ`
 is at `kTy`, a thunk of an `&`, which is not persistent (`kTy_not_persistent`): a live slot of it is
-neither dropped by a consumed context nor read on both sides of a split, and a must-resume `κ`'s
-cancel is at `⊤` only (`der_cancel_lin`).  So no clause that drops `κ` (R1), resumes it twice (R2),
+neither consumed by a consumed context nor read on both sides of a split, and a must-resume `κ`'s
+cancel is at `⊤` only (`der_cancel_lin`).  So no clause that consumes `κ` (R1), resumes it twice (R2),
 or cancels and then resumes it (R4) is typed at its clause type, and at a must-resume operation no
 clause that cancels it (R3) (`refuses_R_clauses`).  The refusals are of `κ`'s use: at the same
 clause types a clause that resumes `κ` once is typed, and a clause that cancels `κ` is typed at a
@@ -512,7 +512,7 @@ theorem deadP_slot {Γ : Ctx VTy} (hd : Ctx.DeadP Γ) :
       cases k with
       | zero => simp at h
       | succ k => exact ih (by simpa using h)
-  | drop hT _ ih =>
+  | weaken hT _ ih =>
       intro k T h
       cases k with
       | zero =>
@@ -843,7 +843,7 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
 /-- The term constants of `CDerives`'s conclusions, unfolded to their head constructors, so that a
 rule whose conclusion's term has another head is told apart. -/
 macro "cd_terms" : tactic => `(tactic| (try simp_all [withPair, absurdE, copy, forget, swap,
-    withbor, withload, withswap, sizeV, replaceV, arrLenV, copyV, forgetV, emptyFamV, swapV,
+    withbor, withload, withswap, sizeV, replaceV, arrLenV, copyV, releaseV, emptyFamV, swapV,
     Val.arr, withborUE, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV, divFuelV, reifyV, BoCa.BoLo.performE,
     BoCa.BoLo.raiseE, opArgE, awaitE, thenE, hndTerm, hndExpr, Expr.val, Val.lam, Val.prim, Val.unit,
     Val.i32, lam2, elet, unit', v0, v1, v2, v3, load', store', mintE, burnE]))
@@ -857,7 +857,7 @@ theorem forceE_var {C : CTy} {i : Nat} {e : Expr} (h : forceE C (.var i) = e) :
 
 /-- The same, at one hypothesis alone. -/
 macro "cd_at " h:ident : tactic => `(tactic| (simp [withPair, absurdE, copy, forget, swap,
-    withbor, withload, withswap, sizeV, replaceV, arrLenV, copyV, forgetV, emptyFamV, swapV,
+    withbor, withload, withswap, sizeV, replaceV, arrLenV, copyV, releaseV, emptyFamV, swapV,
     Val.arr, withborUE, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV, divFuelV, reifyV, BoCa.BoLo.performE,
     BoCa.BoLo.raiseE, opArgE, awaitE, thenE, hndTerm, hndExpr, Expr.val, Val.lam, Val.prim, Val.unit,
     Val.i32, lam2, elet, unit', v0, v1, v2, v3, load', store', mintE, burnE] at $h:ident))
@@ -1462,8 +1462,8 @@ theorem der_hnd {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
 
 /-! #### λ-values -/
 
-/-- `forget`'s axioms (`forgetV` is `forget`): at `!A`, `Imm`, `Mut`, `Unk` and `ArrayImm`. -/
-def ForgetTy (T : VTy) : Prop :=
+/-- `forget`'s axioms (`releaseV` is `forget`): at `!A`, `Imm`, `Mut`, `Unk` and `ArrayImm`. -/
+def ReleaseTy (T : VTy) : Prop :=
   (∃ X, T = .thunk (.arr X (.ret .unit)) ∧
     ((∃ A, X = .bang A) ∨ (∃ a A, X = .imm a A) ∨ (∃ a A, X = .mut a A) ∨ X = .unk)) ∨
   (∃ a A, T = .bang (.thunk (.arr (.fam (.imm a A)) (.ret .unit))))
@@ -1482,7 +1482,7 @@ def OtherLam (e : Expr) : Prop :=
 
 /-- A λ-constant, read at the views of its axiom's type. -/
 def LamAx (e : Expr) (j : Jdg) : Prop :=
-  (e = forget ∧ ∃ T, ForgetTy T ∧ ValCls T j) ∨
+  (e = forget ∧ ∃ T, ReleaseTy T ∧ ValCls T j) ∨
     (∃ d, e = withborUE d ∧ ∃ T, WithborUTy T ∧ ValCls T j) ∨ (OtherLam e ∧ ∃ T, ValCls T j)
 
 theorem LamAx.step {e : Expr} {j j' : Jdg} (hs : JS j j') (h : LamAx e j) : LamAx e j' := by
@@ -1582,7 +1582,7 @@ theorem otherLam_burn : OtherLam burnE := by simp [OtherLam]
 theorem lamAx_other {e : Expr} (h : OtherLam e) (T : VTy) : LamAx e (.val T) :=
   .inr (.inr ⟨h, T, ValCls.refl T⟩)
 
-theorem lamAx_forget {T : VTy} (h : ForgetTy T) : LamAx forget (.val T) :=
+theorem lamAx_release {T : VTy} (h : ReleaseTy T) : LamAx forget (.val T) :=
   .inl ⟨rfl, T, h, ValCls.refl T⟩
 
 theorem lamAx_withborU (d : Expr) {T : VTy} (h : WithborUTy T) : LamAx (withborUE d) (.val T) :=
@@ -1672,15 +1672,15 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
           (.inr (.inr (.inr (.inr (.inl ⟨_, rfl⟩)))))))))))))))) _)
   | tokMint => intro M he; exact LamInv.ofAx (he ▸ lamAx_other otherLam_mint _)
   | tokBurn => intro M he; exact LamInv.ofAx (he ▸ lamAx_other otherLam_burn _)
-  | forgetBang => intro M he; exact LamInv.ofAx (he ▸ lamAx_forget (.inl ⟨_, rfl, .inl ⟨_, rfl⟩⟩))
-  | forgetImm =>
-      intro M he; exact LamInv.ofAx (he ▸ lamAx_forget (.inl ⟨_, rfl, .inr (.inl ⟨_, _, rfl⟩)⟩))
-  | forgetMut =>
+  | releaseBang => intro M he; exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inl ⟨_, rfl⟩⟩))
+  | releaseImm =>
+      intro M he; exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inr (.inl ⟨_, _, rfl⟩)⟩))
+  | releaseMut =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_forget (.inl ⟨_, rfl, .inr (.inr (.inl ⟨_, _, rfl⟩))⟩))
-  | forgetUnk =>
-      intro M he; exact LamInv.ofAx (he ▸ lamAx_forget (.inl ⟨_, rfl, .inr (.inr (.inr rfl))⟩))
-  | arrForget => intro M he; exact LamInv.ofAx (he ▸ lamAx_forget (.inr ⟨_, _, rfl⟩))
+      exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inr (.inr (.inl ⟨_, _, rfl⟩))⟩))
+  | releaseUnk =>
+      intro M he; exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inr (.inr (.inr rfl))⟩))
+  | arrRelease => intro M he; exact LamInv.ofAx (he ▸ lamAx_release (.inr ⟨_, _, rfl⟩))
   | withbor1U x =>
       intro M he
       exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, rfl, rfl⟩)
@@ -2785,7 +2785,7 @@ theorem cancelTy_rowLe {S : Row} {F : CTy} {R : VTy}
 
 /-! ### A continuation is used once: the clauses R1–R4
 
-S6's witnesses, as clauses of a handler's clause tuple: R1 drops `κ`, R2 resumes it twice, R3
+S6's witnesses, as clauses of a handler's clause tuple: R1 consumes `κ`, R2 resumes it twice, R3
 cancels it, and R4 cancels and then resumes it. -/
 
 /-- `resume k w`, in A-normal form: `w to y. k (inj₁ ()) y`. -/
@@ -2794,8 +2794,8 @@ def resumeE (k w : Expr) : Expr := .app (.lam (.app (.app (k.shift 1 0) (.inj₁
 /-- `cancel k`: `k (inj₂ ())`. -/
 def cancelE (k : Expr) : Expr := .app k (.inj₂ .unit)
 
-/-- R1's clause `op (v, k) ⇒ return ff`: `κ` dropped. -/
-def dropCl : Val := ⟨.lam (.letpair (.var 0) (.inj₁ .unit)), .lam⟩
+/-- R1's clause `op (v, k) ⇒ return ff`: `κ` consumed. -/
+def consumeCl : Val := ⟨.lam (.letpair (.var 0) (.inj₁ .unit)), .lam⟩
 
 /-- R2's body: `resume k () to _. resume k ()`. -/
 def twiceBody : Expr := bindE (resumeE (.var 0) .unit) (resumeE (.var 1) .unit)
@@ -2897,9 +2897,9 @@ theorem der_cancel_lin {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {S : Row} {R B : 
 
 /-- **R1's clause is refused at a resuming must-resume or cancellable operation**: `return ff`
 consumes its context, where the slot of `k : kTy` is live, and `kTy` is not persistent. -/
-theorem refuses_dropClause {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q : Qual}
+theorem refuses_consumeClause {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q : Qual}
     {A B : VTy} {F : CTy} (hq : q ≠ .unr) (hres : (B.isZero && q != .lin) = false) :
-    ¬ CDerives Δ Γ dropCl.1 (.val (clauseTy S R (q, A, B) F)) := by
+    ¬ CDerives Δ Γ consumeCl.1 (.val (clauseTy S R (q, A, B) F)) := by
   intro h
   obtain ⟨Γb, C, hX, -⟩ := der_clause_body (X := .inj₁ .unit) hres (by not_withPair)
     (by not_const) h
@@ -2962,11 +2962,11 @@ at every resuming must-resume or cancellable operation, R3 at every must-resume 
 row. -/
 theorem refuses_R_clauses {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q : Qual} {A B : VTy}
     {F : CTy} (hq : q ≠ .unr) (hres : (B.isZero && q != .lin) = false) :
-    ¬ CDerives Δ Γ dropCl.1 (.val (clauseTy S R (q, A, B) F)) ∧
+    ¬ CDerives Δ Γ consumeCl.1 (.val (clauseTy S R (q, A, B) F)) ∧
     ¬ CDerives Δ Γ twiceCl.1 (.val (clauseTy S R (q, A, B) F)) ∧
     ¬ CDerives Δ Γ cancelCl.1 (.val (clauseTy S R (.lin, A, B) F)) ∧
     ¬ CDerives Δ Γ cancelResumeCl.1 (.val (clauseTy S R (q, A, B) F)) :=
-  ⟨refuses_dropClause hq hres, refuses_twiceClause hq hres, refuses_cancelClause_lin,
+  ⟨refuses_consumeClause hq hres, refuses_twiceClause hq hres, refuses_cancelClause_lin,
     refuses_cancelResumeClause hq hres⟩
 
 /-! ### The refusals pin `κ`'s use -/
@@ -2995,14 +2995,14 @@ are not; a clause that cancels `κ` (`clC`) is typed at a cancellable operation 
 must-resume one. -/
 theorem clauseRefusals_pinned :
     (CDerives LifeCtx.empty [] cl₀ (.val (clauseTy [] .unit (.lin, .unit, .unit))) ∧
-      ¬ CDerives LifeCtx.empty [] dropCl.1 (.val (clauseTy [] .unit (.lin, .unit, .unit))) ∧
+      ¬ CDerives LifeCtx.empty [] consumeCl.1 (.val (clauseTy [] .unit (.lin, .unit, .unit))) ∧
       ¬ CDerives LifeCtx.empty [] twiceCl.1 (.val (clauseTy [] .unit (.lin, .unit, .unit))) ∧
       ¬ CDerives LifeCtx.empty [] cancelCl.1 (.val (clauseTy [] .unit (.lin, .unit, .unit))) ∧
       ¬ CDerives LifeCtx.empty [] cancelResumeCl.1
         (.val (clauseTy [] .unit (.lin, .unit, .unit)))) ∧
     (CDerives LifeCtx.empty [] clC (.val (clauseTy [] .unit (.cancel, .unit, .unit))) ∧
       ¬ CDerives LifeCtx.empty [] clC (.val (clauseTy [] .unit (.lin, .unit, .unit)))) :=
-  ⟨⟨cl₀_derives, refuses_dropClause (by simp) (by simp), refuses_twiceClause (by simp) (by simp),
+  ⟨⟨cl₀_derives, refuses_consumeClause (by simp) (by simp), refuses_twiceClause (by simp) (by simp),
       refuses_cancelClause_lin, refuses_cancelResumeClause (by simp) (by simp)⟩,
     clC_derives, refuses_clC_lin⟩
 

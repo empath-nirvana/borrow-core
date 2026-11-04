@@ -25,8 +25,8 @@ the frame is the start's re-read (`noneAt_recMask_end`). So a record the run ope
 segment is avoided by the frame as soon as it exists: this is how the clause that receives `κ` at
 the stop knows that its own frame holds nothing of the stopped branch's lends.
 
-The cancel steps of `κ` (`twpE_kappa_cancel`, `twpE_kappaC_cancel`) and its cell
-(`twpE_kappaCell`, `twpE_kappaC_resume`) are the spike's `erwp_kappa_*` at `twp`.
+The cancel steps of `κ` (`twp_kappa_cancel`, `twp_kappaC_cancel`) and its cell
+(`twp_kappaCell`, `twp_kappaC_resume`) are the spike's `erwp_kappa_*` at `twp`.
 -/
 
 noncomputable section
@@ -72,7 +72,7 @@ theorem TFrame.and_mono {F G : TFrame} (hF : F.Mono) (hG : G.Mono) : (F.and G).M
 
 /-! ### What the frame avoids at the end of a run -/
 
-/-- **A record the run holds at its end is avoided by the frame** (item 4 of #781 slice (d)): the
+/-- **A record the run holds at its end is avoided by the frame**: the
 frame at the start avoided the masks of the records the run started with; at the end the frame is
 the start's re-read, and where the end's masks add a location `EndT`'s `MaskDiff` clause says the
 frame holds nothing there. A lend the run opened during the segment is one such location. -/
@@ -316,7 +316,7 @@ scheduler's relation (`cerwpT` at the empty table) under every frame condition w
 back to `H`'s clause as a stored continuation like any other. `M` holds the lent and escrow
 locations of the records the branch owns at the stop (`SchedClauseT` hands `recMask O`): a state
 the clause keeps beside the resumed run must hold nothing there, and be valid. At an unrestricted
-operation `κ` owns nothing, so it may be dropped. -/
+operation `κ` owns nothing, so it need not be resumed. -/
 def KapSchedT (Qout : TPostV) (M : BoCa.Loc → Prop) (en : OpEntT) (H : Val) (k : Nat) (w : TWd)
     (ls : List (SRecT w.K)) (O : List (FrameRecT w.K)) (v κ : Val) : TRes w.K → Prop := fun ρ =>
   (en.q = .unr → ρ = PMap.empty) ∧ (∀ (w' : TWd) (ρ' : TRes w'.K) (ls' : List (SRecT w'.K))

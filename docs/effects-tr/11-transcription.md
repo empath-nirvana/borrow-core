@@ -111,7 +111,7 @@ item 3, O4).
 | D1.1, D1.2, D1.3 | `Syntax.lean`: `Mode`, `G`, `G.den`, `Sig` |
 | D1.8 | `ktyB`, `kty` |
 | D1.9 | `Val`, `Cmp` (with §1's changes) |
-| D3.8–D3.12 | `Tree.lean`: `Act`, `Dtor`, `Tree`, `Strm`, `CoSem`, `CTy.opA`…`CTy.dtorsA`, `Tree.bind`, `Tree.bindC`, `Tree.hnd`, `catchOp`, `catchAb`, `coK`, `coStep`, `Tree.runL`, `Tree.addFin` |
+| D3.8–D3.12 | `Tree.lean`: `Act`, `Consume`, `Tree`, `Strm`, `CoSem`, `CTy.opA`…`CTy.dtorsA`, `Tree.bind`, `Tree.bindC`, `Tree.hnd`, `catchOp`, `catchAb`, `coK`, `coStep`, `Tree.runL`, `Tree.addFin` |
 | D3.13 | `Denot.lean`: `Val.den`, `Cmp.den`, `mkK`, `iter` |
 | D3.14, D3.15 | `Obs.lean`: `Ev`, `Outcome`, `Obs`, `Wd`, `Act.exec`, `Wd.unwind`, `Tree.obs`, `Context`, `holeTy`, `close`, `CtxEq` |
 | D4.7, L4.3 | `World.lean`: `St`, `W`, `W.le`, `W.sub`, `W.gcP`, the updates and their lemmas |
@@ -134,7 +134,7 @@ to import:
 
 | here | borrow-core |
 |---|---|
-| D5.2 | `Core/EffDefs.lean` `wpG` (with the `TW`/`Tagged` conjuncts dropped: no lifetime records) |
+| D5.2 | `Core/EffDefs.lean` `wpG` (with the `TW`/`Tagged` conjuncts consumed: no lifetime records) |
 | D5.3 | `ewpStep`, `ewpTS` |
 | L5.2 | `Core/EffWp.lean` `ewp_fold`, `ewp_unfold`, `ewp_ind`, `ewp_val`, `ewp_mono`, `ewp_step`, `ewp_bot` |
 | L5.10 | `Core/EffRules.lean` `let_compatC` |

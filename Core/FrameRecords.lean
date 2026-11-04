@@ -158,7 +158,7 @@ def Keeps (rs rs' : List FrameRec) (ρ : WRes) : Prop := ∀ r ∈ rs, Rel r ρ 
 /-- A record with the lifetime of its frame.  `[about ours]` -/
 abbrev SRec := FrameRec × Life
 
-/-- The records, forgetting their lifetimes.  `[about ours]` -/
+/-- The records, ignoring their lifetimes.  `[about ours]` -/
 def rsOf (ls : List SRec) : List FrameRec := ls.map Prod.fst
 
 /-- `ρ` holds a borrow cell no longer-lived than `b`: a `mut` or `imm` cell with

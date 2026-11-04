@@ -22,8 +22,7 @@ So a stored continuation's share held beside the run stays resumable at the run'
 records it does not read. This is the step `twp_keepsKap` (`Core/TreeResume.lean`) took for a
 runner owning no record; here the runner's own records are free, only kept apart from the share.
 
-The carrier facts (`FrzT.flat`, `relFT_not_fdEsc`, `noneAt_recMask`, `fdEsc_of_noneAt`) are the
-pool spike's (`experiments/PoolSpike`, not imported), re-proved here.
+The carrier facts are `FrzT.flat`, `relFT_not_fdEsc`, `noneAt_recMask` and `fdEsc_of_noneAt`.
 -/
 
 noncomputable section

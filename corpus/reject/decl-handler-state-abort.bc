@@ -27,4 +27,4 @@ fn run_it(x: i32) -> i32 + i32 =
   }
 
 main -> i32 = match run_it(5) { inl v -> v | inr e -> 0 - e }
--- expect: 17:34: `t`, of type `i32 * i32 * tok`, is live across a computation that may abort, and its type is linear with no derived drop, and an abort abandons only a value that holds no owned cell: `Txn` holds the field `log`, marked `must_close`; pass it to `commit` before the computation that may abort, or close it in a `finally`
+-- expect: 17:34: `t`, of type `i32 * i32 * tok`, is live across a computation that may abort, and its type is linear and not consumable, and an abort abandons only a value that holds no owned cell: `Txn` holds the field `log`, marked `must_close`; pass it to `commit` before the computation that may abort, or close it in a `finally`

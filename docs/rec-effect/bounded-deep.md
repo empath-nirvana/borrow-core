@@ -24,7 +24,7 @@ a driver chosen at the call site.
 
 `effect Exhausted { ctl exhausted() -> never }` (`lib/rec.bc`) is an ordinary abortive effect,
 like `Fail`. It sits in the row of recursive code where `div` sits in the row of a loop. An
-`exhausted()` unwinds: the finalisers of every level run, innermost first (each level's drop glue
+`exhausted()` unwinds: the finalisers of every level run, innermost first (each level's consume glue
 around its call, SPEC §19), and a handler receives it: `on_exhausted(d)` answers `d(())`,
 `exhausted_to_option` answers `inr ()`. `corpus/rec-overflow.bc` is the test: a recursion a
 hundred times past the budget, a cell held at every level, `live 0` at the end.
@@ -70,7 +70,7 @@ recursion must live in a loop's state between observations.
 - **(a) Partial correctness** in the kernel (a relation in which an observation may diverge) was
   ruled out: it changes the relation, and every theorem with it.
 - **(b) Refunctionalising** the heap machine in the backend (fusing a loop's observations into
-  native recursion when nothing counts them) was dropped: a whole-program analysis that `div_fuel`
+  native recursion when nothing counts them) was consumed: a whole-program analysis that `div_fuel`
   defeats.
 - **(c), taken:** bound the depth. A recursion with a budget is total, so the native recursion is
   typed by one new constant whose soundness is an induction on the budget, and the unbounded

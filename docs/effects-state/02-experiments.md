@@ -59,7 +59,7 @@ them.
 | issue | title (abridged) | state | PR(s) |
 |---|---|---|---|
 | #258 | Ghost-end lemma: end internal Mut borrows at freeze, re-lend fresh at resume (closes O15.1 with naturality) | closed | #259 merged |
-| #260 | Ghost-end, general case: typed borrowers, drop at cancellable yields, 6.64/6.66/6.150 at resuming tables, nested lends | closed | #261 merged |
+| #260 | Ghost-end, general case: typed borrowers, consume at cancellable yields, 6.64/6.66/6.150 at resuming tables, nested lends | closed | #261 merged |
 | #262 | values carrying a lend across a suspension | closed | #263 merged |
 | #264 | KernelInvariant from TW preservation; bridge vs re-lendable-by-construction relation | closed | #265 merged |
 | #266 | Feasibility: fundamental lemma at vRL/cRL (route b) | closed | #267 merged |
@@ -167,7 +167,7 @@ Unless stated otherwise, each file has no refutation and no consumer in `Core/`.
 **Handle.lean** (#258)
 - PROVED: `withbor_spans_yields_sem` :27 and `handle_spans_yields` :72. A lend spanning yields is
   handed to K's `handle_compatC` unchanged.
-- OPEN here: the drop half at a cancellable yield. Drop.lean addresses it.
+- OPEN here: the consume half at a cancellable yield. Consume.lean addresses it.
 - World: K.
 
 **Open.lean** (#258, #260)
@@ -219,8 +219,8 @@ Unless stated otherwise, each file has no refutation and no consumer in `Core/`.
   The iteration is argued directly because `RBody` has no call rule (README:224–226).
 - World: K + G1.
 
-**Drop.lean** (#260)
-- Goal: drop at a cancellable yield.
+**Consume.lean** (#260)
+- Goal: consume at a cancellable yield.
 - PROVED: `opTableO` :49, `ewp_then_owner` :70, `withborR_compat` :108,
   `withborR_spans_yields_cC` :195, `withborR_spans_yields_sem` :230, `handleR_spans_yields` :284
   and `spans_two_affine_yields` :318.
@@ -241,8 +241,8 @@ Unless stated otherwise, each file has no refutation and no consumer in `Core/`.
 - World: K.
 
 **Descend.lean** (#262)
-- PROVED: `dropC` :37, `dropC_disj` :72, `stopAtD` :107, `OpenD` :125, `relend_of_openD` :174,
-  `bodyAtD_bind` :218 and `openD_bind` :259. Stops report the cell they drop, and each lend is
+- PROVED: `consumeC` :37, `consumeC_disj` :72, `stopAtD` :107, `OpenD` :125, `relend_of_openD` :174,
+  `bodyAtD_bind` :218 and `openD_bind` :259. Stops report the cell they consume, and each lend is
   below the last.
 - World: K + G1.
 
@@ -503,7 +503,7 @@ properties, and EffModelRel's theorems supersede them as evidence.
 **PROVED.**
 - Binary FP and soundness: `fundamental` Fundamental.lean:278 and `soundness : LR M N → CtxEq M N`
   Adequacy.lean:258.
-- Algebraicity: `alg_bind` Laws.lean:67 through `alg_dtor` :114 (the destructor form).
+- Algebraicity: `alg_bind` Laws.lean:67 through `alg_dtor` :114 (the consume form).
 - Handler laws: `h_ret` :148, `h_op` :164, `h_fwd` :202 and `h_fwd_ab` :227.
 - Absorption: `absorb_pure` Tensor.lean:204 and `absorb_writer` Examples.lean:115. The failures
   under other nestings are proved as `¬CtxEq` at Examples.lean:136–155.
@@ -616,13 +616,13 @@ and control.
 **REFUTED** (arising does not apply):
 - `no_uniform_comp` Behind.lean:53 (a type equation).
 - `spanFwd_refused` Reentry.lean:308 and `not_borrowSpansForward` :317.
-- `multiShot_ref_refused` / `multiShot_imm_refused` Capture.lean:76/:80 and `forget_not_lolli`
+- `multiShot_ref_refused` / `multiShot_imm_refused` Capture.lean:76/:80 and `release_not_lolli`
   :150.
 
 **OPEN.**
 - K-a (native capture), "stated with its obligations, not built".
 - K-b (`μX` with X under `⊸`, T15).
-- K-c (destructors for continuations).
+- K-c (consumes for continuations).
 - The InvalML-style "in use" elaboration: "not derived … no obstruction verified".
 
 **Kernel.**
@@ -846,14 +846,14 @@ pre-#76 `wpTS`. I did not build to confirm this.
 
 | experiment | effects relevance | world | proved (key) | refuted | open | kernel |
 |---|---|---|---|---|---|---|
-| **FnMut** (#236, PR #238; kernel #239, PR #240, merged 2026-10-02) | the closure `Clo^c A B = νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`; #274's `[gen]` types a continuation at it | K, `cC` with ν, no row | now in Core: `cloBody_nuOk` Core/Clo.lean:53, `cC_clo_iff` :72, `clo_coind` :83, `hasDtor_clo` :108, `not_forgettable_clo` :128 | none | `[gen]` (see §11, lift-stage1) | **promoted**: SPEC §22, `Core/Aff*.lean`, `lib/clo.bc`; the fork is at `60936af`; the directory has no Lean |
+| **FnMut** (#236, PR #238; kernel #239, PR #240, merged 2026-10-02) | the closure `Clo^c A B = νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`; #274's `[gen]` types a continuation at it | K, `cC` with ν, no row | now in Core: `cloBody_nuOk` Core/Clo.lean:53, `cC_clo_iff` :72, `clo_coind` :83, `consumable_clo` :108, `not_releasable_clo` :128 | none | `[gen]` (see §11, lift-stage1) | **promoted**: SPEC §22, `Core/Aff*.lean`, `lib/clo.bc`; the fork is at `60936af`; the directory has no Lean |
 | **Recursion** (borrow_lang `bb5de9b`, 2026-09-25) | ν/codata, coiteration | TW-old (CBPVWorld) | `unfold_sem` Nu.lean:281, `take2Close_runs` :403, `build3Free_runs` Mu.lean:221, `immReborrow_unroll` ImmMu.lean:414 | `naive_ne` ImmMu.lean:469 (syntactic inequality) | chooser and 6.131 at `μ`; observation depth | ancestor of SPEC §6/§7 (`SPEC.md:274`, `:386`) |
 | **CBPVMu** | folds, fuel-free borrowed fold | TW-old | `vC_mu_iff` RelMu.lean:347, `vC_ind` :425, `fundamentalC`/`adequacyC` Fundamental.lean:211/:329 | none | `WpChainCommutes`, continuity | assembled into Core |
 | **CBPVWorld** (borrow_lang `534637e`/`a31b498`, 2026-09-24) | none; ancestor of K | TW-old | `fundamentalC` Fundamental.lean:160, `adequacyC` :270 | none | `⊸E`/`∀E` on subterms | assembled into Core |
 | **BorrowedClosures** | closures | PAPER | `reb_self_of_imm` Reborrow.lean:43, `reborrow_self_of_imm` :99, `envShape_unlinked` EnvCheck.lean:18 | none | stage 2 | superseded by `!T` (SPEC §2); stage 1 in `Support/Model/Unr.lean` |
 | **Bang** (borrow_lang `c790ff9`) | `!` for closed code | PAPER | became the library | none | none | archived into `Paper/`, `Support/`, `Examples/Closures.lean` |
 | **Grades** (#23, PR #42, merged 2026-09-26) | erasing capability tokens | K-pure | `cderives_iff_graded` Judgment.lean:349, `fundamentalG` Soundness.lean:327, `prog_runs_any` Erasure.lean:136 | none | migrating Core; graded checker | not adopted (decision 19) |
-| **Affine** (#43, PR #45, merged 2026-09-27) | destructors; SPEC:1106 says `dtorE` is "total and pure" (no effectful finaliser) | K-pure | `ADerives.elab` Elab.lean:136, `fundamentalA` :177, `adequacyA` :183 | none | effectful destructors (out of scope) | **promoted**: SPEC §12, `Core/Dtor.lean` |
+| **Affine** (#43, PR #45, merged 2026-09-27) | consumes; SPEC:1106 says `consumeE` is "total and pure" (no effectful finaliser) | K-pure | `ADerives.elab` Elab.lean:136, `fundamentalA` :177, `adequacyA` :183 | none | effectful consumes (out of scope) | **promoted**: SPEC §12, `Core/Consume.lean` |
 | **Optics** (#27, PRs #28/#35) | laws at effectful callbacks open | K-pure | `Optic.lift_cell` Lens.lean:326, `over_id`/`over_fuse` Laws.lean:131/:235 (under `PureFn`), `iterMut_shape` Shape.lean:503 | none | `AllAtOnceGoal` Traversal.lean:209 (L2, #176); effectful laws; "6.65/6.66 as an optic … not attempted" | not promoted (decision 22) |
 | **Relaxed / FrameEnd / Projection** | none directly; FrameEnd's 6.64 exit is background for GhostEnd | TW-old | fundamental property and adequacy; `frame_image_empty` FrameEnd/FrameRules.lean:68 | `no_projection`, `frame_view_excluded`, `imm_view_rejected`, `mut_view_rejected`; no claim either way about arising | same-lifetime views | Relaxed became SPEC §4; the exclusions are cited in SPEC §5 |
 | **ModesLabels**, **CBPVSplit** | none | PAPER | `weaken_sound`/`contract_sound`/`dup_sound`; `semX_iff_semC` | none | mode-indexed calculus | parts in Support; superseded by Core |
@@ -970,7 +970,7 @@ ModesLabels (ownership kinds as adjoint modes) are what HandlersAsBorrows later 
 | GhostEnd: Tree | K lifetimes | `relend_respects_nesting` | none | nested lends at a stop | no |
 | GhostEnd: Program | K `cC` at row (semantic) | `withbor_spans_yields_cC` | none | general borrowers | no |
 | GhostEnd: Instance | K | `spans_two_yields_sem` (shape arises) | none | none | no |
-| GhostEnd: Handle | K | `handle_spans_yields` | none | drop half | no |
+| GhostEnd: Handle | K | `handle_spans_yields` | none | consume half | no |
 | GhostEnd: Open | K `CDerives`→`cC` | `withbor_of_relendOfTyped` | none | `RelendOfTyped`, `O151AsStated` (not attempted) | no |
 | GhostEnd: Witness | Restrat carrier over K | `relent_holds`, `gap_accepted` | none | arising of `ρ₀` not checked | no |
 | GhostEnd: Body | K + G1 | `open_bind`, `relend_of_open` | none | determinism route declined (unchecked) | no (audit: retire) |
@@ -978,7 +978,7 @@ ModesLabels (ownership kinds as adjoint modes) are what HandlersAsBorrows later 
 | GhostEnd: General | K + G1 | reduction lemma | none | `RBodyOfTyped` | no |
 | GhostEnd: Branch | K | `branch_spans_yields` | none | none | no |
 | GhostEnd: Loop | K + G1 | `loop_spans_yields` | none | the `[app]` gap | no |
-| GhostEnd: Drop | K at a cancellable row | `withborR_compat`, `spans_two_affine_yields` | none | `RBody` at a cancellable row | no |
+| GhostEnd: Consume | K at a cancellable row | `withborR_compat`, `spans_two_affine_yields` | none | `RBody` at a cancellable row | no |
 | GhostEnd: Frames | K | `ewpTS_M_antiFrameR` | none | 6.150 lift (#277) | no (audit: promote) |
 | GhostEnd: Table | K | `wpG_tabAt` | none | `Imm` table | no (audit: promote) |
 | GhostEnd: Descend | K + G1 | `openD_bind` | none | none | no |
@@ -1014,7 +1014,7 @@ ModesLabels (ownership kinds as adjoint modes) are what HandlersAsBorrows later 
 | TwoRun | K-pure (pre-#76 `wpTS`) | `freshRun_det`, `wpTS_footprint_fresh` | `not_everyRunFootprint`, `not_everyRunFootprintRen`, `not_readFootprint` (none arise) | `ReadFootprintTyped` | no; probably stale against current `wpTS` |
 | FnMut | K, ν | `cC_clo_iff`, `clo_coind` (now in Core) | none | `[gen]` (lift-stage1) | **yes**: SPEC §22 |
 | Recursion / CBPVMu / CBPVWorld | TW-old | ν coiteration, μ folds, FP | `naive_ne` (syntactic) | `WpChainCommutes` etc. | **yes**: assembled into Core |
-| Affine | K-pure | `ADerives.elab`, `fundamentalA` | none | effectful destructors | **yes**: SPEC §12 |
+| Affine | K-pure | `ADerives.elab`, `fundamentalA` | none | effectful consumes | **yes**: SPEC §12 |
 | Grades | K-pure | `cderives_iff_graded`, `prog_runs_any` | none | migrating Core | no (decision 19) |
 | Optics | K-pure | `lift_cell`, `over_fuse` (pure) | none | effectful laws; `AllAtOnceGoal` | no (decision 22) |
 | Outlives | `LDerives` (K-pure fork) | `fundamentalL`, `boxIL_compatC` | `not_vC_outlives_le` (no run shown), `no_nonstrict_stratum` | non-strict ∀ | **yes**: SPEC §23 |

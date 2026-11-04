@@ -1,6 +1,6 @@
 -- `for` over data (SPEC §16): an owned array, `&a`, and a view, each a counted loop over the
 -- data's length (`count_try`), total. The source's type chooses how it is iterated, as Rust's
--- `IntoIterator` does: an owned array's elements are copied and the array is dropped after the
+-- `IntoIterator` does: an owned array's elements are copied and the array is consumed after the
 -- loop; `&a` lends each element `imm` for the whole loop and hands the array back; a view lends
 -- each of its elements. The bodies use `break` (bare, and with the loop's value, which `else`
 -- gives when the source ends), `continue`, and the capability `stdout`, which the loop threads
@@ -42,7 +42,7 @@ main -> i32 * (i32 * (i32 * (i32 * i32))) =
     found
   };
   let (a, none) = first_over(a, 99);
-  -- An owned array: its elements are copied, and it is dropped after the loop.
+  -- An owned array: its elements are copied, and it is consumed after the loop.
   let mut sum = 0;
   for x in a { sum = sum + x };
   (sum, (over, (even, (v, none))))

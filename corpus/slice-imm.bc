@@ -3,7 +3,7 @@
 -- of views came only from `withload` of a borrow of a cell holding the handle
 -- (`corpus/array-get.bc`). The family is copied; `array_len` reads its length; `array_get`
 -- takes the view of one leaf, which `*` reads; past the end it takes the error branch. The
--- array comes back, and is dropped implicitly at the end of `main`.
+-- array comes back, and is consumed implicitly at the end of `main`.
 --
 -- Answer: (i32[5], (i32[30], inr ())): the length, the element at index 3 of
 -- [0, 10, 20, 30, 40], and the error branch at index 7, as `corpus/array-get.bc`.

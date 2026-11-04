@@ -5,9 +5,9 @@
 -- `insert` and `walk` are recursions that take a node apart, take the child at the next letter out
 -- of its array (`array_replace`, leaving `inl ()`), go on in it, and put it back: the borrow-free
 -- form of walking `&mut` down the trie, and nothing is allocated but the new nodes. The trie, and
--- every `1 + Trie` that `array_replace` hands back, is dropped by its derived destructor (SPEC §12,
+-- every `1 + Trie` that `array_replace` hands back, is consumed implicitly (SPEC §12,
 -- `X` under `array` is in the fold class `P`, §6): each node's children, then its array's buffer,
--- at once, as Rust drops a `Vec`.
+-- at once, as Rust consumes a `Vec`.
 --
 -- Answer, on `0208-implement-trie.in`: `1 0 1 1 0`, `0 0 1 1 0`, `1 0 1 1 1 0 0` and `1 1 0 0 1`,
 -- one per line, then `i32[4]`; `live 0`. 58 allocations, Rust's count for the same program
@@ -109,7 +109,7 @@ main -> i32 =
   let cs = borrow imm s { 't, t ->
     fold_lines(t, !{ (l, cs) ->
       let (l, m) = array_copy['t, u8] l;
-      if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, words(l)); cs } },
+      if len(m) == 0 { array_release['t, u8](l); cs } else { let (cs, _) = push(cs, words(l)); cs } },
       box buf[buf string](8)) };
   let (cs, n) = cs;
   let mut cs = cs;

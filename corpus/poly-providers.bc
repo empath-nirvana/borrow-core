@@ -51,8 +51,8 @@ fn compare(a: string, c: string) -> i32 =
 fn prefix_order<'t>(t: text 't) -> i32 =
   let (t, u) = array_copy['t, u8](t);
   match split_at(t, 2) {
-    inl (h, r) -> array_forget['t, u8](r); order(h, u)
-  | inr t -> array_forget['t, u8](t); array_forget['t, u8](u); 0
+    inl (h, r) -> array_release['t, u8](r); order(h, u)
+  | inr t -> array_release['t, u8](t); array_release['t, u8](u); 0
   }
 
 fn sizes<'t>(t: text 't) -> i32 = size_of[(i32 * text 't) * i32](((1, t), 2))

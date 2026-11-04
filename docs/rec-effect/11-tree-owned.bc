@@ -16,7 +16,7 @@
 --
 -- Answer: (i32[1410165408], i32[1001000]): each spine node i holds i and has a right child
 -- holding i, so the sum is 2 · (1 + … + n): 10 000 100 000 at n = 100 000, which wraps to
--- 1410165408 in i32, and 1 001 000 at n = 1000. A walk that dropped the right subtrees gives
+-- 1410165408 in i32, and 1 001 000 at n = 1000. A walk that consumed the right subtrees gives
 -- half.
 
 type Tree = mu X. 1 + (X * (i32 * X))

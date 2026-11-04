@@ -302,7 +302,7 @@ paraphrased, with the file named.
 11. **Novelty is not evidence** (`novelty-is-not-evidence`). "Everything is new the first time
     you see it."
 12. **CoherentX is dead** (`coherentx-is-the-faithful-invariant`, retracted by the owner
-    2026-09-16: "we're not going back to CoherentX, that was a patch to work around dropping
+    2026-09-16: "we're not going back to CoherentX, that was a patch to work around consuming
     linearity"). This applies to any new pointwise "arising" predicate an effects relation
     introduces.
 13. **Current state is not design** (`current-state-is-not-design`, user 2026-09-30: "just
@@ -427,7 +427,7 @@ on main or `5cfe062`.
   hands the body to `handle_compatC`.
 - **6.60.** `vC_outlives` (`Values.lean:154`, `TypedD.lean:89`, `Typed.lean:336`,
   `ClosureBody.lean:170`), `vC_outlivesLe` (`Payload.lean:55`, `Handle.lean:66`,
-  `Drop.lean:273`), and `gSepC_outlives` (`Chain.lean:107`).
+  `Consume.lean:273`), and `gSepC_outlives` (`Chain.lean:107`).
 - **6.50.** `updV_outlives` inside `wpG_tabAt` (`Table.lean:87`).
 - **6.150 is not used.** `wpG_reborrow` appears only in comments (`Frames.lean:9`). README:
   "6.150 (↺): its added step (`ptoImm_dup`) is proved; the lift is not written" (`:810`).
@@ -443,7 +443,7 @@ on main or `5cfe062`.
   - 6.65: `ewpTS_M_frameR` (`Relend.lean:117`, over `Relend` `:57`);
   - 6.64: `ewpTS_I_frameR` (`ImmLend.lean:175`);
   - 6.66: `ewpTS_M_antiFrameR` (`Frames.lean:89`);
-  - unwinding 6.65 with cancellable resumption: `withborR_compat` (`Drop.lean:108`, over
+  - unwinding 6.65 with cancellable resumption: `withborR_compat` (`Consume.lean:108`, over
     `opTableO` `:49`), which reuses Core's `withborUE`.
 
   README: "This is 6.65's proof as printed, applied once per resumption" (`:126–127`).
@@ -470,7 +470,7 @@ on main or `5cfe062`.
 
 - **The ghost end is 6.65's exit run at a stop, then 6.65's entry at the resume.** It is not a
   third rule.
-  - `freeze_at` (`Freeze.lean:50–55`): `ptoMutS l α ls P ⋆ Φ ls t ⊨ wpG ls t Φ`. It drops the
+  - `freeze_at` (`Freeze.lean:50–55`): `ptoMutS l α ls P ⋆ Φ ls t ⊨ wpG ls t Φ`. It consumes the
     borrower's view, a `NoOwn` single `mut` cell (`noOwn_ptoMutS`, `:42`), into `ρ⁺` through
     `wpG_garbage`.
   - README (`:86–93`): `wpG_M_frameX`'s exit "moves the cell `ℓ ↦ mut(α, v″, χ, P̂)` out of `ρ⁺`
@@ -511,7 +511,7 @@ on main or `5cfe062`.
 
 - **PROVED at Core's relation (σ = []):**
   - `withbor_spans_yields_cC`, `handle_spans_yields`, `spans_two_yields`, `loop_spans_yields`;
-  - `withborR_spans_yields_cC` (`Drop.lean:195`), `handleR_spans_yields`, `callee_spans_yields`;
+  - `withborR_spans_yields_cC` (`Consume.lean:195`), `handleR_spans_yields`, `callee_spans_yields`;
   - `imm_spans_yield`, `nested_spans_yield`, `nested₂_spans_yield`;
   - `withbor_reborrow_spans_yield` (`Stacked.lean:1093`);
   - the stacked lemmas `stack_step_other`/`_reborrow`/`_imm` (`StackStep.lean:392,563,1003`).
@@ -681,7 +681,7 @@ B = bypasses, — = not involved.
     `docs/decisions.md` 19–20.
 - `experiments/GhostEnd` (README, `Freeze.lean`, `Stacked.lean`, `Bridge.lean`, `RLCompat.lean`,
   `Relend.lean`, `ImmLend.lean`, `Frames.lean`, `Table.lean`, `Program.lean`, `Open.lean`,
-  `Kernel.lean`, `Drop.lean`, `Handle.lean`) on main, and `Below.lean` @`daf56c0`. `Arising.lean`
+  `Kernel.lean`, `Consume.lean`, `Handle.lean`) on main, and `Below.lean` @`daf56c0`. `Arising.lean`
   @`d31cbb3` and `Extend.lean` @`5cfe062` were read through a delegated survey; their cited
   lines were not all re-opened.
 - Through the same delegated survey, with spot checks of `Restrat/Open.lean:30,37`,

@@ -1,5 +1,5 @@
--- A guard stored in data (SPEC §42, *Declared types with no derived drop*): `Guard`'s field `lock`
--- is marked `must_close(release)`, so a guard is linear with no derived drop, and so is
+-- A guard stored in data (SPEC §42, *Declared types that are not consumable*): `Guard`'s field `lock`
+-- is marked `must_close(release)`, so a guard is linear and not consumable, and so is
 -- `Session`, which stores one beside its data. `main` takes the session apart and runs the work
 -- under `with … finally { … }`: `[then]` (SPEC §27) around the handled computation, its finaliser
 -- releasing the guard on either exit. The inner handler handles `Fail[u8]`, so a `Fail[i32]` that

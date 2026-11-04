@@ -293,7 +293,7 @@ theorem icpAt_of_immFree {b ρ : WRes} (h : ρ.ImmFree) (x : Loc) : ICpAt b ρ x
 theorem icpAt_none {b ρ : WRes} {x : Loc} (h : ρ.get x = none) : ICpAt b ρ x := by
   intro ψ e; rw [h] at e; cases e
 
-/-- `ag(ρ)` keeps every `imm` cell of `ρ` over its value and witness, and never drops a
+/-- `ag(ρ)` keeps every `imm` cell of `ρ` over its value and witness, and never consumes a
 lifetime (`AgW.get_imm`, `AgW.get_ls_imm`). -/
 theorem icpAt_agW {ρ σ : WRes} (h : AgW ρ σ) (x : Loc) : ICpAt σ ρ x := by
   intro ψ e hk

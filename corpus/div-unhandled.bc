@@ -4,7 +4,7 @@
 -- and handles it nowhere: `bcc check` reports `main: `Fail[DivError]` is served by `main_div_error``.
 --
 -- `main` writes a line, builds a buffer, and divides by zero. The error unwinds: the buffer is
--- dropped by its destructor (SPEC §12, §19), so the run ends with `live 0`; `main_div_error` writes
+-- consumed implicitly (SPEC §12, §19), so the run ends with `live 0`; `main_div_error` writes
 -- `error: division by zero` on standard error, and the program exits with status 1
 -- (`div-unhandled.status`), with no value. The harness checks the three at every stage.
 --

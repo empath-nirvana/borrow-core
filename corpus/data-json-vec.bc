@@ -1,10 +1,10 @@
 -- A JSON-like value whose arrays are the prelude's `Vec` (SPEC §42, data-declarations §6.11):
 -- `Vec[Json]` holds `Json` under the array of `Vec`'s buffer, so `Arr` is not a block and needs no
 -- `box`. `Json` elaborates to `mu X. i32 + array X * i32`, in the fold class `P`; its buffer's
--- filler is `Num(0)`, and its destructor drops each element, then the buffer (SPEC §61).
+-- filler is `Num(0)`, and its consume frees each element, then the buffer (SPEC §61).
 --
 -- Answer: i32[10], `[1, [2, 3], 4]` summed; `live 0`: the sum consumes one copy, and the other is
--- dropped by its derived destructor.
+-- consumed implicitly.
 include rec
 include buf
 

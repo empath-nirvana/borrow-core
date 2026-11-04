@@ -110,14 +110,14 @@ fn key_equal_elems[A]<'a, 'b>(x: array_imm 'a A, y: array_imm 'b A) -> bool =
       if same {
         match get(r0, i) {
           inl q -> let s = borrow imm *p { 'u, e -> borrow imm *q { 'w, f -> equal[A](e, f) } }; same = s
-        | inr u -> forget_imm['a, A](p); same = false
+        | inr u -> release_imm['a, A](p); same = false
         }
-      } else { forget_imm['a, A](p) };
+      } else { release_imm['a, A](p) };
       i = i + 1
     };
-    array_forget['b, A](rest);
+    array_release['b, A](rest);
     same
-  } else { array_forget['a, A](x); array_forget['b, A](y); false }
+  } else { array_release['a, A](x); array_release['b, A](y); false }
 
 -- The hash of a view's length and its elements in order.
 fn key_hash_elems[A]<'a>(x: array_imm 'a A) -> i64 =
@@ -144,12 +144,12 @@ fn key_order_elems[A]<'a, 'b>(x: array_imm 'a A, y: array_imm 'b A) -> i32 =
     if o == 0 {
       match get(r0, i) {
         inl q -> let c = borrow imm *p { 'u, e -> borrow imm *q { 'w, f -> order[A](e, f) } }; o = c
-      | inr u -> forget_imm['a, A](p); o = 1
+      | inr u -> release_imm['a, A](p); o = 1
       }
-    } else { forget_imm['a, A](p) };
+    } else { release_imm['a, A](p) };
     i = i + 1
   };
-  array_forget['b, A](rest);
+  array_release['b, A](rest);
   if o == 0 { key_order_i32(n, m) } else { o }
 
 poly equal[A]<'h> at array_imm 'h A = key_equal_elems[A](x, y)
@@ -164,7 +164,7 @@ poly order[A] at array A = key_order_elems[A](x, y)
 -- The initialised prefix of a buffer's view: its first `n` elements.
 fn key_prefix[A]<'a>(v: array_imm 'a A * i32) -> array_imm 'a A =
   let (a, n) = v;
-  match split_at(a, n) { inl (h, t) -> array_forget['a, A](t); h | inr a -> a }
+  match split_at(a, n) { inl (h, t) -> array_release['a, A](t); h | inr a -> a }
 
 -- A buffer (and so a `string`) is its initialised prefix: its capacity does not count.
 poly equal[A] at buf A = key_equal_elems[A](key_prefix(x), key_prefix(y))

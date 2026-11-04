@@ -87,12 +87,12 @@ def Const.respan (sp : Span) : Const → Const
   | .swap A B => .swap (A.respan sp) (B.respan sp)
   | .copy a A => .copy (a.respan sp) (A.respan sp)
   | .copyBang A => .copyBang (A.respan sp)
-  | .forgetImm a A => .forgetImm (a.respan sp) (A.respan sp)
-  | .forgetMut a A => .forgetMut (a.respan sp) (A.respan sp)
-  | .forgetUnk => .forgetUnk
+  | .releaseImm a A => .releaseImm (a.respan sp) (A.respan sp)
+  | .releaseMut a A => .releaseMut (a.respan sp) (A.respan sp)
+  | .releaseUnk => .releaseUnk
   | .tokMint => .tokMint
   | .tokBurn => .tokBurn
-  | .forgetBang A => .forgetBang (A.respan sp)
+  | .releaseBang A => .releaseBang (A.respan sp)
   | .withbor1 x A B => .withbor1 (x.respan sp) (A.respan sp) (B.respan sp)
   | .withbor2 x b A B => .withbor2 (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp)
   | .withbor3 a x A B => .withbor3 (a.respan sp) (x.respan sp) (A.respan sp) (B.respan sp)
@@ -120,7 +120,7 @@ def Const.respan (sp : Span) : Const → Const
   | .arrayLen a A => .arrayLen (a.respan sp) (A.respan sp)
   | .arrayGet a A => .arrayGet (a.respan sp) (A.respan sp)
   | .arrayCopy a A => .arrayCopy (a.respan sp) (A.respan sp)
-  | .arrayForget a A => .arrayForget (a.respan sp) (A.respan sp)
+  | .arrayRelease a A => .arrayRelease (a.respan sp) (A.respan sp)
   | .sliceBorrowMut x b A B =>
       .sliceBorrowMut (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp)
   | .sliceBorrowImm x b A B =>

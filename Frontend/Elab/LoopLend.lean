@@ -235,7 +235,7 @@ def Env.forBody (E : Env) (scope : List String) (sp : Span) (ys : List String) (
   if !E.usesC M then return M
   let ws := (spineNames fuel M).eraseDups.filter fun z =>
     scope.contains z && !E.aliases.contains z && !ys.contains z
-  -- A terminal `()` is dropped, not bound.
+  -- A terminal `()` is consumed, not bound.
   let body := spliceTail (fun T => match T with
     | .ret _ (.unit _) => .ret T.span (tupleVal T.span ws)
     | T => .bind T.span ⟨"io_u", T.span⟩ none T (.ret T.span (tupleVal T.span ws))) fuel M

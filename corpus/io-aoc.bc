@@ -14,7 +14,7 @@ def zero : !(i32 => i32) = !thunkv fun (i : i32) -> return i32[0]
 def inc : i32 => i32 = thunkv fun (n : i32) -> return ((unbang host[add32]) (n, i32[1]))
 
 -- The byte `b` into slot `k` of the buffer; past its 16 slots `array_replace` takes its error
--- branch and the byte is dropped.
+-- branch and the byte is consumed.
 def push : Buf * (i32 * i32) => Buf * 1 =
   thunkv fun (p : Buf * (i32 * i32)) ->
     let (c, r) = p;

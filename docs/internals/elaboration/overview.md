@@ -64,7 +64,7 @@ written `A => B`, and a call is a `force` and an application. Making suspension 
 lets the compiler see every closure, every loop's state and every continuation as data with a
 known type, and what lets the type system say which values hold resources.
 
-`!A` is a value that holds no resource, so it can be copied and dropped: the surface's `!(A =>
+`!A` is a value that holds no resource, so it can be copied and consumed: the surface's `!(A =>
 B)` closures. `ref A` is an owned heap cell, and `imm 'a A`, `mut 'a A` its borrows, lent by the
 constants `withbor1`, `withbor2` and `withbor3` to a callback that runs within the lifetime `'a`.
 The [glossary](../../glossary.md) has the rest of the vocabulary.
@@ -80,7 +80,7 @@ The [glossary](../../glossary.md) has the rest of the vocabulary.
 | `&x`, `&mut x`, `borrow imm x { … }` | `withbor1`, `withbor2` around a callback; `x` rebound after |
 | `*r` | `withload` |
 | `let mut`, assignment | rebinding (SSA form) |
-| an unused owned value | a destructor call the checker inserts |
+| an unused owned value | a consume call the checker inserts |
 | `for` over data | `count_fold` / `count_try`, the counted-loop constants |
 | `while`, `loop` | a `delay`: codata driven one step at a time |
 | a generator, a stored generator | a handler of `Yield`; codata `pull A B R` |
@@ -98,6 +98,6 @@ The [glossary](../../glossary.md) has the rest of the vocabulary.
 - [Codata](codata.md): `nu X. C`, streams, iterators and `delay`.
 - [Integers and host operations](integers.md): the `host[…]` instructions.
 - [Arrays](arrays.md): `array A`, its families of views.
-- [Implicit destructors](implicit-destructors.md): where the checker inserts frees and closes.
+- [Implicit consumes](implicit-consumes.md): where the checker inserts frees and closes.
 - [Standard I/O as capabilities](standard-io.md): the streams as cells, and the `for` over input.
 - [Divergence](divergence.md): loops in types, `div_fuel`, borrows around a loop.

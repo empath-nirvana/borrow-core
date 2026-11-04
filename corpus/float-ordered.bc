@@ -7,7 +7,7 @@
 --   zeros, both infinities and a NaN of each sign, sorted in place through a `mut` view;
 -- * the `OrderedFloat` pattern: `ord_f64` maps a float to the `i64` key whose signed order is
 --   `totalOrder`, one-to-one (`of_ord_f64` inverts it), so the key's own equality and order are
---   the float's under `totalOrder`. The keys are sorted by `cmp_i64` and their duplicates dropped
+--   the float's under `totalOrder`. The keys are sorted by `cmp_i64` and their duplicates consumed
 --   by `==` at `i64`, and each is mapped back.
 --
 -- Answer: the first line `NaN -inf -0.0 0.0 0.0 1.0 2.0 3.5 NaN` (the negative NaN first, the
@@ -42,7 +42,7 @@ main -> i32 =
   borrow mut a { 'x, v -> let v = sort(v, total_cmp_f64, 0.0); () };
   let mut items = box buf[f64 * u8](24);
   for i in 0..9 { let x = at(&a, i, 0.0); items = put(items, x, i == 8) };
-  -- The keys, sorted, their duplicates dropped, mapped back.
+  -- The keys, sorted, their duplicates consumed, mapped back.
   let mut k = array_new[i64] (9, !{ i -> 0 });
   for i in 0..9 { let x = at(&a, i, 0.0); k = array_set(k, i, ord_f64(x)) };
   borrow mut k { 'x, v -> let v = sort(v, cmp_i64, ord_f64(0.0)); () };

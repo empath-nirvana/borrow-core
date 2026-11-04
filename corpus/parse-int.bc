@@ -9,7 +9,7 @@
 --
 -- Answer: on `parse-int.in`, each line's number or error (`empty`, `bad` and the byte, `overflow`),
 -- and `i32[158]`, the sum of the numbers parsed. A digit not widened, an overflow not caught or a
--- sign dropped changes a line.
+-- sign consumed changes a line.
 
 include textio
 
@@ -19,10 +19,10 @@ type Err = 1 + (u8 + 1)
 fn parse_int<'a>(t: text 'a) -> i32 with Fail[Err] =
   let (t, u) = array_copy['a, u8] t;
   let neg = at(u, 0, b' ') == b'-';
-  let t = if neg { match split_at(t, 1) { inl (h, r) -> array_forget['a, u8](h); r | inr t -> t } }
+  let t = if neg { match split_at(t, 1) { inl (h, r) -> array_release['a, u8](h); r | inr t -> t } }
     else { t };
   let (t, w) = array_copy['a, u8] t;
-  if len(w) == 0 { array_forget['a, u8](t); raise(inl ()) } else {
+  if len(w) == 0 { array_release['a, u8](t); raise(inl ()) } else {
     let mut n = 0;
     for x in t {
       let d = *x;

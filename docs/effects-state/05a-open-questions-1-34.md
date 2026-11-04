@@ -82,9 +82,9 @@ chosen by 6.65's own (H4), once per resumption. Because the lend is closed at th
 condition `ps' ↔ ps` is met unchanged. So these results are stated at Core's `ewpTS`/`cC`:
 
 - `withbor_spans_yields_cC` (`experiments/GhostEnd/GhostEnd/Program.lean:188`);
-- `spans_two_affine_yields` (`Drop.lean:318`, the cancel path for a 6.65 lend);
+- `spans_two_affine_yields` (`Consume.lean:318`, the cancel path for a 6.65 lend);
 - `imm_spans_yield` (`ImmLend.lean:252`, a 6.64 lend, resume path);
-- `withborR_compat` (`Drop.lean:108`, the unwinding borrow at a resuming row).
+- `withborR_compat` (`Consume.lean:108`, the unwinding borrow at a resuming row).
 
 Each is PROVED at [Core σ=[]] for particular borrowers or programs. The general theorem over every
 typed program (GFP, D16.2) is not proved:
@@ -311,11 +311,11 @@ and lifted at every `TableOK` table (a), or kept abortive-only (b)?
 *Evidence.*
 
 - The draft's premise is that "the unwinding forms exist only at abortive callback rows". That is
-  true of the kernel, but no longer of our Lean. `withborR_compat` (`experiments/GhostEnd/GhostEnd/Drop.lean:108`)
+  true of the kernel, but no longer of our Lean. `withborR_compat` (`experiments/GhostEnd/GhostEnd/Consume.lean:108`)
   lifts the unwinding borrow `withborU d` to a callback row whose operations resume, with finaliser
   `d : Ref T ⊸ 1`. Its finaliser table is still abort-only (`hA : Ta.AbortOnly`). The lemma is
   PROVED at [Core σ=[]] (GhostEnd experiment, ghost-end route). `spans_two_affine_yields`
-  (`Drop.lean:318`) discharges every hypothesis on one program.
+  (`Consume.lean:318`) discharges every hypothesis on one program.
 - `GhostEnd/Frames.lean` has 6.64's `hQ`, 6.66 and 6.150's view copy at resuming tables
   (`opTable_extR`, `ewpTS_M_antiFrameR`, `ptoImm_dup`).
 - TR T9.2's in-place half is PAPER-ONLY. Its open step is O2.
@@ -352,7 +352,7 @@ settle-by-proof by user-signed instruction.
 *Needs the user?* No. Under tier 1 first, "the relation stays the `σ = []` kernel" is the draft's
 own default, so it can be deferred.
 
-### OQ-9. Open 6.64 frames handed to a continuation that is cancelled, dropped or resumed between lenders
+### OQ-9. Open 6.64 frames handed to a continuation that is cancelled, consumed or resumed between lenders
 
 *Question.* When a stop leaves lends open, how are they closed on every path the continuation can
 take? The options are carried frames (a), capture rebasing (b), or R-T1 (c).
@@ -376,7 +376,7 @@ That re-entry choice is the printed freshness, applied once per resumption.
 - Option (b) has PROVED instances at [Core σ=[]], with today's stop:
   - resume of a 6.64 lend (`imm_spans_yield`);
   - resume of a 6.65 lend (`withbor_spans_yields_cC`);
-  - drop or cancel of a 6.65 lend at a cancellable yield (`spans_two_affine_yields`,
+  - consume or cancel of a 6.65 lend at a cancellable yield (`spans_two_affine_yields`,
     `withborR_compat`).
 
   The general borrower is reduced to `RelendOfTyped` (`Open.lean:45`), which is OPEN. GFP is
@@ -526,7 +526,7 @@ per iteration) already works." Its general form uses only existing rules [inspec
 
 ### OQ-16. Is multi-shot free?
 
-*Question.* Keep `unr` with no law depending on it (a), or drop it (b)?
+*Question.* Keep `unr` with no law depending on it (a), or consume it (b)?
 
 *Class.* **DECIDED (the criterion).** The fact is settleable by census.
 
@@ -618,7 +618,7 @@ be deferred.
 
 ### OQ-21. What a finaliser may perform, and the cancel error policy
 
-*Question.* Keep as built (a), or restrict destructors to answering operations (b)?
+*Question.* Keep as built (a), or restrict consumes to answering operations (b)?
 
 *Class.* **MIS-POSED.** Its option (a), "as built", conflicts with the recorded decision (F4).
 
@@ -628,7 +628,7 @@ continues to the canceller, which always receives 'cancelled'." The kernel (SPEC
 `SPEC.md:2509-2515`; `Core/EffCancel.lean` `prog₃`) re-raises the first error of a name outside
 the region at the canceller.
 
-Option (b) comes from #245's brief of 2026-10-02 ("Destructors may perform only answering
+Option (b) comes from #245's brief of 2026-10-02 ("Consumes may perform only answering
 operations; handler-level finalisers may perform anything in the outer row… decide them
 deliberately"). That is an agent consolidation, not a user decision.
 
@@ -682,7 +682,7 @@ finalisers have run (b)?
 
 *Decisions.*
 
-- Decision 55 (2026-10-01, provisional): "`from_utf8` raises the index and drops the buffer,
+- Decision 55 (2026-10-01, provisional): "`from_utf8` raises the index and consumes the buffer,
   provisionally: the error should hand the buffer back once an abortive payload may be linear
   (#215)" (`docs/decisions.md:691`).
 - `errors-are-control-flow-effect` (2026-09-30) excludes a value-level error path. That rules out
@@ -952,7 +952,7 @@ only to say where a residue goes.
   `docs/handlers-over-div.md` @ `loophandle`.
 - `Core/EffDefs.lean:25-45, 130-170`; `Core/EffBorrow.lean:128-136`; `Core/Fundamental.lean:350-375`;
   `Core/EffRules.lean:975-985`; `Frontend/Elab/Effects.lean:229, 240`.
-- `experiments/GhostEnd/README.md` (main and `borrow-callbacks`); `GhostEnd/{Program,Drop,ImmLend,StackStep,Stacked}.lean`;
+- `experiments/GhostEnd/README.md` (main and `borrow-callbacks`); `GhostEnd/{Program,Consume,ImmLend,StackStep,Stacked}.lean`;
   `Below.lean` @ `gfp`; `Arising.lean` @ `gfp-arising`; `Extend.lean` @ `borrow-callbacks`.
 - `Core/Gen.lean` @ `lift-stage1` and its commit message.
 - `experiments/HandlersAsBorrows/README.md`; `experiments/HandlersControl/README.md`;

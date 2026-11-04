@@ -1,7 +1,7 @@
 -- A function `A => B` is not a closure (SPEC §22): there is no uniform coercion from `A => B` to
 -- `box 'c Clo[A, B]<'c>`. A closure's `close` must dispose of its state, and `A => B` is linear
--- with no derived drop (SPEC §12, group 3): it is disposed of only by calling it, which
--- needs an argument `close` does not have (`Core/Clo.lean`, `not_hasDtor_lolli`). Here `close`
+-- that is not consumable (SPEC §12, group 3): it is disposed of only by calling it, which
+-- needs an argument `close` does not have (`Core/Clo.lean`, `not_consumable_lolli`). Here `close`
 -- leaves the state `h` unused, and the checker refuses it.
 include clo
 
@@ -11,4 +11,4 @@ fn of_linear<'c>(h: i32 => i32) -> Clo[i32, i32]<'c> =
       return () >)
 
 main -> i32 = 0
--- expect: 10:5: in this `<M, N>`, `h` is consumed in the first component but not in the second, and its type `i32 => i32` is linear and has no derived drop
+-- expect: 10:5: in this `<M, N>`, `h` is consumed in the first component but not in the second, and its type `i32 => i32` is linear and is not consumable

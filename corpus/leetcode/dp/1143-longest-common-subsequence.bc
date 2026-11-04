@@ -43,7 +43,7 @@ fn lcs<'a, 'b>(x: text 'a, y: text 'b) -> i32 =
     };
     i = i + 1
   };
-  array_forget['b, u8](y);
+  array_release['b, u8](y);
   let r = at(&t, m * w + w - 1, 0);
   r
 
@@ -52,19 +52,19 @@ fn lcs<'a, 'b>(x: text 'a, y: text 'b) -> i32 =
 fn case_at<'t>(t: text 't, pos: i32) -> (i32 * i32) + 1 =
   match split_at(t, pos) {
     inl (h, rest) ->
-      array_forget['t, u8](h);
+      array_release['t, u8](h);
       match next_line(rest) {
         inl (l, r) ->
-          array_forget['t, u8](r);
+          array_release['t, u8](r);
           let (l, m) = array_copy['t, u8] l;
           let c = match split_once(l, b' ') {
             inl (x, y) -> lcs(x, y)
-          | inr l -> array_forget['t, u8](l); 0
+          | inr l -> array_release['t, u8](l); 0
           };
           inl (c, pos + len(m) + 1)
       | inr u -> inr ()
       }
-  | inr t -> array_forget['t, u8](t); inr ()
+  | inr t -> array_release['t, u8](t); inr ()
   }
 
 -- Each line of the input a case. The number of cases.

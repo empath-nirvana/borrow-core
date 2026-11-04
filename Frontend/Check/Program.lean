@@ -135,7 +135,7 @@ def externs (ds : Array Decl) : Except Error (List (String × CVTy)) :=
         pure (acc ++ [(n.name, A')])
     | _ => pure acc
 
-/-- The first extern neither consumed nor droppable. -/
+/-- The first extern neither consumed nor consumable. -/
 def firstUnconsumed : List Bool → List Bool → Option Nat
   | a :: as, b :: bs => if !(a || b) then some 0 else (firstUnconsumed as bs).map (· + 1)
   | _, _ => none
@@ -318,12 +318,12 @@ def checkElaborated (el : Frontend.Elab.Elaborated) (wrapped : Bool) : Except Er
 /-- The binder `main`'s result is held at in `discardEntry`'s entry. -/
 def mainResult : String := "io_main_result"
 
-/-- **The entry discards `main`'s result by its derived drop** (SPEC §42): a program with no
+/-- **The entry discards `main`'s result by its consume** (SPEC §42): a program with no
 externs whose `main : F A` answers a value `A` that is neither unrestricted nor a loop the driver
 runs (`U (νX. …)`) is entered as `main : F 1 = io_main_result : A <- M; return ()`. The checker
-drops the result by its derived drop (`drop_derives`, at a `dtor` node; `entry_derives` in
+consumes the result by its consume (`consumeSlot_derives`, at a `consume` node; `entry_derives` in
 `Core/Decl.lean`), and the run ends with every cell freed (`entry_runs`). At a type with no
-derived drop, a declared type's among them, no rule consumes the result and the program is
+consume, a declared type's among them, no rule consumes the result and the program is
 refused. `none` when `main` is entered as it is. -/
 def discardEntry (el : Frontend.Elab.Elaborated) (r : Report) :
     Except Error (Option Frontend.Elab.Elaborated) := do

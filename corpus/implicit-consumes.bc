@@ -1,19 +1,19 @@
--- Implicit destructors (SPEC §12): owned values that go unused are dropped by the checker, which
--- inserts each one's destructor at the end of the path that leaves it unused.
+-- Implicit consumes (SPEC §12): owned values that go unused are consumed by the checker, which
+-- inserts each one's consume at the end of the path that leaves it unused.
 --
 -- * `r`, a cell, is never used: it is freed before `main` returns.
--- * `l` and `k`, lists of cells, are each consumed in the `inr` arm of a `case` and dropped in
+-- * `l` and `k`, lists of cells, are each consumed in the `inr` arm of a `case` and consumed in
 --   the `inl` arm. The first `case` takes the `inr` arm, the second the `inl` arm. `head` keeps
---   the first element and drops the rest of the list.
--- * `t1`, a stream whose state owns a cell, is dropped after one element. Its destructor is
+--   the first element and consumes the rest of the list.
+-- * `t1`, a stream whose state owns a cell, is consumed after one element. Its consume is
 --   `close`, and the close component returns `()` without mentioning its state `s`, which is
---   dropped there: the close frees the cell.
--- * `q` is consumed by `free`, so nothing is dropped for it.
+--   consumed there: the close frees the cell.
+-- * `q` is consumed by `free`, so nothing is consumed for it.
 --
 -- Answer: i32[6047]: 7 (the head of [7, 30]) + 1000 (the `inl` arm) + 5000 (the stream's first
 -- element) + 40 (read from `q`). The wrong arm of the first `case` gives 7040, of the second
 -- 5056; a head that reads the second element gives 6070, and a stream advanced once too often
--- 6057. `live 0` checks that the unused cell, the list dropped in the `inl` arm, the rest of
+-- 6057. `live 0` checks that the unused cell, the list consumed in the `inl` arm, the rest of
 -- `head`'s list and the stream's cell are all freed.
 
 type B = 1 + 1
@@ -27,7 +27,7 @@ def nil : List = roll (inl ())
 def cons : i32 * List => List =
   thunkv fun (p : i32 * List) -> return (roll (inr (alloc_s[Node] p)))
 
--- The first element, or 0. The tail `t` is dropped.
+-- The first element, or 0. The tail `t` is consumed.
 def head : List => i32 =
   thunkv fun (l : List) ->
     case (unroll l) {
@@ -35,7 +35,7 @@ def head : List => i32 =
     | inr p -> let (c, t) = p; return (free[i32] c)
     }
 
--- Emit the cell's value and store the next one; the close drops the cell.
+-- Emit the cell's value and store the next one; the close consumes the cell.
 def cell_step : !U (ref i32 -o F (i32 * ref i32) & F 1) =
   !thunkv fun (s : ref i32) ->
     < cx <- return (swap[i32, 1] s ());

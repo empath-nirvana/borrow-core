@@ -250,7 +250,7 @@ def cancelOwed (ls : List SRec) (K : Kont) : WProp :=
 * a non-abortive `perform (n, (i, v))` under a context free of `n`: the argument, and the
   continuation's share (`performStop`);
 * an abortive `raise (n, (i, v))` under a context catching nothing of `n`: the argument, which
-  holds nothing owned (an abandoned error is dropped), and the abandoned continuation, which holds
+  holds nothing owned (an abandoned error is consumed), and the abandoned continuation, which holds
   nothing owned either. -/
 def opTable (T : OpTab) : Table := fun ls t Φ =>
   BoLo.or (performStop T ls t Φ)

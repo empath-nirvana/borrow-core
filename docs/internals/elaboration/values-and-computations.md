@@ -136,7 +136,7 @@ Lazy pairs are how codata offers its observations: `next` and `close` (see
 
 ## The exponential `!A`
 
-A value of type `!A` holds no resource, so it can be copied and dropped freely. `!thunkv N` and
+A value of type `!A` holds no resource, so it can be copied and consumed freely. `!thunkv N` and
 `!thunk M` build one from a computation that uses only `!`-typed variables, and `unbang V` takes
 the `A` out. The integer operations and the folds have `!` types: `host[add32]` is
 `!(i32 * i32 => i32)`, which is why calls are written `(unbang host[add32]) (x, y)`.

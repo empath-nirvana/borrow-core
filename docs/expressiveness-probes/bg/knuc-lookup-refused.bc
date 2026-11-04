@@ -6,8 +6,8 @@ include map
 
 fn slice<'t>(t: text 't, i: i32, k: i32) -> text 't =
   match split_at(t, i) {
-    inl (h, r) -> array_forget['t, u8](h);
-      match split_at(r, k) { inl (w, rest) -> array_forget['t, u8](rest); w | inr r -> r }
+    inl (h, r) -> array_release['t, u8](h);
+      match split_at(r, k) { inl (w, rest) -> array_release['t, u8](rest); w | inr r -> r }
   | inr t -> t
   }
 
@@ -26,7 +26,7 @@ fn count<'t>(t: text 't, k: i32) -> Map[text 't, i32] =
     let c = match old { inl c -> c + 1 | inr u -> 1 };
     map_insert(&mut m, key, c)
   };
-  array_forget['t, u8](t);
+  array_release['t, u8](t);
   m
 
 -- Higher count first, then the key in byte order.
@@ -102,7 +102,7 @@ fn three<'a>(t: text 'a) -> string =
     };
     line_start = b == b'\n'
   };
-  array_forget['a, u8](t);
+  array_release['a, u8](t);
   s
 
 main -> i32 =

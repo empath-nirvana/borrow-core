@@ -36,8 +36,8 @@ main : F (i32 * ((i32 + i32) * (i32 + i32))) =
 ```
 
 The array `a3` is not used again, so the checker frees it at the end of `main`
-([Implicit destructors](implicit-destructors.md)). `array A` has a destructor whenever `A` has
-one: every element goes to `A`'s destructor, and then the cells are freed. The explicit form is
+([Implicit consumes](implicit-consumes.md)). `array A` is consumable whenever `A` has
+one: every element goes to `A`'s consume, and then the cells are freed. The explicit form is
 `array_free[A]`, which takes the consumer to call on each element:
 
 ```bc
@@ -71,7 +71,7 @@ at a lifetime `'y` inside `'x`. On a family:
 | `array_len['y, A]` | `!(array_imm 'y A => i32)` |
 | `array_get['y, A]` | `!(array_imm 'y A * i32 => imm 'y A + 1)` |
 | `array_copy['y, A]` | `!(array_imm 'y A => array_imm 'y A * array_imm 'y A)` |
-| `array_forget['y, A]` | `!(array_imm 'y A => 1)` |
+| `array_release['y, A]` | `!(array_imm 'y A => 1)` |
 
 `array_get` gives the view of one element at the family's own lifetime, or `inr ()` past the
 end. The view is read with `withload` like any `imm` borrow.
@@ -109,7 +109,7 @@ main : F T =
 -- answer: (i32[3], inl i32[101])
 ```
 
-The cell `r2` and the array in it are dropped implicitly when `main` ends.
+The cell `r2` and the array in it are consumed implicitly when `main` ends.
 
 To change an array through a borrow, borrow the cell `mut` with `withbor2`, and let `withswap`
 lend the array itself to a function that returns it:
@@ -191,7 +191,7 @@ A borrow of a cell cannot hand out a view of something the cell *owns* at the bo
 lifetime: that is a view through a pointer, and the model excludes it
 ([decision 5](../../decisions.md)). That is why `withload` gives the family at a shorter lifetime
 `'y`. The family itself is not a pointer: it is the views of the elements, side by side, and
-nothing in it owns anything. `array_get` takes one of those views out and forgets the rest, so a
+nothing in it owns anything. `array_get` takes one of those views out and releases the rest, so a
 view of an element at `'y` is sound (`SPEC.md` §9, `Core/Arrays.lean`).
 
 ## Beyond this chapter

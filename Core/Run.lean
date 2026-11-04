@@ -690,7 +690,7 @@ theorem LMem.heap_cons (m : LMem) (ℓ : Loc) (v : Val) :
   · have : (k == ℓ) = false := by simp [h]
     simp [this, h]
 
-/-- Dropping every cell at a location removes it from the memory. -/
+/-- Consuming every cell at a location removes it from the memory. -/
 theorem LMem.heap_filter (m : LMem) (ℓ : Loc) :
     LMem.heap (m.filter fun c => c.1 != ℓ) = (LMem.heap m).del ℓ := by
   funext k

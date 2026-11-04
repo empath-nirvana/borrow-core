@@ -4,7 +4,7 @@
 -- which runs it to its first `await`, and gives the task to `killer`, which awaits once and then
 -- cancels it with `cancel` (`lib/async.bc`). The cancel unwinds the victim's continuation
 -- innermost first: the lend's unwinding form ends the lend and runs the owner's finaliser (`buf`'s
--- destructor), then `extra`'s destructor runs. `bcc interp --check tags` checks that the lend
+-- consume), then `extra`'s consume runs. `bcc interp --check tags` checks that the lend
 -- ended before `buf` was freed.
 --
 -- Tasks are linear values here, so the victim is not in the queue once `killer` holds it: the
@@ -15,7 +15,7 @@
 -- `assurance: PinLaw (R1 at 24:11)`.
 --
 -- Answer: `inr (i32[2], inl ())`, the list [2], and `live 0`: both of the victim's cells were
--- freed by its cancel. A cancel that dropped the continuation without unwinding would leave the
+-- freed by its cancel. A cancel that consumed the continuation without unwinding would leave the
 -- two cells live.
 include async
 

@@ -80,7 +80,7 @@ fn take[A](b: buf A, i: i32) -> buf A * (A + 1) =
     match x { inl e -> ((a, n), inl e) | inr e -> ((a, n), inr ()) }
   } else { ((a, n), inr ()) }
 
--- The first `k` elements kept, and the rest dropped, their slots filled.
+-- The first `k` elements kept, and the rest consumed, their slots filled.
 fn truncate[A](b: buf A, k: i32) -> buf A =
   let (a, n) = b;
   if n <= k { (a, n) } else {
@@ -89,10 +89,10 @@ fn truncate[A](b: buf A, k: i32) -> buf A =
     (a, k)
   }
 
--- Length 0, with the capacity kept: every element dropped, its slot filled.
+-- Length 0, with the capacity kept: every element consumed, its slot filled.
 fn clear[A](b: buf A) -> buf A = truncate(b, 0)
 
--- `x` in slot `i` of an array; the element that was there is dropped. Past the end, nothing
+-- `x` in slot `i` of an array; the element that was there is consumed. Past the end, nothing
 -- changes. `[spec §17]`
 fn array_set[A](a: array A, i: i32, x: A) -> array A = let (a, _) = array_replace[A] (a, i, x); a
 

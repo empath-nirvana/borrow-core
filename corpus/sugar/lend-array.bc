@@ -1,7 +1,7 @@
 -- An owned array lent as its view to one call (SPEC §9; typed elaboration §5.1, the array row):
 -- `&mut a` at a parameter `array_mut 'a A` is `slice_borrow_mut` around the call, `&a` at
 -- `array_imm 'a A` is `slice_borrow_imm`, with no cell, and `a` is bound again from the pair. The
--- view a call hands back is dropped there, so `double(&mut a)` is `()`, and `first(&a)` keeps its
+-- view a call hands back is consumed there, so `double(&mut a)` is `()`, and `first(&a)` keeps its
 -- `i32`. `lend-array.core.bc` writes the borrows by hand.
 -- Answer: i32[18]: the first element doubled, 6, and doubled again, 12.
 

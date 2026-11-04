@@ -32,7 +32,7 @@ fn replace_all<'a, 'b, 'c>(t: text 'a, from: text 'b, to: text 'c) -> string =
                      let (out, _) = push_str(out, pre);
                      let (to, t2) = array_copy['c, u8] to;
                      let (out, _) = push_str(out, t2);
-                     let post = match split_at(post, n) { inl (m, p) -> array_forget['a, u8](m); p | inr p -> p };
+                     let post = match split_at(post, n) { inl (m, p) -> array_release['a, u8](m); p | inr p -> p };
                      (out, (post, (from, (to, n))))
                  | inr rest -> (out, (rest, (from, (to, n))))
                  }

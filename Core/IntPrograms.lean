@@ -18,7 +18,7 @@ not wrapping could not produce.
 * `signProg`: `div_s` and `div_u` of `-7` by `2`, an overflowing `mul`, and `div_u` by zero.
   Observed: `(-3, 0x7FFFFFFC, 0x10000, error)`.
 
-`I32` is persistent (§10), so its variables are copied and dropped implicitly. `partP` is the
+`I32` is persistent (§10), so its variables are copied and consumed implicitly. `partP` is the
 context split that sends every persistent slot to both sides; the wrappers `appP`, `pairP`,
 `letP`, `caseP` are the value-level rules at that split, and the tactics `cdeadP`, `csoloP` close
 the leaves.
@@ -94,7 +94,7 @@ end
 /-- `Γ` consumed, up to live persistent slots. -/
 syntax "cdeadP" : tactic
 macro_rules
-  | `(tactic| cdeadP) => `(tactic| first | exact Ctx.DeadP.nil | exact Ctx.Dead.toP (by assumption) | (refine Ctx.DeadP.cons ?_; cdeadP) | (refine Ctx.DeadP.drop (by decide) ?_; cdeadP))
+  | `(tactic| cdeadP) => `(tactic| first | exact Ctx.DeadP.nil | exact Ctx.Dead.toP (by assumption) | (refine Ctx.DeadP.cons ?_; cdeadP) | (refine Ctx.DeadP.weaken (by decide) ?_; cdeadP))
 
 /-- `Γ = x : A`, up to live persistent slots elsewhere. -/
 syntax "csoloP" : tactic
@@ -136,7 +136,7 @@ def sumToNext : Expr :=
         (hop (.bin .w32 .add) (.pair (.var 1) (.var 2)))))
       (.inj₁ (.var 1)))
 
-/-- `λs. ⟨sumToNext, ()⟩ : I32 ⊗ I32 ⊸ F(I32 ⊕ I32 ⊗ I32) & F 1`; `close` drops the state. -/
+/-- `λs. ⟨sumToNext, ()⟩ : I32 ⊗ I32 ⊸ F(I32 ⊕ I32 ⊗ I32) & F 1`; `close` consumes the state. -/
 def sumToStep : Val := .lam (withPair sumToNext (.val .unit))
 
 theorem d_sumToStep :
@@ -253,7 +253,7 @@ theorem d_sumI : CDerives LifeCtx.empty [⟨.lolli ilistL .unit, false⟩] sumIE
       (by simp [VFree, FShape.ty]) (by simp [VFree]) (fun _ _ => .int))
 
 /-- `case r {inj₁ u. () | inj₂ p. let (rn, u) = p in free rn to n. ()}`: the payload and the
-unit are dropped as persistent slots. -/
+unit are consumed as persistent slots. -/
 def freeIAlgB : Expr :=
   .case (.var 0) (.val .unit)
     (.letpair (.var 0) (bindE (.app (.val (.prim .free)) (.var 1)) (.val .unit)))
@@ -326,12 +326,12 @@ abbrev signT : VTy := .tensor .i32 (.tensor .i32 (.tensor .i32 .boolT))
 theorem d_orZero {Γ : Ctx VTy} {e : Expr} (hΓ : Ctx.Dead Γ)
     (he : CDerives LifeCtx.empty Γ e (.val (.sum .i32 .unit))) :
     CDerives LifeCtx.empty Γ (orZero e) (.val .i32) :=
-  .caseV (deadSplit hΓ) he (.var (.here hΓ.toP)) (d_i32 0 (.drop rfl hΓ.toP))
+  .caseV (deadSplit hΓ) he (.var (.here hΓ.toP)) (d_i32 0 (.weaken rfl hΓ.toP))
 
 theorem d_isErr {Γ : Ctx VTy} {e : Expr} (hΓ : Ctx.Dead Γ)
     (he : CDerives LifeCtx.empty Γ e (.val (.sum .i32 .unit))) :
     CDerives LifeCtx.empty Γ (isErr e) (.val .boolT) :=
-  .caseV (deadSplit hΓ) he (.sumI₁ (.unitI (.drop rfl hΓ.toP))) (.sumI₂ (.unitI (.drop rfl hΓ.toP)))
+  .caseV (deadSplit hΓ) he (.sumI₁ (.unitI (.weaken rfl hΓ.toP))) (.sumI₂ (.unitI (.weaken rfl hΓ.toP)))
 
 theorem d_div {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) (o : DivOp) (a b : UInt32) :
     CDerives LifeCtx.empty Γ (hop (.div .w32 o) (.pair (i32E a) (i32E b))) (.val (.sum .i32 .unit)) :=

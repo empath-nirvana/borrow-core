@@ -27,7 +27,7 @@ node	bangThunkF	0	0	0	0
 node	bangThunkV	366	10595	863	27355	corpus/13-2-sum-prog.bc corpus/clo-capture.bc corpus/clo-coerce.bc
 node	bangE	373	30739	2214	71948	corpus/13-2-sum-prog.bc corpus/clo-capture.bc corpus/clo-coerce.bc
 node	copyBang	0	0	0	0	
-node	forgetBang	0	0	0	0	
+node	releaseBang	0	0	0	0	
 node	boxI	265	2267	127	4899	corpus/13-2-sum-prog.bc corpus/clo-capture.bc corpus/clo-coerce.bc
 node	boxE	23	136	0	198	corpus/clo-capture.bc corpus/clo-coerce.bc corpus/clo-counter.bc
 node	immSub	0	0	0	0	
@@ -36,9 +36,9 @@ node	alloc	121	229	0	270	corpus/13-2-sum-prog.bc corpus/clo-capture.bc corpus/cl
 node	free	96	203	0	240	corpus/13-2-sum-prog.bc corpus/clo-capture.bc corpus/clo-coerce.bc
 node	swap	19	56	0	68	corpus/clo-coerce.bc corpus/clo-counter.bc corpus/clo-depth.bc
 node	copy	15	28	0	93	corpus/async-scoped.bc corpus/async-workers-scoped.bc corpus/borrow-in-scope.bc
-node	forgetImm	11	36	0	141	corpus/borrow-in-scope.bc corpus/map-views.bc corpus/poly-providers.bc
-node	forgetMut	12	17	0	24	corpus/clo-capture.bc corpus/async-r1-cancel-finaliser-writes.bc corpus/io-laws.bc
-node	forgetUnk	0	0	0	0	
+node	releaseImm	11	36	0	141	corpus/borrow-in-scope.bc corpus/map-views.bc corpus/poly-providers.bc
+node	releaseMut	12	17	0	24	corpus/clo-capture.bc corpus/async-r1-cancel-finaliser-writes.bc corpus/io-laws.bc
+node	releaseUnk	0	0	0	0	
 node	lit	369	19185	786	41845	corpus/clo-capture.bc corpus/clo-coerce.bc corpus/clo-counter.bc
 node	hostOp	356	13095	1067	30077	corpus/clo-capture.bc corpus/clo-coerce.bc corpus/clo-counter.bc
 node	arrNew	179	888	49	2888	corpus/array-empty.bc corpus/array-get.bc corpus/array-refs.bc
@@ -48,7 +48,7 @@ node	arrReplace	136	909	71	6262	corpus/array-empty.bc corpus/array-refs.bc corpu
 node	arrLen	134	215	16	795	corpus/array-get.bc corpus/ascii-upper.bc corpus/data-config.bc
 node	arrGet	155	339	16	1694	corpus/array-get.bc corpus/ascii-upper.bc corpus/bytes-upper.bc
 node	arrCopy	146	1224	110	1702	corpus/array-get.bc corpus/ascii-upper.bc corpus/data-config.bc
-node	arrForget	112	597	56	746	corpus/ascii-upper.bc corpus/data-config.bc corpus/effects-instances.bc
+node	arrRelease	112	597	56	746	corpus/ascii-upper.bc corpus/data-config.bc corpus/effects-instances.bc
 node	countFold	168	1031	63	3395	corpus/ascii-upper.bc corpus/async-bank-inbox.bc corpus/async-cancel.bc
 node	countTry	70	174	0	457	corpus/async-timers.bc corpus/count-try.bc corpus/data-config.bc
 node	boundedFix	59	148	0	188	corpus/async-bank-inbox.bc corpus/async-map.bc corpus/async-mapreduce.bc
@@ -99,7 +99,7 @@ node	letPoly	0	0	0	0
 node	lendR	10	16	0	16	corpus/async-bank-inbox.bc corpus/async-cancel.bc corpus/async-logged.bc
 node	lendLoopR	0	0	0	0	
 node	nilDead	10	16	0	16	corpus/async-bank-inbox.bc corpus/async-cancel.bc corpus/async-logged.bc
-node	dtor	293	3543	161	6264	corpus/clo-capture.bc corpus/clo-coerce.bc corpus/clo-counter.bc
+node	consume	293	3543	161	6264	corpus/clo-capture.bc corpus/clo-coerce.bc corpus/clo-counter.bc
 node	allocS	15	18	0	48	corpus/13-2-sum-prog.bc corpus/block-swap.bc corpus/data-box-tree.bc
 node	freeS	1	1	0	1	corpus/block-swap.bc
 node	withborSM	1	1	0	1	corpus/block-swap.bc
@@ -170,7 +170,7 @@ read	allocS	expand	15	48
 read	app	masks	162	2063
 read	app	node	160	2031
 read	arrCopy	expand	146	1312
-read	arrForget	expand	112	641
+read	arrRelease	expand	112	641
 read	arrFree	expand	5	10
 read	arrGet	expand	155	859
 read	arrGet	in range	49	69
@@ -194,9 +194,9 @@ read	countFold	expand	168	1425
 read	countTry	expand	70	187
 read	divLit	divisor	10	15
 read	divLit	node	10	15
-read	dtor	expand	293	4306
-read	dtor	node	10	16
-read	dtor	type	293	4306
+read	consume	expand	293	4306
+read	consume	node	10	16
+read	consume	type	293	4306
 read	effHandleV	clause tuple	3	8
 read	effHandleV	forward	10	62
 read	effHandleV	join	109	262
@@ -231,8 +231,8 @@ read	foldOwn	shape	15	26
 read	foldReuse	expand	3	3
 read	foldReuse	shape	3	3
 read	force	node	271	2946
-read	forgetImm	expand	11	36
-read	forgetMut	expand	12	24
+read	releaseImm	expand	11	36
+read	releaseMut	expand	12	24
 read	free	expand	96	210
 read	freeS	expand	1	1
 read	hostOp	expand	354	13427

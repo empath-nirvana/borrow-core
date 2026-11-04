@@ -1,6 +1,6 @@
 -- SPEC §19's unwinding borrows of an owned source in the core text: `withbor1u` lends a cell
 -- `imm`, `slice_borrow_mut_u` lends an array as a family of `mut` leaves; each callback aborts.
--- The finaliser of each, the source's destructor, frees the cell and the array on the unwind.
+-- The finaliser of each, the source's consume, frees the cell and the array on the unwind.
 --
 -- Answer: (inr i32[42], inr i32[43]), and `live 0`.
 

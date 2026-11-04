@@ -131,7 +131,7 @@ Shape gives HasArea                                     -- `name` missing: an er
 
 -- Materialised values have one type whatever their state. Observing one through `imm` (here each
 -- element's view) is finding F3 of §8: today a codata value behind an `imm` borrow can only be
--- forgotten, so this needs the objects persistent (`!`, state `i32`) or lent `mut`.
+-- released, so this needs the objects persistent (`!`, state `i32`) or lent `mut`.
 fn total(xs: imm Vec[HasArea]) -> i32 =
   let mut n = 0; for x in xs.items() { n = n + x.area() }; n   -- observation: dispatched
 

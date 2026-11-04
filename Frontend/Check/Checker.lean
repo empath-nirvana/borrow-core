@@ -10,8 +10,8 @@ builder of `Frontend/Check/Rules.lean` (or `Consts.lean`) to the checked premise
 is a `Res`: the erasure with its `CDerives` derivations. Names are resolved on the way: a
 variable to its de Bruijn slot (§6.3), a lifetime name to its `LifeVar` (§3), a `def` to its
 key's checked body, placed at the use (`useDef`, SPEC §3). Variables owed to the computation being checked (`Env.own`,
-SPEC §12) are passed to its tail positions and dropped before each terminal computation that
-leaves them unused (`dropOwed`).
+SPEC §12) are passed to its tail positions and consumed before each terminal computation that
+leaves them unused (`consumeOwed`).
 
 The recursion is structural on a fuel argument that bounds the depth of the call tree;
 running out is an error, not an assumption.
@@ -60,7 +60,7 @@ def attempt {α : Type} (x : CheckM α) : CheckM (Except Error α) := fun c =>
   | .ok (a, c') => .ok (.ok a, c')
   | .error e => .ok (.error e, c)
 
-/-- A key's checked body, found for a use at `T`: its context `Tc` is `T` with `m` slots dropped. -/
+/-- A key's checked body, found for a use at `T`: its context `Tc` is `T` with `m` slots consumed. -/
 structure DefHit (Δ : LifeCtx) (T : List CVTy) where
   A : CVTy
   Tc : List CVTy
@@ -410,7 +410,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
   | n + 1, E, Δ, T, m =>
     if m.terminal && E.own.any id then do
       let ⟨C, r⟩ ← synC n E.clearOwn Δ T m
-      pure ⟨C, ← dropOwed E m.span r⟩
+      pure ⟨C, ← consumeOwed E m.span r⟩
     else match m with
     | .ret sp V => do
       let ⟨_, r⟩ ← synV n E Δ T V
@@ -423,7 +423,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       | [], rM =>
         let rM := rUnfoldStep (at_ sp) rM
         let ⟨C, rN⟩ ← synC n ((E.minus rM.F.u).pushOwn x.name A) Δ (A :: T) N
-        let rN ← dropStuck x.span 1 rN
+        let rN ← consumeStuck x.span 1 rN
         let FN ← popL E x.span x.name rN.F
         if h : overlapOK T rM.F.u FN.u = true then pure ⟨C, rScope (at_ sp) (rBind (atB sp [x.name]) rM FN h)⟩
         else throw (splitErr E T sp rM.F.u FN.u)
@@ -444,7 +444,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
         (← synC n { (E.minus rM.F.u).pushOwn x.name A with row := some S } Δ (A :: T) N)
       let rD ← chkC n ((E.minus rM.F.u).push none) Δ (.unit :: T) D
         (effOf [] .unit)
-      let rN ← dropStuck x.span 1 rN
+      let rN ← consumeStuck x.span 1 rN
       let FN ← popL E x.span x.name rN.F
       pure ⟨_, ← thenIt E sp x.name rM' FN rD⟩
     | .perform sp k i V => do
@@ -585,7 +585,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       | .tensor A B, rV => do
         let ⟨C, rM⟩ ← synC n ((E.minus rV.F.u).pushOwn x.name A |>.pushOwn y.name B) Δ
           (B :: A :: T) M
-        let rM ← dropStuck sp 2 rM
+        let rM ← consumeStuck sp 2 rM
         let F₁ ← popL E y.span y.name rM.F
         let F₂ ← popL E x.span x.name F₁
         if h : overlapOK T rV.F.u F₂.u = true then pure ⟨C, rScope (at_ sp) (rTensorE (atB sp [x.name, y.name]) rV F₂ h)⟩
@@ -747,7 +747,7 @@ def abortIt : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → Na
         if hd : ownFreeB o.A = true then
           let rV ← chkV n E Δ T V o.A
           pure ⟨S, rRaise (at_ sp) B hf ha hrc hd rV⟩
-        else err sp s!"the argument of the abortive operation {k}.{i}, of type `{E.ppV o.A}`, does not drop"
+        else err sp s!"the argument of the abortive operation {k}.{i}, of type `{E.ppV o.A}`, does not consume"
       else err sp (s!"the operation {k}.{i} is a cancel target: only `await` raises it, on a " ++
         s!"cancel ([await-c], SPEC §29a)")
     else err sp s!"the operation {k}.{i} is not abortive: write `perform[{k}.{i}]`"
@@ -760,7 +760,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
     let E := E.atC C
     if m.terminal && E.own.any id then do
       let r ← chkC n E.clearOwn Δ T m C
-      dropOwed E m.span r
+      consumeOwed E m.span r
     else match m with
     | .ret sp V =>
       match C with
@@ -781,7 +781,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
       | [], rM =>
         let rM := rUnfoldStep (at_ sp) rM
         let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A) Δ (A :: T) N C
-        let rN ← dropStuck x.span 1 rN
+        let rN ← consumeStuck x.span 1 rN
         let FN ← popL E x.span x.name rN.F
         if h : overlapOK T rM.F.u FN.u = true then pure (rScope (at_ sp) (rBind (atB sp [x.name]) rM FN h))
         else throw (splitErr E T sp rM.F.u FN.u)
@@ -807,7 +807,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
           let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A) Δ (A :: T) N (effOf S B)
           let rD ← chkC n ((E.minus rM.F.u).push none) Δ (.unit :: T) D
             (effOf [] .unit)
-          let rN ← dropStuck x.span 1 rN
+          let rN ← consumeStuck x.span 1 rN
           let FN ← popL E x.span x.name rN.F
           pure (hC ▸ (← thenIt E sp x.name rM' FN rD))
         else err sp "internal error: a returner chain"
@@ -853,7 +853,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
       | .tensor A B, rV => do
         let rM ← chkC n ((E.minus rV.F.u).pushOwn x.name A |>.pushOwn y.name B) Δ
           (B :: A :: T) M C
-        let rM ← dropStuck sp 2 rM
+        let rM ← consumeStuck sp 2 rM
         let F₁ ← popL E y.span y.name rM.F
         let F₂ ← popL E x.span x.name F₁
         if h : overlapOK T rV.F.u F₂.u = true then pure (rScope (at_ sp) (rTensorE (atB sp [x.name, y.name]) rV F₂ h))

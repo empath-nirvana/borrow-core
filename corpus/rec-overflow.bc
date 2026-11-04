@@ -2,7 +2,7 @@
 -- A recursion far past its budget (SPEC §20). `down(n)` holds a cell across its call of itself and
 -- frees it after; at the depth of a million it spends `bounded`'s budget, so `exhausted()` is
 -- performed at the bottom. It is an abortive operation: it unwinds, and each level's cell is freed
--- by the finaliser the checker inserted around the level's call (SPEC §19's drop glue), from the
+-- by the finaliser the checker inserted around the level's call (SPEC §19's consume glue), from the
 -- innermost out, before `on_exhausted` answers. Nothing is left live: the `live 0` after the
 -- value is the test. The shallow call first runs to the end.
 --
