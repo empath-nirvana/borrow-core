@@ -224,4 +224,5 @@ These are facts about `cerwp`, not about handles. Each holds of every scheduler 
 
 ## Loan accounting: the handle-join build
 
-Scoped in `docs/new-core/scope-821-loans.md`, for review before the build.
+Scoped in `docs/new-core/scope-821-loans.md`, for review before the build: stage 1 makes `erwp`
+and `cerwp` one relation; stage 2 adds lifetime tokens and the handle join.
