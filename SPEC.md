@@ -2855,6 +2855,12 @@ names.
   `lit-lend-raise.bc`). The unwinding form of a marked scheme (a lent cell's, a literal's view,
   §57) is not marked, so a literal's view crossed by an abort tabulates its table into an array
   that is not the literal's read-only bytes.
+- *In a call that lends a place*: `f(…, &mut x, …)` or `f(…, &x, …)` at a borrow parameter of a
+  function that performs operations of the row is the borrow of the call (§11's lend) in its
+  unwinding form at those operations, which must be abortive: `withbor2U`/`withbor1U` of a cell,
+  of a cell scoped to the call for a `let mut` value, or `slice_borrow_*_u` of an array. `x` is
+  rebound from what the borrow hands back. A capability the call threads is passed beside it, its
+  lifetime parameter read off the capability's borrow (`corpus/lend-call-raise.bc`).
 - *With answering capabilities in use*: the body of a control `with` is given a reborrow of each
   capability it uses (`withbor3`), so that the capability comes back when the body is abandoned.
 
@@ -2867,8 +2873,8 @@ that is not consumable (§12, group 3) live across such a binding is rejected, n
 block that is not run in place, other than a block passed at a parameter of function type (§30),
 and a function with a row passed as a value other than at a parameter of function type, where
 it is the block that calls it (§33; stored callbacks, #161 part B; for a fold's algebra that
-raises, K4 below); a lend `&mut x` in the arguments of a call that
-threads a capability; an operation of an answering effect inside a clause of an answering handler;
+raises, K4 below); a lend `&mut x` in the arguments of an operation, of a block's call (§30) or of
+a recursive group's own call (§20); an operation of an answering effect inside a clause of an answering handler;
 a function with a row whose written result is a computation (a loop); type parameters on an
 answering effect; an effect with both kinds of operation; an unrestricted operation that answers
 `never` (`multi ctl`, above); a `let mut` declared outside a control `with` and assigned in it, or

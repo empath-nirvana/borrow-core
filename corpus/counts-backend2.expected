@@ -82,6 +82,8 @@ clause-captures 6 3 0 10 10 0
 clo-capture 1 0 0 3 3 0
 clo-coerce 1 0 0 3 3 0
 clo-counter 2 0 0 17 17 0
+lend-call-raise 9 0 0 34 31 4
+lend-call-record 1 0 0 6 2 0
 lit-lend-raise 6 0 0 69 30 39
 nu-file-read 2 5 0 7 6 0
 nu-file-twice 2 7 0 11 11 0

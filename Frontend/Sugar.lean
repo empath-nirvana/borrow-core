@@ -2314,10 +2314,20 @@ def replaceLend (y : String) : Val → Val
   | .pair sp V W => .pair sp (replaceLend y V) (replaceLend y W)
   | V => V
 
+/-- An effectful call as the computation it is: `g <- return f; a <- return W; (force g) a`; the
+argument's binding annotated with `P` when given. -/
+def effCallC (sp : Span) (f W : Val) (P : Option VTy := none) : Comp :=
+  let sfx := s!"{sp.start.line}_{sp.start.col}"
+  let g : Ident := ⟨s!"io_fg{sfx}", sp⟩
+  let a : Ident := ⟨s!"io_fa{sfx}", sp⟩
+  .bind sp g none (.ret sp f) (.bind sp a P (.ret sp W) (.app sp (.force sp g) a))
+
 /-- A borrow of the place `x`, lent at the call `sp`, around the body `body` that uses the
-borrow `m : mut 'l A` (or `imm 'l A`) and returns `B`: its value, which the lend rebinds. -/
+borrow `m : mut 'l A` (or `imm 'l A`) and returns `B`: its value, which the lend rebinds. With
+`unw`, the borrow constant is its unwinding form (`Const.unwinding`, the body performing the row's
+operations), and the place is `x` itself: the caller rebinds it. -/
 def lendBorrow (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A B : CVTy)
-    (body : String → String → Comp) : DM Val := do
+    (body : String → String → Comp) (unw : Option (Const → Const) := none) : DM Val := do
   let l := s!"io_lb{sp.start.line}_{sp.start.col}"
   let mv := s!"io_lm{sp.start.line}_{sp.start.col}"
   let As ← (c.surface sp A : Except Error VTy)
@@ -2327,7 +2337,8 @@ def lendBorrow (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A B : CVTy)
   let cb : Val := .thunkv sp (.lamL sp li (.dom sp) (.ret sp (.thunkv sp
     (.lam sp ⟨mv, sp⟩ Tm (body l mv)))))
   let C : Const := if m == .mut then .withbor2 li (.top sp) As Bs else .withbor1 li As Bs
-  let place := Val.lend sp x m
+  let C := (unw.map (· C)).getD C
+  let place := if unw.isSome then Val.var sp x.name else .lend sp x m
   match c.tyV (.var sp x.name) with
   | some (.ref _) => pure (.app sp (.app sp (.const sp C) place) cb)
   | some (.mut ..) | some (.imm ..) =>
@@ -2477,7 +2488,7 @@ from the pair. A view the call hands back, as its result or its result's first c
 consumed there: the lend's result is the rest (`()` for a function that hands back only the view,
 `reverse(&mut a)`).  `[spec §9]` -/
 def lendSlice (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A : CVTy) (v : BoCa.Lifetime.LifeVar)
-    (Q : CVTy) (call : String → String → Comp) : DM Val := do
+    (Q : CVTy) (call : String → String → Comp) (unw : Option (Const → Const) := none) : DM Val := do
   let isView : CVTy → Bool
     | .fam (.mut (.var w) _) | .fam (.imm (.var w) _) => w == v
     | _ => false
@@ -2507,20 +2518,28 @@ def lendSlice (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A : CVTy) (v : BoCa.
     (.lam sp ⟨mv, sp⟩ Tm body))))
   let C : Const := if m == .mut then .sliceBorrowMut li (.top sp) As Bs
     else .sliceBorrowImm li (.top sp) As Bs
-  pure (.app sp (.app sp (.const sp C) (.lend sp x m)) cb)
+  let C := (unw.map (· C)).getD C
+  let place := if unw.isSome then Val.var sp x.name else .lend sp x m
+  pure (.app sp (.app sp (.const sp C) place) cb)
 
 /-- A call `f W` whose argument lends a place at a borrow parameter of `f`: the borrow around
 the call. `none` when it does not. `f` may take several lifetime parameters when `apps` gives the
 lifetime each one is applied at, outermost first (a generic call's, SPEC §36): the lent
 parameter's is the lend's own, and the others are applied inside it. Without `apps`, `f` takes
-one. -/
+one. With `unw`, the call is at a row whose operations are abortive: `f` may perform them
+(`F[S] Q`), it is called as a computation (`effCallC`), and the borrow is its unwinding form
+(`lendBorrow`, `lendSlice`), handing back the place, which the caller rebinds. -/
 def lendCall (c : TCx) (sp : Span) (f W : Val)
-    (apps : Option (List (Option BoCa.Lifetime.Life)) := none) : DM (Option Val) := do
-  -- `f : !(all 'a < b. … P => Q)` or `all 'a < b. … P => Q`.
+    (apps : Option (List (Option BoCa.Lifetime.Life)) := none)
+    (unw : Option (Const → Const) := none) : DM (Option Val) := do
+  -- `f : !(all 'a < b. … P => Q)` or `all 'a < b. … P => Q`; with `unw`, `Q`'s computation may
+  -- be `F[S] Q`.
   let rec peel : Nat → CVTy → Option (List BoCa.Lifetime.LifeVar × CVTy × CVTy)
     | 0, _ => none
     | k + 1, .thunk (.all v _ (.ret X)) => do let (vs, P, Q) ← peel k X; pure (v :: vs, P, Q)
     | _, .thunk (.arr P (.ret Q)) => some ([], P, Q)
+    | _, .thunk (.arr P C) => if unw.isNone then none else
+      (Frontend.Check.effRow? C).map fun (_, Q) => ([], P, Q)
     | _, _ => none
   let (bang, vs, P, Q) ← match c.tyV f with
     | some (.bang T) => match peel 64 T with
@@ -2530,8 +2549,17 @@ def lendCall (c : TCx) (sp : Span) (f W : Val)
       | some (vs, P, Q) => pure (false, vs, P, Q)
       | none => return none
     | none => return none
-  if vs.isEmpty || (apps.isNone && vs.length != 1) then return none
+  if vs.isEmpty || (apps.isNone && unw.isNone && vs.length != 1) then return none
   let some (x, m, Px) := lendParam P W | return none
+  -- With `unw` and no `apps`, a lifetime parameter other than the lent one is the lifetime of the
+  -- borrow passed at a parameter `mut 'v A` or `imm 'v A` (a capability the call threads).
+  let rec lifeArgs : CVTy → Val → List (BoCa.Lifetime.LifeVar × BoCa.Lifetime.Life)
+    | .tensor P Q, .pair _ V W => lifeArgs P V ++ lifeArgs Q W
+    | .mut (.var v) _, V | .imm (.var v) _, V => match c.tyV V with
+      | some (.mut a _) | some (.imm a _) => [(v, a)]
+      | _ => []
+    | _, _ => []
+  let inferred := if apps.isNone && unw.isSome then lifeArgs P W else []
   let (pm, w, A, fam) ← match Px with
     | .mut (.var w) A => pure (Mode.mut, w, A, false)
     | .imm (.var w) A => pure (Mode.imm, w, A, false)
@@ -2546,9 +2574,11 @@ def lendCall (c : TCx) (sp : Span) (f W : Val)
   let mut σ : List (BoCa.Lifetime.LifeVar × BoCa.Lifetime.Life) := []
   for (v, k) in vs.zipIdx do
     if v == w then continue
-    match apps.bind (·[k]?) |>.join with
+    match (apps.bind (·[k]?) |>.join) <|> inferred.lookup v with
     | some l => σ := σ ++ [(v, l)]
-    | none => throw ⟨sp, "internal error: a lifetime of a call that lends a place"⟩
+    | none =>
+      if apps.isNone then return none
+      throw ⟨sp, "internal error: a lifetime of a call that lends a place"⟩
   let mut ls : List (Option Frontend.Life) := []
   for v in vs do
     match σ.lookup v with
@@ -2558,13 +2588,14 @@ def lendCall (c : TCx) (sp : Span) (f W : Val)
   let A := A.applyLSub σ
   let f' := if bang then Val.unbang f.span f else f
   let applied (l : String) : Val := ls.foldl (fun g o => .inst sp g (o.getD (.var sp l))) f'
-  if fam then return some (← lendSlice c sp x m A w Q fun l mv =>
-    .ret sp (.app sp (applied l) (replaceLend mv W)))
+  let call (l mv : String) : Comp :=
+    if unw.isSome then effCallC sp (applied l) (replaceLend mv W)
+    else .ret sp (.app sp (applied l) (replaceLend mv W))
+  if fam then return some (← lendSlice c sp x m A w Q call unw)
   if BoCa.Fig16.LogRel.Core.Check.vfreeB w Q then
     throw ⟨sp, "the call's result mentions the lifetime of the lent place, so the place cannot " ++
       "be handed back after it"⟩
-  some <$> lendBorrow c sp x m A Q fun l mv =>
-    boxedResult sp l (.ret sp (.app sp (applied l) (replaceLend mv W)))
+  some <$> lendBorrow c sp x m A Q (fun l mv => boxedResult sp l (call l mv)) unw
 
 /-- The typing context `c` with the declarations made so far in scope (the instances and copies
 made while elaborating the declaration it is in). -/
@@ -3049,14 +3080,6 @@ def effCall? (c : TCx) : Val → Option (Val × Val)
     | none => none
   | _ => none
 
-/-- An effectful call as the computation it is: `g <- return f; a <- return W; (force g) a`; the
-argument's binding annotated with `P` when given. -/
-def effCallC (sp : Span) (f W : Val) (P : Option VTy := none) : Comp :=
-  let sfx := s!"{sp.start.line}_{sp.start.col}"
-  let g : Ident := ⟨s!"io_fg{sfx}", sp⟩
-  let a : Ident := ⟨s!"io_fa{sfx}", sp⟩
-  .bind sp g none (.ret sp f) (.bind sp a P (.ret sp W) (.app sp (.force sp g) a))
-
 /-- The parameter type of an effectful function's type, outside lifetime binders. -/
 def fnParamOf : CVTy → Option CVTy
   | .bang A => fnParamOf A
@@ -3199,7 +3222,11 @@ def unwindingC? (sp : Span) : Val → Option Comp
 /-- A scheme's code with its lend, the first binding whose bound value is an unwinding form, as
 that form's computation (`unwindingC?`); the code before and after it as it is. -/
 def unwindingM? (sp : Span) : Comp → Option Comp
-  | .letPair lsp x y V M => (unwindingM? sp M).map (.letPair lsp x y V ·)
+  | .letPair lsp x y V M => match unwindingC? sp V with
+    | some U =>
+      let t : Ident := ⟨s!"io_up{sp.start.line}_{sp.start.col}_p", lsp⟩
+      some (.bind lsp t none U (.letPair lsp x y (.var lsp t.name) M))
+    | none => (unwindingM? sp M).map (.letPair lsp x y V ·)
   | .bind bsp x A (.ret rsp V) N => match unwindingC? sp V with
     | some M => some (.bind bsp x A M N)
     | none => (unwindingM? sp N).map (.bind bsp x A (.ret rsp V) ·)
@@ -4333,6 +4360,22 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       if let some L ← (Frontend.Elab.LoopLend.hook c (dataFor (← get).sizedFns) sp x A M N :
           Except Error (Option Comp)) then
         return (← surfC n c exp L)
+      -- A call that lends a place (`&mut p`, `&p`) at a borrow parameter and performs operations
+      -- of the row: its borrow is the unwinding form, as a borrow block's is (SPEC §18), and `p`
+      -- is rebound from what the borrow hands back.
+      if let (.ret _ (.app fsp f W), some S@(_ :: _)) := (M, c.E.row) then
+        if W.lends then
+          if let some L ← lendEffCall n c sp fsp S f W then
+            let some p := W.takeLends.2.head? | throw ⟨sp, "internal error: a lending call"⟩
+            let c' ← refresh c
+            let t : Ident := ⟨s!"io_lu{sp.start.line}_{sp.start.col}", sp⟩
+            let (Ap, Ax) := match resultOfC (c'.tyCL L) with
+              | some (.tensor P X) => (some P, some X)
+              | _ => (none, none)
+            let Ax := (A.bind c.elabV) <|> Ax
+            let Tt := Ap.bind fun P => Ax.map (BoCa.Fig16.LogRel.Core.VTy.tensor P ·)
+            let N' ← surfC n (((c'.push t.name Tt).push p.name Ap).push x.name Ax) exp N
+            return .bind sp t none L (.letPair sp p x (.var sp t.name) N')
       -- An annotated head that performs operations of the current row is at that row, as the
       -- checker reads it (`F_Σ A` when `F A` fails): a handler site inside it handles its body at
       -- the row around it.  `[spec §33]`
@@ -4464,6 +4507,31 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       let N' ← surfC n (c.push x.name ((A.bind c.elabV) <|> hd.map (·.2))) exp N
       pure (.unwind sp x A M' D' N')
     | M => pure M
+
+/-- A call `f W` whose argument lends a place at a borrow parameter of `f`, at the row `S` whose
+operations the call performs: the borrow around the call in its unwinding form at those
+operations (`lendCall`, `unwindingC?`), answering the place handed back and the call's answer.
+`none` when the call performs none of `S`'s operations.  `[spec §18]` -/
+def lendEffCall : Nat → TCx → Span → Span → Frontend.Check.CRow → Val → Val → DM (Option Comp)
+  | 0, _, _, _, _, _, _ => pure none
+  | n + 1, c, sp, fsp, S, f, W => do
+    let used := (opsC c divFuel (.ret sp (.app fsp f W))).map (·.1)
+    let r := S.filter fun o => used.contains o.n.toNat
+    if r.isEmpty then return none
+    if let some o := r.find? (fun o => !o.abort) then
+      throw ⟨fsp, s!"this call lends a place and performs the operation {o.n}.{o.i}, which " ++
+        "resumes: only an abortive operation crosses a lend (SPEC §18). Lend the place in a " ++
+        "borrow block that ends before the operation"⟩
+    let rs ← (surfRow c sp r : Except Error Frontend.Row)
+    let f' ← surfV n c none f
+    let W' ← surfV n c none W
+    match ← lendCall c fsp f' W' (unw := some fun C => (Const.unwinding rs C).getD C) with
+    | some V => match unwindingC? fsp V with
+      | some U => pure (some U)
+      | none => throw ⟨fsp, "internal error: the unwinding form of a lending call"⟩
+    | none => throw ⟨fsp, "a place is lent (`&mut x`) in the arguments of a call that performs " ++
+        "operations, at a parameter that is not a borrow of the call's one lifetime parameter: " ++
+        "lend it in a call of its own"⟩
 
 /-- The record of a `for`'s or a stored generator's site, whose types are in the frame of its
 callee's declaration, in the frame `c` of the site's code: at the type arguments of the call of

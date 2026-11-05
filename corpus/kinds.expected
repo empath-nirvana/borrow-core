@@ -404,6 +404,12 @@ corpus/leetcode/trees/0230-kth-smallest-element-in-a-bst.bc 1.0 cancellable abor
 corpus/leetcode/trees/0235-lowest-common-ancestor-of-a-binary-search-tree.bc 1.0 cancellable abortive: branch; agree
 corpus/leetcode/trees/0297-serialize-and-deserialize-binary-tree.bc 1.0 cancellable abortive: branch; agree
 corpus/leetcode/trees/0572-subtree-of-another-tree.bc 1.0 cancellable abortive: branch; agree
+corpus/lend-call-raise.bc 1.0 cancellable abortive: branch; agree
+corpus/lend-call-raise.bc 2.0 cancellable abortive: branch; agree
+corpus/lend-call-raise.bc 3.0 cancellable abortive: branch; agree
+corpus/lend-call-raise.bc 5.0 cancellable abortive: branch; agree
+corpus/lend-call-raise.bc 4.0 cancellable abortive: branch; agree
+corpus/lend-call-record.bc 1.0 cancellable abortive: branch; agree
 corpus/lend-div.bc 1.0 cancellable tail: machine: the handlers of the name have 2 clauses for it; disagree
 corpus/lend-pipeline.bc 3.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/lend-pipeline.bc 2.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
