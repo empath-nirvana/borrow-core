@@ -462,6 +462,220 @@ theorem vN_extend_of_not_free {x : LifeVar} {A : VTy} (h : ¬ VFree x A) (δ : L
     vN (ℍ := ℍ) A (δ.extend x α) = vN (ℍ := ℍ) A δ :=
   vN_congr A fun y hy => BoCa.Fig16.LogRel.find?_extend_ne δ α (fun e => by subst e; exact h hy)
 
+
+/-! ### Outliving types lie in the stratum -/
+
+/-- **`Δ ⊢ A ⊐ @a`: `𝒱⟦A⟧` lies in `Res_α`, `α = @aδ`** (Core's `vC_outlives`). -/
+theorem vN_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life} (hδ : Δ.Models δ)
+    (ha : a.interp δ = some α) {T : VTy} (hT : VOutlives Δ a T) :
+    ∀ n v ρ, vN (ℍ := ℍ) T δ n v ρ → ρ.InStratum α := by
+  induction hT with
+  | unit => rintro n v ρ ⟨-, rfl⟩; exact ResU.inStratum_empty α
+  | tensor _ _ ih₁ ih₂ =>
+      rintro n v ρ ⟨v₁, v₂, ρ₁, ρ₂, -, hc, h₁, h₂⟩
+      exact inStratum_compS hc (ih₁ n v₁ ρ₁ h₁) (ih₂ n v₂ ρ₂ h₂)
+  | zero => intro n v ρ h; exact h.elim
+  | sum _ _ ih₁ ih₂ =>
+      rintro n v ρ (⟨v₁, -, h₁⟩ | ⟨v₂, -, h₂⟩)
+      · exact ih₁ n v₁ ρ h₁
+      · exact ih₂ n v₂ ρ h₂
+  | ref _ ih =>
+      rintro n v ρ ⟨l, u, σ, -, hc, h⟩
+      exact inStratum_compS hc (ResU.inStratum_single_own α l u) (ih n u σ h)
+  | bang => rintro n v ρ ⟨rfl, -⟩; exact ResU.inStratum_empty α
+  | box hle =>
+      rintro n v ρ ⟨β, hb, -, ho⟩
+      obtain ⟨α', β', ha', hb', hle'⟩ := hle δ hδ
+      rw [ha] at ha'; cases Option.some.inj ha'
+      rw [hb] at hb'; cases Option.some.inj hb'
+      exact ho.mono (show (α : Life) ≤ β from hle')
+  | imm hlt =>
+      rintro n v ρ ⟨β, hb, l, s, u, σ, hs, -, rfl, hle, -⟩
+      obtain ⟨α', β', ha', hb', hlt'⟩ := hlt δ hδ
+      rw [ha] at ha'; cases Option.some.inj ha'
+      rw [hb] at hb'; cases Option.some.inj hb'
+      exact ResU.inStratum_single l (lt_of_lt_of_le (show (α : Life) < β from hlt') hle)
+  | «mut» hlt =>
+      rintro n v ρ ⟨β, hb, l, w, χ, hχ, j, hw, -, -, rfl⟩
+      obtain ⟨α', β', ha', hb', hlt'⟩ := hlt δ hδ
+      rw [ha] at ha'; cases Option.some.inj ha'
+      rw [hb] at hb'; cases Option.some.inj hb'
+      exact ResU.inStratum_single l (show (α : Life) < β from hlt')
+  | tvar => intro n v ρ h; exact h.elim
+  | mu _ _ => intro n v ρ h; exact h.elim
+  | int => rintro n v ρ ⟨-, rfl⟩; exact ResU.inStratum_empty α
+  | opq => intro n v ρ h; exact h.elim
+  | fam _ _ => intro n v ρ h; exact h.elim
+
+/-! ### Computations are monotone along the location family -/
+
+/-- A stop of a cancel run at `T` is one at `T′ ≥ T`. -/
+theorem cancelTabN_le {T T' : OpTabN} (hT : T.Le T') :
+    ∀ k ls t (Ψ Ψ' : ContN) ρ, (∀ k', k' < k → ∀ ls e ρ, Ψ k' ls e ρ → Ψ' k' ls e ρ) →
+      cancelTabN T k ls t Ψ ρ → cancelTabN T' k ls t Ψ' ρ := by
+  intro k ls t Ψ Ψ' ρ hΨ h
+  rcases h with ⟨K, err, hp⟩ | ⟨K, n, i, v, en, hp⟩
+  · obtain ⟨hc, τa, τb, hcab, he, hnb⟩ := pure_sep_iff.mp hp
+    refine Or.inl ⟨K, err, pure_sep_mk hc ⟨τa, τb, hcab, ?_, hnb⟩⟩
+    cases err with
+    | none => exact he
+    | some E =>
+        obtain ⟨m, j, w, en, he⟩ := he
+        obtain ⟨⟨h₁, h₂, h₃⟩, hPA, hn⟩ := pure_sep_iff.mp he
+        obtain ⟨en', h₂', -, hab, hPA', -⟩ := hT m j en h₂
+        exact ⟨m, j, w, en', pure_sep_mk ⟨h₁, h₂', hab ▸ h₃⟩ ⟨hPA' ▸ hPA, hn⟩⟩
+  · obtain ⟨⟨h₁, h₂, h₃, h₄⟩, ρa, ρk, hc, hA, hu, hcont⟩ := pure_sep_iff.mp hp
+    obtain ⟨en', h₃', hq, hab, hPA, hPB, hwc, hfl⟩ := hT n i en h₃
+    refine Or.inr ⟨K, n, i, v, en', pure_sep_mk ⟨h₁, h₂, h₃', hab ▸ h₄⟩ ⟨ρa, ρk, hc, hPA ▸ hA,
+      fun hu' => hu (hq.trans hu'), fun ls' he => ?_⟩⟩
+    rw [← hwc] at he
+    refine ⟨fun k' hk' w => hPB ▸ ?_, fun hq' P hP => ?_⟩
+    · intro σ₁ σ₂ hB hcσ
+      exact hΨ k' hk' _ _ _ ((hcont ls' he).1 k' hk' w σ₁ σ₂ hB hcσ)
+    · exact finLeSN_apply (hfl h₄ (hq ▸ hq')) hP
+        (fun P₀ hP₀ => (hcont ls' he).2 (hq ▸ hq') P₀ hP₀)
+
+theorem extTabN_le {n i : UInt32} {en en' : OpEntN} {T T' : OpTabN} (he : en.Le en')
+    (hT : T.Le T') : (extTabN n i en T).Le (extTabN n i en' T') := by
+  intro m j e h
+  unfold extTabN at h ⊢
+  split at h
+  · rename_i hmj
+    cases Option.some.inj h
+    exact ⟨en', by rw [if_pos hmj], he⟩
+  · rename_i hmj
+    rw [if_neg hmj]
+    exact hT m j e h
+
+theorem entN_le {q : Qual} {B : VTy} {PA PB : Nat → Val → WRes → Prop}
+    {fin fin' : Option (Nat → List SRec → Expr → WProp)} (h : FinLeSN fin fin') :
+    (entN q B PA PB fin).Le (entN q B PA PB fin') := by
+  refine ⟨rfl, rfl, rfl, rfl, rfl, fun _ _ => ?_⟩
+  simp only [entN]
+  split
+  · exact h
+  · trivial
+
+theorem cancelOblN_extΦ {Φ Φ' : LocFam} (hE : Φ.Ext Φ') {T T' : OpTabN} (hT : T.Le T') :
+    ∀ k ls e ρ, cancelOblN (ℍ := ℍ) Φ T k ls e ρ → cancelOblN (ℍ := ℍ) Φ' T' k ls e ρ :=
+  fun k ls e ρ h => erwp_mono (fun _ _ _ _ h => h) (cancelTabN_le hT) k ls e ρ
+    (erwp_extΦ hE (cancelTabN_local T) k ls e ρ h)
+
+mutual
+theorem tabN_extΦ : ∀ (C : CTy) (δ : LSub) {Φ Φ' : LocFam}, Φ.Ext Φ' →
+    (tabN (ℍ := ℍ) C δ Φ).Le (tabN (ℍ := ℍ) C δ Φ')
+  | .eff m i q A B fin rc C, δ, Φ, Φ', hE =>
+      extTabN_le (entN_le (finN_extΦ fin δ hE)) (tabN_extΦ C δ hE)
+  | .ret _, _, _, _, _ => OpTabN.Sub.le (fun _ _ _ h => h)
+  | .arr _ _, _, _, _, _ => OpTabN.Sub.le (fun _ _ _ h => h)
+  | .amp _ _, _, _, _, _ => OpTabN.Sub.le (fun _ _ _ h => h)
+  | .top, _, _, _, _ => OpTabN.Sub.le (fun _ _ _ h => h)
+  | .all _ _ _, _, _, _, _ => OpTabN.Sub.le (fun _ _ _ h => h)
+  | .nu _, _, _, _, _ => OpTabN.Sub.le (fun _ _ _ h => h)
+theorem finN_extΦ : ∀ (F : CTy) (δ : LSub) {Φ Φ' : LocFam}, Φ.Ext Φ' →
+    FinLeSN (finN (ℍ := ℍ) F δ Φ) (finN (ℍ := ℍ) F δ Φ')
+  | .top, _, _, _, _ => trivial
+  | .eff m i q A B fin rc C, δ, Φ, Φ', hE =>
+      cancelOblN_extΦ hE (extTabN_le (entN_le (finN_extΦ fin δ hE)) (tabN_extΦ C δ hE))
+  | .ret _, _, _, _, hE => cancelOblN_extΦ hE (OpTabN.Sub.le (fun _ _ _ h => h))
+  | .arr _ _, _, _, _, hE => cancelOblN_extΦ hE (OpTabN.Sub.le (fun _ _ _ h => h))
+  | .amp _ _, _, _, _, hE => cancelOblN_extΦ hE (OpTabN.Sub.le (fun _ _ _ h => h))
+  | .all _ _ _, _, _, _, hE => cancelOblN_extΦ hE (OpTabN.Sub.le (fun _ _ _ h => h))
+  | .nu _, _, _, _, hE => cancelOblN_extΦ hE (OpTabN.Sub.le (fun _ _ _ h => h))
+end
+
+/-- **`𝒞⟦C⟧` is monotone along the location family** (`erwp_extΦ`, the table widened along
+`OpTabN.Le`: a cancel obligation read at `Φ′ ⊇ Φ` is weaker). -/
+theorem cN_extΦ : ∀ (C : CTy) (δ : LSub) {Φ Φ' : LocFam}, Φ.Ext Φ' →
+    ∀ n ls e ρ, cN (ℍ := ℍ) C δ Φ n ls e ρ → cN (ℍ := ℍ) C δ Φ' n ls e ρ
+  | .ret _, _, _, _, hE, n, ls, e, ρ, h => erwp_extΦ hE (opTableN_local _) n ls e ρ h
+  | .arr _ C, δ, _, _, hE, _, ls, e, _, h => fun k hk v ρv ρ' hc hv =>
+      cN_extΦ C δ hE k ls _ ρ' (h k hk v ρv ρ' hc hv)
+  | .amp C D, δ, _, _, hE, n, ls, e, ρ, h =>
+      ⟨cN_extΦ C δ hE n ls _ ρ h.1, cN_extΦ D δ hE n ls _ ρ h.2⟩
+  | .top, _, _, _, _, _, _, _, _, h => h
+  | .all x _ C, δ, _, _, hE, n, ls, e, ρ, h =>
+      ⟨h.1, fun α hα => cN_extΦ C (δ.extend x α) hE n ls _ ρ (h.2 α hα)⟩
+  | .nu _, _, _, _, _, _, _, _, _, h => h
+  | .eff m i q A B fin rc C, δ, _, _, hE, n, ls, e, ρ, h =>
+      erwp_tabLe (extTabN_le (entN_le (finN_extΦ fin δ hE)) (tabN_extΦ C δ hE)) n ls e ρ
+        (erwp_extΦ hE (opTableN_local _) n ls e ρ h)
+
+/-! ## §3. The statements -/
+
+/-- **A #791 constant is a value of `!` its type**, at every `δ` and index, from its rule's
+premises. -/
+def ConstN (c : Const791) : Prop :=
+  c.OK → ∀ (δ : LSub) (n : Nat), vN (ℍ := ℍ) (.bang c.ty) δ n c.val PMap.empty
+
+/-- Every #791 constant. -/
+def ConstsN : Prop := ∀ c : Const791, ConstN (ℍ := ℍ) c
+
+/-- **The fundamental property over `erwp`**, for the existing judgment. -/
+def FundamentalN : Prop :=
+  ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (j : Jdg), CDerives Δ Γ e j → SemJN (ℍ := ℍ) Δ Γ e j
+
+/-- **The adequacy bridge**: a closed run of `F 1` over `erwp` is `OrDiverges`. -/
+def BridgeN : Prop :=
+  ∀ e : Expr, (∀ Φ : LocFam, Φ.Down → ∀ n, cN (ℍ := ℍ) (.ret .unit) LSub.empty Φ n [] e
+    (PMap.empty : WRes)) → OrDiverges (ℍ := ℍ) e
+
+/-- **#791's end goal under a scheduler at the top, over `erwp`**: `poolSchedAdequacyN`'s form.
+A task typed at `F_Σ 1` from the constants, run by a scheduler meeting `SchedOKN` at the row's
+table, is safe, leak-free, or diverges. -/
+def Goal791SchedN : Prop :=
+  ∀ (cs : List Const791), (∀ c ∈ cs, c.OK) → ∀ (S : Row) (e₀ : Expr),
+    CDerives LifeCtx.empty (ctx791 cs) e₀ (.comp (CTy.effOf S .unit)) →
+    ∀ (Φ : LocFam) (n₀ : UInt32) (qs hr hs : Val) (Q : PostN) (Inv : List StoredN → Prop),
+      Φ.Down → (∀ k ls v ρ, Q k ls v ρ → ρ = PMap.empty) → Inv [] →
+      SchedOKN (ℍ := ℍ) Φ (rowTabN (ℍ := ℍ) S Φ) n₀ qs hr hs
+        (fun k _ v ρ => vN (ℍ := ℍ) .unit LSub.empty k v ρ)
+        (PoolAnsN (ℍ := ℍ) Φ Q (hndVal n₀ qs hr hs) Inv) →
+      OrDiverges (ℍ := ℍ)
+        (.app (hndE (hndVal n₀ qs hr hs) (substAll (vals791 cs) e₀))
+          (stateValN (hndVal n₀ qs hr hs) []).1)
+
+/-- `withbor (2)` at a suspending row. -/
+def Withbor2SN : Prop := ∀ x bnd A B S d, ConstN (ℍ := ℍ) (.w2 x bnd A B S d)
+/-- `withbor (3)` at a suspending row. -/
+def Withbor3SN : Prop := ∀ a x bnd A B S d, ConstN (ℍ := ℍ) (.w3 a x bnd A B S d)
+/-- The field reborrow at a suspending row. -/
+def WithborFSN : Prop := ∀ a x bnd A B S d, ConstN (ℍ := ℍ) (.wF a x bnd A B S d)
+/-- `withload` at a suspending row. -/
+def WithloadSN : Prop := ∀ a x bnd A B S, ConstN (ℍ := ℍ) (.wl a x bnd A B S)
+/-- `slice_borrow_mut` at a suspending row. -/
+def SliceBorrowMSN : Prop := ∀ x bnd A B S d, ConstN (ℍ := ℍ) (.sm x bnd A B S d)
+
+/-! ### What is proved of the statements -/
+
+/-- **The adequacy bridge holds**: `erwp_adequacy` at `F 1`, whose values own nothing. -/
+theorem bridgeN : BridgeN (ℍ := ℍ) := fun e h =>
+  erwp_adequacy (Φ := fun _ => none) (fun _ _ _ _ hq => hq.2)
+    (fun n => h (fun _ => none) (fun _ _ _ h => by cases h) n)
+
+theorem liveWithin_ctx791 : ∀ cs : List Const791, Ctx.LiveWithin (ctx791 cs) (vals791 cs)
+  | [] => trivial
+  | _ :: cs => liveWithin_ctx791 cs
+
+theorem gN_ctx791 (hC : ConstsN (ℍ := ℍ)) (δ : LSub) (n : Nat) :
+    ∀ cs : List Const791, (∀ c ∈ cs, c.OK) → gN (ℍ := ℍ) δ (ctx791 cs) (vals791 cs) n PMap.empty
+  | [], _ => rfl
+  | c :: cs, hcs => by
+      simp only [ctx791, vals791, List.map_cons, gN, if_true]
+      exact ⟨PMap.empty, PMap.empty, ResU.comp_empty_right _,
+        hC c (hcs c (by simp)) δ n, gN_ctx791 hC δ n cs (fun c' h => hcs c' (by simp [h]))⟩
+
+/-- **`Goal791SchedN` from the fundamental property and the constants**, through
+`poolSchedAdequacyN`. -/
+theorem goal791Sched_of (hF : FundamentalN (ℍ := ℍ)) (hC : ConstsN (ℍ := ℍ)) :
+    Goal791SchedN (ℍ := ℍ) := by
+  intro cs hcs S e₀ hder Φ n₀ qs hr hs Q Inv hΦ hQ hInv hS
+  refine poolSchedAdequacyN Φ (rowTabN S Φ) n₀ qs hr hs _ Q Inv _ hΦ hQ hInv hS (fun n => ?_)
+  have h := hF _ _ _ _ hder LSub.empty (vals791 cs) Φ n [] PMap.empty
+    (BoCa.Fig16.LogRel.Core.models_empty_any _) hΦ (liveWithin_ctx791 cs)
+    (gN_ctx791 hC LSub.empty n cs hcs)
+  exact (cN_effOf S .unit LSub.empty Φ n [] _ _).mp h
+
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 
 end
