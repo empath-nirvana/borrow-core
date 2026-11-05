@@ -81,7 +81,7 @@ the handler that serves it, before the rest of the sugar; it knows no effect by 
 
 What is not provided, with the message that says so: an operation inside a closure or block that
 is not run in place, other than an effectful block; a block parameter stored; a function with a
-row passed as a value (effectful callbacks, #161); a lend `&mut x` in the arguments of a call that threads a capability; an operation of an answering
+row passed as a value (effectful callbacks, #161); a lend `&mut x` in the arguments of an operation, of a block's call or of a recursive group's own call; an operation of an answering
 effect inside a clause; an effect with both kinds of operation; type parameters on an answering
 effect; an unrestricted operation that answers `never` (`multi ctl`: an abortive operation is
 cancellable, decision 63); a function with a row whose result is a computation (a loop or a
@@ -2324,7 +2324,8 @@ def fnCall : Nat → Cx → List Cap → Span → Val → String → FSig → Va
     -- A named slot with no handler of its name here is reported where its copy is made.
     let named := row.any fun i => i.name.isSome && (cx.capFor i).isNone
     if used.isEmpty && (cx.ctl row).isEmpty && !named then return ← plainApp k cx cs sp f W
-    noLend sp s!"`{x}`" W
+    -- A place lent in the arguments is lent by the typed elaboration around the call, in the
+    -- unwinding form of its borrow at the operations the call performs (`Sugar.lendEffCall`).
     let (b, W') ← goV k cx cs W
     let name ← copyFor k cx sp x g row []
     let f' : Val := match f with

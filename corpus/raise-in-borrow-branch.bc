@@ -1,0 +1,20 @@
+-- A raise or a division as a branch's value, the last computation of a borrow block's body: the
+-- branch never returns, so nothing of it is boxed at the block's lifetime.
+include fail
+
+fn per(c: ref i32, d: i32) -> ref i32 * i32 with Fail[i32] =
+  let q = borrow imm c { v -> if d == 0 { raise(d) } else { *v } };
+  (c, q)
+
+fn scale(c: ref i32, d: i32) -> ref i32 * i32 with Fail[DivError] =
+  let q = borrow imm c { v -> *v / d };
+  (c, q)
+
+fn go(d: i32) -> i32 + i32 =
+  with to_result { let (c, q) = per(alloc(4), d); let x = free(c); q }
+
+fn go2(d: i32) -> i32 + DivError =
+  with to_result { let (c, q) = scale(alloc(12), d); let x = free(c); q }
+
+main -> (i32 + i32) * ((i32 + i32) * ((i32 + DivError) * (i32 + DivError))) =
+  (go(0), (go(2), (go2(0), go2(3))))

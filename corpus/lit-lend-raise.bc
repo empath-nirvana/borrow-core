@@ -1,0 +1,26 @@
+-- A literal lent by a borrow block whose body may raise, the handler outside the lend (SPEC §18,
+-- *Where an abortive operation may stand*): the literal's table is tabulated into an array, which
+-- is lent by the unwinding form `slice_borrow_imm_u`. When the body raises, the lend ends and the
+-- array goes back to its owner, whose finaliser consumes it. The literal itself is handed back
+-- unchanged on the normal path.
+--
+-- Answer: `inl` of the literal's length, and of the index of its first `l`, where nothing is
+-- raised, and the payload where it is; `live 0` either way.
+
+include fail
+include text
+
+fn length(k: i32) -> i32 with Fail[i32] =
+  let n = borrow imm "hello" { v -> if k < 0 { raise(k) } else { len(v) } };
+  n
+
+fn first_l(k: i32) -> i32 with Fail[i32] =
+  borrow imm "hello" { v ->
+    let i = match find(v, b'l', eq_u8) { inl i -> i | inr _ -> 0 - 1 };
+    if i < k { raise(i) } else { i } }
+
+fn go(k: i32) -> (i32 + i32) * (i32 + i32) =
+  (with to_result { length(k) }, with to_result { first_l(k) })
+
+main -> ((i32 + i32) * (i32 + i32)) * (((i32 + i32) * (i32 + i32)) * ((i32 + i32) * (i32 + i32))) =
+  (go(0), (go(0 - 1), go(3)))

@@ -65,11 +65,9 @@ fn parse_monkey<'t>(names: Map[text 't, i32], l: text 't) -> Map[text 't, i32] *
     }
   }
 
-fn quot64(a: i64, b: i64) -> i64 = match host[div_s64](a, b) { inl q -> q | inr u -> i64[0] }
-
 fn apply(op: u8, a: i64, b: i64) -> i64 =
   if op == b'+' { a + b } else { if op == b'-' { a - b } else { if op == b'*' { a * b }
-  else { quot64(a, b) } } }
+  else { a / b } } }
 
 -- What monkey `i` yells, with every value below it recorded in `yell`.
 fn compute(ms: array Monkey, yell: array i64, i: i32) -> (array Monkey * array i64) * i64 =
@@ -112,11 +110,11 @@ fn inverse(st: array Monkey * (array i64 * array bool), root: i32, i: i32, value
       if i == root { if ul { inverse(st, root, l, yr) } else { inverse(st, root, r, yl) } }
       else { if ul {
         let v = if op == b'+' { value - yr } else { if op == b'-' { value + yr }
-          else { if op == b'*' { quot64(value, yr) } else { value * yr } } };
+          else { if op == b'*' { value / yr } else { value * yr } } };
         inverse(st, root, l, v)
       } else {
         let v = if op == b'+' { value - yl } else { if op == b'-' { yl - value }
-          else { if op == b'*' { quot64(value, yl) } else { quot64(yl, value) } } };
+          else { if op == b'*' { value / yl } else { yl / value } } };
         inverse(st, root, r, v)
       } }
   }

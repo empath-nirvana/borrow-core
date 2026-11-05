@@ -15,11 +15,6 @@
 
 include textio
 
--- `a / b`, and below `a mod b`, for `b > 0`.
-fn quot(a: i32, b: i32) -> i32 = match host[div_s32](a, b) { inl q -> q | inr u -> 0 }
-
-fn modulo(a: i32, b: i32) -> i32 = match host[rem_s32](a, b) { inl r -> r | inr u -> 0 }
-
 fn is_digit(b: u8) -> bool = b'0' <= b && b <= b'9'
 
 -- The schematic: its bytes row by row, its width and height.
@@ -32,13 +27,13 @@ fn grid_of<'t>(t: text 't) -> Grid =
   let mut cells = box buf[u8](len(v));
   for p in t { let b = *p; if b != b'\n' { let (c, _) = push(cells, b); cells = c } else { () } };
   let (a, n) = cells;
-  (a, (w, quot(n, w)))
+  (a, (w, n / w))
 
 -- The neighbour of `p` in direction `d`, the eight around it, or `-1` off the grid.
 fn around(p: i32, d: i32, w: i32, h: i32) -> i32 =
   let dd = if d < 4 { d } else { d + 1 };
-  let x = modulo(p, w) + modulo(dd, 3) - 1;
-  let y = quot(p, w) + quot(dd, 3) - 1;
+  let x = p % w + dd % 3 - 1;
+  let y = p / w + dd / 3 - 1;
   if 0 <= x && x < w && 0 <= y && y < h { y * w + x } else { 0 - 1 }
 
 -- The numbers of the schematic, and which number each square's digit belongs to: `part[k]` is
@@ -59,7 +54,7 @@ fn numbers(g: Grid) -> Grid * (array i32 * buf i32) =
       owner = array_set(owner, p, k);
       n = 10 * n + to_i32(b) - 48
     } else { () };
-    if n > 0 && (not(is_digit(b)) || modulo(p, w) == w - 1) {
+    if n > 0 && (not(is_digit(b)) || p % w == w - 1) {
       let (ps, _) = push(parts, n); parts = ps; n = 0
     } else { () }
   };

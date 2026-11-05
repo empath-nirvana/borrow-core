@@ -1059,19 +1059,21 @@ def finalOf (E : Env) (sp : Span) (S : CRow) (u : List Bool) :
   let idx := (List.range T.length).filter fun i =>
     u.getD i false && !((T[i]?.map (·.persistent)).getD true)
   let r0 : Res Δ (.unit :: T) (.comp (.ret .unit)) := rRet (at_ sp) (rUnit (at_ sp))
-  let r ← idx.foldlM (init := r0) fun r i => do
+  for i in idx do
     match T[i]? with
     | some A =>
-      if consumableB A then consumeOne sp (i + 1) r
-      else if cancels then
-        throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across an operation that " ++
-          "may be cancelled: the cancel runs a finaliser (`[then]`) that consumes it by its " ++
-          "consume, and its type is linear and not consumable" ++ E.closeHint A true⟩
-      else throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across a computation " ++
-        "that may abort, and its type is linear and not consumable, and an abort abandons " ++
-        "only a value that holds no owned cell" ++ E.closeHint A true⟩
+      unless consumableB A do
+        if cancels then
+          throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across an operation that " ++
+            "may be cancelled: the cancel runs a finaliser (`[then]`) that consumes it by its " ++
+            "consume, and its type is linear and not consumable" ++ E.closeHint A true⟩
+        else throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across a computation " ++
+          "that may abort, and its type is linear and not consumable, and an abort abandons " ++
+          "only a value that holds no owned cell" ++ E.closeHint A true⟩
     | none => throw ⟨sp, "internal error: a slot is out of range"⟩
-  pure r
+  -- In reverse binding order, as at the end of a path (SPEC §12, `consumeOwed`): the lowest index,
+  -- the most recently bound slot, is consumed first, so it is wrapped last, outermost.
+  idx.reverse.foldlM (init := r0) fun r i => consumeOne sp (i + 1) r
 
 /-- A marked scheme's derived node, over its checked term (SPEC §3). -/
 def markIt {j : Jdg} (sp : Span) (k : SchemeMark) (r : Res Δ T j) : Except Error (Res Δ T j) :=

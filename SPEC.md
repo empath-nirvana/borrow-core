@@ -2849,25 +2849,36 @@ names.
   operation that resumes makes the loop a div loop instead (§16, *Effectful bodies*).
 - *In a borrow block's body*: the block is the unwinding form of its borrow (§19), at the
   operations its body performs, which must be abortive (a resuming one is T1, #172); its callback
-  is ascribed its row. An unwind ends the lend, and the lender's finaliser runs.
+  is ascribed its row. An unwind ends the lend, and the lender's finaliser runs. A buffer's or a
+  literal's block is its scheme (§17) with the array's lend in the unwinding form
+  (`slice_borrow_*_u`), ascribed the scheme's type (`corpus/buf-lend-raise.bc`,
+  `lit-lend-raise.bc`). The unwinding form of a marked scheme (a lent cell's, a literal's view,
+  §57) is not marked, so a literal's view crossed by an abort tabulates its table into an array
+  that is not the literal's read-only bytes.
+- *In a call that lends a place*: `f(…, &mut x, …)` or `f(…, &x, …)` at a borrow parameter of a
+  function that performs operations of the row is the borrow of the call (§11's lend) in its
+  unwinding form at those operations, which must be abortive: `withbor2U`/`withbor1U` of a cell,
+  of a cell scoped to the call for a `let mut` value, or `slice_borrow_*_u` of an array. `x` is
+  rebound from what the borrow hands back. A capability the call threads is passed beside it, its
+  lifetime parameter read off the capability's borrow (`corpus/lend-call-raise.bc`).
 - *With answering capabilities in use*: the body of a control `with` is given a reborrow of each
   capability it uses (`withbor3`), so that the capability comes back when the body is abandoned.
 
 **Consume glue** is the checker's (§19): a binding whose head may abort, at a row that cancels
-(`Row.Cancels`), puts the consumes of the slots the rest uses in a `[then]` finaliser. A value
+(`Row.Cancels`), puts the consumes of the slots the rest uses in a `[then]` finaliser, in §12's
+reverse binding order, as at the end of a path (`corpus/sugar/finaliser-order.bc`). A value
 that is not consumable (§12, group 3) live across such a binding is rejected, naming it.
 
 **Not provided**, each rejected with a message that says so: an operation inside a closure or
 block that is not run in place, other than a block passed at a parameter of function type (§30),
 and a function with a row passed as a value other than at a parameter of function type, where
 it is the block that calls it (§33; stored callbacks, #161 part B; for a fold's algebra that
-raises, K4 below); a lend `&mut x` in the arguments of a call that
-threads a capability; an operation of an answering effect inside a clause of an answering handler;
+raises, K4 below); a lend `&mut x` in the arguments of an operation, of a block's call (§30) or of
+a recursive group's own call (§20); an operation of an answering effect inside a clause of an answering handler;
 a function with a row whose written result is a computation (a loop); type parameters on an
 answering effect; an effect with both kinds of operation; an unrestricted operation that answers
 `never` (`multi ctl`, above); a `let mut` declared outside a control `with` and assigned in it, or
-a place lent in it; a borrow of a buffer or a literal crossed by an abort. Several instances of one
-effect are §38's, with what it does not provide.
+a place lent in it. Several instances of one effect are §38's, with what it does not provide.
 
 ### Reports
 
@@ -7689,8 +7700,9 @@ counts stay as they were: `aoc/2021-06` (`modulo(day, 9)`, a literal divisor), `
 for two abortive effects in a counted `for`'s body, which §38 provides. The others keep their
 form, each for a limit that applies to any abortive operation (#517), checked again here:
 
-- `aoc/2022-12`, `aoc/2023-03`, `aoc/2024-11`, `aoc/2022-21`: the division is inside `borrow imm s`
-  of the input string, a borrow of a buffer that an abort would cross (§18 *Not provided*);
+- `aoc/2024-11`: `div_u64` and `rem_u64`, which `/` and `%` (signed) would change. `aoc/2022-12`,
+  `aoc/2023-03` and `aoc/2022-21`, kept here for a borrow of a buffer that an abort would cross,
+  use `/` and `%` since that borrow is provided (§18), with their output and counts unchanged;
 - `leetcode/matrix/0054`, `0073`, `0079`: the division is inside `cases`, a loop over the input
   with no bound, and a handler around a div computation is not provided (§20); the refusal is
   reported as a type mismatch against the loop's type, as it is for a `raise` there (#522);
@@ -11125,6 +11137,14 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
 ---
 
 ## Changelog
+
+- **1.33** (2026-11-05) — §18, §39 (#810–#814): surface fixes, each an elaboration into existing
+  kernel forms; no `CDerives`, judgment or theorem changes. A borrow block's body boxes no terminal
+  that never returns (#810). The consume glue's finaliser consumes in §12's reverse binding order
+  (#811). A buffer's and a literal's borrow crossed by an abort, and a place lent in a call that
+  may raise, are lent by the unwinding forms (#812–#814); §18 *Not provided* loses those items.
+  The unwinding form of a literal's view is not marked (§57). `aoc/2022-12`, `2023-03` and
+  `2022-21` use `/` and `%`.
 
 - **1.32** (2026-11-04) — §3, §22 (#808): conversion up to the names of lifetime binders. `CDerives`
   gains `[α]` (`CDerives.alpha`, premise `Jdg.alphaB j j' = true`), and so do its copies

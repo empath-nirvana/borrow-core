@@ -7,7 +7,10 @@ corpus/aoc/2021-15.bc 1.0 cancellable abortive: branch; agree
 corpus/aoc/2022-01.bc 1.0 cancellable abortive: branch; agree
 corpus/aoc/2022-01.bc 3.0 cancellable abortive: branch; agree
 corpus/aoc/2022-01.bc 2.0 cancellable abortive: branch; agree
+corpus/aoc/2022-12.bc 1.0 cancellable abortive: branch; agree
 corpus/aoc/2022-21.bc 1.0 cancellable abortive: branch; agree
+corpus/aoc/2022-21.bc 2.0 cancellable abortive: branch; agree
+corpus/aoc/2023-03.bc 1.0 cancellable abortive: branch; agree
 corpus/ascii-upper.bc 1.0 cancellable abortive: branch; agree
 corpus/async-bank-inbox.bc 1.0 cancellable abortive: branch; agree
 corpus/async-bank-inbox.bc 3.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
@@ -137,6 +140,8 @@ corpus/block-yield-inner.bc 1.0 cancellable tail: -; agree
 corpus/block-yield-inner.bc 3.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/block-yield-inner.bc 2.0 cancellable tail: direct; agree
 corpus/btree-boxed.bc 1.0 cancellable abortive: branch; agree
+corpus/buf-lend-raise.bc 1.0 cancellable abortive: branch; agree
+corpus/buf-lend-raise.bc 2.0 cancellable abortive: branch; agree
 corpus/capture-await-raise.bc 1.0 cancellable tail: direct; agree
 corpus/capture-await-raise.bc 2.0 cancellable abortive: branch; agree
 corpus/capture-store-raise.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
@@ -399,6 +404,11 @@ corpus/leetcode/trees/0230-kth-smallest-element-in-a-bst.bc 1.0 cancellable abor
 corpus/leetcode/trees/0235-lowest-common-ancestor-of-a-binary-search-tree.bc 1.0 cancellable abortive: branch; agree
 corpus/leetcode/trees/0297-serialize-and-deserialize-binary-tree.bc 1.0 cancellable abortive: branch; agree
 corpus/leetcode/trees/0572-subtree-of-another-tree.bc 1.0 cancellable abortive: branch; agree
+corpus/lend-call-raise.bc 1.0 cancellable abortive: branch; agree
+corpus/lend-call-raise.bc 2.0 cancellable abortive: branch; agree
+corpus/lend-call-raise.bc 3.0 cancellable abortive: branch; agree
+corpus/lend-call-raise.bc 4.0 cancellable abortive: branch; agree
+corpus/lend-call-record.bc 1.0 cancellable abortive: branch; agree
 corpus/lend-div.bc 1.0 cancellable tail: machine: the handlers of the name have 2 clauses for it; disagree
 corpus/lend-pipeline.bc 3.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/lend-pipeline.bc 2.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
@@ -408,6 +418,8 @@ corpus/list-blocks.bc 2.0 cancellable abortive: branch; agree
 corpus/list-blocks.bc 3.0 cancellable abortive: branch; agree
 corpus/list-capability.bc 1.0 cancellable abortive: branch; agree
 corpus/list-generic.bc 1.0 cancellable abortive: branch; agree
+corpus/lit-lend-raise.bc 1.0 cancellable abortive: branch; agree
+corpus/lit-lend-raise.bc 2.0 cancellable abortive: branch; agree
 corpus/loop-handler-binder.bc 1.0 cancellable abortive: branch; agree
 corpus/loop-handler-binder.bc 3.0 cancellable abortive: branch; agree
 corpus/loop-handler-binder.bc 2.0 cancellable abortive: branch; agree
@@ -434,6 +446,8 @@ corpus/pipe-handlers.bc 3.0 cancellable abortive: -; agree
 corpus/pipe-handlers.bc 4.0 cancellable once: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/pipe-handlers.bc 1.0 cancellable abortive: branch; agree
 corpus/pipe-handlers.bc 2.0 cancellable once: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/raise-in-borrow-branch.bc 1.0 cancellable abortive: branch; agree
+corpus/raise-in-borrow-branch.bc 2.0 cancellable abortive: branch; agree
 corpus/rec-await-exhausted.bc 1.0 cancellable tail: direct; agree
 corpus/rec-await-exhausted.bc 2.0 cancellable abortive: branch; agree
 corpus/rec-emit.bc 1.0 cancellable abortive: branch; agree
@@ -503,6 +517,8 @@ corpus/sugar/data-box-tree.lowered.bc 1.0 cancellable abortive: branch; agree
 corpus/sugar/data-config.lowered.bc 1.0 cancellable abortive: branch; agree
 corpus/sugar/data-config.lowered.bc 3.0 cancellable abortive: branch; agree
 corpus/sugar/data-config.lowered.bc 2.0 cancellable abortive: branch; agree
+corpus/sugar/finaliser-order.bc 1.0 cancellable abortive: branch; agree
+corpus/sugar/finaliser-order.core.bc 1.0 cancellable abortive: branch; agree
 corpus/sugar/for-value.bc 1.0 cancellable tail: direct; agree
 corpus/sugar/for-value.bc 2.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/sugar/for-value.core.bc 1.0 cancellable tail: direct; agree

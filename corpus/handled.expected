@@ -36,12 +36,23 @@ corpus/aoc/2022-01.bc 394:11: handle 2: inside []; row [1]; ops 2.0 abortive; na
 corpus/aoc/2022-01.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/aoc/2022-01.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/aoc/2022-01.bc 2.0 abortive: branch; condition 2 holds; -
-corpus/aoc/2022-12.bc flows [0, 4294967295]; main []
-corpus/aoc/2022-21.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/aoc/2022-21.bc 134:5: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/aoc/2022-12.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
+corpus/aoc/2022-12.bc 76:1: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/aoc/2022-12.bc 55:3: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/aoc/2022-12.bc 61:5: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/aoc/2022-12.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/aoc/2022-21.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
+corpus/aoc/2022-21.bc 122:1: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/aoc/2022-21.bc 132:5: handle 2: inside [], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/aoc/2022-21.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/aoc/2022-21.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/aoc/2023-01.bc flows [0, 4294967295]; main []
-corpus/aoc/2023-03.bc flows [0, 4294967295]; main []
+corpus/aoc/2023-03.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
+corpus/aoc/2023-03.bc 99:1: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/aoc/2023-03.bc 49:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/aoc/2023-03.bc 75:3: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/aoc/2023-03.bc 81:7: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/aoc/2023-03.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/aoc/2023-07.bc flows [0, 4294967295]; main []
 corpus/aoc/2024-01.bc flows [0, 4294967295]; main []
 corpus/aoc/2024-02.bc flows [0, 4294967295]; main []
@@ -325,6 +336,11 @@ corpus/btree-boxed.bc 177:3: handle 1: inside [], finaliser; row []; ops 1.0 abo
 corpus/btree-boxed.bc 180:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/btree-boxed.bc 151:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/btree-boxed.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/buf-lend-raise.bc flows [0, 4294967295], finaliser; main [1, 2], finaliser
+corpus/buf-lend-raise.bc 26:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/buf-lend-raise.bc 32:3: handle 2: inside [], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/buf-lend-raise.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/buf-lend-raise.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/bytes-upper.bc flows [0, 4294967295]; main []
 corpus/capability-bang-width.bc flows [0, 4294967295]; main []
 corpus/capability-swap-width.bc flows [0, 4294967295]; main []
@@ -1200,6 +1216,18 @@ corpus/leetcode/trees/0297-serialize-and-deserialize-binary-tree.bc 1.0 abortive
 corpus/leetcode/trees/0572-subtree-of-another-tree.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
 corpus/leetcode/trees/0572-subtree-of-another-tree.bc 147:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/trees/0572-subtree-of-another-tree.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/lend-call-raise.bc flows [0, 4, 4294967295], finaliser; main [1, 2, 3, 4], finaliser
+corpus/lend-call-raise.bc 35:32: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/lend-call-raise.bc 42:33: handle 2: inside [], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/lend-call-raise.bc 48:34: handle 3: inside [], finaliser; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/lend-call-raise.bc 56:56: handle 4: inside [], finaliser; row []; ops 4.0 abortive; names 4.0 []; condition 2 holds
+corpus/lend-call-raise.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/lend-call-raise.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/lend-call-raise.bc 3.0 abortive: branch; condition 2 holds; -
+corpus/lend-call-raise.bc 4.0 abortive: branch; condition 2 holds; -
+corpus/lend-call-record.bc flows [0, 4294967295], finaliser; main [1], finaliser
+corpus/lend-call-record.bc 14:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/lend-call-record.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/lend-config.bc flows [0, 4294967295]; main []
 corpus/lend-copy.bc flows [0, 4294967295]; main []
 corpus/lend-div.bc flows [0, 1, 4294967295]; main [1]
@@ -1235,6 +1263,11 @@ corpus/list-capability.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/list-generic.bc flows [0, 4294967295], finaliser; main [1], finaliser
 corpus/list-generic.bc 19:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/list-generic.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/lit-lend-raise.bc flows [0, 4294967295], finaliser; main [1, 2], finaliser
+corpus/lit-lend-raise.bc 23:4: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/lit-lend-raise.bc 23:34: handle 2: inside [], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/lit-lend-raise.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/lit-lend-raise.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/literal-array-written.bc flows [0, 4294967295]; main []
 corpus/loop-handler-binder.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
 corpus/loop-handler-binder.bc 21:13: handle 1: inside [1, 2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
@@ -1328,6 +1361,11 @@ corpus/poly-providers.bc flows [0, 4294967295]; main []
 corpus/print-borrowed-array.bc flows [0, 4294967295]; main []
 corpus/print-borrowed-list.bc flows [0, 4294967295]; main []
 corpus/quicksort.bc flows [0, 4294967295]; main []
+corpus/raise-in-borrow-branch.bc flows [0, 4294967295], finaliser; main [1, 2], finaliser
+corpus/raise-in-borrow-branch.bc 14:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/raise-in-borrow-branch.bc 17:3: handle 2: inside [], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/raise-in-borrow-branch.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/raise-in-borrow-branch.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/rec-await-exhausted.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
 corpus/rec-await-exhausted.bc 16:13: handle 1: inside [2], finaliser; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/rec-await-exhausted.bc 16:25: handle 2: inside [], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
@@ -1526,6 +1564,12 @@ corpus/sugar/div-nested.bc flows [0, 4294967295]; main []
 corpus/sugar/div-nested.core.bc flows [0, 4294967295]; main []
 corpus/sugar/effects-counter.bc flows [0, 4294967295]; main []
 corpus/sugar/effects-counter.core.bc flows [0, 4294967295]; main []
+corpus/sugar/finaliser-order.bc flows [0, 4294967295], finaliser; main [1], finaliser
+corpus/sugar/finaliser-order.bc 28:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/sugar/finaliser-order.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/sugar/finaliser-order.core.bc flows [0, 4294967295], finaliser; main [1], finaliser
+corpus/sugar/finaliser-order.core.bc 29:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/sugar/finaliser-order.core.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/sugar/for-count.bc flows [0, 4294967295]; main []
 corpus/sugar/for-count.core.bc flows [0, 4294967295]; main []
 corpus/sugar/for-untyped.bc flows [0, 4294967295]; main []

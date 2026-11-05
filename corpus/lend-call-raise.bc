@@ -1,0 +1,73 @@
+-- A place lent in the arguments of a call that may raise (SPEC §18): `&mut x` and `&x` at a
+-- borrow parameter of a function whose row has `Fail`, with or without an answering capability
+-- threaded through the call. The borrow around the call is the unwinding form of its borrow at
+-- the call's abortive operations (`withbor2U`, `withbor1U`): a cell is lent as it is, and a `let
+-- mut` value through a cell scoped to the call. When the call raises, the lend ends and the
+-- lender's finaliser consumes the place with the rest of the abandoned scope.
+--
+-- Answer: `inl` where nothing is raised and the payload where it is: the cells' sums `8`, `14`
+-- and `9`. Under `table`: `inl 3` from the first run, and `3` = 2 * 1 + 1, the keys `3` and `0`
+-- both recorded, the second by the run that raises after its `insert`; `live 0`.
+
+include fail
+include slice
+
+effect Map { fn lookup(k: i32) -> i32 + 1; fn insert(k: i32, v: i32) }
+handler table(mut t: array i32): Map = {
+  lookup(k) = { let x = borrow imm t { v -> at(v, k, 0) }; if x == 0 { inr () } else { inl x } };
+  insert(k, v) = { let (t, _) = array_replace[i32](t, k, v); () }
+}
+
+-- Add `k` to the cell, raising a negative `k` first.
+fn bump<'a>(m: mut 'a i32, k: i32) -> i32 with Fail[i32] =
+  if k < 0 { raise(k) } else { () };
+  modify m { v -> (v + k, v + k) }
+
+-- The cell's content plus `k`, raising a negative `k`.
+fn peek<'a>(b: imm 'a i32, k: i32) -> i32 with Fail[i32] =
+  if k < 0 { raise(k) } else { *b + k }
+
+-- `bump` that records its key in the table first.
+fn bump_rec<'a>(m: mut 'a i32, k: i32) -> i32 with Map, Fail[i32] =
+  insert(k + 1, 1);
+  bump(m, k)
+
+fn cell(k: i32) -> i32 + i32 = with to_result {
+  let c = alloc(4);
+  let r = bump(&mut c, k);
+  let x = free(c);
+  r + x
+}
+
+fn value(k: i32) -> i32 + i32 = with to_result {
+  let mut v = 5;
+  let r = bump(&mut v, k);
+  r + v
+}
+
+fn shared(k: i32) -> i32 + i32 = with to_result {
+  let c = alloc(3);
+  let r = peek(&c, k);
+  let x = free(c);
+  r + x
+}
+
+-- One run of `bump_rec` on a cell of its own, under the caller's `Map`.
+fn run_rec(start: i32, k: i32) -> i32 + i32 with Map = with to_result {
+  let c = alloc(start);
+  let r = bump_rec(&mut c, k);
+  let x = free(c);
+  r
+}
+
+fn recorded(k: i32) -> (i32 + i32) * i32 =
+  with table(array_new[i32] (8, !{ i -> 0 })) {
+    let r = run_rec(1, k);
+    let s = run_rec(2, 0 - 1);
+    let one = match lookup(k + 1) { inl c -> c | inr u -> 0 };
+    let zero = match lookup(0) { inl c -> c | inr u -> 0 };
+    (r, one * 2 + zero)
+  }
+
+main -> ((i32 + i32) * (i32 + i32)) * (((i32 + i32) * (i32 + i32)) * (((i32 + i32) * (i32 + i32)) * ((i32 + i32) * i32))) =
+  ((cell(0), cell(0 - 1)), ((value(2), value(0 - 2)), ((shared(3), shared(0 - 3)), recorded(2))))
