@@ -10,15 +10,18 @@ import Core.Chain.SI.XRes
 
 **The run (`rwpGX`).** Frames range over `XRes`. At the start the frame and the resource compose
 validly and are each `WF_C` at the world's counted set `C`; the resource is `MaskShallow` at `M`
-(`ρ_P = ∅` at masked locations) and holds `M`'s authorities (`MaskAuth`).
+(`ρ_P = ∅` at masked locations) and holds `M`'s authorities (`MaskAuth`); the frame holds only
+copies at a location lent across stops (`MaskOff`).
 
 **The end (`EndOKX`).** `EndOKG`'s conjuncts, with `↭` read outside `M` (`UpdVNm Φ k M.locs`);
 the end ghost `g′` and the garbage's `gp` compose validly with the frame's (a change from the start
 is frame-preserving because the end composes with the same frame); at the end world's counted set
 `C′`, the end and the garbage are `WF_C′`, and the frame carries no lifetime counted at `C′` and
 not at `C` (`NewNotCarried`), which with the frame's `WF_C` at the start is its `WF_C′`; the end and
-the end with its garbage are `MaskShallow` at `M`, and the end holds `M`'s authorities. The records
-and the list are as at the start. `C′` is passed to the post.
+the end with its garbage are `MaskShallow` at `M`, and the end holds `M`'s authorities; the
+garbage holds only copies at a location lent across stops (`MaskOff`). The records and the list
+are as at the start off the locations lent across stops (`RecAgree`, `ListAgree`). `C′` is passed
+to the post.
 
 **The guard.** Every run keeps the frame's world (`FrameKept xf.1`, the access guard G of
 `rwpG`): the ghost part has no memory.
