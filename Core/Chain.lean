@@ -27,6 +27,7 @@ import Core.Chain.SI.HandleN
 import Core.Chain.SI.HandlerLendAll
 import Core.Chain.SI.HandlerLendProg
 import Core.Chain.SI.HeapN
+import Core.Chain.SI.HeapX
 import Core.Chain.SI.IFrameN
 import Core.Chain.SI.ILendCancelProg
 import Core.Chain.SI.ILendProg
@@ -35,6 +36,7 @@ import Core.Chain.SI.IStopF
 import Core.Chain.SI.IStopN
 import Core.Chain.SI.IStopRaiseN
 import Core.Chain.SI.LendAcross
+import Core.Chain.SI.LendAcrossProg
 import Core.Chain.SI.LendCancelProg
 import Core.Chain.SI.LendX
 import Core.Chain.SI.LendProg
