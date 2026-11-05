@@ -2854,7 +2854,8 @@ names.
   capability it uses (`withbor3`), so that the capability comes back when the body is abandoned.
 
 **Consume glue** is the checker's (§19): a binding whose head may abort, at a row that cancels
-(`Row.Cancels`), puts the consumes of the slots the rest uses in a `[then]` finaliser. A value
+(`Row.Cancels`), puts the consumes of the slots the rest uses in a `[then]` finaliser, in §12's
+reverse binding order, as at the end of a path (`corpus/sugar/finaliser-order.bc`). A value
 that is not consumable (§12, group 3) live across such a binding is rejected, naming it.
 
 **Not provided**, each rejected with a message that says so: an operation inside a closure or
