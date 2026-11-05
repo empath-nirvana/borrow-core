@@ -389,41 +389,88 @@ theorem DF_finOK (Φ : LocFam) (hΦ : Φ.Down) (c : Loc) :
   refine rwpG_det hΦ hQ (fun μ => step1Only_plug (Head.beta μ _ (Val.loc c)) rfl .hole) ?_
   exact rwpG_here (fun μ => final_val μ Val.unit) ⟨Val.unit, rfl, rfl, rfl⟩
 
-/-- **The record's borrowed computation**: `withborF dFwd c cbField`, the borrow opened around
-the field's read and reborrow (`erwp_M_antiFrameC`, `openF_ok`), the field's finaliser frame
-outside it (`erwp_ubind`), then the borrow forgotten and the sealed cell dumped. -/
-theorem methodF_ok {Φ : LocFam} (hΦ : Φ.Down) (Φs : LocFam) (c d : Loc) (u : Val) (A : Life)
-    (k : Nat) (ls : List SRec) (BM : WRes)
-    (hBM : ResU.CompS PMap.empty (ResU.single c (CellU.mutOf A (.loc d)
-      (ResU.single d (CellU.ownOf u)) (inStratum_own A d u) (boxF A k) ⟨d, u, rfl, rfl⟩)) BM) :
+/-- A deterministic step in front of an `rwp` at a downward-closed postcondition. -/
+theorem rwp_detD {Φ : LocFam} (hΦ : Φ.Down) {Q : PostN} (hQ : Q.Down) {n : Nat}
+    {ls : List SRec} {e e' : Expr} {ρ : WRes} (hdet : ∀ μ, Step1Only (ℍ := ℍ) μ e μ e')
+    (h : rwp (ℍ := ℍ) Φ Q n ls e' ρ) : rwp (ℍ := ℍ) Φ Q n ls e ρ := by
+  rw [rwp_iff_rwpG] at h ⊢
+  exact rwpG_det hΦ (fun _ _ _ _ ⟨v, hv, hq⟩ => ⟨v, hv, hQ _ _ _ _ hq⟩) hdet h
+
+/-- The anti-frame's postcondition at `boxF` is downward closed with its continuation's. -/
+theorem afPost_boxF_down {c : Loc} {A : Life} {Q : PostN} (hQ : Q.Down) :
+    (AFPost c A (boxF A) Q).Down := fun _ _ _ _ ⟨w, σ', h', hw', R, rest, h₁, h₂, h₃⟩ =>
+  ⟨w, σ', h', hw', R, rest, h₁, h₂, fun X hX => hQ _ _ _ _ (h₃ X hX)⟩
+
+/-- `writeRecE` at the record `c`. -/
+def writeRec (c : Loc) : Expr :=
+  letE (ldA c) (letE (allocE (.val .unit)) (letE (storeE (.val (Val.loc c)) (.var 0))
+    (freeE (.var 2))))
+
+/-- **The write through the record's opened borrow**: from `c ↦ own(loc d) ● d ↦ own(u)`,
+`!c` reads `d`, a fresh `d′ ↦ own(())` is allocated and stored in `c`, and `d` is freed; the run
+answers `u` holding `c ↦ own(loc d′) ● d′ ↦ own(())`. -/
+theorem writeRec_ok {Φ : LocFam} (hΦ : Φ.Down) {P : PostN} (hP : P.Down) (c d : Loc) (u : Val)
+    (k : Nat) (ls : List SRec) (W : WRes)
+    (hW : ResU.CompS (ResU.single d (CellU.ownOf u)) (ResU.single c (CellU.ownOf (.loc d))) W)
+    (hend : ∀ k' (d' : Loc) (ρ : WRes), ResU.CompS (ResU.single c (CellU.ownOf (.loc d')))
+      (ResU.single d' (CellU.ownOf Val.unit)) ρ → P k' ls u ρ) :
+    rwp (ℍ := ℍ) Φ P k ls (writeRec c) W := by
+  set B2 : Expr := letE (storeE (.val (Val.loc c)) (.var 0)) (freeE (.val (Val.loc d)))
+  refine rwp_bind hΦ (.appR (.lam (letE (allocE (.val .unit)) (letE (storeE (.val (Val.loc c))
+    (.var 0)) (freeE (.var 2))))) .hole) (rwp_load ls c (.loc d) _
+      ⟨_, _, ResU.CompS.comm hW, rfl, fun ρ₁ ρ₂ h₁ hc => ?_⟩)
+  subst h₁
+  obtain rfl := ResU.CompS.functional hc hW
+  refine rwp_detD hΦ hP (fun μ => step1Only_plug (Head.beta μ _ (Val.loc d)) rfl .hole) ?_
+  have e₁ : Kont.hole.plug (Expr.subst 0 (Val.loc d) (letE (allocE (.val .unit))
+      (letE (storeE (.val (Val.loc c)) (.var 0)) (freeE (.var 2))))) =
+      (Kont.appR (.lam B2) .hole).plug (.app (.val (.prim .alloc)) (.val Val.unit)) := by
+    simp [B2, Kont.plug, Expr.subst, Expr.shift, letE, allocE, storeE, freeE, Val.loc, Expr.val,
+      Val.prim, Val.unit, Val.shift, Expr.loc]
+  rw [e₁]
+  refine rwp_bind hΦ _ (rwp_alloc ls Val.unit _ fun d' σ₁ σ₂ hp hc => ?_)
+  subst hp
+  refine rwp_detD hΦ hP (fun μ => step1Only_plug (Head.beta μ _ (Val.loc d')) rfl .hole) ?_
+  have e₂ : Kont.hole.plug (Expr.subst 0 (Val.loc d') B2) =
+      (Kont.appR (.lam (freeE (.val (Val.loc d)))) .hole).plug
+        (.app (.val (Val.storeV (Val.loc c))) (.val (Val.loc d'))) := by
+    simp [B2, Kont.plug, Expr.subst, letE, storeE, freeE, Val.loc, Expr.val, Val.prim,
+      Val.storeV]
+  rw [e₂]
+  obtain ⟨y, hy, hcy⟩ := (ResU.CompS.assoc _ _ _ _).mpr ⟨_, ResU.CompS.comm hW, hc⟩
+  refine rwp_bind hΦ _ (rwp_store ls c (.loc d) (.loc d') _ ⟨_, _, hcy, rfl, fun ρ₁ ρ' h₁ hc' => ?_⟩)
+  subst h₁
+  refine rwp_detD hΦ hP (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) ?_
+  have e₃ : Kont.hole.plug (Expr.subst 0 Val.unit (freeE (.val (Val.loc d)))) =
+      freeE (.val (Val.loc d)) := by
+    simp [Kont.plug, Expr.subst, freeE, Val.loc, Expr.val, Val.prim]
+  rw [e₃]
+  obtain ⟨x, hx, hdx⟩ := (ResU.CompS.assoc _ _ _ _).mpr ⟨_, hy, hc'⟩
+  exact rwp_free ls d u _ ⟨_, _, hdx, rfl, hend _ d' x (ResU.CompS.comm hx)⟩
+
+/-- **The record's borrowed computation after its write**: `withborF dFwd c cbField`, the borrow
+opened around the field's read and reborrow (`erwp_M_antiFrameC`, `openF_ok`), the field's
+finaliser frame outside it (`erwp_ubind`), then the borrow forgotten. -/
+theorem methodF_rest {Φ : LocFam} (hΦ : Φ.Down) (Φs : LocFam) (c d : Loc) (u : Val) (A : Life)
+    (k : Nat) (ls : List SRec) :
     erwp (ℍ := ℍ) (Φ.set c A (boxF A)) (opTableN (tabOfN (ℍ := ℍ) (Φ.set c A (boxF A)) (PS₀ Φs)))
-      (MFPost c A (boxF A) (AntiLendProg.QA c)) k ls (cbBody c) BM := by
+      (fun k ls' v X => NoOwn X ∧ MFPost c A (boxF A) (AntiLendProg.QA c) k ls' v PMap.empty) k ls
+      ((Kont.appR (.lam ((Expr.var 0).letpair (forget.app (Expr.var 1)))) .hole).plug
+        (((Expr.val (withborFV (Expr.val dFwd))).app (.val (Val.loc c))).app (.val cbField)))
+      (ResU.single c (CellU.mutOf A (.loc d) (ResU.single d (CellU.ownOf u)) (inStratum_own A d u)
+        (boxF A k) ⟨d, u, rfl, rfl⟩)) := by
   set Φ' := Φ.set c A (boxF A) with hΦ'e
   have hΦ' : Φ'.Down := LocFam.set_down (l := c) hΦ (boxF_down A)
   have hFl : Φ' c = some ⟨A, boxF A⟩ := by simp [Φ', LocFam.set]
-  obtain rfl := eq_of_compS_empty_left hBM
   set T := tabOfN (ℍ := ℍ) Φ' (PS₀ Φs)
   have hTd : T.Down := tabOfN_down hΦ' (spawnPAN_down _ _)
   have hTD := opTableN_down hTd
-  have hL := opTableN_local T
   set QM : PostN := fun k ls' v X => NoOwn X ∧
     MFPost c A (boxF A) (AntiLendProg.QA c) k ls' v PMap.empty
   have hQM : QM.Down := fun _ _ _ _ ⟨h₁, h₂, h₃⟩ => ⟨h₁, h₂, fun w Y hY σ hσ Z hZ =>
     h₃ w Y hY σ hσ Z hZ⟩
   have hQN : (QN c).Down := fun _ _ _ _ h => h
-  refine erwp_dump hL k ls _ _ ?_
-  refine erwp_det hΦ' hTD hQM (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl
-    (.appL .hole (Val.loc c))) ?_
-  refine erwp_det hΦ' hTD hQM (fun μ => step1Only_plug (Head.beta μ _ (Val.loc c)) rfl .hole) ?_
   set LP : Expr := (Expr.var 0).letpair (forget.app (Expr.var 1))
-  have e₁ : Kont.hole.plug (Expr.subst 0 (Val.loc c) (Expr.subst (0 + 1) (Val.shift 1 0 Val.unit)
-      (letE (((Expr.val (withborFV (Expr.val dFwd))).app (Expr.var 0)).app (Expr.val cbField))
-        LP))) = (Kont.appR (.lam LP) .hole).plug
-          (((Expr.val (withborFV (Expr.val dFwd))).app (.val (Val.loc c))).app (.val cbField)) := by
-    simp [LP, Expr.subst, Expr.shift, Kont.plug, letE, withborFV, withborFE, thenE, cbField, dFwd,
-      storeE, vField, forget, unit', BoCa.Fig16.Tree.Wp.SchedProgs.SpawnProgs.parkE, performE, opPayload,
-      Val.shift, Val.pair, Val.i32, Val.unit, Val.loc, Expr.val, Val.prim, Val.lam, Expr.loc]
-  rw [e₁]
   have hKH : ∀ m, (Kont.appR (.lam LP) .hole).HasHnd m = false := fun m => by simp [Kont.HasHnd]
   have hKC : ∀ m, (Kont.appR (.lam LP) .hole).Catches m = false := fun m => by simp [Kont.Catches]
   refine erwp_bind hΦ' _ hKH hKC (tabOfN_ctxClosed hΦ' _ hKH hKC) (Q' := QN c) ?_ k ls _ _ ?_
@@ -480,6 +527,59 @@ theorem methodF_ok {Φ : LocFam} (hΦ : Φ.Down) (Φs : LocFam) (c d : Loc) (u :
       exact cancelOblN_ubind hΦ' OpTabN.empty_down
         (fun _ _ _ h => by simp [OpTabN.empty] at h) (NF c) (DF c) (DF_finOK Φ' hΦ' c) k' ls' _
         _ _ (ResU.comp_empty_right _) (hc _ (tabOfN_ent h).2.2.1)
+
+/-- **The record's borrowed computation**: the record opened by the Mut Anti-Frame
+(`rwp_M_antiFrame`, within one segment) and written through (`writeRec_ok`: a fresh box stored,
+the old one freed), resealed with the fresh box as its content; then `methodF_rest` on the fresh
+box. -/
+theorem methodF_ok {Φ : LocFam} (hΦ : Φ.Down) (Φs : LocFam) (c d : Loc) (u : Val) (A : Life)
+    (k : Nat) (ls : List SRec) (BM : WRes)
+    (hBM : ResU.CompS PMap.empty (ResU.single c (CellU.mutOf A (.loc d)
+      (ResU.single d (CellU.ownOf u)) (inStratum_own A d u) (boxF A k) ⟨d, u, rfl, rfl⟩)) BM) :
+    erwp (ℍ := ℍ) (Φ.set c A (boxF A)) (opTableN (tabOfN (ℍ := ℍ) (Φ.set c A (boxF A)) (PS₀ Φs)))
+      (MFPost c A (boxF A) (AntiLendProg.QA c)) k ls (cbBody c) BM := by
+  set Φ' := Φ.set c A (boxF A) with hΦ'e
+  have hΦ' : Φ'.Down := LocFam.set_down (l := c) hΦ (boxF_down A)
+  have hFl : Φ' c = some ⟨A, boxF A⟩ := by simp [Φ', LocFam.set]
+  obtain rfl := eq_of_compS_empty_left hBM
+  set T := tabOfN (ℍ := ℍ) Φ' (PS₀ Φs)
+  have hTd : T.Down := tabOfN_down hΦ' (spawnPAN_down _ _)
+  have hTD := opTableN_down hTd
+  have hL := opTableN_local T
+  set QM : PostN := fun k ls' v X => NoOwn X ∧
+    MFPost c A (boxF A) (AntiLendProg.QA c) k ls' v PMap.empty
+  have hQM : QM.Down := fun _ _ _ _ ⟨h₁, h₂, h₃⟩ => ⟨h₁, h₂, fun w Y hY σ hσ Z hZ =>
+    h₃ w Y hY σ hσ Z hZ⟩
+  refine erwp_dump hL k ls _ _ ?_
+  refine erwp_det hΦ' hTD hQM (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl
+    (.appL .hole (Val.loc c))) ?_
+  refine erwp_det hΦ' hTD hQM (fun μ => step1Only_plug (Head.beta μ _ (Val.loc c)) rfl .hole) ?_
+  set LP : Expr := (Expr.var 0).letpair (forget.app (Expr.var 1))
+  set M2 : Expr := letE (((Expr.val (withborFV (Expr.val dFwd))).app (.val (Val.loc c))).app
+    (.val cbField)) LP
+  have e₁ : Kont.hole.plug (Expr.subst 0 (Val.loc c) (Expr.subst (0 + 1) (Val.shift 1 0 Val.unit)
+      (letE BoCa.Fig16.Tree.Wp.Goal791.writeRecE
+        (letE (((Expr.val (withborFV (Expr.val dFwd))).app (Expr.var 1)).app (Expr.val cbField))
+          LP)))) = (Kont.appR (.lam M2) .hole).plug (writeRec c) := by
+    simp [M2, LP, writeRec, BoCa.Fig16.Tree.Wp.Goal791.writeRecE, ldA, Expr.subst, Expr.shift,
+      Kont.plug, letE, allocE, freeE, withborFV, withborFE, thenE, cbField, dFwd, storeE, vField,
+      forget, unit', BoCa.Fig16.Tree.Wp.SchedProgs.SpawnProgs.parkE, performE, opPayload,
+      Val.shift, Val.pair, Val.i32, Val.unit, Val.loc, Expr.val, Val.prim, Val.lam]
+  rw [e₁]
+  have hQ' : PostN.Down (fun k ls' (v : Val) X =>
+      erwp (ℍ := ℍ) Φ' (opTableN T) QM k ls' ((Kont.appR (.lam M2) .hole).plug v.1) X) :=
+    fun _ _ _ _ h => erwp_le hΦ' hL hTD hQM (Nat.le_succ _) h
+  refine erwp_bindR hΦ' hL (.appR (.lam M2) .hole)
+    (rwp_M_antiFrame hΦ' hFl (ResU.comp_empty_right _) fun W X hW hX => ?_)
+  obtain rfl := eq_of_compS_empty_left hX
+  refine writeRec_ok hΦ' (afPost_boxF_down hQ') c d u k ls _ hW fun k' d' ρ hρ => ?_
+  refine ⟨Val.loc d', ResU.single d' (CellU.ownOf Val.unit), inStratum_own A d' Val.unit,
+    ⟨d', Val.unit, rfl, rfl⟩, PMap.empty, _, hρ, ResU.comp_empty_right _, fun X hX => ?_⟩
+  obtain rfl := eq_of_compS_empty_left hX
+  refine erwp_det hΦ' hTD hQM (fun μ => step1Only_plug (Head.beta μ _ u) rfl .hole) ?_
+  have hM2 : closedAt 0 M2 = true := rfl
+  rw [Kont.plug_hole, subst_closedAt _ _ hM2 (Nat.zero_le _)]
+  exact methodF_rest hΦ Φs c d' Val.unit A k' ls
 
 /-! ### Task A -/
 

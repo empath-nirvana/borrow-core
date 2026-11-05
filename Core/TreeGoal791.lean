@@ -430,14 +430,22 @@ def vField : Val := Val.i32 7
 def cbField : Val := Val.lam (.val (Val.lam (letE parkE
   (letE (storeE (.var 1) (.val vField)) (.app forget (.var 2))))))
 
-/-- **The record's borrow**: `λ_. λv. let (v′, _) = withborF dFwd v cbField in forget v′`. -/
-def cbRec : Val := Val.lam (.val (Val.lam
-  (letE (.app (.app (.val (withborFV (.val dFwd))) (.var 0)) (.val cbField))
-    (.letpair (.var 0) (.app forget (.var 1))))))
+/-- **A write through the record's borrow**: a fresh box stored in the record, the old one freed:
+`let o = !v in let b = alloc () in v := b; free o`. -/
+def writeRecE : Expr :=
+  letE (.app (.val (.prim .load)) (.var 0)) (letE (allocE (.val .unit))
+    (letE (storeE (.var 2) (.var 0)) (freeE (.var 2))))
+
+/-- **The record's borrow**: `λ_. λv. writeRec v; let (v′, _) = withborF dFwd v cbField in
+forget v′`. The field reborrowed is the fresh box's. -/
+def cbRec : Val := Val.lam (.val (Val.lam (letE writeRecE
+  (letE (.app (.app (.val (withborFV (.val dFwd))) (.var 1)) (.val cbField))
+    (.letpair (.var 0) (.app forget (.var 1)))))))
 
 /-- **Task A**: `c ↦ own(loc k) ● k ↦ own(())`; a `mut` lend of `c` (`withbor (2)`, unwinding,
-at `park`'s row); inside it the field reborrow of `k` (`withborF`), held across `park`; both
-ended, both freed. -/
+at `park`'s row); through it a fresh box `k′` stored in `c` and `k` freed; then the field reborrow
+of `k′` (`withborF`), held across `park` and written through after it; both ended; `dRec` frees
+`c` and `k′`. -/
 def taskA : Expr :=
   letE (allocE (.val .unit)) (letE (allocE (.var 0))
     (letE (.app (.app (.val (withborUV (.val dRec))) (.var 0)) (.val cbRec))
