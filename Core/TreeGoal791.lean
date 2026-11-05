@@ -403,7 +403,7 @@ def EffLetT : Prop :=
 /-! ## §5. The hardest case -/
 
 open BoCa.Fig16.Tree.Wp.SchedProgs.Park (nP)
-open BoCa.Fig16.Tree.Wp.SchedProgs.SpawnProgs (parkE spawnE thL thC progOf)
+open BoCa.Fig16.Tree.Wp.SchedProgs.SpawnProgs (parkE spawnE cancelE progOf)
 open BoCa.Fig16.Tree.Wp.SchedProgs.Spawn (TJ qsS hsS InvS hs_schedOK)
 open BoCa.Fig16.Tree.Wp.SchedProgs.Stack (QV QS stackRet)
 
@@ -420,8 +420,15 @@ def dRec : Val := Val.lam (letE (.app (.val (.prim .load)) (.var 0)) (letE (free
 /-- The reborrow's finaliser: `forget`. -/
 def dFwd : Val := Val.lam (.val .unit)
 
-/-- **The field's borrow, held across `park`**: `λ_. λu. park; forget u; ()`. -/
-def cbField : Val := Val.lam (.val (Val.lam (letE parkE (letE (.app forget (.var 1)) (.val .unit)))))
+/-- `x := v`. -/
+def storeE (x v : Expr) : Expr := .app (.app (.val (.prim .store)) x) v
+
+/-- The value task A writes through the field's borrow. -/
+def vField : Val := Val.i32 7
+
+/-- **The field's borrow, held across `park`, then written**: `λ_. λu. park; u := 7; forget u`. -/
+def cbField : Val := Val.lam (.val (Val.lam (letE parkE
+  (letE (storeE (.var 1) (.val vField)) (.app forget (.var 2))))))
 
 /-- **The record's borrow**: `λ_. λv. let (v′, _) = withborF dFwd v cbField in forget v′`. -/
 def cbRec : Val := Val.lam (.val (Val.lam
@@ -436,12 +443,40 @@ def taskA : Expr :=
     (letE (.app (.app (.val (withborUV (.val dRec))) (.var 0)) (.val cbRec))
       (.letpair (.var 0) (.app (.val dRec) (.var 1)))))
 
-/-- The root: spawn `B` (`thL`: a lend of its own, parked, ended after `A` parks), then run `A`. -/
-def rootMut : Expr := letE (spawnE thL) taskA
+/-- The value the other task writes through its borrow. -/
+def vB : Val := Val.i32 5
 
-/-- The cancel variant: spawn `B`, spawn the canceller `C` (`thC`: parks, then cancels the
-task that ran it), then run `A`; `A` is cancelled while it holds the field's borrow. -/
-def rootMutC : Expr := letE (spawnE thL) (letE (spawnE thC) taskA)
+/-- The other task's borrow: `λ_. λu. u := 5; forget u`. -/
+def cbB : Val := Val.lam (.val (Val.lam
+  (letE (storeE (.var 0) (.val vB)) (.app forget (.var 1)))))
+
+/-- The other task's finaliser: `λr. free r`. -/
+def dB : Val := Val.lam (freeE (.var 0))
+
+/-- **The other task's body**, then `tail`: `park (); let a = alloc () in let (a′, _) =
+withborU dB a cbB in free a′; tail`. Its cell is allocated and lent `mut` after its `park`, so
+under `HS` (a spawned child runs first; `park` swaps with the top ready task) the lend opens and
+ends while task A is parked. -/
+def bodyB (tail : Expr) : Expr :=
+  letE parkE (letE (allocE (.val .unit))
+    (letE (.app (.app (.val (withborUV (.val dB))) (.var 0)) (.val cbB))
+      (.letpair (.var 0) (letE (freeE (.var 1)) tail))))
+
+/-- **The other task**: `bodyB ()`. -/
+def thB : Val := Val.lam (bodyB (.val .unit))
+
+/-- **The other task, then the canceller**: `bodyB (cancel ())`. When it cancels, task A is the
+top ready task. -/
+def thBC : Val := Val.lam (bodyB cancelE)
+
+/-- The root: spawn `B` (`thB`), then run `A`. `B` runs first and parks; `A` runs to the `park`
+inside the field's borrow; `B` resumes, opens its lend, writes, ends it and frees its cell; then
+`A` resumes and writes through the field's borrow. -/
+def rootMut : Expr := letE (spawnE thB) taskA
+
+/-- The cancel variant: spawn `B` (`thBC`), then run `A`. As in `rootMut`, `B`'s lend opens and
+ends while `A` is parked; then `B` cancels `A` while `A` holds the field's borrow. -/
+def rootMutC : Expr := letE (spawnE thBC) taskA
 
 def progMut : Expr := progOf rootMut
 def progMutC : Expr := progOf rootMutC
