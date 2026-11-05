@@ -1342,3 +1342,21 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.Tree.chain_ResU_six58_right
 #print axioms BoCa.Fig16.LogRel.Core.resourceSafety
 #print axioms BoCa.Fig16.LogRel.Core.rtSafety
+-- The step-indexed chain relation (SPEC §62, #791 over per-task chains): frames across stops,
+-- cancellable ones included, and the programs holding borrows across a suspension.
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_M_frame
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_M_frameC
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_M_frameTF
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_M_antiFrame
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_M_antiFrameC
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_withbor3
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_reborrow
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_reborrowT
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_handle
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_adequacy
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.HandlerLendProg.progHL_orDiverges
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.HandlerLendAll.anti_underL
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.AntiLendProg.progAnti_orDiverges
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.AntiCancelProg.progAntiCancel_orDiverges
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.CrossProgM.progM_orDiverges
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.CrossProgM.progDM_orDiverges
