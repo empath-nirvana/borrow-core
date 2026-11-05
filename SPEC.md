@@ -11138,6 +11138,14 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
 
 ## Changelog
 
+- **1.33** (2026-11-05) — §18, §39 (#810–#814): surface fixes, each an elaboration into existing
+  kernel forms; no `CDerives`, judgment or theorem changes. A borrow block's body boxes no terminal
+  that never returns (#810). The consume glue's finaliser consumes in §12's reverse binding order
+  (#811). A buffer's and a literal's borrow crossed by an abort, and a place lent in a call that
+  may raise, are lent by the unwinding forms (#812–#814); §18 *Not provided* loses those items.
+  The unwinding form of a literal's view is not marked (§57). `aoc/2022-12`, `2023-03` and
+  `2022-21` use `/` and `%`.
+
 - **1.32** (2026-11-04) — §3, §22 (#808): conversion up to the names of lifetime binders. `CDerives`
   gains `[α]` (`CDerives.alpha`, premise `Jdg.alphaB j j' = true`), and so do its copies
   (`CDerivesAt`, `CDerivesP`, `TDerivesAt`, `TDerivesP`) and the typed term (`TExpr.alpha`). The
