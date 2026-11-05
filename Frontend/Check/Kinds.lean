@@ -33,9 +33,10 @@ open BoCa.Fig16.LogRel.Core.ClauseKinds
 
 /-! ### Uses of `κ` -/
 
-/-- `[sub]` at a row (`effSub`), which keeps its premise's term, removed. -/
+/-- `[sub]` at a row (`effSub`) and `[α]`, which keep their premise's term, removed. -/
 def TExpr.unSub : TExpr → TExpr
   | .effSub _ _ _ _ _ t => t.unSub
+  | .alpha _ _ _ _ t => t.unSub
   | t => t
 
 /-- `t` is the resume of `κ` in the slot `k` applied to an answer that is not `κ`: `[app]` of
@@ -63,6 +64,7 @@ def returns0B : TExpr → Bool
   | .bind _ _ _ _ _ tM tN => isVar0 tM.unSub && returns0B tN
   | .effLet _ _ _ _ _ _ tM tN => isVar0 tM.unSub && returns0B tN
   | .effSub _ _ _ _ _ t => returns0B t
+  | .alpha _ _ _ _ t => returns0B t
   | _ => false
 where
   isVar0 : TExpr → Bool
@@ -87,6 +89,7 @@ neither it nor `κ` (the slot `k`) before: `[app]` of `[force]` at `g`, of a `�
 def appliesB : Nat → Nat → TExpr → Bool
   | g, k, .app _ _ s _ _ _ f => forceArrB g f && s != g && s != k
   | g, k, .effSub _ _ _ _ _ t => appliesB g k t
+  | g, k, .alpha _ _ _ _ t => appliesB g k t
   | g, k, .bind _ _ _ _ _ tM tN =>
       (!mentions g tM.erase && !mentions k tM.erase && appliesB (g + 1) (k + 1) tN) ||
         (appliesB g k tM && returns0B tN)
@@ -108,6 +111,7 @@ def onceB (k : Nat) : TExpr → Bool
   | .bind _ _ _ _ _ tM tN => onceB k tM && !mentions (k + 1) tN.erase
   | .effLet _ _ _ _ _ _ tM tN => onceB k tM && !mentions (k + 1) tN.erase
   | .effSub _ _ _ _ _ t => onceB k t
+  | .alpha _ _ _ _ t => onceB k t
   | t => resumeB k t || cancelHeadB k t
 
 /-! ### Paths -/
@@ -134,6 +138,7 @@ def onPaths (leaf : Nat → TExpr → Bool) : Nat → TExpr → Bool
       leaf k t || (!mentions k tM.erase && onPaths leaf (k + 1) tN) ||
         (isVarB k tM.erase && !mentions (k + 1) tN.erase && onPaths leaf 0 tN)
   | k, t@(.effSub _ _ _ _ _ t') => leaf k t || onPaths leaf k t'
+  | k, t@(.alpha _ _ _ _ t') => leaf k t || onPaths leaf k t'
   | k, t@(.lendScope _ _ _ t') => leaf k t || onPaths leaf k t'
   | k, t => leaf k t
 

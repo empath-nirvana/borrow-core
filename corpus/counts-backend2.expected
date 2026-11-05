@@ -68,6 +68,7 @@ block-swap 2 0 0 4 4 0
 block-yield-inner 3 0 0 3 3 0
 borrow-in-scope 2 0 0 4 3 0
 btree-boxed 80 0 0 22932 19398 6795
+buf-lend-raise 4 0 0 24 20 12
 bytes-upper 1 0 0 80 52 54
 capability-bang-width 3 0 0 10 8 0
 capability-swap-width 3 0 0 8 6 0
@@ -81,6 +82,18 @@ clause-captures 6 3 0 10 10 0
 clo-capture 1 0 0 3 3 0
 clo-coerce 1 0 0 3 3 0
 clo-counter 2 0 0 17 17 0
+lend-call-raise 9 0 0 34 31 4
+lend-call-record 1 0 0 6 2 0
+lit-lend-raise 6 0 0 69 30 39
+nu-file-read 2 5 0 7 6 0
+nu-file-twice 2 7 0 11 11 0
+nu-file-consumed 2 3 0 5 5 0
+nu-file-contexts 3 5 0 10 9 0
+alpha-all-u 1 0 0 2 1 0
+alpha-effect-row 0 0 0 0 0 0
+alpha-row-lift 0 0 0 0 0 0
+alpha-nu-in 5 3 0 12 13 0
+alpha-handle-copies 0 0 0 0 0 0
 clo-depth 2 0 0 29 29 0
 clo-consume 3 0 0 5 5 0
 clo-higher 2 6 0 8 8 0
@@ -377,6 +390,7 @@ poly-providers 2 0 0 90 48 22
 print-borrowed-array 4 0 0 19 6 0
 print-borrowed-list 19 4 0 67 42 0
 quicksort 5 0 0 92301 84255 94774
+raise-in-borrow-branch 4 0 0 7 4 0
 rec-await-exhausted 2 0 0 9 6 0
 rec-deep 30043 0 0 2169443 2169443 436560
 rec-emit 6 0 0 252 252 0

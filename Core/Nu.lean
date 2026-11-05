@@ -83,7 +83,7 @@ step's computation at the node.  At `F A` and `F_Σ A`: run `c ()` and map its r
 At `C & D`:
 `λo. case o {inj₁ _. node_C wr (childV c (inj₁ ())) | inj₂ _. node_D wr (childV c (inj₂ ()))}`.
 At `A ⊸ D`: `λx. node_D wr (childA c x)`, the argument passed on to the step's computation.
-`[spec §7, §22]` -/
+At `∀'x ⊏ @b. D` the same term: `Λ` is `λ_`, its argument `()` passed on.  `[spec §7, §22]` -/
 def nodeV : CTy → Val
   | .ret A => .lam (.val (.lam
       (bindE (.app (.var 0) (.val .unit)) (.app (.app (.val (mapV A)) (.var 2)) (.var 0)))))
@@ -97,6 +97,9 @@ def nodeV : CTy → Val
   | .arr _ D => .lam (.val (.lam (.val (.lam
       (.app (.app (.val (nodeV D)) (.var 2))
         (.val (.lam (.app (.app (.var 2) (.val .unit)) (.var 1)))))))))
+  | .all _ _ D => .lam (.val (.lam (.val (.lam
+      (.app (.app (.val (nodeV D)) (.var 2))
+        (.val (.lam (.app (.app (.var 2) (.val .unit)) (.var 1)))))))))
   | _ => .lam (.val (.lam (.val .unit)))
 
 theorem nodeV_closed : ∀ C : CTy, closedAt 0 (nodeV C).1 = true
@@ -108,7 +111,9 @@ theorem nodeV_closed : ∀ C : CTy, closedAt 0 (nodeV C).1 = true
       simp [nodeV, bindE, closedAt, closedAt_mono _ (mapV_closed (effAns C)) (Nat.zero_le _)]
   | .arr _ D => by
       simp [nodeV, closedAt, closedAt_mono _ (nodeV_closed D) (Nat.zero_le _)]
-  | .top | .all _ _ _ | .nu _ => rfl
+  | .all _ _ D => by
+      simp [nodeV, closedAt, closedAt_mono _ (nodeV_closed D) (Nat.zero_le _)]
+  | .top | .nu _ => rfl
 
 /-- The body of `unfold_C = Z (λself. λg. λs. node_C (λs′. λo. self g s′ o) (λ_. g s))`. -/
 def fBN (C : CTy) : Expr :=
@@ -297,6 +302,16 @@ theorem nodeV_arr_steps (A : VTy) (D : CTy) (wr c x : Val) :
   simp [childA, closed_subst (nodeV_closed D), subst_shift_succ]
   exact .refl
 
+/-- `node_{∀'x ⊏ @b. D} wr c () ↦ node_D wr (childA c ())`. -/
+theorem nodeV_all_steps (x : LifeVar) (b : Lifetime.Life) (D : CTy) (wr c : Val) :
+    PureSteps (.app (.app (.app (.val (nodeV (.all x b D))) (.val wr)) (.val c)) (.val .unit))
+      (.app (.app (.val (nodeV D)) (.val wr)) (.val (childA c .unit))) := by
+  refine (PureSteps.beta_in (.appL (.appL .hole _) _) _ wr).trans ?_
+  refine (PureSteps.beta_in (.appL .hole _) _ _).trans ?_
+  refine (PureSteps.beta _ _).trans ?_
+  simp [childA, closed_subst (nodeV_closed D), subst_shift_succ]
+  exact .refl
+
 theorem childA_steps (c x : Val) :
     PureSteps (.app (.val (childA c x)) (.val .unit)) (.app (.app (.val c) (.val .unit)) (.val x)) := by
   refine (PureSteps.beta _ _).trans ?_
@@ -342,6 +357,12 @@ theorem vC_inst_envS (S A : VTy) (δ : LSub) (b : Bool) (ls : List SRec) :
 /-- The candidate: the codata `unfold step s` at a state `s ∈ 𝒱⟦S⟧`. -/
 def candN (C : CTy) (g : Val) (S : VTy) (δ : LSub) : CPred := fun ls e ρ =>
   ∃ s, e = .val (etaN C g s) ∧ vC true S ls δ s ρ
+
+/-- The candidate depends on `δ` only at the state type's free variables. -/
+theorem candN_congr (C : CTy) (g : Val) (S : VTy) {δ₁ δ₂ : LSub}
+    (h : ∀ y, VFree y S → δ₁.find? y = δ₂.find? y) : candN C g S δ₁ = candN C g S δ₂ := by
+  funext ls e ρ
+  simp only [candN, vC_congr S h true ls]
 
 /-- At a type without `X`, the two environments agree. -/
 theorem vCE_envS_nuEnv {A : VTy} (hA : ¬ A.Occ 0) (S : VTy) (δ : LSub) (C : CTy) (R : CPred)
@@ -416,13 +437,15 @@ theorem effRet_instT_ans (S : VTy) (δ : LSub) : ∀ {C : CTy}, C.EffLeaf →
   | .eff _ _ _ _ _ _ _ C, h => effRet_instT_ans S δ (C := C) h.2.2
 
 /-- **The node lemma**: when `c ()` runs a computation of `D[S/X]`, `node_D (unfold step) c` is
-one unfolding of `D` at the candidate. -/
-theorem node_ok (C : CTy) (g : Val) (S : VTy) (δ : LSub) :
-    ∀ (D : CTy), D.NuLeaf → ∀ (c : Val) (M : Expr) (ls : List SRec) (ρ : WRes),
+one unfolding of `D` at the candidate.  At a `∀'x` leaf the tree is read at `δ[x ↦ α]`, and the
+candidate at `δ` is the candidate there because `'x` is not free in the state type. -/
+theorem node_ok (C : CTy) (g : Val) (S : VTy) :
+    ∀ (D : CTy), D.NuLeaf → (∀ x, D.LeafBinds x → ¬ VFree x S) → ∀ (δ : LSub)
+      (c : Val) (M : Expr) (ls : List SRec) (ρ : WRes),
       PureSteps (.app (.val c) (.val .unit)) M → cC (D.instT S) ls δ M ρ →
       cB (some (nuEnv C (candN C g S δ))) D ls δ
         (.app (.app (.val (nodeV D)) (.val (hN C g))) (.val c)) ρ
-  | .ret A, hA, c, M, ls, ρ, hc, hM => by
+  | .ret A, hA, _, δ, c, M, ls, ρ, hc, hM => by
       show wpTS ls _ _ ρ
       refine wpTS_pureSteps (nodeV_ret_steps A _ c) ls _ ρ ?_
       refine wpTS_pureSteps (PureSteps.plug (.appR (.val (.lam _)) .hole) hc) ls _ ρ ?_
@@ -436,18 +459,27 @@ theorem node_ok (C : CTy) (g : Val) (S : VTy) (δ : LSub) :
         simp [closed_subst (mapV_closed A), subst_shift_succ]
       rw [e]
       exact wpTS_pureSteps hs ls' _ σ (wpTS_val ls' w' _ σ h')
-  | .amp D₁ D₂, hD, c, M, ls, ρ, hc, hM =>
+  | .amp D₁ D₂, hD, hS, δ, c, M, ls, ρ, hc, hM =>
       ⟨cB_pureSteps _ D₁ (nodeV_amp₁_steps D₁ D₂ _ c) ls δ ρ
-        (node_ok C g S δ D₁ hD.1 _ (.app M (.val (.inj₁ .unit))) ls ρ
+        (node_ok C g S D₁ hD.1 (fun x hx => hS x (Or.inl hx)) δ _ (.app M (.val (.inj₁ .unit))) ls ρ
           ((childV_steps c _ rfl).trans (PureSteps.plug (.appL .hole _) hc)) hM.1),
        cB_pureSteps _ D₂ (nodeV_amp₂_steps D₁ D₂ _ c) ls δ ρ
-        (node_ok C g S δ D₂ hD.2 _ (.app M (.val (.inj₂ .unit))) ls ρ
+        (node_ok C g S D₂ hD.2 (fun x hx => hS x (Or.inr hx)) δ _ (.app M (.val (.inj₂ .unit))) ls ρ
           ((childV_steps c _ rfl).trans (PureSteps.plug (.appL .hole _) hc)) hM.2)⟩
-  | .arr A D, hD, c, M, ls, ρ, hc, hM => fun v ρ₁ ρ₂ hv hcomp =>
+  | .arr A D, hD, hS, δ, c, M, ls, ρ, hc, hM => fun v ρ₁ ρ₂ hv hcomp =>
       cB_pureSteps _ D (nodeV_arr_steps A D _ c v) ls δ ρ₂
-        (node_ok C g S δ D hD.2 (childA c v) (.app M (.val v)) ls ρ₂
+        (node_ok C g S D hD.2 hS δ (childA c v) (.app M (.val v)) ls ρ₂
           ((childA_steps c v).trans (PureSteps.plug (.appL .hole _) hc)) (hM v ρ₁ ρ₂ hv hcomp))
-  | .eff n i q A B fin rc D, hD, c, M, ls, ρ, hc, hM => by
+  | .all x b D, hD, hS, δ, c, M, ls, ρ, hc, hM => fun α ρ₁ ρ₂ hα hcomp => by
+      have hcand : candN C g S δ = candN C g S (δ.extend x α) :=
+        candN_congr C g S (fun y hy =>
+          (find?_extend_ne δ α (fun e => by subst e; exact hS x (Or.inl rfl) hy)).symm)
+      rw [hcand]
+      exact cB_pureSteps _ D (nodeV_all_steps x b D _ c) ls _ ρ₂
+        (node_ok C g S D hD (fun y hy => hS y (Or.inr hy)) (δ.extend x α) (childA c .unit)
+          (.app M (.val .unit)) ls ρ₂
+          ((childA_steps c .unit).trans (PureSteps.plug (.appL .hole _) hc)) (hM α ρ₁ ρ₂ hα hcomp))
+  | .eff n i q A B fin rc D, hD, _, δ, c, M, ls, ρ, hc, hM => by
       have hR := EffLeaf.ans_poly (C := D) hD.2.2
       show effWp _ _ (effRetE _ D δ) ls _ ρ
       have hM' : effWp (CTy.eff n i q A B fin rc D).divAt (OpTab.ext n i
@@ -522,7 +554,8 @@ theorem node_ok (C : CTy) (g : Val) (S : VTy) (δ : LSub) :
 /-- The candidate is a post-fixed point of `νX. C`'s functor: each observation path runs the
 same path of the step and returns its result with every state `s′` replaced by
 `unfold step s′`, back in the candidate. -/
-theorem candN_post {C : CTy} (hC : C.NuOk) {S : VTy} {δ : LSub} {g : Val}
+theorem candN_post {C : CTy} (hC : C.NuOk) {S : VTy} (hS : ∀ x, C.LeafBinds x → ¬ VFree x S)
+    {δ : LSub} {g : Val}
     (hg : ∀ ls, vC true (.bang (.thunk (.arr S (C.instT S)))) ls δ g PMap.empty) :
     (candN C g S δ).Le (nuF C δ (candN C g S δ)) := by
   rintro ls e ρ ⟨s, rfl, hs⟩
@@ -531,16 +564,17 @@ theorem candN_post {C : CTy} (hC : C.NuOk) {S : VTy} {δ : LSub} {g : Val}
     hthunk ls (Ext.refl _ _) s ρ ρ hs (ResU.CompS.comm (ResU.comp_empty_right ρ))
   cases C with
   | amp C₁ C₂ =>
-      have hN := node_ok (.amp C₁ C₂) g S δ (.amp C₁ C₂) hC (rootV g s) _ ls ρ
+      have hN := node_ok (.amp C₁ C₂) g S (.amp C₁ C₂) hC.1 hS δ (rootV g s) _ ls ρ
         (rootV_steps g s) hstep
       exact ⟨cB_pureSteps _ C₁ (etaN_obs _ g s _) ls δ ρ hN.1,
         cB_pureSteps _ C₂ (etaN_obs _ g s _) ls δ ρ hN.2⟩
-  | _ => exact hC.elim
+  | _ => exact hC.1.elim
 
 /-- **`unfold` is sound**: `unfold : !U(S ⊸ C[S/X]) ⊸ !U(S ⊸ νX. C)` at every positive `C`
-and every `S`.  `[spec §7]` -/
+and every `S` in which no lifetime bound by a `∀` leaf of `C` is free (`C[S/X]` puts `S` under
+those binders).  `[spec §7]` -/
 theorem unfold_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {C : CTy} (hC : C.NuOk) (S : VTy)
-    (hΓ : Ctx.DeadP Γ) : SemV Δ Γ (.val (unfoldV C)) (unfoldTy C S) := by
+    (hS : ∀ x, C.LeafBinds x → ¬ VFree x S) (hΓ : Ctx.DeadP Γ) : SemV Δ Γ (.val (unfoldV C)) (unfoldTy C S) := by
   intro δ γ ls ρ _ hg₀
   have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg₀).2
   subst hρ
@@ -559,7 +593,7 @@ theorem unfold_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {C : CTy} (hC : C.NuOk) (S 
   rw [eq_of_compS_empty_left hc]
   refine cC_head (.nu C) (fun μ => Head.beta μ _ s) rfl ls₂ δ ρ₂ ?_
   rw [hN_subst]
-  exact fun _ => nuRel_coind (candN_post hC hg) ls₂ _ ρ₂ ⟨s, rfl, hs⟩
+  exact fun _ => nuRel_coind (candN_post hC hS hg) ls₂ _ ρ₂ ⟨s, rfl, hs⟩
 
 /-! ### `νX. C` and its unrolling -/
 

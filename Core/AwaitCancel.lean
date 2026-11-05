@@ -88,11 +88,11 @@ theorem not_der_perform_await {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row}
     ¬ CDerives Δ Γ (performE (opArgE 1 0 V)) (.comp (CTy.effOf S B)) := by
   intro h
   obtain ⟨j₀, ⟨S₀, o, hf, -, hrc, rfl⟩, hr⟩ := der_performJ h 1 0 V rfl
-  obtain ⟨o', hf', hle⟩ := JR.rowLe hr 1 0 o hf
+  obtain ⟨o', hf', hle⟩ := (JR.rowLe hr).find hf
   have hF : ∃ F, Row.find S 1 0 = some (awaitF F) := hS.elim (fun h => ⟨_, h⟩) id
   obtain ⟨F, hF⟩ := hF
   rw [hF] at hf'; cases hf'
-  have := hle.1.rc_eq
+  have := hle.keys.2.1
   rw [hrc] at this; cases this
 
 /-- **`[raise]` refuses the cancel target at every row it is read at**: a plain `raise` of `(1, 1)`
@@ -102,9 +102,9 @@ theorem not_der_raise_cancelled {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Ro
     ¬ CDerives Δ Γ (raiseE (opArgE 1 1 V)) (.comp (CTy.effOf S B)) := by
   intro h
   obtain ⟨j₀, ⟨S₀, o, B₀, hf, -, hrc, rfl⟩, hr⟩ := der_raiseJ h 1 1 V rfl
-  obtain ⟨o', hf', hle⟩ := JR.rowLe hr 1 1 o hf
+  obtain ⟨o', hf', hle⟩ := (JR.rowLe hr).find hf
   rw [hS] at hf'; cases hf'
-  have := hle.1.rc_eq
+  have := hle.keys.2.1
   rw [hrc] at this; cases this
 
 theorem not_der_perform_rowAwait {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {B : VTy} :

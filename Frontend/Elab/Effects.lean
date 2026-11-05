@@ -1,3 +1,4 @@
+import Frontend.Elab.SurfAlpha
 import Frontend.Parser
 import Frontend.Print
 import Frontend.Elab.Subst
@@ -80,7 +81,7 @@ the handler that serves it, before the rest of the sugar; it knows no effect by 
 
 What is not provided, with the message that says so: an operation inside a closure or block that
 is not run in place, other than an effectful block; a block parameter stored; a function with a
-row passed as a value (effectful callbacks, #161); a lend `&mut x` in the arguments of a call that threads a capability; an operation of an answering
+row passed as a value (effectful callbacks, #161); a lend `&mut x` in the arguments of an operation, of a block's call or of a recursive group's own call; an operation of an answering
 effect inside a clause; an effect with both kinds of operation; type parameters on an answering
 effect; an unrestricted operation that answers `never` (`multi ctl`: an abortive operation is
 cancellable, decision 63); a function with a row whose result is a computation (a loop or a
@@ -88,7 +89,7 @@ generator).
 -/
 
 namespace Frontend.Elab.Effects
-open Frontend.Check (CVTy)
+open Frontend.Check (CVTy tyEqVs)
 
 /-! ### What is declared -/
 
@@ -535,9 +536,9 @@ where
       | .lapp _ P' a, .lapp _ A' b => if a.strip == b.strip then go k σ P' A' else none
       | P, A => if same P A then some σ else none
 
-/-- `matchTyBy` with types compared as written. -/
+/-- `matchTyBy` with types compared as written, up to the names of their binders (`VTy.alphaEq`). -/
 def matchTy (tps : List String) (σ : TySubst) (P A : VTy) : Option TySubst :=
-  matchTyBy (fun a b => a.strip == b.strip) tps σ P A
+  matchTyBy VTy.alphaEq tps σ P A
 
 /-- The type names `A` mentions among `tps`. -/
 def mentions (tps : List String) (A : VTy) : Bool :=
@@ -564,11 +565,11 @@ def Env.keyOf (env : Env) (As : List VTy) : Option (List CVTy) := do
   As.mapM (Instances.frame c env.ownerTps).elabV
 
 /-- Two lists of type arguments are one instance's: equal as types, or, when they are not types of
-the frame, as written.  `[spec §38]` -/
+the frame, as written, each up to the names of their binders (`tyEqVs`, `alphaEqs`).  `[spec §38]` -/
 def Env.sameArgs (env : Env) (a b : List VTy) : Bool :=
   a.length == b.length && match env.keyOf a, env.keyOf b with
-    | some x, some y => x == y
-    | _, _ => a.map VTy.strip == b.map VTy.strip
+    | some x, some y => tyEqVs x y
+    | _, _ => alphaEqs a b
 
 /-- An instance as the messages write it. -/
 def instText (e : String) (As : List VTy) : String :=
@@ -2323,7 +2324,8 @@ def fnCall : Nat → Cx → List Cap → Span → Val → String → FSig → Va
     -- A named slot with no handler of its name here is reported where its copy is made.
     let named := row.any fun i => i.name.isSome && (cx.capFor i).isNone
     if used.isEmpty && (cx.ctl row).isEmpty && !named then return ← plainApp k cx cs sp f W
-    noLend sp s!"`{x}`" W
+    -- A place lent in the arguments is lent by the typed elaboration around the call, in the
+    -- unwinding form of its borrow at the operations the call performs (`Sugar.lendEffCall`).
     let (b, W') ← goV k cx cs W
     let name ← copyFor k cx sp x g row []
     let f' : Val := match f with
@@ -3196,7 +3198,7 @@ def deepCopy : Nat → Env → Span → String → String → String → EM Stri
     let A := sumTys gsp (G.members.map (·.2.P))
     let some (_, f₀) := G.members.head? | throw ⟨gsp, "internal error: an empty group"⟩
     let B := f₀.T
-    if let some (y, _) := G.members.find? (·.2.T.strip != B.strip) then
+    if let some (y, _) := G.members.find? (!·.2.T.alphaEq B) then
       throw ⟨sp, s!"`{y}` answers a type other than `{x}`'s: members with different result types " ++
         s!"are not provided under the heap driver `{d}`"⟩
     let rs : RSelf := ⟨G.members.map (·.1), 0, "", [], [], [], true⟩

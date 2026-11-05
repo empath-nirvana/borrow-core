@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.35 · 2026-11-04
+Version 1.38 · 2026-11-05
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -171,7 +171,8 @@ data is materialized, and gives codata (`&`, and the formers of §7) a home.
 the CBPV formers (`thunk`, `force`, `return`, `to`, `λ`, application, `⟨·,·⟩`, projections),
 the lifetime `∀` (elimination at every `C`), the `!` rules of §2, `[]I` at every value type,
 `⊑Imm`/`⊑Mut`, one constant per borrow axiom of `[TR]` p. 3 at arbitrary value-type payloads,
-and three call-by-value derived forms (`lolliE`, `allEV`, `ofRet`). No new machine rules.
+three call-by-value derived forms (`lolliE`, `allEV`, `ofRet`), and conversion up to the names of
+lifetime binders (`[α]`, *Lifetime binders and `[α]`* below). No new machine rules.
 
 ### Semantics
 
@@ -292,11 +293,122 @@ mention none of its binders. Two kinds of body are still checked once per lifeti
 - one with a borrow, whose type `∀'x ⊏ ⊓Δ. …` the context changes (the borrow rules' type reads
   `⊓Δ`, so no derivation at a smaller context is one at a larger);
 - one whose type has a lifetime binder: the binder is numbered from the context (`Δ.freshVar`), so
-  the type elaborated at the use is another `VTy` than the one checked, and the checker compares
-  types as they are. A renaming of typed derivations' lifetime binders would place it.
+  the type elaborated at the use is another `VTy` than the one checked. `[α]` (below) relates the
+  two types; placing the body without checking it again would also need its derivation's binders
+  renamed, which is not built.
 
 In #509's reproduction (`print_f64` twice) that is 179 keys and 249 checks, of which 36 are bodies
 with a borrow and 34 bodies whose type has a binder.
+
+**Lifetime binders and `[α]` (#808).** A term's lifetime context numbers its variables from `0`: a
+function's lifetime parameters, `Fun`, a borrow's lifetime, `'main` (`Δ.freshVar`), and the
+elaborator names a type's binder `forall 'x < @b. C` or `all 'x < @b. A` the same way. So one
+written type elaborated in two lifetime contexts can be two `VTy`s that differ only in their
+binders' names, as `File<'c>` (§22) is in `main` and in `file_read<'a, 'c>`. The kernel accepts a
+term at every type equal to its own up to those names, by one rule of `CDerives`:
+
+    Δ; Γ ⊢ e : j     j ≡α j'
+    ────────────────────────  [α]
+         Δ; Γ ⊢ e : j'
+
+- **The relation.** `j ≡α j'` is `Jdg.alphaB j j' = true` (`Core/Fundamental.lean`): `VTy.alphaB`/
+  `CTy.alphaB` at no binder pairs (`Core/Types.lean`). The binders are `CTy.all` alone (`VTy.all`
+  is `U (∀'x ⊏ @b. F A)`); passing `∀'x ⊏ @b. C` and `∀'x' ⊏ @b'. C'` pairs `'x` with `'x'`, and
+  a variable is read through the innermost pair that binds it on either side, or is free on both.
+  An effect row's operations are compared at their argument, answer and cancel row like every other
+  type (`OpSig.AlphaEq`, `RowAlpha`). It is an equivalence (`VTy.alphaB_refl`, `_symm`, `_trans'`,
+  `Core/Alpha.lean`).
+- **Rows and the effect context.** A row is tied to the effect context `Ξ` up to α (`RowAt`,
+  `OpAt`, `Core/Tied.lean`): an operation's qualifier is `Ξ`'s and its argument and answer are
+  α-equivalent to `Ξ`'s (`OpSig.AtEntry`), so an operation whose type is elaborated in two lifetime
+  contexts has one signature. A handler's signature is a prefix of `Ξ`'s up to α
+  (`sig_prefix_of_rowAt`); its tags are a prefix of `Ξ`'s qualifiers as before (`hndTags_of_rowAt`).
+  The checker's `sigsOkB` compares an operation's signatures up to α.
+- **Soundness.** At substitutions agreeing on the pairs (`AlphaAgree`), α-equivalent types are one
+  type (`VTy.alphaB_sound`, `CTy.alphaB_sound` into `TyEq`/`CTyEq`), so the relation reads them
+  alike (`cC_alpha`, from `cC_tyEq`). `[α]`'s compatibility lemma is `alpha_compatJ`; it is the
+  rule's one cost under the growth rule.
+- **The checker.** The checker compares two kernel types in one place. `tyEqV`/`tyEqC`
+  (`Frontend/Check/TyEq.lean`) decide equality up to α, and `convVal`/`convComp`
+  (`Frontend/Check/Conv.lean`) carry a checked term from the type it was derived at to the type it is
+  wanted at. Equal types take no node, α-equivalent types take `[α]` (`rAlpha`), and a returner chain
+  `F_Σ′ A′` wanted at `F_Σ A` takes `[sub]` to `Σ` read at `Σ′`'s names (`alignRow`), then `[α]`.
+  These are the sites that compare:
+  - checking against an expected type (`convV`, `convC`);
+  - a bound head lifted to its binding's row (`liftRow`, `atRow`);
+  - the argument of `M x` (`appIt`: `M` carried to the argument's type);
+  - the binder of `fun (x : A) -> M` (checked at the annotation, then carried to the expected
+    `A₀ -o C`);
+  - `nu_in M` synthesized (the `ν` type found under the observations' arguments and `∀` binders,
+    `M` carried to its unrolling);
+  - `withbor2r`'s annotation against the lent cell's type (the lend is at the cell's type);
+  - `shorten`'s operand against its family;
+  - a handler's clause tuple against the type its reading rebuilds (`clausesReadAt`, `convVal`);
+  - a `handle` site's record against the node's operations (`tyEqEnts`);
+  - the program's operation signatures (`sigsOkB`, `sigsErr`);
+  - derived copies (`withCopiesC`, `withCopiesVC`);
+  - the backend's `handle` nodes of one static name, which a direct call needs at one outer row and
+    one signature (`directFacts`, `Backend2/Driver.lean`: `tyEqC` at the rows, `tyEqEnts` at the
+    operations). Copies of one site from generic instances at different lifetime contexts spell
+    their binders differently (`corpus/alpha-handle-copies.bc`, erased).
+
+  `alignRow` reads each operation the synthesized row finds, and each layer of its cancel row at
+  every depth (`alignFin`), at the synthesized names. So a cancel row that grows and names its
+  binders differently is `[sub]` then `[α]`. `rowLeB` decides `[sub]`'s `RowLe` with cancel rows
+  growing (`finLeB`, `Frontend/Check/Decide.lean`). The written cancel rows are `F 1` (`elabRow`),
+  so the case is exercised on the rows themselves (`alignRow_grow_renamed`).
+
+  Some comparisons stay exact, each with its reason in `scripts/type-eq.allow`:
+  - kernel premises stated exactly (`OpSig.Sig` in `[sub]`; `Row.ResumeO`'s binder-free `F 1` and
+    `1`; `FamSide.hinst`);
+  - cache and cell-class keys, where an unequal key is a miss and never a refusal; the backend's
+    cell classes are keyed by `eraseLife`, which sends α-equal types to one type
+    (`VTy.eraseLife_of_alphaB`);
+  - the kernel's derived consume `consumeE A` (SPEC §12), whose one comparison is a key lookup
+    among the keys of the one type it is built at, and the kernel programs built from it;
+  - the IO harness's comparisons against the standard table. Those types are elaborated at the
+    empty lifetime context, where binders are numbered by position, so an α-variant spelling
+    elaborates to the table's term.
+
+  The elaborator (`Frontend/Elab/`, `Frontend/Sugar.lean`) compares kernel types through the same
+  `tyEqV`/`tyEqC`: generic inference (`matchV`, `matchC`, `phUnify`, `specTy`), instance keys
+  (`Env.sameArgs`, `sameTy`), the readers of loop, iterator, generator and `sized` types
+  (`loopRowOf`, `iterOf`, `pullOf`, `sizedOf`), and the loop plans' tests of their value types.
+  `corpus/alpha-generic-arg.bc` infers a generic argument from two α-variant types.
+
+  `scripts/check-type-eq.sh` (a gate step) reads the elaborated declarations of every compiled
+  module (`bcc`'s import closure outside `Core`, `Support` and `Paper`: `Frontend`, `Backend`,
+  `Backend2`) and refuses any other equality of `VTy`, `CTy`, `OpSig` or a row decided at run
+  time, directly or through a kernel declaration that decides one (`scripts/TypeEq.lean`).
+
+  Surface types name their binders, so α does arise there. The elaborator compares them up to the
+  names of their binders (`VTy.alphaEq`, `Frontend/Elab/SurfAlpha.lean`: every lifetime binder and
+  `mu`/`nu` binder renamed by its depth, spans dropped). It does so where two surface types are
+  compared as types: the effects pass's matching of type arguments (`matchTy`), instance keys
+  written as surface types (`Env.sameArgs`, `sameTy`), a recursive group's result types, and a
+  datatype's own parameters. The caches of generic instances and of higher-order copies key on the
+  same renaming (`makeInst`, `copyOf`). The other surface comparisons are of terms and
+  declarations, or test whether a type mentions a name by substituting for it. None of them
+  compares two types. The census does not cover surface types.
+
+  The `[α]` node erases to its premise's term, and the backends read through it
+  (`transparent?`).
+- **Inversions.** `[α]` concludes with its premise's term, so it is a same-term step (`JS.alpha`,
+  `VS.alpha`, `Core/Inversions.lean`), and what an inversion gives is up to `≡α`: views keep their
+  head up to `≡α` (`VView.hnf`, `Hnf.alpha`), a rigid type is read at its α-equivalents
+  (`JR.rigid`), an `&` at α-equivalent `&`s (`JR.amp_amp`, through `CTy.alphaB_unroll` at two
+  positive bodies), a λ-value's binder at an α-equivalent of the type it is read at
+  (`lam_bang`, `lam_arr`, `der_clause_body`), and a row at the rows `[sub]`'s order and `[α]` reach
+  (`RowReach`, `JR.rowLe`), whose operations keep their key, qualifier, mark and answer's `0`-ness
+  and reach their cancel rows (`OpReach`, `FinReach`).
+- **The inversions' cost** (CLAUDE.md, *Do not invert `CDerives` casually*). `[α]` is a same-term
+  rule, so every inversion takes it as a step and gives its facts up to α. The change against the
+  rule-free baseline: `Core/Inversions.lean` +483/−203, `Core/Rejections.lean` +194/−141,
+  `Core/EffCancelTyped.lean` +186/−109, `Core/AwaitCancel.lean` +4/−4, and `Core/Tied.lean`
+  +67/−31 for the tie up to α; `Core/Alpha.lean` (921 lines) holds the α lemmas the inversions and
+  the checker use. Persistence is kept (`VTy.alphaB_persistent`), so
+  each refusal (`refuses_R_clauses`, `not_der_at05`, `not_der_at06`, `not_der_at08`,
+  `not_der_at13`, `not_der_progT`, `not_der_e7c`) holds as before.
 
 **The elaborator's keys.** A `use` node records the elaborator's key of the `def` (`TInfo.key`,
 `Frontend.DefKey`), when the elaboration generated it: a template instance's template and type
@@ -441,17 +553,28 @@ over it; a new codata shape is a new abbreviation, and a library of iterator ada
 rest of the codata". Every observation of a `νX. C` returns, possibly among other values, a
 thunk of the rest.
 
-**Positivity** (`CTy.NuOk`). `C` is a `&` of two observation trees, and an observation tree is
-an `F A`, a `&` of two observation trees, or an observation that takes a closed argument,
-`A ⊸ D` with `X` not in `A` and `D` an observation tree (§22). In each result `A`, `U X` occurs
-only under `⊗`, `⊕` and `[@a]`: `A` is `U X`, `B ⊗ B'`, `B ⊕ B'` or `[@a] B` of such types, or a
-type in which `X` does not occur (`VTy.Poly`). So `X` is never in an argument, under a `Ref`, a
-borrow, a `!`, a `μ` or another `U`, and a `νX. C` always has at least two observations.
+**Positivity** (`CTy.NuOk`). `C` is a `&` of two observation trees (`CTy.NuShape`), and an
+observation tree is an `F A`, a `&` of two observation trees, an observation that takes an
+argument, `A ⊸ D` with `X` not in `A` and `D` an observation tree (§22), or an observation
+quantified over a lifetime, `∀'x ⊏ @b. D` with `D` an observation tree (§22). In each result
+`A`, `U X` occurs only under `⊗`, `⊕` and `[@a]`: `A` is `U X`, `B ⊗ B'`, `B ⊕ B'` or `[@a] B` of
+such types, or a type in which `X` does not occur (`VTy.Poly`). So `X` is never in an argument,
+under a `Ref`, a borrow, a `!`, a `μ` or another `U`, and a `νX. C` always has at least two
+observations. An argument's lifetimes are unrestricted: `Mut 'x A ⊸ D` under `∀'x` takes a borrow
+lent for that one call. **Binder freshness:** no lifetime bound by a `∀` leaf is free in `C`, so
+the unrolling `C[U(νX. C)/X]`, which puts `U(νX. C)` under those binders, captures none.
+
+`X` is kept out of arguments because an argument is a negative position: one unfolding is
+monotone in the candidate for `U X` (below) only while the argument does not read it.
+Lifetimes are not type variables, so `X ∉ A` (`A.Cl 0`) places no restriction on them; what an
+observation taking a borrow needs is the `∀` leaf (#808).
 
 **Relation.** At a positive `C`, `𝒞⟦νX. C⟧` is the greatest fixed point of one unfolding of the
 observation tree, with a candidate `R` for `U X`: `⋃{R | R ⊆ Φ_C(R)}`, written in `Prop` as
 `∃ R` (`docs/scope-recursion.md` §3.1). `Φ_C` is monotone because `X` is outside every `Mut`
-payload. It needs no approximation of `νX. C` and no step index.
+payload and every argument. It needs no approximation of `νX. C` and no step index. `cC` reads
+the shape (`NuShape`) as its guard; freshness is syntactic, not invariant under renaming a
+binder, and the rules carry it through `NuOk`.
 
 **In and out.** `C[U(νX. C)/X]` is the unrolling:
 
@@ -462,7 +585,8 @@ payload. It needs no approximation of `νX. C` and no step index.
 on the same term, at a positive `C`. Observing a `νX. C` is `nuOut` followed by the projections
 of the unrolling.
 
-**Coiteration.** At every positive `C` and every state type `S`:
+**Coiteration.** At every positive `C` and every state type `S` that mentions no lifetime
+bound by a `∀` leaf of `C` (`CTy.BindsFresh`, since `C[S/X]` puts `S` under those binders):
 
     unfold : !U(S ⊸ C[S/X]) ⊸ !U(S ⊸ νX. C)
 
@@ -2725,25 +2849,36 @@ names.
   operation that resumes makes the loop a div loop instead (§16, *Effectful bodies*).
 - *In a borrow block's body*: the block is the unwinding form of its borrow (§19), at the
   operations its body performs, which must be abortive (a resuming one is T1, #172); its callback
-  is ascribed its row. An unwind ends the lend, and the lender's finaliser runs.
+  is ascribed its row. An unwind ends the lend, and the lender's finaliser runs. A buffer's or a
+  literal's block is its scheme (§17) with the array's lend in the unwinding form
+  (`slice_borrow_*_u`), ascribed the scheme's type (`corpus/buf-lend-raise.bc`,
+  `lit-lend-raise.bc`). The unwinding form of a marked scheme (a lent cell's, a literal's view,
+  §57) is not marked, so a literal's view crossed by an abort tabulates its table into an array
+  that is not the literal's read-only bytes.
+- *In a call that lends a place*: `f(…, &mut x, …)` or `f(…, &x, …)` at a borrow parameter of a
+  function that performs operations of the row is the borrow of the call (§11's lend) in its
+  unwinding form at those operations, which must be abortive: `withbor2U`/`withbor1U` of a cell,
+  of a cell scoped to the call for a `let mut` value, or `slice_borrow_*_u` of an array. `x` is
+  rebound from what the borrow hands back. A capability the call threads is passed beside it, its
+  lifetime parameter read off the capability's borrow (`corpus/lend-call-raise.bc`).
 - *With answering capabilities in use*: the body of a control `with` is given a reborrow of each
   capability it uses (`withbor3`), so that the capability comes back when the body is abandoned.
 
 **Consume glue** is the checker's (§19): a binding whose head may abort, at a row that cancels
-(`Row.Cancels`), puts the consumes of the slots the rest uses in a `[then]` finaliser. A value
+(`Row.Cancels`), puts the consumes of the slots the rest uses in a `[then]` finaliser, in §12's
+reverse binding order, as at the end of a path (`corpus/sugar/finaliser-order.bc`). A value
 that is not consumable (§12, group 3) live across such a binding is rejected, naming it.
 
 **Not provided**, each rejected with a message that says so: an operation inside a closure or
 block that is not run in place, other than a block passed at a parameter of function type (§30),
 and a function with a row passed as a value other than at a parameter of function type, where
 it is the block that calls it (§33; stored callbacks, #161 part B; for a fold's algebra that
-raises, K4 below); a lend `&mut x` in the arguments of a call that
-threads a capability; an operation of an answering effect inside a clause of an answering handler;
+raises, K4 below); a lend `&mut x` in the arguments of an operation, of a block's call (§30) or of
+a recursive group's own call (§20); an operation of an answering effect inside a clause of an answering handler;
 a function with a row whose written result is a computation (a loop); type parameters on an
 answering effect; an effect with both kinds of operation; an unrestricted operation that answers
 `never` (`multi ctl`, above); a `let mut` declared outside a control `with` and assigned in it, or
-a place lent in it; a borrow of a buffer or a literal crossed by an abort. Several instances of one
-effect are §38's, with what it does not provide.
+a place lent in it. Several instances of one effect are §38's, with what it does not provide.
 
 ### Reports
 
@@ -3381,7 +3516,8 @@ Richer policies are K3 (#162), and *Open*:
   state in the loop's state.
 - **As built** (`Core/Types.lean`, `Core/Relation.lean`, `Core/NuRel.lean`, `Core/Nu.lean`):
   - an observation tree's leaf is `F A` or `F_Σ A` (`CTy.EffLeaf`): a row's layers with closed
-    operation types over `F A`, `A` polynomial in `X`;
+    operation types over `F A`, `A` polynomial in `X`; it may sit under arguments and `∀` leaves
+    (§22), and its operation types are then read at the leaf's lifetime substitution;
   - `cB` at `F_Σ A` is `ewpTS` at the row's table, with the answer at the candidate (`effRetE`);
   - `instT` passes through a row's layers, so `unfold` coiterates an effectful step, mapped
     through the `[let]` frame (`node_ok`);
@@ -4338,6 +4474,78 @@ the step's computation (`nodeV`, `node_ok`, `Core/Nu.lean`). The map at `[@a] B`
 
 Every body positive before is positive after, and `nuIn`, `nuOut` and `unfold` cover the new
 shapes through these cases, with no new compatibility lemma.
+
+### Observations that take borrowed arguments: `∀` leaves (#808)
+
+An observation tree may also be `∀'x ⊏ @b. D` over an observation tree `D` (`CTy.NuLeaf`). With
+it an observation takes a borrow lent for one call: `∀'x ⊏ ⊤. Mut 'x A ⊸ F(B ⊗ [@c] U X)` and
+`∀'x ⊏ ⊤. Imm 'x A ⊸ …`, and in general any argument type that mentions the bound lifetimes.
+
+- **Why it was missing.** `A ⊸ D` needs `X ∉ A` (`A.Cl 0`), which says nothing about lifetimes:
+  `Mut 'x A ⊸ D` with `'x` free was already an observation tree. The gap was that `NuLeaf` had no
+  `∀` case, so a lifetime could not be quantified at the observation, and every call shared one
+  lend. `X ∉ A` stays: it keeps `X` out of a negative position (`cB_mono`'s `⊸` case passes the
+  argument through unchanged, and an argument that read the candidate would need it antitone).
+- **Positivity.** `NuOk C` is `NuShape C` and binder freshness: no `'x` bound by a `∀` leaf is free
+  in `C` (`CTy.LeafBinds`). `unfold` asks the same of its state type (`CTy.BindsFresh`). The
+  checker decides both (`CTy.nuOkB`, `CTy.bindsFreshB`); a written type is fresh by construction,
+  since a binder is named `Δ.freshVar`, past every variable the body's free lifetimes name.
+- **Relation.** `cB` at `∀'x ⊏ @c. D` is `cC`'s `∀` clause:
+  `∀α, ⌜δ ⊨ α ⊏ c⌝ ─⋆ cB η D (δ[x ↦ α]) (e ())`. The candidate for `U X` is read at no lifetime
+  substitution (`nuP`), so the rest an observation answers does not depend on `α`. One
+  unfolding at the relation is the unrolling with the candidate at `δ` and the tree at an
+  agreeing `δ'` (`cB_unroll`, `vCE_nuEnv_at`); under a `∀'x` leaf `δ[x ↦ α]` still agrees on
+  `νX. C` because `'x` is not free in `C`. Monotonicity (`cB_mono`) gains the `∀` case. Up to
+  `TyEq` (`cB_tyEq`) the two sides may extend by different binder names; one unfolding never
+  reads the type the environment gives `X`, only its candidate (`vCE_poly_ty`, `cB_poly_ty`), so
+  it is compared at the type `1` on both sides (`nuEnvU`).
+- **Coiteration.** The node at `∀'x ⊏ @b. D` is the node at `⊸` with the argument `()` (`Λ` is
+  `λ_`; `nodeV_all_steps`). In `node_ok` the candidate at `δ` is the candidate at `δ[x ↦ α]`
+  because `'x` is not free in the state type (`candN_congr`).
+- **The rest leaves a lend only boxed.** `U` has no outlives rule, so a rest that is to outlive the
+  lend its call is made in is `[@c] U X`, as in `Clo`. A lend's callback answers `['y] B` with `'y`
+  not in `B` (`withbor`); `B = I32 ⊗ [@c] U(νX. C)` qualifies when `'c` is outside the lend. The
+  rest's type cannot mention the call's `'x` (it is `νX. C`, formed outside the binder), and the
+  lend's existing compatibility lemma returns the lent cell.
+- **Surface.** `forall 'x < @b. C` in a `nu` body, `Fun 'x < @b. M` for the observation, `M['a]` to
+  instantiate it; a call with `&mut buf` is `borrow mut buf { 'w, m -> f(…, m) }` over a function
+  that instantiates the observation at its own lifetime parameter. No judgment, rule or
+  elaboration is added.
+- **Kernel derivations** (`Core/NuBorrow.lean`): `File^c`'s body is positive (`fileBody_nuOk`);
+  a `read` called on a lent `Mut 'y I32` and a `write` on a lent `Imm 'y I32` derive in `CDerives`
+  at `F(I32 ⊗ [@c] File^c)` (`d_fileRead`, `d_fileWrite`), covered by `fundamentalC`
+  (`fileRead_sem`, `fileWrite_sem`); `∀E` at the lend's lifetime leaves the rest's type
+  `File^c` (`fileRead_inst`, `fileWrite_inst`).
+- **A closed program** (`Core/NuBorrowPrograms.lean`): `File^⊤` made by `unfold` over a state
+  `Ref I32`, its `read` called inside a `withbor` of a buffer lent `mut` (`withbor2`), the rest
+  leaving the lend as `[⊤] U File^⊤`, its `write` inside a second lend `imm` (`withbor1`), then
+  `close` and the buffer freed. This is one closed `CDerives` derivation (`d_fileReadProg`), run by
+  `adequacyC` from the empty memory to `()` and the empty memory (`fileReadProg_runs`). Its variant
+  `d_fileReadOut` answers what each step returned, `(1, (12, (5, 5)))`, with no cell left
+  (`fileReadOut_eval`). The methods use their borrows. `read` exchanges the buffer's and the
+  state's contents through the `Mut 'x I32` (`withswap`): the buffer, 7, takes the state's 5, and
+  the state takes 7. `write` loads the buffer's 5 through the `Imm 'x I32` (`withload`), stores it
+  into the state, and answers the state's old 7 plus 5. `close` answers the state, 5, and the
+  owner frees the buffer at 5. Each value is read back after its lend ends.
+  `fileTwice` and `fileConsumed` are not derived in the kernel. They run as corpus programs
+  (below).
+- **Programs** (each at its golden from `bcc interp`, through every stage and backend):
+  `corpus/nu-file-read.bc` (lend `mut` to `read`, the buffer back, lend `imm` to `write`, `close`,
+  free: `i32[121215]`), `corpus/nu-file-twice.bc` (two reads inside one lend, the first through a
+  reborrow, one after: `i32[72123]`) and `corpus/nu-file-consumed.bc` (the object closed by its
+  implicit consume: `i32[71]`). Each calls the observations through functions of their own
+  lifetime parameters (`file_read<'a, 'c>`), so `File<'c>` is elaborated in several lifetime
+  contexts, with other binder names in each; the checker relates them by `[α]` (§3, *Lifetime
+  binders and `[α]`*). `corpus/nu-file-contexts.bc` writes the type in two contexts whose numbering
+  differs and passes the object between them, and `corpus/alpha-all-u.bc` uses one type written
+  as `all 'x < b. A` in one function and as `U (forall 'x < b. F A)` in another.
+- **Baseline.** `fundamentalC`, `adequacyC`, `adequacyD`, `resourceSafety`, `fundamentalC_pin` and
+  `adequacyC_pin` keep their statements. Changed statements: `CTy.NuLeaf` (the `∀` case),
+  `CTy.instT` (passes under `∀`), `CTy.NuOk` (`NuShape` and freshness), `cB` (the `∀` clause),
+  `cC`'s `ν` guard (`NuShape`), `CDerives.unfoldN` and its copies (the premise `BindsFresh`), and
+  at the `ν` level `cB_unroll`/`effRetE_unroll` (the candidate's `δ` apart from the tree's),
+  `cB_tyEq` (an environment related at every pair of substitutions), `node_ok`/`candN_post`/
+  `unfold_compatX` (freshness of the state type), `sSB` (the `∀` clause).
 
 ### The closure
 
@@ -7492,8 +7700,9 @@ counts stay as they were: `aoc/2021-06` (`modulo(day, 9)`, a literal divisor), `
 for two abortive effects in a counted `for`'s body, which §38 provides. The others keep their
 form, each for a limit that applies to any abortive operation (#517), checked again here:
 
-- `aoc/2022-12`, `aoc/2023-03`, `aoc/2024-11`, `aoc/2022-21`: the division is inside `borrow imm s`
-  of the input string, a borrow of a buffer that an abort would cross (§18 *Not provided*);
+- `aoc/2024-11`: `div_u64` and `rem_u64`, which `/` and `%` (signed) would change. `aoc/2022-12`,
+  `aoc/2023-03` and `aoc/2022-21`, kept here for a borrow of a buffer that an abort would cross,
+  use `/` and `%` since that borrow is provided (§18), with their output and counts unchanged;
 - `leetcode/matrix/0054`, `0073`, `0079`: the division is inside `cases`, a loop over the input
   with no bound, and a handler around a div computation is not provided (§20); the refusal is
   reported as a type mismatch against the loop's type, as it is for a `raise` there (#522);
@@ -7592,7 +7801,7 @@ Everything here is backend: no change to the language, the kernel, the checker o
 
 ### Tests
 
-`scripts/compile-native.sh`, a step of `make gate` (passing with a notice when there is no C
+`scripts/compile-native.sh`, a step of `make gate-full` (passing with a notice when there is no C
 compiler, as the book build is skipped without `mdbook`): every corpus program built natively matches its golden standard
 output, standard error, exit status and `live`, which the flat IR is checked against, and
 `bcc-counts --native` agrees with the flat IR; every kernel program prints what it prints at the
@@ -11252,7 +11461,7 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
 
 ## Changelog
 
-- **1.35** (2026-11-04) — §62 (*Semantic types read at the tree*): `F A` is a bare `cerwpT` run
+- **1.38** (2026-11-04) — §62 (*Semantic types read at the tree*): `F A` is a bare `cerwpT` run
   (`SCmp.ret`), Core's `cC (.ret A)`; the Kripke quantifier over later worlds and lists sits at
   `U` only. Thunks are introduced as Core's `thunkF_compatC` does, from the computation at every
   world and list with the environment carried by its monotonicity (`TEnv.Mono`; `STy.thunk_intro_env`,
@@ -11262,16 +11471,16 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
   coverage. `STy.kont_of_share`, `STy.kontBox_resume_after` and the instances keep their
   statements. No change to `twp`, `EndT`, `cerwpT`, `CDerives`, `fundamentalC`, `adequacyC`,
   `adequacyD`, the checker, the backends or the corpus.
-- **1.34** (2026-11-04) — §62 (#795): the scheduler interface over the running task and a stack
+- **1.37** (2026-11-04) — §62 (#795): the scheduler interface over the running task and a stack
   pool (`PoolTJ`, `PoolAns`): tasks above a joiner hold views of what it shares, hand them back at
   their end (`PoolTJ.deposit`), and the joiner is resumed with them; `poolSchedAdequacyT` at the new
   interface. A lend ended at its copies composed (`twp_lendEnd_imm`, through `twp_lendEnd`
   unchanged). `HS` with `par` (a joiner and an unstarted child, `κU`) and indexed tables, so
   children spawn and join at every depth; `progJoin_safe` at every depth. `twp_frame_keep_sh` and
-  `twp_holdsIn` read `EndT` at `UpdA` and `InvKeptA` (1.33). The early join refused
+  `twp_holdsIn` read `EndT` at `UpdA` and `InvKeptA` (1.36). The early join refused
   (`twp_refuses_join_early`). No change to `twp`'s rules, `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the checker, the backends or the
   corpus.
-- **1.33** (2026-11-04) — §62 (#806): `EndT` reads row 5.27's `↭` along the walks (`UpdA`), with
+- **1.36** (2026-11-04) — §62 (#806): `EndT` reads row 5.27's `↭` along the walks (`UpdA`), with
   row 5.27's `mut` clause read by `InvKeptA`: an `imm` cell may be given up to the end world while
   another part holds a copy, and a `mut` cell is read through the `imm` cell it sits beneath
   (`[TR]` 6.48's ancestor technique; `UpdA.frame`, `UpdA.trans`, `recMaskClosed`). Every `twp` rule
@@ -11285,7 +11494,7 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
   results*). Open, #789: the consume at a frame holding the copy only inside another view's
   witness (`HoldsView`). No change to `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the
   checker, the backends or the corpus.
-- **1.32** (2026-11-04) — §62 (#782): the relation's types at the tree (*Semantic types read at
+- **1.35** (2026-11-04) — §62 (#782): the relation's types at the tree (*Semantic types read at
   the tree*): value types (`STy`) read the record list, downward closed and monotone along
   extension and `KeepRel` for every former (`Mut` at a store code); computation types (`SCmp`)
   downward closed, `F A` Kripke along `KeepRel` (`SCmp.ret_kripke`; a bare `cerwpT` run owning
@@ -11296,7 +11505,7 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
   records the share reads", with `contShareT_resume_ext` for the whole-list condition. No change to
   `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, `twp`, `cerwpT`, the checker, the backends
   or the corpus.
-- **1.31** (2026-11-04) — §62 (#781, slice (d)): the per-branch share (`KeepRel`) in
+- **1.34** (2026-11-04) — §62 (#781, slice (d)): the per-branch share (`KeepRel`) in
   `contShareT_resume`'s list condition; a lend's open and end at `twp` (`twp_lendOpen`,
   `twp_lendEnd`); `[handle]` for a scheduler at the program's top (`cerwpT_schedHandle`) and
   adequacy over several branches (`multiBranchAdequacyT`), through `cerwpT_adequacy` at one branch
@@ -11306,6 +11515,45 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
   excluded by the pool invariant. Borrow edges to ancestors are properties of `CactusInvT`
   configurations, with no scheduler instance. No change to `CDerives`, `fundamentalC`,
   `adequacyC`, `adequacyD`, the checker, the backends or the corpus.
+- **1.33** (2026-11-05) — §18, §39 (#810–#814): surface fixes, each an elaboration into existing
+  kernel forms; no `CDerives`, judgment or theorem changes. A borrow block's body boxes no terminal
+  that never returns (#810). The consume glue's finaliser consumes in §12's reverse binding order
+  (#811). A buffer's and a literal's borrow crossed by an abort, and a place lent in a call that
+  may raise, are lent by the unwinding forms (#812–#814); §18 *Not provided* loses those items.
+  The unwinding form of a literal's view is not marked (§57). `aoc/2022-12`, `2023-03` and
+  `2022-21` use `/` and `%`.
+
+- **1.32** (2026-11-04) — §3, §22 (#808): conversion up to the names of lifetime binders. `CDerives`
+  gains `[α]` (`CDerives.alpha`, premise `Jdg.alphaB j j' = true`), and so do its copies
+  (`CDerivesAt`, `CDerivesP`, `TDerivesAt`, `TDerivesP`) and the typed term (`TExpr.alpha`). The
+  rule's compatibility lemma is `alpha_compatJ`, from `cC_tyEq` through `CTy.alphaB_sound`. The
+  checker's `convV`/`convC` compare types up to `≡α`. `check-judgments` is unchanged: a rule, no
+  judgment. `fundamentalC`, `adequacyC`, `adequacyD` and `resourceSafety` keep their statements.
+  Changed statements, at the inversions (`Core/Inversions.lean`): `VView.hnf`, `VView.hnf_of`,
+  `VView.eq_of_heads`, `vview_thunk`, `vview_kBoxO_thunk`, `vview_bang_thunk`, `vview_bang_bang`,
+  `vview_tensor`, `LamCls` and `LamCls.val_thunk`/`val_bang`/`comp_rigid`, `JR.rigid`, `AmpCls`,
+  `JR.amp_amp`, `lam_bang`, `lam_arr`, `der_clause_body`, `der_cancel_lin`,
+  `kcancel_jr_cancellable` (each up to `≡α`), `JR.rowLe` and `cancelTy_rowLe` (`RowReach`, the
+  rows `[sub]`'s order and `[α]` reach, for `RowLe`), and `RowCls`; in `Core/Rejections.lean`
+  `kview`, `kviewO`, `vview_ref`, `not_release_kappa`, `wb_view`, `at05_M`. `[α]` reaches an
+  effect row's operations (`OpSig.AlphaEq`, `RowAlpha`); a row is tied to the effect context up
+  to α (`RowAt`, `OpAt`, `OpSig.AtEntry`), `sig_prefix_of_rowAt` is a prefix up to α, and the
+  checker's `sigsOkB` compares signatures up to α. Every refusal keeps its statement
+  (`not_der_progT`, `not_der_progNCrecT`, `not_der_e7c`, `not_der_perform_await`,
+  `not_der_raise_cancelled` among them). The
+  1.31 naming of a computation type's binders by its body (`CTy.canonBinder`) is withdrawn:
+  binders keep the context's numbering. Programs `alpha-all-u`, `nu-file-contexts`,
+  `alpha-effect-row`.
+- **1.31** (2026-11-04) — §7, §19, §22 (#808): observations quantified over a lifetime. An
+  observation tree may be `∀'x ⊏ @b. D` (`CTy.NuLeaf`), so a codata observation takes a borrow
+  lent for one call (`∀'x. Mut 'x A ⊸ …`, `∀'x. Imm 'x A ⊸ …`). `NuOk` is `NuShape` plus binder
+  freshness; `cC`'s `ν` guard is `NuShape`; `unfold` gains the premise `BindsFresh`; `cB` gains
+  `cC`'s `∀` clause, with `cB_mono`, `cB_unroll`, `cB_congr`, `cB_tyEq`, `cB_iff_stacks`,
+  `cB_step`, `cB_bind` and `node_ok` extended. §7 corrects the earlier reading of `X ∉ A`: it
+  keeps `X` out of a negative position and was never a restriction on lifetimes; the missing
+  piece was the `∀` case. `fundamentalC`, `adequacyC`, `adequacyD` and `resourceSafety` keep their
+  statements. `Core/NuBorrow.lean` derives `read`/`write` calls on lent buffers. Programs
+  `nu-file-read`, `nu-file-twice`, `nu-file-consumed`.
 - **1.30** (2026-11-04) — §62, §12 (#771): the frame form of 1.27 is removed with its programs
   and its file handle; Core has no file-specific definition. `resourceSafety` and `rtSafety` keep
   their statements, in `Core/ResourceSafety.lean`. `kappa_lin_strict` (a must-resume `κ` is

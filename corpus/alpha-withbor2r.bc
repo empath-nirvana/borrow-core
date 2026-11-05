@@ -1,0 +1,21 @@
+-- SPEC §3, §29 (#808): a relaxed lend whose annotation is the cell's type up to `[α]`. `mk`
+-- allocates a cell at `!(all 'z < top. i32)`, elaborated after its `'a` and `'b`; `main`'s
+-- `withbor2r` names the cell's type `!(all 'q < top. i32)`, elaborated in `main`'s context, so the
+-- binders' names differ. The lend is at the cell's own type, the annotation compared up to `[α]`.
+--
+-- Answer: see `alpha-withbor2r.out`: the lend answers 5, and the cell's thunk, freed after the lend
+-- and instantiated, answers 3: 5 * 10 + 3; `live 0`.
+
+fn mk<'a, 'b>(u: i32) -> ref (!(all 'z < top. i32)) =
+  return (alloc[!(all 'z < top. i32)] (!thunkv Fun 'z < top. return i32[3]))
+
+main : F i32 =
+  c <- mk(i32[3]);
+  d <- withbor2r['x, dom, !(all 'q < top. i32), i32, []](c, m) (
+      let () = release_mut['x, !(all 'q < top. i32)] m;
+      return (boxed['x] i32[5]));
+  let (c, r) = d;
+  g <- return (free[!(all 'z < top. i32)] c);
+  k <- return (unbang g);
+  h <- (force k)['main];
+  return (r * i32[10] + h)

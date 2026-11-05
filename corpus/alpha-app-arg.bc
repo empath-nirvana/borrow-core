@@ -1,0 +1,17 @@
+-- SPEC §3 (#808): an application `M x` whose argument's type is the function's up to `[α]`. `kk`
+-- takes `all 'x < top. i32`, elaborated in `main`'s context; `g` is `Fun 'y < top. …`, built inside
+-- the lend, after `'w`, so its binder's name differs. `force kk g` is `M x`: `M` is carried to
+-- `g`'s type by `[α]` (`appIt`).
+--
+-- Answer: see `alpha-app-arg.out`: `g` answers the lent 41, `kk` instantiates it, and the buffer
+-- is freed at 41; `live 0`.
+
+main -> i32 =
+  let buf = alloc(41);
+  let kk = (thunkv fun (g : all 'x < top. i32) -> (force g)['main]);
+  let r = borrow imm buf { 'w, b ->
+     v <- return (*b); return (release_imm['w, i32] b);
+     g <- return (thunkv Fun 'y < top. return v);
+     force kk g };
+  let v = free(buf);
+  r * 100 + v

@@ -1,0 +1,48 @@
+# The declarations of the compiled modules (the checker, the elaborator and both backends: every
+# module of `bcc`'s import closure outside `Core`, `Support` and `Paper`) that may decide an
+# equality of a kernel type (`VTy`, `CTy`, `OpSig`, a row) other than through the
+# type-compatibility helper. Read by scripts/check-type-eq.sh against scripts/TypeEq.lean's census
+# of the elaborated terms. Format: `declaration  reason`. Every other comparison of two types goes
+# through `tyEqV`/`tyEqC`/`tyEqEnts` (Frontend/Check/TyEq.lean) or `convVal`/`convComp`
+# (Frontend/Check/Conv.lean). Adding a line here is the only way past the check, and it shows up
+# in review. A line names a declaration the census lists: one that no longer compares types is
+# refused, so the helper's declarations that compare only through `tyEqV`/`tyEqC` (`tyEqEnts`,
+# `tyEqVs`, `tyEqVo`, `alignRow`, `alignFin`, `convRow`) are not listed.
+
+# The helper itself.
+Frontend.Check.tyEqV  `[α]` at value types: `VTy.alphaB` at no binder pairs
+Frontend.Check.tyEqC  `[α]` at computation types: `CTy.alphaB` at no binder pairs
+Frontend.Check.rowUnion  the rows two premises read, together (`Res.sigs`): a list of signatures, not a comparison of two types; an operation read at α-variants of one signature is kept twice, and `sigsOkB` reads the two as one
+Frontend.Check.convVal  the conversion at value types: the exact case first (no node), then `[α]`
+Frontend.Check.convComp  the conversion at computation types: the exact case first (no node), then `[α]`, then `[sub]` then `[α]`
+
+# Kernel-mandated exact forms.
+BoCa.Fig16.LogRel.Core.Check.OpSig.sigB  `[sub]`'s `OpSig.Sig` compares an operation exactly; `convComp` reads the row at the synthesized names first (`alignRow`), then `[α]`
+BoCa.Fig16.LogRel.Core.Check.Row.resumeOB  `Row.ResumeO` states `o.fin = F 1` and `o.B = 1` exactly; both are binder-free, so α-equal is equal
+BoCa.Fig16.LogRel.Core.Check.Row.resumeOCB  `Row.ResumeOC`: the same premises as `resumeOB`
+Frontend.Check.famSide  `FamSide.hinst` is an exact equation of the kernel's derived rule (`∀E` renames `'c` to `'b`)
+
+# Keys and caches: an unequal key is a miss, never a refusal.
+Frontend.Check.DefEntry.hit?  the cache of checked `def` bodies: a miss checks the body again
+Frontend.Check.DefEntry.lift?  the same cache, placed at a larger lifetime context: a miss checks the body again
+BoCa.Fig16.LogRel.Core.Check.TExpr.cellsAcc  the cell classes' keys: built from the term, and closed by `cellsOkB` under the same key
+BoCa.Fig16.LogRel.Core.Check.reachN  the cell classes, by the same key
+BoCa.Fig16.LogRel.Core.Check.cellsOkB  the classes `cellClasses` built, closed under the key they were built by: holds by construction
+Frontend.Check.Checked.classAt  the backend's lookup of a class by the key it was built at
+Backend2.classOf  the converter's lookup of a cell's class: the key is `A.eraseLife`, and α-equal types have one erasure (`VTy.eraseLife_of_alphaB`), so an α-variant finds the same class
+Backend2.classesOf  the classes the converter reads, keyed by `eraseLife` as `classOf` is (`VTy.eraseLife_of_alphaB`): a capability's cell already in the table at an α-variant is found
+
+# The kernel's derived terms: built at a type the derivation fixes, and stated at that term exactly.
+BoCa.Fig16.LogRel.Core.Check.TExpr.erase  a consume node's term is `consumeE A` (SPEC §12), the term `consume_wf` types; its one comparison is `FoldP.callE`'s lookup of a key in `FoldP.keys B₀`, keys and lookups both read off the one type `B₀`, so no two independently spelled types meet
+BoCa.Fig16.LogRel.Core.Check.TExpr.isLam  whether a node's erasure is a `λ`: reads `consumeE A` as `TExpr.erase` builds it
+Backend.kernelPrograms  the fixed kernel programs `bcc kernel` compiles (Core/EffPrograms.lean, Core/NestedPrograms.lean): closed terms built by `consumeE` at constant types, as `TExpr.erase` builds it
+
+# The IO harness: the program's externs and `main` against the standard table's Lean terms. Both
+# are elaborated at the empty lifetime context, where a binder is numbered by its position
+# (`Frontend/Check/Elab.lean`), so every α-variant spelling of a table type elaborates to the
+# table's term. `IORun.every_run` and `stdModel` are stated at those exact types.
+Frontend.Check.checkExterns  an extern's type against the table's
+Frontend.Check.trustedReport  the same comparison, for `bcc trusted`
+Frontend.Check.modelFor  the model of an extern, by the table's exact type
+Frontend.Check.ioMainOf  `main`'s type against the capabilities' tuple, and a loop's type rebuilt from itself
+Frontend.Check.ioRunOf  the wrapper's type against `ioType`, the type `IORun.every_run` is stated at

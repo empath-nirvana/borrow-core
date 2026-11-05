@@ -52,7 +52,7 @@ abbrev cloUnroll (c : Lifetime.Life) (A B : VTy) : CTy := cloStepC c A B (cloT c
 /-- **Positivity**: at a closed argument type, the closure's body is an observation tree. -/
 theorem cloBody_nuOk {A : VTy} (hA : A.Cl 0) (c : Lifetime.Life) (B : VTy) :
     (cloBody c A B).NuOk :=
-  ⟨⟨hA, VTy.poly_of_not_occ (VTy.not_occ_rename_succ B), trivial⟩, fun h => h⟩
+  CTy.NuOk.of_shape ⟨⟨hA, VTy.poly_of_not_occ (VTy.not_occ_rename_succ B), trivial⟩, fun h => h⟩ rfl
 
 theorem cloBody_instT (c : Lifetime.Life) (A B S : VTy) :
     (cloBody c A B).instT S = cloStepC c A B S := by
@@ -160,8 +160,9 @@ abbrev cloEffBody (S : List OpSig) (c : Lifetime.Life) (A B : VTy) : CTy :=
 `unfold` cover it with no further change. -/
 theorem cloEffBody_nuOk {S : List OpSig} (hS : ∀ o ∈ S, o.A.Cl 0 ∧ o.B.Cl 0) {A : VTy}
     (hA : A.Cl 0) (c : Lifetime.Life) (B : VTy) : (cloEffBody S c A B).NuOk :=
-  ⟨⟨hA, CTy.nuLeaf_effOf hS ⟨VTy.poly_of_not_occ (VTy.not_occ_rename_succ B), trivial⟩⟩,
+  CTy.NuOk.of_shape ⟨⟨hA, CTy.nuLeaf_effOf hS ⟨VTy.poly_of_not_occ (VTy.not_occ_rename_succ B), trivial⟩⟩,
    CTy.nuLeaf_effOf hS (fun h => h)⟩
+   (by simp only [cloEffBody, CTy.hasAll, CTy.hasAll_effOf, Bool.or_self])
 
 end BoCa.Fig16.LogRel.Core
 

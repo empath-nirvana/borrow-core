@@ -326,7 +326,7 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
       let ac ← inferV n E Δ T none hc
       let sig : Option (CRow × CVTy × CVTy × List (CQual × CVTy × CVTy)) := do
         let ⟨S, A, R, _⟩ ← retRead (← ar.ty.v?)
-        let ⟨Es, _⟩ ← clausesRead S R (← ac.ty.v?)
+        let Es ← clausesRead S R (← ac.ty.v?)
         pure (S, A, R, Es)
       let e := sig.map fun (S, A, _, Es) =>
         effOf (BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat k) Es 0 ++ S) A

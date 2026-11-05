@@ -1,0 +1,24 @@
+-- SPEC §3 (#808): one type written two ways. `read` is at `all 'z < top. imm 'z i32 => i32`,
+-- the value type `U (∀'z ⊏ ⊤. F (U (Imm 'z i32 ⊸ F i32)))`; `use_read<'a>` takes it written as
+-- `U (forall 'x < top. F (U (imm 'x i32 -o F i32)))`. The two elaborate in different lifetime
+-- contexts (`read`'s binder is the context's first variable, `use_read`'s the one after `'a`), so
+-- their binders' names differ, and the call passes `read` by `[α]`.
+--
+-- Answer: see `alpha-all-u.out`: the lent buffer is 41, `read` answers 42, and the buffer is freed
+-- at 41; `live 0`.
+
+def read : all 'z < top. imm 'z i32 => i32 =
+  thunkv Fun 'z < top. return (thunkv fun (v : imm 'z i32) ->
+    w <- return (*v);
+    return (release_imm['z, i32] v);
+    return (w + i32[1]))
+
+fn use_read<'a>(g: U (forall 'x < top. F (U (imm 'x i32 -o F i32))), b: imm 'a i32) -> i32 =
+  h <- (force g)['a];
+  force h b
+
+main -> i32 =
+  let buf = alloc(41);
+  let r = borrow imm buf { 'w, b -> use_read(read, b) };
+  let v = free(buf);
+  r * 100 + v

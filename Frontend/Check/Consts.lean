@@ -60,7 +60,8 @@ theorem tFixD {Ξ : BoCa.Fig16.LogRel.Core.EffCtx} {Δ : LifeCtx} {Γ : Ctx CVTy
     TDerivesAt Ξ Δ Γ (.unfoldN i (.val (fixDTy A S)) (BoCa.Fig16.LogRel.Core.CTy.delayBody A) S)
       (.val (fixDTy A S)) := by
   have h := TDerivesAt.unfoldN (Ξ := Ξ) (Δ := Δ) (info := i)
-    (BoCa.Fig16.LogRel.Core.CTy.delayBody A) S (BoCa.Fig16.LogRel.Core.CTy.delayBody_nuOk A) hΓ
+    (BoCa.Fig16.LogRel.Core.CTy.delayBody A) S (BoCa.Fig16.LogRel.Core.CTy.delayBody_nuOk A)
+    (BoCa.Fig16.LogRel.Core.CTy.BindsFresh.of_hasAll rfl S) hΓ
   rwa [unfoldTy, BoCa.Fig16.LogRel.Core.CTy.delayBody_instT] at h
 
 open BoCa.Fig16.LogRel.Core (fixDTy unfoldSTy unfoldTy) in
@@ -70,7 +71,8 @@ theorem tUnfoldS {Ξ : BoCa.Fig16.LogRel.Core.EffCtx} {Δ : LifeCtx} {Γ : Ctx C
     TDerivesAt Ξ Δ Γ (.unfoldN i (.val (unfoldSTy A S)) (BoCa.Fig16.LogRel.Core.CTy.streamBody A) S)
       (.val (unfoldSTy A S)) := by
   have h := TDerivesAt.unfoldN (Ξ := Ξ) (Δ := Δ) (info := i)
-    (BoCa.Fig16.LogRel.Core.CTy.streamBody A) S (BoCa.Fig16.LogRel.Core.CTy.streamBody_nuOk A) hΓ
+    (BoCa.Fig16.LogRel.Core.CTy.streamBody A) S (BoCa.Fig16.LogRel.Core.CTy.streamBody_nuOk A)
+    (BoCa.Fig16.LogRel.Core.CTy.BindsFresh.of_hasAll rfl S) hΓ
   rwa [unfoldTy, BoCa.Fig16.LogRel.Core.CTy.streamBody_instT] at h
 
 section
@@ -352,8 +354,11 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       match C' with
       | .nu B =>
         if hB : CTy.nuOkB B = true then
-          (cDead (fun j => .unfoldN (at_ sp) j B S) fun hd _ => .unfoldN B S (CTy.nuOkB_sound B hB) hd)
-        else err C.span s!"`unfold[C, S]` needs each observation of `{E.ppC C'}` to have `U X` only under `*` and `+`"
+          if hS : CTy.bindsFreshB B S = true then
+            (cDead (fun j => .unfoldN (at_ sp) j B S) fun hd _ =>
+              .unfoldN B S (CTy.nuOkB_sound B hB) (CTy.bindsFreshB_sound B S hS) hd)
+          else err C.span s!"`unfold[C, S]` needs the state type `{E.ppV S}` to mention no lifetime bound by a `forall` observation of `{E.ppC C'}`"
+        else err C.span s!"`unfold[C, S]` needs each observation of `{E.ppC C'}` to have `U X` only under `*` and `+`, and no `forall` observation to bind a lifetime free elsewhere in it"
       | _ => err C.span s!"`unfold[C, S]` needs a `nu` type, but `C` is `{E.ppC C'}`"
   | .lit c => (cDead (fun j => .lit (at_ sp) j c) fun hd _ => .lit c hd)
   | .host op => (cDead (fun j => .hostOp (at_ sp) j op) fun hd _ => .hostOp op hd)
@@ -536,17 +541,19 @@ def shortenIt {A : CVTy} (_E : Env) (T : List CVTy) (sp : Span) (m : Mode) (s : 
   let ⟨hle⟩ ← needB sp (leB Δ a b) s!"cannot show `{ppLife a}` ⊑ `{ppLife b}` from the lifetime context"
   match m with
   | .mut =>
-    if h : A = s.famTy mutM b then
+    match convVal (at_ sp) (s.famTy mutM b) ⟨A, r⟩ with
+    | some r =>
       pure ⟨_, shortenAt (M := mutM)
-        (leaf := fun i a b A t => .mutSub i (.val (.mut a A)) a b A t) (at_ sp) (h ▸ r)
+        (leaf := fun i a b A t => .mutSub i (.val (.mut a A)) a b A t) (at_ sp) r
         (fun h' hle' => TTied.mutSub _ h' hle') (leB_sound hle)⟩
-    else err sp s!"`shorten_mut` needs `fam mut @ σ`, but the operand has type `{ppVTy A}`"
+    | none => err sp s!"`shorten_mut` needs `fam mut @ σ`, but the operand has type `{ppVTy A}`"
   | .imm =>
-    if h : A = s.famTy immM b then
+    match convVal (at_ sp) (s.famTy immM b) ⟨A, r⟩ with
+    | some r =>
       pure ⟨_, shortenAt (M := immM)
-        (leaf := fun i a b A t => .immSub i (.val (.imm a A)) a b A t) (at_ sp) (h ▸ r)
+        (leaf := fun i a b A t => .immSub i (.val (.imm a A)) a b A t) (at_ sp) r
         (fun h' hle' => TTied.immSub _ h' hle') (leB_sound hle)⟩
-    else err sp s!"`shorten_imm` needs `fam imm @ σ`, but the operand has type `{ppVTy A}`"
+    | none => err sp s!"`shorten_imm` needs `fam imm @ σ`, but the operand has type `{ppVTy A}`"
 
 end
 

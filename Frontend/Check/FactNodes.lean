@@ -130,7 +130,7 @@ a capture, a field of a value) is not a release.  `[spec §57]` -/
 def relT (k : Nat) : TExpr → Bool
   | .lolliE _ _ _ _ _ ta tf => ta.isVarT k && tf.isRelease
   | .ret _ _ _ t | .ofRet _ _ _ t | .effSub _ _ _ _ _ t | .lendScope _ _ _ t | .sumI₁ _ _ _ _ t
-  | .sumI₂ _ _ _ _ t => relT k t
+  | .sumI₂ _ _ _ _ t | .alpha _ _ _ _ t => relT k t
   | .bind _ _ _ _ u tM tN | .effLet _ _ _ _ _ u tM tN =>
     match u.at k with
     | (true, false) => relT k tM
@@ -272,7 +272,7 @@ theorem relT_shift (d : Nat) (t : TExpr) : ∀ k c, k < c → relT k (t.shift d 
   case lolliE _ _ _ _ _ ta tf _ _ =>
     intro k c h; simp only [TExpr.shift, relT, TExpr.isVarT_shift h, TExpr.isRelease_shift]
   case ret _ _ _ t ih | ofRet _ _ _ t ih | effSub _ _ _ _ _ t ih | lendScope _ _ _ t ih
-    | sumI₁ _ _ _ _ t ih | sumI₂ _ _ _ _ t ih =>
+    | sumI₁ _ _ _ _ t ih | sumI₂ _ _ _ _ t ih | alpha _ _ _ _ t ih =>
     intro k c h; simp only [TExpr.shift, relT, ih k c h]
   case bind _ _ _ _ u tM tN ihM ihN | effLet _ _ _ _ _ u tM tN ihM ihN =>
     intro k c h

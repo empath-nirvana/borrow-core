@@ -1,4 +1,4 @@
-import Frontend.Check.Rules
+import Frontend.Check.Conv
 import Core.Classes
 
 /-!
@@ -535,12 +535,6 @@ def Env.ppL (E : Env) (a : CLife) : String := ppLifeP E.lenv 1 a
 
 /-! ### Rows  `[spec §19]` -/
 
-/-- `C` as a returner chain `F_Σ A`: its row and answer. -/
-def effRow? : CCTy → Option (CRow × CVTy)
-  | .ret A => some ([], A)
-  | .eff n i q A B fin rc C => (effRow? C).map fun (S, R) => (⟨n, i, q, A, B, fin, rc⟩ :: S, R)
-  | _ => none
-
 /-- The environment of a computation checked against `C`: the row of `C` when it is a returner
 chain.  `[spec §19]` -/
 def Env.atC (E : Env) (C : CCTy) : Env :=
@@ -590,23 +584,22 @@ def clauseCands : CVTy → List (CQual × CVTy × CVTy)
   | .bang (.thunk (.arr A _)) => [(.cancel, A, .zero)]
   | _ => []
 
-/-- The first candidate whose clause type is `c`. -/
+/-- The first candidate whose clause type is `c` up to `[α]` (`tyEqV`). -/
 def firstClause (S : CRow) (R c : CVTy) :
-    List (CQual × CVTy × CVTy) → Option {e // BoCa.Fig16.LogRel.Core.clauseTy S R e = c}
+    List (CQual × CVTy × CVTy) → Option (CQual × CVTy × CVTy)
   | [] => none
-  | e :: es => if h : BoCa.Fig16.LogRel.Core.clauseTy S R e = c then some ⟨e, h⟩
+  | e :: es => if tyEqV (BoCa.Fig16.LogRel.Core.clauseTy S R e) c then some e
       else firstClause S R c es
 
 /-- The operations `E` of a handler read back from the type of its clauses' tuple, with
-`clausesTy S R E` that type. An abortive operation is read as cancellable: `cancel` and `unr` give
-it the same clause type. -/
-def clausesRead (S : CRow) (R : CVTy) :
-    (Tc : CVTy) → Option {E // BoCa.Fig16.LogRel.Core.clausesTy S R E = Tc}
-  | .unit => some ⟨[], rfl⟩
+`clausesTy S R E` that type up to `[α]`. An abortive operation is read as cancellable: `cancel` and
+`unr` give it the same clause type. -/
+def clausesRead (S : CRow) (R : CVTy) : (Tc : CVTy) → Option (List (CQual × CVTy × CVTy))
+  | .unit => some []
   | .tensor c rest => do
-    let ⟨e, he⟩ ← firstClause S R c (clauseCands c)
-    let ⟨E, hE⟩ ← clausesRead S R rest
-    pure ⟨e :: E, by subst he hE; rfl⟩
+    let e ← firstClause S R c (clauseCands c)
+    let E ← clausesRead S R rest
+    pure (e :: E)
   | _ => none
 
 /-- The operations a clause's type under BOXED-κ may be the type of (`[spec §28]`): a control
@@ -618,22 +611,21 @@ def clauseCandsB : CVTy → List (CQual × CVTy × CVTy)
   | .bang (.thunk (.arr A _)) => [(.cancel, A, .zero)]
   | _ => []
 
-/-- The first candidate whose clause type under BOXED-κ at `@d` is `c`. -/
+/-- The first candidate whose clause type under BOXED-κ at `@d` is `c` up to `[α]`. -/
 def firstClauseB (S : CRow) (R : CVTy) (d : CLife) (c : CVTy) :
-    List (CQual × CVTy × CVTy) → Option {e // BoCa.Fig16.LogRel.Core.clauseTyB S R d e = c}
+    List (CQual × CVTy × CVTy) → Option (CQual × CVTy × CVTy)
   | [] => none
-  | e :: es => if h : BoCa.Fig16.LogRel.Core.clauseTyB S R d e = c then some ⟨e, h⟩
+  | e :: es => if tyEqV (BoCa.Fig16.LogRel.Core.clauseTyB S R d e) c then some e
       else firstClauseB S R d c es
 
 /-- The operations `E` of a handler whose clauses receive `κ` boxed at `@d`, read back from the
-type of its clauses' tuple, with `clausesTyB S R d E` that type.  `[spec §28]` -/
-def clausesReadB (S : CRow) (R : CVTy) (d : CLife) :
-    (Tc : CVTy) → Option {E // BoCa.Fig16.LogRel.Core.clausesTyB S R d E = Tc}
-  | .unit => some ⟨[], rfl⟩
+type of its clauses' tuple, with `clausesTyB S R d E` that type up to `[α]`.  `[spec §28]` -/
+def clausesReadB (S : CRow) (R : CVTy) (d : CLife) : (Tc : CVTy) → Option (List (CQual × CVTy × CVTy))
+  | .unit => some []
   | .tensor c rest => do
-    let ⟨e, he⟩ ← firstClauseB S R d c (clauseCandsB c)
-    let ⟨E, hE⟩ ← clausesReadB S R d rest
-    pure ⟨e :: E, by subst he hE; rfl⟩
+    let e ← firstClauseB S R d c (clauseCandsB c)
+    let E ← clausesReadB S R d rest
+    pure (e :: E)
   | _ => none
 
 /-- The lifetime a clause tuple's type boxes its continuations at: that of its first clause whose
@@ -644,23 +636,32 @@ def clausesBoxOf : CVTy → Option CLife
   | .tensor _ rest => clausesBoxOf rest
   | _ => none
 
-/-- A clause tuple's type read as BOXED-κ's: its boxing lifetime, and its operations. Where it reads,
-the checker prefers it to `clausesRead`, which would read a clause `!U(A ⊗ [@d] κ ⊸ F_Σ R)` as an
-abortive operation's.  `[spec §28]` -/
-def clausesReadBoxed (S : CRow) (R : CVTy) (Tc : CVTy) :
-    Option (Σ d : CLife, {E // BoCa.Fig16.LogRel.Core.clausesTyB S R d E = Tc}) := do
-  let d ← clausesBoxOf Tc
-  let r ← clausesReadB S R d Tc
-  pure ⟨d, r⟩
+/-- A reading of a handler's clause tuple: BOXED-κ's at `@d` (SPEC §28), or the plain one. -/
+inductive ClausesAt where
+  | boxed (d : CLife) (Es : List (CQual × CVTy × CVTy))
+  | plain (Es : List (CQual × CVTy × CVTy))
+
+/-- The clause tuple's type a reading rebuilds: `clausesTyB S R d E` or `clausesTy S R E`. -/
+def ClausesAt.ty (S : CRow) (R : CVTy) : ClausesAt → CVTy
+  | .boxed d Es => BoCa.Fig16.LogRel.Core.clausesTyB S R d Es
+  | .plain Es => BoCa.Fig16.LogRel.Core.clausesTy S R Es
+
+/-- A clause tuple's type read back, up to `[α]`: as BOXED-κ's where it reads so, which the checker
+prefers to the plain reading (that would read a clause `!U(A ⊗ [@d] κ ⊸ F_Σ R)` as an abortive
+operation's); else plainly. The handler's clauses are then carried to the type the reading
+rebuilds (`ClausesAt.ty`, `convVal`).  `[spec §19, §28]` -/
+def clausesReadAt (S : CRow) (R : CVTy) (Tc : CVTy) : Option ClausesAt :=
+  match (do let d ← clausesBoxOf Tc; let Es ← clausesReadB S R d Tc; pure (d, Es)) with
+  | some (d, Es) => some (.boxed d Es)
+  | none => (clausesRead S R Tc).map .plain
 
 /-- `h_ret`'s type `!U(A -o F_S R)` read back. -/
 def retRead (Tr : CVTy) :
     Option (Σ' (S : CRow) (A R : CVTy), BoCa.Fig16.LogRel.Core.retTy S A R = Tr) :=
   match Tr with
   | .bang (.thunk (.arr A C)) =>
-    match effRow? C with
-    | some (S, R) =>
-      if h : BoCa.Fig16.LogRel.Core.retTy S A R = .bang (.thunk (.arr A C)) then some ⟨S, A, R, h⟩ else none
+    match effRowOf? C with
+    | some ⟨S, R, h⟩ => some ⟨S, A, R, by rw [← h]; rfl⟩
     | none => none
   | _ => none
 
@@ -690,16 +691,16 @@ def firstMissing : List Bool → List Bool → List Bool → Option Nat
   | a :: as, b :: bs, c :: cs => if a && !(b || c) then some 0 else (firstMissing as bs cs).map (· + 1)
   | _, _, _ => none
 
-/-- `B` occurs in `A`. -/
+/-- `B` occurs in `A`, up to `[α]`. -/
 def occursTy (B : CVTy) : CVTy → Bool
-  | .tensor X Y => .tensor X Y == B || occursTy B X || occursTy B Y
-  | .sum X Y => .sum X Y == B || occursTy B X || occursTy B Y
-  | .ref X => .ref X == B || occursTy B X
-  | .box a X => .box a X == B || occursTy B X
-  | .bang X => .bang X == B || occursTy B X
-  | .mu X => .mu X == B || occursTy B X
-  | .fam X => .fam X == B || occursTy B X
-  | A => A == B
+  | .tensor X Y => tyEqV (.tensor X Y) B || occursTy B X || occursTy B Y
+  | .sum X Y => tyEqV (.sum X Y) B || occursTy B X || occursTy B Y
+  | .ref X => tyEqV (.ref X) B || occursTy B X
+  | .box a X => tyEqV (.box a X) B || occursTy B X
+  | .bang X => tyEqV (.bang X) B || occursTy B X
+  | .mu X => tyEqV (.mu X) B || occursTy B X
+  | .fam X => tyEqV (.fam X) B || occursTy B X
+  | A => tyEqV A B
 
 /-- The fix a message names for a value whose type holds a field marked `must_close` (SPEC §42):
 the declaration, the field and the function that consumes it. Message text only: the refusal is
@@ -750,23 +751,23 @@ def mismatch (sp : Span) (want got : String) : Error :=
 section
 variable {Δ : LifeCtx} {T : List CVTy}
 
-def convV (E : Env) (sp : Span) (A : CVTy) : (Σ B : CVTy, Res Δ T (.val B)) → Except Error (Res Δ T (.val A))
-  | ⟨B, r⟩ => if h : B = A then pure (h ▸ r) else throw (mismatch sp (E.ppV A) (E.ppV B))
+/-- A value of `B` at `A`: equal, or equal up to the names of lifetime binders by `[α]`
+(`convVal`, SPEC §3). -/
+def convV (E : Env) (sp : Span) (A : CVTy) (r : Σ B : CVTy, Res Δ T (.val B)) :
+    Except Error (Res Δ T (.val A)) :=
+  match convVal (at_ sp) A r with
+  | some r' => pure r'
+  | none => throw (mismatch sp (E.ppV A) (E.ppV r.1))
 
-/-- A computation of `D` at `C`: equal, or `F_Σ′ A` within `F_Σ A` by `[sub]` (SPEC §19). -/
-def convC (E : Env) (sp : Span) (C : CCTy) : (Σ D : CCTy, Res Δ T (.comp D)) → Except Error (Res Δ T (.comp C))
-  | ⟨D, r⟩ =>
-    if h : D = C then pure (h ▸ r) else
-    match effRow? D, effRow? C with
-    | some (S', A'), some (S, _) =>
-      if hD : effOf S' A' = D then
-        if hC : effOf S A' = C then
-          if hle : rowLeB S' S = true then pure (hC ▸ rEffSub (at_ sp) hle (hD ▸ r))
-          else throw ⟨sp, s!"type mismatch: expected `{E.ppC C}`, but this has type " ++
-            s!"`{E.ppC D}`: its row `{ppRow E S'}` is not within `{ppRow E S}`"⟩
-        else throw (mismatch sp (E.ppC C) (E.ppC D))
-      else throw (mismatch sp (E.ppC C) (E.ppC D))
-    | _, _ => throw (mismatch sp (E.ppC C) (E.ppC D))
+/-- A computation of `D` at `C`: equal, equal up to the names of lifetime binders by `[α]`
+(SPEC §3), or `F_Σ′ A` within `F_Σ A` by `[sub]` (SPEC §19) then `[α]` (`convComp`). -/
+def convC (E : Env) (sp : Span) (C : CCTy) (r : Σ D : CCTy, Res Δ T (.comp D)) :
+    Except Error (Res Δ T (.comp C)) :=
+  match convComp (at_ sp) C r with
+  | .ok r' => pure r'
+  | .error .mismatch => throw (mismatch sp (E.ppC C) (E.ppC r.1))
+  | .error (.row S' S) => throw ⟨sp, s!"type mismatch: expected `{E.ppC C}`, but this has type " ++
+      s!"`{E.ppC r.1}`: its row `{ppRow E S'}` is not within `{ppRow E S}`"⟩
 
 def popL {A : CVTy} {P : List Bool → Prop} (E : Env) (sp : Span) (x : String) (F : Fam (A :: T) P) :
     Except Error (Fam T (fun L => P (true :: L))) :=
@@ -951,10 +952,15 @@ def appIt {A : CVTy} {C : CCTy} (E : Env) (T : List CVTy) (sp : Span) (x : Ident
   | none => throw ⟨x.span, s!"application `M x` takes a variable, and `{x.name}` is not one " ++
       "in scope; bind it first"⟩
   | some i =>
-    if hi : T[i]? = some A then
-      if h : overlapOK T rM.F.u (oneL T i) = true then pure (rApp { sp, name := x.name } rM i hi h)
-      else throw (splitErr E T sp rM.F.u (oneL T i))
-    else throw (mismatch x.span (E.ppV A) (E.slotTy T i))
+    match hi : T[i]? with
+    | some B =>
+      -- `M` at `B -o C`, `B` the argument's type up to `[α]` (`convComp`).
+      match convComp (at_ sp) (.arr B C) ⟨_, rM⟩ with
+      | .ok rM =>
+        if h : overlapOK T rM.F.u (oneL T i) = true then pure (rApp { sp, name := x.name } rM i hi h)
+        else throw (splitErr E T sp rM.F.u (oneL T i))
+      | .error _ => throw (mismatch x.span (E.ppV A) (E.slotTy T i))
+    | none => throw ⟨x.span, "internal error: variable out of range"⟩
 
 /-- `<M, N>`: both components at the pair's context. -/
 def withIt {C D : CCTy} (E : Env) (T : List CVTy) (sp : Span) (r₁ : Res Δ (withT T) (.comp C))
@@ -1012,13 +1018,11 @@ def lamIt {A : CVTy} {C : CCTy} (E : Env) (sp : Span) (x : Ident) (rM : Res Δ (
     Except Error (Res Δ T (.comp (.arr A C))) :=
   match A, rM with
   | .unit, rM =>
-    match effRow? C with
-    | some (S, B) =>
-      if hC : effOf S B = C then
-        match lamDeadIt sp (hC ▸ rM) with
-        | some r => pure (hC ▸ r)
-        | none => rLam { sp, name := x.name } <$> popL E x.span x.name rM.F
-      else rLam { sp, name := x.name } <$> popL E x.span x.name rM.F
+    match effRowOf? C with
+    | some ⟨_, _, hC⟩ =>
+      match lamDeadIt sp (hC ▸ rM) with
+      | some r => pure (hC ▸ r)
+      | none => rLam { sp, name := x.name } <$> popL E x.span x.name rM.F
     | none => rLam { sp, name := x.name } <$> popL E x.span x.name rM.F
   | _, rM => do
     let rM ← consumeStuck x.span 1 rM
@@ -1026,21 +1030,20 @@ def lamIt {A : CVTy} {C : CCTy} (E : Env) (sp : Span) (x : Ident) (rM : Res Δ (
 
 /-! ### Effectful bindings  `[spec §19]` -/
 
-/-- A computation at the row `S′`, at the row `S` by `[sub]`. -/
+/-- A computation at the row `S′`, at the row `S`: `[sub]`, or `[sub]` then `[α]` (`convRow`). -/
 def liftRow (E : Env) (sp : Span) {S' : CRow} {A : CVTy} (S : CRow)
     (r : Res Δ T (.comp (effOf S' A))) : Except Error (Res Δ T (.comp (effOf S A))) :=
-  if hle : rowLeB S' S = true then pure (rEffSub (at_ sp) hle r)
-  else throw ⟨sp, s!"this computation performs the operations `{ppRow E S'}`, which are not " ++
-    s!"within the row `{ppRow E S}` here"⟩
+  match convRow (at_ sp) S r with
+  | .ok r' => pure r'
+  | .error _ => throw ⟨sp, s!"this computation performs the operations `{ppRow E S'}`, which are " ++
+    s!"not within the row `{ppRow E S}` here"⟩
 
 /-- A synthesized computation at the row `S`: a returner chain within it. -/
 def atRow (E : Env) (sp : Span) (S : CRow) :
     (Σ C : CCTy, Res Δ T (.comp C)) → Except Error (Σ B : CVTy, Res Δ T (.comp (effOf S B)))
   | ⟨C, r⟩ =>
-    match effRow? C with
-    | some (S', B) =>
-      if hC : effOf S' B = C then do pure ⟨B, ← liftRow E sp S (hC ▸ r)⟩
-      else throw ⟨sp, "internal error: a returner chain"⟩
+    match effRowOf? C with
+    | some ⟨_, B, hC⟩ => do pure ⟨B, ← liftRow E sp S (hC ▸ r)⟩
     | none => throw ⟨sp, s!"after a computation that performs operations, this must have a " ++
         s!"type `F[…] B`, but it has type `{E.ppC C}`"⟩
 
@@ -1056,19 +1059,21 @@ def finalOf (E : Env) (sp : Span) (S : CRow) (u : List Bool) :
   let idx := (List.range T.length).filter fun i =>
     u.getD i false && !((T[i]?.map (·.persistent)).getD true)
   let r0 : Res Δ (.unit :: T) (.comp (.ret .unit)) := rRet (at_ sp) (rUnit (at_ sp))
-  let r ← idx.foldlM (init := r0) fun r i => do
+  for i in idx do
     match T[i]? with
     | some A =>
-      if consumableB A then consumeOne sp (i + 1) r
-      else if cancels then
-        throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across an operation that " ++
-          "may be cancelled: the cancel runs a finaliser (`[then]`) that consumes it by its " ++
-          "consume, and its type is linear and not consumable" ++ E.closeHint A true⟩
-      else throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across a computation " ++
-        "that may abort, and its type is linear and not consumable, and an abort abandons " ++
-        "only a value that holds no owned cell" ++ E.closeHint A true⟩
+      unless consumableB A do
+        if cancels then
+          throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across an operation that " ++
+            "may be cancelled: the cancel runs a finaliser (`[then]`) that consumes it by its " ++
+            "consume, and its type is linear and not consumable" ++ E.closeHint A true⟩
+        else throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across a computation " ++
+          "that may abort, and its type is linear and not consumable, and an abort abandons " ++
+          "only a value that holds no owned cell" ++ E.closeHint A true⟩
     | none => throw ⟨sp, "internal error: a slot is out of range"⟩
-  pure r
+  -- In reverse binding order, as at the end of a path (SPEC §12, `consumeOwed`): the lowest index,
+  -- the most recently bound slot, is consumed first, so it is wrapped last, outermost.
+  idx.reverse.foldlM (init := r0) fun r i => consumeOne sp (i + 1) r
 
 /-- A marked scheme's derived node, over its checked term (SPEC §3). -/
 def markIt {j : Jdg} (sp : Span) (k : SchemeMark) (r : Res Δ T j) : Except Error (Res Δ T j) :=

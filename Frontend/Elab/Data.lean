@@ -1,3 +1,4 @@
+import Frontend.Elab.SurfAlpha
 import Frontend.Elab.Subst
 import Core.FoldClass
 import Frontend.Print
@@ -218,7 +219,7 @@ def regular (g : List String) (d : DataDecl) : VTy → Except String Unit
         match headOf A with
         | some (h, As, _) =>
           if g.contains h then
-            unless As.map VTy.strip == own do
+            unless alphaEqs As own do
               throw <| s!"`{h}` occurs in its own declaration at other parameters than its own: a " ++
                 "nested datatype is not provided"
           else for B in As do go k B
