@@ -221,3 +221,7 @@ These are facts about `cerwp`, not about handles. Each holds of every scheduler 
 `CaptureScope`'s are kept (empty lent-cell payload; must-resume, empty-answer body operations;
 `erwp0`). A handle join inside an `imm` scope's body would have a non-empty answer, which
 `ScopeTabs.inner` refuses.
+
+## Loan accounting: the handle-join build
+
+Scoped in `docs/new-core/scope-821-loans.md`, for review before the build.
