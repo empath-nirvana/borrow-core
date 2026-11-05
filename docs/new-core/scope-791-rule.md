@@ -18,13 +18,13 @@ Every piece names the Core technique it follows.
 | value types `vN A δ : SemT` | `P k v ρ`, downward closed in `k` | `SemT` (`SI/MutSemN.lean`), Core's `vCE` clause by clause |
 | `1`, `⊗`, `0`, `+`, `Ref`, `!`, `I32/I64` | `vCE`'s clauses, `⋆` written as `ResU.CompS` | `vCE`; `sV` (`SI/Sem.lean`) |
 | `Mut @a A` | `vMut α (vN A δ)`: a location whose `mut` cell at `α = @aδ` holds the member `j ≥ k` of `A`'s family | `vMut` (`SI/MutSemN.lean`) |
-| `Imm @a A` | one `imm` cell `imm(β̄, u, σ)` with `α ⊑ ⊓β̄`, `u, σ` in `𝒱⟦A⟧` | `ptoImmS` (`Core/Relation.lean`), records dropped (§3) |
+| `Imm @a A` | one `imm` cell `imm(β̄, u, σ)` with `α ⊑ ⊓β̄`, `u, σ` in `𝒱⟦A⟧` | `ptoImmS` (`Core/Relation.lean`), without the record list (§3) |
 | `[@a] A` | `𝒱⟦A⟧ ∧ ρ ∈ Res_α` | `box` (`vCE`'s `box` clause) |
-| `U C` | `C` at every `Φ′` (downward closed) and every record list | `vThunk` (`SI/MutSemN.lean`), `Covers` dropped (§3) |
+| `U C` | `C` at every `Φ′` (downward closed) and every record list | `vThunk` (`SI/MutSemN.lean`), without `Covers` (§3) |
 | `F A` | `erwp Φ (opTableN ∅) 𝒱⟦A⟧` | `sC`'s `F` (`SI/Sem.lean`); `cC`'s `wpTS` |
 | `A ⊸ C` | at every `k′ ≤ k`, every argument in `𝒱⟦A⟧` composed with the function's resource | `sC`'s `⊸` (the step-indexed `−∗`); `cC`'s wand |
 | `C & D`, `⊤` | componentwise; trivial | `cC` |
-| `∀'x ⊏ @c. C` | every `α ⊏ @cδ`, `C` at `δ[x ↦ α]`, the term applied to `()` | `cC`'s `∀` clause (`LtLife`) |
+| `∀'x ⊏ @c. C` | `@cδ` defined, and every `α ⊏ @cδ`: `C` at `δ[x ↦ α]`, the term applied to `()` | `cC`'s `∀` clause (`LtLife`); empty where `@cδ` is undefined, as `TreeGoal791`'s `SCmp.none` (§3) |
 | `F_Σ R` | `erwp Φ (opTableN (tabN (F_Σ R) δ Φ)) 𝒱⟦R⟧` | `cC`'s `eff` clause (`effTab`, `finObl`, `effRet`); `sProt`/`sFin` |
 | `tabN` | one entry per layer, first match winning: qualifier, `abort = B.isZero && q != lin`, `PA = 𝒱⟦A⟧`, `PB = 𝒱⟦B⟧`, cancel obligation `finN fin` where `capB q B`, resumed under `extF` | `effTab`; `OpEntN` (`SI/ErwpN.lean`); `extF` from `SI/ExtF.lean` (§2 of structure.md) |
 | `finN` | `none` at `⊤`; else the cancel run at the cancel row's table, `cancelOblN Φ (tabN F δ Φ)` | `finObl`; `sFin` |
@@ -69,7 +69,11 @@ statements, as `TreeGoal791`'s with `vN`/`cN`/`erwp` for `vT`/`cT`/`cerwpT`. Pro
    `mut` cell it was given (`rwp_M_antiFrame_sem`'s `Φ ℓ = (α, τ.fam α)`) cannot be proved at the
    interpretation. So the anti-frame constants (`w3`, `wF`, `withswap`) are not reachable from
    this interpretation as it stands. **Decision for the user** (§5).
-4. **Entries resumed under `extF`**, not Core's `Ext`: `OpEntN.wc`. structure.md §2: no restriction
+4. **`∀'x ⊏ @c` is empty where `@cδ` has no interpretation** (Core's `cC` reads it as trivial
+   there). The two agree at every `δ ⊨ Δ` for a bound `Δ` defines (`Δ.meetOfDom`). Without it,
+   `ConstN` of a constant whose bound is undefined at some `δ` would ask the constant to run an
+   arbitrary term as its callback.
+5. **Entries resumed under `extF`**, not Core's `Ext`: `OpEntN.wc`. structure.md §2: no restriction
    relative to `Ext` (`ext_extF`).
 
 ## 4. NOT doing (stop and report)
@@ -87,4 +91,76 @@ statements, as `TreeGoal791`'s with `vN`/`cN`/`erwp` for `vT`/`cT`/`cerwpT`. Pro
 
 ## 5. State and open items
 
-(Filled in as the unit lands; see the end of this file.)
+### Proved (all axioms within `propext`, `Classical.choice`, `Quot.sound`; in `scripts/AxiomCheck.lean`)
+
+| Result | File | Hypotheses |
+|---|---|---|
+| `vN_down`, `cN_down`, `tabN_down`, `finN_down`, `retN_down`, `vN_le`, `cN_le` | `Goal791N` | `Φ.Down` for computations |
+| `vN_congr`, `cN_congr`, `tabN_congr`, `finN_congr`, `retN_congr`, `vN_extend_of_not_free` | `Goal791N` | agreement of `δ`, `δ′` at the free variables |
+| `cN_extΦ` (with `tabN_extΦ`, `finN_extΦ`, `cancelTabN_le`) | `Goal791N` | `Φ.Ext Φ′` |
+| `vN_outlives` | `Goal791N` | `Δ.Models δ`, `@aδ = α`, `VOutlives Δ a A` |
+| `cN_effOf`, `retN_effOf` | `Goal791N` | none |
+| `bridgeN : BridgeN` | `Goal791N` | none |
+| `goal791Sched_of : FundamentalN → ConstsN → Goal791SchedN` | `Goal791N` | the two named |
+| `erwp_M_frameCR`, `claimT_canX`, `erwp_ubindClaimR` | `Lend791N` | the frames' own (as `erwp_M_frameT`/`erwp_M_frameR`, `erwp_ubindClaim`/`erwp_ubindRaise`) |
+| **`withbor2S_compat`** | `Lend791N` | `withbor2U`'s premises with `Row.Suspend` (`hA`, `hB`, `hS`, `hdc`), `d`'s semantic judgment (`hd`, the fundamental property at the premise), and **`hSB`, `hSF`** below |
+| `constN_w2` | `Lend791N` | `FundamentalN`, `hSB`, `hSF` |
+| `cbRelease_sem` (the callback type is inhabited) | `Lend791N` | the bound defined |
+| `answer_not_inStratum` (the configuration for `hSB`) | `Lend791N` | none |
+
+`ConstN`, `ConstsN`, `FundamentalN`, `BridgeN`, `Goal791SchedN`, `Withbor2SN`, `Withbor3SN`,
+`WithborFSN`, `WithloadSN`, `SliceBorrowMSN` are stated (`Goal791N` §3). `Goal791Top` reads no
+relation and is `TreeGoal791`'s as it stands.
+
+### Two row clauses `Row.Suspend` does not supply (decisions for the user)
+
+`withbor2S_compat` takes two clauses on the callback's row that `Row.Suspend`
+(`Core/TreeGoal791.lean`) does not state:
+
+- **`hSB`: every answer type outlives every lifetime** (`∀ o ∈ S, ∀ Δ a, VOutlives Δ a o.B`),
+  `Row.Suspend`'s payload clause applied to the answer. The Mut Frame re-lends at the resume and
+  asks the answer's resource in `Res_{↓α}` (`OpTabN.LendOKCR.pb`, as `LendOK.pb`/`LendOKC.pb`).
+  `¬ VFree x o.B` does not give it: `answer_not_inStratum` is a value of `U(F 1)` outside
+  `Res_{↓α}` at every `α`. Not derived from `Row.Suspend`; obstruction at `OpTabN.LendOKCR.pb`,
+  configuration `answer_not_inStratum`. This is the frame's premise; I have not verified that
+  the constant itself fails at such a row. What the clause gives up: answers holding borrows or
+  thunks (an answer `U C`); `1`, data, `!` types and boxes outliving everything are kept.
+- **`hSF`: every capturable operation's cancel row has no layers** (`CTy.NoLayers`: not `⊤`, no
+  operations). The lender's cancel run is the callback's with the borrow folded
+  (`erwp_M_frame_cancelRun`), which asks the cancel row's table `LendOK α` and one table `T₁` for
+  every operation (`claimT`). A cancel row with operations would need its operations' types
+  constrained as `Row.Suspend` constrains the row's, and `claimT` per entry. Not derived;
+  obstruction at `claimT`'s single `T₁` and `erwp_M_frame_cancelRun`'s `T₁.LendOK A`; no
+  configuration built. What it gives up: cancel rows that perform (the default `finsNil` is kept).
+
+### The decision on `Covers` (§3, departure 3)
+
+With no `Covers`, the constants that open a `mut` argument are not reachable at this
+interpretation: `w3` (`withbor3U` at `Row.Suspend`, the Anti-Frame on the source) and `wF` (the
+field reborrow `withborFE`, which reads the field out of the borrowed record), as `withswap`.
+Opening a cell at the index re-seals it at a lower member of its family, which `UpdN` allows only
+along `Φ ℓ`'s family (`rwp_M_antiFrame_sem`'s `Φ ℓ = (α, τ.fam α)`), and nothing in the
+interpretation says `Φ` types an argument's cell. I have not derived `w3`/`wF` and have not
+verified that any obstruction is real. The candidate: `Covers` in `U`, `⊸` and `SemJN` (as
+`vThunk`), with the lend's family carrying the lender's coverage
+(`F j w r = 𝒱⟦A⟧ j w r ∧ Covers Φ r`, so the claim's content is covered when the finaliser takes
+it) and `Mut`'s clause reading its family through `Φ ℓ`. That is an interpretation change, so it
+is the user's: it re-opens `withbor2S_compat` at the finaliser's argument.
+
+### What the next unit needs
+
+- The `Covers` decision above, then `w3` and `wF` (`erwp_withbor3` and `erwp_M_antiFrameC`, the
+  inner frame at a cell of the content), `wl` (the `imm` half: the record list and `CohE` back
+  in `Imm`), `sm` (families).
+- `FundamentalN`: every `CDerives` rule at `SemJN` (#789's ports), and `[handle]` at `cN`
+  (`erwp_handle_le`) for `Goal791Top`.
+- `BridgeN` is proved; `Goal791SchedN` follows from `FundamentalN` and `ConstsN`
+  (`goal791Sched_of`).
+
+### Unspent premises, unused results
+
+- `Const791.OK`'s `∃ b, Defines b ∧ VOutlivesLe b A` for `w2` is unspent: the lend's lifetime is
+  chosen below the content's stratum (`ResU.exists_stratum`), not from the type.
+- `Row.Suspend`'s `o.n ≠ 0` is spent at the raises (`erwp_ubindClaimR`'s `hTr`).
+- Not used: `erwp_M_frameTF`/`erwpG_frameT` (the fold-guarded tables, for the anti-frame
+  constants), `erwp_withbor3`, `erwp_reborrow`.
