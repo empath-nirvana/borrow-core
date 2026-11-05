@@ -21,6 +21,7 @@ import Core.Chain.SI.CrossProgM
 import Core.Chain.SI.DeepRebProg
 import Core.Chain.SI.Erwp0
 import Core.Chain.SI.ErwpN
+import Core.Chain.SI.ErwpX
 import Core.Chain.SI.Ewp
 import Core.Chain.SI.ExtExtF
 import Core.Chain.SI.ExtF
@@ -78,6 +79,8 @@ import Core.Chain.SI.UbindGN
 import Core.Chain.SI.UbindN
 import Core.Chain.SI.Uncapture
 import Core.Chain.SI.UpdMask
+import Core.Chain.SI.XRes
+import Core.Chain.SI.Ghost
 import Core.Chain.SI.UpdN
 import Core.Chain.SI.WpN
 import Core.Chain.PoolN
