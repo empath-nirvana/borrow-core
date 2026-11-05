@@ -260,6 +260,9 @@ theorem maskAuth_empty (g : GRes) : MaskAuth ∅ g := fun _ _ h => absurd h (by 
 @[simp] theorem Mask.locs_empty : (∅ : Mask).locs = ∅ := by
   ext l; simp [Mask.locs]
 
+theorem maskShallow_locs_empty (ρ : WRes) : MaskShallow (∅ : Mask).locs ρ := by
+  rw [Mask.locs_empty]; exact maskShallow_empty ρ
+
 /-- An authority a part holds, a valid sum holds. -/
 theorem Auth.Held.add_right {g h : GRes} (hv : (g + h).Valid) {l : Loc} {a : Auth}
     (ha : a.Held g l) : a.Held (g + h) l := by

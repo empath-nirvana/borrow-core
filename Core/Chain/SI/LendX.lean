@@ -33,9 +33,6 @@ open BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Step1 Kont)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
-theorem maskShallow_locs_empty (ρ : WRes) : MaskShallow (∅ : Mask).locs ρ := by
-  rw [Mask.locs_empty]; exact maskShallow_empty ρ
-
 /-- A resource below `α` carries no `α`. -/
 theorem not_carries_of_inStratum {ρ : WRes} {α : Life} (h : ρ.InStratum α) : ¬ Carries ρ α := by
   rintro ⟨l, s, v, χ, hh, ⟨σ, hσ, hg⟩, hm⟩

@@ -22,6 +22,8 @@ import Core.Chain.SI.DeepRebProg
 import Core.Chain.SI.Erwp0
 import Core.Chain.SI.ErwpN
 import Core.Chain.SI.ErwpX
+import Core.Chain.SI.ErwpX0
+import Core.Chain.SI.AdequacyX
 import Core.Chain.SI.Ewp
 import Core.Chain.SI.ExtExtF
 import Core.Chain.SI.ExtF
