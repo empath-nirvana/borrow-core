@@ -6,7 +6,7 @@ import Core.EffRules
 
 `Core`'s `ewp_handle_or` (`Core/EffRules.lean`) proves `[handle]` by induction on the least fixed
 point of the handled computation's `ewpTS`. At `erwp` there is no fixed point: the proof is by
-induction on the index, as stage 1's `ewp_handle`, and otherwise follows `ewp_handle_or`'s case
+induction on the index, as `ewp_handle` at `ewp`, and otherwise follows `ewp_handle_or`'s case
 split at the end of the handled run: `[ret]`; an operation of the handler's name, whose clause
 gets `κ`; an abortive one, whose clause runs and whose continuation is discarded; an operation or
 raise of another name, which passes outward with the handler reinstalled in its continuation.
@@ -299,24 +299,27 @@ theorem erwp_kappaC_cancel {Φ : LocFam} (hΦ : Φ.Down) {Tb : TableN} (hL : Tb.
 
 /-! ### The handler -/
 
-/-- **A handler at the step index** (`[handle]`), by induction on the index; `ewp_handle_or`'s
-cases at the end of the handled run. -/
-theorem erwp_handle {Φ : LocFam} (hΦ : Φ.Down) (Tin Tout : OpTabN) (hTinD : Tin.Down)
+/-- **A handler at the step index, its clauses asked at the stops up to `N`** (`[handle]`), by
+induction on the index; `ewp_handle_or`'s cases at the end of the handled run. A run at `n ≤ N`
+stops, and returns, only at indices up to `n`, so the return clause and the operation clauses are
+asked only there. A clause that runs a computation under the same handler (a scheduler's spawn)
+proves its case at `k` from this lemma below `k`. -/
+theorem erwp_handle_le {Φ : LocFam} (hΦ : Φ.Down) (N : Nat) (Tin Tout : OpTabN) (hTinD : Tin.Down)
     (hTout : Tout.Down) (n₀ : UInt32) (hTin : ∀ m i, m ≠ n₀ → Tin m i = Tout m i) (qs hr hs : Val)
     (Qin Qout : PostN) (hQout : Qout.Down)
     (hq : ∀ i en, Tin n₀ i = some en → en.abort = false → capTag qs.1 i.toNat = en.q.tag)
     (Tc : UInt32 → Option OpTabN)
     (hTc : ∀ i en, Tin n₀ i = some en → en.abort = false → en.q ≠ .lin → ∀ Tk, Tc i = some Tk →
       ∃ T₁, en.fin = some (cancelOblN (ℍ := ℍ) Φ T₁) ∧ T₁.Sub Tk ∧ Tk.Down)
-    (hret : ∀ k ls v ρ, Qin k ls v ρ →
+    (hret : ∀ k, k ≤ N → ∀ ls v ρ, Qin k ls v ρ →
       erwp (ℍ := ℍ) Φ (opTableN Tout) Qout k ls (.app (.val hr) (.val v)) ρ)
     (hop : ∀ i en, Tin n₀ i = some en → ∃ c, clauseAt hs.1 i.toNat = some c ∧
-      (en.abort = false → ∀ k ls v (κ : Val) ρ,
+      (en.abort = false → ∀ k, k ≤ N → ∀ ls v (κ : Val) ρ,
         (en.PA k ls v ⋆ KapRelN (ℍ := ℍ) Φ (opTableN Tout) Qout en (Tc i) k ls κ) ρ →
         erwp (ℍ := ℍ) Φ (opTableN Tout) Qout k ls (.app (.val c) (.pair (.val v) κ.1)) ρ) ∧
-      (en.abort = true → ∀ k ls v ρ, en.PA k ls v ρ →
+      (en.abort = true → ∀ k, k ≤ N → ∀ ls v ρ, en.PA k ls v ρ →
         erwp (ℍ := ℍ) Φ (opTableN Tout) Qout k ls (.app (.val c) (.val v)) ρ)) :
-    ∀ n ls e ρ, erwp (ℍ := ℍ) Φ (opTableN Tin) Qin n ls e ρ →
+    ∀ n, n ≤ N → ∀ ls e ρ, erwp (ℍ := ℍ) Φ (opTableN Tin) Qin n ls e ρ →
       erwp (ℍ := ℍ) Φ (opTableN Tout) Qout n ls (hndE (hndVal n₀ qs hr hs) e) ρ := by
   have hLin := opTableN_local Tin
   have hLout := opTableN_local Tout
@@ -325,7 +328,7 @@ theorem erwp_handle {Φ : LocFam} (hΦ : Φ.Down) (Tin Tout : OpTabN) (hTinD : T
   intro n
   induction n using Nat.strong_induction_on with
   | _ n ih =>
-  intro ls e ρ h
+  intro hnN ls e ρ h
   set H := hndVal n₀ qs hr hs with hH
   rw [erwp_eq]
   show rwpG (ℍ := ℍ) Φ _ n ls ((hndK H).plug e) ρ
@@ -337,11 +340,11 @@ theorem erwp_handle {Φ : LocFam} (hΦ : Φ.Down) (Tin Tout : OpTabN) (hTinD : T
       erwpC (ℍ := ℍ) Φ (opTableN Tout) Qout n k' ls'' (hndE H e'') τ := by
     intro k' hk' ls'' e'' τ hc
     simp only [erwpC, show k' < n by omega, if_true] at hc ⊢
-    exact ih k' (by omega) ls'' e'' τ hc
+    exact ih k' (by omega) (by omega) ls'' e'' τ hc
   rcases ht with ⟨v, rfl, hv⟩ | ht | ht
   · -- `[ret]`
     exact rwpG_det hΦ (hPD _) (fun μ => step1Only_plug (Head.hret μ n₀ qs hr hs v) rfl .hole)
-      (erwp_unfold_at hLout hk (hret k ls' v σ hv))
+      (erwp_unfold_at hLout hk (hret k (by omega) ls' v σ hv))
   · -- a stop at a non-abortive operation
     obtain ⟨K₁, m, i, v, en, hp⟩ := ht
     obtain ⟨⟨rfl, hK₁, hT, ha⟩, ρa, ρk, hcak, hA, hu, hcont⟩ := pure_sep_iff.mp hp
@@ -366,7 +369,7 @@ theorem erwp_handle {Φ : LocFam} (hΦ : Φ.Down) (Tin Tout : OpTabN) (hTinD : T
       rw [hq i en hT ha, kappaAt_tag]
       cases hqq : en.q with
       | unr =>
-          refine erwp_unfold_at hLout hk (hna ha k ls' v
+          refine erwp_unfold_at hLout hk (hna ha k (by omega) ls' v
             ⟨kappa H K₁, by unfold kappa; exact .lam⟩ σ ⟨ρa, ρk, hcak, hA, hu, ?_⟩)
           intro ls'' he k' hk'
           refine ⟨fun w τ₁ τ₂ hB hcτ => ?_, fun hq' Tk hTk => ?_⟩
@@ -384,7 +387,7 @@ theorem erwp_handle {Φ : LocFam} (hΦ : Φ.Down) (Tin Tout : OpTabN) (hTinD : T
             cases k with
             | zero => exact hA
             | succ k₀ => exact hTinD.pa _ _ _ hT _ _ _ _ hA
-          refine hna ha (k - 1) ls' v ⟨_, isVal_kappaC _ ℓ H K₁⟩ σ₂
+          refine hna ha (k - 1) (by omega) ls' v ⟨_, isVal_kappaC _ ℓ H K₁⟩ σ₂
             ⟨ρa, y, hy₂, hA', fun hq' => absurd (hqq.symm.trans hq') (by simp), ?_⟩
           intro ls'' he k' hk'
           refine ⟨fun w τ₁ τ₂ hB hcτ => ?_, fun hq' Tk hTk => ?_⟩
@@ -428,7 +431,7 @@ theorem erwp_handle {Φ : LocFam} (hΦ : Φ.Down) (Tin Tout : OpTabN) (hTinD : T
         (fun μ => step1Only_plug (Head.hunwind μ m i qs hr hs c v K₁ hc hK₁) rfl .hole) ?_
       refine rwpG_garbage (rwpG_mono (fun _ _ _ _ ⟨τ₁, τ₂, hcτ, hq', hnτ⟩ =>
         ⟨τ₁, τ₂, hcτ, hnτ, hq'⟩) (rwpG_frame (fun _ τ => NoOwn τ) (fun _ _ _ _ h => h) hcan
-          (erwp_unfold_at hLout hk (hab ha k ls' v ρa hPA)) hnn))
+          (erwp_unfold_at hLout hk (hab ha k (by omega) ls' v ρa hPA)) hnn))
     · -- an abortive operation of another name passes outward
       have hKo : ((hndK H).comp K₁).Catches m = false := by
         rw [catches_comp, hndK_catches, hK₁]; simpa using Ne.symm hm
@@ -439,6 +442,30 @@ theorem erwp_handle {Φ : LocFam} (hΦ : Φ.Down) (Tin Tout : OpTabN) (hTinD : T
       exact rwpG_here (final_opPlug (payloadName_opPayload m i v) hKo) (Or.inr (Or.inr
         ⟨(hndK H).comp K₁, m, i, v, en, pure_sep_mk ⟨rfl, hKo, (hTin m i hm) ▸ hT, ha⟩
           ⟨ρa, ρn, hcan, ⟨hPA, hnA⟩, hnn⟩⟩))
+
+/-- **A handler at the step index** (`[handle]`): `erwp_handle_le` at `N = n`. -/
+theorem erwp_handle {Φ : LocFam} (hΦ : Φ.Down) (Tin Tout : OpTabN) (hTinD : Tin.Down)
+    (hTout : Tout.Down) (n₀ : UInt32) (hTin : ∀ m i, m ≠ n₀ → Tin m i = Tout m i) (qs hr hs : Val)
+    (Qin Qout : PostN) (hQout : Qout.Down)
+    (hq : ∀ i en, Tin n₀ i = some en → en.abort = false → capTag qs.1 i.toNat = en.q.tag)
+    (Tc : UInt32 → Option OpTabN)
+    (hTc : ∀ i en, Tin n₀ i = some en → en.abort = false → en.q ≠ .lin → ∀ Tk, Tc i = some Tk →
+      ∃ T₁, en.fin = some (cancelOblN (ℍ := ℍ) Φ T₁) ∧ T₁.Sub Tk ∧ Tk.Down)
+    (hret : ∀ k ls v ρ, Qin k ls v ρ →
+      erwp (ℍ := ℍ) Φ (opTableN Tout) Qout k ls (.app (.val hr) (.val v)) ρ)
+    (hop : ∀ i en, Tin n₀ i = some en → ∃ c, clauseAt hs.1 i.toNat = some c ∧
+      (en.abort = false → ∀ k ls v (κ : Val) ρ,
+        (en.PA k ls v ⋆ KapRelN (ℍ := ℍ) Φ (opTableN Tout) Qout en (Tc i) k ls κ) ρ →
+        erwp (ℍ := ℍ) Φ (opTableN Tout) Qout k ls (.app (.val c) (.pair (.val v) κ.1)) ρ) ∧
+      (en.abort = true → ∀ k ls v ρ, en.PA k ls v ρ →
+        erwp (ℍ := ℍ) Φ (opTableN Tout) Qout k ls (.app (.val c) (.val v)) ρ)) :
+    ∀ n ls e ρ, erwp (ℍ := ℍ) Φ (opTableN Tin) Qin n ls e ρ →
+      erwp (ℍ := ℍ) Φ (opTableN Tout) Qout n ls (hndE (hndVal n₀ qs hr hs) e) ρ :=
+  fun n => erwp_handle_le hΦ n Tin Tout hTinD hTout n₀ hTin qs hr hs Qin Qout hQout hq Tc hTc
+    (fun k _ => hret k)
+    (fun i en hT => by
+      obtain ⟨c, hc, h₁, h₂⟩ := hop i en hT
+      exact ⟨c, hc, fun ha k _ => h₁ ha k, fun ha k _ => h₂ ha k⟩) n le_rfl
 
 end BoCa.Fig16.LogRel.Core.Chain.SI
 
