@@ -386,6 +386,7 @@ poly-providers erased handles 0 performs 0 raises 0 left 0 0
 print-borrowed-array erased handles 0 performs 0 raises 0 left 0 0
 print-borrowed-list erased handles 0 performs 0 raises 0 left 0 0
 quicksort erased handles 0 performs 0 raises 0 left 0 0
+raise-in-borrow-branch erased handles 4 performs 0 raises 2 left 0 0
 rec-await-exhausted erased handles 2 performs 1 raises 1 left 0 0
 rec-deep erased handles 0 performs 0 raises 0 left 0 0
 rec-emit erased handles 1 performs 0 raises 1 machines 1 suspends 2 left 0 0

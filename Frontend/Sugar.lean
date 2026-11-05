@@ -2190,10 +2190,13 @@ where
   closed (A : CVTy) : CVTy := A.subst (BoCa.Fig16.LogRel.Core.FoldP.env Bs)
 
 /-- The body `S` of a block with its tail values boxed at `'x`: a tail value is bound first, so
-that what it computes from the borrow is not inside the box (`boxI`'s context outlives `'x`). -/
+that what it computes from the borrow is not inside the box (`boxI`'s context outlives `'x`). A
+terminal that never returns, `abort[n.i] V` or `absurd V`, has no value to box and checks at the
+boxed result type as it is: boxing its `0` would type the path at `['x] 0`. -/
 def boxTail (x : String) (S : Comp) : Comp :=
   wrapTail (fun
     | .ret sp V@(.var ..) | .ret sp V@(.clone ..) | .ret sp V@(.unit _) => .ret sp (.boxed sp (.var sp x) V)
+    | T@(.abort ..) | T@(.absurd ..) => T
     | T => .bind T.span ⟨"io_bx", T.span⟩ none T
         (.ret T.span (.boxed T.span (.var T.span x) (.var T.span "io_bx")))) S
 

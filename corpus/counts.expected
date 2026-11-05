@@ -392,6 +392,7 @@ poly-providers 2 0 0 90 48 69 # the two strings; the comparisons read views and 
 print-borrowed-array 4 0 0 19 6 3
 print-borrowed-list 19 4 0 85 60 0
 quicksort 5 0 0 96891 88845 94775 # the data and the range stack; the output capability's cell is a word of the program's data
+raise-in-borrow-branch 4 0 0 7 4 0 # the cell of each of the four runs, freed after its borrow; the raises are branches
 rec-await-exhausted 2 0 0 9 6 0 # the two list cells; the one `await`'s clause resumes in tail position, a direct call
 rec-deep 30043 0 0 2169491 2169491 436560 # the tree, one object per node (its payload, boxed at the sum), and each group's buffer of frames growing by doubling
 rec-emit 6 0 0 216 252 0 # the frames of the continuation `summed` resumes in the middle of the recursion, as in the probe P2

@@ -434,6 +434,8 @@ corpus/pipe-handlers.bc 3.0 cancellable abortive: -; agree
 corpus/pipe-handlers.bc 4.0 cancellable once: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/pipe-handlers.bc 1.0 cancellable abortive: branch; agree
 corpus/pipe-handlers.bc 2.0 cancellable once: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/raise-in-borrow-branch.bc 1.0 cancellable abortive: branch; agree
+corpus/raise-in-borrow-branch.bc 2.0 cancellable abortive: branch; agree
 corpus/rec-await-exhausted.bc 1.0 cancellable tail: direct; agree
 corpus/rec-await-exhausted.bc 2.0 cancellable abortive: branch; agree
 corpus/rec-emit.bc 1.0 cancellable abortive: branch; agree
