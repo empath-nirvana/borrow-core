@@ -316,4 +316,156 @@ theorem erwp_ubindClaimR {Φ : LocFam} (hΦ : Φ.Down) {T T₁ : OpTabN} (hTD : 
 
 end BoCa.Fig16.LogRel.Core.Chain.SI
 
+/-! ## The suspending `mut` lend, compatible with the interpretation -/
+
+namespace BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
+open BoCa
+open BoCa.Fig16
+open BoCa.Fig16.BoLo
+open BoCa.Fig16.LogRel.Core
+open BoCa.Fig16.LogRel.Core.Chain.SI
+open BoCa.Fig16.LogRel (LtLife substAll)
+open BoCa.Lifetime (LSub LifeCtx LifeVar)
+open BoCa.Fig16.Tree.Wp.Goal791 (Const791 ctx791 vals791 jdgC)
+open BoCa.Fig16.LogRel.Core.Chain.SI.Hardest791 (rwp_det'')
+open BoCa.BoLo (Heap Kont ubindE Head)
+
+/-- `rwp_mono` reading the postcondition at the indices the runs leave, `≤ n`. -/
+theorem rwp_mono_le {Φ : LocFam} {P Q : PostN} {n : Nat}
+    (hPQ : ∀ k, k ≤ n → ∀ ls v ρ, P k ls v ρ → Q k ls v ρ) {ls : List SRec} {e : Expr} {ρ : WRes}
+    (h : rwp (ℍ := ℍ) Φ P n ls e ρ) : rwp (ℍ := ℍ) Φ Q n ls e ρ := by
+  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
+  obtain ⟨hval, hprog⟩ := h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
+  refine ⟨fun v hv => ?_, hprog⟩
+  obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
+    h₁₃⟩ := hval v hv
+  exact ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
+    hPQ _ (Nat.sub_le n j) _ _ _ h₁₃⟩
+
+/-- A run at the empty table never stops: it is an `rwp` run. -/
+theorem rwp_of_erwp_empty {Φ : LocFam} {Q : PostN} {n : Nat} {ls : List SRec} {e : Expr}
+    {ρ : WRes} (h : erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) Q n ls e ρ) :
+    rwp (ℍ := ℍ) Φ Q n ls e ρ := by
+  rw [erwp_eq] at h
+  refine rwp_iff_rwpG.mpr (rwpG_mono (fun k ls t ρ ht => ?_) h)
+  rcases ht with ht | ⟨K, m, i, v, en, hp⟩ | ⟨K, m, i, v, en, hp⟩
+  · exact ht
+  · obtain ⟨⟨-, -, hT, -⟩, -⟩ := pure_sep_iff.mp hp; cases hT
+  · obtain ⟨⟨-, -, hT, -⟩, -⟩ := pure_sep_iff.mp hp; cases hT
+
+theorem OpTabN.Twin.trans {T₁ T₂ T₃ : OpTabN} (h₁ : T₁.Twin T₂) (h₂ : T₂.Twin T₃) :
+    T₁.Twin T₃ := fun m i en h => by
+  obtain ⟨en₂, h₂', a1, b1, c1, d1, e1⟩ := h₁ m i en h
+  obtain ⟨en₃, h₃', a2, b2, c2, d2, e2⟩ := h₂ m i en₂ h₂'
+  exact ⟨en₃, h₃', a2.trans a1, b2.trans b1, c2.trans c1, d2.trans d1, e2.trans e1⟩
+
+/-- A cancel row with no layers. -/
+def _root_.BoCa.Fig16.LogRel.Core.CTy.NoLayers : CTy → Prop
+  | .top => False
+  | .eff _ _ _ _ _ _ _ _ => False
+  | _ => True
+
+theorem finN_noLayers {F : CTy} (h : F.NoLayers) (δ : LSub) (Φ : LocFam) :
+    finN (ℍ := ℍ) F δ Φ = some (cancelOblN (ℍ := ℍ) Φ OpTabN.empty) := by
+  cases F <;> simp_all [CTy.NoLayers, finN]
+
+/-- An entry of a row's table is one of its operations'. -/
+theorem tabN_effOf_some {S : Row} {R : VTy} {δ : LSub} {Φ : LocFam} {m i : UInt32} {en : OpEntN}
+    (h : tabN (ℍ := ℍ) (CTy.effOf S R) δ Φ m i = some en) :
+    ∃ o ∈ S, m = o.n ∧ en = entN o.q o.B (fun k v ρ => vN (ℍ := ℍ) o.A δ k v ρ)
+      (fun k v ρ => vN (ℍ := ℍ) o.B δ k v ρ) (finN (ℍ := ℍ) o.fin δ Φ) := by
+  induction S with
+  | nil => simp [CTy.effOf, tabN, OpTabN.empty] at h
+  | cons o S ih =>
+      simp only [CTy.effOf, tabN] at h
+      rcases extTabN_some h with ⟨hm, -, rfl⟩ | h
+      · exact ⟨o, List.mem_cons_self .., hm, rfl⟩
+      · obtain ⟨o', ho', hm, rfl⟩ := ih h
+        exact ⟨o', List.mem_cons_of_mem _ ho', hm, rfl⟩
+
+/-- **The callback's table and the lender's are twins**: they differ in `'x`, which no operation
+type of the row mentions, and in the location family, which only the cancel obligations read. -/
+theorem tabN_effOf_twin {x : LifeVar} {α : Life} {S : Row}
+    (hS : ∀ o ∈ S, ¬ VFree x o.A ∧ ¬ VFree x o.B) (R₁ R₂ : VTy) (δ : LSub) (Φ₁ Φ₂ : LocFam) :
+    (tabN (ℍ := ℍ) (CTy.effOf S R₁) (δ.extend x α) Φ₁).Twin
+      (tabN (ℍ := ℍ) (CTy.effOf S R₂) δ Φ₂) := by
+  induction S with
+  | nil => intro m i en h; simp [CTy.effOf, tabN, OpTabN.empty] at h
+  | cons o S ih =>
+      intro m j en h
+      simp only [CTy.effOf, tabN] at h ⊢
+      unfold extTabN at h ⊢
+      split at h
+      · rename_i hmj
+        cases Option.some.inj h
+        rw [if_pos hmj]
+        have hA := vN_extend_of_not_free (ℍ := ℍ) (hS o (List.mem_cons_self ..)).1 δ α
+        have hB := vN_extend_of_not_free (ℍ := ℍ) (hS o (List.mem_cons_self ..)).2 δ α
+        refine ⟨_, rfl, rfl, rfl, ?_, ?_, rfl⟩
+        · simp only [entN, hA]
+        · simp only [entN, hB]
+      · rename_i hmj
+        rw [if_neg hmj]
+        exact ih (fun o' ho' => hS o' (List.mem_cons_of_mem _ ho')) m j en h
+
+/-- **The callback's table may be stopped at under the lend at `α`**: `Row.Suspend`'s qualifier
+and payload clauses, and the answer clause `hSB` (§5 of the scope document). -/
+theorem tabN_lendOKCR {x : LifeVar} {α : Life} {S : Row} (hS : S.Suspend x)
+    (hSB : ∀ o ∈ S, ∀ Δ a, VOutlives Δ a o.B) (R : VTy) (δ : LSub) (Φ : LocFam) :
+    (tabN (ℍ := ℍ) (CTy.effOf S R) (δ.extend x α) Φ).LendOKCR α where
+  entry := fun m i en h _ => by
+    obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
+    exact ⟨(hS o ho).1, rfl⟩
+  pa := fun m i en h k ls v ρ hp => by
+    obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
+    exact vN_outlives (Δ := LifeCtx.empty) (a := .var x) (models_empty_any _)
+      (interp_ext_self δ x α) ((hS o ho).2.2.2.2 _ _) k v ρ hp
+  pb := fun m i en h k ls w ρ hp => by
+    obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
+    exact (vN_outlives (Δ := LifeCtx.empty) (a := .var x) (models_empty_any _)
+      (interp_ext_self δ x α) (hSB o ho _ _) k w ρ hp).mono (Life.down_sqsubset α).le
+
+/-- A cancellable, non-abortive entry's cancel obligation, at a cancel row with no layers. -/
+theorem tabN_fin {S : Row} (hSF : ∀ o ∈ S, capB o.q o.B = true → o.fin.NoLayers) {R : VTy}
+    {δ : LSub} {Φ : LocFam} : ∀ m i en, tabN (ℍ := ℍ) (CTy.effOf S R) δ Φ m i = some en →
+      en.abort = false → en.q = .cancel → en.fin = some (cancelOblN (ℍ := ℍ) Φ OpTabN.empty) := by
+  intro m i en h ha hq
+  obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
+  have hc : capB o.q o.B = true := by
+    simp only [entN] at ha hq
+    simp only [capB, hq] at ha ⊢
+    simpa using ha
+  simp only [entN, hc, if_true]
+  exact finN_noLayers (hSF o ho hc) δ Φ
+
+/-- The finaliser `λ_. d ℓ` consumes the lend's claim: `d`'s judgment at `Ref A ⊸ 1`, applied to
+the cell owned again with its content in `A`'s family. -/
+theorem fin_claim {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
+    (hd : SemJN (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.ref A) .unit))) {δ δ' : LSub}
+    (hδ : vN (ℍ := ℍ) A δ' = vN (ℍ := ℍ) A δ) {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {α : Life}
+    {k : Nat} {ls : List SRec} {ρ : WRes}
+    (h : claimR l α (fun j u r => vN (ℍ := ℍ) A δ' j u r.1) k ρ) :
+    rwp (ℍ := ℍ) Φ (fun _ _ v ρ' => v = Val.unit ∧ ρ' = PMap.empty) k ls
+      (.app (.val (Val.lam (.app d (.val (Val.loc l))))) (.val .unit)) ρ := by
+  obtain ⟨w, σ, hσ, hF, hcl⟩ := h
+  have hF' : vN (ℍ := ℍ) A δ k w σ := by rw [← hδ]; exact hF
+  refine rwp_det'' (Q := fun _ v ρ' => v = Val.unit ∧ ρ' = PMap.empty) hΦ
+    (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) ?_
+  have e : Kont.hole.plug (Expr.subst 0 Val.unit (.app d (.val (Val.loc l)))) =
+      (Kont.appL .hole (Val.loc l)).plug d := by
+    simp [Kont.plug, Expr.subst, subst_closedAt d (s := _) hdc (Nat.zero_le _), Val.loc,
+      Expr.loc]
+  rw [e]
+  refine rwp_bind hΦ _ ?_
+  have hd0 := hd δ [] Φ k ls PMap.empty (models_empty_any _) hΦ trivial rfl
+  rw [show substAll [] d = d from psub_closedAt d [] hdc (Nat.zero_le 0)] at hd0
+  have hfr := rwp_frame (fun _ τ => τ = ρ) (fun _ _ _ _ h => h) (compS_empty_left ρ)
+    (rwp_of_erwp_empty hd0) rfl
+  refine rwp_mono_le (fun k' hk' ls' v τ hv => ?_) hfr
+  obtain ⟨τ₁, τ₂, hcτ, hP, rfl⟩ := hv
+  have := hP Φ hΦ ls' k' le_rfl (Val.loc l) τ₂ τ hcτ ⟨l, w, σ, rfl, hcl, vN_le hk' hF'⟩
+  exact rwp_of_erwp_empty this
+
+end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
+
 end
