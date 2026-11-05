@@ -261,6 +261,62 @@ theorem lendEnd_frame {M : Mask} {l : Loc} (hl : l ∈ M.lendLocs) {v : Val} {T 
   rw [hzα] at hz
   exact hfα ⟨l, t', φ.erase, φ.wit, ht', hφ, hz⟩
 
+/-! ### `MaskOff` along another task's run -/
+
+/-- **A run not masked at `ℓ` keeps its resource's flattening free of `own` and `mut` cells at
+`ℓ`**, in a world whose `ag` holds a cell at `ℓ` (a record proper at `ℓ`, by `LeInv`). A `mut`
+cell at the end was at the start (`↭`'s `mut` clause at `ℓ`). An `own` cell at the end is in
+`ex(π)_●`, which `ex_ag_disjoint` refutes in the world, or beneath an `imm` cell of `ag(π)`, whose
+ancestor is unmasked (`MaskShallow`) and so at the start, where the start's flattening is then
+defined at `ℓ`, hence an `imm` cell there, which `↭`'s `imm` clause carries to the end. This is
+what a pool reads to keep the frame condition `MaskOff` of the lender's frames. -/
+theorem maskOff_of_upd {Φ : LocFam} {n : Nat} {L : Set Loc} {l : Loc} (hlL : l ∉ L)
+    {ρ π R W : WRes} (hU : UpdVNm Φ n L ρ π) (hshπ : MaskShallow L π)
+    (hoffρ : ∀ ψ, ρ.FlatAt l ψ → ψ.kind = Kind.imm) (hW : ResU.CompS π R W)
+    (hag : ∀ a, AgW W a → ∃ ψ, a.get l = some ψ) (hvW : W.Valid) :
+    ∀ ψ, π.FlatAt l ψ → ψ.kind = Kind.imm := by
+  intro ψ hψ
+  cases hk : ψ.kind with
+  | imm => rfl
+  | «mut» =>
+      obtain ⟨ψ₀, hψ₀, hs⟩ := hU.1.2.2 l hlL ψ hψ hk
+      have := hoffρ ψ₀ hψ₀
+      rw [hs.1] at this; cases this
+  | own =>
+      exfalso
+      obtain ⟨σπ, ⟨eπ, aπ, heπ, haπ, hcπ⟩, hgπ⟩ := hψ
+      have hko : ψ.kind ≠ Kind.imm := by rw [hk]; simp
+      rcases ResU.Comp.get hcπ l with ⟨-, -, f⟩ | ⟨ζ, f₁, f₂, f⟩ | ⟨ζ, f₁, f₂, f⟩ |
+          ⟨ζ₁, ζ₂, ζ, f₁, f₂, f, hC⟩
+      · rw [hgπ] at f; cases f
+      · -- in `ex(π)_●`: refuted in the world
+        rw [hgπ] at f; cases Option.some.inj f
+        obtain ⟨σW, eW, aW, heW, haW, hcW⟩ := hvW
+        obtain ⟨e₁, e₂, he₁, he₂, hec⟩ := (ExS.split hW).mp heW
+        obtain rfl := ExS.functional he₁ heπ
+        have heWl : eW.get l = some ψ := (ResU.CompS.get_left_of_ne_imm hec f₁ hko).2
+        obtain ⟨φ, hφ⟩ := hag aW haW
+        exact ex_ag_disjoint ⟨σW, eW, aW, heW, haW, hcW⟩ heW haW heWl hφ
+      · -- beneath an `imm` cell of `ag(π)`: its ancestor is at the start
+        rw [hgπ] at f; cases Option.some.inj f
+        obtain ⟨σρ, eρ, aρ, heρ, haρ, hcρ⟩ := hU.2.1
+        obtain ⟨χ, ev, av, p, z, ξ, -, -, -, hz, hpl, -, -, -⟩ :=
+          updImmM_ag_nonimm_transfer (updImmM_symm hU.1.1) hshπ heπ haπ hcπ heρ haρ hcρ f₂ hko
+        obtain ⟨ζa, hζa⟩ := comp_some hz hpl
+        obtain ⟨ζσ, hζσ⟩ := comp_some_r hcρ hζa
+        have hkσ := hoffρ ζσ ⟨σρ, ⟨eρ, aρ, heρ, haρ, hcρ⟩, hζσ⟩
+        obtain ⟨t, ht, hζeq⟩ := CellU.imm_eta hkσ
+        rw [hζeq] at hζσ
+        obtain ⟨σπ', hσπ', hgπ'⟩ := (hU.1.1 l hlL t _ _ ht).mp
+          ⟨σρ, ⟨eρ, aρ, heρ, haρ, hcρ⟩, hζσ⟩
+        obtain rfl := ResU.Flat.functional hσπ' ⟨eπ, aπ, heπ, haπ, hcπ⟩
+        rw [hgπ] at hgπ'
+        have := congrArg CellU.kind (Option.some.inj hgπ')
+        rw [hk, CellU.kind_immOf] at this
+        cases this
+      · rw [hgπ] at f; cases Option.some.inj f
+        exact hko (CellU.CompS.kind hC)
+
 /-! ### Ghost facts -/
 
 theorem GRes.counted_mono_add (g h : GRes) : g.counted ⊆ (g + h).counted := by
@@ -398,7 +454,7 @@ theorem rwpGX_lendEnd {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {l : Loc}
   -- `[α]_1` is the resource's whole token
   have hgα : g.tok α = 0 := by
     have h1 := (GRes.Valid.right hv).tok α
-    simp only [GRes.tok_add, GRes.tok_life, if_pos rfl] at h1
+    simp only [GRes.tok_add, GRes.tok_life] at h1
     have h' : g.tok α + 1 ≤ 0 + 1 := by simpa using h1
     exact le_antisymm (le_of_add_le_add_right h') (by positivity)
   have hα1 : (g + GRes.life α).tok α = 1 := by simp [hgα]
