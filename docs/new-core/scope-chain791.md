@@ -59,26 +59,38 @@ The new constants of `goal-791` (`Row.Suspend`, the field reborrow) are data. No
   - `AntiLendProg.progAnti_orDiverges` (resumed);
   - `AntiCancelProg.progAntiCancel_orDiverges` (cancelled).
 
-## Next steps, in order
+## Done: the four steps
 
-1. **The chain scheduler** (`Core/Chain/Pool*.lean`). Port `TreePoolSched`/`TreePoolSpawn`
-   (`SchedOKT`, `PoolAns`, `poolSchedAdequacyT`) to `erwp` as `SchedOKN`, `PoolAnsN`,
-   `poolSchedAdequacyN`:
-   - a stored entry is a `KapRelN` share at its own stop list, resumed at `extF`;
-   - the pool is the separating conjunction (`ResU.CompS`) of the entries' shares. `PoolTJ`'s
-     masks, `AvoidUnsh`, `HoldsIn` and `RecsApart` are the tree's form of that separation;
-   - the table carries `park`, `spawn` and `cancel` only. `rootMut`/`rootMutC` do not perform
-     `par`, and `erwp_handle` checks clauses only at the table's entries.
-2. **Task A with the `goal-791` constants.**
-   - `withborUE`: `erwp_M_frameC` around `f [] r`, with the `then … unwind d r` frame by
-     `erwp_ubindClaim`.
-   - `withborFE`: `load r`, then `AntiLendProg.open_ok` (resumed) or
-     `AntiCancelProg.openC_ok` (cancelled), with the field's lend at the callback `cbField`.
-   - `dRec` consumes `c`'s claim, as `AntiCancelProg.Dc_ok`.
-3. **`thL`, `thC` at `erwp`**, from `TreePoolSpawnProgs`' `L` and `Cbody`.
-4. **`rootMut`, `rootMutC` at the chain table**, then `HardestCase791`/`HardestCase791C`
-   (`Core/TreeGoal791.lean`; the statements are about `progOf`, so they do not depend on the
-   relation) through `poolSchedAdequacyN`.
+1. **The chain scheduler** (`Core/Chain/PoolN.lean`): `StoredN`, `PoolN` (the separating
+   conjunction of the stored continuations' `KapRelN` shares, each with its entry's world condition
+   at every list with the current list's members), `PoolAnsN`, `GoodN`, `SchedOKNLe`/`SchedOKN`
+   (the premises of `erwp_handle_le` at the empty outer table, each cancel run at the scheduler's
+   own table), the moves (`poolAnsN_run_le`, `poolAnsN_park`, `poolAnsN_resume`,
+   `poolAnsN_cancel`, `PoolN.swap`, `PoolN.perm`, `poolAnsN_resumeSnd`, `poolAnsN_cancelSnd`), and
+   `poolSchedAdequacyN`. General: any table, any scheduler meeting `SchedOKN`, any invariant of its
+   list, no fixed task count or order. `erwp_handle_le` (`SI/HandleN.lean`) is `erwp_handle` with its
+   clauses asked at the stops up to `N`; `erwp_handle` is its corollary.
+   `HS` at the chain table `TJN` (`Core/Chain/PoolSpawnN.lean`): park, spawn and cancel entries,
+   children's tables indexed (`tabAtN`), `hs_schedOKN`, `progOfN_orDiverges`. `HS`'s `par` clause
+   has no entry in `TJN`.
+2. **Task A** (`Core/Chain/Hardest791N.lean`, `taskA_ok`): `withborU dRec` is `erwp_M_frameT` +
+   `claimT_canS` (the record's claim at the cancel's `raise`) under `erwp_ubindClaim` (`dRec`
+   consumes the claim, `dRec_ok`); `withborF dFwd` is the anti-frame (`erwp_M_antiFrameC`) around
+   `cbField () (!c)` (`openF_ok`: `load`, then the field's lend by `erwp_M_frameTF` with the opened
+   cell framed by `erwpG_frameT`), and the field's finaliser frame `then … unwind dFwd c` outside
+   the anti-frame by `erwp_ubind` (`cancelOblN_ubind`, the finaliser holding nothing).
+3. **`thL`, `thC`** at every indexed table (`thL_ok`: the cell lent `mut` across `park` by
+   `erwp_M_frameT`, inside `L`'s finaliser frame by `erwp_ubindClaim`; `thC_ok`).
+4. **The roots** (`rootMut_ok`, `rootMutC_ok`) and `hardestCase791`, `hardestCase791C` through
+   `poolSchedAdequacyN`. Axioms `[propext, Classical.choice, Quot.sound]`.
 
-**Not yet done:** an audit of the lifted files' prose for history (stage numbers, round numbers,
-spike numbers).
+Departures from the plan above, none a kill:
+- Task A's proof is the same for both roots, and uses the cancellable-stop pieces in both: every
+  entry of `TJN` is cancellable, so a stop owes a cancel run whether or not it is taken.
+  `AntiLendProg.open_ok` (must-resume) is not used.
+- `withborF`'s finaliser frame is not in the plan; it sits outside the anti-frame, at the plain
+  table, where `erwp_ubind` applies.
+- `TJN`'s cancel obligations are cancel runs at the empty table: a cancelled task's unwinding
+  performs no operation. `SchedOKN` itself allows any cancel table inside the scheduler's.
+- A task's and the program's answer `QVN` is a value owning nothing (the value is not `()`: the
+  field's content after its lend is not tracked).

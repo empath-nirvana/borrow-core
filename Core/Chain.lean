@@ -83,3 +83,6 @@ import Core.Chain.SI.UbindN
 import Core.Chain.SI.Uncapture
 import Core.Chain.SI.UpdN
 import Core.Chain.SI.WpN
+import Core.Chain.PoolN
+import Core.Chain.PoolSpawnN
+import Core.Chain.Hardest791N

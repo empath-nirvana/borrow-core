@@ -31,9 +31,9 @@ or which of them it resumes or cancels; `Inv` is the scheduler's own condition o
 `erwp_handle_le` at the empty outer table, each clause getting the stopped task's continuation as
 `KapRelN`, its cancel run at the scheduler's own table. A clause proves its case by the pool's
 moves: run a task under the scheduler beside the pool (`poolAnsN_run_le`), park the stopped task
-(`poolAnsN_park`), resume a stored task (`poolAnsN_resume`), cancel one (`poolAnsN_cancel`), or
-exchange the two top entries (`PoolN.swap`); `poolAnsN_resumeSnd` and `poolAnsN_cancelSnd` are
-the moves at the second entry.
+(`poolAnsN_park`), resume the top task (`poolAnsN_resume`), cancel it (`poolAnsN_cancel`), or
+reorder the entries (`PoolN.perm`, `PoolN.swap`), so any stored task can be brought to the top;
+`poolAnsN_resumeSnd` and `poolAnsN_cancelSnd` are the moves at the second entry.
 
 **How it is proved.** `[handle]` for the scheduler (`erwp_handle_le`) gives the handled task's
 answer in `PoolAnsN`; the pool is framed beside the handled run (`erwpE_frame`, the outer table
@@ -138,6 +138,15 @@ theorem PoolN.swap {Φ : LocFam} {t u : StoredN} {ts : List StoredN} {ls : List 
   obtain ⟨a, bc, hc, ha, b, c, hbc, hb, hcp⟩ := h
   obtain ⟨ac, hac, hx⟩ := compS_lcomm hbc hc
   exact ⟨b, ac, hx, hb, a, c, hac, ha, hcp⟩
+
+/-- The pool's resource does not depend on the order of its entries. -/
+theorem PoolN.perm {Φ : LocFam} {ls : List SRec} {ts ts' : List StoredN} (hp : ts.Perm ts') :
+    ∀ {ρ : WRes}, PoolN (ℍ := ℍ) Φ ts ls ρ → PoolN (ℍ := ℍ) Φ ts' ls ρ := by
+  induction hp with
+  | nil => exact fun h => h
+  | cons t _ ih => exact fun ⟨a, b, hc, ha, hb⟩ => ⟨a, b, hc, ha, ih hb⟩
+  | swap t u _ => exact fun h => PoolN.swap h
+  | trans _ _ ih₁ ih₂ => exact fun h => ih₂ (ih₁ h)
 
 /-! ### Scheduler answers -/
 
