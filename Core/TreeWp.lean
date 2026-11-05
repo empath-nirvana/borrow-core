@@ -111,7 +111,7 @@ def EndT (Q : TPost) (k : Nat) (w₀ : TWd) (ρ₀ : TRes w₀.K) (O₀ : List (
     UpdA (sem w'.Θ) (recMask O₀) (recMask O') ρ₀ ρ' fρ' ∧
     NoneAt (MaskDiff (recMask O₀) (recMask O')) ρf' ∧ InvKeptA w₀.Θ w'.Θ (recMask O₀) ρ₀
 
-/-- **`crwpG` over the tree world.** -/
+/-- **The run relation over the tree world.** -/
 def twp (F : TFrame) (Q : TPost) (n : Nat) (w : TWd) (ls : List (SRecT w.K))
     (O : List (FrameRecT w.K)) (e : Expr) (ρ : TRes w.K) : Prop :=
   ∀ (w₀ : TWd) (ρ₀ ρf fρ : TRes w₀.K) (ls₀ : List (SRecT w₀.K))
@@ -322,7 +322,7 @@ theorem forall₂_append_left {α β : Type} {R : α → β → Prop} :
       ⟨_ :: ys₁, ys₂, by rw [e]; rfl, .cons hxy h₁, h₂⟩
 
 /-- **The frame**: a resource `ρ₂` in `R`, owning the records `O₂`, kept beside the run, which
-owns `O₁`. Forced beside `crwpG_frame`: `R` is carried along re-reading (`hR`), and the framed
+owns `O₁`. Forced by the tree world: `R` is carried along re-reading (`hR`), and the framed
 resource is covered at its world (`hcov`), so that its parts have re-readings at every extension
 carrying it; `O₁` and `O₂` are apart by location (`hO`), which every re-reading keeps. -/
 theorem twp_frame {F F₁ : TFrame} {P : TPost} {R : TRProp} (hR : R.Mono) {n : Nat} {w : TWd}

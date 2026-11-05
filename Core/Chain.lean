@@ -6,20 +6,9 @@ import Core.Chain.SI.AntiLendProg
 import Core.Chain.SI.AntiRebProg
 import Core.Chain.SI.AntiStopN
 import Core.Chain.SI.BindN
-import Core.Chain.SI.CactusInv
 import Core.Chain.SI.CanonDeep
 import Core.Chain.SI.CanonRef
-import Core.Chain.SI.Capture
-import Core.Chain.SI.CaptureAdequacy
-import Core.Chain.SI.CaptureE
-import Core.Chain.SI.CaptureGen
-import Core.Chain.SI.CaptureHeap
-import Core.Chain.SI.CaptureScope
-import Core.Chain.SI.CaptureScopeM
-import Core.Chain.SI.CrossProg
-import Core.Chain.SI.CrossProgM
 import Core.Chain.SI.DeepRebProg
-import Core.Chain.SI.Erwp0
 import Core.Chain.SI.ErwpN
 import Core.Chain.SI.ErwpX
 import Core.Chain.SI.ErwpX0
@@ -27,7 +16,6 @@ import Core.Chain.SI.AdequacyX
 import Core.Chain.SI.Ewp
 import Core.Chain.SI.ExtExtF
 import Core.Chain.SI.ExtF
-import Core.Chain.SI.FdTypes
 import Core.Chain.SI.Fin
 import Core.Chain.SI.FinCancelN
 import Core.Chain.SI.FinCancelProg
@@ -92,7 +80,3 @@ import Core.Chain.Hardest791N
 import Core.Chain.PoolScopeN
 import Core.Chain.CrossStopN
 import Core.Chain.Cross821N
-import Core.Chain.Cross821C
-import Core.Chain.Cross821Obs
-import Core.Chain.PoolC
-import Core.Chain.PoolJoinC

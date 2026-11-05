@@ -361,6 +361,21 @@ def TableX.none : TableX := fun _ _ _ _ _ _ => False
 
 theorem TableX.none_local : TableX.none.Local := fun _ _ _ _ _ _ _ _ h => h
 
+/-- **The frame at `erwpX`**, for a run that does not stop. -/
+theorem erwpX_frame_none {Φ : LocFam} {M : Mask} {P : PostX} (R : List SRec → XProp)
+    (hR : ∀ ls ls', (∀ y, y ∈ ls' ↔ y ∈ ls) → ∀ x, R ls x → R ls' x) {n : Nat}
+    {ls : List SRec} {e : Expr} {ρ₁ ρ₂ ρ : WRes} {g₁ g₂ : GRes} (hcρ : ResU.CompS ρ₁ ρ₂ ρ)
+    (hsplit : WFSplit (ρ₁, g₁) (ρ₂, g₂)) (hau₁ : MaskAuth M g₁)
+    (h : erwpX (ℍ := ℍ) Φ M TableX.none P n ls e (ρ₁, g₁)) (hR₂ : R ls (ρ₂, g₂)) :
+    erwpX (ℍ := ℍ) Φ M TableX.none (fun C k ls' v => sepX (P C k ls' v) (R ls')) n ls e
+      (ρ, g₁ + g₂) := by
+  rw [erwpX_eq] at h ⊢
+  refine rwpGX_mono (fun C k ls' t x hx => ?_)
+    (rwpGX_frame R hR hcρ hsplit hau₁
+      (rwpGX_mono (fun C k ls' t x h => h.elim id (fun h' => h'.elim)) h) hR₂)
+  obtain ⟨ρa, ρb, ga, gb, hc, hg, ⟨v, rfl, hp⟩, hr⟩ := hx
+  exact Or.inl ⟨v, rfl, ρa, ρb, ga, gb, hc, hg, hp, hr⟩
+
 /-- **`rwpGX_lend` at `erwpX`**: a body that does not stop, around any table. -/
 theorem erwpX_lend {Φ : LocFam} (l : BoCa.Loc) (T : VTy) (δ : LSub)
     (hadm : AdmWf T δ) (v : Val) (hshape : vShape T δ v (PMap.empty : WRes))

@@ -164,7 +164,8 @@ theorem opTableT_local (T : OpTabT) : (opTableT T).Local := by
 def cerwpPostT (Tb : TableT) (Q : TPostV) (Ψ : ContT) (F : TFrame) : TPost :=
   fun k w ls O t ρ => (∃ v : Val, t = v.1 ∧ Q k w ls O v ρ) ∨ Tb F k w ls O t Ψ ρ
 
-/-- **`cerwp` over the tree world**, at the base frame condition `Fb` and the present one `F`.
+/-- **The effectful relation over the tree world**, at the base frame condition `Fb` and the
+present one `F`.
 The run is `twp` at `F`; a stop hands the table `Fb`, so the continuation resumes at the
 resumer's guarantee over `Fb` (`fdAt en v Fb O′`), and is again `cerwpT` at the base `Fb`. A
 resumed run's frame condition is the base and what its resumer guarantees of the records it owns

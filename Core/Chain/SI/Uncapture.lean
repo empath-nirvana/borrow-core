@@ -1,20 +1,21 @@
 import Core.Chain.SI.IStopN
-import Core.Chain.SI.Erwp0
+import Core.Chain.SI.HandleN
 
 /-!
 # Capture and uncapture: the world at a lend's entry and at its end in a later segment
 
 `[TR]` 6.64's proof changes the world twice: at the entry, `TWNC.immFrame` (the lent cell becomes
-`imm`, its record joins the records proper); at the end, `TWNC.immEnd`. In `rwpG_I_frameG` both
-happen inside one run. A lend left open at a stop is ended in a later segment, under a frame the
-resumer chose, so the two world changes are stated here apart from any run:
+`imm`, its record joins the records proper); at the end, `TWNC.immEnd`. In `rwp_I_frame` and
+`rwpGX_lend` (`SI/LendX.lean`) both happen inside one run. A lend left open at a stop is ended
+in a later segment, under a frame the resumer chose, so the two world changes are stated here
+apart from any run:
 
-* `capture_world` is the entry of `rwpG_I_frameG`, verbatim, with the new record added to the
+* `capture_world` is the entry of `rwp_I_frame`, with the new record added to the
   records the computation owns.
-* `uncapture_world` is the end of `rwpG_I_frameG` (`TWNC.immEnd`, the memory by 6.26 under a
+* `uncapture_world` is the end of `rwp_I_frame` (`TWNC.immEnd`, the memory by 6.26 under a
   frame, the tags by `end_walks`), for a lend whose payload is empty, at a resumed segment: the
   resource holds the lent location's cell at the top level and the rest is compatible with
-  `ℓ ↦ own(v)` (what 6.29 and 6.38 give at the borrowed run's end, `SI/CaptureScope.lean`), and
+  `ℓ ↦ own(v)` (what 6.29 and 6.38 give at the borrowed run's end, `six38N`), and
   the frame is compatible with `ℓ ↦ own(v)` (what the resumer guarantees). The record must be a
   record proper, which ownership gives; the tagged list loses the record's entries.
 -/
@@ -29,6 +30,10 @@ open BoCa.Fig16
 open BoCa.Fig16.BoLo
 open BoCa.Fig16.LogRel.Core
 open BoCa.Lifetime (LSub)
+
+/-- The records proper `ps` are the computation's `O` and the frame's `psF`, disjoint. -/
+def Split (ps O psF : List FrameRec) : Prop :=
+  (∀ p, p ∈ ps ↔ p ∈ O ∨ p ∈ psF) ∧ ∀ p ∈ O, p ∉ psF
 
 /-! ### Small facts -/
 
@@ -74,7 +79,7 @@ theorem descR_empty {p d : FrameRec} (hR : p.R = PMap.empty) (h : DescR p d) : d
 
 /-! ### The entry -/
 
-/-- **A lend's entry** (`rwpG_I_frameG` from the entry on to the borrowed run, verbatim): under
+/-- **A lend's entry** (`rwp_I_frame` from the entry on to the borrowed run): under
 any frame, the world with `ℓ ↦ own(v) ● ρ_P ● ρ_b` becomes the world with `ρ_b ● ℓ ↦ imm(α, v,
 ρ_P)`, the record `p` joins the records proper and the records the computation owns, the list
 becomes `frameList p ds α ls`, and the memory is kept. -/
@@ -163,7 +168,7 @@ theorem capture_world (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmWf T δ) (v : V
 record proper, the resource `S ● ℓ ↦ imm(s, v, ∅)` with `S` holding nothing at `ℓ` and compatible
 with `ℓ ↦ own(v)`, the frame compatible with `ℓ ↦ own(v)`. The world becomes `ρ_f ● S ● ℓ ↦
 own(v)` (`TWNC.immEnd`), the memory is kept (6.26 under a frame), `p` leaves the records proper,
-and its entries leave the list (the tags of the others by `end_walks`, as `rwpG_I_frameG`'s exit
+and its entries leave the list (the tags of the others by `end_walks`, as `rwp_I_frame`'s exit
 reads them). -/
 theorem uncapture_world {l : Loc} {v : Val} {T : VTy} {δ : LSub} {s : LSet}
     {hs : ResU.InStratum s.join (PMap.empty : WRes)} {ρf S ρres W : WRes} {ps : List FrameRec}

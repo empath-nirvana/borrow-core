@@ -373,8 +373,7 @@ That is about 7.0k lines, plus about 0.8k if `CrossProg`/`CrossProgM` are re-pro
 
 ## Open questions
 
-- **The six `cerwp` headlines:** option (i) chosen. The deletion waits on stage 1's relation
-  (below).
+- **The six `cerwp` headlines:** option (i) chosen; deleted in stage 1.
 - **`CrossProg`/`CrossProgM`:** delete (chosen).
 - **`updVNm_frame`.** Derived at `ρ_P = ∅` (`Core/Chain/SI/UpdMask.lean`; stage 1 build, below).
 - **`WF_C` at depth** (escrows) and its preservation along lifted steps. Not derived.
@@ -386,53 +385,76 @@ That is about 7.0k lines, plus about 0.8k if `CrossProg`/`CrossProgM` are re-pro
   garbage. No checker marking is needed. That is fundamental-property work after stage 2.
 - **Reading back `7` in `crossMutJ`.**
 
-## Stage 1 build: where it stopped
+## Stage 1 build: the mask as an index
 
-**Derived** (`Core/Chain/SI/UpdMask.lean`, standard axioms):
+**Why the mask moved.** `not_endpointMaskCompose` (`SI/UpdMask.lean`) is a configuration at
+`UpdVNm`. A mask drawn from each run's start and end (change 2) does not compose across a middle
+that alone masks a location, and that composition is bind's `↭` step. Decision (#821): the mask
+is an index of the relation, as Iris's `WP_E e {Q}` carries `E`. A run's `↭` is read outside its
+mask, and bind composes at a fixed mask (`UpdVNm.trans` at `M ∪ M = M`).
 
-- `UpdNm`/`UpdVNm` and their laws: the empty mask is `UpdN`/`UpdVN`, monotone in the mask,
-  downward closed, and transitive at the union of the two masks.
-- `updVNm_frame`, 6.48 at a mask, by `updVN_frame`'s proof at each unmasked location. The aliasable
-  case reads the `imm` clause at the ancestor's location. `MaskShallow M ρ` is this scope's
-  `ρ_P = ∅`: every `imm` cell of `ρ`'s flattening at a masked location has the empty witness. It is
-  a hypothesis on the two updated resources, and it keeps the ancestor of an unmasked location
-  unmasked (`ancestor_unmasked`).
+**Built** (all with the standard axioms):
 
-**Not derived: `erwpX_bind`.** `rwpG_compose` composes the first run's `↭` with the second run's,
-framed by the first run's garbage. At masks, the composite's mask must contain both runs' masks.
-This scope draws a run's mask from its own start and end (change 2), so a lifetime or `xm` that
-only the middle holds wholly is in both runs' masks and in neither end's.
-`not_endpointMaskCompose` is that configuration at `UpdVNm` (an `xm` at `ℓ` held only in the
-middle, `ℓ ↦ mut` at the middle and the end, nothing at the start). The records clause
-(change 3, `ps Δ ps′`) composes the same way. Stage 2 needs this case: a lend opened inside a run
-holds `[α]_1` at every bind boundary of that segment. I have not verified that `erwpX_bind` itself
-fails at this scope's definition. The composite run may have ends other than the composed one.
+| module | content |
+|---|---|
+| `SI/UpdMask` | `UpdNm`/`UpdVNm`, `updVNm_frame` (6.48 at a mask, at `MaskShallow`), `not_endpointMaskCompose` |
+| `SI/Ghost` | `GRes`: tokens, `xm`, the registry; validity; `exists_fresh_life` |
+| `SI/XRes` | `Carries`, `WFC`, `NewNotCarried`, `Mask`/`Auth`/`MaskAuth`, composite and part lemmas |
+| `SI/ErwpX` | `rwpGX`, `EndOKX`, `erwpX`; `_le`, `_det`, `_val`, `rwpGX_bind`, `erwpX_bind`, `rwpGX_frame` |
+| `SI/LendX` | `rwpGX_lend`, `erwpX_lend`, `erwpX_frame_none` |
+| `SI/ErwpX0` | `erwp_iff_erwpX0` |
+| `SI/AdequacyX` | `erwpX_safe`, `erwpX_adequacy` |
 
-So `erwpX`'s final form is not fixed, and this stage defines no `erwpX`, `GRes`, `WF_C` or
-`TWNX`. It proves no equivalence, rules or adequacy, and deletes nothing. `cerwp` and its modules
-stay.
+**The lend inside one run.** `rwpGX_lend` is `rwp_I_frame`'s proof with a token:
+1. The open makes `ℓ ↦ imm({α}, v, ∅)` at a fresh `α` and mints `[α]_1`.
+2. The body runs.
+3. The end, holding `[α]_1`, ends the record and consumes the token.
 
-**Routes examined. None is derived, and none is verified as an obstruction.**
+The composite is the shape of `not_endpointMaskCompose`: no token at either end, `[α]_1` in the
+middle. Its `↭` is unmasked.
 
-- *Mask from the end together with its garbage, with tokens conserved in the run's region.* The
-  composite mask then contains both runs' masks. But the (←) half of `erwp_iff_erwpX0` relies on
-  `ρ′.G = ∅` giving the empty mask, and garbage holding a minted `[α]_1` would mask `α`'s cells.
-- *A side condition on `erwpX_bind`: every lifetime and `xm` the intermediate post holds wholly is
-  held wholly by the start.* The `↭` masks then compose. The records clause also needs a record's
-  lifetime read at the middle to agree with the start's. `FrameRec` carries no lifetime, so the
-  scope's "records whose lifetime is wholly held" needs a definition: `FrameLife` at which world, or
-  the tag in `ls`. The lend rule that mints and ends `α` inside one run would prove its own
-  composite.
-- *Proving the composite at a saturated frame* (the frame holds every spare fraction, so the
-  middle can hold wholly only what the start does). This fails for a lifetime carried only beneath
-  a `mut` witness of `ρ`. No frame can carry such a lifetime without changing the world.
+The body runs at the outer mask, not at a mask holding `ℓ`. The end rebuilds `ℓ ↦ own(v)` with
+6.38 (`six29_borrows_offN`, `six38N`), which reads the body's `↭` at `ℓ`. There the exact cell
+`imm({α}, v, ∅)` persists, and with it no other part's cell at `ℓ`. It also reads the `↭` at every
+other location. Masking `ℓ` in the body drops exactly that premise. Iris's mask-changing update
+has the same discipline: `|={E₁,E₂}=>` around a WP is allowed only for an atomic expression.
 
-**Further gaps in the definition, found while working through stage 1 (none built):**
+**Departures, each with its reason:**
 
-- *The frame's `WF_C` at the end.* Change 4 asks it of `ρ′` and `ρp`, not of the frame. A run that
-  mints `[α]_1` at a lifetime the frame carries uncounted leaves a world whose frame the next
-  segment's quantifier excludes. `erwpX_frame` also needs it: the inner run's frame is
-  `F ● ρ₂`.
-- *`erwpX_frame` and `WF_C`'s split.* `WF_C` of `ρ₁ ● ρ₂` does not give `WF_C` of `ρ₂`, because
-  the fraction for `ρ₂`'s copy may sit in `ρ₁`. The rule needs the framed part to carry the
-  fractions for its own copies.
+1. *Masks carry their authority* (`Mask = Set (Loc × Auth)`). This ties each masked location to
+   the `[α]_1` or `xm` that justifies it. The run holds those authorities at its start and its end
+   (`MaskAuth`).
+2. *`MaskShallow` at the start and the ends.* It is the scope's `ρ_P = ∅` at masked locations,
+   and `updVNm_frame` needs it in bind and frame.
+3. *The frame's `WF_C` at the end* is `NewNotCarried`: the frame carries no newly counted
+   lifetime. A run minting `[α]_1` at a lifetime the frame carries uncounted would leave a world
+   the next segment's quantifier excludes.
+4. *`rwpGX_frame` takes `WFSplit` and the inner part's `MaskAuth`.* `WF_C` of a composite does not
+   give `WF_C` of a part: the fraction for a part's copy may sit in the other part.
+5. *Validity asks finitely many counted lifetimes.* Otherwise no fresh lifetime need exist to
+   mint at.
+6. *`rwpGXat`.* A table and post read the counted set `C`, so the continuation in bind is entered
+   at the frames whose world counts the `C` it was reached at. `erwpX_bind` asks the table to carry
+   a stop through the context (`TableX.CtxClosed`).
+7. *The records clause stays exact* (`ps′ ~ ps`, `ls′ ~ ls`). Records change only in the lend
+   rule's open and end.
+8. *`rwpGX_lend` is at the empty outer mask and empty payload.* The 6.38 lemmas read the body's
+   `↭` at every location.
+9. *`FdTypes` is deleted* beside the table's modules: it is stated over `joinFd`, the `cerwp`
+   scope's frame condition. `Split` moved into `Uncapture`, which keeps `capture_world` and
+   `uncapture_world`.
+10. *`erwpX_adequacy` asks only that the post own no cell.* The ghost is unrestricted, which makes
+    this weaker than the scope's "ghost included".
+
+**Open, for stage 2:**
+- **A lend across a stop.** It ends in a later segment, at a mask holding `ℓ`. `↭` at `ℓ` is not
+  read through the run, so 6.38's facts there must come from the tokens and the world: no other
+  part carries `α` (`WF_C` with `[α]_1`), every cell at `ℓ` carries only `α` (`FrameLife` of the
+  record's tag), and no part's walk holds a `mut` cell at `ℓ` beneath another cell. I have not
+  derived the last one, and have not verified that any obstruction is real.
+- **`rwpGX_lend` at a non-empty outer mask.**
+- **`erwpX_frame` across stops.**
+
+**Open questions above, resolved by this stage:** `updVNm_frame` (derived); the six headlines
+(option (i), deleted); `CrossProg`/`CrossProgM` (deleted). `C` as a post coordinate is kept, and
+`rwpGXat` is what bind needs of it. The rest stay open.

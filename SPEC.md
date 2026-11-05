@@ -10230,8 +10230,8 @@ is a way for a program to keep such a linear value live across those points and 
 The cause is structural. Core's lifetimes form a single chain and its frames nest last-in-first-out.
 A stored continuation, resumed later under frames its handler opened in the meantime, makes the
 program's lends nest as a tree (argued). #770's evidence is two configurations at typed worlds
-where the single chain's reading fails (`resume_frame_short`, `not_fdFromLifetimeTypes`); neither
-is shown reachable from a program.
+where the single chain's reading fails (`resume_frame_short`, and a configuration at `joinFd`, the
+frame condition of the retired `cerwp` scope); neither is shown reachable from a program.
 
 ### The target theorem
 
@@ -10329,7 +10329,7 @@ linear types in the library, not a kernel rule.
 A step-indexed linear weakest precondition with the following parts:
 - **Exact ownership.** Each term owns an exact fragment of memory.
 - **Capture is its own operation.** A stop is not read as a return: the stopped continuation's
-  share keeps its branch's real cells and frame records (`crwpG`/`cerwp`).
+  share keeps its branch's real cells and frame records (on the tree, `cerwpT`).
 - **The cactus invariant over all computations** (running, stored in a κ, spawned). Each owns its
   resources and frame records, pairwise disjoint. The design: it is preserved by step, capture,
   graft, unwind, spawn and join; adequacy is derived from that preservation; and the frame rules
@@ -10341,10 +10341,9 @@ A step-indexed linear weakest precondition with the following parts:
 Evidence: `progStore_orDiverges`; borrows live across stops for `mut`/`imm` lends, reborrows,
 deep reborrows, and the Anti-Frame (`erwp_M_frame`, `erwp_I_frame`, `erwp_reborrow(Deep)`,
 `erwp_M_antiFrame`); a handler that lends its own cell and resumes κ inside it
-(`HandlerLendProg`); cross-task scopes (`cerwp_scope`, `cerwp_scopeM`, which hold over any body),
-tested by programs with one child and a fixed order of events (`CrossProg`, `CrossProgM`).
-`CactusInv` (`reb-canon`) is stated, with `cactus_step`, `cactus_move` and
-`joinReady_fd`, and not yet used: the cross-task programs are proved without it. **Built over the library's typed tree world** (`Core/StepsN.lean`, `Core/TreeWp.lean`,
+(`HandlerLendProg`); cross-task scopes at `erwp` (`crossImm`, `crossImmC`, `crossMut`, `crossMutC`,
+through `poolSchedAdequacyN`). The chain's second relation `cerwp`, its scopes and its programs
+are retired for the one relation (*One relation over ghost resources*, below). **Built over the library's typed tree world** (`Core/StepsN.lean`, `Core/TreeWp.lean`,
 `Core/TreeWpEff.lean`, `Core/TreeCactus.lean`, `Core/TreeStepKeep.lean`, `Core/TreeHeadlines.lean`).
 `twp` is the step-indexed relation at a world that grows: a run starts at any extension of its
 world, from the re-reading of its resource, and ends at an extension of the start, the frame
@@ -10601,7 +10600,7 @@ deriving the property for `PoolT`/`KapAtT` shares is open (#789).
 - adequacy derived from invariant preservation, at the relation the typing rules use;
 - preservation at spawn and join;
 - the frame rules as instances of capture;
-- one relation with abortive stops and forwarding (the two relations `erwp`/`cerwp` merge);
+- one relation with abortive stops and forwarding (on the chain, `erwpX`, below);
 - the lend rules at `twp` over the tree for escrows with contents (reborrows, `TWNT.reb`), and
   multi-branch programs whose tasks borrow each other's lends other than as views of what a
   joiner below them shares (`PoolTJ`);
@@ -10614,34 +10613,73 @@ deriving the property for `PoolT`/`KapAtT` shares is open (#789).
 
 ### One relation over ghost resources (#821)
 
-Design: `docs/new-core/scope-821-loans.md`. The one relation `erwpX` runs `erwp` over
-`WRes × GRes`, with lifetime tokens, `mut` authorities and a task registry in `GRes`. Its end
-reads `↭` with a mask: `UpdN`'s clauses only at locations outside the mask.
+Design: `docs/new-core/scope-821-loans.md`. **`erwpX Φ M Tb Q n ls e x`** is `erwp`'s
+definition over `XRes = WRes × GRes` at a mask `M`, an index of the relation as Iris's
+`WP_E e {Q}` carries `E` (`Core/Chain/SI/ErwpX.lean`). There is one relation on the chain:
+`erwp` is its instance at the empty mask and ghost, and `cerwp` is retired.
 
-Adds (`Core/Chain/SI/UpdMask.lean`):
-- **`↭` with a mask** (`UpdNm`, `UpdVNm`). At the empty mask it is `UpdN`/`UpdVN`
-  (`updNm_empty_iff`, `updVNm_empty_iff`). It is monotone in the mask (`UpdVNm.mono`), downward
-  closed in the index (`UpdVNm.down`), and transitive with the union of the two masks
-  (`UpdVNm.trans`).
-- **`[TR]` 6.48 at a mask** (`updVNm_frame`), by `updVN_frame`'s proof at every location outside
-  the mask. The ancestor step reads the `imm` clause at the ancestor's location. `MaskShallow`
-  (the scope's `ρ_P = ∅`: every `imm` cell at a masked location has the empty witness) keeps the
-  ancestor of an unmasked location unmasked (`ancestor_unmasked`). At the empty mask it is
-  `updVN_frame` (`updVNm_frame_empty`).
-- **End-drawn masks do not compose** (`not_endpointMaskCompose`). The scope draws a run's mask
-  from its start and its end. Take two runs `ρ₀ → ρ₁ → ρ₂` where only the middle masks `ℓ`. Each
-  passes `UpdVNm` at its own mask, and the composite fails at `ℓ`. This is the composition
-  `rwpG_compose` performs at its `↭` line.
+- **Ghost** (`SI/Ghost.lean`, `GRes`): lifetime tokens `[α]_q` (`Life → ℚ≥0`), `mut`
+  authorities `xm` (exclusive, by location), and the task registry `Auth(Loc ⇀ Agree(Ret))` with
+  the joiner's `tok r` and the child's `wr r` fragments. Composition is pointwise addition.
+  Validity bounds each fraction by `1`, makes authorities and fragments exclusive and agreeing,
+  and asks finitely many counted lifetimes, so a fresh one can be minted (`exists_fresh_life`).
+- **`WF_C`** (`SI/XRes.lean`, `WFC`): for every counted `α` a part carries (an `imm` cell of its
+  flattening whose lifetime set holds `α`, `Carries`), the part holds a positive fraction of
+  `[α]`. Carrying passes between a composite and its parts (`carries_comp_left`,
+  `carries_comp_split`).
+- **Masks** (`Mask`, `MaskAuth`): locations, each with the authority it is masked by (`[α]_1` or
+  `xm`). A run starts and ends holding its mask's authorities, and its resources are
+  `MaskShallow` at the mask (the scope's `ρ_P = ∅`).
+- **The run** (`rwpGX`, `EndOKX`). The frame ranges over `XRes`. At the start the frame and the
+  resource compose validly, and each is `WF_C` at the world's counted set `C`. The end is
+  `EndOKG`'s, with these changes:
+  - `↭` is read outside `M` (`UpdVNm`, `SI/UpdMask.lean`);
+  - the end and garbage ghosts compose validly with the frame's;
+  - the end and the garbage are `WF_C′` at the end world's counted set `C′`;
+  - the frame carries no lifetime counted at `C′` and not at `C` (`NewNotCarried`), which with its
+    `WF_C` at the start is its `WF_C′`;
+  - the end and the end with its garbage are `MaskShallow`, and the end holds the mask's
+    authorities.
 
-Preserves: nothing existing changes; `erwp`, `cerwp` and every headline stand as before.
+  `C′` is passed to the post.
+- **Structural rules**: `erwpX_le`, `erwpX_det`, `erwpX_val`. `erwpX_bind` and `rwpGX_bind` bind
+  at a fixed mask; their `↭` composes by `UpdVNm.trans` at `M ∪ M = M`. A stop is carried through
+  the context by the table (`TableX.CtxClosed`), and a continuation is entered at the counted
+  set where it was reached (`rwpGXat`). The frame rule is `rwpGX_frame` (and `erwpX_frame_none`
+  for a run that does not stop): by `updVNm_frame`
+  (`[TR]` 6.48 at a mask, at `MaskShallow`), with the framed part carrying its own fractions
+  (`WFSplit`) and the inner part holding the mask's authorities.
+- **A lend opened and ended inside one run** (`rwpGX_lend`, `erwpX_lend`, `SI/LendX.lean`).
+  `rwp_I_frame`'s proof, with a token. At the open, `ℓ ↦ own(v)` (empty payload) becomes
+  `ℓ ↦ imm({α}, v, ∅)` at a fresh `α`, and `[α]_1` is minted for the body. At the end, holding
+  `[α]_1`, the record is ended and `[α]_1` consumed. The composite has the shape of
+  `not_endpointMaskCompose`: no token at the start or the end, `[α]_1` in the middle. Its `↭` is
+  unmasked. The body runs at the outer mask, which is empty. The end rebuilds `ℓ ↦ own(v)`
+  from the body's `↭` at `ℓ` and at every location (`six29_borrows_offN`, `six38N`, `six39N`).
+  This is Iris's discipline that a mask-changing update is taken only around an atomic step.
+- **`erwp` is the ghost-free instance** (`erwp_iff_erwpX0`, `SI/ErwpX0.lean`):
+  `erwp Φ Tb Q n ls e ρ ↔ erwpX Φ ∅ (tableUp Tb) (postUp Q) n ls e (ρ, 0)`.
+- **Adequacy** (`erwpX_adequacy`, `SI/AdequacyX.lean`): a closed program at the empty mask and the
+  table with no stop, from `(∅, 0)`, whose post owns no cell, is `OrDiverges`.
+- **End-drawn masks do not compose** (`not_endpointMaskCompose`). A mask drawn from each run's
+  start and end leaves out what only the middle masks. This is why the mask is an index.
+
+Retires (`SI/Capture`, `CaptureE`, `CaptureGen`, `CaptureHeap`, `CaptureAdequacy`,
+`CaptureScope`, `CaptureScopeM`, `CrossProg`, `CrossProgM`, `Erwp0`, `CactusInv`, `FdTypes`,
+`PoolC`, `PoolJoinC`, `Cross821C`, `Cross821Obs`): `crwpG`, `cerwp`, `contShareC`, `erwp0`,
+`cerwp_scope(M)`, `poolSchedAdequacyC`, `hj_schedOKC`, and the headlines `prog_orDiverges`,
+`progD_orDiverges`, `progM_orDiverges`, `progDM_orDiverges`, `crossImmJ` and `crossImmJC`.
+Stage 2 restates `crossImmJ` and `crossImmJC` at `erwpX`. `Uncapture` is kept, with `Split`.
+
+Preserves: `erwp`'s definition and rules, and every remaining chain headline, unchanged.
 
 *Open*:
-- `erwpX` itself, `GRes`, `WF_C`, `TWNX`, `erwp_iff_erwpX0`, the structural rules and
-  `erwpX_adequacy`. `erwpX_bind` is not derived. Its proof composes the two runs' masks, and a
-  mask drawn from each run's ends leaves out what only the middle holds wholly
-  (`not_endpointMaskCompose`). The records clause (`ps Δ ps′`) composes the same way. Whether
-  `erwpX_bind` fails at the scope's definition is not verified.
-- Retiring `cerwp` and its modules, which waits on the above.
+- the lend across a stop (stage 2): its end, in a later segment, runs at a mask holding the lent
+  location. There `↭` at `ℓ` is not read through the body, so the facts `six38N` takes from it
+  must come from the tokens and the world;
+- `rwpGX_lend` at a non-empty outer mask (the 6.38 lemmas read `↭` everywhere);
+- `erwpX_frame` across stops (the table carrying the framed part into the continuation); it is
+  proved for runs that do not stop (`erwpX_frame_none`).
 
 ### Semantic types read at the tree (#782)
 
@@ -10770,8 +10808,8 @@ given the entries'); the typing rules and the fundamental theorem over these typ
   unrestricted operation is excluded while a borrow or owned resource is live.
   Multi-shot continuations over duplicable state are a hypothesis, not a rule.
 - **Lends shared across tasks end only at a join**: scoped spawn. A branch resumed from a join
-  asks that no other branch's flattening hold the joined location (`JoinReady`), which gives the
-  resumer's frame condition (`joinFd`, `joinReady_fd`). The scheduler establishes it by finishing
+  asks that no other branch's flattening hold the joined location, which gives the resumer's
+  frame condition. The scheduler establishes it by finishing
   or cancelling every branch that held a borrow of the location and handing their borrows to the
   joiner, which is what a join does.
 - **The resume condition** (nothing outside a resumed segment holds a location whose lend it
@@ -10788,9 +10826,8 @@ given the entries'); the typing rules and the fundamental theorem over these typ
   (`lend_open_needs_mask`). The condition holds at a join from the cactus invariant
   (`fdEsc_at_join`), other branches' steps keep it (`stepKeepsFdEsc`), and an end of the lend is
   valid only where it holds (`fdEsc_of_end_valid`).
-- Lifetimes on continuation and task types alone do not supply it: not at `Imm 'r 1` in a single
-  chain (`not_fdFromLifetimeTypes`), and not at closure types in the tree
-  (`not_fdFromThunkTypesT`).
+- Lifetimes on continuation and task types alone do not supply it: not at closure types in the
+  tree (`not_fdFromThunkTypesT`).
 - *Open*: the typing rules and their compatibility lemmas.
 
 ### Closing a branch
@@ -10825,8 +10862,8 @@ passes through.
 
 - Termination for programs that use the new rules.
 - Threads: the invariant is per computation, so a concurrent reading stays possible. Two places
-  rely on sequential scheduling: the frame of a run is fixed for the whole segment, and
-  `JoinReady` is read at the resume (`SI/CactusInv.lean`).
+  rely on sequential scheduling: the frame of a run is fixed for the whole segment, and the join's
+  frame condition is read at the resume.
 - Lowering: per-task state machines, self-reference, per-state consume glue. Tracked as the series'
   last issue.
 
@@ -11283,11 +11320,12 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
 
 ## Changelog
 
-- **1.36** (2026-11-05) — §62 (*One relation over ghost resources*, #821): `↭` with a mask
-  (`UpdNm`, `UpdVNm`) and `[TR]` 6.48 at a mask (`updVNm_frame`, at `MaskShallow`); end-drawn masks
-  do not compose (`not_endpointMaskCompose`). `erwpX` is not yet defined. No change to `erwp`,
-  `cerwp`, `twp`, `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the checker, the backends
-  or the corpus.
+- **1.36** (2026-11-05) — §62 (*One relation over ghost resources*, #821, stage 1): `erwpX`
+  over `WRes × GRes` at a mask, with `GRes`, `WF_C` and masks with their authorities; bind at a
+  fixed mask, the frame at a mask (`updVNm_frame`), a lend opened and ended inside one run
+  (`rwpGX_lend`), `erwp_iff_erwpX0` and `erwpX_adequacy`. `cerwp` and its modules are retired,
+  with the six headlines stated at it. No change to `erwp`, `twp`, `CDerives`, `fundamentalC`,
+  `adequacyC`, `adequacyD`, the checker, the backends or the corpus.
 - **1.35** (2026-11-04) — §62 (*Semantic types read at the tree*): `F A` is a bare `cerwpT` run
   (`SCmp.ret`), Core's `cC (.ret A)`; the Kripke quantifier over later worlds and lists sits at
   `U` only. Thunks are introduced as Core's `thunkF_compatC` does, from the computation at every

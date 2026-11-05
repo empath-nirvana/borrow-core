@@ -73,8 +73,7 @@ theorem stepKeepsFdEsc : StepKeepsFdEsc (ℍ := ℍ) := by
     ps' O' ls' hE _ _ _ hc hS' hR' _ _ hu _ p' hp' hpp
   exact fdEsc_of_updA hE.1 (TWNT.esc_valid hR.1 p (hS.right p hp)) h₀ hR'.1 hc hS' hp' hpp hu
 
-/-- `StepKeepsFdEsc` at `EndT`'s clauses less `↭` and the frame clause: the post-configuration
-`crwpG` asked for. -/
+/-- `StepKeepsFdEsc` at `EndT`'s clauses less `↭` and the frame clause. -/
 def StepKeepsFdEscNoUpd : Prop :=
   ∀ (w : TWd) (F : TFrame) (Q : TPost) (n : Nat) (ls : List (SRecT w.K))
     (O ps psF : List (FrameRecT w.K)) (e : Expr) (ρ ρf fρ : TRes w.K) (μ : Heap)
@@ -159,7 +158,7 @@ theorem twp_unit_empty (n : Nat) (w : TWd) (ls : List (SRecT w.K)) :
     exact ⟨⊤, OnBranchResT.empty ⊤⟩
 
 /-- **`StepKeepsFdEscNoUpd` fails.** The empty branch's run of `()` beside the parent's lent cell
-may end holding a copy of that cell: every clause of `crwpG`'s post-configuration holds there, and
+may end holding a copy of that cell: every clause of that post-configuration holds there, and
 the branch holds the lent location. -/
 theorem not_stepKeepsFdEscNoUpd : ¬ StepKeepsFdEscNoUpd (ℍ := ℍ) := by
   intro hK
