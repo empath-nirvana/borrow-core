@@ -373,10 +373,10 @@ That is about 7.0k lines, plus about 0.8k if `CrossProg`/`CrossProgM` are re-pro
 
 ## Open questions
 
-- **The six `cerwp` headlines:** option (i) or (ii) of stage 1.
-- **`CrossProg`/`CrossProgM`:** delete (recommended) or re-prove in stage 2.
-- **`updVNm_frame`.** 6.48's aliasable case at a mask. I expect it to go through at `ρ_P = ∅`; not
-  derived.
+- **The six `cerwp` headlines:** option (i) chosen. The deletion waits on stage 1's relation
+  (below).
+- **`CrossProg`/`CrossProgM`:** delete (chosen).
+- **`updVNm_frame`.** Derived at `ρ_P = ∅` (`Core/Chain/SI/UpdMask.lean`; stage 1 build, below).
 - **`WF_C` at depth** (escrows) and its preservation along lifted steps. Not derived.
 - **`C` as a post coordinate**, against the alternative of a table that reads the world. The
   design has not been checked against every table definition.
@@ -385,3 +385,54 @@ That is about 7.0k lines, plus about 0.8k if `CrossProg`/`CrossProgM` are re-pro
 - **Typing.** `Imm`'s semantic type gains a fraction: copying splits it and releasing puts it in
   garbage. No checker marking is needed. That is fundamental-property work after stage 2.
 - **Reading back `7` in `crossMutJ`.**
+
+## Stage 1 build: where it stopped
+
+**Derived** (`Core/Chain/SI/UpdMask.lean`, standard axioms):
+
+- `UpdNm`/`UpdVNm` and their laws: the empty mask is `UpdN`/`UpdVN`, monotone in the mask,
+  downward closed, and transitive at the union of the two masks.
+- `updVNm_frame`, 6.48 at a mask, by `updVN_frame`'s proof at each unmasked location. The aliasable
+  case reads the `imm` clause at the ancestor's location. `MaskShallow M ρ` is this scope's
+  `ρ_P = ∅`: every `imm` cell of `ρ`'s flattening at a masked location has the empty witness. It is
+  a hypothesis on the two updated resources, and it keeps the ancestor of an unmasked location
+  unmasked (`ancestor_unmasked`).
+
+**Not derived: `erwpX_bind`.** `rwpG_compose` composes the first run's `↭` with the second run's,
+framed by the first run's garbage. At masks, the composite's mask must contain both runs' masks.
+This scope draws a run's mask from its own start and end (change 2), so a lifetime or `xm` that
+only the middle holds wholly is in both runs' masks and in neither end's.
+`not_endpointMaskCompose` is that configuration at `UpdVNm` (an `xm` at `ℓ` held only in the
+middle, `ℓ ↦ mut` at the middle and the end, nothing at the start). The records clause
+(change 3, `ps Δ ps′`) composes the same way. Stage 2 needs this case: a lend opened inside a run
+holds `[α]_1` at every bind boundary of that segment. I have not verified that `erwpX_bind` itself
+fails at this scope's definition. The composite run may have ends other than the composed one.
+
+So `erwpX`'s final form is not fixed, and this stage defines no `erwpX`, `GRes`, `WF_C` or
+`TWNX`. It proves no equivalence, rules or adequacy, and deletes nothing. `cerwp` and its modules
+stay.
+
+**Routes examined. None is derived, and none is verified as an obstruction.**
+
+- *Mask from the end together with its garbage, with tokens conserved in the run's region.* The
+  composite mask then contains both runs' masks. But the (←) half of `erwp_iff_erwpX0` relies on
+  `ρ′.G = ∅` giving the empty mask, and garbage holding a minted `[α]_1` would mask `α`'s cells.
+- *A side condition on `erwpX_bind`: every lifetime and `xm` the intermediate post holds wholly is
+  held wholly by the start.* The `↭` masks then compose. The records clause also needs a record's
+  lifetime read at the middle to agree with the start's. `FrameRec` carries no lifetime, so the
+  scope's "records whose lifetime is wholly held" needs a definition: `FrameLife` at which world, or
+  the tag in `ls`. The lend rule that mints and ends `α` inside one run would prove its own
+  composite.
+- *Proving the composite at a saturated frame* (the frame holds every spare fraction, so the
+  middle can hold wholly only what the start does). This fails for a lifetime carried only beneath
+  a `mut` witness of `ρ`. No frame can carry such a lifetime without changing the world.
+
+**Further gaps in the definition, found while working through stage 1 (none built):**
+
+- *The frame's `WF_C` at the end.* Change 4 asks it of `ρ′` and `ρp`, not of the frame. A run that
+  mints `[α]_1` at a lifetime the frame carries uncounted leaves a world whose frame the next
+  segment's quantifier excludes. `erwpX_frame` also needs it: the inner run's frame is
+  `F ● ρ₂`.
+- *`erwpX_frame` and `WF_C`'s split.* `WF_C` of `ρ₁ ● ρ₂` does not give `WF_C` of `ρ₂`, because
+  the fraction for `ρ₂`'s copy may sit in `ρ₁`. The rule needs the framed part to carry the
+  fractions for its own copies.

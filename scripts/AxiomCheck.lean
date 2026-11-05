@@ -1411,3 +1411,7 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.AntiCancelProg.progAntiCancel_orDiverges
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.CrossProgM.progM_orDiverges
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.CrossProgM.progDM_orDiverges
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.updVNm_frame
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.updVNm_empty_iff
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.UpdVNm.trans
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.not_endpointMaskCompose

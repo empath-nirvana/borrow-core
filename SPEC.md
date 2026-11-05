@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.35 · 2026-11-04
+Version 1.36 · 2026-11-05
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -10612,6 +10612,37 @@ deriving the property for `PoolT`/`KapAtT` shares is open (#789).
 - views of lends with a non-empty escrow collected at a joiner (`ViewsT` fixes `imm(S, (), ∅)`;
   with #791).
 
+### One relation over ghost resources (#821)
+
+Design: `docs/new-core/scope-821-loans.md`. The one relation `erwpX` runs `erwp` over
+`WRes × GRes`, with lifetime tokens, `mut` authorities and a task registry in `GRes`. Its end
+reads `↭` with a mask: `UpdN`'s clauses only at locations outside the mask.
+
+Adds (`Core/Chain/SI/UpdMask.lean`):
+- **`↭` with a mask** (`UpdNm`, `UpdVNm`). At the empty mask it is `UpdN`/`UpdVN`
+  (`updNm_empty_iff`, `updVNm_empty_iff`). It is monotone in the mask (`UpdVNm.mono`), downward
+  closed in the index (`UpdVNm.down`), and transitive with the union of the two masks
+  (`UpdVNm.trans`).
+- **`[TR]` 6.48 at a mask** (`updVNm_frame`), by `updVN_frame`'s proof at every location outside
+  the mask. The ancestor step reads the `imm` clause at the ancestor's location. `MaskShallow`
+  (the scope's `ρ_P = ∅`: every `imm` cell at a masked location has the empty witness) keeps the
+  ancestor of an unmasked location unmasked (`ancestor_unmasked`). At the empty mask it is
+  `updVN_frame` (`updVNm_frame_empty`).
+- **End-drawn masks do not compose** (`not_endpointMaskCompose`). The scope draws a run's mask
+  from its start and its end. Take two runs `ρ₀ → ρ₁ → ρ₂` where only the middle masks `ℓ`. Each
+  passes `UpdVNm` at its own mask, and the composite fails at `ℓ`. This is the composition
+  `rwpG_compose` performs at its `↭` line.
+
+Preserves: nothing existing changes; `erwp`, `cerwp` and every headline stand as before.
+
+*Open*:
+- `erwpX` itself, `GRes`, `WF_C`, `TWNX`, `erwp_iff_erwpX0`, the structural rules and
+  `erwpX_adequacy`. `erwpX_bind` is not derived. Its proof composes the two runs' masks, and a
+  mask drawn from each run's ends leaves out what only the middle holds wholly
+  (`not_endpointMaskCompose`). The records clause (`ps Δ ps′`) composes the same way. Whether
+  `erwpX_bind` fails at the scope's definition is not verified.
+- Retiring `cerwp` and its modules, which waits on the above.
+
 ### Semantic types read at the tree (#782)
 
 The relation's types are read at the current tree and are monotone along its extension. Two
@@ -11252,6 +11283,11 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
 
 ## Changelog
 
+- **1.36** (2026-11-05) — §62 (*One relation over ghost resources*, #821): `↭` with a mask
+  (`UpdNm`, `UpdVNm`) and `[TR]` 6.48 at a mask (`updVNm_frame`, at `MaskShallow`); end-drawn masks
+  do not compose (`not_endpointMaskCompose`). `erwpX` is not yet defined. No change to `erwp`,
+  `cerwp`, `twp`, `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the checker, the backends
+  or the corpus.
 - **1.35** (2026-11-04) — §62 (*Semantic types read at the tree*): `F A` is a bare `cerwpT` run
   (`SCmp.ret`), Core's `cC (.ret A)`; the Kripke quantifier over later worlds and lists sits at
   `U` only. Thunks are introduced as Core's `thunkF_compatC` does, from the computation at every
