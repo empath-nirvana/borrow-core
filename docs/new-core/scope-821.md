@@ -94,3 +94,71 @@ or rule.
   `PoolSchedAdequacyC` over `cerwp`, with `HS`'s clauses proving `joinFd` at the joiner's resume,
   is the route; not started.
 - `HS`'s `par` at the chain tables.
+
+## The outer pool: `PoolSchedAdequacyC`
+
+`Core/Chain/PoolC.lean`, `Core/Chain/PoolJoinC.lean`, `Core/Chain/Cross821C.lean`.
+
+### The general theorem
+
+- `cerwp_schedHandle_le`: `[handle]` for a scheduler at `cerwp` (`cerwp_gen`'s cases, by induction
+  on the index), each clause given the stopped task's continuation as `KapRelC`: resumed under the
+  stopped run's frame condition with the entry's `fd`, owning the records the stop owned; cancelled
+  (D15, `κ (inj₂ ())`) through the entry's cancel obligation `PcanC`.
+- `PoolSchedAdequacyC` / `poolSchedAdequacyC`: `PoolSchedAdequacyN`'s structure over `cerwp`. A
+  stored task records its frame condition, records and payload (`StoredC`); the pool is the
+  separating conjunction of their shares (`PoolC`); the scheduler keeps a **bag** of what ended
+  tasks hold (no garbage at `cerwp`); its invariant `Inv` is read at the running task's frame
+  condition. Moves: `poolAnsC_run_le`, `_park`, `_resume` (part of the bag as the answer's
+  resource, the frame condition proved of the rest of the pool and bag), `_cancel`, `_resumeSnd`,
+  `_cancelSnd`. The program's answers own no record and hold only `imm` cells (`cerwp_adequacy`).
+
+### The scheduler `HJ`
+
+`parkC` (cancellable), `spawn`, `cancel`, `join ℓ` (`joinEnt`), `parkL` (must-resume). A task's end
+puts what it holds (`QinJ`: copies, `ViewsC`) in the bag. `join ℓ` with the pool empty resumes the
+joiner with the bag's copies of `ℓ` (`ViewsC.split`), the rest of the bag flattening to nothing at
+`ℓ` (`ViewsC.flat_none`): `joinFd`. `hj_schedOKC`: `HJ` meets `SchedOKC` at `TJC` for every task at
+that table; `progOfC_orDiverges` closes any root through `poolSchedAdequacyC`.
+
+### Case 1: proved
+
+| headline | statement | hypotheses | axioms |
+|---|---|---|---|
+| `crossImmJ` | `OrDiverges ((hnd HJ (rootI false)) (HJ, []))` | none | propext, Classical.choice, Quot.sound |
+| `crossImmJC` | `OrDiverges ((hnd HJ (rootI true)) (HJ, []))` | none | same |
+
+`rootI b = let c = alloc () in (spawn (λ_. parkC (); !c); !c; tail; ()); join c; free c`, `tail`
+`parkL ()` or `cancel ()`. The child is spawned into the top-level pool with a copy of the borrow;
+the root reads `!c` while the child is parked holding its copy; the root suspends to the scheduler
+(`parkL`/`cancel`) with the lend open (its record and copy in its stored continuation); the child
+is resumed and ends, or is cancelled, its copy going to the bag; `join c` returns it; the lend ends
+in that segment (`cerwp_scope`); `c` is freed.
+
+### Restrictions
+
+Kept from `CaptureScope`: the lent cell's payload empty; the borrowed run's operations must-resume
+with empty answers (the scope's body is at `tabInN`, the lend's stops at the must-resume part
+`tabLinC`); the body at `erwp0`.
+
+New, of `HJ` (the general theorem has none of them):
+
+- **`join` is a barrier**: it resumes only with no other task stored, else diverges.
+- **After a join the program is one task**: the join pushes a marker; `spawn` above it diverges.
+  Reason: `contShareC` resumes a continuation under its run's frame condition and its entry's
+  `fd`, so a task resumed from `join ℓ` carries `joinFd ℓ` at every later resume; a stored share is
+  opaque to the scheduler, so it can establish `joinFd ℓ` only when no other task holds a share.
+  I have not verified in Lean that this is forced (only that `HJ` meets its obligations with it).
+- Tasks end holding copies only (`QinJ`).
+
+### Case 2 (`mut`): not derived
+
+Not derived, no obstruction verified. What is missing: `joinEntM`'s answer is the `mut` cell at the
+joined location. A child's answer at a fixed table says only that it holds some resource; nothing
+in `KapRelC`, in a task's answer, or in the scheduler's code (which cannot compare locations) ties
+a `mut` cell a child leaves to the joiner that lent it, so the scheduler cannot prove the joiner's
+answer; and a `mut` cell left in the bag at the program's end would fail the `AllImm` answer.
+Routes, not built: per-task answers delivered to a waiting spawner (fork-join, as the tree track's
+`PoolTJ` for copies), or a resource the lender holds that names the loan.
+
+Gate: `gate-serial.sh gate`, ALL PASSED (`~/repos/scratch-archive/cross821/gate2.log`).

@@ -1391,6 +1391,13 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Cross821.crossImmC
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Cross821.crossMut
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Cross821.crossMutC
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.poolSchedAdequacyC
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.cerwp_schedHandle_le
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.PoolJoin.hj_schedOKC
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.PoolJoin.progOfC_orDiverges
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Cross821C.rootI_ok
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Cross821C.crossImmJ
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Cross821C.crossImmJC
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_adequacy
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.HandlerLendProg.progHL_orDiverges
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.HandlerLendAll.anti_underL

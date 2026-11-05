@@ -85,3 +85,6 @@ import Core.Chain.Hardest791N
 import Core.Chain.PoolScopeN
 import Core.Chain.CrossStopN
 import Core.Chain.Cross821N
+import Core.Chain.Cross821C
+import Core.Chain.PoolC
+import Core.Chain.PoolJoinC
