@@ -14,15 +14,22 @@
 # machines, are its line of `corpus/erasure-backend2.expected`.
 #
 #     scripts/compile-backend2.sh [file.bc…]
+#     scripts/compile-backend2.sh --final [file.bc…]
 #     scripts/compile-backend2.sh --write-counts [file.bc…]
+#
+# `--final` (`make gate`) lints each program and runs it in Wasm only: no LIR or word-IR
+# interpreter, no native run, no erasure check and no counts. A program whose Wasm run differs
+# from the golden is then run at the `lir` and `lflat` stages, and the first that differs is named.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export write=0
+export final=0
 files=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --write-counts) write=1 ;;
-    -*) echo "usage: scripts/compile-backend2.sh [--write-counts] [file.bc…]"; exit 2 ;;
+    --final) final=1 ;;
+    -*) echo "usage: scripts/compile-backend2.sh [--final | --write-counts] [file.bc…]"; exit 2 ;;
     *) files+=("$1") ;;
   esac
   shift
@@ -52,6 +59,19 @@ statusOf() {
   if [ -f "$s" ]; then tr -d ' \n' < "$s"; else echo 0; fi
 }
 
+# --final: after program $1's Wasm run differs (input $2, standard error golden $3, base $4),
+# the first of the lir and lflat stages that differs from the golden, if either does.
+localise() {
+  local st rc
+  for st in lir lflat; do
+    rc=0
+    "$bcc" interp --stage "$st" "$1" -- "${args[@]+"${args[@]}"}" < "$2" > "$w/out" 2> "$w/err" || rc=$?
+    if [ "$rc" != "$(statusOf "$1")" ] || ! cmp -s "$w/out" "$4.out" || ! cmp -s "$w/err" "$3"; then
+      echo "  localised: the $st stage differs already"; return 0
+    fi
+  done
+  echo "  localised: the lir and lflat stages agree with the golden; Wasm alone differs"
+}
 # One program: linted, run at every stage, counted.
 program() {
   local f=$1 w=${PAR_TMP:-$tmp} base in err st rc name got a i c l s b want wa wi wc wl ws wb oldc note
@@ -66,7 +86,9 @@ program() {
   in=/dev/null; [ -f "$base.in" ] && in="$base.in"
   err=/dev/null; [ -f "$base.err" ] && err="$base.err"
   argsOf "$f"
-  for st in lir lflat wasm $([ "$native" = 1 ] && echo native); do
+  local stages="lir lflat wasm $([ "$native" = 1 ] && echo native)"
+  [ "$final" = 0 ] || stages="wasm"
+  for st in $stages; do
     rc=0
     case "$st" in
       wasm) "$bcc" run --backend new "$f" "${args[@]+"${args[@]}"}" < "$in" > "$w/out" 2> "$w/err" || rc=$? ;;
@@ -75,9 +97,11 @@ program() {
     esac
     if [ "$rc" != "$(statusOf "$f")" ] || ! cmp -s "$w/out" "$base.out" || ! cmp -s "$w/err" "$err"; then
       echo "$f: the new backend's $st stage differs from the golden (status $rc): $(head -c 300 "$w/err" | head -3)"
+      [ "$final" = 1 ] && localise "$f" "$in" "$err" "$base"
       return 1
     fi
   done
+  if [ "$final" = 1 ]; then echo "$f: ok at wasm"; echo "$f" > "$tmp/counts.$$.$RANDOM"; return 0; fi
   name=${f#corpus/}; name=${name%.bc}
   local er wer
   er=$("$bcc" lir --erasure "$f" 2>&1)
@@ -109,7 +133,7 @@ program() {
   fi
   echo "$f: ok (allocs $a indirect $i copies $c; old $oldc)"
 }
-export -f program argsOf statusOf
+export -f program localise argsOf statusOf
 par program "${files[@]}"
 if [ "$write" = 1 ]; then
   cat "$tmp"/counts.* 2>/dev/null | sort > "$tmp/new"
