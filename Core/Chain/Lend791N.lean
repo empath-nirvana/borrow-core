@@ -328,7 +328,7 @@ open BoCa.Fig16.LogRel (LtLife substAll)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open BoCa.Fig16.Tree.Wp.Goal791 (Const791 ctx791 vals791 jdgC)
 open BoCa.Fig16.LogRel.Core.Chain.SI.Hardest791 (rwp_det'')
-open BoCa.Fig16.LogRel.Core.Chain.SI.LendProg (empty_lendOK)
+open BoCa.Fig16.LogRel.Core.Chain.SI.LendProg (empty_lendOK noOwn_single_mut)
 open BoCa.BoLo (Heap Kont ubindE Head)
 
 /-- `rwp_mono` reading the postcondition at the indices the runs leave, `≤ n`. -/
@@ -590,6 +590,58 @@ theorem constN_w2 (hF : FundamentalN (ℍ := ℍ)) {x : LifeVar} {bnd : Lifetime
     ConstN (ℍ := ℍ) (.w2 x bnd A B S d) := by
   rintro ⟨-, hA, hB, hS, hdc, hder⟩ δ n
   exact withbor2S_compat hA hB hS hSB hSF hdc (hF _ _ _ _ hder) δ n
+
+/-! ### The callback type is inhabited -/
+
+/-- The callback `λ_. λu. ()`: it releases the borrow at once. -/
+def cbRelease : Val := Val.lam (.val (Val.lam (.val .unit)))
+
+/-- **`λ_. λu. ()` is a callback of the suspending lend**, at the empty row and the answer `1`,
+wherever the bound has an interpretation: the borrow is left as garbage at the return, so the
+callback type `withbor2S_compat` reads is not empty. -/
+theorem cbRelease_sem {x : LifeVar} {bnd : Lifetime.Life} {A : VTy} {δ : LSub}
+    (hb : ∃ γ, bnd.interp δ = some γ) (n : Nat) :
+    vN (ℍ := ℍ) (cbUTy x bnd (.mut (.var x) A) .unit []) δ n cbRelease PMap.empty := by
+  intro Φ hΦ ls
+  refine ⟨hb, fun α _ k _ v ρv ρ' hc hv => ?_⟩
+  obtain rfl := eq_of_compS_empty_left hc
+  obtain ⟨β, hβ, l, w, χ, hχ, j, hw, -, rfl, rfl⟩ := hv
+  have hQ : PostN.Down (fun k _ v ρ => vN (ℍ := ℍ) (.box (.var x) .unit) (δ.extend x α) k v ρ) :=
+    fun k _ v ρ h => vN_down _ _ k v ρ h
+  show erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) _ k ls
+    (.app (.app cbRelease.1 (.val .unit)) (.val (Val.loc l))) _
+  refine erwp_det hΦ (opTableN_down OpTabN.empty_down) hQ
+    (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl (.appL .hole (Val.loc l))) ?_
+  refine erwp_det hΦ (opTableN_down OpTabN.empty_down) hQ
+    (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl .hole) ?_
+  simp only [Kont.plug, Expr.subst, Val.unit, Expr.val]
+  exact erwp_garbage (compS_empty_left _) (noOwn_single_mut l)
+    (erwp_val (v := Val.unit) ⟨α, interp_ext_self δ x α, ⟨rfl, rfl⟩, ResU.inStratum_empty α⟩)
+
+/-! ### The answer clause: where the frame's stratum premise is not met -/
+
+/-- The thunk `λ_. ()`. -/
+def unitThunk : Val := Val.lam (.val .unit)
+
+/-- **`U(F 1)` has values outside every stratum `↓α`**: `λ_. ()` holding a `mut` cell at a
+lifetime shorter than `↓α`, left as garbage at the return. So an operation answering `U(F 1)`
+does not meet `OpTabN.LendOKCR.pb` at any lend lifetime `α`, and `Row.Suspend`'s
+`¬ VFree x o.B` does not give `erwp_M_frameCR`'s premise there; `withbor2S_compat`'s `hSB` does.
+This is a configuration for the premise, not a refutation of the constant. -/
+theorem answer_not_inStratum (δ : LSub) (α : Life) (l : Loc) :
+    ∃ ρ : WRes, (∀ n, vN (ℍ := ℍ) (.thunk (.ret .unit)) δ n unitThunk ρ) ∧
+      ¬ ρ.InStratum (↓α) := by
+  refine ⟨ResU.single l (CellU.mutOf (↓(↓α)) Val.unit PMap.empty
+    (ResU.inStratum_empty _) (fun _ _ => True) trivial), fun n Φ hΦ ls => ?_, fun h => ?_⟩
+  · show erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) _ n ls (.app unitThunk.1 (.val .unit)) _
+    refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down _ _ k v ρ h)
+      (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) ?_
+    simp only [Kont.plug, Expr.subst, Val.unit, Expr.val]
+    exact erwp_garbage (compS_empty_left _) (noOwn_single_mut l)
+      (erwp_val (v := Val.unit) ⟨rfl, rfl⟩)
+  · have := h l _ (ResU.single_get_self _ _)
+    rw [CellU.inStratum_mutOf] at this
+    exact lt_asymm this (Life.down_sqsubset _)
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 
