@@ -1,3 +1,4 @@
+corpus/alpha-effect-row.bc 1.0 cancellable tail: direct; agree
 corpus/answers-two-types.bc 1.0 cancellable tail+state: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/answers-two-types.bc 2.0 cancellable tail: direct; agree
 corpus/aoc/2021-15.bc 1.0 cancellable abortive: branch; agree
