@@ -1027,6 +1027,47 @@ cancel unwinds through the field's lend, the anti-frame and the record's lend to
 theorem hardestCase791C : HardestCase791C (ℍ := ℍ) :=
   progOfN_orDiverges Φ₀_down fun n => rootMutC_ok Φ₀_down n []
 
+/-! ### What the Mut Frame hands the lender back
+
+The lender of a `mut` lend gets its cell back through `MFPost`: at every content the lend's family
+admits at the end index, the content the lend started from included. So a lender's postcondition
+that names the content the borrower wrote is not reached through `rwp_M_frame`/`erwp_M_frameT`
+when the family admits the start content and the write changed it. -/
+
+/-- **`MFPost` holds the lender's postcondition at every admitted content.** -/
+theorem mfPost_any {l : Loc} {A : Life} {F : Nat → Val → SPropS Loc Val A} {Q : PostN} {k : Nat}
+    {ls : List SRec} {v : Val} {ρ' : WRes} (h : MFPost l A F Q k ls v ρ') (w : Val) (σ : WRes)
+    (hσ : σ.InStratum A) (hF : F k w ⟨σ, hσ⟩) {Y Z : WRes}
+    (hY : ResU.CompS ρ' (ResU.single l (CellU.ownOf w)) Y) (hZ : ResU.CompS Y σ Z) :
+    Q k ls v Z :=
+  h.2 w Y hY σ ⟨hσ, hF⟩ Z hZ
+
+/-- The lender's cell holds `v₁`. -/
+def HoldsAt (l : Loc) (v₁ : Val) : PostN := fun _ _ _ Z =>
+  ∃ R, ResU.CompS (ResU.single l (CellU.ownOf v₁)) R Z
+
+/-- **The field's lend cannot hand back the written value.** At the end `writeForget_ok` proves
+`MFPost` at (the borrow forgotten and dumped, the run holding nothing), `MFPost` at `famF` with
+the lender's postcondition `HoldsAt l v₁`, `v₁ ≠ ()`, is false: `famF` admits `()`, the field's
+start content. -/
+theorem mfPost_famF_holdsAt_false (l : Loc) (A : Life) (k : Nat) (ls : List SRec) (v v₁ : Val)
+    (h₁ : v₁ ≠ Val.unit) :
+    ¬ MFPost l A (famF A) (HoldsAt l v₁) k ls v PMap.empty := by
+  intro h
+  obtain ⟨R, hR⟩ := mfPost_any h Val.unit PMap.empty (inStratum_empty A) rfl
+    (compS_empty_left _) (ResU.comp_empty_right _)
+  obtain ⟨ψ, hψ, he⟩ := compS_get_erase hR (ResU.single_get_self l _)
+  rw [ResU.single_get_self] at hψ
+  cases Option.some.inj hψ
+  simp only [CellU.erase_ownOf] at he
+  exact h₁ (Option.some.inj (congrArg some he.symm) ▸ rfl)
+
+/-- `vField` is not `()`: the field's write changes its content. -/
+theorem vField_ne_unit : vField ≠ Val.unit := by
+  intro h
+  have := congrArg Subtype.val h
+  simp [vField, Val.i32, Val.unit] at this
+
 end BoCa.Fig16.LogRel.Core.Chain.SI.Hardest791
 
 end
