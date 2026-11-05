@@ -5,7 +5,7 @@ import Core.Chain.SI.Uncapture
 # The counted `imm` lend across stops, at `erwpX`  `[spec §62]`
 
 `docs/new-core/scope-821-loans.md`, stage 2. An `imm` lend whose cell `ℓ` is masked at the lend's
-authority (`Auth.lend`, held by `ℓ`'s `xm`) is opened at the start of one segment and ended at the
+authority (`Auth.lend κ`, held by a whole token `[κ]_1` the lender keeps) is opened at the start of one segment and ended at the
 start of a later one. Between them it is held across any number of stops: the run's continuation
 is the same `erwpX` at the same mask, and `↭` is not read at `ℓ`.
 
@@ -134,7 +134,7 @@ theorem UpdVNm.of_flatAt_off {Φ : LocFam} {n : Nat} {L : Set Loc} {A B π : WRe
   exact ⟨ψ, (hAB m hm ψ).mpr hψB, hs⟩
 
 /-- The lend masks `ℓ`. -/
-theorem Mask.lendLocs_sub (M : Mask) : M.lendLocs ⊆ M.locs := fun _ hl => ⟨_, hl⟩
+theorem Mask.lendLocs_sub (M : Mask) : M.lendLocs ⊆ M.locs := fun _ ⟨_, h⟩ => ⟨_, h⟩
 
 /-! ### `ρ # ℓ ↦ own(v)` from a flattening undefined at `ℓ` -/
 
@@ -334,6 +334,66 @@ theorem not_desc_empty {p d : FrameRec} (hR : p.R = PMap.empty) : ¬ Desc p d :=
       rw [hR, PMap.empty_get] at eζ
       cases eζ
 
+/-! ### Minting a whole token -/
+
+/-- **`[κ]_1` minted at a fresh `κ` at the start of a run**: below the resource and the frame, with
+no token anywhere. A ghost change the frame cannot see: it holds no fraction of `κ` and carries
+no copy at `κ`. A lender mints the authority of a loan it will hold across stops this way, before
+the task that holds the loan is spawned. -/
+theorem rwpGX_mint {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {ls : List SRec} {e : Expr}
+    {ρ : WRes} {g : GRes}
+    (hbody : ∀ κ : Life, ρ.InStratum κ → g.tok κ = 0 →
+      rwpGX (ℍ := ℍ) Φ M Q n ls e (ρ, g + GRes.life κ)) :
+    rwpGX (ℍ := ℍ) Φ M Q n ls e (ρ, g) := by
+  intro xf sρ ps μ hH3 hsρ hv hwf hwx hsh hau hoff hT htg hlow hfd jr μ' e' hj hrun
+  obtain ⟨ar, har⟩ := ρ.exists_atLife
+  obtain ⟨af, haf⟩ := xf.1.exists_atLife
+  obtain ⟨κ, hlt, htokκ⟩ := GRes.exists_fresh_life (hv := hv) (ar ⊓ af)
+  have houtr : ResU.InStratum κ ρ := outlives_of_atLife har (lt_of_lt_of_le hlt inf_le_left)
+  have houtf : ResU.InStratum κ xf.1 := outlives_of_atLife haf (lt_of_lt_of_le hlt inf_le_right)
+  have htokg : g.tok κ = 0 := by
+    have := htokκ; simp only [GRes.tok_add] at this
+    exact (add_eq_zero.mp this).2
+  have hVin : (xf.2 + (g + GRes.life κ)).Valid := by
+    rw [← GRes.add_assoc]; exact GRes.valid_add_life hv htokκ
+  have hcin : ∀ α, α ∈ (xf.2 + (g + GRes.life κ)).counted → α ≠ κ →
+      α ∈ (xf.2 + g).counted := by
+    intro α hα hne
+    simp only [GRes.counted, Set.mem_ofPred_eq, GRes.tok_add, GRes.tok_life, if_neg hne,
+      _root_.add_zero] at hα ⊢
+    exact hα
+  have hWf : WFC (xf.2 + (g + GRes.life κ)).counted xf := by
+    intro α hα hc
+    by_cases hακ : α = κ
+    · subst hακ; exact absurd hc (not_carries_of_inStratum houtf)
+    · exact hwf α (hcin α hα hακ) hc
+  have hWx : WFC (xf.2 + (g + GRes.life κ)).counted (ρ, g + GRes.life κ) := by
+    intro α hα hc
+    show 0 < g.tok α + (GRes.life κ).tok α
+    by_cases hακ : α = κ
+    · subst hακ; exact absurd hc (not_carries_of_inStratum houtr)
+    · exact lt_of_lt_of_le (hwx α (hcin α hα hακ) hc) le_self_add
+  have hr := hbody κ houtr htokg xf sρ ps μ hH3 hsρ hVin hWf hWx hsh
+    (hau.add_right (GRes.Valid.right hVin)) hoff hT htg hlow hfd jr μ' e' hj hrun
+  refine ⟨hr.1, fun hfin => ?_⟩
+  obtain ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, hU, hNo, hT', htg',
+    hps', hls', hV, hN, hW', hWp, hS', hSπ, hAu, hOff, hq⟩ := hr.2 hfin
+  refine ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, hU, hNo, hT', htg',
+    hps', hls', hV, fun α hα hα₀ => ?_, hW', hWp, hS', hSπ, hAu, hOff, hq⟩
+  by_cases hακ : α = κ
+  · subst hακ; exact not_carries_of_inStratum houtf
+  · exact hN α hα (fun h => hα₀ (hcin α h hακ))
+
+theorem erwpX_mint {Φ : LocFam} {M : Mask} {Tb : TableX} {Q : PostX} {n : Nat}
+    {ls : List SRec} {e : Expr} {ρ : WRes} {g : GRes}
+    (hbody : ∀ κ : Life, ρ.InStratum κ → g.tok κ = 0 →
+      erwpX (ℍ := ℍ) Φ M Tb Q n ls e (ρ, g + GRes.life κ)) :
+    erwpX (ℍ := ℍ) Φ M Tb Q n ls e (ρ, g) := by
+  rw [erwpX_eq]
+  refine rwpGX_mint (fun κ h₁ h₂ => ?_)
+  have hb := hbody κ h₁ h₂
+  rwa [erwpX_eq] at hb
+
 /-! ### The open -/
 
 /-- **A counted lend opened at the start of a run, at a mask holding it.** `ℓ ↦ own(v)` with an
@@ -443,7 +503,7 @@ theorem rwpGX_lendEnd {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {l : Loc}
     {S ρ : WRes} {g : GRes}
     (hres : ResU.CompS S (ResU.single l (CellU.immOf s v PMap.empty hs)) ρ)
     (hS : ¬ Carries S α) (hSo : ResU.Hash S (ResU.single l (CellU.ownOf v)))
-    (hM : ∀ m, (m, Auth.life α) ∉ M)
+    (hau₀ : MaskAuth M g)
     (hbody : ∀ ρo, ResU.CompS S (ResU.single l (CellU.ownOf v)) ρo →
       rwpGX (ℍ := ℍ) Φ M Q n ls' e (ρo, g)) :
     rwpGX (ℍ := ℍ) Φ M Q n ls e (ρ, g + GRes.life α) := by
@@ -475,16 +535,7 @@ theorem rwpGX_lendEnd {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {l : Loc}
     · exact absurd hc' (not_carries_single_own l v β)
   have hsh0 : MaskShallow M.locs ρo :=
     maskShallow_comp hρo (maskShallow_left hres hvρ hsh) (maskShallow_single_own _ _ _)
-  have hau0 : MaskAuth M g := by
-    intro m a hma
-    have := hau m a hma
-    cases a with
-    | life β =>
-        have hβα : β ≠ α := fun h => hM m (h ▸ hma)
-        simpa [Auth.Held, GRes.tok_life, hβα] using this
-    | xm => simpa [Auth.Held] using this
-    | lend => simpa [Auth.Held] using this
-  have hr := hbody ρo hρo xf W' ps' μ hHf hW' hV0 (hwf.mono hsub) hwx0 hsh0 hau0 hoff hTW'
+  have hr := hbody ρo hρo xf W' ps' μ hHf hW' hV0 (hwf.mono hsub) hwx0 hsh0 hau₀ hoff hTW'
     htgW' hlowW' hfd jr μ' e' hj hrun
   refine ⟨hr.1, fun hfin => ?_⟩
   obtain ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps'', ls'', h₁, h₂, h₃, h₄, h₅, h₆, hU, hNo, hT', htg',
@@ -531,18 +582,18 @@ theorem erwpX_lendEnd {Φ : LocFam} {M : Mask} {Tb : TableX} {Q : PostX} {n : Na
     {S ρ : WRes} {g : GRes}
     (hres : ResU.CompS S (ResU.single l (CellU.immOf s v PMap.empty hs)) ρ)
     (hS : ¬ Carries S α) (hSo : ResU.Hash S (ResU.single l (CellU.ownOf v)))
-    (hM : ∀ m, (m, Auth.life α) ∉ M)
+    (hau₀ : MaskAuth M g)
     (hbody : ∀ ρo, ResU.CompS S (ResU.single l (CellU.ownOf v)) ρo →
       erwpX (ℍ := ℍ) Φ M Tb Q n ls' e (ρo, g)) :
     erwpX (ℍ := ℍ) Φ M Tb Q n ls e (ρ, g + GRes.life α) := by
   rw [erwpX_eq]
-  refine rwpGX_lendEnd hl e hmem hls' hres hS hSo hM (fun ρo hρo => ?_)
+  refine rwpGX_lendEnd hl e hmem hls' hres hS hSo hau₀ (fun ρo hρo => ?_)
   have hb := hbody ρo hρo
   rwa [erwpX_eq] at hb
 
-/-! ### The `mut` loan: the cell moves, the lender keeps `xm`
+/-! ### The `mut` loan: the cell moves, the lender keeps the loan's authority
 
-A `mut` loan of `ℓ` is masked at `ℓ`'s `xm`. Its open folds `ℓ ↦ own(v)` into the borrow cell
+A `mut` loan of `ℓ` is masked at `Auth.mloan κ`, held by the lender's `[κ]_1`. Its open folds `ℓ ↦ own(v)` into the borrow cell
 `ℓ ↦ mut(β, v, ∅, P̂)` (`TWNC.mutFold`), which the run may hand to another task at a stop; its end
 unfolds the cell, given back, into `ℓ ↦ own(w)` (`TWNC.mutUnfold`). No record is made. The frame's
 half of the end needs no world argument: a frame composing with the borrow cell composes with
@@ -596,9 +647,9 @@ theorem not_carries_single_mut {l : Loc} {β : Life} {v : Val}
 theorem Mask.locs_of_mem {M : Mask} {l : Loc} {a : Auth} (h : (l, a) ∈ M) : l ∈ M.locs :=
   ⟨a, h⟩
 
-/-- **A `mut` loan opened at the start of a run, at a mask holding `ℓ`'s `xm`.** -/
+/-- **A `mut` loan opened at the start of a run, at a mask holding its authority.** -/
 theorem rwpGX_mutLoanOpen {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {l : Loc}
-    (hl : (l, Auth.xm) ∈ M) {β : Life} {v : Val} {hstr : ResU.InStratum β (PMap.empty : WRes)}
+    {κ : Life} (hl : (l, Auth.mloan κ) ∈ M) {β : Life} {v : Val} {hstr : ResU.InStratum β (PMap.empty : WRes)}
     {P : Val → SPropS Loc Val β} (hw : P v ⟨PMap.empty, hstr⟩) (e : Expr) (ls : List SRec)
     {ρa ρ : WRes} {g : GRes}
     (hcρ : ResU.CompS (ResU.single l (CellU.ownOf v)) ρa ρ)
@@ -650,10 +701,10 @@ theorem rwpGX_mutLoanOpen {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {l : L
   have hml : m ≠ l := fun h => hm (h ▸ Mask.locs_of_mem hl)
   exact flatAt_off_swap single_own_off single_mut_off hcρ (ResU.CompS.comm hρm) hvρ hvρm hml ψ
 
-/-- **A `mut` loan ended at the start of a run, at a mask holding `ℓ`'s `xm`**: the borrow cell,
+/-- **A `mut` loan ended at the start of a run, at a mask holding its authority**: the borrow cell,
 given back, unfolds into `ℓ ↦ own(v)`. -/
 theorem rwpGX_mutLoanEnd {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {l : Loc}
-    (hl : (l, Auth.xm) ∈ M) {β : Life} {v : Val} {hstr : ResU.InStratum β (PMap.empty : WRes)}
+    {κ : Life} (hl : (l, Auth.mloan κ) ∈ M) {β : Life} {v : Val} {hstr : ResU.InStratum β (PMap.empty : WRes)}
     {P : Val → SPropS Loc Val β} {hw : P v ⟨PMap.empty, hstr⟩} (e : Expr) (ls : List SRec)
     {ρa ρ : WRes} {g : GRes}
     (hcρ : ResU.CompS (ResU.single l (CellU.mutOf β v PMap.empty hstr P hw)) ρa ρ)
@@ -705,7 +756,7 @@ theorem rwpGX_mutLoanEnd {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {l : Lo
   exact flatAt_off_swap single_mut_off single_own_off hcρ (ResU.CompS.comm hρo) hvρ hvρo hml ψ
 
 theorem erwpX_mutLoanOpen {Φ : LocFam} {M : Mask} {Tb : TableX} {Q : PostX} {n : Nat}
-    {l : Loc} (hl : (l, Auth.xm) ∈ M) {β : Life} {v : Val}
+    {l : Loc} {κ : Life} (hl : (l, Auth.mloan κ) ∈ M) {β : Life} {v : Val}
     {hstr : ResU.InStratum β (PMap.empty : WRes)} {P : Val → SPropS Loc Val β}
     (hw : P v ⟨PMap.empty, hstr⟩) (e : Expr) (ls : List SRec) {ρa ρ : WRes} {g : GRes}
     (hcρ : ResU.CompS (ResU.single l (CellU.ownOf v)) ρa ρ)
@@ -718,7 +769,7 @@ theorem erwpX_mutLoanOpen {Φ : LocFam} {M : Mask} {Tb : TableX} {Q : PostX} {n 
   rwa [erwpX_eq] at hb
 
 theorem erwpX_mutLoanEnd {Φ : LocFam} {M : Mask} {Tb : TableX} {Q : PostX} {n : Nat}
-    {l : Loc} (hl : (l, Auth.xm) ∈ M) {β : Life} {v : Val}
+    {l : Loc} {κ : Life} (hl : (l, Auth.mloan κ) ∈ M) {β : Life} {v : Val}
     {hstr : ResU.InStratum β (PMap.empty : WRes)} {P : Val → SPropS Loc Val β}
     {hw : P v ⟨PMap.empty, hstr⟩} (e : Expr) (ls : List SRec) {ρa ρ : WRes} {g : GRes}
     (hcρ : ResU.CompS (ResU.single l (CellU.mutOf β v PMap.empty hstr P hw)) ρa ρ)

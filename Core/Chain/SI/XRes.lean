@@ -236,12 +236,14 @@ theorem wfc_grow {C C' : Set Life} {x : XRes} (h : WFC C x) (hn : NewNotCarried 
 
 /-! ### Masks -/
 
-/-- What masks a location: a whole lifetime token, a `mut` authority, or the authority of an
-`imm` lend held across stops (`lend`, held by the location's `xm`). -/
+/-- What masks a location: a whole lifetime token, a `mut` authority, or the authority of a
+loan held across stops: an `imm` lend (`lend κ`) or a `mut` loan (`mloan κ`), each held by a whole
+token `[κ]_1` that the lender keeps for as long as it holds the location. -/
 inductive Auth where
   | life (α : Life)
   | xm
-  | lend
+  | lend (κ : Life)
+  | mloan (κ : Life)
 
 /-- A mask: locations, each with the authority it is masked by. -/
 abbrev Mask : Type := Set (Loc × Auth)
@@ -250,7 +252,7 @@ abbrev Mask : Type := Set (Loc × Auth)
 def Mask.locs (M : Mask) : Set Loc := {l | ∃ a, (l, a) ∈ M}
 
 /-- The locations masked by an `imm` lend held across stops. -/
-def Mask.lendLocs (M : Mask) : Set Loc := {l | (l, Auth.lend) ∈ M}
+def Mask.lendLocs (M : Mask) : Set Loc := {l | ∃ κ, (l, Auth.lend κ) ∈ M}
 
 @[simp] theorem Mask.lendLocs_empty : (∅ : Mask).lendLocs = ∅ := by
   ext l; simp [Mask.lendLocs]
@@ -259,7 +261,8 @@ def Mask.lendLocs (M : Mask) : Set Loc := {l | (l, Auth.lend) ∈ M}
 def Auth.Held (g : GRes) (l : Loc) : Auth → Prop
   | .life α => g.tok α = 1
   | .xm => g.xm l = 1
-  | .lend => g.xm l = 1
+  | .lend κ => g.tok κ = 1
+  | .mloan κ => g.tok κ = 1
 
 /-- **The mask's authorities are held**: by `g`, at every location `M` masks. -/
 def MaskAuth (M : Mask) (g : GRes) : Prop := ∀ l a, (l, a) ∈ M → a.Held g l
@@ -278,7 +281,8 @@ theorem Auth.Held.add_right {g h : GRes} (hv : (g + h).Valid) {l : Loc} {a : Aut
   cases a with
   | life α => exact GRes.tok_one_of_add hv ha
   | xm => exact GRes.xm_one_of_add hv ha
-  | lend => exact GRes.xm_one_of_add hv ha
+  | lend κ => exact GRes.tok_one_of_add hv ha
+  | mloan κ => exact GRes.tok_one_of_add hv ha
 
 theorem MaskAuth.add_right {M : Mask} {g h : GRes} (hv : (g + h).Valid) (hm : MaskAuth M g) :
     MaskAuth M (g + h) :=

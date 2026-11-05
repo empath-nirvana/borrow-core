@@ -1417,6 +1417,8 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpX_lendOpen
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpX_lendEnd
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.maskOff_of_upd
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.rwpGX_mint
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpX_mint
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.rwpGX_mutLoanOpen
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.rwpGX_mutLoanEnd
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpX_mutLoanOpen
