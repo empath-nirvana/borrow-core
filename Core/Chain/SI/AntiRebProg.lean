@@ -15,7 +15,7 @@ the method opens the borrow (`erwp_M_antiFrame`), lends the opened cell `imm` (`
 loads `d` through it and reborrows the field at a shorter lifetime (`erwp_reborrow`, at the
 canonical image); the reborrow is live across `y`, whose `κ` the scheduler stores and resumes.
 
-At the stop the reborrow folds (round 8), the Imm Frame folds `c` back to `own` with its content
+At the stop the reborrow folds (`erwp_reborrow`), the Imm Frame folds `c` back to `own` with its content
 unchanged (the guard `ImmFold`), the anti-frame seals `c` with that content (`CellFold`), and the
 outer lend folds `c` to `own`. At the resume each is undone in the reverse order.
 -/
@@ -129,7 +129,7 @@ theorem turnRM_ok {Φ : LocFam} (hΦ : Φ.Down) (Ao : Life) (k : Nat) (s : Val) 
         (.inj₂ (.var 2))) (.val .unit)))) =
       Kont.hole.plug (.app (.val (Val.lam (.case (.var 0)
         (.seq (lendRE c) (.inj₂ (.val (Val.loc c)))) (.val .unit)))) (.val nextV)) := by
-    simp [Expr.subst, Expr.shift, Kont.plug, lamX, discardV, lendRE, ldR, Stage1.yE, performE,
+    simp [Expr.subst, Expr.shift, Kont.plug, lamX, discardV, lendRE, ldR, FileProg.yE, performE,
       opPayload, Val.pair, Val.i32, Val.unit, Val.lam, Val.loc, Expr.val, Val.prim, Val.shift]
   rw [e₁]
   refine erwp_det hΦ hD hTP (fun μ => step1Only_plug (Head.beta μ _ nextV) rfl .hole) ?_
@@ -137,14 +137,14 @@ theorem turnRM_ok {Φ : LocFam} (hΦ : Φ.Down) (Ao : Life) (k : Nat) (s : Val) 
         (.seq (lendRE c) (.inj₂ (.val (Val.loc c)))) (.val .unit))) =
       Kont.hole.plug (.case (.val (Val.inj₁ Val.unit))
         (.seq (lendRE c) (.inj₂ (.val (Val.loc c)))) (.val .unit)) := by
-    simp [Expr.subst, Kont.plug, lamX, discardV, lendRE, ldR, Stage1.yE, performE, opPayload,
+    simp [Expr.subst, Kont.plug, lamX, discardV, lendRE, ldR, FileProg.yE, performE, opPayload,
       Val.pair, Val.i32, Val.unit, nextV, Val.inj₁, Val.loc, Expr.val, Val.prim, Val.lam]
   rw [e₂]
   refine erwp_det hΦ hD hTP (fun μ => step1Only_plug (Head.case₁ μ Val.unit _ _) rfl .hole) ?_
   have e₃ : Kont.hole.plug (Expr.subst 0 Val.unit
         (.seq (lendRE c) (.inj₂ (.val (Val.loc c))))) =
       (Kont.seq .hole (.inj₂ (.val (Val.loc c)))).plug (lendRE c) := by
-    simp [Expr.subst, Kont.plug, lamX, discardV, lendRE, ldR, Stage1.yE, performE, opPayload,
+    simp [Expr.subst, Kont.plug, lamX, discardV, lendRE, ldR, FileProg.yE, performE, opPayload,
       Val.pair, Val.i32, Val.unit, Val.loc, Expr.val, Val.prim, Val.lam]
   rw [e₃]
   refine erwp_bind_le (Q' := QR c) hΦ _ (fun m => by simp [Kont.HasHnd])
@@ -167,7 +167,7 @@ theorem bodyRM_ok (n : Nat) :
   have h₁ : Kont.hole.plug (Expr.subst 0 (Val.loc e)
       (.app (.val lamD) (.app (.val (.prim .alloc)) (.val u₀)))) =
       (Kont.appR (.val lamD) .hole).plug (.app (.val (.prim .alloc)) (.val u₀)) := by
-    simp [Expr.subst, Kont.plug, lamD, lamC, fR, lamX, discardV, u₀, Stage1.idV, Stage1.yE,
+    simp [Expr.subst, Kont.plug, lamD, lamC, fR, lamX, discardV, u₀, FileProg.idV, FileProg.yE,
       performE, opPayload, Val.pair, Val.i32, Val.unit, Val.loc, Expr.val, Val.prim, Val.lam]
   rw [h₁]
   refine erwp_alloc Φ₀_down hL (.appR (.val lamD) .hole) u₀ (fun d τ₁ τ₂ hcd hcd' => ?_)
@@ -175,7 +175,7 @@ theorem bodyRM_ok (n : Nat) :
   have h₂ : Kont.hole.plug (Expr.subst 0 (Val.loc d)
       (.app (.val lamC) (.app (.val (.prim .alloc)) (.var 0)))) =
       (Kont.appR (.val lamC) .hole).plug (.app (.val (.prim .alloc)) (.val (Val.loc d))) := by
-    simp [Expr.subst, Kont.plug, lamC, fR, lamX, discardV, Stage1.yE, performE, opPayload,
+    simp [Expr.subst, Kont.plug, lamC, fR, lamX, discardV, FileProg.yE, performE, opPayload,
       Val.pair, Val.i32, Val.unit, Val.loc, Expr.val, Val.prim, Val.lam]
   rw [h₂]
   refine erwp_alloc Φ₀_down hL (.appR (.val lamC) .hole) (Val.loc d)
@@ -188,7 +188,7 @@ theorem bodyRM_ok (n : Nat) :
   rw [h₃]
   subst hcell hcd hcc
   exact erwp_iterate Φ₀_down T2_down (OpTabN.ctxClosed_of_fin T2_fin _) QZ_down rfl (I := IR)
-    (en := tickEnt) (by simp [T2, T1, Stage1.divEff_ne6]) rfl rfl
+    (en := tickEnt) (by simp [T2, T1, FileProg.divEff_ne6]) rfl rfl
     (fun _ _ => ⟨rfl, rfl⟩) (fun _ _ _ _ h => h) IR_closed
     (fun k s ls ρ hI => turnRM_ok Φ₀_down 0 k s ls ρ hI) _ _ _ _
     ⟨c, d, e, _, rfl, ResU.CompS.comm hcd', ResU.CompS.comm hcc'⟩

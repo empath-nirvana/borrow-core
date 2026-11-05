@@ -195,9 +195,9 @@ theorem openC_ok {Φ : LocFam} (hΦ : Φ.Down) (c d : Loc) (u : Val) (A : Life) 
   | succ k₀ =>
   refine erwp_step hL (fun μ => step1Only_plug (Head.beta μ _ (Val.loc d)) rfl .hole) ?_
   have e₁ : Kont.hole.plug (Expr.subst 0 (Val.loc d)
-      (.seq Stage1.yE (.app (.app (.val (.prim .store)) (.var 0)) (.val (Val.i32 5))))) =
+      (.seq FileProg.yE (.app (.app (.val (.prim .store)) (.var 0)) (.val (Val.i32 5))))) =
       lendE d := by
-    simp [Expr.subst, Kont.plug, Stage1.yE, lendE, wrL, performE, opPayload, Val.pair,
+    simp [Expr.subst, Kont.plug, FileProg.yE, lendE, wrL, performE, opPayload, Val.pair,
       Val.i32, Val.unit, Val.loc, Expr.val, Val.prim, Val.storeV]
   rw [e₁]
   have hTfield : erwp (ℍ := ℍ) Φ (opTableG T' (CellFold d A (famF A))) (Qlend d) k₀ ls (lendE d)
@@ -341,7 +341,7 @@ theorem turnC_ok (A : Life) (c : Loc) (k : Nat) (s : Val) (ls : List SRec) (ρ :
         (.inj₂ (.var 2))) (.val .unit)))) =
       Kont.hole.plug (.app (.val (Val.lam (.case (.var 0)
         (.seq (fieldE c) (.inj₂ (.val (Val.loc c)))) (.val .unit)))) (.val nextV)) := by
-    simp [Expr.subst, Expr.shift, Kont.plug, lamW, fieldE, ldA, Stage1.yE, performE, opPayload,
+    simp [Expr.subst, Expr.shift, Kont.plug, lamW, fieldE, ldA, FileProg.yE, performE, opPayload,
       Val.pair, Val.i32, Val.unit, Val.lam, Val.loc, Expr.val, Val.prim, Val.shift]
   rw [e₁]
   refine erwp_det Φ₀_down hD hTP (fun μ => step1Only_plug (Head.beta μ _ nextV) rfl .hole) ?_
@@ -349,7 +349,7 @@ theorem turnC_ok (A : Life) (c : Loc) (k : Nat) (s : Val) (ls : List SRec) (ρ :
         (.seq (fieldE c) (.inj₂ (.val (Val.loc c)))) (.val .unit))) =
       Kont.hole.plug (.case (.val (Val.inj₁ Val.unit))
         (.seq (fieldE c) (.inj₂ (.val (Val.loc c)))) (.val .unit)) := by
-    simp [Expr.subst, Kont.plug, lamW, fieldE, ldA, Stage1.yE, performE, opPayload, Val.pair,
+    simp [Expr.subst, Kont.plug, lamW, fieldE, ldA, FileProg.yE, performE, opPayload, Val.pair,
       Val.i32, Val.unit, nextV, Val.inj₁, Val.loc, Expr.val, Val.prim, Val.lam]
   rw [e₂]
   refine erwp_det Φ₀_down hD hTP
@@ -357,7 +357,7 @@ theorem turnC_ok (A : Life) (c : Loc) (k : Nat) (s : Val) (ls : List SRec) (ρ :
   have e₃ : Kont.hole.plug (Expr.subst 0 Val.unit
         (.seq (fieldE c) (.inj₂ (.val (Val.loc c))))) =
       (Kont.seq .hole (.inj₂ (.val (Val.loc c)))).plug (fieldE c) := by
-    simp [Expr.subst, Kont.plug, lamW, fieldE, ldA, Stage1.yE, performE, opPayload, Val.pair,
+    simp [Expr.subst, Kont.plug, lamW, fieldE, ldA, FileProg.yE, performE, opPayload, Val.pair,
       Val.i32, Val.unit, Val.loc, Expr.val, Val.prim, Val.lam]
   rw [e₃]
   refine erwp_bind_le (Q' := QA c) Φ₀_down _ (fun m => by simp [Kont.HasHnd])
@@ -429,7 +429,7 @@ theorem bodyCD_ok (A : Life) (n : Nat) :
       (.app (.val (Val.lam bodyCDF)) (.app (.val (.prim .alloc)) (.var 0)))) =
       (Kont.appR (.val (Val.lam bodyCDF)) .hole).plug
         (.app (.val (.prim .alloc)) (.val (Val.loc d))) := by
-    simp [Expr.subst, Kont.plug, bodyCDF, fA, lamW, Stage1.yE, performE, opPayload, freeE,
+    simp [Expr.subst, Kont.plug, bodyCDF, fA, lamW, FileProg.yE, performE, opPayload, freeE,
       Val.pair, Val.i32, Val.unit, Val.loc, Expr.val, Val.prim, Val.lam]
   rw [h₂]
   refine erwp_alloc Φ₀_down hL (.appR (.val (Val.lam bodyCDF)) .hole) (Val.loc d)
@@ -442,7 +442,7 @@ theorem bodyCD_ok (A : Life) (n : Nat) :
   exact erwp_iterate Φ₀_down (TL_down A c)
     (TL_ctxClosed A c _ (fun m => by simp [iterK, Kont.HasHnd])
       (fun m => by simp [iterK, Kont.Catches])) QF_down rfl (I := ILc c) (en := tickEnt)
-    (by simp [OpTabN.claimT, T2C, T1, tickEnt, Stage1.divEff_ne6]) rfl rfl
+    (by simp [OpTabN.claimT, T2C, T1, tickEnt, FileProg.divEff_ne6]) rfl rfl
     (fun _ _ => ⟨rfl, rfl⟩) (fun _ _ _ _ h => h) (fun s ρ ⟨_, _, hs, _⟩ => by subst hs; rfl)
     (fun k s ls ρ hI => turnC_ok A c k s ls ρ hI) _ _ _ _
     ⟨d, Val.i32 1, rfl, ResU.CompS.comm hcc'⟩

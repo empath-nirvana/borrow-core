@@ -142,10 +142,10 @@ def wrE' : Expr := .app (.app (.val (.prim .store)) (.var 3)) (.val (Val.i32 5))
 
 /-- `λs. λb. case b {next → (λ_. s := 5) (y ()); inr s | close → ()}`. -/
 def fTH : Val :=
-  Val.lam (.lam (.case (.var 0) (.seq (.app (.lam wrE') Stage1.yE) (.inj₂ (.var 2))) (.val .unit)))
+  Val.lam (.lam (.case (.var 0) (.seq (.app (.lam wrE') FileProg.yE) (.inj₂ (.var 2))) (.val .unit)))
 
 /-- The lent computation: `(λ_. ℓ := 5) (y ())`. -/
-def lendEH (l : Loc) : Expr := .app (.lam (wrL l)) Stage1.yE
+def lendEH (l : Loc) : Expr := .app (.lam (wrL l)) FileProg.yE
 
 /-- **The borrowed computation**: `y ()` stops with the lend live; after the resume the answer
 (with its borrow, if any) is garbage, and the borrow writes. -/
@@ -201,10 +201,10 @@ theorem turnH_ok {Φ : LocFam} (hΦ : Φ.Down) (k : Nat) (s : Val) (ls : List SR
   refine erwp_det hΦ hD hTP
     (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl (.appL .hole nextV)) ?_
   have e₁ : (Kont.appL .hole nextV).plug (Expr.subst 0 (Val.loc l)
-      (.lam (.case (.var 0) (.seq (.app (.lam wrE') Stage1.yE) (.inj₂ (.var 2))) (.val .unit)))) =
+      (.lam (.case (.var 0) (.seq (.app (.lam wrE') FileProg.yE) (.inj₂ (.var 2))) (.val .unit)))) =
       Kont.hole.plug (.app (.val (Val.lam (.case (.var 0)
         (.seq (lendEH l) (.inj₂ (.val (Val.loc l)))) (.val .unit)))) (.val nextV)) := by
-    simp [Expr.subst, Expr.shift, Kont.plug, Stage1.yE, wrE', wrL, lendEH, performE, opPayload,
+    simp [Expr.subst, Expr.shift, Kont.plug, FileProg.yE, wrE', wrL, lendEH, performE, opPayload,
       Val.pair, Val.i32, Val.unit, Val.lam, Val.loc, Val.storeV, Expr.val, Val.prim, Val.shift]
   rw [e₁]
   refine erwp_det hΦ hD hTP (fun μ => step1Only_plug (Head.beta μ _ nextV) rfl .hole) ?_
@@ -212,14 +212,14 @@ theorem turnH_ok {Φ : LocFam} (hΦ : Φ.Down) (k : Nat) (s : Val) (ls : List SR
         (.seq (lendEH l) (.inj₂ (.val (Val.loc l)))) (.val .unit))) =
       Kont.hole.plug (.case (.val (Val.inj₁ Val.unit))
         (.seq (lendEH l) (.inj₂ (.val (Val.loc l)))) (.val .unit)) := by
-    simp [Expr.subst, Kont.plug, Stage1.yE, wrL, lendEH, performE, opPayload, Val.pair, Val.i32,
+    simp [Expr.subst, Kont.plug, FileProg.yE, wrL, lendEH, performE, opPayload, Val.pair, Val.i32,
       Val.unit, nextV, Val.inj₁, Val.loc, Val.storeV, Expr.val, Val.prim]
   rw [e₂]
   refine erwp_det hΦ hD hTP (fun μ => step1Only_plug (Head.case₁ μ Val.unit _ _) rfl .hole) ?_
   have e₃ : Kont.hole.plug (Expr.subst 0 Val.unit
         (.seq (lendEH l) (.inj₂ (.val (Val.loc l))))) =
       (Kont.seq .hole (.inj₂ (.val (Val.loc l)))).plug (lendEH l) := by
-    simp [Expr.subst, Kont.plug, Stage1.yE, wrL, lendEH, performE, opPayload, Val.pair, Val.i32,
+    simp [Expr.subst, Kont.plug, FileProg.yE, wrL, lendEH, performE, opPayload, Val.pair, Val.i32,
       Val.unit, Val.loc, Val.storeV, Expr.val, Val.prim]
   rw [e₃]
   refine erwp_bind_le (Q' := Qlend l) hΦ _ (fun m => by simp [Kont.HasHnd])
@@ -382,7 +382,7 @@ theorem resume_not_ext (ls : List SRec) (ds : List FrameRec) (d l : Loc) (ρ : W
 /-! ### The handlers and the program -/
 
 /-- `hnd_Y yLend`: the scheduler, `y` must-resume, its clause `clLend`. -/
-def yHL : Val := hndVal 6 (qualsVal [.lin]) Stage1.idV (Val.pair clLend .unit)
+def yHL : Val := hndVal 6 (qualsVal [.lin]) FileProg.idV (Val.pair clLend .unit)
 
 theorem erwp_yHL {Φ : LocFam} (hΦ : Φ.Down) :
     ∀ n ls e ρ, erwp (ℍ := ℍ) Φ (opTableN T2H) QZ n ls e ρ →
@@ -392,15 +392,15 @@ theorem erwp_yHL {Φ : LocFam} (hΦ : Φ.Down) :
     (fun k ls v ρ hv => erwp_idV hΦ T1_down hv) ?_
   · intro i en hT _
     rcases T2H_cases hT with ⟨-, rfl, rfl⟩ | ⟨h6, -, -⟩
-    · exact Stage1.capTag_one .lin
-    · exact absurd h6.symm Stage1.divEff_ne6
+    · exact FileProg.capTag_one .lin
+    · exact absurd h6.symm FileProg.divEff_ne6
   · intro i en hT
     rcases T2H_cases hT with ⟨-, rfl, rfl⟩ | ⟨h6, -, -⟩
-    · refine ⟨clLend, Stage1.clauseAt_pair0 _ _, fun _ k ls v κ ρ hsep => ?_, fun h => by cases h⟩
+    · refine ⟨clLend, FileProg.clauseAt_pair0 _ _, fun _ k ls v κ ρ hsep => ?_, fun h => by cases h⟩
       obtain ⟨ρa, ρk, hc, ⟨-, rfl⟩, hK⟩ := hsep
       obtain rfl : ρ = ρk := eq_of_compS_empty_left hc
       exact erwp_clLend hΦ k ls v κ ρ hK
-    · exact absurd h6.symm Stage1.divEff_ne6
+    · exact absurd h6.symm FileProg.divEff_ne6
 
 /-- `(λc. iterate (fTH, c)) (alloc 1)`. -/
 def bodyH : Expr :=
@@ -424,7 +424,7 @@ theorem bodyH_ok (n : Nat) :
       subst_closedAt _ _ (show closedAt 0 fTH.1 = true from rfl) (Nat.zero_le _)]
   rw [e]
   exact erwp_iterate Φ₀_down T2H_down (OpTabN.ctxClosed_of_fin T2H_fin _) QZ_down rfl (I := IL)
-    (en := tickEnt) (by simp [T2H, T1, Stage1.divEff_ne6]) rfl rfl
+    (en := tickEnt) (by simp [T2H, T1, FileProg.divEff_ne6]) rfl rfl
     (fun _ _ => ⟨rfl, rfl⟩) (fun _ _ _ _ h => h) IL_closed
     (fun k s ls ρ hI => turnH_ok Φ₀_down k s ls ρ hI) _ _ _ _ ⟨l, Val.i32 1, rfl, hcell⟩
 

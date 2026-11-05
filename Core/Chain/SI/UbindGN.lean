@@ -12,7 +12,7 @@ continuation; its cancel obligation is read through the frame (`cancelOblN_ubind
 of `ubind (N, D) K†` owning `ρ_D` more is the cancel run of `K†` followed by `D`).
 
 Narrowings: the finaliser neither stops nor raises (`rwp`), as `[let-closeFin]`'s `¬ Σ_D.Cancels`;
-finalisers that perform operations (stage 1's `close`) are not covered here.
+finalisers that perform operations (`close` in `SI/Programs.lean`) are not covered here.
 -/
 
 noncomputable section

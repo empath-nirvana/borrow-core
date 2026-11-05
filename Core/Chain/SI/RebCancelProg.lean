@@ -57,7 +57,7 @@ theorem rebBodyC_ok (c d : Loc) (R₀ : WRes) (A β : Life) (k : Nat)
     (hpto : ptoImm d β P Bχ) :
     erwp (ℍ := ℍ) Φ₀ (opTableN (T2C (ℍ := ℍ)))
       (RebPost β (IFPost c (.loc d) (PR d R₀) A (Qt c d R₀))) k ls
-      (.seq Stage1.yE (useR d)) Bχ := by
+      (.seq FileProg.yE (useR d)) Bχ := by
   have hKH : ∀ m, (Kont.seq .hole (useR d)).HasHnd m = false := fun m => by simp [Kont.HasHnd]
   have hKC : ∀ m, (Kont.seq .hole (useR d)).Catches m = false := fun m => by simp [Kont.Catches]
   have hnoχ : NoOwn Bχ := by
@@ -129,9 +129,9 @@ theorem lendRC_ok (c d e : Loc) (R₀ : WRes)
   refine erwp_step (opTableN_local _)
     (fun μ => step1Only_plug (Head.beta μ _ (Val.loc d)) rfl .hole) ?_
   have e₁ : Kont.hole.plug (Expr.subst 0 (Val.loc d)
-      (.seq Stage1.yE (.app (.val discardV) (.app (.val (.prim .load)) (.var 0))))) =
-      .seq Stage1.yE (useR d) := by
-    simp [Expr.subst, Kont.plug, Stage1.yE, useR, discardV, ldR, performE, opPayload, Val.pair,
+      (.seq FileProg.yE (.app (.val discardV) (.app (.val (.prim .load)) (.var 0))))) =
+      .seq FileProg.yE (useR d) := by
+    simp [Expr.subst, Kont.plug, FileProg.yE, useR, discardV, ldR, performE, opPayload, Val.pair,
       Val.i32, Val.unit, Val.loc, Expr.val, Val.prim, Val.lam]
   rw [e₁]
   have hS := recR_tmpl (c := c) hR₀
@@ -208,7 +208,7 @@ theorem turnRC_ok (c d e : Loc) (R₀ : WRes)
         (.inj₂ (.var 2))) (.val .unit)))) =
       Kont.hole.plug (.app (.val (Val.lam (.case (.var 0)
         (.seq (lendRE c) (.inj₂ (.val (Val.loc c)))) (.val .unit)))) (.val nextV)) := by
-    simp [Expr.subst, Expr.shift, Kont.plug, lamX, discardV, lendRE, ldR, Stage1.yE, performE,
+    simp [Expr.subst, Expr.shift, Kont.plug, lamX, discardV, lendRE, ldR, FileProg.yE, performE,
       opPayload, Val.pair, Val.i32, Val.unit, Val.lam, Val.loc, Expr.val, Val.prim, Val.shift]
   rw [e₁]
   refine erwp_det Φ₀_down hD hTP (fun μ => step1Only_plug (Head.beta μ _ nextV) rfl .hole) ?_
@@ -216,7 +216,7 @@ theorem turnRC_ok (c d e : Loc) (R₀ : WRes)
         (.seq (lendRE c) (.inj₂ (.val (Val.loc c)))) (.val .unit))) =
       Kont.hole.plug (.case (.val (Val.inj₁ Val.unit))
         (.seq (lendRE c) (.inj₂ (.val (Val.loc c)))) (.val .unit)) := by
-    simp [Expr.subst, Kont.plug, lamX, discardV, lendRE, ldR, Stage1.yE, performE, opPayload,
+    simp [Expr.subst, Kont.plug, lamX, discardV, lendRE, ldR, FileProg.yE, performE, opPayload,
       Val.pair, Val.i32, Val.unit, nextV, Val.inj₁, Val.loc, Expr.val, Val.prim, Val.lam]
   rw [e₂]
   refine erwp_det Φ₀_down hD hTP
@@ -224,7 +224,7 @@ theorem turnRC_ok (c d e : Loc) (R₀ : WRes)
   have e₃ : Kont.hole.plug (Expr.subst 0 Val.unit
         (.seq (lendRE c) (.inj₂ (.val (Val.loc c))))) =
       (Kont.seq .hole (.inj₂ (.val (Val.loc c)))).plug (lendRE c) := by
-    simp [Expr.subst, Kont.plug, lamX, discardV, lendRE, ldR, Stage1.yE, performE, opPayload,
+    simp [Expr.subst, Kont.plug, lamX, discardV, lendRE, ldR, FileProg.yE, performE, opPayload,
       Val.pair, Val.i32, Val.unit, Val.loc, Expr.val, Val.prim, Val.lam]
   rw [e₃]
   refine erwp_bind_le (Q' := Qt c d R₀) Φ₀_down _ (fun m => by simp [Kont.HasHnd])
@@ -338,8 +338,8 @@ theorem bodyRC_ok (n : Nat) :
   have h₁ : Kont.hole.plug (Expr.subst 0 (Val.loc e)
       (.app (.val (lamDC D3var)) (.app (.val (.prim .alloc)) (.val u₀)))) =
       (Kont.appR (.val (lamDC (D3e e))) .hole).plug (.app (.val (.prim .alloc)) (.val u₀)) := by
-    simp [Expr.subst, Expr.shift, Kont.plug, lamDC, bodyCF, D3var, D3e, fR, lamX, discardV, u₀, Stage1.idV,
-      Stage1.yE, performE, opPayload, freeE, Val.pair, Val.i32, Val.unit, Val.loc, Expr.val,
+    simp [Expr.subst, Expr.shift, Kont.plug, lamDC, bodyCF, D3var, D3e, fR, lamX, discardV, u₀, FileProg.idV,
+      FileProg.yE, performE, opPayload, freeE, Val.pair, Val.i32, Val.unit, Val.loc, Expr.val,
       Val.prim, Val.lam]
   rw [h₁]
   refine erwp_alloc Φ₀_down hL (.appR (.val (lamDC (D3e e))) .hole) u₀
@@ -349,7 +349,7 @@ theorem bodyRC_ok (n : Nat) :
       (.app (.val (Val.lam (bodyCF (D3e e)))) (.app (.val (.prim .alloc)) (.var 0)))) =
       (Kont.appR (.val (Val.lam (bodyCF (D3de d e)))) .hole).plug
         (.app (.val (.prim .alloc)) (.val (Val.loc d))) := by
-    simp [Expr.subst, Expr.shift, Kont.plug, bodyCF, D3e, D3de, fR, lamX, discardV, Stage1.yE, performE,
+    simp [Expr.subst, Expr.shift, Kont.plug, bodyCF, D3e, D3de, fR, lamX, discardV, FileProg.yE, performE,
       opPayload, freeE, Val.pair, Val.i32, Val.unit, Val.loc, Expr.val, Val.prim, Val.lam]
   rw [h₂]
   refine erwp_alloc Φ₀_down hL (.appR (.val (Val.lam (bodyCF (D3de d e)))) .hole) (Val.loc d)
@@ -369,7 +369,7 @@ theorem bodyRC_ok (n : Nat) :
   refine erwp_iterate Φ₀_down (T2R_down c d _)
     (T2R_ctxClosed c d _ _ (fun m => by simp [iterK, Kont.HasHnd])
       (fun m => by simp [iterK, Kont.Catches])) QF_down rfl (I := IRf c d _) (en := tickEnt)
-    (by simp [OpTabN.claimT, T2C, T1, tickEnt, Stage1.divEff_ne6]) rfl rfl
+    (by simp [OpTabN.claimT, T2C, T1, tickEnt, FileProg.divEff_ne6]) rfl rfl
     (fun _ _ => ⟨rfl, rfl⟩) (fun _ _ _ _ h => h) (fun s ρ ⟨hs, _⟩ => by subst hs; rfl)
     (fun k s ls ρ hI => turnRC_ok c d e _ hR₀ k s ls ρ hI) _ _ _ _
     ⟨rfl, ResU.CompS.comm hcc'⟩

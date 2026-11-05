@@ -79,10 +79,44 @@ The new constants of `goal-791` (`Row.Suspend`, the field reborrow) are data. No
    `cbField () (!c)` (`openF_ok`: `load`, then the field's lend by `erwp_M_frameTF` with the opened
    cell framed by `erwpG_frameT`), and the field's finaliser frame `then … unwind dFwd c` outside
    the anti-frame by `erwp_ubind` (`cancelOblN_ubind`, the finaliser holding nothing).
-3. **`thL`, `thC`** at every indexed table (`thL_ok`: the cell lent `mut` across `park` by
-   `erwp_M_frameT`, inside `L`'s finaliser frame by `erwp_ubindClaim`; `thC_ok`).
-4. **The roots** (`rootMut_ok`, `rootMutC_ok`) and `hardestCase791`, `hardestCase791C` through
-   `poolSchedAdequacyN`. Axioms `[propext, Classical.choice, Quot.sound]`.
+3. **The other task** at every indexed table: `thB = λ_. bodyB ()`, `thBC = λ_. bodyB (cancel ())`,
+   `bodyB tail = park (); let a = alloc () in let (a′, _) = withborU dB a cbB in free a′; tail`,
+   `cbB = λ_. λu. u := 5; forget u`, `dB = λr. free r` (`Core/TreeGoal791.lean`). Its lend is in
+   its text and is opened after its `park`: under `HS` (a spawned child runs first, `park` swaps
+   with the top ready task) it opens and ends while task A is parked. `lendB_ok`: `erwp_M_frameT`
+   inside `erwp_ubindClaim`; `bodyB_ok`, `thB_ok`, `thBC_ok`.
+4. **The roots** `rootMut = spawn thB; A` and `rootMutC = spawn thBC; A` (`rootMut_ok`,
+   `rootMutC_ok`) and `hardestCase791`, `hardestCase791C` through `poolSchedAdequacyN`. In
+   `rootMutC` the lender is also the canceller: after its lend it cancels A, the top ready task,
+   while A holds the field's borrow. (With `thB` and `thC` both spawned before A, the task A's
+   `park` resumes is `thC`, which cancels A at once, and `thB`'s lend runs after A is gone; so the
+   lend that opens and ends while A is parked is the canceller's own.) Axioms `[propext, Classical.choice, Quot.sound]`.
+
+**Writes through `mut`.** Core's dynamics carry no `mut`/`imm` distinction; the writes are real
+stores, each through the Mut Anti-Frame within one segment (`rwp_M_antiFrame`):
+- the field's borrow, after it is held across `park`: `cbField = λ_. λu. park; u := 7; forget u`
+  (`writeForget_ok`, `fieldBody_ok`);
+- the record's borrow, before the field is reborrowed: `cbRec = λ_. λv. writeRec v; let (v′, _) =
+  withborF dFwd v cbField in forget v′`, `writeRec v = let o = !v in let b = alloc () in v := b;
+  free o` (`writeRec_ok`, `methodF_ok`); the field reborrowed is the fresh box's, and `dRec` frees
+  the record and the box written into it;
+- the other task's borrow: `u := 5` (`methodB_ok`).
+
+**The written value read back (departure 4): not reached.** The Mut Frame hands the lender its
+cell back at every content the lend's family admits (`MFPost`; `mfPost_any`), and the family admits
+the start content. So a lender postcondition naming the written value is false at the end
+`writeForget_ok` proves `MFPost` at: `mfPost_famF_holdsAt_false` (`Core/Chain/Hardest791N.lean`),
+every hypothesis discharged, at `v₁ = vField` (`vField_ne_unit`). The same holds of the record's
+lend at `boxF`. Tracking the written value needs a chain theorem Core does not have (kill
+criterion A): a Mut Frame whose borrowed run's postcondition carries the cell's content at the
+borrow's release, so that `MFPost` hands back that content and not every admitted one. Departure
+(4) stands.
+
+**Probes moved out.** `RebRechooseN`, `CanonN`, `CanonAdv`, `ResumeWorldsG` (refutations and
+probes of the chain world's resume worlds; no library module reads them) are in
+`experiments/ChainProbes` (`lake build ChainProbes`). `RebAgreeCex` stays in `Core`: `tagged_rebN`
+is read by `RebChooseC` and `RebStopC`, and `not_rebReentryAgreeN` is cited by `RebAcrossN`,
+`RebAcrossC` and `TWNC`. The `Core.Chain.SI.Stage1` namespace is `Core.Chain.SI.FileProg`.
 
 Departures from the plan above, none a kill:
 - Task A's proof is the same for both roots, and uses the cancellable-stop pieces in both: every
@@ -93,4 +127,4 @@ Departures from the plan above, none a kill:
 - `TJN`'s cancel obligations are cancel runs at the empty table: a cancelled task's unwinding
   performs no operation. `SchedOKN` itself allows any cancel table inside the scheduler's.
 - A task's and the program's answer `QVN` is a value owning nothing (the value is not `()`: the
-  field's content after its lend is not tracked).
+  field's content after its lend is not tracked; see "The written value read back" above).

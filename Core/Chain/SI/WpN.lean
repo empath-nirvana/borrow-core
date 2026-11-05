@@ -4,7 +4,7 @@ import Core.Chain.SI.TWNC
 import Core.Wp
 
 /-!
-# Stage 2, step 2 (part): the step-indexed `wp` over Core's typed worlds
+# The step-indexed `wp` over Core's typed worlds
 
 `rwp Φ Q n ls e ρ`: `wpTS` (`Core/World.lean`, `[TR]` p. 6's `wp`, row 5.33's repair) cut at the
 step index `n`, as Ahmed's expression relation cuts a run: under every frame `ρ_f # ρ` whose

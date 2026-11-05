@@ -1,7 +1,7 @@
 import Core.Chain.SI.Sem
 
 /-!
-# Stage 2, step 1: `mut` cells at a step index — where the index meets BoLo's world
+# `mut` cells at a step index — where the index meets BoLo's world
 
 `𝒱⟦Mut @a A⟧` (`Core/Relation.lean`, `ptoMutS`) stores `ofS P̂ = 𝒱⟦A⟧` in the cell
 `mut(β, v, ρ, P̂, | P̂(v)(ρ))` (`[TR]` p. 4, row 5.8: the cell carries the witness `hw`), and the

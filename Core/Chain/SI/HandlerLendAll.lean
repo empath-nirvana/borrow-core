@@ -15,7 +15,7 @@ any handled computation at `T2` (`erwp_yLU`), so every task the existing tests p
 under it unchanged: a `mut` lend (`progLend`), an `imm` lend (`progILend`), a reborrow of a field
 (`progReb`), the same through `&mut self` (`progReb`, `bodyRM_ok`), an anti-frame (`progAnti`) and a
 deep reborrow (`progDeep`), each live across `y`. Each continuation is resumed at a list that
-carries the handler's records, at a lifetime no task lend relates to: round 7's configuration
+carries the handler's records, at a lifetime no task lend relates to: the configuration of `resume_frame_short`
 (the handler's lend around the resume) with a record, for every frame rule across stops.
 -/
 
@@ -129,7 +129,7 @@ theorem erwp_clLendU {Φ : LocFam} (hΦ : Φ.Down) (k : Nat) (ls : List SRec) (v
     exact lendResumeU_ok κ x d (k₁ + 1) ls ρ σ₂ hx hK hc
 
 /-- `hnd_Y yLendU`: the lending scheduler, `y` must-resume. -/
-def yLU : Val := hndVal 6 (qualsVal [.lin]) Stage1.idV (Val.pair clLendU .unit)
+def yLU : Val := hndVal 6 (qualsVal [.lin]) FileProg.idV (Val.pair clLendU .unit)
 
 /-- **The lending scheduler at `erwp`**, for any handled computation at `T2`. -/
 theorem erwp_yLU {Φ : LocFam} (hΦ : Φ.Down) :
@@ -140,16 +140,16 @@ theorem erwp_yLU {Φ : LocFam} (hΦ : Φ.Down) :
     (fun k ls v ρ hv => erwp_idV hΦ T1_down hv) ?_
   · intro i en hT _
     rcases T2_cases hT with ⟨-, rfl, rfl⟩ | ⟨h6, -, -⟩
-    · exact Stage1.capTag_one .lin
-    · exact absurd h6.symm Stage1.divEff_ne6
+    · exact FileProg.capTag_one .lin
+    · exact absurd h6.symm FileProg.divEff_ne6
   · intro i en hT
     rcases T2_cases hT with ⟨-, rfl, rfl⟩ | ⟨h6, -, -⟩
-    · refine ⟨clLendU, Stage1.clauseAt_pair0 _ _, fun _ k ls v κ ρ hsep => ?_,
+    · refine ⟨clLendU, FileProg.clauseAt_pair0 _ _, fun _ k ls v κ ρ hsep => ?_,
         fun h => by cases h⟩
       obtain ⟨ρa, ρk, hc, ⟨-, rfl⟩, hK⟩ := hsep
       obtain rfl : ρ = ρk := eq_of_compS_empty_left hc
       exact erwp_clLendU hΦ k ls v κ ρ hK
-    · exact absurd h6.symm Stage1.divEff_ne6
+    · exact absurd h6.symm FileProg.divEff_ne6
 
 /-- A task at `T2`, under the lending scheduler and the runtime. -/
 def underL (body : Expr) : Expr := hndE DivRuntime.rtH (hndE yLU body)

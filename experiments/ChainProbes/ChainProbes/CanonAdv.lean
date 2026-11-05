@@ -1,12 +1,12 @@
 import Core.Chain.SI.RebAcrossC
 
 /-!
-# Round 7's and round 8's resume worlds at canonical images
+# The handler-lend and reborrow re-entry resume worlds at canonical images
 
-* Round 7's world (`resume_frame_short`): a handler lends a cell of its own at `A′ ⊏ β` and resumes
+* The handler-lend world (`resume_frame_short`): a handler lends a cell of its own at `A′ ⊏ β` and resumes
   the continuation inside the lend. `resume_frame_shortC` builds it at `TWNC`; there the re-entry's
   premise `RebRecLe` holds and the canonical image agrees with the world (`resume_round7C`).
-* Round 8's world (`not_rebReentryAgreeN`): a handler reborrows the record with the other witness
+* The reborrow re-entry world (`not_rebReentryAgreeN`): a handler reborrows the record with the other witness
   while the continuation is stored. At `TWNC` that reborrow's image is `canon r β` itself
   (`TWNC.reb`'s premise), and the agreement holds at every `TWNC` world (`cex_canon`,
   `canon_escrowAgree`).
@@ -61,7 +61,7 @@ theorem resume_frame_shortC {W : WRes} {ps rs : List FrameRec} {ls : List SRec} 
   simp only [shortCell] at hcon
   exact lt_irrefl _ hcon
 
-/-- **Round 7's resume world at `TWNC`.** At the world `resume_frame_shortC` builds (the handler's
+/-- **The handler-lend resume world at `TWNC`.** At the world `resume_frame_shortC` builds (the handler's
 `mut` cell at any `A′`, possibly shorter than `β`), the re-entry's premise holds and the canonical
 image of every record of the list agrees with the world. -/
 theorem resume_round7C {W : WRes} {ps : List FrameRec} {ls : List SRec} {μ : Heap} {l : Loc}

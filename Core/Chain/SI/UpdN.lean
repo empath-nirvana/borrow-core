@@ -4,7 +4,7 @@ import Support.Model.Ancestors
 import Support.Model.UpdateFrame
 
 /-!
-# Stage 2, step 1: `↭` at a step index, tested on `[TR]` 6.48
+# `↭` at a step index, tested on `[TR]` 6.48
 
 ## Where `UpdMutSI` (`SI/MutWorld.lean`) does not carry `[TR]` 6.48's proof
 

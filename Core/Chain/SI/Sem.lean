@@ -2,7 +2,7 @@ import Core.Chain.SI.Fin
 import Core.Chain.SI.Adequacy
 
 /-!
-# Stage 2 (part): the step-indexed relation at Core's types, for the fragment without borrows
+# The step-indexed relation at Core's types, for the fragment without borrows
 
 `sV A n v σ` and `sC C n e σ`: Core's `𝒱⟦A⟧`/`𝒞⟦C⟧` (`Core/Relation.lean`, `vCE`/`cC`) with
 `ewp` in place of `wpTS`/`ewpTS`/`cwp`, over exact fragments, at the step index `n`. A row is read

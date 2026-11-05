@@ -2,7 +2,7 @@ import Core.Chain.SI.Loop
 import Core.Chain.SI.Adequacy
 
 /-!
-# Stage 1: a file closed by an effectful finaliser, a scheduler that stores `κ`, a loop with no
+# A file closed by an effectful finaliser, a scheduler that stores `κ`, a loop with no
 bound, under the runtime's `Div` handler — `OrDiverges`, with no fuel
 
     prog cl = hnd_Div rtH (                       -- the runtime: every tick answered next
@@ -25,7 +25,7 @@ finaliser closes the file, and the run ends at the empty memory. `OrDiverges` ho
 
 noncomputable section
 
-namespace BoCa.Fig16.LogRel.Core.Chain.SI.Stage1
+namespace BoCa.Fig16.LogRel.Core.Chain.SI.FileProg
 open BoCa
 open BoCa.Fig16.LogRel.Core
 open BoCa.Fig16.LogRel.Core.Chain.SI
@@ -566,15 +566,15 @@ theorem prog_ok (cl : Val) (hcl : cl = clStore ∨ cl = clCancel) (n : Nat) :
     (ewp_handle fs_spec (prot3_down _ _ _) n _ _
       (ewp_handle (y_spec cl hcl) (prot3_down _ _ _) n _ _ (body_ok n)))
 
-/-- **Stage 1, store and resume**: every configuration a run reaches is a value or steps, a value
+/-- **The file program, store and resume**: every configuration a run reaches is a value or steps, a value
 only at the empty memory, and every `free` finds its cell. No fuel. -/
 theorem progStore_orDiverges : OrDiverges (ℍ := ℍ) progStore :=
   adequacy (fun _ _ _ h => h) (prog_ok clStore (.inl rfl))
 
-/-- **Stage 1, store and cancel**: the same, for the scheduler that cancels the stored `κ`. -/
+/-- **The file program, store and cancel**: the same, for the scheduler that cancels the stored `κ`. -/
 theorem progCancel_orDiverges : OrDiverges (ℍ := ℍ) progCancel :=
   adequacy (fun _ _ _ h => h) (prog_ok clCancel (.inr rfl))
 
-end BoCa.Fig16.LogRel.Core.Chain.SI.Stage1
+end BoCa.Fig16.LogRel.Core.Chain.SI.FileProg
 
 end

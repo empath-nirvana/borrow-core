@@ -1,4 +1,4 @@
-import Core.Chain.SI.CanonN
+import Core.Chain.SI.RebAgreeCex
 
 /-!
 # `[TR]` 6.150's chooser at canonical images

@@ -1,9 +1,9 @@
-import Core.Chain.SI.CanonAdv
-import Core.Chain.SI.CanonN
+import ChainProbes.CanonAdv
+import ChainProbes.CanonN
 import Core.Chain.SI.LinDisj
 
 /-!
-# Round 7's and round 8's resume worlds, at any list
+# The handler-lend and reborrow re-entry resume worlds, at any list
 
 `erwp_reborrow` re-enters a reborrow at the world and list the handler resumes at. It reads three
 things there: the record is on the list (`rec_kept`, from `extF` at the lender's share), the
@@ -12,10 +12,10 @@ canonical image agrees with the world (`canon_escrowAgree`), and `TWNC.reb`'s `R
 stopped at: `RebReentryG` states the three at every typed world at every list holding the record
 and its cell.
 
-* **Round 7's world** (`resume_frame_short`): the handler lends a cell of its own at any `A′` and
+* **The handler-lend world** (`resume_frame_short`): the handler lends a cell of its own at any `A′` and
   resumes inside the lend. `resume_round7G`: the re-entry's premises hold there, with no condition
   on the list; `resume_round7C` asked every tag of the list to be longer than `β`.
-* **Round 8's world** (`not_rebReentryAgreeN`): the handler reborrows the record while the
+* **The reborrow re-entry world** (`not_rebReentryAgreeN`): the handler reborrows the record while the
   continuation is stored. At `TWNC` its image is `canon cexRec β`; `resume_round8G`: the
   re-entry's premises hold at every typed world at every list holding the record's cell.
 -/
@@ -44,7 +44,7 @@ def RebReentryG : Prop :=
 theorem rebReentryG : RebReentryG := fun _ _ _ _ _ _ β hT hr hle hβs hex =>
   ⟨rebRecLe_global hT hr hle hβs, canon_escrowAgree hT hr (tmpl_spec hex) β⟩
 
-/-- **Round 7's resume world, at any list.** At the world `resume_frame_shortC` builds (the
+/-- **The handler-lend resume world, at any list.** At the world `resume_frame_shortC` builds (the
 handler's `mut` cell at any `A`), the re-entry's premises hold: no condition on the tags of the
 list. -/
 theorem resume_round7G {W : WRes} {ps : List FrameRec} {ls : List SRec} {μ : Heap} {l : Loc}
@@ -61,8 +61,8 @@ theorem resume_round7G {W : WRes} {ps : List FrameRec} {ls : List SRec} {μ : He
   exact ⟨W', hc, hT', htg', hnA,
     rebReentryG W' ps ls r s hs β hT' hr ⟨τ', hW'⟩ hβs hex⟩
 
-/-- **Round 8's resume world, at any list.** At every typed world at any list holding round 8's
-record and its cell, the re-entry's premises hold: the handler's reborrow while the continuation
+/-- **The reborrow re-entry resume world, at any list.** At every typed world at any list holding
+the configuration's record and its cell, the re-entry's premises hold: the handler's reborrow while the continuation
 was stored entered at the canonical image, and nothing is read of the list but the record. -/
 theorem resume_round8G (β : Life) (W : WRes) (ps : List FrameRec) (ls : List SRec) (s : LSet)
     (hs : cexRec.R.InStratum s.join) (hT : TWNC W ps (rsOf ls)) (hr : cexRec ∈ rsOf ls)

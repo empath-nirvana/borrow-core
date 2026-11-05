@@ -4,7 +4,7 @@ import Core.Chain.SI.StopRaiseN
 # Finalisers that perform
 
 `erwp_ubind` and `erwp_ubindRaise` read the finaliser's run at `rwp`: `D ()` neither stops nor
-raises (`FinOK`). Stage 1's finaliser closes a file through a capability, `close`, an operation
+raises (`FinOK`). The finaliser of `SI/Programs.lean` closes a file through a capability, `close`, an operation
 of the row (`Σ_D ≤ Σ`): its run stops. Here `D ()` is read at `erwp` at the body's table, whose
 non-abortive entries are must-resume; at `[finalise]` the `raise`'s resource rides along the
 finaliser's run, into its continuations' shares (`erwp_frameL`), and the `raise` goes on when

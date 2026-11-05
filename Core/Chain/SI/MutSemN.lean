@@ -5,7 +5,7 @@ import Core.Chain.SI.LendProg
 
 ## The concern
 
-Round 3's location typing `Φ` fixes a location's family `F` when a frame lends it
+The location typing `Φ` (`LocFam`, `SI/WpN.lean`) fixes a location's family `F` when a frame lends it
 (`rwp_M_frame` at `Φ[ℓ ↦ (A, F)]`). If `𝒱ₖ⟦A⟧` depended on `Φ`, a value written into the cell
 inside the borrowed run, at an extended `Φ′ ⊇ Φ`, could lie in `𝒱ₖ⟦A⟧(Φ′)` and not in the family
 fixed at the lend. Ahmed's answer is a recursive world: families as functions of `Φ` at lower

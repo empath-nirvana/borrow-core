@@ -168,7 +168,7 @@ theorem bodyR_ok (A : Life) (n : Nat) :
 def clE : Val := Val.lam (.val .unit)
 
 /-- `hnd_E`. -/
-def eH : Val := hndVal 7 (qualsVal [.lin]) Stage1.idV (Val.pair clE .unit)
+def eH : Val := hndVal 7 (qualsVal [.lin]) FileProg.idV (Val.pair clE .unit)
 
 theorem erwp_eH :
     ∀ n ls e ρ, erwp (ℍ := ℍ) Φ₀ (opTableN TE) QZ n ls e ρ →
@@ -182,7 +182,7 @@ theorem erwp_eH :
     rw [(TE_cases hT).2.2] at ha; cases ha
   · intro i en hT
     obtain ⟨-, rfl, rfl⟩ := TE_cases hT
-    refine ⟨clE, Stage1.clauseAt_pair0 _ _, fun h => (by cases h), fun _ k ls v ρ hv => ?_⟩
+    refine ⟨clE, FileProg.clauseAt_pair0 _ _, fun h => (by cases h), fun _ k ls v ρ hv => ?_⟩
     obtain ⟨rfl, rfl⟩ := hv
     refine erwp_det Φ₀_down (opTableN_down empty_down) QZ_down
       (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) ?_

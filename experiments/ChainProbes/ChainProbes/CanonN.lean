@@ -1,11 +1,11 @@
-import Core.Chain.SI.RebRechooseN
+import ChainProbes.RebRechooseN
 
 /-!
-# Round 8's world at canonical images
+# The reborrow re-entry world at canonical images
 
-`cex_canon`: the record of round 8's counterexample (`SI/RebAgreeCex.lean`) has a template, and at
+`cex_canon`: the record of `not_rebReentryAgreeN`'s counterexample (`SI/RebAgreeCex.lean`) has a template, and at
 every `TWNC` world holding it the canonical image agrees with the world. The handler's image at
-round 8's resume world enters by `TWNC.reb` only as `canon cexRec β`, the image the continuation
+that resume world enters by `TWNC.reb` only as `canon cexRec β`, the image the continuation
 holds.
 -/
 
@@ -19,10 +19,10 @@ open BoCa.Fig16.LogRel.Core
 open BoCa.DeepReborrow
 open BoCa.Lifetime (LifeVar)
 
-/-! ### Round 8's world -/
+/-! ### The reborrow re-entry world -/
 
-/-- **Round 8's configuration at canonical images.** The record `cexRec` has a typed image (the
-handler's, witness `∅`), so its template exists (existence). Round 8's resume world adds the
+/-- **The reborrow re-entry configuration at canonical images.** The record `cexRec` has a typed image (the
+handler's, witness `∅`), so its template exists (existence). The resume world adds the
 handler's image by `TWN.reb`; at `TWNC` that step needs the image to be `canon cexRec β`, the same
 image the continuation holds, and then the agreement holds at every typed world holding the
 record (`canon_escrowAgree`). -/

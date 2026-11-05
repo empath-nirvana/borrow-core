@@ -4,16 +4,16 @@ import Core.Chain.SI.RwpG
 # The effectful `wp` at the step index over Core's worlds: `erwp`
 
 `ewpTS ls e Π Q` (`Core/EffDefs.lean`) is the least fixed point of `wpG` at the postcondition
-"a value in `Q`, or a stop the table `Π` allows, owing its continuations `ewpTS`". Stage 1's `ewp`
+"a value in `Q`, or a stop the table `Π` allows, owing its continuations `ewpTS`". `ewp`
 (`SI/Ewp.lean`) replaces the least fixed point by the step index: a stop's continuation is owed at
 every later index. `erwp` is the two together: `rwpG` (`wpG` at the index) at the postcondition
 "a value in `Q`, or a stop the table allows at the index `k` the run left, owing its continuations
 `erwp` at every `k′ < k`". The recursion is on the index, so no fixed point is taken, and a
-handler is proved by induction on the index (`erwp_handle`), as stage 1's `ewp_handle`.
+handler is proved by induction on the index (`erwp_handle`), as `ewp_handle` for `ewp`.
 
 The tables are `Core`'s with an index: `OpEntN` is `OpEnt` with `PA`, `PB` and the cancel
 obligation read at an index; the continuation's share (`contShareN`) is owed at every answer in
-`PB` at every `k′ < k`, the step-indexed `−∗` of stage 1.
+`PB` at every `k′ < k`, the step-indexed `−∗` of `ewp`.
 -/
 
 noncomputable section

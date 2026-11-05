@@ -18,8 +18,8 @@ carries the template's witness there (`TemplAt`, `TWNC.templ`). It is proved by 
 `TWNC` from the transfer lemmas `TI`'s proof uses at each step (`reb_like_back`,
 `frame_transfer`, `end_back`, `lift_view`). From it, the canonical image at any `β` agrees with
 every typed world holding the record (`canon_escrowAgree`), whatever the world did while the image
-was folded: the re-entry's agreement (`rebReentryAgreeC`), the step round 8 refuted for
-`TWN` (`not_rebReentryAgreeN`).
+was folded: the re-entry's agreement (`rebReentryAgreeC`), the step
+`not_rebReentryAgreeN` refutes for `TWN`.
 -/
 
 noncomputable section
@@ -98,7 +98,7 @@ theorem canonD_get {r : FrameRec} {S₀ : VTy} {u₀ : Val} {w₀ : WRes} {β : 
   exact ⟨ζ, eζ, (relCell_props w₀ β m ζ).2.1⟩
 
 /-- The typed world with canonical images: `TWN` with `reb`'s image required to be
-`canon r β` and `rebDeep`'s `canonD r S₀ u₀ w₀ β`.  `[about ours: new design beside TWN; SI/CanonN.lean's header]` -/
+`canon r β` and `rebDeep`'s `canonD r S₀ u₀ w₀ β`.  `[about ours: new design beside TWN; experiments/ChainProbes/ChainProbes/CanonN.lean's header]` -/
 inductive TWNC : WRes → List FrameRec → List FrameRec → Prop
   | empty : TWNC PMap.empty [] []
   | alloc {W W' : WRes} {ps rs : List FrameRec} {μ : BoCa.BoLo.Heap} {l : Loc} {v : Val} :

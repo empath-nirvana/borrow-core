@@ -7,9 +7,7 @@ import Core.Chain.SI.AntiRebProg
 import Core.Chain.SI.AntiStopN
 import Core.Chain.SI.BindN
 import Core.Chain.SI.CactusInv
-import Core.Chain.SI.CanonAdv
 import Core.Chain.SI.CanonDeep
-import Core.Chain.SI.CanonN
 import Core.Chain.SI.CanonRef
 import Core.Chain.SI.Capture
 import Core.Chain.SI.CaptureAdequacy
@@ -63,13 +61,11 @@ import Core.Chain.SI.RebChooseC
 import Core.Chain.SI.RebCancelProg
 import Core.Chain.SI.RebN
 import Core.Chain.SI.RebProg
-import Core.Chain.SI.RebRechooseN
 import Core.Chain.SI.RebResumeN
 import Core.Chain.SI.RebRuleN
 import Core.Chain.SI.RebStopC
 import Core.Chain.SI.RebStopD
 import Core.Chain.SI.RebStopN
-import Core.Chain.SI.ResumeWorldsG
 import Core.Chain.SI.RwpG
 import Core.Chain.SI.Sem
 import Core.Chain.SI.StopCancelN

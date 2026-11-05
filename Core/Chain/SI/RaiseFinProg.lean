@@ -163,7 +163,7 @@ theorem bodyRC_ok (A : Life) (n : Nat) :
     rfl (ResU.comp_empty_right _) (ResU.comp_empty_right _) (lendRC_ok l A (Val.i32 1) _ [])
 
 /-- `hnd_C`: `close` resumed at once. -/
-def cH : Val := hndVal 8 (qualsVal [.lin]) Stage1.idV (Val.pair (Stage1.resumeCl Val.unit) .unit)
+def cH : Val := hndVal 8 (qualsVal [.lin]) FileProg.idV (Val.pair (FileProg.resumeCl Val.unit) .unit)
 
 theorem erwp_cH :
     ∀ n ls e ρ, erwp (ℍ := ℍ) Φ₀ (opTableN TEC) QZ n ls e ρ →
@@ -174,11 +174,11 @@ theorem erwp_cH :
     (fun k ls v ρ hv => erwp_idV Φ₀_down TE_down hv) ?_
   · intro i en hT _
     rcases TEC_cases hT with ⟨-, rfl, rfl⟩ | ⟨h7, -, -⟩
-    · exact Stage1.capTag_one .lin
+    · exact FileProg.capTag_one .lin
     · exact absurd h7 (by decide)
   · intro i en hT
     rcases TEC_cases hT with ⟨-, rfl, rfl⟩ | ⟨h7, -, -⟩
-    · refine ⟨Stage1.resumeCl Val.unit, Stage1.clauseAt_pair0 _ _, fun _ k ls v κ ρ hsep => ?_,
+    · refine ⟨FileProg.resumeCl Val.unit, FileProg.clauseAt_pair0 _ _, fun _ k ls v κ ρ hsep => ?_,
         fun h => (by cases h)⟩
       obtain ⟨ρa, ρk, hc, ⟨-, rfl⟩, -, hK⟩ := hsep
       obtain rfl : ρ = ρk := eq_of_compS_empty_left hc

@@ -22,7 +22,8 @@ again (`erwp_M_frame` at `k′`, by induction on the index) with the stored pred
 borrowed continuation holds, which lies in `F k` by the step from the first lend
 (`PredStep`), so the read-back at the end still finds the content in the family.
 
-This is stage 6's segmentation done in the logic instead of in the program: the term is not cut,
+This is the program's segmentation at its stops done in the logic instead of in the program: the
+term is not cut,
 and the lend's lifetime `A` is the same in every segment.
 
 ## What is new, and the conditions it needs

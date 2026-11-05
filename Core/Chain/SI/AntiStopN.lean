@@ -14,8 +14,8 @@ At a stop the anti-frame does at the stop what 6.66's proof does at the return: 
 sealed, `ℓ ↦ own(w) ● ρ′_v` replaced by `ℓ ↦ mut(β, w, ρ′_v, F k)` (`rwpG_M_antiFrameG`, the
 printed proof at any final term, where `rwp_M_antiFrame` has it at a value). The sealed cell goes
 into the continuation's share; when the continuation is resumed at `k′ < k`, the anti-frame opens
-it again (`erwp_M_antiFrame` at `k′`, by induction on the index). It is round 5's pattern
-(`SI/StopFrameN.lean`) one level up: the Mut Frame folds `mut → own` at a stop, the anti-frame
+it again (`erwp_M_antiFrame` at `k′`, by induction on the index). It is the Mut Frame's fold
+(`erwp_M_frame`, `SI/StopFrameN.lean`) one level up: the Mut Frame folds `mut → own` at a stop, the anti-frame
 seals `own → mut`.
 
 The seal needs, at the stop, the content `ρ′_v` in the family: the callback must stop only with

@@ -12,7 +12,7 @@ induction on the index, and at a stop the continuation is in the inner `ewp` onl
 indices, where the induction hypothesis already puts `hnd H K[w]` in the outer one.
 
 This is where `[TR]`-style total `ewpTS` (a least fixed point) and the `Div` row's `cwp` (a
-greatest fixed point) could not meet (stage 8's `hdv`): the clause may store `κ` and resume it any
+greatest fixed point) could not meet: the clause may store `κ` and resume it any
 number of steps later, into `ewp` at a later index, and no fixed point has to contain the object
 being built. Nothing in the rule mentions `Div`: a body that ticks for ever passes its ticks
 outward (`fwd`), each consuming an index.

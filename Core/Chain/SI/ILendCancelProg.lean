@@ -134,27 +134,27 @@ theorem turnI_okC (l : Loc) (k : Nat) (s : Val) (ls : List SRec) (ρ : WRes) (hI
   refine erwp_det Φ₀_down hD hTP
     (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl (.appL .hole nextV)) ?_
   have e₁ : (Kont.appL .hole nextV).plug (Expr.subst 0 (Val.loc l)
-      (.lam (.case (.var 0) (.seq (.seq Stage1.yE (.app (.val (.prim .load)) (.var 2)))
+      (.lam (.case (.var 0) (.seq (.seq FileProg.yE (.app (.val (.prim .load)) (.var 2)))
         (.inj₂ (.var 2))) (.val .unit)))) =
       Kont.hole.plug (.app (.val (Val.lam (.case (.var 0)
-        (.seq (.seq Stage1.yE (ldL l)) (.inj₂ (.val (Val.loc l)))) (.val .unit)))) (.val nextV)) := by
-    simp [Expr.subst, Expr.shift, Kont.plug, Stage1.yE, ldL, performE, opPayload, Val.pair,
+        (.seq (.seq FileProg.yE (ldL l)) (.inj₂ (.val (Val.loc l)))) (.val .unit)))) (.val nextV)) := by
+    simp [Expr.subst, Expr.shift, Kont.plug, FileProg.yE, ldL, performE, opPayload, Val.pair,
       Val.i32, Val.unit, Val.lam, Val.loc, Expr.val, Val.prim, Val.shift]
   rw [e₁]
   refine erwp_det Φ₀_down hD hTP (fun μ => step1Only_plug (Head.beta μ _ nextV) rfl .hole) ?_
   have e₂ : Kont.hole.plug (Expr.subst 0 nextV (.case (.var 0)
-        (.seq (.seq Stage1.yE (ldL l)) (.inj₂ (.val (Val.loc l)))) (.val .unit))) =
+        (.seq (.seq FileProg.yE (ldL l)) (.inj₂ (.val (Val.loc l)))) (.val .unit))) =
       Kont.hole.plug (.case (.val (Val.inj₁ Val.unit))
-        (.seq (.seq Stage1.yE (ldL l)) (.inj₂ (.val (Val.loc l)))) (.val .unit)) := by
-    simp [Expr.subst, Kont.plug, Stage1.yE, ldL, performE, opPayload, Val.pair, Val.i32,
+        (.seq (.seq FileProg.yE (ldL l)) (.inj₂ (.val (Val.loc l)))) (.val .unit)) := by
+    simp [Expr.subst, Kont.plug, FileProg.yE, ldL, performE, opPayload, Val.pair, Val.i32,
       Val.unit, nextV, Val.inj₁, Val.loc, Expr.val, Val.prim]
   rw [e₂]
   refine erwp_det Φ₀_down hD hTP
     (fun μ => step1Only_plug (Head.case₁ μ Val.unit _ _) rfl .hole) ?_
   have e₃ : Kont.hole.plug (Expr.subst 0 Val.unit
-        (.seq (.seq Stage1.yE (ldL l)) (.inj₂ (.val (Val.loc l))))) =
+        (.seq (.seq FileProg.yE (ldL l)) (.inj₂ (.val (Val.loc l))))) =
       (Kont.seq .hole (.inj₂ (.val (Val.loc l)))).plug (lendIE l) := by
-    simp [Expr.subst, Kont.plug, Stage1.yE, ldL, lendIE, performE, opPayload, Val.pair, Val.i32,
+    simp [Expr.subst, Kont.plug, FileProg.yE, ldL, lendIE, performE, opPayload, Val.pair, Val.i32,
       Val.unit, Val.loc, Expr.val, Val.prim]
   rw [e₃]
   refine erwp_bind_le (Q' := Qown l) Φ₀_down _ (fun m => by simp [Kont.HasHnd])
@@ -219,7 +219,7 @@ theorem bodyI_okC (n : Nat) :
   refine erwp_iterate Φ₀_down (T2I_down l)
     (T2I_ctxClosed l _ (fun m => by simp [iterK, Kont.HasHnd])
       (fun m => by simp [iterK, Kont.Catches])) QF_down rfl (I := ILu l) (en := tickEnt)
-    (by simp [OpTabN.claimT, T2C, T1, tickEnt, Stage1.divEff_ne6]) rfl rfl
+    (by simp [OpTabN.claimT, T2C, T1, tickEnt, FileProg.divEff_ne6]) rfl rfl
     (fun _ _ => ⟨rfl, rfl⟩) (fun _ _ _ _ h => h) (fun s ρ ⟨hs, _⟩ => by subst hs; rfl)
     (fun k s ls ρ hI => turnI_okC l k s ls ρ hI) _ _ _ _ ⟨rfl, hcell⟩
 

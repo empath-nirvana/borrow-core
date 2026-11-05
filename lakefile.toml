@@ -55,6 +55,11 @@ srcDir = "experiments/CBPVWorld"
 roots = ["CBPVWorld"]
 
 [[lean_lib]]
+name = "ChainProbes"
+srcDir = "experiments/ChainProbes"
+roots = ["ChainProbes"]
+
+[[lean_lib]]
 name = "Experiments"
 srcDir = "experiments"
 roots = ["CBPVSplit.Split", "ModesLabels.Modes", "Shifts.Shifts", "BorrowedClosures.Reborrow",

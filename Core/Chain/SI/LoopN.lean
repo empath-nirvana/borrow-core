@@ -10,7 +10,7 @@ stop, so the next turn is owed only below the index the tick is at, and the loop
 every index by induction on the index. Here the tick's answer is always *next*: a loop the
 runtime never closes.
 
-`erwp_adequacy` is stage 1's `adequacy` (LinearActris Theorem 5.4's shape) for `erwp`: a closed
+`erwp_adequacy` is `ewp`'s `adequacy` (`SI/Adequacy.lean`; LinearActris Theorem 5.4's shape) for `erwp`: a closed
 program at the empty table, the empty world and the empty list, at every index, at a
 postcondition that owns nothing, is `OrDiverges`: every configuration a run reaches is a value or
 steps, a value is reached only at the empty memory (`reclaimN`, `Fundamental.reclaim` at the

@@ -12,12 +12,12 @@ image `χ` chosen at the first entry. The continuation was proved good at `χ`; 
 `relabel_obs` types `relRes R β c` at the reborrow type, and `relCell` changes only a cell's
 lifetime set (`relCell_props`: value, witness and kind kept). So every `relRes`-relabelling of `χ`
 carries `χ`'s witnesses, and `EscrowAgree` reads only witnesses and kinds
-(`escrowAgree_relRes`). Round 8's resume world refutes agreement for every one of them:
+(`escrowAgree_relRes`). The resume world of `not_rebReentryAgreeN` refutes agreement for every one of them:
 `not_rebRelabelAgreeN`, from `not_rebReentryAgreeN`.
 
 ## The image that agrees changes witnesses
 
-At round 8's resume world an image that agrees exists, of the same escrow at the same `β` and of
+At that resume world an image that agrees exists, of the same escrow at the same `β` and of
 the reborrow's shape: the handler's own image, witness `∅` (`cex_rechoose`). It differs from `χ`
 in the witness at the root, so it is related to `χ` by `obs_transfer`'s move (both are pieces of the
 escrow), not by `relRes`. The continuation's obligation then moves along a change of witness.
@@ -85,13 +85,14 @@ theorem rebReentryAgreeN_of_relabel (h : RebRelabelAgreeN) : RebReentryAgreeN :=
     htg hls hle
   exact escrowAgree_relRes.mp (h' a ha)
 
-/-- **No `relRes`-relabelling of the first entry's image agrees at round 8's resume world.** -/
+/-- **No `relRes`-relabelling of the first entry's image agrees at `not_rebReentryAgreeN`'s resume
+world.** -/
 theorem not_rebRelabelAgreeN : ¬ RebRelabelAgreeN :=
   fun h => not_rebReentryAgreeN (rebReentryAgreeN_of_relabel h)
 
-/-! ### Round 8's resume world -/
+/-! ### The resume world of `not_rebReentryAgreeN` -/
 
-/-- The record of round 8's configuration: the cell `2 ↦ own(loc 0)` over `0 ↦ own(𝓋) ● 1 ↦ own(𝓋)`
+/-- The record of `not_rebReentryAgreeN`'s configuration: the cell `2 ↦ own(loc 0)` over `0 ↦ own(𝓋) ● 1 ↦ own(𝓋)`
 at `ref (thunk ⊤)`. -/
 def cexRec : FrameRec := ⟨2, .loc 0, rho2 𝓋 𝓋, cexT, ⟨[]⟩⟩
 
@@ -102,7 +103,7 @@ abbrev cxβ : Life := ↓cxα
 /-- The resume world `0 ↦ imm({β}, 𝓋, ∅) ● 2 ↦ imm({α}, loc 0, ρ″)`. -/
 abbrev cxW : WRes := comp cxα cxβ 𝓋 𝓋 (.loc 0)
 
-/-- Round 8's resume world is typed at the record, with `TWN.reb` of the handler's image. -/
+/-- `not_rebReentryAgreeN`'s resume world is typed at the record, with `TWN.reb` of the handler's image. -/
 theorem cex_resumeWorld :
     ∃ ls : List SRec, TWN cxW [cexRec] (rsOf ls) ∧ Tagged cxW [cexRec] ls ∧
       cexRec ∈ rsOf ls := by
@@ -163,7 +164,7 @@ theorem cex_resumeWorld :
       (Valid_composite α β v u w)
   exact ⟨ls, hT, tagged_rebN hT₀ hr hle₀ hrebF hrebLe (bcell_frame_comp α β v u w) htg₀, hr⟩
 
-/-- **An image that agrees exists at round 8's resume world**: the handler's own, witness `∅`. It
+/-- **An image that agrees exists at `not_rebReentryAgreeN`'s resume world**: the handler's own, witness `∅`. It
 is an image of the same escrow at the same `β`, of the reborrow's shape, and it differs from the
 first entry's image `rebA` at the root's witness. -/
 theorem cex_rechoose (x : LifeVar) :
@@ -208,7 +209,7 @@ def ImmFrameWitSwapN : Prop :=
     ResU.Reb β r.R c → vShape (r.T.immReborrow (.var x)) (r.δ.extend x β) r.v c →
     vShape p.T p.δ p.v c
 
-/-- The memory of round 8's resume world. -/
+/-- The memory of `not_rebReentryAgreeN`'s resume world. -/
 def cxμ : BoCa.BoLo.Heap := fun l => ((sigma cxα cxβ 𝓋 𝓋 (.loc 0)).get l).map CellU.erase
 
 theorem cx_lower : ResU.Lower cxW cxμ := ⟨_, flat_composite _ _ _ _ _, fun _ => rfl⟩
@@ -240,7 +241,7 @@ theorem cx_not_shape₃ : ¬ vShape cxT₃ cxδ₃ (.loc 0) (rebA cxβ 𝓋 𝓋
   rw [show (witU 𝓋).get 1 = some (CellU.ownOf 𝓋) from ResU.single_get_self _ _] at hm
   cases hm
 
-/-- **The per-step transport fails at a world `TWN` reaches.** From round 8's resume world: the
+/-- **The per-step transport fails at a world `TWN` reaches.** From `not_rebReentryAgreeN`'s resume world: the
 handler allocates `5 ↦ own(loc 0)` and takes an Imm Frame of it at `imm 'x 1`, its escrow the
 handler's image of the reborrowed escrow (`TWN.alloc`, `TWN.immFrame`). Its shape premise does not
 hold at the first entry's image. -/

@@ -1362,6 +1362,17 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.PoolSpawn.hs_schedOKN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.PoolSpawn.progOfN_orDiverges
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Hardest791.taskA_ok
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Hardest791.writeForget_ok
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Hardest791.fieldBody_ok
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Hardest791.writeRec_ok
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Hardest791.methodF_ok
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Hardest791.methodF_rest
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Hardest791.lendB_ok
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Hardest791.bodyB_ok
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Hardest791.thB_ok
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Hardest791.thBC_ok
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Hardest791.mfPost_any
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Hardest791.mfPost_famF_holdsAt_false
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Hardest791.rootMut_ok
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Hardest791.rootMutC_ok
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Hardest791.hardestCase791

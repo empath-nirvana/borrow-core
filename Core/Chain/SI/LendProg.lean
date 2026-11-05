@@ -72,7 +72,7 @@ theorem ent_cases {m i : UInt32} {en : OpEntN} (h : T2 m i = some en) :
 
 theorem T1_sub {m i : UInt32} {en : OpEntN} (h : T1 m i = some en) : T2 m i = some en := by
   obtain ⟨rfl, rfl, rfl⟩ := T1_cases h
-  simp [T2, T1, Stage1.divEff_ne6]
+  simp [T2, T1, FileProg.divEff_ne6]
 
 theorem T2_down : T2.Down where
   pa := fun _ _ en h _ _ _ _ hA => by rcases ent_cases h with he | he <;> subst he <;> exact hA
@@ -116,7 +116,7 @@ theorem QZ_down : QZ.Down := fun _ _ _ _ h => h
 /-- `λx. x` returns its argument, owning nothing. -/
 theorem erwp_idV {Φ : LocFam} (hΦ : Φ.Down) {T : OpTabN} (hTD : T.Down) {k : Nat}
     {ls : List SRec} {v : Val} {ρ : WRes} (h : ρ = PMap.empty) :
-    erwp (ℍ := ℍ) Φ (opTableN T) QZ k ls (.app (.val Stage1.idV) (.val v)) ρ := by
+    erwp (ℍ := ℍ) Φ (opTableN T) QZ k ls (.app (.val FileProg.idV) (.val v)) ρ := by
   refine erwp_det hΦ (opTableN_down hTD) QZ_down
     (fun μ => step1Only_plug (Head.beta μ _ v) rfl .hole) ?_
   have e : Kont.hole.plug (Expr.subst 0 v (.var 0)) = v.1 := by simp [Expr.subst, Kont.plug]
@@ -129,12 +129,12 @@ theorem erwp_resumeCl {Φ : LocFam} (hΦ : Φ.Down) {T : OpTabN} (hTD : T.Down) 
     {v κ : Val} {ρ : WRes}
     (h : ∀ k', k' < k → erwp (ℍ := ℍ) Φ (opTableN T) Q k' ls
       (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val w)) ρ) :
-    erwp (ℍ := ℍ) Φ (opTableN T) Q k ls (.app (.val (Stage1.resumeCl w)) (.pair (.val v) κ.1)) ρ := by
+    erwp (ℍ := ℍ) Φ (opTableN T) Q k ls (.app (.val (FileProg.resumeCl w)) (.pair (.val v) κ.1)) ρ := by
   cases k with
   | zero => exact erwp_zero
   | succ k₀ =>
-  have e₀ : (.app (.val (Stage1.resumeCl w)) (.pair (.val v) κ.1) : Expr) =
-      Kont.hole.plug (.app (.val (Stage1.resumeCl w)) (.val (Val.pair v κ))) := rfl
+  have e₀ : (.app (.val (FileProg.resumeCl w)) (.pair (.val v) κ.1) : Expr) =
+      Kont.hole.plug (.app (.val (FileProg.resumeCl w)) (.val (Val.pair v κ))) := rfl
   rw [e₀]
   refine erwp_step (opTableN_local T) (fun μ => step1Only_plug (Head.beta μ _ _) rfl .hole) ?_
   have e₁ : Expr.subst 0 (Val.pair v κ)
@@ -161,11 +161,11 @@ theorem erwp_storeCl {Φ : LocFam} (hΦ : Φ.Down) {T : OpTabN} (hTD : T.Down) {
     {v κ : Val} {ρ : WRes}
     (h : ∀ ℓ' : Loc, (ptoOwn ℓ' κ ─⋆
       erwp (ℍ := ℍ) Φ (opTableN T) Q (k - 1) ls (B.subst 0 (Val.loc ℓ'))) ρ) :
-    erwp (ℍ := ℍ) Φ (opTableN T) Q k ls (.app (.val (Stage1.storeCl B)) (.pair (.val v) κ.1)) ρ := by
+    erwp (ℍ := ℍ) Φ (opTableN T) Q k ls (.app (.val (FileProg.storeCl B)) (.pair (.val v) κ.1)) ρ := by
   have hL := opTableN_local T
   have hD := opTableN_down hTD
-  have e₀ : (.app (.val (Stage1.storeCl B)) (.pair (.val v) κ.1) : Expr) =
-      Kont.hole.plug (.app (.val (Stage1.storeCl B)) (.val (Val.pair v κ))) := rfl
+  have e₀ : (.app (.val (FileProg.storeCl B)) (.pair (.val v) κ.1) : Expr) =
+      Kont.hole.plug (.app (.val (FileProg.storeCl B)) (.val (Val.pair v κ))) := rfl
   rw [e₀]
   refine erwp_det hΦ hD hQ (fun μ => step1Only_plug (Head.beta μ _ _) rfl .hole) ?_
   have e₁ : Expr.subst 0 (Val.pair v κ)
@@ -193,7 +193,7 @@ theorem erwp_clStore {Φ : LocFam} (hΦ : Φ.Down) {T : OpTabN} (hTD : T.Down) {
     (hQ : Q.Down) {k : Nat} {ls : List SRec} {v κ : Val} {ρ : WRes}
     (h : ∀ k', k' < k → erwp (ℍ := ℍ) Φ (opTableN T) Q k' ls
       (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val .unit)) ρ) :
-    erwp (ℍ := ℍ) Φ (opTableN T) Q k ls (.app (.val Stage1.clStore) (.pair (.val v) κ.1)) ρ := by
+    erwp (ℍ := ℍ) Φ (opTableN T) Q k ls (.app (.val FileProg.clStore) (.pair (.val v) κ.1)) ρ := by
   have hL := opTableN_local T
   cases k with
   | zero => exact erwp_zero
@@ -210,7 +210,7 @@ theorem erwp_clStore {Φ : LocFam} (hΦ : Φ.Down) {T : OpTabN} (hTD : T.Down) {
 /-! ### The handlers -/
 
 /-- `hnd_Y yStore`: the scheduler, `y` must-resume. -/
-def yH : Val := hndVal 6 (qualsVal [.lin]) Stage1.idV (Val.pair Stage1.clStore .unit)
+def yH : Val := hndVal 6 (qualsVal [.lin]) FileProg.idV (Val.pair FileProg.clStore .unit)
 
 theorem erwp_yH {Φ : LocFam} (hΦ : Φ.Down) :
     ∀ n ls e ρ, erwp (ℍ := ℍ) Φ (opTableN T2) QZ n ls e ρ →
@@ -220,18 +220,18 @@ theorem erwp_yH {Φ : LocFam} (hΦ : Φ.Down) :
     (fun k ls v ρ hv => erwp_idV hΦ T1_down hv) ?_
   · intro i en hT _
     rcases T2_cases hT with ⟨-, rfl, rfl⟩ | ⟨h6, -, -⟩
-    · exact Stage1.capTag_one .lin
-    · exact absurd h6.symm Stage1.divEff_ne6
+    · exact FileProg.capTag_one .lin
+    · exact absurd h6.symm FileProg.divEff_ne6
   · intro i en hT
     rcases T2_cases hT with ⟨-, rfl, rfl⟩ | ⟨h6, -, -⟩
-    · refine ⟨Stage1.clStore, Stage1.clauseAt_pair0 _ _, fun _ k ls v κ ρ hsep => ?_,
+    · refine ⟨FileProg.clStore, FileProg.clauseAt_pair0 _ _, fun _ k ls v κ ρ hsep => ?_,
         fun h => by cases h⟩
       obtain ⟨ρa, ρk, hc, ⟨-, rfl⟩, -, hK⟩ := hsep
       obtain rfl : ρ = ρk := eq_of_compS_empty_left hc
       refine erwp_clStore hΦ T1_down QZ_down fun k' hk' => ?_
       exact (hK ls (extF_refl ls _) k' hk').1 Val.unit PMap.empty ρ ⟨rfl, rfl⟩
         (ResU.comp_empty_right ρ)
-    · exact absurd h6.symm Stage1.divEff_ne6
+    · exact absurd h6.symm FileProg.divEff_ne6
 
 theorem nextV_closed : closedAt 0 nextV.1 = true := rfl
 
@@ -244,14 +244,14 @@ theorem erwp_rtH {Φ : LocFam} (hΦ : Φ.Down) :
     (fun k ls v ρ hv => erwp_idV hΦ empty_down hv) ?_
   · intro i en hT _
     obtain ⟨-, rfl, rfl⟩ := T1_cases hT
-    exact Stage1.capTag_one .lin
+    exact FileProg.capTag_one .lin
   · intro i en hT
     obtain ⟨-, rfl, rfl⟩ := T1_cases hT
-    refine ⟨DivRuntime.rtC, Stage1.clauseAt_pair0 _ _, fun _ k ls v κ ρ hsep => ?_,
+    refine ⟨DivRuntime.rtC, FileProg.clauseAt_pair0 _ _, fun _ k ls v κ ρ hsep => ?_,
       fun h => by cases h⟩
     obtain ⟨ρa, ρk, hc, ⟨-, rfl⟩, -, hK⟩ := hsep
     obtain rfl : ρ = ρk := eq_of_compS_empty_left hc
-    rw [Stage1.rtC_eq]
+    rw [FileProg.rtC_eq]
     refine erwp_resumeCl hΦ empty_down QZ_down nextV_closed fun k' hk' => ?_
     exact (hK ls (extF_refl ls _) k' hk').1 nextV PMap.empty ρ ⟨rfl, rfl⟩
       (ResU.comp_empty_right ρ)
@@ -263,13 +263,13 @@ def wrE : Expr := .app (.app (.val (.prim .store)) (.var 2)) (.val (Val.i32 5))
 
 /-- `λs. λb. case b {next → (y (); s := 5); inr s | close → ()}`. -/
 def fT : Val :=
-  Val.lam (.lam (.case (.var 0) (.seq (.seq Stage1.yE wrE) (.inj₂ (.var 2))) (.val .unit)))
+  Val.lam (.lam (.case (.var 0) (.seq (.seq FileProg.yE wrE) (.inj₂ (.var 2))) (.val .unit)))
 
 /-- `ℓ := 5`. -/
 def wrL (l : Loc) : Expr := .app (.val (Val.storeV (Val.loc l))) (.val (Val.i32 5))
 
 /-- The lent computation: `y (); ℓ := 5`. -/
-def lendE (l : Loc) : Expr := .seq Stage1.yE (wrL l)
+def lendE (l : Loc) : Expr := .seq FileProg.yE (wrL l)
 
 /-- The cell's family: an integer, owning nothing. -/
 def famF (A : Life) : Nat → Val → SPropS Loc Val A := fun _ _ r => r.1 = PMap.empty
@@ -362,25 +362,25 @@ theorem turn_ok {Φ : LocFam} (hΦ : Φ.Down) (A : Life) (k : Nat) (s : Val) (ls
   refine erwp_det hΦ hD hTP
     (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl (.appL .hole nextV)) ?_
   have e₁ : (Kont.appL .hole nextV).plug (Expr.subst 0 (Val.loc l)
-      (.lam (.case (.var 0) (.seq (.seq Stage1.yE wrE) (.inj₂ (.var 2))) (.val .unit)))) =
+      (.lam (.case (.var 0) (.seq (.seq FileProg.yE wrE) (.inj₂ (.var 2))) (.val .unit)))) =
       Kont.hole.plug (.app (.val (Val.lam (.case (.var 0)
-        (.seq (.seq Stage1.yE (wrL l)) (.inj₂ (.val (Val.loc l)))) (.val .unit)))) (.val nextV)) := by
-    simp [Expr.subst, Expr.shift, Kont.plug, Stage1.yE, wrE, wrL, performE, opPayload, Val.pair,
+        (.seq (.seq FileProg.yE (wrL l)) (.inj₂ (.val (Val.loc l)))) (.val .unit)))) (.val nextV)) := by
+    simp [Expr.subst, Expr.shift, Kont.plug, FileProg.yE, wrE, wrL, performE, opPayload, Val.pair,
       Val.i32, Val.unit, Val.lam, Val.loc, Val.storeV, Expr.val, Val.prim, Val.shift]
   rw [e₁]
   refine erwp_det hΦ hD hTP (fun μ => step1Only_plug (Head.beta μ _ nextV) rfl .hole) ?_
   have e₂ : Kont.hole.plug (Expr.subst 0 nextV (.case (.var 0)
-        (.seq (.seq Stage1.yE (wrL l)) (.inj₂ (.val (Val.loc l)))) (.val .unit))) =
+        (.seq (.seq FileProg.yE (wrL l)) (.inj₂ (.val (Val.loc l)))) (.val .unit))) =
       Kont.hole.plug (.case (.val (Val.inj₁ Val.unit))
-        (.seq (.seq Stage1.yE (wrL l)) (.inj₂ (.val (Val.loc l)))) (.val .unit)) := by
-    simp [Expr.subst, Kont.plug, Stage1.yE, wrL, performE, opPayload, Val.pair, Val.i32,
+        (.seq (.seq FileProg.yE (wrL l)) (.inj₂ (.val (Val.loc l)))) (.val .unit)) := by
+    simp [Expr.subst, Kont.plug, FileProg.yE, wrL, performE, opPayload, Val.pair, Val.i32,
       Val.unit, nextV, Val.inj₁, Val.loc, Val.storeV, Expr.val, Val.prim]
   rw [e₂]
   refine erwp_det hΦ hD hTP (fun μ => step1Only_plug (Head.case₁ μ Val.unit _ _) rfl .hole) ?_
   have e₃ : Kont.hole.plug (Expr.subst 0 Val.unit
-        (.seq (.seq Stage1.yE (wrL l)) (.inj₂ (.val (Val.loc l))))) =
+        (.seq (.seq FileProg.yE (wrL l)) (.inj₂ (.val (Val.loc l))))) =
       (Kont.seq .hole (.inj₂ (.val (Val.loc l)))).plug (lendE l) := by
-    simp [Expr.subst, Kont.plug, Stage1.yE, wrL, lendE, performE, opPayload, Val.pair, Val.i32,
+    simp [Expr.subst, Kont.plug, FileProg.yE, wrL, lendE, performE, opPayload, Val.pair, Val.i32,
       Val.unit, Val.loc, Val.storeV, Expr.val, Val.prim]
   rw [e₃]
   refine erwp_bind_le (Q' := Qlend l) hΦ _ (fun m => by simp [Kont.HasHnd]) (fun m => by simp [Kont.Catches])
@@ -422,7 +422,7 @@ theorem body_ok (A : Life) (n : Nat) :
       subst_closedAt _ _ (show closedAt 0 fT.1 = true from rfl) (Nat.zero_le _)]
   rw [e]
   exact erwp_iterate Φ₀_down T2_down (OpTabN.ctxClosed_of_fin T2_fin _) QZ_down rfl (I := IL) (en := tickEnt)
-    (by simp [T2, T1, Stage1.divEff_ne6]) rfl rfl
+    (by simp [T2, T1, FileProg.divEff_ne6]) rfl rfl
     (fun _ _ => ⟨rfl, rfl⟩) (fun _ _ _ _ h => h) IL_closed
     (fun k s ls ρ hI => turn_ok Φ₀_down A k s ls ρ hI) _ _ _ _ ⟨l, Val.i32 1, rfl, hcell⟩
 
