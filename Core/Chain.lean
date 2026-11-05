@@ -84,3 +84,4 @@ import Core.Chain.PoolSpawnN
 import Core.Chain.Hardest791N
 import Core.Chain.PoolScopeN
 import Core.Chain.CrossStopN
+import Core.Chain.Cross821N
