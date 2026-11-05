@@ -346,7 +346,11 @@ term at every type equal to its own up to those names, by one rule of `CDerives`
   - a handler's clause tuple against the type its reading rebuilds (`clausesReadAt`, `convVal`);
   - a `handle` site's record against the node's operations (`tyEqEnts`);
   - the program's operation signatures (`sigsOkB`, `sigsErr`);
-  - derived copies (`withCopiesC`, `withCopiesVC`).
+  - derived copies (`withCopiesC`, `withCopiesVC`);
+  - the backend's `handle` nodes of one static name, which a direct call needs at one outer row and
+    one signature (`directFacts`, `Backend2/Driver.lean`: `tyEqC` at the rows, `tyEqEnts` at the
+    operations). Copies of one site from generic instances at different lifetime contexts spell
+    their binders differently (`corpus/alpha-handle-copies.bc`, erased).
 
   `alignRow` reads each operation the synthesized row finds, and each layer of its cancel row at
   every depth (`alignFin`), at the synthesized names. So a cancel row that grows and names its
@@ -357,7 +361,11 @@ term at every type equal to its own up to those names, by one rule of `CDerives`
   Some comparisons stay exact, each with its reason in `scripts/type-eq.allow`:
   - kernel premises stated exactly (`OpSig.Sig` in `[sub]`; `Row.ResumeO`'s binder-free `F 1` and
     `1`; `FamSide.hinst`);
-  - cache and cell-class keys, where an unequal key is a miss and never a refusal;
+  - cache and cell-class keys, where an unequal key is a miss and never a refusal; the backend's
+    cell classes are keyed by `eraseLife`, which sends α-equal types to one type
+    (`VTy.eraseLife_of_alphaB`);
+  - the kernel's derived consume `consumeE A` (SPEC §12), whose one comparison is a key lookup
+    among the keys of the one type it is built at, and the kernel programs built from it;
   - the IO harness's comparisons against the standard table. Those types are elaborated at the
     empty lifetime context, where binders are numbered by position, so an α-variant spelling
     elaborates to the table's term.
@@ -368,9 +376,10 @@ term at every type equal to its own up to those names, by one rule of `CDerives`
   (`loopRowOf`, `iterOf`, `pullOf`, `sizedOf`), and the loop plans' tests of their value types.
   `corpus/alpha-generic-arg.bc` infers a generic argument from two α-variant types.
 
-  `scripts/check-type-eq.sh` (a gate step) reads the elaborated declarations of every `Frontend`
-  module and refuses any other equality of `VTy`, `CTy`, `OpSig` or a row
-  (`scripts/TypeEq.lean`).
+  `scripts/check-type-eq.sh` (a gate step) reads the elaborated declarations of every compiled
+  module (`bcc`'s import closure outside `Core`, `Support` and `Paper`: `Frontend`, `Backend`,
+  `Backend2`) and refuses any other equality of `VTy`, `CTy`, `OpSig` or a row decided at run
+  time, directly or through a kernel declaration that decides one (`scripts/TypeEq.lean`).
 
   Surface types name their binders, so α does arise there. The elaborator compares them up to the
   names of their binders (`VTy.alphaEq`, `Frontend/Elab/SurfAlpha.lean`: every lifetime binder and
@@ -380,8 +389,10 @@ term at every type equal to its own up to those names, by one rule of `CDerives`
   datatype's own parameters. The caches of generic instances and of higher-order copies key on the
   same renaming (`makeInst`, `copyOf`). The other surface comparisons are of terms and
   declarations, or test whether a type mentions a name by substituting for it. None of them
-  compares two types. The census does not cover surface types. The `[α]` node erases to its premise's term, and the backends read
-  through it (`transparent?`).
+  compares two types. The census does not cover surface types.
+
+  The `[α]` node erases to its premise's term, and the backends read through it
+  (`transparent?`).
 - **Inversions.** `[α]` concludes with its premise's term, so it is a same-term step (`JS.alpha`,
   `VS.alpha`, `Core/Inversions.lean`), and what an inversion gives is up to `≡α`: views keep their
   head up to `≡α` (`VView.hnf`, `Hnf.alpha`), a rigid type is read at its α-equivalents

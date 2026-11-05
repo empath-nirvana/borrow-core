@@ -98,6 +98,7 @@ alpha-lam-binder 1 0 0 2 1 0 # the lent buffer; the `fun` carried to its type by
 alpha-nu-in 1 0 0 2 1 0 # the lent buffer; the observations are direct calls
 alpha-withbor2r 1 0 0 1 1 0 # the lent cell
 alpha-generic-arg 0 0 0 0 0 0 # no cell; the generic argument passed by `[α]`
+alpha-handle-copies 0 0 0 0 0 0 # the handler site's two copies at different lifetime contexts; no cell
 clo-higher 2 6 0 8 8 0 # two counters' cells; the indirect calls are `runner`'s calls of its argument, which closures built at two sites reach: the flow analysis is monovariant, and the argument's code is chosen at run time, as a `dyn` call's is
 clone-reuse 6 0 1 36 27 0
 comp-param 0 0 0 0 0 0 # every argument is a closed block and every error a branch
