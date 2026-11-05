@@ -54,8 +54,8 @@ open BoCa.BoLo (Heap Head Kont hndE hndVal clauseAt capTag)
 
 /-! ### The tables -/
 
-/-- A task's answer, and the program's: `()`, owning nothing. -/
-abbrev QVN : PostN := unitP
+/-- A task's answer, and the program's: a value owning nothing. -/
+def QVN : PostN := fun _ _ _ ρ => ρ = PMap.empty
 
 theorem QVN_down : QVN.Down := fun _ _ _ _ h => h
 
@@ -286,7 +286,7 @@ abbrev SchedBelow (Φ : LocFam) (N : Nat) : Prop :=
 
 /-- A cancel run's answer is a task's. -/
 theorem unitPost_QVN : ∀ k ls v (ρ : WRes), unitPost k ls v ρ → QVN k ls v ρ :=
-  fun _ _ _ _ ⟨h₁, h₂⟩ => ⟨h₂, h₁⟩
+  fun _ _ _ _ ⟨h₁, _⟩ => h₁
 
 /-- **`cancel`'s clause**: the stopped task parked; the top ready, it is cancelled, its cancel
 branch run under the scheduler below the stop's index, the stopped task kept beneath it
@@ -375,10 +375,10 @@ empty, the task's answer the program's. -/
 theorem stackRetN_ok {Φ : LocFam} (hΦ : Φ.Down) : ∀ k ls v (ρ : WRes), QVN k ls v ρ →
     erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) (PA_SN (ℍ := ℍ) Φ) k ls
       (.app (.val stackRet) (.val v)) ρ := by
-  rintro k ls v ρ ⟨rfl, rfl⟩
+  rintro k ls v ρ rfl
   have hTD := opTableN_down OpTabN.empty_down
   have hD := poolAnsN_down (ℍ := ℍ) Φ QVN HS (InvSN (ℍ := ℍ) Φ)
-  refine erwp_det hΦ hTD hD (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) ?_
+  refine erwp_det hΦ hTD hD (fun μ => step1Only_plug (Head.beta μ _ v) rfl .hole) ?_
   simp only [Kont.plug]
   refine erwp_val (v := ⟨_, .lam⟩) (fun j hj => poolAnsAtN_iff.mpr ?_)
   intro ts σ ρ' hi hg hP hc'
@@ -396,7 +396,7 @@ theorem stackRetN_ok {Φ : LocFam} (hΦ : Φ.Down) : ∀ k ls v (ρ : WRes), QVN
     refine erwp_det hΦ hTD QVN_down (fun μ => step1Only_plug (Head.case₂ μ Val.unit _ _) rfl
       .hole) ?_
     simp [Kont.plug, Expr.subst, Expr.shift_shift, subst_shift0', Expr.shift_zero]
-    exact erwp_val (v := Val.unit) ⟨rfl, rfl⟩
+    exact erwp_val (v := v) rfl
   | cons t ts =>
     cases j with
     | zero => exact erwp_zero
@@ -455,7 +455,7 @@ theorem progOfN_orDiverges {Φ : LocFam} (hΦ : Φ.Down) {root : Expr}
     (h : ∀ n, erwp (ℍ := ℍ) Φ (opTableN (TJN (ℍ := ℍ) Φ)) QVN n [] root (PMap.empty : WRes)) :
     OrDiverges (ℍ := ℍ) (.app (hndE HS root) (stateValN HS []).1) :=
   poolSchedAdequacyN Φ (TJN Φ) nP qsS stackRet hsS QVN QVN (InvSN Φ) root hΦ
-    (fun _ _ _ _ h => h.2) (fun _ h => by cases h) (hs_schedOKN hΦ) h
+    (fun _ _ _ _ h => h) (fun _ h => by cases h) (hs_schedOKN hΦ) h
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.PoolSpawn
 

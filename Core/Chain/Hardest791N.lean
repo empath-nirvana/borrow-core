@@ -1,0 +1,455 @@
+import Core.Chain.PoolSpawnN
+import Core.Chain.SI.AntiCancelProg
+import Core.Chain.SI.UbindGN
+import Core.TreeGoal791
+
+/-!
+# #791's hardest case over the chain relation  `[spec §62]`
+
+`HardestCase791` and `HardestCase791C` (`Core/TreeGoal791.lean`) are `OrDiverges` for
+`progOf rootMut` and `progOf rootMutC` under the scheduler `HS`. Here they are proved through
+`poolSchedAdequacyN` at the chain table `TJN` (`Core/Chain/PoolSpawnN.lean`):
+
+* **task A** (`taskA_ok`): `c ↦ own(loc k) ● k ↦ own(())`; `c` lent `mut` by `withborU dRec`
+  (the Mut Frame across cancellable stops, `erwp_M_frameT` with `claimT_canS`, its cancel runs
+  ending at `c`'s claim, which the finaliser frame `then … unwind dRec c` consumes,
+  `erwp_ubindClaim`); inside, the borrow opened (`erwp_M_antiFrameC`), the boxed field `k` read out
+  of it and lent `mut` by `withborF dFwd` to `cbField` (`erwp_M_frameTF`, the opened cell framed
+  across cancellable stops by `erwpG_frameT`), which holds the field's borrow across `park`; the
+  field's finaliser frame `then … unwind dFwd c` outside the anti-frame (`erwp_ubind`, its
+  finaliser holding nothing); at the end both cells are freed by `dRec`;
+* **the children** `thL` (`let a = alloc () in ubind (λ_. free a, λ_. free a) (park ())`) and
+  `thC` (`park (); cancel ()`), at every indexed table;
+* **the roots**: `spawn` of each child, then task A.
+
+Task A's proof is the same in both programs: every entry of `TJN` is cancellable, so a stop of A's
+is owed a cancel run whether or not the scheduler takes it. In `rootMutC`, `thC`'s `cancel` finds
+A ready on the pool's top and cancels it while A holds the field's borrow.
+
+The location family of the table's cancel obligations follows the lends (`tabOfN Φc PS` at
+`Φc = Φ[c ↦ …][k ↦ …]` inside), the spawn payload `PS` staying the scheduler's.
+-/
+
+noncomputable section
+
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
+namespace BoCa.Fig16.LogRel.Core.Chain.SI.Hardest791
+open BoCa
+open BoCa.Fig16
+open BoCa.Fig16.BoLo
+open BoCa.Fig16.LogRel.Core
+open BoCa.Fig16.LogRel.Core.Chain.SI
+open BoCa.Fig16.LogRel.Core.Chain.SI.LendProg
+open BoCa.Fig16.LogRel.Core.Chain.SI.AntiLendProg (boxF boxF_down inStratum_own ldA)
+open BoCa.Fig16.LogRel.Core.Chain.SI.PoolSpawn
+open BoCa.Fig16.Tree.Wp.SchedProgs.Park (nP)
+open BoCa.BoLo (Heap Head Kont performE raiseE cancelVal opPayload freeE hndE hndVal clauseAt
+  capTag ubindE)
+
+/-! ### The tables -/
+
+section Tables
+variable {PS : Nat → List SRec → Val → WProp}
+
+theorem tabOfN_lendOKC (Φc : LocFam) (A : Life) (hPS : ∀ k ls v ρ, PS k ls v ρ → ρ = PMap.empty) :
+    (tabOfN (ℍ := ℍ) Φc PS).LendOKC A where
+  entry := fun _ _ en h => by
+    obtain ⟨ha, hq, -, hw, -⟩ := tabOfN_ent h
+    exact ⟨ha, by rw [hq]; decide, hw⟩
+  pa := fun _ _ en h k ls v ρ hA => by
+    obtain ⟨-, ⟨-, rfl⟩ | ⟨-, rfl⟩ | ⟨-, rfl⟩⟩ := tabOfN_some h
+    · obtain ⟨-, rfl⟩ := hA; exact inStratum_empty A
+    · obtain rfl := hPS k ls v ρ hA; exact inStratum_empty A
+    · obtain ⟨-, rfl⟩ := hA; exact inStratum_empty A
+  pb := fun _ _ en h k ls w ρ hB => by
+    rw [(tabOfN_ent h).2.2.2.2] at hB
+    obtain ⟨-, rfl⟩ := hB; exact inStratum_empty _
+
+theorem tabOfN_e (Φc : LocFam) : ∀ m i en, tabOfN (ℍ := ℍ) Φc PS m i = some en →
+    en.abort = false → en.q ≠ .unr ∧ en.wc = extF := fun _ _ en h _ => by
+  obtain ⟨-, hq, -, hw, -⟩ := tabOfN_ent h
+  exact ⟨by rw [hq]; decide, hw⟩
+
+theorem tabOfN_fin (Φc : LocFam) : ∀ m i en, tabOfN (ℍ := ℍ) Φc PS m i = some en →
+    en.q = .cancel → en.fin = some (cancelOblN (ℍ := ℍ) Φc OpTabN.empty) :=
+  fun _ _ _ h _ => (tabOfN_ent h).2.2.1
+
+theorem tabOfN_unr (Φc : LocFam) : ∀ m i en, tabOfN (ℍ := ℍ) Φc PS m i = some en → en.q ≠ .unr :=
+  fun _ _ _ h => by rw [(tabOfN_ent h).2.1]; decide
+
+/-- The tables at two location families: twins up to the cancel obligations. -/
+theorem tabOfN_twin (Φc Φc' : LocFam) : ∀ m i en, tabOfN (ℍ := ℍ) Φc PS m i = some en →
+    ∃ en', tabOfN (ℍ := ℍ) Φc' PS m i = some en' ∧ en'.q = en.q ∧ en'.abort = en.abort ∧
+      en'.PA = en.PA ∧ en'.PB = en.PB ∧ en'.wc = en.wc ∧ (en.q ≠ .cancel → en'.fin = en.fin) := by
+  intro m i en h
+  obtain ⟨rfl, ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩⟩ := tabOfN_some h
+  · exact ⟨_, tabOfN_park _ _, rfl, rfl, rfl, rfl, rfl, fun hq => absurd rfl hq⟩
+  · exact ⟨_, tabOfN_spawn _ _, rfl, rfl, rfl, rfl, rfl, fun hq => absurd rfl hq⟩
+  · exact ⟨_, tabOfN_cancel _ _, rfl, rfl, rfl, rfl, rfl, fun hq => absurd rfl hq⟩
+
+/-- `claimT` replaces every cancel obligation, so it does not read the table's own location
+family. -/
+theorem claimT_tabOfN (Φc Φc' Φ : LocFam) (T₁ : OpTabN) (R : Nat → WProp) :
+    @OpTabN.claimT ℍ _ (tabOfN (ℍ := ℍ) Φc PS) Φ T₁ R =
+      @OpTabN.claimT ℍ _ (tabOfN (ℍ := ℍ) Φc' PS) Φ T₁ R := by
+  funext m i
+  unfold OpTabN.claimT tabOfN
+  split_ifs <;> simp [enParkN, enSpawnN]
+
+theorem claimT_tabOfN_down {Φ : LocFam} (hΦ : Φ.Down) (Φc : LocFam) (hΦc : Φc.Down)
+    (hPS : ∀ k ls v ρ, PS (k + 1) ls v ρ → PS k ls v ρ) {R : Nat → WProp}
+    (hR : ∀ k ρ, R (k + 1) ρ → R k ρ) :
+    (@OpTabN.claimT ℍ _ (tabOfN (ℍ := ℍ) Φc PS) Φ OpTabN.empty R).Down where
+  pa := fun _ _ en' h _ _ _ _ hA => by
+    obtain ⟨en, hT, rfl⟩ := claimT_some h
+    have hq := (tabOfN_ent hT).2.1
+    rw [if_pos hq] at hA ⊢
+    exact (tabOfN_down hΦc hPS).pa _ _ en hT _ _ _ _ hA
+  fin := fun _ _ en' P h hP => by
+    obtain ⟨en, hT, rfl⟩ := claimT_some h
+    rw [if_pos (tabOfN_ent hT).2.1] at hP
+    cases hP
+    exact fun k ls e ρ hk => erwp_le hΦ (cancelTabR_local _ _)
+      (cancelTabR_down OpTabN.empty_down hR) falsePost_down (Nat.le_succ _) hk
+  wcl := fun _ _ en' h => by
+    obtain ⟨en, hT, rfl⟩ := claimT_some h
+    rw [if_pos (tabOfN_ent hT).2.1]
+    exact (tabOfN_down hΦc hPS).wcl _ _ en hT
+
+theorem claimT_tabOfN_ctxClosed {Φ : LocFam} (hΦ : Φ.Down) (Φc : LocFam) {R : Nat → WProp}
+    (K : Kont) (hH : ∀ m, K.HasHnd m = false) (hC : ∀ m, K.Catches m = false) :
+    (@OpTabN.claimT ℍ _ (tabOfN (ℍ := ℍ) Φc PS) Φ OpTabN.empty R).CtxClosed K :=
+  claimT_ctxClosed hΦ K hH hC (fun _ _ _ h hq => absurd (tabOfN_ent h).2.1 hq) (empty_ctxClosed K)
+
+end Tables
+
+/-- **A cancel run passes a context with no handler and no catcher** (`erwp_cancelTabR_ctx` at
+`cancelTabN`). -/
+theorem erwp_cancelTabN_ctx {Φ : LocFam} (hΦ : Φ.Down) {T : OpTabN} (K : Kont)
+    (hH : ∀ m, K.HasHnd m = false) (hC : ∀ m, K.Catches m = false) (hK : T.CtxClosed K) :
+    ∀ n ls x ρ, erwp (ℍ := ℍ) Φ (cancelTabN T) (fun _ _ _ _ => False) n ls x ρ →
+      erwp (ℍ := ℍ) Φ (cancelTabN T) (fun _ _ _ _ => False) n ls (K.plug x) ρ := by
+  have hL := cancelTabN_local T
+  intro n
+  induction n using Nat.strong_induction_on with
+  | _ n ih =>
+  intro ls x ρ h
+  rw [erwp_eq]
+  refine rwpG_bind hΦ K ?_
+  refine rwpG_mono_le (fun k hk ls' t σ ht => ?_) (erwp_unfold_at hL le_rfl h)
+  rcases ht with ⟨_, _, hf⟩ | ⟨K', err, hp⟩ | ⟨K₁, m, i, v, en, hp⟩
+  · exact hf.elim
+  · obtain ⟨⟨rfl, hK'⟩, hrest⟩ := pure_sep_iff.mp hp
+    have hKo : (K.comp K').Catches 0 = false := by simp [catches_comp, hC, hK']
+    have ht' : K.plug (K'.plug (raiseE (.val (cancelVal err)))) =
+        (K.comp K').plug (opE true (cancelVal err)) := by
+      rw [Kont.plug_comp]; rfl
+    rw [ht']
+    exact rwpG_here (final_opPlug (payloadName_cancelVal err) hKo) (Or.inr (Or.inl
+      ⟨K.comp K', err, pure_sep_mk ⟨rfl, hKo⟩ hrest⟩))
+  · obtain ⟨⟨rfl, hK₁, hT, ha⟩, ρa, ρk, hcak, hA, hu, hcont'⟩ := pure_sep_iff.mp hp
+    have hKo : (K.comp K₁).HasHnd m = false := by simp [hasHnd_comp, hH, hK₁]
+    have ht' : K.plug (K₁.plug (performE (.val (opPayload m i v)))) =
+        (K.comp K₁).plug (opE false (opPayload m i v)) := by
+      rw [Kont.plug_comp]; rfl
+    rw [ht']
+    refine rwpG_here (final_opPlug (payloadName_opPayload m i v) hKo) (Or.inr (Or.inr
+      ⟨K.comp K₁, m, i, v, en, pure_sep_mk ⟨rfl, hKo, hT, ha⟩
+        ⟨ρa, ρk, hcak, hA, hu, fun ls'' he => ⟨fun k' hk' w τ₁ τ₂ hB hcτ => ?_,
+          fun hq' P hP => ?_⟩⟩⟩))
+    · rw [Kont.plug_comp]
+      have hc := (hcont' ls'' he).1 k' hk' w τ₁ τ₂ hB hcτ
+      simp only [erwpC, show k' < n by omega, if_true] at hc ⊢
+      exact ih k' (by omega) _ _ _ hc
+    · exact hK m i en P hT hP _ _ _ _ _ ((hcont' ls'' he).2 hq' P hP)
+
+/-- **`tabOfN`'s cancel obligations pass a context with no handler and no catcher.** -/
+theorem tabOfN_ctxClosed {Φc : LocFam} (hΦ : Φc.Down) {PS : Nat → List SRec → Val → WProp}
+    (K : Kont) (hH : ∀ m, K.HasHnd m = false) (hC : ∀ m, K.Catches m = false) :
+    (tabOfN (ℍ := ℍ) Φc PS).CtxClosed K := by
+  intro m i en P h hP k ls K' x ρ hx
+  rw [(tabOfN_ent h).2.2.1] at hP
+  cases hP
+  have hd : (K.comp K').dead = K.comp K'.dead := by
+    rw [dead_comp, dead_plain K hH (hC 0)]
+  show erwp (ℍ := ℍ) Φc (cancelTabN OpTabN.empty) (fun _ _ _ _ => False) k ls _ ρ
+  rw [hd, Kont.plug_comp]
+  exact erwp_cancelTabN_ctx hΦ K hH hC (empty_ctxClosed K) k ls _ ρ hx
+
+/-! ### The field's borrow, held across `park` -/
+
+/-- The scheduler's spawn payload. -/
+abbrev PS₀ (Φ : LocFam) : Nat → List SRec → Val → WProp := spawnPAN (ℍ := ℍ) Φ (tabAtN (ℍ := ℍ) Φ)
+
+theorem PS₀_empty (Φ : LocFam) : ∀ k ls v ρ, PS₀ (ℍ := ℍ) Φ k ls v ρ → ρ = PMap.empty :=
+  fun _ _ _ _ h => h.1
+
+/-- `cbField`'s body at the field `d`: `park; forget d; ()`. -/
+def fieldBody (d : Loc) : Expr :=
+  .app (.lam (.app (.lam (.val .unit)) (.app forget (.val (Val.loc d))))) parkE
+where parkE : Expr := performE (.val (opPayload nP 0 Val.unit))
+
+/-- **The field's borrowed computation**: `park` with the field's `mut` borrow held, then the
+borrow forgotten. Resumed, the cell is dumped and the field handed back; cancelled, the cancel's
+`raise` owns only the borrow. -/
+theorem fieldBody_ok {Φ : LocFam} (hΦ : Φ.Down) (Φs : LocFam) (l : Loc) (A : Life) (u : Val)
+    (k : Nat) (ls : List SRec) (BM : WRes)
+    (hBM : ResU.CompS PMap.empty (ResU.single l (CellU.mutOf A u PMap.empty (inStratum_empty A)
+      (famF A k) rfl)) BM) :
+    erwp (ℍ := ℍ) (Φ.set l A (famF A)) (opTableN (tabOfN (ℍ := ℍ) (Φ.set l A (famF A)) (PS₀ Φs)))
+      (MFPost l A (famF A) (Qlend l)) k ls (fieldBody l) BM := by
+  have hΦ' := LocFam.set_down (l := l) hΦ (famF_down A)
+  obtain rfl := eq_of_compS_empty_left hBM
+  set K₀ : Kont := .appR (.lam (.app (.lam (.val .unit)) (.app forget (.val (Val.loc l))))) .hole
+  have hKH : ∀ m, K₀.HasHnd m = false := fun m => by simp [K₀, Kont.HasHnd]
+  have hKC : ∀ m, K₀.Catches m = false := fun m => by simp [K₀, Kont.Catches]
+  have hTD := opTableN_down (tabOfN_down (ℍ := ℍ) hΦ' (PS := PS₀ Φs) (spawnPAN_down _ _))
+  have hQD : (MFPost l A (famF A) (Qlend l)).Down := fun _ _ _ _ ⟨h₁, h₂⟩ =>
+    ⟨h₁, fun w Y hY σ ⟨hσ, hF⟩ Z hZ => h₂ w Y hY σ ⟨hσ, hF⟩ Z hZ⟩
+  refine erwp_performG (K := K₀) (hKH nP) (tabOfN_park _ _) rfl (compS_empty_left _) ⟨rfl, rfl⟩
+    (fun h => by cases h) (fun ls' _ k' hk' w σB XB hB hXB => ?_) (fun ls' _ _ P hP => ?_)
+  · obtain ⟨rfl, rfl⟩ := hB
+    obtain rfl := ResU.CompS.functional hXB (ResU.comp_empty_right _)
+    refine erwp_dump (opTableN_local _) k' ls' _ _ ?_
+    refine erwp_det hΦ' hTD (fun _ _ _ _ ⟨h₁, h₂⟩ => ⟨h₁, hQD _ _ _ _ h₂⟩)
+      (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) ?_
+    refine erwp_det hΦ' hTD (fun _ _ _ _ ⟨h₁, h₂⟩ => ⟨h₁, hQD _ _ _ _ h₂⟩)
+      (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl
+        (.appR (.lam (.val .unit)) .hole)) ?_
+    refine erwp_det hΦ' hTD (fun _ _ _ _ ⟨h₁, h₂⟩ => ⟨h₁, hQD _ _ _ _ h₂⟩)
+      (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) ?_
+    refine erwp_val (v := Val.unit) ⟨noOwn_single_mut l, inStratum_empty A,
+      fun w Y hY σ ⟨hσ, hF⟩ Z hZ => ?_⟩
+    have hσ0 : σ = PMap.empty := hF
+    subst hσ0
+    obtain rfl := eq_of_compS_empty_left hY
+    obtain rfl := ResU.CompS.functional hZ (ResU.comp_empty_right _)
+    exact ⟨rfl, w, rfl⟩
+  · cases hP
+    show erwp (ℍ := ℍ) (Φ.set l A (famF A)) (cancelTabN OpTabN.empty) (fun _ _ _ _ => False) k
+      ls' _ _
+    rw [dead_plain _ hKH (hKC 0), erwp_eq]
+    exact rwpG_here (final_opPlug (r := true) (payloadName_cancelVal none) (hKC 0))
+      (Or.inr (Or.inl ⟨_, none, pure_sep_mk ⟨rfl, hKC 0⟩
+        ⟨PMap.empty, _, compS_empty_left _, emp_empty, noOwn_single_mut l⟩⟩))
+
+/-! ### The opened borrow: the field read out and lent across `park` -/
+
+open BoCa.Fig16.Tree.Wp.Goal791 (cbField cbRec dRec dFwd withborFV withborFE taskA rootMut
+  rootMutC letE allocE)
+
+/-- The callback's table inside the anti-frame: `tabOfN` with the opened cell's claim. -/
+abbrev TcbN (Φ Φs : LocFam) (c : Loc) (A : Life) : OpTabN :=
+  @OpTabN.claimT ℍ _ (tabOfN (ℍ := ℍ) Φ (PS₀ Φs)) Φ OpTabN.empty (claimR c A (boxF A))
+
+/-- `withborF`'s callback run on the field read out of `c`: `cbField () (!c)`. -/
+def fieldF (c : Loc) : Expr := .app (.app (.val cbField) (.val .unit)) (ldA c)
+
+/-- The opened borrow's end: owning nothing. -/
+def QF : PostN := fun _ _ _ X => NoOwn X
+
+/-- **The opened borrow**: `!c` reads the field out of the opened cell, the field is lent `mut`
+across `park` with the opened cell framed (`erwp_M_frameTF`, `erwpG_frameT`), and at the end the
+cell is sealed with the field as its content. At a stop the field's fold and the frame give the
+seal's guard. -/
+theorem openF_ok {Φ : LocFam} (hΦ : Φ.Down) (Φs : LocFam) (c d : Loc) (u : Val) (A : Life)
+    (k : Nat) (ls : List SRec) (X : WRes)
+    (hX : ResU.CompS (ResU.single d (CellU.ownOf u)) (ResU.single c (CellU.ownOf (.loc d))) X) :
+    erwp (ℍ := ℍ) Φ (opTableG (TcbN (ℍ := ℍ) Φ Φs c A) (CellFold c A (boxF A)))
+      (AFPost c A (boxF A) QF) k ls (fieldF c) X := by
+  set Φ₂ := Φ.set d A (famF A) with hΦ₂
+  set T' := @OpTabN.claimT ℍ _ (tabOfN (ℍ := ℍ) Φ₂ (PS₀ Φs)) Φ OpTabN.empty (claimR d A (famF A))
+  set R₂ : WProp := ptoOwn c (.loc d)
+  set T'' := @OpTabN.claimT ℍ _ (tabOfN (ℍ := ℍ) Φ₂ (PS₀ Φs)) Φ OpTabN.empty
+    (fun k => claimR d A (famF A) k ⋆ R₂)
+  have hL := opTableG_local (TcbN (ℍ := ℍ) Φ Φs c A) (CellFold c A (boxF A))
+  have hplug : fieldF c = (Kont.appR (.app (.val cbField) (.val .unit)) .hole).plug (ldA c) := rfl
+  rw [hplug]
+  refine erwp_bindR hΦ hL _ (rwp_load ls c (.loc d) _ ⟨_, _, ResU.CompS.comm hX, rfl,
+    fun ρ₁ ρ₂ h₁ hc => ?_⟩)
+  subst h₁
+  generalize k - 1 = k'
+  rcases k' with _ | _ | k₀
+  · exact erwp_zero
+  · exact erwp_step hL (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl
+      (.appL .hole (Val.loc d))) erwp_zero
+  refine erwp_step hL (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl
+    (.appL .hole (Val.loc d))) ?_
+  refine erwp_step hL (fun μ => step1Only_plug (Head.beta μ _ (Val.loc d)) rfl .hole) ?_
+  have e₁ : Kont.hole.plug (Expr.subst 0 (Val.loc d) (Expr.subst (0 + 1) (Val.shift 1 0 Val.unit)
+      (letE BoCa.Fig16.Tree.Wp.SchedProgs.SpawnProgs.parkE
+        (letE (forget.app (.var 1)) (.val Val.unit))))) = fieldBody d := by
+    simp [Expr.subst, Expr.shift, Kont.plug, letE, fieldBody, fieldBody.parkE,
+      BoCa.Fig16.Tree.Wp.SchedProgs.SpawnProgs.parkE, forget, unit', performE, opPayload,
+      Val.shift, Val.pair, Val.i32, Val.unit, Val.loc, Expr.val, Val.prim, Val.lam, Expr.loc]
+  rw [e₁]
+  have hTfield : erwp (ℍ := ℍ) Φ (opTableG T' (CellFold d A (famF A))) (Qlend d) k₀ ls
+      (fieldBody d) (ResU.single d (CellU.ownOf u)) :=
+    erwp_M_frameTF (famF_down A) (tabOfN_lendOKC Φ₂ A (PS₀_empty Φs)) (claimT_twin _ _ _ _)
+      (claimT_canS (famF_down A) (empty_lendOK A) (tabOfN_fin Φ₂) (tabOfN_unr Φ₂))
+      k₀ k₀ le_rfl ls (fieldBody d) u PMap.empty _ PMap.empty _ (inStratum_empty A)
+      (inStratum_empty _) (famF A k₀) (fun _ _ h => h) rfl (ResU.comp_empty_right _)
+      (ResU.comp_empty_right _) (fieldBody_ok hΦ Φs d A u k₀ ls)
+  have hT'e : ∀ m i en, T' m i = some en → en.abort = false → en.q ≠ .unr ∧ en.wc = extF := by
+    intro m i en h ha
+    obtain ⟨en₀, h₀, rfl⟩ := claimT_some h
+    rw [if_pos (tabOfN_ent h₀).2.1] at ha ⊢
+    exact tabOfN_e Φ₂ m i en₀ h₀ ha
+  have hT'T'' : T'.Twin T'' := by
+    intro m i en h
+    obtain ⟨en₀, h₀, rfl⟩ := claimT_some h
+    have hq := (tabOfN_ent h₀).2.1
+    refine ⟨OpEntN.mk en₀.q en₀.abort en₀.PA en₀.PB
+      (some (@cancelOblRN ℍ _ Φ OpTabN.empty (fun k => claimR d A (famF A) k ⋆ R₂))) en₀.wc,
+      by simp [T'', OpTabN.claimT, h₀, hq], ?_⟩
+    simp [hq]
+  have hfr := erwpG_frameT hT'e hT'T'' R₂ (fun m i en en' h h' hql k ls' K ρk σ₂ ρk₂ hk hR hcan => by
+      obtain ⟨en₀, h₀, rfl⟩ := claimT_some h
+      obtain ⟨en₁, h₁, rfl⟩ := claimT_some h'
+      rw [h₀] at h₁; cases h₁
+      have hqc : en₀.q = .cancel := (tabOfN_ent h₀).2.1
+      simp only [hqc, if_true] at hcan ⊢
+      intro P hP
+      cases hP
+      exact erwp_frame_cancelRun R₂ k ls' _ ρk σ₂ ρk₂ hk hR (hcan _ rfl))
+    k₀ ls (fieldBody d) _ _ _ hc rfl hTfield
+  have hR : ∀ k ρ, (claimR d A (famF A) k ⋆ R₂) ρ → claimR c A (boxF A) k ρ := by
+    rintro k ρ ⟨ρ₁, ρ₂', hc₁, ⟨w, σ, hσ, hF, hcw⟩, rfl⟩
+    have hσ0 : σ = PMap.empty := hF
+    subst hσ0
+    obtain rfl := ResU.CompS.functional hcw (ResU.comp_empty_right _)
+    exact ⟨Val.loc d, ResU.single d (CellU.ownOf w), inStratum_own A d w, ⟨d, w, rfl, rfl⟩,
+      ResU.CompS.comm hc₁⟩
+  refine erwp_mono (fun k ls' v ρ h => ?_)
+    (opTableG_twinC (AntiCancelProg.claimT_twinC (tabOfN_twin Φ₂ Φ) hR) fun k ls' ρ h => ?_) _ _ _ _ hfr
+  · obtain ⟨ρ₁, ρ₂, hc₁, ⟨rfl, w, rfl⟩, rfl⟩ := h
+    refine ⟨Val.loc d, ResU.single d (CellU.ownOf w), inStratum_own A d w, ⟨d, w, rfl, rfl⟩,
+      PMap.empty, _, ResU.CompS.comm hc₁, ResU.comp_empty_right _, fun X hX => ?_⟩
+    obtain rfl := eq_of_compS_empty_left hX
+    exact noOwn_single_mut c
+  · obtain ⟨ρ₁, ρ₂, hc₁, ⟨w, χ, hχ, hw, R, rest, hr1, hr2⟩, rfl⟩ := h
+    have hχ0 : χ = PMap.empty := hw
+    subst hχ0
+    obtain rfl := eq_of_compS_empty_left hr2
+    exact ⟨Val.loc d, ResU.single d (CellU.ownOf w), inStratum_own A d w, ⟨d, w, rfl, rfl⟩, _,
+      ρ₁, ResU.CompS.comm hc₁, hr1⟩
+
+/-! ### The record's borrow: the borrow opened, the field reborrowed, the borrow forgotten -/
+
+/-- `withborU`'s callback run on the record: `cbRec () c`. -/
+def cbBody (c : Loc) : Expr := .app (.app (.val cbRec) (.val .unit)) (.val (Val.loc c))
+
+/-- `withborF`'s `then` and `unwind`: `λb. (c, b)` and `λ_. dFwd c`. -/
+def NF (c : Loc) : Val := Val.lam (.pair (.val (Val.loc c)) (.var 0))
+def DF (c : Loc) : Val := Val.lam (.app (.val dFwd) (.val (Val.loc c)))
+
+/-- What the field's reborrow answers: the pair, owning nothing. -/
+def QN (c : Loc) : PostN := fun _ _ v ρ => (∃ b, v = Val.pair (Val.loc c) b) ∧ NoOwn ρ
+
+/-- `withborF`'s finaliser holds nothing. -/
+theorem DF_finOK (Φ : LocFam) (hΦ : Φ.Down) (c : Loc) :
+    BoCa.Fig16.LogRel.Core.Chain.SI.FinOK (ℍ := ℍ) Φ (DF c) PMap.empty := by
+  intro k ls
+  rw [rwp_iff_rwpG]
+  have hQ : PostG.Down (valPostN (fun _ _ v ρ' => v = Val.unit ∧ ρ' = PMap.empty)) :=
+    fun _ _ _ _ ⟨v, hv, hq⟩ => ⟨v, hv, hq⟩
+  refine rwpG_det hΦ hQ (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) ?_
+  refine rwpG_det hΦ hQ (fun μ => step1Only_plug (Head.beta μ _ (Val.loc c)) rfl .hole) ?_
+  exact rwpG_here (fun μ => final_val μ Val.unit) ⟨Val.unit, rfl, rfl, rfl⟩
+
+/-- **The record's borrowed computation**: `withborF dFwd c cbField`, the borrow opened around
+the field's read and reborrow (`erwp_M_antiFrameC`, `openF_ok`), the field's finaliser frame
+outside it (`erwp_ubind`), then the borrow forgotten and the sealed cell dumped. -/
+theorem methodF_ok {Φ : LocFam} (hΦ : Φ.Down) (Φs : LocFam) (c d : Loc) (u : Val) (A : Life)
+    (k : Nat) (ls : List SRec) (BM : WRes)
+    (hBM : ResU.CompS PMap.empty (ResU.single c (CellU.mutOf A (.loc d)
+      (ResU.single d (CellU.ownOf u)) (inStratum_own A d u) (boxF A k) ⟨d, u, rfl, rfl⟩)) BM) :
+    erwp (ℍ := ℍ) (Φ.set c A (boxF A)) (opTableN (tabOfN (ℍ := ℍ) (Φ.set c A (boxF A)) (PS₀ Φs)))
+      (MFPost c A (boxF A) (AntiLendProg.QA c)) k ls (cbBody c) BM := by
+  set Φ' := Φ.set c A (boxF A) with hΦ'e
+  have hΦ' : Φ'.Down := LocFam.set_down (l := c) hΦ (boxF_down A)
+  have hFl : Φ' c = some ⟨A, boxF A⟩ := by simp [Φ', LocFam.set]
+  obtain rfl := eq_of_compS_empty_left hBM
+  set T := tabOfN (ℍ := ℍ) Φ' (PS₀ Φs)
+  have hTd : T.Down := tabOfN_down hΦ' (spawnPAN_down _ _)
+  have hTD := opTableN_down hTd
+  have hL := opTableN_local T
+  set QM : PostN := fun k ls' v X => NoOwn X ∧
+    MFPost c A (boxF A) (AntiLendProg.QA c) k ls' v PMap.empty
+  have hQM : QM.Down := fun _ _ _ _ ⟨h₁, h₂, h₃⟩ => ⟨h₁, h₂, fun w Y hY σ hσ Z hZ =>
+    h₃ w Y hY σ hσ Z hZ⟩
+  have hQN : (QN c).Down := fun _ _ _ _ h => h
+  refine erwp_dump hL k ls _ _ ?_
+  refine erwp_det hΦ' hTD hQM (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl
+    (.appL .hole (Val.loc c))) ?_
+  refine erwp_det hΦ' hTD hQM (fun μ => step1Only_plug (Head.beta μ _ (Val.loc c)) rfl .hole) ?_
+  set LP : Expr := (Expr.var 0).letpair (forget.app (Expr.var 1))
+  have e₁ : Kont.hole.plug (Expr.subst 0 (Val.loc c) (Expr.subst (0 + 1) (Val.shift 1 0 Val.unit)
+      (letE (((Expr.val (withborFV (Expr.val dFwd))).app (Expr.var 0)).app (Expr.val cbField))
+        LP))) = (Kont.appR (.lam LP) .hole).plug
+          (((Expr.val (withborFV (Expr.val dFwd))).app (.val (Val.loc c))).app (.val cbField)) := by
+    simp [LP, Expr.subst, Expr.shift, Kont.plug, letE, withborFV, withborFE, thenE, cbField, dFwd,
+      forget, unit', BoCa.Fig16.Tree.Wp.SchedProgs.SpawnProgs.parkE, performE, opPayload,
+      Val.shift, Val.pair, Val.i32, Val.unit, Val.loc, Expr.val, Val.prim, Val.lam, Expr.loc]
+  rw [e₁]
+  have hKH : ∀ m, (Kont.appR (.lam LP) .hole).HasHnd m = false := fun m => by simp [Kont.HasHnd]
+  have hKC : ∀ m, (Kont.appR (.lam LP) .hole).Catches m = false := fun m => by simp [Kont.Catches]
+  refine erwp_bind hΦ' _ hKH hKC (tabOfN_ctxClosed hΦ' _ hKH hKC) (Q' := QN c) ?_ k ls _ _ ?_
+  · rintro k' ls' v ρ ⟨⟨b, rfl⟩, hno⟩
+    simp only [Kont.plug]
+    refine erwp_det hΦ' hTD hQM (fun μ => step1Only_plug (Head.beta μ _ _) rfl .hole) ?_
+    simp [LP, Kont.plug, Expr.subst, forget, unit']
+    refine erwp_det hΦ' hTD hQM (fun μ => step1Only_plug (Head.letpair μ (Val.loc c) b _) rfl
+      .hole) ?_
+    simp [Kont.plug, Expr.subst, forget, unit']
+    refine erwp_det hΦ' hTD hQM (fun μ => step1Only_plug (Head.beta μ _ (Val.loc c)) rfl .hole) ?_
+    simp [Kont.plug, Expr.subst, unit']
+    refine erwp_val (v := Val.unit) ⟨hno, inStratum_empty A,
+      fun w Y hY σ ⟨hσ, d', u', hw, hσ'⟩ Z hZ => ⟨rfl, d', u', ?_⟩⟩
+    obtain rfl := eq_of_compS_empty_left hY
+    subst hw
+    have : σ = ResU.single d' (CellU.ownOf u') := hσ'
+    subst this
+    exact hZ
+  · refine erwp_det hΦ' hTD hQN (fun μ => step1Only_plug (Head.beta μ _ (Val.loc c)) rfl
+      (.appL .hole cbField)) ?_
+    refine erwp_det hΦ' hTD hQN (fun μ => step1Only_plug (Head.beta μ _ cbField) rfl .hole) ?_
+    have e₂ : Kont.hole.plug (Expr.subst 0 cbField (Expr.subst (0 + 1) (Val.shift 1 0 (Val.loc c))
+        (thenE ((Expr.var 2).pair (Expr.var 0)) ((Expr.val dFwd).app (Expr.var 2))
+          (((Expr.var 0).app (Expr.val Val.unit)).app
+            ((Expr.val (Val.prim Prim.load)).app (Expr.var 1)))))) =
+        ubindE (.pair (NF c) (DF c)) (fieldF c) := by
+      simp [Expr.subst, Expr.shift, Kont.plug, thenE, ubindE, NF, DF, fieldF, ldA, cbField, dFwd,
+        forget, unit', letE, BoCa.Fig16.Tree.Wp.SchedProgs.SpawnProgs.parkE, performE, opPayload,
+        Val.shift, Val.pair, Val.i32, Val.unit, Val.loc, Expr.val, Val.prim, Val.lam, Expr.loc]
+    rw [e₂]
+    have hM : erwp (ℍ := ℍ) Φ' (opTableN T) QF k ls (fieldF c)
+        (ResU.single c (CellU.mutOf A (.loc d) (ResU.single d (CellU.ownOf u))
+          (inStratum_own A d u) (boxF A k) ⟨d, u, rfl, rfl⟩)) :=
+      erwp_M_antiFrameC hΦ' hFl (tabOfN_e Φ') (tabOfN_fin Φ') k ls (fieldF c) (.loc d) _
+        (inStratum_own A d u) k ⟨d, u, rfl, rfl⟩ PMap.empty _ (ResU.comp_empty_right _)
+        fun W X hW hX => by
+          obtain rfl := eq_of_compS_empty_left hX
+          exact openF_ok hΦ' Φs c d u A k ls _ hW
+    refine erwp_ubind hΦ' hTd hTd hQN (NF c) (DF c) (DF_finOK Φ' hΦ' c) ?_ ?_ (tabOfN_unr Φ')
+      (fun _ _ en h ha => absurd ha (by rw [(tabOfN_ent h).1]; simp)) k ls (fieldF c) _ _
+      (ResU.comp_empty_right _) hM
+    · intro k' ls' v ρ X hX hv
+      obtain rfl := ResU.CompS.functional hX (ResU.comp_empty_right _)
+      refine erwp_det hΦ' hTD hQN (fun μ => step1Only_plug (Head.beta μ _ v) rfl .hole) ?_
+      simp [Kont.plug, Expr.subst, NF]
+      exact erwp_val (v := Val.pair (Val.loc c) v) ⟨⟨v, rfl⟩, hv⟩
+    · intro m i en h _
+      refine ⟨en, h, rfl, (tabOfN_ent h).1, rfl, rfl, rfl, fun k' ls' K ρk X hX hc P hP => ?_⟩
+      obtain rfl := ResU.CompS.functional hX (ResU.comp_empty_right _)
+      rw [(tabOfN_ent h).2.2.1] at hP
+      cases hP
+      rw [dead_comp, ubK_dead, Kont.plug_comp]
+      exact cancelOblN_ubind hΦ' OpTabN.empty_down
+        (fun _ _ _ h => by simp [OpTabN.empty] at h) (NF c) (DF c) (DF_finOK Φ' hΦ' c) k' ls' _
+        _ _ (ResU.comp_empty_right _) (hc _ (tabOfN_ent h).2.2.1)
+
+end BoCa.Fig16.LogRel.Core.Chain.SI.Hardest791
+
+end
