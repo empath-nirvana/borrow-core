@@ -27,7 +27,7 @@ run: bcc
 	$(BCC) run $(RUN_ARGS)
 
 # The sanity gate (scripts/ci-local.sh): the build, hygiene and axioms, the judgment freeze and
-# the Backend2 fence, the corpus parsed and checked, and every corpus program run in WebAssembly by
+# the Backend2 fence, the type-equality census, the corpus parsed, checked and renamed, and every corpus program run in WebAssembly by
 # each backend against its golden with `live 0`; the source stage only on unverified goldens.
 gate: | tools
 	scripts/ci-local.sh

@@ -44,7 +44,7 @@ one.
 
 `scripts/ci-local.sh` (`make gate`) is the sanity gate, run before opening a pull request: after
 `lake build`, at once, the hygiene and axiom checks, the judgment freeze, the Backend2 fence,
-`parse-corpus.sh`, `check-corpus.sh`, and the corpus in WebAssembly on each backend
+`check-type-eq.sh`, `parse-corpus.sh`, `check-corpus.sh`, `alpha-check.py`, and the corpus in WebAssembly on each backend
 (`compile-corpus.sh --final`, `compile-backend2.sh --final`: no intermediate-IR interpreter and no
 counts, except to name the first differing stage of a program whose WebAssembly run is wrong).
 `scripts/ci-local.sh --source` (`make gate-full`) runs every script, the corpus at every stage

@@ -101,12 +101,13 @@ and paste its final summary into the PR body. Never report a PR as passing witho
 
 Goldens are the oracle. Every corpus program has a `<name>.out` and every book `bc` block an
 `-- answer:`: the output of `Support`'s interpreter (`bcc interp`), the reference semantics.
-`make gate` checks the build, hygiene, axioms, the judgment freeze, the Backend2 fence, that the
-corpus parses and checks, and every corpus program in WebAssembly on each backend against its
+`make gate` checks the build, hygiene, axioms, the judgment freeze, the Backend2 fence, that every
+type comparison goes through the `[α]` helper, that the corpus parses, checks and elaborates the same
+under a renaming of its binders, and every corpus program in WebAssembly on each backend against its
 golden with `live 0`; it runs the interpreter itself (minutes on the largest programs) only on
 the corpus programs that are new or changed since the merge base with origin/main. `make
 gate-full` adds every other check (the clos, flat, LIR and word-IR stages, counts, native, the
-kernel programs, the static tables, the sugar pairs, `let mut` combinations, renaming, the book)
+kernel programs, the static tables, the sugar pairs, `let mut` combinations, the book)
 and runs the interpreter on every program and book block, re-verifying every golden. `make
 gate-full` is required when `Paper/`, `Support/` (the interpreter and the machine) or `Backend/`
 changed, and `make gate` says so then. Run it by hand too after a `Frontend/` or `lib/` change that

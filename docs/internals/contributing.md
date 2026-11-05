@@ -46,6 +46,8 @@ freeze and the Backend2 fence, and these:
 | `scripts/check-hygiene.sh` | forbidden keywords and axioms |
 | `scripts/parse-corpus.sh` | every corpus file parses and round-trips; each `corpus/fail/` file fails with its expected message |
 | `scripts/check-corpus.sh` | every corpus file checks; each `corpus/reject/` file is rejected with its expected message |
+| `scripts/check-type-eq.sh` | every type comparison goes through the one `[α]` helper |
+| `scripts/alpha-check.py` | every corpus program elaborates to the same term under a renaming of its binders |
 | `scripts/compile-corpus.sh --final` | every corpus `main` prints its golden `.out`, the interpreter's output, in WebAssembly, with `live 0` |
 | `scripts/compile-backend2.sh --final` | the same, compiled by the new backend |
 

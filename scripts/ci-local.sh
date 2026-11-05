@@ -12,7 +12,9 @@
 # The sanity gate (`gateSteps` below) checks that the library builds; hygiene (no forbidden
 # keyword, every declaration's axioms within propext, Classical.choice and Quot.sound) and the
 # axioms of the theorems SPEC.md names; the typing-judgment freeze and the new backend's import
-# fence; that the corpus parses and checks; and that every corpus program, compiled to WebAssembly
+# fence; that every type comparison goes through the one `[α]` helper (`type equality`); that the
+# corpus parses and checks, and elaborates the same under a renaming of its binders (`renaming`);
+# and that every corpus program, compiled to WebAssembly
 # by each backend, prints its golden output with `live 0` (`compile-corpus.sh --final`,
 # `compile-backend2.sh --final`: no intermediate-IR interpreter runs and no counts, except to name
 # the first differing stage of a program whose WebAssembly run is wrong). The full gate runs every
@@ -100,8 +102,8 @@ steps=(
 )
 # The sanity gate's steps (`make gate`, `--changed`). The `(final)` corpus runs are its own: the
 # full gate runs the corpus at every stage instead.
-gateSteps=("hygiene + axioms" "judgment freeze" "axiom report" "parse corpus" "check corpus"
-  "compile corpus (final)" "backend2 fence" "backend2 corpus (final)")
+gateSteps=("hygiene + axioms" "judgment freeze" "axiom report" "type equality" "parse corpus"
+  "check corpus" "renaming" "compile corpus (final)" "backend2 fence" "backend2 corpus (final)")
 if [ "$full" = 1 ]; then
   everyStep=("compile scaling")
   for ((i = 0; i < ${#steps[@]}; i += 2)); do
@@ -128,7 +130,7 @@ if [ "$changed" = 1 ]; then
   done
   if [ "$lean" = 0 ]; then
     all=0
-    corpus=("parse corpus" "check corpus" "compile corpus (final)" "backend2 corpus (final)")
+    corpus=("parse corpus" "check corpus" "renaming" "compile corpus (final)" "backend2 corpus (final)")
     for f in $files; do
       case "$f" in
         corpus/*|lib/*) add "${corpus[@]}" ;;
@@ -138,6 +140,8 @@ if [ "$changed" = 1 ]; then
         scripts/compile-corpus.sh|scripts/source-stage.sh) add "compile corpus (final)" ;;
         scripts/compile-backend2.sh) add "backend2 corpus (final)" ;;
         scripts/check-backend2.sh) add "backend2 fence" ;;
+        scripts/check-type-eq.sh|scripts/TypeEq.lean|scripts/type-eq.allow) add "type equality" ;;
+        scripts/alpha-check.py) add "renaming" ;;
       esac
     done
   fi
