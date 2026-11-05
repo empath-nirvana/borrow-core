@@ -96,6 +96,8 @@ inductive CTy where
   | eff (n i : UInt32) (q : Qual) (A B : VTy) (fin : CTy) (rc : Bool) (C : CTy)
 end
 
+deriving instance DecidableEq for VTy, CTy
+
 /-- The value-type eliminator with `U C` a leaf. -/
 @[elab_as_elim]
 theorem VTy.recV {motive : VTy → Prop}
@@ -1166,6 +1168,7 @@ def instT (S : VTy) : CTy → CTy
   | .amp C D => .amp (instT S C) (instT S D)
   | .eff n i q A B fin rc C => .eff n i q A B fin rc (instT S C)
   | .arr A C => .arr A (instT S C)
+  | .all x b C => .all x b (instT S C)
   | C => C
 
 /-- An effectful observation `F_Σ A`: a row's layers over `F A`, the operation types closed and
@@ -1175,20 +1178,64 @@ def EffLeaf : CTy → Prop
   | .eff _ _ _ A B _ _ C => A.Cl 0 ∧ B.Cl 0 ∧ EffLeaf C
   | _ => False
 
-/-- A `&`-tree of observations `F A` and `F_Σ A`, each `A` polynomial in `X`, and observations
-with an argument `A ⊸ D` over such a tree, the argument type closed (the closure's
-`call`).  `[spec §7, §19, §22]` -/
+/-- A `&`-tree of observations `F A` and `F_Σ A`, each `A` polynomial in `X`; observations
+with an argument `A ⊸ D` over such a tree, `X` not in the argument type (`A.Cl 0`: `X` is never
+in a negative position); and observations `∀'x ⊏ @b. D` over such a tree, a lifetime
+quantified at the observation, so an argument may be a borrow lent for one call.
+`[spec §7, §19, §22]` -/
 def NuLeaf : CTy → Prop
   | .ret A => A.Poly
   | .amp C D => NuLeaf C ∧ NuLeaf D
   | .eff n i q A B fin rc C => EffLeaf (.eff n i q A B fin rc C)
   | .arr A D => A.Cl 0 ∧ NuLeaf D
+  | .all _ _ D => NuLeaf D
   | _ => False
 
-/-- **Positivity** of `νX. C`: `C` is a `&` of two observation trees. -/
-def NuOk : CTy → Prop
+/-- `'x` is bound by a `∀` of an observation tree. -/
+def LeafBinds (x : LifeVar) : CTy → Prop
+  | .amp C D => LeafBinds x C ∨ LeafBinds x D
+  | .arr _ D => LeafBinds x D
+  | .all y _ D => y = x ∨ LeafBinds x D
+  | _ => False
+
+/-- The shape of a positive body: a `&` of two observation trees.  Invariant under `CTyEq`, so
+it is what `cC` reads at `νX. C`. -/
+def NuShape : CTy → Prop
   | .amp C D => NuLeaf C ∧ NuLeaf D
   | _ => False
+
+/-- **Positivity** of `νX. C`: `C` is a `&` of two observation trees, and no lifetime bound by a
+`∀` of a leaf is free in `C`, so the unrolling `C[U(νX. C)/X]` captures none.  `[spec §7, §22]` -/
+def NuOk (C : CTy) : Prop := C.NuShape ∧ ∀ x, C.LeafBinds x → ¬ CFree x C
+
+/-- The observation tree has a `∀` leaf. -/
+def hasAll : CTy → Bool
+  | .amp C D => hasAll C || hasAll D
+  | .arr _ D => hasAll D
+  | .all _ _ _ => true
+  | _ => false
+
+theorem not_leafBinds_of_hasAll : ∀ {C : CTy}, C.hasAll = false → ∀ x, ¬ C.LeafBinds x
+  | .amp C D, h, x, hb => by
+      simp only [hasAll, Bool.or_eq_false_iff] at h
+      exact hb.elim (not_leafBinds_of_hasAll h.1 x) (not_leafBinds_of_hasAll h.2 x)
+  | .arr _ D, h, x, hb => not_leafBinds_of_hasAll (C := D) h x hb
+  | .all _ _ _, h, _, _ => by simp [hasAll] at h
+  | .ret _, _, _, hb | .top, _, _, hb | .nu _, _, _, hb | .eff _ _ _ _ _ _ _ _, _, _, hb => hb
+
+/-- A positive shape with no `∀` leaf is positive: it binds no lifetime. -/
+theorem NuOk.of_shape {C : CTy} (hS : C.NuShape) (hA : C.hasAll = false) : C.NuOk :=
+  ⟨hS, fun x hx => absurd hx (not_leafBinds_of_hasAll hA x)⟩
+
+theorem NuOk.shape {C : CTy} (h : C.NuOk) : C.NuShape := h.1
+
+/-- No lifetime bound by a `∀` leaf of `C` is free in the state type `S`: `C[S/X]` puts `S`
+under those binders without capture (`unfold`'s premise).  `[spec §7]` -/
+def BindsFresh (C : CTy) (S : VTy) : Prop := ∀ x, C.LeafBinds x → ¬ VFree x S
+
+/-- A body with no `∀` leaf binds nothing, so every state type is fresh for it. -/
+theorem BindsFresh.of_hasAll {C : CTy} (hA : C.hasAll = false) (S : VTy) : C.BindsFresh S :=
+  fun x hx => absurd hx (not_leafBinds_of_hasAll hA x)
 
 /-- The unrolling `C[U(νX. C)/X]`. -/
 abbrev unroll (C : CTy) : CTy := instT (.thunk (.nu C)) C
@@ -1278,8 +1325,8 @@ theorem iterBody_instT (A R R' S : VTy) :
     VTy.inst_rename_succ]
 
 theorem loopBody_nuOk (A B : VTy) : (loopBody A B).NuOk :=
-  ⟨⟨VTy.poly_of_not_occ (VTy.not_occ_rename_succ A), trivial⟩,
-   VTy.poly_of_not_occ (VTy.not_occ_rename_succ B)⟩
+  NuOk.of_shape ⟨⟨VTy.poly_of_not_occ (VTy.not_occ_rename_succ A), trivial⟩,
+   VTy.poly_of_not_occ (VTy.not_occ_rename_succ B)⟩ rfl
 
 theorem delayBody_nuOk (A : VTy) : (delayBody A).NuOk := loopBody_nuOk A .unit
 
@@ -1287,6 +1334,10 @@ theorem instT_effOf (S' : VTy) : ∀ (S : List OpSig) (R : VTy),
     instT S' (CTy.effOf S R) = CTy.effOf S (VTy.inst S' R)
   | [], _ => rfl
   | o :: S, R => by simp only [CTy.effOf, instT, instT_effOf S' S R]
+
+theorem hasAll_effOf : ∀ (S : List OpSig) (R : VTy), (CTy.effOf S R).hasAll = false
+  | [], _ => rfl
+  | _ :: _, _ => rfl
 
 theorem effLeaf_effOf {S : List OpSig} (hS : ∀ o ∈ S, o.A.Cl 0 ∧ o.B.Cl 0) {R : VTy}
     (hR : R.Poly) : EffLeaf (CTy.effOf S R) := by
@@ -1303,20 +1354,21 @@ theorem nuLeaf_effOf {S : List OpSig} (hS : ∀ o ∈ S, o.A.Cl 0 ∧ o.B.Cl 0) 
 
 theorem loopEffBody_nuOk {S : List OpSig} (hS : ∀ o ∈ S, o.A.Cl 0 ∧ o.B.Cl 0) (A B : VTy) :
     (loopEffBody S A B).NuOk :=
-  ⟨nuLeaf_effOf hS ⟨VTy.poly_of_not_occ (VTy.not_occ_rename_succ A), trivial⟩,
+  NuOk.of_shape ⟨nuLeaf_effOf hS ⟨VTy.poly_of_not_occ (VTy.not_occ_rename_succ A), trivial⟩,
    nuLeaf_effOf hS (VTy.poly_of_not_occ (VTy.not_occ_rename_succ B))⟩
+   (by simp only [loopEffBody, hasAll, hasAll_effOf, Bool.or_self])
 
 theorem loopEffBody_instT (S : List OpSig) (A B S' : VTy) :
     (loopEffBody S A B).instT S' = .amp (CTy.effOf S (.sum A S')) (CTy.effOf S B) := by
   simp only [instT, instT_effOf, inst_sum_var, VTy.inst_rename_succ]
 
 theorem streamBody_nuOk (A : VTy) : (streamBody A).NuOk :=
-  ⟨⟨VTy.poly_of_not_occ (VTy.not_occ_rename_succ A), trivial⟩, fun h => h⟩
+  NuOk.of_shape ⟨⟨VTy.poly_of_not_occ (VTy.not_occ_rename_succ A), trivial⟩, fun h => h⟩ rfl
 
 theorem iterBody_nuOk (A R R' : VTy) : (iterBody A R R').NuOk :=
-  ⟨⟨⟨VTy.poly_of_not_occ (VTy.not_occ_rename_succ A), trivial⟩,
+  NuOk.of_shape ⟨⟨⟨VTy.poly_of_not_occ (VTy.not_occ_rename_succ A), trivial⟩,
     VTy.poly_of_not_occ (VTy.not_occ_rename_succ R)⟩,
-   VTy.poly_of_not_occ (VTy.not_occ_rename_succ R')⟩
+   VTy.poly_of_not_occ (VTy.not_occ_rename_succ R')⟩ rfl
 
 end CTy
 
@@ -1618,6 +1670,54 @@ def CTy.applyLSub (σ : LSubst) : CTy → CTy
   | .nu C => .nu (C.applyLSub σ)
   | .eff n i q A B fin rc C =>
       .eff n i q (A.applyLSub σ) (B.applyLSub σ) (fin.applyLSub σ) rc (C.applyLSub σ)
+end
+
+/-! ### α-equivalence: types equal up to the names of their lifetime binders  `[spec §3]`
+
+The binders are `∀'x ⊏ @b. C` (`CTy.all`) and nothing else; `VTy.all` is `U (∀'x ⊏ @b. F A)`.
+`ρ` pairs the binders passed on the left with those on the right, innermost first. -/
+
+/-- `'x` on the left and `'y` on the right name one lifetime under the binder pairs `ρ`: the
+innermost pair binding either decides, and a variable bound by neither is free on both sides. -/
+def varAlphaB : List (LifeVar × LifeVar) → LifeVar → LifeVar → Bool
+  | [], x, y => x == y
+  | (a, b) :: ρ, x, y => if x = a then y == b else if y = b then false else varAlphaB ρ x y
+
+/-- Lifetime terms equal up to the binder pairs `ρ`. -/
+def lifeAlphaB (ρ : List (LifeVar × LifeVar)) : Lifetime.Life → Lifetime.Life → Bool
+  | .var x, .var y => varAlphaB ρ x y
+  | .top, .top => true
+  | .join a b, .join a' b' => lifeAlphaB ρ a a' && lifeAlphaB ρ b b'
+  | .meet a b, .meet a' b' => lifeAlphaB ρ a a' && lifeAlphaB ρ b b'
+  | _, _ => false
+
+mutual
+/-- Value types equal up to the names of their lifetime binders, under the binder pairs `ρ`. -/
+def VTy.alphaB (ρ : List (LifeVar × LifeVar)) : VTy → VTy → Bool
+  | .unit, .unit | .zero, .zero | .unk, .unk => true
+  | .int w, .int w' => decide (w = w')
+  | .opq k, .opq k' => decide (k = k')
+  | .tensor A B, .tensor A' B' | .sum A B, .sum A' B' => VTy.alphaB ρ A A' && VTy.alphaB ρ B B'
+  | .thunk C, .thunk C' => CTy.alphaB ρ C C'
+  | .ref A, .ref A' | .bang A, .bang A' | .fam A, .fam A' | .mu A, .mu A' => VTy.alphaB ρ A A'
+  | .imm a A, .imm a' A' | .mut a A, .mut a' A' | .box a A, .box a' A' =>
+      lifeAlphaB ρ a a' && VTy.alphaB ρ A A'
+  | .tvar n, .tvar n' => n == n'
+  | _, _ => false
+/-- Computation types equal up to the names of their lifetime binders, under the binder pairs
+`ρ`: `∀'x ⊏ @b. C` and `∀'x' ⊏ @b'. C'` when `@b`, `@b'` are, and `C`, `C'` are with `'x`
+paired with `'x'`; an operation's signature `A ↠ B` and its cancel row as every other type. -/
+def CTy.alphaB (ρ : List (LifeVar × LifeVar)) : CTy → CTy → Bool
+  | .ret A, .ret A' => VTy.alphaB ρ A A'
+  | .arr A C, .arr A' C' => VTy.alphaB ρ A A' && CTy.alphaB ρ C C'
+  | .amp C D, .amp C' D' => CTy.alphaB ρ C C' && CTy.alphaB ρ D D'
+  | .top, .top => true
+  | .all x b C, .all x' b' C' => lifeAlphaB ρ b b' && CTy.alphaB ((x, x') :: ρ) C C'
+  | .nu C, .nu C' => CTy.alphaB ρ C C'
+  | .eff n i q A B fin rc C, .eff n' i' q' A' B' fin' rc' C' =>
+      n == n' && i == i' && decide (q = q') && rc == rc' && VTy.alphaB ρ A A' &&
+        VTy.alphaB ρ B B' && CTy.alphaB ρ fin fin' && CTy.alphaB ρ C C'
+  | _, _ => false
 end
 
 /-- `A[@a/'x]`. -/

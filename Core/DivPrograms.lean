@@ -87,8 +87,8 @@ theorem rowAt_Sg : RowAt ΞDiv Sg := by
   obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf
   simp only [List.mem_singleton] at hm
   subst hm
-  refine ⟨by decide, by simp [ΞDiv, tickSig], ?_⟩
-  simp [ΞDiv, tickSig]
+  exact (OpAt.of_get (Ξ := ΞDiv) (o := tickSig) (by decide) (by simp [ΞDiv, tickSig])
+    (by simp [ΞDiv, tickSig]))
 
 theorem find_Sg : Row.find Sg tickSig.n tickSig.i = some tickSig := by
   simp [Row.find, List.find?, tickSig]

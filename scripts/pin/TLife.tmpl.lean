@@ -213,7 +213,7 @@ theorem relT_reAb (Δr : LifeCtx) (t : TExpr) : ∀ k, relT k (t.reAb Δr) = rel
   case lolliE _ _ _ _ _ ta tf _ _ =>
     intro k; simp only [TExpr.reAb, relT, TExpr.isVarT_reAb, TExpr.isRelease_reAb]
   case ret _ _ _ t ih | ofRet _ _ _ t ih | effSub _ _ _ _ _ t ih | lendScope _ _ _ t ih
-    | sumI₁ _ _ _ _ t ih | sumI₂ _ _ _ _ t ih =>
+    | sumI₁ _ _ _ _ t ih | sumI₂ _ _ _ _ t ih | alpha _ _ _ _ t ih =>
     intro k; simp only [TExpr.reAb, relT, ih k]
   case bind _ _ _ _ u tM tN ihM ihN | effLet _ _ _ _ _ u tM tN ihM ihN =>
     intro k; simp only [TExpr.reAb, relT, ihM k, ihN (k + 1)]

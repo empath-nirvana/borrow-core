@@ -141,7 +141,8 @@ def firstUnconsumed : List Bool → List Bool → Option Nat
   | _, _ => none
 
 /-- Why the rows `main`'s derivation reads fail `sigsOkB`: an operation of the reserved name `0`,
-an unrestricted operation answering `0`, or an operation with two signatures.  `[spec §18, §19]` -/
+an unrestricted operation answering `0`, or an operation with two signatures not equal up to `[α]`
+(`tyEqV`, as `sigsOkB` compares them).  `[spec §18, §19]` -/
 def sigsErr (s : CRow) : String :=
   let sig (o : COpSig) : String := s!"`{qualStr o.q} {ppVTy o.A} ~> {ppVTy o.B}`"
   match s.find? (·.n == 0) with
@@ -152,7 +153,7 @@ def sigsErr (s : CRow) : String :=
         "operation is cancellable (decision 63)"
     | none =>
       match s.findSome? (fun o => (s.find? fun o' => o'.n == o.n && o'.i == o.i &&
-          !(o'.q == o.q && o'.A == o.A && o'.B == o.B)).map (o, ·)) with
+          !(o'.q == o.q && tyEqV o'.A o.A && tyEqV o'.B o.B)).map (o, ·)) with
       | some (o, o') => s!"the operation {o.n}.{o.i} has two signatures in this program, " ++
           s!"{sig o} and {sig o'}: an operation has one signature (decision R)"
       | none => "internal error: the operations' signatures"

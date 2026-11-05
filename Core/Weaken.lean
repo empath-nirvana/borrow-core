@@ -167,7 +167,7 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | foldReuse F R hΓ hF hG => exact .foldReuse F R (deadP_append h' hΓ) hF hG
   | nuIn hC _ ih => exact .nuIn hC ih
   | nuOut hC _ ih => exact .nuOut hC ih
-  | unfoldN C S hC hΓ => exact .unfoldN C S hC (deadP_append h' hΓ)
+  | unfoldN C S hC hS hΓ => exact .unfoldN C S hC hS (deadP_append h' hΓ)
   | effSub hle _ ih => exact .effSub hle ih
   | effPerform hf hna hac _ ih => exact .effPerform hf hna hac ih
   | effAwait hΓ hfa ha haA hfc hc => exact .effAwait (dead_append_dead hΓ h') hfa ha haA hfc hc
@@ -195,6 +195,7 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
       exact .effHandleL (splitP_append h' hs) (deadP_append h' hd) hHr.append hHw.append
         hHn.append ihc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin ihe
   | letPoly b hcl hV _ _ ihN => exact .letPoly b hcl hV ihN
+  | alpha _ hα ih => exact .alpha ih hα
 
 end BoCa.Fig16.LogRel.Core
 

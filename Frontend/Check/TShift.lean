@@ -197,6 +197,7 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | .nuIn i j C t => .nuIn i j C (t.shift d c)
   | .nuOut i j C t => .nuOut i j C (t.shift d c)
   | .effSub i j S S' A t => .effSub i j S S' A (t.shift d c)
+  | .alpha i j j₀ j' t => .alpha i j j₀ j' (t.shift d c)
   | .effPerform i j S o t => .effPerform i j S o (t.shift d c)
   | .effRaise i j S o B t => .effRaise i j S o B (t.shift d c)
   | .effLet i j A B S u tM tN =>
@@ -300,7 +301,7 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .lam _ _ _ _ t | .lamDead _ _ _ _ t | .proj₁ _ _ _ _ t | .proj₂ _ _ _ _ t
   | .allE _ _ _ _ _ _ t | .bangE _ _ _ t | .boxE _ _ _ _ t | .immSub _ _ _ _ _ t
   | .mutSub _ _ _ _ _ t | .allEV _ _ _ _ _ _ t | .ofRet _ _ _ t | .roll _ _ _ t
-  | .unroll _ _ _ t | .nuIn _ _ _ t | .nuOut _ _ _ t | .effSub _ _ _ _ _ t
+  | .unroll _ _ _ t | .nuIn _ _ _ t | .nuOut _ _ _ t | .effSub _ _ _ _ _ t | .alpha _ _ _ _ t
   | .effPerform _ _ _ _ t | .effRaise _ _ _ _ _ t | .litFn _ _ _ t | .divLit _ _ _ _ t
   | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t
   | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t => t.absF Δ

@@ -99,13 +99,14 @@ theorem appliesB_sound {g k : Nat} {t : TExpr} (h : appliesB g k t = true) :
     simp only [TExpr.erase, forceArrB_sound hf]
     exact .apply (by simp [mentions]; omega) (by simp [mentions]; omega)
   case case2 => simp only [TExpr.erase]; simp_all
-  case case3 ih₁ ih₂ =>
+  case case3 => simp only [TExpr.erase]; simp_all
+  case case4 ih₁ ih₂ =>
     simp only [Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true'] at h
     simp only [TExpr.erase]
     rcases h with ⟨⟨h₁, h₂⟩, h₃⟩ | ⟨h₁, h₂⟩
     · exact .bind h₁ h₂ (ih₁ h₃)
     · exact .ret (ih₂ h₁) (returns0B_sound h₂)
-  case case4 ih₁ ih₂ =>
+  case case5 ih₁ ih₂ =>
     simp only [Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true'] at h
     simp only [TExpr.erase]
     rcases h with ⟨⟨h₁, h₂⟩, h₃⟩ | ⟨h₁, h₂⟩
@@ -134,7 +135,8 @@ theorem onceB_sound {k : Nat} {t : TExpr} (h : onceB k t = true) : Once k t.eras
     simp only [Bool.and_eq_true, Bool.not_eq_true'] at h
     simp only [TExpr.erase]; exact .head (ih h.1) h.2
   case case3 ih => simp only [TExpr.erase]; exact ih h
-  case case4 =>
+  case case4 ih => simp only [TExpr.erase]; exact ih h
+  case case5 =>
     simp only [Bool.or_eq_true] at h
     rcases h with h | h
     · obtain ⟨N, hN, hm⟩ := resumeB_sound' h; rw [hN]; exact .resume hm
@@ -181,7 +183,12 @@ theorem onPaths_sound {leaf : Nat → TExpr → Bool} {L : Nat → Expr → Prop
     rcases h with h | h
     · exact .leaf (hl _ _ h)
     · simp only [TExpr.erase]; exact ih h
-  case case8 => exact .leaf (hl _ _ h)
+  case case8 ih =>
+    simp only [Bool.or_eq_true] at h
+    rcases h with h | h
+    · exact .leaf (hl _ _ h)
+    · simp only [TExpr.erase]; exact ih h
+  case case9 => exact .leaf (hl _ _ h)
 
 theorem stateFnB_sound {leaf : Nat → TExpr → Bool} {L : Nat → Expr → Prop}
     (hl : ∀ k t, leaf k t = true → L k t.erase) {k : Nat} {t : TExpr}

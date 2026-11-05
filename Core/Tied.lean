@@ -10,6 +10,7 @@ finds is of a nonzero name with at most `2³²` operations, at the signature `Ξ
 **`CDerivesAt Ξ`** is `CDerives` with the premise `RowAt Ξ` at the three rules that read an
 operation's signature off a row: `[perform]` and `[raise]` (the row the operation is found in) and
 `[handle]` (the handled row `(n)↑E ⊙ Σ`, whose qualifiers are the handler value's tags, §25).
+An operation's argument and answer are the context's up to α (`OpSig.AtEntry`, §3).
 Every other rule is `CDerives`'s verbatim, `[then]` with its finaliser's row and the cancel rows of
 §27 among them; the tie reads no cancel row (`rowAt_ofEff_fs`).  So a name has one signature across
 a derivation: every instance of a handler site has one protocol (§19 *Names*).
@@ -20,7 +21,7 @@ a derivation: every instance of a handler site has one protocol (§19 *Names*).
   (`Expr.effFree`) is tied at every effect context.
 * `CDerivesAt.effThenA`, `CDerivesAt.effHandle`: `CDerives.effThenA` and `CDerives.effHandle`,
   tied.
-* At a handler the tie makes its signature `E` a prefix of `Ξ n` (`sig_prefix_of_rowAt`), so the
+* At a handler the tie makes its signature `E` a prefix of `Ξ n` up to α (`sig_prefix_of_rowAt`), so the
   handler value's tags are a prefix of `Ξ`'s qualifiers of `n` (`hndTags_of_rowAt`).
 * `SigsAt Ξ S`: every entry of the list `S` is at `Ξ`'s signature; it ties every row whose
   entries are among `S`'s (`rowAt_of_sigsAt`).
@@ -38,11 +39,19 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 /-- An effect context: each name's signature, its operations numbered from `0`.  `[spec §19]` -/
 abbrev EffCtx := UInt32 → List (Qual × VTy × VTy)
 
+/-- An operation at an effect context's entry: its qualifier, its argument and answer the entry's
+up to the names of lifetime binders (`[α]`, SPEC §3).  `[spec §3, §19]` -/
+def OpSig.AtEntry (o : OpSig) (p : Qual × VTy × VTy) : Prop :=
+  p.1 = o.q ∧ VTy.alphaB [] p.2.1 o.A = true ∧ VTy.alphaB [] p.2.2 o.B = true
+
+theorem OpSig.AtEntry.self (o : OpSig) : o.AtEntry (o.q, o.A, o.B) :=
+  ⟨rfl, VTy.alphaB_refl _, VTy.alphaB_refl _⟩
+
 /-- **A row tied to the effect context**: every operation the row finds is of a nonzero name with
-at most `2³²` operations, at the signature `Ξ` gives it.  `[spec §19]` -/
+at most `2³²` operations, at the signature `Ξ` gives it up to α.  `[spec §3, §19]` -/
 def RowAt (Ξ : EffCtx) (S : Row) : Prop :=
   ∀ n i o, Row.find S n i = some o →
-    n ≠ 0 ∧ (Ξ n).length ≤ 2 ^ 32 ∧ (Ξ n)[i.toNat]? = some (o.q, o.A, o.B)
+    n ≠ 0 ∧ (Ξ n).length ≤ 2 ^ 32 ∧ ∃ p, (Ξ n)[i.toNat]? = some p ∧ o.AtEntry p
 
 /-- A row tied to an effect context that gives `Div`'s name no operation does not hold `Div`. -/
 theorem Row.divB_of_rowAt {Ξ : EffCtx} {S : Row} (hAt : RowAt Ξ S) (hΞ : Ξ divEff = []) :
@@ -367,7 +376,7 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       CDerivesAt Ξ Δ Γ e (.comp C.unroll)
   /-- Coiteration, a constant: `unfold : !U(S ⊸ C[S/X]) ⊸ !U(S ⊸ νX. C)` (`Nu.lean`), at a
   positive `C`.  `[spec §7]` -/
-  | unfoldN {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hΓ : Ctx.DeadP Γ) :
+  | unfoldN {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
       CDerivesAt Ξ Δ Γ (.val (unfoldV C)) (.val (unfoldTy C S))
   /-- `[sub]`: `F_Σ A ≤ F_Σ′ A` for `Σ ⊆ Σ′`; `F A = F_∅ A`.  `[spec §19]` -/
   | effSub {Δ Γ e} {S S' : Row} {A : VTy} (hle : RowLe S S')
@@ -480,6 +489,9 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       (hV : CDerivesAt Ξ Δ [] (.val (.lam b)) j)
       (hN : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ) ((N.subst 0 (Val.lam b)).shift 1 0) (.comp C)) :
       CDerivesAt Ξ Δ Γ (.app (.val (.lam N)) (.val (.lam b))) (.comp C)
+  /-- `[α]`: conversion up to the names of lifetime binders.  `[spec §3]` -/
+  | alpha {Δ Γ e} {j j' : Jdg} (h : CDerivesAt Ξ Δ Γ e j) (hα : j.alphaB j' = true) :
+      CDerivesAt Ξ Δ Γ e j'
 
 /-- **Every tied derivation is one of `CDerives`.**  `[spec §19]` -/
 theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
@@ -579,7 +591,7 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | foldReuse F R hΓ hF hG => exact .foldReuse F R hΓ hF hG
   | nuIn hC _ ih1 => exact .nuIn hC ih1
   | nuOut hC _ ih1 => exact .nuOut hC ih1
-  | unfoldN C S hC hΓ => exact .unfoldN C S hC hΓ
+  | unfoldN C S hC hS hΓ => exact .unfoldN C S hC hS hΓ
   | effSub hle _ ih1 => exact .effSub hle ih1
   | effPerform _ hf hna hac _ ih1 => exact .effPerform hf hna hac ih1
   | effAwait _ hΓ hfa ha haA hfc hc => exact .effAwait hΓ hfa ha haA hfc hc
@@ -601,6 +613,7 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | divFuel S A _ hS hΓ => exact .divFuel S A hS hΓ
   | reify S B R res _ hS hcl _ hΓ ih => exact .reify S B R res hS hcl ih hΓ
   | letPoly b hcl _ _ ihV ihN => exact .letPoly b hcl ihV ihN
+  | alpha _ hα ih => exact .alpha ih hα
 
 /-- `[then]` with its finaliser at the pure row (§24, option A), tied: `effThen` at `Σ_M = Σ` and
 `Σ_D = ∅`, as `CDerives.effThenA`.  `[spec §24, §27]` -/
@@ -671,8 +684,8 @@ theorem rowAt_of_le {Ξ : EffCtx} {S S' : Row} (hle : RowLe S S') (h : RowAt Ξ 
     RowAt Ξ S := by
   intro n i o hf
   obtain ⟨o', hf', hs⟩ := RowLe.sig hle hf
-  obtain ⟨h₁, h₂, h₃⟩ := h n i o' hf'
-  exact ⟨h₁, h₂, by rw [hs.2.2.1, hs.2.2.2.1, hs.2.2.2.2.1]; exact h₃⟩
+  obtain ⟨h₁, h₂, p, h₃, h₄⟩ := h n i o' hf'
+  exact ⟨h₁, h₂, p, h₃, by rw [OpSig.AtEntry, hs.2.2.1, hs.2.2.2.1, hs.2.2.2.2.1]; exact h₄⟩
 
 /-- The front of a row tied to `Ξ` is tied to `Ξ`. -/
 theorem rowAt_left {Ξ : EffCtx} {S S' : Row} (h : RowAt Ξ (S ++ S')) : RowAt Ξ S :=
@@ -683,7 +696,7 @@ theorem ofEff_wf (Ξ : EffCtx) (n : UInt32) (hn : n ≠ 0) (hlen : (Ξ n).length
     RowAt Ξ (Row.ofEff n (Ξ n) 0) := by
   intro m i o h
   obtain ⟨rfl, j, hj, rfl, rfl⟩ := Row.find_ofEff n (Ξ n) 0 finsNil m i o h
-  refine ⟨hn, hlen, ?_⟩
+  refine ⟨hn, hlen, _, ?_, OpSig.AtEntry.self _⟩
   have hj' : (UInt32.ofNat (0 + j)).toNat = j := by
     rw [Nat.zero_add]; exact UInt32.toNat_ofNat_of_lt' (by simp [UInt32.size]; omega)
   rw [hj']
@@ -775,9 +788,9 @@ theorem rowAt_ofEff_fs {Ξ : EffCtx} {n : UInt32} {E : List (Qual × VTy × VTy)
       have ho : o₁ = o := Option.some.inj hf
       subst ho
       obtain ⟨o', hf', hsig⟩ := find_ofEff_sig n E 0 fs' fs m i o₁ hA
-      obtain ⟨h₁, h₂, h₃⟩ := h m i o' (by rw [Row.find_append, hf', Option.some_or])
-      refine ⟨h₁, h₂, ?_⟩
-      rw [h₃, hsig.2.2.1, hsig.2.2.2.1, hsig.2.2.2.2.1]
+      obtain ⟨h₁, h₂, p, h₃, h₄⟩ := h m i o' (by rw [Row.find_append, hf', Option.some_or])
+      refine ⟨h₁, h₂, p, h₃, ?_⟩
+      rw [OpSig.AtEntry, hsig.2.2.1, hsig.2.2.2.1, hsig.2.2.2.2.1]; exact h₄
   | none =>
       rw [hA, Option.none_or] at hf
       have hB : Row.find (Row.ofEff n E 0 fs) m i = none := by
@@ -788,30 +801,43 @@ theorem rowAt_ofEff_fs {Ξ : EffCtx} {n : UInt32} {E : List (Qual × VTy × VTy)
             rw [hA] at hf'; cases hf'
       exact h m i o (by rw [Row.find_append, hB, Option.none_or, hf])
 
-/-- **A tied handler's signature is a prefix of the context's**: the handled row `(n)↑E ⊙ Σ`, tied
-to `Ξ`, finds each operation of `E` at the signature `Ξ n` gives at its index.  `[spec §19]` -/
+/-- **A tied handler's signature is a prefix of the context's**, up to α: the handled row
+`(n)↑E ⊙ Σ`, tied to `Ξ`, finds each operation of `E` at the signature `Ξ n` gives at its index.
+`[spec §3, §19]` -/
 theorem sig_prefix_of_rowAt {Ξ : EffCtx} {n : UInt32} {E : List (Qual × VTy × VTy)} {S : Row}
-    (h : RowAt Ξ (Row.ofEff n E 0 ++ S)) (hlen : E.length ≤ 2 ^ 32) : E <+: Ξ n := by
-  rw [List.prefix_iff_eq_take]
-  apply List.ext_getElem?
-  intro j
-  by_cases hj : j < E.length
-  · have hf : Row.find (Row.ofEff n E 0 ++ S) n (UInt32.ofNat j) =
-        some ⟨n, UInt32.ofNat j, E[j].1, E[j].2.1, E[j].2.2, .ret .unit, false⟩ := by
-      rw [Row.find_append, find_ofEff_at n E j hj hlen, Option.some_or]
-    obtain ⟨-, -, hg⟩ := h n _ _ hf
-    rw [UInt32.toNat_ofNat_of_lt' (by simp [UInt32.size]; omega)] at hg
-    rw [List.getElem?_take_of_lt hj, hg, List.getElem?_eq_getElem hj]
-  · rw [List.getElem?_eq_none (by omega), List.getElem?_eq_none]
-    simp only [List.length_take]
-    omega
+    (h : RowAt Ξ (Row.ofEff n E 0 ++ S)) (hlen : E.length ≤ 2 ^ 32) :
+    ∀ j (hj : j < E.length), ∃ p, (Ξ n)[j]? = some p ∧ p.1 = E[j].1 ∧
+      VTy.alphaB [] p.2.1 E[j].2.1 = true ∧ VTy.alphaB [] p.2.2 E[j].2.2 = true := by
+  intro j hj
+  have hf : Row.find (Row.ofEff n E 0 ++ S) n (UInt32.ofNat j) =
+      some ⟨n, UInt32.ofNat j, E[j].1, E[j].2.1, E[j].2.2, .ret .unit, false⟩ := by
+    rw [Row.find_append, find_ofEff_at n E j hj hlen, Option.some_or]
+  obtain ⟨-, -, p, hg, hp⟩ := h n _ _ hf
+  rw [UInt32.toNat_ofNat_of_lt' (by simp [UInt32.size]; omega)] at hg
+  exact ⟨p, hg, hp⟩
 
 /-- **A tied handler's tags are a prefix of the context's qualifiers** of its name (§25: a handler
 value carries its operations' qualifiers, `E.map Prod.fst`).  `[spec §19, §25]` -/
 theorem hndTags_of_rowAt {Ξ : EffCtx} {n : UInt32} {E : List (Qual × VTy × VTy)} {S : Row}
     (h : RowAt Ξ (Row.ofEff n E 0 ++ S)) (hlen : E.length ≤ 2 ^ 32) :
-    E.map Prod.fst <+: (Ξ n).map Prod.fst :=
-  (sig_prefix_of_rowAt h hlen).map Prod.fst
+    E.map Prod.fst <+: (Ξ n).map Prod.fst := by
+  have hp := sig_prefix_of_rowAt h hlen
+  have hle : E.length ≤ (Ξ n).length := by
+    rcases Nat.lt_or_ge (Ξ n).length E.length with hlt | hge
+    · obtain ⟨p, hg, -⟩ := hp (Ξ n).length hlt
+      simp at hg
+    · exact hge
+  rw [List.prefix_iff_eq_take]
+  apply List.ext_getElem?
+  intro j
+  by_cases hj : j < E.length
+  · obtain ⟨p, hg, h₁, -⟩ := hp j hj
+    rw [List.getElem?_take_of_lt (by simpa using hj), List.getElem?_map, List.getElem?_map, hg,
+      List.getElem?_eq_getElem hj]
+    simp [h₁]
+  · rw [List.getElem?_eq_none (by simpa using hj), List.getElem?_eq_none]
+    simp only [List.length_take, List.length_map]
+    omega
 
 /-! ### Terms with no operation -/
 
@@ -961,7 +987,7 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | foldReuse F R hΓ hF hG => exact .foldReuse F R hΓ hF hG
   | nuIn hC _ ih1 => exact .nuIn hC (ih1 he)
   | nuOut hC _ ih1 => exact .nuOut hC (ih1 he)
-  | unfoldN C S hC hΓ => exact .unfoldN C S hC hΓ
+  | unfoldN C S hC hS hΓ => exact .unfoldN C S hC hS hΓ
   | effSub hle _ ih1 => exact .effSub hle (ih1 he)
   | effPerform => simp [BoCa.BoLo.performE, Expr.effFree, Expr.val, Val.prim] at he
   | effAwait => simp [awaitE, BoCa.BoLo.performE, BoCa.BoLo.raiseE, Expr.effFree, Expr.val,
@@ -984,13 +1010,19 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
       simp only [Expr.effFree, Expr.val, Val.lam, Bool.and_eq_true] at he
       exact .letPoly b hcl (ihV he.2)
         (ihN (by rw [effFree_shift]; exact effFree_subst N 0 (Val.lam b) he.1 he.2))
+  | alpha _ hα ih => exact .alpha (ih he) hα
 
 /-! ### Signature lists -/
 
 /-- The operation is at `Ξ`'s signature: of a nonzero name with at most `2³²` operations, whose
 `o.i`-th is `o`'s qualifier, argument and answer. -/
 def OpAt (Ξ : EffCtx) (o : OpSig) : Prop :=
-  o.n ≠ 0 ∧ (Ξ o.n).length ≤ 2 ^ 32 ∧ (Ξ o.n)[o.i.toNat]? = some (o.q, o.A, o.B)
+  o.n ≠ 0 ∧ (Ξ o.n).length ≤ 2 ^ 32 ∧ ∃ p, (Ξ o.n)[o.i.toNat]? = some p ∧ o.AtEntry p
+
+/-- An operation at the entry that is its own signature. -/
+theorem OpAt.of_get {Ξ : EffCtx} {o : OpSig} (h₁ : o.n ≠ 0) (h₂ : (Ξ o.n).length ≤ 2 ^ 32)
+    (h₃ : (Ξ o.n)[o.i.toNat]? = some (o.q, o.A, o.B)) : OpAt Ξ o :=
+  ⟨h₁, h₂, _, h₃, OpSig.AtEntry.self o⟩
 
 /-- Every entry of the list is at `Ξ`'s signature. -/
 def SigsAt (Ξ : EffCtx) (S : Row) : Prop := ∀ o ∈ S, OpAt Ξ o
@@ -1029,8 +1061,12 @@ theorem EffCtx.NoUnrExn.ne_exn {Ξ : EffCtx} (h : Ξ.NoUnrExn) (n : UInt32) (A :
 theorem abort_false_of_rowAt {Ξ : EffCtx} (hx : Ξ.NoUnrExn) {S : Row} (h : RowAt Ξ S)
     {n i : UInt32} {o : OpSig} (hf : Row.find S n i = some o) (hq : o.q = .unr) :
     o.abort = false := by
-  obtain ⟨-, -, hget⟩ := h n i o hf
-  have hz := hx n (o.q, o.A, o.B) (List.mem_of_getElem? hget) hq
-  simp only [OpSig.abort, hz, Bool.false_and]
+  obtain ⟨-, -, p, hget, hp1, -, hpB⟩ := h n i o hf
+  have hz := hx n p (List.mem_of_getElem? hget) (hp1.trans hq)
+  have hB : o.B.isZero = false := by
+    rw [← hz]
+    cases hb : p.2.2 <;> cases hb' : o.B <;> rw [hb, hb'] at hpB <;>
+      simp_all [VTy.alphaB, VTy.isZero]
+  simp only [OpSig.abort, hB, Bool.false_and]
 
 end BoCa.Fig16.LogRel.Core

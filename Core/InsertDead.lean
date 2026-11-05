@@ -503,10 +503,10 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       exact .foldReuse F R (deadP_insert hd Γa hΓ) hF hG
   | nuIn hC _ ih => intro Γa Γb hΓ; exact .nuIn hC (ih Γa Γb hΓ)
   | nuOut hC _ ih => intro Γa Γb hΓ; exact .nuOut hC (ih Γa Γb hΓ)
-  | unfoldN C S hC hΓ =>
+  | unfoldN C S hC hS hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (unfoldV_closed C)]
-      exact .unfoldN C S hC (deadP_insert hd Γa hΓ)
+      exact .unfoldN C S hC hS (deadP_insert hd Γa hΓ)
   | effSub hle _ ih => intro Γa Γb hΓ; exact .effSub hle (ih Γa Γb hΓ)
   | effPerform hf hna hac _ ih => intro Γa Γb hΓ; exact .effPerform hf hna hac (ih Γa Γb hΓ)
   | effAwait hΓ hfa ha haA hfc hc =>
@@ -590,6 +590,7 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       show CDerives _ _ (Expr.app (Expr.lam (N.shift _ (Γa.length + 1))) ((Expr.lam b).shift _ _)) _
       rw [hb]
       exact .letPoly b hcl hV eN
+  | alpha _ hα ih => intro Γa Γb hΓ; exact .alpha (ih Γa Γb hΓ) hα
 
 /-- **Weakening of a tied derivation** by consumed slots inside its context, as
 `CDerives.insert_dead`: the tie is on rows, which the shift leaves alone.  `[spec §3, §19]` -/
@@ -882,10 +883,10 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
       exact .foldReuse F R (deadP_insert hd Γa hΓ) hF hG
   | nuIn hC _ ih => intro Γa Γb hΓ; exact .nuIn hC (ih Γa Γb hΓ)
   | nuOut hC _ ih => intro Γa Γb hΓ; exact .nuOut hC (ih Γa Γb hΓ)
-  | unfoldN C S hC hΓ =>
+  | unfoldN C S hC hS hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (unfoldV_closed C)]
-      exact .unfoldN C S hC (deadP_insert hd Γa hΓ)
+      exact .unfoldN C S hC hS (deadP_insert hd Γa hΓ)
   | effSub hle _ ih => intro Γa Γb hΓ; exact .effSub hle (ih Γa Γb hΓ)
   | effPerform hAt hf hna hac _ ih => intro Γa Γb hΓ; exact .effPerform hAt hf hna hac (ih Γa Γb hΓ)
   | effAwait hAt hΓ hfa ha haA hfc hc =>
@@ -971,6 +972,7 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
         (Expr.app (Expr.lam (N.shift _ (Γa.length + 1))) ((Expr.lam b).shift _ _)) _
       rw [hb]
       exact .letPoly b hcl hV eN
+  | alpha _ hα ih => intro Γa Γb hΓ; exact .alpha (ih Γa Γb hΓ) hα
 
 end BoCa.Fig16.LogRel.Core
 

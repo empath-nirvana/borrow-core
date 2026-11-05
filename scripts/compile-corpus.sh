@@ -14,6 +14,7 @@
 # when either is 0.)
 #
 #     scripts/compile-corpus.sh [--source] [file.bc…]   check the corpus, or the files named
+#     scripts/compile-corpus.sh --final [file.bc…]      the final target only (`make gate`)
 #     scripts/compile-corpus.sh --write-goldens [file.bc…]
 #     scripts/compile-corpus.sh --write-counts [file.bc…]
 #
@@ -23,6 +24,11 @@
 # did not change. With `--source` (or `BCC_SOURCE=1`) it runs on every program, and must print
 # the golden: `make gate-full` re-verifies every golden this way. With `BCC_SOURCE=0` it never
 # runs (`ci-local.sh --changed`), and the unverified programs are listed.
+#
+# `--final` (`make gate`) runs WebAssembly only (and the source stage where it runs, as above),
+# and no counts: the output, standard error, exit status and `live 0` of every program at the
+# final target. A program whose WebAssembly run differs is then run at the clos and flat stages,
+# and the first stage that differs is named.
 #
 # `--write-goldens` (`make goldens`) writes `<name>.out`, `<name>.err` (removed when empty) and
 # `<name>.status` (removed when `0`) from the source stage, and only from it: a golden is never a
@@ -60,8 +66,9 @@
 # entry ends with (`# …`) and the file's header.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-usage() { echo "usage: scripts/compile-corpus.sh [--source | --write-goldens | --write-counts] [file.bc…]"; exit 2; }
+usage() { echo "usage: scripts/compile-corpus.sh [--source] [--final] [--write-goldens | --write-counts] [file.bc…]"; exit 2; }
 export write=0
+export final=0
 goldens=0
 files=()
 while [ $# -gt 0 ]; do
@@ -69,12 +76,14 @@ while [ $# -gt 0 ]; do
     --write-counts) write=1 ;;
     --write-goldens) goldens=1 ;;
     --source) export BCC_SOURCE=1 ;;
+    --final) final=1 ;;
     -*) usage ;;
     *) files+=("$1") ;;
   esac
   shift
 done
 [ "$write" = 0 ] || [ "$goldens" = 0 ] || usage
+[ "$final" = 0 ] || [ "$write" = 0 ] || usage
 named=1
 [ ${#files[@]} -gt 0 ] || { named=0; files=(corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc corpus/leetcode/*/*.bc); }
 for f in "${files[@]}"; do [ -f "$f" ] || { echo "$f: no such file"; exit 2; }; done
@@ -190,6 +199,17 @@ withSource() {
     *) unverified "$f" "$base.in" "$base.out" "$base.err" "$base.status" ;;
   esac
 }
+# --final: after program $1's WebAssembly run differs (on input $2, standard error golden $3),
+# the first of the clos and flat stages that differs from the golden, if either does.
+localise() {
+  local st
+  for st in clos flat; do
+    if ! runStage "$st" "$1" "$2" || ! cmp -s "$w/out" "${1%.bc}.out" || ! cmp -s "$w/err" "$3"; then
+      echo "  localised: the $st stage differs already"; return 0
+    fi
+  done
+  echo "  localised: the clos and flat stages agree with the golden; WebAssembly alone differs"
+}
 # One corpus program, run at every stage and counted (in parallel, by `par`; its scratch
 # directory is $PAR_TMP).
 program() {
@@ -204,6 +224,7 @@ program() {
   err=/dev/null; [ -f "$base.err" ] && err="$base.err"
   ok=1
   stages="clos flat wasm"
+  [ "$final" = 0 ] || stages="wasm"
   local old=1
   if grep -q '^-- check: old-backend-refuses' "$f"; then
     old=0; stages=""
@@ -221,7 +242,9 @@ program() {
   fi
   for st in $stages; do
     if ! runStage "$st" "$f" "$in"; then
-      echo "$f: stage $st fails, or does not exit with status $(statusOf "$f"): $(head -3 "$w/err")"; ok=0; break
+      echo "$f: stage $st fails, or does not exit with status $(statusOf "$f"): $(head -3 "$w/err")"; ok=0
+      [ "$final" = 0 ] || [ "$st" != wasm ] || localise "$f" "$in" "$err"
+      break
     fi
     if ! cmp -s "$w/out" "$base.out" || ! cmp -s "$w/err" "$err"; then
       echo "$f: stage $st differs from $base.out or from its standard error"
@@ -230,13 +253,16 @@ program() {
         echo "  the golden is not the reference semantics: if the program's new output is intended, write it with"
         echo "  \`scripts/compile-corpus.sh --write-goldens $f\` and check it with \`scripts/compile-corpus.sh $f\`"
       fi
-      ok=0; break
+      ok=0
+      [ "$final" = 0 ] || [ "$st" != wasm ] || localise "$f" "$in" "$err"
+      break
     fi
   done
   if [ "$ok" = 1 ] && [ "$(tail -1 "$base.out")" != "live 0" ]; then
     echo "$f: agrees, but leaves objects live"; ok=0
   fi
   if [ "$old" = 0 ]; then cnt="the old backend refuses it"
+  elif [ "$final" = 1 ]; then cnt="not counted (--final)"
   elif [ "$ok" = 1 ] && ! counts "$f" "$in"; then ok=0; fi
   [ "$ok" = 1 ] || return 1
   echo "$f: $(wc -c < "$base.out" | tr -d ' ') bytes as $base.out at $(echo $stages | tr ' ' ,)$note | live 0 | $cnt"
@@ -245,6 +271,7 @@ program() {
 # interpreter takes about a minute on it, so it runs beside the corpus.)
 bigcat() {
   local w=$tmp/bigcat st ok=1 stages="clos flat wasm"
+  [ "$final" = 0 ] || stages="wasm"
   mkdir -p "$w"
   awk 'BEGIN { for (i = 0; i < 90; i++) printf "line %02d of a long input, copied byte for byte by cat.\n", i }' \
     > "$w/big.in"
@@ -256,7 +283,7 @@ bigcat() {
   done
   if [ "$ok" = 1 ]; then echo "corpus/io-cat.bc: a $(wc -c < "$w/big.in" | tr -d ' ')-byte input copied whole at $(echo $stages | tr ' ' ,)"; else return 1; fi
 }
-export -f counts runStage withSource runnable program argsOf statusOf
+export -f counts runStage withSource runnable program localise argsOf statusOf
 bigpid=""
 case " ${files[*]} " in *" corpus/io-cat.bc "*) bigcat > "$tmp/bigcat.log" 2>&1 & bigpid=$! ;; esac
 par program "${files[@]}"

@@ -217,7 +217,9 @@ def withCopiesC {m : Type → Type} [Monad m] [MonadExceptOf Error m] {Δ : Life
     m (Res Δ T (.comp C)) := do
   if xs.isEmpty then k E E T else
   let ⟨C', r⟩ ← withCopies sp xs E E T fun E₁ E₂ T' => do pure ⟨C, ← k E₁ E₂ T'⟩
-  if h : C' = C then pure (h ▸ r) else throw ⟨sp, "internal error: a derived copy's type"⟩
+  match convComp (at_ sp) C ⟨C', r⟩ with
+  | .ok r => pure r
+  | .error _ => throw ⟨sp, "internal error: a derived copy's type"⟩
 
 /-- `withCopies` at a value: `run (copies; return V)`, by `ofRet`; the value as it is when nothing
 is copied. -/
@@ -238,6 +240,8 @@ def withCopiesVC {m : Type → Type} [Monad m] [MonadExceptOf Error m] {Δ : Lif
     m (Res Δ T (.val A)) := do
   if xs.isEmpty then k E E T else
   let ⟨A', r⟩ ← withCopiesV sp xs E T fun E₁ E₂ T' => do pure ⟨A, ← k E₁ E₂ T'⟩
-  if h : A' = A then pure (h ▸ r) else throw ⟨sp, "internal error: a derived copy's type"⟩
+  match convVal (at_ sp) A ⟨A', r⟩ with
+  | some r => pure r
+  | none => throw ⟨sp, "internal error: a derived copy's type"⟩
 
 end Frontend.Check

@@ -742,7 +742,7 @@ theorem d_tickProg (n : ℕ) :
   refine .bind .nil (.ret (.unitI .nil)) ?_
   refine .bind (.right .nil)
     (.ret (.bangE (.lolliE (deadSplit (.cons .nil)) (d_tickStep (.cons .nil))
-      (.unfoldN TickC .unit tickC_nuOk (Ctx.Dead.cons Ctx.Dead.nil).toP)))) ?_
+      (.unfoldN TickC .unit tickC_nuOk (CTy.BindsFresh.of_hasAll rfl _) (Ctx.Dead.cons Ctx.Dead.nil).toP)))) ?_
   refine .bind (.left (.left .nil))
     (.ret (.thunkV rfl (.nuIn tickC_nuOk (.withI (.proj₁ (.nuOut tickC_nuOk d_fs))
       (.proj₂ (.nuOut tickC_nuOk d_fs)))))) ?_
@@ -1035,6 +1035,7 @@ theorem d_tickAnsProg (n : ℕ) :
       (by rw [CTy.loopBody_instT .zero (.ref Flag) (.ref Flag)]
           exact d_tickAnsStep (Ctx.Dead.cons Ctx.Dead.nil))
       (.unfoldN (CTy.loopBody .zero (.ref Flag)) (.ref Flag) (CTy.loopBody_nuOk _ _)
+        (CTy.BindsFresh.of_hasAll rfl _)
         (Ctx.Dead.cons Ctx.Dead.nil).toP)))) ?_
   refine .bind (.left (.left .nil))
     (.ret (.thunkV rfl (.loopIn (.withI (.proj₁ (.loopOut d_fs)) (.proj₂ (.loopOut d_fs)))))) ?_

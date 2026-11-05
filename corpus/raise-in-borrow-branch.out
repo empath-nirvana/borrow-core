@@ -1,0 +1,2 @@
+(inr i32[0], (inl i32[4], (inr (inl ()), inl i32[4])))
+live 0

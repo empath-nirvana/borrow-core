@@ -49,7 +49,7 @@ abbrev cloUnfoldV (c : Lifetime.Life) (A B : VTy) : Val := unfoldV (cloBody c A 
 
 theorem CDerives.cloUnfold {Γ : Ctx VTy} {c : Lifetime.Life} {A : VTy} (hA : A.Cl 0) (B S : VTy)
     (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ (.val (cloUnfoldV c A B)) (.val (cloUnfoldTy c A B S)) := by
-  have h := CDerives.unfoldN (Δ := Δ) (cloBody c A B) S (cloBody_nuOk hA c B) hΓ
+  have h := CDerives.unfoldN (Δ := Δ) (cloBody c A B) S (cloBody_nuOk hA c B) (CTy.BindsFresh.of_hasAll rfl S) hΓ
   rwa [unfoldTy, cloBody_instT] at h
 
 /-! ### Outlives of contexts -/

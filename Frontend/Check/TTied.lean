@@ -268,6 +268,11 @@ theorem nuOut {p : Pins} {s : CRow} {t : TExpr} {C : CCTy} (hC : C.NuOk)
     (h : TTied p s Δ Γ t (.comp (.nu C))) : TTied p s Δ Γ (.nuOut i (.comp C.unroll) C t) (.comp C.unroll) :=
   ⟨fun hn Ξ hΞ => .nuOut hC (h.1 hn Ξ hΞ), .nuOut hC h.2⟩
 
+/-- `[α]`: the judgment up to the names of its types' lifetime binders.  `[spec §3]` -/
+theorem alpha {p : Pins} {s : CRow} {t : TExpr} {j j' : Jdg} (hα : j.alphaB j' = true)
+    (h : TTied p s Δ Γ t j) : TTied p s Δ Γ (.alpha i j' j j' t) j' :=
+  ⟨fun hn Ξ hΞ => .alpha (h.1 hn Ξ hΞ) hα, .alpha h.2 hα⟩
+
 /-! ### The effect rules -/
 
 theorem effSub {p : Pins} {s : CRow} {t : TExpr} {S S' : CRow} {A : CVTy}

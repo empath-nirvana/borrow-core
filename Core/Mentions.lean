@@ -205,7 +205,7 @@ theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
   | sumI₁ _ ih | sumI₂ _ ih => intro k hk; exact ih k (by simpa [mentions] using hk)
   | thunkV _ _ ih | ret _ ih | bangE _ ih | boxI _ _ ih | boxE _ ih | immSub _ _ ih
   | mutSub _ _ ih | ofRet _ ih | roll _ _ _ ih | unroll _ ih | nuIn _ _ ih | nuOut _ _ ih
-  | effSub _ _ ih | bangThunkV _ _ _ ih => exact ih
+  | effSub _ _ ih | bangThunkV _ _ _ ih | alpha _ _ ih => exact ih
   | thunkF _ ih | lamDead _ ih | allI _ _ _ _ ih | bangThunkF _ _ ih =>
       intro k hk
       exact Ctx.liveAt_cons_succ.mp (ih (k + 1) (by simpa [mentions, Expr.val, Val.lam] using hk))

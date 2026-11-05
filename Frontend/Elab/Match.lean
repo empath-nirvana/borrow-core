@@ -10,7 +10,7 @@ type arguments of an operation and of a generic call (`Frontend/Elab/Instances.l
 
 namespace Frontend.Sugar
 open Frontend.Elab (TCx)
-open Frontend.Check (CVTy CCTy)
+open Frontend.Check (CVTy CCTy tyEqV tyEqC)
 
 /-! #### Generic calls
 
@@ -71,17 +71,17 @@ not a lifetime parameter of the call matches any lifetime: the checker decides i
 def matchV (m : MatchSt) (d : Nat) : CVTy → CVTy → Option MatchSt
   | .tvar i, t =>
     if i ≥ phBase + d then match m.ty[i - phBase - d]? with
-      | some (some u) => if u = t then some m else none
+      | some (some u) => if tyEqV u t then some m else none
       | some none => some { m with ty := m.ty.set! (i - phBase - d) (some t) }
       | none => none
-    else if t = .tvar i then some m else none
+    else if tyEqV t (.tvar i) then some m else none
   | .tensor A B, .tensor A' B' | .sum A B, .sum A' B' => (matchV m d A A').bind (matchV · d B B')
   | .thunk C, .thunk C' => matchC m d C C'
   | .mu A, .mu A' => matchV m (d + 1) A A'
   | .ref A, .ref A' | .bang A, .bang A' | .fam A, .fam A' => matchV m d A A'
   | .imm a A, .imm a' A' | .mut a A, .mut a' A' | .box a A, .box a' A' =>
     matchV (matchLife m a a') d A A'
-  | p, t => if p = t then some m else none
+  | p, t => if tyEqV p t then some m else none
 
 /-- `t` matches the computation-type pattern `p`. -/
 def matchC (m : MatchSt) (d : Nat) : CCTy → CCTy → Option MatchSt
@@ -95,7 +95,7 @@ def matchC (m : MatchSt) (d : Nat) : CCTy → CCTy → Option MatchSt
       (matchV m d A A').bind fun m => (matchV m d B B').bind fun m =>
         (matchC m d fin fin').bind (matchC · d C C')
     else none
-  | p, t => if p = t then some m else none
+  | p, t => if tyEqC p t then some m else none
 end
 
 mutual

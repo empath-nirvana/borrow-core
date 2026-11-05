@@ -106,14 +106,14 @@ def recOps (k : SiteKind) (ents Es : List (CQual × CVTy × CVTy)) : List (CQual
 /-- **The site of a `handle` node**, from the record of the elaboration of effects the node
 carries (`SiteRec`), its types elaborated here, in the frame of the node's code; `none` at a node
 with no record (one the program writes in core). The record names the node's name, and its
-operations are the node's `E`, the operations the derivation handles (`recOps`,
-`siteOf_ops`): a record that does not is an internal error.  `[spec §19]` -/
+operations are the node's `E` up to `[α]` (`tyEqEnts`), the operations the derivation handles
+(`recOps`, `siteOf_ops`): a record that does not is an internal error.  `[spec §19]` -/
 def siteOf (E : Env) (Δ : LifeCtx) (sp : Span) (n : Nat) (st : Option SiteRec)
     (Es : List (CQual × CVTy × CVTy)) : Except Error (Option HSite) := do
   let some r := st | return none
   unless r.n == n do throw (siteErr sp r s!"is at the `handle` node of the name {n}")
   let ents ← siteEnts E Δ sp r
-  unless recOps r.kind ents Es == Es do
+  unless tyEqEnts (recOps r.kind ents Es) Es do
     throw (siteErr sp r "does not have its `handle` node's operations")
   let args ← r.args.mapM (siteTy E Δ sp r)
   let state ← r.state.mapM fun (x, A) => do pure (x, ← siteTy E Δ sp r A)
@@ -121,11 +121,11 @@ def siteOf (E : Env) (Δ : LifeCtx) (sp : Span) (n : Nat) (st : Option SiteRec)
 
 /-- **A site's record has its node's operations**: when `siteOf` gives the node a site, the
 record the node carries names the node, and its operations, elaborated in the node's frame, are
-the node's `E` (at a `for`'s site, with the threaded variables).  `[spec §19]` -/
+the node's `E` up to `[α]` (at a `for`'s site, with the threaded variables).  `[spec §19]` -/
 theorem siteOf_ops {E : Env} {Δ : LifeCtx} {sp : Span} {n : Nat} {st : Option SiteRec}
     {Es : List (CQual × CVTy × CVTy)} {s : HSite} (h : siteOf E Δ sp n st Es = .ok (some s)) :
     ∃ r ents, st = some r ∧ r.n = n ∧ siteEnts E Δ sp r = .ok ents ∧
-      recOps r.kind ents Es = Es ∧ s.kind = r.kind ∧ s.eff = r.eff := by
+      tyEqEnts (recOps r.kind ents Es) Es = true ∧ s.kind = r.kind ∧ s.eff = r.eff := by
   cases st with
   | none => simp [siteOf, pure, Except.pure] at h
   | some r =>
@@ -471,15 +471,22 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       | none => err hr.span (s!"the answer clause {what hr "of the handler"} must have a type " ++
           s!"`!U(A -o F[…] R)`, but it has type `{E.ppV Tr}`")
       | some ⟨S, A, R, hr'⟩ =>
+        match clausesReadAt S R Tc with
+        | none => err hc.span (s!"the clauses {what hc "of the handler"} must have " ++
+            s!"the type of a handler's clauses at `F{ppRow E S} {E.ppV R}`, but they have " ++
+            s!"type `{E.ppV Tc}`")
+        | some rd =>
+        -- The clauses at the type their reading rebuilds, up to `[α]` (`convVal`).
+        match convVal (at_ hc.span) (rd.ty S R) ⟨Tc, rc⟩ with
+        | none => err hc.span "internal error: a handler's clauses at their reading"
+        | some rc =>
         if hov : overlapOK T rr.F.u rc.F.u = true then
           let rH := rPair (at_ sp) rr rc hov
           if hp : usedSat BoCa.Fig16.LogRel.Core.VTy.persistent T rH.F.u = true then
             if hv : valFormB rH.F.u rH.t.erase = true then
-              match clausesReadBoxed S R Tc, clausesRead S R Tc with
-              | none, none => err hc.span (s!"the clauses {what hc "of the handler"} must have " ++
-                  s!"the type of a handler's clauses at `F{ppRow E S} {E.ppV R}`, but they have " ++
-                  s!"type `{E.ppV Tc}`")
-              | some ⟨d, Es, hc'⟩, _ =>
+              match hrd : rd with
+              | .boxed d Es =>
+                let hc' : BoCa.Fig16.LogRel.Core.clausesTyB S R d Es = rd.ty S R := by rw [hrd]; rfl
                 -- BOXED-κ (SPEC §28): the clauses receive `κ` boxed at `@d`.
                 if k < 2 ^ 32 ∧ k ≠ 0 then
                   let nm := UInt32.ofNat k
@@ -516,7 +523,8 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                     else err sp s!"the name {k} is already in the row `{ppRow E S}` of the handler's answer"
                   else err sp "a handler's name is not 0"
                 else err sp s!"a handler's name is between 1 and 2^32 - 1, not {k}"
-              | none, some ⟨Es, hc'⟩ =>
+              | .plain Es =>
+                let hc' : BoCa.Fig16.LogRel.Core.clausesTy S R Es = rd.ty S R := by rw [hrd]; rfl
                 if k < 2 ^ 32 ∧ k ≠ 0 then
                   let nm := UInt32.ofNat k
                   if hn0 : nm ≠ 0 then
@@ -642,10 +650,13 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       | C, _ => err M.span s!"this is instantiated, so it must have a type `forall 'x < @. C`, but it has type `{E.ppC C}`"
     | .nuIn sp M => do
       let ⟨C, r⟩ ← synC n E Δ T M
-      match (CTy.nuThunks C).find? (fun B => CTy.nuOkB B && decide (B.unroll = C)) with
+      -- The `ν` type whose unrolling `M`'s type is, up to `[α]` (`tyEqC`, `convComp`).
+      match (CTy.nuThunks C).find? (fun B => CTy.nuOkB B && tyEqC C B.unroll) with
       | some B =>
-        if h : CTy.nuOkB B = true ∧ B.unroll = C then
-          pure ⟨_, rNuIn (at_ sp) (CTy.nuOkB_sound B h.1) (h.2 ▸ r)⟩
+        if h : CTy.nuOkB B = true then
+          match convComp (at_ sp) B.unroll ⟨C, r⟩ with
+          | .ok r => pure ⟨_, rNuIn (at_ sp) (CTy.nuOkB_sound B h) r⟩
+          | .error _ => err sp s!"`nu_in M` needs `M` at the unrolling of a `nu` type, but `M : {E.ppC C}`"
         else err sp s!"`nu_in M` needs `M` at the unrolling of a `nu` type, but `M : {E.ppC C}`"
       | none => err sp s!"`nu_in M` needs `M` at the unrolling of a `nu` type, but `M : {E.ppC C}`"
     | .nuOut sp M => do
@@ -662,16 +673,17 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
     | .withbor2r sp x b A B r p m M => do
       -- R1, the relaxed lend (SPEC §29): its body sees the view alone.
       let bl ← E.elabL Δ b
-      let A' ← E.elabV Δ A
+      let Aw ← E.elabV Δ A
       let B' ← E.elabV Δ B
       let S ← E.elabRow Δ sp r
       let v := Δ.freshVar
-      let ⟨⟨hx, hT, hB⟩⟩ ← freshFor sp v A' B'
       let some i := lookupVar p.name E.vars
         | err p.span s!"`withbor2r` lends a variable, and `{p.name}` is not one in scope"
       match hi : T[i]? with
-      | some (.ref A'') =>
-        if hA : A'' = A' then
+      | some (.ref A') =>
+        -- The annotation `A` is the cell's type `A'` up to `[α]` (`tyEqV`); the lend is at `A'`.
+        if tyEqV A' Aw then
+          let ⟨⟨hx, hT, hB⟩⟩ ← freshFor sp v A' B'
           if hwf : bl.wf Δ = true then
             if hbx : bl.mentions v = false then
               if hΔx : boundsAvoidB Δ v = true then
@@ -688,7 +700,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                       if hM1 : BoCa.Fig16.LogRel.Core.closedAt 1 rM.e = true then
                         if hcb : BoCa.Fig16.LogRel.Core.closedAt 0 (BoCa.Fig16.LogRel.Core.lendCb rM.e).1 = true then
                           if h : overlapOK T (Fam.deadStrict T).u (oneL T i) = true then
-                            pure ⟨_, rLendR (at_ sp) ⟨"R1", sp.start.line, sp.start.col⟩ v bl i (hA ▸ hi)
+                            pure ⟨_, rLendR (at_ sp) ⟨"R1", sp.start.line, sp.start.col⟩ v bl i hi
                               (defines_of_wf hwf) hx hbx (boundsAvoidB_sound hΔx) hT hB
                               (noThunkB_sound hBn) hside (Row.resumeOCB_sound hS) hdt hdc hde rM hL hM1
                               hcb h⟩
@@ -706,7 +718,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
               else err sp s!"`withbor2r`: its number {ppLVar v} occurs in a bound of the lifetime context"
             else err sp s!"`withbor2r`: its bound mentions its own number {ppLVar v}"
           else err sp s!"`withbor2r`: the bound `{E.ppL bl}` is not defined here"
-        else throw (mismatch p.span (E.ppV (.ref A')) (E.ppV (.ref A'')))
+        else throw (mismatch p.span (E.ppV (.ref Aw)) (E.ppV (.ref A')))
       | some A'' => err p.span s!"`withbor2r` lends an owned cell `ref A`, but `{p.name} : {E.ppV A''}`"
       | none => err sp "internal error: variable out of range"
 
@@ -730,10 +742,8 @@ def bindHead : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → O
       pure ⟨A', [], r⟩
   | n + 1, E, Δ, T, _, none, M => do
     let ⟨C, r⟩ ← synC n E Δ T M
-    match effRow? C with
-    | some (S, A) =>
-      if h : effOf S A = C then pure ⟨A, S, h ▸ r⟩
-      else err M.span "internal error: a returner chain"
+    match effRowOf? C with
+    | some ⟨S, A, h⟩ => pure ⟨A, S, h ▸ r⟩
     | none => err M.span s!"a bound computation must have a type `F A`, but this has type `{E.ppC C}`"
 
 /-- `abort[k.i] V` at the answer `B`: an abortive operation of the current row (SPEC §19's abortive rule). -/
@@ -766,12 +776,10 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
       match C with
       | .ret A => do pure (rRet (at_ sp) (← chkV n E Δ T V A))
       | C =>
-        match effRow? C with
-        | some (S, A) =>
-          if hC : effOf S A = C then do
-            let r : Res Δ T (.comp (effOf [] A)) := rRet (at_ sp) (← chkV n E Δ T V A)
-            pure (hC ▸ rEffSub (at_ sp) (S := []) rfl r)
-          else err sp "internal error: a returner chain"
+        match effRowOf? C with
+        | some ⟨_, A, hC⟩ => do
+          let r : Res Δ T (.comp (effOf [] A)) := rRet (at_ sp) (← chkV n E Δ T V A)
+          pure (hC ▸ rEffSub (at_ sp) (S := []) rfl r)
         | none => err sp s!"`return V` is checked against `{E.ppC C}`, which is not an `F` type"
     | .bind sp x oA M N =>
       withCopiesC sp (E.copyVars T (mentionsC · M) (fun z => x.name != z && mentionsC z N)) E T C
@@ -787,19 +795,16 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
         else throw (splitErr E T sp rM.F.u FN.u)
       | o :: os, rM =>
         -- The head performs operations (SPEC §19): the binding is at the row of `C`.
-        match effRow? C with
-        | some (S, B) =>
-          if hC : effOf S B = C then do
-            let rM' ← liftRow E M.span S rM
-            let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A) Δ (A :: T) N (effOf S B)
-            pure (hC ▸ (← effBind E sp x rM' rN))
-          else err sp "internal error: a returner chain"
+        match effRowOf? C with
+        | some ⟨S, B, hC⟩ => do
+          let rM' ← liftRow E M.span S rM
+          let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A) Δ (A :: T) N (effOf S B)
+          pure (hC ▸ (← effBind E sp x rM' rN))
         | none => err sp (s!"the bound computation performs the operations " ++
             s!"`{ppRow E (o :: os)}`, so this must have a type `F[…] B`, but `{E.ppC C}` is expected")
     | .unwind sp x oA M D N =>
-      match effRow? C with
-      | some (S, B) =>
-        if hC : effOf S B = C then
+      match effRowOf? C with
+      | some ⟨S, B, hC⟩ =>
           withCopiesC sp (E.copyVars T (mentionsC · M)
               (fun z => mentionsC z D || (x.name != z && mentionsC z N))) E T C fun E₁ E T => do
           let ⟨A, _, rM⟩ ← bindHead n (E₁.ownIn (mentionsC · M)) Δ T sp oA M
@@ -810,23 +815,24 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
           let rN ← consumeStuck x.span 1 rN
           let FN ← popL E x.span x.name rN.F
           pure (hC ▸ (← thenIt E sp x.name rM' FN rD))
-        else err sp "internal error: a returner chain"
       | none => err sp s!"`x <- M unwind (D); N` is checked against `{E.ppC C}`, which is not `F[…] B`"
     | .abort sp k i V =>
       match effRow? C with
       | some (_, B) => do
-        let ⟨S', r⟩ ← abortIt n E Δ T sp k i V B
-        if hC : effOf S' B = C then pure (hC ▸ r)
-        else err sp s!"internal error: the row of `{E.ppC C}`"
+        let ⟨_, r⟩ ← abortIt n E Δ T sp k i V B
+        -- At `C`'s own row (`E.atC`): the conversion is the identity.
+        convC E sp C ⟨_, r⟩
       | none => err sp s!"`abort[{k}.{i}] V` is checked against `{E.ppC C}`, which is not `F[…] B`"
     | .lam sp x A M =>
       match C with
       | .arr A₀ C => do
         let A' ← E.elabV Δ A
-        if hA : A' = A₀ then do
-          let rM ← chkC n (E.pushOwn x.name A') Δ (A' :: T) M C
-          pure (hA ▸ (← lamIt E sp x rM))
-        else err A.span s!"the binder is annotated `{E.ppV A'}`, but the expected type is `{E.ppV A₀} -o …`"
+        -- Checked at the annotation, then at `A₀ -o C` up to `[α]` (`convComp`).
+        let rM ← chkC n (E.pushOwn x.name A') Δ (A' :: T) M C
+        let rL ← lamIt E sp x rM
+        match convComp (at_ sp) (.arr A₀ C) ⟨_, rL⟩ with
+        | .ok r => pure r
+        | .error _ => err A.span s!"the binder is annotated `{E.ppV A'}`, but the expected type is `{E.ppV A₀} -o …`"
       | C => err sp s!"`fun` is checked against `{E.ppC C}`, which is not a `-o` type"
     | .with_ sp M N =>
       match C with

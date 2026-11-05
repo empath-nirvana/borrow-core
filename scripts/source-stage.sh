@@ -12,8 +12,8 @@
 # Unverified: the program or its golden differs from the merge base with origin/main (or from the
 # commit `CI_LOCAL_BASE` names), or is new. Committed, staged, unstaged and untracked changes
 # all count. An unchanged program and golden were checked at the source stage by the gate that
-# merged them (the full gate runs the source stage whenever the interpreter or the compiler
-# changes: `ci-local.sh`), so they agree with the reference semantics. Without a merge base,
+# merged them (`make gate-full`, which runs the source stage on every program, is required whenever
+# the interpreter or the compiler changes: `ci-local.sh`), so they agree with the reference semantics. Without a merge base,
 # every golden is unverified.
 BCC_SOURCE=${BCC_SOURCE:-}
 source_base=""

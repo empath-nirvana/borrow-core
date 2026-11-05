@@ -1,0 +1,20 @@
+-- SPEC §3 (#808): a `fun` whose binder is annotated with its expected type up to `[α]`. `apply`'s
+-- parameter `k : (all 'x < top. i32) => i32` is elaborated after `'a` and instantiated at the
+-- call's `'w`; the argument `fun (g : all 'x < top. i32) -> …` is written inside the lend, after
+-- `'w`, so the two binders' names differ. The `fun` is checked at its annotation, then carried to
+-- the expected type by `[α]`.
+--
+-- Answer: see `alpha-lam-binder.out`: `k` is called on a `Fun` answering 1, so `apply` answers 1,
+-- and the buffer is freed at 41: 1 * 100 + 41; `live 0`.
+
+fn apply<'a>(k: (all 'x < top. i32) => i32, b: imm 'a i32) -> i32 =
+  v <- return (*b);
+  return (release_imm['a, i32] b);
+  g0 <- return (thunkv Fun 'y < top. return i32[1]);
+  force k g0
+
+main -> i32 =
+  let buf = alloc(41);
+  let r = borrow imm buf { 'w, b -> apply(thunkv fun (g : all 'x < top. i32) -> (force g)['w], b) };
+  let v = free(buf);
+  r * 100 + v
