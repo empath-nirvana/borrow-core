@@ -94,15 +94,18 @@ structure Valid (g : GRes) : Prop where
   wrF_one : ∀ a r r', 0 < g.wrF a r → 0 < g.wrF a r' → r = r'
   tokF_agree : ∀ m a r, 0 < g.auth m → 0 < g.tokF a r → m a = some r
   wrF_agree : ∀ m a r, 0 < g.auth m → 0 < g.wrF a r → m a = some r
+  /-- Finitely many lifetimes have a token, so a fresh one can be minted. -/
+  fin : {α | 0 < g.tok α}.Finite
 
 theorem valid_zero : (0 : GRes).Valid :=
   ⟨fun _ => by simp, fun _ => by simp, fun _ => by simp, fun _ _ h => by simp at h,
     fun _ _ => by simp, fun _ _ _ h => by simp at h, fun _ _ => by simp,
-    fun _ _ _ h => by simp at h, fun _ _ _ h => by simp at h, fun _ _ _ h => by simp at h⟩
+    fun _ _ _ h => by simp at h, fun _ _ _ h => by simp at h, fun _ _ _ h => by simp at h,
+    Set.finite_empty.subset (fun α h => by simp at h)⟩
 
 /-- **Validity is downward closed.** -/
 theorem Valid.left {g h : GRes} (hv : (g + h).Valid) : g.Valid := by
-  obtain ⟨t, x, al, ao, tl, tz, wl, wo, ta, wa⟩ := hv
+  obtain ⟨t, x, al, ao, tl, tz, wl, wo, ta, wa, fi⟩ := hv
   refine ⟨fun α => le_trans le_self_add (t α), fun l => le_trans (Nat.le_add_right _ _) (x l),
     fun m => le_trans (Nat.le_add_right _ _) (al m), fun m m' h₁ h₂ => ao m m' (by simp; omega)
       (by simp; omega), fun a r => le_trans (Nat.le_add_right _ _) (tl a r),
@@ -110,7 +113,8 @@ theorem Valid.left {g h : GRes} (hv : (g + h).Valid) : g.Valid := by
     fun a r => le_trans (Nat.le_add_right _ _) (wl a r),
     fun a r r' h₁ h₂ => wo a r r' (by simp; omega) (by simp; omega),
     fun m a r h₁ h₂ => ta m a r (by simp; omega) (by simp; omega),
-    fun m a r h₁ h₂ => wa m a r (by simp; omega) (by simp; omega)⟩
+    fun m a r h₁ h₂ => wa m a r (by simp; omega) (by simp; omega),
+    fi.subset (fun α hα => lt_of_lt_of_le hα (show g.tok α ≤ g.tok α + h.tok α from le_self_add))⟩
 
 theorem Valid.right {g h : GRes} (hv : (g + h).Valid) : h.Valid :=
   Valid.left (by rwa [add_comm] at hv)
@@ -145,18 +149,40 @@ def life (α : Life) : GRes :=
 /-- `[α]_1` composes with anything holding no fraction of `α`. -/
 theorem valid_add_life {g : GRes} (hv : g.Valid) {α : Life} (h0 : g.tok α = 0) :
     (g + life α).Valid := by
-  obtain ⟨t, x, al, ao, tl, tz, wl, wo, ta, wa⟩ := hv
-  refine ⟨fun β => ?_, fun l => by simpa using x l, fun m => by simpa using al m,
+  obtain ⟨t, x, al, ao, tl, tz, wl, wo, ta, wa, fi⟩ := hv
+  have ht : ∀ β, (g + life α).tok β ≤ 1 := by
+    intro β
+    by_cases hβ : β = α
+    · subst hβ; simp [h0]
+    · simpa [hβ] using t β
+  have hfi : {β | 0 < (g + life α).tok β}.Finite := by
+    refine (fi.union (Set.finite_singleton α)).subset (fun β hβ => ?_)
+    by_cases hβα : β = α
+    · exact Or.inr hβα
+    · exact Or.inl (by simpa [hβα] using hβ)
+  exact ⟨ht, fun l => by simpa using x l, fun m => by simpa using al m,
     fun m m' h₁ h₂ => ao m m' (by simpa using h₁) (by simpa using h₂),
     fun a r => by simpa using tl a r,
     fun a r r' h₁ h₂ => tz a r r' (by simpa using h₁) (by simpa using h₂),
     fun a r => by simpa using wl a r,
     fun a r r' h₁ h₂ => wo a r r' (by simpa using h₁) (by simpa using h₂),
     fun m a r h₁ h₂ => ta m a r (by simpa using h₁) (by simpa using h₂),
-    fun m a r h₁ h₂ => wa m a r (by simpa using h₁) (by simpa using h₂)⟩
-  by_cases hβ : β = α
-  · subst hβ; simp [h0]
-  · simpa [hβ] using t β
+    fun m a r h₁ h₂ => wa m a r (by simpa using h₁) (by simpa using h₂), hfi⟩
+
+/-- **A fresh lifetime**: below any given one and with no token in a valid `g`. -/
+theorem exists_fresh_life {g : GRes} (hv : g.Valid) (a : Life) :
+    ∃ A : Life, A < a ∧ g.tok A = 0 := by
+  obtain ⟨N, hN⟩ := (hv.fin.image OrderDual.ofDual).bddAbove
+  refine ⟨OrderDual.toDual (max N (OrderDual.ofDual a) + 1), ?_, ?_⟩
+  · show OrderDual.ofDual a < max N (OrderDual.ofDual a) + 1
+    omega
+  · by_contra hne
+    have hmem : OrderDual.ofDual (OrderDual.toDual (max N (OrderDual.ofDual a) + 1)) ∈
+        OrderDual.ofDual '' {α | 0 < g.tok α} :=
+      ⟨_, pos_iff_ne_zero.mpr hne, rfl⟩
+    have := hN hmem
+    simp only [OrderDual.ofDual_toDual] at this
+    omega
 
 end GRes
 

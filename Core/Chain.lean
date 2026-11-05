@@ -45,6 +45,7 @@ import Core.Chain.SI.IStopF
 import Core.Chain.SI.IStopN
 import Core.Chain.SI.IStopRaiseN
 import Core.Chain.SI.LendCancelProg
+import Core.Chain.SI.LendX
 import Core.Chain.SI.LendProg
 import Core.Chain.SI.LinDisj
 import Core.Chain.SI.Loop
