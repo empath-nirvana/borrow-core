@@ -328,6 +328,7 @@ open BoCa.Fig16.LogRel (LtLife substAll)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open BoCa.Fig16.Tree.Wp.Goal791 (Const791 ctx791 vals791 jdgC)
 open BoCa.Fig16.LogRel.Core.Chain.SI.Hardest791 (rwp_det'')
+open BoCa.Fig16.LogRel.Core.Chain.SI.LendProg (empty_lendOK)
 open BoCa.BoLo (Heap Kont ubindE Head)
 
 /-- `rwp_mono` reading the postcondition at the indices the runs leave, `≤ n`. -/
@@ -465,6 +466,130 @@ theorem fin_claim {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
   obtain ⟨τ₁, τ₂, hcτ, hP, rfl⟩ := hv
   have := hP Φ hΦ ls' k' le_rfl (Val.loc l) τ₂ τ hcτ ⟨l, w, σ, rfl, hcl, vN_le hk' hF'⟩
   exact rwp_of_erwp_empty this
+
+theorem claimT_fin {Φ : LocFam} {T T₁ : OpTabN} {R : Nat → WProp} {m i : UInt32} {en' : OpEntN}
+    (h : @OpTabN.claimT ℍ _ T Φ T₁ R m i = some en') (hq : en'.q = .cancel) :
+    en'.fin = some (@cancelOblRN ℍ _ Φ T₁ R) := by
+  obtain ⟨en, -, rfl⟩ := claimT_some h
+  by_cases hc : en.q = .cancel
+  · rw [if_pos hc]
+  · rw [if_neg hc] at hq ⊢; exact absurd hq hc
+
+/-- `withborU`'s `then`: `λb. (ℓ, b)`. -/
+def NFv (l : Loc) : Val := Val.lam (.pair (.val (Val.loc l)) (.var 0))
+
+/-- `withborU`'s `unwind`: `λ_. d ℓ`. -/
+def DFv (d : Expr) (l : Loc) : Val := Val.lam (.app d (.val (Val.loc l)))
+
+/-- **`withbor (2)` at a suspending row is a value of `!` its type**: `withborU d`, at
+`Ref A ⊸ (∀'x ⊏ @bnd. Mut 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ(Ref A ⊗ B)` with `Σ` a `Row.Suspend x`
+row: the rule-level form of a `mut` borrow held across a suspension.
+
+The source cell `ℓ ↦ own(w₀) ● σ₀` is lent at a lifetime `α` chosen below the bound, `σ₀`'s
+stratum and the callback's (`ResU.exists_stratum`), at the family of `A`'s values; the callback
+runs at `Φ[ℓ ↦ (α, 𝒱⟦A⟧)]` from the borrow (`erwp_M_frameCR`), its stops folding the borrow into
+the continuation's share, its cancel runs and its raises ending at the lend's claim; the
+finaliser frame `then b. (ℓ, b) unwind d ℓ` consumes the claim with `d` (`erwp_ubindClaimR`,
+`fin_claim`).
+
+Premises, and the rule that supplies each: `hA`, `hB`, `hS`, `hdc` are `withbor2U`'s (with
+`Row.Suspend` for `Row.Unwind`, `Const791.OK`); `hd` is the fundamental property at `d`'s
+derivation, the premise `CDerives Δ Γ d (Ref A ⊸ 1)` read semantically. `hSB` (every answer type
+of the row outlives every lifetime) and `hSF` (every capturable operation's cancel row has no
+layers) are **not** supplied by `Row.Suspend` as `Core/TreeGoal791.lean` states it: see
+`docs/new-core/scope-791-rule.md` §5. -/
+theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Row} {d : Expr}
+    (hA : ¬ VFree x A) (hB : ¬ VFree x B) (hS : S.Suspend x)
+    (hSB : ∀ o ∈ S, ∀ Δ a, VOutlives Δ a o.B)
+    (hSF : ∀ o ∈ S, capB o.q o.B = true → o.fin.NoLayers)
+    (hdc : closedAt 0 d = true)
+    (hd : SemJN (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.ref A) .unit))) (δ : LSub)
+    (n : Nat) : vN (ℍ := ℍ) (.bang (withbor2UTy x bnd A B S)) δ n (withborUV d) PMap.empty := by
+  refine ⟨rfl, fun Φ hΦ ls => ?_⟩
+  intro k hk u ρu ρ' hc hu
+  obtain rfl := eq_of_compS_empty_left hc
+  intro k' hk' f ρf ρ'' hc' hf
+  obtain ⟨l, w₀, σ₀, rfl, hcl, hw₀⟩ := hu
+  rw [cN_effOf]
+  set T := tabN (ℍ := ℍ) (CTy.effOf S (.tensor (.ref A) B)) δ Φ with hTdef
+  have hTd : T.Down := tabN_down _ δ Φ hΦ
+  have hQo : PostN.Down (fun k _ v ρ => vN (ℍ := ℍ) (.tensor (.ref A) B) δ k v ρ) :=
+    fun k _ v ρ h => vN_down _ δ k v ρ h
+  refine erwp_det hΦ (opTableN_down hTd) hQo
+    (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl (.appL .hole f)) ?_
+  refine erwp_det hΦ (opTableN_down hTd) hQo (fun μ => step1Only_plug (Head.beta μ _ f) rfl .hole) ?_
+  have e₃ : Kont.hole.plug (Expr.subst 0 f (Expr.subst (0 + 1) (Val.shift 1 0 (Val.loc l))
+        (thenE ((Expr.var 2).pair (Expr.var 0)) (d.app (Expr.var 2))
+          (((Expr.var 0).app (Expr.val Val.unit)).app (Expr.var 1))))) =
+      ubindE (.pair (NFv l) (DFv d l)) (.app (.app (.val f) (.val .unit)) (.val (Val.loc l))) := by
+    simp [Kont.plug, Expr.subst, Expr.shift, thenE, ubindE, NFv, DFv, Val.shift, Val.pair,
+      Val.loc, Val.lam, Expr.val, Val.prim, Expr.loc,
+      subst_closedAt d (s := _) hdc (Nat.zero_le _)]
+  rw [e₃]
+  -- the lend's lifetime: below the bound, the source's content's stratum and the callback's
+  obtain ⟨γ, hγ⟩ := (hf Φ hΦ ls).1
+  obtain ⟨βP, hβP⟩ := ResU.exists_stratum σ₀
+  obtain ⟨βf, hβf⟩ := ResU.exists_stratum ρf
+  set α : Life := ↓(βP ⊓ βf ⊓ γ) with hαdef
+  have hαlt : α < βP ⊓ βf ⊓ γ := Life.down_sqsubset _
+  have houtP : σ₀.InStratum α := hβP.mono (hαlt.le.trans (inf_le_left.trans inf_le_left))
+  have houtf : ρf.InStratum (↓α) := hβf.mono
+    ((Life.down_sqsubset α).le.trans (hαlt.le.trans (inf_le_left.trans inf_le_right)))
+  have hLt : LtLife δ bnd α := ⟨γ, hγ, lt_of_lt_of_le hαlt inf_le_right⟩
+  set δ' := δ.extend x α with hδ'
+  have hAδ : vN (ℍ := ℍ) A δ' = vN (ℍ := ℍ) A δ := vN_extend_of_not_free hA δ α
+  have hBδ : vN (ℍ := ℍ) B δ' = vN (ℍ := ℍ) B δ := vN_extend_of_not_free hB δ α
+  have hwit : vN (ℍ := ℍ) A δ' k w₀ σ₀ := by rw [hAδ]; exact hw₀
+  set Fam : Nat → Val → SPropS Loc Val α := fun j u r => vN (ℍ := ℍ) A δ' j u r.1 with hFam
+  set Φ' := Φ.set l α Fam with hΦ'
+  have hSAB : ∀ o ∈ S, ¬ VFree x o.A ∧ ¬ VFree x o.B :=
+    fun o ho => ⟨(hS o ho).2.2.1, (hS o ho).2.2.2.1⟩
+  have hTw : (tabN (ℍ := ℍ) (CTy.effOf S (.box (.var x) B)) δ' Φ').Twin
+      (@OpTabN.claimT ℍ _ T Φ OpTabN.empty (claimR l α Fam)) :=
+    OpTabN.Twin.trans (tabN_effOf_twin hSAB _ _ δ Φ' Φ) (claimT_twin T Φ OpTabN.empty _)
+  have hcan := claimT_canX (Φ := Φ) (vN_fam_down A δ' α) (empty_lendOK α) hTw (tabN_fin hSF)
+    (fun m i en h _ => by obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h; exact (hS o ho).1)
+    (fun m i en' h hq => claimT_fin h hq)
+  have hM := erwp_M_frameCR (Φ := Φ) (l := l) (A := α) (F := Fam) (vN_fam_down A δ' α)
+    (tabN_lendOKCR hS hSB _ δ Φ') hTw hcan
+    (Q := fun k _ b ρ => vN (ℍ := ℍ) (.tensor (.ref A) B) δ k (Val.pair (Val.loc l) b) ρ)
+    k' k hk' ls (.app (.app (.val f) (.val .unit)) (.val (Val.loc l))) w₀ σ₀ ρ' ρf ρ'' houtP
+    houtf (Fam k) (fun _ _ h => h) hwit hcl hc' (fun BM hBM => ?_)
+  · refine erwp_ubindClaimR hΦ hTd OpTabN.empty_down
+      (fun _ _ _ h => by simp [OpTabN.empty] at h)
+      (fun m i en h _ => by obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h; exact (hS o ho).1)
+      (fun m i en h _ => by obtain ⟨o, ho, rfl, -⟩ := tabN_effOf_some h; exact (hS o ho).2.1)
+      (fun m i en h k ls ls' v ρ _ hp => by obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h; exact hp)
+      (tabN_fin hSF) (NFv l) (DFv d l) (fun k ls ρ hR => fin_claim hdc hd hAδ hΦ hR) hQo
+      (fun k ls b ρ hq => ?_) k' ls _ ρ'' hM
+    refine erwp_det hΦ (opTableN_down hTd) hQo
+      (fun μ => step1Only_plug (Head.beta μ _ b) rfl .hole) ?_
+    simp [Kont.plug, Expr.subst, NFv]
+    exact erwp_val (v := Val.pair (Val.loc l) b) hq
+  · -- the callback, at `α`, from the borrow
+    have h1 := (hf Φ' (LocFam.set_down hΦ (vN_fam_down A δ' α)) ls).2 α hLt
+    have h2 := h1 k' le_rfl (Val.loc l) _ BM hBM
+      ⟨α, interp_ext_self δ x α, l, w₀, σ₀, houtP, k, hwit, hk', rfl, rfl⟩
+    rw [cN_effOf] at h2
+    refine erwp_mono (fun k ls' b ρ' hb => ?_) (opTableN_local _) k' ls _ BM h2
+    obtain ⟨β, hβ, hbB, hst⟩ := hb
+    rw [interp_ext_self] at hβ
+    cases Option.some.inj hβ
+    refine ⟨hst, fun w Y hY σ ⟨hσ, hFσ⟩ Z hZ => ?_⟩
+    obtain ⟨Wc, hWc, hZ'⟩ :=
+      (ResU.CompS.assoc ρ' (ResU.single l (CellU.ownOf w)) σ Z).mpr ⟨Y, hY, hZ⟩
+    have hwσ : vN (ℍ := ℍ) A δ k w σ := by rw [← hAδ]; exact hFσ
+    have hbB' : vN (ℍ := ℍ) B δ k b ρ' := by rw [← hBδ]; exact hbB
+    exact ⟨Val.loc l, b, Wc, ρ', rfl, ResU.CompS.comm hZ', ⟨l, w, σ, rfl, hWc, hwσ⟩, hbB'⟩
+
+/-- **`ConstN` for `withbor (2)` at a suspending row**, from the fundamental property at the
+finaliser's derivation, under the two row clauses `withbor2S_compat` names. -/
+theorem constN_w2 (hF : FundamentalN (ℍ := ℍ)) {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
+    {S : Row} {d : Expr} (hSB : ∀ o ∈ S, ∀ Δ a, VOutlives Δ a o.B)
+    (hSF : ∀ o ∈ S, capB o.q o.B = true → o.fin.NoLayers) :
+    ConstN (ℍ := ℍ) (.w2 x bnd A B S d) := by
+  rintro ⟨-, hA, hB, hS, hdc, hder⟩ δ n
+  exact withbor2S_compat hA hB hS hSB hSF hdc (hF _ _ _ _ hder) δ n
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 
