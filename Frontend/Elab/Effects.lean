@@ -1,3 +1,4 @@
+import Frontend.Elab.SurfAlpha
 import Frontend.Parser
 import Frontend.Print
 import Frontend.Elab.Subst
@@ -88,7 +89,7 @@ generator).
 -/
 
 namespace Frontend.Elab.Effects
-open Frontend.Check (CVTy)
+open Frontend.Check (CVTy tyEqVs)
 
 /-! ### What is declared -/
 
@@ -535,9 +536,9 @@ where
       | .lapp _ P' a, .lapp _ A' b => if a.strip == b.strip then go k σ P' A' else none
       | P, A => if same P A then some σ else none
 
-/-- `matchTyBy` with types compared as written. -/
+/-- `matchTyBy` with types compared as written, up to the names of their binders (`VTy.alphaEq`). -/
 def matchTy (tps : List String) (σ : TySubst) (P A : VTy) : Option TySubst :=
-  matchTyBy (fun a b => a.strip == b.strip) tps σ P A
+  matchTyBy VTy.alphaEq tps σ P A
 
 /-- The type names `A` mentions among `tps`. -/
 def mentions (tps : List String) (A : VTy) : Bool :=
@@ -564,11 +565,11 @@ def Env.keyOf (env : Env) (As : List VTy) : Option (List CVTy) := do
   As.mapM (Instances.frame c env.ownerTps).elabV
 
 /-- Two lists of type arguments are one instance's: equal as types, or, when they are not types of
-the frame, as written.  `[spec §38]` -/
+the frame, as written, each up to the names of their binders (`tyEqVs`, `alphaEqs`).  `[spec §38]` -/
 def Env.sameArgs (env : Env) (a b : List VTy) : Bool :=
   a.length == b.length && match env.keyOf a, env.keyOf b with
-    | some x, some y => x == y
-    | _, _ => a.map VTy.strip == b.map VTy.strip
+    | some x, some y => tyEqVs x y
+    | _, _ => alphaEqs a b
 
 /-- An instance as the messages write it. -/
 def instText (e : String) (As : List VTy) : String :=
@@ -3196,7 +3197,7 @@ def deepCopy : Nat → Env → Span → String → String → String → EM Stri
     let A := sumTys gsp (G.members.map (·.2.P))
     let some (_, f₀) := G.members.head? | throw ⟨gsp, "internal error: an empty group"⟩
     let B := f₀.T
-    if let some (y, _) := G.members.find? (·.2.T.strip != B.strip) then
+    if let some (y, _) := G.members.find? (!·.2.T.alphaEq B) then
       throw ⟨sp, s!"`{y}` answers a type other than `{x}`'s: members with different result types " ++
         s!"are not provided under the heap driver `{d}`"⟩
     let rs : RSelf := ⟨G.members.map (·.1), 0, "", [], [], [], true⟩

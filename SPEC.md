@@ -362,9 +362,25 @@ term at every type equal to its own up to those names, by one rule of `CDerives`
     empty lifetime context, where binders are numbered by position, so an α-variant spelling
     elaborates to the table's term.
 
-  `scripts/check-type-eq.sh` (a gate step) reads the elaborated declarations under
-  `Frontend/Check/` and refuses any other equality of `VTy`, `CTy`, `OpSig` or a row
-  (`scripts/TypeEq.lean`). The `[α]` node erases to its premise's term, and the backends read
+  The elaborator (`Frontend/Elab/`, `Frontend/Sugar.lean`) compares kernel types through the same
+  `tyEqV`/`tyEqC`: generic inference (`matchV`, `matchC`, `phUnify`, `specTy`), instance keys
+  (`Env.sameArgs`, `sameTy`), the readers of loop, iterator, generator and `sized` types
+  (`loopRowOf`, `iterOf`, `pullOf`, `sizedOf`), and the loop plans' tests of their value types.
+  `corpus/alpha-generic-arg.bc` infers a generic argument from two α-variant types.
+
+  `scripts/check-type-eq.sh` (a gate step) reads the elaborated declarations of every `Frontend`
+  module and refuses any other equality of `VTy`, `CTy`, `OpSig` or a row
+  (`scripts/TypeEq.lean`).
+
+  Surface types name their binders, so α does arise there. The elaborator compares them up to the
+  names of their binders (`VTy.alphaEq`, `Frontend/Elab/SurfAlpha.lean`: every lifetime binder and
+  `mu`/`nu` binder renamed by its depth, spans dropped). It does so where two surface types are
+  compared as types: the effects pass's matching of type arguments (`matchTy`), instance keys
+  written as surface types (`Env.sameArgs`, `sameTy`), a recursive group's result types, and a
+  datatype's own parameters. The caches of generic instances and of higher-order copies key on the
+  same renaming (`makeInst`, `copyOf`). The other surface comparisons are of terms and
+  declarations, or test whether a type mentions a name by substituting for it. None of them
+  compares two types. The census does not cover surface types. The `[α]` node erases to its premise's term, and the backends read
   through it (`transparent?`).
 - **Inversions.** `[α]` concludes with its premise's term, so it is a same-term step (`JS.alpha`,
   `VS.alpha`, `Core/Inversions.lean`), and what an inversion gives is up to `≡α`: views keep their
@@ -4483,9 +4499,12 @@ it an observation takes a borrow lent for one call: `∀'x ⊏ ⊤. Mut 'x A ⊸
   leaving the lend as `[⊤] U File^⊤`, its `write` inside a second lend `imm` (`withbor1`), then
   `close` and the buffer freed. This is one closed `CDerives` derivation (`d_fileReadProg`), run by
   `adequacyC` from the empty memory to `()` and the empty memory (`fileReadProg_runs`). Its variant
-  `d_fileReadOut` answers what each step returned, `(1, (2, (5, 7)))`, with no cell left
-  (`fileReadOut_eval`). `read` and `write` only release their borrow and answer a constant with
-  the rest: the content arithmetic of `corpus/nu-file-read.bc` is not in the kernel program.
+  `d_fileReadOut` answers what each step returned, `(1, (12, (5, 5)))`, with no cell left
+  (`fileReadOut_eval`). The methods use their borrows. `read` exchanges the buffer's and the
+  state's contents through the `Mut 'x I32` (`withswap`): the buffer, 7, takes the state's 5, and
+  the state takes 7. `write` loads the buffer's 5 through the `Imm 'x I32` (`withload`), stores it
+  into the state, and answers the state's old 7 plus 5. `close` answers the state, 5, and the
+  owner frees the buffer at 5. Each value is read back after its lend ends.
   `fileTwice` and `fileConsumed` are not derived in the kernel. They run as corpus programs
   (below).
 - **Programs** (each at its golden from `bcc interp`, through every stage and backend):

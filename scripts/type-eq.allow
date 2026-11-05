@@ -1,4 +1,4 @@
-# The declarations under Frontend/Check/ that may decide an equality of a kernel type (`VTy`,
+# The declarations of the `Frontend` modules (the checker and the elaborator) that may decide an equality of a kernel type (`VTy`,
 # `CTy`, `OpSig`, a row) other than through the type-compatibility helper. Read by
 # scripts/check-type-eq.sh against scripts/TypeEq.lean's census of the elaborated terms.
 # Format: `declaration  reason`, or `module.*  reason` for a whole module. Every other comparison

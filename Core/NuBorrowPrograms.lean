@@ -14,10 +14,12 @@ bound `⊤`), one `CDerives` derivation run by `adequacyC`:
     let (b'', r₂) = withbor b' (Λ'y. λi. let r = (let u = unbox rest in u π₁ π₂ [] i) in [r]);
     let (n₂, rest₂) = r₂;  let k = (unbox rest₂) π₂;  let v = free b'';  ()
 
-`step` builds the object over the state `s : Ref I32`: `read` releases the buffer's `Mut 'x I32`
-and answers `(1, [s])`, `write` releases its `Imm 'x I32` and answers `(2, [s])`, and `close` frees
-the state and answers its content. The object is made by `unfold` (`CDerives.unfoldN`). Its
-`read` is called inside a `withbor` of the buffer lent `mut` (`CDerives.withbor2`) at the lend's
+`step` builds the object over the state `s : Ref I32`. `read` exchanges the contents of the
+buffer and the state through the buffer's `Mut 'x I32` (`withswap`, the state's `swap` inside its
+callback), releases the borrow and answers `(1, [s])`. `write` loads the buffer's content through
+its `Imm 'x I32` (`withload`), stores it into the state (`swap`), and answers the state's old
+content plus it, with `[s]`. `close` frees the state and answers its content. The object is
+made by `unfold` (`CDerives.unfoldN`). Its `read` is called inside a `withbor` of the buffer lent `mut` (`CDerives.withbor2`) at the lend's
 `'y`: `∀E` at `'y` leaves the rest `[⊤] U File^⊤` free of `'y` (`fileTop_read_inst`), so the
 callback's answer `(n, rest)` is boxed at `'y` by `[]I` (the rest outlives `'y` by the box rule)
 and leaves the lend. The rest is then captured by a second callback, the buffer lent `imm`
@@ -28,7 +30,9 @@ rest that leaves the second lend is closed, and the buffer freed.
   the empty memory to `()` and the empty memory; `fileReadProg_eval`: the interpreter, `()` with
   no cell left.
 * `d_fileReadOut`, `fileReadOut_eval`: the variant that answers `(n, (n₂, (k, v)))`, run by the
-  interpreter to `(1, (2, (5, 7)))` with no cell left.
+  interpreter to `(1, (12, (5, 5)))` with no cell left: from a buffer at `7` and a state at `5`,
+  `read` stores `5` into the buffer through its `Mut` borrow, and `write` loads it back through its
+  `Imm` borrow into the state and answers `7 + 5`.
 -/
 
 noncomputable section
@@ -81,38 +85,84 @@ theorem outlives_ctxR {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} (ha : Δ
   have := List.all_eq_true.mp h s hs
   simpa [hl] using this
 
-/-- `λs. ⟨⟨Λ. λm. forget m; (1, s), Λ. λb. forget b; (2, s)⟩, free s⟩`. -/
-def fileStep : Val :=
-  .lam (withPair
-    (withPair
-      (.val (.lam (.val (.lam (.seq (.app forget (.var 0)) (.pair (i32E 1) (.var 6)))))))
-      (.val (.lam (.val (.lam (.seq (.app forget (.var 0)) (.pair (i32E 2) (.var 6))))))))
-    (.app free' (.var 2)))
+/-- The observations' lifetime context: `'1 ⊏ ⊤`. -/
+abbrev ΔO : LifeCtx := LifeCtx.empty.extend 1 .top
 
-/-- The step's observation at `Mut` or `Imm`: release the borrow, answer `(n, [s])`. -/
-theorem d_fileObs (n : UInt32) (R : Lifetime.Life → VTy)
-    (hR : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ →
-      CDerives (LifeCtx.empty.extend 1 .top) Γ forget (.val (.lolli (R (.var 1)) .unit))) :
-    CDerives LifeCtx.empty
-      (withCtx (withCtx [⟨fileS, true⟩, ⟨fileS, false⟩]))
-      (.val (.lam (.val (.lam (.seq (.app forget (.var 0)) (.pair (i32E n) (.var 6)))))))
-      (.comp (.all 1 .top (.arr (R (.var 1)) (.ret (.tensor bufT (.box .top fileS)))))) := by
+theorem ΔO_ok : ΔO.Ok := ok_empty.extend rfl rfl
+
+/-- `read`'s exchange through the lent buffer: `λv. let (s', o) = swap s v in (o, s')`, with
+the state `s` at index 7. The buffer is given the state's content `o`, the state the buffer's `v`. -/
+def fileReadCb : Expr :=
+  .val (.lam (.letpair (.app (.app swap (.var 7)) (.var 0)) (.pair (.var 0) (.var 1))))
+
+/-- `read`: `Λ. λm. let (m', s') = withswap m readCb in forget m'; (1, [s'])`: the buffer and the
+state exchange their contents through the `Mut 'x I32`. -/
+def fileReadObsE : Expr :=
+  .val (.lam (.val (.lam (.letpair (.app (.app withswap (.var 0)) fileReadCb)
+    (.seq (.app forget (.var 1)) (.pair (i32E 1) (.var 0)))))))
+
+/-- `write`: `Λ. λb. let w = withload b (Λ. λv. [v]) in let (s', o) = swap s w in (o + w, [s'])`:
+the buffer's content `w`, loaded through the `Imm 'x I32`, is stored into the state, and `write`
+answers the state's old content plus it. -/
+def fileWriteObsE : Expr :=
+  .val (.lam (.val (.lam (bindE (readI (.var 0))
+    (.letpair (.app (.app swap (.var 7)) (.var 0))
+      (.pair (hop (.bin .w32 .add) (.pair (.var 0) (.var 2))) (.var 1)))))))
+
+/-- `λs. ⟨⟨read, write⟩, free s⟩`. -/
+def fileStep : Val :=
+  .lam (withPair (withPair fileReadObsE fileWriteObsE) (.app free' (.var 2)))
+
+/-- The observations' context: the state `s`, under the two `&` pairs. -/
+abbrev ΓO : Ctx VTy := withCtx (withCtx [⟨fileS, true⟩, ⟨fileS, false⟩])
+
+theorem fileObs_fresh : ∀ s ∈ ΓO, s.live = true → ¬ VFree 1 s.ty := by
+  intro s hs hl
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hs
+  rcases hs with rfl | rfl | rfl | rfl | rfl | rfl <;> simp_all [VFree]
+
+theorem d_fileReadObs :
+    CDerives LifeCtx.empty ΓO fileReadObsE
+      (.comp (.all 1 .top (.arr (.mut (.var 1) bufT) (.ret (.tensor bufT (.box .top fileS)))))) := by
   refine .allI (S := .unit) rfl
     (fun _ _ h => by simp [LifeCtx.empty, LifeCtx.find?, Lifetime.assocFind] at h)
-    (fun s hs hl => ?_) (.lam (.ret ?_))
-  · simp only [List.mem_cons, List.not_mem_nil, or_false] at hs
-    rcases hs with rfl | rfl | rfl | rfl | rfl | rfl <;> simp_all [VFree]
-  · refine seqW (appW (.var (by csolo)) (hR (by cdead))) ?_
-    refine pairW (d_i32 n (Ctx.Dead.toP (by cdead))) (.boxI (.var (by csolo)) ?_)
-    exact outlives_ctxR (LifeCtx.defines_of_wf rfl) (by simp [part, occ, i32E, forget, unit', refDataB, dataB]; split <;> simp [dataB])
+    fileObs_fresh (.lam (.ret ?_))
+  refine letP (A := .mut (.var 1) bufT) (B := fileS)
+    (appP (.thunkV rfl (.lam (A := .i32) (C := .ret (.tensor .i32 fileS))
+        (.ret (letP (A := fileS) (B := .i32)
+          (appP (.var (by csoloP)) (appP (.var (by csoloP)) (.swap (by cdeadP))))
+          (pairP (.var (by csoloP)) (.var (by csoloP)))))))
+      (appP (.var (by csoloP)) (.withswap (by cdeadP)))) ?_
+  refine seqW (appW (.var (by csolo)) (.releaseMut (Ctx.Dead.toP (by cdead)))) ?_
+  refine pairW (d_i32 1 (Ctx.Dead.toP (by cdead))) (.boxI (.var (by csolo)) ?_)
+  exact outlives_ctxR (LifeCtx.defines_of_wf rfl) (by decide)
+
+theorem d_fileWriteObs :
+    CDerives LifeCtx.empty ΓO fileWriteObsE
+      (.comp (.all 1 .top (.arr (.imm (.var 1) bufT) (.ret (.tensor bufT (.box .top fileS)))))) := by
+  refine .allI (S := .unit) rfl
+    (fun _ _ h => by simp [LifeCtx.empty, LifeCtx.find?, Lifetime.assocFind] at h)
+    fileObs_fresh (.lam (.ret ?_))
+  refine bindP (A := .i32)
+    (appW (callbackW ΔO_ok (x := 2) rfl (by cdead)
+        (.boxI (.var (by csoloP))
+          (CtxOutlives.solo (LifeCtx.defines_of_wf (wf_var_self _ _ _)) (outlives_of_dataB rfl)
+            (by cdead))))
+      (appW (.var (by csoloP))
+        (.withload (a := .var 1) (A := .i32) (B := .i32) 2 (by cdeadP) rfl (by simp [VFree])
+          (by simp [VFree])))) ?_
+  refine letP (A := fileS) (B := .i32)
+    (appP (.var (by csoloP)) (appP (.var (by csoloP)) (.swap (by cdeadP)))) ?_
+  refine pairP (d_hop (.bin .w32 .add) (pairP (.var (by csoloP)) (.var (by csoloP))) (by cdeadP))
+    (.boxI (.var (by csoloP)) ?_)
+  exact outlives_ctxR (LifeCtx.defines_of_wf rfl) (by decide)
 
 theorem d_fileStep :
     CDerives LifeCtx.empty [⟨fileS, false⟩] (.val fileStep)
       (.val (.bang (.thunk (.arr fileS (fileTopC.instT fileS))))) := by
-  refine .bangThunkV (banged_dead (.cons .nil)) rfl (.lam (.withI (.withI ?_ ?_) ?_))
-  · exact d_fileObs 1 (fun a => .mut a bufT) (fun hΓ => .releaseMut (Ctx.Dead.toP hΓ))
-  · exact d_fileObs 2 (fun a => .imm a bufT) (fun hΓ => .releaseImm (Ctx.Dead.toP hΓ))
-  · exact .ret (appW (.var (by csolo)) (.free (Ctx.Dead.toP (by cdead))))
+  refine .bangThunkV (banged_dead (.cons .nil)) rfl
+    (.lam (.withI (.withI d_fileReadObs d_fileWriteObs) ?_))
+  exact .ret (appW (.var (by csolo)) (.free (Ctx.Dead.toP (by cdead))))
 
 /-! ### The call inside the lend -/
 
@@ -294,9 +344,11 @@ theorem d_fileReadOut :
     (pairP (.var (by csoloP)) (.var (by csoloP)))))
 
 set_option maxRecDepth 100000 in
-/-- The interpreter at Wasm's host: `read`'s `1`, `write`'s `2`, the state's `5` that `close`
-frees, and the buffer's `7`, given back by both lends and freed; no cell left. -/
-theorem fileReadOut_eval : quadNoLeak (eval fileReadOut) = some (1, 2, 5, 7) := by decide
+/-- The interpreter at Wasm's host. The buffer starts at `7`, the state at `5`. `read` exchanges
+them through the `Mut` borrow and answers `1`; the buffer, back with its owner, holds `5`. `write`
+loads that `5` through the `Imm` borrow, stores it into the state, and answers the state's old
+`7` plus it, `12`. `close` frees the state at `5`, and the buffer is freed at `5`; no cell left. -/
+theorem fileReadOut_eval : quadNoLeak (eval fileReadOut) = some (1, 12, 5, 5) := by decide
 
 end BoCa.Fig16.LogRel.Core
 

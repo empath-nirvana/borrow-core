@@ -29,6 +29,18 @@ abbrev tyEqV (A B : CVTy) : Bool := BoCa.Fig16.LogRel.Core.VTy.alphaB [] A B
 /-- Computation types compatible: equal up to the names of their lifetime binders.  `[spec §3]` -/
 abbrev tyEqC (C D : CCTy) : Bool := BoCa.Fig16.LogRel.Core.CTy.alphaB [] C D
 
+/-- Two lists of value types, position by position, each up to `[α]`. -/
+def tyEqVs : List CVTy → List CVTy → Bool
+  | [], [] => true
+  | A :: As, B :: Bs => tyEqV A B && tyEqVs As Bs
+  | _, _ => false
+
+/-- Two optional value types: both absent, or both present and equal up to `[α]`. -/
+def tyEqVo : Option CVTy → Option CVTy → Bool
+  | none, none => true
+  | some A, some B => tyEqV A B
+  | _, _ => false
+
 /-- Two lists of a handler's operations `(q, A ↠ B)`, position by position: the same qualifier and
 each signature up to `[α]`. -/
 def tyEqEnts : List (CQual × CVTy × CVTy) → List (CQual × CVTy × CVTy) → Bool

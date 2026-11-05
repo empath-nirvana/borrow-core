@@ -281,10 +281,12 @@ runs). Each is listed with its hardest part.
 (`Core/NuBorrowPrograms.lean`). It is a closed `CDerives` derivation `d_fileReadProg` through
 `unfold`, `withbor2` (the `mut` lend, the rest crossing it as `[⊤] U File^⊤`) and `withbor1` (the
 `imm` lend), then `close` and `free`, with `adequacyC` at it (`fileReadProg_runs`) and an
-interpreter run that reads every step's answer (`fileReadOut_eval`). The object's bound is `⊤`.
-Its `read` and `write` release the borrow and answer a constant with the rest. They do not add the
-state to the buffer or store the buffer into the state. `fileTwice` and `fileConsumed` are not
-derived in the kernel. All three run, with the content arithmetic, as `corpus/nu-file-read.bc`,
+interpreter run that reads every step's answer (`fileReadOut_eval`, `(1, 12, 5, 5)`). The object's
+bound is `⊤`. Its `read` exchanges the buffer's and the state's contents through the `Mut 'x I32`
+(the buffer takes the state's value), and its `write` loads the buffer through the `Imm 'x I32` and
+stores it into the state, answering the state's old value plus the loaded one. The state is
+replaced by the loaded value, not added to. `fileTwice` and `fileConsumed` are not derived in the
+kernel. All three run, with the content arithmetic, as `corpus/nu-file-read.bc`,
 `corpus/nu-file-twice.bc` and `corpus/nu-file-consumed.bc`.
 
 ## 5. The surface and the checker
