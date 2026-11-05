@@ -307,7 +307,18 @@ rule additionally folds at stops. There is no `erwp_I_frameK` on this branch.
     - Join, then a second loan after the join, join again, unfold.
 - **Headlines.** `crossImmJ`, `crossImmJC`, `crossMutJ` and `crossMutJC`, each `OrDiverges` through
   `poolSchedAdequacyS`, with no hypotheses and the standard axioms. Also `not_mutualWait` and
-  `ImmEndAfterResume` refuted.
+  `ImmEndAfterResume` refuted. Two more, with the same bar:
+  - **Async scope** (user's headline): a scope whose children hold borrows of the parent's lend
+    suspends to the outer scheduler while they hold them, and is then resumed or cancelled.
+    Rust's closure-passing `thread::scope` form is what the scoped `crossImm*`/`crossMut*` already
+    give; this one stops with the borrows out.
+  - **Handles are first-class** (user, on #821): a join handle is a linear value that can be
+    passed to and stored by an owner other than its spawner (a handler's state, a data
+    structure), and that owner joins or cancels it. This is what detached tasks under a
+    supervisor rest on: a `Supervisor` handler in an enclosing scope holds the handles of the
+    tasks spawned into it and joins or cancels them when its scope ends (the outermost in `main`).
+    A task may borrow only data that outlives the owner holding its handle. The headline: a
+    handle joined or cancelled by a task other than its spawner.
 - **Hardest cases.**
   - The `mut` child's write after its park, and its cancel while holding the cell.
   - For `imm`, the join resumed beside another share of the same lend.
@@ -561,3 +572,114 @@ bridge lemma as the fallback:
 2. channels with recursive protocols, which may need the later modality;
 3. a stored predicate outside BoLo's strata;
 4. detached tasks that outlive every joiner.
+
+## Stage 2 build: loans across stops at the one relation
+
+### The definition fixes
+
+The stage-1 relation could not hold a lend across a stop. Three changes, each to a stage-1
+definition (`SI/XRes.lean`, `SI/ErwpX.lean`); every stage-1 result is re-proved with its statement
+unchanged except the frame rule's (below):
+
+1. **Loan authorities** (`Auth.lend κ`, `Auth.mloan κ`). A location lent across stops is masked by
+   a whole token `[κ]_1` that the lender keeps for as long as it holds the location (`Auth.Held`).
+   The lend's own lifetime `α` is a second lifetime, whose fractions the borrowers carry. `xm` is
+   not the authority: `xm ℓ` at a freshly allocated `ℓ` cannot be minted in a way that preserves
+   the frame, since nothing ties `xm` to allocation and a frame may hold `xm ℓ` for any `ℓ`. A
+   whole token at a fresh `κ` can (`rwpGX_mint`, `erwpX_mint`).
+2. **`MaskOff`**, a condition on every frame (in `rwpGX`'s and `rwpGXat`'s frame quantifier) and on
+   every run's garbage (in `EndOKX`): at a location masked by `Auth.lend`, the part's flattening
+   holds only `imm` cells. The lender alone holds the location's `own` cell, or a `mut` cell
+   there, at any depth. Composites keep it (`maskOff_comp`).
+3. **The records clause off the lent locations** (`RecAgree`, `ListAgree`). A run's end records and
+   list agree with its start's at every record not at a location masked by `Auth.lend`. At the
+   empty mask this is the exact clause (`RecAgree.empty_iff`, `ListAgree.empty_iff`), so
+   `erwp_iff_erwpX0` and every `erwp` result stand unchanged.
+
+The frame rule (`rwpGX_frame`, `erwpX_frame_none`) gains `MaskOff M ρ₂` of the framed part, and
+its framed predicate is closed under `ListAgree M` rather than under equal members. At the empty
+mask both are vacuous.
+
+**Why the first segment needed (1) and (3).** A segment that opens a lend and stops with it open
+starts with `ℓ ↦ own(v)` and stops holding `ℓ ↦ imm({α}, v, ∅)` in its share and payload. `↭`
+at `ℓ` refuses that end, so `ℓ` must be masked for the whole segment, with an authority held at
+its start, before `α` exists. The stop also carries the lend's record and its tag, which the
+exact records clause refuses.
+
+**Why (2).** At the lend's end, in a later segment, `uncapture_world` asks `ρ_f # ℓ ↦ own(v)`.
+Stage 1 recorded three facts the end must get from the tokens and the world. A fourth was missing:
+**no frame holds an `own` cell at `ℓ` beneath an `imm` cell.** `own ○ imm` is defined
+(`CellU.CompR.ownImm`), so validity does not exclude it, and `↭` does not read `own` cells.
+In `rwpGX_lend` that case is excluded because the open's `ρ_b # ℓ ↦ own(v)` holds and the
+body's `↭` at the ancestor's location carries it to the end. Across stops there is no such
+body. `MaskOff` states it as a frame condition. A pool keeps it, because a run that is not
+masked at `ℓ` keeps its resource's flattening free of `own` and `mut` cells there
+(`maskOff_of_upd`).
+
+### The settle-first fact
+
+`lendEnd_frame` (`SI/LendAcross.lean`). At the start of a run holding `[α]_1` and
+`S ● ℓ ↦ imm(s, v, ∅)`, with `S` carrying no `α`, in a world whose list tags the lend's record
+`p` at `α`:
+
+1. No frame carries `α`: `WF_C` with `[α]_1` held.
+2. `p` is a record proper, and every cell at `ℓ` carries only `α`. The tag gives a record proper
+   `q` with `FrameLife W q α`. The cell at `q`'s location carries `α`, so it is the lender's cell
+   at `ℓ`, whose witness is empty, so `q = p` (`descR_empty`).
+3. No frame holds an `own` or `mut` cell at `ℓ`, at any depth: `MaskOff`. The fact as stage 1
+   recorded it (a `mut` cell at `ℓ` beneath another cell) is this fact's `mut` case. `TI`'s
+   `NoMut` at the record proper `p` may also exclude it, but that is not derived here. The `own`
+   case is the one that needs the definition.
+
+So the frame's flattening is undefined at `ℓ` (a cell there would be an `imm` cell carrying only
+`α`), which is `ρ_f # ℓ ↦ own(v)` (`hash_own_of_flat_none`).
+
+### Rules (all `SI/LendAcross.lean`, standard axioms, no hypotheses beyond each rule's premises)
+
+- `rwpGX_lendOpen`, `erwpX_lendOpen`: the counted `imm` lend opened at the start of a run at a
+  mask holding `Auth.lend κ` at `ℓ`. `capture_world` gives the world. `[α]_1` is minted at a fresh
+  `α`, and the run continues with the record tagged `α`. Every end of the continued run is an
+  end of the run from `ℓ ↦ own(v)`: the two starts flatten alike off `ℓ` (`flatAt_off_swap`,
+  `UpdVNm.of_flatAt_off`), and the records differ only at `ℓ`. The continuations at the run's
+  stops are the same `erwpX` at the same mask, so the lend is held across all of them.
+- `rwpGX_lendEnd`, `erwpX_lendEnd`: ended at the start of any later segment holding `[α]_1`,
+  through `lendEnd_frame` and `uncapture_world`. `[α]_1` is consumed.
+- `rwpGX_mutLoanOpen`, `rwpGX_mutLoanEnd`, `erwpX_mutLoanOpen`, `erwpX_mutLoanEnd`: the `mut` loan.
+  The cell `ℓ ↦ own(v)` folds into the borrow cell `ℓ ↦ mut(β, v, ∅, P̂)` (`TWNC.mutFold`), which
+  moves. The lender keeps `Auth.mloan κ`, and the cell given back unfolds (`TWNC.mutUnfold`). The
+  frame's half of the end is `[TR]` 6.24 (`ResU.six24`) and needs no world argument.
+- `rwpGX_mint`, `erwpX_mint`: `[κ]_1` at a fresh `κ`.
+- `maskOff_of_upd`: the pool's obligation for `MaskOff`, at one run.
+
+### Departures
+
+1. *The three definition fixes above*, against "stage 2 changes nothing stages 1 and 1.5
+   define". The brief allows fixing a definition so that the third fact holds. Each fix is
+   vacuous at the empty mask.
+2. *A loan held across stops is held by a task that holds its authority from the task's first
+   segment.* A task's mask is fixed across all its segments: the continuations in `erwpX`'s
+   definition are at the same `M`. `MaskAuth` holds at every segment's start, and a ghost-free
+   start runs only at the empty mask (`MaskAuth.zero`). So the lending task is spawned holding the
+   cell and `[κ]_1`, which its spawner allocated and minted. A lend of a cell allocated inside the
+   lending task, held across that task's own stops, is not covered. Lifting this needs a
+   continuation whose mask is chosen at each stop. That is a change to `erwpX`'s recursion, not
+   made here.
+3. *The authority is a lifetime token, not `xm`* (reason in fix 1). The `mut` loan's "lender keeps
+   `xm`" reads "lender keeps `[κ]_1` at `Auth.mloan κ`".
+
+Threads constraints (`scope-threads.md`, branch `threads-scope`):
+- C1 is kept as stage 1.5 reads it: each new rule enters its inner run at the outer frame.
+- C4 is kept: the authority is read at each segment's `MaskAuth`, and `MaskOff` at each segment's
+  frame quantifier.
+- C5 holds by construction (G).
+- C2, C3 and C6 concern `TJX`, `PoolS` and `HH`, which are not built.
+
+### What is left of stage 2
+
+- `[handle]` at `erwpX`. This needs an operation table over `XRes` and `erwp_handle_le`'s proof
+  re-done over it, with the `κ` cell primitives at `erwpX` (alloc, load, free). A lift
+  `erwpX_of_erwp_tok` would give the heap primitives.
+- `PoolS` with `TokPost` and the registry; `HH`; `poolSchedAdequacyS`; `not_mutualWait`.
+- The headlines `crossImmJ`, `crossImmJC`, `crossMutJ`, `crossMutJC`, the async scope, and
+  first-class handles.
+- `erwpX_of_erwp_tok`, `not_erwp_of_erwpX_tok`, `ImmEndAfterResume`.
