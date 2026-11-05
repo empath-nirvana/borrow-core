@@ -328,15 +328,44 @@ term at every type equal to its own up to those names, by one rule of `CDerives`
   type (`VTy.alphaB_sound`, `CTy.alphaB_sound` into `TyEq`/`CTyEq`), so the relation reads them
   alike (`cC_alpha`, from `cC_tyEq`). `[α]`'s compatibility lemma is `alpha_compatJ`; it is the
   rule's one cost under the growth rule.
-- **The checker.** `convV`/`convC` (`Frontend/Check/Steps.lean`) accept a synthesized type equal
-  to the expected one, or α-equivalent to it, emitting the `alpha` node (`rAlpha`); at an
-  effect row, `[sub]` to the expected row read at the synthesized row's names (`alignRow`), then
-  `[α]`. `alignRow` reads each operation the synthesized row finds, and each layer of its cancel
-  row at every depth (`alignFin`), at the synthesized names, so a cancel row that grows and names
-  its binders differently is `[sub]` then `[α]`; `rowLeB` decides `[sub]`'s `RowLe` with cancel
-  rows growing (`finLeB`, `Frontend/Check/Decide.lean`). The written cancel rows are `F 1`
-  (`elabRow`), so the case is exercised on the rows themselves (`alignRow_grow_renamed`). The node
-  erases to its premise's term, and the backends read through it (`transparent?`).
+- **The checker.** The checker compares two kernel types in one place. `tyEqV`/`tyEqC`
+  (`Frontend/Check/TyEq.lean`) decide equality up to α, and `convVal`/`convComp`
+  (`Frontend/Check/Conv.lean`) carry a checked term from the type it was derived at to the type it is
+  wanted at. Equal types take no node, α-equivalent types take `[α]` (`rAlpha`), and a returner chain
+  `F_Σ′ A′` wanted at `F_Σ A` takes `[sub]` to `Σ` read at `Σ′`'s names (`alignRow`), then `[α]`.
+  These are the sites that compare:
+  - checking against an expected type (`convV`, `convC`);
+  - a bound head lifted to its binding's row (`liftRow`, `atRow`);
+  - the argument of `M x` (`appIt`: `M` carried to the argument's type);
+  - the binder of `fun (x : A) -> M` (checked at the annotation, then carried to the expected
+    `A₀ -o C`);
+  - `nu_in M` synthesized (the `ν` type found under the observations' arguments and `∀` binders,
+    `M` carried to its unrolling);
+  - `withbor2r`'s annotation against the lent cell's type (the lend is at the cell's type);
+  - `shorten`'s operand against its family;
+  - a handler's clause tuple against the type its reading rebuilds (`clausesReadAt`, `convVal`);
+  - a `handle` site's record against the node's operations (`tyEqEnts`);
+  - the program's operation signatures (`sigsOkB`, `sigsErr`);
+  - derived copies (`withCopiesC`, `withCopiesVC`).
+
+  `alignRow` reads each operation the synthesized row finds, and each layer of its cancel row at
+  every depth (`alignFin`), at the synthesized names. So a cancel row that grows and names its
+  binders differently is `[sub]` then `[α]`. `rowLeB` decides `[sub]`'s `RowLe` with cancel rows
+  growing (`finLeB`, `Frontend/Check/Decide.lean`). The written cancel rows are `F 1` (`elabRow`),
+  so the case is exercised on the rows themselves (`alignRow_grow_renamed`).
+
+  Some comparisons stay exact, each with its reason in `scripts/type-eq.allow`:
+  - kernel premises stated exactly (`OpSig.Sig` in `[sub]`; `Row.ResumeO`'s binder-free `F 1` and
+    `1`; `FamSide.hinst`);
+  - cache and cell-class keys, where an unequal key is a miss and never a refusal;
+  - the IO harness's comparisons against the standard table. Those types are elaborated at the
+    empty lifetime context, where binders are numbered by position, so an α-variant spelling
+    elaborates to the table's term.
+
+  `scripts/check-type-eq.sh` (a gate step) reads the elaborated declarations under
+  `Frontend/Check/` and refuses any other equality of `VTy`, `CTy`, `OpSig` or a row
+  (`scripts/TypeEq.lean`). The `[α]` node erases to its premise's term, and the backends read
+  through it (`transparent?`).
 - **Inversions.** `[α]` concludes with its premise's term, so it is a same-term step (`JS.alpha`,
   `VS.alpha`, `Core/Inversions.lean`), and what an inversion gives is up to `≡α`: views keep their
   head up to `≡α` (`VView.hnf`, `Hnf.alpha`), a rigid type is read at its α-equivalents
@@ -4449,6 +4478,16 @@ it an observation takes a borrow lent for one call: `∀'x ⊏ ⊤. Mut 'x A ⊸
   at `F(I32 ⊗ [@c] File^c)` (`d_fileRead`, `d_fileWrite`), covered by `fundamentalC`
   (`fileRead_sem`, `fileWrite_sem`); `∀E` at the lend's lifetime leaves the rest's type
   `File^c` (`fileRead_inst`, `fileWrite_inst`).
+- **A closed program** (`Core/NuBorrowPrograms.lean`): `File^⊤` made by `unfold` over a state
+  `Ref I32`, its `read` called inside a `withbor` of a buffer lent `mut` (`withbor2`), the rest
+  leaving the lend as `[⊤] U File^⊤`, its `write` inside a second lend `imm` (`withbor1`), then
+  `close` and the buffer freed. This is one closed `CDerives` derivation (`d_fileReadProg`), run by
+  `adequacyC` from the empty memory to `()` and the empty memory (`fileReadProg_runs`). Its variant
+  `d_fileReadOut` answers what each step returned, `(1, (2, (5, 7)))`, with no cell left
+  (`fileReadOut_eval`). `read` and `write` only release their borrow and answer a constant with
+  the rest: the content arithmetic of `corpus/nu-file-read.bc` is not in the kernel program.
+  `fileTwice` and `fileConsumed` are not derived in the kernel. They run as corpus programs
+  (below).
 - **Programs** (each at its golden from `bcc interp`, through every stage and backend):
   `corpus/nu-file-read.bc` (lend `mut` to `read`, the buffer back, lend `imm` to `write`, `close`,
   free: `i32[121215]`), `corpus/nu-file-twice.bc` (two reads inside one lend, the first through a

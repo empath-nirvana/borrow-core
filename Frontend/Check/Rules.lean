@@ -261,7 +261,7 @@ def rUnfoldStep {j : Jdg} (r : Res Δ T j) : Res Δ T j :=
 def rPair {A B : CVTy} (r₁ : Res Δ T (.val A)) (r₂ : Res Δ T (.val B))
     (h : overlapOK T r₁.F.u r₂.F.u = true) : Res Δ T (.val (.tensor A B)) :=
   have hl : r₁.F.u.length = r₂.F.u.length := r₁.F.hu.trans r₂.F.hu.symm
-  ⟨.tensorI i (.val (.tensor A B)) A B (Masks.of r₁.F.u r₂.F.u) r₁.t r₂.t, r₁.sigs ∪ r₂.sigs,
+  ⟨.tensorI i (.val (.tensor A B)) A B (Masks.of r₁.F.u r₂.F.u) r₁.t r₂.t, r₁.sigs ∪ᵣ r₂.sigs,
     r₁.pins ++ r₂.pins,
     (r₁.F.split r₂.F h).map fun _ ⟨_, _, hs, hm, h₁, h₂⟩ => TTied.tensorI i _ hs hm.rel_of
       ⟨r₁.covers.of₁ hl, r₂.covers.of₂ hl⟩ h₁ h₂⟩
@@ -379,7 +379,7 @@ def rOfRet {A : CVTy} (r : Res Δ T (.comp (.ret A))) : Res Δ T (.val A) :=
 def rLolliE {A B : CVTy} (rf : Res Δ T (.val (.lolli A B))) (ra : Res Δ T (.val A))
     (h : overlapOK T ra.F.u rf.F.u = true) : Res Δ T (.val B) :=
   have hl : ra.F.u.length = rf.F.u.length := ra.F.hu.trans rf.F.hu.symm
-  ⟨.lolliE i (.val B) A B (Masks.of ra.F.u rf.F.u) ra.t rf.t, ra.sigs ∪ rf.sigs, ra.pins ++ rf.pins,
+  ⟨.lolliE i (.val B) A B (Masks.of ra.F.u rf.F.u) ra.t rf.t, ra.sigs ∪ᵣ rf.sigs, ra.pins ++ rf.pins,
     (ra.F.split rf.F h).map fun _ ⟨_, _, hs, hm, ha, hf⟩ => TTied.lolliE i _ hs hm.rel_of
       ⟨ra.covers.of₁ hl, rf.covers.of₂ hl⟩ ha hf⟩
 
@@ -399,7 +399,7 @@ def rBind {A : CVTy} {C : CCTy} {tN : TExpr} {sN : CRow} {pN : Pins}
     (FN : Fam T (fun L => TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp C)))
     (h : overlapOK T rM.F.u FN.u = true) : Res Δ T (.comp C) :=
   have hl : rM.F.u.length = FN.u.length := rM.F.hu.trans FN.hu.symm
-  ⟨.bind i (.comp C) A C (Masks.of rM.F.u FN.u) rM.t tN, rM.sigs ∪ sN, rM.pins ++ pN,
+  ⟨.bind i (.comp C) A C (Masks.of rM.F.u FN.u) rM.t tN, rM.sigs ∪ᵣ sN, rM.pins ++ pN,
     (rM.F.split FN h).map fun _ ⟨_, _, hs, hm, h₁, h₂⟩ => TTied.bind i _ hs hm.rel_of
       ⟨rM.covers.of₁ hl, (FN.covers fun _ h => h.covers fun _ hl => liveAt_mkCtx₁ hl).of₂ hl⟩ h₁ h₂⟩
 
@@ -435,7 +435,7 @@ def popWith {j : Jdg} {t : TExpr} {s : CRow} {p : Pins}
 def rWith {C D : CCTy} {s₁ s₂ : CRow} {p₁ p₂ : Pins} (t₁ t₂ : TExpr)
     (F : Fam T (fun L => TTied p₁ s₁ Δ (withCtx (mkCtx T L)) t₁ (.comp C) ∧
       TTied p₂ s₂ Δ (withCtx (mkCtx T L)) t₂ (.comp D))) : Res Δ T (.comp (.amp C D)) :=
-  ⟨.withI i (.comp (.amp C D)) C D t₁ t₂, s₁ ∪ s₂, p₁ ++ p₂,
+  ⟨.withI i (.comp (.amp C D)) C D t₁ t₂, s₁ ∪ᵣ s₂, p₁ ++ p₂,
     F.map fun _ ⟨h₁, h₂⟩ => TTied.withI i h₁ h₂⟩
 
 def rProj₁ {C D : CCTy} (r : Res Δ T (.comp (.amp C D))) : Res Δ T (.comp C) :=
@@ -447,7 +447,7 @@ def rProj₂ {C D : CCTy} (r : Res Δ T (.comp (.amp C D))) : Res Δ T (.comp D)
 def rUnitE {C : CCTy} (rV : Res Δ T (.val .unit)) (rM : Res Δ T (.comp C))
     (h : overlapOK T rV.F.u rM.F.u = true) : Res Δ T (.comp C) :=
   have hl : rV.F.u.length = rM.F.u.length := rV.F.hu.trans rM.F.hu.symm
-  ⟨.unitE i (.comp C) C (Masks.of rV.F.u rM.F.u) rV.t rM.t, rV.sigs ∪ rM.sigs, rV.pins ++ rM.pins,
+  ⟨.unitE i (.comp C) C (Masks.of rV.F.u rM.F.u) rV.t rM.t, rV.sigs ∪ᵣ rM.sigs, rV.pins ++ rM.pins,
     (rV.F.split rM.F h).map fun _ ⟨_, _, hs, hm, h₁, h₂⟩ => TTied.unitE i _ hs hm.rel_of
       ⟨rV.covers.of₁ hl, rM.covers.of₂ hl⟩ h₁ h₂⟩
 
@@ -456,7 +456,7 @@ def rTensorE {A B : CVTy} {C : CCTy} {tM : TExpr} {sM : CRow} {pM : Pins}
     (FM : Fam T (fun L => TTied pM sM Δ (mkCtx (B :: A :: T) (true :: true :: L)) tM (.comp C)))
     (h : overlapOK T rV.F.u FM.u = true) : Res Δ T (.comp C) :=
   have hl : rV.F.u.length = FM.u.length := rV.F.hu.trans FM.hu.symm
-  ⟨.tensorE i (.comp C) A B C (Masks.of rV.F.u FM.u) rV.t tM, rV.sigs ∪ sM, rV.pins ++ pM,
+  ⟨.tensorE i (.comp C) A B C (Masks.of rV.F.u FM.u) rV.t tM, rV.sigs ∪ᵣ sM, rV.pins ++ pM,
     (rV.F.split FM h).map fun _ ⟨_, _, hs, hm, h₁, h₂⟩ => TTied.tensorE i _ hs hm.rel_of
       ⟨rV.covers.of₁ hl, (FM.covers fun _ h => h.covers fun _ hl => liveAt_mkCtx₂ hl).of₂ hl⟩ h₁ h₂⟩
 
@@ -466,7 +466,7 @@ def rSumE {A B : CVTy} {C : CCTy} {t₁ t₂ : TExpr} {s₁ s₂ : CRow} {p₁ p
       TTied p₂ s₂ Δ (mkCtx (B :: T) (true :: L)) t₂ (.comp C)))
     (h : overlapOK T rV.F.u F.u = true) : Res Δ T (.comp C) :=
   have hl : rV.F.u.length = F.u.length := rV.F.hu.trans F.hu.symm
-  ⟨.sumE i (.comp C) A B C (Masks.of rV.F.u F.u) rV.t t₁ t₂, rV.sigs ∪ (s₁ ∪ s₂), rV.pins ++ (p₁ ++ p₂),
+  ⟨.sumE i (.comp C) A B C (Masks.of rV.F.u F.u) rV.t t₁ t₂, rV.sigs ∪ᵣ (s₁ ∪ᵣ s₂), rV.pins ++ (p₁ ++ p₂),
     (rV.F.split F h).map fun _ ⟨_, _, hs, hm, h₁, h₂, h₃⟩ => TTied.sumE i _ hs hm.rel_of
       ⟨rV.covers.of₁ hl, (F.covers fun _ h => h.1.covers fun _ hl => liveAt_mkCtx₁ hl).of₂ hl,
         (F.covers fun _ h => h.2.covers fun _ hl => liveAt_mkCtx₁ hl).of₂ hl⟩ h₁ h₂ h₃⟩
@@ -532,7 +532,7 @@ row. -/
 def rPerform {S : CRow} {o : COpSig} (hf : BoCa.Fig16.LogRel.Core.Row.find S o.n o.i = some o)
     (hna : o.abort = false) (hac : o.rc = false) (r : Res Δ T (.val o.A)) :
     Res Δ T (.comp (effOf S o.B)) :=
-  ⟨.effPerform i (.comp (effOf S o.B)) S o r.t, S ∪ r.sigs, r.pins,
+  ⟨.effPerform i (.comp (effOf S o.B)) S o r.t, S ∪ᵣ r.sigs, r.pins,
     r.F.map fun _ h => TTied.effPerform i hf hna hac h⟩
 
 /-- The abortive rule (SPEC §19): an abortive operation of the row, at any answer `B`; its argument
@@ -541,7 +541,7 @@ def rRaise {S : CRow} {o : COpSig} (B : CVTy)
     (hf : BoCa.Fig16.LogRel.Core.Row.find S o.n o.i = some o) (ha : o.abort = true)
     (hrc : o.rc = false) (hd : ownFreeB o.A = true) (r : Res Δ T (.val o.A)) :
     Res Δ T (.comp (effOf S B)) :=
-  ⟨.effRaise i (.comp (effOf S B)) S o B r.t, S ∪ r.sigs, r.pins,
+  ⟨.effRaise i (.comp (effOf S B)) S o B r.t, S ∪ᵣ r.sigs, r.pins,
     r.F.map fun _ h => TTied.effRaise i hf ha hrc (ownFreeB_sound _ hd) h⟩
 
 /-- `[let]`: `M to x. N` at a row, `N`'s context consuming at a row with weakening and persistent
@@ -552,7 +552,7 @@ def rEffLet {S : CRow} {A B : CVTy} {tN : TExpr} {sN : CRow} {pN : Pins}
       (S.Cancels → (mkCtx T L).OwnFree) ∧ (S.Unr → Ctx.Banged (mkCtx T L))))
     (h : overlapOK T rM.F.u FN.u = true) : Res Δ T (.comp (effOf S B)) :=
   have hl : rM.F.u.length = FN.u.length := rM.F.hu.trans FN.hu.symm
-  ⟨.effLet i (.comp (effOf S B)) A B S (Masks.of rM.F.u FN.u) rM.t tN, rM.sigs ∪ sN, rM.pins ++ pN,
+  ⟨.effLet i (.comp (effOf S B)) A B S (Masks.of rM.F.u FN.u) rM.t tN, rM.sigs ∪ᵣ sN, rM.pins ++ pN,
     (rM.F.split FN h).map fun _ ⟨_, _, hs, hm, h₁, h₂, hW, hU⟩ => TTied.effLet i _ hs hm.rel_of
       ⟨rM.covers.of₁ hl, (FN.covers fun _ h => h.1.covers fun _ hl => liveAt_mkCtx₁ hl).of₂ hl⟩ hW hU h₁ h₂⟩
 
@@ -565,7 +565,7 @@ def rEffThen {S : CRow} {A B : CVTy} {tN tD : TExpr} {sN sD : CRow} {pN pD : Pin
       (S.UnrD → Ctx.Banged (mkCtx T L))))
     (h : overlapOK T rM.F.u F.u = true) : Res Δ T (.comp (effOf S B)) :=
   have hl : rM.F.u.length = F.u.length := rM.F.hu.trans F.hu.symm
-  ⟨.effThen i (.comp (effOf S B)) A B S S [] (Masks.of rM.F.u F.u) rM.t tN tD, rM.sigs ∪ (sN ∪ sD),
+  ⟨.effThen i (.comp (effOf S B)) A B S S [] (Masks.of rM.F.u F.u) rM.t tN tD, rM.sigs ∪ᵣ (sN ∪ᵣ sD),
     rM.pins ++ (pN ++ pD), (rM.F.split F h).map
     fun _ ⟨_, _, hs, hm, h₁, ⟨hN, hD⟩, hU⟩ => TTied.effThenA i _ hs hm.rel_of
       ⟨rM.covers.of₁ hl, (F.covers fun _ h => h.1.1.covers fun _ hl => liveAt_mkCtx₁ hl).of₂ hl,
@@ -652,7 +652,7 @@ def rEffHandle {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R T
   have hlu : rH.F.u.length = rM.F.u.length := rH.F.hu.trans rM.F.hu.symm
   ⟨.effHandleV i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil BoCa.Fig16.LogRel.Core.rcsNil n A R (Masks.of rH.F.u rM.F.u) ks site
       rM.t.erase.hin rH.t rM.t,
-    (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ (rH.sigs ∪ rM.sigs), rH.pins ++ rM.pins,
+    (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ᵣ (rH.sigs ∪ᵣ rM.sigs), rH.pins ++ rM.pins,
     ((rH.F.restrict BoCa.Fig16.LogRel.Core.VTy.persistent hp).withUse.split rM.F h).map
       fun _ ⟨_, _, hs, hm, ⟨⟨hH, hl⟩, hsub, hlen'⟩, he⟩ => by
         subst hr hc
@@ -677,7 +677,7 @@ def rEffHandleB {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R 
   have hlu : rH.F.u.length = rM.F.u.length := rH.F.hu.trans rM.F.hu.symm
   ⟨.effHandleVB i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil BoCa.Fig16.LogRel.Core.rcsNil n A R d (Masks.of rH.F.u rM.F.u) ks site
       rM.t.erase.hin rH.t rM.t,
-    (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ (rH.sigs ∪ rM.sigs), rH.pins ++ rM.pins,
+    (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ᵣ (rH.sigs ∪ᵣ rM.sigs), rH.pins ++ rM.pins,
     ((rH.F.restrict BoCa.Fig16.LogRel.Core.VTy.persistent hp).withUse.split (rM.F.restrict (outlivesB Δ d) hso) h).map
       fun _ ⟨_, _, hs, hm, ⟨⟨hH, hl⟩, hsub, hlen'⟩, he, ho⟩ => by
         subst hr hc

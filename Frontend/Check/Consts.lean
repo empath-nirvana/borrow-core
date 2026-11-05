@@ -541,17 +541,19 @@ def shortenIt {A : CVTy} (_E : Env) (T : List CVTy) (sp : Span) (m : Mode) (s : 
   let ⟨hle⟩ ← needB sp (leB Δ a b) s!"cannot show `{ppLife a}` ⊑ `{ppLife b}` from the lifetime context"
   match m with
   | .mut =>
-    if h : A = s.famTy mutM b then
+    match convVal (at_ sp) (s.famTy mutM b) ⟨A, r⟩ with
+    | some r =>
       pure ⟨_, shortenAt (M := mutM)
-        (leaf := fun i a b A t => .mutSub i (.val (.mut a A)) a b A t) (at_ sp) (h ▸ r)
+        (leaf := fun i a b A t => .mutSub i (.val (.mut a A)) a b A t) (at_ sp) r
         (fun h' hle' => TTied.mutSub _ h' hle') (leB_sound hle)⟩
-    else err sp s!"`shorten_mut` needs `fam mut @ σ`, but the operand has type `{ppVTy A}`"
+    | none => err sp s!"`shorten_mut` needs `fam mut @ σ`, but the operand has type `{ppVTy A}`"
   | .imm =>
-    if h : A = s.famTy immM b then
+    match convVal (at_ sp) (s.famTy immM b) ⟨A, r⟩ with
+    | some r =>
       pure ⟨_, shortenAt (M := immM)
-        (leaf := fun i a b A t => .immSub i (.val (.imm a A)) a b A t) (at_ sp) (h ▸ r)
+        (leaf := fun i a b A t => .immSub i (.val (.imm a A)) a b A t) (at_ sp) r
         (fun h' hle' => TTied.immSub _ h' hle') (leB_sound hle)⟩
-    else err sp s!"`shorten_imm` needs `fam imm @ σ`, but the operand has type `{ppVTy A}`"
+    | none => err sp s!"`shorten_imm` needs `fam imm @ σ`, but the operand has type `{ppVTy A}`"
 
 end
 

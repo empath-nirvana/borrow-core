@@ -71,6 +71,7 @@ step() {
 steps=(
   "hygiene + axioms" "scripts/check-hygiene.sh"
   "judgment freeze"  "scripts/check-judgments.sh"
+  "type equality"    "scripts/check-type-eq.sh"
   "axiom report"     "lake env lean scripts/AxiomCheck.lean"
   "insertion pins"   "scripts/check-pins.sh"
   "parse corpus"     "scripts/parse-corpus.sh"
@@ -134,6 +135,7 @@ if [ "$changed" = 1 ]; then
         scripts/check-sugar.sh) add "sugar pairs" ;;
         scripts/mut-combos.py) add "let mut combos" ;;
         scripts/alpha-check.py) add "renaming" ;;
+        scripts/check-type-eq.sh|scripts/TypeEq.lean|scripts/type-eq.allow) add "type equality" ;;
         scripts/book-doctest.sh) add "book doc-tests" ;;
         scripts/source-stage.sh) add "compile corpus" "book doc-tests" ;;
       esac

@@ -315,12 +315,12 @@ def VTy.nuThunks : VTy → List CTy
   | .ref A | .box _ A | .imm _ A | .bang A => VTy.nuThunks A
   | _ => []
 
-/-- `VTy.nuThunks` over the observations of a `&`-tree. -/
+/-- `VTy.nuThunks` over the observations of a `&`-tree, under their arguments and `∀` binders. -/
 def CTy.nuThunks : CTy → List CTy
   | .ret A => VTy.nuThunks A
   | .amp C D => CTy.nuThunks C ++ CTy.nuThunks D
   | .eff _ _ _ _ _ _ _ C => CTy.nuThunks C
-  | .arr _ D => CTy.nuThunks D
+  | .arr _ D | .all _ _ D => CTy.nuThunks D
   | _ => []
 
 /-! ### Free lifetime variables -/

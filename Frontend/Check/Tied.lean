@@ -1,4 +1,5 @@
 import Frontend.Check.Elab
+import Frontend.Check.TyEq
 import Core.Tied
 import Core.PinFundamental
 
@@ -691,8 +692,7 @@ unrestricted operation answering `0`, decided.  `[spec §3, §18, §19]` -/
 def sigsOkB (s : CRow) : Bool :=
   s.all fun o => o.n != 0 && !(o.q == .unr && o.B.isZero) &&
     s.all fun o' => !(o'.n == o.n && o'.i == o.i) ||
-      (o'.q == o.q && BoCa.Fig16.LogRel.Core.VTy.alphaB [] o'.A o.A &&
-        BoCa.Fig16.LogRel.Core.VTy.alphaB [] o'.B o.B)
+      (o'.q == o.q && tyEqV o'.A o.A && tyEqV o'.B o.B)
 
 theorem lt_idxBound {s : CRow} {o : COpSig} (ho : o ∈ s) : o.i.toNat < idxBound s o.n := by
   induction s with

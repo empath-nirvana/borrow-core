@@ -1,0 +1,36 @@
+# The declarations under Frontend/Check/ that may decide an equality of a kernel type (`VTy`,
+# `CTy`, `OpSig`, a row) other than through the type-compatibility helper. Read by
+# scripts/check-type-eq.sh against scripts/TypeEq.lean's census of the elaborated terms.
+# Format: `declaration  reason`, or `module.*  reason` for a whole module. Every other comparison
+# of two types goes through `tyEqV`/`tyEqC`/`tyEqEnts` (Frontend/Check/TyEq.lean) or
+# `convVal`/`convComp` (Frontend/Check/Conv.lean). Adding a line here is the only way past the
+# check, and it shows up in review.
+
+# The helper itself.
+Frontend.Check.TyEq.*  the decisions: `[α]` (`VTy.alphaB`/`CTy.alphaB`), and `rowUnion`, the set union of the rows read
+Frontend.Check.Conv.*  the conversions: the exact case first (no node), then `[α]`, then `[sub]` then `[α]`
+
+# Kernel-mandated exact forms.
+BoCa.Fig16.LogRel.Core.Check.OpSig.sigB  `[sub]`'s `OpSig.Sig` compares an operation exactly; `convComp` reads the row at the synthesized names first (`alignRow`), then `[α]`
+BoCa.Fig16.LogRel.Core.Check.Row.resumeOB  `Row.ResumeO` states `o.fin = F 1` and `o.B = 1` exactly; both are binder-free, so α-equal is equal
+BoCa.Fig16.LogRel.Core.Check.Row.resumeOCB  `Row.ResumeOC`: the same premises as `resumeOB`
+Frontend.Check.famSide  `FamSide.hinst` is an exact equation of the kernel's derived rule (`∀E` renames `'c` to `'b`)
+Frontend.Check.rAlpha  the `[α]` node: passes the decided `j.alphaB j'` to `TTied.alpha`, decides nothing
+
+# Keys and caches: an unequal key is a miss, never a refusal.
+Frontend.Check.DefEntry.hit?  the cache of checked `def` bodies: a miss checks the body again
+Frontend.Check.DefEntry.lift?  the same cache, placed at a larger lifetime context: a miss checks the body again
+BoCa.Fig16.LogRel.Core.Check.TExpr.cellsAcc  the cell classes' keys: built from the term, and closed by `cellsOkB` under the same key
+BoCa.Fig16.LogRel.Core.Check.reachN  the cell classes, by the same key
+BoCa.Fig16.LogRel.Core.Check.cellsOkB  the classes `cellClasses` built, closed under the key they were built by: holds by construction
+Frontend.Check.Checked.classAt  the backend's lookup of a class by the key it was built at
+
+# The IO harness: the program's externs and `main` against the standard table's Lean terms. Both
+# are elaborated at the empty lifetime context, where a binder is numbered by its position
+# (`Frontend/Check/Elab.lean`), so every α-variant spelling of a table type elaborates to the
+# table's term. `IORun.every_run` and `stdModel` are stated at those exact types.
+Frontend.Check.checkExterns  an extern's type against the table's
+Frontend.Check.trustedReport  the same comparison, for `bcc trusted`
+Frontend.Check.modelFor  the model of an extern, by the table's exact type
+Frontend.Check.ioMainOf  `main`'s type against the capabilities' tuple, and a loop's type rebuilt from itself
+Frontend.Check.ioRunOf  the wrapper's type against `ioType`, the type `IORun.every_run` is stated at

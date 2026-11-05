@@ -87,6 +87,8 @@ nu-file-consumed 2 3 0 5 5 0
 nu-file-contexts 3 5 0 10 9 0
 alpha-all-u 1 0 0 2 1 0
 alpha-effect-row 0 0 0 0 0 0
+alpha-row-lift 0 0 0 0 0 0
+alpha-nu-in 5 3 0 12 13 0
 clo-depth 2 0 0 29 29 0
 clo-consume 3 0 0 5 5 0
 clo-higher 2 6 0 8 8 0

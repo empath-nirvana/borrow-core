@@ -210,7 +210,8 @@ checker's `unfold[C, S]` decides `hS` with `vfreeB`.
 `stripAll`. Whether an `allE` applied to an `unfold`-made observation (not an `allI`) lowers to the
 erased call is not checked. It is risk R4.
 
-**Programs, new file `Core/NuBorrowPrograms.lean`.** The done-when programs (§4.3).
+**Programs, new file `Core/NuBorrowPrograms.lean`.** The closed `fileRead` of §4.3 (narrowed, as
+§4.3 records).
 
 **SPEC.** §7's positivity paragraph and §22's "Positivity"/"Relation"/"Coiteration" paragraphs gain
 the `∀` leaf and the freshness premise. §22's "Baseline" paragraph is repeated for #808.
@@ -275,6 +276,16 @@ runs). Each is listed with its hardest part.
   boundary as `[@c] U File_c`.
 - `fileTwice`: two reads in one lend (the rest called again inside it), then one after it.
 - `fileConsumed`: the object closed by its implicit consume (`Consumable.nu`).
+
+**What is built (narrowed).** The kernel holds one closed program, `fileRead`
+(`Core/NuBorrowPrograms.lean`). It is a closed `CDerives` derivation `d_fileReadProg` through
+`unfold`, `withbor2` (the `mut` lend, the rest crossing it as `[⊤] U File^⊤`) and `withbor1` (the
+`imm` lend), then `close` and `free`, with `adequacyC` at it (`fileReadProg_runs`) and an
+interpreter run that reads every step's answer (`fileReadOut_eval`). The object's bound is `⊤`.
+Its `read` and `write` release the borrow and answer a constant with the rest. They do not add the
+state to the buffer or store the buffer into the state. `fileTwice` and `fileConsumed` are not
+derived in the kernel. All three run, with the content arithmetic, as `corpus/nu-file-read.bc`,
+`corpus/nu-file-twice.bc` and `corpus/nu-file-consumed.bc`.
 
 ## 5. The surface and the checker
 

@@ -87,6 +87,8 @@ nu-file-consumed erased handles 0 performs 0 raises 0 left 0 0
 nu-file-contexts erased handles 0 performs 0 raises 0 left 0 0
 alpha-all-u erased handles 0 performs 0 raises 0 left 0 0
 alpha-effect-row erased handles 1 performs 1 raises 0 left 0 0
+alpha-row-lift erased handles 1 performs 1 raises 0 left 0 0
+alpha-nu-in erased handles 0 performs 0 raises 0 left 0 0
 clo-depth erased handles 0 performs 0 raises 0 left 0 0
 clo-consume erased handles 0 performs 0 raises 0 left 0 0
 clo-higher erased handles 0 performs 0 raises 0 left 0 0
