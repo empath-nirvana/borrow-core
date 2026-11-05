@@ -537,8 +537,8 @@ confinement) keeps the frames that new rules enter inner runs at among the ones 
 ## Iris boundary
 
 Decision (#821, user, 2026-11-05): we keep the custom step-indexed relation and borrow Iris's
-**designs**, not Iris itself. A port to iris-lean is rejected: its base logic is affine
-(`BIAffine (UPred M)`), so `OrDiverges`'s empty heap does not follow from its adequacy; RustBelt's
+**designs**, not Iris itself. A port to iris-lean is rejected: its base logic lets any resource
+be discarded, so `OrDiverges`'s empty heap does not follow from its adequacy; RustBelt's
 lifetime logic rests on invariants that a leak-free logic cannot reuse; and the port would replace
 about 32k lines that work.
 
