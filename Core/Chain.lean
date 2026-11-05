@@ -24,6 +24,7 @@ import Core.Chain.SI.Frag
 import Core.Chain.SI.FrameResN
 import Core.Chain.SI.Handle
 import Core.Chain.SI.HandleN
+import Core.Chain.SI.HandleX
 import Core.Chain.SI.HandlerLendAll
 import Core.Chain.SI.HandlerLendProg
 import Core.Chain.SI.HeapN
