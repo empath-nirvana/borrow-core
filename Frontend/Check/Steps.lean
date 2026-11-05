@@ -750,17 +750,58 @@ def mismatch (sp : Span) (want got : String) : Error :=
 section
 variable {Δ : LifeCtx} {T : List CVTy}
 
+/-- The cancel row `F` read at the names of `F'`: each layer `F'` finds at its key with an
+α-equivalent argument and answer takes those, and its own cancel row read at that layer's, in
+turn. Every other component is kept, so the result is α-equivalent to `F`. -/
+def alignFin (F' : CCTy) : CCTy → CCTy
+  | .eff n i q A B f rc C =>
+    match BoCa.Fig16.LogRel.Core.Row.find (BoCa.Fig16.LogRel.Core.CTy.rowOf F') n i with
+    | some o' =>
+      if BoCa.Fig16.LogRel.Core.VTy.alphaB [] o'.A A && BoCa.Fig16.LogRel.Core.VTy.alphaB [] o'.B B
+      then .eff n i q o'.A o'.B (alignFin o'.fin f) rc (alignFin F' C)
+      else .eff n i q A B f rc (alignFin F' C)
+    | none => .eff n i q A B f rc (alignFin F' C)
+  | F => F
+
 /-- `S`'s operations read at the names of `S'`'s: where `S'` finds an operation at the key with an
-α-equivalent argument and answer, those, and its cancel row where that is α-equivalent too. The
-row `[sub]` reaches from `S'` before `[α]` reads it at `S` (`convC`). -/
+α-equivalent argument and answer, those, and its cancel row read at the names of `S'`'s
+(`alignFin`), at every depth. An operation of `S` that `S'` does not find, and a cancel row's
+layer its counterpart does not hold, keep their names. The row `[sub]` reaches from `S'`
+before `[α]` reads it at `S` (`convC`). Where some row α-equivalent to `S` is above `S'`, this one
+is (argued, not proved): `[sub]` compares the operations `S'` finds, and those are read at `S'`'s
+names. -/
 def alignRow (S' S : CRow) : CRow := S.map fun o =>
   match BoCa.Fig16.LogRel.Core.Row.find S' o.n o.i with
   | some o' =>
     if BoCa.Fig16.LogRel.Core.VTy.alphaB [] o'.A o.A && BoCa.Fig16.LogRel.Core.VTy.alphaB [] o'.B o.B
-    then { o with A := o'.A, B := o'.B,
-                  fin := if BoCa.Fig16.LogRel.Core.CTy.alphaB [] o'.fin o.fin then o'.fin else o.fin }
+    then { o with A := o'.A, B := o'.B, fin := alignFin o'.fin o.fin }
     else o
   | none => o
+
+/-! The row `[sub]` then `[α]` reach at a cancel row that both grows and names its binder
+differently. The synthesized row `S'` holds a cancellable `1.0` whose cancel row holds `2.0`, its
+argument `U (∀'5 ⊏ ⊤. F 1)`; the expected row `S` holds `1.0` with a cancel row holding `2.0` at
+`U (∀'7 ⊏ ⊤. F 1)` and `3.0` besides. `[sub]` alone does not reach `S`, nor `[α]` alone; `S` read at
+`S'`'s names is above `S'` and α-equivalent to `S`, which is what `convC` emits. -/
+section
+open BoCa.Fig16.LogRel.Core (OpSig CTy VTy)
+
+private def finSyn : CCTy :=
+  .eff 2 0 .cancel (.thunk (.all 5 .top (.ret .unit))) .unit (.ret .unit) false (.ret .unit)
+private def finExp : CCTy :=
+  .eff 2 0 .cancel (.thunk (.all 7 .top (.ret .unit))) .unit (.ret .unit) false
+    (.eff 3 0 .cancel .unit .unit (.ret .unit) false (.ret .unit))
+private def rowSyn : CRow := [⟨1, 0, .cancel, .unit, .unit, finSyn, false⟩]
+private def rowExp : CRow := [⟨1, 0, .cancel, .unit, .unit, finExp, false⟩]
+
+theorem alignRow_grow_renamed :
+    rowLeB rowSyn rowExp = false ∧
+    CTy.alphaB [] (CTy.effOf rowSyn .unit) (CTy.effOf rowExp .unit) = false ∧
+    rowLeB rowSyn (alignRow rowSyn rowExp) = true ∧
+    CTy.alphaB [] (CTy.effOf (alignRow rowSyn rowExp) .unit) (CTy.effOf rowExp .unit) = true := by
+  decide
+
+end
 
 /-- A value of `B` at `A`: equal, or equal up to the names of lifetime binders by `[α]`
 (`VTy.alphaB`, SPEC §3). -/

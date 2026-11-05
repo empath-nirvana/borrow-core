@@ -20,6 +20,8 @@ cases the comments name; where it is not, the gap is stated at the function.
   `Row.AnsOutlives`, from it.
 * `outlivesAllB`: foldImm's `∀ Δ' a, VOutlives Δ' a R` (§12 item 2), sound.
 * `scopedB`: `VScoped`, sound.
+* `rowLeB`: `[sub]`'s `RowLe`, sound, with `finLeB`: `FinLe`, each cancel row compared at every
+  depth.
 -/
 
 namespace BoCa.Fig16.LogRel.Core
@@ -900,14 +902,81 @@ theorem ownFreeB_iff (A : VTy) : ownFreeB A = true ↔ A.OwnFree := by
   | opq k hk => simpa [ownFreeB, Opaque.Host] using hk
   | _ => rfl
 
-/-- `RowLe S S'`, decided: every operation of `S` is found in `S'` as itself. -/
-def rowLeB (S S' : Row) : Bool := S.all fun o => Row.find S' o.n o.i == some o
+/-- `OpSig.Sig`, decided: one operation, its cancel row aside. -/
+def OpSig.sigB (o o' : OpSig) : Bool :=
+  o.n == o'.n && o.i == o'.i && decide (o.q = o'.q) && decide (o.A = o'.A) && decide (o.B = o'.B) &&
+    o.rc == o'.rc
+
+theorem OpSig.sigB_sound {o o' : OpSig} (h : OpSig.sigB o o' = true) : o.Sig o' := by
+  simp only [OpSig.sigB, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h
+  obtain ⟨⟨⟨⟨⟨h₁, h₂⟩, h₃⟩, h₄⟩, h₅⟩, h₆⟩ := h
+  exact ⟨h₁, h₂, h₃, h₄, h₅, h₆⟩
+
+/-- The layers of `F` each below what `R'` finds at its key: the same operation, with, where its
+cancel row is read, that cancel row below the one `R'` finds (`FinLe`, decided the same way).
+By recursion on `F`'s layers. -/
+def layersLeB : CTy → Row → Bool
+  | .eff n i q A B f rc C, R' =>
+      (match Row.find R' n i with
+       | some o' => OpSig.sigB ⟨n, i, q, A, B, f, rc⟩ o' &&
+           (!OpSig.finRead ⟨n, i, q, A, B, f, rc⟩ || o'.fin.isTop || (!f.isTop && layersLeB f o'.fin.rowOf))
+       | none => false) && layersLeB C R'
+  | _, _ => true
+
+/-- `FinLe F F'`, decided: `F'` is `⊤`, or `F` is not and its layers are below `F'`'s
+(`layersLeB`). -/
+def finLeB (F F' : CTy) : Bool := F'.isTop || (!F.isTop && layersLeB F F'.rowOf)
+
+theorem layersLeB_sound : ∀ (F : CTy) {R' : Row}, layersLeB F R' = true →
+    ∀ o ∈ F.rowOf, ∃ o', Row.find R' o.n o.i = some o' ∧ o.LeF o'
+  | .eff n i q A B f rc C, R', h, o, ho => by
+      simp only [layersLeB, Bool.and_eq_true] at h
+      simp only [CTy.rowOf, List.mem_cons] at ho
+      rcases ho with rfl | ho
+      · have h₁ := h.1
+        split at h₁
+        · rename_i o' hf'
+          simp only [Bool.and_eq_true, Bool.or_eq_true, Bool.not_eq_true'] at h₁
+          refine ⟨o', hf', OpSig.sigB_sound h₁.1, fun hc => ?_⟩
+          rw [finLe_iff]
+          rcases h₁.2 with (hn | ht) | ⟨hf, hl⟩
+          · rw [hc] at hn; cases hn
+          · exact Or.inl ht
+          · exact Or.inr ⟨hf, RowLe.of_mem (layersLeB_sound f hl)⟩
+        · cases h₁
+      · exact layersLeB_sound C h.2 o ho
+  | .ret _, _, _, _, ho | .arr _ _, _, _, _, ho | .amp _ _, _, _, _, ho | .top, _, _, _, ho
+  | .all _ _ _, _, _, _, ho | .nu _, _, _, _, ho => by simp [CTy.rowOf] at ho
+
+theorem finLeB_sound {F F' : CTy} (h : finLeB F F' = true) : FinLe F F' := by
+  simp only [finLeB, Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true'] at h
+  rw [finLe_iff]
+  rcases h with h | ⟨hF, h⟩
+  · exact Or.inl h
+  · exact Or.inr ⟨hF, RowLe.of_mem (layersLeB_sound F h)⟩
+
+/-- `o` below what `S'` finds at its key, decided. -/
+def opLeInB (S' : Row) (o : OpSig) : Bool :=
+  match Row.find S' o.n o.i with
+  | some o' => OpSig.sigB o o' && (!o.finRead || finLeB o.fin o'.fin)
+  | none => false
+
+/-- `RowLe S S'`, decided: every operation of `S` is found in `S'` as the same operation, its
+cancel row below the one `S'` finds where it is read (`finLeB`). -/
+def rowLeB (S S' : Row) : Bool := S.all (opLeInB S')
 
 theorem rowLeB_sound {S S' : Row} (h : rowLeB S S' = true) : RowLe S S' := by
-  refine RowLe.of_find fun n i o hf => ?_
-  obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf
-  have := List.all_eq_true.mp h o hm
-  simpa using this
+  refine RowLe.of_mem fun o hm => ?_
+  have hx := List.all_eq_true.mp h o hm
+  simp only [opLeInB] at hx
+  split at hx
+  · rename_i o' hf'
+    simp only [Bool.and_eq_true, Bool.or_eq_true, Bool.not_eq_true'] at hx
+    refine ⟨o', hf', OpSig.sigB_sound hx.1, fun hc => ?_⟩
+    rcases hx.2 with hn | hl
+    · rw [hc] at hn; cases hn
+    · exact finLeB_sound hl
+  · cases hx
 
 /-- `Row.NZ`, decided. -/
 def Row.nzB (S : Row) : Bool := S.all fun o => o.n != 0

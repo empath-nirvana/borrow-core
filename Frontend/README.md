@@ -340,7 +340,9 @@ borrows (`synConstU`, `Consts.lean`); their side conditions are decided by `rowL
   (`findOp`). A value has no row (`Env.forVal`), so a computation synthesized inside a value
   (`thunkv fun …` with no type expected) cannot perform: ascribe it.
 * **Conversion.** Where a synthesized type meets an expected one (`convC`), `F_Σ′ A` is accepted at
-  `F_Σ A` when `Σ′ ⊆ Σ` (`rowLeB`), by `[sub]`; `return V` checks at `F_Σ A` the same way.
+  `F_Σ A` when `Σ′ ⊆ Σ` (`rowLeB`, cancel rows growing at every depth), by `[sub]`, and up to
+  the names of lifetime binders when `Σ′ ⊆ Σ₀` for `Σ₀`, `Σ` read at `Σ′`'s names (`alignRow`),
+  by `[sub]` then `[α]`; `return V` checks at `F_Σ A` the same way.
 * **Effectful binds.** `x <- M; N` whose head synthesizes `F_Σ′ A` with `Σ′` nonempty is at the
   current row `Σ` (or `Σ′`, when none is set), `M` lifted by `[sub]`. At a row with no weakening
   (every operation `lin`) it is `[let]`; when every slot `N` uses holds no owned cell

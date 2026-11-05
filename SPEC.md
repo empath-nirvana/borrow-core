@@ -331,10 +331,12 @@ term at every type equal to its own up to those names, by one rule of `CDerives`
 - **The checker.** `convV`/`convC` (`Frontend/Check/Steps.lean`) accept a synthesized type equal
   to the expected one, or α-equivalent to it, emitting the `alpha` node (`rAlpha`); at an
   effect row, `[sub]` to the expected row read at the synthesized row's names (`alignRow`), then
-  `[α]`. `alignRow` renames an expected operation's cancel row only where it is α-equivalent to
-  the synthesized one's; a cancel row that both grows and differs in binder names is refused by
-  the checker, though `[α]` and `[sub]` derive it. The node erases to its premise's term, and the
-  backends read through it (`transparent?`).
+  `[α]`. `alignRow` reads each operation the synthesized row finds, and each layer of its cancel
+  row at every depth (`alignFin`), at the synthesized names, so a cancel row that grows and names
+  its binders differently is `[sub]` then `[α]`; `rowLeB` decides `[sub]`'s `RowLe` with cancel
+  rows growing (`finLeB`, `Frontend/Check/Decide.lean`). The written cancel rows are `F 1`
+  (`elabRow`), so the case is exercised on the rows themselves (`alignRow_grow_renamed`). The node
+  erases to its premise's term, and the backends read through it (`transparent?`).
 - **Inversions.** `[α]` concludes with its premise's term, so it is a same-term step (`JS.alpha`,
   `VS.alpha`, `Core/Inversions.lean`), and what an inversion gives is up to `≡α`: views keep their
   head up to `≡α` (`VView.hnf`, `Hnf.alpha`), a rigid type is read at its α-equivalents
