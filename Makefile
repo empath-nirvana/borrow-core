@@ -26,16 +26,20 @@ bcc: $(CACHE_STAMP) | tools
 run: bcc
 	$(BCC) run $(RUN_ARGS)
 
-# The gate (scripts/ci-local.sh): every check, the source stage only on unverified goldens.
+# The sanity gate (scripts/ci-local.sh): the build, hygiene and axioms, the judgment freeze and
+# the Backend2 fence, the corpus parsed and checked, and every corpus program run in WebAssembly by
+# each backend against its golden with `live 0`; the source stage only on unverified goldens.
 gate: | tools
 	scripts/ci-local.sh
 
-# The gate with the source stage on every program: re-verifies every golden against `Support`'s
-# interpreter. The gate turns it on by itself when Paper/, Support/ or Backend/ changed.
+# The full gate: every check (every compiled stage, counts, native, the static tables, the
+# generated and renamed programs, the book), and the source stage on every program, re-verifying
+# every golden against `Support`'s interpreter. Required when Paper/, Support/ or Backend/ changed.
 gate-full: | tools
 	scripts/ci-local.sh --source
 
-# While iterating: the steps the changes since origin/main reach, never the source stage.
+# While iterating: the sanity gate's steps the changes since origin/main reach, never the source
+# stage.
 gate-fast: | tools
 	scripts/ci-local.sh --changed
 

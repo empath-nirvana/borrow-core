@@ -7801,7 +7801,7 @@ Everything here is backend: no change to the language, the kernel, the checker o
 
 ### Tests
 
-`scripts/compile-native.sh`, a step of `make gate` (passing with a notice when there is no C
+`scripts/compile-native.sh`, a step of `make gate-full` (passing with a notice when there is no C
 compiler, as the book build is skipped without `mdbook`): every corpus program built natively matches its golden standard
 output, standard error, exit status and `live`, which the flat IR is checked against, and
 `bcc-counts --native` agrees with the flat IR; every kernel program prints what it prints at the

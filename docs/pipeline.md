@@ -34,7 +34,7 @@ one.
 |---|---|
 | `scripts/parse-corpus.sh` | every corpus file parses and round-trips; each `corpus/fail/` file fails with its expected message |
 | `scripts/check-corpus.sh` | every corpus file checks; each `corpus/reject/` file is rejected with its expected message |
-| `scripts/compile-corpus.sh` | every corpus `main` prints its golden `<name>.out` (the reference interpreter's output) at the clos, flat and wasm stages, with `live 0`, and at the source stage when that runs (below); its counts are at most its entry in `corpus/counts.expected`; `--write-goldens` writes the goldens from the reference interpreter |
+| `scripts/compile-corpus.sh` | every corpus `main` prints its golden `<name>.out` (the reference interpreter's output) at the clos, flat and wasm stages, with `live 0`, and at the source stage when that runs (below); its counts are at most its entry in `corpus/counts.expected`; `--final` runs wasm only, without counts; `--write-goldens` writes the goldens from the reference interpreter |
 | `scripts/compile-kernel.sh` | every kernel program gives the same value at every stage and in WebAssembly, with `live 0`; its counts are at most its entry in `corpus/kernel-counts.expected` |
 | `scripts/compile-scaling.sh` | compile time against program size; with `--guard`, the 8× program compiles within a bound times the 1× program's time |
 | `scripts/check-sugar.sh` | for every `corpus/sugar/` pair, the sugared program and its hand-written core form check and erase to the same term |
@@ -42,11 +42,15 @@ one.
 | `scripts/check-hygiene.sh` | no `sorry`, `axiom`, `native_decide`, `partial` and the like; every declaration's axioms within the standard three |
 | `scripts/AxiomCheck.lean` | prints the axioms of the theorems `SPEC.md` names (`lake env lean scripts/AxiomCheck.lean`) |
 
-`scripts/ci-local.sh` (`make gate`) runs all of them, after `lake build`, and `mdbook build book`
-when `mdbook` is installed, the independent ones at once. It is the gate: run it before opening or
-merging a pull request. `scripts/ci-local.sh --changed` (`make gate-fast`) runs only the steps
-that the changes since origin/main reach (none of the Lean steps unless a `.lean` file changed):
-it is for iteration, and does not replace the full gate. There is no hosted CI;
+`scripts/ci-local.sh` (`make gate`) is the sanity gate, run before opening a pull request: after
+`lake build`, at once, the hygiene and axiom checks, the judgment freeze, the Backend2 fence,
+`parse-corpus.sh`, `check-corpus.sh`, and the corpus in WebAssembly on each backend
+(`compile-corpus.sh --final`, `compile-backend2.sh --final`: no intermediate-IR interpreter and no
+counts, except to name the first differing stage of a program whose WebAssembly run is wrong).
+`scripts/ci-local.sh --source` (`make gate-full`) runs every script, the corpus at every stage
+with its counts, and `mdbook build book` when `mdbook` is installed. `scripts/ci-local.sh
+--changed` (`make gate-fast`) runs only the sanity gate's steps that the changes since origin/main
+reach (none of the Lean steps unless a `.lean` file changed): it is for iteration. There is no hosted CI;
 `.github/workflows/ci.yml` runs only when started by hand. `compile-corpus.sh`, `check-corpus.sh`
 and `book-doctest.sh` also take the files to check (`book/src/<file>.md:<line>` for one block).
 
@@ -60,7 +64,7 @@ blocks whose text is not among the merge base's blocks. An unchanged program and
 checked against the interpreter by the gate that merged them. `make gate-full`
 (`scripts/ci-local.sh --source`, or `BCC_SOURCE=1` for a single script) runs it on every program
 and block, and re-verifies every golden. It is required when `Paper/`, `Support/` or `Backend/`
-changed, and `make gate` turns it on by itself then; run it by hand after a `Frontend/` or `lib/`
+changed, and `make gate` says so then; run it by hand after a `Frontend/` or `lib/`
 change that changes what programs mean, since the goldens of unchanged programs are not rerun.
 `make gate-fast` never runs the interpreter; it lists the unverified programs. `make goldens`
 (`scripts/compile-corpus.sh --write-goldens [file…]`) writes corpus goldens, only ever from the

@@ -36,8 +36,9 @@ See [`CLAUDE.md`](../../CLAUDE.md) (the part marked `growth`).
 
 ## Tests
 
-There is no hosted CI. The gate, `make gate` (`scripts/ci-local.sh`), is run locally before a
-pull request is opened or merged. It runs, among other checks:
+There is no hosted CI. The sanity gate, `make gate` (`scripts/ci-local.sh`), is run locally
+before a pull request is opened. It runs the build, the hygiene and axiom checks, the judgment
+freeze and the Backend2 fence, and these:
 
 | script | checks |
 |---|---|
@@ -45,15 +46,18 @@ pull request is opened or merged. It runs, among other checks:
 | `scripts/check-hygiene.sh` | forbidden keywords and axioms |
 | `scripts/parse-corpus.sh` | every corpus file parses and round-trips; each `corpus/fail/` file fails with its expected message |
 | `scripts/check-corpus.sh` | every corpus file checks; each `corpus/reject/` file is rejected with its expected message |
-| `scripts/compile-corpus.sh` | every corpus `main` prints its golden `.out`, the interpreter's output, at every compiled stage, with `live 0` |
-| `scripts/book-doctest.sh` | every program in this book, as below |
-| `mdbook build book` | this book |
+| `scripts/compile-corpus.sh --final` | every corpus `main` prints its golden `.out`, the interpreter's output, in WebAssembly, with `live 0` |
+| `scripts/compile-backend2.sh --final` | the same, compiled by the new backend |
+
+`make gate-full` runs every check besides: every compiled stage and the counts, the native
+target, the kernel programs, the static tables, the generated and renamed programs,
+`scripts/book-doctest.sh` (every program in this book, as below) and `mdbook build book`.
 
 Other targets:
 
 ```sh
-make gate-full   # the gate, re-checking every golden against the reference interpreter
-make gate-fast   # while iterating: only the steps your changes since origin/main reach
+make gate-full   # every check, re-checking every golden against the reference interpreter
+make gate-fast   # while iterating: only the sanity gate's steps your changes since origin/main reach
 make goldens     # rewrite the corpus goldens (.out) from the reference interpreter
 scripts/new-worktree.sh <branch>  # a worktree from origin/main, reusing this checkout's build
 ```
@@ -61,8 +65,8 @@ scripts/new-worktree.sh <branch>  # a worktree from origin/main, reusing this ch
 Every corpus program's `.out` and every book block's `-- answer:` is a golden: what the reference
 interpreter (`bcc interp`) prints. The gate checks every compiled stage against the goldens. It
 runs the interpreter itself, which is slow on the largest programs, only on programs and blocks
-that are new or changed; `make gate-full` runs it on all of them, and the gate turns that on by
-itself when `Paper/`, `Support/` or `Backend/` changed.
+that are new or changed; `make gate-full` runs it on all of them, and is required when `Paper/`,
+`Support/` or `Backend/` changed.
 
 A corpus program's `main` should have a **falsifier observable**: an answer that plausible wrong
 implementations cannot produce. `a - b` with `a ≠ b` catches swapped operands, and two stores read
