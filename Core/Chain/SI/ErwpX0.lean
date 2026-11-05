@@ -31,7 +31,7 @@ open BoCa.BoLo (Heap Step1 Head Kont)
 def postUp (Q : PostN) : PostX := fun _ k ls v x => x.2 = 0 ∧ Q k ls v x.1
 
 /-- `Tb↑`: `Tb` at the ghost-free resources, owing its continuation at the ghost-free ones. -/
-def tableUp (Tb : TableN) : TableX := fun _ k ls t Ψ x =>
+def tableUp (Tb : TableN) : TableX := fun _ _ _ k ls t Ψ x =>
   x.2 = 0 ∧ Tb k ls t (fun k' ls' e' ρ => Ψ k' ls' e' (ρ, 0)) x.1
 
 /-- At the empty mask, `UpdVNm` is `UpdVN`. -/
@@ -47,7 +47,7 @@ theorem erwp_iff_erwpX0 (Φ : LocFam) (Tb : TableN) (Q : PostN) :
   induction n using Nat.strong_induction_on with
   | _ n ih =>
   -- the continuations owed below `n` agree
-  have hC : (fun k' ls' e' ρ => erwpXC (ℍ := ℍ) Φ ∅ (tableUp Tb) (postUp Q) n k' ls' e' (ρ, 0)) =
+  have hC : (fun k' ls' e' ρ => erwpXC (ℍ := ℍ) Φ (tableUp Tb) (postUp Q) n ∅ k' ls' e' (ρ, 0)) =
       erwpC (ℍ := ℍ) Φ Tb Q n := by
     funext k' ls' e' ρ
     by_cases hk : k' < n
@@ -69,10 +69,11 @@ theorem erwp_iff_erwpX0 (Φ : LocFam) (Tb : TableN) (Q : PostN) :
       have := hwx α hα hcρ
       simp at this
     have hvπ : π.Valid := h₇.2.2
-    refine ⟨ρ', ρp, fρ', fρ'p, π, 0, 0, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆,
-      updVNm_locs_empty_iff.mpr h₇, h₈, h₉, h₁₀, RecAgree.of_iff h₁₁, ListAgree.of_iff h₁₂,
-      by simpa using hv, ?_, ?_, ?_, maskShallow_locs_empty _, maskShallow_locs_empty _,
-      maskAuth_empty _, maskOff_empty _, ?_⟩
+    refine ⟨∅, ρ', ρp, fρ', fρ'p, π, 0, 0, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆,
+      by simpa using updVNm_locs_empty_iff.mpr h₇, h₈, h₉, h₁₀, RecAgree.of_iff h₁₁,
+      ListAgree.of_iff h₁₂, by simpa using hv, ?_, ?_, ?_, maskShallow_locs_empty _,
+      by simpa using maskShallow_locs_empty _, maskAuth_empty _, maskOff_empty _,
+      by simpa using maskShallow_empty _, by simpa using flatNone_empty _, ?_⟩
     · intro α h₁α h₂α; simp only [GRes.add_zero] at h₁α h₂α; exact absurd h₁α h₂α
     · intro α hα hcρ'
       simp only [GRes.add_zero] at hα
@@ -81,7 +82,7 @@ theorem erwp_iff_erwpX0 (Φ : LocFam) (Tb : TableN) (Q : PostN) :
       simp only [GRes.add_zero] at hα
       exact absurd (carries_comp_right h₆ hvπ hcp) (hno α (by simpa using hα))
     · rcases h₁₃ with ⟨v, hv', hq⟩ | ht
-      · exact Or.inl ⟨v, hv', rfl, hq⟩
+      · exact Or.inl ⟨rfl, v, hv', rfl, hq⟩
       · refine Or.inr ⟨rfl, ?_⟩
         rw [hC]; exact ht
   · intro h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
@@ -89,12 +90,19 @@ theorem erwp_iff_erwpX0 (Φ : LocFam) (Tb : TableN) (Q : PostN) :
         (fun α hα _ => by simp [GRes.counted] at hα) (fun α hα _ => by simp [GRes.counted] at hα) (maskShallow_locs_empty _) (maskAuth_empty _) (maskOff_empty _) hT htg hl hfd
         j μ' e' hj hrun
     refine ⟨hr.1, fun hfin => ?_⟩
-    obtain ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀,
-      h₁₁, h₁₂, -, -, -, -, -, -, -, -, h₂₀⟩ := hr.2 hfin
+    obtain ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀,
+      h₁₁, h₁₂, -, -, -, -, -, -, hau', -, -, -, h₂₀⟩ := hr.2 hfin
+    -- the end is ghost-free, so it resumes at the empty mask
+    have hM' : M' = ∅ := by
+      rcases h₂₀ with ⟨hM, -⟩ | ⟨hg, -⟩
+      · exact hM
+      · rw [show g' = 0 from hg] at hau'; exact MaskAuth.zero hau'
+    subst hM'
+    rw [Set.union_self] at h₇ h₁₁ h₁₂
     refine ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆,
       updVNm_locs_empty_iff.mp h₇, h₈, h₉, h₁₀, RecAgree.empty_iff.mp h₁₁,
       ListAgree.empty_iff.mp h₁₂, ?_⟩
-    rcases h₂₀ with ⟨v, hv', -, hq⟩ | ⟨-, ht⟩
+    rcases h₂₀ with ⟨-, v, hv', -, hq⟩ | ⟨-, ht⟩
     · exact Or.inl ⟨v, hv', hq⟩
     · refine Or.inr ?_
       rw [← hC]; exact ht

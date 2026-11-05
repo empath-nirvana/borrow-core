@@ -179,6 +179,33 @@ theorem hash_own_of_flat_none {ρ : WRes} (hv : ρ.Valid) {l : Loc}
   obtain ⟨σ', hσ'⟩ := (ResU.compS_defined_iff _ _).mpr hEa
   exact ⟨hcomp, T, hT, σ', E, a, hexT, hagT, hσ'⟩
 
+/-! ### What composes with `ℓ ↦ own(v)` holds nothing at `ℓ` -/
+
+/-- **A resource composing with `ℓ ↦ own(v)` holds nothing at `ℓ`**: neither of its walks reaches
+`ℓ` (`ResU.walks_none_of_hash_own`). -/
+theorem flatNone_of_hash_own {ρ : WRes} {l : Loc} {v : Val}
+    (h : ResU.Hash ρ (ResU.single l (CellU.ownOf v))) : ∀ ψ, ¬ ρ.FlatAt l ψ := by
+  rintro ψ ⟨σ, ⟨e, a, he, ha, hc⟩, hg⟩
+  obtain ⟨hel, hal, -, -⟩ :=
+    ResU.walks_none_of_hash_own (compS_empty_left _) h he ha exW_empty agW_empty
+  have : σ.get l = none := (ResU.Comp.eq_none_iff hc l).mpr ⟨hel, hal⟩
+  rw [this] at hg; cases hg
+
+/-- `ℓ ↦ own(v) ● ρ_b` holds no `imm` cell at `ℓ`. -/
+theorem not_flatAt_imm_of_own {l : Loc} {v : Val} {ρb ρ : WRes}
+    (hcρ : ResU.CompS (ResU.single l (CellU.ownOf v)) ρb ρ) (hvρ : ρ.Valid) {s : LSet} {w : Val}
+    {χ : WRes} {hh : χ.InStratum s.join} : ¬ ρ.FlatAt l (CellU.immOf s w χ hh) := by
+  intro hf
+  rcases flatAt_comp_imm_split hcρ hf s.join_mem with ⟨s₁, h₁, ⟨τ, hτ, hg⟩, -⟩ | ⟨s₂, h₂, hf₂, -⟩
+  · rw [flat_single_own_eq hτ, ResU.single_get_self] at hg
+    exact CellU.ownOf_ne_immOf (Option.some.inj hg)
+  · exact flatNone_of_hash_own ⟨(ResU.CompS.comm hcρ).1, ρ, ResU.CompS.comm hcρ, hvρ⟩ _ hf₂
+
+/-- Shallowness read through a resource whose cells at `S` are another's. -/
+theorem maskShallow_swap {S : Set Loc} {A B : WRes} (h : MaskShallow S B)
+    (hAB : ∀ m, m ∈ S → ∀ ψ, A.FlatAt m ψ → B.FlatAt m ψ) : MaskShallow S A :=
+  fun m hm s v χ hh hf => h m hm s v χ hh (hAB m hm _ hf)
+
 /-! ### What the end reads of the frame -/
 
 /-- **The frame at a lend's end in a later segment.** At the start of a run holding `[α]_1` and
@@ -376,10 +403,10 @@ theorem rwpGX_mint {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {ls : List SR
   have hr := hbody κ houtr htokg xf sρ ps μ hH3 hsρ hVin hWf hWx hsh
     (hau.add_right (GRes.Valid.right hVin)) hoff hT htg hlow hfd jr μ' e' hj hrun
   refine ⟨hr.1, fun hfin => ?_⟩
-  obtain ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, hU, hNo, hT', htg',
-    hps', hls', hV, hN, hW', hWp, hS', hSπ, hAu, hOff, hq⟩ := hr.2 hfin
-  refine ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, hU, hNo, hT', htg',
-    hps', hls', hV, fun α hα hα₀ => ?_, hW', hWp, hS', hSπ, hAu, hOff, hq⟩
+  obtain ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, hU, hNo, hT', htg',
+    hps', hls', hV, hN, hW', hWp, hS', hSπ, hAu, hOff, hSx, hFx, hq⟩ := hr.2 hfin
+  refine ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, hU, hNo, hT', htg',
+    hps', hls', hV, fun α hα hα₀ => ?_, hW', hWp, hS', hSπ, hAu, hOff, hSx, hFx, hq⟩
   by_cases hακ : α = κ
   · subst hακ; exact not_carries_of_inStratum houtf
   · exact hN α hα (fun h => hα₀ (hcin α h hακ))
@@ -471,14 +498,17 @@ theorem rwpGX_lendOpen {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} (l : Loc)
   have hr := hbody A houtb hAtag htokg houtP BI hBI (ρf, xf.2) fρ (p :: ps) μ hH17 h4 hVin
     hWfin hWxin hshBI hauIn hoff hTin htgin hlowin hfd jr μ' e' hj hrun
   refine ⟨hr.1, fun hfin => ?_⟩
-  obtain ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, hU, hNo, hT', htg',
-    hps', hls', hV, hN, hW', hWp, hS', hSπ, hAu, hOff, hq⟩ := hr.2 hfin
-  have hpl : p.le ∈ M.lendLocs := hl
-  refine ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, ?_, hNo, hT', htg',
-    fun q hq => ?_, fun y hy => ?_, hV, ?_, hW', hWp, hS', hSπ, hAu, hOff, hq⟩
-  · refine UpdVNm.of_flatAt_off hU hvρ (fun m hm ψ => ?_)
-    have hml : m ≠ l := fun h => hm (h ▸ Mask.lendLocs_sub M hl)
-    exact flatAt_off_swap single_own_off single_imm_off hcρ (ResU.CompS.comm hBI) hvρ hvBI hml ψ
+  obtain ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, hU, hNo, hT', htg',
+    hps', hls', hV, hN, hW', hWp, hS', hSπ, hAu, hOff, hSx, hFx, hq⟩ := hr.2 hfin
+  have hpl : p.le ∈ (M ∪ M').lendLocs := by rw [Mask.lendLocs_union]; exact Or.inl hl
+  have hlM : l ∈ M.locs := Mask.lendLocs_sub M hl
+  have hoffl : ∀ m, m ≠ l → ∀ ψ, ρ.FlatAt m ψ ↔ BI.FlatAt m ψ := fun m hml ψ =>
+    flatAt_off_swap single_own_off single_imm_off hcρ (ResU.CompS.comm hBI) hvρ hvBI hml ψ
+  refine ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, ?_, hNo, hT', htg',
+    fun q hq => ?_, fun y hy => ?_, hV, ?_, hW', hWp, hS', hSπ, hAu, hOff,
+    maskShallow_swap hSx (fun m hm ψ => (hoffl m (fun h => hm.2 (h ▸ hlM)) ψ).mp), hFx, hq⟩
+  · refine UpdVNm.of_flatAt_off hU hvρ (fun m hm ψ => hoffl m (fun h => hm ?_) ψ)
+    rw [h, Mask.locs_union]; exact Or.inl hlM
   · have hqp : q ≠ p := fun h => hq (h ▸ hpl)
     rw [hps' q hq]; simp [hqp]
   · have hyp : y ≠ (p, A) := fun h => hy (h ▸ hpl)
@@ -538,16 +568,19 @@ theorem rwpGX_lendEnd {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {l : Loc}
   have hr := hbody ρo hρo xf W' ps' μ hHf hW' hV0 (hwf.mono hsub) hwx0 hsh0 hau₀ hoff hTW'
     htgW' hlowW' hfd jr μ' e' hj hrun
   refine ⟨hr.1, fun hfin => ?_⟩
-  obtain ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps'', ls'', h₁, h₂, h₃, h₄, h₅, h₆, hU, hNo, hT', htg',
-    hps'', hls'', hV, hN, hW'', hWp, hS', hSπ, hAu, hOff, hq⟩ := hr.2 hfin
-  have hpl : p.le ∈ M.lendLocs := hl
-  refine ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps'', ls'', h₁, h₂, h₃, h₄, h₅, h₆, ?_, hNo, hT', htg',
-    fun q hq => ?_, fun y hy => ?_, hV, fun β hβ hβ₀ => hN β hβ (fun h => hβ₀ (hsub h)), hW'',
-    hWp, hS', hSπ, hAu, hOff, hq⟩
-  · refine UpdVNm.of_flatAt_off hU hvρ (fun m hm ψ => ?_)
-    have hml : m ≠ l := fun h => hm (h ▸ Mask.lendLocs_sub M hl)
-    exact flatAt_off_swap single_imm_off single_own_off (ResU.CompS.comm hres)
+  obtain ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps'', ls'', h₁, h₂, h₃, h₄, h₅, h₆, hU, hNo, hT', htg',
+    hps'', hls'', hV, hN, hW'', hWp, hS', hSπ, hAu, hOff, hSx, hFx, hq⟩ := hr.2 hfin
+  have hpl : p.le ∈ (M ∪ M').lendLocs := by rw [Mask.lendLocs_union]; exact Or.inl hl
+  have hlM : l ∈ M.locs := Mask.lendLocs_sub M hl
+  have hoffl : ∀ m, m ≠ l → ∀ ψ, ρ.FlatAt m ψ ↔ ρo.FlatAt m ψ := fun m hml ψ =>
+    flatAt_off_swap single_imm_off single_own_off (ResU.CompS.comm hres)
       (ResU.CompS.comm hρo) hvρ hvρo hml ψ
+  refine ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps'', ls'', h₁, h₂, h₃, h₄, h₅, h₆, ?_, hNo, hT', htg',
+    fun q hq => ?_, fun y hy => ?_, hV, fun β hβ hβ₀ => hN β hβ (fun h => hβ₀ (hsub h)), hW'',
+    hWp, hS', hSπ, hAu, hOff,
+    maskShallow_swap hSx (fun m hm ψ => (hoffl m (fun h => hm.2 (h ▸ hlM)) ψ).mp), hFx, hq⟩
+  · refine UpdVNm.of_flatAt_off hU hvρ (fun m hm ψ => hoffl m (fun h => hm ?_) ψ)
+    rw [h, Mask.locs_union]; exact Or.inl hlM
   · have hqp : q ≠ p := fun h => hq (h ▸ hpl)
     rw [hps'' q hq, hps' q]; exact ⟨fun h => h.1, fun h => ⟨h, hqp⟩⟩
   · have hyp : y.1 ≠ p := fun h => hy (h ▸ hpl)
@@ -693,13 +726,16 @@ theorem rwpGX_mutLoanOpen {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {l : L
   have hr := hbody ρm (ResU.CompS.comm hρm) xf W' ps μ hHf hfm hv hwf hwxm hshm hau hoff hTin
     htgin hlowin hfd jr μ' e' hj hrun
   refine ⟨hr.1, fun hfin => ?_⟩
-  obtain ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, hU, hNo, hT', htg',
-    hps', hls', hV, hN, hW'', hWp, hS', hSπ, hAu, hOff, hq⟩ := hr.2 hfin
-  refine ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, ?_, hNo, hT', htg',
-    hps', hls', hV, hN, hW'', hWp, hS', hSπ, hAu, hOff, hq⟩
-  refine UpdVNm.of_flatAt_off hU hvρ (fun m hm ψ => ?_)
-  have hml : m ≠ l := fun h => hm (h ▸ Mask.locs_of_mem hl)
-  exact flatAt_off_swap single_own_off single_mut_off hcρ (ResU.CompS.comm hρm) hvρ hvρm hml ψ
+  obtain ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, hU, hNo, hT', htg',
+    hps', hls', hV, hN, hW'', hWp, hS', hSπ, hAu, hOff, hSx, hFx, hq⟩ := hr.2 hfin
+  have hlM : l ∈ M.locs := Mask.locs_of_mem hl
+  have hoffl : ∀ m, m ≠ l → ∀ ψ, ρ.FlatAt m ψ ↔ ρm.FlatAt m ψ := fun m hml ψ =>
+    flatAt_off_swap single_own_off single_mut_off hcρ (ResU.CompS.comm hρm) hvρ hvρm hml ψ
+  refine ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, ?_, hNo, hT', htg',
+    hps', hls', hV, hN, hW'', hWp, hS', hSπ, hAu, hOff,
+    maskShallow_swap hSx (fun m hm ψ => (hoffl m (fun h => hm.2 (h ▸ hlM)) ψ).mp), hFx, hq⟩
+  refine UpdVNm.of_flatAt_off hU hvρ (fun m hm ψ => hoffl m (fun h => hm ?_) ψ)
+  rw [h, Mask.locs_union]; exact Or.inl hlM
 
 /-- **A `mut` loan ended at the start of a run, at a mask holding its authority**: the borrow cell,
 given back, unfolds into `ℓ ↦ own(v)`. -/
@@ -747,13 +783,16 @@ theorem rwpGX_mutLoanEnd {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {l : Lo
   have hr := hbody ρo (ResU.CompS.comm hρo) xf W' ps μ hHf hfo hv hwf hwxo hsho hau hoff hTin
     htgin hlowin hfd jr μ' e' hj hrun
   refine ⟨hr.1, fun hfin => ?_⟩
-  obtain ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, hU, hNo, hT', htg',
-    hps', hls', hV, hN, hW'', hWp, hS', hSπ, hAu, hOff, hq⟩ := hr.2 hfin
-  refine ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, ?_, hNo, hT', htg',
-    hps', hls', hV, hN, hW'', hWp, hS', hSπ, hAu, hOff, hq⟩
-  refine UpdVNm.of_flatAt_off hU hvρ (fun m hm ψ => ?_)
-  have hml : m ≠ l := fun h => hm (h ▸ Mask.locs_of_mem hl)
-  exact flatAt_off_swap single_mut_off single_own_off hcρ (ResU.CompS.comm hρo) hvρ hvρo hml ψ
+  obtain ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, hU, hNo, hT', htg',
+    hps', hls', hV, hN, hW'', hWp, hS', hSπ, hAu, hOff, hSx, hFx, hq⟩ := hr.2 hfin
+  have hlM : l ∈ M.locs := Mask.locs_of_mem hl
+  have hoffl : ∀ m, m ≠ l → ∀ ψ, ρ.FlatAt m ψ ↔ ρo.FlatAt m ψ := fun m hml ψ =>
+    flatAt_off_swap single_mut_off single_own_off hcρ (ResU.CompS.comm hρo) hvρ hvρo hml ψ
+  refine ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, ?_, hNo, hT', htg',
+    hps', hls', hV, hN, hW'', hWp, hS', hSπ, hAu, hOff,
+    maskShallow_swap hSx (fun m hm ψ => (hoffl m (fun h => hm.2 (h ▸ hlM)) ψ).mp), hFx, hq⟩
+  refine UpdVNm.of_flatAt_off hU hvρ (fun m hm ψ => hoffl m (fun h => hm ?_) ψ)
+  rw [h, Mask.locs_union]; exact Or.inl hlM
 
 theorem erwpX_mutLoanOpen {Φ : LocFam} {M : Mask} {Tb : TableX} {Q : PostX} {n : Nat}
     {l : Loc} {κ : Life} (hl : (l, Auth.mloan κ) ∈ M) {β : Life} {v : Val}

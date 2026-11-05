@@ -27,7 +27,7 @@ private theorem erwpX_end_empty {Φ : LocFam} {Q : PostX} {P₀ : Expr} {n : Nat
     (h : erwpX (ℍ := ℍ) Φ ∅ TableX.none Q n [] P₀ ((PMap.empty : WRes), 0)) {j : Nat}
     {μ : Heap} {e : Expr} (hj : j < n) (hrun : StepsN (ℍ := ℍ) j (fun _ => none) P₀ μ e)
     (hfin : Final (ℍ := ℍ) μ e) :
-    EndOKX Φ ∅ (erwpXPost TableX.none Q (erwpXC (ℍ := ℍ) Φ ∅ TableX.none Q n)) (n - j) []
+    EndOKX Φ ∅ (erwpXPost ∅ TableX.none Q (erwpXC (ℍ := ℍ) Φ TableX.none Q n)) (n - j) []
       ((PMap.empty : WRes), 0) ((PMap.empty : WRes), 0) [] μ e := by
   have htg : Tagged (PMap.empty : WRes) [] [] := fun x hx => absurd hx (by simp)
   rw [erwpX_eq] at h
@@ -48,8 +48,8 @@ theorem erwpX_safe {Φ : LocFam} {Q : PostX} {P₀ : Expr}
   · exact .inr hs
   · have hfin : Final (ℍ := ℍ) μ' e' := fun μ'' e'' h => hs ⟨μ'', e'', h⟩
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-      _, _, hq⟩ := erwpX_end_empty (hall (j + 1)) (by omega) hrun hfin
-    rcases hq with ⟨v, rfl, -⟩ | h
+      _, _, _, _, _, hq⟩ := erwpX_end_empty (hall (j + 1)) (by omega) hrun hfin
+    rcases hq with ⟨-, v, rfl, -⟩ | h
     · exact .inl v.2
     · exact h.elim
 
@@ -63,11 +63,13 @@ theorem erwpX_adequacy {Φ : LocFam} {Q : PostX} {P₀ : Expr}
   obtain ⟨j, hrun⟩ := stepsN_of_steps hs
   have hp := erwpX_safe (Φ := Φ) hall hrun
   refine ⟨hp, fun hv => ?_, fun K ℓ he => ?_⟩
-  · obtain ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h1, h2, h3, h6, h7, h9, h10, h11, -, -,
-      -, -, -, -, -, -, -, -, -, -, hq⟩ :=
+  · obtain ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h1, h2, h3, h6, h7, h9, h10, h11, -, -,
+      -, -, -, -, -, -, -, -, -, -, -, -, hq⟩ :=
       erwpX_end_empty (hall (j + 1)) (by omega) hrun (final_val μ ⟨e, hv⟩)
-    rcases hq with ⟨v, -, hqv⟩ | h
-    · obtain rfl : ρ' = PMap.empty := hQ _ _ _ _ _ hqv
+    rcases hq with ⟨hM', v, -, hqv⟩ | h
+    · subst hM'
+      rw [Set.union_self] at h10
+      obtain rfl : ρ' = PMap.empty := hQ _ _ _ _ _ hqv
       obtain rfl : (PMap.empty : WRes) = fρ' := ResU.eq_of_comp_empty_left h2
       obtain rfl : ρp = fρ'p := ResU.eq_of_comp_empty_left h6
       obtain rfl : ρp = π := ResU.eq_of_comp_empty_left h9

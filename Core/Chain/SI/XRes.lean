@@ -374,6 +374,108 @@ theorem ListAgree.empty_iff {ls' ls : List SRec} :
     ListAgree ∅ ls' ls ↔ ∀ y, y ∈ ls' ↔ y ∈ ls :=
   ⟨fun h y => h y (by simp), ListAgree.of_iff⟩
 
+/-! ### The mask a stop resumes at
+
+A segment runs at its mask `M`; its stop names the mask `M′` its continuation resumes at
+(`EndOKX`). `M′` is new against `M` at `M.fresh M′`: the locations `M′` masks and `M` does not,
+and the locations `M′` lends across stops and `M` does not. At those the segment's frame holds
+nothing (`FlatNone`), as a name Iris allocates is fresh. -/
+
+@[simp] theorem Mask.locs_union (M M' : Mask) : (M ∪ M').locs = M.locs ∪ M'.locs := by
+  ext l; simp [Mask.locs, exists_or]
+
+@[simp] theorem Mask.lendLocs_union (M M' : Mask) :
+    (M ∪ M').lendLocs = M.lendLocs ∪ M'.lendLocs := by
+  ext l; simp [Mask.lendLocs, exists_or]
+
+theorem Mask.lendLocs_mono {M M' : Mask} (h : M ⊆ M') : M.lendLocs ⊆ M'.lendLocs :=
+  fun _ ⟨κ, hκ⟩ => ⟨κ, h hκ⟩
+
+theorem Mask.locs_mono {M M' : Mask} (h : M ⊆ M') : M.locs ⊆ M'.locs :=
+  fun _ ⟨a, ha⟩ => ⟨a, h ha⟩
+
+/-- **What a stop's mask `M′` masks that the segment's mask `M` does not.** -/
+def Mask.fresh (M M' : Mask) : Set Loc := (M'.locs \ M.locs) ∪ (M'.lendLocs \ M.lendLocs)
+
+@[simp] theorem Mask.fresh_self (M : Mask) : M.fresh M = ∅ := by
+  ext l; simp [Mask.fresh]
+
+theorem Mask.locs_sub_fresh (M M' : Mask) : M'.locs ⊆ M.locs ∪ M.fresh M' := by
+  intro l hl
+  by_cases h : l ∈ M.locs
+  · exact Or.inl h
+  · exact Or.inr (Or.inl ⟨hl, h⟩)
+
+theorem Mask.lendLocs_sub_fresh (M M' : Mask) : M'.lendLocs ⊆ M.lendLocs ∪ M.fresh M' := by
+  intro l hl
+  by_cases h : l ∈ M.lendLocs
+  · exact Or.inl h
+  · exact Or.inr (Or.inr ⟨hl, h⟩)
+
+/-- `ρ`'s flattening holds nothing at `L`. -/
+def FlatNone (L : Set Loc) (ρ : WRes) : Prop := ∀ l, l ∈ L → ∀ ψ, ¬ ρ.FlatAt l ψ
+
+theorem flatNone_empty (ρ : WRes) : FlatNone ∅ ρ := fun _ h => absurd h (by simp)
+
+theorem FlatNone.mono {L L' : Set Loc} (hL : L' ⊆ L) {ρ : WRes} (h : FlatNone L ρ) :
+    FlatNone L' ρ := fun l hl => h l (hL hl)
+
+/-- A part's cell is under a cell of the composite: `⦇ρ₁ ● ρ₂⦈ = ⦇ρ₁⦈ ○ ⦇ρ₂⦈`. -/
+theorem flatAt_comp_defined_left {ρ₁ ρ₂ ρ : WRes} (hc : ResU.CompS ρ₁ ρ₂ ρ) (hv : ρ.Valid)
+    {l : Loc} {ψ : CellU Loc Val} (h : ρ₁.FlatAt l ψ) : ∃ ψ', ρ.FlatAt l ψ' := by
+  obtain ⟨σ, hσ⟩ := hv
+  obtain ⟨σ₁, σ₂, hσ₁, hσ₂, hR⟩ := flat_compR hc hσ
+  obtain ⟨σ₁', hσ₁', hg⟩ := h
+  obtain rfl := ResU.Flat.functional hσ₁' hσ₁
+  rcases ResU.Comp.get hR l with ⟨f₁, -, -⟩ | ⟨ζ, -, -, f⟩ | ⟨ζ, f₁, -, -⟩ |
+      ⟨ζ₁, ζ₂, ζ, -, -, f, -⟩
+  · rw [hg] at f₁; cases f₁
+  · exact ⟨ζ, σ, hσ, f⟩
+  · rw [hg] at f₁; cases f₁
+  · exact ⟨ζ, σ, hσ, f⟩
+
+theorem FlatNone.left {L : Set Loc} {ρ₁ ρ₂ ρ : WRes} (hc : ResU.CompS ρ₁ ρ₂ ρ) (hv : ρ.Valid)
+    (h : FlatNone L ρ) : FlatNone L ρ₁ := by
+  intro l hl ψ hψ
+  obtain ⟨ψ', hψ'⟩ := flatAt_comp_defined_left hc hv hψ
+  exact h l hl ψ' hψ'
+
+theorem FlatNone.right {L : Set Loc} {ρ₁ ρ₂ ρ : WRes} (hc : ResU.CompS ρ₁ ρ₂ ρ) (hv : ρ.Valid)
+    (h : FlatNone L ρ) : FlatNone L ρ₂ :=
+  FlatNone.left (ResU.CompS.comm hc) hv h
+
+theorem FlatNone.maskShallow {L : Set Loc} {ρ : WRes} (h : FlatNone L ρ) : MaskShallow L ρ :=
+  fun l hl _ _ _ _ hf => absurd hf (h l hl _)
+
+theorem maskShallow_union {A B : Set Loc} {ρ : WRes} (hA : MaskShallow A ρ)
+    (hB : MaskShallow B ρ) : MaskShallow (A ∪ B) ρ := by
+  intro l hl
+  rcases hl with hl | hl
+  · exact hA l hl
+  · exact hB l hl
+
+theorem MaskShallow.mono {A B : Set Loc} (hAB : A ⊆ B) {ρ : WRes} (h : MaskShallow B ρ) :
+    MaskShallow A ρ := fun l hl => h l (hAB hl)
+
+/-- `ρ` is shallow at the stop's mask when it is at the segment's and holds nothing new. -/
+theorem maskShallow_fresh {M M' : Mask} {ρ : WRes} (h : MaskShallow M.locs ρ)
+    (hn : FlatNone (M.fresh M') ρ) : MaskShallow M'.locs ρ :=
+  MaskShallow.mono (Mask.locs_sub_fresh M M') (maskShallow_union h hn.maskShallow)
+
+/-- `MaskOff` at the stop's mask, from the segment's and nothing new. -/
+theorem maskOff_fresh {M M' : Mask} {ρ : WRes} (h : MaskOff M ρ) (hn : FlatNone (M.fresh M') ρ) :
+    MaskOff M' ρ := by
+  intro l hl ψ hψ
+  rcases Mask.lendLocs_sub_fresh M M' hl with hl | hl
+  · exact h l hl ψ hψ
+  · exact absurd hψ (hn l hl ψ)
+
+theorem RecAgree.mono {M M' : Mask} (hM : M.lendLocs ⊆ M'.lendLocs) {a b : List FrameRec}
+    (h : RecAgree M a b) : RecAgree M' a b := fun p hp => h p (fun h' => hp (hM h'))
+
+theorem ListAgree.mono {M M' : Mask} (hM : M.lendLocs ⊆ M'.lendLocs) {a b : List SRec}
+    (h : ListAgree M a b) : ListAgree M' a b := fun y hy => h y (fun h' => hy (hM h'))
+
 end BoCa.Fig16.LogRel.Core.Chain.SI
 
 end

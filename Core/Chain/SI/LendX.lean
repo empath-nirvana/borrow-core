@@ -86,11 +86,11 @@ theorem rwpGX_lend {Φ : LocFam} (l : BoCa.Loc) (T : VTy) (δ : LSub)
       ∀ ls', AddAt ls ls' A → ∀ (h : ResU.InStratum (LSet.singleton A).join (PMap.empty : WRes))
         (BI : WRes),
         ResU.CompS ρb (ResU.single l (CellU.immOf (LSet.singleton A) v PMap.empty h)) BI →
-        rwpGX (ℍ := ℍ) Φ ∅ (valPostX (Q' A)) n ls' e (BI, g + GRes.life A))
+        rwpGX (ℍ := ℍ) Φ ∅ (valPostX ∅ (Q' A)) n ls' e (BI, g + GRes.life A))
     (hend : ∀ A C k ls'' (w : Val) (ρ' : WRes) (g' : GRes), Q' A C k ls'' w (ρ', g') →
       ρ'.InStratum A ∧ ∃ g'', g' = g'' + GRes.life A ∧
         ∀ R, ResU.CompS ρ' (ResU.single l (CellU.ownOf v)) R → ∀ C₀, Q C₀ k ls w (R, g'')) :
-    rwpGX (ℍ := ℍ) Φ ∅ (valPostX Q) n ls e (ρ, g) := by
+    rwpGX (ℍ := ℍ) Φ ∅ (valPostX ∅ Q) n ls e (ρ, g) := by
   classical
   intro xf sρ ps μ hH3 hsρ hv hwf hwx _ _ _ hT htg hlow hfd jr μ' e' hj hrun
   have hTI := hT.inv
@@ -202,12 +202,13 @@ theorem rwpGX_lend {Φ : LocFam} (l : BoCa.Loc) (T : VTy) (δ : LSub)
     hwpBI (ρf, xf.2) fρ (p :: ps) μ hH17 h4 hVin hWfin hWxin (maskShallow_locs_empty _)
       (maskAuth_empty _) (maskOff_empty _) hTin htgin hlowin hfd jr μ' e' hj hrun
   refine ⟨hr.1, fun hfin => ?_⟩
-  obtain ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps'', ls'', h1, h2, h3, h6, h7, h9, h10m, h11, hT'',
-    htg'', hps''m, hls''m, hV, hN, hW', hWp, -, -, -, -, hpost⟩ := hr.2 hfin
+  obtain ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps'', ls'', h1, h2, h3, h6, h7, h9, h10m, h11, hT'',
+    htg'', hps''m, hls''m, hV, hN, hW', hWp, -, -, -, -, -, -, hpost⟩ := hr.2 hfin
+  obtain ⟨rfl, v', rfl, hq⟩ := hpost
+  rw [Set.union_self] at h10m hps''m hls''m
   have hps'' := RecAgree.empty_iff.mp hps''m
   have hls'' := ListAgree.empty_iff.mp hls''m
   have h10 : UpdVN Φ (n - jr) BI π := updVNm_empty_iff.mp (by simpa using h10m)
-  obtain ⟨v', rfl, hq⟩ := hpost
   obtain ⟨houtρ', g'', rfl, hQend⟩ := hend A _ _ _ _ _ _ hq
   -- end: 6.38 and 6.39 at the index, as `rwp_I_frame`
   obtain ⟨hfρp, hρ'p⟩ := ResU.Hash.split h2 (ResU.hash_symm h3)
@@ -339,10 +340,11 @@ theorem rwpGX_lend {Φ : LocFam} (l : BoCa.Loc) (T : VTy) (δ : LSub)
     simp only [GRes.counted, Set.mem_ofPred_eq, GRes.tok_add, not_lt, nonpos_iff_eq_zero]
     rw [← _root_.add_assoc]; exact hzero
   have hvρp : ρp.Valid := (hash_valid h3).1
-  refine ⟨R, ρp.del l, FR, FRP, RP, g'', gp, ps, ls, ResU.hash_symm hfR, hFR, hPDFR, hFRP,
+  refine ⟨∅, R, ρp.del l, FR, FRP, RP, g'', gp, ps, ls, ResU.hash_symm hfR, hFR, hPDFR, hFRP,
     hmem₂, hRP, ?_, hno, hTout, htgout, RecAgree.refl _ _, ListAgree.refl _ _, ?_, ?_, ?_, ?_,
-    maskShallow_locs_empty _, maskShallow_locs_empty _, maskAuth_empty _, maskOff_empty _,
-    ⟨v', rfl, hQend R hR _⟩⟩
+    maskShallow_locs_empty _, by simpa using maskShallow_locs_empty _, maskAuth_empty _,
+    maskOff_empty _, by simpa using maskShallow_empty _, by simpa using flatNone_empty _,
+    ⟨rfl, v', rfl, hQend R hR _⟩⟩
   · simpa using updVNm_empty_iff.mpr hupdw
   · have : xf.2 + (g'' + GRes.life A + gp) = xf.2 + (g'' + gp) + GRes.life A := by
       rw [GRes.add_right_comm g'' (GRes.life A) gp, ← GRes.add_assoc]
@@ -362,9 +364,9 @@ theorem rwpGX_lend {Φ : LocFam} (l : BoCa.Loc) (T : VTy) (δ : LSub)
     exact hWp α (hcout α hα) (carries_comp_left hpd hvρp hc)
 
 /-- The table with no stop. -/
-def TableX.none : TableX := fun _ _ _ _ _ _ => False
+def TableX.none : TableX := fun _ _ _ _ _ _ _ _ => False
 
-theorem TableX.none_local : TableX.none.Local := fun _ _ _ _ _ _ _ _ h => h
+theorem TableX.none_local : TableX.none.Local := fun _ _ _ _ _ _ _ _ _ _ h => h
 
 /-- **The frame at `erwpX`**, for a run that does not stop. -/
 theorem erwpX_frame_none {Φ : LocFam} {M : Mask} {P : PostX} (R : List SRec → XProp)
@@ -375,11 +377,12 @@ theorem erwpX_frame_none {Φ : LocFam} {M : Mask} {P : PostX} (R : List SRec →
     erwpX (ℍ := ℍ) Φ M TableX.none (fun C k ls' v => sepX (P C k ls' v) (R ls')) n ls e
       (ρ, g₁ + g₂) := by
   rw [erwpX_eq] at h ⊢
-  refine rwpGX_mono (fun C k ls' t x hx => ?_)
-    (rwpGX_frame R hR hcρ hsplit hau₁ hoff₂
-      (rwpGX_mono (fun C k ls' t x h => h.elim id (fun h' => h'.elim)) h) hR₂)
-  obtain ⟨ρa, ρb, ga, gb, hc, hg, ⟨v, rfl, hp⟩, hr⟩ := hx
-  exact Or.inl ⟨v, rfl, ρa, ρb, ga, gb, hc, hg, hp, hr⟩
+  refine rwpGX_mono (fun M' C k ls' t x hx => ?_)
+    (rwpGX_frame_post R (fun M' _ _ ls' _ _ hP hA => by
+        obtain ⟨rfl, -⟩ := hP; rw [Set.union_self] at hA; exact hR _ _ hA) hcρ hsplit hau₁
+      hoff₂ (rwpGX_mono (fun M' C k ls' t x h => h.elim id (fun h' => h'.elim)) h) hR₂)
+  obtain ⟨ρa, ρb, ga, gb, hc, hg, ⟨hM, v, rfl, hp⟩, hr⟩ := hx
+  exact Or.inl ⟨hM, v, rfl, ρa, ρb, ga, gb, hc, hg, hp, hr⟩
 
 /-- **`rwpGX_lend` at `erwpX`**: a body that does not stop, around any table. -/
 theorem erwpX_lend {Φ : LocFam} (l : BoCa.Loc) (T : VTy) (δ : LSub)
@@ -397,11 +400,11 @@ theorem erwpX_lend {Φ : LocFam} (l : BoCa.Loc) (T : VTy) (δ : LSub)
         ∀ R, ResU.CompS ρ' (ResU.single l (CellU.ownOf v)) R → ∀ C₀, Q C₀ k ls w (R, g'')) :
     erwpX (ℍ := ℍ) Φ ∅ Tb Q n ls e (ρ, g) := by
   rw [erwpX_eq]
-  refine rwpGX_mono (fun C k ls' t x h => Or.inl h) ?_
+  refine rwpGX_mono (fun M' C k ls' t x h => Or.inl h) ?_
   refine rwpGX_lend l T δ hadm v hshape e ls hcρ (fun A h₁ h₂ h₃ ls' h₄ h BI hBI => ?_) hend
   have hb := hbody A h₁ h₂ h₃ ls' h₄ h BI hBI
   rw [erwpX_eq] at hb
-  exact rwpGX_mono (fun C k ls'' t x h => h.elim id (fun h' => h'.elim)) hb
+  exact rwpGX_mono (fun M' C k ls'' t x h => h.elim id (fun h' => h'.elim)) hb
 
 end BoCa.Fig16.LogRel.Core.Chain.SI
 
