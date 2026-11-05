@@ -18,7 +18,7 @@ between tasks stays acyclic.
 | stage | what lands | new loan feature | size |
 |---|---|---|---|
 | 1. One relation | `erwpX` defined once, in its final form; `erwp` proved its ghost-free instance; its structural rules and adequacy; `cerwp` and everything built on it retired | none | about 3.0k lines added, 6.0k deleted |
-| 1.5. The access guard | G in the run clause of `rwp`, `rwpG` and `rwpGX`; `UndoneWrite` | none | about 0.4k lines changed or added |
+| 1.5. The access guard | G in the run clause of `rwp`, `rwpG` and `rwpGX`; `UndoneWrite` | none | about 0.5k lines changed or added |
 | 2. Loans | token rules, counted lend across stops, `mut` loans, `[handle]` at `erwpX`, `PoolS`, `HH`, four headlines | yes | about 7.0k lines (7.8k if `CrossProg` is re-proved) |
 
 Stage 2 changes nothing stages 1 and 1.5 define. It only adds rules, the pool theorem and
