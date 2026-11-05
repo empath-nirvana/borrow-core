@@ -127,7 +127,7 @@ theorem CTy.alphaB_sound : ∀ {ρ : List (LifeVar × LifeVar)} {δ δ' : LSub} 
       cases C' with
       | eff n' i' q' A' B' fin' rc' C' =>
           simp only [CTy.alphaB, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at hα
-          obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨hn, hi⟩, hq⟩, -⟩, -⟩, -⟩, -⟩, hA⟩, hB⟩, hf⟩, hC⟩ := hα
+          obtain ⟨⟨⟨⟨⟨⟨⟨hn, hi⟩, hq⟩, -⟩, hA⟩, hB⟩, hf⟩, hC⟩ := hα
           exact ⟨hn, hi, hq, VTy.alphaB_sound A A' h hA, VTy.alphaB_sound B B' h hB,
             CTy.alphaB_sound fin fin' h hf, CTy.alphaB_sound C C' h hC⟩
       | _ => simp [CTy.alphaB] at hα
@@ -277,8 +277,8 @@ theorem CTy.alphaB_swap : ∀ (ρ : List (LifeVar × LifeVar)) (C C' : CTy),
       cases C' with
       | eff n' i' q' A' B' fin' rc' C' =>
           simp only [CTy.alphaB, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h ⊢
-          obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨hn, hi⟩, hq⟩, hr⟩, hA⟩, hB⟩, hf⟩, hA'⟩, hB'⟩, hf'⟩, hC⟩ := h
-          exact ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨hn.symm, hi.symm⟩, hq.symm⟩, hr.symm⟩, hA.symm⟩, hB.symm⟩, hf.symm⟩,
+          obtain ⟨⟨⟨⟨⟨⟨⟨hn, hi⟩, hq⟩, hr⟩, hA'⟩, hB'⟩, hf'⟩, hC⟩ := h
+          exact ⟨⟨⟨⟨⟨⟨⟨hn.symm, hi.symm⟩, hq.symm⟩, hr.symm⟩,
             VTy.alphaB_swap ρ A A' hA'⟩, VTy.alphaB_swap ρ B B' hB'⟩,
             CTy.alphaB_swap ρ fin fin' hf'⟩, CTy.alphaB_swap ρ C C' hC⟩
       | _ => simp [CTy.alphaB] at h
@@ -434,10 +434,10 @@ theorem CTy.alphaB_trans : ∀ {ρ₁ ρ₂ : List (LifeVar × LifeVar)}, AlphaM
           cases E with
           | eff n'' i'' q'' A'' B'' fin'' rc'' E =>
               simp only [CTy.alphaB, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h₁ h₂ ⊢
-              obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨hn, hi⟩, hq⟩, hr⟩, hA⟩, hB⟩, hf⟩, hA'⟩, hB'⟩, hf'⟩, hC⟩ := h₁
-              obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨gn, gi⟩, gq⟩, gr⟩, gA⟩, gB⟩, gf⟩, gA'⟩, gB'⟩, gf'⟩, gC⟩ := h₂
-              exact ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨hn.trans gn, hi.trans gi⟩, hq.trans gq⟩, hr.trans gr⟩,
-                hA.trans gA⟩, hB.trans gB⟩, hf.trans gf⟩, VTy.alphaB_trans hm _ _ _ hA' gA'⟩,
+              obtain ⟨⟨⟨⟨⟨⟨⟨hn, hi⟩, hq⟩, hr⟩, hA'⟩, hB'⟩, hf'⟩, hC⟩ := h₁
+              obtain ⟨⟨⟨⟨⟨⟨⟨gn, gi⟩, gq⟩, gr⟩, gA'⟩, gB'⟩, gf'⟩, gC⟩ := h₂
+              exact ⟨⟨⟨⟨⟨⟨⟨hn.trans gn, hi.trans gi⟩, hq.trans gq⟩, hr.trans gr⟩,
+                VTy.alphaB_trans hm _ _ _ hA' gA'⟩,
                 VTy.alphaB_trans hm _ _ _ hB' gB'⟩, CTy.alphaB_trans hm _ _ _ hf' gf'⟩,
                 CTy.alphaB_trans hm _ _ _ hC gC⟩
           | _ => simp [CTy.alphaB] at h₂
@@ -812,30 +812,93 @@ theorem CTy.alphaB_unroll {C C' : CTy} (h : CTy.alphaB [] C C' = true) (hC : C.N
   exact CTy.alphaB_instT (S := .thunk (.nu C)) (S' := .thunk (.nu C')) h [] C C'
     (fun _ hp => absurd hp List.not_mem_nil) (hfresh hC) (hfresh hC') h
 
-/-- An α-equivalent of a row's type is the row's type at an α-equivalent answer: an operation's
-signature is compared as written. -/
+/-! ### Rows up to α -/
+
+/-- Two operations up to α: the same key, qualifier and mark, their argument, answer and cancel
+row α-equivalent. -/
+def OpSig.AlphaEq (o o' : OpSig) : Prop :=
+  o.n = o'.n ∧ o.i = o'.i ∧ o.q = o'.q ∧ o.rc = o'.rc ∧ VTy.alphaB [] o.A o'.A = true ∧
+    VTy.alphaB [] o.B o'.B = true ∧ CTy.alphaB [] o.fin o'.fin = true
+
+/-- Two rows up to α, operation by operation. -/
+abbrev RowAlpha : List OpSig → List OpSig → Prop := List.Forall₂ OpSig.AlphaEq
+
+theorem OpSig.AlphaEq.refl (o : OpSig) : o.AlphaEq o :=
+  ⟨rfl, rfl, rfl, rfl, VTy.alphaB_refl _, VTy.alphaB_refl _, CTy.alphaB_refl _⟩
+
+theorem OpSig.AlphaEq.symm {o o' : OpSig} (h : o.AlphaEq o') : o'.AlphaEq o :=
+  ⟨h.1.symm, h.2.1.symm, h.2.2.1.symm, h.2.2.2.1.symm, VTy.alphaB_symm h.2.2.2.2.1,
+    VTy.alphaB_symm h.2.2.2.2.2.1, CTy.alphaB_symm h.2.2.2.2.2.2⟩
+
+theorem OpSig.AlphaEq.trans {o o' o'' : OpSig} (h : o.AlphaEq o') (h' : o'.AlphaEq o'') :
+    o.AlphaEq o'' :=
+  ⟨h.1.trans h'.1, h.2.1.trans h'.2.1, h.2.2.1.trans h'.2.2.1, h.2.2.2.1.trans h'.2.2.2.1,
+    VTy.alphaB_trans' h.2.2.2.2.1 h'.2.2.2.2.1, VTy.alphaB_trans' h.2.2.2.2.2.1 h'.2.2.2.2.2.1,
+    CTy.alphaB_trans' h.2.2.2.2.2.2 h'.2.2.2.2.2.2⟩
+
+theorem OpSig.AlphaEq.isZero_eq {o o' : OpSig} (h : o.AlphaEq o') : o.B.isZero = o'.B.isZero := by
+  have hB := h.2.2.2.2.2.1
+  cases hb : o.B <;> cases hb' : o'.B <;> rw [hb, hb'] at hB <;>
+    simp_all [VTy.alphaB, VTy.isZero]
+
+theorem RowAlpha.refl : ∀ S : List OpSig, RowAlpha S S
+  | [] => .nil
+  | o :: S => .cons (OpSig.AlphaEq.refl o) (RowAlpha.refl S)
+
+theorem RowAlpha.symm {S S' : List OpSig} (h : RowAlpha S S') : RowAlpha S' S := by
+  induction h with
+  | nil => exact .nil
+  | cons ho _ ih => exact .cons ho.symm ih
+
+theorem RowAlpha.trans {S S' S'' : List OpSig} (h : RowAlpha S S') (h' : RowAlpha S' S'') :
+    RowAlpha S S'' := by
+  induction h generalizing S'' with
+  | nil => cases h'; exact .nil
+  | cons ho _ ih => cases h' with | cons ho' h' => exact .cons (ho.trans ho') (ih h')
+
+/-- An α-equivalent of a row's type is a row's type: the row up to α, at an α-equivalent answer. -/
 theorem CTy.alphaB_effOf : ∀ (S : List OpSig) {Y : VTy} {D : CTy},
-    CTy.alphaB [] (CTy.effOf S Y) D = true → ∃ Y', D = CTy.effOf S Y' ∧ VTy.alphaB [] Y Y' = true
+    CTy.alphaB [] (CTy.effOf S Y) D = true →
+      ∃ S' Y', D = CTy.effOf S' Y' ∧ RowAlpha S S' ∧ VTy.alphaB [] Y Y' = true
   | [], Y, D, h => by
       cases D <;> simp only [CTy.effOf, CTy.alphaB, reduceCtorEq, Bool.false_eq_true] at h
-      exact ⟨_, rfl, h⟩
+      exact ⟨[], _, rfl, .nil, h⟩
   | o :: S, Y, D, h => by
       cases D with
       | eff n i q A B fin rc D =>
           simp only [CTy.effOf, CTy.alphaB, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h
-          obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨hn, hi⟩, hq⟩, hr⟩, hA⟩, hB⟩, hf⟩, -⟩, -⟩, -⟩, hC⟩ := h
-          obtain ⟨Y', rfl, hY⟩ := CTy.alphaB_effOf S hC
-          subst hn hi hq hr hA hB hf
-          exact ⟨Y', rfl, hY⟩
+          obtain ⟨⟨⟨⟨⟨⟨⟨hn, hi⟩, hq⟩, hr⟩, hA⟩, hB⟩, hf⟩, hC⟩ := h
+          obtain ⟨S', Y', rfl, hS, hY⟩ := CTy.alphaB_effOf S hC
+          exact ⟨⟨n, i, q, A, B, fin, rc⟩ :: S', Y', rfl, .cons ⟨hn, hi, hq, hr, hA, hB, hf⟩ hS, hY⟩
       | _ => simp [CTy.effOf, CTy.alphaB] at h
 
+/-- A row's type at α-equivalent rows and answers. -/
+theorem CTy.alphaB_effOf_of : ∀ {S S' : List OpSig} {Y Y' : VTy}, RowAlpha S S' →
+    VTy.alphaB [] Y Y' = true → CTy.alphaB [] (CTy.effOf S Y) (CTy.effOf S' Y') = true
+  | [], [], _, _, .nil, h => h
+  | _ :: _, _ :: _, _, _, .cons ho hS, h => by
+      obtain ⟨hn, hi, hq, hr, hA, hB, hf⟩ := ho
+      simp only [CTy.effOf, CTy.alphaB, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq]
+      exact ⟨⟨⟨⟨⟨⟨⟨hn, hi⟩, hq⟩, hr⟩, hA⟩, hB⟩, hf⟩, CTy.alphaB_effOf_of hS h⟩
+
 /-- A row's type at α-equivalent answers. -/
-theorem CTy.alphaB_effOf_congr : ∀ (S : List OpSig) {Y Y' : VTy}, VTy.alphaB [] Y Y' = true →
-    CTy.alphaB [] (CTy.effOf S Y) (CTy.effOf S Y') = true
-  | [], _, _, h => h
-  | o :: S, _, _, h => by
-      simp only [CTy.effOf, CTy.alphaB, beq_self_eq_true, decide_true, Bool.and_true,
-        Bool.true_and, VTy.alphaB_refl, CTy.alphaB_refl, CTy.alphaB_effOf_congr S h]
+theorem CTy.alphaB_effOf_congr (S : List OpSig) {Y Y' : VTy} (h : VTy.alphaB [] Y Y' = true) :
+    CTy.alphaB [] (CTy.effOf S Y) (CTy.effOf S Y') = true :=
+  CTy.alphaB_effOf_of (RowAlpha.refl S) h
+
+/-- An α-equivalent cancel row: `⊤` alike, and its operations up to α. -/
+theorem CTy.alphaB_rowOf : ∀ {F F' : CTy}, CTy.alphaB [] F F' = true →
+    F.isTop = F'.isTop ∧ RowAlpha F.rowOf F'.rowOf
+  | .eff n i q A B fin rc C, F', h => by
+      cases F' with
+      | eff n' i' q' A' B' fin' rc' C' =>
+          simp only [CTy.alphaB, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h
+          obtain ⟨⟨⟨⟨⟨⟨⟨hn, hi⟩, hq⟩, hr⟩, hA⟩, hB⟩, hf⟩, hC⟩ := h
+          exact ⟨rfl, .cons ⟨hn, hi, hq, hr, hA, hB, hf⟩ (CTy.alphaB_rowOf hC).2⟩
+      | _ => simp [CTy.alphaB] at h
+  | .top, F', h => by cases F' <;> simp_all [CTy.alphaB, CTy.isTop, CTy.rowOf]
+  | .ret _, F', h | .arr _ _, F', h | .amp _ _, F', h | .all _ _ _, F', h | .nu _, F', h => by
+      cases F' <;> simp_all [CTy.alphaB, CTy.isTop, CTy.rowOf]
 
 /-- `𝒱⟦A⟧ = 𝒱⟦A'⟧` at α-equivalent value types. -/
 theorem vC_alpha {A A' : VTy} (hα : VTy.alphaB [] A A' = true) (b : Bool) (ls : List SRec)

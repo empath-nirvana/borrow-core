@@ -91,6 +91,7 @@ nu-file-twice 2 0 0 11 11 0 # as nu-file-read: three reads, one through a reborr
 nu-file-consumed 2 0 0 5 5 0 # the buffer and the content cell, freed by the object's consume
 nu-file-contexts 3 0 0 10 9 0 # the two buffers and the content cell; the observations are direct calls
 alpha-all-u 1 0 0 2 1 0 # the lent buffer; `read` passed by `[α]` is called directly
+alpha-effect-row 0 0 0 0 0 0 # the handler is erased; the row is related by `[α]`
 clo-higher 2 6 0 8 8 0 # two counters' cells; the indirect calls are `runner`'s calls of its argument, which closures built at two sites reach: the flow analysis is monovariant, and the argument's code is chosen at run time, as a `dyn` call's is
 clone-reuse 6 0 1 36 27 0
 comp-param 0 0 0 0 0 0 # every argument is a closed block and every error a branch

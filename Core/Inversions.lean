@@ -352,8 +352,8 @@ theorem ValCls.step {T : VTy} {j j' : Jdg} (hs : JS j j') (h : ValCls T j) : Val
       exact absurd he.symm (effOf_ne_nu S Y C)
   | alpha hα =>
       obtain ⟨S, Y, rfl, hY⟩ := h
-      obtain ⟨Y', rfl, hY'⟩ := CTy.alphaB_effOf S hα
-      exact ⟨S, Y', rfl, hY.tail (.alpha hY')⟩
+      obtain ⟨S', Y', rfl, -, hY'⟩ := CTy.alphaB_effOf S hα
+      exact ⟨S', Y', rfl, hY.tail (.alpha hY')⟩
 
 theorem ValCls.reach {T : VTy} {j j' : Jdg} (hr : JR j j') (h : ValCls T j) : ValCls T j' := by
   induction hr with
@@ -394,8 +394,8 @@ theorem rigid_top : Rigid .top := by
 theorem alpha_not_effOf {D D' : CTy} (hα : CTy.alphaB [] D D' = true)
     (hD : ∀ S A, D ≠ CTy.effOf S A) : ∀ S A, D' ≠ CTy.effOf S A := by
   rintro S A rfl
-  obtain ⟨Y, rfl, -⟩ := CTy.alphaB_effOf S (CTy.alphaB_symm hα)
-  exact hD S Y rfl
+  obtain ⟨S', Y, rfl, -, -⟩ := CTy.alphaB_effOf S (CTy.alphaB_symm hα)
+  exact hD S' Y rfl
 
 theorem Rigid.alpha {D D' : CTy} (hD : Rigid D) (hα : CTy.alphaB [] D D' = true) : Rigid D' := by
   obtain ⟨he, ha, hn⟩ := hD
@@ -2321,11 +2321,83 @@ same-term rules read a computation at another row only by `[sub]`: they grow row
 Each inversion below gives its rule's premises at the judgement the rule concludes with, and the
 same-term rules' path from there to the judgement read. -/
 
-/-- What a computation at `F_Σ Y` is read at through the same-term rules: a row above `Σ` over a
-view of `Y`, or, with `Σ` below the empty row, a view of `Y`. -/
+/-- α-equivalent rows find α-equivalent operations at a key. -/
+theorem RowAlpha.find {S S' : List OpSig} (h : RowAlpha S S') {n i : UInt32} {o : OpSig}
+    (hf : Row.find S n i = some o) : ∃ o', Row.find S' n i = some o' ∧ o.AlphaEq o' := by
+  induction h with
+  | nil => simp [Row.find] at hf
+  | @cons p p' S S' hp _ ih =>
+      have hkey : decide (n = p.n ∧ i = p.i) = decide (n = p'.n ∧ i = p'.i) := by
+        rw [hp.1, hp.2.1]
+      simp only [Row.find, List.find?_cons] at hf ⊢
+      rw [← hkey]
+      cases hd : decide (n = p.n ∧ i = p.i) <;> rw [hd] at hf <;> simp only at hf ⊢
+      · exact ih hf
+      · cases hf; exact ⟨p', rfl, hp⟩
+
+/-- Rows reached by `[sub]`'s order and `[α]`, in any order of steps. -/
+def RowReach : Row → Row → Prop := Relation.ReflTransGen (fun S S' => RowLe S S' ∨ RowAlpha S S')
+
+/-- Operations reached by `[sub]`'s order and α. -/
+def OpReach : OpSig → OpSig → Prop :=
+  Relation.ReflTransGen (fun o o' => o.LeF o' ∨ o.AlphaEq o')
+
+/-- Cancel rows reached by `[sub]`'s order and α. -/
+def FinReach : CTy → CTy → Prop :=
+  Relation.ReflTransGen (fun F F' => FinLe F F' ∨ CTy.alphaB [] F F' = true)
+
+theorem RowReach.of_le {S S' : Row} (h : RowLe S S') : RowReach S S' := .single (.inl h)
+
+/-- **What a row reached finds**: at every key the row finds, an operation reached from it. -/
+theorem RowReach.find {S S' : Row} (h : RowReach S S') {n i : UInt32} {o : OpSig}
+    (hf : Row.find S n i = some o) : ∃ o', Row.find S' n i = some o' ∧ OpReach o o' := by
+  induction h with
+  | refl => exact ⟨o, hf, .refl⟩
+  | tail _ hs ih =>
+      obtain ⟨o', hf', h'⟩ := ih
+      rcases hs with hle | hα
+      · obtain ⟨o'', hf'', hle'⟩ := hle n i o' hf'
+        exact ⟨o'', hf'', h'.tail (.inl hle')⟩
+      · obtain ⟨o'', hf'', hα'⟩ := RowAlpha.find hα hf'
+        exact ⟨o'', hf'', h'.tail (.inr hα')⟩
+
+theorem OpReach.of_le {o o' : OpSig} (h : o.LeF o') : OpReach o o' := .single (.inl h)
+
+/-- A reached operation has the qualifier, the mark and the answer's `0`-ness. -/
+theorem OpReach.keys {o o' : OpSig} (h : OpReach o o') :
+    o.q = o'.q ∧ o.rc = o'.rc ∧ o.B.isZero = o'.B.isZero := by
+  induction h with
+  | refl => exact ⟨rfl, rfl, rfl⟩
+  | tail _ hs ih =>
+      rcases hs with hle | hα
+      · exact ⟨ih.1.trans hle.1.2.2.1, ih.2.1.trans hle.1.rc_eq, ih.2.2.trans (by rw [hle.1.B_eq])⟩
+      · exact ⟨ih.1.trans hα.2.2.1, ih.2.1.trans hα.2.2.2.1, ih.2.2.trans hα.isZero_eq⟩
+
+theorem OpReach.capB_eq {o o' : OpSig} (h : OpReach o o') : capB o.q o.B = capB o'.q o'.B := by
+  obtain ⟨hq, -, hz⟩ := h.keys; simp only [capB, hq, hz]
+
+theorem OpReach.abort_eq {o o' : OpSig} (h : OpReach o o') : o.abort = o'.abort := by
+  obtain ⟨hq, -, hz⟩ := h.keys; simp only [OpSig.abort, hq, hz]
+
+theorem OpReach.finRead_eq {o o' : OpSig} (h : OpReach o o') : o.finRead = o'.finRead := by
+  obtain ⟨hq, hr, hz⟩ := h.keys; simp only [OpSig.finRead, capB, OpSig.abort, hq, hr, hz]
+
+/-- A reached operation's cancel row is reached, where the cancel row is read. -/
+theorem OpReach.fin {o o' : OpSig} (h : OpReach o o') (hr : o.finRead = true) :
+    FinReach o.fin o'.fin := by
+  induction h with
+  | refl => exact .refl
+  | @tail o₁ o₂ h₁ hs ih =>
+      have hr₁ : o₁.finRead = true := (OpReach.finRead_eq h₁) ▸ hr
+      rcases hs with hle | hα
+      · exact (ih).tail (.inl (hle.2 hr₁))
+      · exact (ih).tail (.inr hα.2.2.2.2.2.2)
+
+/-- What a computation at `F_Σ Y` is read at through the same-term rules: a row reached from `Σ`
+over a view of `Y`, or, with the empty row reached from `Σ`, a view of `Y`. -/
 def RowCls (S : Row) (Y : VTy) : Jdg → Prop
-  | .comp D => ∃ S' Y', D = CTy.effOf S' Y' ∧ RowLe S S' ∧ VView Y Y'
-  | .val Y' => RowLe S [] ∧ VView Y Y'
+  | .comp D => ∃ S' Y', D = CTy.effOf S' Y' ∧ RowReach S S' ∧ VView Y Y'
+  | .val Y' => RowReach S [] ∧ VView Y Y'
 
 theorem RowCls.step {S : Row} {Y : VTy} {j j' : Jdg} (hs : JS j j') (h : RowCls S Y j) :
     RowCls S Y j' := by
@@ -2339,7 +2411,7 @@ theorem RowCls.step {S : Row} {Y : VTy} {j j' : Jdg} (hs : JS j j') (h : RowCls 
   | effSub S₀ S₁ A hle' =>
       obtain ⟨S', Y', he, hle, hY⟩ := h
       obtain ⟨rfl, rfl⟩ := effOf_inj he
-      exact ⟨_, _, rfl, hle.trans hle', hY⟩
+      exact ⟨_, _, rfl, hle.tail (.inl hle'), hY⟩
   | nuIn C hC =>
       obtain ⟨S', Y', he, -⟩ := h
       obtain ⟨C₁, C₂, hu⟩ := unroll_amp hC
@@ -2349,8 +2421,8 @@ theorem RowCls.step {S : Row} {Y : VTy} {j j' : Jdg} (hs : JS j j') (h : RowCls 
       exact absurd he.symm (effOf_ne_nu S' Y' C)
   | alpha hα =>
       obtain ⟨S', Y', rfl, hle, hY⟩ := h
-      obtain ⟨Y'', rfl, hY'⟩ := CTy.alphaB_effOf S' hα
-      exact ⟨S', Y'', rfl, hle, hY.alpha hY'⟩
+      obtain ⟨S'', Y'', rfl, hS, hY'⟩ := CTy.alphaB_effOf S' hα
+      exact ⟨S'', Y'', rfl, hle.tail (.inr hS), hY.alpha hY'⟩
 
 theorem RowCls.reach {S : Row} {Y : VTy} {j j' : Jdg} (hr : JR j j') (h : RowCls S Y j) :
     RowCls S Y j' := by
@@ -2358,10 +2430,11 @@ theorem RowCls.reach {S : Row} {Y : VTy} {j j' : Jdg} (hr : JR j j') (h : RowCls
   | refl => exact h
   | tail _ hs ih => exact ih.step hs
 
-/-- **The same-term rules grow rows**: a computation at `F_Σ Y` read at `F_Σ′ Y′` has `Σ ≤ Σ′`. -/
+/-- **The same-term rules grow rows, up to α**: a computation at `F_Σ Y` read at `F_Σ′ Y′` has
+`Σ′` reached from `Σ` by `[sub]`'s order and `[α]`. -/
 theorem JR.rowLe {S S' : Row} {Y Y' : VTy}
-    (hr : JR (.comp (CTy.effOf S Y)) (.comp (CTy.effOf S' Y'))) : RowLe S S' := by
-  obtain ⟨S₁, Y₁, he, hle, -⟩ := RowCls.reach hr (S := S) (Y := Y) ⟨S, Y, rfl, RowLe.refl S, .refl⟩
+    (hr : JR (.comp (CTy.effOf S Y)) (.comp (CTy.effOf S' Y'))) : RowReach S S' := by
+  obtain ⟨S₁, Y₁, he, hle, -⟩ := RowCls.reach hr (S := S) (Y := Y) ⟨S, Y, rfl, .refl, .refl⟩
   obtain ⟨rfl, -⟩ := effOf_inj he
   exact hle
 
@@ -2916,8 +2989,8 @@ theorem kappa_cancel_jr {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy} {T : VTy
     · have := vview_bang_thunk (hT.trans hc); simp [CTy.alphaB] at this
     · have hα := vview_bang_thunk hT
       obtain ⟨S, A, rfl⟩ := JR.comp_val hr'
-      obtain ⟨Y, he, -⟩ := CTy.alphaB_effOf S (CTy.alphaB_symm hα)
-      exact absurd he (effOf_ne_amp S Y C₁ C₂).symm
+      obtain ⟨Sα, Y, he, -, -⟩ := CTy.alphaB_effOf S (CTy.alphaB_symm hα)
+      exact absurd he (effOf_ne_amp Sα Y C₁ C₂).symm
   all_goals first
     | (cases he)
     | skip
@@ -2966,7 +3039,7 @@ theorem kcancel_jr_cancellable {Δ : LifeCtx} {Γ Γ' : Ctx VTy} {C₁ C₂ : CT
 are below the row. -/
 theorem cancelTy_rowLe {S : Row} {F : CTy} {R : VTy}
     (h : JR (.comp (cancelTy S F)) (.comp (CTy.effOf S R))) :
-    F.isTop = false ∧ RowLe (F.rowOf ++ S) S := by
+    F.isTop = false ∧ RowReach (F.rowOf ++ S) S := by
   cases hF : F.isTop
   · rw [show cancelTy S F = CTy.effOf (F.rowOf ++ S) .unit by simp [cancelTy, hF]] at h
     exact ⟨rfl, JR.rowLe h⟩
@@ -2974,8 +3047,8 @@ theorem cancelTy_rowLe {S : Row} {F : CTy} {R : VTy}
     obtain ⟨D', he, hα⟩ := JR.rigid h rigid_top
     simp only [Jdg.comp.injEq] at he
     subst he
-    obtain ⟨Y, he, -⟩ := CTy.alphaB_effOf S (CTy.alphaB_symm hα)
-    exact (effOf_ne_top S Y he.symm).elim
+    obtain ⟨Sα, Y, he, -, -⟩ := CTy.alphaB_effOf S (CTy.alphaB_symm hα)
+    exact (effOf_ne_top Sα Y he.symm).elim
 
 /-! ### A continuation is used once: the clauses R1–R4
 
@@ -3160,7 +3233,7 @@ theorem refuses_cancelClause_lin {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VT
   obtain ⟨D', he, hα⟩ := hc.rigid rigid_top
   simp only [Jdg.comp.injEq] at he
   subst he
-  obtain ⟨Y, he, -⟩ := CTy.alphaB_effOf _ (CTy.alphaB_symm hα)
+  obtain ⟨_, Y, he, -, -⟩ := CTy.alphaB_effOf _ (CTy.alphaB_symm hα)
   exact effOf_ne_top _ _ he.symm
 
 /-- **The clause typing refuses R1–R4's clauses** at the classes S6's witnesses name: R1, R2 and R4
@@ -3193,7 +3266,7 @@ theorem refuses_clC_lin {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {A B :
   obtain ⟨D', he, hα⟩ := JR.rigid ((hc.trans hr').trans hr) rigid_top
   simp only [Jdg.comp.injEq] at he
   subst he
-  obtain ⟨Y, he, -⟩ := CTy.alphaB_effOf _ (CTy.alphaB_symm hα)
+  obtain ⟨_, Y, he, -, -⟩ := CTy.alphaB_effOf _ (CTy.alphaB_symm hα)
   exact effOf_ne_top _ _ he.symm
 
 open EffExamples in

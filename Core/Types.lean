@@ -1706,9 +1706,7 @@ def VTy.alphaB (ρ : List (LifeVar × LifeVar)) : VTy → VTy → Bool
   | _, _ => false
 /-- Computation types equal up to the names of their lifetime binders, under the binder pairs
 `ρ`: `∀'x ⊏ @b. C` and `∀'x' ⊏ @b'. C'` when `@b`, `@b'` are, and `C`, `C'` are with `'x`
-paired with `'x'`.  An operation's signature (`A ↠ B` and its cancel row) is compared as it is
-written, and read at `ρ` only for its free lifetimes: a row is tied to the effect context's
-signatures as written (`RowAt`), so the same-term rules leave it unchanged. -/
+paired with `'x'`; an operation's signature `A ↠ B` and its cancel row as every other type. -/
 def CTy.alphaB (ρ : List (LifeVar × LifeVar)) : CTy → CTy → Bool
   | .ret A, .ret A' => VTy.alphaB ρ A A'
   | .arr A C, .arr A' C' => VTy.alphaB ρ A A' && CTy.alphaB ρ C C'
@@ -1717,9 +1715,8 @@ def CTy.alphaB (ρ : List (LifeVar × LifeVar)) : CTy → CTy → Bool
   | .all x b C, .all x' b' C' => lifeAlphaB ρ b b' && CTy.alphaB ((x, x') :: ρ) C C'
   | .nu C, .nu C' => CTy.alphaB ρ C C'
   | .eff n i q A B fin rc C, .eff n' i' q' A' B' fin' rc' C' =>
-      n == n' && i == i' && decide (q = q') && rc == rc' && decide (A = A') && decide (B = B') &&
-        decide (fin = fin') && VTy.alphaB ρ A A' && VTy.alphaB ρ B B' && CTy.alphaB ρ fin fin' &&
-        CTy.alphaB ρ C C'
+      n == n' && i == i' && decide (q = q') && rc == rc' && VTy.alphaB ρ A A' &&
+        VTy.alphaB ρ B B' && CTy.alphaB ρ fin fin' && CTy.alphaB ρ C C'
   | _, _ => false
 end
 

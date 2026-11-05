@@ -439,6 +439,33 @@ theorem finLe_top_top {F F' : CTy} (h : FinLe F F') (hF : F.isTop = true) : F'.i
   · exact h
   · rw [hF] at h; cases h
 
+/-- A cancel row reached from `⊤` by `[sub]`'s order and α is `⊤`. -/
+theorem finReach_top_top {F F' : CTy} (h : FinReach F F') (hF : F.isTop = true) :
+    F'.isTop = true := by
+  induction h with
+  | refl => exact hF
+  | tail _ hs ih =>
+      rcases hs with hle | hα
+      · exact finLe_top_top hle ih
+      · exact (CTy.alphaB_rowOf hα).1 ▸ ih
+
+/-- A cancel row reached from one that finds a key finds that key, unless it is `⊤`. -/
+theorem finReach_find {F F' : CTy} (h : FinReach F F') {n i : UInt32} {o : OpSig}
+    (hf : Row.find F.rowOf n i = some o) :
+    F'.isTop = true ∨ ∃ o', Row.find F'.rowOf n i = some o' := by
+  induction h with
+  | refl => exact .inr ⟨o, hf⟩
+  | tail _ hs ih =>
+      rcases hs with hle | hα
+      · rcases ih with ht | ⟨o₁, hf₁⟩
+        · exact .inl (finLe_top_top hle ht)
+        · exact finLe_find hle hf₁
+      · obtain ⟨htop, hrow⟩ := CTy.alphaB_rowOf hα
+        rcases ih with ht | ⟨o₁, hf₁⟩
+        · exact .inl (htop ▸ ht)
+        · obtain ⟨o₂, hf₂, -⟩ := RowAlpha.find hrow hf₁
+          exact .inr ⟨o₂, hf₂⟩
+
 /-- **`progT` has no derivation at a row without `2`** (decision D3).  `[handle] 1`'s body holds
 `hnd 2 (perform 1 then x. x unwind raise 2)`: the `[then]`'s premise puts `2` in the cancel row of
 `1`, `fs 0`, which `[sub]` up to the body keeps; the clause applies `κ`'s cancel branch, at
@@ -452,7 +479,7 @@ theorem not_der_progT {Δ : LifeCtx} {Γ : Ctx VTy} {S' : Row} {Y : VTy}
     der_hndJ₁ (n := 1) (Q := (qualsVal [.unr]).1)
       (H := (.pair (.val idV) (.pair (.val cancelCT) (.val Val.unit))))
       (M := ((K 2).plug (performU 1))) h (by not_tail [cancelCT, constC])
-  have hSS' : RowLe S S' := JR.rowLe hr₁
+  have hSS' : RowReach S S' := JR.rowLe hr₁
   have hE : [Qual.unr] = E.map Prod.fst := qualsVal_inj hQ
   obtain ⟨⟨q₁, A₁, B₁⟩, rfl⟩ : ∃ e, E = [e] := by
     rcases E with _ | ⟨e, _ | ⟨e', E'⟩⟩
@@ -466,46 +493,46 @@ theorem not_der_progT {Δ : LifeCtx} {Γ : Ctx VTy} {S' : Row} {Y : VTy}
     der_hndJ₁ (n := 2) (Q := (qualsVal [.unr]).1)
       (H := (.pair (.val idV) (.pair (.val (constC Val.unit)) (.val Val.unit))))
       (M := ((uF (raiseU 2) .hole).plug (performU 1))) hM (by not_tail [cancelCT, constC])
-  have hS₂ : RowLe S₂ (Row.ofEff 1 [(.unr, A₁, B₁)] 0 fs cs ++ S) := JR.rowLe hr₂
+  have hS₂ : RowReach S₂ (Row.ofEff 1 [(.unr, A₁, B₁)] 0 fs cs ++ S) := JR.rowLe hr₂
   obtain ⟨j₃, ⟨Γ₅, Γ₆, A₃, B₃, S₃, SM, SD, -, hMS, -, hfin, hMp, hDr, rfl⟩, hr₃⟩ :=
     der_thenJ hM₂ (.var 0) (raiseU 2) (performU 1) rfl
-  have hS₃ : RowLe S₃ (Row.ofEff 2 E₂ 0 fs₂ cs₂ ++ S₂) := JR.rowLe hr₃
+  have hS₃ : RowReach S₃ (Row.ofEff 2 E₂ 0 fs₂ cs₂ ++ S₂) := JR.rowLe hr₃
   -- `perform 1`'s row finds `1`, the finaliser's row finds `2`
   obtain ⟨j₄, ⟨S₄, oM₀, hf₄, ha₄, -, rfl⟩, hr₄⟩ := der_performJ hMp 1 0 (.val Val.unit) rfl
-  obtain ⟨oM, hfM, hleM⟩ := JR.rowLe hr₄ 1 0 oM₀ hf₄
+  obtain ⟨oM, hfM, hleM⟩ := (JR.rowLe hr₄).find hf₄
   obtain ⟨j₅, ⟨S₅, oD₀, B₅, hf₅, -, -, rfl⟩, hr₅⟩ := der_raiseJ hDr 2 0 (.val Val.unit) rfl
-  obtain ⟨oD, hfD, -⟩ := JR.rowLe hr₅ 2 0 oD₀ hf₅
+  obtain ⟨oD, hfD, -⟩ := (JR.rowLe hr₅).find hf₅
   -- `1` from the `[then]` up to `[handle] 1`'s body
   obtain ⟨o₃, hf₃, hle₃⟩ := hMS 1 0 oM hfM
-  obtain ⟨o₄, hf₄', hle₄⟩ := hS₃ 1 0 o₃ hf₃
+  obtain ⟨o₄, hf₄', hle₄⟩ := hS₃.find hf₃
   rw [Row.find_append, Row.find_ofEff_ne 2 E₂ 0 fs₂ 1 0 (by decide), Option.none_or] at hf₄'
-  obtain ⟨o₅, hf₅', hle₅⟩ := hS₂ 1 0 o₄ hf₄'
+  obtain ⟨o₅, hf₅', hle₅⟩ := hS₂.find hf₄'
   rw [Row.find_append, show Row.find (Row.ofEff 1 [(.unr, A₁, B₁)] 0 fs cs) 1 0 =
     some ⟨1, 0, .unr, A₁, B₁, fs 0, cs 0⟩ from rfl, Option.some_or] at hf₅'
   cases hf₅'
-  have hsig : oM₀.Sig ⟨1, 0, .unr, A₁, B₁, fs 0, cs 0⟩ :=
-    hleM.1.trans (hle₃.1.trans (hle₄.1.trans hle₅.1))
+  have hsig : OpReach oM₀ ⟨1, 0, .unr, A₁, B₁, fs 0, cs 0⟩ :=
+    hleM.trans ((OpReach.of_le hle₃).trans (hle₄.trans hle₅))
   have hB₁ : B₁.isZero = false := by
     have := hsig.abort_eq
     rw [ha₄] at this
     simpa [OpSig.abort] using this.symm
   have hcap₀ : capB oM₀.q oM₀.B = true := by
     rw [hsig.capB_eq]; simp [capB, hB₁]
-  have hcapM : capB oM.q oM.B = true := hleM.1.capB_eq ▸ hcap₀
+  have hcapM : capB oM.q oM.B = true := hleM.capB_eq ▸ hcap₀
   have hcap₃ : capB o₃.q o₃.B = true := hle₃.1.capB_eq ▸ hcapM
-  have hcap₄ : capB o₄.q o₄.B = true := hle₄.1.capB_eq ▸ hcap₃
+  have hcap₄ : capB o₄.q o₄.B = true := hle₄.capB_eq ▸ hcap₃
   -- `2` in the cancel row of `1`, or the cancel row `⊤`
-  have h₃₄ : FinLe o₃.fin o₄.fin := hle₄.2 (OpSig.finRead_of_capB hcap₃)
-  have h₄₅ : FinLe o₄.fin (fs 0) := hle₅.2 (OpSig.finRead_of_capB hcap₄)
+  have h₃₄ : FinReach o₃.fin o₄.fin := hle₄.fin (OpSig.finRead_of_capB hcap₃)
+  have h₄₅ : FinReach o₄.fin (fs 0) := hle₅.fin (OpSig.finRead_of_capB hcap₄)
   have hfs : (fs 0).isTop = true ∨ ∃ o₆, Row.find (fs 0).rowOf 2 0 = some o₆ := by
     have hT := hfin 1 0 oM o₃ hfM hf₃ hcapM
     rw [ThenLe] at hT
     rcases hT with hT | ⟨-, -, hT⟩
-    · exact .inl (finLe_top_top h₄₅ (finLe_top_top h₃₄ hT))
+    · exact .inl (finReach_top_top h₄₅ (finReach_top_top h₃₄ hT))
     · obtain ⟨o', hf', -⟩ := hT 2 0 oD hfD
-      rcases finLe_find h₃₄ hf' with h₄ | ⟨o'', hf''⟩
-      · exact .inl (finLe_top_top h₄₅ h₄)
-      · exact finLe_find h₄₅ hf''
+      rcases finReach_find h₃₄ hf' with h₄ | ⟨o'', hf''⟩
+      · exact .inl (finReach_top_top h₄₅ h₄)
+      · exact finReach_find h₄₅ hf''
   -- the clause reads `κ`'s cancel at its row
   rcases der_pair hH _ _ rfl with ⟨Γ₇, Γ₈, X₁, X₂, -, -, hcl, hc₁⟩ | he
   swap
@@ -532,8 +559,8 @@ theorem not_der_progT {Δ : LifeCtx} {Γ : Ctx VTy} {S' : Row} {Y : VTy}
         rw [this] at hf₆; simp [Row.find] at hf₆
     rw [show cancelTy S (fs 0) = CTy.effOf ((fs 0).rowOf ++ S) .unit by
       simp [cancelTy, hnt]] at hjr
-    obtain ⟨o₇, hf₇, -⟩ := JR.rowLe hjr 2 0 o₆ (by rw [Row.find_append, hf₆]; rfl)
-    obtain ⟨o₈, hf₈, -⟩ := hSS' 2 0 o₇ hf₇
+    obtain ⟨o₇, hf₇, -⟩ := (JR.rowLe hjr).find (by rw [Row.find_append, hf₆]; rfl)
+    obtain ⟨o₈, hf₈, -⟩ := hSS'.find hf₇
     obtain ⟨hm₈, hn₈, -⟩ := Row.find_mem hf₈
     exact hS' o₈ hm₈ hn₈
 
@@ -1211,6 +1238,46 @@ theorem FindsRec.mono {m : UInt32} {G G' : CTy} (h : FinLe G G') (hG : FindsRec 
     · obtain ⟨x', hx₁, hle'⟩ := hle m 0 x hx
       exact .inr ⟨x', hx₁, hle'.1.capB_eq ▸ hc, hx'.mono (hle'.2 (OpSig.finRead_of_capB hc))⟩
 
+theorem FindsAt.alpha {m : UInt32} {G G' : CTy} (h : CTy.alphaB [] G G' = true)
+    (hG : FindsAt m G) : FindsAt m G' := by
+  obtain ⟨ht, hr⟩ := CTy.alphaB_rowOf h
+  rcases hG with hT | ⟨y, hy⟩
+  · exact .inl (ht ▸ hT)
+  · obtain ⟨y', hy', -⟩ := RowAlpha.find hr hy; exact .inr ⟨y', hy'⟩
+
+theorem FindsAt.monoR {m : UInt32} {G G' : CTy} (h : FinReach G G') (hG : FindsAt m G) :
+    FindsAt m G' := by
+  induction h with
+  | refl => exact hG
+  | tail _ hs ih => rcases hs with hle | hα; exact ih.mono hle; exact ih.alpha hα
+
+theorem FindsCap.monoR {m : UInt32} {G G' : CTy} (h : FinReach G G') (hG : FindsCap m G) :
+    FindsCap m G' := by
+  induction h with
+  | refl => exact hG
+  | tail _ hs ih =>
+      rcases hs with hle | hα
+      · exact ih.mono hle
+      · obtain ⟨ht, hr⟩ := CTy.alphaB_rowOf hα
+        rcases ih with hT | ⟨x, hx, hc⟩
+        · exact .inl (ht ▸ hT)
+        · obtain ⟨x', hx', hxα⟩ := RowAlpha.find hr hx
+          exact .inr ⟨x', hx', OpReach.capB_eq (o := x) (o' := x') (.single (.inr hxα)) ▸ hc⟩
+
+theorem FindsRec.monoR {m : UInt32} {G G' : CTy} (h : FinReach G G') (hG : FindsRec m G) :
+    FindsRec m G' := by
+  induction h with
+  | refl => exact hG
+  | tail _ hs ih =>
+      rcases hs with hle | hα
+      · exact ih.mono hle
+      · obtain ⟨ht, hr⟩ := CTy.alphaB_rowOf hα
+        rcases ih with hT | ⟨x, hx, hc, hxf⟩
+        · exact .inl (ht ▸ hT)
+        · obtain ⟨x', hx', hxα⟩ := RowAlpha.find hr hx
+          exact .inr ⟨x', hx', OpReach.capB_eq (o := x) (o' := x') (.single (.inr hxα)) ▸ hc,
+            hxf.alpha hxα.2.2.2.2.2.2⟩
+
 /-- **The finaliser below a cancel row**: a capturable operation of `m` in `E` puts one in
 `F ⋈ E`. -/
 theorem thenLe_findsCap {m : UInt32} {F T : CTy} {E : Row} (h : ThenLe F E T) {z : OpSig}
@@ -1266,7 +1333,7 @@ theorem not_der_progNCrecT {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives
       (H := (.pair (.val idV) (.pair (.val cancelCT) (.val Val.unit))))
       (M := (hndE (hU 4 idV (constC Val.unit))
         (thenU (thenU (performU 1) (performU 4)) (performU 4)))) hM₀ (by not_tail [cancelCT, constC])
-  have hS₁ : RowLe S₁ (Row.ofEff 4 [(.unr, A₀, B₀)] 0 fs₀ cs₀ ++ S₀) := JR.rowLe hr₁
+  have hS₁ : RowReach S₁ (Row.ofEff 4 [(.unr, A₀, B₀)] 0 fs₀ cs₀ ++ S₀) := JR.rowLe hr₁
   have hE₁ : [Qual.unr] = E₁.map Prod.fst := qualsVal_inj hQ₁
   obtain ⟨⟨q₁, A₁, B₁⟩, rfl⟩ : ∃ e, E₁ = [e] := by
     rcases E₁ with _ | ⟨e, _ | ⟨e', E'⟩⟩
@@ -1280,7 +1347,7 @@ theorem not_der_progNCrecT {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives
     der_hndJ₁ (n := 4) (Q := (qualsVal [.unr]).1)
       (H := (.pair (.val idV) (.pair (.val (constC Val.unit)) (.val Val.unit))))
       (M := (thenU (thenU (performU 1) (performU 4)) (performU 4))) hM₁ (by not_tail [cancelCT, constC])
-  have hS₂ : RowLe S₂ (Row.ofEff 1 [(.unr, A₁, B₁)] 0 fs₁ cs₁ ++ S₁) := JR.rowLe hr₂
+  have hS₂ : RowReach S₂ (Row.ofEff 1 [(.unr, A₁, B₁)] 0 fs₁ cs₁ ++ S₁) := JR.rowLe hr₂
   have hE₂ : [Qual.unr] = E₂.map Prod.fst := qualsVal_inj hQ₂
   obtain ⟨⟨q₂, A₂', B₂'⟩, rfl⟩ : ∃ e, E₂ = [e] := by
     rcases E₂ with _ | ⟨e, _ | ⟨e', E'⟩⟩
@@ -1291,82 +1358,84 @@ theorem not_der_progNCrecT {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives
   subst hE₂
   obtain ⟨j₃, ⟨Γg, Γh, A₃, B₃, S₃, SM₃, SD₃, -, hMS₃, -, hfin₃, hM₃, hD₃, rfl⟩, hr₃⟩ :=
     der_thenJ hM₂ (.var 0) (performU 4) (thenU (performU 1) (performU 4)) rfl
-  have hS₃ : RowLe S₃ (Row.ofEff 4 [(.unr, A₂', B₂')] 0 fs₂ cs₂ ++ S₂) := JR.rowLe hr₃
+  have hS₃ : RowReach S₃ (Row.ofEff 4 [(.unr, A₂', B₂')] 0 fs₂ cs₂ ++ S₂) := JR.rowLe hr₃
   obtain ⟨j₄, ⟨Γi, Γj, A₄, B₄, S₄, SM₄, SD₄, -, hMS₄, hDS₄, hfin₄, hM₄, hD₄, rfl⟩, hr₄⟩ :=
     der_thenJ hM₃ (.var 0) (performU 4) (performU 1) rfl
-  have hS₄ : RowLe S₄ SM₃ := JR.rowLe hr₄
+  have hS₄ : RowReach S₄ SM₃ := JR.rowLe hr₄
   -- the operations the three `perform`s find
   obtain ⟨j₅, ⟨S₅, oP₀, hf₅, ha₅, -, rfl⟩, hr₅⟩ := der_performJ hM₄ 1 0 (.val Val.unit) rfl
-  obtain ⟨oP, hfP, hleP⟩ := JR.rowLe hr₅ 1 0 oP₀ hf₅
+  obtain ⟨oP, hfP, hleP⟩ := (JR.rowLe hr₅).find hf₅
   obtain ⟨j₆, ⟨S₆, oD₀, hf₆, ha₆, -, rfl⟩, hr₆⟩ := der_performJ hD₄ 4 0 (.val Val.unit) rfl
-  obtain ⟨oD, hfD, hleD⟩ := JR.rowLe hr₆ 4 0 oD₀ hf₆
+  obtain ⟨oD, hfD, hleD⟩ := (JR.rowLe hr₆).find hf₆
   obtain ⟨j₇, ⟨S₇, oE₀, hf₇, ha₇, -, rfl⟩, hr₇⟩ := der_performJ hD₃ 4 0 (.val Val.unit) rfl
-  obtain ⟨oE, hfE, -⟩ := JR.rowLe hr₇ 4 0 oE₀ hf₇
+  obtain ⟨oE, hfE, -⟩ := (JR.rowLe hr₇).find hf₇
   -- `1` from `perform 1` up to `[handle] 1`'s body: unrestricted, its answer no `0`
   obtain ⟨o₄₁, hf₄₁, hle₄₁⟩ := hMS₄ 1 0 oP hfP
-  obtain ⟨o₃₁, hf₃₁, hle₃₁⟩ := hS₄ 1 0 o₄₁ hf₄₁
+  obtain ⟨o₃₁, hf₃₁, hle₃₁⟩ := hS₄.find hf₄₁
   obtain ⟨o₂₁, hf₂₁, hle₂₁⟩ := hMS₃ 1 0 o₃₁ hf₃₁
-  obtain ⟨o₂₁', hf₂₁', hle₂₁'⟩ := hS₃ 1 0 o₂₁ hf₂₁
+  obtain ⟨o₂₁', hf₂₁', hle₂₁'⟩ := hS₃.find hf₂₁
   rw [Row.find_append, Row.find_ofEff_ne 4 _ 0 fs₂ 1 0 (by decide), Option.none_or] at hf₂₁'
-  obtain ⟨o₁, hf₁, hle₁⟩ := hS₂ 1 0 o₂₁' hf₂₁'
+  obtain ⟨o₁, hf₁, hle₁⟩ := hS₂.find hf₂₁'
   rw [Row.find_append, show Row.find (Row.ofEff 1 [(.unr, A₁, B₁)] 0 fs₁ cs₁) 1 0 =
     some ⟨1, 0, .unr, A₁, B₁, fs₁ 0, cs₁ 0⟩ from rfl, Option.some_or] at hf₁
   cases hf₁
-  have hsig₁ : oP₀.Sig ⟨1, 0, .unr, A₁, B₁, fs₁ 0, cs₁ 0⟩ :=
-    hleP.1.trans (hle₄₁.1.trans (hle₃₁.1.trans (hle₂₁.1.trans (hle₂₁'.1.trans hle₁.1))))
+  have hsig₁ : OpReach oP₀ ⟨1, 0, .unr, A₁, B₁, fs₁ 0, cs₁ 0⟩ :=
+    hleP.trans ((OpReach.of_le hle₄₁).trans (hle₃₁.trans ((OpReach.of_le hle₂₁).trans
+      (hle₂₁'.trans hle₁))))
   have hB₁ : B₁.isZero = false := by
     have := hsig₁.abort_eq
     rw [ha₅] at this
     simpa [OpSig.abort] using this.symm
   have hcap₁ : capB oP₀.q oP₀.B = true := by rw [hsig₁.capB_eq]; simp [capB, hB₁]
-  have hcapP : capB oP.q oP.B = true := hleP.1.capB_eq ▸ hcap₁
+  have hcapP : capB oP.q oP.B = true := hleP.capB_eq ▸ hcap₁
   have hcap₄₁ : capB o₄₁.q o₄₁.B = true := hle₄₁.1.capB_eq ▸ hcapP
-  have hcap₃₁ : capB o₃₁.q o₃₁.B = true := hle₃₁.1.capB_eq ▸ hcap₄₁
+  have hcap₃₁ : capB o₃₁.q o₃₁.B = true := hle₃₁.capB_eq ▸ hcap₄₁
   have hcap₂₁ : capB o₂₁.q o₂₁.B = true := hle₂₁.1.capB_eq ▸ hcap₃₁
-  have hcap₂₁' : capB o₂₁'.q o₂₁'.B = true := hle₂₁'.1.capB_eq ▸ hcap₂₁
+  have hcap₂₁' : capB o₂₁'.q o₂₁'.B = true := hle₂₁'.capB_eq ▸ hcap₂₁
   -- the first finaliser's `4`, up to the inner `[handle] 4`: unrestricted, its answer no `0`
   obtain ⟨d₄, hfd₄, hled₄⟩ := hDS₄ 4 0 oD hfD
-  obtain ⟨d₃, hfd₃, hled₃⟩ := hS₄ 4 0 d₄ hfd₄
+  obtain ⟨d₃, hfd₃, hled₃⟩ := hS₄.find hfd₄
   obtain ⟨d₂, hfd₂, hled₂⟩ := hMS₃ 4 0 d₃ hfd₃
-  obtain ⟨d₁, hfd₁, hled₁⟩ := hS₃ 4 0 d₂ hfd₂
+  obtain ⟨d₁, hfd₁, hled₁⟩ := hS₃.find hfd₂
   rw [Row.find_append, show Row.find (Row.ofEff 4 [(.unr, A₂', B₂')] 0 fs₂ cs₂) 4 0 =
     some ⟨4, 0, .unr, A₂', B₂', fs₂ 0, cs₂ 0⟩ from rfl, Option.some_or] at hfd₁
   cases hfd₁
-  have hsigD : oD₀.Sig ⟨4, 0, .unr, A₂', B₂', fs₂ 0, cs₂ 0⟩ :=
-    hleD.1.trans (hled₄.1.trans (hled₃.1.trans (hled₂.1.trans hled₁.1)))
+  have hsigD : OpReach oD₀ ⟨4, 0, .unr, A₂', B₂', fs₂ 0, cs₂ 0⟩ :=
+    hleD.trans ((OpReach.of_le hled₄).trans (hled₃.trans ((OpReach.of_le hled₂).trans hled₁)))
   have hB₂ : B₂'.isZero = false := by
     have := hsigD.abort_eq
     rw [ha₆] at this
     simpa [OpSig.abort] using this.symm
   have hcapD₀ : capB oD₀.q oD₀.B = true := by rw [hsigD.capB_eq]; simp [capB, hB₂]
-  have hcapD : capB oD.q oD.B = true := hleD.1.capB_eq ▸ hcapD₀
+  have hcapD : capB oD.q oD.B = true := hleD.capB_eq ▸ hcapD₀
   -- the first finaliser puts `4` in the cancel row of `1`; the second, a leftover of that `4`'s
   -- cancel, puts `4` in its cancel row in turn
   have h₄ : FindsCap 4 o₄₁.fin := thenLe_findsCap (hfin₄ 1 0 oP o₄₁ hfP hf₄₁ hcapP) hfD hcapD
-  have h₃ : FindsCap 4 o₃₁.fin := h₄.mono (hle₃₁.2 (OpSig.finRead_of_capB hcap₄₁))
+  have h₃ : FindsCap 4 o₃₁.fin := h₄.monoR (hle₃₁.fin (OpSig.finRead_of_capB hcap₄₁))
   have h₂ : FindsRec 4 o₂₁.fin := thenLe_findsRec (hfin₃ 1 0 o₃₁ o₂₁ hf₃₁ hf₂₁ hcap₃₁) h₃ hfE
-  have h₁ : FindsRec 4 (fs₁ 0) := (h₂.mono (hle₂₁'.2 (OpSig.finRead_of_capB hcap₂₁))).mono (hle₁.2 (OpSig.finRead_of_capB hcap₂₁'))
+  have h₁ : FindsRec 4 (fs₁ 0) := (h₂.monoR (hle₂₁'.fin (OpSig.finRead_of_capB hcap₂₁))).monoR
+    (hle₁.fin (OpSig.finRead_of_capB hcap₂₁'))
   -- `H₁`'s clause row holds a `4` whose cancel row holds `4`
   obtain ⟨hnt₁, hle₁'⟩ := cancelTy_rowLe (cancelPair_jr hB₁ hH₁)
   rcases h₁ with ht | ⟨x₁, hx₁, hcx₁, hfx₁⟩
   · rw [ht] at hnt₁; cases hnt₁
-  obtain ⟨x₀, hx₀, hlex₀⟩ := hle₁' 4 0 x₁ (by rw [Row.find_append, hx₁]; rfl)
-  have hfx₀ : FindsAt 4 x₀.fin := hfx₁.mono (hlex₀.2 (OpSig.finRead_of_capB hcx₁))
-  have hcx₀ : capB x₀.q x₀.B = true := hlex₀.1.capB_eq ▸ hcx₁
+  obtain ⟨x₀, hx₀, hlex₀⟩ := hle₁'.find (by rw [Row.find_append, hx₁]; rfl)
+  have hfx₀ : FindsAt 4 x₀.fin := hfx₁.monoR (hlex₀.fin (OpSig.finRead_of_capB hcx₁))
+  have hcx₀ : capB x₀.q x₀.B = true := hlex₀.capB_eq ▸ hcx₁
   -- so does the outer handler of `4`'s clause row, its own outer row
-  obtain ⟨y₀, hy₀, hley₀⟩ := hS₁ 4 0 x₀ hx₀
+  obtain ⟨y₀, hy₀, hley₀⟩ := hS₁.find hx₀
   rw [Row.find_append, show Row.find (Row.ofEff 4 [(.unr, A₀, B₀)] 0 fs₀ cs₀) 4 0 =
     some ⟨4, 0, .unr, A₀, B₀, fs₀ 0, cs₀ 0⟩ from rfl, Option.some_or] at hy₀
   cases hy₀
   have hB₀ : B₀.isZero = false := by
-    have := hley₀.1.capB_eq ▸ hcx₀
+    have := hley₀.capB_eq ▸ hcx₀
     simp only [capB, Bool.and_eq_true, bne_iff_ne, ne_eq, Bool.not_eq_true'] at this
     exact this.2
-  have hfs₀ : FindsAt 4 (fs₀ 0) := hfx₀.mono (hley₀.2 (OpSig.finRead_of_capB hcx₀))
+  have hfs₀ : FindsAt 4 (fs₀ 0) := hfx₀.monoR (hley₀.fin (OpSig.finRead_of_capB hcx₀))
   obtain ⟨hnt₀, hle₀⟩ := cancelTy_rowLe (cancelPair_jr hB₀ hH₀)
   rcases hfs₀ with ht | ⟨y, hy⟩
   · rw [ht] at hnt₀; cases hnt₀
-  obtain ⟨z, hz, -⟩ := hle₀ 4 0 y (by rw [Row.find_append, hy]; rfl)
+  obtain ⟨z, hz, -⟩ := hle₀.find (by rw [Row.find_append, hy]; rfl)
   obtain ⟨hmz, hnz, -⟩ := Row.find_mem hz
   exact hnS₀ z hmz hnz
 
@@ -1431,15 +1500,15 @@ theorem timeoutCl_finds {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F
     ⟨j₁, ⟨Γ₃, S₅, X, hle₃, hM, hS₅⟩, hr₁⟩ | ⟨Γ₃, X, hle₃, hM⟩
   · -- `bind` or `[let]`: `cancel k` at a row below the clause's
     have hkj := kcancel_jr_cancellable hslotK hK hle₃ hM
-    have hS₅S : RowLe S₅ S := by
+    have hS₅S : RowReach S₅ S := by
       rcases hS₅ with rfl | ⟨B', rfl⟩
-      · exact RowLe.nil S
+      · exact RowReach.of_le (RowLe.nil S)
       · exact JR.rowLe (hr₁.trans hr)
     cases hF : F.isTop
     · rw [show cancelTy S F = CTy.effOf (F.rowOf ++ S) .unit by simp [cancelTy, hF]] at hkj
       have hle := (JR.rowLe hkj).trans hS₅S
       refine ⟨rfl, fun n i o hf => ?_⟩
-      obtain ⟨o', hf', -⟩ := hle n i o (by rw [Row.find_append, hf]; rfl)
+      obtain ⟨o', hf', -⟩ := RowReach.find hle (by rw [Row.find_append, hf]; rfl)
       exact ⟨o', hf'⟩
     · rw [show cancelTy S F = .top by simp [cancelTy, hF]] at hkj
       have := JR.top_eq hkj
@@ -1450,9 +1519,9 @@ theorem timeoutCl_finds {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F
     cases hF : F.isTop
     · rw [show cancelTy S F = CTy.effOf (F.rowOf ++ S) .unit by simp [cancelTy, hF]] at hkj
       obtain ⟨hle, -⟩ := RowCls.reach hkj (S := F.rowOf ++ S) (Y := .unit)
-        ⟨_, _, rfl, RowLe.refl _, .refl⟩
+        ⟨_, _, rfl, .refl, .refl⟩
       refine ⟨rfl, fun n i o hf => ?_⟩
-      obtain ⟨o', hf', -⟩ := hle n i o (by rw [Row.find_append, hf]; rfl)
+      obtain ⟨o', hf', -⟩ := RowReach.find hle (by rw [Row.find_append, hf]; rfl)
       simp [Row.find] at hf'
     · rw [show cancelTy S F = .top by simp [cancelTy, hF]] at hkj
       have := JR.top_eq hkj
@@ -1472,7 +1541,7 @@ theorem not_der_e7c {Δ : LifeCtx} {Γ : Ctx VTy} {nw ni : UInt32} {qi : Qual} (
     der_hndJ₁ (n := nw) (Q := (qualsVal [.cancel]).1)
       (H := (.pair (.val injlV) (.pair (.val timeoutCl) (.val Val.unit))))
       (M := (hndE (toResultH ni qi) (bodyF nw (raiseU ni)))) h (by not_tail [timeoutCl, constC, bindE, Inversions.cancelE])
-  have hSS' : RowLe S S' := JR.rowLe hr₁
+  have hSS' : RowReach S S' := JR.rowLe hr₁
   have hE : [Qual.cancel] = E.map Prod.fst := qualsVal_inj hQ
   obtain ⟨⟨q₁, A₁, B₁⟩, rfl⟩ : ∃ e, E = [e] := by
     rcases E with _ | ⟨e, _ | ⟨e', E'⟩⟩
@@ -1486,62 +1555,62 @@ theorem not_der_e7c {Δ : LifeCtx} {Γ : Ctx VTy} {nw ni : UInt32} {qi : Qual} (
     der_hndJ₁ (n := ni) (Q := (qualsVal [qi]).1)
       (H := (.pair (.val injlV) (.pair (.val (constC (Val.inj₂ Val.unit))) (.val Val.unit))))
       (M := (bodyF nw (raiseU ni))) hM (by not_tail [timeoutCl, constC, bindE, Inversions.cancelE])
-  have hS₂ : RowLe S₂ (Row.ofEff nw [(.cancel, A₁, B₁)] 0 fs cs ++ S) := JR.rowLe hr₂
+  have hS₂ : RowReach S₂ (Row.ofEff nw [(.cancel, A₁, B₁)] 0 fs cs ++ S) := JR.rowLe hr₂
   obtain ⟨j₃, ⟨Γ₅, Γ₆, A₃, B₃, S₃, SM, SD, -, hMS, -, hfin, hMp, hDr, rfl⟩, hr₃⟩ :=
     der_thenJ hM₂ (.var 0) (raiseU ni) (bindE (performU nw) (.inj₂ .unit)) rfl
-  have hS₃ : RowLe S₃ (Row.ofEff ni E₂ 0 fs₂ cs₂ ++ S₂) := JR.rowLe hr₃
+  have hS₃ : RowReach S₃ (Row.ofEff ni E₂ 0 fs₂ cs₂ ++ S₂) := JR.rowLe hr₃
   -- `wait ()`'s row finds `wait`, below the `[then]`'s `M`'s row
   obtain ⟨S₄, oM₀, hf₄, ha₄, hS₄M⟩ : ∃ (S₄ : Row) (oM₀ : OpSig), Row.find S₄ nw 0 = some oM₀ ∧
-      oM₀.abort = false ∧ RowLe S₄ SM := by
+      oM₀.abort = false ∧ RowReach S₄ SM := by
     rcases der_letJ hMp (.inj₂ .unit) (performU nw) rfl (fun _ h => by cases h)
         (fun _ h => by cases h) (fun h => by cases h) (fun h => by cases h)
         (fun h => by cases h) (fun _ h => by cases h) with
       ⟨j₄, ⟨Γ₇, S₇, X₇, -, hP, hS₇⟩, hr₄⟩ | ⟨Γ₇, X₇, -, hP⟩
     · obtain ⟨j₅, ⟨S₅, oM₀, hf₅, ha₅, -, rfl⟩, hr₅⟩ := der_performJ hP nw 0 (.val Val.unit) rfl
-      have h57 : RowLe S₅ S₇ := JR.rowLe hr₅
+      have h57 : RowReach S₅ S₇ := JR.rowLe hr₅
       rcases hS₇ with rfl | ⟨B₇, rfl⟩
-      · obtain ⟨o', hf', -⟩ := h57 nw 0 oM₀ hf₅
+      · obtain ⟨o', hf', -⟩ := h57.find hf₅
         simp [Row.find] at hf'
       · exact ⟨S₅, oM₀, hf₅, ha₅, h57.trans (JR.rowLe hr₄)⟩
     · obtain ⟨j₅, ⟨S₅, oM₀, hf₅, -, -, rfl⟩, hr₅⟩ := der_performJ hP nw 0 (.val Val.unit) rfl
-      obtain ⟨hle, -⟩ := RowCls.reach hr₅ (S := S₅) (Y := oM₀.B) ⟨_, _, rfl, RowLe.refl _, .refl⟩
-      obtain ⟨o', hf', -⟩ := hle nw 0 oM₀ hf₅
+      obtain ⟨hle, -⟩ := RowCls.reach hr₅ (S := S₅) (Y := oM₀.B) ⟨_, _, rfl, .refl, .refl⟩
+      obtain ⟨o', hf', -⟩ := RowReach.find hle hf₅
       simp [Row.find] at hf'
-  obtain ⟨oM, hfM, hleM⟩ := hS₄M nw 0 oM₀ hf₄
+  obtain ⟨oM, hfM, hleM⟩ := hS₄M.find hf₄
   -- the finaliser's row finds `exnᵢ`
   obtain ⟨j₆, ⟨S₆, oD₀, B₆, hf₆, -, -, rfl⟩, hr₆⟩ := der_raiseJ hDr ni 0 (.val Val.unit) rfl
-  obtain ⟨oD, hfD, -⟩ := JR.rowLe hr₆ ni 0 oD₀ hf₆
+  obtain ⟨oD, hfD, -⟩ := (JR.rowLe hr₆).find hf₆
   -- `wait` from the `[then]` up to `[handle] wait`'s body
   obtain ⟨o₃, hf₃, hle₃⟩ := hMS nw 0 oM hfM
-  obtain ⟨o₄, hf₄', hle₄⟩ := hS₃ nw 0 o₃ hf₃
+  obtain ⟨o₄, hf₄', hle₄⟩ := hS₃.find hf₃
   rw [Row.find_append, Row.find_ofEff_ne ni E₂ 0 fs₂ nw 0 hne, Option.none_or] at hf₄'
-  obtain ⟨o₅, hf₅', hle₅⟩ := hS₂ nw 0 o₄ hf₄'
+  obtain ⟨o₅, hf₅', hle₅⟩ := hS₂.find hf₄'
   rw [Row.find_append, show Row.find (Row.ofEff nw [(.cancel, A₁, B₁)] 0 fs cs) nw 0 =
     some ⟨nw, 0, .cancel, A₁, B₁, fs 0, cs 0⟩ by simp [Row.ofEff, Row.find], Option.some_or] at hf₅'
   cases hf₅'
-  have hsig : oM₀.Sig ⟨nw, 0, .cancel, A₁, B₁, fs 0, cs 0⟩ :=
-    hleM.1.trans (hle₃.1.trans (hle₄.1.trans hle₅.1))
+  have hsig : OpReach oM₀ ⟨nw, 0, .cancel, A₁, B₁, fs 0, cs 0⟩ :=
+    hleM.trans ((OpReach.of_le hle₃).trans (hle₄.trans hle₅))
   have hB₁ : B₁.isZero = false := by
     have := hsig.abort_eq
     rw [ha₄] at this
     simpa [OpSig.abort] using this.symm
   have hcap₀ : capB oM₀.q oM₀.B = true := by
     rw [hsig.capB_eq]; simp [capB, hB₁]
-  have hcapM : capB oM.q oM.B = true := hleM.1.capB_eq ▸ hcap₀
+  have hcapM : capB oM.q oM.B = true := hleM.capB_eq ▸ hcap₀
   have hcap₃ : capB o₃.q o₃.B = true := hle₃.1.capB_eq ▸ hcapM
-  have hcap₄ : capB o₄.q o₄.B = true := hle₄.1.capB_eq ▸ hcap₃
+  have hcap₄ : capB o₄.q o₄.B = true := hle₄.capB_eq ▸ hcap₃
   -- `exnᵢ` in the cancel row of `wait`, or that cancel row `⊤`
-  have h₃₄ : FinLe o₃.fin o₄.fin := hle₄.2 (OpSig.finRead_of_capB hcap₃)
-  have h₄₅ : FinLe o₄.fin (fs 0) := hle₅.2 (OpSig.finRead_of_capB hcap₄)
+  have h₃₄ : FinReach o₃.fin o₄.fin := hle₄.fin (OpSig.finRead_of_capB hcap₃)
+  have h₄₅ : FinReach o₄.fin (fs 0) := hle₅.fin (OpSig.finRead_of_capB hcap₄)
   have hfs : (fs 0).isTop = true ∨ ∃ o₆, Row.find (fs 0).rowOf ni 0 = some o₆ := by
     have hT := hfin nw 0 oM o₃ hfM hf₃ hcapM
     rw [ThenLe] at hT
     rcases hT with hT | ⟨-, -, hT⟩
-    · exact .inl (finLe_top_top h₄₅ (finLe_top_top h₃₄ hT))
+    · exact .inl (finReach_top_top h₄₅ (finReach_top_top h₃₄ hT))
     · obtain ⟨o', hf', -⟩ := hT ni 0 oD hfD
-      rcases finLe_find h₃₄ hf' with h₄ | ⟨o'', hf''⟩
-      · exact .inl (finLe_top_top h₄₅ h₄)
-      · exact finLe_find h₄₅ hf''
+      rcases finReach_find h₃₄ hf' with h₄ | ⟨o'', hf''⟩
+      · exact .inl (finReach_top_top h₄₅ h₄)
+      · exact finReach_find h₄₅ hf''
   -- the clause reads `κ`'s cancel at its row
   rcases der_pair hH _ _ rfl with ⟨Γ₇, Γ₈, X₁, X₂, -, -, hcl, hc₁⟩ | he
   swap
@@ -1558,7 +1627,7 @@ theorem not_der_e7c {Δ : LifeCtx} {Γ : Ctx VTy} {nw ni : UInt32} {qi : Qual} (
   rcases hfs with htop | ⟨o₆, hf₆'⟩
   · rw [hnt] at htop; cases htop
   · obtain ⟨o₇, hf₇⟩ := hfS ni 0 o₆ hf₆'
-    obtain ⟨o₈, hf₈, -⟩ := hSS' ni 0 o₇ hf₇
+    obtain ⟨o₈, hf₈, -⟩ := hSS'.find hf₇
     obtain ⟨hm₈, hn₈, -⟩ := Row.find_mem hf₈
     exact hS' o₈ hm₈ hn₈
 

@@ -315,23 +315,40 @@ term at every type equal to its own up to those names, by one rule of `CDerives`
   `CTy.alphaB` at no binder pairs (`Core/Types.lean`). The binders are `CTy.all` alone (`VTy.all`
   is `U (∀'x ⊏ @b. F A)`); passing `∀'x ⊏ @b. C` and `∀'x' ⊏ @b'. C'` pairs `'x` with `'x'`, and
   a variable is read through the innermost pair that binds it on either side, or is free on both.
-  An operation's signature (`A ↠ B` and its cancel row) is compared as it is written, its free
-  lifetimes read at the pairs: rows are tied to the effect context's signatures as written
-  (`RowAt`). It is an equivalence (`VTy.alphaB_refl`, `_symm`, `_trans'`, `Core/Alpha.lean`).
+  An effect row's operations are compared at their argument, answer and cancel row like every other
+  type (`OpSig.AlphaEq`, `RowAlpha`). It is an equivalence (`VTy.alphaB_refl`, `_symm`, `_trans'`,
+  `Core/Alpha.lean`).
+- **Rows and the effect context.** A row is tied to the effect context `Ξ` up to α (`RowAt`,
+  `OpAt`, `Core/Tied.lean`): an operation's qualifier is `Ξ`'s and its argument and answer are
+  α-equivalent to `Ξ`'s (`OpSig.AtEntry`), so an operation whose type is elaborated in two lifetime
+  contexts has one signature. A handler's signature is a prefix of `Ξ`'s up to α
+  (`sig_prefix_of_rowAt`); its tags are a prefix of `Ξ`'s qualifiers as before (`hndTags_of_rowAt`).
+  The checker's `sigsOkB` compares an operation's signatures up to α.
 - **Soundness.** At substitutions agreeing on the pairs (`AlphaAgree`), α-equivalent types are one
   type (`VTy.alphaB_sound`, `CTy.alphaB_sound` into `TyEq`/`CTyEq`), so the relation reads them
   alike (`cC_alpha`, from `cC_tyEq`). `[α]`'s compatibility lemma is `alpha_compatJ`; it is the
   rule's one cost under the growth rule.
 - **The checker.** `convV`/`convC` (`Frontend/Check/Steps.lean`) accept a synthesized type equal
   to the expected one, or α-equivalent to it, emitting the `alpha` node (`rAlpha`); at an
-  effect row, `[sub]` and then `[α]` at the answer. The node erases to its premise's term, and the
+  effect row, `[sub]` to the expected row read at the synthesized row's names (`alignRow`), then
+  `[α]`. `alignRow` renames an expected operation's cancel row only where it is α-equivalent to
+  the synthesized one's; a cancel row that both grows and differs in binder names is refused by
+  the checker, though `[α]` and `[sub]` derive it. The node erases to its premise's term, and the
   backends read through it (`transparent?`).
 - **Inversions.** `[α]` concludes with its premise's term, so it is a same-term step (`JS.alpha`,
   `VS.alpha`, `Core/Inversions.lean`), and what an inversion gives is up to `≡α`: views keep their
   head up to `≡α` (`VView.hnf`, `Hnf.alpha`), a rigid type is read at its α-equivalents
   (`JR.rigid`), an `&` at α-equivalent `&`s (`JR.amp_amp`, through `CTy.alphaB_unroll` at two
-  positive bodies), and a λ-value's binder at an α-equivalent of the type it is read at
-  (`lam_bang`, `lam_arr`, `der_clause_body`). Persistence is kept (`VTy.alphaB_persistent`), so
+  positive bodies), a λ-value's binder at an α-equivalent of the type it is read at
+  (`lam_bang`, `lam_arr`, `der_clause_body`), and a row at the rows `[sub]`'s order and `[α]` reach
+  (`RowReach`, `JR.rowLe`), whose operations keep their key, qualifier, mark and answer's `0`-ness
+  and reach their cancel rows (`OpReach`, `FinReach`).
+- **The inversions' cost** (CLAUDE.md, *Do not invert `CDerives` casually*). `[α]` is a same-term
+  rule, so every inversion takes it as a step and gives its facts up to α. The change against the
+  rule-free baseline: `Core/Inversions.lean` +483/−203, `Core/Rejections.lean` +194/−141,
+  `Core/EffCancelTyped.lean` +186/−109, `Core/AwaitCancel.lean` +4/−4, and `Core/Tied.lean`
+  +67/−31 for the tie up to α; `Core/Alpha.lean` (921 lines) holds the α lemmas the inversions and
+  the checker use. Persistence is kept (`VTy.alphaB_persistent`), so
   each refusal (`refuses_R_clauses`, `not_der_at05`, `not_der_at06`, `not_der_at08`,
   `not_der_at13`, `not_der_progT`, `not_der_e7c`) holds as before.
 
@@ -11048,10 +11065,17 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
   `VView.eq_of_heads`, `vview_thunk`, `vview_kBoxO_thunk`, `vview_bang_thunk`, `vview_bang_bang`,
   `vview_tensor`, `LamCls` and `LamCls.val_thunk`/`val_bang`/`comp_rigid`, `JR.rigid`, `AmpCls`,
   `JR.amp_amp`, `lam_bang`, `lam_arr`, `der_clause_body`, `der_cancel_lin`,
-  `kcancel_jr_cancellable` (each up to `≡α`); in `Core/Rejections.lean` `kview`, `kviewO`,
-  `vview_ref`, `not_release_kappa`, `wb_view`, `at05_M`. Every refusal keeps its statement. The
+  `kcancel_jr_cancellable` (each up to `≡α`), `JR.rowLe` and `cancelTy_rowLe` (`RowReach`, the
+  rows `[sub]`'s order and `[α]` reach, for `RowLe`), and `RowCls`; in `Core/Rejections.lean`
+  `kview`, `kviewO`, `vview_ref`, `not_release_kappa`, `wb_view`, `at05_M`. `[α]` reaches an
+  effect row's operations (`OpSig.AlphaEq`, `RowAlpha`); a row is tied to the effect context up
+  to α (`RowAt`, `OpAt`, `OpSig.AtEntry`), `sig_prefix_of_rowAt` is a prefix up to α, and the
+  checker's `sigsOkB` compares signatures up to α. Every refusal keeps its statement
+  (`not_der_progT`, `not_der_progNCrecT`, `not_der_e7c`, `not_der_perform_await`,
+  `not_der_raise_cancelled` among them). The
   1.31 naming of a computation type's binders by its body (`CTy.canonBinder`) is withdrawn:
-  binders keep the context's numbering. Programs `alpha-all-u`, `nu-file-contexts`.
+  binders keep the context's numbering. Programs `alpha-all-u`, `nu-file-contexts`,
+  `alpha-effect-row`.
 - **1.31** (2026-11-04) — §7, §19, §22 (#808): observations quantified over a lifetime. An
   observation tree may be `∀'x ⊏ @b. D` (`CTy.NuLeaf`), so a codata observation takes a borrow
   lent for one call (`∀'x. Mut 'x A ⊸ …`, `∀'x. Imm 'x A ⊸ …`). `NuOk` is `NuShape` plus binder

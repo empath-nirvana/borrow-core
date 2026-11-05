@@ -170,7 +170,7 @@ theorem not_release_kappa {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy}
       · have := (hr'.top_eq)
         simp only [Jdg.comp.injEq] at this
         subst this
-        obtain ⟨_, he, -⟩ := CTy.alphaB_effOf S' (CTy.alphaB_symm hα.2)
+        obtain ⟨_, _, he, -, -⟩ := CTy.alphaB_effOf S' (CTy.alphaB_symm hα.2)
         exact effOf_ne_top _ _ he.symm
     · have hα := hcl.comp_rigid (rigid_arr _ _)
       simp only [CTy.alphaB, Bool.and_eq_true] at hα
@@ -592,7 +592,7 @@ theorem wb_view {Δ : LifeCtx} {Γ : Ctx VTy} {d : Expr} {j : Jdg} {T : VTy} {A 
     · rcases hj with h' | ⟨S, h'⟩
       · cases h'
       · cases h'
-        obtain ⟨_, he, -⟩ := CTy.alphaB_effOf S (CTy.alphaB_symm hα)
+        obtain ⟨_, _, he, -, -⟩ := CTy.alphaB_effOf S (CTy.alphaB_symm hα)
         exact (hD.1 _ _ he).elim
     · exact vview_thunk ((hc.at hj).trans hv)
     · exact vview_bang_thunk ((hc.at hj).trans hv)
@@ -750,7 +750,7 @@ theorem not_at05F_cb {Δ : LifeCtx} {Γ : Ctx VTy} {S S' : Row} {x : BoCa.Lifeti
     intro D hD hcl
     rcases hcl with ⟨D', he, hα⟩ | hcl | ⟨-, hcl⟩
     · cases he
-      obtain ⟨_, he, -⟩ := CTy.alphaB_effOf S (CTy.alphaB_symm hα)
+      obtain ⟨_, _, he, -, -⟩ := CTy.alphaB_effOf S (CTy.alphaB_symm hα)
       exact (hD.1 _ _ he).elim
     · exact vview_thunk (hcl.at (.inr ⟨S, rfl⟩))
     · exact vview_bang_thunk (hcl.at (.inr ⟨S, rfl⟩))
