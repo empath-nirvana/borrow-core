@@ -341,3 +341,9 @@ programs.
 9. **The interpreter's file system.** `bcc interp` reads the files a run names from the host into
    the model's `fs` at the start (the spike did this). Recommended: yes; the alternative, an empty
    model file system, leaves the source stage with fakes only.
+10. **Host cells are released only by their kind's release extern** (user, 2026-11-05: chosen because it is general). Every opaque host kind at §11's extension point names one release extern (`close_input` for `input`, `close_output` for `output`, `take_fs` for `fs`). A cell of a host kind cannot be released by a plain `free`, and a host resource never appears as a bare own-free value: it lives only in its cell. Then "every opened file is closed" is a corollary rather than prose:
+    - the kernel proves the final memory is empty, so every host cell was released;
+    - a host cell is released only through its release extern;
+    - each release extern's contract (`ExternsMeet`) closes the host resource.
+
+    The only trust left is the extern contracts, which are already trusted. This closes leaks 1 and 2 above. Code calling the raw externs still has to release the cell it was handed. Leak 3 (never finishing) stays, since divergence is allowed. The rule applies to every host kind (`clock`, `args`, streams, and later sockets), not just files. It is a rule on opaque kinds, not a new judgment. Lean target: a corollary of `externs_every_run`, stating that every host resource opened in a run is closed in it.
