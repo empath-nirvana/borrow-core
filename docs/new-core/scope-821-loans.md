@@ -416,7 +416,7 @@ middle. Its `↭` is unmasked.
 The body runs at the outer mask, not at a mask holding `ℓ`. The end rebuilds `ℓ ↦ own(v)` with
 6.38 (`six29_borrows_offN`, `six38N`), which reads the body's `↭` at `ℓ`. There the exact cell
 `imm({α}, v, ∅)` persists, and with it no other part's cell at `ℓ`. It also reads the `↭` at every
-other location. Masking `ℓ` in the body drops exactly that premise. Iris's mask-changing update
+other location. Masking `ℓ` in the body removes exactly that premise. Iris's mask-changing update
 has the same discipline: `|={E₁,E₂}=>` around a WP is allowed only for an atomic expression.
 
 **Departures, each with its reason:**
