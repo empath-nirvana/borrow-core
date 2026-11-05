@@ -18,12 +18,6 @@ of `μB₀`'s keys, the root first. `keys_ok` shows it meets `KeysOK`, the closu
 proof uses, at every body in the class.
 -/
 
-namespace BoCa.Fig16.LogRel.Core
-
-deriving instance DecidableEq for VTy, CTy
-
-end BoCa.Fig16.LogRel.Core
-
 noncomputable section
 
 namespace BoCa.Fig16.LogRel.Core.FoldP

@@ -69,7 +69,9 @@ its operations, whether every `handle` node of the name
 - holds names of the clause's own code (`handlerNames`; its row's names where it has none) that
   `main`'s flow record cannot catch (`cond2B` at `Checked.flows`, which gives
   `Checked.unhandledNames`: no frame between a `perform` and its handler catches them), and
-- holds one clause for it, closed (`closedAt 0`), at one outer row and one signature,
+- holds one clause for it, closed (`closedAt 0`), at one outer row and one signature, both up to
+  `[α]` (`tyEqC`, `tyEqEnts`, SPEC §3): copies of one site from generic instances at different
+  lifetime contexts spell their binders differently,
 so that the clause a `perform` reaches is known and needs nothing from its handler's frame. -/
 def directFacts (c : Frontend.Check.Checked) : Std.HashMap UInt32 (List Bool) := Id.run do
   let nodes := hnodes Frontend.Check.copiesFuel c.t
@@ -89,7 +91,8 @@ def directFacts (c : Frontend.Check.Checked) : Std.HashMap UInt32 (List Bool) :=
           Frontend.Check.cond2B flows (Frontend.Check.cond2Names row ((names[j]?).getD none)) &&
           (match cl with | some e => closedAt 0 e | none => false) &&
           cl == hs.bind (fun hs => Check.clauseExpr hs j) &&
-          decide (CTy.effOf g.S .unit = CTy.effOf h.S .unit) && decide (g.E = h.E)
+          Frontend.Check.tyEqC (CTy.effOf g.S .unit) (CTy.effOf h.S .unit) &&
+          Frontend.Check.tyEqEnts g.E h.E
     out := out.insert h.n ok
   return out
 

@@ -65,11 +65,13 @@ row() {
 . scripts/par.sh
 export bcc counts
 export -f row
+# The working tree's corpus, as the other gate steps read it: a program not yet committed is in
+# the table too.
 table() {
   local fs=()
   while read -r f; do
     grep -q '^-- check: parse-only' "$f" || fs+=("$f")
-  done < <(git ls-files 'corpus/*.bc' | grep -v '^corpus/\(reject\|pending\|fail\)/' | sort)
+  done < <(find corpus -name '*.bc' -type f | grep -v '^corpus/\(reject\|pending\|fail\)/' | sort)
   par row "${fs[@]}"
 }
 if [ "${1:-}" = "--write" ]; then

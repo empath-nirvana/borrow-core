@@ -1,3 +1,6 @@
+corpus/alpha-effect-row.bc 1.0 cancellable tail: direct; agree
+corpus/alpha-handle-copies.bc 1.0 cancellable tail: machine: the handlers of the name have 2 clauses for it; disagree
+corpus/alpha-row-lift.bc 1.0 cancellable tail: direct; agree
 corpus/answers-two-types.bc 1.0 cancellable tail+state: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/answers-two-types.bc 2.0 cancellable tail: direct; agree
 corpus/aoc/2021-15.bc 1.0 cancellable abortive: branch; agree

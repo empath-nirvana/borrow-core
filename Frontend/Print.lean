@@ -303,7 +303,9 @@ def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .lam _ x A M => "fun (" ++ x.name ++ " : " ++ A.pp ++ ") ->" ++ nl (k + 2) ++ M.pp 0 (k + 2)
     | .app _ M x => M.pp 2 k ++ " " ++ x.name
     | .with_ _ M N => "< " ++ M.pp 0 (k + 2) ++ "," ++ nl (k + 2) ++ N.pp 0 (k + 2) ++ " >"
-    | .proj _ i M => M.pp 2 k ++ (if i then ".1" else ".2")
+    | .proj _ i M =>
+        -- `M.1 .2`, not `M.1.2`: the lexer reads `1.2` as a float.
+        M.pp 2 k ++ (match M with | .proj .. => " " | _ => "") ++ (if i then ".1" else ".2")
     | .top _ => "<>"
     | .letUnit _ V M => "let () = " ++ V.pp 1 k ++ ";" ++ nl k ++ M.pp 0 k
     | .letPair _ x y V M =>

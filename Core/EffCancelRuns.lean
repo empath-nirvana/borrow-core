@@ -1943,10 +1943,11 @@ theorem supersede_finaliserOrder : FinaliserOrder (ℍ := ℍ) supersedeE :=
 def Ξ₁₂ : EffCtx := fun n => if n = 1 then [(.unr, .unit, .unit)] else
   if n = 2 then [(.unr, .unit, .zero)] else []
 
-theorem opAt_rSig2 : OpAt Ξ₁₂ (rSig 2) := ⟨by decide, by simp [Ξ₁₂, rSig], by simp [Ξ₁₂, rSig]⟩
+theorem opAt_rSig2 : OpAt Ξ₁₂ (rSig 2) :=
+  OpAt.of_get (by decide) (by simp [Ξ₁₂, rSig]) (by simp [Ξ₁₂, rSig])
 
 theorem opAt_pSig1 (F : CTy) : OpAt Ξ₁₂ (pSig 1 F) :=
-  ⟨by simp [pSig], by simp [Ξ₁₂, pSig], by simp [Ξ₁₂, pSig]⟩
+  OpAt.of_get (by simp [pSig]) (by simp [Ξ₁₂, pSig]) (by simp [Ξ₁₂, pSig])
 
 theorem rowAt_two (F : CTy) : RowAt Ξ₁₂ [rSig 2, pSig 1 F] := by
   refine rowAt_of_sigsAt fun o ho => ?_
@@ -2106,10 +2107,10 @@ theorem noUnrExn_Ξ₁₂A : Ξ₁₂A.NoUnrExn := by
     · cases hp
 
 theorem opAt_rSigA2 : OpAt Ξ₁₂A (rSigA 2) :=
-  ⟨by decide, by simp [Ξ₁₂A, rSigA], by simp [Ξ₁₂A, rSigA]⟩
+  OpAt.of_get (by decide) (by simp [Ξ₁₂A, rSigA]) (by simp [Ξ₁₂A, rSigA])
 
 theorem opAt_pSig1A (F : CTy) : OpAt Ξ₁₂A (pSig 1 F) :=
-  ⟨by simp [pSig], by simp [Ξ₁₂A, pSig], by simp [Ξ₁₂A, pSig]⟩
+  OpAt.of_get (by simp [pSig]) (by simp [Ξ₁₂A, pSig]) (by simp [Ξ₁₂A, pSig])
 
 theorem rowAt_twoA (F : CTy) : RowAt Ξ₁₂A [rSigA 2, pSig 1 F] := by
   refine rowAt_of_sigsAt fun o ho => ?_

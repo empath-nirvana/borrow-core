@@ -43,6 +43,7 @@ import Core.FoldOwnG
 import Core.FoldOwnGTerm
 import Core.FoldClass
 import Core.Nu
+import Core.Alpha
 import Core.Fundamental
 import Core.Examples
 import Core.Embedding
@@ -114,6 +115,8 @@ import Core.ClauseOwn
 import Core.Clo
 import Core.CloRules
 import Core.CloPrograms
+import Core.NuBorrow
+import Core.NuBorrowPrograms
 import Core.Mentions
 import Core.ResourceSafety
 import Core.StepsN

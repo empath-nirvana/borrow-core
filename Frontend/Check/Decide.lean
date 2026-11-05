@@ -11,7 +11,8 @@ cases the comments name; where it is not, the gap is stated at the function.
 
 * `DecidableEq` on `VTy` and `CTy` (§12 item 4), derived; on `Expr`, `Core/LetCopy.lean`'s.
 * `VTy.clB`, `VTy.occB`, `VTy.noMutB`: `Cl`, `Occ`, `NoMut`, exactly.
-* `CTy.nuOkB`: `νX. C`'s positivity `NuOk`, exactly.
+* `CTy.nuOkB`: `νX. C`'s positivity `NuOk` (shape `CTy.nuShapeB` and binder freshness), exactly;
+  `CTy.bindsFreshB`: `unfold`'s premise `BindsFresh`.
 * `vfreeB`/`cfreeB`: `VFree`/`CFree`, exactly.
 * `ordB`: lifetime entailment `Δ ⊨ @a ⊏ @b` / `Δ ⊨ @a ⊑ @b` (§12 item 1), sound, by a bounded
   search over the structural rules of the carrier (`⊓` is `max`, `⊔` is `min`, `⊤` is `0`).
@@ -19,6 +20,8 @@ cases the comments name; where it is not, the gap is stated at the function.
   `Row.AnsOutlives`, from it.
 * `outlivesAllB`: foldImm's `∀ Δ' a, VOutlives Δ' a R` (§12 item 2), sound.
 * `scopedB`: `VScoped`, sound.
+* `rowLeB`: `[sub]`'s `RowLe`, sound, with `finLeB`: `FinLe`, each cancel row compared at every
+  depth.
 -/
 
 namespace BoCa.Fig16.LogRel.Core
@@ -243,6 +246,7 @@ def CTy.nuLeafB : CTy → Bool
   | .amp C D => CTy.nuLeafB C && CTy.nuLeafB D
   | .eff n i q A B fin rc C => CTy.effLeafB (.eff n i q A B fin rc C)
   | .arr A D => VTy.clB 0 A && CTy.nuLeafB D
+  | .all _ _ D => CTy.nuLeafB D
   | _ => false
 
 theorem CTy.nuLeafB_sound : ∀ C : CTy, CTy.nuLeafB C = true → C.NuLeaf
@@ -254,19 +258,20 @@ theorem CTy.nuLeafB_sound : ∀ C : CTy, CTy.nuLeafB C = true → C.NuLeaf
   | .arr A D, h => by
       simp only [CTy.nuLeafB, Bool.and_eq_true] at h
       exact ⟨VTy.clB_sound 0 A h.1, nuLeafB_sound D h.2⟩
-  | .top, h | .all _ _ _, h | .nu _, h => by simp [CTy.nuLeafB] at h
+  | .all _ _ D, h => nuLeafB_sound D h
+  | .top, h | .nu _, h => by simp [CTy.nuLeafB] at h
 
-/-- `CTy.NuOk`, decided. -/
-def CTy.nuOkB : CTy → Bool
+/-- `CTy.NuShape`, decided. -/
+def CTy.nuShapeB : CTy → Bool
   | .amp C D => CTy.nuLeafB C && CTy.nuLeafB D
   | _ => false
 
-theorem CTy.nuOkB_sound : ∀ C : CTy, CTy.nuOkB C = true → C.NuOk
+theorem CTy.nuShapeB_sound : ∀ C : CTy, CTy.nuShapeB C = true → C.NuShape
   | .amp C D, h => by
-      simp only [CTy.nuOkB, Bool.and_eq_true] at h
+      simp only [CTy.nuShapeB, Bool.and_eq_true] at h
       exact ⟨CTy.nuLeafB_sound C h.1, CTy.nuLeafB_sound D h.2⟩
   | .ret _, h | .arr _ _, h | .top, h | .all _ _ _, h | .nu _, h | .eff _ _ _ _ _ _ _ _, h => by
-      simp [CTy.nuOkB] at h
+      simp [CTy.nuShapeB] at h
 
 /-- `VTy.polyB` is complete for `VTy.Poly`. -/
 theorem VTy.polyB_complete : ∀ A : VTy, A.Poly → VTy.polyB A = true
@@ -293,12 +298,13 @@ theorem CTy.nuLeafB_complete : ∀ C : CTy, C.NuLeaf → CTy.nuLeafB C = true
   | .amp C D, h => by simp [CTy.nuLeafB, nuLeafB_complete C h.1, nuLeafB_complete D h.2]
   | .eff n i q A B fin rc C, h => CTy.effLeafB_complete (.eff n i q A B fin rc C) h
   | .arr A D, h => by simp [CTy.nuLeafB, VTy.clB_complete 0 A h.1, nuLeafB_complete D h.2]
-  | .top, h | .all _ _ _, h | .nu _, h => h.elim
+  | .all _ _ D, h => by simpa [CTy.nuLeafB] using nuLeafB_complete D h
+  | .top, h | .nu _, h => h.elim
 
-/-- `CTy.nuOkB` is complete for `CTy.NuOk`. -/
-theorem CTy.nuOkB_complete : ∀ C : CTy, C.NuOk → CTy.nuOkB C = true
+/-- `CTy.nuShapeB` is complete for `CTy.NuShape`. -/
+theorem CTy.nuShapeB_complete : ∀ C : CTy, C.NuShape → CTy.nuShapeB C = true
   | .amp C D, h => by
-      simp [CTy.nuOkB, CTy.nuLeafB_complete C h.1, CTy.nuLeafB_complete D h.2]
+      simp [CTy.nuShapeB, CTy.nuLeafB_complete C h.1, CTy.nuLeafB_complete D h.2]
   | .ret _, h | .arr _ _, h | .top, h | .all _ _ _, h | .nu _, h | .eff _ _ _ _ _ _ _ _, h => h.elim
 
 /-- The bodies `C` of the thunks `U(νX. C)` in a value type: where `nu_in` looks for the type
@@ -309,12 +315,12 @@ def VTy.nuThunks : VTy → List CTy
   | .ref A | .box _ A | .imm _ A | .bang A => VTy.nuThunks A
   | _ => []
 
-/-- `VTy.nuThunks` over the observations of a `&`-tree. -/
+/-- `VTy.nuThunks` over the observations of a `&`-tree, under their arguments and `∀` binders. -/
 def CTy.nuThunks : CTy → List CTy
   | .ret A => VTy.nuThunks A
   | .amp C D => CTy.nuThunks C ++ CTy.nuThunks D
   | .eff _ _ _ _ _ _ _ C => CTy.nuThunks C
-  | .arr _ D => CTy.nuThunks D
+  | .arr _ D | .all _ _ D => CTy.nuThunks D
   | _ => []
 
 /-! ### Free lifetime variables -/
@@ -381,6 +387,49 @@ end
 
 theorem not_vfree_of_vfreeB {x : LifeVar} {A : VTy} (h : vfreeB x A = false) : ¬ VFree x A :=
   fun hf => by rw [(vfreeB_iff x A).mpr hf] at h; exact Bool.noConfusion h
+
+/-! ### Leaf binders and positivity -/
+
+/-- The lifetimes bound by the `∀` leaves of an observation tree (`CTy.LeafBinds`). -/
+def CTy.leafBindsL : CTy → List LifeVar
+  | .amp C D => (CTy.leafBindsL C) ++ (CTy.leafBindsL D)
+  | .arr _ D => (CTy.leafBindsL D)
+  | .all y _ D => y :: (CTy.leafBindsL D)
+  | _ => []
+
+theorem CTy.leafBinds_iff (x : LifeVar) : ∀ C : CTy, C.LeafBinds x ↔ x ∈ (CTy.leafBindsL C)
+  | .amp C D => by
+      simp [CTy.LeafBinds, CTy.leafBindsL, CTy.leafBinds_iff x C, CTy.leafBinds_iff x D]
+  | .arr _ D => by simp [CTy.LeafBinds, CTy.leafBindsL, CTy.leafBinds_iff x D]
+  | .all y _ D => by simp [CTy.LeafBinds, CTy.leafBindsL, CTy.leafBinds_iff x D, eq_comm]
+  | .ret _ | .top | .nu _ | .eff _ _ _ _ _ _ _ _ => by simp [CTy.LeafBinds, CTy.leafBindsL]
+
+/-- `CTy.NuOk`, decided: the shape, and no leaf binder free in the body. -/
+def CTy.nuOkB (C : CTy) : Bool :=
+  CTy.nuShapeB C && (CTy.leafBindsL C).all (fun x => !cfreeB x C)
+
+theorem CTy.nuOkB_sound (C : CTy) (h : CTy.nuOkB C = true) : C.NuOk := by
+  simp only [CTy.nuOkB, Bool.and_eq_true, List.all_eq_true, Bool.not_eq_true'] at h
+  refine ⟨CTy.nuShapeB_sound C h.1, fun x hx hf => ?_⟩
+  have := h.2 x ((CTy.leafBinds_iff x C).mp hx)
+  rw [(cfreeB_iff x C).mpr hf] at this
+  exact Bool.noConfusion this
+
+/-- `CTy.nuOkB` is complete for `CTy.NuOk`. -/
+theorem CTy.nuOkB_complete (C : CTy) (h : C.NuOk) : CTy.nuOkB C = true := by
+  simp only [CTy.nuOkB, Bool.and_eq_true, List.all_eq_true, Bool.not_eq_true']
+  refine ⟨CTy.nuShapeB_complete C h.1, fun x hx => ?_⟩
+  cases hc : cfreeB x C with
+  | false => rfl
+  | true => exact absurd ((cfreeB_iff x C).mp hc) (h.2 x ((CTy.leafBinds_iff x C).mpr hx))
+
+/-- `CTy.BindsFresh`, decided: `unfold`'s premise. -/
+def CTy.bindsFreshB (C : CTy) (S : VTy) : Bool := (CTy.leafBindsL C).all (fun x => !vfreeB x S)
+
+theorem CTy.bindsFreshB_sound (C : CTy) (S : VTy) (h : CTy.bindsFreshB C S = true) :
+    C.BindsFresh S := by
+  simp only [CTy.bindsFreshB, List.all_eq_true, Bool.not_eq_true'] at h
+  exact fun x hx => not_vfree_of_vfreeB (h x ((CTy.leafBinds_iff x C).mp hx))
 
 /-! ### Lifetime entailment
 
@@ -853,14 +902,81 @@ theorem ownFreeB_iff (A : VTy) : ownFreeB A = true ↔ A.OwnFree := by
   | opq k hk => simpa [ownFreeB, Opaque.Host] using hk
   | _ => rfl
 
-/-- `RowLe S S'`, decided: every operation of `S` is found in `S'` as itself. -/
-def rowLeB (S S' : Row) : Bool := S.all fun o => Row.find S' o.n o.i == some o
+/-- `OpSig.Sig`, decided: one operation, its cancel row aside. -/
+def OpSig.sigB (o o' : OpSig) : Bool :=
+  o.n == o'.n && o.i == o'.i && decide (o.q = o'.q) && decide (o.A = o'.A) && decide (o.B = o'.B) &&
+    o.rc == o'.rc
+
+theorem OpSig.sigB_sound {o o' : OpSig} (h : OpSig.sigB o o' = true) : o.Sig o' := by
+  simp only [OpSig.sigB, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h
+  obtain ⟨⟨⟨⟨⟨h₁, h₂⟩, h₃⟩, h₄⟩, h₅⟩, h₆⟩ := h
+  exact ⟨h₁, h₂, h₃, h₄, h₅, h₆⟩
+
+/-- The layers of `F` each below what `R'` finds at its key: the same operation, with, where its
+cancel row is read, that cancel row below the one `R'` finds (`FinLe`, decided the same way).
+By recursion on `F`'s layers. -/
+def layersLeB : CTy → Row → Bool
+  | .eff n i q A B f rc C, R' =>
+      (match Row.find R' n i with
+       | some o' => OpSig.sigB ⟨n, i, q, A, B, f, rc⟩ o' &&
+           (!OpSig.finRead ⟨n, i, q, A, B, f, rc⟩ || o'.fin.isTop || (!f.isTop && layersLeB f o'.fin.rowOf))
+       | none => false) && layersLeB C R'
+  | _, _ => true
+
+/-- `FinLe F F'`, decided: `F'` is `⊤`, or `F` is not and its layers are below `F'`'s
+(`layersLeB`). -/
+def finLeB (F F' : CTy) : Bool := F'.isTop || (!F.isTop && layersLeB F F'.rowOf)
+
+theorem layersLeB_sound : ∀ (F : CTy) {R' : Row}, layersLeB F R' = true →
+    ∀ o ∈ F.rowOf, ∃ o', Row.find R' o.n o.i = some o' ∧ o.LeF o'
+  | .eff n i q A B f rc C, R', h, o, ho => by
+      simp only [layersLeB, Bool.and_eq_true] at h
+      simp only [CTy.rowOf, List.mem_cons] at ho
+      rcases ho with rfl | ho
+      · have h₁ := h.1
+        split at h₁
+        · rename_i o' hf'
+          simp only [Bool.and_eq_true, Bool.or_eq_true, Bool.not_eq_true'] at h₁
+          refine ⟨o', hf', OpSig.sigB_sound h₁.1, fun hc => ?_⟩
+          rw [finLe_iff]
+          rcases h₁.2 with (hn | ht) | ⟨hf, hl⟩
+          · rw [hc] at hn; cases hn
+          · exact Or.inl ht
+          · exact Or.inr ⟨hf, RowLe.of_mem (layersLeB_sound f hl)⟩
+        · cases h₁
+      · exact layersLeB_sound C h.2 o ho
+  | .ret _, _, _, _, ho | .arr _ _, _, _, _, ho | .amp _ _, _, _, _, ho | .top, _, _, _, ho
+  | .all _ _ _, _, _, _, ho | .nu _, _, _, _, ho => by simp [CTy.rowOf] at ho
+
+theorem finLeB_sound {F F' : CTy} (h : finLeB F F' = true) : FinLe F F' := by
+  simp only [finLeB, Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true'] at h
+  rw [finLe_iff]
+  rcases h with h | ⟨hF, h⟩
+  · exact Or.inl h
+  · exact Or.inr ⟨hF, RowLe.of_mem (layersLeB_sound F h)⟩
+
+/-- `o` below what `S'` finds at its key, decided. -/
+def opLeInB (S' : Row) (o : OpSig) : Bool :=
+  match Row.find S' o.n o.i with
+  | some o' => OpSig.sigB o o' && (!o.finRead || finLeB o.fin o'.fin)
+  | none => false
+
+/-- `RowLe S S'`, decided: every operation of `S` is found in `S'` as the same operation, its
+cancel row below the one `S'` finds where it is read (`finLeB`). -/
+def rowLeB (S S' : Row) : Bool := S.all (opLeInB S')
 
 theorem rowLeB_sound {S S' : Row} (h : rowLeB S S' = true) : RowLe S S' := by
-  refine RowLe.of_find fun n i o hf => ?_
-  obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf
-  have := List.all_eq_true.mp h o hm
-  simpa using this
+  refine RowLe.of_mem fun o hm => ?_
+  have hx := List.all_eq_true.mp h o hm
+  simp only [opLeInB] at hx
+  split at hx
+  · rename_i o' hf'
+    simp only [Bool.and_eq_true, Bool.or_eq_true, Bool.not_eq_true'] at hx
+    refine ⟨o', hf', OpSig.sigB_sound hx.1, fun hc => ?_⟩
+    rcases hx.2 with hn | hl
+    · rw [hc] at hn; cases hn
+    · exact finLeB_sound hl
+  · cases hx
 
 /-- `Row.NZ`, decided. -/
 def Row.nzB (S : Row) : Bool := S.all fun o => o.n != 0

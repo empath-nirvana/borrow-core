@@ -1,0 +1,21 @@
+-- SPEC §3 (#808): a generic argument inferred up to `[α]`. `both[A]` takes two arguments of one
+-- type `A`. `one` is at `all 'z < top. i32`, elaborated in the empty lifetime context; `mk`'s result
+-- `all 'q < top. i32` is elaborated after its `'a`, so the two binders' names differ. Matching the
+-- call against `both`'s parameters reads `A` off `one`, and `g`'s type is `A` up to `[α]`
+-- (`matchV`); the checker carries `g` to it by `[α]`.
+--
+-- Answer: see `alpha-generic-arg.out`: `one` answers 1 and `g` 2: 1 * 10 + 2; `live 0`.
+
+def one : all 'z < top. i32 = thunkv Fun 'z < top. return i32[1]
+
+fn mk<'a>(u: i32) -> all 'q < top. i32 =
+  return (thunkv Fun 'q < top. return u)
+
+fn both[A](x: A, y: A) -> A * A = (x, y)
+
+main -> i32 =
+  let g = mk(i32[2]);
+  let (p, q) = both(one, g);
+  h <- (force p)['main];
+  k <- (force q)['main];
+  h * 10 + k

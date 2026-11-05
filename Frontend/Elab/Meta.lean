@@ -84,7 +84,7 @@ def loopRowOf (A : CVTy) : Option (CRow × CVTy × CVTy) :=
     let (_, R) ← effRow? D
     match O with
     | .sum B (.tvar 0) =>
-      if A = .thunk (BoCa.Fig16.LogRel.Core.CTy.loopEff S B R) then some (S, B, R) else none
+      if tyEqV A (.thunk (BoCa.Fig16.LogRel.Core.CTy.loopEff S B R)) then some (S, B, R) else none
     | _ => none
   | _ => none
 
@@ -95,14 +95,14 @@ def loopOf (A : CVTy) : Option (CVTy × CVTy) := (loopRowOf A).map (·.2)
 def iterOf (V : CVTy) : Option (CVTy × CVTy × CVTy) :=
   match V with
   | .thunk (.nu (.amp (.ret (.sum (.tensor A (.tvar 0)) R)) (.ret R'))) =>
-    if V = .thunk (BoCa.Fig16.LogRel.Core.CTy.iter A R R') then some (A, R, R') else none
+    if tyEqV V (.thunk (BoCa.Fig16.LogRel.Core.CTy.iter A R R')) then some (A, R, R') else none
   | _ => none
 
 /-- `U (pull A B R)`: its `A`, `B` and `R`. -/
 def pullOf (V : CVTy) : Option (CVTy × CVTy × CVTy) :=
   match V with
   | .thunk (.nu (.amp (.ret (.sum (.tensor A (.tvar 0)) (.sum B (.tvar 0)))) (.ret R))) =>
-    if V = .thunk (Frontend.Check.pullTy A B R) then some (A, B, R) else none
+    if tyEqV V (.thunk (Frontend.Check.pullTy A B R)) then some (A, B, R) else none
   | _ => none
 
 /-- The element type of an iterator or a generator. -/

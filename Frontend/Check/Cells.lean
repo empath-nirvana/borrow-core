@@ -62,6 +62,75 @@ def _root_.BoCa.Fig16.LogRel.Core.CTy.eraseLife : CTy → CTy
   | .eff n i q A B fin rc C => .eff n i q A.eraseLife B.eraseLife fin.eraseLife rc C.eraseLife
 end
 
+mutual
+/-- **Erasure forgets `[α]`**: two value types equal up to the names of their lifetime binders
+have one erasure (`eraseLife` sends every lifetime to `⊤` and every binder to `0`). So a lookup
+keyed by erased types (the cell classes, `Checked.classAt`, `Backend2.classOf`) finds a type's
+class at every α-variant of it. -/
+theorem _root_.BoCa.Fig16.LogRel.Core.VTy.eraseLife_of_alphaB :
+    ∀ {ρ : List (Lifetime.LifeVar × Lifetime.LifeVar)} (A : VTy) {B : VTy},
+      VTy.alphaB ρ A B = true → A.eraseLife = B.eraseLife
+  | _, .unit, B, h | _, .zero, B, h | _, .unk, B, h | _, .int _, B, h | _, .opq _, B, h
+  | _, .tvar _, B, h => by
+      cases B <;> simp_all [VTy.alphaB, VTy.eraseLife]
+  | _, .tensor A₁ A₂, B, h => by
+      cases B <;> simp only [VTy.alphaB, Bool.and_eq_true, reduceCtorEq] at h
+      simp [VTy.eraseLife, VTy.eraseLife_of_alphaB A₁ h.1, VTy.eraseLife_of_alphaB A₂ h.2]
+  | _, .sum A₁ A₂, B, h => by
+      cases B <;> simp only [VTy.alphaB, Bool.and_eq_true, reduceCtorEq] at h
+      simp [VTy.eraseLife, VTy.eraseLife_of_alphaB A₁ h.1, VTy.eraseLife_of_alphaB A₂ h.2]
+  | _, .thunk C, B, h => by
+      cases B <;> simp only [VTy.alphaB, reduceCtorEq] at h
+      simp [VTy.eraseLife, CTy.eraseLife_of_alphaB C h]
+  | _, .ref A, B, h => by
+      cases B <;> simp only [VTy.alphaB, reduceCtorEq] at h
+      simp [VTy.eraseLife, VTy.eraseLife_of_alphaB A h]
+  | _, .bang A, B, h => by
+      cases B <;> simp only [VTy.alphaB, reduceCtorEq] at h
+      simp [VTy.eraseLife, VTy.eraseLife_of_alphaB A h]
+  | _, .fam A, B, h => by
+      cases B <;> simp only [VTy.alphaB, reduceCtorEq] at h
+      simp [VTy.eraseLife, VTy.eraseLife_of_alphaB A h]
+  | _, .mu A, B, h => by
+      cases B <;> simp only [VTy.alphaB, reduceCtorEq] at h
+      simp [VTy.eraseLife, VTy.eraseLife_of_alphaB A h]
+  | _, .imm _ A, B, h => by
+      cases B <;> simp only [VTy.alphaB, Bool.and_eq_true, reduceCtorEq] at h
+      simp [VTy.eraseLife, VTy.eraseLife_of_alphaB A h.2]
+  | _, .mut _ A, B, h => by
+      cases B <;> simp only [VTy.alphaB, Bool.and_eq_true, reduceCtorEq] at h
+      simp [VTy.eraseLife, VTy.eraseLife_of_alphaB A h.2]
+  | _, .box _ A, B, h => by
+      cases B <;> simp only [VTy.alphaB, Bool.and_eq_true, reduceCtorEq] at h
+      simp [VTy.eraseLife, VTy.eraseLife_of_alphaB A h.2]
+
+/-- **Erasure forgets `[α]`**, at computation types. -/
+theorem _root_.BoCa.Fig16.LogRel.Core.CTy.eraseLife_of_alphaB :
+    ∀ {ρ : List (Lifetime.LifeVar × Lifetime.LifeVar)} (C : CTy) {D : CTy}, CTy.alphaB ρ C D = true →
+      C.eraseLife = D.eraseLife
+  | _, .top, D, h => by cases D <;> simp_all [CTy.alphaB, CTy.eraseLife]
+  | _, .ret A, D, h => by
+      cases D <;> simp only [CTy.alphaB, reduceCtorEq] at h
+      simp [CTy.eraseLife, VTy.eraseLife_of_alphaB A h]
+  | _, .arr A C, D, h => by
+      cases D <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq] at h
+      simp [CTy.eraseLife, VTy.eraseLife_of_alphaB A h.1, CTy.eraseLife_of_alphaB C h.2]
+  | _, .amp C₁ C₂, D, h => by
+      cases D <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq] at h
+      simp [CTy.eraseLife, CTy.eraseLife_of_alphaB C₁ h.1, CTy.eraseLife_of_alphaB C₂ h.2]
+  | _, .all _ _ C, D, h => by
+      cases D <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq] at h
+      simp [CTy.eraseLife, CTy.eraseLife_of_alphaB C h.2]
+  | _, .nu C, D, h => by
+      cases D <;> simp only [CTy.alphaB, reduceCtorEq] at h
+      simp [CTy.eraseLife, CTy.eraseLife_of_alphaB C h]
+  | _, .eff _ _ _ A B fin _ C, D, h => by
+      cases D <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq] at h
+      obtain ⟨⟨⟨⟨⟨⟨⟨hn, hi⟩, hq⟩, hrc⟩, hA⟩, hB⟩, hf⟩, hC⟩ := h
+      simp_all [CTy.eraseLife, VTy.eraseLife_of_alphaB A hA, VTy.eraseLife_of_alphaB B hB,
+        CTy.eraseLife_of_alphaB fin hf, CTy.eraseLife_of_alphaB C hC]
+end
+
 /-- The fields of a fold's shape at `Ref X`. -/
 def _root_.BoCa.Fig16.LogRel.Core.FShape.hasRefX : FShape → Bool
   | .refX => true

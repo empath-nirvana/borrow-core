@@ -356,7 +356,7 @@ theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' 
   | foldReuse F R hΓ hF hG => exact .foldReuse F R (deadP_append h' hΓ) hF hG
   | nuIn hC _ ih => exact .nuIn hC ih
   | nuOut hC _ ih => exact .nuOut hC ih
-  | unfoldN C S hC hΓ => exact .unfoldN C S hC (deadP_append h' hΓ)
+  | unfoldN C S hC hS hΓ => exact .unfoldN C S hC hS (deadP_append h' hΓ)
   | effSub hle _ ih => exact .effSub hle ih
   | effPerform hAt hf hna hac _ ih => exact .effPerform hAt hf hna hac ih
   | effAwait hAt hΓ hfa ha haA hfc hc =>
@@ -388,6 +388,7 @@ theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' 
   | divFuel S A hAt hS hΓ => exact .divFuel S A hAt hS (deadP_append h' hΓ)
   | reify S B R res hAt hS hcl hres hΓ _ => exact .reify S B R res hAt hS hcl hres (deadP_append h' hΓ)
   | letPoly b hcl hV _ _ ihN => exact .letPoly b hcl hV ihN
+  | alpha _ hα ih => exact .alpha ih hα
 
 /-! ### Typing: calls, callbacks and one-operation handlers -/
 

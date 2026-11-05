@@ -1,4 +1,5 @@
 import Frontend.Check.Elab
+import Frontend.Check.TyEq
 import Core.Tied
 import Core.PinFundamental
 
@@ -686,11 +687,12 @@ def effCtxOf (s : CRow) : EffCtx := fun n =>
     | some o => (o.q, o.A, o.B)
     | none => (.lin, .unit, .unit)
 
-/-- The list gives each operation one signature, of a nonzero name, and has no unrestricted
-operation answering `0`, decided.  `[spec §18, §19]` -/
+/-- The list gives each operation one signature up to α (SPEC §3), of a nonzero name, and has no
+unrestricted operation answering `0`, decided.  `[spec §3, §18, §19]` -/
 def sigsOkB (s : CRow) : Bool :=
   s.all fun o => o.n != 0 && !(o.q == .unr && o.B.isZero) &&
-    s.all fun o' => !(o'.n == o.n && o'.i == o.i) || (o'.q == o.q && o'.A == o.A && o'.B == o.B)
+    s.all fun o' => !(o'.n == o.n && o'.i == o.i) ||
+      (o'.q == o.q && tyEqV o'.A o.A && tyEqV o'.B o.B)
 
 theorem lt_idxBound {s : CRow} {o : COpSig} (ho : o ∈ s) : o.i.toNat < idxBound s o.n := by
   induction s with
@@ -729,7 +731,7 @@ theorem sigsAt_effCtxOf {s : CRow} (h : sigsOkB s = true) : SigsAt (effCtxOf s) 
   simp only [hp.1, hi, beq_self_eq_true, Bool.and_self, Bool.not_true, Bool.false_or,
     Bool.and_eq_true, beq_iff_eq] at hc
   obtain ⟨⟨hq, hA⟩, hB⟩ := hc
-  simp [hq, hA, hB]
+  exact ⟨_, rfl, hq, hA, hB⟩
 
 /-- **The effect context the list gives has no unrestricted abortive operation**, when
 `sigsOkB` holds of it.  `[spec §18, §19]` -/

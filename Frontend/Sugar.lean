@@ -1,3 +1,4 @@
+import Frontend.Elab.SurfAlpha
 import Frontend.Parser
 import Frontend.Print
 import Frontend.Check.Steps
@@ -41,7 +42,7 @@ reported at the sugar, with a note naming it (`Frontend.Elab.renderError`).
 -/
 
 namespace Frontend.Sugar
-open Frontend.Check (mentionsV mentionsC)
+open Frontend.Check (mentionsV mentionsC tyEqV tyEqC tyEqVo tyEqVs)
 
 /-- The library modules, by the name `include` gives them (#59). A module `m` is the file
 `lib/m.bc`, read when `bcc` starts (`libSources`), so editing one rebuilds no Lean (#113); adding
@@ -343,7 +344,7 @@ it, when known, is not that loop. Its `B` and `R`. -/
 def directCall (c : TCx) (exp : Option CVTy) : Val → Option (CVTy × CVTy)
   | V@(.app ..) => do
     let A ← c.tyV V
-    if exp = some A then none else loopOf A
+    if tyEqVo exp (some A) then none else loopOf A
   | _ => none
 
 /-- The subvalues of a value outside nested computations, each with the type expected of it. -/
@@ -758,7 +759,7 @@ def checkBreaks (M : Comp) (keep : Option CVTy) : Except Error Unit :=
     match keep, e with
     | none, some _ => throw ⟨bsp, "`break e` gives the value of a `for` whose value is bound: " ++
         "`let r = for x in … { … }; …`"⟩
-    | some T, none => if T != .unit then
+    | some T, none => if !tyEqV T .unit then
         throw ⟨bsp, s!"this `for`'s value, of type `{ppT T}`, is bound: `break e` gives it"⟩
     | _, _ => pure ()
 
@@ -943,7 +944,7 @@ def loopPlan (cx : LoopCx) (c : TCx) (src : LoopSrc) (V : Val) (M N : Comp) : SM
         | some (.ret T) => pure (some (r.name, T))
         | _ => throw ⟨d.span, "the type of the `else` value is not determined here"⟩
       | none, none =>
-        if Q != .zero then pure (some (r.name, Q)) else
+        if !tyEqV Q .zero then pure (some (r.name, Q)) else
         match (M.spineBreaks.filterMap (·.2)).head? with
         | some e => match (src.bound.foldl (·.push · (some E)) c).tyV e with
           | some T => pure (some (r.name, T))
@@ -957,7 +958,7 @@ def loopPlan (cx : LoopCx) (c : TCx) (src : LoopSrc) (V : Val) (M N : Comp) : SM
       "back: the source holds it until the loop ends. `break`, and `return` after the loop"⟩
   let never := match src, it with
     | .forever, _ => true
-    | _, some (_, _, _, Q, _) => Q == .zero
+    | _, some (_, _, _, Q, _) => tyEqV Q .zero
     | _, _ => false
   pure { src, cond, V, it, cap, keep, rest := N, els, never }
 
@@ -985,7 +986,7 @@ def closeGiven (cx : LoopCx) (gs : List (String × Option CVTy)) : String × Lis
   for (p, T) in cx.caps do
     if names.contains p then continue
     let hands (g : String) (Tg : Option CVTy) : Bool := !used.contains g && match Tg with
-      | some Tg => (((pullOf Tg).map (·.2.2)).orElse fun _ => (iterOf Tg).map (·.2.2)) == some T
+      | some Tg => tyEqVo (((pullOf Tg).map (·.2.2)).orElse fun _ => (iterOf Tg).map (·.2.2)) (some T)
       | none => false
     match gs.find? (fun (g, Tg) => hands g Tg) with
     | some (g, _) => used := g :: used; out := out ++ s!"{p} <- (nu_out (force {g})).2;\n"
@@ -1217,13 +1218,13 @@ def mAbort (m : MCx) (sp : Span) (lend : Option Ident) (Rf : CVTy) : MM (String 
     | .tensor _ .unit => pure (s!"let ({l.name}, io_ru) = io_r;\n", [l.name])
     | _ => pure (s!"{l.name} <- return io_r;\n", [l.name])
   | none =>
-    if Rf == .unit then pure ("let () = io_r;\n", [])
-    else if Rf == cx.R && !cx.parts.isEmpty then
+    if tyEqV Rf .unit then pure ("let () = io_r;\n", [])
+    else if tyEqV Rf cx.R && !cx.parts.isEmpty then
       pure ((if cx.tail1 then destructR "io_r" cx.parts else destructParts "io_r" cx.parts), cx.capNames)
     else
       -- The loop hands back, by their types, capabilities of the body it was given (the variables
       -- a `for` over a generator threads, say); what else it hands back is consumed.
-      let capOf (T : CVTy) : Option String := match cx.caps.filter (·.2 == T) with
+      let capOf (T : CVTy) : Option String := match cx.caps.filter (tyEqV ·.2 T) with
         | [(p, _)] => some p
         | _ => none
       let (src, leaves) := destructLeaves divFuel "io_r" Rf capOf
@@ -1417,7 +1418,7 @@ def mLoop (m : MCx) : Nat → TCx → Span → LoopSrc → Val → Comp → Comp
     let code ← match P.it, src with
       | some (_, _, isGen, Q, _), .each x => do
         let v := s!"io_it{k}"
-        let ended := if Q == .zero then "absurd io_q" else match P.keep, P.els with
+        let ended := if tyEqV Q .zero then "absurd io_q" else match P.keep, P.els with
           | some (r, _), some _ =>
             let consume := if P.cap.isSome then bindCap P.cap Q "io_q" else "io_dq <- return io_q;\n"
             s!"{consume}{r} <- force io_hole_else;\nforce io_hole_after"
@@ -1803,7 +1804,7 @@ def specTy : CVTy → CVTy → Option CVTy
       | _ => none
     -- A div callback's result is a loop of `B`.
     let B' ← (loopFnOf T).map (·.1)
-    if A' = A ∧ B' = B then some T else none
+    if tyEqV A' A && tyEqV B' B then some T else none
 
 /-- A loop around the code being elaborated, for a `return` in the body of a counted loop inside
 it: a counted loop leaves through its exit (`ret`, of type `Rt`); a drain passes the `return` on
@@ -2277,10 +2278,10 @@ them after its result (`handBackResult`). -/
 def modifyBody (hands : Bool) (A X : CVTy) (S : Comp) : Comp × CVTy :=
   match hands, X with
   | true, .tensor X₀ W =>
-    if X₀ = A then (handBackResult false S, .tensor .unit W) else match X₀ with
-      | .tensor A' R => if A' = A then (handBackResult true S, .tensor R W) else (unitTail S, .unit)
+    if tyEqV X₀ A then (handBackResult false S, .tensor .unit W) else match X₀ with
+      | .tensor A' R => if tyEqV A' A then (handBackResult true S, .tensor R W) else (unitTail S, .unit)
       | _ => (unitTail S, .unit)
-  | false, .tensor A' B => if A' = A then (S, B) else (unitTail S, .unit)
+  | false, .tensor A' B => if tyEqV A' A then (S, B) else (unitTail S, .unit)
   | _, _ => (unitTail S, .unit)
 
 /-- The result type of a computation, as its tail gives it. -/
@@ -2612,7 +2613,7 @@ type, when `D` is data.  `[spec §16]` -/
 def sizedOf : CVTy → Option (CVTy × CVTy × CVTy)
   | .tensor D (.tensor S (.bang (.thunk (.arr (.tensor D₁ S₁)
       (.ret (.tensor (.tensor D₂ S₂) (.sum A (.sum .unit .unit)))))))) =>
-    if D == D₁ && D == D₂ && S == S₁ && S == S₂ && dataTy 64 D then some (D, S, A) else none
+    if tyEqV D D₁ && tyEqV D D₂ && tyEqV S S₁ && tyEqV S S₂ && dataTy 64 D then some (D, S, A) else none
   | _ => none
 
 /-- The source of a `for` that is sized, by its type (or its form, for `a..b` and `&a`).
@@ -2791,7 +2792,7 @@ def phUnify : Nat → List (Nat × CVTy) → CVTy → CVTy → Option (List (Nat
       (phUnify n σ A A').bind (phUnify n · B B')
     | .ref A, .ref A' | .bang A, .bang A' | .fam A, .fam A' | .imm _ A, .imm _ A'
     | .mut _ A, .mut _ A' | .box _ A, .box _ A' => phUnify n σ A A'
-    | a, b => if a == b then some σ else none
+    | a, b => if tyEqV a b then some σ else none
 
 /-- A pattern with the solution `σ` applied. -/
 def phApply : Nat → List (Nat × CVTy) → CVTy → CVTy
@@ -3080,11 +3081,12 @@ def tupleArgs : Nat → Val → List Val
   | k + 1, .pair _ V W => V :: tupleArgs k W
   | _, V => [V]
 
-/-- Two types equal once elaborated (abbreviations expanded), or as written. -/
+/-- Two types equal once elaborated (abbreviations expanded), or as written, each up to the names
+of their binders (`tyEqV`, `VTy.alphaEq`). -/
 def sameTy (c : TCx) (A B : VTy) : Bool :=
   match c.elabV A, c.elabV B with
-  | some A', some B' => A' == B'
-  | _, _ => A.strip == B.strip
+  | some A', some B' => tyEqV A' B'
+  | _, _ => A.alphaEq B
 
 mutual
 /-- The operations `(n, i)` a computation performs, outside closures, by name: its `perform`s and
@@ -4379,7 +4381,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       let M' ← surfC n cM none M
       modify fun s => { s with exits := s.exits.drop 1 }
       -- A source that never ends (it finishes with `0`): what follows runs only after `break`.
-      if (T.bind finOf) == some .zero && M.spineBreaks.isEmpty then
+      if tyEqVo (T.bind finOf) (some .zero) && M.spineBreaks.isEmpty then
         let N₀ := match N.forElse?, N.forRes? with
           | some (_, _, _, N₀), _ => N₀
           | none, some (_, _, N₀) => N₀
@@ -4400,7 +4402,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       | none, some (r, A, N₀) =>
         let rT := (A.bind c.elabV).orElse fun _ => (T.bind finOf).bind fun B =>
           -- A source that never ends: the loop's value is `break e`'s.
-          if B == .zero then none else some B
+          if tyEqV B .zero then none else some B
         let N₀' ← surfC n (c.push r.name rT) exp N₀
         pure (.loop sp ℓ src V' M' (.bind N.span r A (.ret r.span (.sugar r.span .forRes)) N₀'))
       | none, none => pure (.loop sp ℓ src V' M' (← surfC n c exp N))
@@ -4416,7 +4418,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       let c ← refresh c
       let e : Option CCTy := do
         let ⟨S, A, R, _⟩ ← Frontend.Check.retRead (← c.tyV hr')
-        let ⟨Es, _⟩ ← Frontend.Check.clausesRead S R (← c.tyV hc')
+        let Es ← Frontend.Check.clausesRead S R (← c.tyV hc')
         pure (Frontend.Check.effOf
           (BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat k) Es 0 ++ S) A)
       pure (.handle sp k st hr' hc' (← surfC n c e M))
@@ -4592,7 +4594,7 @@ def forData : Nat → TCx → Option CCTy → Span → Ident → Val → Val →
       if e.isSome && els.isNone then
         throw ⟨bsp, "this `for`'s source can end, so its value is `break e`'s or, when the " ++
           "source ends, the `else` value: `for … { … } else { d }` (SPEC §16)"⟩
-      if e.isNone && B != .unit then
+      if e.isNone && !tyEqV B .unit then
         throw ⟨bsp, s!"this `for`'s value, of type `{ppT B}`, is bound: `break e` gives it"⟩
     -- A `return`: the type it returns, and where it goes after the loop.
     let hasRet := M.hasRet
@@ -5125,7 +5127,7 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     let Vt : CVTy ← match keep with
       | some (_, some A) => need sp "the loop's value" (c.elabV A)
       | some (r, none) =>
-        if Bg != .zero then pure Bg else
+        if !tyEqV Bg .zero then pure Bg else
         match (M.spineBreaks.filterMap (·.2)).head? with
         | some e => match (ws.foldl (fun c (y, T) => c.push y (some T)) (c.push x.name (some Tc))).tyV e with
           | some T => pure T
@@ -5137,7 +5139,7 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     if keep.isNone && Class.of Bg == .linear false then
       throw ⟨sp, s!"`{i.callee}` returns `{ppT Bg}`, which is linear and not consumable: bind the loop's value, " ++
         "`let r = for …`"⟩
-    if keep.isSome && Bg != Vt && Bg != .zero then
+    if keep.isSome && !tyEqV Bg Vt && !tyEqV Bg .zero then
       throw ⟨sp, s!"the loop's value has type `{ppT Vt}`, and `{i.callee}` returns `{ppT Bg}`"⟩
     let Tt ← pp Tc
     let Bt ← pp Bg
@@ -5180,7 +5182,7 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     let valEnd := if keep.isSome then s!"io_jg{sfx}" else "()"
     let JJt := if hasRet then s!"(({Wt}) * ({Vs})) + ({Rts})" else s!"({Wt}) * ({Vs})"
     let inj (v : String) : String := if hasRet then s!"inl ({v})" else v
-    let endRet := if Bg == .zero then s!"absurd io_jg{sfx}"
+    let endRet := if tyEqV Bg .zero then s!"absurd io_jg{sfx}"
       else s!"return ({inj s!"(io_jw{sfx}, {valEnd})"})"
     let exitArm := if hasRet then
         s!"case io_jo{sfx} \{ inl io_jb{sfx} -> return (inl (io_jw{sfx}, io_jb{sfx})) | inr io_jr{sfx} -> return (inr io_jr{sfx}) }"
@@ -5232,7 +5234,7 @@ io_j{sfx} : {Jt} <- return ((unbang io_hwf{sfx}) io_l{sfx});
       report sp (if looping then s!"`for` is div: `{i.callee}` loops" else
         s!"`for` is total: `{i.callee}` does not loop")
       -- A generator that never returns (`0`): what follows runs only after `break`.
-      if Bg == .zero && M.spineBreaks.isEmpty && N != .ret N.span (.unit N.span) then
+      if tyEqV Bg .zero && M.spineBreaks.isEmpty && N != .ret N.span (.unit N.span) then
         report N.span ("unreachable: the loop before this never ends (its generator never " ++
           "returns, and its body does not `break`)")
     -- The loops inside the body leave by this loop's exit on `return`.
@@ -5444,7 +5446,7 @@ def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) → Option 
     let mut σs : TySubst := []
     for (x, t) in names.zip ts₀ do
       σs := σs ++ [(x, ← c'.surface sp t)]
-    let key := (tn.name, σs.map (·.2.strip))
+    let key := (tn.name, σs.map (·.2.canon [] [] 0 |>.strip))
     let st ← get
     if let some name := st.insts.lookup key then
       modify fun st => { st with instCalls := (name, names, ts₀) :: st.instCalls }
@@ -5782,7 +5784,7 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
       | some T, _ =>
         match m.conflicts.find? (BoCa.Fig16.LogRel.Core.Check.vfreeB · Pi) with
         | some v =>
-          if T != Pf then
+          if !tyEqV T Pf then
             throw ⟨Wi'.span, s!"the lifetime `{lname v}` of `{fname}` is given different lifetimes " ++
               "by its arguments, and this one cannot be shortened to their meet: write it, " ++
               s!"`{writeLives fname}"⟩
@@ -5849,7 +5851,7 @@ def copyOf : Nat → Hof → VTy → DM String
   | 0, hof, _ => pure hof.name.name
   | n + 1, hof, P' => do
     let st ← get
-    if let some name := st.copies.lookup (hof.name.name, P'.strip) then return name
+    if let some name := st.copies.lookup (hof.name.name, (P'.canon [] [] 0).strip) then return name
     let name := s!"{hof.name.name}__{st.copies.length}"
     let F := VTy.lolli hof.P.span P' hof.Q
     let lam := Comp.lam hof.sp hof.x P' hof.M
@@ -5857,7 +5859,7 @@ def copyOf : Nat → Hof → VTy → DM String
     let copy := if hof.bang then Decl.def_ hof.sp ⟨name, hof.name.span⟩ [] (.bang hof.P.span F)
         (.bangThunkv hof.sp lam) mark
       else Decl.def_ hof.sp ⟨name, hof.name.span⟩ [] F (.thunkv hof.sp lam) mark
-    let copies := ((hof.name.name, P'.strip), name) :: st.copies
+    let copies := ((hof.name.name, (P'.canon [] [] 0).strip), name) :: st.copies
     let st₁ : DivSt := { st with copies := copies }
     let st' ← (elabDecl n st₁ copy : SM DivSt)
     set st'

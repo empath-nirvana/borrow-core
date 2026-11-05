@@ -1,0 +1,27 @@
+-- SPEC §3, §19 (#808): an effect whose operation's argument type has a lifetime binder, read in two
+-- lifetime contexts. `step<'c>` performs `ask` under its own lifetime parameter, so its row's
+-- `ask : !(all 'x < top. imm 'x i32 => i32) ↠ i32` names the binder past `'c`; `main` handles it
+-- with the binder named past `'main`. The checker relates the two rows by `[α]`, and the program's
+-- effect context gives `ask` one signature up to α (`RowAt`, `OpSig.AtEntry`).
+--
+-- Answer: see `alpha-effect-row.out`: the handler answers 5 and `step` adds its boxed 3.
+
+effect Ask { ctl ask(g: !(all 'x < top. imm 'x i32 => i32)) -> i32 }
+handler answer: Ask, i32 -> i32 = {
+  return(a) = a;
+  ask(g, k) = k(i32[5])
+}
+
+def read : !(all 'z < top. imm 'z i32 => i32) =
+  !thunkv Fun 'z < top. return (thunkv fun (v : imm 'z i32) ->
+    w <- return (*v);
+    return (release_imm['z, i32] v);
+    return (w + i32[1]))
+
+fn step<'c>(n: box 'c i32) -> i32 with Ask =
+  m <- return (unbox n);
+  r <- ask(read);
+  return (r + m)
+
+main -> i32 =
+  with answer { step(boxed['main] i32[3]) }

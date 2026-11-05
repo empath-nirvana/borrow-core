@@ -163,9 +163,11 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
 | `Check/Decide.lean` | `DecidableEq` on `VTy` and `CTy` (on `Expr`, `Core/LetCopy.lean`'s); a `Bool` decider for each side condition, with its soundness lemma |
 | `Check/Fam.lean` | linearity: masks of used and absorbable slots, and a derivation at every liveness between them |
 | `Check/Elab.lean` | surface lifetimes, types and shapes to `Core`'s; a printer back |
+| `Check/TyEq.lean` | the checker's one test of two kernel types: equal up to the names of lifetime binders (`tyEqV`, `tyEqC`, `tyEqEnts`), returner chains read back (`effRow?`, `effRowOf?`), and a row read at another's names (`alignRow`); `scripts/check-type-eq.sh` refuses any other comparison under `Check/` |
 | `Check/Tied.lean` | tied derivations (SPEC §19, decision R): `TiedAt`, and the checker's derivations `TiedDer p s` (SPEC §29: of `CDerivesP`, and tied when the list `p` of relaxed rules used is empty), one lemma per rule the builders apply, and the program's effect context (`effCtxOf`, `sigsOkB`) |
 | `Check/Pin.lean` | R1, the relaxed lend (SPEC §29): `withbor2r`'s builder `rLendR`, and the deciders `Row.resumeOB`, `noThunkB` |
 | `Check/Rules.lean` | one builder per `CDerives` constructor, and `rConsume` (SPEC §12) |
+| `Check/Conv.lean` | conversions: a checked term carried to an equal type, an α-equivalent one (`[α]`, `rAlpha`), or a wider row (`[sub]` then `[α]`) (`convVal`, `convComp`) |
 | `Check/Steps.lean` | the environment, messages, the deciders of fold shapes and consumes, the consumes, and the steps shared by the checker's cases |
 | `Check/Consts.lean` | constants (§8, §8a, §8b) and derived forms (§9) |
 | `Check/Checker.lean` | the bidirectional checker, `synV`/`chkV`/`synC`/`chkC` |
@@ -340,7 +342,9 @@ borrows (`synConstU`, `Consts.lean`); their side conditions are decided by `rowL
   (`findOp`). A value has no row (`Env.forVal`), so a computation synthesized inside a value
   (`thunkv fun …` with no type expected) cannot perform: ascribe it.
 * **Conversion.** Where a synthesized type meets an expected one (`convC`), `F_Σ′ A` is accepted at
-  `F_Σ A` when `Σ′ ⊆ Σ` (`rowLeB`), by `[sub]`; `return V` checks at `F_Σ A` the same way.
+  `F_Σ A` when `Σ′ ⊆ Σ` (`rowLeB`, cancel rows growing at every depth), by `[sub]`, and up to
+  the names of lifetime binders when `Σ′ ⊆ Σ₀` for `Σ₀`, `Σ` read at `Σ′`'s names (`alignRow`),
+  by `[sub]` then `[α]`; `return V` checks at `F_Σ A` the same way.
 * **Effectful binds.** `x <- M; N` whose head synthesizes `F_Σ′ A` with `Σ′` nonempty is at the
   current row `Σ` (or `Σ′`, when none is set), `M` lifted by `[sub]`. At a row with no weakening
   (every operation `lin`) it is `[let]`; when every slot `N` uses holds no owned cell
@@ -354,10 +358,10 @@ borrows (`synConstU`, `Consts.lean`); their side conditions are decided by `rowL
 * **Handlers.** `handle_with[n](hr, hc) M` checks the pair `(hr, hc)` of values, a value form
   over slots that are persistent (`valFormB`, `rEffHandle`), reads `A`, `Σ` and `R` off
   `hr : !U(A -o F_Σ R)` (`retRead`) and the operations `E` off the clauses' type (`clausesRead`,
-  checked equal to `clausesTy Σ R E`); an abortive clause `!U(A -o F_Σ R)` is read as the cancellable operation
+  `clausesTy Σ R E` up to `[α]`, the clauses carried to it by `convVal`); an abortive clause `!U(A -o F_Σ R)` is read as the cancellable operation
   `A ↠^cancel 0` (`cancel` and `unr` give it the same clause type). `M` is checked at
   `F_{ofEff n E 0 ++ Σ} A`. When a clause's argument is `A ⊗ [@d] κ`, `κ` a continuation's type,
-  the clauses are read as BOXED-κ's first (`clausesReadBoxed`, `clausesTyB Σ R d E`; SPEC §28):
+  the clauses are read as BOXED-κ's first (`clausesReadAt`, `clausesTyB Σ R d E`; SPEC §28):
   then `@d` must be defined, every non-abortive answer type of the handled row must outlive it
   (`ansOutlivesB`), and so must every slot `M` uses, and the derivation is `rEffHandleB`'s.
 * **Unwinding borrows.** The finaliser is the source's consume `consumeE` (`forget` at a `mut`

@@ -14,6 +14,7 @@ import Core.PolyLet
 import Core.DivHandle
 import Core.DivHandleLast
 import Core.Tok
+import Core.Alpha
 import Support.LogicalRelation.Adequacy
 
 /-!
@@ -186,6 +187,13 @@ theorem await_compatC {Δ : LifeCtx} {S : Row} {n : UInt32} {a c : OpSig}
 inductive Jdg where
   | val (A : VTy)
   | comp (C : CTy)
+
+/-- Judgment forms equal up to the names of their types' lifetime binders (`VTy.alphaB`,
+`CTy.alphaB` at no binder pairs).  `[spec §3]` -/
+def Jdg.alphaB : Jdg → Jdg → Bool
+  | .val A, .val A' => VTy.alphaB [] A A'
+  | .comp C, .comp C' => CTy.alphaB [] C C'
+  | _, _ => false
 
 /-- The CBPV typing judgment.  Its context premises are `Ctx.SplitP`, `Ctx.DeadP` and
 `Ctx.SoloP`: a live slot of persistent type may be duplicated and consumed.  `[spec §3, §10]` -/
@@ -499,7 +507,7 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       CDerives Δ Γ e (.comp C.unroll)
   /-- Coiteration, a constant: `unfold : !U(S ⊸ C[S/X]) ⊸ !U(S ⊸ νX. C)` (`Nu.lean`), at a
   positive `C`.  `[spec §7]` -/
-  | unfoldN {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hΓ : Ctx.DeadP Γ) :
+  | unfoldN {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ (.val (unfoldV C)) (.val (unfoldTy C S))
   /-- `[sub]`: `F_Σ A ≤ F_Σ′ A` for `Σ ⊆ Σ′`; `F A = F_∅ A`.  `[spec §19]` -/
   | effSub {Δ Γ e} {S S' : Row} {A : VTy} (hle : RowLe S S')
@@ -633,6 +641,11 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (hV : CDerives Δ [] (.val (.lam b)) j)
       (hN : CDerives Δ (⟨.unit, false⟩ :: Γ) ((N.subst 0 (Val.lam b)).shift 1 0) (.comp C)) :
       CDerives Δ Γ (.app (.val (.lam N)) (.val (.lam b))) (.comp C)
+  /-- **Conversion** `[α]`: a term at a judgment is at every judgment equal to it up to the names
+  of its types' lifetime binders (`Jdg.alphaB`).  Its compatibility lemma is `alpha_compatJ`, from
+  `cC_tyEq`.  `[spec §3]` -/
+  | alpha {Δ Γ e} {j j' : Jdg} (h : CDerives Δ Γ e j) (hα : j.alphaB j' = true) :
+      CDerives Δ Γ e j'
 
 /-- `[then]` with its finaliser at the pure row (SPEC §24, option A): `effThen` at `Σ_M = Σ` and
 `Σ_D = ∅`, since `F ⋈ ∅ ≤ F` (`ThenLe.nil`).  `[spec §24, §27]` -/
@@ -718,7 +731,7 @@ theorem CDerives.delayOut {Δ Γ e A} (h : CDerives Δ Γ e (.comp (.delay A))) 
 /-- Guarded recursion on the delay type: `fixD : !U(S ⊸ F(A ⊕ S) & F 1) ⊸ !U(S ⊸ D A)`. -/
 theorem CDerives.fixD {Δ Γ} (A S : VTy) (hΓ : Ctx.DeadP Γ) :
     CDerives Δ Γ (.val (fixDV A)) (.val (fixDTy A S)) := by
-  have h := CDerives.unfoldN (Δ := Δ) (CTy.delayBody A) S (CTy.delayBody_nuOk A) hΓ
+  have h := CDerives.unfoldN (Δ := Δ) (CTy.delayBody A) S (CTy.delayBody_nuOk A) (CTy.BindsFresh.of_hasAll rfl S) hΓ
   rwa [unfoldTy, CTy.delayBody_instT] at h
 
 theorem CDerives.streamIn {Δ Γ e A} (h : CDerives Δ Γ e (.comp (streamUnroll A))) :
@@ -732,13 +745,29 @@ theorem CDerives.streamOut {Δ Γ e A} (h : CDerives Δ Γ e (.comp (.stream A))
 /-- Coiteration on the stream type: `unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Stream A)`. -/
 theorem CDerives.unfoldS {Δ Γ} (A S : VTy) (hΓ : Ctx.DeadP Γ) :
     CDerives Δ Γ (.val (unfoldSV A)) (.val (unfoldSTy A S)) := by
-  have h := CDerives.unfoldN (Δ := Δ) (CTy.streamBody A) S (CTy.streamBody_nuOk A) hΓ
+  have h := CDerives.unfoldN (Δ := Δ) (CTy.streamBody A) S (CTy.streamBody_nuOk A) (CTy.BindsFresh.of_hasAll rfl S) hΓ
   rwa [unfoldTy, CTy.streamBody_instT] at h
 
 /-- The semantic judgment at a judgment form.  `[spec §3]` -/
 def SemJ (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) : Jdg → Prop
   | .val A => SemV Δ Γ e A
   | .comp C => SemC Δ Γ e C
+
+/-- `[α]` at a value judgment. -/
+theorem CDerives.alphaV {Δ Γ e} {A A' : VTy} (h : CDerives Δ Γ e (.val A))
+    (hα : VTy.alphaB [] A A' = true) : CDerives Δ Γ e (.val A') := .alpha h hα
+
+/-- `[α]` at a computation judgment. -/
+theorem CDerives.alphaC {Δ Γ e} {C C' : CTy} (h : CDerives Δ Γ e (.comp C))
+    (hα : CTy.alphaB [] C C' = true) : CDerives Δ Γ e (.comp C') := .alpha h hα
+
+/-- `[α]`'s compatibility lemma: the relation reads α-equivalent types alike (`cC_tyEq`).
+`[spec §3]` -/
+theorem alpha_compatJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} :
+    ∀ {j j' : Jdg}, j.alphaB j' = true → SemJ Δ Γ e j → SemJ Δ Γ e j'
+  | .val _, .val _, hα, h => alpha_compatC (C := .ret _) (C' := .ret _) hα h
+  | .comp _, .comp _, hα, h => alpha_compatC hα h
+  | .val _, .comp _, hα, _ | .comp _, .val _, hα, _ => by simp [Jdg.alphaB] at hα
 
 /-- **Fundamental Property** of the CBPV judgment over the typed world at CBPV types.  `[spec §3]` -/
 theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
@@ -838,7 +867,7 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | foldOwnG B₀ Rs hΓ hB => exact FoldP.foldOwnG_compatX B₀ hB Rs hΓ
   | nuIn hC _ ih => exact nuIn_compatX hC ih
   | nuOut hC _ ih => exact nuOut_compatX hC ih
-  | unfoldN C S hC hΓ => exact unfold_compatX hC S hΓ
+  | unfoldN C S hC hS hΓ => exact unfold_compatX hC S hS hΓ
   | effSub hle _ ih => exact sub_compatC hle ih
   | effPerform hf hna _ _ ih => exact perform_compatC hf hna ih
   | effAwait hΓ hfa ha haA hfc hc => exact semC_dead .nil hΓ (await_compatC hfa ha haA hfc hc)
@@ -864,6 +893,7 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | effHandleL hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
       exact handleL_compatC hs hd hHr hHw hHn ihc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin ihe
   | letPoly b hcl _ _ _ ihN => exact letPoly_compatC (Val.lam b) hcl ihN
+  | alpha _ hα ih => exact alpha_compatJ hα ih
 
 /-- **The stop lemma** (BOXED-κ's premise, `[spec §28]`): a computation typed at `F_Σ A` under
 `Γ`, with `Δ ⊨ Γ ⊐ @d` and every non-abortive answer type of `Σ` outliving `@d`, has the
