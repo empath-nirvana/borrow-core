@@ -42,17 +42,31 @@ open BoCa.BoLo (hndE hndVal freeE Kont performE opPayload)
 
 /-! ## §1. The new rules -/
 
+/-- **The clauses `Row.Suspend` asks of a cancel row's layers**, recursively: each layer named,
+not unrestricted, its payload and answer types free of `'x` and outliving every lifetime, and the
+cancel row of each capturable layer likewise. A cancel run under a live lend stops at these
+layers, so they meet what the row's own operations meet. -/
+def _root_.BoCa.Fig16.LogRel.Core.CTy.SuspendC (x : LifeVar) : CTy → Prop
+  | .eff n _ q A B fin _ C =>
+      (q ≠ .unr ∧ n ≠ 0 ∧ ¬ VFree x A ∧ ¬ VFree x B ∧ (∀ Δ a, VOutlives Δ a A) ∧
+        (∀ Δ a, VOutlives Δ a B) ∧ (capB q B = true → SuspendC x fin)) ∧ SuspendC x C
+  | _ => True
+
 /-- **The row of a callback that may suspend inside a borrow of `'x`**: `Row.Unwind` without its
 abort clause. Every operation is named, not unrestricted (a continuation resumed twice would lend
-twice: SPEC §62, "Typing: suspension"), and its payload and answer types are free of `'x`, the
-payload outliving every lifetime. Decidable on the row given `VFree` and `VOutlives`. -/
+twice: SPEC §62, "Typing: suspension"), and its payload and answer types are free of `'x` and
+outlive every lifetime; a capturable operation's cancel row meets the same clauses
+(`CTy.SuspendC`). Decidable on the row given `VFree` and `VOutlives`. -/
 def _root_.BoCa.Fig16.LogRel.Core.Row.Suspend (S : Row) (x : LifeVar) : Prop :=
-  ∀ o ∈ S, o.q ≠ .unr ∧ o.n ≠ 0 ∧ ¬ VFree x o.A ∧ ¬ VFree x o.B ∧ ∀ Δ a, VOutlives Δ a o.A
+  ∀ o ∈ S, o.q ≠ .unr ∧ o.n ≠ 0 ∧ ¬ VFree x o.A ∧ ¬ VFree x o.B ∧ (∀ Δ a, VOutlives Δ a o.A) ∧
+    (∀ Δ a, VOutlives Δ a o.B) ∧ (capB o.q o.B = true → o.fin.SuspendC x)
 
 theorem _root_.BoCa.Fig16.LogRel.Core.Row.Suspend.of_unwind {S : Row} {x : LifeVar} (h : S.Unwind x)
     (hq : ∀ o ∈ S, o.q ≠ .unr) : S.Suspend x := fun o ho =>
   ⟨hq o ho, (h o ho).2.1, (h o ho).2.2.1,
-    by rw [OpSig.B_zero (h o ho).1]; exact id, (h o ho).2.2.2⟩
+    by rw [OpSig.B_zero (h o ho).1]; exact id, (h o ho).2.2.2,
+    by rw [OpSig.B_zero (h o ho).1]; exact fun _ _ => .zero,
+    by rw [OpSig.B_zero (h o ho).1]; simp [capB, VTy.isZero]⟩
 
 /-- **The field reborrow** `λr. λf. (f [] (load r)) then b. (r, b) unwind d r`: the callback gets
 the boxed field's location, read out of the borrowed cell. `withborUE` with the source replaced

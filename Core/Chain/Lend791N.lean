@@ -409,10 +409,10 @@ theorem tabN_effOf_twin {x : LifeVar} {α : Life} {S : Row}
         rw [if_neg hmj]
         exact ih (fun o' ho' => hS o' (List.mem_cons_of_mem _ ho')) m j en h
 
-/-- **The callback's table may be stopped at under the lend at `α`**: `Row.Suspend`'s qualifier
-and payload clauses, and the answer clause `hSB` (§5 of the scope document). -/
+/-- **The callback's table may be stopped at under the lend at `α`**: `Row.Suspend`'s qualifier,
+payload and answer clauses. -/
 theorem tabN_lendOKCR {x : LifeVar} {α : Life} {S : Row} (hS : S.Suspend x)
-    (hSB : ∀ o ∈ S, ∀ Δ a, VOutlives Δ a o.B) (R : VTy) (δ : LSub) (Φ : LocFam) :
+    (R : VTy) (δ : LSub) (Φ : LocFam) :
     (tabN (ℍ := ℍ) (CTy.effOf S R) (δ.extend x α) Φ).LendOKCR α where
   entry := fun m i en h _ => by
     obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
@@ -420,11 +420,11 @@ theorem tabN_lendOKCR {x : LifeVar} {α : Life} {S : Row} (hS : S.Suspend x)
   pa := fun m i en h k ls v ρ hp => by
     obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
     exact vN_outlives (Δ := LifeCtx.empty) (a := .var x) (models_empty_any _)
-      (interp_ext_self δ x α) ((hS o ho).2.2.2.2 _ _) k v ρ hp
+      (interp_ext_self δ x α) ((hS o ho).2.2.2.2.1 _ _) k v ρ hp
   pb := fun m i en h k ls w ρ hp => by
     obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
     exact (vN_outlives (Δ := LifeCtx.empty) (a := .var x) (models_empty_any _)
-      (interp_ext_self δ x α) (hSB o ho _ _) k w ρ hp).mono (Life.down_sqsubset α).le
+      (interp_ext_self δ x α) ((hS o ho).2.2.2.2.2.1 _ _) k w ρ hp).mono (Life.down_sqsubset α).le
 
 /-- A cancellable, non-abortive entry's cancel obligation, at a cancel row with no layers. -/
 theorem tabN_fin {S : Row} (hSF : ∀ o ∈ S, capB o.q o.B = true → o.fin.NoLayers) {R : VTy}
@@ -500,7 +500,6 @@ layers) are **not** supplied by `Row.Suspend` as `Core/TreeGoal791.lean` states 
 `docs/new-core/scope-791-rule.md` §5. -/
 theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Row} {d : Expr}
     (hA : ¬ VFree x A) (hB : ¬ VFree x B) (hS : S.Suspend x)
-    (hSB : ∀ o ∈ S, ∀ Δ a, VOutlives Δ a o.B)
     (hSF : ∀ o ∈ S, capB o.q o.B = true → o.fin.NoLayers)
     (hdc : closedAt 0 d = true)
     (hd : SemJN (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.ref A) .unit))) (δ : LSub)
@@ -551,7 +550,7 @@ theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Ro
     (fun m i en h _ => by obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h; exact (hS o ho).1)
     (fun m i en' h hq => claimT_fin h hq)
   have hM := erwp_M_frameCR (Φ := Φ) (l := l) (A := α) (F := Fam) (vN_fam_down A δ' α)
-    (tabN_lendOKCR hS hSB _ δ Φ') hTw hcan
+    (tabN_lendOKCR hS _ δ Φ') hTw hcan
     (Q := fun k _ b ρ => vN (ℍ := ℍ) (.tensor (.ref A) B) δ k (Val.pair (Val.loc l) b) ρ)
     k' k hk' ls (.app (.app (.val f) (.val .unit)) (.val (Val.loc l))) w₀ σ₀ ρ' ρf ρ'' houtP
     houtf (Fam k) (fun _ _ h => h) hwit hcl hc' (fun BM hBM => ?_)
@@ -585,11 +584,11 @@ theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Ro
 /-- **`ConstN` for `withbor (2)` at a suspending row**, from the fundamental property at the
 finaliser's derivation, under the two row clauses `withbor2S_compat` names. -/
 theorem constN_w2 (hF : FundamentalN (ℍ := ℍ)) {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
-    {S : Row} {d : Expr} (hSB : ∀ o ∈ S, ∀ Δ a, VOutlives Δ a o.B)
+    {S : Row} {d : Expr}
     (hSF : ∀ o ∈ S, capB o.q o.B = true → o.fin.NoLayers) :
     ConstN (ℍ := ℍ) (.w2 x bnd A B S d) := by
   rintro ⟨-, hA, hB, hS, hdc, hder⟩ δ n
-  exact withbor2S_compat hA hB hS hSB hSF hdc (hF _ _ _ _ hder) δ n
+  exact withbor2S_compat hA hB hS hSF hdc (hF _ _ _ _ hder) δ n
 
 /-! ### The callback type is inhabited -/
 

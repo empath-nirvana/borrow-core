@@ -10947,6 +10947,12 @@ given the entries'); the typing rules and the fundamental theorem over these typ
   (argued), so its share owns nothing, a clause of the share's definition (`contShareN`), and an
   unrestricted operation is excluded while a borrow or owned resource is live.
   Multi-shot continuations over duplicable state are a hypothesis, not a rule.
+- **A lend's callback may suspend at a row `Row.Suspend 'x`** (`Core/TreeGoal791.lean`): every
+  operation named and not unrestricted, its payload and answer types free of `'x` and outliving
+  every lifetime (what passes out of the borrowed run, and what is resumed into it, holds no
+  borrow the lend could outlive), and each capturable operation's cancel row meeting the same
+  clauses (`CTy.SuspendC`), since the cancel run stops at its layers under the live lend. Cleanup
+  that performs is kept: a cancel row may have layers.
 - **Lends shared across tasks end only at a join**: scoped spawn. A branch resumed from a join
   asks that no other branch's flattening hold the joined location (`JoinReady`), which gives the
   resumer's frame condition (`joinFd`, `joinReady_fd`). The scheduler establishes it by finishing

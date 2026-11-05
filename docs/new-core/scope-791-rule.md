@@ -164,3 +164,50 @@ is the user's: it re-opens `withbor2S_compat` at the finaliser's argument.
 - `Row.Suspend`'s `o.n ≠ 0` is spent at the raises (`erwp_ubindClaimR`'s `hTr`).
 - Not used: `erwp_M_frameTF`/`erwpG_frameT` (the fold-guarded tables, for the anti-frame
   constants), `erwp_withbor3`, `erwp_reborrow`.
+
+## 6. Unit 2: the plan for the decisions of 2026-11-05
+
+Kernel target: the interpretation in Core's shape; `withbor2S_compat` with only premises the
+typing rule supplies; `w3` and `wF` across stops.
+
+### Decision 2: the answer clause in `Row.Suspend`
+
+`Row.Suspend` (`Core/TreeGoal791.lean`, the row predicate `Const791.OK` checks for every
+constant) gains `∀ Δ a, VOutlives Δ a o.B`, the payload clause applied to the answer.
+`Row.Suspend.of_unwind` still holds (an unwinding operation's answer is `0`). `hSB` leaves
+`withbor2S_compat` and `constN_w2`; `tabN_lendOKCR` reads the clause from `hS`. SPEC §62
+("Typing: suspension") states the clause.
+
+### Decision 3: lifting `hSF`
+
+`Row.Suspend` constrains the cancel row of every capturable operation by the same clauses,
+recursively (`CTy.SuspendC`: every layer not unrestricted, named, free of `'x`, payload and
+answer outliving every lifetime, and its own capturable layers' cancel rows likewise). Then:
+
+1. `tabR F δ Φ R` / `finR F δ Φ R`: the table of a row's layers with every capturable entry's
+   cancel obligation the cancel run ending at the claim `R` (`cancelOblRN`), recursively. It is
+   the lender's twin of the callback's `tabN` (replacing `claimT`'s single table `T₁`).
+2. `erwp_M_frame_cancelRunCR`: the Mut Frame over a cancel run whose table has abortive,
+   must-resume and cancellable entries (`LendOKCR α`), from `cancelTabN T₁` at `Φ[ℓ ↦ (α, F)]`
+   to `cancelTabR T₁′ (claimR …)` at `Φ`, its nested cancel obligations transferred by a premise
+   (as `erwp_M_frameCR`'s `hcan`).
+3. `tabR_can`: that premise, by induction on the cancel row, each level `erwp_M_frame_cancelRunCR`
+   at the row's own table, `LendOKCR α` at it from `CTy.SuspendC`.
+4. `erwp_ubind_cancelRunCR`: the finaliser frame over a cancel run at `cancelTabR (tabR …) R`,
+   ending at `cancelTabN (tabN …)`: at the cancel's `raise` `D` consumes the claim (with or
+   without an error payload); a nested cancellable stop's cancel run passes the frame by the
+   same lemma one level down.
+5. `withbor2S_compat` re-proved through them; no `hSF`.
+
+### Decision 1: Core's shape
+
+Core's `Mut` stores `𝒱⟦A⟧` at the records strictly longer-lived than the cell (`ptoMutS`'s
+`ofS Q = P ls₀`), and its Kripke order `Ext` keeps exactly the records above every borrow of the
+resource. On the chain the location typing `Φ` carries the families (`UpdN` changes a cell's
+predicate only along `Φ ℓ`), so the transport is: a `Mut` value at `ℓ` with `Φ ℓ = (α, F)`,
+`F = 𝒱⟦A⟧` read at `Φ` above `α`, and `U` Kripke along the `Φ` that keep the entries above every
+borrow of the thunk's resource. Before rebuilding the interpretation the plan checks this shape
+against the frames the constants run: `withbor3U` and `withborFE` re-lend a location at a shorter
+lifetime (`erwp_withbor3`: the callback runs at `Φ.set ℓ α Fi`, `Φ ℓ = (β, Fo)`). The check is a
+Lean configuration (`Core/Chain/Shape791N.lean`); if Core's shape fails there, the configuration
+is the departure's justification and the interpretation keeps the chain's answer at `Mut`.
