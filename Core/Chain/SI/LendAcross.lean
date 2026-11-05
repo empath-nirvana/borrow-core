@@ -518,6 +518,86 @@ theorem rwpGX_lendOpen {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} (l : Loc)
     · subst hαA; exact not_carries_of_inStratum houtf
     · exact hN α hα (fun h => hα₀ (hcin α h hαA))
 
+/-! ### A location taken into the mask at a stop -/
+
+theorem Mask.mem_locs_insert {M : Mask} {l m : Loc} {a : Auth} :
+    m ∈ (insert (l, a) M).locs ↔ m = l ∨ m ∈ M.locs := by
+  constructor
+  · rintro ⟨b, hb⟩
+    rcases Set.mem_insert_iff.mp hb with h | h
+    · exact Or.inl (Prod.mk.inj h).1
+    · exact Or.inr ⟨b, h⟩
+  · rintro (rfl | ⟨b, hb⟩)
+    · exact ⟨a, Set.mem_insert _ _⟩
+    · exact ⟨b, Set.mem_insert_of_mem _ hb⟩
+
+theorem Mask.mem_lendLocs_insert_ne {M : Mask} {l m : Loc} {a : Auth} (hml : m ≠ l) :
+    m ∈ (insert (l, a) M).lendLocs ↔ m ∈ M.lendLocs := by
+  constructor
+  · rintro ⟨κ, hκ⟩
+    rcases Set.mem_insert_iff.mp hκ with h | h
+    · exact absurd (Prod.mk.inj h).1 hml
+    · exact ⟨κ, h⟩
+  · rintro ⟨κ, hκ⟩
+    exact ⟨κ, Set.mem_insert_of_mem _ hκ⟩
+
+theorem Mask.mem_lendLocs_insert {M : Mask} {l : Loc} {κ : Life} :
+    l ∈ (insert (l, Auth.lend κ) M).lendLocs := ⟨κ, Set.mem_insert _ _⟩
+
+/-- **A segment takes a location it owns into its mask, to be held across its stop.** A segment at
+`M` whose resource holds `ℓ ↦ own(v)` and a whole `[κ]_1` runs at `M ∪ {(ℓ, lend κ)}` when each of
+its ends is a stop whose continuation resumes at a mask holding `(ℓ, lend κ)`. The frame holds
+nothing at `ℓ`, since it composes with `ℓ ↦ own(v)`, so `ℓ` is new to the stop's mask exactly as
+a fresh name is in Iris; and `↭` is read outside `M ∪ M′`, which holds `ℓ`. No end at the larger
+mask is a value: a value is reached at the segment's own mask. -/
+theorem rwpGX_maskFresh {Φ : LocFam} {M : Mask} {Q Q₁ : PostGX} {n : Nat} {ls : List SRec}
+    {e : Expr} {ρb ρ : WRes} {g : GRes} (l : Loc) (κ : Life) {v : Val} (hκ : g.tok κ = 1)
+    (hcρ : ResU.CompS (ResU.single l (CellU.ownOf v)) ρb ρ)
+    (h : rwpGX (ℍ := ℍ) Φ (insert (l, Auth.lend κ) M) Q₁ n ls e (ρ, g))
+    (hQ : ∀ M' C k ls' t y, Q₁ M' C k ls' t y → (l, Auth.lend κ) ∈ M' ∧ Q M' C k ls' t y) :
+    rwpGX (ℍ := ℍ) Φ M Q n ls e (ρ, g) := by
+  intro xf fρ ps μ hf hc hv hwf hwx hsh hau hoff hT htg hl hfd j μ' e' hj hrun
+  have hvρ : ρ.Valid := (hash_valid hf).2
+  obtain ⟨hlPf, -⟩ := ResU.Hash.split hcρ (ResU.hash_symm hf)
+  have hfl : ∀ ψ, ¬ xf.1.FlatAt l ψ := flatNone_of_hash_own (ResU.hash_symm hlPf)
+  have hsh₁ : MaskShallow (insert (l, Auth.lend κ) M).locs ρ := by
+    intro m hm s w χ hh hf'
+    rcases Mask.mem_locs_insert.mp hm with rfl | hm
+    · exact absurd hf' (not_flatAt_imm_of_own hcρ hvρ)
+    · exact hsh m hm s w χ hh hf'
+  have hau₁ : MaskAuth (insert (l, Auth.lend κ) M) g := by
+    intro m a hma
+    rcases Set.mem_insert_iff.mp hma with h' | h'
+    · obtain ⟨rfl, rfl⟩ := Prod.mk.inj h'; exact hκ
+    · exact hau m a h'
+  have hoff₁ : MaskOff (insert (l, Auth.lend κ) M) xf.1 := by
+    intro m hm ψ hψ
+    by_cases hml : m = l
+    · subst hml; exact absurd hψ (hfl ψ)
+    · exact hoff m ((Mask.mem_lendLocs_insert_ne hml).mp hm) ψ hψ
+  have hr := h xf fρ ps μ hf hc hv hwf hwx hsh₁ hau₁ hoff₁ hT htg hl hfd j μ' e' hj hrun
+  refine ⟨hr.1, fun hfin => ?_⟩
+  obtain ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, hU, hNo, hT', htg',
+    hps', hls', hV, hN, hW', hWp, hS', hSπ, hAu, hOff, hSx, hFx, hq₁⟩ := hr.2 hfin
+  obtain ⟨hlM', hq⟩ := hQ _ _ _ _ _ _ hq₁
+  have hMM : insert (l, Auth.lend κ) M ∪ M' = M ∪ M' := by
+    rw [Set.insert_union]; exact Set.insert_eq_of_mem (Or.inr hlM')
+  rw [hMM] at hU hps' hls' hSπ
+  refine ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, hU, hNo, hT', htg',
+    hps', hls', hV, hN, hW', hWp, hS', hSπ, hAu, hOff, ?_, ?_, hq⟩
+  · intro m hm s w χ hh hf'
+    by_cases hml : m = l
+    · subst hml; exact absurd hf' (not_flatAt_imm_of_own hcρ hvρ)
+    · exact hSx m ⟨hm.1, fun h' => hm.2 ((Mask.mem_locs_insert.mp h').resolve_left hml)⟩
+        s w χ hh hf'
+  · intro m hm ψ hψ
+    by_cases hml : m = l
+    · subst hml; exact hfl ψ hψ
+    · refine hFx m ?_ ψ hψ
+      rcases hm with ⟨h1, h2⟩ | ⟨h1, h2⟩
+      · exact Or.inl ⟨h1, fun h' => h2 ((Mask.mem_locs_insert.mp h').resolve_left hml)⟩
+      · exact Or.inr ⟨h1, fun h' => h2 ((Mask.mem_lendLocs_insert_ne hml).mp h')⟩
+
 /-! ### The end -/
 
 /-- **A counted lend ended at the start of a run, at a mask holding it.** Holding `[α]_1` and
@@ -605,6 +685,29 @@ theorem erwpX_lendOpen {Φ : LocFam} {M : Mask} {Tb : TableX} {Q : PostX} {n : N
   refine rwpGX_lendOpen l hl T δ hadm v hshape e ls hcρ (fun A h₁ h₂ h₃ h BI hBI => ?_)
   have hb := hbody A h₁ h₂ h₃ h BI hBI
   rwa [erwpX_eq] at hb
+
+/-- **A counted lend opened in a segment that did not mask its cell, held across the segment's
+stop.** The segment holds `ℓ ↦ own(v)` and a whole `[κ]_1`; it is taken into the mask at
+`(ℓ, lend κ)` (`rwpGX_maskFresh`), the lend is opened there (`rwpGX_lendOpen`), and the body ends
+only at stops the table allows at the segment's mask, each resuming at a mask holding
+`(ℓ, lend κ)`. A task that allocated `ℓ` itself lends it across its own stops this way. -/
+theorem erwpX_lendOpenStop {Φ : LocFam} {M : Mask} {Tb : TableX} {Q : PostX} {n : Nat}
+    (l : Loc) (κ : Life) (T : VTy) (δ : LSub) (hadm : AdmWf T δ) (v : Val)
+    (hshape : vShape T δ v (PMap.empty : WRes)) (e : Expr) (ls : List SRec)
+    {ρb ρ : WRes} {g : GRes} (hκ : g.tok κ = 1)
+    (hcρ : ResU.CompS (ResU.single l (CellU.ownOf v)) ρb ρ)
+    (hbody : ∀ A : Life, ρb.InStratum A → (∀ x ∈ ls, x.2 ⊐ A) → g.tok A = 0 →
+      ∀ (h : ResU.InStratum (LSet.singleton A).join (PMap.empty : WRes)) (BI : WRes),
+        ResU.CompS ρb (ResU.single l (CellU.immOf (LSet.singleton A) v PMap.empty h)) BI →
+        rwpGX (ℍ := ℍ) Φ (insert (l, Auth.lend κ) M)
+          (fun M' C k ls' t y => (l, Auth.lend κ) ∈ M' ∧
+            Tb M M' C k ls' t (erwpXC (ℍ := ℍ) Φ Tb Q n M') y) n
+          (((⟨l, v, PMap.empty, T, δ⟩ : FrameRec), A) :: ls) e (BI, g + GRes.life A)) :
+    erwpX (ℍ := ℍ) Φ M Tb Q n ls e (ρ, g) := by
+  rw [erwpX_eq]
+  exact rwpGX_maskFresh l κ hκ hcρ
+    (rwpGX_lendOpen l Mask.mem_lendLocs_insert T δ hadm v hshape e ls hcρ hbody)
+    (fun _ _ _ _ _ _ ⟨h₁, h₂⟩ => ⟨h₁, Or.inr h₂⟩)
 
 /-- **`rwpGX_lendEnd` at `erwpX`**: the lend ended at the start of any segment holding `[α]_1`. -/
 theorem erwpX_lendEnd {Φ : LocFam} {M : Mask} {Tb : TableX} {Q : PostX} {n : Nat} {l : Loc}
