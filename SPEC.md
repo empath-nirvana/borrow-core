@@ -2849,7 +2849,12 @@ names.
   operation that resumes makes the loop a div loop instead (§16, *Effectful bodies*).
 - *In a borrow block's body*: the block is the unwinding form of its borrow (§19), at the
   operations its body performs, which must be abortive (a resuming one is T1, #172); its callback
-  is ascribed its row. An unwind ends the lend, and the lender's finaliser runs.
+  is ascribed its row. An unwind ends the lend, and the lender's finaliser runs. A buffer's or a
+  literal's block is its scheme (§17) with the array's lend in the unwinding form
+  (`slice_borrow_*_u`), ascribed the scheme's type (`corpus/buf-lend-raise.bc`,
+  `lit-lend-raise.bc`). The unwinding form of a marked scheme (a lent cell's, a literal's view,
+  §57) is not marked, so a literal's view crossed by an abort tabulates its table into an array
+  that is not the literal's read-only bytes.
 - *With answering capabilities in use*: the body of a control `with` is given a reborrow of each
   capability it uses (`withbor3`), so that the capability comes back when the body is abandoned.
 
@@ -2867,8 +2872,7 @@ threads a capability; an operation of an answering effect inside a clause of an 
 a function with a row whose written result is a computation (a loop); type parameters on an
 answering effect; an effect with both kinds of operation; an unrestricted operation that answers
 `never` (`multi ctl`, above); a `let mut` declared outside a control `with` and assigned in it, or
-a place lent in it; a borrow of a buffer or a literal crossed by an abort. Several instances of one
-effect are §38's, with what it does not provide.
+a place lent in it. Several instances of one effect are §38's, with what it does not provide.
 
 ### Reports
 
@@ -7690,8 +7694,9 @@ counts stay as they were: `aoc/2021-06` (`modulo(day, 9)`, a literal divisor), `
 for two abortive effects in a counted `for`'s body, which §38 provides. The others keep their
 form, each for a limit that applies to any abortive operation (#517), checked again here:
 
-- `aoc/2022-12`, `aoc/2023-03`, `aoc/2024-11`, `aoc/2022-21`: the division is inside `borrow imm s`
-  of the input string, a borrow of a buffer that an abort would cross (§18 *Not provided*);
+- `aoc/2024-11`: `div_u64` and `rem_u64`, which `/` and `%` (signed) would change. `aoc/2022-12`,
+  `aoc/2023-03` and `aoc/2022-21`, kept here for a borrow of a buffer that an abort would cross,
+  use `/` and `%` since that borrow is provided (§18), with their output and counts unchanged;
 - `leetcode/matrix/0054`, `0073`, `0079`: the division is inside `cases`, a loop over the input
   with no bound, and a handler around a div computation is not provided (§20); the refusal is
   reported as a type mismatch against the loop's type, as it is for a `raise` there (#522);

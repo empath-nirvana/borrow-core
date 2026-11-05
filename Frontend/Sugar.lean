@@ -3154,8 +3154,16 @@ def Const.unwinding (r : Frontend.Row) : Const → Option Const
   | .sliceBorrowImm x b A B => some (.sliceBorrowImmU x b A B r)
   | _ => none
 
+/-- The type an unwinding form's callback is ascribed: `U (∀'x. L ⊸ F[r] (['x] B))`. -/
+def unwindingTy (sp : Span) (x : Ident) (L B : VTy) (r : Frontend.Row) : VTy :=
+  .thunk sp (.all sp x (.dom sp) (.arr sp L (.eff sp r (.box sp (.var sp x.name) B))))
+
+mutual
 /-- A borrow block whose constant is an unwinding form, as the computation it is:
-`k <- return CONST; p <- return P; f <- return CB; ((force k) p) f`. -/
+`k <- return CONST; p <- return P; f <- return CB; ((force k) p) f`. A block whose borrow is
+inside a scheme (a buffer's, a literal's: `run` of the code around the lend, ascribed its type)
+is that scheme as a computation, its lend in the unwinding form (`unwindingM?`), ascribed the
+same type. -/
 def unwindingC? (sp : Span) : Val → Option Comp
   | .app _ (.app _ (.const ksp C) P) cb => match C with
     | .withbor1U .. | .withbor2U .. | .withbor3U .. | .sliceBorrowMutU .. | .sliceBorrowImmU .. =>
@@ -3166,10 +3174,11 @@ def unwindingC? (sp : Span) : Val → Option Comp
       -- The callback is ascribed its type: a computation synthesized in a value performs
       -- nothing, and the callback's body performs the row's operations.
       let cbTy : Option VTy := match C with
-        | .withbor1U x A B r => some (ty x (.imm sp (.var sp x.name) A) B r)
-        | .withbor2U x _ A B r | .withbor3U _ x A B r => some (ty x (.mut sp (.var sp x.name) A) B r)
-        | .sliceBorrowMutU x _ A B r => some (ty x (.arrayMut sp (.var sp x.name) A) B r)
-        | .sliceBorrowImmU x _ A B r => some (ty x (.arrayImm sp (.var sp x.name) A) B r)
+        | .withbor1U x A B r => some (unwindingTy sp x (.imm sp (.var sp x.name) A) B r)
+        | .withbor2U x _ A B r | .withbor3U _ x A B r =>
+          some (unwindingTy sp x (.mut sp (.var sp x.name) A) B r)
+        | .sliceBorrowMutU x _ A B r => some (unwindingTy sp x (.arrayMut sp (.var sp x.name) A) B r)
+        | .sliceBorrowImmU x _ A B r => some (unwindingTy sp x (.arrayImm sp (.var sp x.name) A) B r)
         | _ => none
       -- Its `∀` is over the computation `L ⊸ F[S] (['x] B)` itself, not over a returned thunk.
       let cb := match cb with
@@ -3178,12 +3187,24 @@ def unwindingC? (sp : Span) : Val → Option Comp
       some (.bind sp k none (.ret sp (.const ksp C)) (.bind sp p none (.ret sp P)
         (.bind sp f cbTy (.ret sp cb) (.app sp (.app sp (.force sp k) p) f))))
     | _ => none
-  -- A lent cell's mark is the plain borrow's scheme, not the unwinding form's.
+  -- A marked scheme's unwinding form is not marked: a mark fixes the shape of the pure scheme
+  -- (SPEC §57), and the unwinding form is a computation of another shape.
   | .mark _ _ V => unwindingC? sp V
+  | .ascribe asp V T => (unwindingC? sp V).map fun M =>
+    let t : Ident := ⟨s!"io_ut{sp.start.line}_{sp.start.col}", asp⟩
+    .bind asp t (some T) M (.ret asp (.var asp t.name))
+  | .run _ M => unwindingM? sp M
   | _ => none
-where
-  ty (x : Ident) (L B : VTy) (r : Frontend.Row) : VTy :=
-    .thunk sp (.all sp x (.dom sp) (.arr sp L (.eff sp r (.box sp (.var sp x.name) B))))
+
+/-- A scheme's code with its lend, the first binding whose bound value is an unwinding form, as
+that form's computation (`unwindingC?`); the code before and after it as it is. -/
+def unwindingM? (sp : Span) : Comp → Option Comp
+  | .letPair lsp x y V M => (unwindingM? sp M).map (.letPair lsp x y V ·)
+  | .bind bsp x A (.ret rsp V) N => match unwindingC? sp V with
+    | some M => some (.bind bsp x A M N)
+    | none => (unwindingM? sp N).map (.bind bsp x A (.ret rsp V) ·)
+  | _ => none
+end
 
 /-- A `mut` borrow block of an owned cell whose body performs resuming operations, as the relaxed
 lend R1 (SPEC §29): `p <- return P; withbor2r['x, @b, A, B, [r]](p, m) M`, from the unwinding
@@ -3876,6 +3897,9 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let xi : Ident := ⟨x, ksp⟩
         -- The side conditions' bound is `dom`: the elements (views, say) may have lifetimes.
         let C := if imm then Const.sliceBorrowImm xi (.dom ksp) As Bs else .sliceBorrowMut xi (.dom ksp) As Bs
+        let C ← match cbr with
+          | some r => do pure ((Const.unwinding (← (surfRow c ksp r : Except Error Frontend.Row)) C).getD C)
+          | none => pure C
         let Tbs := if imm then VTy.arrayImm lsp (.var lsp x) As else .arrayMut lsp (.var lsp x) As
         let splitC := if imm then Const.sliceSplitImm (.var lsp x) As else .sliceSplitMut (.var lsp x) As
         let id (s : String) : Ident := ⟨s, lsp⟩
@@ -3912,6 +3936,10 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let U8s : VTy := .int ksp .w8
         let Bs ← c.surface ksp B
         let xi : Ident := ⟨x, ksp⟩
+        let C := Const.sliceBorrowImm xi (.dom ksp) U8s Bs
+        let C ← match cbr with
+          | some r => do pure ((Const.unwinding (← (surfRow c ksp r : Except Error Frontend.Row)) C).getD C)
+          | none => pure C
         let id (s : String) : Ident := ⟨s, lsp⟩
         let body : Comp := .letPair lsp (id "io_lc") (id "io_ld")
           (.app lsp (.unbang lsp (.const lsp (.arrayCopy (.var lsp x) U8s))) (.var lsp "io_lw"))
@@ -3926,7 +3954,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
             (.bind sp (ids "io_la") none (.ret sp (.app sp (.unbang sp (.const sp (.arrayNew U8s)))
                 (.pair sp (.var sp "io_ln") (.var sp "io_lt"))))
               (.bind sp (ids "io_lr") none
-                (.ret sp (.app sp (.app sp₂ (.const ksp (.sliceBorrowImm xi (.dom ksp) U8s Bs))
+                (.ret sp (.app sp (.app sp₂ (.const ksp C)
                   (.var sp "io_la")) cb))
                 (.letPair sp (ids "io_la2") (ids "io_lv") (.var sp "io_lr")
                   (.ret sp (.pair sp (.var sp "io_lp") (.var sp "io_lv")))))))))
@@ -4275,7 +4303,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
             match unwindingC? sp V' with
             | some M' => return M'
             | none => throw ⟨V.span, "this borrow block's body performs an abortive operation, and " ++
-                "its place (a buffer or a literal) has no unwinding form here: not provided"⟩
+                "its place has no unwinding form here: not provided"⟩
       let V' ← surfV n c (match exp.bind rowRes? with | some (_, A) => some A | _ => none) V
       let c' ← refresh c
       match effCall? c' V' with

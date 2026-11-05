@@ -71,6 +71,7 @@ block-swap 2 0 0 4 4 0
 block-yield-inner 3 0 0 3 3 0
 borrow-in-scope 2 0 0 4 3 0 # the borrowed cell and the cell holding the borrow
 btree-boxed 80 0 0 23562 19398 6885 # the B-tree's buffers: a leaf's keys, an inner node's keys and children (Rust's count, btree_boxed.rs)
+buf-lend-raise 4 0 0 24 20 32 # the four strings, each freed on its run's path or by the unwinding lend's finaliser
 bytes-upper 1 0 0 80 52 54
 capability-bang-width 3 0 0 10 8 0
 capability-swap-width 3 0 0 8 6 0
@@ -86,6 +87,7 @@ clo-coerce 1 0 0 3 3 0 # the counter's cell; `main`'s lifetime is a cell of no w
 clo-counter 2 0 0 29 29 0 # the cell the closure is stored in, and the counter's cell; the calls through `mut` are direct
 clo-depth 2 0 0 49 49 0 # as clo-counter: four calls through three functions and a reborrow, all direct
 clo-consume 3 0 0 5 5 0 # three counters' cells, each freed by its `close`
+lit-lend-raise 6 0 0 69 30 39 # one array per literal view: the unwinding form is not marked as a literal's view (SPEC §18), so the table is tabulated into the heap
 nu-file-read 2 0 0 7 6 0 # the buffer and the file's content cell; the observations are direct calls
 nu-file-twice 2 0 0 11 11 0 # as nu-file-read: three reads, one through a reborrow
 nu-file-consumed 2 0 0 5 5 0 # the buffer and the content cell, freed by the object's consume

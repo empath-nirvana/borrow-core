@@ -1,0 +1,35 @@
+-- A buffer lent by a borrow block whose body may raise, the handler outside the lend (SPEC §18,
+-- *Where an abortive operation may stand*): the buffer's array is lent by the unwinding form,
+-- `slice_borrow_mut_u` for `borrow mut` of a `let mut` string and `slice_borrow_imm_u` for
+-- `borrow imm`. When the body raises, the lend ends, the array goes back to the lender, and the
+-- lender's finaliser consumes it with the rest of the abandoned scope.
+--
+-- Answer: `inl` where nothing is raised (the bumped string's length, and the index of the first `a` of
+-- `ba`), and the payload where it is; `live 0` either way.
+
+include fail
+include text
+
+fn bump(s: string, k: i32) -> string with Fail[i32] =
+  let mut s = s;
+  borrow mut s { m -> if k < 0 { raise(k) } else { () }; () };
+  s
+
+fn first_a(s: string, k: i32) -> string * i32 with Fail[i32] =
+  let n = borrow imm s { v ->
+    let c = match find(v, b'a', eq_u8) { inl i -> i | inr _ -> 0 - 1 };
+    if c < k { raise(c) } else { c } };
+  (s, n)
+
+fn go_mut(k: i32) -> i32 + i32 =
+  let s = string_new(4);
+  with to_result { let s = bump(s, k); let (s, n) = len_of(s); n }
+
+fn go_imm(k: i32) -> i32 + i32 =
+  let s = string_new(4);
+  let (s, _) = push(s, b'b');
+  let (s, _) = push(s, b'a');
+  with to_result { let (s, n) = first_a(s, k); n }
+
+main -> ((i32 + i32) * (i32 + i32)) * ((i32 + i32) * (i32 + i32)) =
+  ((go_mut(5), go_mut(0 - 2)), (go_imm(0), go_imm(2)))
