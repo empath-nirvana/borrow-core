@@ -92,7 +92,7 @@ theorem rwpGX_lend {Φ : LocFam} (l : BoCa.Loc) (T : VTy) (δ : LSub)
         ∀ R, ResU.CompS ρ' (ResU.single l (CellU.ownOf v)) R → ∀ C₀, Q C₀ k ls w (R, g'')) :
     rwpGX (ℍ := ℍ) Φ ∅ (valPostX Q) n ls e (ρ, g) := by
   classical
-  intro xf sρ ps μ hH3 hsρ hv hwf hwx _ _ hT htg hlow hfd jr μ' e' hj hrun
+  intro xf sρ ps μ hH3 hsρ hv hwf hwx _ _ _ hT htg hlow hfd jr μ' e' hj hrun
   have hTI := hT.inv
   have hvsρ : ResU.Valid sρ := hash_valid_comp hH3 hsρ
   have hvρ : ResU.Valid ρ := (hash_valid hH3).2
@@ -200,10 +200,12 @@ theorem rwpGX_lend {Φ : LocFam} (l : BoCa.Loc) (T : VTy) (δ : LSub)
       · exact absurd (carries_single_imm hc') hαA
   have hr :=
     hwpBI (ρf, xf.2) fρ (p :: ps) μ hH17 h4 hVin hWfin hWxin (maskShallow_locs_empty _)
-      (maskAuth_empty _) hTin htgin hlowin hfd jr μ' e' hj hrun
+      (maskAuth_empty _) (maskOff_empty _) hTin htgin hlowin hfd jr μ' e' hj hrun
   refine ⟨hr.1, fun hfin => ?_⟩
   obtain ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps'', ls'', h1, h2, h3, h6, h7, h9, h10m, h11, hT'',
-    htg'', hps'', hls'', hV, hN, hW', hWp, -, -, -, hpost⟩ := hr.2 hfin
+    htg'', hps''m, hls''m, hV, hN, hW', hWp, -, -, -, -, hpost⟩ := hr.2 hfin
+  have hps'' := RecAgree.empty_iff.mp hps''m
+  have hls'' := ListAgree.empty_iff.mp hls''m
   have h10 : UpdVN Φ (n - jr) BI π := updVNm_empty_iff.mp (by simpa using h10m)
   obtain ⟨v', rfl, hq⟩ := hpost
   obtain ⟨houtρ', g'', rfl, hQend⟩ := hend A _ _ _ _ _ _ hq
@@ -338,8 +340,9 @@ theorem rwpGX_lend {Φ : LocFam} (l : BoCa.Loc) (T : VTy) (δ : LSub)
     rw [← _root_.add_assoc]; exact hzero
   have hvρp : ρp.Valid := (hash_valid h3).1
   refine ⟨R, ρp.del l, FR, FRP, RP, g'', gp, ps, ls, ResU.hash_symm hfR, hFR, hPDFR, hFRP,
-    hmem₂, hRP, ?_, hno, hTout, htgout, fun _ => Iff.rfl, fun _ => Iff.rfl, ?_, ?_, ?_, ?_,
-    maskShallow_locs_empty _, maskShallow_locs_empty _, maskAuth_empty _, ⟨v', rfl, hQend R hR _⟩⟩
+    hmem₂, hRP, ?_, hno, hTout, htgout, RecAgree.refl _ _, ListAgree.refl _ _, ?_, ?_, ?_, ?_,
+    maskShallow_locs_empty _, maskShallow_locs_empty _, maskAuth_empty _, maskOff_empty _,
+    ⟨v', rfl, hQend R hR _⟩⟩
   · simpa using updVNm_empty_iff.mpr hupdw
   · have : xf.2 + (g'' + GRes.life A + gp) = xf.2 + (g'' + gp) + GRes.life A := by
       rw [GRes.add_right_comm g'' (GRes.life A) gp, ← GRes.add_assoc]
@@ -365,15 +368,15 @@ theorem TableX.none_local : TableX.none.Local := fun _ _ _ _ _ _ _ _ h => h
 
 /-- **The frame at `erwpX`**, for a run that does not stop. -/
 theorem erwpX_frame_none {Φ : LocFam} {M : Mask} {P : PostX} (R : List SRec → XProp)
-    (hR : ∀ ls ls', (∀ y, y ∈ ls' ↔ y ∈ ls) → ∀ x, R ls x → R ls' x) {n : Nat}
+    (hR : ∀ ls ls', ListAgree M ls' ls → ∀ x, R ls x → R ls' x) {n : Nat}
     {ls : List SRec} {e : Expr} {ρ₁ ρ₂ ρ : WRes} {g₁ g₂ : GRes} (hcρ : ResU.CompS ρ₁ ρ₂ ρ)
-    (hsplit : WFSplit (ρ₁, g₁) (ρ₂, g₂)) (hau₁ : MaskAuth M g₁)
+    (hsplit : WFSplit (ρ₁, g₁) (ρ₂, g₂)) (hau₁ : MaskAuth M g₁) (hoff₂ : MaskOff M ρ₂)
     (h : erwpX (ℍ := ℍ) Φ M TableX.none P n ls e (ρ₁, g₁)) (hR₂ : R ls (ρ₂, g₂)) :
     erwpX (ℍ := ℍ) Φ M TableX.none (fun C k ls' v => sepX (P C k ls' v) (R ls')) n ls e
       (ρ, g₁ + g₂) := by
   rw [erwpX_eq] at h ⊢
   refine rwpGX_mono (fun C k ls' t x hx => ?_)
-    (rwpGX_frame R hR hcρ hsplit hau₁
+    (rwpGX_frame R hR hcρ hsplit hau₁ hoff₂
       (rwpGX_mono (fun C k ls' t x h => h.elim id (fun h' => h'.elim)) h) hR₂)
   obtain ⟨ρa, ρb, ga, gb, hc, hg, ⟨v, rfl, hp⟩, hr⟩ := hx
   exact Or.inl ⟨v, rfl, ρa, ρb, ga, gb, hc, hg, hp, hr⟩

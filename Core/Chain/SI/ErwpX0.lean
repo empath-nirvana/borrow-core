@@ -57,7 +57,7 @@ theorem erwp_iff_erwpX0 (Φ : LocFam) (Tb : TableN) (Q : PostN) :
   intro ls e ρ
   rw [erwp_eq, erwpX_eq]
   constructor
-  · intro h xf fρ ps μ hf hc hv _ hwx _ _ hT htg hl hfd j μ' e' hj hrun
+  · intro h xf fρ ps μ hf hc hv _ hwx _ _ _ hT htg hl hfd j μ' e' hj hrun
     refine ⟨h.kept hf hc hT htg hl hfd hj hrun, fun hfin => ?_⟩
     obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
       h₁₃⟩ := h.run hf hc hT htg hl hfd hj hrun hfin
@@ -70,8 +70,9 @@ theorem erwp_iff_erwpX0 (Φ : LocFam) (Tb : TableN) (Q : PostN) :
       simp at this
     have hvπ : π.Valid := h₇.2.2
     refine ⟨ρ', ρp, fρ', fρ'p, π, 0, 0, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆,
-      updVNm_locs_empty_iff.mpr h₇, h₈, h₉, h₁₀, h₁₁, h₁₂, by simpa using hv, ?_, ?_, ?_,
-      maskShallow_locs_empty _, maskShallow_locs_empty _, maskAuth_empty _, ?_⟩
+      updVNm_locs_empty_iff.mpr h₇, h₈, h₉, h₁₀, RecAgree.of_iff h₁₁, ListAgree.of_iff h₁₂,
+      by simpa using hv, ?_, ?_, ?_, maskShallow_locs_empty _, maskShallow_locs_empty _,
+      maskAuth_empty _, maskOff_empty _, ?_⟩
     · intro α h₁α h₂α; simp only [GRes.add_zero] at h₁α h₂α; exact absurd h₁α h₂α
     · intro α hα hcρ'
       simp only [GRes.add_zero] at hα
@@ -85,13 +86,14 @@ theorem erwp_iff_erwpX0 (Φ : LocFam) (Tb : TableN) (Q : PostN) :
         rw [hC]; exact ht
   · intro h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
     have hr := h (ρf, 0) fρ ps μ hf hc (by simpa using GRes.valid_zero)
-        (fun α hα _ => by simp [GRes.counted] at hα) (fun α hα _ => by simp [GRes.counted] at hα) (maskShallow_locs_empty _) (maskAuth_empty _) hT htg hl hfd
+        (fun α hα _ => by simp [GRes.counted] at hα) (fun α hα _ => by simp [GRes.counted] at hα) (maskShallow_locs_empty _) (maskAuth_empty _) (maskOff_empty _) hT htg hl hfd
         j μ' e' hj hrun
     refine ⟨hr.1, fun hfin => ?_⟩
     obtain ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀,
-      h₁₁, h₁₂, -, -, -, -, -, -, -, h₂₀⟩ := hr.2 hfin
+      h₁₁, h₁₂, -, -, -, -, -, -, -, -, h₂₀⟩ := hr.2 hfin
     refine ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆,
-      updVNm_locs_empty_iff.mp h₇, h₈, h₉, h₁₀, h₁₁, h₁₂, ?_⟩
+      updVNm_locs_empty_iff.mp h₇, h₈, h₉, h₁₀, RecAgree.empty_iff.mp h₁₁,
+      ListAgree.empty_iff.mp h₁₂, ?_⟩
     rcases h₂₀ with ⟨v, hv', -, hq⟩ | ⟨-, ht⟩
     · exact Or.inl ⟨v, hv', hq⟩
     · refine Or.inr ?_

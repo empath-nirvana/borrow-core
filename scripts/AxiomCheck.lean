@@ -1410,6 +1410,12 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpX_lend
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_iff_erwpX0
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpX_adequacy
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.lendEnd_frame
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.hash_own_of_flat_none
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.rwpGX_lendOpen
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.rwpGX_lendEnd
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpX_lendOpen
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpX_lendEnd
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpX_frame_none
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.frameKept_of_lower
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.FrameKept.of_compS

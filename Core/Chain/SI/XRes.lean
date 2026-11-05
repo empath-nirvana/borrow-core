@@ -236,10 +236,12 @@ theorem wfc_grow {C C' : Set Life} {x : XRes} (h : WFC C x) (hn : NewNotCarried 
 
 /-! ### Masks -/
 
-/-- What masks a location: a whole lifetime token, or a `mut` authority. -/
+/-- What masks a location: a whole lifetime token, a `mut` authority, or the authority of an
+`imm` lend held across stops (`lend`, held by the location's `xm`). -/
 inductive Auth where
   | life (α : Life)
   | xm
+  | lend
 
 /-- A mask: locations, each with the authority it is masked by. -/
 abbrev Mask : Type := Set (Loc × Auth)
@@ -247,10 +249,17 @@ abbrev Mask : Type := Set (Loc × Auth)
 /-- The masked locations. -/
 def Mask.locs (M : Mask) : Set Loc := {l | ∃ a, (l, a) ∈ M}
 
+/-- The locations masked by an `imm` lend held across stops. -/
+def Mask.lendLocs (M : Mask) : Set Loc := {l | (l, Auth.lend) ∈ M}
+
+@[simp] theorem Mask.lendLocs_empty : (∅ : Mask).lendLocs = ∅ := by
+  ext l; simp [Mask.lendLocs]
+
 /-- `g` holds the authority `a` at `l`. -/
 def Auth.Held (g : GRes) (l : Loc) : Auth → Prop
   | .life α => g.tok α = 1
   | .xm => g.xm l = 1
+  | .lend => g.xm l = 1
 
 /-- **The mask's authorities are held**: by `g`, at every location `M` masks. -/
 def MaskAuth (M : Mask) (g : GRes) : Prop := ∀ l a, (l, a) ∈ M → a.Held g l
@@ -269,10 +278,97 @@ theorem Auth.Held.add_right {g h : GRes} (hv : (g + h).Valid) {l : Loc} {a : Aut
   cases a with
   | life α => exact GRes.tok_one_of_add hv ha
   | xm => exact GRes.xm_one_of_add hv ha
+  | lend => exact GRes.xm_one_of_add hv ha
 
 theorem MaskAuth.add_right {M : Mask} {g h : GRes} (hv : (g + h).Valid) (hm : MaskAuth M g) :
     MaskAuth M (g + h) :=
   fun l a hla => (hm l a hla).add_right hv
+
+/-- A ghost-free resource holds no authority, so the only mask it runs at is empty. -/
+theorem MaskAuth.zero {M : Mask} (h : MaskAuth M 0) : M = ∅ := by
+  ext ⟨l, a⟩
+  simp only [Set.mem_empty_iff_false, iff_false]
+  intro hla
+  have := h l a hla
+  cases a <;> simp [Auth.Held] at this
+
+/-! ### What a frame may hold at a lent location -/
+
+/-- **At a location lent `imm` across stops, the part holds only copies**: every cell of its
+flattening there is `imm`. The lender alone holds the location's `own` cell or `mut` cells, at any
+depth. -/
+def MaskOff (M : Mask) (ρ : WRes) : Prop :=
+  ∀ l, l ∈ M.lendLocs → ∀ ψ, ρ.FlatAt l ψ → ψ.kind = Kind.imm
+
+theorem maskOff_empty (ρ : WRes) : MaskOff ∅ ρ := fun _ h => by simp at h
+
+theorem maskOff_emptyRes (M : Mask) : MaskOff M (PMap.empty : WRes) := by
+  intro l _ ψ ⟨σ, hσ, hg⟩
+  obtain rfl := ResU.Flat.functional hσ flat_empty
+  rw [PMap.empty_get] at hg; cases hg
+
+/-- `○` of two `imm` cells is `imm`. -/
+theorem CellU.CompR.kind_imm {ψ₁ ψ₂ ψ : CellU Loc Val} (h : CellU.CompR ψ₁ ψ₂ ψ)
+    (h₁ : ψ₁.kind = Kind.imm) (h₂ : ψ₂.kind = Kind.imm) : ψ.kind = Kind.imm := by
+  cases h with
+  | same => exact h₁
+  | strict k =>
+      obtain ⟨s₁, s₂, w, τ, k₁, k₂, k₃, f₁, f₂, f₃⟩ := CellU.compS_spec _ _ k
+      rw [f₃]; exact CellU.kind_immOf _ _ _ _
+  | mutMut => simp at h₁
+  | mutOwn => simp at h₁
+  | ownMut => simp at h₁
+  | immOwn => simp at h₂
+  | ownImm => simp at h₁
+  | immMut => simp at h₂
+  | mutImm => simp at h₁
+
+/-- `MaskOff` of a composite from its parts: `⦇ρ₁ ● ρ₂⦈ = ⦇ρ₁⦈ ○ ⦇ρ₂⦈`. -/
+theorem maskOff_comp {M : Mask} {ρ₁ ρ₂ ρ : WRes} (hc : ResU.CompS ρ₁ ρ₂ ρ)
+    (h₁ : MaskOff M ρ₁) (h₂ : MaskOff M ρ₂) : MaskOff M ρ := by
+  intro l hl ψ ⟨σ, hσ, hg⟩
+  obtain ⟨σ₁, σ₂, hσ₁, hσ₂, hR⟩ := flat_compR hc hσ
+  rcases ResU.Comp.get hR l with ⟨-, -, e⟩ | ⟨ζ, f₁, -, e⟩ | ⟨ζ, -, f₂, e⟩ |
+      ⟨ζ₁, ζ₂, ζ, f₁, f₂, e, hC⟩
+  · rw [hg] at e; cases e
+  · rw [hg] at e; cases Option.some.inj e; exact h₁ l hl _ ⟨σ₁, hσ₁, f₁⟩
+  · rw [hg] at e; cases Option.some.inj e; exact h₂ l hl _ ⟨σ₂, hσ₂, f₂⟩
+  · rw [hg] at e; cases Option.some.inj e
+    exact CellU.CompR.kind_imm hC (h₁ l hl _ ⟨σ₁, hσ₁, f₁⟩) (h₂ l hl _ ⟨σ₂, hσ₂, f₂⟩)
+
+/-! ### The records outside the lent locations -/
+
+/-- Two record lists agree at every record not at a location lent across stops. -/
+def RecAgree (M : Mask) (ps' ps : List FrameRec) : Prop :=
+  ∀ p, p.le ∉ M.lendLocs → (p ∈ ps' ↔ p ∈ ps)
+
+/-- Two tagged lists agree at every entry whose record is not at a location lent across stops. -/
+def ListAgree (M : Mask) (ls' ls : List SRec) : Prop :=
+  ∀ y, y.1.le ∉ M.lendLocs → (y ∈ ls' ↔ y ∈ ls)
+
+theorem RecAgree.refl (M : Mask) (ps : List FrameRec) : RecAgree M ps ps := fun _ _ => Iff.rfl
+
+theorem ListAgree.refl (M : Mask) (ls : List SRec) : ListAgree M ls ls := fun _ _ => Iff.rfl
+
+theorem RecAgree.trans {M : Mask} {a b c : List FrameRec} (h₁ : RecAgree M a b)
+    (h₂ : RecAgree M b c) : RecAgree M a c := fun p hp => (h₁ p hp).trans (h₂ p hp)
+
+theorem ListAgree.trans {M : Mask} {a b c : List SRec} (h₁ : ListAgree M a b)
+    (h₂ : ListAgree M b c) : ListAgree M a c := fun y hy => (h₁ y hy).trans (h₂ y hy)
+
+theorem RecAgree.of_iff {M : Mask} {ps' ps : List FrameRec} (h : ∀ p, p ∈ ps' ↔ p ∈ ps) :
+    RecAgree M ps' ps := fun p _ => h p
+
+theorem ListAgree.of_iff {M : Mask} {ls' ls : List SRec} (h : ∀ y, y ∈ ls' ↔ y ∈ ls) :
+    ListAgree M ls' ls := fun y _ => h y
+
+theorem RecAgree.empty_iff {ps' ps : List FrameRec} :
+    RecAgree ∅ ps' ps ↔ ∀ p, p ∈ ps' ↔ p ∈ ps :=
+  ⟨fun h p => h p (by simp), RecAgree.of_iff⟩
+
+theorem ListAgree.empty_iff {ls' ls : List SRec} :
+    ListAgree ∅ ls' ls ↔ ∀ y, y ∈ ls' ↔ y ∈ ls :=
+  ⟨fun h y => h y (by simp), ListAgree.of_iff⟩
 
 end BoCa.Fig16.LogRel.Core.Chain.SI
 

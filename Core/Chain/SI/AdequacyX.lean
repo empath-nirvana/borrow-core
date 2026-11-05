@@ -34,7 +34,7 @@ private theorem erwpX_end_empty {Φ : LocFam} {Q : PostX} {P₀ : Expr} {n : Nat
   exact (h ((PMap.empty : WRes), 0) PMap.empty [] (fun _ => none) Fig16.LogRel.hash_empty
     (ResU.comp_empty_right _) (by simpa using GRes.valid_zero)
     (fun α hα _ => by simp [GRes.counted] at hα) (fun α hα _ => by simp [GRes.counted] at hα)
-    (maskShallow_locs_empty _) (maskAuth_empty _) TWNC.empty htg Fig16.BoLo.lower_empty fd_empty
+    (maskShallow_locs_empty _) (maskAuth_empty _) (maskOff_empty _) TWNC.empty htg Fig16.BoLo.lower_empty fd_empty
     j μ e hj hrun).2 hfin
 
 /-- **Safety at the one relation.** -/
@@ -48,7 +48,7 @@ theorem erwpX_safe {Φ : LocFam} {Q : PostX} {P₀ : Expr}
   · exact .inr hs
   · have hfin : Final (ℍ := ℍ) μ' e' := fun μ'' e'' h => hs ⟨μ'', e'', h⟩
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-      _, hq⟩ := erwpX_end_empty (hall (j + 1)) (by omega) hrun hfin
+      _, _, hq⟩ := erwpX_end_empty (hall (j + 1)) (by omega) hrun hfin
     rcases hq with ⟨v, rfl, -⟩ | h
     · exact .inl v.2
     · exact h.elim
@@ -64,7 +64,7 @@ theorem erwpX_adequacy {Φ : LocFam} {Q : PostX} {P₀ : Expr}
   have hp := erwpX_safe (Φ := Φ) hall hrun
   refine ⟨hp, fun hv => ?_, fun K ℓ he => ?_⟩
   · obtain ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h1, h2, h3, h6, h7, h9, h10, h11, -, -,
-      -, -, -, -, -, -, -, -, -, hq⟩ :=
+      -, -, -, -, -, -, -, -, -, -, hq⟩ :=
       erwpX_end_empty (hall (j + 1)) (by omega) hrun (final_val μ ⟨e, hv⟩)
     rcases hq with ⟨v, -, hqv⟩ | h
     · obtain rfl : ρ' = PMap.empty := hQ _ _ _ _ _ hqv
