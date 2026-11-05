@@ -6,8 +6,10 @@ import Core.Chain.SI.Uncapture
 
 `docs/new-core/scope-821-loans.md`, stage 2. An `imm` lend whose cell `ℓ` is masked at the lend's
 authority (`Auth.lend κ`, held by a whole token `[κ]_1` the lender keeps) is opened at the start of one segment and ended at the
-start of a later one. Between them it is held across any number of stops: the run's continuation
-is the same `erwpX` at the same mask, and `↭` is not read at `ℓ`.
+start of a later one. Between them it is held across any number of stops: each stop resumes its
+continuation at a mask that holds `ℓ` while the lender keeps `[κ]_1`, and `↭` is not read at `ℓ`.
+A segment that does not mask `ℓ` takes it into its mask for its stop (`rwpGX_maskFresh`), so a
+task lends a cell it allocated itself (`erwpX_lendOpenStop`).
 
 * **Open** (`rwpGX_lendOpen`): `ℓ ↦ own(v)` becomes `ℓ ↦ imm({α}, v, ∅)` at a fresh `α`, its record
   joins the records proper (`capture_world`), and `[α]_1` is minted. The run from the lent
@@ -668,8 +670,8 @@ theorem rwpGX_lendEnd {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {l : Loc}
 
 /-! ### At `erwpX` -/
 
-/-- **`rwpGX_lendOpen` at `erwpX`**: the lend opened, then held across every stop of the run and
-of its continuations, which are the same `erwpX` at the same mask. -/
+/-- **`rwpGX_lendOpen` at `erwpX`**: the lend opened, then held across every stop whose
+continuation resumes at a mask that holds `ℓ`. -/
 theorem erwpX_lendOpen {Φ : LocFam} {M : Mask} {Tb : TableX} {Q : PostX} {n : Nat} (l : Loc)
     (hl : l ∈ M.lendLocs) (T : VTy) (δ : LSub) (hadm : AdmWf T δ) (v : Val)
     (hshape : vShape T δ v (PMap.empty : WRes)) (e : Expr) (ls : List SRec)

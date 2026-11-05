@@ -656,8 +656,8 @@ So the frame's flattening is undefined at `ℓ` (a cell there would be an `imm` 
 1. *The three definition fixes above*, against "stage 2 changes nothing stages 1 and 1.5
    define". The brief allows fixing a definition so that the third fact holds. Each fix is
    vacuous at the empty mask.
-2. *A loan held across stops is held by a task that holds its authority from the task's first
-   segment.* A task's mask is fixed across all its segments: the continuations in `erwpX`'s
+2. *(Lifted in stage 2b.)* *A loan held across stops is held by a task that holds its authority
+   from the task's first segment.* A task's mask is fixed across all its segments: the continuations in `erwpX`'s
    definition are at the same `M`. `MaskAuth` holds at every segment's start, and a ghost-free
    start runs only at the empty mask (`MaskAuth.zero`). So the lending task is spawned holding the
    cell and `[κ]_1`, which its spawner allocated and minted. A lend of a cell allocated inside the
@@ -683,3 +683,128 @@ Threads constraints (`scope-threads.md`, branch `threads-scope`):
 - The headlines `crossImmJ`, `crossImmJC`, `crossMutJ`, `crossMutJC`, the async scope, and
   first-class handles.
 - `erwpX_of_erwp_tok`, `not_erwp_of_erwpX_tok`, `ImmEndAfterResume`.
+
+## Stage 2b build: the mask of each segment, and `[handle]` at the one relation
+
+### The definition change
+
+A stop chooses the mask its continuation resumes at (`SI/ErwpX.lean`). This lifts stage 2's
+departure 2.
+
+- **`EndOKX` names `M′`.** Every end of a run at `M` names a mask `M′`, passed to the post
+  (`PostGX` gains the mask). `↭`, `RecAgree` and `ListAgree` are read outside `M ∪ M′`. The end
+  is `MaskShallow` at `M′` and holds `M′`'s authorities (`MaskAuth M′ g′`); the end with its
+  garbage is `MaskShallow` at `M ∪ M′`; the garbage is `MaskOff M′`. Two new conjuncts: the start
+  is shallow at `M′.locs \ M.locs`, and the frame holds nothing at `M.fresh M′` (what `M′`
+  masks, or lends across stops, and `M` does not; `FlatNone`).
+- **`erwpX`'s recursion.** `erwpX Φ M Tb Q n` owes, at a stop that names `M′`, `erwpX Φ M′ Tb Q`
+  below `n` (`erwpXPost`, `erwpXC Φ Tb Q N M′`). A value is reached at `M′ = M` (`valPostX M`).
+  The table sees both masks (`TableX : Mask → Mask → …`, the segment's and the continuation's).
+- **Bind** (`bindPostX`): the bound run either reaches a value at `M`, continued in `K` at `M`, or
+  a stop that `K` keeps final, which ends the composite where it ended. The composite's `↭` is
+  `UpdVNm.trans` at `M ∪ (M ∪ M′)`, read at `M ∪ M′`. The start's shallowness at the newly masked
+  locations comes through the bound run's `↭`: an `imm` cell of the start there is the bound
+  run's end's or its garbage's, and the second run's frame (the frame with that garbage) holds
+  nothing there.
+
+At the empty mask and ghost a stop names the empty mask, since its share is ghost-free
+(`MaskAuth.zero`). So `erwp_iff_erwpX0` stands with its statement.
+
+**Why the frame holds nothing at the newly masked locations.** The pool resumes the continuation at
+`M′` with a frame that must be `MaskOff M′`. The frame at the start was `MaskOff M`; what `M′` adds
+it does not hold (`maskOff_fresh`). Without the clause a stop could mask a location another task
+owns. A part of a frame that holds nothing holds nothing (`FlatNone.left`), whereas `MaskOff` does
+not pass to a part (`own ○ imm = imm`), so the clause is `FlatNone`, not `MaskOff M′`.
+
+**Iris.** A WP's mask is fixed, and only an atomic step changes it. Lifetimes and borrows are
+created at any point as resources: RustBelt's `lft_create` and its borrow creation are ghost
+updates under the lifetime logic's one fixed namespace. Here the mask changes only at a stop, and
+the stop's choice is justified by resources (`MaskAuth M′`). A location taken into the mask is
+new to it as an Iris name is fresh: the frame does not hold it.
+
+### Rules (standard axioms, no hypotheses beyond each rule's premises)
+
+- `rwpGX_maskFresh` (`SI/LendAcross.lean`). A segment at `M` holds `ℓ ↦ own(v)` and a whole
+  `[κ]_1`. It runs at `M ∪ {(ℓ, lend κ)}` when every end is a stop resuming at a mask that holds
+  `(ℓ, lend κ)`. The frame composes with `ℓ ↦ own(v)`, so it holds nothing at `ℓ`
+  (`flatNone_of_hash_own`, from `ResU.walks_none_of_hash_own`).
+- `erwpX_lendOpenStop`: `rwpGX_maskFresh` around `rwpGX_lendOpen` at the larger mask. The body
+  ends only at stops the table allows at the segment's mask.
+- `rwpGX_of_rwp_own` (`SI/HeapX.lean`): a run of `rwp` from a part whose flattening holds only
+  `own` cells, beside the rest and the whole ghost, at any mask. `↭` keeps every `imm` and `mut`
+  cell, so the end carries nothing. The garbage is empty (`eq_empty_of_noOwn_comp`). From it come
+  `erwpX_alloc`, `erwpX_free` and `erwpX_load`.
+- `opTableX`, `erwpX_handle_le` and `erwpX_handle` (`SI/HandleX.lean`). `erwp_handle_le`'s proof
+  over `OpEntX` (predicates on `XRes`, plus `remask : Bool`). An entry with `remask = false` stops
+  only at its segment's mask; one with `remask = true` may name another. The operations of the
+  handler's name are `remask = false` and are `unr` or `lin`. A `lin` `κ` owns its cell
+  (`erwpX_kappaCell`, `erwpX_kappaC_resume`); an `unr` one is `kappa` (`erwpX_kappa_resume`).
+  Operations of other names pass outward at the mask they named, their cancel obligation carried.
+  The proof is by induction on the index at every mask, and the return and operation clauses are
+  asked at every mask.
+- **The test.** `LendAcrossProg.lendProg_erwpX` (`SI/LendAcrossProg.lean`):
+  `(λc. park; free c) (alloc ())`, at `erwpX Φ₀ ∅ parkTab QX n [] _ (∅, 0)` for every `n`, with no
+  hypotheses. The task mints `[κ]_1`, allocates `c`, lends it (`erwpX_lendOpenStop`) and stops at
+  `park`, resuming at `{(c, lend κ)}`. The next segment (`lendProg_after`) ends the lend holding
+  `[α]_1` (`erwpX_lendEnd`) and frees `c`. `parkTab` is the stop as a scheduler would see it: the
+  continuation owed at `()`, at the same share and list.
+
+Every stage-1, 1.5 and 2 rule is re-proved at the new recursion: the frame rule, bind, `_le`,
+`_det`, `_val`, `rwpGX_lend`, the lend and the `mut` loan across stops, `erwpX_mint`,
+`erwp_iff_erwpX0` and `erwpX_adequacy`. G is unchanged. The chain headlines are stated at `erwp`
+and do not read `erwpX`.
+
+### Departures
+
+1. *Statement changes forced by the recursion.*
+   - `erwpX_bind`'s value continuation `hcont` is asked at every mask: a value of a later segment
+     is reached at that segment's mask. Its conclusion holds at every mask.
+   - `rwpGX_frame`'s framed predicate is closed under `ListAgree (M ∪ M′)` at every stop mask
+     `M′`. `rwpGX_frame_post` asks it only at the masks the inner post reaches, and
+     `erwpX_frame_none` keeps its statement.
+   - `rwpGX_bind` takes `bindPostX`.
+   - `PostGX`, `TableX`, `valPostX` and `erwpXC` take masks.
+2. *A mask changes only at a stop.* A location taken into the mask inside a segment
+   (`rwpGX_maskFresh`) is held to the segment's stop: no end at the larger mask is a value.
+3. *`erwpX_of_erwp_tok` is not built.* The lift of an arbitrary `erwp` run has to split the
+   fractions that a released copy takes into the garbage. `rwpGX_of_rwp_own` lifts runs over owned
+   cells, which is what the heap primitives need. A store at `erwpX` is the same lift of
+   `rwp_store` and is not added.
+4. *`[handle]` narrowings, against `erwp_handle_le`.*
+   - A caught operation is `unr` or `lin`, never `cancel`: `erwp_ccatch` at `erwpX` is not built.
+   - The table has no abortive operations: `rwpGX_garbage` would need the garbage's ghost and
+     `MaskOff` in its post.
+   - A caught operation stops at its segment's mask (`remask = false`).
+5. *The test's table is `parkTab`*, a stop with no scheduler behind it.
+
+Threads constraints. C1 is kept: `rwpGX_maskFresh` and `[handle]` enter their inner runs at the
+outer frame. C4 is kept: the authority is read at each segment's `MaskAuth`, now at the mask the
+stop names. C5 holds by construction (G).
+
+### What stage 2c needs from these definitions
+
+- **The pool resumes a parked task at the mask its stop named.** For the resumed segment's frame
+  (the other tasks, the scheduler and the garbage), the pool owes `MaskOff M′`. It comes from
+  `MaskOff M` at the segment's start, the stop's `FlatNone (M.fresh M′)` of the frame
+  (`maskOff_fresh`), and `maskOff_of_upd` along the other tasks' runs. `MaskShallow M′` and
+  `MaskAuth M′` of the share are in `EndOKX`.
+- **The scheduler is not a handler at one mask.** `poolSchedAdequacyN` proves the pool through
+  `erwp_handle_le`, with the scheduler's clauses resuming tasks inside the scheduler's run.
+  `erwpX_handle_le` resumes only at the handler's mask, since a caught entry has
+  `remask = false`. A task's `park` must be `remask = true`, so that the task can take a new mask
+  there. So `PoolS` must run each task segment as its own `erwpX` run at that task's mask, with
+  `HH`'s code between segments, which is Iris's `wptp` shape. The other route is a `[handle]`
+  whose `remask = true` clauses resume `κ` only in tail position. Neither is built.
+- **Cancellation** (`crossImmJC`, `crossMutJC`) needs `erwp_ccatch` and the garbage rule at
+  `erwpX`.
+- **`HH`'s slot cells** need `erwpX_store` (the waiter field), the same lift as `erwpX_load`.
+- A task's last value is reached at its last segment's mask, so the pool's record of a finished
+  task accepts any mask.
+
+### What is left of stage 2 after 2b
+
+- `PoolS` with `TokPost` and the registry; `HH`; `poolSchedAdequacyS`; `not_mutualWait`.
+- The headlines `crossImmJ`, `crossImmJC`, `crossMutJ`, `crossMutJC`, the async scope, and
+  first-class handles.
+- `erwpX_of_erwp_tok`, `not_erwp_of_erwpX_tok`, `ImmEndAfterResume`.
+- At `[handle]`: cancellable caught operations and abortive operations.

@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.40 · 2026-11-05
+Version 1.41 · 2026-11-05
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -10843,19 +10843,22 @@ definition over `XRes = WRes × GRes` at a mask `M`, an index of the relation as
 - **The run** (`rwpGX`, `EndOKX`). The frame ranges over `XRes`. At the start the frame and the
   resource compose validly, each is `WF_C` at the world's counted set `C`, and the frame holds
   only copies at a location masked by `Auth.lend` (`MaskOff`: its flattening holds only `imm` cells
-  there). The end is `EndOKG`'s, with these changes:
-  - `↭` is read outside `M` (`UpdVNm`, `SI/UpdMask.lean`);
+  there). The end names the mask `M′` the run's continuation resumes at (stage 2b). It is
+  `EndOKG`'s, with these changes:
+  - `↭` is read outside `M ∪ M′` (`UpdVNm`, `SI/UpdMask.lean`);
   - the end and garbage ghosts compose validly with the frame's;
   - the end and the garbage are `WF_C′` at the end world's counted set `C′`;
   - the frame carries no lifetime counted at `C′` and not at `C` (`NewNotCarried`), which with its
     `WF_C` at the start is its `WF_C′`;
-  - the end and the end with its garbage are `MaskShallow`, and the end holds the mask's
-    authorities;
-  - the garbage holds only copies at a location masked by `Auth.lend` (`MaskOff`);
-  - the end records and list agree with the start's off the locations masked by `Auth.lend`
-    (`RecAgree`, `ListAgree`; at the empty mask, the exact clause).
+  - the end is `MaskShallow` at `M′` and holds `M′`'s authorities; the end with its garbage is
+    `MaskShallow` at `M ∪ M′`;
+  - the garbage holds only copies at a location `M′` masks by `Auth.lend` (`MaskOff`);
+  - at what `M′` masks and `M` does not (`M.fresh M′`: newly masked, or newly lent across
+    stops) the frame holds nothing (`FlatNone`), and the start is shallow where `M′` newly masks;
+  - the end records and list agree with the start's off the locations `M ∪ M′` masks by
+    `Auth.lend` (`RecAgree`, `ListAgree`; at the empty mask, the exact clause).
 
-  `C′` is passed to the post.
+  `M′` and `C′` are passed to the post. A value is reached at `M′ = M` (`valPostX`).
 - **The access guard G** (stage 1.5; `FrameKept`, `SI/WpN.lean`). The run clause of `rwp`,
   `rwpG` (so `erwp`) and `rwpGX` (so `erwpX`) asks, of every configuration `(μ′, e′)` a run of
   `j < n` steps reaches, intermediate ones included, that `μ′` agree with the start frame's
@@ -10881,14 +10884,24 @@ definition over `XRes = WRes × GRes` at a mask `M`, an index of the relation as
     `rwpGX_lend`) or at the outer frame with the reborrowed `imm` cell composed in
     (`rwp_reborrow`, `RebStopC`, `RebStopD`), so G passes to the outer frame by
     `FrameKept.of_compS`. No typed rule writes a location its start frame holds.
-- **Structural rules**: `erwpX_le`, `erwpX_det`, `erwpX_val`. `erwpX_bind` and `rwpGX_bind` bind
-  at a fixed mask; their `↭` composes by `UpdVNm.trans` at `M ∪ M = M`. A stop is carried through
-  the context by the table (`TableX.CtxClosed`), and a continuation is entered at the counted
-  set where it was reached (`rwpGXat`). The frame rule is `rwpGX_frame` (and `erwpX_frame_none`
-  for a run that does not stop): by `updVNm_frame`
-  (`[TR]` 6.48 at a mask, at `MaskShallow`), with the framed part carrying its own fractions
-  (`WFSplit`) and holding only copies at the lent locations (`MaskOff`), and the inner part holding
-  the mask's authorities.
+- **The mask of each segment** (stage 2b). A stop chooses its continuation's mask: `erwpX` at `M`
+  owes, at a stop that names `M′`, `erwpX` at `M′` below the index (`erwpXPost`, `erwpXC`). The
+  table sees the segment's mask and the continuation's (`TableX`). A mask changes only at a stop,
+  as Iris's is fixed under a WP and changed only around an atomic step. `M′` is justified by the
+  authorities the stop's share holds (`MaskAuth M′`), and what it newly masks the frame does not
+  hold. At the empty mask and ghost a stop names the empty mask (`MaskAuth.zero`), so `erwp` is
+  unchanged.
+- **Structural rules**: `erwpX_le`, `erwpX_det`, `erwpX_val`. `erwpX_bind` and `rwpGX_bind`
+  continue a value at the segment's mask; their `↭` composes by `UpdVNm.trans` at
+  `M ∪ (M ∪ M′) = M ∪ M′`. A stop of the bound run ends the composite where it ended, its context
+  put back by the table (`TableX.CtxClosed`), and its continuation owed at the mask it named; so
+  `erwpX_bind`'s value continuation is asked at every mask. A continuation is entered at the
+  counted set where it was reached (`rwpGXat`). The frame rule is `rwpGX_frame` (and
+  `rwpGX_frame_post`, `erwpX_frame_none` for a run that does not stop): by `updVNm_frame`
+  (`[TR]` 6.48 at a mask, at `MaskShallow`) at `M ∪ M′`, with the framed part carrying its own
+  fractions (`WFSplit`) and holding only copies at the lent locations (`MaskOff`), the inner part
+  holding the mask's authorities, and the framed predicate closed under the lists that agree off
+  the locations `M ∪ M′` lends.
 - **A lend opened and ended inside one run** (`rwpGX_lend`, `erwpX_lend`, `SI/LendX.lean`).
   `rwp_I_frame`'s proof, with a token. At the open, `ℓ ↦ own(v)` (empty payload) becomes
   `ℓ ↦ imm({α}, v, ∅)` at a fresh `α`, and `[α]_1` is minted for the body. At the end, holding
@@ -10915,9 +10928,28 @@ definition over `XRes = WRes × GRes` at a mask `M`, an index of the relation as
   - A run not masked at `ℓ` keeps `MaskOff` (`maskOff_of_upd`): what a pool reads to keep it of the
     lender's frames.
 
-  A lending task holds its authority from its first segment: its mask is fixed across its
-  segments and holds at each start (`MaskAuth.zero`: a ghost-free start runs only at the empty
-  mask), so it is spawned holding the cell and `[κ]_1`.
+  - **A location taken into the mask at a stop** (stage 2b, `rwpGX_maskFresh`): a segment at `M`
+    whose resource holds `ℓ ↦ own(v)` and a whole `[κ]_1` runs at `M ∪ {(ℓ, lend κ)}` when each
+    of its ends is a stop resuming at a mask holding `(ℓ, lend κ)`. The frame composes with
+    `ℓ ↦ own(v)`, so it holds nothing at `ℓ` (`flatNone_of_hash_own`). `erwpX_lendOpenStop` opens
+    `erwpX_lendOpen`'s lend there: a task that allocated `ℓ` itself lends it across its own stops.
+    The test is `LendAcrossProg.lendProg_erwpX`: `(λc. park; free c) (alloc ())`, from `(∅, 0)` at
+    the empty mask, mints `[κ]_1`, allocates `c`, lends it, stops at `park` resuming at
+    `{(c, lend κ)}`, ends the lend in the next segment and frees `c`, at every index with no
+    hypotheses.
+- **Heap primitives** (stage 2b, `SI/HeapX.lean`): `rwpGX_of_rwp_own` lifts a run of `rwp` from
+  a part whose flattening holds only `own` cells, beside the rest and the whole ghost, at any mask:
+  `↭` keeps every `imm` and `mut` cell, so the end carries nothing and the garbage is empty. From
+  it `erwpX_alloc`, `erwpX_free`, `erwpX_load`.
+- **`[handle]` at `erwpX`** (stage 2b, `erwpX_handle_le`, `erwpX_handle`, `SI/HandleX.lean`).
+  The operation table reads `XRes` (`OpEntX`, `opTableX`); an entry with `remask = false` stops
+  only at its segment's mask, one with `remask = true` may name another. The operations of the
+  handler's name are `remask = false`, unrestricted or must-resume: `κ` resumes the handled
+  continuation at the handler's mask, and a must-resume `κ` owns its cell (`erwpX_kappaCell`,
+  `erwpX_kappaC_resume`). An operation of another name passes outward at the mask it named, its
+  cancel obligation carried. By induction on the index at every mask; the return and operation
+  clauses are asked at every mask. No abortive operation is in the table, and a caught operation
+  is not cancellable.
 - **`erwp` is the ghost-free instance** (`erwp_iff_erwpX0`, `SI/ErwpX0.lean`):
   `erwp Φ Tb Q n ls e ρ ↔ erwpX Φ ∅ (tableUp Tb) (postUp Q) n ls e (ρ, 0)`.
 - **Adequacy** (`erwpX_adequacy`, `SI/AdequacyX.lean`): a closed program at the empty mask and the
@@ -10936,10 +10968,12 @@ Preserves: `erwp`'s rules and every remaining chain headline, unchanged in state
 definition gains G through `rwpG`.
 
 *Open*:
-- `[handle]` at `erwpX`, `PoolS` with `TokPost` and the registry, `HH`, `poolSchedAdequacyS`,
-  `not_mutualWait`, and the stage-2 headlines;
-- a lend of a cell allocated inside the lending task, held across that task's stops (a
-  continuation whose mask is chosen at each stop);
+- `PoolS` with `TokPost` and the registry, `HH`, `poolSchedAdequacyS`, `not_mutualWait`, and the
+  stage-2 headlines;
+- at `[handle]` at `erwpX`: a cancellable operation of the handler's name and abortive operations
+  (`erwp_ccatch` at `erwpX`, garbage with ghost);
+- `erwpX_of_erwp_tok`, the lift of every `erwp` run (the fractions a released copy takes into the
+  garbage); it is proved for runs over owned cells (`rwpGX_of_rwp_own`);
 - `rwpGX_lend` at a non-empty outer mask (the 6.38 lemmas read `↭` everywhere);
 - `erwpX_frame` across stops (the table carrying the framed part into the continuation); it is
   proved for runs that do not stop (`erwpX_frame_none`).
@@ -11583,6 +11617,16 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
 
 ## Changelog
 
+- **1.41** (2026-11-05) — §62 (*One relation over ghost resources*, #821, stage 2b): the mask of
+  each segment. `EndOKX` names the mask `M′` the continuation resumes at; `↭` and the records
+  clause are read outside `M ∪ M′`; what `M′` newly masks the frame does not hold. `erwpX`'s
+  continuation at a stop is `erwpX` at `M′`; the table sees both masks. `rwpGX_maskFresh` and
+  `erwpX_lendOpenStop`; `LendAcrossProg.lendProg_erwpX`. The heap primitives at `erwpX`
+  (`rwpGX_of_rwp_own`, `erwpX_alloc`, `erwpX_free`, `erwpX_load`) and `[handle]` at `erwpX`
+  (`erwpX_handle_le` over `opTableX`, the `κ` cell primitives). Every stage-1, 1.5 and 2 rule
+  re-proved; `erwpX_bind`'s value continuation is asked at every mask and `rwpGX_frame`'s framed
+  predicate at every stop mask. No change to `erwp`, `twp`, `CDerives`, `fundamentalC`,
+  `adequacyC`, `adequacyD`, the checker, the backends or the corpus.
 - **1.40** (2026-11-05) — §62 (*One relation over ghost resources*, #821, stage 1.5): the access
   guard G in the run clause of `rwp`, `rwpG` and `rwpGX` (`FrameKept`); `UndoneWrite` (the
   undone write through an `imm` copy meets every other conjunct and is refuted by G). Every
