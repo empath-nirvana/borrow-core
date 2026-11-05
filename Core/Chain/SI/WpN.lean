@@ -13,6 +13,10 @@ steps either ends at a value, and then the printed post-configuration exists (`E
 conjuncts verbatim, with `ρ ↭ₙ₋ⱼ ρ′ ● ρ⁺` (`UpdVN`) for `ρ ↭ ρ′ ● ρ⁺` and the postcondition at
 `n − j`), or the term it reached steps again.
 
+Every configuration such a run reaches, the intermediate ones included, keeps the frame: the
+memory agrees with the frame's flattening wherever it is defined (the access guard G,
+`FrameKept`).
+
 The forced change is the run's quantifier: `wpTS` asks for one terminating run under every
 allocator; at an index, every run shorter than the index is safe, and one that returns meets the
 post-configuration. The post-configuration is checked where the printed `wp` checks it, at the

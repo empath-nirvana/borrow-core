@@ -1411,3 +1411,12 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_iff_erwpX0
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpX_adequacy
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpX_frame_none
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.frameKept_of_lower
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.FrameKept.of_compS
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.EndOK.frameKept
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.EndOKG.frameKept
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.EndOKX.frameKept
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.rwpG_compose_kept
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.UndoneWrite.undoneImmWrite_run
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.UndoneWrite.copy_config
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.UndoneWrite.not_undoneImmWrite

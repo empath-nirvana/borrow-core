@@ -10,7 +10,8 @@ stop the table allows". `rwpG` is `wpG` at the step index, cut at runs as `rwp` 
 `j < n` steps that reaches a configuration with no step meets the post-configuration there, at
 `n − j`. A value and a stop (`perform`/`raise` under a context that does not catch it,
 `opPlug_no_step`) are such configurations; at any other one the postcondition is `False` in every
-use, which is safety.
+use, which is safety. Every configuration a run reaches, final or not, keeps the frame (the access
+guard G, `FrameKept`, as at `rwp`); `rwpG.run` and `rwpG.kept` read the two conjuncts.
 
 `rwp_iff_rwpG`: `rwp` is `rwpG` at a postcondition over values, so `rwp`'s rules hold at
 `rwpG` for value postconditions. `rwpG_bind`, `rwpG_frame` and `rwpG_step` are `rwp_bind`,

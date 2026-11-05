@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.36 · 2026-11-05
+Version 1.37 · 2026-11-05
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -10642,6 +10642,31 @@ definition over `XRes = WRes × GRes` at a mask `M`, an index of the relation as
     authorities.
 
   `C′` is passed to the post.
+- **The access guard G** (stage 1.5; `FrameKept`, `SI/WpN.lean`). The run clause of `rwp`,
+  `rwpG` (so `erwp`) and `rwpGX` (so `erwpX`) asks, of every configuration `(μ′, e′)` a run of
+  `j < n` steps reaches, intermediate ones included, that `μ′` agree with the start frame's
+  flattening wherever it is defined: `⦇ρ_f⦈(ℓ) = ψ ⇒ μ′(ℓ) = ⌊ψ⌋` (at `rwpGX`, `ρ_f` is the
+  frame's world `x_f.1`). Without it a run holding an `imm` copy of `ℓ` may run
+  `ℓ := w; ℓ := v` (`UndoneWrite.undoneImmWrite_run`), and a holder of the other copy reads `w`
+  in between; with it that run is refuted at a frame holding the other copy
+  (`UndoneWrite.not_undoneImmWrite`, at `UndoneWrite.copy_config`). G is read at the flattening, so
+  agreeing `imm` copies are read by both holders and written by neither. It is the heap condition
+  of `ewp`'s step clause (`SI/Ewp.lean`, "every step keeps the frame") at a segment's frame.
+  - At the start G is the frame hypotheses' (`frameKept_of_lower`), and at a run's end the
+    post-configuration's (`EndOK.frameKept`, `EndOKG.frameKept`, `EndOKX.frameKept`): the end
+    composes the frame into the world the end memory lowers to. A part keeps G whenever a
+    composite holding it does (`FrameKept.of_compS`, from `⦇ρ₁ ● ρ₂⦈ = ⦇ρ₁⦈ ○ ⦇ρ₂⦈`).
+  - So a run of one step meets G exactly when its post-configuration exists: the heap
+    primitives (`rwp_head1`) and the pure steps (`rwpG_step`, `rwpG_det`, `rwpGX_det`) need
+    nothing new. A store or a free needs `ℓ ↦ own(v)`, and an allocation a location the memory
+    does not hold, so none touches the frame's flattening.
+  - Bind passes G through the continuation's frame `ρ_f ● ρ⁺` (`rwpG_compose_kept`, and the
+    first conjunct of `rwpGX_compose`); the frame rule through `ρ_f ● ρ₂`.
+  - Every frame-changing rule enters its inner run at the outer frame (`rwp_M_frame`,
+    `rwp_M_antiFrame`, `rwp_I_frame`, the stops' frames in `IStopN`, `StopFrameN`, `AntiStopN`,
+    `rwpGX_lend`) or at the outer frame with the reborrowed `imm` cell composed in
+    (`rwp_reborrow`, `RebStopC`, `RebStopD`), so G passes to the outer frame by
+    `FrameKept.of_compS`. No typed rule writes a location its start frame holds.
 - **Structural rules**: `erwpX_le`, `erwpX_det`, `erwpX_val`. `erwpX_bind` and `rwpGX_bind` bind
   at a fixed mask; their `↭` composes by `UpdVNm.trans` at `M ∪ M = M`. A stop is carried through
   the context by the table (`TableX.CtxClosed`), and a continuation is entered at the counted
@@ -10671,7 +10696,8 @@ Retires (`SI/Capture`, `CaptureE`, `CaptureGen`, `CaptureHeap`, `CaptureAdequacy
 `progD_orDiverges`, `progM_orDiverges`, `progDM_orDiverges`, `crossImmJ` and `crossImmJC`.
 Stage 2 restates `crossImmJ` and `crossImmJC` at `erwpX`. `Uncapture` is kept, with `Split`.
 
-Preserves: `erwp`'s definition and rules, and every remaining chain headline, unchanged.
+Preserves: `erwp`'s rules and every remaining chain headline, unchanged in statement; `erwp`'s
+definition gains G through `rwpG`.
 
 *Open*:
 - the lend across a stop (stage 2): its end, in a later segment, runs at a mask holding the lent
@@ -11320,6 +11346,11 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
 
 ## Changelog
 
+- **1.37** (2026-11-05) — §62 (*One relation over ghost resources*, #821, stage 1.5): the access
+  guard G in the run clause of `rwp`, `rwpG` and `rwpGX` (`FrameKept`); `UndoneWrite` (the
+  undone write through an `imm` copy meets every other conjunct and is refuted by G). Every
+  rule and headline keeps its statement. No change to `twp`, `CDerives`, `fundamentalC`,
+  `adequacyC`, `adequacyD`, the checker, the backends or the corpus.
 - **1.36** (2026-11-05) — §62 (*One relation over ghost resources*, #821, stage 1): `erwpX`
   over `WRes × GRes` at a mask, with `GRes`, `WF_C` and masks with their authorities; bind at a
   fixed mask, the frame at a mask (`updVNm_frame`), a lend opened and ended inside one run

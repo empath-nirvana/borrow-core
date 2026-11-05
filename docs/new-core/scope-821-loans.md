@@ -18,9 +18,11 @@ between tasks stays acyclic.
 | stage | what lands | new loan feature | size |
 |---|---|---|---|
 | 1. One relation | `erwpX` defined once, in its final form; `erwp` proved its ghost-free instance; its structural rules and adequacy; `cerwp` and everything built on it retired | none | about 3.0k lines added, 6.0k deleted |
+| 1.5. The access guard | G in the run clause of `rwp`, `rwpG` and `rwpGX`; `UndoneWrite` | none | about 0.4k lines changed or added |
 | 2. Loans | token rules, counted lend across stops, `mut` loans, `[handle]` at `erwpX`, `PoolS`, `HH`, four headlines | yes | about 7.0k lines (7.8k if `CrossProg` is re-proved) |
 
-Stage 2 changes nothing stage 1 defines. It only adds rules, the pool theorem and programs.
+Stage 2 changes nothing stages 1 and 1.5 define. It only adds rules, the pool theorem and
+programs.
 
 ---
 
@@ -370,6 +372,7 @@ That is about 7.0k lines, plus about 0.8k if `CrossProg`/`CrossProgM` are re-pro
   et al.'s counting permissions were rejected: they need the source to count, while fractions
   split at the borrower (sub-loans).
 - **Iris.** The registry is `Auth(Agree)`. Iris's invariants and later modality are not needed.
+  What else is taken, and where we would stop, is in *Iris boundary* below.
 
 ## Open questions
 
@@ -458,3 +461,103 @@ has the same discipline: `|={E₁,E₂}=>` around a WP is allowed only for an at
 **Open questions above, resolved by this stage:** `updVNm_frame` (derived); the six headlines
 (option (i), deleted); `CrossProg`/`CrossProgM` (deleted). `C` as a post coordinate is kept, and
 `rwpGXat` is what bind needs of it. The rest stay open.
+
+## Stage 1.5 build: the access guard G
+
+Motivation and design: `docs/new-core/scope-threads.md` on branch `threads-scope`, §2–§2.3 and
+constraint C5. Plan: #821 (user, 2026-11-05).
+
+**The undone write** (`SI/UndoneWrite.lean`). A run holding an `imm` copy of `ℓ` at `v` runs
+`ℓ := w; ℓ := v`. It ends at the memory it started from, with its resource unchanged, and the
+post-configuration reads only the end. Every conjunct of the run clause other than G holds at
+every index and frame (`undoneImmWrite_run`). Between the stores a holder of the other copy reads
+`w`. So the relation without G admitted the undone write, and G is needed.
+
+**G** (`FrameKept`, `SI/WpN.lean`). Every configuration `(μ′, e′)` a run of `j < n` steps
+reaches, the intermediate ones included, agrees with the start frame's flattening wherever that
+is defined:
+
+```
+FrameKept ρ_f μ′  :=  ∀ ℓ ψ, ⦇ρ_f⦈(ℓ) = ψ → μ′(ℓ) = some ⌊ψ⌋
+```
+
+It is a conjunct of the run clause of `rwp`, `rwpG` (so `erwp`) and `rwpGX` (so `erwpX`, at the
+frame's world `x_f.1`):
+
+```
+∀ j μ′ e′, j < n → StepsN j μ e μ′ e′ → FrameKept ρ_f μ′ ∧ (Final μ′ e′ → EndOKG …)
+```
+
+It is read at the flattening, so agreeing `imm` copies are read by both holders and written by
+neither. At the frame holding the other copy (`copy_config`: the world `ℓ ↦ imm({A}, (), ∅)`,
+entered by `TWNC.immFrame`, split in two), the undone write is refuted at every index above `1`
+(`not_undoneImmWrite`).
+
+**Carried through.** Three lemmas do all of it:
+- `frameKept_of_lower`: G at the start, from the frame hypotheses;
+- `EndOK.frameKept` (and `EndOKG.`, `EndOKX.`): G at a run's end, from the post-configuration,
+  which composes the frame into the world the end memory lowers to;
+- `FrameKept.of_compS`: a part keeps G whenever a composite holding it does, from
+  `⦇ρ₁ ● ρ₂⦈ = ⦇ρ₁⦈ ○ ⦇ρ₂⦈` (`flat_compR`) and `○` keeping the erasure.
+
+With them:
+- a run of one step meets G exactly when its post-configuration exists. The heap primitives
+  (`rwp_head1`) need nothing new: a store or a free needs `ℓ ↦ own(v)` and an allocation an
+  unheld location, so none touches the frame's flattening;
+- bind passes G through the continuation's frame `ρ_f ● ρ⁺` (`rwpG_compose_kept`, `rwpGX_compose`),
+  and the frame rule through `ρ_f ● ρ₂`;
+- every frame-changing rule enters its inner run at the outer frame (`rwp_M_frame`,
+  `rwp_M_antiFrame`, `rwp_I_frame`, `IStopN`, `StopFrameN`, `AntiStopN`, `rwpGX_lend`) or at the
+  outer frame with the reborrowed `imm` cell composed in (`rwp_reborrow`, `RebStopC`,
+  `RebStopD`). The pool, `[handle]` and the programs go through these rules.
+
+**No typed rule strained G.** No rule writes, even transiently, a location its start frame
+holds: a `mut` borrow's writes are to the cell the Anti-Frame opens as `own`, which the frame
+does not hold.
+
+**Modules changed:** `SI/WpN`, `SI/RwpG`, `SI/HeapN`, `SI/ErwpN`, `SI/ErwpX`, `SI/ErwpX0`,
+`SI/IFrameN`, `SI/IStopN`, `SI/StopFrameN`, `SI/AntiStopN`, `SI/LendX`, `SI/RebRuleN`,
+`SI/RebStopC`, `SI/RebStopD`, `SI/HandleN`, `SI/MutSemN`, `SI/LoopN`, `SI/AdequacyX`,
+`CrossStopN`; added `SI/UndoneWrite`.
+
+**Preserved:** every rule's and headline's statement; `erwp_iff_erwpX0` with G on both sides
+(the same `FrameKept` at the frame's world); `erwpX_adequacy`.
+
+**Departures:**
+1. *G constrains writes only.* `scope-threads.md` §2.2 also asks that a run read no location its
+   frame holds exclusively. That half is not in the run clause: no relation result needs it, and
+   a read changes no memory. It is left to the threads build, where serialisation reads it.
+2. *G is a conjunct of `rwp` as well as `rwpG`*, so that `rwp_iff_rwpG` and the rules stated at
+   `rwp` stay as they are.
+
+**For stage 2.** Every new rule is proved against the guarded relation, so C5 holds by
+construction: a proof that writes its start frame's cells does not close. C1 (run-level
+confinement) keeps the frames that new rules enter inner runs at among the ones above.
+
+## Iris boundary
+
+Decision (#821, user, 2026-11-05): we keep the custom step-indexed relation and borrow Iris's
+**designs**, not Iris itself. A port to iris-lean is rejected: its base logic is affine
+(`BIAffine (UPred M)`), so `OrDiverges`'s empty heap does not follow from its adequacy; RustBelt's
+lifetime logic rests on invariants that a leak-free logic cannot reuse; and the port would replace
+about 32k lines that work.
+
+**What we borrow:**
+- a fixed mask under bind (`rwpGX` at `M`, `UpdVNm.trans` at `M ∪ M = M`), with mask changes only
+  around a lend's open and end, as Iris's `|={E₁,E₂}=>` is taken only around an atomic step;
+- `Auth(Agree)` for the task registry;
+- fractional lifetime tokens `[α]_q`, as in RustBelt's lifetime logic;
+- a pool invariant shaped like Iris's `wptp`, re-established at each segment's end;
+- connectivity-graph progress (Jacobs, Balzer, Krebbers), specialised to the spawn tree's
+  post-order.
+
+**Our `Mask` is over locations**, each with the authority that masks it (`[α]_1` or `xm`), not
+over Iris's invariant names. There are no invariants to open, so there is nothing to name.
+
+**Tripwires.** If one fires, we stop and re-decide for that one component, with iris-lean behind a
+bridge lemma as the fallback:
+1. thread-shared state with no owner at a stop (atomics, lock-free structures, a shared ready
+   queue);
+2. channels with recursive protocols, which may need the later modality;
+3. a stored predicate outside BoLo's strata;
+4. detached tasks that outlive every joiner.
