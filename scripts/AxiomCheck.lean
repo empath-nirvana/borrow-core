@@ -1398,6 +1398,12 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Cross821C.rootI_ok
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Cross821C.crossImmJ
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Cross821C.crossImmJC
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Cross821Obs.kapRelC_end
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Cross821Obs.not_joinFd_of_holds
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Cross821Obs.hj_joinerEntry
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Cross821Obs.hj_joinersDeadlock
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Cross821Obs.hj_joinersDeadlock₀
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Cross821Obs.hj_joined_blocked
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_adequacy
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.HandlerLendProg.progHL_orDiverges
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.HandlerLendAll.anti_underL

@@ -162,3 +162,62 @@ Routes, not built: per-task answers delivered to a waiting spawner (fork-join, a
 `PoolTJ` for copies), or a resource the lender holds that names the loan.
 
 Gate: `gate-serial.sh gate`, ALL PASSED (`~/repos/scratch-archive/cross821/gate2.log`).
+
+## Join by task handle: not derived
+
+Target: `spawn` answers a handle; `join h` waits for that child and answers its result, the
+borrows it held; finished answers kept per handle until joined; no barrier. Headlines
+`crossImmJ`/`crossImmJC` re-proved and `crossMutJ`/`crossMutJC` on such a scheduler.
+
+**Not derived.** No scheduler was built; no headline changed. `crossImmJ`, `crossImmJC` stand on
+`HJ` as above. `crossMutJ`, `crossMutJC`: not derived, no obstruction to the design verified.
+
+### Obstructions at the relation (`Core/Chain/Cross821Obs.lean`)
+
+These are facts about `cerwp`, not about handles. Each holds of every scheduler meeting
+`SchedOKCLe`.
+
+- **`crwpG`'s `EndC` (`SI/Capture.lean:57`) has no `↭`.** A run may stop or end holding a copy of
+  any `imm` cell its frame holds (the world is unchanged, 6.116). Every scheduler's clauses accept
+  such a share (`kapRelC_end`, `hj_joinerEntry`). `joinFd ℓ` fails at every valid frame holding a
+  cell at `ℓ` (`not_joinFd_of_holds`). So an `imm` lend's join cannot be resumed while any
+  continuation that ran during the lend is stored, whether or not the joiner has joined every
+  child it lent to. Per-handle answers return the children's copies but do not remove copies held
+  elsewhere. Two such joiners, each stored beside a copy of the other's lend, can be resumed in
+  neither order (`hj_joinersDeadlock₀`). Core's `rwpG` (`SI/RwpG.lean:49`) asks `ρ ↭ π` at every
+  end, which refuses a copy the run did not start with, so it would rule this out. But `rwpG` also
+  refuses a stop whose payload holds the borrow (`not_crossTaskILend`), so the cross-task case
+  cannot be stated at `erwp` at all.
+- **`contShareC` (`SI/CaptureE.lean:69`) resumes at `F ρf ∧ en.fd v ρf`.** Frame conditions
+  accumulate. A task resumed from `join ℓ` is owed `joinFd ℓ` at every later resume
+  (`fdAnd_joinFd`). The return clause accepts tasks ending with a copy at `ℓ` (`hj_qin_copy`), and
+  a frame holding one falsifies that condition (`hj_joined_blocked`). This is why `HJ`'s joined
+  task runs alone. A resume at `en.fd v ρf` alone would remove it. No proof in `SI/` reads `F`
+  past the segment after a stop (`cerwp_scopeK` reads only `joinFd`), but I have not checked that
+  the change goes through.
+
+### Not derived for the handle design, no obstruction verified
+
+- **Handle to answer.** The scheduler's code must reach a child's answer from the handle value the
+  program passes to `join`. The language has no equality on locations, and a search over stored
+  answers needs a loop in the scheduler's code (none of `count`, `boundedFix`, `iterate` has a
+  `cerwp` rule). The alternative is a handle the scheduler dereferences: a cell it owns. A forged
+  or stale handle would then be loaded without a resource. `join`'s `PA` can ask only for a
+  resource the joiner holds, and `WRes` has no unforgeable token. Missing: a per-handle resource
+  the joiner hands back (ghost state, or a typed handle), or a lookup with a `cerwp` rule.
+- **Cancelled `mut` child.** A cancelled task's leftover is answered at the entry's fixed
+  `fin = PcanC Qc`. `OpEntN.fin` does not read the payload, and the cancel run's value is `()`
+  (`Head.cancel`), so neither ties the leftover's `mut` cell to the lender's location. This
+  affects `crossMutJC` with the borrow in the child's share across a cancellable park. Routes, not
+  built: the borrow handed to the scheduler in the park's payload (payload-dependent `PA`/`PBv`), or
+  a table indexed by the location (as `CrossProgM`, `TCM l`), which needs the cell allocated before
+  the scheduler.
+- **`mut` without these.** A `mut` join has `fd = True` (`joinEntM`) and a `mut` cell cannot be
+  copied, so neither obstruction above applies to `mut`. A `mut` join by handle is blocked only by
+  the handle-to-answer gap.
+
+### Restrictions
+
+`CaptureScope`'s are kept (empty lent-cell payload; must-resume, empty-answer body operations;
+`erwp0`). A handle join inside an `imm` scope's body would have a non-empty answer, which
+`ScopeTabs.inner` refuses.
