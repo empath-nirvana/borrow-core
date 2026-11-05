@@ -56,6 +56,14 @@ def convComp (C : CCTy) : (Σ D : CCTy, Res Δ T (.comp D)) → Except ConvFail 
       else throw .mismatch
     | _, _ => throw .mismatch
 
+/-- A computation at the row `S′`, at the row `S` of its binding (`liftRow`): `[sub]` when `S′ ⊆ S`,
+equal rows included, so every effectful binding's head has the node; else `convComp`'s `[sub]`
+then `[α]`. -/
+def convRow {S' : CRow} {A : CVTy} (S : CRow) (r : Res Δ T (.comp (effOf S' A))) :
+    Except ConvFail (Res Δ T (.comp (effOf S A))) :=
+  if hle : rowLeB S' S = true then pure (rEffSub i hle r)
+  else convComp i (effOf S A) ⟨_, r⟩
+
 end
 
 end Frontend.Check

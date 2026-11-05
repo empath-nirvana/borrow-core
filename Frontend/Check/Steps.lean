@@ -1030,10 +1030,10 @@ def lamIt {A : CVTy} {C : CCTy} (E : Env) (sp : Span) (x : Ident) (rM : Res Δ (
 
 /-! ### Effectful bindings  `[spec §19]` -/
 
-/-- A computation at the row `S′`, at the row `S`: `[sub]` then `[α]` (`convComp`). -/
+/-- A computation at the row `S′`, at the row `S`: `[sub]`, or `[sub]` then `[α]` (`convRow`). -/
 def liftRow (E : Env) (sp : Span) {S' : CRow} {A : CVTy} (S : CRow)
     (r : Res Δ T (.comp (effOf S' A))) : Except Error (Res Δ T (.comp (effOf S A))) :=
-  match convComp (at_ sp) (effOf S A) ⟨_, r⟩ with
+  match convRow (at_ sp) S r with
   | .ok r' => pure r'
   | .error _ => throw ⟨sp, s!"this computation performs the operations `{ppRow E S'}`, which are " ++
     s!"not within the row `{ppRow E S}` here"⟩
