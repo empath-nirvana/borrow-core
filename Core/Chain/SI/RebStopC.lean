@@ -84,7 +84,7 @@ theorem rwpG_rebG {Φ : LocFam} (r : FrameRec) (x : LifeVar) (hx : ¬ VFree x r.
           ∃ ρ'L ρpL, ResU.CompS ρ'L ρpL Y ∧ NoOwn ρpL ∧ Qout k ls'' t ρ'L)
     (hA : ∀ Bχ, ResU.CompS ρb (canon r β) Bχ → rwpG (ℍ := ℍ) Φ Qin n ls e Bχ) :
     rwpG (ℍ := ℍ) Φ Qout n ls e ρ := by
-  intro ρf fρ ps μ hf hcf hT htg hl hfd jr μ' e' hj hrun hfin
+  intro ρf fρ ps μ hf hcf hT htg hl hfd jr μ' e' hj hrun
   set χ : WRes := canon r β with hχdef
   set ρi : WRes := ResU.single r.le (CellU.immOf s r.v r.R hs) with hρidef
   have hreb : ResU.Reb β r.R χ := canon_reb hS hRβ
@@ -139,9 +139,12 @@ theorem rwpG_rebG {Φ : LocFam} (r : FrameRec) (x : LifeVar) (hx : ¬ VFree x r.
   rw [ResU.CompS.functional ht2 hc] at ht2'
   rw [ResU.CompS.functional ht2' hcf] at h58L
   have g5 : ResU.Lower Win μ := (h58L μ).mpr hl
+  have hrr :=
+    hA ρbχ hbχ ρF Win ps μ hFbχ hWin hTin htgin g5 hfd jr μ' e' hj hrun
+  -- the inner frame `ρᵢ ● ρ_f` keeps `ρ_f`
+  refine ⟨hrr.1.of_compS (ResU.CompS.comm hF) (hash_valid hFbχ).1, fun hfin => ?_⟩
   obtain ⟨ρQ, ρp, fρ', fρ'p, π, ps', ls', g1, g2, g3, g6, g7, g9, gA, gB,
-    gT, gtg, gps, gls, gC⟩ :=
-    hA ρbχ hbχ ρF Win ps μ hFbχ hWin hTin htgin g5 hfd jr μ' e' hj hrun hfin
+    gT, gtg, gps, gls, gC⟩ := hrr.2 hfin
   -- the caller's split `ρ′ = ρₒ ● ρₖ`, and `π = ρₒ ● (ρₖ ● ρ⁺)`
   obtain ⟨ρo, ρk, hok, hoβ, hcont⟩ := hpost (n - jr) (by omega) ls' e' ρQ gC gls
   obtain ⟨w, hw, hπ⟩ := compS_reassoc hok g9

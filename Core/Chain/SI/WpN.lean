@@ -92,14 +92,88 @@ def EndOK (Φ : LocFam) (Q : PostN) (k : Nat) (ls : List SRec) (ρ ρf : WRes)
     TWNC fρ'p ps' (rsOf ls') ∧ Tagged fρ'p ps' ls' ∧
     (∀ p, p ∈ ps' ↔ p ∈ ps) ∧ (∀ x, x ∈ ls' ↔ x ∈ ls) ∧ Q k ls' v ρ'
 
-/-- **The step-indexed `wp` at a tagged typed world.** -/
+/-! ### The access guard G
+
+`FrameKept ρ_f μ′`: at every location of the frame's flattening `⦇ρ_f⦈`, the memory `μ′` holds
+the value the flattening holds there. The run clause asks it of every configuration a run
+reaches, the intermediate ones included: that is the access guard G (`scope-threads.md` §2.2),
+the heap shadow of `ewp`'s per-step "every step keeps the frame" (`SI/Ewp.lean`) at a segment's
+frame. It is read at the flattening, so a frame's `imm` copy of a location the run also holds a
+copy of forbids the run's writes there and permits its reads.
+
+At the start it is the frame hypotheses' (`frameKept_of_lower`); at a run's end it is the
+post-configuration's (`EndOK.frameKept`); a frame that composes into a larger one keeps it
+whenever the larger one does (`FrameKept.of_compS`). -/
+
+/-- G's memory condition: `μ′` agrees with the frame's flattening wherever it is defined. -/
+def FrameKept (ρf : WRes) (μ' : Heap) : Prop :=
+  ∀ (l : Loc) (ψ : CellU Loc Val), ρf.FlatAt l ψ → μ' l = some ψ.erase
+
+/-- A `○`-composite holds a cell, of the same erasure, wherever its left part does. -/
+theorem compR_get_erase {σ₁ σ₂ σ : WRes} (h : ResU.CompR σ₁ σ₂ σ) {l : Loc}
+    {ψ : CellU Loc Val} (e : σ₁.get l = some ψ) :
+    ∃ ψ', σ.get l = some ψ' ∧ ψ'.erase = ψ.erase := by
+  rcases ResU.Comp.get h l with ⟨f₁, -, -⟩ | ⟨χ, f₁, -, f⟩ | ⟨χ, f₁, -, -⟩ |
+      ⟨χ₁, χ₂, χ, f₁, -, f, hC⟩
+  · rw [e] at f₁; exact absurd f₁ (by simp)
+  · rw [e] at f₁
+    obtain rfl := Option.some.inj f₁
+    exact ⟨_, f, rfl⟩
+  · rw [e] at f₁; exact absurd f₁ (by simp)
+  · rw [e] at f₁
+    obtain rfl := Option.some.inj f₁
+    exact ⟨χ, f, CellU.CompR.erase_left hC⟩
+
+/-- **A part's flattening is covered by the composite's**, at the same erasure
+(`⦇ρ₁ ● ρ₂⦈ = ⦇ρ₁⦈ ○ ⦇ρ₂⦈`, `flat_compR`). -/
+theorem flatAt_cover {ρ₁ ρ₂ ρ : WRes} (hc : ResU.CompS ρ₁ ρ₂ ρ) (hv : ρ.Valid) {l : Loc}
+    {ψ : CellU Loc Val} (h : ρ₁.FlatAt l ψ) : ∃ ψ', ρ.FlatAt l ψ' ∧ ψ'.erase = ψ.erase := by
+  obtain ⟨σ, hσ⟩ := hv
+  obtain ⟨σ₁, σ₂, h₁, -, hR⟩ := flat_compR hc hσ
+  obtain ⟨σ', hσ', hg⟩ := h
+  obtain rfl := ResU.Flat.functional hσ' h₁
+  obtain ⟨ψ', e', he⟩ := compR_get_erase hR hg
+  exact ⟨ψ', ⟨σ, hσ, e'⟩, he⟩
+
+/-- **G passes to a part.** -/
+theorem FrameKept.of_compS {ρ₁ ρ₂ ρ : WRes} {μ : Heap} (hc : ResU.CompS ρ₁ ρ₂ ρ)
+    (hv : ρ.Valid) (h : FrameKept ρ μ) : FrameKept ρ₁ μ := by
+  intro l ψ hψ
+  obtain ⟨ψ', hψ', he⟩ := flatAt_cover hc hv hψ
+  rw [h l ψ' hψ', he]
+
+/-- A world keeps its own lowering. -/
+theorem frameKept_lower {ρ : WRes} {μ : Heap} (hl : ResU.Lower ρ μ) : FrameKept ρ μ := by
+  intro l ψ hψ
+  obtain ⟨σ, hσ, hμ⟩ := hl
+  obtain ⟨σ', hσ', hg⟩ := hψ
+  obtain rfl := ResU.Flat.functional hσ' hσ
+  rw [hμ l, hg]
+  rfl
+
+/-- **G at the start**: the frame of a world agrees with the memory the world lowers to. -/
+theorem frameKept_of_lower {ρf ρ fρ : WRes} {μ : Heap} (hc : ResU.CompS ρf ρ fρ)
+    (hl : ResU.Lower fρ μ) : FrameKept ρf μ :=
+  (frameKept_lower hl).of_compS hc (by obtain ⟨σ, hσ, -⟩ := hl; exact ⟨σ, hσ⟩)
+
+/-- **The step-indexed `wp` at a tagged typed world.** Every run of `j < n` steps keeps the
+frame (G), and either ends at a value, where the post-configuration exists, or steps again. -/
 def rwp (Φ : LocFam) (Q : PostN) (n : Nat) (ls : List SRec) (e : Expr) : WProp := fun ρ =>
   ∀ (ρf fρ : WRes) (ps : List FrameRec) (μ : Heap),
     ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ → TWNC fρ ps (rsOf ls) → Tagged fρ ps ls →
     ResU.Lower fρ μ → FinDom μ →
     ∀ j μ' e', j < n → StepsN (ℍ := ℍ) j μ e μ' e' →
+      FrameKept ρf μ' ∧
       (∀ v : Val, e' = v.1 → EndOK Φ Q (n - j) ls ρ ρf ps μ' v) ∧
       (¬ IsVal e' → ∃ μ'' e'', Step1 (ℍ := ℍ) μ' e' μ'' e'')
+
+/-- **G at a run's end**: the post-configuration keeps the frame. -/
+theorem EndOK.frameKept {Φ : LocFam} {Q : PostN} {k : Nat} {ls : List SRec} {ρ ρf : WRes}
+    {ps : List FrameRec} {μ' : Heap} {v : Val} (h : EndOK Φ Q k ls ρ ρf ps μ' v) :
+    FrameKept ρf μ' := by
+  obtain ⟨_, _, fρ', fρ'p, _, _, _, _, h₂, h₃, h₄, h₅, _⟩ := h
+  exact ((frameKept_lower h₅).of_compS h₄ (by obtain ⟨σ, hσ, -⟩ := h₅; exact ⟨σ, hσ⟩)).of_compS
+    h₂ (hash_valid h₃).2
 
 /-! ### Downward closure and monotonicity -/
 
@@ -141,16 +215,16 @@ theorem rwp_le {Φ : LocFam} (hΦ : Φ.Down) {Q : PostN} (hQ : Q.Down) {m n : Na
     {ls : List SRec} {e : Expr} {ρ : WRes} (h : rwp (ℍ := ℍ) Φ Q n ls e ρ) :
     rwp (ℍ := ℍ) Φ Q m ls e ρ := by
   intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
-  obtain ⟨hval, hprog⟩ := h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' (by omega) hrun
-  exact ⟨fun v hv => (hval v hv).mono hΦ (by omega) (fun _ _ _ x => hQ.le (by omega) _ _ _ x),
-    hprog⟩
+  obtain ⟨hG, hval, hprog⟩ := h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' (by omega) hrun
+  exact ⟨hG, fun v hv => (hval v hv).mono hΦ (by omega)
+    (fun _ _ _ x => hQ.le (by omega) _ _ _ x), hprog⟩
 
 theorem rwp_mono {Φ : LocFam} {P Q : PostN} (hPQ : ∀ n ls v ρ, P n ls v ρ → Q n ls v ρ)
     {n : Nat} {ls : List SRec} {e : Expr} {ρ : WRes} (h : rwp (ℍ := ℍ) Φ P n ls e ρ) :
     rwp (ℍ := ℍ) Φ Q n ls e ρ := by
   intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
-  obtain ⟨hval, hprog⟩ := h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
-  refine ⟨fun v hv => ?_, hprog⟩
+  obtain ⟨hG, hval, hprog⟩ := h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
+  refine ⟨hG, fun v hv => ?_, hprog⟩
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
     h₁₃⟩ := hval v hv
   exact ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
@@ -163,7 +237,7 @@ theorem rwp_val {Φ : LocFam} {Q : PostN} {n : Nat} {ls : List SRec} {v : Val}
   cases hrun with
   | more hs _ => exact absurd hs BoLo.no_step_val
   | refl =>
-  refine ⟨fun w hw => ?_, fun hnv => absurd v.2 hnv⟩
+  refine ⟨frameKept_of_lower hc hl, fun w hw => ?_, fun hnv => absurd v.2 hnv⟩
   have hw' : w = v := Subtype.ext hw.symm
   subst hw'
   have hvρ : ResU.Valid ρ := (hash_valid hf).2
@@ -183,6 +257,7 @@ theorem rwp_compose {Φ : LocFam} (hΦ : Φ.Down) {Q : PostN} (K : Kont) {k₁ :
     (hend : EndOK Φ (fun k ls' v => rwp (ℍ := ℍ) Φ Q k ls' (K.plug v.1)) k₁ ls ρ ρf ps μ₁ w)
     (hfd₁ : FinDom μ₁) {j₂ : Nat} {μ' : Heap} {E : Expr} (hj : j₂ < k₁)
     (hrun : StepsN (ℍ := ℍ) j₂ μ₁ (K.plug w.1) μ' E) :
+    FrameKept ρf μ' ∧
     (∀ v : Val, E = v.1 → EndOK Φ Q (k₁ - j₂) ls ρ ρf ps μ' v) ∧
       (¬ IsVal E → ∃ μ'' e'', Step1 (ℍ := ℍ) μ' E μ'' e'') := by
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₆, h₇, h₉, hA, hB, hT', htg', hps',
@@ -191,8 +266,8 @@ theorem rwp_compose {Φ : LocFam} (hΦ : Φ.Down) {Q : PostN} (K : Kont) {k₁ :
   have hfz : ResU.CompS ρf ρp z := ResU.CompS.comm hzp
   obtain ⟨z₀, hz₀, hY⟩ := compS_exch h₂ h₆
   have hzY : ResU.CompS z ρ' fρ'p := by rwa [ResU.CompS.functional hz₀ hfz] at hY
-  obtain ⟨hval, hprog⟩ := hC z fρ'p ps' μ₁ hz hzY hT' htg' h₇ hfd₁ j₂ μ' E hj hrun
-  refine ⟨fun v hv => ?_, hprog⟩
+  obtain ⟨hG, hval, hprog⟩ := hC z fρ'p ps' μ₁ hz hzY hT' htg' h₇ hfd₁ j₂ μ' E hj hrun
+  refine ⟨hG.of_compS hfz (hash_valid hz).1, fun v hv => ?_, hprog⟩
   obtain ⟨ρ'', ρpp, Y'', Y''p, π'', ps'', ls'', k₁', k₂, k₃, k₆, k₇, k₉, kA, kB, kT, ktg, kps,
     kls, kC⟩ := hval v hv
   obtain ⟨hfρ'', -⟩ := ResU.Hash.split hfz (ResU.hash_symm k₁')
@@ -225,15 +300,15 @@ theorem rwp_bind {Φ : LocFam} (hΦ : Φ.Down) {Q : PostN} (K : Kont) {n : Nat}
   intro ρf fρ ps μ hf hc hT htg hl hfd j μ' E hj hrun
   rcases stepsN_plug_split K hrun with ⟨e', rfl, hrun'⟩ |
     ⟨j₁, j₂, μ₁, t, hjj, hrun₁, hirr, hrun₂⟩
-  · obtain ⟨hval, hprog⟩ := hw ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun'
+  · obtain ⟨hG, hval, hprog⟩ := hw ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun'
     by_cases he' : IsVal e'
     · have h := rwp_compose hΦ K (w := ⟨e', he'⟩) (hval ⟨e', he'⟩ rfl) (fd_stepsN hrun' hfd)
         (j₂ := 0) (by omega) (.refl _ _)
-      exact ⟨fun v hv => by simpa using h.1 v hv, h.2⟩
-    · refine ⟨fun v hv => absurd (K.isVal_of_plug (hv ▸ v.2)) he', fun _ => ?_⟩
+      exact ⟨hG, fun v hv => by simpa using h.2.1 v hv, h.2.2⟩
+    · refine ⟨hG, fun v hv => absurd (K.isVal_of_plug (hv ▸ v.2)) he', fun _ => ?_⟩
       obtain ⟨μ'', e'', hs⟩ := hprog he'
       exact ⟨μ'', K.plug e'', hs.plug K⟩
-  · obtain ⟨hval, hprog⟩ := hw ρf fρ ps μ hf hc hT htg hl hfd j₁ μ₁ t (by omega) hrun₁
+  · obtain ⟨-, hval, hprog⟩ := hw ρf fρ ps μ hf hc hT htg hl hfd j₁ μ₁ t (by omega) hrun₁
     have ht : IsVal t := by
       by_contra hn
       obtain ⟨μ₂, t₂, hs⟩ := hprog hn
@@ -258,8 +333,8 @@ theorem rwp_frame {Φ : LocFam} {P : PostN} (R : List SRec → WProp)
   obtain ⟨y, hy, hy₁⟩ := (hash_shift ρf ρ₂ ρ₁).mp ⟨ρ, ResU.CompS.comm hcρ, hf⟩
   obtain ⟨y', hy', hyfρ⟩ := compS_reassoc' (ResU.CompS.comm hcρ) hc
   cases ResU.CompS.functional hy' hy
-  obtain ⟨hval, hprog⟩ := hwp y fρ ps μ hy₁ hyfρ hT htg hl hfd j μ' e' hj hrun
-  refine ⟨fun v hv => ?_, hprog⟩
+  obtain ⟨hG, hval, hprog⟩ := hwp y fρ ps μ hy₁ hyfρ hT htg hl hfd j μ' e' hj hrun
+  refine ⟨hG.of_compS hy (hash_valid hy₁).1, fun v hv => ?_, hprog⟩
   obtain ⟨ρ', ρp, Y', Y'p, π', ps', ls', g₁, g₂, g₃, g₆, g₇, g₉, gA, gB, gT, gtg, gps,
     gls, gC⟩ := hval v hv
   obtain ⟨W, hW, hfW⟩ := compS_reassoc hy g₂
@@ -287,7 +362,7 @@ theorem rwp_safe {Φ : LocFam} {Q : PostN} {e : Expr}
     (hrun : StepsN (ℍ := ℍ) j (fun _ => none) e μ' e') :
     IsVal e' ∨ ∃ μ'' e'', Step1 (ℍ := ℍ) μ' e' μ'' e'' := by
   have htg : Tagged (PMap.empty : WRes) [] [] := fun x hx => absurd hx (by simp)
-  obtain ⟨-, hprog⟩ := hall (j + 1) PMap.empty PMap.empty [] (fun _ => none)
+  obtain ⟨-, -, hprog⟩ := hall (j + 1) PMap.empty PMap.empty [] (fun _ => none)
     Fig16.LogRel.hash_empty (ResU.comp_empty_right _) TWNC.empty htg Fig16.BoLo.lower_empty
     fd_empty j μ' e' (by omega) hrun
   by_cases hv : IsVal e'
@@ -357,8 +432,8 @@ theorem rwp_M_antiFrame {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {β : Life}
       ha) htg
   have hlowin : ResU.Lower fρ μ :=
     (ResU.lower_swap_mut_own hW hvm hvW hFAmc hFAm hFAWc hFAW).mp hlow
-  obtain ⟨hval, hprog⟩ := hwpX ρf fρ ps μ hfX h4 hTin htgin hlowin hfd jr μ' e' hj hrun
-  refine ⟨fun v' hv' => ?_, hprog⟩
+  obtain ⟨hG, hval, hprog⟩ := hwpX ρf fρ ps μ hfX h4 hTin htgin hlowin hfd jr μ' e' hj hrun
+  refine ⟨hG, fun v' hv' => ?_, hprog⟩
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps'', ls'', h1, h2, h3, h6, h7, h9, h10, h11, hT'', htg'',
     hps'', hls'', h12⟩ := hval v' hv'
   obtain ⟨w, σ', h', hw', ρb, rest, hcr, hcr2, hb⟩ := h12
@@ -659,9 +734,9 @@ theorem rwp_M_frame {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {A : Life}
   have hlowin : ResU.Lower fρ μ :=
     (ResU.lower_swap_mut_own hlPcell hvmm hvlP hFBm hFBmH hFBl hFBlH).mpr hlow
   -- H18: the borrowed run, at `Φ[ℓ ↦ (A, F)]`
-  obtain ⟨hval, hprog⟩ :=
+  obtain ⟨hG, hval, hprog⟩ :=
     hA BM hBM ρf fρ ps μ hH17 h4 hTin htgin hlowin hfd jr μ' e' hj hrun
-  refine ⟨fun v' hv' => ?_, hprog⟩
+  refine ⟨hG, fun v' hv' => ?_, hprog⟩
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps'', ls'', h1, h2, h3, h6, h7, h9, h10, h11, hT'', htg'',
     hps'', hls'', h12⟩ := hval v' hv'
   -- H24 and H25: unfolding `[α]`

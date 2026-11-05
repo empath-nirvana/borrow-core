@@ -97,7 +97,7 @@ theorem erwp_refuses_borrowOut {Φ : LocFam} {T : OpTabN} {m i : UInt32} {en : O
   intro h
   rw [erwp_eq] at h
   obtain ⟨ρ', ρp, -, -, π, -, ls', -, -, -, -, -, h9, hUpd, -, -, -, -, -, hq⟩ :=
-    h ρf fρ ps μ hf hc hTW htg hl hfd 0 μ _ hn (StepsN.refl _ _)
+    (h ρf fρ ps μ hf hc hTW htg hl hfd 0 μ _ hn (StepsN.refl _ _)).2
       (final_opPlug (r := false) (payloadName_opPayload m i v) hK μ)
   rcases hq with ⟨w, hw, -⟩ | ⟨K', m', i', v', en', hp⟩ | ⟨K', m', i', v', en', hp⟩
   · exact plug_perform_ne_val K _ w hw

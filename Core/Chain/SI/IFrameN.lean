@@ -141,9 +141,9 @@ theorem rwp_I_frame {Φ : LocFam} (l : BoCa.Loc) (T : VTy) (δ : LSub)
       (ResU.hash_of_pairwise hlPf (ResU.hash_symm hbf) (ResU.hash_symm hH12) hFB)
   have hlowin : ResU.Lower fρ μ :=
     (ResU.lower_swap_imm_own hlPcell hvi hvlP hFBi hFBiH hFBl hFBlH).mpr hlow
-  obtain ⟨hval, hprog⟩ :=
+  obtain ⟨hkept, hval, hprog⟩ :=
     hwpBI ρf fρ (p :: ps) μ hH17 h4 hTin htgin hlowin hfd jr μ' e' hj hrun
-  refine ⟨fun v' hv' => ?_, hprog⟩
+  refine ⟨hkept, fun v' hv' => ?_, hprog⟩
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps'', ls'',
     h1, h2, h3, h6, h7, h9, h10, h11, hT'', htg'', hps'', hls'', h12⟩ := hval v' hv'
   -- H24 and H25

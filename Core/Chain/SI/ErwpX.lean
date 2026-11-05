@@ -20,6 +20,9 @@ not at `C` (`NewNotCarried`), which with the frame's `WF_C` at the start is its 
 the end with its garbage are `MaskShallow` at `M`, and the end holds `M`'s authorities. The records
 and the list are as at the start. `C′` is passed to the post.
 
+**The guard.** Every run keeps the frame's world (`FrameKept xf.1`, the access guard G of
+`rwpG`): the ghost part has no memory.
+
 **The mask is fixed for the run**: bind composes at `M` (`UpdVNm.trans` at `M ∪ M = M`). The mask
 grows and shrinks only at a lend's open and end (`SI/LendX.lean`).
 -/
@@ -70,8 +73,8 @@ def rwpGX (Φ : LocFam) (M : Mask) (Q : PostGX) (n : Nat) (ls : List SRec) (e : 
       WFC (xf.2 + x.2).counted xf → WFC (xf.2 + x.2).counted x →
       MaskShallow M.locs x.1 → MaskAuth M x.2 →
       TWNC fρ ps (rsOf ls) → Tagged fρ ps ls → ResU.Lower fρ μ → FinDom μ →
-      ∀ j μ' e', j < n → StepsN (ℍ := ℍ) j μ e μ' e' → Final (ℍ := ℍ) μ' e' →
-        EndOKX Φ M Q (n - j) ls x xf ps μ' e'
+      ∀ j μ' e', j < n → StepsN (ℍ := ℍ) j μ e μ' e' →
+        FrameKept xf.1 μ' ∧ (Final (ℍ := ℍ) μ' e' → EndOKX Φ M Q (n - j) ls x xf ps μ' e')
 
 /-- `rwpGX` at the frames whose world counts exactly `C`: what a continuation entered at a
 world of counted set `C` owes. -/
@@ -83,8 +86,16 @@ def rwpGXat (Φ : LocFam) (M : Mask) (Q : PostGX) (n : Nat) (ls : List SRec) (e 
       WFC (xf.2 + x.2).counted xf → WFC (xf.2 + x.2).counted x →
       MaskShallow M.locs x.1 → MaskAuth M x.2 →
       TWNC fρ ps (rsOf ls) → Tagged fρ ps ls → ResU.Lower fρ μ → FinDom μ →
-      ∀ j μ' e', j < n → StepsN (ℍ := ℍ) j μ e μ' e' → Final (ℍ := ℍ) μ' e' →
-        EndOKX Φ M Q (n - j) ls x xf ps μ' e'
+      ∀ j μ' e', j < n → StepsN (ℍ := ℍ) j μ e μ' e' →
+        FrameKept xf.1 μ' ∧ (Final (ℍ := ℍ) μ' e' → EndOKX Φ M Q (n - j) ls x xf ps μ' e')
+
+/-- G at a run's end: the post-configuration keeps the frame's world. -/
+theorem EndOKX.frameKept {Φ : LocFam} {M : Mask} {Q : PostGX} {k : Nat} {ls : List SRec}
+    {x xf : XRes} {ps : List FrameRec} {μ' : Heap} {t : Expr}
+    (h : EndOKX Φ M Q k ls x xf ps μ' t) : FrameKept xf.1 μ' := by
+  obtain ⟨_, _, fρ', fρ'p, _, _, _, _, _, _, h₂, h₃, h₄, h₅, _⟩ := h
+  exact ((frameKept_lower h₅).of_compS h₄ (by obtain ⟨σ, hσ, -⟩ := h₅; exact ⟨σ, hσ⟩)).of_compS
+    h₂ (hash_valid h₃).2
 
 theorem rwpGX.at {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {ls : List SRec} {e : Expr}
     {x : XRes} (h : rwpGX (ℍ := ℍ) Φ M Q n ls e x) (C : Set Life) :
@@ -113,19 +124,21 @@ theorem EndOKX.mono {Φ : LocFam} {M : Mask} {P Q : PostGX} {k k' : Nat} (hΦ : 
 theorem rwpGX_le {Φ : LocFam} (hΦ : Φ.Down) {M : Mask} {Q : PostGX} (hQ : Q.Down) {m n : Nat}
     (hmn : m ≤ n) {ls : List SRec} {e : Expr} {x : XRes} (h : rwpGX (ℍ := ℍ) Φ M Q n ls e x) :
     rwpGX (ℍ := ℍ) Φ M Q m ls e x := by
-  intro xf fρ ps μ a₁ a₂ a₃ a₄ a₅ a₆ a₇ a₈ a₉ a₁₀ a₁₁ j μ' e' hj hrun hfin
-  exact (h xf fρ ps μ a₁ a₂ a₃ a₄ a₅ a₆ a₇ a₈ a₉ a₁₀ a₁₁ j μ' e' (by omega) hrun hfin).mono hΦ
-    (by omega) (fun C _ y hy => hQ.le (by omega) C _ _ y hy)
+  intro xf fρ ps μ a₁ a₂ a₃ a₄ a₅ a₆ a₇ a₈ a₉ a₁₀ a₁₁ j μ' e' hj hrun
+  have hr := h xf fρ ps μ a₁ a₂ a₃ a₄ a₅ a₆ a₇ a₈ a₉ a₁₀ a₁₁ j μ' e' (by omega) hrun
+  exact ⟨hr.1, fun hfin => (hr.2 hfin).mono hΦ
+    (by omega) (fun C _ y hy => hQ.le (by omega) C _ _ y hy)⟩
 
 /-- `rwpGX_mono` reading the postcondition at the indices the runs leave, `≤ n`. -/
 theorem rwpGX_mono_le {Φ : LocFam} {M : Mask} {P Q : PostGX} {n : Nat}
     (hPQ : ∀ C k, k ≤ n → ∀ ls t x, P C k ls t x → Q C k ls t x)
     {ls : List SRec} {e : Expr} {x : XRes} (h : rwpGX (ℍ := ℍ) Φ M P n ls e x) :
     rwpGX (ℍ := ℍ) Φ M Q n ls e x := by
-  intro xf fρ ps μ a₁ a₂ a₃ a₄ a₅ a₆ a₇ a₈ a₉ a₁₀ a₁₁ j μ' e' hj hrun hfin
+  intro xf fρ ps μ a₁ a₂ a₃ a₄ a₅ a₆ a₇ a₈ a₉ a₁₀ a₁₁ j μ' e' hj hrun
+  have hr := h xf fρ ps μ a₁ a₂ a₃ a₄ a₅ a₆ a₇ a₈ a₉ a₁₀ a₁₁ j μ' e' hj hrun
+  refine ⟨hr.1, fun hfin => ?_⟩
   obtain ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀,
-    h₁₁, h₁₂, h₁₃, h₁₄, h₁₅, h₁₆, h₁₇, h₁₈, h₁₉, h₂₀⟩ :=
-    h xf fρ ps μ a₁ a₂ a₃ a₄ a₅ a₆ a₇ a₈ a₉ a₁₀ a₁₁ j μ' e' hj hrun hfin
+    h₁₁, h₁₂, h₁₃, h₁₄, h₁₅, h₁₆, h₁₇, h₁₈, h₁₉, h₂₀⟩ := hr.2 hfin
   exact ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉,
     h₁₀, h₁₁, h₁₂, h₁₃, h₁₄, h₁₅, h₁₆, h₁₇, h₁₈, h₁₉, hPQ _ _ (by omega) _ _ _ h₂₀⟩
 
@@ -146,10 +159,11 @@ theorem rwpGX_zero {Φ : LocFam} {M : Mask} {Q : PostGX} {ls : List SRec} {e : E
 theorem rwpGX_here {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {ls : List SRec} {e : Expr}
     {x : XRes} (hfin : ∀ μ, Final (ℍ := ℍ) μ e)
     (h : ∀ C, Q C n ls e x) : rwpGX (ℍ := ℍ) Φ M Q n ls e x := by
-  intro xf fρ ps μ hf hc hv hwf hwx hsh hau hT htg hl hfd j μ' e' hj hrun _
+  intro xf fρ ps μ hf hc hv hwf hwx hsh hau hT htg hl hfd j μ' e' hj hrun
   cases hrun with
   | more hs _ => exact absurd hs (hfin _ _ _)
   | refl =>
+  refine ⟨frameKept_of_lower hc hl, fun _ => ?_⟩
   have hvρ : ResU.Valid x.1 := (hash_valid hf).2
   refine ⟨x.1, PMap.empty, fρ, fρ, x.1, x.2, 0, ps, ls, ResU.hash_symm hf, hc,
     ResU.hash_symm (ResU.hash_empty_right (hash_valid_comp hf hc)), ResU.comp_empty_right _, hl,
@@ -166,10 +180,11 @@ theorem rwpGX_here {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {ls : List SR
 theorem rwpGXat_here {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {ls : List SRec}
     {e : Expr} {C : Set Life} {x : XRes} (hfin : ∀ μ, Final (ℍ := ℍ) μ e)
     (h : Q C n ls e x) : rwpGXat (ℍ := ℍ) Φ M Q n ls e C x := by
-  intro xf fρ ps μ hC hf hc hv hwf hwx hsh hau hT htg hl hfd j μ' e' hj hrun _
+  intro xf fρ ps μ hC hf hc hv hwf hwx hsh hau hT htg hl hfd j μ' e' hj hrun
   cases hrun with
   | more hs _ => exact absurd hs (hfin _ _ _)
   | refl =>
+  refine ⟨frameKept_of_lower hc hl, fun _ => ?_⟩
   have hvρ : ResU.Valid x.1 := (hash_valid hf).2
   refine ⟨x.1, PMap.empty, fρ, fρ, x.1, x.2, 0, ps, ls, ResU.hash_symm hf, hc,
     ResU.hash_symm (ResU.hash_empty_right (hash_valid_comp hf hc)), ResU.comp_empty_right _, hl,
@@ -186,13 +201,14 @@ theorem rwpGXat_here {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {ls : List 
 theorem rwpGX_det {Φ : LocFam} (hΦ : Φ.Down) {M : Mask} {Q : PostGX} (hQ : Q.Down) {n : Nat}
     {ls : List SRec} {e e' : Expr} {x : XRes} (hdet : ∀ μ, Step1Only (ℍ := ℍ) μ e μ e')
     (h : rwpGX (ℍ := ℍ) Φ M Q n ls e' x) : rwpGX (ℍ := ℍ) Φ M Q n ls e x := by
-  intro xf fρ ps μ a₁ a₂ a₃ a₄ a₅ a₆ a₇ a₈ a₉ a₁₀ a₁₁ j μ' E hj hrun hfin
+  intro xf fρ ps μ a₁ a₂ a₃ a₄ a₅ a₆ a₇ a₈ a₉ a₁₀ a₁₁ j μ' E hj hrun
   cases hrun with
-  | refl => exact absurd (hdet _).1 (hfin _ e')
+  | refl => exact ⟨frameKept_of_lower a₂ a₁₀, fun hfin => absurd (hdet _).1 (hfin _ e')⟩
   | @more j' _ _ _ _ _ _ hs t =>
       obtain ⟨rfl, rfl⟩ := (hdet _).2 _ _ hs
-      exact (h xf fρ ps _ a₁ a₂ a₃ a₄ a₅ a₆ a₇ a₈ a₉ a₁₀ a₁₁ j' μ' E (by omega) t hfin).mono hΦ
-        (by omega) (fun C _ y hy => hQ.le (by omega) C _ _ y hy)
+      have hr := h xf fρ ps _ a₁ a₂ a₃ a₄ a₅ a₆ a₇ a₈ a₉ a₁₀ a₁₁ j' μ' E (by omega) t
+      exact ⟨hr.1, fun hfin => (hr.2 hfin).mono hΦ
+        (by omega) (fun C _ y hy => hQ.le (by omega) C _ _ y hy)⟩
 
 /-! ### Bind at a fixed mask -/
 
@@ -204,8 +220,8 @@ theorem rwpGX_compose {Φ : LocFam} (hΦ : Φ.Down) {M : Mask} {Q : PostGX} (K :
     (hend : EndOKX Φ M (fun C k ls' t => rwpGXat (ℍ := ℍ) Φ M Q k ls' (K.plug t) C) k₁ ls x xf
       ps μ₁ t)
     (hfd₁ : FinDom μ₁) {j₂ : Nat} {μ' : Heap} {E : Expr} (hj : j₂ < k₁)
-    (hrun : StepsN (ℍ := ℍ) j₂ μ₁ (K.plug t) μ' E) (hfin : Final (ℍ := ℍ) μ' E) :
-    EndOKX Φ M Q (k₁ - j₂) ls x xf ps μ' E := by
+    (hrun : StepsN (ℍ := ℍ) j₂ μ₁ (K.plug t) μ' E) :
+    FrameKept xf.1 μ' ∧ (Final (ℍ := ℍ) μ' E → EndOKX Φ M Q (k₁ - j₂) ls x xf ps μ' E) := by
   obtain ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₆, h₇, h₉, hA, hB, hT', htg',
     hps', hls', hV, hN, hW', hWp, hS', hSπ, hAu, hC⟩ := hend
   obtain ⟨z, hzp, hz⟩ := (hash_shift ρp xf.1 ρ').mp ⟨fρ', h₂, h₃⟩
@@ -219,10 +235,12 @@ theorem rwpGX_compose {Φ : LocFam} (hΦ : Φ.Down) {M : Mask} {Q : PostGX} (K :
   have hWf₂ : WFC (xf.2 + gp + g').counted (z, xf.2 + gp) := by
     rw [hG₁]; exact wfc_comp hfz (wfc_grow hwf₀ hN) hWp
   have hW₂ : WFC (xf.2 + gp + g').counted (ρ', g') := by rw [hG₁]; exact hW'
+  have hr := hC (z, xf.2 + gp) fρ'p ps' μ₁ (by show (xf.2 + gp + g').counted = _; rw [hG₁]) hz
+    hzY hV₂ hWf₂ hW₂ hS' hAu hT' htg' h₇ hfd₁ j₂ μ' E hj hrun
+  -- the continuation's frame `ρ_f ● ρp` keeps `ρ_f`
+  refine ⟨hr.1.of_compS hfz hvz, fun hfin => ?_⟩
   obtain ⟨ρ'', ρpp, Y'', Y''p, π'', g'', gpp, ps'', ls'', k₁', k₂, k₃, k₆, k₇, k₉, kA, kB, kT,
-    ktg, kps, kls, kV, kN, kW, kWp, kS', kSπ, kAu, kC⟩ :=
-    hC (z, xf.2 + gp) fρ'p ps' μ₁ (by show (xf.2 + gp + g').counted = _; rw [hG₁]) hz hzY hV₂
-      hWf₂ hW₂ hS' hAu hT' htg' h₇ hfd₁ j₂ μ' E hj hrun hfin
+    ktg, kps, kls, kV, kN, kW, kWp, kS', kSπ, kAu, kC⟩ := hr.2 hfin
   -- the W part, as `rwpG_compose`
   obtain ⟨hfρ'', -⟩ := ResU.Hash.split hfz (ResU.hash_symm k₁')
   obtain ⟨F, hF, hFp⟩ := compS_exch hfz k₂
@@ -271,17 +289,18 @@ theorem rwpGX_bind {Φ : LocFam} (hΦ : Φ.Down) {M : Mask} {Q : PostGX} (K : Ko
       x) :
     rwpGX (ℍ := ℍ) Φ M Q n ls (K.plug e) x := by
   classical
-  intro xf fρ ps μ a₁ a₂ a₃ a₄ a₅ a₆ a₇ a₈ a₉ a₁₀ a₁₁ j μ' E hj hrun hfin
+  intro xf fρ ps μ a₁ a₂ a₃ a₄ a₅ a₆ a₇ a₈ a₉ a₁₀ a₁₁ j μ' E hj hrun
   rcases stepsN_plug_split K hrun with ⟨e', rfl, hrun'⟩ |
     ⟨j₁, j₂, μ₁, t, hjj, hrun₁, hirr, hrun₂⟩
-  · have hfin' : Final (ℍ := ℍ) μ' e' := fun μ'' e'' hs => hfin _ _ (hs.plug K)
-    have h := rwpGX_compose hΦ K a₄
-      (hw xf fρ ps μ a₁ a₂ a₃ a₄ a₅ a₆ a₇ a₈ a₉ a₁₀ a₁₁ j μ' e' hj hrun' hfin')
-      (fd_stepsN hrun' a₁₁) (j₂ := 0) (by omega) (.refl _ _) hfin
+  · have hr := hw xf fρ ps μ a₁ a₂ a₃ a₄ a₅ a₆ a₇ a₈ a₉ a₁₀ a₁₁ j μ' e' hj hrun'
+    refine ⟨hr.1, fun hfin => ?_⟩
+    have hfin' : Final (ℍ := ℍ) μ' e' := fun μ'' e'' hs => hfin _ _ (hs.plug K)
+    have h := (rwpGX_compose hΦ K a₄ (hr.2 hfin')
+      (fd_stepsN hrun' a₁₁) (j₂ := 0) (by omega) (.refl _ _)).2 hfin
     simpa using h
   · have h := rwpGX_compose hΦ K a₄
-      (hw xf fρ ps μ a₁ a₂ a₃ a₄ a₅ a₆ a₇ a₈ a₉ a₁₀ a₁₁ j₁ μ₁ t (by omega) hrun₁ hirr)
-      (fd_stepsN hrun₁ a₁₁) (j₂ := j₂) (by omega) hrun₂ hfin
+      ((hw xf fρ ps μ a₁ a₂ a₃ a₄ a₅ a₆ a₇ a₈ a₉ a₁₀ a₁₁ j₁ μ₁ t (by omega) hrun₁).2 hirr)
+      (fd_stepsN hrun₁ a₁₁) (j₂ := j₂) (by omega) hrun₂
     rwa [show n - j₁ - j₂ = n - j by omega] at h
 
 /-! ### The frame -/
@@ -305,7 +324,7 @@ theorem rwpGX_frame {Φ : LocFam} {M : Mask} {P : PostGX} (R : List SRec → XPr
     (hsplit : WFSplit (ρ₁, g₁) (ρ₂, g₂)) (hau₁ : MaskAuth M g₁)
     (hwp : rwpGX (ℍ := ℍ) Φ M P n ls e (ρ₁, g₁)) (hR₂ : R ls (ρ₂, g₂)) :
     rwpGX (ℍ := ℍ) Φ M (fun C k ls' t => sepX (P C k ls' t) (R ls')) n ls e (ρ, g₁ + g₂) := by
-  intro xf fρ ps μ hf hc hv hwf hwx hsh _ hT htg hl hfd j μ' e' hj hrun hfin
+  intro xf fρ ps μ hf hc hv hwf hwx hsh _ hT htg hl hfd j μ' e' hj hrun
   obtain ⟨y, hy, hy₁⟩ := (hash_shift xf.1 ρ₂ ρ₁).mp ⟨ρ, ResU.CompS.comm hcρ, hf⟩
   obtain ⟨y', hy', hyfρ⟩ := compS_reassoc' (ResU.CompS.comm hcρ) hc
   cases ResU.CompS.functional hy' hy
@@ -322,9 +341,11 @@ theorem rwpGX_frame {Φ : LocFam} {M : Mask} {P : PostGX} (R : List SRec → XPr
   have a₅ : WFC (xf.2 + g₂ + g₁).counted (ρ₁, g₁) := by rw [hG]; exact hwx₁
   have hsh₁ : MaskShallow M.locs ρ₁ := maskShallow_left hcρ hvρ hsh
   have hsh₂ : MaskShallow M.locs ρ₂ := maskShallow_right hcρ hvρ hsh
+  have hr := hwp (y, xf.2 + g₂) fρ ps μ hy₁ hyfρ a₃ a₄ a₅ hsh₁ hau₁ hT htg hl hfd j μ' e' hj hrun
+  -- the inner frame `ρ_f ● ρ₂` keeps `ρ_f`
+  refine ⟨hr.1.of_compS hy hvy, fun hfin => ?_⟩
   obtain ⟨ρ', ρp, Y', Y'p, π', g', gp, ps', ls', g₁', g₂', g₃, g₆, g₇, g₉, gA, gB, gT, gtg, gps,
-    gls, gV, gN, gW, gWp, gS', gSπ, gAu, gC⟩ :=
-    hwp (y, xf.2 + g₂) fρ ps μ hy₁ hyfρ a₃ a₄ a₅ hsh₁ hau₁ hT htg hl hfd j μ' e' hj hrun hfin
+    gls, gV, gN, gW, gWp, gS', gSπ, gAu, gC⟩ := hr.2 hfin
   obtain ⟨W, hW, hfW⟩ := compS_reassoc hy g₂'
   obtain ⟨W₀, hW₀, hWf₀⟩ := (hash_shift ρ' ρ₂ xf.1).mp ⟨y, ResU.CompS.comm hy, g₁'⟩
   have hWf : ResU.Hash W xf.1 := by

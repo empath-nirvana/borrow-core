@@ -31,11 +31,11 @@ private theorem erwpX_end_empty {Φ : LocFam} {Q : PostX} {P₀ : Expr} {n : Nat
       ((PMap.empty : WRes), 0) ((PMap.empty : WRes), 0) [] μ e := by
   have htg : Tagged (PMap.empty : WRes) [] [] := fun x hx => absurd hx (by simp)
   rw [erwpX_eq] at h
-  exact h ((PMap.empty : WRes), 0) PMap.empty [] (fun _ => none) Fig16.LogRel.hash_empty
+  exact (h ((PMap.empty : WRes), 0) PMap.empty [] (fun _ => none) Fig16.LogRel.hash_empty
     (ResU.comp_empty_right _) (by simpa using GRes.valid_zero)
     (fun α hα _ => by simp [GRes.counted] at hα) (fun α hα _ => by simp [GRes.counted] at hα)
     (maskShallow_locs_empty _) (maskAuth_empty _) TWNC.empty htg Fig16.BoLo.lower_empty fd_empty
-    j μ e hj hrun hfin
+    j μ e hj hrun).2 hfin
 
 /-- **Safety at the one relation.** -/
 theorem erwpX_safe {Φ : LocFam} {Q : PostX} {P₀ : Expr}

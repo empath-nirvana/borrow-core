@@ -7,7 +7,11 @@ import Core.EffMachine
 Each heap operation is one head step to a value. `rwp_head1` reads such a term at `rwp`: the run
 of no step must be able to step, and the run of one step ends at a value, where the
 post-configuration is asked at `n − 1`. The runs of more steps do not exist, since a value does
-not step.
+not step. The access guard G holds at both configurations: at the start by the frame hypotheses,
+and after the step by the post-configuration (`EndOK.frameKept`), which composes the frame into
+the world the new memory lowers to. So a primitive meets G exactly when its post-configuration
+exists: a store or a free needs `ℓ ↦ own(v)`, which the frame's flattening cannot hold, and an
+allocation's location is one the memory, so the flattening, does not hold.
 
 The rules are `wpTS_alloc`, `wpTS_free`, `wpTS_load`, `wpTS_load_I` and `wpTS_store`, with the
 post-configuration as printed. Two things differ from `wpTS`: an allocation's run is any step,
@@ -78,13 +82,13 @@ theorem rwp_head1 {Φ : LocFam} {Q : PostN} {n : Nat} {ls : List SRec} {e : Expr
   have hnv : ¬ IsVal e := hred.not_isVal
   cases hrun with
   | refl =>
-      exact ⟨fun v hv => absurd (hv ▸ v.2) hnv,
+      exact ⟨frameKept_of_lower hc hl, fun v hv => absurd (hv ▸ v.2) hnv,
         fun _ => ⟨μ₁, e₁, ⟨Kont.hole, e, e₁, by simp [Kont.plug], by simp [Kont.plug], hh⟩⟩⟩
   | @more j' _ μ₂ _ _ e₂ _ h t =>
       obtain ⟨w, rfl, hEnd⟩ := hend μ₂ e₂ (step1_head hred h)
       cases t with
       | refl =>
-          refine ⟨fun v hv => ?_, fun hn => absurd w.2 hn⟩
+          refine ⟨hEnd.frameKept, fun v hv => ?_, fun hn => absurd w.2 hn⟩
           have : v = w := Subtype.ext hv.symm
           subst this
           simpa using hEnd

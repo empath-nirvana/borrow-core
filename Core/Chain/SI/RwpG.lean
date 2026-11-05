@@ -45,13 +45,40 @@ def EndOKG (Φ : LocFam) (Q : PostG) (k : Nat) (ls : List SRec) (ρ ρf : WRes)
     TWNC fρ'p ps' (rsOf ls') ∧ Tagged fρ'p ps' ls' ∧
     (∀ p, p ∈ ps' ↔ p ∈ ps) ∧ (∀ x, x ∈ ls' ↔ x ∈ ls) ∧ Q k ls' t ρ'
 
-/-- **`wpG` at the step index.** -/
+/-- **`wpG` at the step index.** Every run of `j < n` steps keeps the frame (the access guard
+G, `FrameKept`), and one that reaches a configuration with no step meets the post-configuration
+there. -/
 def rwpG (Φ : LocFam) (Q : PostG) (n : Nat) (ls : List SRec) (e : Expr) : WProp := fun ρ =>
   ∀ (ρf fρ : WRes) (ps : List FrameRec) (μ : Heap),
     ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ → TWNC fρ ps (rsOf ls) → Tagged fρ ps ls →
     ResU.Lower fρ μ → FinDom μ →
-    ∀ j μ' e', j < n → StepsN (ℍ := ℍ) j μ e μ' e' → Final (ℍ := ℍ) μ' e' →
-      EndOKG Φ Q (n - j) ls ρ ρf ps μ' e'
+    ∀ j μ' e', j < n → StepsN (ℍ := ℍ) j μ e μ' e' →
+      FrameKept ρf μ' ∧ (Final (ℍ := ℍ) μ' e' → EndOKG Φ Q (n - j) ls ρ ρf ps μ' e')
+
+/-- G at a run's end: the post-configuration keeps the frame. -/
+theorem EndOKG.frameKept {Φ : LocFam} {Q : PostG} {k : Nat} {ls : List SRec} {ρ ρf : WRes}
+    {ps : List FrameRec} {μ' : Heap} {t : Expr} (h : EndOKG Φ Q k ls ρ ρf ps μ' t) :
+    FrameKept ρf μ' := by
+  obtain ⟨_, _, fρ', fρ'p, _, _, _, _, h₂, h₃, h₄, h₅, _⟩ := h
+  exact ((frameKept_lower h₅).of_compS h₄ (by obtain ⟨σ, hσ, -⟩ := h₅; exact ⟨σ, hσ⟩)).of_compS
+    h₂ (hash_valid h₃).2
+
+/-- `rwpG`'s run clause at a run that reached a final configuration. -/
+theorem rwpG.run {Φ : LocFam} {Q : PostG} {n : Nat} {ls : List SRec} {e : Expr} {ρ : WRes}
+    (h : rwpG (ℍ := ℍ) Φ Q n ls e ρ) {ρf fρ : WRes} {ps : List FrameRec} {μ : Heap}
+    (hf : ResU.Hash ρf ρ) (hc : ResU.CompS ρf ρ fρ) (hT : TWNC fρ ps (rsOf ls))
+    (htg : Tagged fρ ps ls) (hl : ResU.Lower fρ μ) (hfd : FinDom μ) {j : Nat} {μ' : Heap}
+    {e' : Expr} (hj : j < n) (hrun : StepsN (ℍ := ℍ) j μ e μ' e') (hfin : Final (ℍ := ℍ) μ' e') :
+    EndOKG Φ Q (n - j) ls ρ ρf ps μ' e' :=
+  (h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun).2 hfin
+
+/-- `rwpG`'s guard at any run. -/
+theorem rwpG.kept {Φ : LocFam} {Q : PostG} {n : Nat} {ls : List SRec} {e : Expr} {ρ : WRes}
+    (h : rwpG (ℍ := ℍ) Φ Q n ls e ρ) {ρf fρ : WRes} {ps : List FrameRec} {μ : Heap}
+    (hf : ResU.Hash ρf ρ) (hc : ResU.CompS ρf ρ fρ) (hT : TWNC fρ ps (rsOf ls))
+    (htg : Tagged fρ ps ls) (hl : ResU.Lower fρ μ) (hfd : FinDom μ) {j : Nat} {μ' : Heap}
+    {e' : Expr} (hj : j < n) (hrun : StepsN (ℍ := ℍ) j μ e μ' e') : FrameKept ρf μ' :=
+  (h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun).1
 
 /-- The postcondition over terms that admits only values. -/
 def valPostN (Q : PostN) : PostG := fun k ls t ρ => ∃ v : Val, t = v.1 ∧ Q k ls v ρ
@@ -82,20 +109,21 @@ theorem rwp_iff_rwpG {Φ : LocFam} {Q : PostN} {n : Nat} {ls : List SRec} {e : E
     {ρ : WRes} : rwp (ℍ := ℍ) Φ Q n ls e ρ ↔ rwpG (ℍ := ℍ) Φ (valPostN Q) n ls e ρ := by
   classical
   constructor
-  · intro h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
-    obtain ⟨hval, hprog⟩ := h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
+  · intro h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
+    obtain ⟨hG, hval, hprog⟩ := h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
+    refine ⟨hG, fun hfin => ?_⟩
     by_cases hv : IsVal e'
     · exact (hval ⟨e', hv⟩ rfl).toG
     · obtain ⟨μ'', e'', hs⟩ := hprog hv
       exact absurd hs (hfin μ'' e'')
   · intro h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
-    refine ⟨fun v hv => ?_, fun hnv => ?_⟩
+    refine ⟨h.kept hf hc hT htg hl hfd hj hrun, fun v hv => ?_, fun hnv => ?_⟩
     · subst hv
-      exact (h ρf fρ ps μ hf hc hT htg hl hfd j μ' v.1 hj hrun (final_val μ' v)).ofVal
+      exact (h.run hf hc hT htg hl hfd hj hrun (final_val μ' v)).ofVal
     · by_contra hno
       have hfin : Final (ℍ := ℍ) μ' e' := fun μ'' e'' hs => hno ⟨μ'', e'', hs⟩
       obtain ⟨-, -, -, -, -, -, -, -, -, -, -, -, -, -, -, -, -, -, -, w, hw, -⟩ :=
-        h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
+        h.run hf hc hT htg hl hfd hj hrun hfin
       exact hnv (hw ▸ w.2)
 
 /-! ### Downward closure and monotonicity -/
@@ -122,16 +150,18 @@ theorem EndOKG.mono {Φ : LocFam} {P Q : PostG} {k k' : Nat} (hΦ : Φ.Down) (hk
 theorem rwpG_le {Φ : LocFam} (hΦ : Φ.Down) {Q : PostG} (hQ : Q.Down) {m n : Nat} (hmn : m ≤ n)
     {ls : List SRec} {e : Expr} {ρ : WRes} (h : rwpG (ℍ := ℍ) Φ Q n ls e ρ) :
     rwpG (ℍ := ℍ) Φ Q m ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
-  exact (h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' (by omega) hrun hfin).mono hΦ (by omega)
+  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
+  refine ⟨h.kept hf hc hT htg hl hfd (by omega) hrun, fun hfin => ?_⟩
+  exact (h.run hf hc hT htg hl hfd (by omega) hrun hfin).mono hΦ (by omega)
     (fun _ _ x => hQ.le (by omega) _ _ _ x)
 
 theorem rwpG_mono {Φ : LocFam} {P Q : PostG} (hPQ : ∀ n ls t ρ, P n ls t ρ → Q n ls t ρ)
     {n : Nat} {ls : List SRec} {e : Expr} {ρ : WRes} (h : rwpG (ℍ := ℍ) Φ P n ls e ρ) :
     rwpG (ℍ := ℍ) Φ Q n ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
+  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
+  refine ⟨h.kept hf hc hT htg hl hfd hj hrun, fun hfin => ?_⟩
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
-    h₁₃⟩ := h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
+    h₁₃⟩ := h.run hf hc hT htg hl hfd hj hrun hfin
   exact ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
     hPQ _ _ _ _ h₁₃⟩
 
@@ -139,10 +169,11 @@ theorem rwpG_mono {Φ : LocFam} {P Q : PostG} (hPQ : ∀ n ls t ρ, P n ls t ρ 
 memory. -/
 theorem rwpG_here {Φ : LocFam} {Q : PostG} {n : Nat} {ls : List SRec} {e : Expr} {ρ : WRes}
     (hfin : ∀ μ, Final (ℍ := ℍ) μ e) (h : Q n ls e ρ) : rwpG (ℍ := ℍ) Φ Q n ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun _
+  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
   cases hrun with
   | more hs _ => exact absurd hs (hfin _ _ _)
   | refl =>
+  refine ⟨frameKept_of_lower hc hl, fun _ => ?_⟩
   have hvρ : ResU.Valid ρ := (hash_valid hf).2
   refine ⟨ρ, PMap.empty, fρ, fρ, ρ, ps, ls, ResU.hash_symm hf, hc,
     ResU.hash_symm (ResU.hash_empty_right (hash_valid_comp hf hc)), ResU.comp_empty_right _, hl,
@@ -155,12 +186,13 @@ the index pays for it. -/
 theorem rwpG_step {Φ : LocFam} {Q : PostG} {n : Nat} {ls : List SRec} {e e' : Expr} {ρ : WRes}
     (hdet : ∀ μ, Step1Only (ℍ := ℍ) μ e μ e') (h : rwpG (ℍ := ℍ) Φ Q n ls e' ρ) :
     rwpG (ℍ := ℍ) Φ Q (n + 1) ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' E hj hrun hfin
+  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' E hj hrun
   cases hrun with
-  | refl => exact absurd (hdet μ).1 (hfin μ e')
+  | refl => exact ⟨frameKept_of_lower hc hl, fun hfin => absurd (hdet μ).1 (hfin μ e')⟩
   | @more j' μ μ₁ μ' e e₁ E hs t =>
       obtain ⟨rfl, rfl⟩ := (hdet μ).2 _ _ hs
-      have := h ρf fρ ps _ hf hc hT htg hl hfd j' μ' E (by omega) t hfin
+      refine ⟨h.kept hf hc hT htg hl hfd (by omega) t, fun hfin => ?_⟩
+      have := h.run hf hc hT htg hl hfd (j := j') (by omega) t hfin
       rwa [show n + 1 - (j' + 1) = n - j' by omega]
 
 /-! ### Bind -/
@@ -179,7 +211,7 @@ theorem rwpG_compose {Φ : LocFam} (hΦ : Φ.Down) {Q : PostG} (K : Kont) {k₁ 
   obtain ⟨z₀, hz₀, hY⟩ := compS_exch h₂ h₆
   have hzY : ResU.CompS z ρ' fρ'p := by rwa [ResU.CompS.functional hz₀ hfz] at hY
   obtain ⟨ρ'', ρpp, Y'', Y''p, π'', ps'', ls'', k₁', k₂, k₃, k₆, k₇, k₉, kA, kB, kT, ktg, kps,
-    kls, kC⟩ := hC z fρ'p ps' μ₁ hz hzY hT' htg' h₇ hfd₁ j₂ μ' E hj hrun hfin
+    kls, kC⟩ := (hC z fρ'p ps' μ₁ hz hzY hT' htg' h₇ hfd₁ j₂ μ' E hj hrun).2 hfin
   obtain ⟨hfρ'', -⟩ := ResU.Hash.split hfz (ResU.hash_symm k₁')
   obtain ⟨F, hF, hFp⟩ := compS_exch hfz k₂
   obtain ⟨ZZ, hZZ, hZF⟩ := (hash_shift ρpp ρp F).mp ⟨Y'', ResU.CompS.comm hFp, k₃⟩
@@ -202,6 +234,21 @@ theorem rwpG_compose {Φ : LocFam} (hΦ : Φ.Down) {Q : PostG} (K : Kont) {k₁ 
   exact UpdVN.trans hΦ (Nat.sub_le k₁ j₂) hA
     (updVN_frame (ResU.CompS.comm h₉) hYn (ResU.hash_symm hpρ') hpπ kA)
 
+/-- G through bind's second half: the continuation keeps its frame `ρ_f ● ρ⁺`, so `ρ_f`. -/
+theorem rwpG_compose_kept {Φ : LocFam} {Q : PostG} (K : Kont) {k₁ : Nat}
+    {ls : List SRec} {ρ ρf : WRes} {ps : List FrameRec} {μ₁ : Heap} {t : Expr}
+    (hend : EndOKG Φ (fun k ls' t => rwpG (ℍ := ℍ) Φ Q k ls' (K.plug t)) k₁ ls ρ ρf ps μ₁ t)
+    (hfd₁ : FinDom μ₁) {j₂ : Nat} {μ' : Heap} {E : Expr} (hj : j₂ < k₁)
+    (hrun : StepsN (ℍ := ℍ) j₂ μ₁ (K.plug t) μ' E) : FrameKept ρf μ' := by
+  obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₆, h₇, h₉, hA, hB, hT', htg', hps',
+    hls', hC⟩ := hend
+  obtain ⟨z, hzp, hz⟩ := (hash_shift ρp ρf ρ').mp ⟨fρ', h₂, h₃⟩
+  have hfz : ResU.CompS ρf ρp z := ResU.CompS.comm hzp
+  obtain ⟨z₀, hz₀, hY⟩ := compS_exch h₂ h₆
+  have hzY : ResU.CompS z ρ' fρ'p := by rwa [ResU.CompS.functional hz₀ hfz] at hY
+  exact (hC z fρ'p ps' μ₁ hz hzY hT' htg' h₇ hfd₁ j₂ μ' E hj hrun).1.of_compS hfz
+    (hash_valid hz).1
+
 /-- **Bind at any final term** (`wpG_bind` at the index): a run of `e` to a final term `t`, then
 the continuation from `K[t]`. -/
 theorem rwpG_bind {Φ : LocFam} (hΦ : Φ.Down) {Q : PostG} (K : Kont) {n : Nat}
@@ -209,17 +256,19 @@ theorem rwpG_bind {Φ : LocFam} (hΦ : Φ.Down) {Q : PostG} (K : Kont) {n : Nat}
     (hw : rwpG (ℍ := ℍ) Φ (fun k ls' t => rwpG (ℍ := ℍ) Φ Q k ls' (K.plug t)) n ls e ρ) :
     rwpG (ℍ := ℍ) Φ Q n ls (K.plug e) ρ := by
   classical
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' E hj hrun hfin
+  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' E hj hrun
   rcases stepsN_plug_split K hrun with ⟨e', rfl, hrun'⟩ |
     ⟨j₁, j₂, μ₁, t, hjj, hrun₁, hirr, hrun₂⟩
-  · -- the run stayed inside `K`: `e'` is final, since a step of it is one of `K[e']`
+  · refine ⟨hw.kept hf hc hT htg hl hfd hj hrun', fun hfin => ?_⟩
+    -- the run stayed inside `K`: `e'` is final, since a step of it is one of `K[e']`
     have hfin' : Final (ℍ := ℍ) μ' e' := fun μ'' e'' hs => hfin _ _ (hs.plug K)
-    have h := rwpG_compose hΦ K (hw ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun' hfin')
+    have h := rwpG_compose hΦ K (hw.run hf hc hT htg hl hfd hj hrun' hfin')
       (fd_stepsN hrun' hfd) (j₂ := 0) (by omega) (.refl _ _) hfin
     simpa using h
-  · have h := rwpG_compose hΦ K
-      (hw ρf fρ ps μ hf hc hT htg hl hfd j₁ μ₁ t (by omega) hrun₁ hirr)
-      (fd_stepsN hrun₁ hfd) (j₂ := j₂) (by omega) hrun₂ hfin
+  · have hend := hw.run hf hc hT htg hl hfd (j := j₁) (by omega) hrun₁ hirr
+    refine ⟨rwpG_compose_kept K hend (fd_stepsN hrun₁ hfd) (j₂ := j₂) (by omega) hrun₂,
+      fun hfin => ?_⟩
+    have h := rwpG_compose hΦ K hend (fd_stepsN hrun₁ hfd) (j₂ := j₂) (by omega) hrun₂ hfin
     rwa [show n - j₁ - j₂ = n - j by omega] at h
 
 /-! ### The frame -/
@@ -231,12 +280,14 @@ theorem rwpG_frame {Φ : LocFam} {P : PostG} (R : List SRec → WProp)
     {ls : List SRec} {e : Expr} {ρ₁ ρ₂ ρ : WRes} (hcρ : ResU.CompS ρ₁ ρ₂ ρ)
     (hwp : rwpG (ℍ := ℍ) Φ P n ls e ρ₁) (hR₂ : R ls ρ₂) :
     rwpG (ℍ := ℍ) Φ (fun k ls' t => P k ls' t ⋆ R ls') n ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
+  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
   obtain ⟨y, hy, hy₁⟩ := (hash_shift ρf ρ₂ ρ₁).mp ⟨ρ, ResU.CompS.comm hcρ, hf⟩
   obtain ⟨y', hy', hyfρ⟩ := compS_reassoc' (ResU.CompS.comm hcρ) hc
   cases ResU.CompS.functional hy' hy
+  refine ⟨(hwp.kept hy₁ hyfρ hT htg hl hfd hj hrun).of_compS hy (hash_valid hy₁).1,
+    fun hfin => ?_⟩
   obtain ⟨ρ', ρp, Y', Y'p, π', ps', ls', g₁, g₂, g₃, g₆, g₇, g₉, gA, gB, gT, gtg, gps,
-    gls, gC⟩ := hwp y fρ ps μ hy₁ hyfρ hT htg hl hfd j μ' e' hj hrun hfin
+    gls, gC⟩ := hwp.run hy₁ hyfρ hT htg hl hfd hj hrun hfin
   obtain ⟨W, hW, hfW⟩ := compS_reassoc hy g₂
   obtain ⟨W₀, hW₀, hWf₀⟩ := (hash_shift ρ' ρ₂ ρf).mp ⟨y, ResU.CompS.comm hy, g₁⟩
   have hWf : ResU.Hash W ρf := by
@@ -267,9 +318,9 @@ theorem rwpG_safe {Φ : LocFam} {Q : PostG} {e : Expr}
   · exact .inr hs
   · have hfin : Final (ℍ := ℍ) μ' e' := fun μ'' e'' h => hs ⟨μ'', e'', h⟩
     have htg : Tagged (PMap.empty : WRes) [] [] := fun x hx => absurd hx (by simp)
-    have h := hall (j + 1) PMap.empty PMap.empty [] (fun _ => none)
+    have h := (hall (j + 1) PMap.empty PMap.empty [] (fun _ => none)
       Fig16.LogRel.hash_empty (ResU.comp_empty_right _) TWNC.empty htg Fig16.BoLo.lower_empty
-      fd_empty j μ' e' (by omega) hrun hfin
+      fd_empty j μ' e' (by omega) hrun).2 hfin
     obtain ⟨_, _, _, _, _, _, _, -, -, -, -, -, -, -, -, -, -, -, -, hq⟩ := h
     exact .inl (hQ _ _ _ _ hq)
 

@@ -148,8 +148,9 @@ theorem rwp_reborrow {Φ : LocFam} (ls : List SRec) (l : BoCa.Loc) (α : Life)
   rw [ResU.CompS.functional ht2' hcf] at h58L
   -- the inner run's memory is the outer one
   have g5 : ResU.Lower Win μ := (h58L μ).mpr hl
-  obtain ⟨hval, hprog⟩ := h21 ρF Win ps μ hFbχ hWin hTin htgin g5 hfd jr μ' e' hj hrun
-  refine ⟨fun v hv => ?_, hprog⟩
+  obtain ⟨hkept, hval, hprog⟩ := h21 ρF Win ps μ hFbχ hWin hTin htgin g5 hfd jr μ' e' hj hrun
+  -- the inner frame `ρᵢ ● ρ_f` keeps `ρ_f`
+  refine ⟨hkept.of_compS (ResU.CompS.comm hF) (hash_valid hFbχ).1, fun v hv => ?_, hprog⟩
   obtain ⟨ρQ, ρp, fρ', fρ'p, π, ps', ls', g1, g2, g3, g6, g7, g9, gA, gB,
     gT, gtg, gps, gls, gC⟩ := hval v hv
   -- H28 and H29, by unfolding `[β]` in H27.

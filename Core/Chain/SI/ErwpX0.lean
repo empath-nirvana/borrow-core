@@ -12,6 +12,8 @@ the index; the continuations agree below it.
   keeps the `imm` cells, so neither does the end nor the garbage (`carries_of_updImmM`).
 * **(←)** At the frame `(ρ_f, 0)`, where `WF_∅` is vacuous, the ghost-free post and table give
   the end's ghost `0`, and the empty mask reads `↭` as `UpdVN`.
+
+The guard G is the same condition on both sides, `FrameKept` at the frame's world.
 -/
 
 noncomputable section
@@ -55,9 +57,10 @@ theorem erwp_iff_erwpX0 (Φ : LocFam) (Tb : TableN) (Q : PostN) :
   intro ls e ρ
   rw [erwp_eq, erwpX_eq]
   constructor
-  · intro h xf fρ ps μ hf hc hv _ hwx _ _ hT htg hl hfd j μ' e' hj hrun hfin
+  · intro h xf fρ ps μ hf hc hv _ hwx _ _ hT htg hl hfd j μ' e' hj hrun
+    refine ⟨h.kept hf hc hT htg hl hfd hj hrun, fun hfin => ?_⟩
     obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
-      h₁₃⟩ := h xf.1 fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
+      h₁₃⟩ := h.run hf hc hT htg hl hfd hj hrun hfin
     -- the start carries no counted lifetime, so neither does what `↭` reaches
     have hno : ∀ α, α ∈ (xf.2 + 0).counted → ¬ Carries π α := by
       intro α hα hcπ
@@ -80,12 +83,13 @@ theorem erwp_iff_erwpX0 (Φ : LocFam) (Tb : TableN) (Q : PostN) :
       · exact Or.inl ⟨v, hv', rfl, hq⟩
       · refine Or.inr ⟨rfl, ?_⟩
         rw [hC]; exact ht
-  · intro h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
-    obtain ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀,
-      h₁₁, h₁₂, -, -, -, -, -, -, -, h₂₀⟩ :=
-      h (ρf, 0) fρ ps μ hf hc (by simpa using GRes.valid_zero)
+  · intro h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
+    have hr := h (ρf, 0) fρ ps μ hf hc (by simpa using GRes.valid_zero)
         (fun α hα _ => by simp [GRes.counted] at hα) (fun α hα _ => by simp [GRes.counted] at hα) (maskShallow_locs_empty _) (maskAuth_empty _) hT htg hl hfd
-        j μ' e' hj hrun hfin
+        j μ' e' hj hrun
+    refine ⟨hr.1, fun hfin => ?_⟩
+    obtain ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀,
+      h₁₁, h₁₂, -, -, -, -, -, -, -, h₂₀⟩ := hr.2 hfin
     refine ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆,
       updVNm_locs_empty_iff.mp h₇, h₈, h₉, h₁₀, h₁₁, h₁₂, ?_⟩
     rcases h₂₀ with ⟨v, hv', -, hq⟩ | ⟨-, ht⟩

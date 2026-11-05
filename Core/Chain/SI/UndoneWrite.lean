@@ -1,4 +1,5 @@
 import Core.Chain.SI.HeapN
+import Core.Chain.SI.IStopN
 import Core.EffMachine
 
 /-!
@@ -6,15 +7,14 @@ import Core.EffMachine
 
 `scope-threads.md` §2.3. A run that holds an `imm` copy of `ℓ` at value `v` and runs
 `ℓ := w; ℓ := v` ends at the memory it started from, with its resource unchanged. Every
-post-configuration conjunct reads only the end of the run, so without a condition on the
-configurations in between the run is in `rwp` at every index (`undoneImmWrite_run`): the run
-clause asks nothing of the memory after the first store, where a holder of the other copy reads
-`w`.
+post-configuration conjunct reads only the end of the run, so every conjunct of `rwp`'s run
+clause except the access guard holds at every index and every frame (`undoneImmWrite_run`).
+Between the two stores a holder of the other copy reads `w`.
 
-The access guard G (`FrameKept`, the conjunct of `rwp`'s and `rwpG`'s run clause) is that
-condition: at a frame that holds the other copy, the memory after the first store disagrees with
-the frame's flattening at `ℓ`, so the run is not in `rwp` at any index above `1`
-(`not_undoneImmWrite`).
+The access guard G (`FrameKept`, a conjunct of `rwp`'s and `rwpG`'s run clause) is the
+condition on the configurations in between: at a frame that holds the other copy
+(`copy_config`), the memory after the first store disagrees with the frame's flattening at `ℓ`,
+so for `w ≠ ()` the run is not in `rwp` at any index above `1` (`not_undoneImmWrite`).
 -/
 
 noncomputable section
@@ -81,9 +81,9 @@ theorem upd_upd_self {μ : Heap} {l : Loc} {w v : Val} (h : μ l = some v) :
   · subst e; rw [BoCa.BoLo.Heap.upd_same, h]
   · rw [BoCa.BoLo.Heap.upd_other e, BoCa.BoLo.Heap.upd_other e]
 
-/-- **The undone write's run clause**: from every frame, every run of `ℓ := w; ℓ := v` shorter
-than the index ends at `()` with the start's memory and resource, or steps. The guard aside, this
-is the whole of `rwp`'s run clause. -/
+/-- **The undone write's run clause without the guard**: from every frame, every run of
+`ℓ := w; ℓ := v` shorter than the index ends at `()` with the start's memory and resource, or
+steps. -/
 theorem undoneImmWrite_run (Φ : LocFam) (l : Loc) (A : Life) (w v : Val) (n : Nat)
     (ls : List SRec) :
     ∀ (ρf fρ : WRes) (ps : List FrameRec) (μ : Heap),
@@ -126,10 +126,83 @@ theorem undoneImmWrite_run (Φ : LocFam) (l : Loc) (A : Life) (w v : Val) (n : N
     UpdVN.refl Φ _ (hash_valid hf).2, noOwn_empty, hT, htg,
     fun _ => Iff.rfl, fun _ => Iff.rfl, rfl⟩
 
-/-- **`UndoneImmWrite` holds** at `rwp` without the guard. -/
-theorem undoneImmWrite (Φ : LocFam) (l : Loc) (A : Life) (w v : Val) (n : Nat)
-    (ls : List SRec) : UndoneImmWrite (ℍ := ℍ) Φ l A w v n ls :=
-  undoneImmWrite_run Φ l A w v n ls
+/-! ### The guard refutes it
+
+The configuration: the world `ℓ ↦ imm({A}, (), ∅)`, entered from `ℓ ↦ own(())` by
+`TWNC.immFrame`, split into two copies (`compS_imm_dup`), one the run's and one the frame's. -/
+
+/-- The record of the frozen cell. -/
+def recU (l : Loc) : FrameRec := ⟨l, Val.unit, PMap.empty, .unk, ⟨[]⟩⟩
+
+/-- **A frame holding the other copy**: every hypothesis of `rwp`'s run clause holds at the
+world of the two copies. -/
+theorem copy_config (l : Loc) (A : Life) :
+    ∃ ls : List SRec, ∃ ps : List FrameRec,
+      ResU.Hash (immCopy l A Val.unit) (immCopy l A Val.unit) ∧
+      ResU.CompS (immCopy l A Val.unit) (immCopy l A Val.unit) (immCopy l A Val.unit) ∧
+      TWNC (immCopy l A Val.unit) ps (rsOf ls) ∧ Tagged (immCopy l A Val.unit) ps ls ∧
+      ResU.Lower (immCopy l A Val.unit) (BoCa.BoLo.Heap.upd (fun _ => none) l Val.unit) ∧
+      FinDom (BoCa.BoLo.Heap.upd (fun _ => none) l Val.unit) := by
+  have hshape : vShape .unk (⟨[]⟩ : BoCa.Lifetime.LSub) Val.unit (PMap.empty : WRes) := ⟨rfl, trivial⟩
+  have hadm : AdmWf .unk (⟨[]⟩ : BoCa.Lifetime.LSub) := fun _ h => h.elim
+  obtain ⟨ds, hds⟩ := lineage_list (r := recU l) hshape hadm
+    (ExW.empty_of_all_imm (fun _ _ h => by simp [recU] at h))
+  set W : WRes := ResU.single l (CellU.ownOf Val.unit)
+  have hvW : ResU.Valid W := ResU.valid_single_own l Val.unit
+  have hT : TWNC W [] (rsOf []) :=
+    TWNC.alloc TWNC.empty lower_empty rfl (compS_empty_left _) hvW
+  have hhW : ResU.Hash (PMap.empty : WRes) W := ResU.hash_symm (ResU.hash_empty_right hvW)
+  have hhi : ResU.Hash (PMap.empty : WRes) (immCopy l A Val.unit) :=
+    ResU.six34 (compS_empty_left _) hhW
+  have hvi : ResU.Valid (immCopy l A Val.unit) := (hash_valid hhi).2
+  have hX : ResU.CompS (ResU.single l (CellU.ownOf Val.unit)) PMap.empty W :=
+    ResU.comp_empty_right _
+  have hW' : ResU.CompS (immCopy l A Val.unit) PMap.empty (immCopy l A Val.unit) :=
+    ResU.comp_empty_right _
+  have hT' : TWNC (immCopy l A Val.unit) [recU l] (recU l :: (ds ++ rsOf [])) :=
+    TWNC.immFrame (l := l) (v := Val.unit) (α := A) .unk ⟨[]⟩ (inStratum_empty' _) hT hadm
+      hX (ResU.comp_empty_right _) hshape hW' hvi hds
+  obtain ⟨hFL, -⟩ := frameLife_frame (ps := []) (rs := rsOf []) (T := .unk) (δ := ⟨[]⟩)
+    (hα := inStratum_empty' _) hvW hX (ResU.comp_empty_right _) hW' hT.inv
+  have hdup := compS_imm_dup l (LSet.singleton A) Val.unit PMap.empty (inStratum_empty' _)
+  refine ⟨frameList (recU l) ds A [], [recU l], ⟨hdup.1, _, hdup, hvi⟩, hdup, ?_, ?_, ?_,
+    fd_upd fd_empty l Val.unit⟩
+  · rw [rsOf_frameList]; exact hT'
+  · intro x hx
+    simp only [frameList, List.mem_cons, List.mem_append, List.mem_map] at hx
+    rcases hx with rfl | ⟨d, hd, rfl⟩ | hx
+    · exact ⟨recU l, List.mem_cons_self, DescR.refl _, hFL⟩
+    · obtain ⟨q, hq, hqd⟩ := (hds d).mp hd
+      exact ⟨recU l, List.mem_cons_self, ⟨q, hqd⟩, hFL⟩
+    · simp at hx
+  · have hLW : ResU.Lower W (BoCa.BoLo.Heap.upd (fun _ => none) l Val.unit) :=
+      lower_compS_own (compS_empty_left _) lower_empty rfl
+    exact (ResU.lower_swap_imm_own (compS_empty_left _) hvi hvW (compS_empty_left _) hhi
+      (compS_empty_left _) hhW).mpr hLW
+
+/-- **The guard refutes the undone write**: at the frame holding the other copy, the run's first
+store leaves a memory that disagrees with the frame's flattening at `ℓ`, so `ℓ := w; ℓ := ()` is
+not in `rwp` at any index above `1`, at the list of that world. -/
+theorem not_undoneImmWrite (Φ : LocFam) (l : Loc) (A : Life) {w : Val} (hw : w ≠ Val.unit)
+    {n : Nat} (hn : 2 ≤ n) : ∃ ls, ¬ UndoneImmWrite (ℍ := ℍ) Φ l A w Val.unit n ls := by
+  obtain ⟨ls, ps, hf, hc, hT, htg, hl, hfd⟩ := copy_config l A
+  refine ⟨ls, fun h => hw ?_⟩
+  have hlu : BoCa.BoLo.Heap.upd (fun _ => none) l Val.unit l = some Val.unit :=
+    BoCa.BoLo.Heap.upd_same _ l Val.unit
+  obtain ⟨s₀, -, -⟩ := undo_steps (ℍ := ℍ) (w := w) (v := Val.unit) hlu
+  obtain ⟨hkept, -, -⟩ := h _ _ ps _ hf hc hT htg hl hfd 1 _ _ (by omega) (.more s₀.1 (.refl _ _))
+  -- the frame's flattening holds a cell at `ℓ`, of value `()`
+  obtain ⟨σ, hσ, hμ⟩ := hl
+  have hl' := hμ l
+  rw [hlu] at hl'
+  cases hg : σ.get l with
+  | none => rw [hg] at hl'; cases hl'
+  | some ψ =>
+    rw [hg] at hl'
+    have h1 := hkept l ψ ⟨σ, hσ, hg⟩
+    rw [BoCa.BoLo.Heap.upd_same] at h1
+    rw [Option.some.inj h1]
+    exact (Option.some.inj hl').symm
 
 end UndoneWrite
 

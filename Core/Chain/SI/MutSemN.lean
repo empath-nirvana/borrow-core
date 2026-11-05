@@ -175,9 +175,10 @@ theorem Covers.extΦ {Φ Φ' : LocFam} (hE : Φ.Ext Φ') {ρ : WRes} (h : Covers
 
 theorem rwpG_extΦ {Φ Φ' : LocFam} (hE : Φ.Ext Φ') {Q : PostG} {n : Nat} {ls : List SRec}
     {e : Expr} {ρ : WRes} (h : rwpG (ℍ := ℍ) Φ Q n ls e ρ) : rwpG (ℍ := ℍ) Φ' Q n ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
+  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
+  refine ⟨h.kept hf hc hT htg hl hfd hj hrun, fun hfin => ?_⟩
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
-    h₁₃⟩ := h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
+    h₁₃⟩ := h.run hf hc hT htg hl hfd hj hrun hfin
   exact ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇.extΦ hE, h₈, h₉, h₁₀, h₁₁,
     h₁₂, h₁₃⟩
 

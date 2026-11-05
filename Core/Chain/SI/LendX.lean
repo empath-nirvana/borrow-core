@@ -92,7 +92,7 @@ theorem rwpGX_lend {Φ : LocFam} (l : BoCa.Loc) (T : VTy) (δ : LSub)
         ∀ R, ResU.CompS ρ' (ResU.single l (CellU.ownOf v)) R → ∀ C₀, Q C₀ k ls w (R, g'')) :
     rwpGX (ℍ := ℍ) Φ ∅ (valPostX Q) n ls e (ρ, g) := by
   classical
-  intro xf sρ ps μ hH3 hsρ hv hwf hwx _ _ hT htg hlow hfd jr μ' e' hj hrun hfin
+  intro xf sρ ps μ hH3 hsρ hv hwf hwx _ _ hT htg hlow hfd jr μ' e' hj hrun
   have hTI := hT.inv
   have hvsρ : ResU.Valid sρ := hash_valid_comp hH3 hsρ
   have hvρ : ResU.Valid ρ := (hash_valid hH3).2
@@ -198,10 +198,12 @@ theorem rwpGX_lend {Φ : LocFam} (l : BoCa.Loc) (T : VTy) (δ : LSub)
       · exact lt_of_lt_of_le (hwx α (hcin α hα hαA) (carries_comp_right hcρ hvρ hc'))
           le_self_add
       · exact absurd (carries_single_imm hc') hαA
-  obtain ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps'', ls'', h1, h2, h3, h6, h7, h9, h10m, h11, hT'',
-    htg'', hps'', hls'', hV, hN, hW', hWp, -, -, -, hpost⟩ :=
+  have hr :=
     hwpBI (ρf, xf.2) fρ (p :: ps) μ hH17 h4 hVin hWfin hWxin (maskShallow_locs_empty _)
-      (maskAuth_empty _) hTin htgin hlowin hfd jr μ' e' hj hrun hfin
+      (maskAuth_empty _) hTin htgin hlowin hfd jr μ' e' hj hrun
+  refine ⟨hr.1, fun hfin => ?_⟩
+  obtain ⟨ρ', ρp, fρ', fρ'p, π, g', gp, ps'', ls'', h1, h2, h3, h6, h7, h9, h10m, h11, hT'',
+    htg'', hps'', hls'', hV, hN, hW', hWp, -, -, -, hpost⟩ := hr.2 hfin
   have h10 : UpdVN Φ (n - jr) BI π := updVNm_empty_iff.mp (by simpa using h10m)
   obtain ⟨v', rfl, hq⟩ := hpost
   obtain ⟨houtρ', g'', rfl, hQend⟩ := hend A _ _ _ _ _ _ hq

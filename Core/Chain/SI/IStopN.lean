@@ -144,7 +144,7 @@ theorem rwpG_I_frameG {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmW
       rwpG (ℍ := ℍ) Φ Qin n (frameList ⟨l, v, ρP, T, δ⟩ ds A ls) e BI) :
     rwpG (ℍ := ℍ) Φ Qout n ls e ρ := by
   classical
-  intro ρf sρ ps μ hH3 hsρ hT htg hlow hfd jr μ' e' hj hrun hfin
+  intro ρf sρ ps μ hH3 hsρ hT htg hlow hfd jr μ' e' hj hrun
   have hTI := hT.inv
   have hvsρ : ResU.Valid sρ := hash_valid_comp hH3 hsρ
   set ρi : ResU BoCa.Loc BoCa.Val :=
@@ -204,9 +204,11 @@ theorem rwpG_I_frameG {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmW
   have hlowin : ResU.Lower fρ μ :=
     (ResU.lower_swap_imm_own hlPcell hvi hvlP hFBi hFBiH hFBl hFBlH).mpr hlow
   -- H18: the run under the frame
+  have hr :=
+    hA BI hBI ρf fρ (p :: ps) μ hH17 h4 hTin htgin hlowin hfd jr μ' e' hj hrun
+  refine ⟨hr.1, fun hfin => ?_⟩
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps'', ls'', h1, h2, h3, h6, h7, h9, h10, h11, hT'', htg'',
-    hps'', hls'', h12⟩ :=
-    hA BI hBI ρf fρ (p :: ps) μ hH17 h4 hTin htgin hlowin hfd jr μ' e' hj hrun hfin
+    hps'', hls'', h12⟩ := hr.2 hfin
   have hvπ : ResU.Valid π := h10.2.2
   -- 6.29: `π = π/ℓ ● ρᵢ`, and every other cell of `⦇π⦈` outlives `α`
   have hGc : ResU.CompS (π.del l) ρi π := six29N houtb hlPcell hH12 hBI h10

@@ -67,7 +67,7 @@ theorem rwpG_M_antiFrameG {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {β : Life}
       rwpG (ℍ := ℍ) Φ (AFPostG l β F Q) n ls e X) :
     rwpG (ℍ := ℍ) Φ Q n ls e ρ := by
   classical
-  intro ρf sρ ps μ hH2 hsρ hT htg hlow hfd jr μ' e' hj hrun hfin
+  intro ρf sρ ps μ hH2 hsρ hT htg hlow hfd jr μ' e' hj hrun
   have hvsρ : ResU.Valid sρ := hash_valid_comp hH2 hsρ
   have hvρ : ResU.Valid ρ := (ResU.Valid.split hsρ hvsρ).2
   obtain ⟨hvm, hva⟩ := ResU.Valid.split hsplit hvρ
@@ -102,8 +102,10 @@ theorem rwpG_M_antiFrameG {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {β : Life}
       ha) htg
   have hlowin : ResU.Lower fρ μ :=
     (ResU.lower_swap_mut_own hW hvm hvW hFAmc hFAm hFAWc hFAW).mp hlow
+  have hr := hwpX ρf fρ ps μ hfX h4 hTin htgin hlowin hfd jr μ' e' hj hrun
+  refine ⟨hr.1, fun hfin => ?_⟩
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps'', ls'', h1, h2, h3, h6, h7, h9, h10, h11, hT'', htg'',
-    hps'', hls'', h12⟩ := hwpX ρf fρ ps μ hfX h4 hTin htgin hlowin hfd jr μ' e' hj hrun hfin
+    hps'', hls'', h12⟩ := hr.2 hfin
   obtain ⟨w, σ', h', hw', ρb, rest, hcr, hcr2, hb⟩ := h12
   obtain ⟨W'', hW''₁, hW''₂⟩ :=
     (ResU.CompS.assoc (ResU.single l (CellU.ownOf w)) σ' ρb ρ').mp ⟨rest, hcr2, hcr⟩

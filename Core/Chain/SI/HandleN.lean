@@ -50,9 +50,10 @@ theorem rwpG_garbage {Φ : LocFam} {Q : PostG} {n : Nat} {ls : List SRec} {e : E
     (h : rwpG (ℍ := ℍ) Φ (fun k ls' t ρ' => ∃ ρ₁ ρ₂, ResU.CompS ρ₁ ρ₂ ρ' ∧ NoOwn ρ₂ ∧
       Q k ls' t ρ₁) n ls e ρ) :
     rwpG (ℍ := ℍ) Φ Q n ls e ρ := by
-  intro ρf fρ ps μ h1 h2 h3 h4 hl hfd j μ' e' hj hrun hfin
+  intro ρf fρ ps μ h1 h2 h3 h4 hl hfd j μ' e' hj hrun
+  refine ⟨h.kept h1 h2 h3 h4 hl hfd hj hrun, fun hfin => ?_⟩
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', g1, g2, g3, g6, g7, g9, gA, gB,
-    gT, gtg, gps, gls, ρ₁, ρ₂, hc, hno, hQ⟩ := h ρf fρ ps μ h1 h2 h3 h4 hl hfd j μ' e' hj hrun hfin
+    gT, gtg, gps, gls, ρ₁, ρ₂, hc, hno, hQ⟩ := h.run h1 h2 h3 h4 hl hfd hj hrun hfin
   obtain ⟨hf₁, -⟩ := ResU.Hash.split hc g1
   obtain ⟨F, hF, hF₂⟩ := (ResU.CompS.assoc ρf ρ₁ ρ₂ fρ').mp ⟨ρ', hc, g2⟩
   obtain ⟨Z, hZ, hFZ⟩ := (ResU.CompS.assoc F ρ₂ ρp fρ'p).mpr ⟨fρ', hF₂, g6⟩
