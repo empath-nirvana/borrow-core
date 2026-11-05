@@ -14,8 +14,8 @@ A handler resumes what it catches inside its own segment, so the operations of t
 are entries with `remask = false`: `κ` resumes the handled continuation at the handler's mask.
 An operation of another name passes outward at the mask it named.
 
-**What is covered.** `[ret]`; an operation of the handler's name that must be resumed (`lin`),
-whose `κ` owns its cell (`kappaCell`), allocated at the `[op]` step and released at the resume
+**What is covered.** `[ret]`; an unrestricted operation of the handler's name (`unr`, `κ` the
+plain `kappa`, its share empty); a must-resume one (`lin`), whose `κ` owns its cell (`kappaCell`), allocated at the `[op]` step and released at the resume
 (`erwpX_kappaCell`, `erwpX_kappaC_resume`, from `erwpX_alloc` and `erwpX_free`); an operation of
 another name, which passes outward with the handler reinstalled in its continuation, its cancel
 obligation carried. The table has no abortive operations, and a caught operation is not
@@ -150,18 +150,34 @@ theorem erwpX_kappaC_resume {Φ : LocFam} (hΦ : Φ.Down) {M : Mask} {Tb : Table
   rw [show (0 + 1 : Nat) = 1 from rfl, show (0 + 1 + 1 : Nat) = 2 from rfl, kappa_resume_subst]
   exact h
 
+/-- Resuming `κ` at `w` runs `hnd H K[w]` (`erwp_kappa_resume`): four deterministic steps, for
+free. -/
+theorem erwpX_kappa_resume {Φ : LocFam} (hΦ : Φ.Down) {M : Mask} {Tb : TableX} (hTd : Tb.Down)
+    {Q : PostX} (hQ : Q.Down) (H : Val) (K : Kont) (w : Val) {k : Nat} {ls : List SRec}
+    {x : XRes} (h : erwpX (ℍ := ℍ) Φ M Tb Q k ls (hndE H (K.plug (.val w))) x) :
+    erwpX (ℍ := ℍ) Φ M Tb Q k ls (.app (.app (kappa H K) (.val (Val.inj₁ .unit))) (.val w)) x := by
+  refine erwpX_det hΦ hTd hQ
+    (fun μ => step1Only_plug (Head.beta μ _ _) rfl (Kont.appL .hole w)) ?_
+  refine erwpX_det hΦ hTd hQ
+    (fun μ => step1Only_plug (Head.case₁ μ Val.unit _ _) rfl (Kont.appL .hole w)) ?_
+  refine erwpX_det hΦ hTd hQ
+    (fun μ => step1Only_plug (Head.seq μ _) rfl (Kont.appL .hole w)) ?_
+  refine erwpX_det hΦ hTd hQ (fun μ => step1Only_plug (Head.beta μ _ w) rfl .hole) ?_
+  rw [show (0 + 1 : Nat) = 1 from rfl, show (0 + 1 + 1 : Nat) = 2 from rfl, kappa_resume_subst]
+  exact h
+
 /-! ### The handler -/
 
 /-- **A handler at `erwpX`, its clauses asked at the stops up to `N`** (`[handle]`), by induction
-on the index, at every mask. The operations of the handler's name are must-resume entries that
-stop at their segment's mask (`remask = false`); the return clause and the operation clauses are
+on the index, at every mask. The operations of the handler's name are unrestricted or
+must-resume entries that stop at their segment's mask (`remask = false`); the return clause and the operation clauses are
 asked at every mask a segment of the handled run is at, since a stop of another name may resume
 the run at another. -/
 theorem erwpX_handle_le {Φ : LocFam} (hΦ : Φ.Down) (N : Nat) (Tin Tout : OpTabX)
     (hTinD : Tin.Down) (hTout : Tout.Down) (n₀ : UInt32)
     (hTin : ∀ m i, m ≠ n₀ → Tin m i = Tout m i) (qs hr hs : Val) (Qin Qout : PostX)
     (hQout : Qout.Down)
-    (hlin : ∀ i en, Tin n₀ i = some en → en.q = .lin ∧ en.remask = false)
+    (hlin : ∀ i en, Tin n₀ i = some en → (en.q = .lin ∨ en.q = .unr) ∧ en.remask = false)
     (hq : ∀ i en, Tin n₀ i = some en → capTag qs.1 i.toNat = en.q.tag)
     (hret : ∀ M C k, k ≤ N → ∀ ls v x, Qin C k ls v x →
       erwpX (ℍ := ℍ) Φ M (opTableX Tout) Qout k ls (.app (.val hr) (.val v)) x)
@@ -207,7 +223,18 @@ theorem erwpX_handle_le {Φ : LocFam} (hΦ : Φ.Down) (N : Nat) (Tin Tout : OpTa
     obtain ⟨c, hc, hna⟩ := hop i en hT
     refine Or.inl ⟨rfl, (rwpGX_det hΦ hPD
       (fun μ => step1Only_plug (Head.hop μ m i qs hr hs c v K₁ hc hK₁) rfl .hole) ?_).at C⟩
-    rw [hq i en hT, kappaAt_tag, hql]
+    rw [hq i en hT, kappaAt_tag]
+    rcases hql with hql | hql
+    swap
+    · -- unrestricted: `κ` is the plain `kappa`
+      rw [hql]
+      refine erwpX_unfold_at hLout hk (hna M k (by omega) ls' v
+        ⟨kappa H K₁, by unfold kappa; exact .lam⟩ y ⟨ρa, ρk, ga, gk, hcak, hg, hA, ?_⟩)
+      intro ls'' he k' hk' w y' z' hB hcz
+      have h₁ := hcontIH M k' hk' _ _ _ ((hcont ls'' he).1 k' hk' w y' z' hB hcz)
+      simp only [erwpXC, show k' < n by omega, if_true] at h₁
+      exact erwpX_kappa_resume hΦ hDout hQout H K₁ w h₁
+    rw [hql]
     obtain ⟨y₁, y₂⟩ := y
     simp only at hcak hg
     subst hg
@@ -259,7 +286,7 @@ theorem erwpX_handle_le {Φ : LocFam} (hΦ : Φ.Down) (N : Nat) (Tin Tout : OpTa
 theorem erwpX_handle {Φ : LocFam} (hΦ : Φ.Down) (Tin Tout : OpTabX) (hTinD : Tin.Down)
     (hTout : Tout.Down) (n₀ : UInt32) (hTin : ∀ m i, m ≠ n₀ → Tin m i = Tout m i)
     (qs hr hs : Val) (Qin Qout : PostX) (hQout : Qout.Down)
-    (hlin : ∀ i en, Tin n₀ i = some en → en.q = .lin ∧ en.remask = false)
+    (hlin : ∀ i en, Tin n₀ i = some en → (en.q = .lin ∨ en.q = .unr) ∧ en.remask = false)
     (hq : ∀ i en, Tin n₀ i = some en → capTag qs.1 i.toNat = en.q.tag)
     (hret : ∀ M C k ls v x, Qin C k ls v x →
       erwpX (ℍ := ℍ) Φ M (opTableX Tout) Qout k ls (.app (.val hr) (.val v)) x)
