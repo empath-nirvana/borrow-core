@@ -116,7 +116,7 @@ theorem tabN_ctxClosed {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} (hΦ :
   obtain ⟨o, -, rfl⟩ := tabN_effOf_some_find hT
   simp only [entN] at hP
   split at hP
-  · rw [finN_eq] at hP
+  · rw [finN_eq_ite] at hP
     split at hP
     · cases hP
     · cases hP

@@ -145,7 +145,7 @@ Each entry is a chain lemma under Core's name with `N`, following Core's printed
 |---|---|---|---|
 | E12 | `UpdVN.inStratum`, `rwpG_inStratum`, `opTableNS`, `erwpS_erwp`, `erwp_stratify`, `gN_outlives`, `tabN_ansIn`, `SemCSN`, `stop_semN` | `Core/Chain/Stop835N.lean` | `ResU.updV_inStratum`, `wpG_inStratum`, `opTableS`, `ewp_stratify`, `gSepC_outlives`, `Row.ansIn_of_ansOutlives`, `stop_sem` |
 | E12's handler | `erwp_handleS` | `Core/Chain/HandleS835N.lean` | `ewp_handleS` |
-| E3 | `tabN_effOf_find`, `finN_eq`, `cancelTabN_le`, `cancelOblN_le`, `finN_mono`, `tabN_le_of_rowLe`, `erwp_rowLe` | `Core/Chain/Eff835N.lean` | `Row.tab_find`, `finObl_eq`, `cancelObl_le`, `finObl_mono`, `effWp_sub` |
+| E3 | `tabN_effOf_find`, `finN_eq_ite`, `cancelTabN_le`, `cancelOblN_le`, `finN_mono`, `tabN_le_of_rowLe`, `erwp_rowLe` | `Core/Chain/Eff835N.lean` | `Row.tab_find`, `finObl_eq`, `cancelObl_le`, `finObl_mono`, `effWp_sub` |
 | E5 | `erwp_bind_pure_frame`, `tabN_ctxClosed` | `Eff835N`, `Loop835N` | `ewp_bind_pure_frame`, `plain_cancel₀` |
 | E6 | `erwp_perform_here`, `cancelOblN_start`, `entN_start` | `Eff835N` | `ewp_perform_here`, `cancelObl_start`, `ent_start` |
 | E7 | `erwp_raise_here`, `vN_noOwn_of_ownFree` | `Eff835N` | `ewp_raise_here`, `vC_noOwn_of_ownFree` |

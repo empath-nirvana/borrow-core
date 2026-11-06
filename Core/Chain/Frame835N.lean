@@ -244,7 +244,7 @@ theorem cancelOblN_plain₀ {δ : LSub} {Θ : LocTy} {c : Loc → Option Life}
   have hP' := hP
   simp only [entN] at hP'
   split at hP'
-  · rw [finN_eq] at hP'
+  · rw [finN_eq_ite] at hP'
     split at hP'
     · cases hP'
     · cases hP'
@@ -265,7 +265,7 @@ theorem tabN_plainCancel {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} (hΦ
   have hP' := hP
   simp only [entN] at hP'
   split at hP'
-  · rw [finN_eq] at hP'
+  · rw [finN_eq_ite] at hP'
     split at hP'
     · cases hP'
     · cases hP'
@@ -288,7 +288,7 @@ theorem entN_plain {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} (hΦ : (Θ
   have hP' := hP
   simp only [entN] at hP'
   split at hP'
-  · rw [finN_eq] at hP'
+  · rw [finN_eq_ite] at hP'
     split at hP'
     · cases hP'
     · cases hP'

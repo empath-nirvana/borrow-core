@@ -9,7 +9,7 @@ E6, E7):
 
 * **E3** (Core's `effWp_sub`, `finObl_mono`, `cancelObl_le`): a row's table at a key is the entry
   of the operation `Row.find` finds there (`tabN_effOf_find`); a cancel row's obligation is the
-  cancel run at its layers' table, or none at `⊤` (`finN_eq`); a cancel run is monotone in its
+  cancel run at its layers' table, or none at `⊤` (`finN_eq_ite`); a cancel run is monotone in its
   table (`cancelOblN_le`); so the obligation grows with the cancel row (`finN_mono`, along
   `FinLe`, by Core's recursion on the cancel row) and the table with the row (`tabN_le_of_rowLe`);
 * **E5** (Core's `ewp_bind_pure_frame`): a computation that never stops, framed, in front of an
@@ -173,7 +173,7 @@ theorem tabN_rowOf (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) :
 
 /-- **A cancel row's obligation** (Core's `finObl_eq`): none at `⊤`; otherwise the cancel run at
 the row's table, read at the view. -/
-theorem finN_eq (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (F : CTy) :
+theorem finN_eq_ite (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (F : CTy) :
     finN (ℍ := ℍ) F δ Θ c =
       if F.isTop then none else some (cancelOblN (ℍ := ℍ) (Θ.view c) (tabN (ℍ := ℍ) F δ Θ c)) := by
   cases F <;> simp [finN, tabN, CTy.isTop]
@@ -204,7 +204,7 @@ theorem finN_mono (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (F : CTy) :
     ∀ {F' : CTy}, FinLe F F' → FinLeSN (finN (ℍ := ℍ) F δ Θ c) (finN (ℍ := ℍ) F' δ Θ c) := by
   intro F' h
   rw [finLe_iff] at h
-  rw [finN_eq δ Θ c F, finN_eq δ Θ c F']
+  rw [finN_eq_ite δ Θ c F, finN_eq_ite δ Θ c F']
   rcases h with h | ⟨hF, h⟩
   · simp only [h, if_true]; exact trivial
   · cases hF' : F'.isTop
@@ -248,7 +248,7 @@ theorem entN_start (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (o : OpSig
   intro P hP
   simp only [entN] at hP
   split at hP
-  · rw [finN_eq] at hP
+  · rw [finN_eq_ite] at hP
     split at hP
     · cases hP
     · cases hP; exact cancelOblN_start _ _ k ls

@@ -1677,7 +1677,7 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_raise_here
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabN_effOf_find
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabN_rowOf
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.finN_eq
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.finN_eq_ite
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.finN_mono
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabN_le_of_rowLe
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwp_rowLe
