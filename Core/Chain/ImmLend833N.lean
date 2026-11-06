@@ -256,8 +256,8 @@ theorem fin_claimI {A : VTy} {d : Expr} (hdc : closedAt 0 d = true) {δ : LSub} 
     (rwp_of_erwp_empty hd0) rfl
   refine rwp_mono_le (fun k' hk' ls' v τ hv => ?_) (rwp_consistentXV hfr hc)
   obtain ⟨⟨τ₁, τ₂, hcτ, hP, rfl⟩, hcτ', hvτ⟩ := hv
-  have := hP Θ (LocTy.extR_refl Θ _) hΘ c (consistentX_left hcτ hcτ' hvτ) ls' Θ
-    (LocTy.extR_refl Θ _) hΘ c k' le_rfl (Val.loc l) τ₂ τ hcτ
+  have := hP Θ (LocTy.extR_refl Θ _) hΘ c (consistentX_left hcτ hcτ' hvτ) ls'
+    c k' le_rfl (Val.loc l) τ₂ τ hcτ
     ⟨l, w, σ, rfl, h, vN_le (hk'.trans hk) hw⟩ hcτ'
   exact rwp_of_erwp_empty this
 
@@ -290,11 +290,11 @@ theorem withbor1U_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Ex
     (hd : ∀ (Θ : LocTy), Θ.OK → ∀ c k, k ≤ n → ∀ ls,
       cN (ℍ := ℍ) (.ret (.lolli (.ref A) .unit)) δ Θ c k ls d PMap.empty) :
     vN (ℍ := ℍ) (withbor1UTy x Δ.meetOfDom A B S) δ Θ₀ n (withborUV d) PMap.empty := by
-  intro Θ₁ _ _ c₁ _ ls Θ₂ _ _ c₂ k hk u ρv ρu hc hu _
+  intro Θ _ hΘ c₁ _ ls c₂ k hk u ρv ρu hc hu _
   obtain rfl := eq_of_compS_empty_left hc
-  intro Θ hE₃ hΘ c k' hk' f ρf ρ'' hc' hf hcon
+  intro c k' hk' f ρf ρ'' hc' hf hcon
   -- step 1
-  obtain ⟨l, w₀, σ₀, rfl, hcl, hw₀⟩ := vN_le hk' (vN_extR _ δ k u ρu hE₃ hu)
+  obtain ⟨l, w₀, σ₀, rfl, hcl, hw₀⟩ := vN_le hk' hu
   rw [cN_effOf]
   refine erwp_of_valid fun hv'' => ?_
   have hΦ : (Θ.view c).Down := LocTy.view_down hΘ.1 c
@@ -392,7 +392,7 @@ theorem withbor1U_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Ex
     -- step 6: the callback's run
     have h1 := (hf Θ' (LocTy.extR_addImm Θ p houtb) hOK' c hcf
       (frameList p ds α ls)) α hLt
-    have h2 := h1 Θ' (LocTy.extR_refl _ _) hOK' c k' le_rfl (Val.loc l) ρi BI hBI hcell hcBI
+    have h2 := h1 c k' le_rfl (Val.loc l) ρi BI hBI hcell hcBI
     rw [cN_effOf, tabN_unwind_eq hS _ (.tensor (.ref A) B) δ Θ p α c] at h2
     have h3 := erwp_tieEntry (Φ := Θ.view c) (Φ' := Θ'.view c) rfl
       (tabN_unwind_abort hS _ δ Θ c) (fun y hy => by
@@ -463,7 +463,7 @@ back at the world without the record (`ext_drop`); the Imm Frame (`erwp_I_frameR
 theorem withbor1_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {δ : LSub} (hδ : Δ.Models δ)
     (hadm : AdmWf A δ) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (Θ₀ : LocTy) (n : Nat) :
     vN (ℍ := ℍ) (axWithbor1Ty x Δ.meetOfDom A B) δ Θ₀ n withborVal PMap.empty := by
-  intro Θ₁ _ _ c₁ _ ls Θ₂ _ _ c₂ k hk u ρv ρu hc hu _
+  intro Θ₂ _ _ c₁ _ ls c₂ k hk u ρv ρu hc hu _
   obtain rfl := eq_of_compS_empty_left hc
   obtain ⟨l, w₀, σ₀, rfl, hcl, hw₀⟩ := hu
   have hΦ₂ : (Θ₂.view c₂).Down := LocTy.view_down (by assumption : Θ₂.OK).1 c₂
@@ -478,10 +478,10 @@ theorem withbor1_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {δ : LSub} (hδ :
       Val.lam, Expr.val, Val.unit]
   rw [e₁]
   refine erwp_val (v := withborAt l) ?_
-  intro Θ hE₃ hΘ c _ ls' Θ' hE' hΘ' c' k' hk' f ρf ρ'' hc' hf hcon
+  intro Θ' hE₃ hΘ' c _ ls' c' k' hk' f ρf ρ'' hc' hf hcon
   -- the source at the callback's world
   obtain ⟨l₁, w₀', σ₀', hl₁, hcl', hw₀'⟩ := vN_le hk'
-    (vN_extR (.ref A) δ k _ ρu hE' (vN_extR (.ref A) δ k _ ρu hE₃ ⟨l, w₀, σ₀, rfl, hcl, hw₀⟩))
+    (vN_extR (.ref A) δ k _ ρu hE₃ ⟨l, w₀, σ₀, rfl, hcl, hw₀⟩)
   obtain rfl : l = l₁ := by
     have := congrArg Subtype.val hl₁; simpa [Val.loc] using this
   have hΦ : (Θ'.view c').Down := LocTy.view_down hΘ'.1 c'
@@ -562,7 +562,7 @@ theorem withbor1_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {δ : LSub} (hδ :
     obtain ⟨⟨τg, τi, hcτ, hgv, rfl⟩, hcτ', hvτ⟩ := hg
     -- the borrow's application
     have happ := hgv Θ'' (LocTy.extR_refl _ _) hOK'' c' (consistentX_left hcτ hcτ' hvτ) ls₂
-      Θ'' (LocTy.extR_refl _ _) hOK'' c' j le_rfl (Val.loc l) ρi τ hcτ (vN_le hj hcell) hcτ'
+      c' j le_rfl (Val.loc l) ρi τ hcτ (vN_le hj hcell) hcτ'
     show rwp (ℍ := ℍ) _ _ j ls₂ ((Kont.pairR (Val.loc l) Kont.hole).plug
       (.app (.val g) (.val (Val.loc l)))) τ
     refine rwp_bind hΦi _ ?_
@@ -668,10 +668,10 @@ theorem withbor2U_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Ex
     (hd : ∀ (Θ : LocTy), Θ.OK → ∀ c k, k ≤ n → ∀ ls,
       cN (ℍ := ℍ) (.ret (.lolli (.ref A) .unit)) δ Θ c k ls d PMap.empty) :
     vN (ℍ := ℍ) (withbor2UTy x Δ.meetOfDom A B S) δ Θ₀ n (withborUV d) PMap.empty := by
-  intro Θ₁ _ _ c₁ _ ls Θ₂ _ _ c₂ k hk u ρv ρu hc hu _
+  intro Θ _ hΘ c₁ _ ls c₂ k hk u ρv ρu hc hu _
   obtain rfl := eq_of_compS_empty_left hc
-  intro Θ hE₃ hΘ c k' hk' f ρf ρ'' hc' hf hcon
-  obtain ⟨l, w₀, σ₀, rfl, hcl, hw₀⟩ := vN_le hk' (vN_extR _ δ k u ρu hE₃ hu)
+  intro c k' hk' f ρf ρ'' hc' hf hcon
+  obtain ⟨l, w₀, σ₀, rfl, hcl, hw₀⟩ := vN_le hk' hu
   rw [cN_effOf]
   refine erwp_of_valid fun hv'' => ?_
   have hΦ : (Θ.view c).Down := LocTy.view_down hΘ.1 c
@@ -771,7 +771,7 @@ theorem withbor2U_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Ex
         fun Θ'' j u r h => hunif Θ'' j u r (by rw [← hAδ]; exact h)⟩
     have hcBM : ConsistentX c' BM := consistentX_compS hBM hcf'
       (consistentX_single_mut hcσ' (by simp [hc'def, setLife]))
-    have h2 := h1 Θ' (LocTy.extR_refl _ _) hOK' c' k' le_rfl (Val.loc l) _ BM hBM hcell hcBM
+    have h2 := h1 c' k' le_rfl (Val.loc l) _ BM hBM hcell hcBM
     rw [cN_effOf, tabN_unwind_eq_add hS _ (.tensor (.ref A) B) δ hfr l Fam c' c] at h2
     refine erwp_mono (fun k ls' b ρ' hb => ?_) (opTableN_local _) k' ls _ BM h2
     obtain ⟨β, hβ, hbB, hst⟩ := hb
@@ -816,7 +816,7 @@ theorem withbor2_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {δ : LSub} (hδ :
     (hO : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
     (Θ₀ : LocTy) (n : Nat) :
     vN (ℍ := ℍ) (axWithbor2Ty x Δ.meetOfDom A B) δ Θ₀ n withborVal PMap.empty := by
-  intro Θ₁ _ _ c₁ _ ls Θ₂ _ _ c₂ k hk u ρv ρu hc hu _
+  intro Θ₂ _ _ c₁ _ ls c₂ k hk u ρv ρu hc hu _
   obtain rfl := eq_of_compS_empty_left hc
   obtain ⟨l, w₀, σ₀, rfl, hcl, hw₀⟩ := hu
   have hΦ₂ : (Θ₂.view c₂).Down := LocTy.view_down (by assumption : Θ₂.OK).1 c₂
@@ -831,9 +831,9 @@ theorem withbor2_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {δ : LSub} (hδ :
       Val.lam, Expr.val, Val.unit]
   rw [e₁]
   refine erwp_val (v := withborAt l) ?_
-  intro Θ hE₃ hΘ c _ ls' Θ' hE' hΘ' c' k' hk' f ρf ρ'' hc' hf hcon
+  intro Θ' hE₃ hΘ' c _ ls' c' k' hk' f ρf ρ'' hc' hf hcon
   obtain ⟨l₁, w₀', σ₀', hl₁, hcl', hw₀'⟩ := vN_le hk'
-    (vN_extR (.ref A) δ k _ ρu hE' (vN_extR (.ref A) δ k _ ρu hE₃ ⟨l, w₀, σ₀, rfl, hcl, hw₀⟩))
+    (vN_extR (.ref A) δ k _ ρu hE₃ ⟨l, w₀, σ₀, rfl, hcl, hw₀⟩)
   obtain rfl : l = l₁ := by
     have := congrArg Subtype.val hl₁; simpa [Val.loc] using this
   have hΦ : (Θ'.view c').Down := LocTy.view_down hΘ'.1 c'
@@ -916,7 +916,7 @@ theorem withbor2_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {δ : LSub} (hδ :
       (consistentX_compS hBM hcf'' hcm))
     obtain ⟨⟨τg, τm, hcτ, hgv, rfl⟩, hcτ', hvτ⟩ := hg
     have happ := hgv Θ'' (LocTy.extR_refl _ _) hOK'' c'' (consistentX_left hcτ hcτ' hvτ) ls₂
-      Θ'' (LocTy.extR_refl _ _) hOK'' c'' j le_rfl (Val.loc l) _ τ hcτ (vN_le hj hcell) hcτ'
+      c'' j le_rfl (Val.loc l) _ τ hcτ (vN_le hj hcell) hcτ'
     show rwp (ℍ := ℍ) _ _ j ls₂ ((Kont.pairR (Val.loc l) Kont.hole).plug
       (.app (.val g) (.val (Val.loc l)))) τ
     refine rwp_bind hΦi _ ?_

@@ -301,8 +301,8 @@ theorem fin_claim {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
     (rwp_of_erwp_empty hd0) rfl
   refine rwp_mono_le (fun k' hk' ls' v τ hv => ?_) (rwp_consistentXV hfr hc)
   obtain ⟨⟨τ₁, τ₂, hcτ, hP, rfl⟩, hcτ', hvτ⟩ := hv
-  have := hP Θ (LocTy.extR_refl Θ _) hΘ c (consistentX_left hcτ hcτ' hvτ) ls' Θ (LocTy.extR_refl Θ _)
-    hΘ c k' le_rfl (Val.loc l) τ₂ τ hcτ ⟨l, w, σ, rfl, hcl, vN_le hk' hF'⟩ hcτ'
+  have := hP Θ (LocTy.extR_refl Θ _) hΘ c (consistentX_left hcτ hcτ' hvτ) ls'
+    c k' le_rfl (Val.loc l) τ₂ τ hcτ ⟨l, w, σ, rfl, hcl, vN_le hk' hF'⟩ hcτ'
   exact rwp_of_erwp_empty this
 
 /-- `withborU`'s `then`: `λb. (ℓ, b)`. -/
@@ -323,15 +323,15 @@ A callback that performs at a suspending row while holding the borrow is `cbPerf
 theorem cbRelease_sem {x : LifeVar} {bnd : Lifetime.Life} {A : VTy} {δ : LSub}
     (Θ : LocTy) (n : Nat) :
     vN (ℍ := ℍ) (cbUTy x bnd (.mut (.var x) A) .unit []) δ Θ n cbRelease PMap.empty := by
-  intro Θ' _ _ c _ ls
-  refine fun α _ Θ'' _ hOK c' k _ v ρv ρ' hc hv _ => ?_
+  intro Θ' _ hOK c _ ls
+  refine fun α _ c' k _ v ρv ρ' hc hv _ => ?_
   obtain rfl := eq_of_compS_empty_left hc
   obtain ⟨β, hβ, b, -, ⟨l, w, χ, hχ, j, hw, -, rfl, -, rfl⟩, -⟩ := hv
   have hΦ := LocTy.view_down hOK.1 c'
   have hQ : PostN.Down
-      (fun k _ v ρ => vN (ℍ := ℍ) (.box (.var x) .unit) (δ.extend x α) Θ'' k v ρ) :=
+      (fun k _ v ρ => vN (ℍ := ℍ) (.box (.var x) .unit) (δ.extend x α) Θ' k v ρ) :=
     fun k _ v ρ h => vN_down _ _ _ k v ρ h
-  show erwp (ℍ := ℍ) (Θ''.view c') (opTableN OpTabN.empty) _ k ls
+  show erwp (ℍ := ℍ) (Θ'.view c') (opTableN OpTabN.empty) _ k ls
     (.app (.app cbRelease.1 (.val .unit)) (.val (Val.loc l))) _
   refine erwp_det hΦ (opTableN_down OpTabN.empty_down) hQ
     (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl (.appL .hole (Val.loc l))) ?_

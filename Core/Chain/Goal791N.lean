@@ -21,8 +21,10 @@ interpretation and the statements are restated over Core's step-indexed chain re
   - `Mut` is Core's `ptoMutS` shape over the world: the cell at some `b ⊒ @aδ` (`mutL b`) holds a
     member of the payload read at the world above `b`, the family the world stores at the lend's
     key, and every value of the payload is in `Res_b`;
-  - `U C` and `⊸` are Kripke along Core's resource-relative order (`LocTy.ExtR` at the thunk's
-    or function's resource), at every view consistent with the resource (`ConsistentX`).
+  - `U C` is Kripke along Core's resource-relative order (`LocTy.ExtR` at the thunk's
+    resource), at every view consistent with the resource (`ConsistentX`); `⊸` is Core's plain
+    wand at the same world, step-indexed (every later index) and at every view consistent with
+    the composite.
   - `Imm` is Core's `ptoImmS` shape over the world: one `imm` cell, its payload in the
     observable view `vO` (Core's `vCE false`), its location witnessed in the world's `imm`
     records (`ImmWitW`, Core's `CohE`); the relation's entry tie (`ImmTieL`) puts the witness's
@@ -153,18 +155,17 @@ def vO : VTy → LSub → LocTy → Nat → Val → WRes → Prop
   | .opq _, _, _, _, _, _ => False
 /-- **`𝒞⟦C⟧δ` at the world, the run's live lifetimes, the index and the record list.** Every
 run is `erwp` at the view `Θ.view c`. `F A` is `erwp` at the empty table; `F_Σ R` is `erwp` at the
-table of the row's layers; `⊸` reads its argument at every extension of the world along `ExtR` at
-the function's resource, every view consistent with the argument's and the function's resource,
-and every later index
-(the step-indexed `−∗`); `∀'x ⊏ @c` every `α ⊏ @cδ` (Core's `cC`: vacuous where `@c` has no
+table of the row's layers; `⊸` is Core's plain wand at the same world, read at every view
+consistent with the argument's and the function's resource and every later index (the
+step-indexed `−∗`); `∀'x ⊏ @c` every `α ⊏ @cδ` (Core's `cC`: vacuous where `@c` has no
 interpretation; a constant's premises carry its bound's definedness, `Const791.OK`); `ν` is outside
 the fragment. -/
 def cN : CTy → LSub → LocTy → (Loc → Option Life) → Nat → List SRec → Expr → WRes → Prop
   | .ret A, δ, Θ, c, n, ls, e, ρ =>
       erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (fun k _ v ρ => vN A δ Θ k v ρ) n ls e ρ
-  | .arr A C, δ, Θ, _, n, ls, e, ρ => ∀ Θ' : LocTy, Θ.ExtR Θ' ρ → Θ'.OK → ∀ c',
-      ∀ k, k ≤ n → ∀ (v : Val) (ρv ρ' : WRes), ResU.CompS ρ ρv ρ' → vN A δ Θ' k v ρv →
-        ConsistentX c' ρ' → cN C δ Θ' c' k ls (.app e (.val v)) ρ'
+  | .arr A C, δ, Θ, _, n, ls, e, ρ => ∀ c',
+      ∀ k, k ≤ n → ∀ (v : Val) (ρv ρ' : WRes), ResU.CompS ρ ρv ρ' → vN A δ Θ k v ρv →
+        ConsistentX c' ρ' → cN C δ Θ c' k ls (.app e (.val v)) ρ'
   | .amp C D, δ, Θ, c, n, ls, e, ρ => cN C δ Θ c n ls (.app e (.val (Val.inj₁ .unit))) ρ ∧
       cN D δ Θ c n ls (.app e (.val (Val.inj₂ .unit))) ρ
   | .top, _, _, _, _, _, _, _ => True
@@ -331,7 +332,7 @@ theorem cN_down : ∀ (C : CTy) (δ : LSub) (Θ : LocTy), Θ.Down → ∀ (c : L
   | .ret A, δ, Θ, hΘ, c, n, ls, e, ρ, h =>
       erwp_le (LocTy.view_down hΘ c) (opTableN_local _) (opTableN_down OpTabN.empty_down)
         (fun k _ v ρ h => vN_down A δ Θ k v ρ h) (Nat.le_succ n) h
-  | .arr A C, δ, Θ, hΘ, c, n, ls, e, ρ, h => fun Θ' hE hOK c' k hk => h Θ' hE hOK c' k (by omega)
+  | .arr A C, δ, Θ, hΘ, c, n, ls, e, ρ, h => fun c' k hk => h c' k (by omega)
   | .amp C D, δ, Θ, hΘ, c, n, ls, e, ρ, h =>
       ⟨cN_down C δ Θ hΘ c n ls _ ρ h.1, cN_down D δ Θ hΘ c n ls _ ρ h.2⟩
   | .top, _, _, _, _, _, _, _, _, h => h
@@ -812,11 +813,12 @@ theorem vN_extA (A : VTy) (δ : LSub) {Θ Θ' : LocTy} (hE : Θ.ExtA Θ') (n : N
     (ρ : WRes) (h : vN (ℍ := ℍ) A δ Θ n v ρ) : vN (ℍ := ℍ) A δ Θ' n v ρ :=
   vN_extR A δ n v ρ (hE.extR ρ) h
 
-/-- The computation types `cN_extA` covers: every former but an effect row (`F_Σ R`), read
-through `⊗`-free spines (`&`, `∀`); `⊸` and `F A` at any argument and result. -/
+/-- The computation types `cN_extA` covers: `F A`, `⊤` and `ν`, read through `&` and `∀`. Not
+an effect row (`F_Σ R`), and not `⊸`: a plain wand at `Θ` reads its argument at `Θ`, and an
+argument at an extension `Θ′` is not one at `Θ`. -/
 def noEffSpine : CTy → Prop
   | .ret _ => True
-  | .arr _ _ => True
+  | .arr _ _ => False
   | .amp C D => noEffSpine C ∧ noEffSpine D
   | .top => True
   | .all _ _ C => noEffSpine C
@@ -824,8 +826,7 @@ def noEffSpine : CTy → Prop
   | .eff _ _ _ _ _ _ _ _ => False
 
 /-- **`𝒞⟦C⟧` is stable along `ExtA`**: `F A` by `erwp_extΦ` at the view (which grows along the
-order, `LocTy.view_ext`) and `vN_extA` for its values; `⊸` by `ExtA` being `ExtR` at the
-function's resource and `ExtR`'s transitivity. Not at an effect row: there the table's answer `vN B δ Θ` is what the continuation was proved to accept,
+order, `LocTy.view_ext`) and `vN_extA` for its values. Not at an effect row: there the table's answer `vN B δ Θ` is what the continuation was proved to accept,
 and the table at `Θ′` hands back answers at `Θ′`. -/
 theorem cN_extA : ∀ (C : CTy), noEffSpine C → ∀ (δ : LSub) {Θ Θ' : LocTy}, Θ.ExtA Θ' →
     ∀ c n ls e ρ, cN (ℍ := ℍ) C δ Θ c n ls e ρ → cN (ℍ := ℍ) C δ Θ' c n ls e ρ
@@ -833,8 +834,7 @@ theorem cN_extA : ∀ (C : CTy), noEffSpine C → ∀ (δ : LSub) {Θ Θ' : LocT
       erwp_mono (fun k _ v ρ h => vN_extA A δ hE k v ρ h) (opTableN_local _) n ls e ρ
         (erwp_extΦ (LocTy.view_ext (LocTy.ext_of_extA hE) c) (LocTy.view_immLe hE.2.2 c)
           (opTableN_local _) n ls e ρ h)
-  | .arr _ _, _, _, _, _, hE, _, _, _, _, ρ, h => fun Θ'' hE' hOK c' k hk v ρv ρ' hc hv hcon =>
-      h Θ'' ((hE.extR ρ).trans hE') hOK c' k hk v ρv ρ' hc hv hcon
+  | .arr _ _, hC, _, _, _, _, _, _, _, _, _, _ => hC.elim
   | .amp C D, hC, δ, _, _, hE, c, n, ls, e, ρ, h =>
       ⟨cN_extA C hC.1 δ hE c n ls _ ρ h.1, cN_extA D hC.2 δ hE c n ls _ ρ h.2⟩
   | .top, _, _, _, _, _, _, _, _, _, _, h => h
@@ -886,9 +886,9 @@ theorem cN_head : ∀ (C : CTy) (δ : LSub) (Θ : LocTy), Θ.Down → ∀ (c : L
   | .ret A, δ, Θ, hΘ, c, n, ls, ρ, K, a, a', hh, hn, h =>
       erwp_det (LocTy.view_down hΘ c) (opTableN_down OpTabN.empty_down)
         (fun k _ v ρ h => vN_down A δ Θ k v ρ h) (fun μ => step1Only_plug (hh μ) hn K) h
-  | .arr A C, δ, Θ, _, c, n, ls, ρ, K, a, a', hh, hn, h =>
-      fun Θ' hE hOK c' k hk v ρv ρ' hc hv hcon =>
-        cN_head C δ Θ' hOK.1 c' k ls ρ' (.appL K v) a a' hh hn (h Θ' hE hOK c' k hk v ρv ρ' hc hv hcon)
+  | .arr A C, δ, Θ, hΘ, c, n, ls, ρ, K, a, a', hh, hn, h =>
+      fun c' k hk v ρv ρ' hc hv hcon =>
+        cN_head C δ Θ hΘ c' k ls ρ' (.appL K v) a a' hh hn (h c' k hk v ρv ρ' hc hv hcon)
   | .amp C D, δ, Θ, hΘ, c, n, ls, ρ, K, a, a', hh, hn, h =>
       ⟨cN_head C δ Θ hΘ c n ls ρ (.appL K _) a a' hh hn h.1,
         cN_head D δ Θ hΘ c n ls ρ (.appL K _) a a' hh hn h.2⟩

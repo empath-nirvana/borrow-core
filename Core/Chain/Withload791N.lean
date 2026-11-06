@@ -385,7 +385,7 @@ theorem callback_at_image {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : R
       (.app (.app (.val f) (.val .unit)) (.val u)) Bχ := by
   have h1 := (hf Θ (LocTy.extR_refl _ _) hΘ c hcf ls) β hLt
   have hcon : ConsistentX c Bχ := consistentX_compS hBχ hcf (consistentX_allImm hχ c)
-  have h2 := h1 Θ (LocTy.extR_refl _ _) hΘ c n le_rfl u χ Bχ hBχ himg hcon
+  have h2 := h1 c n le_rfl u χ Bχ hBχ himg hcon
   rw [cN_effOf, tabN_extend_suspendC β _ (suspendC_effOf hS _) δ Θ c,
     tabN_effOf_base S (.box (.var x) B) B δ Θ c] at h2
   refine erwp_mono (fun k _ w ρ hb => ?_) (opTableN_local _) n ls _ Bχ h2
@@ -533,8 +533,8 @@ Core's `withload_compatX`, step by step (`scope-791-rule.md` §9.1):
 
 1. the context owns nothing: the constant at `PMap.empty`;
 2. the `Imm` argument is `loc ℓ` (`vN`'s `Imm` clause);
-3. the callback, at the world along `ExtR`;
-4. both arrive at the world `Θ` the run is at (`vN_extR`);
+3. the callback, at the same world: `⊸` is a plain wand;
+4. both are at the world `Θ` the run is at, which the thunk's `U` reached;
 5. the load: its payload observable at `A` (`rwp_load_I` under `erwp_bindR`);
 6.–11. at the run's first entry (`withload_reb`): the record whose cell or chain view the source
    is, at the source's type (the tie and `TI`); its template (6.132, `tmpl_exists`,
@@ -551,13 +551,13 @@ theorem withloadS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
     (hS : S.Suspend x bnd) (δ : LSub) (Θ₀ : LocTy) (n : Nat) :
     vN (ℍ := ℍ) (.bang (withloadUTy a x bnd A B S)) δ Θ₀ n withloadV PMap.empty := by
   -- step 1
-  refine ⟨rfl, fun Θ₁ _ _ c₁ _ ls => ?_⟩
-  intro Θ₂ _ _ c₂ k hk u ρv ρu hc hu _
+  refine ⟨rfl, fun Θ _ hΘ c₁ _ ls => ?_⟩
+  intro c₂ k hk u ρv ρu hc hu _
   obtain rfl := eq_of_compS_empty_left hc
   -- steps 2–4
-  intro Θ hE₃ hΘ c k' hk' f ρf ρ'' hc' hf hcon
+  intro c k' hk' f ρf ρ'' hc' hf hcon
   obtain ⟨α₀, hα₀, ⟨l, s, w, σ, hσs, rfl, rfl, hα₀s, hpay⟩, hwit⟩ :=
-    vN_le hk' (vN_extR _ δ k _ _ hE₃ hu)
+    vN_le hk' hu
   rw [cN_effOf]
   refine erwp_of_valid fun hv'' => ?_
   have hcf : ConsistentX c ρf := consistentX_right hc' hcon hv''

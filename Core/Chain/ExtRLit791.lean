@@ -16,8 +16,8 @@ keeps nothing above `b`, so none has a key at `α`, and the thunk is valid there
 holds the argument `ℓ′ ↦ mut(α, (), ∅, 𝒱⟦1⟧)`, and the thunk is not valid there
 (`not_valid_at_lend`).
 
-`vUgen E` is `vN`'s `U` clause followed by `cN`'s `⊸` clause at this type, with the order `E` in
-both places; at `E = LocTy.ExtR` it is `vN` itself (`vN_eq_vUgen`). The `Mut` and `ν` clauses do not
+`vUgen E` is `vN`'s `U` clause, reading the order `E`, followed by `cN`'s `⊸` clause at this type,
+a plain wand at the world `U` reached; at `E = LocTy.ExtR` it is `vN` itself (`vN_eq_vUgen`). The `Mut` and `ν` clauses do not
 read the order, so `vUgen ExtRL` is the literal reading's `𝒱⟦U(Mut 'x 1 ⊸ ν(F 1))⟧`.
 -/
 
@@ -45,14 +45,14 @@ theorem extRL_refl (Θ : LocTy) (ρ : WRes) : ExtRL Θ Θ ρ := ⟨fun _ _ _ h _
 /-- `Mut 'x 1 ⊸ ν(F 1)`. -/
 def tyC (x : LifeVar) : CTy := .arr (.mut (.var x) .unit) (.nu (.ret .unit))
 
-/-- **`𝒱⟦U(Mut 'x 1 ⊸ ν(F 1))⟧` with the Kripke order `E`**: `vN`'s `U` clause, then `cN`'s `⊸`
-clause, each reading `E` where `vN`/`cN` read `LocTy.ExtR`. -/
+/-- **`𝒱⟦U(Mut 'x 1 ⊸ ν(F 1))⟧` with the Kripke order `E`**: `vN`'s `U` clause, reading `E` where
+`vN` reads `LocTy.ExtR`, then `cN`'s `⊸` clause at the world reached. -/
 def vUgen (E : LocTy → LocTy → WRes → Prop) (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat)
     (v : Val) (ρ : WRes) : Prop :=
   ∀ Θ' : LocTy, E Θ Θ' ρ → Θ'.OK → ∀ c, ConsistentX c ρ → ∀ ls : List SRec,
-    ∀ Θ'' : LocTy, E Θ' Θ'' ρ → Θ''.OK → ∀ c', ∀ k, k ≤ n → ∀ (w : Val) (ρv ρ' : WRes),
-      ResU.CompS ρ ρv ρ' → vN (ℍ := ℍ) (.mut (.var x) .unit) δ Θ'' k w ρv → ConsistentX c' ρ' →
-        cN (ℍ := ℍ) (.nu (.ret .unit)) δ Θ'' c' k ls (.app (forceE (tyC x) v.1) (.val w)) ρ'
+    ∀ c', ∀ k, k ≤ n → ∀ (w : Val) (ρv ρ' : WRes),
+      ResU.CompS ρ ρv ρ' → vN (ℍ := ℍ) (.mut (.var x) .unit) δ Θ' k w ρv → ConsistentX c' ρ' →
+        cN (ℍ := ℍ) (.nu (.ret .unit)) δ Θ' c' k ls (.app (forceE (tyC x) v.1) (.val w)) ρ'
 
 /-- At the interpretation's own order, `vUgen` is `vN`. -/
 theorem vN_eq_vUgen (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes) :
@@ -70,17 +70,16 @@ theorem cellIn_ρb (m : Loc) (b : Life) : CellIn (ρb m b) b := by
     (by rw [CellU.kind_mutOf]; exact fun c => Kind.noConfusion c)
   rwa [CellU.at_mutOf] at h
 
-/-- **Under the literal order the thunk is valid at the empty world**: every literal extension,
-and every literal extension of that, keeps nothing above `b`, so none has a key at `α > b`, and no
-`Mut @α 1` argument exists. -/
+/-- **Under the literal order the thunk is valid at the empty world**: every literal extension
+keeps nothing above `b`, so none has a key at `α > b`, and no `Mut @α 1` argument exists. -/
 theorem valid_at_empty (x : LifeVar) (δ : LSub) {α b : Life} (hbα : b < α) (m : Loc) (n : Nat)
     (v : Val) : vUgen (ℍ := ℍ) ExtRL x (δ.extend x α) LocTy.empty n v (ρb m b) := by
-  intro Θ' hE _ c _ ls Θ'' hE' _ c' k _ w ρv ρ' _ hv _
+  intro Θ' hE _ c _ ls c' k _ w ρv ρ' _ hv _
   exfalso
   obtain ⟨β, hβ, b', hβb', ⟨l', _, _, _, _, _, _, _, hl, _⟩, -⟩ := hv
   rw [interp_ext_self] at hβ
   cases Option.some.inj hβ
-  have habove := (hE'.2 b (cellIn_ρb m b)).trans (hE.2 b (cellIn_ρb m b))
+  have habove := hE.2 b (cellIn_ρb m b)
   have h := congrArg (fun Θ : LocTy => Θ l' b') habove
   simp only [LocTy.above_apply, if_pos (lt_of_lt_of_le hbα hβb'), LocTy.empty_apply] at h
   rw [h] at hl
@@ -116,8 +115,7 @@ theorem not_valid_at_lend (x : LifeVar) (δ : LSub) {N α b : Life} (hNα : N < 
   have hcc : ConsistentX c' cell :=
     consistentX_single_mut (consistentX_empty c') (by simp [c', hml])
   have hc' : ConsistentX c' ρ' := consistentX_compS hρ' hcb' hcc
-  exact h Θ₁ (extRL_refl _ _) hOK c hcb [] Θ₁ (extRL_refl _ _) hOK c' n le_rfl (Val.loc l') cell ρ'
-    hρ' hv hc'
+  exact h Θ₁ (extRL_refl _ _) hOK c hcb [] c' n le_rfl (Val.loc l') cell ρ' hρ' hv hc'
 
 /-- **The literal reading of Core's `Ext` breaks `vN_extA` at `U`.** Both worlds are `OK`, the
 second is an `ExtA` extension of the first (a fresh lend), and a value of
