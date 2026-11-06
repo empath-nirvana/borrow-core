@@ -3,7 +3,7 @@
 Branch `rule-791`. The world is in the library (`Core/Chain/SI/LocTy.lean`); the interpretation
 over it is `Core/Chain/Goal791N.lean`; `Core/Chain/LocTypeSketch.lean` keeps L2 (c)'s
 configuration. Background: `scope-791-rule.md` §7. State after #825 (U1, U2): §9; after #826 (U3):
-§10.
+§10; after #827 (U4): §11.
 
 Kernel target: the location typing the chain's semantic interpretation reads, so that step 7 of
 Core's `withbor3_compatX` (`Core/Compatibility.lean:1151`; inside it `Core/FrameRules.lean:620`,
@@ -457,3 +457,83 @@ obstruction is real.
 (`consistentX_get`, then `erwp_antiFrame_view`/`reseal_at_entry`); its key `(ℓ, β)` kept by the
 reborrow (`reborrow_view`); `erwp_claimX`'s consistency reasoning for the anti-frame's cancel runs;
 step 8's anti-frame across layered cancel runs (`erwp_M_antiFrameC` at `tabR`), not built.
+
+## 11. State after #827 (U4)
+
+All in `scripts/AxiomCheck.lean`; axioms within `propext`, `Classical.choice`, `Quot.sound`. No
+relation definition changed (`erwp`, `rwpG`, `EndOKG`, `UpdN`, `PredStep`, `MutStep`, `LocFam`).
+
+**`ExtR` stays: the literal reading breaks `vN_extA` at `U`** (`Core/Chain/ExtRLit791.lean`,
+`extRL_breaks_extA`, every hypothesis discharged). `ExtRL Θ Θ′ ρ` is Core's `Ext` read literally:
+keys kept, and nothing added above *every* `b` with `CellIn ρ b`. The type is
+`U(Mut 'x 1 ⊸ ν(F 1))` at `'x ↦ α`; the thunk's resource `m ↦ mut(b, (), ∅, ⊤)` with `b < α`.
+From the empty world every literal extension, and every literal extension of that, keeps nothing
+above `b`, so no `Mut @α 1` argument exists and the thunk is valid (`valid_at_empty`). The world
+`∅ + (ℓ′, α) ↦ 𝒱⟦1⟧` is an `ExtA` extension of the empty one (a fresh lend), holds the argument
+`ℓ′ ↦ mut(α, (), ∅, 𝒱⟦1⟧)`, and `ν`'s clause is `False`, so the thunk is not valid there
+(`not_valid_at_lend`). `vUgen E` is `vN`'s `U` clause followed by `cN`'s `⊸` clause at this type
+with the order `E`; at `LocTy.ExtR` it is `vN` (`vN_eq_vUgen`), and the `Mut` and `ν` clauses do not
+read the order. So the restriction of `ExtR` to keys present is a forced departure from Core's
+literal clause: Core's records are a list that a lend extends only below the cells present, while
+the world gains keys anywhere, and `ExtA` (which keeps only what is above keys present) must be an
+`ExtR` at every resource for `vN_extA` to hold.
+
+**Step 6: `ptoMutS`'s uniform conjunct** (`Goal791N.lean`). `vN`'s `Mut @a A` clause is now
+`∃ α, @aδ = α ∧ mutL α 𝒱⟦A⟧ Θ n v ρ ∧ ∀ Θ′ j u r, 𝒱⟦A⟧ Θ′ j u r → r ∈ Res_α`, Core's `hunif`
+(`Core/Relation.lean`, `ptoMutS`'s last conjunct). The laws are re-proved with their statements
+unchanged. `vN_outlivesLe` is new: `⊢ A ⊒ @a` puts `𝒱⟦A⟧` in every stratum strictly below `@aδ`
+(Core's `vC_outlivesLe`).
+
+**`withbor2S_compat` takes the lend below the side condition**, as Core's `withbor2U_compatX`
+does: its premises gain `hO : ∃ b, Defines b ∧ VOutlivesLe b A`, `withbor2U`'s side condition,
+which `Const791.OK` already carried. The borrow's uniform conjunct at `α` comes from it. `constN_w2`
+is unchanged in its statement. §7.4's departure (the lend below the content's actual stratum) is
+gone.
+
+**`w3`** (`Core/Chain/Reborrow791N.lean`):
+
+- `opTableGR`/`cancelTabGR`: `opTableR`/`cancelTabR` with guarded stops.
+- `erwp_M_frameCRG`, `erwp_M_frame_cancelRunCRG`: the Row.Suspend Mut Frame with its fold at every
+  stop (`CellFold`), as `erwp_M_frameTF` is `erwp_M_frameT`'s.
+- **Step 8**: `erwp_M_antiFrameCR` (body) and `erwp_M_antiFrame_cancelRunCR` (cancel run):
+  `erwp_M_antiFrameC` extended to raises and to cancel runs that stop. Inner table
+  `opTableGR T G Rin`, outer `opTableR T′ Rout`, `T.Twin T′`. At a stop the guard gives the fold
+  (`hG`) and the cell is sealed into the share at `F k`; at a raise the claim (`hRin`) is sealed
+  into the source's entry and carried out (`hRout`); a cancellable stop's obligation is transferred
+  by `hcan`. `tabG`/`finG` are the lender's guarded twin (cancel runs at their rows' guarded
+  tables); `tabG_can` discharges the Mut Frame's transfer and `tabR_canA` the anti-frame's, each by
+  induction on cancel depth, as `tabR_can` does for `w2`.
+- `consistentX_mut_wit`, `exS_wit_none`: a `mut` cell's witness is consistent with the cell's view
+  and its walk misses the cell's location (the borrow's content, consistent at `setLife c ℓ α`).
+- `fin_claimM`: `λ_. d ℓ` consumes a `Mut @a A` value by `d`'s judgment.
+- `withbor3S_compat` (premises `hA`, `hB`, `hS`, `hdc` from `Const791.OK` for `w3`, and `hd`,
+  `d`'s semantic judgment) and `constN_w3 : FundamentalN → ConstN (.w3 …)`.
+
+K1 was not met: a consistent view opens the source (`consistentX_get` on a valid start; the start
+is valid by `erwp_of_valid`).
+
+**What #828 (`wF`, `withborFE`) needs.** The source is `Mut @a (Ref A)`; the anti-frame opens
+`ℓ ↦ mut(β, loc ℓ₂, σ₀, F_o j)` with `σ₀ = ℓ₂ ↦ own(u) ● σ_u`; the callback borrows `ℓ₂`.
+
+1. A `load` step from the opened `ℓ ↦ own(loc ℓ₂)` under the anti-frame (`erwp_det` at the load
+   head; the opened cell is the anti-frame's `W`).
+2. The Mut Frame at `ℓ₂`, with `ℓ ↦ own(loc ℓ₂)` framed outside it: a frame over
+   `opTableGR`/`cancelTabGR` whose framed resource joins the guard at every stop
+   (`ShareG.sep`, as `erwpG_frame`), the claim at every raise and the claim of every layered cancel
+   run (as `erwp_frame_cancelRun`, there at `OpTabN.empty`). Then `hG` and `hRin` read
+   `CellFold ℓ₂ α F_i ⋆ ℓ ↦ own(loc ℓ₂)` into `CellFold ℓ β F_o`. Not built.
+3. The field's inclusion `F_i k ⊆ F_o k` through `Ref`'s clause: `ℓ₂ ↦ own(w) ● χ`, `χ ∈ F_i k`, is
+   a `Ref A` value; its stratum from `hunif` at `Ref A` (the `Ref` clause splits `Res_β`).
+4. The view at `ℓ₂`: `ℓ₂` holds an `own` cell in `σ₀`, so `setLife c ℓ₂ α` is consistent with the
+   callback's start by `exS_wit_none`/`exS_none_of_part` and `consistentX_setLife`.
+5. `fin_claimM` at `Mut @a (Ref A)`; `tabG`, `tabG_can`, `tabR_canA`, `erwp_M_antiFrameCR` as they
+   stand.
+
+**Unspent and unused.** Unspent printed premises of `withbor3U_compatX`: none (`_hx`, Core's
+`Δ.find? x = none`, has no counterpart at `LifeCtx.empty`). Unused: `erwp_withbor3`,
+`erwp_M_antiFrameC`, `erwp_M_antiFrame_cancelRun` (the cases with no raises or no stops that
+`erwp_M_antiFrameCR` covers), `reseal_at_entry`'s `MutStep` conjunct (the reseal is
+`rwpG_M_antiFrameG`'s), `erwp_antiFrame_view` (its `hF` comes from `reseal_at_entry` directly).
+Uniqueness results used: `ExS.functional`, `ResU.CompS.functional`.
+
+**Open, unchanged:** `cN_extA` at `F_Σ R` (§10).

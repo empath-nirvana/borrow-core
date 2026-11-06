@@ -322,18 +322,17 @@ records'.
 
 - `withbor2_compatX`: steps 1–3 and 8–13 above, with the source an owned cell (`Ref`), so no
   step 7; `MutFrame` at `↓β` from the side condition `Δ ⊢ T₁ ⊒ @b` through `vC_outlivesLe`
-  (1053–1057). Chain: `withbor2S_compat` (`Cancel791N`), proved, no `hSF`, no `hSB`. It departs
-  at that one step: the lend's lifetime is chosen below the content's actual stratum
-  (`ResU.exists_stratum`), not from the side condition, so the technique Core builds there (6.60
-  at the side condition's `@bδ`, `vC_outlivesLe`) is not used by the chain's proof, and
-  `Const791.OK`'s `∃ b, Defines b ∧ VOutlivesLe b A` stays unspent (§5). `vN_outlives` exists
-  and would carry Core's step.
+  (1053–1057). Chain: `withbor2S_compat` (`Cancel791N`), proved, no `hSF`, no `hSB`. Since #827 it
+  takes this step as Core does: the lend's lifetime is below the side condition's `@bδ`, and every
+  value of `A` is in its stratum by `vN_outlivesLe` (Core's `vC_outlivesLe`), which supplies the
+  borrow's uniform conjunct (step 6) and the content's stratum. `Const791.OK`'s
+  `∃ b, Defines b ∧ VOutlivesLe b A` is now spent (`hO`).
 - `withload_compatX`: reads `ptoImmS` with `CohE` at the loaded cell (the chooser of
   `wpTS_reborrow`), `wpTS_load_I`, `vC_local`, `vC_tyEq`. Chain: `erwp_reborrow`
   (`SI/RebAcrossC.lean:96`) exists; `vN`'s `Imm` has no `CohE` and no record list (departure 1),
   so the chooser is not read off the value. Not attempted: §7.2 stops the unit first.
 
-### 7.5 State
+### 7.5 State before #827
 
 Interpretation unchanged (`Goal791N.lean`): step 2 of the brief changes only what the port reads,
 and the port stops at step 7 before the pieces it would read (`hunif`, the record list) matter.
@@ -346,3 +345,30 @@ yet past step 6. Unused: `rwp_M_antiFrame_sem`, `erwp_withbor3`, `erwp_M_antiFra
 counterparts of steps 4 (`vN_local`, only if `vN` reads the list), 6 (`ptoMutS`'s uniform
 conjunct), 7 (the reseal at a location `Φ` does not type) and 8's anti-frame across layered cancel
 runs.
+
+### 7.6 State after #827 (U4): every step built
+
+`withbor3S_compat`/`constN_w3` (`Core/Chain/Reborrow791N.lean`) follow Core's `withbor3U_compatX`
+(`Core/EffBorrow.lean`), whose proof is `withbor3_compatX`'s: the finaliser frame outermost, the
+anti-frame at the source with the borrow handed back at every end, the Mut Frame inside it. Over
+the per-lend interpretation (`scope-791-loctype.md` §11) the 13 steps are:
+
+| # | Chain counterpart, built | State |
+|---|---|---|
+| 1 | the constant at `PMap.empty` | as `withbor2S_compat` |
+| 2 | `vN`'s `Mut` clause: `ℓ ↦ mut(β, w₀, σ₀, F_o j₀)`, `Θ (ℓ, β) = F_o`, `F_o = famL β 𝒱⟦A⟧ Θ` | done |
+| 3 | the callback along `ExtR` | as `withbor2S_compat` |
+| 4 | `vN_extR` (Core's `vC_local`) carries both to the run's world; `vN_local` returns the result | done (#826) |
+| 5 | `mutL` unpacked | done |
+| 6 | `hunif`, `ptoMutS`'s last conjunct, now the `Mut` clause's: every value of `A` in `Res_β` | done; `w2` supplies it from `⊢ A ⊒ @b` (`vN_outlivesLe`, Core's 6.60) |
+| 7 | `consistentX_get` gives `c ℓ = β`; `reseal_at_entry` gives the view's `hF`; the anti-frame reseals into `F_o k` | done (L1) |
+| 8 | `erwp_M_frameCRG` (the Mut Frame at a fresh `α ≤ β`, its fold recorded at every stop), `erwp_M_antiFrameCR`/`erwp_M_antiFrame_cancelRunCR` (the anti-frame across stops, raises and layered cancel runs), `tabG_can`, `tabR_canA` | done, built in this unit |
+| 9 | `LocTy.exists_fresh` below `β ⊓ βf ⊓ γ` | done |
+| 10 | `lend_mutL`, `vN_extend_of_not_free`; the borrow's `hunif` at `α` from the source's by `α ≤ β` | done |
+| 11 | the callback at `Θ + (ℓ, α) ↦ famL α 𝒱⟦A⟧ Θ`, view `setLife c ℓ α` (`view_add`); its table the guarded twin (`tabN_tabG_twin`) | done |
+| 12 | `vN_local` at `['x] B` | done |
+| 13 | `F_i k ⊆ F_o k` by `hunif` and `vN_above` (the guard `hG`, the claim `hRin`); the resealed cell is a `Mut @a A` value (`hRout`) beside the result and in every raise's claim; `erwp_claimX`, `erwp_ubindClaimRT`, `fin_claimM` | done |
+
+§7.2's obstruction (`reseal_untyped`) is answered by L1: the view types the cell at its own entry.
+`erwp_withbor3` (`SI/AntiStopN.lean`) is not used: it is the composition at tables with no raises
+and no cancellable stops; `erwp_M_antiFrameCR ∘ erwp_M_frameCRG` is its extension.
