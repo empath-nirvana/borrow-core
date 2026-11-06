@@ -15,11 +15,15 @@ Core's `withbor1U_compatX` (`Core/EffBorrow.lean`) and `withbor1_compatX`
   callback's `Imm` argument is witnessed there by the record;
 * the callback's run, at that world's view, is a run at the lender's view: an unwinding row's
   table never resumes, so the relation reads the tie only at the run's entry, whose list is the
-  frame's and holds the record (`erwp_tieDrop`);
+  frame's and holds the record (`erwp_tieEntry`);
 * the Imm Frame across the row's raises (`erwp_I_frameR`, Core's `ewpTS_I_frameU`);
 * the callback's result `['x] B` returns to the world without the record (`LocTy.extR_of_addImm`,
   Core's `ext_drop`);
 * the finaliser frame consumes the lend's claim at a raise (`erwp_ubindRaise`, `fin_claimI`).
+
+The same steps give the `mut` lend `withbor (2)` at the pure row and at an unwinding row, at any
+`Δ` (`withbor2_compatN`, `withbor2U_compatN`): the Mut Frame across raises (`erwp_M_frameR`), the
+claim consistent with the view (`erwp_claimX_abort`).
 -/
 
 noncomputable section
@@ -124,7 +128,7 @@ theorem gN_dead_any {δ : LSub} {Θ : LocTy} {n : Nat} : ∀ {Γ : Ctx VTy}, Ctx
 
 /-- **The tie is read only at the entry**: a run at a location typing with more `imm` records,
 the same families, from a list holding the extra records, is a run at the one with fewer. -/
-theorem rwpG_tieDrop {Φ Φ' : LocFam} (hfam : Φ'.fam = Φ.fam) {ls : List SRec}
+theorem rwpG_tieEntry {Φ Φ' : LocFam} (hfam : Φ'.fam = Φ.fam) {ls : List SRec}
     (hI : ∀ x ∈ Φ'.imm, x ∈ Φ.imm ∨ x ∈ ls) {Q : PostG} {n : Nat} {e : Expr} {ρ : WRes}
     (h : rwpG (ℍ := ℍ) Φ' Q n ls e ρ) : rwpG (ℍ := ℍ) Φ Q n ls e ρ := by
   obtain ⟨f', I'⟩ := Φ'
@@ -137,12 +141,12 @@ theorem rwpG_tieDrop {Φ Φ' : LocFam} (hfam : Φ'.fam = Φ.fam) {ls : List SRec
 
 /-- **A run at an abortive table reads its tie only at its entry**: the table never resumes, so
 what the run owes at a stop does not mention the location typing. -/
-theorem erwp_tieDrop {Φ Φ' : LocFam} (hfam : Φ'.fam = Φ.fam) {T : OpTabN}
+theorem erwp_tieEntry {Φ Φ' : LocFam} (hfam : Φ'.fam = Φ.fam) {T : OpTabN}
     (hab : ∀ m i en, T m i = some en → en.abort = true) {Q : PostN} {n : Nat} {ls : List SRec}
     {e : Expr} {ρ : WRes} (hI : ∀ x ∈ Φ'.imm, x ∈ Φ.imm ∨ x ∈ ls)
     (h : erwp (ℍ := ℍ) Φ' (opTableN T) Q n ls e ρ) : erwp (ℍ := ℍ) Φ (opTableN T) Q n ls e ρ := by
   rw [erwp_eq] at h ⊢
-  refine rwpG_tieDrop hfam hI (rwpG_mono (fun k ls' t σ ht => ?_) h)
+  refine rwpG_tieEntry hfam hI (rwpG_mono (fun k ls' t σ ht => ?_) h)
   rcases ht with ht | ⟨K, m, i, v, en, hp⟩ | ht
   · exact Or.inl ht
   · obtain ⟨⟨-, -, hTe, ha⟩, -⟩ := pure_sep_iff.mp hp
@@ -271,7 +275,7 @@ theorem fin_claimI {A : VTy} {d : Expr} (hdc : closedAt 0 d = true) {δ : LSub} 
    (`LocTy.extR_addImm`, Core's `ext_add hadd hout₂`);
 5. the borrow `ℓ ↦ imm({α}, w₀, σ₀)` a value of `Imm 'x A` at `δ['x ↦ α]` there: its payload
    observable at `A`, its witness the record;
-6. the callback's run, at the world's view, is one at `Θ`'s (`erwp_tieDrop`), its table the
+6. the callback's run, at the world's view, is one at `Θ`'s (`erwp_tieEntry`), its table the
    lender's (`tabN_unwind_eq`);
 7. the Imm Frame across the row's raises (`erwp_I_frameR`, Core's `ewpTS_I_frameU`), the
    callback's result `['x] B` back at `Θ` (`LocTy.extR_of_addImm`, Core's `ext_drop`);
@@ -390,7 +394,7 @@ theorem withbor1U_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Ex
       (frameList p ds α ls)) α hLt
     have h2 := h1 Θ' (LocTy.extR_refl _ _) hOK' c k' le_rfl (Val.loc l) ρi BI hBI hcell hcBI
     rw [cN_effOf, tabN_unwind_eq hS _ (.tensor (.ref A) B) δ Θ p α c] at h2
-    have h3 := erwp_tieDrop (Φ := Θ.view c) (Φ' := Θ'.view c) rfl
+    have h3 := erwp_tieEntry (Φ := Θ.view c) (Φ' := Θ'.view c) rfl
       (tabN_unwind_abort hS _ δ Θ c) (fun y hy => by
         rcases List.mem_cons.mp hy with rfl | hy
         · exact .inr (List.mem_cons_self ..)
@@ -543,7 +547,7 @@ theorem withbor1_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {δ : LSub} (hδ :
       obtain ⟨-, rfl⟩ := ResU.single_get_eq_some e
       exact CellU.kind_immOf _ _ _ _) c'
     -- the run, at the callback's world, read at the lender's view
-    refine erwp_tieDrop (Φ := Θ'.view c') (Φ' := Θ''.view c') (T := OpTabN.empty) rfl
+    refine erwp_tieEntry (Φ := Θ'.view c') (Φ' := Θ''.view c') (T := OpTabN.empty) rfl
       (fun _ _ _ h => by simp [OpTabN.empty] at h)
       (fun y hy => by
         rcases List.mem_cons.mp hy with rfl | hy

@@ -1045,7 +1045,8 @@ The rule-by-rule map is `docs/new-core/scope-831-map.md`. Its answers on the two
   With `LocTy.above` Core's `ls₀` and `ExtR`'s record conjunct Core's `Keeps`, that world is an
   extension at the callback's resource (`LocTy.extR_addImm`, Core's `ext_add`) and the world
   without the record is one at the result's (`LocTy.extR_of_addImm`, Core's `ext_drop`);
-  `withbor1_compatN` and `withbor1U_compatN` (`Core/Chain/ImmLend833N.lean`) follow Core's proofs.
+  `withbor1_compatN` and `withbor1U_compatN` (`Core/Chain/ImmLend833N.lean`) follow Core's proofs,
+  as do `withbor2_compatN` and `withbor2U_compatN` (the latter at any `Δ` and a `Row.Unwind` row).
 * `cN_extA` at an effect row `F_Σ R` is needed by no rule: Core carries the callback's table along
   `Ext` only in `withbor1U_compatX` and `sliceBorrowIU_compatX` (`opTable_ext`), and the chain's
   table does not read the record list. -/

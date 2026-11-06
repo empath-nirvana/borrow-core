@@ -150,13 +150,13 @@ branches are the same lemmas). E10 is not derived.
 | 66 | `arrEmpty` | `arrEmpty_compatX` (`SliceOps.lean:108`) | no | **out** | families (`Array`/`ArrayImm`/`[Mut]`); §4 |
 | 67 | `sliceReplaceM` | `sliceReplaceM_compatX` (`SliceOps.lean:136`) | no | **out** | families (`Array`/`ArrayImm`/`[Mut]`); §4 |
 | 68 | `sliceSwapM` | `sliceSwapM_compatX` (`SliceOps.lean:299`) | no | **out** | families (`Array`/`ArrayImm`/`[Mut]`); §4 |
-| 69 | `withbor1` | `withbor1_compatX` (`Compatibility.lean:937`) | yes | **proved** | `withbor1_compatN` (`ImmLend833N.lean`): the lend's record in the callback's world (`LocTy.extR_addImm`, Core's `ext_add`), the result back by `LocTy.extR_of_addImm` (`ext_drop`), the Imm Frame `erwp_I_frameR`, the run read at the lender's view (`erwp_tieDrop`) |
-| 70 | `withbor2` | `withbor2_compatX` (`Compatibility.lean:1028`) | yes | **portable** | `scope-791-rule.md` §7.4's steps 1–3, 8–13 at the empty table: `withbor2S_compat` (`Cancel791N.lean:802`) without its finaliser frame, the Mut Frame `erwp_M_frame` (`SI/StopFrameN.lean:321`), `vN_outlivesLe`; the restatement at `Δ` (bound `Δ.meetOfDom`, defined at every `δ ⊨ Δ`): buildable |
+| 69 | `withbor1` | `withbor1_compatX` (`Compatibility.lean:937`) | yes | **proved** | `withbor1_compatN` (`ImmLend833N.lean`): the lend's record in the callback's world (`LocTy.extR_addImm`, Core's `ext_add`), the result back by `LocTy.extR_of_addImm` (`ext_drop`), the Imm Frame `erwp_I_frameR`, the run read at the lender's view (`erwp_tieEntry`) |
+| 70 | `withbor2` | `withbor2_compatX` (`Compatibility.lean:1028`) | yes | **proved** | `withbor2_compatN` (`ImmLend833N.lean`): the Mut Frame `erwp_M_frameR` at the pure row, the callback's application under the pair framed beside the borrow, `vN_local` for the result |
 | 71 | `withbor3` | `withbor3_compatX` (`Compatibility.lean:1109`) | yes | **portable** | §7.1's 13 steps at the empty table: `withbor3S_compat` (`Reborrow791N.lean:808`) without its finaliser frame, `erwp_M_antiFrame` (`SI/AntiStopN.lean:257`) around `erwp_M_frame`; restatement at `Δ`: buildable |
 | 72 | `withload` | `withload_compatX` (`Compatibility.lean:252`) | yes | **portable** | §13.4's steps at the empty table: `withloadS_compat` (`Withload791N.lean:459`), `erwp_reborrow` (`SI/RebAcrossC.lean:96`) for 6.150; restatement at `Δ`: buildable |
 | 73 | `withswap` | `withswap_compatX` (`Compatibility.lean:1194`) | yes | **portable** | `wpTS_M_antiFrameX`, `wpTS_load`/`wpTS_store`, `wpTS_bind_frame` → `erwp_antiFrame_view` (`SI/LocTy.lean:485`, `consistentX_get`), `rwp_load`/`rwp_store`, G3; the reseal into the stored family at the anti-frame's return as in `withbor3S_compat`'s step 13: not checked in detail |
 | 74 | `withbor1U` | `withbor1U_compatX` (`EffBorrow.lean:452`) | yes | **proved** | `withbor1U_compatN` (`ImmLend833N.lean`): as `withbor1`, the Imm Frame across the row's raises (`erwp_I_frameR`), the finaliser frame at a raise (`erwp_ubindRaise`, `fin_claimI`); `opTable_ext` is not needed (`entN` reads no list) |
-| 75 | `withbor2U` | `withbor2U_compatX` (`EffBorrow.lean:281`) | yes | **portable** | `withbor2S_compat` (proved at `Row.Suspend`, `LifeCtx.empty`); restated at `Δ` (G4 for `hd`) and at an `Unwind` row holding abortive unrestricted operations (`Row.Suspend.of_unwind` asks `q ≠ unr`): buildable, not verified |
+| 75 | `withbor2U` | `withbor2U_compatX` (`EffBorrow.lean:281`) | yes | **proved** | `withbor2U_compatN` (`ImmLend833N.lean`), at any `Δ` and a `Row.Unwind` row (abortive unrestricted operations included): the Mut Frame across raises `erwp_M_frameR`, `erwp_claimX_abort`, `erwp_ubindRaise` |
 | 76 | `withbor3U` | `withbor3U_compatX` (`EffBorrow.lean:362`) | yes | **portable** | `withbor3S_compat`, restated as `withbor2U`'s row |
 | 77 | `withloadU` | `withloadU_compatX` (`EffBorrow.lean:554`) | yes | **portable** | `withloadS_compat`, restated as `withbor2U`'s row |
 | 78 | `sliceBorrowMU` | `sliceBorrowMU_compatX` (`EffBorrow.lean:651`) | no | **out** | `Array`; §4 families (the `sm` constant) |
@@ -205,7 +205,7 @@ with the lend's record added at `α`, and the callback is run there by its own K
 the world without the record (`LocTy.extR_of_addImm`, Core's `ext_drop`). The callback's run is at
 the world's view, which has one more `imm` record than the lender's; an unwinding row's table (and
 the pure row's) never resumes, so the relation reads its tie only at the entry, whose list is the
-frame's and holds the record (`erwp_tieDrop`). `withbor1_compatN`, `withbor1U_compatN`
+frame's and holds the record (`erwp_tieEntry`). `withbor1_compatN`, `withbor1U_compatN`
 (`Core/Chain/ImmLend833N.lean`).
 
 The old configuration (`callback_any_inst`: at the old `above`, `𝒱⟦U(Imm 'x 1 ⊸ F 1)⟧` admitted
@@ -295,8 +295,8 @@ world (for `Tok`, a resource clause like `Ref 1`) and its laws: small.
 
 | Class | Rows |
 |---|---|
-| proved | 5 (`immSub`, `mutSub`, `allI`, `withbor1`, `withbor1U`) |
-| portable | 65 |
+| proved | 7 (`immSub`, `mutSub`, `allI`, `withbor1`, `withbor1U`, `withbor2`, `withbor2U`) |
+| portable | 63 |
 | blocked | 0 |
 | pending | 1 (`effHandleVB`) |
 | out of the fragment | 33 |
@@ -306,7 +306,7 @@ Fragment status: 57 **yes**, 16 **cut**, 31 **no**.
 | Group | Rows | proved | portable | blocked | pending | out |
 |---|---|---|---|---|---|---|
 | structural | 44 | 1 | 43 | | | |
-| borrows | 11 | 4 | 7 | | | |
+| borrows | 11 | 6 | 5 | | | |
 | effects/handlers | 16 | | 15 | | 1 | |
 | data (families, `μ`, opaque) | 29 | | | | | 29 |
 | codata (`ν`) | 4 | | | | | 4 |
