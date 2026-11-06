@@ -12,6 +12,9 @@ no step, as in Core, where the machine has no `roll`/`unroll` step.
 
 * `roll_compatN`, `unroll_compatN`: Core's `roll_compatX`, `unroll_compatX`, with `vN_roll` and
   `vN_unfold` under `erwp_mono`.
+* `foldOwn_compatN`, `foldReuse_compatN`: Core's `foldOwn_compatX`, `foldReuse_compatX`.
+
+`foldOwnG` is `Core/Chain/FoldG836N.lean`, `foldImm` `Core/Chain/FoldImm836N.lean`.
 -/
 
 noncomputable section

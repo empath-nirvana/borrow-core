@@ -143,7 +143,7 @@ The configurations named below are indexed in `configurations.md`; the design th
 | F5 | `rel_tok_intro`, `rel_cases`, `tok_not_host` | — | 2: `tokMint`, `tokBurn` | **same** (#836) | `vN`/`vO` at `opq k` read Core's `k.rel`; Core's lemmas used as they are (§9.2) |
 | F6 | `vP_fam_mk`, `vP_fam_split`, `vP_fam_idx`, `sepRange_pick` … | spec §9 | 22: `arrNew`, `arrFree`, `arrSize`, `arrReplace` … | **same** (#836), but the `tab` step | `vN`/`vO` at `[L]` Core's `sepRange` clause; `vN_fam_iff`/`_mk`/`_idx`/`_split`, `noOwn_famN`; the laws re-proved over it (§9.2). The `tab` step at the index (`arrNew`) is missing, buildable |
 | F7 | `wpTS_M_frameFam`, `wpTS_I_frameFam`, `wpG_M_frameFam`, `wpG_I_frameFam` | — | 4: `sliceBorrowM`, `sliceBorrowI`, `sliceBorrowMU`, `sliceBorrowIU` | **departed, to build** (#836) | `wpTS_M_frameFam` is `rwp_M_frameListN` (built). Across raises, the one-cell frame under inner claims `erwp_M_frameRR` is built; its list induction, the cancel-run counterpart and the Imm family frames are missing, buildable (§9.3) |
-| F8 | `vC_roll`, `vC_unfold`, `vC_immReborrow_mu_iff`, `vCE_subst` … | — | 8: `reify`, `roll`, `unroll`, `foldImm` … | **same** (#836 L6), but `withload_sized` | `vNE`/`vOE` under a type-variable environment, `vN`/`vO` at the empty one; the `μ`/`tvar` clauses; Core's `RelMu` at the chain (`vN_mu_iff`, `vN_ind`, `vBN_subst`, `vBN_mono_at`, …), §13. `withload_sized` (`foldImm`) is missing, buildable |
+| F8 | `vC_roll`, `vC_unfold`, `vC_immReborrow_mu_iff`, `vCE_subst` … | — | 8: `reify`, `roll`, `unroll`, `foldImm` … | **same** (#836 L6) | `vNE`/`vOE` under a type-variable environment, `vN`/`vO` at the empty one; the `μ`/`tvar` clauses; Core's `RelMu` at the chain (`vN_mu_iff`, `vN_ind`, `vBN_subst`, `vBN_mono_at`, …); `withload_sized` is `withload_sizedN` (§13) |
 | F10 | `cC` .arr (the `⊸` clause) | — | 10: `bind`, `lam`, `lamDead`, `app` … | **same** (#834) | `cN .arr` is Core's plain wand at the function's own world, read at every later index and every view consistent with the composite (§8.1). The Kripke reading along `ExtR` is gone: no configuration forced it |
 | F9 | `cC_nu_iff`, `nuRel_coind`, `cB_step` | spec §7 | 4: `reify`, `nuIn`, `nuOut`, `unfoldN` | **missing, unclear** | a reading of `ν` at `erwp`: a design choice first. Not derived; obstruction not verified |
 
@@ -328,10 +328,10 @@ that step is done inside `withloadS_compat`, which is proved, so V1 is not a blo
 | 82 | `ofRet` | yes | portable | — | — | mechanical now |  |
 | 83 | `roll` | no | out | W3 F8 | F8 | proved (#836 L6) |  |
 | 84 | `unroll` | cut | out | W3 F8 | F8 | proved (#836 L6) |  |
-| 85 | `foldImm` | no | out | W1 W2 W3 W4 W6 K1 K2 V2 V3 V4 V5 V11 G3 F3 F8 R8 | W4 F8 | mechanical once built | `foldImmV`, `travK` |
+| 85 | `foldImm` | no | out | W1 W2 W3 W4 W6 K1 K2 V2 V3 V4 V5 V11 G3 F3 F8 R8 | W4 F8 | proved (#836 L6) | `foldImmV`, `travK` |
 | 86 | `foldOwn` | no | out | W1 W2 W3 W4 W6 H2 K1 K2 V11 G3 F8 | W4 F8 | proved (#836 L6) | `foldOwnV` |
 | 87 | `foldReuse` | no | out | W1 W2 W3 W4 W6 H3 H5 K1 K2 V11 G3 F8 | W4 F8 | proved (#836 L6) | `foldReuseV` |
-| 88 | `foldOwnG` | no | out | W1 W2 W3 W4 W6 K1 K2 V11 G3 F3 F6 F8 | W4 F6 F8 | mechanical once built | `FoldP` traversal |
+| 88 | `foldOwnG` | no | out | W1 W2 W3 W4 W6 K1 K2 V11 G3 F3 F6 F8 | W4 F6 F8 | proved (#836 L6) | `FoldP` traversal |
 | 89 | `nuIn` | no | out | F9 | F9 | waits (unclear) |  |
 | 90 | `nuOut` | cut | out | F9 | F9 | waits (unclear) |  |
 | 91 | `unfoldN` | no | out | W1 W2 W3 W6 K1 V4 G3 C1 F8 F9 R6 E1 E2 E4 E8 E13 | F8 F9 E8 | waits (unclear) | `nuRel_coind` |
@@ -1056,6 +1056,8 @@ and `Const791.InFrag` do too. `ν` stays out (L7).
 | `unroll` | `unroll_compatN` (`vN_unfold`) | `unroll_compatX` |
 | `foldOwn` | `foldOwn_compatN` (`travO_specN`, `hOSpecN_all`, `travO_appN`, `hO_appN`) | `foldOwn_compatX`, `travO_spec`, `hOSpec_all` |
 | `foldReuse` | `foldReuse_compatN` (`travR_specN`, `hRSpecN_all`, `erwp_swapN`) | `foldReuse_compatX`, `travR_spec`, `hRSpec_all`, `wpTS_swap` |
+| `foldOwnG` | `foldOwnG_compatN` (`Core/Chain/FoldG836N.lean`: `trav_specN`, `arr_specN`, `step_specN`, `countLoop_invN`, `selfG_runN`, `hs_allN`, `fold_specN`, `algsOK_of_tupleN`) | `foldOwnG_compatX`, `trav_spec`, `arr_spec`, `step_spec`, `countLoop_inv`, `selfG_run`, `hs_all`, `fold_spec`, `algsOK_of_tuple` |
+| `foldImm` | `foldImm_compatN` (`Core/Chain/FoldImm836N.lean`: `withload_sizedN`, `good_of_imageN`, `trav_specKN`, `pSpec_succN`, `hSpec_allN`, `alg_callN`) | `foldImm_compatX`, `withload_sized`, `good_of_image`, `trav_spec`, `pSpec_succ`, `hSpec_all`, `alg_call` |
 
 The folds follow Core line by line: Core's terms (`foldOwnV`, `travO`, `selfO`, `hO`, and the
 `R` versions) with their reductions, and Core's induction on the resource size (`dsize`) and then
@@ -1068,3 +1070,40 @@ the value size.
 - The fold runs at one world and one view. The algebra `g` has the empty resource, so it moves to
   the world where the fold is forced (`vN_extR`), and it is read there at every index below the
   fold's. That index bound is the `N` of `HOSpecN`/`HRSpecN`.
+
+`foldOwnG`: Core's loop invariant `ArrInv` becomes `ArrInvN`, a post read at the index, and is
+closed downward (`arrInvN_down`). The loop step's frames are the exact resources Core's
+reassociation produces. The array is drained by `dropFill_wpN` with `dropU_sem`. The algebras
+come out of the run-time tuple at the world the fold is forced at (`bang_app`, at the empty
+resource), at every index up to the tuple's.
+
+`foldImm`: `withload_sizedN` is Core's `withload_sized` at the empty row, by `withload_reb` (the
+row `[]`, the bound `⊤`). Its callback is handed the image's relation to the loaded witness. For
+that, `withload_rebT` and `withload_reb` now give their callback two more premises:
+- `u = v`: the view is the loaded payload's value;
+- `ResU.Reb β σ χ`: the view's resource is an image of the payload's witness.
+
+Both premises are already in scope where `withload_rebT` calls the callback (`hreb`, after the
+`subst`). The three callers ignore them: `withloadS_compat`, `withload_compatN` and the unwinding
+row's `withload`. `good_of_imageN` is Core's `good_of_image` with `vO_vShape`/`vN_vShape`. The
+algebra is called at the run's world by `alg_callN`: `cN`'s `∀` clause at `β`, then the `⊸`
+clause.
+
+### 13.6 Restated declarations
+
+| Declaration | Before | After |
+|---|---|---|
+| `vN`, `vO` | `def`s in the mutual block | syntax for `vNE (η := none)`, `vOE (η := none)`; the block defines `vNE`, `vOE` |
+| `vN_down`, `vO_down`, `vN_congr`, `vO_congr`, `vN_extR`, `vO_extR`, `vN_outlives`, `vN_outlivesLe`, `vN_tyEq`, `vO_tyEq` | proved by structural recursion | the same statements, as corollaries at `none` of the `vNE`/`vOE` laws |
+| `vN_vO`, `vN_vShape`, `vO_vShape`, `vO_transfer`, `relabel_vN`, `vN_empty_of_persistent` | structural recursion | the same statements, by `vN_ind` (Core's route) |
+| `VTy.inFrag` | `μ` and type variables out | `μ` at an in-fragment body, every type variable in |
+| `withload_rebT`, `withload_reb` | callback at `u χ Bχ`, all-`imm` `χ` | the same, plus `u = v` and `ResU.Reb β σ χ` |
+
+`FundamentalN`'s statement reads `JdgInFrag`, so the wider `VTy.inFrag` makes it quantify over more
+derivations. `goal791Sched_of_fundamental : FundamentalN → Goal791SchedN` and `constsN_of`
+build unchanged in text. `Goal791SchedN` covers more programs (rows and constants with `μ`).
+
+### 13.7 What remains
+
+The six `μ` rows are proved at `SemJN`. `reify` and `unfoldN` also read F8, but they wait on `ν`
+(F9, L7).
