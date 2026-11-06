@@ -243,6 +243,22 @@ theorem tab_lookupNK : ∀ (F : CTy) {S : UInt32 → Prop} {g : KW → KW} {δ :
   | .all _ _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
   | .nu _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
 
+/-- **An entry at a scheduler name owes along `KW.Owed`** (the lender's tables, `g = id`). -/
+theorem tabNK_wk_sched {S : UInt32 → Prop} {F : CTy} {δ : LSub} {x : KW} {m j : UInt32}
+    {en : OpEntK KW} (h : tabNK (ℍ := ℍ) S id F δ x m j = some en) (hm : S m) :
+    ∀ f y ρ, en.wk f y ρ ↔ x.Owed f y ρ := by
+  obtain ⟨q, A, B, fin, -, rfl, -⟩ := tab_lookupNK F h
+  exact fun f y ρ => ⟨fun h => h.owed hm, fun h => h.owedS⟩
+
+/-- **An entry at any other name owes along `KW.OwedR`**, so a stop there is one at every floor
+bound (`contShareK_owedR_lo`) and owes its continuation at `U`'s futures
+(`contShareK_owedR_U`). -/
+theorem tabNK_wk_owedR {S : UInt32 → Prop} {F : CTy} {δ : LSub} {x : KW} {m j : UInt32}
+    {en : OpEntK KW} (h : tabNK (ℍ := ℍ) S id F δ x m j = some en) (hm : ¬ S m) :
+    ∀ f y ρ, en.wk f y ρ ↔ x.OwedR y ρ := by
+  obtain ⟨q, A, B, fin, -, rfl, -⟩ := tab_lookupNK F h
+  exact fun f y ρ => ⟨fun h => h.2 hm, fun h => ⟨fun h' => absurd h' hm, fun _ => h⟩⟩
+
 /-! ### The restriction on a row -/
 
 /-- **A row whose resuming layers are at scheduler names** (`Row.SchedOnly` on a row type). -/
