@@ -47,6 +47,7 @@ import Core.Chain.SI.LendCancelProg
 import Core.Chain.SI.LendProg
 import Core.Chain.SI.LinDisj
 import Core.Chain.SI.Loop
+import Core.Chain.SI.LocTy
 import Core.Chain.SI.LoopN
 import Core.Chain.SI.MutSemN
 import Core.Chain.SI.MutWorld
@@ -87,3 +88,4 @@ import Core.Chain.Goal791N
 import Core.Chain.Lend791N
 import Core.Chain.Shape791N
 import Core.Chain.LocTypeSketch
+import Core.Chain.ConsistentFlat791
