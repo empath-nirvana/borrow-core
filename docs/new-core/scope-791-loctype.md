@@ -2,7 +2,8 @@
 
 Branch `rule-791`. The world is in the library (`Core/Chain/SI/LocTy.lean`); the interpretation
 over it is `Core/Chain/Goal791N.lean`; `Core/Chain/LocTypeSketch.lean` keeps L2 (c)'s
-configuration. Background: `scope-791-rule.md` §7. State after #825 (U1, U2): §9.
+configuration. Background: `scope-791-rule.md` §7. State after #825 (U1, U2): §9; after #826 (U3):
+§10.
 
 Kernel target: the location typing the chain's semantic interpretation reads, so that step 7 of
 Core's `withbor3_compatX` (`Core/Compatibility.lean:1151`; inside it `Core/FrameRules.lean:620`,
@@ -75,12 +76,14 @@ single lifetime `c ℓ`, and the run is at the **view**:
 
 - **`Mut @a A`** is Core's shape (`mutL`): a location whose cell at `a = @aδ` holds the
   member `j ≥ k` of `famL a 𝒱⟦A⟧ Θ`, together with `Θ ℓ a = some (famL a 𝒱⟦A⟧ Θ)`.
-- **`U C`**: `C` at every `ExtA`-extension `Θ′` with `Θ′.OK` and every view `c′` consistent
-  with the thunk's resource. `vThunk` with `Covers` has the right idea but the wrong strength: it asks for some
-  family, where consistency plus the `Mut` clause name the payload's family.
-- **`⊸`** quantifies over `ExtA`-extensions `Θ′` (`OK`) and views `c′` consistent with the
-  argument's and the context's composite; **`SemJN`** over worlds `Θ` with `Θ.OK` and views
-  consistent with the context's resource. The relation's `Φ` is `Θ.view c`.
+- **`U C`**: `C` at every extension `Θ′` along `LocTy.ExtR Θ Θ′ ρ` (`ρ` the thunk's resource;
+  §10) with `Θ′.OK` and every view `c′` consistent with the thunk's resource. `vThunk` with
+  `Covers` has the right idea but the wrong strength: it asks for some family, where consistency
+  plus the `Mut` clause name the payload's family.
+- **`⊸`** quantifies over extensions `Θ′` along `ExtR` at the function's resource (`OK`) and views
+  `c′` consistent with the argument's and the function's composite; **`SemJN`** over worlds `Θ`
+  with `Θ.OK` and views consistent with the context's resource. The relation's `Φ` is
+  `Θ.view c`.
 - **`F A`, `F_Σ R`, `tabN`, `finN`** are `erwp` at `Θ.view c`, as now at `Φ`.
 
 ## 3. The lemmas the port needs
@@ -281,7 +284,9 @@ Each unit lands on the PR branch; the order is the list order.
    `∅ + (ℓ′, b) ↦ 𝒱⟦1⟧` holds the argument `ℓ′ ↦ mut(b, (), ∅, 𝒱⟦1⟧)`, on which the thunk is
    stuck (`thunk_not_at_empty`). Under Core's `Ext ls ls′ ρ`, which constrains only the records
    above the borrows of `ρ` (none, at `∅`), this thunk is not a value at the lend's world either.
-   Changing `U`'s order is a design change: **decision for the user**.
+   Changing `U`'s order is a design change: **decision for the user**. *Decided (#826): Core's
+   resource-relative order, §10.* `LocalU791.lean` is removed with the `ExtA` clause; the
+   configuration is at commit `728b51d7`.
 2. **`erwp_consistent`.** *Answer: holds, on the exclusive walk.* `erwp_consistent`
    (`SI/LocTy.lean`): a run at any `LocFam` from a resource with `ConsistentX c` returns, at every
    value or stop it reaches, a resource with `ConsistentX c`. The proof follows a returned
@@ -367,3 +372,88 @@ commented in `Core/Chain.lean`.
 - the callback's result `[@x] B` returned to the lender at `Θ` needs `vN_local`, which is open at
   `U` (Q1): the decision on `U`'s order comes first;
 - `withbor2S_compat`'s premises otherwise as today.
+
+## 10. State after #826 (U3)
+
+All in `scripts/AxiomCheck.lean`; axioms within `propext`, `Classical.choice`, `Quot.sound`. No
+relation definition changed (`erwp`, `rwpG`, `EndOKG`, `UpdN`, `PredStep`, `MutStep`, `LocFam`).
+
+**`U` and `⊸` along Core's resource-relative order** (`SI/LocTy.lean`):
+
+```
+LocTy.ExtR Θ Θ′ ρ ≜ ∀ ℓ a F, Θ ℓ a = some F → CellIn ρ a → Θ′ ℓ a = some F ∧ Θ′.above a = Θ.above a
+```
+
+`CellIn ρ a` is Core's (`Core/FrameRecords.lean`): a borrow cell of `ρ` no longer-lived than `a`.
+It is Core's `Ext ls ls′ ρ` read on the per-lend world: the keys a value with resource `ρ` reads
+(its cells' keys, and the keys above them that their families read) are kept, and nothing is
+added above them. Two differences from Core's clause, both from the world's shape:
+
+- the key at a `mut` cell's own lifetime is kept (`CellIn` is `⊑`). Core's cell stores its
+  predicate; here the `Mut` clause reads it at the key (`mutL`);
+- agreement is asked only above the lifetimes of keys present, not above every `b` with
+  `CellIn ρ b`. A key may be added above a borrow cell of `ρ` and below every relevant key.
+  This is what makes `ExtA` an `ExtR` at every resource (`LocTy.ExtA.extR`). I have not built a
+  configuration showing that agreement above every such `b` would break `vN_extA` at `U`.
+
+Laws: `extR_refl`, `ExtR.trans`, `ExtR.left`/`right`/`mono`, `ExtA.extR`; `extR_of_add` (the
+world without a lend at `α` is an extension at a resource in `Res_α`; Core's `ext_drop`);
+`extR_above`; `mutL_extR`.
+
+**The interpretation** (`Goal791N.lean`): `vN`'s `U` clause and `cN`'s `⊸` clause read `ExtR` at
+the thunk's or function's resource. Laws:
+
+| Law | Proved at | Notes |
+|---|---|---|
+| `vN_extR` | every former | Core's `vC_local`; one structural recursion, no `cN` case |
+| `vN_extA` | every former | from `vN_extR` and `ExtA.extR` |
+| `vN_local` | every former, `U` included | from `vN_extR` and `extR_of_add`; `uFree` is gone |
+| `cN_extA` | as before (`noEffSpine`) | `⊸` by `ExtA.extR` and `ExtR.trans`; `F_Σ R` below |
+| `vN_down`, `cN_down`, `vN_congr`, `vN_outlives`, `cN_effOf` | unchanged | |
+| `bridgeN`, `goal791Sched_of` | re-checked | unchanged proofs |
+
+New: `vN_top` (a type outliving every lifetime has values in the top stratum), `vN_add_eq` (such a
+type's `𝒱⟦·⟧` is the same at the world with a fresh lend), `vN_above` (a stored family is the
+payload at the world on content in the cell's stratum).
+
+**Consistency** (`SI/LocTy.lean`): `consistentX_setLife`, `exS_none_of_part`,
+`consistentX_single_mut`, `consistentX_of_top` (a resource in the top stratum is consistent with
+every view: an operation's answer, when the row's types outlive every lifetime).
+
+**`withbor2S_compat`, `constN_w2`** (`Cancel791N.lean`, back in the build): the lend at `α` fresh
+for `Θ` (`exists_fresh` from `Θ.OK`) and below the bound, `σ₀`'s stratum and the callback's; the
+callback at `Θ + (ℓ, α) ↦ famL α 𝒱⟦A⟧ Θ` (`OK` by `down_add`, `fresh_add`) and the view
+`setLife c ℓ α`, the relation's `Φ.set` (`view_add`); its argument `lend_mutL`, consistent by
+`consistentX_compS`, `consistentX_single_mut` and `consistentX_setLife` (the source's parts miss
+`ℓ` in their exclusive walks, `exS_none_of_part`, from the start's validity, `erwp_of_valid`). The
+callback's result returns to `Θ` by `vN_local`; the content handed back by `vN_above`.
+Premises: `withbor2U`'s with `Row.Suspend` (`hA`, `hB`, `hS`, `hdc`) and `hd`, `d`'s semantic
+judgment. No `hSF`, no `hSB`.
+
+- `tabR`/`finR` take the world and view; `tab_lookupN`/`tab_lookupR`, `tabR_tabN_twin`,
+  `tabR_tabR_twin`, `tabN_lendOKCR_C` restated. `tabN_tabR_twin` relates the callback's table at
+  `Θ + (ℓ, α)` and the lender's at `Θ` (`hΘ`, supplied by `vN_add_eq` from `CTy.SuspendC`'s
+  outliving clauses): the generalisation of `tabN_effOf_twin` across the two worlds.
+- `tabR_can` takes `Θ.Fresh α`; `erwp_M_frame_cancelRunCR`, `erwp_M_frameCR` unchanged.
+  `erwp_ubind_cancelRunCR`, `erwp_ubindClaimRT`: the same proofs at `Φ = Θ.view c`, the tables
+  at `(Θ, c)`.
+- **The claim's consistency.** `fin_claim` runs `d ℓ` and applies `d`'s thunk at a view
+  consistent with the claim, so the claim must be consistent with `c`. The relation-level frame
+  lemmas do not carry consistency. `erwp_claimX`/`erwp_cancelRun_claimX` carry it: from a
+  consistent start, a run's returned resources are consistent (`rwpG_consistentXV`), a stop's
+  continuation resumes from its consistent share and an answer in the top stratum, a cancel run by
+  the induction on cancel depth. The lender's table becomes `tabR (claimX Rc c)`.
+
+**`cN_extA` at `F_Σ R`: not derived.** It needs each layer's answer, read at `Θ′`, to be one at
+`Θ` (the continuation was proved to accept answers at `Θ`), and likewise for the cancel rows'
+tables, which `ExtA` does not give in general. Where every answer type outlives every lifetime,
+answers are in the top stratum and read no key, so `vN_extR` relates `Θ` and `Θ′` both ways; that
+case additionally needs an `erwp` lemma over tables whose payloads grow and answers agree, not
+built. I have not derived a counterexample at a general answer type and have not verified that any
+obstruction is real.
+
+**What #827 (U4, `w3`) needs from this:** the lend at a fresh `α` and the callback at
+`Θ + (ℓ, α)` exactly as here; the source `Mut @a A` argument opened at `c ℓ = β`
+(`consistentX_get`, then `erwp_antiFrame_view`/`reseal_at_entry`); its key `(ℓ, β)` kept by the
+reborrow (`reborrow_view`); `erwp_claimX`'s consistency reasoning for the anti-frame's cancel runs;
+step 8's anti-frame across layered cancel runs (`erwp_M_antiFrameC` at `tabR`), not built.
