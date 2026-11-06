@@ -23,6 +23,10 @@ interpretation and the statements are restated over Core's step-indexed chain re
     key, and every value of the payload is in `Res_b`;
   - `U C` and `⊸` are Kripke along Core's resource-relative order (`LocTy.ExtR` at the thunk's
     or function's resource), at every view consistent with the resource (`ConsistentX`).
+  - `Imm` is Core's `ptoImmS` shape over the world: one `imm` cell, its payload in the
+    observable view `vO` (Core's `vCE false`), its location witnessed in the world's `imm`
+    records (`ImmWitW`, Core's `CohE`); the relation's entry tie (`ImmTieL`) puts the witness's
+    record on the run's list.
   `gN`, `SemJN`.
 * **§2. Laws.** Downward closure of every piece; `vN`/`cN` read `δ` only at free variables
   (`vN_congr`); values stable along the resource-relative order (`vN_extR`), hence along the
@@ -1019,10 +1023,11 @@ shown attainable by induction on the derivation until those formers have clauses
 
 That is not the whole remaining gap. Rules in the fragment may also force `vN` itself to change,
 and with it its laws and the `*_compat` proofs:
-* `withloadU` (`withloadUTy`: `Imm`, `Mut`, `U`, `⊸`, `∀`, `F_Σ`, all in the fragment): Core's
-  `withloadU_compatX` reads the source through `ptoImmS`'s record list and `CohE`, which `vN`'s
-  `imm` clause does not carry (`scope-791-loctype.md` §12, departure 1). Any other rule whose
-  Core proof reads them is in the same position.
+* An `imm` lend (`withbor1U`, Core's `withbor1U_compatX`) adds a record to the world's `imm`
+  records. `LocTy.above` keeps them whole and `ExtR` asks every key a resource reads to keep
+  what lies above it, so a lend under a live `mut` borrow whose payload the lend's body reads is
+  not an extension along `ExtR` at that borrow. Whether such a rule needs `LocTy.above` to keep
+  only the records lent above its lifetime (Core's `ls₀`) is not checked.
 * `cN_extA` at an effect row `F_Σ R` is not derived (`noEffSpine`). Core's `withbor1U_compatX`
   and `sliceBorrowIU_compatX` carry the callback's table along `Ext` (`opTable_ext`, at an
   abortive table); their chain analogues are the candidates for needing it or a table lemma like
@@ -1043,9 +1048,11 @@ def BridgeN : Prop :=
     cN (ℍ := ℍ) (.ret .unit) LSub.empty Θ c n [] e (PMap.empty : WRes)) → OrDiverges (ℍ := ℍ) e
 
 /-- **#791's end goal under a scheduler at the top, over `erwp`**: `poolSchedAdequacyN`'s form,
-at the view of any world. A task typed at `F_Σ 1` from the constants, run by a scheduler meeting
-`SchedOKN` at the row's table, is safe, leak-free, or diverges. Scoped to the fragment: the
-constants' types and the row's (`Const791.InFrag`, `VTy.inFrag`). -/
+at the view of any world holding no `imm` record (the task starts at the empty list, which the
+relation's entry tie `ImmTieL` reads against the world's `imm` records). A task typed at `F_Σ 1`
+from the constants, run by a scheduler meeting `SchedOKN` at the row's table, is safe,
+leak-free, or diverges. Scoped to the fragment: the constants' types and the row's
+(`Const791.InFrag`, `VTy.inFrag`). -/
 def Goal791SchedN : Prop :=
   ∀ (cs : List Const791), (∀ c ∈ cs, c.OK) → (∀ c ∈ cs, c.InFrag) → ∀ (S : Row) (e₀ : Expr),
     (CTy.effOf S .unit).inFrag = true →

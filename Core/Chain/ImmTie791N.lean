@@ -25,7 +25,10 @@ each with the lifetime it was lent at) and checks what it gives and what it excl
   fails for it. At `world_ref`'s list it holds (`immTie_ref`).
 
 Where the tie can be placed, and what each placement meets, is §12; `not_effOf_guarded` is the
-check for a guard on `cN`'s run clauses.
+check for a guard on `cN`'s run clauses. The relation carries the tie in its list form at its entry
+(`ImmTieL`, `SI/UpdN.lean`; `scope-791-rule.md` §13): every record of the location typing's
+`imm` list is a record of the run's list. `ImmTieL.tie` gives `ImmTie` from it at every resource;
+`immTieL_world_ref` shows it holds at `world_ref`'s list and fails at `world_thunk`'s.
 -/
 
 noncomputable section

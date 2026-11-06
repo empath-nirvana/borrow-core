@@ -23,12 +23,18 @@ added, nothing added above a key present. `U` and `⊸` are Kripke along the res
 order `LocTy.ExtR`, which departs from Core's `Ext` (`scope-791-loctype.md` §10,
 `Core/Chain/ExtRLit791.lean`); `ExtA` is `ExtR` at every resource.
 
+The world also holds its `imm` records, each with the lifetime it was lent at (`LocTy.imm`,
+Core's record list moved into the world); `vN`'s `Imm` clause reads its witnesses there. A lend of
+a `mut` cell leaves them alone, `LocTy.above` keeps them whole, and the Kripke orders keep every
+one (`LocTy.ImmLe`).
+
 ## Its view at a run
 
 The relation's `LocFam` is per location. At a run, each location's live `mut` cell is at one
 lifetime (`c : Loc → Option Life`), and the per-location typing the run uses is the view
-`Θ.view c`. A lend at `α` is, viewed, `Φ.set ℓ α F` (`LocTy.view_add`), so the relation's lend
-frames stated at `Φ.set` are the per-lend lend seen at its run; nothing in the relation changes.
+`Θ.view c`, which carries the world's `imm` records to the relation's entry tie (`ImmTieL`). A
+lend at `α` is, viewed, `Φ.set ℓ α F` (`LocTy.view_add`), so the relation's lend frames stated at
+`Φ.set` are the per-lend lend seen at its run.
 
 ## Consistency
 

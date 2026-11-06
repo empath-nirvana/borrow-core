@@ -45,7 +45,8 @@ def EndOKG (Φ : LocFam) (Q : PostG) (k : Nat) (ls : List SRec) (ρ ρf : WRes)
     TWNC fρ'p ps' (rsOf ls') ∧ Tagged fρ'p ps' ls' ∧
     (∀ p, p ∈ ps' ↔ p ∈ ps) ∧ (∀ x, x ∈ ls' ↔ x ∈ ls) ∧ Q k ls' t ρ'
 
-/-- **`wpG` at the step index.** -/
+/-- **`wpG` at the step index.** The run is entered at a typed world at the list's records, the
+location typing's `imm` records among them (`ImmTieL`). -/
 def rwpG (Φ : LocFam) (Q : PostG) (n : Nat) (ls : List SRec) (e : Expr) : WProp := fun ρ =>
   ∀ (ρf fρ : WRes) (ps : List FrameRec) (μ : Heap),
     ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ → TWNC fρ ps (rsOf ls) → Tagged fρ ps ls →

@@ -92,7 +92,8 @@ def EndOK (Φ : LocFam) (Q : PostN) (k : Nat) (ls : List SRec) (ρ ρf : WRes)
     TWNC fρ'p ps' (rsOf ls') ∧ Tagged fρ'p ps' ls' ∧
     (∀ p, p ∈ ps' ↔ p ∈ ps) ∧ (∀ x, x ∈ ls' ↔ x ∈ ls) ∧ Q k ls' v ρ'
 
-/-- **The step-indexed `wp` at a tagged typed world.** -/
+/-- **The step-indexed `wp` at a tagged typed world**, entered where the location typing's `imm`
+records are records of the list (`ImmTieL`). -/
 def rwp (Φ : LocFam) (Q : PostN) (n : Nat) (ls : List SRec) (e : Expr) : WProp := fun ρ =>
   ∀ (ρf fρ : WRes) (ps : List FrameRec) (μ : Heap),
     ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ → TWNC fρ ps (rsOf ls) → Tagged fρ ps ls →

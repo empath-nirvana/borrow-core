@@ -5,7 +5,7 @@ interpretation, its laws, the rule checks `mutSub`/`immSub`/`allI`, the restated
 `Core/Chain/SI/LocTy.lean` (the per-lend world), `Core/Chain/Lend791N.lean` (the frames the
 suspending `mut` lend needs), `Core/Chain/Cancel791N.lean` (`w2`), `Core/Chain/Reborrow791N.lean`
 (`w3`), `Core/Chain/Field791N.lean` (`wF`) and `Core/Chain/Inst791N.lean` (their hypotheses
-discharged). §8 is the current state.
+discharged). §13 is the current state (`withload`, `Core/Chain/Withload791N.lean`).
 
 Kernel target: the semantic interpretation of types over `erwp` (`Core/Chain/SI/*`), the
 semantic judgment over it, and compatibility of the `mut` lend whose callback row may suspend
@@ -928,3 +928,149 @@ Not verified:
 - `vC_vShape`;
 - `image_vC_of_shape`/`relabel_obs`;
 - `erwp_reborrow` across raises and layered cancel runs.
+
+## 13. The tie in the relation, and `withload` at a suspending row (#829)
+
+Kernel target: `ImmTie` threaded into the chain relation; `vN`'s `Imm` clause reading Core's
+`CohE` content in the world; `withloadS_compat`, `constN_wl` and an instance at `hardestRow`.
+All proved; the files are `Core/Chain/SI/UpdN.lean` (the tie), `Core/Chain/SI/LocTy.lean` (the
+world), `Core/Chain/Goal791N.lean` (the clause and its laws), `Core/Chain/ImmImage791N.lean`
+(the observable view and the image), `Core/Chain/SI/RebRaiseC.lean` (6.150 across raises and
+layered cancel runs) and `Core/Chain/Withload791N.lean` (the constant).
+
+### 13.1 Where the tie is: the relation's entry, in its list form
+
+Place 2 of §12.3. `LocFam` and `LocTy` carry the world's `imm` records (`imm : List SRec`), and
+`LocTy.view` copies them to the relation. `rwp`, `rwpG` and `rwpG0` are entered only where
+
+    ImmTieL Φ.imm ls := ∀ x ∈ Φ.imm, x.1 ∈ rsOf ls
+
+holds: every record of the location typing is a record of the run's list. This is `ImmTie` read
+without the resource (`ImmTie791N.ImmTieL.tie` gives `ImmTie` from it at every resource). The
+list form is what makes the threading local:
+
+- a run keeps it: `EndOKG`'s lists keep their members, so `rwpG_compose`/`rwp_compose` re-enter
+  the continuation by `ImmTieL.perm`;
+- a lend's body keeps it: `frameList` extends the list (`ImmTieL.of_sub`, `IFrameN`, `IStopN`);
+- the reborrow lemmas keep it: their callbacks run at the same location typing and list, so
+  `erwp_reborrow*` need no freshness condition on `β` (§12.3's concern is the resource form's);
+- `erwp_extΦ` takes `Φ.ImmLe Φ'` beside `Φ.Ext Φ'`.
+
+`immTieL_world_ref`: at the world holding the cell's record at `Ref 1` (`ImmRec791N.ΘRef`, where
+`vN_cellI` types the cell) the tie holds at `world_ref`'s list and fails at `world_thunk`'s, so
+`immAgreeErwp_both`'s second world is no longer an entry.
+
+### 13.2 The `Imm` clause
+
+    Imm a A at δ, Θ:  ∃ α, a.interp δ = some α ∧ immCell α (vO A δ Θ n) v ρ ∧
+                      ∀ ℓ, v = loc ℓ → ImmWitW Θ.imm ℓ A δ
+    ImmWitW I ℓ A δ := ∃ x ∈ I, ∃ d, DescR x.1 d ∧ CohE [d] ℓ A δ
+
+- The payload is read in the observable view `vO` (Core's `vCE false`: `U` read as `True`, `!`
+  and `Mut`'s stored family at `vN`), defined in `vN`'s mutual block; an image's witness under a
+  `Ref (U C)` is a choice (`reb_witness_choice`), which is why Core reads it there.
+- The witness is Core's `CohE` at a descendant of a world record: a record's own cell, one of its
+  chain positions, or a sub-record's cell (an image's `Mut` positions). At a run's first entry the
+  tie and `TI` put the descendant on the run's list (`desc_mem_of_tie`, `cohE_of_immWitW`), which
+  is Core's `CohE (rsOf ls)`.
+- Laws: `vO_down`, `vO_congr` (with `immWitW_congr`), `vO_extR` join the mutual blocks;
+  `vN_down`, `vN_congr`, `vN_extR`, `vN_outlives`, `vN_outlivesLe`, `immSub_compatN` read the new
+  clause; the others are unchanged.
+
+### 13.3 The world's Kripke orders
+
+`LocTy.ExtA` keeps every `imm` record (a third conjunct, `ImmLe`); `LocTy.ExtR` is its old
+clause and `ImmLe`. `LocTy.above` keeps the `imm` records whole, so the stored family of a key
+`ExtR` reads stays fixed. A `mut` lend changes no `imm` record (`LocTy.add`), so every existing
+use of `extA_add`, `extR_of_add` and `extR_above` stands. An `imm` lend would add a record; under
+a live `mut` borrow whose key the lend's body reads, that is not an `ExtR` step. Whether the
+`imm` lend's rule (`withbor1U`) needs `LocTy.above` to keep only the records lent above its
+lifetime (Core's `ls₀`) is not checked: that rule is not part of this unit.
+
+### 13.4 `withload_compatX`'s steps
+
+| # | Step | Chain |
+|---|---|---|
+| 1–4 | the constant at `∅`; the source `loc ℓ`; the callback; both at the run's world | `withloadS_compat` (`vN_extR`, `vN_le`) |
+| 5 | the load, the payload observable | `rwp_load_I` under `erwp_bindR` |
+| 6 | the record whose cell or chain view the source is, at the source's type | `cohE_of_immWitW` at the first entry; the cell identified by `TI.leInvW` (own cell) or `TI.exIn` (chain view) |
+| 7 | the template | 6.132 (`six132_shape_fresh`), `tmpl_exists`, `tmplD_exists` (new: `JointDeep` or `agW_image_noview`) |
+| 8 | the image typed at `Imm̲ 'x A`; across raises and layered cancel runs | `relabel_vN` (Core's `relabel_obs` at `vN`), `vO_transfer` (Core's `obs_transfer`); `erwp_rebGen`, `erwp_rebGen_cancelRun`, `tab_rebClosed` |
+| 9 | the fresh `β` | `↓(⊓s ⊓ g ⊓ @bnd δ)`: below the cell, the callback's stratum and the bound |
+| 10 | the pin | the image is at the record's value (`v = d.v`, or the chain's) |
+| 11 | the callback at `δ['x ↦ β]` | `callback_at_image`; its table is the constant's (`tabN_extend_suspendC`) |
+| 12–13 | the result `['x] B` at `B` | `vN_extend_of_not_free` |
+
+Step 8's extension (`SI/RebRaiseC.lean`) is `erwp_reborrowT` with a raise branch (the lender
+raises with the same payload; its share and the cell own nothing) and a cancel branch whose
+obligation is closed under the reborrow (`RebClosed`), for both entries of 6.150's run
+(`RebEntryG`: `rwpG_rebG`, `rwpG_rebDeepG`). `tab_rebClosed` proves `RebClosed` for a
+`Row.Suspend` row by induction on `cdepth`, `erwp_rebGen_cancelRun` at each level: `tabR_canA`'s
+pattern. The callback's table and the constant's are one table, so no twin is needed.
+
+`constN_wl` reads `Const791.OK` only. `withloadS_inst` and `constN_wl_inst` are at `hardestRow`,
+`A = B = 1`, the bound `LifeCtx.empty.meetOfDom` (`wl_ok`).
+
+### 13.5 Restated declarations
+
+| Declaration | Before | After |
+|---|---|---|
+| `LocFam` | `abbrev`, `Loc → Option (Σ b, …)` | structure `{fam, imm}`, applied as `fam` |
+| `LocTy` | `abbrev`, `Loc → (b : Life) → Option …` | structure `{fam, imm}`, applied as `fam` |
+| `rwp`, `rwpG`, `rwpG0` | entry: `Hash`, `CompS`, `TWNC`, `Tagged`, `Lower`, `FinDom` | the same and `ImmTieL Φ.imm ls` after `Tagged` |
+| `rwp_compose`, `rwpG_compose` | — | `+ ImmTieL Φ.imm ls` |
+| `rwp_safe`, `rwpG_safe`, `erwp_safe` | any `Φ` | `+ ImmTieL Φ.imm []` |
+| `erwp_adequacy` | any `Φ` | `+ ImmTieL Φ.imm []`, discharged by default |
+| `crwpG_of_rwpG`, `crwpG_of_rwpG0_frame`, `cerwp_bindRwp`, `cerwp_of_erwp`, `cerwp_alloc`, `cerwp_free`, `cerwp_scopeK`, `cerwp_scope` | any `Φ` | `+ Φ.imm = []` |
+| `rwpG_extΦ`, `erwp_extΦ` | `Φ.Ext Φ'` | `+ Φ.ImmLe Φ'` |
+| `PoolSchedAdequacyN` | any downward-closed `Φ` | `+ Φ.imm = []` |
+| `progOfN_orDiverges` | `Φ.Down` | `+ Φ.imm = []` |
+| `Goal791SchedN` | any `Θ` with `Θ.OK` | `+ Θ.imm = []` |
+| `LocTy.ExtA`, `LocTy.ExtR` | — | `+ ImmLe` |
+| `LocTy.view_empty` | `= fun _ => none` | `= LocFam.empty` |
+| `vN` at `Imm` | payload at `vN`, no witness | payload at `vO`, witness `ImmWitW` |
+| `ImmTie791N.not_erwp_false`, `not_effOf_guarded` | any `Φ` | `+ ImmTieL Φ.imm [(recT (Ref 1) …, α)]` |
+| `ImmRec791N.vN_cellI`, `not_wlImage_vN`, `not_wlImageA_vN` | any `Θ` | at `ΘRef` |
+
+### 13.6 Why each headline keeps its meaning
+
+- `constN_w2`/`w3`/`wF` and their `_inst`: statements unchanged; proofs unchanged but for the
+  relation's entry binder. A `mut` lend keeps the `imm` records, so their worlds are steps of the
+  new orders.
+- `goal791Sched_of`: its hypotheses are `FundamentalN` and `ConstsN`, as before. `Goal791SchedN`
+  is read at worlds holding no `imm` record: a closed task starts at the empty list, where the
+  entry tie admits no `imm` record. `PoolSchedAdequacyN` and `progOfN_orDiverges` likewise; the
+  hardest case's instances discharge it by `rfl`.
+- The #820 closed programs (`*Prog`): statements unchanged; their location typings are
+  `LocFam.empty`/`Φ₀`, whose `imm` list is empty, which `erwp_adequacy`'s default discharges.
+- `erwp_consistent`: statement unchanged.
+- The `vN`/`cN` laws: `cN_effOf` unchanged; the others re-proved at the new clause with their
+  statements unchanged.
+- No typing rule gained a side condition; cancel rows are not restricted.
+
+### 13.7 Bookkeeping
+
+**Spent:** `Row.Suspend`'s payload/answer clause (`tabN_rebOKR`: `Res_β`), its qualifier clause
+(`RebOKR.entry`), the cancel rows' `SuspendC` (`tab_rebClosed`); `Const791.OK`'s `wl` clause in
+full (the bound below `β`; `¬ VFree x A` in the image and the transports; `¬ VFree x B` in
+`callback_at_image`). Unspent: `Row.Suspend`'s `o.n ≠ 0` (no finaliser frame in `withload`).
+
+**Used:** `rwpG_rebG`, `rwpG_rebDeepG` (through `RebEntryG`), `extF`'s `RelF` clause (through
+`rec_kept`/`okKept_deep`), `canon_reb`, `canonD_reb`, `tmpl_exists`, `ExS.functional`,
+`ResU.CompS.functional`. Not read directly: `erwp_reborrow`, `erwp_reborrowT`, `erwp_reborrowDeep`
+(their cases are inside `erwp_rebGen`), `rebChooseC_tw`, `relabel_obs`, `canon_escrowAgree`;
+`immTie_agree` (its own-cell case is `cohE_of_immWitW`'s first disjunct); uniqueness results
+`AgW.functional`, `CellU.immOf_inj`, `chain_unique_rec`.
+
+**Routes that differ from Core's:**
+- Core converts the source to the record's type (`vC_tyEq`) and types the image at the record's
+  type, coherence read at the record's positions (`coh_root`, `coh_mutI`, `coh_child`,
+  `coh_mut_child`). Here the image is typed at the source's type `A` and the record's positions
+  are read across `TyEq` (`RefPos.tyEq`, `MutPos.tyEq`, `immWitW_root`/`…Mut`/`child`/
+  `childMut`). `vN_tyEq` (Core's `vC_tyEq` at `vN`) is not built.
+- Core's chooser (`RebChooseTW`, `rebChooseTW_top`/`deep`) picks the image inside `wpTS_reborrow`;
+  here the first entry is unfolded and `erwp_rebGen` applied there at the canonical image
+  (`canon`/`canonD`), as the chain's reborrow lemmas are stated.
+
+**Untranscribed in the run-up:** `vC_tyEq` at `vN`; `ptoImmO_read` (no list in `vN`); Core's
+`vC_local` along `Ext` (the chain keeps `vN_extR`).
