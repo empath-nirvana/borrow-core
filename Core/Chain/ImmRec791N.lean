@@ -235,12 +235,12 @@ theorem vN_cellI (x : LifeVar) (α : Life) (l l' : Loc) (n : Nat) :
       (ΘRef (LSub.empty.extend x α) l l' α) n (Val.loc l) (cellI α l l') := by
   refine ⟨α, interp_ext_self _ x α, ⟨l, LSet.singleton α, Val.loc l', escU l',
     escU_inStratum l' _, rfl, rfl, le_refl _, l', Val.unit, PMap.empty, rfl,
-    ResU.comp_empty_right _, rfl, rfl⟩, fun l₀ hl₀ => ?_⟩
-  obtain rfl : l₀ = l := by
-    have := congrArg Subtype.val hl₀
-    simpa [Val.loc] using this.symm
-  exact ⟨_, List.mem_singleton_self _, _, DescR.refl _, .ref .unit, LSub.empty.extend x α,
-    TyEq.refl _ _, Or.inl ⟨_, List.mem_singleton_self _, rfl, rfl, fun _ _ => rfl⟩⟩
+    ResU.comp_empty_right _, rfl, rfl⟩, fun l₀ s₀ u₀ σ₀ h₀ e => ?_⟩
+  obtain ⟨rfl, e'⟩ := single_immOf_inj e
+  obtain ⟨rfl, -⟩ := CellU.immOf_inj e'
+  exact ⟨_, List.mem_singleton_self _, le_refl _, _, DescR.refl _, .ref .unit,
+    LSub.empty.extend x α, TyEq.refl _ _,
+    Or.inl ⟨_, List.mem_singleton_self _, rfl, rfl, fun _ _ => rfl⟩⟩
 
 /-- `vN` has no value of an `Imm` type at `∅`. -/
 theorem not_vN_imm_empty (a : BoCa.Lifetime.Life) (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat)

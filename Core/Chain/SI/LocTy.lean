@@ -116,14 +116,20 @@ def LocTy.add (Θ : LocTy) (l : Loc) (α : Life) (F : Nat → Val → SPropS Loc
 @[simp] theorem LocTy.add_imm (Θ : LocTy) (l : Loc) (α : Life) (F : Nat → Val → SPropS Loc Val α) :
     (Θ.add l α F).imm = Θ.imm := rfl
 
-/-- The entries strictly longer-lived than `a` (Core's `ls₀`), and the world's `imm` records. -/
+/-- **The part of the world above `a`, Core's `ls₀`**: the entries strictly longer-lived than `a`,
+and the `imm` records lent strictly above `a` (`ptoMutS`'s `x ∈ ls₀ ↔ x ∈ ls ∧ x.2 ⊐ b`). -/
 def LocTy.above (Θ : LocTy) (a : Life) : LocTy :=
-  ⟨fun x b => if a < b then Θ x b else none, Θ.imm⟩
+  ⟨fun x b => if a < b then Θ x b else none, Θ.imm.filter (fun x => decide (a < x.2))⟩
 
 @[simp] theorem LocTy.above_apply (Θ : LocTy) (a : Life) (x : Loc) (b : Life) :
     Θ.above a x b = if a < b then Θ x b else none := rfl
 
-@[simp] theorem LocTy.above_imm (Θ : LocTy) (a : Life) : (Θ.above a).imm = Θ.imm := rfl
+@[simp] theorem LocTy.above_imm (Θ : LocTy) (a : Life) :
+    (Θ.above a).imm = Θ.imm.filter (fun x => decide (a < x.2)) := rfl
+
+theorem LocTy.mem_above_imm {Θ : LocTy} {a : Life} {x : SRec} :
+    x ∈ (Θ.above a).imm ↔ x ∈ Θ.imm ∧ a < x.2 := by
+  simp [LocTy.above]
 
 theorem LocTy.add_self (Θ : LocTy) (l : Loc) (α : Life) (F : Nat → Val → SPropS Loc Val α) :
     Θ.add l α F l α = some F := by
@@ -268,37 +274,49 @@ theorem mutL_extA {Θ Θ' : LocTy} (hE : Θ.ExtA Θ') {a : Life} {P : CPredL} {n
 
 /-! ### The resource-relative Kripke order -/
 
+/-- **Core's `Keeps` at the per-lend world**: `Θ′` keeps every `imm` record of `Θ` relevant to `ρ`,
+a record being relevant when `ρ` holds a borrow cell no longer-lived than the lifetime the record
+was lent at (`CellIn ρ x.2`). An `Imm` value's witness is relevant to its cell, since a record
+witnesses only cells no longer-lived than it (`Goal791N.ImmWitW`); a record lent at `α` is relevant
+to no resource in `Res_α`. Core's `Keeps` reads relevance off the record's location
+(`Rel`, `Core/FrameRecords.lean`) and supplies the lifetime from the run's tags (`FrameLife`,
+`not_rel_lineage`); here the world carries the lifetime, and relevance reads it. -/
+def LocTy.Keeps (Θ Θ' : LocTy) (ρ : WRes) : Prop := ∀ x ∈ Θ.imm, CellIn ρ x.2 → x ∈ Θ'.imm
+
+theorem LocTy.Keeps.of_immLe {Θ Θ' : LocTy} (h : Θ.ImmLe Θ') (ρ : WRes) : Θ.Keeps Θ' ρ :=
+  fun x hx _ => h x hx
+
 /-- **The resource-relative order on the per-lend world**, the order `U` and `⊸` are Kripke
 along: at the resource `ρ`, every key at a lifetime `a` with a borrow cell of `ρ` no longer-lived
-than `a` (`CellIn ρ a`, Core's) is kept, and nothing is added above it; every `imm` record is
-kept. `LocTy.above` keeps the `imm` records whole, so above a key the resource reads no `imm`
-record is added either. A stored family here reads
-the world above its key (`famL`), so the keys at and above such an `a`, and what lies above them,
-are what a value with resource `ρ` reads. It departs from Core's literal `Ext ls ls′ ρ`, which
-asks agreement above every `b` with `CellIn ρ b`, not only above the keys present
-(`scope-791-loctype.md` §10); read literally, `U` is not Kripke along `ExtA` at a type through
-`ν`, which the interpretation reads as empty (`Core/Chain/ExtRLit791.lean`). -/
+than `a` (`CellIn ρ a`, Core's) is kept, and nothing is added above it, `imm` records included
+(`LocTy.above` is Core's `ls₀`); the `imm` records relevant to `ρ` are kept (`LocTy.Keeps`, Core's
+`Keeps`). A stored family here reads the world above its key (`famL`), so the keys at and above
+such an `a`, and what lies above them, are what a value with resource `ρ` reads. It departs from
+Core's literal `Ext ls ls′ ρ`, which asks agreement above every `b` with `CellIn ρ b`, not only
+above the keys present (`scope-791-loctype.md` §10); read literally, `U` is not Kripke along
+`ExtA` at a type through `ν`, which the interpretation reads as empty
+(`Core/Chain/ExtRLit791.lean`). -/
 def LocTy.ExtR (Θ Θ' : LocTy) (ρ : WRes) : Prop :=
   (∀ l a F, Θ l a = some F → CellIn ρ a → Θ' l a = some F ∧ Θ'.above a = Θ.above a) ∧
-    Θ.ImmLe Θ'
+    Θ.Keeps Θ' ρ
 
 theorem LocTy.extR_refl (Θ : LocTy) (ρ : WRes) : Θ.ExtR Θ ρ :=
-  ⟨fun _ _ _ h _ => ⟨h, rfl⟩, fun _ h => h⟩
+  ⟨fun _ _ _ h _ => ⟨h, rfl⟩, fun _ h _ => h⟩
 
 theorem LocTy.ExtR.trans {Θ Θ' Θ'' : LocTy} {ρ : WRes} (h₁ : Θ.ExtR Θ' ρ) (h₂ : Θ'.ExtR Θ'' ρ) :
     Θ.ExtR Θ'' ρ := by
-  refine ⟨fun l a F hF hc => ?_, fun x hx => h₂.2 x (h₁.2 x hx)⟩
+  refine ⟨fun l a F hF hc => ?_, fun x hx hc => h₂.2 x (h₁.2 x hx hc) hc⟩
   obtain ⟨e₁, a₁⟩ := h₁.1 l a F hF hc
   obtain ⟨e₂, a₂⟩ := h₂.1 l a F e₁ hc
   exact ⟨e₂, a₂.trans a₁⟩
 
 /-- The world-relative order is the resource-relative one at every resource. -/
 theorem LocTy.ExtA.extR {Θ Θ' : LocTy} (h : Θ.ExtA Θ') (ρ : WRes) : Θ.ExtR Θ' ρ :=
-  ⟨fun l a F hF _ => ⟨h.1 l a F hF, h.2.1 l a (by rw [hF]; simp)⟩, h.2.2⟩
+  ⟨fun l a F hF _ => ⟨h.1 l a F hF, h.2.1 l a (by rw [hF]; simp)⟩, LocTy.Keeps.of_immLe h.2.2 ρ⟩
 
 theorem LocTy.ExtR.mono {Θ Θ' : LocTy} {ρ σ : WRes} (h : Θ.ExtR Θ' ρ)
     (hs : ∀ a, CellIn σ a → CellIn ρ a) : Θ.ExtR Θ' σ :=
-  ⟨fun l a F hF hc => h.1 l a F hF (hs a hc), h.2⟩
+  ⟨fun l a F hF hc => h.1 l a F hF (hs a hc), fun x hx hc => h.2 x hx (hs _ hc)⟩
 
 theorem LocTy.ExtR.left {Θ Θ' : LocTy} {ρ₁ ρ₂ ρ : WRes} (hc : ResU.CompS ρ₁ ρ₂ ρ)
     (h : Θ.ExtR Θ' ρ) : Θ.ExtR Θ' ρ₁ := h.mono fun _ hi => hi.of_left hc
@@ -311,7 +329,7 @@ theorem LocTy.ExtR.right {Θ Θ' : LocTy} {ρ₁ ρ₂ ρ : WRes} (hc : ResU.Com
 one it reads. -/
 theorem LocTy.extR_of_add (Θ : LocTy) (l₀ : Loc) {α : Life} (F : Nat → Val → SPropS Loc Val α)
     {ρ : WRes} (hρ : ρ.InStratum α) : (Θ.add l₀ α F).ExtR Θ ρ := by
-  refine ⟨fun l a G hG hc => ?_, fun x hx => hx⟩
+  refine ⟨fun l a G hG hc => ?_, fun x hx _ => hx⟩
   have hαa : α < a := hc.of_stratum hρ
   rw [LocTy.add_keep Θ l₀ F l (ne_of_gt hαa)] at hG
   exact ⟨hG, (LocTy.above_add Θ l₀ (not_lt_of_gt hαa) F).symm⟩
@@ -333,7 +351,8 @@ theorem mutL_extR {Θ Θ' : LocTy} {a : Life} {P : CPredL} {n : Nat} {v : Val} {
   exact ⟨l, w, χ, hχ, j, hw, hnj, hv, hl', rfl⟩
 
 /-- **The part of the world above `a` and the whole are extensions of each other at a resource
-in `Res_a`**: such a resource reads only keys above `a`. -/
+in `Res_a`**: such a resource reads only keys above `a`, and every record relevant to it is lent
+above `a`. -/
 theorem LocTy.extR_above (Θ : LocTy) {a : Life} {ρ : WRes} (hρ : ρ.InStratum a) :
     (Θ.above a).ExtR Θ ρ ∧ Θ.ExtR (Θ.above a) ρ := by
   have habove : ∀ b, a < b → (Θ.above a).above b = Θ.above b := by
@@ -343,13 +362,53 @@ theorem LocTy.extR_above (Θ : LocTy) {a : Life} {ρ : WRes} (hρ : ρ.InStratum
       by_cases hby : b < y
       · simp [hby, lt_trans hab hby]
       · simp [hby]
-    · rfl
-  refine ⟨⟨fun l b F hF hc => ?_, fun x hx => hx⟩, ⟨fun l b F hF hc => ?_, fun x hx => hx⟩⟩
+    · simp only [LocTy.above_imm, List.filter_filter]
+      congr 1
+      funext x
+      by_cases hbx : b < x.2
+      · simp [hbx, lt_trans hab hbx]
+      · simp [hbx]
+  refine ⟨⟨fun l b F hF hc => ?_, fun x hx _ => (LocTy.mem_above_imm.mp hx).1⟩,
+    ⟨fun l b F hF hc => ?_, fun x hx hc => LocTy.mem_above_imm.mpr ⟨hx, hc.of_stratum hρ⟩⟩⟩
   · have hab : a < b := hc.of_stratum hρ
     simp only [LocTy.above_apply, if_pos hab] at hF
     exact ⟨hF, (habove b hab).symm⟩
   · have hab : a < b := hc.of_stratum hρ
     exact ⟨by simp only [LocTy.above_apply, if_pos hab]; exact hF, habove b hab⟩
+
+/-! ### An `imm` lend's record -/
+
+/-- An `imm` lend's record added to the world; the keys unchanged. -/
+def LocTy.addImm (Θ : LocTy) (x : SRec) : LocTy := ⟨Θ.fam, x :: Θ.imm⟩
+
+@[simp] theorem LocTy.addImm_apply (Θ : LocTy) (x : SRec) (l : Loc) (b : Life) :
+    Θ.addImm x l b = Θ l b := rfl
+
+@[simp] theorem LocTy.addImm_imm (Θ : LocTy) (x : SRec) : (Θ.addImm x).imm = x :: Θ.imm := rfl
+
+/-- Above a lifetime longer than the record's, the record is not seen. -/
+theorem LocTy.above_addImm (Θ : LocTy) {x : SRec} {a : Life} (h : ¬ a < x.2) :
+    (Θ.addImm x).above a = Θ.above a := by
+  refine LocTy.ext' (fun _ _ => rfl) ?_
+  simp only [LocTy.above_imm, LocTy.addImm_imm]
+  rw [List.filter_cons_of_neg (by simpa using h)]
+
+/-- **Core's `ext_add` at the per-lend world**: a record lent at `α` is not compared at a resource
+in `Res_α`, whose borrow cells are all longer-lived than `α`. -/
+theorem LocTy.extR_addImm (Θ : LocTy) (r : FrameRec) {α : Life} {ρ : WRes}
+    (hρ : ρ.InStratum α) : Θ.ExtR (Θ.addImm (r, α)) ρ :=
+  ⟨fun _ a _ hF hc => ⟨hF, LocTy.above_addImm Θ (not_lt_of_gt (hc.of_stratum hρ))⟩,
+    fun _ hy _ => List.mem_cons_of_mem _ hy⟩
+
+/-- **Core's `ext_drop` at the per-lend world**: the record lent at `α` is relevant to no resource
+in `Res_α`, so the world without it is an extension there. -/
+theorem LocTy.extR_of_addImm (Θ : LocTy) (r : FrameRec) {α : Life} {ρ : WRes}
+    (hρ : ρ.InStratum α) : (Θ.addImm (r, α)).ExtR Θ ρ := by
+  refine ⟨fun _ a _ hF hc => ⟨hF, (LocTy.above_addImm Θ
+    (not_lt_of_gt (hc.of_stratum hρ))).symm⟩, fun y hy hc => ?_⟩
+  rcases List.mem_cons.mp hy with rfl | hy
+  · exact absurd (hc.of_stratum hρ) (lt_irrefl _)
+  · exact hy
 
 /-- **L3 (locality)**: a `Mut` value of Core's shape at the world with the lend, whose cell is
 longer-lived than the lend, is one at the world without it (Core's `vC_local`; what the lender

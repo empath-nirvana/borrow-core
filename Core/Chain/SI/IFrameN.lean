@@ -143,8 +143,7 @@ theorem rwp_I_frame {Φ : LocFam} (l : BoCa.Loc) (T : VTy) (δ : LSub)
     (ResU.lower_swap_imm_own hlPcell hvi hvlP hFBi hFBiH hFBl hFBlH).mpr hlow
   obtain ⟨hval, hprog⟩ :=
     hwpBI ρf fρ (p :: ps) μ hH17 h4 hTin htgin
-      (hI.of_sub fun r hr => by
-        rw [hls'def, rsOf_frameList]; exact List.mem_cons_of_mem _ (List.mem_append_right _ hr))
+      (hI.of_sub fun r hr => by rw [hls'def]; simp [frameList, hr])
       hlowin hfd jr μ' e' hj hrun
   refine ⟨fun v' hv' => ?_, hprog⟩
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps'', ls'',

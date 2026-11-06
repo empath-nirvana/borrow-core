@@ -193,18 +193,12 @@ theorem rwp_load {Φ : LocFam} (ls : List SRec) (l : BoCa.Loc) (v : Val) (Q : Po
     UpdVN.refl Φ _ (hash_valid hf).2, noOwn_empty, hT, htg,
     fun _ => Iff.rfl, fun _ => Iff.rfl, hwand _ ρ rfl (ResU.CompS.comm hcρ)⟩
 
-/-- **`[TR]` 6.144 (`wp-load-I`) at the step index** (`wpTS_load_I`). -/
-theorem rwp_load_I {Φ : LocFam} (ls : List SRec) (l : BoCa.Loc) (α : Life) (P : Val → WProp)
-    (Q : PostN) {n : Nat} {ρ : WRes}
-    (h : (sep (ptoImm l α P)
-        (all fun v =>
-          wand (ptoImm l α (fun v' => sep (pure (v = v')) (P v))) (Q (n - 1) ls v))) ρ) :
+/-- **A load at an `imm` cell of the resource returns the cell's value**, the resource unchanged:
+`[TR]` 6.144's run, at the cell held. -/
+theorem rwp_load_cell {Φ : LocFam} (ls : List SRec) (l : BoCa.Loc) (s : LSet) (v : Val)
+    (σ : WRes) (hs : σ.InStratum s.join) (Q : PostN) {n : Nat} {ρ ρR : WRes}
+    (hcρ : ResU.CompS (ResU.single l (CellU.immOf s v σ hs)) ρR ρ) (hQ : Q (n - 1) ls v ρ) :
     rwp (ℍ := ℍ) Φ Q n ls (.app (.val (.prim .load)) (.val (.loc l))) ρ := by
-  obtain ⟨ρ₁, ρR, hcρ, ⟨s, v, σ, hs, rfl, hP, hα⟩, hR⟩ := h
-  have hcell : ptoImm l α (fun v' => sep (pure (v = v')) (P v))
-      (ResU.single l (CellU.immOf s v σ hs)) :=
-    ⟨s, v, σ, hs, rfl, (pure_sep_biEntails rfl (P v)).2 σ hP, hα⟩
-  have hQ : Q (n - 1) ls v ρ := hR v _ ρ hcell (ResU.CompS.comm hcρ)
   refine rwp_head1 (Head.load (fun _ => some Val.unit) l Val.unit rfl)
     (fun ρf τ ps μ hf hτ hT htg hμ hfin => ?_)
   obtain ⟨χ, hχ, heχ⟩ := compS_get_erase hcρ (ResU.single_get_self l _)
@@ -222,6 +216,19 @@ theorem rwp_load_I {Φ : LocFam} (ls : List SRec) (l : BoCa.Loc) (α : Life) (P 
     ResU.comp_empty_right τ, hμ, ResU.comp_empty_right ρ,
     UpdVN.refl Φ _ (hash_valid hf).2, noOwn_empty, hT, htg,
     fun _ => Iff.rfl, fun _ => Iff.rfl, hQ⟩
+
+/-- **`[TR]` 6.144 (`wp-load-I`) at the step index** (`wpTS_load_I`). -/
+theorem rwp_load_I {Φ : LocFam} (ls : List SRec) (l : BoCa.Loc) (α : Life) (P : Val → WProp)
+    (Q : PostN) {n : Nat} {ρ : WRes}
+    (h : (sep (ptoImm l α P)
+        (all fun v =>
+          wand (ptoImm l α (fun v' => sep (pure (v = v')) (P v))) (Q (n - 1) ls v))) ρ) :
+    rwp (ℍ := ℍ) Φ Q n ls (.app (.val (.prim .load)) (.val (.loc l))) ρ := by
+  obtain ⟨ρ₁, ρR, hcρ, ⟨s, v, σ, hs, rfl, hP, hα⟩, hR⟩ := h
+  have hcell : ptoImm l α (fun v' => sep (pure (v = v')) (P v))
+      (ResU.single l (CellU.immOf s v σ hs)) :=
+    ⟨s, v, σ, hs, rfl, (pure_sep_biEntails rfl (P v)).2 σ hP, hα⟩
+  exact rwp_load_cell ls l s v σ hs Q hcρ (hR v _ ρ hcell (ResU.CompS.comm hcρ))
 
 /-- A store's head steps: the location held, overwritten, answering `()`. -/
 theorem head_store_inv {μ μ' : Heap} {ℓ : Loc} {v : Val} {a' : Expr}

@@ -157,48 +157,97 @@ end
 theorem loc_inj {l l' : Loc} (h : Val.loc l = Val.loc l') : l = l' := by
   have := congrArg Subtype.val h; simpa [Val.loc] using this
 
+/-- **Every `imm` cell of `B` is no longer-lived than every world record coherent at its
+location**: Core's `FrameLife` (a record's lineage views have lifetimes ⊑ its tag) read at the
+cells of `B` and the world's records. A run's typed world supplies it at its entry
+(`Withload791N.lifeBoundW_of_entry`). -/
+def LifeBoundOn (I : List SRec) (P : Loc → Prop) (B : WRes) : Prop :=
+  ∀ m t u σ h, B.get m = some (CellU.immOf t u σ h) → P m → ∀ x ∈ I, ∀ d, DescR x.1 d →
+    ∀ S δ₀, CohE [d] m S δ₀ → ∀ y, t.mem y → y ≤ x.2
+
+/-- `LifeBoundOn` at every location. -/
+abbrev LifeBoundW (I : List SRec) (B : WRes) : Prop := LifeBoundOn I (fun _ => True) B
+
+/-- A piece of an `imm` cell has fewer lifetimes. -/
+theorem imm_piece_left {B₁ B₂ B : WRes} (hc : ResU.CompS B₁ B₂ B) {m : Loc} {t : LSet}
+    {u : Val} {σ : WRes} {hσ : σ.InStratum t.join} (e : B₁.get m = some (CellU.immOf t u σ hσ)) :
+    ∃ (t' : LSet) (h' : σ.InStratum t'.join), B.get m = some (CellU.immOf t' u σ h') ∧
+      ∀ y, t.mem y → t'.mem y := by
+  rcases ResU.Comp.get hc m with ⟨f₁, -, -⟩ | ⟨ζ, f₁, -, f⟩ | ⟨ζ, f₁, -, -⟩ |
+      ⟨ζ₁, ζ₂, ζ, f₁, -, f, hC⟩
+  · rw [e] at f₁; cases f₁
+  · rw [e] at f₁; cases Option.some.inj f₁
+    exact ⟨t, hσ, f, fun _ h => h⟩
+  · rw [e] at f₁; cases f₁
+  · rw [e] at f₁; cases Option.some.inj f₁
+    obtain ⟨s₁, s₂, v, ρ, h₁, h₂, h₃, e₁, rfl, rfl⟩ := hC
+    obtain ⟨rfl, rfl, rfl⟩ := CellU.immOf_inj e₁
+    exact ⟨_, h₃, f, fun _ h => Or.inl h⟩
+
+theorem LifeBoundOn.left {I : List SRec} {P : Loc → Prop} {B₁ B₂ B : WRes}
+    (hc : ResU.CompS B₁ B₂ B) (h : LifeBoundOn I P B) : LifeBoundOn I P B₁ := by
+  intro m t u σ hσ e hP x hx d hd S δ₀ hco y hy
+  obtain ⟨t', h', e', ht⟩ := imm_piece_left hc e
+  exact h m t' u σ h' e' hP x hx d hd S δ₀ hco y (ht y hy)
+
+theorem LifeBoundOn.right {I : List SRec} {P : Loc → Prop} {B₁ B₂ B : WRes}
+    (hc : ResU.CompS B₁ B₂ B) (h : LifeBoundOn I P B) : LifeBoundOn I P B₂ := h.left hc.comm
+
+/-- **Every cell of `c` at an `own` location of `R` has its witness bounded** (`LifeBoundW`). -/
+def LifeBoundWit (I : List SRec) (R c : WRes) : Prop :=
+  ∀ m ψ, c.get m = some ψ → (∃ u, R.get m = some (CellU.ownOf u)) → LifeBoundW I ψ.wit
+
+theorem LifeBoundWit.left {I : List SRec} {R c₁ c₂ c : WRes} (hc : ResU.CompS c₁ c₂ c)
+    (h : LifeBoundWit I R c) : LifeBoundWit I R c₁ := by
+  intro m ψ e hR
+  obtain ⟨ψ', e', -, w', -⟩ := compS_get_left' hc e
+  rw [← w']
+  exact h m ψ' e' hR
+
 /-- **The observable view transfers between two pieces of one escrow** (Core's `obs_transfer`):
 `A` observable at `T`, `B` shaped at `T`, both cell-matching `R`, gives `B` observable at `T`.
 At a `U` position both sides are `True`; at an `Imm` or `Mut` position the cell is read off `R`'s,
-and an `Imm` cell's witness is its location's, which the two pieces share. -/
+and an `Imm` cell's witness is its location's, which the two pieces share; `B`'s cell is no
+longer-lived than it (`LifeBoundW`). -/
 theorem vO_transfer {R : WRes} : ∀ (T : VTy) {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val}
-    {A B : WRes}, CellMatch R A → CellMatch R B → vO (ℍ := ℍ) T δ Θ n v A → vShape T δ v B →
-    vO (ℍ := ℍ) T δ Θ n v B
-  | .unit, _, _, _, _, _, _, _, _, _, hs => by obtain ⟨hB, hv⟩ := hs; exact ⟨hv, hB⟩
-  | .int _, _, _, _, _, _, _, _, _, _, hs => by obtain ⟨hB, hv⟩ := hs; exact ⟨hv, hB⟩
-  | .unk, _, _, _, _, _, _, _, _, _, hs => hs.1
-  | .opq _, _, _, _, _, _, _, _, _, h, _ => h.elim
-  | .zero, _, _, _, _, _, _, _, _, h, _ => h.elim
-  | .thunk _, _, _, _, _, _, _, _, _, _, _ => trivial
-  | .tvar _, _, _, _, _, _, _, _, _, h, _ => h.elim
-  | .mu _, _, _, _, _, _, _, _, _, h, _ => h.elim
-  | .fam _, _, _, _, _, _, _, _, _, h, _ => h.elim
-  | .tensor T₁ T₂, δ, Θ, n, _, A, B, hA, hB, h, hs => by
+    {A B : WRes}, CellMatch R A → CellMatch R B → LifeBoundW Θ.imm B →
+    vO (ℍ := ℍ) T δ Θ n v A → vShape T δ v B → vO (ℍ := ℍ) T δ Θ n v B
+  | .unit, _, _, _, _, _, _, _, _, _, _, hs => by obtain ⟨hB, hv⟩ := hs; exact ⟨hv, hB⟩
+  | .int _, _, _, _, _, _, _, _, _, _, _, hs => by obtain ⟨hB, hv⟩ := hs; exact ⟨hv, hB⟩
+  | .unk, _, _, _, _, _, _, _, _, _, _, hs => hs.1
+  | .opq _, _, _, _, _, _, _, _, _, _, h, _ => h.elim
+  | .zero, _, _, _, _, _, _, _, _, _, h, _ => h.elim
+  | .thunk _, _, _, _, _, _, _, _, _, _, _, _ => trivial
+  | .tvar _, _, _, _, _, _, _, _, _, _, h, _ => h.elim
+  | .mu _, _, _, _, _, _, _, _, _, _, h, _ => h.elim
+  | .fam _, _, _, _, _, _, _, _, _, _, h, _ => h.elim
+  | .tensor T₁ T₂, δ, Θ, n, _, A, B, hA, hB, hL, h, hs => by
       obtain ⟨v₁, v₂, A₁, A₂, rfl, hcA, h₁, h₂⟩ := h
       obtain ⟨w₁, w₂, hk⟩ := hs
       obtain ⟨he, B₁, B₂, hcB, g₁, g₂⟩ := pure_sep_iff.mp hk
       obtain ⟨rfl, rfl⟩ := Val.pair_inj' he
-      exact ⟨v₁, v₂, B₁, B₂, rfl, hcB, vO_transfer T₁ (hA.left hcA) (hB.left hcB) h₁ g₁,
-        vO_transfer T₂ (hA.right hcA) (hB.right hcB) h₂ g₂⟩
-  | .sum T₁ T₂, δ, Θ, n, _, A, B, hA, hB, h, hs => by
+      exact ⟨v₁, v₂, B₁, B₂, rfl, hcB,
+        vO_transfer T₁ (hA.left hcA) (hB.left hcB) (LifeBoundOn.left hcB hL) h₁ g₁,
+        vO_transfer T₂ (hA.right hcA) (hB.right hcB) (LifeBoundOn.right hcB hL) h₂ g₂⟩
+  | .sum T₁ T₂, δ, Θ, n, _, A, B, hA, hB, hL, h, hs => by
       rcases h with ⟨a, rfl, h₁⟩ | ⟨a, rfl, h₁⟩ <;> rcases hs with ⟨b, hk⟩ | ⟨b, hk⟩
       · obtain ⟨he, g⟩ := pure_sep_iff.mp hk
         cases Val.inj₁_inj' he
-        exact .inl ⟨a, rfl, vO_transfer T₁ hA hB h₁ g⟩
+        exact .inl ⟨a, rfl, vO_transfer T₁ hA hB hL h₁ g⟩
       · exact absurd (pure_sep_iff.mp hk).1 (Val.inj₁_ne_inj₂)
       · exact absurd (pure_sep_iff.mp hk).1 (fun e => Val.inj₁_ne_inj₂ e.symm)
       · obtain ⟨he, g⟩ := pure_sep_iff.mp hk
         cases Val.inj₂_inj' he
-        exact .inr ⟨a, rfl, vO_transfer T₂ hA hB h₁ g⟩
-  | .box a T, δ, Θ, n, v, A, B, hA, hB, h, hs => by
+        exact .inr ⟨a, rfl, vO_transfer T₂ hA hB hL h₁ g⟩
+  | .box a T, δ, Θ, n, v, A, B, hA, hB, hL, h, hs => by
       obtain ⟨α, hα, h₁, -⟩ := h
       obtain ⟨α', hα', hs₁, ho'⟩ := hs
-      exact ⟨α', hα', vO_transfer T hA hB h₁ hs₁, ho'⟩
-  | .bang T, δ, Θ, n, v, A, B, hA, hB, h, hs => by
+      exact ⟨α', hα', vO_transfer T hA hB hL h₁ hs₁, ho'⟩
+  | .bang T, δ, Θ, n, v, A, B, hA, hB, _, h, hs => by
       obtain ⟨rfl, hT⟩ := h
       obtain ⟨rfl, -⟩ := hs
       exact ⟨rfl, hT⟩
-  | .ref S, δ, Θ, n, _, A, B, hA, hB, h, hs => by
+  | .ref S, δ, Θ, n, _, A, B, hA, hB, hL, h, hs => by
       obtain ⟨l, u, σ, rfl, hab, hS⟩ := h
       obtain ⟨l', u', hk⟩ := hs
       obtain ⟨hl', σa, σb, hab', hown', hSb⟩ := pure_sep_iff.mp hk
@@ -214,12 +263,13 @@ theorem vO_transfer {R : WRes} : ∀ (T : VTy) {δ : LSub} {Θ : LocTy} {n : Nat
         have := congrArg CellU.erase ((hζ (by simp)).symm.trans (hζ' (by simp)))
         simpa using this
       subst huu
-      exact ⟨l, u, σb, rfl, hab', vO_transfer S (hA.right hab) (hB.right hab') hS hSb⟩
-  | .imm a S, δ, Θ, n, _, A, B, hA, hB, h, hs => by
+      exact ⟨l, u, σb, rfl, hab', vO_transfer S (hA.right hab) (hB.right hab') (LifeBoundOn.right hab' hL)
+        hS hSb⟩
+  | .imm a S, δ, Θ, n, _, A, B, hA, hB, hL, h, hs => by
       obtain ⟨α, hα, ⟨l, s, u, σ, hσ, rfl, rfl, hαs, hP⟩, hW⟩ := h
       obtain ⟨α', hα', l', hk⟩ := hs
       obtain ⟨hl', t, w, W, hWt, rfl, -, hα't⟩ := pure_sep_iff.mp hk
-      obtain rfl := loc_inj hl'
+      obtain rfl : l = l' := loc_inj hl'
       rw [hα] at hα'; cases Option.some.inj hα'
       obtain ⟨ζ, eζ, kζ, wζ, rζ, -⟩ := hA l _ (ResU.single_get_self _ _)
       obtain ⟨ζ', eζ', -, wζ', rζ', -⟩ := hB l _ (ResU.single_get_self _ _)
@@ -228,8 +278,14 @@ theorem vO_transfer {R : WRes} : ∀ (T : VTy) {δ : LSub} {Θ : LocTy} {n : Nat
       have hW' : W = σ := wζ'.symm.trans wζ
       have hw' : w = u := rζ'.symm.trans rζ
       subst hW' hw'
-      exact ⟨α, hα, ⟨l, t, w, W, hWt, rfl, rfl, hα't, hP⟩, hW⟩
-  | .mut a S, δ, Θ, n, _, A, B, hA, hB, h, hs => by
+      refine ⟨α, hα, ⟨l, t, w, W, hWt, rfl, rfl, hα't, hP⟩, fun l₀ t₀ u₀ σ₀ h₀ e => ?_⟩
+      obtain ⟨rfl, e'⟩ := single_immOf_inj e
+      obtain ⟨rfl, -, -⟩ := CellU.immOf_inj e'
+      obtain ⟨x, hx, -, d, hd, hco⟩ := hW l s w W hσ rfl
+      obtain ⟨S₀, δ₀, he, hc⟩ := hco
+      exact ⟨x, hx, hL l t w W hWt (ResU.single_get_self _ _) trivial x hx d hd S δ ⟨S₀, δ₀, he, hc⟩
+        t.meet t.meet_mem, d, hd, S₀, δ₀, he, hc⟩
+  | .mut a S, δ, Θ, n, _, A, B, hA, hB, _, h, hs => by
       obtain ⟨α, hα, b, hab, hm, hu⟩ := h
       obtain ⟨l, w, χ, hχ, j, hw, hnj, rfl, hl, rfl⟩ := id hm
       obtain ⟨α', -, l', hk⟩ := hs
@@ -259,30 +315,32 @@ theorem relabel_vN {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSu
           (ζ.kind ≠ Kind.own → ψ.wit = ζ.wit) ∧ (ζ.kind = Kind.own → CellMatch R ψ.wit)) →
       (∀ m ψ, c.get m = some ψ → (∃ ζ, R.get m = some ζ ∧ ζ.kind ≠ Kind.imm) →
         ψ.wit.InStratum (LSet.singleton β).join) →
+      LifeBoundOn Θ.imm (fun m => ∃ ζ, R.get m = some ζ ∧ ζ.kind = Kind.imm) c →
+      LifeBoundWit Θ.imm R c →
       (∀ m S u, RefPos T v m S → R.get m = some (CellU.ownOf u) →
-        ImmWitW Θ.imm m S (δ.extend x β)) →
-      (∀ m S, MutPos T v m S → ImmWitW Θ.imm m S (δ.extend x β)) →
+        ImmWitW Θ.imm m (LSet.singleton β) S (δ.extend x β)) →
+      (∀ m S, MutPos T v m S → ImmWitW Θ.imm m (LSet.singleton β) S (δ.extend x β)) →
       vN (ℍ := ℍ) (T.immReborrow (.var x)) (δ.extend x β) Θ n v (relRes R β c)
-  | .unit, _, _, _, _, _, hc, _, _, _, _, _, _ => by
+  | .unit, _, _, _, _, _, hc, _, _, _, _, _, _, _, _ => by
       obtain ⟨rfl, hv⟩ := hc; rw [relRes_empty]; exact ⟨hv, rfl⟩
-  | .int _, _, _, _, _, _, hc, _, _, _, _, _, _ => by
+  | .int _, _, _, _, _, _, hc, _, _, _, _, _, _, _, _ => by
       obtain ⟨rfl, hv⟩ := hc; rw [relRes_empty]; exact ⟨hv, rfl⟩
-  | .opq _, _, _, _, _, _, hc, _, _, _, _, _, _ => by
+  | .opq _, _, _, _, _, _, hc, _, _, _, _, _, _, _, _ => by
       obtain ⟨rfl, -⟩ := hc; rw [relRes_empty]; rfl
-  | .thunk _, _, _, _, _, _, hc, _, _, _, _, _, _ => by
+  | .thunk _, _, _, _, _, _, hc, _, _, _, _, _, _, _, _ => by
       obtain ⟨rfl, -⟩ := hc; rw [relRes_empty]; rfl
-  | .unk, _, _, _, _, _, hc, _, _, _, _, _, _ => by
+  | .unk, _, _, _, _, _, hc, _, _, _, _, _, _, _, _ => by
       obtain ⟨rfl, -⟩ := hc; rw [relRes_empty]; rfl
-  | .zero, _, _, _, _, _, hc, _, _, _, _, _, _ => hc.elim
-  | .tvar _, _, _, _, _, _, _, hR, _, _, _, _, _ => hR.elim
-  | .mu _, _, _, _, _, _, _, hR, _, _, _, _, _ => hR.elim
-  | .fam _, _, _, _, _, _, _, hR, _, _, _, _, _ => hR.elim
-  | .sum T₁ T₂, hx, hx₀, _, c, Rl, hc, hR, hRl, hcR, hs, hcr, hcm => by
+  | .zero, _, _, _, _, _, hc, _, _, _, _, _, _, _, _ => hc.elim
+  | .tvar _, _, _, _, _, _, _, hR, _, _, _, _, _, _, _ => hR.elim
+  | .mu _, _, _, _, _, _, _, hR, _, _, _, _, _, _, _ => hR.elim
+  | .fam _, _, _, _, _, _, _, hR, _, _, _, _, _, _, _ => hR.elim
+  | .sum T₁ T₂, hx, hx₀, _, c, Rl, hc, hR, hRl, hcR, hs, hLk, hLo, hcr, hcm => by
       rcases hc with ⟨a, hk₁⟩ | ⟨a, hk₁⟩ <;> rcases hR with ⟨b, hb, h₁'⟩ | ⟨b, hb, h₁'⟩
       · obtain ⟨he, h₁⟩ := pure_sep_iff.mp hk₁
         subst he; cases Val.inj₁_inj' hb
         exact .inl ⟨a, rfl, relabel_vN T₁ (fun h => hx (Or.inl h)) (fun h => hx₀ (Or.inl h)) h₁
-          h₁' hRl hcR hs (fun m S u h => hcr m S u (RefPos.sumL h))
+          h₁' hRl hcR hs hLk hLo (fun m S u h => hcr m S u (RefPos.sumL h))
           (fun m S h => hcm m S (MutPos.sumL h))⟩
       · obtain ⟨he, -⟩ := pure_sep_iff.mp hk₁
         subst he; exact (Val.inj₁_ne_inj₂ hb).elim
@@ -291,9 +349,9 @@ theorem relabel_vN {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSu
       · obtain ⟨he, h₂⟩ := pure_sep_iff.mp hk₁
         subst he; cases Val.inj₂_inj' hb
         exact .inr ⟨a, rfl, relabel_vN T₂ (fun h => hx (Or.inr h)) (fun h => hx₀ (Or.inr h)) h₂
-          h₁' hRl hcR hs (fun m S u h => hcr m S u (RefPos.sumR h))
+          h₁' hRl hcR hs hLk hLo (fun m S u h => hcr m S u (RefPos.sumR h))
           (fun m S h => hcm m S (MutPos.sumR h))⟩
-  | .tensor T₁ T₂, hx, hx₀, _, c, Rl, hc, hR, hRl, hcR, hs, hcr, hcm => by
+  | .tensor T₁ T₂, hx, hx₀, _, c, Rl, hc, hR, hRl, hcR, hs, hLk, hLo, hcr, hcm => by
       obtain ⟨a, b, hk₁⟩ := hc
       obtain ⟨he, c₁, c₂, hcc, h₁, h₂⟩ := pure_sep_iff.mp hk₁
       obtain ⟨a', b', R₁, R₂, he', hRR, h₁', h₂'⟩ := hR
@@ -301,23 +359,24 @@ theorem relabel_vN {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSu
       obtain ⟨rfl, rfl⟩ := Val.pair_inj' he'
       exact ⟨a, b, _, _, rfl, relRes_compS hcc,
         relabel_vN T₁ (fun h => hx (Or.inl h)) (fun h => hx₀ (Or.inl h)) h₁ h₁' (hRl.left hRR)
-          (rebMatch_left hcc hcR) (strat_left hcc hs)
+          (rebMatch_left hcc hcR) (strat_left hcc hs) (LifeBoundOn.left hcc hLk) (LifeBoundWit.left hcc hLo)
           (fun m S u h => hcr m S u (RefPos.tensorL h)) (fun m S h => hcm m S (MutPos.tensorL h)),
         relabel_vN T₂ (fun h => hx (Or.inr h)) (fun h => hx₀ (Or.inr h)) h₂ h₂' (hRl.right hRR)
-          (rebMatch_left hcc.comm hcR) (strat_left hcc.comm hs)
+          (rebMatch_left hcc.comm hcR) (strat_left hcc.comm hs) (LifeBoundOn.right hcc hLk)
+          (LifeBoundWit.left hcc.comm hLo)
           (fun m S u h => hcr m S u (RefPos.tensorR h)) (fun m S h => hcm m S (MutPos.tensorR h))⟩
-  | .box a T, hx, hx₀, _, c, Rl, hc, hR, hRl, hcR, hs, hcr, hcm => by
+  | .box a T, hx, hx₀, _, c, Rl, hc, hR, hRl, hcR, hs, hLk, hLo, hcr, hcm => by
       obtain ⟨α, -, hb, -⟩ := hR
-      exact relabel_vN T (fun h => hx (Or.inr h)) (fun h => hx₀ (Or.inr h)) hc hb hRl hcR hs
+      exact relabel_vN T (fun h => hx (Or.inr h)) (fun h => hx₀ (Or.inr h)) hc hb hRl hcR hs hLk hLo
         (fun m S u h => hcr m S u (RefPos.box h)) (fun m S h => hcm m S (MutPos.box h))
-  | .bang S, hx, _, _, c, Rl, hc, hR, _, _, _, _, _ => by
+  | .bang S, hx, _, _, c, Rl, hc, hR, _, _, _, _, _, _, _ => by
       obtain ⟨rfl, -⟩ := hc
       obtain ⟨rfl, hS⟩ := hR
       rw [relRes_empty]
       refine ⟨rfl, ?_⟩
       rw [vN_extend_of_not_free (A := S) hx]
       exact hS
-  | .ref S, hx, hx₀, _, c, Rl, hc, hR, hRl, hcR, hs, hcr, _ => by
+  | .ref S, hx, hx₀, _, c, Rl, hc, hR, hRl, hcR, hs, _, hLo, hcr, _ => by
       obtain ⟨α, hα, l', hk₁⟩ := hc
       obtain ⟨hl, s', w, W, hW, rfl, hWd, -⟩ := pure_sep_iff.mp hk₁
       obtain ⟨l'', u, ρb, hl', hab, hRb⟩ := hR
@@ -339,15 +398,19 @@ theorem relabel_vN {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSu
       rw [relRes_single, relCell_fire eζ kne hβ]
       have hS₀ : ¬ VFree x₀ S := hx₀
       rw [vShape_extend_of_not_free hS₀] at hWd
-      have hobs : vO (ℍ := ℍ) S δ Θ n w W := vO_transfer S (hRl.right hab) hWm hRb hWd
+      have hobs : vO (ℍ := ℍ) S δ Θ n w W :=
+        vO_transfer S (hRl.right hab) hWm (by
+          have := hLo l' _ (ResU.single_get_self _ _) ⟨w, eζ⟩
+          rwa [CellU.wit_immOf] at this) hRb hWd
       have hobs' : vO (ℍ := ℍ) S (δ.extend x β) Θ n w W := by
         rw [vO_extend_of_not_free (A := S) hx]
         exact hobs
       refine ⟨β, interp_ext_self δ x β, ⟨l', LSet.singleton β, w, W, hβ, rfl, rfl, le_refl _,
-        hobs'⟩, fun l₀ hl₀ => ?_⟩
-      obtain rfl := loc_inj hl₀
+        hobs'⟩, fun l₀ s₀ u₀ σ₀ h₀ e => ?_⟩
+      obtain ⟨rfl, e'⟩ := single_immOf_inj e
+      obtain ⟨rfl, -, -⟩ := CellU.immOf_inj e'
       exact hcr l' S w (RefPos.ref S l') eζ
-  | .imm a S, hx, hx₀, _, c, Rl, hc, hR, hRl, hcR, _, _, _ => by
+  | .imm a S, hx, hx₀, _, c, Rl, hc, hR, hRl, hcR, _, hLk, _, _, _ => by
       have hc' : vShape (.imm a S) (δ.extend x₀ β₀) _ c := hc
       obtain ⟨α, -, l', hk₁⟩ := hc
       obtain ⟨hl, s', w, W, hW, rfl, -, -⟩ := pure_sep_iff.mp hk₁
@@ -360,14 +423,19 @@ theorem relabel_vN {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSu
       show vN (ℍ := ℍ) (.imm a S) (δ.extend x β) Θ n _ _
       rw [vN_extend_of_not_free hx, vN_imm_eq]
       rw [vShape_extend_of_not_free hx₀] at hc'
-      refine vO_transfer (.imm a S) hRl ?_ hR hc'
+      refine vO_transfer (.imm a S) hRl ?_ ?_ hR hc'
+      rotate_left
+      · intro m t u σ h e _
+        exact hLk m t u σ h e (by
+          obtain ⟨rfl, -⟩ := ResU.single_get_eq_some e
+          exact ⟨ζ, eζ, kζ'⟩)
       intro m ψ e
       obtain ⟨rfl, rfl⟩ := ResU.single_get_eq_some e
       obtain ⟨ζ₂, eζ₂, her, hwit, -⟩ := hcR m _ (ResU.single_get_self _ _)
       rw [eζ] at eζ₂; cases Option.some.inj eζ₂
       exact ⟨ζ, eζ, by rw [kζ']; simp, (hwit (by rw [kζ']; simp)).symm, her.symm,
         fun hk => absurd (by simp) hk⟩
-  | .mut a S, hx, _, _, c, Rl, hc, hR, hRl, hcR, hs, _, hcm => by
+  | .mut a S, hx, _, _, c, Rl, hc, hR, hRl, hcR, hs, _, _, _, hcm => by
       obtain ⟨α, -, l', hk₁⟩ := hc
       obtain ⟨hl, s', w, W, hW, rfl, -, -⟩ := pure_sep_iff.mp hk₁
       obtain ⟨α', -, b, -, ⟨l'', w₀, χ, hχ, j, hw, hnj, hv, -, rfl⟩, -⟩ := hR
@@ -393,8 +461,9 @@ theorem relabel_vN {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSu
         rw [vO_extend_of_not_free hS]
         exact vN_vO S δ Θ n w W hvS
       refine ⟨β, interp_ext_self δ x β, ⟨l'', LSet.singleton β, w, W, hβ, rfl, rfl, le_refl _,
-        hobs'⟩, fun l₀ hl₀ => ?_⟩
-      obtain rfl := loc_inj hl₀
+        hobs'⟩, fun l₀ s₀ u₀ σ₀ h₀ e => ?_⟩
+      obtain ⟨rfl, e'⟩ := single_immOf_inj e
+      obtain ⟨rfl, -, -⟩ := CellU.immOf_inj e'
       exact hcm l'' S (MutPos.mut a S l'')
 
 /-! ### Positions across `TyEq` -/

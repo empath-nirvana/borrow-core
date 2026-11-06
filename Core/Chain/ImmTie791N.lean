@@ -73,7 +73,7 @@ theorem immTie_agree {ΘI ls : List SRec} {ρ : WRes} (ht : ImmTie ΘI ls ρ) {l
 /-- **The relation's entry tie gives `ImmTie` at every resource**: `ImmTieL` asks every record of
 `ΘI` on the run's list, whichever cells the resource holds. -/
 theorem ImmTieL.tie {ΘI ls : List SRec} (h : ImmTieL ΘI ls) (ρ : WRes) : ImmTie ΘI ls ρ :=
-  fun x hx _ _ _ _ => h x hx
+  fun _ hx _ _ _ _ => h.rsOf hx
 
 /-! ### The two worlds of `immAgreeErwp_both` -/
 
@@ -136,10 +136,10 @@ theorem immTieL_world_ref (δ : LSub) (l l' : Loc) (α : Life) :
   refine ⟨fun x hx => ?_, fun h => ?_⟩
   · simp only [ΘRef, List.mem_singleton] at hx
     subst hx
-    simp [rsOf]
+    simp
   · have := h _ (List.mem_singleton_self _)
-    simp only [rsOf, List.map_cons, List.map_nil, List.mem_singleton] at this
-    exact recT_ne this
+    simp only [List.mem_singleton] at this
+    exact recT_ne (congrArg Prod.fst this)
 
 /-! ### A guard on `cN`'s run clauses -/
 

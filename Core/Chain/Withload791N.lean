@@ -146,18 +146,18 @@ theorem desc_mem_of_tie {W : WRes} {ps : List FrameRec} {ls : List SRec} {I : Li
     (hT : TWNC W ps (rsOf ls)) (hI : ImmTieL I ls) {x : SRec} (hx : x ∈ I) {d : FrameRec}
     (hd : DescR x.1 d) : d ∈ rsOf ls := by
   have hTI := hT.inv
-  obtain ⟨p, hp, hpx⟩ := (hTI.2.2.2.2.2.2.1 x.1).mp (hI x hx)
+  obtain ⟨p, hp, hpx⟩ := (hTI.2.2.2.2.2.2.1 x.1).mp (hI.rsOf hx)
   exact (hTI.2.2.2.2.2.2.1 d).mpr ⟨p, hp, hpx.trans hd⟩
 
 /-- **The witness at the run's first entry is Core's `CohE` at the run's list.** -/
 theorem cohE_of_immWitW {W : WRes} {ps : List FrameRec} {ls : List SRec} {I : List SRec}
     (hT : TWNC W ps (rsOf ls)) (hI : ImmTieL I ls) {l : Loc} {A : VTy} {δ : LSub}
-    (hw : ImmWitW I l A δ) :
-    ∃ x ∈ I, ∃ d, DescR x.1 d ∧ d ∈ rsOf ls ∧ ∃ S₀ δ₀, TyEq A δ S₀ δ₀ ∧
+    {s : LSet} (hw : ImmWitW I l s A δ) :
+    ∃ x ∈ I, s.meet ≤ x.2 ∧ ∃ d, DescR x.1 d ∧ d ∈ rsOf ls ∧ ∃ S₀ δ₀, TyEq A δ S₀ δ₀ ∧
       ((l = d.le ∧ S₀ = d.T ∧ AgreeOn d.T δ₀ d.δ) ∨
         (∃ p u, Chain d.R d.T d.v p l S₀ u ∧ AgreeOn S₀ δ₀ d.δ)) := by
-  obtain ⟨x, hx, d, hd, S₀, δ₀, he, hc⟩ := hw
-  refine ⟨x, hx, d, hd, desc_mem_of_tie hT hI hx hd, S₀, δ₀, he, ?_⟩
+  obtain ⟨x, hx, hxs, d, hd, S₀, δ₀, he, hc⟩ := hw
+  refine ⟨x, hx, hxs, d, hd, desc_mem_of_tie hT hI hx hd, S₀, δ₀, he, ?_⟩
   rcases hc with ⟨r, hr, h₁, h₂, h₃⟩ | ⟨r, hr, p, u, h₁, h₂⟩
   · simp only [List.mem_singleton] at hr; subst hr; exact .inl ⟨h₁, h₂, h₃⟩
   · simp only [List.mem_singleton] at hr; subst hr; exact .inr ⟨p, u, h₁, h₂⟩
@@ -167,11 +167,12 @@ theorem cohE_of_immWitW {W : WRes} {ps : List FrameRec} {ls : List SRec} {I : Li
 /-- The witness of an image cell at a `Ref` position of a record's own cell. -/
 theorem immWitW_root {I : List SRec} {x : SRec} (hx : x ∈ I) {d : FrameRec} (hd : DescR x.1 d)
     {A : VTy} {δ δ₀ : LSub} (he : TyEq A δ d.T δ₀) (hag : AgreeOn d.T δ₀ d.δ) {y : LifeVar}
-    (hy : ¬ VFree y A) (β : Life) {m : Loc} {S : VTy} {u : Val} (hpos : RefPos A d.v m S)
-    (hown : d.R.get m = some (CellU.ownOf u)) : ImmWitW I m S (δ.extend y β) := by
+    (hy : ¬ VFree y A) {β : Life} (hβ : β ≤ x.2) {m : Loc} {S : VTy} {u : Val}
+    (hpos : RefPos A d.v m S) (hown : d.R.get m = some (CellU.ownOf u)) :
+    ImmWitW I m (LSet.singleton β) S (δ.extend y β) := by
   obtain ⟨S', hpos', heS⟩ := hpos.tyEq he
   have hyS : ¬ VFree y S := RefPos.not_free hpos hy
-  refine ⟨x, hx, d, hd, S', d.δ, TyEq.extend_left hyS β
+  refine ⟨x, hx, hβ, d, hd, S', d.δ, TyEq.extend_left hyS β
     (heS.trans (TyEq.of_agree S' fun z hz => hag z (hpos'.free hz))),
     Or.inr ⟨d, List.mem_singleton_self _, none, u, Chain.one hpos' hown, fun _ _ => rfl⟩⟩
 
@@ -180,12 +181,13 @@ there. -/
 theorem immWitW_rootMut {I : List SRec} {x : SRec} (hx : x ∈ I) {d : FrameRec}
     (hd : DescR x.1 d) (hR : vShape d.T d.δ d.v d.R) {A : VTy} {δ δ₀ : LSub}
     (he : TyEq A δ d.T δ₀) (hag : AgreeOn d.T δ₀ d.δ) {y : LifeVar} (hy : ¬ VFree y A)
-    (β : Life) {m : Loc} {S : VTy} (hpos : MutPos A d.v m S) : ImmWitW I m S (δ.extend y β) := by
+    {β : Life} (hβ : β ≤ x.2) {m : Loc} {S : VTy} (hpos : MutPos A d.v m S) :
+    ImmWitW I m (LSet.singleton β) S (δ.extend y β) := by
   obtain ⟨S', hpos', heS⟩ := hpos.tyEq he
   have hyS : ¬ VFree y S := fun h => hy (hpos.free h)
   obtain ⟨ζ, eζ, kζ, -⟩ := mut_split_den hpos' hR
   have hsub : SubRec d ⟨m, ζ.erase, ζ.wit, S', d.δ⟩ := ⟨rfl, GPos.here hpos', ζ, eζ, kζ, rfl, rfl⟩
-  refine ⟨x, hx, _, hd.sub hsub, S', d.δ, TyEq.extend_left hyS β
+  refine ⟨x, hx, hβ, _, hd.sub hsub, S', d.δ, TyEq.extend_left hyS β
     (heS.trans (TyEq.of_agree S' fun z hz => hag z (hpos'.free hz))),
     Or.inl ⟨_, List.mem_singleton_self _, rfl, rfl, fun _ _ => rfl⟩⟩
 
@@ -193,11 +195,12 @@ theorem immWitW_rootMut {I : List SRec} {x : SRec} (hx : x ∈ I) {d : FrameRec}
 theorem immWitW_child {I : List SRec} {x : SRec} (hx : x ∈ I) {d : FrameRec} (hd : DescR x.1 d)
     {p : Option Loc} {l₀ : Loc} {S₀ : VTy} {u₀ : Val} (hch : Chain d.R d.T d.v p l₀ S₀ u₀)
     {A : VTy} {δ δ₀ : LSub} (he : TyEq A δ S₀ δ₀) (hag : AgreeOn S₀ δ₀ d.δ) {y : LifeVar}
-    (hy : ¬ VFree y A) (β : Life) {m : Loc} {S : VTy} {u : Val} (hpos : RefPos A u₀ m S)
-    (hown : d.R.get m = some (CellU.ownOf u)) : ImmWitW I m S (δ.extend y β) := by
+    (hy : ¬ VFree y A) {β : Life} (hβ : β ≤ x.2) {m : Loc} {S : VTy} {u : Val}
+    (hpos : RefPos A u₀ m S) (hown : d.R.get m = some (CellU.ownOf u)) :
+    ImmWitW I m (LSet.singleton β) S (δ.extend y β) := by
   obtain ⟨S', hpos', heS⟩ := hpos.tyEq he
   have hyS : ¬ VFree y S := RefPos.not_free hpos hy
-  refine ⟨x, hx, d, hd, S', d.δ, TyEq.extend_left hyS β
+  refine ⟨x, hx, hβ, d, hd, S', d.δ, TyEq.extend_left hyS β
     (heS.trans (TyEq.of_agree S' fun z hz => hag z (hpos'.free hz))),
     Or.inr ⟨d, List.mem_singleton_self _, some l₀, u, hch.snoc hpos' hown, fun _ _ => rfl⟩⟩
 
@@ -205,14 +208,15 @@ theorem immWitW_child {I : List SRec} {x : SRec} (hx : x ∈ I) {d : FrameRec} (
 theorem immWitW_childMut {I : List SRec} {x : SRec} (hx : x ∈ I) {d : FrameRec}
     (hd : DescR x.1 d) (hR : vShape d.T d.δ d.v d.R) {p : Option Loc} {l₀ : Loc} {S₀ : VTy}
     {u₀ : Val} (hch : Chain d.R d.T d.v p l₀ S₀ u₀) {A : VTy} {δ δ₀ : LSub}
-    (he : TyEq A δ S₀ δ₀) (hag : AgreeOn S₀ δ₀ d.δ) {y : LifeVar} (hy : ¬ VFree y A) (β : Life)
-    {m : Loc} {S : VTy} (hpos : MutPos A u₀ m S) : ImmWitW I m S (δ.extend y β) := by
+    (he : TyEq A δ S₀ δ₀) (hag : AgreeOn S₀ δ₀ d.δ) {y : LifeVar} (hy : ¬ VFree y A)
+    {β : Life} (hβ : β ≤ x.2) {m : Loc} {S : VTy} (hpos : MutPos A u₀ m S) :
+    ImmWitW I m (LSet.singleton β) S (δ.extend y β) := by
   obtain ⟨S', hpos', heS⟩ := hpos.tyEq he
   have hyS : ¬ VFree y S := fun h => hy (hpos.free h)
   have hg : GPos d.R d.T d.v m S' := GPos.of_chain hch hpos'
   obtain ⟨ζ, eζ, kζ, -⟩ := gpos_mut_cell hg hR (fun _ _ e => e)
   have hsub : SubRec d ⟨m, ζ.erase, ζ.wit, S', d.δ⟩ := ⟨rfl, hg, ζ, eζ, kζ, rfl, rfl⟩
-  refine ⟨x, hx, _, hd.sub hsub, S', d.δ, TyEq.extend_left hyS β
+  refine ⟨x, hx, hβ, _, hd.sub hsub, S', d.δ, TyEq.extend_left hyS β
     (heS.trans (TyEq.of_agree S' fun z hz => hag z (hpos'.free hz))),
     Or.inl ⟨_, List.mem_singleton_self _, rfl, rfl, fun _ _ => rfl⟩⟩
 
@@ -276,6 +280,87 @@ theorem tmplD_exists {W F χ₀ : WRes} {ps rs : List FrameRec} {r : FrameRec} {
     by_contra hk
     exact hv ⟨y, S, u, hch.snoc hS (hw₀own y u hu), aW, haW, ζ, hζ, hk⟩
 
+/-! ### The image's lifetimes, from the run's tags -/
+
+/-- **A reborrow keeps a subset of an `imm` cell's lifetimes** (`RebAt`'s `imm` clause). -/
+theorem reb_imm_sub {β : Life} {σ c : WRes} (hr : ResU.Reb β σ c) {m : Loc} {t : LSet} {u : Val}
+    {w : WRes} {h : w.InStratum t.join} (e : c.get m = some (CellU.immOf t u w h)) {s : LSet}
+    {u' : Val} {w' : WRes} {h' : w'.InStratum s.join}
+    (eσ : σ.get m = some (CellU.immOf s u' w' h')) : ∀ y, t.mem y → s.mem y := by
+  obtain ⟨-, π, b, hdom, -, -, hbody⟩ := hr
+  obtain ⟨⟨l₀, q⟩, hpm, hpl⟩ := List.mem_map.mp ((hdom.2 m).mpr ⟨_, e⟩)
+  simp only at hpl
+  subst hpl
+  obtain ⟨⟨t', ht', hsub, he⟩, -⟩ := (hbody l₀ q hpm).2.2.2 s u' w' h' eσ
+  rw [e] at he
+  obtain ⟨rfl, -, -⟩ := CellU.immOf_inj (Option.some.inj he)
+  exact hsub
+
+/-- **A reborrow's cell at an `own` location of the source has a part of the source as its
+witness** (`RebAt`'s `own` clause). -/
+theorem reb_own_wit {β : Life} {σ c : WRes} (hr : ResU.Reb β σ c) {m : Loc} {ψ : CellU Loc Val}
+    (e : c.get m = some ψ) {u : Val} (eσ : σ.get m = some (CellU.ownOf u)) :
+    ∃ q, ResU.Le q σ ∧ ψ.wit = q.del m := by
+  obtain ⟨-, π, b, hdom, hbig, hle, hbody⟩ := hr
+  obtain ⟨⟨l₀, q⟩, hpm, hpl⟩ := List.mem_map.mp ((hdom.2 m).mpr ⟨_, e⟩)
+  simp only at hpl
+  subst hpl
+  have hmem : q ∈ π.map Prod.snd := List.mem_map.mpr ⟨_, hpm, rfl⟩
+  obtain ⟨b', hb', hle'⟩ := BigComp.leS_of_sublist (List.singleton_sublist.mpr hmem) hbig
+  rw [(BigComp.singleton_iff ResU.compLawsS).mp hb'] at hle'
+  obtain ⟨hh, he⟩ := (hbody l₀ q hpm).2.1 u eσ
+  rw [e] at he
+  cases Option.some.inj he
+  exact ⟨q, hle'.trans hle, by rw [CellU.wit_immOf]⟩
+
+/-- **The source's payload is bounded by the run's tags** (Core's `lifeBound_of_tagged`, at the
+cells of an `imm` cell's witness and at the world's records): an `imm` cell beneath a top-level
+`imm` cell of the run's typed world sits, with its lifetimes, in `ag(W)` (`AgW.imm_wit_le`); a
+world record coherent at its location is on the list with its lifetime (`ImmTieL`), tagged by a
+record proper whose lineage holds the location (`linLoc_of_rel`), whose views are no
+longer-lived than the tag (`FrameLife`). -/
+theorem lifeBoundW_of_entry {W : WRes} {ps : List FrameRec} {ls I : List SRec}
+    (hv : ResU.Valid W) (htg : Tagged W ps ls) (hI : ImmTieL I ls) {l : Loc} {s : LSet}
+    {v : Val} {σ : WRes} {h : σ.InStratum s.join} (e : W.get l = some (CellU.immOf s v σ h)) :
+    LifeBoundW I σ := by
+  intro m t u σ' h' eσ _ x hx d hd S δ₀ hco y hy
+  obtain ⟨p, -, hpx, hFL⟩ := htg x (hI x hx)
+  obtain ⟨aW, haW⟩ := agW_of_valid hv
+  obtain ⟨ev, av, q, z, -, hav, hq, hz⟩ := AgW.imm_wit_le haW e (CellU.kind_immOf _ _ _ _)
+  rw [CellU.wit_immOf] at hav
+  have hicp : ICp aW m (CellU.immOf t u σ' h') :=
+    icp_trans (icp_trans (icpAt_agW hav m _ eσ) (icpAt_right hq m)) (icpAt_left hz m)
+  obtain ⟨ζ, t', eζ, ht', hyt⟩ := hicp.ls (CellU.lsOf_immOf _ _ _ _) hy
+  obtain ⟨S₀, δ₁, -, hc⟩ := hco
+  have hm : m = d.le ∨ ∃ q S u, Chain d.R d.T d.v q m S u := by
+    rcases hc with ⟨r, hr, h₁, -, -⟩ | ⟨r, hr, q', u', h₁, -⟩
+    · rw [List.mem_singleton] at hr; subst hr; exact .inl h₁
+    · rw [List.mem_singleton] at hr; subst hr; exact .inr ⟨q', _, u', h₁⟩
+  rcases linLoc_of_rel (hpx.trans hd) hm with ⟨-, rfl⟩ | hL
+  · exact le_of_eq (hFL.1 aW haW ζ t' eζ ht' y hyt)
+  · exact hFL.2 aW haW m hL ζ t' eζ ht' y hyt
+
+/-- **A reborrow's kept cells are bounded where the source is**. -/
+theorem lifeBoundOn_reb {I : List SRec} {β : Life} {σ c : WRes} (hr : ResU.Reb β σ c)
+    (hσ : LifeBoundW I σ) :
+    LifeBoundOn I (fun m => ∃ ζ, σ.get m = some ζ ∧ ζ.kind = Kind.imm) c := by
+  intro m t u w h e ⟨ζ, eζ, kζ⟩ x hx d hd S δ₀ hco y hy
+  obtain ⟨s', h', hζe⟩ := CellU.imm_eta kζ
+  rw [hζe] at eζ
+  exact hσ m s' _ _ h' eζ trivial x hx d hd S δ₀ hco y (reb_imm_sub hr e eζ y hy)
+
+/-- **A reborrow's witnesses at the source's `own` locations are bounded where the source is.** -/
+theorem lifeBoundWit_reb {I : List SRec} {β : Life} {σ c : WRes} (hr : ResU.Reb β σ c)
+    (hσ : LifeBoundW I σ) : LifeBoundWit I σ c := by
+  intro m ψ e ⟨u, eσ⟩
+  obtain ⟨q, ⟨τ, hτ⟩, hw⟩ := reb_own_wit hr e eσ
+  rw [hw]
+  intro m' t u' w h e' _ x hx d hd S δ₀ hco y hy
+  have hne : m' ≠ m := fun h => by subst h; rw [ResU.del_get_self] at e'; cases e'
+  rw [ResU.del_get_ne _ hne] at e'
+  obtain ⟨t'', h'', e'', ht⟩ := imm_piece_left hτ e'
+  exact hσ m' t'' u' w h'' e'' trivial x hx d hd S δ₀ hco y (ht y hy)
+
 /-! ### The reborrow at the loaded cell -/
 
 /-- `Imm̲` at `δ['x ↦ β]` against a record's type at its own substitution. -/
@@ -322,7 +407,7 @@ theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     (hS : S.Suspend x bnd) {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {c : Loc → Option Life}
     {n : Nat} {ls : List SRec} {f v : Val} {l : Loc} {s : LSet} {σ : WRes}
     {h : σ.InStratum s.join} {ρf X : WRes}
-    (hpay : vO (ℍ := ℍ) A δ Θ n v σ) (hwit : ImmWitW Θ.imm l A δ)
+    (hpay : vO (ℍ := ℍ) A δ Θ n v σ) (hwit : ImmWitW Θ.imm l s A δ)
     (hf : vN (ℍ := ℍ) (cbUTy x bnd (A.immReborrow (.var x)) B S) δ Θ n f ρf)
     (hcf : ConsistentX c ρf)
     (hX : ResU.CompS (ResU.single l (CellU.immOf s v σ h)) ρf X) :
@@ -340,7 +425,9 @@ theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
   simp only [CellU.erase_immOf, CellU.wit_immOf] at rφ₁ wφ₁
   -- step 6: the tie puts the witness's record on the run's list
   have hI' : ImmTieL Θ.imm ls := hI
-  obtain ⟨xr, hxr, d, hd, hdmem, S₀, δ₀, he, hcoh⟩ := cohE_of_immWitW hT hI' hwit
+  obtain ⟨xr, hxr, hxrs, d, hd, hdmem, S₀, δ₀, he, hcoh⟩ := cohE_of_immWitW hT hI' hwit
+  -- the source's payload is bounded by the run's tags
+  have hLσ : LifeBoundW Θ.imm σ := lifeBoundW_of_entry (hash_valid_comp hF hcF) htg hI' hle
   have hR₀ : vShape d.T d.δ d.v d.R := (hTI.1.2.2.2.1 d hdmem).1
   -- step 9: the fresh `β`, below the cell, the callback's stratum and the bound
   obtain ⟨γb, hγb⟩ := hbnd δ (models_empty_any _)
@@ -348,6 +435,7 @@ theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
   set β : Life := ↓(s.meet ⊓ g ⊓ γb) with hβdef
   have hβlt : β < s.meet ⊓ g ⊓ γb := Life.down_sqsubset _
   have hβs : β < s.meet := lt_of_lt_of_le hβlt (inf_le_left.trans inf_le_left)
+  have hβx : β ≤ xr.2 := hβs.le.trans hxrs
   have hβg : β ≤ g := (lt_of_lt_of_le hβlt (inf_le_left.trans inf_le_right)).le
   have hLt : LtLife δ bnd β := ⟨γb, hγb, lt_of_lt_of_le hβlt inf_le_right⟩
   have hσβ : σ.InStratum β := h.mono (hβs.le.trans (LSet.meet_le_join s))
@@ -374,8 +462,9 @@ theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
         rw [vShape_tyEq (tyEq_immReb hheA hA hx₁ β₁)]; exact hden₁
       exact relabel_vN A hA hA hden₁' hpay (CellMatch.of_le ⟨_, ResU.comp_empty_right _⟩)
         (fun m ψ e => reb_cell_match hreb₁ e) (reb_wit_stratum hσβ hreb₁)
-        (fun m S u hpos hown => immWitW_root hxr hd he hag hA β hpos hown)
-        (fun m S hpos => immWitW_rootMut hxr hd hR₀ he hag hA β hpos)
+        (lifeBoundOn_reb hreb₁ hLσ) (lifeBoundWit_reb hreb₁ hLσ)
+        (fun m S u hpos hown => immWitW_root hxr hd he hag hA hβx hpos hown)
+        (fun m S hpos => immWitW_rootMut hxr hd hR₀ he hag hA hβx hpos)
     have hshape : vShape (d.T.immReborrow (.var y)) (d.δ.extend y β) d.v (canon d β) := by
       rw [← vShape_tyEq (tyEq_immReb hheA hA hy β)]
       exact vN_vShape _ _ _ _ _ _ himg
@@ -418,8 +507,9 @@ theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
         rw [vShape_tyEq (tyEq_immReb hheA hA hx₁ β₁)]; exact hden₁
       exact relabel_vN A hA hA hden₁' hpay (CellMatch.of_le ⟨_, ResU.comp_empty_right _⟩)
         (fun m ψ e => reb_cell_match hreb₁ e) (reb_wit_stratum hσβ hreb₁)
-        (fun m S u hpos hown => immWitW_child hxr hd hch he hag hA β hpos (hσown m u hown))
-        (fun m S hpos => immWitW_childMut hxr hd hR₀ hch he hag hA β hpos)
+        (lifeBoundOn_reb hreb₁ hLσ) (lifeBoundWit_reb hreb₁ hLσ)
+        (fun m S u hpos hown => immWitW_child hxr hd hch he hag hA hβx hpos (hσown m u hown))
+        (fun m S hpos => immWitW_childMut hxr hd hR₀ hch he hag hA hβx hpos)
     have hshape : vShape (S₀.immReborrow (.var y)) (d.δ.extend y β) v (canonD d S₀ v σ β) := by
       rw [← vShape_tyEq (tyEq_immReb hheA hA hy β)]
       exact vN_vShape _ _ _ _ _ _ himg
@@ -487,14 +577,11 @@ theorem withloadS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
   rw [e₃]
   -- step 5: the load
   refine erwp_bindR hΦ (opTableN_local _) _ ?_
-  refine rwp_load_I ls l α₀ (fun u σ => vO (ℍ := ℍ) A δ Θ k' u σ) _
-    ⟨_, ρf, hc', ⟨s, w, σ, hσs, rfl, hpay, hα₀s⟩, fun v ρ₁ ρ₂ hcell hc₂ => ?_⟩
-  obtain ⟨s', v', σ', hσ', rfl, hP₀, -⟩ := hcell
-  obtain ⟨rfl, hP₁⟩ := pure_sep_iff.mp hP₀
+  refine rwp_load_cell ls l s w σ hσs _ hc' ?_
   -- steps 6–13
   simp only [Kont.plug]
-  exact withload_reb hbnd hA hB hS hΘ (vO_le (Nat.sub_le k' 1) hP₁) (hwit l rfl)
-    (vN_le (Nat.sub_le k' 1) hf) hcf (ResU.CompS.comm hc₂)
+  exact withload_reb hbnd hA hB hS hΘ (vO_le (Nat.sub_le k' 1) hpay) (hwit l s w σ hσs rfl)
+    (vN_le (Nat.sub_le k' 1) hf) hcf hc' 
 
 /-- **`ConstN` for `withload` at a suspending row**, from its rule's premises. -/
 theorem constN_wl {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}

@@ -129,10 +129,11 @@ theorem LocFam.ext' {Φ Φ' : LocFam} (h : ∀ l, Φ l = Φ' l) (hI : Φ.imm = �
   funext l
   exact h l
 
-/-- **The relation's entry tie**: every `imm` record of the location typing is a record of the
-run's list. `ImmTie`'s list form: it reads no resource, so a run keeps it (its lists keep their
-members) and a run at a list extending the caller's keeps it. -/
-def ImmTieL (I : List SRec) (ls : List SRec) : Prop := ∀ x ∈ I, x.1 ∈ rsOf ls
+/-- **The relation's entry tie**: every `imm` record of the location typing, with the lifetime it
+was lent at, is a record of the run's list. `ImmTie`'s list form: it reads no resource, so a run
+keeps it (its lists keep their members) and a run at a list extending the caller's keeps it. The
+lifetime is what puts a record's tag (`Tagged`) at the world's lifetime for it. -/
+def ImmTieL (I : List SRec) (ls : List SRec) : Prop := ∀ x ∈ I, x ∈ ls
 
 theorem ImmTieL.nil (ls : List SRec) : ImmTieL [] ls := fun _ h => absurd h (by simp)
 
@@ -140,20 +141,21 @@ theorem ImmTieL.of_nil {I : List SRec} (h : I = []) (ls : List SRec) : ImmTieL I
   subst h; exact ImmTieL.nil ls
 
 theorem ImmTieL.perm {I ls ls' : List SRec} (h : ImmTieL I ls) (hls : ∀ x, x ∈ ls' ↔ x ∈ ls) :
-    ImmTieL I ls' := fun x hx => by
-  obtain ⟨y, hy, he⟩ := List.mem_map.mp (h x hx)
-  exact List.mem_map.mpr ⟨y, (hls y).mpr hy, he⟩
+    ImmTieL I ls' := fun x hx => (hls x).mpr (h x hx)
 
 theorem ImmTieL.mono {I I' ls : List SRec} (h : ImmTieL I' ls) (hI : ∀ x ∈ I, x ∈ I') :
     ImmTieL I ls := fun x hx => h x (hI x hx)
 
 theorem ImmTieL.of_sub {I ls ls' : List SRec} (h : ImmTieL I ls)
-    (hs : ∀ r ∈ rsOf ls, r ∈ rsOf ls') : ImmTieL I ls' := fun x hx => hs _ (h x hx)
+    (hs : ∀ x ∈ ls, x ∈ ls') : ImmTieL I ls' := fun x hx => hs _ (h x hx)
 
 theorem ImmTieL.cons {I ls : List SRec} (h : ImmTieL I ls) (y : SRec) : ImmTieL I (y :: ls) :=
-  fun x hx => by
-  obtain ⟨z, hz, he⟩ := List.mem_map.mp (h x hx)
-  exact List.mem_map.mpr ⟨z, List.mem_cons_of_mem _ hz, he⟩
+  fun x hx => List.mem_cons_of_mem _ (h x hx)
+
+/-- The tie's records are records of the list. -/
+theorem ImmTieL.rsOf {I ls : List SRec} (h : ImmTieL I ls) {x : SRec} (hx : x ∈ I) :
+    x.1 ∈ rsOf ls :=
+  List.mem_map_of_mem (h x hx)
 
 /-- Every family `Φ` assigns is downward closed. -/
 def LocFam.Down (Φ : LocFam) : Prop :=

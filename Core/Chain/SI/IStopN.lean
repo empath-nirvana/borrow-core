@@ -207,8 +207,7 @@ theorem rwpG_I_frameG {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmW
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps'', ls'', h1, h2, h3, h6, h7, h9, h10, h11, hT'', htg'',
     hps'', hls'', h12⟩ :=
     hA BI hBI ρf fρ (p :: ps) μ hH17 h4 hTin htgin
-      (hI.of_sub fun r hr => by
-        rw [hls'def, rsOf_frameList]; exact List.mem_cons_of_mem _ (List.mem_append_right _ hr))
+      (hI.of_sub fun r hr => by rw [hls'def]; simp [frameList, hr])
       hlowin hfd jr μ' e' hj hrun hfin
   have hvπ : ResU.Valid π := h10.2.2
   -- 6.29: `π = π/ℓ ● ρᵢ`, and every other cell of `⦇π⦈` outlives `α`

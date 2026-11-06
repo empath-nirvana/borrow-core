@@ -76,13 +76,15 @@ def immCell (α : Life) (P : Val → WRes → Prop) (v : Val) (ρ : WRes) : Prop
   ∃ (l : Loc) (s : LSet) (u : Val) (σ : WRes) (h : σ.InStratum s.join), v = Val.loc l ∧
     ρ = ResU.single l (CellU.immOf s u σ h) ∧ α ⊑ s.meet ∧ P u σ
 
-/-- **The witness of an `imm` borrow at `ℓ` of type `A` at `δ`** in the world's `imm` records:
-Core's `CohE` at a descendant `d` of a record of the world, a record of the world's lineage
-whose own cell is at `ℓ` or one of whose chain positions is `ℓ`, at a type `TyEq` to `A`. The
-relation's entry tie (`ImmTieL`) puts the record on the run's list, whose typed world holds its
-descendants (`TI`). -/
-def ImmWitW (I : List SRec) (l : Loc) (A : VTy) (δ : LSub) : Prop :=
-  ∃ x ∈ I, ∃ d, DescR x.1 d ∧ CohE [d] l A δ
+/-- **The witness of an `imm` cell `imm(s, …)` at `ℓ` of type `A` at `δ`** in the world's `imm`
+records: a record of the world lent no shorter-lived than the cell (`⊓s ⊑ x.2`), and Core's `CohE`
+at a descendant `d` of it, a record of the world's lineage whose own cell is at `ℓ` or one of whose
+chain positions is `ℓ`, at a type `TyEq` to `A`. The lifetime match is what makes the witness
+relevant to the cell (`LocTy.Keeps`): the orders keep it at the cell's resource, and a record lent
+below a stratum witnesses no cell in it. The relation's entry tie (`ImmTieL`) puts the record on
+the run's list, whose typed world holds its descendants (`TI`). -/
+def ImmWitW (I : List SRec) (l : Loc) (s : LSet) (A : VTy) (δ : LSub) : Prop :=
+  ∃ x ∈ I, s.meet ≤ x.2 ∧ ∃ d, DescR x.1 d ∧ CohE [d] l A δ
 
 mutual
 /-- **`𝒱⟦A⟧δ` at the world and the index.** Core's `vCE` clause by clause, `⋆` written as
@@ -110,7 +112,8 @@ def vN : VTy → LSub → LocTy → Nat → Val → WRes → Prop
   | .ref A, δ, Θ, n, v, ρ => ∃ (l : Loc) (u : Val) (σ : WRes), v = Val.loc l ∧
       ResU.CompS (ResU.single l (CellU.ownOf u)) σ ρ ∧ vN A δ Θ n u σ
   | .imm a A, δ, Θ, n, v, ρ => ∃ α, a.interp δ = some α ∧
-      immCell α (fun u σ => vO A δ Θ n u σ) v ρ ∧ ∀ l, v = Val.loc l → ImmWitW Θ.imm l A δ
+      immCell α (fun u σ => vO A δ Θ n u σ) v ρ ∧
+        ∀ l s u σ h, ρ = ResU.single l (CellU.immOf s u σ h) → ImmWitW Θ.imm l s A δ
   | .mut a A, δ, Θ, n, v, ρ => ∃ α : Life, a.interp δ = some α ∧ ∃ b : Life, α ≤ b ∧
       mutL b (fun Θ' j u r => vN A δ Θ' j u r) Θ n v ρ ∧
         ∀ (Θ' : LocTy) (j : Nat) (u : Val) (r : WRes), vN A δ Θ' j u r → r.InStratum b
@@ -135,7 +138,8 @@ def vO : VTy → LSub → LocTy → Nat → Val → WRes → Prop
   | .ref A, δ, Θ, n, v, ρ => ∃ (l : Loc) (u : Val) (σ : WRes), v = Val.loc l ∧
       ResU.CompS (ResU.single l (CellU.ownOf u)) σ ρ ∧ vO A δ Θ n u σ
   | .imm a A, δ, Θ, n, v, ρ => ∃ α, a.interp δ = some α ∧
-      immCell α (fun u σ => vO A δ Θ n u σ) v ρ ∧ ∀ l, v = Val.loc l → ImmWitW Θ.imm l A δ
+      immCell α (fun u σ => vO A δ Θ n u σ) v ρ ∧
+        ∀ l s u σ h, ρ = ResU.single l (CellU.immOf s u σ h) → ImmWitW Θ.imm l s A δ
   | .mut a A, δ, Θ, n, v, ρ => ∃ α : Life, a.interp δ = some α ∧ ∃ b : Life, α ≤ b ∧
       mutL b (fun Θ' j u r => vN A δ Θ' j u r) Θ n v ρ ∧
         ∀ (Θ' : LocTy) (j : Nat) (u : Val) (r : WRes), vN A δ Θ' j u r → r.InStratum b
@@ -439,12 +443,12 @@ theorem cohE_congr_ty {rs : List FrameRec} {l : Loc} {A : VTy} {δ δ' : LSub}
 
 /-- `ImmWitW` reads `δ` only at the type's free variables. -/
 theorem immWitW_congr {A : VTy} {δ δ' : LSub} (h : ∀ y, VFree y A → δ.find? y = δ'.find? y)
-    (I : List SRec) (l : Loc) : ImmWitW I l A δ = ImmWitW I l A δ' := by
+    (I : List SRec) (l : Loc) (s : LSet) : ImmWitW I l s A δ = ImmWitW I l s A δ' := by
   unfold ImmWitW
   apply propext
   constructor
-  · rintro ⟨x, hx, d, hd, hc⟩; exact ⟨x, hx, d, hd, (cohE_congr_ty h).mp hc⟩
-  · rintro ⟨x, hx, d, hd, hc⟩; exact ⟨x, hx, d, hd, (cohE_congr_ty h).mpr hc⟩
+  · rintro ⟨x, hx, hs, d, hd, hc⟩; exact ⟨x, hx, hs, d, hd, (cohE_congr_ty h).mp hc⟩
+  · rintro ⟨x, hx, hs, d, hd, hc⟩; exact ⟨x, hx, hs, d, hd, (cohE_congr_ty h).mpr hc⟩
 
 mutual
 theorem vN_congr : ∀ (A : VTy) {δ δ' : LSub}, (∀ y, VFree y A → δ.find? y = δ'.find? y) →
@@ -700,6 +704,13 @@ theorem vN_outlivesLe {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α γ : Li
 
 /-! ### Values along the Kripke order -/
 
+/-- One cell at one location determines both. -/
+theorem single_immOf_inj {l l' : Loc} {ψ ψ' : CellU Loc Val}
+    (e : ResU.single l ψ = ResU.single l' ψ') : l = l' ∧ ψ = ψ' := by
+  have h : (ResU.single l' ψ').get l = some ψ := e ▸ ResU.single_get_self l ψ
+  exact ResU.single_get_eq_some h
+
+
 mutual
 /-- **`𝒱⟦A⟧` is stable along the resource-relative order at the value's resource** (Core's
 `vC_local`): `Mut` by `mutL_extR` (the cell's key and what lies above it are kept), `U` by the
@@ -729,9 +740,13 @@ theorem vN_extR : ∀ (A : VTy) (δ : LSub) {Θ Θ' : LocTy} (n : Nat) (v : Val)
         exact ⟨l, CellU.immOf s u σ hs, ResU.single_get_self _ _,
           by simp [CellU.kind_immOf],
           le_of_lt (lt_of_le_of_lt (LSet.meet_le_join s) hjb)⟩
-      refine ⟨α, hα, ⟨l, s, u, σ, hs, h₁, rfl, h₃, vO_extR A δ n u σ hσ h₄⟩, fun l' hl' => ?_⟩
-      obtain ⟨x, hx, hd⟩ := hw l' hl'
-      exact ⟨x, hE.2 x hx, hd⟩
+      refine ⟨α, hα, ⟨l, s, u, σ, hs, h₁, rfl, h₃, vO_extR A δ n u σ hσ h₄⟩,
+        fun l' s' u' σ' hs' e => ?_⟩
+      obtain ⟨x, hx, hxs, hd⟩ := hw l' s' u' σ' hs' e
+      obtain ⟨-, e'⟩ := single_immOf_inj e
+      obtain ⟨rfl, -⟩ := CellU.immOf_inj e'
+      exact ⟨x, hE.2 x hx ⟨l, _, ResU.single_get_self _ _, by simp [CellU.kind_immOf], hxs⟩,
+        hxs, hd⟩
   | .mut a A, δ, _, _, n, _, _, hE, h => by
       obtain ⟨α, hα, b, hab, hm, hu⟩ := h
       exact ⟨α, hα, b, hab, mutL_extR hE hm, hu⟩
@@ -770,9 +785,13 @@ theorem vO_extR : ∀ (A : VTy) (δ : LSub) {Θ Θ' : LocTy} (n : Nat) (v : Val)
         exact ⟨l, CellU.immOf s u σ hs, ResU.single_get_self _ _,
           by simp [CellU.kind_immOf],
           le_of_lt (lt_of_le_of_lt (LSet.meet_le_join s) hjb)⟩
-      refine ⟨α, hα, ⟨l, s, u, σ, hs, h₁, rfl, h₃, vO_extR A δ n u σ hσ h₄⟩, fun l' hl' => ?_⟩
-      obtain ⟨x, hx, hd⟩ := hw l' hl'
-      exact ⟨x, hE.2 x hx, hd⟩
+      refine ⟨α, hα, ⟨l, s, u, σ, hs, h₁, rfl, h₃, vO_extR A δ n u σ hσ h₄⟩,
+        fun l' s' u' σ' hs' e => ?_⟩
+      obtain ⟨x, hx, hxs, hd⟩ := hw l' s' u' σ' hs' e
+      obtain ⟨-, e'⟩ := single_immOf_inj e
+      obtain ⟨rfl, -⟩ := CellU.immOf_inj e'
+      exact ⟨x, hE.2 x hx ⟨l, _, ResU.single_get_self _ _, by simp [CellU.kind_immOf], hxs⟩,
+        hxs, hd⟩
   | .mut a A, δ, _, _, n, _, _, hE, h => by
       obtain ⟨α, hα, b, hab, hm, hu⟩ := h
       exact ⟨α, hα, b, hab, mutL_extR hE hm, hu⟩
