@@ -10,7 +10,8 @@ more fact: `N`'s judgment is read at the run's view `c`, so the resource it star
 value beside the frame, must be consistent with `c` (`SemJN`'s `ConsistentX`). The frame is (the
 context's part, `gN_splitC`). `M`'s value is too when its run never stops (`rwp_consistentXV`, as
 `bind_compatN` reads it); across a stop it is the continuation's share beside the answer the stop
-was resumed at, and `tabN`'s answers are `vN B δ Θ` at any resource, consistent or not.
+was resumed at, and a row's table reads its answers at the view (`tabN`'s `ConsistentX c`), as
+`SemJN` reads the resource a run starts from and `⊸` the argument's composite.
 
 * `OpTabN.AnsC c T`: the answers of every entry of `T` are consistent with `c`.
 * `erwp_consistentAns`: a run from a resource consistent with `c`, at a table whose answers are,
@@ -18,13 +19,10 @@ was resumed at, and `tabN`'s answers are `vN B δ Θ` at any resource, consisten
   the index: at a stop the share is a part of a consistent valid resource, `consistentX_right`;
   the resumed composite is consistent by `consistentX_compS`). Its post also carries the index
   bound and validity, which the frame's context reads (`gN_le`).
-* `let_compatN_ansC`: Core's `let_compatC`, step for step (`erwp_frame_plain`, `entN_plain`,
-  `gN_noOwn`, `gN_persistent`), at a row whose table's answers are consistent with every view.
-  `hAns` is a premise Core's rule does not have; `let_compatN` (without it) is not derived.
-* `tabN_ansC_of_persistent`: `hAns` holds at a row whose answers are persistent types (their
-  values own nothing, `vN_empty_of_persistent`).
-* `let_compatN_persist`: the same proof binding a persistent type, with no premise on the answers:
-  the bound value owns nothing, so `N` starts from the frame's resource (`erwp_idxLe` gives the
+* `tabN_ansC`: a row's table reads its answers at its view, so they are consistent with it.
+* `let_compatN`: Core's `let_compatC`, step for step (`erwp_frame_plain`, `entN_plain`,
+  `gN_noOwn`, `gN_persistent`).
+* `let_compatN_persist`: the same proof binding a persistent type: the bound value owns nothing, so `N` starts from the frame's resource (`erwp_idxLe` gives the
   index bound the frame's context is read at).
 * `await_compatN`: Core's `await_compatC`, `[perform]`, `[case]`, `[sub]` and `[raise]` under
   `let_compatN_persist`, the answer at `1 + 1`.
@@ -112,25 +110,30 @@ theorem tabN_effOf_ret (S : Row) (A B : VTy) (δ : LSub) (Θ : LocTy) (c : Loc �
   | nil => simp [CTy.effOf, tabN]
   | cons o S ih => simp only [CTy.effOf, tabN]; rw [ih]
 
-/-- **The answers of a row whose answer types are persistent are consistent with every view**:
-their values own nothing (`vN_empty_of_persistent`). -/
-theorem tabN_ansC_of_persistent {S : Row} (hS : ∀ o ∈ S, o.B.Persistent) (R : VTy) (δ : LSub)
-    (Θ : LocTy) (c : Loc → Option Life) : (tabN (ℍ := ℍ) (CTy.effOf S R) δ Θ c).AnsC c := by
-  intro m i en hT k ls w ρ hB
-  obtain ⟨o, hf, rfl⟩ := tabN_effOf_some_find hT
-  have hB' : vN (ℍ := ℍ) o.B δ Θ k w ρ := hB
-  rw [vN_empty_of_persistent _ (hS o (Row.find_mem hf).1) hB']
-  exact consistentX_empty c
+/-- **A row's table reads its answers at its view**: every answer of `tabN C δ Θ c` is consistent
+with `c` (`tabN`'s answers are `vN B δ Θ ∧ ConsistentX c`). -/
+theorem tabN_ansC : ∀ (C : CTy) (δ : LSub) (Θ : LocTy) (c : Loc → Option Life),
+    (tabN (ℍ := ℍ) C δ Θ c).AnsC c
+  | .eff _ _ _ _ _ _ _ C, δ, Θ, c => by
+      intro m' i' en hT k ls w ρ hB
+      simp only [tabN] at hT
+      rcases extTabN_some hT with ⟨-, -, rfl⟩ | hT
+      · exact hB.2
+      · exact tabN_ansC C δ Θ c m' i' en hT k ls w ρ hB
+  | .ret _, _, _, _ => fun _ _ _ h => by simp [tabN, OpTabN.empty] at h
+  | .arr _ _, _, _, _ => fun _ _ _ h => by simp [tabN, OpTabN.empty] at h
+  | .amp _ _, _, _, _ => fun _ _ _ h => by simp [tabN, OpTabN.empty] at h
+  | .top, _, _, _ => fun _ _ _ h => by simp [tabN, OpTabN.empty] at h
+  | .all _ _ _, _, _, _ => fun _ _ _ h => by simp [tabN, OpTabN.empty] at h
+  | .nu _, _, _, _ => fun _ _ _ h => by simp [tabN, OpTabN.empty] at h
 
-/-- **`[let]` at a row whose answers are consistent with the view** (Core's `let_compatC`):
-`ewp_frame_plain` around `M` with the context of `N` as the frame, its cancels carried by
-`ent_plain`, left behind owning nothing where the row cancels (`hW`), empty at an unrestricted
-row (`hU`). `M`'s value is consistent with the run's view across its resumptions
-(`erwp_consistentAns`), which is what `hAns` is read for: `N`'s judgment is at that view. Core's
-rule has no `hAns`. -/
-theorem let_compatN_ansC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B : VTy} {S : Row}
+/-- **`[let]`** (Core's `let_compatC`): `ewp_frame_plain` around `M` with the context of `N` as the
+frame, its cancels carried by `ent_plain`, left behind owning nothing where the row cancels (`hW`),
+empty at an unrestricted row (`hU`). `N`'s judgment is read at the run's view, from `M`'s value
+beside the frame: `M`'s value is consistent with that view across its resumptions
+(`erwp_consistentAns`), the row's answers being read at the view (`tabN_ansC`). -/
+theorem let_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B : VTy} {S : Row}
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hW : S.Cancels → Γ₂.OwnFree) (hU : S.Unr → Ctx.Banged Γ₂)
-    (hAns : ∀ δ Θ c, (tabN (ℍ := ℍ) (CTy.effOf S B) δ Θ c).AnsC c)
     (hM : SemJN (ℍ := ℍ) Δ Γ₁ M (.comp (CTy.effOf S A)))
     (hN : SemJN (ℍ := ℍ) Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) :
     SemJN (ℍ := ℍ) Δ Γ (.app (.val (.lam N)) M) (.comp (CTy.effOf S B)) := by
@@ -141,7 +144,7 @@ theorem let_compatN_ansC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} 
   obtain ⟨hlw₁, hlw₂⟩ := hsp.liveWithin hlw
   have hM' := (cN_effOf S A δ Θ c n ls _ ρ₁).mp (hM δ γ Θ c n ls ρ₁ hδ hΘ hc₁ hlw₁ hg₁)
   rw [tabN_effOf_ret S A B] at hM'
-  have hM'' := erwp_consistentAns (hAns δ Θ c) n n le_rfl ls _ ρ₁ hM' hc₁
+  have hM'' := erwp_consistentAns (tabN_ansC _ δ Θ c) n n le_rfl ls _ ρ₁ hM' hc₁
   have hK : ∀ m, (Kont.appR (.val (.lam (Expr.psub 1 γ N))) .hole).HasHnd m = false :=
     fun _ => by simp [Kont.HasHnd]
   have hC : ∀ m, (Kont.appR (.val (.lam (Expr.psub 1 γ N))) .hole).Catches m = false :=
@@ -222,6 +225,28 @@ theorem let_compatN_persist {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Exp
       from (substAll_cons_psub v γ N).symm]
     exact hN δ (v :: γ) Θ c k ls' σ₂ hδ hΘ hc₂' hlw₂
       (gN_live_cons (compS_empty_left σ₂) hv (gN_le hkn hg₂'))
+
+/-- **A table's answers at a persistent type read alike at every view**: their values own
+nothing (`vN_empty_of_persistent`), consistent with every view. -/
+theorem ansN_persistent {B : VTy} (hB : B.Persistent) (δ : LSub) (Θ : LocTy)
+    (c : Loc → Option Life) :
+    (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ) = fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ := by
+  funext k v ρ
+  exact propext ⟨fun h => h.1, fun h => ⟨h, by
+    rw [vN_empty_of_persistent _ hB h]; exact consistentX_empty c⟩⟩
+
+/-- **The row's table answers `park` as `TJN` does**: at `(nP, 0)` the answer of the row's table
+is `enParkN`'s, at every view, the answer type `1` being persistent (`ansN_persistent`). -/
+theorem hardestRow_entry_PB (Θ : LocTy) (c : Loc → Option Life) :
+    ∃ en, rowTabN (ℍ := ℍ) hardestRow Θ c BoCa.Fig16.Tree.Wp.SchedProgs.Park.nP 0 = some en ∧
+      en.PB = (PoolSpawn.enParkN (ℍ := ℍ) (Θ.view c)).PB := by
+  refine ⟨entN .cancel .unit (fun k v ρ => vN (ℍ := ℍ) .unit LSub.empty Θ k v ρ)
+      (fun k v ρ => vN (ℍ := ℍ) .unit LSub.empty Θ k v ρ ∧ ConsistentX c ρ)
+      (finN (ℍ := ℍ) (.ret .unit) LSub.empty Θ c),
+    by simp [rowTabN, hardestRow, parkSig, CTy.effOf, tabN, extTabN], ?_⟩
+  have h := ansN_persistent (ℍ := ℍ) (B := .unit) (by decide) LSub.empty Θ c
+  funext k ls v ρ
+  exact (congrFun (congrFun (congrFun h k) v) ρ).trans rfl
 
 theorem noNuSpine_effOf (S : Row) (R : VTy) : noNuSpine (CTy.effOf S R) := by
   cases S <;> trivial

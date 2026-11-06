@@ -195,10 +195,22 @@ Each entry is a chain lemma under Core's name with `N`, following Core's printed
 | E11's fuel instances | `erwp_pureSteps`, `erwp_kappaC_resume_in`, `erwp_hnd_tick`, `fuel_tick_zeroN`, `fuel_tick_succN`, `fuel_totalN` | `Core/Chain/Fuel835N.lean` | `ewp_pureSteps`, `ewp_kappaC_resume_in`, `hnd_tick`, `fuel_tick_zero`, `fuel_tick_succ`, `fuel_total` |
 | `divFuel` | `divFuel_compatN` | `Fuel835N` | `divFuel_compatX` |
 | `effAwait` | `await_compatN`, over `let_compatN_persist` and `erwp_idxLe` | `Core/Chain/Let835N.lean` | `await_compatC` |
-| `effLet` | `let_compatN_ansC` (with `hAns`), `let_compatN_persist` (a persistent bound type); `let_compatN` not derived | `Let835N` | `let_compatC` |
-| E9, E10's tail and last instances, `effThen`, `effThenDiv`, `iterate`, the four handlers | not built | — | — |
+| `effLet` | `let_compatN_persist` (a persistent bound type) | `Let835N` | `let_compatC` |
 
-The step that stops `effLet` is chain-only: `N`'s judgment is read at the run's view, and an
-answer a stop is resumed at may be inconsistent with it (`tabN`'s `PB` does not read the view).
-In the paper's terms it is neither value nor control-flow linearity: it is the borrow side
-(§2.4), the view being where a `Mut` cell's lend is read.
+## 6. Part 3 (`rule-791-view`)
+
+`scope-831-interface.md` §10.2–§10.4 has the detail.
+
+| Entry or rule | Built | File | Core's proof it follows |
+|---|---|---|---|
+| a row's answers read at the view | `tabN`/`finN`/`cN`'s `F_Σ` answers `vN B δ Θ ∧ ConsistentX c`; `tabN_ansC`; the twins by `consistentX_of_outlives` | `Goal791N`, `Cancel791N`, `Reborrow791N` | — (Core has no view) |
+| `effLet` | `let_compatN` | `Let835N` | `let_compatC` |
+| E14 at an indexed invariant, `iterate` | `erwp_iterateCI`, `iterate_compatN` | `Core/Chain/Iter835N.lean` | `cwp_iterate`, `iterate_compatX` |
+| E9, `effThen`, `effThenDiv` | `cfin_cancelN`, `cfin_runN`, `then_cancelN`, `seq_raise_runN`, `erwp_frame_then`, `then_compatN`, `thenDiv_compatN` | `Core/Chain/Then835N.lean` | `cfin_cancel`, `cfin_run`, `then_cancel`, `seq_raise_run`, `ewp_frame_then_or`, `then_compatC`, `then_compatC_div` |
+| E10, E10's tail and last instances, the four handlers | not built | — | — |
+
+The step that stopped `effLet` in part 2 is chain-only: `N`'s judgment is read at the run's view,
+and an answer a stop is resumed at must be consistent with it. In the paper's terms it is neither
+value nor control-flow linearity: it is the borrow side (§2.4), the view being where a `Mut` cell's
+lend is read. A row's table now reads its answers at the view, as `SemJN` reads a run's starting
+resource and `⊸` its argument's composite.

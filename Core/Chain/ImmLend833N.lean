@@ -213,7 +213,7 @@ theorem tabN_unwind_iLendOKR {S : Row} {x : LifeVar} (hS : S.Unwind x) (R : VTy)
     exact vN_unwind_inStratum hS ho δ α Θ k v ρ hp
   pb := fun m i en h k ls w ρ hp => by
     obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
-    have hp' : vN (ℍ := ℍ) o.B δ Θ k w ρ := hp
+    have hp' : vN (ℍ := ℍ) o.B δ Θ k w ρ := hp.1
     rw [unwind_B hS ho] at hp'
     exact hp'.elim
   paExt := fun m i en h k ls₁ ls₂ v ρ _ hp => by
@@ -594,6 +594,12 @@ theorem withbor1_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} (x : LifeVar)
 
 /-! ### `withbor (2)` at an unwinding row -/
 
+/-- **An answer at `0` is at no view**: a table's answers at `0` read alike at every view. -/
+theorem ansN_zero (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) :
+    (fun k v ρ => vN (ℍ := ℍ) .zero δ Θ k v ρ ∧ ConsistentX c ρ) = fun _ _ _ => False := by
+  funext k v ρ
+  exact propext ⟨fun h => h.1, False.elim⟩
+
 /-- **An unwinding row's table does not read `'x`, a `mut` lend at a fresh `α`, the view, nor its
 base.** -/
 theorem tabN_unwind_eq_add {S : Row} {x : LifeVar} (hS : S.Unwind x) (R₁ R₂ : VTy) (δ : LSub)
@@ -616,8 +622,8 @@ theorem tabN_unwind_eq_add {S : Row} {x : LifeVar} (hS : S.Unwind x) (R₁ R₂ 
       simp only [CTy.effOf, tabN]
       rw [ih hS', hA, hB,
         entN_fin_congr (f := finN (ℍ := ℍ) o.fin (δ.extend x α) (Θ.add l α F) c₁)
-          (f' := finN (ℍ := ℍ) o.fin δ Θ c₂) (fun hcap => by simp [capB, VTy.isZero] at hcap)]
-      rfl
+          (f' := finN (ℍ := ℍ) o.fin δ Θ c₂) (fun hcap => by simp [capB, VTy.isZero] at hcap),
+        ansN_zero, ansN_zero]
 
 /-- **An unwinding row's table may be stopped at under a `mut` lend at any `α`**: its stops are
 raises, whose payloads lie in every stratum. -/
@@ -631,7 +637,7 @@ theorem tabN_unwind_lendOKR {S : Row} {x : LifeVar} (hS : S.Unwind x) (R : VTy) 
     exact vN_unwind_inStratum hS ho δ α Θ k v ρ hp
   pb := fun m i en h k ls w ρ hp => by
     obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
-    have hp' : vN (ℍ := ℍ) o.B δ Θ k w ρ := hp
+    have hp' : vN (ℍ := ℍ) o.B δ Θ k w ρ := hp.1
     rw [unwind_B hS ho] at hp'
     exact hp'.elim
 

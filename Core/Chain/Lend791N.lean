@@ -218,7 +218,7 @@ theorem OpTabN.Twin.trans {T₁ T₂ T₃ : OpTabN} (h₁ : T₁.Twin T₂) (h�
 theorem tabN_effOf_some {S : Row} {R : VTy} {δ : LSub} {Θ : LocTy} {c : Loc → Option Life}
     {m i : UInt32} {en : OpEntN} (h : tabN (ℍ := ℍ) (CTy.effOf S R) δ Θ c m i = some en) :
     ∃ o ∈ S, m = o.n ∧ en = entN o.q o.B (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
-      (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ) (finN (ℍ := ℍ) o.fin δ Θ c) := by
+      (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN (ℍ := ℍ) o.fin δ Θ c) := by
   induction S with
   | nil => simp [CTy.effOf, tabN, OpTabN.empty] at h
   | cons o S ih =>
@@ -228,13 +228,13 @@ theorem tabN_effOf_some {S : Row} {R : VTy} {δ : LSub} {Θ : LocTy} {c : Loc �
       · obtain ⟨o', ho', hm, rfl⟩ := ih h
         exact ⟨o', List.mem_cons_of_mem _ ho', hm, rfl⟩
 
-/-- **The callback's table and the lender's are twins** at one world: they differ in `'x`, which
-no operation type of the row mentions, and in the view, which only the cancel obligations read. -/
+/-- **The callback's table and the lender's are twins** at one world and view: they differ in
+`'x`, which no operation type of the row mentions. -/
 theorem tabN_effOf_twin {x : LifeVar} {α : Life} {S : Row}
     (hS : ∀ o ∈ S, ¬ VFree x o.A ∧ ¬ VFree x o.B) (R₁ R₂ : VTy) (δ : LSub) (Θ : LocTy)
-    (c₁ c₂ : Loc → Option Life) :
-    (tabN (ℍ := ℍ) (CTy.effOf S R₁) (δ.extend x α) Θ c₁).Twin
-      (tabN (ℍ := ℍ) (CTy.effOf S R₂) δ Θ c₂) := by
+    (c : Loc → Option Life) :
+    (tabN (ℍ := ℍ) (CTy.effOf S R₁) (δ.extend x α) Θ c).Twin
+      (tabN (ℍ := ℍ) (CTy.effOf S R₂) δ Θ c) := by
   induction S with
   | nil => intro m i en h; simp [CTy.effOf, tabN, OpTabN.empty] at h
   | cons o S ih =>
@@ -271,7 +271,7 @@ theorem tabN_lendOKCR {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {S : Row}
     exact vN_inStratum_bnd (hS o ho).2.2.2.2.1 hLt hp'
   pb := fun m i en h k ls w ρ hp => by
     obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
-    have hp' : vN (ℍ := ℍ) o.B (δ.extend x α) Θ k w ρ := hp
+    have hp' : vN (ℍ := ℍ) o.B (δ.extend x α) Θ k w ρ := hp.1
     rw [vN_extend_of_not_free (hS o ho).2.2.2.1] at hp'
     exact (vN_inStratum_bnd (hS o ho).2.2.2.2.2.1 hLt hp').mono (Life.down_sqsubset α).le
 
@@ -416,7 +416,8 @@ theorem hardestRow_entry (Θ : LocTy) (c : Loc → Option Life) :
       en.fin = (PoolSpawn.enParkN (ℍ := ℍ) (Θ.view c)).fin ∧
       en.wc = (PoolSpawn.enParkN (ℍ := ℍ) (Θ.view c)).wc :=
   ⟨entN .cancel .unit (fun k v ρ => vN (ℍ := ℍ) .unit LSub.empty Θ k v ρ)
-      (fun k v ρ => vN (ℍ := ℍ) .unit LSub.empty Θ k v ρ) (finN (ℍ := ℍ) (.ret .unit) LSub.empty Θ c),
+      (fun k v ρ => vN (ℍ := ℍ) .unit LSub.empty Θ k v ρ ∧ ConsistentX c ρ)
+      (finN (ℍ := ℍ) (.ret .unit) LSub.empty Θ c),
     by simp [rowTabN, hardestRow, parkSig, CTy.effOf, tabN, extTabN], rfl, rfl,
     by simp [entN, capB, finN, PoolSpawn.enParkN, VTy.isZero], rfl⟩
 

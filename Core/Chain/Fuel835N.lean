@@ -26,7 +26,7 @@ entries E8, E11, E13):
   (`LocTy.extR_refl`) and view.
 
 No typed code runs after a resumption here: an answer of `Σ` goes back into the callback's own
-continuation, so `let_compatN_ansC`'s `hAns` is not needed.
+continuation.
 -/
 
 noncomputable section
@@ -179,7 +179,8 @@ open BoCa.BoLo (Heap Head Kont performE raiseE cancelVal opPayload hndE hndVal)
 theorem tabN_tick (S : Row) (A : VTy) (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) :
     tabN (ℍ := ℍ) (CTy.effOf (tickSig :: S) A) δ Θ c = extTabN divEff 0
       (entN .lin nextTy (fun k v ρ => vN (ℍ := ℍ) .unit δ Θ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) nextTy δ Θ k v ρ) (finN (ℍ := ℍ) (.ret .unit) δ Θ c))
+        (fun k v ρ => vN (ℍ := ℍ) nextTy δ Θ k v ρ ∧ ConsistentX c ρ)
+        (finN (ℍ := ℍ) (.ret .unit) δ Θ c))
       (tabN (ℍ := ℍ) (CTy.effOf S A) δ Θ c) := rfl
 
 /-- **`div_fuel` is total** (Core's `fuel_total`): under a frame at any budget, a computation at
@@ -250,8 +251,8 @@ theorem fuel_totalN {S : Row} (hS : ∀ o ∈ S, o.n ≠ divEff) {A : VTy} {δ :
           erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf (tickSig :: S) A) δ Θ c))
             (fun k _ v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) (k' - 1 - 1) ls' (K₁.plug (.val w)) σ := by
         intro w hw
-        have h₁ := (hcont ls' (extF_refl ls' σ)).1 (k' - 1 - 1) (by omega) w PMap.empty σ hw
-          (ResU.comp_empty_right σ)
+        have h₁ := (hcont ls' (extF_refl ls' σ)).1 (k' - 1 - 1) (by omega) w PMap.empty σ
+          ⟨hw, consistentX_empty c⟩ (ResU.comp_empty_right σ)
         simp only [erwpC, show k' - 1 - 1 < n by omega, if_true] at h₁
         exact h₁
       by_cases hk0 : k = 0

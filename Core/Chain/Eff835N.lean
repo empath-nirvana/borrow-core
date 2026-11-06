@@ -138,7 +138,7 @@ theorem tabN_effOf_find (S : Row) (R : VTy) (δ : LSub) (Θ : LocTy) (c : Loc �
     (n i : UInt32) :
     tabN (ℍ := ℍ) (CTy.effOf S R) δ Θ c n i = (Row.find S n i).map (fun o =>
       entN o.q o.B (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ) (finN (ℍ := ℍ) o.fin δ Θ c)) := by
+        (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN (ℍ := ℍ) o.fin δ Θ c)) := by
   induction S with
   | nil => simp [CTy.effOf, tabN, OpTabN.empty, Row.find]
   | cons o S ih =>
@@ -153,7 +153,7 @@ theorem tabN_effOf_find (S : Row) (R : VTy) (δ : LSub) (Θ : LocTy) (c : Loc �
 theorem tabN_effOf_some_find {S : Row} {R : VTy} {δ : LSub} {Θ : LocTy} {c : Loc → Option Life}
     {n i : UInt32} {en : OpEntN} (h : tabN (ℍ := ℍ) (CTy.effOf S R) δ Θ c n i = some en) :
     ∃ o, Row.find S n i = some o ∧ en = entN o.q o.B (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
-      (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ) (finN (ℍ := ℍ) o.fin δ Θ c) := by
+      (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN (ℍ := ℍ) o.fin δ Θ c) := by
   rw [tabN_effOf_find] at h
   obtain ⟨o, hf, rfl⟩ := Option.map_eq_some_iff.mp h
   exact ⟨o, hf, rfl⟩
@@ -183,9 +183,9 @@ theorem entN_le_of_leF {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} {o o' 
     (hs : o.Sig o')
     (hfin : capB o.q o.B = true → FinLeSN (finN (ℍ := ℍ) o.fin δ Θ c) (finN (ℍ := ℍ) o'.fin δ Θ c)) :
     (entN o.q o.B (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ) (finN (ℍ := ℍ) o.fin δ Θ c)).Le
+        (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN (ℍ := ℍ) o.fin δ Θ c)).Le
       (entN o'.q o'.B (fun k v ρ => vN (ℍ := ℍ) o'.A δ Θ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) o'.B δ Θ k v ρ) (finN (ℍ := ℍ) o'.fin δ Θ c)) := by
+        (fun k v ρ => vN (ℍ := ℍ) o'.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN (ℍ := ℍ) o'.fin δ Θ c)) := by
   obtain ⟨-, -, hq, hA, hB, -⟩ := hs
   refine ⟨hq, by simp [entN, hq, hB], by simp [entN, hA], by simp [entN, hB], rfl,
     fun ha hq' => ?_⟩
@@ -243,7 +243,7 @@ theorem erwp_rowLe {S S' : Row} (hle : RowLe S S') {A : VTy} {δ : LSub} {Θ : L
 theorem entN_start (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (o : OpSig) (k : Nat)
     (ls : List SRec) :
     cancelOKN (entN o.q o.B (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
-      (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ) (finN (ℍ := ℍ) o.fin δ Θ c)) k ls .hole
+      (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN (ℍ := ℍ) o.fin δ Θ c)) k ls .hole
       PMap.empty := by
   intro P hP
   simp only [entN] at hP
@@ -309,11 +309,11 @@ theorem perform_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {o : 
   rintro k ls' v σ ⟨σ₁, σ₂, hc', hv, rfl, -⟩
   rw [ResU.CompS.functional hc' (ResU.comp_empty_right σ₁)]
   have hT : tabN (ℍ := ℍ) (CTy.effOf S o.B) δ Θ c o.n o.i = some (entN o.q o.B
-      (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ) (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ)
+      (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ) (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ)
       (finN (ℍ := ℍ) o.fin δ Θ c)) := by
     rw [tabN_effOf_find, hf]; rfl
   exact erwp_perform_here hT (by simpa [entN, OpSig.abort] using hna)
-    (entN_start δ Θ c o) (fun _ _ _ _ h => h) hv
+    (entN_start δ Θ c o) (fun _ _ _ _ h => h.1) hv
 
 /-- **`[raise]`**: an abortive operation, at any answer type, its argument owning nothing (Core's
 `raise_compatC`). -/
@@ -332,7 +332,7 @@ theorem raise_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {o : Op
   rintro k ls' v σ ⟨σ₁, σ₂, hc', hv, rfl, -⟩
   rw [ResU.CompS.functional hc' (ResU.comp_empty_right σ₁)]
   have hT : tabN (ℍ := ℍ) (CTy.effOf S B) δ Θ c o.n o.i = some (entN o.q o.B
-      (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ) (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ)
+      (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ) (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ)
       (finN (ℍ := ℍ) o.fin δ Θ c)) := by
     rw [tabN_effOf_find, hf]; rfl
   exact erwp_raise_here hT (by simpa [entN, OpSig.abort] using ha) hv (hd _ _ _ _ _ hv)

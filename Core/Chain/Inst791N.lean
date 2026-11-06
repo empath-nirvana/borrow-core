@@ -165,11 +165,11 @@ theorem cbPerform_sem {x : LifeVar} {bnd : Lifetime.Life} {A : VTy} {δ : LSub} 
   refine erwp_perform (T := tabN (ℍ := ℍ) (CTy.effOf [linSig n i] (.box (.var x) .unit))
       (δ.extend x α) Θ'' c')
       (en := entN .lin .unit (fun k v ρ => vN (ℍ := ℍ) .unit (δ.extend x α) Θ'' k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) .unit (δ.extend x α) Θ'' k v ρ)
+        (fun k v ρ => vN (ℍ := ℍ) .unit (δ.extend x α) Θ'' k v ρ ∧ ConsistentX c' ρ)
         (finN (ℍ := ℍ) (.ret .unit) (δ.extend x α) Θ'' c')) .hole rfl
     (by simp [CTy.effOf, tabN, extTabN, linSig]) rfl rfl (compS_empty_left _) ⟨rfl, rfl⟩ ?_
   intro ls' _ k' _ w' τ₁ τ₂ hB hcτ
-  obtain ⟨rfl, rfl⟩ := hB
+  obtain ⟨⟨rfl, rfl⟩, -⟩ := hB
   obtain rfl := eq_of_compS_empty_left (ResU.CompS.comm hcτ)
   exact erwp_garbage (compS_empty_left _) (noOwn_single_mut l)
     (erwp_val (v := Val.unit) ⟨α, interp_ext_self δ x α, ⟨rfl, rfl⟩, ResU.inStratum_empty α⟩)

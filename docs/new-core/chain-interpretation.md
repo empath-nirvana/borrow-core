@@ -141,6 +141,7 @@ and `Goal791SchedN` take `imm = []`. The capture bridges into `crwpG` (`crwpG_of
 | `∀'x ⊏ @c. C` | every `α ⊏ @cδ` (`LtLife`), vacuous where `@cδ` is undefined | `cC`'s `∀` |
 | `F_Σ R` | `erwp (Θ.view c)` at the table of the row's layers (`extTabN` over `entN`, `tabN`), post `retN` | `cC`'s `eff` (`effTab`, `finObl`, `effRet`) |
 | `entN q B PA PB fin` | qualifier; abortive iff `B` is empty and `q ≠ lin`; payload and answer at every list; the cancel obligation where `capB q B`; resumed under `extF` | `effTab`'s entry (D8) |
+| a row's answers (`tabN`, `finN`, `F_Σ`) | `vN B δ Θ ∧ ConsistentX c`: read at the view, as every resource entering a run is (D7) | `vC true B` |
 | `finN` | `none` at `⊤`; else `cancelOblN` at the cancel row's table, at the view | `finObl` |
 | `gN δ Θ Γ γ n ρ` | the live slots' values over a split of `ρ` | `gSepC` |
 | `SemJN Δ Γ e j` | every `δ ⊨ Δ`, `γ`, world `Θ` with `Θ.OK`, view `c` with `ConsistentX c ρ`, index `n`, list `ls`, resource in `𝒢⟦Γ⟧`, `Ctx.LiveWithin Γ γ` | `SemC` |
@@ -186,7 +187,9 @@ and each capturable operation's cancel row meeting the same clauses (`CTy.Suspen
   (`vN_inStratum_bnd`; `OpTabN.LendOKCR`'s `pa`/`pb`) and leave their reading unchanged by a
   fresh lend (`vN_add_eq_bnd`).
 - A bound defined at the empty context is `⊤` (`interp_top_of_defines_empty`), so answers lie in
-  `Res_⊤` and are consistent with every view (`consistentX_of_top`); `erwp_claimX` reads that.
+  `Res_⊤` and are consistent with every view (`consistentX_of_top`, `consistentX_of_outlives`);
+  `erwp_claimX` reads that, and so do the twins of the callback's table and the lender's, which
+  read their answers at different views (`tabN_tabR_twin`, `tabN_tabG_twin`).
 - At such a bound the clause excludes, outside a box or `!`, `Imm @b A`, `Mut @b A`, `U C`, `Unk`,
   and a box at a lifetime with a variable. A box at a closed lifetime and `! A` pass.
 - `answer_not_inStratum` (`Lend791N.lean`) is why the answer clause is there: `U(F 1)` has values
@@ -214,7 +217,7 @@ none is recorded and the departure is a choice still open. The IDs in brackets a
 | D4 | `ExtR` asks "nothing added above" only at the lifetimes of keys present [K1] | `Ext` asks it above every `b` with `CellIn ρ b` | `extRL_breaks_extA`: read literally, `U` is not Kripke along `ExtA`. It rests on `ν` read as empty |
 | D5 | `Keeps` reads a record's relevance off its lifetime; `ImmWitW` carries the lifetime match `⊓s ≤ x.2`; `extR_of_addImm` has no relevance premise [K4, V10] | `Keeps` reads relevance off the location (`Rel`); the converse of `ext_add` ([TR] 6.64) takes a relevance premise, discharged at the Imm Frame's exit by `not_rel_lineage` | `not_unwindArgStepLoc` (`Depart831N`): Core's location reading fails at `tabN_unwind_eq`'s world-level step, a step of our unwinding-row proof that Core does not take; candidate for the post-merge refactor (`scope-831-interface.md` §6.3) |
 | D6 | `⊸` is Kripke along `ExtR` and down the index [F10] | `cC .arr` is a wand at the same list | the index is the step-indexed `−∗` of `sC`, the chain's carrier; returned to Core's plain wand in #834 (`scope-831-interface.md` §8.1); no longer a departure |
-| D7 | `U`, `⊸` and `SemJN` quantify views consistent with the resource (`ConsistentX`), on the exclusive walk [R11] | Core has no view; the tree track uses `Covers`/`vThunk` | for the exclusive walk over the whole flattening: `flat_part_config`. For consistency in place of `Covers`: no configuration yet (the argument is prose, Appendix A.4) |
+| D7 | `U`, `⊸` and `SemJN` quantify views consistent with the resource (`ConsistentX`), on the exclusive walk; a row's table reads its answers at the view (`tabN`'s `ConsistentX c`) [R11] | Core has no view; the tree track uses `Covers`/`vThunk` | for the exclusive walk over the whole flattening: `flat_part_config`. For consistency in place of `Covers`: no configuration yet (the argument is prose, Appendix A.4). For the answers: every resource that enters a run is read at the run's view, the answer a resumption brings included; each producer meets it (`scope-831-interface.md` §10.2): a lending constant's relay by `Row.Suspend`'s answer clause (`consistentX_of_outlives`), a handler by its own run at the view (`erwp_consistentAns`), the scheduler `HS` at the hardest row by its `∅` answers (`hardestRow_entry_PB`) |
 | D8 | an entry's continuation is resumed under `extF` (`entN`'s `wc`) | `Ext` | `not_extFoldTransfer`, `resume_not_ext`: `Ext` is not kept across a fold. `ext_extF`: no restriction relative to `Ext` |
 | D9 | the interpretation carries a step index; rules owe `vN_le`, `gN_le` and consistency at a split [V11, G11, G12] | no index | none needed: the index is the relation's |
 | D10 | a `Div` row is a row of the table; Core's coinductive `cwp` has no counterpart [E13] | `cwp` and its bookkeeping | no configuration: it is how `erwp` is defined |

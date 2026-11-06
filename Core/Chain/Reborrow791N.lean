@@ -531,7 +531,7 @@ cancel obligation the cancel run at its cancel row's own guarded table, its stop
 ending at `R`. The Mut Frame inside an anti-frame produces it (`erwp_M_frame_cancelRunCRG`). -/
 def tabG (R : Nat → WProp) (G : ShareG) : CTy → LSub → LocTy → (Loc → Option Life) → OpTabN
   | .eff m i q A B fin _ C, δ, Θ, c => extTabN m i
-      (entN q B (fun k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ)
+      (entN q B (fun k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ)
         (finG R G fin δ Θ c))
       (tabG R G C δ Θ c)
   | _, _, _, _ => OpTabN.empty
@@ -540,7 +540,7 @@ def finG (R : Nat → WProp) (G : ShareG) : CTy → LSub → LocTy → (Loc → 
     Option (Nat → List SRec → Expr → WProp)
   | .top, _, _, _ => none
   | .eff m i q A B fin _ C, δ, Θ, c => some (cancelOblGN (ℍ := ℍ) (Θ.view c) (extTabN m i
-      (entN q B (fun k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ)
+      (entN q B (fun k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ)
         (finG R G fin δ Θ c))
       (tabG R G C δ Θ c)) G R)
   | .ret _, _, Θ, c => some (cancelOblGN (ℍ := ℍ) (Θ.view c) OpTabN.empty G R)
@@ -561,11 +561,11 @@ theorem tab_lookupNG (R : Nat → WProp) (G : ShareG) : ∀ (F : CTy) {δ₁ : L
     {c₁ : Loc → Option Life} {m j : UInt32} {en : OpEntN},
     tabN (ℍ := ℍ) F δ₁ Θ₁ c₁ m j = some en → ∃ q A B fin, F.LayerOf q A B fin ∧
       en = entN q B (fun k v ρ => vN (ℍ := ℍ) A δ₁ Θ₁ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) B δ₁ Θ₁ k v ρ) (finN (ℍ := ℍ) fin δ₁ Θ₁ c₁) ∧
+        (fun k v ρ => vN (ℍ := ℍ) B δ₁ Θ₁ k v ρ ∧ ConsistentX c₁ ρ) (finN (ℍ := ℍ) fin δ₁ Θ₁ c₁) ∧
       ∀ (δ₂ : LSub) (Θ₂ : LocTy) (c₂ : Loc → Option Life),
         tabG (ℍ := ℍ) R G F δ₂ Θ₂ c₂ m j =
           some (entN q B (fun k v ρ => vN (ℍ := ℍ) A δ₂ Θ₂ k v ρ)
-            (fun k v ρ => vN (ℍ := ℍ) B δ₂ Θ₂ k v ρ) (finG (ℍ := ℍ) R G fin δ₂ Θ₂ c₂))
+            (fun k v ρ => vN (ℍ := ℍ) B δ₂ Θ₂ k v ρ ∧ ConsistentX c₂ ρ) (finG (ℍ := ℍ) R G fin δ₂ Θ₂ c₂))
   | .eff m₀ i₀ q A B fin rc C, δ₁, Θ₁, c₁, m, j, en, h => by
       simp only [tabN] at h
       unfold extTabN at h
@@ -590,10 +590,10 @@ theorem tab_lookupG (R : Nat → WProp) (G : ShareG) : ∀ (F : CTy) {δ : LSub}
     {c : Loc → Option Life} {m j : UInt32} {en : OpEntN},
     tabG (ℍ := ℍ) R G F δ Θ c m j = some en → ∃ q A B fin, F.LayerOf q A B fin ∧
       en = entN q B (fun k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ) (finG (ℍ := ℍ) R G fin δ Θ c) ∧
+        (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ) (finG (ℍ := ℍ) R G fin δ Θ c) ∧
       ∀ R' : Nat → WProp, tabR (ℍ := ℍ) R' F δ Θ c m j =
         some (entN q B (fun k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ)
-          (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ) (finR (ℍ := ℍ) R' fin δ Θ c))
+          (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ) (finR (ℍ := ℍ) R' fin δ Θ c))
   | .eff m₀ i₀ q A B fin rc C, δ, Θ, c, m, j, en, h => by
       simp only [tabG] at h
       unfold extTabN at h
@@ -616,7 +616,7 @@ theorem tab_lookupG (R : Nat → WProp) (G : ShareG) : ∀ (F : CTy) {δ : LSub}
 /-- **The callback's table and the lender's guarded twin agree but for the cancel obligations**
 (`tabN_tabR_twin`'s argument). -/
 theorem tabN_tabG_twin {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {F : CTy}
-    (hF : F.SuspendC x bnd) (R : Nat → WProp)
+    (hbnd : LifeCtx.empty.Defines bnd) (hF : F.SuspendC x bnd) (R : Nat → WProp)
     (G : ShareG) (δ : LSub) (Θ₁ Θ₂ : LocTy) (c₁ c₂ : Loc → Option Life)
     (hΘ : ∀ A : VTy, VOutlives LifeCtx.empty bnd A → vN (ℍ := ℍ) A δ Θ₁ = vN (ℍ := ℍ) A δ Θ₂) :
     (tabN (ℍ := ℍ) F (δ.extend x α) Θ₁ c₁).Twin (tabG (ℍ := ℍ) R G F δ Θ₂ c₂) := by
@@ -626,6 +626,9 @@ theorem tabN_tabG_twin {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {F : CTy}
   refine ⟨_, hR δ Θ₂ c₂, rfl, rfl, ?_, ?_, rfl⟩
   · simp only [entN, vN_extend_of_not_free (ℍ := ℍ) hA δ α, hΘ A hOA]
   · simp only [entN, vN_extend_of_not_free (ℍ := ℍ) hB δ α, hΘ B hOB]
+    funext k _ v ρ
+    exact propext ⟨fun h => ⟨h.1, consistentX_of_outlives hbnd hOB h.1 c₁⟩,
+      fun h => ⟨h.1, consistentX_of_outlives hbnd hOB h.1 c₂⟩⟩
 
 /-- The guarded twin and the lender's twin at the same world and view agree but for the cancel
 obligations. -/
@@ -652,7 +655,7 @@ cancel run at its cancel row's table, framed by `erwp_M_frame_cancelRunCRG` at t
 callback's view is the relation's `Φ.set`, `LocTy.view_add`), its own nested cancel obligations by
 the induction. -/
 theorem tabG_can {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {δ : LSub} {Θ : LocTy}
-    (hf : Θ.Fresh α) (hLt : LtLife δ bnd α) {c : Loc → Option Life} {l : Loc}
+    (hbnd : LifeCtx.empty.Defines bnd) (hf : Θ.Fresh α) (hLt : LtLife δ bnd α) {c : Loc → Option Life} {l : Loc}
     {Fam : Nat → Val → SPropS Loc Val α} (hFam : DownFam α Fam) :
     ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC x bnd →
     ∀ m i en en', tabN (ℍ := ℍ) F (δ.extend x α) (Θ.add l α Fam) (setLife c l α) m i = some en →
@@ -690,7 +693,7 @@ theorem tabG_can {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {δ : LSub} {Θ
   have hin := hc _ (finN_eq htop _ _ _)
   refine erwp_M_frame_cancelRunCRG (Φ := Θ.view c) hFam
     (tabN_lendOKCR_C hfin δ hLt (Θ.add l α Fam) (setLife c l α))
-    (tabN_tabG_twin hfin _ _ δ (Θ.add l α Fam) Θ (setLife c l α) c
+    (tabN_tabG_twin hbnd hfin _ _ δ (Θ.add l α Fam) Θ (setLife c l α) c
       (fun A' hO => vN_add_eq_bnd hO δ hLt hf l Fam))
     (ih fin hfd hfin) k k le_rfl ls _ v'' χ W'' (Z.del l) ρkL hχ hdZd P'' hPk hw''
     (ResU.CompS.comm hW'') (ResU.CompS.comm hkL) (fun BM hBM => ?_)
@@ -914,8 +917,8 @@ theorem withbor3S_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
   have hTw : (tabN (ℍ := ℍ) (CTy.effOf S (.box (.var x) B)) δ' Θ' c').Twin
       (tabG (ℍ := ℍ) Rc Gc Fo δ Θ c) := by
     rw [hbase]
-    exact tabN_tabG_twin hFS Rc Gc δ Θ' Θ c' c (fun A' hO => vN_add_eq_bnd hO δ hLt hfr l Fam)
-  have hcanM := tabG_can (ℍ := ℍ) (δ := δ) hfr hLt (c := c) (l := l) hFamD Fo.cdepth Fo le_rfl hFS
+    exact tabN_tabG_twin hbnd hFS Rc Gc δ Θ' Θ c' c (fun A' hO => vN_add_eq_bnd hO δ hLt hfr l Fam)
+  have hcanM := tabG_can (ℍ := ℍ) (δ := δ) hbnd hfr hLt (c := c) (l := l) hFamD Fo.cdepth Fo le_rfl hFS
   rw [← hbase] at hcanM
   have hcanA := tabR_canA (ℍ := ℍ) (x := x) (δ := δ) hΘ.1 hFv hG hRin hRout Fo.cdepth Fo le_rfl
     hFS

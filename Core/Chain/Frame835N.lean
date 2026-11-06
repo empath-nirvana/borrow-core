@@ -280,10 +280,10 @@ theorem entN_plain {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} (hΦ : (Θ
     (K : Kont) (hH : ∀ n, K.HasHnd n = false) (hC : K.Catches 0 = false) {σ : WRes}
     (hσ : NoOwn σ) (o : OpSig) {k : Nat} {ls : List SRec} {K₁ : Kont} {ρ ρ' : WRes}
     (hcan : cancelOKN (entN o.q o.B (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
-      (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ) (finN (ℍ := ℍ) o.fin δ Θ c)) k ls K₁ ρ)
+      (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN (ℍ := ℍ) o.fin δ Θ c)) k ls K₁ ρ)
     (hc : ResU.CompS ρ σ ρ') :
     cancelOKN (entN o.q o.B (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
-      (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ) (finN (ℍ := ℍ) o.fin δ Θ c)) k ls (K.comp K₁) ρ' := by
+      (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN (ℍ := ℍ) o.fin δ Θ c)) k ls (K.comp K₁) ρ' := by
   intro P hP
   have hP' := hP
   simp only [entN] at hP'
