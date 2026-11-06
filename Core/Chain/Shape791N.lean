@@ -221,7 +221,7 @@ theorem stuckV_one (δ : LSub) : thunkUnit (ℍ := ℍ) δ 1 stuckV PMap.empty :
 
 theorem stuckV_not_two (δ : LSub) : ¬ thunkUnit (ℍ := ℍ) δ 2 stuckV PMap.empty := by
   intro h
-  have h2 := h LocTy.empty (LocTy.extA_refl _) LocTy.empty_ok (fun _ => none)
+  have h2 := h LocTy.empty (LocTy.extR_refl _ _) LocTy.empty_ok (fun _ => none)
     (consistentX_empty _) []
   change erwp (ℍ := ℍ) _ _ _ 2 [] (.app stuckV.1 (.val .unit)) PMap.empty at h2
   rw [erwp_eq] at h2

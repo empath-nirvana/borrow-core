@@ -297,7 +297,7 @@ theorem fin_claim {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
     (rwp_of_erwp_empty hd0) rfl
   refine rwp_mono_le (fun k' hk' ls' v τ hv => ?_) (rwp_consistentXV hfr hc)
   obtain ⟨⟨τ₁, τ₂, hcτ, hP, rfl⟩, hcτ', hvτ⟩ := hv
-  have := hP Θ (LocTy.extA_refl Θ) hΘ c (consistentX_left hcτ hcτ' hvτ) ls' Θ (LocTy.extA_refl Θ)
+  have := hP Θ (LocTy.extR_refl Θ _) hΘ c (consistentX_left hcτ hcτ' hvτ) ls' Θ (LocTy.extR_refl Θ _)
     hΘ c k' le_rfl (Val.loc l) τ₂ τ hcτ ⟨l, w, σ, rfl, hcl, vN_le hk' hF'⟩ hcτ'
   exact rwp_of_erwp_empty this
 

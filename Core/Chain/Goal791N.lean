@@ -20,14 +20,14 @@ interpretation and the statements are restated over Core's step-indexed chain re
   clause by clause, with `ewpTS`/`wpTS` replaced by `erwp`:
   - `Mut` is Core's shape over the world (`mutL`): the cell at `@aδ` holds a member of the payload
     read at the world above `@aδ`, the family the world stores at the lend's key;
-  - `U C` and `⊸` are Kripke along `LocTy.ExtA`, at every view consistent with the resource
-    (`ConsistentX`).
+  - `U C` and `⊸` are Kripke along Core's resource-relative order (`LocTy.ExtR` at the thunk's
+    or function's resource), at every view consistent with the resource (`ConsistentX`).
   `gN`, `SemJN`.
 * **§2. Laws.** Downward closure of every piece; `vN`/`cN` read `δ` only at free variables
-  (`vN_congr`); values stable along the Kripke order (`vN_extA`), computations too except at an
-  effect row (`cN_extA`); values in a lend's stratum do not read the lend (`vN_local`, except at
-  `U`); `𝒱⟦A⟧` of an outliving `A` in the stratum (`vN_outlives`); `F_Σ R` as `erwp` at the row's
-  table (`cN_effOf`).
+  (`vN_congr`); values stable along the resource-relative order (`vN_extR`), hence along the
+  world-relative `ExtA` (`vN_extA`), computations too except at an effect row (`cN_extA`); values in
+  a lend's stratum do not read the lend (`vN_local`); `𝒱⟦A⟧` of an outliving `A` in the stratum
+  (`vN_outlives`); `F_Σ R` as `erwp` at the row's table (`cN_effOf`).
 * **§3. The statements**: `ConstN`, `ConstsN`, `FundamentalN`, `BridgeN`, `Goal791SchedN`, and
   `goal791Sched_of`: `Goal791SchedN` from `FundamentalN` and `ConstsN`.
 -/
@@ -76,8 +76,9 @@ mutual
 `ResU.CompS`; `Mut` is Core's shape over the world (`mutL`: a location whose cell at `@aδ` holds
 the member `j ≥ k` of the payload read at the world above `@aδ`, which the world stores at the
 lend's key); `Imm` one `imm` cell longer-lived than `@aδ` with its payload in `𝒱⟦A⟧`; `[@a] A` in
-the stratum; `U C` the forced thunk in `𝒞⟦C⟧` at every extension of the world along `ExtA`, every
-view consistent with the thunk's resource and every record list. A lifetime with no
+the stratum; `U C` the forced thunk in `𝒞⟦C⟧` at every extension of the world along `ExtR` at the
+thunk's resource (Core's `vCE` at `U`), every view consistent with that resource and every record
+list. A lifetime with no
 interpretation reads as empty. Type variables, `μ`, families and opaque host types are outside
 the fragment and empty. -/
 def vN : VTy → LSub → LocTy → Nat → Val → WRes → Prop
@@ -87,7 +88,7 @@ def vN : VTy → LSub → LocTy → Nat → Val → WRes → Prop
   | .zero, _, _, _, _, _ => False
   | .sum A B, δ, Θ, n, v, ρ =>
       (∃ v₁, v = Val.inj₁ v₁ ∧ vN A δ Θ n v₁ ρ) ∨ (∃ v₂, v = Val.inj₂ v₂ ∧ vN B δ Θ n v₂ ρ)
-  | .thunk C, δ, Θ, n, v, ρ => ∀ Θ' : LocTy, Θ.ExtA Θ' → Θ'.OK → ∀ c, ConsistentX c ρ →
+  | .thunk C, δ, Θ, n, v, ρ => ∀ Θ' : LocTy, Θ.ExtR Θ' ρ → Θ'.OK → ∀ c, ConsistentX c ρ →
       ∀ ls, cN C δ Θ' c n ls (forceE C v.1) ρ
   | .ref A, δ, Θ, n, v, ρ => ∃ (l : Loc) (u : Val) (σ : WRes), v = Val.loc l ∧
       ResU.CompS (ResU.single l (CellU.ownOf u)) σ ρ ∧ vN A δ Θ n u σ
@@ -105,14 +106,15 @@ def vN : VTy → LSub → LocTy → Nat → Val → WRes → Prop
   | .opq _, _, _, _, _, _ => False
 /-- **`𝒞⟦C⟧δ` at the world, the run's live lifetimes, the index and the record list.** Every
 run is `erwp` at the view `Θ.view c`. `F A` is `erwp` at the empty table; `F_Σ R` is `erwp` at the
-table of the row's layers; `⊸` reads its argument at every extension of the world along `ExtA`,
-every view consistent with the argument's and the context's resource, and every later index
+table of the row's layers; `⊸` reads its argument at every extension of the world along `ExtR` at
+the function's resource, every view consistent with the argument's and the function's resource,
+and every later index
 (the step-indexed `−∗`); `∀'x ⊏ @c` every `α ⊏ @cδ`, empty where `@c` has no interpretation;
 `ν` is outside the fragment. -/
 def cN : CTy → LSub → LocTy → (Loc → Option Life) → Nat → List SRec → Expr → WRes → Prop
   | .ret A, δ, Θ, c, n, ls, e, ρ =>
       erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (fun k _ v ρ => vN A δ Θ k v ρ) n ls e ρ
-  | .arr A C, δ, Θ, _, n, ls, e, ρ => ∀ Θ' : LocTy, Θ.ExtA Θ' → Θ'.OK → ∀ c',
+  | .arr A C, δ, Θ, _, n, ls, e, ρ => ∀ Θ' : LocTy, Θ.ExtR Θ' ρ → Θ'.OK → ∀ c',
       ∀ k, k ≤ n → ∀ (v : Val) (ρv ρ' : WRes), ResU.CompS ρ ρv ρ' → vN A δ Θ' k v ρv →
         ConsistentX c' ρ' → cN C δ Θ' c' k ls (.app e (.val v)) ρ'
   | .amp C D, δ, Θ, c, n, ls, e, ρ => cN C δ Θ c n ls (.app e (.val (Val.inj₁ .unit))) ρ ∧
@@ -524,41 +526,53 @@ theorem vN_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life} (
 
 /-! ### Values along the Kripke order -/
 
-/-- **`𝒱⟦A⟧` is stable along `ExtA`**, at every type: `Mut` by `mutL_extA` (the family a lend
-stores reads the world only above the lend, which `ExtA` leaves alone), `U` by the order's
-transitivity, the rest by their parts. -/
-theorem vN_extA : ∀ (A : VTy) (δ : LSub) {Θ Θ' : LocTy}, Θ.ExtA Θ' →
-    ∀ n v ρ, vN (ℍ := ℍ) A δ Θ n v ρ → vN (ℍ := ℍ) A δ Θ' n v ρ
+/-- **`𝒱⟦A⟧` is stable along the resource-relative order at the value's resource** (Core's
+`vC_local`): `Mut` by `mutL_extR` (the cell's key and what lies above it are kept), `U` by the
+order's transitivity at the thunk's resource, `Imm` because its payload's borrow cells are
+longer-lived than the cell, the rest by their parts. -/
+theorem vN_extR : ∀ (A : VTy) (δ : LSub) {Θ Θ' : LocTy} (n : Nat) (v : Val) (ρ : WRes),
+    Θ.ExtR Θ' ρ → vN (ℍ := ℍ) A δ Θ n v ρ → vN (ℍ := ℍ) A δ Θ' n v ρ
   | .unit, _, _, _, _, _, _, _, h => h
-  | .tensor A B, δ, _, _, hE, n, _, _, h => by
+  | .tensor A B, δ, _, _, n, _, _, hE, h => by
       obtain ⟨v₁, v₂, ρ₁, ρ₂, h₁, h₂, h₃, h₄⟩ := h
-      exact ⟨v₁, v₂, ρ₁, ρ₂, h₁, h₂, vN_extA A δ hE n v₁ ρ₁ h₃, vN_extA B δ hE n v₂ ρ₂ h₄⟩
+      exact ⟨v₁, v₂, ρ₁, ρ₂, h₁, h₂, vN_extR A δ n v₁ ρ₁ (hE.left h₂) h₃,
+        vN_extR B δ n v₂ ρ₂ (hE.right h₂) h₄⟩
   | .zero, _, _, _, _, _, _, _, h => h
-  | .sum A B, δ, _, _, hE, n, _, ρ, h => by
+  | .sum A B, δ, _, _, n, _, ρ, hE, h => by
       rcases h with ⟨v₁, h₁, h₂⟩ | ⟨v₂, h₁, h₂⟩
-      · exact .inl ⟨v₁, h₁, vN_extA A δ hE n v₁ ρ h₂⟩
-      · exact .inr ⟨v₂, h₁, vN_extA B δ hE n v₂ ρ h₂⟩
-  | .thunk _, _, _, _, hE, _, _, _, h => fun Θ'' hE' hOK c hc ls =>
-      h Θ'' (LocTy.extA_trans hE hE') hOK c hc ls
-  | .ref A, δ, _, _, hE, n, _, _, h => by
+      · exact .inl ⟨v₁, h₁, vN_extR A δ n v₁ ρ hE h₂⟩
+      · exact .inr ⟨v₂, h₁, vN_extR B δ n v₂ ρ hE h₂⟩
+  | .thunk _, _, _, _, _, _, _, hE, h => fun Θ'' hE' hOK c hc ls =>
+      h Θ'' (hE.trans hE') hOK c hc ls
+  | .ref A, δ, _, _, n, _, _, hE, h => by
       obtain ⟨l, u, σ, h₁, h₂, h₃⟩ := h
-      exact ⟨l, u, σ, h₁, h₂, vN_extA A δ hE n u σ h₃⟩
-  | .imm a A, δ, _, _, hE, n, _, _, h => by
-      obtain ⟨α, hα, l, s, u, σ, hs, h₁, h₂, h₃, h₄⟩ := h
-      exact ⟨α, hα, l, s, u, σ, hs, h₁, h₂, h₃, vN_extA A δ hE n u σ h₄⟩
-  | .mut a A, δ, _, _, hE, n, _, _, h => by
+      exact ⟨l, u, σ, h₁, h₂, vN_extR A δ n u σ (hE.right h₂) h₃⟩
+  | .imm a A, δ, _, _, n, _, _, hE, h => by
+      obtain ⟨α, hα, l, s, u, σ, hs, h₁, rfl, h₃, h₄⟩ := h
+      have hσ : LocTy.ExtR _ _ σ := hE.mono fun b hb => by
+        have hjb : s.join < b := hb.of_stratum hs
+        exact ⟨l, CellU.immOf s u σ hs, ResU.single_get_self _ _,
+          by simp [CellU.kind_immOf],
+          le_of_lt (lt_of_le_of_lt (LSet.meet_le_join s) hjb)⟩
+      exact ⟨α, hα, l, s, u, σ, hs, h₁, rfl, h₃, vN_extR A δ n u σ hσ h₄⟩
+  | .mut a A, δ, _, _, n, _, _, hE, h => by
       obtain ⟨α, hα, hm⟩ := h
-      exact ⟨α, hα, mutL_extA hE hm⟩
-  | .box a A, δ, _, _, hE, n, v, ρ, h => by
+      exact ⟨α, hα, mutL_extR hE hm⟩
+  | .box a A, δ, _, _, n, v, ρ, hE, h => by
       obtain ⟨α, hα, h₁, h₂⟩ := h
-      exact ⟨α, hα, vN_extA A δ hE n v ρ h₁, h₂⟩
-  | .bang A, δ, _, _, hE, n, v, ρ, h => ⟨h.1, vN_extA A δ hE n v ρ h.2⟩
+      exact ⟨α, hα, vN_extR A δ n v ρ hE h₁, h₂⟩
+  | .bang A, δ, _, _, n, v, ρ, hE, h => ⟨h.1, vN_extR A δ n v ρ hE h.2⟩
   | .unk, _, _, _, _, _, _, _, h => h
   | .int _, _, _, _, _, _, _, _, h => h
   | .tvar _, _, _, _, _, _, _, _, h => h
   | .mu _, _, _, _, _, _, _, _, h => h
   | .fam _, _, _, _, _, _, _, _, h => h
   | .opq _, _, _, _, _, _, _, _, h => h
+
+/-- **`𝒱⟦A⟧` is stable along `ExtA`**, at every type: `ExtA` is `ExtR` at every resource. -/
+theorem vN_extA (A : VTy) (δ : LSub) {Θ Θ' : LocTy} (hE : Θ.ExtA Θ') (n : Nat) (v : Val)
+    (ρ : WRes) (h : vN (ℍ := ℍ) A δ Θ n v ρ) : vN (ℍ := ℍ) A δ Θ' n v ρ :=
+  vN_extR A δ n v ρ (hE.extR ρ) h
 
 /-- The computation types `cN_extA` covers: every former but an effect row (`F_Σ R`), read
 through `⊗`-free spines (`&`, `∀`); `⊸` and `F A` at any argument and result. -/
@@ -572,16 +586,16 @@ def noEffSpine : CTy → Prop
   | .eff _ _ _ _ _ _ _ _ => False
 
 /-- **`𝒞⟦C⟧` is stable along `ExtA`**: `F A` by `erwp_extΦ` at the view (which grows along the
-order, `LocTy.view_ext`) and `vN_extA` for its values; `⊸` by the order's transitivity. Not at an
-effect row: there the table's answer `vN B δ Θ` is what the continuation was proved to accept,
+order, `LocTy.view_ext`) and `vN_extA` for its values; `⊸` by `ExtA` being `ExtR` at the
+function's resource and `ExtR`'s transitivity. Not at an effect row: there the table's answer `vN B δ Θ` is what the continuation was proved to accept,
 and the table at `Θ′` hands back answers at `Θ′`. -/
 theorem cN_extA : ∀ (C : CTy), noEffSpine C → ∀ (δ : LSub) {Θ Θ' : LocTy}, Θ.ExtA Θ' →
     ∀ c n ls e ρ, cN (ℍ := ℍ) C δ Θ c n ls e ρ → cN (ℍ := ℍ) C δ Θ' c n ls e ρ
   | .ret A, _, δ, _, _, hE, c, n, ls, e, ρ, h =>
       erwp_mono (fun k _ v ρ h => vN_extA A δ hE k v ρ h) (opTableN_local _) n ls e ρ
         (erwp_extΦ (LocTy.view_ext (LocTy.ext_of_extA hE) c) (opTableN_local _) n ls e ρ h)
-  | .arr _ _, _, _, _, _, hE, _, _, _, _, _, h => fun Θ'' hE' hOK c' k hk v ρv ρ' hc hv hcon =>
-      h Θ'' (LocTy.extA_trans hE hE') hOK c' k hk v ρv ρ' hc hv hcon
+  | .arr _ _, _, _, _, _, hE, _, _, _, _, ρ, h => fun Θ'' hE' hOK c' k hk v ρv ρ' hc hv hcon =>
+      h Θ'' ((hE.extR ρ).trans hE') hOK c' k hk v ρv ρ' hc hv hcon
   | .amp C D, hC, δ, _, _, hE, c, n, ls, e, ρ, h =>
       ⟨cN_extA C hC.1 δ hE c n ls _ ρ h.1, cN_extA D hC.2 δ hE c n ls _ ρ h.2⟩
   | .top, _, _, _, _, _, _, _, _, _, _, h => h
@@ -592,64 +606,13 @@ theorem cN_extA : ∀ (C : CTy), noEffSpine C → ∀ (δ : LSub) {Θ Θ' : LocT
 
 /-! ### Values in a lend's stratum do not read the lend -/
 
-/-- The value types `vN_local` covers: every former but `U`. -/
-def uFree : VTy → Prop
-  | .tensor A B => uFree A ∧ uFree B
-  | .sum A B => uFree A ∧ uFree B
-  | .thunk _ => False
-  | .ref A => uFree A
-  | .imm _ A => uFree A
-  | .mut _ A => uFree A
-  | .box _ A => uFree A
-  | .bang A => uFree A
-  | _ => True
-
-/-- **Locality** (Core's `vC_local`): a value at the world with a lend at `α`, whose resource is
-in `α`'s stratum, is one at the world without it. `Mut` by `mutL_of_add` (its cell outlives `α`);
-`Imm`'s payload, `Ref`'s content and `⊗`'s parts are in the stratum too. Not at `U`, whose thunk
-was proved at the extensions of the world with the lend. -/
-theorem vN_local : ∀ (A : VTy), uFree A → ∀ (δ : LSub) (Θ : LocTy) (l₀ : Loc) (α : Life)
-    (F : Nat → Val → SPropS Loc Val α) (n : Nat) (v : Val) (ρ : WRes), ρ.InStratum α →
-    vN (ℍ := ℍ) A δ (Θ.add l₀ α F) n v ρ → vN (ℍ := ℍ) A δ Θ n v ρ
-  | .unit, _, _, _, _, _, _, _, _, _, _, h => h
-  | .tensor A B, hA, δ, Θ, l₀, α, F, n, _, _, hs, h => by
-      obtain ⟨v₁, v₂, ρ₁, ρ₂, h₁, h₂, h₃, h₄⟩ := h
-      exact ⟨v₁, v₂, ρ₁, ρ₂, h₁, h₂,
-        vN_local A hA.1 δ Θ l₀ α F n v₁ ρ₁ (ResU.CompS.inStratum_left h₂ hs) h₃,
-        vN_local B hA.2 δ Θ l₀ α F n v₂ ρ₂ (ResU.CompS.inStratum_right h₂ hs) h₄⟩
-  | .zero, _, _, _, _, _, _, _, _, _, _, h => h
-  | .sum A B, hA, δ, Θ, l₀, α, F, n, _, ρ, hs, h => by
-      rcases h with ⟨v₁, h₁, h₂⟩ | ⟨v₂, h₁, h₂⟩
-      · exact .inl ⟨v₁, h₁, vN_local A hA.1 δ Θ l₀ α F n v₁ ρ hs h₂⟩
-      · exact .inr ⟨v₂, h₁, vN_local B hA.2 δ Θ l₀ α F n v₂ ρ hs h₂⟩
-  | .thunk _, hA, _, _, _, _, _, _, _, _, _, _ => hA.elim
-  | .ref A, hA, δ, Θ, l₀, α, F, n, _, _, hs, h => by
-      obtain ⟨l, u, σ, h₁, h₂, h₃⟩ := h
-      exact ⟨l, u, σ, h₁, h₂,
-        vN_local A hA δ Θ l₀ α F n u σ (ResU.CompS.inStratum_right h₂ hs) h₃⟩
-  | .imm a A, hA, δ, Θ, l₀, α, F, n, _, _, hs, h => by
-      obtain ⟨β, hβ, l, s, u, σ, hσ, h₁, rfl, h₃, h₄⟩ := h
-      have hcell := hs l _ (ResU.single_get_self _ _)
-      rw [CellU.inStratum_immOf] at hcell
-      have hσα : σ.InStratum α :=
-        fun x ψ hx => (hσ x ψ hx).mono (le_of_lt (lt_of_lt_of_le hcell (LSet.meet_le_join s)))
-      exact ⟨β, hβ, l, s, u, σ, hσ, h₁, rfl, h₃, vN_local A hA δ Θ l₀ α F n u σ hσα h₄⟩
-  | .mut a A, _, δ, Θ, l₀, α, F, n, _, _, hs, h => by
-      obtain ⟨β, hβ, hm⟩ := h
-      obtain ⟨l, w, χ, hχ, j, hw, -, -, -, rfl⟩ := id hm
-      have hcell := (CellU.inStratum_mutOf α β _ _ _ _ _).mp (hs l _ (ResU.single_get_self _ _))
-      exact ⟨β, hβ, mutL_of_add hcell l₀ F hm⟩
-  | .box a A, hA, δ, Θ, l₀, α, F, n, v, ρ, hs, h => by
-      obtain ⟨β, hβ, h₁, h₂⟩ := h
-      exact ⟨β, hβ, vN_local A hA δ Θ l₀ α F n v ρ hs h₁, h₂⟩
-  | .bang A, hA, δ, Θ, l₀, α, F, n, v, ρ, hs, h =>
-      ⟨h.1, vN_local A hA δ Θ l₀ α F n v ρ hs h.2⟩
-  | .unk, _, _, _, _, _, _, _, _, _, _, h => h
-  | .int _, _, _, _, _, _, _, _, _, _, _, h => h
-  | .tvar _, _, _, _, _, _, _, _, _, _, _, h => h
-  | .mu _, _, _, _, _, _, _, _, _, _, _, h => h
-  | .fam _, _, _, _, _, _, _, _, _, _, _, h => h
-  | .opq _, _, _, _, _, _, _, _, _, _, _, h => h
+/-- **Locality** (Core's `vC_local` along `ext_drop`): a value at the world with a lend at `α`,
+whose resource is in `α`'s stratum, is one at the world without it, at every type, `U` included:
+the world without the lend is an extension at that resource (`LocTy.extR_of_add`). -/
+theorem vN_local (A : VTy) (δ : LSub) (Θ : LocTy) (l₀ : Loc) (α : Life)
+    (F : Nat → Val → SPropS Loc Val α) (n : Nat) (v : Val) (ρ : WRes) (hs : ρ.InStratum α)
+    (h : vN (ℍ := ℍ) A δ (Θ.add l₀ α F) n v ρ) : vN (ℍ := ℍ) A δ Θ n v ρ :=
+  vN_extR A δ n v ρ (LocTy.extR_of_add Θ l₀ F hs) h
 
 /-! ## §3. The statements -/
 

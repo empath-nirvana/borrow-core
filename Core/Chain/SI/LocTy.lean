@@ -224,6 +224,65 @@ theorem mutL_extA {Θ Θ' : LocTy} (hE : Θ.ExtA Θ') {a : Life} {P : CPredL} {n
   rw [hfam]
   exact ⟨l, w, χ, hχ, j, hw, hnj, hv, hE.1 l a _ hl, hρ⟩
 
+/-! ### The resource-relative Kripke order -/
+
+/-- **Core's `Ext` on the per-lend world**, the order `U` and `⊸` are Kripke along: at the
+resource `ρ`, every key at a lifetime `a` with a borrow cell of `ρ` no longer-lived than `a`
+(`CellIn ρ a`, Core's) is kept, and nothing is added above it. Core's `Ext ls ls′ ρ` keeps the
+records relevant to `ρ` and the records above every such `a`; a stored family here reads the world
+above its key (`famL`), so the keys at and above such an `a`, and what lies above them, are what
+a value with resource `ρ` reads. -/
+def LocTy.ExtR (Θ Θ' : LocTy) (ρ : WRes) : Prop :=
+  ∀ l a F, Θ l a = some F → CellIn ρ a → Θ' l a = some F ∧ Θ'.above a = Θ.above a
+
+theorem LocTy.extR_refl (Θ : LocTy) (ρ : WRes) : Θ.ExtR Θ ρ := fun _ _ _ h _ => ⟨h, rfl⟩
+
+theorem LocTy.ExtR.trans {Θ Θ' Θ'' : LocTy} {ρ : WRes} (h₁ : Θ.ExtR Θ' ρ) (h₂ : Θ'.ExtR Θ'' ρ) :
+    Θ.ExtR Θ'' ρ := fun l a F hF hc => by
+  obtain ⟨e₁, a₁⟩ := h₁ l a F hF hc
+  obtain ⟨e₂, a₂⟩ := h₂ l a F e₁ hc
+  exact ⟨e₂, a₂.trans a₁⟩
+
+/-- The world-relative order is the resource-relative one at every resource. -/
+theorem LocTy.ExtA.extR {Θ Θ' : LocTy} (h : Θ.ExtA Θ') (ρ : WRes) : Θ.ExtR Θ' ρ :=
+  fun l a F hF _ => ⟨h.1 l a F hF, h.2 l a (by rw [hF]; simp)⟩
+
+theorem LocTy.ExtR.mono {Θ Θ' : LocTy} {ρ σ : WRes} (h : Θ.ExtR Θ' ρ)
+    (hs : ∀ a, CellIn σ a → CellIn ρ a) : Θ.ExtR Θ' σ :=
+  fun l a F hF hc => h l a F hF (hs a hc)
+
+theorem LocTy.ExtR.left {Θ Θ' : LocTy} {ρ₁ ρ₂ ρ : WRes} (hc : ResU.CompS ρ₁ ρ₂ ρ)
+    (h : Θ.ExtR Θ' ρ) : Θ.ExtR Θ' ρ₁ := h.mono fun _ hi => hi.of_left hc
+
+theorem LocTy.ExtR.right {Θ Θ' : LocTy} {ρ₁ ρ₂ ρ : WRes} (hc : ResU.CompS ρ₁ ρ₂ ρ)
+    (h : Θ.ExtR Θ' ρ) : Θ.ExtR Θ' ρ₂ := h.mono fun _ hi => hi.of_right hc
+
+/-- **A lend at `α` and the world without it are extensions of each other at a resource in
+`Res_α`**: such a resource's borrow cells are longer-lived than `α`, so the lend's key is never
+one it reads. -/
+theorem LocTy.extR_of_add (Θ : LocTy) (l₀ : Loc) {α : Life} (F : Nat → Val → SPropS Loc Val α)
+    {ρ : WRes} (hρ : ρ.InStratum α) : (Θ.add l₀ α F).ExtR Θ ρ := by
+  intro l a G hG hc
+  have hαa : α < a := hc.of_stratum hρ
+  rw [LocTy.add_keep Θ l₀ F l (ne_of_gt hαa)] at hG
+  exact ⟨hG, (LocTy.above_add Θ l₀ (not_lt_of_gt hαa) F).symm⟩
+
+/-- **`Mut` values of Core's shape are stable along the resource-relative order**: the cell's
+own key and what lies above it are the ones its resource reads. -/
+theorem mutL_extR {Θ Θ' : LocTy} {a : Life} {P : CPredL} {n : Nat} {v : Val} {ρ : WRes}
+    (hE : Θ.ExtR Θ' ρ) (hm : mutL a P Θ n v ρ) : mutL a P Θ' n v ρ := by
+  obtain ⟨l, w, χ, hχ, j, hw, hnj, hv, hl, rfl⟩ := hm
+  have hin : CellIn (ResU.single l (CellU.mutOf a w χ hχ (famL a P Θ j) hw)) a :=
+    CellIn.single (ψ := CellU.mutOf a w χ hχ (famL a P Θ j) hw)
+      (by rw [CellU.kind_mutOf]; exact fun c => Kind.noConfusion c)
+  obtain ⟨hl', ha⟩ := hE l a _ hl hin
+  have hfam : famL a P Θ' = famL a P Θ := by
+    funext j u r
+    simp only [famL, ha]
+  unfold mutL
+  rw [hfam]
+  exact ⟨l, w, χ, hχ, j, hw, hnj, hv, hl', rfl⟩
+
 /-- **L3 (locality)**: a `Mut` value of Core's shape at the world with the lend, whose cell is
 longer-lived than the lend, is one at the world without it (Core's `vC_local`; what the lender
 reads of a result in the lend's stratum). -/
