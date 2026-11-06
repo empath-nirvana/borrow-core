@@ -1908,11 +1908,3 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Public835N.not_kapRelP_view
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Public835N.kapRelN_not_kapRelP
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.extP_of_add
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.KStopSpike835N.erwp_eq_erwpK
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.KStopSpike835N.opTableK_liftTab
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.KStopSpike835N.erwp_opTableN_eq_erwpK
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.KStopSpike835N.erwpK_perform
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.KStopSpike835N.erwpK_M_frame
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.KStopSpike835N.extP_foldFrame
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.KStopSpike835N.foldTwin_wk_typed
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.KStopSpike835N.extP_not_foldInv
