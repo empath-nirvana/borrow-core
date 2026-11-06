@@ -1950,3 +1950,9 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.KW.Owed.foldInv
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.extP_foldFrame
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.kw_owed_fold
+#print axioms BoCa.Fig16.LogRel.Core.Row.schedOnly_of_unwind
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.hardestRow_schedOnly
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.hin_qualsVal
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.hin_hndExpr
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.hndAvoids_hndExpr
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.not_hndAvoids_hndExpr

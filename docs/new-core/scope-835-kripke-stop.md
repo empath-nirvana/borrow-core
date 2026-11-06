@@ -6,7 +6,9 @@ This is a cost map for one change: a stop (`contShareN`, `KapRelN`) owes its con
 `effHandleVB` and `reify` wait on. This document measures the change; `erwp` is not changed.
 
 The Lean is in `Core/Chain/KStopSpike835N.lean`, and it uses local copies of the new definitions.
-§6 has the verdict.
+§6 has the verdict. The definitions are now a module, `Core/Chain/SI/ErwpK.lean`, with the stop's
+floor and `FoldInv` kept (§1's two additions) and the generic laws; `scope-835-restriction.md` §6
+lists what it holds.
 
 ## 1. The new definitions
 
