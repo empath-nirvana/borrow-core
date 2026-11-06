@@ -382,7 +382,8 @@ open BoCa.Fig16.LogRel.Core
 open BoCa.Fig16.LogRel.Core.Chain.SI
 open BoCa.Fig16.LogRel (LtLife substAll)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
-open BoCa.Fig16.Tree.Wp.Goal791 (Const791 ctx791 vals791 jdgC interp_top_of_defines_empty)
+open BoCa.Fig16.Tree.Wp.Goal791 (Const791 ctx791 vals791 jdgC interp_top_of_defines_empty
+  defines_meetOfDom_empty)
 open BoCa.BoLo (Heap Kont ubindE Head performE raiseE cancelVal opPayload)
 
 /-! ### The lender's twin at an incoming claim -/
@@ -702,6 +703,241 @@ theorem erwp_M_frameListCRN {A : VTy} {δ : LSub} {β β' : Life}
             fun Θ'' j w r h => (hunif Θ'' j w r h).mono hα₁β⟩
         exact (hH α₂ hα₂γ).2 Θ' c' (LocTy.extA_trans hE₁ hE) hOK' X ρ' ⟨_, ρm₂, hX, hlead, hm₂⟩
           hρ'X hc'
+
+/-! ### `slice_borrow_mut` at a suspending row -/
+
+/-- `withborU`'s `then` at the source `a`: `λb. (a, b)`. -/
+def NFa (a : Val) : Val := Val.lam (.pair (.val a) (.var 0))
+
+/-- `withborU`'s `unwind` at the source `a`: `λ_. d a`. -/
+def DFa (d : Expr) (a : Val) : Val := Val.lam (.app d (.val a))
+
+/-- **The finaliser consumes the source array** (`fin_claim` at `Array A`): `d`'s judgment at
+`Array A ⊸ 1`, applied to the array owned again. -/
+theorem fin_claimArr {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
+    (hd : SemJN (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.array A) .unit))) {δ : LSub}
+    {Θ : LocTy} (hΘ : Θ.OK) {c : Loc → Option Life} {a : Val} {k : Nat} {ls : List SRec}
+    {ρ : WRes} (h : vN (ℍ := ℍ) (.array A) δ Θ k a ρ) (hc : ConsistentX c ρ) :
+    rwp (ℍ := ℍ) (Θ.view c) (fun _ _ v ρ' => v = Val.unit ∧ ρ' = PMap.empty) k ls
+      (.app (.val (DFa d a)) (.val .unit)) ρ := by
+  have hΦ := LocTy.view_down hΘ.1 c
+  obtain ⟨l, cn, rfl, -, -⟩ := id h
+  refine Hardest791.rwp_det'' (Q := fun _ v ρ' => v = Val.unit ∧ ρ' = PMap.empty) hΦ
+    (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) ?_
+  have e : Kont.hole.plug (Expr.subst 0 Val.unit (.app d (.val (Val.arr l cn)))) =
+      (Kont.appL .hole (Val.arr l cn)).plug d := by
+    simp [Kont.plug, Expr.subst, subst_closedAt d (s := _) hdc (Nat.zero_le _), subst_arr]
+  rw [e]
+  refine rwp_bind hΦ _ ?_
+  have hd0 := hd δ [] Θ c k ls PMap.empty (models_empty_any _) hΘ (consistentX_empty c) trivial rfl
+  rw [show substAll [] d = d from psub_closedAt d [] hdc (Nat.zero_le 0)] at hd0
+  have hfr := rwp_frame (fun _ τ => τ = ρ) (fun _ _ _ _ h => h) (compS_empty_left ρ)
+    (rwp_of_erwp_empty hd0) rfl
+  refine rwp_mono_le (fun k' hk' ls' v τ hv => ?_) (rwp_consistentXV hfr hc)
+  obtain ⟨⟨τ₁, τ₂, hcτ, hP, rfl⟩, hcτ', hvτ⟩ := hv
+  have := hP Θ (LocTy.extR_refl Θ _) hΘ c (consistentX_left hcτ hcτ' hvτ) ls'
+    c k' le_rfl (Val.arr l cn) τ₂ τ hcτ (vN_le hk' h) hcτ'
+  exact rwp_of_erwp_empty this
+
+/-- **`slice_borrow_mut` at a suspending row is a value of `!` its type** (Core's
+`sliceBorrowMU_compatX` at `Row.Suspend`): `withborU d` at
+`Array A ⊸ (∀'x ⊏ @bnd. [Mut 'x A] ⊸ F_Σ(['x] B)) ⊸ F_Σ(Array A ⊗ B)`, `Σ` a
+`Row.Suspend x bnd` row, cleanup that performs included.
+
+`withbor2S_compat`'s structure, with the one-cell frame replaced by the `n`-cell frame across
+stops, raises and layered cancel runs (`erwp_M_frameListCRN`, Core's `wpG_M_frameFam` at the
+array's range): the payloads' stratum and the result's from the side conditions by 6.60 at
+`↓@bδ` (`vN_outlivesLe`), the frames' lifetimes below the bound; the callback, at the innermost
+lifetime `α`, receives the family `[Mut 'x A]` (`vN_mutLeaf` at each leaf) and runs at its row's
+`tabN`, below the lender's twin at the empty claim (`tabN_tabR_le`); the composite claim, the
+cells owned again at `Θ` (`claimL`), is the array; it is consistent with the view
+(`erwp_claimX`), and the finaliser frame `then b. (a, b) unwind d a` consumes it with `d`
+(`erwp_ubindClaimRT`, `fin_claimArr`).
+
+Premises, and the rule that supplies each: `hbnd` is the bound's definedness (`Const791.OK`);
+`hOA`, `hOB`, `hA`, `hB`, `hS`, `hdc` are `sliceBorrowMU`'s with `Row.Suspend` for `Row.Unwind`
+(`Const791.OK`); `hd` is the fundamental property at `d`'s derivation. -/
+theorem sliceBorrowMS_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Row}
+    {d : Expr} (hbnd : LifeCtx.empty.Defines bnd)
+    (hOA : ∃ b, LifeCtx.empty.Defines b ∧ VOutlivesLe LifeCtx.empty b A)
+    (hOB : ∃ b, LifeCtx.empty.Defines b ∧ VOutlivesLe LifeCtx.empty b B)
+    (hA : ¬ VFree x A) (hB : ¬ VFree x B) (hS : S.Suspend x bnd) (hdc : closedAt 0 d = true)
+    (hd : SemJN (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.array A) .unit))) (δ : LSub)
+    (Θ₀ : LocTy) (n : Nat) :
+    vN (ℍ := ℍ) (.bang (sliceBorrowMUTy x bnd A B S)) δ Θ₀ n (withborUV d) PMap.empty := by
+  refine ⟨rfl, fun Θ _ hΘ c₁ _ ls => ?_⟩
+  intro c₂ k hk u ρv ρu hc hu _
+  obtain rfl := eq_of_compS_empty_left hc
+  intro c k' hk' f ρf ρ'' hc' hf hcon
+  have hu' := vN_le hk' hu
+  obtain ⟨l, cn, rfl, hn, hs⟩ := hu'
+  rw [cN_effOf]
+  refine erwp_of_valid fun hv'' => ?_
+  have hΦ : (Θ.view c).Down := LocTy.view_down hΘ.1 c
+  set Fo := CTy.effOf S (.tensor (.array A) B) with hFo
+  set T := tabN (ℍ := ℍ) Fo δ Θ c with hTdef
+  have hTd : T.Down := tabN_down _ δ Θ hΘ.1 c
+  have hQo : PostN.Down (fun k _ v ρ => vN (ℍ := ℍ) (.tensor (.array A) B) δ Θ k v ρ) :=
+    fun k _ v ρ h => vN_down _ δ Θ k v ρ h
+  refine erwp_det hΦ (opTableN_down hTd) hQo
+    (fun μ => step1Only_plug (Head.beta μ _ (Val.arr l cn)) rfl (.appL .hole f)) ?_
+  refine erwp_det hΦ (opTableN_down hTd) hQo (fun μ => step1Only_plug (Head.beta μ _ f) rfl .hole) ?_
+  have e₃ : Kont.hole.plug (Expr.subst 0 f (Expr.subst (0 + 1) (Val.shift 1 0 (Val.arr l cn))
+        (thenE ((Expr.var 2).pair (Expr.var 0)) (d.app (Expr.var 2))
+          (((Expr.var 0).app (Expr.val Val.unit)).app (Expr.var 1))))) =
+      ubindE (.pair (NFa (Val.arr l cn)) (DFa d (Val.arr l cn)))
+        (.app (.app (.val f) (.val .unit)) (.val (Val.arr l cn))) := by
+    simp [Kont.plug, Expr.subst, thenE, ubindE, NFa, DFa, Val.pair,
+      Val.lam, Expr.val, Val.prim, shift_arr, subst_arr,
+      subst_closedAt d (s := _) hdc (Nat.zero_le _)]
+  rw [e₃]
+  -- the side conditions: the payloads' and the result's strata (6.60 at `↓@bδ`)
+  obtain ⟨a, hdefa, hOa⟩ := hOA
+  obtain ⟨βP, hβP⟩ := hdefa δ (models_empty_any _)
+  have hunif : ∀ Θ j w r, vN (ℍ := ℍ) A δ Θ j w r → r.InStratum (↓βP) :=
+    vN_outlivesLe (models_empty_any _) hβP (Life.down_sqsubset βP) hOa
+  obtain ⟨b, hdefb, hOb⟩ := hOB
+  obtain ⟨βB, hβB⟩ := hdefb δ (models_empty_any _)
+  have hBs : ∀ Θ j w r, vN (ℍ := ℍ) B δ Θ j w r → r.InStratum (↓βB) :=
+    vN_outlivesLe (models_empty_any _) hβB (Life.down_sqsubset βB) hOb
+  obtain ⟨mb, hmb⟩ := hbnd δ (models_empty_any _)
+  obtain ⟨βf, hβf⟩ := ResU.exists_stratum ρf
+  have hAδ : ∀ α, vN (ℍ := ℍ) A (δ.extend x α) = vN (ℍ := ℍ) A δ :=
+    fun α => vN_extend_of_not_free hA δ α
+  have hBδ : ∀ α, vN (ℍ := ℍ) B (δ.extend x α) = vN (ℍ := ℍ) B δ :=
+    fun α => vN_extend_of_not_free hB δ α
+  have hFS : Fo.SuspendC x bnd := suspendC_effOf hS _
+  set I := rangeLocs l cn.toNat with hI
+  -- the frames, the composite claim the array
+  let Ψ : LocTy → PostN := fun Θ k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ
+  have hM := erwp_M_frameListCRN hunif hmb hFS Ψ (fun Θ k _ v ρ hw => hBs Θ k v ρ hw)
+    (fun Θ l₀ α F k _ v ρ hρ hw => vN_local B δ Θ l₀ α F k v ρ hρ hw)
+    (.app (.app (.val f) (.val .unit)) (.val (Val.arr l cn))) ls I Θ c k' ρu ρf ρ'' (mb ⊓ βf)
+    hΘ hcon hc' (by rw [← sepRange_eq_sepList]; exact hs)
+    (fun α hα => ⟨hβf.mono (le_of_lt (lt_of_lt_of_le hα inf_le_right)), ?_⟩)
+  · have hM' := erwp_claimX (c := c) hbnd hFS k' ls _ ρ'' hcon hM
+    refine erwp_ubindClaimRT hΘ.1 (F := Fo) (δ := δ) (c := c)
+      (fun m i en h _ => by obtain ⟨o, ho, rfl, -⟩ := tabN_effOf_some h; exact (hS o ho).2.1)
+      (NFa (Val.arr l cn)) (DFa d (Val.arr l cn)) (fun k ls ρ hR => ?_) hQo
+      (fun k ls b ρ hq => ?_) k' ls _ ρ'' hM'
+    · obtain ⟨hR, hcR⟩ := hR
+      exact fin_claimArr hdc hd hΘ ⟨l, cn, rfl, hn, by rw [sepRange_eq_sepList]; exact hR⟩ hcR
+    · obtain ⟨ρ₁, ρ₂, hc12, ho, hb⟩ := hq
+      refine erwp_det hΦ (opTableN_down hTd) hQo
+        (fun μ => step1Only_plug (Head.beta μ _ b) rfl .hole) ?_
+      simp [Kont.plug, Expr.subst]
+      exact erwp_val (v := Val.pair (Val.arr l cn) b)
+        ⟨Val.arr l cn, b, ρ₁, ρ₂, rfl, hc12,
+          ⟨l, cn, rfl, hn, by rw [sepRange_eq_sepList]; exact ho⟩, hb⟩
+  -- the callback, at the frames' world and view, from the leaves at `α`
+  intro Θ'' c'' hE hOK'' ρm ρ₃ hml hcomp hc''
+  refine erwp_of_valid fun hv₃ => ?_
+  have hLt : LtLife δ bnd α := ⟨mb, hmb, lt_of_lt_of_le hα inf_le_left⟩
+  have hcf : ConsistentX c'' ρf := consistentX_left hcomp hc'' hv₃
+  have hfam : vN (ℍ := ℍ) (.sliceMut (.var x) A) (δ.extend x α) Θ'' k' (Val.arr l cn) ρm :=
+    ⟨l, cn, rfl, hn, by
+      rw [sepRange_eq_sepList]; exact sepList_mono' (fun _ _ h => vN_mutLeaf hA h) hml⟩
+  have h1 := (hf Θ'' (hE.extR ρf) hOK'' c'' hcf ls) α hLt
+  have h2 := h1 c'' k' le_rfl (Val.arr l cn) _ ρ₃ hcomp hfam hc''
+  rw [cN_effOf, tabN_effOf_base S (.box (.var x) B) (.tensor (.array A) B)] at h2
+  refine erwp_opTableN_R (tabN_tabR_le (R₀ := claimL (ℍ := ℍ) A δ Θ'' []) (fun _ => ⟨rfl, trivial⟩)
+    δ Θ'' c'' Fo.cdepth Fo le_rfl hFS) (fun _ => ⟨rfl, trivial⟩) k' ls _ ρ₃
+    (erwp_mono (fun k ls' b ρ' hb => ?_) (opTableN_local _) k' ls _ ρ₃ h2)
+  obtain ⟨β, hβ, hbB, -⟩ := hb
+  rw [interp_ext_self] at hβ
+  cases Option.some.inj hβ
+  show vN (ℍ := ℍ) B δ Θ'' k b ρ'
+  rw [← hBδ α]; exact hbB
+
+/-- **`ConstN` for `slice_borrow_mut` at a suspending row**, from the fundamental property at the
+finaliser's derivation. -/
+theorem constN_sm (hF : FundamentalN (ℍ := ℍ)) {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
+    {S : Row} {d : Expr} (hfr : (Const791.sm x bnd A B S d).InFrag) :
+    ConstN (ℍ := ℍ) (.sm x bnd A B S d) := by
+  rintro ⟨hbnd, hOA, hOB, hA, hB, hS, hdc, hder⟩ δ Θ n _
+  have hL : (VTy.array A).inFrag = true := by
+    simp_all [Const791.InFrag, Const791.ty, sliceBorrowMUTy, withborUTy, VTy.inFrag, CTy.inFrag]
+  exact sliceBorrowMS_compat hbnd hOA hOB hA hB hS hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ Θ n
+
+/-! ### `slice_borrow_mut` at the hardest case's row -/
+
+/-- `λu. ()`. -/
+def dropU : Val := Val.lam (.val .unit)
+
+/-- `λa. drop (λu. (), a)`: the source array's cells freed. -/
+def dArrFree : Expr := .val (Val.lam (.app (.val (.prim .drop)) (.pair (.val dropU) (.var 0))))
+
+theorem dArrFree_closed : closedAt 0 dArrFree = true := by decide
+
+/-- `λu. ()` is a value of `!(1 ⊸ 1)`. -/
+theorem dropU_sem (δ : LSub) (Θ : LocTy) (n : Nat) :
+    vN (ℍ := ℍ) (.bang (.lolli .unit .unit)) δ Θ n dropU PMap.empty := by
+  refine ⟨rfl, ?_⟩
+  intro Θ'' _ hOK c' _ ls' c'' k _ v ρv ρ' hc hv _
+  obtain ⟨rfl, rfl⟩ := hv
+  obtain rfl := eq_of_compS_empty_left hc
+  have hΦ := LocTy.view_down hOK.1 c''
+  show erwp (ℍ := ℍ) (Θ''.view c'') (opTableN OpTabN.empty) _ k ls'
+    (.app (Val.lam (.val .unit)).1 (.val Val.unit)) _
+  refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down _ _ _ k v ρ h)
+    (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) ?_
+  simp only [Kont.plug, Expr.subst, Val.unit, Expr.val]
+  exact erwp_val (v := Val.unit) ⟨rfl, rfl⟩
+
+/-- **`λa. drop (λu. (), a)` is a finaliser of an `Array 1` source**: the cells are freed in
+order by `dropFill` (`dropFill_wpN`). -/
+theorem dArrFree_sem :
+    SemJN (ℍ := ℍ) LifeCtx.empty [] dArrFree (.val (.lolli (.array .unit) .unit)) := by
+  intro δ γ Θ c n ls ρ _ _ _ _ hg
+  obtain rfl : ρ = PMap.empty := hg
+  rw [show substAll γ dArrFree = dArrFree from psub_closedAt dArrFree γ dArrFree_closed le_rfl]
+  refine erwp_val (v := Val.lam (.app (.val (.prim .drop)) (.pair (.val dropU) (.var 0)))) ?_
+  intro Θ'' _ hOK c' _ ls' c'' k _ v ρv ρ' hc hv hcon
+  obtain rfl := eq_of_compS_empty_left hc
+  obtain ⟨l, cn, rfl, -, hs⟩ := hv
+  have hΦ := LocTy.view_down hOK.1 c''
+  have hQd : PostN.Down (fun k _ v ρ => vN (ℍ := ℍ) .unit δ Θ'' k v ρ) :=
+    fun k _ v ρ h => vN_down _ _ _ k v ρ h
+  show erwp (ℍ := ℍ) (Θ''.view c'') (opTableN OpTabN.empty) _ k ls'
+    (.app (Val.lam (.app (.val (.prim .drop)) (.pair (.val dropU) (.var 0)))).1
+      (.val (Val.arr l cn))) _
+  refine erwp_det hΦ (opTableN_down OpTabN.empty_down) hQd
+    (fun μ => step1Only_plug (Head.beta μ _ (Val.arr l cn)) rfl .hole) ?_
+  have e : Kont.hole.plug (Expr.subst 0 (Val.arr l cn)
+      (.app (.val (.prim .drop)) (.pair (.val dropU) (.var 0)))) =
+      Kont.hole.plug (.app (.val (.prim .drop)) (.val (Val.pair dropU (Val.arr l cn)))) := by
+    simp [Kont.plug, Expr.subst, dropU, Val.pair, Val.lam, Val.unit, Expr.val, Val.prim]
+  rw [e]
+  refine erwp_det hΦ (opTableN_down OpTabN.empty_down) hQd
+    (fun μ => step1Only_plug (Head.drop μ dropU l cn) rfl .hole) ?_
+  exact dropFill_wpN hOK dropU l (dropU_sem δ Θ'' k) cn.toNat 0 k ls' ρ' c'' le_rfl hcon
+    (by simpa using hs)
+
+/-- **`slice_borrow_mut` at the hardest case's row**, every hypothesis of `sliceBorrowMS_compat`
+discharged: an `Array 1` lent cell by cell at the bound `LifeCtx.empty.meetOfDom`, finalised by
+`dArrFree`. -/
+theorem sliceBorrowMS_inst (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
+    vN (ℍ := ℍ) (.bang (sliceBorrowMUTy x LifeCtx.empty.meetOfDom .unit .unit hardestRow)) δ Θ n
+      (withborUV dArrFree) PMap.empty :=
+  sliceBorrowMS_compat defines_meetOfDom_empty ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩
+    ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩ id id (hardestRow_suspend x _) dArrFree_closed
+    dArrFree_sem δ Θ n
+
+/-! ### Every constant -/
+
+/-- **`ConstsN` from the fundamental property**: each of the five constants inside the fragment,
+the finalisers' judgments read by the fundamental property (`constN_w2`, `constN_w3`,
+`constN_wF`, `constN_wl`, `constN_sm`). -/
+theorem constsN_of (hF : FundamentalN (ℍ := ℍ)) : ConstsN (ℍ := ℍ)
+  | .w2 .., hfr => constN_w2 hF hfr
+  | .w3 .., hfr => constN_w3 hF hfr
+  | .wF .., hfr => constN_wF hF hfr
+  | .wl .., _ => constN_wl
+  | .sm .., hfr => constN_sm hF hfr
+
+/-- **`Goal791SchedN` from the fundamental property alone**: `goal791Sched_of` at `constsN_of`. -/
+theorem goal791Sched_of_fundamental (hF : FundamentalN (ℍ := ℍ)) : Goal791SchedN (ℍ := ℍ) :=
+  goal791Sched_of hF (constsN_of hF)
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

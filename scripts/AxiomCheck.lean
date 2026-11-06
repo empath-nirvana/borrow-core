@@ -1811,3 +1811,17 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sliceBorrowM_sem
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sliceBorrowM_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_M_frameRR
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_M_frameCRR
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_M_frame_cancelRunCRR
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_opTableR_le
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_opTableN_R
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabR_canR
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabR_le
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabN_tabR_le
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwp_M_frameListCRN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sliceBorrowMS_compat
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.constN_sm
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sliceBorrowMS_inst
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.dArrFree_sem
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.constsN_of
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.goal791Sched_of_fundamental
