@@ -66,7 +66,7 @@ The configurations named below are indexed in `configurations.md`; the design th
 | W6 | `wpTS_head`, `wpTS_lolli`, `wpTS_1`, `wpTS_tensor` … | 6.137–6.140 | 43: `copyBang`, `releaseBang`, `tokMint`, `tokBurn` … | **same** | `erwp_det` (`SI/ErwpN.lean`, any `Step1Only` step): one lemma for every head step |
 | W7 | `wpTS_box` | 6.147 | 1: `boxI` | **missing, buildable** | a run at the empty table from `Res_α` ends in `Res_α`: from `rwp`'s definition (the model's `↭` keeps strata) |
 | W8 | `wpTS_iff_wpG`, `ewp_abortive` | — | 6: `withbor1U`, `withbor2U`, `withbor3U`, `withloadU` … | **same** | `erwp_eq`, `rwp_iff_rwpG` (`SI/RwpG.lean`): `erwp` is already the general form |
-| W9 | `wpTS_val_post` | — | 5: `reify`, `effHandleV`, `effHandleVB`, `effHandleT` … | **missing, buildable** | map E9: `vN` read off a value's `cN (.ret A)`, from `erwp_unfold_at` at `.val v` |
+| W9 | `wpTS_val_post` | — | 5: `reify`, `effHandleV`, `effHandleVB`, `effHandleT` … | **built** (#835: `erwp_val_post`) | map E9: `vN` read off a value's `cN (.ret A)`, from `erwp_unfold_at` at `.val v` |
 
 ### H. Heap steps
 
@@ -169,18 +169,18 @@ The configurations named below are indexed in `configurations.md`; the design th
 |---|---|---|---|---|---|
 | E1 | `ewp_fold`, `ewp_unfold`, `ewp_ind` | — | 18: `iterate`, `divFuel`, `reify`, `withbor1U` … | **same** | `erwp_fold_at`, `erwp_unfold_at` (`SI/ErwpN.lean`) |
 | E2 | `ewp_val`, `ewp_mono`, `ewp_step`, `effWp_step` … | — | 16: `iterate`, `divFuel`, `reify`, `withbor1U` … | **same** | `erwp_val`, `erwp_mono`, `erwp_det`, `erwp_step` (`SI/LoopN.lean`) |
-| E3 | `effWp_sub`, `ewp_sub`, `finLe_iff`, `cancelObl_le` | — | 6: `effSub`, `effAwait`, `effThen`, `effThenDiv` … | **departed, to build** | `erwp_tabLe` (`SI/TabLeN.lean`) is there; `RowLe S S′ → OpTabN.Le (tabN …)` is missing, buildable (map E1) |
+| E3 | `effWp_sub`, `ewp_sub`, `finLe_iff`, `cancelObl_le` | — | 6: `effSub`, `effAwait`, `effThen`, `effThenDiv` … | **built** (#835: `tabN_le_of_rowLe`, `erwp_rowLe`) | `erwp_tabLe` (`SI/TabLeN.lean`) is there; `RowLe S S′ → OpTabN.Le (tabN …)` is missing, buildable (map E1) |
 | E4 | `opTable_mono`, `opTable_abortive`, `tab_local`, `tab_zero` … | — | 21: `iterate`, `divFuel`, `reify`, `withbor1U` … | **same** | `opTableN_le`, `opTableN_local`, `opTableN_down`, `tabN_effOf_some`, `tab_lookupN`, `tabN_unwind_abort` |
-| E5 | `ewp_bind_pure_frame` | spec §19 | 3: `effPerform`, `effAwait`, `effRaise` | **departed, to build** | `erwp_bind` with `T.CtxClosed K`: `tabN`'s `CtxClosed` at a context with no handler or catcher is missing, buildable (map E3) |
-| E6 | `ewp_perform_here`, `ent_start`, `cancelObl_start` | spec §19 | 2: `effPerform`, `effAwait` | **departed, to build** | `erwp_performG` (`SI/LendCancelProg.lean`), `erwp_perform`; `cancelOKN` at the empty context (`ent_start`) missing, buildable (map E2) |
-| E7 | `ewp_raise_here` | spec §19 | 2: `effAwait`, `effRaise` | **missing, buildable** | a raise's introduction at `raiseStopN`: built inline in `erwp_handle`'s proof (`SI/HandleN.lean`), to be stated (map E4) |
-| E8 | `ewp_frame_plain`, `ent_plain`, `cancel_frame`, `cancel_frame_consume` … | spec §27 | 10: `iterate`, `divFuel`, `reify`, `unfoldN` … | **missing, buildable** | the frame at a row's table: owning across must-resume stops, owning nothing where the row cancels, empty at an unrestricted row; `erwpG_frame`, `erwp_frameL` are special cases (map E5) |
-| E9 | `ewp_frame_then`, `ewp_frame_then_or`, `cwp_then`, `cwp_then_div` … | — | 3: `effThen`, `effThenDiv`, `effHandleL` | **departed, to build** | `erwp_ubind` (`SI/UbindGN.lean`) and its cancel/raise/claim companions are stated without unrestricted operations in `Σ_M` and at a finaliser meeting `FinOK`; Core's `hP`/`hU`/`ThenLe` form and a finaliser row holding `Div` are missing, buildable (map E6, E7) |
-| E10 | `ewp_handle_vals`, `ewp_handle_valsB`, `ewp_handle_tail`, `ewp_handle_last` … | — | 4: `effHandleV`, `effHandleVB`, `effHandleT`, `effHandleL` | **departed, to build** | `erwp_handle` (`SI/HandleN.lean`; needs no `hdv`), `erwp_kappa_*`; the clauses' reading at `vN` and the split of `tabN (ofEff n E 0 fs ++ S)` (map E8), the tail and last instances (map E11): missing, buildable |
-| E11 | `ewp_kappaC_resume`, `ewp_kappaC_cancel`, `ewp_kappaCell`, `ewp_kappa_resume` … | — | 3: `divFuel`, `reify`, `effHandleVB` | **same** | `erwp_kappa_resume`, `erwp_kappaC_resume`, `erwp_kappa_cancel`, `erwp_kappaC_cancel`, `erwp_kappaCell`, `erwp_ccatch` (`SI/HandleN.lean`) |
-| E12 | `stop_sem` | spec §28 | 1: `effHandleVB` | **missing, unclear** | the BOXED-κ stop lemma at `erwp` (map E10). Not derived; obstruction not verified |
+| E5 | `ewp_bind_pure_frame` | spec §19 | 3: `effPerform`, `effAwait`, `effRaise` | **built** (#835: `erwp_bind_pure_frame`, `tabN_ctxClosed`) | `erwp_bind` with `T.CtxClosed K`: `tabN`'s `CtxClosed` at a context with no handler or catcher is missing, buildable (map E3) |
+| E6 | `ewp_perform_here`, `ent_start`, `cancelObl_start` | spec §19 | 2: `effPerform`, `effAwait` | **built** (#835: `erwp_perform_here`, `entN_start`) | `erwp_performG` (`SI/LendCancelProg.lean`), `erwp_perform`; `cancelOKN` at the empty context (`ent_start`) missing, buildable (map E2) |
+| E7 | `ewp_raise_here` | spec §19 | 2: `effAwait`, `effRaise` | **built** (#835: `erwp_raise_here`) | a raise's introduction at `raiseStopN`: built inline in `erwp_handle`'s proof (`SI/HandleN.lean`), to be stated (map E4) |
+| E8 | `ewp_frame_plain`, `ent_plain`, `cancel_frame`, `cancel_frame_consume` … | spec §27 | 10: `iterate`, `divFuel`, `reify`, `unfoldN` … | **built** (#835: `erwp_frame_plain`, `entN_plain`, `tabN_plainCancel`) | the frame at a row's table: owning across must-resume stops, owning nothing where the row cancels, empty at an unrestricted row; `erwpG_frame`, `erwp_frameL` are special cases (map E5) |
+| E9 | `ewp_frame_then`, `ewp_frame_then_or`, `cwp_then`, `cwp_then_div` … | — | 3: `effThen`, `effThenDiv`, `effHandleL` | **not built** (#835 §9.4) | `erwp_ubind` (`SI/UbindGN.lean`) and its cancel/raise/claim companions are stated without unrestricted operations in `Σ_M` and at a finaliser meeting `FinOK`; Core's `hP`/`hU`/`ThenLe` form and a finaliser row holding `Div` are missing, buildable (map E6, E7) |
+| E10 | `ewp_handle_vals`, `ewp_handle_valsB`, `ewp_handle_tail`, `ewp_handle_last` … | — | 4: `effHandleV`, `effHandleVB`, `effHandleT`, `effHandleL` | **not derived** (#835 §9.1: the clauses at `vN`; the tail and last instances not built) | `erwp_handle` (`SI/HandleN.lean`; needs no `hdv`), `erwp_kappa_*`; the clauses' reading at `vN` and the split of `tabN (ofEff n E 0 fs ++ S)` (map E8), the tail and last instances (map E11): missing, buildable |
+| E11 | `ewp_kappaC_resume`, `ewp_kappaC_cancel`, `ewp_kappaCell`, `ewp_kappa_resume` … | — | 3: `divFuel`, `reify`, `effHandleVB` | **same**; the fuel handler's instances built (#835: `erwp_kappaC_resume_in`, `erwp_hnd_tick`) | `erwp_kappa_resume`, `erwp_kappaC_resume`, `erwp_kappa_cancel`, `erwp_kappaC_cancel`, `erwp_kappaCell`, `erwp_ccatch` (`SI/HandleN.lean`) |
+| E12 | `stop_sem` | spec §28 | 1: `effHandleVB` | **built** (#835: `stop_semN`, `erwp_handleS`) | the BOXED-κ stop lemma at `erwp` (map E10). Not derived; obstruction not verified |
 | E13 | `cwp_bind`, `cwp_of_ewp`, `effWp_of_ewp`, `cwp_out` … | spec §14 | 21: `iterate`, `divFuel`, `reify`, `withbor1U` … | **departed, forced by `erwp`** | a `Div` row is a row of the table; `erwp` is step-indexed, so Core's coinductive `cwp` and its bookkeeping have no counterpart, and each `cwp` branch is the `ewp` branch's `erwp` lemma. Reason: `Depart831N.erwp_of_noFinal`; the split: `Depart831N.cN_effOf_divB` (§6.3) |
-| E14 | `cwp_iterate` | spec §14 | 1: `iterate` | **departed, to build** | `erwp_iterate` (`SI/LoopN.lean`) is stated where the tick always answers *next*; the version answering in `vN nextTy` (the close branch) is missing, buildable from its induction |
+| E14 | `cwp_iterate` | spec §14 | 1: `iterate` | **built** (#835: `erwp_iterateC`) | `erwp_iterate` (`SI/LoopN.lean`) is stated where the tick always answers *next*; the version answering in `vN nextTy` (the close branch) is missing, buildable from its induction |
 
 ### 2.1 Counts
 
@@ -298,8 +298,8 @@ that step is done inside `withloadS_compat`, which is proved, so V1 is not a blo
 | 52 | `countFold` | yes | portable | W1 W4 W6 K2 V11 G3 F1 F2 | W4 F2 | mechanical once built | `countLoop_wp` (induction on `len − i`) |
 | 53 | `countTry` | yes | portable | W1 W4 W6 K2 V11 G3 F1 F2 | W4 F2 | mechanical once built | `countTryLoop_wp` |
 | 54 | `boundedFix` | yes | portable | W1 G3 C1 F1 | — | mechanical now | `fixSelf_valid`, `cC_boundedFix` along `ExtR` |
-| 55 | `iterate` | yes | portable | W1 K1 K5 G3 C3 E1 E2 E4 E8 E13 E14 | K5 E8 E14 | mechanical once built | `cwp_iterate` → E14 |
-| 56 | `divFuel` | yes | portable | W1 G3 C3 E1 E2 E4 E8 E11 E13 | E8 | mechanical once built | `fuel_total`, `divFuel_steps`, `fuelK_frame` |
+| 55 | `iterate` | yes | portable | W1 K1 K5 G3 C3 E1 E2 E4 E8 E13 E14 | K5 E8 E14 | waits: answer consistency (§9.2) | `cwp_iterate` → E14 |
+| 56 | `divFuel` | yes | portable | W1 G3 C3 E1 E2 E4 E8 E11 E13 | E8 | proved (`divFuel_compatN`) | `fuel_total`, `divFuel_steps`, `fuelK_frame` |
 | 57 | `reify` | no | out | W1 W9 K1 K5 V4 G3 C3 F8 F9 E1 E2 E4 E8 E11 E13 | W9 K5 F8 F9 E8 | waits (unclear) | `reify_compat` |
 | 58 | `sliceBorrowM` | no | out | W1 W2 W3 W4 W6 K1 K2 V3 V6 V11 G3 F1 F6 F7 | W4 F6 F7 | mechanical once built |  |
 | 59 | `sliceBorrowI` | no | out | W1 W2 W3 W4 W6 K1 K2 V3 V6 V7 V10 V11 G3 F1 F6 F7 R5 | W4 F6 F7 | mechanical once built |  |
@@ -335,17 +335,17 @@ that step is done inside `withloadS_compat`, which is proved, so V1 is not a blo
 | 89 | `nuIn` | no | out | F9 | F9 | waits (unclear) |  |
 | 90 | `nuOut` | cut | out | F9 | F9 | waits (unclear) |  |
 | 91 | `unfoldN` | no | out | W1 W2 W3 W6 K1 V4 G3 C1 F8 F9 R6 E1 E2 E4 E8 E13 | F8 F9 E8 | waits (unclear) | `nuRel_coind` |
-| 92 | `effSub` | yes | portable | C3 E3 E4 E13 | E3 | mechanical once built |  |
-| 93 | `effPerform` | yes | portable | C3 E4 E5 E6 E13 | E5 E6 | mechanical once built |  |
-| 94 | `effAwait` | yes | portable | W1 K2 V8 V11 G1 G2 G3 G4 G5 G6 G9 G11 G12 C1 C2 C3 F10 R6 E1 E2 E3 E4 E5 E6 E7 E8 E13 | V8 G1 G2 G4 G6 G9 G11 G12 C2 E3 E5 E6 E7 E8 | mechanical once built | composes `perform`, `raise`, `sub`, `ret`, `var`, `sumE`, `let` |
-| 95 | `effRaise` | yes | portable | C3 E4 E5 E7 E13 | E5 E7 | mechanical once built |  |
-| 96 | `effLet` | cut | portable | K2 G1 G4 G5 G6 G9 G11 G12 C3 R6 E1 E2 E4 E8 E13 | G1 G4 G6 G9 G11 G12 E8 | mechanical once built |  |
-| 97 | `effThen` | cut | portable | K2 V9 G1 G4 G5 G6 G11 G12 C3 R6 E1 E2 E3 E4 E8 E9 E13 | G1 G4 G6 G11 G12 E3 E8 E9 | mechanical once built |  |
-| 98 | `effThenDiv` | cut | portable | K2 V9 G1 G4 G5 G6 G11 G12 C3 R6 E1 E2 E3 E4 E8 E9 E13 | G1 G4 G6 G11 G12 E3 E8 E9 | mechanical once built |  |
-| 99 | `effHandleV` | cut | portable | W9 K5 V9 G1 G3 G11 G12 C3 F1 E1 E4 E10 E13 | W9 K5 G1 G11 G12 E10 | mechanical once built |  |
-| 100 | `effHandleVB` | cut | pending | W9 K5 V5 V9 G1 G3 G7 G11 G12 C3 F1 R6 E1 E4 E10 E11 E12 E13 | W9 K5 G1 G7 G11 G12 E10 E12 | waits (unclear) |  |
-| 101 | `effHandleT` | cut | portable | W9 K5 V9 G1 G3 G11 G12 C3 E1 E2 E3 E4 E8 E10 E13 | W9 K5 G1 G11 G12 E3 E8 E10 | mechanical once built |  |
-| 102 | `effHandleL` | cut | portable | W9 K1 K2 K5 V8 V9 G1 G3 G11 G12 C3 R6 E1 E2 E3 E4 E8 E9 E10 E13 | W9 K5 V8 G1 G11 G12 E3 E8 E9 E10 | mechanical once built |  |
+| 92 | `effSub` | yes | portable | C3 E3 E4 E13 | E3 | proved (`sub_compatN`) |  |
+| 93 | `effPerform` | yes | portable | C3 E4 E5 E6 E13 | E5 E6 | proved (`perform_compatN`) |  |
+| 94 | `effAwait` | yes | portable | W1 K2 V8 V11 G1 G2 G3 G4 G5 G6 G9 G11 G12 C1 C2 C3 F10 R6 E1 E2 E3 E4 E5 E6 E7 E8 E13 | V8 G1 G2 G4 G6 G9 G11 G12 C2 E3 E5 E6 E7 E8 | proved (`await_compatN`) | composes `perform`, `raise`, `sub`, `ret`, `var`, `sumE`, `let` |
+| 95 | `effRaise` | yes | portable | C3 E4 E5 E7 E13 | E5 E7 | proved (`raise_compatN`) |  |
+| 96 | `effLet` | cut | portable | K2 G1 G4 G5 G6 G9 G11 G12 C3 R6 E1 E2 E4 E8 E13 | G1 G4 G6 G9 G11 G12 E8 | waits: answer consistency (§9.2); `let_compatN_ansC`, `let_compatN_persist` |  |
+| 97 | `effThen` | cut | portable | K2 V9 G1 G4 G5 G6 G11 G12 C3 R6 E1 E2 E3 E4 E8 E9 E13 | G1 G4 G6 G11 G12 E3 E8 E9 | waits: answer consistency (§9.2), E9 |  |
+| 98 | `effThenDiv` | cut | portable | K2 V9 G1 G4 G5 G6 G11 G12 C3 R6 E1 E2 E3 E4 E8 E9 E13 | G1 G4 G6 G11 G12 E3 E8 E9 | waits: answer consistency (§9.2), E9 |  |
+| 99 | `effHandleV` | cut | portable | W9 K5 V9 G1 G3 G11 G12 C3 F1 E1 E4 E10 E13 | W9 K5 G1 G11 G12 E10 | waits: E10 (§9.1), answer consistency |  |
+| 100 | `effHandleVB` | cut | pending | W9 K5 V5 V9 G1 G3 G7 G11 G12 C3 F1 R6 E1 E4 E10 E11 E12 E13 | W9 K5 G1 G7 G11 G12 E10 E12 | waits: E10 (§9.1), answer consistency; E12 built |  |
+| 101 | `effHandleT` | cut | portable | W9 K5 V9 G1 G3 G11 G12 C3 E1 E2 E3 E4 E8 E10 E13 | W9 K5 G1 G11 G12 E3 E8 E10 | waits: answer consistency (§9.2), E10's tail instance |  |
+| 102 | `effHandleL` | cut | portable | W9 K1 K2 K5 V8 V9 G1 G3 G11 G12 C3 R6 E1 E2 E3 E4 E8 E9 E10 E13 | W9 K5 V8 G1 G11 G12 E3 E8 E9 E10 | waits: answer consistency (§9.2), E9, E10's last instance |  |
 | 103 | `letPoly` | cut | portable | G5 C1 | — | mechanical now |  |
 | 104 | `alpha` | yes | portable | V1 | V1 | mechanical once built |  |
 
@@ -696,3 +696,79 @@ replaced by the two facts its proof reads of the table: `hTab` (the table is `Re
 The class counts of §3.1 and the map's rows for the rules ported in #834 are as the map left them;
 rows 76 and 77 are updated here.
 
+## 9. Built in #835 (unit L4)
+
+Branch `rule-791-l4b`. The paper mapping is `scope-835-handlers.md`. Part 1 (`rule-791-l4`) built
+E3, E5–E8, W9, E12, E14 and ported `effSub`, `effPerform`, `effRaise` (`scope-835-handlers.md`
+§4). Part 2 is this section.
+
+### 9.1 E10: the clauses read at `vN`
+
+Core's step is `vC_kTy_of_kapRel` (`Core/EffFin.lean`), which `ewp_handle_vals` applies to each
+clause: `KapRel` at `ls` is Kripke along `Ext` (`∀ ls′, Ext ls ls′ ρ → …`), because the stop's
+share in `opTable` is (`contShare`), and that is exactly `vC`'s `U` at `ls`. In Core one world, the
+record list, indexes both the values (`vC … ls`) and the run (`ewpTS ls`), so the two quantifiers
+are the same quantifier, and `hk ls′ he` closes the step.
+
+At the chain the world is split. `vN`'s `U` quantifies the value world (`Θ′` with
+`Θ.ExtR Θ′ ρ`, `Θ′.OK`), every view consistent with the thunk's resource, and every record list.
+`KapRelN` fixes the run's view `Θ.view c` and its tables at `Θ` and `c`, and resumes along `extF`
+on the list (D8). So `κ`'s `vN (kTy …)` asks the handled continuation at worlds, views and lists
+that its stop does not owe it at. The port of Core's step would make the stop's share Kripke in
+the value world as Core's is in `ls` (`contShareN` along `ExtR`), which `erwp`'s fixed view does
+not express. F10's plain wand (§8.1) does not change this: it puts the clause's argument pair at the
+clause's own world, which `ExtR`'s reflexivity reaches, but `κ`'s own type is `U(…)`, whose clause
+still quantifies `Θ′`, the view and the list. Not derived; obstruction not verified.
+
+`effHandleT` and `effHandleL` give the clauses no `κ` and do not need this step; they need §9.2
+and the tail and last instances, which are not built.
+
+### 9.2 Answer consistency
+
+`SemJN` reads a judgment at a view `c` consistent with its resource (D7). A rule that runs typed
+code after a computation at a row (`effLet`'s `N`, `effThen`'s `N` and `D`, `iterate`'s step on the
+next state, a handler's `h_ret` on the handled value) reads that code at the run's view, from the
+resource the computation returned. When the computation never stops, that resource is consistent
+(`rwp_consistentXV`, as `bind_compatN` reads it). Across a stop it is the continuation's share
+beside the answer it was resumed at, and `tabN`'s answers are `vN B δ Θ` at any resource:
+`entN`'s `PB` does not read `c`. Core has no view, so Core's proofs have no such step.
+
+- `erwp_consistentAns` (`Core/Chain/Let835N.lean`): a run from a consistent resource, at a table
+  whose answers are consistent with `c` (`OpTabN.AnsC c`), returns consistent resources at every
+  value across its resumptions.
+- `let_compatN_ansC`: Core's `let_compatC`, step for step (`erwp_frame_plain`, `entN_plain`,
+  `gN_noOwn`, `gN_persistent`), with one premise Core's rule does not have,
+  `hAns : ∀ δ Θ c, (tabN (F_Σ B) δ Θ c).AnsC c`. `tabN_ansC_of_persistent` gives it at a row whose
+  answer types are persistent.
+- `let_compatN_persist`: the same proof when the bound type is persistent (the bound value owns
+  nothing, so `N` starts from the frame's resource, consistent from the start). `await_compatN`
+  is its instance.
+
+`let_compatN` without `hAns` is not derived; obstruction not verified. Two routes, both outside
+this unit's allowance: answers consistent with the view in `tabN`'s entries (`entN`'s `PB` read at
+`c`, which makes `Goal791SchedN`'s hypothesis `SchedOKN` at `rowTabN` ask consistent answers of the
+scheduler's clauses), or a side condition on the rules. The rules waiting on this are `effLet`,
+`effThen`, `effThenDiv`, `iterate`, and the four handlers.
+
+### 9.3 Rules ported
+
+| Rule | Lemma | File | Core |
+|---|---|---|---|
+| `divFuel` | `divFuel_compatN` (`fuel_totalN`, `fuel_tick_zeroN`, `fuel_tick_succN`, `erwp_hnd_tick`, `erwp_kappaC_resume_in`, `erwp_pureSteps`) | `Core/Chain/Fuel835N.lean` | `divFuel_compatX` (`fuel_total`, `fuel_tick_zero`, `fuel_tick_succ`, `hnd_tick`, `ewp_kappaC_resume_in`, `ewp_pureSteps`) |
+| `effAwait` | `await_compatN` (`let_compatN_persist`, `erwp_idxLe`) | `Core/Chain/Let835N.lean` | `await_compatC` |
+
+`fuel_totalN` inducts on the index alone. Core inducts on the budget and, inside, on `cwp`'s
+segment, and treats the spent budget by `Closing` (`fuel_closing`); a `Div` row is a row of the
+chain's table (E13), so every tick's continuation is owed below the tick's index whether it is
+answered *next* or *close*, and `Closing` has no counterpart. No typed code runs after a
+resumption in `div_fuel`: an answer of `Σ` goes back into the callback's own continuation.
+
+### 9.4 Not built
+
+- E9 (`ewp_frame_then_or` with `ThenLe`/`PendLe`, a finaliser that performs and raises): not
+  built. `effThen`/`effThenDiv` also wait on §9.2.
+- E10's tail and last instances (`ewp_handle_tail`, `ewp_handle_last`): not built.
+  `effHandleT`/`effHandleL` also wait on §9.2.
+- `iterate`: `erwp_iterateC` (E14) with the invariant `vN St` read at the index; the step's next
+  state is read at the loop's view, which §9.2 is.
+- `withloadU` (#834 §8.4) is unchanged.
