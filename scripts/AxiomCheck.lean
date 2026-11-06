@@ -1830,3 +1830,8 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwp_M_frameListRN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sliceReplaceM_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sliceSwapM_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.arrNew_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabFill_wpN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_tab
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.rwpG_tab
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.alloc_blockN
