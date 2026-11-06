@@ -225,24 +225,36 @@ theorem not_wlImage (P : VTy → LSub → LocTy → Nat → Val → WRes → Pro
   rw [canon_thunk hT] at hc
   exact h₂ hc
 
-/-- `vN`'s `Imm` clause admits the cell at `Imm @a (Ref 1)`. -/
-theorem vN_cellI (x : LifeVar) (α : Life) (l l' : Loc) (Θ : LocTy) (n : Nat) :
-    vN (ℍ := ℍ) (.imm (.var x) (.ref .unit)) (LSub.empty.extend x α) Θ n (Val.loc l)
-      (cellI α l l') :=
-  ⟨α, interp_ext_self _ x α, l, LSet.singleton α, Val.loc l', escU l', escU_inStratum l' _, rfl,
-    rfl, le_refl _, l', Val.unit, PMap.empty, rfl, ResU.comp_empty_right _, rfl, rfl⟩
+/-- The world holding the cell's record at `Ref 1` among its `imm` records, and no entry. -/
+def ΘRef (δ : LSub) (l l' : Loc) (α : Life) : LocTy :=
+  ⟨fun _ _ => none, [(recT (.ref .unit) δ l l', α)]⟩
+
+/-- `vN`'s `Imm` clause admits the cell at `Imm @a (Ref 1)`, at the world holding its record. -/
+theorem vN_cellI (x : LifeVar) (α : Life) (l l' : Loc) (n : Nat) :
+    vN (ℍ := ℍ) (.imm (.var x) (.ref .unit)) (LSub.empty.extend x α)
+      (ΘRef (LSub.empty.extend x α) l l' α) n (Val.loc l) (cellI α l l') := by
+  refine ⟨α, interp_ext_self _ x α, ⟨l, LSet.singleton α, Val.loc l', escU l',
+    escU_inStratum l' _, rfl, rfl, le_refl _, l', Val.unit, PMap.empty, rfl,
+    ResU.comp_empty_right _, rfl, rfl⟩, fun l₀ hl₀ => ?_⟩
+  obtain rfl : l₀ = l := by
+    have := congrArg Subtype.val hl₀
+    simpa [Val.loc] using this.symm
+  exact ⟨_, List.mem_singleton_self _, _, DescR.refl _, .ref .unit, LSub.empty.extend x α,
+    TyEq.refl _ _, Or.inl ⟨_, List.mem_singleton_self _, rfl, rfl, fun _ _ => rfl⟩⟩
 
 /-- `vN` has no value of an `Imm` type at `∅`. -/
 theorem not_vN_imm_empty (a : BoCa.Lifetime.Life) (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat)
     (v : Val) : ¬ vN (ℍ := ℍ) (.imm a A) δ Θ n v PMap.empty := by
-  rintro ⟨-, -, m, s, u, σ, hs, -, hρ, -⟩
+  rintro ⟨-, -, ⟨m, s, u, σ, hs, -, hρ, -⟩, -⟩
   have := congrArg (fun ρ : WRes => ρ.get m) hρ
   simp at this
 
-/-- **`vN`'s `Imm` clause does not meet step 8**, at `ℓ = 0`, `ℓ′ = 1`, `α = 1`. -/
+/-- **`vN`'s `Imm` clause alone does not meet step 8**, at `ℓ = 0`, `ℓ′ = 1`, `α = 1`: `WlImage`
+has no entry tie, and the run it reads may be entered at `world_thunk`'s list. -/
 theorem not_wlImage_vN : ¬ WlImage (fun A δ Θ n v ρ => vN (ℍ := ℍ) A δ Θ n v ρ) :=
-  not_wlImage _ (l := 0) (l' := 1) (by decide) 1 (.var 0) (LSub.empty.extend 0 1) LocTy.empty 0 1
-    (vN_cellI 0 1 0 1 LocTy.empty 0) (not_vN_imm_empty _ _ _ _ _ _)
+  not_wlImage _ (l := 0) (l' := 1) (by decide) 1 (.var 0) (LSub.empty.extend 0 1)
+    (ΘRef (LSub.empty.extend 0 1) 0 1 1) 0 1
+    (vN_cellI 0 1 0 1 0) (not_vN_imm_empty _ _ _ _ _ _)
 
 /-! ### An agreement between the world and a record, read off a run's first entry -/
 
@@ -323,16 +335,17 @@ theorem not_wlImageA (P : VTy → LSub → LocTy → Nat → Val → WRes → Pr
   rw [canon_thunk hT] at hc
   exact h₂ hc
 
-/-- `not_wlImageA` at the clause that reads, besides `vN`'s current `Imm`, any condition `G` on
-the world at the cell's location and type which the lend recorded at `Ref 1` meets: every such
-clause with every agreement from `erwp`, at `ℓ = 0`, `ℓ′ = 1`, `α = 1`. -/
+/-- `not_wlImageA` at the clause that reads, besides `vN`'s `Imm`, any condition `G` on the world
+at the cell's location and type which the world holding the cell's record at `Ref 1` meets: every
+such clause with every agreement from `erwp`, at `ℓ = 0`, `ℓ′ = 1`, `α = 1`. -/
 theorem not_wlImageA_vN (G : LocTy → Loc → VTy → LSub → Prop)
-    {Agree : LocTy → Loc → VTy → LSub → Prop} (hA : ImmAgreeErwp (ℍ := ℍ) Agree) (Θ : LocTy)
-    (hG : G Θ 0 (.ref .unit) (LSub.empty.extend 0 1)) :
+    {Agree : LocTy → Loc → VTy → LSub → Prop} (hA : ImmAgreeErwp (ℍ := ℍ) Agree)
+    (hG : G (ΘRef (LSub.empty.extend 0 1) 0 1 1) 0 (.ref .unit) (LSub.empty.extend 0 1)) :
     ¬ WlImageA (fun A δ Θ' n v ρ => vN (ℍ := ℍ) A δ Θ' n v ρ ∧
       ∀ a B l, A = .imm a B → v = Val.loc l → G Θ' l B δ) Agree :=
-  not_wlImageA _ hA (l := 0) (l' := 1) (by decide) 1 (.var 0) (LSub.empty.extend 0 1) Θ 0 0
-    ⟨vN_cellI 0 1 0 1 Θ 0, fun a B l hA hv => by
+  not_wlImageA _ hA (l := 0) (l' := 1) (by decide) 1 (.var 0) (LSub.empty.extend 0 1)
+    (ΘRef (LSub.empty.extend 0 1) 0 1 1) 0 0
+    ⟨vN_cellI 0 1 0 1 0, fun a B l hA hv => by
       cases hA
       obtain rfl : l = 0 := by
         have := congrArg Subtype.val hv
