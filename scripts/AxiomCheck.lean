@@ -601,7 +601,6 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.CTy.alphaB_rowOf
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.finReach_find
 #print axioms BoCa.Fig16.LogRel.Core.let_compatC
-#print axioms BoCa.Fig16.LogRel.Core.handleV_compatC
 #print axioms BoCa.Fig16.LogRel.Core.CDerives.effThenA
 #print axioms BoCa.Fig16.LogRel.Core.Row.unrD_iff_of_fin
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.cancelT_start
@@ -1649,7 +1648,6 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Map831N.imm_at_extension
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.extR_addImm
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.extR_of_addImm
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.extR_above
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.lifeBoundW_of_entry
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwp_tieEntry
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.gN_dead_any
@@ -1710,8 +1708,6 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.gN_splitC
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.gN_soloP
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.gN_persistent
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.gN_outlives
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vN_noOwn_of_ownFree
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.gN_noOwn
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cN_of_valid
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwp_bind_frame
@@ -1810,3 +1806,16 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sliceBorrowM_sem
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sliceBorrowM_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_M_frameRR
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cN_nu_unfold
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cN_nu_coind
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cN_nu_iff
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cBN_mono
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cBN_of_valid
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cBN_bind
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cBN_unroll
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cN_congr
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.nuIn_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.nuOut_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.unfoldN_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.candNN_post
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ExtRLit791.world_two

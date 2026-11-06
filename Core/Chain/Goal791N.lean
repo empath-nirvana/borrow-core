@@ -1698,8 +1698,9 @@ theorem allI_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {x : LifeVar} {b : Lifetime.L
 
 mutual
 /-- **The formers the interpretation covers**: every former but type variables and `μ`, which
-`vN` reads as empty, and `ν`, which `cN` reads as empty. Families (arrays and slices) are covered
-at a covered leaf, and opaque types (`Tok` and the host types) always. Decidable. -/
+`vN` reads as empty. `ν` is covered at a covered body, whose variable `X` (`VTy.inFragNu`) `cN`
+reads at the candidate. Families (arrays and slices) are covered at a covered leaf, and opaque
+types (`Tok` and the host types) always. Decidable. -/
 def _root_.BoCa.Fig16.LogRel.Core.VTy.inFrag : VTy → Bool
   | .unit | .zero | .unk | .int _ | .opq _ => true
   | .tensor A B | .sum A B => A.inFrag && B.inFrag
@@ -1713,8 +1714,26 @@ def _root_.BoCa.Fig16.LogRel.Core.CTy.inFrag : CTy → Bool
   | .amp C D => C.inFrag && D.inFrag
   | .top => true
   | .all _ _ C => C.inFrag
-  | .nu _ => false
+  | .nu C => C.inFragNu
   | .eff _ _ _ A B fin _ C => A.inFrag && B.inFrag && fin.inFrag && C.inFrag
+/-- The value-type formers a `ν` body covers: `VTy.inFrag`'s, and the body's variable `X`
+(index `0`). A thunk is read by `vN`, where `X` does not occur. -/
+def _root_.BoCa.Fig16.LogRel.Core.VTy.inFragNu : VTy → Bool
+  | .tvar 0 => true
+  | .unit | .zero | .unk | .int _ | .opq _ => true
+  | .tensor A B | .sum A B => A.inFragNu && B.inFragNu
+  | .thunk C => C.inFrag
+  | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A | .fam A => A.inFragNu
+  | .tvar (_ + 1) | .mu _ => false
+/-- The computation-type formers a `ν` body covers. -/
+def _root_.BoCa.Fig16.LogRel.Core.CTy.inFragNu : CTy → Bool
+  | .ret A => A.inFragNu
+  | .arr A C => A.inFragNu && C.inFragNu
+  | .amp C D => C.inFragNu && D.inFragNu
+  | .top => true
+  | .all _ _ C => C.inFragNu
+  | .nu C => C.inFragNu
+  | .eff _ _ _ A B fin _ C => A.inFragNu && B.inFragNu && fin.inFrag && C.inFragNu
 end
 
 /-- **A judgment inside the fragment**: its context's types and its own type use only the formers
@@ -1740,9 +1759,8 @@ def ConstsN : Prop := ∀ c : Const791, c.InFrag → ConstN (ℍ := ℍ) c
 
 /-- **The fundamental property over `erwp`, on the fragment**: every derivation of the existing
 judgment whose context and type lie in the fragment (`JdgInFrag`). The rules whose conclusion is
-at a former the interpretation reads as empty (the fold constants over `μ`, `roll`, `nuIn`,
-`unfoldN`, a type variable's introduction) conclude outside the fragment and are not quantified
-over. A derivation of a judgment in the fragment may still cut through an excluded type inside
+at a former the interpretation reads as empty (the fold constants over `μ`, `roll`, a type
+variable's introduction) conclude outside the fragment and are not quantified over. A derivation of a judgment in the fragment may still cut through an excluded type inside
 (`unroll` of a `μ` value); at such a cut the interpretation gives no reading, so `FundamentalN`
 is not shown attainable by induction on the derivation until those formers have clauses.
 

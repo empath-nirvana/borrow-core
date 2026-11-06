@@ -1,5 +1,5 @@
 import Core.Chain.Rules834N
-import Core.Chain.Loop835N
+import Core.Chain.Fuel835N
 import Core.Chain.SI.LendCancelProg
 import Core.Nu
 
@@ -252,14 +252,6 @@ theorem step1Only_of_step1N {μ : BoCa.BoLo.Heap} {e e' : Expr}
     (h : BoCa.BoLo.Step1N (ℍ := ℍ) μ e μ e') : Step1Only (ℍ := ℍ) μ e μ e' := by
   obtain ⟨K, a, a', rfl, rfl, hh, hn⟩ := h
   exact step1Only_plug hh hn K
-
-/-- **Pure steps in front of an `erwp`.** -/
-theorem erwp_pureSteps {Φ : LocFam} (hΦ : Φ.Down) {Tb : TableN} (hTd : Tb.Down) {Q : PostN}
-    (hQ : Q.Down) {n : Nat} {ls : List SRec} {e e' : Expr} {ρ : WRes} (h : PureSteps e e')
-    (hw : erwp (ℍ := ℍ) Φ Tb Q n ls e' ρ) : erwp (ℍ := ℍ) Φ Tb Q n ls e ρ := by
-  induction h with
-  | refl => exact hw
-  | tail _ hs ih => exact ih (erwp_det hΦ hTd hQ (fun μ => step1Only_of_step1N (hs μ)) hw)
 
 /-- **One unfolding is closed under a pure step in front** (Core's `cB_step`). -/
 theorem cBN_step (S : VTy) {R : CandN} (hR : R.Down) : ∀ (D : CTy) (δ : LSub) (Θ : LocTy),
