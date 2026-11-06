@@ -339,17 +339,20 @@ recursion on the cancel row `F` below it and, inside, induction on the index: at
 below `D`, the frame joins its continuation, whose own cancel passes the frame and fires `D` too.
 So the run is at any `T ≥ F ⋈ E` that is not `⊤`. The frame `Fr`, which `D` consumes, holds nothing
 where `T` may stop at an unrestricted operation; `F`'s errors hold nothing where `E` may. `D` is owed
-up to the index `N₀`. -/
+up to the index `N₀`. The frame is read at the record list, as Core's is, and carried along the
+continuations' `extF` (`hFe`). -/
 theorem then_cancelN {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Option Life} (E : Row)
-    (hNZ : ∀ n i o, Row.find E n i = some o → o.n ≠ 0) (Nv Dv : Val) (Fr : WProp)
+    (hNZ : ∀ n i o, Row.find E n i = some o → o.n ≠ 0) (Nv Dv : Val) (Fr : List SRec → WProp)
+    (hFs : ∀ ls ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → ∀ ρ, Fr ls ρ → Fr ls' ρ)
+    (hFe : ∀ ls ls' ρ σ ρ', ResU.CompS ρ σ ρ' → extF ls ls' ρ' → Fr ls σ → Fr ls' σ)
     {Qd : PostN} (hQd : ∀ k ls v ρ, Qd k ls v ρ → NoOwn ρ) (N₀ : Nat)
-    (hD : ∀ k, k ≤ N₀ → ∀ ls ρ, Fr ρ →
+    (hD : ∀ k, k ≤ N₀ → ∀ ls ρ, Fr ls ρ →
       erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf E .unit) δ Θ c)) Qd k ls
         (.app (.val Dv) (.val .unit)) ρ)
     (F : CTy) : ∀ {T : CTy}, ThenLe F E T → T.isTop = false →
-      (T.FinUnr → ∀ σ, Fr σ → σ = PMap.empty) → (E.UnrD → F.FinPers) →
+      (T.FinUnr → ∀ ls σ, Fr ls σ → σ = PMap.empty) → (E.UnrD → F.FinPers) →
       ∀ n, n ≤ N₀ → ∀ ls e ρ, cancelOblN (ℍ := ℍ) (Θ.view c) (tabN (ℍ := ℍ) F δ Θ c) n ls e ρ →
-        ∀ σ ρ', Fr σ → ResU.CompS ρ σ ρ' →
+        ∀ σ ρ', Fr ls σ → ResU.CompS ρ σ ρ' →
           cancelOblN (ℍ := ℍ) (Θ.view c) (tabN (ℍ := ℍ) T δ Θ c) n ls
             ((ubindK Nv Dv).plug e) ρ' := by
   intro T hle hT hunr hpers
@@ -365,10 +368,8 @@ theorem then_cancelN {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Optio
   show erwp (ℍ := ℍ) _ _ _ _ _ _ _
   rw [erwp_eq]
   refine rwpG_bind hΦ (ubindK Nv Dv) ?_
-  have hfr := rwpG_frame (fun _ τ => τ = σ) (fun _ _ _ _ h => h) hc
-    (erwp_unfold_at hL le_rfl h) rfl
-  refine rwpG_mono_le (fun k hk ls' t τ ⟨τ₁, τ₂, hcτ, hp, hτ₂⟩ => ?_) hfr
-  subst hτ₂
+  have hfr := rwpG_frame Fr hFs hc (erwp_unfold_at hL le_rfl h) hF
+  refine rwpG_mono_le (fun k hk ls' t τ ⟨τ₁, τ₂, hcτ, hp, hF₂⟩ => ?_) hfr
   rcases hp with ⟨_, _, hv⟩ | ⟨K₀, err, hs'⟩ | ⟨K₁, m, i, v, en, hp⟩
   · exact hv.elim
   · -- the cancel reaches the frame: `D` runs under `cfin`
@@ -380,7 +381,7 @@ theorem then_cancelN {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Optio
     rw [tabN_rowOf] at he
     exact cfin_runN hΘ E F.rowOf err (T := T) hET (fun n i o hf _ => by
         obtain ⟨o', hf', hs, -⟩ := hFT n i o hf; exact ⟨o', hf', hs⟩) hNZ hQd k ls' _ τ₂
-      (hD k (by omega) ls' τ₂ hF) τa z he (fun hu => errOkN_empty_of_pers (hpers hu) he)
+      (hD k (by omega) ls' τ₂ hF₂) τa z he (fun hu => errOkN_empty_of_pers (hpers hu) he)
       (ResU.CompS.comm hz)
   · -- an operation below the frame: the frame joins its continuation
     obtain ⟨⟨rfl, hK₁, hTn, ha⟩, ρa, ρk, hcak, hA, hu', hcont⟩ := pure_sep_iff.mp hp
@@ -405,14 +406,15 @@ theorem then_cancelN {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Optio
           ⟨fun k' hk'' w τ₃ τ₄ hB hcτ' => ?_, fun hq P' hP' => ?_⟩⟩⟩))
     · have hq₀ : o.q = .unr := hq
       have hq' : o'.q = .unr := by rw [← hs.2.2.1]; exact hq₀
-      rw [hu' hq₀, hunr (finUnr_of_find hf' (Or.inl hq')) τ₂ hF] at hk'
+      rw [hu' hq₀, hunr (finUnr_of_find hf' (Or.inl hq')) ls' τ₂ hF₂] at hk'
       exact eq_of_compS_empty_left hk'
     · have hwc := (tabN_down F δ Θ hΘ c).wcl m i _ hT₀ ls' ls'' ρk τ₂ ρk' hk' hext
       obtain ⟨z, hz, hcz⟩ := compS_exch hk' hcτ'
       have h₁ := (hcont ls'' hwc).1 k' hk'' w τ₃ z hB hz
       simp only [erwpC, show k' < n by omega, if_true] at h₁ ⊢
       rw [Kont.plug_comp]
-      exact ih k' (by omega) (by omega) ls'' _ z h₁ τ₂ τ₄ hF hcz
+      exact ih k' (by omega) (by omega) ls'' _ z h₁ τ₂ τ₄ (hFe ls' ls'' ρk τ₂ ρk' hk' hext hF₂)
+        hcz
     · have hwc := (tabN_down F δ Θ hΘ c).wcl m i _ hT₀ ls' ls'' ρk τ₂ ρk' hk' hext
       obtain ⟨hcap, hnT, rfl⟩ := entN_fin_cancel hP'
       have hcap' : capB o'.q o'.B = true := hs.capB_eq ▸ hcap
@@ -423,10 +425,10 @@ theorem then_cancelN {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Optio
       have hcan := (hcont ls'' hwc).2 hq _ (entN_fin_of hcap hoT)
       show cancelOblN (ℍ := ℍ) _ _ k ls'' (((ubindK Nv Dv).comp K₁).dead.plug _) ρk'
       rw [dead_comp, dead_ubindK, Kont.plug_comp]
-      exact then_cancelN hΘ E hNZ Nv Dv Fr hQd N₀ hD o.fin hfin' hnT
+      exact then_cancelN hΘ E hNZ Nv Dv Fr hFs hFe hQd N₀ hD o.fin hfin' hnT
         (fun hu₁ => hunr (finUnr_of_find hf' (Or.inr ⟨hcap', hu₁⟩)))
         (fun hu₁ => (finPers_of_mem (hpers hu₁) (Row.find_mem hf).1).2 hcap) k (by omega) ls''
-        _ ρk hcan τ₂ ρk' hF hk'
+        _ ρk hcan τ₂ ρk' (hFe ls' ls'' ρk τ₂ ρk' hk' hext hF₂) hk'
 termination_by sizeOf F
 decreasing_by exact rowOf_fin_lt F (Row.find_mem hf).1
 
@@ -548,24 +550,27 @@ theorem seq_raise_runN {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Opt
 operation keeps the frame in its continuation; its cancel passes the frame and fires `D`
 (`then_cancelN`). An abortive stop runs `D` first (`[finalise]`, `seq_raise_runN`). The frame,
 which `D` consumes, holds nothing where `Σ` may stop at an unrestricted operation; a pending error
-holds nothing where `Σ_D` may. `D` and the continuation are owed up to the index `N₀`. -/
+holds nothing where `Σ_D` may. `D` and the continuation are owed up to the index `N₀`. The frame
+is read at the record list, as Core's is, and carried along the continuations' `extF` (`hFe`). -/
 theorem erwp_frame_then {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Option Life}
     (S SM SD : Row) (hNZ : S.NZ) (hMS : RowLe SM S) (hDS : RowLe SD S)
     (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
       capB o.q o.B = true → ThenLe o.fin SD o'.fin)
-    (hP : SD.UnrD → SM.PendPers) (Nv Dv : Val) (Fr : WProp)
-    (hU : S.UnrD → ∀ ρ, Fr ρ → ρ = PMap.empty)
+    (hP : SD.UnrD → SM.PendPers) (Nv Dv : Val) (Fr : List SRec → WProp)
+    (hFs : ∀ ls ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → ∀ ρ, Fr ls ρ → Fr ls' ρ)
+    (hFe : ∀ ls ls' ρ σ ρ', ResU.CompS ρ σ ρ' → extF ls ls' ρ' → Fr ls σ → Fr ls' σ)
+    (hU : S.UnrD → ∀ ls ρ, Fr ls ρ → ρ = PMap.empty)
     {Qd : PostN} (hQd : ∀ k ls v ρ, Qd k ls v ρ → v = .unit ∧ NoOwn ρ) (N₀ : Nat)
-    (hD : ∀ k, k ≤ N₀ → ∀ ls ρ, Fr ρ →
+    (hD : ∀ k, k ≤ N₀ → ∀ ls ρ, Fr ls ρ →
       erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf SD .unit) δ Θ c)) Qd k ls
         (.app (.val Dv) (.val .unit)) ρ)
     (Q₁ Q : PostN) (hQ : Q.Down)
-    (hkv : ∀ k, k ≤ N₀ → ∀ ls (v : Val) ρ, (Q₁ k ls v ⋆ Fr) ρ →
+    (hkv : ∀ k, k ≤ N₀ → ∀ ls (v : Val) ρ, (Q₁ k ls v ⋆ Fr ls) ρ →
       erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S .unit) δ Θ c)) Q k ls
         ((ubindK Nv Dv).plug (.val v)) ρ) :
     ∀ n, n ≤ N₀ → ∀ ls e ρ,
       erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf SM .unit) δ Θ c)) Q₁ n ls e ρ →
-      ∀ ρ₂ ρ', Fr ρ₂ → ResU.CompS ρ ρ₂ ρ' →
+      ∀ ρ₂ ρ', Fr ls ρ₂ → ResU.CompS ρ ρ₂ ρ' →
         erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S .unit) δ Θ c)) Q n ls
           ((ubindK Nv Dv).plug e) ρ' := by
   have hΦ := LocTy.view_down hΘ c
@@ -583,7 +588,7 @@ theorem erwp_frame_then {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Op
   rw [erwp_eq] at h ⊢
   refine rwpG_bind hΦ (ubindK Nv Dv) ?_
   refine rwpG_mono_le (fun k hk ls' t σ ⟨σ₁, σ₂, hcσ, hp, hF'⟩ => ?_)
-    (rwpG_frame (fun _ τ => Fr τ) (fun _ _ _ _ h => h) hc h hF)
+    (rwpG_frame Fr hFs hc h hF)
   rcases hp with ⟨v, rfl, hv⟩ | ⟨K₁, m, i, v, en, hp⟩ | ⟨K₁, m, i, v, en, hp⟩
   · exact erwp_unfold_at hLS hk (hkv k (by omega) ls' v σ ⟨σ₁, σ₂, hcσ, hv, hF'⟩)
   · -- a `perform`: the frame joins the continuation's share; its cancel fires `D`
@@ -604,14 +609,15 @@ theorem erwp_frame_then {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Op
         ⟨ρa, ρk', hcσ', hLA ▸ hA, fun hq => ?_, fun ls'' hext =>
           ⟨fun k' hk'' w τ₁ τ₂ hB hcτ => ?_, fun hq P' hP' => ?_⟩⟩⟩))
     · have hq' : o.q = .unr := hLq.trans hq
-      rw [hu hq', hU ⟨o', (Row.find_mem hf').1, Or.inl hq⟩ σ₂ hF'] at hk'
+      rw [hu hq', hU ⟨o', (Row.find_mem hf').1, Or.inl hq⟩ ls' σ₂ hF'] at hk'
       exact eq_of_compS_empty_left hk'
     · have hwc := (tabN_down _ δ Θ hΘ c).wcl m i _ hTn₀ ls' ls'' ρk σ₂ ρk' hk' (hLw ▸ hext)
       obtain ⟨z, hz, hcz⟩ := compS_exch hk' hcτ
       have h₁ := (hcont ls'' hwc).1 k' hk'' w τ₁ z (hLB ▸ hB) hz
       simp only [erwpC, show k' < n by omega, if_true] at h₁ ⊢
       rw [Kont.plug_comp]
-      exact ih k' (by omega) (by omega) ls'' _ z h₁ σ₂ τ₂ hF' hcz
+      exact ih k' (by omega) (by omega) ls'' _ z h₁ σ₂ τ₂
+        (hFe ls' ls'' ρk σ₂ ρk' hk' hext hF') hcz
     · have hwc := (tabN_down _ δ Θ hΘ c).wcl m i _ hTn₀ ls' ls'' ρk σ₂ ρk' hk' (hLw ▸ hext)
       obtain ⟨hcap', hnT, rfl⟩ := entN_fin_cancel hP'
       have hcap : capB o.q o.B = true := hs.capB_eq ▸ hcap'
@@ -622,10 +628,10 @@ theorem erwp_frame_then {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Op
       have hcan := (hcont ls'' hwc).2 (hLq ▸ hq) _ (entN_fin_of hcap hoT)
       show cancelOblN (ℍ := ℍ) _ _ k ls'' (((ubindK Nv Dv).comp K₁).dead.plug _) ρk'
       rw [dead_comp, dead_ubindK, Kont.plug_comp]
-      exact then_cancelN hΘ SD hNZD Nv Dv Fr (fun _ _ _ _ h => (hQd _ _ _ _ h).2) N₀ hD o.fin hth
-        hnT (fun hu₁ => hU ⟨o', (Row.find_mem hf').1, Or.inr ⟨hcap', hu₁⟩⟩)
+      exact then_cancelN hΘ SD hNZD Nv Dv Fr hFs hFe (fun _ _ _ _ h => (hQd _ _ _ _ h).2) N₀ hD
+        o.fin hth hnT (fun hu₁ => hU ⟨o', (Row.find_mem hf').1, Or.inr ⟨hcap', hu₁⟩⟩)
         (fun hu₁ => ((hP hu₁) o (Row.find_mem hf).1).2 hcap) k (by omega) ls'' _ ρk hcan σ₂ ρk'
-        hF' hk'
+        (hFe ls' ls'' ρk σ₂ ρk' hk' hext hF') hk'
   · -- a `raise`: the finaliser runs, then the `raise` goes on
     obtain ⟨⟨rfl, hK₁, hTn, ha⟩, ρa, ρn, hcan, ⟨hPA, hnA⟩, hn⟩ := pure_sep_iff.mp hp
     obtain ⟨o, hf, rfl⟩ := tabN_effOf_some_find hTn
@@ -710,8 +716,9 @@ theorem then_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A
   change erwp (ℍ := ℍ) _ _ _ n ls
     ((ubindK (Val.lam (Expr.psub 1 γ N)) (Val.lam (Expr.psub 1 γ D))).plug (substAll γ M)) ρ
   rw [tabN_effOf_ret S B .unit]
-  exact erwp_frame_then hΘ.1 S SM SD hNZ hMS hDS hfin hP _ _ _
-    (fun hu σ h => gN_persistent (hU hu) h.1) hQd n hD' _ _
+  exact erwp_frame_then hΘ.1 S SM SD hNZ hMS hDS hfin hP _ _
+    (fun _ σ => gN (ℍ := ℍ) δ Θ Γ₂ γ n σ ∧ ConsistentX c σ) (fun _ _ _ _ h => h)
+    (fun _ _ _ _ _ _ _ h => h) (fun hu _ σ h => gN_persistent (hU hu) h.1) hQd n hD' _ _
     (fun k _ v ρ h => vN_down _ δ Θ k v ρ h) hk n le_rfl ls _ ρ₁ hM'' ρ₂ ρ ⟨hg₂, hc₂⟩ hcρ
 
 /-- **`[then]` with a finaliser that may loop** (Core's `then_compatC_div`): `M`'s row has no
