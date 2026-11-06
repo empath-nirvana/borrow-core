@@ -1508,5 +1508,8 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.rwp_consistentXV
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ConsistentFlat791.erwp_val_split
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ConsistentFlat791.flat_part_config
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocalU791.thunk_at_lend
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocalU791.thunk_not_at_empty
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocalU791.u_not_local
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cbRelease_sem
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.answer_not_inStratum
