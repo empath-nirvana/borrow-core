@@ -38,7 +38,8 @@ paper's terms, so a port that changes one can be checked against it.
   `Δ ⊢ Γ : Y` and `Δ ⊢ R : Y`, because outer handlers may capture it in the continuations of the
   unhandled operations `R`.
 - **Related work** (§7): `finally`, `dynamic-wind`, RAII as unwind protection, outside the
-  calculus; λURAL(𝒞)'s affine point; one-shot handlers checked at run time.
+  calculus; λURAL(𝒞)'s point between linear and unrestricted, which discards; one-shot handlers
+  checked at run time.
 
 ## 2. Our conditions, one by one
 
@@ -50,7 +51,7 @@ Each row says **matches** (the paper's condition, in our terms) or **differs** (
 |---|---|---|
 | `lin` (must resume): `κ : U((B ⊸ F_Σ R) & ⊤)`, resumed exactly once (`kTy`, `Core/EffRules.lean`) | `A ↠◦ B`, `r : B →◦ D` (Fig. 4 `T-Handler`) | **matches** |
 | `unr` (unrestricted): `κ : !U((B ⊸ F_Σ R) & F_Σ 1)`, any number of times, its captures persistent (`lam_bang_persistent`); at the relation the share of an `unr` stop is empty (`contShareN`'s first conjunct, `SI/ErwpN.lean`) | `A ↠• B`, `r : B →• D`; Theorem 3.4.2 | **matches**; our empty share is Theorem 3.4.2 read semantically |
-| `cancel` (cancellable): `κ : U((B ⊸ F_Σ R) & cancelTy Σ F)`, a linear `κ` resumed once or cancelled; the cancel unwinds `κ`'s frames, each finaliser running (SPEC §19, §27) | none. The closest is λURAL's affine point (§7), which discards | **differs**: a third point. A cancel is not a discard: it is `κ`'s consume, with computational content (its finalisers run, and may perform effects at the cancel row `F`). The paper's two points cannot say "used at most once, and if not resumed then unwound" |
+| `cancel` (cancellable): `κ : U((B ⊸ F_Σ R) & cancelTy Σ F)`, a linear `κ` resumed once or cancelled; the cancel unwinds `κ`'s frames, each finaliser running (SPEC §19, §27) | none. The closest is λURAL(𝒞)'s point between linear and unrestricted (§7), which discards | **differs**: a third point. A cancel is not a discard: it is `κ`'s consume, with computational content (its finalisers run, and may perform effects at the cancel row `F`). The paper's two points cannot say "used at most once, and if not resumed then unwound" |
 | abortive (`B = 0`, `q ≠ lin`, `OpSig.abort`): the machine cancels in place (`[unwind]`/`[finalise]`), the clause gets no `κ` | `Fail : ∀a. () ↠• a` (§1, §2) | **differs** in what the continuation may hold: the paper's `Fail` is `•`, so its continuation holds no linear value; ours unwinds the continuation, so it may hold owned values whose finalisers consume them (`[then]`) |
 | the handler reads the operation's qualifier from the term (`qs`, `capTag`; `hq` of `erwp_handle`) | the handler reads the signature's annotation, not the row's kind (§2.2, §3.2) | **matches** |
 
@@ -135,3 +136,51 @@ In the order the brief fixes, each a chain lemma under Core's name and shape:
 
 E13 (a `Div` row is a row of the table) means Core's `hSd : Row.divB S = false` premise of
 `stop_sem`, which Core needs only to pass from `cwp` to `ewp`, has no use on the chain.
+
+## 4. Outcome
+
+Each entry is a chain lemma under Core's name with `N`, following Core's printed proof.
+
+| Entry | Built | File | Core's proof it follows |
+|---|---|---|---|
+| E12 | `UpdVN.inStratum`, `rwpG_inStratum`, `opTableNS`, `erwpS_erwp`, `erwp_stratify`, `gN_outlives`, `tabN_ansIn`, `SemCSN`, `stop_semN` | `Core/Chain/Stop835N.lean` | `ResU.updV_inStratum`, `wpG_inStratum`, `opTableS`, `ewp_stratify`, `gSepC_outlives`, `Row.ansIn_of_ansOutlives`, `stop_sem` |
+| E12's handler | `erwp_handleS` | `Core/Chain/HandleS835N.lean` | `ewp_handleS` |
+| E3 | `tabN_effOf_find`, `finN_eq`, `cancelTabN_le`, `cancelOblN_le`, `finN_mono`, `tabN_le_of_rowLe`, `erwp_rowLe` | `Core/Chain/Eff835N.lean` | `Row.tab_find`, `finObl_eq`, `cancelObl_le`, `finObl_mono`, `effWp_sub` |
+| E5 | `erwp_bind_pure_frame`, `tabN_ctxClosed` | `Eff835N`, `Loop835N` | `ewp_bind_pure_frame`, `plain_cancel₀` |
+| E6 | `erwp_perform_here`, `cancelOblN_start`, `entN_start` | `Eff835N` | `ewp_perform_here`, `cancelObl_start`, `ent_start` |
+| E7 | `erwp_raise_here`, `vN_noOwn_of_ownFree` | `Eff835N` | `ewp_raise_here`, `vC_noOwn_of_ownFree` |
+| E8 | `cancelOblN_frame`, `cancelOblN_plain₀`, `tabN_plainCancel`, `cancelOblN_frame_consume`, `entN_plain`, `erwp_frame_plain` | `Core/Chain/Frame835N.lean` | `cancel_frame`, `plain_cancel₀`, `Row.tab_plainCancel`, `cancel_frame_consume`, `ent_plain`, `ewp_frame_plain` |
+| W9 | `erwp_val_post` | `Frame835N` | `wpTS_val_post` |
+| E14 | `erwp_iterateC` | `Core/Chain/Loop835N.lean` | `cwp_iterate`'s *next* and *close* (`cwp_closePath`) |
+| E9 | not built | — | `ewp_frame_then_or` |
+| E10 | not built | — | `ewp_handle_vals`, `vC_kTy_of_kapRel` |
+
+**Rules ported**: `effSub` (`sub_compatN`), `effPerform` (`perform_compatN`), `effRaise`
+(`raise_compatN`), in `Eff835N`. Each is Core's proof step for step.
+
+**Rules not ported, and what each waits on**:
+- `effLet`, `effThen`, `effThenDiv`, `effAwait` and the four handlers split their context
+  (`gN_split`, interface G1 with G12), which is L1's. `effLet` is then `erwp_frame_plain` with
+  `entN_plain`, as Core's `let_compatC` is `ewp_frame_plain` with `ent_plain`.
+- `effThen`/`effThenDiv` also need E9: a finaliser frame whose finaliser performs and raises,
+  with the cancel rows composed (`ThenLe`, `PendLe`). The chain's `erwp_ubind` covers a finaliser
+  that never stops (`FinOK`).
+- `effHandleV`/`effHandleVB` need E10's reading of a clause at `vN`. A clause's `κ` is at
+  `kTy Σ R q B F`, a thunk; `vN` of a thunk asks the computation at every world along `ExtR` from
+  the thunk's resource and at every view consistent with it. A stop of the handled run owes its
+  continuation (`KapRelN`) at that run's view, and along `extF` on the record list only. So the
+  clause cannot be applied to `κ` by Core's step. Not derived; obstruction not verified. This is
+  the `ExtR` part of interface entry F10 (and §3.2's risk 2, a computation moved along the world).
+  `effHandleVB` has every other piece: `stop_semN` and `erwp_handleS`.
+- `effHandleT`/`effHandleL` give the clauses no `κ` (the handler's own code resumes it), so they
+  avoid that step; they need G1, Core's `ewp_handle_tail`/`ewp_handle_last` at `erwp`
+  (`erwp_frame_plain` around the clause's run with `κ` as the frame) and, at each clause, the
+  payload's consistency with the view (`rwpG_consistentXV`). Not built here.
+- `iterate` needs `erwp_iterateC` with an invariant read at the index (the state's `vN` lowers
+  with the loop), the step's `vN` applied at the loop's world (`LocTy.extR_refl`) and K5. Not
+  built here. `divFuel` needs E11's instances at the index. Not built here.
+
+**Unspent hypotheses**: Core's `stop_sem` premise `Row.divB S = false` is not a premise of
+`stop_semN` (E13). No other printed premise was dropped.
+
+**Restated declarations**: none. Every lemma is new; no existing statement was changed.
