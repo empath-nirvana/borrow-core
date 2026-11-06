@@ -945,7 +945,7 @@ theorem withbor3S_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
   have hcell : vN (ℍ := ℍ) (.mut (.var x) A) δ' Θ' k' (Val.loc l)
       (ResU.single l (CellU.mutOf α w₀ σ₀ houtP (Fam j₀) hwit)) :=
     ⟨α, interp_ext_self δ x α, α, le_rfl, lend_mutL Θ l α P' hkj houtP hwit,
-      fun Θ'' j u r h => (hunif Θ'' j u r (by rw [← hAδ]; exact h)).mono hαβ⟩
+      fun Θ'' j u r h => (hunif Θ'' j u r (vN_cast hAδ h)).mono hαβ⟩
   have hcBM : ConsistentX c' BM := consistentX_compS hBM hcf'
     (consistentX_single_mut hcσ' (by simp [hc'def, setLife]))
   have h2 := h1 c' k' le_rfl (Val.loc l) _ BM hBM hcell hcBM
