@@ -1766,3 +1766,6 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.fuel_tick_succN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fuel_totalN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.divFuel_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_idxLe
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.let_compatN_persist
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.await_compatN

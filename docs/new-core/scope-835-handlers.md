@@ -184,3 +184,21 @@ Each entry is a chain lemma under Core's name with `N`, following Core's printed
 `stop_semN` (E13). No other printed premise was dropped.
 
 **Restated declarations**: none. Every lemma is new; no existing statement was changed.
+
+## 5. Part 2 (`rule-791-l4b`)
+
+`scope-831-interface.md` §9 has the detail.
+
+| Entry or rule | Built | File | Core's proof it follows |
+|---|---|---|---|
+| E10 | not derived; obstruction not verified (§9.1 there) | — | `vC_kTy_of_kapRel` |
+| E11's fuel instances | `erwp_pureSteps`, `erwp_kappaC_resume_in`, `erwp_hnd_tick`, `fuel_tick_zeroN`, `fuel_tick_succN`, `fuel_totalN` | `Core/Chain/Fuel835N.lean` | `ewp_pureSteps`, `ewp_kappaC_resume_in`, `hnd_tick`, `fuel_tick_zero`, `fuel_tick_succ`, `fuel_total` |
+| `divFuel` | `divFuel_compatN` | `Fuel835N` | `divFuel_compatX` |
+| `effAwait` | `await_compatN`, over `let_compatN_persist` and `erwp_idxLe` | `Core/Chain/Let835N.lean` | `await_compatC` |
+| `effLet` | `let_compatN_ansC` (with `hAns`), `let_compatN_persist` (a persistent bound type); `let_compatN` not derived | `Let835N` | `let_compatC` |
+| E9, E10's tail and last instances, `effThen`, `effThenDiv`, `iterate`, the four handlers | not built | — | — |
+
+The step that stops `effLet` is chain-only: `N`'s judgment is read at the run's view, and an
+answer a stop is resumed at may be inconsistent with it (`tabN`'s `PB` does not read the view).
+In the paper's terms it is neither value nor control-flow linearity: it is the borrow side
+(§2.4), the view being where a `Mut` cell's lend is read.
