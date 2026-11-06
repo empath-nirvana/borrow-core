@@ -707,23 +707,6 @@ theorem constN_w2 (hF : FundamentalN (ℍ := ℍ)) {x : LifeVar} {bnd : Lifetime
   rintro ⟨-, hA, hB, hS, hdc, hder⟩ δ n
   exact withbor2S_compat hA hB hS hdc (hF _ _ _ _ hder) δ n
 
-/-! ### The cancel-row clause admits cleanup that performs -/
-
-/-- A cancellable operation `1 ↠^cancel 1` whose cancel row performs a must-resume operation
-`1 ↠^lin 1` (cleanup that closes a resource, say). -/
-def closingOp (n i n' i' : UInt32) : OpSig :=
-  ⟨n, i, .cancel, .unit, .unit, .eff n' i' .lin .unit .unit (.ret .unit) false (.ret .unit), false⟩
-
-/-- **`Row.Suspend` admits a cancel row with a layer**: the row of `closingOp` suspends, so the
-cancel-row clause does not rule out cleanup that performs. -/
-theorem suspend_closingOp (x : LifeVar) {n i n' i' : UInt32} (hn : n ≠ 0) (hn' : n' ≠ 0) :
-    Row.Suspend [closingOp n i n' i'] x := by
-  intro o ho
-  simp only [List.mem_singleton] at ho
-  subst ho
-  refine ⟨by simp [closingOp], hn, id, id, fun _ _ => .unit, fun _ _ => .unit, fun _ => ?_⟩
-  exact ⟨⟨by simp, hn', id, id, fun _ _ => .unit, fun _ _ => .unit, fun _ => trivial⟩, trivial⟩
-
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 
 end
