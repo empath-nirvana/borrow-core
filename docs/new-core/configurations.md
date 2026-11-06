@@ -40,6 +40,26 @@ These predate #791's interpretation and justify choices in the relation the inte
 | `SI/RebAgreeCex.lean` | `not_rebReentryAgreeN` | Re-entering a folded reborrow at the image chosen at its first entry fails at a resume world `TWN` reaches | `TWNC`'s canonical images: `erwp_reborrow` re-enters at `canon r β` (`canon_escrowAgree`) |
 | `SI/FdTypes.lean` | `not_fdFromLifetimeTypes` | Lifetimes on continuation types do not supply the join's frame condition at `Imm 'r 1` in a single chain | the tree track's branch hypotheses (structure.md §6); nothing in the chain interpretation reads it |
 
+## Against `HandlerLawN`
+
+`HandlerLawN` (`HandlerLaw.lean`) asserts `HandleVN`, `HandleVBN` and `ReifyN`. Each
+configuration above that reads handlers, `κ`, stops, `U` or answers refutes a step or a reading,
+not a field:
+
+| Configuration | Why it is not a counterexample to a field |
+|---|---|
+| `not_kapRelKTyN` (`not_kTy_world`, `not_kTy_view`, `not_kTy_at`) | It refutes Core's step `KapRelKTyN` over every `κ`. Its `κ` is `()`, which no `[op]` step hands a clause (`kappa_ne_unit`, `kappaC_ne_unit`); the failure is `() (inj₁ ())` being final (`unit_resume_final`), and the resumption of every `κ` the step hands takes a step (`kappa_resume_not_final`, `kappaC_resume_not_final`). `HandleVN` quantifies over handled computations, whose stops hand `kappa H K` or `kappaC b ℓ H K` |
+| `not_extRFoldTransfer` | A statement about `ExtR` across the Mut Frame's fold (route 2 of E10), a proof route; it names no handler |
+| `extRL_breaks_extA` (`ExtRLit791.lean`) | It reads `ExtRL`, which the relation does not use (D4); at `ExtR` the clause is `vN` (`vN_eq_vUgen`). Its thunk is also `()` |
+| `answer_not_inStratum` | A configuration for `Row.Suspend`'s answer premise, a typing premise of the lends; it names no handler |
+| `resume_not_ext`, `resume_frame_short`, `resume_frame_not_stratumLe`, `resume_frame_not_inStratum`, `not_extFoldTransfer` | Each refutes a candidate reading of the resume list or of `Ext` at a handler's lend, and justifies `extF` or `TWN`'s record premises, which the relation reads; none states a handler's compatibility lemma |
+| `not_rebReentryAgreeN`, `not_fdFromLifetimeTypes` | A reborrow's re-entry image and the join's frame condition; no handler |
+| `Public835N`, `KStopSpike835N` | Not in this tree (the parked branch `rule-791-kstop`). Their negative results (`not_kapRelP_world`, `not_kapRelP_view`, `kapRelN_not_kapRelP`) use the same `κ = ()`; `not_extP_foldConfig` and `extP_not_foldInv` are about the public order and the fold invariant, not a handler |
+
+The fields hold at instances whose clause receives `κ` (`handle_resume_inst`, every premise
+inhabited, `handleVN_resume_premises`, `handleVBN_resume_premises`); `ReifyN`'s premises are
+inhabited (`reifyN_premises_inst`) and its conclusion is proved at no instance.
+
 ## Historical
 
 | File | Headline | Why it justifies nothing current |

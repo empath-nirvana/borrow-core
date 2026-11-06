@@ -376,6 +376,27 @@ lemma, each as its `*_compatN` would be:
 | `HandleVBN` | `effHandleVB` | `handleV_compatCB` |
 | `ReifyN` | `reify` | `reify_compatX` |
 
+**The named assertion** (`HandlerLaw.lean`, SPEC §62 *The named assertion*). `HandlerLawN` is
+`MissingN` as a structure of three named fields in `PinLaw`'s form (`handlerLawN_iff`): a `Prop`
+used as a hypothesis, over `SemJN` premises only, with no restriction to a scheduler. It is the
+trusted base of the chain's results:
+
+```
+fundamentalN_of_handlerLaw  : HandlerLawN → FundamentalN
+goal791SchedN_of_handlerLaw : HandlerLawN → Goal791SchedN
+```
+
+Checked not refuted: `not_kapRelKTyN`'s configurations use `κ = ()`, which no `[op]` step hands a
+clause (`kappa_ne_unit`, `kappaC_ne_unit`), and fail at the resumption of `()` being final
+(`unit_resume_final`), where every handed `κ`'s resumption steps (`kappa_resume_not_final`,
+`kappaC_resume_not_final`). Checked not vacuous: `HandleVN` and `HandleVBN` hold at the handler
+`resumeH`, whose one clause receives `κ` and resumes it, over every handled computation
+(`handle_resume_inst`, `handleVN_at_resumeH`, `handleVBN_at_resumeH`), with every premise of each
+inhabited there (`handleVN_resume_premises`, `handleVBN_resume_premises`); `ReifyN`'s premises
+are inhabited (`reifyN_premises_inst`), its conclusion at no instance; `Goal791SchedN`'s premises
+are inhabited under `HS` (`goal791SchedN_premises_inst`). The discharge route is the Kripke stop,
+`scope-835-kripke-stop.md` on the parked branch `rule-791-kstop`.
+
 ### 6.5 Relation-level results the track rests on
 
 `poolSchedAdequacyN` (`PoolN.lean`), `PoolSpawnN`, `erwp_adequacy`; `hardestCase791` and
@@ -399,8 +420,8 @@ in these units (its §5):
 | L6, `μ` | an environment argument, the `μ`/`tvar` clauses, `RelMu` at the index (built, `scope-831-interface.md` §13) | the environment argument |
 | L7, `ν` | a reading of `ν` at `erwp` | a design choice first |
 
-What is left of them is `MissingN`: the handler clauses at `vN` for `effHandleV` and
-`effHandleVB` (E10, `scope-831-interface.md` §10.1), and `reify` (§12.5).
+What is left of them is `MissingN`, asserted as `HandlerLawN` (§6.4): the handler clauses at
+`vN` for `effHandleV` and `effHandleVB` (E10, `scope-831-interface.md` §10.1), and `reify` (§12.5).
 
 **Departures with no configuration yet** (D5, D6, D7's `Covers` half, D11, D12). Each is a
 choice: a configuration that forces it, or a return to Core's reading. `scope-831-interface.md`

@@ -5474,6 +5474,11 @@ R1 of `docs/async-capabilities.md` §3.3 as a rule of an extended judgment besid
 states its soundness as `PinLaw`. `CDerives` and its theorems are unchanged; a program that does not
 use R1 keeps them unconditionally.
 
+The chain interpretation of §62 has a second named hypothesis of the same form, `HandlerLawN`
+(`Core/Chain/HandlerLaw.lean`): the compatibility lemmas of `[handle]` at a value form, BOXED-κ
+`[handle]` and `reify`, from which `FundamentalN` and `Goal791SchedN` are proved (§62, *The named
+assertion*).
+
 *Decision 71 is void (decision 72); R1 and `PinLaw` stay as stated here until §62's PRs land.*
 
 **Frozen for now (decision 71, the user's "Freeze r1 for now").** R1, with §29a's cancel-path
@@ -11011,6 +11016,44 @@ passes through.
 - **Raise, cancel and panic unwind only through closeable points.** A raise passes a `[let]` frame
   only at a row that cancels, where the rule above holds; a cancel runs `κ.2`, which exists only at
   a `cancel` operation. Core has no panic: an integer division with no answer raises (§39).
+
+### The named assertion: `HandlerLawN` (#835)
+
+Over the chain (`Core/Chain/HandlerLaw.lean`), `FundamentalN` is proved from one named hypothesis,
+`HandlerLawN`, a `Prop` and not an axiom, in `PinLaw`'s form (§29): three fields, the
+compatibility lemmas of the three rules with no chain lemma, each over `SemJN` premises only, at
+every row, qualifier, handler and handled computation, with no restriction to a scheduler.
+
+| Field | Rule | Core's lemma |
+|---|---|---|
+| `handleV : HandleVN` | `effHandleV`, `[handle]` at a value form | `handleV_compatC` |
+| `handleVB : HandleVBN` | `effHandleVB`, BOXED-κ `[handle]` | `handleV_compatCB` |
+| `reify : ReifyN` | `reify` | `reify_compatX` |
+
+    goal791SchedN_of_handlerLaw : HandlerLawN → Goal791SchedN
+    fundamentalN_of_handlerLaw  : HandlerLawN → FundamentalN
+
+It is believed because Core proves all three on its own relation, and `PinLaw` already rests on
+the same belief: a borrow held across a suspension is sound under a handler written in the
+program. The chain lacks Core's step `vC_kTy_of_kapRel` (E10): the clause is handed `κ` with
+`KapRelN`, Kripke along `extF` from the stop's list, where `vN`'s `U` clause at `kTy` reads it at
+every `ExtR`-extension and every consistent view; `reify` reads its loop through the same clause.
+The route to discharge it is the Kripke stop (`docs/new-core/scope-835-kripke-stop.md`, on the
+parked branch `rule-791-kstop`). That plan leaves one item open, posts at a lend's exit (its §5),
+which decides E10 for an in-program handler catching an operation performed under a live lend.
+
+- **Not refuted.** No configuration in the tree refutes a field (`docs/new-core/configurations.md`).
+  `not_kapRelKTyN` refutes the step, not `HandleVN`: its configurations use the thunk `κ = ()`,
+  which no `[op]` step hands a clause (`kappa_ne_unit`, `kappaC_ne_unit`), and their failure is
+  the resumption of `()` being final (`unit_resume_final`), where every handed `κ`'s resumption
+  steps (`kappa_resume_not_final`, `kappaC_resume_not_final`).
+- **Not vacuous.** `handle_resume_inst`: the conclusion of `HandleVN` and `HandleVBN` holds at the
+  handler `resumeH`, whose one unrestricted clause receives `κ` and resumes it, over every handled
+  computation at every outer row (`handleVN_at_resumeH`, `handleVBN_at_resumeH`); every premise
+  of each holds there over `perform` (`handleVN_resume_premises`, `handleVBN_resume_premises`).
+  `ReifyN`'s premises hold at the residual `λx. x` (`reifyN_premises_inst`); no instance of its
+  conclusion is proved. `Goal791SchedN`'s premises hold at the task `return ()` under `HS`
+  (`goal791SchedN_premises_inst`, from `hs_schedOKN`).
 
 ### Not claimed
 

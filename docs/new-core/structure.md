@@ -205,10 +205,16 @@ are part of step 2.
 2. Rule checks at `SemJN`: `mutSub`, `immSub`, `allI`, `withbor1`, `withbor1U`, `withbor2`,
    `withbor2U`. The constants: `withbor2S_compat`, `withbor3S_compat`, `withborFS_compat` (each
    with its finaliser's judgment `hd` as a premise) and `withloadS_compat`, instantiated with every
-   hypothesis discharged. `FundamentalN` is stated on the fragment (`JdgInFrag`) and not proved;
-   its plan is `scope-831-interface.md` (units L1–L7). A derivation of an in-fragment judgment may
+   hypothesis discharged. `FundamentalN` is stated on the fragment (`JdgInFrag`) and proved from
+   `HandlerLawN` (item 4) by induction on `CDerives` (`Fundamental831N.lean`); its plan is
+   `scope-831-interface.md` (units L1–L7). A derivation of an in-fragment judgment may
    cut through an excluded former, which the interpretation does not read until L5–L7.
 3. Adequacy: `goal791Sched_of` (`Goal791SchedN` from `FundamentalN` and `ConstsN`).
+4. The trusted base: `HandlerLawN` (`Core/Chain/HandlerLaw.lean`), the named assertion of the
+   three handler rules with no chain lemma (`[handle]` at a value form, BOXED-κ `[handle]`,
+   `reify`), in `PinLaw`'s form; `goal791SchedN_of_handlerLaw : HandlerLawN → Goal791SchedN`.
+   Its discharge route is the Kripke stop (`scope-835-kripke-stop.md`, on the parked branch
+   `rule-791-kstop`).
 
 ## 8. Termination
 
