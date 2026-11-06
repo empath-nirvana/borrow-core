@@ -140,7 +140,7 @@ branches are the same lemmas). E10 is not derived.
 | 56 | `divFuel` | `divFuel_compatX` (`DivFuel.lean:392`) | yes | **portable** | Core: `divFuel_steps`, `fuel_total` (induction on the budget). Chain: `erwp_det` for the steps; the fuel handler as an `erwp_handle` instance with its clauses through `erwp_kappa_resume`/`erwp_kappa_cancel`: buildable (E8) |
 | 57 | `reify` | `reify_compatX` (`DivReify.lean:513`) | no | **out** | `reifyTy`'s answer `U(Loop_Σ B R)` is `ν` (`Types.lean:1256`); §4 ν |
 | 58 | `sliceBorrowM` | `sliceBorrowM_compatX` (`Slices.lean:60`) | no | **out** | `Array`; §4 families |
-| 59 | `sliceBorrowI` | `sliceBorrowI_compatX` (`Slices.lean:176`) | no | **out** | `Array`; §4 families, and §3.1's `aboveL` |
+| 59 | `sliceBorrowI` | `sliceBorrowI_compatX` (`Slices.lean:176`) | no | **out** | `Array`; §4 families |
 | 60 | `sliceGetM` | `sliceGetM_compatX` (`Slices.lean:315`) | no | **out** | families (`Array`/`ArrayImm`/`[Mut]`); §4 |
 | 61 | `sliceLenM` | `sliceLenM_compatX` (`Slices.lean:319`) | no | **out** | families (`Array`/`ArrayImm`/`[Mut]`); §4 |
 | 62 | `sliceSplitI` | `sliceSplitI_compatX` (`SliceOps.lean:83`) | no | **out** | families (`Array`/`ArrayImm`/`[Mut]`); §4 |
@@ -150,17 +150,17 @@ branches are the same lemmas). E10 is not derived.
 | 66 | `arrEmpty` | `arrEmpty_compatX` (`SliceOps.lean:108`) | no | **out** | families (`Array`/`ArrayImm`/`[Mut]`); §4 |
 | 67 | `sliceReplaceM` | `sliceReplaceM_compatX` (`SliceOps.lean:136`) | no | **out** | families (`Array`/`ArrayImm`/`[Mut]`); §4 |
 | 68 | `sliceSwapM` | `sliceSwapM_compatX` (`SliceOps.lean:299`) | no | **out** | families (`Array`/`ArrayImm`/`[Mut]`); §4 |
-| 69 | `withbor1` | `withbor1_compatX` (`Compatibility.lean:937`) | yes | **blocked** | the `imm` lend runs the callback at the list with the lend's record (`ext_add`); at the current `LocTy.above` no `ExtR` extension at a callback resource holding a borrow cell at a key holds an `Imm` value: `Map831N.callback_any_inst` (step, not constant). Unblocked by Core's `ls₀` (`Map831N.extRL_addImm`), §3.1 |
+| 69 | `withbor1` | `withbor1_compatX` (`Compatibility.lean:937`) | yes | **proved** | `withbor1_compatN` (`ImmLend833N.lean`): the lend's record in the callback's world (`LocTy.extR_addImm`, Core's `ext_add`), the result back by `LocTy.extR_of_addImm` (`ext_drop`), the Imm Frame `erwp_I_frameR`, the run read at the lender's view (`erwp_tieDrop`) |
 | 70 | `withbor2` | `withbor2_compatX` (`Compatibility.lean:1028`) | yes | **portable** | `scope-791-rule.md` §7.4's steps 1–3, 8–13 at the empty table: `withbor2S_compat` (`Cancel791N.lean:802`) without its finaliser frame, the Mut Frame `erwp_M_frame` (`SI/StopFrameN.lean:321`), `vN_outlivesLe`; the restatement at `Δ` (bound `Δ.meetOfDom`, defined at every `δ ⊨ Δ`): buildable |
 | 71 | `withbor3` | `withbor3_compatX` (`Compatibility.lean:1109`) | yes | **portable** | §7.1's 13 steps at the empty table: `withbor3S_compat` (`Reborrow791N.lean:808`) without its finaliser frame, `erwp_M_antiFrame` (`SI/AntiStopN.lean:257`) around `erwp_M_frame`; restatement at `Δ`: buildable |
 | 72 | `withload` | `withload_compatX` (`Compatibility.lean:252`) | yes | **portable** | §13.4's steps at the empty table: `withloadS_compat` (`Withload791N.lean:459`), `erwp_reborrow` (`SI/RebAcrossC.lean:96`) for 6.150; restatement at `Δ`: buildable |
 | 73 | `withswap` | `withswap_compatX` (`Compatibility.lean:1194`) | yes | **portable** | `wpTS_M_antiFrameX`, `wpTS_load`/`wpTS_store`, `wpTS_bind_frame` → `erwp_antiFrame_view` (`SI/LocTy.lean:485`, `consistentX_get`), `rwp_load`/`rwp_store`, G3; the reseal into the stored family at the anti-frame's return as in `withbor3S_compat`'s step 13: not checked in detail |
-| 74 | `withbor1U` | `withbor1U_compatX` (`EffBorrow.lean:452`) | yes | **blocked** | as `withbor1`: Core's `hvf ls′ (ext_add hadd hout₂)` has no counterpart at the current `above` (`Map831N.callback_any_inst`); the constant is not verified to fail. With `aboveL`: Core's frame `ewpTS_I_frameU` is `erwp_I_frameC` (`SI/IStopCancelN.lean:320`); `opTable_ext` is immediate (`entN` reads no list); §3 |
+| 74 | `withbor1U` | `withbor1U_compatX` (`EffBorrow.lean:452`) | yes | **proved** | `withbor1U_compatN` (`ImmLend833N.lean`): as `withbor1`, the Imm Frame across the row's raises (`erwp_I_frameR`), the finaliser frame at a raise (`erwp_ubindRaise`, `fin_claimI`); `opTable_ext` is not needed (`entN` reads no list) |
 | 75 | `withbor2U` | `withbor2U_compatX` (`EffBorrow.lean:281`) | yes | **portable** | `withbor2S_compat` (proved at `Row.Suspend`, `LifeCtx.empty`); restated at `Δ` (G4 for `hd`) and at an `Unwind` row holding abortive unrestricted operations (`Row.Suspend.of_unwind` asks `q ≠ unr`): buildable, not verified |
 | 76 | `withbor3U` | `withbor3U_compatX` (`EffBorrow.lean:362`) | yes | **portable** | `withbor3S_compat`, restated as `withbor2U`'s row |
 | 77 | `withloadU` | `withloadU_compatX` (`EffBorrow.lean:554`) | yes | **portable** | `withloadS_compat`, restated as `withbor2U`'s row |
 | 78 | `sliceBorrowMU` | `sliceBorrowMU_compatX` (`EffBorrow.lean:651`) | no | **out** | `Array`; §4 families (the `sm` constant) |
-| 79 | `sliceBorrowIU` | `sliceBorrowIU_compatX` (`EffBorrow.lean:732`) | no | **out** | `Array`; §4 families, and §3.1's `aboveL` |
+| 79 | `sliceBorrowIU` | `sliceBorrowIU_compatX` (`EffBorrow.lean:732`) | no | **out** | `Array`; §4 families |
 | 80 | `lolliE` | `lolliE_compatX` (`Compatibility.lean:512`) | cut | **portable** | `gDenC_split`, `wpTS_bind_frame` ×2, the function at `Ext.refl` → G1, G3, G6, G7, `extR_refl`, `rwp_consistentXV` |
 | 81 | `allEV` | `allE_compatX` (`Compatibility.lean:731`) | yes | **portable** | `wpTS_bind`, `vC_tyEq` at `instLife` → `erwp_bindR`, `erwp_mono`, `vN_tyEq` (G8) |
 | 82 | `ofRet` | the identity (`ofRet _ ih => ih`) | yes | **portable** | the identity: `SemJN` at `.val A` is `cN (.ret A)` |
@@ -191,61 +191,32 @@ branches are the same lemmas). E10 is not derived.
 
 ### 3.1 Risk 1: `withbor1U` and `LocTy.above`
 
-**Verdict: the port of Core's `withbor1U_compatX` needs `LocTy.above` to keep only the `imm`
-records lent strictly above its lifetime (Core's `ls₀`).** At the current `above`, the step
-Core takes has no counterpart; with Core's `ls₀` it does.
+**Answer (#833): with Core's `ls₀` and `Keeps`, Core's step goes through, and both rules are
+proved.** `LocTy.above a` keeps the keys and the `imm` records lent strictly above `a`;
+`LocTy.ExtR`'s record conjunct is Core's `Keeps` (`LocTy.Keeps`: the records relevant to the
+resource, relevance read off the lifetime a record was lent at); `ImmWitW` matches a record no
+shorter-lived than the cell, which makes it relevant to its cell (`scope-791-rule.md` §13.2–3).
 
-Core's step (`Core/EffBorrow.lean:452`, the last block): the Imm Frame (`ewpTS_I_frameU`) hands
-the callback a list `ls′` with the lend's record added at `α` (`hadd`), and the callback is run
-there by its own Kripke clause, `hvf ls′ (ext_add hadd hout₂)`: the callback's resource `ρ₂` is
-in `Res_α`, and Core's `Ext ls ls′ ρ₂` (`Core/FrameRecords.lean:172`) compares only the records
-strictly longer-lived than each borrow cell of `ρ₂`, so a record at `α` is never compared
-(`ext_add`, `Core/Wp.lean:466`).
+Core's step (`Core/EffBorrow.lean:452`, the last block): the Imm Frame hands the callback a list
+with the lend's record added at `α`, and the callback is run there by its own Kripke clause,
+`hvf ls′ (ext_add hadd hout₂)`. On the chain the record goes into the callback's world
+(`LocTy.addImm`), an `ExtR` extension at the callback's resource in `Res_α`
+(`LocTy.extR_addImm`, Core's `ext_add`); the callback's result `['x] B`, in `Res_α`, returns to
+the world without the record (`LocTy.extR_of_addImm`, Core's `ext_drop`). The callback's run is at
+the world's view, which has one more `imm` record than the lender's; an unwinding row's table (and
+the pure row's) never resumes, so the relation reads its tie only at the entry, whose list is the
+frame's and holds the record (`erwp_tieDrop`). `withbor1_compatN`, `withbor1U_compatN`
+(`Core/Chain/ImmLend833N.lean`).
 
-On the chain the record goes into the world (`LocTy.imm`), since `vN`'s `Imm` clause reads its
-witness there (`ImmWitW`). `LocTy.ExtR Θ Θ′ ρ` asks `Θ′.above a = Θ.above a` at every key
-`(ℓ, a)` with `CellIn ρ a`, and `above` keeps the `imm` records whole. The configuration
-(`Core/Chain/Map831N.lean`):
+The old configuration (`callback_any_inst`: at the old `above`, `𝒱⟦U(Imm 'x 1 ⊸ F 1)⟧` admitted
+every value at a callback holding a `mut` borrow) rested on no extension holding an `Imm` value;
+at the same world and resource the world with one more record is an extension
+(`Map831N.extR_addImm_inst`) holding one (`Map831N.imm_at_extension`).
 
-- `extR_imm_eq`: at a resource with a borrow cell at a key's lifetime, `ExtR` fixes `Θ.imm`
-  exactly; `not_extR_addImm`: the world with one more record is not an `ExtR` extension there.
-- `imm_world_ne_nil`: an `Imm` value needs a record in the world.
-- `not_imm_of_extR`, `callback_any`: at a world with no `imm` records and such a resource, no
-  `ExtR` extension holds an `Imm` value, so `𝒱⟦U(Imm @b A ⊸ C)⟧` admits **every** value with that
-  resource.
-- `callback_any_inst`: every hypothesis discharged. At the `OK` world `∅ + (0, α) ↦ 𝒱⟦1⟧` and the
-  resource `0 ↦ mut(α, (), ∅, ⊤)` (a callback holding a `mut` borrow), `()` (not a function) is a
-  value of `U(Imm 'x 1 ⊸ F 1)` at every `δ` and index.
-
-So a callback that holds a live `mut` borrow carries no information about what it does with an
-`imm` argument, and Core's `hvf ls′ …` step has nothing to apply. What is configured is the step,
-not the constant: that `SemJN` of `withbor1U` fails at the current interpretation (a run of
-`withborUE d` reaching the body of such a callback) is not built.
-
-With Core's `ls₀` (`LocTy.aboveL`: the keys and the `imm` records strictly longer-lived than the
-key; `ExtRL` is `ExtR` with `aboveL`): `extRL_addImm` proves that the world with the lend's
-record at `α` is an `ExtRL` extension at every resource in `Res_α`. That is Core's `ext_add` at
-the per-lend world.
-
-**What the change touches.** Reading `above` as `aboveL` changes `famL` (a stored family's
-`Imm` payloads then read only the records above the cell, as Core's `ptoMutS` stores `P ls₀`),
-`ExtA`, `ExtR`, `mutL_congr`, `vN_above`, `extR_above`. The step that would need re-proof is
-`vN_above`'s direction from `Θ` to `Θ.aboveL a` on content in `Res_a`: at present it uses
-`ImmLe Θ (Θ.above a)`, which fails once `aboveL a` omits the records below `a`. Core's counterpart is
-`Ext`'s `Keeps` conjunct, which keeps only the records *relevant* to the resource (`Rel`,
-`Core/FrameRecords.lean:151`), with the run's entry (`Tagged`) placing a resource's relevant
-records above its stratum. The chain's counterpart would be `ExtR`'s `ImmLe` read as `Keeps`
-and the content's witness records shown above `a` at the lend from the relation's entry
-(`ImmTieL` and `TI`). Not built; not verified.
-
-**Headlines.** No headline statement reads `above`, `ExtR` or `famL`: `constN_w2`/`w3`/`wF`/`wl`
-and their `_inst` are `ConstN`/`vN` statements; `goal791Sched_of` and `Goal791SchedN` read the
-world only at `Θ.imm = []`, where `aboveL` and `above` agree; the `*Prog` results are at
-`LocFam.empty`/`Φ₀`; `erwp_consistent` and the relation (`rwp`, `rwpG`, `erwp`, `ImmTieL`) read
-`LocFam`, which `LocTy.view` builds without `above`. No typing rule gains a side condition and no
-cancel row is restricted. The proofs of `constN_w2`/`w3`/`wF`/`wl` (where a lend stores content
-through `vN_above`) and of the `vN` laws reading `above` would be re-proved. By inspection only;
-not verified by building.
+**Headlines.** `constN_w2`/`w3`/`wF`/`wl` and their `_inst`, `goal791Sched_of`, the `*Prog`
+results, `erwp_consistent` and the `vN`/`cN` laws keep their statements. `withload`'s image cells at
+`Imm` positions get their lifetimes from the run's tags (`lifeBoundW_of_entry`, Core's
+`lifeBound_of_tagged`), which needs the entry tie to match a record's lifetime (`ImmTieL`).
 
 ### 3.2 Risk 2: `cN_extA` at `F_Σ R`
 
@@ -324,9 +295,9 @@ world (for `Tok`, a resource clause like `Ref 1`) and its laws: small.
 
 | Class | Rows |
 |---|---|
-| proved | 3 (`immSub`, `mutSub`, `allI`) |
+| proved | 5 (`immSub`, `mutSub`, `allI`, `withbor1`, `withbor1U`) |
 | portable | 65 |
-| blocked | 2 (`withbor1`, `withbor1U`) |
+| blocked | 0 |
 | pending | 1 (`effHandleVB`) |
 | out of the fragment | 33 |
 
@@ -335,16 +306,12 @@ Fragment status: 57 **yes**, 16 **cut**, 31 **no**.
 | Group | Rows | proved | portable | blocked | pending | out |
 |---|---|---|---|---|---|---|
 | structural | 44 | 1 | 43 | | | |
-| borrows | 11 | 2 | 7 | 2 | | |
+| borrows | 11 | 4 | 7 | | | |
 | effects/handlers | 16 | | 15 | | 1 | |
 | data (families, `μ`, opaque) | 29 | | | | | 29 |
 | codata (`ν`) | 4 | | | | | 4 |
 
-**Blocked rows and their evidence.** `withbor1`, `withbor1U`: `Map831N.callback_any_inst` (every
-hypothesis discharged): at an `OK` world with no `imm` records, a callback resource holding a
-`mut` borrow makes `𝒱⟦U(Imm 'x 1 ⊸ F 1)⟧` admit every value, so Core's step `hvf ls′ (ext_add …)`
-has nothing to apply. The configuration is of the step; the constants are not verified to fail.
-`Map831N.extRL_addImm` shows Core's `ls₀` reading gives the step back (§3.1).
+**Blocked rows.** None. `withbor1`/`withbor1U` were blocked at the old `above` (§3.1); with Core's `ls₀` and `Keeps` they are proved.
 
 **Proposed units.** Each follows Core's printed proofs row by row; estimates are relative, from
 the size of Core's proofs and the chain pieces each needs.
@@ -356,10 +323,7 @@ the size of Core's proofs and the chain pieces each needs.
 2. **Borrows** (11 rows). (a) `withbor2`/`withbor3`/`withload` at the pure row and the three
    `U` forms at `Δ` and at `Unwind` rows: restatements of the proved constants, small to medium.
    (b) `withswap`: the anti-frame and its reseal (`withbor3S_compat`'s step 13), medium.
-   (c) `withbor1`/`withbor1U`: §3.1's `aboveL` change first (an addition to `LocTy` and a
-   re-reading of `ExtR`'s record conjunct as Core's `Keeps`), then the `vN` laws reading `above`
-   and the four constants re-proved, then the rule by `erwp_I_frameC`. Effort: high; it is the
-   unit's hardest case and goes first.
+   (c) `withbor1`/`withbor1U`: done (#833; §3.1).
 3. **Effects/handlers** (16 rows; E1–E11). Medium for `sub`/`perform`/`raise`/`await`/`let`
    (E1–E5); high for `then` (E6, E7) and the handlers (E8, E9, E11), which are the bulk; `iterate`,
    `divFuel`, `boundedFix`, `countFold`/`countTry` medium. `effHandleVB` needs E10 (the BOXED-κ

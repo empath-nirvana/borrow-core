@@ -3,6 +3,11 @@ import Core.Chain.ImmRec791N
 /-!
 # A tie between the world's `imm` records and a run's records  `[spec §62]`
 
+**The design choice this file justifies**: the tie between the world's `imm` records and the
+run's list sits at the relation's entry (`ImmTieL`), not on `cN`'s run clauses. A guard on `cN`'s
+`F_Σ` clause fails `cN_effOf` (`not_effOf_guarded`); the entry form gives Core's `CohE` at the
+run's list (`ImmTieL.tie`, `immTie_agree`).
+
 `scope-791-rule.md` §12. Step 8 of `withload_compatX` needs the source `Imm @a A` cell to be the
 cell of a record of the run's list whose type is the source's, up to `TyEq`. §11's
 `immAgreeErwp_both` shows that nothing read off the unchanged `erwp` gives this: the cell

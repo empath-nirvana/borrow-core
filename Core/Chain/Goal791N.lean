@@ -1040,18 +1040,15 @@ fragment may still cut through an excluded type inside (an array built and consu
 of a `μ` value); at such a cut the interpretation gives no reading, so `FundamentalN` is not
 shown attainable by induction on the derivation until those formers have clauses.
 
-That is not the whole remaining gap. Rules in the fragment may also force `vN` itself to change,
-and with it its laws and the `*_compat` proofs:
-* An `imm` lend (`withbor1U`, Core's `withbor1U_compatX`) adds a record to the world's `imm`
-  records. `LocTy.above` keeps them whole and `ExtR` asks every key a resource reads to keep
-  what lies above it, so a lend under a live `mut` borrow whose payload the lend's body reads is
-  not an extension along `ExtR` at that borrow. Whether such a rule needs `LocTy.above` to keep
-  only the records lent above its lifetime (Core's `ls₀`) is not checked.
-* `cN_extA` at an effect row `F_Σ R` is not derived (`noEffSpine`). Core's `withbor1U_compatX`
-  and `sliceBorrowIU_compatX` carry the callback's table along `Ext` (`opTable_ext`, at an
-  abortive table); their chain analogues are the candidates for needing it or a table lemma like
-  it. Whether they reduce to `opTableN_local` at an abortive row, and whether any other rule
-  needs it, is not checked. -/
+The rule-by-rule map is `docs/new-core/scope-831-map.md`. Its answers on the two risks it named:
+* An `imm` lend (`withbor1`, `withbor1U`) runs its callback at the world with the lend's record.
+  With `LocTy.above` Core's `ls₀` and `ExtR`'s record conjunct Core's `Keeps`, that world is an
+  extension at the callback's resource (`LocTy.extR_addImm`, Core's `ext_add`) and the world
+  without the record is one at the result's (`LocTy.extR_of_addImm`, Core's `ext_drop`);
+  `withbor1_compatN` and `withbor1U_compatN` (`Core/Chain/ImmLend833N.lean`) follow Core's proofs.
+* `cN_extA` at an effect row `F_Σ R` is needed by no rule: Core carries the callback's table along
+  `Ext` only in `withbor1U_compatX` and `sliceBorrowIU_compatX` (`opTable_ext`), and the chain's
+  table does not read the record list. -/
 def FundamentalN : Prop :=
   ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (j : Jdg), CDerives Δ Γ e j → JdgInFrag Γ j = true →
     SemJN (ℍ := ℍ) Δ Γ e j

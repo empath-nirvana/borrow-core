@@ -963,8 +963,8 @@ list form is what makes the threading local:
 ### 13.2 The `Imm` clause
 
     Imm a A at δ, Θ:  ∃ α, a.interp δ = some α ∧ immCell α (vO A δ Θ n) v ρ ∧
-                      ∀ ℓ, v = loc ℓ → ImmWitW Θ.imm ℓ A δ
-    ImmWitW I ℓ A δ := ∃ x ∈ I, ∃ d, DescR x.1 d ∧ CohE [d] ℓ A δ
+                      ∀ ℓ s u σ h, ρ = ℓ ↦ imm(s, u, σ) → ImmWitW Θ.imm ℓ s A δ
+    ImmWitW I ℓ s A δ := ∃ x ∈ I, ⊓s ⊑ x.2 ∧ ∃ d, DescR x.1 d ∧ CohE [d] ℓ A δ
 
 - The payload is read in the observable view `vO` (Core's `vCE false`: `U` read as `True`, `!`
   and `Mut`'s stored family at `vN`), defined in `vN`'s mutual block; an image's witness under a
@@ -973,19 +973,42 @@ list form is what makes the threading local:
   chain positions, or a sub-record's cell (an image's `Mut` positions). At a run's first entry the
   tie and `TI` put the descendant on the run's list (`desc_mem_of_tie`, `cohE_of_immWitW`), which
   is Core's `CohE (rsOf ls)`.
+- **The lifetime match** (review3 M1): the witness is a record lent no shorter-lived than the
+  cell (`⊓s ⊑ x.2`). It is what makes the witness relevant to its cell for `ExtR`'s record
+  conjunct (§13.3), so `vN_extR` keeps it. An `imm` lend's cell `imm({α}, …)` is witnessed by the
+  lend's record at `α`; `withload`'s new cells `imm({β}, …)` by the source's record, `β ⊏ ⊓s`. At
+  `withload`'s `Imm` positions the kept cell's lifetimes come from the run's tags: Core's
+  `FrameLife` (a record's lineage views are no longer-lived than its tag) read at the source's
+  payload (`lifeBoundW_of_entry`, Core's `lifeBound_of_tagged`), through `vO_transfer`'s
+  `LifeBoundW` and `relabel_vN`'s `LifeBoundOn`/`LifeBoundWit`. The entry tie matches the
+  record's lifetime (`ImmTieL I ls := ∀ x ∈ I, x ∈ ls`), which puts the tag `Tagged` reads at the
+  world's lifetime.
 - Laws: `vO_down`, `vO_congr` (with `immWitW_congr`), `vO_extR` join the mutual blocks;
   `vN_down`, `vN_congr`, `vN_extR`, `vN_outlives`, `vN_outlivesLe`, `immSub_compatN` read the new
   clause; the others are unchanged.
 
 ### 13.3 The world's Kripke orders
 
-`LocTy.ExtA` keeps every `imm` record (a third conjunct, `ImmLe`); `LocTy.ExtR` is its old
-clause and `ImmLe`. `LocTy.above` keeps the `imm` records whole, so the stored family of a key
-`ExtR` reads stays fixed. A `mut` lend changes no `imm` record (`LocTy.add`), so every existing
-use of `extA_add`, `extR_of_add` and `extR_above` stands. An `imm` lend would add a record; under
-a live `mut` borrow whose key the lend's body reads, that is not an `ExtR` step. Whether the
-`imm` lend's rule (`withbor1U`) needs `LocTy.above` to keep only the records lent above its
-lifetime (Core's `ls₀`) is not checked: that rule is not part of this unit.
+`LocTy.above a` is Core's `ls₀`: the keys and the `imm` records lent strictly above `a`.
+`LocTy.ExtR Θ Θ′ ρ` is its key clause (a key at a lifetime with a borrow cell of `ρ` no
+longer-lived than it is kept, and `above` it is unchanged) and Core's `Keeps` (`LocTy.Keeps`): the
+records relevant to `ρ` are kept, a record being relevant when `ρ` holds a borrow cell no
+longer-lived than the lifetime it was lent at. Core reads relevance off a record's location
+(`Rel`) and supplies the lifetime from the run's tags (`not_rel_lineage`); the world carries the
+lifetime, and relevance reads it. `LocTy.ExtA` keeps every record (`ImmLe`) and is `ExtR` at every
+resource.
+
+An `imm` lend's record (`LocTy.addImm`) is lent below every borrow cell of the callback's
+resource, so the world with it is an `ExtR` extension there (`LocTy.extR_addImm`, Core's
+`ext_add`), and the world without it is one at the result's resource (`LocTy.extR_of_addImm`,
+Core's `ext_drop`). Both halves of review3 I1 (the callback move and the return transport) are
+these two lemmas. `vN_above` (content in `Res_a` at `Θ` and at `Θ.above a`) holds as before: a
+record relevant to such content is lent above `a`.
+
+`Map831N.callback_any_inst` (the configuration where `𝒱⟦U(Imm 'x A ⊸ C)⟧` admitted every value)
+rested on no `ExtR` extension at a callback holding a `mut` borrow holding an `Imm` value; at the
+same configuration the world with one more record is an extension (`extR_addImm_inst`) holding
+one (`imm_at_extension`).
 
 ### 13.4 `withload_compatX`'s steps
 
@@ -1021,7 +1044,7 @@ pattern. The callback's table and the constant's are one table, so no twin is ne
 | `rwp_compose`, `rwpG_compose` | — | `+ ImmTieL Φ.imm ls` |
 | `rwp_safe`, `rwpG_safe`, `erwp_safe` | any `Φ` | `+ ImmTieL Φ.imm []` |
 | `erwp_adequacy` | any `Φ` | `+ ImmTieL Φ.imm []`, discharged by default |
-| `crwpG_of_rwpG`, `crwpG_of_rwpG0_frame`, `cerwp_bindRwp`, `cerwp_of_erwp`, `cerwp_alloc`, `cerwp_free`, `cerwp_scopeK`, `cerwp_scope` | any `Φ` | `+ Φ.imm = []` |
+| `crwpG_of_rwpG`, `crwpG_of_rwpG0_frame`, `cerwp_bindRwp`, `cerwp_of_erwp`, `cerwp_alloc`, `cerwp_free`, `cerwp_scopeK`, `cerwp_scope` | any `Φ` | `+ Φ.imm = []` (a departure: see below) |
 | `rwpG_extΦ`, `erwp_extΦ` | `Φ.Ext Φ'` | `+ Φ.ImmLe Φ'` |
 | `PoolSchedAdequacyN` | any downward-closed `Φ` | `+ Φ.imm = []` |
 | `progOfN_orDiverges` | `Φ.Down` | `+ Φ.imm = []` |
@@ -1031,6 +1054,24 @@ pattern. The callback's table and the constant's are one table, so no twin is ne
 | `vN` at `Imm` | payload at `vN`, no witness | payload at `vO`, witness `ImmWitW` |
 | `ImmTie791N.not_erwp_false`, `not_effOf_guarded` | any `Φ` | `+ ImmTieL Φ.imm [(recT (Ref 1) …, α)]` |
 | `ImmRec791N.vN_cellI`, `not_wlImage_vN`, `not_wlImageA_vN` | any `Θ` | at `ΘRef` |
+| `LocTy.above` (#833) | keys above `a`, every `imm` record | keys and `imm` records above `a` (Core's `ls₀`) |
+| `LocTy.ExtR` (#833) | key clause and `ImmLe` | key clause and `LocTy.Keeps` (Core's `Keeps`) |
+| `ImmWitW` (#833) | `I ℓ A δ`, no lifetime | `I ℓ s A δ`, `⊓s ⊑ x.2` |
+| `vN`/`vO` at `Imm` (#833) | witness `∀ ℓ, v = loc ℓ → ImmWitW Θ.imm ℓ A δ` | witness at the cell's lifetimes |
+| `ImmTieL` (#833) | `x.1 ∈ rsOf ls` | `x ∈ ls` |
+| `ImmTieL.of_sub` (#833) | `rsOf ls ⊆ rsOf ls′` | `ls ⊆ ls′` |
+| `vO_transfer` (#833) | — | `+ LifeBoundW Θ.imm B` |
+| `relabel_vN` (#833) | — | `+ LifeBoundOn …`, `+ LifeBoundWit …`; new cells' witnesses at `{β}` |
+| `immWitW_root`/`…Mut`/`child`/`childMut` (#833) | `(β : Life)` | `(hβ : β ≤ x.2)`, at `{β}` |
+| `withload_reb` (#833) | `ImmWitW Θ.imm ℓ A δ` | `ImmWitW Θ.imm ℓ s A δ` |
+| `cohE_of_immWitW` (#833) | — | returns the lifetime match |
+
+**The capture bridges and `Φ.imm = []` (review3 I2).** `crwpG`'s entry has no tie, and the
+bridges from `rwpG` into `crwpG` take `Φ.imm = []` instead of adding the tie to `crwpG`'s entry.
+This is a restriction of the bridges, not threading: a lend left open at a stop (the capture
+machinery) is not reached under an `imm` borrow until `crwpG`'s entry carries `ImmTieL` (its lists
+keep or extend their members, `rwpG`'s argument). The only callers are the closed programs in
+`CrossProg`, at `LocFam.empty`. It is deferred with the capture machinery (#821).
 
 ### 13.6 Why each headline keeps its meaning
 

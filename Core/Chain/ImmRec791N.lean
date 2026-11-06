@@ -3,6 +3,12 @@ import Core.Chain.Goal791N
 /-!
 # The record an `imm` value's reborrow reads, and what an `Imm` clause sees  `[spec §62]`
 
+**The design choice this file justifies**: `vN`'s `Imm` clause reads its witness in the world's
+`imm` records (`Goal791N.ImmWitW`), not off the value alone. A clause that reads only the type,
+substitution, world, index, value and resource, with no record in the world, cannot give
+`withload`'s step 8 (`not_wlImage_vN`), nor can one strengthened by any agreement read off a
+run's entry (`not_wlImageA_vN`).
+
 `withload_compatX`'s steps 6 and 8 (`scope-791-rule.md` §9.1, §10): the chain's reborrow of an
 `imm` cell (`erwp_reborrow`, `erwp_reborrowT`; `SI/RebAcrossC.lean`, `SI/RebCancelC.lean`) is
 taken at a record `r` of the run's list whose cell the source is, and hands the borrowed

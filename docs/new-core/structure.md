@@ -5,8 +5,9 @@ The structure SPEC §62 is built against, and its rules. Lean names and branches
 
 ## 1. The target theorem
 
-For every closed, well-typed Core program `P` (including handlers that store one-shot
-continuations, borrows live across suspensions, and borrows shared with spawned tasks):
+For every closed, well-typed Core program `P` (including borrows live across suspensions,
+carried by the one-shot continuation a handler stores for the suspended task, and borrows shared
+with spawned tasks):
 
 > `OrDiverges P`: every reachable configuration is a value or steps; a value is reached only at
 > the empty memory; every `free` finds its cell.
