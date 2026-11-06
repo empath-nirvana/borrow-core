@@ -830,18 +830,18 @@ Each row, its Core proof, and the chain lemmas it reads (`·N` names are new in 
 | `arrRelease` | `arrRelease_compatX` (`release_fam_compatX`) | `noOwn_famN`, `erwp_garbage` |
 | `arrSize` | `arrSize_compatX` | `erwp_det`, `vN_fam_mk` |
 | `arrReplace` | `arrReplace_compatX` | `erwp_det`, `erwp_bindR`, `rwp_load` (H3), `rwp_store` (H5), `sepRange_pick` |
-| `arrNew` | `arrNew_compatX`, `tabFill_wp`, `wpTS_tab`, `alloc_block` (`Core/ArrayWp.lean`) | `rwp_tab`/`erwp_tab` (the `tab` step at the index: `n` of `TWNC.alloc`, a block from `finDom_block`), `tabFill_wpN` by Core's induction: `bang_app` (F2), `erwp_bind_frame` (W4), `rwp_store` |
+| `arrNew` | `arrNew_compatX`, `tabFill_wp`, `wpTS_tab`, `alloc_block` (`Core/ArrayWp.lean`) | `rwpG_tab`/`erwp_tab` (the `tab` step at the index: `alloc_blockN`, `n` of `TWNC.alloc`, a block from `finDom_block`), `tabFill_wpN` by Core's induction: `bang_app` (F2), `erwp_bind_frame` (W4), `rwp_store` |
 | `arrFree` | `arrFree_compatX`, `dropFill_wp` | `erwp_det` at `Head.drop`, `erwp_free`, `bang_app`, `erwp_bind_frame` |
 | `arrEmpty`, `sliceEmptyI`, `sliceEmptyM` | `famEmpty_compatX` (`Core/SliceOps.lean`) | `vN_fam_mk` at `0` |
 | `sliceSplitI`, `sliceSplitM` | `famSplit_compatX` | `vN_fam_split`, `erwp_det` at `Head.split` |
 | `sliceGetM` | `famGet_compatX` (`Core/Slices.lean`) | as `arrGet`, the leaf a `mut` one (`noOwn` of `mutL`) |
 | `sliceLenM` | `famSize_compatX` | as `arrSize` |
 | `sliceReplaceM` | `sliceReplaceM_compatX` | `erwp_M_antiFrame` at the view (R2, as `withswap_compatN`) at the leaf, `rwp_load`, `rwp_store`, `sepRange_pick` |
-| `sliceSwapM` | `sliceSwapM_compatX` | the same at one leaf (`i = j`) or two (`sepRange_pick2N`) |
+| `sliceSwapM` | `sliceSwapM_compatX` | the same at one leaf (`i = j`) or two nested (`sepRange_pick2NW`) |
 | `sliceBorrowM` | `sliceBorrowM_compatX`, `wpTS_M_frameFam`/`wpTS_M_frameList` (`Core/SliceFrames.lean`) | `erwp_M_frameFamN`: the list induction over the one-cell frame at the empty table (`erwp_M_frameR`, as `withbor2_compatN`), each cell its own key `Θ + (ℓᵢ, αᵢ)`, `αᵢ₊₁` fresh for the world after `ℓᵢ`; the callback reads every leaf at the innermost lifetime through `Mut`'s slack `@aδ ⊑ b` |
-| `sliceBorrowI` | `sliceBorrowI_compatX`, `wpTS_I_frameFam` | `erwp_I_frameFamN`: the list induction over `erwp_I_frame` (R5), one `imm` record per cell (`LocTy.addImm`), the run read at the lender's view by `erwp_tieEntry` |
+| `sliceBorrowI` | `sliceBorrowI_compatX`, `wpTS_I_frameFam` | `erwp_I_frameListRN` at the pure row's table: the list induction over `erwp_I_frameRR` (R5 at an incoming claim), one `imm` record per cell (`LocTy.addImm`), the inner frames' run read at the lender's view by `erwp_tieEntryR` |
 | `sliceBorrowMU` | `sliceBorrowMU_compatX` (`Core/EffBorrow.lean`), `wpG_M_frameFam` | the list induction over `erwp_M_frameR` at a `Row.Unwind` table (abortive entries), as `withbor2U_compatN` |
-| `sliceBorrowIU` | `sliceBorrowIU_compatX`, `wpG_I_frameFam` | the list induction over `erwp_I_frameR`, as `withbor1U_compatN` |
+| `sliceBorrowIU` | `sliceBorrowIU_compatX`, `wpG_I_frameFam` | `erwp_I_frameListRN` at the row's table, as `withbor1U_compatN` |
 | `sm` (constant) | `sliceBorrowMU_compatX` at `Row.Suspend` | the list induction over `erwp_M_frameCR` (stops, raises) and `erwp_M_frame_cancelRunCR` (layered cancel runs): each layer's table the guarded twin of the next (`tabR` at that layer's claim), `tabR_can` per layer; `withbor2S_compat`'s structure around it, `erwp_claimX`, `erwp_ubindClaimRT`, the finaliser `d : Array A ⊸ 1` |
 
 The statements `JdgInFrag` and `Const791.InFrag` read `VTy.inFrag`; it is widened to `opq` and to
@@ -940,21 +940,54 @@ picked leaf (`consistentX_get` for the cell's view lifetime), as in `withswap_co
 inside the anti-frame are taken at the index each one costs. The family is rebuilt at the end's
 index by `sepRange_pickW` (`sepRange_pick` with the rest read at a weaker predicate).
 
+### 11.2b Built in `Core/Chain/FamSwap836N.lean`, `FamNew836N.lean`, `FamImm836N.lean`
+
+| Row | Chain lemma | Core proof |
+|---|---|---|
+| `sliceSwapM` | `sliceSwapM_compatN` (`sepRange_pickW`, `sepRange_pick2NW`) | `sliceSwapM_compatX` |
+| `arrNew` | `arrNew_compatN` (`erwp_tab`, `tabFill_wpN`) | `arrNew_compatX`, `wpTS_tab`, `tabFill_wp` |
+| `sliceBorrowI` | `sliceBorrowI_compatN` (`sliceBorrowI_sem`, `erwp_I_frameListRN`) | `sliceBorrowI_compatX`, `wpTS_I_frameFam` |
+| `sliceBorrowIU` | `sliceBorrowIU_compatN` (`sliceBorrowIU_sem`, `erwp_I_frameListRN`, `fin_claimArrI`) | `sliceBorrowIU_compatX`, `wpG_I_frameFam` |
+
+**`sliceSwapM`** is `sliceReplaceM_compatN`'s steps. At `i = j` one anti-frame opens the leaf's
+cell, which is read twice and written twice. At distinct leaves each leaf is opened by its own
+`erwp_M_antiFrame` at the view, the inner one at the outer one's table (`erwp_mono`: the empty
+table stops nowhere); the contents are read and written crosswise, each moving to the other cell
+with its witness, which lies in that cell's stratum (the leaf's uniformity clause). The family is
+rebuilt at the end's index by `sepRange_pick2NW` (`sepRange_pick2N` with the rest read at a
+weaker predicate).
+
+**`arrNew`.** `alloc_worldN`/`alloc_blockN` are Core's `alloc_world`/`alloc_block` at `TWNC`.
+`rwpG_tab` is `wpTS_tab` at the index: the `tab` step is the configuration's one head step
+(`head_tab_inv`), to `tabFill`, a non-value; the run after it is the continuation's from the world
+`alloc_blockN` builds, its update composed with the allocation's (`UpdVN.trans`), the index paying
+for the step. `erwp_tab` is `rwpG_tab` at `erwp`. `tabFill_wpN` is Core's induction, the filled
+cells read at the index left after each store; the placeholders are consistent with every view
+(`consistentX_sepRange_own`).
+
+**The `n`-cell Imm Frame.** `erwp_I_frameRR` is `erwp_I_frameR` with the callback's raises at
+`opTableR Tb R` and the lender's at `opTableR Tb (claimI ℓ v ρ_P̂(v) ⋆ R)`, `R` in the lend's
+stratum; only the `raise` case differs (the lend's claim joins `R`). `erwp_I_frameListRN` is the
+list induction over it at an abortive table, each frame:
+
+- lends its leaf `imm` at `αⱼ` below the frame's rest, the payloads' stratum, the result's and the
+  bound, its record `(pⱼ, αⱼ)` in the inner frames' world `Θ.addImm (pⱼ, αⱼ)`, whose run is read at
+  the lender's view (`erwp_tieEntryR`, `erwp_tieEntry` at `opTableR`);
+- hands the inner frames the bound `@R ⊓ αⱼ ⊓ γ` as printed;
+- moves what the inner frames returned to the world without its record
+  (`LocTy.extR_of_addImm`), and its claim joins theirs, the cells owned again (`claimL` at the
+  frames' index).
+
+The callback runs at the world holding every record (`LocTy.addImms`), each lent below the bound
+and on the callback's list, so its resource extends there (`LocTy.extR_addImms`). It receives
+every leaf at the innermost lifetime (`immLeafN`, `vN_immLeaf`; `immCell` reads `α ⊑ ⊓s`). At an
+unwinding row the row's table reads no record (`tabN_unwind_addImms`), and the finaliser consumes
+the composite claim at a raise as in `sliceBorrowMU_sem`.
+
 ### 11.3 Not built
 
-- **`sliceBorrowIU`, `sliceBorrowI`**: the family Imm Frame. This is the list induction over
-  `erwp_I_frameR`/`erwp_I_frame`, one record per cell (`LocTy.addImm`), each leaf's `ImmWitW`
-  at its record, with the run read at the lender's view by `erwp_tieEntry`. Nesting needs
-  `erwp_I_frameR` at an incoming claim, as `erwp_M_frameCRR` is for the Mut Frame: the callback
-  at `opTableR Tb R`, the lender at `opTableR Tb (claimI … ⋆ R)`. Not built. Not derived;
-  obstruction not verified.
-- **`arrNew`**: the `tab` step at the index. `rwp_tab` takes one head step to `tabFill` that
-  allocates a block. It needs `alloc_block` at the chain (`n` of `TWNC.alloc` and
-  `hash_compS_own`, the block from `finDom_block`) and the continuation's `rwp` from the post-step
-  configuration. `rwp_head1` covers only steps to a value. After that comes `tabFill_wpN`, by
-  Core's induction. Not built. Not derived; obstruction not verified.
-- **`sliceSwapM`**: `sliceReplaceM_compatN`'s steps at one leaf (`i = j`) or two (two anti-frames,
-  `sepRange_pick2N`). Not built. Not derived; obstruction not verified.
+Every row of §11.1 is built at `SemJN`. Like the unit's other rows, the four `*_compatN` of
+§11.2b are lemmas that no fundamental-property case reads yet.
 
 ## 12. Unit L7: `ν` at `erwp` (#837)
 

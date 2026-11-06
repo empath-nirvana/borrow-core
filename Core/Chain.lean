@@ -124,3 +124,6 @@ import Core.Chain.FamFrame836N
 import Core.Chain.FamStop836N
 import Core.Chain.FamCancel836N
 import Core.Chain.FamSlice836N
+import Core.Chain.FamSwap836N
+import Core.Chain.FamNew836N
+import Core.Chain.FamImm836N
