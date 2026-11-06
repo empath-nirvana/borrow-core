@@ -1829,3 +1829,4 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sliceBorrowMU_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwp_M_frameListRN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sliceReplaceM_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sliceSwapM_compatN
