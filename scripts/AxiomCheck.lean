@@ -1484,6 +1484,14 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ImmRec791N.immAgreeErwp_both
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ImmRec791N.not_wlImageA
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ImmRec791N.not_wlImageA_vN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ImmTie791N.immTie_agree
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ImmTie791N.immWit_ref
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ImmTie791N.immTie_excludes_thunk
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ImmTie791N.immTie_ref
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ImmTie791N.immTie_wit_excludes_thunk
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ImmTie791N.not_erwp_false
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ImmTie791N.not_effOf_guarded
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ImmTie791N.immTie_guard_fails
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.ext_add
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.add_keep
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.above_add

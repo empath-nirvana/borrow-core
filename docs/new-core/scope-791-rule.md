@@ -782,3 +782,149 @@ Not verified:
 - `vC_vShape`;
 - `image_vC_of_shape`/`relabel_obs`;
 - `erwp_reborrow` across raises and layered cancel runs.
+
+## 12. A tie between the world's `imm` records and the run's records (#829)
+
+Kernel target: the chain relation, its world typing or an entry condition carries `imm` record
+types, so that at an `imm` cell the world's record agrees with the run's (`TWNC` at `rsOf ls`);
+then `vN`'s `Imm` clause reads it, step 8 of `withload_compatX` closes, and `withloadS_compat`,
+`constN_wl` and the instance at `hardestRow` follow.
+
+### 12.1 The addition
+
+The world carries, beside its `mut` families, a list `ΘI` of `imm` records, each with the
+lifetime it was lent at (`SRec`, Core's record list moved into the world). `vN`'s `Imm` clause
+reads a witness in `ΘI`. The tie relates `ΘI` to the run's list. Both are stated over an abstract
+`ΘI` in `Core/Chain/ImmTie791N.lean`, every hypothesis discharged:
+
+- `ImmWit ΘI ℓ s u σ A δ`: a record of `ΘI` whose cell is `imm(s, u, σ)` at `ℓ`, lent at a
+  lifetime of `s`, at a type `TyEq` to `A` at `δ`. This is the content of Core's `CohE` at a
+  record's own cell; a chain view (`Coh`'s second disjunct) is read the same way at the view's
+  location and type.
+- `ImmTie ΘI ls ρ`: every record of `ΘI` whose cell `ρ` holds, at a lifetime of the cell's set,
+  is a record of `ls`.
+- `immTie_agree`: the tie and a witness give a record of the run's list whose cell is the
+  source's and whose type is `TyEq` to the source's. At a run's first entry the typed world's
+  records are `rsOf ls` (`rwpG`), so this is steps 6 and 8's agreement there: the record
+  `erwp_reborrow` is applied at, with its `(le, v, R)` read off the cell and no appeal to
+  `leInvW`.
+- `immTie_wit_excludes_thunk`: `immAgreeErwp_both`'s second world is excluded. A source at
+  `Imm @a (Ref 1)` on the cell `ℓ ↦ imm({α}, loc ℓ′, ℓ′ ↦ own(()))` has its witness at `Ref 1`
+  (`immWit_ref`), and for every `ΘI` holding such a witness the tie fails at `world_thunk`'s list.
+  At `world_ref`'s list it holds (`immTie_ref`). `immTie_excludes_thunk` is the one-record case.
+
+The lifetime in the match is what lets a creation step choose a cell no stale record of `ΘI`
+claims: a lend or a reborrow at a lifetime below every lifetime of `ΘI` makes a cell
+`imm({γ}, …)` that no record of `ΘI` matches.
+
+### 12.2 Why a run keeps the tie
+
+None of this is proved in Lean. It is the `ConsistentX`/`erwp_consistent` shape:
+- `imm` records are never rewritten: `TWNC.reb` and `TWNC.rebDeep` keep `ps` and `rs`, and
+  `TWNC.immEnd` removes only the record whose cell it consumes;
+- `TWNC.immFrame` records the type at creation; the lend would add `(r, α)` to `ΘI` at a fresh
+  `α`, and the body's list carries `r`;
+- `↭`'s `imm` clause (`ResU.UpdImm`) keeps the flattening's `imm` cells, and `EndOKG` keeps the
+  list's members (`∀ x, x ∈ ls′ ↔ x ∈ ls`); so a tie at a run's start holds of the resource it
+  returns;
+- a resume goes along `extF`, which keeps every record of the list relevant to a frozen location
+  of the share (`RelF`), and every cell the tie reads is frozen there.
+
+### 12.3 Where the tie can live, and the proved statement each place meets
+
+The tie reads `ΘI`, which only `vN`'s world `Θ` can carry, and `ls`, which only a run has. Three
+places put the two together. Each meets a proved declaration whose statement would change.
+
+1. **A guard on `cN`'s run clauses** (`F A`, `F_Σ R`: `ImmTie Θ.imm ls ρ → erwp …`). This meets
+   `cN_effOf` (`Core/Chain/Goal791N.lean`), an `↔` between `cN (F_Σ R)` and the unguarded `erwp`.
+   Checked in Lean: `not_effOf_guarded` shows that, at any guard failing at `world_ref`'s list and
+   cell, the `↔` fails, since the run `()` at the post `False` fails at that entry
+   (`not_erwp_false`). `immTie_guard_fails` shows that the tie is such a guard (`ΘI` holding the
+   cell's record at `U (F 1)`). `goal791Sched_of` reads `cN_effOf`.
+2. **An entry condition of the relation.** Here `LocFam` carries `ΘI` through `LocTy.view`, and
+   `rwpG`'s entry requires the tie at `rsOf ls`. This would meet `erwp_reborrow`
+   (`SI/RebAcrossC.lean`), `erwp_reborrowT` (`SI/RebCancelC.lean`) and `erwp_reborrowDeep`
+   (`SI/RebStopD.lean`). Each is stated at every `Φ` and takes the image's lifetime `β` as a
+   parameter. The borrowed computation is entered at `ρ_b ● canon r β`, whose new cells are
+   `imm({β}, …)`. At a `Φ` whose `ΘI` holds a record that claims one of them at `β` and is not on
+   `ls`, the tie fails at that entry. The premise `∀ Bχ, … → erwp Φ … Bχ` then holds of every
+   term, and the conclusion fails at a term with no step. The statement would need `β` to be fresh
+   for `Φ`'s `ΘI`. I have not derived this in Lean and have not verified that any obstruction is
+   real.
+3. **A guard in the interpretation's entries**: `vN`'s `U`, `cN`'s `⊸`, `SemJN`. `cN_effOf` is
+   kept, and a run keeps the tie (§12.2). `withload`'s source reaches it through `⊸`, so the guard
+   must cover `⊸`'s argument. This would meet `fin_claim` (`Core/Chain/Lend791N.lean`), stated at
+   every `ls`. It applies the finaliser's `⊸` to the claimed content (`claimR`, typed at `Θ`'s
+   stored family) at `ls`, so it needs the tie for that content at `ls`. `erwp_ubindClaimRT`
+   (`Core/Chain/Cancel791N.lean`) hands its premise `hD` an `ls` that its statement does not relate
+   to the lend's. `withbor2S_compat` reaches `fin_claim` through `erwp_ubindClaimRT`. I have not
+   derived `fin_claim` under the guard by another route, and have not verified that any
+   obstruction is real.
+
+The tie cannot be read off the unchanged relation (§11, `immAgreeErwp_both`). It cannot be
+carried by an `Imm` clause over `vN`'s arguments alone (§10, `not_wlImage`).
+
+### 12.4 What each placement would extend
+
+These are not built. Common to all three:
+- `LocTy`: carry `ΘI`; `LocTy.above a` keeps the records lent strictly above `a` (Core's `ls₀`);
+  `ExtA`/`ExtR` keep `ΘI`'s records with `CellIn ρ` at their lifetime; `Fresh` below `ΘI`'s
+  lifetimes;
+- `vN`'s `Imm` clause: the witness (`ImmWit`, and its chain-view form), with the payload read at
+  Core's observable view (`vCE false`, `U` read as `True`). Core reads it there because the image's
+  witness under a `Ref (U C)` is a choice (`reb_witness_choice`);
+- every law re-proved at the new clause: `vN_down`, `vN_congr` (with `TyEq`'s reading of `δ`),
+  `vN_extR`, `vN_extA`, `vN_local`, `vN_above`, `vN_outlives`;
+- the tie's preservation, `erwp_immTie`, on `erwp_consistent`'s pattern;
+- `relabel_obs`/`image_vC_of_shape` at `vN` (step 8), and `vShape_tyEq` (which exists) with
+  `TyEq` along `Imm̲`.
+
+### 12.5 The 13 steps of `withload_compatX`
+
+| # | Step (§9.1) | State |
+|---|---|---|
+| 1–5, 7, 9, 11–13 | as §10.3 | exist |
+| 6 | the chooser: the record whose cell the source is, at the source's type | given the tie, from `immTie_agree` at the first entry; the tie's placement: §12.3 |
+| 8 | the image typed at `Imm̲ 'x A`; across raises and layered cancel runs | the type link: given the tie, `immTie_agree`; the image typed at `vN`: `relabel_obs` at `vN`, not built; across raises and layered cancel runs: not attempted |
+| 10 | the pin `vℓ = r.v` | given the tie, from `immTie_agree` |
+
+### 12.6 STOP
+
+The addition needs a place where `ΘI` and the run's list meet. I found three, and each meets a
+proved statement:
+- `cN_effOf` for the run-clause guard. This is checked: `not_effOf_guarded` and
+  `immTie_guard_fails`.
+- `erwp_reborrow`/`erwp_reborrowT`/`erwp_reborrowDeep` for an entry condition of the relation.
+  Not verified.
+- `fin_claim`, through `erwp_ubindClaimRT`'s premise, for a guard in `vN`'s `U`, `cN`'s `⊸` and
+  `SemJN`. Not verified.
+
+Nothing already proved is changed. `vN`, `cN`, `LocTy`, the relation and every `w2`/`w3`/`wF`
+statement and instance are as they were. The additions are `Core/Chain/ImmTie791N.lean`, its
+entries in `scripts/AxiomCheck.lean` and `Core/Chain.lean`, and this section.
+
+Not verified:
+- that a relation-level tie makes `erwp_reborrow`'s statement false at a `Φ` whose `ΘI` claims an
+  image cell. I have not derived this and have not verified that any obstruction is real;
+- that `fin_claim` cannot be proved under an interpretation-level guard by a route that does not
+  apply the finaliser's `⊸` at an untied list. I have not derived this and have not verified that
+  any obstruction is real;
+- that `ConstN (.wl …)` is false. No run of the constant is refuted.
+
+**Unspent premises:**
+- `Row.Suspend`'s payload/answer clause (step 11);
+- `Const791.OK`'s `wl` clause: `¬ VFree x B`, the bound's definedness. `¬ VFree x A` is read only by
+  §10's `WlImage`.
+
+**Unused:**
+- `erwp_reborrow`, `erwp_reborrowT`, `erwp_reborrowDeep`, `rebChooseC_tw`, `canon_escrowAgree`,
+  `relabel_obs`, `erwp_consistent`, `extF`'s `RelF` clause;
+- the uniqueness results `ResU.CompS.functional`, `AgW.functional`, `ExS.functional`,
+  `CellU.immOf_inj`.
+
+**Untranscribed in `withload_compatX`'s run-up, at `vN`:**
+- `CohE` and its `TyEq` transport (`vC_tyEq`; `vShape_tyEq` exists);
+- `ptoImmO_read`;
+- `vC_vShape`;
+- `image_vC_of_shape`/`relabel_obs`;
+- `erwp_reborrow` across raises and layered cancel runs.
