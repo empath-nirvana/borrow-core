@@ -102,3 +102,8 @@ import Core.Chain.Inst791N
 import Core.Chain.Withload791N
 import Core.Chain.Map831N
 import Core.Chain.ImmLend833N
+import Core.Chain.Iface834N
+import Core.Chain.TyEq834N
+import Core.Chain.Rules834N
+import Core.Chain.Borrow834N
+import Core.Chain.Count834N

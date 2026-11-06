@@ -44,7 +44,8 @@ open BoCa.BoLo (Heap Kont Head)
 
 /-- **Every two worlds are related at `∅`** (Core's `ext_empty'`): `∅` holds no borrow cell, so
 neither conjunct of `ExtR` reads anything. -/
-theorem LocTy.extR_empty (Θ Θ' : LocTy) : Θ.ExtR Θ' PMap.empty :=
+theorem _root_.BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.extR_empty (Θ Θ' : LocTy) :
+    Θ.ExtR Θ' PMap.empty :=
   ⟨fun _ _ _ _ hc => absurd hc (fun ⟨m, ψ, e, _⟩ => by simp at e),
     fun _ _ hc => absurd hc (fun ⟨m, ψ, e, _⟩ => by simp at e)⟩
 
