@@ -58,6 +58,7 @@ import Core.Chain.SI.RebAcrossC
 import Core.Chain.SI.RebAcrossN
 import Core.Chain.SI.RebAgreeCex
 import Core.Chain.SI.RebCancelC
+import Core.Chain.SI.RebRaiseC
 import Core.Chain.SI.RebChooseC
 import Core.Chain.SI.RebCancelProg
 import Core.Chain.SI.RebN
@@ -91,9 +92,11 @@ import Core.Chain.Shape791N
 import Core.Chain.ImmShape791N
 import Core.Chain.ImmRec791N
 import Core.Chain.ImmTie791N
+import Core.Chain.ImmImage791N
 import Core.Chain.PerLendShape791
 import Core.Chain.ConsistentFlat791
 import Core.Chain.ExtRLit791
 import Core.Chain.Reborrow791N
 import Core.Chain.Field791N
 import Core.Chain.Inst791N
+import Core.Chain.Withload791N

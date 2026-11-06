@@ -400,7 +400,7 @@ theorem relabel_vN {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSu
 /-! ### Positions across `TyEq` -/
 
 /-- **A `Ref` position is read across `TyEq`**, at a pointee type `TyEq` to the first. -/
-theorem RefPos.tyEq {T : VTy} {v : Val} {l : Loc} {S : VTy} (h : RefPos T v l S) :
+theorem _root_.BoCa.Fig16.LogRel.Core.RefPos.tyEq {T : VTy} {v : Val} {l : Loc} {S : VTy} (h : RefPos T v l S) :
     ∀ {T' : VTy} {δ δ' : LSub}, TyEq T δ T' δ' → ∃ S', RefPos T' v l S' ∧ TyEq S δ S' δ' := by
   induction h with
   | ref S l =>
@@ -448,7 +448,7 @@ theorem RefPos.tyEq {T : VTy} {v : Val} {l : Loc} {S : VTy} (h : RefPos T v l S)
       exact ⟨S', RefPos.fam hi h', e⟩
 
 /-- **A `Mut` position is read across `TyEq`**, at a pointee type `TyEq` to the first. -/
-theorem MutPos.tyEq {T : VTy} {v : Val} {l : Loc} {S : VTy} (h : MutPos T v l S) :
+theorem _root_.BoCa.Fig16.LogRel.Core.MutPos.tyEq {T : VTy} {v : Val} {l : Loc} {S : VTy} (h : MutPos T v l S) :
     ∀ {T' : VTy} {δ δ' : LSub}, TyEq T δ T' δ' → ∃ S', MutPos T' v l S' ∧ TyEq S δ S' δ' := by
   induction h with
   | «mut» a S l =>

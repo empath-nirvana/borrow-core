@@ -67,6 +67,11 @@ theorem immTie_agree {ΘI ls : List SRec} {ρ : WRes} (ht : ImmTie ΘI ls ρ) {l
   subst hle hv hR
   exact ⟨_, ht _ hx s h hg hs, rfl, rfl, rfl, hT⟩
 
+/-- **The relation's entry tie gives `ImmTie` at every resource**: `ImmTieL` asks every record of
+`ΘI` on the run's list, whichever cells the resource holds. -/
+theorem ImmTieL.tie {ΘI ls : List SRec} (h : ImmTieL ΘI ls) (ρ : WRes) : ImmTie ΘI ls ρ :=
+  fun x hx _ _ _ _ => h x hx
+
 /-! ### The two worlds of `immAgreeErwp_both` -/
 
 /-- **A witness for the cell at `Imm @a (Ref 1)` is at `Ref 1`**: `TyEq (Ref 1) δ T δ'` holds only
@@ -119,6 +124,19 @@ theorem immTie_wit_excludes_thunk (δ δ' : LSub) {l l' : Loc} (α : Life) {ΘI 
   simp only [rsOf, List.map_cons, List.map_nil, List.mem_singleton] at hr
   subst hr
   simp [recT, TyEq] at hT
+
+/-- **The entry tie holds at `world_ref`'s list** for the world holding the cell's record at
+`Ref 1` (`ImmRec791N.ΘRef`, where `vN_cellI` types the cell), and fails at `world_thunk`'s. -/
+theorem immTieL_world_ref (δ : LSub) (l l' : Loc) (α : Life) :
+    ImmTieL (ΘRef δ l l' α).imm [(recT (.ref .unit) δ l l', α)] ∧
+      ¬ ImmTieL (ΘRef δ l l' α).imm [(recT (.thunk (.ret .unit)) δ l l', α)] := by
+  refine ⟨fun x hx => ?_, fun h => ?_⟩
+  · simp only [ΘRef, List.mem_singleton] at hx
+    subst hx
+    simp [rsOf]
+  · have := h _ (List.mem_singleton_self _)
+    simp only [rsOf, List.map_cons, List.map_nil, List.mem_singleton] at this
+    exact recT_ne this
 
 /-! ### A guard on `cN`'s run clauses -/
 
