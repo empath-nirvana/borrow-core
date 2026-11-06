@@ -327,6 +327,413 @@ theorem erwpK_M_frameGen {V : ι → ι → Prop} {Φ : ι → LocFam} {Inv : ι
       Q n) ρ' ρp X hr hnoρp h9 hdX v'' χ hχ P'' hw'' hPk hsplit W'' hW'' Y hY
     exact ⟨ρ'L, ρpL, hc, hno, Or.inr (Or.inr hr')⟩
 
+/-! ### The lender's stops are at the borrowed run's names -/
+
+/-- `T`'s abortive entries, and its resuming entries at names in `Sched`. -/
+def OpTabK.schedPart (Sched : UInt32 → Prop) (T : OpTabK ι) : OpTabK ι := fun m i =>
+  open Classical in
+  match T m i with
+  | some en => if en.abort = false ∧ ¬ Sched m then none else some en
+  | none => none
+
+theorem OpTabK.schedPart_some {Sched : UInt32 → Prop} {T : OpTabK ι} {m i : UInt32}
+    {en : OpEntK ι} (h : T.schedPart Sched m i = some en) :
+    T m i = some en ∧ (en.abort = false → Sched m) := by
+  classical
+  unfold OpTabK.schedPart at h
+  cases hT : T m i with
+  | none => rw [hT] at h; cases h
+  | some en₀ =>
+      rw [hT] at h
+      simp only at h
+      split_ifs at h with hc
+      cases h
+      exact ⟨rfl, fun ha => by_contra fun hn => hc ⟨ha, hn⟩⟩
+
+/-- **The frame builds no stop outside `Sched`.** When the borrowed table's resuming entries are
+at names in `Sched` (the restriction's (S1), `Row.SchedOnly`), `FoldTwin` holds of the part of the
+lender's table at those names and its raises; so every stop a Mut Frame gives the lender is at a
+name in `Sched`, and owes along the `Sched` order. -/
+theorem OpTabK.FoldTwin.schedPart {Inv : ι → Prop} {lo lo' : Life} {Ti To : OpTabK ι} {l : Loc}
+    {A : Life} (h : Ti.FoldTwin Inv lo lo' To l A) {Sched : UInt32 → Prop}
+    (hS : ∀ m i en, Ti m i = some en → en.abort = false → Sched m) :
+    Ti.FoldTwin Inv lo lo' (To.schedPart Sched) l A := by
+  classical
+  intro m i en hTe
+  obtain ⟨en', hTe', h₁, h₂, h₃, h₄, h₅, h₆⟩ := h m i en hTe
+  refine ⟨en', ?_, h₁, h₂, h₃, h₄, h₅, h₆⟩
+  unfold OpTabK.schedPart
+  rw [hTe']
+  simp only
+  rw [if_neg]
+  rintro ⟨ha, hn⟩
+  exact hn (hS m i en hTe (h₂ ▸ ha))
+
+/-- The part of a table at `Sched` allows no stop the table does not. -/
+theorem opTableK_schedPart_le (lo : Life) (Sched : UInt32 → Prop) (T : OpTabK ι) :
+    (opTableK lo (T.schedPart Sched)).Le (opTableK lo T) := by
+  intro k ls t Ψ ρ h
+  rcases h with ⟨K, n, i, v, en, h⟩ | ⟨K, n, i, v, en, h⟩
+  · obtain ⟨⟨h₁, h₂, h₃, h₄⟩, hr⟩ := pure_sep_iff.mp h
+    exact Or.inl ⟨K, n, i, v, en, pure_sep_mk ⟨h₁, h₂, (OpTabK.schedPart_some h₃).1, h₄⟩ hr⟩
+  · obtain ⟨⟨h₁, h₂, h₃, h₄⟩, hr⟩ := pure_sep_iff.mp h
+    exact Or.inr ⟨K, n, i, v, en, pure_sep_mk ⟨h₁, h₂, (OpTabK.schedPart_some h₃).1, h₄⟩ hr⟩
+
+/-! ### The raise cases and the guard -/
+
+/-- **A raise across the fold**: a raise of the borrowed run at `RI`, the borrow folded, is a raise
+of the lender at `RO` (`erwpK_M_frameGen`'s `hR`). A raise owes no continuation, so it reads no
+world. -/
+def RaiseFold (l : Loc) (A : Life) (F : Nat → Val → SPropS Loc Val A) (RI RO : TableK ι) : Prop :=
+  ∀ k ls' t (Ψ Ψ' : ContK ι) (ρ' ρp X : WRes), RI k ls' t Ψ ρ' → NoOwn ρp →
+    ResU.CompS ρ' ρp X → X.InStratum (↓A) →
+    ∀ (v'' : Val) (χ : WRes) (hχ : χ.InStratum A) (P'' : Val → SPropS Loc Val A)
+      (hw'' : P'' v'' ⟨χ, hχ⟩), (∀ u r, SPropS.toU (P'' u) r → SPropS.toU (F k u) r) →
+    ResU.CompS (X.del l) (ResU.single l (CellU.mutOf A v'' χ hχ P'' hw'')) X →
+    ∀ W'', ResU.CompS χ (ResU.single l (CellU.ownOf v'')) W'' →
+    ∀ Y, ResU.CompS (X.del l) W'' Y →
+    ∃ ρ'L ρpL, ResU.CompS ρ'L ρpL Y ∧ NoOwn ρpL ∧ RO k ls' t Ψ' ρ'L
+
+/-- A table with no abortive entry has no raise. -/
+theorem raiseFold_absurd {l : Loc} {A : Life} {F : Nat → Val → SPropS Loc Val A} {T : OpTabK ι}
+    (hab : ∀ m i en, T m i = some en → en.abort = false) (RO : TableK ι) :
+    RaiseFold l A F (raiseStopK T) RO := by
+  intro k ls' t Ψ Ψ' ρ' ρp X hr
+  obtain ⟨K, m, i, v₀, en, hp⟩ := hr
+  obtain ⟨⟨-, -, hTe, ha⟩, -⟩ := pure_sep_iff.mp hp
+  exact absurd ha (by rw [hab m i en hTe]; simp)
+
+/-- **A `raise`, the cell the claim it carries** (`erwp_M_frameCR`'s case). -/
+theorem raiseFold_claim {l : Loc} {A : Life} {F : Nat → Val → SPropS Loc Val A}
+    {Ti To : OpTabK ι} (hTw : Ti.Twin To)
+    (hpa : ∀ m i en, Ti m i = some en → ∀ k ls v (ρ : WRes), en.PA k ls v ρ → ρ.InStratum A) :
+    RaiseFold l A F (raiseStopK Ti) (raiseStopRK To (claimR l A F)) := by
+  intro k ls' t Ψ Ψ' ρ' ρp X hr hnoρp h9 hdX v'' χ hχ P'' hw'' hPk hsplit W'' hW'' Y hY
+  have hkm'' : (CellU.mutOf A v'' χ hχ P'' hw'').kind ≠ Kind.imm := by
+    rw [CellU.kind_mutOf]; exact fun c => Kind.noConfusion c
+  have hXl : X.get l = some (CellU.mutOf A v'' χ hχ P'' hw'') :=
+    (ResU.CompS.get_left_of_ne_imm (ResU.CompS.comm hsplit) (ResU.single_get_self _ _) hkm'').2
+  obtain ⟨K, m, i, v₀, en, hp⟩ := hr
+  obtain ⟨⟨rfl, hK, hTe, ha⟩, τa, τn, hcan', ⟨hPA, hnA⟩, hnn⟩ := pure_sep_iff.mp hp
+  obtain ⟨en', hTe', -, hab', hPA', -, -⟩ := hTw m i en hTe
+  have hρa := hpa m i en hTe _ _ _ _ hPA
+  obtain ⟨Z, hZ, haZ⟩ := (ResU.CompS.assoc τa τn ρp X).mpr ⟨ρ', hcan', h9⟩
+  rcases ResU.CompS.get_split_of_ne_imm haZ hXl hkm'' with ⟨hg, -⟩ | ⟨-, hZl⟩
+  · exfalso
+    have hcon := hρa l _ hg
+    rw [CellU.inStratum_mutOf] at hcon
+    exact absurd hcon (lt_irrefl _)
+  have hZd := ResU.del_compS hZl
+  obtain ⟨D, hD, hDm⟩ := (ResU.CompS.assoc τa (Z.del l)
+    (ResU.single l (CellU.mutOf A v'' χ hχ P'' hw'')) X).mp ⟨Z, hZd, haZ⟩
+  obtain rfl : D = X.del l := compS_single_cancel hkm'' hDm hsplit
+  have hnoZ : NoOwn Z := noOwn_compS hZ hnn hnoρp
+  obtain ⟨hs, hFk⟩ := hPk v'' χ ⟨hχ, hw''⟩
+  exact ⟨Y, PMap.empty, ResU.comp_empty_right _, noOwn_empty,
+    ⟨K, m, i, v₀, en', pure_sep_mk ⟨rfl, hK, hTe', hab'.trans ha⟩ ⟨X.del l, W'', hY,
+      ⟨τa, Z.del l, hD, ⟨hPA' ▸ hPA, hnA⟩, noOwn_del hnoZ l⟩,
+      v'', χ, hs, hFk, ResU.CompS.comm hW''⟩⟩⟩
+
+/-- **A `raise` already carrying `R`, the cell's claim joining it** (`erwp_M_frameRR`'s case). -/
+theorem raiseFold_claimR {l : Loc} {A : Life} {F : Nat → Val → SPropS Loc Val A}
+    {Ti To : OpTabK ι} (hTw : Ti.Twin To)
+    (hpa : ∀ m i en, Ti m i = some en → ∀ k ls v (ρ : WRes), en.PA k ls v ρ → ρ.InStratum A)
+    {R : Nat → WProp} (hR : ∀ k ρ, R k ρ → ρ.InStratum A) :
+    RaiseFold l A F (raiseStopRK Ti R) (raiseStopRK To (fun k => claimR l A F k ⋆ R k)) := by
+  intro k ls' t Ψ Ψ' ρ' ρp X hr hnoρp h9 hdX v'' χ hχ P'' hw'' hPk hsplit W'' hW'' Y hY
+  have hkm'' : (CellU.mutOf A v'' χ hχ P'' hw'').kind ≠ Kind.imm := by
+    rw [CellU.kind_mutOf]; exact fun c => Kind.noConfusion c
+  have hXl : X.get l = some (CellU.mutOf A v'' χ hχ P'' hw'') :=
+    (ResU.CompS.get_left_of_ne_imm (ResU.CompS.comm hsplit) (ResU.single_get_self _ _) hkm'').2
+  obtain ⟨K, m, i, v₀, en, hp⟩ := hr
+  obtain ⟨⟨rfl, hK, hTe, ha⟩, τ0, τR, hc0R, ⟨τa, τn, hcan, ⟨hPA, hnA⟩, hnn⟩, hRk⟩ :=
+    pure_sep_iff.mp hp
+  obtain ⟨en', hTe', -, hab', hPA', -, -⟩ := hTw m i en hTe
+  have hρa := hpa m i en hTe _ _ _ _ hPA
+  obtain ⟨t1, ht1, hρ't1⟩ := compS_exch hcan hc0R
+  have hρa' : t1.InStratum A := inStratum_compS ht1 hρa (hR _ _ hRk)
+  obtain ⟨Z, hZ, haZ⟩ := (ResU.CompS.assoc t1 τn ρp X).mpr ⟨ρ', hρ't1, h9⟩
+  rcases ResU.CompS.get_split_of_ne_imm haZ hXl hkm'' with ⟨hg, -⟩ | ⟨-, hZl⟩
+  · exfalso
+    have hcon := hρa' l _ hg
+    rw [CellU.inStratum_mutOf] at hcon
+    exact absurd hcon (lt_irrefl _)
+  have hZd := ResU.del_compS hZl
+  obtain ⟨D, hD, hDm⟩ := (ResU.CompS.assoc t1 (Z.del l)
+    (ResU.single l (CellU.mutOf A v'' χ hχ P'' hw'')) X).mp ⟨Z, hZd, haZ⟩
+  obtain rfl : D = X.del l := compS_single_cancel hkm'' hDm hsplit
+  have hnoZ : NoOwn Z := noOwn_compS hZ hnn hnoρp
+  obtain ⟨hs, hFk⟩ := hPk v'' χ ⟨hχ, hw''⟩
+  obtain ⟨s0, hs0, hXd⟩ := compS_exch ht1 hD
+  obtain ⟨s1, hs1, hYs⟩ := compS_reassoc hXd hY
+  exact ⟨Y, PMap.empty, ResU.comp_empty_right _, noOwn_empty,
+    ⟨K, m, i, v₀, en', pure_sep_mk ⟨rfl, hK, hTe', hab'.trans ha⟩ ⟨s0, s1, hYs,
+      ⟨τa, Z.del l, hs0, ⟨hPA' ▸ hPA, hnA⟩, noOwn_del hnoZ l⟩,
+      ⟨W'', τR, ResU.CompS.comm hs1, ⟨v'', χ, hs, hFk, ResU.CompS.comm hW''⟩, hRk⟩⟩⟩⟩
+
+/-- `errOkN_inStratum` over a world index. -/
+theorem errOkK_inStratum {T : OpTabK ι} {A : Life}
+    (hpa : ∀ m i en, T m i = some en → ∀ k ls v (ρ : WRes), en.PA k ls v ρ → ρ.InStratum A) :
+    ∀ {k : Nat} {ls : List SRec} {err : Option Val} {ρ : WRes}, errOkK T k ls err ρ →
+      ρ.InStratum A
+  | _, _, none, _, h => by obtain rfl := h.1; exact ResU.inStratum_empty A
+  | _, _, some _, _, h => by
+      obtain ⟨_, _, _, en, he⟩ := h
+      obtain ⟨⟨-, hTe, -⟩, hPA, -⟩ := pure_sep_iff.mp he
+      exact hpa _ _ _ hTe _ _ _ _ hPA
+
+/-- `errOkN_twin` over a world index. -/
+theorem errOkK_twin {T T' : OpTabK ι} (hTT' : T.Twin T') :
+    ∀ {k : Nat} {ls : List SRec} {err : Option Val} {ρ : WRes}, errOkK T k ls err ρ →
+      errOkK T' k ls err ρ
+  | _, _, none, _, h => h
+  | _, _, some _, _, h => by
+      obtain ⟨m, j, w, en, he⟩ := h
+      obtain ⟨⟨hE, hTe, ha⟩, hPA, hn⟩ := pure_sep_iff.mp he
+      obtain ⟨en', hTe', -, hab', hPA', -, -⟩ := hTT' m j en hTe
+      exact ⟨m, j, w, en', pure_sep_mk ⟨hE, hTe', hab'.trans ha⟩ ⟨hPA' ▸ hPA, hn⟩⟩
+
+/-- **A cancel's `raise`, the cell the claim it carries** (`erwp_M_frame_cancelRunCR`'s case). -/
+theorem cancelFold_claim {l : Loc} {A : Life} {F : Nat → Val → SPropS Loc Val A}
+    {Ti To : OpTabK ι} (hTw : Ti.Twin To)
+    (hpa : ∀ m i en, Ti m i = some en → ∀ k ls v (ρ : WRes), en.PA k ls v ρ → ρ.InStratum A) :
+    RaiseFold l A F (cancelRaiseK Ti) (cancelRaiseRK To (claimR l A F)) := by
+  intro k ls' t Ψ Ψ' ρ' ρp X hr hnoρp h9 hdX v'' χ hχ P'' hw'' hPk hsplit W'' hW'' Y hY
+  have hkm'' : (CellU.mutOf A v'' χ hχ P'' hw'').kind ≠ Kind.imm := by
+    rw [CellU.kind_mutOf]; exact fun c => Kind.noConfusion c
+  have hXl : X.get l = some (CellU.mutOf A v'' χ hχ P'' hw'') :=
+    (ResU.CompS.get_left_of_ne_imm (ResU.CompS.comm hsplit) (ResU.single_get_self _ _) hkm'').2
+  obtain ⟨K, err, hp⟩ := hr
+  obtain ⟨⟨rfl, hK⟩, τa, τb, hcab, herr, hnb⟩ := pure_sep_iff.mp hp
+  have hρa := errOkK_inStratum hpa herr
+  obtain ⟨Z, hZ, haZ⟩ := (ResU.CompS.assoc τa τb ρp X).mpr ⟨ρ', hcab, h9⟩
+  rcases ResU.CompS.get_split_of_ne_imm haZ hXl hkm'' with ⟨hg, -⟩ | ⟨-, hZl⟩
+  · exfalso
+    have hcon := hρa l _ hg
+    rw [CellU.inStratum_mutOf] at hcon
+    exact absurd hcon (lt_irrefl _)
+  have hZd := ResU.del_compS hZl
+  obtain ⟨D, hD, hDm⟩ := (ResU.CompS.assoc τa (Z.del l)
+    (ResU.single l (CellU.mutOf A v'' χ hχ P'' hw'')) X).mp ⟨Z, hZd, haZ⟩
+  obtain rfl : D = X.del l := compS_single_cancel hkm'' hDm hsplit
+  have hnoZ : NoOwn Z := noOwn_compS hZ hnb hnoρp
+  obtain ⟨hs, hFk⟩ := hPk v'' χ ⟨hχ, hw''⟩
+  exact ⟨Y, PMap.empty, ResU.comp_empty_right _, noOwn_empty,
+    ⟨K, err, pure_sep_mk ⟨rfl, hK⟩ ⟨X.del l, W'', hY,
+      ⟨τa, Z.del l, hD, errOkK_twin hTw herr, noOwn_del hnoZ l⟩,
+      v'', χ, hs, hFk, ResU.CompS.comm hW''⟩⟩⟩
+
+/-- **A cancel's `raise` already carrying `R`, the cell's claim joining it**
+(`erwp_M_frame_cancelRunCRR`'s case). -/
+theorem cancelFold_claimR {l : Loc} {A : Life} {F : Nat → Val → SPropS Loc Val A}
+    {Ti To : OpTabK ι} (hTw : Ti.Twin To)
+    (hpa : ∀ m i en, Ti m i = some en → ∀ k ls v (ρ : WRes), en.PA k ls v ρ → ρ.InStratum A)
+    {R : Nat → WProp} (hR : ∀ k ρ, R k ρ → ρ.InStratum A) :
+    RaiseFold l A F (cancelRaiseRK Ti R) (cancelRaiseRK To (fun k => claimR l A F k ⋆ R k)) := by
+  intro k ls' t Ψ Ψ' ρ' ρp X hr hnoρp h9 hdX v'' χ hχ P'' hw'' hPk hsplit W'' hW'' Y hY
+  have hkm'' : (CellU.mutOf A v'' χ hχ P'' hw'').kind ≠ Kind.imm := by
+    rw [CellU.kind_mutOf]; exact fun c => Kind.noConfusion c
+  have hXl : X.get l = some (CellU.mutOf A v'' χ hχ P'' hw'') :=
+    (ResU.CompS.get_left_of_ne_imm (ResU.CompS.comm hsplit) (ResU.single_get_self _ _) hkm'').2
+  obtain ⟨K, err, hp⟩ := hr
+  obtain ⟨⟨rfl, hK⟩, τ0, τR, hc0R, ⟨τa, τn, hcan', herr, hnn⟩, hRk⟩ := pure_sep_iff.mp hp
+  have hρa := errOkK_inStratum hpa herr
+  obtain ⟨t1, ht1, hρ't1⟩ := compS_exch hcan' hc0R
+  have hρa' : t1.InStratum A := inStratum_compS ht1 hρa (hR _ _ hRk)
+  obtain ⟨Z, hZ, haZ⟩ := (ResU.CompS.assoc t1 τn ρp X).mpr ⟨ρ', hρ't1, h9⟩
+  rcases ResU.CompS.get_split_of_ne_imm haZ hXl hkm'' with ⟨hg, -⟩ | ⟨-, hZl⟩
+  · exfalso
+    have hcon := hρa' l _ hg
+    rw [CellU.inStratum_mutOf] at hcon
+    exact absurd hcon (lt_irrefl _)
+  have hZd := ResU.del_compS hZl
+  obtain ⟨D, hD, hDm⟩ := (ResU.CompS.assoc t1 (Z.del l)
+    (ResU.single l (CellU.mutOf A v'' χ hχ P'' hw'')) X).mp ⟨Z, hZd, haZ⟩
+  obtain rfl : D = X.del l := compS_single_cancel hkm'' hDm hsplit
+  have hnoZ : NoOwn Z := noOwn_compS hZ hnn hnoρp
+  obtain ⟨hs, hFk⟩ := hPk v'' χ ⟨hχ, hw''⟩
+  obtain ⟨s0, hs0, hXd⟩ := compS_exch ht1 hD
+  obtain ⟨s1, hs1, hYs⟩ := compS_reassoc hXd hY
+  exact ⟨Y, PMap.empty, ResU.comp_empty_right _, noOwn_empty,
+    ⟨K, err, pure_sep_mk ⟨rfl, hK⟩ ⟨s0, s1, hYs,
+      ⟨τa, Z.del l, hs0, errOkK_twin hTw herr, noOwn_del hnoZ l⟩,
+      ⟨W'', τR, ResU.CompS.comm hs1, ⟨v'', χ, hs, hFk, ResU.CompS.comm hW''⟩, hRk⟩⟩⟩⟩
+
+/-- **The fold seals at a stop** (`erwp_M_frameF`'s guard): the lender's share
+`Z/ℓ ● χ ● ℓ ↦ own(v″)`, `χ` in `F k`, is `CellFold ℓ A F`. -/
+theorem cellFold_fold {l : Loc} {A : Life} {F : Nat → Val → SPropS Loc Val A} {k : Nat}
+    {ls : List SRec} {Z W'' ρkL : WRes} {v'' : Val} {χ : WRes} {hχ : χ.InStratum A}
+    {P'' : Val → SPropS Loc Val A} {hw'' : P'' v'' ⟨χ, hχ⟩}
+    (hPk : ∀ u r, SPropS.toU (P'' u) r → SPropS.toU (F k u) r)
+    (hW'' : ResU.CompS χ (ResU.single l (CellU.ownOf v'')) W'')
+    (hkL : ResU.CompS (Z.del l) W'' ρkL) : CellFold l A F k ls ρkL := by
+  obtain ⟨hχ', hFk⟩ := hPk v'' χ ⟨hχ, hw''⟩
+  obtain ⟨ac, hac, hacl⟩ := compS_exch hW'' (ResU.CompS.comm hkL)
+  exact ⟨v'', χ, hχ', hFk, Z.del l, ac, ResU.CompS.comm hacl, hac⟩
+
+/-! ### The constant world -/
+
+/-- **`erwp` at a table is `erwpK` at one world**, at any table at `Unit` that is the lifted one. -/
+theorem erwp_eq_erwpK_of {Tb : TableN} {TbK : TableK Unit}
+    (h : ∀ k ls t Ψ ρ, TbK k ls t Ψ ρ ↔ liftTb Tb k ls t Ψ ρ) (Φ : LocFam) (Q : PostN) :
+    ∀ n ls e, erwp (ℍ := ℍ) Φ Tb Q n ls e =
+      erwpK (ℍ := ℍ) (fun _ _ => True) (fun _ => Φ) (fun _ => TbK) (fun _ => Q) () n ls e := by
+  have hT : (fun _ : Unit => TbK) = fun _ => liftTb Tb := by
+    funext _ k ls t Ψ ρ
+    exact propext (h k ls t Ψ ρ)
+  intro n ls e
+  rw [hT]
+  exact erwp_eq_erwpK Φ Tb Q n ls e
+
+theorem performStopK_lift (lo : Life) (T : OpTabN) (k : Nat) (ls : List SRec) (t : Expr)
+    (Ψ : ContK Unit) (ρ : WRes) :
+    performStopK lo (liftTabK T) k ls t Ψ ρ ↔ performStopN T k ls t (Ψ ()) ρ := by
+  constructor
+  · rintro ⟨K, n, i, v, en, h⟩
+    obtain ⟨⟨h₁, h₂, h₃, h₄⟩, ρa, ρk, hc, hA, hcs⟩ := pure_sep_iff.mp h
+    obtain ⟨en₀, he₀, rfl⟩ := liftTabK_some h₃
+    exact ⟨K, n, i, v, en₀, pure_sep_mk ⟨h₁, h₂, he₀, h₄⟩
+      ⟨ρa, ρk, hc, hA, (contShareK_liftEntK en₀ lo k ls K Ψ ρk).mp hcs⟩⟩
+  · rintro ⟨K, n, i, v, en, h⟩
+    obtain ⟨⟨h₁, h₂, h₃, h₄⟩, ρa, ρk, hc, hA, hcs⟩ := pure_sep_iff.mp h
+    exact ⟨K, n, i, v, liftEntK en, pure_sep_mk ⟨h₁, h₂, liftTabK_of_some h₃, h₄⟩
+      ⟨ρa, ρk, hc, hA, (contShareK_liftEntK en lo k ls K Ψ ρk).mpr hcs⟩⟩
+
+theorem performStopGK_lift (lo : Life) (T : OpTabN) (G : ShareG) (k : Nat) (ls : List SRec)
+    (t : Expr) (Ψ : ContK Unit) (ρ : WRes) :
+    performStopGK lo (liftTabK T) G k ls t Ψ ρ ↔ opTableG T G k ls t (Ψ ()) ρ := by
+  constructor
+  · rintro ⟨K, n, i, v, en, h⟩
+    obtain ⟨⟨h₁, h₂, h₃, h₄⟩, ρa, ρk, hc, hA, hG, hcs⟩ := pure_sep_iff.mp h
+    obtain ⟨en₀, he₀, rfl⟩ := liftTabK_some h₃
+    exact ⟨K, n, i, v, en₀, pure_sep_mk ⟨h₁, h₂, he₀, h₄⟩
+      ⟨ρa, ρk, hc, hA, hG, (contShareK_liftEntK en₀ lo k ls K Ψ ρk).mp hcs⟩⟩
+  · rintro ⟨K, n, i, v, en, h⟩
+    obtain ⟨⟨h₁, h₂, h₃, h₄⟩, ρa, ρk, hc, hA, hG, hcs⟩ := pure_sep_iff.mp h
+    exact ⟨K, n, i, v, liftEntK en, pure_sep_mk ⟨h₁, h₂, liftTabK_of_some h₃, h₄⟩
+      ⟨ρa, ρk, hc, hA, hG, (contShareK_liftEntK en lo k ls K Ψ ρk).mpr hcs⟩⟩
+
+theorem raiseStopK_lift (T : OpTabN) (k : Nat) (ls : List SRec) (t : Expr) (Ψ : ContK Unit)
+    (ρ : WRes) : raiseStopK (liftTabK T) k ls t Ψ ρ ↔ raiseStopN T k ls t (Ψ ()) ρ := by
+  constructor
+  · rintro ⟨K, n, i, v, en, h⟩
+    obtain ⟨⟨h₁, h₂, h₃, h₄⟩, hr⟩ := pure_sep_iff.mp h
+    obtain ⟨en₀, he₀, rfl⟩ := liftTabK_some h₃
+    exact ⟨K, n, i, v, en₀, pure_sep_mk ⟨h₁, h₂, he₀, h₄⟩ hr⟩
+  · rintro ⟨K, n, i, v, en, h⟩
+    obtain ⟨⟨h₁, h₂, h₃, h₄⟩, hr⟩ := pure_sep_iff.mp h
+    exact ⟨K, n, i, v, liftEntK en, pure_sep_mk ⟨h₁, h₂, liftTabK_of_some h₃, h₄⟩ hr⟩
+
+theorem raiseStopRK_lift (T : OpTabN) (R : Nat → WProp) (k : Nat) (ls : List SRec) (t : Expr)
+    (Ψ : ContK Unit) (ρ : WRes) :
+    raiseStopRK (liftTabK T) R k ls t Ψ ρ ↔ raiseStopR T R k ls t (Ψ ()) ρ := by
+  constructor
+  · rintro ⟨K, n, i, v, en, h⟩
+    obtain ⟨⟨h₁, h₂, h₃, h₄⟩, hr⟩ := pure_sep_iff.mp h
+    obtain ⟨en₀, he₀, rfl⟩ := liftTabK_some h₃
+    exact ⟨K, n, i, v, en₀, pure_sep_mk ⟨h₁, h₂, he₀, h₄⟩ hr⟩
+  · rintro ⟨K, n, i, v, en, h⟩
+    obtain ⟨⟨h₁, h₂, h₃, h₄⟩, hr⟩ := pure_sep_iff.mp h
+    exact ⟨K, n, i, v, liftEntK en, pure_sep_mk ⟨h₁, h₂, liftTabK_of_some h₃, h₄⟩ hr⟩
+
+theorem errOkK_lift (T : OpTabN) (k : Nat) (ls : List SRec) :
+    ∀ (err : Option Val) (ρ : WRes), errOkK (liftTabK T) k ls err ρ ↔ errOkN T k ls err ρ
+  | none, _ => Iff.rfl
+  | some _, _ => by
+      constructor
+      · rintro ⟨m, j, w, en, he⟩
+        obtain ⟨⟨hE, hTe, ha⟩, hr⟩ := pure_sep_iff.mp he
+        obtain ⟨en₀, he₀, rfl⟩ := liftTabK_some hTe
+        exact ⟨m, j, w, en₀, pure_sep_mk ⟨hE, he₀, ha⟩ hr⟩
+      · rintro ⟨m, j, w, en, he⟩
+        obtain ⟨⟨hE, hTe, ha⟩, hr⟩ := pure_sep_iff.mp he
+        exact ⟨m, j, w, liftEntK en, pure_sep_mk ⟨hE, liftTabK_of_some hTe, ha⟩ hr⟩
+
+/-- The cancel's `raise` of the lifted table, carrying `R`. -/
+theorem cancelRaiseRK_lift (T : OpTabN) (R : Nat → WProp) (k : Nat) (ls : List SRec) (t : Expr)
+    (Ψ : ContK Unit) (ρ : WRes) :
+    cancelRaiseRK (liftTabK T) R k ls t Ψ ρ ↔
+      (ex fun (K : Kont) => ex fun (err : Option Val) =>
+        ⌜t = K.plug (raiseE (.val (cancelVal err))) ∧ K.Catches 0 = false⌝ ⋆
+          ((errOkN T k ls err ⋆ fun ρ => NoOwn ρ) ⋆ R k)) ρ := by
+  constructor
+  · rintro ⟨K, err, h⟩
+    obtain ⟨hp, τ, τR, hc, ⟨τa, τb, hab, he, hn⟩, hR⟩ := pure_sep_iff.mp h
+    exact ⟨K, err, pure_sep_mk hp ⟨τ, τR, hc, ⟨τa, τb, hab, (errOkK_lift T k ls err τa).mp he, hn⟩,
+      hR⟩⟩
+  · rintro ⟨K, err, h⟩
+    obtain ⟨hp, τ, τR, hc, ⟨τa, τb, hab, he, hn⟩, hR⟩ := pure_sep_iff.mp h
+    exact ⟨K, err, pure_sep_mk hp ⟨τ, τR, hc,
+      ⟨τa, τb, hab, (errOkK_lift T k ls err τa).mpr he, hn⟩, hR⟩⟩
+
+theorem opTableRK_lift (lo : Life) (T : OpTabN) (R : Nat → WProp) (k : Nat) (ls : List SRec)
+    (t : Expr) (Ψ : ContK Unit) (ρ : WRes) :
+    opTableRK lo (liftTabK T) R k ls t Ψ ρ ↔ liftTb (opTableR T R) k ls t Ψ ρ :=
+  or_congr (performStopK_lift lo T k ls t Ψ ρ) (raiseStopRK_lift T R k ls t Ψ ρ)
+
+theorem opTableGK_lift (lo : Life) (T : OpTabN) (G : ShareG) (k : Nat) (ls : List SRec)
+    (t : Expr) (Ψ : ContK Unit) (ρ : WRes) :
+    opTableGK lo (liftTabK T) G k ls t Ψ ρ ↔ liftTb (opTableG T G) k ls t Ψ ρ :=
+  performStopGK_lift lo T G k ls t Ψ ρ
+
+theorem opTableGRK_lift (lo : Life) (T : OpTabN) (G : ShareG) (R : Nat → WProp) (k : Nat)
+    (ls : List SRec) (t : Expr) (Ψ : ContK Unit) (ρ : WRes) :
+    opTableGRK lo (liftTabK T) G R k ls t Ψ ρ ↔ liftTb (opTableGR T G R) k ls t Ψ ρ :=
+  or_congr (performStopGK_lift lo T G k ls t Ψ ρ) (raiseStopRK_lift T R k ls t Ψ ρ)
+
+theorem cancelTabK_lift (lo : Life) (T : OpTabN) (k : Nat) (ls : List SRec) (t : Expr)
+    (Ψ : ContK Unit) (ρ : WRes) :
+    cancelTabK lo (liftTabK T) k ls t Ψ ρ ↔ liftTb (cancelTabN T) k ls t Ψ ρ := by
+  refine (or_congr (performStopK_lift lo T k ls t Ψ ρ) ?_).trans Or.comm
+  constructor
+  · rintro ⟨K, err, h⟩
+    obtain ⟨hp, τa, τb, hab, he, hn⟩ := pure_sep_iff.mp h
+    exact ⟨K, err, pure_sep_mk hp ⟨τa, τb, hab, (errOkK_lift T k ls err τa).mp he, hn⟩⟩
+  · rintro ⟨K, err, h⟩
+    obtain ⟨hp, τa, τb, hab, he, hn⟩ := pure_sep_iff.mp h
+    exact ⟨K, err, pure_sep_mk hp ⟨τa, τb, hab, (errOkK_lift T k ls err τa).mpr he, hn⟩⟩
+
+theorem cancelTabRK_lift (lo : Life) (T : OpTabN) (R : Nat → WProp) (k : Nat) (ls : List SRec)
+    (t : Expr) (Ψ : ContK Unit) (ρ : WRes) :
+    cancelTabRK lo (liftTabK T) R k ls t Ψ ρ ↔ liftTb (cancelTabR T R) k ls t Ψ ρ :=
+  (or_congr (performStopK_lift lo T k ls t Ψ ρ) (cancelRaiseRK_lift T R k ls t Ψ ρ)).trans Or.comm
+
+theorem cancelTabGRK_lift (lo : Life) (T : OpTabN) (G : ShareG) (R : Nat → WProp) (k : Nat)
+    (ls : List SRec) (t : Expr) (Ψ : ContK Unit) (ρ : WRes) :
+    cancelTabGRK lo (liftTabK T) G R k ls t Ψ ρ ↔ liftTb (cancelTabGR T G R) k ls t Ψ ρ :=
+  (or_congr (performStopGK_lift lo T G k ls t Ψ ρ) (cancelRaiseRK_lift T R k ls t Ψ ρ)).trans
+    Or.comm
+
+/-- `OpTabN.LendOKCR` at the lifted table. -/
+theorem OpTabN.LendOKCR.lift {T : OpTabN} {A : Life} (h : T.LendOKCR A) :
+    (liftTabK T).LendOKCR A where
+  entry m i en hT ha := by
+    obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some hT
+    exact h.entry m i en₀ h₀ ha
+  pa m i en hT := by
+    obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some hT
+    exact h.pa m i en₀ h₀
+  pb m i en hT _ := by
+    obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some hT
+    exact h.pb m i en₀ h₀
+
+/-- **`FoldTwin` at one world**: a twin of the lifted table, every world allowed. -/
+theorem foldTwin_lift {T T' : OpTabN} (hTw : T.Twin T') (lo : Life) (l : Loc) (A : Life) :
+    (liftTabK T).FoldTwin (fun _ => True) lo lo (liftTabK T') l A := by
+  intro m i en hT
+  obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some hT
+  obtain ⟨en₀', h₀', hq, ha, hPA, hPB, hwc⟩ := hTw m i en₀ h₀
+  refine ⟨liftEntK en₀', liftTabK_of_some h₀', hq, ha, hPA, ?_, hwc,
+    fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ f hf => ⟨f, hf, fun _ _ => ⟨trivial, trivial⟩⟩⟩
+  show (fun _ => en₀'.PB) = fun _ => en₀.PB
+  rw [hPB]
+
+/-- The cancel obligations of a twin, at one world. -/
+theorem cancelOKK_lift_conv {en en' : OpEntN} {k : Nat} {ls : List SRec} {K : Kont} {ρ ρ' : WRes}
+    (h : cancelOKN en k ls K ρ → cancelOKN en' k ls K ρ') :
+    cancelOKK (liftEntK en) () k ls K ρ → cancelOKK (liftEntK en') () k ls K ρ' := fun hc =>
+  (cancelOKK_liftEntK en' k ls K ρ').mpr (h ((cancelOKK_liftEntK en k ls K ρ).mp hc))
+
 /-! ### The typed world -/
 
 /-- **`ExtP` across the fold at a floor at or below the lend's.** `LocTy.ExtP.fold`'s proof, the

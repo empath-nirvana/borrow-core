@@ -135,3 +135,5 @@ import Core.Chain.KStopSpike835N
 import Core.Chain.SI.ErwpK
 import Core.Chain.Restrict835N
 import Core.Chain.LendExit835N
+import Core.Chain.SI.MFrameK
+import Core.Chain.MFrameK835N
