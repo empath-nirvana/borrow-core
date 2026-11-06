@@ -27,9 +27,10 @@ has its `erwp` statement as the instance at `Unit` (`erwp_val_of_K`, `erwp_of_rw
 location typing and the view and may lower the floor (`KW.Post`). A stop at `x`, at the floor `f`
 it chose, owes its continuation at the worlds `y` of `KW.Owed x f y`: `ExtP f` at the
 continuation's share, a valid location typing, every view consistent with the share, a floor no
-higher, and **`FoldInv f` kept** (if it held at `x`, it holds at `y`). `ExtP` at `A` alone does not
-keep `FoldInv A` (`KStopSpike835N.extP_not_foldInv`), and a frame's induction re-enters at the
-resumption world, where it needs it (`kw_owed_fold`). Kept rather than asked, it holds at the
+higher, and **`FoldInv g` kept at every `g ≥ f`** (if it held at `x`, it holds at `y`). `ExtP`
+at `A` alone does not keep `FoldInv A` (`KStopSpike835N.extP_not_foldInv`), and a frame's
+induction re-enters at the resumption world, where it needs it (`kw_owed_fold`); under nested
+lends the stop's floor is the innermost lend's, below the frame's. Kept rather than asked, it holds at the
 stop's own world for every floor (`KW.owed_self`), which is where a handler that resumes in place
 resumes.
 -/
@@ -738,34 +739,36 @@ theorem KW.Post.trans {x y z : KW} (h₁ : x.Post y) (h₂ : y.Post z) : x.Post 
 
 /-- **The worlds a stop at `x` owes its continuation at**, at the floor `f` it chose and the
 continuation's share `ρ`: `ExtP f` at the share, a valid location typing, every view consistent
-with the share, a floor no higher than `x`'s, and `FoldInv f` kept. -/
+with the share, a floor no higher than `x`'s, and `FoldInv g` kept at every floor `g ≥ f`. A stop
+under live lends at `A > B` chooses `B`; the frame of the lend at `A` re-enters at the resumption
+world, where it needs `FoldInv A`. -/
 def KW.Owed (x : KW) (f : Life) (y : KW) (ρ : WRes) : Prop :=
   x.Θ.ExtP f y.Θ ρ ∧ y.Θ.OK ∧ ConsistentX y.c ρ ∧ y.lo ≤ x.lo ∧
-    (x.Θ.FoldInv f → y.Θ.FoldInv f)
+    (∀ g, f ≤ g → x.Θ.FoldInv g → y.Θ.FoldInv g)
 
 /-- **A stop's own world is owed, at every floor**: a handler that resumes in place does not need
 to know the floor the stop chose. -/
 theorem KW.owed_self {x : KW} (hΘ : x.Θ.OK) (f : Life) {ρ : WRes} (hc : ConsistentX x.c ρ) :
     x.Owed f x ρ :=
-  ⟨LocTy.extP_refl f x.Θ ρ, hΘ, hc, le_rfl, id⟩
+  ⟨LocTy.extP_refl f x.Θ ρ, hΘ, hc, le_rfl, fun _ _ h => h⟩
 
 /-- A world reached at the same location typing and view, at a floor no higher, is owed. -/
 theorem KW.owed_of_post {x y : KW} (hxy : x.Post y) (hΘ : x.Θ.OK) (f : Life) {ρ : WRes}
     (hc : ConsistentX x.c ρ) : x.Owed f y ρ := by
   obtain ⟨hΘy, hcy, hlo⟩ := hxy
-  refine ⟨?_, hΘy ▸ hΘ, hcy ▸ hc, hlo, fun h => hΘy ▸ h⟩
+  refine ⟨?_, hΘy ▸ hΘ, hcy ▸ hc, hlo, fun _ _ h => hΘy ▸ h⟩
   rw [hΘy]; exact LocTy.extP_refl f x.Θ ρ
 
 theorem KW.Owed.trans {x y z : KW} {f : Life} {ρ : WRes} (h₁ : x.Owed f y ρ)
     (h₂ : y.Owed f z ρ) : x.Owed f z ρ :=
   ⟨h₁.1.trans h₂.1, h₂.2.1, h₂.2.2.1, le_trans h₂.2.2.2.1 h₁.2.2.2.1,
-    fun h => h₂.2.2.2.2 (h₁.2.2.2.2 h)⟩
+    fun g hg h => h₂.2.2.2.2 g hg (h₁.2.2.2.2 g hg h)⟩
 
 /-- **Under a live lend at `A`, the resumption world keeps `FoldInv A`**, which the frame needs to
 re-enter there. -/
 theorem KW.Owed.foldInv {x y : KW} {A : Life} {ρ : WRes} (h : x.Owed A y ρ)
     (hx : x.Θ.FoldInv A) : y.Θ.FoldInv A :=
-  h.2.2.2.2 hx
+  h.2.2.2.2 A le_rfl hx
 
 /-- **`ExtP` at the floor `A` across the fold at a frame's shares**: the lender's share
 `ρkL = Z/ℓ ● W″` and the borrowed one `ρk ⊆ Z`, `Z`'s cell at `ℓ` lent at `A`

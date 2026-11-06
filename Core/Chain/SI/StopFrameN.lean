@@ -137,8 +137,9 @@ borrowed run, at `Φ[ℓ ↦ (A, F)]` from `ρ_b ● ℓ ↦ mut(A, v, ρ_P, P̂
 6.27 at the index finds the borrow at the top level of `π`, now `mut(A, v″, χ, P̂″)` with
 `P̂″ ⊆ F k`; the lender's resource is `π/ℓ ● χ ● ℓ ↦ own(v″)`, split by `hpost` into the
 post-configuration's two parts. The memory, the typed world and `↭` are the printed proof's
-(H33, exit, H34). -/
-theorem rwpG_M_frameG {Φ : LocFam} {l : Loc} {A : Life}
+(H33, exit, H34). `hpost` is read with the borrowed run's post resource `X` and the lender's `Y`
+valid. -/
+theorem rwpG_M_frameGV {Φ : LocFam} {l : Loc} {A : Life}
     {F : Nat → Val → SPropS Loc Val A} (hF : DownFam A F) {Qin Qout : PostG} {n j : Nat}
     (hjn : n ≤ j) {ls : List SRec} {e : Expr} {v : Val} {ρP ρlP ρb ρ : WRes}
     (houtP : ρP.InStratum A) (houtb : ρb.InStratum (↓A))
@@ -151,7 +152,7 @@ theorem rwpG_M_frameG {Φ : LocFam} {l : Loc} {A : Life}
         (hw'' : P'' v'' ⟨χ, hχ⟩), (∀ u r, SPropS.toU (P'' u) r → SPropS.toU (F k u) r) →
       ResU.CompS (X.del l) (ResU.single l (CellU.mutOf A v'' χ hχ P'' hw'')) X →
       ∀ W'', ResU.CompS χ (ResU.single l (CellU.ownOf v'')) W'' →
-      ∀ Y, ResU.CompS (X.del l) W'' Y →
+      ∀ Y, ResU.CompS (X.del l) W'' Y → ResU.Valid X → ResU.Valid Y →
       ∃ ρ'L ρpL, ResU.CompS ρ'L ρpL Y ∧ NoOwn ρpL ∧ Qout k ls' t ρ'L)
     (hA : ∀ BM, ResU.CompS ρb (ResU.single l (CellU.mutOf A v ρP houtP P hwit)) BM →
       rwpG (ℍ := ℍ) (Φ.set l A F) Qin n ls e BM) :
@@ -261,12 +262,36 @@ theorem rwpG_M_frameG {Φ : LocFam} {l : Loc} {A : Life}
       ha) htg''
   -- the lender's post-configuration
   obtain ⟨ρ'L, ρpL, hLY, hnoL, hQ⟩ := hpost (n - jr) (by omega) ls'' e' ρ' ρp π h12 h11 h9 hdπ
-    v'' χ hχ P'' hwit'' hPk hsplit'' W'' hW'' Y hY
+    v'' χ hχ P'' hwit'' hPk hsplit'' W'' hW'' Y hY hvπ hvY
   obtain ⟨fL, hf1, hf2⟩ := (ResU.CompS.assoc ρf ρ'L ρpL FY).mp ⟨Y, hLY, hFY⟩
   have hvfL : ResU.Valid fL := (ResU.Valid.split hf2 hvFY).1
   exact ⟨ρ'L, ρpL, fL, FY, Y, ps'', ls'', ⟨(ResU.CompS.comm hf1).1, fL, ResU.CompS.comm hf1, hvfL⟩,
     hf1, ⟨(ResU.CompS.comm hf2).1, FY, ResU.CompS.comm hf2, hvFY⟩, hf2, hmem₂, hLY,
     ⟨hupd, hvρ, hvY⟩, hnoL, hTout, htgout, hps'', hls'', hQ⟩
+
+/-- **The lender's side of a Mut Frame at any final term** (`[TR]` 6.65's proof at `rwpG`):
+`rwpG_M_frameGV`, the validity of the two post resources not read. -/
+theorem rwpG_M_frameG {Φ : LocFam} {l : Loc} {A : Life}
+    {F : Nat → Val → SPropS Loc Val A} (hF : DownFam A F) {Qin Qout : PostG} {n j : Nat}
+    (hjn : n ≤ j) {ls : List SRec} {e : Expr} {v : Val} {ρP ρlP ρb ρ : WRes}
+    (houtP : ρP.InStratum A) (houtb : ρb.InStratum (↓A))
+    {P : Val → SPropS Loc Val A} (hPF : ∀ u r, SPropS.toU (P u) r → SPropS.toU (F j u) r)
+    (hwit : P v ⟨ρP, houtP⟩)
+    (hclP : ResU.CompS (ResU.single l (CellU.ownOf v)) ρP ρlP) (hcρ : ResU.CompS ρlP ρb ρ)
+    (hpost : ∀ k, k ≤ n → ∀ ls' t (ρ' ρp X : WRes), Qin k ls' t ρ' → NoOwn ρp →
+      ResU.CompS ρ' ρp X → X.InStratum (↓A) →
+      ∀ (v'' : Val) (χ : WRes) (hχ : χ.InStratum A) (P'' : Val → SPropS Loc Val A)
+        (hw'' : P'' v'' ⟨χ, hχ⟩), (∀ u r, SPropS.toU (P'' u) r → SPropS.toU (F k u) r) →
+      ResU.CompS (X.del l) (ResU.single l (CellU.mutOf A v'' χ hχ P'' hw'')) X →
+      ∀ W'', ResU.CompS χ (ResU.single l (CellU.ownOf v'')) W'' →
+      ∀ Y, ResU.CompS (X.del l) W'' Y →
+      ∃ ρ'L ρpL, ResU.CompS ρ'L ρpL Y ∧ NoOwn ρpL ∧ Qout k ls' t ρ'L)
+    (hA : ∀ BM, ResU.CompS ρb (ResU.single l (CellU.mutOf A v ρP houtP P hwit)) BM →
+      rwpG (ℍ := ℍ) (Φ.set l A F) Qin n ls e BM) :
+    rwpG (ℍ := ℍ) Φ Qout n ls e ρ :=
+  rwpG_M_frameGV hF hjn houtP houtb hPF hwit hclP hcρ
+    (fun k hk ls' t ρ' ρp X hQ hno h9 hd v'' χ hχ P'' hw'' hPk hs W'' hW'' Y hY _ _ =>
+      hpost k hk ls' t ρ' ρp X hQ hno h9 hd v'' χ hχ P'' hw'' hPk hs W'' hW'' Y hY) hA
 
 /-! ### The frame rule across stops -/
 
