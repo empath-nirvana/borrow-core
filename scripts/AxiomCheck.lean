@@ -1784,6 +1784,13 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_idxLe
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.let_compatN_persist
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.await_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.ansN_persistent
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.hardestRow_entry_PB
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.consistentX_of_outlives
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.ansN_zero
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_iterateCI
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tickB_sig
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.iterate_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tokMint_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tokBurn_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.arrLen_compatN
