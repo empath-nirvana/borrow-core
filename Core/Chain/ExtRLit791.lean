@@ -57,7 +57,7 @@ def vUgen (E : LocTy → LocTy → WRes → Prop) (x : LifeVar) (δ : LSub) (Θ 
 /-- At the interpretation's own order, `vUgen` is `vN`. -/
 theorem vN_eq_vUgen (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes) :
     vN (ℍ := ℍ) (.thunk (tyC x)) δ Θ n v ρ ↔ vUgen (ℍ := ℍ) LocTy.ExtR x δ Θ n v ρ := by
-  simp only [vN, vNE, cN, tyC, vUgen]
+  simp only [vNE, cN, tyC, vUgen]
 
 /-- The thunk's resource: one `mut` cell at `b`. -/
 def ρb (m : Loc) (b : Life) : WRes :=

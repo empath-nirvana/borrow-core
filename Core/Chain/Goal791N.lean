@@ -137,7 +137,7 @@ variable is its environment entry's candidate (empty at the empty environment); 
 least fixed point `⋂{P | A[P/X] ⊆ P}`, the candidate joint over the mode, the world and the index,
 empty unless `X` is outside `A`'s `Mut` payloads and the `μ` is closed. The `U` clause reads no
 environment (Core's `vCE` at `U`: `cC` has none). -/
-def vNE : Option (Nat → TEntN) → VTy → LSub → LocTy → Nat → Val → WRes → Prop
+def vNE : (η : Option (Nat → TEntN)) → VTy → LSub → LocTy → Nat → Val → WRes → Prop
   | _, .unit, _, _, _, v, ρ => v = Val.unit ∧ ρ = PMap.empty
   | η, .tensor A B, δ, Θ, n, v, ρ => ∃ v₁ v₂ ρ₁ ρ₂, v = Val.pair v₁ v₂ ∧ ResU.CompS ρ₁ ρ₂ ρ ∧
       vNE η A δ Θ n v₁ ρ₁ ∧ vNE η B δ Θ n v₂ ρ₂
@@ -172,7 +172,7 @@ def vNE : Option (Nat → TEntN) → VTy → LSub → LocTy → Nat → Val → 
 /-- **`𝒱⟦A⟧δ` in the observable view an `imm` payload is held at** (Core's `vCE false`): `vNE`'s
 clauses with `U C` read as `True`, `!A` and `Mut`'s stored family read at `vNE`, a variable at its
 entry's observable candidate. -/
-def vOE : Option (Nat → TEntN) → VTy → LSub → LocTy → Nat → Val → WRes → Prop
+def vOE : (η : Option (Nat → TEntN)) → VTy → LSub → LocTy → Nat → Val → WRes → Prop
   | _, .unit, _, _, _, v, ρ => v = Val.unit ∧ ρ = PMap.empty
   | η, .tensor A B, δ, Θ, n, v, ρ => ∃ v₁ v₂ ρ₁ ρ₂, v = Val.pair v₁ v₂ ∧ ResU.CompS ρ₁ ρ₂ ρ ∧
       vOE η A δ Θ n v₁ ρ₁ ∧ vOE η B δ Θ n v₂ ρ₂
@@ -259,11 +259,20 @@ end
 
 end
 
-/-- `𝒱⟦A⟧δ` at the world and the index: `vNE` at the empty environment. -/
-abbrev vN : VTy → LSub → LocTy → Nat → Val → WRes → Prop := vNE (ℍ := ℍ) none
+/-- `𝒱⟦A⟧δ` at the world and the index: `vNE` at the empty environment (Core's `vC`, which is
+`vCE none`). `vN (ℍ := h) A …` is `vNE (ℍ := h) none A …`. -/
+syntax "vN" : term
+macro_rules
+  | `(vN) => `(vNE (η := none))
+macro_rules
+  | `(vN (ℍ := $h) $args*) => `(vNE (ℍ := $h) none $args*)
 
 /-- The observable view at the empty environment. -/
-abbrev vO : VTy → LSub → LocTy → Nat → Val → WRes → Prop := vOE (ℍ := ℍ) none
+syntax "vO" : term
+macro_rules
+  | `(vO) => `(vOE (η := none))
+macro_rules
+  | `(vO (ℍ := $h) $args*) => `(vOE (ℍ := $h) none $args*)
 
 /-! ### The environment (Core's `RelMu`)
 
