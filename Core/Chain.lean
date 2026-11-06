@@ -119,3 +119,5 @@ import Core.Chain.Fuel835N
 import Core.Chain.Fam836N
 import Core.Chain.FamFrame836N
 import Core.Chain.FamStop836N
+import Core.Chain.FamCancel836N
+import Core.Chain.FamSlice836N
