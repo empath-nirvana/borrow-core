@@ -125,8 +125,9 @@ location of `ℓ ↦ own(v) ● ρ_P̂(v)` (`not_relAt_xex` at the entry world).
 longer than `α`), so a record of the caller's list is not tagged by the frame. At a resume the list
 is the handler's and `α` the first entry's, so freshness is not available; the exit reads instead
 that no record of the caller's list is in the frame's lineage (`notDesc_frame`, from the entry
-world). The printed freshness technique is not used here. -/
-theorem rwpG_I_frameG {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmWf T δ) (v : Val)
+world). The printed freshness technique is not used here. `hpost` is also handed the validity of
+`π` and of `π/ℓ ● ρ_ℓ ● ρ_P̂(v)`. -/
+theorem rwpG_I_frameGV {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmWf T δ) (v : Val)
     {A : Life} {ρP ρlP ρb ρ : WRes} (houtP : ρP.InStratum A) (houtb : ρb.InStratum A)
     (hclP : ResU.CompS (ResU.single l (CellU.ownOf v)) ρP ρlP) (hcρ : ResU.CompS ρlP ρb ρ)
     (hshape : vShape T δ v ρP) {ls : List SRec}
@@ -138,7 +139,7 @@ theorem rwpG_I_frameG {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmW
       (π.del l).InStratum A → ResU.CompS (π.del l) ρlP Y →
       (∀ R Z, ResU.CompS R Z Y → R.InStratum A →
         (∀ ψ : CellU Loc Val, R.get l = some ψ → ψ.kind ≠ Kind.imm) → Ext ls'' ls R) →
-      (∀ r ∈ rsOf ls, ∀ m, XEx ρlP m → ¬ RelAt r m) →
+      (∀ r ∈ rsOf ls, ∀ m, XEx ρlP m → ¬ RelAt r m) → ResU.Valid π → ResU.Valid Y →
       ∃ ρ'L ρpL, ResU.CompS ρ'L ρpL Y ∧ NoOwn ρpL ∧ Qout k ls t ρ'L)
     (hA : ∀ BI, ResU.CompS ρb (ResU.single l (CellU.immOf (LSet.singleton A) v ρP houtP)) BI →
       rwpG (ℍ := ℍ) Φ Qin n (frameList ⟨l, v, ρP, T, δ⟩ ds A ls) e BI) :
@@ -331,13 +332,37 @@ theorem rwpG_I_frameG {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmW
   -- the lender's post-configuration
   obtain ⟨ρ'L, ρpL, hLY, hnoL, hQ⟩ :=
     hpost (n - jr) (by omega) ls'' e' ρ' ρp π Y h12 h11 h9 hls'' hGc hπdA hY hext
-      (fun r hr m hx => not_relAt_xex hvsρ hTI ⟨FB, ResU.CompS.comm hFBl⟩ hr hx)
+      (fun r hr m hx => not_relAt_xex hvsρ hTI ⟨FB, ResU.CompS.comm hFBl⟩ hr hx) ⟨σπ, hσπ⟩
+      (ResU.Valid.split hFY hvFY).2
   obtain ⟨fL, hf1, hf2⟩ := (ResU.CompS.assoc ρf ρ'L ρpL FY).mp ⟨Y, hLY, hFY⟩
   have hvfL : ResU.Valid fL := (ResU.Valid.split hf2 hvFY).1
   exact ⟨ρ'L, ρpL, fL, FY, Y, ps, ls,
     ⟨(ResU.CompS.comm hf1).1, fL, ResU.CompS.comm hf1, hvfL⟩, hf1,
     ⟨(ResU.CompS.comm hf2).1, FY, ResU.CompS.comm hf2, hvFY⟩, hf2, hmem₂, hLY, hupdw, hnoL,
     hTout, htgout, fun _ => Iff.rfl, fun _ => Iff.rfl, hQ⟩
+
+/-- **The lender's side of an Imm Frame at any final term** (`rwpG_I_frameGV` without the
+validity it hands `hpost`). -/
+theorem rwpG_I_frameG {Φ : LocFam} (l : Loc) (T : VTy) (δ : LSub) (hadm : AdmWf T δ) (v : Val)
+    {A : Life} {ρP ρlP ρb ρ : WRes} (houtP : ρP.InStratum A) (houtb : ρb.InStratum A)
+    (hclP : ResU.CompS (ResU.single l (CellU.ownOf v)) ρP ρlP) (hcρ : ResU.CompS ρlP ρb ρ)
+    (hshape : vShape T δ v ρP) {ls : List SRec}
+    {ds : List FrameRec} (hds : ∀ d, d ∈ ds ↔ Desc ⟨l, v, ρP, T, δ⟩ d)
+    {Qin Qout : PostG} {n : Nat} {e : Expr}
+    (hpost : ∀ k, k ≤ n → ∀ ls'' t (ρ' ρp π Y : WRes), Qin k ls'' t ρ' → NoOwn ρp →
+      ResU.CompS ρ' ρp π → (∀ x, x ∈ ls'' ↔ x ∈ frameList ⟨l, v, ρP, T, δ⟩ ds A ls) →
+      ResU.CompS (π.del l) (ResU.single l (CellU.immOf (LSet.singleton A) v ρP houtP)) π →
+      (π.del l).InStratum A → ResU.CompS (π.del l) ρlP Y →
+      (∀ R Z, ResU.CompS R Z Y → R.InStratum A →
+        (∀ ψ : CellU Loc Val, R.get l = some ψ → ψ.kind ≠ Kind.imm) → Ext ls'' ls R) →
+      (∀ r ∈ rsOf ls, ∀ m, XEx ρlP m → ¬ RelAt r m) →
+      ∃ ρ'L ρpL, ResU.CompS ρ'L ρpL Y ∧ NoOwn ρpL ∧ Qout k ls t ρ'L)
+    (hA : ∀ BI, ResU.CompS ρb (ResU.single l (CellU.immOf (LSet.singleton A) v ρP houtP)) BI →
+      rwpG (ℍ := ℍ) Φ Qin n (frameList ⟨l, v, ρP, T, δ⟩ ds A ls) e BI) :
+    rwpG (ℍ := ℍ) Φ Qout n ls e ρ :=
+  rwpG_I_frameGV l T δ hadm v houtP houtb hclP hcρ hshape hds
+    (fun k hk ls'' t ρ' ρp π Y hQ hno h9 hls hGc hπ hY hext hNX _ _ =>
+      hpost k hk ls'' t ρ' ρp π Y hQ hno h9 hls hGc hπ hY hext hNX) hA
 
 /-! ### The Imm Frame across stops -/
 
