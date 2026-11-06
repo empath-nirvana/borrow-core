@@ -668,3 +668,43 @@ callback's run at the image as a premise (was the suspending callback's value);
   (`OpTabN.RebOKR.entry`); `Row.Unwind` admits an abortive `unr` operation. Not derived;
   obstruction not verified.
 
+
+## 9. Unit L5: opaque types and families (#836)
+
+### 9.1 The map
+
+The clauses are Core's (`Core/Relation.lean`): at `opq k`, `k.rel v` (for `Tok` a location owning a
+unit cell, `Opaque.rel`); at `[L]`, `v = arr(ℓ, c)`, `c < 2³¹` and `sepRange (λm. 𝒱⟦L⟧(loc m)) ℓ c`.
+On the chain both go into `vN` and `vO` as they are, the leaf read at the world and index of the
+family (`sepRange` is Core's, `Core/SepRange.lean`). The laws are re-proved over them: a family's
+law is the leaf's, lifted by `sepRange_mono_down` (for laws read at a part of the resource:
+`vN_extR`, `vN_outlives`, `vN_above`) or `sepRange_mono'`.
+
+Each row, its Core proof, and the chain lemmas it reads (`·N` names are new in this unit):
+
+| Row | Core proof | Chain lemmas |
+|---|---|---|
+| `tokMint` | `tokMint_compatX` (`Core/Tok.lean`) | `gN_deadP`, `erwp_val`, `erwp_det` (β), `erwp_alloc` (H1), `Opaque.rel_tok_intro` at the `opq` clause |
+| `tokBurn` | `tokBurn_compatX` | `erwp_det` (β), `erwp_free` (H2), `Opaque.rel_cases`, `Opaque.tok_not_host` |
+| `arrLen` | `arrLen_compatX` (`Core/Arrays.lean`) | `vN_fam_iff`, `noOwn_arrayImmN`, `erwp_garbage` (W5), `erwp_det` |
+| `arrGet` | `arrGet_compatX` | `vN_fam_idx`, `erwp_det` at `Head.idx`, `sepRange_pick`, `noOwn` of a leaf, `erwp_garbage` |
+| `arrCopy` | `arrCopy_compatX` | `sepRange_dup` with the `imm` leaf's duplication (`compS_imm_dup`, R10, and the witness `ImmWitW` kept on both halves) |
+| `arrRelease` | `arrRelease_compatX` (`release_fam_compatX`) | `noOwn_famN`, `erwp_garbage` |
+| `arrSize` | `arrSize_compatX` | `erwp_det`, `vN_fam_mk` |
+| `arrReplace` | `arrReplace_compatX` | `erwp_det`, `erwp_bindR`, `rwp_load` (H3), `rwp_store` (H5), `sepRange_pick` |
+| `arrNew` | `arrNew_compatX`, `tabFill_wp`, `wpTS_tab`, `alloc_block` (`Core/ArrayWp.lean`) | `rwp_tab`/`erwp_tab` (the `tab` step at the index: `n` of `TWNC.alloc`, a block from `finDom_block`), `tabFill_wpN` by Core's induction: `bang_app` (F2), `erwp_bind_frame` (W4), `rwp_store` |
+| `arrFree` | `arrFree_compatX`, `dropFill_wp` | `erwp_det` at `Head.drop`, `erwp_free`, `bang_app`, `erwp_bind_frame` |
+| `arrEmpty`, `sliceEmptyI`, `sliceEmptyM` | `famEmpty_compatX` (`Core/SliceOps.lean`) | `vN_fam_mk` at `0` |
+| `sliceSplitI`, `sliceSplitM` | `famSplit_compatX` | `vN_fam_split`, `erwp_det` at `Head.split` |
+| `sliceGetM` | `famGet_compatX` (`Core/Slices.lean`) | as `arrGet`, the leaf a `mut` one (`noOwn` of `mutL`) |
+| `sliceLenM` | `famSize_compatX` | as `arrSize` |
+| `sliceReplaceM` | `sliceReplaceM_compatX` | `erwp_M_antiFrame` at the view (R2, as `withswap_compatN`) at the leaf, `rwp_load`, `rwp_store`, `sepRange_pick` |
+| `sliceSwapM` | `sliceSwapM_compatX` | the same at one leaf (`i = j`) or two (`sepRange_pick2N`) |
+| `sliceBorrowM` | `sliceBorrowM_compatX`, `wpTS_M_frameFam`/`wpTS_M_frameList` (`Core/SliceFrames.lean`) | `erwp_M_frameFamN`: the list induction over the one-cell frame at the empty table (`erwp_M_frameR`, as `withbor2_compatN`), each cell its own key `Θ + (ℓᵢ, αᵢ)`, `αᵢ₊₁` fresh for the world after `ℓᵢ`; the callback reads every leaf at the innermost lifetime through `Mut`'s slack `@aδ ⊑ b` |
+| `sliceBorrowI` | `sliceBorrowI_compatX`, `wpTS_I_frameFam` | `erwp_I_frameFamN`: the list induction over `erwp_I_frame` (R5), one `imm` record per cell (`LocTy.addImm`), the run read at the lender's view by `erwp_tieEntry` |
+| `sliceBorrowMU` | `sliceBorrowMU_compatX` (`Core/EffBorrow.lean`), `wpG_M_frameFam` | the list induction over `erwp_M_frameR` at a `Row.Unwind` table (abortive entries), as `withbor2U_compatN` |
+| `sliceBorrowIU` | `sliceBorrowIU_compatX`, `wpG_I_frameFam` | the list induction over `erwp_I_frameR`, as `withbor1U_compatN` |
+| `sm` (constant) | `sliceBorrowMU_compatX` at `Row.Suspend` | the list induction over `erwp_M_frameCR` (stops, raises) and `erwp_M_frame_cancelRunCR` (layered cancel runs): each layer's table the guarded twin of the next (`tabR` at that layer's claim), `tabR_can` per layer; `withbor2S_compat`'s structure around it, `erwp_claimX`, `erwp_ubindClaimRT`, the finaliser `d : Array A ⊸ 1` |
+
+The statements `JdgInFrag` and `Const791.InFrag` read `VTy.inFrag`; it is widened to `opq` and to
+`[L]` at an in-fragment `L`. `μ`, `tvar` (L6) and `ν` (L7) stay out.

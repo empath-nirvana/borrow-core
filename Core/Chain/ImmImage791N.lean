@@ -58,7 +58,9 @@ theorem vN_vO : ∀ (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ :
   | .int _, _, _, _, _, _, h => h
   | .tvar _, _, _, _, _, _, h => h
   | .mu _, _, _, _, _, _, h => h
-  | .fam _, _, _, _, _, _, h => h
+  | .fam L, δ, Θ, n, _, _, h => by
+      obtain ⟨l, c, h₁, h₂, h₃⟩ := h
+      exact ⟨l, c, h₁, h₂, sepRange_mono' (fun m σ hm => vN_vO L δ Θ n (Val.loc m) σ hm) h₃⟩
   | .opq _, _, _, _, _, _, h => h
 
 /-- Extending `δ` at a variable `A` does not mention leaves `vO⟦A⟧` alone. -/
@@ -109,8 +111,11 @@ theorem vN_vShape : ∀ (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (
   | .int _, _, _, _, _, _, ⟨hv, hρ⟩ => by subst hρ; exact ⟨rfl, hv⟩
   | .tvar _, _, _, _, _, _, h => h.elim
   | .mu _, _, _, _, _, _, h => h.elim
-  | .fam _, _, _, _, _, _, h => h.elim
-  | .opq _, _, _, _, _, _, h => h.elim
+  | .fam L, δ, Θ, n, _, _, h => by
+      obtain ⟨l, c, rfl, -, h₃⟩ := h
+      exact ⟨l, c, pure_sep_mk rfl
+        (sepRange_mono' (fun m σ hm => vN_vShape L δ Θ n (Val.loc m) σ hm) h₃)⟩
+  | .opq _, _, _, _, _, _, h => h
 /-- **An observable value has its type's shape.** -/
 theorem vO_vShape : ∀ (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes),
     vO (ℍ := ℍ) A δ Θ n v ρ → vShape A δ v ρ
@@ -147,8 +152,11 @@ theorem vO_vShape : ∀ (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (
   | .int _, _, _, _, _, _, ⟨hv, hρ⟩ => by subst hρ; exact ⟨rfl, hv⟩
   | .tvar _, _, _, _, _, _, h => h.elim
   | .mu _, _, _, _, _, _, h => h.elim
-  | .fam _, _, _, _, _, _, h => h.elim
-  | .opq _, _, _, _, _, _, h => h.elim
+  | .fam L, δ, Θ, n, _, _, h => by
+      obtain ⟨l, c, rfl, -, h₃⟩ := h
+      exact ⟨l, c, pure_sep_mk rfl
+        (sepRange_mono' (fun m σ hm => vO_vShape L δ Θ n (Val.loc m) σ hm) h₃)⟩
+  | .opq _, _, _, _, _, _, h => h
 end
 
 /-! ### The observable view transfers between pieces of one escrow -/
@@ -215,12 +223,23 @@ theorem vO_transfer {R : WRes} : ∀ (T : VTy) {δ : LSub} {Θ : LocTy} {n : Nat
   | .unit, _, _, _, _, _, _, _, _, _, _, hs => by obtain ⟨hB, hv⟩ := hs; exact ⟨hv, hB⟩
   | .int _, _, _, _, _, _, _, _, _, _, _, hs => by obtain ⟨hB, hv⟩ := hs; exact ⟨hv, hB⟩
   | .unk, _, _, _, _, _, _, _, _, _, _, hs => hs.1
-  | .opq _, _, _, _, _, _, _, _, _, _, h, _ => h.elim
+  | .opq _, _, _, _, _, _, _, _, _, _, _, hs => hs
   | .zero, _, _, _, _, _, _, _, _, _, h, _ => h.elim
   | .thunk _, _, _, _, _, _, _, _, _, _, _, _ => trivial
   | .tvar _, _, _, _, _, _, _, _, _, _, h, _ => h.elim
   | .mu _, _, _, _, _, _, _, _, _, _, h, _ => h.elim
-  | .fam _, _, _, _, _, _, _, _, _, _, h, _ => h.elim
+  | .fam L, δ, Θ, n, _, A, B, hA, hB, hL, h, hs => by
+      obtain ⟨l, c, he, hn, hsA⟩ := h
+      obtain ⟨l', c', hk'⟩ := hs
+      obtain ⟨he', hsB⟩ := pure_sep_iff.mp hk'
+      obtain ⟨rfl, rfl⟩ := Val.arr_inj (he.symm.trans he')
+      exact ⟨l, c, he, hn, sepRange_zip (RA := CellMatch R)
+        (RB := fun B => CellMatch R B ∧ LifeBoundW Θ.imm B) (f := id)
+        (fun _ _ _ hc h => ⟨h.left hc, h.right hc⟩)
+        (fun _ _ _ hc h => ⟨⟨h.1.left hc, LifeBoundOn.left hc h.2⟩,
+          ⟨h.1.right hc, LifeBoundOn.right hc h.2⟩⟩)
+        (fun _ _ _ hc => hc) rfl
+        (fun m _ _ a b ha hb hPa hQb => vO_transfer L ha hb.1 hb.2 hPa hQb) hA ⟨hB, hL⟩ hsA hsB⟩
   | .tensor T₁ T₂, δ, Θ, n, _, A, B, hA, hB, hL, h, hs => by
       obtain ⟨v₁, v₂, A₁, A₂, rfl, hcA, h₁, h₂⟩ := h
       obtain ⟨w₁, w₂, hk⟩ := hs
@@ -334,7 +353,31 @@ theorem relabel_vN {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSu
   | .zero, _, _, _, _, _, hc, _, _, _, _, _, _, _, _ => hc.elim
   | .tvar _, _, _, _, _, _, _, hR, _, _, _, _, _, _, _ => hR.elim
   | .mu _, _, _, _, _, _, _, hR, _, _, _, _, _, _, _ => hR.elim
-  | .fam _, _, _, _, _, _, _, hR, _, _, _, _, _, _, _ => hR.elim
+  | .fam L, hx, hx₀, _, c, Rl, hc, hR, hRl, hcR, hs, hLk, hLo, hcr, hcm => by
+      obtain ⟨ℓ, k, hk₁⟩ := hc
+      obtain ⟨he, hs₁⟩ := pure_sep_iff.mp hk₁
+      obtain ⟨ℓ', k', he', hn, hs₂⟩ := hR
+      subst he
+      obtain ⟨rfl, rfl⟩ := Val.arr_inj he'
+      refine ⟨ℓ, k, rfl, hn, ?_⟩
+      exact sepRange_zip (RA := CellMatch R)
+        (RB := fun c => (∀ m ψ, c.get m = some ψ → ∃ ζ, R.get m = some ζ ∧ ψ.erase = ζ.erase ∧
+          (ζ.kind ≠ Kind.own → ψ.wit = ζ.wit) ∧ (ζ.kind = Kind.own → CellMatch R ψ.wit)) ∧
+          (∀ m ψ, c.get m = some ψ → (∃ ζ, R.get m = some ζ ∧ ζ.kind ≠ Kind.imm) →
+            ψ.wit.InStratum (LSet.singleton β).join) ∧
+          LifeBoundOn Θ.imm (fun m => ∃ ζ, R.get m = some ζ ∧ ζ.kind = Kind.imm) c ∧
+          LifeBoundWit Θ.imm R c)
+        (f := relRes R β)
+        (fun _ _ _ hc h => ⟨h.left hc, h.right hc⟩)
+        (fun _ _ _ hc h => ⟨⟨rebMatch_left hc h.1, strat_left hc h.2.1, LifeBoundOn.left hc h.2.2.1,
+            LifeBoundWit.left hc h.2.2.2⟩,
+          ⟨rebMatch_left hc.comm h.1, strat_left hc.comm h.2.1, LifeBoundOn.right hc h.2.2.1,
+            LifeBoundWit.left hc.comm h.2.2.2⟩⟩)
+        (fun _ _ _ hc => relRes_compS hc) (relRes_empty R β)
+        (fun m hm hm' a b ha hb hPa hQb => relabel_vN L hx hx₀ hQb hPa ha hb.1 hb.2.1 hb.2.2.1
+          hb.2.2.2 (fun m' S u h => hcr m' S u (RefPos.fam_at hm hm' h))
+          (fun m' S h => hcm m' S (MutPos.fam_at hm hm' h)))
+        hRl ⟨hcR, hs, hLk, hLo⟩ hs₂ hs₁
   | .sum T₁ T₂, hx, hx₀, _, c, Rl, hc, hR, hRl, hcR, hs, hLk, hLo, hcr, hcm => by
       rcases hc with ⟨a, hk₁⟩ | ⟨a, hk₁⟩ <;> rcases hR with ⟨b, hb, h₁'⟩ | ⟨b, hb, h₁'⟩
       · obtain ⟨he, h₁⟩ := pure_sep_iff.mp hk₁

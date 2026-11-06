@@ -275,7 +275,11 @@ theorem vN_noOwn_of_ownFree {A : VTy} (hA : A.OwnFree) :
   | zero => intro δ Θ n v ρ h; exact h.elim
   | int w => intro δ Θ n v ρ h; rw [h.2]; exact noOwn_empty
   | unk => intro δ Θ n v ρ h; rw [h]; exact noOwn_empty
-  | opq k hk => intro δ Θ n v ρ h; exact h.elim
+  | opq k hk =>
+      intro δ Θ n v ρ h
+      rcases Opaque.rel_cases h with ⟨-, rfl, -⟩ | ⟨rfl, -⟩
+      · exact noOwn_empty
+      · exact absurd hk Opaque.tok_not_host
   | bang A => intro δ Θ n v ρ h; rw [h.1]; exact noOwn_empty
   | imm a A =>
       intro δ Θ n v ρ h
