@@ -1,18 +1,20 @@
 import Core.Chain.Goal791N
 
 /-!
-# Core's `Mut` on the chain, at a reborrow: a configuration  `[spec §62]`
+# `Mut` read per location on the chain, at a reborrow: a configuration  `[spec §62]`
 
 Core's `Mut` clause (`ptoMutS`, `Core/Relation.lean`) stores `𝒱⟦A⟧` read at the records strictly
 longer-lived than the cell (`ofS Q = P ls₀`), and Core's Kripke order `Ext` keeps exactly the
-records above every borrow of the resource. On the chain the families live in the location
-typing `Φ` (`UpdN` changes a cell's predicate only along `Φ ℓ`), so Core's shape there is: a
-`Mut` value at `ℓ` whose cell is at `α`, with `Φ ℓ = (α, 𝒱⟦A⟧ read at Φ above α)` (`mutC`).
+records above every borrow of the resource. Read per location instead, with `ls₀` taken as the
+chain's location typing `Φ` (`UpdN` changes a cell's predicate only along `Φ ℓ`), the clause is: a
+`Mut` value at `ℓ` whose cell is at `α`, with `Φ ℓ = (α, 𝒱⟦A⟧ read at Φ above α)` (`mutC`). This is
+not Core's technique; the configuration below refutes this reading, and the interpretation reads
+`Mut` over the per-lend world instead (`Core/Chain/SI/LocTy.lean`, `perLocShape_lend_reborrow`).
 
 A reborrow runs its callback at `Φ.set ℓ α Fi` where `Φ ℓ = (β, Fo)`, `α < β` (`erwp_withbor3`,
 the frame `withbor3U` and the field reborrow `withborFE` run). The configuration: a value of
-Core's shape at a location `ℓ_b ≠ ℓ`, its cell at `b` with `α < b < β`, holding a `Mut @β 1` at
-a location `ℓ₂ ≠ ℓ` (`coreShape_not_reborrow`). It is a value at `Φ` and is not one at
+the per-location shape at a location `ℓ_b ≠ ℓ`, its cell at `b` with `α < b < β`, holding a `Mut @β 1` at
+a location `ℓ₂ ≠ ℓ` (`perLocShape_not_reborrow`). It is a value at `Φ` and is not one at
 `Φ.set ℓ α F`, for every `F`: re-typing `ℓ` below `b` takes `ℓ` out of `Φ` above `b`, so the
 family `Φ ℓ_b` stores is no longer `𝒱⟦Mut @β 1⟧` read at `Φ` above `b`, though the value holds
 nothing at `ℓ`. A callback holding such a borrow (one shorter than the source's, longer than the
@@ -49,12 +51,12 @@ def LocFam.above (Φ : LocFam) (α : Life) : LocFam := fun l =>
 /-- A content predicate read at a location typing: the semantic payload of a type. -/
 abbrev CPredN := LocFam → Nat → Val → WRes → Prop
 
-/-- The family Core's shape stores at a cell at `α`: the payload read at `Φ` above `α`. -/
+/-- The family the per-location shape stores at a cell at `α`: the payload read at `Φ` above `α`. -/
 def famC (α : Life) (P : CPredN) (Φ : LocFam) : Nat → Val → SPropS Loc Val α :=
   fun j u r => P (LocFam.above Φ α) j u r.1
 
-/-- **Core's `Mut` clause on the chain**: a location whose cell at `α` holds the member `j ≥ n`
-of `famC α P Φ`, the family `Φ ℓ` gives. -/
+/-- **`Mut` read per location on the chain** (not Core's technique): a location whose cell at `α`
+holds the member `j ≥ n` of `famC α P Φ`, the family `Φ ℓ` gives. -/
 def mutC (α : Life) (P : CPredN) : CPredN := fun Φ n v ρ =>
   ∃ (l : Loc) (w : Val) (χ : WRes) (hχ : χ.InStratum α) (j : Nat) (hw : famC α P Φ j w ⟨χ, hχ⟩),
     n ≤ j ∧ v = Val.loc l ∧ Φ l = some ⟨α, famC α P Φ⟩ ∧
@@ -114,11 +116,11 @@ theorem inner_mutC (l l₂ : Loc) {b β : Life} (hbβ : b < β) :
   refine ⟨l₂, Val.unit, PMap.empty, ResU.inStratum_empty β, 0, ⟨rfl, rfl⟩, le_rfl, rfl, ?_, rfl⟩
   simp [Φ₁, famC_unit]
 
-/-- **The configuration.** At `Φc`, the location `ℓ_b` holds a value of Core's shape at
+/-- **The configuration.** At `Φc`, the location `ℓ_b` holds a value of the per-location shape at
 `Mut @b (Mut @β 1)` (its content a `Mut @β 1` at `ℓ₂`); for every `α < b` and every family
 `F`, the same value is not one at `Φc.set ℓ α F`, the location typing a reborrow of `ℓ` at `α`
 runs its callback at. The value holds nothing at `ℓ`. -/
-theorem coreShape_not_reborrow (l l₂ lb : Loc) (hl : lb ≠ l) (hl₂ : lb ≠ l₂) (hll₂ : l₂ ≠ l)
+theorem perLocShape_not_reborrow (l l₂ lb : Loc) (hl : lb ≠ l) (hl₂ : lb ≠ l₂) (hll₂ : l₂ ≠ l)
     {α b β : Life} (hαb : α < b) (hbβ : b < β) (F : Nat → Val → SPropS Loc Val α) :
     ∃ (v : Val) (ρ : WRes),
       (∀ x ψ, ρ.get x = some ψ → x ≠ l) ∧

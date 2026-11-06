@@ -487,10 +487,12 @@ theorem withborFS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
 /-- **`ConstN` for the field reborrow at a suspending row**, from the fundamental property at the
 finaliser's derivation. -/
 theorem constN_wF (hF : FundamentalN (ℍ := ℍ)) {a : Lifetime.Life} {x : LifeVar}
-    {bnd : Lifetime.Life} {A B : VTy} {S : Row} {d : Expr} :
-    ConstN (ℍ := ℍ) (.wF a x bnd A B S d) := by
+    {bnd : Lifetime.Life} {A B : VTy} {S : Row} {d : Expr}
+    (hfr : (Const791.wF a x bnd A B S d).InFrag) : ConstN (ℍ := ℍ) (.wF a x bnd A B S d) := by
   rintro ⟨hbnd, hA, hB, hS, hdc, hder⟩ δ Θ n _
-  exact withborFS_compat hbnd hA hB hS hdc (hF _ _ _ _ hder) δ Θ n
+  have hL : (VTy.mut a (.ref A)).inFrag = true := by
+    simp_all [Const791.InFrag, Const791.ty, withborFSTy, withborUTy, VTy.inFrag, CTy.inFrag]
+  exact withborFS_compat hbnd hA hB hS hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ Θ n
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

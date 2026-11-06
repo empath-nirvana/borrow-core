@@ -58,7 +58,7 @@ statements, as `TreeGoal791`'s with `vN`/`cN`/`erwp` for `vT`/`cT`/`cerwpT`. Pro
 Departures 1–3 below describe the interpretation before the per-lend world; #825 replaced them
 (`scope-791-loctype.md` §9): `Mut` reads the world, `U` is Kripke along `ExtA`, and the view's
 consistency replaces `Covers`. Departure 1's `Imm` half stands. Decision 1 (2026-11-05) asked for
-1–3 to be undone. `coreShape_not_reborrow`
+1–3 to be undone. `perLocShape_not_reborrow`
 (§5, "Decision 1") refutes reading Core's `ls₀` as the location typing, not Core's records-based
 `Mut` (§7.3). What stops the port of Core's `withbor3_compatX` is the anti-frame's reseal at a
 location the location typing does not type (`reseal_untyped`, §7.2); departure 1's record half
@@ -121,7 +121,7 @@ has no configuration.
 | `suspend_closingOp` (the cancel-row clause admits a cancel row with a layer) | `Cancel791N` | the names nonzero |
 | `cbRelease_sem` (the callback type is inhabited) | `Lend791N` | the bound defined |
 | `answer_not_inStratum` (why the answer clause is in `Row.Suspend`) | `Lend791N` | none |
-| `coreShape_not_reborrow` (the configuration for decision 1) | `Shape791N` | the locations distinct, `α < b < β` |
+| `perLocShape_not_reborrow` (the configuration for decision 1) | `Shape791N` | the locations distinct, `α < b < β` |
 | `reseal_untyped` (with `stuckV_one`, `stuckV_not_two`, `unitV_all`): the anti-frame's reseal at a location `Φ` does not type (§7.2) | `Shape791N` | `@aδ = β`; `Φ ℓ = none` |
 
 `ConstN`, `ConstsN`, `FundamentalN`, `BridgeN`, `Goal791SchedN`, `Withbor2SN`, `Withbor3SN`,
@@ -140,7 +140,7 @@ under the live lend reads; it admits cleanup that performs (`suspend_closingOp`)
 
 ### Decision 1: Core's shape, and where it fails on the chain
 
-`coreShape_not_reborrow` (`Core/Chain/Shape791N.lean`): with `Mut` in Core's shape on the chain
+`perLocShape_not_reborrow` (`Core/Chain/Shape791N.lean`): with `Mut` in Core's shape on the chain
 (`Φ ℓ = (α, 𝒱⟦A⟧ read at Φ above α)`, `mutC`), a value at `ℓ_b ≠ ℓ` whose cell is at `b`, holding
 a `Mut @β 1` at `ℓ₂ ≠ ℓ`, is a value at `Φ` (`Φ ℓ = (β, 𝒱⟦1⟧)`) and is not one at `Φ.set ℓ α F`
 for any `α < b < β` and any `F`. `Φ.set ℓ α Fi` is where a reborrow runs its callback
@@ -181,7 +181,7 @@ families, fixed at the lend, would read.
 
 - §7 (unit 3): the port of `withbor3_compatX` stops at its anti-frame step (§7.2). A decision
   on how an opened `Mut` argument's location comes to be typed by `Φ` at the step index; then
-  `w3` and `wF`. Routes A–C below were framed against `coreShape_not_reborrow`; §7.3 places that
+  `w3` and `wF`. Routes A–C below were framed against `perLocShape_not_reborrow`; §7.3 places that
   configuration, and §7.2 is the question they have to answer.
   `w3`/`wF` across `Row.Suspend` also need the anti-frame across raises and across cancel runs
   that stop at their rows' tables: `erwp_M_antiFrameC`'s cancel runs perform nothing
@@ -251,7 +251,7 @@ is the departure's justification and the interpretation keeps the chain's answer
 ### Outcome
 
 Decisions 2 and 3 are built (§5: `Row.Suspend`'s clauses, `withbor2S_compat` with no row clause
-beyond them). Decision 1 stops at the configuration `coreShape_not_reborrow`: the routes left are
+beyond them). Decision 1 stops at the configuration `perLocShape_not_reborrow`: the routes left are
 design decisions (§5, routes A–C).
 
 ## 7. Port of Core's withbor3_compatX
@@ -302,11 +302,11 @@ defined and used nowhere. As defined it would not close step 7: it covers the th
 not `⊸`'s argument; and it gives `Φ ℓ = (β, F)` with the cell at *some* member of *some* `F`,
 where `erwp_withbor3`'s `hoi` needs `F` to be `𝒱⟦T₁⟧`'s family (as `rwp_M_antiFrame_sem`'s
 `Φ ℓ = (A, τ.fam A)`). Putting `Φ ℓ = (α, 𝒱⟦A⟧'s family)` into the `Mut` clause makes `vN` read
-`Φ`, and then a nested `Mut`'s family reads `Φ`: that is `coreShape_not_reborrow`'s situation
+`Φ`, and then a nested `Mut`'s family reads `Φ`: that is `perLocShape_not_reborrow`'s situation
 (below). The STOP condition holds: a definition beyond Core's interpretation pieces would be
 needed, and choosing it is a design decision.
 
-### 7.3 `coreShape_not_reborrow` against Core's records-based `Mut`
+### 7.3 `perLocShape_not_reborrow` against Core's records-based `Mut`
 
 It does not arise. Core's `ptoMutS` stores `P ls₀` with `ls₀` the members of the **record list**
 above the cell; the record list is the same `List SRec` on the chain, and a `mut` reborrow leaves

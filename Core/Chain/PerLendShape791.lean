@@ -1,19 +1,20 @@
 import Core.Chain.SI.LocTy
 
 /-!
-# Location typing per lend: `coreShape_not_reborrow`'s configuration  `[spec §62]`
+# `perLocShape_not_reborrow`'s configuration at the per-lend world  `[spec §62]`
 
 The world is `Core/Chain/SI/LocTy.lean`; the design is `docs/new-core/scope-791-loctype.md`.
-`Shape791N.coreShape_not_reborrow` is a value of Core's `Mut` shape at a per-location typing that
-is not one after a reborrow of an unrelated location. Here the same value is one of Core's shape
-at the per-lend world before and after the reborrow (`coreShapeL_reborrow`, L2 (c)).
+`Shape791N.perLocShape_not_reborrow` is a value of the per-location reading of `Mut` that is not
+one after a reborrow of an unrelated location. Here the same value is one of the interpretation's
+`Mut` (`mutL`, over the per-lend world) before and after the reborrow
+(`perLocShape_lend_reborrow`, L2 (c)).
 -/
 
 noncomputable section
 
 variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 
-namespace BoCa.Fig16.LogRel.Core.Chain.SI.LocTypeSketch
+namespace BoCa.Fig16.LogRel.Core.Chain.SI.PerLendShape791
 open BoCa
 open BoCa.Fig16
 open BoCa.Fig16.BoLo
@@ -32,7 +33,7 @@ theorem innerCell_inStratum (l₂ : Loc) {b β : Life} (hbβ : b < β) :
     (innerCell l₂ β).InStratum b :=
   ResU.inStratum_single l₂ ((CellU.inStratum_mutOf b β _ _ _ _ _).mpr hbβ)
 
-/-! ### L2 (c): `coreShape_not_reborrow`'s configuration, per lend -/
+/-! ### L2 (c): `perLocShape_not_reborrow`'s configuration, per lend -/
 
 /-- `𝒱⟦1⟧`. -/
 def unitL : CPredL := fun _ _ v ρ => v = Val.unit ∧ ρ = PMap.empty
@@ -67,11 +68,11 @@ theorem Wc_fresh (l l₂ lb : Loc) {α b β : Life} (hαb : α < b) (hbβ : b < 
     · rw [h'.2]; exact lt_trans hαb hbβ
     · exact absurd (if_neg h') ha
 
-/-- **`coreShape_not_reborrow`'s configuration holds per lend.** The same value (a `Mut @b
+/-- **`perLocShape_not_reborrow`'s configuration holds per lend.** The same value (a `Mut @b
 (Mut @β 1)` at `ℓ_b`, its content a `Mut @β 1` at `ℓ₂`, holding nothing at `ℓ`) is one of Core's
 shape at `Wc` and at `Wc` with `ℓ` lent at any `α < b < β` with any family: the per-location
-typing loses `ℓ` above `b` (`Shape791N.coreShape_not_reborrow`), the per-lend typing keeps it. -/
-theorem coreShapeL_reborrow (l l₂ lb : Loc) (hl : lb ≠ l) (hl₂ : lb ≠ l₂) {α b β : Life}
+typing loses `ℓ` above `b` (`Shape791N.perLocShape_not_reborrow`), the per-lend typing keeps it. -/
+theorem perLocShape_lend_reborrow (l l₂ lb : Loc) (hl : lb ≠ l) (hl₂ : lb ≠ l₂) {α b β : Life}
     (hαb : α < b) (hbβ : b < β) (F : Nat → Val → SPropS Loc Val α) :
     ∃ (v : Val) (ρ : WRes),
       (∀ x ψ, ρ.get x = some ψ → x ≠ l) ∧
@@ -97,6 +98,6 @@ theorem coreShapeL_reborrow (l l₂ lb : Loc) (hl : lb ≠ l) (hl₂ : lb ≠ l�
   · rw [h]; exact hl
   · rw [ResU.single_get_ne _ h] at hx; exact absurd hx (by simp)
 
-end BoCa.Fig16.LogRel.Core.Chain.SI.LocTypeSketch
+end BoCa.Fig16.LogRel.Core.Chain.SI.PerLendShape791
 
 end

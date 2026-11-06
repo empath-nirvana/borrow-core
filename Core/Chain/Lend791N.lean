@@ -316,9 +316,10 @@ def DFv (d : Expr) (l : Loc) : Val := Val.lam (.app d (.val (Val.loc l)))
 /-- The callback `λ_. λu. ()`: it releases the borrow at once. -/
 def cbRelease : Val := Val.lam (.val (Val.lam (.val .unit)))
 
-/-- **`λ_. λu. ()` is a callback of the suspending lend**, at the empty row and the answer `1`,
-wherever the bound has an interpretation: the borrow is left as garbage at the return, so the
-callback type `withbor2S_compat` reads is not empty. -/
+/-- **`λ_. λu. ()` is a callback of the lend at the empty row and the answer `1`**: it performs
+nothing, and the borrow is left as garbage at the return (admissible: Core has `releaseMut`).
+A callback that performs at a suspending row while holding the borrow is `cbPerform_sem`
+(`Core/Chain/Inst791N.lean`). -/
 theorem cbRelease_sem {x : LifeVar} {bnd : Lifetime.Life} {A : VTy} {δ : LSub}
     (Θ : LocTy) (n : Nat) :
     vN (ℍ := ℍ) (cbUTy x bnd (.mut (.var x) A) .unit []) δ Θ n cbRelease PMap.empty := by

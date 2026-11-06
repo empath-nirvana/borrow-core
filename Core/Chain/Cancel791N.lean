@@ -919,9 +919,12 @@ theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Ro
 /-- **`ConstN` for `withbor (2)` at a suspending row**, from the fundamental property at the
 finaliser's derivation. -/
 theorem constN_w2 (hF : FundamentalN (ℍ := ℍ)) {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
-    {S : Row} {d : Expr} : ConstN (ℍ := ℍ) (.w2 x bnd A B S d) := by
+    {S : Row} {d : Expr} (hfr : (Const791.w2 x bnd A B S d).InFrag) :
+    ConstN (ℍ := ℍ) (.w2 x bnd A B S d) := by
   rintro ⟨hbnd, hO, hA, hB, hS, hdc, hder⟩ δ Θ n _
-  exact withbor2S_compat hbnd hO hA hB hS hdc (hF _ _ _ _ hder) δ Θ n
+  have hL : (VTy.ref A).inFrag = true := by
+    simp_all [Const791.InFrag, Const791.ty, withbor2UTy, withborUTy, VTy.inFrag, CTy.inFrag]
+  exact withbor2S_compat hbnd hO hA hB hS hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ Θ n
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

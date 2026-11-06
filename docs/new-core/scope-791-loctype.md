@@ -1,7 +1,7 @@
 # #791: location typing per lend, for step 7 of `withbor3_compatX` on the chain
 
 Branch `rule-791`. The world is in the library (`Core/Chain/SI/LocTy.lean`); the interpretation
-over it is `Core/Chain/Goal791N.lean`; `Core/Chain/LocTypeSketch.lean` keeps L2 (c)'s
+over it is `Core/Chain/Goal791N.lean`; `Core/Chain/PerLendShape791.lean` keeps L2 (c)'s
 configuration. Background: `scope-791-rule.md` §7. State after #825 (U1, U2): §9; after #826 (U3):
 §10; after #827 (U4): §11.
 
@@ -18,7 +18,7 @@ in the lower member `F k`, so the reseal is a predicate change. `↭` admits tha
 the location typing types the cell (`PredStep`, `hF : Φ ℓ = some ⟨β, F⟩` in `erwp_M_antiFrame`),
 and the interpretation never gives `Φ ℓ`: at `Φ ℓ = none` no `MutStep` reseals
 (`Shape791N.reseal_untyped`). Reading `Φ ℓ` in the `Mut` clause per location fails at a reborrow,
-whose `Φ.set ℓ α Fi` overwrites the source's entry (`Shape791N.coreShape_not_reborrow`).
+whose `Φ.set ℓ α Fi` overwrites the source's entry (`Shape791N.perLocShape_not_reborrow`).
 
 ## 2. The proposed definition
 
@@ -91,7 +91,7 @@ single lifetime `c ℓ`, and the run is at the **view**:
 The "not built" entries are as scoped; §9 has what #825 built.
 
 All proved results below are in `Core/Chain/SI/LocTy.lean` (L2 (c) in
-`Core/Chain/LocTypeSketch.lean`), registered in `Core/Chain.lean` and in `scripts/AxiomCheck.lean`. Axioms are within `propext`, `Classical.choice`, `Quot.sound`.
+`Core/Chain/PerLendShape791.lean`), registered in `Core/Chain.lean` and in `scripts/AxiomCheck.lean`. Axioms are within `propext`, `Classical.choice`, `Quot.sound`.
 
 **(L1) The anti-frame's reseal at the original entry. Proved.**
 
@@ -113,7 +113,7 @@ All proved results below are in `Core/Chain/SI/LocTy.lean` (L2 (c) in
 - `mutL_add`: for every payload `P`, a `mutL a P` value at `Θ` is one at `Θ.add ℓ₀ α F`
   for fresh `α`.
 - `mutL_extA`: `Mut` values are stable along the Kripke order `ExtA`.
-- `coreShapeL_reborrow`: `coreShape_not_reborrow`'s own configuration, per lend. With
+- `perLocShape_lend_reborrow`: `perLocShape_not_reborrow`'s own configuration, per lend. With
   `ℓ_b ≠ ℓ, ℓ₂` and `α < b < β`, the value `Mut @b (Mut @β 1)` at `ℓ_b` (holding nothing at `ℓ`)
   is one of Core's shape at `Wc` and at `Wc.add ℓ α F`, for every `F`. Per location it is not
   (`Shape791N`). Every hypothesis is discharged; `Wc_fresh` shows `α` is fresh there.
@@ -148,7 +148,7 @@ about 31 sites. `Φ.set` appears in 20 files, about 100 sites.
 | `Goal791N` (681; 79 uses) | defines `vN`/`cN`/`tabN`/`finN`/`SemJN`/`ConstN`/… | **restated**: the world `Θ` and a view replace `Φ`; `Mut` takes Core's shape; `U` is Kripke along `ExtA`. The laws (`vN_down`, `cN_down`, `vN_congr`, `cN_extΦ` → along `ExtA`, `vN_outlives`, `bridgeN`, `goal791Sched_of`) are re-proved, mostly mechanically. `vN_extA` and `vN_local` are new. Most of the file is touched. |
 | `Lend791N` (361; 17 uses) | `tabN_*`, `cbRelease_sem`, `answer_not_inStratum` | restated at `Θ` and re-proved mechanically. `erwp_M_frameCR`, `rwp_mono_le` and `rwp_of_erwp_empty` (relation-level) are unchanged. |
 | `Cancel791N` (729; 59 uses) | `tabR`/`finR` and the `tabN` twins, `withbor2S_compat`, `constN_w2` | `withbor2S_compat`/`constN_w2` restated (`ConstN` changes), re-proved with the lend at a fresh `α` and `view_add`. Lemmas over `tabR`/`tabN` get the world argument and are re-proved mechanically. `erwp_M_frame_cancelRunCR`, `erwp_ubind_cancelRunCR` and `erwp_ubindClaimRT` take the table as a parameter and are unchanged. **The `Cancel791N` results survive**: the relation-level ones as they are, `withbor2S_compat`/`constN_w2` re-proved at the new interpretation. |
-| `Shape791N` (281) | `reseal_untyped` reads `vN` | restated at the new `vN` (its content, `Φ ℓ = none` forcing the predicate, is unchanged). `coreShape_not_reborrow` uses its own `mutC` and is unchanged. |
+| `Shape791N` (281) | `reseal_untyped` reads `vN` | restated at the new `vN` (its content, `Φ ℓ = none` forcing the predicate, is unchanged). `perLocShape_not_reborrow` uses its own `mutC` and is unchanged. |
 
 Roughly 1,800 lines restated or re-proved, all of them interpretation-level.
 
@@ -163,7 +163,7 @@ every `SI` module touched, most mechanically.
 ## 5. The alternatives compared
 
 - **A. Per-lend keys, read through the view (recommended).** It closes step 7 by L1, with the
-  existing anti-frame. It answers `coreShape_not_reborrow` by L2. It needs no recursive world,
+  existing anti-frame. It answers `perLocShape_not_reborrow` by L2. It needs no recursive world,
   because of the lifetime stratification and freshness, and it leaves the one relation alone
   (structure.md §3). It costs a world, a view and a consistency invariant in the interpretation
   (§3, L3 rows not built).
@@ -175,7 +175,7 @@ every `SI` module touched, most mechanically.
   - Cost: `CellU`'s predicate type, `ResU` composition and validity, flattening and `Lower` all
     change, in `Paper`/`Support`'s model, under every `SI` module and the transcription. That is
     a model change, not a relation change, and far larger than A or E.
-  - It does not answer `coreShape_not_reborrow` by itself. Iris answers that by naming
+  - It does not answer `perLocShape_not_reborrow` by itself. Iris answers that by naming
     invariants per allocation (fresh `ι`), which is A's key. The `▷` resolves the recursion of
     `P` mentioning invariants, which the lifetime stratification already resolves here.
   - Not recommended.

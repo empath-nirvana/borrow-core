@@ -847,18 +847,64 @@ theorem allI_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {x : LifeVar} {b : Lifetime.L
 
 /-! ## §3. The statements -/
 
+mutual
+/-- **The formers the interpretation covers**: every former but type variables, `μ`, families
+(arrays and slices) and opaque host types, which `vN` reads as empty, and `ν`, which `cN` reads
+as empty. Decidable. -/
+def _root_.BoCa.Fig16.LogRel.Core.VTy.inFrag : VTy → Bool
+  | .unit | .zero | .unk | .int _ => true
+  | .tensor A B | .sum A B => A.inFrag && B.inFrag
+  | .thunk C => C.inFrag
+  | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A => A.inFrag
+  | .tvar _ | .mu _ | .fam _ | .opq _ => false
+/-- The computation-type formers the interpretation covers. -/
+def _root_.BoCa.Fig16.LogRel.Core.CTy.inFrag : CTy → Bool
+  | .ret A => A.inFrag
+  | .arr A C => A.inFrag && C.inFrag
+  | .amp C D => C.inFrag && D.inFrag
+  | .top => true
+  | .all _ _ C => C.inFrag
+  | .nu _ => false
+  | .eff _ _ _ A B fin _ C => A.inFrag && B.inFrag && fin.inFrag && C.inFrag
+end
+
+/-- **A judgment inside the fragment**: its context's types and its own type use only the formers
+the interpretation covers. -/
+def JdgInFrag (Γ : Ctx VTy) (j : Jdg) : Bool :=
+  Γ.all (fun s => s.ty.inFrag) &&
+    match j with
+    | .val A => A.inFrag
+    | .comp C => C.inFrag
+
 /-- **A #791 constant is a value of `!` its type**, at every `δ`, world and index, from its
 rule's premises. -/
 def ConstN (c : Const791) : Prop :=
   c.OK → ∀ (δ : LSub) (Θ : LocTy) (n : Nat), Θ.OK →
     vN (ℍ := ℍ) (.bang c.ty) δ Θ n c.val PMap.empty
 
-/-- Every #791 constant. -/
-def ConstsN : Prop := ∀ c : Const791, ConstN (ℍ := ℍ) c
+/-- **A #791 constant inside the fragment**: its type uses only the formers the interpretation
+covers. -/
+def _root_.BoCa.Fig16.Tree.Wp.Goal791.Const791.InFrag (c : Const791) : Prop := c.ty.inFrag = true
 
-/-- **The fundamental property over `erwp`**, for the existing judgment. -/
+/-- Every #791 constant inside the fragment. -/
+def ConstsN : Prop := ∀ c : Const791, c.InFrag → ConstN (ℍ := ℍ) c
+
+/-- **The fundamental property over `erwp`, on the fragment**: every derivation of the existing
+judgment whose context and type lie in the fragment (`JdgInFrag`). The rules whose conclusion is
+at a former the interpretation reads as empty (`arrNew`, `arrEmpty`, the slice and fold
+constants, `roll`, `nuIn`, `unfoldN`, a type variable's or an opaque host type's introduction)
+conclude outside the fragment and are not quantified over. A derivation of a judgment in the
+fragment may still cut through an excluded type inside (an array built and consumed, `unroll`
+of a `μ` value); at such a cut the interpretation gives no reading, so `FundamentalN` is not
+shown attainable by induction on the derivation until those formers have clauses. -/
 def FundamentalN : Prop :=
-  ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (j : Jdg), CDerives Δ Γ e j → SemJN (ℍ := ℍ) Δ Γ e j
+  ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (j : Jdg), CDerives Δ Γ e j → JdgInFrag Γ j = true →
+    SemJN (ℍ := ℍ) Δ Γ e j
+
+/-- A finaliser's judgment `L ⊸ 1` is in the fragment where `L` is. -/
+theorem jdgInFrag_lolli {L : VTy} (h : L.inFrag = true) :
+    JdgInFrag [] (.val (.lolli L .unit)) = true := by
+  simp [JdgInFrag, VTy.lolli, VTy.inFrag, CTy.inFrag, h]
 
 /-- **The adequacy bridge**: a closed run of `F 1` over `erwp` is `OrDiverges`. -/
 def BridgeN : Prop :=
@@ -867,9 +913,11 @@ def BridgeN : Prop :=
 
 /-- **#791's end goal under a scheduler at the top, over `erwp`**: `poolSchedAdequacyN`'s form,
 at the view of any world. A task typed at `F_Σ 1` from the constants, run by a scheduler meeting
-`SchedOKN` at the row's table, is safe, leak-free, or diverges. -/
+`SchedOKN` at the row's table, is safe, leak-free, or diverges. Scoped to the fragment: the
+constants' types and the row's (`Const791.InFrag`, `VTy.inFrag`). -/
 def Goal791SchedN : Prop :=
-  ∀ (cs : List Const791), (∀ c ∈ cs, c.OK) → ∀ (S : Row) (e₀ : Expr),
+  ∀ (cs : List Const791), (∀ c ∈ cs, c.OK) → (∀ c ∈ cs, c.InFrag) → ∀ (S : Row) (e₀ : Expr),
+    (CTy.effOf S .unit).inFrag = true →
     CDerives LifeCtx.empty (ctx791 cs) e₀ (.comp (CTy.effOf S .unit)) →
     ∀ (Θ : LocTy) (c : Loc → Option Life) (n₀ : UInt32) (qs hr hs : Val) (Q : PostN)
       (Inv : List StoredN → Prop),
@@ -909,25 +957,33 @@ theorem liveWithin_ctx791 : ∀ cs : List Const791, Ctx.LiveWithin (ctx791 cs) (
   | _ :: cs => liveWithin_ctx791 cs
 
 theorem gN_ctx791 (hC : ConstsN (ℍ := ℍ)) (δ : LSub) {Θ : LocTy} (hΘ : Θ.OK) (n : Nat) :
-    ∀ cs : List Const791, (∀ c ∈ cs, c.OK) →
+    ∀ cs : List Const791, (∀ c ∈ cs, c.OK) → (∀ c ∈ cs, c.InFrag) →
       gN (ℍ := ℍ) δ Θ (ctx791 cs) (vals791 cs) n PMap.empty
-  | [], _ => rfl
-  | c :: cs, hcs => by
+  | [], _, _ => rfl
+  | c :: cs, hcs, hfr => by
       simp only [ctx791, vals791, List.map_cons, gN, if_true]
       exact ⟨PMap.empty, PMap.empty, ResU.comp_empty_right _,
-        hC c (hcs c (by simp)) δ Θ n hΘ,
-        gN_ctx791 hC δ hΘ n cs (fun c' h => hcs c' (by simp [h]))⟩
+        hC c (hfr c (by simp)) (hcs c (by simp)) δ Θ n hΘ,
+        gN_ctx791 hC δ hΘ n cs (fun c' h => hcs c' (by simp [h])) (fun c' h => hfr c' (by simp [h]))⟩
+
+theorem jdgInFrag_ctx791 (cs : List Const791) (hfr : ∀ c ∈ cs, c.InFrag) {S : Row}
+    (hS : (CTy.effOf S .unit).inFrag = true) :
+    JdgInFrag (ctx791 cs) (.comp (CTy.effOf S .unit)) = true := by
+  simp only [JdgInFrag, Bool.and_eq_true, List.all_eq_true]
+  refine ⟨fun s hs => ?_, hS⟩
+  obtain ⟨c, hc, rfl⟩ := List.mem_map.mp hs
+  simpa [VTy.inFrag, Const791.InFrag] using hfr c hc
 
 /-- **`Goal791SchedN` from the fundamental property and the constants**, through
 `poolSchedAdequacyN` at the view. -/
 theorem goal791Sched_of (hF : FundamentalN (ℍ := ℍ)) (hC : ConstsN (ℍ := ℍ)) :
     Goal791SchedN (ℍ := ℍ) := by
-  intro cs hcs S e₀ hder Θ c n₀ qs hr hs Q Inv hΘ hQ hInv hS
+  intro cs hcs hfr S e₀ hSf hder Θ c n₀ qs hr hs Q Inv hΘ hQ hInv hS
   refine poolSchedAdequacyN (Θ.view c) (rowTabN S Θ c) n₀ qs hr hs _ Q Inv _
     (LocTy.view_down hΘ.1 c) hQ hInv hS (fun n => ?_)
-  have h := hF _ _ _ _ hder LSub.empty (vals791 cs) Θ c n [] PMap.empty
-    (BoCa.Fig16.LogRel.Core.models_empty_any _) hΘ (consistentX_empty c)
-    (liveWithin_ctx791 cs) (gN_ctx791 hC LSub.empty hΘ n cs hcs)
+  have h := hF _ _ _ _ hder (jdgInFrag_ctx791 cs hfr hSf) LSub.empty (vals791 cs) Θ c n []
+    PMap.empty (BoCa.Fig16.LogRel.Core.models_empty_any _) hΘ (consistentX_empty c)
+    (liveWithin_ctx791 cs) (gN_ctx791 hC LSub.empty hΘ n cs hcs hfr)
   exact (cN_effOf S .unit LSub.empty Θ c n [] _ _).mp h
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N

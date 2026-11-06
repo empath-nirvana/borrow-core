@@ -966,10 +966,12 @@ theorem withbor3S_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
 /-- **`ConstN` for `withbor (3)` at a suspending row**, from the fundamental property at the
 finaliser's derivation. -/
 theorem constN_w3 (hF : FundamentalN (ℍ := ℍ)) {a : Lifetime.Life} {x : LifeVar}
-    {bnd : Lifetime.Life} {A B : VTy} {S : Row} {d : Expr} :
-    ConstN (ℍ := ℍ) (.w3 a x bnd A B S d) := by
+    {bnd : Lifetime.Life} {A B : VTy} {S : Row} {d : Expr}
+    (hfr : (Const791.w3 a x bnd A B S d).InFrag) : ConstN (ℍ := ℍ) (.w3 a x bnd A B S d) := by
   rintro ⟨hbnd, hA, hB, hS, hdc, hder⟩ δ Θ n _
-  exact withbor3S_compat hbnd hA hB hS hdc (hF _ _ _ _ hder) δ Θ n
+  have hL : (VTy.mut a A).inFrag = true := by
+    simp_all [Const791.InFrag, Const791.ty, withbor3UTy, withborUTy, VTy.inFrag, CTy.inFrag]
+  exact withbor3S_compat hbnd hA hB hS hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ Θ n
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 
