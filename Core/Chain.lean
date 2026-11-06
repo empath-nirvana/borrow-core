@@ -113,3 +113,5 @@ import Core.Chain.TyEq834N
 import Core.Chain.Rules834N
 import Core.Chain.Borrow834N
 import Core.Chain.Count834N
+import Core.Chain.Let835N
+import Core.Chain.Fuel835N

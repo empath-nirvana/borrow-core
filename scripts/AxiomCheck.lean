@@ -1755,3 +1755,14 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.countFold_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.countTryLoop_wpN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.countTry_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_consistentAns
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabN_effOf_ret
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabN_ansC_of_persistent
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.let_compatN_ansC
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_pureSteps
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_kappaC_resume_in
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_hnd_tick
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.fuel_tick_zeroN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.fuel_tick_succN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fuel_totalN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.divFuel_compatN
