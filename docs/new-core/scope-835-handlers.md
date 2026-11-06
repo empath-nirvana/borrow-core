@@ -187,11 +187,11 @@ Each entry is a chain lemma under Core's name with `N`, following Core's printed
 
 ## 5. Part 2 (`rule-791-l4b`)
 
-`scope-831-interface.md` §9 has the detail.
+`scope-831-interface.md` §10 has the detail.
 
 | Entry or rule | Built | File | Core's proof it follows |
 |---|---|---|---|
-| E10 | not derived; obstruction not verified (§9.1 there) | — | `vC_kTy_of_kapRel` |
+| E10 | not derived; obstruction not verified (§10.1 there) | — | `vC_kTy_of_kapRel` |
 | E11's fuel instances | `erwp_pureSteps`, `erwp_kappaC_resume_in`, `erwp_hnd_tick`, `fuel_tick_zeroN`, `fuel_tick_succN`, `fuel_totalN` | `Core/Chain/Fuel835N.lean` | `ewp_pureSteps`, `ewp_kappaC_resume_in`, `hnd_tick`, `fuel_tick_zero`, `fuel_tick_succ`, `fuel_total` |
 | `divFuel` | `divFuel_compatN` | `Fuel835N` | `divFuel_compatX` |
 | `effAwait` | `await_compatN`, over `let_compatN_persist` and `erwp_idxLe` | `Core/Chain/Let835N.lean` | `await_compatC` |

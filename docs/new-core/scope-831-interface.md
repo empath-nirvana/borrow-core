@@ -696,13 +696,13 @@ replaced by the two facts its proof reads of the table: `hTab` (the table is `Re
 The class counts of §3.1 and the map's rows for the rules ported in #834 are as the map left them;
 rows 76 and 77 are updated here.
 
-## 9. Built in #835 (unit L4)
+## 10. Built in #835 (unit L4)
 
 Branch `rule-791-l4b`. The paper mapping is `scope-835-handlers.md`. Part 1 (`rule-791-l4`) built
 E3, E5–E8, W9, E12, E14 and ported `effSub`, `effPerform`, `effRaise` (`scope-835-handlers.md`
 §4). Part 2 is this section.
 
-### 9.1 E10: the clauses read at `vN`
+### 10.1 E10: the clauses read at `vN`
 
 Core's step is `vC_kTy_of_kapRel` (`Core/EffFin.lean`), which `ewp_handle_vals` applies to each
 clause: `KapRel` at `ls` is Kripke along `Ext` (`∀ ls′, Ext ls ls′ ρ → …`), because the stop's
@@ -723,7 +723,7 @@ still quantifies `Θ′`, the view and the list. Not derived; obstruction not ve
 `effHandleT` and `effHandleL` give the clauses no `κ` and do not need this step; they need §9.2
 and the tail and last instances, which are not built.
 
-### 9.2 Answer consistency
+### 10.2 Answer consistency
 
 `SemJN` reads a judgment at a view `c` consistent with its resource (D7). A rule that runs typed
 code after a computation at a row (`effLet`'s `N`, `effThen`'s `N` and `D`, `iterate`'s step on the
@@ -750,7 +750,7 @@ this unit's allowance: answers consistent with the view in `tabN`'s entries (`en
 scheduler's clauses), or a side condition on the rules. The rules waiting on this are `effLet`,
 `effThen`, `effThenDiv`, `iterate`, and the four handlers.
 
-### 9.3 Rules ported
+### 10.3 Rules ported
 
 | Rule | Lemma | File | Core |
 |---|---|---|---|
@@ -763,7 +763,7 @@ chain's table (E13), so every tick's continuation is owed below the tick's index
 answered *next* or *close*, and `Closing` has no counterpart. No typed code runs after a
 resumption in `div_fuel`: an answer of `Σ` goes back into the callback's own continuation.
 
-### 9.4 Not built
+### 10.4 Not built
 
 - E9 (`ewp_frame_then_or` with `ThenLe`/`PendLe`, a finaliser that performs and raises): not
   built. `effThen`/`effThenDiv` also wait on §9.2.
