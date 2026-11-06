@@ -110,17 +110,14 @@ def LocTy.add (Θ : LocTy) (l : Loc) (α : Life) (F : Nat → Val → SPropS Loc
 @[simp] theorem LocTy.add_imm (Θ : LocTy) (l : Loc) (α : Life) (F : Nat → Val → SPropS Loc Val α) :
     (Θ.add l α F).imm = Θ.imm := rfl
 
-/-- The entries strictly longer-lived than `a`, and the `imm` records lent strictly above `a`
-(Core's `ls₀`). -/
+/-- The entries strictly longer-lived than `a` (Core's `ls₀`), and the world's `imm` records. -/
 def LocTy.above (Θ : LocTy) (a : Life) : LocTy :=
-  ⟨fun x b => if a < b then Θ x b else none, Θ.imm.filter (fun x => decide (a < x.2))⟩
+  ⟨fun x b => if a < b then Θ x b else none, Θ.imm⟩
 
 @[simp] theorem LocTy.above_apply (Θ : LocTy) (a : Life) (x : Loc) (b : Life) :
     Θ.above a x b = if a < b then Θ x b else none := rfl
 
-theorem LocTy.mem_above_imm {Θ : LocTy} {a : Life} {x : SRec} :
-    x ∈ (Θ.above a).imm ↔ x ∈ Θ.imm ∧ a < x.2 := by
-  simp [LocTy.above]
+@[simp] theorem LocTy.above_imm (Θ : LocTy) (a : Life) : (Θ.above a).imm = Θ.imm := rfl
 
 theorem LocTy.add_self (Θ : LocTy) (l : Loc) (α : Life) (F : Nat → Val → SPropS Loc Val α) :
     Θ.add l α F l α = some F := by
@@ -232,8 +229,9 @@ theorem mutL_add {Θ : LocTy} {α : Life} (hf : Θ.Fresh α) (l₀ : Loc)
   refine (mutL_congr P (fun x => LocTy.add_keep Θ l₀ F x (ne_of_gt hαa))
     (LocTy.above_add Θ l₀ (not_lt_of_gt hαa) F) n v ρ).mpr hm
 
-/-- **The Kripke order of the interpretation**: entries only added, and nothing added above any
-key present. A lend at a fresh lifetime is one step of it (`LocTy.extA_add`). -/
+/-- **The Kripke order of the interpretation**: entries and `imm` records only added, and nothing
+added above any key present (an `imm` record among them, since `LocTy.above` keeps them). A lend
+at a fresh lifetime is one step of it (`LocTy.extA_add`). -/
 def LocTy.ExtA (Θ Θ' : LocTy) : Prop :=
   Θ.Ext Θ' ∧ (∀ l a, Θ l a ≠ none → Θ'.above a = Θ.above a) ∧ Θ.ImmLe Θ'
 
@@ -266,7 +264,9 @@ theorem mutL_extA {Θ Θ' : LocTy} (hE : Θ.ExtA Θ') {a : Life} {P : CPredL} {n
 
 /-- **The resource-relative order on the per-lend world**, the order `U` and `⊸` are Kripke
 along: at the resource `ρ`, every key at a lifetime `a` with a borrow cell of `ρ` no longer-lived
-than `a` (`CellIn ρ a`, Core's) is kept, and nothing is added above it. A stored family here reads
+than `a` (`CellIn ρ a`, Core's) is kept, and nothing is added above it; every `imm` record is
+kept. `LocTy.above` keeps the `imm` records whole, so above a key the resource reads no `imm`
+record is added either. A stored family here reads
 the world above its key (`famL`), so the keys at and above such an `a`, and what lies above them,
 are what a value with resource `ρ` reads. It departs from Core's literal `Ext ls ls′ ρ`, which
 asks agreement above every `b` with `CellIn ρ b`, not only above the keys present
@@ -274,26 +274,25 @@ asks agreement above every `b` with `CellIn ρ b`, not only above the keys prese
 `ν`, which the interpretation reads as empty (`Core/Chain/ExtRLit791.lean`). -/
 def LocTy.ExtR (Θ Θ' : LocTy) (ρ : WRes) : Prop :=
   (∀ l a F, Θ l a = some F → CellIn ρ a → Θ' l a = some F ∧ Θ'.above a = Θ.above a) ∧
-    ∀ x ∈ Θ.imm, (∃ b, CellIn ρ b ∧ b ≤ x.2) → x ∈ Θ'.imm
+    Θ.ImmLe Θ'
 
 theorem LocTy.extR_refl (Θ : LocTy) (ρ : WRes) : Θ.ExtR Θ ρ :=
-  ⟨fun _ _ _ h _ => ⟨h, rfl⟩, fun _ h _ => h⟩
+  ⟨fun _ _ _ h _ => ⟨h, rfl⟩, fun _ h => h⟩
 
 theorem LocTy.ExtR.trans {Θ Θ' Θ'' : LocTy} {ρ : WRes} (h₁ : Θ.ExtR Θ' ρ) (h₂ : Θ'.ExtR Θ'' ρ) :
     Θ.ExtR Θ'' ρ := by
-  refine ⟨fun l a F hF hc => ?_, fun x hx hb => h₂.2 x (h₁.2 x hx hb) hb⟩
+  refine ⟨fun l a F hF hc => ?_, fun x hx => h₂.2 x (h₁.2 x hx)⟩
   obtain ⟨e₁, a₁⟩ := h₁.1 l a F hF hc
   obtain ⟨e₂, a₂⟩ := h₂.1 l a F e₁ hc
   exact ⟨e₂, a₂.trans a₁⟩
 
 /-- The world-relative order is the resource-relative one at every resource. -/
 theorem LocTy.ExtA.extR {Θ Θ' : LocTy} (h : Θ.ExtA Θ') (ρ : WRes) : Θ.ExtR Θ' ρ :=
-  ⟨fun l a F hF _ => ⟨h.1 l a F hF, h.2.1 l a (by rw [hF]; simp)⟩, fun x hx _ => h.2.2 x hx⟩
+  ⟨fun l a F hF _ => ⟨h.1 l a F hF, h.2.1 l a (by rw [hF]; simp)⟩, h.2.2⟩
 
 theorem LocTy.ExtR.mono {Θ Θ' : LocTy} {ρ σ : WRes} (h : Θ.ExtR Θ' ρ)
     (hs : ∀ a, CellIn σ a → CellIn ρ a) : Θ.ExtR Θ' σ :=
-  ⟨fun l a F hF hc => h.1 l a F hF (hs a hc),
-    fun x hx ⟨b, hb, hbx⟩ => h.2 x hx ⟨b, hs b hb, hbx⟩⟩
+  ⟨fun l a F hF hc => h.1 l a F hF (hs a hc), h.2⟩
 
 theorem LocTy.ExtR.left {Θ Θ' : LocTy} {ρ₁ ρ₂ ρ : WRes} (hc : ResU.CompS ρ₁ ρ₂ ρ)
     (h : Θ.ExtR Θ' ρ) : Θ.ExtR Θ' ρ₁ := h.mono fun _ hi => hi.of_left hc
@@ -306,7 +305,7 @@ theorem LocTy.ExtR.right {Θ Θ' : LocTy} {ρ₁ ρ₂ ρ : WRes} (hc : ResU.Com
 one it reads. -/
 theorem LocTy.extR_of_add (Θ : LocTy) (l₀ : Loc) {α : Life} (F : Nat → Val → SPropS Loc Val α)
     {ρ : WRes} (hρ : ρ.InStratum α) : (Θ.add l₀ α F).ExtR Θ ρ := by
-  refine ⟨fun l a G hG hc => ?_, fun x hx _ => hx⟩
+  refine ⟨fun l a G hG hc => ?_, fun x hx => hx⟩
   have hαa : α < a := hc.of_stratum hρ
   rw [LocTy.add_keep Θ l₀ F l (ne_of_gt hαa)] at hG
   exact ⟨hG, (LocTy.above_add Θ l₀ (not_lt_of_gt hαa) F).symm⟩
@@ -338,15 +337,8 @@ theorem LocTy.extR_above (Θ : LocTy) {a : Life} {ρ : WRes} (hρ : ρ.InStratum
       by_cases hby : b < y
       · simp [hby, lt_trans hab hby]
       · simp [hby]
-    · simp only [LocTy.above, List.filter_filter]
-      congr 1
-      funext x
-      by_cases hbx : b < x.2
-      · simp [hbx, lt_trans hab hbx]
-      · simp [hbx]
-  refine ⟨⟨fun l b F hF hc => ?_, fun x hx _ => (LocTy.mem_above_imm.mp hx).1⟩,
-    ⟨fun l b F hF hc => ?_, fun x hx ⟨b, hb, hbx⟩ =>
-      LocTy.mem_above_imm.mpr ⟨hx, lt_of_lt_of_le (hb.of_stratum hρ) hbx⟩⟩⟩
+    · rfl
+  refine ⟨⟨fun l b F hF hc => ?_, fun x hx => hx⟩, ⟨fun l b F hF hc => ?_, fun x hx => hx⟩⟩
   · have hab : a < b := hc.of_stratum hρ
     simp only [LocTy.above_apply, if_pos hab] at hF
     exact ⟨hF, (habove b hab).symm⟩
