@@ -292,6 +292,96 @@ theorem withbor3_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
     ⟨Val.loc l, b', _, ρb, rfl, ResU.CompS.comm hX',
       ⟨α₀, hα₀, b, hα₀b, ⟨l, w, σ, h', j', hw', le_rfl, rfl, hlΘ, rfl⟩, hunif⟩, hbB'⟩⟩
 
+/-! ### `withload` at the pure row -/
+
+/-- **The pure callback at the image**: the callback `U(∀'x ⊏ @bnd. F(U(Imm̲ 'x A ⊸ F(['x] B))))`,
+at `β ⊏ @bnd`, its `f ()` run beside the image (`erwp_bind_frame`), then applied to the image's
+value; its result `['x] B` read at `B` (`vN_extend_of_not_free`). The pure row's `withload_compatX`
+reads the callback this way, where the unwinding form reads `callback_at_image`. -/
+theorem callback_at_imageP {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
+    (hB : ¬ VFree x B) {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK)
+    {c : Loc → Option Life} {n : Nat} {ls : List SRec} {f u : Val} {ρf χ Bχ : WRes} {β : Life}
+    (hLt : LtLife δ bnd β)
+    (hf : vN (ℍ := ℍ) (.all x bnd (.lolli (A.immReborrow (.var x)) (.box (.var x) B))) δ Θ n f ρf)
+    (hcf : ConsistentX c ρf) (hχ : ∀ m (ψ : CellU Loc Val), χ.get m = some ψ → ψ.kind = Kind.imm)
+    (himg : vN (ℍ := ℍ) (A.immReborrow (.var x)) (δ.extend x β) Θ n u χ)
+    (hBχ : ResU.CompS ρf χ Bχ) :
+    erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty)
+      (RebPost β (fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ)) n ls
+      (.app (.app (.val f) (.val .unit)) (.val u)) Bχ := by
+  have hΦ := LocTy.view_down hΘ.1 c
+  have hcon : ConsistentX c Bχ := consistentX_compS hBχ hcf (consistentX_allImm hχ c)
+  have h1 := hf Θ (LocTy.extR_refl _ _) hΘ c hcf ls β hLt
+  show erwp (ℍ := ℍ) _ _ _ n ls ((Kont.appL .hole u).plug (.app (.val f) (.val .unit))) Bχ
+  refine erwp_bind_frame hΦ (opTableN_local _) (.appL .hole u)
+    (vN (ℍ := ℍ) (A.immReborrow (.var x)) (δ.extend x β) Θ n u) hBχ hcon h1 himg ?_
+  intro k hk ls' g σ₁ σ₂ σ hcσ hg hu hcσ' hvσ
+  have h2 := hg Θ (LocTy.extR_refl _ _) hΘ c (consistentX_left hcσ hcσ' hvσ) ls' c k le_rfl u σ₂ σ
+    hcσ (vN_le hk hu) hcσ'
+  refine erwp_mono (fun k' _ w ρ hb => ?_) (opTableN_local _) k ls' _ σ h2
+  obtain ⟨α', hα', hbB, hst⟩ := hb
+  rw [interp_ext_self] at hα'
+  cases Option.some.inj hα'
+  rw [vN_extend_of_not_free hB] at hbB
+  exact ⟨hbB, hst⟩
+
+/-- `withload`'s inner abstraction at the source `ℓ`: `λf. f () (load ℓ)`. -/
+def withloadAt (l : Loc) : Val :=
+  Val.lam (.app (.app BoCa.v0 unit') (.app load' (.val (.loc l))))
+
+/-- **`withload` at `SemJN`** (Core's `withload_compatX`):
+`Imm @a A ⊸ (∀'x ⊏ @Δ. Imm̲ 'x A ⊸ ['x] B) ⊸ B` at the pure row. Core's steps: the `Imm`
+argument at the callback's world (`vC_local`, here `vN_extR`); the load (`wpTS_load_I`, here
+`rwp_load_cell` under `erwp_bindR`); 6.150 at the record the program's own `Imm` value
+witnesses (`wpTS_reborrow`, here `withload_reb` at the empty row), the callback run at the image
+(`callback_at_imageP`). -/
+theorem withload_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B : VTy}
+    (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hA : ¬ VFree x A) (hB : ¬ VFree x B) :
+    SemJN (ℍ := ℍ) Δ Γ withload (.val (axWithloadTy a x Δ.meetOfDom A B)) := by
+  intro δ γ Θ c n ls ρ hδ _ _ _ hg
+  obtain rfl := gN_deadP hΓ hg
+  show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ withload) _
+  rw [show substAll γ withload = withload from psub_closedAt _ γ (by decide) (Nat.zero_le 0)]
+  refine erwp_val (v := withloadV) ?_
+  intro Θ₁ _ hΘ₁ _ _ ls₁ c₂ k₁ _ v₁ τ₀ ρ₁ hcomp hv₁ _
+  obtain rfl := eq_of_compS_empty_left hcomp
+  obtain ⟨-, -, ⟨l, -, -, -, -, rfl, -, -, -⟩, -⟩ := id hv₁
+  have hΦ₁ : (Θ₁.view c₂).Down := LocTy.view_down hΘ₁.1 c₂
+  refine erwp_det hΦ₁ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down _ δ Θ₁ k v ρ h)
+    (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl .hole) ?_
+  have e₁ : Kont.hole.plug (Expr.subst 0 (Val.loc l)
+      (Val.lam (.app (.app BoCa.v0 unit') (.app load' BoCa.v1))).1) = (withloadAt l).1 := by
+    simp [Kont.plug, Expr.subst, Expr.shift, withloadAt, BoCa.v0, BoCa.v1, unit', load', Val.loc,
+      Val.lam, Expr.val, Val.unit, Val.prim]
+  rw [e₁]
+  refine erwp_val (v := withloadAt l) ?_
+  -- the callback, at the world the body's `U` reached; the source arrives there along `ExtR`
+  intro Θ₂ hE₂ hΘ₂ _ _ ls₂ c k₂ hk₂ f ρf ρ'' hc' hf hcon
+  have hΦ : (Θ₂.view c).Down := LocTy.view_down hΘ₂.1 c
+  obtain ⟨α₀, hα₀, ⟨l', s, w, σ, hσs, hl', rfl, hα₀s, hpay⟩, hwit⟩ :=
+    vN_le hk₂ (vN_extR _ δ k₁ _ _ hE₂ hv₁)
+  obtain rfl : l = l' := by have := congrArg Subtype.val hl'; simpa [Val.loc] using this
+  refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down _ δ Θ₂ k v ρ h)
+    (fun μ => step1Only_plug (Head.beta μ _ f) rfl .hole) ?_
+  have e₂ : Kont.hole.plug (Expr.subst 0 f
+      (.app (.app BoCa.v0 unit') (.app load' (.val (.loc l))))) =
+      (Kont.appR (.app (.val f) (.val .unit)) .hole).plug
+        (.app (.val (.prim .load)) (.val (Val.loc l))) := by
+    simp [Kont.plug, Expr.subst, BoCa.v0, unit', load', Val.loc, Expr.val, Val.prim, Val.unit]
+  rw [e₂]
+  refine erwp_of_valid fun hv'' => ?_
+  have hcf : ConsistentX c ρf := consistentX_right hc' hcon hv''
+  -- the load
+  refine erwp_bindR hΦ (opTableN_local _) _ ?_
+  refine rwp_load_cell ls₂ l s w σ hσs _ hc' ?_
+  simp only [Kont.plug]
+  -- 6.150 at the record, the callback at the image
+  exact withload_reb (S := []) (Lifetime.Life.interp_defined_of_wf hδ
+      (Lifetime.meetOfDomL_wf Δ.entries)) hA (fun o ho => absurd ho List.not_mem_nil)
+    (vO_le (Nat.sub_le k₂ 1) hpay) (hwit l s w σ hσs rfl)
+    (fun β hLt u χ Bχ hχ himg hBχ =>
+      callback_at_imageP hB hΘ₂ hLt (vN_le (Nat.sub_le k₂ 1) hf) hcf hχ himg hBχ) hc'
+
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 
 end
