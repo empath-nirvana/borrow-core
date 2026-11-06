@@ -18,8 +18,9 @@ interpretation and the statements are restated over Core's step-indexed chain re
   `F_Σ R` is read at the table of the row's layers (`tabN`, each capturable entry with its cancel
   row's obligation `finN`) and its answer `retN`. Core's `vCE`/`cC`/`effTab`/`finObl`/`effRet`
   clause by clause, with `ewpTS`/`wpTS` replaced by `erwp`:
-  - `Mut` is Core's shape over the world (`mutL`): the cell at `@aδ` holds a member of the payload
-    read at the world above `@aδ`, the family the world stores at the lend's key;
+  - `Mut` is Core's `ptoMutS` shape over the world: the cell at some `b ⊒ @aδ` (`mutL b`) holds a
+    member of the payload read at the world above `b`, the family the world stores at the lend's
+    key, and every value of the payload is in `Res_b`;
   - `U C` and `⊸` are Kripke along Core's resource-relative order (`LocTy.ExtR` at the thunk's
     or function's resource), at every view consistent with the resource (`ConsistentX`).
   `gN`, `SemJN`.
@@ -73,10 +74,11 @@ def immCell (α : Life) (P : Val → WRes → Prop) (v : Val) (ρ : WRes) : Prop
 
 mutual
 /-- **`𝒱⟦A⟧δ` at the world and the index.** Core's `vCE` clause by clause, `⋆` written as
-`ResU.CompS`; `Mut` is Core's shape over the world (`mutL`: a location whose cell at `@aδ` holds
-the member `j ≥ k` of the payload read at the world above `@aδ`, which the world stores at the
-lend's key, and every value of `A` in the stratum `@aδ`: `ptoMutS`'s last conjunct, `hunif`,
-`Core/Relation.lean`); `Imm` one `imm` cell longer-lived than `@aδ` with its payload in `𝒱⟦A⟧`; `[@a] A` in
+`ResU.CompS`; `Mut` is Core's `ptoMutS` shape over the world (`Core/Relation.lean`): a lifetime
+`b` with `@aδ ⊑ b` (Core's slack, which `mutSub` reads), a location whose cell at `b` holds the
+member `j ≥ k` of the payload read at the world above `b`, which the world stores at the lend's
+key `(ℓ, b)` (`mutL`), and every value of `A` in the stratum `b` (`ptoMutS`'s last conjunct,
+`hunif`); `Imm` one `imm` cell longer-lived than `@aδ` with its payload in `𝒱⟦A⟧`; `[@a] A` in
 the stratum; `U C` the forced thunk in `𝒞⟦C⟧` at every extension of the world along `ExtR` at the
 thunk's resource (Core's `vCE` at `U`), every view consistent with that resource and every record
 list. A lifetime with no
@@ -95,9 +97,9 @@ def vN : VTy → LSub → LocTy → Nat → Val → WRes → Prop
       ResU.CompS (ResU.single l (CellU.ownOf u)) σ ρ ∧ vN A δ Θ n u σ
   | .imm a A, δ, Θ, n, v, ρ => ∃ α, a.interp δ = some α ∧
       immCell α (fun u σ => vN A δ Θ n u σ) v ρ
-  | .mut a A, δ, Θ, n, v, ρ => ∃ α, a.interp δ = some α ∧
-      mutL α (fun Θ' j u r => vN A δ Θ' j u r) Θ n v ρ ∧
-        ∀ (Θ' : LocTy) (j : Nat) (u : Val) (r : WRes), vN A δ Θ' j u r → r.InStratum α
+  | .mut a A, δ, Θ, n, v, ρ => ∃ α : Life, a.interp δ = some α ∧ ∃ b : Life, α ≤ b ∧
+      mutL b (fun Θ' j u r => vN A δ Θ' j u r) Θ n v ρ ∧
+        ∀ (Θ' : LocTy) (j : Nat) (u : Val) (r : WRes), vN A δ Θ' j u r → r.InStratum b
   | .box a A, δ, Θ, n, v, ρ => ∃ α, a.interp δ = some α ∧ vN A δ Θ n v ρ ∧ ρ.InStratum α
   | .bang A, δ, Θ, n, v, ρ => ρ = PMap.empty ∧ vN A δ Θ n v ρ
   | .unk, _, _, _, _, ρ => ρ = PMap.empty
@@ -111,8 +113,9 @@ run is `erwp` at the view `Θ.view c`. `F A` is `erwp` at the empty table; `F_Σ
 table of the row's layers; `⊸` reads its argument at every extension of the world along `ExtR` at
 the function's resource, every view consistent with the argument's and the function's resource,
 and every later index
-(the step-indexed `−∗`); `∀'x ⊏ @c` every `α ⊏ @cδ`, empty where `@c` has no interpretation;
-`ν` is outside the fragment. -/
+(the step-indexed `−∗`); `∀'x ⊏ @c` every `α ⊏ @cδ` (Core's `cC`: vacuous where `@c` has no
+interpretation; a constant's premises carry its bound's definedness, `Const791.OK`); `ν` is outside
+the fragment. -/
 def cN : CTy → LSub → LocTy → (Loc → Option Life) → Nat → List SRec → Expr → WRes → Prop
   | .ret A, δ, Θ, c, n, ls, e, ρ =>
       erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (fun k _ v ρ => vN A δ Θ k v ρ) n ls e ρ
@@ -122,7 +125,7 @@ def cN : CTy → LSub → LocTy → (Loc → Option Life) → Nat → List SRec 
   | .amp C D, δ, Θ, c, n, ls, e, ρ => cN C δ Θ c n ls (.app e (.val (Val.inj₁ .unit))) ρ ∧
       cN D δ Θ c n ls (.app e (.val (Val.inj₂ .unit))) ρ
   | .top, _, _, _, _, _, _, _ => True
-  | .all x c' C, δ, Θ, c, n, ls, e, ρ => (∃ γ, c'.interp δ = some γ) ∧
+  | .all x c' C, δ, Θ, c, n, ls, e, ρ =>
       ∀ α, LtLife δ c' α → cN C (δ.extend x α) Θ c n ls (.app e (.val .unit)) ρ
   | .nu _, _, _, _, _, _, _, _ => False
   | .eff m i q A B fin _ C, δ, Θ, c, n, ls, e, ρ =>
@@ -236,8 +239,8 @@ theorem vN_down : ∀ (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ
       obtain ⟨α, hα, l, s, u, σ, hs, h₁, h₂, h₃, h₄⟩ := h
       exact ⟨α, hα, l, s, u, σ, hs, h₁, h₂, h₃, vN_down A δ Θ n u σ h₄⟩
   | .mut a A, δ, Θ, n, _, _, h => by
-      obtain ⟨α, hα, ⟨l, w, χ, hχ, j, hw, hj, h₁, h₂, h₃⟩, hu⟩ := h
-      exact ⟨α, hα, ⟨l, w, χ, hχ, j, hw, by omega, h₁, h₂, h₃⟩, hu⟩
+      obtain ⟨α, hα, b, hab, ⟨l, w, χ, hχ, j, hw, hj, h₁, h₂, h₃⟩, hu⟩ := h
+      exact ⟨α, hα, b, hab, ⟨l, w, χ, hχ, j, hw, by omega, h₁, h₂, h₃⟩, hu⟩
   | .box a A, δ, Θ, n, v, ρ, h => by
       obtain ⟨α, hα, h₁, h₂⟩ := h
       exact ⟨α, hα, vN_down A δ Θ n v ρ h₁, h₂⟩
@@ -259,7 +262,7 @@ theorem cN_down : ∀ (C : CTy) (δ : LSub) (Θ : LocTy), Θ.Down → ∀ (c : L
       ⟨cN_down C δ Θ hΘ c n ls _ ρ h.1, cN_down D δ Θ hΘ c n ls _ ρ h.2⟩
   | .top, _, _, _, _, _, _, _, _, h => h
   | .all x c' C, δ, Θ, hΘ, c, n, ls, e, ρ, h =>
-      ⟨h.1, fun α hα => cN_down C (δ.extend x α) Θ hΘ c n ls _ ρ (h.2 α hα)⟩
+      fun α hα => cN_down C (δ.extend x α) Θ hΘ c n ls _ ρ (h α hα)
   | .nu _, _, _, _, _, _, _, _, _, h => h
   | .eff m i q A B fin rc C, δ, Θ, hΘ, c, n, ls, e, ρ, h =>
       erwp_le (LocTy.view_down hΘ c) (opTableN_local _)
@@ -515,11 +518,11 @@ theorem vN_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life} (
       rw [hb] at hb'; cases Option.some.inj hb'
       exact ResU.inStratum_single l (lt_of_lt_of_le (show (α : Life) < β from hlt') hle)
   | «mut» hlt =>
-      rintro Θ n v ρ ⟨β, hb, ⟨l, w, χ, hχ, j, hw, -, -, -, rfl⟩, -⟩
+      rintro Θ n v ρ ⟨β, hb, b, hβb, ⟨l, w, χ, hχ, j, hw, -, -, -, rfl⟩, -⟩
       obtain ⟨α', β', ha', hb', hlt'⟩ := hlt δ hδ
       rw [ha] at ha'; cases Option.some.inj ha'
       rw [hb] at hb'; cases Option.some.inj hb'
-      exact ResU.inStratum_single l (show (α : Life) < β from hlt')
+      exact ResU.inStratum_single l (lt_of_lt_of_le (show (α : Life) < β from hlt') hβb)
   | tvar => intro Θ n v ρ h; exact h.elim
   | mu _ _ => intro Θ n v ρ h; exact h.elim
   | int => rintro Θ n v ρ ⟨-, rfl⟩; exact ResU.inStratum_empty α
@@ -559,11 +562,12 @@ theorem vN_outlivesLe {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α γ : Li
       rw [hb] at hb'; cases Option.some.inj hb'
       exact ResU.inStratum_single l (lt_of_lt_of_le (lt_of_lt_of_le hγ (show (α : Life) ≤ β from hlt')) hle)
   | «mut» hlt =>
-      rintro Θ n v ρ ⟨β, hb, ⟨l, w, χ, hχ, j, hw, -, -, -, rfl⟩, -⟩
+      rintro Θ n v ρ ⟨β, hb, b, hβb, ⟨l, w, χ, hχ, j, hw, -, -, -, rfl⟩, -⟩
       obtain ⟨α', β', ha', hb', hlt'⟩ := hlt δ hδ
       rw [ha] at ha'; cases Option.some.inj ha'
       rw [hb] at hb'; cases Option.some.inj hb'
-      exact ResU.inStratum_single l (lt_of_lt_of_le hγ (show (α : Life) ≤ β from hlt'))
+      exact ResU.inStratum_single l
+        (lt_of_lt_of_le hγ ((show (α : Life) ≤ β from hlt').trans hβb))
   | tvar => intro Θ n v ρ h; exact h.elim
   | mu _ _ => intro Θ n v ρ h; exact h.elim
   | int => rintro Θ n v ρ ⟨-, rfl⟩; exact ResU.inStratum_empty γ
@@ -602,8 +606,8 @@ theorem vN_extR : ∀ (A : VTy) (δ : LSub) {Θ Θ' : LocTy} (n : Nat) (v : Val)
           le_of_lt (lt_of_le_of_lt (LSet.meet_le_join s) hjb)⟩
       exact ⟨α, hα, l, s, u, σ, hs, h₁, rfl, h₃, vN_extR A δ n u σ hσ h₄⟩
   | .mut a A, δ, _, _, n, _, _, hE, h => by
-      obtain ⟨α, hα, hm, hu⟩ := h
-      exact ⟨α, hα, mutL_extR hE hm, hu⟩
+      obtain ⟨α, hα, b, hab, hm, hu⟩ := h
+      exact ⟨α, hα, b, hab, mutL_extR hE hm, hu⟩
   | .box a A, δ, _, _, n, v, ρ, hE, h => by
       obtain ⟨α, hα, h₁, h₂⟩ := h
       exact ⟨α, hα, vN_extR A δ n v ρ hE h₁, h₂⟩
@@ -646,7 +650,7 @@ theorem cN_extA : ∀ (C : CTy), noEffSpine C → ∀ (δ : LSub) {Θ Θ' : LocT
       ⟨cN_extA C hC.1 δ hE c n ls _ ρ h.1, cN_extA D hC.2 δ hE c n ls _ ρ h.2⟩
   | .top, _, _, _, _, _, _, _, _, _, _, h => h
   | .all x _ C, hC, δ, _, _, hE, c, n, ls, e, ρ, h =>
-      ⟨h.1, fun α hα => cN_extA C hC (δ.extend x α) hE c n ls _ ρ (h.2 α hα)⟩
+      fun α hα => cN_extA C hC (δ.extend x α) hE c n ls _ ρ (h α hα)
   | .nu _, _, _, _, _, _, _, _, _, _, _, h => h
   | .eff _ _ _ _ _ _ _ _, hC, _, _, _, _, _, _, _, _, _, _ => hC.elim
 
@@ -679,6 +683,118 @@ theorem vN_add_eq {A : VTy} (hO : ∀ Δ a, VOutlives Δ a A) (δ : LSub) {Θ : 
 theorem vN_above (A : VTy) (δ : LSub) (Θ : LocTy) {a : Life} {n : Nat} {v : Val} {ρ : WRes}
     (hρ : ρ.InStratum a) : vN (ℍ := ℍ) A δ (Θ.above a) n v ρ ↔ vN (ℍ := ℍ) A δ Θ n v ρ :=
   ⟨vN_extR A δ n v ρ (LocTy.extR_above Θ hρ).1, vN_extR A δ n v ρ (LocTy.extR_above Θ hρ).2⟩
+
+/-! ### Rule checks: `⊑mut`, `⊑imm`, `∀I` at `SemJN` -/
+
+/-- **`𝒞⟦C⟧` is closed under a pure head step backwards**, in every evaluation context: the
+`F`/`F_Σ` clauses by `erwp_det`, the others by their parts (Core's `cC_head`). -/
+theorem cN_head : ∀ (C : CTy) (δ : LSub) (Θ : LocTy), Θ.Down → ∀ (c : Loc → Option Life)
+    (n : Nat) (ls : List SRec) (ρ : WRes) (K : Kont) (a a' : Expr),
+    (∀ μ, BoCa.BoLo.Head (ℍ := ℍ) μ a μ a') → a.allocs = false →
+    cN (ℍ := ℍ) C δ Θ c n ls (K.plug a') ρ → cN (ℍ := ℍ) C δ Θ c n ls (K.plug a) ρ
+  | .ret A, δ, Θ, hΘ, c, n, ls, ρ, K, a, a', hh, hn, h =>
+      erwp_det (LocTy.view_down hΘ c) (opTableN_down OpTabN.empty_down)
+        (fun k _ v ρ h => vN_down A δ Θ k v ρ h) (fun μ => step1Only_plug (hh μ) hn K) h
+  | .arr A C, δ, Θ, _, c, n, ls, ρ, K, a, a', hh, hn, h =>
+      fun Θ' hE hOK c' k hk v ρv ρ' hc hv hcon =>
+        cN_head C δ Θ' hOK.1 c' k ls ρ' (.appL K v) a a' hh hn (h Θ' hE hOK c' k hk v ρv ρ' hc hv hcon)
+  | .amp C D, δ, Θ, hΘ, c, n, ls, ρ, K, a, a', hh, hn, h =>
+      ⟨cN_head C δ Θ hΘ c n ls ρ (.appL K _) a a' hh hn h.1,
+        cN_head D δ Θ hΘ c n ls ρ (.appL K _) a a' hh hn h.2⟩
+  | .top, _, _, _, _, _, _, _, _, _, _, _, _, h => h
+  | .all x c' C, δ, Θ, hΘ, c, n, ls, ρ, K, a, a', hh, hn, h =>
+      fun α hα => cN_head C (δ.extend x α) Θ hΘ c n ls ρ (.appL K _) a a' hh hn (h α hα)
+  | .nu _, _, _, _, _, _, _, _, _, _, _, _, _, h => h
+  | .eff m i q A B fin rc C, δ, Θ, hΘ, c, n, ls, ρ, K, a, a', hh, hn, h =>
+      erwp_det (LocTy.view_down hΘ c)
+        (opTableN_down (extTabN_down (fun k v ρ h => vN_down A δ Θ k v ρ h)
+          (finN_down fin δ Θ hΘ c) (tabN_down C δ Θ hΘ c)))
+        (fun k _ v ρ h => retN_down C δ Θ k v ρ h) (fun μ => step1Only_plug (hh μ) hn K) h
+
+/-- `Δ ⊨ a ⊑ b`'s order on interpretations is `Life`'s. -/
+theorem sLe_life {m n : Life} (h : BoCa.Lifetime.SLife.Le m n) : m ≤ n := h
+
+/-- **`⊑mut` at `SemJN`** (`mutSub`, `Core/Fundamental.lean`): Core's `mutSub_compatC` by
+`ptoMutS_antitone`. The `Mut` clause's slack `@aδ ⊑ b` absorbs `@aδ ⊑ @bδ`: the cell stays at
+its `b`, its key and its uniform conjunct unchanged. -/
+theorem mutSub_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a b : Lifetime.Life} {A : VTy}
+    (h : SemJN (ℍ := ℍ) Δ Γ e (.val (.mut b A))) (hle : Δ.EntailsLe a b) :
+    SemJN (ℍ := ℍ) Δ Γ e (.val (.mut a A)) := by
+  intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
+  obtain ⟨α, β, ha, hb, hle'⟩ := hle δ hδ
+  refine erwp_mono (fun k _ v ρ hv => ?_) (opTableN_local _) n ls _ ρ
+    (h δ γ Θ c n ls ρ hδ hΘ hc hlw hg)
+  obtain ⟨β', hβ', b', hβb', hm, hu⟩ := hv
+  rw [hb] at hβ'
+  cases Option.some.inj hβ'
+  exact ⟨α, ha, b', le_trans (sLe_life hle') hβb', hm, hu⟩
+
+/-- **`⊑imm` at `SemJN`** (`immSub`): Core's `immSub_compatC` by `ptoImmS_antitone`. -/
+theorem immSub_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a b : Lifetime.Life} {A : VTy}
+    (h : SemJN (ℍ := ℍ) Δ Γ e (.val (.imm b A))) (hle : Δ.EntailsLe a b) :
+    SemJN (ℍ := ℍ) Δ Γ e (.val (.imm a A)) := by
+  intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
+  obtain ⟨α, β, ha, hb, hle'⟩ := hle δ hδ
+  refine erwp_mono (fun k _ v ρ hv => ?_) (opTableN_local _) n ls _ ρ
+    (h δ γ Θ c n ls ρ hδ hΘ hc hlw hg)
+  obtain ⟨β', hβ', l, s, u, σ, hs, h₁, h₂, h₃, h₄⟩ := hv
+  rw [hb] at hβ'
+  cases Option.some.inj hβ'
+  exact ⟨α, ha, l, s, u, σ, hs, h₁, h₂, le_trans (sLe_life hle') h₃, h₄⟩
+
+/-- `𝒢⟦Γ⟧` does not read `δ` at a variable no live slot mentions. -/
+theorem gN_extend_of_not_free {x : LifeVar} (δ : LSub) (α : Life) (Θ : LocTy) :
+    ∀ (Γ : Ctx VTy), (∀ s ∈ Γ, s.live = true → ¬ VFree x s.ty) → ∀ γ n ρ,
+      gN (ℍ := ℍ) δ Θ Γ γ n ρ → gN (ℍ := ℍ) (δ.extend x α) Θ Γ γ n ρ
+  | [], _, _, _, _, h => h
+  | _ :: _, _, [], _, _, h => h
+  | s :: Γ, hΓ, v :: γ, n, ρ, h => by
+      have ih := gN_extend_of_not_free δ α Θ Γ (fun s' hs' => hΓ s' (List.mem_cons_of_mem _ hs'))
+      unfold gN at h ⊢
+      split
+      · rename_i hl
+        rw [if_pos hl] at h
+        obtain ⟨ρ₁, ρ₂, hc, h₁, h₂⟩ := h
+        refine ⟨ρ₁, ρ₂, hc, ?_, ih γ n ρ₂ h₂⟩
+        rw [vN_extend_of_not_free (hΓ s (List.mem_cons_self ..) hl)]
+        exact h₁
+      · rename_i hl
+        rw [if_neg hl] at h
+        exact ih γ n ρ h
+
+/-- **`∀I` at `SemJN`** (`allI`, `Core/Fundamental.lean`): Core's `allI_compatC`. At every
+`α ⊏ @bδ`, `δ[x ↦ α]` models `Δ, 'x ⊏ @b` (the bound and `Δ`'s bounds do not mention `'x`), the
+context's reading does not change (`gN_extend_of_not_free`), and the body is one β step away
+(`cN_head`). The `∀` clause reads no definedness of `@b`, as Core's `cC`, so the rule needs none. -/
+theorem allI_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {x : LifeVar} {b : Lifetime.Life} {M : Expr}
+    {S : VTy} {C : CTy} (hbx : b.mentions x = false)
+    (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
+    (hΓx : ∀ s ∈ Γ, s.live = true → ¬ VFree x s.ty)
+    (h : SemJN (ℍ := ℍ) (Δ.extend x b) (⟨S, false⟩ :: Γ) M (.comp C)) :
+    SemJN (ℍ := ℍ) Δ Γ (.val (.lam M)) (.comp (.all x b C)) := by
+  intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg α hα
+  obtain ⟨β, hβ, hlt⟩ := hα
+  have hδ' : (Δ.extend x b).Models (δ.extend x α) := by
+    intro y u hy
+    rw [LifeCtx.find?_extend] at hy
+    by_cases hxy : x = y
+    · subst hxy
+      rw [if_pos rfl] at hy
+      obtain rfl := Option.some.inj hy
+      exact ⟨α, β, BoCa.Fig16.LogRel.find?_extend_self δ x α,
+        by rw [BoCa.Fig16.LogRel.interp_extend_of_not_mentions hbx]; exact hβ, hlt⟩
+    · rw [if_neg hxy] at hy
+      obtain ⟨m, k, hm, hk, hlk⟩ := hδ y u hy
+      exact ⟨m, k, by rw [BoCa.Fig16.LogRel.find?_extend_ne δ α hxy]; exact hm,
+        by rw [BoCa.Fig16.LogRel.interp_extend_of_not_mentions (hΔx y u hy)]; exact hk, hlk⟩
+  show cN (ℍ := ℍ) C (δ.extend x α) Θ c n ls
+    (Kont.hole.plug (.app (.val (.lam (Expr.psub 1 γ M))) (.val .unit))) ρ
+  refine cN_head C _ Θ hΘ.1 c n ls ρ .hole _ _
+    (fun μ => BoCa.BoLo.Head.beta μ (Expr.psub 1 γ M) Val.unit) rfl ?_
+  rw [show Kont.hole.plug (Expr.subst 0 Val.unit (Expr.psub 1 γ M)) = substAll (Val.unit :: γ) M
+    from (substAll_cons_psub Val.unit γ M).symm]
+  exact h (δ.extend x α) (Val.unit :: γ) Θ c n ls ρ hδ' hΘ hc hlw
+    (gN_extend_of_not_free δ α Θ Γ hΓx γ n ρ hg)
 
 /-! ## §3. The statements -/
 

@@ -112,20 +112,35 @@ def Const791.val : Const791 → Val
 /-- **The rule's premises, at the empty lifetime context**: the corresponding `CDerives`
 constructor's (`withbor2U`, `withbor3U`, `withloadU`, `sliceBorrowMU`), `hS : S.Unwind x` read as
 `S.Suspend x`; the finaliser closed and typed. The field reborrow's are `withbor3U`'s at
-`Mut @a (Ref A)`. -/
+`Mut @a (Ref A)`.
+
+The first conjunct, `LifeCtx.empty.Defines bnd`, is where Core's rules get the callback bound's
+interpretation: they fix the bound to `Δ.meetOfDom`, which every `δ ⊨ Δ` interprets
+(`Lifetime.Life.interp_defined_of_wf`, `Lifetime.meetOfDomL_wf`; `withbor2U_compatX`,
+`Core/EffBorrow.lean`). The constants take any bound, so they carry the definedness as a premise;
+`defines_meetOfDom_empty` shows Core's bound meets it. -/
 def Const791.OK : Const791 → Prop
-  | .w2 x _ A B S d => (∃ b, LifeCtx.empty.Defines b ∧ VOutlivesLe LifeCtx.empty b A) ∧
+  | .w2 x bnd A B S d => LifeCtx.empty.Defines bnd ∧
+      (∃ b, LifeCtx.empty.Defines b ∧ VOutlivesLe LifeCtx.empty b A) ∧
       ¬ VFree x A ∧ ¬ VFree x B ∧ S.Suspend x ∧ closedAt 0 d = true ∧
       CDerives LifeCtx.empty [] d (.val (.lolli (.ref A) .unit))
-  | .w3 a x _ A B S d => ¬ VFree x A ∧ ¬ VFree x B ∧ S.Suspend x ∧ closedAt 0 d = true ∧
+  | .w3 a x bnd A B S d => LifeCtx.empty.Defines bnd ∧
+      ¬ VFree x A ∧ ¬ VFree x B ∧ S.Suspend x ∧ closedAt 0 d = true ∧
       CDerives LifeCtx.empty [] d (.val (.lolli (.mut a A) .unit))
-  | .wF a x _ A B S d => ¬ VFree x A ∧ ¬ VFree x B ∧ S.Suspend x ∧ closedAt 0 d = true ∧
+  | .wF a x bnd A B S d => LifeCtx.empty.Defines bnd ∧
+      ¬ VFree x A ∧ ¬ VFree x B ∧ S.Suspend x ∧ closedAt 0 d = true ∧
       CDerives LifeCtx.empty [] d (.val (.lolli (.mut a (.ref A)) .unit))
-  | .wl _ x _ A B S => ¬ VFree x A ∧ ¬ VFree x B ∧ S.Suspend x
-  | .sm x _ A B S d => (∃ b, LifeCtx.empty.Defines b ∧ VOutlivesLe LifeCtx.empty b A) ∧
+  | .wl _ x bnd A B S => LifeCtx.empty.Defines bnd ∧ ¬ VFree x A ∧ ¬ VFree x B ∧ S.Suspend x
+  | .sm x bnd A B S d => LifeCtx.empty.Defines bnd ∧
+      (∃ b, LifeCtx.empty.Defines b ∧ VOutlivesLe LifeCtx.empty b A) ∧
       (∃ b, LifeCtx.empty.Defines b ∧ VOutlivesLe LifeCtx.empty b B) ∧
       ¬ VFree x A ∧ ¬ VFree x B ∧ S.Suspend x ∧ closedAt 0 d = true ∧
       CDerives LifeCtx.empty [] d (.val (.lolli (.array A) .unit))
+
+/-- **Core's bound meets `Const791.OK`'s first conjunct**: `LifeCtx.empty.meetOfDom`, the bound
+Core's rules fix at the empty context, is defined at every `δ`. -/
+theorem defines_meetOfDom_empty : LifeCtx.empty.Defines LifeCtx.empty.meetOfDom :=
+  fun _ hδ => Lifetime.Life.interp_defined_of_wf hδ (Lifetime.meetOfDomL_wf LifeCtx.empty.entries)
 
 /-- The context a program using the constants `cs` is typed in: each constant at `!` of its
 type, live. -/

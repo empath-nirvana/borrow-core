@@ -316,12 +316,12 @@ def cbRelease : Val := Val.lam (.val (Val.lam (.val .unit)))
 wherever the bound has an interpretation: the borrow is left as garbage at the return, so the
 callback type `withbor2S_compat` reads is not empty. -/
 theorem cbRelease_sem {x : LifeVar} {bnd : Lifetime.Life} {A : VTy} {δ : LSub}
-    (hb : ∃ γ, bnd.interp δ = some γ) (Θ : LocTy) (n : Nat) :
+    (Θ : LocTy) (n : Nat) :
     vN (ℍ := ℍ) (cbUTy x bnd (.mut (.var x) A) .unit []) δ Θ n cbRelease PMap.empty := by
   intro Θ' _ _ c _ ls
-  refine ⟨hb, fun α _ Θ'' _ hOK c' k _ v ρv ρ' hc hv _ => ?_⟩
+  refine fun α _ Θ'' _ hOK c' k _ v ρv ρ' hc hv _ => ?_
   obtain rfl := eq_of_compS_empty_left hc
-  obtain ⟨β, hβ, ⟨l, w, χ, hχ, j, hw, -, rfl, -, rfl⟩, -⟩ := hv
+  obtain ⟨β, hβ, b, -, ⟨l, w, χ, hχ, j, hw, -, rfl, -, rfl⟩, -⟩ := hv
   have hΦ := LocTy.view_down hOK.1 c'
   have hQ : PostN.Down
       (fun k _ v ρ => vN (ℍ := ℍ) (.box (.var x) .unit) (δ.extend x α) Θ'' k v ρ) :=

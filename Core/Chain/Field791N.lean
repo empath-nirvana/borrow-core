@@ -270,12 +270,12 @@ theorem tabG_canF {x : LifeVar} {δ : LSub} {Θ : LocTy} {c : Loc → Option Lif
   `hunif` at `Ref A`: the field's cell with its content is a `Ref A` value, in `Res_β` and in
   `F_o k`.
 
-Premises, and the rule that supplies each: `hA`, `hB`, `hS`, `hdc` are `Const791.OK`'s for `wF`
+Premises, and the rule that supplies each: `hbnd`, `hA`, `hB`, `hS`, `hdc` are `Const791.OK`'s for `wF`
 (`withbor3U`'s at `Mut @a (Ref A)`, `Row.Suspend` for `Row.Unwind`); `hd` is the fundamental
 property at `d`'s derivation, the premise `CDerives Δ Γ d (Mut @a (Ref A) ⊸ 1)` read
 semantically. -/
 theorem withborFS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
-    {S : Row} {d : Expr} (hA : ¬ VFree x A) (hB : ¬ VFree x B) (hS : S.Suspend x)
+    {S : Row} {d : Expr} (hbnd : LifeCtx.empty.Defines bnd) (hA : ¬ VFree x A) (hB : ¬ VFree x B) (hS : S.Suspend x)
     (hdc : closedAt 0 d = true)
     (hd : SemJN (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.mut a (.ref A)) .unit))) (δ : LSub)
     (Θ₀ : LocTy) (n : Nat) :
@@ -287,7 +287,7 @@ theorem withborFS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
   -- steps 2–4
   intro Θ hE₃ hΘ c k' hk' f ρf ρ'' hc' hf hcon
   set P : CPredL := fun Θ' j u r => vN (ℍ := ℍ) (.ref A) δ Θ' j u r with hP
-  obtain ⟨(β : Life), hβ, hm, hunif⟩ := vN_le hk' (vN_extR _ δ k u ρu hE₃ hu)
+  obtain ⟨α₀, hα₀, (β : Life), hα₀β, hm, hunif⟩ := vN_le hk' (vN_extR _ δ k u ρu hE₃ hu)
   -- step 5
   obtain ⟨l, w₀, σ₀, hσ₀, j₀, hw₀, hkj, rfl, hl, rfl⟩ := id hm
   -- step 2 at `Ref A`: the source's content is the field `ℓ₂ ↦ own(u₀) ● σ_u`
@@ -349,7 +349,7 @@ theorem withborFS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
     exact ResU.CompS.inStratum_left hX
       (hunif Θ' j (Val.loc l') X ⟨l', u, r, rfl, ResU.CompS.comm hX, h⟩)
   -- step 9: the lend's lifetime, fresh, below `β`, the bound and the callback's stratum
-  obtain ⟨γ, hγ⟩ := (hf Θ (LocTy.extR_refl Θ ρf) hΘ c hcf ls).1
+  obtain ⟨γ, hγ⟩ := hbnd δ (models_empty_any _)
   obtain ⟨βf, hβf⟩ := ResU.exists_stratum ρf
   obtain ⟨α, hαle, hfr⟩ := LocTy.exists_fresh hΘ.2 (↓(β ⊓ βf ⊓ γ))
   have hαlt : α < β ⊓ βf ⊓ γ := lt_of_le_of_lt hαle (Life.down_sqsubset _)
@@ -394,7 +394,7 @@ theorem withborFS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
     with hRoutd
   have hRout : ∀ k (w : Val) (σ : WRes) (h : σ.InStratum β) (hw : famL β P Θ k w ⟨σ, h⟩),
       Rout k (ResU.single l (CellU.mutOf β w σ h (famL β P Θ k) hw)) :=
-    fun k w σ h hw => ⟨β, hβ, ⟨l, w, σ, h, k, hw, le_rfl, rfl, hl, rfl⟩, hunif⟩
+    fun k w σ h hw => ⟨α₀, hα₀, β, hα₀β, ⟨l, w, σ, h, k, hw, le_rfl, rfl, hl, rfl⟩, hunif⟩
   -- step 11: the callback's world and view
   set Θ' := Θ.add l₂ α Fam with hΘ'
   set c' := setLife c l₂ α with hc'def
@@ -459,10 +459,10 @@ theorem withborFS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
     hσ₀s (ResU.CompS.comm hX''1) (fun BM hBM => ?_)
   -- step 11: the callback, at the lend's world and view, from the borrow
   rw [← hview]
-  have h1 := (hf Θ' ((LocTy.extA_add hfr l₂ Fam).extR ρf) hOK' c' hcf' ls).2 α hLt
+  have h1 := (hf Θ' ((LocTy.extA_add hfr l₂ Fam).extR ρf) hOK' c' hcf' ls) α hLt
   have hcell : vN (ℍ := ℍ) (.mut (.var x) A) δ' Θ' (k' - 1) (Val.loc l₂)
       (ResU.single l₂ (CellU.mutOf α u₀ σu houtP (Fam j₀) hwit)) :=
-    ⟨α, interp_ext_self δ x α, lend_mutL Θ l₂ α P' (by omega) houtP hwit,
+    ⟨α, interp_ext_self δ x α, α, le_rfl, lend_mutL Θ l₂ α P' (by omega) houtP hwit,
       fun Θ'' j u r h => (hunifA Θ'' j u r (by rw [← hAδ]; exact h)).mono hαβ⟩
   have hcBM : ConsistentX c' BM := consistentX_compS hBM hcf'
     (consistentX_single_mut hcσu' (by simp [hc'def, setLife]))
@@ -488,8 +488,8 @@ finaliser's derivation. -/
 theorem constN_wF (hF : FundamentalN (ℍ := ℍ)) {a : Lifetime.Life} {x : LifeVar}
     {bnd : Lifetime.Life} {A B : VTy} {S : Row} {d : Expr} :
     ConstN (ℍ := ℍ) (.wF a x bnd A B S d) := by
-  rintro ⟨hA, hB, hS, hdc, hder⟩ δ Θ n _
-  exact withborFS_compat hA hB hS hdc (hF _ _ _ _ hder) δ Θ n
+  rintro ⟨hbnd, hA, hB, hS, hdc, hder⟩ δ Θ n _
+  exact withborFS_compat hbnd hA hB hS hdc (hF _ _ _ _ hder) δ Θ n
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

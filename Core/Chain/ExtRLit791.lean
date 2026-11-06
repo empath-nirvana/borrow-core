@@ -77,12 +77,12 @@ theorem valid_at_empty (x : LifeVar) (δ : LSub) {α b : Life} (hbα : b < α) (
     (v : Val) : vUgen (ℍ := ℍ) ExtRL x (δ.extend x α) LocTy.empty n v (ρb m b) := by
   intro Θ' hE _ c _ ls Θ'' hE' _ c' k _ w ρv ρ' _ hv _
   exfalso
-  obtain ⟨β, hβ, ⟨l', _, _, _, _, _, _, _, hl, _⟩, -⟩ := hv
+  obtain ⟨β, hβ, b', hβb', ⟨l', _, _, _, _, _, _, _, hl, _⟩, -⟩ := hv
   rw [interp_ext_self] at hβ
   cases Option.some.inj hβ
   have habove := (hE'.2 b (cellIn_ρb m b)).trans (hE.2 b (cellIn_ρb m b))
-  have h := congrFun (congrFun habove l') α
-  simp only [LocTy.above, if_pos hbα, LocTy.empty] at h
+  have h := congrFun (congrFun habove l') b'
+  simp only [LocTy.above, if_pos (lt_of_lt_of_le hbα hβb'), LocTy.empty] at h
   rw [h] at hl
   cases hl
 
@@ -103,7 +103,7 @@ theorem not_valid_at_lend (x : LifeVar) (δ : LSub) {N α b : Life} (hNα : N < 
   let cell : WRes := ResU.single l' (CellU.mutOf α Val.unit PMap.empty
     (ResU.inStratum_empty α) (famL α P LocTy.empty n) hw)
   have hv : vN (ℍ := ℍ) (.mut (.var x) .unit) (δ.extend x α) Θ₁ n (Val.loc l') cell :=
-    ⟨α, interp_ext_self δ x α, lend_mutL LocTy.empty l' α P le_rfl _ hw,
+    ⟨α, interp_ext_self δ x α, α, le_rfl, lend_mutL LocTy.empty l' α P le_rfl _ hw,
       fun _ _ _ r h => by obtain ⟨-, rfl⟩ := h; exact ResU.inStratum_empty α⟩
   obtain ⟨ρ', hρ'⟩ := (ResU.compS_defined_iff (ρb m b) cell).mpr
     (compatS_single_of_get_none (ResU.single_get_ne _ hml))
