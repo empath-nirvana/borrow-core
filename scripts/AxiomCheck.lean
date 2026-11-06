@@ -1474,6 +1474,8 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Shape791N.stuckV_not_two
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Shape791N.unitV_all
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Shape791N.reseal_untyped
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ImmShape791N.coreMutImm_not_extF
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ImmShape791N.coreMutImm_not_extF_inst
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.ext_add
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.add_keep
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.above_add

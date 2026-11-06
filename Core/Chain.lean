@@ -88,6 +88,7 @@ import Core.Chain.Cancel791N
 import Core.Chain.Goal791N
 import Core.Chain.Lend791N
 import Core.Chain.Shape791N
+import Core.Chain.ImmShape791N
 import Core.Chain.PerLendShape791
 import Core.Chain.ConsistentFlat791
 import Core.Chain.ExtRLit791

@@ -128,6 +128,7 @@ has no configuration.
 | `answer_not_inStratum` (why the answer clause is in `Row.Suspend`) | `Lend791N` | none |
 | `perLocShape_not_reborrow` (the configuration for decision 1) | `Shape791N` | the locations distinct, `α < b < β` |
 | `reseal_untyped` (with `stuckV_one`, `stuckV_not_two`, `unitV_all`): the anti-frame's reseal at a location `Φ` does not type (§7.2) | `Shape791N` | `@aδ = β`; `Φ ℓ = none` |
+| `coreMutImm_not_extF` (with `coreMutImm_not_extF_inst`): Core's `Mut 'x (Imm 'y 1)` value is not stable along `extF` (§9.3) | `ImmShape791N` | `δ('x) ⊏ δ('y)`, the record lifetime `⊐ δ('x)`, the locations distinct; none in the instance |
 
 `ConstN`, `ConstsN`, `FundamentalN`, `BridgeN`, `Goal791SchedN`, `Withbor2SN`, `Withbor3SN`,
 `WithborFSN`, `WithloadSN`, `SliceBorrowMSN` are stated (`Goal791N` §3). `Goal791Top` reads no
@@ -412,7 +413,7 @@ case's row in `Core/Chain/Inst791N.lean`. `Const791.OK` is inhabited for each, i
 `CDerives` judgment included (`w2_ok`, `w3_ok`, `wF_ok`), and `withbor2S_perform` applies `w2` to
 a callback that performs while holding the borrow (at `A = B = 1`). The corollaries `constN_w2`/`constN_w3`/`constN_wF`
 are conditional on `FundamentalN`, stated on the fragment and not proved. The `imm` half (`wl`)
-waits on `Imm`'s record list and `CohE` (departure 1); `cN_extA` at `F_Σ R` is open; `sm` needs
+waits on `Imm`'s record list and `CohE` (departure 1), which stops at §9.3 (`coreMutImm_not_extF`); `cN_extA` at `F_Σ R` is open; `sm` needs
 the `fam` clause.
 
 **`Mut`** is Core's `ptoMutS` shape: `∃ b, @aδ ⊑ b ∧ mutL b … ∧` the uniform conjunct at `b`.
@@ -464,3 +465,94 @@ and the `*_compat` proofs:
 cell, its lowering and the run to the stuck term), which is not built. No negative configuration
 for a wrong constant (M6) is built, for the same reason: refuting a run at the source's `own`
 cell needs that world.
+
+## 9. Port of Core's withload_compatX (#829)
+
+Kernel target: `vN`'s `Imm` clause in Core's `ptoImmS` shape (the record list, `ls₀`, `CohE`), its
+laws re-proved, and `ConstN (.wl …)` by Core's `withload_compatX` (`Core/Compatibility.lean:252`)
+at a `Row.Suspend` callback row.
+
+### 9.1 `withload_compatX`, step by step
+
+| # | Core step (`Core/Compatibility.lean`) | What it reads | Chain counterpart |
+|---|---|---|---|
+| 1 | `gSepC_deadP` (257): the context owns nothing | `Ctx.DeadP Γ` | the constant at `PMap.empty`, as `withbor2S_compat`. Exists. |
+| 2 | `wpTS_val`, `wpTS_lolli`, `hβ₁` (259–272): the `Imm` argument is `loc ℓ` | `vCE`'s `imm` clause up to the location | `cN`'s `⊸` clause, `erwp_det` at `Head.beta`. Exists. |
+| 3 | `wpTS_val`, `wpTS_lolli`, `hβ₂` (274–281): the callback `v_f` at `ls₂`, `Ext ls₁ ls₂ ρ₂` | `vCE`'s `U`: Kripke along `Ext` | `cN`'s `⊸` along `ExtR` at the same list; `U` at every list (departure 2). Exists. |
+| 4 | `vC_local true _ hext₂ hv₁` (283): the `Imm` value carried to `ls₂`; its `CohE (rsOf ls₂)` unpacked (284–288) | `Ext` keeps the records relevant to `ρ₁` (`Keeps`) and those above its cells | `vN_extR` along the world. With `vN` reading the list, `vN` stable along the list order: **missing**; Core's is `vC_local` along `Ext`. |
+| 5 | `wpTS_bind`, `wpTS_load_I`, `ptoImmO_toImm` (290–295): the load, its payload observable at `ls₂` | `ptoImmS` (`ls₀` to `ls₂`: `ptoImmO_read`) | `rwp_load` under `erwp_bindR` (as `withborFS_compat`'s load). Exists for the load; the observable payload at the current list needs `vN`'s observable mode and `ptoImmO_read` at `vN`: **missing** (`vN`'s `Imm` payload is read at the full relation, not Core's `vCE false`). |
+| 6 | the chooser `hesc` (297–318): `CohE` up to `TyEq`, `vC_tyEq`, `vShape_tyEq`, then `rebChooseTW_top` (a record's cell) or `rebChooseTW_deep` (a chain view) | `CohE`; inside the run, the world: `leInvW`/`exIn` (the cell is the record's), `witLB_of`, `tags_above`, `coh_mut` | `erwp_reborrowT` (`SI/RebCancelC.lean`) / `erwp_reborrow` (`SI/RebAcrossC.lean`) at the record's cell, image `canon r β`; `erwp_reborrowDeep` (`SI/RebStopD.lean`) at a chain view. They take the cell as the record's (`single r.le (immOf s r.v r.R hs)`); `vN`'s value gives `single ℓ (immOf s u σ h)` with `CohE`. Identifying `u = r.v`, `σ = r.R` reads the world (`TWNC.inv`'s `leInvW`), available at the first entry of `erwp`: buildable (unfold `erwp_eq` at the first world, then apply the lemma there). `TyEq` transport at `vN` (`vN_tyEq`): **missing**, buildable as `vC_tyEq`. |
+| 7 | "Apply `↺V₂`" and 6.134 (319–326): `six132_shape_fresh`, `vC_vShape` | the observable payload's shape | `TmplSpec r (tmpl r)` (`tmpl_exists`, at the first world), `hshape` for `canon r β`. Exists at Core's `vC`; at `vN`: the shape of a `vN` value (`vN_vShape`): **missing**. |
+| 8 | "Apply theorem 6.150" (327–329): `wpTS_reborrow` with the chooser | `RebChooseTW`, at the program's relation: the chosen image typed at `vC true⟦Imm̲ 'x T₁⟧` (`image_vC_of_shape`/`relabel_obs`, `Core/RelationFacts.lean:1626`) | `erwp_reborrow*` take the image's typing as the callback's premise (`∀ Bχ, ρ_b ● canon r β = Bχ → erwp …`), supplied before the run. `canon r β` typed at `vN⟦Imm̲ 'x T₁⟧`: `relabel_obs` at `vN`, **missing**, buildable only once `vN` has Core's `Imm` (its `Imm` positions read `CohE`, `coh_root`/`coh_mutI`). Across `Row.Suspend`: `erwp_reborrow` is at `RebOK` tables (non-abortive, `lin`), `erwp_reborrowT` at `RebOKC` with cancel runs that perform nothing (`T₁.RebOK`); raises and layered cancel runs (`tabR`-style, as `erwp_M_frame_cancelRunCR`/`erwp_M_antiFrameCR`): **missing**, buildable on the pattern of `erwp_reborrowT` + `tabR_canA`. |
+| 9 | `ИR`, the fresh `β` (330–333): `m ⊓ g₂` below `⊓Δδ` and `ρ₂`'s stratum | `interp_defined_of_wf`, `exists_stratum` | `ResU.exists_stratum`, `defines_meetOfDom_empty`; additionally `β ⊑ ⊓s` (`hβs`) and `r.R ∈ Res_β` (`hRβ`), from the cell. Exists. |
+| 10 | `─⋆R`, the pin (335–338) | `rebChooseTW_pin` | `vℓ = r.v` from step 6's identification. Exists. |
+| 11 | the callback at `δ['x↦β]` (339–341): `hvf ls₂ (Ext.refl) β` | `U` at `Ext.refl`, `∀` at `β ⊏ ⊓Δδ` | the thunk at the run's world and view; its table the callback row's (`tabN`), which must be `RebOK*` at `β`: `Row.Suspend`'s payload/answer clause gives `PA`/`PB ∈ Res_β` (`vN_inStratum_bnd`). Exists in shape (`withbor2S_compat`'s pattern). |
+| 12 | `wpTS_bind_frame` (342–347): the reborrow framed through the thunk, `vP_same` | values stable at same-member lists | `erwp_bindR`/frame; `vN` at same-member lists (`vC_local ∘ ext_of_same`): **missing** with `vN` reading the list, buildable. |
+| 13 | `⊸E`, `wpTS_mono`, unpack `['x] T₂`, `vC_extend_of_not_free` (348–357) | the result at the run's last list `ls''` | `vN_extend_of_not_free`, `vN`'s `box` clause. Exists. |
+
+Steps 1–3, 9–11 and 13 exist. Steps 4, 5, 7, 8 and 12 read `Imm` in Core's shape, which `vN` does
+not have; step 8's extension across raises and layered cancel runs is the brief's step 3.
+
+### 9.2 What Core's `Imm` brings into `vN`
+
+Core's `imm` clause is `⌜v = ℓ ∧ CohE (rsOf ls) ℓ A δ⌝ ⋆ ptoImmS ℓ α ls (vCE false A · δ)`. Putting it
+into `vN`:
+- `vN` takes the record list (`vN A δ Θ ls k v ρ`), since `CohE` reads it and the payload is read
+  at `ls₀`; the payload is read at Core's observable view (`vCE false`, `U` read as `True`), a
+  second mode of `vN`.
+- Every former that recurses passes the list, and `Mut` stores its payload at a list: Core's
+  `ptoMutS` stores `P ls₀`, the members of `ls` strictly longer-lived than the cell. On the chain
+  the stored family is `Θ (ℓ, b) = famL b (vN A · ls₀) Θ`, compared for equality at every re-read
+  (`mutL`).
+- `F A`'s post reads the run's last list (Core's `wpTS ls e (fun ls'' => vCE … ls'' δ)`).
+
+### 9.3 The stop: Core's list-reading payloads are not stable along `extF`
+
+Core keeps a list-reading payload fixed along `Ext`, whose second clause keeps exactly the records
+longer-lived than every borrow cell of the resource (`vC_local`). The chain resumes a continuation
+stopped under a live lend at every list `extF` admits (`entN`'s `wc := extF`, every frame's fold
+keeps `extF`; `SI/ExtF.lean`), which keeps the records the share's views name and has no lifetime
+clause.
+
+`coreMutImm_not_extF` (`Core/Chain/ImmShape791N.lean`), every hypothesis discharged in
+`coreMutImm_not_extF_inst`: with `δ('x) = b ⊏ δ('y) = c`, records `recU m`, `recU m'` at `t ⊐ b`,
+`ls = [(recU m, t)]`, `ls' = ls ++ [(recU m', t)]`, the cell `ℓ ↦ mut(b, m, m ↦ imm({c}, (), ∅))`
+is a value of Core's `Mut 'x (Imm 'y 1)` (`vCE`, Core's own definition) at `ls`; `extF ls ls'`
+holds at it; `Ext ls ls'` does not; and it is not a value at `ls'`. The cell's stored predicate is
+`𝒱⟦Imm 'y 1⟧` at `ls`, which differs from the one at `ls'` at the `imm` cell at `m'` (`CohE` finds
+`recU m'` only in `ls'`).
+
+Where it lands in the `mut` constants, with `Imm` in Core's shape:
+- `withbor3S_compat`, step 13: the resealed cell is a `Mut @a A` value beside the result
+  (`hRout`, `Core/Chain/Reborrow791N.lean:314`) at the run's last list. After a stop resumed at an
+  `extF`-extension adding a record above the cell, `Θ (ℓ, b)`'s family (fixed at the source's list)
+  is not `famL b (vN A · ls₀')`, at `A = Imm 'y 1`. The same at `withborFS_compat`'s reseal, and at
+  `withbor2S_compat`'s returned `Ref A` (the cell's content, a member of the family fixed at the
+  lend, re-read as `𝒱⟦A⟧` at the last list).
+- Core's technique (`vC_local` along `Ext`) does not apply: the resumed list is related to the
+  stopped one by `extF` only.
+
+What each way out needs, none taken (each is a design decision):
+- resuming under `Ext` at a lend's table: a change to `entN`'s `wc` and to every frame's fold
+  (each proves `extF` for the lender's continuation); `SI/ExtF.lean`'s header says a fold does not
+  keep `Ext` and names `not_ext_fold`, which is not in the tree, so that claim is not checked;
+- a world invariant giving `Ext`'s lifetime clause from `extF` at typed worlds (a converse of
+  `ext_extF`): not derived, and I have not verified that any obstruction to it is real;
+- reading `F A`'s post at the run's first list instead of its last: not Core's shape; and
+  `FundamentalN`'s bind across a stop then meets the same configuration for the context's values.
+
+Not verified: that `ConstN (.w3 …)` fails with `Imm` in Core's shape. The configuration is the
+step (a value re-read at an `extF`-related list), not a run of the constant ending at `ls'`; no
+`TWNC` world typing `ls'` is built.
+
+### 9.4 State
+
+- `vN`'s `Imm` clause is unchanged (`Core/Chain/Goal791N.lean:98`); `w2`/`w3`/`wF`, their
+  instances and the laws are untouched and still proved.
+- `constN_wl` is not built: step 2 of #829 stops at §9.3 before the steps of §9.1 that read Core's
+  `Imm` (4, 5, 7, 8, 12) can be built.
+- Unspent: `Row.Suspend`'s payload/answer clause (would supply `RebOK*`'s `pa`/`pb` at `β`, step 11).
+  Unused: `erwp_reborrowT`, `erwp_reborrowDeep`, `rebChooseC_tw`, `canon_obs`, `relabel_obs`.
+  Untranscribed in `withload_compatX`'s run-up, at `vN`: `vC_local` (list order), `ptoImmO_read`,
+  `vC_tyEq`, `vC_vShape`, `relabel_obs`/`image_vC_of_shape`; `erwp_reborrow` across raises and
+  layered cancel runs.
