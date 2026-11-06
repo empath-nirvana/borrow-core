@@ -588,6 +588,359 @@ theorem withbor1_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} (x : LifeVar)
   rw [show substAll γ withbor = withbor from psub_closedAt _ γ (by decide) (Nat.zero_le 0)]
   exact erwp_val (v := withborVal) (withbor1_sem hδ (admWf_of_vScoped hsc₁ hδ) hfree₁ hfree₂ Θ n)
 
+/-! ### `withbor (2)` at an unwinding row -/
+
+/-- **An unwinding row's table does not read `'x`, a `mut` lend at a fresh `α`, the view, nor its
+base.** -/
+theorem tabN_unwind_eq_add {S : Row} {x : LifeVar} (hS : S.Unwind x) (R₁ R₂ : VTy) (δ : LSub)
+    {Θ : LocTy} {α : Life} (hfr : Θ.Fresh α) (l : Loc) (F : Nat → Val → SPropS Loc Val α)
+    (c₁ c₂ : Loc → Option Life) :
+    tabN (ℍ := ℍ) (CTy.effOf S R₁) (δ.extend x α) (Θ.add l α F) c₁ =
+      tabN (ℍ := ℍ) (CTy.effOf S R₂) δ Θ c₂ := by
+  induction S with
+  | nil => rfl
+  | cons o S ih =>
+      have ho : o ∈ o :: S := List.mem_cons_self ..
+      have hS' : Row.Unwind S x := fun o' ho' => hS o' (List.mem_cons_of_mem _ ho')
+      have hA : vN (ℍ := ℍ) o.A (δ.extend x α) (Θ.add l α F) = vN (ℍ := ℍ) o.A δ Θ := by
+        rw [vN_extend_of_not_free (hS o ho).2.2.1 δ α]
+        funext n v ρ
+        have hρ := vN_unwind_inStratum hS ho δ α
+        exact propext ⟨fun h => vN_local _ δ Θ l α F n v ρ (hρ _ n v ρ h) h,
+          fun h => vN_extA _ δ (LocTy.extA_add hfr l F) n v ρ h⟩
+      have hB := unwind_B hS ho
+      simp only [CTy.effOf, tabN]
+      rw [ih hS', hA, hB,
+        entN_fin_congr (f := finN (ℍ := ℍ) o.fin (δ.extend x α) (Θ.add l α F) c₁)
+          (f' := finN (ℍ := ℍ) o.fin δ Θ c₂) (fun hcap => by simp [capB, VTy.isZero] at hcap)]
+      rfl
+
+/-- **An unwinding row's table may be stopped at under a `mut` lend at any `α`**: its stops are
+raises, whose payloads lie in every stratum. -/
+theorem tabN_unwind_lendOKR {S : Row} {x : LifeVar} (hS : S.Unwind x) (R : VTy) (δ : LSub)
+    (Θ : LocTy) (c : Loc → Option Life) (α : Life) :
+    (tabN (ℍ := ℍ) (CTy.effOf S R) δ Θ c).LendOKR α where
+  entry := fun m i en h ha => by
+    rw [tabN_unwind_abort hS R δ Θ c m i en h] at ha; cases ha
+  pa := fun m i en h k ls v ρ hp => by
+    obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
+    exact vN_unwind_inStratum hS ho δ α Θ k v ρ hp
+  pb := fun m i en h k ls w ρ hp => by
+    obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
+    have hp' : vN (ℍ := ℍ) o.B δ Θ k w ρ := hp
+    rw [unwind_B hS ho] at hp'
+    exact hp'.elim
+
+/-- **A body at an abortive table carries the view's consistency to its claim** (`erwp_claimX`'s
+`raise` case): a run from a resource consistent with `c` returns consistent resources, and the
+claim a `raise` carries is part of one. -/
+theorem erwp_claimX_abort {Θ : LocTy} {c : Loc → Option Life} {T : OpTabN}
+    (hab : ∀ m i en, T m i = some en → en.abort = true) {R : Nat → WProp} {Q : PostN} {n : Nat}
+    {ls : List SRec} {e : Expr} {ρ : WRes} (hc : ConsistentX c ρ)
+    (h : erwp (ℍ := ℍ) (Θ.view c) (opTableR T R) Q n ls e ρ) :
+    erwp (ℍ := ℍ) (Θ.view c) (opTableR T (claimX R c)) Q n ls e ρ := by
+  rw [erwp_eq] at h ⊢
+  refine rwpG_mono_le (fun k hk ls' t σ ht => ?_) (rwpG_consistentXV h hc)
+  obtain ⟨ht, hcσ, hvσ⟩ := ht
+  rcases ht with hv | ⟨K₁, m, i, v, en, hp⟩ | ⟨K₁, m, i, v, en, hp⟩
+  · exact Or.inl hv
+  · obtain ⟨⟨-, -, hTe, ha⟩, -⟩ := pure_sep_iff.mp hp
+    exact absurd ha (by rw [hab m i en hTe]; decide)
+  · obtain ⟨hpt, σ₁, ρR, hcσR, hpa, hR⟩ := pure_sep_iff.mp hp
+    exact Or.inr (Or.inr ⟨K₁, m, i, v, en, pure_sep_mk hpt
+      ⟨σ₁, ρR, hcσR, hpa, hR, consistentX_right hcσR hcσ hvσ⟩⟩)
+
+/-- **`withbor (2)` at an unwinding row is a value of its type**: `withborU d` at
+`Ref A ⊸ (∀'x ⊏ @Δ. Mut 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ(Ref A ⊗ B)`, `Σ` a `Row.Unwind x` row. Core's
+`withbor2U_compatX`, step by step, as `withbor2S_compat` with the bound `Δ.meetOfDom` defined at
+`δ ⊨ Δ` and the row's table abortive: the lend at a lifetime fresh for the world, below the bound,
+`[TR]` 6.60's stratum at the side condition `Δ ⊢ A ⊒ @b` and the callback's; the callback at the
+world with the lend (`LocTy.view_add`); the Mut Frame across the row's raises (`erwp_M_frameR`,
+Core's `ewpTS_M_frameU`); the claim consistent with the view (`erwp_claimX_abort`); the finaliser
+frame at a raise (`erwp_ubindRaise`, `fin_claimI` at the claim's content). -/
+theorem withbor2U_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Expr} {δ : LSub}
+    (hδ : Δ.Models δ) (hO : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hA : ¬ VFree x A)
+    (hB : ¬ VFree x B) (hS : S.Unwind x) (hdc : closedAt 0 d = true) (Θ₀ : LocTy) (n : Nat)
+    (hd : ∀ (Θ : LocTy), Θ.OK → ∀ c k, k ≤ n → ∀ ls,
+      cN (ℍ := ℍ) (.ret (.lolli (.ref A) .unit)) δ Θ c k ls d PMap.empty) :
+    vN (ℍ := ℍ) (withbor2UTy x Δ.meetOfDom A B S) δ Θ₀ n (withborUV d) PMap.empty := by
+  intro Θ₁ _ _ c₁ _ ls Θ₂ _ _ c₂ k hk u ρv ρu hc hu _
+  obtain rfl := eq_of_compS_empty_left hc
+  intro Θ hE₃ hΘ c k' hk' f ρf ρ'' hc' hf hcon
+  obtain ⟨l, w₀, σ₀, rfl, hcl, hw₀⟩ := vN_le hk' (vN_extR _ δ k u ρu hE₃ hu)
+  rw [cN_effOf]
+  refine erwp_of_valid fun hv'' => ?_
+  have hΦ : (Θ.view c).Down := LocTy.view_down hΘ.1 c
+  set Fo := CTy.effOf S (.tensor (.ref A) B) with hFo
+  set T := tabN (ℍ := ℍ) Fo δ Θ c with hTdef
+  have hTd : T.Down := tabN_down _ δ Θ hΘ.1 c
+  have hQo : PostN.Down (fun k _ v ρ => vN (ℍ := ℍ) (.tensor (.ref A) B) δ Θ k v ρ) :=
+    fun k _ v ρ h => vN_down _ δ Θ k v ρ h
+  refine erwp_det hΦ (opTableN_down hTd) hQo
+    (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl (.appL .hole f)) ?_
+  refine erwp_det hΦ (opTableN_down hTd) hQo (fun μ => step1Only_plug (Head.beta μ _ f) rfl .hole) ?_
+  have e₃ : Kont.hole.plug (Expr.subst 0 f (Expr.subst (0 + 1) (Val.shift 1 0 (Val.loc l))
+        (thenE ((Expr.var 2).pair (Expr.var 0)) (d.app (Expr.var 2))
+          (((Expr.var 0).app (Expr.val Val.unit)).app (Expr.var 1))))) =
+      ubindE (.pair (NFv l) (DFv d l)) (.app (.app (.val f) (.val .unit)) (.val (Val.loc l))) := by
+    simp [Kont.plug, Expr.subst, Expr.shift, thenE, ubindE, NFv, DFv, Val.shift, Val.pair,
+      Val.loc, Val.lam, Expr.val, Val.prim, subst_closedAt d (s := _) hdc (Nat.zero_le _)]
+  rw [e₃]
+  have hvu : ResU.Valid ρu := (ResU.Valid.split hc' hv'').1
+  have hcf : ConsistentX c ρf := consistentX_right hc' hcon hv''
+  have hcσ : ConsistentX c σ₀ := consistentX_right hcl (consistentX_left hc' hcon hv'') hvu
+  have hko : (CellU.ownOf (Loc := Loc) w₀).kind ≠ Kind.imm := by simp
+  have hown : ρu.get l = some (CellU.ownOf w₀) :=
+    (ResU.CompS.get_left_of_ne_imm hcl (ResU.single_get_self _ _) hko).2
+  -- the lend's lifetime
+  obtain ⟨γ, hγ⟩ : ∃ m, Δ.meetOfDom.interp δ = some m :=
+    Lifetime.Life.interp_defined_of_wf hδ (Lifetime.meetOfDomL_wf Δ.entries)
+  obtain ⟨b, hdef, hOb⟩ := hO
+  obtain ⟨βP, hβP⟩ : ∃ β : Life, b.interp δ = some β := hdef δ hδ
+  obtain ⟨βf, hβf⟩ := ResU.exists_stratum ρf
+  obtain ⟨α, hαle, hfr⟩ := LocTy.exists_fresh hΘ.2 (↓(βP ⊓ βf ⊓ γ))
+  have hαlt : α < βP ⊓ βf ⊓ γ := lt_of_le_of_lt hαle (Life.down_sqsubset _)
+  have hαP : α < βP := lt_of_lt_of_le hαlt (inf_le_left.trans inf_le_left)
+  have hunif : ∀ (Θ' : LocTy) (j : Nat) (u : Val) (r : WRes), vN (ℍ := ℍ) A δ Θ' j u r →
+      r.InStratum α :=
+    vN_outlivesLe hδ hβP hαP hOb
+  have houtP : σ₀.InStratum α := hunif Θ k' w₀ σ₀ hw₀
+  have houtf : ρf.InStratum (↓α) := hβf.mono
+    ((Life.down_sqsubset α).le.trans (hαlt.le.trans (inf_le_left.trans inf_le_right)))
+  have hLt : LtLife δ Δ.meetOfDom α := ⟨γ, hγ, lt_of_lt_of_le hαlt inf_le_right⟩
+  set δ' := δ.extend x α with hδ'
+  have hAδ : vN (ℍ := ℍ) A δ' = vN (ℍ := ℍ) A δ := vN_extend_of_not_free hA δ α
+  have hBδ : vN (ℍ := ℍ) B δ' = vN (ℍ := ℍ) B δ := vN_extend_of_not_free hB δ α
+  set P : CPredL := fun Θ' j u r => vN (ℍ := ℍ) A δ' Θ' j u r with hP
+  set Fam : Nat → Val → SPropS Loc Val α := famL α P Θ with hFam
+  have hFamD : DownFam α Fam := vN_fam_down A δ' α Θ
+  have hwit : Fam k' w₀ ⟨σ₀, houtP⟩ := (vN_above A δ' Θ houtP).mpr (by rw [hAδ]; exact hw₀)
+  -- the callback's world and view
+  set Θ' := Θ.add l α Fam with hΘ'
+  set c' := setLife c l α with hc'def
+  have hOK' : Θ'.OK := by
+    obtain ⟨N, hN⟩ := hΘ.2
+    exact ⟨LocTy.down_add hΘ.1 l hFamD, ⟨min N (↓α), LocTy.fresh_add hN (min_le_left _ _)
+      (lt_of_le_of_lt (min_le_right _ _) (Life.down_sqsubset α)) l Fam⟩⟩
+  have hview : Θ'.view c' = (Θ.view c).set l α Fam := LocTy.view_add Θ c l α Fam
+  have hcf' : ConsistentX c' ρf := consistentX_setLife hcf (exS_none_of_part hc' hv'' hown hko) α
+  have hcσ' : ConsistentX c' σ₀ :=
+    consistentX_setLife hcσ (exS_none_of_part hcl hvu (ResU.single_get_self _ _) hko) α
+  set Qb : PostN := fun k _ b ρ => vN (ℍ := ℍ) (.tensor (.ref A) B) δ Θ k
+    (Val.pair (Val.loc l) b) ρ with hQb
+  have hM := erwp_M_frameR (Φ := Θ.view c) (l := l) (A := α) (F := Fam) hFamD
+    (tabN_unwind_lendOKR hS (.tensor (.ref A) B) δ Θ c α) (Q := Qb)
+    k' k' le_rfl ls (.app (.app (.val f) (.val .unit)) (.val (Val.loc l))) w₀ σ₀ ρu ρf ρ''
+    houtP houtf (Fam k') (fun _ _ h => h) hwit hcl hc' (fun BM hBM => ?_)
+  · -- the claim with the view's consistency, then the finaliser frame
+    have hM' := erwp_claimX_abort (tabN_unwind_abort hS _ δ Θ c) hcon hM
+    have hM'' := erwp_mono_le
+      (Tb' := opTableR T (fun j ρ => claimX (claimR l α Fam) c j ρ ∧ j ≤ k')) k'
+      (fun _ _ _ _ _ h => h) (fun j hj ls' t Ψ Ψ' ρ hΨ h => by
+        rcases h with ⟨K, m, i, v, en, h⟩ | ⟨K, m, i, v, en, h⟩
+        · obtain ⟨⟨-, -, hTe, ha⟩, -⟩ := pure_sep_iff.mp h
+          exact absurd ha (by rw [tabN_unwind_abort hS _ δ Θ c m i en hTe]; decide)
+        · obtain ⟨hp, τ, τR, hcτ, h₁, hR⟩ := pure_sep_iff.mp h
+          exact Or.inr ⟨K, m, i, v, en, pure_sep_mk hp ⟨τ, τR, hcτ, h₁, hR, hj⟩⟩)
+      k' le_rfl ls _ ρ'' hM'
+    refine erwp_ubindRaise hΦ hTd
+      (fun m i en h ha => by rw [tabN_unwind_abort hS _ δ Θ c m i en h] at ha; cases ha)
+      (tabN_unwind_named hS _ δ Θ c)
+      (fun m i en h k ls ls' v ρ _ hp => by
+        obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
+        exact hp)
+      (NFv l) (DFv d l) (fun j ls' ρ hR => ?_) hQo (fun j ls' b ρ hq => ?_) k' ls _ ρ'' hM''
+    · obtain ⟨⟨⟨w, σ, hσ, hF, hclm⟩, hcR⟩, hj⟩ := hR
+      have hwσ : vN (ℍ := ℍ) A δ Θ j w σ := by rw [← hAδ]; exact (vN_above A δ' Θ hσ).mp hF
+      exact fin_claimI hdc hΘ (fun j' hj' ls => hd Θ hΘ c j' (hj'.trans (hj.trans (hk'.trans hk))) ls)
+        hwσ le_rfl hclm hcR
+    · refine erwp_det hΦ (opTableN_down hTd) hQo
+        (fun μ => step1Only_plug (Head.beta μ _ b) rfl .hole) ?_
+      simp [Kont.plug, Expr.subst]
+      exact erwp_val (v := Val.pair (Val.loc l) b) hq
+  · -- the callback, at the lend's world and view, from the borrow
+    rw [← hview]
+    have h1 := (hf Θ' ((LocTy.extA_add hfr l Fam).extR ρf) hOK' c' hcf' ls) α hLt
+    have hcell : vN (ℍ := ℍ) (.mut (.var x) A) δ' Θ' k' (Val.loc l)
+        (ResU.single l (CellU.mutOf α w₀ σ₀ houtP (Fam k') hwit)) :=
+      ⟨α, interp_ext_self δ x α, α, le_rfl, lend_mutL Θ l α P le_rfl houtP hwit,
+        fun Θ'' j u r h => hunif Θ'' j u r (by rw [← hAδ]; exact h)⟩
+    have hcBM : ConsistentX c' BM := consistentX_compS hBM hcf'
+      (consistentX_single_mut hcσ' (by simp [hc'def, setLife]))
+    have h2 := h1 Θ' (LocTy.extR_refl _ _) hOK' c' k' le_rfl (Val.loc l) _ BM hBM hcell hcBM
+    rw [cN_effOf, tabN_unwind_eq_add hS _ (.tensor (.ref A) B) δ hfr l Fam c' c] at h2
+    refine erwp_mono (fun k ls' b ρ' hb => ?_) (opTableN_local _) k' ls _ BM h2
+    obtain ⟨β, hβ, hbB, hst⟩ := hb
+    rw [interp_ext_self] at hβ
+    cases Option.some.inj hβ
+    refine ⟨hst, fun w Y hY σ ⟨hσ, hFσ⟩ Z hZ => ?_⟩
+    obtain ⟨Wc, hWc, hZ'⟩ :=
+      (ResU.CompS.assoc ρ' (ResU.single l (CellU.ownOf w)) σ Z).mpr ⟨Y, hY, hZ⟩
+    have hwσ : vN (ℍ := ℍ) A δ Θ k w σ := by
+      rw [← hAδ]; exact (vN_above A δ' Θ hσ).mp hFσ
+    have hbB' : vN (ℍ := ℍ) B δ Θ k b ρ' :=
+      vN_local B δ Θ l α Fam k b ρ' hst (by rw [← hBδ]; exact hbB)
+    exact ⟨Val.loc l, b, Wc, ρ', rfl, ResU.CompS.comm hZ', ⟨l, w, σ, rfl, hWc, hwσ⟩, hbB'⟩
+
+/-- **`withbor2U` at `SemJN`** (Core's `withbor2U_compatX`), at an unwinding row and any `Δ`. -/
+theorem withbor2U_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
+    (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
+    (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hdc : closedAt 0 d = true)
+    (hd : SemJN (ℍ := ℍ) Δ Γ d (.val (.lolli (.ref A) .unit))) :
+    SemJN (ℍ := ℍ) Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S)) := by
+  intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
+  obtain rfl := gN_deadP hΓ hg
+  show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ (withborUE d)) _
+  rw [show substAll γ (withborUE d) = withborUE d from
+    psub_closedAt _ γ (withborUE_closed hdc) (Nat.zero_le 0)]
+  refine erwp_val (v := withborUV d) (withbor2U_sem hδ hside hfree₁ hfree₂ hS hdc Θ n
+    (fun Θ' hΘ' c' k hk ls' => ?_))
+  have h := hd δ γ Θ' c' k ls' PMap.empty hδ hΘ' (consistentX_empty c') hlw
+    (gN_dead_any hΓ hg Θ' k hk)
+  rwa [show substAll γ d = d from psub_closedAt d γ hdc (Nat.zero_le 0)] at h
+
+/-! ### `withbor (2)` at the pure row -/
+
+/-- **`withbor (2)` is a value of its type**: `withbor` at
+`Ref A ⊸ (∀'x ⊏ @Δ. Mut 'x A ⊸ ['x] B) ⊸ Ref A ⊗ B`. Core's `withbor2_compatX`, step by step, at
+the pure row: the source read at the callback's world; the lend at a lifetime fresh for the world,
+below the bound, `[TR]` 6.60's stratum at the side condition and the callback's; the callback's
+world `Θ + (ℓ, α) ↦ famL α 𝒱⟦A⟧`; `f ()` and the borrow's application under the pair, framed beside
+the borrow; the result `['x] B` back at the world without the lend (`vN_local`); the Mut Frame
+(`erwp_M_frameR`, Core's `wpTS_M_frameX`). -/
+theorem withbor2_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {δ : LSub} (hδ : Δ.Models δ)
+    (hO : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
+    (Θ₀ : LocTy) (n : Nat) :
+    vN (ℍ := ℍ) (axWithbor2Ty x Δ.meetOfDom A B) δ Θ₀ n withborVal PMap.empty := by
+  intro Θ₁ _ _ c₁ _ ls Θ₂ _ _ c₂ k hk u ρv ρu hc hu _
+  obtain rfl := eq_of_compS_empty_left hc
+  obtain ⟨l, w₀, σ₀, rfl, hcl, hw₀⟩ := hu
+  have hΦ₂ : (Θ₂.view c₂).Down := LocTy.view_down (by assumption : Θ₂.OK).1 c₂
+  have hQ₂ : PostN.Down (fun k _ v ρ => vN (ℍ := ℍ)
+      (.lolli (.all x Δ.meetOfDom (.lolli (.mut (.var x) A) (.box (.var x) B)))
+        (.tensor (.ref A) B)) δ Θ₂ k v ρ) := fun k _ v ρ h => vN_down _ δ Θ₂ k v ρ h
+  refine erwp_det hΦ₂ (opTableN_down OpTabN.empty_down) hQ₂
+    (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl .hole) ?_
+  have e₁ : Kont.hole.plug (Expr.subst 0 (Val.loc l)
+      (Val.lam (.pair BoCa.v1 (.app (.app BoCa.v0 unit') BoCa.v1))).1) = (withborAt l).1 := by
+    simp [Kont.plug, Expr.subst, Expr.shift, withborAt, BoCa.v0, BoCa.v1, unit', Val.loc,
+      Val.lam, Expr.val, Val.unit]
+  rw [e₁]
+  refine erwp_val (v := withborAt l) ?_
+  intro Θ hE₃ hΘ c _ ls' Θ' hE' hΘ' c' k' hk' f ρf ρ'' hc' hf hcon
+  obtain ⟨l₁, w₀', σ₀', hl₁, hcl', hw₀'⟩ := vN_le hk'
+    (vN_extR (.ref A) δ k _ ρu hE' (vN_extR (.ref A) δ k _ ρu hE₃ ⟨l, w₀, σ₀, rfl, hcl, hw₀⟩))
+  obtain rfl : l = l₁ := by
+    have := congrArg Subtype.val hl₁; simpa [Val.loc] using this
+  have hΦ : (Θ'.view c').Down := LocTy.view_down hΘ'.1 c'
+  have hQo : PostN.Down (fun k _ v ρ => vN (ℍ := ℍ) (.tensor (.ref A) B) δ Θ' k v ρ) :=
+    fun k _ v ρ h => vN_down _ δ Θ' k v ρ h
+  refine erwp_det hΦ (opTableN_down OpTabN.empty_down) hQo
+    (fun μ => step1Only_plug (Head.beta μ _ f) rfl .hole) ?_
+  have e₂ : Kont.hole.plug (Expr.subst 0 f
+      (.pair (.val (Val.loc l)) (.app (.app BoCa.v0 unit') (.val (Val.loc l))))) =
+      (Kont.pairR (Val.loc l) (Kont.appL Kont.hole (Val.loc l))).plug
+        (.app (.val f) (.val Val.unit)) := by
+    simp [Kont.plug, Expr.subst, BoCa.v0, unit', Val.loc, Expr.val, Val.unit]
+  rw [e₂]
+  refine erwp_of_valid fun hv'' => ?_
+  have hvu : ResU.Valid ρu := (ResU.Valid.split hc' hv'').1
+  have hcf : ConsistentX c' ρf := consistentX_right hc' hcon hv''
+  have hcσ : ConsistentX c' σ₀' := consistentX_right hcl' (consistentX_left hc' hcon hv'') hvu
+  have hko : (CellU.ownOf (Loc := Loc) w₀').kind ≠ Kind.imm := by simp
+  have hown : ρu.get l = some (CellU.ownOf w₀') :=
+    (ResU.CompS.get_left_of_ne_imm hcl' (ResU.single_get_self _ _) hko).2
+  -- the lend's lifetime
+  obtain ⟨γ, hγ⟩ : ∃ m, Δ.meetOfDom.interp δ = some m :=
+    Lifetime.Life.interp_defined_of_wf hδ (Lifetime.meetOfDomL_wf Δ.entries)
+  obtain ⟨b, hdef, hOb⟩ := hO
+  obtain ⟨βP, hβP⟩ : ∃ β : Life, b.interp δ = some β := hdef δ hδ
+  obtain ⟨βf, hβf⟩ := ResU.exists_stratum ρf
+  obtain ⟨α, hαle, hfr⟩ := LocTy.exists_fresh hΘ'.2 (↓(βP ⊓ βf ⊓ γ))
+  have hαlt : α < βP ⊓ βf ⊓ γ := lt_of_le_of_lt hαle (Life.down_sqsubset _)
+  have hαP : α < βP := lt_of_lt_of_le hαlt (inf_le_left.trans inf_le_left)
+  have hunif : ∀ (Θ'' : LocTy) (j : Nat) (u : Val) (r : WRes), vN (ℍ := ℍ) A δ Θ'' j u r →
+      r.InStratum α :=
+    vN_outlivesLe hδ hβP hαP hOb
+  have houtP : σ₀'.InStratum α := hunif Θ' k' w₀' σ₀' hw₀'
+  have houtf : ρf.InStratum (↓α) := hβf.mono
+    ((Life.down_sqsubset α).le.trans (hαlt.le.trans (inf_le_left.trans inf_le_right)))
+  have hLt : LtLife δ Δ.meetOfDom α := ⟨γ, hγ, lt_of_lt_of_le hαlt inf_le_right⟩
+  set δ' := δ.extend x α with hδ'
+  have hAδ : vN (ℍ := ℍ) A δ' = vN (ℍ := ℍ) A δ := vN_extend_of_not_free hA δ α
+  have hBδ : vN (ℍ := ℍ) B δ' = vN (ℍ := ℍ) B δ := vN_extend_of_not_free hB δ α
+  set P : CPredL := fun Θ'' j u r => vN (ℍ := ℍ) A δ' Θ'' j u r with hP
+  set Fam : Nat → Val → SPropS Loc Val α := famL α P Θ' with hFam
+  have hFamD : DownFam α Fam := vN_fam_down A δ' α Θ'
+  have hwit : Fam k' w₀' ⟨σ₀', houtP⟩ := (vN_above A δ' Θ' houtP).mpr (by rw [hAδ]; exact hw₀')
+  set Θ'' := Θ'.add l α Fam with hΘ''
+  set c'' := setLife c' l α with hc''def
+  have hOK'' : Θ''.OK := by
+    obtain ⟨N, hN⟩ := hΘ'.2
+    exact ⟨LocTy.down_add hΘ'.1 l hFamD, ⟨min N (↓α), LocTy.fresh_add hN (min_le_left _ _)
+      (lt_of_le_of_lt (min_le_right _ _) (Life.down_sqsubset α)) l Fam⟩⟩
+  have hview : Θ''.view c'' = (Θ'.view c').set l α Fam := LocTy.view_add Θ' c' l α Fam
+  have hcf'' : ConsistentX c'' ρf :=
+    consistentX_setLife hcf (exS_none_of_part hc' hv'' hown hko) α
+  have hcσ' : ConsistentX c'' σ₀' :=
+    consistentX_setLife hcσ (exS_none_of_part hcl' hvu (ResU.single_get_self _ _) hko) α
+  set Q : PostN := fun k _ v ρ => vN (ℍ := ℍ) (.tensor (.ref A) B) δ Θ' k v ρ with hQ
+  have hMF := erwp_M_frameR (Φ := Θ'.view c') (l := l) (A := α) (F := Fam) hFamD
+    (T := OpTabN.empty) ⟨fun _ _ _ h => by simp [OpTabN.empty] at h,
+      fun _ _ _ h => by simp [OpTabN.empty] at h, fun _ _ _ h => by simp [OpTabN.empty] at h⟩
+    (Q := Q) k' k' le_rfl ls'
+    ((Kont.pairR (Val.loc l) (Kont.appL Kont.hole (Val.loc l))).plug (.app (.val f) (.val Val.unit)))
+    w₀' σ₀' ρu ρf ρ'' houtP houtf (Fam k') (fun _ _ h => h) hwit hcl' hc' (fun BM hBM => ?_)
+  · refine erwp_mono (fun _ _ _ _ h => h) (fun j ls₁ t Ψ Ψ' ρ hΨ h => ?_) k' ls' _ ρ'' hMF
+    rcases h with ⟨K, m, i, v, en, h⟩ | ⟨K, m, i, v, en, h⟩
+    · obtain ⟨⟨-, -, hTe, -⟩, -⟩ := pure_sep_iff.mp h; simp [OpTabN.empty] at hTe
+    · obtain ⟨⟨-, -, hTe, -⟩, -⟩ := pure_sep_iff.mp h; simp [OpTabN.empty] at hTe
+  · -- the callback, at the lend's world and view, from the borrow
+    rw [← hview]
+    have hΦi : (Θ''.view c'').Down := LocTy.view_down hOK''.1 c''
+    have hcell : vN (ℍ := ℍ) (.mut (.var x) A) δ' Θ'' k' (Val.loc l)
+        (ResU.single l (CellU.mutOf α w₀' σ₀' houtP (Fam k') hwit)) :=
+      ⟨α, interp_ext_self δ x α, α, le_rfl, lend_mutL Θ' l α P le_rfl houtP hwit,
+        fun Θ₃ j u r h => hunif Θ₃ j u r (by rw [← hAδ]; exact h)⟩
+    have hcm : ConsistentX c'' (ResU.single l (CellU.mutOf α w₀' σ₀' houtP (Fam k') hwit)) :=
+      consistentX_single_mut hcσ' (by simp [hc''def, setLife])
+    refine erwp_of_rwp (rwp_bind hΦi _ ?_)
+    have hcb := (hf Θ'' ((LocTy.extA_add hfr l Fam).extR ρf) hOK'' c'' hcf'' ls') α hLt
+    have hfr' := rwp_frame (fun _ τ => τ = ResU.single l (CellU.mutOf α w₀' σ₀' houtP (Fam k') hwit))
+      (fun _ _ _ _ h => h) hBM (rwp_of_erwp_empty hcb) rfl
+    refine rwp_mono_le (fun j hj ls₂ g τ hg => ?_) (rwp_consistentXV hfr'
+      (consistentX_compS hBM hcf'' hcm))
+    obtain ⟨⟨τg, τm, hcτ, hgv, rfl⟩, hcτ', hvτ⟩ := hg
+    have happ := hgv Θ'' (LocTy.extR_refl _ _) hOK'' c'' (consistentX_left hcτ hcτ' hvτ) ls₂
+      Θ'' (LocTy.extR_refl _ _) hOK'' c'' j le_rfl (Val.loc l) _ τ hcτ (vN_le hj hcell) hcτ'
+    show rwp (ℍ := ℍ) _ _ j ls₂ ((Kont.pairR (Val.loc l) Kont.hole).plug
+      (.app (.val g) (.val (Val.loc l)))) τ
+    refine rwp_bind hΦi _ ?_
+    refine rwp_mono_le (fun j' hj' ls₃ b ρb hb => ?_) (rwp_of_erwp_empty happ)
+    refine rwp_val (v := Val.pair (Val.loc l) b) ?_
+    obtain ⟨β, hβ, hbB, hst⟩ := hb
+    rw [interp_ext_self] at hβ
+    cases Option.some.inj hβ
+    refine ⟨hst, fun w Y hY σ ⟨hσ, hFσ⟩ Z hZ => ?_⟩
+    obtain ⟨Wc, hWc, hZ'⟩ :=
+      (ResU.CompS.assoc ρb (ResU.single l (CellU.ownOf w)) σ Z).mpr ⟨Y, hY, hZ⟩
+    have hwσ : vN (ℍ := ℍ) A δ Θ' j' w σ := by
+      rw [← hAδ]; exact (vN_above A δ' Θ' hσ).mp hFσ
+    have hbB' : vN (ℍ := ℍ) B δ Θ' j' b ρb :=
+      vN_local B δ Θ' l α Fam j' b ρb hst (by rw [← hBδ]; exact hbB)
+    exact ⟨Val.loc l, b, Wc, ρb, rfl, ResU.CompS.comm hZ', ⟨l, w, σ, rfl, hWc, hwσ⟩, hbB'⟩
+
+/-- **`withbor2` at `SemJN`** (Core's `withbor2_compatX`). -/
+theorem withbor2_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} (x : LifeVar)
+    (hΓ : Ctx.DeadP Γ) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hfree₁ : ¬ VFree x A)
+    (hfree₂ : ¬ VFree x B) :
+    SemJN (ℍ := ℍ) Δ Γ withbor (.val (axWithbor2Ty x Δ.meetOfDom A B)) := by
+  intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
+  obtain rfl := gN_deadP hΓ hg
+  show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ withbor) _
+  rw [show substAll γ withbor = withbor from psub_closedAt _ γ (by decide) (Nat.zero_le 0)]
+  exact erwp_val (v := withborVal) (withbor2_sem hδ hside hfree₁ hfree₂ Θ n)
+
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 
 end
