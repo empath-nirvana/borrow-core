@@ -28,7 +28,7 @@ open BoCa.Fig16.LogRel.Core
 open BoCa.Fig16.LogRel.Core.Chain.SI
 open BoCa.Fig16.LogRel (LtLife substAll)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
-open BoCa.BoLo (Heap Kont Head)
+open BoCa.BoLo (Heap Kont Head eLoad eStore)
 
 /-! ### The relation at a family -/
 
@@ -300,6 +300,140 @@ theorem sliceSplitI_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A
 theorem sliceSplitM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
     (hΓ : Ctx.DeadP Γ) : SemJN (ℍ := ℍ) Δ Γ (.val (.prim .split)) (.val (sliceSplitMTy a A)) :=
   famSplit_compatN hΓ
+
+/-! ### `array_free` -/
+
+/-- **The drain** (Core's `dropFill_wp`): the cells `ℓ + i, …, ℓ + i + k − 1` are freed in order,
+each value handed to the consumer, at every index below the consumer's; by induction on `k`. -/
+theorem dropFill_wpN {A : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {N : Nat} (f : Val) (l : Loc)
+    (hf : vN (ℍ := ℍ) (.bang (.lolli A .unit)) δ Θ N f PMap.empty) :
+    ∀ (k i m : Nat) (ls : List SRec) (ρ : WRes) (c : Loc → Option Life), m ≤ N →
+      ConsistentX c ρ → sepRange (fun x => vN (ℍ := ℍ) (.ref A) δ Θ m (Val.loc x)) (l + i) k ρ →
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (fun k _ v ρ => vN (ℍ := ℍ) .unit δ Θ k v ρ)
+        m ls (dropFill f l i k) ρ
+  | 0, i, m, ls, ρ, c, _, _, hs => by
+      obtain ⟨rfl, -⟩ := hs
+      exact erwp_val (v := Val.unit) ⟨rfl, rfl⟩
+  | k + 1, i, m, ls, ρ, c, hm, hc, ⟨ρl, ρr, hcl, hleaf, hrest⟩ => by
+      have hΦ := LocTy.view_down hΘ.1 c
+      refine erwp_of_valid fun hv => ?_
+      obtain ⟨l', w, ρw, hl', hcw, hw⟩ := hleaf
+      obtain rfl : l + i = l' := loc_inj hl'
+      -- `ρ = cell ● (ρw ● ρr)`
+      obtain ⟨R, hR, hρ⟩ := compS_reassoc hcw hcl
+      show erwp (ℍ := ℍ) _ _ _ m ls ((Kont.seq (.appR (.val f) .hole) (dropFill f l (i + 1) k)).plug
+        (BoLo.freeE (.val (Val.loc (l + i))))) ρ
+      refine erwp_free hΦ (opTableN_local _) _ (l + i) w ⟨_, R, hρ, rfl, ?_⟩
+      have hvR : ResU.Valid R := (ResU.Valid.split hρ hv).2
+      have hcR : ConsistentX c R := consistentX_right hρ hc hv
+      have hcw' : ConsistentX c ρw := consistentX_left hR hcR hvR
+      show erwp (ℍ := ℍ) _ _ _ (m - 1) ls ((Kont.seq .hole (dropFill f l (i + 1) k)).plug
+        (.app (.val f) (.val w))) R
+      refine erwp_bind_frame hΦ (opTableN_local _) _
+        (sepRange (fun x => vN (ℍ := ℍ) (.ref A) δ Θ (m - 1) (Val.loc x)) (l + i + 1) k) hR hcR
+        (bang_app hΘ ((Nat.sub_le m 1).trans hm) hf hcw' (vN_le (Nat.sub_le m 1) hw) ls)
+        (sepRange_mono' (fun x τ h => vN_le (Nat.sub_le m 1) h) hrest) ?_
+      intro k' hk' ls' u σ₁ σ₂ σ hcσ hu hr hcσ' _
+      obtain ⟨rfl, rfl⟩ := hu
+      rw [eq_of_compS_empty_left hcσ] at hcσ' ⊢
+      refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down _ δ Θ k v ρ h)
+        (fun μ => step1Only_plug (Head.seq μ _) rfl .hole) ?_
+      refine dropFill_wpN hΘ f l hf k (i + 1) k' ls' σ₂ c (hk'.trans ((Nat.sub_le m 1).trans hm)) hcσ' ?_
+      rw [← Nat.add_assoc]
+      exact sepRange_mono' (fun x τ h => vN_le hk' h) hr
+
+/-- **`array_free` at `SemJN`** (Core's `arrFree_compatX`). -/
+theorem arrFree_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ) :
+    SemJN (ℍ := ℍ) Δ Γ (.val (.prim .drop)) (.val (arrFreeTy A)) := by
+  refine sem_constN hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
+  intro Θ' _ hΘ' _ _ ls' c'' k _ v σ τ hcomp hv hcon
+  rw [eq_of_compS_empty_left hcomp] at hcon ⊢
+  obtain ⟨f, v₂, σ₁, σ₂, rfl, hc, hf, l, cn, rfl, hn, hs⟩ := hv
+  obtain rfl : σ₁ = PMap.empty := hf.1
+  rw [eq_of_compS_empty_left hc] at hcon ⊢
+  have hΦ := LocTy.view_down hΘ'.1 c''
+  refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down _ δ Θ' k v ρ h)
+    (fun μ => step1Only_plug (Head.drop μ f l cn) rfl .hole) ?_
+  exact dropFill_wpN hΘ' f l hf cn.toNat 0 k ls' σ₂ c'' le_rfl hcon (by simpa using hs)
+
+/-! ### `array_replace` -/
+
+theorem eStore_storeV (c : Loc) (x : Val) :
+    eStore c x = .app (.val (Val.storeV (Val.loc c))) (.val x) := rfl
+
+/-- **`array_replace` at `SemJN`** (Core's `arrReplace_compatX`): in range, the leaf's cell is
+read (`rwp_load`) and written (`rwp_store`), and the leaf goes back into the family with the new
+payload beside the old one; out of range, the element is handed back. -/
+theorem arrReplace_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ) :
+    SemJN (ℍ := ℍ) Δ Γ (.val replaceV) (.val (arrReplaceTy A)) := by
+  refine sem_constN hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
+  intro Θ' _ hΘ' _ _ ls' c'' k _ v σ τ hcomp hv hcon
+  rw [eq_of_compS_empty_left hcomp]
+  obtain ⟨v₁, v₂, σ₁, σ₂, rfl, hc, ⟨ℓ, cn, rfl, hn, hs⟩, w₁, x, ρ₀, σx, rfl, hc₂,
+    ⟨⟨i, rfl⟩, rfl⟩, hx⟩ := hv
+  rw [eq_of_compS_empty_left hc₂] at hc
+  have hΦ := LocTy.view_down hΘ'.1 c''
+  have hQd : PostN.Down (fun k _ v ρ => vN (ℍ := ℍ) (.tensor (.array A) (.sum A A)) δ Θ' k v ρ) :=
+    fun k _ v ρ h => vN_down _ δ Θ' k v ρ h
+  have hTd := opTableN_down OpTabN.empty_down
+  refine erwp_det hΦ hTd hQd (fun μ => step1Only_plug (Head.beta μ _ _) rfl .hole) ?_
+  simp only [Kont.plug]
+  rw [replace_body₁]
+  refine erwp_det hΦ hTd hQd
+    (fun μ => step1Only_plug (Head.letpair μ (Val.arr ℓ cn) (Val.pair (Val.i32 i) x) _) rfl .hole) ?_
+  simp only [Kont.plug]
+  rw [replace_body₂]
+  refine erwp_det hΦ hTd hQd
+    (fun μ => step1Only_plug (Head.letpair μ (Val.i32 i) x _) rfl .hole) ?_
+  simp only [Kont.plug]
+  rw [replace_body₃]
+  refine erwp_det hΦ hTd hQd
+    (fun μ => step1Only_plug (Head.idx μ ℓ cn i) rfl (.case .hole _ _)) ?_
+  simp only [Kont.plug]
+  rcases idxAns_cases ℓ cn i with ⟨hi, he⟩ | he
+  · rw [he]
+    refine erwp_det hΦ hTd hQd
+      (fun μ => step1Only_plug (Head.case₁ μ (Val.loc (ℓ + i.toNat)) _ _) rfl .hole) ?_
+    simp only [Kont.plug]
+    rw [replace_in]
+    obtain ⟨ρi, ρr, hci, hPi, hback⟩ := sepRange_pick hi hs
+    obtain ⟨ℓ', old, ρold, hl, hcw, hold⟩ := hPi
+    obtain rfl : ℓ + i.toNat = ℓ' := loc_inj hl
+    -- `σ = cell ● G`, `G = ρold ● F`, `F = ρr ● σx`
+    obtain ⟨F, hF, hiF⟩ := compS_reassoc hci hc
+    obtain ⟨G, hG, hσ⟩ := compS_reassoc hcw hiF
+    refine erwp_bindR hΦ (opTableN_local _)
+      (.pairR (Val.arr ℓ cn) (.inj₁ (.appR (.val (.lam _)) .hole))) ?_
+    refine rwp_load ls' _ old _ ⟨_, G, hσ, rfl, fun c₁ p₁ hc₁ hp₁ => ?_⟩
+    obtain rfl := hc₁
+    simp only [Kont.plug]
+    refine erwp_det hΦ hTd hQd
+      (fun μ => step1Only_plug (Head.beta μ _ old) rfl (.pairR (Val.arr ℓ cn) (.inj₁ .hole))) ?_
+    simp only [Kont.plug]
+    rw [replace_store, eStore_storeV]
+    refine erwp_bindR hΦ (opTableN_local _)
+      (.pairR (Val.arr ℓ cn) (.inj₁ (.seq .hole (.val old)))) ?_
+    refine rwp_store ls' _ old x _ ⟨_, G, ResU.CompS.comm hp₁, rfl, fun c₃ p₃ hc₃ hp₃ => ?_⟩
+    obtain rfl := hc₃
+    simp only [Kont.plug]
+    refine erwp_det hΦ hTd hQd
+      (fun μ => step1Only_plug (Head.seq μ _) rfl (.pairR (Val.arr ℓ cn) (.inj₁ .hole))) ?_
+    simp only [Kont.plug]
+    -- `p₃ = X ● ρold`, `X = ρr ● L`, `L` the new leaf `c₃ ● σx`
+    obtain ⟨X, hX, hp₃'⟩ := compS_exch (ResU.CompS.comm hG) hp₃
+    obtain ⟨L, hL, hXL⟩ := compS_reassoc hF hX
+    have hfam : vN (ℍ := ℍ) (.array A) δ Θ' k (Val.arr ℓ cn) X :=
+      vN_fam_mk hn (hback L X (ResU.CompS.comm hXL)
+        ⟨ℓ + i.toNat, x, σx, rfl, ResU.CompS.comm hL, hx⟩)
+    exact erwp_val (v := Val.pair (Val.arr ℓ cn) (Val.inj₁ old))
+      (vN_le (by omega) ⟨_, _, X, ρold, rfl, hp₃', hfam, .inl ⟨old, rfl, hold⟩⟩)
+  · rw [he]
+    refine erwp_det hΦ hTd hQd
+      (fun μ => step1Only_plug (Head.case₂ μ Val.unit _ _) rfl .hole) ?_
+    simp only [Kont.plug]
+    rw [replace_out]
+    exact erwp_val (v := Val.pair (Val.arr ℓ cn) (Val.inj₂ x))
+      ⟨_, _, σ₁, σx, rfl, hc, vN_fam_mk hn hs, .inr ⟨x, rfl, hx⟩⟩
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 
