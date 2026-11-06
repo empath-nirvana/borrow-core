@@ -529,8 +529,8 @@ is valid by `erwp_of_valid`).
 5. `fin_claimM` at `Mut @a (Ref A)`; `tabG`, `tabG_can`, `tabR_canA`, `erwp_M_antiFrameCR` as they
    stand.
 
-**Unspent and unused.** Unspent printed premises of `withbor3U_compatX`: none (`_hx`, Core's
-`Δ.find? x = none`, has no counterpart at `LifeCtx.empty`). Unused: `erwp_withbor3`,
+**Unspent and unused.** Unspent printed premises of `withbor3U_compatX`: none (`withbor3_compatX`'s
+`_hx : Δ.find? x = none` is unused in Core too). Unused: `erwp_withbor3`,
 `erwp_M_antiFrameC`, `erwp_M_antiFrame_cancelRun` (the cases with no raises or no stops that
 `erwp_M_antiFrameCR` covers), `reseal_at_entry`'s `MutStep` conjunct (the reseal is
 `rwpG_M_antiFrameG`'s), `erwp_antiFrame_view` (its `hF` comes from `reseal_at_entry` directly).
