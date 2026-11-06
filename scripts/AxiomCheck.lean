@@ -1467,7 +1467,6 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.bridgeN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.goal791Sched_of
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_M_frameCR
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_M_frame_cancelRunCR
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.suspend_closingOp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Shape791N.coreShape_not_reborrow
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Shape791N.stuckV_one
