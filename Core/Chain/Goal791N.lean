@@ -664,20 +664,69 @@ theorem vN_local (A : VTy) (δ : LSub) (Θ : LocTy) (l₀ : Loc) (α : Life)
     (h : vN (ℍ := ℍ) A δ (Θ.add l₀ α F) n v ρ) : vN (ℍ := ℍ) A δ Θ n v ρ :=
   vN_extR A δ n v ρ (LocTy.extR_of_add Θ l₀ F hs) h
 
-/-- **A value of a type outliving every lifetime holds no borrow cell**: it is in the top
-stratum. -/
-theorem vN_top {A : VTy} (hO : ∀ Δ a, VOutlives Δ a A) {δ : LSub} {Θ : LocTy} {n : Nat}
-    {v : Val} {ρ : WRes} (h : vN (ℍ := ℍ) A δ Θ n v ρ) : ρ.InStratum (OrderDual.toDual 0) :=
-  vN_outlives (Δ := LifeCtx.empty) (a := .top) (models_empty_any _) rfl (hO _ _) Θ n v ρ h
+/-- **A value of a type outliving the bound lies in the stratum of every lend below it.** -/
+theorem vN_inStratum_bnd {A : VTy} {bnd : Lifetime.Life} (hO : VOutlives LifeCtx.empty bnd A)
+    {δ : LSub} {α : Life} (hLt : LtLife δ bnd α) {Θ : LocTy} {n : Nat} {v : Val} {ρ : WRes}
+    (h : vN (ℍ := ℍ) A δ Θ n v ρ) : ρ.InStratum α := by
+  obtain ⟨γ, hγ, hlt⟩ := hLt
+  exact (vN_outlives (models_empty_any _) hγ hO Θ n v ρ h).mono hlt.le
 
-/-- **A fresh lend does not change `𝒱⟦A⟧` of a type outliving every lifetime**: its values are in
-every stratum, so `vN_local` and `vN_extA` relate the two worlds both ways. -/
-theorem vN_add_eq {A : VTy} (hO : ∀ Δ a, VOutlives Δ a A) (δ : LSub) {Θ : LocTy} {α : Life}
-    (hf : Θ.Fresh α) (l : Loc) (F : Nat → Val → SPropS Loc Val α) :
+/-- **A fresh lend below the bound does not change `𝒱⟦A⟧` of a type outliving the bound**: its
+values are in the lend's stratum, so `vN_local` and `vN_extA` relate the two worlds both ways. -/
+theorem vN_add_eq_bnd {A : VTy} {bnd : Lifetime.Life} (hO : VOutlives LifeCtx.empty bnd A)
+    (δ : LSub) {α : Life} (hLt : LtLife δ bnd α) {Θ : LocTy} (hf : Θ.Fresh α) (l : Loc)
+    (F : Nat → Val → SPropS Loc Val α) :
     vN (ℍ := ℍ) A δ (Θ.add l α F) = vN (ℍ := ℍ) A δ Θ := by
   funext n v ρ
-  refine propext ⟨fun h => vN_local A δ Θ l α F n v ρ ((vN_top hO h).mono (Nat.zero_le _)) h,
+  exact propext ⟨fun h => vN_local A δ Θ l α F n v ρ (vN_inStratum_bnd hO hLt h) h,
     fun h => vN_extA A δ (LocTy.extA_add hf l F) n v ρ h⟩
+
+/-- `ex(ℓ ↦ imm(β̄, u, σ)) = ∅`: the exclusive walk does not enter an `imm` cell. -/
+theorem exS_single_imm (l : Loc) (s : LSet) (u : Val) (σ : WRes) (h : σ.InStratum s.join) :
+    ExS (ResU.single l (CellU.immOf s u σ h)) PMap.empty := by
+  have hk : ∀ k, k ≠ Kind.imm → (CellU.immOf s u σ h).kind ≠ k := fun k hk e => by
+    rw [CellU.kind_immOf] at e; exact hk e.symm
+  refine ExW.mk (w := []) (b := PMap.empty) (nm := PMap.empty)
+    (ResU.sites_single_other (hk _ (fun e => Kind.noConfusion e))) ExWits.nil BigComp.nil ?_
+    (ResU.comp_empty_right _)
+  rw [ResU.restrict_single_other (hk Kind.own (fun e => Kind.noConfusion e)),
+    ResU.restrict_single_other (hk Kind.mut (fun e => Kind.noConfusion e))]
+  exact ResU.comp_empty_right _
+
+/-- **A value of a type with no `mut` cell on the exclusive walk is consistent with every
+view.** -/
+theorem consistentX_of_exclMutFree : ∀ (B : VTy), B.exclMutFree = true → ∀ (δ : LSub)
+    (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes), vN (ℍ := ℍ) B δ Θ n v ρ →
+    ∀ c, ConsistentX c ρ
+  | .unit, _, _, _, _, _, _, ⟨_, rfl⟩, c => consistentX_empty c
+  | .zero, _, _, _, _, _, _, h, _ => h.elim
+  | .int _, _, _, _, _, _, _, ⟨_, rfl⟩, c => consistentX_empty c
+  | .unk, _, _, _, _, _, _, h, c => by rw [show _ = PMap.empty from h]; exact consistentX_empty c
+  | .bang _, _, _, _, _, _, _, ⟨rfl, _⟩, c => consistentX_empty c
+  | .imm _ _, _, _, _, _, _, _, ⟨_, _, l, s, u, σ, hs, _, rfl, _, _⟩, c => by
+      intro e he x ψ hg _
+      obtain rfl := ExS.functional he (exS_single_imm l s u σ hs)
+      cases hg
+  | .tensor A B, hB, δ, Θ, n, _, _, ⟨v₁, v₂, ρ₁, ρ₂, _, hc, h₁, h₂⟩, c => by
+      simp only [VTy.exclMutFree, Bool.and_eq_true] at hB
+      exact consistentX_compS hc (consistentX_of_exclMutFree A hB.1 δ Θ n v₁ ρ₁ h₁ c)
+        (consistentX_of_exclMutFree B hB.2 δ Θ n v₂ ρ₂ h₂ c)
+  | .sum A B, hB, δ, Θ, n, _, ρ, h, c => by
+      simp only [VTy.exclMutFree, Bool.and_eq_true] at hB
+      rcases h with ⟨v₁, -, h₁⟩ | ⟨v₂, -, h₂⟩
+      · exact consistentX_of_exclMutFree A hB.1 δ Θ n v₁ ρ h₁ c
+      · exact consistentX_of_exclMutFree B hB.2 δ Θ n v₂ ρ h₂ c
+  | .ref A, hB, δ, Θ, n, _, _, ⟨l, u, σ, _, hc, h⟩, c => by
+      refine consistentX_compS hc (fun e he x ψ hg hk => ?_)
+        (consistentX_of_exclMutFree A hB δ Θ n u σ h c)
+      obtain rfl := ExS.functional he (ExW.single_own l u)
+      obtain ⟨-, rfl⟩ := ResU.single_get_eq_some hg
+      exact absurd hk (by simp)
+  | .box _ A, hB, δ, Θ, n, v, ρ, ⟨_, _, h, _⟩, c => consistentX_of_exclMutFree A hB δ Θ n v ρ h c
+  | .tvar _, _, _, _, _, _, _, h, _ => h.elim
+  | .mu _, _, _, _, _, _, _, h, _ => h.elim
+  | .fam _, _, _, _, _, _, _, h, _ => h.elim
+  | .opq _, _, _, _, _, _, _, h, _ => h.elim
 
 /-- **A stored family is the payload at the world** on content in the cell's stratum. -/
 theorem vN_above (A : VTy) (δ : LSub) (Θ : LocTy) {a : Life} {n : Nat} {v : Val} {ρ : WRes}

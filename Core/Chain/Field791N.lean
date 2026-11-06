@@ -225,7 +225,7 @@ deep cancel rows nest: at a capturable entry the cancel run at its cancel row's 
 framed (`erwp_frame_cancelRunGR`), its own nested cancel obligations by the induction. -/
 theorem tabG_canF {x : LifeVar} {δ : LSub} {Θ : LocTy} {c : Loc → Option Life}
     (R : Nat → WProp) (G : ShareG) (Fr : WProp) :
-    ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC x →
+    ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC x bnd →
     ∀ m i en en', tabG (ℍ := ℍ) R G F δ Θ c m i = some en →
       tabG (ℍ := ℍ) (fun k => R k ⋆ Fr) (G.sep fun _ => Fr) F δ Θ c m i = some en' →
       en.abort = false → en.q ≠ .lin →
@@ -243,7 +243,7 @@ theorem tabG_canF {x : LifeVar} {δ : LSub} {Θ : LocTy} {c : Loc → Option Lif
   rw [hR _ _] at h'
   cases Option.some.inj h'
   have hcap := entN_capB ha hql
-  have hfin := (layer_suspend F hFs hL).2.2.2.2.2 hcap
+  have hfin := (layer_suspend F hFs hL).2.2.2.2.2.2 hcap
   have hfd : fin.cdepth ≤ d := by have := layer_cdepth F hL; omega
   intro P' hP'
   simp only [entN, hcap, if_true] at hP' hcn
@@ -259,7 +259,7 @@ theorem tabG_canF {x : LifeVar} {δ : LSub} {Θ : LocTy} {c : Loc → Option Lif
 
 /-- **`withborF` at a suspending row is a value of `!` its type**: `withborF d` at
 `Mut @a (Ref A) ⊸ (∀'x ⊏ @bnd. Mut 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ(Mut @a (Ref A) ⊗ B)`, `Σ` a
-`Row.Suspend x` row. Core has no rule for it. The proof is `withbor3S_compat`'s 13 steps (Core's
+`Row.Suspend x bnd` row. Core has no rule for it. The proof is `withbor3S_compat`'s 13 steps (Core's
 `withbor3U_compatX`) at the source `Mut @a (Ref A)`, with three changes, each from the term:
 
 * step 2 reads the source's content as a `Ref A` value: `loc ℓ₂` with
@@ -275,7 +275,8 @@ Premises, and the rule that supplies each: `hbnd`, `hA`, `hB`, `hS`, `hdc` are `
 property at `d`'s derivation, the premise `CDerives Δ Γ d (Mut @a (Ref A) ⊸ 1)` read
 semantically. -/
 theorem withborFS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
-    {S : Row} {d : Expr} (hbnd : LifeCtx.empty.Defines bnd) (hA : ¬ VFree x A) (hB : ¬ VFree x B) (hS : S.Suspend x)
+    {S : Row} {d : Expr} (hbnd : LifeCtx.empty.Defines bnd) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
+    (hS : S.Suspend x bnd)
     (hdc : closedAt 0 d = true)
     (hd : SemJN (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.mut a (.ref A)) .unit))) (δ : LSub)
     (Θ₀ : LocTy) (n : Nat) :
@@ -411,14 +412,14 @@ theorem withborFS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
   have hcσu' : ConsistentX c' σu := consistentX_setLife hcσu
     (exS_none_of_walk hσ₀s he₀ fun e₁ he₁ =>
       ⟨_, ExS.get_of_ne_imm he₁ (ResU.single_get_self _ _) hkown, hkown⟩) α
-  have hFS : Fo.SuspendC x := suspendC_effOf hS _
+  have hFS : Fo.SuspendC x bnd := suspendC_effOf hS _
   have hbase : tabN (ℍ := ℍ) (CTy.effOf S (.box (.var x) B)) δ' Θ' c' =
       tabN (ℍ := ℍ) Fo δ' Θ' c' := tabN_effOf_base S _ _ δ' Θ' c'
   have hTw : (tabN (ℍ := ℍ) (CTy.effOf S (.box (.var x) B)) δ' Θ' c').Twin
       (tabG (ℍ := ℍ) Rc Gc Fo δ Θ c) := by
     rw [hbase]
-    exact tabN_tabG_twin hFS Rc Gc δ Θ' Θ c' c (fun A' hO => vN_add_eq hO δ hfr l₂ Fam)
-  have hcanM := tabG_can (ℍ := ℍ) (δ := δ) hfr (c := c) (l := l₂) hFamD Fo.cdepth Fo le_rfl hFS
+    exact tabN_tabG_twin hFS Rc Gc δ Θ' Θ c' c (fun A' hO => vN_add_eq_bnd hO δ hLt hfr l₂ Fam)
+  have hcanM := tabG_can (ℍ := ℍ) (δ := δ) hfr hLt (c := c) (l := l₂) hFamD Fo.cdepth Fo le_rfl hFS
   rw [← hbase] at hcanM
   have hcanF := tabG_canF (ℍ := ℍ) (x := x) (δ := δ) (Θ := Θ) (c := c) Rc Gc Fr Fo.cdepth Fo
     le_rfl hFS
@@ -454,7 +455,7 @@ theorem withborFS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
       (Q := Q₁) _ ls _ X'' _ ρ₂ h2 rfl ?_)
   -- step 8: the field lent at `α`
   refine erwp_M_frameCRG (Φ := Θ.view c) (l := l₂) (A := α) (F := Fam) hFamD
-    (tabN_lendOKCR hS _ δ Θ' c') hTw hcanM (Q := Q₁)
+    (tabN_lendOKCR hS _ δ hLt Θ' c') hTw hcanM (Q := Q₁)
     (k' - 1) j₀ (by omega) ls _ u₀ σu σ₀ ρf X'' houtP houtf (Fam j₀) (fun _ _ h => h) hwit
     hσ₀s (ResU.CompS.comm hX''1) (fun BM hBM => ?_)
   -- step 11: the callback, at the lend's world and view, from the borrow

@@ -615,13 +615,14 @@ theorem tab_lookupG (R : Nat → WProp) (G : ShareG) : ∀ (F : CTy) {δ : LSub}
 
 /-- **The callback's table and the lender's guarded twin agree but for the cancel obligations**
 (`tabN_tabR_twin`'s argument). -/
-theorem tabN_tabG_twin {x : LifeVar} {α : Life} {F : CTy} (hF : F.SuspendC x) (R : Nat → WProp)
+theorem tabN_tabG_twin {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {F : CTy}
+    (hF : F.SuspendC x bnd) (R : Nat → WProp)
     (G : ShareG) (δ : LSub) (Θ₁ Θ₂ : LocTy) (c₁ c₂ : Loc → Option Life)
-    (hΘ : ∀ A : VTy, (∀ Δ a, VOutlives Δ a A) → vN (ℍ := ℍ) A δ Θ₁ = vN (ℍ := ℍ) A δ Θ₂) :
+    (hΘ : ∀ A : VTy, VOutlives LifeCtx.empty bnd A → vN (ℍ := ℍ) A δ Θ₁ = vN (ℍ := ℍ) A δ Θ₂) :
     (tabN (ℍ := ℍ) F (δ.extend x α) Θ₁ c₁).Twin (tabG (ℍ := ℍ) R G F δ Θ₂ c₂) := by
   intro m i en h
   obtain ⟨q, A, B, fin, hL, rfl, hR⟩ := tab_lookupNG R G F h
-  obtain ⟨-, hA, hB, hOA, hOB, -⟩ := layer_suspend F hF hL
+  obtain ⟨-, hA, hB, hOA, hOB, -, -⟩ := layer_suspend F hF hL
   refine ⟨_, hR δ Θ₂ c₂, rfl, rfl, ?_, ?_, rfl⟩
   · simp only [entN, vN_extend_of_not_free (ℍ := ℍ) hA δ α, hΘ A hOA]
   · simp only [entN, vN_extend_of_not_free (ℍ := ℍ) hB δ α, hΘ B hOB]
@@ -636,7 +637,7 @@ theorem tabG_tabR_twin (R : Nat → WProp) (G : ShareG) (R' : Nat → WProp) (F 
   exact ⟨_, hR R', rfl, rfl, rfl, rfl, rfl⟩
 
 /-- A row meeting `CTy.SuspendC` may be stopped at under an anti-frame. -/
-theorem tabG_afok {x : LifeVar} {F : CTy} (hF : F.SuspendC x) (R : Nat → WProp) (G : ShareG)
+theorem tabG_afok {x : LifeVar} {bnd : Lifetime.Life} {F : CTy} (hF : F.SuspendC x bnd) (R : Nat → WProp) (G : ShareG)
     (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) :
     ∀ m i en, tabG (ℍ := ℍ) R G F δ Θ c m i = some en → en.abort = false →
       en.q ≠ .unr ∧ en.wc = extF := by
@@ -650,10 +651,10 @@ there; the lender's at the world and view without it. At a capturable entry, the
 cancel run at its cancel row's table, framed by `erwp_M_frame_cancelRunCRG` at that table (the
 callback's view is the relation's `Φ.set`, `LocTy.view_add`), its own nested cancel obligations by
 the induction. -/
-theorem tabG_can {x : LifeVar} {α : Life} {δ : LSub} {Θ : LocTy} (hf : Θ.Fresh α)
-    {c : Loc → Option Life} {l : Loc}
+theorem tabG_can {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {δ : LSub} {Θ : LocTy}
+    (hf : Θ.Fresh α) (hLt : LtLife δ bnd α) {c : Loc → Option Life} {l : Loc}
     {Fam : Nat → Val → SPropS Loc Val α} (hFam : DownFam α Fam) :
-    ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC x →
+    ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC x bnd →
     ∀ m i en en', tabN (ℍ := ℍ) F (δ.extend x α) (Θ.add l α Fam) (setLife c l α) m i = some en →
       tabG (ℍ := ℍ) (claimR l α Fam) (CellFold l α Fam) F δ Θ c m i = some en' → en.abort = false →
       en.q ≠ .lin →
@@ -678,7 +679,7 @@ theorem tabG_can {x : LifeVar} {α : Life} {δ : LSub} {Θ : LocTy} (hf : Θ.Fre
   rw [hR δ Θ c] at h'
   cases Option.some.inj h'
   have hcap := entN_capB ha hql
-  have hfin := (layer_suspend F hF hL).2.2.2.2.2 hcap
+  have hfin := (layer_suspend F hF hL).2.2.2.2.2.2 hcap
   have hfd : fin.cdepth ≤ d := by have := layer_cdepth F hL; omega
   intro P' hP'
   simp only [entN, hcap, if_true] at hP' hc
@@ -688,9 +689,9 @@ theorem tabG_can {x : LifeVar} {α : Life} {δ : LSub} {Θ : LocTy} (hf : Θ.Fre
   cases Option.some.inj hP'
   have hin := hc _ (finN_eq htop _ _ _)
   refine erwp_M_frame_cancelRunCRG (Φ := Θ.view c) hFam
-    (tabN_lendOKCR_C hfin δ (Θ.add l α Fam) (setLife c l α))
+    (tabN_lendOKCR_C hfin δ hLt (Θ.add l α Fam) (setLife c l α))
     (tabN_tabG_twin hfin _ _ δ (Θ.add l α Fam) Θ (setLife c l α) c
-      (fun A' hO => vN_add_eq hO δ hf l Fam))
+      (fun A' hO => vN_add_eq_bnd hO δ hLt hf l Fam))
     (ih fin hfd hfin) k k le_rfl ls _ v'' χ W'' (Z.del l) ρkL hχ hdZd P'' hPk hw''
     (ResU.CompS.comm hW'') (ResU.CompS.comm hkL) (fun BM hBM => ?_)
   obtain rfl := ResU.CompS.functional hBM hZd
@@ -701,14 +702,14 @@ theorem tabG_can {x : LifeVar} {α : Life} {δ : LSub} {Θ : LocTy} (hf : Θ.Fre
 cancel rows nest. At a capturable entry the inner cancel run, from the opened cell at its cancel
 row's guarded table, is the anti-frame's cancel run from the sealed cell at that row's `tabR`
 (`erwp_M_antiFrame_cancelRunCR`), its own nested cancel obligations by the induction. -/
-theorem tabR_canA {x : LifeVar} {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Option Life}
+theorem tabR_canA {x : LifeVar} {bnd : Lifetime.Life} {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Option Life}
     {l : Loc} {β : Life} {Fo : Nat → Val → SPropS Loc Val β}
     (hF : (Θ.view c) l = some ⟨β, Fo⟩) {G : ShareG}
     (hG : ∀ k ls ρ, G k ls ρ → CellFold l β Fo k ls ρ)
     {Rin Rout : Nat → WProp} (hRin : ∀ k ρ, Rin k ρ → claimR l β Fo k ρ)
     (hRout : ∀ k (w : Val) (σ : WRes) (h : σ.InStratum β) (hw : Fo k w ⟨σ, h⟩),
       Rout k (ResU.single l (CellU.mutOf β w σ h (Fo k) hw))) :
-    ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC x →
+    ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC x bnd →
     ∀ m i en en', tabG (ℍ := ℍ) Rin G F δ Θ c m i = some en →
       tabR (ℍ := ℍ) Rout F δ Θ c m i = some en' → en.abort = false → en.q ≠ .lin →
       ∀ k ls (K : Kont) (w : Val) (σ : WRes) (h : σ.InStratum β)
@@ -729,7 +730,7 @@ theorem tabR_canA {x : LifeVar} {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Lo
   rw [hR Rout] at h'
   cases Option.some.inj h'
   have hcap := entN_capB ha hql
-  have hfin := (layer_suspend F hFs hL).2.2.2.2.2 hcap
+  have hfin := (layer_suspend F hFs hL).2.2.2.2.2.2 hcap
   have hfd : fin.cdepth ≤ d := by have := layer_cdepth F hL; omega
   intro P' hP'
   simp only [entN, hcap, if_true] at hP'
@@ -772,7 +773,7 @@ theorem fin_claimM {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d 
 
 /-- **`withbor (3)` at a suspending row is a value of `!` its type**: `withborU d`, at
 `Mut @a A ⊸ (∀'x ⊏ @bnd. Mut 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ(Mut @a A ⊗ B)` with `Σ` a
-`Row.Suspend x` row. Core's `withbor3U_compatX`, step by step (`scope-791-rule.md` §7.1):
+`Row.Suspend x bnd` row. Core's `withbor3U_compatX`, step by step (`scope-791-rule.md` §7.1):
 
 1. the context owns nothing: the constant at `PMap.empty`;
 2. the source is `loc ℓ` with its cell `ℓ ↦ mut(β, w₀, σ₀, F_o j₀)`, `F_o = famL β 𝒱⟦A⟧ Θ` and
@@ -793,7 +794,7 @@ theorem fin_claimM {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d 
 10. the borrow `Mut @α A` at `δ[x ↦ α]` (`vN_extend_of_not_free`, `lend_mutL`);
 11. the callback at the world `Θ + (ℓ, α) ↦ famL α 𝒱⟦A⟧ Θ` and the view `setLife c ℓ α`, the
     relation's `Φ[ℓ ↦ (α, …)]` (`LocTy.view_add`), its table the guarded twin at `Θ`
-    (`tabN_tabG_twin`, `vN_add_eq`);
+    (`tabN_tabG_twin`, `vN_add_eq_bnd`);
 12. its result `['x] B` back at `Θ` (`vN_local`);
 13. the content handed back in `F_i k` is in `F_o k` (`hunif`, `vN_above`), and the resealed cell
     is a `Mut @a A` value again, beside the result and in every raise's claim; the claim is
@@ -805,7 +806,8 @@ gets from its bound `Δ.meetOfDom` (`Const791.OK`); `hA`, `hB`, `hS`, `hdc` are 
 `Row.Suspend` for `Row.Unwind` (`Const791.OK`); `hd` is the fundamental property at `d`'s
 derivation, the premise `CDerives Δ Γ d (Mut @a A ⊸ 1)` read semantically. -/
 theorem withbor3S_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
-    {S : Row} {d : Expr} (hbnd : LifeCtx.empty.Defines bnd) (hA : ¬ VFree x A) (hB : ¬ VFree x B) (hS : S.Suspend x)
+    {S : Row} {d : Expr} (hbnd : LifeCtx.empty.Defines bnd) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
+    (hS : S.Suspend x bnd)
     (hdc : closedAt 0 d = true)
     (hd : SemJN (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.mut a A) .unit))) (δ : LSub)
     (Θ₀ : LocTy) (n : Nat) :
@@ -906,14 +908,14 @@ theorem withbor3S_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
   have hcσ' : ConsistentX c' σ₀ := consistentX_setLife hcσ (exS_wit_none hvu) α
   set Rc := claimR l α Fam with hRc
   set Gc := CellFold l α Fam with hGc
-  have hFS : Fo.SuspendC x := suspendC_effOf hS _
+  have hFS : Fo.SuspendC x bnd := suspendC_effOf hS _
   have hbase : tabN (ℍ := ℍ) (CTy.effOf S (.box (.var x) B)) δ' Θ' c' =
       tabN (ℍ := ℍ) Fo δ' Θ' c' := tabN_effOf_base S _ _ δ' Θ' c'
   have hTw : (tabN (ℍ := ℍ) (CTy.effOf S (.box (.var x) B)) δ' Θ' c').Twin
       (tabG (ℍ := ℍ) Rc Gc Fo δ Θ c) := by
     rw [hbase]
-    exact tabN_tabG_twin hFS Rc Gc δ Θ' Θ c' c (fun A' hO => vN_add_eq hO δ hfr l Fam)
-  have hcanM := tabG_can (ℍ := ℍ) (δ := δ) hfr (c := c) (l := l) hFamD Fo.cdepth Fo le_rfl hFS
+    exact tabN_tabG_twin hFS Rc Gc δ Θ' Θ c' c (fun A' hO => vN_add_eq_bnd hO δ hLt hfr l Fam)
+  have hcanM := tabG_can (ℍ := ℍ) (δ := δ) hfr hLt (c := c) (l := l) hFamD Fo.cdepth Fo le_rfl hFS
   rw [← hbase] at hcanM
   have hcanA := tabR_canA (ℍ := ℍ) (x := x) (δ := δ) hΘ.1 hFv hG hRin hRout Fo.cdepth Fo le_rfl
     hFS
@@ -934,7 +936,7 @@ theorem withbor3S_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
     exact erwp_val (v := Val.pair (Val.loc l) b) hq
   -- step 8: the opened cell lent at `α`
   refine erwp_M_frameCRG (Φ := Θ.view c) (l := l) (A := α) (F := Fam) hFamD
-    (tabN_lendOKCR hS _ δ Θ' c') hTw hcanM (Q := AFPost l β (famL β P Θ) Qin)
+    (tabN_lendOKCR hS _ δ hLt Θ' c') hTw hcanM (Q := AFPost l β (famL β P Θ) Qin)
     k' j₀ hkj ls _ w₀ σ₀ W ρf X houtP houtf (Fam j₀) (fun _ _ h => h) hwit
     (ResU.CompS.comm hW) (ResU.CompS.comm hX) (fun BM hBM => ?_)
   -- step 11: the callback, at the lend's world and view, from the borrow

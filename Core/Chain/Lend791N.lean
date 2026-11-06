@@ -254,22 +254,26 @@ theorem tabN_effOf_twin {x : LifeVar} {α : Life} {S : Row}
         rw [if_neg hmj]
         exact ih (fun o' ho' => hS o' (List.mem_cons_of_mem _ ho')) m j en h
 
-/-- **The callback's table may be stopped at under the lend at `α`**: `Row.Suspend`'s qualifier,
-payload and answer clauses. -/
-theorem tabN_lendOKCR {x : LifeVar} {α : Life} {S : Row} (hS : S.Suspend x)
-    (R : VTy) (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) :
+/-- **The callback's table may be stopped at under a lend at `α ⊏ @bnd`**: `Row.Suspend`'s
+qualifier, payload and answer clauses; the payload and answer types, free of `'x` and outliving
+`@bnd`, have their values in the lend's stratum (`vN_inStratum_bnd`). -/
+theorem tabN_lendOKCR {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {S : Row}
+    (hS : S.Suspend x bnd) (R : VTy) (δ : LSub) (hLt : LtLife δ bnd α) (Θ : LocTy)
+    (c : Loc → Option Life) :
     (tabN (ℍ := ℍ) (CTy.effOf S R) (δ.extend x α) Θ c).LendOKCR α where
   entry := fun m i en h _ => by
     obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
     exact ⟨(hS o ho).1, rfl⟩
   pa := fun m i en h k ls v ρ hp => by
     obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
-    exact vN_outlives (Δ := LifeCtx.empty) (a := .var x) (models_empty_any _)
-      (interp_ext_self δ x α) ((hS o ho).2.2.2.2.1 _ _) Θ k v ρ hp
+    have hp' : vN (ℍ := ℍ) o.A (δ.extend x α) Θ k v ρ := hp
+    rw [vN_extend_of_not_free (hS o ho).2.2.1] at hp'
+    exact vN_inStratum_bnd (hS o ho).2.2.2.2.1 hLt hp'
   pb := fun m i en h k ls w ρ hp => by
     obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
-    exact (vN_outlives (Δ := LifeCtx.empty) (a := .var x) (models_empty_any _)
-      (interp_ext_self δ x α) ((hS o ho).2.2.2.2.2.1 _ _) Θ k w ρ hp).mono (Life.down_sqsubset α).le
+    have hp' : vN (ℍ := ℍ) o.B (δ.extend x α) Θ k w ρ := hp
+    rw [vN_extend_of_not_free (hS o ho).2.2.2.1] at hp'
+    exact (vN_inStratum_bnd (hS o ho).2.2.2.2.2.1 hLt hp').mono (Life.down_sqsubset α).le
 
 /-- The finaliser `λ_. d ℓ` consumes the lend's claim: `d`'s judgment at `Ref A ⊸ 1`, applied to
 the cell owned again with its content in `A`'s family. -/
@@ -344,7 +348,8 @@ def unitThunk : Val := Val.lam (.val .unit)
 /-- **`U(F 1)` has values outside every stratum `↓α`**: `λ_. ()` holding a `mut` cell at a
 lifetime shorter than `↓α`, left as garbage at the return. So an operation answering `U(F 1)`
 does not meet `OpTabN.LendOKCR.pb` at any lend lifetime `α`, and `Row.Suspend`'s
-`¬ VFree x o.B` does not give `erwp_M_frameCR`'s premise there; `Row.Suspend`'s answer clause does.
+`¬ VFree x o.B` does not give `erwp_M_frameCR`'s premise there; `Row.Suspend`'s answer clause
+(`VOutlives ∅ @bnd`, which has no `U` constructor) does.
 This is a configuration for the premise, not a refutation of the constant. -/
 theorem answer_not_inStratum (δ : LSub) (α : Life) (l : Loc) :
     ∃ ρ : WRes, (∀ Θ n, vN (ℍ := ℍ) (.thunk (.ret .unit)) δ Θ n unitThunk ρ) ∧
@@ -374,13 +379,45 @@ def closingOp (n i n' i' : UInt32) : OpSig :=
 
 /-- **`Row.Suspend` admits a cancel row with a layer**: the row of `closingOp` suspends, so the
 cancel-row clause does not rule out cleanup that performs. -/
-theorem suspend_closingOp (x : LifeVar) {n i n' i' : UInt32} (hn : n ≠ 0) (hn' : n' ≠ 0) :
-    Row.Suspend [closingOp n i n' i'] x := by
+theorem suspend_closingOp (x : LifeVar) (bnd : Lifetime.Life) {n i n' i' : UInt32} (hn : n ≠ 0) :
+    Row.Suspend [closingOp n i n' i'] x bnd := by
   intro o ho
   simp only [List.mem_singleton] at ho
   subst ho
-  refine ⟨by simp [closingOp], hn, id, id, fun _ _ => .unit, fun _ _ => .unit, fun _ => ?_⟩
-  exact ⟨⟨by simp, hn', id, id, fun _ _ => .unit, fun _ _ => .unit, fun _ => trivial⟩, trivial⟩
+  refine ⟨by simp [closingOp], hn, id, id, .unit, .unit, rfl, fun _ => ?_⟩
+  exact ⟨⟨by simp, id, id, .unit, .unit, rfl, fun _ => trivial⟩, trivial⟩
+
+/-! ### The hardest case's callback row -/
+
+/-- `park` as the scheduler's table `TJN` types it (`enParkN`, `Core/Chain/PoolSpawnN.lean`):
+`1 ↠^cancel 1` at `nP`'s operation `0`, its cancel row pure. -/
+def parkSig : OpSig := ⟨BoCa.Fig16.Tree.Wp.SchedProgs.Park.nP, 0, .cancel, .unit, .unit,
+  .ret .unit, false⟩
+
+/-- **The row of the hardest case's lend callbacks** (`Core/TreeGoal791.lean` §5, the program
+`Core/Chain/Hardest791N.lean` proves): `cbRec` and `cbField` perform `park` (`parkE`) while
+holding the record's and the field's borrows, and nothing else. -/
+def hardestRow : Row := [parkSig]
+
+/-- **The hardest case's callback row suspends**, at every borrow variable and bound. -/
+theorem hardestRow_suspend (x : LifeVar) (bnd : Lifetime.Life) : hardestRow.Suspend x bnd := by
+  intro o ho
+  simp only [hardestRow, List.mem_singleton] at ho
+  subst ho
+  exact ⟨by simp [parkSig], by decide, id, id, .unit, .unit, rfl, fun _ => trivial⟩
+
+/-- **The row's table is `park`'s entry in `TJN`**: at `(nP, 0)` the row's table has `enParkN`'s
+qualifier, abort flag, cancel obligation (the pure row's) and resumption order, at the view. -/
+theorem hardestRow_entry (Θ : LocTy) (c : Loc → Option Life) :
+    ∃ en, rowTabN (ℍ := ℍ) hardestRow Θ c BoCa.Fig16.Tree.Wp.SchedProgs.Park.nP 0 = some en ∧
+      en.q = (PoolSpawn.enParkN (ℍ := ℍ) (Θ.view c)).q ∧
+      en.abort = (PoolSpawn.enParkN (ℍ := ℍ) (Θ.view c)).abort ∧
+      en.fin = (PoolSpawn.enParkN (ℍ := ℍ) (Θ.view c)).fin ∧
+      en.wc = (PoolSpawn.enParkN (ℍ := ℍ) (Θ.view c)).wc :=
+  ⟨entN .cancel .unit (fun k v ρ => vN (ℍ := ℍ) .unit LSub.empty Θ k v ρ)
+      (fun k v ρ => vN (ℍ := ℍ) .unit LSub.empty Θ k v ρ) (finN (ℍ := ℍ) (.ret .unit) LSub.empty Θ c),
+    by simp [rowTabN, hardestRow, parkSig, CTy.effOf, tabN, extTabN], rfl, rfl,
+    by simp [entN, capB, finN, PoolSpawn.enParkN, VTy.isZero], rfl⟩
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

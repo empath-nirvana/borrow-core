@@ -1510,8 +1510,6 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.exS_none_of_part
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.consistentX_single_mut
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.consistentX_of_top
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vN_top
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vN_add_eq
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vN_above
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_of_valid
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_M_frame_cancelRunCR

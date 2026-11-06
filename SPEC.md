@@ -10947,12 +10947,18 @@ given the entries'); the typing rules and the fundamental theorem over these typ
   (argued), so its share owns nothing, a clause of the share's definition (`contShareN`), and an
   unrestricted operation is excluded while a borrow or owned resource is live.
   Multi-shot continuations over duplicable state are a hypothesis, not a rule.
-- **A lend's callback may suspend at a row `Row.Suspend 'x`** (`Core/TreeGoal791.lean`): every
-  operation named and not unrestricted, its payload and answer types free of `'x` and outliving
-  every lifetime (what passes out of the borrowed run, and what is resumed into it, holds no
-  borrow the lend could outlive), and each capturable operation's cancel row meeting the same
-  clauses (`CTy.SuspendC`), since the cancel run stops at its layers under the live lend. Cleanup
-  that performs is kept: a cancel row may have layers.
+- **A lend's callback `∀'x ⊏ @bnd` may suspend at a row `Row.Suspend 'x @bnd`**
+  (`Core/TreeGoal791.lean`): every operation named and not unrestricted; its payload and answer
+  types free of `'x` and outliving `@bnd` (`VOutlives ∅ bnd`), so their values lie in the stratum
+  of every lend `α ⊏ @bnd`, what the Mut Frame asks of a stop (the relation's `LendOK`); its answer
+  type with no `mut` cell outside an `imm` cell, since an answer arrives from outside the borrowed
+  run; and each capturable operation's cancel row meeting the same clauses (`CTy.SuspendC`),
+  since the cancel run stops at its layers under the live lend. Excluded: payloads and answers
+  holding an `imm` or `mut` borrow not strictly longer-lived than `@bnd`, every non-`!` thunk
+  (`VOutlives` has no `U` clause), answers holding a `mut` cell outside an `imm` cell, and the
+  same in cancel rows. The constants are stated at the empty lifetime context, where a closed
+  bound is `⊤`, so there no payload or answer holds a borrow. Cleanup that performs is kept: a
+  cancel row may have layers.
 - **Lends shared across tasks end only at a join**: scoped spawn. A branch resumed from a join
   asks that no other branch's flattening hold the joined location (`JoinReady`), which gives the
   resumer's frame condition (`joinFd`, `joinReady_fd`). The scheduler establishes it by finishing

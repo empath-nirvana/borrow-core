@@ -264,15 +264,15 @@ theorem layer_cdepth : ∀ (F : CTy) {q : Qual} {A B : VTy} {fin : CTy}, F.Layer
   | .nu _, _, _, _, _, h => h.elim
 
 /-- A layer of a row meeting `CTy.SuspendC` meets its clauses. -/
-theorem layer_suspend {x : LifeVar} : ∀ (F : CTy), F.SuspendC x → ∀ {q : Qual} {A B : VTy}
-    {fin : CTy}, F.LayerOf q A B fin →
-    q ≠ .unr ∧ ¬ VFree x A ∧ ¬ VFree x B ∧ (∀ Δ a, VOutlives Δ a A) ∧ (∀ Δ a, VOutlives Δ a B) ∧
-      (capB q B = true → fin.SuspendC x)
-  | .eff _ _ q₀ A₀ B₀ fin₀ _ C, ⟨⟨h1, _, h3, h4, h5, h6, h7⟩, hC⟩, q, A, B, fin, h => by
-      simp only [CTy.LayerOf] at h
-      rcases h with ⟨rfl, rfl, rfl, rfl⟩ | h
-      · exact ⟨h1, h3, h4, h5, h6, h7⟩
-      · exact layer_suspend C hC h
+theorem layer_suspend {x : LifeVar} {bnd : Lifetime.Life} : ∀ (F : CTy), F.SuspendC x bnd →
+    ∀ {q : Qual} {A B : VTy} {fin : CTy}, F.LayerOf q A B fin →
+    q ≠ .unr ∧ ¬ VFree x A ∧ ¬ VFree x B ∧ VOutlives LifeCtx.empty bnd A ∧
+      VOutlives LifeCtx.empty bnd B ∧ B.exclMutFree = true ∧ (capB q B = true → fin.SuspendC x bnd)
+  | .eff _ _ q₀ A₀ B₀ fin₀ _ C, ⟨h, hC⟩, q, A, B, fin, hL => by
+      simp only [CTy.LayerOf] at hL
+      rcases hL with ⟨rfl, rfl, rfl, rfl⟩ | hL
+      · exact h
+      · exact layer_suspend C hC hL
   | .ret _, _, _, _, _, _, h => h.elim
   | .arr _ _, _, _, _, _, _, h => h.elim
   | .amp _ _, _, _, _, _, _, h => h.elim
@@ -345,14 +345,15 @@ theorem tab_lookupR (R : Nat → WProp) : ∀ (F : CTy) {δ₂ : LSub} {Θ₂ : 
 
 /-- **The callback's table and the lender's twin agree but for the cancel obligations**: they
 differ in `'x`, which no layer's types mention, and in the world, which the layers' types,
-outliving every lifetime, read alike (`hΘ`, `vN_add_eq` at a lend). -/
-theorem tabN_tabR_twin {x : LifeVar} {α : Life} {F : CTy} (hF : F.SuspendC x) (R : Nat → WProp)
+outliving the bound, read alike (`hΘ`, `vN_add_eq_bnd` at a lend below the bound). -/
+theorem tabN_tabR_twin {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {F : CTy}
+    (hF : F.SuspendC x bnd) (R : Nat → WProp)
     (δ : LSub) (Θ₁ Θ₂ : LocTy) (c₁ c₂ : Loc → Option Life)
-    (hΘ : ∀ A : VTy, (∀ Δ a, VOutlives Δ a A) → vN (ℍ := ℍ) A δ Θ₁ = vN (ℍ := ℍ) A δ Θ₂) :
+    (hΘ : ∀ A : VTy, VOutlives LifeCtx.empty bnd A → vN (ℍ := ℍ) A δ Θ₁ = vN (ℍ := ℍ) A δ Θ₂) :
     (tabN (ℍ := ℍ) F (δ.extend x α) Θ₁ c₁).Twin (tabR (ℍ := ℍ) R F δ Θ₂ c₂) := by
   intro m i en h
   obtain ⟨q, A, B, fin, hL, rfl, hR⟩ := tab_lookupN F h
-  obtain ⟨-, hA, hB, hOA, hOB, -⟩ := layer_suspend F hF hL
+  obtain ⟨-, hA, hB, hOA, hOB, -, -⟩ := layer_suspend F hF hL
   refine ⟨_, hR R δ Θ₂ c₂, rfl, rfl, ?_, ?_, rfl⟩
   · simp only [entN, vN_extend_of_not_free (ℍ := ℍ) hA δ α, hΘ A hOA]
   · simp only [entN, vN_extend_of_not_free (ℍ := ℍ) hB δ α, hΘ B hOB]
@@ -372,21 +373,25 @@ theorem tabR_tabR_twin (R R' : Nat → WProp) (F : CTy) (δ : LSub) (Θ : LocTy)
   obtain ⟨q, A, B, fin, -, rfl, -, hR'⟩ := tab_lookupR R F h
   exact ⟨_, hR' R', rfl, rfl, rfl, rfl, rfl⟩
 
-/-- **A cancel row meeting `CTy.SuspendC` may be stopped at under the lend at `α`.** -/
-theorem tabN_lendOKCR_C {x : LifeVar} {α : Life} {F : CTy} (hF : F.SuspendC x) (δ : LSub)
+/-- **A cancel row meeting `CTy.SuspendC` may be stopped at under a lend at `α ⊏ @bnd`.** -/
+theorem tabN_lendOKCR_C {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {F : CTy}
+    (hF : F.SuspendC x bnd) (δ : LSub) (hLt : LtLife δ bnd α)
     (Θ : LocTy) (c : Loc → Option Life) : (tabN (ℍ := ℍ) F (δ.extend x α) Θ c).LendOKCR α where
   entry := fun m i en h _ => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupN F h
     exact ⟨(layer_suspend F hF hL).1, rfl⟩
   pa := fun m i en h k ls v ρ hp => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupN F h
-    exact vN_outlives (Δ := LifeCtx.empty) (a := .var x) (models_empty_any _)
-      (interp_ext_self δ x α) ((layer_suspend F hF hL).2.2.2.1 _ _) Θ k v ρ hp
+    obtain ⟨-, hA, -, hOA, -⟩ := layer_suspend F hF hL
+    have hp' : vN (ℍ := ℍ) A (δ.extend x α) Θ k v ρ := hp
+    rw [vN_extend_of_not_free hA] at hp'
+    exact vN_inStratum_bnd hOA hLt hp'
   pb := fun m i en h k ls w ρ hp => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupN F h
-    exact (vN_outlives (Δ := LifeCtx.empty) (a := .var x) (models_empty_any _)
-      (interp_ext_self δ x α) ((layer_suspend F hF hL).2.2.2.2.1 _ _) Θ k w ρ hp).mono
-      (Life.down_sqsubset α).le
+    obtain ⟨-, -, hB, -, hOB, -⟩ := layer_suspend F hF hL
+    have hp' : vN (ℍ := ℍ) B (δ.extend x α) Θ k w ρ := hp
+    rw [vN_extend_of_not_free hB] at hp'
+    exact (vN_inStratum_bnd hOB hLt hp').mono (Life.down_sqsubset α).le
 
 theorem entN_capB {q : Qual} {B : VTy} {PA PB : Nat → Val → WRes → Prop}
     {fin : Option (Nat → List SRec → Expr → WProp)}
@@ -405,10 +410,10 @@ there; the lender's at the world and view without it. At a capturable entry, the
 cancel run at its cancel row's table, framed by `erwp_M_frame_cancelRunCR` at that table (the
 callback's view is the relation's `Φ.set`, `LocTy.view_add`), its own nested cancel obligations by
 the induction. -/
-theorem tabR_can {x : LifeVar} {α : Life} {δ : LSub} {Θ : LocTy} (hf : Θ.Fresh α)
-    {c : Loc → Option Life} {l : Loc}
+theorem tabR_can {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {δ : LSub} {Θ : LocTy}
+    (hf : Θ.Fresh α) (hLt : LtLife δ bnd α) {c : Loc → Option Life} {l : Loc}
     {Fam : Nat → Val → SPropS Loc Val α} (hFam : DownFam α Fam) :
-    ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC x →
+    ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC x bnd →
     ∀ m i en en', tabN (ℍ := ℍ) F (δ.extend x α) (Θ.add l α Fam) (setLife c l α) m i = some en →
       tabR (ℍ := ℍ) (claimR l α Fam) F δ Θ c m i = some en' → en.abort = false →
       en.q ≠ .lin →
@@ -433,7 +438,7 @@ theorem tabR_can {x : LifeVar} {α : Life} {δ : LSub} {Θ : LocTy} (hf : Θ.Fre
   rw [hR] at h'
   cases Option.some.inj h'
   have hcap := entN_capB ha hql
-  have hfin := (layer_suspend F hF hL).2.2.2.2.2 hcap
+  have hfin := (layer_suspend F hF hL).2.2.2.2.2.2 hcap
   have hfd : fin.cdepth ≤ d := by have := layer_cdepth F hL; omega
   intro P' hP'
   simp only [entN, hcap, if_true] at hP' hc
@@ -443,9 +448,9 @@ theorem tabR_can {x : LifeVar} {α : Life} {δ : LSub} {Θ : LocTy} (hf : Θ.Fre
   cases Option.some.inj hP'
   have hin := hc _ (finN_eq htop _ _ _)
   refine erwp_M_frame_cancelRunCR (Φ := Θ.view c) hFam
-    (tabN_lendOKCR_C hfin δ (Θ.add l α Fam) (setLife c l α))
+    (tabN_lendOKCR_C hfin δ hLt (Θ.add l α Fam) (setLife c l α))
     (tabN_tabR_twin hfin _ δ (Θ.add l α Fam) Θ (setLife c l α) c
-      (fun A' hO => vN_add_eq hO δ hf l Fam))
+      (fun A' hO => vN_add_eq_bnd hO δ hLt hf l Fam))
     (ih fin hfd hfin) k k le_rfl ls _ v'' χ W'' (Z.del l) ρkL hχ hdZd P'' hPk hw''
     (ResU.CompS.comm hW'') (ResU.CompS.comm hkL) (fun BM hBM => ?_)
   obtain rfl := ResU.CompS.functional hBM hZd
@@ -473,11 +478,12 @@ def claimX (R : Nat → WProp) (c : Loc → Option Life) : Nat → WProp :=
 /-- **A cancel run at the lender's twin carries the view's consistency to its claim.** A run from
 a resource consistent with `c` returns consistent resources (`rwpG_consistentXV`), so the claim a
 `raise` carries is consistent; a stop's continuation is resumed from its share, consistent, and
-an answer, whose type outlives every lifetime (`CTy.SuspendC`) and so holds no borrow cell
-(`consistentX_of_top`); a cancellable stop's cancel run is one at its cancel row's table, by the
+an answer, whose type holds no `mut` cell on the exclusive walk (`CTy.SuspendC`), is consistent
+with every view (`consistentX_of_exclMutFree`); a cancellable stop's cancel run is one at its cancel row's table, by the
 induction on how deep cancel rows nest. -/
-theorem erwp_cancelRun_claimX {x : LifeVar} {δ : LSub} {Θ : LocTy} {c : Loc → Option Life}
-    {R : Nat → WProp} : ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC x →
+theorem erwp_cancelRun_claimX {x : LifeVar} {bnd : Lifetime.Life} {δ : LSub} {Θ : LocTy}
+    {c : Loc → Option Life} {R : Nat → WProp} :
+    ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC x bnd →
     ∀ n ls e ρ, ConsistentX c ρ →
       erwp (ℍ := ℍ) (Θ.view c) (cancelTabR (tabR (ℍ := ℍ) R F δ Θ c) R) (fun _ _ _ _ => False)
         n ls e ρ →
@@ -505,14 +511,14 @@ theorem erwp_cancelRun_claimX {x : LifeVar} {δ : LSub} {Θ : LocTy} {c : Loc �
     obtain ⟨⟨hpt, hK₁, hT', ha⟩, ρa, ρk, hcak, hA, hu, hcont⟩ := pure_sep_iff.mp hp
     obtain ⟨q, A, B, fin, hLy, rfl, -, hR₂⟩ := tab_lookupR R F hT'
     have hck : ConsistentX c ρk := consistentX_right hcak hcσ hvσ
-    obtain ⟨-, -, -, -, hOB, hfinS⟩ := layer_suspend F hF hLy
+    obtain ⟨-, -, -, -, -, hMF, hfinS⟩ := layer_suspend F hF hLy
     refine Or.inr (Or.inr ⟨K₁, m, i, v, _, pure_sep_mk ⟨hpt, hK₁, hR₂ (claimX R c), ha⟩
       ⟨ρa, ρk, hcak, hA, hu, fun ls'' he => ⟨fun k' hk' w τ₁ τ₂ hB hcτ => ?_,
         fun hql P hP => ?_⟩⟩⟩)
     · have hc' := (hcont ls'' he).1 k' hk' w τ₁ τ₂ hB hcτ
       simp only [erwpC, show k' < n by omega, if_true] at hc' ⊢
       exact ih k' (by omega) _ _ _
-        (consistentX_compS hcτ hck (consistentX_of_top (vN_top hOB hB) c)) hc'
+        (consistentX_compS hcτ hck (consistentX_of_exclMutFree B hMF δ Θ k' w τ₁ hB c)) hc'
     · have hcap := entN_capB ha hql
       have hfS := hfinS hcap
       simp only [entN, hcap, if_true] at hP
@@ -527,8 +533,8 @@ theorem erwp_cancelRun_claimX {x : LifeVar} {δ : LSub} {Θ : LocTy} {c : Loc �
 
 /-- **A body at the lender's twin carries the view's consistency to its claim**: as
 `erwp_cancelRun_claimX`, at a `raise` the claim beside the payload. -/
-theorem erwp_claimX {x : LifeVar} {δ : LSub} {Θ : LocTy} {c : Loc → Option Life}
-    {R : Nat → WProp} {F : CTy} (hF : F.SuspendC x) {Q : PostN} :
+theorem erwp_claimX {x : LifeVar} {bnd : Lifetime.Life} {δ : LSub} {Θ : LocTy}
+    {c : Loc → Option Life} {R : Nat → WProp} {F : CTy} (hF : F.SuspendC x bnd) {Q : PostN} :
     ∀ n ls e ρ, ConsistentX c ρ →
       erwp (ℍ := ℍ) (Θ.view c) (opTableR (tabR (ℍ := ℍ) R F δ Θ c) R) Q n ls e ρ →
       erwp (ℍ := ℍ) (Θ.view c) (opTableR (tabR (ℍ := ℍ) (claimX R c) F δ Θ c) (claimX R c)) Q
@@ -546,14 +552,14 @@ theorem erwp_claimX {x : LifeVar} {δ : LSub} {Θ : LocTy} {c : Loc → Option L
     obtain ⟨⟨hpt, hK₁, hT', ha⟩, ρa, ρk, hcak, hA, hu, hcont⟩ := pure_sep_iff.mp hp
     obtain ⟨q, A, B, fin, hLy, rfl, -, hR₂⟩ := tab_lookupR R F hT'
     have hck : ConsistentX c ρk := consistentX_right hcak hcσ hvσ
-    obtain ⟨-, -, -, -, hOB, hfinS⟩ := layer_suspend F hF hLy
+    obtain ⟨-, -, -, -, -, hMF, hfinS⟩ := layer_suspend F hF hLy
     refine Or.inr (Or.inl ⟨K₁, m, i, v, _, pure_sep_mk ⟨hpt, hK₁, hR₂ (claimX R c), ha⟩
       ⟨ρa, ρk, hcak, hA, hu, fun ls'' he => ⟨fun k' hk' w τ₁ τ₂ hB hcτ => ?_,
         fun hql P hP => ?_⟩⟩⟩)
     · have hc' := (hcont ls'' he).1 k' hk' w τ₁ τ₂ hB hcτ
       simp only [erwpC, show k' < n by omega, if_true] at hc' ⊢
       exact ih k' (by omega) _ _ _
-        (consistentX_compS hcτ hck (consistentX_of_top (vN_top hOB hB) c)) hc'
+        (consistentX_compS hcτ hck (consistentX_of_exclMutFree B hMF δ Θ k' w τ₁ hB c)) hc'
     · have hcap := entN_capB ha hql
       have hfS := hfinS hcap
       simp only [entN, hcap, if_true] at hP
@@ -757,15 +763,17 @@ theorem tabN_effOf_base (S : Row) (R₁ R₂ : VTy) (δ : LSub) (Θ : LocTy) (c 
   | cons o S ih => simp only [CTy.effOf, tabN, ih]
 
 /-- `Row.Suspend` is `CTy.SuspendC` of the row's computation type. -/
-theorem suspendC_effOf {S : Row} {x : LifeVar} (hS : S.Suspend x) (R : VTy) :
-    (CTy.effOf S R).SuspendC x := by
+theorem suspendC_effOf {S : Row} {x : LifeVar} {bnd : Lifetime.Life} (hS : S.Suspend x bnd)
+    (R : VTy) : (CTy.effOf S R).SuspendC x bnd := by
   induction S with
   | nil => trivial
   | cons o S ih =>
-      exact ⟨hS o (List.mem_cons_self ..), ih (fun o' ho' => hS o' (List.mem_cons_of_mem _ ho'))⟩
+      obtain ⟨h1, -, h3, h4, h5, h6, h7, h8⟩ := hS o (List.mem_cons_self ..)
+      exact ⟨⟨h1, h3, h4, h5, h6, h7, h8⟩,
+        ih (fun o' ho' => hS o' (List.mem_cons_of_mem _ ho'))⟩
 
 /-- **`withbor (2)` at a suspending row is a value of `!` its type**: `withborU d`, at
-`Ref A ⊸ (∀'x ⊏ @bnd. Mut 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ(Ref A ⊗ B)` with `Σ` a `Row.Suspend x`
+`Ref A ⊸ (∀'x ⊏ @bnd. Mut 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ(Ref A ⊗ B)` with `Σ` a `Row.Suspend x bnd`
 row: the rule-level form of a `mut` borrow held across a suspension, cleanup that performs
 included.
 
@@ -777,7 +785,7 @@ callback runs at the world `Θ + (ℓ, α) ↦ famL α 𝒱⟦A⟧ Θ` and the v
 the relation's `Φ[ℓ ↦ (α, …)]` (`LocTy.view_add`), from the borrow (`lend_mutL`), consistent
 (`consistentX_compS`); its stops fold the borrow into the continuation's share
 (`erwp_M_frameCR`), its table the lender's twin at `Θ` (`tabN_tabR_twin`, the row's types
-outliving every lifetime, `vN_add_eq`); its raises end at the lend's claim, and its cancel runs,
+outliving the bound, `vN_add_eq_bnd`); its raises end at the lend's claim, and its cancel runs,
 each at its cancel row's own table, end there too (`tabR_can`); the claim is consistent with `c`
 (`erwp_claimX`); the finaliser frame `then b. (ℓ, b) unwind d ℓ` consumes it with `d`
 (`erwp_ubindClaimRT`, `fin_claim`). The callback's result `['x] B` returns to the world without
@@ -789,7 +797,7 @@ gets from its bound `Δ.meetOfDom` (`Const791.OK`); `hO`, `hA`, `hB`, `hS`, `hdc
 derivation, the premise `CDerives Δ Γ d (Ref A ⊸ 1)` read semantically. -/
 theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Row} {d : Expr}
     (hbnd : LifeCtx.empty.Defines bnd) (hO : ∃ b, LifeCtx.empty.Defines b ∧ VOutlivesLe LifeCtx.empty b A)
-    (hA : ¬ VFree x A) (hB : ¬ VFree x B) (hS : S.Suspend x) (hdc : closedAt 0 d = true)
+    (hA : ¬ VFree x A) (hB : ¬ VFree x B) (hS : S.Suspend x bnd) (hdc : closedAt 0 d = true)
     (hd : SemJN (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.ref A) .unit))) (δ : LSub)
     (Θ₀ : LocTy) (n : Nat) :
     vN (ℍ := ℍ) (.bang (withbor2UTy x bnd A B S)) δ Θ₀ n (withborUV d) PMap.empty := by
@@ -859,17 +867,18 @@ theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Ro
   have hcσ' : ConsistentX c' σ₀ :=
     consistentX_setLife hcσ (exS_none_of_part hcl hvu (ResU.single_get_self _ _) hko) α
   set Rc := claimR l α Fam with hRc
-  have hFS : Fo.SuspendC x := suspendC_effOf hS _
+  have hFS : Fo.SuspendC x bnd := suspendC_effOf hS _
   have hbase : tabN (ℍ := ℍ) (CTy.effOf S (.box (.var x) B)) δ' Θ' c' =
       tabN (ℍ := ℍ) Fo δ' Θ' c' := tabN_effOf_base S _ _ δ' Θ' c'
   have hTw : (tabN (ℍ := ℍ) (CTy.effOf S (.box (.var x) B)) δ' Θ' c').Twin
       (tabR (ℍ := ℍ) Rc Fo δ Θ c) := by
     rw [hbase]
-    exact tabN_tabR_twin hFS Rc δ Θ' Θ c' c (fun A' hO => vN_add_eq hO δ hfr l Fam)
-  have hcan := tabR_can (ℍ := ℍ) (δ := δ) hfr (c := c) (l := l) hFamD Fo.cdepth Fo le_rfl hFS
+    exact tabN_tabR_twin hFS Rc δ Θ' Θ c' c (fun A' hO => vN_add_eq_bnd hO δ hLt hfr l Fam)
+  have hcan := tabR_can (ℍ := ℍ) (δ := δ) hfr hLt (c := c) (l := l) hFamD Fo.cdepth Fo le_rfl
+    hFS
   rw [← hbase] at hcan
   have hM := erwp_M_frameCR (Φ := Θ.view c) (l := l) (A := α) (F := Fam) hFamD
-    (tabN_lendOKCR hS _ δ Θ' c') hTw hcan
+    (tabN_lendOKCR hS _ δ hLt Θ' c') hTw hcan
     (Q := fun k _ b ρ => vN (ℍ := ℍ) (.tensor (.ref A) B) δ Θ k (Val.pair (Val.loc l) b) ρ)
     k' k' le_rfl ls (.app (.app (.val f) (.val .unit)) (.val (Val.loc l))) w₀ σ₀ ρu ρf ρ''
     houtP houtf (Fam k') (fun _ _ h => h) hwit hcl hc' (fun BM hBM => ?_)
