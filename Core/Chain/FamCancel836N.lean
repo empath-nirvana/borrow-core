@@ -1,4 +1,5 @@
 import Core.Chain.FamStop836N
+import Core.Chain.Unwind833N
 
 /-!
 # The `n`-cell Mut Frame across stops and layered cancel runs, and `slice_borrow_mut` at a
@@ -883,25 +884,6 @@ theorem tabN_unwind_add {S : Row} {x : LifeVar} (hS : S.Unwind x) (R : VTy) (δ 
           (f' := finN (ℍ := ℍ) o.fin δ Θ c₂) (fun hcap => by simp [capB, VTy.isZero] at hcap)]
       rfl
 
-/-- **An unwinding row's table does not read `'x` nor its base.** -/
-theorem tabN_unwind_extend {S : Row} {x : LifeVar} (hS : S.Unwind x) (R₁ R₂ : VTy) (δ : LSub)
-    (α : Life) (Θ : LocTy) (c₁ c₂ : Loc → Option Life) :
-    tabN (ℍ := ℍ) (CTy.effOf S R₁) (δ.extend x α) Θ c₁ =
-      tabN (ℍ := ℍ) (CTy.effOf S R₂) δ Θ c₂ := by
-  induction S with
-  | nil => rfl
-  | cons o S ih =>
-      have ho : o ∈ o :: S := List.mem_cons_self ..
-      have hS' : Row.Unwind S x := fun o' ho' => hS o' (List.mem_cons_of_mem _ ho')
-      have hA : vN (ℍ := ℍ) o.A (δ.extend x α) Θ = vN (ℍ := ℍ) o.A δ Θ :=
-        congrFun (vN_extend_of_not_free (hS o ho).2.2.1 δ α) Θ
-      have hB := unwind_B hS ho
-      simp only [CTy.effOf, tabN]
-      rw [ih hS', hA, hB,
-        entN_fin_congr (f := finN (ℍ := ℍ) o.fin (δ.extend x α) Θ c₁)
-          (f' := finN (ℍ := ℍ) o.fin δ Θ c₂) (fun hcap => by simp [capB, VTy.isZero] at hcap)]
-      rfl
-
 /-- **One Mut Frame per place, around one expression, across raises** (Core's
 `wpG_M_frameList`, the frames of `sliceBorrowMU_compatX` at an unwinding row): the list
 induction over `erwp_M_frameRR`. The table `τ Θ c` does not read a fresh key (`hτ`), so every
@@ -1158,7 +1140,7 @@ theorem sliceBorrowMU_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d 
       rw [sepRange_eq_sepList]; exact sepList_mono' (fun _ _ h => vN_mutLeaf hA h) hml⟩
   have h1 := (hf Θ'' (hE.extR ρf) hOK'' c'' hcf ls) α hLt
   have h2 := h1 c'' k' le_rfl (Val.arr l cn) _ ρ₃ hcomp hfam hc''
-  rw [cN_effOf, tabN_unwind_extend hS (.box (.var x) B) (.tensor (.array A) B) δ α Θ'' c'' c''] at h2
+  rw [cN_effOf, tabN_unwind_extend hS (.box (.var x) B) (.tensor (.array A) B) δ Θ'' α c''] at h2
   refine erwp_opTableN_R (OpTabN.Sub.le fun _ _ _ h => h) (R₀ := claimL (ℍ := ℍ) A δ Θ'' [])
     (fun _ => ⟨rfl, trivial⟩) k' ls _ ρ₃
     (erwp_mono (fun k ls' b ρ' hb => ?_) (opTableN_local _) k' ls _ ρ₃ h2)
