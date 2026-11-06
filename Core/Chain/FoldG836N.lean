@@ -1,0 +1,673 @@
+import Core.Chain.Mu836N
+import Core.Chain.FamCancel836N
+import Core.FoldOwnG
+
+/-!
+# The general owned fold at `SemJN`  `[spec §6]`
+
+Core's `foldOwnG_compatX` (`Core/FoldOwnG.lean`) at the chain, line by line: Core's term
+(`foldOwnGV`, the dispatch `selfG`, the traversal `trav`, the array action `arrE`/`stepV`) and its
+reductions, each pure step `erwp_det` at the same index; Core's induction on the position (`P`),
+the loop invariant `ArrInv`, and the lexicographic induction on cells, value size and key rank
+(`hs_all`). Every run is at one world `Θ` and one view `c`, every call at an index up to `N`;
+each split's part is consistent with the view because the whole is valid (`erwp_of_valid`). The
+algebras have the empty resource and are read at the run's world (`bang_app`).
+-/
+
+noncomputable section
+
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
+namespace BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
+open BoCa
+open BoCa.Fig16
+open BoCa.Fig16.BoLo
+open BoCa.Fig16.LogRel.Core
+open BoCa.Fig16.LogRel.Core.FoldP
+open BoCa.Fig16.LogRel.Core.Chain.SI
+open BoCa.Fig16.LogRel (LtLife substAll)
+open BoCa.Lifetime (LSub LifeCtx LifeVar)
+open BoCa.BoLo (Heap Kont Head)
+
+attribute [local simp] Expr.subst Val.val_shift Expr.shift_shift Expr.shift_zero
+
+-- Every reduction below normalises with one list of substitution facts, as Core's does.
+set_option linter.unusedSimpArgs false
+
+/-! ### Reductions -/
+
+section Red
+variable {Φ : LocFam} {Q : PostN}
+
+/-- A pure head step in an evaluation context, at the empty table. -/
+theorem erwp_headE (hΦ : Φ.Down) (hQ : Q.Down) (K : Kont) {a a' : Expr}
+    (hh : ∀ μ, Head (ℍ := ℍ) μ a μ a') (hn : a.allocs = false) {n : Nat} {ls : List SRec}
+    {ρ : WRes} (h : erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) Q n ls (K.plug a') ρ) :
+    erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) Q n ls (K.plug a) ρ :=
+  erwp_det hΦ (opTableN_down OpTabN.empty_down) hQ (fun μ => step1Only_plug (hh μ) hn K) h
+
+theorem travOf_appN (hΦ : Φ.Down) (hQ : Q.Down) (e : Expr) (s w : Val) {n : Nat}
+    {ls : List SRec} {ρ : WRes}
+    (hw : erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) Q n ls ((e.subst 1 (s.shift 1 0)).subst 0 w) ρ) :
+    erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) Q n ls (.app (.app (.val (travOf e)) (.val s)) (.val w))
+      ρ := by
+  refine erwp_headE hΦ hQ (.appL .hole w) (fun μ => Head.beta μ _ s) rfl ?_
+  exact erwp_headE hΦ hQ .hole (fun μ => Head.beta μ _ w) rfl hw
+
+/-- At the tag of the `i`-th key, the dispatch runs that key's branch (Core's `dspV_run`). -/
+theorem dspV_runN (ks : List Bnd) (hΦ : Φ.Down) (hQ : Q.Down) {sv : Val}
+    (hsv : closedAt 0 sv.1 = true) (g w : Val) {n : Nat} {ls : List SRec} :
+    ∀ (r : List Bnd) (p i : Nat) (k : Bnd), r[i]? = some k → ∀ ρ,
+      erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) Q n ls ((branchV ks sv (g.shift 1 0) (p + i) k).subst 0 w)
+        ρ →
+      erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) Q n ls ((dspV ks sv (g.shift 1 0) p r).subst 0 (tagV i w))
+        ρ
+  | [], _, _, _, h => by simp at h
+  | c :: r, p, 0, k, h => by
+      simp only [List.getElem?_cons_zero, Option.some.injEq] at h
+      subst h
+      intro ρ hw
+      have e : (dspV ks sv (g.shift 1 0) p (c :: r)).subst 0 (tagV 0 w)
+          = .case (.val (.inj₁ w)) (branchV ks sv (g.shift 1 0) p c)
+              (dspV ks sv (g.shift 1 0) (p + 1) r) := by
+        have hb := branchV_subst ks hsv g ((tagV 0 w).shift 1 0) p 1 le_rfl c
+        have hd := dspV_subst ks hsv g r ((tagV 0 w).shift 1 0) (p + 1) 1 le_rfl
+        simp only [dspV, Expr.subst, if_pos, Val.shift_shift, tagV] at hb hd ⊢
+        rw [hb, hd]
+      rw [e]
+      exact erwp_headE hΦ hQ .hole (fun μ => Head.case₁ μ w _ _) rfl (by simpa using hw)
+  | c :: r, p, i + 1, k, h => by
+      simp only [List.getElem?_cons_succ] at h
+      intro ρ hw
+      have e : (dspV ks sv (g.shift 1 0) p (c :: r)).subst 0 (tagV (i + 1) w)
+          = .case (.val (.inj₂ (tagV i w))) (branchV ks sv (g.shift 1 0) p c)
+              (dspV ks sv (g.shift 1 0) (p + 1) r) := by
+        have hb := branchV_subst ks hsv g ((tagV (i + 1) w).shift 1 0) p 1 le_rfl c
+        have hd := dspV_subst ks hsv g r ((tagV (i + 1) w).shift 1 0) (p + 1) 1 le_rfl
+        simp only [dspV, Expr.subst, if_pos, Val.shift_shift, tagV] at hb hd ⊢
+        rw [hb, hd]
+      rw [e]
+      refine erwp_headE hΦ hQ .hole (fun μ => Head.case₂ μ (tagV i w) _ _) rfl ?_
+      exact dspV_runN ks hΦ hQ hsv g w r (p + 1) i k h ρ
+        (by simpa [Nat.add_assoc, Nat.add_comm 1 i] using hw)
+
+/-- **The dispatch** (Core's `selfG_run`). -/
+theorem selfG_runN (ks : List Bnd) (hΦ : Φ.Down) (hQ : Q.Down) (gs w : Val) (i : Nat) (k : Bnd)
+    (hk : ks[i]? = some k) {n : Nat} {ls : List SRec} {ρ : WRes}
+    (hw : erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) Q n ls
+      ((branchV ks (selfG ks) (gs.shift 1 0) i k).subst 0 w) ρ) :
+    erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) Q n ls
+      (.app (.app (.val (selfG ks)) (.val gs)) (.val (tagV i w))) ρ := by
+  have hT := opTableN_down OpTabN.empty_down
+  refine erwp_pureSteps hΦ hT hQ (selfV_steps_in (fBG_closed ks) (.appL .hole (tagV i w)) gs) ?_
+  rw [fixV_eq (fBG_closed ks)]
+  refine erwp_headE hΦ hQ (.appL .hole (tagV i w)) (fun μ => Head.beta μ _ gs) rfl ?_
+  have e : ((fBG ks).subst 1 (selfG ks)).subst 0 gs
+      = .val (.lam (dspV ks (selfG ks) (gs.shift 1 0) 0 ks)) := by
+    have h := dsp_subst ks (selfG_closed ks) gs ks 0 0
+    have hc : (selfG ks).shift 1 0 = selfG ks := val_shift_closed (selfG_closed ks) 1 0
+    show (Expr.subst 0 gs (Expr.subst 1 (selfG ks) (Expr.lam (dsp ks 0 0 ks))))
+      = Expr.lam (dspV ks (selfG ks) (gs.shift 1 0) 0 ks)
+    simp only [Expr.subst, hc]
+    simpa using h
+  change erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) Q n ls
+    ((Kont.appL .hole (tagV i w)).plug (((fBG ks).subst 1 (selfG ks)).subst 0 gs)) ρ
+  rw [e]
+  simp only [Kont.plug]
+  refine erwp_headE hΦ hQ .hole (fun μ => Head.beta μ _ (tagV i w)) rfl ?_
+  exact dspV_runN ks hΦ hQ (selfG_closed ks) gs w ks 0 i k hk ρ (by simpa using hw)
+
+/-- The handle applied is the fixed point at the algebras (Core's `hG_app`). -/
+theorem hG_appN (ks : List Bnd) (hΦ : Φ.Down) (hQ : Q.Down) (gs x : Val) {n : Nat}
+    {ls : List SRec} {ρ : WRes}
+    (hw : erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) Q n ls
+      (.app (.app (.val (selfG ks)) (.val gs)) (.val x)) ρ) :
+    erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) Q n ls (.app (.val (hG ks gs)) (.val x)) ρ := by
+  refine erwp_headE hΦ hQ .hole (fun μ => Head.beta μ _ x) rfl ?_
+  simpa [closed_subst (selfG_closed ks), subst_shift_succ] using hw
+
+/-- The `p`-th component of a tuple, by pure steps, in an evaluation context (Core's
+`proj_red`). -/
+theorem proj_redN (hΦ : Φ.Down) (hQ : Q.Down) {n : Nat} :
+    ∀ (vs : List Val) (p : Nat) (a : Val), vs[p]? = some a → ∀ (K : Kont) (ls : List SRec)
+      (ρ : WRes), erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) Q n ls (K.plug (.val a)) ρ →
+      erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) Q n ls (K.plug (projE vs.length p (.val (tupV vs)))) ρ
+  | [], _, _, h, _, _, _ => by simp at h
+  | [b], p, a, h, K, ls, ρ => by
+      intro hw
+      have hp : p = 0 := by
+        cases p with
+        | zero => rfl
+        | succ p => simp at h
+      subst hp
+      simp only [List.getElem?_cons_zero, Option.some.injEq] at h
+      subst h
+      exact hw
+  | b :: c :: rest, 0, a, h, K, ls, ρ => by
+      intro hw
+      simp only [List.getElem?_cons_zero, Option.some.injEq] at h
+      subst h
+      simp only [List.length_cons, projE, tupV]
+      refine erwp_headE hΦ hQ K (fun μ => Head.letpair μ b (tupV (c :: rest)) _) rfl ?_
+      simpa using hw
+  | b :: c :: rest, p + 1, a, h, K, ls, ρ => by
+      intro hw
+      simp only [List.getElem?_cons_succ] at h
+      have ih := proj_redN hΦ hQ (c :: rest) p a h K ls ρ hw
+      simp only [List.length_cons, projE, tupV]
+      refine erwp_headE hΦ hQ K (fun μ => Head.letpair μ b (tupV (c :: rest)) _) rfl ?_
+      rw [projE_subst, projE_subst_gen]
+      simpa [subst_shift_succ] using ih
+
+/-- **The `p`-th algebra of the tuple**, applied (Core's `proj_run`). -/
+theorem proj_runN (hΦ : Φ.Down) (hQ : Q.Down) (vs : List Val) (p : Nat) (a : Val)
+    (h : vs[p]? = some a) (r : Val) {n : Nat} {ls : List SRec} {ρ : WRes}
+    (hw : erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) Q n ls (.app (.val a) (.val r)) ρ) :
+    erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) Q n ls
+      (.app (.app (.val (projV vs.length p)) (.val (tupV vs))) (.val r)) ρ := by
+  refine erwp_headE hΦ hQ (.appL .hole r) (fun μ => Head.beta μ _ (tupV vs)) rfl ?_
+  rw [projE_subst]
+  exact proj_redN hΦ hQ vs p a h (.appL .hole r) ls ρ hw
+
+end Red
+
+/-! ### The counted loop with an invariant (Core's `countLoop_inv`) -/
+
+theorem countLoop_invN {Θ : LocTy} (hΘ : Θ.OK) {c : Loc → Option Life} {Nb : Nat} (f : Val)
+    (n : UInt32) (I : Nat → PostN) (hId : ∀ j, (I j).Down)
+    (hstep : ∀ i : UInt32, i < arrLen n → ∀ k ls st ρ, k ≤ Nb → I i.toNat k ls st ρ →
+      ConsistentX c ρ → erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (I (i.toNat + 1)) k ls
+        (.app (.val f) (.val (Val.pair (Val.i32 i) st))) ρ) :
+    ∀ (d : Nat) (i : UInt32) (k : Nat) (ls : List SRec) (st : Val) (ρ : WRes), k ≤ Nb →
+      (arrLen n).toNat - i.toNat = d → i.toNat ≤ (arrLen n).toNat → I i.toNat k ls st ρ →
+      ConsistentX c ρ →
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (I (arrLen n).toNat) k ls
+        (.app (.val (.prim .count)) (.val (Val.pair f (Val.pair (Val.i32 n)
+          (Val.pair (Val.i32 i) st))))) ρ := by
+  have hΦ := LocTy.view_down hΘ.1 c
+  intro d
+  induction d with
+  | zero =>
+      intro i k ls st ρ _ hd hle hs _
+      refine erwp_headE hΦ (hId _) .hole (fun μ => Head.count μ f n i st) rfl ?_
+      have hi : ¬ i < arrLen n := by
+        rw [UInt32.lt_iff_toNat_lt]; omega
+      simp only [Kont.plug]
+      unfold countNext
+      rw [if_neg hi]
+      have e : i.toNat = (arrLen n).toNat := by omega
+      rw [← e]
+      exact erwp_val hs
+  | succ d ih =>
+      intro i k ls st ρ hk hd hle hs hc
+      refine erwp_headE hΦ (hId _) .hole (fun μ => Head.count μ f n i st) rfl ?_
+      have hi : i < arrLen n := by
+        rw [UInt32.lt_iff_toNat_lt]; omega
+      have hb := arrLen_bound n
+      have hi1 : (i + 1).toNat = i.toNat + 1 := by
+        rw [UInt32.toNat_add]
+        have : i.toNat < (arrLen n).toNat := UInt32.lt_iff_toNat_lt.mp hi
+        simp only [UInt32.toNat_one]
+        exact Nat.mod_eq_of_lt (by omega)
+      simp only [Kont.plug]
+      unfold countNext
+      rw [if_pos hi]
+      refine erwp_bind_frame hΦ (opTableN_local _)
+        (.appR (.val (.prim .count)) (.pairR f (.pairR (Val.i32 n) (.pairR (Val.i32 (i + 1)) .hole))))
+        (fun σ => σ = PMap.empty) (ResU.comp_empty_right ρ) hc (hstep i hi k ls st ρ hk hs hc) rfl ?_
+      rintro k' hk' ls' v σ₁ σ₂ σ hcσ hv rfl hcσ' -
+      rw [ResU.CompS.functional hcσ (ResU.comp_empty_right σ₁)] at hcσ' ⊢
+      have hv' : I (i + 1).toNat k' ls' v σ₁ := by rw [hi1]; exact hv
+      exact ih (i + 1) k' ls' v σ₁ (hk'.trans hk) (by omega) (by omega) hv' hcσ'
+
+/-! ### The owned traversal of an array -/
+
+section Arr
+variable {S' RS RA : VTy} {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} {Nb : Nat}
+
+/-- The slots `ℓ, …, ℓ + m − 1` of an array of `Ref S'` at the index `j` (Core's `slots`). -/
+abbrev slotsN (S' : VTy) (δ : LSub) (Θ : LocTy) (j : Nat) (ℓ : Loc) (m : Nat) : WProp :=
+  sepRange (fun x => vN (ℍ := ℍ) (.ref S') δ Θ j (Val.loc x)) ℓ m
+
+theorem slotsN_le {S' : VTy} {δ : LSub} {Θ : LocTy} {j j' : Nat} (h : j' ≤ j) {ℓ : Loc} {m : Nat}
+    {ρ : WRes} (hs : slotsN (ℍ := ℍ) S' δ Θ j ℓ m ρ) : slotsN (ℍ := ℍ) S' δ Θ j' ℓ m ρ :=
+  sepRange_mono' (fun _ _ hm => vN_le h hm) hs
+
+/-- **The loop's invariant** before the `i`-th step, at the index (Core's `ArrInv`). -/
+def ArrInvN (S' RA : VTy) (δ : LSub) (Θ : LocTy) (w s : Val) (ℓ : Loc) (N n : Nat) (i : Nat) :
+    PostN := fun j _ st ρ =>
+  ∃ acc, st = Val.pair acc (Val.pair w s) ∧
+    (vN (ℍ := ℍ) RA δ Θ j acc ⋆ (sepRange todoP ℓ i ⋆
+      fun ρ' => slotsN (ℍ := ℍ) S' δ Θ j (ℓ + i) (N - i) ρ' ∧ dsize ρ' ≤ n)) ρ
+
+theorem arrInvN_down (S' RA : VTy) (δ : LSub) (Θ : LocTy) (w s : Val) (ℓ : Loc) (N n i : Nat) :
+    (ArrInvN (ℍ := ℍ) S' RA δ Θ w s ℓ N n i).Down := by
+  rintro j ls st ρ ⟨acc, rfl, ρa, ρr, hc, hacc, ρd, ρs, hcr, htodo, hsl, hdr⟩
+  exact ⟨acc, rfl, ρa, ρr, hc, vN_le (Nat.le_succ j) hacc, ρd, ρs, hcr, htodo,
+    slotsN_le (Nat.le_succ j) hsl, hdr⟩
+
+/-- **One step of the loop** (Core's `step_spec`). -/
+theorem step_specN (hΘ : Θ.OK) (k : Nat) {t s : Val} (ht : closedAt 0 t.1 = true) {n : Nat}
+    {ℓ : Loc} {N : UInt32} (hN : N.toNat < 2 ^ 31)
+    (hS : ∀ v ρ j ls, j ≤ Nb → vN (ℍ := ℍ) S' δ Θ j v ρ → dsize ρ < n → ConsistentX c ρ →
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN RS δ Θ) j ls
+        (.app (.app (.val t) (.val s)) (.val v)) ρ)
+    (hgA : ∀ j ls x ρ, j ≤ Nb → vN (ℍ := ℍ) (.sum .unit (.tensor RA RS)) δ Θ j x ρ →
+      ConsistentX c ρ → erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN RA δ Θ) j ls
+        (.app (.val s) (.val (tagV k x))) ρ)
+    (i : UInt32) (hi : i < arrLen N) :
+    ∀ j ls st ρ, j ≤ Nb → ArrInvN (ℍ := ℍ) S' RA δ Θ (Val.arr ℓ N) s ℓ N.toNat n i.toNat j ls st ρ →
+      ConsistentX c ρ →
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty)
+        (ArrInvN (ℍ := ℍ) S' RA δ Θ (Val.arr ℓ N) s ℓ N.toNat n (i.toNat + 1)) j ls
+        (.app (.val (FoldP.stepV k t)) (.val (Val.pair (Val.i32 i) st))) ρ := by
+  rintro j ls st ρ hj ⟨acc, rfl, ρa, ρr, hc, hacc, ρd, ρs, hcr, htodo, hsl, hdr⟩ hcρ
+  have hΦ := LocTy.view_down hΘ.1 c
+  have hQ := arrInvN_down (ℍ := ℍ) S' RA δ Θ (Val.arr ℓ N) s ℓ N.toNat n (i.toNat + 1)
+  rw [arrLen_of_bound hN] at hi
+  have hiN : i.toNat < N.toNat := UInt32.lt_iff_toNat_lt.mp hi
+  have esub : N.toNat - i.toNat = (N.toNat - (i.toNat + 1)) + 1 := by omega
+  rw [esub] at hsl
+  unfold slotsN at hsl
+  rw [sepRange_succ] at hsl
+  obtain ⟨ρsl, ρre, hcs, hslot, hrest⟩ := hsl
+  obtain ⟨l', v, ρb, el, hcb, hv⟩ := hslot
+  have hl' : l' = ℓ + i.toNat := (loc_inj el).symm
+  subst hl'
+  have hlt : dsize ρb < n := by
+    have h₁ : dsize ρb < dsize ρsl := dsize_tail_lt hcb ⟨PMap.empty, ResU.comp_empty_right _⟩
+    have h₂ := dsize_le_left hcs
+    omega
+  have hre : dsize ρre ≤ n := le_trans (dsize_le_right hcs) hdr
+  -- the pure steps to the `idx`
+  refine erwp_headE hΦ hQ .hole (fun μ => Head.beta μ _ _) rfl ?_
+  simp only [FoldP.stepE, Kont.plug]
+  refine erwp_headE hΦ hQ .hole
+    (fun μ => Head.letpair μ (Val.i32 i) (Val.pair acc (Val.pair (Val.arr ℓ N) s)) _) rfl ?_
+  simp [bindE, tagE_subst, closed_subst ht, closed_shift ht, swap_subst, subst_shift_succ]
+  refine erwp_headE hΦ hQ .hole (fun μ => Head.letpair μ acc (Val.pair (Val.arr ℓ N) s) _) rfl ?_
+  simp [bindE, tagE_subst, closed_subst ht, closed_shift ht, swap_subst, subst_shift_succ]
+  refine erwp_headE hΦ hQ .hole (fun μ => Head.letpair μ (Val.arr ℓ N) s _) rfl ?_
+  simp [bindE, tagE_subst, closed_subst ht, closed_shift ht, swap_subst, subst_shift_succ,
+    closed_shift (arr_closed ℓ N), closed_subst (arr_closed ℓ N)]
+  -- `idx`, then the `inj₁` branch
+  refine erwp_headE hΦ hQ (.case .hole _ _) (fun μ => Head.idx μ ℓ N i) rfl ?_
+  simp only [Kont.plug]
+  rw [idxAns_lt ℓ hi]
+  refine erwp_headE hΦ hQ .hole (fun μ => Head.case₁ μ (Val.loc (ℓ + i.toNat)) _ _) rfl ?_
+  simp [bindE, tagE_subst, closed_subst ht, closed_shift ht, swap_subst, subst_shift_succ,
+    closed_shift (arr_closed ℓ N), closed_subst (arr_closed ℓ N)]
+  -- the resource: `ρ = cell ● (ρa ● (ρd ● (ρb ● ρre)))`
+  obtain ⟨bre, hbre, hcbre⟩ := compS_reassoc hcb hcs
+  obtain ⟨X, hX, hcX⟩ := compS_lcomm hcbre hcr
+  obtain ⟨Y, hY, hcY⟩ := compS_lcomm hcX hc
+  -- take the slot's value out
+  refine erwp_bind_frame hΦ (opTableN_local _) (.appR (.val (.lam _)) .hole)
+    (e := .app (.app swap (.val (.loc (ℓ + i.toNat)))) (.val .unit))
+    (P := fun _ _ q σ => q = Val.pair (.loc (ℓ + i.toNat)) v ∧
+      σ = ResU.single (ℓ + i.toNat) (CellU.ownOf .unit))
+    (fun Y' => Y' = Y) hcY hcρ
+    (erwp_swapN hΦ (fun _ _ _ _ h => h) (ℓ + i.toNat) v .unit
+      ⟨_, PMap.empty, ResU.comp_empty_right _, rfl, fun σa σ hσa hcσ => ⟨rfl, by
+        rw [ResU.CompS.functional hcσ (compS_empty_left σa)]; exact hσa⟩⟩) rfl ?_
+  rintro k₁ hk₁ ls₁ q σa Y' σ hcσ ⟨rfl, rfl⟩ rfl hcσ' hvσ
+  simp only [Kont.plug]
+  refine erwp_headE hΦ hQ .hole (fun μ => Head.beta μ _ _) rfl ?_
+  simp [bindE, tagE_subst, closed_subst ht, closed_shift ht, subst_shift_succ,
+    closed_shift (arr_closed ℓ N), closed_subst (arr_closed ℓ N)]
+  refine erwp_headE hΦ hQ .hole (fun μ => Head.letpair μ (.loc (ℓ + i.toNat)) v _) rfl ?_
+  simp [bindE, tagE_subst, closed_subst ht, closed_shift ht, subst_shift_succ,
+    closed_shift (arr_closed ℓ N), closed_subst (arr_closed ℓ N)]
+  -- `σ = ρb ● (ρa ● ((ρd ● σa) ● ρre))`
+  obtain ⟨Xσ, hXσ, hcXσ⟩ := compS_reassoc hY (ResU.CompS.comm hcσ)
+  obtain ⟨dσ, hdσ, hcdσ⟩ := compS_exch hX hXσ
+  obtain ⟨dre, hdre, hcdre⟩ := compS_lcomm hbre hcdσ
+  obtain ⟨F, hF, hcF⟩ := compS_lcomm hcdre hcXσ
+  have htodo' : sepRange todoP ℓ (i.toNat + 1) dσ :=
+    sepRange_append hdσ htodo ⟨_, PMap.empty, ResU.comp_empty_right _, rfl, ⟨rfl, trivial⟩⟩
+  -- the value's traversal, framing `acc ⋆ (emptied ⋆ rest)`
+  refine erwp_bind_frame hΦ (opTableN_local _) (.appR (.val (.lam _)) .hole)
+    (e := .app (.app (.val t) (.val s)) (.val v)) (fun F' => F' = F) hcF hcσ'
+    (hS v ρb k₁ ls₁ (hk₁.trans hj) (vN_le hk₁ hv) hlt (consistentX_left hcF hcσ' hvσ)) rfl ?_
+  rintro k₂ hk₂ ls₂ r σ₁ F' σ' hc₂ hr rfl hcσ₂ hvσ₂
+  simp only [Kont.plug]
+  refine erwp_headE hΦ hQ .hole (fun μ => Head.beta μ _ r) rfl ?_
+  simp [bindE, tagE_subst, closed_subst ht, closed_shift ht, subst_shift_succ,
+    closed_shift (arr_closed ℓ N), closed_subst (arr_closed ℓ N)]
+  rw [tagE_inj₂_pair]
+  -- the algebra at `inj₂ (acc, r)`, framing the emptied slots and the rest
+  obtain ⟨Z, hZ, hσZ⟩ := compS_reassoc' hF hc₂
+  refine erwp_bind_frame hΦ (opTableN_local _) (.appR (.val (.lam _)) .hole)
+    (e := .app (.val s) (.val (tagV k (Val.inj₂ (Val.pair acc r))))) (fun D => D = dre)
+    hσZ hcσ₂
+    (hgA k₂ ls₂ _ Z (hk₂.trans (hk₁.trans hj))
+      (.inr ⟨Val.pair acc r, rfl, ⟨acc, r, ρa, σ₁, rfl, ResU.CompS.comm hZ,
+        vN_le (hk₂.trans hk₁) hacc, hr⟩⟩)
+      (consistentX_left hσZ hcσ₂ hvσ₂)) rfl ?_
+  rintro k₃ hk₃ ls₃ acc' τ₁ D τ hcτ hacc' rfl _ _
+  simp only [Kont.plug]
+  refine erwp_headE hΦ hQ .hole (fun μ => Head.beta μ _ acc') rfl ?_
+  simp [subst_shift_succ, closed_shift (arr_closed ℓ N), closed_subst (arr_closed ℓ N)]
+  refine erwp_val (v := Val.pair acc' (Val.pair (Val.arr ℓ N) s)) ?_
+  refine ⟨acc', rfl, τ₁, _, hcτ, hacc', dσ, ρre, hdre, htodo', ?_, hre⟩
+  have hle : k₃ ≤ j := hk₃.trans (hk₂.trans hk₁)
+  rw [show ℓ + (i.toNat + 1) = ℓ + i.toNat + 1 by lomega]
+  exact slotsN_le hle hrest
+
+end Arr
+
+section Arr2
+variable {S' RS RA : VTy} {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} {Nb : Nat}
+
+/-- An emptied slot is a leaf of `Array 1` (Core's `todo_done`). -/
+theorem todo_doneN {ℓ : Loc} {m j : Nat} {ρ : WRes} (h : sepRange todoP ℓ m ρ) :
+    sepRange (fun x => vN (ℍ := ℍ) (.ref .unit) δ Θ j (Val.loc x)) ℓ m ρ :=
+  sepRange_mono' (fun x ρ' hm => ⟨x, .unit, PMap.empty, rfl, by rw [hm]; exact ResU.comp_empty_right _,
+    rfl, rfl⟩) h
+
+/-- **The owned traversal of an array** (Core's `arr_spec`): the seed, the loop, the drop. -/
+theorem arr_specN (hΘ : Θ.OK) (k : Nat) {t s : Val} (ht : closedAt 0 t.1 = true) {n : Nat}
+    (hS : ∀ v ρ j ls, j ≤ Nb → vN (ℍ := ℍ) S' δ Θ j v ρ → dsize ρ < n → ConsistentX c ρ →
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN RS δ Θ) j ls
+        (.app (.app (.val t) (.val s)) (.val v)) ρ)
+    (hgA : ∀ j ls x ρ, j ≤ Nb → vN (ℍ := ℍ) (.sum .unit (.tensor RA RS)) δ Θ j x ρ →
+      ConsistentX c ρ → erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN RA δ Θ) j ls
+        (.app (.val s) (.val (tagV k x))) ρ)
+    (w : Val) (χ : WRes) (j : Nat) (ls : List SRec) (hj : j ≤ Nb)
+    (hw : vN (ℍ := ℍ) (.fam (.ref S')) δ Θ j w χ) (hn : dsize χ ≤ n) (hc : ConsistentX c χ) :
+    erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN RA δ Θ) j ls
+      (.app (.app (.val (travOf (arrE k (FoldP.stepV k t)))) (.val s)) (.val w)) χ := by
+  have hΦ := LocTy.view_down hΘ.1 c
+  have hQ := vPostN_down (ℍ := ℍ) RA δ Θ
+  obtain ⟨ℓ, N, rfl, hN, hsl⟩ := vN_fam_iff.mp hw
+  have hf := FoldP.stepV_closed k ht
+  refine travOf_appN hΦ hQ _ s _ ?_
+  simp [arrE, bindE, tagE_subst, subst_shift_succ, closed_subst hf, closed_shift hf,
+    closed_subst unitF_closed, closed_shift unitF_closed]
+  refine erwp_headE hΦ hQ .hole (fun μ => Head.letpair μ (Val.loc ℓ) (Val.i32 N) _) rfl ?_
+  simp [bindE, tagE_subst, subst_shift_succ, closed_subst hf, closed_shift hf,
+    closed_subst unitF_closed, closed_shift unitF_closed, Val.i32]
+  rw [tagE_inj₁_unit]
+  -- the seed, framing the slots
+  refine erwp_bind_frame hΦ (opTableN_local _) (.appR (.val (.lam _)) .hole)
+    (e := .app (.val s) (.val (tagV k (.inj₁ .unit)))) (fun X => X = χ) (compS_empty_left χ) hc
+    (hgA j ls _ _ hj (.inl ⟨Val.unit, rfl, rfl, rfl⟩) (consistentX_empty c)) rfl ?_
+  rintro k₁ hk₁ ls₁ acc₀ σ₁ X σ hcσ hacc₀ rfl hcσ' -
+  simp only [Kont.plug]
+  refine erwp_headE hΦ hQ .hole (fun μ => Head.beta μ _ acc₀) rfl ?_
+  simp [subst_shift_succ, closed_subst hf, closed_shift hf, closed_subst unitF_closed,
+    closed_shift unitF_closed]
+  -- the loop
+  have hloop := countLoop_invN hΘ (c := c) (Nb := Nb) (FoldP.stepV k t) N
+    (fun i => ArrInvN (ℍ := ℍ) S' RA δ Θ (Val.arr ℓ N) s ℓ N.toNat n i)
+    (fun i => arrInvN_down S' RA δ Θ (Val.arr ℓ N) s ℓ N.toNat n i)
+    (fun i hi j' ls' st ρ' hj' h' hc' => step_specN hΘ k ht hN hS hgA i hi j' ls' st ρ' hj' h' hc')
+    _ 0 k₁ ls₁ (Val.pair acc₀ (Val.pair (Val.arr ℓ N) s)) σ (hk₁.trans hj) rfl (Nat.zero_le _)
+    ⟨acc₀, rfl, σ₁, X, hcσ, hacc₀, PMap.empty, X, compS_empty_left X, ⟨rfl, trivial⟩,
+      by simpa using slotsN_le hk₁ hsl, hn⟩ hcσ'
+  refine erwp_bind_frame hΦ (opTableN_local _) (.appR (.val (.lam _)) .hole) (fun E => E = PMap.empty)
+    (ResU.comp_empty_right σ) hcσ' hloop rfl ?_
+  rintro k₂ hk₂ ls₂ st ρ' E σ'' hcρ hst rfl hc₂ hv₂
+  obtain rfl := ResU.CompS.functional hcρ (ResU.comp_empty_right ρ')
+  rw [arrLen_of_bound hN] at hst
+  obtain ⟨acc, rfl, ρ₁, ρ₂, hc', hacc, ρd, ρs, hcr, htodo, hsl', -⟩ := hst
+  rw [Nat.sub_self] at hsl'
+  obtain ⟨rfl, -⟩ := hsl'
+  rw [ResU.CompS.functional hcr (ResU.comp_empty_right ρd)] at hc'
+  simp only [Kont.plug]
+  refine erwp_headE hΦ hQ .hole (fun μ => Head.beta μ _ _) rfl ?_
+  refine erwp_headE hΦ hQ .hole (fun μ => Head.letpair μ acc (Val.pair (Val.arr ℓ N) s) _) rfl ?_
+  simp [subst_shift_succ, closed_subst unitF_closed, closed_shift unitF_closed]
+  refine erwp_headE hΦ hQ .hole (fun μ => Head.letpair μ (Val.arr ℓ N) s _) rfl ?_
+  simp [subst_shift_succ, closed_subst unitF_closed, closed_shift unitF_closed,
+    closed_subst (arr_closed ℓ N), closed_shift (arr_closed ℓ N)]
+  -- `drop` the emptied array, framing the accumulator
+  have hcd : ConsistentX c ρd := consistentX_right hc' hc₂ hv₂
+  refine erwp_bind_frame hΦ (opTableN_local _) (.appR (.val (.lam _)) .hole)
+    (e := .app (.val (.prim .drop)) (.val (Val.pair unitF (Val.arr ℓ N))))
+    (P := vPostN (ℍ := ℍ) .unit δ Θ) (fun A => A = ρ₁)
+    (ResU.CompS.comm hc') hc₂ ?_ rfl ?_
+  · refine erwp_headE hΦ (vPostN_down (ℍ := ℍ) .unit δ Θ) .hole
+      (fun μ => Head.drop μ unitF ℓ N) rfl ?_
+    exact dropFill_wpN hΘ unitF ℓ (dropU_sem δ Θ k₂) N.toNat 0 k₂ ls₂ ρd c le_rfl hcd
+      (by simpa using todo_doneN (ℍ := ℍ) (δ := δ) (Θ := Θ) (j := k₂) htodo)
+  rintro k₃ hk₃ ls₃ u τ₁ A τ hcτ ⟨rfl, rfl⟩ rfl _ _
+  simp only [Kont.plug]
+  refine erwp_headE hΦ hQ .hole (fun μ => Head.beta μ _ Val.unit) rfl ?_
+  simp [subst_shift_succ]
+  rw [eq_of_compS_empty_left hcτ]
+  exact erwp_val (vN_le hk₃ hacc)
+
+end Arr2
+
+/-! ### The traversal's spec, by induction on `P` (Core's `trav_spec`) -/
+
+section Trav
+variable (ks : List Bnd) (G : Algs) (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (Nb : Nat)
+
+/-- **The call of the `μ` key `B :: Bs`** (Core's `HS`). -/
+def HSN (s : Val) (B : VTy) (Bs : Stack) (n K : Nat) : Prop :=
+  ∀ w χ j ls, j ≤ Nb → sizeOf w.1 ≤ K → vN (ℍ := ℍ) (closedOf B Bs) δ Θ j w χ → dsize χ ≤ n →
+    ConsistentX c χ →
+    erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN (G.Res (B :: Bs)) δ Θ) j ls
+      (.app (.val s) (.val (tagV (ks.idxOf (.mu (B :: Bs))) w))) χ
+
+/-- **The environment of handles** (Core's `IHL`). -/
+def IHLN (s : Val) (n K r : Nat) : Prop :=
+  ∀ B Bs, .mu (B :: Bs) ∈ ks → Anc ks (B :: Bs) → ∀ n' K', Lt3 n' K' (sizeOf B) n K r →
+    HSN (ℍ := ℍ) ks G δ Θ c Nb s B Bs n' K'
+
+/-- The array keys' algebras through the handle (Core's `AH`). -/
+def AHN (s : Val) : Prop :=
+  ∀ Bs S, .arr Bs S ∈ ks → ∀ j ls x ρ, j ≤ Nb →
+    vN (ℍ := ℍ) (.sum .unit (.tensor (G.ResA Bs S) (resO G Bs S))) δ Θ j x ρ → ConsistentX c ρ →
+    erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN (G.ResA Bs S) δ Θ) j ls
+      (.app (.val s) (.val (tagV (ks.idxOf (.arr Bs S)) x))) ρ
+
+theorem IHLN.down {s : Val} {n K r n' : Nat} (h : IHLN (ℍ := ℍ) ks G δ Θ c Nb s n K r)
+    (hn : n' < n) (K' r' : Nat) : IHLN (ℍ := ℍ) ks G δ Θ c Nb s n' K' r' :=
+  fun B Bs hm ha n'' K'' hlt =>
+    h B Bs hm ha n'' K'' (Or.inl (by rcases hlt with h | ⟨rfl, -⟩ <;> omega))
+
+/-- A closed position: the value itself (Core's `leaf_spec`). -/
+theorem leaf_specN (hΘ : Θ.OK) (s : Val) (Bs : Stack) {A : VTy} (hA : FoldP.clB 0 A = true) (w : Val)
+    (χ : WRes) (j : Nat) (ls : List SRec) (hv : vN (ℍ := ℍ) (A.subst (env Bs)) δ Θ j w χ) :
+    erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN (resO G Bs A) δ Θ) j ls
+      (.app (.app (.val (trav ks Bs A)) (.val s)) (.val w)) χ := by
+  refine travOf_appN (LocTy.view_down hΘ.1 c) (vPostN_down _ δ Θ) _ s w ?_
+  rw [tE_leaf ks Bs hA]
+  have e : ((Expr.var 0).subst 1 (s.shift 1 0)).subst 0 w = .val w := by simp [Expr.subst]
+  rw [e, resO_leaf G Bs hA]
+  rw [VTy.subst_closed0 ((clB_iff 0 A).mp hA)] at hv
+  exact erwp_val hv
+
+/-- **The generic owned traversal**, by induction on the position `A ∈ P` (Core's `trav_spec`). -/
+theorem trav_specN (hΘ : Θ.OK) (s : Val) (hAH : AHN (ℍ := ℍ) ks G δ Θ c Nb s) :
+    ∀ (A : VTy) (Bs : Stack) (n K r : Nat), IHLN (ℍ := ℍ) ks G δ Θ c Nb s n K r →
+      P Bs.length A → sizeOf A ≤ r → Anc ks Bs → (∀ b ∈ keysIn Bs A, b ∈ ks) →
+      ∀ w χ j ls, j ≤ Nb → sizeOf w.1 ≤ K → (Hd A ∨ sizeOf w.1 < K) →
+        vN (ℍ := ℍ) (A.subst (env Bs)) δ Θ j w χ → dsize χ ≤ n → ConsistentX c χ →
+        erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN (resO G Bs A) δ Θ) j ls
+          (.app (.app (.val (trav ks Bs A)) (.val s)) (.val w)) χ
+  | .tvar i, Bs, n, K, r, hI, hP, _, hA, _, w, χ, j, ls, hj, _, hhd, hv, hn, hc => by
+      have hi : i < Bs.length := hP
+      have hlt : sizeOf w.1 < K := by
+        rcases hhd with h | h
+        · rcases h with h | h
+          · exact absurd h (Nat.not_lt_zero _)
+          · exact h.elim
+        · exact h
+      have e := List.drop_eq_getElem_cons hi
+      set B' := Bs[i]
+      set Bs' := Bs.drop (i + 1)
+      have hm : Bnd.mu (B' :: Bs') ∈ ks := e ▸ hA i hi
+      have ha : Anc ks (B' :: Bs') := e ▸ anc_drop hA i
+      have hH := hI B' Bs' hm ha n (sizeOf w.1) (Or.inr ⟨rfl, Or.inl hlt⟩)
+      refine travOf_appN (LocTy.view_down hΘ.1 c) (vPostN_down _ δ Θ) _ s w ?_
+      simp only [tE]
+      rw [callE_subst ks _ s w, e]
+      have hv' : vN (ℍ := ℍ) (closedOf B' Bs') δ Θ j w χ := by
+        rw [← env_drop Bs i B' Bs' e]; exact hv
+      simp only [resO, e]
+      exact hH w χ j ls hj le_rfl hv' hn hc
+  | .tensor A₁ A₂, Bs, n, K, r, hI, hP, hr, hA, hk, w, χ, j, ls, hj, hK, _, hv, hn, hc => by
+      by_cases hcl : FoldP.clB 0 (.tensor A₁ A₂) = true
+      · exact leaf_specN ks G δ Θ c hΘ s Bs hcl w χ j ls hv
+      have hΦ := LocTy.view_down hΘ.1 c
+      obtain ⟨v₁, v₂, χ₁, χ₂, rfl, hcχ, h₁, h₂⟩ := hv
+      have hs₁ : sizeOf v₁.1 < K := by rw [sizeOf_pair] at hK; omega
+      have hs₂ : sizeOf v₂.1 < K := by rw [sizeOf_pair] at hK; omega
+      have hr₁ : sizeOf A₁ ≤ r := by simp at hr; omega
+      have hr₂ : sizeOf A₂ ≤ r := by simp at hr; omega
+      have hk₁ : ∀ b ∈ keysIn Bs A₁, b ∈ ks := fun b h => hk b (by simp [keysIn, h])
+      have hk₂ : ∀ b ∈ keysIn Bs A₂, b ∈ ks := fun b h => hk b (by simp [keysIn, h])
+      have ht₁ := trav_closed ks Bs A₁
+      have ht₂ := trav_closed ks Bs A₂
+      refine travOf_appN hΦ (vPostN_down _ δ Θ) _ s _ ?_
+      simp only [tE, if_neg hcl]
+      rw [FoldP.tensor_subst _ _ s v₁ v₂ ht₁ ht₂]
+      refine erwp_headE hΦ (vPostN_down _ δ Θ) .hole (fun μ => Head.letpair μ v₁ v₂ _) rfl ?_
+      simp only [Kont.plug]
+      rw [FoldP.tensor_body _ _ s v₁ v₂ ht₁ ht₂]
+      simp only [resO, if_neg hcl]
+      refine erwp_of_valid fun hvχ => ?_
+      refine erwp_bind_frame hΦ (opTableN_local _)
+        (.appR (.val (.lam (bindE (.app (.app (.val (trav ks Bs A₂)) (.val (s.shift 1 0)))
+          (.val (v₂.shift 1 0))) (.pair (.var 1) (.var 0))))) .hole)
+        (fun X => X = χ₂) hcχ hc
+        (trav_specN hΘ s hAH A₁ Bs n K r hI hP.1 hr₁ hA hk₁ v₁ χ₁ j ls hj (le_of_lt hs₁)
+          (Or.inr hs₁) h₁ (le_trans (dsize_le_left hcχ) hn) (consistentX_left hcχ hc hvχ)) rfl ?_
+      rintro k₁ hk₁ ls₁ r₁ σ₁ X σ hcσ hr₁' rfl hcσ' hvσ
+      simp only [Kont.plug]
+      refine erwp_headE hΦ (vPostN_down _ δ Θ) .hole (fun μ => Head.beta μ _ r₁) rfl ?_
+      rw [FoldP.tensor_body₂ _ s v₂ r₁ ht₂]
+      refine erwp_bind_frame hΦ (opTableN_local _)
+        (.appR (.val (.lam (.pair (.val (r₁.shift 1 0)) (.var 0)))) .hole)
+        (fun Y => Y = σ₁) (ResU.CompS.comm hcσ) hcσ'
+        (trav_specN hΘ s hAH A₂ Bs n K r hI hP.2 hr₂ hA hk₂ v₂ X k₁ ls₁ (hk₁.trans hj)
+          (le_of_lt hs₂) (Or.inr hs₂) (vN_le hk₁ h₂) (le_trans (dsize_le_right hcχ) hn)
+          (consistentX_right hcσ hcσ' hvσ)) rfl ?_
+      rintro k₂ hk₂ ls₂ r₂ τ₁ Y τ hcτ hr₂' rfl _ _
+      simp only [Kont.plug]
+      refine erwp_headE hΦ (vPostN_down _ δ Θ) .hole (fun μ => Head.beta μ _ r₂) rfl ?_
+      rw [tensor_body₃]
+      exact erwp_val ⟨r₁, r₂, Y, τ₁, rfl, ResU.CompS.comm hcτ, vN_le hk₂ hr₁', hr₂'⟩
+  | .sum A₁ A₂, Bs, n, K, r, hI, hP, hr, hA, hk, w, χ, j, ls, hj, hK, _, hv, hn, hc => by
+      by_cases hcl : FoldP.clB 0 (.sum A₁ A₂) = true
+      · exact leaf_specN ks G δ Θ c hΘ s Bs hcl w χ j ls hv
+      have hΦ := LocTy.view_down hΘ.1 c
+      have hr₁ : sizeOf A₁ ≤ r := by simp at hr; omega
+      have hr₂ : sizeOf A₂ ≤ r := by simp at hr; omega
+      have hk₁ : ∀ b ∈ keysIn Bs A₁, b ∈ ks := fun b h => hk b (by simp [keysIn, h])
+      have hk₂ : ∀ b ∈ keysIn Bs A₂, b ∈ ks := fun b h => hk b (by simp [keysIn, h])
+      have ht₁ := trav_closed ks Bs A₁
+      have ht₂ := trav_closed ks Bs A₂
+      refine travOf_appN hΦ (vPostN_down _ δ Θ) _ s _ ?_
+      simp only [tE, if_neg hcl]
+      rw [FoldP.sum_subst _ _ s w ht₁ ht₂]
+      simp only [resO, if_neg hcl]
+      rcases hv with ⟨v, rfl, hv⟩ | ⟨v, rfl, hv⟩
+      · have hsz : sizeOf v.1 < K := by
+          have : sizeOf (Val.inj₁ v).1 = 1 + sizeOf v.1 := rfl
+          omega
+        refine erwp_headE hΦ (vPostN_down _ δ Θ) .hole (fun μ => Head.case₁ μ v _ _) rfl ?_
+        simp only [Kont.plug]
+        rw [FoldP.sum_branch _ s v ht₁ Expr.inj₁ (fun _ _ _ => rfl)]
+        refine erwp_bind_frame hΦ (opTableN_local _) (.appR (.val (.lam (Expr.inj₁ (.var 0)))) .hole)
+          (fun E => E = PMap.empty) (ResU.comp_empty_right χ) hc
+          (trav_specN hΘ s hAH A₁ Bs n K r hI hP.1 hr₁ hA hk₁ v χ j ls hj (le_of_lt hsz)
+            (Or.inr hsz) hv hn hc) rfl ?_
+        rintro k' _ ls' r' σ₁ E σ hcσ hr' rfl _ _
+        obtain rfl := ResU.CompS.functional hcσ (ResU.comp_empty_right σ₁)
+        simp only [Kont.plug]
+        refine erwp_headE hΦ (vPostN_down _ δ Θ) .hole (fun μ => Head.beta μ _ r') rfl ?_
+        exact erwp_val (v := Val.inj₁ r') (.inl ⟨r', rfl, hr'⟩)
+      · have hsz : sizeOf v.1 < K := by
+          have : sizeOf (Val.inj₂ v).1 = 1 + sizeOf v.1 := rfl
+          omega
+        refine erwp_headE hΦ (vPostN_down _ δ Θ) .hole (fun μ => Head.case₂ μ v _ _) rfl ?_
+        simp only [Kont.plug]
+        rw [FoldP.sum_branch _ s v ht₂ Expr.inj₂ (fun _ _ _ => rfl)]
+        refine erwp_bind_frame hΦ (opTableN_local _) (.appR (.val (.lam (Expr.inj₂ (.var 0)))) .hole)
+          (fun E => E = PMap.empty) (ResU.comp_empty_right χ) hc
+          (trav_specN hΘ s hAH A₂ Bs n K r hI hP.2 hr₂ hA hk₂ v χ j ls hj (le_of_lt hsz)
+            (Or.inr hsz) hv hn hc) rfl ?_
+        rintro k' _ ls' r' σ₁ E σ hcσ hr' rfl _ _
+        obtain rfl := ResU.CompS.functional hcσ (ResU.comp_empty_right σ₁)
+        simp only [Kont.plug]
+        refine erwp_headE hΦ (vPostN_down _ δ Θ) .hole (fun μ => Head.beta μ _ r') rfl ?_
+        exact erwp_val (v := Val.inj₂ r') (.inr ⟨r', rfl, hr'⟩)
+  | .ref S, Bs, n, K, r, hI, hP, hr, hA, hk, w, χ, j, ls, hj, _, _, hv, hn, hc => by
+      by_cases hcl : FoldP.clB 0 (.ref S) = true
+      · exact leaf_specN ks G δ Θ c hΘ s Bs hcl w χ j ls hv
+      have hcl' : ¬ FoldP.clB 0 S = true := hcl
+      have hΦ := LocTy.view_down hΘ.1 c
+      have hrS : sizeOf S ≤ r := by simp at hr; omega
+      have htS := trav_closed ks Bs S
+      obtain ⟨ℓ, v', ρb, rfl, hc', hM⟩ := hv
+      have hlt : dsize ρb < n :=
+        lt_of_lt_of_le (dsize_tail_lt hc' ⟨PMap.empty, ResU.comp_empty_right _⟩) hn
+      refine travOf_appN hΦ (vPostN_down _ δ Θ) _ s _ ?_
+      simp only [tE, if_neg hcl']
+      rw [FoldP.ref_subst _ s _ htS]
+      refine erwp_of_valid fun hvχ => ?_
+      refine erwp_free hΦ (opTableN_local _) _ ℓ v' ⟨_, ρb, hc', rfl, ?_⟩
+      simp only [Kont.plug]
+      refine erwp_headE hΦ (vPostN_down _ δ Θ) .hole (fun μ => Head.beta μ _ v') rfl ?_
+      rw [FoldP.ref_body _ s v' htS]
+      simp only [resO, if_neg hcl']
+      exact trav_specN hΘ s hAH S Bs (dsize ρb) (sizeOf v'.1 + 1) r
+        (IHLN.down ks G δ Θ c Nb hI hlt _ _) hP hrS hA hk v' ρb (j - 1) ls
+        (le_trans (Nat.sub_le j 1) hj) (Nat.le_succ _) (Or.inr (Nat.lt_succ_self _))
+        (vN_le (Nat.sub_le j 1) hM) le_rfl (consistentX_right hc' hc hvχ)
+  | .fam (.ref S), Bs, n, K, r, hI, hP, hr, hA, hk, w, χ, j, ls, hj, _, _, hv, hn, hc => by
+      by_cases hcl : FoldP.clB 0 S = true
+      · exact leaf_specN ks G δ Θ c hΘ s Bs (A := .fam (.ref S)) hcl w χ j ls hv
+      have hrS : sizeOf S ≤ r := by simp at hr; omega
+      have hmA : Bnd.arr Bs S ∈ ks := hk _ (by simp [keysIn, hcl])
+      have hk' : ∀ b ∈ keysIn Bs S, b ∈ ks := fun b h => hk b (by simp [keysIn, hcl, h])
+      simp only [trav, tE, if_neg hcl, resO]
+      exact arr_specN hΘ (ks.idxOf (.arr Bs S)) (trav_closed ks Bs S)
+        (fun v ρ j' ls' hj' hv' hlt hcρ => trav_specN hΘ s hAH S Bs (dsize ρ) (sizeOf v.1 + 1) r
+          (IHLN.down ks G δ Θ c Nb hI (lt_of_lt_of_le hlt le_rfl) _ _) hP hrS hA hk' v ρ j' ls' hj'
+          (Nat.le_succ _) (Or.inr (Nat.lt_succ_self _)) hv' le_rfl hcρ)
+        (hAH Bs S hmA) w χ j ls hj hv hn hc
+  | .mu B, Bs, n, K, r, hI, _, hr, hA, hk, w, χ, j, ls, hj, hK, _, hv, hn, hc => by
+      by_cases hcl : FoldP.clB 0 (.mu B) = true
+      · exact leaf_specN ks G δ Θ c hΘ s Bs hcl w χ j ls hv
+      have hm : Bnd.mu (B :: Bs) ∈ ks := hk _ (by simp [keysIn, hcl])
+      have hrB : sizeOf B < r := by simp at hr; omega
+      have hH := hI B Bs hm (anc_cons hm hA) n K (Or.inr ⟨rfl, Or.inr ⟨rfl, hrB⟩⟩)
+      refine travOf_appN (LocTy.view_down hΘ.1 c) (vPostN_down _ δ Θ) _ s w ?_
+      simp only [tE, if_neg hcl]
+      rw [callE_subst ks _ s w]
+      simp only [resO, if_neg hcl]
+      exact hH w χ j ls hj hK hv hn hc
+  | .unit, Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .zero, Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .thunk _, Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .imm _ _, Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .mut _ _, Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .box _ _, Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .bang _, Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .unk, Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .int _, Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .opq _, Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .fam .unit, Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .fam (.tensor _ _), Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .fam .zero, Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .fam (.sum _ _), Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .fam (.thunk _), Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .fam (.imm _ _), Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .fam (.mut _ _), Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .fam (.box _ _), Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .fam (.bang _), Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .fam .unk, Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .fam (.tvar _), Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .fam (.mu _), Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .fam (.int _), Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .fam (.fam _), Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .fam (.opq _), Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _ =>
+      leaf_specN ks G δ Θ c hΘ s Bs (by exact (clB_iff 0 _).mpr hP) w χ j ls hv
+
+#exit
