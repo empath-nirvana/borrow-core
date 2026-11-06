@@ -124,6 +124,25 @@ def IRaiseFold (l : Loc) (v : Val) (ρP ρlP : WRes) (A : Life) (houtP : ρP.InS
       (∀ ψ : CellU Loc Val, R.get l = some ψ → ψ.kind ≠ Kind.imm) → Ext ls'' ls R) →
     ∃ ρ'L ρpL, ResU.CompS ρ'L ρpL Y ∧ NoOwn ρpL ∧ RO k ls t Ψ' ρ'L
 
+/-- **The Imm Frame builds no stop outside `Sched`**: when the borrowed table's resuming entries
+are at names in `Sched` (the restriction's (S1)), `IFoldTwin` holds of the part of the lender's
+table at those names and its raises (`OpTabK.schedPart`). -/
+theorem OpTabK.IFoldTwin.schedPart {Inv : ι → Prop} {lo lo' : Life} {Ti To : OpTabK ι} {l : Loc}
+    {A : Life} {v : Val} {ρP ρlP : WRes} {houtP : ρP.InStratum A}
+    (h : Ti.IFoldTwin Inv lo lo' To l A v ρP ρlP houtP) {Sched : UInt32 → Prop}
+    (hS : ∀ m i en, Ti m i = some en → en.abort = false → Sched m) :
+    Ti.IFoldTwin Inv lo lo' (To.schedPart Sched) l A v ρP ρlP houtP := by
+  classical
+  intro m i en hTe
+  obtain ⟨en', hTe', h₁, h₂, h₃, h₄, h₅, h₆⟩ := h m i en hTe
+  refine ⟨en', ?_, h₁, h₂, h₃, h₄, h₅, h₆⟩
+  unfold OpTabK.schedPart
+  rw [hTe']
+  simp only
+  rw [if_neg]
+  rintro ⟨ha, hn⟩
+  exact hn (hS m i en hTe (h₂ ▸ ha))
+
 /-! ### The fold at a stop -/
 
 /-- **`iFold`, with the fold's resource a part of `π`**: `ρ_a ● Xᵢ = π`, so `Xᵢ` is valid where

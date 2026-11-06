@@ -126,6 +126,24 @@ theorem OpTabK.RebTwin.twin {Inv : ι → Prop} {lo lo' : Life} {Ti To : OpTabK 
   obtain ⟨en', h₁, h₂, h₃, h₄, h₅, h₆, -⟩ := h m i en hTe
   exact ⟨en', h₁, h₂, h₃, h₄, h₅, h₆⟩
 
+/-- **The reborrow frame builds no stop outside `Sched`**: when the borrowed table's resuming
+entries are at names in `Sched` (the restriction's (S1)), `RebTwin` holds of the part of the
+lender's table at those names and its raises (`OpTabK.schedPart`). -/
+theorem OpTabK.RebTwin.schedPart {Inv : ι → Prop} {lo lo' : Life} {Ti To : OpTabK ι} {β : Life}
+    {ρi χ R : WRes} {Pv : WRes → WRes → Prop} (h : Ti.RebTwin Inv lo lo' To β ρi χ R Pv)
+    {Sched : UInt32 → Prop} (hS : ∀ m i en, Ti m i = some en → en.abort = false → Sched m) :
+    Ti.RebTwin Inv lo lo' (To.schedPart Sched) β ρi χ R Pv := by
+  classical
+  intro m i en hTe
+  obtain ⟨en', hTe', h₁, h₂, h₃, h₄, h₅, h₆⟩ := h m i en hTe
+  refine ⟨en', ?_, h₁, h₂, h₃, h₄, h₅, h₆⟩
+  unfold OpTabK.schedPart
+  rw [hTe']
+  simp only
+  rw [if_neg]
+  rintro ⟨ha, hn⟩
+  exact hn (hS m i en hTe (h₂ ▸ ha))
+
 /-- **The cancel obligations across the reborrow's fold**: a cancellable stop's, the borrowed
 run's at `ρ_k`, is the lender's at `ψ ● ρᵢ`, at every resumption world. -/
 def RebCanK (Inv : ι → Prop) (Ti To : ι → OpTabK ι) (β : Life) (ρi χ R : WRes)
