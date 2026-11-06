@@ -1651,3 +1651,7 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.extR_of_addImm
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.extR_above
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.lifeBoundW_of_entry
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwp_tieDrop
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.gN_dead_any
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor1U_sem
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor1U_compatN

@@ -25,8 +25,12 @@ order `LocTy.ExtR`, which departs from Core's `Ext` (`scope-791-loctype.md` §10
 
 The world also holds its `imm` records, each with the lifetime it was lent at (`LocTy.imm`,
 Core's record list moved into the world); `vN`'s `Imm` clause reads its witnesses there. A lend of
-a `mut` cell leaves them alone, `LocTy.above` keeps them whole, and the Kripke orders keep every
-one (`LocTy.ImmLe`).
+a `mut` cell leaves them alone; `LocTy.above` keeps the records lent strictly above its lifetime
+(Core's `ls₀`); the world-relative order keeps every record (`LocTy.ImmLe`), the resource-relative
+one the records relevant to the resource (`LocTy.Keeps`, Core's `Keeps`). An `imm` lend adds its
+record (`LocTy.addImm`); at a resource in the lend's stratum the world with it and the world
+without it are extensions of each other (`LocTy.extR_addImm`, `LocTy.extR_of_addImm`: Core's
+`ext_add`, `ext_drop`).
 
 ## Its view at a run
 
@@ -242,8 +246,8 @@ theorem mutL_add {Θ : LocTy} {α : Life} (hf : Θ.Fresh α) (l₀ : Loc)
     (LocTy.above_add Θ l₀ (not_lt_of_gt hαa) F) n v ρ).mpr hm
 
 /-- **The Kripke order of the interpretation**: entries and `imm` records only added, and nothing
-added above any key present (an `imm` record among them, since `LocTy.above` keeps them). A lend
-at a fresh lifetime is one step of it (`LocTy.extA_add`). -/
+added above any key present (an `imm` record lent above it among them). A lend at a fresh lifetime
+is one step of it (`LocTy.extA_add`). -/
 def LocTy.ExtA (Θ Θ' : LocTy) : Prop :=
   Θ.Ext Θ' ∧ (∀ l a, Θ l a ≠ none → Θ'.above a = Θ.above a) ∧ Θ.ImmLe Θ'
 
