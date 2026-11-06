@@ -824,6 +824,24 @@ theorem LocTy.ok_add {Θ : LocTy} (hΘ : Θ.OK) (l : Loc) {A : Life}
   obtain ⟨N, hN, hfr⟩ := LocTy.exists_fresh hΘ.2 (↓A)
   exact ⟨N, LocTy.fresh_add hfr le_rfl (lt_of_le_of_lt hN (Life.down_sqsubset A)) l F⟩
 
+/-- A lifetime below a bound and strictly below every lifetime of a list of records. -/
+theorem exists_below_imm (a : Life) : ∀ (L : List SRec), ∃ A, A ≤ a ∧ ∀ x ∈ L, A < x.2
+  | [] => ⟨a, le_rfl, fun _ h => by cases h⟩
+  | x :: L => by
+      obtain ⟨A, hA, hL⟩ := exists_below_imm a L
+      refine ⟨min A (↓x.2), le_trans (min_le_left _ _) hA, fun z hz => ?_⟩
+      rcases List.mem_cons.mp hz with rfl | hz
+      · exact lt_of_le_of_lt (min_le_right _ _) (Life.down_sqsubset _)
+      · exact lt_of_le_of_lt (min_le_left _ _) (hL z hz)
+
+/-- **A lend can be taken where its frame can be re-entered**: below any bound, a bounded world has
+a lifetime `A` with `FoldInv A` (fresh, and no `imm` record lent at `A`). -/
+theorem LocTy.exists_foldInv {Θ : LocTy} (hB : Θ.Bounded) (a : Life) :
+    ∃ A, A ≤ a ∧ Θ.FoldInv A := by
+  obtain ⟨α, hα, hfr⟩ := LocTy.exists_fresh hB a
+  obtain ⟨A, hA, hI⟩ := exists_below_imm α Θ.imm
+  exact ⟨A, le_trans hA hα, LocTy.fresh_le hfr hA, fun x hx => ne_of_gt (hI x hx)⟩
+
 /-- **The lend's view is consistent with the borrowed share** when the lender's view is consistent
 with the lender's share, at a fold at `ℓ` with both resources valid: the borrowed share is part
 of `Z = Z/ℓ ● ℓ ↦ mut(A, v, χ)`, `Z/ℓ` and `χ` parts of the lender's share, and the view at `ℓ` is
@@ -887,6 +905,38 @@ theorem foldTwin_owed {x : KW} {l : Loc} {A : Life} {F : Nat → Val → SPropS 
   obtain ⟨h, hyA⟩ := kw_owed_foldAt hF hx hf (min_le_left _ _) hZ hZl hW'' hkL hvZ hvkL
     (hout _ _ _ hy)
   exact ⟨hin _ _ _ h, hyA⟩
+
+/-- **Why `KW.Owed` keeps `FoldInv` at every floor at or above the stop's.** The lender's world
+`x` holds an `imm` record at `B` and satisfies `FoldInv A`, `B < A`; a key at `C < B` is added.
+That world is owed by a stop at the floor `B` under the clause that keeps `FoldInv B` alone, which
+is vacuous at `x`; there `FoldInv A` fails, so a frame at `A` could not be re-entered. `KW.Owed`
+does not owe it. -/
+theorem owed_keeps_foldInv_above {A B C : Life} (hBA : B < A) (hCB : C < B) (r : FrameRec)
+    (c : Loc → Option Life) (lo : Life) :
+    let G : Nat → Val → SPropS Loc Val C := fun _ _ _ => True
+    let x : KW := ⟨LocTy.empty.addImm (r, B), c, lo⟩
+    let y : KW := ⟨x.Θ.add 1 C G, c, lo⟩
+    x.Θ.FoldInv A ∧
+      (x.Θ.ExtP B y.Θ PMap.empty ∧ y.Θ.OK ∧ ConsistentX y.c PMap.empty ∧ y.lo ≤ x.lo ∧
+        (x.Θ.FoldInv B → y.Θ.FoldInv B)) ∧
+      ¬ y.Θ.FoldInv A ∧ ¬ x.Owed B y PMap.empty := by
+  intro G x y
+  have hG : DownFam C G := fun _ _ _ _ => trivial
+  have hxA : x.Θ.FoldInv A := ⟨fun _ _ h => absurd rfl h, fun z hz => by
+    simp only [x, LocTy.addImm_imm, LocTy.empty_imm, List.mem_singleton] at hz
+    subst hz; exact ne_of_lt hBA⟩
+  have hyA : ¬ y.Θ.FoldInv A := fun h => by
+    have := h.1 1 C (by simp [y, LocTy.add_self])
+    exact absurd (lt_trans this (lt_trans hCB hBA)) (lt_irrefl _)
+  have hxOK : x.Θ.OK := ⟨fun _ _ _ h => by simp [x] at h, ⟨C, fun _ _ h => absurd rfl h⟩⟩
+  refine ⟨hxA, ⟨⟨⟨fun _ _ _ h _ => ?_, fun _ _ hc => ?_⟩, fun l₀ b hb => ?_, rfl⟩,
+    LocTy.ok_add hxOK 1 hG, consistentX_empty c, le_rfl, fun h => ?_⟩, hyA,
+    fun h => hyA (h.2.2.2.2 A hBA.le hxA)⟩
+  · simp [x] at h
+  · obtain ⟨m, φ, e, -⟩ := hc
+    cases e
+  · exact LocTy.add_keep _ _ _ _ (ne_of_gt (lt_trans hCB hb))
+  · exact absurd (h.2 (r, B) (by simp [x])) (fun h' => h' rfl)
 
 end BoCa.Fig16.LogRel.Core.Chain.SI
 

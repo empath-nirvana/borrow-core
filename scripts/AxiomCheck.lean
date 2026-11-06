@@ -2054,3 +2054,6 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpK_M_frameTF
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_M_frameTF_of_K
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpK_M_frameCR_KW
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.owed_keeps_foldInv_above
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.exists_below_imm
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.exists_foldInv

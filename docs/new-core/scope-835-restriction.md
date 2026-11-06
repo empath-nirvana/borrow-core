@@ -42,8 +42,8 @@ At `erwpK` (by reading; the handlers are a later unit):
 - A tail clause resumes `κ` at the world its answering function's value is posted at.
 - A post keeps the location typing and the view and may only lower the floor (`KW.Post`).
 - `KW.owed_of_post` (Lean) shows that such a world is owed **at every floor the stop could have
-  chosen**. `KW.Owed` keeps `FoldInv f` ("if it held at the stop, it holds here") rather than
-  asking for it, so a handler resuming in place needs no knowledge of `f`. The view premise
+  chosen**. `KW.Owed` keeps `FoldInv g` at every `g ≥ f` ("if it held at the stop, it holds
+  here") rather than asking for it, so a handler resuming in place needs no knowledge of `f`. The view premise
   `ConsistentX` at `κ`'s share is what `erwp_consistentPA` gives today.
 - A last clause's work and exit are the same, and its cancel is at the entry's own obligation.
 
@@ -204,7 +204,8 @@ Built (`ErwpK.lean`, `Restrict835N.lean`, all in `scripts/AxiomCheck.lean`, axio
     post order they ask for the same location family and a table allowing no more stops.
 - **The typed world `KW`** (`Θ`, `c`, `lo`):
   - `KW.Post` (same `Θ` and `c`, a floor no higher);
-  - `KW.Owed` (`ExtP f`, `Θ.OK`, a consistent view, a floor no higher, `FoldInv f` kept), with
+  - `KW.Owed` (`ExtP f`, `Θ.OK`, a consistent view, a floor no higher, `FoldInv g` kept at every
+    `g ≥ f`; `scope-835-mframes.md` §3 says why every `g`), with
     `KW.owed_self`, `KW.owed_of_post`, `KW.Owed.trans` and `KW.Owed.foldInv`;
   - `kw_owed_fold`: the Mut Frame's fold premise, from `KW.Owed` at the lend's floor.
 - **The restriction**: `Row.SchedOnly`, `Expr.HndAvoids` (at `Expr.hin`), `Const791.SchedOK` and

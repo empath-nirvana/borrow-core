@@ -92,7 +92,9 @@ The brief's three items are (a), (b) and (c). The spike shows the stop needs two
      resumption world, so it needs `FoldInv A` there too.
    - `ExtP` at `A` does not keep it: a key at `A` itself is a public move at floor `A`
      (`extP_not_foldInv`, a configuration checked in Lean).
-   - So under a live lend the lender's `wk` is `ExtP A x y ρ ∧ FoldInv A y`.
+   - So under a live lend the lender's `wk` is `ExtP A x y ρ ∧ FoldInv A y`. Under nested lends
+     the stop's floor is the innermost lend's, so `KW.Owed` keeps `FoldInv` at every floor at or
+     above the stop's (`scope-835-mframes.md` §3).
    - In [DNB] terms, the lender's island still holds `A`, so no other island may claim it.
 
 ## 2. Producers and consumers
