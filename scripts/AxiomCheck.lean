@@ -1536,3 +1536,7 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ConsistentFlat791.flat_part_config
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cbRelease_sem
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.answer_not_inStratum
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ExtRLit791.vN_eq_vUgen
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ExtRLit791.valid_at_empty
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ExtRLit791.not_valid_at_lend
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ExtRLit791.extRL_breaks_extA

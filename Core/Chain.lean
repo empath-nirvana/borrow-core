@@ -90,3 +90,4 @@ import Core.Chain.Lend791N
 import Core.Chain.Shape791N
 import Core.Chain.LocTypeSketch
 import Core.Chain.ConsistentFlat791
+import Core.Chain.ExtRLit791
