@@ -58,11 +58,12 @@ def OpTabK.SealTwin (Inv : ι → Prop) (lo lo' : Life) (Ti To : OpTabK ι) (l :
       ∀ f, f ≤ lo → ∃ f', f' ≤ lo' ∧ ∀ y, en'.wk f' y ρk' → en.wk f y ρk ∧ Inv y)
 
 /-- **The cancel obligations across the seal**: a cancellable stop's, the callback's at every
-opening of the sealed share, is the anti-frame's at the sealed share, at every resumption world. -/
+opening of the sealed share, is the anti-frame's at the sealed share, at every resumption world
+where `Inv` holds (the frame re-enters only there). -/
 def ASealCan (Inv : ι → Prop) (Ti To : ι → OpTabK ι) (l : Loc) (β : Life)
     (F : Nat → Val → SPropS Loc Val β) : Prop :=
   ∀ x, Inv x → ∀ m i en en', Ti x m i = some en → To x m i = some en' → en.abort = false →
-    en.q ≠ .lin → ∀ y k ls (K : Kont) (w : Val) (σ : WRes) (h : σ.InStratum β)
+    en.q ≠ .lin → ∀ y, Inv y → ∀ k ls (K : Kont) (w : Val) (σ : WRes) (h : σ.InStratum β)
       (hw : F k w ⟨σ, h⟩) (R ρk' : WRes),
       ResU.CompS (ResU.single l (CellU.mutOf β w σ h (F k) hw)) R ρk' →
       (∀ W X, ResU.CompS σ (ResU.single l (CellU.ownOf w)) W → ResU.CompS R W X →
@@ -212,9 +213,9 @@ theorem erwpK_M_antiFrameGen {V : ι → ι → Prop} {Φ : ι → LocFam} {Inv 
       simp only [erwpCK, show k' < n by omega, if_true] at hc
       exact hc
     · -- a cancellable stop: the cancel obligation is the anti-frame's, at the resumption world
-      obtain ⟨hyi, -⟩ := hwk' y hy
+      obtain ⟨hyi, hyInv⟩ := hwk' y hy
       have hql' : en.q ≠ .lin := hq' ▸ hql
-      refine hcan x hx m i en en' hTe hTe' ha hql' y k ls'' K w σ' h' hw' R ρk'
+      refine hcan x hx m i en en' hTe hTe' ha hql' y hyInv k ls'' K w σ' h' hw' R ρk'
         (ResU.CompS.comm hRk) fun W X₀ hW hX₀ => ?_
       obtain rfl : X₀ = ρk := by
         have h0 := seal_back hk1 hk2 PMap.empty R X₀ W (ResU.comp_empty_right R) hW hX₀
@@ -249,7 +250,7 @@ theorem asealCan_lift {T T' : OpTabN} {l : Loc} {β : Life} {F : Nat → Val →
           cancelOKN en k ls K X) →
         cancelOKN en' k ls K ρk') :
     ASealCan (fun _ : Unit => True) (fun _ => liftTabK T) (fun _ => liftTabK T') l β F := by
-  intro _ _ m i en en' hT hT' ha hq _ k ls K w σ h hw R ρk' hRk hX
+  intro _ _ m i en en' hT hT' ha hq _ _ k ls K w σ h hw R ρk' hRk hX
   obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some hT
   obtain ⟨en₀', h₀', rfl⟩ := liftTabK_some hT'
   exact (cancelOKK_liftEntK en₀' k ls K ρk').mpr (hcan m i en₀ en₀' h₀ h₀' ha hq k ls K w σ h hw

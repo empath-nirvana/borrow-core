@@ -90,13 +90,13 @@ theorem OpTabK.IFoldTwin.twin {Inv : ι → Prop} {lo lo' : Life} {Ti To : OpTab
   obtain ⟨en', h₁, h₂, h₃, h₄, h₅, h₆, -⟩ := h m i en hTe
   exact ⟨en', h₁, h₂, h₃, h₄, h₅, h₆⟩
 
-/-- **The cancel obligations across the `imm` fold** (`ICan` at every resumption world): a
-cancellable stop's, the borrowed run's at the frame's list and the borrowed share, is the lender's at
-the caller's list and the lender's share. -/
+/-- **The cancel obligations across the `imm` fold** (`ICan` at every resumption world where `Inv`
+holds, the only worlds the frame re-enters at): a cancellable stop's, the borrowed run's at the
+frame's list and the borrowed share, is the lender's at the caller's list and the lender's share. -/
 def ICanK (Inv : ι → Prop) (Ti To : ι → OpTabK ι) (l : Loc) (Ty : VTy) (δ : LSub) (A : Life)
     (v : Val) (ρP ρlP : WRes) (houtP : ρP.InStratum A) (ds : List FrameRec) : Prop :=
   ∀ x, Inv x → ∀ m i en en', Ti x m i = some en → To x m i = some en' → en.abort = false →
-    en.q ≠ .lin → ∀ y k lsO (K : Kont) (ρk ρp X Xi ρkL : WRes),
+    en.q ≠ .lin → ∀ y, Inv y → ∀ k lsO (K : Kont) (ρk ρp X Xi ρkL : WRes),
       NoOwn ρp → ResU.CompS ρk ρp X →
       ResU.CompS X (ResU.single l (CellU.immOf (LSet.singleton A) v ρP houtP)) Xi →
       ResU.CompS (Xi.del l) (ResU.single l (CellU.immOf (LSet.singleton A) v ρP houtP)) Xi →
@@ -297,10 +297,10 @@ theorem erwpK_I_frameGen {V : ι → ι → Prop} {Φ : ι → LocFam} {Inv : ι
       simp only [erwpCK, show k' < n by omega, if_true] at hc
       exact erwpK_garbage hXkg hg hc
     · -- a cancellable stop: the cancel obligation is the lender's, at the resumption world
-      obtain ⟨hyi, -⟩ := hwk' y hy
+      obtain ⟨hyi, hyInv⟩ := hwk' y hy
       have he' := hwcl lsO he
       have hql' : en.q ≠ .lin := hq' ▸ hql
-      exact hcan x hx m i en en' hTe hTe' ha hql' y k lsO K ρk ρp X Xi ρkL hnoρp hX hXi hXid
+      exact hcan x hx m i en en' hTe hTe' ha hql' y hyInv k lsO K ρk ρp X Xi ρkL hnoρp hX hXi hXid
         hXdA hkL ((hcont y hyi _ (hwcI lsO he')).2 hql')
   · -- a raise: no continuation is owed
     obtain ⟨ρ'L, ρpL, hc, hno, hr'⟩ := hR x hx k ls'' ls t _ (erwpCK (ℍ := ℍ) V Φ
@@ -456,7 +456,7 @@ theorem icanK_lift {T T' : OpTabN} {l : Loc} {Ty : VTy} {δ : LSub} {A : Life} {
     (hcan : ICan T T' l Ty δ A v ρP ρlP houtP ds) :
     ICanK (fun _ : Unit => True) (fun _ => liftTabK T) (fun _ => liftTabK T') l Ty δ A v ρP ρlP
       houtP ds := by
-  intro _ _ m i en en' hT hT' _ hq _ k lsO K ρk ρp X Xi ρkL hno hX hXi hXid hXdA hkL
+  intro _ _ m i en en' hT hT' _ hq _ _ k lsO K ρk ρp X Xi ρkL hno hX hXi hXid hXdA hkL
   obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some hT
   obtain ⟨en₀', h₀', rfl⟩ := liftTabK_some hT'
   intro hc

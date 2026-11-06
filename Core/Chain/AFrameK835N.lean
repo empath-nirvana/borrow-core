@@ -170,7 +170,7 @@ theorem asealCan_claimT {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {β : Life}
     ASealCan (fun _ : Unit => True)
       (fun _ => liftTabK (@OpTabN.claimT ℍ _ T Φ OpTabN.empty (claimR l β F)))
       (fun _ => liftTabK T) l β F := by
-  intro _ _ m i en en' hT' hTe ha hql _ k ls K w σ h hw R ρk' hRk hX
+  intro _ _ m i en en' hT' hTe ha hql _ _ k ls K w σ h hw R ρk' hRk hX
   obtain ⟨enI, hI, rfl⟩ := liftTabK_some hT'
   obtain ⟨enO, hO, rfl⟩ := liftTabK_some hTe
   obtain ⟨en₁, h₁, hen⟩ := claimT_some hI
