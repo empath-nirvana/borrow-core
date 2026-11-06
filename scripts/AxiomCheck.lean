@@ -1661,3 +1661,11 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor2U_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor2_sem
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor2_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.UpdVN.inStratum
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.rwpG_inStratum
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpS_erwp
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_stratify
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.gN_outlives
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabN_ansIn
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.SemCSN.semJN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.stop_semN
