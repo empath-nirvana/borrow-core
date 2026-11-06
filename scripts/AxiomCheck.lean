@@ -1858,3 +1858,11 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.unfoldN_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.candNN_post
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ExtRLit791.world_two
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_frame_plain_or
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_consistentPA
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabN_ofEff_ne
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabN_ofEff_self
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.capTag_ofEffN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.ansesTy_atN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwp_handle_tail
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.handleT_compatN
