@@ -22,8 +22,8 @@ rule of `CDerives`:
   name is not a literal may be of any name, so it is refused.
 
 The interpretation (a later unit) reads `Sched` in the row's table: an entry at a name outside
-`Sched` owes its continuation only at the floor of the world it stops at, so `[handle]` at such a
-name receives `κ` at its own floor.
+`Sched` owes its continuation along `KW.OwedR` (`LendExit835N.lean`), `ExtR` at the share with no
+floor, which is the order `vN`'s `U` reads; so `[handle]` at such a name receives `κ` at `U`.
 -/
 
 noncomputable section

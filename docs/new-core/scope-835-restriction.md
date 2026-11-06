@@ -110,10 +110,11 @@ they would be sound there.
   scheduler name".
 
 **How the interpretation reads it** (a later unit; `tabN`/`entN` at the world):
-- A row entry's order at the stop's world `x` is `KW.Owed x f y ρ`, plus `f = x.lo` when the name is
-  not in `Sched`.
+- A row entry's order at the stop's world `x` is `KW.Owed x f y ρ` when the name is in `Sched`, and
+  `KW.OwedR x y ρ` (`ExtR` at the share, no floor) when it is not (`scope-835-lendexit.md`).
 - The lend frames produce stops at `f < lo` only at rows meeting (S1). So a `[handle]` at a name
-  outside `Sched`, which (S2) guarantees, receives `κ` at its own floor, which is E10's reading.
+  outside `Sched`, which (S2) guarantees, receives `κ` owed along `ExtR`, the order `vN`'s `U`
+  reads, which is E10's reading.
 
 **Cancel rows are not restricted.** The restriction reads no cancel row.
 - A continuation captured under a live lend is caught only by the scheduler. Its cancel runs are at
@@ -231,8 +232,6 @@ reads the inner world's view, not the lender's.
 | Posts across a lend's exit (`scope-835-kripke-stop.md` §5) | 1–3 |
 | **Total** | **8–14** |
 
-`KW.Post`'s `y.lo ≤ x.lo` is §5's route 1. Under route 1, an in-program `[handle]` at a name
-outside `Sched`, around a lender that has already exited a lend, sees stops at the lender's lowered
-floor, so E10 does not reach it. Route 2, raising the floor for values whose cells lie above it,
-would make `KW.Post` keep the floor. Neither is derived. **Not derived; obstruction not verified.**
-Without that item the total is 7–11.
+Posts across a lend's exit are settled in `scope-835-lendexit.md`: with entries outside `Sched`
+owing along `KW.OwedR`, `vN` reads no floor, the exit is `vN_local` as it is today, and the item
+costs nothing further.
