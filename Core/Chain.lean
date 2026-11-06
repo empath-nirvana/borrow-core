@@ -82,5 +82,6 @@ import Core.Chain.SI.WpN
 import Core.Chain.PoolN
 import Core.Chain.PoolSpawnN
 import Core.Chain.Hardest791N
+import Core.Chain.Cancel791N
 import Core.Chain.Goal791N
 import Core.Chain.Lend791N

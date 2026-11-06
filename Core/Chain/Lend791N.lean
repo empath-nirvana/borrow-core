@@ -16,14 +16,10 @@ on the index, each case the existing one:
   obligation is the lender's (`hcan`, `erwp_M_frameT`'s case); at a `raise`, the borrow folded and
   the cell the claim the `raise` carries (`erwp_M_frameR`'s case). The lender's stops are at a
   twin table `T′`, its raises carrying the claim (`opTableR`).
-* `claimT_canX`: the lender's cancel obligations, at a twin whose cancellable entries' obligation
-  is the cancel run ending at the claim (`claimT_canS` with the twin given).
-* `erwp_ubindClaimR`: the finaliser frame around a body at `opTableR (claimT T …) R`: `[then]` at
-  a return; at a stop the frame passes outward (`erwp_ubindClaim`'s case, the cancel run through
-  `erwp_ubind_cancelRun`); at a `raise`, `[finalise]` runs `D ()`, which consumes the claim
-  (`erwp_ubindRaise`'s case).
 
-Then the compatibility of `withbor (2)` at a suspending row (`withbor2S_compat`).
+The lender's cancel obligations, the finaliser frame and the compatibility of `withbor (2)` at a
+suspending row (`withbor2S_compat`) are in `Core/Chain/Cancel791N.lean`, where each cancel run
+runs at its own cancel row's table.
 -/
 
 noncomputable section
@@ -172,148 +168,6 @@ theorem erwp_M_frameCR {Φ : LocFam} {l : Loc} {A : Life} {F : Nat → Val → S
         ⟨τa, Z.del l, hD, ⟨hPA' ▸ hPA, hnA⟩, noOwn_del hnoZ l⟩,
         v'', χ, hs, hFk, ResU.CompS.comm hW''⟩⟩)⟩
 
-/-- **The lender's cancel obligations at a twin whose cancellable entries end at the claim**
-(`claimT_canS` with the twin `T′` given): the borrowed run's cancel run at its own location
-typing `Φ[ℓ ↦ (A, F)]`, framed by `erwp_M_frame_cancelRun`. -/
-theorem claimT_canX {Φ : LocFam} {l : Loc} {A : Life} {F : Nat → Val → SPropS Loc Val A}
-    (hF : DownFam A F) {T T' T₁ : OpTabN} (hT₁ : T₁.LendOK A) (hTT' : T.Twin T')
-    (hfin : ∀ m i en, T m i = some en → en.abort = false → en.q = .cancel →
-      en.fin = some (cancelOblN (ℍ := ℍ) (Φ.set l A F) T₁))
-    (hq : ∀ m i en, T m i = some en → en.abort = false → en.q ≠ .unr)
-    (hT' : ∀ m i en', T' m i = some en' → en'.q = .cancel →
-      en'.fin = some (@cancelOblRN ℍ _ Φ T₁ (claimR l A F))) :
-    ∀ m i en en', T m i = some en → T' m i = some en' → en.abort = false → en.q ≠ .lin →
-      ∀ k ls (K : Kont) (ρk ρp Z ρkL W'' : WRes) (v'' : Val) (χ : WRes) (hχ : χ.InStratum A)
-        (P'' : Val → SPropS Loc Val A) (hw'' : P'' v'' ⟨χ, hχ⟩),
-        NoOwn ρp → ResU.CompS ρk ρp Z →
-        ResU.CompS (Z.del l) (ResU.single l (CellU.mutOf A v'' χ hχ P'' hw'')) Z →
-        (Z.del l).InStratum (↓A) →
-        (∀ u r, SPropS.toU (P'' u) r → SPropS.toU (F k u) r) →
-        ResU.CompS χ (ResU.single l (CellU.ownOf v'')) W'' → ResU.CompS (Z.del l) W'' ρkL →
-        cancelOKN en k ls K ρk → cancelOKN en' k ls K ρkL := by
-  intro m i en en' hT hT'' ha hql k ls K ρk ρp Z ρkL W'' v'' χ hχ P'' hw'' hno hZ hZd hdZd hPk
-    hW'' hkL hc
-  have hqc : en.q = .cancel := by
-    have := hq m i en hT ha
-    cases h : en.q <;> simp_all
-  obtain ⟨en₂, hT₂, hq₂, -⟩ := hTT' m i en hT
-  rw [hT''] at hT₂
-  cases Option.some.inj hT₂
-  intro P' hP'
-  rw [hT' m i en' hT'' (hq₂.trans hqc)] at hP'
-  cases hP'
-  have hin := hc _ (hfin m i en hT ha hqc)
-  refine erwp_M_frame_cancelRun hF hT₁ k k le_rfl ls _ v'' χ W'' (Z.del l) ρkL hχ hdZd P'' hPk
-    hw'' (ResU.CompS.comm hW'') (ResU.CompS.comm hkL) (fun BM hBM => ?_)
-  obtain rfl := ResU.CompS.functional hBM hZd
-  exact erwp_garbage hZ hno hin
-
-/-- **The finaliser frame around a body at `opTableR (claimT T …) R`**: the body's cancel runs
-and its raises both end carrying `R`, which `D` consumes. -/
-theorem erwp_ubindClaimR {Φ : LocFam} (hΦ : Φ.Down) {T T₁ : OpTabN} (hTD : T.Down)
-    (hT₁ : T₁.Down) (hT₁e : ∀ m i en, T₁ m i = some en → en.abort = false ∧ en.q = .lin)
-    (hTe : ∀ m i en, T m i = some en → en.abort = false → en.q ≠ .unr)
-    (hTr : ∀ m i en, T m i = some en → en.abort = true → m ≠ 0)
-    (hPAls : ∀ m i en, T m i = some en → ∀ k ls ls' v ρ, (∀ x, x ∈ ls' ↔ x ∈ ls) →
-      en.PA k ls v ρ → en.PA k ls' v ρ)
-    (hfin : ∀ m i en, T m i = some en → en.abort = false → en.q = .cancel →
-      en.fin = some (cancelOblN (ℍ := ℍ) Φ T₁))
-    {R : Nat → WProp} (N D : Val)
-    (hD : ∀ k ls ρ, R k ρ → rwp (ℍ := ℍ) Φ (fun _ _ v ρ' => v = Val.unit ∧ ρ' = PMap.empty) k ls
-      (.app (.val D) (.val .unit)) ρ)
-    {Qin Qout : PostN} (hQout : Qout.Down)
-    (hN : ∀ k ls (v : Val) ρ, Qin k ls v ρ →
-      erwp (ℍ := ℍ) Φ (opTableN T) Qout k ls (.app (.val N) (.val v)) ρ) :
-    ∀ n ls M ρ, erwp (ℍ := ℍ) Φ (opTableR (@OpTabN.claimT ℍ _ T Φ T₁ R) R) Qin n ls M ρ →
-      erwp (ℍ := ℍ) Φ (opTableN T) Qout n ls (ubindE (.pair N D) M) ρ := by
-  have hL := opTableR_local (@OpTabN.claimT ℍ _ T Φ T₁ R) R
-  have hPD := erwpPost_down (opTableN_down hTD) hQout
-  have hD' : ∀ k ls ρ, R k ρ →
-      rwp (ℍ := ℍ) Φ (fun _ _ _ ρ' => ρ' = PMap.empty) k ls (.app (.val D) (.val .unit)) ρ :=
-    fun k ls ρ h => rwp_mono (fun _ _ _ _ h => h.2) (hD k ls ρ h)
-  intro n
-  induction n using Nat.strong_induction_on with
-  | _ n ih =>
-  intro ls M ρ h
-  rw [← ubK_plug, erwp_eq]
-  refine rwpG_bind hΦ (ubK N D) ?_
-  refine rwpG_mono_le (fun k hk ls' t σ ht => ?_) (erwp_unfold_at hL le_rfl h)
-  rcases ht with ⟨v, rfl, hv⟩ | ⟨K₁, m, i, v, en', hp⟩ | ⟨K₁, m, i, v, en', hp⟩
-  · -- `[then]`
-    have hstep := fun μ => then_ret (ℍ := ℍ) μ N D v .hole
-    simp only [Kont.plug_hole] at hstep
-    exact rwpG_det hΦ (hPD _) hstep
-      (erwp_unfold_at (opTableN_local T) hk (hN k ls' v σ hv))
-  · -- a stop passes the frame; a cancellable one's cancel run through the frame
-    obtain ⟨⟨rfl, hK₁, hT', ha⟩, ρa, ρk, hcak, hA, hu, hcont⟩ := pure_sep_iff.mp hp
-    obtain ⟨en, hT, rfl⟩ := claimT_some hT'
-    have hKo : ((ubK N D).comp K₁).HasHnd m = false := by simp [hasHnd_comp, hK₁]
-    have ht' : (ubK N D).plug (K₁.plug (performE (.val (opPayload m i v)))) =
-        ((ubK N D).comp K₁).plug (opE false (opPayload m i v)) := by
-      rw [Kont.plug_comp]; rfl
-    rw [ht']
-    by_cases hqc : en.q = .cancel
-    · rw [if_pos hqc] at ha hA hu hcont
-      refine rwpG_here (final_opPlug (payloadName_opPayload m i v) hKo) (Or.inr (Or.inl
-        ⟨(ubK N D).comp K₁, m, i, v, en, pure_sep_mk ⟨rfl, hKo, hT, ha⟩
-          ⟨ρa, ρk, hcak, hA, hu, fun ls'' he => ⟨fun k' hk' w τ₁ τ₂ hB hcτ => ?_,
-            fun _ P hP => ?_⟩⟩⟩))
-      · rw [Kont.plug_comp]
-        have hc := (hcont ls'' he).1 k' hk' w τ₁ τ₂ hB hcτ
-        simp only [erwpC, show k' < n by omega, if_true] at hc ⊢
-        exact ih k' (by omega) _ _ _ hc
-      · rw [hfin m i en hT ha hqc] at hP
-        cases hP
-        have hql : en.q ≠ .lin := by rw [hqc]; simp
-        have hin := (hcont ls'' he).2 hql _ rfl
-        show erwp (ℍ := ℍ) Φ (cancelTabN T₁) (fun _ _ _ _ => False) k ls''
-          (((ubK N D).comp K₁).dead.plug _) ρk
-        rw [dead_comp, ubK_dead, Kont.plug_comp]
-        exact erwp_ubind_cancelRun hΦ hT₁ hT₁e N D hD' k ls'' _ ρk hin
-    · rw [if_neg hqc] at ha hA hu hcont
-      refine rwpG_here (final_opPlug (payloadName_opPayload m i v) hKo) (Or.inr (Or.inl
-        ⟨(ubK N D).comp K₁, m, i, v, en, pure_sep_mk ⟨rfl, hKo, hT, ha⟩
-          ⟨ρa, ρk, hcak, hA, hu, fun ls'' he => ⟨fun k' hk' w τ₁ τ₂ hB hcτ => ?_,
-            fun hql => ?_⟩⟩⟩))
-      · rw [Kont.plug_comp]
-        have hc := (hcont ls'' he).1 k' hk' w τ₁ τ₂ hB hcτ
-        simp only [erwpC, show k' < n by omega, if_true] at hc ⊢
-        exact ih k' (by omega) _ _ _ hc
-      · exfalso
-        have := hTe m i en hT ha
-        cases h : en.q <;> simp_all
-  · -- `[finalise]`: `D (); raise p`, `D` consuming the claim
-    obtain ⟨⟨rfl, hK₁, hT', ha⟩, σ₁, ρR, hcσ, ⟨ρa, ρn, hcan, ⟨hPA, hnA⟩, hnn⟩, hR⟩ :=
-      pure_sep_iff.mp hp
-    obtain ⟨en, hT, rfl⟩ := claimT_some hT'
-    have hab : en.abort = true := by
-      by_cases hqc : en.q = .cancel
-      · rw [if_pos hqc] at ha; exact ha
-      · rw [if_neg hqc] at ha; exact ha
-    have hPAe : en.PA k ls' v ρa := by
-      by_cases hqc : en.q = .cancel
-      · rw [if_pos hqc] at hPA; exact hPA
-      · rw [if_neg hqc] at hPA; exact hPA
-    have hm0 := hTr m i en hT hab
-    refine rwpG_det hΦ (hPD _)
-      (fun μ => (then_fin (ℍ := ℍ) (μ := μ) (i := i) N D v hm0 hK₁ .hole).1) ?_
-    rw [Kont.plug_hole]
-    refine rwpG_bind hΦ _ ?_
-    have hDr := rwpG_frame
-      (fun ls₀ τ => (∀ x, x ∈ ls₀ ↔ x ∈ ls') ∧
-        ((fun ρ => en.PA k ls' v ρ ∧ NoOwn ρ) ⋆ (fun ρ => NoOwn ρ)) τ)
-      (fun _ _ hs _ ⟨h₁, h₂⟩ => ⟨fun x => (hs x).trans (h₁ x), h₂⟩) (ResU.CompS.comm hcσ)
-      (rwp_iff_rwpG.mp (hD k ls' ρR hR)) ⟨fun _ => Iff.rfl, ρa, ρn, hcan, ⟨hPAe, hnA⟩, hnn⟩
-    refine rwpG_mono_le (fun k₂ hk₂ ls₂ t₂ σ₂ ht₂ => ?_) hDr
-    obtain ⟨σa, σb, hcσ', ⟨w, rfl, rfl, rfl⟩, hls₂, ⟨τa, τn, hcτ, ⟨hPAτ, hnτ⟩, hnn'⟩⟩ := ht₂
-    obtain rfl := eq_of_compS_empty_left hcσ'
-    refine rwpG_det hΦ (hPD _)
-      (fun μ => (then_fin (ℍ := ℍ) (μ := μ) (i := i) N D v hm0 hK₁ .hole).2.2) ?_
-    exact rwpG_here (final_opPlug (K := .hole) (r := true) (payloadName_opPayload m i v)
-      (by simp [OpFree, Kont.Catches])) (Or.inr (Or.inr ⟨.hole, m, i, v, en,
-        pure_sep_mk ⟨rfl, rfl, hT, hab⟩ ⟨τa, τn, hcτ, ⟨hTD.pa_le hT hk₂
-          (hPAls _ _ _ hT _ _ _ _ _ hls₂ hPAτ), hnτ⟩, hnn'⟩⟩))
-
 end BoCa.Fig16.LogRel.Core.Chain.SI
 
 /-! ## The suspending `mut` lend, compatible with the interpretation -/
@@ -359,16 +213,6 @@ theorem OpTabN.Twin.trans {T₁ T₂ T₃ : OpTabN} (h₁ : T₁.Twin T₂) (h�
   obtain ⟨en₂, h₂', a1, b1, c1, d1, e1⟩ := h₁ m i en h
   obtain ⟨en₃, h₃', a2, b2, c2, d2, e2⟩ := h₂ m i en₂ h₂'
   exact ⟨en₃, h₃', a2.trans a1, b2.trans b1, c2.trans c1, d2.trans d1, e2.trans e1⟩
-
-/-- A cancel row with no layers. -/
-def _root_.BoCa.Fig16.LogRel.Core.CTy.NoLayers : CTy → Prop
-  | .top => False
-  | .eff _ _ _ _ _ _ _ _ => False
-  | _ => True
-
-theorem finN_noLayers {F : CTy} (h : F.NoLayers) (δ : LSub) (Φ : LocFam) :
-    finN (ℍ := ℍ) F δ Φ = some (cancelOblN (ℍ := ℍ) Φ OpTabN.empty) := by
-  cases F <;> simp_all [CTy.NoLayers, finN]
 
 /-- An entry of a row's table is one of its operations'. -/
 theorem tabN_effOf_some {S : Row} {R : VTy} {δ : LSub} {Φ : LocFam} {m i : UInt32} {en : OpEntN}
@@ -426,19 +270,6 @@ theorem tabN_lendOKCR {x : LifeVar} {α : Life} {S : Row} (hS : S.Suspend x)
     exact (vN_outlives (Δ := LifeCtx.empty) (a := .var x) (models_empty_any _)
       (interp_ext_self δ x α) ((hS o ho).2.2.2.2.2.1 _ _) k w ρ hp).mono (Life.down_sqsubset α).le
 
-/-- A cancellable, non-abortive entry's cancel obligation, at a cancel row with no layers. -/
-theorem tabN_fin {S : Row} (hSF : ∀ o ∈ S, capB o.q o.B = true → o.fin.NoLayers) {R : VTy}
-    {δ : LSub} {Φ : LocFam} : ∀ m i en, tabN (ℍ := ℍ) (CTy.effOf S R) δ Φ m i = some en →
-      en.abort = false → en.q = .cancel → en.fin = some (cancelOblN (ℍ := ℍ) Φ OpTabN.empty) := by
-  intro m i en h ha hq
-  obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
-  have hc : capB o.q o.B = true := by
-    simp only [entN] at ha hq
-    simp only [capB, hq] at ha ⊢
-    simpa using ha
-  simp only [entN, hc, if_true]
-  exact finN_noLayers (hSF o ho hc) δ Φ
-
 /-- The finaliser `λ_. d ℓ` consumes the lend's claim: `d`'s judgment at `Ref A ⊸ 1`, applied to
 the cell owned again with its content in `A`'s family. -/
 theorem fin_claim {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
@@ -467,128 +298,11 @@ theorem fin_claim {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
   have := hP Φ hΦ ls' k' le_rfl (Val.loc l) τ₂ τ hcτ ⟨l, w, σ, rfl, hcl, vN_le hk' hF'⟩
   exact rwp_of_erwp_empty this
 
-theorem claimT_fin {Φ : LocFam} {T T₁ : OpTabN} {R : Nat → WProp} {m i : UInt32} {en' : OpEntN}
-    (h : @OpTabN.claimT ℍ _ T Φ T₁ R m i = some en') (hq : en'.q = .cancel) :
-    en'.fin = some (@cancelOblRN ℍ _ Φ T₁ R) := by
-  obtain ⟨en, -, rfl⟩ := claimT_some h
-  by_cases hc : en.q = .cancel
-  · rw [if_pos hc]
-  · rw [if_neg hc] at hq ⊢; exact absurd hq hc
-
 /-- `withborU`'s `then`: `λb. (ℓ, b)`. -/
 def NFv (l : Loc) : Val := Val.lam (.pair (.val (Val.loc l)) (.var 0))
 
 /-- `withborU`'s `unwind`: `λ_. d ℓ`. -/
 def DFv (d : Expr) (l : Loc) : Val := Val.lam (.app d (.val (Val.loc l)))
-
-/-- **`withbor (2)` at a suspending row is a value of `!` its type**: `withborU d`, at
-`Ref A ⊸ (∀'x ⊏ @bnd. Mut 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ(Ref A ⊗ B)` with `Σ` a `Row.Suspend x`
-row: the rule-level form of a `mut` borrow held across a suspension.
-
-The source cell `ℓ ↦ own(w₀) ● σ₀` is lent at a lifetime `α` chosen below the bound, `σ₀`'s
-stratum and the callback's (`ResU.exists_stratum`), at the family of `A`'s values; the callback
-runs at `Φ[ℓ ↦ (α, 𝒱⟦A⟧)]` from the borrow (`erwp_M_frameCR`), its stops folding the borrow into
-the continuation's share, its cancel runs and its raises ending at the lend's claim; the
-finaliser frame `then b. (ℓ, b) unwind d ℓ` consumes the claim with `d` (`erwp_ubindClaimR`,
-`fin_claim`).
-
-Premises, and the rule that supplies each: `hA`, `hB`, `hS`, `hdc` are `withbor2U`'s (with
-`Row.Suspend` for `Row.Unwind`, `Const791.OK`); `hd` is the fundamental property at `d`'s
-derivation, the premise `CDerives Δ Γ d (Ref A ⊸ 1)` read semantically. `hSB` (every answer type
-of the row outlives every lifetime) and `hSF` (every capturable operation's cancel row has no
-layers) are **not** supplied by `Row.Suspend` as `Core/TreeGoal791.lean` states it: see
-`docs/new-core/scope-791-rule.md` §5. -/
-theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Row} {d : Expr}
-    (hA : ¬ VFree x A) (hB : ¬ VFree x B) (hS : S.Suspend x)
-    (hSF : ∀ o ∈ S, capB o.q o.B = true → o.fin.NoLayers)
-    (hdc : closedAt 0 d = true)
-    (hd : SemJN (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.ref A) .unit))) (δ : LSub)
-    (n : Nat) : vN (ℍ := ℍ) (.bang (withbor2UTy x bnd A B S)) δ n (withborUV d) PMap.empty := by
-  refine ⟨rfl, fun Φ hΦ ls => ?_⟩
-  intro k hk u ρu ρ' hc hu
-  obtain rfl := eq_of_compS_empty_left hc
-  intro k' hk' f ρf ρ'' hc' hf
-  obtain ⟨l, w₀, σ₀, rfl, hcl, hw₀⟩ := hu
-  rw [cN_effOf]
-  set T := tabN (ℍ := ℍ) (CTy.effOf S (.tensor (.ref A) B)) δ Φ with hTdef
-  have hTd : T.Down := tabN_down _ δ Φ hΦ
-  have hQo : PostN.Down (fun k _ v ρ => vN (ℍ := ℍ) (.tensor (.ref A) B) δ k v ρ) :=
-    fun k _ v ρ h => vN_down _ δ k v ρ h
-  refine erwp_det hΦ (opTableN_down hTd) hQo
-    (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl (.appL .hole f)) ?_
-  refine erwp_det hΦ (opTableN_down hTd) hQo (fun μ => step1Only_plug (Head.beta μ _ f) rfl .hole) ?_
-  have e₃ : Kont.hole.plug (Expr.subst 0 f (Expr.subst (0 + 1) (Val.shift 1 0 (Val.loc l))
-        (thenE ((Expr.var 2).pair (Expr.var 0)) (d.app (Expr.var 2))
-          (((Expr.var 0).app (Expr.val Val.unit)).app (Expr.var 1))))) =
-      ubindE (.pair (NFv l) (DFv d l)) (.app (.app (.val f) (.val .unit)) (.val (Val.loc l))) := by
-    simp [Kont.plug, Expr.subst, Expr.shift, thenE, ubindE, NFv, DFv, Val.shift, Val.pair,
-      Val.loc, Val.lam, Expr.val, Val.prim, Expr.loc,
-      subst_closedAt d (s := _) hdc (Nat.zero_le _)]
-  rw [e₃]
-  -- the lend's lifetime: below the bound, the source's content's stratum and the callback's
-  obtain ⟨γ, hγ⟩ := (hf Φ hΦ ls).1
-  obtain ⟨βP, hβP⟩ := ResU.exists_stratum σ₀
-  obtain ⟨βf, hβf⟩ := ResU.exists_stratum ρf
-  set α : Life := ↓(βP ⊓ βf ⊓ γ) with hαdef
-  have hαlt : α < βP ⊓ βf ⊓ γ := Life.down_sqsubset _
-  have houtP : σ₀.InStratum α := hβP.mono (hαlt.le.trans (inf_le_left.trans inf_le_left))
-  have houtf : ρf.InStratum (↓α) := hβf.mono
-    ((Life.down_sqsubset α).le.trans (hαlt.le.trans (inf_le_left.trans inf_le_right)))
-  have hLt : LtLife δ bnd α := ⟨γ, hγ, lt_of_lt_of_le hαlt inf_le_right⟩
-  set δ' := δ.extend x α with hδ'
-  have hAδ : vN (ℍ := ℍ) A δ' = vN (ℍ := ℍ) A δ := vN_extend_of_not_free hA δ α
-  have hBδ : vN (ℍ := ℍ) B δ' = vN (ℍ := ℍ) B δ := vN_extend_of_not_free hB δ α
-  have hwit : vN (ℍ := ℍ) A δ' k w₀ σ₀ := by rw [hAδ]; exact hw₀
-  set Fam : Nat → Val → SPropS Loc Val α := fun j u r => vN (ℍ := ℍ) A δ' j u r.1 with hFam
-  set Φ' := Φ.set l α Fam with hΦ'
-  have hSAB : ∀ o ∈ S, ¬ VFree x o.A ∧ ¬ VFree x o.B :=
-    fun o ho => ⟨(hS o ho).2.2.1, (hS o ho).2.2.2.1⟩
-  have hTw : (tabN (ℍ := ℍ) (CTy.effOf S (.box (.var x) B)) δ' Φ').Twin
-      (@OpTabN.claimT ℍ _ T Φ OpTabN.empty (claimR l α Fam)) :=
-    OpTabN.Twin.trans (tabN_effOf_twin hSAB _ _ δ Φ' Φ) (claimT_twin T Φ OpTabN.empty _)
-  have hcan := claimT_canX (Φ := Φ) (vN_fam_down A δ' α) (empty_lendOK α) hTw (tabN_fin hSF)
-    (fun m i en h _ => by obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h; exact (hS o ho).1)
-    (fun m i en' h hq => claimT_fin h hq)
-  have hM := erwp_M_frameCR (Φ := Φ) (l := l) (A := α) (F := Fam) (vN_fam_down A δ' α)
-    (tabN_lendOKCR hS _ δ Φ') hTw hcan
-    (Q := fun k _ b ρ => vN (ℍ := ℍ) (.tensor (.ref A) B) δ k (Val.pair (Val.loc l) b) ρ)
-    k' k hk' ls (.app (.app (.val f) (.val .unit)) (.val (Val.loc l))) w₀ σ₀ ρ' ρf ρ'' houtP
-    houtf (Fam k) (fun _ _ h => h) hwit hcl hc' (fun BM hBM => ?_)
-  · refine erwp_ubindClaimR hΦ hTd OpTabN.empty_down
-      (fun _ _ _ h => by simp [OpTabN.empty] at h)
-      (fun m i en h _ => by obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h; exact (hS o ho).1)
-      (fun m i en h _ => by obtain ⟨o, ho, rfl, -⟩ := tabN_effOf_some h; exact (hS o ho).2.1)
-      (fun m i en h k ls ls' v ρ _ hp => by obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h; exact hp)
-      (tabN_fin hSF) (NFv l) (DFv d l) (fun k ls ρ hR => fin_claim hdc hd hAδ hΦ hR) hQo
-      (fun k ls b ρ hq => ?_) k' ls _ ρ'' hM
-    refine erwp_det hΦ (opTableN_down hTd) hQo
-      (fun μ => step1Only_plug (Head.beta μ _ b) rfl .hole) ?_
-    simp [Kont.plug, Expr.subst, NFv]
-    exact erwp_val (v := Val.pair (Val.loc l) b) hq
-  · -- the callback, at `α`, from the borrow
-    have h1 := (hf Φ' (LocFam.set_down hΦ (vN_fam_down A δ' α)) ls).2 α hLt
-    have h2 := h1 k' le_rfl (Val.loc l) _ BM hBM
-      ⟨α, interp_ext_self δ x α, l, w₀, σ₀, houtP, k, hwit, hk', rfl, rfl⟩
-    rw [cN_effOf] at h2
-    refine erwp_mono (fun k ls' b ρ' hb => ?_) (opTableN_local _) k' ls _ BM h2
-    obtain ⟨β, hβ, hbB, hst⟩ := hb
-    rw [interp_ext_self] at hβ
-    cases Option.some.inj hβ
-    refine ⟨hst, fun w Y hY σ ⟨hσ, hFσ⟩ Z hZ => ?_⟩
-    obtain ⟨Wc, hWc, hZ'⟩ :=
-      (ResU.CompS.assoc ρ' (ResU.single l (CellU.ownOf w)) σ Z).mpr ⟨Y, hY, hZ⟩
-    have hwσ : vN (ℍ := ℍ) A δ k w σ := by rw [← hAδ]; exact hFσ
-    have hbB' : vN (ℍ := ℍ) B δ k b ρ' := by rw [← hBδ]; exact hbB
-    exact ⟨Val.loc l, b, Wc, ρ', rfl, ResU.CompS.comm hZ', ⟨l, w, σ, rfl, hWc, hwσ⟩, hbB'⟩
-
-/-- **`ConstN` for `withbor (2)` at a suspending row**, from the fundamental property at the
-finaliser's derivation, under the two row clauses `withbor2S_compat` names. -/
-theorem constN_w2 (hF : FundamentalN (ℍ := ℍ)) {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
-    {S : Row} {d : Expr}
-    (hSF : ∀ o ∈ S, capB o.q o.B = true → o.fin.NoLayers) :
-    ConstN (ℍ := ℍ) (.w2 x bnd A B S d) := by
-  rintro ⟨-, hA, hB, hS, hdc, hder⟩ δ n
-  exact withbor2S_compat hA hB hS hSF hdc (hF _ _ _ _ hder) δ n
 
 /-! ### The callback type is inhabited -/
 
@@ -625,7 +339,7 @@ def unitThunk : Val := Val.lam (.val .unit)
 /-- **`U(F 1)` has values outside every stratum `↓α`**: `λ_. ()` holding a `mut` cell at a
 lifetime shorter than `↓α`, left as garbage at the return. So an operation answering `U(F 1)`
 does not meet `OpTabN.LendOKCR.pb` at any lend lifetime `α`, and `Row.Suspend`'s
-`¬ VFree x o.B` does not give `erwp_M_frameCR`'s premise there; `withbor2S_compat`'s `hSB` does.
+`¬ VFree x o.B` does not give `erwp_M_frameCR`'s premise there; `Row.Suspend`'s answer clause does.
 This is a configuration for the premise, not a refutation of the constant. -/
 theorem answer_not_inStratum (δ : LSub) (α : Life) (l : Loc) :
     ∃ ρ : WRes, (∀ n, vN (ℍ := ℍ) (.thunk (.ret .unit)) δ n unitThunk ρ) ∧

@@ -1462,9 +1462,12 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.bridgeN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.goal791Sched_of
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_M_frameCR
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.claimT_canX
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_ubindClaimR
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_M_frame_cancelRunCR
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabR_can
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwp_ubind_cancelRunCR
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwp_ubindClaimRT
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor2S_compat
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.constN_w2
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.suspend_closingOp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cbRelease_sem
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.answer_not_inStratum
