@@ -1713,7 +1713,6 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.gN_outlives
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vN_noOwn_of_ownFree
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.gN_noOwn
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.noNuSpine_of_inFrag
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cN_of_valid
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwp_bind_frame
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cN_bind

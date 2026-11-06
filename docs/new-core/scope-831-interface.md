@@ -876,3 +876,55 @@ family frame across raises.
   by Core's induction. Not built.
 - **`sliceReplaceM`, `sliceSwapM`**: `arrReplace_compatN`'s steps with `erwp_M_antiFrame` at the
   view at each leaf (as `withswap_compatN`). Not built.
+
+## 12. Unit L7: `ν` at `erwp` (#837)
+
+### 12.1 Core's clause and its laws
+
+Core reads `νX. C` (`Core/Relation.lean`, `cC .nu`; `Core/NuRel.lean`) as the greatest fixed point
+of one unfolding of the observation tree `C`, written in `Prop` as an existential over candidates
+(`docs/scope-recursion.md` §3.1):
+
+    cC (νX. C) ls δ e ρ  =  C.NuShape → ∃ R : CPred, R ⊆ cB (nuEnv C R) C δ ∧ R ls e ρ
+
+`cB η C` is `cC`'s `F`, `&`, `F_Σ`, `⊸` and `∀` clauses with the answer of each leaf read under
+the type-variable environment `η`; `nuEnv C R` reads the variable `U X` as `thunkR R` (Core's `U`
+clause with the candidate in place of `𝒞⟦νX. C⟧`) and gives it the closed type `U(νX. C)`, which
+the `Imm` clause's `CohE` reads (`tClose`). The leaves are positive (`NuLeaf`, `VTy.Poly`: `X`
+only under `⊗`, `⊕`, `[@a]`), so `cB` is monotone in the candidate (`cB_mono`, `nuF_mono`). The
+laws: `nuRel_coind` (coinduction), `nuRel_out`/`nuRel_roll`, `cC_nu_unfold`, and `cC_nu_iff`
+(`𝒞⟦νX. C⟧ = 𝒞⟦C[U(νX. C)/X]⟧` at `NuOk`, through `cB_unroll` and `vCE_nuEnv`). Every
+relation law reaches `ν` the same way: unfold, apply the law's `cB` version, roll (`cC_step` with
+`cB_step`, `cC_bind` with `cB_bind`, `cC_tyEq_aux` with `cB_tyEq` at `nuEnvU`). Core cites spec §7
+and no [TR] number: `ν` is not in the paper.
+
+### 12.2 The reading at `erwp`
+
+Core's answer, at the chain's signature. A candidate is `cN`'s signature at a fixed `δ`
+(`CandN : LocTy → (Loc → Option Life) → Nat → List SRec → Expr → WRes → Prop`, Core's `CPred` with
+the world, the view and the index added), and
+
+    cN (νX. C) δ Θ c n ls e ρ  =  C.NuShape → ∃ R : CandN, R ⊆ cBN U(νX. C) R C δ ∧ R Θ c n ls e ρ
+
+`cBN S R` is `cN`'s `F`, `&`, `F_Σ`, `⊸`, `∀` clauses (Core's `cB`), the leaf answers read by
+`vNX S (thunkRN R)`. `vNX S P`/`vOX S P` are `vN`/`vO` with one type variable: `X` reads `P`
+(`True` in the observable view, Core's `nuP false`), every other variable is empty, and the `Imm`
+clause's witness reads the closed type `A[S/X]` (Core's `tClose`). `thunkRN R` is `vN`'s `U`
+clause with the candidate in place of `cN`: at every `ExtR` extension of the world at the thunk's
+resource, every view consistent with it and every record list (Core's `thunkR`). No departure:
+the step index passes through the candidate unchanged, as the world and the view do.
+
+The chain has no type-variable environment (F8), so the one variable of a `ν` body is carried by
+`vNX`, a copy of `vN` with Core's environment at one entry; `vNX S (vN S δ) A δ = vN A[S/X] δ`
+(`vNX_inst`, Core's `vCE_subst` at `scons`) is what makes one unfolding at `𝒞⟦νX. C⟧` the
+unrolling.
+
+### 12.3 `cN_of_valid` at `ν`
+
+`cN_of_valid` says a computation may assume its resource valid: `(Valid ρ → cN C … ρ) → cN C … ρ`.
+With `ν` read as `False` it fails at `ν`: from `Valid ρ → False` nothing gives `False` (the
+premise holds at every invalid `ρ`). That is why it carried `noNuSpine C`, and with it `app`,
+`bind`, `unitE`, `tensorE`, `sumE` and `zeroE`. With the fixed point the law holds at `ν` by
+coinduction: the candidate `R′ = {ρ | Valid ρ → 𝒞⟦νX. C⟧ ρ}` is a post-fixed point, since at a
+valid `ρ` the unfolding of `𝒞⟦νX. C⟧` is one at `R′` (`cBN_mono`), and `cBN` may assume validity
+(`cBN_of_valid`, the tree version, by `cN_of_valid`'s own induction).

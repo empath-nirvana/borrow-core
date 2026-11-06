@@ -223,9 +223,6 @@ theorem let_compatN_persist {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Exp
     exact hN δ (v :: γ) Θ c k ls' σ₂ hδ hΘ hc₂' hlw₂
       (gN_live_cons (compS_empty_left σ₂) hv (gN_le hkn hg₂'))
 
-theorem noNuSpine_effOf (S : Row) (R : VTy) : noNuSpine (CTy.effOf S R) := by
-  cases S <;> trivial
-
 /-- **`[await-c]` at `SemJN`** (Core's `await_compatC`): `[perform]` of the cancellable `a`, then
 a `case` whose `inl` arm returns and whose `inr` arm raises the cancel target `c`, each by its own
 compatibility lemma, under `[let]`. The bound answer is at `1 + 1`, persistent, so the `[let]` is
@@ -261,7 +258,7 @@ theorem await_compatN {Δ : LifeCtx} {S : Row} {n : UInt32} {a c : OpSig}
     rw [hcn, hci] at h; exact h
   exact let_compatN_persist .nil (fun _ s hs => absurd hs List.not_mem_nil)
     (fun _ s hs => absurd hs List.not_mem_nil) (by decide) hP
-    (sumE_compatN (noNuSpine_effOf S .unit) (.left .nil) (var_compatN (.here .nil)) h₁ h₂)
+    (sumE_compatN (.left .nil) (var_compatN (.here .nil)) h₁ h₂)
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 
