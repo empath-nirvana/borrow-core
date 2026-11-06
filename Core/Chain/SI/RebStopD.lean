@@ -81,8 +81,9 @@ theorem canonD_agree_split {W F : WRes} {ps rs : List FrameRec} {r : FrameRec}
     exact w'.symm.trans (hW_agree aW haW l v ψ ψ' hown hψ e' hk k')
   exact ⟨liftG F (Or.inl rfl), liftG _ (Or.inr rfl)⟩
 
-/-- **`[TR]` 6.150 at a chain view, at any final term, at a canonical image.** -/
-theorem rwpG_rebDeepG {Φ : LocFam} (r : FrameRec) {p₀ : Option Loc} {l₀ : Loc} {S₀ : VTy}
+/-- **`[TR]` 6.150 at a chain view, at any final term, at a canonical image.** `hpost` is also
+handed the validity of `w` and `Y`. -/
+theorem rwpG_rebDeepGV {Φ : LocFam} (r : FrameRec) {p₀ : Option Loc} {l₀ : Loc} {S₀ : VTy}
     {u₀ : Val} (hch₀ : Chain r.R r.T r.v p₀ l₀ S₀ u₀) {w₀ : WRes} (x : LifeVar) (hx : ¬ VFree x S₀) {β : Life}
     {s : LSet} {hs : w₀.InStratum s.join} (hS : TmplSpecD r S₀ u₀ w₀ (tmplD r S₀ u₀ w₀))
     (hRβ : w₀.InStratum β) (hβc : (CellU.immOf s u₀ w₀ hs).InStratum β)
@@ -96,7 +97,7 @@ theorem rwpG_rebDeepG {Φ : LocFam} (r : FrameRec) {p₀ : Option Loc} {l₀ : L
           ResU.SubKeep w ((canonD r S₀ u₀ w₀ β).restrictDom w₀.exclPart) ψ →
           ResU.CompS ψ ((canonD r S₀ u₀ w₀ β).restrictDom w₀.exclPart) w → ψ.InStratum β →
           ResU.CompS ρo ψ Yo →
-          ResU.CompS Yo (ResU.single l₀ (CellU.immOf s u₀ w₀ hs)) Y →
+          ResU.CompS Yo (ResU.single l₀ (CellU.immOf s u₀ w₀ hs)) Y → ResU.Valid w → ResU.Valid Y →
           ∃ ρ'L ρpL, ResU.CompS ρ'L ρpL Y ∧ NoOwn ρpL ∧ Qout k ls'' t ρ'L)
     (hA : ∀ Bχ, ResU.CompS ρb (canonD r S₀ u₀ w₀ β) Bχ → rwpG (ℍ := ℍ) Φ Qin n ls e Bχ) :
     rwpG (ℍ := ℍ) Φ Qout n ls e ρ := by
@@ -222,6 +223,7 @@ theorem rwpG_rebDeepG {Φ : LocFam} (r : FrameRec) {p₀ : Option Loc} {l₀ : L
       (ResU.hash_symm hiπ) hsubK hc ⟨w59, hw59, hY59⟩ hσX hσY
   -- the caller's split of `ρₒ ● ψ ● ρᵢ`
   obtain ⟨ρ'L, ρpL, hLY, hnoL, hQout⟩ := hcont ρp w ψ w59 Y59 gB hw hsubK hsplit hψβ hw59 hY59
+    (ResU.Valid.split hfρ'p hvfp).2 hvY59
   -- the final world is `ρ_f ● Y`
   obtain ⟨X1, hX1, hX1'⟩ := compS_reassoc ht3 hρ'χ
   have hFY : ResU.CompS ρf Y59 Q58 := by
@@ -254,6 +256,30 @@ theorem rwpG_rebDeepG {Φ : LocFam} (r : FrameRec) {p₀ : Option Loc} {l₀ : L
     ⟨(ResU.CompS.comm hf1).1, fL, ResU.CompS.comm hf1, hvfL⟩, hf1,
     ⟨(ResU.CompS.comm hf2).1, Q58, ResU.CompS.comm hf2, hvQ⟩, hf2, hLQ, hLY,
     ⟨h59, hvρ, hvY59⟩, hnoL, hTout, htgout, gps, gls, hQout⟩
+
+/-- `rwpG_rebDeepGV`, the validity it hands `hpost` not read. -/
+theorem rwpG_rebDeepG {Φ : LocFam} (r : FrameRec) {p₀ : Option Loc} {l₀ : Loc} {S₀ : VTy}
+    {u₀ : Val} (hch₀ : Chain r.R r.T r.v p₀ l₀ S₀ u₀) {w₀ : WRes} (x : LifeVar) (hx : ¬ VFree x S₀) {β : Life}
+    {s : LSet} {hs : w₀.InStratum s.join} (hS : TmplSpecD r S₀ u₀ w₀ (tmplD r S₀ u₀ w₀))
+    (hRβ : w₀.InStratum β) (hβc : (CellU.immOf s u₀ w₀ hs).InStratum β)
+    (hshape : vShape (S₀.immReborrow (.var x)) (r.δ.extend x β) u₀ (canonD r S₀ u₀ w₀ β))
+    {ρb ρ : WRes} (hc : ResU.CompS (ResU.single l₀ (CellU.immOf s u₀ w₀ hs)) ρb ρ)
+    (h15 : ρb.InStratum β) {ls : List SRec} (hr : r ∈ rsOf ls)
+    {Qin Qout : PostG} {n : Nat} {e : Expr}
+    (hpost : ∀ k, k ≤ n → ∀ ls'' t (ρ' : WRes), Qin k ls'' t ρ' → (∀ y, y ∈ ls'' ↔ y ∈ ls) →
+      ∃ ρo ρk, ResU.CompS ρo ρk ρ' ∧ ρo.InStratum β ∧
+        ∀ (ρp w ψ Yo Y : WRes), NoOwn ρp → ResU.CompS ρk ρp w →
+          ResU.SubKeep w ((canonD r S₀ u₀ w₀ β).restrictDom w₀.exclPart) ψ →
+          ResU.CompS ψ ((canonD r S₀ u₀ w₀ β).restrictDom w₀.exclPart) w → ψ.InStratum β →
+          ResU.CompS ρo ψ Yo →
+          ResU.CompS Yo (ResU.single l₀ (CellU.immOf s u₀ w₀ hs)) Y →
+          ∃ ρ'L ρpL, ResU.CompS ρ'L ρpL Y ∧ NoOwn ρpL ∧ Qout k ls'' t ρ'L)
+    (hA : ∀ Bχ, ResU.CompS ρb (canonD r S₀ u₀ w₀ β) Bχ → rwpG (ℍ := ℍ) Φ Qin n ls e Bχ) :
+    rwpG (ℍ := ℍ) Φ Qout n ls e ρ :=
+  rwpG_rebDeepGV r hch₀ x hx hS hRβ hβc hshape hc h15 hr
+    (fun k hk ls'' t ρ' hQ hls => by
+      obtain ⟨ρo, ρk, h1, h2, h3⟩ := hpost k hk ls'' t ρ' hQ hls
+      exact ⟨ρo, ρk, h1, h2, fun ρp w ψ Yo Y a b c d e f g _ _ => h3 ρp w ψ Yo Y a b c d e f g⟩) hA
 
 /-- **`[TR]` 6.150 at a chain view, at `erwp`, across stops**, at the canonical image
 `canonD r S₀ u₀ w₀ β`. -/
