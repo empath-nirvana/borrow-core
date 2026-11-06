@@ -1693,3 +1693,5 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cancelOblN_plain₀
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabN_plainCancel
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.entN_plain
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_iterateC
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabN_ctxClosed
