@@ -1895,3 +1895,16 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Kappa835N.not_kTy_view
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Kappa835N.not_kapRelKTyN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Kappa835N.not_extRFoldTransfer
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.ExtP.fold
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.ExtP.trans
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.ExtP.mono
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.extP_add
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.extP_addImm
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.extPFoldTransfer
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.not_extP_foldConfig
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Public835N.extP_world
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Public835N.not_extP_world
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Public835N.not_kapRelP_world
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Public835N.not_kapRelP_view
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Public835N.kapRelN_not_kapRelP
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.extP_of_add

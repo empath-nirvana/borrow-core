@@ -914,6 +914,24 @@ with answers consistent with the view. **Not derived; obstruction not verified.*
 - **The statement is unchanged.** `Goal791SchedN` and `hs_schedOKN` are as before. The hardest
   case's row answers `park` at `∅` (`hardestRow_entry_PB`), so its instance meets the requirement.
 
+### 10.7 E10 through public transitions (`rule-791-pub`)
+
+The mapping and the verdict are in `scope-835-public.md`. The Lean results are in
+`Core/Chain/Public835N.lean`.
+
+- **The order.** `LocTy.ExtP lo` is `ExtR` plus two clauses at a floor `lo`: every key strictly
+  longer-lived than `lo` is unchanged, and so are the `imm` records lent above `lo`.
+- **Public moves.** Lends and `imm` records below the floor are public (`extP_add`,
+  `extP_addImm`). A lend's exit is public at its own floor (`extP_of_add`).
+- **The fold.** `ExtP` at the lend's floor is carried across the Mut Frame's fold
+  (`extPFoldTransfer`). That answers `not_extRFoldTransfer`.
+- **E10.** Read along `ExtP`, both `not_kapRelKTyN` configurations are excluded
+  (`not_kapRelP_world`, `not_kapRelP_view`).
+- **What is not built.** The present stop does not give that reading (`kapRelN_not_kapRelP`). The
+  relation's stop must owe the continuation at other location typings, with the tables and post
+  read there, as [DNB]'s `K⟦τ⟧` is. That step is not built. Not derived; obstruction not verified.
+  `effHandleV`, `effHandleVB` and `reify` wait on it.
+
 ## 11. Unit L5: opaque types and families (#836)
 
 ### 11.1 The map
