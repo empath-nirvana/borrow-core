@@ -719,16 +719,52 @@ that its stop does not owe it at. The port of Core's step would make the stop's 
 the value world as Core's is in `ls` (`contShareN` along `ExtR`), which `erwp`'s fixed view does
 not express. F10's plain wand (§8.1) does not change this: it puts the clause's argument pair at the
 clause's own world, which `ExtR`'s reflexivity reaches, but `κ`'s own type is `U(…)`, whose clause
-still quantifies `Θ′`, the view and the list. Not derived; obstruction not verified.
+still quantifies `Θ′`, the view and the list. The step is refuted below (`not_kapRelKTyN`).
 
 The answers' reading at the view (§10.2) settles one part of this step: at the stop's own world and
 view, `⊸`'s clause hands `κ` an argument whose composite with `κ`'s share is consistent with the
 view, so the answer meets the inner table's `ConsistentX` (with `ResU.Valid`, `consistentX_right`).
-What remains is `κ` at a `Θ′` with `Θ.ExtR Θ′ ρ` and a view `c′ ≠ c` consistent with `κ`'s share:
-the handled continuation's run at `Θ′.view c′` and the tables at `Θ′`, `c′`. A table at `c′` does not
-embed in the table at `c` (`OpTabN.Le` asks equal answers, and the two read their answers at
-different views), so the step would go through the run's resource, not the tables. Not derived;
-obstruction not verified.
+
+**Core's step does not hold at the chain** (`Core/Chain/Kappa835N.lean`). `KapRelKTyN` states it:
+`KapRelN` at the stop's world `Θ`, view `c`, the outer row's table and answer at `Θ`/`c`, and the
+operation's entry, at the index above, gives `vN (kTy Σ R q B F) δ Θ k κ ρ`. `not_kapRelKTyN`
+refutes it. Two configurations, every hypothesis discharged, both at the stop's own list `[]`, both
+at the stuck `κ = ()` and the answer type `Mut 'x 1`, at the empty row answering `1`:
+
+- *The world* (`not_kTy_world`, `kapRelN_world`). At the empty world no `Mut` value exists, so the
+  stop owes `κ` nothing and `KapRelN` holds. `U` reaches the world `∅ + (ℓ′, α) ↦ 𝒱⟦1⟧` (an
+  `ExtA` extension), at the stop's own view and list, where the answer `ℓ′ ↦ mut(α, (), ∅, 𝒱⟦1⟧)`
+  exists and `() (inj₁ ()) ℓ′` is stuck from the typed world of the two cells (`world_two`).
+- *The view* (`not_kTy_view`, `kapRelN_view`). At the world with the key `(ℓ′, α)` and a view with
+  no lifetime at `ℓ′`, the only `Mut` answer is at `ℓ′`, not consistent with the run's view, which
+  the row's table reads (§10.2); `KapRelN` holds again. `U` reads `κ` at the same world and list at
+  a view consistent with its share that puts `ℓ′` at `α`, and the same run is stuck.
+
+So each of `U`'s world and view quantifiers, alone, asks the handled continuation at answers its
+stop does not owe it at. The configurations refute the step, a statement about `KapRelN`; they do
+not refute the rule, and a proof of E10 by another route would read more of `κ` than `KapRelN`.
+
+**The three routes.**
+
+1. *Transport by a lemma about `erwp`.* `KapRelN` does not imply `U`'s clause (above). The run's
+   world enters its answers contravariantly (`tabN`'s `vN B δ Θ`), and an answer at `Θ′` is not one
+   at `Θ` (the world configuration); `erwp_extΦ` moves a run along `LocFam.Ext`, and `Θ.view c` is
+   not below `Θ′.view c′` where `c′` differs from `c` off the share (the view configuration).
+2. *A Kripke share.* The share would owe the continuation at every `ExtR`-later world and every
+   consistent view. The share's continuation is `erwpC Φ Tb Q n`, at one `LocFam` and one table, so
+   this is a change to `erwp` itself (its stops owing runs at other location typings and tables),
+   not to `KapRelN` or `contShareN` alone. Every stop under a live `mut` lend crosses the Mut Frame's
+   fold, and `not_extRFoldTransfer` shows `ExtR` at the lender's share does not give `ExtR` at the
+   borrowed continuation's share from `Θ + (ℓ, A)` to `Θ′ + (ℓ, A)`: a key added above `A` (D8 at the
+   world). Not built; an inner world other than `Θ′ + (ℓ, A)` was not examined.
+3. *The list quantifier.* `U`'s "every record list" is ours, not Core's: `vCE`'s `U` is Kripke along
+   `Ext` from the value's own list, and `vN` reads no list (D2, `coreMutImm_not_extF`). Both
+   configurations hold at the stop's own list, at which `extF` is reflexive, so no reading of the
+   list quantifier closes the step.
+
+`reify` (§12.5) reads the loop made at a tick through `U X` (`thunkRN`, `vN`'s `U` clause with the
+candidate in place of `cN`), so its first disjunct asks the tick's continuation at the same worlds
+and views; no separate configuration is built for it.
 
 `effHandleT` and `effHandleL` give the clauses no `κ` and do not need this step; their tail and last
 instances are built (§10.5).
@@ -797,7 +833,7 @@ without `Div` either; `hSD` selects Core's `ewp`/`cwp` branch, which E13 removes
 ### 10.4 Not built
 
 - E10's tail and last instances: built in part 4 (§10.5).
-- `effHandleV`, `effHandleVB`: wait on E10 (§10.1).
+- `effHandleV`, `effHandleVB`: wait on E10 (§10.1), whose Core step is refuted (`not_kapRelKTyN`).
 - `withloadU` (#834 §8.4) is unchanged.
 
 ### 10.5 Built in part 4: the tail and last handlers (`rule-791-tail`)
@@ -1152,4 +1188,6 @@ Restated:
   (`thunkRN`, as `vN`'s `U` clause), at every record list, while the tick's stop owes its
   continuation only at `extF`-extensions of the stop's own list (`entN`'s `wc := extF`). The
   first disjunct of the chain's candidate therefore has no source at a list the stop's
-  continuation is not owed at. Not derived; obstruction not verified.
+  continuation is not owed at. Not derived. `thunkRN` is `vN`'s `U` clause, so the loop is also
+  asked at the worlds and views at which E10's Core step is refuted (§10.1, `not_kapRelKTyN`); no
+  configuration is built for `reify` itself.
