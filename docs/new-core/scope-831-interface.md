@@ -855,24 +855,69 @@ returns frame by frame by `vN_local`.
 `R` (`R` in the lend's stratum, so the lent cell is not in it). It is the one-cell step of the
 family frame across raises.
 
+### 11.2a Built in `Core/Chain/FamCancel836N.lean`, `FamSlice836N.lean`
+
+| Row / constant | Chain lemma | Core proof |
+|---|---|---|
+| `sm` (constant) | `constN_sm` (`sliceBorrowMS_compat`, `erwp_M_frameListCRN`); instance `sliceBorrowMS_inst` at `hardestRow`, finaliser `dArrFree = λa. drop (λu. (), a)` (`dArrFree_sem`) | `sliceBorrowMU_compatX` at `Row.Suspend` |
+| `sliceBorrowMU` | `sliceBorrowMU_compatN` (`sliceBorrowMU_sem`, `erwp_M_frameListRN`) | `sliceBorrowMU_compatX`, `wpG_M_frameFam` |
+| `sliceReplaceM` | `sliceReplaceM_compatN` (`sepRange_pickW`) | `sliceReplaceM_compatX` |
+
+`ConstsN` now follows from `FundamentalN` (`constsN_of`, the five `constN_*`), so
+`goal791Sched_of`'s second hypothesis is discharged: `goal791Sched_of_fundamental : FundamentalN →
+Goal791SchedN`.
+
+**The one-cell frame at an incoming claim.** Nesting `erwp_M_frameCR` needs the callback's raises
+and cancel runs already carrying the inner frames' claims. Each declaration below is a new lemma
+beside the one it restates; the originals are unchanged and keep their callers.
+
+| Original | At an incoming claim `R` |
+|---|---|
+| `erwp_M_frameCR`: callback at `opTableN T`, lender at `opTableR T′ (claimR ℓ A F)` | `erwp_M_frameCRR`: callback at `opTableR T R`, lender at `opTableR T′ (claimR ℓ A F ⋆ R)`, `R` in `A`'s stratum |
+| `erwp_M_frame_cancelRunCR`: `cancelTabN T` to `cancelTabR T′ (claimR …)` | `erwp_M_frame_cancelRunCRR`: `cancelTabR T R` to `cancelTabR T′ (claimR … ⋆ R)` |
+| `tabN_tabR_twin` (`tabN` at the lend's world, `tabR` without it) | `tabR_tabR_twinW` (`tabR R` at one world, `tabR R′` at another, the row's types read alike) |
+| `tabN_lendOKCR_C` | `tabR_lendOKCR_C` |
+| `tabR_can` (`tabN` entries' cancel runs to `tabR (claimR …)`) | `tabR_canR` (`tabR R` entries' cancel runs to `tabR (claimR … ⋆ R)`, by `erwp_M_frame_cancelRunCRR`) |
+| `tabR`/`finR` | unchanged: already parametric in the claim |
+
+Beside them: `tab_lookupRW` (a `tabR` entry at every claim and world), `tabR_le` (`tabR`
+monotone in its claim along `OpTabN.Le`), `tabN_tabR_le` (the callback's `tabN` below `tabR` at a
+claim holding of `∅`), `performStopN_le`, `errOkN_le`, `erwp_opTableR_le`, `erwp_cancelTabR_le`,
+`erwp_opTableN_R`, `erwp_cancelTabN_R`.
+
+**The list induction** (`erwp_M_frameListCRN`, Core's `wpG_M_frameList` across stops, raises and
+layered cancel runs) is `rwp_M_frameListN`'s, with `erwp_M_frameCRR` for `rwp_M_frame`. Frame `j`
+lends at `αⱼ` fresh and below the frame's rest, the payloads' and result's strata and the bound.
+Its callback, the run of frames `j+1 … n`, runs at `tabR (claimL A δ Θⱼ I)` at the world `Θⱼ` with
+`αⱼ`'s key. `claimL A δ Θ I` is the composite claim: the cells of `I` owned again, each holding a
+member of `A` at `Θ`. Frame `j`'s output `claimR ℓⱼ αⱼ Fⱼ ⋆ claimL … Θⱼ I` is moved to
+`claimL … Θⱼ₋₁ (ℓⱼ :: I)` by `vN_local` (the cells are in `αⱼ`'s stratum), at every cancel depth
+(`tabR_le`). The innermost callback runs at the empty claim `claimL … []`, and its own `tabN` lies
+below that (`tabN_tabR_le`). `sliceBorrowMS_compat` is `withbor2S_compat`'s structure around it:
+`erwp_claimX` at `claimL`, then `erwp_ubindClaimRT`, where `d : Array A ⊸ 1` takes the array
+(`fin_claimArr`).
+
+**At an unwinding row** the table reads no fresh key (`tabN_unwind_add`), so
+`erwp_M_frameListRN` is the list induction over `erwp_M_frameRR` at one table. The finaliser
+runs at a raise (`erwp_ubindRaise`, `fin_claimArrI`).
+
+**`sliceReplaceM`** is `arrReplace_compatN`'s steps with `erwp_M_antiFrame` at the view at the
+picked leaf (`consistentX_get` for the cell's view lifetime), as in `withswap_compatN`. The steps
+inside the anti-frame are taken at the index each one costs. The family is rebuilt at the end's
+index by `sepRange_pickW` (`sepRange_pick` with the rest read at a weaker predicate).
+
 ### 11.3 Not built
 
-- **`sliceBorrowMU`, `sliceBorrowIU`**: the list induction over `erwp_M_frameRR` (the claims a
-  `sepList` of `claimR` at each leaf's key, which is the owned array the finaliser `d : Array A ⊸ 1`
-  takes at `[finalise]`, `erwp_ubindRaise`), then `withbor2U_compatN`'s and `withbor1U_compatN`'s
-  steps. The `Imm` side needs the family Imm Frame: the list induction over `erwp_I_frameR`, one
-  record per cell (`LocTy.addImm`), each leaf's `ImmWitW` at its record. Not derived; obstruction not
-  verified.
-- **`constN_sm`**: the family frame across stops and layered cancel runs. Nesting `erwp_M_frameCR`
-  needs it with the callback's raises and cancel runs already carrying the inner claims, as
-  `erwp_M_frameRR` does for raises: `erwp_M_frameCR`, `erwp_M_frame_cancelRunCR`, `tabR`/`finR`,
-  `tabR_can` and `tabN_tabR_twin` at an incoming claim, then the list induction and
-  `withbor2S_compat`'s structure with the composite claim at `erwp_claimX`/`erwp_ubindClaimRT`.
-  Not derived; obstruction not verified.
-- **`sliceBorrowI`**: `erwp_I_frameFamN`, the list induction over `erwp_I_frame` with
-  `erwp_tieEntry`; not built.
-- **`arrNew`**: the `tab` step at the index (`rwp_tab`: one head step to `tabFill`, the block
-  from `finDom_block`, `n` of `TWNC.alloc`; Core's `wpTS_tab`, `alloc_block`), then `tabFill_wpN`
-  by Core's induction. Not built.
-- **`sliceReplaceM`, `sliceSwapM`**: `arrReplace_compatN`'s steps with `erwp_M_antiFrame` at the
-  view at each leaf (as `withswap_compatN`). Not built.
+- **`sliceBorrowIU`, `sliceBorrowI`**: the family Imm Frame. This is the list induction over
+  `erwp_I_frameR`/`erwp_I_frame`, one record per cell (`LocTy.addImm`), each leaf's `ImmWitW`
+  at its record, with the run read at the lender's view by `erwp_tieEntry`. Nesting needs
+  `erwp_I_frameR` at an incoming claim, as `erwp_M_frameCRR` is for the Mut Frame: the callback
+  at `opTableR Tb R`, the lender at `opTableR Tb (claimI … ⋆ R)`. Not built. Not derived;
+  obstruction not verified.
+- **`arrNew`**: the `tab` step at the index. `rwp_tab` takes one head step to `tabFill` that
+  allocates a block. It needs `alloc_block` at the chain (`n` of `TWNC.alloc` and
+  `hash_compS_own`, the block from `finDom_block`) and the continuation's `rwp` from the post-step
+  configuration. `rwp_head1` covers only steps to a value. After that comes `tabFill_wpN`, by
+  Core's induction. Not built. Not derived; obstruction not verified.
+- **`sliceSwapM`**: `sliceReplaceM_compatN`'s steps at one leaf (`i = j`) or two (two anti-frames,
+  `sepRange_pick2N`). Not built. Not derived; obstruction not verified.
