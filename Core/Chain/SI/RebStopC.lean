@@ -66,8 +66,8 @@ theorem canon_agree_split {W F : WRes} {ps rs : List FrameRec} {r : FrameRec} {l
 `ρᵢ` and `ρ_b ∈ Res_β`; the borrowed run is handed `ρ_b ● canon r β`. At the end, `hpost` splits
 the run's resource `ρ′ = ρₒ ● ρₖ`, `ρₒ ∈ Res_β`, and is given 6.52's `ψ`
 (`ψ ● (canon r β)|dom(ρ′|mut,own) = ρₖ ● ρ⁺`, `ψ ∈ Res_β`); it splits `ρₒ ● ψ ● ρᵢ` for the
-lender. -/
-theorem rwpG_rebG {Φ : LocFam} (r : FrameRec) (x : LifeVar) (hx : ¬ VFree x r.T) {β : Life}
+lender. `hpost` is also handed the validity of `w` and `Y`. -/
+theorem rwpG_rebGV {Φ : LocFam} (r : FrameRec) (x : LifeVar) (hx : ¬ VFree x r.T) {β : Life}
     {s : LSet} {hs : r.R.InStratum s.join} (hS : TmplSpec r (tmpl r))
     (hRβ : r.R.InStratum β)
     (hshape : vShape (r.T.immReborrow (.var x)) (r.δ.extend x β) r.v (canon r β))
@@ -80,7 +80,7 @@ theorem rwpG_rebG {Φ : LocFam} (r : FrameRec) (x : LifeVar) (hx : ¬ VFree x r.
           ResU.SubKeep w ((canon r β).restrictDom r.R.exclPart) ψ →
           ResU.CompS ψ ((canon r β).restrictDom r.R.exclPart) w → ψ.InStratum β →
           ResU.CompS ρo ψ Yo →
-          ResU.CompS Yo (ResU.single r.le (CellU.immOf s r.v r.R hs)) Y →
+          ResU.CompS Yo (ResU.single r.le (CellU.immOf s r.v r.R hs)) Y → ResU.Valid w → ResU.Valid Y →
           ∃ ρ'L ρpL, ResU.CompS ρ'L ρpL Y ∧ NoOwn ρpL ∧ Qout k ls'' t ρ'L)
     (hA : ∀ Bχ, ResU.CompS ρb (canon r β) Bχ → rwpG (ℍ := ℍ) Φ Qin n ls e Bχ) :
     rwpG (ℍ := ℍ) Φ Qout n ls e ρ := by
@@ -200,6 +200,7 @@ theorem rwpG_rebG {Φ : LocFam} (r : FrameRec) (x : LifeVar) (hx : ¬ VFree x r.
       (ResU.hash_symm hiπ) hsubK hc ⟨w59, hw59, hY59⟩ hσX hσY
   -- the caller's split of `ρₒ ● ψ ● ρᵢ`
   obtain ⟨ρ'L, ρpL, hLY, hnoL, hQout⟩ := hcont ρp w ψ w59 Y59 gB hw hsubK hsplit hψβ hw59 hY59
+    (ResU.Valid.split hfρ'p hvfp).2 hvY59
   -- the final world is `ρ_f ● Y`
   obtain ⟨X1, hX1, hX1'⟩ := compS_reassoc ht3 hρ'χ
   have hFY : ResU.CompS ρf Y59 Q58 := by
@@ -232,6 +233,29 @@ theorem rwpG_rebG {Φ : LocFam} (r : FrameRec) (x : LifeVar) (hx : ¬ VFree x r.
     ⟨(ResU.CompS.comm hf1).1, fL, ResU.CompS.comm hf1, hvfL⟩, hf1,
     ⟨(ResU.CompS.comm hf2).1, Q58, ResU.CompS.comm hf2, hvQ⟩, hf2, hLQ, hLY,
     ⟨h59, hvρ, hvY59⟩, hnoL, hTout, htgout, gps, gls, hQout⟩
+
+/-- `rwpG_rebGV`, the validity it hands `hpost` not read. -/
+theorem rwpG_rebG {Φ : LocFam} (r : FrameRec) (x : LifeVar) (hx : ¬ VFree x r.T) {β : Life}
+    {s : LSet} {hs : r.R.InStratum s.join} (hS : TmplSpec r (tmpl r))
+    (hRβ : r.R.InStratum β)
+    (hshape : vShape (r.T.immReborrow (.var x)) (r.δ.extend x β) r.v (canon r β))
+    {ρb ρ : WRes} (hc : ResU.CompS (ResU.single r.le (CellU.immOf s r.v r.R hs)) ρb ρ)
+    (h15 : ρb.InStratum β) {ls : List SRec} (hr : r ∈ rsOf ls) (hβs : ∀ y, s.mem y → β ⊑ y)
+    {Qin Qout : PostG} {n : Nat} {e : Expr}
+    (hpost : ∀ k, k ≤ n → ∀ ls'' t (ρ' : WRes), Qin k ls'' t ρ' → (∀ y, y ∈ ls'' ↔ y ∈ ls) →
+      ∃ ρo ρk, ResU.CompS ρo ρk ρ' ∧ ρo.InStratum β ∧
+        ∀ (ρp w ψ Yo Y : WRes), NoOwn ρp → ResU.CompS ρk ρp w →
+          ResU.SubKeep w ((canon r β).restrictDom r.R.exclPart) ψ →
+          ResU.CompS ψ ((canon r β).restrictDom r.R.exclPart) w → ψ.InStratum β →
+          ResU.CompS ρo ψ Yo →
+          ResU.CompS Yo (ResU.single r.le (CellU.immOf s r.v r.R hs)) Y →
+          ∃ ρ'L ρpL, ResU.CompS ρ'L ρpL Y ∧ NoOwn ρpL ∧ Qout k ls'' t ρ'L)
+    (hA : ∀ Bχ, ResU.CompS ρb (canon r β) Bχ → rwpG (ℍ := ℍ) Φ Qin n ls e Bχ) :
+    rwpG (ℍ := ℍ) Φ Qout n ls e ρ :=
+  rwpG_rebGV r x hx hS hRβ hshape hc h15 hr hβs
+    (fun k hk ls'' t ρ' hQ hls => by
+      obtain ⟨ρo, ρk, h1, h2, h3⟩ := hpost k hk ls'' t ρ' hQ hls
+      exact ⟨ρo, ρk, h1, h2, fun ρp w ψ Yo Y a b c d e f g _ _ => h3 ρp w ψ Yo Y a b c d e f g⟩) hA
 
 end BoCa.Fig16.LogRel.Core.Chain.SI
 

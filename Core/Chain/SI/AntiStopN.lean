@@ -56,15 +56,24 @@ def AFPostG (l : Loc) (β : Life) (F : Nat → Val → SPropS Loc Val β) (Q : P
     ResU.CompS σ' R rest ∧
     ∀ X, ResU.CompS R (ResU.single l (CellU.mutOf β w σ' h' (F k) hw')) X → Q k ls' t X
 
+/-- `AFPostG`, the seal handed on only at a valid resource. -/
+def AFPostGV (l : Loc) (β : Life) (F : Nat → Val → SPropS Loc Val β) (Q : PostG) : PostG :=
+  fun k ls' t ρ' => ∃ (w : Val) (σ' : WRes) (h' : σ'.InStratum β) (hw' : F k w ⟨σ', h'⟩)
+    (R rest : WRes), ResU.CompS (ResU.single l (CellU.ownOf w)) rest ρ' ∧
+    ResU.CompS σ' R rest ∧
+    ∀ X, ResU.CompS R (ResU.single l (CellU.mutOf β w σ' h' (F k) hw')) X → ResU.Valid X →
+      Q k ls' t X
+
 /-- **Mut Anti-Frame at any final term** (`[TR]` 6.66's proof at `rwpG`): `rwp_M_antiFrame`'s
-proof, read at the final term the run reached instead of at a value. -/
-theorem rwpG_M_antiFrameG {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {β : Life}
+proof, read at the final term the run reached instead of at a value. The sealed resource it hands
+the callback's post is valid (`AFPostGV`). -/
+theorem rwpG_M_antiFrameGV {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {β : Life}
     {F : Nat → Val → SPropS Loc Val β} (hF : Φ l = some ⟨β, F⟩) {Q : PostG} {n : Nat}
     {ls : List SRec} {e : Expr} {v : Val} {σP : WRes} {hstr : σP.InStratum β} {j : Nat}
     {hwit : F j v ⟨σP, hstr⟩} {ρa ρ : WRes}
     (hsplit : ResU.CompS (ResU.single l (CellU.mutOf β v σP hstr (F j) hwit)) ρa ρ)
     (hA : ∀ W X, ResU.CompS σP (ResU.single l (CellU.ownOf v)) W → ResU.CompS ρa W X →
-      rwpG (ℍ := ℍ) Φ (AFPostG l β F Q) n ls e X) :
+      rwpG (ℍ := ℍ) Φ (AFPostGV l β F Q) n ls e X) :
     rwpG (ℍ := ℍ) Φ Q n ls e ρ := by
   classical
   intro ρf sρ ps μ hH2 hsρ hT htg hI hlow hfd jr μ' e' hj hrun hfin
@@ -179,7 +188,21 @@ theorem rwpG_M_antiFrameG {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {β : Life}
   have htgout : Tagged FRBp ps'' ls'' := tagged_of_ag (fun a ha =>
     (mut_fold_ag hW''₁ (ResU.CompS.comm hFBW) (ResU.CompS.comm hFBm) a).mpr ha) htg''
   exact ⟨RB, ρp, FRB, FRBp, π', ps'', ls'', ResU.hash_symm hfRB, hFRB, hpFRB, hFRBp, hmem₂,
-    hπ', ⟨hupd, hvρ, hvπ'⟩, h11, hTout, htgout, hps'', hls'', hb RB hRB⟩
+    hπ', ⟨hupd, hvρ, hvπ'⟩, h11, hTout, htgout, hps'', hls'', hb RB hRB (ResU.Valid.split hπ' hvπ').1⟩
+
+/-- **Mut Anti-Frame at any final term** (`rwpG_M_antiFrameGV`, the sealed resource's validity
+not read). -/
+theorem rwpG_M_antiFrameG {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {β : Life}
+    {F : Nat → Val → SPropS Loc Val β} (hF : Φ l = some ⟨β, F⟩) {Q : PostG} {n : Nat}
+    {ls : List SRec} {e : Expr} {v : Val} {σP : WRes} {hstr : σP.InStratum β} {j : Nat}
+    {hwit : F j v ⟨σP, hstr⟩} {ρa ρ : WRes}
+    (hsplit : ResU.CompS (ResU.single l (CellU.mutOf β v σP hstr (F j) hwit)) ρa ρ)
+    (hA : ∀ W X, ResU.CompS σP (ResU.single l (CellU.ownOf v)) W → ResU.CompS ρa W X →
+      rwpG (ℍ := ℍ) Φ (AFPostG l β F Q) n ls e X) :
+    rwpG (ℍ := ℍ) Φ Q n ls e ρ :=
+  rwpG_M_antiFrameGV hΦ hF hsplit fun W X hW hX =>
+    rwpG_mono (fun _ _ _ _ ⟨w, σ', h', hw', R, rest, h1, h2, hQ⟩ =>
+      ⟨w, σ', h', hw', R, rest, h1, h2, fun X hX _ => hQ X hX⟩) (hA W X hW hX)
 
 /-! ### Guarded tables -/
 
