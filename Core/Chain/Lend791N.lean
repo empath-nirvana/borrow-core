@@ -215,10 +215,10 @@ theorem OpTabN.Twin.trans {T₁ T₂ T₃ : OpTabN} (h₁ : T₁.Twin T₂) (h�
   exact ⟨en₃, h₃', a2.trans a1, b2.trans b1, c2.trans c1, d2.trans d1, e2.trans e1⟩
 
 /-- An entry of a row's table is one of its operations'. -/
-theorem tabN_effOf_some {S : Row} {R : VTy} {δ : LSub} {Φ : LocFam} {m i : UInt32} {en : OpEntN}
-    (h : tabN (ℍ := ℍ) (CTy.effOf S R) δ Φ m i = some en) :
-    ∃ o ∈ S, m = o.n ∧ en = entN o.q o.B (fun k v ρ => vN (ℍ := ℍ) o.A δ k v ρ)
-      (fun k v ρ => vN (ℍ := ℍ) o.B δ k v ρ) (finN (ℍ := ℍ) o.fin δ Φ) := by
+theorem tabN_effOf_some {S : Row} {R : VTy} {δ : LSub} {Θ : LocTy} {c : Loc → Option Life}
+    {m i : UInt32} {en : OpEntN} (h : tabN (ℍ := ℍ) (CTy.effOf S R) δ Θ c m i = some en) :
+    ∃ o ∈ S, m = o.n ∧ en = entN o.q o.B (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
+      (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ) (finN (ℍ := ℍ) o.fin δ Θ c) := by
   induction S with
   | nil => simp [CTy.effOf, tabN, OpTabN.empty] at h
   | cons o S ih =>
@@ -228,12 +228,13 @@ theorem tabN_effOf_some {S : Row} {R : VTy} {δ : LSub} {Φ : LocFam} {m i : UIn
       · obtain ⟨o', ho', hm, rfl⟩ := ih h
         exact ⟨o', List.mem_cons_of_mem _ ho', hm, rfl⟩
 
-/-- **The callback's table and the lender's are twins**: they differ in `'x`, which no operation
-type of the row mentions, and in the location family, which only the cancel obligations read. -/
+/-- **The callback's table and the lender's are twins** at one world: they differ in `'x`, which
+no operation type of the row mentions, and in the view, which only the cancel obligations read. -/
 theorem tabN_effOf_twin {x : LifeVar} {α : Life} {S : Row}
-    (hS : ∀ o ∈ S, ¬ VFree x o.A ∧ ¬ VFree x o.B) (R₁ R₂ : VTy) (δ : LSub) (Φ₁ Φ₂ : LocFam) :
-    (tabN (ℍ := ℍ) (CTy.effOf S R₁) (δ.extend x α) Φ₁).Twin
-      (tabN (ℍ := ℍ) (CTy.effOf S R₂) δ Φ₂) := by
+    (hS : ∀ o ∈ S, ¬ VFree x o.A ∧ ¬ VFree x o.B) (R₁ R₂ : VTy) (δ : LSub) (Θ : LocTy)
+    (c₁ c₂ : Loc → Option Life) :
+    (tabN (ℍ := ℍ) (CTy.effOf S R₁) (δ.extend x α) Θ c₁).Twin
+      (tabN (ℍ := ℍ) (CTy.effOf S R₂) δ Θ c₂) := by
   induction S with
   | nil => intro m i en h; simp [CTy.effOf, tabN, OpTabN.empty] at h
   | cons o S ih =>
@@ -256,31 +257,32 @@ theorem tabN_effOf_twin {x : LifeVar} {α : Life} {S : Row}
 /-- **The callback's table may be stopped at under the lend at `α`**: `Row.Suspend`'s qualifier,
 payload and answer clauses. -/
 theorem tabN_lendOKCR {x : LifeVar} {α : Life} {S : Row} (hS : S.Suspend x)
-    (R : VTy) (δ : LSub) (Φ : LocFam) :
-    (tabN (ℍ := ℍ) (CTy.effOf S R) (δ.extend x α) Φ).LendOKCR α where
+    (R : VTy) (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) :
+    (tabN (ℍ := ℍ) (CTy.effOf S R) (δ.extend x α) Θ c).LendOKCR α where
   entry := fun m i en h _ => by
     obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
     exact ⟨(hS o ho).1, rfl⟩
   pa := fun m i en h k ls v ρ hp => by
     obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
     exact vN_outlives (Δ := LifeCtx.empty) (a := .var x) (models_empty_any _)
-      (interp_ext_self δ x α) ((hS o ho).2.2.2.2.1 _ _) k v ρ hp
+      (interp_ext_self δ x α) ((hS o ho).2.2.2.2.1 _ _) Θ k v ρ hp
   pb := fun m i en h k ls w ρ hp => by
     obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
     exact (vN_outlives (Δ := LifeCtx.empty) (a := .var x) (models_empty_any _)
-      (interp_ext_self δ x α) ((hS o ho).2.2.2.2.2.1 _ _) k w ρ hp).mono (Life.down_sqsubset α).le
+      (interp_ext_self δ x α) ((hS o ho).2.2.2.2.2.1 _ _) Θ k w ρ hp).mono (Life.down_sqsubset α).le
 
 /-- The finaliser `λ_. d ℓ` consumes the lend's claim: `d`'s judgment at `Ref A ⊸ 1`, applied to
 the cell owned again with its content in `A`'s family. -/
 theorem fin_claim {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
     (hd : SemJN (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.ref A) .unit))) {δ δ' : LSub}
-    (hδ : vN (ℍ := ℍ) A δ' = vN (ℍ := ℍ) A δ) {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {α : Life}
-    {k : Nat} {ls : List SRec} {ρ : WRes}
-    (h : claimR l α (fun j u r => vN (ℍ := ℍ) A δ' j u r.1) k ρ) :
-    rwp (ℍ := ℍ) Φ (fun _ _ v ρ' => v = Val.unit ∧ ρ' = PMap.empty) k ls
+    (hδ : vN (ℍ := ℍ) A δ' = vN (ℍ := ℍ) A δ) {Θ : LocTy} (hΘ : Θ.OK)
+    {c : Loc → Option Life} {l : Loc} {α : Life} {k : Nat} {ls : List SRec} {ρ : WRes}
+    (h : claimR l α (fun j u r => vN (ℍ := ℍ) A δ' Θ j u r.1) k ρ) (hc : ConsistentX c ρ) :
+    rwp (ℍ := ℍ) (Θ.view c) (fun _ _ v ρ' => v = Val.unit ∧ ρ' = PMap.empty) k ls
       (.app (.val (Val.lam (.app d (.val (Val.loc l))))) (.val .unit)) ρ := by
+  have hΦ := LocTy.view_down hΘ.1 c
   obtain ⟨w, σ, hσ, hF, hcl⟩ := h
-  have hF' : vN (ℍ := ℍ) A δ k w σ := by rw [← hδ]; exact hF
+  have hF' : vN (ℍ := ℍ) A δ Θ k w σ := by rw [← hδ]; exact hF
   refine rwp_det'' (Q := fun _ v ρ' => v = Val.unit ∧ ρ' = PMap.empty) hΦ
     (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) ?_
   have e : Kont.hole.plug (Expr.subst 0 Val.unit (.app d (.val (Val.loc l)))) =
@@ -289,13 +291,14 @@ theorem fin_claim {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
       Expr.loc]
   rw [e]
   refine rwp_bind hΦ _ ?_
-  have hd0 := hd δ [] Φ k ls PMap.empty (models_empty_any _) hΦ trivial rfl
+  have hd0 := hd δ [] Θ c k ls PMap.empty (models_empty_any _) hΘ (consistentX_empty c) trivial rfl
   rw [show substAll [] d = d from psub_closedAt d [] hdc (Nat.zero_le 0)] at hd0
   have hfr := rwp_frame (fun _ τ => τ = ρ) (fun _ _ _ _ h => h) (compS_empty_left ρ)
     (rwp_of_erwp_empty hd0) rfl
-  refine rwp_mono_le (fun k' hk' ls' v τ hv => ?_) hfr
-  obtain ⟨τ₁, τ₂, hcτ, hP, rfl⟩ := hv
-  have := hP Φ hΦ ls' k' le_rfl (Val.loc l) τ₂ τ hcτ ⟨l, w, σ, rfl, hcl, vN_le hk' hF'⟩
+  refine rwp_mono_le (fun k' hk' ls' v τ hv => ?_) (rwp_consistentXV hfr hc)
+  obtain ⟨⟨τ₁, τ₂, hcτ, hP, rfl⟩, hcτ', hvτ⟩ := hv
+  have := hP Θ (LocTy.extA_refl Θ) hΘ c (consistentX_left hcτ hcτ' hvτ) ls' Θ (LocTy.extA_refl Θ)
+    hΘ c k' le_rfl (Val.loc l) τ₂ τ hcτ ⟨l, w, σ, rfl, hcl, vN_le hk' hF'⟩ hcτ'
   exact rwp_of_erwp_empty this
 
 /-- `withborU`'s `then`: `λb. (ℓ, b)`. -/
@@ -313,15 +316,17 @@ def cbRelease : Val := Val.lam (.val (Val.lam (.val .unit)))
 wherever the bound has an interpretation: the borrow is left as garbage at the return, so the
 callback type `withbor2S_compat` reads is not empty. -/
 theorem cbRelease_sem {x : LifeVar} {bnd : Lifetime.Life} {A : VTy} {δ : LSub}
-    (hb : ∃ γ, bnd.interp δ = some γ) (n : Nat) :
-    vN (ℍ := ℍ) (cbUTy x bnd (.mut (.var x) A) .unit []) δ n cbRelease PMap.empty := by
-  intro Φ hΦ ls
-  refine ⟨hb, fun α _ k _ v ρv ρ' hc hv => ?_⟩
+    (hb : ∃ γ, bnd.interp δ = some γ) (Θ : LocTy) (n : Nat) :
+    vN (ℍ := ℍ) (cbUTy x bnd (.mut (.var x) A) .unit []) δ Θ n cbRelease PMap.empty := by
+  intro Θ' _ _ c _ ls
+  refine ⟨hb, fun α _ Θ'' _ hOK c' k _ v ρv ρ' hc hv _ => ?_⟩
   obtain rfl := eq_of_compS_empty_left hc
-  obtain ⟨β, hβ, l, w, χ, hχ, j, hw, -, rfl, rfl⟩ := hv
-  have hQ : PostN.Down (fun k _ v ρ => vN (ℍ := ℍ) (.box (.var x) .unit) (δ.extend x α) k v ρ) :=
-    fun k _ v ρ h => vN_down _ _ k v ρ h
-  show erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) _ k ls
+  obtain ⟨β, hβ, l, w, χ, hχ, j, hw, -, rfl, -, rfl⟩ := hv
+  have hΦ := LocTy.view_down hOK.1 c'
+  have hQ : PostN.Down
+      (fun k _ v ρ => vN (ℍ := ℍ) (.box (.var x) .unit) (δ.extend x α) Θ'' k v ρ) :=
+    fun k _ v ρ h => vN_down _ _ _ k v ρ h
+  show erwp (ℍ := ℍ) (Θ''.view c') (opTableN OpTabN.empty) _ k ls
     (.app (.app cbRelease.1 (.val .unit)) (.val (Val.loc l))) _
   refine erwp_det hΦ (opTableN_down OpTabN.empty_down) hQ
     (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl (.appL .hole (Val.loc l))) ?_
@@ -342,12 +347,16 @@ does not meet `OpTabN.LendOKCR.pb` at any lend lifetime `α`, and `Row.Suspend`'
 `¬ VFree x o.B` does not give `erwp_M_frameCR`'s premise there; `Row.Suspend`'s answer clause does.
 This is a configuration for the premise, not a refutation of the constant. -/
 theorem answer_not_inStratum (δ : LSub) (α : Life) (l : Loc) :
-    ∃ ρ : WRes, (∀ n, vN (ℍ := ℍ) (.thunk (.ret .unit)) δ n unitThunk ρ) ∧
+    ∃ ρ : WRes, (∀ Θ n, vN (ℍ := ℍ) (.thunk (.ret .unit)) δ Θ n unitThunk ρ) ∧
       ¬ ρ.InStratum (↓α) := by
   refine ⟨ResU.single l (CellU.mutOf (↓(↓α)) Val.unit PMap.empty
-    (ResU.inStratum_empty _) (fun _ _ => True) trivial), fun n Φ hΦ ls => ?_, fun h => ?_⟩
-  · show erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) _ n ls (.app unitThunk.1 (.val .unit)) _
-    refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down _ _ k v ρ h)
+    (ResU.inStratum_empty _) (fun _ _ => True) trivial), fun Θ n Θ' _ hOK c _ ls => ?_,
+    fun h => ?_⟩
+  · have hΦ := LocTy.view_down hOK.1 c
+    show erwp (ℍ := ℍ) (Θ'.view c) (opTableN OpTabN.empty) _ n ls
+      (.app unitThunk.1 (.val .unit)) _
+    refine erwp_det hΦ (opTableN_down OpTabN.empty_down)
+      (fun k _ v ρ h => vN_down _ _ _ k v ρ h)
       (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) ?_
     simp only [Kont.plug, Expr.subst, Val.unit, Expr.val]
     exact erwp_garbage (compS_empty_left _) (noOwn_single_mut l)

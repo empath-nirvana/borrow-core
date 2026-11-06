@@ -384,6 +384,12 @@ theorem LocTy.empty_down : LocTy.empty.Down := fun _ _ _ h => by cases h
 
 theorem LocTy.empty_bounded : LocTy.empty.Bounded := ⟨0, fun _ _ h => absurd rfl h⟩
 
+/-- A world an interpretation runs at: its families downward closed, and a lifetime fresh for
+it (`LocTy.exists_fresh`). -/
+def LocTy.OK (Θ : LocTy) : Prop := Θ.Down ∧ Θ.Bounded
+
+theorem LocTy.empty_ok : LocTy.empty.OK := ⟨LocTy.empty_down, LocTy.empty_bounded⟩
+
 /-- The view of the empty world types nothing. -/
 theorem LocTy.view_empty (c : Loc → Option Life) : LocTy.empty.view c = fun _ => none := by
   funext x
@@ -524,6 +530,27 @@ theorem rwpG_consistentX {Φ : LocFam} {Q : PostG} {n : Nat} {ls : List SRec} {e
     h₁₃⟩ := h ρf fρ ps μ hf hcf hT htg hl hfd j μ' e' hj hrun hfin
   exact ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
     h₁₃, consistentX_of_updN h₇.1 h₇.2.2 h₆ hc⟩
+
+/-- `rwpG_consistentX` with the returned resource's validity, which `↭` gives. -/
+theorem rwpG_consistentXV {Φ : LocFam} {Q : PostG} {n : Nat} {ls : List SRec} {e : Expr}
+    {ρ : WRes} (h : rwpG (ℍ := ℍ) Φ Q n ls e ρ) {c : Loc → Option Life}
+    (hc : ConsistentX c ρ) :
+    rwpG (ℍ := ℍ) Φ (fun k ls t ρ' => Q k ls t ρ' ∧ ConsistentX c ρ' ∧ ResU.Valid ρ') n ls e ρ := by
+  intro ρf fρ ps μ hf hcf hT htg hl hfd j μ' e' hj hrun hfin
+  obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
+    h₁₃⟩ := h ρf fρ ps μ hf hcf hT htg hl hfd j μ' e' hj hrun hfin
+  exact ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
+    h₁₃, consistentX_of_updN h₇.1 h₇.2.2 h₆ hc, (ResU.Valid.split h₆ h₇.2.2).1⟩
+
+/-- **A run to a value keeps the view consistent**, at `rwp`. -/
+theorem rwp_consistentXV {Φ : LocFam} {Q : PostN} {n : Nat} {ls : List SRec} {e : Expr}
+    {ρ : WRes} (h : rwp (ℍ := ℍ) Φ Q n ls e ρ) {c : Loc → Option Life}
+    (hc : ConsistentX c ρ) :
+    rwp (ℍ := ℍ) Φ (fun k ls v ρ' => Q k ls v ρ' ∧ ConsistentX c ρ' ∧ ResU.Valid ρ') n ls e ρ := by
+  refine rwp_iff_rwpG.mpr (rwpG_mono (fun k ls t ρ' ht => ?_)
+    (rwpG_consistentXV (rwp_iff_rwpG.mp h) hc))
+  obtain ⟨⟨v, hv, hq⟩, hc', hv'⟩ := ht
+  exact ⟨v, hv, hq, hc', hv'⟩
 
 /-- **`erwp_consistent`: a run's returned resource stays consistent with the view.** A run at any
 location typing (the view `Θ.view c` among them) from a resource consistent with `c` returns, at
