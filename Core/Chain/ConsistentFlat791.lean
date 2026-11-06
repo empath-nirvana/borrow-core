@@ -40,7 +40,7 @@ and leaves `ρp`, which owns nothing, in the post-configuration. -/
 theorem rwpG_here_split {Φ : LocFam} {Q : PostG} {n : Nat} {ls : List SRec} {e : Expr}
     {ρ ρ' ρp : WRes} (hfin : ∀ μ, Final (ℍ := ℍ) μ e) (hs : ResU.CompS ρ' ρp ρ)
     (hno : NoOwn ρp) (h : Q n ls e ρ') : rwpG (ℍ := ℍ) Φ Q n ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun _
+  intro ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun _
   cases hrun with
   | more hs' _ => exact absurd hs' (hfin _ _ _)
   | refl =>

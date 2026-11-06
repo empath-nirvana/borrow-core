@@ -157,7 +157,7 @@ theorem rwpG_M_frameG {Φ : LocFam} {l : Loc} {A : Life}
       rwpG (ℍ := ℍ) (Φ.set l A F) Qin n ls e BM) :
     rwpG (ℍ := ℍ) Φ Qout n ls e ρ := by
   classical
-  intro ρf sρ ps μ hH3 hsρ hT htg hlow hfd jr μ' e' hj hrun hfin
+  intro ρf sρ ps μ hH3 hsρ hT htg hI hlow hfd jr μ' e' hj hrun hfin
   have hvsρ : ResU.Valid sρ := hash_valid_comp hH3 hsρ
   set ρm : ResU BoCa.Loc BoCa.Val :=
     ResU.single l (CellU.mutOf A v ρP houtP P hwit) with hρm
@@ -200,7 +200,7 @@ theorem rwpG_M_frameG {Φ : LocFam} {l : Loc} {A : Life}
     (ResU.lower_swap_mut_own hlPcell hvmm hvlP hFBm hFBmH hFBl hFBlH).mpr hlow
   -- H18: the borrowed run, at `Φ[ℓ ↦ (A, F)]`
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps'', ls'', h1, h2, h3, h6, h7, h9, h10, h11, hT'', htg'',
-    hps'', hls'', h12⟩ := hA BM hBM ρf fρ ps μ hH17 h4 hTin htgin hlowin hfd jr μ' e' hj hrun hfin
+    hps'', hls'', h12⟩ := hA BM hBM ρf fρ ps μ hH17 h4 hTin htgin hI hlowin hfd jr μ' e' hj hrun hfin
   -- H26: 6.27 at the index
   have hdBM : BM.InStratum (↓A) :=
     BoLo.inStratum_comp (BoLo.compS_hC (↓A)) hBM houtb

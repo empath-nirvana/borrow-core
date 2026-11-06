@@ -232,7 +232,7 @@ theorem cerwp_perform {T : OpTabC} {Q : PostCV} {F : WRes → Prop} (K : Kont) {
 
 /-- **`rwp` in front of a `cerwp`**: a run of `e` to a value at `rwp`, the garbage kept, then the
 continuation. -/
-theorem cerwp_bindRwp {Φ : LocFam} {Tb : TableC} (hL : Tb.Local) {Q : PostCV}
+theorem cerwp_bindRwp {Φ : LocFam} (hΦI : Φ.imm = []) {Tb : TableC} (hL : Tb.Local) {Q : PostCV}
     {F : WRes → Prop} (K : Kont) {Q' : PostN} {n : Nat} {ls : List SRec} {O : List FrameRec}
     {e : Expr} {ρ : WRes} (h : rwp (ℍ := ℍ) Φ Q' n ls e ρ)
     (hK : ∀ k ls' (v : Val) ρ₁ ρ₂ ρ', k ≤ n → Q' k ls' v ρ₁ → NoOwn ρ₂ → ResU.CompS ρ₁ ρ₂ ρ' →
@@ -240,19 +240,19 @@ theorem cerwp_bindRwp {Φ : LocFam} {Tb : TableC} (hL : Tb.Local) {Q : PostCV}
     cerwp (ℍ := ℍ) Tb Q F n ls O (K.plug e) ρ := by
   rw [cerwp_eq]
   refine crwpG_bind K (crwpG_mono_le (fun k hk ls' O' t ρ' ht => ?_)
-    (crwpG_of_rwpG (O := O) (F := F) (rwp_iff_rwpG.mp h)))
+    (crwpG_of_rwpG hΦI (O := O) (F := F) (rwp_iff_rwpG.mp h)))
   obtain ⟨rfl, ρ₁, ρ₂, hc, hno, v, rfl, hq⟩ := ht
   exact cerwp_unfold_at hL hk (hK k ls' v ρ₁ ρ₂ ρ' hk hq hno hc)
 
 /-- An allocation at an evaluation position. -/
-theorem cerwp_alloc {Φ : LocFam} {Tb : TableC} (hL : Tb.Local) {Q : PostCV}
+theorem cerwp_alloc {Φ : LocFam} (hΦI : Φ.imm = []) {Tb : TableC} (hL : Tb.Local) {Q : PostCV}
     {F : WRes → Prop} (K : Kont) (v : Val) {n : Nat} {ls : List SRec} {O : List FrameRec}
     {ρ : WRes}
     (h : ∀ (ℓ : Loc) (σ₁ σ₂ g σ₃ : WRes), ptoOwn ℓ v σ₁ →
       ResU.CompS ρ σ₁ σ₂ → NoOwn g → ResU.CompS σ₂ g σ₃ →
       cerwp (ℍ := ℍ) Tb Q F (n - 1) ls O (K.plug (.val (Val.loc ℓ))) σ₃) :
     cerwp (ℍ := ℍ) Tb Q F n ls O (K.plug (.app (.val (.prim .alloc)) (.val v))) ρ := by
-  refine cerwp_bindRwp (Φ := Φ) hL K (Q' := fun k ls' w σ => k = n - 1 ∧ ls' = ls ∧ ∃ ℓ σ₁,
+  refine cerwp_bindRwp (Φ := Φ) hΦI hL K (Q' := fun k ls' w σ => k = n - 1 ∧ ls' = ls ∧ ∃ ℓ σ₁,
       w = Val.loc ℓ ∧ ptoOwn ℓ v σ₁ ∧ ResU.CompS ρ σ₁ σ)
     (rwp_alloc (Φ := Φ) ls v _ (fun ℓ σ₁ σ₂ hp hc => ⟨rfl, rfl, ℓ, σ₁, rfl, hp, hc⟩))
     (fun k ls' w ρ₁ ρ₂ ρ' _ hq hno hc => ?_)
@@ -260,13 +260,13 @@ theorem cerwp_alloc {Φ : LocFam} {Tb : TableC} (hL : Tb.Local) {Q : PostCV}
   exact h ℓ σ₁ ρ₁ ρ₂ ρ' hp hc₁ hno hc
 
 /-- A release of an owned cell at an evaluation position. -/
-theorem cerwp_free {Φ : LocFam} {Tb : TableC} (hL : Tb.Local) {Q : PostCV}
+theorem cerwp_free {Φ : LocFam} (hΦI : Φ.imm = []) {Tb : TableC} (hL : Tb.Local) {Q : PostCV}
     {F : WRes → Prop} (K : Kont) (ℓ : Loc) (v : Val) {n : Nat} {ls : List SRec}
     {O : List FrameRec} {ρ ρ₁ ρ₂ : WRes} (hc : ResU.CompS ρ₁ ρ₂ ρ) (hp : ptoOwn ℓ v ρ₁)
     (h : ∀ (g σ : WRes), NoOwn g → ResU.CompS ρ₂ g σ →
       cerwp (ℍ := ℍ) Tb Q F (n - 1) ls O (K.plug (.val v)) σ) :
     cerwp (ℍ := ℍ) Tb Q F n ls O (K.plug (BoLo.freeE (.val (Val.loc ℓ)))) ρ := by
-  refine cerwp_bindRwp (Φ := Φ) hL K
+  refine cerwp_bindRwp (Φ := Φ) hΦI hL K
     (Q' := fun k ls' w σ => k = n - 1 ∧ ls' = ls ∧ w = v ∧ σ = ρ₂)
     (rwp_free (Φ := Φ) ls ℓ v _ ⟨ρ₁, ρ₂, hc, hp, rfl, rfl, rfl, rfl⟩)
     (fun k ls' w σ₁ g σ _ hq hno hcg => ?_)
@@ -302,7 +302,7 @@ def FinGarbage (T : OpTabN) : Prop :=
 /-- **`erwp` is `cerwp`** at the lifted table, at every frame condition and every owned list.
 The garbage of a stop goes into the continuation's share, which is why unrestricted entries
 (whose share is empty) are excluded. -/
-theorem cerwp_of_erwp {Φ : LocFam} {T : OpTabN} (hTD : T.Down)
+theorem cerwp_of_erwp {Φ : LocFam} (hΦI : Φ.imm = []) {T : OpTabN} (hTD : T.Down)
     (hab : ∀ m i en, T m i = some en → en.abort = false)
     (hunr : ∀ m i en, T m i = some en → en.q ≠ .unr) (hfin : FinGarbage T) {Q : PostN} :
     ∀ n (F : WRes → Prop) ls (O : List FrameRec) e ρ, erwp (ℍ := ℍ) Φ (opTableN T) Q n ls e ρ →
@@ -313,7 +313,7 @@ theorem cerwp_of_erwp {Φ : LocFam} {T : OpTabN} (hTD : T.Down)
   intro F ls O e ρ h
   rw [erwp_eq] at h
   rw [cerwp_eq]
-  refine crwpG_mono_le (fun k hk ls' O' t ρ' ht => ?_) (crwpG_of_rwpG (O := O) (F := F) h)
+  refine crwpG_mono_le (fun k hk ls' O' t ρ' ht => ?_) (crwpG_of_rwpG hΦI (O := O) (F := F) h)
   obtain ⟨rfl, ρ₁, ρ₂, hc, hno, ht⟩ := ht
   rcases ht with ⟨v, rfl, hv⟩ | ⟨K, m, i, v, en, hp⟩ | ⟨K, m, i, v, en, hp⟩
   · exact Or.inl ⟨v, rfl, rfl, ρ₁, ρ₂, hc, hno, hv⟩

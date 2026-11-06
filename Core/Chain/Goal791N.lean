@@ -643,7 +643,8 @@ theorem cN_extA : ∀ (C : CTy), noEffSpine C → ∀ (δ : LSub) {Θ Θ' : LocT
     ∀ c n ls e ρ, cN (ℍ := ℍ) C δ Θ c n ls e ρ → cN (ℍ := ℍ) C δ Θ' c n ls e ρ
   | .ret A, _, δ, _, _, hE, c, n, ls, e, ρ, h =>
       erwp_mono (fun k _ v ρ h => vN_extA A δ hE k v ρ h) (opTableN_local _) n ls e ρ
-        (erwp_extΦ (LocTy.view_ext (LocTy.ext_of_extA hE) c) (opTableN_local _) n ls e ρ h)
+        (erwp_extΦ (LocTy.view_ext (LocTy.ext_of_extA hE) c) (LocTy.view_immLe hE.2.2 c)
+          (opTableN_local _) n ls e ρ h)
   | .arr _ _, _, _, _, _, hE, _, _, _, _, ρ, h => fun Θ'' hE' hOK c' k hk v ρv ρ' hc hv hcon =>
       h Θ'' ((hE.extR ρ).trans hE') hOK c' k hk v ρv ρ' hc hv hcon
   | .amp C D, hC, δ, _, _, hE, c, n, ls, e, ρ, h =>
@@ -886,7 +887,7 @@ def Goal791SchedN : Prop :=
     CDerives LifeCtx.empty (ctx791 cs) e₀ (.comp (CTy.effOf S .unit)) →
     ∀ (Θ : LocTy) (c : Loc → Option Life) (n₀ : UInt32) (qs hr hs : Val) (Q : PostN)
       (Inv : List StoredN → Prop),
-      Θ.OK → (∀ k ls v ρ, Q k ls v ρ → ρ = PMap.empty) → Inv [] →
+      Θ.OK → Θ.imm = [] → (∀ k ls v ρ, Q k ls v ρ → ρ = PMap.empty) → Inv [] →
       SchedOKN (ℍ := ℍ) (Θ.view c) (rowTabN (ℍ := ℍ) S Θ c) n₀ qs hr hs
         (fun k _ v ρ => vN (ℍ := ℍ) .unit LSub.empty Θ k v ρ)
         (PoolAnsN (ℍ := ℍ) (Θ.view c) Q (hndVal n₀ qs hr hs) Inv) →
@@ -910,7 +911,7 @@ def SliceBorrowMSN : Prop := ∀ x bnd A B S d, ConstN (ℍ := ℍ) (.sm x bnd A
 /-- **The adequacy bridge holds**: `erwp_adequacy` at `F 1`, whose values own nothing, at the
 empty world, whose view types nothing. -/
 theorem bridgeN : BridgeN (ℍ := ℍ) := fun e h =>
-  erwp_adequacy (Φ := fun _ => none)
+  erwp_adequacy (Φ := LocFam.empty)
     (Q := fun k _ v ρ => vN (ℍ := ℍ) .unit LSub.empty LocTy.empty k v ρ) (fun _ _ _ _ hq => hq.2)
     (fun n => by
       have := h LocTy.empty (fun _ => none) LocTy.empty_ok n
@@ -943,9 +944,9 @@ theorem jdgInFrag_ctx791 (cs : List Const791) (hfr : ∀ c ∈ cs, c.InFrag) {S 
 `poolSchedAdequacyN` at the view. -/
 theorem goal791Sched_of (hF : FundamentalN (ℍ := ℍ)) (hC : ConstsN (ℍ := ℍ)) :
     Goal791SchedN (ℍ := ℍ) := by
-  intro cs hcs hfr S e₀ hSf hder Θ c n₀ qs hr hs Q Inv hΘ hQ hInv hS
+  intro cs hcs hfr S e₀ hSf hder Θ c n₀ qs hr hs Q Inv hΘ hΘI hQ hInv hS
   refine poolSchedAdequacyN (Θ.view c) (rowTabN S Θ c) n₀ qs hr hs _ Q Inv _
-    (LocTy.view_down hΘ.1 c) hQ hInv hS (fun n => ?_)
+    (LocTy.view_down hΘ.1 c) hΘI hQ hInv hS (fun n => ?_)
   have h := hF _ _ _ _ hder (jdgInFrag_ctx791 cs hfr hSf) LSub.empty (vals791 cs) Θ c n []
     PMap.empty (BoCa.Fig16.LogRel.Core.models_empty_any _) hΘ (consistentX_empty c)
     (liveWithin_ctx791 cs) (gN_ctx791 hC LSub.empty hΘ n cs hcs hfr)

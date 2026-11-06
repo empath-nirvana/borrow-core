@@ -195,7 +195,7 @@ def Qsc (l : Loc) : PostCV := fun _ _ O w ρ =>
 theorem Qsc_down (l : Loc) : (Qsc l).Down := fun _ _ _ _ _ h => h
 
 /-- The empty location typing. -/
-def Φe : LocFam := fun _ => none
+def Φe : LocFam := LocFam.empty
 
 /-- **The body**: `spawn f` passes one copy of the borrow to the child and keeps one. -/
 theorem body_ok (l : Loc) (A : Life) (n : Nat) (ls : List SRec) :
@@ -220,7 +220,7 @@ theorem parent_ok (l : Loc) (A : Life) (F : WRes → Prop) (n : Nat) (ls : List 
   have hadm : AdmWf .unk δ₀ := fun _ h => h.elim
   obtain ⟨ds, hds⟩ := lineage_list (r := recP l Val.unit .unk δ₀) hshape hadm
     (ExW.empty_of_all_imm (fun _ _ h => by simp [recP, PMap.empty_get] at h))
-  refine cerwp_scope (Φ := Φe) (Q₀ := Q₀ l A) l Val.unit .unk δ₀ hadm hshape A 7 1 (TP_down (ℍ := ℍ))
+  refine cerwp_scope (Φ := Φe) rfl (Q₀ := Q₀ l A) l Val.unit .unk δ₀ hadm hshape A 7 1 (TP_down (ℍ := ℍ))
     (TP_tabs (ℍ := ℍ)) (Qsc_down l) (fun _ _ _ _ h => h.1) [] ?_ n F ls (spawnE l)
     PMap.empty _ (inStratumE A) (ResU.comp_empty_right _) (ResU.valid_single_own l _) ds hds
     (fun BI hBI => ?_)

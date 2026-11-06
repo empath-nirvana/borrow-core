@@ -81,8 +81,8 @@ theorem valid_at_empty (x : LifeVar) (δ : LSub) {α b : Life} (hbα : b < α) (
   rw [interp_ext_self] at hβ
   cases Option.some.inj hβ
   have habove := (hE'.2 b (cellIn_ρb m b)).trans (hE.2 b (cellIn_ρb m b))
-  have h := congrFun (congrFun habove l') b'
-  simp only [LocTy.above, if_pos (lt_of_lt_of_le hbα hβb'), LocTy.empty] at h
+  have h := congrArg (fun Θ : LocTy => Θ l' b') habove
+  simp only [LocTy.above_apply, if_pos (lt_of_lt_of_le hbα hβb'), LocTy.empty_apply] at h
   rw [h] at hl
   cases hl
 

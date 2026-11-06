@@ -43,10 +43,15 @@ open BoCa.Fig16.LogRel.Core
 open BoCa.Fig16.LogRel.Core.Chain.SI
 
 /-- `Φ` above `α`: the entries whose lifetime is strictly longer than `α` (Core's `ls₀`). -/
-def LocFam.above (Φ : LocFam) (α : Life) : LocFam := fun l =>
-  match Φ l with
-  | some x => if α < x.1 then some x else none
-  | none => none
+def LocFam.above (Φ : LocFam) (α : Life) : LocFam :=
+  ⟨fun l => match Φ l with
+    | some x => if α < x.1 then some x else none
+    | none => none, Φ.imm⟩
+
+theorem LocFam.above_apply (Φ : LocFam) (α : Life) (l : Loc) :
+    LocFam.above Φ α l = match Φ l with
+      | some x => if α < x.1 then some x else none
+      | none => none := rfl
 
 /-- A content predicate read at a location typing: the semantic payload of a type. -/
 abbrev CPredN := LocFam → Nat → Val → WRes → Prop
@@ -72,21 +77,21 @@ theorem famC_unit (β : Life) (Φ : LocFam) : famC β unitP Φ = famUnit β := r
 
 theorem above_set_lt {Φ : LocFam} {l : Loc} {α b : Life} (hαb : ¬ b < α)
     {F : Nat → Val → SPropS Loc Val α} : LocFam.above (Φ.set l α F) b l = none := by
-  simp only [LocFam.above, LocFam.set, if_true]
+  simp only [LocFam.above_apply, LocFam.set, LocFam.mk_apply, if_true]
   exact if_neg hαb
 
 /-- The location typing of the configuration: `ℓ` and `ℓ₂` at `β` with `𝒱⟦1⟧`'s family, `ℓ_b`
 at `b` with `𝒱⟦Mut @β 1⟧`'s, read at the entries above `b`. -/
-def Φ₁ (l l₂ : Loc) (β : Life) : LocFam := fun x =>
-  if x = l ∨ x = l₂ then some ⟨β, famUnit β⟩ else none
+def Φ₁ (l l₂ : Loc) (β : Life) : LocFam :=
+  ⟨fun x => if x = l ∨ x = l₂ then some ⟨β, famUnit β⟩ else none, []⟩
 
-def Φc (l l₂ lb : Loc) (b β : Life) : LocFam := fun x =>
-  if x = lb then some ⟨b, famC b (mutC β unitP) (Φ₁ l l₂ β)⟩ else Φ₁ l l₂ β x
+def Φc (l l₂ lb : Loc) (b β : Life) : LocFam :=
+  ⟨fun x => if x = lb then some ⟨b, famC b (mutC β unitP) (Φ₁ l l₂ β)⟩ else Φ₁ l l₂ β x, []⟩
 
 theorem Φc_above (l l₂ lb : Loc) (hl : lb ≠ l) (hl₂ : lb ≠ l₂) {b β : Life} (hbβ : b < β) :
     LocFam.above (Φc l l₂ lb b β) b = Φ₁ l l₂ β := by
-  funext x
-  simp only [LocFam.above, Φc, Φ₁]
+  refine LocFam.ext' (fun x => ?_) rfl
+  simp only [LocFam.above_apply, Φc, Φ₁, LocFam.mk_apply]
   by_cases hx : x = lb
   · subst hx
     simp [hl, hl₂]
@@ -96,8 +101,8 @@ theorem Φc_above (l l₂ lb : Loc) (hl : lb ≠ l) (hl₂ : lb ≠ l₂) {b β 
 
 theorem Φ₁_above (l l₂ : Loc) {b β : Life} (hbβ : b < β) :
     LocFam.above (Φ₁ l l₂ β) b = Φ₁ l l₂ β := by
-  funext x
-  simp only [LocFam.above, Φ₁]
+  refine LocFam.ext' (fun x => ?_) rfl
+  simp only [LocFam.above_apply, Φ₁, LocFam.mk_apply]
   by_cases h : x = l ∨ x = l₂ <;> simp [h, hbβ]
 
 /-- The inner cell `ℓ₂ ↦ mut(β, (), ∅, 𝒱⟦1⟧)`. -/
@@ -114,7 +119,7 @@ theorem inner_mutC (l l₂ : Loc) {b β : Life} (hbβ : b < β) :
     mutC β unitP (LocFam.above (Φ₁ l l₂ β) b) 0 (Val.loc l₂) (innerCell l₂ β) := by
   rw [Φ₁_above l l₂ hbβ]
   refine ⟨l₂, Val.unit, PMap.empty, ResU.inStratum_empty β, 0, ⟨rfl, rfl⟩, le_rfl, rfl, ?_, rfl⟩
-  simp [Φ₁, famC_unit]
+  simp [Φ₁, famC_unit, LocFam.mk_apply]
 
 /-- **The configuration.** At `Φc`, the location `ℓ_b` holds a value of the per-location shape at
 `Mut @b (Mut @β 1)` (its content a `Mut @β 1` at `ℓ₂`); for every `α < b` and every family
@@ -141,7 +146,8 @@ theorem perLocShape_not_reborrow (l l₂ lb : Loc) (hl : lb ≠ l) (hl₂ : lb �
     · rw [h]; exact hl
     · rw [ResU.single_get_ne _ h] at hx; exact absurd hx (by simp)
   · refine ⟨lb, _, _, _, 0, hw, le_rfl, rfl, ?_, rfl⟩
-    simp only [Φc, if_true, hfam]
+    rw [hfam]
+    simp only [Φc, LocFam.mk_apply, if_true]
   · rintro ⟨l', w, χ, hχ, j, hw', -, hv, hΦ, -⟩
     obtain rfl : lb = l' := by
       have := congrArg Subtype.val hv
@@ -149,7 +155,7 @@ theorem perLocShape_not_reborrow (l l₂ lb : Loc) (hl : lb ≠ l) (hl₂ : lb �
     -- `Φ ℓ_b` is unchanged by the re-typing, so its family is read above `b` at both
     have hΦlb : (Φc l l₂ lb b β).set l α F lb =
         some ⟨b, famC b (mutC β unitP) (Φ₁ l l₂ β)⟩ := by
-      simp [LocFam.set, hl, Φc]
+      simp [LocFam.set, hl, Φc, LocFam.mk_apply]
     rw [hΦlb] at hΦ
     have heq : famC b (mutC β unitP) (Φ₁ l l₂ β) =
         famC b (mutC β unitP) ((Φc l l₂ lb b β).set l α F) := by
@@ -162,7 +168,7 @@ theorem perLocShape_not_reborrow (l l₂ lb : Loc) (hl : lb ≠ l) (hl₂ : lb �
       simp only [famC]
       rw [Φ₁_above l l₂ hbβ]
       refine ⟨l, Val.unit, PMap.empty, ResU.inStratum_empty β, 0, ⟨rfl, rfl⟩, le_rfl, rfl, ?_, rfl⟩
-      simp [Φ₁, famC_unit]
+      simp [Φ₁, famC_unit, LocFam.mk_apply]
     rw [heq] at hin
     obtain ⟨l'', -, -, -, -, -, -, hv'', hΦ'', -⟩ := hin
     obtain rfl : l = l'' := by
@@ -215,7 +221,7 @@ theorem stuckV_one (δ : LSub) : thunkUnit (ℍ := ℍ) δ 1 stuckV PMap.empty :
   intro Θ' _ _ c _ ls
   show erwp (ℍ := ℍ) (Θ'.view c) _ _ 1 ls (.app stuckV.1 (.val .unit)) PMap.empty
   rw [erwp_eq]
-  intro ρf fρ ps μ _ _ _ _ _ _ j μ' e' hj hrun hfin
+  intro ρf fρ ps μ _ _ _ _ _ _ _ j μ' e' hj hrun hfin
   obtain rfl : j = 0 := by omega
   cases hrun
   exact absurd (step1Only_plug (ℍ := ℍ) (Head.beta μ (.app .unit Val.unit.1) Val.unit) rfl
@@ -237,7 +243,7 @@ theorem stuckV_not_two (δ : LSub) : ¬ thunkUnit (ℍ := ℍ) δ 2 stuckV PMap.
     fun _ _ hs => stuck_no_step (stuckAt_unit_app Val.unit) .hole hs
   have htg : Tagged (PMap.empty : WRes) [] [] := fun x hx => absurd hx (by simp)
   have hE := h2 PMap.empty PMap.empty [] (fun _ => none) Fig16.LogRel.hash_empty
-    (ResU.comp_empty_right _) TWNC.empty htg Fig16.BoLo.lower_empty fd_empty 1 _ _
+    (ResU.comp_empty_right _) TWNC.empty htg (ImmTieL.nil _) Fig16.BoLo.lower_empty fd_empty 1 _ _
     (by omega) (.more hstep (.refl _ _)) hfin
   obtain ⟨_, _, _, _, _, _, _, -, -, -, -, -, -, -, -, -, -, -, -, hq⟩ := hE
   rcases hq with ⟨v, hv, -⟩ | ⟨_, _, _, _, _, h'⟩ | ⟨_, _, _, _, _, h'⟩

@@ -41,7 +41,7 @@ def EndOKG0 (Φ : LocFam) (Q : PostG) (k : Nat) (ls : List SRec) (ρ ρf : WRes)
 def rwpG0 (Φ : LocFam) (Q : PostG) (n : Nat) (ls : List SRec) (e : Expr) : WProp := fun ρ =>
   ∀ (ρf fρ : WRes) (ps : List FrameRec) (μ : Heap),
     ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ → TWNC fρ ps (rsOf ls) → Tagged fρ ps ls →
-    ResU.Lower fρ μ → FinDom μ →
+    ImmTieL Φ.imm ls → ResU.Lower fρ μ → FinDom μ →
     ∀ j μ' e', j < n → StepsN (ℍ := ℍ) j μ e μ' e' → Final (ℍ := ℍ) μ' e' →
       EndOKG0 Φ Q (n - j) ls ρ ρf ps μ' e'
 
@@ -57,8 +57,8 @@ theorem EndOKG0.toG {Φ : LocFam} {Q : PostG} {k : Nat} {ls : List SRec} {ρ ρf
 /-- `rwpG0` is `rwpG` at `ρ⁺ = ∅`. -/
 theorem rwpG_of_rwpG0 {Φ : LocFam} {Q : PostG} {n : Nat} {ls : List SRec} {e : Expr} {ρ : WRes}
     (h : rwpG0 (ℍ := ℍ) Φ Q n ls e ρ) : rwpG (ℍ := ℍ) Φ Q n ls e ρ :=
-  fun ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin =>
-    (h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin).toG
+  fun ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun hfin =>
+    (h ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun hfin).toG
 
 theorem EndOKG0.mono {Φ : LocFam} {P Q : PostG} {k k' : Nat} (hΦ : Φ.Down) (hk : k' ≤ k)
     {t : Expr} (hPQ : ∀ ls ρ, P k ls t ρ → Q k' ls t ρ) {ls : List SRec} {ρ ρf : WRes}
@@ -71,14 +71,14 @@ theorem rwpG0_mono_le {Φ : LocFam} {P Q : PostG} {n : Nat}
     (hPQ : ∀ k, k ≤ n → ∀ ls t ρ, P k ls t ρ → Q k ls t ρ)
     {ls : List SRec} {e : Expr} {ρ : WRes} (h : rwpG0 (ℍ := ℍ) Φ P n ls e ρ) :
     rwpG0 (ℍ := ℍ) Φ Q n ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
+  intro ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun hfin
   obtain ⟨ρ', fρ', ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉⟩ :=
-    h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
+    h ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun hfin
   exact ⟨ρ', fρ', ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, hPQ _ (by omega) _ _ _ h₉⟩
 
 theorem rwpG0_here {Φ : LocFam} {Q : PostG} {n : Nat} {ls : List SRec} {e : Expr} {ρ : WRes}
     (hfin : ∀ μ, Final (ℍ := ℍ) μ e) (h : Q n ls e ρ) : rwpG0 (ℍ := ℍ) Φ Q n ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun _
+  intro ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun _
   cases hrun with
   | more hs _ => exact absurd hs (hfin _ _ _)
   | refl =>
@@ -88,12 +88,12 @@ theorem rwpG0_here {Φ : LocFam} {Q : PostG} {n : Nat} {ls : List SRec} {e : Exp
 theorem rwpG0_det {Φ : LocFam} (hΦ : Φ.Down) {Q : PostG} (hQ : Q.Down) {n : Nat}
     {ls : List SRec} {e e' : Expr} {ρ : WRes} (hdet : ∀ μ, Step1Only (ℍ := ℍ) μ e μ e')
     (h : rwpG0 (ℍ := ℍ) Φ Q n ls e' ρ) : rwpG0 (ℍ := ℍ) Φ Q n ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' E hj hrun hfin
+  intro ρf fρ ps μ hf hc hT htg hI hl hfd j μ' E hj hrun hfin
   cases hrun with
   | refl => exact absurd (hdet _).1 (hfin _ e')
   | @more j' _ _ _ _ _ _ hs t =>
       obtain ⟨rfl, rfl⟩ := (hdet _).2 _ _ hs
-      exact (h ρf fρ ps _ hf hc hT htg hl hfd j' μ' E (by omega) t hfin).mono hΦ (by omega)
+      exact (h ρf fρ ps _ hf hc hT htg hI hl hfd j' μ' E (by omega) t hfin).mono hΦ (by omega)
         (fun _ _ x => hQ.le (by omega) _ _ _ x)
 
 /-! ### The effectful relation -/
@@ -170,18 +170,19 @@ theorem erwp0_perform {Φ : LocFam} {T : OpTabN} {Q : PostN} (K : Kont) {m i : U
 /-- **An `rwpG0` run under a resource the caller keeps beside it.** The run of `e` from `ρ_in`,
 the caller holding `R` too: at every final term the run's resource `π` in `Q`, the whole
 `π ● R`, and `ρ_in ● R ↭ π ● R` (6.48). The records and list members are kept. -/
-theorem crwpG_of_rwpG0_frame {Φ : LocFam} {F : WRes → Prop} {Q : PostG} {n : Nat}
-    {ls : List SRec} {O : List FrameRec} {e : Expr} {ρin R ρo : WRes}
+theorem crwpG_of_rwpG0_frame {Φ : LocFam} (hΦI : Φ.imm = []) {F : WRes → Prop} {Q : PostG}
+    {n : Nat} {ls : List SRec} {O : List FrameRec} {e : Expr} {ρin R ρo : WRes}
     (h : rwpG0 (ℍ := ℍ) Φ Q n ls e ρin) (hc : ResU.CompS ρin R ρo) :
     crwpG (ℍ := ℍ) F (fun k ls' O' t ρ' => O' = O ∧ (∀ x, x ∈ ls' ↔ x ∈ ls) ∧
       ∃ π, Q k ls' t π ∧ ResU.CompS π R ρ' ∧ UpdVN Φ k ρo ρ') n ls O e ρo := by
   intro ρf fρ ps psF μ _ hf hcf hS hT htg hl hfd j μ' e' hj hrun hfin
+  have hI : ImmTieL Φ.imm ls := ImmTieL.of_nil hΦI ls
   -- the inner run's frame: `ρ_f ● R`
   obtain ⟨y, hy, hy₁⟩ := (hash_shift ρf R ρin).mp ⟨ρo, ResU.CompS.comm hc, hf⟩
   obtain ⟨y', hy', hyfρ⟩ := compS_reassoc' (ResU.CompS.comm hc) hcf
   cases ResU.CompS.functional hy' hy
   obtain ⟨π, fρ', ps', ls', g₁, g₂, g₃, g₄, g₅, g₆, g₇, g₈, g₉⟩ :=
-    h y fρ ps μ hy₁ hyfρ hT htg hl hfd j μ' e' hj hrun hfin
+    h y fρ ps μ hy₁ hyfρ hT htg hI hl hfd j μ' e' hj hrun hfin
   obtain ⟨W, hW, hfW⟩ := compS_reassoc hy g₂
   have hvW : ResU.Valid fρ' := by obtain ⟨σ, hσ, -⟩ := g₃; exact ⟨σ, hσ⟩
   have hRπ : ResU.Hash R π := by

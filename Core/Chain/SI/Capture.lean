@@ -234,13 +234,14 @@ def liftG (Q : PostG) (O : List FrameRec) : PostC := fun k ls O' t ρ =>
   O' = O ∧ ∃ ρ₁ ρ₂, ResU.CompS ρ₁ ρ₂ ρ ∧ NoOwn ρ₂ ∧ Q k ls t ρ₁
 
 /-- **`rwpG` is `crwpG`** at the lifted postcondition, at every frame condition and every owned
-list: a run of `rwpG` keeps every record proper, so it keeps the frame's. -/
-theorem crwpG_of_rwpG {Φ : LocFam} {F : WRes → Prop} {Q : PostG} {n : Nat} {ls : List SRec}
-    {O : List FrameRec} {e : Expr} {ρ : WRes} (h : rwpG (ℍ := ℍ) Φ Q n ls e ρ) :
+list, at a location typing with no `imm` records: a run of `rwpG` keeps every record proper, so
+it keeps the frame's. -/
+theorem crwpG_of_rwpG {Φ : LocFam} (hΦI : Φ.imm = []) {F : WRes → Prop} {Q : PostG} {n : Nat}
+    {ls : List SRec} {O : List FrameRec} {e : Expr} {ρ : WRes} (h : rwpG (ℍ := ℍ) Φ Q n ls e ρ) :
     crwpG (ℍ := ℍ) F (liftG Q O) n ls O e ρ := by
   intro ρf fρ ps psF μ _ hf hc hS hT htg hl hfd j μ' e' hj hrun hfin
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, -, h₈, h₉, h₁₀, h₁₁, -, h₁₃⟩ :=
-    h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
+    h ρf fρ ps μ hf hc hT htg (ImmTieL.of_nil hΦI ls) hl hfd j μ' e' hj hrun hfin
   obtain ⟨π₁, hπ₁, hfπ⟩ := (ResU.CompS.assoc ρf ρ' ρp fρ'p).mpr ⟨fρ', h₂, h₄⟩
   cases ResU.CompS.functional h₆ hπ₁
   have hv : ResU.Valid fρ'p := by obtain ⟨σ, hσ, -⟩ := h₅; exact ⟨σ, hσ⟩

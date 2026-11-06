@@ -404,7 +404,7 @@ def bodyL : Expr :=
 def progLend : Expr := hndE DivRuntime.rtH (hndE yH bodyL)
 
 /-- The empty location typing. -/
-def Φ₀ : LocFam := fun _ => none
+def Φ₀ : LocFam := LocFam.empty
 
 theorem Φ₀_down : Φ₀.Down := fun _ _ _ h => by cases h
 

@@ -174,16 +174,17 @@ theorem stepsN_of_steps {μ μ' : Heap} {e e' : Expr} (h : BoCa.BoLo.Steps (ℍ 
 `free` finding its cell. -/
 theorem erwp_adequacy {Φ : LocFam} {Q : PostN} {P₀ : Expr}
     (hQ : ∀ k ls v (ρ : WRes), Q k ls v ρ → ρ = PMap.empty)
-    (hall : ∀ n, erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) Q n [] P₀ (PMap.empty : WRes)) :
+    (hall : ∀ n, erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) Q n [] P₀ (PMap.empty : WRes))
+    (hΦI : ImmTieL Φ.imm [] := by exact ImmTieL.nil _) :
     OrDiverges (ℍ := ℍ) P₀ := by
   intro μ e hs
   obtain ⟨j, hrun⟩ := stepsN_of_steps hs
-  have hp := erwp_safe (Φ := Φ) hall hrun
+  have hp := erwp_safe (Φ := Φ) hΦI hall hrun
   refine ⟨hp, fun hv => ?_, fun K ℓ he => ?_⟩
   · have htg : Tagged (PMap.empty : WRes) [] [] := fun x hx => absurd hx (by simp)
     have h := erwp_unfold_at (opTableN_local _) le_rfl (hall (j + 1))
     have hE := h PMap.empty PMap.empty [] (fun _ => none) Fig16.LogRel.hash_empty
-        (ResU.comp_empty_right _) TWNC.empty htg Fig16.BoLo.lower_empty fd_empty j μ e
+        (ResU.comp_empty_right _) TWNC.empty htg hΦI Fig16.BoLo.lower_empty fd_empty j μ e
         (by omega) hrun (final_val μ ⟨e, hv⟩)
     obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h1, h2, h3, h6, h7, h9, h10, h11, hT', htg', hps,
       hls, hq⟩ := hE

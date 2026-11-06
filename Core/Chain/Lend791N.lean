@@ -189,8 +189,8 @@ open BoCa.BoLo (Heap Kont ubindE Head)
 theorem rwp_mono_le {Φ : LocFam} {P Q : PostN} {n : Nat}
     (hPQ : ∀ k, k ≤ n → ∀ ls v ρ, P k ls v ρ → Q k ls v ρ) {ls : List SRec} {e : Expr} {ρ : WRes}
     (h : rwp (ℍ := ℍ) Φ P n ls e ρ) : rwp (ℍ := ℍ) Φ Q n ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
-  obtain ⟨hval, hprog⟩ := h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
+  intro ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun
+  obtain ⟨hval, hprog⟩ := h ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun
   refine ⟨fun v hv => ?_, hprog⟩
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
     h₁₃⟩ := hval v hv

@@ -173,24 +173,30 @@ theorem Covers.extΦ {Φ Φ' : LocFam} (hE : Φ.Ext Φ') {ρ : WRes} (h : Covers
   obtain ⟨F, hF, hj⟩ := h l ψ hg hk
   exact ⟨F, hE l _ hF, hj⟩
 
-theorem rwpG_extΦ {Φ Φ' : LocFam} (hE : Φ.Ext Φ') {Q : PostG} {n : Nat} {ls : List SRec}
+/-- The `imm` records of `Φ` are among `Φ′`'s. -/
+def LocFam.ImmLe (Φ Φ' : LocFam) : Prop := ∀ x ∈ Φ.imm, x ∈ Φ'.imm
+
+theorem LocFam.immLe_set (Φ : LocFam) (l : Loc) (A : Life) (F : Nat → Val → SPropS Loc Val A) :
+    Φ.ImmLe (Φ.set l A F) := fun _ h => h
+
+theorem rwpG_extΦ {Φ Φ' : LocFam} (hE : Φ.Ext Φ') (hEI : Φ.ImmLe Φ') {Q : PostG} {n : Nat} {ls : List SRec}
     {e : Expr} {ρ : WRes} (h : rwpG (ℍ := ℍ) Φ Q n ls e ρ) : rwpG (ℍ := ℍ) Φ' Q n ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
+  intro ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun hfin
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
-    h₁₃⟩ := h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
+    h₁₃⟩ := h ρf fρ ps μ hf hc hT htg (hI.mono hEI) hl hfd j μ' e' hj hrun hfin
   exact ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇.extΦ hE, h₈, h₉, h₁₀, h₁₁,
     h₁₂, h₁₃⟩
 
 /-- **The relation is monotone under world extension**, stops and their continuations
 included (by induction on the index). -/
-theorem erwp_extΦ {Φ Φ' : LocFam} (hE : Φ.Ext Φ') {Tb : TableN} (hL : Tb.Local) {Q : PostN} :
+theorem erwp_extΦ {Φ Φ' : LocFam} (hE : Φ.Ext Φ') (hEI : Φ.ImmLe Φ') {Tb : TableN} (hL : Tb.Local) {Q : PostN} :
     ∀ n ls e ρ, erwp (ℍ := ℍ) Φ Tb Q n ls e ρ → erwp (ℍ := ℍ) Φ' Tb Q n ls e ρ := by
   intro n
   induction n using Nat.strong_induction_on with
   | _ n ih =>
   intro ls e ρ h
   rw [erwp_eq] at h ⊢
-  refine rwpG_extΦ hE (rwpG_mono_le (fun k hk ls' t σ ht => ?_) h)
+  refine rwpG_extΦ hE hEI (rwpG_mono_le (fun k hk ls' t σ ht => ?_) h)
   rcases ht with ht | ht
   · exact Or.inl ht
   · refine Or.inr (hL k ls' t _ _ σ (fun k' hk' ls'' e'' ρ'' hΨ => ?_) ht)

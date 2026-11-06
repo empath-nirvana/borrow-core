@@ -50,9 +50,9 @@ theorem rwpG_garbage {Φ : LocFam} {Q : PostG} {n : Nat} {ls : List SRec} {e : E
     (h : rwpG (ℍ := ℍ) Φ (fun k ls' t ρ' => ∃ ρ₁ ρ₂, ResU.CompS ρ₁ ρ₂ ρ' ∧ NoOwn ρ₂ ∧
       Q k ls' t ρ₁) n ls e ρ) :
     rwpG (ℍ := ℍ) Φ Q n ls e ρ := by
-  intro ρf fρ ps μ h1 h2 h3 h4 hl hfd j μ' e' hj hrun hfin
+  intro ρf fρ ps μ h1 h2 h3 h4 hI hl hfd j μ' e' hj hrun hfin
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', g1, g2, g3, g6, g7, g9, gA, gB,
-    gT, gtg, gps, gls, ρ₁, ρ₂, hc, hno, hQ⟩ := h ρf fρ ps μ h1 h2 h3 h4 hl hfd j μ' e' hj hrun hfin
+    gT, gtg, gps, gls, ρ₁, ρ₂, hc, hno, hQ⟩ := h ρf fρ ps μ h1 h2 h3 h4 hI hl hfd j μ' e' hj hrun hfin
   obtain ⟨hf₁, -⟩ := ResU.Hash.split hc g1
   obtain ⟨F, hF, hF₂⟩ := (ResU.CompS.assoc ρf ρ₁ ρ₂ fρ').mp ⟨ρ', hc, g2⟩
   obtain ⟨Z, hZ, hFZ⟩ := (ResU.CompS.assoc F ρ₂ ρp fρ'p).mpr ⟨fρ', hF₂, g6⟩
@@ -480,12 +480,12 @@ def OpTabN.empty : OpTabN := fun _ _ => none
 
 /-- **Safety of a closed program at `erwp`**: at the empty table, at the empty world, at every
 index, every configuration a run reaches is a value or steps. -/
-theorem erwp_safe {Φ : LocFam} {Q : PostN} {e : Expr}
+theorem erwp_safe {Φ : LocFam} (hΦI : ImmTieL Φ.imm []) {Q : PostN} {e : Expr}
     (hall : ∀ n, erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) Q n [] e (PMap.empty : WRes))
     {j : Nat} {μ' : BoCa.BoLo.Heap} {e' : Expr}
     (hrun : StepsN (ℍ := ℍ) j (fun _ => none) e μ' e') :
     IsVal e' ∨ ∃ μ'' e'', BoCa.BoLo.Step1 (ℍ := ℍ) μ' e' μ'' e'' := by
-  refine rwpG_safe (Φ := Φ) (Q := erwpPost (opTableN OpTabN.empty) Q
+  refine rwpG_safe (Φ := Φ) hΦI (Q := erwpPost (opTableN OpTabN.empty) Q
     (erwpC (ℍ := ℍ) Φ (opTableN OpTabN.empty) Q (j + 1))) ?_
     (fun n => ?_) hrun
   · intro k ls t ρ h

@@ -381,19 +381,20 @@ theorem poolAnsN_cancelSnd {Φ : LocFam} (hΦ : Φ.Down) {N : Nat} {T : OpTabN} 
 the empty pool: the task `e₀` at `erwp` at the scheduler's table `T`, from the empty list and
 resource, at every index; the scheduler `H = hndVal n₀ qs hr hs` meeting `SchedOKN` with its
 answers functions of its state (`PoolAnsN Q H Inv`, for any invariant `Inv` of its list the empty
-list meets), at any downward-closed location family; the program's answers holding nothing. -/
+list meets), at any downward-closed location family holding no `imm` record (the program starts
+at the empty list, so the entry tie asks that); the program's answers holding nothing. -/
 def PoolSchedAdequacyN : Prop :=
   ∀ (Φ : LocFam) (T : OpTabN) (n₀ : UInt32) (qs hr hs : Val) (Qin Q : PostN)
-    (Inv : List StoredN → Prop) (e₀ : Expr), Φ.Down →
+    (Inv : List StoredN → Prop) (e₀ : Expr), Φ.Down → Φ.imm = [] →
     (∀ k ls v ρ, Q k ls v ρ → ρ = PMap.empty) → Inv [] →
     SchedOKN (ℍ := ℍ) Φ T n₀ qs hr hs Qin (PoolAnsN (ℍ := ℍ) Φ Q (hndVal n₀ qs hr hs) Inv) →
     (∀ n, erwp (ℍ := ℍ) Φ (opTableN T) Qin n [] e₀ (PMap.empty : WRes)) →
     OrDiverges (ℍ := ℍ) (.app (hndE (hndVal n₀ qs hr hs) e₀) (stateValN (hndVal n₀ qs hr hs) []).1)
 
 theorem poolSchedAdequacyN : PoolSchedAdequacyN (ℍ := ℍ) :=
-  fun _ _ _ _ _ _ _ _ _ _ hΦ hQ hInv hS he => erwp_adequacy hQ fun n =>
+  fun _ _ _ _ _ _ _ _ _ _ hΦ hΦI hQ hInv hS he => erwp_adequacy hQ (fun n =>
     poolAnsN_run_le hΦ (hS n) le_rfl (fun _ h => by cases h) hInv poolN_nil
-      (ResU.comp_empty_right _) (he n)
+      (ResU.comp_empty_right _) (he n)) (ImmTieL.of_nil hΦI [])
 
 end BoCa.Fig16.LogRel.Core.Chain.SI
 

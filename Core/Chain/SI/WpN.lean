@@ -96,7 +96,7 @@ def EndOK (Φ : LocFam) (Q : PostN) (k : Nat) (ls : List SRec) (ρ ρf : WRes)
 def rwp (Φ : LocFam) (Q : PostN) (n : Nat) (ls : List SRec) (e : Expr) : WProp := fun ρ =>
   ∀ (ρf fρ : WRes) (ps : List FrameRec) (μ : Heap),
     ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ → TWNC fρ ps (rsOf ls) → Tagged fρ ps ls →
-    ResU.Lower fρ μ → FinDom μ →
+    ImmTieL Φ.imm ls → ResU.Lower fρ μ → FinDom μ →
     ∀ j μ' e', j < n → StepsN (ℍ := ℍ) j μ e μ' e' →
       (∀ v : Val, e' = v.1 → EndOK Φ Q (n - j) ls ρ ρf ps μ' v) ∧
       (¬ IsVal e' → ∃ μ'' e'', Step1 (ℍ := ℍ) μ' e' μ'' e'')
@@ -140,16 +140,16 @@ theorem EndOK.mono {Φ : LocFam} {P Q : PostN} {k k' : Nat} (hΦ : Φ.Down) (hk 
 theorem rwp_le {Φ : LocFam} (hΦ : Φ.Down) {Q : PostN} (hQ : Q.Down) {m n : Nat} (hmn : m ≤ n)
     {ls : List SRec} {e : Expr} {ρ : WRes} (h : rwp (ℍ := ℍ) Φ Q n ls e ρ) :
     rwp (ℍ := ℍ) Φ Q m ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
-  obtain ⟨hval, hprog⟩ := h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' (by omega) hrun
+  intro ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun
+  obtain ⟨hval, hprog⟩ := h ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' (by omega) hrun
   exact ⟨fun v hv => (hval v hv).mono hΦ (by omega) (fun _ _ _ x => hQ.le (by omega) _ _ _ x),
     hprog⟩
 
 theorem rwp_mono {Φ : LocFam} {P Q : PostN} (hPQ : ∀ n ls v ρ, P n ls v ρ → Q n ls v ρ)
     {n : Nat} {ls : List SRec} {e : Expr} {ρ : WRes} (h : rwp (ℍ := ℍ) Φ P n ls e ρ) :
     rwp (ℍ := ℍ) Φ Q n ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
-  obtain ⟨hval, hprog⟩ := h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
+  intro ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun
+  obtain ⟨hval, hprog⟩ := h ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun
   refine ⟨fun v hv => ?_, hprog⟩
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
     h₁₃⟩ := hval v hv
@@ -159,7 +159,7 @@ theorem rwp_mono {Φ : LocFam} {P Q : PostN} (hPQ : ∀ n ls v ρ, P n ls v ρ �
 /-- A value in the postcondition. -/
 theorem rwp_val {Φ : LocFam} {Q : PostN} {n : Nat} {ls : List SRec} {v : Val}
     {ρ : WRes} (h : Q n ls v ρ) : rwp (ℍ := ℍ) Φ Q n ls v.1 ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
+  intro ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun
   cases hrun with
   | more hs _ => exact absurd hs BoLo.no_step_val
   | refl =>
@@ -179,7 +179,8 @@ theorem rwp_val {Φ : LocFam} {Q : PostN} {n : Nat} {ls : List SRec} {v : Val}
 at the frame `ρ_f ● ρ⁺` (`wpTS_bind`'s H8), and the two post-configurations composed: the
 updates by `updVN_frame` (6.48) and `UpdVN.trans` (6.49). -/
 theorem rwp_compose {Φ : LocFam} (hΦ : Φ.Down) {Q : PostN} (K : Kont) {k₁ : Nat}
-    {ls : List SRec} {ρ ρf : WRes} {ps : List FrameRec} {μ₁ : Heap} {w : Val}
+    {ls : List SRec} (hI : ImmTieL Φ.imm ls) {ρ ρf : WRes} {ps : List FrameRec} {μ₁ : Heap}
+    {w : Val}
     (hend : EndOK Φ (fun k ls' v => rwp (ℍ := ℍ) Φ Q k ls' (K.plug v.1)) k₁ ls ρ ρf ps μ₁ w)
     (hfd₁ : FinDom μ₁) {j₂ : Nat} {μ' : Heap} {E : Expr} (hj : j₂ < k₁)
     (hrun : StepsN (ℍ := ℍ) j₂ μ₁ (K.plug w.1) μ' E) :
@@ -191,7 +192,7 @@ theorem rwp_compose {Φ : LocFam} (hΦ : Φ.Down) {Q : PostN} (K : Kont) {k₁ :
   have hfz : ResU.CompS ρf ρp z := ResU.CompS.comm hzp
   obtain ⟨z₀, hz₀, hY⟩ := compS_exch h₂ h₆
   have hzY : ResU.CompS z ρ' fρ'p := by rwa [ResU.CompS.functional hz₀ hfz] at hY
-  obtain ⟨hval, hprog⟩ := hC z fρ'p ps' μ₁ hz hzY hT' htg' h₇ hfd₁ j₂ μ' E hj hrun
+  obtain ⟨hval, hprog⟩ := hC z fρ'p ps' μ₁ hz hzY hT' htg' (hI.perm hls') h₇ hfd₁ j₂ μ' E hj hrun
   refine ⟨fun v hv => ?_, hprog⟩
   obtain ⟨ρ'', ρpp, Y'', Y''p, π'', ps'', ls'', k₁', k₂, k₃, k₆, k₇, k₉, kA, kB, kT, ktg, kps,
     kls, kC⟩ := hval v hv
@@ -222,23 +223,23 @@ theorem rwp_bind {Φ : LocFam} (hΦ : Φ.Down) {Q : PostN} (K : Kont) {n : Nat}
     {ls : List SRec} {e : Expr} {ρ : WRes}
     (hw : rwp (ℍ := ℍ) Φ (fun k ls' v => rwp (ℍ := ℍ) Φ Q k ls' (K.plug v.1)) n ls e ρ) :
     rwp (ℍ := ℍ) Φ Q n ls (K.plug e) ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' E hj hrun
+  intro ρf fρ ps μ hf hc hT htg hI hl hfd j μ' E hj hrun
   rcases stepsN_plug_split K hrun with ⟨e', rfl, hrun'⟩ |
     ⟨j₁, j₂, μ₁, t, hjj, hrun₁, hirr, hrun₂⟩
-  · obtain ⟨hval, hprog⟩ := hw ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun'
+  · obtain ⟨hval, hprog⟩ := hw ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun'
     by_cases he' : IsVal e'
-    · have h := rwp_compose hΦ K (w := ⟨e', he'⟩) (hval ⟨e', he'⟩ rfl) (fd_stepsN hrun' hfd)
+    · have h := rwp_compose hΦ K hI (w := ⟨e', he'⟩) (hval ⟨e', he'⟩ rfl) (fd_stepsN hrun' hfd)
         (j₂ := 0) (by omega) (.refl _ _)
       exact ⟨fun v hv => by simpa using h.1 v hv, h.2⟩
     · refine ⟨fun v hv => absurd (K.isVal_of_plug (hv ▸ v.2)) he', fun _ => ?_⟩
       obtain ⟨μ'', e'', hs⟩ := hprog he'
       exact ⟨μ'', K.plug e'', hs.plug K⟩
-  · obtain ⟨hval, hprog⟩ := hw ρf fρ ps μ hf hc hT htg hl hfd j₁ μ₁ t (by omega) hrun₁
+  · obtain ⟨hval, hprog⟩ := hw ρf fρ ps μ hf hc hT htg hI hl hfd j₁ μ₁ t (by omega) hrun₁
     have ht : IsVal t := by
       by_contra hn
       obtain ⟨μ₂, t₂, hs⟩ := hprog hn
       exact hirr μ₂ t₂ hs
-    have h := rwp_compose hΦ K (w := ⟨t, ht⟩) (hval ⟨t, ht⟩ rfl) (fd_stepsN hrun₁ hfd)
+    have h := rwp_compose hΦ K hI (w := ⟨t, ht⟩) (hval ⟨t, ht⟩ rfl) (fd_stepsN hrun₁ hfd)
       (j₂ := j₂) (by omega) hrun₂
     have hidx : n - j₁ - j₂ = n - j := by omega
     rw [hidx] at h
@@ -254,11 +255,11 @@ theorem rwp_frame {Φ : LocFam} {P : PostN} (R : List SRec → WProp)
     {ls : List SRec} {e : Expr} {ρ₁ ρ₂ ρ : WRes} (hcρ : ResU.CompS ρ₁ ρ₂ ρ)
     (hwp : rwp (ℍ := ℍ) Φ P n ls e ρ₁) (hR₂ : R ls ρ₂) :
     rwp (ℍ := ℍ) Φ (fun k ls' v => P k ls' v ⋆ R ls') n ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
+  intro ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun
   obtain ⟨y, hy, hy₁⟩ := (hash_shift ρf ρ₂ ρ₁).mp ⟨ρ, ResU.CompS.comm hcρ, hf⟩
   obtain ⟨y', hy', hyfρ⟩ := compS_reassoc' (ResU.CompS.comm hcρ) hc
   cases ResU.CompS.functional hy' hy
-  obtain ⟨hval, hprog⟩ := hwp y fρ ps μ hy₁ hyfρ hT htg hl hfd j μ' e' hj hrun
+  obtain ⟨hval, hprog⟩ := hwp y fρ ps μ hy₁ hyfρ hT htg hI hl hfd j μ' e' hj hrun
   refine ⟨fun v hv => ?_, hprog⟩
   obtain ⟨ρ', ρp, Y', Y'p, π', ps', ls', g₁, g₂, g₃, g₆, g₇, g₉, gA, gB, gT, gtg, gps,
     gls, gC⟩ := hval v hv
@@ -282,13 +283,13 @@ theorem rwp_frame {Φ : LocFam} {P : PostN} (R : List SRec → WProp)
 
 /-- **Safety**: a closed term in `rwp` at the empty world at every index never gets stuck: every
 configuration it reaches is a value or steps. -/
-theorem rwp_safe {Φ : LocFam} {Q : PostN} {e : Expr}
+theorem rwp_safe {Φ : LocFam} (hΦI : ImmTieL Φ.imm []) {Q : PostN} {e : Expr}
     (hall : ∀ n, rwp (ℍ := ℍ) Φ Q n [] e (PMap.empty : WRes)) {j : Nat} {μ' : Heap} {e' : Expr}
     (hrun : StepsN (ℍ := ℍ) j (fun _ => none) e μ' e') :
     IsVal e' ∨ ∃ μ'' e'', Step1 (ℍ := ℍ) μ' e' μ'' e'' := by
   have htg : Tagged (PMap.empty : WRes) [] [] := fun x hx => absurd hx (by simp)
   obtain ⟨-, hprog⟩ := hall (j + 1) PMap.empty PMap.empty [] (fun _ => none)
-    Fig16.LogRel.hash_empty (ResU.comp_empty_right _) TWNC.empty htg Fig16.BoLo.lower_empty
+    Fig16.LogRel.hash_empty (ResU.comp_empty_right _) TWNC.empty htg hΦI Fig16.BoLo.lower_empty
     fd_empty j μ' e' (by omega) hrun
   by_cases hv : IsVal e'
   · exact .inl hv
@@ -320,7 +321,7 @@ theorem rwp_M_antiFrame {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {β : Life}
       rwp (ℍ := ℍ) Φ (AFPost l β F Q) n ls e X) :
     rwp (ℍ := ℍ) Φ Q n ls e ρ := by
   classical
-  intro ρf sρ ps μ hH2 hsρ hT htg hlow hfd jr μ' e' hj hrun
+  intro ρf sρ ps μ hH2 hsρ hT htg hI hlow hfd jr μ' e' hj hrun
   have hvsρ : ResU.Valid sρ := hash_valid_comp hH2 hsρ
   have hvρ : ResU.Valid ρ := (ResU.Valid.split hsρ hvsρ).2
   obtain ⟨hvm, hva⟩ := ResU.Valid.split hsplit hvρ
@@ -357,7 +358,7 @@ theorem rwp_M_antiFrame {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {β : Life}
       ha) htg
   have hlowin : ResU.Lower fρ μ :=
     (ResU.lower_swap_mut_own hW hvm hvW hFAmc hFAm hFAWc hFAW).mp hlow
-  obtain ⟨hval, hprog⟩ := hwpX ρf fρ ps μ hfX h4 hTin htgin hlowin hfd jr μ' e' hj hrun
+  obtain ⟨hval, hprog⟩ := hwpX ρf fρ ps μ hfX h4 hTin htgin hI hlowin hfd jr μ' e' hj hrun
   refine ⟨fun v' hv' => ?_, hprog⟩
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps'', ls'', h1, h2, h3, h6, h7, h9, h10, h11, hT'', htg'',
     hps'', hls'', h12⟩ := hval v' hv'
@@ -582,7 +583,10 @@ theorem six28N_fwd {Φ Φ' : LocFam} (hag : Φ.AgreeOff Φ' l) {k : Nat} {b : Li
 
 /-- `Φ[ℓ ↦ (A, F)]`. -/
 def LocFam.set (Φ : LocFam) (l : Loc) (A : Life) (F : Nat → Val → SPropS Loc Val A) : LocFam :=
-  fun x => if x = l then some ⟨A, F⟩ else Φ x
+  ⟨fun x => if x = l then some ⟨A, F⟩ else Φ x, Φ.imm⟩
+
+@[simp] theorem LocFam.set_imm (Φ : LocFam) (l : Loc) (A : Life)
+    (F : Nat → Val → SPropS Loc Val A) : (Φ.set l A F).imm = Φ.imm := rfl
 
 theorem LocFam.set_down {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {A : Life}
     {F : Nat → Val → SPropS Loc Val A} (hF : DownFam A F) : (Φ.set l A F).Down := by
@@ -617,7 +621,7 @@ theorem rwp_M_frame {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {A : Life}
       rwp (ℍ := ℍ) (Φ.set l A F) (MFPost l A F Q) n ls e BM) :
     rwp (ℍ := ℍ) Φ Q n ls e ρ := by
   classical
-  intro ρf sρ ps μ hH3 hsρ hT htg hlow hfd jr μ' e' hj hrun
+  intro ρf sρ ps μ hH3 hsρ hT htg hI hlow hfd jr μ' e' hj hrun
   have hvsρ : ResU.Valid sρ := hash_valid_comp hH3 hsρ
   set ρm : ResU BoCa.Loc BoCa.Val :=
     ResU.single l (CellU.mutOf A v ρP houtP (F j) hwit) with hρm
@@ -660,7 +664,7 @@ theorem rwp_M_frame {Φ : LocFam} (hΦ : Φ.Down) {l : Loc} {A : Life}
     (ResU.lower_swap_mut_own hlPcell hvmm hvlP hFBm hFBmH hFBl hFBlH).mpr hlow
   -- H18: the borrowed run, at `Φ[ℓ ↦ (A, F)]`
   obtain ⟨hval, hprog⟩ :=
-    hA BM hBM ρf fρ ps μ hH17 h4 hTin htgin hlowin hfd jr μ' e' hj hrun
+    hA BM hBM ρf fρ ps μ hH17 h4 hTin htgin hI hlowin hfd jr μ' e' hj hrun
   refine ⟨fun v' hv' => ?_, hprog⟩
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps'', ls'', h1, h2, h3, h6, h7, h9, h10, h11, hT'', htg'',
     hps'', hls'', h12⟩ := hval v' hv'

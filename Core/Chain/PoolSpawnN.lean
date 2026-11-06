@@ -451,10 +451,10 @@ theorem hs_schedOKN {Φ : LocFam} (hΦ : Φ.Down) : SchedOKN (ℍ := ℍ) Φ (TJ
 
 /-- **A root verified at the scheduler's table, closed under `HS`**: through
 `poolSchedAdequacyN`, every premise discharged. -/
-theorem progOfN_orDiverges {Φ : LocFam} (hΦ : Φ.Down) {root : Expr}
+theorem progOfN_orDiverges {Φ : LocFam} (hΦ : Φ.Down) (hΦI : Φ.imm = []) {root : Expr}
     (h : ∀ n, erwp (ℍ := ℍ) Φ (opTableN (TJN (ℍ := ℍ) Φ)) QVN n [] root (PMap.empty : WRes)) :
     OrDiverges (ℍ := ℍ) (.app (hndE HS root) (stateValN HS []).1) :=
-  poolSchedAdequacyN Φ (TJN Φ) nP qsS stackRet hsS QVN QVN (InvSN Φ) root hΦ
+  poolSchedAdequacyN Φ (TJN Φ) nP qsS stackRet hsS QVN QVN (InvSN Φ) root hΦ hΦI
     (fun _ _ _ _ h => h) (fun _ h => by cases h) (hs_schedOKN hΦ) h
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.PoolSpawn

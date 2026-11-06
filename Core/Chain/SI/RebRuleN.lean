@@ -76,7 +76,7 @@ theorem rwp_reborrow {Φ : LocFam} (ls : List SRec) (l : BoCa.Loc) (α : Life)
           rwp (ℍ := ℍ) Φ (fun k ls' v' => box b (Q k ls' v')) n ls e)) ρ) :
     rwp (ℍ := ℍ) Φ Q n ls e ρ := by
   obtain ⟨ρi, ρb, hc, hpi, hpb⟩ := hH
-  intro ρf fρ ps μ hf hcf hT htg hl hfd jr μ' e' hj hrun
+  intro ρf fρ ps μ hf hcf hT htg hI hl hfd jr μ' e' hj hrun
   -- H4 unfolded: `ρᵢ = ℓ ↦ imm(ᾱ, v′, ρ′)`, H7 and H8.
   obtain ⟨s, v', σ, hs, hρi, ⟨hRv, hP7⟩, hα⟩ := hpi
   subst hρi
@@ -148,7 +148,7 @@ theorem rwp_reborrow {Φ : LocFam} (ls : List SRec) (l : BoCa.Loc) (α : Life)
   rw [ResU.CompS.functional ht2' hcf] at h58L
   -- the inner run's memory is the outer one
   have g5 : ResU.Lower Win μ := (h58L μ).mpr hl
-  obtain ⟨hval, hprog⟩ := h21 ρF Win ps μ hFbχ hWin hTin htgin g5 hfd jr μ' e' hj hrun
+  obtain ⟨hval, hprog⟩ := h21 ρF Win ps μ hFbχ hWin hTin htgin hI g5 hfd jr μ' e' hj hrun
   refine ⟨fun v hv => ?_, hprog⟩
   obtain ⟨ρQ, ρp, fρ', fρ'p, π, ps', ls', g1, g2, g3, g6, g7, g9, gA, gB,
     gT, gtg, gps, gls, gC⟩ := hval v hv

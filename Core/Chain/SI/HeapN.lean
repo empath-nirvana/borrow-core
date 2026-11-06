@@ -73,7 +73,7 @@ theorem rwp_head1 {Φ : LocFam} {Q : PostN} {n : Nat} {ls : List SRec} {e : Expr
       ∀ μ₁ e₁, Head (ℍ := ℍ) μ e μ₁ e₁ →
         ∃ v : Val, e₁ = v.1 ∧ EndOK Φ Q (n - 1) ls ρ ρf ps μ₁ v) :
     rwp (ℍ := ℍ) Φ Q n ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
+  intro ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun
   obtain ⟨⟨μ₁, e₁, hh⟩, hend⟩ := hstep ρf fρ ps μ hf hc hT htg hl hfd
   have hnv : ¬ IsVal e := hred.not_isVal
   cases hrun with

@@ -1020,12 +1020,12 @@ holds a `mut` reborrow of the boxed field of its `mut`-borrowed record across `p
 holds its cell across its own `park`; every configuration a run of `progOf rootMut` reaches steps
 or is a value, a value only at the empty memory, and every `free` finds its cell. -/
 theorem hardestCase791 : HardestCase791 (ℍ := ℍ) :=
-  progOfN_orDiverges Φ₀_down fun n => rootMut_ok Φ₀_down n []
+  progOfN_orDiverges Φ₀_down rfl fun n => rootMut_ok Φ₀_down n []
 
 /-- **#791's hardest case, cancelled**: `thC` cancels task A while A holds the field's borrow; the
 cancel unwinds through the field's lend, the anti-frame and the record's lend to `dRec`. -/
 theorem hardestCase791C : HardestCase791C (ℍ := ℍ) :=
-  progOfN_orDiverges Φ₀_down fun n => rootMutC_ok Φ₀_down n []
+  progOfN_orDiverges Φ₀_down rfl fun n => rootMutC_ok Φ₀_down n []
 
 /-! ### What the Mut Frame hands the lender back
 

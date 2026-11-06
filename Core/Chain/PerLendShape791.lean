@@ -41,17 +41,18 @@ def unitL : CPredL := fun _ _ v ρ => v = Val.unit ∧ ρ = PMap.empty
 theorem famL_unit (b : Life) (Θ : LocTy) : famL b unitL Θ = famUnit b := rfl
 
 /-- `ℓ` and `ℓ₂` lent at `β` with `𝒱⟦1⟧`'s family. -/
-def W₁ (l l₂ : Loc) (β : Life) : LocTy := fun x b =>
-  if (x = l ∨ x = l₂) ∧ b = β then some (famUnit b) else none
+def W₁ (l l₂ : Loc) (β : Life) : LocTy :=
+  ⟨fun x b => if (x = l ∨ x = l₂) ∧ b = β then some (famUnit b) else none, []⟩
 
 /-- …and `ℓ_b` lent at `b` with `𝒱⟦Mut @β 1⟧`'s, read above `b`. -/
-def Wc (l l₂ lb : Loc) (b β : Life) : LocTy := fun x a =>
-  if x = lb ∧ a = b then some (famL a (mutL β unitL) (W₁ l l₂ β)) else W₁ l l₂ β x a
+def Wc (l l₂ lb : Loc) (b β : Life) : LocTy :=
+  ⟨fun x a => if x = lb ∧ a = b then some (famL a (mutL β unitL) (W₁ l l₂ β)) else W₁ l l₂ β x a,
+    []⟩
 
 theorem Wc_above (l l₂ lb : Loc) (hl : lb ≠ l) (hl₂ : lb ≠ l₂) (b β : Life) :
     (Wc l l₂ lb b β).above b = (W₁ l l₂ β).above b := by
-  funext x a
-  simp only [LocTy.above, Wc]
+  refine LocTy.ext' (fun x a => ?_) rfl
+  simp only [LocTy.above_apply, Wc, LocTy.mk_apply]
   by_cases h : x = lb ∧ a = b
   · obtain ⟨rfl, rfl⟩ := h
     simp
@@ -60,7 +61,7 @@ theorem Wc_above (l l₂ lb : Loc) (hl : lb ≠ l) (hl₂ : lb ≠ l₂) (b β :
 theorem Wc_fresh (l l₂ lb : Loc) {α b β : Life} (hαb : α < b) (hbβ : b < β) :
     (Wc l l₂ lb b β).Fresh α := by
   intro x a ha
-  simp only [Wc, W₁] at ha
+  simp only [Wc, W₁, LocTy.mk_apply] at ha
   by_cases h : x = lb ∧ a = b
   · rw [h.2]; exact hαb
   · rw [if_neg h] at ha
@@ -84,7 +85,7 @@ theorem perLocShape_lend_reborrow (l l₂ lb : Loc) (hl : lb ≠ l) (hl₂ : lb 
   -- the content: `ℓ₂ ↦ mut(β, (), ∅, 𝒱⟦1⟧)`, typed at `W₁` above `b`
   have hin : mutL β unitL ((W₁ l l₂ β).above b) 0 (Val.loc l₂) (innerCell l₂ β) := by
     refine ⟨l₂, Val.unit, PMap.empty, ResU.inStratum_empty β, 0, ⟨rfl, rfl⟩, le_rfl, rfl, ?_, rfl⟩
-    simp [LocTy.above, W₁, hbβ, famL_unit]
+    simp [LocTy.above_apply, W₁, hbβ, famL_unit]
   have hw : famL b (mutL β unitL) (Wc l l₂ lb b β) 0 (Val.loc l₂)
       ⟨innerCell l₂ β, innerCell_inStratum l₂ hbβ⟩ := by
     rw [hfam]; exact hin
@@ -92,7 +93,8 @@ theorem perLocShape_lend_reborrow (l l₂ lb : Loc) (hl : lb ≠ l) (hl₂ : lb 
       (ResU.single lb (CellU.mutOf b (Val.loc l₂) (innerCell l₂ β)
         (innerCell_inStratum l₂ hbβ) _ hw)) := by
     refine ⟨lb, _, _, _, 0, hw, le_rfl, rfl, ?_, rfl⟩
-    simp only [Wc, and_self, if_true, hfam]
+    rw [hfam]
+    simp only [Wc, LocTy.mk_apply, and_self, if_true]
   refine ⟨_, _, fun x ψ hx => ?_, hv, mutL_add (Wc_fresh l l₂ lb hαb hbβ) l F hv⟩
   by_cases h : x = lb
   · rw [h]; exact hl

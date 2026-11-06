@@ -49,7 +49,7 @@ def EndOKG (Φ : LocFam) (Q : PostG) (k : Nat) (ls : List SRec) (ρ ρf : WRes)
 def rwpG (Φ : LocFam) (Q : PostG) (n : Nat) (ls : List SRec) (e : Expr) : WProp := fun ρ =>
   ∀ (ρf fρ : WRes) (ps : List FrameRec) (μ : Heap),
     ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ → TWNC fρ ps (rsOf ls) → Tagged fρ ps ls →
-    ResU.Lower fρ μ → FinDom μ →
+    ImmTieL Φ.imm ls → ResU.Lower fρ μ → FinDom μ →
     ∀ j μ' e', j < n → StepsN (ℍ := ℍ) j μ e μ' e' → Final (ℍ := ℍ) μ' e' →
       EndOKG Φ Q (n - j) ls ρ ρf ps μ' e'
 
@@ -82,20 +82,20 @@ theorem rwp_iff_rwpG {Φ : LocFam} {Q : PostN} {n : Nat} {ls : List SRec} {e : E
     {ρ : WRes} : rwp (ℍ := ℍ) Φ Q n ls e ρ ↔ rwpG (ℍ := ℍ) Φ (valPostN Q) n ls e ρ := by
   classical
   constructor
-  · intro h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
-    obtain ⟨hval, hprog⟩ := h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
+  · intro h ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun hfin
+    obtain ⟨hval, hprog⟩ := h ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun
     by_cases hv : IsVal e'
     · exact (hval ⟨e', hv⟩ rfl).toG
     · obtain ⟨μ'', e'', hs⟩ := hprog hv
       exact absurd hs (hfin μ'' e'')
-  · intro h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun
+  · intro h ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun
     refine ⟨fun v hv => ?_, fun hnv => ?_⟩
     · subst hv
-      exact (h ρf fρ ps μ hf hc hT htg hl hfd j μ' v.1 hj hrun (final_val μ' v)).ofVal
+      exact (h ρf fρ ps μ hf hc hT htg hI hl hfd j μ' v.1 hj hrun (final_val μ' v)).ofVal
     · by_contra hno
       have hfin : Final (ℍ := ℍ) μ' e' := fun μ'' e'' hs => hno ⟨μ'', e'', hs⟩
       obtain ⟨-, -, -, -, -, -, -, -, -, -, -, -, -, -, -, -, -, -, -, w, hw, -⟩ :=
-        h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
+        h ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun hfin
       exact hnv (hw ▸ w.2)
 
 /-! ### Downward closure and monotonicity -/
@@ -122,16 +122,16 @@ theorem EndOKG.mono {Φ : LocFam} {P Q : PostG} {k k' : Nat} (hΦ : Φ.Down) (hk
 theorem rwpG_le {Φ : LocFam} (hΦ : Φ.Down) {Q : PostG} (hQ : Q.Down) {m n : Nat} (hmn : m ≤ n)
     {ls : List SRec} {e : Expr} {ρ : WRes} (h : rwpG (ℍ := ℍ) Φ Q n ls e ρ) :
     rwpG (ℍ := ℍ) Φ Q m ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
-  exact (h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' (by omega) hrun hfin).mono hΦ (by omega)
+  intro ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun hfin
+  exact (h ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' (by omega) hrun hfin).mono hΦ (by omega)
     (fun _ _ x => hQ.le (by omega) _ _ _ x)
 
 theorem rwpG_mono {Φ : LocFam} {P Q : PostG} (hPQ : ∀ n ls t ρ, P n ls t ρ → Q n ls t ρ)
     {n : Nat} {ls : List SRec} {e : Expr} {ρ : WRes} (h : rwpG (ℍ := ℍ) Φ P n ls e ρ) :
     rwpG (ℍ := ℍ) Φ Q n ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
+  intro ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun hfin
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
-    h₁₃⟩ := h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
+    h₁₃⟩ := h ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun hfin
   exact ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
     hPQ _ _ _ _ h₁₃⟩
 
@@ -139,7 +139,7 @@ theorem rwpG_mono {Φ : LocFam} {P Q : PostG} (hPQ : ∀ n ls t ρ, P n ls t ρ 
 memory. -/
 theorem rwpG_here {Φ : LocFam} {Q : PostG} {n : Nat} {ls : List SRec} {e : Expr} {ρ : WRes}
     (hfin : ∀ μ, Final (ℍ := ℍ) μ e) (h : Q n ls e ρ) : rwpG (ℍ := ℍ) Φ Q n ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun _
+  intro ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun _
   cases hrun with
   | more hs _ => exact absurd hs (hfin _ _ _)
   | refl =>
@@ -155,19 +155,19 @@ the index pays for it. -/
 theorem rwpG_step {Φ : LocFam} {Q : PostG} {n : Nat} {ls : List SRec} {e e' : Expr} {ρ : WRes}
     (hdet : ∀ μ, Step1Only (ℍ := ℍ) μ e μ e') (h : rwpG (ℍ := ℍ) Φ Q n ls e' ρ) :
     rwpG (ℍ := ℍ) Φ Q (n + 1) ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' E hj hrun hfin
+  intro ρf fρ ps μ hf hc hT htg hI hl hfd j μ' E hj hrun hfin
   cases hrun with
   | refl => exact absurd (hdet μ).1 (hfin μ e')
   | @more j' μ μ₁ μ' e e₁ E hs t =>
       obtain ⟨rfl, rfl⟩ := (hdet μ).2 _ _ hs
-      have := h ρf fρ ps _ hf hc hT htg hl hfd j' μ' E (by omega) t hfin
+      have := h ρf fρ ps _ hf hc hT htg hI hl hfd j' μ' E (by omega) t hfin
       rwa [show n + 1 - (j' + 1) = n - j' by omega]
 
 /-! ### Bind -/
 
 /-- `rwp_compose` at any final term. -/
 theorem rwpG_compose {Φ : LocFam} (hΦ : Φ.Down) {Q : PostG} (K : Kont) {k₁ : Nat}
-    {ls : List SRec} {ρ ρf : WRes} {ps : List FrameRec} {μ₁ : Heap} {t : Expr}
+    {ls : List SRec} (hI : ImmTieL Φ.imm ls) {ρ ρf : WRes} {ps : List FrameRec} {μ₁ : Heap} {t : Expr}
     (hend : EndOKG Φ (fun k ls' t => rwpG (ℍ := ℍ) Φ Q k ls' (K.plug t)) k₁ ls ρ ρf ps μ₁ t)
     (hfd₁ : FinDom μ₁) {j₂ : Nat} {μ' : Heap} {E : Expr} (hj : j₂ < k₁)
     (hrun : StepsN (ℍ := ℍ) j₂ μ₁ (K.plug t) μ' E) (hfin : Final (ℍ := ℍ) μ' E) :
@@ -179,7 +179,7 @@ theorem rwpG_compose {Φ : LocFam} (hΦ : Φ.Down) {Q : PostG} (K : Kont) {k₁ 
   obtain ⟨z₀, hz₀, hY⟩ := compS_exch h₂ h₆
   have hzY : ResU.CompS z ρ' fρ'p := by rwa [ResU.CompS.functional hz₀ hfz] at hY
   obtain ⟨ρ'', ρpp, Y'', Y''p, π'', ps'', ls'', k₁', k₂, k₃, k₆, k₇, k₉, kA, kB, kT, ktg, kps,
-    kls, kC⟩ := hC z fρ'p ps' μ₁ hz hzY hT' htg' h₇ hfd₁ j₂ μ' E hj hrun hfin
+    kls, kC⟩ := hC z fρ'p ps' μ₁ hz hzY hT' htg' (hI.perm hls') h₇ hfd₁ j₂ μ' E hj hrun hfin
   obtain ⟨hfρ'', -⟩ := ResU.Hash.split hfz (ResU.hash_symm k₁')
   obtain ⟨F, hF, hFp⟩ := compS_exch hfz k₂
   obtain ⟨ZZ, hZZ, hZF⟩ := (hash_shift ρpp ρp F).mp ⟨Y'', ResU.CompS.comm hFp, k₃⟩
@@ -209,16 +209,16 @@ theorem rwpG_bind {Φ : LocFam} (hΦ : Φ.Down) {Q : PostG} (K : Kont) {n : Nat}
     (hw : rwpG (ℍ := ℍ) Φ (fun k ls' t => rwpG (ℍ := ℍ) Φ Q k ls' (K.plug t)) n ls e ρ) :
     rwpG (ℍ := ℍ) Φ Q n ls (K.plug e) ρ := by
   classical
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' E hj hrun hfin
+  intro ρf fρ ps μ hf hc hT htg hI hl hfd j μ' E hj hrun hfin
   rcases stepsN_plug_split K hrun with ⟨e', rfl, hrun'⟩ |
     ⟨j₁, j₂, μ₁, t, hjj, hrun₁, hirr, hrun₂⟩
   · -- the run stayed inside `K`: `e'` is final, since a step of it is one of `K[e']`
     have hfin' : Final (ℍ := ℍ) μ' e' := fun μ'' e'' hs => hfin _ _ (hs.plug K)
-    have h := rwpG_compose hΦ K (hw ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun' hfin')
+    have h := rwpG_compose hΦ K hI (hw ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun' hfin')
       (fd_stepsN hrun' hfd) (j₂ := 0) (by omega) (.refl _ _) hfin
     simpa using h
-  · have h := rwpG_compose hΦ K
-      (hw ρf fρ ps μ hf hc hT htg hl hfd j₁ μ₁ t (by omega) hrun₁ hirr)
+  · have h := rwpG_compose hΦ K hI
+      (hw ρf fρ ps μ hf hc hT htg hI hl hfd j₁ μ₁ t (by omega) hrun₁ hirr)
       (fd_stepsN hrun₁ hfd) (j₂ := j₂) (by omega) hrun₂ hfin
     rwa [show n - j₁ - j₂ = n - j by omega] at h
 
@@ -231,12 +231,12 @@ theorem rwpG_frame {Φ : LocFam} {P : PostG} (R : List SRec → WProp)
     {ls : List SRec} {e : Expr} {ρ₁ ρ₂ ρ : WRes} (hcρ : ResU.CompS ρ₁ ρ₂ ρ)
     (hwp : rwpG (ℍ := ℍ) Φ P n ls e ρ₁) (hR₂ : R ls ρ₂) :
     rwpG (ℍ := ℍ) Φ (fun k ls' t => P k ls' t ⋆ R ls') n ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
+  intro ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun hfin
   obtain ⟨y, hy, hy₁⟩ := (hash_shift ρf ρ₂ ρ₁).mp ⟨ρ, ResU.CompS.comm hcρ, hf⟩
   obtain ⟨y', hy', hyfρ⟩ := compS_reassoc' (ResU.CompS.comm hcρ) hc
   cases ResU.CompS.functional hy' hy
   obtain ⟨ρ', ρp, Y', Y'p, π', ps', ls', g₁, g₂, g₃, g₆, g₇, g₉, gA, gB, gT, gtg, gps,
-    gls, gC⟩ := hwp y fρ ps μ hy₁ hyfρ hT htg hl hfd j μ' e' hj hrun hfin
+    gls, gC⟩ := hwp y fρ ps μ hy₁ hyfρ hT htg hI hl hfd j μ' e' hj hrun hfin
   obtain ⟨W, hW, hfW⟩ := compS_reassoc hy g₂
   obtain ⟨W₀, hW₀, hWf₀⟩ := (hash_shift ρ' ρ₂ ρf).mp ⟨y, ResU.CompS.comm hy, g₁⟩
   have hWf : ResU.Hash W ρf := by
@@ -257,7 +257,7 @@ theorem rwpG_frame {Φ : LocFam} {P : PostG} (R : List SRec → WProp)
 
 /-- **Safety at any final term**: a closed term in `rwpG` at the empty world at every index,
 whose postcondition holds only at values, never gets stuck. -/
-theorem rwpG_safe {Φ : LocFam} {Q : PostG} {e : Expr}
+theorem rwpG_safe {Φ : LocFam} (hΦI : ImmTieL Φ.imm []) {Q : PostG} {e : Expr}
     (hQ : ∀ k ls t ρ, Q k ls t ρ → IsVal t)
     (hall : ∀ n, rwpG (ℍ := ℍ) Φ Q n [] e (PMap.empty : WRes)) {j : Nat} {μ' : Heap} {e' : Expr}
     (hrun : StepsN (ℍ := ℍ) j (fun _ => none) e μ' e') :
@@ -268,7 +268,7 @@ theorem rwpG_safe {Φ : LocFam} {Q : PostG} {e : Expr}
   · have hfin : Final (ℍ := ℍ) μ' e' := fun μ'' e'' h => hs ⟨μ'', e'', h⟩
     have htg : Tagged (PMap.empty : WRes) [] [] := fun x hx => absurd hx (by simp)
     have h := hall (j + 1) PMap.empty PMap.empty [] (fun _ => none)
-      Fig16.LogRel.hash_empty (ResU.comp_empty_right _) TWNC.empty htg Fig16.BoLo.lower_empty
+      Fig16.LogRel.hash_empty (ResU.comp_empty_right _) TWNC.empty htg hΦI Fig16.BoLo.lower_empty
       fd_empty j μ' e' (by omega) hrun hfin
     obtain ⟨_, _, _, _, _, _, _, -, -, -, -, -, -, -, -, -, -, -, -, hq⟩ := h
     exact .inl (hQ _ _ _ _ hq)

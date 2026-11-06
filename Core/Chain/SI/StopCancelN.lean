@@ -319,7 +319,7 @@ theorem claimT_can {Φ : LocFam} {l : Loc} (hΦl : Φ l = none) {A : Life}
   refine erwp_M_frame_cancelRun hF hT₁ k k le_rfl ls _ v'' χ W'' (Z.del l) ρkL hχ hdZd P'' hPk
     hw'' (ResU.CompS.comm hW'') (ResU.CompS.comm hkL) (fun BM hBM => ?_)
   obtain rfl := ResU.CompS.functional hBM hZd
-  exact erwp_extΦ (LocFam.ext_set hΦl A F) (cancelTabN_local T₁) _ _ _ _
+  exact erwp_extΦ (LocFam.ext_set hΦl A F) (LocFam.immLe_set Φ l A F) (cancelTabN_local T₁) _ _ _ _
     (erwp_garbage hZ hno hin)
 
 /-- **Mut Frame at `erwp` across stops, cancellable stops included**: the lender's stops are at

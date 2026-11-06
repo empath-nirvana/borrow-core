@@ -147,9 +147,9 @@ theorem rwpG_mono_le {Φ : LocFam} {P Q : PostG} {n : Nat}
     (hPQ : ∀ k, k ≤ n → ∀ ls t ρ, P k ls t ρ → Q k ls t ρ)
     {ls : List SRec} {e : Expr} {ρ : WRes} (h : rwpG (ℍ := ℍ) Φ P n ls e ρ) :
     rwpG (ℍ := ℍ) Φ Q n ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
+  intro ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun hfin
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
-    h₁₃⟩ := h ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
+    h₁₃⟩ := h ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun hfin
   exact ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
     hPQ _ (by omega) _ _ _ h₁₃⟩
 
@@ -195,12 +195,12 @@ a run from `e′`, which `rwpG` at `n` covers at a higher index left. -/
 theorem rwpG_det {Φ : LocFam} (hΦ : Φ.Down) {Q : PostG} (hQ : Q.Down) {n : Nat}
     {ls : List SRec} {e e' : Expr} {ρ : WRes} (hdet : ∀ μ, Step1Only (ℍ := ℍ) μ e μ e')
     (h : rwpG (ℍ := ℍ) Φ Q n ls e' ρ) : rwpG (ℍ := ℍ) Φ Q n ls e ρ := by
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' E hj hrun hfin
+  intro ρf fρ ps μ hf hc hT htg hI hl hfd j μ' E hj hrun hfin
   cases hrun with
   | refl => exact absurd (hdet _).1 (hfin _ e')
   | @more j' _ _ _ _ _ _ hs t =>
       obtain ⟨rfl, rfl⟩ := (hdet _).2 _ _ hs
-      exact (h ρf fρ ps _ hf hc hT htg hl hfd j' μ' E (by omega) t hfin).mono hΦ (by omega)
+      exact (h ρf fρ ps _ hf hc hT htg hI hl hfd j' μ' E (by omega) t hfin).mono hΦ (by omega)
         (fun _ _ x => hQ.le (by omega) _ _ _ x)
 
 /-- `erwp`'s postcondition is downward closed. -/

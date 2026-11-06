@@ -48,7 +48,7 @@ theorem rwp_I_frame {Φ : LocFam} (l : BoCa.Loc) (T : VTy) (δ : LSub)
               n ls' e) ρ)) ρ) :
     rwp (ℍ := ℍ) Φ Q n ls e ρ := by
   classical
-  intro ρf sρ ps μ hH3 hsρ hT htg hlow hfd jr μ' e' hj hrun
+  intro ρf sρ ps μ hH3 hsρ hT htg hI hlow hfd jr μ' e' hj hrun
   have hTI := hT.inv
   have hvsρ : ResU.Valid sρ := hash_valid_comp hH3 hsρ
   -- 6.112 pulls `ℓ ↦ v ⋆ P̂(v)` inside the `⋔`
@@ -142,7 +142,10 @@ theorem rwp_I_frame {Φ : LocFam} (l : BoCa.Loc) (T : VTy) (δ : LSub)
   have hlowin : ResU.Lower fρ μ :=
     (ResU.lower_swap_imm_own hlPcell hvi hvlP hFBi hFBiH hFBl hFBlH).mpr hlow
   obtain ⟨hval, hprog⟩ :=
-    hwpBI ρf fρ (p :: ps) μ hH17 h4 hTin htgin hlowin hfd jr μ' e' hj hrun
+    hwpBI ρf fρ (p :: ps) μ hH17 h4 hTin htgin
+      (hI.of_sub fun r hr => by
+        rw [hls'def, rsOf_frameList]; exact List.mem_cons_of_mem _ (List.mem_append_right _ hr))
+      hlowin hfd jr μ' e' hj hrun
   refine ⟨fun v' hv' => ?_, hprog⟩
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps'', ls'',
     h1, h2, h3, h6, h7, h9, h10, h11, hT'', htg'', hps'', hls'', h12⟩ := hval v' hv'

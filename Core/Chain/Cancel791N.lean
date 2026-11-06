@@ -181,10 +181,10 @@ theorem erwp_of_valid {Φ : LocFam} {Tb : TableN} {Q : PostN} {n : Nat} {ls : Li
     {e : Expr} {ρ : WRes} (h : ResU.Valid ρ → erwp (ℍ := ℍ) Φ Tb Q n ls e ρ) :
     erwp (ℍ := ℍ) Φ Tb Q n ls e ρ := by
   rw [erwp_eq]
-  intro ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
+  intro ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun hfin
   have h' := h (ResU.Valid.split hc hT.valid).2
   rw [erwp_eq] at h'
-  exact h' ρf fρ ps μ hf hc hT htg hl hfd j μ' e' hj hrun hfin
+  exact h' ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun hfin
 
 end BoCa.Fig16.LogRel.Core.Chain.SI
 

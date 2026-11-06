@@ -70,8 +70,29 @@ open BoCa.Fig16.LogRel.Core
 
 /-! ### The world -/
 
-/-- **Location typing per lend**: the family of the cell lent at `ℓ` at `b`. -/
-abbrev LocTy : Type := Loc → (b : Life) → Option (Nat → Val → SPropS Loc Val b)
+/-- **Location typing per lend**: the family of the cell lent at `ℓ` at `b` (`fam`, applied as
+`Θ ℓ b`), and the `imm` records of the world, each with the lifetime it was lent at (`imm`, Core's
+record list moved into the world; `vN`'s `Imm` clause reads its witnesses there). -/
+structure LocTy where
+  fam : Loc → (b : Life) → Option (Nat → Val → SPropS Loc Val b)
+  imm : List SRec := []
+
+instance : CoeFun LocTy (fun _ => (l : Loc) → (b : Life) → Option (Nat → Val → SPropS Loc Val b)) :=
+  ⟨LocTy.fam⟩
+
+@[simp] theorem LocTy.mk_apply (f : Loc → (b : Life) → Option (Nat → Val → SPropS Loc Val b))
+    (I : List SRec) (l : Loc) (b : Life) : (LocTy.mk f I) l b = f l b := rfl
+
+theorem LocTy.ext' {Θ Θ' : LocTy} (h : ∀ l b, Θ l b = Θ' l b) (hI : Θ.imm = Θ'.imm) : Θ = Θ' := by
+  cases Θ; cases Θ'
+  simp only at hI
+  subst hI
+  congr
+  funext l b
+  exact h l b
+
+/-- The `imm` records of `Θ` are among `Θ′`'s. -/
+def LocTy.ImmLe (Θ Θ' : LocTy) : Prop := ∀ x ∈ Θ.imm, x ∈ Θ'.imm
 
 /-- Every family `Θ` assigns is downward closed. -/
 def LocTy.Down (Θ : LocTy) : Prop := ∀ l b F, Θ l b = some F → DownFam b F
@@ -84,10 +105,22 @@ def LocTy.Fresh (Θ : LocTy) (α : Life) : Prop := ∀ l b, Θ l b ≠ none → 
 
 /-- The entry `(ℓ, α) ↦ F` added; every other key unchanged. -/
 def LocTy.add (Θ : LocTy) (l : Loc) (α : Life) (F : Nat → Val → SPropS Loc Val α) : LocTy :=
-  fun x b => if hb : b = α then (if x = l then some (hb ▸ F) else Θ x b) else Θ x b
+  ⟨fun x b => if hb : b = α then (if x = l then some (hb ▸ F) else Θ x b) else Θ x b, Θ.imm⟩
 
-/-- The entries strictly longer-lived than `a` (Core's `ls₀`). -/
-def LocTy.above (Θ : LocTy) (a : Life) : LocTy := fun x b => if a < b then Θ x b else none
+@[simp] theorem LocTy.add_imm (Θ : LocTy) (l : Loc) (α : Life) (F : Nat → Val → SPropS Loc Val α) :
+    (Θ.add l α F).imm = Θ.imm := rfl
+
+/-- The entries strictly longer-lived than `a`, and the `imm` records lent strictly above `a`
+(Core's `ls₀`). -/
+def LocTy.above (Θ : LocTy) (a : Life) : LocTy :=
+  ⟨fun x b => if a < b then Θ x b else none, Θ.imm.filter (fun x => decide (a < x.2))⟩
+
+@[simp] theorem LocTy.above_apply (Θ : LocTy) (a : Life) (x : Loc) (b : Life) :
+    Θ.above a x b = if a < b then Θ x b else none := rfl
+
+theorem LocTy.mem_above_imm {Θ : LocTy} {a : Life} {x : SRec} :
+    x ∈ (Θ.above a).imm ↔ x ∈ Θ.imm ∧ a < x.2 := by
+  simp [LocTy.above]
 
 theorem LocTy.add_self (Θ : LocTy) (l : Loc) (α : Life) (F : Nat → Val → SPropS Loc Val α) :
     Θ.add l α F l α = some F := by
@@ -100,7 +133,7 @@ theorem LocTy.add_keep (Θ : LocTy) (l : Loc) {α : Life} (F : Nat → Val → S
 
 theorem LocTy.add_other (Θ : LocTy) {l x : Loc} (hx : x ≠ l) {α : Life}
     (F : Nat → Val → SPropS Loc Val α) (b : Life) : Θ.add l α F x b = Θ x b := by
-  unfold LocTy.add
+  show (if hb : b = α then (if x = l then some (hb ▸ F) else Θ x b) else Θ x b) = Θ x b
   split <;> simp_all
 
 /-- **L2 (a): a lend at a fresh lifetime is an extension.** -/
@@ -117,8 +150,8 @@ theorem LocTy.ext_add {Θ : LocTy} {α : Life} (hf : Θ.Fresh α) (l : Loc)
 /-- The part of the world above `a` is unchanged by a lend at a lifetime not above `a`. -/
 theorem LocTy.above_add (Θ : LocTy) (l : Loc) {α a : Life} (h : ¬ a < α)
     (F : Nat → Val → SPropS Loc Val α) : (Θ.add l α F).above a = Θ.above a := by
-  funext x b
-  simp only [LocTy.above]
+  refine LocTy.ext' (fun x b => ?_) rfl
+  simp only [LocTy.above_apply]
   by_cases hab : a < b
   · have hb : b ≠ α := fun e => h (e ▸ hab)
     simp [hab, LocTy.add_keep Θ l F x hb]
@@ -202,18 +235,21 @@ theorem mutL_add {Θ : LocTy} {α : Life} (hf : Θ.Fresh α) (l₀ : Loc)
 /-- **The Kripke order of the interpretation**: entries only added, and nothing added above any
 key present. A lend at a fresh lifetime is one step of it (`LocTy.extA_add`). -/
 def LocTy.ExtA (Θ Θ' : LocTy) : Prop :=
-  Θ.Ext Θ' ∧ ∀ l a, Θ l a ≠ none → Θ'.above a = Θ.above a
+  Θ.Ext Θ' ∧ (∀ l a, Θ l a ≠ none → Θ'.above a = Θ.above a) ∧ Θ.ImmLe Θ'
 
 theorem LocTy.extA_add {Θ : LocTy} {α : Life} (hf : Θ.Fresh α) (l : Loc)
     (F : Nat → Val → SPropS Loc Val α) : Θ.ExtA (Θ.add l α F) :=
-  ⟨LocTy.ext_add hf l F, fun x a ha => LocTy.above_add Θ l (not_lt_of_gt (hf x a ha)) F⟩
+  ⟨LocTy.ext_add hf l F, fun x a ha => LocTy.above_add Θ l (not_lt_of_gt (hf x a ha)) F,
+    fun _ h => h⟩
 
-theorem LocTy.extA_refl (Θ : LocTy) : Θ.ExtA Θ := ⟨fun _ _ _ h => h, fun _ _ _ => rfl⟩
+theorem LocTy.extA_refl (Θ : LocTy) : Θ.ExtA Θ :=
+  ⟨fun _ _ _ h => h, fun _ _ _ => rfl, fun _ h => h⟩
 
 theorem LocTy.extA_trans {Θ Θ' Θ'' : LocTy} (h₁ : Θ.ExtA Θ') (h₂ : Θ'.ExtA Θ'') : Θ.ExtA Θ'' := by
-  refine ⟨fun l b F h => h₂.1 l b F (h₁.1 l b F h), fun l a ha => ?_⟩
+  refine ⟨fun l b F h => h₂.1 l b F (h₁.1 l b F h), fun l a ha => ?_,
+    fun x hx => h₂.2.2 x (h₁.2.2 x hx)⟩
   obtain ⟨G, hG⟩ := Option.ne_none_iff_exists'.mp ha
-  rw [h₂.2 l a (by rw [h₁.1 l a G hG]; simp), h₁.2 l a ha]
+  rw [h₂.2.1 l a (by rw [h₁.1 l a G hG]; simp), h₁.2.1 l a ha]
 
 /-- **`Mut` values of Core's shape are stable along the Kripke order.** -/
 theorem mutL_extA {Θ Θ' : LocTy} (hE : Θ.ExtA Θ') {a : Life} {P : CPredL} {n : Nat} {v : Val}
@@ -221,7 +257,7 @@ theorem mutL_extA {Θ Θ' : LocTy} (hE : Θ.ExtA Θ') {a : Life} {P : CPredL} {n
   obtain ⟨l, w, χ, hχ, j, hw, hnj, hv, hl, hρ⟩ := hm
   have hfam : famL a P Θ' = famL a P Θ := by
     funext j u r
-    simp only [famL, hE.2 l a (by rw [hl]; simp)]
+    simp only [famL, hE.2.1 l a (by rw [hl]; simp)]
   unfold mutL
   rw [hfam]
   exact ⟨l, w, χ, hχ, j, hw, hnj, hv, hE.1 l a _ hl, hρ⟩
@@ -237,23 +273,27 @@ asks agreement above every `b` with `CellIn ρ b`, not only above the keys prese
 (`scope-791-loctype.md` §10); read literally, `U` is not Kripke along `ExtA` at a type through
 `ν`, which the interpretation reads as empty (`Core/Chain/ExtRLit791.lean`). -/
 def LocTy.ExtR (Θ Θ' : LocTy) (ρ : WRes) : Prop :=
-  ∀ l a F, Θ l a = some F → CellIn ρ a → Θ' l a = some F ∧ Θ'.above a = Θ.above a
+  (∀ l a F, Θ l a = some F → CellIn ρ a → Θ' l a = some F ∧ Θ'.above a = Θ.above a) ∧
+    ∀ x ∈ Θ.imm, (∃ b, CellIn ρ b ∧ b ≤ x.2) → x ∈ Θ'.imm
 
-theorem LocTy.extR_refl (Θ : LocTy) (ρ : WRes) : Θ.ExtR Θ ρ := fun _ _ _ h _ => ⟨h, rfl⟩
+theorem LocTy.extR_refl (Θ : LocTy) (ρ : WRes) : Θ.ExtR Θ ρ :=
+  ⟨fun _ _ _ h _ => ⟨h, rfl⟩, fun _ h _ => h⟩
 
 theorem LocTy.ExtR.trans {Θ Θ' Θ'' : LocTy} {ρ : WRes} (h₁ : Θ.ExtR Θ' ρ) (h₂ : Θ'.ExtR Θ'' ρ) :
-    Θ.ExtR Θ'' ρ := fun l a F hF hc => by
-  obtain ⟨e₁, a₁⟩ := h₁ l a F hF hc
-  obtain ⟨e₂, a₂⟩ := h₂ l a F e₁ hc
+    Θ.ExtR Θ'' ρ := by
+  refine ⟨fun l a F hF hc => ?_, fun x hx hb => h₂.2 x (h₁.2 x hx hb) hb⟩
+  obtain ⟨e₁, a₁⟩ := h₁.1 l a F hF hc
+  obtain ⟨e₂, a₂⟩ := h₂.1 l a F e₁ hc
   exact ⟨e₂, a₂.trans a₁⟩
 
 /-- The world-relative order is the resource-relative one at every resource. -/
 theorem LocTy.ExtA.extR {Θ Θ' : LocTy} (h : Θ.ExtA Θ') (ρ : WRes) : Θ.ExtR Θ' ρ :=
-  fun l a F hF _ => ⟨h.1 l a F hF, h.2 l a (by rw [hF]; simp)⟩
+  ⟨fun l a F hF _ => ⟨h.1 l a F hF, h.2.1 l a (by rw [hF]; simp)⟩, fun x hx _ => h.2.2 x hx⟩
 
 theorem LocTy.ExtR.mono {Θ Θ' : LocTy} {ρ σ : WRes} (h : Θ.ExtR Θ' ρ)
     (hs : ∀ a, CellIn σ a → CellIn ρ a) : Θ.ExtR Θ' σ :=
-  fun l a F hF hc => h l a F hF (hs a hc)
+  ⟨fun l a F hF hc => h.1 l a F hF (hs a hc),
+    fun x hx ⟨b, hb, hbx⟩ => h.2 x hx ⟨b, hs b hb, hbx⟩⟩
 
 theorem LocTy.ExtR.left {Θ Θ' : LocTy} {ρ₁ ρ₂ ρ : WRes} (hc : ResU.CompS ρ₁ ρ₂ ρ)
     (h : Θ.ExtR Θ' ρ) : Θ.ExtR Θ' ρ₁ := h.mono fun _ hi => hi.of_left hc
@@ -266,7 +306,7 @@ theorem LocTy.ExtR.right {Θ Θ' : LocTy} {ρ₁ ρ₂ ρ : WRes} (hc : ResU.Com
 one it reads. -/
 theorem LocTy.extR_of_add (Θ : LocTy) (l₀ : Loc) {α : Life} (F : Nat → Val → SPropS Loc Val α)
     {ρ : WRes} (hρ : ρ.InStratum α) : (Θ.add l₀ α F).ExtR Θ ρ := by
-  intro l a G hG hc
+  refine ⟨fun l a G hG hc => ?_, fun x hx _ => hx⟩
   have hαa : α < a := hc.of_stratum hρ
   rw [LocTy.add_keep Θ l₀ F l (ne_of_gt hαa)] at hG
   exact ⟨hG, (LocTy.above_add Θ l₀ (not_lt_of_gt hαa) F).symm⟩
@@ -279,7 +319,7 @@ theorem mutL_extR {Θ Θ' : LocTy} {a : Life} {P : CPredL} {n : Nat} {v : Val} {
   have hin : CellIn (ResU.single l (CellU.mutOf a w χ hχ (famL a P Θ j) hw)) a :=
     CellIn.single (ψ := CellU.mutOf a w χ hχ (famL a P Θ j) hw)
       (by rw [CellU.kind_mutOf]; exact fun c => Kind.noConfusion c)
-  obtain ⟨hl', ha⟩ := hE l a _ hl hin
+  obtain ⟨hl', ha⟩ := hE.1 l a _ hl hin
   have hfam : famL a P Θ' = famL a P Θ := by
     funext j u r
     simp only [famL, ha]
@@ -293,17 +333,25 @@ theorem LocTy.extR_above (Θ : LocTy) {a : Life} {ρ : WRes} (hρ : ρ.InStratum
     (Θ.above a).ExtR Θ ρ ∧ Θ.ExtR (Θ.above a) ρ := by
   have habove : ∀ b, a < b → (Θ.above a).above b = Θ.above b := by
     intro b hab
-    funext x y
-    simp only [LocTy.above]
-    by_cases hby : b < y
-    · simp [hby, lt_trans hab hby]
-    · simp [hby]
-  refine ⟨fun l b F hF hc => ?_, fun l b F hF hc => ?_⟩
+    refine LocTy.ext' (fun x y => ?_) ?_
+    · simp only [LocTy.above_apply]
+      by_cases hby : b < y
+      · simp [hby, lt_trans hab hby]
+      · simp [hby]
+    · simp only [LocTy.above, List.filter_filter]
+      congr 1
+      funext x
+      by_cases hbx : b < x.2
+      · simp [hbx, lt_trans hab hbx]
+      · simp [hbx]
+  refine ⟨⟨fun l b F hF hc => ?_, fun x hx _ => (LocTy.mem_above_imm.mp hx).1⟩,
+    ⟨fun l b F hF hc => ?_, fun x hx ⟨b, hb, hbx⟩ =>
+      LocTy.mem_above_imm.mpr ⟨hx, lt_of_lt_of_le (hb.of_stratum hρ) hbx⟩⟩⟩
   · have hab : a < b := hc.of_stratum hρ
-    simp only [LocTy.above, if_pos hab] at hF
+    simp only [LocTy.above_apply, if_pos hab] at hF
     exact ⟨hF, (habove b hab).symm⟩
   · have hab : a < b := hc.of_stratum hρ
-    exact ⟨by simp only [LocTy.above, if_pos hab]; exact hF, habove b hab⟩
+    exact ⟨by simp only [LocTy.above_apply, if_pos hab]; exact hF, habove b hab⟩
 
 /-- **L3 (locality)**: a `Mut` value of Core's shape at the world with the lend, whose cell is
 longer-lived than the lend, is one at the world without it (Core's `vC_local`; what the lender
@@ -335,14 +383,21 @@ theorem lend_mutL (Θ : LocTy) (l : Loc) (α : Life) (P : CPredL) {n j : Nat} (h
 
 /-- **The per-location typing a run uses**: at each location, the entry of the lifetime its live
 cell is at. -/
-def LocTy.view (Θ : LocTy) (c : Loc → Option Life) : LocFam := fun x =>
-  match c x with
-  | some b => (Θ x b).map (fun F => ⟨b, F⟩)
-  | none => none
+def LocTy.view (Θ : LocTy) (c : Loc → Option Life) : LocFam :=
+  ⟨fun x => match c x with
+    | some b => (Θ x b).map (fun F => ⟨b, F⟩)
+    | none => none, Θ.imm⟩
+
+@[simp] theorem LocTy.view_imm (Θ : LocTy) (c : Loc → Option Life) : (Θ.view c).imm = Θ.imm := rfl
+
+theorem LocTy.view_apply (Θ : LocTy) (c : Loc → Option Life) (x : Loc) :
+    Θ.view c x = match c x with
+      | some b => (Θ x b).map (fun F => ⟨b, F⟩)
+      | none => none := rfl
 
 theorem LocTy.view_down {Θ : LocTy} (hΘ : Θ.Down) (c : Loc → Option Life) : (Θ.view c).Down := by
   intro x b G h
-  simp only [LocTy.view] at h
+  rw [LocTy.view_apply] at h
   cases hc : c x with
   | none => rw [hc] at h; cases h
   | some b' =>
@@ -358,17 +413,17 @@ def setLife (c : Loc → Option Life) (l : Loc) (α : Life) : Loc → Option Lif
 
 theorem LocTy.view_some {Θ : LocTy} {c : Loc → Option Life} {l : Loc} {b : Life} (hc : c l = some b)
     {F : Nat → Val → SPropS Loc Val b} (hF : Θ l b = some F) : Θ.view c l = some ⟨b, F⟩ := by
-  simp [LocTy.view, hc, hF]
+  simp [LocTy.view_apply, hc, hF]
 
 /-- **L3: the relation's `Φ.set` at a lend is the view of the per-lend lend.** -/
 theorem LocTy.view_add (Θ : LocTy) (c : Loc → Option Life) (l : Loc) (α : Life)
     (F : Nat → Val → SPropS Loc Val α) :
     (Θ.add l α F).view (setLife c l α) = (Θ.view c).set l α F := by
-  funext x
+  refine LocFam.ext' (fun x => ?_) rfl
   by_cases hx : x = l
   · subst hx
-    simp [LocTy.view, setLife, LocFam.set, LocTy.add_self]
-  · simp only [LocTy.view, setLife, LocFam.set, if_neg hx]
+    simp [LocTy.view_apply, setLife, LocFam.set, LocTy.add_self]
+  · simp only [LocTy.view_apply, setLife, LocFam.set, if_neg hx, LocFam.mk_apply]
     cases c x with
     | none => rfl
     | some b => simp [LocTy.add_other Θ hx F b]
@@ -419,7 +474,7 @@ theorem reseal_at_entry {Θ Θ' : LocTy} (hE : Θ.Ext Θ') {c : Loc → Option L
   have hview : Θ'.view c l = some ⟨β, famL β P Θ⟩ := LocTy.view_some hc (hE l β _ hl)
   refine ⟨w, χ, hχ, j, hw, hnj, rfl, hview, fun k m hmk w' σ' hσ' hw' => ⟨?_, ?_⟩⟩
   · -- `mutStep_write` at the one-entry typing `ℓ ↦ (β, F)`, read at the view
-    let Φ₀ : LocFam := LocFam.set (fun _ => none) l β (famL β P Θ)
+    let Φ₀ : LocFam := LocFam.set LocFam.empty l β (famL β P Θ)
     have hΦ₀ : Φ₀.Down := LocFam.set_down (fun _ _ _ h => by cases h) hd
     have hF₀ : Φ₀ l = some ⟨β, famL β P Θ⟩ := by simp [Φ₀, LocFam.set]
     exact mutStep_congr (hview.trans hF₀.symm) (mutStep_write hΦ₀ hF₀ hmk)
@@ -459,11 +514,15 @@ theorem reborrow_view {Θ : LocTy} {α β : Life} (hf : Θ.Fresh α) {l : Loc}
 /-! ### The empty world, and the view along the Kripke order -/
 
 /-- The world with no entries. -/
-def LocTy.empty : LocTy := fun _ _ => none
+def LocTy.empty : LocTy := ⟨fun _ _ => none, []⟩
 
-theorem LocTy.empty_down : LocTy.empty.Down := fun _ _ _ h => by cases h
+@[simp] theorem LocTy.empty_apply (l : Loc) (b : Life) : LocTy.empty l b = none := rfl
 
-theorem LocTy.empty_bounded : LocTy.empty.Bounded := ⟨0, fun _ _ h => absurd rfl h⟩
+@[simp] theorem LocTy.empty_imm : LocTy.empty.imm = [] := rfl
+
+theorem LocTy.empty_down : LocTy.empty.Down := fun _ _ _ h => by simp at h
+
+theorem LocTy.empty_bounded : LocTy.empty.Bounded := ⟨0, fun _ _ h => by simp at h⟩
 
 /-- A world an interpretation runs at: its families downward closed, and a lifetime fresh for
 it (`LocTy.exists_fresh`). -/
@@ -472,9 +531,9 @@ def LocTy.OK (Θ : LocTy) : Prop := Θ.Down ∧ Θ.Bounded
 theorem LocTy.empty_ok : LocTy.empty.OK := ⟨LocTy.empty_down, LocTy.empty_bounded⟩
 
 /-- The view of the empty world types nothing. -/
-theorem LocTy.view_empty (c : Loc → Option Life) : LocTy.empty.view c = fun _ => none := by
-  funext x
-  simp only [LocTy.view, LocTy.empty]
+theorem LocTy.view_empty (c : Loc → Option Life) : LocTy.empty.view c = LocFam.empty := by
+  refine LocFam.ext' (fun x => ?_) rfl
+  rw [LocTy.view_apply]
   cases c x <;> rfl
 
 theorem LocTy.ext_of_extA {Θ Θ' : LocTy} (h : Θ.ExtA Θ') : Θ.Ext Θ' := h.1
@@ -483,7 +542,7 @@ theorem LocTy.ext_of_extA {Θ Θ' : LocTy} (h : Θ.ExtA Θ') : Θ.Ext Θ' := h.1
 theorem LocTy.view_ext {Θ Θ' : LocTy} (h : Θ.Ext Θ') (c : Loc → Option Life) :
     LocFam.Ext (Θ.view c) (Θ'.view c) := by
   intro x y hx
-  simp only [LocTy.view] at hx ⊢
+  rw [LocTy.view_apply] at hx ⊢
   cases hc : c x with
   | none => rw [hc] at hx; cases hx
   | some b =>
@@ -492,6 +551,10 @@ theorem LocTy.view_ext {Θ Θ' : LocTy} (h : Θ.Ext Θ') (c : Loc → Option Lif
       obtain ⟨F, hF, rfl⟩ := Option.map_eq_some_iff.mp hx
       rw [h x b F hF]
       rfl
+
+/-- The view's `imm` records grow along the order that keeps them. -/
+theorem LocTy.view_immLe {Θ Θ' : LocTy} (h : Θ.ImmLe Θ') (c : Loc → Option Life) :
+    (Θ.view c).ImmLe (Θ'.view c) := h
 
 /-! ### Consistency on the exclusive walk -/
 
@@ -667,9 +730,9 @@ theorem rwpG_consistentX {Φ : LocFam} {Q : PostG} {n : Nat} {ls : List SRec} {e
     {ρ : WRes} (h : rwpG (ℍ := ℍ) Φ Q n ls e ρ) {c : Loc → Option Life}
     (hc : ConsistentX c ρ) :
     rwpG (ℍ := ℍ) Φ (fun k ls t ρ' => Q k ls t ρ' ∧ ConsistentX c ρ') n ls e ρ := by
-  intro ρf fρ ps μ hf hcf hT htg hl hfd j μ' e' hj hrun hfin
+  intro ρf fρ ps μ hf hcf hT htg hI hl hfd j μ' e' hj hrun hfin
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
-    h₁₃⟩ := h ρf fρ ps μ hf hcf hT htg hl hfd j μ' e' hj hrun hfin
+    h₁₃⟩ := h ρf fρ ps μ hf hcf hT htg hI hl hfd j μ' e' hj hrun hfin
   exact ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
     h₁₃, consistentX_of_updN h₇.1 h₇.2.2 h₆ hc⟩
 
@@ -678,9 +741,9 @@ theorem rwpG_consistentXV {Φ : LocFam} {Q : PostG} {n : Nat} {ls : List SRec} {
     {ρ : WRes} (h : rwpG (ℍ := ℍ) Φ Q n ls e ρ) {c : Loc → Option Life}
     (hc : ConsistentX c ρ) :
     rwpG (ℍ := ℍ) Φ (fun k ls t ρ' => Q k ls t ρ' ∧ ConsistentX c ρ' ∧ ResU.Valid ρ') n ls e ρ := by
-  intro ρf fρ ps μ hf hcf hT htg hl hfd j μ' e' hj hrun hfin
+  intro ρf fρ ps μ hf hcf hT htg hI hl hfd j μ' e' hj hrun hfin
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
-    h₁₃⟩ := h ρf fρ ps μ hf hcf hT htg hl hfd j μ' e' hj hrun hfin
+    h₁₃⟩ := h ρf fρ ps μ hf hcf hT htg hI hl hfd j μ' e' hj hrun hfin
   exact ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
     h₁₃, consistentX_of_updN h₇.1 h₇.2.2 h₆ hc, (ResU.Valid.split h₆ h₇.2.2).1⟩
 

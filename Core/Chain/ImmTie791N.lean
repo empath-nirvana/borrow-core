@@ -123,7 +123,8 @@ theorem immTie_wit_excludes_thunk (δ δ' : LSub) {l l' : Loc} (α : Life) {ΘI 
 /-! ### A guard on `cN`'s run clauses -/
 
 /-- The trivial run `()` at the post `False` fails at `world_ref`'s entry. -/
-theorem not_erwp_false (δ : LSub) {l l' : Loc} (hl : l ≠ l') (α : Life) (Φ : LocFam) :
+theorem not_erwp_false (δ : LSub) {l l' : Loc} (hl : l ≠ l') (α : Life) (Φ : LocFam)
+    (hΦ : ImmTieL Φ.imm [(recT (.ref .unit) δ l l', α)]) :
     ¬ erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) (fun _ _ _ _ => False) 1
       [(recT (.ref .unit) δ l l', α)] Val.unit.1 (cellI α l l') := by
   intro h
@@ -131,7 +132,7 @@ theorem not_erwp_false (δ : LSub) {l l' : Loc} (hl : l ≠ l') (α : Life) (Φ 
   obtain ⟨hTW, htg, hH, μ, hL, hfd⟩ := world_ref δ hl α
   obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', -, -, -, -, -, -, -, -, -, -, -, -, hq⟩ :=
     h PMap.empty (cellI α l l') [recT (.ref .unit) δ l l'] μ hH (ResU.comp_empty_left _) hTW
-      htg hL hfd 0 μ Val.unit.1 (by decide) (StepsN.refl μ _) (final_val μ Val.unit)
+      htg hΦ hL hfd 0 μ Val.unit.1 (by decide) (StepsN.refl μ _) (final_val μ Val.unit)
   rcases hq with ⟨w, -, hf⟩ | ⟨K, m, i, v, en, hp⟩ | ⟨K, m, i, v, en, hp⟩
   · exact hf
   · obtain ⟨⟨-, -, hTe, -⟩, -⟩ := pure_sep_iff.mp hp
@@ -143,13 +144,14 @@ theorem not_erwp_false (δ : LSub) {l l' : Loc} (hl : l ≠ l') (α : Life) (Φ 
 `G ls ρ → erwp …`. At a list and resource where `G` fails, `cN_effOf`'s `↔` would make the run
 hold, and the run `()` at the post `False` does not hold at `world_ref`'s entry. -/
 theorem not_effOf_guarded (G : List SRec → WRes → Prop) (δ : LSub) {l l' : Loc} (hl : l ≠ l')
-    (α : Life) (Φ : LocFam) (hG : ¬ G [(recT (.ref .unit) δ l l', α)] (cellI α l l')) :
+    (α : Life) (Φ : LocFam) (hΦ : ImmTieL Φ.imm [(recT (.ref .unit) δ l l', α)])
+    (hG : ¬ G [(recT (.ref .unit) δ l l', α)] (cellI α l l')) :
     ¬ ((G [(recT (.ref .unit) δ l l', α)] (cellI α l l') →
         erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) (fun _ _ _ _ => False) 1
           [(recT (.ref .unit) δ l l', α)] Val.unit.1 (cellI α l l')) ↔
       erwp (ℍ := ℍ) Φ (opTableN OpTabN.empty) (fun _ _ _ _ => False) 1
         [(recT (.ref .unit) δ l l', α)] Val.unit.1 (cellI α l l')) :=
-  fun h => not_erwp_false δ hl α Φ (h.mp fun hg => absurd hg hG)
+  fun h => not_erwp_false δ hl α Φ hΦ (h.mp fun hg => absurd hg hG)
 
 /-- The tie at `ΘI` holding the cell's record at `U (F 1)`, read at `world_ref`'s list, is a
 guard that fails there: `not_effOf_guarded` applies to it. -/

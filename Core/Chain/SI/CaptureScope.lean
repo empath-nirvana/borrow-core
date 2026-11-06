@@ -219,7 +219,7 @@ theorem viewA_del (l : Loc) (v : Val) (A : Life) : (viewA l v A).del l = PMap.em
 borrow beside the borrowed run (`ρ_o = ρ_in ● ρᵢ`, `ScopeInv`). By induction on the index: each
 segment of the body ends at a stop of the lender, the share keeping the borrow and the record,
 or at the body's value, then the join; the join's resume ends the lend. -/
-theorem cerwp_scopeK {Φ : LocFam} (l : Loc) (v : Val) (T : VTy) (δ : LSub)
+theorem cerwp_scopeK {Φ : LocFam} (hΦI : Φ.imm = []) (l : Loc) (v : Val) (T : VTy) (δ : LSub)
     (A : Life) (nJ iJ : UInt32) {Tin : OpTabN} {Tout : OpTabC} (hToutD : Tout.Down)
     (hTabs : ScopeTabs Tin Tout nJ iJ) {Q₀ : PostN} {Qout : PostCV} (hQout : Qout.Down)
     (hQ₀u : ∀ k ls (w : Val) ρ, Q₀ k ls w ρ → w = Val.unit)
@@ -244,7 +244,7 @@ theorem cerwp_scopeK {Φ : LocFam} (l : Loc) (v : Val) (T : VTy) (δ : LSub)
   rw [cerwp_eq]
   refine crwpG_bind (seqK nJ iJ l) ?_
   refine crwpG_mono_le (fun k hk ls' O' t ρ' ht => ?_)
-    (crwpG_of_rwpG0_frame (F := F) (O := O) (erwp0_unfold_at (opTableN_local Tin) le_rfl h) hcin)
+    (crwpG_of_rwpG0_frame hΦI (F := F) (O := O) (erwp0_unfold_at (opTableN_local Tin) le_rfl h) hcin)
   obtain ⟨hOO, hls', π, hπ, hπc, hupd⟩ := ht
   subst O'
   -- 6.29 and 6.38 at the segment's end, the lender's copy beside the run
@@ -369,7 +369,7 @@ payload empty, `ρ_b` in `Res_α`, lent `imm` at `α` to a body in `erwp0` from 
 `frameList p ds α ls`: the scope `e; join(ℓ)` is in `cerwp`. The entry is 6.64's
 (`capture_world`), the record joining the records the scope owns; then `cerwp_scopeK` with the
 lender's copy of the borrow beside the body (6.116). -/
-theorem cerwp_scope {Φ : LocFam} (l : Loc) (v : Val) (T : VTy) (δ : LSub) (hadm : AdmWf T δ)
+theorem cerwp_scope {Φ : LocFam} (hΦI : Φ.imm = []) (l : Loc) (v : Val) (T : VTy) (δ : LSub) (hadm : AdmWf T δ)
     (hshape : vShape T δ v PMap.empty) (A : Life) (nJ iJ : UInt32) {Tin : OpTabN}
     {Tout : OpTabC} (hToutD : Tout.Down) (hTabs : ScopeTabs Tin Tout nJ iJ) {Q₀ : PostN}
     {Qout : PostCV} (hQout : Qout.Down) (hQ₀u : ∀ k ls (w : Val) ρ, Q₀ k ls w ρ → w = Val.unit)
@@ -404,7 +404,7 @@ theorem cerwp_scope {Φ : LocFam} (l : Loc) (v : Val) (T : VTy) (δ : LSub) (had
     subst e
     exact ⟨fρ', _, hfB, hcB, hS', hT', htg', hlow'⟩
   · rw [← cerwp_eq]
-    exact cerwp_scopeK l v T δ A nJ iJ hToutD hTabs hQout hQ₀u _ hpost n F _ e BI BI
+    exact cerwp_scopeK hΦI l v T δ A nJ iJ hToutD hTabs hQout hQ₀u _ hpost n F _ e BI BI
       List.mem_cons_self hdup ⟨ρb, hBI, houtb, hbo⟩ (h BI hBI)
 
 
