@@ -363,16 +363,16 @@ theorem vBN_some (η : Option (Nat → TEntN)) :
   | bang A ih =>
       intro b
       obtain ⟨h₁, h₂⟩ := vBN_eq_both (ℍ := ℍ) ih
-      cases b <;> funext δ Θ n v ρ <;> simp only [vBN, vNE, vOE, h₁, h₂]
+      cases b <;> funext δ Θ n v ρ <;> simp only [vBN, vNE, vOE, h₁]
   | «mut» a A ih =>
       intro b
       obtain ⟨h₁, h₂⟩ := vBN_eq_both (ℍ := ℍ) ih
-      cases b <;> funext δ Θ n v ρ <;> simp only [vBN, vNE, vOE, h₁, h₂]
+      cases b <;> funext δ Θ n v ρ <;> simp only [vBN, vNE, vOE, h₁]
   | imm a A ih =>
       intro b
       obtain ⟨h₁, h₂⟩ := vBN_eq_both (ℍ := ℍ) ih
       have e : tCloseN η A = tCloseN (some (tEnvN η)) A := by rw [tCloseN_eq]; rfl
-      cases b <;> funext δ Θ n v ρ <;> simp only [vBN, vNE, vOE, h₁, h₂, e]
+      cases b <;> funext δ Θ n v ρ <;> simp only [vBN, vNE, vOE, h₂, e]
   | tvar n =>
       intro b; cases b <;> funext δ Θ k v ρ <;> simp only [vBN, vNE, vOE, tEnvPN_eq] <;> rfl
   | mu A _ =>
@@ -416,17 +416,17 @@ theorem vBN_congr_occ : ∀ (A : VTy) (η₁ η₂ : Nat → TEntN), (∀ n, A.O
   | bang A ih =>
       intro η₁ η₂ h b
       obtain ⟨h₁, h₂⟩ := vBN_eq_both (ℍ := ℍ) (ih η₁ η₂ h)
-      cases b <;> funext δ Θ n v ρ <;> simp only [vBN, vNE, vOE, h₁, h₂]
+      cases b <;> funext δ Θ n v ρ <;> simp only [vBN, vNE, vOE, h₁]
   | «mut» a A ih =>
       intro η₁ η₂ h b
       obtain ⟨h₁, h₂⟩ := vBN_eq_both (ℍ := ℍ) (ih η₁ η₂ h)
-      cases b <;> funext δ Θ n v ρ <;> simp only [vBN, vNE, vOE, h₁, h₂]
+      cases b <;> funext δ Θ n v ρ <;> simp only [vBN, vNE, vOE, h₁]
   | imm a A ih =>
       intro η₁ η₂ h b
       obtain ⟨h₁, h₂⟩ := vBN_eq_both (ℍ := ℍ) (ih η₁ η₂ h)
       have e : tCloseN (some η₁) A = tCloseN (some η₂) A :=
         VTy.subst_congr_occ A (fun n hn => by rw [h n hn])
-      cases b <;> funext δ Θ n v ρ <;> simp only [vBN, vNE, vOE, h₁, h₂, e]
+      cases b <;> funext δ Θ n v ρ <;> simp only [vBN, vNE, vOE, h₂, e]
   | tvar n =>
       intro η₁ η₂ h b
       cases b <;> funext δ Θ k v ρ <;> simp only [vBN, vNE, vOE, tEnvPN, h n rfl]
@@ -488,17 +488,17 @@ theorem vBN_rename : ∀ (A : VTy) (η : Nat → TEntN) (r : Nat → Nat) (b : B
   | bang A ih =>
       intro η r b
       obtain ⟨h₁, h₂⟩ := vBN_eq_both (ℍ := ℍ) (ih η r)
-      cases b <;> funext δ Θ n v w <;> simp only [VTy.rename, vBN, vNE, vOE, h₁, h₂]
+      cases b <;> funext δ Θ n v w <;> simp only [VTy.rename, vBN, vNE, vOE, h₁]
   | «mut» a A ih =>
       intro η r b
       obtain ⟨h₁, h₂⟩ := vBN_eq_both (ℍ := ℍ) (ih η r)
-      cases b <;> funext δ Θ n v w <;> simp only [VTy.rename, vBN, vNE, vOE, h₁, h₂]
+      cases b <;> funext δ Θ n v w <;> simp only [VTy.rename, vBN, vNE, vOE, h₁]
   | imm a A ih =>
       intro η r b
       obtain ⟨h₁, h₂⟩ := vBN_eq_both (ℍ := ℍ) (ih η r)
       have e : tCloseN (some η) (A.rename r) = tCloseN (some (η ∘ r)) A := by
         simp only [tCloseN, VTy.subst_rename]; rfl
-      cases b <;> funext δ Θ n v w <;> simp only [VTy.rename, vBN, vNE, vOE, h₁, h₂, e]
+      cases b <;> funext δ Θ n v w <;> simp only [VTy.rename, vBN, vNE, vOE, h₂, e]
   | mu A ih =>
       intro η r b
       have e' : tCloseN (some η) (.mu (A.rename (VTy.upR r))) = tCloseN (some (η ∘ r)) (.mu A) := by
@@ -564,19 +564,19 @@ theorem vBN_subst : ∀ (A : VTy) (η : Nat → TEntN) (σ : Nat → VTy) (δ : 
       intro η σ δ b
       have h₁ := ih η σ δ true; have h₂ := ih η σ δ false
       simp only [vBN] at h₁ h₂
-      cases b <;> funext Θ n v w <;> simp only [VTy.subst, vBN, vNE, vOE, h₁, h₂]
+      cases b <;> funext Θ n v w <;> simp only [VTy.subst, vBN, vNE, vOE, h₁]
   | «mut» a A ih =>
       intro η σ δ b
       have h₁ := ih η σ δ true; have h₂ := ih η σ δ false
       simp only [vBN] at h₁ h₂
-      cases b <;> funext Θ n v w <;> simp only [VTy.subst, vBN, vNE, vOE, h₁, h₂]
+      cases b <;> funext Θ n v w <;> simp only [VTy.subst, vBN, vNE, vOE, h₁]
   | imm a A ih =>
       intro η σ δ b
       have h₁ := ih η σ δ true; have h₂ := ih η σ δ false
       simp only [vBN] at h₁ h₂
       have e : tCloseN (some η) (A.subst σ) = tCloseN (some (substEnvN (ℍ := ℍ) η σ δ)) A := by
         simp only [tCloseN, substEnvN, VTy.subst_subst]
-      cases b <;> funext Θ n v w <;> simp only [VTy.subst, vBN, vNE, vOE, h₁, h₂, e]
+      cases b <;> funext Θ n v w <;> simp only [VTy.subst, vBN, vNE, vOE, h₂, e]
   | mu A ih =>
       intro η σ δ b
       have eM : tCloseN (some η) (.mu (A.subst (VTy.upS σ)))

@@ -921,3 +921,150 @@ index by `sepRange_pickW` (`sepRange_pick` with the rest read at a weaker predic
   Core's induction. Not built. Not derived; obstruction not verified.
 - **`sliceSwapM`**: `sliceReplaceM_compatN`'s steps at one leaf (`i = j`) or two (two anti-frames,
   `sepRange_pick2N`). Not built. Not derived; obstruction not verified.
+
+## 13. Unit L6: `μ` (#836)
+
+### 13.1 Core's `μ` clause and `RelMu`
+
+Core's relation takes a type-variable environment, `vCE : Option (Nat → TEnt) → Bool → VTy → …`
+(`Core/Relation.lean`); `vC` is notation for `vCE none`. An entry `TEnt` holds the closed type the
+variable stands for (`ty`, which the `Imm` clause's `CohE` reads through `tClose η A`) and a
+candidate `P : Bool → List SRec → Val → WProp` over the mode and the record list. The clauses:
+
+- a type variable reads its entry's candidate (`tEnvP`), empty at `none`;
+- `μX. A` is the least fixed point `⋂{P | A[P/X] ⊆ P}`, written in `Prop` and joint over the mode
+  and the list:
+  `A.NoMut 0 ∧ (tClose η (μX. A)).Cl 0 ∧ ∀ P, (∀ b' ls' v' ρ', vCE (some (P · η)) b' A ls' δ v' ρ' →
+  P b' ls' v' ρ') → P b ls v ρ`;
+- `U C` reads no environment (`cC` has none), so a thunk is a leaf of the induction;
+- `Mut`'s payload is read under `η`, and `NoMut 0` keeps `X` out of it: the `Mut` clause stores its
+  predicate by an equation and is not monotone.
+
+`Core/RelMu.lean` proves, with no [TR] number cited (the file cites spec §6):
+
+| Core | Content |
+|---|---|
+| `vCE_some` | the relation reads `η` only through `tEnv` |
+| `vCE_rename`, `vCE_subst` (`substEnv`) | renaming and substitution move into the environment |
+| `vCE_congr_occ` | only the entries of occurring variables are read |
+| `vCE_mono_at` | monotone in an entry whose variable occurs in no `Mut` payload |
+| `cBody`, `vC_inst`, `cBody_mono` | one unfolding at a candidate; `A[μX. A/X]` is the body at `vC (μX. A)` |
+| `vC_roll`, `vC_unfold`, `vC_mu_iff` | the unroll equation at a closed `μ` outside its `Mut` payloads |
+| `vF`, `vF_vC`, `vF_mono`, `vC_ind` | the induction principle: a property closed under one unfolding of every clause holds of `vC` |
+| `vC_mu_ind` | induction at one `μ` |
+| `vC_immReborrow_mu_iff` | `Imm̲` at a closed `μ` is read at the reborrow of the unrolling |
+
+`Core/RelationFacts.lean` proves the laws over the environment two ways. `vCE_congr` (with
+`EnvAgree`) and `vCE_tyEq` (with `EnvEq`) are by induction on the type, generalised over the
+environment with a hypothesis on its entries. `vC_local`, `vO_obs`, `vC_vShape`, `vC_outlives`,
+`vC_outlivesLe`, `obs_transfer` and `relabel_obs` are by `vC_ind` at the empty environment, the
+`μ` case by `vC_roll` at the unrolling.
+
+### 13.2 The environment in `vN`
+
+`vNE`/`vOE` (`Goal791N.lean`) are `vN`/`vO` with an environment `η : Option (Nat → TEntN)` in
+front. `TEntN` is Core's `TEnt` with the candidate over the chain's arguments:
+`P : Bool → LocTy → Nat → Val → WRes → Prop`, the mode (`true` for `vNE`, `false` for `vOE`), the
+world, the index, the value and the resource. `tEnvN`, `tEnvPN`, `tCloseN` are Core's `tEnv`,
+`tEnvP`, `tClose`. `vBN η b` is `vNE η` or `vOE η`: Core's `vCE η b`.
+
+New clauses:
+- `vNE η (tvar n)` is `tEnvPN η n true`; `vOE η (tvar n)` is `tEnvPN η n false`;
+- `vNE η (μX. A)` is Core's clause, with the candidate's closure asked in both modes: `vNE` and
+  `vOE` at `some (scons ⟨tCloseN η (μX. A), P⟩ (tEnvN η))` into `P true` and `P false`
+  (`MuClosedN`, `vBN_mu`);
+- `Imm`'s witness is read at `tCloseN η A`;
+- `Mut`'s family and uniform conjunct are read at `vNE η A`.
+
+Every other clause is the old one with `η` passed down. `cN`, `tabN`, `finN`, `retN` keep their
+signatures and read `vNE none`.
+
+**At the empty environment every statement is unchanged.**
+- `vN`/`vO` are syntax for `vNE (η := none)`/`vOE (η := none)`, and `vN (ℍ := h) A …` for
+  `vNE (ℍ := h) none A …`, so every existing use elaborates to the empty environment.
+- At `none`, `tvar` is `False` (as before), `tCloseN none A` is `A` definitionally (so the `Imm`
+  clause is the old one), and every other clause is the old one.
+- `μ` was `False` and now has Core's clause.
+
+**What changed in the signature (for the hand merge with #835 and #837).**
+- `vN`/`vO` are no longer `def`s. The mutual block defines
+  `vNE : (η : Option (Nat → TEntN)) → VTy → LSub → LocTy → Nat → Val → WRes → Prop` and `vOE`
+  (same type); `vN`/`vO` are `syntax` with `macro_rules` after the block.
+- Inside the block a section-local notation makes `vN`/`vO` read as `vNE none`/`vOE none`, so the
+  text of `cN`'s, `tabN`'s, `finN`'s and `retN`'s clauses (`entN`'s callers included) is unchanged
+  and merges as it is.
+- `simp only [vN, …]`/`[vO, …]` become `simp only [vNE, …]`/`[vOE, …]` (`vN` is not a constant).
+- A law over `vN` that matched on `.tvar`/`.mu` as `h.elim` needs the `μ` case: by `vN_ind`
+  (Core's route), or generalised over the environment (§13.4).
+
+### 13.3 The step index and unfolding
+
+The candidate is joint over the mode, the world and the index, as Core's is joint over the mode
+and the list. Every clause that reaches `X` reads it at the same world and index, so the least
+fixed point is pointwise in them. The joint quantification is the one the laws use: `vN_down` and
+`vN_extR` take candidates that close over lower indices and later worlds.
+
+Unfolding costs no step: `vN_mu_iff` is the unroll equation at the same index, as `vC_mu_iff` is
+Core's at the same list. The machine has no `roll`/`unroll` step (`Fundamental.lean`: "typing rules
+on the same term"), so no index is spent and no later modality is needed. This is Core's answer;
+nothing departs from it.
+
+### 13.4 The laws
+
+Core's `RelMu` at the chain (`Goal791N.lean`):
+
+| Core | Chain |
+|---|---|
+| `vCE_some`, `vCE_rename`, `vCE_subst`, `vCE_congr_occ`, `vCE_mono_at` | `vBN_some`, `vBN_rename`, `vBN_subst` (`substEnvN`), `vBN_congr_occ`, `vBN_mono_at` |
+| `cBody`, `vC_inst`, `cBody_mono` | `bodyN`, `vN_inst`, `bodyN_mono` |
+| `vC_roll`, `vC_unfold`, `vC_mu_iff` | `vBN_roll`, `vBN_unfold`, `vBN_mu_iff`; at `vN`: `vN_roll`, `vN_unfold`, `vN_mu_iff` |
+| `vF`, `vF_vC`, `vF_mono`, `vC_ind` | `vFN`, `vFN_vN`, `vFN_mono`, `vN_ind` |
+| `vC_mu_ind` | `vBN_mu_ind` (at every environment), with `vBN_rollE` |
+| `vC_immReborrow_mu_iff` | `vN_immReborrow_mu_iff` (`ImmImage791N.lean`) |
+
+Each existing law is extended to the new clauses, its statement unchanged at the empty
+environment.
+- **Generalised over the environment, with a hypothesis on its entries** (Core's route for
+  `vCE_congr`/`vCE_tyEq`). The `μ` case takes the candidate "the property at the least fixed
+  point" and closes it by the law at the body and `vBN_mono_at`.
+  - `vNE_down`/`vOE_down`, mutual with `cN_down`, entries `EnvDownN`. The candidate is
+    "every lower index is in `P`" (`vBN_mu_down`).
+  - `vNE_congr`/`vOE_congr`, entries `EnvAgreeN`.
+  - `vNE_extR`/`vOE_extR`, entries `EnvExtRN`. The candidate is "in `P` at every extension"
+    (`vBN_mu_extR`).
+  - `vNE_outlives`/`vNE_outlivesLe`, entries in the stratum. The candidate is
+    `b = true → InStratum`.
+  - `vNE_tyEq`/`vOE_tyEq` (`TyEq834N.lean`), entries `EnvEqN`.
+- **By `vN_ind`** (Core's route for these): `vN_vO` (`vO_obs`), `vBN_vShape` (`vC_vShape`;
+  `vN_vShape`, `vO_vShape` are its two modes), `vO_transfer` (`obs_transfer`), `relabel_vN`
+  (`relabel_obs`; at `μ` by `vN_immReborrow_mu_iff` and `vShape_immReborrow_mu_iff`), and
+  `vN_empty_of_persistent` (`ImmLend833N.lean`, at `μ` by `persistent_inst_mu`).
+
+The old names (`vN_down`, `vN_congr`, `vN_extR`, `vO_extR`, `vN_outlives`, `vN_outlivesLe`,
+`vN_tyEq`, `vO_tyEq`) are corollaries at `none`, with their statements unchanged. Every other law
+(`vN_local`, `vN_above`, `vN_inStratum_bnd`, `vN_noOwn_of_ownFree`, `vN_iff_vP`, …) builds
+unchanged.
+
+`VTy.inFrag` admits `μX. A` at an in-fragment body and every type variable, so `JdgInFrag`
+and `Const791.InFrag` do too. `ν` stays out (L7).
+
+### 13.5 The rows (`Core/Chain/Mu836N.lean`)
+
+| Row | Chain lemma | Core proof |
+|---|---|---|
+| `roll` | `roll_compatN` (`vN_roll` under `erwp_mono`) | `roll_compatX` |
+| `unroll` | `unroll_compatN` (`vN_unfold`) | `unroll_compatX` |
+| `foldOwn` | `foldOwn_compatN` (`travO_specN`, `hOSpecN_all`, `travO_appN`, `hO_appN`) | `foldOwn_compatX`, `travO_spec`, `hOSpec_all` |
+| `foldReuse` | `foldReuse_compatN` (`travR_specN`, `hRSpecN_all`, `erwp_swapN`) | `foldReuse_compatX`, `travR_spec`, `hRSpec_all`, `wpTS_swap` |
+
+The folds follow Core line by line: Core's terms (`foldOwnV`, `travO`, `selfO`, `hO`, and the
+`R` versions) with their reductions, and Core's induction on the resource size (`dsize`) and then
+the value size.
+- A pure step is `erwp_det` at the same index; the Z combinator's unrolling is `erwp_pureSteps`
+  over Core's `selfV_steps_in`.
+- A `free`, `load` or `store` costs one step (`erwp_free`, `rwp_load`, `rwp_store`).
+- Core's `wpTS_bind_frame` is `erwp_bind_frame`. Its consistency premise is met at each split from
+  the whole resource's consistency and validity (`erwp_of_valid`, `consistentX_left`/`right`).
+- The fold runs at one world and one view. The algebra `g` has the empty resource, so it moves to
+  the world where the fold is forced (`vN_extR`), and it is read there at every index below the
+  fold's. That index bound is the `N` of `HOSpecN`/`HRSpecN`.
