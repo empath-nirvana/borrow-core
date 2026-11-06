@@ -2086,15 +2086,16 @@ theorem allI_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {x : LifeVar} {b : Lifetime.L
 /-! ## §3. The statements -/
 
 mutual
-/-- **The formers the interpretation covers**: every former but type variables and `μ`, which
-`vN` reads as empty, and `ν`, which `cN` reads as empty. Families (arrays and slices) are covered
-at a covered leaf, and opaque types (`Tok` and the host types) always. Decidable. -/
+/-- **The formers the interpretation covers**: every former but `ν`, which `cN` reads as empty.
+`μ` is covered at a covered body, a type variable always (its environment entry, empty at the
+empty environment). Families (arrays and slices) are covered at a covered leaf, and opaque types
+(`Tok` and the host types) always. Decidable. -/
 def _root_.BoCa.Fig16.LogRel.Core.VTy.inFrag : VTy → Bool
   | .unit | .zero | .unk | .int _ | .opq _ => true
   | .tensor A B | .sum A B => A.inFrag && B.inFrag
   | .thunk C => C.inFrag
-  | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A | .fam A => A.inFrag
-  | .tvar _ | .mu _ => false
+  | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A | .fam A | .mu A => A.inFrag
+  | .tvar _ => true
 /-- The computation-type formers the interpretation covers. -/
 def _root_.BoCa.Fig16.LogRel.Core.CTy.inFrag : CTy → Bool
   | .ret A => A.inFrag
