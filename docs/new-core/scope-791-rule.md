@@ -663,3 +663,122 @@ Unspent premises: `Row.Suspend`'s payload/answer clause (step 11), `Const791.OK`
 run-up, at `vN`: `CohE` and its `TyEq` transport (`vC_tyEq`, `vShape_tyEq`), `ptoImmO_read` (the
 observable payload), `vC_vShape`, `image_vC_of_shape`/`relabel_obs`; `erwp_reborrow` across
 raises and layered cancel runs.
+
+## 11. An `imm` consistency fact from `erwp` (#829)
+
+Kernel target: an `imm` consistency fact proved from the unchanged `erwp` (the world's record type
+agrees with `Θ` at an `imm` cell), the analogue of `ConsistentX`/`erwp_consistent`
+(`Core/Chain/SI/LocTy.lean`); `vN`'s `Imm` clause reading `Θ` at the cell; then
+`withloadS_compat`, `constN_wl` and the instance at `hardestRow`.
+
+### 11.1 The consistency statement
+
+`ImmAgreeErwp Agree` (`Core/Chain/ImmRec791N.lean`). `Agree Θ ℓ T δ` relates the world to the type
+`T` at `δ` of a record whose cell is at `ℓ`. The fact says the following. Take a run
+`erwp (Θ.view c) Tb Q n ls e ρ`. At its first entry, `ρ` sits in a `TWNC` world at `rsOf ls`,
+tagged, with a `#`-valid frame. If `ρ` holds a record's `imm` cell, then
+`Agree Θ r.le r.T r.δ`. This is the shape `erwp_consistent` has for `mut`, read at the entry
+instead of at the returns.
+
+`WlImageA P Agree` is §10's `WlImage P` with `Agree Θ r.le r.T r.δ` added to step 8's premises.
+This is the `Imm` clause reading `Θ` at the cell, together with the agreement that would link
+that reading to the record.
+
+### 11.2 Why `erwp` does not maintain it at the entry
+
+`ConsistentX` is maintained because `↭`'s `mut` clause reads the view `Θ.view c` at every `mut`
+cell (`UpdMutN`, `MutStep`). So a returned `mut` cell is tied to `c` by the relation itself, given
+the tie at the start. `SemJN` and the `U`/`⊸` clauses supply that starting tie as a hypothesis,
+`ConsistentX c ρ`.
+
+For `imm` there is no such reading. `imm` records are never rewritten (`TWNC.reb`/`rebDeep` keep
+`rs`, and `immEnd` only removes records), so a record's type stays fixed once recorded. But
+nothing in `rwpG`, `EndOKG` or `UpdN` compares a record's type with `Φ`. And `rwpG`'s first entry
+is universally quantified over the typed worlds holding the resource.
+
+`immAgreeErwp_both`, with every hypothesis discharged: for every `Agree` satisfying
+`ImmAgreeErwp Agree`, every world `Θ` and every `δ`, both of these hold:
+- `Agree Θ ℓ (Ref 1) δ`;
+- `Agree Θ ℓ (U (F 1)) δ`.
+
+The trivial run `erwp_val` at the cell `ℓ ↦ imm({α}, loc ℓ′, ℓ′ ↦ own(()))` is entered at §10's
+`world_ref` and at its `world_thunk`. So any agreement read off `erwp` cannot tell the two
+records apart at one world.
+
+The preserved form also has nothing to start from. That form would be: agreement with the list at
+the start implies agreement at the returns, which is `ConsistentX`'s shape. The list a value's
+computation runs at is quantified independently of `Θ`:
+- `vN`'s `U` clause: `∀ ls, cN C δ Θ' c n ls …`;
+- `cN`'s `⊸` clause, which keeps the caller's `ls`;
+- `SemJN`: `∀ … Θ … ls`.
+
+`ConstN` is `vN (! c.ty)` at every `Θ`. I have not proved the preserved form.
+
+### 11.3 The new `Imm` clause and step 8
+
+The `Imm` clause would read `Θ` at the cell: `vN`'s current clause plus a condition `G Θ ℓ A δ`
+on the world at the source's location and type. Some `Θ` must meet `G` at the lend recorded at
+`Ref 1`; otherwise that lend has no `Imm` value to hand.
+
+`not_wlImageA`, every hypothesis discharged except its own. Let `P` be any clause that:
+- admits the cell at `Imm @a (Ref 1)` at the world `Θ`;
+- has no value of `Imm 'x 1` at `∅` at that world.
+
+Then for every `Agree` with `ImmAgreeErwp Agree`, `WlImageA P Agree` fails. The agreement holds
+at `world_thunk` (`immAgreeErwp_both`), where `canon r β = ∅` (`canon_thunk`).
+
+`not_wlImageA_vN` covers the clause `vN … ∧ (∀ a B ℓ, A = Imm a B → v = loc ℓ → G Θ ℓ B δ)`, for
+every `G` met at some world by the lend recorded at `Ref 1`.
+
+So the clause's reading of `Θ` escapes `not_wlImage`'s hypothesis only when it is paired with an
+agreement that tells `Ref 1` from `U (F 1)` at one world. No agreement `erwp` gives at the run's
+entry does that.
+
+### 11.4 The 13 steps under the `Θ`-reading clause
+
+| # | Step (§9.1) | State |
+|---|---|---|
+| 1–5, 7, 9, 11–13 | as §10.3 | exist (the added conjunct `G` is carried alongside `vN`'s current clause) |
+| 6 | the chooser | the record's `(le, v, R)`: buildable from the first world. Its type agreeing with the source: **blocked** (`immAgreeErwp_both`) |
+| 8 | the image typed at `Imm̲ 'x A` | **blocked** at its first part (`not_wlImageA`). The extension across raises and layered cancel runs (on `erwp_reborrowT` + `tabR_canA`) is buildable and was not attempted |
+| 10 | the pin | buildable with step 6's identification |
+
+### 11.5 STOP
+
+Step 8 needs the source's type to be its record's at the run's entry. `immAgreeErwp_both` shows
+that no agreement proved from the unchanged `erwp` provides it. Providing it means one of three
+things, and each is on the stop list:
+- **A starting tie in the interpretation.** `SemJN`, `vN`'s `U` clause or `cN`'s `⊸` clause would
+  quantify only lists that agree with `Θ`. That changes the statements of `vN`'s other clauses,
+  hence of the laws, of `w2`/`w3`/`wF` compat, and of `constN_*` and the `_inst` lemmas.
+- **The relation reading the world at `imm` records.** That is a change to `rwpG`/`EndOKG`/`UpdN`
+  or `TWNC`'s records.
+- **A side condition on `withload`'s rule.**
+
+Nothing already proved is changed. `vN`, its laws, `w2`/`w3`/`wF` and their instances, `LocTy`,
+`Row.Suspend`, `CTy.SuspendC` and `Const791.OK` are as they were. `vN`'s `Imm` clause is not
+changed, because a `Θ`-reading conjunct without the agreement closes nothing (§11.3).
+
+Not verified:
+- that `ConstN (.wl …)` is false. The configuration is step 8, the image the chain's reborrow
+  lemmas hand the callback. No run of the constant is refuted;
+- that, in `world_thunk`, no typed-world step other than an image of `r` gives the callback a
+  resource at `ℓ′` (as §10.4).
+
+**Unspent premises:**
+- `Row.Suspend`'s payload/answer clause (step 11);
+- `Const791.OK`'s `wl` clause: `¬ VFree x B` and the bound's definedness. Only `¬ VFree x A` is
+  read, by `WlImageA`.
+
+**Unused:**
+- `erwp_reborrow`, `erwp_reborrowT`, `erwp_reborrowDeep`, `rebChooseC_tw`, `canon_escrowAgree`,
+  `relabel_obs`, `erwp_consistent`;
+- the uniqueness results `ResU.CompS.functional`, `AgW.functional`, `ExS.functional`,
+  `CellU.immOf_inj` (the configuration needs none).
+
+**Untranscribed in `withload_compatX`'s run-up, at `vN`:**
+- `CohE` and its `TyEq` transport (`vC_tyEq`, `vShape_tyEq`);
+- `ptoImmO_read`;
+- `vC_vShape`;
+- `image_vC_of_shape`/`relabel_obs`;
+- `erwp_reborrow` across raises and layered cancel runs.

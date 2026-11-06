@@ -1481,6 +1481,9 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ImmRec791N.canon_thunk
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ImmRec791N.not_wlImage
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ImmRec791N.not_wlImage_vN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ImmRec791N.immAgreeErwp_both
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ImmRec791N.not_wlImageA
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ImmRec791N.not_wlImageA_vN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.ext_add
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.add_keep
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.above_add

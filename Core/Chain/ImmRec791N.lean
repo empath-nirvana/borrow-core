@@ -25,6 +25,14 @@ of `erwp_reborrow` holds there. A clause that admits the cell at `Imm @a (Ref 1)
 recorded at `Ref 1` needs) and has no value of `Imm 'x 1` at `∅` refutes `WlImage`
 (`not_wlImage`); `vN`'s is one (`not_wlImage_vN`).
 
+An agreement between the world and the source's record, read off a run's first entry
+(`ImmAgreeErwp`), does not change this. `erwp`'s first entry is `rwpG`'s, universally quantified
+over the typed worlds holding the resource, and no part of `erwp` reads an `imm` record against
+the world; so every such agreement holds, at one world, at both records of the cell
+(`immAgreeErwp_both`). With the agreement among step 8's premises (`WlImageA`), the same
+configuration refutes step 8 (`not_wlImageA`), at `vN`'s clause strengthened by any condition on
+the world at the cell (`not_wlImageA_vN`).
+
 This is the step, not the constant: no run of `ConstN (.wl …)` is refuted.
 -/
 
@@ -235,6 +243,102 @@ theorem not_vN_imm_empty (a : BoCa.Lifetime.Life) (A : VTy) (δ : LSub) (Θ : Lo
 theorem not_wlImage_vN : ¬ WlImage (fun A δ Θ n v ρ => vN (ℍ := ℍ) A δ Θ n v ρ) :=
   not_wlImage _ (l := 0) (l' := 1) (by decide) 1 (.var 0) (LSub.empty.extend 0 1) LocTy.empty 0 1
     (vN_cellI 0 1 0 1 LocTy.empty 0) (not_vN_imm_empty _ _ _ _ _ _)
+
+/-! ### An agreement between the world and a record, read off a run's first entry -/
+
+/-- **An `imm` consistency fact from `erwp`.** `Agree Θ ℓ T δ` relates the world `Θ` to the type
+`T` (at `δ`) of a record whose cell is at `ℓ`. The fact: at the first entry of every run `erwp`
+(at the view `Θ.view c`) from a resource holding a record's `imm` cell, the world agrees with
+the record's type. The entry is `rwpG`'s: a frame `#`-valid with the resource, the composite a
+`TWNC` world at the list's records, tagged. -/
+def ImmAgreeErwp (Agree : LocTy → Loc → VTy → LSub → Prop) : Prop :=
+  ∀ (Θ : LocTy) (c : Loc → Option Life) (Tb : TableN) (Q : PostN) (n : Nat) (ls : List SRec)
+    (e : Expr) (ρ ρf W : WRes) (ps : List FrameRec) (r : FrameRec) (s : LSet)
+    (hs : r.R.InStratum s.join),
+    erwp (ℍ := ℍ) (Θ.view c) Tb Q n ls e ρ → ResU.Hash ρf ρ → ResU.CompS ρf ρ W →
+    TWNC W ps (rsOf ls) → Tagged W ps ls → r ∈ rsOf ls →
+    ρ.get r.le = some (CellU.immOf s r.v r.R hs) → Agree Θ r.le r.T r.δ
+
+/-- **Step 8 with the agreement among its premises**: `WlImage`, where the run's first entry
+also has the world agreeing with the source's record. -/
+def WlImageA (P : VTy → LSub → LocTy → Nat → Val → WRes → Prop)
+    (Agree : LocTy → Loc → VTy → LSub → Prop) : Prop :=
+  ∀ (W : WRes) (ps : List FrameRec) (ls : List SRec) (r : FrameRec) (s : LSet)
+    (hs : r.R.InStratum s.join) (a : BoCa.Lifetime.Life) (A : VTy) (δ : LSub) (Θ : LocTy)
+    (n : Nat) (x : LifeVar) (β : Life),
+    TWNC W ps (rsOf ls) → Tagged W ps ls → r ∈ rsOf ls →
+    W.get r.le = some (CellU.immOf s r.v r.R hs) → Agree Θ r.le r.T r.δ →
+    ¬ VFree x A → ¬ VFree x r.T → TmplSpec r (tmpl r) → r.R.InStratum β →
+    vShape (r.T.immReborrow (.var x)) (r.δ.extend x β) r.v (canon r β) →
+    (∀ y, s.mem y → β ⊑ y) →
+    P (.imm a A) δ Θ n (Val.loc r.le) (ResU.single r.le (CellU.immOf s r.v r.R hs)) →
+    P (A.immReborrow (.var x)) (δ.extend x β) Θ n r.v (canon r β)
+
+/-- The agreement at the cell's lend, read off the trivial run at the world of the lend recorded
+at `T`. -/
+theorem agree_of_world {Agree : LocTy → Loc → VTy → LSub → Prop} (hA : ImmAgreeErwp (ℍ := ℍ) Agree)
+    (T : VTy) (δ : LSub) {l l' : Loc} (α : Life) (Θ : LocTy)
+    (hTW : TWNC (cellI α l l') [recT T δ l l'] (rsOf [(recT T δ l l', α)]))
+    (htg : Tagged (cellI α l l') [recT T δ l l'] [(recT T δ l l', α)])
+    (hH : ResU.Hash PMap.empty (cellI α l l')) : Agree Θ l T δ :=
+  hA Θ (fun _ => none) (opTableN OpTabN.empty) (fun _ _ _ _ => True) 0
+    [(recT T δ l l', α)] Val.unit.1 (cellI α l l') PMap.empty (cellI α l l')
+    [recT T δ l l'] (recT T δ l l') (LSet.singleton α) (escU_inStratum l' _)
+    (erwp_val (v := Val.unit) trivial) hH (ResU.comp_empty_left _) hTW htg (by simp [rsOf])
+    (ResU.single_get_self _ _)
+
+/-- **Every agreement `erwp` gives holds at both records of the cell**: at one world `Θ`, at
+`Ref 1` and at `U (F 1)`. The run's first entry is universally quantified over the typed worlds
+holding the resource, and `erwp` reads no `imm` record against the world. -/
+theorem immAgreeErwp_both {Agree : LocTy → Loc → VTy → LSub → Prop}
+    (hA : ImmAgreeErwp (ℍ := ℍ) Agree) {l l' : Loc} (hl : l ≠ l') (α : Life) (Θ : LocTy)
+    (δ : LSub) :
+    Agree Θ l (.ref .unit) δ ∧ Agree Θ l (.thunk (.ret .unit)) δ := by
+  obtain ⟨hTr, htr, hHr, -⟩ := world_ref δ hl α
+  obtain ⟨hTt, htt, hHt, -⟩ := world_thunk δ hl α
+  exact ⟨agree_of_world hA _ δ α Θ hTr htr hHr, agree_of_world hA _ δ α Θ hTt htt hHt⟩
+
+/-- **No agreement `erwp` gives closes step 8.** Let `P` admit the cell at `Imm @a (Ref 1)` at the
+world `Θ` and have no value of `Imm 'x 1` at `∅` there. For every `Agree` with
+`ImmAgreeErwp Agree`, `WlImageA P Agree` fails: the agreement holds at the world of the lend
+recorded at `U (F 1)` (`immAgreeErwp_both`), where the canonical image is `∅`. -/
+theorem not_wlImageA (P : VTy → LSub → LocTy → Nat → Val → WRes → Prop)
+    {Agree : LocTy → Loc → VTy → LSub → Prop} (hA : ImmAgreeErwp (ℍ := ℍ) Agree) {l l' : Loc}
+    (hl : l ≠ l') (α : Life) (a : BoCa.Lifetime.Life) (δ : LSub) (Θ : LocTy) (n : Nat)
+    (x : LifeVar)
+    (h₁ : P (.imm a (.ref .unit)) δ Θ n (Val.loc l) (cellI α l l'))
+    (h₂ : ¬ P (.imm (.var x) .unit) (δ.extend x α) Θ n (Val.loc l') PMap.empty) :
+    ¬ WlImageA P Agree := by
+  intro hW
+  let r := recT (.thunk (.ret .unit)) LSub.empty l l'
+  obtain ⟨hTW, htg, -, -⟩ := world_thunk LSub.empty hl α
+  have hT : r.T = .thunk (.ret .unit) := rfl
+  have hag : Agree Θ r.le r.T r.δ := (immAgreeErwp_both hA hl α Θ LSub.empty).2
+  have hc := hW (cellI α l l') [r] [(r, α)] r (LSet.singleton α) (escU_inStratum l' _) a
+    (.ref .unit) δ Θ n x α hTW htg (by simp [rsOf]) (ResU.single_get_self _ _) hag
+    (by simp [VFree]) (by rw [hT]; simp [VFree, CFree])
+    (tmplSpec_thunk hT (escU_inStratum l' α) x) (escU_inStratum l' _)
+    (by rw [canon_thunk hT, hT]; exact ⟨rfl, trivial⟩)
+    (fun y hy => by simp [LSet.singleton] at hy; subst hy; exact le_refl _) h₁
+  rw [canon_thunk hT] at hc
+  exact h₂ hc
+
+/-- `not_wlImageA` at the clause that reads, besides `vN`'s current `Imm`, any condition `G` on
+the world at the cell's location and type which the lend recorded at `Ref 1` meets: every such
+clause with every agreement from `erwp`, at `ℓ = 0`, `ℓ′ = 1`, `α = 1`. -/
+theorem not_wlImageA_vN (G : LocTy → Loc → VTy → LSub → Prop)
+    {Agree : LocTy → Loc → VTy → LSub → Prop} (hA : ImmAgreeErwp (ℍ := ℍ) Agree) (Θ : LocTy)
+    (hG : G Θ 0 (.ref .unit) (LSub.empty.extend 0 1)) :
+    ¬ WlImageA (fun A δ Θ' n v ρ => vN (ℍ := ℍ) A δ Θ' n v ρ ∧
+      ∀ a B l, A = .imm a B → v = Val.loc l → G Θ' l B δ) Agree :=
+  not_wlImageA _ hA (l := 0) (l' := 1) (by decide) 1 (.var 0) (LSub.empty.extend 0 1) Θ 0 0
+    ⟨vN_cellI 0 1 0 1 Θ 0, fun a B l hA hv => by
+      cases hA
+      obtain rfl : l = 0 := by
+        have := congrArg Subtype.val hv
+        simpa [Val.loc] using this.symm
+      exact hG⟩
+    (fun h => not_vN_imm_empty _ _ _ _ _ _ h.1)
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.ImmRec791N
 
