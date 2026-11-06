@@ -37,7 +37,9 @@ Statuses:
 - **departed (built)**: it exists with a different statement, and a recorded Lean configuration
   forces the difference; the configuration is named.
 - **departed, no configuration**: it exists with a different statement and no configuration
-  forces the difference. This is a gap to close (§6.2, §2.4).
+  forces the difference. This is a gap to close (§2.2).
+- **departed, forced by `erwp`'s definition**: the chain's `erwp` has no counterpart of Core's
+  object, and a Lean lemma records why (§6.3).
 - **departed, to build**: a chain lemma exists in a narrower form. The form Core's proofs read is
   missing, buildable, and departs in the way the narrower form already does.
 - **missing, buildable**: says what it would be built from.
@@ -85,7 +87,7 @@ The configurations named below are indexed in `configurations.md`; the design th
 | K1 | `vC_local` | — | 19: `swap`, `iterate`, `reify`, `sliceBorrowM` … | **departed (built)** | `vN_extR` (`Goal791N.lean`), along `LocTy.ExtR` at the value's resource. Configurations: `extRL_breaks_extA` (Core's `Ext` read literally is not Kripke along `ExtA`; rests on `ν` read as empty) and `coreMutImm_not_extF` (payloads read off the list are not stable along `extF`, so the order is on the world) |
 | K2 | `vC_same`, `vP_same`, `gDenC_same`, `ext_of_same` | — | 31: `tensorI`, `bind`, `unitE`, `tensorE` … | **same** | holds by definition: `vN`/`gN` read no record list; `LocTy.extR_refl` |
 | K3 | `ext_add` | 6.64 | 2: `withbor1`, `withbor1U` | **departed (built)** | `LocTy.extR_addImm` (`SI/LocTy.lean`): the record goes into the world, not the list (`coreMutImm_not_extF`) |
-| K4 | `ext_drop` | 6.64 | 0 (inside the Imm Frame) | **departed, no configuration** | `LocTy.extR_of_addImm`: Core asks `∀ r ∈ rsOf ls′, Rel r ρ → r ∈ rsOf ls` and discharges it at the Imm Frame's exit from the run (`not_rel_lineage`); the chain's statement has no such premise because `Keeps` reads relevance by lifetime (`chain-interpretation.md` §2.2). No configuration (§6.2) |
+| K4 | `ext_drop` | 6.64 | 0 (inside the Imm Frame) | **departed (built)** | `LocTy.extR_of_addImm`: Core asks `∀ r ∈ rsOf ls′, Rel r ρ → r ∈ rsOf ls` and discharges it at the Imm Frame's exit from the run (`not_rel_lineage`); the chain's statement has no such premise because `Keeps` reads relevance by lifetime. Configuration: `Depart831N.not_unwindArgStepLoc` (§6.3) |
 | K5 | `ext_empty'` | — | 11: `iterate`, `reify`, `withbor1U`, `withbor2U` … | **missing, buildable** | `ExtR` at `∅` (no `CellIn`): one line; inlined in `ImmLend833N.gN_dead_any` |
 | K6 | `opTable_ext` | — | 2: `withbor1U`, `sliceBorrowIU` | **same** | not needed: `entN` reads no list (`scope-831-map.md` §3.2) |
 
@@ -102,7 +104,7 @@ The configurations named below are indexed in `configurations.md`; the design th
 | V7 | `vO_obs` | — | 4: `sliceBorrowI`, `withbor1`, `withbor1U`, `sliceBorrowIU` | **same** | `vN_vO` (`ImmImage791N.lean`) |
 | V8 | `vC_noOwn_of_ownFree` | — | 2: `effAwait`, `effHandleL` | **missing, buildable** | `vN` of an `OwnFree` type owns nothing: induction on `A` |
 | V9 | `vP_empty_of_persistent` | spec §10 | 6: `effThen`, `effThenDiv`, `effHandleV`, `effHandleVB` … | **same** | `vN_empty_of_persistent` (`ImmLend833N.lean`) |
-| V10 | `admWf_of_vScoped`, `cohE_of_coh` | — | 4: `sliceBorrowI`, `withbor1`, `withbor1U`, `sliceBorrowIU` | **departed (built)** | the Imm Frame's admissibility and `Coh` become the witness `ImmWitW` (`cohE_of_immWitW`, `Withload791N.lean`) at the world's records, with the lifetime match `⊓s ⊑ x.2`. Carrier: `coreMutImm_not_extF`, `not_wlImage` (`configurations.md`). The lifetime match serves `Keeps` by lifetime: no configuration (§6.2) |
+| V10 | `admWf_of_vScoped`, `cohE_of_coh` | — | 4: `sliceBorrowI`, `withbor1`, `withbor1U`, `sliceBorrowIU` | **departed (built)** | the Imm Frame's admissibility and `Coh` become the witness `ImmWitW` (`cohE_of_immWitW`, `Withload791N.lean`) at the world's records, with the lifetime match `⊓s ⊑ x.2`. Carrier: `coreMutImm_not_extF`, `not_wlImage` (`ImmRec791N`). The lifetime match serves `Keeps` by lifetime, configured with K4 (§6.3) |
 | V11 | `vN_le` (chain only) | — | 28: `tensorI`, `bind`, `unitE`, `tensorE` … | **same** | `vN_le`, `vO_le`, `cN_le`: the index is the chain's, Core has none |
 
 ### G. The context relation
@@ -177,7 +179,7 @@ The configurations named below are indexed in `configurations.md`; the design th
 | E10 | `ewp_handle_vals`, `ewp_handle_valsB`, `ewp_handle_tail`, `ewp_handle_last` … | — | 4: `effHandleV`, `effHandleVB`, `effHandleT`, `effHandleL` | **departed, to build** | `erwp_handle` (`SI/HandleN.lean`; needs no `hdv`), `erwp_kappa_*`; the clauses' reading at `vN` and the split of `tabN (ofEff n E 0 fs ++ S)` (map E8), the tail and last instances (map E11): missing, buildable |
 | E11 | `ewp_kappaC_resume`, `ewp_kappaC_cancel`, `ewp_kappaCell`, `ewp_kappa_resume` … | — | 3: `divFuel`, `reify`, `effHandleVB` | **same** | `erwp_kappa_resume`, `erwp_kappaC_resume`, `erwp_kappa_cancel`, `erwp_kappaC_cancel`, `erwp_kappaCell`, `erwp_ccatch` (`SI/HandleN.lean`) |
 | E12 | `stop_sem` | spec §28 | 1: `effHandleVB` | **missing, unclear** | the BOXED-κ stop lemma at `erwp` (map E10). Not derived; obstruction not verified |
-| E13 | `cwp_bind`, `cwp_of_ewp`, `effWp_of_ewp`, `cwp_out` … | spec §14 | 21: `iterate`, `divFuel`, `reify`, `withbor1U` … | **departed, no configuration** | a `Div` row is a row of the table; `erwp` is step-indexed, so Core's coinductive `cwp` and its bookkeeping have no counterpart, and each `cwp` branch is the `ewp` branch's `erwp` lemma. No configuration: the departure is the chain's definition of `erwp` |
+| E13 | `cwp_bind`, `cwp_of_ewp`, `effWp_of_ewp`, `cwp_out` … | spec §14 | 21: `iterate`, `divFuel`, `reify`, `withbor1U` … | **departed, forced by `erwp`** | a `Div` row is a row of the table; `erwp` is step-indexed, so Core's coinductive `cwp` and its bookkeeping have no counterpart, and each `cwp` branch is the `ewp` branch's `erwp` lemma. Reason: `Depart831N.erwp_of_noFinal`; the split: `Depart831N.cN_effOf_divB` (§6.3) |
 | E14 | `cwp_iterate` | spec §14 | 1: `iterate` | **departed, to build** | `erwp_iterate` (`SI/LoopN.lean`) is stated where the tick always answers *next*; the version answering in `vN nextTy` (the close branch) is missing, buildable from its induction |
 
 ### 2.1 Counts
@@ -185,8 +187,9 @@ The configurations named below are indexed in `configurations.md`; the design th
 | Status | Entries |
 |---|---|
 | same | 37 |
-| departed (built) | 10 (K1, K3, V10, R1, R2, R4, R5, R7, R8, R11) |
-| departed, no configuration | 3 (K4, F10, E13), and the lifetime-match part of V10 |
+| departed (built) | 11 (K1, K3, K4, V10, R1, R2, R4, R5, R7, R8, R11) |
+| departed, forced by `erwp`'s definition | 1 (E13) |
+| departed, no configuration | 1 (F10) |
 | departed, to build | 7 (R3, E3, E5, E6, E9, E10, E14) |
 | missing, buildable | 24 |
 | missing, unclear | 2 (F9 `ν`, E12 the BOXED-κ stop lemma) |
@@ -197,25 +200,14 @@ judgment carries a step index and a view (`SemJN`'s `n` and `c`), and Core's has
 
 ### 2.2 Departed without a configuration
 
-- **K4 `ext_drop` → `LocTy.extR_of_addImm`.** Core's statement has the premise
-  `∀ r ∈ rsOf ls′, Rel r ρ → r ∈ rsOf ls`, which it discharges at the Imm Frame's exit through
-  `not_rel_lineage`, from the run's `FrameLife`/`AgW`/`ICpAt`. The chain's statement has no such
-  premise, because `LocTy.Keeps` reads relevance by lifetime (`CellIn ρ x.2`). No configuration
-  shows Core's location reading failing on the chain (§6.2).
-- **V10, its lifetime match.** `ImmWitW`'s `⊓s ⊑ x.2` (review3 M1) is what makes a witness
-  relevant under the lifetime reading of `Keeps`. It stands or falls with K4. The carrier half of
-  V10 (the world's records instead of `rsOf ls`) is configured by `coreMutImm_not_extF` and
-  `not_wlImage`.
+K4, V10's lifetime match and E13 were listed here. Their verdicts are in §6.3: K4/V10 now have a
+configuration, and E13 is forced by `erwp`'s definition. One entry remains:
+
 - **F10 `cC .arr` → `cN .arr`.** The chain's `⊸` is Kripke along `ExtR`, at every later index and
   every consistent view. Core's is a wand at the same list. The index is the step-indexed `−∗` of
   `sC`, which is the chain's carrier. For the `ExtR` part, `chain-interpretation.md` §3.1 and D6
   state it but record no configuration that forces it. Its cost is in `lam`/`lamDead`, which must move
   their context along `ExtR` and down the index (G6, G11). Core's proofs do not take those steps.
-- **E13 `cwp` and its bookkeeping.** A `Div` row is a row of the chain's table, and `erwp` is
-  step-indexed. So Core's coinductive `cwp` (and `keyNA`, `tickStop_*`, `closeAt_*`, `divB_*`) has
-  no counterpart: each of Core's `cwp` branches becomes the `ewp` branch's `erwp` lemma. Core's
-  case split on `Row.divB` stays a printed split. On the chain both branches go to the same lemma
-  (§3.3). No configuration exists: this is a consequence of how `erwp` is defined.
 
 ### 2.3 Missing, unclear
 
@@ -478,17 +470,12 @@ cumulative, simulated from §3's table: a rule is unblocked once every entry it 
 passes through an excluded former. L1 and L4 are independent and can run in parallel. L2 and L3
 need only L1's W4/G6.
 
-The three departures without a configuration (K4/V10, F10, E13) are not units. Each needs either
-a configuration or a return to Core's reading:
-- **K4/V10, the location reading.** It would bring back `ext_drop`'s `hk` premise, discharged at
-  the Imm Frame's exit as Core does. That touches `withbor1`/`withbor1U`, which are proved.
+The departures without a configuration are not units. K4/V10 and E13 are settled in §6.3. F10
+remains, and it needs either a configuration or a return to Core's reading:
 - **F10, a plain-wand `⊸`.** It would remove G6/G11 from `lam` and add the `ExtR` move to the
   rules that apply a function at a later world (`app`, `lolliE`, `cN_bind`).
-- **E13.** It follows from how `erwp` is defined.
 
-Each is a choice for the user, recorded in §6.2 and §2.2.
-
-## 6. The two concerns
+## 6. The concerns and the departure check
 
 ### 6.1 `erwp_tieEntry` and an inner location typing
 
@@ -529,10 +516,88 @@ inspection, the unpremised `extR_of_addImm` would fail under the location readin
 holds. That configuration is not built, and it says nothing about Core's route, which never asks
 the unpremised statement.
 
-**Verdict: no configuration shows Core's location reading failing on the chain. This is an open
-departure.** The lifetime reading is what lets `extR_of_addImm` do without the premise and lets
-`ImmWitW` carry the lifetime match (V10). Whether the run's exit supplies Core's `hk` on the
-chain is not derived; obstruction not verified.
+The verdict is in §6.3.
+
+### 6.3 The departure check (`Core/Chain/Depart831N.lean`)
+
+**K4/V10: the departure stays, with a configuration.**
+
+The chain has two record carriers.
+- *The run's list `ls`.* Here the chain follows Core: `erwp_I_frameR`'s `hQ` is Core's `Ext` on
+  lists, and its exit discharges `ext_drop`'s premise with `not_rel_lineage`, as Core's
+  `ewpTS_I_frameU` does. The run does supply Core's premise here.
+- *The world's records `Θ.imm`.* `vN`'s `Imm` clause reads these, and the lifetime reading of
+  `Keeps` is used only here.
+
+`LocTy.extR_of_addImm` is used at the world in three places:
+1. `tabN_unwind_eq` (`ImmLend833N.lean`). This identifies the callback's table at `Θ + (p, α)`
+   with the lender's at `Θ`. It moves every value of every operation's argument type in `Res_α`
+   across the two worlds. A table is a function of the world and the view, with no run, so there
+   is no `FrameLife`, `AgW` or `ICpAt` for `not_rel_lineage` to read.
+2. and 3. The callback's result at the Imm Frame's exit, in `withbor1U_sem` and `withbor1_sem`.
+   This is transported by `erwp_mono_le`, which sees the postcondition only.
+
+Core has no counterpart of (1), because Core's table does not read the list (`Row.tab_local`,
+`hS.tab_extend`). It moves a stop's argument along `Ext` inside the frame instead (`opTable_ext`
+at `hQ`).
+
+The configuration covers (1):
+- `LocTy.KeepsLoc` is Core's `Keeps` on `rsOf Θ.imm`, and `LocTy.ExtRLoc` is `ExtR` with that
+  record conjunct.
+- `UnwindArgStepLoc` is the step `tabN_unwind_eq` takes, read by location, at every value of an
+  `Imm` type at the world with the record, in `Res_α`.
+- `not_unwindArgStepLoc` shows it fails.
+- `unwindArg_inst` discharges every hypothesis. It uses an `OK` world with one record
+  `q = (ℓ ↦ own(loc ℓ′))`, lent at `γ = 1` at type `Ref 1`, and a record `p ≠ q` at `ℓ`, lent at
+  `α = 2 ⊏ γ`. The resource `ℓ ↦ imm({γ}, loc ℓ′, ℓ′ ↦ own(()))` is a value of `Imm 'y (Ref 1)`
+  at `δ['y ↦ γ]` at `Θ + (p, α)`, witnessed by `q`, and it lies in `Res_α`. By location `Rel p ρ`
+  holds and `p` is not in `Θ`, so `ExtRLoc` fails. By lifetime the same step holds
+  (`LocTy.extR_of_addImm`).
+- This configures the step, not `tabN_unwind_eq`. A configuration of the lemma itself would need
+  a second `vN` built on `ExtRLoc`.
+
+What reverting would touch, so it is not local:
+- `LocTy.Keeps` and `ExtR`.
+- `extR_of_addImm`: it gains `hk`.
+- `extR_above`: under the location reading it needs every record relevant to `ρ ∈ Res_a` to be
+  lent above `a`. Its `vN_above.mpr` uses in the `mut` lends (`ImmLend833N.lean`,
+  `Cancel791N.lean`) would follow Core's `strat_fresh` instead, with the lend's lifetime chosen
+  below every record.
+- `vN_extR`'s `Imm` case: `ImmWitW`'s witness is a descendant `d` of a world record, and `Rel`
+  at the root does not see `d`'s location.
+- `tabN_unwind_eq`: it would have to be replaced by a stop-level transport inside the frame, which
+  means restating `erwp_I_frameR` and `erwp_tieEntry` with a world-level `hQ`.
+- `withbor1_sem`/`withbor1U_sem` and the `w2`/`w3` constants.
+
+These carry the #833 borrow rows and `constN_*`, so the stop rule applies and the departure is
+kept. V10's lifetime match stays with it. Under the lifetime reading it is what makes a witness
+relevant to its cell.
+
+**E13: forced by `erwp`'s definition.**
+
+Core's `ewpTS` is a least fixed point. A run that ticks forever is not in it, so at a row that
+holds `Div` Core takes the greatest fixed point over segments (`cwp`, `Core/DivDefs.lean`).
+`erwp` at `n` constrains only the runs of fewer than `n` steps that reach a final configuration.
+So a computation with no final configuration is in `erwp` at every index, at every table and
+postcondition (`erwp_of_noFinal`), and there is nothing for a greatest fixed point to add.
+
+Core's split on `Row.divB` appears in two places:
+- *Between `CDerives` constructors* (`effThen` and `effThenDiv`). This is a case of the
+  induction and stays as printed.
+- *Inside the relation* (`effWp`'s two branches, and the handler lemmas `ewp_handle_*` against
+  `cwp_handle_*`). On the chain both branches are `erwp` at the row's table (`cN_effOf_divB`, at
+  either value of `Row.divB`), and the port keeps the split (§3.3).
+
+One consequence: Core's `Closing` (a close is followed by finitely many ticks, each answered
+close) is a least fixed point. `fuel_total` reads it to conclude `ewpTS` after `div_fuel`. `erwp`
+states no termination, so on the chain the content of `Closing` has no counterpart. The chain
+port of `divFuel` concludes `erwp`, which does not need it. That port is not done.
+
+**Bookkeeping for this check.**
+- Unspent printed hypotheses: none. No printed statement was restated.
+- Unused uniqueness or functionality results: none.
+- Untranscribed in the run-up: the world-level `hQ` for `erwp_I_frameR` that a revert would need,
+  and the port of `divFuel` (E8, E14).
 
 ## 7. Bookkeeping
 

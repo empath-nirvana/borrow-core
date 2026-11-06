@@ -51,3 +51,5 @@ sketch, from 7ac003bb; its results were moved into `SI/LocTy.lean`).
 
 Not configurations, noted here because they are definitions nothing reads: `vThunk` and
 `Covers` (`SI/MutSemN.lean`; `chain-interpretation.md` Appendix A.4).
+
+- `Depart831N.lean`: `not_unwindArgStepLoc` / `unwindArg_inst` justify D5 (`Keeps` by lifetime) at `tabN_unwind_eq`, a step Core's proofs do not take (refactor candidate); `erwp_of_noFinal` / `cN_effOf_divB` justify reading `Div` rows at `erwp` (no coinductive `cwp`).
