@@ -537,3 +537,90 @@ is valid by `erwp_of_valid`).
 Uniqueness results used: `ExS.functional`, `ResU.CompS.functional`.
 
 **Open, unchanged:** `cN_extA` at `F_Σ R` (§10).
+
+## 12. State after #828 (U5)
+
+All in `scripts/AxiomCheck.lean` (1518 results); axioms within `propext`, `Classical.choice`,
+`Quot.sound`. No relation definition changed (`erwp`, `rwpG`, `EndOKG`, `UpdN`, `PredStep`,
+`MutStep`, `LocFam`). `constN_w2`, `constN_w3`, the `vN_*` laws, `bridgeN`, `goal791Sched_of`,
+`hardestCase791`/`C`, `poolSchedAdequacyN` and `erwp_adequacy` are untouched: the unit adds one
+file (`Core/Chain/Field791N.lean`) and changes no existing proof.
+
+**Core has no printed proof to follow.** `withborFE` has no `CDerives` rule and no Core
+compatibility lemma (`Core/TreeGoal791.lean` §1; `Core/Family.lean`'s `withborF2` is the
+two-`Ref` family borrow, a different rule). `withborFS_compat` is `withbor3S_compat`'s 13 steps
+(Core's `withbor3U_compatX`) at the source `Mut @a (Ref A)`, built from the chain's existing frames
+with no new relation definition. `scope-791-rule.md` §7.7 maps it step by step.
+
+**`withborFS_compat`, `constN_wF`** (`Field791N.lean:277`, `:488`). Premises: `hA : ¬ VFree x A`,
+`hB : ¬ VFree x B`, `hS : S.Suspend x`, `hdc : closedAt 0 d = true` (`Const791.OK` for `wF`) and
+`hd`, `d`'s semantic judgment at `Mut @a (Ref A) ⊸ 1`; `constN_wF : FundamentalN → ConstN (.wF …)`
+supplies `hd` from `Const791.OK`'s `CDerives` premise, as `constN_w3` does. Each of #827's five
+items:
+
+1. **The load.** Not `erwp_det`: `load ℓ` steps only at a heap holding `ℓ`, so the step is
+   `rwp_load` (the opened `ℓ ↦ own(loc ℓ₂)` and the wand giving it back) under
+   `erwp_bindR` at the context `(f []) □`, at the anti-frame's table (`opTableGR_local`). The
+   callback runs one index lower (`k′ - 1 ≤ j₀`).
+2. **The frame** (the main new piece). `erwp_frameGR` (`:47`): from
+   `erwp Φ (opTableGR T₁ G R) Q n ls e ρ₁` and `Fr ρ₂`, the run from `ρ₁ ● ρ₂` is in
+   `erwp Φ (opTableGR T₂ (G.sep (λ_. Fr)) (λk. R k ⋆ Fr)) (λk ls v. Q k ls v ⋆ Fr)`. At a stop the
+   frame joins the share beside the guarded part (`ShareG.sep`), as in `erwpG_frame`, and is
+   taken back at each resume; at a raise it joins the claim; a cancellable stop's obligation at
+   the share with the frame is `T₂`'s by a premise `hcan`. `erwp_frame_cancelRunGR` (`:95`) is
+   the same at `cancelTabGR` (the frame joins the cancel's claim), `erwp_frame_cancelRun`
+   extended to cancel runs that stop. `tabG_canF` (`:226`) discharges `hcan` from
+   `tabG Rc Gc` to `tabG (Rc ⋆ Fr) (Gc.sep Fr)` by induction on cancel depth, each layer's
+   cancel run framed by `erwp_frame_cancelRunGR`. Premises of the frame lemmas are the tables'
+   (`Twin`, `q ≠ unr`, `wc = extF`: `tabG_tabG_twin`, `tabG_afok`). `Fr` is the opened cell
+   `ℓ ↦ own(loc ℓ₂)`; `Gc`, `Rc` the Mut Frame's `CellFold ℓ₂ α F_i`, `claimR ℓ₂ α F_i`. Then
+   `hG` and `hRin` read `CellFold ℓ₂ α F_i ⋆ ℓ ↦ own(loc ℓ₂)` into `CellFold ℓ β F_o` and
+   `claimR ℓ₂ α F_i ⋆ ℓ ↦ own(loc ℓ₂)` into `claimR ℓ β F_o`. No relation change was needed.
+3. **The family inclusion** (`hoi`): `χ ∈ F_i k` and `ℓ₂ ↦ own(w) ● χ = X` give
+   `X ∈ F_o k` with `X ∈ Res_β`: `X` is a `Ref A` value (`vN`'s `Ref` clause), so `hunif` at
+   `Ref A` gives the stratum and `vN_above` the member. Step 6 at `A` (`hunifA`, the borrow's
+   uniform conjunct at `α`): a value of `A` beside a fresh `own` cell (`PMap.exists_fresh`) is a
+   `Ref A` value, so it is in `Res_β`.
+4. **The view at `ℓ₂`.** `ℓ₂` is not a top-level cell of the source, so `exS_none_of_part` does
+   not apply; `exS_none_of_walk` (`:144`) reads it off the source cell's walk, which holds the
+   witness's walk (`exS_mut_wit_get`, `:164`), which holds `ℓ₂ ↦ own(u₀)`. So `ρ_f`'s walk and
+   `σ_u`'s miss `ℓ₂`, and both stay consistent at `setLife c ℓ₂ α` (`consistentX_setLife`);
+   `σ_u` consistent at `c` by `consistentX_leftE` (`:156`), from the walk of `σ₀`.
+5. **`fin_claimM` at `Mut @a (Ref A)`**, `tabG`, `tabG_can` (at `ℓ₂`), `tabR_canA` and
+   `erwp_M_antiFrameCR` (at `G = Gc.sep Fr`, `Rin = Rc ⋆ Fr`) as they stand.
+
+Neither STOP was hit. K1: the source opens as in `w3` (`consistentX_get` on the valid start,
+`reseal_at_entry`); the field is read off the content's `Ref` clause, not off the view. The frame
+of item 2 needed no relation change.
+
+**Unspent and unused.** Unspent premises of `withborFS_compat`: none. Unused for `wF`:
+`exS_none_of_part`, `exS_wit_none` (replaced by `exS_none_of_walk`), `erwpG_frame`,
+`erwp_frame_cancelRun` (the cases `erwp_frameGR`/`erwp_frame_cancelRunGR` extend). Uniqueness
+results used: `ExS.functional`. No printed lemma is untranscribed in the run-up: Core prints no
+field-reborrow rule.
+
+**What remains for `Goal791SchedN` and `Goal791Top`.** `goal791Sched_of : FundamentalN →
+ConstsN → Goal791SchedN` is proved; `ConstsN` is `w2`, `w3`, `wF` (proved), `wl`, `sm`:
+
+- **`wl`** (`withloadU` at `Row.Suspend`, `ConstN (.wl …)`). Core's `withloadU_compatX` reads the
+  source `Imm @a A` through `ptoImmS` with `CohE` (the chooser of `wpG_reborrow`) and the record
+  list (`vC_local`). `vN`'s `imm` clause (`immCell`) has neither: no `CohE` and no records
+  (`scope-791-rule.md` §7.4, departure 1). It needs the user's `Imm`/`CohE` decision, then the
+  `Imm` clause in that shape, its laws re-proved, and `erwp_reborrow` (`SI/RebAcrossC.lean`)
+  across stops, raises and layered cancel runs, as `erwp_M_antiFrameCR` is for `mut`.
+- **`sm`** (`sliceBorrowMU` at `Row.Suspend`). `.array A` is `.fam (.ref A)`, and `vN`'s
+  `fam` clause is `False` (families are outside the fragment). It needs: a `fam` clause in `vN`
+  (Core's family reading) with its laws; the `n` Mut Frames at once (Core's
+  `wpG_M_frameFam`) at `erwp` across stops, raises and layered cancel runs, at a guarded
+  table, with its `tabG_can`; and `sliceBorrowMU_compatX`'s two side conditions
+  (`VOutlivesLe` at `A` and at `B`), which `Const791.OK` already carries.
+- **`FundamentalN`**: each of `CDerives`'s 104 constructors (`Core/Fundamental.lean:200`) as a
+  compatibility lemma at `SemJN`. None is proved on the chain today; Core's `fundamentalC`
+  (`SemC`) is the map, rule by rule.
+- **`cN_extA` at `F_Σ R`** (§10): open, unchanged. Nothing in the chain uses `cN_extA` today; I
+  have not identified which `CDerives` rule's compatibility at `SemJN` would need it at an
+  effect row. What it needs where it is needed: each layer's answer read at `Θ′` is one at `Θ`,
+  and likewise for the cancel rows' tables; at answer types outliving every lifetime, an `erwp`
+  lemma over tables whose payloads grow and whose answers agree, not built.
+- **`Goal791Top`** additionally needs `[handle]` (#792): the scheduler typed inside the program,
+  so that `Goal791Top`'s closed `F 1` program reduces to `Goal791SchedN`'s form.

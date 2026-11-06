@@ -372,3 +372,27 @@ the per-lend interpretation (`scope-791-loctype.md` §11) the 13 steps are:
 §7.2's obstruction (`reseal_untyped`) is answered by L1: the view types the cell at its own entry.
 `erwp_withbor3` (`SI/AntiStopN.lean`) is not used: it is the composition at tables with no raises
 and no cancellable stops; `erwp_M_antiFrameCR ∘ erwp_M_frameCRG` is its extension.
+
+### 7.7 State after #828 (U5): the field reborrow
+
+Core prints no field-reborrow rule, so there is no printed proof to follow: `withborFE` has no
+`CDerives` constructor and no Core compatibility lemma. `withborFS_compat`
+(`Core/Chain/Field791N.lean`) is §7.6's 13 steps at the source `Mut @a (Ref A)`, from the chain's
+existing frames, with no new relation definition:
+
+| # | Chain counterpart | Change from `w3` |
+|---|---|---|
+| 1 | the constant at `PMap.empty` | none |
+| 2 | `vN`'s `Mut` clause: `ℓ ↦ mut(β, w₀, σ₀, F_o j₀)` | `F_o = famL β 𝒱⟦Ref A⟧ Θ`; `Ref`'s clause gives `w₀ = loc ℓ₂`, `σ₀ = ℓ₂ ↦ own(u₀) ● σ_u`, `u₀ ∈ 𝒱⟦A⟧` |
+| 3–5 | as `w3` | none |
+| 6 | `hunif` | at `Ref A` (source); at `A` (`hunifA`) by a fresh `own` cell beside the value |
+| 7 | `consistentX_get`, `reseal_at_entry`, `erwp_M_antiFrameCR` | then the `load` from the opened `ℓ ↦ own(loc ℓ₂)`: `rwp_load` under `erwp_bindR` |
+| 8 | `erwp_M_frameCRG` | at `ℓ₂`, with `ℓ ↦ own(loc ℓ₂)` framed outside it: `erwp_frameGR`, `erwp_frame_cancelRunGR`, `tabG_canF` |
+| 9–10 | `exists_fresh`, `lend_mutL` | at `ℓ₂`, below `β ⊓ βf ⊓ γ` |
+| 11 | the callback at `Θ + (ℓ₂, α)`, view `setLife c ℓ₂ α` | consistency from the source cell's walk (`exS_none_of_walk`, `exS_mut_wit_get`) |
+| 12 | `vN_local` | none |
+| 13 | `F_i k ⊆ F_o k` | `ℓ₂ ↦ own(w) ● χ` is a `Ref A` value (`hoi`); the guard and claim at `ℓ₂` beside the framed cell are the guard and claim at `ℓ` |
+
+The rule-level hardest case of #791 (a mut reborrow of a boxed field of a borrowed record held
+across `park`) is complete: `constN_w3` and `constN_wF` take only `FundamentalN`. What remains for
+`Goal791SchedN`/`Goal791Top` is listed in `scope-791-loctype.md` §12.
