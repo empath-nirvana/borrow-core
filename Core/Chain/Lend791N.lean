@@ -385,8 +385,8 @@ theorem suspend_closingOp (x : LifeVar) (bnd : Lifetime.Life) {n i n' i' : UInt3
   intro o ho
   simp only [List.mem_singleton] at ho
   subst ho
-  refine ⟨by simp [closingOp], hn, id, id, .unit, .unit, rfl, fun _ => ?_⟩
-  exact ⟨⟨by simp, id, id, .unit, .unit, rfl, fun _ => trivial⟩, trivial⟩
+  refine ⟨by simp [closingOp], hn, id, id, .unit, .unit, fun _ => ?_⟩
+  exact ⟨⟨by simp, id, id, .unit, .unit, fun _ => trivial⟩, trivial⟩
 
 /-! ### The hardest case's callback row -/
 
@@ -405,7 +405,7 @@ theorem hardestRow_suspend (x : LifeVar) (bnd : Lifetime.Life) : hardestRow.Susp
   intro o ho
   simp only [hardestRow, List.mem_singleton] at ho
   subst ho
-  exact ⟨by simp [parkSig], by decide, id, id, .unit, .unit, rfl, fun _ => trivial⟩
+  exact ⟨by simp [parkSig], by decide, id, id, .unit, .unit, fun _ => trivial⟩
 
 /-- **The row's table is `park`'s entry in `TJN`**: at `(nP, 0)` the row's table has `enParkN`'s
 qualifier, abort flag, cancel obligation (the pure row's) and resumption order, at the view. -/

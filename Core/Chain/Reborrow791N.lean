@@ -622,7 +622,7 @@ theorem tabN_tabG_twin {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {F : CTy}
     (tabN (ℍ := ℍ) F (δ.extend x α) Θ₁ c₁).Twin (tabG (ℍ := ℍ) R G F δ Θ₂ c₂) := by
   intro m i en h
   obtain ⟨q, A, B, fin, hL, rfl, hR⟩ := tab_lookupNG R G F h
-  obtain ⟨-, hA, hB, hOA, hOB, -, -⟩ := layer_suspend F hF hL
+  obtain ⟨-, hA, hB, hOA, hOB, -⟩ := layer_suspend F hF hL
   refine ⟨_, hR δ Θ₂ c₂, rfl, rfl, ?_, ?_, rfl⟩
   · simp only [entN, vN_extend_of_not_free (ℍ := ℍ) hA δ α, hΘ A hOA]
   · simp only [entN, vN_extend_of_not_free (ℍ := ℍ) hB δ α, hΘ B hOB]
@@ -679,7 +679,7 @@ theorem tabG_can {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {δ : LSub} {Θ
   rw [hR δ Θ c] at h'
   cases Option.some.inj h'
   have hcap := entN_capB ha hql
-  have hfin := (layer_suspend F hF hL).2.2.2.2.2.2 hcap
+  have hfin := (layer_suspend F hF hL).2.2.2.2.2 hcap
   have hfd : fin.cdepth ≤ d := by have := layer_cdepth F hL; omega
   intro P' hP'
   simp only [entN, hcap, if_true] at hP' hc
@@ -730,7 +730,7 @@ theorem tabR_canA {x : LifeVar} {bnd : Lifetime.Life} {δ : LSub} {Θ : LocTy} (
   rw [hR Rout] at h'
   cases Option.some.inj h'
   have hcap := entN_capB ha hql
-  have hfin := (layer_suspend F hFs hL).2.2.2.2.2.2 hcap
+  have hfin := (layer_suspend F hFs hL).2.2.2.2.2 hcap
   have hfd : fin.cdepth ≤ d := by have := layer_cdepth F hL; omega
   intro P' hP'
   simp only [entN, hcap, if_true] at hP'
@@ -925,7 +925,7 @@ theorem withbor3S_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
     (.app (.app (.val f) (.val .unit)) (.val (Val.loc l))) w₀ σ₀ hσ₀ j₀ hw₀ ρf ρ'' hc'
     (fun W X hW hX => ?_)
   · -- step 13: the claim consistent, the finaliser frame consuming it
-    have hM' := erwp_claimX (c := c) hFS k' ls _ ρ'' hcon hAF
+    have hM' := erwp_claimX (c := c) hbnd hFS k' ls _ ρ'' hcon hAF
     refine erwp_ubindClaimRT hΘ.1 (F := Fo) (δ := δ) (c := c)
       (fun m i en h _ => by obtain ⟨o, ho, rfl, -⟩ := tabN_effOf_some h; exact (hS o ho).2.1)
       (NFv l) (DFv d l) (fun k ls ρ hR => fin_claimM hdc hd hΘ hR.1 hR.2) hQo

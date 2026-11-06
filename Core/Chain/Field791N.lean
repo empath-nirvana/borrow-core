@@ -243,7 +243,7 @@ theorem tabG_canF {x : LifeVar} {δ : LSub} {Θ : LocTy} {c : Loc → Option Lif
   rw [hR _ _] at h'
   cases Option.some.inj h'
   have hcap := entN_capB ha hql
-  have hfin := (layer_suspend F hFs hL).2.2.2.2.2.2 hcap
+  have hfin := (layer_suspend F hFs hL).2.2.2.2.2 hcap
   have hfd : fin.cdepth ≤ d := by have := layer_cdepth F hL; omega
   intro P' hP'
   simp only [entN, hcap, if_true] at hP' hcn
@@ -431,7 +431,7 @@ theorem withborFS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
     (.app (.app (.val f) (.val .unit)) (.app (.val (Val.prim .load)) (.val (Val.loc l))))
     (Val.loc l₂) σ₀ hσ₀ j₀ hw₀ ρf ρ'' hc' (fun W X hW hX => ?_)
   · -- step 13: the claim consistent, the finaliser frame consuming it
-    have hM' := erwp_claimX (c := c) hFS k' ls _ ρ'' hcon hAF
+    have hM' := erwp_claimX (c := c) hbnd hFS k' ls _ ρ'' hcon hAF
     refine erwp_ubindClaimRT hΘ.1 (F := Fo) (δ := δ) (c := c)
       (fun m i en h _ => by obtain ⟨o, ho, rfl, -⟩ := tabN_effOf_some h; exact (hS o ho).2.1)
       (NFv l) (DFv d l) (fun k ls ρ hR => fin_claimM hdc hd hΘ hR.1 hR.2) hQo

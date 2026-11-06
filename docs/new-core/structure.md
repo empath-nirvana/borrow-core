@@ -201,7 +201,12 @@ are part of step 2.
    `withbor2S_compat`, `withbor3S_compat`, `withborFS_compat`, each with its finaliser's
    judgment `hd` as a premise, instantiated with every hypothesis discharged in
    `Core/Chain/Inst791N.lean`. `FundamentalN` is stated on the fragment (`JdgInFrag`) and not
-   proved.
+   proved. Its remaining gap: cuts through excluded types inside an in-fragment derivation;
+   in-fragment rules that may force `vN` to change, at least `withloadU`, whose Core proof reads
+   `Imm`'s record list and `CohE` (`scope-791-loctype.md` §12, departure 1); and `cN_extA` at
+   `F_Σ R`, open, which the chain analogues of `withbor1U_compatX`/`sliceBorrowIU_compatX`
+   (`opTable_ext` in Core) may need. A change to `vN` reopens its laws and the `*_compat`
+   proofs (`scope-791-rule.md` §8).
 3. Adequacy: `goal791Sched_of` (`Goal791SchedN` from `FundamentalN` and `ConstsN`).
 
 ## 8. Termination

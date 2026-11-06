@@ -42,26 +42,15 @@ open BoCa.BoLo (hndE hndVal freeE Kont performE opPayload)
 
 /-! ## §1. The new rules -/
 
-/-- **No `mut` cell on the exclusive walk**: a type whose values hold no `mut` cell outside an
-`imm` cell (beneath an `imm` cell the walk is aliasable and read-only). `Mut` and `U` are
-excluded; `!` holds nothing; the formers outside the fragment have no values. -/
-def _root_.BoCa.Fig16.LogRel.Core.VTy.exclMutFree : VTy → Bool
-  | .unit | .zero | .int _ | .unk | .imm _ _ | .bang _ => true
-  | .tensor A B | .sum A B => A.exclMutFree && B.exclMutFree
-  | .ref A | .box _ A => A.exclMutFree
-  | .mut _ _ | .thunk _ => false
-  | .tvar _ | .mu _ | .fam _ | .opq _ => true
-
 /-- **The clauses `Row.Suspend` asks of a cancel row's layers**, recursively: each layer not
 unrestricted, its payload and answer types free of `'x` and outliving the callback's bound
-`@bnd`, its answer type without a `mut` cell on the exclusive walk, and the cancel row of each
-capturable layer likewise. A cancel run under a live lend stops at these layers, so they meet
-what the row's own operations meet. -/
+`@bnd`, and the cancel row of each capturable layer likewise. A cancel run under a live lend
+stops at these layers, so they meet what the row's own operations meet. -/
 def _root_.BoCa.Fig16.LogRel.Core.CTy.SuspendC (x : LifeVar) (bnd : Lifetime.Life) : CTy → Prop
   | .eff _ _ q A B fin _ C =>
       (q ≠ .unr ∧ ¬ VFree x A ∧ ¬ VFree x B ∧ VOutlives LifeCtx.empty bnd A ∧
-        VOutlives LifeCtx.empty bnd B ∧ B.exclMutFree = true ∧
-        (capB q B = true → SuspendC x bnd fin)) ∧ SuspendC x bnd C
+        VOutlives LifeCtx.empty bnd B ∧ (capB q B = true → SuspendC x bnd fin)) ∧
+      SuspendC x bnd C
   | _ => True
 
 /-- **The row of a callback that may suspend inside a borrow of `'x ⊏ @bnd`**: `Row.Unwind`
@@ -70,15 +59,22 @@ without its abort clause, its outliving clause relative to the lend. Every opera
 continuation resumed twice would lend twice: SPEC §62, "Typing: suspension"); its payload and
 answer types are free of `'x` and outlive `@bnd`, so their values lie in the stratum of every lend
 `α ⊏ @bnd` (`OpTabN.LendOKCR`'s `pa`/`pb`, Core's `LendOK`), and a fresh lend leaves their reading
-unchanged (`vN_add_eq_bnd`); the answer type holds no `mut` cell on the exclusive walk, since an
-answer arrives from outside the run and the view `c` the run is read at says nothing of its cells
-(`erwp_claimX`); a capturable operation's cancel row meets the same clauses (`CTy.SuspendC`).
-Decidable on the row given `VFree` and `VOutlives`. -/
+unchanged (`vN_add_eq_bnd`); a capturable operation's cancel row meets the same clauses
+(`CTy.SuspendC`). Decidable on the row given `VFree` and `VOutlives`.
+
+A bound defined at the empty context (`Const791.OK`'s first conjunct) is closed, so it is `⊤`
+(`interp_top_of_defines_empty`), and the outliving clauses put every payload and answer in
+`Res_⊤`, consistent with every view (`erwp_claimX`). At such a bound `VOutlives ∅ bnd T` excludes
+exactly the types with, outside a box or `!`, one of: `Imm @b A` or `Mut @b A` (they
+need `∅ ⊨ @bnd ⊏ @b`, and no `@b` is strictly longer than `⊤`); a thunk `U C` or `Unk` (no
+outliving rule); a box `[@b] A` at a `@b` with a variable (`∅ ⊨ @bnd ⊑ @b` asks `@b` defined at
+the empty substitution). A box `[@b] A` at a closed `@b`, whatever `A` holds (`[@⊤] U C`
+included), and `! A` pass. -/
 def _root_.BoCa.Fig16.LogRel.Core.Row.Suspend (S : Row) (x : LifeVar) (bnd : Lifetime.Life) :
     Prop :=
   ∀ o ∈ S, o.q ≠ .unr ∧ o.n ≠ 0 ∧ ¬ VFree x o.A ∧ ¬ VFree x o.B ∧
     VOutlives LifeCtx.empty bnd o.A ∧ VOutlives LifeCtx.empty bnd o.B ∧
-    o.B.exclMutFree = true ∧ (capB o.q o.B = true → o.fin.SuspendC x bnd)
+    (capB o.q o.B = true → o.fin.SuspendC x bnd)
 
 theorem _root_.BoCa.Fig16.LogRel.Core.Row.Suspend.of_unwind {S : Row} {x : LifeVar}
     {bnd : Lifetime.Life} (h : S.Unwind x) (hq : ∀ o ∈ S, o.q ≠ .unr) : S.Suspend x bnd :=
@@ -86,7 +82,6 @@ theorem _root_.BoCa.Fig16.LogRel.Core.Row.Suspend.of_unwind {S : Row} {x : LifeV
   ⟨hq o ho, (h o ho).2.1, (h o ho).2.2.1,
     by rw [OpSig.B_zero (h o ho).1]; exact id, (h o ho).2.2.2 _ _,
     by rw [OpSig.B_zero (h o ho).1]; exact .zero,
-    by rw [OpSig.B_zero (h o ho).1]; rfl,
     by rw [OpSig.B_zero (h o ho).1]; simp [capB, VTy.isZero]⟩
 
 /-- **The field reborrow** `λr. λf. (f [] (load r)) then b. (r, b) unwind d r`: the callback gets
@@ -162,6 +157,30 @@ def Const791.OK : Const791 → Prop
 Core's rules fix at the empty context, is defined at every `δ`. -/
 theorem defines_meetOfDom_empty : LifeCtx.empty.Defines LifeCtx.empty.meetOfDom :=
   fun _ hδ => Lifetime.Life.interp_defined_of_wf hδ (Lifetime.meetOfDomL_wf LifeCtx.empty.entries)
+
+/-- A lifetime defined at the empty substitution has no variable, so it is `⊤` at every `δ`. -/
+theorem interp_top_of_interp_empty : ∀ (b : Lifetime.Life) (n : Nat),
+    b.interp ⟨[]⟩ = some n → ∀ δ : LSub, b.interp δ = some Lifetime.SLife.top
+  | .var _, _, h, _ => by simp [Lifetime.Life.interp, LSub.find?, Lifetime.assocFind] at h
+  | .top, _, _, _ => rfl
+  | .join a b, _, h, δ => by
+      simp only [Lifetime.Life.interp, Option.bind_eq_some_iff] at h
+      obtain ⟨m, hm, m', hm', -⟩ := h
+      simp [Lifetime.Life.interp, interp_top_of_interp_empty a m hm δ,
+        interp_top_of_interp_empty b m' hm' δ, Lifetime.SLife.join, Lifetime.SLife.top]
+  | .meet a b, _, h, δ => by
+      simp only [Lifetime.Life.interp, Option.bind_eq_some_iff] at h
+      obtain ⟨m, hm, m', hm', -⟩ := h
+      simp [Lifetime.Life.interp, interp_top_of_interp_empty a m hm δ,
+        interp_top_of_interp_empty b m' hm' δ, Lifetime.SLife.meet, Lifetime.SLife.top]
+
+/-- **A lifetime defined at the empty context is `⊤`**: `Defines` quantifies over every `δ`, the
+empty one included, so the lifetime has no variable. -/
+theorem interp_top_of_defines_empty {b : Lifetime.Life} (h : LifeCtx.empty.Defines b)
+    (δ : LSub) : b.interp δ = some Lifetime.SLife.top := by
+  obtain ⟨n, hn⟩ := h ⟨[]⟩ (fun _ _ h => by
+    simp [LifeCtx.empty, LifeCtx.find?, Lifetime.assocFind] at h)
+  exact interp_top_of_interp_empty b n hn δ
 
 /-- The context a program using the constants `cs` is typed in: each constant at `!` of its
 type, live. -/

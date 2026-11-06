@@ -18,8 +18,10 @@ the lifetime stratification, not the step index, makes the stored family a fixed
 add keys at a lifetime strictly shorter than every key present (`LocTy.Fresh`); then the part of
 the world above every existing key never changes (`LocTy.above_add`), so a family stored at a
 lend stays the payload's family read at the current world (`fam_add_self`), and a value typed
-before the lend stays typed (`mutL_add`). The Kripke order is `LocTy.ExtA`: entries only added,
-nothing added above a key present.
+before the lend stays typed (`mutL_add`). Lends extend the world along `LocTy.ExtA`: entries only
+added, nothing added above a key present. `U` and `⊸` are Kripke along the resource-relative
+order `LocTy.ExtR`, which departs from Core's `Ext` (`scope-791-loctype.md` §10,
+`Core/Chain/ExtRLit791.lean`); `ExtA` is `ExtR` at every resource.
 
 ## Its view at a run
 
@@ -226,12 +228,14 @@ theorem mutL_extA {Θ Θ' : LocTy} (hE : Θ.ExtA Θ') {a : Life} {P : CPredL} {n
 
 /-! ### The resource-relative Kripke order -/
 
-/-- **Core's `Ext` on the per-lend world**, the order `U` and `⊸` are Kripke along: at the
-resource `ρ`, every key at a lifetime `a` with a borrow cell of `ρ` no longer-lived than `a`
-(`CellIn ρ a`, Core's) is kept, and nothing is added above it. Core's `Ext ls ls′ ρ` keeps the
-records relevant to `ρ` and the records above every such `a`; a stored family here reads the world
-above its key (`famL`), so the keys at and above such an `a`, and what lies above them, are what
-a value with resource `ρ` reads. -/
+/-- **The resource-relative order on the per-lend world**, the order `U` and `⊸` are Kripke
+along: at the resource `ρ`, every key at a lifetime `a` with a borrow cell of `ρ` no longer-lived
+than `a` (`CellIn ρ a`, Core's) is kept, and nothing is added above it. A stored family here reads
+the world above its key (`famL`), so the keys at and above such an `a`, and what lies above them,
+are what a value with resource `ρ` reads. It departs from Core's literal `Ext ls ls′ ρ`, which
+asks agreement above every `b` with `CellIn ρ b`, not only above the keys present
+(`scope-791-loctype.md` §10); read literally, `U` is not Kripke along `ExtA` at a type through
+`ν`, which the interpretation reads as empty (`Core/Chain/ExtRLit791.lean`). -/
 def LocTy.ExtR (Θ Θ' : LocTy) (ρ : WRes) : Prop :=
   ∀ l a F, Θ l a = some F → CellIn ρ a → Θ' l a = some F ∧ Θ'.above a = Θ.above a
 

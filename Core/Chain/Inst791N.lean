@@ -127,7 +127,7 @@ theorem linSig_suspend {n i : UInt32} (hn : n ≠ 0) (x : LifeVar) (bnd : Lifeti
   intro o ho
   simp only [List.mem_singleton] at ho
   subst ho
-  exact ⟨by simp [linSig], hn, id, id, .unit, .unit, rfl, fun h => by simp [capB, linSig] at h⟩
+  exact ⟨by simp [linSig], hn, id, id, .unit, .unit, fun h => by simp [capB, linSig] at h⟩
 
 /-- `λ_. λu. perform op ()`: the callback stops at `op` holding the borrow `u`, and answers with
 the operation's answer, the borrow released (left as garbage) at the return. -/
@@ -173,6 +173,52 @@ theorem cbPerform_sem {x : LifeVar} {bnd : Lifetime.Life} {A : VTy} {δ : LSub} 
   obtain rfl := eq_of_compS_empty_left (ResU.CompS.comm hcτ)
   exact erwp_garbage (compS_empty_left _) (noOwn_single_mut l)
     (erwp_val (v := Val.unit) ⟨α, interp_ext_self δ x α, ⟨rfl, rfl⟩, ResU.inStratum_empty α⟩)
+
+/-! ### `Const791.OK` inhabited, finaliser judgment included -/
+
+/-- **`w2`'s antecedent holds**, its finaliser `free : Ref 1 ⊸ 1` derived by `CDerives.free` at
+the payload `1`. -/
+theorem w2_ok (x : LifeVar) :
+    (Const791.w2 x LifeCtx.empty.meetOfDom .unit .unit hardestRow (.val (.prim .free))).OK :=
+  ⟨defines_meetOfDom_empty, ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩, id, id, hardestRow_suspend x _,
+    rfl, .free .nil⟩
+
+/-- `dRelease` is Core's `forget`. -/
+theorem dRelease_eq_forget : dRelease = BoCa.forget := rfl
+
+/-- **`w3`'s antecedent holds** at the instance's constant, its finaliser `dRelease`, Core's
+`forget`, derived by `CDerives.releaseMut`. -/
+theorem w3_ok (a : Lifetime.Life) (x : LifeVar) :
+    (Const791.w3 a x LifeCtx.empty.meetOfDom .unit .unit hardestRow dRelease).OK :=
+  ⟨defines_meetOfDom_empty, id, id, hardestRow_suspend x _, dRelease_closed, .releaseMut .nil⟩
+
+/-- **`wF`'s antecedent holds** at the instance's constant, its finaliser `dRelease` at
+`Mut @a (Ref 1) ⊸ 1` derived by `CDerives.releaseMut`. -/
+theorem wF_ok (a : Lifetime.Life) (x : LifeVar) :
+    (Const791.wF a x LifeCtx.empty.meetOfDom .unit .unit hardestRow dRelease).OK :=
+  ⟨defines_meetOfDom_empty, id, id, hardestRow_suspend x _, dRelease_closed, .releaseMut .nil⟩
+
+/-! ### The constant applied to a callback that performs while holding the borrow -/
+
+/-- **`withbor (2)` applied to a cell and to `cbPerform`**: at the one-operation row
+`[linSig n i]`, `withborU dFree ℓ cbPerform` runs at `F_Σ(Ref 1 ⊗ 1)` from `ℓ ↦ own(())`. The
+callback stops at the must-resume operation with the borrow of `ℓ` in the continuation's share
+(`cbPerform_sem`); `withbor2S_compat` gives the rest. -/
+theorem withbor2S_perform (x : LifeVar) {n i : UInt32} (hn : n ≠ 0) (δ : LSub) (Θ : LocTy)
+    (hOK : Θ.OK) (c : Loc → Option Life) (k : Nat) (ls : List SRec) (l : Loc) :
+    cN (ℍ := ℍ) (CTy.effOf [linSig n i] (.tensor (.ref .unit) .unit)) δ Θ c k ls
+      (.app (.app (withborUV dFree).1 (.val (Val.loc l))) (.val (cbPerform n i)))
+      (ResU.single l (CellU.ownOf Val.unit)) := by
+  have hcon : ConsistentX c (ResU.single l (CellU.ownOf (Loc := Loc) Val.unit)) :=
+    consistentX_of_top (ResU.inStratum_single_own _ l Val.unit) c
+  have hv : vN (ℍ := ℍ) (.ref .unit) δ Θ k (Val.loc l) (ResU.single l (CellU.ownOf Val.unit)) :=
+    ⟨l, Val.unit, PMap.empty, rfl, ResU.comp_empty_right _, rfl, rfl⟩
+  have h := (withbor2S_compat (ℍ := ℍ) (A := .unit) (B := .unit) defines_meetOfDom_empty ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩
+    id id (linSig_suspend (i := i) hn x _) dFree_closed dFree_sem δ Θ k).2 Θ (LocTy.extR_refl _ _) hOK c
+    (consistentX_empty c) ls
+  have h2 := h Θ (LocTy.extR_refl _ _) hOK c k le_rfl (Val.loc l) _ _ (compS_empty_left _) hv hcon
+  exact h2 Θ (LocTy.extR_refl _ _) hOK c k le_rfl (cbPerform n i) PMap.empty _
+    (ResU.comp_empty_right _) (cbPerform_sem n i Θ k) hcon
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

@@ -60,8 +60,9 @@ statements, as `TreeGoal791`'s with `vN`/`cN`/`erwp` for `vT`/`cT`/`cerwpT`. Pro
 ## 3. Departures from Core, each recorded
 
 Departures 1–3 below describe the interpretation before the per-lend world; #825 replaced them
-(`scope-791-loctype.md` §9): `Mut` reads the world, `U` is Kripke along `ExtA`, and the view's
-consistency replaces `Covers`. Departure 1's `Imm` half stands. Decision 1 (2026-11-05) asked for
+(`scope-791-loctype.md` §9): `Mut` reads the world, `U` is Kripke along the resource-relative
+order `LocTy.ExtR` (departing from Core's `Ext` as in `scope-791-loctype.md` §10,
+`Core/Chain/ExtRLit791.lean`), and the view's consistency replaces `Covers`. Departure 1's `Imm` half stands. Decision 1 (2026-11-05) asked for
 1–3 to be undone. `perLocShape_not_reborrow`
 (§5, "Decision 1") refutes reading Core's `ls₀` as the location typing, not Core's records-based
 `Mut` (§7.3). What stops the port of Core's `withbor3_compatX` is the anti-frame's reseal at a
@@ -407,7 +408,9 @@ The review is `~/repos/scratch-archive/rule791/review.md`.
 **What is proved, and its scope.** #791's `mut` half at the rule level: `withbor2S_compat`
 (`w2`), `withbor3S_compat` (`w3`) and `withborFS_compat` (`wF`), each from `Const791.OK`'s
 clauses and the finaliser's semantic judgment `hd`, every hypothesis discharged at the hardest
-case's row in `Core/Chain/Inst791N.lean`. The corollaries `constN_w2`/`constN_w3`/`constN_wF`
+case's row in `Core/Chain/Inst791N.lean`. `Const791.OK` is inhabited for each, its finaliser's
+`CDerives` judgment included (`w2_ok`, `w3_ok`, `wF_ok`), and `withbor2S_perform` applies `w2` to
+a callback that performs while holding the borrow (at `A = B = 1`). The corollaries `constN_w2`/`constN_w3`/`constN_wF`
 are conditional on `FundamentalN`, stated on the fragment and not proved. The `imm` half (`wl`)
 waits on `Imm`'s record list and `CohE` (departure 1); `cN_extA` at `F_Σ R` is open; `sm` needs
 the `fam` clause.
@@ -419,15 +422,19 @@ reborrow and the field reborrow open the source at its own `b` (`consistentX_get
 **`Row.Suspend S 'x @bnd`** (`Core/TreeGoal791.lean`): payload and answer types outlive `@bnd`
 (`VOutlives ∅ bnd`), which puts their values in the stratum of every lend `α ⊏ @bnd`
 (`vN_inStratum_bnd`, `LendOKCR`'s `pa`/`pb`) and leaves their reading unchanged by a fresh lend
-(`vN_add_eq_bnd`); the answer type has no `mut` cell outside an `imm` cell (`VTy.exclMutFree`),
-since `erwp_claimX` reads an answer's consistency with the view and an answer arrives from outside
-the run (`consistentX_of_exclMutFree`). `CTy.SuspendC` likewise, without `n ≠ 0`, which no proof
-reads; `Row.Suspend`'s `n ≠ 0` is read by `erwp_ubindClaimRT`'s `hTr`. Excluded: payloads and
-answers holding an `imm`/`mut` borrow not strictly longer-lived than `@bnd`, non-`!` thunks
-(`VOutlives` has no `U` clause), answers holding a `mut` cell outside an `imm`, and the same in
-cancel rows. At the constants' empty lifetime context a closed bound interprets as `⊤`
-(`Life.interp` has only `var`/`top`/`join`/`meet`), so there no payload or answer holds a borrow,
-as under the old clause; the narrowing admits more only at a bound below `⊤`. The hardest case's
+(`vN_add_eq_bnd`). `erwp_claimX` reads an answer's consistency with the view, since an answer
+arrives from outside the run: the bound is defined at the empty context, so it is `⊤`
+(`interp_top_of_defines_empty`), and the answer, outliving it, lies in `Res_⊤` (`vN_outlives`),
+consistent with every view (`consistentX_of_top`). No clause beyond the outliving one is needed.
+`CTy.SuspendC` likewise, without `n ≠ 0`, which no proof reads; `Row.Suspend`'s `n ≠ 0` is read by
+`erwp_ubindClaimRT`'s `hTr`. Excluded,
+exactly: a payload or answer type with, outside a box or `!`, an `Imm @b A` or `Mut @b A` (they
+need `∅ ⊨ @bnd ⊏ @b`, and at the empty context `@bnd` is `⊤`, which no `@b` is strictly longer
+than), a thunk `U C` or `Unk` (no `VOutlives` rule), or a box `[@b] A` at a `@b` with a variable;
+and the same in cancel rows. A box at a closed lifetime, whatever it holds (`[@⊤] U C`
+included), and `! A` pass. The narrowing to `VOutlives ∅ bnd` admits more
+than the old "every lifetime" clause only at a bound below `⊤`, which the empty context does not
+have. The hardest case's
 callback row (`hardestRow`, `park` as `TJN` types it) meets it (`hardestRow_suspend`,
 `hardestRow_entry`).
 
@@ -438,6 +445,19 @@ elimination), so the scope is on the judgment. A derivation of a judgment in the
 still cut through an excluded type inside; at such a cut the interpretation gives no reading, so
 `FundamentalN` is not shown attainable by induction until those formers have clauses. `ConstsN`
 and `Goal791SchedN` are scoped likewise (`Const791.InFrag`, the row's types).
+
+The excluded cuts are not the whole remaining gap. Two more may change `vN`, and with it its laws
+and the `*_compat` proofs:
+- **In-fragment rules whose Core proofs read `ptoImmS`'s record list or `CohE`.** At least
+  `withloadU`: its type (`withloadUTy`) uses `Imm`, `Mut`, `U`, `⊸`, `∀` and `F_Σ`, all in the
+  fragment, and `withloadU_compatX` reads the source through `ptoImmS` with `CohE` and the
+  record list, which `vN`'s `imm` clause does not carry (`scope-791-loctype.md` §12,
+  departure 1). It is not expected to go through at the current `Imm` clause.
+- **`cN_extA` at `F_Σ R`**, open (`scope-791-loctype.md` §10). Core's `withbor1U_compatX` and
+  `sliceBorrowIU_compatX` carry the callback's table along `Ext` (`opTable_ext`, at an abortive
+  table); their chain analogues are the candidates for needing `cN_extA`'s effect-row case or a
+  table lemma like it. Whether they reduce to `opTableN_local` at an abortive row, and whether
+  any other rule needs it, is not checked.
 
 **Not done.** `extRL_breaks_extA` still rests on `ν` read as empty (M3): rebuilding it at
 `F 0` needs a refutation of `erwp` from a resource holding a `mut` cell (a `TWNC` world with that

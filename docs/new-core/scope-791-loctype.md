@@ -643,9 +643,11 @@ The review is `~/repos/scratch-archive/rule791/review.md`; the claims are scoped
   `Const791.OK`'s first conjunct, which Core's bound `Δ.meetOfDom` meets
   (`defines_meetOfDom_empty`).
 - **I3.** `Row.Suspend S 'x @bnd`, `CTy.SuspendC 'x @bnd`: `VOutlives ∅ bnd` for payloads and
-  answers, `VTy.exclMutFree` for answers; `SuspendC`'s `n ≠ 0` dropped. Laws: `vN_inStratum_bnd`,
-  `vN_add_eq_bnd` (replacing `vN_add_eq`/`vN_top`), `consistentX_of_exclMutFree`,
-  `exS_single_imm`. `hardestRow_suspend`, `hardestRow_entry`. SPEC §62 restated.
+  answers, and nothing more; `SuspendC`'s `n ≠ 0` removed. Laws: `vN_inStratum_bnd`,
+  `vN_add_eq_bnd` (replacing `vN_add_eq`/`vN_top`), `interp_top_of_defines_empty` (a lifetime
+  defined at the empty context is `⊤`), which with `vN_outlives` and `consistentX_of_top` gives
+  an answer's consistency in `erwp_claimX`/`erwp_cancelRun_claimX`. `hardestRow_suspend`,
+  `hardestRow_entry`. SPEC §62 restated.
 - **I1.** `FundamentalN`/`ConstsN`/`Goal791SchedN` on the fragment (`JdgInFrag`,
   `Const791.InFrag`). `Core/Chain/Inst791N.lean`: `dRelease_sem`, `dFree_sem`,
   `withbor2S_inst`, `withbor3S_inst`, `withborFS_inst` (every hypothesis discharged),
@@ -657,11 +659,14 @@ The review is `~/repos/scratch-archive/rule791/review.md`; the claims are scoped
 - **Not done: M3, M6** (`scope-791-rule.md` §8).
 
 **Unspent hypotheses, unused results.** `Const791.OK`'s `CDerives` clause for the finaliser is
-read only through `FundamentalN`; the `*_inst` lemmas use semantic finalisers (`λr. ()` is not a
-`CDerives` term at `Mut @a A ⊸ 1`). `consistentX_of_top` is no longer used by the #791 files.
-`Row.Suspend`'s `exclMutFree` is implied, at the constants' empty context, by the outliving clause
-for every type but a `[@⊤]` box over a `Mut` (whose values hold no borrow cell anyway); no lemma
-states this.
+read only through `FundamentalN`; the `*_inst` lemmas use the semantic readings `dFree_sem`,
+`dRelease_sem` of their finalisers. `Const791.OK` is inhabited, its `CDerives` clause included:
+`w2_ok` (finaliser `free : Ref 1 ⊸ 1`, `CDerives.free`), `w3_ok` and `wF_ok` (finaliser
+`dRelease`, Core's `forget`, `CDerives.releaseMut`; `w3_ok`/`wF_ok` are at the instances'
+constants exactly). `withbor2S_perform` applies `withbor (2)` at the row `[linSig n i]` to a cell
+and to `cbPerform`, a callback that stops at a must-resume operation while it holds the borrow;
+it is at `A = B = 1`. `erwp_claimX` reads `Const791.OK`'s `Defines bnd` for an
+answer's consistency (`interp_top_of_defines_empty`, `vN_outlives`, `consistentX_of_top`).
 
 **Untranscribed Core pieces the run-up needs.** `CohE` and the record list in `Imm` (`wl`); the
 `fam` clause and `wpG_M_frameFam` (`sm`); the μ and ν clauses (the cuts `FundamentalN` cannot

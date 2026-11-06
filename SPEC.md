@@ -10950,15 +10950,16 @@ given the entries'); the typing rules and the fundamental theorem over these typ
 - **A lend's callback `∀'x ⊏ @bnd` may suspend at a row `Row.Suspend 'x @bnd`**
   (`Core/TreeGoal791.lean`): every operation named and not unrestricted; its payload and answer
   types free of `'x` and outliving `@bnd` (`VOutlives ∅ bnd`), so their values lie in the stratum
-  of every lend `α ⊏ @bnd`, what the Mut Frame asks of a stop (the relation's `LendOK`); its answer
-  type with no `mut` cell outside an `imm` cell, since an answer arrives from outside the borrowed
-  run; and each capturable operation's cancel row meeting the same clauses (`CTy.SuspendC`),
-  since the cancel run stops at its layers under the live lend. Excluded: payloads and answers
-  holding an `imm` or `mut` borrow not strictly longer-lived than `@bnd`, every non-`!` thunk
-  (`VOutlives` has no `U` clause), answers holding a `mut` cell outside an `imm` cell, and the
-  same in cancel rows. The constants are stated at the empty lifetime context, where a closed
-  bound is `⊤`, so there no payload or answer holds a borrow. Cleanup that performs is kept: a
-  cancel row may have layers.
+  of every lend `α ⊏ @bnd`, what the Mut Frame asks of a stop (the relation's `LendOK`); and each
+  capturable operation's cancel row meeting the same clauses (`CTy.SuspendC`), since the cancel
+  run stops at its layers under the live lend. The constants are stated at the empty lifetime
+  context, where the bound, being defined, is closed and so `⊤`; an answer, which arrives from
+  outside the borrowed run, then lies in the top stratum and holds no borrow cell, so it is
+  consistent with the run's view. `VOutlives ∅ bnd` excludes exactly the payload and answer types
+  with, outside a box or `!`, an `Imm @b A` or `Mut @b A` (no `@b` is strictly longer-lived than
+  `⊤`), a thunk `U C` or `Unk` (no outliving rule), or a box `[@b] A` at a `@b` with a variable;
+  and the same in cancel rows. A box at a closed lifetime, whatever it holds (`[@⊤] U C`
+  included), and `! A` pass. Cleanup that performs is kept: a cancel row may have layers.
 - **Lends shared across tasks end only at a join**: scoped spawn. A branch resumed from a join
   asks that no other branch's flattening hold the joined location (`JoinReady`), which gives the
   resumer's frame condition (`joinFd`, `joinReady_fd`). The scheduler establishes it by finishing

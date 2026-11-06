@@ -196,7 +196,7 @@ open BoCa.Fig16.LogRel.Core
 open BoCa.Fig16.LogRel.Core.Chain.SI
 open BoCa.Fig16.LogRel (LtLife substAll)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
-open BoCa.Fig16.Tree.Wp.Goal791 (Const791 ctx791 vals791 jdgC)
+open BoCa.Fig16.Tree.Wp.Goal791 (Const791 ctx791 vals791 jdgC interp_top_of_defines_empty)
 open BoCa.BoLo (Heap Kont ubindE Head performE raiseE cancelVal opPayload)
 
 
@@ -267,7 +267,7 @@ theorem layer_cdepth : ∀ (F : CTy) {q : Qual} {A B : VTy} {fin : CTy}, F.Layer
 theorem layer_suspend {x : LifeVar} {bnd : Lifetime.Life} : ∀ (F : CTy), F.SuspendC x bnd →
     ∀ {q : Qual} {A B : VTy} {fin : CTy}, F.LayerOf q A B fin →
     q ≠ .unr ∧ ¬ VFree x A ∧ ¬ VFree x B ∧ VOutlives LifeCtx.empty bnd A ∧
-      VOutlives LifeCtx.empty bnd B ∧ B.exclMutFree = true ∧ (capB q B = true → fin.SuspendC x bnd)
+      VOutlives LifeCtx.empty bnd B ∧ (capB q B = true → fin.SuspendC x bnd)
   | .eff _ _ q₀ A₀ B₀ fin₀ _ C, ⟨h, hC⟩, q, A, B, fin, hL => by
       simp only [CTy.LayerOf] at hL
       rcases hL with ⟨rfl, rfl, rfl, rfl⟩ | hL
@@ -353,7 +353,7 @@ theorem tabN_tabR_twin {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {F : CTy}
     (tabN (ℍ := ℍ) F (δ.extend x α) Θ₁ c₁).Twin (tabR (ℍ := ℍ) R F δ Θ₂ c₂) := by
   intro m i en h
   obtain ⟨q, A, B, fin, hL, rfl, hR⟩ := tab_lookupN F h
-  obtain ⟨-, hA, hB, hOA, hOB, -, -⟩ := layer_suspend F hF hL
+  obtain ⟨-, hA, hB, hOA, hOB, -⟩ := layer_suspend F hF hL
   refine ⟨_, hR R δ Θ₂ c₂, rfl, rfl, ?_, ?_, rfl⟩
   · simp only [entN, vN_extend_of_not_free (ℍ := ℍ) hA δ α, hΘ A hOA]
   · simp only [entN, vN_extend_of_not_free (ℍ := ℍ) hB δ α, hΘ B hOB]
@@ -438,7 +438,7 @@ theorem tabR_can {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {δ : LSub} {Θ
   rw [hR] at h'
   cases Option.some.inj h'
   have hcap := entN_capB ha hql
-  have hfin := (layer_suspend F hF hL).2.2.2.2.2.2 hcap
+  have hfin := (layer_suspend F hF hL).2.2.2.2.2 hcap
   have hfd : fin.cdepth ≤ d := by have := layer_cdepth F hL; omega
   intro P' hP'
   simp only [entN, hcap, if_true] at hP' hc
@@ -478,11 +478,12 @@ def claimX (R : Nat → WProp) (c : Loc → Option Life) : Nat → WProp :=
 /-- **A cancel run at the lender's twin carries the view's consistency to its claim.** A run from
 a resource consistent with `c` returns consistent resources (`rwpG_consistentXV`), so the claim a
 `raise` carries is consistent; a stop's continuation is resumed from its share, consistent, and
-an answer, whose type holds no `mut` cell on the exclusive walk (`CTy.SuspendC`), is consistent
-with every view (`consistentX_of_exclMutFree`); a cancellable stop's cancel run is one at its cancel row's table, by the
-induction on how deep cancel rows nest. -/
+an answer, whose type outlives the bound (`CTy.SuspendC`), a closed lifetime and so `⊤`
+(`interp_top_of_defines_empty`), lies in `Res_⊤` (`vN_outlives`) and is consistent with every
+view (`consistentX_of_top`); a cancellable stop's cancel run is one at its cancel row's table, by
+the induction on how deep cancel rows nest. -/
 theorem erwp_cancelRun_claimX {x : LifeVar} {bnd : Lifetime.Life} {δ : LSub} {Θ : LocTy}
-    {c : Loc → Option Life} {R : Nat → WProp} :
+    {c : Loc → Option Life} {R : Nat → WProp} (hbnd : LifeCtx.empty.Defines bnd) :
     ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC x bnd →
     ∀ n ls e ρ, ConsistentX c ρ →
       erwp (ℍ := ℍ) (Θ.view c) (cancelTabR (tabR (ℍ := ℍ) R F δ Θ c) R) (fun _ _ _ _ => False)
@@ -511,14 +512,15 @@ theorem erwp_cancelRun_claimX {x : LifeVar} {bnd : Lifetime.Life} {δ : LSub} {�
     obtain ⟨⟨hpt, hK₁, hT', ha⟩, ρa, ρk, hcak, hA, hu, hcont⟩ := pure_sep_iff.mp hp
     obtain ⟨q, A, B, fin, hLy, rfl, -, hR₂⟩ := tab_lookupR R F hT'
     have hck : ConsistentX c ρk := consistentX_right hcak hcσ hvσ
-    obtain ⟨-, -, -, -, -, hMF, hfinS⟩ := layer_suspend F hF hLy
+    obtain ⟨-, -, -, -, hOB, hfinS⟩ := layer_suspend F hF hLy
     refine Or.inr (Or.inr ⟨K₁, m, i, v, _, pure_sep_mk ⟨hpt, hK₁, hR₂ (claimX R c), ha⟩
       ⟨ρa, ρk, hcak, hA, hu, fun ls'' he => ⟨fun k' hk' w τ₁ τ₂ hB hcτ => ?_,
         fun hql P hP => ?_⟩⟩⟩)
     · have hc' := (hcont ls'' he).1 k' hk' w τ₁ τ₂ hB hcτ
       simp only [erwpC, show k' < n by omega, if_true] at hc' ⊢
       exact ih k' (by omega) _ _ _
-        (consistentX_compS hcτ hck (consistentX_of_exclMutFree B hMF δ Θ k' w τ₁ hB c)) hc'
+        (consistentX_compS hcτ hck (consistentX_of_top (vN_outlives (models_empty_any _)
+          (interp_top_of_defines_empty hbnd δ) hOB Θ k' w τ₁ hB) c)) hc'
     · have hcap := entN_capB ha hql
       have hfS := hfinS hcap
       simp only [entN, hcap, if_true] at hP
@@ -534,7 +536,8 @@ theorem erwp_cancelRun_claimX {x : LifeVar} {bnd : Lifetime.Life} {δ : LSub} {�
 /-- **A body at the lender's twin carries the view's consistency to its claim**: as
 `erwp_cancelRun_claimX`, at a `raise` the claim beside the payload. -/
 theorem erwp_claimX {x : LifeVar} {bnd : Lifetime.Life} {δ : LSub} {Θ : LocTy}
-    {c : Loc → Option Life} {R : Nat → WProp} {F : CTy} (hF : F.SuspendC x bnd) {Q : PostN} :
+    {c : Loc → Option Life} {R : Nat → WProp} {F : CTy} (hbnd : LifeCtx.empty.Defines bnd)
+    (hF : F.SuspendC x bnd) {Q : PostN} :
     ∀ n ls e ρ, ConsistentX c ρ →
       erwp (ℍ := ℍ) (Θ.view c) (opTableR (tabR (ℍ := ℍ) R F δ Θ c) R) Q n ls e ρ →
       erwp (ℍ := ℍ) (Θ.view c) (opTableR (tabR (ℍ := ℍ) (claimX R c) F δ Θ c) (claimX R c)) Q
@@ -552,14 +555,15 @@ theorem erwp_claimX {x : LifeVar} {bnd : Lifetime.Life} {δ : LSub} {Θ : LocTy}
     obtain ⟨⟨hpt, hK₁, hT', ha⟩, ρa, ρk, hcak, hA, hu, hcont⟩ := pure_sep_iff.mp hp
     obtain ⟨q, A, B, fin, hLy, rfl, -, hR₂⟩ := tab_lookupR R F hT'
     have hck : ConsistentX c ρk := consistentX_right hcak hcσ hvσ
-    obtain ⟨-, -, -, -, -, hMF, hfinS⟩ := layer_suspend F hF hLy
+    obtain ⟨-, -, -, -, hOB, hfinS⟩ := layer_suspend F hF hLy
     refine Or.inr (Or.inl ⟨K₁, m, i, v, _, pure_sep_mk ⟨hpt, hK₁, hR₂ (claimX R c), ha⟩
       ⟨ρa, ρk, hcak, hA, hu, fun ls'' he => ⟨fun k' hk' w τ₁ τ₂ hB hcτ => ?_,
         fun hql P hP => ?_⟩⟩⟩)
     · have hc' := (hcont ls'' he).1 k' hk' w τ₁ τ₂ hB hcτ
       simp only [erwpC, show k' < n by omega, if_true] at hc' ⊢
       exact ih k' (by omega) _ _ _
-        (consistentX_compS hcτ hck (consistentX_of_exclMutFree B hMF δ Θ k' w τ₁ hB c)) hc'
+        (consistentX_compS hcτ hck (consistentX_of_top (vN_outlives (models_empty_any _)
+          (interp_top_of_defines_empty hbnd δ) hOB Θ k' w τ₁ hB) c)) hc'
     · have hcap := entN_capB ha hql
       have hfS := hfinS hcap
       simp only [entN, hcap, if_true] at hP
@@ -569,7 +573,7 @@ theorem erwp_claimX {x : LifeVar} {bnd : Lifetime.Life} {δ : LSub} {Θ : LocTy}
       cases Option.some.inj hP
       have hin := (hcont ls'' he).2 hql _
         (by simp only [entN, hcap, if_true]; exact finR_eq R htop δ Θ c)
-      exact erwp_cancelRun_claimX fin.cdepth fin le_rfl hfS k ls'' _ ρk hck hin
+      exact erwp_cancelRun_claimX hbnd fin.cdepth fin le_rfl hfS k ls'' _ ρk hck hin
   · -- a `raise`: the claim is part of a consistent resource
     obtain ⟨⟨hpt, hK₁, hT', hab⟩, σ₁, ρR, hcσR, hpa, hR⟩ := pure_sep_iff.mp hp
     obtain ⟨q, A, B, fin, -, rfl, -, hR₂⟩ := tab_lookupR R F hT'
@@ -768,8 +772,8 @@ theorem suspendC_effOf {S : Row} {x : LifeVar} {bnd : Lifetime.Life} (hS : S.Sus
   induction S with
   | nil => trivial
   | cons o S ih =>
-      obtain ⟨h1, -, h3, h4, h5, h6, h7, h8⟩ := hS o (List.mem_cons_self ..)
-      exact ⟨⟨h1, h3, h4, h5, h6, h7, h8⟩,
+      obtain ⟨h1, -, h3, h4, h5, h6, h7⟩ := hS o (List.mem_cons_self ..)
+      exact ⟨⟨h1, h3, h4, h5, h6, h7⟩,
         ih (fun o' ho' => hS o' (List.mem_cons_of_mem _ ho'))⟩
 
 /-- **`withbor (2)` at a suspending row is a value of `!` its type**: `withborU d`, at
@@ -882,7 +886,7 @@ theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Ro
     (Q := fun k _ b ρ => vN (ℍ := ℍ) (.tensor (.ref A) B) δ Θ k (Val.pair (Val.loc l) b) ρ)
     k' k' le_rfl ls (.app (.app (.val f) (.val .unit)) (.val (Val.loc l))) w₀ σ₀ ρu ρf ρ''
     houtP houtf (Fam k') (fun _ _ h => h) hwit hcl hc' (fun BM hBM => ?_)
-  · have hM' := erwp_claimX (c := c) hFS k' ls _ ρ'' hcon hM
+  · have hM' := erwp_claimX (c := c) hbnd hFS k' ls _ ρ'' hcon hM
     refine erwp_ubindClaimRT hΘ.1 (F := Fo) (δ := δ) (c := c)
       (fun m i en h _ => by obtain ⟨o, ho, rfl, -⟩ := tabN_effOf_some h; exact (hS o ho).2.1)
       (NFv l) (DFv d l) (fun k ls ρ hR => ?_) hQo (fun k ls b ρ hq => ?_) k' ls _ ρ'' hM'

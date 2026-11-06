@@ -1574,8 +1574,6 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sLe_life
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vN_inStratum_bnd
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vN_add_eq_bnd
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.exS_single_imm
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.consistentX_of_exclMutFree
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.jdgInFrag_lolli
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.jdgInFrag_ctx791
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.hardestRow_suspend
@@ -1588,5 +1586,12 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.linSig_suspend
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cbPerform_sem
 #print axioms BoCa.Fig16.Tree.Wp.Goal791.defines_meetOfDom_empty
+#print axioms BoCa.Fig16.Tree.Wp.Goal791.interp_top_of_interp_empty
+#print axioms BoCa.Fig16.Tree.Wp.Goal791.interp_top_of_defines_empty
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.w2_ok
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.w3_ok
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.wF_ok
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.dRelease_eq_forget
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor2S_perform
 #print axioms BoCa.Fig16.LogRel.Core.Row.Suspend.of_unwind
 #print axioms BoCa.Fig16.Tree.Wp.Goal791.suspend_of_unwind
