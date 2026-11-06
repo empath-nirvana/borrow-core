@@ -18,7 +18,7 @@ a chain view (`rwpG_rebDeepG`): `RebEntryG` is their common shape.
   (`Withload791N.tab_rebClosed`, by induction on how deep cancel rows nest).
 
 * `RebEntryG`, `rebEntryG_top`, `rebEntryG_deep`;
-* `OpTabN.RebOKR`: `RebOKC` with abortive entries allowed;
+* `OpTabN.RebOKR`: `RebOKC` with abortive entries allowed, unrestricted ones included;
 * `erwp_rebGen_cancelRun`, `erwp_rebGen`.
 -/
 
@@ -72,10 +72,11 @@ theorem rebEntryG_deep {Φ : LocFam} (r : FrameRec) {p₀ : Option Loc} {l₀ : 
     rwpG_rebDeepG r hch₀ x hx hS hRβ hβc hshape hc hb hr hpost hA
 
 /-- **A table whose stops may be taken under a live reborrow at `β`, raises and cancellable
-entries included**: no entry unrestricted, every one resumed under `extF`, payloads and answers
-in `Res_β`. -/
+entries included**: no resumable entry unrestricted, every one resumed under `extF`, payloads and
+answers in `Res_β`. An abortive entry may be unrestricted: its stop is a `raise`, which never
+resumes, so the reborrow is never re-entered through it. -/
 structure OpTabN.RebOKR (T : OpTabN) (β : Life) : Prop where
-  entry : ∀ m i en, T m i = some en → en.q ≠ .unr ∧ en.wc = extF
+  entry : ∀ m i en, T m i = some en → en.abort = false → en.q ≠ .unr ∧ en.wc = extF
   pa : ∀ m i en, T m i = some en → ∀ k ls v (ρ : WRes), en.PA k ls v ρ → ρ.InStratum β
   pb : ∀ m i en, T m i = some en → ∀ k ls w (ρ : WRes), en.PB k ls w ρ → ρ.InStratum β
 
@@ -155,7 +156,7 @@ theorem erwp_rebGen_cancelRun {Φ : LocFam} {β : Life} {le : Loc} {s : LSet} {v
       ⟨K, err, pure_sep_mk ⟨rfl, hK⟩ ⟨τa, Ks, haKs, herr, hnKs⟩⟩)⟩
   · -- a stop of the cancel run: the fold
     obtain ⟨⟨rfl, hK, hTe, ha⟩, ρa, ρk, hcak, hPA, hu, hcont⟩ := pure_sep_iff.mp hp
-    obtain ⟨hq, hwc⟩ := hT₁.entry m i en hTe
+    obtain ⟨hq, hwc⟩ := hT₁.entry m i en hTe ha
     refine ⟨ρa, ρk, hcak, hT₁.pa m i en hTe _ _ _ _ hPA, ?_⟩
     intro ρp w' ψ Yo Y hnp hkw hsubK hsplit hψβ hYo hY
     obtain ⟨Ks, hKs, haKs⟩ := compS_reassoc hYo hY
@@ -228,7 +229,7 @@ theorem erwp_rebGen {Φ : LocFam} {β : Life} {le : Loc} {s : LSet} {v : Val}
       Or.inl ⟨w, rfl, hQ⟩⟩
   · -- a stop: the fold
     obtain ⟨⟨rfl, hK, hTe, ha⟩, ρa, ρk, hcak, hPA, -, hcont⟩ := pure_sep_iff.mp hp
-    obtain ⟨hq, hwc⟩ := hT.entry m i en hTe
+    obtain ⟨hq, hwc⟩ := hT.entry m i en hTe ha
     refine ⟨ρa, ρk, hcak, hT.pa m i en hTe _ _ _ _ hPA, ?_⟩
     intro ρp w' ψ Yo Y hnp hkw hsubK hsplit hψβ hYo hY
     obtain ⟨Ks, hKs, haKs⟩ := compS_reassoc hYo hY

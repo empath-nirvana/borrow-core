@@ -153,7 +153,7 @@ The configurations named below are indexed in `configurations.md`; the design th
 |---|---|---|---|---|---|
 | R1 | `wpTS_M_frameX`, `ewpTS_M_frameU` | 6.65 | 3: `withbor2`, `withbor3`, `withbor2U` | **departed (built)** | `erwp_M_frame` (`SI/StopFrameN.lean`), `erwp_M_frameR` (raises, `SI/StopRaiseN.lean`), `erwp_M_frameCR`/`CRG` (cancel runs): the lend's key in the world `Φ[ℓ ↦ (A, F)]`, not `ptoMutS ℓ α ls₀`. Configurations: `perLocShape_not_reborrow`, `reseal_untyped`, `coreMutImm_not_extF` |
 | R2 | `wpTS_M_antiFrameX` | 6.66 | 4: `sliceReplaceM`, `sliceSwapM`, `withbor3`, `withswap` | **departed (built)** | `erwp_M_antiFrame` (`SI/AntiStopN.lean`) at the view: `erwp_antiFrame_view`, `reseal_at_entry` (`SI/LocTy.lean`). Configuration: `reseal_untyped` |
-| R3 | `ewpTS_M_antiFrameU` | 6.66 | 1: `withbor3U` | **departed, to build** | the anti-frame across an unwinding row's raises: `erwp_M_antiFrameCR` (`Reborrow791N.lean`) at the row's guarded twin. Missing: the twin tables at a `Row.Unwind` row (every entry abortive, so no stop to guard: `tabN_unwind_abort`). Buildable from `erwp_M_antiFrameCR` and `tabN_unwind_*` |
+| R3 | `ewpTS_M_antiFrameU` | 6.66 | 1: `withbor3U` | **departed (built)** | `erwp_M_antiFrameU` (`Unwind833N.lean`): `erwp_M_antiFrameCR` with the row's own table as its twin (`OpTabN.Twin.refl`). Every entry of a `Row.Unwind` row is abortive (`tabN_unwind_abort`), so the twin guards no stop and no cancel obligation is transferred; only the raises' claim (`hRin`/`hRout`) remains |
 | R4 | `wpG_M_frameX` | 6.65 | 1: `withbor3U` | **departed (built)** | `erwp_M_frameCRG`/`erwp_M_frameF`: the inner Mut Frame of 6.174 with the fold at every stop (`erwp_withbor3`, `SI/AntiStopN.lean`) |
 | R5 | `wpTS_I_frameX`, `ewpTS_I_frameU`, `ptoImmS_mono` | 6.64 | 4: `sliceBorrowI`, `withbor1`, `withbor1U`, `sliceBorrowIU` | **departed (built)** | `erwp_I_frame` (`SI/IStopN.lean`), `erwp_I_frameR` (`SI/IStopRaiseN.lean`), with the record in the world (`LocTy.addImm`) and the run read at the lender's view by `erwp_tieEntry` (abortive tables only, §6.1). Carrier: `coreMutImm_not_extF` |
 | R6 | `wpG_frame`, `wpG_garbage` | 6.146 | 13: `withbor1U`, `withbor2U`, `withbor3U`, `withloadU` … | **same** | `erwpG_frame` (`SI/AntiStopN.lean`), `erwp_frameL`, `rwpG_garbage` |
@@ -187,10 +187,10 @@ The configurations named below are indexed in `configurations.md`; the design th
 | Status | Entries |
 |---|---|
 | same | 38 |
-| departed (built) | 11 (K1, K3, K4, V10, R1, R2, R4, R5, R7, R8, R11) |
+| departed (built) | 12 (K1, K3, K4, V10, R1, R2, R3, R4, R5, R7, R8, R11) |
 | departed, forced by `erwp`'s definition | 1 (E13) |
 | departed, no configuration | 0 |
-| departed, to build | 7 (R3, E3, E5, E6, E9, E10, E14) |
+| departed, to build | 6 (E3, E5, E6, E9, E10, E14) |
 | missing, buildable | 24 |
 | missing, unclear | 2 (F9 `ν`, E12 the BOXED-κ stop lemma) |
 | **total** | **83** |
@@ -319,8 +319,8 @@ that step is done inside `withloadS_compat`, which is proved, so V1 is not a blo
 | 73 | `withswap` | yes | portable | W1 W2 W4 W6 H3 H5 K1 V11 G3 F1 R2 | W4 | mechanical once built | `withswap_compatX`'s anti-frame and reseal (as `withbor3S_compat` step 13) |
 | 74 | `withbor1U` | yes | proved | W1 W4 W6 W8 K1 K2 K3 K5 K6 V3 V7 V10 V11 G3 G6 G10 C3 F1 R5 R6 R11 E1 E2 E4 E13 | — (proved with chain lemmas inline) | proved |  |
 | 75 | `withbor2U` | yes | proved | W1 W4 W6 W8 K2 K5 V3 V6 V11 G3 G6 G10 C3 F1 R1 R6 R11 E1 E2 E4 E13 | — (proved with chain lemmas inline) | proved |  |
-| 76 | `withbor3U` | yes | portable | W1 W4 W6 W8 K2 K5 V3 V11 G3 G6 G10 C3 F1 R3 R4 R6 R11 E1 E2 E4 E13 | W4 K5 G6 R3 | mechanical once built | `withbor3S_compat` at an unwinding row |
-| 77 | `withloadU` | yes | portable | W1 W8 H4 V1 V2 V3 G3 C3 F3 R6 R7 R8 R11 E1 E2 E4 E13 | (V1 is inside `withloadS_compat`) | mechanical once built | `withloadS_compat` at an unwinding row |
+| 76 | `withbor3U` | yes | proved | W1 W4 W6 W8 K2 K5 V3 V11 G3 G6 G10 C3 F1 R3 R4 R6 R11 E1 E2 E4 E13 | — (`withbor3U_compatN`, `Unwind833N.lean`) | proved | `withbor3S_compat`'s steps at an unwinding row |
+| 77 | `withloadU` | yes | proved | W1 W8 H4 V1 V2 V3 G3 C3 F3 R6 R7 R8 R11 E1 E2 E4 E13 | — (`withloadU_compatN`, `Unwind833N.lean`) | proved | `withloadS_compat`'s steps at an unwinding row |
 | 78 | `sliceBorrowMU` | no | out | W1 W4 W6 W8 K2 K5 V3 V6 V11 G3 G6 G10 C3 F1 F6 F7 R6 R11 E1 E2 E4 E13 | W4 K5 G6 F6 F7 | mechanical once built |  |
 | 79 | `sliceBorrowIU` | no | out | W1 W4 W6 W8 K1 K2 K5 K6 V3 V6 V7 V10 V11 G3 G6 G10 C3 F1 F6 F7 R5 R6 R11 E1 E2 E4 E13 | W4 K5 G6 F6 F7 | mechanical once built |  |
 | 80 | `lolliE` | cut | portable | W2 W4 K1 K2 V11 G1 G5 G6 G11 G12 F10 | W4 G1 G6 G11 G12 | mechanical once built |  |
@@ -368,9 +368,9 @@ the interface; it is not a build.
 | Row | Waits on |
 |---|---|
 | `withbor3` | W4 (the frame beside a run at the empty table), then `withbor3S_compat`'s steps at the empty table: `erwp_withbor3` (6.174 across stops), the reseal `reseal_at_entry`. Restatement at `Δ` |
-| `withbor3U` | **R3**: the anti-frame across an unwinding row's raises, `erwp_M_antiFrameCR` at the row's guarded twin. A `Row.Unwind` row's entries are all abortive (`tabN_unwind_abort`), so its twin guards no stop: only the raises' claim (`hRin`/`hRout`) and cancel obligations (`hcan`) remain. Also W4, G6, K5 (`ExtR` at `∅`, for the finaliser) |
+| `withbor3U` | proved in #833 L3: `withbor3U_compatN` (§9) |
 | `withload` | W4, then `withloadS_compat`'s 13 steps (`chain-interpretation.md` §6.3) at the empty table; `erwp_reborrow` for 6.150 |
-| `withloadU` | `withloadS_compat` at an unwinding row: `erwp_rebGen` for the raises. `RebClosed` at an unwinding row is `tab_rebClosed`'s base case, since the row has no cancellable entry. Not checked |
+| `withloadU` | proved in #833 L3: `withloadU_compatN` (§9), with `OpTabN.RebOKR.entry` read at resumable entries only |
 | `withswap` | W4; the anti-frame at the view (`erwp_antiFrame_view`, R2) around `rwp_load`/`rwp_store`; the reseal into the stored family at the anti-frame's return, as `withbor3S_compat`'s step 13. Not checked in detail |
 
 These five need no new reading of the world. They need W4 (every one but `withloadU`), the twin
@@ -455,7 +455,7 @@ cumulative, simulated from §3's table: a rule is unblocked once every entry it 
 |---|---|---|---|---|
 | **L1: context and bind** | G1 with G12, G2, G4, G6, G7, G8, G9, G11, K5, W4, C2 (`cN_bind`), W7, V8, F2 (`bang_app`), F4 (`host_call_sound` at `vN`) | G12 at a conclusion that is not `F`/`F_Σ` (map G7: not verified), and `cN_bind`'s `⊸` case under F10 | 25, beyond the 22 mechanical now: `var`, `tensorI`, `thunkF`, `thunkV`, `bind`, `force`, `lam`, `lamDead`, `app`, `unitE`, `tensorE`, `sumE`, `zeroE`, `bangThunkF`, `bangThunkV`, `boxI`, `lit`, `hostOp`, `countFold`, `countTry`, `lolliE`, and the borrow rows `withbor3`, `withload`, `withloadU`, `withswap` | medium |
 | **L2: type equality** | V1 (`vN_tyEq`/`cN_tyEq`, Core's `Alpha.lean`/`RelationFacts.lean` induction) | the `Imm`/`Mut` clauses under `TyEq` (`ImmWitW`'s `CohE`, `mutL`'s family) | `allE`, `allEV`, `alpha` | medium (map: a third of the structural unit) |
-| **L3: the unwinding anti-frame** | R3 | the twin of a `Row.Unwind` row for `erwp_M_antiFrameCR` | `withbor3U` | small to medium |
+| **L3: the unwinding anti-frame** | R3 | the twin of a `Row.Unwind` row for `erwp_M_antiFrameCR` | `withbor3U` | small to medium (built, §9) |
 | **L4: effects and handlers** | E12 first, then E3, E5, E6, E7, E8, E9 (`erwp_ubind` with `hP`/`hU`/`ThenLe`, a `Div` finaliser row), E10 (the clauses' reading, the table split, the tail and last instances), E14, W9 | **E12** (BOXED-κ stop lemma at `erwp`): missing, unclear | 13: `iterate`, `divFuel`, `effSub`, `effPerform`, `effAwait`, `effRaise`, `effLet`, `effThen`, `effThenDiv`, `effHandleV`, `effHandleT`, `effHandleL`, and `effHandleVB` if E12 is derived | high |
 | **L5: opaque types and families** | F5, F6, F7 | F7 across stops (one key per cell, the twin per layer) | 23: `tokMint`, `tokBurn`, the 8 array rows, the 11 slice rows, `sliceBorrowMU`, `sliceBorrowIU` | high (F5 small) |
 | **L6: `μ`** | F8 | the environment argument in `vN`/`vO` and Core's `RelMu` laws at the index | `roll`, `unroll`, `foldImm`, `foldOwn`, `foldReuse`, `foldOwnG` | very high |
@@ -667,4 +667,32 @@ callback's run at the image as a premise (was the suspending callback's value);
 - **`withloadU`**: `erwp_rebGen` asks every entry of the table to be other than `unr`
   (`OpTabN.RebOKR.entry`); `Row.Unwind` admits an abortive `unr` operation. Not derived;
   obstruction not verified.
+  Ported in §9.
+
+## 9. Built in #833 (unit L3)
+
+`Core/Chain/Unwind833N.lean`; every rule at any `Δ` and a `Row.Unwind x` row.
+
+| Entry or rule | Chain lemma |
+|---|---|
+| R3 | `erwp_M_antiFrameU` (Core's `ewpTS_M_antiFrameU`): `erwp_M_antiFrameCR` at `T′ = T` (`OpTabN.Twin.refl`), its `hT` and `hcan` vacuous at a table whose every entry is abortive |
+| the row's tables | `tabN_unwind_lendOKCR` (the Mut Frame's table condition), `tabN_unwind_rebOKR` (the reborrow's), `tabN_unwind_rebClosed` (no cancel obligation), `tabN_unwind_extend` (the table reads neither `'x` nor its base) |
+| `withbor3U` | `withbor3U_sem`, `withbor3U_compatN`: `withbor3S_compat`'s steps with the bound `Δ.meetOfDom`; the Mut Frame at the row's table (`erwp_M_frameCRG`, the callback's table the lender's by `tabN_unwind_eq_add`); the anti-frame `erwp_M_antiFrameU`; the claim consistent (`erwp_claimX_abort`); the finaliser frame at a raise (`erwp_ubindRaise`, `fin_claimMN`) |
+| `withloadU` | `withloadU_sem`, `withloadU_compatN`: `withloadS_compat`'s steps; 6.150 across the row's raises (`withload_rebT`, `erwp_rebGen`); the callback at the image (`callback_at_imageU`) |
+| an `unr` row | `unrRaiseRow` (`raise : 1 ↠^unr 0`), `unrRaiseRow_unwind`, `withloadU_unr_inst`: `withloadU_compatN` with every hypothesis discharged at a row whose one entry is unrestricted |
+
+**`unr` at an unwinding row.** `OpTabN.RebOKR.entry` now reads only resumable entries
+(`en.abort = false → en.q ≠ unr ∧ en.wc = extF`). `erwp_rebGen` and `erwp_rebGen_cancelRun` read
+`entry` only at a stop, whose entry is resumable (`performStopN` carries `en.abort = false`); a
+raise never resumes, so the reborrow is never re-entered through it. Their statements are
+unchanged but for the structure. `tabN_rebOKR` discharges the guarded field as before.
+
+**Restated.** `OpTabN.RebOKR.entry`: was `T m i = some en → en.q ≠ unr ∧ en.wc = extF`, now with
+the premise `en.abort = false`. `withload_rebT` is `withload_reb` with the row's `S.Suspend x bnd`
+replaced by the two facts its proof reads of the table: `hTab` (the table is `RebOKR β` at every
+`β ⊏ @bnd`) and `hClo` (its cancel obligations are closed under the reborrow at every entry).
+`withload_reb` keeps its statement and is `withload_rebT` with `tabN_rebOKR` and `tab_rebClosed`.
+
+The class counts of §3.1 and the map's rows for the rules ported in #834 are as the map left them;
+rows 76 and 77 are updated here.
 

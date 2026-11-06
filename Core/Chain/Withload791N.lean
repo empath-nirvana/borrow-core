@@ -80,7 +80,7 @@ its layers' payload and answer types outlive the bound, so their values lie in `
 theorem tabN_rebOKR {x : LifeVar} {bnd : Lifetime.Life} {β : Life} {F : CTy}
     (hF : F.SuspendC x bnd) (δ : LSub) (hLt : LtLife δ bnd β) (Θ : LocTy)
     (c : Loc → Option Life) : (tabN (ℍ := ℍ) F δ Θ c).RebOKR β where
-  entry := fun m i en h => by
+  entry := fun m i en h _ => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupN F h
     exact ⟨(layer_suspend F hF hL).1, rfl⟩
   pa := fun m i en h k ls v ρ hp => by
@@ -401,12 +401,23 @@ records, and the callback. At the run's first entry the tie puts the witness's r
 run's list (`cohE_of_immWitW`); the cell is that record's own cell (`TI`'s `leInvW`) or one of
 its chain views (`exIn`); the image re-taken at a `β` below the cell, the callback's stratum and
 the bound is a value of `Imm̲ 'x A` (`relabel_vN`), and 6.150 across the callback's stops, raises
-and layered cancel runs (`erwp_rebGen`, `tab_rebClosed`) gives the run. The callback's run at
-the image is the premise `hcb`: at a suspending row `callback_at_image`, at the pure row its
-`F (U …)` form. -/
-theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
+and layered cancel runs (`erwp_rebGen`) gives the run. The table's premises are `hTab` (the
+table may be stopped at under the reborrow) and `hClo` (its cancel obligations are closed under
+it). The callback's run at the image is the premise `hcb`: at a suspending row
+`callback_at_image`, at an unwinding row `callback_at_imageU`, at the pure row its `F (U …)`
+form. -/
+theorem withload_rebT {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {S : Row} {δ : LSub} (hbnd : ∃ γ, bnd.interp δ = some γ) (hA : ¬ VFree x A)
-    (hS : S.Suspend x bnd) {Θ : LocTy} {c : Loc → Option Life}
+    {Θ : LocTy} {c : Loc → Option Life}
+    (hTab : ∀ β, LtLife δ bnd β → (tabN (ℍ := ℍ) (CTy.effOf S B) δ Θ c).RebOKR β)
+    (hClo : ∀ β, LtLife δ bnd β → ∀ {le : Loc} {s : LSet} {v : Val} {R : WRes}
+      {hs : R.InStratum s.join} {χ : WRes} {Ok : List SRec → Prop},
+      RebEntryG (ℍ := ℍ) (Θ.view c) β (ResU.single le (CellU.immOf s v R hs)) χ R Ok →
+      ResU.Reb β R χ →
+      (∀ (ls ls'' lsO : List SRec) (ψ Ks : WRes), Ok ls → (∀ y, y ∈ ls'' ↔ y ∈ ls) →
+        ResU.CompS ψ (ResU.single le (CellU.immOf s v R hs)) Ks → extF ls'' lsO Ks → Ok lsO) →
+      RebClosed β (ResU.single le (CellU.immOf s v R hs)) χ Ok
+        (tabN (ℍ := ℍ) (CTy.effOf S B) δ Θ c))
     {n : Nat} {ls : List SRec} {f v : Val} {l : Loc} {s : LSet} {σ : WRes}
     {h : σ.InStratum s.join} {ρf X : WRes}
     (hpay : vO (ℍ := ℍ) A δ Θ n v σ) (hwit : ImmWitW Θ.imm l s A δ)
@@ -446,7 +457,7 @@ theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
   have hLt : LtLife δ bnd β := ⟨γb, hγb, lt_of_lt_of_le hβlt inf_le_right⟩
   have hσβ : σ.InStratum β := h.mono (hβs.le.trans (LSet.meet_le_join s))
   have hbβ : ρf.InStratum β := hg.mono hβg
-  have hT' := tabN_rebOKR (ℍ := ℍ) (suspendC_effOf hS B) δ hLt Θ c
+  have hT' := hTab β hLt
   rcases hcoh with ⟨rfl, rfl, hag⟩ | ⟨p, u₀, hch, hag⟩
   · -- the record's own cell: `v = d.v`, `σ = d.R`
     obtain ⟨φ, eφ, -, rφ, wφ⟩ := hTI.leInvW d hdmem aW haW
@@ -477,8 +488,7 @@ theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     have hreb := canon_reb hSt hσβ
     have hE := rebEntryG_top (ℍ := ℍ) (Φ := Θ.view c) (hs := h) d y hy hSt hσβ hshape
       (fun z hz => hβs.le.trans (s.meet_least z hz))
-    have hcan := tab_rebClosed (ℍ := ℍ) (x := x) (δ := δ) (Θ := Θ) (c := c) hLt hE hreb
-      okKept_top _ _ le_rfl (suspendC_effOf hS B)
+    have hcan := hClo β hLt hE hreb okKept_top
     have hrun' := erwp_rebGen hE hreb okKept_top hT' hcan
       (Q := fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ) n ls
       (.app (.app (.val f) (.val .unit)) (.val d.v)) ρf X hX hbβ hdmem
@@ -522,14 +532,35 @@ theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     have hreb := canonD_reb hSt hσβ
     have hβc : (CellU.immOf s v σ h).InStratum β := (CellU.inStratum_immOf β s v σ h).mpr hβs
     have hE := rebEntryG_deep (ℍ := ℍ) (Φ := Θ.view c) d hch y hy hSt hσβ hβc hshape
-    have hcan := tab_rebClosed (ℍ := ℍ) (x := x) (δ := δ) (Θ := Θ) (c := c) hLt hE hreb
-      (okKept_deep hch) _ _ le_rfl (suspendC_effOf hS B)
+    have hcan := hClo β hLt hE hreb (okKept_deep hch)
     have hrun' := erwp_rebGen hE hreb (okKept_deep hch) hT' hcan
       (Q := fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ) n ls
       (.app (.app (.val f) (.val .unit)) (.val v)) ρf X hX hbβ hdmem
       (fun Bχ hBχ => hcb β hLt _ _ Bχ (reb_allImm hreb) himg hBχ)
     rw [erwp_eq] at hrun'
     exact hrun' ρF fρ ps μ hF hcF hT htg hI hl hfd j μ' e' hj hrun hfin
+
+/-- **`withload_rebT` at a suspending row**: the row's table may be stopped at under the
+reborrow (`tabN_rebOKR`), and its cancel obligations are closed under it (`tab_rebClosed`). -/
+theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
+    {S : Row} {δ : LSub} (hbnd : ∃ γ, bnd.interp δ = some γ) (hA : ¬ VFree x A)
+    (hS : S.Suspend x bnd) {Θ : LocTy} {c : Loc → Option Life}
+    {n : Nat} {ls : List SRec} {f v : Val} {l : Loc} {s : LSet} {σ : WRes}
+    {h : σ.InStratum s.join} {ρf X : WRes}
+    (hpay : vO (ℍ := ℍ) A δ Θ n v σ) (hwit : ImmWitW Θ.imm l s A δ)
+    (hcb : ∀ β, LtLife δ bnd β → ∀ (u : Val) (χ Bχ : WRes),
+      (∀ m (ψ : CellU Loc Val), χ.get m = some ψ → ψ.kind = Kind.imm) →
+      vN (ℍ := ℍ) (A.immReborrow (.var x)) (δ.extend x β) Θ n u χ → ResU.CompS ρf χ Bχ →
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S B) δ Θ c))
+        (RebPost β (fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ)) n ls
+        (.app (.app (.val f) (.val .unit)) (.val u)) Bχ)
+    (hX : ResU.CompS (ResU.single l (CellU.immOf s v σ h)) ρf X) :
+    erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S B) δ Θ c))
+      (fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ) n ls
+      (.app (.app (.val f) (.val .unit)) (.val v)) X :=
+  withload_rebT hbnd hA (fun _ hLt => tabN_rebOKR (ℍ := ℍ) (suspendC_effOf hS B) δ hLt Θ c)
+    (fun _ hLt _ _ _ _ _ _ _ hE hreb hOk => tab_rebClosed (ℍ := ℍ) (x := x) (δ := δ) (Θ := Θ)
+      (c := c) hLt hE hreb hOk _ _ le_rfl (suspendC_effOf hS B)) hpay hwit hcb hX
 
 /-! ### `withload` at a suspending row -/
 
