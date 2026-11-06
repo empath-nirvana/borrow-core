@@ -770,7 +770,9 @@ row: the rule-level form of a `mut` borrow held across a suspension, cleanup tha
 included.
 
 At the world `Θ` and view `c` the source cell `ℓ ↦ own(w₀) ● σ₀` is lent at a lifetime `α` fresh
-for `Θ` (`LocTy.exists_fresh`) and below the bound, `σ₀`'s stratum and the callback's; the
+for `Θ` (`LocTy.exists_fresh`) and below the bound, the side condition's `@bδ` and the callback's
+stratum: by `[TR]` 6.60 at `⊢ A ⊒ @b` every value of `A` is in `Res_α` (`vN_outlivesLe`), the
+borrow's uniform conjunct and the content's stratum (Core's `withbor2U_compatX`); the
 callback runs at the world `Θ + (ℓ, α) ↦ famL α 𝒱⟦A⟧ Θ` and the view moved to `α` at `ℓ`, which is
 the relation's `Φ[ℓ ↦ (α, …)]` (`LocTy.view_add`), from the borrow (`lend_mutL`), consistent
 (`consistentX_compS`); its stops fold the borrow into the continuation's share
@@ -781,10 +783,11 @@ each at its cancel row's own table, end there too (`tabR_can`); the claim is con
 (`erwp_ubindClaimRT`, `fin_claim`). The callback's result `['x] B` returns to the world without
 the lend by `vN_local`.
 
-Premises, and the rule that supplies each: `hA`, `hB`, `hS`, `hdc` are `withbor2U`'s with
+Premises, and the rule that supplies each: `hO`, `hA`, `hB`, `hS`, `hdc` are `withbor2U`'s with
 `Row.Suspend` for `Row.Unwind` (`Const791.OK`); `hd` is the fundamental property at `d`'s
 derivation, the premise `CDerives Δ Γ d (Ref A ⊸ 1)` read semantically. -/
 theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Row} {d : Expr}
+    (hO : ∃ b, LifeCtx.empty.Defines b ∧ VOutlivesLe LifeCtx.empty b A)
     (hA : ¬ VFree x A) (hB : ¬ VFree x B) (hS : S.Suspend x) (hdc : closedAt 0 d = true)
     (hd : SemJN (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.ref A) .unit))) (δ : LSub)
     (Θ₀ : LocTy) (n : Nat) :
@@ -822,11 +825,17 @@ theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Ro
     (ResU.CompS.get_left_of_ne_imm hcl (ResU.single_get_self _ _) hko).2
   -- the lend's lifetime: fresh, below the bound, the source's content's stratum and the callback's
   obtain ⟨γ, hγ⟩ := (hf Θ (LocTy.extR_refl Θ ρf) hΘ c hcf ls).1
-  obtain ⟨βP, hβP⟩ := ResU.exists_stratum σ₀
+  -- `[TR]` 6.60 at the side condition `⊢ A ⊒ @b`: every value of `A` below `@bδ`
+  obtain ⟨b, hdef, hOb⟩ := hO
+  obtain ⟨βP, hβP⟩ : ∃ β : Life, b.interp δ = some β := hdef δ (models_empty_any _)
   obtain ⟨βf, hβf⟩ := ResU.exists_stratum ρf
   obtain ⟨α, hαle, hfr⟩ := LocTy.exists_fresh hΘ.2 (↓(βP ⊓ βf ⊓ γ))
   have hαlt : α < βP ⊓ βf ⊓ γ := lt_of_le_of_lt hαle (Life.down_sqsubset _)
-  have houtP : σ₀.InStratum α := hβP.mono (hαlt.le.trans (inf_le_left.trans inf_le_left))
+  have hαP : α < βP := lt_of_lt_of_le hαlt (inf_le_left.trans inf_le_left)
+  have hunif : ∀ (Θ' : LocTy) (j : Nat) (u : Val) (r : WRes), vN (ℍ := ℍ) A δ Θ' j u r →
+      r.InStratum α :=
+    vN_outlivesLe (models_empty_any _) hβP hαP hOb
+  have houtP : σ₀.InStratum α := hunif Θ k' w₀ σ₀ hw₀
   have houtf : ρf.InStratum (↓α) := hβf.mono
     ((Life.down_sqsubset α).le.trans (hαlt.le.trans (inf_le_left.trans inf_le_right)))
   have hLt : LtLife δ bnd α := ⟨γ, hγ, lt_of_lt_of_le hαlt inf_le_right⟩
@@ -878,7 +887,8 @@ theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Ro
     have h1 := (hf Θ' ((LocTy.extA_add hfr l Fam).extR ρf) hOK' c' hcf' ls).2 α hLt
     have hcell : vN (ℍ := ℍ) (.mut (.var x) A) δ' Θ' k' (Val.loc l)
         (ResU.single l (CellU.mutOf α w₀ σ₀ houtP (Fam k') hwit)) :=
-      ⟨α, interp_ext_self δ x α, lend_mutL Θ l α P le_rfl houtP hwit⟩
+      ⟨α, interp_ext_self δ x α, lend_mutL Θ l α P le_rfl houtP hwit,
+        fun Θ'' j u r h => hunif Θ'' j u r (by rw [← hAδ]; exact h)⟩
     have hcBM : ConsistentX c' BM := consistentX_compS hBM hcf'
       (consistentX_single_mut hcσ' (by simp [hc'def, setLife]))
     have h2 := h1 Θ' (LocTy.extR_refl _ _) hOK' c' k' le_rfl (Val.loc l) _ BM hBM hcell hcBM
@@ -900,8 +910,8 @@ theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Ro
 finaliser's derivation. -/
 theorem constN_w2 (hF : FundamentalN (ℍ := ℍ)) {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {S : Row} {d : Expr} : ConstN (ℍ := ℍ) (.w2 x bnd A B S d) := by
-  rintro ⟨-, hA, hB, hS, hdc, hder⟩ δ Θ n _
-  exact withbor2S_compat hA hB hS hdc (hF _ _ _ _ hder) δ Θ n
+  rintro ⟨hO, hA, hB, hS, hdc, hder⟩ δ Θ n _
+  exact withbor2S_compat hO hA hB hS hdc (hF _ _ _ _ hder) δ Θ n
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

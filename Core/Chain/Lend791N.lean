@@ -321,7 +321,7 @@ theorem cbRelease_sem {x : LifeVar} {bnd : Lifetime.Life} {A : VTy} {δ : LSub}
   intro Θ' _ _ c _ ls
   refine ⟨hb, fun α _ Θ'' _ hOK c' k _ v ρv ρ' hc hv _ => ?_⟩
   obtain rfl := eq_of_compS_empty_left hc
-  obtain ⟨β, hβ, l, w, χ, hχ, j, hw, -, rfl, -, rfl⟩ := hv
+  obtain ⟨β, hβ, ⟨l, w, χ, hχ, j, hw, -, rfl, -, rfl⟩, -⟩ := hv
   have hΦ := LocTy.view_down hOK.1 c'
   have hQ : PostN.Down
       (fun k _ v ρ => vN (ℍ := ℍ) (.box (.var x) .unit) (δ.extend x α) Θ'' k v ρ) :=

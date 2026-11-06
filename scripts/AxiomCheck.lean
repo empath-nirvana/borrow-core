@@ -1540,3 +1540,4 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ExtRLit791.valid_at_empty
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ExtRLit791.not_valid_at_lend
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ExtRLit791.extRL_breaks_extA
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vN_outlivesLe

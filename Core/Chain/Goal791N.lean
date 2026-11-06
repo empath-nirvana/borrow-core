@@ -75,7 +75,8 @@ mutual
 /-- **`𝒱⟦A⟧δ` at the world and the index.** Core's `vCE` clause by clause, `⋆` written as
 `ResU.CompS`; `Mut` is Core's shape over the world (`mutL`: a location whose cell at `@aδ` holds
 the member `j ≥ k` of the payload read at the world above `@aδ`, which the world stores at the
-lend's key); `Imm` one `imm` cell longer-lived than `@aδ` with its payload in `𝒱⟦A⟧`; `[@a] A` in
+lend's key, and every value of `A` in the stratum `@aδ`: `ptoMutS`'s last conjunct, `hunif`,
+`Core/Relation.lean`); `Imm` one `imm` cell longer-lived than `@aδ` with its payload in `𝒱⟦A⟧`; `[@a] A` in
 the stratum; `U C` the forced thunk in `𝒞⟦C⟧` at every extension of the world along `ExtR` at the
 thunk's resource (Core's `vCE` at `U`), every view consistent with that resource and every record
 list. A lifetime with no
@@ -95,7 +96,8 @@ def vN : VTy → LSub → LocTy → Nat → Val → WRes → Prop
   | .imm a A, δ, Θ, n, v, ρ => ∃ α, a.interp δ = some α ∧
       immCell α (fun u σ => vN A δ Θ n u σ) v ρ
   | .mut a A, δ, Θ, n, v, ρ => ∃ α, a.interp δ = some α ∧
-      mutL α (fun Θ' j u r => vN A δ Θ' j u r) Θ n v ρ
+      mutL α (fun Θ' j u r => vN A δ Θ' j u r) Θ n v ρ ∧
+        ∀ (Θ' : LocTy) (j : Nat) (u : Val) (r : WRes), vN A δ Θ' j u r → r.InStratum α
   | .box a A, δ, Θ, n, v, ρ => ∃ α, a.interp δ = some α ∧ vN A δ Θ n v ρ ∧ ρ.InStratum α
   | .bang A, δ, Θ, n, v, ρ => ρ = PMap.empty ∧ vN A δ Θ n v ρ
   | .unk, _, _, _, _, ρ => ρ = PMap.empty
@@ -234,8 +236,8 @@ theorem vN_down : ∀ (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ
       obtain ⟨α, hα, l, s, u, σ, hs, h₁, h₂, h₃, h₄⟩ := h
       exact ⟨α, hα, l, s, u, σ, hs, h₁, h₂, h₃, vN_down A δ Θ n u σ h₄⟩
   | .mut a A, δ, Θ, n, _, _, h => by
-      obtain ⟨α, hα, l, w, χ, hχ, j, hw, hj, h₁, h₂, h₃⟩ := h
-      exact ⟨α, hα, l, w, χ, hχ, j, hw, by omega, h₁, h₂, h₃⟩
+      obtain ⟨α, hα, ⟨l, w, χ, hχ, j, hw, hj, h₁, h₂, h₃⟩, hu⟩ := h
+      exact ⟨α, hα, ⟨l, w, χ, hχ, j, hw, by omega, h₁, h₂, h₃⟩, hu⟩
   | .box a A, δ, Θ, n, v, ρ, h => by
       obtain ⟨α, hα, h₁, h₂⟩ := h
       exact ⟨α, hα, vN_down A δ Θ n v ρ h₁, h₂⟩
@@ -513,7 +515,7 @@ theorem vN_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life} (
       rw [hb] at hb'; cases Option.some.inj hb'
       exact ResU.inStratum_single l (lt_of_lt_of_le (show (α : Life) < β from hlt') hle)
   | «mut» hlt =>
-      rintro Θ n v ρ ⟨β, hb, l, w, χ, hχ, j, hw, -, -, -, rfl⟩
+      rintro Θ n v ρ ⟨β, hb, ⟨l, w, χ, hχ, j, hw, -, -, -, rfl⟩, -⟩
       obtain ⟨α', β', ha', hb', hlt'⟩ := hlt δ hδ
       rw [ha] at ha'; cases Option.some.inj ha'
       rw [hb] at hb'; cases Option.some.inj hb'
@@ -521,6 +523,50 @@ theorem vN_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life} (
   | tvar => intro Θ n v ρ h; exact h.elim
   | mu _ _ => intro Θ n v ρ h; exact h.elim
   | int => rintro Θ n v ρ ⟨-, rfl⟩; exact ResU.inStratum_empty α
+  | opq => intro Θ n v ρ h; exact h.elim
+  | fam _ _ => intro Θ n v ρ h; exact h.elim
+
+/-- **`Δ ⊢ A ⊒ @a`: `𝒱⟦A⟧` lies in every stratum strictly below `α = @aδ`** (Core's
+`vC_outlivesLe`, `[TR]` 6.60 at the non-strict side condition), at every world. -/
+theorem vN_outlivesLe {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α γ : Life}
+    (hδ : Δ.Models δ) (ha : a.interp δ = some α) (hγ : γ < α) {T : VTy}
+    (hT : VOutlivesLe Δ a T) :
+    ∀ Θ n v ρ, vN (ℍ := ℍ) T δ Θ n v ρ → ρ.InStratum γ := by
+  induction hT with
+  | unit => rintro Θ n v ρ ⟨-, rfl⟩; exact ResU.inStratum_empty γ
+  | tensor _ _ ih₁ ih₂ =>
+      rintro Θ n v ρ ⟨v₁, v₂, ρ₁, ρ₂, -, hc, h₁, h₂⟩
+      exact inStratum_compS hc (ih₁ Θ n v₁ ρ₁ h₁) (ih₂ Θ n v₂ ρ₂ h₂)
+  | zero => intro Θ n v ρ h; exact h.elim
+  | sum _ _ ih₁ ih₂ =>
+      rintro Θ n v ρ (⟨v₁, -, h₁⟩ | ⟨v₂, -, h₂⟩)
+      · exact ih₁ Θ n v₁ ρ h₁
+      · exact ih₂ Θ n v₂ ρ h₂
+  | ref _ ih =>
+      rintro Θ n v ρ ⟨l, u, σ, -, hc, h⟩
+      exact inStratum_compS hc (ResU.inStratum_single_own γ l u) (ih Θ n u σ h)
+  | bang => rintro Θ n v ρ ⟨rfl, -⟩; exact ResU.inStratum_empty γ
+  | box hle =>
+      rintro Θ n v ρ ⟨β, hb, -, ho⟩
+      obtain ⟨α', β', ha', hb', hle'⟩ := hle δ hδ
+      rw [ha] at ha'; cases Option.some.inj ha'
+      rw [hb] at hb'; cases Option.some.inj hb'
+      exact ho.mono (le_trans hγ.le (show (α : Life) ≤ β from hle'))
+  | imm hlt =>
+      rintro Θ n v ρ ⟨β, hb, l, s, u, σ, hs, -, rfl, hle, -⟩
+      obtain ⟨α', β', ha', hb', hlt'⟩ := hlt δ hδ
+      rw [ha] at ha'; cases Option.some.inj ha'
+      rw [hb] at hb'; cases Option.some.inj hb'
+      exact ResU.inStratum_single l (lt_of_lt_of_le (lt_of_lt_of_le hγ (show (α : Life) ≤ β from hlt')) hle)
+  | «mut» hlt =>
+      rintro Θ n v ρ ⟨β, hb, ⟨l, w, χ, hχ, j, hw, -, -, -, rfl⟩, -⟩
+      obtain ⟨α', β', ha', hb', hlt'⟩ := hlt δ hδ
+      rw [ha] at ha'; cases Option.some.inj ha'
+      rw [hb] at hb'; cases Option.some.inj hb'
+      exact ResU.inStratum_single l (lt_of_lt_of_le hγ (show (α : Life) ≤ β from hlt'))
+  | tvar => intro Θ n v ρ h; exact h.elim
+  | mu _ _ => intro Θ n v ρ h; exact h.elim
+  | int => rintro Θ n v ρ ⟨-, rfl⟩; exact ResU.inStratum_empty γ
   | opq => intro Θ n v ρ h; exact h.elim
   | fam _ _ => intro Θ n v ρ h; exact h.elim
 
@@ -556,8 +602,8 @@ theorem vN_extR : ∀ (A : VTy) (δ : LSub) {Θ Θ' : LocTy} (n : Nat) (v : Val)
           le_of_lt (lt_of_le_of_lt (LSet.meet_le_join s) hjb)⟩
       exact ⟨α, hα, l, s, u, σ, hs, h₁, rfl, h₃, vN_extR A δ n u σ hσ h₄⟩
   | .mut a A, δ, _, _, n, _, _, hE, h => by
-      obtain ⟨α, hα, hm⟩ := h
-      exact ⟨α, hα, mutL_extR hE hm⟩
+      obtain ⟨α, hα, hm, hu⟩ := h
+      exact ⟨α, hα, mutL_extR hE hm, hu⟩
   | .box a A, δ, _, _, n, v, ρ, hE, h => by
       obtain ⟨α, hα, h₁, h₂⟩ := h
       exact ⟨α, hα, vN_extR A δ n v ρ hE h₁, h₂⟩
