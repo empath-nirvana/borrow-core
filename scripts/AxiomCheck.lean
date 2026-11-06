@@ -1644,3 +1644,10 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor2S_perform
 #print axioms BoCa.Fig16.LogRel.Core.Row.Suspend.of_unwind
 #print axioms BoCa.Fig16.Tree.Wp.Goal791.suspend_of_unwind
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Map831N.extR_imm_eq
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Map831N.imm_world_ne_nil
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Map831N.not_imm_of_extR
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Map831N.callback_any
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Map831N.callback_any_inst
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Map831N.extRL_addImm
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Map831N.not_extR_addImm
