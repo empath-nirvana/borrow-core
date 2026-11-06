@@ -9,8 +9,8 @@ compatibility proofs (`Core/Compat.lean`, `Core/Compatibility.lean`, `Core/Compu
 reach for, at the chain (`vN`/`cN`/`gN`/`erwp`), under Core's names with `N` for `C`:
 
 * **G1/G12** `gN_split`, `gN_splitC`: Core's `gDenC_split`, the parts consistent with the view at
-  a valid resource; `cN_of_valid`: a computation may assume its resource valid, at every type with
-  a reading (`noNuSpine`), so a split's consistency holds at a conclusion that is not `F`/`F_Σ`.
+  a valid resource; `cN_of_valid`: a computation may assume its resource valid, at every type, so
+  a split's consistency holds at a conclusion that is not `F`/`F_Σ`.
 * **G2** `gN_soloP`, **G4** `gN_persistent`, **G6** `gN_extR`, **G7** `gN_outlives`, **G8**
   `gN_congr`, **G9** `gN_noOwn`, **G11** `gN_le`.
 * **K5** `LocTy.extR_empty`: every two worlds are related at `∅` (Core's `ext_empty'`).
@@ -316,52 +316,50 @@ theorem gN_noOwn {δ : LSub} {Θ : LocTy} {n : Nat} :
 
 /-! ### G12 at a conclusion that is not `F`/`F_Σ` -/
 
-/-- **The computation types with a reading at every spine position**: every former but `ν`,
-which `cN` reads as empty (outside the fragment), through `⊸`, `&` and `∀`. -/
-def noNuSpine : CTy → Prop
-  | .ret _ => True
-  | .arr _ C => noNuSpine C
-  | .amp C D => noNuSpine C ∧ noNuSpine D
-  | .top => True
-  | .all _ _ C => noNuSpine C
-  | .nu _ => False
-  | .eff _ _ _ _ _ _ _ _ => True
-
-/-- A computation type of the fragment has a reading at every spine position. -/
-theorem noNuSpine_of_inFrag : ∀ {C : CTy}, C.inFrag = true → noNuSpine C
-  | .ret _, _ => trivial
-  | .arr _ C, h => by
-      simp only [CTy.inFrag, Bool.and_eq_true] at h
-      exact noNuSpine_of_inFrag (C := C) h.2
-  | .amp C D, h => by
-      simp only [CTy.inFrag, Bool.and_eq_true] at h
-      exact ⟨noNuSpine_of_inFrag h.1, noNuSpine_of_inFrag h.2⟩
-  | .top, _ => trivial
-  | .all _ _ C, h => by
-      simp only [CTy.inFrag] at h
-      exact noNuSpine_of_inFrag (C := C) h
-  | .nu _, h => by simp [CTy.inFrag] at h
-  | .eff _ _ _ _ _ _ _ _, _ => trivial
+/-- **One unfolding may assume its resource valid**: `cN_of_valid`'s induction on the tree. -/
+theorem cBN_of_valid (S : VTy) (Rc : CandN) : ∀ (D : CTy) (δ : LSub) (Θ : LocTy)
+    (c : Loc → Option Life) (n : Nat) (ls : List SRec) (e : Expr) (ρ : WRes),
+    (ResU.Valid ρ → cBN (ℍ := ℍ) S Rc D δ Θ c n ls e ρ) → cBN (ℍ := ℍ) S Rc D δ Θ c n ls e ρ
+  | .ret _, _, _, _, _, _, _, _, h => erwp_of_valid h
+  | .arr _ D, δ, Θ, _, _, ls, _, _, h => fun c' k hk v ρv ρ' hcomp hv hcon =>
+      cBN_of_valid S Rc D δ Θ c' k ls _ ρ'
+        (fun hv' => h (ResU.Valid.split hcomp hv').1 c' k hk v ρv ρ' hcomp hv hcon)
+  | .amp C D, δ, Θ, c, n, ls, _, ρ, h =>
+      ⟨cBN_of_valid S Rc C δ Θ c n ls _ ρ (fun hv => (h hv).1),
+        cBN_of_valid S Rc D δ Θ c n ls _ ρ (fun hv => (h hv).2)⟩
+  | .top, _, _, _, _, _, _, _, _ => trivial
+  | .all x _ D, δ, Θ, c, n, ls, _, ρ, h => fun α hα =>
+      cBN_of_valid S Rc D (δ.extend x α) Θ c n ls _ ρ (fun hv => h hv α hα)
+  | .nu _, _, _, _, _, _, _, _, _ => trivial
+  | .eff _ _ _ _ _ _ _ _, _, _, _, _, _, _, _, h => erwp_of_valid h
 
 /-- **A computation may assume its resource valid** (chain only): at `F`/`F_Σ` by
 `erwp_of_valid`; at `⊸` because the resource is a part of the composite the wand runs from, and a
-part of a valid resource is valid; at `&` and `∀` by their parts. This is what gives a split's
-consistency (`gN_splitC`) at a conclusion that is not `F`/`F_Σ`. -/
-theorem cN_of_valid : ∀ (C : CTy), noNuSpine C → ∀ (δ : LSub) (Θ : LocTy)
+part of a valid resource is valid; at `&` and `∀` by their parts; at `ν` by coinduction, the
+candidate being the computations valid where their resource is (`cBN_of_valid` at one
+unfolding). This is what gives a split's consistency (`gN_splitC`) at a conclusion that is not
+`F`/`F_Σ`. -/
+theorem cN_of_valid : ∀ (C : CTy) (δ : LSub) (Θ : LocTy)
     (c : Loc → Option Life) (n : Nat) (ls : List SRec) (e : Expr) (ρ : WRes),
     (ResU.Valid ρ → cN (ℍ := ℍ) C δ Θ c n ls e ρ) → cN (ℍ := ℍ) C δ Θ c n ls e ρ
-  | .ret _, _, _, _, _, _, _, _, _, h => erwp_of_valid h
-  | .arr _ C, hC, δ, Θ, _, _, ls, _, _, h => fun c' k hk v ρv ρ' hcomp hv hcon =>
-      cN_of_valid C hC δ Θ c' k ls _ ρ'
+  | .ret _, _, _, _, _, _, _, _, h => erwp_of_valid h
+  | .arr _ C, δ, Θ, _, _, ls, _, _, h => fun c' k hk v ρv ρ' hcomp hv hcon =>
+      cN_of_valid C δ Θ c' k ls _ ρ'
         (fun hv' => h (ResU.Valid.split hcomp hv').1 c' k hk v ρv ρ' hcomp hv hcon)
-  | .amp C D, hC, δ, Θ, c, n, ls, _, ρ, h =>
-      ⟨cN_of_valid C hC.1 δ Θ c n ls _ ρ (fun hv => (h hv).1),
-        cN_of_valid D hC.2 δ Θ c n ls _ ρ (fun hv => (h hv).2)⟩
-  | .top, _, _, _, _, _, _, _, _, _ => trivial
-  | .all x _ C, hC, δ, Θ, c, n, ls, _, ρ, h => fun α hα =>
-      cN_of_valid C hC (δ.extend x α) Θ c n ls _ ρ (fun hv => h hv α hα)
-  | .nu _, hC, _, _, _, _, _, _, _, _ => hC.elim
-  | .eff _ _ _ _ _ _ _ _, _, _, _, _, _, _, _, _, h => erwp_of_valid h
+  | .amp C D, δ, Θ, c, n, ls, _, ρ, h =>
+      ⟨cN_of_valid C δ Θ c n ls _ ρ (fun hv => (h hv).1),
+        cN_of_valid D δ Θ c n ls _ ρ (fun hv => (h hv).2)⟩
+  | .top, _, _, _, _, _, _, _, _ => trivial
+  | .all x _ C, δ, Θ, c, n, ls, _, ρ, h => fun α hα =>
+      cN_of_valid C (δ.extend x α) Θ c n ls _ ρ (fun hv => h hv α hα)
+  | .nu C, δ, Θ, c, n, ls, e, ρ, h => fun hS => by
+      refine ⟨fun Θ c n ls e ρ => ResU.Valid ρ → nuCand (ℍ := ℍ) C δ Θ c n ls e ρ, ?_, h⟩
+      intro Θ' c' k ls' e' ρ' hR
+      refine cBN_of_valid _ _ C δ Θ' c' k ls' e' ρ' fun hv => ?_
+      exact cBN_mono (R' := fun Θ c n ls e ρ => ResU.Valid ρ → nuCand (ℍ := ℍ) C δ Θ c n ls e ρ)
+        (fun _ _ _ _ _ _ _ h'' _ => h'') hS.nuLeaf δ Θ' c' k ls' e' ρ'
+        (cN_nu_out hS δ Θ' c' k ls' e' ρ' (hR hv))
+  | .eff _ _ _ _ _ _ _ _, _, _, _, _, _, _, _, h => erwp_of_valid h
 
 /-! ### W4: bind with a frame -/
 
@@ -386,37 +384,30 @@ theorem erwp_bind_frame {Φ : LocFam} (hΦ : Φ.Down) {Tb : TableN} (hL : Tb.Loc
 
 /-! ### C2: bind at every computation type -/
 
-/-- **Bind at `𝒞⟦C⟧`** (Core's `cC_bind`). Run `M` in the hole of `K`, framing `R` through the
-run; the rest of the computation (`K` and the stack `C` is eliminated by) continues at the index
-the run leaves. `erwp_bind_frame` at `F`/`F_Σ`; at `⊸` the stack's argument joins the frame, read
-at the wand's index; at `&` and `∀` by their parts.
-
-The chain's obligations are in the premises: `M`'s run is asked at every view consistent with its
-own part (`SemJN`'s reading), and `cN_of_valid` gives that part's consistency from the
-composite's at each `⊸` the stack passes. -/
-theorem cN_bind : ∀ (C : CTy), noNuSpine C → ∀ (δ : LSub) (Θ : LocTy), Θ.Down →
+/-- **Bind at one unfolding of an observation tree** (Core's `cB_bind`): `cN_bind`'s induction. -/
+theorem cBN_bind (S : VTy) (Rc : CandN) : ∀ (C : CTy) (δ : LSub) (Θ : LocTy), Θ.Down →
     ∀ (K : Kont) (M : Expr) (P : PostN), P.Down → ∀ (R : Nat → WRes → Prop),
     (∀ k k' ρ, k' ≤ k → R k ρ → R k' ρ) →
     (∀ (c : Loc → Option Life) k ls' (v : Val) (σ₁ σ₂ σ : WRes), ResU.CompS σ₁ σ₂ σ →
-      P k ls' v σ₁ → R k σ₂ → ConsistentX c σ → cN (ℍ := ℍ) C δ Θ c k ls' (K.plug v.1) σ) →
+      P k ls' v σ₁ → R k σ₂ → ConsistentX c σ → cBN (ℍ := ℍ) S Rc C δ Θ c k ls' (K.plug v.1) σ) →
     ∀ (c : Loc → Option Life) (n : Nat) (ls : List SRec) (ρ₁ ρ₂ ρ : WRes),
       ResU.CompS ρ₁ ρ₂ ρ →
       (∀ c', ConsistentX c' ρ₁ → erwp (ℍ := ℍ) (Θ.view c') (opTableN OpTabN.empty) P n ls M ρ₁) →
-      R n ρ₂ → ConsistentX c ρ → cN (ℍ := ℍ) C δ Θ c n ls (K.plug M) ρ
-  | .ret _, _, _, Θ, hΘ, K, _, _, _, R, hR, h, c, n, _, _, _, _, hcρ, hM, hR₂, hc =>
+      R n ρ₂ → ConsistentX c ρ → cBN (ℍ := ℍ) S Rc C δ Θ c n ls (K.plug M) ρ
+  | .ret _, _, Θ, hΘ, K, _, _, _, R, hR, h, c, n, _, _, _, _, hcρ, hM, hR₂, hc =>
       erwp_of_valid fun hv => erwp_bind_frame (LocTy.view_down hΘ c) (opTableN_local _) K (R n)
         hcρ hc (hM c (consistentX_left hcρ hc hv)) hR₂
         (fun k hk ls' v σ₁ σ₂ σ hcσ hPv hRσ hcσ' _ =>
           h c k ls' v σ₁ σ₂ σ hcσ hPv (hR n k σ₂ hk hRσ) hcσ')
-  | .eff _ _ _ _ _ _ _ _, _, _, Θ, hΘ, K, _, _, _, R, hR, h, c, n, _, _, _, _, hcρ, hM, hR₂, hc =>
+  | .eff _ _ _ _ _ _ _ _, _, Θ, hΘ, K, _, _, _, R, hR, h, c, n, _, _, _, _, hcρ, hM, hR₂, hc =>
       erwp_of_valid fun hv => erwp_bind_frame (LocTy.view_down hΘ c) (opTableN_local _) K (R n)
         hcρ hc (hM c (consistentX_left hcρ hc hv)) hR₂
         (fun k hk ls' v σ₁ σ₂ σ hcσ hPv hRσ hcσ' _ =>
           h c k ls' v σ₁ σ₂ σ hcσ hPv (hR n k σ₂ hk hRσ) hcσ')
-  | .arr A C, hC, δ, Θ, hΘ, K, M, P, hP, R, hR, h, _, n, ls, ρ₁, ρ₂, ρ, hcρ, hM, hR₂, _ =>
+  | .arr A C, δ, Θ, hΘ, K, M, P, hP, R, hR, h, _, n, ls, ρ₁, ρ₂, ρ, hcρ, hM, hR₂, _ =>
       fun c' k hk v ρv ρ' hcomp hv hcon => by
         obtain ⟨y, hy, hyx⟩ := compS_reassoc hcρ hcomp
-        refine cN_bind C hC δ Θ hΘ (.appL K v) M P hP
+        refine cBN_bind S Rc C δ Θ hΘ (.appL K v) M P hP
           (fun j σ => ∃ a b, ResU.CompS a b σ ∧ R j a ∧ vN (ℍ := ℍ) A δ Θ j v b)
           (fun j j' σ hj ⟨a, b, hab, hRa, hvb⟩ => ⟨a, b, hab, hR j j' a hj hRa, vN_le hj hvb⟩)
           (fun c'' j ls' w σ₁ σ₂ σ' hcσ hPw ⟨a, b, hab, hRa, hvb⟩ hcon' => ?_)
@@ -425,22 +416,83 @@ theorem cN_bind : ∀ (C : CTy), noNuSpine C → ∀ (δ : LSub) (Θ : LocTy), �
             (opTableN_down OpTabN.empty_down) hP hk (hM c'' hc''))
           ⟨ρ₂, ρv, hy, hR n k ρ₂ hk hR₂, hv⟩ hcon
         obtain ⟨z, hz, hzσ⟩ := compS_reassoc' hab hcσ
-        refine cN_of_valid C hC δ Θ c'' j ls' _ σ' fun hv' => ?_
+        refine cBN_of_valid S Rc C δ Θ c'' j ls' _ σ' fun hv' => ?_
         exact h c'' j ls' w σ₁ a z hz hPw hRa (consistentX_left hzσ hcon' hv') c'' j le_rfl v b σ'
           hzσ hvb hcon'
-  | .amp C D, hC, δ, Θ, hΘ, K, M, P, hP, R, hR, h, c, n, ls, ρ₁, ρ₂, ρ, hcρ, hM, hR₂, hc =>
-      ⟨cN_bind C hC.1 δ Θ hΘ (.appL K _) M P hP R hR
+  | .amp C D, δ, Θ, hΘ, K, M, P, hP, R, hR, h, c, n, ls, ρ₁, ρ₂, ρ, hcρ, hM, hR₂, hc =>
+      ⟨cBN_bind S Rc C δ Θ hΘ (.appL K _) M P hP R hR
           (fun c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' => (h c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ').1)
           c n ls ρ₁ ρ₂ ρ hcρ hM hR₂ hc,
-        cN_bind D hC.2 δ Θ hΘ (.appL K _) M P hP R hR
+        cBN_bind S Rc D δ Θ hΘ (.appL K _) M P hP R hR
           (fun c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' => (h c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ').2)
           c n ls ρ₁ ρ₂ ρ hcρ hM hR₂ hc⟩
-  | .top, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => trivial
-  | .all x _ C, hC, δ, Θ, hΘ, K, M, P, hP, R, hR, h, c, n, ls, ρ₁, ρ₂, ρ, hcρ, hM, hR₂, hc =>
-      fun α hα => cN_bind C hC (δ.extend x α) Θ hΘ (.appL K .unit) M P hP R hR
+  | .top, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => trivial
+  | .all x _ C, δ, Θ, hΘ, K, M, P, hP, R, hR, h, c, n, ls, ρ₁, ρ₂, ρ, hcρ, hM, hR₂, hc =>
+      fun α hα => cBN_bind S Rc C (δ.extend x α) Θ hΘ (.appL K .unit) M P hP R hR
         (fun c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' => h c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' α hα)
         c n ls ρ₁ ρ₂ ρ hcρ hM hR₂ hc
-  | .nu _, hC, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => hC.elim
+  | .nu _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => trivial
+
+
+/-- **Bind at `𝒞⟦C⟧`** (Core's `cC_bind`). Run `M` in the hole of `K`, framing `R` through the
+run; the rest of the computation (`K` and the stack `C` is eliminated by) continues at the index
+the run leaves. `erwp_bind_frame` at `F`/`F_Σ`; at `⊸` the stack's argument joins the frame, read
+at the wand's index; at `&` and `∀` by their parts; at `ν` by unfolding, `cBN_bind`, and rolling (Core's `cC_bind`).
+
+The chain's obligations are in the premises: `M`'s run is asked at every view consistent with its
+own part (`SemJN`'s reading), and `cN_of_valid` gives that part's consistency from the
+composite's at each `⊸` the stack passes. -/
+theorem cN_bind : ∀ (C : CTy) (δ : LSub) (Θ : LocTy), Θ.Down →
+    ∀ (K : Kont) (M : Expr) (P : PostN), P.Down → ∀ (R : Nat → WRes → Prop),
+    (∀ k k' ρ, k' ≤ k → R k ρ → R k' ρ) →
+    (∀ (c : Loc → Option Life) k ls' (v : Val) (σ₁ σ₂ σ : WRes), ResU.CompS σ₁ σ₂ σ →
+      P k ls' v σ₁ → R k σ₂ → ConsistentX c σ → cN (ℍ := ℍ) C δ Θ c k ls' (K.plug v.1) σ) →
+    ∀ (c : Loc → Option Life) (n : Nat) (ls : List SRec) (ρ₁ ρ₂ ρ : WRes),
+      ResU.CompS ρ₁ ρ₂ ρ →
+      (∀ c', ConsistentX c' ρ₁ → erwp (ℍ := ℍ) (Θ.view c') (opTableN OpTabN.empty) P n ls M ρ₁) →
+      R n ρ₂ → ConsistentX c ρ → cN (ℍ := ℍ) C δ Θ c n ls (K.plug M) ρ
+  | .ret _, _, Θ, hΘ, K, _, _, _, R, hR, h, c, n, _, _, _, _, hcρ, hM, hR₂, hc =>
+      erwp_of_valid fun hv => erwp_bind_frame (LocTy.view_down hΘ c) (opTableN_local _) K (R n)
+        hcρ hc (hM c (consistentX_left hcρ hc hv)) hR₂
+        (fun k hk ls' v σ₁ σ₂ σ hcσ hPv hRσ hcσ' _ =>
+          h c k ls' v σ₁ σ₂ σ hcσ hPv (hR n k σ₂ hk hRσ) hcσ')
+  | .eff _ _ _ _ _ _ _ _, _, Θ, hΘ, K, _, _, _, R, hR, h, c, n, _, _, _, _, hcρ, hM, hR₂, hc =>
+      erwp_of_valid fun hv => erwp_bind_frame (LocTy.view_down hΘ c) (opTableN_local _) K (R n)
+        hcρ hc (hM c (consistentX_left hcρ hc hv)) hR₂
+        (fun k hk ls' v σ₁ σ₂ σ hcσ hPv hRσ hcσ' _ =>
+          h c k ls' v σ₁ σ₂ σ hcσ hPv (hR n k σ₂ hk hRσ) hcσ')
+  | .arr A C, δ, Θ, hΘ, K, M, P, hP, R, hR, h, _, n, ls, ρ₁, ρ₂, ρ, hcρ, hM, hR₂, _ =>
+      fun c' k hk v ρv ρ' hcomp hv hcon => by
+        obtain ⟨y, hy, hyx⟩ := compS_reassoc hcρ hcomp
+        refine cN_bind C δ Θ hΘ (.appL K v) M P hP
+          (fun j σ => ∃ a b, ResU.CompS a b σ ∧ R j a ∧ vN (ℍ := ℍ) A δ Θ j v b)
+          (fun j j' σ hj ⟨a, b, hab, hRa, hvb⟩ => ⟨a, b, hab, hR j j' a hj hRa, vN_le hj hvb⟩)
+          (fun c'' j ls' w σ₁ σ₂ σ' hcσ hPw ⟨a, b, hab, hRa, hvb⟩ hcon' => ?_)
+          c' k ls ρ₁ y ρ' hyx
+          (fun c'' hc'' => erwp_le (LocTy.view_down hΘ c'') (opTableN_local _)
+            (opTableN_down OpTabN.empty_down) hP hk (hM c'' hc''))
+          ⟨ρ₂, ρv, hy, hR n k ρ₂ hk hR₂, hv⟩ hcon
+        obtain ⟨z, hz, hzσ⟩ := compS_reassoc' hab hcσ
+        refine cN_of_valid C δ Θ c'' j ls' _ σ' fun hv' => ?_
+        exact h c'' j ls' w σ₁ a z hz hPw hRa (consistentX_left hzσ hcon' hv') c'' j le_rfl v b σ'
+          hzσ hvb hcon'
+  | .amp C D, δ, Θ, hΘ, K, M, P, hP, R, hR, h, c, n, ls, ρ₁, ρ₂, ρ, hcρ, hM, hR₂, hc =>
+      ⟨cN_bind C δ Θ hΘ (.appL K _) M P hP R hR
+          (fun c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' => (h c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ').1)
+          c n ls ρ₁ ρ₂ ρ hcρ hM hR₂ hc,
+        cN_bind D δ Θ hΘ (.appL K _) M P hP R hR
+          (fun c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' => (h c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ').2)
+          c n ls ρ₁ ρ₂ ρ hcρ hM hR₂ hc⟩
+  | .top, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => trivial
+  | .all x _ C, δ, Θ, hΘ, K, M, P, hP, R, hR, h, c, n, ls, ρ₁, ρ₂, ρ, hcρ, hM, hR₂, hc =>
+      fun α hα => cN_bind C (δ.extend x α) Θ hΘ (.appL K .unit) M P hP R hR
+        (fun c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' => h c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' α hα)
+        c n ls ρ₁ ρ₂ ρ hcρ hM hR₂ hc
+  | .nu C, δ, Θ, hΘ, K, M, P, hP, R, hR, h, c, n, ls, ρ₁, ρ₂, ρ, hcρ, hM, hR₂, hc => fun hS =>
+      (cN_nu_unfold hS δ Θ c n ls _ ρ).mpr (cBN_bind _ _ C δ Θ hΘ K M P hP R hR
+        (fun c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' =>
+          (cN_nu_unfold hS δ Θ c' k ls' _ σ).mp (h c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ'))
+        c n ls ρ₁ ρ₂ ρ hcρ hM hR₂ hc) hS
 
 /-! ### W7: a run from `Res_α` ends in `Res_α` -/
 

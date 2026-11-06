@@ -15,8 +15,7 @@ The chain's judgment carries a world, a view consistent with the resource and a 
 (`SemJN`'s `Θ`, `c`, `n`); Core's has none. They enter at the same places in every rule:
 * a premise is read at the view, which a context split's part is consistent with where the
   resource is valid (`gN_splitC`): at `F`/`F_Σ` by `erwp_of_valid`, elsewhere by `cN_of_valid`,
-  which asks the conclusion to have a reading at every spine position (`noNuSpine`; `ν` is read as
-  empty, outside the fragment, and `noNuSpine_of_inFrag`);
+  at every conclusion;
 * a premise read after a run is read at the index the run leaves (`gN_le`, `vN_le`);
 * a thunk moves its context along `ExtR` to the world it is forced at (`gN_extR`), as Core's
   `gDenC_local`; `⊸` is a plain wand and moves nothing.
@@ -190,10 +189,10 @@ theorem lamDead_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy}
 /-- **`M x : C` at `SemJN`** (Core's `app_compatC`): the function's part of the split is
 consistent with the view (`gN_splitC` at a valid resource, `cN_of_valid` at `C`). -/
 theorem app_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M : Expr} {i : Nat} {A : VTy} {C : CTy}
-    (hC : noNuSpine C) (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hM : SemJN (ℍ := ℍ) Δ Γ₁ M (.comp (.arr A C)))
+    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hM : SemJN (ℍ := ℍ) Δ Γ₁ M (.comp (.arr A C)))
     (hx : Ctx.SoloP Γ₂ i A) : SemJN (ℍ := ℍ) Δ Γ (.app M (.var i)) (.comp C) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
-  refine cN_of_valid C hC δ Θ c n ls _ ρ fun hv => ?_
+  refine cN_of_valid C δ Θ c n ls _ ρ fun hv => ?_
   obtain ⟨ρ₁, ρ₂, hcρ, hg₁, hg₂, hc₁, -⟩ := gN_splitC hsp hg hc hv
   obtain ⟨hlw₁, hlw₂⟩ := hsp.liveWithin hlw
   obtain ⟨v, hvγ, hval⟩ := gN_soloP hx (hx.lt_of_liveWithin hlw₂) hg₂
@@ -206,13 +205,13 @@ theorem app_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M : Expr} {i : Na
 /-- **`M to x. N : C` at `SemJN`** (Core's `bind_compatC`): the context `N` needs is framed
 through `M`'s run, together with the stack `C` is eliminated by (`cN_bind`). -/
 theorem bind_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A : VTy} {C : CTy}
-    (hC : noNuSpine C) (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hM : SemJN (ℍ := ℍ) Δ Γ₁ M (.comp (.ret A)))
+    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hM : SemJN (ℍ := ℍ) Δ Γ₁ M (.comp (.ret A)))
     (hN : SemJN (ℍ := ℍ) Δ (⟨A, true⟩ :: Γ₂) N (.comp C)) :
     SemJN (ℍ := ℍ) Δ Γ (.app (.val (.lam N)) M) (.comp C) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
   obtain ⟨ρ₁, ρ₂, hcρ, hg₁, hg₂⟩ := gN_split hsp hg
   obtain ⟨hlw₁, hlw₂⟩ := hsp.liveWithin hlw
-  refine cN_bind C hC δ Θ hΘ.1 (.appR (.val (.lam (Expr.psub 1 γ N))) .hole) (substAll γ M)
+  refine cN_bind C δ Θ hΘ.1 (.appR (.val (.lam (Expr.psub 1 γ N))) .hole) (substAll γ M)
     (fun k _ v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) (fun k _ v ρ h => vN_down _ δ Θ k v ρ h)
     (fun k σ => gN (ℍ := ℍ) δ Θ Γ₂ γ k σ) (fun _ _ _ hk h => gN_le hk h) ?_ c n ls ρ₁ ρ₂ ρ hcρ
     (fun c' hc' => hM δ γ Θ c' n ls ρ₁ hδ hΘ hc' hlw₁ hg₁) hg₂ hc
@@ -226,12 +225,12 @@ theorem bind_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A :
 
 /-- **`V; M : C` at `SemJN`** (Core's `unitE_compatC`). -/
 theorem unitE_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {V M : Expr} {C : CTy}
-    (hC : noNuSpine C) (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hV : SemJN (ℍ := ℍ) Δ Γ₁ V (.val .unit))
+    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hV : SemJN (ℍ := ℍ) Δ Γ₁ V (.val .unit))
     (hM : SemJN (ℍ := ℍ) Δ Γ₂ M (.comp C)) : SemJN (ℍ := ℍ) Δ Γ (.seq V M) (.comp C) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
   obtain ⟨ρ₁, ρ₂, hcρ, hg₁, hg₂⟩ := gN_split hsp hg
   obtain ⟨hlw₁, hlw₂⟩ := hsp.liveWithin hlw
-  refine cN_bind C hC δ Θ hΘ.1 (.seq .hole (substAll γ M)) (substAll γ V)
+  refine cN_bind C δ Θ hΘ.1 (.seq .hole (substAll γ M)) (substAll γ V)
     (fun k _ v ρ => vN (ℍ := ℍ) .unit δ Θ k v ρ) (fun k _ v ρ h => vN_down _ δ Θ k v ρ h)
     (fun k σ => gN (ℍ := ℍ) δ Θ Γ₂ γ k σ) (fun _ _ _ hk h => gN_le hk h) ?_ c n ls ρ₁ ρ₂ ρ hcρ
     (fun c' hc' => hV δ γ Θ c' n ls ρ₁ hδ hΘ hc' hlw₁ hg₁) hg₂ hc
@@ -242,14 +241,14 @@ theorem unitE_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {V M : Expr} {C 
 
 /-- **`let (x, y) = V in M : C` at `SemJN`** (Core's `tensorE_compatC`). -/
 theorem tensorE_compatN {Δ : LifeCtx} {Γ Γp Γb : Ctx VTy} {V M : Expr} {A B : VTy} {C : CTy}
-    (hC : noNuSpine C) (hsp : Ctx.SplitP Γ Γp Γb)
+    (hsp : Ctx.SplitP Γ Γp Γb)
     (hV : SemJN (ℍ := ℍ) Δ Γp V (.val (.tensor A B)))
     (hM : SemJN (ℍ := ℍ) Δ (⟨B, true⟩ :: ⟨A, true⟩ :: Γb) M (.comp C)) :
     SemJN (ℍ := ℍ) Δ Γ (.letpair V M) (.comp C) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
   obtain ⟨ρ₁, ρ₂, hcρ, hg₁, hg₂⟩ := gN_split hsp hg
   obtain ⟨hlw₁, hlw₂⟩ := hsp.liveWithin hlw
-  refine cN_bind C hC δ Θ hΘ.1 (.letpair .hole (Expr.psub 2 γ M)) (substAll γ V)
+  refine cN_bind C δ Θ hΘ.1 (.letpair .hole (Expr.psub 2 γ M)) (substAll γ V)
     (fun k _ v ρ => vN (ℍ := ℍ) (.tensor A B) δ Θ k v ρ) (fun k _ v ρ h => vN_down _ δ Θ k v ρ h)
     (fun k σ => gN (ℍ := ℍ) δ Θ Γb γ k σ) (fun _ _ _ hk h => gN_le hk h) ?_ c n ls ρ₁ ρ₂ ρ hcρ
     (fun c' hc' => hV δ γ Θ c' n ls ρ₁ hδ hΘ hc' hlw₁ hg₁) hg₂ hc
@@ -263,14 +262,14 @@ theorem tensorE_compatN {Δ : LifeCtx} {Γ Γp Γb : Ctx VTy} {V M : Expr} {A B 
 
 /-- **`case V {inj₁ x. M₁ | inj₂ y. M₂} : C` at `SemJN`** (Core's `sumE_compatC`). -/
 theorem sumE_compatN {Δ : LifeCtx} {Γ Γs Γb : Ctx VTy} {V M₁ M₂ : Expr} {A B : VTy} {C : CTy}
-    (hC : noNuSpine C) (hsp : Ctx.SplitP Γ Γs Γb) (hV : SemJN (ℍ := ℍ) Δ Γs V (.val (.sum A B)))
+    (hsp : Ctx.SplitP Γ Γs Γb) (hV : SemJN (ℍ := ℍ) Δ Γs V (.val (.sum A B)))
     (h₁ : SemJN (ℍ := ℍ) Δ (⟨A, true⟩ :: Γb) M₁ (.comp C))
     (h₂ : SemJN (ℍ := ℍ) Δ (⟨B, true⟩ :: Γb) M₂ (.comp C)) :
     SemJN (ℍ := ℍ) Δ Γ (.case V M₁ M₂) (.comp C) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
   obtain ⟨ρ₁, ρ₂, hcρ, hg₁, hg₂⟩ := gN_split hsp hg
   obtain ⟨hlw₁, hlw₂⟩ := hsp.liveWithin hlw
-  refine cN_bind C hC δ Θ hΘ.1 (.case .hole (Expr.psub 1 γ M₁) (Expr.psub 1 γ M₂)) (substAll γ V)
+  refine cN_bind C δ Θ hΘ.1 (.case .hole (Expr.psub 1 γ M₁) (Expr.psub 1 γ M₂)) (substAll γ V)
     (fun k _ v ρ => vN (ℍ := ℍ) (.sum A B) δ Θ k v ρ) (fun k _ v ρ h => vN_down _ δ Θ k v ρ h)
     (fun k σ => gN (ℍ := ℍ) δ Θ Γb γ k σ) (fun _ _ _ hk h => gN_le hk h) ?_ c n ls ρ₁ ρ₂ ρ hcρ
     (fun c' hc' => hV δ γ Θ c' n ls ρ₁ hδ hΘ hc' hlw₁ hg₁) hg₂ hc
@@ -287,12 +286,12 @@ theorem sumE_compatN {Δ : LifeCtx} {Γ Γs Γb : Ctx VTy} {V M₁ M₂ : Expr} 
 
 /-- **`absurd V : C` at `SemJN`** (Core's `zeroE_compatC`): no arm runs. -/
 theorem zeroE_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {V : Expr} {C : CTy}
-    (hC : noNuSpine C) (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hV : SemJN (ℍ := ℍ) Δ Γ₁ V (.val .zero)) :
+    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hV : SemJN (ℍ := ℍ) Δ Γ₁ V (.val .zero)) :
     SemJN (ℍ := ℍ) Δ Γ (absurdE V) (.comp C) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
   obtain ⟨ρ₁, ρ₂, hcρ, hg₁, hg₂⟩ := gN_split hsp hg
   obtain ⟨hlw₁, -⟩ := hsp.liveWithin hlw
-  refine cN_bind C hC δ Θ hΘ.1 (.case .hole (.var 0) (.var 0)) (substAll γ V)
+  refine cN_bind C δ Θ hΘ.1 (.case .hole (.var 0) (.var 0)) (substAll γ V)
     (fun k _ v ρ => vN (ℍ := ℍ) .zero δ Θ k v ρ) (fun k _ v ρ h => vN_down _ δ Θ k v ρ h)
     (fun k σ => gN (ℍ := ℍ) δ Θ Γ₂ γ k σ) (fun _ _ _ hk h => gN_le hk h) ?_ c n ls ρ₁ ρ₂ ρ hcρ
     (fun c' hc' => hV δ γ Θ c' n ls ρ₁ hδ hΘ hc' hlw₁ hg₁) hg₂ hc

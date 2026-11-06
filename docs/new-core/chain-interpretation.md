@@ -214,7 +214,7 @@ none is recorded and the departure is a choice still open. The IDs in brackets a
 | D1 | `mut` lends are keys `(ℓ, b)` of the world, and `Mut` reads the key (`mutL`); a run is at the view [R1, R2, R4] | `ptoMutS ℓ α ls₀`: the cell stores `P ls₀` | `perLocShape_not_reborrow` (a per-location key is overwritten by a reborrow; the per-lend world keeps the value: `perLocShape_lend_reborrow`); `reseal_untyped` (the anti-frame's reseal needs the location typed) |
 | D2 | values read no record list: `vN` has no `ls` argument [K1, R5] | `Imm` reads `CohE (rsOf ls)`, `Mut` stores its payload at `ls₀` | `coreMutImm_not_extF`: a list-reading payload is not stable along `extF`, at which the chain resumes |
 | D3 | `imm` records live in the world; `Imm`'s witness is `ImmWitW` there; the relation's entry carries `ImmTieL` [K3, V10, R7, R8] | `CohE (rsOf ls)` read off the run's list | `not_wlImage_vN` (no `Imm` clause over `vN`'s arguments gives `withload`'s step 8); `immAgreeErwp_both`, `not_wlImageA_vN` (no agreement read off the unchanged `erwp` does); `not_effOf_guarded`, `immTie_guard_fails` (a guard on `cN`'s run clauses breaks `cN_effOf`); `immTieL_world_ref` (the entry tie excludes the second world) |
-| D4 | `ExtR` asks "nothing added above" only at the lifetimes of keys present [K1] | `Ext` asks it above every `b` with `CellIn ρ b` | `extRL_breaks_extA`: read literally, `U` is not Kripke along `ExtA`. It rests on `ν` read as empty |
+| D4 | `ExtR` asks "nothing added above" only at the lifetimes of keys present [K1] | `Ext` asks it above every `b` with `CellIn ρ b` | `extRL_breaks_extA`: read literally, `U` is not Kripke along `ExtA`, at a stuck application from a typed world of two `mut` cells |
 | D5 | `Keeps` reads a record's relevance off its lifetime; `ImmWitW` carries the lifetime match `⊓s ≤ x.2`; `extR_of_addImm` has no relevance premise [K4, V10] | `Keeps` reads relevance off the location (`Rel`); the converse of `ext_add` ([TR] 6.64) takes a relevance premise, discharged at the Imm Frame's exit by `not_rel_lineage` | `not_unwindArgStepLoc` (`Depart831N`): Core's location reading fails at `tabN_unwind_eq`'s world-level step, a step of our unwinding-row proof that Core does not take; candidate for the post-merge refactor (`scope-831-interface.md` §6.3) |
 | D6 | `⊸` is Kripke along `ExtR` and down the index [F10] | `cC .arr` is a wand at the same list | the index is the step-indexed `−∗` of `sC`, the chain's carrier; returned to Core's plain wand in #834 (`scope-831-interface.md` §8.1); no longer a departure |
 | D7 | `U`, `⊸` and `SemJN` quantify views consistent with the resource (`ConsistentX`), on the exclusive walk; a row's table reads its answers at the view (`tabN`'s `ConsistentX c`) [R11] | Core has no view; the tree track uses `Covers`/`vThunk` | for the exclusive walk over the whole flattening: `flat_part_config`. For consistency in place of `Covers`: no configuration yet (the argument is prose, Appendix A.4). For the answers: every resource that enters a run is read at the run's view, the answer a resumption brings included; each producer meets it (`scope-831-interface.md` §10.2): a lending constant's relay by `Row.Suspend`'s answer clause (`consistentX_of_outlives`), a handler by its own run at the view (`erwp_consistentAns`), the scheduler `HS` at the hardest row by its `∅` answers (`hardestRow_entry_PB`) |
@@ -395,10 +395,9 @@ choice: a configuration that forces it, or a return to Core's reading. `scope-83
 - `cN_extA` at `F_Σ R`: not derived, obstruction not verified. No rule needs it
   (`scope-831-map.md` §3.2): it would need an `erwp` lemma over tables whose payloads grow and
   whose answers agree.
-- D4's configuration rests on `ν` read as empty. Rebuilding it at `F 0` needs a refutation of
-  `erwp` from a resource holding a `mut` cell (a `TWNC` world with that cell, its lowering and the
-  run to the stuck term); not built. No negative configuration for a wrong constant is built,
-  for the same reason.
+- D4's configuration is built at `F 1` with the stuck application `() ℓ′`, refuted from the
+  `TWNC` world of the two `mut` cells (`ExtRLit791.world_two`). No negative configuration for a
+  wrong constant is built.
 - The capture bridges at `Φ.imm = []` (D12): open until `crwpG`'s entry carries `ImmTieL`
   (#821).
 

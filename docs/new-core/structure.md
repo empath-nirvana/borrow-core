@@ -200,7 +200,7 @@ are part of step 2.
    the uniform conjunct at `b`), `Imm` at Core's `ptoImmS` shape (the payload in the observable
    view `vO`, the location witnessed in the world's `imm` records, `ImmWitW`), `U` and `⊸` Kripke
    along the resource-relative `LocTy.ExtR`, `∀` as Core's `cC`. Type variables, μ, families,
-   opaque types and ν are read as empty. Laws: downward closure, `vN_extR`, `vN_local`,
+   opaque types are read as empty; ν is Core's greatest fixed point (#837). Laws: downward closure, `vN_extR`, `vN_local`,
    `vN_outlives`.
 2. Rule checks at `SemJN`: `mutSub`, `immSub`, `allI`, `withbor1`, `withbor1U`, `withbor2`,
    `withbor2U`. The constants: `withbor2S_compat`, `withbor3S_compat`, `withborFS_compat` (each
