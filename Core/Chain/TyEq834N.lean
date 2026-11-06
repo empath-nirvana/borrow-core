@@ -46,7 +46,10 @@ theorem vN_tyEq : ∀ (S : VTy) {S' : VTy} {δ δ' : LSub}, TyEq S δ S' δ' →
   | .unk, S', _, _, h => by cases S' <;> simp only [TyEq] at h; rfl
   | .tvar n, S', _, _, h => by cases S' <;> simp only [TyEq] at h; subst h; rfl
   | .mu A, S', _, _, h => by cases S' <;> simp only [TyEq] at h; rfl
-  | .fam A, S', _, _, h => by cases S' <;> simp only [TyEq] at h; rfl
+  | .fam A, S', _, _, h => by
+      cases S' <;> simp only [TyEq] at h
+      have ih := vN_tyEq A h
+      funext Θ n v ρ; simp only [vN, ih]
   | .tensor A B, S', _, _, h => by
       cases S' <;> simp only [TyEq] at h
       have ihA := vN_tyEq A h.1
@@ -93,7 +96,10 @@ theorem vO_tyEq : ∀ (S : VTy) {S' : VTy} {δ δ' : LSub}, TyEq S δ S' δ' →
   | .unk, S', _, _, h => by cases S' <;> simp only [TyEq] at h; rfl
   | .tvar n, S', _, _, h => by cases S' <;> simp only [TyEq] at h; subst h; rfl
   | .mu A, S', _, _, h => by cases S' <;> simp only [TyEq] at h; rfl
-  | .fam A, S', _, _, h => by cases S' <;> simp only [TyEq] at h; rfl
+  | .fam A, S', _, _, h => by
+      cases S' <;> simp only [TyEq] at h
+      have ih := vO_tyEq A h
+      funext Θ n v ρ; simp only [vO, ih]
   | .tensor A B, S', _, _, h => by
       cases S' <;> simp only [TyEq] at h
       have ihA := vO_tyEq A h.1

@@ -140,9 +140,9 @@ The configurations named below are indexed in `configurations.md`; the design th
 | F2 | `bang_app` | — | 4: `arrNew`, `arrFree`, `countFold`, `countTry` | **missing, buildable** | `!(A ⊸ B)` applied at a later world: from `vN .bang` and the `⊸` clause |
 | F3 | `instLife`, `immReborrow`, `vShape_tyEq`, `six132_shape_fresh` | 6.132 | 6: `allE`, `withload`, `withloadU`, `allEV` … | **same** | syntactic or model-level: Core's lemmas used as they are (`TyEq.instLife`, `tyEq_immReb`, `six132_shape_fresh`) |
 | F4 | `host_call_sound`, `vP_lit` | spec §8 | 2: `lit`, `hostOp` | **missing, buildable** | `host_call_sound` at `vN` (`hostSig` uses `int`, `⊗`, `+`, `1`, `0`); `vP_lit` is `vN .int` by definition |
-| F5 | `rel_tok_intro`, `rel_cases`, `tok_not_host` | — | 2: `tokMint`, `tokBurn` | **missing, buildable** | an `opq` clause in `vN` reading `k.rel` (for `Tok`, a fresh unit cell), and its laws |
-| F6 | `vP_fam_mk`, `vP_fam_split`, `vP_fam_idx`, `sepRange_pick` … | spec §9 | 22: `arrNew`, `arrFree`, `arrSize`, `arrReplace` … | **missing, buildable** | a `fam` clause in `vN`/`vO` (an indexed `sepRange` of leaves), the array steps at `erwp`, and the laws re-proved over it (`scope-831-map.md` §4) |
-| F7 | `wpTS_M_frameFam`, `wpTS_I_frameFam`, `wpG_M_frameFam`, `wpG_I_frameFam` | — | 4: `sliceBorrowM`, `sliceBorrowI`, `sliceBorrowMU`, `sliceBorrowIU` | **missing, buildable** | the `n`-cell frames: list inductions over the one-cell frames (`erwp_M_frameCRG`, `erwp_I_frameC`), one key per cell |
+| F5 | `rel_tok_intro`, `rel_cases`, `tok_not_host` | — | 2: `tokMint`, `tokBurn` | **same** (#836) | `vN`/`vO` at `opq k` read Core's `k.rel`; Core's lemmas used as they are (§9.2) |
+| F6 | `vP_fam_mk`, `vP_fam_split`, `vP_fam_idx`, `sepRange_pick` … | spec §9 | 22: `arrNew`, `arrFree`, `arrSize`, `arrReplace` … | **same** (#836), but the `tab` step | `vN`/`vO` at `[L]` Core's `sepRange` clause; `vN_fam_iff`/`_mk`/`_idx`/`_split`, `noOwn_famN`; the laws re-proved over it (§9.2). The `tab` step at the index (`arrNew`) is missing, buildable |
+| F7 | `wpTS_M_frameFam`, `wpTS_I_frameFam`, `wpG_M_frameFam`, `wpG_I_frameFam` | — | 4: `sliceBorrowM`, `sliceBorrowI`, `sliceBorrowMU`, `sliceBorrowIU` | **departed, to build** (#836) | `wpTS_M_frameFam` is `rwp_M_frameListN` (built). Across raises, the one-cell frame under inner claims `erwp_M_frameRR` is built; its list induction, the cancel-run counterpart and the Imm family frames are missing, buildable (§9.3) |
 | F8 | `vC_roll`, `vC_unfold`, `vC_immReborrow_mu_iff`, `vCE_subst` … | — | 8: `reify`, `roll`, `unroll`, `foldImm` … | **missing, buildable** | an environment argument in `vN`/`vO`, the `μ`/`tvar` clauses, Core's `RelMu` laws at the index; `withload_sized` is `withloadS_compat` with a size measure. Very high; not checked |
 | F10 | `cC` .arr (the `⊸` clause) | — | 10: `bind`, `lam`, `lamDead`, `app` … | **same** (#834) | `cN .arr` is Core's plain wand at the function's own world, read at every later index and every view consistent with the composite (§8.1). The Kripke reading along `ExtR` is gone: no configuration forced it |
 | F9 | `cC_nu_iff`, `nuRel_coind`, `cB_step` | spec §7 | 4: `reify`, `nuIn`, `nuOut`, `unfoldN` | **missing, unclear** | a reading of `ν` at `erwp`: a design choice first. Not derived; obstruction not verified |
@@ -186,12 +186,12 @@ The configurations named below are indexed in `configurations.md`; the design th
 
 | Status | Entries |
 |---|---|
-| same | 38 |
+| same | 40 (F5, F6 in #836) |
 | departed (built) | 12 (K1, K3, K4, V10, R1, R2, R3, R4, R5, R7, R8, R11) |
 | departed, forced by `erwp`'s definition | 1 (E13) |
 | departed, no configuration | 0 |
-| departed, to build | 6 (E3, E5, E6, E9, E10, E14) |
-| missing, buildable | 24 |
+| departed, to build | 7 (E3, E5, E6, E9, E10, E14, F7) |
+| missing, buildable | 21 |
 | missing, unclear | 2 (F9 `ν`, E12 the BOXED-κ stop lemma) |
 | **total** | **83** |
 
@@ -278,8 +278,8 @@ that step is done inside `withloadS_compat`, which is proved, so V1 is not a blo
 | 32 | `mutSub` | yes | proved | W3 F1 R9 | — (proved with chain lemmas inline) | proved |  |
 | 33 | `alloc` | yes | portable | W1 H1 G3 F1 | — | mechanical now |  |
 | 34 | `free` | yes | portable | W1 H2 G3 | — | mechanical now |  |
-| 35 | `tokMint` | no | out | W1 W6 H1 G3 F5 | F5 | mechanical once built |  |
-| 36 | `tokBurn` | no | out | W1 W6 H2 G3 F5 | F5 | mechanical once built |  |
+| 35 | `tokMint` | no | out | W1 W6 H1 G3 F5 | F5 | proved (#836) |  |
+| 36 | `tokBurn` | no | out | W1 W6 H2 G3 F5 | F5 | proved (#836) |  |
 | 37 | `swap` | yes | portable | W1 W2 W6 H3 H5 K1 G3 F1 | — | mechanical now |  |
 | 38 | `copy` | yes | portable | W1 W6 G3 F1 R10 | — | mechanical now |  |
 | 39 | `releaseImm` | yes | portable | W1 W6 H6 G3 | — | mechanical now |  |
@@ -288,28 +288,28 @@ that step is done inside `withloadS_compat`, which is proved, so V1 is not a blo
 | 42 | `lit` | yes | portable | W1 G3 F4 | F4 | mechanical once built | `vP_lit` (F4) |
 | 43 | `hostOp` | yes | portable | W1 W6 G3 F4 | F4 | mechanical once built | `host_call_sound` (F4) |
 | 44 | `arrNew` | no | out | W1 W2 W4 W6 H5 K2 V11 G3 F1 F2 F6 | W4 F2 F6 | mechanical once built |  |
-| 45 | `arrFree` | no | out | W1 W2 W4 W6 H2 K2 V11 G3 F2 F6 | W4 F2 F6 | mechanical once built |  |
-| 46 | `arrSize` | no | out | W1 W6 G3 F1 F6 | F6 | mechanical once built |  |
-| 47 | `arrReplace` | no | out | W1 W2 W6 H3 H5 G3 F1 F6 | F6 | mechanical once built |  |
-| 48 | `arrLen` | no | out | W1 W5 W6 G3 F6 | F6 | mechanical once built |  |
-| 49 | `arrGet` | no | out | W1 W5 W6 G3 F1 F6 | F6 | mechanical once built |  |
-| 50 | `arrCopy` | no | out | W1 W6 G3 F1 F6 R10 | F6 | mechanical once built |  |
-| 51 | `arrRelease` | no | out | W1 W5 W6 G3 F6 | F6 | mechanical once built |  |
+| 45 | `arrFree` | no | out | W1 W2 W4 W6 H2 K2 V11 G3 F2 F6 | W4 F2 F6 | proved (#836) |  |
+| 46 | `arrSize` | no | out | W1 W6 G3 F1 F6 | F6 | proved (#836) |  |
+| 47 | `arrReplace` | no | out | W1 W2 W6 H3 H5 G3 F1 F6 | F6 | proved (#836) |  |
+| 48 | `arrLen` | no | out | W1 W5 W6 G3 F6 | F6 | proved (#836) |  |
+| 49 | `arrGet` | no | out | W1 W5 W6 G3 F1 F6 | F6 | proved (#836) |  |
+| 50 | `arrCopy` | no | out | W1 W6 G3 F1 F6 R10 | F6 | proved (#836) |  |
+| 51 | `arrRelease` | no | out | W1 W5 W6 G3 F6 | F6 | proved (#836) |  |
 | 52 | `countFold` | yes | portable | W1 W4 W6 K2 V11 G3 F1 F2 | W4 F2 | mechanical once built | `countLoop_wp` (induction on `len − i`) |
 | 53 | `countTry` | yes | portable | W1 W4 W6 K2 V11 G3 F1 F2 | W4 F2 | mechanical once built | `countTryLoop_wp` |
 | 54 | `boundedFix` | yes | portable | W1 G3 C1 F1 | — | mechanical now | `fixSelf_valid`, `cC_boundedFix` along `ExtR` |
 | 55 | `iterate` | yes | portable | W1 K1 K5 G3 C3 E1 E2 E4 E8 E13 E14 | K5 E8 E14 | waits: answer consistency (§9.2) | `cwp_iterate` → E14 |
 | 56 | `divFuel` | yes | portable | W1 G3 C3 E1 E2 E4 E8 E11 E13 | E8 | proved (`divFuel_compatN`) | `fuel_total`, `divFuel_steps`, `fuelK_frame` |
 | 57 | `reify` | no | out | W1 W9 K1 K5 V4 G3 C3 F8 F9 E1 E2 E4 E8 E11 E13 | W9 K5 F8 F9 E8 | waits (unclear) | `reify_compat` |
-| 58 | `sliceBorrowM` | no | out | W1 W2 W3 W4 W6 K1 K2 V3 V6 V11 G3 F1 F6 F7 | W4 F6 F7 | mechanical once built |  |
+| 58 | `sliceBorrowM` | no | out | W1 W2 W3 W4 W6 K1 K2 V3 V6 V11 G3 F1 F6 F7 | W4 F6 F7 | proved (#836) |  |
 | 59 | `sliceBorrowI` | no | out | W1 W2 W3 W4 W6 K1 K2 V3 V6 V7 V10 V11 G3 F1 F6 F7 R5 | W4 F6 F7 | mechanical once built |  |
-| 60 | `sliceGetM` | no | out | W1 W5 W6 G3 F6 | F6 | mechanical once built |  |
-| 61 | `sliceLenM` | no | out | W1 W6 G3 F6 | F6 | mechanical once built |  |
-| 62 | `sliceSplitI` | no | out | W1 W6 G3 F6 | F6 | mechanical once built |  |
-| 63 | `sliceSplitM` | no | out | W1 W6 G3 F6 | F6 | mechanical once built |  |
-| 64 | `sliceEmptyI` | no | out | W1 G3 F6 | F6 | mechanical once built |  |
-| 65 | `sliceEmptyM` | no | out | W1 G3 F6 | F6 | mechanical once built |  |
-| 66 | `arrEmpty` | no | out | W1 G3 F6 | F6 | mechanical once built |  |
+| 60 | `sliceGetM` | no | out | W1 W5 W6 G3 F6 | F6 | proved (#836) |  |
+| 61 | `sliceLenM` | no | out | W1 W6 G3 F6 | F6 | proved (#836) |  |
+| 62 | `sliceSplitI` | no | out | W1 W6 G3 F6 | F6 | proved (#836) |  |
+| 63 | `sliceSplitM` | no | out | W1 W6 G3 F6 | F6 | proved (#836) |  |
+| 64 | `sliceEmptyI` | no | out | W1 G3 F6 | F6 | proved (#836) |  |
+| 65 | `sliceEmptyM` | no | out | W1 G3 F6 | F6 | proved (#836) |  |
+| 66 | `arrEmpty` | no | out | W1 G3 F6 | F6 | proved (#836) |  |
 | 67 | `sliceReplaceM` | no | out | W1 W2 W6 H3 H5 G3 F1 F6 R2 | F6 | mechanical once built |  |
 | 68 | `sliceSwapM` | no | out | W1 W2 W6 H3 H5 G3 F1 F6 R2 | F6 | mechanical once built |  |
 | 69 | `withbor1` | yes | proved | W1 W2 W3 W4 W6 K1 K2 K3 V3 V7 V10 V11 G3 F1 R5 | — (proved with chain lemmas inline) | proved |  |
@@ -772,3 +772,107 @@ resumption in `div_fuel`: an answer of `Σ` goes back into the callback's own co
 - `iterate`: `erwp_iterateC` (E14) with the invariant `vN St` read at the index; the step's next
   state is read at the loop's view, which §9.2 is.
 - `withloadU` (#834 §8.4) is unchanged.
+
+## 11. Unit L5: opaque types and families (#836)
+
+### 11.1 The map
+
+The clauses are Core's (`Core/Relation.lean`): at `opq k`, `k.rel v` (for `Tok` a location owning a
+unit cell, `Opaque.rel`); at `[L]`, `v = arr(ℓ, c)`, `c < 2³¹` and `sepRange (λm. 𝒱⟦L⟧(loc m)) ℓ c`.
+On the chain both go into `vN` and `vO` as they are, the leaf read at the world and index of the
+family (`sepRange` is Core's, `Core/SepRange.lean`). The laws are re-proved over them: a family's
+law is the leaf's, lifted by `sepRange_mono_down` (for laws read at a part of the resource:
+`vN_extR`, `vN_outlives`, `vN_above`) or `sepRange_mono'`.
+
+Each row, its Core proof, and the chain lemmas it reads (`·N` names are new in this unit):
+
+| Row | Core proof | Chain lemmas |
+|---|---|---|
+| `tokMint` | `tokMint_compatX` (`Core/Tok.lean`) | `gN_deadP`, `erwp_val`, `erwp_det` (β), `erwp_alloc` (H1), `Opaque.rel_tok_intro` at the `opq` clause |
+| `tokBurn` | `tokBurn_compatX` | `erwp_det` (β), `erwp_free` (H2), `Opaque.rel_cases`, `Opaque.tok_not_host` |
+| `arrLen` | `arrLen_compatX` (`Core/Arrays.lean`) | `vN_fam_iff`, `noOwn_arrayImmN`, `erwp_garbage` (W5), `erwp_det` |
+| `arrGet` | `arrGet_compatX` | `vN_fam_idx`, `erwp_det` at `Head.idx`, `sepRange_pick`, `noOwn` of a leaf, `erwp_garbage` |
+| `arrCopy` | `arrCopy_compatX` | `sepRange_dup` with the `imm` leaf's duplication (`compS_imm_dup`, R10, and the witness `ImmWitW` kept on both halves) |
+| `arrRelease` | `arrRelease_compatX` (`release_fam_compatX`) | `noOwn_famN`, `erwp_garbage` |
+| `arrSize` | `arrSize_compatX` | `erwp_det`, `vN_fam_mk` |
+| `arrReplace` | `arrReplace_compatX` | `erwp_det`, `erwp_bindR`, `rwp_load` (H3), `rwp_store` (H5), `sepRange_pick` |
+| `arrNew` | `arrNew_compatX`, `tabFill_wp`, `wpTS_tab`, `alloc_block` (`Core/ArrayWp.lean`) | `rwp_tab`/`erwp_tab` (the `tab` step at the index: `n` of `TWNC.alloc`, a block from `finDom_block`), `tabFill_wpN` by Core's induction: `bang_app` (F2), `erwp_bind_frame` (W4), `rwp_store` |
+| `arrFree` | `arrFree_compatX`, `dropFill_wp` | `erwp_det` at `Head.drop`, `erwp_free`, `bang_app`, `erwp_bind_frame` |
+| `arrEmpty`, `sliceEmptyI`, `sliceEmptyM` | `famEmpty_compatX` (`Core/SliceOps.lean`) | `vN_fam_mk` at `0` |
+| `sliceSplitI`, `sliceSplitM` | `famSplit_compatX` | `vN_fam_split`, `erwp_det` at `Head.split` |
+| `sliceGetM` | `famGet_compatX` (`Core/Slices.lean`) | as `arrGet`, the leaf a `mut` one (`noOwn` of `mutL`) |
+| `sliceLenM` | `famSize_compatX` | as `arrSize` |
+| `sliceReplaceM` | `sliceReplaceM_compatX` | `erwp_M_antiFrame` at the view (R2, as `withswap_compatN`) at the leaf, `rwp_load`, `rwp_store`, `sepRange_pick` |
+| `sliceSwapM` | `sliceSwapM_compatX` | the same at one leaf (`i = j`) or two (`sepRange_pick2N`) |
+| `sliceBorrowM` | `sliceBorrowM_compatX`, `wpTS_M_frameFam`/`wpTS_M_frameList` (`Core/SliceFrames.lean`) | `erwp_M_frameFamN`: the list induction over the one-cell frame at the empty table (`erwp_M_frameR`, as `withbor2_compatN`), each cell its own key `Θ + (ℓᵢ, αᵢ)`, `αᵢ₊₁` fresh for the world after `ℓᵢ`; the callback reads every leaf at the innermost lifetime through `Mut`'s slack `@aδ ⊑ b` |
+| `sliceBorrowI` | `sliceBorrowI_compatX`, `wpTS_I_frameFam` | `erwp_I_frameFamN`: the list induction over `erwp_I_frame` (R5), one `imm` record per cell (`LocTy.addImm`), the run read at the lender's view by `erwp_tieEntry` |
+| `sliceBorrowMU` | `sliceBorrowMU_compatX` (`Core/EffBorrow.lean`), `wpG_M_frameFam` | the list induction over `erwp_M_frameR` at a `Row.Unwind` table (abortive entries), as `withbor2U_compatN` |
+| `sliceBorrowIU` | `sliceBorrowIU_compatX`, `wpG_I_frameFam` | the list induction over `erwp_I_frameR`, as `withbor1U_compatN` |
+| `sm` (constant) | `sliceBorrowMU_compatX` at `Row.Suspend` | the list induction over `erwp_M_frameCR` (stops, raises) and `erwp_M_frame_cancelRunCR` (layered cancel runs): each layer's table the guarded twin of the next (`tabR` at that layer's claim), `tabR_can` per layer; `withbor2S_compat`'s structure around it, `erwp_claimX`, `erwp_ubindClaimRT`, the finaliser `d : Array A ⊸ 1` |
+
+The statements `JdgInFrag` and `Const791.InFrag` read `VTy.inFrag`; it is widened to `opq` and to
+`[L]` at an in-fragment `L`. `μ`, `tvar` (L6) and `ν` (L7) stay out.
+
+### 11.2 Built (`Core/Chain/Fam836N.lean`, `FamFrame836N.lean`, `FamStop836N.lean`)
+
+The clauses (`Goal791N.lean`): `vN`/`vO` at `opq k` are `k.rel v ρ`; at `[L]` they are
+`∃ ℓ c, v = arr(ℓ, c) ∧ c < 2³¹ ∧ sepRange (λm. 𝒱⟦L⟧(loc m)) ℓ c ρ`, the leaf at the family's
+world and index. `VTy.inFrag` admits `opq` and `[L]` at an in-fragment `L`, so `JdgInFrag` and
+`Const791.InFrag` do; the family rows of §3 (marked `no` there) are now in the fragment.
+
+Laws re-proved over the two clauses, statements unchanged: `vN_down`/`vO_down`, `vN_congr`/
+`vO_congr`, `vN_extR`/`vO_extR` (`sepRange_mono_down` at `ExtR`'s parts), `vN_outlives`,
+`vN_outlivesLe` (`sepRange_closed`; at `Tok` the owned unit cell), `vN_vO`, `vN_vShape`/
+`vO_vShape`, `vO_transfer` and `relabel_vN` (`sepRange_zip`, Core's `obs_transfer`/`relabel_obs`
+family cases, with the chain's `LifeBoundOn`/`LifeBoundWit` conjuncts closed under parts),
+`vN_tyEq`/`vO_tyEq`, `vN_noOwn_of_ownFree` (both copies; `Tok` is not own-free).
+
+| Row | Chain lemma | Core proof |
+|---|---|---|
+| `tokMint` | `tokMint_compatN` | `tokMint_compatX` |
+| `tokBurn` | `tokBurn_compatN` | `tokBurn_compatX` |
+| `arrLen` | `arrLen_compatN` | `arrLen_compatX` |
+| `arrGet`, `sliceGetM` | `arrGet_compatN`, `sliceGetM_compatN` (`famGet_compatN`) | `arrGet_compatX`, `famGet_compatX` |
+| `arrCopy` | `arrCopy_compatN` (`vN_imm_dupN`, `sepRange_dup`) | `arrCopy_compatX` |
+| `arrRelease` | `arrRelease_compatN` (`release_fam_compatN`) | `release_fam_compatX` |
+| `arrSize`, `sliceLenM` | `arrSize_compatN`, `sliceLenM_compatN` (`famSize_compatN`) | `famSize_compatX` |
+| `arrEmpty`, `sliceEmptyI`, `sliceEmptyM` | `arrEmpty_compatN`, `sliceEmptyI_compatN`, `sliceEmptyM_compatN` (`famEmpty_compatN`) | `famEmpty_compatX` |
+| `sliceSplitI`, `sliceSplitM` | `sliceSplitI_compatN`, `sliceSplitM_compatN` (`famSplit_compatN`, `vN_fam_split`) | `famSplit_compatX` |
+| `arrFree` | `arrFree_compatN` (`dropFill_wpN`) | `arrFree_compatX`, `dropFill_wp` |
+| `arrReplace` | `arrReplace_compatN` | `arrReplace_compatX` |
+| `sliceBorrowM` | `sliceBorrowM_compatN` (`sliceBorrowM_sem`, `rwp_M_frameListN`) | `sliceBorrowM_compatX`, `wpTS_M_frameList` |
+
+`rwp_M_frameListN` is Core's `wpTS_M_frameList` as the list induction over `rwp_M_frame`: frame `j`
+lends its leaf at `αⱼ` fresh for the world the frames before it reached, at the key `(ℓⱼ, αⱼ)`,
+below the frame's rest, the payloads' stratum and the result's (Core's `aF ⊓ β′ ⊓ β`); the inner
+frames' callback bound is `aR ⊓ α₁ ⊓ γH` as printed. Core's `ptoMutS_antitone` step (the outer
+leaf shortened to the innermost lifetime) is `Mut`'s slack `@aδ ⊑ b` on the chain (`mutLeafN`,
+`vN_mutLeaf`): the leaf keeps its cell at `αⱼ` and is read at `α ⊑ αⱼ`. The callback's result
+returns frame by frame by `vN_local`.
+
+`erwp_M_frameRR` (`FamStop836N.lean`) is `erwp_M_frameR` with the callback's raises at
+`opTableR T R`, the claims of the frames nested inside it: at a `raise` the lent cell's claim joins
+`R` (`R` in the lend's stratum, so the lent cell is not in it). It is the one-cell step of the
+family frame across raises.
+
+### 11.3 Not built
+
+- **`sliceBorrowMU`, `sliceBorrowIU`**: the list induction over `erwp_M_frameRR` (the claims a
+  `sepList` of `claimR` at each leaf's key, which is the owned array the finaliser `d : Array A ⊸ 1`
+  takes at `[finalise]`, `erwp_ubindRaise`), then `withbor2U_compatN`'s and `withbor1U_compatN`'s
+  steps. The `Imm` side needs the family Imm Frame: the list induction over `erwp_I_frameR`, one
+  record per cell (`LocTy.addImm`), each leaf's `ImmWitW` at its record. Not derived; obstruction not
+  verified.
+- **`constN_sm`**: the family frame across stops and layered cancel runs. Nesting `erwp_M_frameCR`
+  needs it with the callback's raises and cancel runs already carrying the inner claims, as
+  `erwp_M_frameRR` does for raises: `erwp_M_frameCR`, `erwp_M_frame_cancelRunCR`, `tabR`/`finR`,
+  `tabR_can` and `tabN_tabR_twin` at an incoming claim, then the list induction and
+  `withbor2S_compat`'s structure with the composite claim at `erwp_claimX`/`erwp_ubindClaimRT`.
+  Not derived; obstruction not verified.
+- **`sliceBorrowI`**: `erwp_I_frameFamN`, the list induction over `erwp_I_frame` with
+  `erwp_tieEntry`; not built.
+- **`arrNew`**: the `tab` step at the index (`rwp_tab`: one head step to `tabFill`, the block
+  from `finDom_block`, `n` of `TWNC.alloc`; Core's `wpTS_tab`, `alloc_block`), then `tabFill_wpN`
+  by Core's induction. Not built.
+- **`sliceReplaceM`, `sliceSwapM`**: `arrReplace_compatN`'s steps with `erwp_M_antiFrame` at the
+  view at each leaf (as `withswap_compatN`). Not built.

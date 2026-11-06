@@ -99,9 +99,10 @@ key `(ℓ, b)` (`mutL`), and every value of `A` in the stratum `b` (`ptoMutS`'s 
 `A` (`ImmWitW`, Core's `CohE`); `[@a] A` in
 the stratum; `U C` the forced thunk in `𝒞⟦C⟧` at every extension of the world along `ExtR` at the
 thunk's resource (Core's `vCE` at `U`), every view consistent with that resource and every record
-list. A lifetime with no
-interpretation reads as empty. Type variables, `μ`, families and opaque host types are outside
-the fragment and empty. -/
+list; `opq k` Core's `k.rel` (at `Tok` a location owning a unit cell); `[L]` Core's family: a
+value `arr(ℓ, c)` with `c < 2³¹` whose leaves `loc (ℓ + i)`, `i < c`, are values of `L` over a
+separation of the resource (`sepRange`). A lifetime with no interpretation reads as empty. Type
+variables and `μ` are outside the fragment and empty. -/
 def vN : VTy → LSub → LocTy → Nat → Val → WRes → Prop
   | .unit, _, _, _, v, ρ => v = Val.unit ∧ ρ = PMap.empty
   | .tensor A B, δ, Θ, n, v, ρ => ∃ v₁ v₂ ρ₁ ρ₂, v = Val.pair v₁ v₂ ∧ ResU.CompS ρ₁ ρ₂ ρ ∧
@@ -125,8 +126,9 @@ def vN : VTy → LSub → LocTy → Nat → Val → WRes → Prop
   | .int w, _, _, _, v, ρ => v.IsInt w ∧ ρ = PMap.empty
   | .tvar _, _, _, _, _, _ => False
   | .mu _, _, _, _, _, _ => False
-  | .fam _, _, _, _, _, _ => False
-  | .opq _, _, _, _, _, _ => False
+  | .fam L, δ, Θ, n, v, ρ => ∃ (l : Loc) (c : UInt32), v = Val.arr l c ∧ c.toNat < 2 ^ 31 ∧
+      sepRange (fun m => vN L δ Θ n (Val.loc m)) l c.toNat ρ
+  | .opq k, _, _, _, v, ρ => k.rel v ρ
 /-- **`𝒱⟦A⟧δ` in the observable view an `imm` payload is held at** (Core's `vCE false`): `vN`'s
 clauses with `U C` read as `True`, `!A` and `Mut`'s stored family read at `vN`. -/
 def vO : VTy → LSub → LocTy → Nat → Val → WRes → Prop
@@ -151,8 +153,9 @@ def vO : VTy → LSub → LocTy → Nat → Val → WRes → Prop
   | .int w, _, _, _, v, ρ => v.IsInt w ∧ ρ = PMap.empty
   | .tvar _, _, _, _, _, _ => False
   | .mu _, _, _, _, _, _ => False
-  | .fam _, _, _, _, _, _ => False
-  | .opq _, _, _, _, _, _ => False
+  | .fam L, δ, Θ, n, v, ρ => ∃ (l : Loc) (c : UInt32), v = Val.arr l c ∧ c.toNat < 2 ^ 31 ∧
+      sepRange (fun m => vO L δ Θ n (Val.loc m)) l c.toNat ρ
+  | .opq k, _, _, _, v, ρ => k.rel v ρ
 /-- **`𝒞⟦C⟧δ` at the world, the run's live lifetimes, the index and the record list.** Every
 run is `erwp` at the view `Θ.view c`. `F A` is `erwp` at the empty table; `F_Σ R` is `erwp` at the
 table of the row's layers; `⊸` is Core's plain wand at the same world, read at every view
@@ -293,7 +296,9 @@ theorem vN_down : ∀ (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ
   | .int _, _, _, _, _, _, h => h
   | .tvar _, _, _, _, _, _, h => h
   | .mu _, _, _, _, _, _, h => h
-  | .fam _, _, _, _, _, _, h => h
+  | .fam L, δ, Θ, n, _, _, h => by
+      obtain ⟨l, c, h₁, h₂, h₃⟩ := h
+      exact ⟨l, c, h₁, h₂, sepRange_mono' (fun m σ hm => vN_down L δ Θ n (Val.loc m) σ hm) h₃⟩
   | .opq _, _, _, _, _, _, h => h
 theorem vO_down : ∀ (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes),
     vO (ℍ := ℍ) A δ Θ (n + 1) v ρ → vO (ℍ := ℍ) A δ Θ n v ρ
@@ -324,7 +329,9 @@ theorem vO_down : ∀ (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ
   | .int _, _, _, _, _, _, h => h
   | .tvar _, _, _, _, _, _, h => h
   | .mu _, _, _, _, _, _, h => h
-  | .fam _, _, _, _, _, _, h => h
+  | .fam L, δ, Θ, n, _, _, h => by
+      obtain ⟨l, c, h₁, h₂, h₃⟩ := h
+      exact ⟨l, c, h₁, h₂, sepRange_mono' (fun m σ hm => vO_down L δ Θ n (Val.loc m) σ hm) h₃⟩
   | .opq _, _, _, _, _, _, h => h
 theorem cN_down : ∀ (C : CTy) (δ : LSub) (Θ : LocTy), Θ.Down → ∀ (c : Loc → Option Life)
     (n : Nat) (ls : List SRec) (e : Expr) (ρ : WRes),
@@ -490,7 +497,9 @@ theorem vN_congr : ∀ (A : VTy) {δ δ' : LSub}, (∀ y, VFree y A → δ.find?
   | .int _, _, _, _ => rfl
   | .tvar _, _, _, _ => rfl
   | .mu _, _, _, _ => rfl
-  | .fam _, _, _, _ => rfl
+  | .fam L, δ, δ', h => by
+      have h₁ := vN_congr L (δ := δ) (δ' := δ') h
+      funext Θ n v ρ; simp only [vN, h₁]
   | .opq _, _, _, _ => rfl
 theorem vO_congr : ∀ (A : VTy) {δ δ' : LSub}, (∀ y, VFree y A → δ.find? y = δ'.find? y) →
     vO (ℍ := ℍ) A δ = vO (ℍ := ℍ) A δ'
@@ -528,7 +537,9 @@ theorem vO_congr : ∀ (A : VTy) {δ δ' : LSub}, (∀ y, VFree y A → δ.find?
   | .int _, _, _, _ => rfl
   | .tvar _, _, _, _ => rfl
   | .mu _, _, _, _ => rfl
-  | .fam _, _, _, _ => rfl
+  | .fam L, δ, δ', h => by
+      have h₁ := vO_congr L (δ := δ) (δ' := δ') h
+      funext Θ n v ρ; simp only [vO, h₁]
   | .opq _, _, _, _ => rfl
 theorem cN_congr : ∀ (C : CTy) {δ δ' : LSub}, (∀ y, CFree y C → δ.find? y = δ'.find? y) →
     cN (ℍ := ℍ) C δ = cN (ℍ := ℍ) C δ'
@@ -655,8 +666,15 @@ theorem vN_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life} (
   | tvar => intro Θ n v ρ h; exact h.elim
   | mu _ _ => intro Θ n v ρ h; exact h.elim
   | int => rintro Θ n v ρ ⟨-, rfl⟩; exact ResU.inStratum_empty α
-  | opq => intro Θ n v ρ h; exact h.elim
-  | fam _ _ => intro Θ n v ρ h; exact h.elim
+  | opq =>
+      intro Θ n v ρ h
+      rcases Opaque.rel_cases h with ⟨-, rfl, -⟩ | ⟨-, l, -, rfl⟩
+      · exact ResU.inStratum_empty α
+      · exact ResU.inStratum_single_own α l _
+  | fam _ ih =>
+      rintro Θ n v ρ ⟨l, c, -, -, hs⟩
+      exact sepRange_closed (R := fun σ => σ.InStratum α) (ResU.inStratum_empty α)
+        (fun _ _ _ hc o₁ o₂ => inStratum_compS hc o₁ o₂) (fun m σ hm => ih Θ n _ σ hm) hs
 
 /-- **`Δ ⊢ A ⊒ @a`: `𝒱⟦A⟧` lies in every stratum strictly below `α = @aδ`** (Core's
 `vC_outlivesLe`, `[TR]` 6.60 at the non-strict side condition), at every world. -/
@@ -700,8 +718,15 @@ theorem vN_outlivesLe {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α γ : Li
   | tvar => intro Θ n v ρ h; exact h.elim
   | mu _ _ => intro Θ n v ρ h; exact h.elim
   | int => rintro Θ n v ρ ⟨-, rfl⟩; exact ResU.inStratum_empty γ
-  | opq => intro Θ n v ρ h; exact h.elim
-  | fam _ _ => intro Θ n v ρ h; exact h.elim
+  | opq =>
+      intro Θ n v ρ h
+      rcases Opaque.rel_cases h with ⟨-, rfl, -⟩ | ⟨-, l, -, rfl⟩
+      · exact ResU.inStratum_empty γ
+      · exact ResU.inStratum_single_own γ l _
+  | fam _ ih =>
+      rintro Θ n v ρ ⟨l, c, -, -, hs⟩
+      exact sepRange_closed (R := fun σ => σ.InStratum γ) (ResU.inStratum_empty γ)
+        (fun _ _ _ hc o₁ o₂ => inStratum_compS hc o₁ o₂) (fun m σ hm => ih Θ n _ σ hm) hs
 
 /-! ### Values along the Kripke order -/
 
@@ -759,7 +784,11 @@ theorem vN_extR : ∀ (A : VTy) (δ : LSub) {Θ Θ' : LocTy} (n : Nat) (v : Val)
   | .int _, _, _, _, _, _, _, _, h => h
   | .tvar _, _, _, _, _, _, _, _, h => h
   | .mu _, _, _, _, _, _, _, _, h => h
-  | .fam _, _, _, _, _, _, _, _, h => h
+  | .fam L, δ, Θ, Θ', n, _, _, hE, h => by
+      obtain ⟨l, c, h₁, h₂, h₃⟩ := h
+      exact ⟨l, c, h₁, h₂, sepRange_mono_down (R := fun σ => LocTy.ExtR Θ Θ' σ)
+        (fun _ _ _ hc hE' => ⟨hE'.left hc, hE'.right hc⟩)
+        (fun m σ hEσ hm => vN_extR L δ n (Val.loc m) σ hEσ hm) hE h₃⟩
   | .opq _, _, _, _, _, _, _, _, h => h
 
 /-- **The observable view is stable along the resource-relative order**, as `vN_extR`. -/
@@ -804,7 +833,11 @@ theorem vO_extR : ∀ (A : VTy) (δ : LSub) {Θ Θ' : LocTy} (n : Nat) (v : Val)
   | .int _, _, _, _, _, _, _, _, h => h
   | .tvar _, _, _, _, _, _, _, _, h => h
   | .mu _, _, _, _, _, _, _, _, h => h
-  | .fam _, _, _, _, _, _, _, _, h => h
+  | .fam L, δ, Θ, Θ', n, _, _, hE, h => by
+      obtain ⟨l, c, h₁, h₂, h₃⟩ := h
+      exact ⟨l, c, h₁, h₂, sepRange_mono_down (R := fun σ => LocTy.ExtR Θ Θ' σ)
+        (fun _ _ _ hc hE' => ⟨hE'.left hc, hE'.right hc⟩)
+        (fun m σ hEσ hm => vO_extR L δ n (Val.loc m) σ hEσ hm) hE h₃⟩
   | .opq _, _, _, _, _, _, _, _, h => h
 end
 
@@ -990,15 +1023,15 @@ theorem allI_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {x : LifeVar} {b : Lifetime.L
 /-! ## §3. The statements -/
 
 mutual
-/-- **The formers the interpretation covers**: every former but type variables, `μ`, families
-(arrays and slices) and opaque host types, which `vN` reads as empty, and `ν`, which `cN` reads
-as empty. Decidable. -/
+/-- **The formers the interpretation covers**: every former but type variables and `μ`, which
+`vN` reads as empty, and `ν`, which `cN` reads as empty. Families (arrays and slices) are covered
+at a covered leaf, and opaque types (`Tok` and the host types) always. Decidable. -/
 def _root_.BoCa.Fig16.LogRel.Core.VTy.inFrag : VTy → Bool
-  | .unit | .zero | .unk | .int _ => true
+  | .unit | .zero | .unk | .int _ | .opq _ => true
   | .tensor A B | .sum A B => A.inFrag && B.inFrag
   | .thunk C => C.inFrag
-  | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A => A.inFrag
-  | .tvar _ | .mu _ | .fam _ | .opq _ => false
+  | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A | .fam A => A.inFrag
+  | .tvar _ | .mu _ => false
 /-- The computation-type formers the interpretation covers. -/
 def _root_.BoCa.Fig16.LogRel.Core.CTy.inFrag : CTy → Bool
   | .ret A => A.inFrag
@@ -1033,12 +1066,11 @@ def ConstsN : Prop := ∀ c : Const791, c.InFrag → ConstN (ℍ := ℍ) c
 
 /-- **The fundamental property over `erwp`, on the fragment**: every derivation of the existing
 judgment whose context and type lie in the fragment (`JdgInFrag`). The rules whose conclusion is
-at a former the interpretation reads as empty (`arrNew`, `arrEmpty`, the slice and fold
-constants, `roll`, `nuIn`, `unfoldN`, a type variable's or an opaque host type's introduction)
-conclude outside the fragment and are not quantified over. A derivation of a judgment in the
-fragment may still cut through an excluded type inside (an array built and consumed, `unroll`
-of a `μ` value); at such a cut the interpretation gives no reading, so `FundamentalN` is not
-shown attainable by induction on the derivation until those formers have clauses.
+at a former the interpretation reads as empty (the fold constants over `μ`, `roll`, `nuIn`,
+`unfoldN`, a type variable's introduction) conclude outside the fragment and are not quantified
+over. A derivation of a judgment in the fragment may still cut through an excluded type inside
+(`unroll` of a `μ` value); at such a cut the interpretation gives no reading, so `FundamentalN`
+is not shown attainable by induction on the derivation until those formers have clauses.
 
 The rule-by-rule map is `docs/new-core/scope-831-map.md`. Its answers on the two risks it named:
 * An `imm` lend (`withbor1`, `withbor1U`) runs its callback at the world with the lend's record.
