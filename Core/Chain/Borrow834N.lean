@@ -152,6 +152,146 @@ theorem withswap_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
     ⟨α₀, hα₀, b, hα₀b, ⟨l, w₃, ρ₃, hρ₃, m', hw₃, le_rfl, rfl, hlΘ, rfl⟩, hunif⟩,
     vN_le (by omega) h₄⟩
 
+/-! ### `withbor (3)` at the pure row -/
+
+/-- **`withbor (3)` at `SemJN`** (Core's `withbor3_compatX`):
+`Mut @a A ⊸ (∀'x ⊏ @Δ. Mut 'x A ⊸ ['x] B) ⊸ Mut @a A ⊗ B` at the pure row. Core's steps: the
+source's `Mut` value at the callback's world; the anti-frame at its cell (`wpTS_M_antiFrameX`),
+the opened content lent at a fresh `α` below the cell, the bound and the callback's stratum
+(`wpTS_M_frameX`), the two together `erwp_withbor3` at the view (the source's cell at its view
+lifetime, `consistentX_get`); `f ()` and the borrow's application under the pair, framed beside
+the borrow (`wpTS_bind (.pairR ℓ □)`, `wpTS_bind_frame`); the result `['x] B` back at the world
+without the lend (`vN_local`); the content handed back in `F_i k` is in `F_o k` (`hunif`), and the
+resealed cell is a `Mut @a A` value again. -/
+theorem withbor3_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B : VTy}
+    (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hA : ¬ VFree x A) (hB : ¬ VFree x B) :
+    SemJN (ℍ := ℍ) Δ Γ withbor (.val (axWithbor3Ty a x Δ.meetOfDom A B)) := by
+  intro δ γ Θ c n ls ρ hδ _ _ _ hg
+  obtain rfl := gN_deadP hΓ hg
+  show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ withbor) _
+  rw [show substAll γ withbor = withbor from psub_closedAt _ γ (by decide) (Nat.zero_le 0)]
+  refine erwp_val (v := withborVal) ?_
+  intro Θ₁ _ hΘ₁ _ _ ls₁ c₂ k₁ _ v₁ τ₀ ρ₁ hcomp hv₁ _
+  obtain rfl := eq_of_compS_empty_left hcomp
+  obtain ⟨α₀, hα₀, b, hα₀b, hm₁, hunif⟩ := hv₁
+  obtain ⟨l, -, -, -, -, -, -, rfl, -, -⟩ := id hm₁
+  have hΦ₁ : (Θ₁.view c₂).Down := LocTy.view_down hΘ₁.1 c₂
+  refine erwp_det hΦ₁ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down _ δ Θ₁ k v ρ h)
+    (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl .hole) ?_
+  have e₁ : Kont.hole.plug (Expr.subst 0 (Val.loc l)
+      (Val.lam (.pair BoCa.v1 (.app (.app BoCa.v0 unit') BoCa.v1))).1) = (withborAt l).1 := by
+    simp [Kont.plug, Expr.subst, Expr.shift, withborAt, BoCa.v0, BoCa.v1, unit', Val.loc,
+      Val.lam, Expr.val, Val.unit]
+  rw [e₁]
+  refine erwp_val (v := withborAt l) ?_
+  -- the callback, at the world the body's `U` reached; the source arrives there along `ExtR`
+  intro Θ₂ hE₂ hΘ₂ _ _ ls₂ c k₂ hk₂ f ρf τ₂ hc₂ hf hcon
+  have hΦ : (Θ₂.view c).Down := LocTy.view_down hΘ₂.1 c
+  set P : CPredL := fun Θ' j u r => vN (ℍ := ℍ) A δ Θ' j u r with hP
+  have hm : mutL b P Θ₂ k₂ (Val.loc l) ρ₁ := by
+    obtain ⟨l₀, w, χ, hχ, j, hw, hj, h₁, h₂, h₃⟩ := hm₁
+    exact mutL_extR hE₂ ⟨l₀, w, χ, hχ, j, hw, by omega, h₁, h₂, h₃⟩
+  set Q : PostN := fun k _ v ρ => vN (ℍ := ℍ) (.tensor (.mut a A) B) δ Θ₂ k v ρ with hQ
+  refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down _ δ Θ₂ k v ρ h)
+    (fun μ => step1Only_plug (Head.beta μ _ f) rfl .hole) ?_
+  have e₂ : Kont.hole.plug (Expr.subst 0 f
+      (.pair (.val (Val.loc l)) (.app (.app BoCa.v0 unit') (.val (Val.loc l))))) =
+      (Kont.pairR (Val.loc l) (Kont.appL Kont.hole (Val.loc l))).plug
+        (.app (.val f) (.val Val.unit)) := by
+    simp [Kont.plug, Expr.subst, BoCa.v0, unit', Val.loc, Expr.val, Val.unit]
+  rw [e₂]
+  refine erwp_of_valid fun hv => ?_
+  -- the source's cell is at its view lifetime, and the view types it with `F_o`
+  obtain ⟨l', w₀, σ₀, hσ₀, j₀, hw₀, hkj, hl', hlΘ, rfl⟩ := id hm
+  obtain rfl : l = l' := by have := congrArg Subtype.val hl'; simpa [Val.loc] using this
+  have hkm : (CellU.mutOf b w₀ σ₀ hσ₀ (famL b P Θ₂ j₀) hw₀).kind ≠ Kind.imm := by
+    rw [CellU.kind_mutOf]; exact fun c => Kind.noConfusion c
+  have hget : τ₂.get l = some (CellU.mutOf b w₀ σ₀ hσ₀ (famL b P Θ₂ j₀) hw₀) :=
+    (ResU.CompS.get_left_of_ne_imm hc₂ (ResU.single_get_self _ _) hkm).2
+  have hcb : c l = some b := by
+    have h := consistentX_get hcon hv hget (CellU.kind_mutOf _ _ _ _ _ _)
+    rwa [CellU.at_mutOf] at h
+  have hvc : ResU.Valid (ResU.single l (CellU.mutOf b w₀ σ₀ hσ₀ (famL b P Θ₂ j₀) hw₀)) :=
+    (ResU.Valid.split hc₂ hv).1
+  have hcf : ConsistentX c ρf := consistentX_right hc₂ hcon hv
+  have hcσ : ConsistentX c σ₀ := consistentX_mut_wit (consistentX_left hc₂ hcon hv) hvc
+  -- the lend's lifetime: fresh, below the cell, the bound and the callback's stratum
+  obtain ⟨γb, hγb⟩ : ∃ m, Δ.meetOfDom.interp δ = some m :=
+    Lifetime.Life.interp_defined_of_wf hδ (Lifetime.meetOfDomL_wf Δ.entries)
+  obtain ⟨βf, hβf⟩ := ResU.exists_stratum ρf
+  obtain ⟨α, hαle, hfr⟩ := LocTy.exists_fresh hΘ₂.2 (↓(b ⊓ βf ⊓ γb))
+  have hαlt : α < b ⊓ βf ⊓ γb := lt_of_le_of_lt hαle (Life.down_sqsubset _)
+  have hαβ : α ≤ b := hαlt.le.trans (inf_le_left.trans inf_le_left)
+  have houtP : σ₀.InStratum α := hσ₀.mono hαβ
+  have houtf : ρf.InStratum (↓α) := hβf.mono
+    ((Life.down_sqsubset α).le.trans (hαlt.le.trans (inf_le_left.trans inf_le_right)))
+  have hLt : LtLife δ Δ.meetOfDom α := ⟨γb, hγb, lt_of_lt_of_le hαlt inf_le_right⟩
+  set δ' := δ.extend x α with hδ'
+  have hAδ : vN (ℍ := ℍ) A δ' = vN (ℍ := ℍ) A δ := vN_extend_of_not_free hA δ α
+  have hBδ : vN (ℍ := ℍ) B δ' = vN (ℍ := ℍ) B δ := vN_extend_of_not_free hB δ α
+  set P' : CPredL := fun Θ' j u r => vN (ℍ := ℍ) A δ' Θ' j u r with hP'
+  set Fam : Nat → Val → SPropS Loc Val α := famL α P' Θ₂ with hFam
+  have hFamD : DownFam α Fam := vN_fam_down A δ' α Θ₂
+  have hwit : Fam j₀ w₀ ⟨σ₀, houtP⟩ :=
+    (vN_above A δ' Θ₂ houtP).mpr (by rw [hAδ]; exact (vN_above A δ Θ₂ hσ₀).mp hw₀)
+  have hoi : ∀ k w σ (h : σ.InStratum α), Fam k w ⟨σ, h⟩ →
+      ∃ h' : σ.InStratum b, famL b P Θ₂ k w ⟨σ, h'⟩ := by
+    intro k w σ h hw
+    have hv' : vN (ℍ := ℍ) A δ Θ₂ k w σ := by rw [← hAδ]; exact (vN_above A δ' Θ₂ h).mp hw
+    exact ⟨hunif Θ₂ k w σ hv', (vN_above A δ Θ₂ (hunif Θ₂ k w σ hv')).mpr hv'⟩
+  -- the callback's world and view
+  set Θ' := Θ₂.add l α Fam with hΘ'
+  set c' := setLife c l α with hc'def
+  have hOK' : Θ'.OK := by
+    obtain ⟨N, hN⟩ := hΘ₂.2
+    exact ⟨LocTy.down_add hΘ₂.1 l hFamD, ⟨min N (↓α), LocTy.fresh_add hN (min_le_left _ _)
+      (lt_of_le_of_lt (min_le_right _ _) (Life.down_sqsubset α)) l Fam⟩⟩
+  have hview : Θ'.view c' = (Θ₂.view c).set l α Fam := LocTy.view_add Θ₂ c l α Fam
+  have hcf' : ConsistentX c' ρf :=
+    consistentX_setLife hcf (exS_none_of_part hc₂ hv (ResU.single_get_self _ _) hkm) α
+  have hcσ' : ConsistentX c' σ₀ := consistentX_setLife hcσ (exS_wit_none hvc) α
+  -- the anti-frame at the source and the Mut Frame at the lend (`erwp_withbor3`)
+  refine erwp_withbor3 hΦ (LocTy.view_some hcb hlΘ) hFamD (T := OpTabN.empty)
+    ⟨fun _ _ _ h => by simp [OpTabN.empty] at h, fun _ _ _ h => by simp [OpTabN.empty] at h,
+      fun _ _ _ h => by simp [OpTabN.empty] at h⟩
+    (fun _ _ _ h => by simp [OpTabN.empty] at h) hoi (Q := Q) k₂ ls₂ _ w₀ σ₀ hσ₀ j₀ hkj hw₀ houtP hwit ρf τ₂
+    houtf hc₂ (fun BM hBM => ?_)
+  -- the callback, at the lend's world and view, from the borrow
+  rw [← hview]
+  have hΦi : (Θ'.view c').Down := LocTy.view_down hOK'.1 c'
+  have hcell : vN (ℍ := ℍ) (.mut (.var x) A) δ' Θ' k₂ (Val.loc l)
+      (ResU.single l (CellU.mutOf α w₀ σ₀ houtP (Fam j₀) hwit)) :=
+    ⟨α, interp_ext_self δ x α, α, le_rfl, lend_mutL Θ₂ l α P' hkj houtP hwit,
+      fun Θ₃ j u r h => (hunif Θ₃ j u r (by rw [← hAδ]; exact h)).mono hαβ⟩
+  have hcm : ConsistentX c' (ResU.single l (CellU.mutOf α w₀ σ₀ houtP (Fam j₀) hwit)) :=
+    consistentX_single_mut hcσ' (by simp [hc'def, setLife])
+  refine erwp_of_rwp (rwp_bind hΦi _ ?_)
+  have hcb' := (hf Θ' ((LocTy.extA_add hfr l Fam).extR ρf) hOK' c' hcf' ls₂) α hLt
+  have hfr' := rwp_frame (fun _ τ => τ = ResU.single l (CellU.mutOf α w₀ σ₀ houtP (Fam j₀) hwit))
+    (fun _ _ _ _ h => h) hBM (rwp_of_erwp_empty hcb') rfl
+  refine rwp_mono_le (fun j hj ls₃ g τ hg => ?_) (rwp_consistentXV hfr'
+    (consistentX_compS hBM hcf' hcm))
+  obtain ⟨⟨τg, τm, hcτ, hgv, rfl⟩, hcτ', hvτ⟩ := hg
+  have happ := hgv Θ' (LocTy.extR_refl _ _) hOK' c' (consistentX_left hcτ hcτ' hvτ) ls₃
+    c' j le_rfl (Val.loc l) _ τ hcτ (vN_le hj hcell) hcτ'
+  show rwp (ℍ := ℍ) _ _ j ls₃ ((Kont.pairR (Val.loc l) Kont.hole).plug
+    (.app (.val g) (.val (Val.loc l)))) τ
+  refine rwp_bind hΦi _ ?_
+  refine rwp_mono_le (fun j' hj' ls₄ b' ρb hb => ?_) (rwp_of_erwp_empty happ)
+  refine rwp_val (v := Val.pair (Val.loc l) b') ?_
+  obtain ⟨β', hβ', hbB, hst⟩ := hb
+  rw [interp_ext_self] at hβ'
+  cases Option.some.inj hβ'
+  refine ⟨hst, fun w Y hY σ ⟨hσ, hFσ⟩ Z hZ => ?_⟩
+  -- the result back at `Θ₂`; the content in `F_o k`, the cell resealed
+  obtain ⟨h', hw'⟩ := hoi j' w σ hσ hFσ
+  obtain ⟨ac, hac, hacZ⟩ := compS_exch hY hZ
+  have hbB' : vN (ℍ := ℍ) B δ Θ₂ j' b' ρb :=
+    vN_local B δ Θ₂ l α Fam j' b' ρb hst (by rw [← hBδ]; exact hbB)
+  exact ⟨w, σ, h', hw', ρb, ac, ResU.CompS.comm hacZ, ResU.CompS.comm hac, fun X' hX' =>
+    ⟨Val.loc l, b', _, ρb, rfl, ResU.CompS.comm hX',
+      ⟨α₀, hα₀, b, hα₀b, ⟨l, w, σ, h', j', hw', le_rfl, rfl, hlΘ, rfl⟩, hunif⟩, hbB'⟩⟩
+
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 
 end
