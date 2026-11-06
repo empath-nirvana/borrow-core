@@ -143,7 +143,7 @@ The configurations named below are indexed in `configurations.md`; the design th
 | F5 | `rel_tok_intro`, `rel_cases`, `tok_not_host` | — | 2: `tokMint`, `tokBurn` | **same** (#836) | `vN`/`vO` at `opq k` read Core's `k.rel`; Core's lemmas used as they are (§9.2) |
 | F6 | `vP_fam_mk`, `vP_fam_split`, `vP_fam_idx`, `sepRange_pick` … | spec §9 | 22: `arrNew`, `arrFree`, `arrSize`, `arrReplace` … | **same** (#836), but the `tab` step | `vN`/`vO` at `[L]` Core's `sepRange` clause; `vN_fam_iff`/`_mk`/`_idx`/`_split`, `noOwn_famN`; the laws re-proved over it (§9.2). The `tab` step at the index (`arrNew`) is missing, buildable |
 | F7 | `wpTS_M_frameFam`, `wpTS_I_frameFam`, `wpG_M_frameFam`, `wpG_I_frameFam` | — | 4: `sliceBorrowM`, `sliceBorrowI`, `sliceBorrowMU`, `sliceBorrowIU` | **departed, to build** (#836) | `wpTS_M_frameFam` is `rwp_M_frameListN` (built). Across raises, the one-cell frame under inner claims `erwp_M_frameRR` is built; its list induction, the cancel-run counterpart and the Imm family frames are missing, buildable (§9.3) |
-| F8 | `vC_roll`, `vC_unfold`, `vC_immReborrow_mu_iff`, `vCE_subst` … | — | 8: `reify`, `roll`, `unroll`, `foldImm` … | **missing, buildable** | an environment argument in `vN`/`vO`, the `μ`/`tvar` clauses, Core's `RelMu` laws at the index; `withload_sized` is `withloadS_compat` with a size measure. Very high; not checked |
+| F8 | `vC_roll`, `vC_unfold`, `vC_immReborrow_mu_iff`, `vCE_subst` … | — | 8: `reify`, `roll`, `unroll`, `foldImm` … | **same** (#836 L6), but `withload_sized` | `vNE`/`vOE` under a type-variable environment, `vN`/`vO` at the empty one; the `μ`/`tvar` clauses; Core's `RelMu` at the chain (`vN_mu_iff`, `vN_ind`, `vBN_subst`, `vBN_mono_at`, …), §13. `withload_sized` (`foldImm`) is missing, buildable |
 | F10 | `cC` .arr (the `⊸` clause) | — | 10: `bind`, `lam`, `lamDead`, `app` … | **same** (#834) | `cN .arr` is Core's plain wand at the function's own world, read at every later index and every view consistent with the composite (§8.1). The Kripke reading along `ExtR` is gone: no configuration forced it |
 | F9 | `cC_nu_iff`, `nuRel_coind`, `cB_step` | spec §7 | 4: `reify`, `nuIn`, `nuOut`, `unfoldN` | **missing, unclear** | a reading of `ν` at `erwp`: a design choice first. Not derived; obstruction not verified |
 
@@ -326,11 +326,11 @@ that step is done inside `withloadS_compat`, which is proved, so V1 is not a blo
 | 80 | `lolliE` | cut | portable | W2 W4 K1 K2 V11 G1 G5 G6 G11 G12 F10 | W4 G1 G6 G11 G12 | mechanical once built |  |
 | 81 | `allEV` | yes | portable | W2 W3 V1 F3 | V1 | mechanical once built |  |
 | 82 | `ofRet` | yes | portable | — | — | mechanical now |  |
-| 83 | `roll` | no | out | W3 F8 | F8 | mechanical once built |  |
-| 84 | `unroll` | cut | out | W3 F8 | F8 | mechanical once built |  |
+| 83 | `roll` | no | out | W3 F8 | F8 | proved (#836 L6) |  |
+| 84 | `unroll` | cut | out | W3 F8 | F8 | proved (#836 L6) |  |
 | 85 | `foldImm` | no | out | W1 W2 W3 W4 W6 K1 K2 V2 V3 V4 V5 V11 G3 F3 F8 R8 | W4 F8 | mechanical once built | `foldImmV`, `travK` |
-| 86 | `foldOwn` | no | out | W1 W2 W3 W4 W6 H2 K1 K2 V11 G3 F8 | W4 F8 | mechanical once built | `foldOwnV` |
-| 87 | `foldReuse` | no | out | W1 W2 W3 W4 W6 H3 H5 K1 K2 V11 G3 F8 | W4 F8 | mechanical once built | `foldReuseV` |
+| 86 | `foldOwn` | no | out | W1 W2 W3 W4 W6 H2 K1 K2 V11 G3 F8 | W4 F8 | proved (#836 L6) | `foldOwnV` |
+| 87 | `foldReuse` | no | out | W1 W2 W3 W4 W6 H3 H5 K1 K2 V11 G3 F8 | W4 F8 | proved (#836 L6) | `foldReuseV` |
 | 88 | `foldOwnG` | no | out | W1 W2 W3 W4 W6 K1 K2 V11 G3 F3 F6 F8 | W4 F6 F8 | mechanical once built | `FoldP` traversal |
 | 89 | `nuIn` | no | out | F9 | F9 | waits (unclear) |  |
 | 90 | `nuOut` | cut | out | F9 | F9 | waits (unclear) |  |

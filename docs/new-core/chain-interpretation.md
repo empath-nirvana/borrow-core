@@ -171,9 +171,12 @@ ImmWitW I ℓ s A δ := ∃ x ∈ I, ⊓s ≤ x.2 ∧ ∃ d, DescR x.1 d ∧ Coh
 
 ### 3.3 The fragment
 
-Type variables, `μ`, families (arrays, slices) and opaque host types are read as `False` by
-`vN`/`vO`; `ν` by `cN`. `VTy.inFrag`/`CTy.inFrag` mark the formers read; `JdgInFrag Γ j` a
-judgment whose context and type use only those; `Const791.InFrag` a constant whose type does.
+`ν` is read as `False` by `cN`; every value-type former has a clause. `vN`/`vO` are `vNE`/`vOE`
+at the empty environment: a type variable is its entry's candidate (`False` at the empty
+environment) and `μX. A` is Core's least fixed point, the candidate joint over the mode, the world
+and the index (`scope-831-interface.md` §13). `VTy.inFrag`/`CTy.inFrag` mark the formers read;
+`JdgInFrag Γ j` a judgment whose context and type use only those; `Const791.InFrag` a constant
+whose type does.
 
 ## 4. The row and the constants' premises
 
@@ -245,6 +248,7 @@ every declaration; axioms are within `propext`, `Classical.choice`, `Quot.sound`
 | `vN_inStratum_bnd`, `vN_add_eq_bnd`, `vN_above`, `vN_fam_down` | §4; a stored family read at the world |
 | `cN_effOf`, `retN_effOf` | `F_Σ R` is `erwp` at the row's table |
 | `cN_head` | closed under a pure head step backwards (Core's `cC_head`) |
+| `vN_mu_iff` (`vN_roll`, `vN_unfold`), `vN_ind`, `vBN_mu_ind`; `vBN_some`, `vBN_rename`, `vBN_subst`, `vBN_congr_occ`, `vBN_mono_at` | Core's `RelMu` at the chain: the unroll equation at the same index, the induction principle, the environment laws (`scope-831-interface.md` §13) |
 
 ### 6.2 Rules at `SemJN`
 
@@ -349,9 +353,9 @@ not assembled in Lean: `sm`'s type holds `.array A = .fam (.ref A)`, so `sm` is 
 fragment, and the in-fragment constants are covered by `constN_w2`/`w3`/`wF`, each conditional on
 `FundamentalN`, and `constN_wl`.
 
-A derivation of an in-fragment judgment may cut through an excluded former inside it (an array
-built and consumed, `unroll` of a `μ` value). At such a cut the interpretation gives no reading,
-so `FundamentalN` is not shown attainable by induction until those formers have clauses (L5–L7).
+A derivation of an in-fragment judgment may cut through a `ν` type inside it. At such a cut the
+interpretation gives no reading, so `FundamentalN` is not shown attainable by induction until `ν`
+has a clause (L7).
 
 ### 6.5 Relation-level results the track rests on
 
@@ -372,7 +376,7 @@ in these units (its §5):
 | L3, the unwinding anti-frame | `erwp_M_antiFrameCR` at a `Row.Unwind` row's twin (R3) | that twin |
 | L4, effects and handlers | the BOXED-κ stop lemma (E12), the row frames, `erwp_ubind` in Core's form, the handler clauses at `vN`, `erwp_iterate`'s close branch | E12: not derived, obstruction not verified |
 | L5, opaque types and families | an `opq` clause, a `fam` clause, the `n`-cell frames | the frames across stops, one key per cell |
-| L6, `μ` | an environment argument, the `μ`/`tvar` clauses, `RelMu` at the index | the environment argument |
+| L6, `μ` | an environment argument, the `μ`/`tvar` clauses, `RelMu` at the index (built, `scope-831-interface.md` §13) | the environment argument |
 | L7, `ν` | a reading of `ν` at `erwp` | a design choice first |
 
 `FundamentalN` on the fragment needs L1–L4. The borrow rows left are `withbor3`, `withbor3U`,

@@ -2130,11 +2130,10 @@ def ConstsN : Prop := ∀ c : Const791, c.InFrag → ConstN (ℍ := ℍ) c
 
 /-- **The fundamental property over `erwp`, on the fragment**: every derivation of the existing
 judgment whose context and type lie in the fragment (`JdgInFrag`). The rules whose conclusion is
-at a former the interpretation reads as empty (the fold constants over `μ`, `roll`, `nuIn`,
-`unfoldN`, a type variable's introduction) conclude outside the fragment and are not quantified
-over. A derivation of a judgment in the fragment may still cut through an excluded type inside
-(`unroll` of a `μ` value); at such a cut the interpretation gives no reading, so `FundamentalN`
-is not shown attainable by induction on the derivation until those formers have clauses.
+at `ν`, which the interpretation reads as empty (`nuIn`, `unfoldN`), conclude outside the fragment
+and are not quantified over. A derivation of a judgment in the fragment may still cut through a
+`ν` type inside; at such a cut the interpretation gives no reading, so `FundamentalN` is not
+shown attainable by induction on the derivation until `ν` has a clause.
 
 The rule-by-rule map is `docs/new-core/scope-831-map.md`. Its answers on the two risks it named:
 * An `imm` lend (`withbor1`, `withbor1U`) runs its callback at the world with the lend's record.
