@@ -365,7 +365,8 @@ theorem todo_doneN {ℓ : Loc} {m j : Nat} {ρ : WRes} (h : sepRange todoP ℓ m
   sepRange_mono' (fun x ρ' hm => ⟨x, .unit, PMap.empty, rfl, by rw [hm]; exact ResU.comp_empty_right _,
     rfl, rfl⟩) h
 
-/-- **The owned traversal of an array** (Core's `arr_spec`): the seed, the loop, the drop. -/
+/-- **The owned traversal of an array** (Core's `arr_spec`): the seed, the loop, and the emptied
+array freed by `prim .drop`. -/
 theorem arr_specN (hΘ : Θ.OK) (k : Nat) {t s : Val} (ht : closedAt 0 t.1 = true) {n : Nat}
     (hS : ∀ v ρ j ls, j ≤ Nb → vN (ℍ := ℍ) S' δ Θ j v ρ → dsize ρ < n → ConsistentX c ρ →
       erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN RS δ Θ) j ls
