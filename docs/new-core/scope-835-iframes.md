@@ -131,8 +131,8 @@ holds of a twin with every world allowed (`ifoldTwin_lift`, `sealTwin_lift`, `re
 
 - **The tables at `KW`.** Each KW instance takes the entries' orders (`hTw`: the borrowed entries
   owe along `KW.Owed` at the inner world, the lender's at its own) and the cancel conditions
-  (`ICanK`, `ASealCan`, `RebCanK`) as premises. They need `tabN`/`tabR`/`tabG` at `KW`, the tables
-  unit.
+  (`ICanK`, `ASealCan`, `RebCanK`) as premises. `scope-835-tables.md` §7 discharges them from the
+  typed tables; `ICanK` and `ASealCan` there read `Inv` at the resumption world.
 - **`erwp_M_antiFrame_cancelRun`** is a consumer (`scope-835-kripke-stop.md` §2) and is not
   restated; the `Unit` corollary of `erwp_M_antiFrameC` reads it (`asealCan_claimT`).
 - **The typed lend lemmas' choice of `A` and `β`** at `KW`: `LocTy.exists_foldInv` for `A`; the
