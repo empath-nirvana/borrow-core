@@ -90,7 +90,7 @@ theorem tabN_rebOKR {x : LifeVar} {bnd : Lifetime.Life} {β : Life} {F : CTy}
   pb := fun m i en h k ls w ρ hp => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupN F h
     obtain ⟨-, -, -, -, hOB, -⟩ := layer_suspend F hF hL
-    exact vN_inStratum_bnd hOB hLt hp
+    exact vN_inStratum_bnd hOB hLt hp.1
 
 /-- **The cancel obligations of a row meeting `CTy.SuspendC` are closed under a reborrow at
 `β ⊏ @bnd`**, by induction on how deep cancel rows nest: each is a cancel run at its cancel row's

@@ -208,7 +208,7 @@ every capturable one's cancel obligation the cancel run at its cancel row's own 
 the cancel row) ending at `R`. -/
 def tabR (R : Nat → WProp) : CTy → LSub → LocTy → (Loc → Option Life) → OpTabN
   | .eff m i q A B fin _ C, δ, Θ, c => extTabN m i
-      (entN q B (fun k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ)
+      (entN q B (fun k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ)
         (finR R fin δ Θ c))
       (tabR R C δ Θ c)
   | _, _, _, _ => OpTabN.empty
@@ -218,7 +218,7 @@ def finR (R : Nat → WProp) : CTy → LSub → LocTy → (Loc → Option Life) 
     Option (Nat → List SRec → Expr → WProp)
   | .top, _, _, _ => none
   | .eff m i q A B fin _ C, δ, Θ, c => some (cancelOblRN (ℍ := ℍ) (Θ.view c) (extTabN m i
-      (entN q B (fun k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ)
+      (entN q B (fun k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ)
         (finR R fin δ Θ c))
       (tabR R C δ Θ c)) R)
   | .ret _, _, Θ, c => some (cancelOblRN (ℍ := ℍ) (Θ.view c) OpTabN.empty R)
@@ -285,11 +285,11 @@ theorem tab_lookupN : ∀ (F : CTy) {δ₁ : LSub} {Θ₁ : LocTy} {c₁ : Loc �
     {m j : UInt32} {en : OpEntN},
     tabN (ℍ := ℍ) F δ₁ Θ₁ c₁ m j = some en → ∃ q A B fin, F.LayerOf q A B fin ∧
       en = entN q B (fun k v ρ => vN (ℍ := ℍ) A δ₁ Θ₁ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) B δ₁ Θ₁ k v ρ) (finN (ℍ := ℍ) fin δ₁ Θ₁ c₁) ∧
+        (fun k v ρ => vN (ℍ := ℍ) B δ₁ Θ₁ k v ρ ∧ ConsistentX c₁ ρ) (finN (ℍ := ℍ) fin δ₁ Θ₁ c₁) ∧
       ∀ (R : Nat → WProp) (δ₂ : LSub) (Θ₂ : LocTy) (c₂ : Loc → Option Life),
         tabR (ℍ := ℍ) R F δ₂ Θ₂ c₂ m j =
           some (entN q B (fun k v ρ => vN (ℍ := ℍ) A δ₂ Θ₂ k v ρ)
-            (fun k v ρ => vN (ℍ := ℍ) B δ₂ Θ₂ k v ρ) (finR (ℍ := ℍ) R fin δ₂ Θ₂ c₂))
+            (fun k v ρ => vN (ℍ := ℍ) B δ₂ Θ₂ k v ρ ∧ ConsistentX c₂ ρ) (finR (ℍ := ℍ) R fin δ₂ Θ₂ c₂))
   | .eff m₀ i₀ q A B fin rc C, δ₁, Θ₁, c₁, m, j, en, h => by
       simp only [tabN] at h
       unfold extTabN at h
@@ -315,13 +315,13 @@ theorem tab_lookupR (R : Nat → WProp) : ∀ (F : CTy) {δ₂ : LSub} {Θ₂ : 
     {c₂ : Loc → Option Life} {m j : UInt32} {en : OpEntN},
     tabR (ℍ := ℍ) R F δ₂ Θ₂ c₂ m j = some en → ∃ q A B fin, F.LayerOf q A B fin ∧
       en = entN q B (fun k v ρ => vN (ℍ := ℍ) A δ₂ Θ₂ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) B δ₂ Θ₂ k v ρ) (finR (ℍ := ℍ) R fin δ₂ Θ₂ c₂) ∧
+        (fun k v ρ => vN (ℍ := ℍ) B δ₂ Θ₂ k v ρ ∧ ConsistentX c₂ ρ) (finR (ℍ := ℍ) R fin δ₂ Θ₂ c₂) ∧
       (∀ (δ₁ : LSub) (Θ₁ : LocTy) (c₁ : Loc → Option Life), tabN (ℍ := ℍ) F δ₁ Θ₁ c₁ m j =
         some (entN q B (fun k v ρ => vN (ℍ := ℍ) A δ₁ Θ₁ k v ρ)
-          (fun k v ρ => vN (ℍ := ℍ) B δ₁ Θ₁ k v ρ) (finN (ℍ := ℍ) fin δ₁ Θ₁ c₁))) ∧
+          (fun k v ρ => vN (ℍ := ℍ) B δ₁ Θ₁ k v ρ ∧ ConsistentX c₁ ρ) (finN (ℍ := ℍ) fin δ₁ Θ₁ c₁))) ∧
       ∀ R' : Nat → WProp, tabR (ℍ := ℍ) R' F δ₂ Θ₂ c₂ m j =
         some (entN q B (fun k v ρ => vN (ℍ := ℍ) A δ₂ Θ₂ k v ρ)
-          (fun k v ρ => vN (ℍ := ℍ) B δ₂ Θ₂ k v ρ) (finR (ℍ := ℍ) R' fin δ₂ Θ₂ c₂))
+          (fun k v ρ => vN (ℍ := ℍ) B δ₂ Θ₂ k v ρ ∧ ConsistentX c₂ ρ) (finR (ℍ := ℍ) R' fin δ₂ Θ₂ c₂))
   | .eff m₀ i₀ q A B fin rc C, δ₂, Θ₂, c₂, m, j, en, h => by
       simp only [tabR] at h
       unfold extTabN at h
@@ -343,11 +343,22 @@ theorem tab_lookupR (R : Nat → WProp) : ∀ (F : CTy) {δ₂ : LSub} {Θ₂ : 
   | .all _ _ _, _, _, _, _, _, _, h => by simp [tabR, OpTabN.empty] at h
   | .nu _, _, _, _, _, _, _, h => by simp [tabR, OpTabN.empty] at h
 
+/-- **An answer of a type outliving a closed bound is consistent with every view**: the bound is
+`⊤` (`interp_top_of_defines_empty`), the value's resource in `Res_⊤` (`vN_outlives`), which holds
+no borrow cell (`consistentX_of_top`). -/
+theorem consistentX_of_outlives {bnd : Lifetime.Life} (hbnd : LifeCtx.empty.Defines bnd)
+    {B : VTy} (hOB : VOutlives LifeCtx.empty bnd B) {δ : LSub} {Θ : LocTy} {k : Nat} {v : Val}
+    {ρ : WRes} (h : vN (ℍ := ℍ) B δ Θ k v ρ) (c : Loc → Option Life) : ConsistentX c ρ :=
+  consistentX_of_top (vN_outlives (models_empty_any _) (interp_top_of_defines_empty hbnd δ) hOB
+    Θ k v ρ h) c
+
 /-- **The callback's table and the lender's twin agree but for the cancel obligations**: they
-differ in `'x`, which no layer's types mention, and in the world, which the layers' types,
-outliving the bound, read alike (`hΘ`, `vN_add_eq_bnd` at a lend below the bound). -/
+differ in `'x`, which no layer's types mention; in the world, which the layers' types, outliving
+the bound, read alike (`hΘ`, `vN_add_eq_bnd` at a lend below the bound); and in the view, at
+which the answers, outliving the closed bound, are alike consistent
+(`consistentX_of_outlives`). -/
 theorem tabN_tabR_twin {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {F : CTy}
-    (hF : F.SuspendC x bnd) (R : Nat → WProp)
+    (hbnd : LifeCtx.empty.Defines bnd) (hF : F.SuspendC x bnd) (R : Nat → WProp)
     (δ : LSub) (Θ₁ Θ₂ : LocTy) (c₁ c₂ : Loc → Option Life)
     (hΘ : ∀ A : VTy, VOutlives LifeCtx.empty bnd A → vN (ℍ := ℍ) A δ Θ₁ = vN (ℍ := ℍ) A δ Θ₂) :
     (tabN (ℍ := ℍ) F (δ.extend x α) Θ₁ c₁).Twin (tabR (ℍ := ℍ) R F δ Θ₂ c₂) := by
@@ -357,6 +368,9 @@ theorem tabN_tabR_twin {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {F : CTy}
   refine ⟨_, hR R δ Θ₂ c₂, rfl, rfl, ?_, ?_, rfl⟩
   · simp only [entN, vN_extend_of_not_free (ℍ := ℍ) hA δ α, hΘ A hOA]
   · simp only [entN, vN_extend_of_not_free (ℍ := ℍ) hB δ α, hΘ B hOB]
+    funext k _ v ρ
+    exact propext ⟨fun h => ⟨h.1, consistentX_of_outlives hbnd hOB h.1 c₁⟩,
+      fun h => ⟨h.1, consistentX_of_outlives hbnd hOB h.1 c₂⟩⟩
 
 /-- The lender's twin and the table at the same world and view agree but for the cancel
 obligations. -/
@@ -389,7 +403,7 @@ theorem tabN_lendOKCR_C {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {F : CTy
   pb := fun m i en h k ls w ρ hp => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupN F h
     obtain ⟨-, -, hB, -, hOB, -⟩ := layer_suspend F hF hL
-    have hp' : vN (ℍ := ℍ) B (δ.extend x α) Θ k w ρ := hp
+    have hp' : vN (ℍ := ℍ) B (δ.extend x α) Θ k w ρ := hp.1
     rw [vN_extend_of_not_free hB] at hp'
     exact (vN_inStratum_bnd hOB hLt hp').mono (Life.down_sqsubset α).le
 
@@ -411,7 +425,8 @@ cancel run at its cancel row's table, framed by `erwp_M_frame_cancelRunCR` at th
 callback's view is the relation's `Φ.set`, `LocTy.view_add`), its own nested cancel obligations by
 the induction. -/
 theorem tabR_can {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {δ : LSub} {Θ : LocTy}
-    (hf : Θ.Fresh α) (hLt : LtLife δ bnd α) {c : Loc → Option Life} {l : Loc}
+    (hbnd : LifeCtx.empty.Defines bnd) (hf : Θ.Fresh α) (hLt : LtLife δ bnd α)
+    {c : Loc → Option Life} {l : Loc}
     {Fam : Nat → Val → SPropS Loc Val α} (hFam : DownFam α Fam) :
     ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC x bnd →
     ∀ m i en en', tabN (ℍ := ℍ) F (δ.extend x α) (Θ.add l α Fam) (setLife c l α) m i = some en →
@@ -449,7 +464,7 @@ theorem tabR_can {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {δ : LSub} {Θ
   have hin := hc _ (finN_eq htop _ _ _)
   refine erwp_M_frame_cancelRunCR (Φ := Θ.view c) hFam
     (tabN_lendOKCR_C hfin δ hLt (Θ.add l α Fam) (setLife c l α))
-    (tabN_tabR_twin hfin _ δ (Θ.add l α Fam) Θ (setLife c l α) c
+    (tabN_tabR_twin hbnd hfin _ δ (Θ.add l α Fam) Θ (setLife c l α) c
       (fun A' hO => vN_add_eq_bnd hO δ hLt hf l Fam))
     (ih fin hfd hfin) k k le_rfl ls _ v'' χ W'' (Z.del l) ρkL hχ hdZd P'' hPk hw''
     (ResU.CompS.comm hW'') (ResU.CompS.comm hkL) (fun BM hBM => ?_)
@@ -520,7 +535,7 @@ theorem erwp_cancelRun_claimX {x : LifeVar} {bnd : Lifetime.Life} {δ : LSub} {�
       simp only [erwpC, show k' < n by omega, if_true] at hc' ⊢
       exact ih k' (by omega) _ _ _
         (consistentX_compS hcτ hck (consistentX_of_top (vN_outlives (models_empty_any _)
-          (interp_top_of_defines_empty hbnd δ) hOB Θ k' w τ₁ hB) c)) hc'
+          (interp_top_of_defines_empty hbnd δ) hOB Θ k' w τ₁ hB.1) c)) hc'
     · have hcap := entN_capB ha hql
       have hfS := hfinS hcap
       simp only [entN, hcap, if_true] at hP
@@ -563,7 +578,7 @@ theorem erwp_claimX {x : LifeVar} {bnd : Lifetime.Life} {δ : LSub} {Θ : LocTy}
       simp only [erwpC, show k' < n by omega, if_true] at hc' ⊢
       exact ih k' (by omega) _ _ _
         (consistentX_compS hcτ hck (consistentX_of_top (vN_outlives (models_empty_any _)
-          (interp_top_of_defines_empty hbnd δ) hOB Θ k' w τ₁ hB) c)) hc'
+          (interp_top_of_defines_empty hbnd δ) hOB Θ k' w τ₁ hB.1) c)) hc'
     · have hcap := entN_capB ha hql
       have hfS := hfinS hcap
       simp only [entN, hcap, if_true] at hP
@@ -877,8 +892,8 @@ theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Ro
   have hTw : (tabN (ℍ := ℍ) (CTy.effOf S (.box (.var x) B)) δ' Θ' c').Twin
       (tabR (ℍ := ℍ) Rc Fo δ Θ c) := by
     rw [hbase]
-    exact tabN_tabR_twin hFS Rc δ Θ' Θ c' c (fun A' hO => vN_add_eq_bnd hO δ hLt hfr l Fam)
-  have hcan := tabR_can (ℍ := ℍ) (δ := δ) hfr hLt (c := c) (l := l) hFamD Fo.cdepth Fo le_rfl
+    exact tabN_tabR_twin hbnd hFS Rc δ Θ' Θ c' c (fun A' hO => vN_add_eq_bnd hO δ hLt hfr l Fam)
+  have hcan := tabR_can (ℍ := ℍ) (δ := δ) hbnd hfr hLt (c := c) (l := l) hFamD Fo.cdepth Fo le_rfl
     hFS
   rw [← hbase] at hcan
   have hM := erwp_M_frameCR (Φ := Θ.view c) (l := l) (A := α) (F := Fam) hFamD

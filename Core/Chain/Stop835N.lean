@@ -199,7 +199,7 @@ theorem tabN_ansIn {Δ : LifeCtx} {δ : LSub} {d : Lifetime.Life} {α : Life} {S
     (tabN (ℍ := ℍ) (CTy.effOf S R) δ Θ c).AnsIn α := by
   intro n i en hT ha k ls w τ hB
   obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some hT
-  exact vN_outlives hδ hd (hS o ho (by simpa [entN, OpSig.abort] using ha)) Θ k w τ hB
+  exact vN_outlives hδ hd (hS o ho (by simpa [entN, OpSig.abort] using ha)) Θ k w τ hB.1
 
 /-- The stratified semantic judgment at `F_Σ A` (Core's `SemCS`): at every substitution, world,
 view, index and interpretation of `@d`, the computation is in `erwp` at the stratified table of

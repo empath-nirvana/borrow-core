@@ -91,7 +91,7 @@ theorem tabN_unwind_rebOKR {S : Row} {x : LifeVar} (hS : S.Unwind x) (R : VTy) (
   pa := (tabN_unwind_lendOKR hS R δ Θ c β).pa
   pb := fun m i en h k ls w ρ hp => by
     obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
-    have hp' : vN (ℍ := ℍ) o.B δ Θ k w ρ := hp
+    have hp' : vN (ℍ := ℍ) o.B δ Θ k w ρ := hp.1
     rw [unwind_B hS ho] at hp'
     exact hp'.elim
 

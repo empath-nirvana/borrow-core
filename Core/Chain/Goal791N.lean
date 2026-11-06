@@ -16,7 +16,9 @@ interpretation and the statements are restated over Core's step-indexed chain re
   `cN C δ Θ c k ls e ρ` (`𝒞⟦C⟧δ` at the world `Θ`, the run's live lifetimes `c`, the index `k`
   and the record list `ls`). Every run is `erwp` at the view `Θ.view c`, the relation's `LocFam`.
   `F_Σ R` is read at the table of the row's layers (`tabN`, each capturable entry with its cancel
-  row's obligation `finN`) and its answer `retN`. Core's `vCE`/`cC`/`effTab`/`finObl`/`effRet`
+  row's obligation `finN`) and its answer `retN`. A table's answers are read at the view: an
+  answer's resource enters the run, and is consistent with the view as every resource entering a
+  run is (`SemJN`'s start, `U`'s thunk, `⊸`'s composite). Core's `vCE`/`cC`/`effTab`/`finObl`/`effRet`
   clause by clause, with `ewpTS`/`wpTS` replaced by `erwp`:
   - `Mut` is Core's `ptoMutS` shape over the world: the cell at some `b ⊒ @aδ` (`mutL b`) holds a
     member of the payload read at the world above `b`, the family the world stores at the lend's
@@ -177,13 +179,15 @@ def cN : CTy → LSub → LocTy → (Loc → Option Life) → Nat → List SRec 
   | .nu _, _, _, _, _, _, _, _ => False
   | .eff m i q A B fin _ C, δ, Θ, c, n, ls, e, ρ =>
       erwp (ℍ := ℍ) (Θ.view c) (opTableN (extTabN m i
-          (entN q B (fun k v ρ => vN A δ Θ k v ρ) (fun k v ρ => vN B δ Θ k v ρ) (finN fin δ Θ c))
+          (entN q B (fun k v ρ => vN A δ Θ k v ρ) (fun k v ρ => vN B δ Θ k v ρ ∧ ConsistentX c ρ)
+          (finN fin δ Θ c))
           (tabN C δ Θ c)))
         (fun k _ v ρ => retN C δ Θ k v ρ) n ls e ρ
-/-- The table of a row's layers below the top one. -/
+/-- The table of a row's layers below the top one, its answers read at the view `c`. -/
 def tabN : CTy → LSub → LocTy → (Loc → Option Life) → OpTabN
   | .eff m i q A B fin _ C, δ, Θ, c => extTabN m i
-      (entN q B (fun k v ρ => vN A δ Θ k v ρ) (fun k v ρ => vN B δ Θ k v ρ) (finN fin δ Θ c))
+      (entN q B (fun k v ρ => vN A δ Θ k v ρ) (fun k v ρ => vN B δ Θ k v ρ ∧ ConsistentX c ρ)
+          (finN fin δ Θ c))
       (tabN C δ Θ c)
   | _, _, _, _ => OpTabN.empty
 /-- **The cancel obligation of a cancel row**: `none` at `⊤`; otherwise the cancel run at the
@@ -192,7 +196,8 @@ def finN : CTy → LSub → LocTy → (Loc → Option Life) →
     Option (Nat → List SRec → Expr → WProp)
   | .top, _, _, _ => none
   | .eff m i q A B fin _ C, δ, Θ, c => some (cancelOblN (ℍ := ℍ) (Θ.view c) (extTabN m i
-      (entN q B (fun k v ρ => vN A δ Θ k v ρ) (fun k v ρ => vN B δ Θ k v ρ) (finN fin δ Θ c))
+      (entN q B (fun k v ρ => vN A δ Θ k v ρ) (fun k v ρ => vN B δ Θ k v ρ ∧ ConsistentX c ρ)
+          (finN fin δ Θ c))
       (tabN C δ Θ c)))
   | .ret _, _, Θ, c => some (cancelOblN (ℍ := ℍ) (Θ.view c) OpTabN.empty)
   | .arr _ _, _, Θ, c => some (cancelOblN (ℍ := ℍ) (Θ.view c) OpTabN.empty)

@@ -189,10 +189,10 @@ theorem tab_lookupGG (R : Nat → WProp) (G : ShareG) : ∀ (F : CTy) {δ : LSub
     {c : Loc → Option Life} {m j : UInt32} {en : OpEntN},
     tabG (ℍ := ℍ) R G F δ Θ c m j = some en → ∃ q A B fin, F.LayerOf q A B fin ∧
       en = entN q B (fun k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ) (finG (ℍ := ℍ) R G fin δ Θ c) ∧
+        (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ) (finG (ℍ := ℍ) R G fin δ Θ c) ∧
       ∀ (R' : Nat → WProp) (G' : ShareG), tabG (ℍ := ℍ) R' G' F δ Θ c m j =
         some (entN q B (fun k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ)
-          (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ) (finG (ℍ := ℍ) R' G' fin δ Θ c))
+          (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ) (finG (ℍ := ℍ) R' G' fin δ Θ c))
   | .eff m₀ i₀ q A B fin rc C, δ, Θ, c, m, j, en, h => by
       simp only [tabG] at h
       unfold extTabN at h
@@ -418,8 +418,8 @@ theorem withborFS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
   have hTw : (tabN (ℍ := ℍ) (CTy.effOf S (.box (.var x) B)) δ' Θ' c').Twin
       (tabG (ℍ := ℍ) Rc Gc Fo δ Θ c) := by
     rw [hbase]
-    exact tabN_tabG_twin hFS Rc Gc δ Θ' Θ c' c (fun A' hO => vN_add_eq_bnd hO δ hLt hfr l₂ Fam)
-  have hcanM := tabG_can (ℍ := ℍ) (δ := δ) hfr hLt (c := c) (l := l₂) hFamD Fo.cdepth Fo le_rfl hFS
+    exact tabN_tabG_twin hbnd hFS Rc Gc δ Θ' Θ c' c (fun A' hO => vN_add_eq_bnd hO δ hLt hfr l₂ Fam)
+  have hcanM := tabG_can (ℍ := ℍ) (δ := δ) hbnd hfr hLt (c := c) (l := l₂) hFamD Fo.cdepth Fo le_rfl hFS
   rw [← hbase] at hcanM
   have hcanF := tabG_canF (ℍ := ℍ) (x := x) (δ := δ) (Θ := Θ) (c := c) Rc Gc Fr Fo.cdepth Fo
     le_rfl hFS

@@ -1772,8 +1772,8 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withloadU_unr_inst
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_consistentAns
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabN_effOf_ret
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabN_ansC_of_persistent
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.let_compatN_ansC
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabN_ansC
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.let_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_pureSteps
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_kappaC_resume_in
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_hnd_tick
