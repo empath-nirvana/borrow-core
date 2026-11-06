@@ -1845,3 +1845,8 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.foldOwn_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwp_swapN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.foldReuse_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.countLoop_invN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.arr_specN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.trav_specN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.hs_allN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.foldOwnG_compatN

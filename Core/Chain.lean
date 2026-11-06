@@ -122,3 +122,4 @@ import Core.Chain.FamStop836N
 import Core.Chain.FamCancel836N
 import Core.Chain.FamSlice836N
 import Core.Chain.Mu836N
+import Core.Chain.FoldG836N

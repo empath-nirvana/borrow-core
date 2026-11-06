@@ -670,4 +670,218 @@ theorem trav_specN (hΘ : Θ.OK) (s : Val) (hAH : AHN (ℍ := ℍ) ks G δ Θ c 
   | .fam (.opq _), Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _ =>
       leaf_specN ks G δ Θ c hΘ s Bs (by exact (clB_iff 0 _).mpr hP) w χ j ls hv
 
-#exit
+/-- The algebra at the position `p` of the tuple `gs`, applied (Core's `ProjOK`). -/
+def ProjOKN (gs : Val) (p : Nat) (A R : VTy) : Prop :=
+  ∀ j ls r ρ, j ≤ Nb → vN (ℍ := ℍ) A δ Θ j r ρ → ConsistentX c ρ →
+    erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN R δ Θ) j ls
+      (.app (.app (.val (projV ks.length p)) (.val gs)) (.val r)) ρ
+
+/-- Every listed key's algebra is in the tuple, at the key's first position (Core's `AlgsOK`). -/
+def AlgsOKN (gs : Val) : Prop :=
+  (∀ B Bs, .mu (B :: Bs) ∈ ks →
+    ProjOKN (ℍ := ℍ) ks δ Θ c Nb gs (ks.idxOf (.mu (B :: Bs))) (resO G (B :: Bs) B)
+      (G.Res (B :: Bs))) ∧
+  ∀ Bs S, .arr Bs S ∈ ks →
+    ProjOKN (ℍ := ℍ) ks δ Θ c Nb gs (ks.idxOf (.arr Bs S))
+      (.sum .unit (.tensor (G.ResA Bs S) (resO G Bs S))) (G.ResA Bs S)
+
+/-- The array keys' algebras through the handle (Core's `ah_of_algs`). -/
+theorem ah_of_algsN (hΘ : Θ.OK) {gs : Val} (h : AlgsOKN (ℍ := ℍ) ks G δ Θ c Nb gs) :
+    AHN (ℍ := ℍ) ks G δ Θ c Nb (hG ks gs) := by
+  intro Bs S hm j ls x ρ hj hx hc
+  have hΦ := LocTy.view_down hΘ.1 c
+  refine hG_appN ks hΦ (vPostN_down _ δ Θ) gs _ ?_
+  refine selfG_runN ks hΦ (vPostN_down _ δ Θ) gs x _ (.arr Bs S) (List.getElem?_idxOf hm) ?_
+  rw [branchV_arr]
+  exact h.2 Bs S hm j ls x ρ hj hx hc
+
+/-- The call of the `μ` key `B :: Bs` at the fixed point itself (Core's `HSel`). -/
+def HSelN (gs : Val) (B : VTy) (Bs : Stack) (n K : Nat) : Prop :=
+  ∀ w χ j ls, j ≤ Nb → sizeOf w.1 ≤ K → vN (ℍ := ℍ) (closedOf B Bs) δ Θ j w χ → dsize χ ≤ n →
+    ConsistentX c χ →
+    erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN (G.Res (B :: Bs)) δ Θ) j ls
+      (.app (.app (.val (selfG ks)) (.val gs)) (.val (tagV (ks.idxOf (.mu (B :: Bs))) w))) χ
+
+theorem hs_of_selN (hΘ : Θ.OK) {gs : Val} {B : VTy} {Bs : Stack} {n K : Nat}
+    (h : HSelN (ℍ := ℍ) ks G δ Θ c Nb gs B Bs n K) :
+    HSN (ℍ := ℍ) ks G δ Θ c Nb (hG ks gs) B Bs n K := fun w χ j ls a b d e f =>
+  hG_appN ks (LocTy.view_down hΘ.1 c) (vPostN_down _ δ Θ) gs _ (h w χ j ls a b d e f)
+
+/-- One unrolling of the `μ` key `B :: Bs`: the dispatch, the traversal of the body, the
+algebra (Core's `hs_step`). -/
+theorem hs_stepN (hΘ : Θ.OK) (hok : KeysOK ks) {gs : Val} (halg : AlgsOKN (ℍ := ℍ) ks G δ Θ c Nb gs)
+    {B : VTy} {Bs : Stack} {n K : Nat} (hm : .mu (B :: Bs) ∈ ks) (ha : Anc ks (B :: Bs))
+    (hI : IHLN (ℍ := ℍ) ks G δ Θ c Nb (hG ks gs) n K (sizeOf B)) :
+    HSelN (ℍ := ℍ) ks G δ Θ c Nb gs B Bs n K := by
+  intro w χ j ls hj hK hv hn hc
+  have hΦ := LocTy.view_down hΘ.1 c
+  obtain ⟨hP, hH, hk⟩ := hok.1 B Bs hm
+  refine selfG_runN ks hΦ (vPostN_down _ δ Θ) gs w _ (.mu (B :: Bs)) (List.getElem?_idxOf hm) ?_
+  rw [branchV_mu]
+  have hv' : vN (ℍ := ℍ) (B.subst (env (B :: Bs))) δ Θ j w χ := by
+    rw [← inst_closedOf]; exact (vN_unfold hv).2.2
+  refine erwp_bind_frame hΦ (opTableN_local _)
+    (.appR (.val (.lam (.app (.app (.val (projV ks.length (ks.idxOf (.mu (B :: Bs)))))
+      (.val (gs.shift 1 0))) (.var 0)))) .hole)
+    (fun E => E = PMap.empty) (ResU.comp_empty_right χ) hc
+    (trav_specN ks G δ Θ c Nb hΘ (hG ks gs) (ah_of_algsN ks G δ Θ c Nb hΘ halg) B (B :: Bs) n K
+      (sizeOf B) hI hP le_rfl ha hk w χ j ls hj hK (Or.inl hH) hv' hn hc) rfl ?_
+  rintro k' hk' ls' r σ₁ E σ hcσ hr rfl hcσ' _
+  obtain rfl := ResU.CompS.functional hcσ (ResU.comp_empty_right σ₁)
+  simp only [Kont.plug]
+  refine erwp_headE hΦ (vPostN_down _ δ Θ) .hole (fun μ => Head.beta μ _ r) rfl ?_
+  have e : (Expr.app (.app (.val (projV ks.length (ks.idxOf (.mu (B :: Bs))))) (.val (gs.shift 1 0)))
+      (.var 0)).subst 0 r = .app (.app (.val (projV ks.length (ks.idxOf (.mu (B :: Bs))))) (.val gs))
+        (.val r) := by
+    simp [closed_subst (projV_closed _ _), subst_shift_succ]
+  rw [e]
+  exact halg.1 B Bs hm k' ls' r _ (hk'.trans hj) hr hcσ'
+
+/-- **Every `μ` key's call meets its spec**, at every measure (Core's `hs_all`). -/
+theorem hs_allN (hΘ : Θ.OK) (hok : KeysOK ks) {gs : Val} (halg : AlgsOKN (ℍ := ℍ) ks G δ Θ c Nb gs) :
+    ∀ n K B Bs, .mu (B :: Bs) ∈ ks → Anc ks (B :: Bs) → HSelN (ℍ := ℍ) ks G δ Θ c Nb gs B Bs n K := by
+  intro n
+  induction n using Nat.strong_induction_on with
+  | _ n ihn =>
+    intro K
+    induction K using Nat.strong_induction_on with
+    | _ K ihK =>
+      suffices H : ∀ r B Bs, sizeOf B = r → .mu (B :: Bs) ∈ ks → Anc ks (B :: Bs) →
+          HSelN (ℍ := ℍ) ks G δ Θ c Nb gs B Bs n K from fun B Bs => H _ B Bs rfl
+      intro r
+      induction r using Nat.strong_induction_on with
+      | _ r ihr =>
+        intro B Bs hr hm ha
+        refine hs_stepN ks G δ Θ c Nb hΘ hok halg hm ha ?_
+        intro B' Bs' hm' ha' n' K' hlt
+        refine hs_of_selN ks G δ Θ c Nb hΘ ?_
+        rcases hlt with h | ⟨rfl, h | ⟨rfl, h⟩⟩
+        · exact ihn n' h K' B' Bs' hm' ha'
+        · exact ihK K' h B' Bs' hm' ha'
+        · exact ihr (sizeOf B') (hr ▸ h) B' Bs' rfl hm' ha'
+
+end Trav
+
+/-- **The owned fold of `μB₀`** (Core's `fold_spec`). -/
+theorem fold_specN {B₀ : VTy} (hB : PBody B₀) (G : Algs) (δ : LSub) {Θ : LocTy} (hΘ : Θ.OK)
+    {c : Loc → Option Life} {Nb : Nat} {gs : Val}
+    (halg : AlgsOKN (ℍ := ℍ) (keys B₀) G δ Θ c Nb gs) (w : Val) (χ : WRes) (j : Nat)
+    (ls : List SRec) (hj : j ≤ Nb) (hv : vN (ℍ := ℍ) (.mu B₀) δ Θ j w χ) (hc : ConsistentX c χ) :
+    erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN (G.Res [B₀]) δ Θ) j ls
+      (.app (.app (.val (selfG (keys B₀))) (.val gs)) (.val (tagV 0 w))) χ := by
+  have h := hs_allN (keys B₀) G δ Θ c Nb hΘ (keys_ok hB) halg (dsize χ) (sizeOf w.1) B₀ []
+    (root_mem B₀) (anc_root B₀)
+  rw [← closedOf_root] at hv
+  have h' := h w χ j ls hj le_rfl hv le_rfl hc
+  rwa [root_idx] at h'
+
+/-! ### The rule -/
+
+/-- Every algebra's type holds the empty resource (Core's `algTy_empty`). -/
+theorem algTy_emptyN (G : Algs) (k : Bnd) {δ : LSub} {Θ : LocTy} {j : Nat} {v : Val} {σ : WRes}
+    (h : vN (ℍ := ℍ) (FoldP.algTy G k) δ Θ j v σ) : σ = PMap.empty := by
+  match k, h with
+  | .mu [], h => exact h.2
+  | .mu (_ :: _), h => exact h.1
+  | .arr _ _, h => exact h.1
+
+/-- A tuple of values of types holding the empty resource: its components (Core's
+`tup_split`). -/
+theorem tup_splitN {δ : LSub} {Θ : LocTy} {j : Nat} :
+    ∀ (As : List VTy) (g : Val) (ρ : WRes),
+      (∀ A ∈ As, ∀ v σ, vN (ℍ := ℍ) A δ Θ j v σ → σ = PMap.empty) →
+      vN (ℍ := ℍ) (tupTy As) δ Θ j g ρ →
+      ρ = PMap.empty ∧ ∃ vs, g = tupV vs ∧ vs.length = As.length ∧
+        ∀ (p : Nat) (a : Val) (A : VTy), vs[p]? = some a → As[p]? = some A →
+          vN (ℍ := ℍ) A δ Θ j a PMap.empty
+  | [], g, ρ, _, h => by
+      obtain ⟨rfl, rfl⟩ := h
+      exact ⟨rfl, [], rfl, rfl, fun p a A h => by simp at h⟩
+  | [A], g, ρ, hA, h => by
+      have hρ := hA A (by simp) g ρ h
+      subst hρ
+      refine ⟨rfl, [g], rfl, rfl, fun p a A' h₁ h₂ => ?_⟩
+      cases p with
+      | zero =>
+          simp only [List.getElem?_cons_zero, Option.some.injEq] at h₁ h₂
+          subst h₁; subst h₂; exact h
+      | succ p => simp at h₁
+  | A :: B :: r, g, ρ, hA, h => by
+      obtain ⟨a, g', ρ₁, ρ₂, rfl, hc, h₁, h₂⟩ := h
+      have e₁ := hA A (by simp) a ρ₁ h₁
+      subst e₁
+      obtain ⟨e₂, vs, rfl, hlen, hvs⟩ :=
+        tup_splitN (B :: r) g' ρ₂ (fun A' hA' => hA A' (List.mem_cons_of_mem _ hA')) h₂
+      subst e₂
+      refine ⟨eq_empty_of_compS_empty hc, a :: vs, ?_, by simp [hlen],
+        fun p a' A' h₁' h₂' => ?_⟩
+      · cases vs with
+        | nil => simp at hlen
+        | cons c vs => rfl
+      · cases p with
+        | zero =>
+            simp only [List.getElem?_cons_zero, Option.some.injEq] at h₁' h₂'
+            subst h₁'; subst h₂'; exact h₁
+        | succ p => exact hvs p a' A' (by simpa using h₁') (by simpa using h₂')
+
+/-- The algebras out of a tuple valid at the keys' algebra types (Core's `algsOK_of_tuple`):
+each is read at the run's world by `bang_app`, at every index up to the tuple's. -/
+theorem algsOK_of_tupleN (ks : List Bnd) (G : Algs) (δ : LSub) {Θ₀ Θ : LocTy} (hΘ : Θ.OK)
+    (c : Loc → Option Life) {Nb : Nat} (vs : List Val) (hlen : vs.length = ks.length)
+    (hvs : ∀ (p : Nat) (a : Val) (A : VTy), vs[p]? = some a → (ks.map (FoldP.algTy G))[p]? = some A →
+      vN (ℍ := ℍ) A δ Θ₀ Nb a PMap.empty) :
+    AlgsOKN (ℍ := ℍ) ks G δ Θ c Nb (tupV vs) := by
+  have hΦ := LocTy.view_down hΘ.1 c
+  have hget : ∀ k ∈ ks, ∃ a, vs[ks.idxOf k]? = some a ∧
+      vN (ℍ := ℍ) (FoldP.algTy G k) δ Θ₀ Nb a PMap.empty := by
+    intro k hk
+    have hlt : ks.idxOf k < vs.length := hlen ▸ List.idxOf_lt_length_of_mem hk
+    obtain ⟨a, ha⟩ : ∃ a, vs[ks.idxOf k]? = some a := ⟨_, List.getElem?_eq_getElem hlt⟩
+    refine ⟨a, ha, hvs _ a _ ha ?_⟩
+    simp [List.getElem?_idxOf hk]
+  have hrun : ∀ k ∈ ks, ∀ A R, FoldP.algTy G k = .bang (.lolli A R) →
+      ProjOKN (ℍ := ℍ) ks δ Θ c Nb (tupV vs) (ks.idxOf k) A R := by
+    intro k hk A R hA j ls r ρ hj hr hc
+    obtain ⟨a, ha, hva⟩ := hget k hk
+    rw [hA] at hva
+    rw [← hlen]
+    exact proj_runN hΦ (vPostN_down _ δ Θ) vs _ a ha r (bang_app hΘ hj hva hc hr ls)
+  exact ⟨fun B Bs hm => hrun _ hm _ _ rfl, fun Bs S hm => hrun _ hm _ _ rfl⟩
+
+/-- **The general owned fold at `SemJN`** (Core's `foldOwnG_compatX`): `foldOwnG : Algs ⊸
+!U(μB₀ ⊸ F R₀)` at every body `B₀` of the class `P` and every list of results. -/
+theorem foldOwnG_compatN {Δ : LifeCtx} {Γ : Ctx VTy} (B₀ : VTy) (hB : PBody B₀) (Rs : List VTy)
+    (hΓ : Ctx.DeadP Γ) :
+    SemJN (ℍ := ℍ) Δ Γ (.val (foldOwnGV B₀)) (.val (foldGTy B₀ Rs)) := by
+  intro δ γ Θ c n ls ρ _ hΘ _ _ hg₀
+  have hρ : ρ = PMap.empty := gN_deadP hΓ hg₀
+  subst hρ
+  show erwp (ℍ := ℍ) _ _ _ n ls (substAll γ (.val (foldOwnGV B₀))) _
+  rw [substAll_closed (foldOwnGV_closed B₀)]
+  refine erwp_val ?_
+  intro Θ₁ _ hOK₁ c₁ _ ls₁ c₂ k₁ _ gs ρv ρ' hcomp hv₁ _
+  obtain ⟨hρv, vs, rfl, hlen, hvs⟩ := tup_splitN _ gs ρv
+    (fun A hA v σ hv => by
+      obtain ⟨k, -, rfl⟩ := List.mem_map.mp hA
+      exact algTy_emptyN _ k hv) hv₁
+  subst hρv
+  obtain rfl := eq_of_compS_empty_left hcomp
+  have hΦ := LocTy.view_down hOK₁.1 c₂
+  refine erwp_headE hΦ (vPostN_down _ δ Θ₁) .hole (fun μ => Head.beta μ _ (tupV vs)) rfl ?_
+  rw [foldOwnGV_subst]
+  refine erwp_val ⟨rfl, ?_⟩
+  intro Θ₂ _ hOK₂ c₃ _ ls₂ c₄ k₂ hk₂ w ρw ρ'' hcomp' hw hc₄
+  obtain rfl := eq_of_compS_empty_left hcomp'
+  have hΦ₂ := LocTy.view_down hOK₂.1 c₄
+  have halg := algsOK_of_tupleN (keys B₀) (algsOf (keys B₀) Rs) δ hOK₂ c₄ (Θ₀ := Θ₁) vs
+    (by simpa using hlen) (fun p a A ha hA => vN_le hk₂ (hvs p a A ha (by simpa using hA)))
+  refine erwp_headE hΦ₂ (vPostN_down _ δ Θ₂) .hole (fun μ => Head.beta μ _ w) rfl ?_
+  have e : Expr.subst 0 w (.app (.app (.val (selfG (keys B₀))) (.val ((tupV vs).shift 1 0)))
+      (tagE 0 (.var 0))) = .app (.app (.val (selfG (keys B₀))) (.val (tupV vs))) (.val (tagV 0 w)) := by
+    simp [tagE, tagV, closed_subst (selfG_closed _), subst_shift_succ]
+  rw [e]
+  exact fold_specN hB _ δ hOK₂ halg w ρ'' k₂ ls₂ le_rfl hw hc₄
+
+end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
+
+end
