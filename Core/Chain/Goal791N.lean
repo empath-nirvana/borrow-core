@@ -1023,15 +1023,15 @@ theorem allI_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {x : LifeVar} {b : Lifetime.L
 /-! ## §3. The statements -/
 
 mutual
-/-- **The formers the interpretation covers**: every former but type variables, `μ`, families
-(arrays and slices) and opaque host types, which `vN` reads as empty, and `ν`, which `cN` reads
-as empty. Decidable. -/
+/-- **The formers the interpretation covers**: every former but type variables and `μ`, which
+`vN` reads as empty, and `ν`, which `cN` reads as empty. Families (arrays and slices) are covered
+at a covered leaf, and opaque types (`Tok` and the host types) always. Decidable. -/
 def _root_.BoCa.Fig16.LogRel.Core.VTy.inFrag : VTy → Bool
-  | .unit | .zero | .unk | .int _ => true
+  | .unit | .zero | .unk | .int _ | .opq _ => true
   | .tensor A B | .sum A B => A.inFrag && B.inFrag
   | .thunk C => C.inFrag
-  | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A => A.inFrag
-  | .tvar _ | .mu _ | .fam _ | .opq _ => false
+  | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A | .fam A => A.inFrag
+  | .tvar _ | .mu _ => false
 /-- The computation-type formers the interpretation covers. -/
 def _root_.BoCa.Fig16.LogRel.Core.CTy.inFrag : CTy → Bool
   | .ret A => A.inFrag
@@ -1066,12 +1066,11 @@ def ConstsN : Prop := ∀ c : Const791, c.InFrag → ConstN (ℍ := ℍ) c
 
 /-- **The fundamental property over `erwp`, on the fragment**: every derivation of the existing
 judgment whose context and type lie in the fragment (`JdgInFrag`). The rules whose conclusion is
-at a former the interpretation reads as empty (`arrNew`, `arrEmpty`, the slice and fold
-constants, `roll`, `nuIn`, `unfoldN`, a type variable's or an opaque host type's introduction)
-conclude outside the fragment and are not quantified over. A derivation of a judgment in the
-fragment may still cut through an excluded type inside (an array built and consumed, `unroll`
-of a `μ` value); at such a cut the interpretation gives no reading, so `FundamentalN` is not
-shown attainable by induction on the derivation until those formers have clauses.
+at a former the interpretation reads as empty (the fold constants over `μ`, `roll`, `nuIn`,
+`unfoldN`, a type variable's introduction) conclude outside the fragment and are not quantified
+over. A derivation of a judgment in the fragment may still cut through an excluded type inside
+(`unroll` of a `μ` value); at such a cut the interpretation gives no reading, so `FundamentalN`
+is not shown attainable by induction on the derivation until those formers have clauses.
 
 The rule-by-rule map is `docs/new-core/scope-831-map.md`. Its answers on the two risks it named:
 * An `imm` lend (`withbor1`, `withbor1U`) runs its callback at the world with the lend's record.
