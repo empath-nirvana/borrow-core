@@ -1557,3 +1557,14 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fin_claimM
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor3S_compat
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.constN_w3
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.opTableGR_local
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_frameGR
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_frame_cancelRunGR
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.exS_none_of_walk
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.consistentX_leftE
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.exS_mut_wit_get
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tab_lookupGG
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabG_tabG_twin
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabG_canF
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withborFS_compat
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.constN_wF
