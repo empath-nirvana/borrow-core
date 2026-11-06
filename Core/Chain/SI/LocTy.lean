@@ -283,6 +283,24 @@ theorem mutL_extR {Θ Θ' : LocTy} {a : Life} {P : CPredL} {n : Nat} {v : Val} {
   rw [hfam]
   exact ⟨l, w, χ, hχ, j, hw, hnj, hv, hl', rfl⟩
 
+/-- **The part of the world above `a` and the whole are extensions of each other at a resource
+in `Res_a`**: such a resource reads only keys above `a`. -/
+theorem LocTy.extR_above (Θ : LocTy) {a : Life} {ρ : WRes} (hρ : ρ.InStratum a) :
+    (Θ.above a).ExtR Θ ρ ∧ Θ.ExtR (Θ.above a) ρ := by
+  have habove : ∀ b, a < b → (Θ.above a).above b = Θ.above b := by
+    intro b hab
+    funext x y
+    simp only [LocTy.above]
+    by_cases hby : b < y
+    · simp [hby, lt_trans hab hby]
+    · simp [hby]
+  refine ⟨fun l b F hF hc => ?_, fun l b F hF hc => ?_⟩
+  · have hab : a < b := hc.of_stratum hρ
+    simp only [LocTy.above, if_pos hab] at hF
+    exact ⟨hF, (habove b hab).symm⟩
+  · have hab : a < b := hc.of_stratum hρ
+    exact ⟨by simp only [LocTy.above, if_pos hab]; exact hF, habove b hab⟩
+
 /-- **L3 (locality)**: a `Mut` value of Core's shape at the world with the lend, whose cell is
 longer-lived than the lend, is one at the world without it (Core's `vC_local`; what the lender
 reads of a result in the lend's stratum). -/
@@ -529,6 +547,58 @@ theorem consistentX_get {ρ : WRes} {c : Loc → Option Life} (hc : ConsistentX 
     (hk : ψ.kind = Kind.mut) : c l = some ψ.at := by
   obtain ⟨σ, ex, a, hex, -, -⟩ := hv
   exact hc ex hex l ψ (ExS.get_of_ne_imm hex e (by rw [hk]; decide)) hk
+
+/-- A view moved at a location the resource's exclusive walk does not hold stays consistent. -/
+theorem consistentX_setLife {c : Loc → Option Life} {ρ : WRes} (hc : ConsistentX c ρ) {l : Loc}
+    (hl : ∀ e, ExS ρ e → e.get l = none) (α : Life) : ConsistentX (setLife c l α) ρ := by
+  intro e he x ψ hg hk
+  have hx : x ≠ l := fun h => by subst h; rw [hl e he] at hg; cases hg
+  simp only [setLife, if_neg hx]
+  exact hc e he x ψ hg hk
+
+/-- **An operand's exclusive walk misses a location the other operand holds a non-`imm` cell at**,
+in a valid composite. -/
+theorem exS_none_of_part {ρ₁ ρ₂ ρ : WRes} (h : ResU.CompS ρ₁ ρ₂ ρ) (hv : ResU.Valid ρ) {l : Loc}
+    {ψ : CellU Loc Val} (hg : ρ₁.get l = some ψ) (hk : ψ.kind ≠ Kind.imm) :
+    ∀ e, ExS ρ₂ e → e.get l = none := by
+  intro e he
+  obtain ⟨σ, ex, a, hex, -, -⟩ := hv
+  obtain ⟨e₁, e₂, he₁, he₂, hc⟩ := (ExS.split h).mp hex
+  obtain rfl := ExS.functional he he₂
+  have h₁ := ExS.get_of_ne_imm he₁ hg hk
+  cases f : e.get l with
+  | none => rfl
+  | some ζ => exact absurd (CellU.CompatS.kinds (hc.1 l _ ζ h₁ f)).1 hk
+
+/-- **A `mut` cell at its view lifetime, its content consistent, is consistent.** -/
+theorem consistentX_single_mut {c : Loc → Option Life} {l : Loc} {b : Life} {w : Val}
+    {σ : WRes} {hσ : σ.InStratum b} {P : Val → SPropS Loc Val b} {hw : P w ⟨σ, hσ⟩}
+    (hc : ConsistentX c σ) (hl : c l = some b) :
+    ConsistentX c (ResU.single l (CellU.mutOf b w σ hσ P hw)) := by
+  intro e he x ψ hg hk
+  obtain ⟨e₀, he₀, hcomp⟩ := ExW.single_mut_inv he
+  rcases ResU.Comp.get hcomp x with ⟨-, -, f⟩ | ⟨ζ, f₁, -, f⟩ | ⟨ζ, -, f₂, f⟩ |
+      ⟨ζ₁, ζ₂, ζ, f₁, f₂, -, -⟩
+  · rw [hg] at f; cases f
+  · rw [hg] at f; cases Option.some.inj f
+    obtain ⟨rfl, rfl⟩ := ResU.single_get_eq_some f₁
+    rw [hl, CellU.at_mutOf]
+  · rw [hg] at f; cases Option.some.inj f
+    exact hc e₀ he₀ x _ f₂ hk
+  · obtain ⟨-, rfl⟩ := ResU.single_get_eq_some f₁
+    exact absurd (CellU.CompatS.kinds (hcomp.1 x _ ζ₂ f₁ f₂)).1
+      (by rw [CellU.kind_mutOf]; exact fun c => Kind.noConfusion c)
+
+/-- **A resource in the top stratum is consistent with every view**: it holds no borrow cell, and
+neither does its exclusive walk. -/
+theorem consistentX_of_top {σ : WRes} (h : σ.InStratum (OrderDual.toDual 0))
+    (c : Loc → Option Life) : ConsistentX c σ := by
+  intro e he x ψ hg hk
+  have hin := ExW.inStratum BoLo.compS_hC he _ h x ψ hg
+  rcases ψ with _ | _ | m
+  · cases hk
+  · cases hk
+  · exact absurd hin (fun h' => Nat.not_lt_zero _ h')
 
 /-- The ancestor transfer (`ResU.upd_ag_imm_wit_factor`) from `↭`'s `imm` clause alone, the
 only clause its proof reads. -/

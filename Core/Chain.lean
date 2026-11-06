@@ -83,8 +83,8 @@ import Core.Chain.SI.WpN
 import Core.Chain.PoolN
 import Core.Chain.PoolSpawnN
 import Core.Chain.Hardest791N
--- `Cancel791N` (`withbor2S_compat`, `constN_w2`) is restated over the per-lend world in #826.
--- import Core.Chain.Cancel791N
+
+import Core.Chain.Cancel791N
 import Core.Chain.Goal791N
 import Core.Chain.Lend791N
 import Core.Chain.Shape791N

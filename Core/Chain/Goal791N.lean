@@ -614,6 +614,26 @@ theorem vN_local (A : VTy) (δ : LSub) (Θ : LocTy) (l₀ : Loc) (α : Life)
     (h : vN (ℍ := ℍ) A δ (Θ.add l₀ α F) n v ρ) : vN (ℍ := ℍ) A δ Θ n v ρ :=
   vN_extR A δ n v ρ (LocTy.extR_of_add Θ l₀ F hs) h
 
+/-- **A value of a type outliving every lifetime holds no borrow cell**: it is in the top
+stratum. -/
+theorem vN_top {A : VTy} (hO : ∀ Δ a, VOutlives Δ a A) {δ : LSub} {Θ : LocTy} {n : Nat}
+    {v : Val} {ρ : WRes} (h : vN (ℍ := ℍ) A δ Θ n v ρ) : ρ.InStratum (OrderDual.toDual 0) :=
+  vN_outlives (Δ := LifeCtx.empty) (a := .top) (models_empty_any _) rfl (hO _ _) Θ n v ρ h
+
+/-- **A fresh lend does not change `𝒱⟦A⟧` of a type outliving every lifetime**: its values are in
+every stratum, so `vN_local` and `vN_extA` relate the two worlds both ways. -/
+theorem vN_add_eq {A : VTy} (hO : ∀ Δ a, VOutlives Δ a A) (δ : LSub) {Θ : LocTy} {α : Life}
+    (hf : Θ.Fresh α) (l : Loc) (F : Nat → Val → SPropS Loc Val α) :
+    vN (ℍ := ℍ) A δ (Θ.add l α F) = vN (ℍ := ℍ) A δ Θ := by
+  funext n v ρ
+  refine propext ⟨fun h => vN_local A δ Θ l α F n v ρ ((vN_top hO h).mono (Nat.zero_le _)) h,
+    fun h => vN_extA A δ (LocTy.extA_add hf l F) n v ρ h⟩
+
+/-- **A stored family is the payload at the world** on content in the cell's stratum. -/
+theorem vN_above (A : VTy) (δ : LSub) (Θ : LocTy) {a : Life} {n : Nat} {v : Val} {ρ : WRes}
+    (hρ : ρ.InStratum a) : vN (ℍ := ℍ) A δ (Θ.above a) n v ρ ↔ vN (ℍ := ℍ) A δ Θ n v ρ :=
+  ⟨vN_extR A δ n v ρ (LocTy.extR_above Θ hρ).1, vN_extR A δ n v ρ (LocTy.extR_above Θ hρ).2⟩
+
 /-! ## §3. The statements -/
 
 /-- **A #791 constant is a value of `!` its type**, at every `δ`, world and index, from its
