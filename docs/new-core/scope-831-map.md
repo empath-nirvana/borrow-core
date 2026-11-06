@@ -241,8 +241,9 @@ was given only answers at `Θ`. Since no rule needs it, it is on no unit's path.
 ## 4. Out of the fragment: what bringing each former in would need
 
 Core's clauses and laws are as surveyed in `Core/Relation.lean`, `Core/RelMu.lean`,
-`Core/NuRel.lean`, `Core/SepRange.lean`, `Core/SliceFrames.lean`. No chain file has a family, `μ`
-or `ν` clause (`sV`, `SI/Sem.lean`, reads them as `False` too).
+`Core/NuRel.lean`, `Core/SepRange.lean`, `Core/SliceFrames.lean`. No chain file had a family, `μ`
+or `ν` clause (`sV`, `SI/Sem.lean`, reads them as `False` too); families have one since #836 and
+`ν` since #837 (`scope-831-interface.md` §12).
 
 **Families (arrays, `ArrayImm`, `[Mut]` slices; 21 rows, and the `sm` constant).** Core's clause
 (`Relation.lean:151`): `v = arr(ℓ, c)`, `c < 2³¹`, `sepRange (λm. 𝒱⟦L⟧(loc m)) ℓ c`, one clause

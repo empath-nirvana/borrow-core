@@ -49,7 +49,7 @@ The configurations named below are indexed in `configurations.md`; the design th
 `chain-interpretation.md`:
 `coreMutImm_not_extF` (`ImmShape791N.lean`), `not_wlImage` (`ImmRec791N.lean`),
 `perLocShape_not_reborrow` and `reseal_untyped` (`Shape791N.lean`), `extRL_breaks_extA`
-(`ExtRLit791.lean`, which rests on `ν` read as empty), and `flat_part_config`
+(`ExtRLit791.lean`, at a stuck application, `world_two`), and `flat_part_config`
 (`ConsistentFlat791.lean`).
 
 ## 2. The interface
@@ -84,7 +84,7 @@ The configurations named below are indexed in `configurations.md`; the design th
 
 | ID | Core lemma | [TR] | Rules | Status | Chain counterpart |
 |---|---|---|---|---|---|
-| K1 | `vC_local` | — | 19: `swap`, `iterate`, `reify`, `sliceBorrowM` … | **departed (built)** | `vN_extR` (`Goal791N.lean`), along `LocTy.ExtR` at the value's resource. Configurations: `extRL_breaks_extA` (Core's `Ext` read literally is not Kripke along `ExtA`; rests on `ν` read as empty) and `coreMutImm_not_extF` (payloads read off the list are not stable along `extF`, so the order is on the world) |
+| K1 | `vC_local` | — | 19: `swap`, `iterate`, `reify`, `sliceBorrowM` … | **departed (built)** | `vN_extR` (`Goal791N.lean`), along `LocTy.ExtR` at the value's resource. Configurations: `extRL_breaks_extA` (Core's `Ext` read literally is not Kripke along `ExtA`; at a stuck application from a typed world of two `mut` cells, #837) and `coreMutImm_not_extF` (payloads read off the list are not stable along `extF`, so the order is on the world) |
 | K2 | `vC_same`, `vP_same`, `gDenC_same`, `ext_of_same` | — | 31: `tensorI`, `bind`, `unitE`, `tensorE` … | **same** | holds by definition: `vN`/`gN` read no record list; `LocTy.extR_refl` |
 | K3 | `ext_add` | 6.64 | 2: `withbor1`, `withbor1U` | **departed (built)** | `LocTy.extR_addImm` (`SI/LocTy.lean`): the record goes into the world, not the list (`coreMutImm_not_extF`) |
 | K4 | `ext_drop` | 6.64 | 0 (inside the Imm Frame) | **departed (built)** | `LocTy.extR_of_addImm`: Core asks `∀ r ∈ rsOf ls′, Rel r ρ → r ∈ rsOf ls` and discharges it at the Imm Frame's exit from the run (`not_rel_lineage`); the chain's statement has no such premise because `Keeps` reads relevance by lifetime. Configuration: `Depart831N.not_unwindArgStepLoc` (§6.3) |
@@ -145,7 +145,7 @@ The configurations named below are indexed in `configurations.md`; the design th
 | F7 | `wpTS_M_frameFam`, `wpTS_I_frameFam`, `wpG_M_frameFam`, `wpG_I_frameFam` | — | 4: `sliceBorrowM`, `sliceBorrowI`, `sliceBorrowMU`, `sliceBorrowIU` | **departed, to build** (#836) | `wpTS_M_frameFam` is `rwp_M_frameListN` (built). Across raises, the one-cell frame under inner claims `erwp_M_frameRR` is built; its list induction, the cancel-run counterpart and the Imm family frames are missing, buildable (§9.3) |
 | F8 | `vC_roll`, `vC_unfold`, `vC_immReborrow_mu_iff`, `vCE_subst` … | — | 8: `reify`, `roll`, `unroll`, `foldImm` … | **missing, buildable** | an environment argument in `vN`/`vO`, the `μ`/`tvar` clauses, Core's `RelMu` laws at the index; `withload_sized` is `withloadS_compat` with a size measure. Very high; not checked |
 | F10 | `cC` .arr (the `⊸` clause) | — | 10: `bind`, `lam`, `lamDead`, `app` … | **same** (#834) | `cN .arr` is Core's plain wand at the function's own world, read at every later index and every view consistent with the composite (§8.1). The Kripke reading along `ExtR` is gone: no configuration forced it |
-| F9 | `cC_nu_iff`, `nuRel_coind`, `cB_step` | spec §7 | 4: `reify`, `nuIn`, `nuOut`, `unfoldN` | **missing, unclear** | a reading of `ν` at `erwp`: a design choice first. Not derived; obstruction not verified |
+| F9 | `cC_nu_iff`, `nuRel_coind`, `cB_step` | spec §7 | 4: `reify`, `nuIn`, `nuOut`, `unfoldN` | **same** (#837) | Core's greatest fixed point at the chain's signature (§12): `cN_nu_iff`, `cN_nu_coind`, `cN_nu_unfold`, `cBN_step`; `reify`'s candidate not derived (§12.5) |
 
 ### R. Frames, the reborrow theorem, the chooser, the cells
 
@@ -186,13 +186,13 @@ The configurations named below are indexed in `configurations.md`; the design th
 
 | Status | Entries |
 |---|---|
-| same | 40 (F5, F6 in #836) |
+| same | 41 (F5, F6 in #836; F9 in #837) |
 | departed (built) | 12 (K1, K3, K4, V10, R1, R2, R3, R4, R5, R7, R8, R11) |
 | departed, forced by `erwp`'s definition | 1 (E13) |
 | departed, no configuration | 0 |
 | departed, to build | 7 (E3, E5, E6, E9, E10, E14, F7) |
 | missing, buildable | 21 |
-| missing, unclear | 2 (F9 `ν`, E12 the BOXED-κ stop lemma) |
+| missing, unclear | 1 (E12 the BOXED-κ stop lemma) |
 | **total** | **83** |
 
 The chain-only entries V11, G11 and G12 are counted here. They have no Core lemma: the chain's
@@ -206,9 +206,7 @@ remain.
 
 ### 2.3 Missing, unclear
 
-- **F9, the `ν` clause** (`cC_nu_iff`, `nuRel_coind`, `cB_step`; `nuIn`, `nuOut`, `unfoldN`,
-  `reify`). A reading of `ν` at `erwp` must be chosen first (`scope-831-map.md` §4). Not derived;
-  obstruction not verified.
+- **F9** is built in #837 (§12); of its rules, `reify` is not derived (§12.5).
 - **E12, the BOXED-κ stop lemma `stop_sem`** at `erwp` (`effHandleVB`). Not derived; obstruction
   not verified.
 
@@ -300,7 +298,7 @@ that step is done inside `withloadS_compat`, which is proved, so V1 is not a blo
 | 54 | `boundedFix` | yes | portable | W1 G3 C1 F1 | — | mechanical now | `fixSelf_valid`, `cC_boundedFix` along `ExtR` |
 | 55 | `iterate` | yes | portable | W1 K1 K5 G3 C3 E1 E2 E4 E8 E13 E14 | K5 E8 E14 | waits: answer consistency (§9.2) | `cwp_iterate` → E14 |
 | 56 | `divFuel` | yes | portable | W1 G3 C3 E1 E2 E4 E8 E11 E13 | E8 | proved (`divFuel_compatN`) | `fuel_total`, `divFuel_steps`, `fuelK_frame` |
-| 57 | `reify` | no | out | W1 W9 K1 K5 V4 G3 C3 F8 F9 E1 E2 E4 E8 E11 E13 | W9 K5 F8 F9 E8 | waits (unclear) | `reify_compat` |
+| 57 | `reify` | yes (#837) | portable (#837) | W1 W9 K1 K5 V4 G3 C3 F9 E1 E2 E4 E8 E11 E13 | — | waits (unclear): §12.5 | `reify_compat` |
 | 58 | `sliceBorrowM` | no | out | W1 W2 W3 W4 W6 K1 K2 V3 V6 V11 G3 F1 F6 F7 | W4 F6 F7 | proved (#836) |  |
 | 59 | `sliceBorrowI` | no | out | W1 W2 W3 W4 W6 K1 K2 V3 V6 V7 V10 V11 G3 F1 F6 F7 R5 | W4 F6 F7 | mechanical once built |  |
 | 60 | `sliceGetM` | no | out | W1 W5 W6 G3 F6 | F6 | proved (#836) |  |
@@ -332,9 +330,9 @@ that step is done inside `withloadS_compat`, which is proved, so V1 is not a blo
 | 86 | `foldOwn` | no | out | W1 W2 W3 W4 W6 H2 K1 K2 V11 G3 F8 | W4 F8 | mechanical once built | `foldOwnV` |
 | 87 | `foldReuse` | no | out | W1 W2 W3 W4 W6 H3 H5 K1 K2 V11 G3 F8 | W4 F8 | mechanical once built | `foldReuseV` |
 | 88 | `foldOwnG` | no | out | W1 W2 W3 W4 W6 K1 K2 V11 G3 F3 F6 F8 | W4 F6 F8 | mechanical once built | `FoldP` traversal |
-| 89 | `nuIn` | no | out | F9 | F9 | waits (unclear) |  |
-| 90 | `nuOut` | cut | out | F9 | F9 | waits (unclear) |  |
-| 91 | `unfoldN` | no | out | W1 W2 W3 W6 K1 V4 G3 C1 F8 F9 R6 E1 E2 E4 E8 E13 | F8 F9 E8 | waits (unclear) | `nuRel_coind` |
+| 89 | `nuIn` | yes (#837) | portable (#837) | F9 | — | proved (#837: `nuIn_compatN`) |  |
+| 90 | `nuOut` | yes (#837) | portable (#837) | F9 | — | proved (#837: `nuOut_compatN`) |  |
+| 91 | `unfoldN` | yes (#837) | portable (#837) | W1 W2 W3 W6 K1 V4 G3 C1 F9 R6 E1 E2 E4 E8 E13 | — | proved (#837: `unfoldN_compatN`) | `nuRel_coind` |
 | 92 | `effSub` | yes | portable | C3 E3 E4 E13 | E3 | proved (`sub_compatN`) |  |
 | 93 | `effPerform` | yes | portable | C3 E4 E5 E6 E13 | E5 E6 | proved (`perform_compatN`) |  |
 | 94 | `effAwait` | yes | portable | W1 K2 V8 V11 G1 G2 G3 G4 G5 G6 G9 G11 G12 C1 C2 C3 F10 R6 E1 E2 E3 E4 E5 E6 E7 E8 E13 | V8 G1 G2 G4 G6 G9 G11 G12 C2 E3 E5 E6 E7 E8 | proved (`await_compatN`) | composes `perform`, `raise`, `sub`, `ret`, `var`, `sumE`, `let` |
@@ -357,6 +355,9 @@ that step is done inside `withloadS_compat`, which is proved, so V1 is not a blo
 | mechanical now | 21 | 1 | | 22 |
 | mechanical once built | 29 | 13 | 28 | 70 |
 | waits (unclear) | | 2 (`nuOut`, `effHandleVB`) | 3 (`nuIn`, `unfoldN`, `reify`) | 5 |
+
+The table is as #831 left it. In #837 `ν` entered the fragment: `nuIn`, `nuOut` and `unfoldN`
+are proved, and `reify` waits on §12.5.
 
 **Once the layer is built, 92 rules are mechanical** (22 now and 70 more), 7 are proved, and 5
 wait on F9 or E12. On the fragment (the 73 *yes* and *cut* rows), 72 are proved or mechanical
@@ -624,7 +625,7 @@ its argument at `Θ`; an argument at an extension is not one at `Θ`). `cN_extA`
 | ID | Chain lemma |
 |---|---|
 | G1/G12 | `gN_split`; `gN_splitC` (the parts consistent with the view at a valid resource) |
-| G12 at a conclusion not `F`/`F_Σ` | `cN_of_valid`: a computation at a type with a reading at every spine position (`noNuSpine`, every former but `ν`; `noNuSpine_of_inFrag`) may assume its resource valid |
+| G12 at a conclusion not `F`/`F_Σ` | `cN_of_valid`: a computation may assume its resource valid, at every type (at `ν` from #837, §12.3) |
 | G2 | `gN_soloP` |
 | G4 | `gN_persistent`, `gN_cons_persistent` |
 | G6 | `gN_extR` |
@@ -634,7 +635,7 @@ its argument at `Θ`; an argument at an extension is not one at `Θ`). `cN_extA`
 | G11 | `gN_le` |
 | K5 | `LocTy.extR_empty` |
 | W4 | `erwp_bind_frame` (the inner run at the empty table, any outer local table; the continuation at the index the run leaves, the returned resource consistent and valid) |
-| C2 | `cN_bind`, by induction on `C` with `noNuSpine C` |
+| C2 | `cN_bind`, by induction on `C` (at `ν` from #837: unfold, `cBN_bind`, roll) |
 | W7 | `rwp_box`, `erwp_box` |
 | V8 | `vN_noOwn_of_ownFree` |
 | F2 | `bang_app` (at any later world) |
@@ -642,10 +643,10 @@ its argument at `Θ`; an argument at an extension is not one at `Θ`). `cN_extA`
 | V1 | `vN_tyEq`, `vO_tyEq`, `cN_tyEq`, `tabN_tyEq`, `finN_tyEq`, `retN_tyEq` |
 
 The hardest case, G12 at a conclusion that is not `F`/`F_Σ`, is `cN_of_valid`: at `⊸` the resource
-is a part of the composite the wand runs from. It needs the conclusion to have a reading: `cN` at
-`ν` is `False` (outside the fragment, F9), where validity cannot be assumed. The compatibility
-lemmas whose proof reads it (`app`, `bind`, `unitE`, `tensorE`, `sumE`, `zeroE`) carry
-`noNuSpine C`; `FundamentalN` quantifies over in-fragment judgments, which give it.
+is a part of the composite the wand runs from. With `ν` read as empty it needed the conclusion
+to have a reading at every spine position, and the compatibility lemmas whose proof reads it
+(`app`, `bind`, `unitE`, `tensorE`, `sumE`, `zeroE`) carried `noNuSpine C`. Since #837 `ν` has
+Core's clause and the premise is gone (§12.3).
 
 ### 8.3 The rules ported (`Core/Chain/Rules834N.lean`, `Borrow834N.lean`, `Count834N.lean`)
 
@@ -928,3 +929,44 @@ premise holds at every invalid `ρ`). That is why it carried `noNuSpine C`, and 
 coinduction: the candidate `R′ = {ρ | Valid ρ → 𝒞⟦νX. C⟧ ρ}` is a post-fixed point, since at a
 valid `ρ` the unfolding of `𝒞⟦νX. C⟧` is one at `R′` (`cBN_mono`), and `cBN` may assume validity
 (`cBN_of_valid`, the tree version, by `cN_of_valid`'s own induction).
+
+### 12.4 Built (`Core/Chain/Goal791N.lean`, `Iface834N.lean`, `TyEq834N.lean`, `Nu837N.lean`)
+
+| Core | Chain |
+|---|---|
+| `cC .nu`, `cB`, `vCE (nuEnv C R)`, `effRetE`, `thunkR`, `CPred` | `cN .nu`, `cBN`, `vNX`/`vOX`, `retNX`, `thunkRN`, `CandN` |
+| `cB_mono`, `nuF_mono` | `cBN_mono` (`vNX_mono`, `retNX_mono`, `vNX_occ`), along `CandN.LeOK`: `U X` reads a candidate only at `OK` worlds |
+| `nuRel_coind`, `nuRel_out`, `nuRel_roll`, `cC_nu_unfold` | `cN_nu_coind`, `cN_nu_out`, `cN_nu_roll`, `cN_nu_unfold` |
+| `vCE_nuEnv`, `vC_inst_envS`, `cB_unroll`, `effTab_instT`, `cC_nu_iff` | `vNX_inst_occ`, `vNX_inst_poly`, `retNX_inst`, `tabN_instT`, `thunkRN_nuCand`, `cBN_unroll`, `cN_nu_iff` |
+| `cC_step` at `ν` (`cB_step`) | `cN_head` at `ν` (`cBN_head`); `cBN_step`, `cBN_pureSteps` |
+| `cC_congr` at `ν` (`cB_congr`) | `cN_congr` at `ν` (`cBN_congr`, `vNX_congr`, `vOX_congr`, `retNX_congr`) |
+| `cC_tyEq_aux` at `ν` (`cB_tyEq`, `cB_poly_ty`, `nuEnvU`) | `cN_tyEq` at `ν` (`cBN_tyEq`, `cBN_poly_ty` at the closed type `1`) |
+| `cC_bind` at `ν` (`cB_bind`) | `cN_bind` at `ν` (`cBN_bind`) |
+| (chain only) the index | `cN_down` at `ν` (`cBN_le`, `vNX_down`): the candidate closed upward in the index at `Down` worlds |
+| (chain only) the view | `cN_of_valid` at `ν` (`cBN_of_valid`), §12.3 |
+| `nuIn_compatX`, `nuOut_compatX` | `nuIn_compatN`, `nuOut_compatN` |
+| `unfold_compatX`: `candN`, `candN_post`, `map_ok`, `node_ok` | `unfoldN_compatN`: `candNN`, `candNN_post`, `map_okN`, `node_okN`, over Core's terms and reductions (`Core/Nu.lean`). The candidate holds at the indices up to the step's, at `OK` worlds and at views consistent with the resource, where `U X` reads it; the step is at every world (`LocTy.extR_empty` at `!`'s empty resource) |
+
+`noNuSpine` is gone: `cN_of_valid`, `cN_bind`, `app_compatN`, `bind_compatN`, `unitE_compatN`,
+`tensorE_compatN`, `sumE_compatN` and `zeroE_compatN` hold at every conclusion. `CTy.inFrag`
+admits `ν` at a covered body (`CTy.inFragNu`, `VTy.inFragNu`: the body's variable `X`).
+
+Restated:
+- `noEffSpine` excludes `ν` (was `True` there): `cN_extA` at `ν` would need its trees' leaves
+  stable along `ExtA`, and they hold effect rows and `⊸`. `cN_extA` has no caller.
+- `ExtRLit791.tyC` is `Mut 'x 1 ⊸ F 1` (was `Mut 'x 1 ⊸ ν(F 1)`), `vUgen`'s codomain with it;
+  `not_valid_at_lend` is stated at the thunk `()` and an index `n > 0` (was any `v`, any `n`),
+  refuted from the typed world of the two cells (`world_two`). `extRL_breaks_extA` keeps its
+  statement.
+- `cN_of_valid`, `cN_bind` and the six rules lost the premise `noNuSpine C`; `noNuSpine`,
+  `noNuSpine_of_inFrag` and `noNuSpine_effOf` are removed.
+
+### 12.5 Not built
+
+- **`reify`** (Core's `reify_compatX`, `candR`, `reify_next`, `reify_close`). Core's candidate
+  holds a loop made at a tick, whose continuation is owed at every `Ext`-extension of the list the
+  loop is observed at (`candR`'s first disjunct). On the chain the loop is read through `U X`
+  (`thunkRN`, as `vN`'s `U` clause), at every record list, while the tick's stop owes its
+  continuation only at `extF`-extensions of the stop's own list (`entN`'s `wc := extF`). The
+  first disjunct of the chain's candidate therefore has no source at a list the stop's
+  continuation is not owed at. Not derived; obstruction not verified.
