@@ -54,9 +54,11 @@ statements, as `TreeGoal791`'s with `vN`/`cN`/`erwp` for `vT`/`cT`/`cerwpT`. Pro
 
 ## 3. Departures from Core, each recorded
 
-Decision 1 (2026-11-05) asked for 1–3 below to be undone. They stand, justified by the
-configuration `coreShape_not_reborrow` (§5, "Decision 1") for the location typing; departure 1's
-record half has no configuration (§5).
+Decision 1 (2026-11-05) asked for 1–3 below to be undone. They stand. `coreShape_not_reborrow`
+(§5, "Decision 1") refutes reading Core's `ls₀` as the location typing, not Core's records-based
+`Mut` (§7.3). What stops the port of Core's `withbor3_compatX` is the anti-frame's reseal at a
+location the location typing does not type (`reseal_untyped`, §7.2); departure 1's record half
+has no configuration.
 
 1. **No record list in values; `Imm` without `CohE`.** `𝒱` reads neither `Φ` nor the record list
    (the chain's own answer, `SI/MutSemN.lean`: no recursive world). Core's `Imm` clause reads
@@ -116,6 +118,7 @@ record half has no configuration (§5).
 | `cbRelease_sem` (the callback type is inhabited) | `Lend791N` | the bound defined |
 | `answer_not_inStratum` (why the answer clause is in `Row.Suspend`) | `Lend791N` | none |
 | `coreShape_not_reborrow` (the configuration for decision 1) | `Shape791N` | the locations distinct, `α < b < β` |
+| `reseal_untyped` (with `stuckV_one`, `stuckV_not_two`, `unitV_all`): the anti-frame's reseal at a location `Φ` does not type (§7.2) | `Shape791N` | `@aδ = β`; `Φ ℓ = none` |
 
 `ConstN`, `ConstsN`, `FundamentalN`, `BridgeN`, `Goal791SchedN`, `Withbor2SN`, `Withbor3SN`,
 `WithborFSN`, `WithloadSN`, `SliceBorrowMSN` are stated (`Goal791N` §3). `Goal791Top` reads no
@@ -172,7 +175,10 @@ families, fixed at the lend, would read.
 
 ### What the next unit needs
 
-- The decision on route A, B or C (or another) for `Mut` on the chain; then `w3` and `wF`.
+- §7 (unit 3): the port of `withbor3_compatX` stops at its anti-frame step (§7.2). A decision
+  on how an opened `Mut` argument's location comes to be typed by `Φ` at the step index; then
+  `w3` and `wF`. Routes A–C below were framed against `coreShape_not_reborrow`; §7.3 places that
+  configuration, and §7.2 is the question they have to answer.
   `w3`/`wF` across `Row.Suspend` also need the anti-frame across raises and across cancel runs
   that stop at their rows' tables: `erwp_M_antiFrameC`'s cancel runs perform nothing
   (`cancelTabR OpTabN.empty`), the analogue of `erwp_M_frame_cancelRunCR` for the anti-frame.
@@ -243,3 +249,96 @@ is the departure's justification and the interpretation keeps the chain's answer
 Decisions 2 and 3 are built (§5: `Row.Suspend`'s clauses, `withbor2S_compat` with no row clause
 beyond them). Decision 1 stops at the configuration `coreShape_not_reborrow`: the routes left are
 design decisions (§5, routes A–C).
+
+## 7. Port of Core's withbor3_compatX
+
+Kernel target: Core's proofs of `withbor3_compatX` (`Core/Compatibility.lean:1109`),
+`withbor2_compatX` (`:1028`) and `withload_compatX` (`:252`), step by step on `erwp`.
+
+### 7.1 `withbor3_compatX`, step by step
+
+| # | Core step (`Core/Compatibility.lean`) | What it reads | Chain counterpart |
+|---|---|---|---|
+| 1 | `gSepC_deadP` (1114): the context owns nothing | `Ctx.DeadP Γ` | `ConstN`'s form: the constant at `PMap.empty` (`withbor2S_compat`'s first line). Exists. |
+| 2 | `wpTS_val`, `wpTS_lolli`, `hβ₁` (1117–1128): the `Mut` argument is `loc ℓ`, β | `vCE`'s `Mut` clause up to the location | `cN`'s `⊸` clause and `erwp_det` at `Head.beta` (as in `withbor2S_compat`). Exists. |
+| 3 | `wpTS_val`, `wpTS_lolli`, `hβ₂` (1130–1137): the callback `vf` at `ls₂`, `Ext ls₁ ls₂ ρ₂` | `vCE`'s `U` clause: Kripke along `Ext` | `cN`'s `⊸` at `k′ ≤ k`, the same list; `erwp_det`. Exists. The chain's `⊸` does not move the list. |
+| 4 | `vC_local` (1140): the `Mut` value carried to `ls₂` | `Ext` keeps the members above every borrow of `ρ₁` | Not needed while `⊸` keeps the list. With `vN` reading the list (Core's `ls₀`), `vN_local` along `Ext`: **missing**, buildable as Core's `vC_local`. |
+| 5 | unpack `ptoMutS ℓ α₀ ls₂ P ρ₁` (1141–1145) | the cell `mut(b, u, σ, Q)`, `α₀ ⊑ b`, `ofS Q = P ls₀` | `mutCell`: the cell at `α` holding the member `j ≥ n` of `𝒱⟦T₁⟧`. Exists, without `ls₀`. |
+| 6 | `hunif` (1147–1149): `MutFrame`'s stratum premise, `∀ ls′ w σ, 𝒱⟦T₁⟧ w σ → σ ∈ Res_b` | `ptoMutS`'s last conjunct | `erwp_withbor3`'s `hoi` (`F_i k ⊆ F_o k`, the stratum `α` to `β`). `mutCell` lacks the uniform conjunct: **missing piece of Core's `ptoMutS`**, buildable (add the conjunct to `mutCell`). |
+| 7 | `wpTS_M_antiFrameX` (1151) at `ℓ ↦ M α₀ 𝒱⟦T₁⟧`; inside it (`Core/FrameRules.lean:550`): the content read at the current list (`hofS`, `ext_stored_current`, 582), and at the end the content handed back written into the **unchanged** stored predicate `Qs` (`ptoMutX_write (Q := Qs)`, 620), with `hunif` and `lifeBound_of_tagged` | `ptoMutS` only; Core's `↭` fixes a `mut` cell's predicate, and `Qs` has no index | `erwp_M_antiFrame` (`SI/AntiStopN.lean:257`) inside `erwp_withbor3` (`:515`). It reads **`hF : Φ ℓ = some ⟨β, F_o⟩`** with the cell at the member `F_o j`, and reseals at `F_o k`, the member of the index left: a predicate change `↭` admits only at a location `Φ` types (`PredStep`). **No counterpart** at the interpretation: `vN`'s `Mut` does not give `Φ ℓ`, and neither does Core's (it has no location typing). §7.2. |
+| 8 | `wpTS_M_frameX` at `β` (1154): the opened cell re-lent at the fresh `α` | `hunif`'s `β`; the content at `ls₂` | `erwp_M_frameF` inside `erwp_withbor3`; across `Row.Suspend`, `erwp_M_frameCR`/`erwp_M_frame_cancelRunCR` (`Lend791N`, `Cancel791N`). Exists for the frame. The anti-frame across raises and layered cancel runs: `erwp_M_antiFrameC` (`SI/AntiCancelN.lean:130`) covers cancel runs that perform nothing; the `tabR`-style extension is **missing**, buildable as unit 2's. |
+| 9 | the fresh lifetime `a₂ ⊓ m` (1156–1159) | `ρ₂.exists_atLife`, `⊓Δδ` defined | `ResU.exists_stratum`, `Life.down` (`withbor2S_compat`). Exists. |
+| 10 | the borrow at `δ[x ↦ α]` (1161–1166) | `vC_extend_of_not_free` | `vN_extend_of_not_free`. Exists. |
+| 11 | `wpTS_bind`, `wpTS_bind_frame`, `hvf … α` (1167–1176): the callback at the borrow | `U`'s clause at `Ext.refl`, `∀`'s clause at `α ⊏ ⊓Δδ` | the thunk at `Φ.set ℓ α F_i` (`vN`'s `U` at every `Φ`); `erwp_ubindClaimRT` across `Row.Suspend`. Exists (`withbor2S_compat`'s pattern). |
+| 12 | `wpTS_mono`, unpack `['x] T₂` (1177–1183) | `box`'s clause | `vN`'s `box` clause, `vN_extend_of_not_free`. Exists. |
+| 13 | `wpTS_val` and the two wands (1184–1190): `MutFrame`'s `∀v′`, then `AntiFrame`'s `∃w … (ptoMutS ─⋆ Q)` | the resealed cell is a `Mut` value again | `MFPost l α F_i (AFPost l β F_o Q)`, `erwp_withbor3`'s `hA`. Exists in shape; reads step 7's reseal. |
+
+The interpretation pieces the brief lists, against this proof: `withbor3_compatX` reads `ptoMutS`
+(steps 5–7, 13) and `Ext` (steps 3, 4, 11). It does not read `ptoImmS`, `CohE` or `Covers`
+(Core has no `Covers`; `Covers` is the chain's `vThunk`, `SI/MutSemN.lean`). `Φ.set` has no
+Core analogue: Core's lend re-types nothing; it writes a new cell holding its predicate.
+
+### 7.2 Step 7 has no chain counterpart: `reseal_untyped`
+
+`Core/Chain/Shape791N.lean`, `reseal_untyped`: a `Mut @a (U(F 1))` value at the index `2` (the
+cell `ℓ ↦ mut(β, λ_. (), ∅, 𝒱₂⟦U(F 1)⟧)`); the content `λ_. () ()`, in `𝒱⟦U(F 1)⟧` at the index
+`1` (`stuckV_one`) and not at `2` (`stuckV_not_two`); at every `Φ` with `Φ ℓ = none` and every
+index, no `↭` step (`MutStep`, `UpdMutN`'s clause) takes the cell to one whose predicate admits
+that content. Every hypothesis is discharged. So the chain's reseal at the index left needs the
+location typing to type the opened cell, and the interpretation (Core's or the current `vN`)
+does not supply it: `ConstN` quantifies over every downward-closed `Φ`, and `⊸`'s argument comes
+with no relation to `Φ`.
+
+Not verified: that `ConstN (.w3 …)` itself fails at the current interpretation. The configuration
+is the step, not the constant; I have not built the run (a callback writing `λ_. () ()` one step
+before the index runs out) and have not verified that the constant is false.
+
+What the chain has that reaches `Φ ℓ`: `vThunk`'s `Covers` (`SI/MutSemN.lean`, structure.md §7),
+defined and used nowhere. As defined it would not close step 7: it covers the thunk's resource,
+not `⊸`'s argument; and it gives `Φ ℓ = (β, F)` with the cell at *some* member of *some* `F`,
+where `erwp_withbor3`'s `hoi` needs `F` to be `𝒱⟦T₁⟧`'s family (as `rwp_M_antiFrame_sem`'s
+`Φ ℓ = (A, τ.fam A)`). Putting `Φ ℓ = (α, 𝒱⟦A⟧'s family)` into the `Mut` clause makes `vN` read
+`Φ`, and then a nested `Mut`'s family reads `Φ`: that is `coreShape_not_reborrow`'s situation
+(below). The STOP condition holds: a definition beyond Core's interpretation pieces would be
+needed, and choosing it is a design decision.
+
+### 7.3 `coreShape_not_reborrow` against Core's records-based `Mut`
+
+It does not arise. Core's `ptoMutS` stores `P ls₀` with `ls₀` the members of the **record list**
+above the cell; the record list is the same `List SRec` on the chain, and a `mut` reborrow leaves
+it alone on both sides (Core's `withbor3_compatX` runs the callback at `ls₂`, step 11;
+`erwp_withbor3` runs it at the `ls` it was given). The configuration's `famC` reads `Φ` above the
+cell as if it were `ls₀`; `Φ.set ℓ α F` removes `ℓ` from `Φ` above `b` and so changes the family.
+A `Mut` read Core's way, at the records, is unchanged by `Φ.set`. The configuration stays as a
+documented non-route: it refutes reading `ls₀` as the location typing, not Core's technique. The
+obstruction Core's technique meets on the chain is §7.2's, and it is the step index's, not the
+records'.
+
+### 7.4 `withbor2_compatX` and `withload_compatX`
+
+- `withbor2_compatX`: steps 1–3 and 8–13 above, with the source an owned cell (`Ref`), so no
+  step 7; `MutFrame` at `↓β` from the side condition `Δ ⊢ T₁ ⊒ @b` through `vC_outlivesLe`
+  (1053–1057). Chain: `withbor2S_compat` (`Cancel791N`), proved, no `hSF`, no `hSB`. It departs
+  at that one step: the lend's lifetime is chosen below the content's actual stratum
+  (`ResU.exists_stratum`), not from the side condition, so the technique Core builds there (6.60
+  at the side condition's `@bδ`, `vC_outlivesLe`) is not used by the chain's proof, and
+  `Const791.OK`'s `∃ b, Defines b ∧ VOutlivesLe b A` stays unspent (§5). `vN_outlives` exists
+  and would carry Core's step.
+- `withload_compatX`: reads `ptoImmS` with `CohE` at the loaded cell (the chooser of
+  `wpTS_reborrow`), `wpTS_load_I`, `vC_local`, `vC_tyEq`. Chain: `erwp_reborrow`
+  (`SI/RebAcrossC.lean:96`) exists; `vN`'s `Imm` has no `CohE` and no record list (departure 1),
+  so the chooser is not read off the value. Not attempted: §7.2 stops the unit first.
+
+### 7.5 State
+
+Interpretation unchanged (`Goal791N.lean`): step 2 of the brief changes only what the port reads,
+and the port stops at step 7 before the pieces it would read (`hunif`, the record list) matter.
+`w3` and `wF` (`withborFE` opens the source the same way) are not built. `withbor2S_compat` and
+`constN_w2` are unchanged, with no `hSF` and no `hSB`.
+
+Unspent printed premises at the stop: `Const791.OK`'s `VOutlivesLe` for `w2`; for `w3`, none read
+yet past step 6. Unused: `rwp_M_antiFrame_sem`, `erwp_withbor3`, `erwp_M_antiFrameC`,
+`erwp_reborrow`, `Covers`. Untranscribed in the run-up of `withbor3_compatX`: the chain
+counterparts of steps 4 (`vN_local`, only if `vN` reads the list), 6 (`ptoMutS`'s uniform
+conjunct), 7 (the reseal at a location `Φ` does not type) and 8's anti-frame across layered cancel
+runs.

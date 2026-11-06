@@ -21,7 +21,12 @@ callback to run there, and no order along which Core's `Mut` values are stable r
 
 The reason is structural: Core's records are one per lend (a reborrow adds a record and keeps
 the source's), and the chain's location typing is one family per location (a reborrow overwrites
-the source's). Nothing here changes a definition the relation reads.
+the source's). Core's own `Mut` reads the record list, not the location typing, and a reborrow
+leaves the record list alone, so this situation does not arise for it.
+
+The second configuration (`reseal_untyped`) is the step of Core's `withbor3_compatX` the chain
+has no counterpart for: the anti-frame's reseal of an opened `Mut` argument at a location the
+location typing does not type. Nothing here changes a definition the relation reads.
 -/
 
 noncomputable section
@@ -163,6 +168,113 @@ theorem coreShape_not_reborrow (l l₂ lb : Loc) (hl : lb ≠ l) (hl₂ : lb ≠
       simpa [Val.loc] using this
     rw [above_set_lt (not_lt.mpr hαb.le)] at hΦ''
     cases hΦ''
+
+/-! ## The anti-frame's reseal at a location `Φ` does not type
+
+Core's `withbor3_compatX` (`Core/Compatibility.lean`) opens the `Mut` argument by
+`wpTS_M_antiFrameX` and, at its end, writes the content handed back into the cell's *unchanged*
+stored predicate (`Core/FrameRules.lean`, `ptoMutX_write (Q := Qs)`): Core's `↭` fixes a `mut`
+cell's predicate, and Core's payload predicate has no index. On the chain the stored predicate
+is the member `F j` of the payload's family, and the content handed back is in the member `F k`
+of the index left. The chain's anti-frames (`rwpG_M_antiFrameG`, `erwp_M_antiFrame`,
+`erwp_withbor3`) reseal at `F k`, a predicate change `↭` admits only where the location typing
+types the cell (`PredStep`, `hF : Φ ℓ = some ⟨β, F⟩`). At a location `Φ` does not type the
+reseal must keep `F j`, and the content need not be in it.
+
+The configuration, at the interpretation (`vN`): `𝒱⟦U(F 1)⟧`'s family strictly decreases
+(`λ_. () ()` is in it at `1`, not at `2`); a `Mut @β (U(F 1))` value at the index `2` exists
+(its cell holds `λ_. ()` at the member `2`); and at a location `Φ` does not type, no `↭` step at
+any index takes that cell to one whose predicate admits the content `λ_. () ()`. -/
+
+section Reseal
+
+open BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
+open BoCa.BoLo (Heap Step1 Head Kont)
+open BoCa.Lifetime (LSub)
+
+/-- `λ_. () ()`: stuck after its β step. -/
+def stuckV : Val := Val.lam (.app .unit Val.unit.1)
+
+/-- `λ_. ()`. -/
+def unitV : Val := Val.lam Val.unit.1
+
+/-- `𝒱⟦U(F 1)⟧`'s member at an index. -/
+abbrev thunkUnit (δ : LSub) (k : Nat) : Val → WRes → Prop :=
+  vN (ℍ := ℍ) (.thunk (.ret .unit)) δ k
+
+theorem stuckV_one (δ : LSub) : thunkUnit (ℍ := ℍ) δ 1 stuckV PMap.empty := by
+  intro Φ _ ls
+  show erwp (ℍ := ℍ) Φ _ _ 1 ls (.app stuckV.1 (.val .unit)) PMap.empty
+  rw [erwp_eq]
+  intro ρf fρ ps μ _ _ _ _ _ _ j μ' e' hj hrun hfin
+  obtain rfl : j = 0 := by omega
+  cases hrun
+  exact absurd (step1Only_plug (ℍ := ℍ) (Head.beta μ (.app .unit Val.unit.1) Val.unit) rfl
+    .hole).1 (hfin _ _)
+
+theorem stuckV_not_two (δ : LSub) : ¬ thunkUnit (ℍ := ℍ) δ 2 stuckV PMap.empty := by
+  intro h
+  have h2 := h (fun _ => none) (fun _ _ _ h => by cases h) []
+  change erwp (ℍ := ℍ) _ _ _ 2 [] (.app stuckV.1 (.val .unit)) PMap.empty at h2
+  rw [erwp_eq] at h2
+  have hstep := (step1Only_plug (ℍ := ℍ) (Head.beta (fun _ => none) (.app .unit Val.unit.1)
+    Val.unit) rfl .hole).1
+  have hbody : Kont.hole.plug (Expr.subst 0 Val.unit (.app .unit Val.unit.1)) =
+      Kont.hole.plug (.app .unit Val.unit.1) := by
+    simp [Kont.plug, Expr.subst, Val.unit]
+  rw [hbody] at hstep
+  have hfin : Final (ℍ := ℍ) (fun _ => none) (Kont.hole.plug (.app .unit Val.unit.1)) :=
+    fun _ _ hs => stuck_no_step (stuckAt_unit_app Val.unit) .hole hs
+  have htg : Tagged (PMap.empty : WRes) [] [] := fun x hx => absurd hx (by simp)
+  have hE := h2 PMap.empty PMap.empty [] (fun _ => none) Fig16.LogRel.hash_empty
+    (ResU.comp_empty_right _) TWNC.empty htg Fig16.BoLo.lower_empty fd_empty 1 _ _
+    (by omega) (.more hstep (.refl _ _)) hfin
+  obtain ⟨_, _, _, _, _, _, _, -, -, -, -, -, -, -, -, -, -, -, -, hq⟩ := hE
+  rcases hq with ⟨v, hv, -⟩ | ⟨_, _, _, _, _, h'⟩ | ⟨_, _, _, _, _, h'⟩
+  · have : IsVal (Kont.hole.plug (.app .unit Val.unit.1)) := hv ▸ v.2
+    exact (stuckAt_unit_app (ℍ := ℍ) Val.unit).not_val this
+  · exact absurd (pure_sep_iff.mp h').1.2.2.1 (by simp [OpTabN.empty])
+  · exact absurd (pure_sep_iff.mp h').1.2.2.1 (by simp [OpTabN.empty])
+
+theorem unitV_all (δ : LSub) (k : Nat) : thunkUnit (ℍ := ℍ) δ k unitV PMap.empty := by
+  intro Φ hΦ ls
+  show erwp (ℍ := ℍ) Φ _ _ k ls (.app unitV.1 (.val .unit)) PMap.empty
+  refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down _ δ k v ρ h)
+    (fun μ => step1Only_plug (ℍ := ℍ) (Head.beta μ Val.unit.1 Val.unit) rfl .hole) ?_
+  have e : Kont.hole.plug (Expr.subst 0 Val.unit Val.unit.1) = Val.unit.1 := by
+    simp [Kont.plug, Expr.subst, Val.unit]
+  rw [e]
+  exact erwp_val ⟨rfl, rfl⟩
+
+/-- The family of `U(F 1)` at a cell at `β`. -/
+def famTU (δ : LSub) (β : Life) : Nat → Val → SPropS Loc Val β :=
+  fun j u r => thunkUnit (ℍ := ℍ) δ j u r.1
+
+/-- The cell `ℓ ↦ mut(β, λ_. (), ∅, 𝒱₂⟦U(F 1)⟧)`. -/
+def cellTU (δ : LSub) (l : Loc) (β : Life) : WRes :=
+  ResU.single l (CellU.mutOf β unitV PMap.empty (ResU.inStratum_empty β) (famTU (ℍ := ℍ) δ β 2)
+    (unitV_all δ 2))
+
+/-- **The reseal at a location `Φ` does not type.** The cell is a `Mut @a (U(F 1))` value at
+the index `2`, at every `@aδ = β`. At every `Φ` with `Φ ℓ = none` and every index `n`, no `↭`
+step (`MutStep`, `UpdMutN`'s clause) from the cell reaches a cell whose predicate admits the
+content `λ_. () ()`, which is in `𝒱⟦U(F 1)⟧` at the index `1`. -/
+theorem reseal_untyped (δ : LSub) (l : Loc) {a : Lifetime.Life} {β : Life}
+    (ha : a.interp δ = some β) :
+    vN (ℍ := ℍ) (.mut a (.thunk (.ret .unit))) δ 2 (Val.loc l) (cellTU (ℍ := ℍ) δ l β) ∧
+    thunkUnit (ℍ := ℍ) δ 1 stuckV PMap.empty ∧
+    ∀ (Φ : LocFam), Φ l = none → ∀ (n : Nat) (ψ' : CellU Loc Val),
+      MutStep Φ n l (CellU.mutOf β unitV PMap.empty (ResU.inStratum_empty β)
+        (famTU (ℍ := ℍ) δ β 2) (unitV_all δ 2)) ψ' →
+      ¬ cellPred ψ' stuckV PMap.empty := by
+  refine ⟨⟨β, ha, l, unitV, PMap.empty, ResU.inStratum_empty β, 2, unitV_all δ 2, le_rfl, rfl,
+    rfl⟩, stuckV_one δ, fun Φ hl n ψ' hs hp => ?_⟩
+  have heq := hs.2.2.2.1 hl
+  rw [← heq] at hp
+  obtain ⟨_, hp⟩ := (mpred_mutOf _ _).mp hp
+  exact stuckV_not_two (ℍ := ℍ) δ hp
+
+end Reseal
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Shape791N
 

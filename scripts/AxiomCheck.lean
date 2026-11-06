@@ -1470,5 +1470,9 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.constN_w2
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.suspend_closingOp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Shape791N.coreShape_not_reborrow
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Shape791N.stuckV_one
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Shape791N.stuckV_not_two
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Shape791N.unitV_all
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Shape791N.reseal_untyped
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cbRelease_sem
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.answer_not_inStratum
