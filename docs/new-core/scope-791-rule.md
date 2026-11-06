@@ -15,35 +15,36 @@ Every piece names the Core technique it follows.
 
 | Piece | Definition | Follows |
 |---|---|---|
-| value types `vN A δ : SemT` | `P k v ρ`, downward closed in `k` | `SemT` (`SI/MutSemN.lean`), Core's `vCE` clause by clause |
+| value types `vN A δ Θ` | `P k v ρ` at the per-lend world `Θ` (`SI/LocTy.lean`), downward closed in `k` | Core's `vCE` clause by clause; the world is `scope-791-loctype.md` §2 |
 | `1`, `⊗`, `0`, `+`, `Ref`, `!`, `I32/I64` | `vCE`'s clauses, `⋆` written as `ResU.CompS` | `vCE`; `sV` (`SI/Sem.lean`) |
-| `Mut @a A` | `vMut α (vN A δ)`: a location whose `mut` cell at `α = @aδ` holds the member `j ≥ k` of `A`'s family | `vMut` (`SI/MutSemN.lean`) |
+| `Mut @a A` | `mutL α (vN A δ) Θ`: a location whose `mut` cell at `α = @aδ` holds the member `j ≥ k` of `A`'s family read at `Θ` above `α`, the family `Θ` stores at `(ℓ, α)` | `ptoMutS` (`Core/Relation.lean`), with `Θ.above α` for `ls₀` |
 | `Imm @a A` | one `imm` cell `imm(β̄, u, σ)` with `α ⊑ ⊓β̄`, `u, σ` in `𝒱⟦A⟧` | `ptoImmS` (`Core/Relation.lean`), without the record list (§3) |
 | `[@a] A` | `𝒱⟦A⟧ ∧ ρ ∈ Res_α` | `box` (`vCE`'s `box` clause) |
-| `U C` | `C` at every `Φ′` (downward closed) and every record list | `vThunk` (`SI/MutSemN.lean`), without `Covers` (§3) |
-| `F A` | `erwp Φ (opTableN ∅) 𝒱⟦A⟧` | `sC`'s `F` (`SI/Sem.lean`); `cC`'s `wpTS` |
-| `A ⊸ C` | at every `k′ ≤ k`, every argument in `𝒱⟦A⟧` composed with the function's resource | `sC`'s `⊸` (the step-indexed `−∗`); `cC`'s wand |
+| `U C` | `C` at every `Θ′` with `Θ.ExtA Θ′` and `Θ′.OK`, every view `c` with `ConsistentX c ρ`, every record list | `vCE`'s `U` (Kripke), along `ExtA` (`scope-791-loctype.md` §8 Q1) |
+| `F A` | `erwp (Θ.view c) (opTableN ∅) 𝒱⟦A⟧` | `sC`'s `F` (`SI/Sem.lean`); `cC`'s `wpTS` |
+| `A ⊸ C` | at every `Θ′` along `ExtA` (`OK`), every `k′ ≤ k`, every argument in `𝒱⟦A⟧` at `Θ′` composed with the function's resource, every view consistent with the composite | `sC`'s `⊸` (the step-indexed `−∗`); `cC`'s wand |
 | `C & D`, `⊤` | componentwise; trivial | `cC` |
 | `∀'x ⊏ @c. C` | `@cδ` defined, and every `α ⊏ @cδ`: `C` at `δ[x ↦ α]`, the term applied to `()` | `cC`'s `∀` clause (`LtLife`); empty where `@cδ` is undefined, as `TreeGoal791`'s `SCmp.none` (§3) |
-| `F_Σ R` | `erwp Φ (opTableN (tabN (F_Σ R) δ Φ)) 𝒱⟦R⟧` | `cC`'s `eff` clause (`effTab`, `finObl`, `effRet`); `sProt`/`sFin` |
+| `F_Σ R` | `erwp (Θ.view c) (opTableN (tabN (F_Σ R) δ Θ c)) 𝒱⟦R⟧` | `cC`'s `eff` clause (`effTab`, `finObl`, `effRet`); `sProt`/`sFin` |
 | `tabN` | one entry per layer, first match winning: qualifier, `abort = B.isZero && q != lin`, `PA = 𝒱⟦A⟧`, `PB = 𝒱⟦B⟧`, cancel obligation `finN fin` where `capB q B`, resumed under `extF` | `effTab`; `OpEntN` (`SI/ErwpN.lean`); `extF` from `SI/ExtF.lean` (§2 of structure.md) |
 | `finN` | `none` at `⊤`; else the cancel run at the cancel row's table, `cancelOblN Φ (tabN F δ Φ)` | `finObl`; `sFin` |
 | `retN` | `𝒱⟦R⟧` of the row's answer | `effRet`; `sRet` |
 | `gN δ Γ γ` | the live slots' values over a split of the resource | `gSepC`; `gT` (`Core/TreeGoal791.lean`) |
-| `SemJN Δ Γ e j` | every `δ ⊨ Δ`, every downward-closed `Φ`, index, list; from `𝒢⟦Γ⟧` | `SemC`; `SemJT` |
+| `SemJN Δ Γ e j` | every `δ ⊨ Δ`, every world `Θ` with `Θ.OK` (`Down ∧ Bounded`), every view `c` consistent with the resource, index, list; from `𝒢⟦Γ⟧` | `SemC`; `SemJT` |
 
-`rowTabN S Φ` is `tabN (F_S 1) ∅ Φ`: the table a task at the row `S` is run at, as `rowTab S` on
+`rowTabN S Θ c` is `tabN (F_S 1) ∅ Θ c`: the table a task at the row `S` is run at, as `rowTab S` on
 the tree.
 
 Formers outside the fragment, read as empty (and why): type variables and `μ` (I11, no `μ` in the
 #791 constants), `ν` (I10), families (`[L]`, used only by `sliceBorrowMU`, whose unit is the slice
 lends), opaque host types (no constant mentions them). `Unk` owns nothing, as `vCE`'s `emp`.
 
-**Laws proved:** downward closure of `vN`, `cN`, every `tabN` (`OpTabN.Down`) and `finN`;
-monotonicity of values along `Φ` and the record list (they read neither); monotonicity of
-computations along `LocFam.Ext` (`erwp_extΦ` with the table widened along `OpTabN.Le`); `vN` and
-`cN` read `δ` only at the free lifetime variables (`vN_congr`); `𝒱⟦A⟧` of an outliving `A` lies in
-the stratum (`vN_outlives`, Core's `vC_outlives`).
+**Laws proved** (`Core/Chain/Goal791N.lean`): downward closure of `vN`, `cN`, every `tabN`
+(`OpTabN.Down`) and `finN`; `vN_extA` (values stable along `ExtA`, every former); `cN_extA`
+(computations stable along `ExtA`, every former but `F_Σ R`); `vN_local` (a value in a lend's
+stratum does not read the lend, every former but `U`); `vN` and `cN` read `δ` only at the free
+lifetime variables (`vN_congr`); `𝒱⟦A⟧` of an outliving `A` lies in the stratum (`vN_outlives`,
+Core's `vC_outlives`). `scope-791-loctype.md` §9 lists the formers left out and why.
 
 ## 2. The restated statements
 
@@ -54,7 +55,10 @@ statements, as `TreeGoal791`'s with `vN`/`cN`/`erwp` for `vT`/`cT`/`cerwpT`. Pro
 
 ## 3. Departures from Core, each recorded
 
-Decision 1 (2026-11-05) asked for 1–3 below to be undone. They stand. `coreShape_not_reborrow`
+Departures 1–3 below describe the interpretation before the per-lend world; #825 replaced them
+(`scope-791-loctype.md` §9): `Mut` reads the world, `U` is Kripke along `ExtA`, and the view's
+consistency replaces `Covers`. Departure 1's `Imm` half stands. Decision 1 (2026-11-05) asked for
+1–3 to be undone. `coreShape_not_reborrow`
 (§5, "Decision 1") refutes reading Core's `ls₀` as the location typing, not Core's records-based
 `Mut` (§7.3). What stops the port of Core's `withbor3_compatX` is the anti-frame's reseal at a
 location the location typing does not type (`reseal_untyped`, §7.2); departure 1's record half

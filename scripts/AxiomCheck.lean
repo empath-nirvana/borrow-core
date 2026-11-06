@@ -1500,6 +1500,7 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.view_ext
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.view_empty
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.consistentX_compS
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.consistentX_get
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.consistentX_left
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.upd_ag_imm_wit_factorI
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.consistentX_of_updN

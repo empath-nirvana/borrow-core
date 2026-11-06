@@ -1,7 +1,8 @@
 # #791: location typing per lend, for step 7 of `withbor3_compatX` on the chain
 
-Branch `rule-791`. Scope unit; the Lean is `Core/Chain/LocTypeSketch.lean` (standalone
-definitions, no existing definition or theorem changed). Background: `scope-791-rule.md` §7.
+Branch `rule-791`. The world is in the library (`Core/Chain/SI/LocTy.lean`); the interpretation
+over it is `Core/Chain/Goal791N.lean`; `Core/Chain/LocTypeSketch.lean` keeps L2 (c)'s
+configuration. Background: `scope-791-rule.md` §7. State after #825 (U1, U2): §9.
 
 Kernel target: the location typing the chain's semantic interpretation reads, so that step 7 of
 Core's `withbor3_compatX` (`Core/Compatibility.lean:1151`; inside it `Core/FrameRules.lean:620`,
@@ -23,86 +24,93 @@ whose `Φ.set ℓ α Fi` overwrites the source's entry (`Shape791N.coreShape_not
 ### 2.1 The world: keyed by location and lend lifetime
 
 ```
-LocTy ≜ (ℓ : Loc) → (b : Life) → Option (Nat → Val → SPropS Loc Val b)      -- LocTypeSketch.lean:67
+LocTy ≜ (ℓ : Loc) → (b : Life) → Option (Nat → Val → SPropS Loc Val b)      -- SI/LocTy.lean
 ```
 
 `Θ ℓ b` is the payload family of the `mut` cell lent at `ℓ` at `b`. The key is the lend, as in
 Core, where a record is `SRec = FrameRec × Life` (`Core/FrameRecords.lean:159`), one per lend.
 
-- **A lend** at `(ℓ, α)` is `Θ.add ℓ α F` (`:79`). It replaces `Φ.set`, and every other key is
-  kept (`add_keep`, `:90`). The source's `(ℓ, β)` is one of the kept keys.
+- **A lend** at `(ℓ, α)` is `Θ.add ℓ α F`. It replaces `Φ.set`, and every other key is
+  kept (`add_keep`). The source's `(ℓ, β)` is one of the kept keys.
 - **Freshness.** A lend's lifetime is chosen strictly shorter-lived than every key present
-  (`LocTy.Fresh`, `:76`). Such a lifetime exists below any bound when `Θ` is bounded
-  (`exists_fresh`, `:144`), and a lend keeps `Θ` bounded (`fresh_add`). Every chain lend already
+  (`LocTy.Fresh`). Such a lifetime exists below any bound when `Θ` is bounded
+  (`exists_fresh`), and a lend keeps `Θ` bounded (`fresh_add`). Every chain lend already
   chooses its lifetime (`ResU.exists_stratum`, `Life.down` in `withbor2S_compat`), and shorter
   is always admissible: `Res_α` and `Res_{↓α}` grow, and `MFPost`'s `ρ′ ∈ Res_α` gets weaker.
 - **Stratified families.** The family stored at `(ℓ, a)` reads the world only above `a`
-  (`famL a P Θ = P (Θ.above a)`, `:163`). That is Core's `ls₀` in `ptoMutS`
+  (`famL a P Θ = P (Θ.above a)`). That is Core's `ls₀` in `ptoMutS`
   (`Core/Relation.lean:44`): the records strictly longer-lived than the cell. A fresh lend adds
-  nothing above any key present (`above_add`, `:111`). So a family stored at a lend stays the
+  nothing above any key present (`above_add`). So a family stored at a lend stays the
   payload's family read at the current world (`fam_add_self`), and no recursive world is needed.
   The lifetime is the stratum, as the level is in AAV 2002 (§7).
-- **The Kripke order** is `LocTy.ExtA` (`:197`): entries are only added, and nothing is added
+- **The Kripke order** is `LocTy.ExtA`: entries are only added, and nothing is added
   above a key present. A fresh lend is one step of it (`extA_add`), and it is transitive
   (`extA_trans`).
 
 ### 2.2 How the relation reads it: the view
 
 The relation keeps its per-location `LocFam`. At a run, each location's live `mut` cell sits at a
-single lifetime `c ℓ`, and the run is at the **view** (`:252`):
+single lifetime `c ℓ`, and the run is at the **view**:
 
 ```
 Θ.view c ℓ ≜ (Θ ℓ b).map ⟨b, ·⟩   where c ℓ = some b;   none where c ℓ = none
 ```
 
 - `Φ.set` at a lend is the view of `Θ.add`: `(Θ.add ℓ α F).view (c[ℓ ↦ α]) = (Θ.view c).set ℓ α F`
-  (`view_add`, `:278`). So `rwp_M_frame`, `erwp_M_frameF`, `erwp_withbor3` and the other lend
+  (`view_add`). So `rwp_M_frame`, `erwp_M_frameF`, `erwp_withbor3` and the other lend
   frames, all stated at `Φ.set`, are already this design's lends, seen from their run.
 - **`PredStep`/`MutStep`/`UpdN`/`EndOKG`/`rwpG`/`erwp` are unchanged.** They read
   `Θ.view c ℓ`, which is `Θ ℓ (c ℓ)`. A consistent view (below) gives each cell its own lifetime,
   so `PredStep` at a cell at `b` reads the entry `(ℓ, b)`, its lend's.
-- **Consistency.** `Consistent c ρ`: every `mut` cell of `ρ`'s flattening is at `c ℓ` (`:292`).
-  `↭` keeps it, because `UpdMutN`'s second clause gives each `mut` cell after a step a `mut` cell
-  before it at the same lifetime (`consistent_of_updN`, `:297`).
+- **Consistency.** `ConsistentX c ρ`: every `mut` cell of `ρ`'s *exclusive walk* `ex(ρ)` is at
+  `c ℓ` (`SI/LocTy.lean`). A run keeps it on the resource it returns (`erwp_consistent`), a
+  composite has it when its operands do (`consistentX_compS`), an operand when the composite does
+  (`consistentX_left`), and a held `mut` cell is at its view lifetime (`consistentX_get`, the
+  anti-frame's `c ℓ = β`). The first reading, `Consistent c ρ` over the whole flattening, is kept
+  by `↭` on the whole resource (`consistent_of_updN`) and not by the part a run returns (§9,
+  `flat_part_config`).
 - `Θ.Down → (Θ.view c).Down` (`view_down`).
 
 ### 2.3 The interpretation's clauses
 
-- **`Mut @a A`** is Core's shape (`mutL`, `:168`): a location whose cell at `a = @aδ` holds the
+- **`Mut @a A`** is Core's shape (`mutL`): a location whose cell at `a = @aδ` holds the
   member `j ≥ k` of `famL a 𝒱⟦A⟧ Θ`, together with `Θ ℓ a = some (famL a 𝒱⟦A⟧ Θ)`.
-- **`U C`**: `C` at every `ExtA`-extension `Θ′` and every view `c′` consistent with the thunk's
-  resource. `vThunk` with `Covers` has the right idea but the wrong strength: it asks for some
+- **`U C`**: `C` at every `ExtA`-extension `Θ′` with `Θ′.OK` and every view `c′` consistent
+  with the thunk's resource. `vThunk` with `Covers` has the right idea but the wrong strength: it asks for some
   family, where consistency plus the `Mut` clause name the payload's family.
-- **`⊸`** and **`SemJN`** quantify over `(Θ, c)` with `c` consistent with the argument's and the
-  context's resource. The relation's `Φ` is `Θ.view c`.
+- **`⊸`** quantifies over `ExtA`-extensions `Θ′` (`OK`) and views `c′` consistent with the
+  argument's and the context's composite; **`SemJN`** over worlds `Θ` with `Θ.OK` and views
+  consistent with the context's resource. The relation's `Φ` is `Θ.view c`.
 - **`F A`, `F_Σ R`, `tabN`, `finN`** are `erwp` at `Θ.view c`, as now at `Φ`.
 
 ## 3. The lemmas the port needs
 
-All proved results below are in `Core/Chain/LocTypeSketch.lean`, registered in `Core/Chain.lean`
-and in `scripts/AxiomCheck.lean`. Axioms are within `propext`, `Classical.choice`, `Quot.sound`.
+The "not built" entries are as scoped; §9 has what #825 built.
+
+All proved results below are in `Core/Chain/SI/LocTy.lean` (L2 (c) in
+`Core/Chain/LocTypeSketch.lean`), registered in `Core/Chain.lean` and in `scripts/AxiomCheck.lean`. Axioms are within `propext`, `Classical.choice`, `Quot.sound`.
 
 **(L1) The anti-frame's reseal at the original entry. Proved.**
 
-- `reseal_at_entry` (`:318`). Take `Θ.Ext Θ′`, `c ℓ = some β`, `DownFam β (famL β P Θ)`, and
+- `reseal_at_entry`. Take `Θ.Ext Θ′`, `c ℓ = some β`, `DownFam β (famL β P Θ)`, and
   `mutL β P Θ n (loc ℓ) ρ`. Then `ρ = ℓ ↦ mut(β, w, χ, famL β P Θ j)` with `n ≤ j`, and
   `Θ′.view c ℓ = some ⟨β, famL β P Θ⟩` (the anti-frame's `hF`, at `Θ` and at the reborrow's
   world). For every `m ≤ k` and every content `(w′, σ′) ∈ famL β P Θ k`, the reseal
   `mut(…, F j) → mut(β, w′, σ′, F k)` is a `MutStep` at `Θ′.view c` at `m`. The resealed cell is
   again `mutL β P Θ k (loc ℓ)`. That is Core's step 13: the cell is a `Mut` value again.
-- `erwp_antiFrame_view` (`:346`) is the existing `erwp_M_antiFrame` (`SI/AntiStopN.lean:257`)
+- `erwp_antiFrame_view` is the existing `erwp_M_antiFrame` (`SI/AntiStopN.lean:257`)
   applied at `Θ.view c`, with `hF` supplied by the `Mut` value. Nothing in the relation changes.
-- `reborrow_view` (`:365`): for a fresh `α`, `Θ.Ext (Θ.add ℓ α Fi)`, `Θ.add ℓ α Fi ℓ β = Θ ℓ β`,
+- `reborrow_view`: for a fresh `α`, `Θ.Ext (Θ.add ℓ α Fi)`, `Θ.add ℓ α Fi ℓ β = Θ ℓ β`,
   and the reborrow world's view is `(Θ.view c).set ℓ α Fi`, the typing `erwp_withbor3` runs its
   callback at.
 
 **(L2) A reborrow adds an entry and keeps what was typed. Proved.**
 
-- `ext_add` (`:100`): a fresh lend is an extension. `add_keep`: the source's entry is kept.
-- `mutL_add` (`:187`): for every payload `P`, a `mutL a P` value at `Θ` is one at `Θ.add ℓ₀ α F`
+- `ext_add`: a fresh lend is an extension. `add_keep`: the source's entry is kept.
+- `mutL_add`: for every payload `P`, a `mutL a P` value at `Θ` is one at `Θ.add ℓ₀ α F`
   for fresh `α`.
-- `mutL_extA` (`:212`): `Mut` values are stable along the Kripke order `ExtA`.
-- `coreShapeL_reborrow` (`:411`): `coreShape_not_reborrow`'s own configuration, per lend. With
+- `mutL_extA`: `Mut` values are stable along the Kripke order `ExtA`.
+- `coreShapeL_reborrow`: `coreShape_not_reborrow`'s own configuration, per lend. With
   `ℓ_b ≠ ℓ, ℓ₂` and `α < b < β`, the value `Mut @b (Mut @β 1)` at `ℓ_b` (holding nothing at `ℓ`)
   is one of Core's shape at `Wc` and at `Wc.add ℓ α F`, for every `F`. Per location it is not
   (`Shape791N`). Every hypothesis is discharged; `Wc_fresh` shows `α` is fresh there.
@@ -111,7 +119,7 @@ and in `scripts/AxiomCheck.lean`. Axioms are within `propext`, `Classical.choice
 
 | Step | Needs | State |
 |---|---|---|
-| 4 (`vC_local`) | a value at the lend's world, in the lend's stratum, is one at the world without it | `mutL_of_add` (`:225`), proved at `Mut`; `vN_local` at every type: **not built** |
+| 4 (`vC_local`) | a value at the lend's world, in the lend's stratum, is one at the world without it | `mutL_of_add`, proved at `Mut`; `vN_local` at every type: **not built** |
 | 4, 11 (`U` along `Ext`) | `vN` stable along `ExtA` | at `Mut`: `mutL_extA`; at every type (`vN_extA`): **not built** |
 | 6 (`hunif`) | `𝒱⟦T₁⟧ ⊆ Res_β` from `Δ ⊢ T₁ ⊒ @a` | `vN_outlives` exists (`Goal791N`); the conjunct in the `Mut` clause: **not built** |
 | 7 | L1 | proved |
@@ -259,23 +267,103 @@ Each unit lands on the PR branch; the order is the list order.
   - Taken: the key, the "read above the cell" stratification (`famL`), and `ExtA` as the
     world-relative form of `Ext`.
 
-## 8. Open questions
+## 8. Open questions, and their answers (#825)
 
-1. **`U`'s order: world-relative `ExtA` or Core's resource-relative `Ext`.** A thunk returned out
-   of a lend's callback was proved at extensions of the callback's world. The lender forces it at
-   extensions of its own world, which need not extend the callback's, since the lend's key may
-   later be re-used with another family. Core's `Ext` answers this: the thunk's resource is in
-   the lend's stratum, so the lend's key is below every borrow it holds. Not built; kill
-   criterion K2 decides it.
-2. **`erwp_consistent`** (U1's done-when): whether a `CompS` part's flat `mut` cells are the
-   whole's at the same lifetime. I have not derived it and have not verified that any obstruction
-   is real.
-3. **`Θ.Bounded` as a premise** of `ConstN`/`SemJN`/`Goal791SchedN`. `bridgeN` and the pool's
-   adequacy are at the empty world, which is bounded. That nothing upstream supplies an unbounded
-   world has not been checked across `PoolN`'s statements.
-4. **`Imm`** (`wl`) reads `CohE` and records. Whether `imm` lends need entries in `Θ` is not
-   addressed: `PredStep` does not read `imm` cells.
+1. **`U`'s order: world-relative `ExtA` or Core's resource-relative `Ext`.** *Answer: `ExtA`
+   cannot be `U`'s order if locality (`vC_local`, step 4) is to hold at `U`; that is Core's
+   resource-relative `Ext`.* Kill criterion K2 as written (a `U C` value valid at a world and not
+   at a fresh extension) is not met: `U` is Kripke along `ExtA` and `ExtA` is transitive, so
+   `vN_extA` holds at `U` and at every other former. Locality fails at `U`
+   (`Core/Chain/LocalU791.lean`, `u_not_local`, every hypothesis discharged): the thunk
+   `λx. () ()` of type `U(Mut @b 1 ⊸ F 1)`, holding nothing, is valid at `∅ + (ℓ, α) ↦ F` with
+   `α < b`, because no `ExtA`-extension of that world adds a key above `α`, so no `Mut @b 1`
+   argument exists (`thunk_at_lend`); it is not valid at `∅`, whose extension
+   `∅ + (ℓ′, b) ↦ 𝒱⟦1⟧` holds the argument `ℓ′ ↦ mut(b, (), ∅, 𝒱⟦1⟧)`, on which the thunk is
+   stuck (`thunk_not_at_empty`). Under Core's `Ext ls ls′ ρ`, which constrains only the records
+   above the borrows of `ρ` (none, at `∅`), this thunk is not a value at the lend's world either.
+   Changing `U`'s order is a design change: **decision for the user**.
+2. **`erwp_consistent`.** *Answer: holds, on the exclusive walk.* `erwp_consistent`
+   (`SI/LocTy.lean`): a run at any `LocFam` from a resource with `ConsistentX c` returns, at every
+   value or stop it reaches, a resource with `ConsistentX c`. The proof follows a returned
+   exclusive `mut` cell into the post-configuration's flattening, back across `↭` by `UpdMutN`'s
+   second clause, and, where `↭` finds it in the aliasable walk, to its `imm` ancestor
+   (`AgW.nonimm_beneath_imm`), which `↭` keeps (`upd_ag_imm_wit_factorI`, the `imm` clause
+   alone): the ancestor puts the location in the post-configuration's aliasable walk, where the
+   exclusive cell cannot be. *On the whole flattening it does not hold of the returned part*
+   (`Core/Chain/ConsistentFlat791.lean`, `flat_part_config`): `ρ′ = m ↦ imm(t, (), ℓ ↦ mut(a, …))`
+   and `ρp = ℓ ↦ imm(s, (), ∅)`; in `ρ = ρ′ ● ρp` the two meet at `ℓ` as `mut ○ imm = imm`
+   (`CellU.CompR.mutImm`), so `⦇ρ⦈` has no `mut` cell and the empty view is consistent with it;
+   `⦇ρ′⦈` has `ℓ ↦ mut(a, …)`. `ρ ↭ ρ`, `ρp` owns nothing, and the zero-step run of `()` from `ρ`
+   returning `ρ′` is an `erwp` run (`erwp_val_split`). This is K3's configuration for the first
+   reading; a frame (`TWNC`) at which `ρ` is a run's start is not built (it is an `imm` frame of a
+   `Mut` value with an `imm` reborrow of the borrowed cell). The exclusive-walk reading is what
+   the anti-frame needs (a held `Mut` argument is a top-level cell, `consistentX_get`), and is the
+   one the interpretation uses. The change of reading is recorded here for the user to confirm.
+3. **`Θ.Bounded` as a premise.** *Answer: it is a premise, of every world the interpretation is
+   read at, and nothing upstream supplies an unbounded world.* `LocTy.OK Θ = Θ.Down ∧ Θ.Bounded`
+   is a premise of `SemJN` and `ConstN`, and `U` and `⊸` quantify only `OK` extensions (`ExtA`
+   adds keys freely, so boundedness is asked at each extension rather than carried by the
+   order). `BridgeN` quantifies `OK` worlds and `bridgeN` uses the empty one (`LocTy.empty_ok`);
+   `Goal791SchedN` takes `Θ.OK` as a premise. `PoolN`/`PoolSpawnN` (`poolSchedAdequacyN`) are
+   relation-level, at any `LocFam`, and read no world. A lend keeps a world bounded
+   (`LocTy.fresh_add`).
+4. **`Imm`** (`wl`) reads `CohE` and records. Not addressed: the `Imm` payload is read at `Θ`
+   (`vN`'s `imm` clause), and `PredStep` does not read `imm` cells.
 
-Unspent: `DownFam β (famL β P Θ)` in `reseal_at_entry` is supplied in the port by `vN_down`. The
-uniqueness result used is `UpdMutN`'s lifetime agreement (`MutStep`'s `ψ.at = ψ′.at`), in
-`consistent_of_updN`. Not used: `vThunk`/`Covers`, which the design replaces with consistency.
+Unspent: `DownFam β (famL β P Θ)` in `reseal_at_entry` is supplied in the port by `vN_fam_down`.
+The uniqueness result used is `UpdMutN`'s lifetime agreement (`MutStep`'s `ψ.at = ψ′.at`), in
+`consistent_of_updN` and `consistentX_of_updN`; the functionality results used are
+`ExS.functional`, `ExR.functional`, `AgW.functional`, `ResU.CompR.functional`. Not used:
+`vThunk`/`Covers`, which consistency replaces.
+
+## 9. State after #825 (U1, U2)
+
+All in `scripts/AxiomCheck.lean`; axioms within `propext`, `Classical.choice`, `Quot.sound`.
+
+**U1, the world in the library** (`Core/Chain/SI/LocTy.lean`): `LocTy`, `LocTy.add`, `.above`,
+`.Fresh`, `.Bounded`, `.OK`, `.ExtA`, `.view`, `.empty`; `famL`, `mutL`; `ConsistentX` (and
+`Consistent`); `LocTy.view_add`, `LocTy.extA_add`, `LocTy.extA_trans`, `LocTy.exists_fresh`,
+`LocTy.fresh_add`, `LocTy.view_ext`, `LocTy.view_empty`; L1 `reseal_at_entry`,
+`erwp_antiFrame_view`, `reborrow_view`; L2 `mutL_add`, `mutL_extA`, `mutL_of_add`,
+`fam_add_self`, `lend_mutL`; `consistentX_of_updN`, `rwpG_consistentX`, `rwp_consistentXV`,
+`erwp_consistent`, `consistentX_compS`, `consistentX_left`/`_right`, `consistentX_get`.
+
+**U2, the interpretation over the world** (`Core/Chain/Goal791N.lean`): `vN`, `cN`, `tabN`,
+`finN`, `retN`, `gN`, `SemJN`, `rowTabN`, `ConstN`, `BridgeN`, `Goal791SchedN` restated at
+`(Θ, c)`.
+
+| Law | Proved at | Left out, and why |
+|---|---|---|
+| `vN_down`, `cN_down`, `tabN_down`, `finN_down`, `retN_down` | every former | — |
+| `vN_extA` | every former | — |
+| `cN_extA` | `F A`, `⊸`, `&`, `⊤`, `∀`, `ν` (`noEffSpine`) | `F_Σ R`: the continuation was proved to accept the table's answers at `Θ`, and the table at `Θ′` hands them back at `Θ′`. I have not derived a counterexample and have not verified that any obstruction is real. |
+| `vN_local` (along a lend at `α`, resource in `Res_α`) | every former but `U` (`uFree`) | `U`: false under `ExtA`, `u_not_local` (§8 Q1) |
+| `vN_outlives` | every former `VOutlives` has | — |
+| `vN_congr`/`cN_congr`, `cN_effOf`, `vN_fam_down` | every former | — |
+| `bridgeN`, `goal791Sched_of` | re-proved | — |
+
+`Lend791N` restated: `tabN_effOf_some`, `tabN_effOf_twin` (now at one world, two views),
+`tabN_lendOKCR`, `fin_claim` (at `Θ.view c`, from the claim's consistency, through
+`rwp_consistentXV`), `cbRelease_sem`, `answer_not_inStratum`; `suspend_closingOp` moved there.
+`Shape791N.reseal_untyped` is restated at the per-location `Mut` clause it is about
+(`mutCellPL`). Unchanged: `hardestCase791`/`hardestCase791C`, `poolSchedAdequacyN`,
+`erwp_adequacy`, and every relation definition.
+
+**Out of the build until #826:** `Core/Chain/Cancel791N.lean` (`withbor2S_compat`, `constN_w2`,
+`tabR`/`finR`, `erwp_M_frame_cancelRunCR`, `erwp_ubind_cancelRunCR`, `erwp_ubindClaimRT`), whose
+statements read the interpretation before the world; the source is kept and its import is
+commented in `Core/Chain.lean`.
+
+**What #826 (U3) needs from this:**
+- the callback runs at `Θ.add ℓ α (famL α 𝒱⟦A⟧ Θ)` and the view `setLife c ℓ α`, which is
+  `(Θ.view c).set ℓ α _` (`LocTy.view_add`), with `α` fresh below the bound (`LocTy.exists_fresh`,
+  from `Θ.OK`) and the extended world `OK` (`LocTy.down_add`, `LocTy.fresh_add`); the callback's
+  `Mut @α` argument is `lend_mutL`, and its view is consistent with the argument and the context
+  (`consistentX_compS`, with `setLife` at `ℓ`);
+- the lender's and the callback's tables are at different worlds, so `tabN_effOf_twin` (one world)
+  does not apply as it stands: their entries' `PA`/`PB` differ (`vN o.A δ Θ` against
+  `vN o.A δ (Θ.add …)`). Where the operation types are in the lend's stratum, `vN_local` and
+  `vN_extA` relate them, except at `U` (§8 Q1);
+- the callback's result `[@x] B` returned to the lender at `Θ` needs `vN_local`, which is open at
+  `U` (Q1): the decision on `U`'s order comes first;
+- `withbor2S_compat`'s premises otherwise as today.

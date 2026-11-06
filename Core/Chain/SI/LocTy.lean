@@ -462,6 +462,15 @@ theorem consistentX_right {ρ₁ ρ₂ ρ : WRes} (h : ResU.CompS ρ₁ ρ₂ ρ
     (hc : ConsistentX c ρ) (hv : ResU.Valid ρ) : ConsistentX c ρ₂ :=
   consistentX_left (ResU.CompS.comm h) hc hv
 
+/-- **A consistent view gives a held `mut` cell its lifetime**: a top-level `mut` cell of a valid
+resource is in its exclusive walk, so a consistent view is at the cell's lifetime there (the
+anti-frame's `c ℓ = β`, `erwp_antiFrame_view`). -/
+theorem consistentX_get {ρ : WRes} {c : Loc → Option Life} (hc : ConsistentX c ρ)
+    (hv : ResU.Valid ρ) {l : Loc} {ψ : CellU Loc Val} (e : ρ.get l = some ψ)
+    (hk : ψ.kind = Kind.mut) : c l = some ψ.at := by
+  obtain ⟨σ, ex, a, hex, -, -⟩ := hv
+  exact hc ex hex l ψ (ExS.get_of_ne_imm hex e (by rw [hk]; decide)) hk
+
 /-- The ancestor transfer (`ResU.upd_ag_imm_wit_factor`) from `↭`'s `imm` clause alone, the
 only clause its proof reads. -/
 theorem upd_ag_imm_wit_factorI {ρ₂ ρ₃ e₂ a₂ σ₂ e₃ a₃ σ₃ : WRes}
