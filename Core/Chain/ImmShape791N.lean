@@ -20,7 +20,7 @@ a value of Core's `Mut 'x (Imm 'y 1)` at `ls` is not one at a list `ls'` with `e
 `extF` admits it.
 
 This is the step a resumed `Mut` value's re-reading takes (`withbor3S_compat`'s step 13, the
-resealed cell a `Mut @a A` value at the run's last list; `scope-791-rule.md` §9.3). It is the step's
+resealed cell a `Mut @a A` value at the run's last list; `chain-interpretation.md` §5, D2). It is the step's
 configuration, not the constant's: no run of `ConstN (.w3 …)` ending at `ls'` is built.
 -/
 

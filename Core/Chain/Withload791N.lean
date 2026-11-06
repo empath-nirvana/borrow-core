@@ -6,8 +6,8 @@ import Core.Chain.SI.RebRaiseC
 /-!
 # `withload` at a suspending row  `[spec §62]`
 
-Core's `withload_compatX` (`Core/Compatibility.lean:252`), step by step (`scope-791-rule.md`
-§9.1 and §13), at a `Row.Suspend` callback row:
+Core's `withload_compatX` (`Core/Compatibility.lean:252`), step by step (`chain-interpretation.md`
+§6.3), at a `Row.Suspend` callback row:
 
 * **The tables.** The callback's table is the constant's (`tabN_extend_suspendC`): the row's
   layers do not mention `'x`. It may be stopped at under a reborrow at `β ⊏ @bnd`
@@ -529,7 +529,7 @@ theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
 
 /-- **`withload` at a suspending row is a value of `!` its type**: at
 `Imm @a A ⊸ (∀'x ⊏ @bnd. Imm̲ 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ B` with `Σ` a `Row.Suspend x bnd` row.
-Core's `withload_compatX`, step by step (`scope-791-rule.md` §9.1):
+Core's `withload_compatX`, step by step (`chain-interpretation.md` §6.3):
 
 1. the context owns nothing: the constant at `PMap.empty`;
 2. the `Imm` argument is `loc ℓ` (`vN`'s `Imm` clause);

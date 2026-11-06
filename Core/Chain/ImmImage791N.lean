@@ -3,7 +3,7 @@ import Core.Chain.Goal791N
 /-!
 # The observable view and the image of a reborrow at `vN`  `[spec §62]`
 
-`withload_compatX`'s steps 5, 7 and 8 (`scope-791-rule.md` §9.1) at `vN`'s `Imm` clause, which
+`withload_compatX`'s steps 5, 7 and 8 (`chain-interpretation.md` §6.3) at `vN`'s `Imm` clause, which
 reads its payload in the observable view `vO` (Core's `vCE false`) and its location's witness in
 the world's `imm` records (`ImmWitW`, Core's `CohE`):
 

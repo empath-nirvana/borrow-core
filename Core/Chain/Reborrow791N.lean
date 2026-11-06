@@ -773,7 +773,7 @@ theorem fin_claimM {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d 
 
 /-- **`withbor (3)` at a suspending row is a value of `!` its type**: `withborU d`, at
 `Mut @a A ⊸ (∀'x ⊏ @bnd. Mut 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ(Mut @a A ⊗ B)` with `Σ` a
-`Row.Suspend x bnd` row. Core's `withbor3U_compatX`, step by step (`scope-791-rule.md` §7.1):
+`Row.Suspend x bnd` row. Core's `withbor3U_compatX`, step by step (`chain-interpretation.md` §6.3):
 
 1. the context owns nothing: the constant at `PMap.empty`;
 2. the source is `loc ℓ` with its cell `ℓ ↦ mut(β, w₀, σ₀, F_o j₀)`, `F_o = famL β 𝒱⟦A⟧ Θ` and

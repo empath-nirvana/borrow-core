@@ -43,7 +43,8 @@ Statuses:
 - **missing, buildable**: says what it would be built from.
 - **missing, unclear**: not derived; obstruction not verified.
 
-The configurations named below are recorded in `scope-791-rule.md` §5 and `scope-791-loctype.md`:
+The configurations named below are indexed in `configurations.md`; the design they belong to is
+`chain-interpretation.md`:
 `coreMutImm_not_extF` (`ImmShape791N.lean`), `not_wlImage` (`ImmRec791N.lean`),
 `perLocShape_not_reborrow` and `reseal_untyped` (`Shape791N.lean`), `extRL_breaks_extA`
 (`ExtRLit791.lean`, which rests on `ν` read as empty), and `flat_part_config`
@@ -84,7 +85,7 @@ The configurations named below are recorded in `scope-791-rule.md` §5 and `scop
 | K1 | `vC_local` | — | 19: `swap`, `iterate`, `reify`, `sliceBorrowM` … | **departed (built)** | `vN_extR` (`Goal791N.lean`), along `LocTy.ExtR` at the value's resource. Configurations: `extRL_breaks_extA` (Core's `Ext` read literally is not Kripke along `ExtA`; rests on `ν` read as empty) and `coreMutImm_not_extF` (payloads read off the list are not stable along `extF`, so the order is on the world) |
 | K2 | `vC_same`, `vP_same`, `gDenC_same`, `ext_of_same` | — | 31: `tensorI`, `bind`, `unitE`, `tensorE` … | **same** | holds by definition: `vN`/`gN` read no record list; `LocTy.extR_refl` |
 | K3 | `ext_add` | 6.64 | 2: `withbor1`, `withbor1U` | **departed (built)** | `LocTy.extR_addImm` (`SI/LocTy.lean`): the record goes into the world, not the list (`coreMutImm_not_extF`) |
-| K4 | `ext_drop` | 6.64 | 0 (inside the Imm Frame) | **departed, no configuration** | `LocTy.extR_of_addImm`: Core asks `∀ r ∈ rsOf ls′, Rel r ρ → r ∈ rsOf ls` and discharges it at the Imm Frame's exit from the run (`not_rel_lineage`); the chain's statement has no such premise because `Keeps` reads relevance by lifetime (§13.3). No configuration (§6.2) |
+| K4 | `ext_drop` | 6.64 | 0 (inside the Imm Frame) | **departed, no configuration** | `LocTy.extR_of_addImm`: Core asks `∀ r ∈ rsOf ls′, Rel r ρ → r ∈ rsOf ls` and discharges it at the Imm Frame's exit from the run (`not_rel_lineage`); the chain's statement has no such premise because `Keeps` reads relevance by lifetime (`chain-interpretation.md` §2.2). No configuration (§6.2) |
 | K5 | `ext_empty'` | — | 11: `iterate`, `reify`, `withbor1U`, `withbor2U` … | **missing, buildable** | `ExtR` at `∅` (no `CellIn`): one line; inlined in `ImmLend833N.gN_dead_any` |
 | K6 | `opTable_ext` | — | 2: `withbor1U`, `sliceBorrowIU` | **same** | not needed: `entN` reads no list (`scope-831-map.md` §3.2) |
 
@@ -101,7 +102,7 @@ The configurations named below are recorded in `scope-791-rule.md` §5 and `scop
 | V7 | `vO_obs` | — | 4: `sliceBorrowI`, `withbor1`, `withbor1U`, `sliceBorrowIU` | **same** | `vN_vO` (`ImmImage791N.lean`) |
 | V8 | `vC_noOwn_of_ownFree` | — | 2: `effAwait`, `effHandleL` | **missing, buildable** | `vN` of an `OwnFree` type owns nothing: induction on `A` |
 | V9 | `vP_empty_of_persistent` | spec §10 | 6: `effThen`, `effThenDiv`, `effHandleV`, `effHandleVB` … | **same** | `vN_empty_of_persistent` (`ImmLend833N.lean`) |
-| V10 | `admWf_of_vScoped`, `cohE_of_coh` | — | 4: `sliceBorrowI`, `withbor1`, `withbor1U`, `sliceBorrowIU` | **departed (built)** | the Imm Frame's admissibility and `Coh` become the witness `ImmWitW` (`cohE_of_immWitW`, `Withload791N.lean`) at the world's records, with the lifetime match `⊓s ⊑ x.2`. Carrier: `coreMutImm_not_extF`, `not_wlImage` (§10.4). The lifetime match serves `Keeps` by lifetime: no configuration (§6.2) |
+| V10 | `admWf_of_vScoped`, `cohE_of_coh` | — | 4: `sliceBorrowI`, `withbor1`, `withbor1U`, `sliceBorrowIU` | **departed (built)** | the Imm Frame's admissibility and `Coh` become the witness `ImmWitW` (`cohE_of_immWitW`, `Withload791N.lean`) at the world's records, with the lifetime match `⊓s ⊑ x.2`. Carrier: `coreMutImm_not_extF`, `not_wlImage` (`configurations.md`). The lifetime match serves `Keeps` by lifetime: no configuration (§6.2) |
 | V11 | `vN_le` (chain only) | — | 28: `tensorI`, `bind`, `unitE`, `tensorE` … | **same** | `vN_le`, `vO_le`, `cN_le`: the index is the chain's, Core has none |
 
 ### G. The context relation
@@ -141,7 +142,7 @@ The configurations named below are recorded in `scope-791-rule.md` §5 and `scop
 | F6 | `vP_fam_mk`, `vP_fam_split`, `vP_fam_idx`, `sepRange_pick` … | spec §9 | 22: `arrNew`, `arrFree`, `arrSize`, `arrReplace` … | **missing, buildable** | a `fam` clause in `vN`/`vO` (an indexed `sepRange` of leaves), the array steps at `erwp`, and the laws re-proved over it (`scope-831-map.md` §4) |
 | F7 | `wpTS_M_frameFam`, `wpTS_I_frameFam`, `wpG_M_frameFam`, `wpG_I_frameFam` | — | 4: `sliceBorrowM`, `sliceBorrowI`, `sliceBorrowMU`, `sliceBorrowIU` | **missing, buildable** | the `n`-cell frames: list inductions over the one-cell frames (`erwp_M_frameCRG`, `erwp_I_frameC`), one key per cell |
 | F8 | `vC_roll`, `vC_unfold`, `vC_immReborrow_mu_iff`, `vCE_subst` … | — | 8: `reify`, `roll`, `unroll`, `foldImm` … | **missing, buildable** | an environment argument in `vN`/`vO`, the `μ`/`tvar` clauses, Core's `RelMu` laws at the index; `withload_sized` is `withloadS_compat` with a size measure. Very high; not checked |
-| F10 | `cC` .arr (the `⊸` clause) | — | 10: `bind`, `lam`, `lamDead`, `app` … | **departed, no configuration** | `cN .arr` is Kripke along `ExtR` at the function's resource, at every later index and every view consistent with the composite; Core's `cC .arr` is a plain wand at the same list. The index part is the step-indexed `−∗` (`sC`); for the `ExtR` part no configuration is recorded (`scope-791-loctype.md` §2.3, §10 state it, none forces it). The cost: `lam`/`lamDead` move their context along `ExtR` and down the index (G6, G11), which Core's proofs do not do |
+| F10 | `cC` .arr (the `⊸` clause) | — | 10: `bind`, `lam`, `lamDead`, `app` … | **departed, no configuration** | `cN .arr` is Kripke along `ExtR` at the function's resource, at every later index and every view consistent with the composite; Core's `cC .arr` is a plain wand at the same list. The index part is the step-indexed `−∗` (`sC`); for the `ExtR` part no configuration is recorded (`chain-interpretation.md` §3.1 and D6 state it, none forces it). The cost: `lam`/`lamDead` move their context along `ExtR` and down the index (G6, G11), which Core's proofs do not do |
 | F9 | `cC_nu_iff`, `nuRel_coind`, `cB_step` | spec §7 | 4: `reify`, `nuIn`, `nuOut`, `unfoldN` | **missing, unclear** | a reading of `ν` at `erwp`: a design choice first. Not derived; obstruction not verified |
 
 ### R. Frames, the reborrow theorem, the chooser, the cells
@@ -154,8 +155,8 @@ The configurations named below are recorded in `scope-791-rule.md` §5 and `scop
 | R4 | `wpG_M_frameX` | 6.65 | 1: `withbor3U` | **departed (built)** | `erwp_M_frameCRG`/`erwp_M_frameF`: the inner Mut Frame of 6.174 with the fold at every stop (`erwp_withbor3`, `SI/AntiStopN.lean`) |
 | R5 | `wpTS_I_frameX`, `ewpTS_I_frameU`, `ptoImmS_mono` | 6.64 | 4: `sliceBorrowI`, `withbor1`, `withbor1U`, `sliceBorrowIU` | **departed (built)** | `erwp_I_frame` (`SI/IStopN.lean`), `erwp_I_frameR` (`SI/IStopRaiseN.lean`), with the record in the world (`LocTy.addImm`) and the run read at the lender's view by `erwp_tieEntry` (abortive tables only, §6.1). Carrier: `coreMutImm_not_extF` |
 | R6 | `wpG_frame`, `wpG_garbage` | 6.146 | 13: `withbor1U`, `withbor2U`, `withbor3U`, `withloadU` … | **same** | `erwpG_frame` (`SI/AntiStopN.lean`), `erwp_frameL`, `rwpG_garbage` |
-| R7 | `wpTS_reborrow`, `wpG_reborrow`, `wpG_bind_pure` | 6.150 | 2: `withload`, `withloadU` | **departed (built)** | `erwp_reborrow` (`SI/RebAcrossC.lean`), `erwp_rebGen`/`erwp_rebGen_cancelRun` (raises, layered cancel runs, `SI/RebRaiseC.lean`), `erwp_reborrowDeep`: at the canonical image the first entry chose. Configurations: `coreMutImm_not_extF` (§9.3), `not_wlImage` (§10.4) |
-| R8 | `rebChooseTW_top`, `rebChooseTW_deep`, `rebChooseTW_pin`, `ptoImmO_toImm` … | 6.131, 6.134 | 3: `withload`, `withloadU`, `foldImm` | **departed (built)** | the chooser at the world: `cohE_of_immWitW`, `TI.leInvW`/`TI.exIn`, `tmpl_exists`, `relabel_vN`, `vO_transfer`, `reb_witness_choice` (`Withload791N.lean`, `ImmImage791N.lean`; §13.4 steps 6–10). Configurations as R7 |
+| R7 | `wpTS_reborrow`, `wpG_reborrow`, `wpG_bind_pure` | 6.150 | 2: `withload`, `withloadU` | **departed (built)** | `erwp_reborrow` (`SI/RebAcrossC.lean`), `erwp_rebGen`/`erwp_rebGen_cancelRun` (raises, layered cancel runs, `SI/RebRaiseC.lean`), `erwp_reborrowDeep`: at the canonical image the first entry chose. Configurations: `coreMutImm_not_extF`, `not_wlImage` (`configurations.md`) |
+| R8 | `rebChooseTW_top`, `rebChooseTW_deep`, `rebChooseTW_pin`, `ptoImmO_toImm` … | 6.131, 6.134 | 3: `withload`, `withloadU`, `foldImm` | **departed (built)** | the chooser at the world: `cohE_of_immWitW`, `TI.leInvW`/`TI.exIn`, `tmpl_exists`, `relabel_vN`, `vO_transfer`, `reb_witness_choice` (`Withload791N.lean`, `ImmImage791N.lean`; `chain-interpretation.md` §6.3, `wl` steps 6–10). Configurations as R7 |
 | R9 | `ptoImmS_antitone`, `ptoMutS_antitone` | 6.114, 6.118 | 2: `immSub`, `mutSub` | **same** | inside `immSub_compatN`/`mutSub_compatN` (`Goal791N.lean`) |
 | R10 | `ptoImmS_dup` | 6.116 | 2: `copy`, `arrCopy` | **same** | `compS_imm_dup` (`SI/IStopN.lean`) |
 | R11 | `ewp_unwind`, `ewp_box_end`, `ewp_ret_pair`, `fin_run` … | spec §19 | 6: `withbor1U`, `withbor2U`, `withbor3U`, `withloadU` … | **departed (built)** | the unwinding row's finaliser: `erwp_ubindRaise` (`SI/StopRaiseN.lean`), `fin_claimI`, `erwp_claimX_abort` (`ImmLend833N.lean`). The claim carries the view's consistency (configuration `flat_part_config`, which replaces `Covers`) |
@@ -207,8 +208,8 @@ judgment carries a step index and a view (`SemJN`'s `n` and `c`), and Core's has
   `not_wlImage`.
 - **F10 `cC .arr` → `cN .arr`.** The chain's `⊸` is Kripke along `ExtR`, at every later index and
   every consistent view. Core's is a wand at the same list. The index is the step-indexed `−∗` of
-  `sC`, which is the chain's carrier. For the `ExtR` part, `scope-791-loctype.md` §2.3/§10 state
-  it but record no configuration that forces it. Its cost is in `lam`/`lamDead`, which must move
+  `sC`, which is the chain's carrier. For the `ExtR` part, `chain-interpretation.md` §3.1 and D6
+  state it but record no configuration that forces it. Its cost is in `lam`/`lamDead`, which must move
   their context along `ExtR` and down the index (G6, G11). Core's proofs do not take those steps.
 - **E13 `cwp` and its bookkeeping.** A `Div` row is a row of the chain's table, and `erwp` is
   step-indexed. So Core's coinductive `cwp` (and `keyNA`, `tickStop_*`, `closeAt_*`, `divB_*`) has
@@ -381,7 +382,7 @@ the interface; it is not a build.
 |---|---|
 | `withbor3` | W4 (the frame beside a run at the empty table), then `withbor3S_compat`'s steps at the empty table: `erwp_withbor3` (6.174 across stops), the reseal `reseal_at_entry`. Restatement at `Δ` |
 | `withbor3U` | **R3**: the anti-frame across an unwinding row's raises, `erwp_M_antiFrameCR` at the row's guarded twin. A `Row.Unwind` row's entries are all abortive (`tabN_unwind_abort`), so its twin guards no stop: only the raises' claim (`hRin`/`hRout`) and cancel obligations (`hcan`) remain. Also W4, G6, K5 (`ExtR` at `∅`, for the finaliser) |
-| `withload` | W4, then `withloadS_compat`'s 13 steps (§13.4 of `scope-791-rule.md`) at the empty table; `erwp_reborrow` for 6.150 |
+| `withload` | W4, then `withloadS_compat`'s 13 steps (`chain-interpretation.md` §6.3) at the empty table; `erwp_reborrow` for 6.150 |
 | `withloadU` | `withloadS_compat` at an unwinding row: `erwp_rebGen` for the raises. `RebClosed` at an unwinding row is `tab_rebClosed`'s base case, since the row has no cancellable entry. Not checked |
 | `withswap` | W4; the anti-frame at the view (`erwp_antiFrame_view`, R2) around `rwp_load`/`rwp_store`; the reseal into the stored family at the anti-frame's return, as `withbor3S_compat`'s step 13. Not checked in detail |
 
@@ -504,7 +505,7 @@ reach `ext_add` (K3) or the Imm Frame (R5):
 `CDerives` has no `imm` lend at a row whose table resumes. `withbor1U` and `sliceBorrowIU`
 require `S.Unwind x`, and no `Const791` lends `imm` at `Row.Suspend`: its five constructors are
 `w2`, `w3`, `wF`, `wl` and `sm`, which are `mut` lends and reborrows. `withload`'s images are witnessed by the source's record, already in the
-world (§13.4 step 8), so it adds none. A handler's resumption inside a callback is a step of the
+world (`chain-interpretation.md` §6.3, `wl` step 8), so it adds none. A handler's resumption inside a callback is a step of the
 callback's own expression at its own world, and that world is the one its view reads.
 
 **Verdict: no rule needs the generalisation to an inner location typing.** It would be needed by

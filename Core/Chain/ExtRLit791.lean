@@ -3,7 +3,7 @@ import Core.Chain.Goal791N
 /-!
 # Core's `Ext` read literally on the per-lend world breaks `vN_extA` at `U`  `[spec §62]`
 
-`docs/new-core/scope-791-loctype.md` §10. `LocTy.ExtR Θ Θ′ ρ` asks that nothing be added above a
+`docs/new-core/chain-interpretation.md` §5, D4. `LocTy.ExtR Θ Θ′ ρ` asks that nothing be added above a
 lifetime `a` only where `a` is a key of `Θ` with `CellIn ρ a`. Core's `Ext ls ls′ ρ`
 (`Core/FrameRecords.lean`) asks it above every `b` with `CellIn ρ b`. Read that way on the world
 (`ExtRL`), `U` is not Kripke along `ExtA`.

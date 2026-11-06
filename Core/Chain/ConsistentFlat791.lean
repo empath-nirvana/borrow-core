@@ -3,10 +3,10 @@ import Core.Chain.SI.LocTy
 /-!
 # Consistency on the whole flattening is not kept by taking a part  `[spec §62]`
 
-`docs/new-core/scope-791-loctype.md` §2.2 first reads consistency over the whole flattening
-(`Consistent`). `↭` keeps that on the whole resource (`consistent_of_updN`), but a run returns
-only a part `ρ′` of its post-configuration `π = ρ′ ● ρp`, and the part's flattening can show a
-`mut` cell the whole's hides.
+The per-lend world's first reading (`docs/new-core/chain-interpretation.md` Appendix A.5) read
+consistency over the whole flattening (`Consistent`). `↭` keeps that on the whole resource
+(`consistent_of_updN`), but a run returns only a part `ρ′` of its post-configuration
+`π = ρ′ ● ρp`, and the part's flattening can show a `mut` cell the whole's hides.
 
 The configuration (`flat_part_config`): `ρ′ = m ↦ imm(t, (), ℓ ↦ mut(a, (), ∅, ⊤))`, an `imm`
 cell whose escrow holds a `mut` cell at `ℓ`, and `ρp = ℓ ↦ imm(s, (), ∅)`, an `imm` cell at the

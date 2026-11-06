@@ -4,7 +4,7 @@ import Core.Chain.SI.MutSemN
 /-!
 # Location typing per lend: the world the #791 interpretation reads  `[spec §62]`
 
-The design is `docs/new-core/scope-791-loctype.md`.
+The design is `docs/new-core/chain-interpretation.md` §2.
 
 ## The world
 
@@ -20,7 +20,7 @@ the world above every existing key never changes (`LocTy.above_add`), so a famil
 lend stays the payload's family read at the current world (`fam_add_self`), and a value typed
 before the lend stays typed (`mutL_add`). Lends extend the world along `LocTy.ExtA`: entries only
 added, nothing added above a key present. `U` and `⊸` are Kripke along the resource-relative
-order `LocTy.ExtR`, which departs from Core's `Ext` (`scope-791-loctype.md` §10,
+order `LocTy.ExtR`, which departs from Core's `Ext` (`chain-interpretation.md` §5, D4,
 `Core/Chain/ExtRLit791.lean`); `ExtA` is `ExtR` at every resource.
 
 The world also holds its `imm` records, each with the lifetime it was lent at (`LocTy.imm`,
@@ -297,7 +297,7 @@ than `a` (`CellIn ρ a`, Core's) is kept, and nothing is added above it, `imm` r
 `Keeps`). A stored family here reads the world above its key (`famL`), so the keys at and above
 such an `a`, and what lies above them, are what a value with resource `ρ` reads. It departs from
 Core's literal `Ext ls ls′ ρ`, which asks agreement above every `b` with `CellIn ρ b`, not only
-above the keys present (`scope-791-loctype.md` §10); read literally, `U` is not Kripke along
+above the keys present (`chain-interpretation.md` §5, D4); read literally, `U` is not Kripke along
 `ExtA` at a type through `ν`, which the interpretation reads as empty
 (`Core/Chain/ExtRLit791.lean`). -/
 def LocTy.ExtR (Θ Θ' : LocTy) (ρ : WRes) : Prop :=
@@ -544,7 +544,7 @@ theorem reseal_at_entry {Θ Θ' : LocTy} (hE : Θ.Ext Θ') {c : Loc → Option L
 /-- **L1 at the relation: `erwp_M_antiFrame` itself, at the view.** A `Mut @β` value of Core's
 shape at `Θ` is opened by the existing anti-frame at `Θ.view c` when `c ℓ = β`: the per-lend
 world supplies `hF`, which neither `vN` nor Core's interpretation supplies per location
-(`scope-791-rule.md` §7.2). -/
+(`chain-interpretation.md` Appendix A.4). -/
 theorem erwp_antiFrame_view {Θ : LocTy} {c : Loc → Option Life} (hΦ : (Θ.view c).Down)
     {l : Loc} {β : Life} (hc : c l = some β) {P : CPredL} {T : OpTabN} (hT : T.AFOK)
     {Q : PostN} {n : Nat} {ls : List SRec} {e : Expr} {ρm ρa ρ : WRes}

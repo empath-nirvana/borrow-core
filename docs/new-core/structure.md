@@ -58,16 +58,18 @@ records, `TWNT` and `TaggedT` (condition 21).
 Open: are the table fields `fd` (resumer guarantee), `PBv` (payload-dependent answer) and `oc`
 (owned records) principled? Each must be supplied by a typing rule (§6) or removed.
 
-**#791 at the rule level reads the chain, not the tree** (plan of record, #791, 2026-11-05;
-`scope-791-rule.md`, `scope-791-loctype.md`). The interpretation `vN`/`cN`
-(`Core/Chain/Goal791N.lean`) runs every computation at `erwp`, over a per-lend world `LocTy`
-(`Core/Chain/SI/LocTy.lean`): a family per location and lend lifetime, so a reborrow adds a key
-and keeps the source's, as Core's records do. A run is read at the world's view `Θ.view c`, the
-relation's per-location `LocFam`, at every view consistent with the run's resource
-(`ConsistentX`: each `mut` cell of the exclusive walk at its view lifetime); consistency takes
-the place of the tree's `Covers`/`vThunk`. No relation definition changes (`erwp`, `rwpG`,
-`EndOKG`, `UpdN`, `PredStep`, `MutStep`, `LocFam`). This is a second track beside the one
-relation above, not an instance of it.
+**#791 at the rule level reads the chain, not the tree** (plan of record, #791, 2026-11-05). The
+design is `chain-interpretation.md`; its configurations are indexed in `configurations.md`. The
+interpretation `vN`/`cN` (`Core/Chain/Goal791N.lean`) runs every computation at `erwp`, over a
+per-lend world `LocTy` (`Core/Chain/SI/LocTy.lean`): a family per location and lend lifetime, so
+a reborrow adds a key and keeps the source's, as Core's records do, and the `imm` records with
+the lifetimes they were lent at. A run is read at the world's view `Θ.view c`, the relation's
+`LocFam`, at every view consistent with the run's resource (`ConsistentX`: each `mut` cell of the
+exclusive walk at its view lifetime); consistency takes the place of the tree's
+`Covers`/`vThunk`. The relation's `↭` (`UpdN`, `PredStep`, `MutStep`) and `EndOKG` are
+unchanged; `LocFam` carries the `imm` records, and the relation's entry (`rwp`, `rwpG`, `rwpG0`)
+carries the tie `ImmTieL` (every `imm` record of the location typing is on the run's list). This
+is a second track beside the one relation above, not an instance of it.
 
 The bridge to the tree goal: `Goal791SchedN` restates `TreeGoal791`'s `Goal791Sched` over `erwp`,
 with the same constants (`Const791`, `Const791.OK`), context (`ctx791`), program and conclusion
@@ -192,22 +194,20 @@ Over the single relation:
 Core's plain results over canonical worlds are `Core.C` (condition 8); over the tree world they
 are part of step 2.
 
-**Over the chain (#791, §3).**
-1. 𝒱/𝒞 over `erwp` at `LocTy` (`vN`, `cN`, `tabN`, `finN`, `retN`, `gN`, `SemJN`) for every
+**Over the chain (#791, §3).** `chain-interpretation.md` §3, §6, §7.
+1. 𝒱/𝒞 over `erwp` at `LocTy` (`vN`, `vO`, `cN`, `tabN`, `finN`, `retN`, `gN`, `SemJN`) for every
    former in the fragment (`VTy.inFrag`): `Mut` at Core's `ptoMutS` shape (a cell at `b ⊒ @aδ`,
-   the uniform conjunct at `b`), `Imm` without the record list or `CohE`, `U` and `⊸` Kripke along
-   the resource-relative `LocTy.ExtR`, `∀` as Core's `cC`. Type variables, μ, families, opaque
-   types and ν are read as empty. Laws: downward closure, `vN_extR`, `vN_local`, `vN_outlives`.
-2. Rule checks at `SemJN`: `mutSub_compatN`, `immSub_compatN`, `allI_compatN`; the constants
-   `withbor2S_compat`, `withbor3S_compat`, `withborFS_compat`, each with its finaliser's
-   judgment `hd` as a premise, instantiated with every hypothesis discharged in
-   `Core/Chain/Inst791N.lean`. `FundamentalN` is stated on the fragment (`JdgInFrag`) and not
-   proved. Its remaining gap: cuts through excluded types inside an in-fragment derivation;
-   in-fragment rules that may force `vN` to change, at least `withloadU`, whose Core proof reads
-   `Imm`'s record list and `CohE` (`scope-791-loctype.md` §12, departure 1); and `cN_extA` at
-   `F_Σ R`, open, which the chain analogues of `withbor1U_compatX`/`sliceBorrowIU_compatX`
-   (`opTable_ext` in Core) may need. A change to `vN` reopens its laws and the `*_compat`
-   proofs (`scope-791-rule.md` §8).
+   the uniform conjunct at `b`), `Imm` at Core's `ptoImmS` shape (the payload in the observable
+   view `vO`, the location witnessed in the world's `imm` records, `ImmWitW`), `U` and `⊸` Kripke
+   along the resource-relative `LocTy.ExtR`, `∀` as Core's `cC`. Type variables, μ, families,
+   opaque types and ν are read as empty. Laws: downward closure, `vN_extR`, `vN_local`,
+   `vN_outlives`.
+2. Rule checks at `SemJN`: `mutSub`, `immSub`, `allI`, `withbor1`, `withbor1U`, `withbor2`,
+   `withbor2U`. The constants: `withbor2S_compat`, `withbor3S_compat`, `withborFS_compat` (each
+   with its finaliser's judgment `hd` as a premise) and `withloadS_compat`, instantiated with every
+   hypothesis discharged. `FundamentalN` is stated on the fragment (`JdgInFrag`) and not proved;
+   its plan is `scope-831-interface.md` (units L1–L7). A derivation of an in-fragment judgment may
+   cut through an excluded former, which the interpretation does not read until L5–L7.
 3. Adequacy: `goal791Sched_of` (`Goal791SchedN` from `FundamentalN` and `ConstsN`).
 
 ## 8. Termination

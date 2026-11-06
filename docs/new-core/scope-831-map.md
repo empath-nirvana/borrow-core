@@ -152,8 +152,8 @@ branches are the same lemmas). E10 is not derived.
 | 68 | `sliceSwapM` | `sliceSwapM_compatX` (`SliceOps.lean:299`) | no | **out** | families (`Array`/`ArrayImm`/`[Mut]`); §4 |
 | 69 | `withbor1` | `withbor1_compatX` (`Compatibility.lean:937`) | yes | **proved** | `withbor1_compatN` (`ImmLend833N.lean`): the lend's record in the callback's world (`LocTy.extR_addImm`, Core's `ext_add`), the result back by `LocTy.extR_of_addImm` (`ext_drop`), the Imm Frame `erwp_I_frameR`, the run read at the lender's view (`erwp_tieEntry`) |
 | 70 | `withbor2` | `withbor2_compatX` (`Compatibility.lean:1028`) | yes | **proved** | `withbor2_compatN` (`ImmLend833N.lean`): the Mut Frame `erwp_M_frameR` at the pure row, the callback's application under the pair framed beside the borrow, `vN_local` for the result |
-| 71 | `withbor3` | `withbor3_compatX` (`Compatibility.lean:1109`) | yes | **portable** | §7.1's 13 steps at the empty table: `withbor3S_compat` (`Reborrow791N.lean:808`) without its finaliser frame, `erwp_M_antiFrame` (`SI/AntiStopN.lean:257`) around `erwp_M_frame`; restatement at `Δ`: buildable |
-| 72 | `withload` | `withload_compatX` (`Compatibility.lean:252`) | yes | **portable** | §13.4's steps at the empty table: `withloadS_compat` (`Withload791N.lean:459`), `erwp_reborrow` (`SI/RebAcrossC.lean:96`) for 6.150; restatement at `Δ`: buildable |
+| 71 | `withbor3` | `withbor3_compatX` (`Compatibility.lean:1109`) | yes | **portable** | `w3`'s 13 steps (`chain-interpretation.md` §6.3) at the empty table: `withbor3S_compat` (`Reborrow791N.lean:808`) without its finaliser frame, `erwp_M_antiFrame` (`SI/AntiStopN.lean:257`) around `erwp_M_frame`; restatement at `Δ`: buildable |
+| 72 | `withload` | `withload_compatX` (`Compatibility.lean:252`) | yes | **portable** | `wl`'s steps (`chain-interpretation.md` §6.3) at the empty table: `withloadS_compat` (`Withload791N.lean:549`), `erwp_reborrow` (`SI/RebAcrossC.lean:96`) for 6.150; restatement at `Δ`: buildable |
 | 73 | `withswap` | `withswap_compatX` (`Compatibility.lean:1194`) | yes | **portable** | `wpTS_M_antiFrameX`, `wpTS_load`/`wpTS_store`, `wpTS_bind_frame` → `erwp_antiFrame_view` (`SI/LocTy.lean:485`, `consistentX_get`), `rwp_load`/`rwp_store`, G3; the reseal into the stored family at the anti-frame's return as in `withbor3S_compat`'s step 13: not checked in detail |
 | 74 | `withbor1U` | `withbor1U_compatX` (`EffBorrow.lean:452`) | yes | **proved** | `withbor1U_compatN` (`ImmLend833N.lean`): as `withbor1`, the Imm Frame across the row's raises (`erwp_I_frameR`), the finaliser frame at a raise (`erwp_ubindRaise`, `fin_claimI`); `opTable_ext` is not needed (`entN` reads no list) |
 | 75 | `withbor2U` | `withbor2U_compatX` (`EffBorrow.lean:281`) | yes | **proved** | `withbor2U_compatN` (`ImmLend833N.lean`), at any `Δ` and a `Row.Unwind` row (abortive unrestricted operations included): the Mut Frame across raises `erwp_M_frameR`, `erwp_claimX_abort`, `erwp_ubindRaise` |
@@ -195,7 +195,7 @@ branches are the same lemmas). E10 is not derived.
 proved.** `LocTy.above a` keeps the keys and the `imm` records lent strictly above `a`;
 `LocTy.ExtR`'s record conjunct is Core's `Keeps` (`LocTy.Keeps`: the records relevant to the
 resource, relevance read off the lifetime a record was lent at); `ImmWitW` matches a record no
-shorter-lived than the cell, which makes it relevant to its cell (`scope-791-rule.md` §13.2–3).
+shorter-lived than the cell, which makes it relevant to its cell (`chain-interpretation.md` §2.2, §3.2).
 
 Core's step (`Core/EffBorrow.lean:452`, the last block): the Imm Frame hands the callback a list
 with the lend's record added at `α`, and the callback is run there by its own Kripke clause,
@@ -208,7 +208,7 @@ the pure row's) never resumes, so the relation reads its tie only at the entry, 
 frame's and holds the record (`erwp_tieEntry`). `withbor1_compatN`, `withbor1U_compatN`
 (`Core/Chain/ImmLend833N.lean`).
 
-The old configuration (`callback_any_inst`: at the old `above`, `𝒱⟦U(Imm 'x 1 ⊸ F 1)⟧` admitted
+The old configuration (`callback_any_inst`, removed in 6ede48eb: at the old `above`, `𝒱⟦U(Imm 'x 1 ⊸ F 1)⟧` admitted
 every value at a callback holding a `mut` borrow) rested on no extension holding an `Imm` value;
 at the same world and resource the world with one more record is an extension
 (`Map831N.extR_addImm_inst`) holding one (`Map831N.imm_at_extension`).
@@ -234,7 +234,7 @@ On the chain:
   `opTable_ext`'s counterpart is immediate; the callback's ends are values, carried by `vN_extR`.
 
 **Provable?** Not derived; obstruction not verified. Where it would be needed is an `erwp` lemma
-over tables whose payloads grow and whose answers agree (`scope-791-loctype.md` §10): the
+over tables whose payloads grow and whose answers agree (`chain-interpretation.md` §7): the
 table's answers at `Θ′` are `vN B δ Θ′`, which `vN_extA` makes larger, while the continuation
 was given only answers at `Θ`. Since no rule needs it, it is on no unit's path.
 

@@ -3,7 +3,7 @@ import Core.Chain.SI.LocTy
 /-!
 # `perLocShape_not_reborrow`'s configuration at the per-lend world  `[spec §62]`
 
-The world is `Core/Chain/SI/LocTy.lean`; the design is `docs/new-core/scope-791-loctype.md`.
+The world is `Core/Chain/SI/LocTy.lean`; the design is `docs/new-core/chain-interpretation.md`.
 `Shape791N.perLocShape_not_reborrow` is a value of the per-location reading of `Mut` that is not
 one after a reborrow of an unrelated location. Here the same value is one of the interpretation's
 `Mut` (`mutL`, over the per-lend world) before and after the reborrow

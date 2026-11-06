@@ -7,8 +7,8 @@ import Core.Chain.SI.LocTy
 # #791 at the rule level over the chain relation: the interpretation and the statements
 `[spec §62]`
 
-`docs/new-core/scope-791-rule.md` is the plan and `docs/new-core/scope-791-loctype.md` the design
-of the world. `Core/TreeGoal791.lean` states #791's end goal over the tree relation; here the
+`docs/new-core/chain-interpretation.md` is the design: the world, the interpretation, the
+departures from Core. `Core/TreeGoal791.lean` states #791's end goal over the tree relation; here the
 interpretation and the statements are restated over Core's step-indexed chain relation `erwp`
 (`Core/Chain/SI/*`), at the per-lend world `LocTy` (`Core/Chain/SI/LocTy.lean`).
 

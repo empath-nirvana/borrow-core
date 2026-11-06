@@ -9,7 +9,7 @@ substitution, world, index, value and resource, with no record in the world, can
 `withload`'s step 8 (`not_wlImage_vN`), nor can one strengthened by any agreement read off a
 run's entry (`not_wlImageA_vN`).
 
-`withload_compatX`'s steps 6 and 8 (`scope-791-rule.md` §9.1, §10): the chain's reborrow of an
+`withload_compatX`'s steps 6 and 8 (`chain-interpretation.md` §6.3, Appendix A.9): the chain's reborrow of an
 `imm` cell (`erwp_reborrow`, `erwp_reborrowT`; `SI/RebAcrossC.lean`, `SI/RebCancelC.lean`) is
 taken at a record `r` of the run's list whose cell the source is, and hands the borrowed
 computation the record's canonical image `canon r β` (`SI/TWNC.lean`). The image is fixed by the

@@ -8,7 +8,7 @@ run's list sits at the relation's entry (`ImmTieL`), not on `cN`'s run clauses. 
 `F_Σ` clause fails `cN_effOf` (`not_effOf_guarded`); the entry form gives Core's `CohE` at the
 run's list (`ImmTieL.tie`, `immTie_agree`).
 
-`scope-791-rule.md` §12. Step 8 of `withload_compatX` needs the source `Imm @a A` cell to be the
+`chain-interpretation.md` Appendix A.9. Step 8 of `withload_compatX` needs the source `Imm @a A` cell to be the
 cell of a record of the run's list whose type is the source's, up to `TyEq`. §11's
 `immAgreeErwp_both` shows that nothing read off the unchanged `erwp` gives this: the cell
 `ℓ ↦ imm({α}, loc ℓ′, ℓ′ ↦ own(()))` is the cell of a lend recorded at `Ref 1` (`world_ref`) and
@@ -31,7 +31,7 @@ each with the lifetime it was lent at) and checks what it gives and what it excl
 
 Where the tie can be placed, and what each placement meets, is §12; `not_effOf_guarded` is the
 check for a guard on `cN`'s run clauses. The relation carries the tie in its list form at its entry
-(`ImmTieL`, `SI/UpdN.lean`; `scope-791-rule.md` §13): every record of the location typing's
+(`ImmTieL`, `SI/UpdN.lean`; `chain-interpretation.md` §2.5): every record of the location typing's
 `imm` list is a record of the run's list. `ImmTieL.tie` gives `ImmTie` from it at every resource;
 `immTieL_world_ref` shows it holds at `world_ref`'s list and fails at `world_thunk`'s.
 -/
