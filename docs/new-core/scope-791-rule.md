@@ -54,6 +54,10 @@ statements, as `TreeGoal791`'s with `vN`/`cN`/`erwp` for `vT`/`cT`/`cerwpT`. Pro
 
 ## 3. Departures from Core, each recorded
 
+Decision 1 (2026-11-05) asked for 1–3 below to be undone. They stand, justified by the
+configuration `coreShape_not_reborrow` (§5, "Decision 1") for the location typing; departure 1's
+record half has no configuration (§5).
+
 1. **No record list in values; `Imm` without `CohE`.** `𝒱` reads neither `Φ` nor the record list
    (the chain's own answer, `SI/MutSemN.lean`: no recursive world). Core's `Imm` clause reads
    coherence with the records (`CohE`) and stores the members longer-lived than the cell
@@ -102,68 +106,90 @@ statements, as `TreeGoal791`'s with `vN`/`cN`/`erwp` for `vT`/`cT`/`cerwpT`. Pro
 | `cN_effOf`, `retN_effOf` | `Goal791N` | none |
 | `bridgeN : BridgeN` | `Goal791N` | none |
 | `goal791Sched_of : FundamentalN → ConstsN → Goal791SchedN` | `Goal791N` | the two named |
-| `erwp_M_frameCR`, `claimT_canX`, `erwp_ubindClaimR` | `Lend791N` | the frames' own (as `erwp_M_frameT`/`erwp_M_frameR`, `erwp_ubindClaim`/`erwp_ubindRaise`) |
-| **`withbor2S_compat`** | `Lend791N` | `withbor2U`'s premises with `Row.Suspend` (`hA`, `hB`, `hS`, `hdc`), `d`'s semantic judgment (`hd`, the fundamental property at the premise), and **`hSB`, `hSF`** below |
-| `constN_w2` | `Lend791N` | `FundamentalN`, `hSB`, `hSF` |
+| `erwp_M_frameCR` | `Lend791N` | the frame's own (as `erwp_M_frameT`/`erwp_M_frameR`) |
+| `erwp_M_frame_cancelRunCR` | `Cancel791N` | `DownFam`, `T.LendOKCR α`, `T.Twin T′`, the nested transfer `hcan` |
+| `tabR_can` | `Cancel791N` | `DownFam`, `F.SuspendC x` |
+| `erwp_ubind_cancelRunCR`, `erwp_ubindClaimRT` | `Cancel791N` | `Φ.Down`, `D` consuming the claim; for the latter the raises named (`m ≠ 0`) |
+| **`withbor2S_compat`** | `Cancel791N` | `withbor2U`'s premises with `Row.Suspend` (`hA`, `hB`, `hS`, `hdc`), `d`'s semantic judgment (`hd`, the fundamental property at the premise). No row clause beyond `Row.Suspend`. |
+| `constN_w2` | `Cancel791N` | `FundamentalN` |
+| `suspend_closingOp` (the cancel-row clause admits a cancel row with a layer) | `Cancel791N` | the names nonzero |
 | `cbRelease_sem` (the callback type is inhabited) | `Lend791N` | the bound defined |
-| `answer_not_inStratum` (the configuration for `hSB`) | `Lend791N` | none |
+| `answer_not_inStratum` (why the answer clause is in `Row.Suspend`) | `Lend791N` | none |
+| `coreShape_not_reborrow` (the configuration for decision 1) | `Shape791N` | the locations distinct, `α < b < β` |
 
 `ConstN`, `ConstsN`, `FundamentalN`, `BridgeN`, `Goal791SchedN`, `Withbor2SN`, `Withbor3SN`,
 `WithborFSN`, `WithloadSN`, `SliceBorrowMSN` are stated (`Goal791N` §3). `Goal791Top` reads no
 relation and is `TreeGoal791`'s as it stands.
 
-### Two row clauses `Row.Suspend` does not supply (decisions for the user)
+### `Row.Suspend` (`Core/TreeGoal791.lean`)
 
-`withbor2S_compat` takes two clauses on the callback's row that `Row.Suspend`
-(`Core/TreeGoal791.lean`) does not state:
+The row predicate `Const791.OK` checks for every constant. Its clauses: every operation named,
+not unrestricted, payload and answer free of `'x` and outliving every lifetime, and each
+capturable operation's cancel row meeting the same clauses (`CTy.SuspendC`). The answer clause is
+what the Mut Frame's re-lend at a resume reads (`OpTabN.LendOKCR.pb`; `answer_not_inStratum` is a
+`U(F 1)` answer outside every stratum). The cancel-row clause is what a cancel run stopping
+under the live lend reads; it admits cleanup that performs (`suspend_closingOp`). SPEC §62
+("Typing: suspension") states both.
 
-- **`hSB`: every answer type outlives every lifetime** (`∀ o ∈ S, ∀ Δ a, VOutlives Δ a o.B`),
-  `Row.Suspend`'s payload clause applied to the answer. The Mut Frame re-lends at the resume and
-  asks the answer's resource in `Res_{↓α}` (`OpTabN.LendOKCR.pb`, as `LendOK.pb`/`LendOKC.pb`).
-  `¬ VFree x o.B` does not give it: `answer_not_inStratum` is a value of `U(F 1)` outside
-  `Res_{↓α}` at every `α`. Not derived from `Row.Suspend`; obstruction at `OpTabN.LendOKCR.pb`,
-  configuration `answer_not_inStratum`. This is the frame's premise; I have not verified that
-  the constant itself fails at such a row. What the clause gives up: answers holding borrows or
-  thunks (an answer `U C`); `1`, data, `!` types and boxes outliving everything are kept.
-- **`hSF`: every capturable operation's cancel row has no layers** (`CTy.NoLayers`: not `⊤`, no
-  operations). The lender's cancel run is the callback's with the borrow folded
-  (`erwp_M_frame_cancelRun`), which asks the cancel row's table `LendOK α` and one table `T₁` for
-  every operation (`claimT`). A cancel row with operations would need its operations' types
-  constrained as `Row.Suspend` constrains the row's, and `claimT` per entry. Not derived;
-  obstruction at `claimT`'s single `T₁` and `erwp_M_frame_cancelRun`'s `T₁.LendOK A`; no
-  configuration built. What it gives up: cancel rows that perform (the default `finsNil` is kept).
+### Decision 1: Core's shape, and where it fails on the chain
 
-### The decision on `Covers` (§3, departure 3)
+`coreShape_not_reborrow` (`Core/Chain/Shape791N.lean`): with `Mut` in Core's shape on the chain
+(`Φ ℓ = (α, 𝒱⟦A⟧ read at Φ above α)`, `mutC`), a value at `ℓ_b ≠ ℓ` whose cell is at `b`, holding
+a `Mut @β 1` at `ℓ₂ ≠ ℓ`, is a value at `Φ` (`Φ ℓ = (β, 𝒱⟦1⟧)`) and is not one at `Φ.set ℓ α F`
+for any `α < b < β` and any `F`. `Φ.set ℓ α Fi` is where a reborrow runs its callback
+(`erwp_withbor3`: `Φ ℓ = (β, Fo)`, the callback at `Φ.set ℓ α Fi`); a callback holding a borrow
+shorter than the source and longer than the reborrow is valid at `Φ`, and no Kripke order along
+which Core's `Mut` values are stable reaches the reborrow's location typing. Cause: Core's records
+are one per lend (a reborrow adds one and keeps the source's); the chain's location typing is one
+family per location (a reborrow overwrites the source's). So the interpretation is not rebuilt in
+Core's shape at `Mut`, and `w3`/`wF` are not built: every route found needs a design decision.
 
-With no `Covers`, the constants that open a `mut` argument are not reachable at this
-interpretation: `w3` (`withbor3U` at `Row.Suspend`, the Anti-Frame on the source) and `wF` (the
-field reborrow `withborFE`, which reads the field out of the borrowed record), as `withswap`.
-Opening a cell at the index re-seals it at a lower member of its family, which `UpdN` allows only
-along `Φ ℓ`'s family (`rwp_M_antiFrame_sem`'s `Φ ℓ = (α, τ.fam α)`), and nothing in the
-interpretation says `Φ` types an argument's cell. I have not derived `w3`/`wF` and have not
-verified that any obstruction is real. The candidate: `Covers` in `U`, `⊸` and `SemJN` (as
-`vThunk`), with the lend's family carrying the lender's coverage
-(`F j w r = 𝒱⟦A⟧ j w r ∧ Covers Φ r`, so the claim's content is covered when the finaliser takes
-it) and `Mut`'s clause reading its family through `Φ ℓ`. That is an interpretation change, so it
-is the user's: it re-opens `withbor2S_compat` at the finaliser's argument.
+Routes, none built, none verified:
+
+- **A. Location typing per lend** (Core's records): `Φ` an extension-only record of families, a
+  reborrow adding an entry. A change to `LocFam`/`UpdN`, so a relation change: the user's.
+- **B. Core's shape with inclusion and pointwise content**: the `Mut` clause asks the family to
+  contain `𝒱⟦A⟧` read above `α` (writes), and the actual content to be a value (opening), and `U`
+  is Kripke along "entries above every held borrow not added or changed, removal allowed, and the
+  resource's own cells, deeply, unchanged". The reborrow's removal of `ℓ` then keeps the inclusion;
+  what is left is a callback whose *actual* nested content holds a cell at `ℓ`, which a valid
+  resource cannot (`ResU.Lower`, the flattening). Needs: uniqueness of locations in the
+  flattening, read inside the frame's run. I have not derived it and have not verified that it
+  holds of `ResU.Flat`.
+- **C. Top-level typing over a `Φ`-free content semantics**: `Mut` reads `Φ ℓ = (α, 𝒱⟦A⟧)` with the
+  family `Φ`-free (as now), cell contents and `Ref` contents read without `Φ`, `U` Kripke along
+  agreement at the resource's top-level `mut` cells, Core's `𝒱⟦A⟧ ⊆ Res_α` in the `Mut` clause.
+  `w2`, `w3`, `wF` look provable (the re-lend leaves the callback's top-level cells alone; payload
+  and answer types, outliving every lifetime, hold no `Mut`). The cost: a `Mut` read out of a cell
+  or a `Ref` is not typed by `Φ`, so it cannot be opened again; this is a restriction the
+  fundamental property would meet at nested `Mut`s (load of a `Ref (Mut …)`, swap). Not shown that
+  nothing needed is lost; so not built.
+
+The record half of decision 1 (`Imm` with `CohE`/`ls₀`, `U` Kripke along Core's `Ext`) was not
+attempted; I have no configuration for it. It meets the same question as the location typing:
+whether a chain run keeps the records above a live borrow fixed (Core's `Ext`), which the frames'
+families, fixed at the lend, would read.
 
 ### What the next unit needs
 
-- The `Covers` decision above, then `w3` and `wF` (`erwp_withbor3` and `erwp_M_antiFrameC`, the
-  inner frame at a cell of the content), `wl` (the `imm` half: the record list and `CohE` back
-  in `Imm`), `sm` (families).
+- The decision on route A, B or C (or another) for `Mut` on the chain; then `w3` and `wF`.
+  `w3`/`wF` across `Row.Suspend` also need the anti-frame across raises and across cancel runs
+  that stop at their rows' tables: `erwp_M_antiFrameC`'s cancel runs perform nothing
+  (`cancelTabR OpTabN.empty`), the analogue of `erwp_M_frame_cancelRunCR` for the anti-frame.
+- `wl` needs `Imm`'s records and `CohE` (the record half of decision 1); `sm` needs families
+  (`[L]`), read as empty here.
 - `FundamentalN`: every `CDerives` rule at `SemJN` (#789's ports), and `[handle]` at `cN`
   (`erwp_handle_le`) for `Goal791Top`.
-- `BridgeN` is proved; `Goal791SchedN` follows from `FundamentalN` and `ConstsN`
-  (`goal791Sched_of`).
 
 ### Unspent premises, unused results
 
 - `Const791.OK`'s `∃ b, Defines b ∧ VOutlivesLe b A` for `w2` is unspent: the lend's lifetime is
-  chosen below the content's stratum (`ResU.exists_stratum`), not from the type.
-- `Row.Suspend`'s `o.n ≠ 0` is spent at the raises (`erwp_ubindClaimR`'s `hTr`).
-- Not used: `erwp_M_frameTF`/`erwpG_frameT` (the fold-guarded tables, for the anti-frame
-  constants), `erwp_withbor3`, `erwp_reborrow`.
+  chosen below the content's stratum (`ResU.exists_stratum`), not from the type. Route C would
+  spend it (`𝒱⟦A⟧ ⊆ Res_α`).
+- `Row.Suspend`'s `o.n ≠ 0` is spent at the raises (`erwp_ubindClaimRT`'s `hTr`); in the
+  cancel-row clause it is not read.
+- Not used: `erwp_M_frameTF`/`erwpG_frameT`, `erwp_withbor3`, `erwp_reborrow`,
+  `erwp_M_antiFrameC` (the anti-frame constants, not built).
 
 ## 6. Unit 2: the plan for the decisions of 2026-11-05
 
@@ -211,3 +237,9 @@ against the frames the constants run: `withbor3U` and `withborFE` re-lend a loca
 lifetime (`erwp_withbor3`: the callback runs at `Φ.set ℓ α Fi`, `Φ ℓ = (β, Fo)`). The check is a
 Lean configuration (`Core/Chain/Shape791N.lean`); if Core's shape fails there, the configuration
 is the departure's justification and the interpretation keeps the chain's answer at `Mut`.
+
+### Outcome
+
+Decisions 2 and 3 are built (§5: `Row.Suspend`'s clauses, `withbor2S_compat` with no row clause
+beyond them). Decision 1 stops at the configuration `coreShape_not_reborrow`: the routes left are
+design decisions (§5, routes A–C).
