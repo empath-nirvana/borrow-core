@@ -422,7 +422,7 @@ theorem withload_rebT {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {h : σ.InStratum s.join} {ρf X : WRes}
     (hpay : vO (ℍ := ℍ) A δ Θ n v σ) (hwit : ImmWitW Θ.imm l s A δ)
     (hcb : ∀ β, LtLife δ bnd β → ∀ (u : Val) (χ Bχ : WRes),
-      (∀ m (ψ : CellU Loc Val), χ.get m = some ψ → ψ.kind = Kind.imm) →
+      (∀ m (ψ : CellU Loc Val), χ.get m = some ψ → ψ.kind = Kind.imm) → u = v → ResU.Reb β σ χ →
       vN (ℍ := ℍ) (A.immReborrow (.var x)) (δ.extend x β) Θ n u χ → ResU.CompS ρf χ Bχ →
       erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S B) δ Θ c))
         (RebPost β (fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ)) n ls
@@ -492,7 +492,7 @@ theorem withload_rebT {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     have hrun' := erwp_rebGen hE hreb okKept_top hT' hcan
       (Q := fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ) n ls
       (.app (.app (.val f) (.val .unit)) (.val d.v)) ρf X hX hbβ hdmem
-      (fun Bχ hBχ => hcb β hLt _ _ Bχ (reb_allImm hreb) himg hBχ)
+      (fun Bχ hBχ => hcb β hLt _ _ Bχ (reb_allImm hreb) rfl hreb himg hBχ)
     rw [erwp_eq] at hrun'
     exact hrun' ρF fρ ps μ hF hcF hT htg hI hl hfd j μ' e' hj hrun hfin
   · -- a chain view: the cell's value is the chain's (`ex(R)_○` lifts into `ag(W)`)
@@ -536,7 +536,7 @@ theorem withload_rebT {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     have hrun' := erwp_rebGen hE hreb (okKept_deep hch) hT' hcan
       (Q := fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ) n ls
       (.app (.app (.val f) (.val .unit)) (.val v)) ρf X hX hbβ hdmem
-      (fun Bχ hBχ => hcb β hLt _ _ Bχ (reb_allImm hreb) himg hBχ)
+      (fun Bχ hBχ => hcb β hLt _ _ Bχ (reb_allImm hreb) rfl hreb himg hBχ)
     rw [erwp_eq] at hrun'
     exact hrun' ρF fρ ps μ hF hcF hT htg hI hl hfd j μ' e' hj hrun hfin
 
@@ -549,7 +549,7 @@ theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {h : σ.InStratum s.join} {ρf X : WRes}
     (hpay : vO (ℍ := ℍ) A δ Θ n v σ) (hwit : ImmWitW Θ.imm l s A δ)
     (hcb : ∀ β, LtLife δ bnd β → ∀ (u : Val) (χ Bχ : WRes),
-      (∀ m (ψ : CellU Loc Val), χ.get m = some ψ → ψ.kind = Kind.imm) →
+      (∀ m (ψ : CellU Loc Val), χ.get m = some ψ → ψ.kind = Kind.imm) → u = v → ResU.Reb β σ χ →
       vN (ℍ := ℍ) (A.immReborrow (.var x)) (δ.extend x β) Θ n u χ → ResU.CompS ρf χ Bχ →
       erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S B) δ Θ c))
         (RebPost β (fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ)) n ls
@@ -619,7 +619,7 @@ theorem withloadS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
   simp only [Kont.plug]
   exact withload_reb (hbnd δ (models_empty_any _)) hA hS (vO_le (Nat.sub_le k' 1) hpay)
     (hwit l s w σ hσs rfl)
-    (fun β hLt u χ Bχ hχ himg hBχ =>
+    (fun β hLt u χ Bχ hχ _ _ himg hBχ =>
       callback_at_image hB hS hΘ hLt (vN_le (Nat.sub_le k' 1) hf) hcf hχ himg hBχ) hc' 
 
 /-- **`ConstN` for `withload` at a suspending row**, from its rule's premises. -/

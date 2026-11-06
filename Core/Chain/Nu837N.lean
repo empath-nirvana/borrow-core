@@ -38,103 +38,40 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open BoCa.BoLo (Heap Kont Head)
 open BoCa.Fig16.LogRel.Core.Chain.SI.LendProg (empty_ctxClosed)
 
-mutual
+/-- **`A[S/X]` is `A` at the environment `X ↦ 𝒱⟦S⟧`** (Core's `vC_inst_envS`), in both modes:
+Core's substitution law (`vBN_subst`) at the empty environment. -/
+theorem vBN_inst_env (S A : VTy) (δ : LSub) (b : Bool) :
+    vBN (ℍ := ℍ) none b (VTy.inst S A) δ =
+      vBN (ℍ := ℍ) (some (VTy.scons ⟨S, fun b => vBN (ℍ := ℍ) none b S δ⟩ (tEnvN none))) b A δ := by
+  rw [vBN_some none, VTy.inst, vBN_subst]
+  congr 2
+  funext n
+  cases n with
+  | zero =>
+      refine TEntN.ext' (VTy.subst_id _) ?_
+      funext b
+      show vBN (ℍ := ℍ) (some (tEnvN none)) b S δ = vBN (ℍ := ℍ) none b S δ
+      rw [← vBN_some]
+  | succ n =>
+      refine TEntN.ext' rfl ?_
+      funext b; cases b <;> rfl
+
 /-- **Where `X` does not occur, `vNX` is `vN` at the closed type** (Core's `vCE_subst` at an
 environment whose variable does not occur). -/
 theorem vNX_inst_occ (S : VTy) (P : LocTy → Nat → Val → WRes → Prop) :
-    ∀ (A : VTy), ¬ A.Occ 0 → ∀ δ, vNX (ℍ := ℍ) S P A δ = vN (ℍ := ℍ) (VTy.inst S A) δ
-  | .unit, _, _ => rfl
-  | .zero, _, _ => rfl
-  | .unk, _, _ => rfl
-  | .int _, _, _ => rfl
-  | .opq _, _, _ => rfl
-  | .thunk _, _, _ => rfl
-  | .mu _, _, _ => rfl
-  | .tvar 0, h, _ => absurd rfl h
-  | .tvar (_ + 1), _, _ => rfl
-  | .tensor A B, h, δ => by
-      have h₁ := vNX_inst_occ S P A (fun h' => h (.inl h')) δ
-      have h₂ := vNX_inst_occ S P B (fun h' => h (.inr h')) δ
-      simp only [VTy.inst] at h₁ h₂ ⊢
-      funext Θ n v ρ; simp only [vNX, vN, VTy.subst, h₁, h₂]
-  | .sum A B, h, δ => by
-      have h₁ := vNX_inst_occ S P A (fun h' => h (.inl h')) δ
-      have h₂ := vNX_inst_occ S P B (fun h' => h (.inr h')) δ
-      simp only [VTy.inst] at h₁ h₂ ⊢
-      funext Θ n v ρ; simp only [vNX, vN, VTy.subst, h₁, h₂]
-  | .ref A, h, δ => by
-      have h₁ := vNX_inst_occ S P A h δ
-      simp only [VTy.inst] at h₁ ⊢
-      funext Θ n v ρ; simp only [vNX, vN, VTy.subst, VTy.inst, h₁]
-  | .box _ A, h, δ => by
-      have h₁ := vNX_inst_occ S P A h δ
-      simp only [VTy.inst] at h₁ ⊢
-      funext Θ n v ρ; simp only [vNX, vN, VTy.subst, VTy.inst, h₁]
-  | .bang A, h, δ => by
-      have h₁ := vNX_inst_occ S P A h δ
-      simp only [VTy.inst] at h₁ ⊢
-      funext Θ n v ρ; simp only [vNX, vN, VTy.subst, VTy.inst, h₁]
-  | .fam A, h, δ => by
-      have h₁ := vNX_inst_occ S P A h δ
-      simp only [VTy.inst] at h₁ ⊢
-      funext Θ n v ρ; simp only [vNX, vN, VTy.subst, VTy.inst, h₁]
-  | .mut _ A, h, δ => by
-      have h₁ := vNX_inst_occ S P A h δ
-      simp only [VTy.inst] at h₁ ⊢
-      funext Θ n v ρ; simp only [vNX, vN, VTy.subst, VTy.inst, h₁]
-  | .imm _ A, h, δ => by
-      have h₁ := vOX_inst_occ S P A h δ
-      simp only [VTy.inst] at h₁ ⊢
-      funext Θ n v ρ; simp only [vNX, vN, VTy.subst, VTy.inst, h₁]
-  termination_by structural x => x
+    ∀ (A : VTy), ¬ A.Occ 0 → ∀ δ, vNX (ℍ := ℍ) S P A δ = vN (ℍ := ℍ) (VTy.inst S A) δ :=
+  fun A h δ => (congrFun (vBN_congr_occ A _ _ (fun n hn => by
+    cases n with
+    | zero => exact absurd hn h
+    | succ n => rfl) true) δ).trans (vBN_inst_env S A δ true).symm
+
 /-- The observable view where `X` does not occur. -/
 theorem vOX_inst_occ (S : VTy) (P : LocTy → Nat → Val → WRes → Prop) :
-    ∀ (A : VTy), ¬ A.Occ 0 → ∀ δ, vOX (ℍ := ℍ) S P A δ = vO (ℍ := ℍ) (VTy.inst S A) δ
-  | .unit, _, _ => rfl
-  | .zero, _, _ => rfl
-  | .unk, _, _ => rfl
-  | .int _, _, _ => rfl
-  | .opq _, _, _ => rfl
-  | .thunk _, _, _ => rfl
-  | .mu _, _, _ => rfl
-  | .tvar 0, h, _ => absurd rfl h
-  | .tvar (_ + 1), _, _ => rfl
-  | .tensor A B, h, δ => by
-      have h₁ := vOX_inst_occ S P A (fun h' => h (.inl h')) δ
-      have h₂ := vOX_inst_occ S P B (fun h' => h (.inr h')) δ
-      simp only [VTy.inst] at h₁ h₂ ⊢
-      funext Θ n v ρ; simp only [vOX, vO, VTy.subst, h₁, h₂]
-  | .sum A B, h, δ => by
-      have h₁ := vOX_inst_occ S P A (fun h' => h (.inl h')) δ
-      have h₂ := vOX_inst_occ S P B (fun h' => h (.inr h')) δ
-      simp only [VTy.inst] at h₁ h₂ ⊢
-      funext Θ n v ρ; simp only [vOX, vO, VTy.subst, h₁, h₂]
-  | .ref A, h, δ => by
-      have h₁ := vOX_inst_occ S P A h δ
-      simp only [VTy.inst] at h₁ ⊢
-      funext Θ n v ρ; simp only [vOX, vO, VTy.subst, VTy.inst, h₁]
-  | .box _ A, h, δ => by
-      have h₁ := vOX_inst_occ S P A h δ
-      simp only [VTy.inst] at h₁ ⊢
-      funext Θ n v ρ; simp only [vOX, vO, VTy.subst, VTy.inst, h₁]
-  | .bang A, h, δ => by
-      have h₁ := vNX_inst_occ S P A h δ
-      simp only [VTy.inst] at h₁ ⊢
-      funext Θ n v ρ; simp only [vOX, vO, VTy.subst, VTy.inst, h₁]
-  | .fam A, h, δ => by
-      have h₁ := vOX_inst_occ S P A h δ
-      simp only [VTy.inst] at h₁ ⊢
-      funext Θ n v ρ; simp only [vOX, vO, VTy.subst, VTy.inst, h₁]
-  | .mut _ A, h, δ => by
-      have h₁ := vNX_inst_occ S P A h δ
-      simp only [VTy.inst] at h₁ ⊢
-      funext Θ n v ρ; simp only [vOX, vO, VTy.subst, VTy.inst, h₁]
-  | .imm _ A, h, δ => by
-      have h₁ := vOX_inst_occ S P A h δ
-      simp only [VTy.inst] at h₁ ⊢
-      funext Θ n v ρ; simp only [vOX, vO, VTy.subst, VTy.inst, h₁]
-  termination_by structural x => x
-end
+    ∀ (A : VTy), ¬ A.Occ 0 → ∀ δ, vOX (ℍ := ℍ) S P A δ = vO (ℍ := ℍ) (VTy.inst S A) δ :=
+  fun A h δ => (congrFun (vBN_congr_occ A _ _ (fun n hn => by
+    cases n with
+    | zero => exact absurd hn h
+    | succ n => rfl) false) δ).trans (vBN_inst_env S A δ false).symm
 
 /-- **At a polynomial type, `vNX` with `X` read as `𝒱⟦S⟧` is `𝒱⟦A[S/X]⟧`** (Core's
 `vC_inst_envS`, `vCE_nuEnv`). -/
@@ -144,16 +81,16 @@ theorem vNX_inst_poly (S : VTy) (δ : LSub) :
       have h₁ := vNX_inst_poly S δ (A := A) h.1
       have h₂ := vNX_inst_poly S δ (A := B) h.2
       simp only [VTy.inst] at h₁ h₂ ⊢
-      funext Θ n v ρ; simp only [vNX, vN, VTy.subst, h₁, h₂]
+      funext Θ n v ρ; simp only [vNE, VTy.subst, h₁, h₂]
   | .sum A B, h => by
       have h₁ := vNX_inst_poly S δ (A := A) h.1
       have h₂ := vNX_inst_poly S δ (A := B) h.2
       simp only [VTy.inst] at h₁ h₂ ⊢
-      funext Θ n v ρ; simp only [vNX, vN, VTy.subst, h₁, h₂]
+      funext Θ n v ρ; simp only [vNE, VTy.subst, h₁, h₂]
   | .box _ A, h => by
       have h₁ := vNX_inst_poly S δ (A := A) h
       simp only [VTy.inst] at h₁ ⊢
-      funext Θ n v ρ; simp only [vNX, vN, VTy.subst, VTy.inst, h₁]
+      funext Θ n v ρ; simp only [vNE, VTy.subst, h₁]
   | .tvar 0, _ => rfl
   | .tvar (_ + 1), _ => rfl
   | .unit, h | .zero, h | .unk, h | .int _, h | .opq _, h | .thunk _, h | .mu _, h | .ref _, h
@@ -185,7 +122,7 @@ theorem thunkRN_nuCand (C : CTy) {δ₀ δ : LSub} (hag : ∀ y, CFree y C → �
     thunkRN (nuCand (ℍ := ℍ) C δ₀) = vN (ℍ := ℍ) (.thunk (.nu C)) δ := by
   have h := cN_congr (ℍ := ℍ) (.nu C) (δ := δ₀) (δ' := δ) hag
   funext Θ n v ρ
-  simp only [thunkRN, nuCand, vN, h]
+  simp only [thunkRN, nuCand, vNE, h]
   rfl
 
 /-- **One unfolding at `𝒞⟦νX. C⟧` is `𝒞⟦C[U(νX. C)/X]⟧`** (Core's `cB_unroll`), the candidate at

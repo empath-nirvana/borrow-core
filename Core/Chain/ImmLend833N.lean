@@ -44,33 +44,40 @@ open BoCa.BoLo (Heap Kont Head ubindE)
 
 /-- **At a persistent type `𝒱⟦A⟧` holds only at `∅`** (Core's `vP_empty_of_persistent`). -/
 theorem vN_empty_of_persistent : ∀ (A : VTy), A.Persistent → ∀ {δ : LSub} {Θ : LocTy} {n : Nat}
-    {v : Val} {ρ : WRes}, vN (ℍ := ℍ) A δ Θ n v ρ → ρ = PMap.empty
-  | .unit, _, _, _, _, _, _, h => h.2
-  | .zero, _, _, _, _, _, _, h => h.elim
-  | .unk, _, _, _, _, _, _, h => h
-  | .int _, _, _, _, _, _, _, h => h.2
-  | .bang _, _, _, _, _, _, _, h => h.1
-  | .tvar _, _, _, _, _, _, _, h => h.elim
-  | .mu _, _, _, _, _, _, _, h => h.elim
-  | .opq _, hp, _, _, _, _, _, _ => by simp [VTy.Persistent, VTy.persistent] at hp
-  | .thunk _, hp, _, _, _, _, _, _ => by simp [VTy.Persistent, VTy.persistent] at hp
-  | .ref _, hp, _, _, _, _, _, _ => by simp [VTy.Persistent, VTy.persistent] at hp
-  | .imm _ _, hp, _, _, _, _, _, _ => by simp [VTy.Persistent, VTy.persistent] at hp
-  | .mut _ _, hp, _, _, _, _, _, _ => by simp [VTy.Persistent, VTy.persistent] at hp
-  | .fam _, hp, _, _, _, _, _, _ => by simp [VTy.Persistent, VTy.persistent] at hp
-  | .tensor A B, hp, _, _, _, _, _, h => by
+    {v : Val} {ρ : WRes}, vN (ℍ := ℍ) A δ Θ n v ρ → ρ = PMap.empty := by
+  intro A hA δ Θ n v ρ h
+  refine vN_ind δ (fun _ T _ _ _ ρ => T.Persistent → ρ = PMap.empty) ?_ true A Θ n v ρ h hA
+  intro b T Θ n v ρ h hp
+  cases T with
+  | unit => exact h.2
+  | zero => exact h.elim
+  | unk => exact h
+  | int _ => exact h.2
+  | bang _ => exact h.1
+  | tvar _ => exact h.elim
+  | opq _ => simp [VTy.Persistent, VTy.persistent] at hp
+  | thunk _ => simp [VTy.Persistent, VTy.persistent] at hp
+  | ref _ => simp [VTy.Persistent, VTy.persistent] at hp
+  | imm _ _ => simp [VTy.Persistent, VTy.persistent] at hp
+  | «mut» _ _ => simp [VTy.Persistent, VTy.persistent] at hp
+  | fam _ => simp [VTy.Persistent, VTy.persistent] at hp
+  | tensor A B =>
       simp only [VTy.Persistent, VTy.persistent, Bool.and_eq_true] at hp
       obtain ⟨v₁, v₂, ρ₁, ρ₂, -, hc, h₁, h₂⟩ := h
-      rw [vN_empty_of_persistent A hp.1 h₁, vN_empty_of_persistent B hp.2 h₂] at hc
+      rw [h₁.2 hp.1, h₂.2 hp.2] at hc
       exact eq_empty_of_compS_empty hc
-  | .sum A B, hp, _, _, _, _, _, h => by
+  | sum A B =>
       simp only [VTy.Persistent, VTy.persistent, Bool.and_eq_true] at hp
       rcases h with ⟨v₁, -, h₁⟩ | ⟨v₂, -, h₂⟩
-      · exact vN_empty_of_persistent A hp.1 h₁
-      · exact vN_empty_of_persistent B hp.2 h₂
-  | .box _ A, hp, _, _, _, _, _, h => by
+      · exact h₁.2 hp.1
+      · exact h₂.2 hp.2
+  | box _ A =>
       obtain ⟨α, -, hb, -⟩ := h
-      exact vN_empty_of_persistent A hp hb
+      exact hb.2 hp
+  | mu A =>
+      exact h.2.2.2 (by
+        show (VTy.inst (.mu A) A).persistent = true
+        rw [Inversions.persistent_inst_mu]; exact hp)
 
 /-- **A consumed context, up to persistent slots, owns nothing** (Core's `gSepC_deadP`). -/
 theorem gN_deadP {δ : LSub} {Θ : LocTy} {n : Nat} : ∀ {Γ : Ctx VTy}, Ctx.DeadP Γ →

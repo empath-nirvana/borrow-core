@@ -379,7 +379,7 @@ theorem withload_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
   exact withload_reb (S := []) (Lifetime.Life.interp_defined_of_wf hδ
       (Lifetime.meetOfDomL_wf Δ.entries)) hA (fun o ho => absurd ho List.not_mem_nil)
     (vO_le (Nat.sub_le k₂ 1) hpay) (hwit l s w σ hσs rfl)
-    (fun β hLt u χ Bχ hχ himg hBχ =>
+    (fun β hLt u χ Bχ hχ _ _ himg hBχ =>
       callback_at_imageP hB hΘ₂ hLt (vN_le (Nat.sub_le k₂ 1) hf) hcf hχ himg hBχ) hc'
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N

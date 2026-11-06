@@ -418,7 +418,7 @@ theorem withloadU_sem {Δ : LifeCtx} {a : Lifetime.Life} {x : LifeVar} {A B : VT
     hA (fun β _ => tabN_unwind_rebOKR hS B δ Θ c β)
     (fun β _ _ _ _ _ _ χ Ok _ _ _ => tabN_unwind_rebClosed hS B δ Θ c β _ χ Ok)
     (vO_le (Nat.sub_le k' 1) hpay) (hwit l s w σ hσs rfl)
-    (fun β hLt u χ Bχ hχ himg hBχ =>
+    (fun β hLt u χ Bχ hχ _ _ himg hBχ =>
       callback_at_imageU hB hS hΘ hLt (vN_le (Nat.sub_le k' 1) hf) hcf hχ himg hBχ) hc'
 
 /-- **`withloadU` at `SemJN`** (Core's `withloadU_compatX`), at an unwinding row and any `Δ`,
