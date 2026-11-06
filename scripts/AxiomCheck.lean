@@ -1926,3 +1926,16 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vNX_tyEq
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vNX_down
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vNX_congr
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fundamentalN_all
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fundamentalN_of
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.goal791SchedN_of_missing
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withI_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.letPoly_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.swap_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.boundedFix_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.alloc_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.free_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.copy_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.copyBang_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.releaseImm_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.releaseMut_compatN

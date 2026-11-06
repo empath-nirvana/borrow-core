@@ -2594,9 +2594,9 @@ def ConstsN : Prop := ∀ c : Const791, c.InFrag → ConstN (ℍ := ℍ) c
 /-- **The fundamental property over `erwp`, on the fragment**: every derivation of the existing
 judgment whose context and type lie in the fragment (`JdgInFrag`). The rules whose conclusion is
 at a type outside the fragment (a `ν` body outside `CTy.inFragNu`) conclude outside it and are
-not quantified over. A derivation of a judgment in the fragment may still cut through such a type
-inside; at such a cut the interpretation gives no reading, so `FundamentalN` is not shown
-attainable by induction on the derivation.
+not quantified over. No rule's chain lemma reads the fragment, so the induction on the derivation
+(`fundamentalN_all`, `Core/Chain/Fundamental831N.lean`) proves `SemJN` at every derivation, one
+that cuts through a type outside the fragment included.
 
 The rule-by-rule map is `docs/new-core/scope-831-map.md`. Its answers on the two risks it named:
 * An `imm` lend (`withbor1`, `withbor1U`) runs its callback at the world with the lend's record.

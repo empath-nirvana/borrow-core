@@ -172,7 +172,8 @@ ImmWitW I ℓ s A δ := ∃ x ∈ I, ⊓s ≤ x.2 ∧ ∃ d, DescR x.1 d ∧ Coh
 
 ### 3.3 The fragment
 
-`ν` is read as `False` by `cN`; every value-type former has a clause. `vN`/`vO` are `vNE`/`vOE`
+`cN` reads `ν` at a `NuShape` body (`scope-831-interface.md` §12); every value-type former has a
+clause. `vN`/`vO` are `vNE`/`vOE`
 at the empty environment: a type variable is its entry's candidate (`False` at the empty
 environment) and `μX. A` is Core's least fixed point, the candidate joint over the mode, the world
 and the index (`scope-831-interface.md` §13). `VTy.inFrag`/`CTy.inFrag` mark the formers read;
@@ -356,9 +357,24 @@ not assembled in Lean: `sm`'s type holds `.array A = .fam (.ref A)`, so `sm` is 
 fragment, and the in-fragment constants are covered by `constN_w2`/`w3`/`wF`, each conditional on
 `FundamentalN`, and `constN_wl`.
 
-A derivation of an in-fragment judgment may cut through a `ν` type inside it. At such a cut the
-interpretation gives no reading, so `FundamentalN` is not shown attainable by induction until `ν`
-has a clause (L7).
+**The assembly** (`Fundamental831N.lean`, `scope-831-interface.md` §14):
+
+```
+fundamentalN_all         : MissingN → CDerives Δ Γ e j → SemJN Δ Γ e j
+fundamentalN_of          : MissingN → FundamentalN
+goal791SchedN_of_missing : MissingN → Goal791SchedN
+```
+
+`fundamentalN_all` is `fundamentalC`'s induction, every case its rule's chain lemma. No chain
+lemma reads the fragment, so the induction holds at every derivation, one that cuts through a type
+outside the fragment included. `MissingN` is the conjunction of the three rules with no chain
+lemma, each as its `*_compatN` would be:
+
+| Conjunct | Rule | Core's lemma |
+|---|---|---|
+| `HandleVN` | `effHandleV` | `handleV_compatC` |
+| `HandleVBN` | `effHandleVB` | `handleV_compatCB` |
+| `ReifyN` | `reify` | `reify_compatX` |
 
 ### 6.5 Relation-level results the track rests on
 
@@ -368,7 +384,8 @@ through `progOfN_orDiverges`). They read no interpretation.
 
 ## 7. What is open
 
-**`FundamentalN`.** Not proved. Seven rules are proved at `SemJN` (§6.2). The port is planned in
+**`FundamentalN`.** Proved from `MissingN` (§6.4): every rule but `effHandleV`, `effHandleVB` and
+`reify` is proved at `SemJN`. The units below are as the port planned them in
 `scope-831-interface.md`, line by line against chain lemmas named after Core's (its §4, option B),
 in these units (its §5):
 
@@ -382,9 +399,8 @@ in these units (its §5):
 | L6, `μ` | an environment argument, the `μ`/`tvar` clauses, `RelMu` at the index (built, `scope-831-interface.md` §13) | the environment argument |
 | L7, `ν` | a reading of `ν` at `erwp` | a design choice first |
 
-`FundamentalN` on the fragment needs L1–L4. The borrow rows left are `withbor3`, `withbor3U`,
-`withload`, `withloadU`, `withswap`; they need W4, the twin at an unwinding row, and the reseal
-(`scope-831-interface.md` §3.2).
+What is left of them is `MissingN`: the handler clauses at `vN` for `effHandleV` and
+`effHandleVB` (E10, `scope-831-interface.md` §10.1), and `reify` (§12.5).
 
 **Departures with no configuration yet** (D5, D6, D7's `Covers` half, D11, D12). Each is a
 choice: a configuration that forces it, or a return to Core's reading. `scope-831-interface.md`

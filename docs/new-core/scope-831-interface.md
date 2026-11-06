@@ -1410,3 +1410,61 @@ Restated:
 ### 13.8 What remains
 
 The six `μ` rows are proved at `SemJN`. `reify` reads F8 too and waits on §12.5.
+
+## 14. Assembly (`Core/Chain/Fundamental831N.lean`)
+
+`fundamentalN_all : MissingN → CDerives Δ Γ e j → SemJN Δ Γ e j` is Core's `fundamentalC` at
+`SemJN`: one case per constructor, in `fundamentalC`'s order, with its one printed split
+(`effThenDiv` on `Row.divB SD`: `then_compatN` at `false`, `thenDiv_compatN` at `true`).
+No chain lemma takes a fragment premise, so the induction needs no `JdgInFrag` at a cut, and
+`fundamentalN_of : MissingN → FundamentalN` drops it. `goal791SchedN_of_missing : MissingN →
+Goal791SchedN` is `goal791Sched_of_fundamental` at `fundamentalN_of`.
+
+### 14.1 `MissingN`
+
+Three conjuncts, each Core's compatibility lemma with `SemV`/`SemC` read as `SemJN`:
+
+| Conjunct | Core's lemma | Rule |
+|---|---|---|
+| `HandleVN` | `handleV_compatC` | `effHandleV` |
+| `HandleVBN` | `handleV_compatCB` | `effHandleVB` |
+| `ReifyN` | `reify_compatX` | `reify` |
+
+`HandleVN` and `HandleVBN` are at the unmarked row `Row.ofEff n E 0 fs ++ S`, as Core's lemmas;
+the induction reaches them from the rule's marked row by `semJN_effOf_rc` and
+`Row.divB_ofEff_rc`, and `HandleVBN`'s answer premise by `Row.ansOutlives_ofEff_rc`, as
+`fundamentalC` does.
+
+### 14.2 Rules the assembly found without a chain lemma, now proved
+
+The §3 table marks these *mechanical now*; none had a lemma at `SemJN`. Each is Core's proof
+against the chain's laws:
+
+| Rule | Lemma | From |
+|---|---|---|
+| `ret`, `ofRet` | `ret_compatN`, `ofRet_compatN` | `jdgC (.val A) = F A` |
+| `topI` | `topI_compatN` | `cN .top` is `True` |
+| `unitI`, `sumI₁`, `sumI₂` | `unitI_compatN`, `sumI₁_compatN`, `sumI₂_compatN` | `erwp_val`, `erwp_bind` |
+| `proj₁`, `proj₂` | `proj₁_compatN`, `proj₂_compatN` | `cN`'s `&` clause |
+| `withI` | `withI_compatN` | three `cN_head` steps per projection |
+| `bangE`, `boxE` | `bangE_compatN`, `boxE_compatN` | `erwp_mono` |
+| `letPoly` | `letPoly_compatN` | one `cN_head` step |
+| `alloc`, `free` | `alloc_compatN`, `free_compatN` | `erwp_alloc`, `erwp_free` |
+| `swap` | `swap_compatN` | `rwp_load`, `rwp_store` under `erwp_bindR`; the old payload along `ExtR` (`vN_extR`) |
+| `copy`, `copyBang` | `copy_compatN`, `copyBang_compatN` | `vN_imm_dupN`; `!A` holds `∅` |
+| `releaseImm`, `releaseMut`, `releaseUnk`, `releaseBang` | `releaseImm_compatN`, `releaseMut_compatN`, `releaseUnk_compatN`, `releaseBang_compatN` | `erwp_garbage` at `noOwn_immN`, `noOwn_mutN`; `∅` |
+| `boundedFix` | `boundedFix_compatN` | `fixSelfN_valid`: Core's induction on the budget, the step at every world (`LocTy.extR_empty`) and every index up to the step's |
+
+### 14.3 Adapters
+
+| Adapter | For |
+|---|---|
+| `semJN_dead` (Core's `semC_dead`, at a term no substitution moves), `gN_dead`, `liveWithin_dead_ctx`, `awaitE_closed` | `effAwait`: `await_compatN` is at `[]`, the rule at any consumed `Γ` |
+| `vN_noOwn_of_ownFree` | `effRaise`: `raise_compatN` takes the `vN` form of `o.A.OwnFree` |
+| `OpSig.finRead_of_capB` | `effThen`, `effThenDiv`: `then_compatN` takes `hfin` at `capB`, as Core's `then_compatC` |
+| `semJN_effOf_rc` (Core's `semC_effOf_rc`, from `cN_tyEq` and `CTyEq.effOf_unmark`) | `effHandleV`, `effHandleVB` |
+
+The other rules call their lemmas as `fundamentalC` calls Core's. Premises the rule carries and
+the chain lemma does not read: `hx` of `withbor1`–`withload` and their unwinding forms, `hac` of
+`effPerform`, `hrc` of `effRaise`, `hUq` of `effThen`/`effThenDiv`, `hSD` of `effThen`, `hn0`/`hnd` of
+`effHandleT`/`effHandleL`, `hres`'s derivation of `reify` beyond its `SemJN`.
