@@ -3,7 +3,8 @@
 Branch `rule-791`. The world is in the library (`Core/Chain/SI/LocTy.lean`); the interpretation
 over it is `Core/Chain/Goal791N.lean`; `Core/Chain/PerLendShape791.lean` keeps L2 (c)'s
 configuration. Background: `scope-791-rule.md` §7. State after #825 (U1, U2): §9; after #826 (U3):
-§10; after #827 (U4): §11.
+§10; after #827 (U4): §11; after #828 (U5): §12; after the review fixes: §13 and
+`scope-791-rule.md` §8.
 
 Kernel target: the location typing the chain's semantic interpretation reads, so that step 7 of
 Core's `withbor3_compatX` (`Core/Compatibility.lean:1151`; inside it `Core/FrameRules.lean:620`,
@@ -44,9 +45,10 @@ Core, where a record is `SRec = FrameRec × Life` (`Core/FrameRecords.lean:159`)
   nothing above any key present (`above_add`). So a family stored at a lend stays the
   payload's family read at the current world (`fam_add_self`), and no recursive world is needed.
   The lifetime is the stratum, as the level is in AAV 2002 (§7).
-- **The Kripke order** is `LocTy.ExtA`: entries are only added, and nothing is added
+- **The world-relative order** is `LocTy.ExtA`: entries are only added, and nothing is added
   above a key present. A fresh lend is one step of it (`extA_add`), and it is transitive
-  (`extA_trans`).
+  (`extA_trans`). `U` and `⊸` are Kripke along the resource-relative `LocTy.ExtR` (§10), which
+  `ExtA` is at every resource (`ExtA.extR`).
 
 ### 2.2 How the relation reads it: the view
 
@@ -88,7 +90,9 @@ single lifetime `c ℓ`, and the run is at the **view**:
 
 ## 3. The lemmas the port needs
 
-The "not built" entries are as scoped; §9 has what #825 built.
+The "not built" entries are as scoped; §9–§12 have what #825–#828 built: every row below is
+built (`vN_local` and `vN_extA` at every type, the uniform conjunct in `Mut`, the anti-frame across
+layered cancel runs, the callback's view's consistency, and `erwp_consistent`).
 
 All proved results below are in `Core/Chain/SI/LocTy.lean` (L2 (c) in
 `Core/Chain/PerLendShape791.lean`), registered in `Core/Chain.lean` and in `scripts/AxiomCheck.lean`. Axioms are within `propext`, `Classical.choice`, `Quot.sound`.
@@ -624,3 +628,41 @@ ConstsN → Goal791SchedN` is proved; `ConstsN` is `w2`, `w3`, `wF` (proved), `w
   lemma over tables whose payloads grow and whose answers agree, not built.
 - **`Goal791Top`** additionally needs `[handle]` (#792): the scheduler typed inside the program,
   so that `Goal791Top`'s closed `F 1` program reduces to `Goal791SchedN`'s form.
+
+## 13. State after the review fixes (2026-11-05)
+
+The review is `~/repos/scratch-archive/rule791/review.md`; the claims are scoped in
+`scope-791-rule.md` §8. Per finding:
+
+- **F1.** `vN`'s `Mut` clause is Core's `ptoMutS` shape: `∃ b, @aδ ⊑ b ∧ mutL b … ∧` the
+  uniform conjunct at `b` (`Core/Chain/Goal791N.lean`). `mutSub_compatN` at `SemJN` by Core's
+  `ptoMutS_antitone` technique; `immSub_compatN` likewise. `w2`, `w3`, `wF` re-proved: the lends
+  build the borrow at `b = α`, the reborrows open the source at its `b`.
+- **I2.** `∀` reads Core's `cC` (no definedness conjunct); `allI_compatN` at `SemJN`, by
+  `cN_head` (a pure head step backwards) and `gN_extend_of_not_free`. The bound's definedness is
+  `Const791.OK`'s first conjunct, which Core's bound `Δ.meetOfDom` meets
+  (`defines_meetOfDom_empty`).
+- **I3.** `Row.Suspend S 'x @bnd`, `CTy.SuspendC 'x @bnd`: `VOutlives ∅ bnd` for payloads and
+  answers, `VTy.exclMutFree` for answers; `SuspendC`'s `n ≠ 0` dropped. Laws: `vN_inStratum_bnd`,
+  `vN_add_eq_bnd` (replacing `vN_add_eq`/`vN_top`), `consistentX_of_exclMutFree`,
+  `exS_single_imm`. `hardestRow_suspend`, `hardestRow_entry`. SPEC §62 restated.
+- **I1.** `FundamentalN`/`ConstsN`/`Goal791SchedN` on the fragment (`JdgInFrag`,
+  `Const791.InFrag`). `Core/Chain/Inst791N.lean`: `dRelease_sem`, `dFree_sem`,
+  `withbor2S_inst`, `withbor3S_inst`, `withborFS_inst` (every hypothesis discharged),
+  `cbPerform_sem` (a callback stopping at a must-resume operation while holding the borrow).
+- **I4.** `structure.md` §2, §3, §5, §7.
+- **M2.** `cbRelease_sem`'s docstring; `cbPerform_sem`. **M4.** `perLocShape_not_reborrow`,
+  `PerLendShape791.lean`. **M5.** `Row.Suspend.of_unwind`, `suspend_of_unwind` and every new
+  result in `scripts/AxiomCheck.lean`. **M1/M7.** `scope-791-rule.md` header, §1, §3, §8.
+- **Not done: M3, M6** (`scope-791-rule.md` §8).
+
+**Unspent hypotheses, unused results.** `Const791.OK`'s `CDerives` clause for the finaliser is
+read only through `FundamentalN`; the `*_inst` lemmas use semantic finalisers (`λr. ()` is not a
+`CDerives` term at `Mut @a A ⊸ 1`). `consistentX_of_top` is no longer used by the #791 files.
+`Row.Suspend`'s `exclMutFree` is implied, at the constants' empty context, by the outliving clause
+for every type but a `[@⊤]` box over a `Mut` (whose values hold no borrow cell anyway); no lemma
+states this.
+
+**Untranscribed Core pieces the run-up needs.** `CohE` and the record list in `Imm` (`wl`); the
+`fam` clause and `wpG_M_frameFam` (`sm`); the μ and ν clauses (the cuts `FundamentalN` cannot
+read).

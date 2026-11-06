@@ -1,8 +1,11 @@
 # #791 at the rule level, over the chain relation `erwp`
 
 Branch `rule-791`, from `tree-core` (7cf4769c). The Lean is `Core/Chain/Goal791N.lean` (the
-interpretation, its laws, the restated statements) and `Core/Chain/Lend791N.lean` (the frames
-the suspending `mut` lend needs, and its compatibility).
+interpretation, its laws, the rule checks `mutSub`/`immSub`/`allI`, the restated statements),
+`Core/Chain/SI/LocTy.lean` (the per-lend world), `Core/Chain/Lend791N.lean` (the frames the
+suspending `mut` lend needs), `Core/Chain/Cancel791N.lean` (`w2`), `Core/Chain/Reborrow791N.lean`
+(`w3`), `Core/Chain/Field791N.lean` (`wF`) and `Core/Chain/Inst791N.lean` (their hypotheses
+discharged). §8 is the current state.
 
 Kernel target: the semantic interpretation of types over `erwp` (`Core/Chain/SI/*`), the
 semantic judgment over it, and compatibility of the `mut` lend whose callback row may suspend
@@ -17,14 +20,14 @@ Every piece names the Core technique it follows.
 |---|---|---|
 | value types `vN A δ Θ` | `P k v ρ` at the per-lend world `Θ` (`SI/LocTy.lean`), downward closed in `k` | Core's `vCE` clause by clause; the world is `scope-791-loctype.md` §2 |
 | `1`, `⊗`, `0`, `+`, `Ref`, `!`, `I32/I64` | `vCE`'s clauses, `⋆` written as `ResU.CompS` | `vCE`; `sV` (`SI/Sem.lean`) |
-| `Mut @a A` | `mutL α (vN A δ) Θ`: a location whose `mut` cell at `α = @aδ` holds the member `j ≥ k` of `A`'s family read at `Θ` above `α`, the family `Θ` stores at `(ℓ, α)` | `ptoMutS` (`Core/Relation.lean`), with `Θ.above α` for `ls₀` |
+| `Mut @a A` | `∃ b, @aδ ⊑ b ∧ mutL b (vN A δ) Θ ∧` every value of `A` in `Res_b`: a location whose `mut` cell at `b` holds the member `j ≥ k` of `A`'s family read at `Θ` above `b`, the family `Θ` stores at `(ℓ, b)` | `ptoMutS` (`Core/Relation.lean`), with `Θ.above b` for `ls₀`; the slack `@aδ ⊑ b` is what `mutSub` reads (`mutSub_compatN`) |
 | `Imm @a A` | one `imm` cell `imm(β̄, u, σ)` with `α ⊑ ⊓β̄`, `u, σ` in `𝒱⟦A⟧` | `ptoImmS` (`Core/Relation.lean`), without the record list (§3) |
 | `[@a] A` | `𝒱⟦A⟧ ∧ ρ ∈ Res_α` | `box` (`vCE`'s `box` clause) |
-| `U C` | `C` at every `Θ′` with `Θ.ExtA Θ′` and `Θ′.OK`, every view `c` with `ConsistentX c ρ`, every record list | `vCE`'s `U` (Kripke), along `ExtA` (`scope-791-loctype.md` §8 Q1) |
+| `U C` | `C` at every `Θ′` with `Θ.ExtR Θ′ ρ` and `Θ′.OK`, every view `c` with `ConsistentX c ρ`, every record list | `vCE`'s `U` (Kripke), along the resource-relative `ExtR` (`scope-791-loctype.md` §10) |
 | `F A` | `erwp (Θ.view c) (opTableN ∅) 𝒱⟦A⟧` | `sC`'s `F` (`SI/Sem.lean`); `cC`'s `wpTS` |
-| `A ⊸ C` | at every `Θ′` along `ExtA` (`OK`), every `k′ ≤ k`, every argument in `𝒱⟦A⟧` at `Θ′` composed with the function's resource, every view consistent with the composite | `sC`'s `⊸` (the step-indexed `−∗`); `cC`'s wand |
+| `A ⊸ C` | at every `Θ′` along `ExtR` at the function's resource (`OK`), every `k′ ≤ k`, every argument in `𝒱⟦A⟧` at `Θ′` composed with the function's resource, every view consistent with the composite | `sC`'s `⊸` (the step-indexed `−∗`); `cC`'s wand |
 | `C & D`, `⊤` | componentwise; trivial | `cC` |
-| `∀'x ⊏ @c. C` | `@cδ` defined, and every `α ⊏ @cδ`: `C` at `δ[x ↦ α]`, the term applied to `()` | `cC`'s `∀` clause (`LtLife`); empty where `@cδ` is undefined, as `TreeGoal791`'s `SCmp.none` (§3) |
+| `∀'x ⊏ @c. C` | every `α ⊏ @cδ`: `C` at `δ[x ↦ α]`, the term applied to `()` | `cC`'s `∀` clause (`LtLife`), vacuous where `@cδ` is undefined; `allI_compatN` |
 | `F_Σ R` | `erwp (Θ.view c) (opTableN (tabN (F_Σ R) δ Θ c)) 𝒱⟦R⟧` | `cC`'s `eff` clause (`effTab`, `finObl`, `effRet`); `sProt`/`sFin` |
 | `tabN` | one entry per layer, first match winning: qualifier, `abort = B.isZero && q != lin`, `PA = 𝒱⟦A⟧`, `PB = 𝒱⟦B⟧`, cancel obligation `finN fin` where `capB q B`, resumed under `extF` | `effTab`; `OpEntN` (`SI/ErwpN.lean`); `extF` from `SI/ExtF.lean` (§2 of structure.md) |
 | `finN` | `none` at `⊤`; else the cancel run at the cancel row's table, `cancelOblN Φ (tabN F δ Φ)` | `finObl`; `sFin` |
@@ -41,8 +44,9 @@ lends), opaque host types (no constant mentions them). `Unk` owns nothing, as `v
 
 **Laws proved** (`Core/Chain/Goal791N.lean`): downward closure of `vN`, `cN`, every `tabN`
 (`OpTabN.Down`) and `finN`; `vN_extA` (values stable along `ExtA`, every former); `cN_extA`
-(computations stable along `ExtA`, every former but `F_Σ R`); `vN_local` (a value in a lend's
-stratum does not read the lend, every former but `U`); `vN` and `cN` read `δ` only at the free
+(computations stable along `ExtA`, every former but `F_Σ R`); `vN_extR` (values stable along
+`ExtR` at their resource, every former); `vN_local` (a value in a lend's stratum does not read the
+lend, every former); `vN` and `cN` read `δ` only at the free
 lifetime variables (`vN_congr`); `𝒱⟦A⟧` of an outliving `A` lies in the stratum (`vN_outlives`,
 Core's `vC_outlives`). `scope-791-loctype.md` §9 lists the formers left out and why.
 
@@ -79,10 +83,10 @@ has no configuration.
    `mut` cell it was given (`rwp_M_antiFrame_sem`'s `Φ ℓ = (α, τ.fam α)`) cannot be proved at the
    interpretation. So the anti-frame constants (`w3`, `wF`, `withswap`) are not reachable from
    this interpretation as it stands. **Decision for the user** (§5).
-4. **`∀'x ⊏ @c` is empty where `@cδ` has no interpretation** (Core's `cC` reads it as trivial
-   there). The two agree at every `δ ⊨ Δ` for a bound `Δ` defines (`Δ.meetOfDom`). Without it,
-   `ConstN` of a constant whose bound is undefined at some `δ` would ask the constant to run an
-   arbitrary term as its callback.
+4. **Withdrawn.** `∀'x ⊏ @c` is Core's `cC` reading (vacuous where `@cδ` is undefined), and
+   `allI_compatN` holds at it. The bound's definedness, which the constants read, is
+   `Const791.OK`'s first conjunct: Core's rules fix the bound to `Δ.meetOfDom`, which every
+   `δ ⊨ Δ` defines (`defines_meetOfDom_empty`).
 5. **Entries resumed under `extF`**, not Core's `Ext`: `OpEntN.wc`. structure.md §2: no restriction
    relative to `Ext` (`ext_extF`).
 
@@ -393,6 +397,50 @@ existing frames, with no new relation definition:
 | 12 | `vN_local` | none |
 | 13 | `F_i k ⊆ F_o k` | `ℓ₂ ↦ own(w) ● χ` is a `Ref A` value (`hoi`); the guard and claim at `ℓ₂` beside the framed cell are the guard and claim at `ℓ` |
 
-The rule-level hardest case of #791 (a mut reborrow of a boxed field of a borrowed record held
-across `park`) is complete: `constN_w3` and `constN_wF` take only `FundamentalN`. What remains for
-`Goal791SchedN`/`Goal791Top` is listed in `scope-791-loctype.md` §12.
+What remains for `Goal791SchedN`/`Goal791Top` is listed in `scope-791-loctype.md` §12; §8 below
+scopes the claims.
+
+## 8. State after the review fixes (2026-11-05)
+
+The review is `~/repos/scratch-archive/rule791/review.md`.
+
+**What is proved, and its scope.** #791's `mut` half at the rule level: `withbor2S_compat`
+(`w2`), `withbor3S_compat` (`w3`) and `withborFS_compat` (`wF`), each from `Const791.OK`'s
+clauses and the finaliser's semantic judgment `hd`, every hypothesis discharged at the hardest
+case's row in `Core/Chain/Inst791N.lean`. The corollaries `constN_w2`/`constN_w3`/`constN_wF`
+are conditional on `FundamentalN`, stated on the fragment and not proved. The `imm` half (`wl`)
+waits on `Imm`'s record list and `CohE` (departure 1); `cN_extA` at `F_Σ R` is open; `sm` needs
+the `fam` clause.
+
+**`Mut`** is Core's `ptoMutS` shape: `∃ b, @aδ ⊑ b ∧ mutL b … ∧` the uniform conjunct at `b`.
+`mutSub_compatN` is Core's `ptoMutS_antitone`. The lend sites build the borrow at `b = α`; the
+reborrow and the field reborrow open the source at its own `b` (`consistentX_get` gives `c ℓ = b`).
+
+**`Row.Suspend S 'x @bnd`** (`Core/TreeGoal791.lean`): payload and answer types outlive `@bnd`
+(`VOutlives ∅ bnd`), which puts their values in the stratum of every lend `α ⊏ @bnd`
+(`vN_inStratum_bnd`, `LendOKCR`'s `pa`/`pb`) and leaves their reading unchanged by a fresh lend
+(`vN_add_eq_bnd`); the answer type has no `mut` cell outside an `imm` cell (`VTy.exclMutFree`),
+since `erwp_claimX` reads an answer's consistency with the view and an answer arrives from outside
+the run (`consistentX_of_exclMutFree`). `CTy.SuspendC` likewise, without `n ≠ 0`, which no proof
+reads; `Row.Suspend`'s `n ≠ 0` is read by `erwp_ubindClaimRT`'s `hTr`. Excluded: payloads and
+answers holding an `imm`/`mut` borrow not strictly longer-lived than `@bnd`, non-`!` thunks
+(`VOutlives` has no `U` clause), answers holding a `mut` cell outside an `imm`, and the same in
+cancel rows. At the constants' empty lifetime context a closed bound interprets as `⊤`
+(`Life.interp` has only `var`/`top`/`join`/`meet`), so there no payload or answer holds a borrow,
+as under the old clause; the narrowing admits more only at a bound below `⊤`. The hardest case's
+callback row (`hardestRow`, `park` as `TJN` types it) meets it (`hardestRow_suspend`,
+`hardestRow_entry`).
+
+**`FundamentalN`** quantifies over derivations of judgments in the fragment (`JdgInFrag`:
+context and type free of type variables, μ, families, opaque types and ν; decidable). A
+predicate by recursion on a `CDerives` derivation cannot be written (it is a `Prop`; no large
+elimination), so the scope is on the judgment. A derivation of a judgment in the fragment may
+still cut through an excluded type inside; at such a cut the interpretation gives no reading, so
+`FundamentalN` is not shown attainable by induction until those formers have clauses. `ConstsN`
+and `Goal791SchedN` are scoped likewise (`Const791.InFrag`, the row's types).
+
+**Not done.** `extRL_breaks_extA` still rests on `ν` read as empty (M3): rebuilding it at
+`F 0` needs a refutation of `erwp` from a resource holding a `mut` cell (a `TWNC` world with that
+cell, its lowering and the run to the stuck term), which is not built. No negative configuration
+for a wrong constant (M6) is built, for the same reason: refuting a run at the source's `own`
+cell needs that world.

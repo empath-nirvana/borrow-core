@@ -33,6 +33,9 @@ Done means that theorem. Passing test programs doesn't count.
 
 Stated but not yet used by any proof: `CactusInv` and its preservation lemmas (§5).
 
+#791's rule-level work reads the chain relation `erwp` (rows 1, 2 and 6 of the table), not
+`cerwp` or the tree; its place relative to the one relation is in §3.
+
 ## 3. One relation
 
 There are two relations: `erwp`, where a stop is treated like a return and the lend is folded,
@@ -53,6 +56,24 @@ records, `TWNT` and `TaggedT` (condition 21).
 
 Open: are the table fields `fd` (resumer guarantee), `PBv` (payload-dependent answer) and `oc`
 (owned records) principled? Each must be supplied by a typing rule (§6) or removed.
+
+**#791 at the rule level reads the chain, not the tree** (plan of record, #791, 2026-11-05;
+`scope-791-rule.md`, `scope-791-loctype.md`). The interpretation `vN`/`cN`
+(`Core/Chain/Goal791N.lean`) runs every computation at `erwp`, over a per-lend world `LocTy`
+(`Core/Chain/SI/LocTy.lean`): a family per location and lend lifetime, so a reborrow adds a key
+and keeps the source's, as Core's records do. A run is read at the world's view `Θ.view c`, the
+relation's per-location `LocFam`, at every view consistent with the run's resource
+(`ConsistentX`: each `mut` cell of the exclusive walk at its view lifetime); consistency takes
+the place of the tree's `Covers`/`vThunk`. No relation definition changes (`erwp`, `rwpG`,
+`EndOKG`, `UpdN`, `PredStep`, `MutStep`, `LocFam`). This is a second track beside the one
+relation above, not an instance of it.
+
+The bridge to the tree goal: `Goal791SchedN` restates `TreeGoal791`'s `Goal791Sched` over `erwp`,
+with the same constants (`Const791`, `Const791.OK`), context (`ctx791`), program and conclusion
+(`OrDiverges` of the scheduled task). It differs in the scheduler premise (`SchedOKN` at the row's
+chain table `rowTabN`, not `SchedOKT`), in the world (`LocTy` and a view, not `TWd`), and in its
+scope (the fragment: `Const791.InFrag` and the row's types, `VTy.inFrag`). No Lean lemma relates
+the two; neither has been derived from the other.
 
 ## 4. Lifetimes as a tree; the carrier; re-reading
 
@@ -115,6 +136,10 @@ branch points), not as branches of `CactusInvT`; this is decision 74 (`scope-781
 `scope-795.md`). Open: adequacy at the
 relation the typing rules use; the frame rules as instances of capture (condition 20).
 
+The chain interpretation of §3 does not go through the cactus invariant: `goal791Sched_of`
+derives `Goal791SchedN` through `poolSchedAdequacyN` at the view, from `FundamentalN` and
+`ConstsN`.
+
 Threads: the invariant is per computation. The two dependencies on sequential scheduling (a frame
 fixed for a whole segment; `JoinReady` read at the resume) are kept separate, so a concurrent
 separation logic reading can replace them (condition 19).
@@ -165,6 +190,19 @@ Over the single relation:
 
 Core's plain results over canonical worlds are `Core.C` (condition 8); over the tree world they
 are part of step 2.
+
+**Over the chain (#791, §3).**
+1. 𝒱/𝒞 over `erwp` at `LocTy` (`vN`, `cN`, `tabN`, `finN`, `retN`, `gN`, `SemJN`) for every
+   former in the fragment (`VTy.inFrag`): `Mut` at Core's `ptoMutS` shape (a cell at `b ⊒ @aδ`,
+   the uniform conjunct at `b`), `Imm` without the record list or `CohE`, `U` and `⊸` Kripke along
+   the resource-relative `LocTy.ExtR`, `∀` as Core's `cC`. Type variables, μ, families, opaque
+   types and ν are read as empty. Laws: downward closure, `vN_extR`, `vN_local`, `vN_outlives`.
+2. Rule checks at `SemJN`: `mutSub_compatN`, `immSub_compatN`, `allI_compatN`; the constants
+   `withbor2S_compat`, `withbor3S_compat`, `withborFS_compat`, each with its finaliser's
+   judgment `hd` as a premise, instantiated with every hypothesis discharged in
+   `Core/Chain/Inst791N.lean`. `FundamentalN` is stated on the fragment (`JdgInFrag`) and not
+   proved.
+3. Adequacy: `goal791Sched_of` (`Goal791SchedN` from `FundamentalN` and `ConstsN`).
 
 ## 8. Termination
 
