@@ -395,11 +395,12 @@ theorem tab_lookupRW (R : Nat → WProp) : ∀ (F : CTy) {δ₂ : LSub} {Θ₂ :
     {c₂ : Loc → Option Life} {m j : UInt32} {en : OpEntN},
     tabR (ℍ := ℍ) R F δ₂ Θ₂ c₂ m j = some en → ∃ q A B fin, F.LayerOf q A B fin ∧
       en = entN q B (fun k v ρ => vN (ℍ := ℍ) A δ₂ Θ₂ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) B δ₂ Θ₂ k v ρ) (finR (ℍ := ℍ) R fin δ₂ Θ₂ c₂) ∧
+        (fun k v ρ => vN (ℍ := ℍ) B δ₂ Θ₂ k v ρ ∧ ConsistentX c₂ ρ) (finR (ℍ := ℍ) R fin δ₂ Θ₂ c₂) ∧
       ∀ (R' : Nat → WProp) (δ₃ : LSub) (Θ₃ : LocTy) (c₃ : Loc → Option Life),
         tabR (ℍ := ℍ) R' F δ₃ Θ₃ c₃ m j =
           some (entN q B (fun k v ρ => vN (ℍ := ℍ) A δ₃ Θ₃ k v ρ)
-            (fun k v ρ => vN (ℍ := ℍ) B δ₃ Θ₃ k v ρ) (finR (ℍ := ℍ) R' fin δ₃ Θ₃ c₃))
+            (fun k v ρ => vN (ℍ := ℍ) B δ₃ Θ₃ k v ρ ∧ ConsistentX c₃ ρ)
+            (finR (ℍ := ℍ) R' fin δ₃ Θ₃ c₃))
   | .eff m₀ i₀ q A B fin rc C, δ₂, Θ₂, c₂, m, j, en, h => by
       simp only [tabR] at h
       unfold extTabN at h
@@ -420,10 +421,11 @@ theorem tab_lookupRW (R : Nat → WProp) : ∀ (F : CTy) {δ₂ : LSub} {Θ₂ :
   | .nu _, _, _, _, _, _, _, h => by simp [tabR, OpTabN.empty] at h
 
 /-- **The lender's twins at two worlds and claims agree but for the cancel obligations**: the
-layers' types, outliving the bound, read alike at the two worlds (`hΘ`). `tabN_tabR_twin` with
-the callback's table a `tabR`. -/
+layers' types, outliving the bound, read alike at the two worlds (`hΘ`), and the answers,
+outliving the closed bound, are alike consistent with the two views
+(`consistentX_of_outlives`). `tabN_tabR_twin` with the callback's table a `tabR`. -/
 theorem tabR_tabR_twinW {x : LifeVar} {bnd : Lifetime.Life} {F : CTy}
-    (hF : F.SuspendC x bnd) (R R' : Nat → WProp) (δ : LSub) (Θ₁ Θ₂ : LocTy)
+    (hbnd : LifeCtx.empty.Defines bnd) (hF : F.SuspendC x bnd) (R R' : Nat → WProp) (δ : LSub) (Θ₁ Θ₂ : LocTy)
     (c₁ c₂ : Loc → Option Life)
     (hΘ : ∀ A : VTy, VOutlives LifeCtx.empty bnd A → vN (ℍ := ℍ) A δ Θ₁ = vN (ℍ := ℍ) A δ Θ₂) :
     (tabR (ℍ := ℍ) R F δ Θ₁ c₁).Twin (tabR (ℍ := ℍ) R' F δ Θ₂ c₂) := by
@@ -433,6 +435,9 @@ theorem tabR_tabR_twinW {x : LifeVar} {bnd : Lifetime.Life} {F : CTy}
   refine ⟨_, hR R' δ Θ₂ c₂, rfl, rfl, ?_, ?_, rfl⟩
   · simp only [entN, hΘ A hOA]
   · simp only [entN, hΘ B hOB]
+    funext k _ v ρ
+    exact propext ⟨fun h => ⟨h.1, consistentX_of_outlives hbnd hOB h.1 c₁⟩,
+      fun h => ⟨h.1, consistentX_of_outlives hbnd hOB h.1 c₂⟩⟩
 
 /-- **The lender's twin of a row meeting `CTy.SuspendC` may be stopped at under a lend at
 `α ⊏ @bnd`** (`tabN_lendOKCR_C` at `tabR`). -/
@@ -449,7 +454,7 @@ theorem tabR_lendOKCR_C {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {F : CTy
   pb := fun m i en h k ls w ρ hp => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupRW R F h
     obtain ⟨-, -, -, -, hOB, -⟩ := layer_suspend F hF hL
-    exact (vN_inStratum_bnd hOB hLt hp).mono (Life.down_sqsubset α).le
+    exact (vN_inStratum_bnd hOB hLt hp.1).mono (Life.down_sqsubset α).le
 
 /-- **`tabR` is monotone in its claim**: at a weaker claim every cancel run, at every depth,
 ends at the weaker claim. -/
@@ -506,7 +511,7 @@ with the callback's table `tabR R` at the lend's world): at a capturable entry t
 cancel run at its cancel row's `tabR R`, framed by `erwp_M_frame_cancelRunCRR`, its own nested
 cancel obligations by the induction on how deep cancel rows nest. -/
 theorem tabR_canR {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {δ : LSub} {Θ : LocTy}
-    (hf : Θ.Fresh α) (hLt : LtLife δ bnd α) {c : Loc → Option Life} {l : Loc}
+    (hbnd : LifeCtx.empty.Defines bnd) (hf : Θ.Fresh α) (hLt : LtLife δ bnd α) {c : Loc → Option Life} {l : Loc}
     {Fam : Nat → Val → SPropS Loc Val α} (hFam : DownFam α Fam) {R : Nat → WProp}
     (hR : ∀ k ρ, R k ρ → ρ.InStratum α) :
     ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC x bnd →
@@ -545,7 +550,7 @@ theorem tabR_canR {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {δ : LSub} {�
   have hin := hc _ (finR_eq _ htop _ _ _)
   refine erwp_M_frame_cancelRunCRR (Φ := Θ.view c) hFam
     (tabR_lendOKCR_C hfin R δ hLt (Θ.add l α Fam) (setLife c l α))
-    (tabR_tabR_twinW hfin R _ δ (Θ.add l α Fam) Θ (setLife c l α) c
+    (tabR_tabR_twinW hbnd hfin R _ δ (Θ.add l α Fam) Θ (setLife c l α) c
       (fun A' hO => vN_add_eq_bnd hO δ hLt hf l Fam))
     (ih fin hfd hfin) hR k k le_rfl ls _ v'' χ W'' (Z.del l) ρkL hχ hdZd P'' hPk hw''
     (ResU.CompS.comm hW'') (ResU.CompS.comm hkL) (fun BM hBM => ?_)
@@ -574,8 +579,8 @@ moved to the world without `αⱼ` by `vN_local`, their contents in `αⱼ`'s st
 innermost callback runs at the lender's twin at the empty claim, `claimL … []`. -/
 theorem erwp_M_frameListCRN {A : VTy} {δ : LSub} {β β' : Life}
     (hunif : ∀ Θ j u r, vN (ℍ := ℍ) A δ Θ j u r → r.InStratum β)
-    {x : LifeVar} {bnd : Lifetime.Life} {mb : Life} (hmb : bnd.interp δ = some mb)
-    {F : CTy} (hF : F.SuspendC x bnd)
+    {x : LifeVar} {bnd : Lifetime.Life} (hbnd : LifeCtx.empty.Defines bnd) {mb : Life}
+    (hmb : bnd.interp δ = some mb) {F : CTy} (hF : F.SuspendC x bnd)
     (Ψ : LocTy → PostN) (hΨs : ∀ Θ k ls v ρ, Ψ Θ k ls v ρ → ρ.InStratum β')
     (hΨl : ∀ (Θ : LocTy) (l : Loc) (α : Life) (F : Nat → Val → SPropS Loc Val α) k ls v ρ,
       ρ.InStratum α → Ψ (Θ.add l α F) k ls v ρ → Ψ Θ k ls v ρ)
@@ -655,10 +660,10 @@ theorem erwp_M_frameListCRN {A : VTy} {δ : LSub} {β β' : Life}
           (fun m τ hτ hm => vN_local (.ref A) δ Θ ℓ α₁ Fm k _ τ hτ hm) (hRs k ρ₂ hr) hr
       have hM := erwp_M_frameCRR (Φ := Θ.view c) (l := ℓ) (A := α₁) (F := Fm) hFmD
         (tabR_lendOKCR_C hF (claimL (ℍ := ℍ) A δ Θ₁ I) δ hLt Θ₁ c₁)
-        (tabR_tabR_twinW hF (claimL (ℍ := ℍ) A δ Θ₁ I) (fun k => claimR ℓ α₁ Fm k ⋆
+        (tabR_tabR_twinW hbnd hF (claimL (ℍ := ℍ) A δ Θ₁ I) (fun k => claimR ℓ α₁ Fm k ⋆
           claimL (ℍ := ℍ) A δ Θ₁ I k) δ Θ₁ Θ c₁ c
           (fun A' hO => vN_add_eq_bnd hO δ hLt hfr ℓ Fm))
-        (tabR_canR hfr hLt hFmD hRs F.cdepth F le_rfl hF) hRs
+        (tabR_canR hbnd hfr hLt hFmD hRs F.cdepth F le_rfl hF) hRs
         (Q := fun k ls' v ρ' => ∃ ρ₁ ρ₂, ResU.CompS ρ₁ ρ₂ ρ' ∧
           sepList (fun m => vN (ℍ := ℍ) (.ref A) δ Θ k (Val.loc m)) (ℓ :: I) ρ₁ ∧ Ψ Θ k ls' v ρ₂)
         n n le_rfl ls e u σ ρ0 Fr ρ houtP houtb (Fm n) (fun _ _ h => h) hwit hcl hρ
@@ -673,7 +678,7 @@ theorem erwp_M_frameListCRN {A : VTy} {δ : LSub} {β β' : Life}
       have hrest₁ : sepList (fun m => vN (ℍ := ℍ) (.ref A) δ Θ₁ n (Val.loc m)) I ρr :=
         sepList_mono' (fun m τ h => vN_extA (.ref A) δ hE₁ n _ τ h) hrest
       refine erwp_mono (fun k ls' v ρ' h => ?_) (opTableR_local _ _) n ls e BM
-        (erwp_M_frameListCRN hunif hmb hF Ψ hΨs hΨl e ls I Θ₁ c₁ n ρr R BM (βR ⊓ α₁ ⊓ γ) hOK₁
+        (erwp_M_frameListCRN hunif hbnd hmb hF Ψ hΨs hΨl e ls I Θ₁ c₁ n ρr R BM (βR ⊓ α₁ ⊓ γ) hOK₁
           hcBM hBMR hrest₁ (fun α₂ hα₂ => ⟨hβR.mono (le_of_lt (lt_of_lt_of_le hα₂
             (inf_le_left.trans inf_le_left))), ?_⟩))
       · -- the outer frame's postcondition from the inner ones'
@@ -811,7 +816,7 @@ theorem sliceBorrowMS_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S 
   set I := rangeLocs l cn.toNat with hI
   -- the frames, the composite claim the array
   let Ψ : LocTy → PostN := fun Θ k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ
-  have hM := erwp_M_frameListCRN hunif hmb hFS Ψ (fun Θ k _ v ρ hw => hBs Θ k v ρ hw)
+  have hM := erwp_M_frameListCRN hunif hbnd hmb hFS Ψ (fun Θ k _ v ρ hw => hBs Θ k v ρ hw)
     (fun Θ l₀ α F k _ v ρ hρ hw => vN_local B δ Θ l₀ α F k v ρ hρ hw)
     (.app (.app (.val f) (.val .unit)) (.val (Val.arr l cn))) ls I Θ c k' ρu ρf ρ'' (mb ⊓ βf)
     hΘ hcon hc' (by rw [← sepRange_eq_sepList]; exact hs)
@@ -881,8 +886,8 @@ theorem tabN_unwind_add {S : Row} {x : LifeVar} (hS : S.Unwind x) (R : VTy) (δ 
       simp only [CTy.effOf, tabN]
       rw [ih hS', hA, hB,
         entN_fin_congr (f := finN (ℍ := ℍ) o.fin δ (Θ.add l α F) c₁)
-          (f' := finN (ℍ := ℍ) o.fin δ Θ c₂) (fun hcap => by simp [capB, VTy.isZero] at hcap)]
-      rfl
+          (f' := finN (ℍ := ℍ) o.fin δ Θ c₂) (fun hcap => by simp [capB, VTy.isZero] at hcap),
+        ansN_zero, ansN_zero]
 
 /-- **One Mut Frame per place, around one expression, across raises** (Core's
 `wpG_M_frameList`, the frames of `sliceBorrowMU_compatX` at an unwinding row): the list
