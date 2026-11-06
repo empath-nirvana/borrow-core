@@ -56,7 +56,7 @@ theorem dRelease_sem (a : Lifetime.Life) (A : VTy) :
   obtain rfl : ρ = PMap.empty := hg
   rw [show substAll γ dRelease = dRelease from psub_closedAt dRelease γ dRelease_closed le_rfl]
   refine erwp_val (v := Val.lam (.val .unit)) ?_
-  intro Θ' _ _ c' _ ls' Θ'' _ hOK c'' k _ v ρv ρ' hc hv _
+  intro Θ'' _ hOK c' _ ls' c'' k _ v ρv ρ' hc hv _
   obtain rfl := eq_of_compS_empty_left hc
   obtain ⟨_, _, _, _, ⟨l, w, χ, hχ, j, hw, -, rfl, -, rfl⟩, -⟩ := hv
   have hΦ := LocTy.view_down hOK.1 c''
@@ -75,7 +75,7 @@ theorem dFree_sem :
   obtain rfl : ρ = PMap.empty := hg
   rw [show substAll γ dFree = dFree from psub_closedAt dFree γ dFree_closed le_rfl]
   refine erwp_val (v := Val.lam (freeE (.var 0))) ?_
-  intro Θ' _ _ c' _ ls' Θ'' _ hOK c'' k _ v ρv ρ' hc hv _
+  intro Θ'' _ hOK c' _ ls' c'' k _ v ρv ρ' hc hv _
   obtain rfl := eq_of_compS_empty_left hc
   obtain ⟨l, u, σ, rfl, hcl, rfl, rfl⟩ := hv
   have hΦ := LocTy.view_down hOK.1 c''
@@ -141,8 +141,8 @@ theorem cbPerform_sem {x : LifeVar} {bnd : Lifetime.Life} {A : VTy} {δ : LSub} 
     (Θ : LocTy) (k₀ : Nat) :
     vN (ℍ := ℍ) (cbUTy x bnd (.mut (.var x) A) .unit [linSig n i]) δ Θ k₀ (cbPerform n i)
       PMap.empty := by
-  intro Θ' _ _ c _ ls
-  refine fun α _ Θ'' _ hOK c' k _ v ρv ρ' hc hv _ => ?_
+  intro Θ'' _ hOK c _ ls
+  refine fun α _ c' k _ v ρv ρ' hc hv _ => ?_
   obtain rfl := eq_of_compS_empty_left hc
   obtain ⟨β, hβ, b, -, ⟨l, w, χ, hχ, j, hw, -, rfl, -, rfl⟩, -⟩ := hv
   have hΦ := LocTy.view_down hOK.1 c'
@@ -216,8 +216,8 @@ theorem withbor2S_perform (x : LifeVar) {n i : UInt32} (hn : n ≠ 0) (δ : LSub
   have h := (withbor2S_compat (ℍ := ℍ) (A := .unit) (B := .unit) defines_meetOfDom_empty ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩
     id id (linSig_suspend (i := i) hn x _) dFree_closed dFree_sem δ Θ k).2 Θ (LocTy.extR_refl _ _) hOK c
     (consistentX_empty c) ls
-  have h2 := h Θ (LocTy.extR_refl _ _) hOK c k le_rfl (Val.loc l) _ _ (compS_empty_left _) hv hcon
-  exact h2 Θ (LocTy.extR_refl _ _) hOK c k le_rfl (cbPerform n i) PMap.empty _
+  have h2 := h c k le_rfl (Val.loc l) _ _ (compS_empty_left _) hv hcon
+  exact h2 c k le_rfl (cbPerform n i) PMap.empty _
     (ResU.comp_empty_right _) (cbPerform_sem n i Θ k) hcon
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N

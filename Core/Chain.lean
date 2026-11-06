@@ -108,3 +108,8 @@ import Core.Chain.Eff835N
 import Core.Chain.Frame835N
 import Core.Chain.Loop835N
 import Core.Chain.HandleS835N
+import Core.Chain.Iface834N
+import Core.Chain.TyEq834N
+import Core.Chain.Rules834N
+import Core.Chain.Borrow834N
+import Core.Chain.Count834N

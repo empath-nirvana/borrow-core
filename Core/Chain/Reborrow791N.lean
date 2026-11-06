@@ -765,8 +765,8 @@ theorem fin_claimM {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d 
     (rwp_of_erwp_empty hd0) rfl
   refine rwp_mono_le (fun k' hk' ls' v τ hv => ?_) (rwp_consistentXV hfr hc)
   obtain ⟨⟨τ₁, τ₂, hcτ, hP, rfl⟩, hcτ', hvτ⟩ := hv
-  have := hP Θ (LocTy.extR_refl Θ _) hΘ c (consistentX_left hcτ hcτ' hvτ) ls' Θ (LocTy.extR_refl Θ _)
-    hΘ c k' le_rfl (Val.loc l) τ₂ τ hcτ (vN_le hk' h) hcτ'
+  have := hP Θ (LocTy.extR_refl Θ _) hΘ c (consistentX_left hcτ hcτ' hvτ) ls'
+    c k' le_rfl (Val.loc l) τ₂ τ hcτ (vN_le hk' h) hcτ'
   exact rwp_of_erwp_empty this
 
 /-! ### The suspending reborrow -/
@@ -778,8 +778,8 @@ theorem fin_claimM {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d 
 1. the context owns nothing: the constant at `PMap.empty`;
 2. the source is `loc ℓ` with its cell `ℓ ↦ mut(β, w₀, σ₀, F_o j₀)`, `F_o = famL β 𝒱⟦A⟧ Θ` and
    `Θ (ℓ, β) = F_o` (`vN`'s `Mut` clause);
-3. the callback, at the world along `ExtR`;
-4. both arrive at the world `Θ` the run is at (`vN_extR`, Core's `vC_local`);
+3. the callback, at the same world: `⊸` is a plain wand;
+4. both are at the world `Θ` the run is at, which the thunk's `U` reached;
 5. the cell unpacked (`mutL`);
 6. `MutFrame`'s premise read off the borrow: every value of `A` is in `Res_β` (`hunif`, the
    `Mut` clause's last conjunct);
@@ -813,13 +813,13 @@ theorem withbor3S_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
     (Θ₀ : LocTy) (n : Nat) :
     vN (ℍ := ℍ) (.bang (withbor3UTy a x bnd A B S)) δ Θ₀ n (withborUV d) PMap.empty := by
   -- step 1
-  refine ⟨rfl, fun Θ₁ _ _ c₁ _ ls => ?_⟩
-  intro Θ₂ _ _ c₂ k hk u ρv ρu hc hu _
+  refine ⟨rfl, fun Θ _ hΘ c₁ _ ls => ?_⟩
+  intro c₂ k hk u ρv ρu hc hu _
   obtain rfl := eq_of_compS_empty_left hc
   -- steps 2–4
-  intro Θ hE₃ hΘ c k' hk' f ρf ρ'' hc' hf hcon
+  intro c k' hk' f ρf ρ'' hc' hf hcon
   set P : CPredL := fun Θ' j u r => vN (ℍ := ℍ) A δ Θ' j u r with hP
-  obtain ⟨α₀, hα₀, (β : Life), hα₀β, hm, hunif⟩ := vN_le hk' (vN_extR _ δ k u ρu hE₃ hu)
+  obtain ⟨α₀, hα₀, (β : Life), hα₀β, hm, hunif⟩ := vN_le hk' hu
   -- step 5
   obtain ⟨l, w₀, σ₀, hσ₀, j₀, hw₀, hkj, rfl, hl, rfl⟩ := id hm
   rw [cN_effOf]
@@ -948,7 +948,7 @@ theorem withbor3S_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
       fun Θ'' j u r h => (hunif Θ'' j u r (by rw [← hAδ]; exact h)).mono hαβ⟩
   have hcBM : ConsistentX c' BM := consistentX_compS hBM hcf'
     (consistentX_single_mut hcσ' (by simp [hc'def, setLife]))
-  have h2 := h1 Θ' (LocTy.extR_refl _ _) hOK' c' k' le_rfl (Val.loc l) _ BM hBM hcell hcBM
+  have h2 := h1 c' k' le_rfl (Val.loc l) _ BM hBM hcell hcBM
   rw [cN_effOf] at h2
   refine erwp_mono (fun k ls' b ρ' hb => ?_) (opTableN_local _) k' ls _ BM h2
   obtain ⟨β', hβ', hbB, hst⟩ := hb

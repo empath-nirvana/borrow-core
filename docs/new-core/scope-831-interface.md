@@ -144,7 +144,7 @@ The configurations named below are indexed in `configurations.md`; the design th
 | F6 | `vP_fam_mk`, `vP_fam_split`, `vP_fam_idx`, `sepRange_pick` … | spec §9 | 22: `arrNew`, `arrFree`, `arrSize`, `arrReplace` … | **missing, buildable** | a `fam` clause in `vN`/`vO` (an indexed `sepRange` of leaves), the array steps at `erwp`, and the laws re-proved over it (`scope-831-map.md` §4) |
 | F7 | `wpTS_M_frameFam`, `wpTS_I_frameFam`, `wpG_M_frameFam`, `wpG_I_frameFam` | — | 4: `sliceBorrowM`, `sliceBorrowI`, `sliceBorrowMU`, `sliceBorrowIU` | **missing, buildable** | the `n`-cell frames: list inductions over the one-cell frames (`erwp_M_frameCRG`, `erwp_I_frameC`), one key per cell |
 | F8 | `vC_roll`, `vC_unfold`, `vC_immReborrow_mu_iff`, `vCE_subst` … | — | 8: `reify`, `roll`, `unroll`, `foldImm` … | **missing, buildable** | an environment argument in `vN`/`vO`, the `μ`/`tvar` clauses, Core's `RelMu` laws at the index; `withload_sized` is `withloadS_compat` with a size measure. Very high; not checked |
-| F10 | `cC` .arr (the `⊸` clause) | — | 10: `bind`, `lam`, `lamDead`, `app` … | **departed, no configuration** | `cN .arr` is Kripke along `ExtR` at the function's resource, at every later index and every view consistent with the composite; Core's `cC .arr` is a plain wand at the same list. The index part is the step-indexed `−∗` (`sC`); for the `ExtR` part no configuration is recorded (`chain-interpretation.md` §3.1 and D6 state it, none forces it). The cost: `lam`/`lamDead` move their context along `ExtR` and down the index (G6, G11), which Core's proofs do not do |
+| F10 | `cC` .arr (the `⊸` clause) | — | 10: `bind`, `lam`, `lamDead`, `app` … | **same** (#834) | `cN .arr` is Core's plain wand at the function's own world, read at every later index and every view consistent with the composite (§8.1). The Kripke reading along `ExtR` is gone: no configuration forced it |
 | F9 | `cC_nu_iff`, `nuRel_coind`, `cB_step` | spec §7 | 4: `reify`, `nuIn`, `nuOut`, `unfoldN` | **missing, unclear** | a reading of `ν` at `erwp`: a design choice first. Not derived; obstruction not verified |
 
 ### R. Frames, the reborrow theorem, the chooser, the cells
@@ -186,10 +186,10 @@ The configurations named below are indexed in `configurations.md`; the design th
 
 | Status | Entries |
 |---|---|
-| same | 37 |
+| same | 38 |
 | departed (built) | 11 (K1, K3, K4, V10, R1, R2, R4, R5, R7, R8, R11) |
 | departed, forced by `erwp`'s definition | 1 (E13) |
-| departed, no configuration | 1 (F10) |
+| departed, no configuration | 0 |
 | departed, to build | 7 (R3, E3, E5, E6, E9, E10, E14) |
 | missing, buildable | 24 |
 | missing, unclear | 2 (F9 `ν`, E12 the BOXED-κ stop lemma) |
@@ -200,14 +200,9 @@ judgment carries a step index and a view (`SemJN`'s `n` and `c`), and Core's has
 
 ### 2.2 Departed without a configuration
 
-K4, V10's lifetime match and E13 were listed here. Their verdicts are in §6.3: K4/V10 now have a
-configuration, and E13 is forced by `erwp`'s definition. One entry remains:
-
-- **F10 `cC .arr` → `cN .arr`.** The chain's `⊸` is Kripke along `ExtR`, at every later index and
-  every consistent view. Core's is a wand at the same list. The index is the step-indexed `−∗` of
-  `sC`, which is the chain's carrier. For the `ExtR` part, `chain-interpretation.md` §3.1 and D6
-  state it but record no configuration that forces it. Its cost is in `lam`/`lamDead`, which must move
-  their context along `ExtR` and down the index (G6, G11). Core's proofs do not take those steps.
+K4, V10's lifetime match, E13 and F10 were listed here. K4/V10 now have a configuration and E13
+is forced by `erwp`'s definition (§6.3); F10 returned to Core's plain wand in #834 (§8.1). None
+remain.
 
 ### 2.3 Missing, unclear
 
@@ -470,10 +465,8 @@ cumulative, simulated from §3's table: a rule is unblocked once every entry it 
 passes through an excluded former. L1 and L4 are independent and can run in parallel. L2 and L3
 need only L1's W4/G6.
 
-The departures without a configuration are not units. K4/V10 and E13 are settled in §6.3. F10
-remains, and it needs either a configuration or a return to Core's reading:
-- **F10, a plain-wand `⊸`.** It would remove G6/G11 from `lam` and add the `ExtR` move to the
-  rules that apply a function at a later world (`app`, `lolliE`, `cN_bind`).
+No interface departure is without a configuration: K4/V10 and E13 are settled in §6.3, and F10
+returned to Core's reading in #834 (§8.1).
 
 ## 6. The concerns and the departure check
 
@@ -608,3 +601,70 @@ port of `divFuel` concludes `erwp`, which does not need it. That port is not don
   §2: G1, G2, G4, G6–G9, G11, G12, W4, W7, W9, K5, C2, V1, V8, F2, F4–F9, R3, E3, E5–E10, E12,
   E14. Of these, F9 and E12 are not derived; obstruction not verified.
 - No Lean was written for this step.
+
+## 8. Built in #834 (units L1 and L2)
+
+### 8.1 F10: `⊸` is Core's plain wand
+
+`cN .arr A C` at `(Θ, n, ρ)` is now: at every view `c′`, every `k ≤ n`, every argument `v` with
+`vN A δ Θ k v ρv` and every composite `ρ′` consistent with `c′`, `cN C δ Θ c′ k ls (e v) ρ′`. The
+world is the function's own, as in Core's `cC .arr`; the index is the chain's step-indexed `−∗`,
+the view the chain's `ConsistentX`. Every headline kept its statement: `constN_*` and their
+`_inst` through `withbor2S_compat`, `withbor3S_compat`, `withborFS_compat`, `withloadS_compat`,
+and the #833 borrow rows (`withbor1_compatN`, `withbor1U_compatN`, `withbor2_compatN`,
+`withbor2U_compatN`). The proofs lost steps: each applied the wand at the world `U` had already
+reached, by `ExtR` reflexivity. No configuration forces the Kripke reading.
+
+Restated: `noEffSpine` excludes `⊸`, so `cN_extA` no longer covers it (a plain wand at `Θ` reads
+its argument at `Θ`; an argument at an extension is not one at `Θ`). `cN_extA` has no caller.
+`ExtRLit791.vUgen` reads the order at `U` only; `extRL_breaks_extA` stands as stated.
+
+### 8.2 The interface (`Core/Chain/Iface834N.lean`, `Core/Chain/TyEq834N.lean`)
+
+| ID | Chain lemma |
+|---|---|
+| G1/G12 | `gN_split`; `gN_splitC` (the parts consistent with the view at a valid resource) |
+| G12 at a conclusion not `F`/`F_Σ` | `cN_of_valid`: a computation at a type with a reading at every spine position (`noNuSpine`, every former but `ν`; `noNuSpine_of_inFrag`) may assume its resource valid |
+| G2 | `gN_soloP` |
+| G4 | `gN_persistent`, `gN_cons_persistent` |
+| G6 | `gN_extR` |
+| G7 | `gN_outlives` |
+| G8 | `gN_congr` |
+| G9 | `gN_noOwn` |
+| G11 | `gN_le` |
+| K5 | `LocTy.extR_empty` |
+| W4 | `erwp_bind_frame` (the inner run at the empty table, any outer local table; the continuation at the index the run leaves, the returned resource consistent and valid) |
+| C2 | `cN_bind`, by induction on `C` with `noNuSpine C` |
+| W7 | `rwp_box`, `erwp_box` |
+| V8 | `vN_noOwn_of_ownFree` |
+| F2 | `bang_app` (at any later world) |
+| F4 | `host_call_sound` at `vN`, through `vN_iff_vP` at the first-order types |
+| V1 | `vN_tyEq`, `vO_tyEq`, `cN_tyEq`, `tabN_tyEq`, `finN_tyEq`, `retN_tyEq` |
+
+The hardest case, G12 at a conclusion that is not `F`/`F_Σ`, is `cN_of_valid`: at `⊸` the resource
+is a part of the composite the wand runs from. It needs the conclusion to have a reading: `cN` at
+`ν` is `False` (outside the fragment, F9), where validity cannot be assumed. The compatibility
+lemmas whose proof reads it (`app`, `bind`, `unitE`, `tensorE`, `sumE`, `zeroE`) carry
+`noNuSpine C`; `FundamentalN` quantifies over in-fragment judgments, which give it.
+
+### 8.3 The rules ported (`Core/Chain/Rules834N.lean`, `Borrow834N.lean`, `Count834N.lean`)
+
+`var_compatN`, `tensorI_compatN`, `thunkF_compatN`, `thunkV_compatN`, `force_compatN`,
+`lam_compatN`, `lamDead_compatN`, `app_compatN`, `bind_compatN`, `unitE_compatN`,
+`tensorE_compatN`, `sumE_compatN`, `zeroE_compatN`, `bangThunkF_compatN`, `bangThunkV_compatN`,
+`boxI_compatN`, `lit_compatN`, `hostOp_compatN`, `lolliE_compatN`, `countFold_compatN`
+(`countLoop_wpN`), `countTry_compatN` (`countTryLoop_wpN`), `allE_compatN`, `allEV_compatN`,
+`alpha_compatN`; the borrow rows `withbor3_compatN` (the anti-frame and the Mut Frame together,
+`erwp_withbor3` at the empty table), `withload_compatN` (`withload_reb` at the empty row with the
+pure callback, `callback_at_imageP`), `withswap_compatN` (`erwp_M_antiFrame` at the view).
+
+Restated: `withload_reb` takes the bound's definedness at the run's `δ` (was `∅ ⊨ @bnd`) and the
+callback's run at the image as a premise (was the suspending callback's value);
+`withloadS_compat` supplies `callback_at_image`, its statement unchanged.
+
+### 8.4 Not ported
+
+- **`withloadU`**: `erwp_rebGen` asks every entry of the table to be other than `unr`
+  (`OpTabN.RebOKR.entry`); `Row.Unwind` admits an abortive `unr` operation. Not derived;
+  obstruction not verified.
+

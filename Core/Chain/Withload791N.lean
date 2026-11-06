@@ -385,7 +385,7 @@ theorem callback_at_image {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : R
       (.app (.app (.val f) (.val .unit)) (.val u)) Bχ := by
   have h1 := (hf Θ (LocTy.extR_refl _ _) hΘ c hcf ls) β hLt
   have hcon : ConsistentX c Bχ := consistentX_compS hBχ hcf (consistentX_allImm hχ c)
-  have h2 := h1 Θ (LocTy.extR_refl _ _) hΘ c n le_rfl u χ Bχ hBχ himg hcon
+  have h2 := h1 c n le_rfl u χ Bχ hBχ himg hcon
   rw [cN_effOf, tabN_extend_suspendC β _ (suspendC_effOf hS _) δ Θ c,
     tabN_effOf_base S (.box (.var x) B) B δ Θ c] at h2
   refine erwp_mono (fun k _ w ρ hb => ?_) (opTableN_local _) n ls _ Bχ h2
@@ -401,15 +401,21 @@ records, and the callback. At the run's first entry the tie puts the witness's r
 run's list (`cohE_of_immWitW`); the cell is that record's own cell (`TI`'s `leInvW`) or one of
 its chain views (`exIn`); the image re-taken at a `β` below the cell, the callback's stratum and
 the bound is a value of `Imm̲ 'x A` (`relabel_vN`), and 6.150 across the callback's stops, raises
-and layered cancel runs (`erwp_rebGen`, `tab_rebClosed`) gives the run. -/
+and layered cancel runs (`erwp_rebGen`, `tab_rebClosed`) gives the run. The callback's run at
+the image is the premise `hcb`: at a suspending row `callback_at_image`, at the pure row its
+`F (U …)` form. -/
 theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
-    {S : Row} (hbnd : LifeCtx.empty.Defines bnd) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
-    (hS : S.Suspend x bnd) {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {c : Loc → Option Life}
+    {S : Row} {δ : LSub} (hbnd : ∃ γ, bnd.interp δ = some γ) (hA : ¬ VFree x A)
+    (hS : S.Suspend x bnd) {Θ : LocTy} {c : Loc → Option Life}
     {n : Nat} {ls : List SRec} {f v : Val} {l : Loc} {s : LSet} {σ : WRes}
     {h : σ.InStratum s.join} {ρf X : WRes}
     (hpay : vO (ℍ := ℍ) A δ Θ n v σ) (hwit : ImmWitW Θ.imm l s A δ)
-    (hf : vN (ℍ := ℍ) (cbUTy x bnd (A.immReborrow (.var x)) B S) δ Θ n f ρf)
-    (hcf : ConsistentX c ρf)
+    (hcb : ∀ β, LtLife δ bnd β → ∀ (u : Val) (χ Bχ : WRes),
+      (∀ m (ψ : CellU Loc Val), χ.get m = some ψ → ψ.kind = Kind.imm) →
+      vN (ℍ := ℍ) (A.immReborrow (.var x)) (δ.extend x β) Θ n u χ → ResU.CompS ρf χ Bχ →
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S B) δ Θ c))
+        (RebPost β (fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ)) n ls
+        (.app (.app (.val f) (.val .unit)) (.val u)) Bχ)
     (hX : ResU.CompS (ResU.single l (CellU.immOf s v σ h)) ρf X) :
     erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S B) δ Θ c))
       (fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ) n ls
@@ -430,7 +436,7 @@ theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
   have hLσ : LifeBoundW Θ.imm σ := lifeBoundW_of_entry (hash_valid_comp hF hcF) htg hI' hle
   have hR₀ : vShape d.T d.δ d.v d.R := (hTI.1.2.2.2.1 d hdmem).1
   -- step 9: the fresh `β`, below the cell, the callback's stratum and the bound
-  obtain ⟨γb, hγb⟩ := hbnd δ (models_empty_any _)
+  obtain ⟨γb, hγb⟩ := hbnd
   obtain ⟨g, hg⟩ := ResU.exists_stratum ρf
   set β : Life := ↓(s.meet ⊓ g ⊓ γb) with hβdef
   have hβlt : β < s.meet ⊓ g ⊓ γb := Life.down_sqsubset _
@@ -476,7 +482,7 @@ theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     have hrun' := erwp_rebGen hE hreb okKept_top hT' hcan
       (Q := fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ) n ls
       (.app (.app (.val f) (.val .unit)) (.val d.v)) ρf X hX hbβ hdmem
-      (fun Bχ hBχ => callback_at_image hB hS hΘ hLt hf hcf (reb_allImm hreb) himg hBχ)
+      (fun Bχ hBχ => hcb β hLt _ _ Bχ (reb_allImm hreb) himg hBχ)
     rw [erwp_eq] at hrun'
     exact hrun' ρF fρ ps μ hF hcF hT htg hI hl hfd j μ' e' hj hrun hfin
   · -- a chain view: the cell's value is the chain's (`ex(R)_○` lifts into `ag(W)`)
@@ -521,7 +527,7 @@ theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     have hrun' := erwp_rebGen hE hreb (okKept_deep hch) hT' hcan
       (Q := fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ) n ls
       (.app (.app (.val f) (.val .unit)) (.val v)) ρf X hX hbβ hdmem
-      (fun Bχ hBχ => callback_at_image hB hS hΘ hLt hf hcf (reb_allImm hreb) himg hBχ)
+      (fun Bχ hBχ => hcb β hLt _ _ Bχ (reb_allImm hreb) himg hBχ)
     rw [erwp_eq] at hrun'
     exact hrun' ρF fρ ps μ hF hcF hT htg hI hl hfd j μ' e' hj hrun hfin
 
@@ -533,8 +539,8 @@ Core's `withload_compatX`, step by step (`chain-interpretation.md` §6.3):
 
 1. the context owns nothing: the constant at `PMap.empty`;
 2. the `Imm` argument is `loc ℓ` (`vN`'s `Imm` clause);
-3. the callback, at the world along `ExtR`;
-4. both arrive at the world `Θ` the run is at (`vN_extR`);
+3. the callback, at the same world: `⊸` is a plain wand;
+4. both are at the world `Θ` the run is at, which the thunk's `U` reached;
 5. the load: its payload observable at `A` (`rwp_load_I` under `erwp_bindR`);
 6.–11. at the run's first entry (`withload_reb`): the record whose cell or chain view the source
    is, at the source's type (the tie and `TI`); its template (6.132, `tmpl_exists`,
@@ -551,13 +557,13 @@ theorem withloadS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
     (hS : S.Suspend x bnd) (δ : LSub) (Θ₀ : LocTy) (n : Nat) :
     vN (ℍ := ℍ) (.bang (withloadUTy a x bnd A B S)) δ Θ₀ n withloadV PMap.empty := by
   -- step 1
-  refine ⟨rfl, fun Θ₁ _ _ c₁ _ ls => ?_⟩
-  intro Θ₂ _ _ c₂ k hk u ρv ρu hc hu _
+  refine ⟨rfl, fun Θ _ hΘ c₁ _ ls => ?_⟩
+  intro c₂ k hk u ρv ρu hc hu _
   obtain rfl := eq_of_compS_empty_left hc
   -- steps 2–4
-  intro Θ hE₃ hΘ c k' hk' f ρf ρ'' hc' hf hcon
+  intro c k' hk' f ρf ρ'' hc' hf hcon
   obtain ⟨α₀, hα₀, ⟨l, s, w, σ, hσs, rfl, rfl, hα₀s, hpay⟩, hwit⟩ :=
-    vN_le hk' (vN_extR _ δ k _ _ hE₃ hu)
+    vN_le hk' hu
   rw [cN_effOf]
   refine erwp_of_valid fun hv'' => ?_
   have hcf : ConsistentX c ρf := consistentX_right hc' hcon hv''
@@ -580,8 +586,10 @@ theorem withloadS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
   refine rwp_load_cell ls l s w σ hσs _ hc' ?_
   -- steps 6–13
   simp only [Kont.plug]
-  exact withload_reb hbnd hA hB hS hΘ (vO_le (Nat.sub_le k' 1) hpay) (hwit l s w σ hσs rfl)
-    (vN_le (Nat.sub_le k' 1) hf) hcf hc' 
+  exact withload_reb (hbnd δ (models_empty_any _)) hA hS (vO_le (Nat.sub_le k' 1) hpay)
+    (hwit l s w σ hσs rfl)
+    (fun β hLt u χ Bχ hχ himg hBχ =>
+      callback_at_image hB hS hΘ hLt (vN_le (Nat.sub_le k' 1) hf) hcf hχ himg hBχ) hc' 
 
 /-- **`ConstN` for `withload` at a suspending row**, from its rule's premises. -/
 theorem constN_wl {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}

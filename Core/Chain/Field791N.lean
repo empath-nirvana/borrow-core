@@ -282,13 +282,13 @@ theorem withborFS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
     (Θ₀ : LocTy) (n : Nat) :
     vN (ℍ := ℍ) (.bang (withborFSTy a x bnd A B S)) δ Θ₀ n (withborFV d) PMap.empty := by
   -- step 1
-  refine ⟨rfl, fun Θ₁ _ _ c₁ _ ls => ?_⟩
-  intro Θ₂ _ _ c₂ k hk u ρv ρu hc hu _
+  refine ⟨rfl, fun Θ _ hΘ c₁ _ ls => ?_⟩
+  intro c₂ k hk u ρv ρu hc hu _
   obtain rfl := eq_of_compS_empty_left hc
   -- steps 2–4
-  intro Θ hE₃ hΘ c k' hk' f ρf ρ'' hc' hf hcon
+  intro c k' hk' f ρf ρ'' hc' hf hcon
   set P : CPredL := fun Θ' j u r => vN (ℍ := ℍ) (.ref A) δ Θ' j u r with hP
-  obtain ⟨α₀, hα₀, (β : Life), hα₀β, hm, hunif⟩ := vN_le hk' (vN_extR _ δ k u ρu hE₃ hu)
+  obtain ⟨α₀, hα₀, (β : Life), hα₀β, hm, hunif⟩ := vN_le hk' hu
   -- step 5
   obtain ⟨l, w₀, σ₀, hσ₀, j₀, hw₀, hkj, rfl, hl, rfl⟩ := id hm
   -- step 2 at `Ref A`: the source's content is the field `ℓ₂ ↦ own(u₀) ● σ_u`
@@ -467,7 +467,7 @@ theorem withborFS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
       fun Θ'' j u r h => (hunifA Θ'' j u r (by rw [← hAδ]; exact h)).mono hαβ⟩
   have hcBM : ConsistentX c' BM := consistentX_compS hBM hcf'
     (consistentX_single_mut hcσu' (by simp [hc'def, setLife]))
-  have h2 := h1 Θ' (LocTy.extR_refl _ _) hOK' c' (k' - 1) (by omega) (Val.loc l₂) _ BM hBM
+  have h2 := h1 c' (k' - 1) (by omega) (Val.loc l₂) _ BM hBM
     hcell hcBM
   rw [cN_effOf] at h2
   refine erwp_mono (fun k ls' b ρ' hb => ?_) (opTableN_local _) (k' - 1) ls _ BM h2

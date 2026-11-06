@@ -805,11 +805,11 @@ theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Ro
     (hd : SemJN (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.ref A) .unit))) (δ : LSub)
     (Θ₀ : LocTy) (n : Nat) :
     vN (ℍ := ℍ) (.bang (withbor2UTy x bnd A B S)) δ Θ₀ n (withborUV d) PMap.empty := by
-  refine ⟨rfl, fun Θ₁ _ _ c₁ _ ls => ?_⟩
-  intro Θ₂ _ _ c₂ k hk u ρv ρu hc hu _
+  refine ⟨rfl, fun Θ _ hΘ c₁ _ ls => ?_⟩
+  intro c₂ k hk u ρv ρu hc hu _
   obtain rfl := eq_of_compS_empty_left hc
-  intro Θ hE₃ hΘ c k' hk' f ρf ρ'' hc' hf hcon
-  obtain ⟨l, w₀, σ₀, rfl, hcl, hw₀⟩ := vN_le hk' (vN_extR _ δ k u ρu hE₃ hu)
+  intro c k' hk' f ρf ρ'' hc' hf hcon
+  obtain ⟨l, w₀, σ₀, rfl, hcl, hw₀⟩ := vN_le hk' hu
   rw [cN_effOf]
   refine erwp_of_valid fun hv'' => ?_
   have hΦ : (Θ.view c).Down := LocTy.view_down hΘ.1 c
@@ -905,7 +905,7 @@ theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Ro
         fun Θ'' j u r h => hunif Θ'' j u r (by rw [← hAδ]; exact h)⟩
     have hcBM : ConsistentX c' BM := consistentX_compS hBM hcf'
       (consistentX_single_mut hcσ' (by simp [hc'def, setLife]))
-    have h2 := h1 Θ' (LocTy.extR_refl _ _) hOK' c' k' le_rfl (Val.loc l) _ BM hBM hcell hcBM
+    have h2 := h1 c' k' le_rfl (Val.loc l) _ BM hBM hcell hcBM
     rw [cN_effOf] at h2
     refine erwp_mono (fun k ls' b ρ' hb => ?_) (opTableN_local _) k' ls _ BM h2
     obtain ⟨β, hβ, hbB, hst⟩ := hb
