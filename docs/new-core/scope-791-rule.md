@@ -413,7 +413,7 @@ case's row in `Core/Chain/Inst791N.lean`. `Const791.OK` is inhabited for each, i
 `CDerives` judgment included (`w2_ok`, `w3_ok`, `wF_ok`), and `withbor2S_perform` applies `w2` to
 a callback that performs while holding the borrow (at `A = B = 1`). The corollaries `constN_w2`/`constN_w3`/`constN_wF`
 are conditional on `FundamentalN`, stated on the fragment and not proved. The `imm` half (`wl`)
-waits on `Imm`'s record list and `CohE` (departure 1), which stops at §9.3 (`coreMutImm_not_extF`); `cN_extA` at `F_Σ R` is open; `sm` needs
+waits on `Imm`'s record list and `CohE` (departure 1), which stops at §9.3 (`coreMutImm_not_extF`) and §10.4 (`not_wlImage`); `cN_extA` at `F_Σ R` is open; `sm` needs
 the `fam` clause.
 
 **`Mut`** is Core's `ptoMutS` shape: `∃ b, @aδ ⊑ b ∧ mutL b … ∧` the uniform conjunct at `b`.
@@ -556,3 +556,110 @@ step (a value re-read at an `extF`-related list), not a run of the constant endi
   Untranscribed in `withload_compatX`'s run-up, at `vN`: `vC_local` (list order), `ptoImmO_read`,
   `vC_tyEq`, `vC_vShape`, `relabel_obs`/`image_vC_of_shape`; `erwp_reborrow` across raises and
   layered cancel runs.
+
+## 10. Imm in the per-lend world (#829)
+
+Kernel target: `vN`'s `Imm` clause read in the per-lend world, stable along `extF`, and
+`ConstN (.wl …)` by Core's `withload_compatX` at a `Row.Suspend` callback row.
+
+### 10.1 How an `imm` lend's payload is read across `extF`
+
+`vN` takes no record list (`vN A δ Θ n v ρ`, `Core/Chain/Goal791N.lean`). Its `Imm` clause
+(`immCell`) reads one `imm` cell `imm(s, u, σ)` with `@aδ ⊑ ⊓s` and the payload `(u, σ)` in
+`𝒱⟦A⟧` at the world `Θ`. Nothing in it reads `ls`, so it is unchanged along `extF`, and along
+`ExtR`/`ExtA` by `vN_extR`/`vN_extA` as they stand. §9.3's obstruction is to Core's list-reading
+payload (`ls₀` inside a `Mut`'s stored family). The current clause does not have it.
+
+### 10.2 What replaces `CohE`: nothing that reads only `vN`'s arguments
+
+Core's `CohE (rsOf ls) ℓ A δ` does two things in `withload_compatX`:
+- it names the record whose cell the source is (step 6, the chooser);
+- it makes the source's type the record's type, up to `TyEq` (steps 6–8: `vC_tyEq`,
+  `vShape_tyEq`, then `image_vC_of_shape` at the record's type).
+
+On the chain, the first can be read off the run's first world. `rwpG` quantifies over
+`TWNC fρ ps (rsOf ls)`, every `imm` cell of a typed world is a record's cell or an image's, and
+`TWNC.reb` holds the record's `(le, v, R)`. The second cannot. The reborrow lemmas
+(`erwp_reborrow`, `erwp_reborrowT`, `erwp_reborrowDeep`) hand the borrowed computation the
+record's canonical image `canon r β`. That image is fixed by the record's template, chosen at
+the record's type `r.T` (`TmplSpec`, `SI/TWNC.lean`). The callback's argument type is
+`Imm̲ 'x A`, at the source's type.
+
+`Core/Chain/ImmRec791N.lean`, every hypothesis discharged:
+- `WlImage P` is step 8 at an `Imm` clause `P` read at `vN`'s arguments
+  `(A, δ, Θ, n, v, ρ)`. At a run's first entry (`TWNC` at the list's records, `Tagged`), at a
+  record of the list whose cell is the source, and with every premise `erwp_reborrow` reads
+  (`¬ VFree x r.T`, `TmplSpec r (tmpl r)`, `r.R ∈ Res_β`, the image's shape, `β ⊑ ⊓s`),
+  `canon r β` is a value of `Imm̲ 'x A` at `δ['x ↦ β]`.
+- The cell is `ℓ ↦ imm({α}, loc ℓ′, ℓ′ ↦ own(()))`. It is the world of an `imm` lend of
+  `ℓ ↦ own(loc ℓ′)` recorded at `Ref 1` (`world_ref`). It is also the world of one recorded at
+  `U (F 1)` (`world_thunk`), since `vShape (U C)` is `True`. Both worlds are built from `∅` by
+  `TWNC.alloc` twice and `TWNC.immFrame`, and both are tagged, `#`-valid with `∅` and lowered.
+- At `U (F 1)` the template is `∅`: `Imm̲ (U C) = Unk`, whose shape is `emp`
+  (`tmpl_thunk`, `tmplSpec_thunk`). So `canon r β = ∅` at every `β` (`canon_thunk`).
+- `not_wlImage`: if `P` admits the cell at `Imm @a (Ref 1)` and has no value of `Imm 'x 1` at
+  `∅`, then `¬ WlImage P`. `not_wlImage_vN` is the current clause at `ℓ = 0`, `ℓ′ = 1`, `α = 1`.
+
+`P` is any clause over `vN`'s arguments. It admits the cell at some `Θ`, because the lend
+recorded at `Ref 1` hands it at `Imm @α (Ref 1)` and the callback runs at some world. The
+refutation uses that same `Θ`. `SemJN` and `rwpG` quantify over the world `Θ` and the typed
+world `TWNC` independently, so the same `(Θ, cell)` occurs at the world recorded at `U (F 1)`.
+A clause that reads `Θ` is covered. So is one that asks for coherence with *some* list
+(`∃ ls, CohE (rsOf ls) …`): either way the clause holds at the lend's `Θ` and cannot see which
+record the run's world holds.
+
+So the information `CohE` carries (the source's type is its record's) is not available to an
+`Imm` clause in the per-lend world. That is the difference from `Mut`. The relation reads the
+per-lend world for `mut` cells, through the view `Θ.view c` (`PredStep`, `reseal_at_entry`). For
+`imm` records it reads only the records on `ls`/`TWNC`, which carry `r.T` and never read `Φ`.
+
+### 10.3 `withload_compatX`'s 13 steps under the per-lend reading
+
+| # | Step (§9.1) | State |
+|---|---|---|
+| 1 | the constant at `PMap.empty` | exists |
+| 2 | the `Imm` argument is `loc ℓ` (`cN`'s `⊸`, `erwp_det`) | exists |
+| 3 | the callback along `ExtR` | exists |
+| 4 | the `Imm` value carried to the run's world | exists (`vN_extR`; no list to carry) |
+| 5 | the load, its payload | exists (`rwp_load` under `erwp_bindR`; the payload at `𝒱⟦A⟧`) |
+| 6 | the chooser: the record whose cell the source is | the record's `(le, v, R)`: buildable from the first world (`TWNC`). Its type: **blocked** (`not_wlImage`) |
+| 7 | the image's shape (`TmplSpec`, `hshape`) | exists, at the record's type |
+| 8 | the image typed at `Imm̲ 'x A`; across raises and layered cancel runs | **blocked** at its first part (`not_wlImage`). The extension across raises and layered cancel runs (on `erwp_reborrowT` + `tabR_canA`) is buildable and not attempted |
+| 9 | the fresh `β` | exists |
+| 10 | the pin `vℓ = r.v` | buildable with step 6's identification |
+| 11 | the callback at `δ['x ↦ β]`, its table `RebOK*` from `Row.Suspend`'s clause | exists in shape |
+| 12 | values at same-member lists | exists (`vN` reads no list) |
+| 13 | the result at `['x] B`, `vN_extend_of_not_free` | exists |
+
+### 10.4 STOP
+
+Step 8 needs the source's type to be its record's, and `not_wlImage` shows that no `Imm` clause
+over `vN`'s arguments gives it. Getting it would mean one of:
+- `vN` reading the run's record list (Core's `CohE (rsOf ls)`). This changes `vN`'s signature,
+  hence the statements of every law and of `withbor2S_compat`/`withbor3S_compat`/
+  `withborFS_compat`. With the payload read at the list, §9.3's `coreMutImm_not_extF` applies to
+  `Mut` payloads too;
+- the relation reading an `imm` entry of the per-lend world (a change to `rwpG`/`TWNC`'s
+  records or `LocFam`), or `LocTy` carrying `imm` entries.
+
+Each of these is on the brief's stop list. Nothing is changed: `vN`, its laws, `w2`/`w3`/`wF`
+and their instances, `LocTy`, `Row.Suspend`, `CTy.SuspendC` and `Const791.OK` are as they were.
+
+Not verified:
+- that `ConstN (.wl …)` is false. The configuration is the step: the image the chain's reborrow
+  lemmas hand the callback. No run of the constant is refuted, and no other way of giving the
+  callback a resource at `ℓ′` is excluded in Lean: I have not proved that, in the world recorded
+  at `U (F 1)`, no typed-world step other than an image of `r` (which is `∅`) adds a cell at `ℓ′`;
+- whether, at a record whose type does match the source's, the image is a value of `Imm̲ 'x A`
+  at `vN`'s full-relation payload reading. Core reads the payload at `vCE false` (`U` read as
+  `True`), and `reb_witness_choice` shows the witness under a `Ref (U C)` is a choice. I have not
+  derived this either way and have not verified that any obstruction is real.
+
+Unspent premises: `Row.Suspend`'s payload/answer clause (step 11), `Const791.OK`'s `wl` clause
+(`¬ VFree x A`, `¬ VFree x B`, the bound's definedness; only `¬ VFree x A` is read, by
+`WlImage`). Unused: `erwp_reborrow`, `erwp_reborrowT`, `erwp_reborrowDeep`, `rebChooseC_tw`,
+`canon_escrowAgree`, `relabel_obs`. Unused uniqueness results: `ResU.CompS.functional`,
+`AgW.functional`, `CellU.immOf_inj` (the configuration needs none). Untranscribed in `withload_compatX`'s
+run-up, at `vN`: `CohE` and its `TyEq` transport (`vC_tyEq`, `vShape_tyEq`), `ptoImmO_read` (the
+observable payload), `vC_vShape`, `image_vC_of_shape`/`relabel_obs`; `erwp_reborrow` across
+raises and layered cancel runs.
