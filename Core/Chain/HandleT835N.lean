@@ -5,7 +5,7 @@ import Core.DivHandleLast
 # `[handle]` at clauses that resume `κ` in tail position  `[spec §14, §19]`
 
 Core's `handleT_compatC` (`Core/DivHandle.lean`) at `SemJN`, its proof `ewp_handle_tail` at `erwp`
-(E11's tail instance, `scope-831-interface.md` §10.4), each step Core's:
+(the tail instance, `scope-831-interface.md` §10.5), each step Core's:
 
 * `erwp_frame_plain_or` (Core's `ewp_frame_plain_or` with no table beside, by E13): a plain frame
   around a computation at a table `T` below the outer `T′`; the frame's conditions are read at `T`'s

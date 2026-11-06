@@ -214,3 +214,15 @@ and an answer a stop is resumed at must be consistent with it. In the paper's te
 value nor control-flow linearity: it is the borrow side (§2.4), the view being where a `Mut` cell's
 lend is read. A row's table now reads its answers at the view, as `SemJN` reads a run's starting
 resource and `⊸` its argument's composite.
+
+## 7. Part 4 (`rule-791-tail`)
+
+`scope-831-interface.md` §10.5–§10.6 has the detail.
+
+| Entry or rule | Built | File | Core's proof it follows |
+|---|---|---|---|
+| the handled row's table | `tabN_ofEff_ne`, `tabN_ofEff_self`, `capTag_ofEffN` | `Core/Chain/HandleT835N.lean` | `Row.tab_ofEff_ne`, `Row.tab_ofEff_self`, `capTag_ofEff` |
+| the plain frame from a table below | `erwp_frame_plain_or` | `HandleT835N` | `ewp_frame_plain_or` |
+| E10's tail instance, `effHandleT` | `ansesTy_atN`, `erwp_handle_tail`, `handleT_compatN` | `HandleT835N` | `ansesTy_at`, `ewp_handle_tail`, `handleT_compatC` |
+| E10's last instance, `effHandleL` | `worksTy_atN`, `exitsTy_atN`, `last_contN`, `erwp_handle_last`, `handleL_compatN` | `Core/Chain/HandleL835N.lean` | `worksTy_at`, `exitsTy_at`, `last_cont`, `ewp_handle_last`, `handleL_compatC` |
+| the scheduler's answer consistency from `SchedOKN`'s other fields | not derived; obstruction not verified | — | — (Core has no view) |

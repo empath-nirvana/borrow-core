@@ -176,7 +176,7 @@ The configurations named below are indexed in `configurations.md`; the design th
 | E7 | `ewp_raise_here` | spec §19 | 2: `effAwait`, `effRaise` | **built** (#835: `erwp_raise_here`) | a raise's introduction at `raiseStopN`: built inline in `erwp_handle`'s proof (`SI/HandleN.lean`), to be stated (map E4) |
 | E8 | `ewp_frame_plain`, `ent_plain`, `cancel_frame`, `cancel_frame_consume` … | spec §27 | 10: `iterate`, `divFuel`, `reify`, `unfoldN` … | **built** (#835: `erwp_frame_plain`, `entN_plain`, `tabN_plainCancel`) | the frame at a row's table: owning across must-resume stops, owning nothing where the row cancels, empty at an unrestricted row; `erwpG_frame`, `erwp_frameL` are special cases (map E5) |
 | E9 | `ewp_frame_then`, `ewp_frame_then_or`, `cwp_then`, `cwp_then_div` … | — | 3: `effThen`, `effThenDiv`, `effHandleL` | **built** (#835 §10.3: `erwp_frame_then`, `then_cancelN`, `cfin_runN`, `cfin_cancelN`, `seq_raise_runN`) | `erwp_ubind` (`SI/UbindGN.lean`) and its cancel/raise/claim companions are stated without unrestricted operations in `Σ_M` and at a finaliser meeting `FinOK`; Core's `hP`/`hU`/`ThenLe` form and a finaliser row holding `Div` are missing, buildable (map E6, E7) |
-| E10 | `ewp_handle_vals`, `ewp_handle_valsB`, `ewp_handle_tail`, `ewp_handle_last` … | — | 4: `effHandleV`, `effHandleVB`, `effHandleT`, `effHandleL` | **not derived** (#835 §10.1: the clauses at `vN`; the tail and last instances not built) | `erwp_handle` (`SI/HandleN.lean`; needs no `hdv`), `erwp_kappa_*`; the clauses' reading at `vN` and the split of `tabN (ofEff n E 0 fs ++ S)` (map E8), the tail and last instances (map E11): missing, buildable |
+| E10 | `ewp_handle_vals`, `ewp_handle_valsB`, `ewp_handle_tail`, `ewp_handle_last` … | — | 4: `effHandleV`, `effHandleVB`, `effHandleT`, `effHandleL` | **not derived** for `effHandleV`/`VB` (#835 §10.1: the clauses at `vN`); the tail and last instances **built** (#835 §10.5: `erwp_handle_tail`, `erwp_handle_last`) | `erwp_handle` (`SI/HandleN.lean`; needs no `hdv`), `erwp_kappa_*`; the clauses' reading at `vN` and the split of `tabN (ofEff n E 0 fs ++ S)` (map E8), the tail and last instances (map E11): missing, buildable |
 | E11 | `ewp_kappaC_resume`, `ewp_kappaC_cancel`, `ewp_kappaCell`, `ewp_kappa_resume` … | — | 3: `divFuel`, `reify`, `effHandleVB` | **same**; the fuel handler's instances built (#835: `erwp_kappaC_resume_in`, `erwp_hnd_tick`) | `erwp_kappa_resume`, `erwp_kappaC_resume`, `erwp_kappa_cancel`, `erwp_kappaC_cancel`, `erwp_kappaCell`, `erwp_ccatch` (`SI/HandleN.lean`) |
 | E12 | `stop_sem` | spec §28 | 1: `effHandleVB` | **built** (#835: `stop_semN`, `erwp_handleS`) | the BOXED-κ stop lemma at `erwp` (map E10). Not derived; obstruction not verified |
 | E13 | `cwp_bind`, `cwp_of_ewp`, `effWp_of_ewp`, `cwp_out` … | spec §14 | 21: `iterate`, `divFuel`, `reify`, `withbor1U` … | **departed, forced by `erwp`** | a `Div` row is a row of the table; `erwp` is step-indexed, so Core's coinductive `cwp` and its bookkeeping have no counterpart, and each `cwp` branch is the `ewp` branch's `erwp` lemma. Reason: `Depart831N.erwp_of_noFinal`; the split: `Depart831N.cN_effOf_divB` (§6.3) |
@@ -342,8 +342,8 @@ that step is done inside `withloadS_compat`, which is proved, so V1 is not a blo
 | 98 | `effThenDiv` | cut | portable | K2 V9 G1 G4 G5 G6 G11 G12 C3 R6 E1 E2 E3 E4 E8 E9 E13 | G1 G4 G6 G11 G12 E3 E8 E9 | proved (`thenDiv_compatN`, §10.3) |  |
 | 99 | `effHandleV` | cut | portable | W9 K5 V9 G1 G3 G11 G12 C3 F1 E1 E4 E10 E13 | W9 K5 G1 G11 G12 E10 | waits: E10 (§10.1) |  |
 | 100 | `effHandleVB` | cut | pending | W9 K5 V5 V9 G1 G3 G7 G11 G12 C3 F1 R6 E1 E4 E10 E11 E12 E13 | W9 K5 G1 G7 G11 G12 E10 E12 | waits: E10 (§10.1); E12 built |  |
-| 101 | `effHandleT` | cut | portable | W9 K5 V9 G1 G3 G11 G12 C3 E1 E2 E3 E4 E8 E10 E13 | W9 K5 G1 G11 G12 E3 E8 E10 | waits: E10's tail instance (§10.4) |  |
-| 102 | `effHandleL` | cut | portable | W9 K1 K2 K5 V8 V9 G1 G3 G11 G12 C3 R6 E1 E2 E3 E4 E8 E9 E10 E13 | W9 K5 V8 G1 G11 G12 E3 E8 E9 E10 | waits: E10's last instance (§10.4); E9 built |  |
+| 101 | `effHandleT` | cut | portable | W9 K5 V9 G1 G3 G11 G12 C3 E1 E2 E3 E4 E8 E10 E13 | W9 K5 G1 G11 G12 E3 E8 E10 | proved (`handleT_compatN`, §10.5) | `ewp_handle_tail`, `ansesTy_at`, `Row.tab_ofEff_self` |
+| 102 | `effHandleL` | cut | portable | W9 K1 K2 K5 V8 V9 G1 G3 G11 G12 C3 R6 E1 E2 E3 E4 E8 E9 E10 E13 | W9 K5 V8 G1 G11 G12 E3 E8 E9 E10 | proved (`handleL_compatN`, §10.5) | `ewp_handle_last`, `last_cont`, `worksTy_at`, `exitsTy_at` |
 | 103 | `letPoly` | cut | portable | G5 C1 | — | mechanical now |  |
 | 104 | `alpha` | yes | portable | V1 | V1 | mechanical once built |  |
 
@@ -699,9 +699,9 @@ rows 76 and 77 are updated here.
 
 ## 10. Built in #835 (unit L4)
 
-Branches `rule-791-l4b` and `rule-791-view`. The paper mapping is `scope-835-handlers.md`. Part 1
-(`rule-791-l4`) built E3, E5–E8, W9, E12, E14 and ported `effSub`, `effPerform`, `effRaise`
-(`scope-835-handlers.md` §4). Parts 2 and 3 are this section.
+Branches `rule-791-l4b`, `rule-791-view` and `rule-791-tail`. The paper mapping is
+`scope-835-handlers.md`. Part 1 (`rule-791-l4`) built E3, E5–E8, W9, E12, E14 and ported `effSub`,
+`effPerform`, `effRaise` (`scope-835-handlers.md` §4). Parts 2–4 are this section.
 
 ### 10.1 E10: the clauses read at `vN`
 
@@ -730,8 +730,8 @@ embed in the table at `c` (`OpTabN.Le` asks equal answers, and the two read thei
 different views), so the step would go through the run's resource, not the tables. Not derived;
 obstruction not verified.
 
-`effHandleT` and `effHandleL` give the clauses no `κ` and do not need this step; they need the tail
-and last instances (§10.4), which are not built.
+`effHandleT` and `effHandleL` give the clauses no `κ` and do not need this step; their tail and last
+instances are built (§10.5).
 
 ### 10.2 Answer consistency: a row's table reads its answers at the view
 
@@ -796,16 +796,87 @@ without `Div` either; `hSD` selects Core's `ewp`/`cwp` branch, which E13 removes
 
 ### 10.4 Not built
 
-- E10's tail and last instances (`ewp_handle_tail`, `ewp_handle_last`), and so `effHandleT` and
-  `effHandleL`. Neither needs `κ` at `vN` (§10.1). What each needs: the split of
-  `tabN (CTy.effOf (Row.ofEff n E 0 fs ++ S) _)` (Core's `Row.tab_ofEff_self`, `capTag_ofEff`,
-  `Row.tab_ofEff_ne` at `tabN`), the clause tuple read at `vN` (`ansesTy_at`, `worksTy`/`exitsTy`), the
-  handler value read off its run (`erwp_val_post`), and the resume frame `resK κ` around the clause's
-  run at `Σ_N` (`erwp_frame_plain`), the clause paying one step so that `κ` is resumed below its stop's
-  index. The answer the clause resumes with is its run's value, consistent with the view
-  (`erwp_consistentAns`): the reading of §10.2 is met there. Not built.
+- E10's tail and last instances: built in part 4 (§10.5).
 - `effHandleV`, `effHandleVB`: wait on E10 (§10.1).
 - `withloadU` (#834 §8.4) is unchanged.
+
+### 10.5 Built in part 4: the tail and last handlers (`rule-791-tail`)
+
+| Rule | Lemma | File | Core |
+|---|---|---|---|
+| `effHandleT` | `handleT_compatN` (`erwp_handle_tail`, `erwp_frame_plain_or`, `ansesTy_atN`, `tabN_ofEff_self`, `tabN_ofEff_ne`, `capTag_ofEffN`, `erwp_consistentPA`) | `Core/Chain/HandleT835N.lean` | `handleT_compatC` (`ewp_handle_tail`, `ewp_frame_plain_or`, `ansesTy_at`, `Row.tab_ofEff_self`, `Row.tab_ofEff_ne`, `capTag_ofEff`) |
+| `effHandleL` | `handleL_compatN` (`erwp_handle_last`, `last_contN`, `worksTy_atN`, `exitsTy_atN`, `erwp_frame_then`, `erwp_frame_plain_or`) | `Core/Chain/HandleL835N.lean` | `handleL_compatC` (`ewp_handle_last`, `last_cont`, `worksTy_at`, `exitsTy_at`, `ewp_frame_then`) |
+
+Each is Core's proof at `erwp`, through `erwp_handle_le` at the handled row's table. The handler's
+values are read off its run at the run's start (`erwp_val_post`, W9), as Core reads them off `wpTS`.
+The clauses are Core's syntax (`tailTuple`, `lastTuple`, `resK`, `lastN`, `lastD`, `exitK`), and so
+are their steps, except that each clause's `β` step is split off and paid (`erwp_step`). The rest
+is `tailClause_steps_body`, `lastClause_steps_body`. So the answering function's run, the work's
+run, the finaliser and the frame's answer are all below the stop's index, where `KapRelN` owes `κ`
+(`erwp_idxLe`, `erwp_consistentAns` at the index the step left). `κ`'s cancel branch at `[handle-last]`
+is the table of the operation's own cancel row (Core's `lastTc`). There it is the entry's cancel
+obligation itself (`OpTabN.Sub`, which `erwp_handle_le` asks), and `LastFinOK`'s first conjunct
+makes it not `⊤`.
+
+**Two readings at the view.** Typed code reads its argument at a view consistent with it (`⊸`).
+- The answering functions, the works and `h_ret` get the handled run's payloads and value. The
+  handled run starts from the part of the resource consistent with the view (`gN_splitC`). Its
+  stops and its value are consistent too (`rwpG_consistentXV`, `consistentX_left`).
+  `erwp_consistentPA` moves the run to `T.withPA c n`, the table whose entries of the handler's
+  name read their payload at `c`; `erwp_handle_le` reads the clauses there.
+- The answer `κ` is resumed at is the answering function's (or the work's) value. It is
+  consistent with the view across that run's resumptions (`erwp_consistentAns`), which is §10.2's
+  answer reading. The exit's argument is a part of the work's value.
+
+**The frame at the record list.** Core's `ewp_frame_then` reads its frame at the record list
+(`Fr : List SRec → WProp`); `[handle-last]`'s frame is `κ`'s relation at the stop's list. The
+chain's `erwp_frame_then` and `then_cancelN` read it the same way now, carried along the
+continuations' `extF` (`hFe`), as `erwp_frame_plain` does. `then_compatN` passes its list-free frame.
+
+**Restated:**
+
+| Declaration | Was | Is |
+|---|---|---|
+| `then_cancelN` | `Fr : WProp` | `Fr : List SRec → WProp` with `hFs` (same members) and `hFe` (along `extF`); `hD` and the unrestricted condition read `Fr ls` |
+| `erwp_frame_then` | `Fr : WProp` | the same; `hU`, `hD`, `hkv` and the conclusion read `Fr ls` |
+
+**Unspent:** the rules' `n ≠ 0` and `n ≠ Div` (`hn0`, `hnd`), in both rules. Core reads `hnd` only
+at its `Row.divB` split and `hn0` only in its `ewp_handle`, and neither has a counterpart at the
+chain (E13; `erwp_handle_le` takes no `n ≠ 0`). `handleT_compatN` and `handleL_compatN` do not take
+them.
+
+### 10.6 The scheduler's answers
+
+The brief asked whether the requirement §10.2 added to `Goal791SchedN` can be derived from
+`SchedOKN`'s other fields. The requirement is that `SchedOKN` at `rowTabN` has the scheduler resume
+with answers consistent with the view. **Not derived; obstruction not verified.**
+
+- **Where the requirement sits.** It is not a field. It is inside `SchedOKNLe.op`'s premise: the
+  clause is asked to run for every `κ` with `KapRelN … en …`. `KapRelN` resumes `κ` only at the
+  entry's answers `en.PB`, which at `rowTabN` are `vN B δ Θ ∧ ConsistentX c`. The premise is
+  contravariant in `PB`. Reading the answers without `ConsistentX` makes `KapRelN` stronger, so
+  `op` asks less. No other field (`down`, `names`, `tags`, `fin`, `wc`, `qdown`, `ret`) reads `PB`.
+  Dropping the requirement therefore means taking `op` at the plain reading and obtaining it at
+  the view's reading.
+- **Why `erwp_consistentAns`'s argument does not reach it.**
+  - *In a program's handlers* (`erwp_handle_tail`, `erwp_handle_last`, the fuel handler), the proof
+    builds the clause's run, and the proof resumes `κ`, at the value of a run it holds as an
+    `erwp`. That value is consistent with the view.
+  - *At the scheduler*, the clause's run is the hypothesis `op` itself. `κ`'s resumption happens
+    inside that hypothesis, which takes `κ`'s relation as an input. To use `op` at the plain
+    reading, `erwp_schedHandle_le` → `erwp_handle_le` must hand it a `KapRelN` resumable at every
+    answer in `vN B`. The `κ` it builds resumes the task's continuation. The task's run is at
+    `rowTabN`, read off `FundamentalN`, so that continuation is owed only at answers consistent
+    with the view.
+  - The step needed is therefore an `erwp` at the scheduler's table from a resource inconsistent
+    with the view. `erwp` does not read the view, and no lemma gives such a run.
+- **What would make it follow.** One of:
+  - a reading of `op` that asks the clause only at runs that keep the view, for example `KapRelN`
+    whose resumption also assumes the composite consistent. That restates the requirement; it does
+    not derive it;
+  - a parametricity fact about the clause's run. `erwp` does not provide one.
+- **The statement is unchanged.** `Goal791SchedN` and `hs_schedOKN` are as before. The hardest
+  case's row answers `park` at `∅` (`hardestRow_entry_PB`), so its instance meets the requirement.
 
 ## 11. Unit L5: opaque types and families (#836)
 

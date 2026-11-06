@@ -4,7 +4,7 @@ import Core.Chain.HandleT835N
 # `[handle-last]`: a clause that uses `κ` once, last  `[spec §14, §19, §27, §51]`
 
 Core's `handleL_compatC` (`Core/DivHandleLast.lean`) at `SemJN`, its proof `ewp_handle_last` at
-`erwp` (E11's last instance, `scope-831-interface.md` §10.4), each step Core's:
+`erwp` (the last instance, `scope-831-interface.md` §10.5), each step Core's:
 
 * `worksTy_atN`, `exitsTy_atN` (Core's `worksTy_at`, `exitsTy_at`): the works and the exits read
   at `vN`;
