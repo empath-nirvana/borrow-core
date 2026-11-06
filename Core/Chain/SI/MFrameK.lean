@@ -17,7 +17,7 @@ the index with three cases, each the existing one:
   and owes its continuation at the worlds `y` its entry allows; `OpTabK.FoldTwin` gives the
   borrowed entry's order at the borrowed share and the frame's invariant at `y`, where the frame is
   re-entered by induction on the index; a cancellable stop's cancel obligation is the lender's by
-  `hcan`, read at `y`;
+  `hcan`, read at `y`, where `Inv` holds;
 * **a raise** (a `raise` or a cancel's `raise`): no continuation is owed, so no world is read; the
   case is the existing one (`hR`).
 
@@ -198,7 +198,7 @@ theorem erwpK_M_frameGen {V : ι → ι → Prop} {Φ : ι → LocFam} {Inv : ι
     (hTT : ∀ x, Inv x → (Ti x).FoldTwin Inv (flI x) (flO x) (To x) l A)
     (hcan : ∀ x, Inv x → ∀ m i en en', Ti x m i = some en → To x m i = some en' →
       en.abort = false → en.q ≠ .lin →
-      ∀ y k ls (K : Kont) (ρk ρp Z ρkL W'' : WRes) (v'' : Val) (χ : WRes)
+      ∀ y, Inv y → ∀ k ls (K : Kont) (ρk ρp Z ρkL W'' : WRes) (v'' : Val) (χ : WRes)
         (hχ : χ.InStratum A) (P'' : Val → SPropS Loc Val A) (hw'' : P'' v'' ⟨χ, hχ⟩),
         NoOwn ρp → ResU.CompS ρk ρp Z →
         ResU.CompS (Z.del l) (ResU.single l (CellU.mutOf A v'' χ hχ P'' hw'')) Z →
@@ -317,9 +317,9 @@ theorem erwpK_M_frameGen {V : ι → ι → Prop} {Φ : ι → LocFam} {Inv : ι
       simp only [erwpCK, show k' < n by omega, if_true] at hc
       exact erwpK_garbage hXkp hnoρp hc
     · -- a cancellable stop: the cancel obligation is the lender's, at the resumption world
-      obtain ⟨hyi, -⟩ := hwk' y hy
+      obtain ⟨hyi, hyInv⟩ := hwk' y hy
       have hql' : en.q ≠ .lin := hq' ▸ hql
-      exact hcan x hx m i en en' hTe hTe' ha hql' y k ls'' K ρk ρp Z ρkL W'' v'' χ hχ P'' hw''
+      exact hcan x hx m i en en' hTe hTe' ha hql' y hyInv k ls'' K ρk ρp Z ρkL W'' v'' χ hχ P'' hw''
         hnoρp hZ hZd hdZd hPk hW'' hkL ((hcont y hyi ls'' (he' ls'' he)).2 hql')
   · -- a raise: no continuation is owed
     obtain ⟨ρ'L, ρpL, hc, hno, hr'⟩ := hR x hx k ls' t _ (erwpCK (ℍ := ℍ) V Φ

@@ -82,12 +82,13 @@ theorem noRaise {fl : ι → Life} {T : ι → OpTabK ι} {G : ι → ShareG} (x
   h.elim id False.elim
 
 /-- **The cancel obligations across the fold**: a cancellable stop's, the borrowed run's at the
-borrowed share, is the lender's at the lender's share, at every resumption world. -/
+borrowed share, is the lender's at the lender's share, at every resumption world where `Inv`
+holds (the frame re-enters only there). -/
 def CanFold (Inv : ι → Prop) (Ti To : ι → OpTabK ι) (l : Loc) (A : Life)
     (F : Nat → Val → SPropS Loc Val A) : Prop :=
   ∀ x, Inv x → ∀ m i en en', Ti x m i = some en → To x m i = some en' →
     en.abort = false → en.q ≠ .lin →
-    ∀ y k ls (K : Kont) (ρk ρp Z ρkL W'' : WRes) (v'' : Val) (χ : WRes)
+    ∀ y, Inv y → ∀ k ls (K : Kont) (ρk ρp Z ρkL W'' : WRes) (v'' : Val) (χ : WRes)
       (hχ : χ.InStratum A) (P'' : Val → SPropS Loc Val A) (hw'' : P'' v'' ⟨χ, hχ⟩),
       NoOwn ρp → ResU.CompS ρk ρp Z →
       ResU.CompS (Z.del l) (ResU.single l (CellU.mutOf A v'' χ hχ P'' hw'')) Z →
@@ -117,7 +118,7 @@ theorem canFold_lift {T T' : OpTabN} {l : Loc} {A : Life} {F : Nat → Val → S
         ResU.CompS χ (ResU.single l (CellU.ownOf v'')) W'' → ResU.CompS (Z.del l) W'' ρkL →
         cancelOKN en k ls K ρk → cancelOKN en' k ls K ρkL) :
     CanFold (fun _ : Unit => True) (fun _ => liftTabK T) (fun _ => liftTabK T') l A F := by
-  intro _ _ m i en en' hT hT' ha hq _ k ls K ρk ρp Z ρkL W'' v'' χ hχ P'' hw'' hno hZ hZd hdZd
+  intro _ _ m i en en' hT hT' ha hq _ _ k ls K ρk ρp Z ρkL W'' v'' χ hχ P'' hw'' hno hZ hZd hdZd
     hPk hW'' hkL
   obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some hT
   obtain ⟨en₀', h₀', rfl⟩ := liftTabK_some hT'
