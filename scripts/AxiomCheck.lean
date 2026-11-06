@@ -1866,3 +1866,8 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.ansesTy_atN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwp_handle_tail
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.handleT_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.worksTy_atN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.exitsTy_atN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.last_contN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwp_handle_last
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.handleL_compatN

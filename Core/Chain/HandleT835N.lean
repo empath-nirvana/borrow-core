@@ -431,12 +431,13 @@ end
 (`tailTuple`). The handler's value is read off its run at the run's start (`erwp_val_post`), as
 Core reads it off `wpTS`; the handled computation runs at its row's table from the part of the
 resource consistent with the view (`gN_splitC`), and the handler is `erwp_handle_tail`. A `Div`
-row is a row of the chain's table (E13), so Core's split at `Row.divB S` has no counterpart. -/
+row is a row of the chain's table (E13), so Core's split at `Row.divB S` has no counterpart, and neither do the rule's `n ≠ 0` and
+`n ≠ Div`, which only that split and Core's `ewp_handle` read. -/
 theorem handleT_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Hr Hc e : Expr} {S SN : Row}
     {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)
     (hc : SemJN (ℍ := ℍ) Δ Γ₁ (.pair Hr Hc) (.val (.tensor (retTy S A R) (ansesTy S SN R E))))
-    (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
     (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false)
     (he : SemJN (ℍ := ℍ) Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
     SemJN (ℍ := ℍ) Δ Γ (hndExpr n (E.map Prod.fst) (.pair Hr (tailTuple E 0 Hc)) e)
