@@ -2220,3 +2220,17 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.tabNK_ifoldTwin
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.tabNK_linOnly
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpK_I_frame_tab
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tab_lookupRK
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabRK_sched
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabRK_lendOKCR
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabRK_foldTwinR
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.foldTwin_owedG
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabRK_canRK
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.performStopK_finLe
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.errOkK_finLe
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.opTableRK_finLe
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cancelTabRK_finLe
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabRK_finLe
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabListK_local
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwpK_M_frameCRR_listKW
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwpK_M_frameListKW
