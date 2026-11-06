@@ -1850,3 +1850,7 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.trav_specN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.hs_allN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.foldOwnG_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withload_sizedN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.good_of_imageN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.hSpec_allN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.foldImm_compatN
