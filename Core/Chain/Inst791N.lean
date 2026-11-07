@@ -13,7 +13,7 @@ discharged, so none of them is vacuous:
 * **The constants at the hardest case's row** (`hardestRow`, `park` as `TJN` types it), the bound
   Core's rules fix at the empty context (`LifeCtx.empty.meetOfDom`): `withbor2S_inst₀`,
   `withbor3S_inst₀`, `withborFS_inst₀`.
-* **A callback that performs an operation while holding the borrow** (`cbPerform_sem`):
+* **A callback that performs an operation while holding the borrow** (`cbPerform_sem₀`):
   `λ_. λu. perform op ()` at a one-operation suspending row, the borrow live across the stop.
 
 The finalisers are read semantically; `λr. ()` is not a `CDerives` term at `Mut @a A ⊸ 1` (the
@@ -137,7 +137,7 @@ def cbPerform (n i : UInt32) : Val :=
 /-- **A callback of the suspending lend that performs while holding the borrow**: `cbPerform` is
 a value of `∀'x ⊏ @bnd. Mut 'x A ⊸ F_Σ(['x] 1)` at the one-operation row `[linSig n i]`. Its
 stop is taken with the borrow in the continuation's share. -/
-theorem cbPerform_sem {x : LifeVar} {bnd : Lifetime.Life} {A : VTy} {δ : LSub} (n i : UInt32)
+theorem cbPerform_sem₀ {x : LifeVar} {bnd : Lifetime.Life} {A : VTy} {δ : LSub} (n i : UInt32)
     (Θ : LocTy) (k₀ : Nat) :
     vN₀ (ℍ := ℍ) (cbUTy x bnd (.mut (.var x) A) .unit [linSig n i]) δ Θ k₀ (cbPerform n i)
       PMap.empty := by
@@ -203,8 +203,8 @@ theorem wF_ok (a : Lifetime.Life) (x : LifeVar) :
 /-- **`withbor (2)` applied to a cell and to `cbPerform`**: at the one-operation row
 `[linSig n i]`, `withborU dFree ℓ cbPerform` runs at `F_Σ(Ref 1 ⊗ 1)` from `ℓ ↦ own(())`. The
 callback stops at the must-resume operation with the borrow of `ℓ` in the continuation's share
-(`cbPerform_sem`); `withbor2S_compat₀` gives the rest. -/
-theorem withbor2S_perform (x : LifeVar) {n i : UInt32} (hn : n ≠ 0) (δ : LSub) (Θ : LocTy)
+(`cbPerform_sem₀`); `withbor2S_compat₀` gives the rest. -/
+theorem withbor2S_perform₀ (x : LifeVar) {n i : UInt32} (hn : n ≠ 0) (δ : LSub) (Θ : LocTy)
     (hOK : Θ.OK) (c : Loc → Option Life) (k : Nat) (ls : List SRec) (l : Loc) :
     cN₀ (ℍ := ℍ) (CTy.effOf [linSig n i] (.tensor (.ref .unit) .unit)) δ Θ c k ls
       (.app (.app (withborUV dFree).1 (.val (Val.loc l))) (.val (cbPerform n i)))
@@ -218,7 +218,7 @@ theorem withbor2S_perform (x : LifeVar) {n i : UInt32} (hn : n ≠ 0) (δ : LSub
     (consistentX_empty c) ls
   have h2 := h c k le_rfl (Val.loc l) _ _ (compS_empty_left _) hv hcon
   exact h2 c k le_rfl (cbPerform n i) PMap.empty _
-    (ResU.comp_empty_right _) (cbPerform_sem n i Θ k) hcon
+    (ResU.comp_empty_right _) (cbPerform_sem₀ n i Θ k) hcon
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

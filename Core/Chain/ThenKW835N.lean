@@ -105,7 +105,8 @@ theorem then_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A
     ((ubindK (Val.lam (Expr.psub 1 γ N)) (Val.lam (Expr.psub 1 γ D))).plug (substAll γ M)) ρ
   rw [tabF_effOf_ret (rdN (ℍ := ℍ) δ) () S B .unit]
   exact erwpK_frame_then (rdN_ok δ) (rdN_payExt δ) S SM SD hNZ hMS hDS hfin hP _ _
-    (letFrN (ℍ := ℍ) δ Γ₂ γ n) (fun _ _ _ _ _ h => h) (letFrN_carry δ Γ₂ γ n)
+    (letFrN (ℍ := ℍ) δ Γ₂ γ n) (fun _ _ _ _ _ h => h)
+    (fun μ m x f y ls ls' ρ σ ρ' _ => letFrN_carry δ Γ₂ γ n μ m x f y ls ls' ρ σ ρ')
     (fun hu _ _ σ h => gN_persistent (hU hu) h.1) hQd n hD' _ _
     (fun z k _ v ρ h => vN_down B δ z.Θ k v ρ h) hk n le_rfl (⟨Θ, c, lo⟩ : KW) hΘ.1 ls _ ρ₁
     hM'' ρ₂ ρ ⟨hg₂, hc₂, hΘ⟩ hcρ

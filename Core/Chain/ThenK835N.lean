@@ -283,13 +283,13 @@ theorem cfin_runK (hR : R.OK) (hPE : R.PayExt) (E P : Row) (err : Option Val)
 /-- **A cancel run through a finaliser frame, at `erwpK`** (`then_cancelN`), by recursion on the
 cancel row `F` below it and, inside, induction on the index. `D` is read under the mode `μD`, the
 cancel run under `μ`, the result under any `μ′` above both. The frame `Fr`, read at a world, rides
-in each stop's continuation and is carried to the resumption world along the stop's order
-(`hFe`). -/
+in each stop's continuation and is carried to the resumption world along the stop's order, at the
+floor the stop chose (`hFe`). -/
 theorem then_cancelK (hR : R.OK) (hPE : R.PayExt) (E : Row)
     (hNZ : ∀ n i o, Row.find E n i = some o → o.n ≠ 0) (Nv Dv : Val)
     (Fr : ι → List SRec → WProp)
     (hFs : ∀ x ls ls', (∀ r, r ∈ ls' ↔ r ∈ ls) → ∀ ρ, Fr x ls ρ → Fr x ls' ρ)
-    (hFe : ∀ μ' m x f y ls ls' ρ σ ρ', ResU.CompS ρ σ ρ' → ResU.Valid ρ' →
+    (hFe : ∀ μ' m x f y ls ls' ρ σ ρ', f ≤ R.fl x → ResU.CompS ρ σ ρ' → ResU.Valid ρ' →
       R.wk μ' m x f y ρ' → extF ls ls' ρ' → Fr x ls σ → Fr y ls' σ)
     {Qd : ι → PostN} (hQd : ∀ y k ls v ρ, Qd y k ls v ρ → NoOwn ρ) (N₀ : Nat) {μD : M}
     (hD : ∀ x, R.Inv x → ∀ k, k ≤ N₀ → ∀ ls ρ, Fr x ls ρ →
@@ -354,7 +354,7 @@ theorem then_cancelK (hR : R.OK) (hPE : R.PayExt) (E : Row)
       simp only [erwpCK, show k' < n by omega, if_true] at h₁ ⊢
       rw [Kont.plug_comp]
       exact ih k' (by omega) (by omega) y (hR.wkInv _ _ _ _ _ _ hy) ls'' _ z h₁ τ₂ τ₄
-        (hFe μ' m x f y ls' ls'' ρk τ₂ ρk' hk' hvk' hy hext hF₂) hcz
+        (hFe μ' m x f y ls' ls'' ρk τ₂ ρk' hf hk' hvk' hy hext hF₂) hcz
     · have hy₀ : R.wk μ m x f y ρk :=
         hR.wkLeft μ m x f y ρk τ₂ ρk' hk' hvk' (hR.wk_anti μ μ' m x f y ρk' hμ hy)
       have hwc : extF ls' ls'' ρk := extF_left ls' ls'' ρk τ₂ ρk' hk' hext
@@ -372,7 +372,7 @@ theorem then_cancelK (hR : R.OK) (hPE : R.PayExt) (E : Row)
         (fun hu₁ => hunr (finUnr_of_find hf' (Or.inr ⟨hcap', hu₁⟩)))
         (fun hu₁ => (finPers_of_mem (hpers hu₁) (Row.find_mem hfo).1).2 hcap) k (by omega) y
         (hR.wkInv _ _ _ _ _ _ hy) ls'' _ ρk hcan τ₂ ρk'
-        (hFe μ' m x f y ls' ls'' ρk τ₂ ρk' hk' hvk' hy hext hF₂) hk'
+        (hFe μ' m x f y ls' ls'' ρk τ₂ ρk' hf hk' hvk' hy hext hF₂) hk'
   · -- the cancel reaches the frame: `D` runs under `cfin`
     obtain ⟨⟨rfl, hK₀⟩, τa, τb, hcab, he, hnb⟩ := pure_sep_iff.mp hs'
     refine rwpG_det (hR.ΦDown x hx) (hPD _)
@@ -488,8 +488,8 @@ theorem seq_raise_runK (hR : R.OK) (hPE : R.PayExt) (S E : Row) (hES : RowLe E S
 
 /-- **The finaliser frame around an effectful computation, at `erwpK`** (`erwp_frame_then`), at
 the rows of `[then]`, every table under one mode `μ`. A stop of `M` keeps the frame in its
-continuation, carried to the resumption world (`hFe`); its cancel passes the frame and fires `D`
-(`then_cancelK`, under the cancel row's mode). An abortive stop runs `D` first (`seq_raise_runK`).
+continuation, carried to the resumption world at the floor the stop chose (`hFe`); its cancel
+passes the frame and fires `D` (`then_cancelK`, under the cancel row's mode). An abortive stop runs `D` first (`seq_raise_runK`).
 A value is posted at the run's own world. -/
 theorem erwpK_frame_then (hR : R.OK) (hPE : R.PayExt) (S SM SD : Row) (hNZ : S.NZ)
     (hMS : RowLe SM S) (hDS : RowLe SD S)
@@ -497,7 +497,7 @@ theorem erwpK_frame_then (hR : R.OK) (hPE : R.PayExt) (S SM SD : Row) (hNZ : S.N
       capB o.q o.B = true → ThenLe o.fin SD o'.fin)
     (hP : SD.UnrD → SM.PendPers) (Nv Dv : Val) (Fr : ι → List SRec → WProp)
     (hFs : ∀ x ls ls', (∀ r, r ∈ ls' ↔ r ∈ ls) → ∀ ρ, Fr x ls ρ → Fr x ls' ρ)
-    (hFe : ∀ μ' m x f y ls ls' ρ σ ρ', ResU.CompS ρ σ ρ' → ResU.Valid ρ' →
+    (hFe : ∀ μ' m x f y ls ls' ρ σ ρ', f ≤ R.fl x → ResU.CompS ρ σ ρ' → ResU.Valid ρ' →
       R.wk μ' m x f y ρ' → extF ls ls' ρ' → Fr x ls σ → Fr y ls' σ)
     (hU : S.UnrD → ∀ x ls ρ, Fr x ls ρ → ρ = PMap.empty)
     {Qd : ι → PostN} (hQd : ∀ y k ls v ρ, Qd y k ls v ρ → v = .unit ∧ NoOwn ρ) (N₀ : Nat)
@@ -566,7 +566,7 @@ theorem erwpK_frame_then (hR : R.OK) (hPE : R.PayExt) (S SM SD : Row) (hNZ : S.N
       simp only [erwpCK, show k' < n by omega, if_true] at h₁ ⊢
       rw [Kont.plug_comp]
       exact ih k' (by omega) (by omega) y (hR.wkInv _ _ _ _ _ _ hy) ls'' _ z h₁ σ₂ τ₂
-        (hFe μ m x f y ls' ls'' ρk σ₂ ρk' hk' hvk' hy hext hF') hcz
+        (hFe μ m x f y ls' ls'' ρk σ₂ ρk' hf hk' hvk' hy hext hF') hcz
     · have hy₀ : R.wk μ m x f y ρk := hR.wkLeft μ m x f y ρk σ₂ ρk' hk' hvk' hy
       have hwc : extF ls' ls'' ρk := extF_left ls' ls'' ρk σ₂ ρk' hk' hext
       obtain ⟨hcap', hnT, rfl⟩ := entF_fin_cancel hP'
@@ -583,7 +583,7 @@ theorem erwpK_frame_then (hR : R.OK) (hPE : R.PayExt) (S SM SD : Row) (hNZ : S.N
         (hR.le_refl _) hth hnT (fun hu₁ => hU ⟨o', (Row.find_mem hf').1, Or.inr ⟨hcap', hu₁⟩⟩)
         (fun hu₁ => ((hP hu₁) o (Row.find_mem hfo).1).2 hcap) k (by omega) y
         (hR.wkInv _ _ _ _ _ _ hy) ls'' _ ρk hcan σ₂ ρk'
-        (hFe μ m x f y ls' ls'' ρk σ₂ ρk' hk' hvk' hy hext hF') hk'
+        (hFe μ m x f y ls' ls'' ρk σ₂ ρk' hf hk' hvk' hy hext hF') hk'
   · -- a `raise`: the finaliser runs, then the `raise` goes on
     obtain ⟨⟨rfl, hK₁, hTn, ha⟩, ρa, ρn, hcan, ⟨hPA, hnA⟩, hn⟩ := pure_sep_iff.mp hp
     obtain ⟨o, hfo, rfl⟩ := tabF_effOf_some_find hTn
@@ -630,7 +630,7 @@ theorem erwpK_frame_then_tabKW {δ : LSub} (SS SM SD : Row) (hNZ : SS.NZ)
       capB o.q o.B = true → ThenLe o.fin SD o'.fin)
     (hP : SD.UnrD → SM.PendPers) (Nv Dv : Val) (Fr : KW → List SRec → WProp)
     (hFs : ∀ x ls ls', (∀ r, r ∈ ls' ↔ r ∈ ls) → ∀ ρ, Fr x ls ρ → Fr x ls' ρ)
-    (hFe : ∀ (μ : Unit) m x f y ls ls' ρ σ ρ', ResU.CompS ρ σ ρ' → ResU.Valid ρ' →
+    (hFe : ∀ (μ : Unit) m x f y ls ls' ρ σ ρ', f ≤ x.lo → ResU.CompS ρ σ ρ' → ResU.Valid ρ' →
       (rdN (ℍ := ℍ) δ).wk μ m x f y ρ' → extF ls ls' ρ' → Fr x ls σ → Fr y ls' σ)
     (hU : SS.UnrD → ∀ x ls ρ, Fr x ls ρ → ρ = PMap.empty)
     {Qd : KW → PostN} (hQd : ∀ y k ls v ρ, Qd y k ls v ρ → v = .unit ∧ NoOwn ρ) (N₀ : Nat)
@@ -737,7 +737,7 @@ theorem then_cancelN_of_K {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → 
   intro T hle hT hunr hpers n hnN ls e ρ h σ ρ' hF hc
   rw [← canc_tabF_unit] at h ⊢
   refine then_cancelK (rdU_ok hΘ c) (rdU_payExt δ Θ c) E hNZ Nv Dv (fun _ => Fr)
-    (fun _ => hFs) (fun _ _ _ _ _ ls ls' ρ σ ρ' hc _ _ he hF => hFe ls ls' ρ σ ρ' hc he hF)
+    (fun _ => hFs) (fun _ _ _ _ _ ls ls' ρ σ ρ' _ hc _ _ he hF => hFe ls ls' ρ σ ρ' hc he hF)
     (Qd := fun _ => Qd) (fun _ => hQd) N₀ (μD := ()) ?_ F (μ := ()) (μ' := ()) trivial trivial
     hle hT (fun hu _ => hunr hu) hpers n hnN () trivial ls e ρ h σ ρ' hF hc
   intro _ _ k hk ls' ρ₁ hF₁
@@ -786,7 +786,8 @@ theorem erwp_frame_then_of_K {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc �
   intro n hnN ls e ρ h ρ₂ ρ' hF hc
   rw [erwp_tabF_unit] at h ⊢
   refine erwpK_frame_then (rdU_ok hΘ c) (rdU_payExt δ Θ c) S SM SD hNZ hMS hDS hfin hP Nv Dv
-    (fun _ => Fr) (fun _ => hFs) (fun _ _ _ _ _ ls ls' ρ σ ρ' hc _ _ he hF => hFe ls ls' ρ σ ρ' hc he hF)
+    (fun _ => Fr) (fun _ => hFs)
+    (fun _ _ _ _ _ ls ls' ρ σ ρ' _ hc _ _ he hF => hFe ls ls' ρ σ ρ' hc he hF)
     (fun hu _ => hU hu) (Qd := fun _ => Qd) (fun _ => hQd) N₀ (μ := ()) ?_ (fun _ => Q₁)
     (fun _ => Q) (fun _ => hQ) ?_ n hnN () trivial ls e ρ h ρ₂ ρ' hF hc
   · intro _ _ k hk ls' ρ₁ hF₁

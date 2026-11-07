@@ -587,7 +587,7 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | countTry _ _ hΓ => exact countTry_compatN₀ hΓ
   | boundedFix _ _ hΓ => exact boundedFix_compatN₀ hΓ
   | iterate _ _ _ _ hS hΓ => exact iterate_compatN₀ hS hΓ
-  | divFuel _ _ hS hΓ => exact divFuel_compatN hS hΓ
+  | divFuel _ _ hS hΓ => exact divFuel_compatN₀ hS hΓ
   | reify _ _ _ _ hS hcl _ hΓ ihres => exact hReify hS hcl ihres hΓ
   | sliceBorrowM x hΓ hA hB hf₁ hf₂ => exact sliceBorrowM_compatN₀ x hΓ hA hB hf₁ hf₂
   | sliceBorrowI x hΓ hsc hA hB hf₁ hf₂ => exact sliceBorrowI_compatN₀ x hΓ hsc hA hB hf₁ hf₂
@@ -653,9 +653,9 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
         (semJN_effOf_rc₀ (Row.unmark_ofEff_append _ _ _ _ _ _) ihe) hΓd
         (Row.ansOutlives_ofEff_rc hSd)
   | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
-      exact handleT_compatN hs hd hHr hHc ihc hnS hlen hSN hLin ihe
+      exact handleT_compatN₀ hs hd hHr hHc ihc hnS hlen hSN hLin ihe
   | effHandleL hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
-      exact handleL_compatN hs hd hHr hHw hHn ihc hnS hlen hNZ hCancel hSW hSu hFin ihe
+      exact handleL_compatN₀ hs hd hHr hHw hHn ihc hnS hlen hNZ hCancel hSW hSu hFin ihe
   | letPoly b hcl _ _ _ ihN => exact letPoly_compatN₀ (Val.lam b) hcl ihN
   | alpha _ hα ih => exact alpha_compatN₀ hα ih
 

@@ -12,11 +12,11 @@ Core's `handleT_compatC` (`Core/DivHandle.lean`) at `SemJN₀`, its proof `ewp_h
   entries only;
 * `tabN_ofEff_ne`, `tabN_ofEff_self`, `capTag_ofEffN` (Core's `Row.tab_ofEff_ne`,
   `Row.tab_ofEff_self`, `capTag_ofEff`): the split of the handled row's table;
-* `ansesTy_atN` (Core's `ansesTy_at`): the answering functions read at `vN₀`;
-* `erwp_handle_tail` (Core's `ewp_handle_tail`): `erwp_handle` with a clause running its answering
+* `ansesTy_atN₀` (Core's `ansesTy_at`): the answering functions read at `vN₀`;
+* `erwp_handle_tail₀` (Core's `ewp_handle_tail`): `erwp_handle` with a clause running its answering
   function at its must-resume row under the resume frame `resK κ`; the clause's `β` step is paid
   (`erwp_step`), so the answering function's run returns below the stop's index, where `κ` is owed;
-* `handleT_compatN` (Core's `handleT_compatC`).
+* `handleT_compatN₀` (Core's `handleT_compatC`).
 
 Two readings the chain adds, each where `SemJN₀` reads a run at its view (D7):
 
@@ -271,7 +271,7 @@ theorem capTag_ofEffN {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CT
 
 /-- **The answering functions at `vN₀`** (Core's `ansesTy_at`): a tuple of the answering functions'
 type holds, at each operation, the function `pickE j` steps to, at the empty resource. -/
-theorem ansesTy_atN {S SN : Row} {R : VTy} {δ : LSub} {Θ : LocTy} {k : Nat} :
+theorem ansesTy_atN₀ {S SN : Row} {R : VTy} {δ : LSub} {Θ : LocTy} {k : Nat} :
     ∀ (E : List (Qual × VTy × VTy)) {vc : Val} {ρ : WRes},
       vN₀ (ℍ := ℍ) (ansesTy S SN R E) δ Θ k vc ρ →
       ∀ j (h : j < E.length), ∃ g, PureSteps (pickE j (.val vc)) (.val g) ∧
@@ -285,7 +285,7 @@ theorem ansesTy_atN {S SN : Row} {R : VTy} {δ : LSub} {Θ : LocTy} {k : Nat} :
           exact ⟨g, pickE_steps 0 g rest _ rfl g (fun _ => rfl) (fun _ h => by cases h),
             he ▸ hg⟩
       | succ j =>
-          obtain ⟨g', hs, hg'⟩ := ansesTy_atN E hr j (by simpa using hj)
+          obtain ⟨g', hs, hg'⟩ := ansesTy_atN₀ E hr j (by simpa using hj)
           exact ⟨g', pickE_steps (j + 1) g rest _ rfl g' (fun h => by cases h)
             (fun j' h => by cases h; exact hs), by simpa using hg'⟩
 
@@ -337,7 +337,7 @@ table, its payloads at the handler's name read at the view (`erwp_consistentPA`)
 (`erwp_frame_plain_or`, from `Σ_N` to `Σ`); the function's value, below the stop's index and
 consistent with the view across its resumptions (`erwp_consistentAns`), is the answer `κ` is
 resumed at. -/
-theorem erwp_handle_tail (hΘ : Θ.OK) (hnS : ∀ o ∈ S, o.n ≠ n)
+theorem erwp_handle_tail₀ (hΘ : Θ.OK) (hnS : ∀ o ∈ S, o.n ≠ n)
     (hlen : E.length ≤ 2 ^ 32) (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false)
     {vr vc : Val} {N : Nat}
     (hVr : vN₀ (ℍ := ℍ) (retTy S A R) δ Θ N vr PMap.empty)
@@ -371,7 +371,7 @@ theorem erwp_handle_tail (hΘ : Θ.OK) (hnS : ∀ o ∈ S, o.n ≠ n)
   · intro i en' hT
     obtain ⟨en, hT₀, rfl⟩ := OpTabN.withPA_self hT
     obtain ⟨j, hj, hji, -, rfl⟩ := tabN_ofEff_self hnS hlen hT₀
-    obtain ⟨g, hg, hVg⟩ := ansesTy_atN E hVc j hj
+    obtain ⟨g, hg, hVg⟩ := ansesTy_atN₀ E hVc j hj
     refine ⟨⟨tailClause j (E[j].2.2.isZero && E[j].1 != .lin) (.val vc), isVal_tailClause _ _ _⟩,
       by rw [hji, clauseAt_tailTuple _ E 0 j hj]; simp, fun ha k hk ls' v κ σ hσ => ?_,
       fun ha k hk ls' v σ hσ => ?_⟩
@@ -430,10 +430,10 @@ end
 `handle_n e with (h_ret, gs)`, the clauses written out from the answering functions `gs`
 (`tailTuple`). The handler's value is read off its run at the run's start (`erwp_val_post`), as
 Core reads it off `wpTS`; the handled computation runs at its row's table from the part of the
-resource consistent with the view (`gN_splitC₀`), and the handler is `erwp_handle_tail`. A `Div`
+resource consistent with the view (`gN_splitC₀`), and the handler is `erwp_handle_tail₀`. A `Div`
 row is a row of the chain's table (E13), so Core's split at `Row.divB S` has no counterpart, and neither do the rule's `n ≠ 0` and
 `n ≠ Div`, which only that split and Core's `ewp_handle` read. -/
-theorem handleT_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Hr Hc e : Expr} {S SN : Row}
+theorem handleT_compatN₀ {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Hr Hc e : Expr} {S SN : Row}
     {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)
     (hc : SemJN₀ (ℍ := ℍ) Δ Γ₁ (.pair Hr Hc) (.val (.tensor (retTy S A R) (ansesTy S SN R E))))
@@ -476,7 +476,7 @@ theorem handleT_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Hr Hc e : Exp
   have hHe : substAll γ (.pair Hr Hc) = (Val.pair vr vc).1 := congrArg Subtype.val hpair
   simp only [substAll, Expr.psub, Val.pair] at hHe
   obtain ⟨h₁, h₂⟩ := Expr.pair.inj hHe
-  have hH := erwp_handle_tail (fs := fs) hΘ hnS hlen hSN hLin hVr hVc hE' hc₂
+  have hH := erwp_handle_tail₀ (fs := fs) hΘ hnS hlen hSN hLin hVr hVc hE' hc₂
   rw [erwp_eq] at hH
   rw [h₁, show substAll γ Hc = vc.1 from h₂] at hrun
   exact hH ρf fρ ps μ hf hcf hT htg hI hl hfd j μ' e' hj hrun hfin

@@ -318,7 +318,7 @@ def cbRelease : Val := Val.lam (.val (Val.lam (.val .unit)))
 
 /-- **`λ_. λu. ()` is a callback of the lend at the empty row and the answer `1`**: it performs
 nothing, and the borrow is left as garbage at the return (admissible: Core has `releaseMut`).
-A callback that performs at a suspending row while holding the borrow is `cbPerform_sem`
+A callback that performs at a suspending row while holding the borrow is `cbPerform_sem₀`
 (`Core/Chain/Inst791N.lean`). -/
 theorem cbRelease_sem {x : LifeVar} {bnd : Lifetime.Life} {A : VTy} {δ : LSub}
     (Θ : LocTy) (n : Nat) :

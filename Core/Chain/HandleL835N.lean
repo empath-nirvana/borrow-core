@@ -6,16 +6,16 @@ import Core.Chain.HandleT835N
 Core's `handleL_compatC` (`Core/DivHandleLast.lean`) at `SemJN₀`, its proof `ewp_handle_last` at
 `erwp` (the last instance, `scope-831-interface.md` §10.5), each step Core's:
 
-* `worksTy_atN`, `exitsTy_atN` (Core's `worksTy_at`, `exitsTy_at`): the works and the exits read
+* `worksTy_atN₀`, `exitsTy_atN₀` (Core's `worksTy_at`, `exitsTy_at`): the works and the exits read
   at `vN₀`;
-* `last_contN` (Core's `last_cont`): the finaliser frame's answer: `inl y` resumes `κ` at `y`,
+* `last_contN₀` (Core's `last_cont`): the finaliser frame's answer: `inl y` resumes `κ` at `y`,
   `inr z` cancels `κ` at the table of its cancel row under the exit's frame
   (`erwp_frame_plain_or`), then runs the exit at `z`;
-* `erwp_handle_last` (Core's `ewp_handle_last`): `erwp_handle_le` with a clause running its work
+* `erwp_handle_last₀` (Core's `ewp_handle_last`): `erwp_handle_le` with a clause running its work
   at its row under the finaliser frame (`erwp_frame_then`, its frame `κ`'s relation at the record
   list), `κ.2 ()` the finaliser; the clause pays its `β` step, so the work's run, the finaliser and
   the frame's answer are all below the stop's index, where `κ` is owed;
-* `handleL_compatN` (Core's `handleL_compatC`).
+* `handleL_compatN₀` (Core's `handleL_compatC`).
 
 As at `[handle]` with tail clauses (`Core/Chain/HandleT835N.lean`), the works and the exits are read
 at the view from consistent resources: the payload at the handler's name (`erwp_consistentPA`), the
@@ -42,7 +42,7 @@ open BoCa.BoLo (Heap Head Kont performE raiseE cancelVal opPayload hndE hndVal c
 
 /-- **The works at `vN₀`** (Core's `worksTy_at`): a tuple of the works' type holds, at each
 operation, the function `pickE j` steps to, at the empty resource. -/
-theorem worksTy_atN {S SW : Row} {R : VTy} {Xs : Nat → VTy} {δ : LSub} {Θ : LocTy} {k : Nat} :
+theorem worksTy_atN₀ {S SW : Row} {R : VTy} {Xs : Nat → VTy} {δ : LSub} {Θ : LocTy} {k : Nat} :
     ∀ (E : List (Qual × VTy × VTy)) (j₀ : Nat) {vc : Val} {ρ : WRes},
       vN₀ (ℍ := ℍ) (worksTy S SW R Xs E j₀) δ Θ k vc ρ →
       ∀ j (h : j < E.length), ∃ g, PureSteps (pickE j (.val vc)) (.val g) ∧
@@ -56,14 +56,14 @@ theorem worksTy_atN {S SW : Row} {R : VTy} {Xs : Nat → VTy} {δ : LSub} {Θ : 
           exact ⟨g, pickE_steps 0 g rest _ rfl g (fun _ => rfl) (fun _ h => by cases h),
             by simpa using he ▸ hg⟩
       | succ j =>
-          obtain ⟨g', hs, hg'⟩ := worksTy_atN E (j₀ + 1) hr j (by simpa using hj)
+          obtain ⟨g', hs, hg'⟩ := worksTy_atN₀ E (j₀ + 1) hr j (by simpa using hj)
           refine ⟨g', pickE_steps (j + 1) g rest _ rfl g' (fun h => by cases h)
             (fun j' h => by cases h; exact hs), ?_⟩
           rw [show j₀ + (j + 1) = j₀ + 1 + j by omega]
           simpa using hg'
 
 /-- **The exits at `vN₀`** (Core's `exitsTy_at`), as the works. -/
-theorem exitsTy_atN {S : Row} {R : VTy} {Xs : Nat → VTy} {δ : LSub} {Θ : LocTy} {k : Nat} :
+theorem exitsTy_atN₀ {S : Row} {R : VTy} {Xs : Nat → VTy} {δ : LSub} {Θ : LocTy} {k : Nat} :
     ∀ (E : List (Qual × VTy × VTy)) (j₀ : Nat) {vc : Val} {ρ : WRes},
       vN₀ (ℍ := ℍ) (exitsTy S R Xs E j₀) δ Θ k vc ρ →
       ∀ j, j < E.length → ∃ g, PureSteps (pickE j (.val vc)) (.val g) ∧
@@ -77,7 +77,7 @@ theorem exitsTy_atN {S : Row} {R : VTy} {Xs : Nat → VTy} {δ : LSub} {Θ : Loc
           exact ⟨g, pickE_steps 0 g rest _ rfl g (fun _ => rfl) (fun _ h => by cases h),
             by simpa using he ▸ hg⟩
       | succ j =>
-          obtain ⟨g', hs, hg'⟩ := exitsTy_atN E (j₀ + 1) hr j (by simpa using hj)
+          obtain ⟨g', hs, hg'⟩ := exitsTy_atN₀ E (j₀ + 1) hr j (by simpa using hj)
           refine ⟨g', pickE_steps (j + 1) g rest _ rfl g' (fun h => by cases h)
             (fun j' h => by cases h; exact hs), ?_⟩
           rw [show j₀ + (j + 1) = j₀ + 1 + j by omega]
@@ -131,7 +131,7 @@ variable {δ : LSub} {Θ : LocTy} {c : Loc → Option Life}
 cancels `κ`, at the table of its cancel row `G`, beside `z`, which the cancel leaves held (left
 behind where `G` may raise or be captured, so `X` consumes there), and then runs the exit at `z`.
 The answer is below the stop's index `K₀`, where `κ` is owed. -/
-theorem last_contN (hΘ : Θ.OK) {T' : OpTabN} (hT' : T'.Down) {G : CTy}
+theorem last_contN₀ (hΘ : Θ.OK) {T' : OpTabN} (hT' : T'.Down) {G : CTy}
     (hGT : (tabN₀ (ℍ := ℍ) G δ Θ c).Le T')
     (hGu : ∀ n i o, Row.find G.rowOf n i = some o → o.q ≠ .unr)
     {X : VTy} (hXd : Row.Cancels G.rowOf → X.OwnFree) {Q : PostN} (hQ : Q.Down) {en : OpEntN}
@@ -191,9 +191,9 @@ variable {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} {S SW : Row}
 table, its payloads at the handler's name read at the view (`erwp_consistentPA`), `κ`'s cancel
 branch at the table of the operation's own cancel row. A clause pays its `β` step and runs its
 work at its row under the finaliser frame (`erwp_frame_then`), whose finaliser `κ.2 ()` cancels
-`κ` and whose answer is `last_contN`; the work's value is consistent with the view across its
+`κ` and whose answer is `last_contN₀`; the work's value is consistent with the view across its
 resumptions (`erwp_consistentAns`). -/
-theorem erwp_handle_last (hΘ : Θ.OK) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+theorem erwp_handle_last₀ (hΘ : Θ.OK) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
     (hNZ : S.NZ) (hSW : RowLe SW S) (hSu : ¬ S.UnrD)
     (hCancel : ∀ o ∈ E, o.1 = .cancel ∨ (o.2.2.isZero && o.1 != .lin) = true)
     (hFin : ∀ j, j < E.length → LastFinOK S SW (fs j) (Xs j))
@@ -240,8 +240,8 @@ theorem erwp_handle_last (hΘ : Θ.OK) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.
   · intro i en' hT
     obtain ⟨en, hT₀, rfl⟩ := OpTabN.withPA_self hT
     obtain ⟨j, hj, hji, -, rfl⟩ := tabN_ofEff_self hnS hlen hT₀
-    obtain ⟨g, hg, hVg⟩ := worksTy_atN E 0 hVw j hj
-    obtain ⟨nfv, hnf, hVnf⟩ := exitsTy_atN E 0 hVn j hj
+    obtain ⟨g, hg, hVg⟩ := worksTy_atN₀ E 0 hVw j hj
+    obtain ⟨nfv, hnf, hVnf⟩ := exitsTy_atN₀ E 0 hVn j hj
     rw [Nat.zero_add] at hVg hVnf
     refine ⟨⟨lastClause j (E[j].2.2.isZero && E[j].1 != .lin) (.val vw) (.val vn),
       isVal_lastClause _ _ _ _⟩, by rw [hji, clauseAt_lastTuple _ _ E 0 j hj]; simp,
@@ -287,7 +287,7 @@ theorem erwp_handle_last (hΘ : Θ.OK) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.
       · -- the frame's answer
         rintro k hk ls₁ w τ ⟨τ₁, τ₂, hcτ, ⟨-, hw, hcw, -⟩, hF⟩
         rw [← tabN_effOf_ret S R .unit]
-        refine last_contN hΘ hToutD (by rw [tabN_rowOf]; exact tabN_le_of_rowLe hFS _ R δ Θ c)
+        refine last_contN₀ hΘ hToutD (by rw [tabN_rowOf]; exact tabN_le_of_rowLe hFS _ R δ Θ c)
           (fun _ _ _ hf => find_not_unr hFS hSu hf) hFX hQout (fun ls ρ => extF_refl ls ρ) hq
           ?_ hnf (Nat.lt_succ_of_le hk) ?_ ⟨τ₁, τ₂, hcτ, ⟨hw, hcw⟩, hF⟩
         · exact fun _ _ _ _ hw hcw => ⟨hw, hcw⟩
@@ -313,10 +313,10 @@ end
 written out from the works `ws` and the exits `nfs` (`lastTuple`). The handler's values are read
 off its run at the run's start (`erwp_val_post`), as Core reads them off `wpTS`; the handled
 computation runs at its row's table from the part of the resource consistent with the view
-(`gN_splitC₀`), and the handler is `erwp_handle_last`. A `Div` row is a row of the chain's table
+(`gN_splitC₀`), and the handler is `erwp_handle_last₀`. A `Div` row is a row of the chain's table
 (E13), so Core's split at `Row.divB S` has no counterpart, and neither do the rule's `n ≠ 0` and
 `n ≠ Div`, which only that split and Core's `ewp_handle` read. -/
-theorem handleL_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Hr Hw Hn e : Expr} {S SW : Row}
+theorem handleL_compatN₀ {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Hr Hw Hn e : Expr} {S SW : Row}
     {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {Xs : Nat → VTy} {n : UInt32} {A R : VTy}
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁)
     (hHw : Hw.ValFormIn Γ₁) (hHn : Hn.ValFormIn Γ₁)
@@ -368,7 +368,7 @@ theorem handleL_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Hr Hw Hn e : 
   simp only [substAll, Expr.psub, Val.pair] at hHe
   obtain ⟨h₁, h₂⟩ := Expr.pair.inj hHe
   obtain ⟨h₃, h₄⟩ := Expr.pair.inj h₂
-  have hH := erwp_handle_last (fs := fs) hΘ hnS hlen hNZ hSW hSu hCancel hFin hVr hVw hVn hE' hc₂
+  have hH := erwp_handle_last₀ (fs := fs) hΘ hnS hlen hNZ hSW hSu hCancel hFin hVr hVw hVn hE' hc₂
   rw [erwp_eq] at hH
   rw [h₁, show substAll γ Hw = vw.1 from h₃, show substAll γ Hn = vn.1 from h₄] at hrun
   exact hH ρf fρ ps μ hf hcf hT htg hI hl hfd j μ' e' hj hrun hfin

@@ -231,6 +231,73 @@ theorem sliceBorrowMS_inst (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
     ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩ id id (hardestRow_suspend x _) dArrFree_closed
     dArrFree_sem δ Θ n
 
+/-! ### A callback that performs while holding the borrow -/
+
+/-- **A callback of the suspending lend that performs while holding the borrow, at `vN`**
+(`cbPerform_sem₀`): `cbPerform` is a value of `∀'x ⊏ @bnd. Mut 'x A ⊸ F_Σ(['x] 1)` at the
+one-operation row `[linSig n i]`. Its stop is taken at the floor of its world, with the borrow in
+the continuation's share; at every world the entry owes, the answer `()` returns `['x] ()` with the
+borrow left as garbage. -/
+theorem cbPerform_sem {x : LifeVar} {bnd : Lifetime.Life} {A : VTy} {δ : LSub} (n i : UInt32)
+    (Θ : LocTy) (k₀ : Nat) :
+    vN (ℍ := ℍ) (cbUTy x bnd (.mut (.var x) A) .unit [linSig n i]) δ Θ k₀ (cbPerform n i)
+      PMap.empty := by
+  intro Θ'' _ hOK c _ ls
+  refine fun α _ c' k _ v ρv ρ' hc hv _ => ?_
+  obtain rfl := eq_of_compS_empty_left hc
+  obtain ⟨β, hβ, b, -, ⟨l, w, χ, hχ, j, hw, -, rfl, -, rfl⟩, -⟩ := hv
+  rw [cN_effOf]
+  intro lo
+  have hΦ := LocTy.view_down hOK.1 c'
+  have hTd : (opTableK lo (tabN (ℍ := ℍ) (CTy.effOf [linSig n i] (.box (.var x) .unit))
+      (δ.extend x α) (⟨Θ'', c', lo⟩ : KW))).Down :=
+    opTableK_downI (tabN_downI_OK _ _ _)
+  have hQ : ∀ z : KW, PostN.Down
+      (fun k _ v ρ => vN (ℍ := ℍ) (.box (.var x) .unit) (δ.extend x α) z.Θ k v ρ) :=
+    fun z k _ v ρ h => vN_down _ _ _ k v ρ h
+  refine erwpK_det (Φ := fun z : KW => z.Θ.view z.c) (x := (⟨Θ'', c', lo⟩ : KW)) hΦ hTd hQ
+    (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl (.appL .hole (Val.loc l))) ?_
+  refine erwpK_det (Φ := fun z : KW => z.Θ.view z.c) (x := (⟨Θ'', c', lo⟩ : KW)) hΦ hTd hQ
+    (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl .hole) ?_
+  have hcl : closedAt 0 (performE (.val (opPayload n i Val.unit))) = true := by
+    simp [closedAt, performE, opPayload, Val.unit, Val.i32]
+  have e : Kont.hole.plug (Expr.subst 0 (Val.loc l) (Expr.subst (0 + 1) (Val.shift 1 0 Val.unit)
+        (performE (.val (opPayload n i Val.unit))))) =
+      Kont.hole.plug (performE (.val (opPayload n i Val.unit))) := by
+    rw [subst_closedAt _ _ hcl (Nat.zero_le _), subst_closedAt _ _ hcl (Nat.zero_le _)]
+  rw [e]
+  refine erwpK_performG (K := .hole) (by simp [Kont.HasHnd])
+    (by simp [CTy.effOf, tabN, extTabK, linSig]; rfl) (by simp [entNK, linSig])
+    (compS_empty_left _) (show vN (ℍ := ℍ) .unit (δ.extend x α) Θ'' k Val.unit PMap.empty from
+      ⟨rfl, rfl⟩) (fun h => by simp [entNK, linSig] at h) lo le_rfl ?_
+    (fun _ _ _ _ h => absurd (by simp [entNK, linSig]) h)
+  intro y _ ls' _ k' _ w' τ₁ τ₂ hB hcτ
+  obtain ⟨⟨rfl, rfl⟩, -⟩ := hB
+  obtain rfl := eq_of_compS_empty_left (ResU.CompS.comm hcτ)
+  exact erwpK_garbage (compS_empty_left _) (noOwn_single_mut l)
+    (erwpK_val (KW.postK_refl y)
+      (v := Val.unit) ⟨α, interp_ext_self δ x α, ⟨rfl, rfl⟩, ResU.inStratum_empty α⟩)
+
+/-- **`withbor (2)` applied to a cell and to `cbPerform`, at `cN`** (`withbor2S_perform₀`): at the
+one-operation row `[linSig n i]`, `withborU dFree ℓ cbPerform` runs at `F_Σ(Ref 1 ⊗ 1)` from
+`ℓ ↦ own(())`. The callback stops at the must-resume operation with the borrow of `ℓ` in the
+continuation's share (`cbPerform_sem`); `withbor2S_compat` gives the rest. -/
+theorem withbor2S_perform (x : LifeVar) {n i : UInt32} (hn : n ≠ 0) (δ : LSub) (Θ : LocTy)
+    (hOK : Θ.OK) (c : Loc → Option Life) (k : Nat) (ls : List SRec) (l : Loc) :
+    cN (ℍ := ℍ) (CTy.effOf [linSig n i] (.tensor (.ref .unit) .unit)) δ Θ c k ls
+      (.app (.app (withborUV dFree).1 (.val (Val.loc l))) (.val (cbPerform n i)))
+      (ResU.single l (CellU.ownOf Val.unit)) := by
+  have hcon : ConsistentX c (ResU.single l (CellU.ownOf (Loc := Loc) Val.unit)) :=
+    consistentX_of_top (ResU.inStratum_single_own _ l Val.unit) c
+  have hv : vN (ℍ := ℍ) (.ref .unit) δ Θ k (Val.loc l) (ResU.single l (CellU.ownOf Val.unit)) :=
+    ⟨l, Val.unit, PMap.empty, rfl, ResU.comp_empty_right _, rfl, rfl⟩
+  have h := (withbor2S_compat (ℍ := ℍ) (A := .unit) (B := .unit) defines_meetOfDom_empty
+    ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩ id id (linSig_suspend (i := i) hn x _) dFree_closed dFree_sem
+    δ Θ k).2 Θ (LocTy.extR_refl _ _) hOK c (consistentX_empty c) ls
+  have h2 := h c k le_rfl (Val.loc l) _ _ (compS_empty_left _) hv hcon
+  exact h2 c k le_rfl (cbPerform n i) PMap.empty _
+    (ResU.comp_empty_right _) (cbPerform_sem n i Θ k) hcon
+
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 
 end

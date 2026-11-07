@@ -15,14 +15,14 @@ entries E8, E11, E13):
   a tick answered *close* or *next* (`fuel_tick_zeroN`, `fuel_tick_succN`, Core's
   `fuel_tick_zero`, `fuel_tick_succ`), over Core's `fuel_clause`, `FuelFrame`, `nextK_frame`,
   `spentK_frame`, read unchanged;
-* **`fuel_totalN`** (Core's `fuel_total`): `div_fuel` of a computation at the row `tick, Σ` is at
+* **`fuel_totalN₀`** (Core's `fuel_total`): `div_fuel` of a computation at the row `tick, Σ` is at
   `Σ`. Core inducts on the budget and, inside, on `cwp`'s segment, and treats the spent budget by
   `Closing` (`fuel_closing`). A `Div` row is a row of the chain's table (E13), so here the
   induction is on the index alone: every tick's continuation is owed below the tick's index,
   whether it is answered *next* or *close*. An operation of `Σ` passes the handler with its frame
   (Core's `fuel_fwd`, `hnd_fwd`), its cancel carried through the plain frame
   (`tabN_plainCancel`);
-* `divFuel_compatN`: the constant at `SemJN₀`. The callback runs at the function's own world
+* `divFuel_compatN₀`: the constant at `SemJN₀`. The callback runs at the function's own world
   (`LocTy.extR_refl`) and view.
 
 No typed code runs after a resumption here: an answer of `Σ` goes back into the callback's own
@@ -187,7 +187,7 @@ theorem tabN_tick (S : Row) (A : VTy) (δ : LSub) (Θ : LocTy) (c : Loc → Opti
 the row `tick, Σ` is, handled, at `Σ`. By induction on the index: a tick's continuation, answered
 *next* (the frame at one less) or *close* (the frame `spent`), is owed below the tick's index; an
 operation of `Σ` passes the handler with its frame. -/
-theorem fuel_totalN {S : Row} (hS : ∀ o ∈ S, o.n ≠ divEff) {A : VTy} {δ : LSub} {Θ : LocTy}
+theorem fuel_totalN₀ {S : Row} (hS : ∀ o ∈ S, o.n ≠ divEff) {A : VTy} {δ : LSub} {Θ : LocTy}
     (hΘ : Θ.Down) {c : Loc → Option Life} :
     ∀ (n : Nat) (k : UInt32) (K : Kont), FuelFrame k K → ∀ (ls : List SRec) (e : Expr) (ρ : WRes),
       erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf (tickSig :: S) A) δ Θ c))
@@ -315,8 +315,8 @@ theorem fuel_totalN {S : Row} (hS : ∀ o ∈ S, o.n ≠ divEff) {A : VTy} {δ :
 /-- **`div_fuel` at `SemJN₀`** (Core's `divFuel_compatX`): total at the rest of the row. The
 callback is forced at the function's own world (`LocTy.extR_refl`) and view, applied at `()`;
 `div_fuel (t, k)` steps to the handler under the budget's frame (`divFuel_steps`), and
-`fuel_totalN` takes it to the row `Σ`. -/
-theorem divFuel_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy}
+`fuel_totalN₀` takes it to the row `Σ`. -/
+theorem divFuel_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy}
     (hS : ∀ o ∈ S, o.n ≠ divEff) (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val divFuelV) (.val (divFuelTy S A)) := by
   intro δ γ Θ c n ls ρ _ _ _ _ hg
@@ -335,7 +335,7 @@ theorem divFuel_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy}
   refine (cN_effOf₀ S A δ Θ' c'' k ls' _ _).mpr ?_
   refine erwp_pureSteps hΦ (opTableN_down (tabN_down _ δ Θ' hΘ'.1 c''))
     (fun k _ v ρ h => vN_down₀ A δ Θ' k v ρ h) (divFuel_steps t kk) ?_
-  exact fuel_totalN hS hΘ'.1 k kk (fuelK kk) (fuelK_frame kk) ls' _ _ hin
+  exact fuel_totalN₀ hS hΘ'.1 k kk (fuelK kk) (fuelK_frame kk) ls' _ _ hin
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 
