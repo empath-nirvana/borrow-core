@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.46 · 2026-11-07
+Version 1.47 · 2026-11-07
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2299,6 +2299,29 @@ else:
   arguments give one parameter different lifetimes, it is their meet, and an argument that is a
   borrow is shortened to it with `:>`; there is no other solving.
 - **`unbang`** is inserted, before the lifetimes, as for any persistent function.
+
+**A local whose type is not known** (#849, #686). Inference types a local from its binding; a
+local whose binding it does not type (`let y = inl 3`, a call of a name not in scope, a loop's
+variable, a binder of a `match` the elaboration cannot walk) has a slot whose type is *not known*,
+never a type it does not have. Inference reads such a slot as not known (`TCx.tyV`,
+`Elab.inferV`, over `Elab.Slots`), and does not ask the checker's synthesis about a node that
+names it, the checker having no unknown type. Every reader of a local's type takes "not known" as
+such:
+
+- **At a call**, an argument whose type is not known is one inference does not type, as an
+  injection is. When its parameter's type is determined by the other arguments, the argument is
+  left to the checker at that type, and after the declaration's typed elaboration, with the call
+  at its instance's types, the binding's type is solved from that use by the metavariables of
+  `Frontend/Elab/Meta.lean` (`fillDecl`), as an injection's is before it. When nothing determines
+  the parameter, the call is refused at the argument: `the type of this argument of f is not
+  determined here` (the binding is ascribed, `let y: T = …`).
+- **Where the type itself is needed** (`*e`, `borrow imm *g`), the refusal names the operand:
+  ``the type of `key` is not known here``.
+- **A name not in scope** is reported by the checker, `unknown variable`, as without the call.
+
+A local whose type is known is unchanged, `1` among them. Why a binding is not typed (#686's
+`match` over `imm` data, a generator call lifted inside a borrow block) is not changed here:
+those refusals now say that the type is not known instead of reporting a type `1`.
 
 A type that is not determined is an error at the call that names it. A lifetime that is not
 determined is `dom`, the meet of the lifetimes in scope, or `main`'s own lifetime in `main` (§23);
@@ -11880,6 +11903,17 @@ checker or the old backend.
 
 ## Changelog
 
+- **1.47** (2026-11-07) — §15 (#849, #686, *A local whose type is not known*): inference's slot
+  types are `Option`s, so a local whose binding it does not type is not known to it, rather than
+  `1`, and every reader handles that. An unannotated injection bound and passed to a generic
+  function whose parameter the other arguments determine is accepted, its binding typed from the
+  call after the typed elaboration; a call that leaves the parameter open is refused as not
+  determined; a call of a later-declared function bound to a local reports `unknown variable`;
+  `*x` of such a local says its type is not known (`corpus/infer-local-sum-generic.bc`,
+  `corpus/infer-local-from-call.bc`, `corpus/infer-local-unit.bc`,
+  `corpus/reject/infer-local-undetermined.bc`, `corpus/reject/deref-unknown-local.bc`). No change
+  to `CDerives`, the kernel, the checker, the theorems or the backends; every other corpus program
+  checks as before.
 - **1.46** (2026-11-07) — §66 (#862): at `absurd` (`zeroE`) Backend2 leaves a live slot neither
   mask holds unconsumed, as it leaves `zeroE`'s absorbed part, on the path that ends at
   `Tm.absurd`; `Lint` admits it from that node, at every type. Every other rule's weakening at a

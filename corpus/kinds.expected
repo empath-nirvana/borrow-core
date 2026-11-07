@@ -367,6 +367,8 @@ corpus/hygiene-handler-param.bc 1.0 cancellable abortive: -; agree
 corpus/hygiene-handler-resume.bc 2.0 cancellable abortive: branch; agree
 corpus/hygiene-handler-resume.bc 1.0 cancellable tail: machine: the clause captures values; disagree
 corpus/hygiene-handler-state.bc 1.0 cancellable tail+state: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/infer-local-from-call.bc 1.0 cancellable abortive: branch; agree
+corpus/infer-local-unit.bc 1.0 cancellable abortive: branch; agree
 corpus/io-task.bc 3.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/io-task.bc 3.1 cancellable tail: -; agree
 corpus/io-task.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
