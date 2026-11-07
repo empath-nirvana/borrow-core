@@ -24,7 +24,7 @@ Read at `main` e52174e1 (worktree `borrow-core-scope844`, branch `scope-844`).
        (`lendOKCR_pa_fails`).
     3. **The relation.** `↭` is asked at every stop, and it refuses a lender's segment that
        starts owning `ℓ` and stops with a borrow of `ℓ` in its payload. This holds whatever
-       premise replaces `pa` (`erwp_refuses_borrowOut`, `not_crossTaskMLend`).
+       premise replaces `pa` (`erwpK_refuses_borrowOut`, `not_crossTaskMLendK`).
 
     The third layer is the stop clause of the relation. Changing it is #821's stage 1–2 mask and
     loan, which is built on `erwpX` on branch `cross-821` and not on `erwpK`/`KW`.
@@ -96,17 +96,16 @@ the spike now backs it in Lean (§1.3).
    premise. At the lend's world `Θ + (ℓ, α)`, the callback's own borrow is a `Mut 'x 1` value
    (`lend_mutL`), and its resource is not in `Res_α`. So `LendOKCR.pa` fails at any entry whose
    payload admits it.
-3. **`CrossStop.erwp_refuses_borrowOut`, `CrossStop.not_crossTaskMLend`** (`:160`, `:270`) concern
-   the relation. They port `cross-821`'s `Core/Chain/CrossStopN.lean` (bbf8f16a) to `main`'s
-   `rwpG`, which now carries the entry tie `ImmTieL`.
-   - `rwpG` asks `ρ ↭ π` at every end, a stop included (`EndOKG`, `Core/Chain/SI/RwpG.lean:39–46`).
+3. **`CrossStop.erwpK_refuses_borrowOut`, `CrossStop.not_crossTaskMLendK`** concern the
+   relation. They port `cross-821`'s `Core/Chain/CrossStopN.lean` (bbf8f16a) to `erwpK`, the
+   relation `goal791N` reads.
+   - `erwpK`'s segments are `rwpG`'s (`erwpK_eq`), and `rwpG` asks `ρ ↭ π` at every end, a stop
+     included (`EndOKG`, `Core/Chain/SI/RwpG.lean`).
    - So a segment whose start holds `ℓ` only as `own` cannot stop holding a borrow of `ℓ` in its
-     payload.
-   - `CrossTaskMLend` is the Mut Frame at a table whose payload is the borrow itself, with `pa`
-     dropped and `pb` kept. It is refuted.
-   - `erwpK`'s segments are `rwpG`'s (`Core/Chain/SI/ErwpK.lean:167–170`, `erwpK_eq`), so the same
-     `↭` is asked of a lender's stop at `KW`. I read this, and I have not restated the refutation
-     at `erwpK`.
+     payload, at any world index (`erwpK_refuses_borrowOut`).
+   - `CrossTaskMLendK` is `erwpK_M_frame`'s statement at the typed world `KW`, the view
+     `Θ.view c` and the posts `KW.PostK`, with `LendOKCR.pa` dropped and every other premise
+     kept. It is refuted at a table whose payload is the borrow itself.
 
 So for Tier 2, writing a new frame lemma is not enough. The lender's segment, seen from outside,
 really does stop with the borrow in its payload, because the handler receives it, and `↭` refuses
@@ -260,8 +259,7 @@ though not their proof architecture.
   - `↭` refuses the lender's stop (the relation).
 
   The first obstruction is the typing one, `lender_mut_payload_empty`. The deepest is the
-  relational one, `not_crossTaskMLend`. That one is at `erwp`; at `erwpK` it holds by reading
-  (§1.3).
+  relational one, `not_crossTaskMLendK`, at `erwpK` and `KW` (§1.3).
 
 ## 5. Relation to #821 and #783
 
@@ -342,7 +340,7 @@ though not their proof architecture.
 | Unit | Content |
 |---|---|
 | T2.0 (design, sign-off) | the binder `∀'r. A ↠ B` on `OpSig`/`CTy.eff`; the cancel component `B_back ⊸ cancelTy`; the return rule for `mut` (R1); the pending-IO token at the extern boundary |
-| T2.1 (design, sign-off) | the stop clause: port #821 stage 1/1.5/2's mask and loan-out `↭` to `erwpK`, or rebase `KW` on `erwpX`. Start from `not_crossTaskMLend` at `erwpK` |
+| T2.1 (design, sign-off) | the stop clause: port #821 stage 1/1.5/2's mask and loan-out `↭` to `erwpK`, or rebase `KW` on `erwpX`. Start from `not_crossTaskMLendK` |
 | T2.2 | `erwpK_M_frameGen` with the loan-out stop case; the CR/CRG/anti/field/list variants re-instantiated |
 | T2.3 | the world step: the handler's run at the lend's world while holding the key; resume at a world keeping `(ℓ, α)` with its family |
 | T2.4 | tables: the borrow-carrying entry in `tabNK`/`tabRK`/`tabGK`/`tabListK`, `foldTwin`, `canK`, `comap` |
@@ -385,7 +383,6 @@ lands (or is ported to `erwpK`), on its stop clause. Building a second loan-out 
   (the token cannot be merged into a lender's piece) and is not used.
 - **Not built on `main`.**
   - #821's mask and loan (`cross-821`, stage 1–2).
-  - `erwp_refuses_borrowOut` at `erwpK` (the spike has it at `erwp`).
   - A configuration for R1's dropped token.
 - **Spike results.** These are the full names; §1.3 and §4 use the short ones. The first four are
   in `BoCa.Fig16.LogRel.Core.Chain.SI.Spike844N`, the last two in its `CrossStop` namespace:
@@ -394,8 +391,8 @@ lands (or is ported to `erwpK`), on its stop clause. Building a second loan-out 
   - `lender_mut_payload_empty`
   - `lend_mut_payload_not_inStratum`
   - `lendOKCR_pa_fails`
-  - `erwp_refuses_borrowOut`
-  - `not_crossTaskMLend`
+  - `erwpK_refuses_borrowOut`
+  - `not_crossTaskMLendK`
 
   Each has axioms within `[propext, Classical.choice, Quot.sound]`. `rowSuspendB_of_suspend` uses
   `propext` only.
