@@ -1,6 +1,6 @@
 import Paper.S2_Statics.Definitions
 import Support.Dynamics.Interpreter
-import Backend.Source
+import Pipeline.Source
 import Backend.Clos.Convert
 
 /-!

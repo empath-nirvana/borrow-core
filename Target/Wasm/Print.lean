@@ -1,6 +1,6 @@
-import Backend.Wasm.Syntax
-import Backend.Wasm.Runtime
-import Backend.Flat.Syntax
+import Target.Wasm.Syntax
+import Target.Wasm.Runtime
+import Target.Flat.Syntax
 
 /-!
 # Backend — WAT printer

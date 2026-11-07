@@ -1,4 +1,4 @@
-import Backend.Flat.Syntax
+import Target.Flat.Syntax
 
 /-!
 # Backend — host operations at the word IR  `[spec §8, §37]`

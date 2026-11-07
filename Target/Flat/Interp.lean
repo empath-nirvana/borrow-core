@@ -1,7 +1,7 @@
 import Std.Data.HashMap
 import Support.Dynamics.Host
-import Backend.Flat.Syntax
-import Backend.Value
+import Target.Flat.Syntax
+import Target.Value
 
 /-!
 # Backend — flat-IR interpreter

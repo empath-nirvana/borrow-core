@@ -1,4 +1,4 @@
-import Backend.Flat.Interp
+import Target.Flat.Interp
 import Backend.Clos.Types
 
 /-!

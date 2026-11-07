@@ -1,7 +1,7 @@
 import Std.Data.HashMap
 import Std.Data.HashSet
 import Backend.Clos.Syntax
-import Backend.Flat.Host
+import Target.Flat.Host
 
 /-!
 # Backend — layout types of the closure IR

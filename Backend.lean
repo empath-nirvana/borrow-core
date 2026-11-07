@@ -1,5 +1,3 @@
-import Backend.Value
-import Backend.Source
 import Backend.Clos.Syntax
 import Backend.Clos.Convert
 import Backend.Clos.Types
@@ -11,13 +9,5 @@ import Backend.Driver
 import Backend.Cells
 import Backend.Falsify
 import Backend.FalsifyTests
-import Backend.Flat.Syntax
 import Backend.Flat.Lower
-import Backend.Flat.Interp
-import Backend.Wasm.Syntax
-import Backend.Wasm.Runtime
-import Backend.Wasm.Lower
-import Backend.Wasm.Print
-import Backend.Native.Lower
-import Backend.Native.Runtime
 import Backend.Native.Tests

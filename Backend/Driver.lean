@@ -1,7 +1,7 @@
 import Frontend.Parser
 import Frontend.Check.Program
 import Frontend.Check.Externs
-import Backend.Source
+import Pipeline.Source
 import Backend.Falsify
 import Backend.Clos.Convert
 import Backend.Clos.Collapse
@@ -11,11 +11,11 @@ import Backend.Clos.Poly
 import Backend.Kernel
 import Backend.Clos.Interp
 import Backend.Flat.Lower
-import Backend.Flat.Interp
-import Backend.Wasm.Lower
-import Backend.Wasm.Print
-import Backend.Native.Lower
-import Backend.Native.Runtime
+import Target.Flat.Interp
+import Target.Wasm.Lower
+import Target.Wasm.Print
+import Target.Native.Lower
+import Target.Native.Runtime
 
 /-!
 # Backend — driver
