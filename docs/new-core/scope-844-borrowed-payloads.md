@@ -15,7 +15,7 @@ Read at `main` e52174e1 (worktree `borrow-core-scope844`, branch `scope-844`).
     suspending lend, and the handler sits between the two lends. This case needs no change to the
     relation's stop clause. It needs the constants to be polymorphic in lifetimes, so that their
     bound is no longer `⊤`, plus a generalisation of three laws from `∅` to `Δ`.
-    **Additive, about 4 units.** As built (SPEC §62, 1.39–1.40), Tier 1 generalises payloads
+    **Additive, about 4 units.** As built (SPEC §62, 1.40–1.41), Tier 1 generalises payloads
     only; answers stay at a closed bound (`Row.AnsC`), for the reason in §1.3's Tier 1 paragraph.
   - **Tier 2, the callback's own borrow passed to a handler outside the lend.** This is #844's
     actual ask, and it is the hard form of both grounding programs. Three layers block it today:

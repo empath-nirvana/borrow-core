@@ -15,8 +15,8 @@ the image of a type the checker put on a node of the typed term.
   applied to `()`), a closure of `A ⊸ C` takes an `A`, and a closure of `C & D` is observed at one
   of its two components. `νX. C` is its unrolling: `U X` is the type variable `0` of `C`'s value
   types, as in `VTy`.
-* `∀'x. C` is `C` (SPEC §44): a `Λ` is its body, a λ-value (`allI_inst`), so `U (∀'x. F A)` is
-  `A` and `U (∀'x. C)` is `U C`; no instantiation has run-time content.
+* `∀'x. C` is `C` (SPEC §44, §63): a `Λ` is its body, a value form (`allI_inst`), so
+  `U (∀'x. F A)` is `A` and `U (∀'x. C)` is `U C`; no instantiation has run-time content.
 * `Ref A` is an owned cell, `Imm A` and `Mut A` borrows of one, `[L]` a family of leaves `L`
   (an array is `[Ref A]`).
 * A row's abortive operations are its computation's way out (SPEC §47): `F_Σ R` answers

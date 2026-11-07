@@ -1,4 +1,5 @@
 import Frontend.Check.TDerives
+import Frontend.Check.Pin
 import Support.Dynamics.Completeness
 
 /-!
@@ -19,13 +20,21 @@ the value the elaborator marks, and its typed rule says the term's erasure is th
   bound was taken from is the scheme's (`Frontend.Sugar.forData` threads it in the loop's state);
   it is recorded in `Frontend/Check/TFacts.lean`.
 
-One rule node carries a fact the new backend reads (SPEC §44): a `Λ` whose body erases to a λ-value
-is instantiated by one β to that λ-value (`allI_inst`), so the backend compiles the `Λ` as its body
-and an instantiation as its operand.
+Two rule nodes carry a fact the new backend reads:
+
+* **A `Λ` over a value form** (SPEC §44, §63): a `Λ` whose body erases to a value form in which the
+  binder's dead slot does not occur (`valFormB`) is instantiated by one β to that value form
+  (`allI_inst`), so the backend compiles the `Λ` as its body and an instantiation as its operand.
+* **`[lend-R]` at the empty row** (SPEC §63): with no operation in the callback's row, the
+  unwinding frame never runs its finaliser, and the relaxed lend is the plain lend: the callback on
+  the owner, its answer paired with the owner (`lendR_plain`).
 -/
 
 namespace BoCa.Fig16.LogRel.Core.Check
 open BoCa
+open BoCa.Fig16 BoCa.Fig16.BoLo
+open BoCa.BoLo (Head Kont Step1N)
+open Frontend.Check (valFormB lendRE)
 
 /-- The bound of a view is at most its length. -/
 theorem arrLen_le (n : UInt32) : arrLen n ≤ n := by
@@ -103,28 +112,91 @@ theorem divLit_some8 {ℍ : Host} (hc : ℍ.Conforms) {o : DivOp} {n : UInt8}
     refine prim_div_some _ _ _ (fun h0 => h ?_) (fun ho => by cases ho) <;>
     (apply UInt8.toNat_inj.mp; have := congrArg BitVec.toNat h0; simpa using this)
 
-/-! ### Λ erased  `[spec §44]`
+/-! ### Λ erased  `[spec §44, §63]`
 
 A `Λ` erases to `λ_. M` and an instantiation to `M ()` (`TExpr.erase` at `allI`, `allE`,
-`allEV`). When `M` erases to a λ-value (`TExpr.isLam`), an instantiation is one β at every memory,
-to that λ-value with the binder's slot filled: no code runs, no memory is touched, and the answer
-is the body's value. So a `Λ` over such a body is represented by its body, an instantiation by
-its operand, and no instantiation is compiled. -/
+`allEV`). `[∀I]` checks `M` with the binder's slot dead (`TDerives.allI`: `⟨S, false⟩ :: Γ`).
+When `M` erases to a value form whose variables are live slots, the binder's slot not among them
+(`valFormB (false :: u)`; a λ-value is one whatever it mentions), an instantiation is one β at
+every memory, to that value form with the binder's slot filled: no code runs, no memory is
+touched, and the answer is the body's value. So a `Λ` over such a body is represented by its body,
+an instantiation by its operand, and no instantiation is compiled. -/
 
-/-- **An instantiation of a `Λ` whose body is a λ-value is that λ-value**: one β, at every memory,
-to the body's erasure with the binder's (dead) slot filled by `()`.  `[spec §44]` -/
+/-- Filling a slot no variable of a value form names leaves a value form over the other slots. -/
+theorem valFormB_subst_dead : ∀ {u : List Bool} {e : Expr},
+    valFormB (false :: u) e = true → valFormB u (e.subst 0 Val.unit) = true
+  | _, .var 0, h => by simp [valFormB] at h
+  | u, .var (k + 1), h => by
+      simpa [valFormB, Expr.subst] using h
+  | _, .unit, _ | _, .lam _, _ | _, .loc _, _ | _, .prim _, _ => by simp [valFormB, Expr.subst]
+  | _, .pair a b, h => by
+      simp only [valFormB, Bool.and_eq_true] at h
+      simp only [Expr.subst, valFormB, Bool.and_eq_true]
+      exact ⟨valFormB_subst_dead h.1, valFormB_subst_dead h.2⟩
+  | _, .inj₁ a, h => by
+      simp only [valFormB] at h; simpa [Expr.subst, valFormB] using valFormB_subst_dead h
+  | _, .inj₂ a, h => by
+      simp only [valFormB] at h; simpa [Expr.subst, valFormB] using valFormB_subst_dead h
+  | _, .app _ _, h | _, .letpair _ _, h | _, .seq _ _, h | _, .case _ _ _, h => by
+      simp [valFormB] at h
+
+/-- **An instantiation of a `Λ` whose body is a value form is that value form**: one β, at every
+memory, to the body's erasure with the binder's (dead) slot filled by `()`, and the result is a
+value form over the live slots `u`.  `[spec §44, §63]` -/
 theorem allI_inst {ℍ : Host} [HostIs ℍ] {i : TInfo} {j : Jdg} {x : Lifetime.LifeVar} {b : Lifetime.Life} {S : VTy} {C : CTy}
-    {t : TExpr} (h : t.isLam = true) :
-    ∃ N : Expr, t.erase = .lam N ∧
-      PureSteps (ℍ := ℍ) (.app (TExpr.allI i j x b S C t).erase (.val .unit)) (.lam (N.subst 1 Val.unit)) := by
-  have hl := TExpr.isLam_eq t
-  rw [h] at hl
-  match he : t.erase, hl with
-  | .lam N, _ =>
-    refine ⟨N, rfl, ?_⟩
-    have := PureSteps.beta (ℍ := ℍ) (.lam N) Val.unit
-    have hu : Val.shift 1 0 Val.unit = Val.unit := rfl
-    simpa [TExpr.erase, he, Expr.subst, hu] using this
+    {t : TExpr} {u : List Bool} (h : valFormB (false :: u) t.erase = true) :
+    PureSteps (ℍ := ℍ) (.app (TExpr.allI i j x b S C t).erase (.val .unit))
+        (t.erase.subst 0 Val.unit) ∧
+      valFormB u (t.erase.subst 0 Val.unit) = true :=
+  ⟨PureSteps.beta (ℍ := ℍ) t.erase Val.unit, valFormB_subst_dead h⟩
+
+/-! ### `[lend-R]` at the empty row  `[spec §63]`
+
+R1's term at the owner `u` is `withborU d u (Λ. λm. M)` (`lendRE`): the callback
+under the unwinding frame, whose finaliser `d` runs on the owner only when the callback stops at an
+operation (`ewp_unwind`). At a row with no operation the table has no entry, so the callback never
+stops: every end of its run is a return, where the frame pairs the owner with the answer
+(`ewp_ret_pair`). So the relaxed lend is the plain lend, whatever `d` is. -/
+
+/-- The empty row's table has no entry. -/
+theorem rowTab_isEmpty {ℍ : Host} [HostIs ℍ] {S : Row} (hS : S.isEmpty = true) (δ : Lifetime.LSub) (n i : UInt32) :
+    Row.tab (ℍ := ℍ) S δ n i = none := by
+  cases S with
+  | nil => rfl
+  | cons _ _ => simp at hS
+
+/-- **`[lend-R]` at the empty row is the plain lend**: at a row with no operation, R1's term at a
+closed owner `u` (`lendRE d M`, its variable `0` filled by `u`) runs as the callback
+`lendCb M` on `()` and `u`, its answer `w` paired with the owner: `(u, w)`. The finaliser `d`
+never runs.  `[spec §63]` -/
+theorem lendR_plain {ℍ : Host} [HostIs ℍ] {S : Row} (hS : S.isEmpty = true) (δ : Lifetime.LSub)
+    {d M : Expr} (hd : closedAt 0 d = true) (hcb : closedAt 0 (lendCb M).1 = true)
+    (u : Val) (hu : closedAt 0 u.1 = true) {ls : List SRec} {Q : List SRec → Val → WProp}
+    {ρ : WRes}
+    (h : ewpTS (ℍ := ℍ) ls (.app (.app (.val (lendCb M)) (.val .unit)) (.val u))
+      (opTable (Row.tab S δ)) (fun ls w => Q ls (Val.pair u w)) ρ) :
+    ewpTS (ℍ := ℍ) ls ((lendRE d M).subst 0 u) (opTable (Row.tab S δ)) Q ρ := by
+  have hE := rowTab_isEmpty (ℍ := ℍ) hS δ
+  have hTb := opTable_mono (Row.tab S δ)
+  have hA : (Row.tab S δ).AbortOnly := fun n i en h => by rw [hE n i] at h; cases h
+  have e : (lendRE d M).subst 0 u =
+      .app (.app (.val (withborUV d)) (.val u)) (.val (lendCb M)) := by
+    simp only [lendRE, Expr.subst, if_true]
+    rw [show Expr.val (withborUV d) = withborUE d from rfl,
+      subst_closedAt _ _ (withborUE_closed hd) (Nat.zero_le _),
+      show Expr.val (lendCb M) = (lendCb M).1 from rfl,
+      subst_closedAt _ _ hcb (Nat.zero_le _)]
+  rw [e]
+  refine withborUE_beta hTb hd u hu (lendCb M) ?_
+  refine ewp_fold hTb (wpG_bind (ubindK _ _) _ ls _ ρ ?_)
+  refine wpG_mono (fun ls' t σ ht => ?_) ((ewp_abortive (opTable_abortive hA)).mp h)
+  rcases ht with ⟨v, rfl, hv⟩ | hp
+  · exact ewp_unfold hTb (ewp_ret_pair hTb u hu _ v hv)
+  rcases hp with ⟨K₁, n, i, v, en, hp⟩ | ⟨K₁, n, i, v, en, hp⟩
+  · obtain ⟨⟨-, -, hT, -⟩, -⟩ := pure_sep_iff.mp hp
+    rw [hE n i] at hT; cases hT
+  · obtain ⟨⟨-, -, hT, -⟩, -⟩ := pure_sep_iff.mp hp
+    rw [hE n i] at hT; cases hT
 
 /-! ### Codata's η-thunk  `[spec §45]`
 

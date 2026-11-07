@@ -3,6 +3,7 @@ import Backend2.Syntax
 import Backend2.Debug
 import Frontend.Check.Kinds
 import Frontend.Check.Cells
+import Frontend.Check.Derived
 
 /-!
 # Backend2 — closure conversion of the typed term  `[spec §3, §10]`
@@ -2567,10 +2568,11 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
       | some p :: rest => return .consume .dead p (← convBody fuel (none :: rest) c)
       | _ => throw "LIR: a dead λ's parameter"
   | .allI _ _ _ _ _ _ c => do
-    -- `Λ. M` is `M` (`allI_inst`)  [spec §44]: its body erases to a λ-value, so the binder's slot
-    -- is dead and no instantiation runs code.
-    unless c.isLam do throw "outside the pure fragment: a Λ whose body is not a λ-value (SPEC §44)"
-    readFact "allI:body a λ-value"
+    -- `Λ. M` is `M` (`allI_inst`)  [spec §44, §63]: its body erases to a value form over the live
+    -- slots, the binder's dead slot not among them, so no instantiation runs code.
+    unless Frontend.Check.valFormB (false :: ctx.map Option.isSome) c.erase do
+      throw "outside the pure fragment: a Λ whose body is not a value form (SPEC §44, §63)"
+    readFact "allI:body a value form"
     conv fuel (none :: ctx) c
   | .withI _ j C D tM tN => do
     let .thunk k := (← repJ j).peel | throw "LIR: a `&` at a non-closure type"
@@ -2753,7 +2755,22 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     readFact "nilDead:context"
     unless (live ctx).isEmpty do throw "LIR: `[nil-dead]` at a context with a live slot"
     conv fuel [] c
-  | .effHandleT .. | .lendR .. | .lendLoopR .. | .iterate .. | .divFuel ..
+  | .lendR _ _ _ _ A B S _ tM => do
+    -- `[lend-R]` at the empty row (`lendR_plain`)  [spec §63]: the callback never stops, so the
+    -- finaliser never runs and the lend is the plain lend: the owner lent `mut`, the callback run
+    -- on the view, its answer `b` giving `(r, b)`. At any other row the lend is a machine's.
+    unless S.isEmpty do outside t
+    readFact "lendR:empty row"
+    let some (some r) := ctx[0]? | throw "LIR: a relaxed lend's owner is not live"
+    let rT ← tyOf r
+    let mT : LTy := .mut (← vty A)
+    let bT ← vty B
+    let pr ← fresh (.pair rT mT); let o ← fresh rT; let m ← fresh mT; let b ← fresh bT
+    let body ← conv fuel [some m] tM
+    readFact "lend"
+    return leaf ctx (some 0)
+      (.letv pr (.prim (.lend true) [r]) (.letpair o m pr (.letv b body (.pair o b))))
+  | .effHandleT .. | .lendLoopR .. | .iterate .. | .divFuel ..
   | .reify .. | .letPoly .. => outside t
   | t =>
     match transparent? t with
