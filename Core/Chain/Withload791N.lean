@@ -622,15 +622,15 @@ theorem withloadS_compat₀ {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Li
     (fun β hLt u χ Bχ hχ _ _ himg hBχ =>
       callback_at_image₀ hB hS hΘ hLt (vN_le₀ (Nat.sub_le k' 1) hf) hcf hχ himg hBχ) hc' 
 
-/-- **`ConstN` for `withload` at a suspending row**, from its rule's premises. -/
-theorem constN_wl {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
-    {S : Row} : ConstN (ℍ := ℍ) (.wl a x bnd A B S) := by
+/-- **`ConstN₀` for `withload` at a suspending row**, from its rule's premises. -/
+theorem constN_wl₀ {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
+    {S : Row} : ConstN₀ (ℍ := ℍ) (.wl a x bnd A B S) := by
   rintro ⟨hbnd, hA, hB, hS⟩ δ Θ n _
   exact withloadS_compat₀ hbnd hA hB hS δ Θ n
 
 /-- **`withload` at the hardest case's row**, every hypothesis of `withloadS_compat₀` discharged:
 an `Imm @a 1` source at the bound `LifeCtx.empty.meetOfDom`. -/
-theorem withloadS_inst (a : Lifetime.Life) (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
+theorem withloadS_inst₀ (a : Lifetime.Life) (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
     vN₀ (ℍ := ℍ) (.bang (withloadUTy a x LifeCtx.empty.meetOfDom .unit .unit hardestRow)) δ Θ n
       withloadV PMap.empty :=
   withloadS_compat₀ defines_meetOfDom_empty id id (hardestRow_suspend x _) δ Θ n
@@ -640,12 +640,12 @@ theorem wl_ok (a : Lifetime.Life) (x : LifeVar) :
     (Const791.wl a x LifeCtx.empty.meetOfDom .unit .unit hardestRow).OK :=
   ⟨defines_meetOfDom_empty, id, id, hardestRow_suspend x _⟩
 
-/-- **`ConstN` at the hardest case's `withload`**, its antecedent discharged (`wl_ok`). -/
-theorem constN_wl_inst (a : Lifetime.Life) (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat)
+/-- **`ConstN₀` at the hardest case's `withload`**, its antecedent discharged (`wl_ok`). -/
+theorem constN_wl_inst₀ (a : Lifetime.Life) (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat)
     (hΘ : Θ.OK) :
     vN₀ (ℍ := ℍ) (.bang (Const791.wl a x LifeCtx.empty.meetOfDom .unit .unit hardestRow).ty) δ Θ n
       (Const791.wl a x LifeCtx.empty.meetOfDom .unit .unit hardestRow).val PMap.empty :=
-  constN_wl (wl_ok a x) δ Θ n hΘ
+  constN_wl₀ (wl_ok a x) δ Θ n hΘ
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

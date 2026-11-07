@@ -10,7 +10,7 @@ continuation at a world whose location typing above the lend is the lender's (`L
 the claim's content, in the lend's family read above the lend, is a value of the source's type at
 every world the lender's run reaches. The Mut Frame takes the callback as a thunk of `cN` reads it
 (`erwpK_M_frameCR_cN`); the claim is consistent with the view of the world it is raised at
-(`erwpK_claimXK`); the finaliser frame consumes it with `d` (`erwpK_ubindClaimRWK`, `fin_claimN`).
+(`erwpK_claimXK`); the finaliser frame consumes it with `d` (`erwpK_ubindClaimRWK`, `fin_claim`).
 -/
 
 noncomputable section
@@ -47,8 +47,8 @@ theorem tabN_suspend_raise {S : Row} {x : LifeVar} {bnd : Lifetime.Life} (hS : S
   exact (hS o ho).2.1
 
 /-- The finaliser `λ_. d ℓ` consumes the lend's claim at `SemJN`: `d`'s judgment at `Ref A ⊸ 1`,
-applied to the cell owned again with its content in `A`'s family (`fin_claim`). -/
-theorem fin_claimN {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
+applied to the cell owned again with its content in `A`'s family (`fin_claim₀`). -/
+theorem fin_claim {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
     (hd : SemJN (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.ref A) .unit))) {δ δ' : LSub}
     (hδ : vN (ℍ := ℍ) A δ' = vN (ℍ := ℍ) A δ) {Θ : LocTy} (hΘ : Θ.OK)
     {c : Loc → Option Life} {l : Loc} {α : Life} {k : Nat} {ls : List SRec} {ρ : WRes}
@@ -111,7 +111,7 @@ higher than `α` (`erwpK_flr`), at the worlds `LendInv Θ α`. The callback runs
 `x.lend ℓ α (famL α 𝒱⟦A⟧ Θ)` from the borrow (`lend_mutL`), consistent (`consistentX_compS`), as
 the thunk `cN` reads (`erwpK_M_frameCR_cN`); the lender's run carries the view's consistency to its
 claim (`erwpK_claimXK`); the finaliser frame `then b. (ℓ, b) unwind d ℓ` consumes the claim with `d`
-at the world it is raised at (`erwpK_ubindClaimRWK`, `fin_claimN`), the claim's content a value of
+at the world it is raised at (`erwpK_ubindClaimRWK`, `fin_claim`), the claim's content a value of
 `A` there (`vN_above` at `LendInv`). The callback's result `['x] B` returns to the world without the
 lend by `vN_local`.
 
@@ -227,7 +227,7 @@ theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Ro
       _ ρ'' hM'
     · simpa only [tabNK_vN] using hfin
     · rintro z hz j ls' ρ ⟨⟨w, σ, hσ, hF, hclm⟩, hcR⟩
-      exact fin_claimN hdc hd hAδ hz.1 ⟨w, σ, hσ, hFamV z hz j w σ hσ hF, hclm⟩ hcR
+      exact fin_claim hdc hd hAδ hz.1 ⟨w, σ, hσ, hFamV z hz j w σ hσ hF, hclm⟩ hcR
     · intro z hz j ls' bv ρ hq
       have hTdz : (opTableK z.lo (tabNK (ℍ := ℍ) (fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ)
           id Fo δ z)).Down := opTableK_downI (tabNK_downI valRelOK_vN id Fo δ z)

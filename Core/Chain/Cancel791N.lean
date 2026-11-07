@@ -935,11 +935,11 @@ theorem withbor2S_compat₀ {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S :
       vN_local₀ B δ Θ l α Fam k b ρ' hst (by rw [← hBδ]; exact hbB)
     exact ⟨Val.loc l, b, Wc, ρ', rfl, ResU.CompS.comm hZ', ⟨l, w, σ, rfl, hWc, hwσ⟩, hbB'⟩
 
-/-- **`ConstN` for `withbor (2)` at a suspending row**, from the fundamental property at the
+/-- **`ConstN₀` for `withbor (2)` at a suspending row**, from the fundamental property at the
 finaliser's derivation. -/
-theorem constN_w2 (hF : FundamentalN (ℍ := ℍ)) {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
+theorem constN_w2₀ (hF : FundamentalN₀ (ℍ := ℍ)) {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {S : Row} {d : Expr} (hfr : (Const791.w2 x bnd A B S d).InFrag) :
-    ConstN (ℍ := ℍ) (.w2 x bnd A B S d) := by
+    ConstN₀ (ℍ := ℍ) (.w2 x bnd A B S d) := by
   rintro ⟨hbnd, hO, hA, hB, hS, hdc, hder⟩ δ Θ n _
   have hL : (VTy.ref A).inFrag = true := by
     simp_all [Const791.InFrag, Const791.ty, withbor2UTy, withborUTy, VTy.inFrag, CTy.inFrag]

@@ -484,11 +484,11 @@ theorem withborFS_compat₀ {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Li
   exact ⟨Val.loc l₂, σ', h', hw', ρ', Z, ResU.CompS.comm hX₁, ResU.CompS.comm hρ'σ', fun X' hX' =>
     ⟨Val.loc l, b, _, ρ', rfl, ResU.CompS.comm hX', hRout k _ σ' h' hw', hbB'⟩⟩
 
-/-- **`ConstN` for the field reborrow at a suspending row**, from the fundamental property at the
+/-- **`ConstN₀` for the field reborrow at a suspending row**, from the fundamental property at the
 finaliser's derivation. -/
-theorem constN_wF (hF : FundamentalN (ℍ := ℍ)) {a : Lifetime.Life} {x : LifeVar}
+theorem constN_wF₀ (hF : FundamentalN₀ (ℍ := ℍ)) {a : Lifetime.Life} {x : LifeVar}
     {bnd : Lifetime.Life} {A B : VTy} {S : Row} {d : Expr}
-    (hfr : (Const791.wF a x bnd A B S d).InFrag) : ConstN (ℍ := ℍ) (.wF a x bnd A B S d) := by
+    (hfr : (Const791.wF a x bnd A B S d).InFrag) : ConstN₀ (ℍ := ℍ) (.wF a x bnd A B S d) := by
   rintro ⟨hbnd, hA, hB, hS, hdc, hder⟩ δ Θ n _
   have hL : (VTy.mut a (.ref A)).inFrag = true := by
     simp_all [Const791.InFrag, Const791.ty, withborFSTy, withborUTy, VTy.inFrag, CTy.inFrag]

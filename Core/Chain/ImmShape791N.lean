@@ -21,7 +21,7 @@ a value of Core's `Mut 'x (Imm 'y 1)` at `ls` is not one at a list `ls'` with `e
 
 This is the step a resumed `Mut` value's re-reading takes (`withbor3S_compat₀`'s step 13, the
 resealed cell a `Mut @a A` value at the run's last list; `chain-interpretation.md` §5, D2). It is the step's
-configuration, not the constant's: no run of `ConstN (.w3 …)` ending at `ls'` is built.
+configuration, not the constant's: no run of `ConstN₀ (.w3 …)` ending at `ls'` is built.
 -/
 
 noncomputable section

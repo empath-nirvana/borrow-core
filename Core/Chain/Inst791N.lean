@@ -7,12 +7,12 @@ import Core.Chain.Field791N
 judgment `hd` beside `Const791.OK`'s clauses. Here each is instantiated with every hypothesis
 discharged, so none of them is vacuous:
 
-* **The finalisers.** `dRelease = λr. ()` at `Mut @a A ⊸ 1` (`dRelease_sem`), the borrow left as
-  garbage (Core's `releaseMut`); `dFree = λr. free r` at `Ref 1 ⊸ 1` (`dFree_sem`), the cell
+* **The finalisers.** `dRelease = λr. ()` at `Mut @a A ⊸ 1` (`dRelease_sem₀`), the borrow left as
+  garbage (Core's `releaseMut`); `dFree = λr. free r` at `Ref 1 ⊸ 1` (`dFree_sem₀`), the cell
   freed.
 * **The constants at the hardest case's row** (`hardestRow`, `park` as `TJN` types it), the bound
-  Core's rules fix at the empty context (`LifeCtx.empty.meetOfDom`): `withbor2S_inst`,
-  `withbor3S_inst`, `withborFS_inst`.
+  Core's rules fix at the empty context (`LifeCtx.empty.meetOfDom`): `withbor2S_inst₀`,
+  `withbor3S_inst₀`, `withborFS_inst₀`.
 * **A callback that performs an operation while holding the borrow** (`cbPerform_sem`):
   `λ_. λu. perform op ()` at a one-operation suspending row, the borrow live across the stop.
 
@@ -50,7 +50,7 @@ theorem dRelease_closed : closedAt 0 dRelease = true := by decide
 theorem dFree_closed : closedAt 0 dFree = true := by decide
 
 /-- **`λr. ()` is a finaliser of a `Mut` source**: at `Mut @a A ⊸ 1`, every `a` and `A`. -/
-theorem dRelease_sem (a : Lifetime.Life) (A : VTy) :
+theorem dRelease_sem₀ (a : Lifetime.Life) (A : VTy) :
     SemJN₀ (ℍ := ℍ) LifeCtx.empty [] dRelease (.val (.lolli (.mut a A) .unit)) := by
   intro δ γ Θ c n ls ρ _ _ _ _ hg
   obtain rfl : ρ = PMap.empty := hg
@@ -69,7 +69,7 @@ theorem dRelease_sem (a : Lifetime.Life) (A : VTy) :
     (erwp_val (v := Val.unit) ⟨rfl, rfl⟩)
 
 /-- **`λr. free r` is a finaliser of a `Ref 1` source.** -/
-theorem dFree_sem :
+theorem dFree_sem₀ :
     SemJN₀ (ℍ := ℍ) LifeCtx.empty [] dFree (.val (.lolli (.ref .unit) .unit)) := by
   intro δ γ Θ c n ls ρ _ _ _ _ hg
   obtain rfl : ρ = PMap.empty := hg
@@ -94,28 +94,28 @@ theorem dFree_sem :
 
 /-- **`withbor (2)` at the hardest case's row**, every hypothesis of `withbor2S_compat₀`
 discharged: `Ref 1` lent at the bound `LifeCtx.empty.meetOfDom`, finalised by `dFree`. -/
-theorem withbor2S_inst (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
+theorem withbor2S_inst₀ (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
     vN₀ (ℍ := ℍ) (.bang (withbor2UTy x LifeCtx.empty.meetOfDom .unit .unit hardestRow)) δ Θ n
       (withborUV dFree) PMap.empty :=
   withbor2S_compat₀ defines_meetOfDom_empty
-    ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩ id id (hardestRow_suspend x _) dFree_closed dFree_sem δ Θ n
+    ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩ id id (hardestRow_suspend x _) dFree_closed dFree_sem₀ δ Θ n
 
 /-- **`withbor (3)` at the hardest case's row**, every hypothesis of `withbor3S_compat₀`
 discharged: a `Mut @a 1` source reborrowed, finalised by `dRelease`. -/
-theorem withbor3S_inst (a : Lifetime.Life) (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
+theorem withbor3S_inst₀ (a : Lifetime.Life) (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
     vN₀ (ℍ := ℍ) (.bang (withbor3UTy a x LifeCtx.empty.meetOfDom .unit .unit hardestRow)) δ Θ n
       (withborUV dRelease) PMap.empty :=
   withbor3S_compat₀ defines_meetOfDom_empty id id (hardestRow_suspend x _) dRelease_closed
-    (dRelease_sem a .unit) δ Θ n
+    (dRelease_sem₀ a .unit) δ Θ n
 
 /-- **The field reborrow at the hardest case's row**, every hypothesis of `withborFS_compat₀`
 discharged: a `Mut @a (Ref 1)` source, its field reborrowed, finalised by `dRelease`. -/
-theorem withborFS_inst (a : Lifetime.Life) (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
+theorem withborFS_inst₀ (a : Lifetime.Life) (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
     vN₀ (ℍ := ℍ)
       (.bang (BoCa.Fig16.Tree.Wp.Goal791.withborFSTy a x LifeCtx.empty.meetOfDom .unit .unit
         hardestRow)) δ Θ n (BoCa.Fig16.Tree.Wp.Goal791.withborFV dRelease) PMap.empty :=
   withborFS_compat₀ defines_meetOfDom_empty id id (hardestRow_suspend x _) dRelease_closed
-    (dRelease_sem a (.ref .unit)) δ Θ n
+    (dRelease_sem₀ a (.ref .unit)) δ Θ n
 
 /-! ### A callback that performs while holding the borrow -/
 
@@ -214,7 +214,7 @@ theorem withbor2S_perform (x : LifeVar) {n i : UInt32} (hn : n ≠ 0) (δ : LSub
   have hv : vN₀ (ℍ := ℍ) (.ref .unit) δ Θ k (Val.loc l) (ResU.single l (CellU.ownOf Val.unit)) :=
     ⟨l, Val.unit, PMap.empty, rfl, ResU.comp_empty_right _, rfl, rfl⟩
   have h := (withbor2S_compat₀ (ℍ := ℍ) (A := .unit) (B := .unit) defines_meetOfDom_empty ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩
-    id id (linSig_suspend (i := i) hn x _) dFree_closed dFree_sem δ Θ k).2 Θ (LocTy.extR_refl _ _) hOK c
+    id id (linSig_suspend (i := i) hn x _) dFree_closed dFree_sem₀ δ Θ k).2 Θ (LocTy.extR_refl _ _) hOK c
     (consistentX_empty c) ls
   have h2 := h c k le_rfl (Val.loc l) _ _ (compS_empty_left _) hv hcon
   exact h2 c k le_rfl (cbPerform n i) PMap.empty _

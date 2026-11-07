@@ -25,7 +25,7 @@ restated at an incoming claim `R`:
 * `erwp_M_frameListCRN`: Core's `wpG_M_frameList` across stops, raises and layered cancel runs,
   the list induction over `erwp_M_frameCRR`; the composite claim is the cells owned again
   (`claimL₀`), the `Array A` the finaliser `d` takes.
-* `sliceBorrowMS_compat`, `constN_sm`, `sliceBorrowMS_inst`.
+* `sliceBorrowMS_compat₀`, `constN_sm₀`, `sliceBorrowMS_inst₀`.
 -/
 
 noncomputable section
@@ -720,7 +720,7 @@ def DFa (d : Expr) (a : Val) : Val := Val.lam (.app d (.val a))
 
 /-- **The finaliser consumes the source array** (`fin_claim₀` at `Array A`): `d`'s judgment at
 `Array A ⊸ 1`, applied to the array owned again. -/
-theorem fin_claimArr {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
+theorem fin_claimArr₀ {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
     (hd : SemJN₀ (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.array A) .unit))) {δ : LSub}
     {Θ : LocTy} (hΘ : Θ.OK) {c : Loc → Option Life} {a : Val} {k : Nat} {ls : List SRec}
     {ρ : WRes} (h : vN₀ (ℍ := ℍ) (.array A) δ Θ k a ρ) (hc : ConsistentX c ρ) :
@@ -758,12 +758,12 @@ lifetime `α`, receives the family `[Mut 'x A]` (`vN_mutLeaf₀` at each leaf) a
 `tabN₀`, below the lender's twin at the empty claim (`tabN_tabR_le`); the composite claim, the
 cells owned again at `Θ` (`claimL₀`), is the array; it is consistent with the view
 (`erwp_claimX`), and the finaliser frame `then b. (a, b) unwind d a` consumes it with `d`
-(`erwp_ubindClaimRT`, `fin_claimArr`).
+(`erwp_ubindClaimRT`, `fin_claimArr₀`).
 
 Premises, and the rule that supplies each: `hbnd` is the bound's definedness (`Const791.OK`);
 `hOA`, `hOB`, `hA`, `hB`, `hS`, `hdc` are `sliceBorrowMU`'s with `Row.Suspend` for `Row.Unwind`
 (`Const791.OK`); `hd` is the fundamental property at `d`'s derivation. -/
-theorem sliceBorrowMS_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Row}
+theorem sliceBorrowMS_compat₀ {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Row}
     {d : Expr} (hbnd : LifeCtx.empty.Defines bnd)
     (hOA : ∃ b, LifeCtx.empty.Defines b ∧ VOutlivesLe LifeCtx.empty b A)
     (hOB : ∃ b, LifeCtx.empty.Defines b ∧ VOutlivesLe LifeCtx.empty b B)
@@ -827,7 +827,7 @@ theorem sliceBorrowMS_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S 
       (NFa (Val.arr l cn)) (DFa d (Val.arr l cn)) (fun k ls ρ hR => ?_) hQo
       (fun k ls b ρ hq => ?_) k' ls _ ρ'' hM'
     · obtain ⟨hR, hcR⟩ := hR
-      exact fin_claimArr hdc hd hΘ ⟨l, cn, rfl, hn, by rw [sepRange_eq_sepList]; exact hR⟩ hcR
+      exact fin_claimArr₀ hdc hd hΘ ⟨l, cn, rfl, hn, by rw [sepRange_eq_sepList]; exact hR⟩ hcR
     · obtain ⟨ρ₁, ρ₂, hc12, ho, hb⟩ := hq
       refine erwp_det hΦ (opTableN_down hTd) hQo
         (fun μ => step1Only_plug (Head.beta μ _ b) rfl .hole) ?_
@@ -855,15 +855,15 @@ theorem sliceBorrowMS_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S 
   show vN₀ (ℍ := ℍ) B δ Θ'' k b ρ'
   rw [← hBδ α]; exact hbB
 
-/-- **`ConstN` for `slice_borrow_mut` at a suspending row**, from the fundamental property at the
+/-- **`ConstN₀` for `slice_borrow_mut` at a suspending row**, from the fundamental property at the
 finaliser's derivation. -/
-theorem constN_sm (hF : FundamentalN (ℍ := ℍ)) {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
+theorem constN_sm₀ (hF : FundamentalN₀ (ℍ := ℍ)) {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {S : Row} {d : Expr} (hfr : (Const791.sm x bnd A B S d).InFrag) :
-    ConstN (ℍ := ℍ) (.sm x bnd A B S d) := by
+    ConstN₀ (ℍ := ℍ) (.sm x bnd A B S d) := by
   rintro ⟨hbnd, hOA, hOB, hA, hB, hS, hdc, hder⟩ δ Θ n _
   have hL : (VTy.array A).inFrag = true := by
     simp_all [Const791.InFrag, Const791.ty, sliceBorrowMUTy, withborUTy, VTy.inFrag, CTy.inFrag]
-  exact sliceBorrowMS_compat hbnd hOA hOB hA hB hS hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ Θ n
+  exact sliceBorrowMS_compat₀ hbnd hOA hOB hA hB hS hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ Θ n
 
 /-! ### `slice_borrow_mut` at an unwinding row -/
 
@@ -1201,7 +1201,7 @@ theorem dropU_sem₀ (δ : LSub) (Θ : LocTy) (n : Nat) :
 
 /-- **`λa. drop (λu. (), a)` is a finaliser of an `Array 1` source**: the cells are freed in
 order by `dropFill` (`dropFill_wpN₀`). -/
-theorem dArrFree_sem :
+theorem dArrFree_sem₀ :
     SemJN₀ (ℍ := ℍ) LifeCtx.empty [] dArrFree (.val (.lolli (.array .unit) .unit)) := by
   intro δ γ Θ c n ls ρ _ _ _ _ hg
   obtain rfl : ρ = PMap.empty := hg
@@ -1228,31 +1228,31 @@ theorem dArrFree_sem :
   exact dropFill_wpN₀ hOK dropU l (dropU_sem₀ δ Θ'' k) cn.toNat 0 k ls' ρ' c'' le_rfl hcon
     (by simpa using hs)
 
-/-- **`slice_borrow_mut` at the hardest case's row**, every hypothesis of `sliceBorrowMS_compat`
+/-- **`slice_borrow_mut` at the hardest case's row**, every hypothesis of `sliceBorrowMS_compat₀`
 discharged: an `Array 1` lent cell by cell at the bound `LifeCtx.empty.meetOfDom`, finalised by
 `dArrFree`. -/
-theorem sliceBorrowMS_inst (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
+theorem sliceBorrowMS_inst₀ (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
     vN₀ (ℍ := ℍ) (.bang (sliceBorrowMUTy x LifeCtx.empty.meetOfDom .unit .unit hardestRow)) δ Θ n
       (withborUV dArrFree) PMap.empty :=
-  sliceBorrowMS_compat defines_meetOfDom_empty ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩
+  sliceBorrowMS_compat₀ defines_meetOfDom_empty ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩
     ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩ id id (hardestRow_suspend x _) dArrFree_closed
-    dArrFree_sem δ Θ n
+    dArrFree_sem₀ δ Θ n
 
 /-! ### Every constant -/
 
-/-- **`ConstsN` from the fundamental property**: each of the five constants inside the fragment,
-the finalisers' judgments read by the fundamental property (`constN_w2`, `constN_w3`,
-`constN_wF`, `constN_wl`, `constN_sm`). -/
-theorem constsN_of (hF : FundamentalN (ℍ := ℍ)) : ConstsN (ℍ := ℍ)
-  | .w2 .., hfr => constN_w2 hF hfr
-  | .w3 .., hfr => constN_w3 hF hfr
-  | .wF .., hfr => constN_wF hF hfr
-  | .wl .., _ => constN_wl
-  | .sm .., hfr => constN_sm hF hfr
+/-- **`ConstsN₀` from the fundamental property**: each of the five constants inside the fragment,
+the finalisers' judgments read by the fundamental property (`constN_w2₀`, `constN_w3₀`,
+`constN_wF₀`, `constN_wl₀`, `constN_sm₀`). -/
+theorem constsN_of₀ (hF : FundamentalN₀ (ℍ := ℍ)) : ConstsN₀ (ℍ := ℍ)
+  | .w2 .., hfr => constN_w2₀ hF hfr
+  | .w3 .., hfr => constN_w3₀ hF hfr
+  | .wF .., hfr => constN_wF₀ hF hfr
+  | .wl .., _ => constN_wl₀
+  | .sm .., hfr => constN_sm₀ hF hfr
 
-/-- **`Goal791SchedN` from the fundamental property alone**: `goal791Sched_of` at `constsN_of`. -/
-theorem goal791Sched_of_fundamental (hF : FundamentalN (ℍ := ℍ)) : Goal791SchedN (ℍ := ℍ) :=
-  goal791Sched_of hF (constsN_of hF)
+/-- **`Goal791SchedN` from the fundamental property alone**: `goal791Sched_of` at `constsN_of₀`. -/
+theorem goal791Sched_of_fundamental (hF : FundamentalN₀ (ℍ := ℍ)) : Goal791SchedN (ℍ := ℍ) :=
+  goal791Sched_of hF (constsN_of₀ hF)
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

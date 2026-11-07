@@ -21,7 +21,7 @@ anti-frame runs across stops, raises and layered cancel runs.
 * `tabG`/`finG`: the lender's twin of the callback's table with every cancel run at its cancel
   row's own guarded table, ending at the claim; `tabG_can`, `tabR_canA`: the two transfers, by
   induction on how deep cancel rows nest.
-* `withbor3S_compat₀`, `constN_w3`.
+* `withbor3S_compat₀`, `constN_w3₀`.
 -/
 
 noncomputable section
@@ -966,11 +966,11 @@ theorem withbor3S_compat₀ {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Li
   exact ⟨w, σ, h', hw', ρ', ac, ResU.CompS.comm hacZ, ResU.CompS.comm hac, fun X' hX' =>
     ⟨Val.loc l, b, _, ρ', rfl, ResU.CompS.comm hX', hRout k w σ h' hw', hbB'⟩⟩
 
-/-- **`ConstN` for `withbor (3)` at a suspending row**, from the fundamental property at the
+/-- **`ConstN₀` for `withbor (3)` at a suspending row**, from the fundamental property at the
 finaliser's derivation. -/
-theorem constN_w3 (hF : FundamentalN (ℍ := ℍ)) {a : Lifetime.Life} {x : LifeVar}
+theorem constN_w3₀ (hF : FundamentalN₀ (ℍ := ℍ)) {a : Lifetime.Life} {x : LifeVar}
     {bnd : Lifetime.Life} {A B : VTy} {S : Row} {d : Expr}
-    (hfr : (Const791.w3 a x bnd A B S d).InFrag) : ConstN (ℍ := ℍ) (.w3 a x bnd A B S d) := by
+    (hfr : (Const791.w3 a x bnd A B S d).InFrag) : ConstN₀ (ℍ := ℍ) (.w3 a x bnd A B S d) := by
   rintro ⟨hbnd, hA, hB, hS, hdc, hder⟩ δ Θ n _
   have hL : (VTy.mut a A).inFrag = true := by
     simp_all [Const791.InFrag, Const791.ty, withbor3UTy, withborUTy, VTy.inFrag, CTy.inFrag]

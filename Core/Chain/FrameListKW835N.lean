@@ -372,23 +372,26 @@ theorem erwpK_M_frameCRR_listKW {V : KW → KW → Prop} {A : VTy} {δ : LSub} {
     (fun y k ls t Ψ' ρ h => opTableRK_finLe (tabRK_finLe hcl' g δ F.cdepth F le_rfl _ y) hcl' k ls t
       Ψ' Ψ' ρ (fun _ _ _ _ _ _ h => h) h)
 
-/-- **One Mut Frame per place, around one expression, at the typed tables**
-(`erwp_M_frameListCRN` at `KW`): the list induction, the run indexed by the outermost lender's
-worlds, after the lends `g` the frames before took, each frame `erwpK_M_frameCRR_listKW`. Frame
+/-- **One Mut Frame per place, around one expression, at the typed tables, the lends taken read
+by a predicate `Lm`** (`erwp_M_frameListCRN` at `KW`): the list induction, the run indexed by the
+outermost lender's worlds, after the lends `g` the frames before took, `Lm g` kept by every
+lend below the bound and `β′` (`hLm`), each frame `erwpK_M_frameCRR_listKW`. Frame
 `j` lends its leaf at `αⱼ`, fresh and below every `imm` record of `g x` (`LocTy.exists_foldInv`),
 below the frame's rest, `β`, `β′` and the bound, as in the original. -/
-theorem erwpK_M_frameListKW {V : KW → KW → Prop} {A : VTy} {δ : LSub} {β β' : Life}
+theorem erwpK_M_frameListKWP {V : KW → KW → Prop} {A : VTy} {δ : LSub} {β β' : Life}
     (hunif : ∀ Θ j u r, vN (ℍ := ℍ) A δ Θ j u r → r.InStratum β)
     {xv : LifeVar} {bnd : Lifetime.Life} {mb : Life} (hmb : bnd.interp δ = some mb) {F : CTy}
     (hF : F.SuspendC xv bnd)
     (Ψ : LocTy → PostN) (hΨs : ∀ Θ k ls v ρ, Ψ Θ k ls v ρ → ρ.InStratum β')
     (hΨl : ∀ (Θ : LocTy) (l : Loc) (α : Life) (F : Nat → Val → SPropS Loc Val α) k ls v ρ,
       ρ.InStratum α → Ψ (Θ.add l α F) k ls v ρ → Ψ Θ k ls v ρ)
-    (e : Expr) (ls : List SRec) (x : KW) :
-    ∀ (I : List Loc) (g : KW → KW), KW.LendMap g → ∀ (n : Nat) (ρo ρH ρ : WRes) (γ : Life),
+    (e : Expr) (ls : List SRec) (x : KW) (Lm : (KW → KW) → Prop)
+    (hLm : ∀ g, Lm g → ∀ (ℓ : Loc) (α : Life) (Fm : Nat → Val → SPropS Loc Val α),
+      LtLife δ bnd α → α ≤ β' → Lm fun y => (g y).lend ℓ α Fm) :
+    ∀ (I : List Loc) (g : KW → KW), Lm g → ∀ (n : Nat) (ρo ρH ρ : WRes) (γ : Life),
       (g x).Θ.OK → ConsistentX (g x).c ρ → ResU.CompS ρo ρH ρ →
       sepList (fun m => vN (ℍ := ℍ) (.ref A) δ (g x).Θ n (Val.loc m)) I ρo →
-      (∀ α, α < γ → ρH.InStratum α ∧ ∀ g', KW.LendMap g' → (g x).Θ.ExtA (g' x).Θ →
+      (∀ α, α < γ → ρH.InStratum α ∧ ∀ g', Lm g' → (g x).Θ.ExtA (g' x).Θ →
         (g' x).Θ.OK → ∀ ρm ρ', sepList (mutLeafN (ℍ := ℍ) A δ α (g' x).Θ n) I ρm →
           ResU.CompS ρH ρm ρ' → ConsistentX (g' x).c ρ' →
           erwpK (ℍ := ℍ) V (fun y => (g' y).Θ.view (g' y).c)
@@ -434,7 +437,7 @@ theorem erwpK_M_frameListKW {V : KW → KW → Prop} {A : VTy} {δ : LSub} {β �
       have hwit : Fm n u ⟨σ, houtP⟩ := (vN_above A δ (g x).Θ houtP).mpr hu
       have hFmD : DownFam α₁ Fm := vN_fam_down A δ α₁ (g x).Θ
       set g₁ : KW → KW := fun y => (g y).lend ℓ α₁ Fm with hg₁
-      have hg₁L : KW.LendMap g₁ := KW.LendMap.lend hg ℓ α₁ Fm
+      have hg₁L : Lm g₁ := hLm g hg ℓ α₁ Fm hLt hα₁β'
       have hOK₁ : (g₁ x).Θ.OK := LocTy.ok_add hΘ ℓ hFmD
       have hE₁ : (g x).Θ.ExtA (g₁ x).Θ := LocTy.extA_add hfr ℓ Fm
       have hcF₁ : ConsistentX (g₁ x).c Fr :=
@@ -457,7 +460,7 @@ theorem erwpK_M_frameListKW {V : KW → KW → Prop} {A : VTy} {δ : LSub} {β �
       refine erwpK_mono (fun _ _ h => h) (fun _ k ls' v ρ' h => ?_)
         (fun y k ls t Ψ Ψ' ρ hΨ h => tabListK_local A δ F _ g₁ I y k ls t Ψ Ψ' ρ hΨ h) n x ls
         e BM
-        (erwpK_M_frameListKW hunif hmb hF Ψ hΨs hΨl e ls x I g₁ hg₁L n ρr R BM
+        (erwpK_M_frameListKWP hunif hmb hF Ψ hΨs hΨl e ls x Lm hLm I g₁ hg₁L n ρr R BM
           (βR ⊓ α₁ ⊓ γ) hOK₁ hcBM hBMR hrest₁ (fun α₂ hα₂ => ⟨hβR.mono (le_of_lt
             (lt_of_lt_of_le hα₂ (inf_le_left.trans inf_le_left))), ?_⟩))
       · -- the outer frame's postcondition from the inner ones'
@@ -488,6 +491,31 @@ theorem erwpK_M_frameListKW {V : KW → KW → Prop} {A : VTy} {δ : LSub} {β �
             fun Θ'' j w r h => (hunif Θ'' j w r h).mono hα₁β⟩
         exact (hH α₂ hα₂γ).2 g' hg' (LocTy.extA_trans hE₁ hE) hOK' X ρ' ⟨_, ρm₂, hX, hlead, hm₂⟩
           hρ'X hc'
+
+/-- **One Mut Frame per place, around one expression, at the typed tables**
+(`erwp_M_frameListCRN` at `KW`): `erwpK_M_frameListKWP` at `KW.LendMap`. Frame `j` lends its leaf
+at `αⱼ`, fresh and below every `imm` record of `g x` (`LocTy.exists_foldInv`), below the frame's
+rest, `β`, `β′` and the bound, as in the original. -/
+theorem erwpK_M_frameListKW {V : KW → KW → Prop} {A : VTy} {δ : LSub} {β β' : Life}
+    (hunif : ∀ Θ j u r, vN (ℍ := ℍ) A δ Θ j u r → r.InStratum β)
+    {xv : LifeVar} {bnd : Lifetime.Life} {mb : Life} (hmb : bnd.interp δ = some mb) {F : CTy}
+    (hF : F.SuspendC xv bnd)
+    (Ψ : LocTy → PostN) (hΨs : ∀ Θ k ls v ρ, Ψ Θ k ls v ρ → ρ.InStratum β')
+    (hΨl : ∀ (Θ : LocTy) (l : Loc) (α : Life) (F : Nat → Val → SPropS Loc Val α) k ls v ρ,
+      ρ.InStratum α → Ψ (Θ.add l α F) k ls v ρ → Ψ Θ k ls v ρ)
+    (e : Expr) (ls : List SRec) (x : KW) :
+    ∀ (I : List Loc) (g : KW → KW), KW.LendMap g → ∀ (n : Nat) (ρo ρH ρ : WRes) (γ : Life),
+      (g x).Θ.OK → ConsistentX (g x).c ρ → ResU.CompS ρo ρH ρ →
+      sepList (fun m => vN (ℍ := ℍ) (.ref A) δ (g x).Θ n (Val.loc m)) I ρo →
+      (∀ α, α < γ → ρH.InStratum α ∧ ∀ g', KW.LendMap g' → (g x).Θ.ExtA (g' x).Θ →
+        (g' x).Θ.OK → ∀ ρm ρ', sepList (mutLeafN (ℍ := ℍ) A δ α (g' x).Θ n) I ρm →
+          ResU.CompS ρH ρm ρ' → ConsistentX (g' x).c ρ' →
+          erwpK (ℍ := ℍ) V (fun y => (g' y).Θ.view (g' y).c)
+            (tabListK (ℍ := ℍ) A δ F (g' x).Θ g' []) (fun _ => Ψ (g' x).Θ) x n ls e ρ') →
+      erwpK (ℍ := ℍ) V (fun y => (g y).Θ.view (g y).c) (tabListK (ℍ := ℍ) A δ F (g x).Θ g I)
+        (fun _ => listPostN (ℍ := ℍ) A δ Ψ (g x).Θ I) x n ls e ρ :=
+  erwpK_M_frameListKWP hunif hmb hF Ψ hΨs hΨl e ls x KW.LendMap
+    (fun _ hg ℓ α Fm _ _ => KW.LendMap.lend hg ℓ α Fm)
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

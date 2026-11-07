@@ -39,7 +39,7 @@ the world; so every such agreement holds, at one world, at both records of the c
 configuration refutes step 8 (`not_wlImageA`), at `vN₀`'s clause strengthened by any condition on
 the world at the cell (`not_wlImageA_vN`).
 
-This is the step, not the constant: no run of `ConstN (.wl …)` is refuted.
+This is the step, not the constant: no run of `ConstN₀ (.wl …)` is refuted.
 -/
 
 noncomputable section

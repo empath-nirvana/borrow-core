@@ -41,8 +41,8 @@ interpretation and the statements are restated over Core's step-indexed chain re
   world-relative `ExtA` (`vN_extA₀`), computations too except at an effect row (`cN_extA₀`); values in
   a lend's stratum do not read the lend (`vN_local₀`); `𝒱⟦A⟧` of an outliving `A` in the stratum
   (`vN_outlives₀`); `F_Σ R` as `erwp` at the row's table (`cN_effOf₀`).
-* **§3. The statements**: `ConstN`, `ConstsN`, `FundamentalN`, `BridgeN`, `Goal791SchedN`, and
-  `goal791Sched_of`: `Goal791SchedN` from `FundamentalN` and `ConstsN`.
+* **§3. The statements**: `ConstN₀`, `ConstsN₀`, `FundamentalN₀`, `BridgeN`, `Goal791SchedN`, and
+  `goal791Sched_of`: `Goal791SchedN` from `FundamentalN₀` and `ConstsN₀`.
 -/
 
 noncomputable section
@@ -2584,7 +2584,7 @@ def JdgInFrag (Γ : Ctx VTy) (j : Jdg) : Bool :=
 
 /-- **A #791 constant is a value of `!` its type**, at every `δ`, world and index, from its
 rule's premises. -/
-def ConstN (c : Const791) : Prop :=
+def ConstN₀ (c : Const791) : Prop :=
   c.OK → ∀ (δ : LSub) (Θ : LocTy) (n : Nat), Θ.OK →
     vN₀ (ℍ := ℍ) (.bang c.ty) δ Θ n c.val PMap.empty
 
@@ -2593,7 +2593,7 @@ covers. -/
 def _root_.BoCa.Fig16.Tree.Wp.Goal791.Const791.InFrag (c : Const791) : Prop := c.ty.inFrag = true
 
 /-- Every #791 constant inside the fragment. -/
-def ConstsN : Prop := ∀ c : Const791, c.InFrag → ConstN (ℍ := ℍ) c
+def ConstsN₀ : Prop := ∀ c : Const791, c.InFrag → ConstN₀ (ℍ := ℍ) c
 
 /-- **The fundamental property over `erwp`, on the fragment**: every derivation of the existing
 judgment whose context and type lie in the fragment (`JdgInFrag`). The rules whose conclusion is
@@ -2616,7 +2616,7 @@ The rule-by-rule map is `docs/new-core/scope-831-map.md`. Its answers on the two
 * `cN_extA₀` at an effect row `F_Σ R` is needed by no rule: Core carries the callback's table along
   `Ext` only in `withbor1U_compatX` and `sliceBorrowIU_compatX` (`opTable_ext`), and the chain's
   table does not read the record list. -/
-def FundamentalN : Prop :=
+def FundamentalN₀ : Prop :=
   ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (j : Jdg), CDerives Δ Γ e j → JdgInFrag Γ j = true →
     SemJN₀ (ℍ := ℍ) Δ Γ e j
 
@@ -2651,15 +2651,15 @@ def Goal791SchedN : Prop :=
           (stateValN (hndVal n₀ qs hr hs) []).1)
 
 /-- `withbor (2)` at a suspending row. -/
-def Withbor2SN : Prop := ∀ x bnd A B S d, ConstN (ℍ := ℍ) (.w2 x bnd A B S d)
+def Withbor2SN : Prop := ∀ x bnd A B S d, ConstN₀ (ℍ := ℍ) (.w2 x bnd A B S d)
 /-- `withbor (3)` at a suspending row. -/
-def Withbor3SN : Prop := ∀ a x bnd A B S d, ConstN (ℍ := ℍ) (.w3 a x bnd A B S d)
+def Withbor3SN : Prop := ∀ a x bnd A B S d, ConstN₀ (ℍ := ℍ) (.w3 a x bnd A B S d)
 /-- The field reborrow at a suspending row. -/
-def WithborFSN : Prop := ∀ a x bnd A B S d, ConstN (ℍ := ℍ) (.wF a x bnd A B S d)
+def WithborFSN : Prop := ∀ a x bnd A B S d, ConstN₀ (ℍ := ℍ) (.wF a x bnd A B S d)
 /-- `withload` at a suspending row. -/
-def WithloadSN : Prop := ∀ a x bnd A B S, ConstN (ℍ := ℍ) (.wl a x bnd A B S)
+def WithloadSN : Prop := ∀ a x bnd A B S, ConstN₀ (ℍ := ℍ) (.wl a x bnd A B S)
 /-- `slice_borrow_mut` at a suspending row. -/
-def SliceBorrowMSN : Prop := ∀ x bnd A B S d, ConstN (ℍ := ℍ) (.sm x bnd A B S d)
+def SliceBorrowMSN : Prop := ∀ x bnd A B S d, ConstN₀ (ℍ := ℍ) (.sm x bnd A B S d)
 
 /-! ### What is proved of the statements -/
 
@@ -2677,7 +2677,7 @@ theorem liveWithin_ctx791 : ∀ cs : List Const791, Ctx.LiveWithin (ctx791 cs) (
   | [] => trivial
   | _ :: cs => liveWithin_ctx791 cs
 
-theorem gN_ctx791 (hC : ConstsN (ℍ := ℍ)) (δ : LSub) {Θ : LocTy} (hΘ : Θ.OK) (n : Nat) :
+theorem gN_ctx791 (hC : ConstsN₀ (ℍ := ℍ)) (δ : LSub) {Θ : LocTy} (hΘ : Θ.OK) (n : Nat) :
     ∀ cs : List Const791, (∀ c ∈ cs, c.OK) → (∀ c ∈ cs, c.InFrag) →
       gN₀ (ℍ := ℍ) δ Θ (ctx791 cs) (vals791 cs) n PMap.empty
   | [], _, _ => rfl
@@ -2697,7 +2697,7 @@ theorem jdgInFrag_ctx791 (cs : List Const791) (hfr : ∀ c ∈ cs, c.InFrag) {S 
 
 /-- **`Goal791SchedN` from the fundamental property and the constants**, through
 `poolSchedAdequacyN` at the view. -/
-theorem goal791Sched_of (hF : FundamentalN (ℍ := ℍ)) (hC : ConstsN (ℍ := ℍ)) :
+theorem goal791Sched_of (hF : FundamentalN₀ (ℍ := ℍ)) (hC : ConstsN₀ (ℍ := ℍ)) :
     Goal791SchedN (ℍ := ℍ) := by
   intro cs hcs hfr S e₀ hSf hder Θ c n₀ qs hr hs Q Inv hΘ hΘI hQ hInv hS
   refine poolSchedAdequacyN (Θ.view c) (rowTabN₀ S Θ c) n₀ qs hr hs _ Q Inv _

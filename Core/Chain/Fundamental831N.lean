@@ -24,7 +24,7 @@ import Core.Chain.Unwind833N
 import Core.Fundamental
 
 /-!
-# `FundamentalN` assembled by induction on `CDerives`  `[spec §62]`
+# `FundamentalN₀` assembled by induction on `CDerives`  `[spec §62]`
 
 `docs/new-core/scope-831-interface.md` §14. `fundamentalN_all` is Core's `fundamentalC` at
 `SemJN₀`: one case per constructor of `CDerives`, in `fundamentalC`'s order and with its case
@@ -33,7 +33,7 @@ splits, each calling the rule's chain lemma. The rules with no chain lemma are t
 read as `SemJN₀`.
 
 No chain lemma takes a fragment premise, so the induction proves `SemJN₀` at every derivation;
-`fundamentalN_of` reads `FundamentalN` off it, the fragment premise unused.
+`fundamentalN_of` reads `FundamentalN₀` off it, the fragment premise unused.
 
 The small adapters, each a corollary of the chain's existing laws:
 * `ret_compatN₀`, `ofRet_compatN₀`: `jdgC (.val A)` is `F A`;
@@ -659,8 +659,8 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | letPoly b hcl _ _ _ ihN => exact letPoly_compatN₀ (Val.lam b) hcl ihN
   | alpha _ hα ih => exact alpha_compatN₀ hα ih
 
-/-- **`FundamentalN` from `MissingN`**: `fundamentalN_all`, the fragment premise unused. -/
-theorem fundamentalN_of (h : MissingN (ℍ := ℍ)) : FundamentalN (ℍ := ℍ) :=
+/-- **`FundamentalN₀` from `MissingN`**: `fundamentalN_all`, the fragment premise unused. -/
+theorem fundamentalN_of (h : MissingN (ℍ := ℍ)) : FundamentalN₀ (ℍ := ℍ) :=
   fun _ _ _ _ hder _ => fundamentalN_all h hder
 
 /-- **#791's end goal from `MissingN`**: `goal791Sched_of_fundamental` at `fundamentalN_of`. -/

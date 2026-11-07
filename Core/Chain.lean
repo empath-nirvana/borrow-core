@@ -181,3 +181,5 @@ import Core.Chain.CancelKW835N
 import Core.Chain.ReborrowKW835N
 import Core.Chain.FieldKW835N
 import Core.Chain.WithloadSKW835N
+import Core.Chain.SliceKW835N
+import Core.Chain.ConstKW835N

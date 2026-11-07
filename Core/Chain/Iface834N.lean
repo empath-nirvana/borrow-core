@@ -2,7 +2,7 @@ import Core.Chain.ImmLend833N
 import Core.Integers
 
 /-!
-# The lemma interface for `FundamentalN`: the context and bind layer  `[spec §62]`
+# The lemma interface for `FundamentalN₀`: the context and bind layer  `[spec §62]`
 
 `docs/new-core/scope-831-interface.md` §2, unit L1. The relation-level lemmas Core's
 compatibility proofs (`Core/Compat.lean`, `Core/Compatibility.lean`, `Core/Computation.lean`)
