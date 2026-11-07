@@ -4,9 +4,9 @@
 -- popped after, or moves past it; a path that reaches 0 is copied into the answer, a buffer of
 -- buffers, as Rust's `Vec<Vec<i32>>`. A case is the candidates, `|`, and the target.
 --
--- The usual loop over the candidates from `i` on, recursing in a `for`, is refused (#492:
--- `corpus/pending/lc-0039-combination-sum.bc`); this is the same search as two calls, taking the
--- `i`-th candidate or not, in the same order.
+-- The usual loop over the candidates from `i` on, recursing in a `for`, is
+-- `0039-combination-sum-loop.bc`; this is the same search as two calls, taking the `i`-th candidate
+-- or not, in the same order.
 --
 -- The recursion is driven by `bounded`, the default driver (SPEC §20), and `exhausted_to_option`
 -- answers `inr ()` if its budget runs out. A member of a recursive group takes no lifetime
