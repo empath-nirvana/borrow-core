@@ -1,6 +1,6 @@
 import Core.Chain.TabKW835N2
 import Core.Chain.MechK835N5
-import Core.Chain.Then835N
+import Core.Chain.Iter835N
 
 /-!
 # A row's table over a world index  `[spec §19, §27, §62]`
@@ -15,18 +15,14 @@ How the table reads a world is a record (`RowRd`):
   an entry owes at fewer worlds;
 * the cancel runs' location family, floor, post order and the worlds they run at (`Inv`).
 
-The cancel-row structure (`PendLe`, `ThenLe`) and the recursion on `CTy` are `tabN₀`'s. Two
-instances:
-
-* **one world** (`rdU`): every entry owes at the one world, one mode; `tabF` is `tabN₀` lifted
-  (`tabF_unit`, `finF_unit`);
-* **the typed world** (`rdNv vr g δ`): one mode; every entry, and every entry of a cancel row,
-  owes along `KW.Owed` from `g x`, its values at `vr`; `tabF` is `tabNK` (`tabF_N`, `finF_N`).
-  `cN`'s table is the instance `vr = vN`, `g = id` (`rdN`, `tabN_eq`).
+The table follows the cancel-row structure (`PendLe`, `ThenLe`) by recursion on `CTy`. Its
+instance at the typed world (`rdNv vr g δ`) has one mode; every entry, and every entry of a cancel
+row, owes along `KW.Owed` from `g x`, its values at `vr`; `tabF` is `tabNK` (`tabF_N`, `finF_N`).
+`cN`'s table is the instance `vr = vN`, `g = id` (`rdN`, `tabN_eq`).
 
 The interface lemmas (`tabF_effOf_find`, `tabF_rowOf`, `tabF_find_sig`, `tabF_rowOf_find`,
-`entF_fin_cancel`, `entF_fin_of`, `errOkF_of_sub`, `tabF_rowLe_entry`, `finF_mono`) are `tabN₀`'s,
-proved once over the record. E5 (`tabF_ctxClosed`) is proved here and read at `KW`
+`entF_fin_cancel`, `entF_fin_of`, `errOkF_of_sub`, `tabF_rowLe_entry`, `finF_mono`) are proved
+once over the record. E5 (`tabF_ctxClosed`) is proved here and read at `KW`
 (`tabNK_ctxClosed`).
 
 A world's location family is downward closed only at the worlds `Inv` holds at, which every world
@@ -143,13 +139,13 @@ def canc (R : RowRd ι M) (T : ι → OpTabK ι) : ι → Nat → List SRec → 
 end RowRd
 
 mutual
-/-- **The table of a row's layers over a world index** (`tabN₀`, `tabNK`): an entry at `m` under
+/-- **The table of a row's layers over a world index** (`tabN`, `tabNK`): an entry at `m` under
 the mode `μ`, its cancel row's under `sub μ m`. -/
 def tabF (R : RowRd ι M) (μ : M) : CTy → ι → OpTabK ι
   | .eff m i q A B fin _ C, x => extTabK m i
       (R.ent μ m q A B (finF R (R.sub μ m) fin) x) (tabF R μ C x)
   | _, _ => OpTabK.empty
-/-- **The cancel obligation of a cancel row over a world index** (`finN₀`, `finNK`): `none` at `⊤`;
+/-- **The cancel obligation of a cancel row over a world index** (`finN`, `finNK`): `none` at `⊤`;
 otherwise the cancel run at the row's table. -/
 def finF (R : RowRd ι M) (μ : M) : CTy → Option (ι → Nat → List SRec → Expr → WProp)
   | .top => none
@@ -255,8 +251,7 @@ theorem liftTabK_extTabN (n i : UInt32) (en : OpEntN) (T : OpTabN) :
 section Interface
 variable (R : RowRd ι M)
 
-/-- **A row's table at a key is the entry of the operation the row finds there**
-(`tabN_effOf_find`). -/
+/-- **A row's table at a key is the entry of the operation the row finds there**. -/
 theorem tabF_effOf_find (μ : M) (S : Row) (Rt : VTy) (x : ι) (n i : UInt32) :
     tabF (ℍ := ℍ) R μ (CTy.effOf S Rt) x n i = (Row.find S n i).map (fun o =>
       R.ent μ n o.q o.A o.B (finF (ℍ := ℍ) R (R.sub μ n) o.fin) x) := by
@@ -283,7 +278,7 @@ theorem tabF_effOf_some_find {μ : M} {S : Row} {Rt : VTy} {x : ι} {n i : UInt3
 
 variable (R)
 
-/-- The table of a cancel row is the table of its layers (`tabN_rowOf`). -/
+/-- The table of a cancel row is the table of its layers. -/
 theorem tabF_rowOf (μ : M) : ∀ (F : CTy) (x : ι),
     tabF (ℍ := ℍ) R μ F x = tabF (ℍ := ℍ) R μ (CTy.effOf F.rowOf .unit) x
   | .eff m i q A B fin rc C, x => by
@@ -298,7 +293,7 @@ theorem tabF_rowOf (μ : M) : ∀ (F : CTy) (x : ι),
 
 variable {R}
 
-/-- A row's table at a key, rewritten along a signature (`tabN_find_sig`). -/
+/-- A row's table at a key, rewritten along a signature. -/
 theorem tabF_find_sig {μ : M} {S : Row} {Rt : VTy} {x : ι} {n i : UInt32} {o o' : OpSig}
     (hf : Row.find S n i = some o') (hs : o.Sig o') :
     tabF (ℍ := ℍ) R μ (CTy.effOf S Rt) x n i =
@@ -306,7 +301,7 @@ theorem tabF_find_sig {μ : M} {S : Row} {Rt : VTy} {x : ι} {n i : UInt32} {o o
   obtain ⟨-, -, hq, hA, hB, -⟩ := hs
   rw [tabF_effOf_find, hf, hq, hA, hB]; rfl
 
-/-- A cancel row's table is the table of its layers, at a key (`tabN_rowOf_find`). -/
+/-- A cancel row's table is the table of its layers, at a key. -/
 theorem tabF_rowOf_find {μ : M} {G : CTy} {x : ι} {n i : UInt32} {en : OpEntK ι}
     (h : tabF (ℍ := ℍ) R μ G x n i = some en) :
     ∃ o, Row.find G.rowOf n i = some o ∧
@@ -326,7 +321,7 @@ theorem tabF_at {μ : M} {G : CTy} {x : ι} {n i : UInt32} {en : OpEntK ι}
 
 variable (R)
 
-/-- **A cancel row's obligation** (`finN_eq_ite`): none at `⊤`; otherwise the cancel run at the
+/-- **A cancel row's obligation**: none at `⊤`; otherwise the cancel run at the
 row's table. -/
 theorem finF_eq_ite (μ : M) (F : CTy) :
     finF (ℍ := ℍ) R μ F =
@@ -336,7 +331,7 @@ theorem finF_eq_ite (μ : M) (F : CTy) :
 variable {R}
 
 /-- The cancel obligation of a capturable entry is the cancel run at its cancel row, which is not
-`⊤` (`entN_fin_cancel`). -/
+`⊤`. -/
 theorem entF_fin_cancel {μ μ' : M} {m : UInt32} {q : Qual} {A B : VTy} {F : CTy} {x : ι}
     {P : ι → Nat → List SRec → Expr → WProp}
     (hP : (R.ent μ' m q A B (finF (ℍ := ℍ) R μ F) x).fin = some P) :
@@ -352,15 +347,15 @@ theorem entF_fin_cancel {μ μ' : M} {m : UInt32} {q : Qual} {A B : VTy} {F : CT
       exact ⟨hcap, by simpa using hT, rfl⟩
   · cases hP
 
-/-- The entry at a capturable key has the cancel obligation at its cancel row (`entN_fin_of`). -/
+/-- The entry at a capturable key has the cancel obligation at its cancel row. -/
 theorem entF_fin_of {μ μ' : M} {m : UInt32} {q : Qual} {A B : VTy} {F : CTy} {x : ι}
     (hcap : capB q B = true) (hT : F.isTop = false) :
     (R.ent μ' m q A B (finF (ℍ := ℍ) R μ F) x).fin =
       some (R.canc (ℍ := ℍ) (fun x => tabF (ℍ := ℍ) R μ F x)) := by
   simp only [RowRd.ent, hcap, if_true, finF_eq_ite, hT, Bool.false_eq_true, if_false]
 
-/-- **Errors move along a first-match inclusion of abortive operations, at any modes**
-(`errOkN_of_sub`): an error reads only an entry's payload, which no mode reads. -/
+/-- **Errors move along a first-match inclusion of abortive operations, at any modes**: an error
+reads only an entry's payload, which no mode reads. -/
 theorem errOkF_of_sub {μ μ' : M} {x : ι} {P P' : Row}
     (h : ∀ n i o, Row.find P n i = some o → o.abort = true →
       ∃ o', Row.find P' n i = some o' ∧ o.Sig o') {k : Nat} {ls : List SRec} :
@@ -375,7 +370,7 @@ theorem errOkF_of_sub {μ μ' : M} {x : ι} {P P' : Row}
       obtain ⟨o', hf', hs⟩ := h m j o hf ha'
       exact ⟨m, j, w, _, pure_sep_mk ⟨h₁, tabF_find_sig hf' hs, ha⟩ h₅⟩
 
-/-- An error read at a lower index and any list (`errOkN_tabN_le`). -/
+/-- An error read at a lower index and any list. -/
 theorem errOkF_le (hR : R.OK) {μ : M} {F : CTy} {x : ι} {k k' : Nat} (hk : k' ≤ k) {ls ls' : List SRec} :
     ∀ {err : Option Val} {ρ : WRes}, errOkK (tabF (ℍ := ℍ) R μ F x) k ls err ρ →
       errOkK (tabF (ℍ := ℍ) R μ F x) k' ls' err ρ :=
@@ -430,8 +425,8 @@ theorem extTabK_ent_downI (hR : R.OK) {μ : M} {m i : UInt32} {q : Qual} {A B : 
     · exact hR.wkInv μ m x f y ρ hy
     · exact hT.wkI _ _ _ h f y ρ hy
 
-/-- **A row's table is closed in the index at the worlds the runs are read at** (`tabN_down`),
-and so is its cancel obligation (`finN_down`). -/
+/-- **A row's table is closed in the index at the worlds the runs are read at**,
+and so is its cancel obligation. -/
 theorem tabF_finF_down (hR : R.OK) : ∀ F : CTy,
     (∀ μ x, (tabF (ℍ := ℍ) R μ F x).DownI R.Inv) ∧
       ∀ μ P, finF (ℍ := ℍ) R μ F = some P → ∀ y, R.Inv y → ∀ k ls e ρ,
@@ -539,7 +534,7 @@ section Plain
 variable {R : RowRd ι M}
 
 /-- **A cancel run under a plain context, at a cancel row's table, beside no frame**
-(`cancelOblN_plain₀`, Core's `plain_cancel₀`), by recursion on the cancel row. -/
+(Core's `plain_cancel₀`), by recursion on the cancel row. -/
 theorem tabF_plain_cancel (hR : R.OK) (K : Kont) (hH : ∀ n, K.HasHnd n = false)
     (hC : K.Catches 0 = false) (G : CTy) :
     ∀ {μ : M} {y : ι}, R.Inv y → ∀ {n : Nat} {ls : List SRec} {e : Expr} {ρ : WRes},
@@ -557,7 +552,7 @@ theorem tabF_plain_cancel (hR : R.OK) (K : Kont) (hH : ∀ n, K.HasHnd n = false
 termination_by sizeOf G
 decreasing_by exact rowOf_fin_lt G (Row.find_mem hf).1
 
-/-- **E5: a row's table is closed under a plain context** (`tabN_ctxClosed`), at the worlds the
+/-- **E5: a row's table is closed under a plain context**, at the worlds the
 runs are read at: a context with no handler that catches no cancel carries every cancel
 obligation of the table (`tabF_plain_cancel`). -/
 theorem tabF_ctxClosed (hR : R.OK) (G : CTy) (K : Kont) (hH : ∀ m, K.HasHnd m = false)
@@ -570,7 +565,7 @@ theorem tabF_ctxClosed (hR : R.OK) (G : CTy) (K : Kont) (hH : ∀ m, K.HasHnd m 
   exact tabF_plain_cancel hR K hH hC o.fin hy h
 
 /-- **An entry's cancel obligation under a plain context, beside a frame holding nothing owned**
-(`entN_plain`, Core's `ent_plain`): the frame is left behind (`erwpK_garbage`). -/
+(Core's `ent_plain`): the frame is left behind (`erwpK_garbage`). -/
 theorem entF_plain (hR : R.OK) (K : Kont) (hH : ∀ n, K.HasHnd n = false)
     (hC : K.Catches 0 = false) {σ : WRes} (hσ : NoOwn σ) {μ μ' : M} {m : UInt32} (o : OpSig)
     {x y : ι} (hy : R.Inv y) {k : Nat} {ls : List SRec} {K₁ : Kont} {ρ ρ' : WRes}
@@ -637,7 +632,7 @@ theorem entF_le_of_leF {μ μ₁ : M} {m : UInt32} {o o' : OpSig} {x : ι} (hs :
   simp only [RowRd.ent, hcap, if_true, ← hq, ← hB]
   exact hfin hcap
 
-/-- **A cancel row's obligation grows with the row** (`finN_mono`, Core's `finObl_mono`), along
+/-- **A cancel row's obligation grows with the row** (Core's `finObl_mono`), along
 `FinLe`, by recursion on the cancel row. -/
 theorem finF_mono (μ : M) (F : CTy) :
     ∀ {F' : CTy}, FinLe F F' → FinLeSK (finF (ℍ := ℍ) R μ F) (finF (ℍ := ℍ) R μ F') := by
@@ -663,8 +658,7 @@ theorem finF_mono (μ : M) (F : CTy) :
 termination_by sizeOf F
 decreasing_by exact rowOf_fin_lt F (Row.find_mem (by assumption)).1
 
-/-- The entry `Σ′` has at the key of an operation of `Σ ≤ Σ′`, and the entries' order
-(`tabN_rowLe_entry`). -/
+/-- The entry `Σ′` has at the key of an operation of `Σ ≤ Σ′`, and the entries' order. -/
 theorem tabF_rowLe_entry {S S' : Row} (hle : RowLe S S') {μ : M} {x : ι} {n i : UInt32}
     {o : OpSig} (hf : Row.find S n i = some o) :
     ∃ o', Row.find S' n i = some o' ∧ o.Sig o' ∧
@@ -680,7 +674,7 @@ end Widen
 
 /-! ### E5 at the typed world -/
 
-/-- **E5 at `KW`: a row's table is closed under a plain context** (`tabN_ctxClosed` at `KW`), at
+/-- **E5 at `KW`: a row's table is closed under a plain context**, at
 every world whose location typing under `g` is downward closed, which every world an entry owes
 at is. -/
 theorem tabNK_ctxClosed {vr : VRel} (hv : ValRelOK vr) (g : KW → KW) (G : CTy) (δ : LSub)

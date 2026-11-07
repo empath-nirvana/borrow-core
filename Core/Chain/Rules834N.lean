@@ -3,22 +3,25 @@ import Core.Alpha
 import Core.Compat
 
 /-!
-# The rules L1 and L2 make mechanical, at `SemJN₀`  `[spec §62]`
+# Substitution and liveness facts for the rules L1 and L2 make mechanical  `[spec §62]`
 
-`docs/new-core/scope-831-interface.md` §3. Each rule's chain proof is Core's compatibility lemma
-(`Core/Compat.lean`, `Core/Compatibility.lean`, `Core/Integers.lean`, `Core/Alpha.lean`,
-`Core/Fundamental.lean`), line by line, against the interface of `Core/Chain/Iface834N.lean` and
-`Core/Chain/TyEq834N.lean`: `gDenC_split ↦ gN_split₀`/`gN_splitC₀`, `wpTS_bind_frame ↦
-erwp_bind_frame`, `cC_bind ↦ cN_bind₀`, `gDenC_local ↦ gN_extR₀`, `cC_tyEq ↦ cN_tyEq₀`.
+`docs/new-core/scope-831-interface.md` §3. The rules at `SemJN` are in `RulesKW835N`: each rule's
+chain proof is Core's compatibility lemma (`Core/Compat.lean`, `Core/Compatibility.lean`,
+`Core/Integers.lean`, `Core/Alpha.lean`, `Core/Fundamental.lean`), line by line, against the
+interface: `gDenC_split ↦ gN_split`/`gN_splitC`, `wpTS_bind_frame ↦ erwp_bind_frame`,
+`cC_bind ↦ cN_bind`, `gDenC_local ↦ gN_extR`, `cC_tyEq ↦ cN_tyEq`.
 
 The chain's judgment carries a world, a view consistent with the resource and a step index
-(`SemJN₀`'s `Θ`, `c`, `n`); Core's has none. They enter at the same places in every rule:
+(`SemJN`'s `Θ`, `c`, `n`); Core's has none. They enter at the same places in every rule:
 * a premise is read at the view, which a context split's part is consistent with where the
-  resource is valid (`gN_splitC₀`): at `F`/`F_Σ` by `erwp_of_valid`, elsewhere by `cN_of_valid₀`,
+  resource is valid (`gN_splitC`): at `F`/`F_Σ` by `erwp_of_valid`, elsewhere by `cN_of_valid`,
   at every conclusion;
-* a premise read after a run is read at the index the run leaves (`gN_le₀`, `vN_le₀`);
-* a thunk moves its context along `ExtR` to the world it is forced at (`gN_extR₀`), as Core's
+* a premise read after a run is read at the index the run leaves (`gN_le`, `vN_le`);
+* a thunk moves its context along `ExtR` to the world it is forced at (`gN_extR`), as Core's
   `gDenC_local`; `⊸` is a plain wand and moves nothing.
+
+This file holds `liveWithin_dead` (a live slot turned off keeps `LiveWithin`) and two private
+substitution facts.
 -/
 
 noncomputable section
@@ -59,20 +62,6 @@ theorem liveWithin_dead {A : VTy} {Γ : Ctx VTy} {γ : List Val}
   cases γ with
   | nil => exact absurd h.1 (by simp)
   | cons _ _ => exact h
-
-/-! ### Values -/
-
-/-! ### Computations -/
-
-/-! ### Eliminations of values into computations -/
-
-/-! ### `!` and `[@a]` -/
-
-/-! ### Literals and host operations -/
-
-/-! ### Call-by-value application -/
-
-/-! ### `∀E` and `[α]` (L2) -/
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

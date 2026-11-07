@@ -1211,12 +1211,12 @@ theorem errOkK_le {T : OpTabK ι}
       obtain ⟨⟨hE, hTe, ha⟩, hPA, hn⟩ := pure_sep_iff.mp he
       exact ⟨m, j, w, en, pure_sep_mk ⟨hE, hTe, ha⟩ ⟨hPAle m j en hTe ha _ _ _ _ _ _ hk hPA, hn⟩⟩
 
-/-- **The finaliser frame over a cancel run that stops, at `erwpK`, at the worlds `Inv` holds at**
-(`erwp_ubind_cancelRunCR`), its claim read at a world.
-The cancel run's table `Ti` is the outer `To` but for the cancel obligations; at the cancel's
-`raise`, `D` consumes `R` beside the error payload and `[cfin-ret]` re-raises; a cancellable stop's
-cancel run passes the frame by `hcan`, read at the resumption world. Every world a stop at a floor
-no higher than the run's own is resumed at is one `Inv` holds at (`hInvW`). -/
+/-- **The finaliser frame over a cancel run that stops, at `erwpK`, at the worlds `Inv` holds at**,
+its claim read at a world. The cancel run's table `Ti` is the outer `To` but for the cancel
+obligations; at the cancel's `raise`, `D` consumes `R` beside the error payload and `[cfin-ret]`
+re-raises; a cancellable stop's cancel run passes the frame by `hcan`, read at the resumption world.
+Every world a stop at a floor no higher than the run's own is resumed at is one `Inv` holds at
+(`hInvW`). -/
 theorem erwpK_ubind_cancelRunCRI {V : ι → ι → Prop} {Φ : ι → LocFam} {Inv : ι → Prop}
     (hΦ : ∀ x, Inv x → (Φ x).Down)
     {fl : ι → Life} {Ti To : ι → OpTabK ι} (hToD : ∀ x, Inv x → (cancelTabK (fl x) (To x)).Down)
@@ -1293,7 +1293,7 @@ theorem erwpK_ubind_cancelRunCRI {V : ι → ι → Prop} {Φ : ι → LocFam} {
     exact rwpG_here hfin (Or.inr (Or.inr ⟨.hole, err, pure_sep_mk ⟨rfl, rfl⟩
       ⟨τa, τb, hcab, errOkK_le (hPAle x) hk₂ herr, hnb⟩⟩))
 
-/-- **The finaliser frame over a cancel run that stops, at `erwpK`** (`erwp_ubind_cancelRunCR`):
+/-- **The finaliser frame over a cancel run that stops, at `erwpK`**:
 `erwpK_ubind_cancelRunCRI` at every world, its claim the same at every world. -/
 theorem erwpK_ubind_cancelRunCR {V : ι → ι → Prop} {Φ : ι → LocFam} (hΦ : ∀ x, (Φ x).Down)
     {fl : ι → Life} {Ti To : ι → OpTabK ι} (hToD : ∀ x, (To x).Down)
@@ -1317,13 +1317,12 @@ theorem erwpK_ubind_cancelRunCR {V : ι → ι → Prop} {Φ : ι → LocFam} (h
     (fun x _ m i en en' h h' hq y _ => hcan x m i en en' h h' hq y) (fun x _ => hD x) n x trivial
     ls e ρ h
 
-/-- **The finaliser frame around a body whose table is the outer one but for the cancel
-obligations, its raises carrying `R`, at `erwpK`, at the worlds `Inv` holds at**
-(`erwp_ubindClaimRT`), its claim read at a world: `[then]` at a return; at
-a stop the frame passes outward, a cancellable stop's cancel obligation by `hcan`; at a `raise`,
-`[finalise]` runs `D ()`, which consumes the claim, and the `raise` goes on at the outer table.
-A post's world, and every world a stop at a floor no higher than the run's own is resumed at, is
-one `Inv` holds at (`hVI`, `hInvW`). -/
+/-- **The finaliser frame around a body whose table is the outer one but for the cancel obligations,
+its raises carrying `R`, at `erwpK`, at the worlds `Inv` holds at**, its claim read at a world:
+`[then]` at a return; at a stop the frame passes outward, a cancellable stop's cancel obligation by
+`hcan`; at a `raise`, `[finalise]` runs `D ()`, which consumes the claim, and the `raise` goes on at
+the outer table. A post's world, and every world a stop at a floor no higher than the run's own is
+resumed at, is one `Inv` holds at (`hVI`, `hInvW`). -/
 theorem erwpK_ubindClaimRTI {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V y z → V x z)
     {Φ : ι → LocFam} {Inv : ι → Prop} (hΦ : ∀ x, Inv x → (Φ x).Down)
     (hΦV : ∀ x y, V x y → Φ y = Φ x) (hVI : ∀ x y, V x y → Inv x → Inv y) {fl : ι → Life}
@@ -1412,7 +1411,7 @@ theorem erwpK_ubindClaimRTI {V : ι → ι → Prop} (hVt : ∀ x y z, V x y →
           ⟨hPAle x m i en' hT' hab'' _ _ _ _ _ _ hk₂ hPAτ, hnτ⟩, hnn'⟩⟩))
 
 /-- **The finaliser frame around a body whose table is the outer one but for the cancel
-obligations, its raises carrying `R`, at `erwpK`** (`erwp_ubindClaimRT`): `erwpK_ubindClaimRTI` at
+obligations, its raises carrying `R`, at `erwpK`**: `erwpK_ubindClaimRTI` at
 every world, its claim the same at every world. -/
 theorem erwpK_ubindClaimRT {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V y z → V x z)
     {Φ : ι → LocFam} (hΦ : ∀ x, (Φ x).Down) (hΦV : ∀ x y, V x y → Φ y = Φ x) {fl : ι → Life}

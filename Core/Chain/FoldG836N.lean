@@ -3,7 +3,7 @@ import Core.Chain.FamCancel836N
 import Core.FoldOwnG
 
 /-!
-# The general owned fold at `SemJN₀`  `[spec §6]`
+# The general owned fold on the chain: reductions and the counted loop  `[spec §6]`
 
 Core's `foldOwnG_compatX` (`Core/FoldOwnG.lean`) at the chain, line by line: Core's term
 (`foldOwnGV`, the dispatch `selfG`, the traversal `trav`, the array action `arrE`/`stepV`) and its
@@ -11,7 +11,11 @@ reductions, each pure step `erwp_det` at the same index; Core's induction on the
 the loop invariant `ArrInv`, and the lexicographic induction on cells, value size and key rank
 (`hs_all`). Every run is at one world `Θ` and one view `c`, every call at an index up to `N`;
 each split's part is consistent with the view because the whole is valid (`erwp_of_valid`). The
-algebras have the empty resource and are read at the run's world (`bang_app₀`).
+algebras have the empty resource and are read at the run's world (`bang_app`).
+
+This file holds Core's reductions at `erwp` (`erwp_headE`, `travOf_appN`, `dspV_runN`,
+`selfG_runN`, `hG_appN`, `proj_redN`, `proj_runN`) and the counted loop with an invariant
+(`countLoop_invN`); `FoldGKW835N` proves the rule at `SemJN` (`foldOwnG_compatN`) from them.
 -/
 
 noncomputable section
@@ -220,8 +224,6 @@ theorem countLoop_invN {Θ : LocTy} (hΘ : Θ.OK) {c : Loc → Option Life} {Nb 
       have hv' : I (i + 1).toNat k' ls' v σ₁ := by rw [hi1]; exact hv
       exact ih (i + 1) k' ls' v σ₁ (hk'.trans hk) (by omega) (by omega) hv' hcσ'
 
-/-! ### The owned traversal of an array -/
-
 section Arr
 variable {S' RS RA : VTy} {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} {Nb : Nat}
 
@@ -232,14 +234,10 @@ variable {S' RS RA : VTy} {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} {Nb
 
 end Arr2
 
-/-! ### The traversal's spec, by induction on `P` (Core's `trav_spec`) -/
-
 section Trav
 variable (ks : List Bnd) (G : Algs) (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (Nb : Nat)
 
 end Trav
-
-/-! ### The rule -/
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

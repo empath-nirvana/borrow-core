@@ -10,16 +10,16 @@ import Core.Chain.RFrameK835N
 `docs/new-core/scope-835-tables.md` §7. The frames of `scope-835-iframes.md` and the guarded Mut
 Frame of `scope-835-mframes.md` at the typed tables, every premise read off the tables:
 
-* **the lender's guarded twin** `tabGK` / `finGK` (`tabG` / `finG` at a world): `tabRK`'s entries,
+* **the lender's guarded twin** `tabGK` / `finGK`: `tabRK`'s entries,
   every capturable one's cancel run at its cancel row's own guarded table (`cancelOblGK`);
 * **the guarded Mut Frame** (`erwp_M_frameCRG` at `KW`, the Mut Frame inside an anti-frame):
   `LendOKCR` (`tabNK_lendOKCR`), the twin across the fold (`tabNK_foldTwinG`) and `CanFold`
-  (`tabGK_canK`, `tabG_can` at `KW`), in `erwpK_M_frameCRG_tab`;
+  (`tabGK_canK`), in `erwpK_M_frameCRG_tab`;
 * **the anti-frame** (`erwp_M_antiFrameCR` at `KW`): the entries' shape (`tabGK_afok`), the twin
-  across the seal (`tabGK_sealTw`) and `ASealCan` (`tabRK_canAK`, `tabR_canA` at `KW`), in
+  across the seal (`tabGK_sealTw`) and `ASealCan` (`tabRK_canAK`), in
   `erwpK_M_antiFrameCR_tab`;
 * **the reborrow** (`erwp_rebGen` at `KW`): `RebOKR` (`tabNK_rebOKR_K`), the twin
-  (`tabNK_rebTw`) and `RebCanK` (`tabNK_rebCanK`, `tab_rebClosed` at `KW`), in
+  (`tabNK_rebTw`) and `RebCanK` (`tabNK_rebCanK`), in
   `erwpK_rebGen_tab`.
 
 Each cancel transfer is by induction on how deep cancel rows nest, its step the frame's cancel run
@@ -51,7 +51,7 @@ def cancelOblGK (g : KW → KW) (T : KW → OpTabK KW) (G : ShareG) (R : Nat →
     (fun z => cancelTabGRK (g z).lo (T z) G R) (fun _ _ _ _ _ => False) y k ls e
 
 mutual
-/-- **The lender's guarded table at the typed world** (`tabG`): `tabRK`'s entries, every
+/-- **The lender's guarded table at the typed world**: `tabRK`'s entries, every
 capturable one's cancel run at its cancel row's own guarded table, ending at `R`. -/
 def tabGK (R : Nat → WProp) (G : ShareG) (vr : VRel) (g : KW → KW) :
     CTy → LSub → KW → OpTabK KW
@@ -61,7 +61,7 @@ def tabGK (R : Nat → WProp) (G : ShareG) (vr : VRel) (g : KW → KW) :
         (finGK R G vr g fin δ) (fun f y ρ => (g x).Owed f (g y) ρ))
       (tabGK R G vr g C δ x)
   | _, _, _ => OpTabK.empty
-/-- The guarded cancel obligation of a cancel row at the typed world (`finG`): `none` at `⊤`. -/
+/-- The guarded cancel obligation of a cancel row at the typed world: `none` at `⊤`. -/
 def finGK (R : Nat → WProp) (G : ShareG) (vr : VRel) (g : KW → KW) : CTy → LSub →
     Option (KW → Nat → List SRec → Expr → WProp)
   | .top, _ => none
@@ -153,7 +153,7 @@ theorem tab_lookupGK : ∀ (F : CTy) {R : Nat → WProp} {G : ShareG} {vr : VRel
 /-! ### The guarded Mut Frame at the typed tables -/
 
 /-- **The callback's table and the lender's guarded twin across the fold, at the typed world**
-(`tabN_tabG_twin` at `KW`, `tabNK_foldTwin` with the guarded twin). -/
+(`tabNK_foldTwin` with the guarded twin). -/
 theorem tabNK_foldTwinG {vr : VRel} (hv : ValRelOK vr)
     {xv : LifeVar} {bnd : Lifetime.Life} {α : Life} {F : CTy}
     (hF : F.SuspendC xv bnd) (R : Nat → WProp)
@@ -173,7 +173,7 @@ theorem tabNK_foldTwinG {vr : VRel} (hv : ValRelOK vr)
   · simp only [entNK, hv.extend hB δ α]
 
 /-- **The lender's guarded cancel obligations from the callback's, at the typed world**
-(`tabG_can` at `KW`, the premise `CanFold` of the guarded Mut Frame), by induction on how deep
+(the premise `CanFold` of the guarded Mut Frame), by induction on how deep
 cancel rows nest. At a capturable entry, the callback's cancel run at its cancel row's table,
 indexed by the lender's worlds at the lend's world, framed by `erwpK_M_frame_cancelRunCRG` at the
 cancel row's tables (`FoldTwin` by `foldTwin_owed`), its own nested cancel obligations by the
@@ -252,7 +252,7 @@ theorem erwpK_M_frameCRG_tab {vr : VRel} (hv : ValRelOK vr)
 
 /-! ### The anti-frame at the typed tables -/
 
-/-- A row meeting `CTy.SuspendC` may be stopped at under an anti-frame (`tabG_afok` at `KW`). -/
+/-- A row meeting `CTy.SuspendC` may be stopped at under an anti-frame. -/
 theorem tabGK_afok {xv : LifeVar} {bnd : Lifetime.Life} {F : CTy} (hF : F.SuspendC xv bnd)
     (R : Nat → WProp) (G : ShareG) (vr : VRel) (g : KW → KW) (δ : LSub) :
     ∀ x m i en, tabGK (ℍ := ℍ) R G vr g F δ x m i = some en → en.abort = false →
@@ -278,7 +278,7 @@ theorem tabGK_sealTw {vr : VRel} {F : CTy} (Rin Rout : Nat → WProp)
     fun f z ρ hz => hz⟩⟩
 
 /-- **The anti-frame's cancel obligations from the guarded twin's, at the typed world**
-(`tabR_canA` at `KW`, the premise `ASealCan`), by induction on how deep cancel rows nest. At a
+(the premise `ASealCan`), by induction on how deep cancel rows nest. At a
 capturable entry the inner cancel run, from the opened cell at its cancel row's guarded table, is
 the anti-frame's cancel run from the sealed cell at that row's `tabRK`
 (`erwpK_M_antiFrame_cancelRunCR` at `KW`, `SealTwin` by `sealTwin_owed`), at the resumption world,
@@ -355,7 +355,7 @@ theorem erwpK_M_antiFrameCR_tab {vr : VRel} {V : KW → KW → Prop} {xv : LifeV
 /-! ### The reborrow at the typed tables -/
 
 /-- **A row meeting `CTy.SuspendC` may be stopped at under a reborrow at `β ⊏ @bnd`, at the typed
-world** (`tabN_rebOKR` at `KW`). -/
+world**. -/
 theorem tabNK_rebOKR_K {vr : VRel} (hv : ValRelOK vr) {xv : LifeVar} {bnd : Lifetime.Life}
     {β : Life} {F : CTy} (hF : F.SuspendC xv bnd) (g : KW → KW) (δ : LSub)
     (hLt : LtLife δ bnd β) (x : KW) : (tabNK (ℍ := ℍ) vr g F δ x).RebOKR β where
@@ -383,7 +383,7 @@ theorem tabNK_rebTw {vr : VRel} {F : CTy} (δ : LSub) (x : KW) :
     fun f z ρ hz => hz⟩⟩
 
 /-- **The cancel obligations of a restricted row's table are closed under a reborrow, at the
-typed world** (`tab_rebClosed` at `KW`, the premise `RebCanK`), by induction on how deep cancel
+typed world** (the premise `RebCanK`), by induction on how deep cancel
 rows nest: each is a cancel run at its cancel row's table, closed by `erwpK_rebGen_cancelRun` at
 `KW` (`RebTwin` by `rebTwin_owed`), whose own cancel obligations are closed by the induction. -/
 theorem tabNK_rebCanK {vr : VRel} (hv : ValRelOK vr) {xv : LifeVar} {bnd : Lifetime.Life}

@@ -5,19 +5,24 @@ import Core.Chain.Reborrow791N
 
 `withborF d : Mut @a (Ref A) ⊸ (∀'x ⊏ @bnd. Mut 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ(Mut @a (Ref A) ⊗ B)`,
 `λr. λf. (f [] (load r)) then b. (r, b) unwind d r`: the callback borrows the boxed field of the
-borrowed cell. Core has no rule for it (`Core/TreeGoal791.lean`, §1). The proof is
-`withbor3S_compat₀`'s (Core's `withbor3U_compatX`) with the source at `Ref A`, a `load` from the
-opened cell, and the Mut Frame at the field's location `ℓ₂` rather than at `ℓ`:
+borrowed cell. Core has no rule for it (`Core/TreeGoal791.lean`, §1). Its proof at `SemJN`
+(`withborFS_compat`, `FieldKW835N`) is `withbor3S_compat`'s (Core's `withbor3U_compatX`) with the
+source at `Ref A`, a `load` from the opened cell, and the Mut Frame at the field's location `ℓ₂`
+rather than at `ℓ`:
 
 * the anti-frame opens `ℓ ↦ mut(β, loc ℓ₂, σ₀, F_o j)` to `ℓ ↦ own(loc ℓ₂) ● σ₀`,
   `σ₀ = ℓ₂ ↦ own(u) ● σ_u`; the `load` reads `loc ℓ₂` (`rwp_load`, `erwp_bindR`);
 * the Mut Frame lends `ℓ₂` at a fresh `α` (`erwp_M_frameCRG`), with `ℓ ↦ own(loc ℓ₂)` framed
-  outside it (`erwp_frameGR`, `erwp_frame_cancelRunGR`, `tabG_canF`): the framed cell joins the
+  outside it (`erwp_frameGR`, `erwp_frame_cancelRunGR`): the framed cell joins the
   guard at every stop (`ShareG.sep`), the claim at every raise and the claim of every layered
   cancel run;
 * the guard and the claim at `ℓ₂`, beside the framed cell, are the guard and the claim at `ℓ`:
   the field's cell with its content is a `Ref A` value, in `F_o k` (`Ref`'s clause, `hunif` at
   `Ref A`).
+
+This file holds the frame outside a guarded table (`opTableGR_local`, `erwp_frameGR`,
+`erwp_frame_cancelRunGR`) and the exclusive-walk facts `FieldKW835N` reads (`exS_none_of_walk`,
+`consistentX_leftE`, `exS_mut_wit_get`).
 -/
 
 noncomputable section
@@ -181,10 +186,6 @@ open BoCa.Fig16.LogRel (LtLife substAll)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open BoCa.Fig16.Tree.Wp.Goal791 (Const791 ctx791 vals791 jdgC withborFSTy withborFV withborFE)
 open BoCa.BoLo (Heap Kont ubindE Head performE raiseE cancelVal opPayload)
-
-/-! ### The guarded twin with the frame -/
-
-/-! ### The suspending field reborrow -/
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

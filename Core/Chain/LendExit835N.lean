@@ -3,23 +3,24 @@ import Core.Chain.SI.ErwpK
 /-!
 # Posts across a lend's exit, at the Kripke stop  `[spec §19, §27]`
 
-`docs/new-core/scope-835-lendexit.md`. After `vN_local₀`, a lend's callback result is a value at the
+`docs/new-core/scope-835-lendexit.md`. After `vN_local`, a lend's callback result is a value at the
 lender's location typing `Θ`. If `U` read its futures along `ExtP` at the world's floor, that value
 would be one at the lend's floor `α` only, and the lender would post at the lower floor. A stop the
 lender makes afterwards would then owe its continuation along `ExtP α`. A handler around the lender
 reading `κ` at `U` at its own floor `lo > α` asks for more than that.
 
-**The order of an entry outside `Sched`** (`KW.OwedR`). Under the restriction (`Restrict835N.lean`,
-(S1)) no lend's callback performs a resuming operation outside `Sched`. So a stop at such a name has
-no lend frame between the `perform` and its handler, and the Mut Frame's fold, the one producer that
-needs `ExtP` (`Kappa835N.not_extRFoldTransfer`), never builds it. Its entry may owe the continuation
-along `ExtR` at the continuation's share, at every valid location typing and every consistent view:
-`KW.OwedR`. That is the order `vN₀`'s `U` clause reads today (`Goal791N.vN₀`, `.thunk`). It reads no
-floor, so the floor of the world the stop was made at, and the floor the stop chose, do not change
-what is owed (`contShareK_owedR_lo`), and the obligation has `U`'s quantifiers at every floor
-(`contShareK_owedR_U`). `vN₀` at `U` is `KapRelR`, the same quantifiers (`vN_thunk_iff_kapRelR`).
+**The order of an entry outside `Sched`** (`KW.OwedR`). Under the restriction
+(`docs/new-core/scope-835-restriction.md`, (S1)) no lend's callback performs a resuming operation
+outside `Sched`. So a stop at such a name has no lend frame between the `perform` and its handler,
+and the Mut Frame's fold, the one producer that needs `ExtP` (`Kappa835N.not_extRFoldTransfer`),
+never builds it. Its entry may owe the continuation along `ExtR` at the continuation's share, at
+every valid location typing and every consistent view: `KW.OwedR`. That is the order `vN`'s `U`
+clause reads (`Goal791N.vNE`, `.thunk`). It reads no floor, so the floor of the world the stop was
+made at, and the floor the stop chose, do not change what is owed (`contShareK_owedR_lo`), and the
+obligation has `U`'s quantifiers at every floor (`contShareK_owedR_U`). `vN` at `U` is `KapRelR`,
+the same quantifiers (`vN_thunk_iff_kapRelR`).
 
-**Configurations** (each hypothesis discharged):
+**Configurations** (each hypothesis discharged; `Core/Chain/ConfigsKW835N.lean`):
 
 * `flooredExit`: at the empty world, a key's lifetime `β` with `α < β ≤ lo`. The stuck `κ = ()`
   meets the obligation along `ExtP α` (`kapRelP_floor_world`: no `Mut` answer at `β` exists in any
@@ -89,7 +90,7 @@ theorem contShareK_owedR_lo {x : KW} {en : OpEntK KW} (hwk : ∀ f y ρ, en.wk f
 
 /-- **E10's world step at the Kripke stop**: a stop at an entry owing along `OwedR` owes its
 continuation at every location typing `ExtR` reaches at the share, every view consistent with the
-share and every floor, which are the futures `vN₀`'s `U` clause reads. -/
+share and every floor, which are the futures `vN`'s `U` clause reads. -/
 theorem contShareK_owedR_U {x : KW} {en : OpEntK KW} (hwk : ∀ f y ρ, en.wk f y ρ ↔ x.OwedR y ρ)
     {lo : Life} {k : Nat} {ls : List SRec} {K : Kont} {Ψ : ContK KW} {ρ : WRes}
     (h : contShareK en lo k ls K Ψ ρ) :

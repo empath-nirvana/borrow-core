@@ -4,13 +4,15 @@ import Core.Chain.RulesKW835N
 /-!
 # The suspending lend at the typed world  `[spec §62]`
 
-`Cancel791N`'s `withbor2S_compat` at `SemJN`, step for step. The lender runs at a floor no higher
-than the lend's lifetime (`KW.flr`, `erwpK_flr`), so every stop the lend's run makes owes its
-continuation at a world whose location typing above the lend is the lender's (`LocTy.ExtP.above_eq`):
-the claim's content, in the lend's family read above the lend, is a value of the source's type at
-every world the lender's run reaches. The Mut Frame takes the callback as a thunk of `cN` reads it
-(`erwpK_M_frameCR_cN`); the claim is consistent with the view of the world it is raised at
-(`erwpK_claimXK`); the finaliser frame consumes it with `d` (`erwpK_ubindClaimRWK`, `fin_claim`).
+Core's `withbor2U_compatX` (`Core/EffBorrow.lean`) at a suspending row at `SemJN`
+(`withbor2S_compat`), step for step, over `Cancel791N`'s and `ClaimKW835N`'s frames. The lender runs
+at a floor no higher than the lend's lifetime (`KW.flr`, `erwpK_flr`), so every stop the lend's run
+makes owes its continuation at a world whose location typing above the lend is the lender's
+(`LocTy.ExtP.above_eq`): the claim's content, in the lend's family read above the lend, is a value
+of the source's type at every world the lender's run reaches. The Mut Frame takes the callback as a
+thunk of `cN` reads it (`erwpK_M_frameCR_cN`); the claim is consistent with the view of the world it
+is raised at (`erwpK_claimXK`); the finaliser frame consumes it with `d` (`erwpK_ubindClaimRWK`,
+`fin_claim`).
 -/
 
 noncomputable section
@@ -47,7 +49,7 @@ theorem tabN_suspend_raise {S : Row} {x : LifeVar} {bnd : Lifetime.Life} (hS : S
   exact (hS o ho).2.1
 
 /-- The finaliser `λ_. d ℓ` consumes the lend's claim at `SemJN`: `d`'s judgment at `Ref A ⊸ 1`,
-applied to the cell owned again with its content in `A`'s family (`fin_claim₀`). -/
+applied to the cell owned again with its content in `A`'s family. -/
 theorem fin_claim {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
     (hd : SemJN (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.ref A) .unit))) {δ δ' : LSub}
     (hδ : vN (ℍ := ℍ) A δ' = vN (ℍ := ℍ) A δ) {Θ : LocTy} (hΘ : Θ.OK)
@@ -99,8 +101,8 @@ theorem lendInv_owed {Θ₀ : LocTy} {α : Life} (x : KW) (hx : LendInv Θ₀ α
     (hf : f ≤ x.lo) (y : KW) (ρ : WRes) (hy : x.Owed f y ρ) : LendInv Θ₀ α y :=
   ⟨hy.2.1, le_trans hy.2.2.2.1 hx.2.1, (hy.1.above_eq (le_trans hf hx.2.1)).trans hx.2.2⟩
 
-/-- **`withbor (2)` at a suspending row is a value of `!` its type, at `SemJN`**
-(`withbor2S_compat₀` at the typed world): `withborU d`, at
+/-- **`withbor (2)` at a suspending row is a value of `!` its type, at `SemJN`**:
+`withborU d`, at
 `Ref A ⊸ (∀'x ⊏ @bnd. Mut 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ(Ref A ⊗ B)` with `Σ` a `Row.Suspend x bnd`
 row, cleanup that performs included.
 
@@ -115,7 +117,7 @@ at the world it is raised at (`erwpK_ubindClaimRWK`, `fin_claim`), the claim's c
 `A` there (`vN_above` at `LendInv`). The callback's result `['x] B` returns to the world without the
 lend by `vN_local`.
 
-Premises as `withbor2S_compat₀`'s; `hd` is `d`'s judgment at `SemJN`. -/
+Premises those of the rule; `hd` is `d`'s judgment at `SemJN`. -/
 theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Row} {d : Expr}
     (hbnd : LifeCtx.empty.Defines bnd)
     (hO : ∃ b, LifeCtx.empty.Defines b ∧ VOutlivesLe LifeCtx.empty b A)

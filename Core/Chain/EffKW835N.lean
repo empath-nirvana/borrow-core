@@ -4,7 +4,8 @@ import Core.Chain.MechK835N2
 /-!
 # `[sub]`, `[perform]` and `[raise]` at the typed world  `[spec §19, §27]`
 
-`Eff835N`'s rules at `SemJN`, step for step, `F_Σ R` read at the row's table through
+Core's `sub_compatC`, `perform_compatC` and `raise_compatC` (`Core/EffFin.lean`) at `SemJN`, step
+for step, over `Eff835N`'s helpers, `F_Σ R` read at the row's table through
 `cN_effOf_tabF` (`tabF (rdN δ) ()`):
 
 * **E3**: the table grows with the row (`tabF_le_of_rowLe`, by `entF_le_of_leF` and `finF_mono`),
@@ -152,7 +153,7 @@ theorem cancelK_start {V : ι → ι → Prop} {Φ : ι → LocFam} {fl : ι →
     (by simp [OpFree, Kont.Catches])) (Or.inr (Or.inr ⟨.hole, none, pure_sep_mk ⟨rfl, rfl⟩
       ⟨PMap.empty, PMap.empty, ResU.comp_empty_right _, ⟨rfl, trivial⟩, noOwn_empty⟩⟩))
 
-/-- **E3 over a world index: the table grows with the row** (`tabN_le_of_rowLe`, Core's
+/-- **E3 over a world index: the table grows with the row** (Core's
 `effWp_sub`'s table step), at every answer type and world. -/
 theorem tabF_le_of_rowLe (R : RowRd ι M) {S S' : Row} (hle : RowLe S S') (μ : M) (Rt Rt' : VTy)
     (x : ι) : (tabF (ℍ := ℍ) R μ (CTy.effOf S Rt) x).Le (tabF (ℍ := ℍ) R μ (CTy.effOf S' Rt') x) := by

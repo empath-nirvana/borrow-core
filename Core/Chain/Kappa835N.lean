@@ -3,29 +3,23 @@ import Core.Chain.SI.HandleN
 import Core.Chain.Cancel791N
 
 /-!
-# `κ` read at `vN₀`: Core's `vC_kTy_of_kapRel` at the chain  `[spec §19, §27]`
+# `κ` read at `vN`: Core's `vC_kTy_of_kapRel` at the chain  `[spec §19, §27]`
 
 `docs/new-core/scope-831-interface.md` §10.1, E10. Core's handler (`ewp_handle_vals`,
-`Core/EffFin.lean`) hands each clause `κ` with `KapRel` at the stop's list and reads it at `κ`'s type
-`kTy Σ R q B F` by `vC_kTy_of_kapRel`: `KapRel` is Kripke along `Ext` from the stop's list, which is
-`vC`'s `U` at that list, since one world, the record list, indexes both. At the chain the clause gets
-`KapRelN` (`SI/HandleN.lean`): the handled continuation owed at the run's view `Θ.view c`, at the
-tables read at `Θ` and `c`, and along `extF` from the stop's list. `vN₀`'s `U` clause at `kTy` asks it
-at every `Θ′` with `Θ.ExtR Θ′ ρ`, every view consistent with `κ`'s share, and every list.
+`Core/EffFin.lean`) hands each clause `κ` with `KapRel` at the stop's list and reads it at `κ`'s
+type `kTy Σ R q B F` by `vC_kTy_of_kapRel`: `KapRel` is Kripke along `Ext` from the stop's list,
+which is `vC`'s `U` at that list, since one world, the record list, indexes both. At the chain the
+clause gets `KapRelN` (`SI/HandleN.lean`): the handled continuation owed at the run's view `Θ.view
+c`, at the tables read at `Θ` and `c`, and along `extF` from the stop's list. `vN`'s `U` clause at
+`kTy` asks it at every `Θ′` with `Θ.ExtR Θ′ ρ`, every view consistent with `κ`'s share, and every
+list.
 
-`KapRelKTyN` is Core's step at the chain. Two configurations refute it, each with every hypothesis
-discharged, each at the stop's own list:
-
-* **The world** (`kapRelN_world`, `not_kTy_world`). The stop at the empty world, answer type
-  `Mut 'x 1`: no `Mut` value exists at the empty world, so `KapRelN` holds of the stuck `κ = ()`.
-  The world `∅ + (ℓ′, α) ↦ 𝒱⟦1⟧` is an `ExtA` extension, so `U` reaches it; at the stop's own view
-  and list it holds the answer `ℓ′ ↦ mut(α, (), ∅, 𝒱⟦1⟧)`, and `κ` applied to it is stuck from the
-  typed world of two cells (`ExtRLit791.world_two`).
-* **The view** (`kapRelN_view`, `not_kTy_view`). The stop at the world with the key `(ℓ′, α)`, at a
-  view with no lifetime at `ℓ′`: the answer at the key is not consistent with the run's view, which
-  a row's table reads (`tabN₀`'s `ConsistentX c`), so `KapRelN` holds of `κ = ()` again. At the same
-  world and list, `U` reads `κ` at a view consistent with its share that puts `ℓ′` at `α`, and the
-  same run is stuck.
+The answer type `Mut 'x 1` at the stuck `κ = ()` (`bMut`, `kTyC`, `kTy_eq`): no `Mut` value
+exists at the empty world. The world `∅ + (ℓ′, α) ↦ 𝒱⟦1⟧` (`Θ₁`) is an `ExtA` extension, so `U`
+reaches it; it holds the answer `ℓ′ ↦ mut(α, (), ∅, 𝒱⟦1⟧)`, and `κ` applied to it is stuck from the
+typed world of two cells (`ExtRLit791.world_two`). `kTy`'s value at the stuck thunk fails at every
+world `U` reaches that world from, at a view putting `ℓ′` at `α` (`not_kTy_at`, `not_kTy_of_extR`,
+`Core/Chain/ConfigsKW835N.lean`).
 
 `ExtRFoldTransfer` is what a stop's share made Kripke along `ExtR` (route 2) asks of the Mut
 Frame's fold: the borrowed continuation's share holds the lent cell `mut` at `A`, the lender's holds
@@ -58,10 +52,6 @@ abbrev bMut (x : LifeVar) : VTy := .mut (.var x) .unit
 abbrev kTyC (x : LifeVar) : CTy := .amp (.arr (bMut x) (CTy.effOf [] .unit)) .top
 
 theorem kTy_eq (x : LifeVar) : kTy [] .unit .lin (bMut x) (.ret .unit) = .thunk (kTyC x) := rfl
-
-/-! ### The world -/
-
-/-! ### The view -/
 
 /-! ### Route 2 at the Mut Frame's fold -/
 

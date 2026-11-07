@@ -5,8 +5,10 @@ import Core.Chain.FrameListK835N
 /-!
 # The `n`-cell Mut Frame at the typed tables  `[spec §19, §27, §62]`
 
-`docs/new-core/scope-835-tables.md` §7. `erwp_M_frameListCRN` (`FamCancel836N.lean`) at `KW`:
-the list induction over the Mut Frame, each frame's step discharged from the typed tables.
+`docs/new-core/scope-835-tables.md` §7. Core's `wpG_M_frameList` across stops, raises and layered
+cancel runs, at `KW`: the list induction over the Mut Frame at an incoming claim
+(`erwpK_M_frameCRR`, `FamCancel836N.lean`'s `erwp_M_frameCRR` at a world), each frame's step
+discharged from the typed tables.
 
 * **The run is indexed by the outermost lender's worlds.** A world map `g` follows the lends the
   frames took (`KW.LendMap`: the identity, or a lend after one): frame `j`'s lender owes at
@@ -15,8 +17,8 @@ the list induction over the Mut Frame, each frame's step discharged from the typ
   answer read at the index world, the order and the cancel runs at `g`'s world.
 * **The step** (`erwpK_M_frameCRR_listKW`) is `erwpK_M_frameCRR` with every premise from the
   tables: `LendOKCR` (`tabRK_lendOKCR`), the twin across the fold under `g` (`foldTwin_owedG`,
-  `tabRK_foldTwinR`), `CanFold` (`tabRK_canRK`, `tabR_canR` at `KW`); the claim joined to the
-  inner frames' by `tabRK_finLe` (`tabR_le` at `KW`).
+  `tabRK_foldTwinR`), `CanFold` (`tabRK_canRK`); the claim joined to the
+  inner frames' by `tabRK_finLe`.
 * **The cells at `vN`** (`claimL`, `listPostN`, `mutLeafN`): the places' cells and the frames'
   post read at `cN`'s value relation; the tables are the lender's twin at `vN`.
 * **The list** (`erwpK_M_frameListKW`): each lifetime fresh, below every `imm` record
@@ -75,7 +77,7 @@ theorem tab_lookupRK : ∀ (F : CTy) {R : Nat → WProp} {vr : VRel} {g : KW →
   | .nu _, _, _, _, _, _, _, _, _, h => by simp [tabRK, OpTabK.empty] at h
 
 /-- **The frame's callback table may be stopped at under a lend at `α ⊏ @bnd`, at the typed
-world** (`tabR_lendOKCR_C` at `KW`). -/
+world**. -/
 theorem tabRK_lendOKCR {vr : VRel} (hv : ValRelOK vr) {xv : LifeVar} {bnd : Lifetime.Life}
     {α : Life} {F : CTy} (hF : F.SuspendC xv bnd) (R : Nat → WProp) (g : KW → KW) (δ : LSub)
     (hLt : LtLife δ bnd α) (x : KW) : (tabRK (ℍ := ℍ) R vr g F δ x).LendOKCR α where
@@ -129,7 +131,7 @@ theorem foldTwin_owedG {g : KW → KW} {x : KW} {l : Loc} {A : Life}
   exact ⟨hin _ _ _ h, hyA⟩
 
 /-- **The lender's cancel obligations from the frame's callback's, under a world map**
-(`tabR_canR` at `KW`, the premise `CanFold`), by induction on how deep cancel rows nest. At a
+(the premise `CanFold`), by induction on how deep cancel rows nest. At a
 capturable entry, the callback's cancel run at its cancel row's twin, ending at `R`, is framed by
 `erwpK_M_frame_cancelRunCRR` at the cancel row's tables (`FoldTwin` by `foldTwin_owedG`), its own
 nested cancel obligations by the induction. -/
@@ -252,7 +254,7 @@ theorem cancelTabRK_finLe {lo : Life} {T T' : OpTabK ι} (hT : T.FinLe T') {R R'
 
 end FinLe
 
-/-- **The lender's twin is monotone in its claim, at the typed world** (`tabR_le` at `KW`): at a
+/-- **The lender's twin is monotone in its claim, at the typed world**: at a
 weaker claim every cancel run, at every depth, ends at the weaker claim. -/
 theorem tabRK_finLe {R R' : Nat → WProp} (hR : ∀ k ρ, R k ρ → R' k ρ) (g : KW → KW)
     (δ : LSub) :
@@ -324,7 +326,7 @@ theorem tabListK_local (A : VTy) (δ : LSub) (F : CTy) (Θ : LocTy)
     (g : KW → KW) (I : List Loc) (y : KW) : (tabListK (ℍ := ℍ) A δ F Θ g I y).Local :=
   or_local (performStopK_local _ _) (raiseStopRK_free _ _)
 
-/-- **One frame of the list at the typed tables** (`erwp_M_frameListCRN`'s step at `KW`): the lend
+/-- **One frame of the list at the typed tables**: the lend
 of `ℓ` at `α` after the lends `g`, from the table at the inner world to the table at the outer
 one. Every premise of `erwpK_M_frameCRR` is discharged from the tables (`tabRK_lendOKCR`,
 `tabRK_canRK`, `foldTwin_owedG` with `tabRK_foldTwinR`); the claim is joined to the inner frames'
@@ -373,7 +375,7 @@ theorem erwpK_M_frameCRR_listKW {V : KW → KW → Prop} {A : VTy} {δ : LSub} {
       Ψ' Ψ' ρ (fun _ _ _ _ _ _ h => h) h)
 
 /-- **One Mut Frame per place, around one expression, at the typed tables, the lends taken read
-by a predicate `Lm`** (`erwp_M_frameListCRN` at `KW`): the list induction, the run indexed by the
+by a predicate `Lm`**: the list induction, the run indexed by the
 outermost lender's worlds, after the lends `g` the frames before took, `Lm g` kept by every
 lend below the bound and `β′` (`hLm`), each frame `erwpK_M_frameCRR_listKW`. Frame
 `j` lends its leaf at `αⱼ`, fresh and below every `imm` record of `g x` (`LocTy.exists_foldInv`),
@@ -492,10 +494,9 @@ theorem erwpK_M_frameListKWP {V : KW → KW → Prop} {A : VTy} {δ : LSub} {β 
         exact (hH α₂ hα₂γ).2 g' hg' (LocTy.extA_trans hE₁ hE) hOK' X ρ' ⟨_, ρm₂, hX, hlead, hm₂⟩
           hρ'X hc'
 
-/-- **One Mut Frame per place, around one expression, at the typed tables**
-(`erwp_M_frameListCRN` at `KW`): `erwpK_M_frameListKWP` at `KW.LendMap`. Frame `j` lends its leaf
-at `αⱼ`, fresh and below every `imm` record of `g x` (`LocTy.exists_foldInv`), below the frame's
-rest, `β`, `β′` and the bound, as in the original. -/
+/-- **One Mut Frame per place, around one expression, at the typed tables**: `erwpK_M_frameListKWP`
+at `KW.LendMap`. Frame `j` lends its leaf at `αⱼ`, fresh and below every `imm` record of `g x`
+(`LocTy.exists_foldInv`), below the frame's rest, `β`, `β′` and the bound, as in the original. -/
 theorem erwpK_M_frameListKW {V : KW → KW → Prop} {A : VTy} {δ : LSub} {β β' : Life}
     (hunif : ∀ Θ j u r, vN (ℍ := ℍ) A δ Θ j u r → r.InStratum β)
     {xv : LifeVar} {bnd : Lifetime.Life} {mb : Life} (hmb : bnd.interp δ = some mb) {F : CTy}

@@ -2,25 +2,28 @@ import Core.Chain.ImmLend833N
 import Core.Integers
 
 /-!
-# The lemma interface for `FundamentalN₀`: the context and bind layer  `[spec §62]`
+# The lemma interface for `FundamentalN`: the context and bind layer  `[spec §62]`
 
 `docs/new-core/scope-831-interface.md` §2, unit L1. The relation-level lemmas Core's
 compatibility proofs (`Core/Compat.lean`, `Core/Compatibility.lean`, `Core/Computation.lean`)
-reach for, at the chain (`vN₀`/`cN₀`/`gN₀`/`erwp`), under Core's names with `N` for `C`:
+reach for, at the chain (`vN`/`cN`/`gN`/`erwp`), under Core's names with `N` for `C`. The entries
+that read the relation are in `RulesKW835N.lean` and `Goal791N.lean`; this file holds K5, W4, W7
+and the first-order types F4 reads:
 
-* **G1/G12** `gN_split₀`, `gN_splitC₀`: Core's `gDenC_split`, the parts consistent with the view at
-  a valid resource; `cN_of_valid₀`: a computation may assume its resource valid, at every type, so
+* **G1/G12** `gN_split`, `gN_splitC`: Core's `gDenC_split`, the parts consistent with the view at
+  a valid resource; `cN_of_valid`: a computation may assume its resource valid, at every type, so
   a split's consistency holds at a conclusion that is not `F`/`F_Σ`.
-* **G2** `gN_soloP₀`, **G4** `gN_persistent₀`, **G6** `gN_extR₀`, **G7** `gN_outlives₀`, **G8**
-  `gN_congr₀`, **G9** `gN_noOwn₀`, **G11** `gN_le₀`.
+* **G2** `gN_soloP`, **G4** `gN_persistent`, **G6** `gN_extR`, **G7** `gN_outlives`, **G8**
+  `gN_congr`, **G9** `gN_noOwn`, **G11** `gN_le`.
 * **K5** `LocTy.extR_empty`: every two worlds are related at `∅` (Core's `ext_empty'`).
 * **W4** `erwp_bind_frame`: Core's `wpTS_bind_frame`, the frame carried through the run and read
   at the index the run leaves, the view kept consistent.
-* **C2** `cN_bind₀`: Core's `cC_bind`, by induction on `C`.
+* **C2** `cN_bind`: Core's `cC_bind`, by induction on `C`.
 * **W7** `erwp_box`: Core's `wpTS_box`.
-* **V8** `vN_noOwn_of_ownFree₀`; **F2** `bang_app₀`; **F4** `host_call_sound₀` at `vN₀`.
+* **V8** `vN_noOwn_of_ownFree`; **F2** `bang_app`; **F4** `host_call_sound` at `vN`, over the
+  first-order value types (`VTy.isFO`, `hostArg_isFO`, `hostRes_isFO`).
 
-Core's `⊸` is a plain wand (`cC .arr`), and so is the chain's (`cN₀ .arr`): the argument is read at
+Core's `⊸` is a plain wand (`cC .arr`), and so is the chain's (`cN .arr`): the argument is read at
 the function's own world, at every later index and every view consistent with the composite. The
 index is the chain's step index (Core has none); the view is the chain's `ConsistentX` (Core has
 none).
@@ -49,16 +52,6 @@ theorem _root_.BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.extR_empty (Θ Θ' : LocTy)
   ⟨fun _ _ _ _ hc => absurd hc (fun ⟨m, ψ, e, _⟩ => by simp at e),
     fun _ _ hc => absurd hc (fun ⟨m, ψ, e, _⟩ => by simp at e)⟩
 
-/-! ### G11, G6, G8: the context relation down the index, along the order, at agreeing `δ` -/
-
-/-! ### G1, G2, G4: the context relation at the splits -/
-
-/-! ### G7: an outliving context lies in the stratum -/
-
-/-! ### V8, G9: own-free types own nothing -/
-
-/-! ### G12 at a conclusion that is not `F`/`F_Σ` -/
-
 /-! ### W4: bind with a frame -/
 
 /-- **Bind on the sub-expression, frame the rest through the run, then continue** (Core's
@@ -79,8 +72,6 @@ theorem erwp_bind_frame {Φ : LocFam} (hΦ : Φ.Down) {Tb : TableN} (hL : Tb.Loc
       hc)
   obtain ⟨⟨σ₁, σ₂, hcσ, hP, hRσ⟩, hcσ', hvσ⟩ := hv
   exact h k hk ls' v σ₁ σ₂ σ hcσ hP hRσ hcσ' hvσ
-
-/-! ### C2: bind at every computation type -/
 
 /-! ### W7: a run from `Res_α` ends in `Res_α` -/
 
@@ -104,9 +95,7 @@ theorem erwp_box {Φ : LocFam} {Q : PostN} {n : Nat} {ls : List SRec} {e : Expr}
       n ls e ρ :=
   erwp_of_rwp (rwp_box (rwp_of_erwp_empty h) hρ)
 
-/-! ### F2: a `!`-function applied at a later world -/
-
-/-! ### F4: the host operations at `vN₀` -/
+/-! ### F4: the first-order value types -/
 
 /-- **The first-order value types**: `1`, `0`, the integer widths, `⊗`, `⊕`. The host operations'
 signatures (`hostArg`, `hostRes`) are among them. -/

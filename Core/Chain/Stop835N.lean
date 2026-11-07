@@ -17,8 +17,8 @@ Core's `stop_sem` (`Core/EffBoxed.lean`), step by step, at the chain relation:
   `Res_α` stops only with its share in `Res_α`, and a resumption starts at the share and the
   answer, in `Res_α`. Core inducts on `ewpTS`'s least fixed point; `erwp` is recursive on the
   index, so the induction is on the index;
-* `stop_semN` (Core's `stop_sem`): the context's resource is in `Res_{δ(d)}` (`gN_outlives₀`,
-  Core's `gSepC_outlives`) and the row's answers are (`tabN_ansIn`, Core's
+* `stop_semN` (`StopKW835N`, Core's `stop_sem`): the context's resource is in `Res_{δ(d)}`
+  (`gN_outlives`, Core's `gSepC_outlives`) and the row's answers are (`tabN_ansIn`, Core's
   `Row.ansIn_of_ansOutlives`).
 
 Core's `stop_sem` takes `Row.divB S = false` to pass from `cwp` to `ewpTS`. A row holding `Div` is

@@ -3,7 +3,7 @@ import Core.Chain.RelBase791N
 /-!
 # The record an `imm` value's reborrow reads, and what an `Imm` clause sees  `[spec §62]`
 
-**The design choice this file justifies**: `vN₀`'s `Imm` clause reads its witness in the world's
+**The design choice this file justifies**: `vN`'s `Imm` clause reads its witness in the world's
 `imm` records (`Goal791N.ImmWitW`), not off the value alone. A clause that reads only the type,
 substitution, world, index, value and resource, with no record in the world, cannot give
 `withload`'s step 8 (`not_wlImage_vN`), nor can one strengthened by any agreement read off a
@@ -17,7 +17,7 @@ record's template, which is chosen at the record's type `r.T`. The callback's ar
 `Imm̲ 'x A`, at the source's type `A`. Core links the two by `CohE` (`Core/Relation.lean`): the
 source's type is the record's, up to `TyEq`, and `CohE` reads the record list.
 
-`WlImage P` is step 8 at an `Imm` clause `P` read, as `vN₀` is, at the type, the substitution, the
+`WlImage P` is step 8 at an `Imm` clause `P` read, as `vN` is, at the type, the substitution, the
 world, the index, the value and the resource only: at a run's first entry, wherever the source
 is a record's cell and every premise of `erwp_reborrow` holds, the canonical image is a value of
 `Imm̲ 'x A`.
@@ -29,17 +29,17 @@ both worlds are typed, tagged and lowered. At `U (F 1)` the template is `∅` (`
 whose shape is `emp`), so the canonical image is `∅` at every `β` (`canon_thunk`). Every premise
 of `erwp_reborrow` holds there. A clause that admits the cell at `Imm @a (Ref 1)` (as the lend
 recorded at `Ref 1` needs) and has no value of `Imm 'x 1` at `∅` refutes `WlImage`
-(`not_wlImage`); `vN₀`'s is one (`not_wlImage_vN`).
+(`not_wlImage`); `vN`'s is one (`not_wlImage_vN`).
 
 An agreement between the world and the source's record, read off a run's first entry
 (`ImmAgreeErwp`), does not change this. `erwp`'s first entry is `rwpG`'s, universally quantified
 over the typed worlds holding the resource, and no part of `erwp` reads an `imm` record against
 the world; so every such agreement holds, at one world, at both records of the cell
 (`immAgreeErwp_both`). With the agreement among step 8's premises (`WlImageA`), the same
-configuration refutes step 8 (`not_wlImageA`), at `vN₀`'s clause strengthened by any condition on
+configuration refutes step 8 (`not_wlImageA`), at `vN`'s clause strengthened by any condition on
 the world at the cell (`not_wlImageA_vN`).
 
-This is the step, not the constant: no run of `ConstN₀ (.wl …)` is refuted.
+This is the step, not the constant: no run of `ConstN (.wl …)` is refuted.
 -/
 
 noncomputable section

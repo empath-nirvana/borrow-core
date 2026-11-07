@@ -4,10 +4,10 @@ import Core.Chain.ThenKW835N
 /-!
 # `νX. C` at `SemJN`: the unrolling, `nuIn`, `nuOut`, `unfold`  `[spec §7, §62]`
 
-`docs/new-core/scope-831-interface.md` §12, `docs/new-core/scope-835-tables.md` §10.12. `Nu837N`'s
-statements at the relation at `KW`, step for step. `cN (νX. C)` is Core's greatest fixed point at
-the chain's signature: a candidate below one unfolding of the observation tree (`cBN`), the leaves
-read by `vNX` with `X` at the candidate.
+`docs/new-core/scope-831-interface.md` §12, `docs/new-core/scope-835-tables.md` §10.12. Core's `ν`
+rules (`Core/NuRel.lean`, `Core/Nu.lean`) at the relation at `KW`, step for step. `cN (νX. C)` is
+Core's greatest fixed point at the chain's signature: a candidate below one unfolding of the
+observation tree (`cBN`), the leaves read by `vNX` with `X` at the candidate.
 
 * `vNX_inst_occ`, `vNX_inst_poly`, `retNX_inst`, `tabN_instT`, `cBN_unroll`, `cN_nu_iff`: Core's
   `cC_nu_iff`; a row's table does not read `X`, at every world.

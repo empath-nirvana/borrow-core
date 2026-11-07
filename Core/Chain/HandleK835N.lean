@@ -745,8 +745,6 @@ theorem erwpK_handle {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V y z 
       obtain ⟨c, hc, h₁, h₂⟩ := hop x i en hT
       exact ⟨c, hc, fun ha k _ => h₁ ha k, fun ha k _ => h₂ ha k⟩) n le_rfl
 
-/-! ### The scheduler's `[handle]` -/
-
 /-! ### At one world -/
 
 /-- `KapRelN` at any table is `KapRelK` at one world, at any floor (`kapRelK_lift_iff` at the

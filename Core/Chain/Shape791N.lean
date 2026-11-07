@@ -189,7 +189,7 @@ of the index left. The chain's anti-frames (`rwpG_M_antiFrameG`, `erwp_M_antiFra
 types the cell (`PredStep`, `hF : Φ ℓ = some ⟨β, F⟩`). At a location `Φ` does not type the
 reseal must keep `F j`, and the content need not be in it.
 
-The configuration: `𝒱⟦U(F 1)⟧`'s family (`vN₀`, at the empty world) strictly decreases
+The configuration: `𝒱⟦U(F 1)⟧`'s family (`vN`, at the empty world) strictly decreases
 (`λ_. () ()` is in it at `1`, not at `2`); a value of the per-location `Mut` clause the
 interpretation read before the per-lend world (`mutCellPL`) at the index `2` exists (its cell
 holds `λ_. ()` at the member `2`); and at a location `Φ` does not type, no `↭` step at any index

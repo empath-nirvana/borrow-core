@@ -3,9 +3,10 @@ import Core.Chain.EffKW835N
 /-!
 # `[let]` and `[await]` at the typed world  `[spec §14, §19, §27]`
 
-`Let835N`'s rules at `SemJN`, step for step. `[let]` is the plain frame around `M`
-(`erwpK_frame_plainI`, read at the worlds whose location typing is `OK`), the frame the context
-of `N` at the frame's world and view:
+Core's `let_compatC` and `await_compatC` (`Core/EffFin.lean`) at `SemJN` (`let_compatN`,
+`let_compatN_persist`, `await_compatN`), step for step, over `Let835N`'s consistency lemmas. `[let]`
+is the plain frame around `M` (`erwpK_frame_plainI`, read at the worlds whose location typing is
+`OK`), the frame the context of `N` at the frame's world and view:
 
 * `M`'s values are consistent with the view of the world they are posted at, across its
   resumptions (`erwpK_consistentAns`): a row's table reads its answers at the resumption world's
@@ -31,7 +32,7 @@ open BoCa.Fig16.LogRel.Core
 
 variable {ι M : Type}
 
-/-- A row's table over a world index does not read the answer type (`tabN_effOf_ret`). -/
+/-- A row's table over a world index does not read the answer type. -/
 theorem tabF_effOf_ret (R : RowRd ι M) (μ : M) (S : Row) (A B : VTy) :
     tabF (ℍ := ℍ) R μ (CTy.effOf S A) = tabF (ℍ := ℍ) R μ (CTy.effOf S B) := by
   induction S with
@@ -50,8 +51,7 @@ open BoCa.Fig16.LogRel (substAll)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open BoCa.BoLo (Heap Head Kont performE raiseE cancelVal opPayload)
 
-/-- **A row's table at the typed world reads its answers at the resumption world's view**
-(`tabN_ansC`). -/
+/-- **A row's table at the typed world reads its answers at the resumption world's view**. -/
 theorem tabF_ansC (δ : LSub) (G : CTy) (x : KW) (m i : UInt32) (en : OpEntK KW)
     (hT : tabF (ℍ := ℍ) (rdN (ℍ := ℍ) δ) () G x m i = some en) (y : KW) (k : Nat)
     (ls : List SRec) (w : Val) (ρ : WRes) (hB : en.PB y k ls w ρ) : ConsistentX y.c ρ := by

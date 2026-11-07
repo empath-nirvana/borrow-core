@@ -7,10 +7,10 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 /-!
 # The observable view and the reborrow's image at the typed world  `[spec §62]`
 
-`ImmImage791N`'s relation lemmas at `vN`/`vO`: a value is observable (`vN_vO`), the shapes the
-image is read at (`vN_vShape`, `vO_vShape`), the transfer of an observable payload
-(`vO_transfer`) and the image's relabelling (`relabel_vN`). Each is the one-world proof: no
-clause they read but `U`, and `U` only through `ExtR`.
+`withload_compatX`'s steps 5, 7 and 8 (`chain-interpretation.md` §6.3) at `vN`/`vO`: a value is
+observable (`vN_vO`), the shapes the image is read at (`vN_vShape`, `vO_vShape`), the transfer of an
+observable payload (`vO_transfer`) and the image's relabelling (`relabel_vN`). No clause they read
+reads the world but `U`, and `U` only through `ExtR`.
 -/
 
 namespace BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
@@ -465,8 +465,6 @@ theorem relabel_vN {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSu
       obtain ⟨rfl, e'⟩ := single_immOf_inj e
       obtain ⟨rfl, -, -⟩ := CellU.immOf_inj e'
       exact hcm l'' S (MutPos.mut a S l'')
-
-/-! ### Positions across `TyEq` -/
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

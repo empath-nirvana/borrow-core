@@ -7,8 +7,8 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 /-!
 # `slice_borrow` at the pure row, at the typed world  `[spec §42, §62]`
 
-`FamImm836N`'s pure-row `slice_borrow` at `SemJN`: the callback stops nowhere, so the one-world
-Imm Frame over the family (`erwp_I_frameListRN`) applies at `F A`'s empty table.
+`slice_borrow` at the pure row at `SemJN` (`sliceBorrowI_compatN`): the callback stops nowhere, so
+the chain's Imm Frame over the family (`erwp_I_frameListRN`) applies at `F A`'s empty table.
 -/
 
 namespace BoCa.Fig16.LogRel.Core.Chain.SI
@@ -18,8 +18,6 @@ open BoCa.Fig16.BoLo
 open BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Step1 Kont performE raiseE opPayload)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
-
-/-! ### Records added to a world -/
 
 end BoCa.Fig16.LogRel.Core.Chain.SI
 
@@ -209,7 +207,7 @@ theorem erwp_I_frameListRN {A : VTy} {δ : LSub} {β β' : Life} (hadm : AdmWf A
 /-! ### `slice_borrow` at the pure row -/
 
 /-- **`slice_borrow` is a value of its type** (Core's `sliceBorrowI_compatX`):
-`withbor` at `Array A ⊸ (∀'x ⊏ @Δ. [Imm 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B`. `sliceBorrowM_sem₀`'s
+`withbor` at `Array A ⊸ (∀'x ⊏ @Δ. [Imm 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B`. `sliceBorrowM_sem`'s
 steps with the `n` Imm Frames around the callback (`erwp_I_frameListRN` at the family's range,
 the pure row's table): the payloads' and the result's strata from the side conditions by 6.60 at
 `↓@bδ` (`vN_outlivesLe`), the frames' lifetimes below the bound and the callback's stratum; the

@@ -1,15 +1,16 @@
 import Core.Chain.Fam836N
 
 /-!
-# Writes through a `mut` slice at `SemJN₀`  `[spec §9]`
+# Picking a leaf of a range, for writes through a `mut` slice  `[spec §9]`
 
 Core's `sliceReplaceM_compatX` (`Core/SliceOps.lean`) is `arrReplace_compatX` with the picked leaf
 a `Mut @a A` borrow: the Mut Anti-Frame at the leaf (`wpTS_M_antiFrameX`) opens the cell for the
 load and the store, and the leaf is sealed again holding the new element. On the chain the
 anti-frame is `erwp_M_antiFrame` at the view, the leaf's cell at its view lifetime
-(`consistentX_get`), as in `withswap_compatN₀`; the steps inside it are `arrReplace_compatN₀`'s, each
-at the index it costs (the anti-frame's postcondition reads the cell's member at the index of the
-end).
+(`consistentX_get`), as in `withswap_compatN`; the steps inside it are `arrReplace_compatN`'s,
+each at the index it costs (the anti-frame's postcondition reads the cell's member at the index of
+the end). This file holds the pick (`sepRange_pickW`); `sliceReplaceM_compatN` is in
+`FamOpsKW835N`.
 -/
 
 noncomputable section

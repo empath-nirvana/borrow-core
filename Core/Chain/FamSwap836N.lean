@@ -1,17 +1,19 @@
 import Core.Chain.FamSlice836N
 
 /-!
-# Swapping two leaves of a `mut` slice at `SemJN₀`  `[spec §9]`
+# Picking two leaves of a range, for swapping through a `mut` slice  `[spec §9]`
 
 Core's `sliceSwapM_compatX` (`Core/SliceOps.lean`): both indices in range, the two picked leaves
 are `Mut @a A` borrows. At one leaf (`i = j`) one Mut Anti-Frame opens the cell, which is read
 twice and written twice; at two leaves each is opened by its own Mut Anti-Frame
 (`sepRange_pick2N`), the two contents are read and written crosswise, and both leaves are sealed
 again, each holding the other's content. On the chain each anti-frame is `erwp_M_antiFrame` at the
-view, the leaf's cell at its view lifetime (`consistentX_get`), as in `sliceReplaceM_compatN₀`; the
+view, the leaf's cell at its view lifetime (`consistentX_get`), as in `sliceReplaceM_compatN`; the
 inner anti-frame runs at the outer one's table (`erwp_mono`: the empty table stops nowhere). The
 steps inside are taken at the index each one costs, and the content moved into the other cell keeps
-its witness, which is in that cell's stratum (the leaf's uniformity clause).
+its witness, which is in that cell's stratum (the leaf's uniformity clause). This file holds the
+two-leaf picks (`sepRange_pick2RW`, `sepRange_pick2NW`) and `swap_body₁`; `sliceSwapM_compatN` is
+in `FamOpsKW835N`.
 -/
 
 noncomputable section

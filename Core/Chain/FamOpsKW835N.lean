@@ -7,11 +7,11 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 /-!
 # The family operations at the typed world  `[spec §11, §42]`
 
-`FamFrame836N`, `FamSlice836N`, `FamSwap836N` and `FamNew836N` at `SemJN`, each the one-world
-proof: `slice_borrow_mut` at the pure row (`sliceBorrowM_compatN`, its callback stopping nowhere,
-so the family's frame is the one-world `rwp_M_frameListN`), `slice_replace`, `slice_swap` and
-`array_new`. A value's judgment is `erwp` at the empty table (`cN_ret_of`); a callback's `F`
-answer is read back there (`erwp_of_cN_ret`).
+`slice_borrow_mut` at the pure row (`sliceBorrowM_compatN`, its callback stopping nowhere, so the
+family's frame is `rwp_M_frameListN` at `erwp`), `slice_replace` (`sliceReplaceM_compatN`),
+`slice_swap` (`sliceSwapM_compatN`) and `array_new` (`arrNew_compatN`) at `SemJN`. A value's
+judgment is `erwp` at the empty table (`cN_ret_of`); a callback's `F` answer is read back there
+(`erwp_of_cN_ret`).
 -/
 
 namespace BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N

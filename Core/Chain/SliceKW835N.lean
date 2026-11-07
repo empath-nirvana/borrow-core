@@ -4,7 +4,8 @@ import Core.Chain.FamOpsKW835N
 /-!
 # `slice_borrow_mut` at a suspending row, at the typed world  `[spec §62]`
 
-`FamCancel836N`'s `sliceBorrowMS_compat` at `SemJN`, step for step: the `n`-cell Mut Frame at the
+Core's `sliceBorrowMU_compatX` (`Core/EffBorrow.lean`) at a suspending row at `SemJN`
+(`sliceBorrowMS_compat`), step for step: the `n`-cell Mut Frame at the
 typed tables (`erwpK_M_frameListKWP`), its lends below the bound (`KW.LendMapB`); the callback, a
 thunk of `cN` at the innermost lend's world, read at the lender's worlds under the frames' lends
 (`erwpK_lendMapB_comap`); the lender at the floor no higher than the cells' stratum (`erwpK_flr`,
@@ -190,7 +191,7 @@ theorem erwpK_lendMapB_comap {xv : LifeVar} {bnd : Lifetime.Life}
 
 /-! ### `slice_borrow_mut` at a suspending row -/
 
-/-- **The finaliser consumes the source array, at `SemJN`** (`fin_claimArr₀`): `d`'s judgment at
+/-- **The finaliser consumes the source array, at `SemJN`**: `d`'s judgment at
 `Array A ⊸ 1`, applied to the array owned again. -/
 theorem fin_claimArr {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
     (hd : SemJN (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.array A) .unit))) {δ : LSub}
@@ -217,8 +218,8 @@ theorem fin_claimArr {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
     c k' le_rfl (Val.arr l cn) τ₂ τ hcτ (vN_le hk' h) hcτ'
   exact rwp_of_erwp_empty (erwp_of_cN_ret this)
 
-/-- **`slice_borrow_mut` at a suspending row is a value of `!` its type, at `SemJN`**
-(`sliceBorrowMS_compat₀` at the typed world): `withborU d` at
+/-- **`slice_borrow_mut` at a suspending row is a value of `!` its type, at `SemJN`**:
+`withborU d` at
 `Array A ⊸ (∀'x ⊏ @bnd. [Mut 'x A] ⊸ F_Σ(['x] B)) ⊸ F_Σ(Array A ⊗ B)`, `Σ` a
 `Row.Suspend x bnd` row, cleanup that performs included.
 
@@ -232,7 +233,7 @@ lender's worlds (`erwpK_lendMapB_comap`); the composite claim, the cells owned a
 view of the world it is raised at (`erwpK_claimXK`), and the finaliser frame
 `then b. (a, b) unwind d a` consumes it with `d` (`erwpK_ubindClaimRWK`, `fin_claimArr`).
 
-Premises as `sliceBorrowMS_compat₀`'s; `hd` is `d`'s judgment at `SemJN`. -/
+Premises those of the rule; `hd` is `d`'s judgment at `SemJN`. -/
 theorem sliceBorrowMS_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Row}
     {d : Expr} (hbnd : LifeCtx.empty.Defines bnd)
     (hOA : ∃ b, LifeCtx.empty.Defines b ∧ VOutlivesLe LifeCtx.empty b A)

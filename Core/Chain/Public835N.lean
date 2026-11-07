@@ -25,11 +25,11 @@ the floor `A`, `ExtP` at the lender's share gives `ExtR` at the borrowed continu
 configuration adds a key above `A`, which is not a public move at the floor `A`
 (`not_extP_foldConfig`).
 
-**The two `κ` configurations** (`Kappa835N.lean`). Read along `ExtP`, the stop's obligation reaches
-both failing points: the world with the key `(ℓ′, α)` is a public extension of the empty world at
-any floor above `α` (`extP_world`), and the view at `ℓ′` is any view consistent with the share. So
-the stuck `κ = ()` does not meet the obligation (`not_kapRelP_world`, `not_kapRelP_view`), while it
-meets `KapRelN` (`kapRelN_not_kapRelP`). That is the gap the relation's stop must close.
+**The two `κ` configurations** (`Kappa835N.lean`; at `vN` in `ConfigsKW835N.lean`). Read along
+`ExtP`, the stop's obligation reaches both failing points: the world with the key `(ℓ′, α)` is a
+public extension of the empty world at any floor above `α` (`extP_world`), and the view at `ℓ′` is
+any view consistent with the share. So the stuck `κ = ()` does not meet the obligation
+(`not_kapRelP_world`, `not_kapRelP_view`).
 -/
 
 noncomputable section
@@ -190,8 +190,6 @@ open BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 open BoCa.Fig16.LogRel.Core.Chain.SI.Kappa835N
 open BoCa.Fig16.LogRel.Core.Chain.SI.ExtRLit791
 open BoCa.Lifetime (LSub LifeVar)
-
-/-! ### The stop's obligation along `ExtP` -/
 
 end Public835N
 

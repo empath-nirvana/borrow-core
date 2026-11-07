@@ -2,30 +2,27 @@ import Core.Chain.FamStop836N
 import Core.Chain.Unwind833N
 
 /-!
-# The `n`-cell Mut Frame across stops and layered cancel runs, and `slice_borrow_mut` at a
-suspending row  `[spec §9, §19, §62]`
+# The one-cell Mut Frame at an incoming claim, across stops and layered cancel runs
+`[spec §9, §19, §62]`
 
 Core's `sliceBorrowMU_compatX` (`Core/EffBorrow.lean`) nests one Mut Frame per cell of the source
 array (`wpG_M_frameFam`, `wpG_M_frameList`, `Core/SliceFrames.lean`) around a callback whose row
 may stop. On the chain the one-cell frame across stops, raises and layered cancel runs is
 `erwp_M_frameCR` with `erwp_M_frame_cancelRunCR` (`Core/Chain/Lend791N.lean`,
-`Core/Chain/Cancel791N.lean`): the callback's table `tabN₀`, the lender's its twin `tabR` at the
-lend's claim. Nested, the callback of frame `j` is the run of frames `j+1 … n`, already at a
-`tabR` whose raises and cancel runs end at the inner frames' claims. So the one-cell frame is
+`Core/Chain/Cancel791N.lean`). Nested, the callback of frame `j` is the run of frames `j+1 … n`,
+whose raises and cancel runs already end at the inner frames' claims. So the one-cell frame is
 restated at an incoming claim `R`:
 
 * `erwp_M_frameCRR`, `erwp_M_frame_cancelRunCRR`: `erwp_M_frameCR` and
   `erwp_M_frame_cancelRunCR` with the callback's raises and cancel runs at `opTableR T R`,
   `cancelTabR T R`; at a raise the lent cell's claim joins `R` (`erwp_M_frameRR`'s case).
-* `tabR_tabR_twinW`, `tabR_lendOKCR_C`, `tabR_canR`: `tabN_tabR_twin`, `tabN_lendOKCR_C` and
-  `tabR_can` with the callback's table `tabR R` at the lend's world.
-* `tabR_le`, `tabN_tabR_le`: `tabR` monotone in the claim, and the callback's own `tabN₀` below
-  `tabR` at an empty claim (`OpTabN.Le`); `erwp_opTableR_le` and `erwp_opTableN_R` carry runs
-  along them.
-* `erwp_M_frameListCRN`: Core's `wpG_M_frameList` across stops, raises and layered cancel runs,
-  the list induction over `erwp_M_frameCRR`; the composite claim is the cells owned again
-  (`claimL₀`), the `Array A` the finaliser `d` takes.
-* `sliceBorrowMS_compat₀`, `constN_sm₀`, `sliceBorrowMS_inst₀`.
+* `performStopN_le`, `errOkN_le`, `erwp_opTableR_le`, `erwp_cancelTabR_le`, `erwp_opTableN_R`,
+  `erwp_cancelTabN_R`: runs carried along `OpTabN.Le`, with raises carrying a claim.
+* `NFa`, `DFa`, `dropU`, `dArrFree`: the `then` and `unwind` of `withborU` at a source, and the
+  finaliser that frees the source array's cells.
+
+`MFrameK835N` and `FrameListK835N` read the frame at `KW`; `SliceKW835N`, `UnwindKW835N` and
+`ConstKW835N` read `slice_borrow_mut` at `SemJN`.
 -/
 
 noncomputable section
@@ -387,11 +384,7 @@ open BoCa.Fig16.Tree.Wp.Goal791 (Const791 ctx791 vals791 jdgC interp_top_of_defi
   defines_meetOfDom_empty)
 open BoCa.BoLo (Heap Kont ubindE Head performE raiseE cancelVal opPayload)
 
-/-! ### The lender's twin at an incoming claim -/
-
-/-! ### The `n`-cell Mut Frame across stops and layered cancel runs -/
-
-/-! ### `slice_borrow_mut` at a suspending row -/
+/-! ### `withborU`'s `then` and `unwind` at a source -/
 
 /-- `withborU`'s `then` at the source `a`: `λb. (a, b)`. -/
 def NFa (a : Val) : Val := Val.lam (.pair (.val a) (.var 0))
@@ -399,9 +392,7 @@ def NFa (a : Val) : Val := Val.lam (.pair (.val a) (.var 0))
 /-- `withborU`'s `unwind` at the source `a`: `λ_. d a`. -/
 def DFa (d : Expr) (a : Val) : Val := Val.lam (.app d (.val a))
 
-/-! ### `slice_borrow_mut` at an unwinding row -/
-
-/-! ### `slice_borrow_mut` at the hardest case's row -/
+/-! ### The finaliser of the source array -/
 
 /-- `λu. ()`. -/
 def dropU : Val := Val.lam (.val .unit)
@@ -410,8 +401,6 @@ def dropU : Val := Val.lam (.val .unit)
 def dArrFree : Expr := .val (Val.lam (.app (.val (.prim .drop)) (.pair (.val dropU) (.var 0))))
 
 theorem dArrFree_closed : closedAt 0 dArrFree = true := by decide
-
-/-! ### Every constant -/
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

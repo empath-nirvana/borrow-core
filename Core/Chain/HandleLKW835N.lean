@@ -4,8 +4,9 @@ import Core.Chain.HandleL835N
 /-!
 # `[handle-last]` at the typed world  `[spec §14, §19, §27, §51]`
 
-`HandleL835N`'s handler at `cN`: `erwp_handle_last` at `erwpK` and `handleL_compatN` at `SemJN`,
-each step `erwp_handle_last₀`'s, at the relation at `KW`.
+Core's `handleL_compatC` (`Core/DivHandleLast.lean`) at the relation at `KW`: `erwp_handle_last`
+(Core's `ewp_handle_last`) at `erwpK` and `handleL_compatN` at `SemJN`, over `HandleL835N`'s
+steps.
 
 * `worksTy_atN`, `exitsTy_atN`: the works and the exits read at `vN`.
 * `erwp_handle_last`: `erwpK_handle_leI` at the handled row's table pre-passed by `erwpK_postPA`,
@@ -35,7 +36,7 @@ open BoCa.BoLo (Heap Head Kont performE raiseE cancelVal opPayload hndE hndVal c
 
 /-! ### The works and the exits -/
 
-/-- **The works at `vN`** (`worksTy_atN₀`). -/
+/-- **The works at `vN`** (Core's `worksTy_at`). -/
 theorem worksTy_atN {S SW : Row} {R : VTy} {Xs : Nat → VTy} {δ : LSub} {Θ : LocTy} {k : Nat} :
     ∀ (E : List (Qual × VTy × VTy)) (j₀ : Nat) {vc : Val} {ρ : WRes},
       vN (ℍ := ℍ) (worksTy S SW R Xs E j₀) δ Θ k vc ρ →
@@ -56,7 +57,7 @@ theorem worksTy_atN {S SW : Row} {R : VTy} {Xs : Nat → VTy} {δ : LSub} {Θ : 
           rw [show j₀ + (j + 1) = j₀ + 1 + j by omega]
           simpa using hg'
 
-/-- **The exits at `vN`** (`exitsTy_atN₀`). -/
+/-- **The exits at `vN`** (Core's `exitsTy_at`). -/
 theorem exitsTy_atN {S : Row} {R : VTy} {Xs : Nat → VTy} {δ : LSub} {Θ : LocTy} {k : Nat} :
     ∀ (E : List (Qual × VTy × VTy)) (j₀ : Nat) {vc : Val} {ρ : WRes},
       vN (ℍ := ℍ) (exitsTy S R Xs E j₀) δ Θ k vc ρ →
@@ -97,15 +98,15 @@ section
 variable {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} {S SW : Row}
   {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {Xs : Nat → VTy} {n : UInt32} {A R : VTy}
 
-/-- **A `[handle-last]` handler at the typed world** (`erwp_handle_last₀`): `erwpK_handle_leI` at
-the handled row's table pre-passed by `erwpK_postPA`, `κ`'s cancel branch at the table of the
+/-- **A `[handle-last]` handler at the typed world** (Core's `ewp_handle_last`): `erwpK_handle_leI`
+at the handled row's table pre-passed by `erwpK_postPA`, `κ`'s cancel branch at the table of the
 operation's own cancel row. A clause pays its `β` step and runs its work at its row, from the floor
-`f` the handled stop chose (`erwpK_flr_tabN`), under the finaliser frame
-(`erwpK_frame_then_tabKW`); its frame is `κ`'s relation, the world reached owed from the clause's
-at `f`, carried across each stop of the work at a floor no higher than `f`. The finaliser `κ.2 ()`
-cancels `κ` at the world it runs at; the frame's answer `inl y` resumes `κ` at the world it is
-posted at, and `inr z` cancels `κ` there under the exit's frame (`erwpK_frame_plain_orI`), then
-runs the exit at `z` at the world the cancel run returns at. -/
+`f` the handled stop chose (`erwpK_flr_tabN`), under the finaliser frame (`erwpK_frame_then_tabKW`);
+its frame is `κ`'s relation, the world reached owed from the clause's at `f`, carried across each
+stop of the work at a floor no higher than `f`. The finaliser `κ.2 ()` cancels `κ` at the world it
+runs at; the frame's answer `inl y` resumes `κ` at the world it is posted at, and `inr z` cancels
+`κ` there under the exit's frame (`erwpK_frame_plain_orI`), then runs the exit at `z` at the world
+the cancel run returns at. -/
 theorem erwp_handle_last (hΘ : Θ.OK) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
     (hNZ : S.NZ) (hSW : RowLe SW S) (hSu : ¬ S.UnrD)
     (hCancel : ∀ o ∈ E, o.1 = .cancel ∨ (o.2.2.isZero && o.1 != .lin) = true)
@@ -355,8 +356,8 @@ theorem erwp_handle_last (hΘ : Θ.OK) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.
 
 end
 
-/-- **`[handle-last]` at `SemJN`** (`handleL_compatN₀`): the handler's values are read off its run
-at the run's start (`erwp_val_post`); the handled computation runs at its row's table from the
+/-- **`[handle-last]` at `SemJN`** (Core's `handleL_compatC`): the handler's values are read off its
+run at the run's start (`erwp_val_post`); the handled computation runs at its row's table from the
 part of the resource consistent with the view (`gN_splitC`), at every floor, and the handler is
 `erwp_handle_last`. -/
 theorem handleL_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Hr Hw Hn e : Expr} {S SW : Row}

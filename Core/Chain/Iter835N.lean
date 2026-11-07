@@ -2,7 +2,7 @@ import Core.Chain.Fuel835N
 import Core.DivIterate
 
 /-!
-# `iterate` at `SemJN₀`  `[spec §14]`
+# `iterate`'s loop, its invariant read at the index  `[spec §14]`
 
 Core's `iterate_compatX` (`Core/DivIterate.lean`) reads the step `f` at `!U(S ⊸ F_Σ(B ⊕ S) & F_Σ R)`
 and runs `cwp_iterate` with the invariant `𝒱⟦S⟧` on the state. A `Div` row is a row of the
@@ -15,15 +15,17 @@ readings the chain adds:
   up to that index (`erwp_iterateCI`'s `N`);
 * **the state is consistent with the loop's view.** The step is applied at the loop's view, and
   `⊸`'s clause reads that view consistent with the argument; the state a turn answers is consistent
-  with it (`erwp_consistentAns`, the row's answers read at the view, `tabN_ansC`).
+  with it (`erwp_consistentAns`, the row's answers read at the view).
 
 The tick's answer is either *next*, which goes round again (Core's `turnK_next`), or *close*, which
 runs the close path `inr ((f s′).2)` (Core's `turnK_close`, `inrV_steps`). Core's `PureSteps`
 read these steps at any `f` and `s′`, so `erwp_iterateCI` asks no closedness of them.
 
-* `erwp_iterateCI`: E14 at an invariant read at the index, up to an index `N`;
-* `tickB_sig`: a row holding `Div` finds `tick`'s signature at `Div`'s key;
-* `iterate_compatN₀`: the constant at `SemJN₀` (Core's `iterate_compatX`).
+* `turnPostNI`, `erwp_iterateCI`: E14 at an invariant read at the index, up to an index `N`;
+* `tickB_sig`: a row holding `Div` finds `tick`'s signature at `Div`'s key.
+
+`IterKW835N` reads the loop at the typed tables; the constant at `SemJN` is `iterate_compatN`
+(`ThenKW835N`).
 -/
 
 noncomputable section

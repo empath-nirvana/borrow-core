@@ -8,18 +8,20 @@ import Core.Chain.FamOpsKW835N
 /-!
 # The lends at an unwinding row, at the typed world  `[spec §62]`
 
-The unwinding-row lends at `SemJN`, each step the one-world proof's: `ImmLend833N`'s `withbor1U`
-and `withbor2U`, `Unwind833N`'s `withbor3U` and `withloadU`, `FamCancel836N`'s `sliceBorrowMU`
-and `FamImm836N`'s `sliceBorrowIU`.
+The lends at an unwinding row at `SemJN`: `withbor (1)` and `withbor (2)` (`withbor1U_compatN`,
+`withbor2U_compatN`, over `ImmLend833N`'s steps), `withbor (3)` and `withload`
+(`withbor3U_compatN`, `withloadU_compatN`, over `Unwind833N`'s anti-frame), `slice_borrow_mut`
+(`sliceBorrowMU_compatN`, over `FamCancel836N`'s frame) and `slice_borrow`
+(`sliceBorrowIU_compatN`, over `FamImm836N`'s frame).
 
 An unwinding row's operations are abortive (`Row.Unwind`): a run at its table stops only at
 `raise`s, which owe no continuation and read no world. So `F_Σ R` at such a row is one run at one
-world (`cN_unwind_iff`), at the one-world table `tabUN` whose payloads are read at `vN`
+world (`cN_unwind_iff`), at the table `tabUN` at that world, whose payloads are read at `vN`
 (`erwpK_abort_move`: a run at a table of abortive entries moves to any world whose location family
 is the same and whose table has, at each key, an abortive entry with a weaker payload). The
-one-world frames (`erwp_I_frameR`, `erwp_M_frameR`, `erwp_ubindRaise`) then apply as they do at
-one world, with `tabUN`'s facts (`tabUN_abort`, `tabUN_named`, `tabUN_iLendOKR`, `tabUN_lendOKR`,
-`tabUN_eq_addImm`, `tabUN_eq_add`) in place of `tabN₀`'s.
+chain's frames at `erwp` (`erwp_I_frameR`, `erwp_M_frameR`, `erwp_ubindRaise`) then apply, with
+`tabUN`'s facts (`tabUN_abort`, `tabUN_named`, `tabUN_iLendOKR`, `tabUN_lendOKR`,
+`tabUN_eq_addImm`, `tabUN_eq_add`) in place of `tabN`'s.
 -/
 
 noncomputable section
@@ -70,9 +72,9 @@ open BoCa.Fig16.LogRel (LtLife substAll)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open BoCa.BoLo (Heap Kont Head ubindE)
 
-/-! ### An unwinding row's table at one world -/
+/-! ### An unwinding row's table at a world -/
 
-/-- **An unwinding row's table at one world, its payloads at `vN`**: at each operation of the row,
+/-- **An unwinding row's table at a world, its payloads at `vN`**: at each operation of the row,
 an entry whose payload is `𝒱⟦A⟧` at the world and whose answer is empty. -/
 def tabUN (S : Row) (δ : LSub) (Θ : LocTy) : OpTabN :=
   fun m i => (Row.find S m i).map (fun o =>
@@ -86,7 +88,7 @@ theorem tabUN_some {S : Row} {δ : LSub} {Θ : LocTy} {m i : UInt32} {en : OpEnt
   obtain ⟨ho, hn, -⟩ := Row.find_mem hf
   exact ⟨o, ho, hn.symm, rfl⟩
 
-/-- **An unwinding row's payload values lie in every stratum** (`vN_unwind_inStratum`). -/
+/-- **An unwinding row's payload values lie in every stratum**. -/
 theorem vN_unwind_inStratumK {S : Row} {x : LifeVar} (hS : S.Unwind x) {o : OpSig} (ho : o ∈ S)
     (δ : LSub) (α : Life) : ∀ (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes),
       vN (ℍ := ℍ) o.A δ Θ n v ρ → ρ.InStratum α := by
@@ -120,8 +122,7 @@ theorem tabUN_down (S : Row) (δ : LSub) (Θ : LocTy) : (tabUN (ℍ := ℍ) S δ
     obtain ⟨o, -, -, rfl⟩ := tabUN_some h
     exact extF_left ls ls' ρ₁ ρ₂ ρ hc he
 
-/-- **An unwinding row's table may be stopped at under an `imm` lend at any `α`**
-(`tabN_unwind_iLendOKR`). -/
+/-- **An unwinding row's table may be stopped at under an `imm` lend at any `α`** -/
 theorem tabUN_iLendOKR {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) (Θ : LocTy)
     (α : Life) : (tabUN (ℍ := ℍ) S δ Θ).ILendOKR α where
   entry := fun m i en h ha => by
@@ -139,8 +140,7 @@ theorem tabUN_iLendOKR {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) (Θ
     obtain ⟨o, ho, -, rfl⟩ := tabUN_some h
     exact hp
 
-/-- **An unwinding row's table may be stopped at under a `mut` lend at any `α`**
-(`tabN_unwind_lendOKR`). -/
+/-- **An unwinding row's table may be stopped at under a `mut` lend at any `α`** -/
 theorem tabUN_lendOKR {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) (Θ : LocTy)
     (α : Life) : (tabUN (ℍ := ℍ) S δ Θ).LendOKR α where
   entry := fun m i en h ha => by
@@ -165,8 +165,7 @@ theorem tabUN_congr {S : Row} {δ δ' : LSub} {Θ Θ' : LocTy}
       simp only [Option.map_some]
       rw [h o (Row.find_mem hf).1]
 
-/-- **An unwinding row's table does not read `'x`, the record of a lend at `α`, nor its base**
-(`tabN_unwind_eq`). -/
+/-- **An unwinding row's table does not read `'x`, the record of a lend at `α`, nor its base** -/
 theorem tabUN_eq_addImm {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) (Θ : LocTy)
     (r : FrameRec) (α : Life) :
     tabUN (ℍ := ℍ) S (δ.extend x α) (Θ.addImm (r, α)) = tabUN (ℍ := ℍ) S δ Θ := by
@@ -177,8 +176,7 @@ theorem tabUN_eq_addImm {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) (�
   exact propext ⟨fun h => vN_extR _ δ n v ρ (LocTy.extR_of_addImm Θ r (hρ _ n v ρ h)) h,
     fun h => vN_extR _ δ n v ρ (LocTy.extR_addImm Θ r (hρ _ n v ρ h)) h⟩
 
-/-- **An unwinding row's table does not read `'x`, nor a `mut` lend at a fresh `α`**
-(`tabN_unwind_eq_add`). -/
+/-- **An unwinding row's table does not read `'x`, nor a `mut` lend at a fresh `α`** -/
 theorem tabUN_eq_add {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) {Θ : LocTy}
     {α : Life} (hfr : Θ.Fresh α) (l : Loc) (F : Nat → Val → SPropS Loc Val α) :
     tabUN (ℍ := ℍ) S (δ.extend x α) (Θ.add l α F) = tabUN (ℍ := ℍ) S δ Θ := by
@@ -190,7 +188,7 @@ theorem tabUN_eq_add {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) {Θ :
     fun h => vN_extA _ δ (LocTy.extA_add hfr l F) n v ρ h⟩
 
 /-- **`F_Σ R` at an unwinding row is one run at one world**: at every floor, a run at `cN`'s
-table stops only at `raise`s, so it is the one-world run at `tabUN` (`erwpK_abort_move`, both
+table stops only at `raise`s, so it is the run at `erwp` at `tabUN` (`erwpK_abort_move`, both
 ways). -/
 theorem cN_unwind_iff {S : Row} {x : LifeVar} (hS : S.Unwind x) {R : VTy} {δ : LSub}
     {Θ : LocTy} {c : Loc → Option Life} {n : Nat} {ls : List SRec} {e : Expr} {ρ : WRes} :
@@ -439,7 +437,7 @@ theorem withbor1U_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d
 
 /-- **`withbor (2)` at an unwinding row is a value of its type**: `withborU d` at
 `Ref A ⊸ (∀'x ⊏ @Δ. Mut 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ(Ref A ⊗ B)`, `Σ` a `Row.Unwind x` row. Core's
-`withbor2U_compatX`, step by step, as `withbor2S_compat₀` with the bound `Δ.meetOfDom` defined at
+`withbor2U_compatX`, step by step, as `withbor2S_compat` with the bound `Δ.meetOfDom` defined at
 `δ ⊨ Δ` and the row's table abortive: the lend at a lifetime fresh for the world, below the bound,
 `[TR]` 6.60's stratum at the side condition `Δ ⊢ A ⊒ @b` and the callback's; the callback at the
 world with the lend (`LocTy.view_add`); the Mut Frame across the row's raises (`erwp_M_frameR`,
@@ -590,7 +588,7 @@ theorem withbor2U_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d
 /-! ### An unwinding row's table under a reborrow -/
 
 /-- **An unwinding row's table may be stopped at under a `mut` lend at any `α`, cancellable stops
-included** (`tabN_unwind_lendOKCR`). -/
+included**. -/
 theorem tabUN_lendOKCR {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) (Θ : LocTy)
     (α : Life) : (tabUN (ℍ := ℍ) S δ Θ).LendOKCR α where
   entry := fun m i en h ha => by
@@ -598,8 +596,7 @@ theorem tabUN_lendOKCR {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) (Θ
   pa := (tabUN_lendOKR hS δ Θ α).pa
   pb := (tabUN_lendOKR hS δ Θ α).pb
 
-/-- **An unwinding row's table may be stopped at under a reborrow at any `β`**
-(`tabN_unwind_rebOKR`). -/
+/-- **An unwinding row's table may be stopped at under a reborrow at any `β`** -/
 theorem tabUN_rebOKR {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) (Θ : LocTy)
     (β : Life) : (tabUN (ℍ := ℍ) S δ Θ).RebOKR β where
   entry := fun m i en h ha => by
@@ -609,14 +606,14 @@ theorem tabUN_rebOKR {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) (Θ :
     obtain ⟨o, ho, -, rfl⟩ := tabUN_some h
     exact hp.elim
 
-/-- **An unwinding row's table has no cancel obligation** (`tabN_unwind_rebClosed`). -/
+/-- **An unwinding row's table has no cancel obligation**. -/
 theorem tabUN_rebClosed {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) (Θ : LocTy)
     (β : Life) (ρi χ : WRes) (Ok : List SRec → Prop) :
     RebClosed β ρi χ Ok (tabUN (ℍ := ℍ) S δ Θ) := by
   intro m i en h ha
   rw [tabUN_abort hS δ Θ m i en h] at ha; cases ha
 
-/-- **An unwinding row's table does not read `'x`** (`tabN_unwind_extend`). -/
+/-- **An unwinding row's table does not read `'x`**. -/
 theorem tabUN_extend {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) (Θ : LocTy)
     (α : Life) : tabUN (ℍ := ℍ) S (δ.extend x α) Θ = tabUN (ℍ := ℍ) S δ Θ :=
   tabUN_congr fun o ho => by rw [vN_extend_of_not_free (hS o ho).2.2.1 δ α]
@@ -624,7 +621,7 @@ theorem tabUN_extend {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) (Θ :
 /-! ### `withbor (3)` at an unwinding row -/
 
 /-- **The finaliser `λ_. d ℓ` consumes a `Mut @a A` source**, `d`'s judgment at `Mut @a A ⊸ 1`
-read at the world and an index at or below `N` (`fin_claimM₀` with the judgment at the run's
+read at the world and an index at or below `N` (`fin_claimM` with the judgment at the run's
 world). -/
 theorem fin_claimMN {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
     {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {c : Loc → Option Life} {N : Nat}
@@ -653,7 +650,7 @@ theorem fin_claimMN {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d
 
 /-- **`withbor (3)` at an unwinding row is a value of its type**: `withborU d`, at
 `Mut @a A ⊸ (∀'x ⊏ @Δ. Mut 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ(Mut @a A ⊗ B)` with `Σ` a `Row.Unwind x`
-row. Core's `withbor3U_compatX`, step by step, as `withbor3S_compat₀`:
+row. Core's `withbor3U_compatX`, step by step, as `withbor3S_compat`:
 
 1. the source is `loc ℓ` with its cell `ℓ ↦ mut(β, w₀, σ₀, F_o j₀)`, `F_o = famL β 𝒱⟦A⟧ Θ`;
 2. `withborU d ℓ f` steps to the callback under the finaliser frame `then b. (ℓ, b) unwind d ℓ`;
@@ -853,7 +850,7 @@ theorem withbor3U_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B
 
 /-- **The unwinding callback at the image**: the callback, at `β ⊏ @bnd`, applied to the image
 `χ` of the loaded payload, typed at `Imm̲ 'x A`, runs at the row's table with `[β]𝒱⟦B⟧` as its
-post (`callback_at_image₀` at a `Row.Unwind` row, its table by `tabUN_extend`). -/
+post (`callback_at_image` at a `Row.Unwind` row, its table by `tabUN_extend`). -/
 theorem callback_at_imageU {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Row}
     (hB : ¬ VFree x B) (hS : S.Unwind x) {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK)
     {c : Loc → Option Life} {n : Nat} {ls : List SRec} {f u : Val} {ρf χ Bχ : WRes} {β : Life}
@@ -878,7 +875,7 @@ theorem callback_at_imageU {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : 
 
 /-- **`withload` at an unwinding row is a value of its type**: at
 `Imm @a A ⊸ (∀'x ⊏ @Δ. Imm̲ 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ B` with `Σ` a `Row.Unwind x` row. Core's
-`withloadU_compatX`, step by step, as `withloadS_compat₀`: the `Imm` argument is `loc ℓ`; the
+`withloadU_compatX`, step by step, as `withloadS_compat`: the `Imm` argument is `loc ℓ`; the
 load (`rwp_load_cell` under `erwp_bindR`); 6.150 at the run's first entry (`withload_rebT`),
 across the row's raises (`erwp_rebGen`): the row's table admits the reborrow at every `β`
 (`tabUN_rebOKR`; an unrestricted operation of the row is abortive, so it never resumes) and
@@ -944,7 +941,7 @@ theorem withloadU_unr_inst (Δ : LifeCtx) (a : Lifetime.Life) (x : LifeVar) :
 
 /-! ### The slice lends at an unwinding row -/
 
-/-- **An unwinding row's table does not read a fresh key of the world** (`tabN_unwind_add`). -/
+/-- **An unwinding row's table does not read a fresh key of the world**. -/
 theorem tabUN_add {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) {Θ : LocTy} {α : Life}
     (hfr : Θ.Fresh α) (l : Loc) (F : Nat → Val → SPropS Loc Val α) :
     tabUN (ℍ := ℍ) S δ (Θ.add l α F) = tabUN (ℍ := ℍ) S δ Θ := by
@@ -954,8 +951,7 @@ theorem tabUN_add {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) {Θ : Lo
   exact propext ⟨fun h => vN_local _ δ Θ l α F n v ρ (hρ _ n v ρ h) h,
     fun h => vN_extA _ δ (LocTy.extA_add hfr l F) n v ρ h⟩
 
-/-- **An unwinding row's table does not read an `imm` record of the world**
-(`tabN_unwind_addImm`). -/
+/-- **An unwinding row's table does not read an `imm` record of the world** -/
 theorem tabUN_addImm {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) (Θ : LocTy)
     (y : SRec) : tabUN (ℍ := ℍ) S δ (Θ.addImm y) = tabUN (ℍ := ℍ) S δ Θ := by
   refine tabUN_congr fun o ho => ?_
@@ -964,7 +960,7 @@ theorem tabUN_addImm {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) (Θ :
   exact propext ⟨fun h => vN_extR _ δ n v ρ (LocTy.extR_of_addImm Θ y.1 (hρ _ n v ρ h)) h,
     fun h => vN_extR _ δ n v ρ (LocTy.extR_addImm Θ y.1 (hρ _ n v ρ h)) h⟩
 
-/-- `tabUN_addImm` at every list of records (`tabN_unwind_addImms`). -/
+/-- `tabUN_addImm` at every list of records. -/
 theorem tabUN_addImms {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) (Θ : LocTy) :
     ∀ xs : List SRec, tabUN (ℍ := ℍ) S δ (Θ.addImms xs) = tabUN (ℍ := ℍ) S δ Θ
   | [] => rfl
@@ -976,7 +972,7 @@ theorem tabUN_addImms {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) (Θ 
 induction over `erwp_M_frameRR`. The table `τ Θ c` does not read a fresh key (`hτ`), so every
 frame's callback runs at the lender's table; frame `j`'s claim joins the inner frames' at a
 raise, and the cells it claims are moved to the world without its key (`vN_local`), as in
-`erwp_M_frameListCRN`. -/
+`erwpK_M_frameListKWP`. -/
 theorem erwp_M_frameListRN {A : VTy} {δ : LSub} {β β' : Life}
     (hunif : ∀ Θ j u r, vN (ℍ := ℍ) A δ Θ j u r → r.InStratum β)
     (τ : LocTy → (Loc → Option Life) → OpTabN)
@@ -1099,7 +1095,7 @@ theorem erwp_M_frameListRN {A : VTy} {δ : LSub} {β β' : Life}
         exact (hH α₂ hα₂γ).2 Θ' c' (LocTy.extA_trans hE₁ hE) hOK' X ρ' ⟨_, ρm₂, hX, hlead, hm₂⟩
           hρ'X hc'
 
-/-- **The finaliser consumes the source array, its judgment read at the index** (`fin_claimI₀`
+/-- **The finaliser consumes the source array, its judgment read at the index** (`fin_claimI`
 at `Array A`). -/
 theorem fin_claimArrI {A : VTy} {d : Expr} (hdc : closedAt 0 d = true) {δ : LSub} {Θ : LocTy}
     (hΘ : Θ.OK) {c : Loc → Option Life} {N : Nat}

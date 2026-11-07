@@ -3,13 +3,14 @@ import Core.Chain.Goal791N
 /-!
 # `[then]`'s producers at `erwpK`, over a row's table at a world  `[spec §19, §27, §62]`
 
-`docs/new-core/scope-835-tables.md` §9. `Then835N`'s five producers (`cfin_cancelN`, `cfin_runN`,
-`then_cancelN`, `seq_raise_runN`, `erwp_frame_then`), each stated over the row-indexed table family
-`tabF` at any reading of a world (`RowRd`), by the original's induction on the index and recursion
-on the cancel row. Each original is proved again at one world (`*_of_K`); its text is the
-original's.
+`docs/new-core/scope-835-tables.md` §9. The five producers of Core's finaliser frame
+(`Core/EffFin.lean`): `cfin_cancelK`, `cfin_runK`, `then_cancelK`, `seq_raise_runK`,
+`erwpK_frame_then`, each stated over the row-indexed table family `tabF` at any reading of a world
+(`RowRd`), by induction on the index and recursion on the cancel row (`Then835N` lists them
+against Core's lemmas). `gNFrame_carryKW` and `erwpK_frame_then_tabKW` read the frame at `cN`'s
+tables.
 
-What a world adds, each the K-reading of a step the original takes at one world:
+What a world adds to a run at a single world:
 
 * **the continuation is owed at the worlds the entry allows**, at the joint share of the stop and
   the frame the producer puts beside it; the entry's order passes to the stop's own part
@@ -39,8 +40,7 @@ open BoCa.BoLo (Heap Head Kont performE raiseE cancelVal opPayload cfinE ubindE 
 
 variable {ι M : Type} {R : RowRd ι M}
 
-/-- **A kept error of a cancel row whose errors are persistent holds nothing**
-(`errOkN_empty_of_pers`). -/
+/-- **A kept error of a cancel row whose errors are persistent holds nothing**. -/
 theorem errOkF_empty_of_pers (hR : R.OK) {μ : M} {x : ι} {F : CTy} (hF : F.FinPers) {k : Nat}
     {ls : List SRec} : ∀ {err : Option Val} {ρ : WRes},
       errOkK (tabF (ℍ := ℍ) R μ (CTy.effOf F.rowOf .unit) x) k ls err ρ → ρ = PMap.empty
@@ -53,9 +53,9 @@ theorem errOkF_empty_of_pers (hR : R.OK) {μ : M} {x : ι} {F : CTy} (hF : F.Fin
 
 /-! ### A finaliser under a cancel's `cfin` -/
 
-/-- **A nested cancel past a running finaliser's `cfin`, at `erwpK`** (`cfin_cancelN`): a cancel
-run at the cancel row `G` under the mode `μ`, under `cfin err` holding an error of `P`, is one at
-any `G′ ≥ pend P G` that is not `⊤`, under any mode `μ′ ≥ μ`. The error rides in each stop's
+/-- **A nested cancel past a running finaliser's `cfin`, at `erwpK`** (Core's `cfin_cancel`): a
+cancel run at the cancel row `G` under the mode `μ`, under `cfin err` holding an error of `P`, is
+one at any `G′ ≥ pend P G` that is not `⊤`, under any mode `μ′ ≥ μ`. The error rides in each stop's
 continuation and is carried to the resumption world (`errOkF_ext`). -/
 theorem cfin_cancelK (hR : R.OK) (hPE : R.PayExt) (P : Row) (err : Option Val)
     (G : CTy) :
@@ -162,10 +162,10 @@ theorem cfin_cancelK (hR : R.OK) (hPE : R.PayExt) (P : Row) (err : Option Val)
 termination_by sizeOf G
 decreasing_by exact rowOf_fin_lt G (Row.find_mem hfo).1
 
-/-- **A finaliser running under a cancel's `cfin`, at `erwpK`** (`cfin_runN`): `D` at the row `E`
-under the mode `μD`, the cancel keeping an error of `P`, is a cancel run at any `T` that has `E`'s
-operations, their cancel rows with `P`'s errors pending, and `P`'s errors, under any mode
-`μ ≥ μD`. -/
+/-- **A finaliser running under a cancel's `cfin`, at `erwpK`** (Core's `cfin_run`): `D` at the row
+`E` under the mode `μD`, the cancel keeping an error of `P`, is a cancel run at any `T` that has
+`E`'s operations, their cancel rows with `P`'s errors pending, and `P`'s errors, under any mode `μ ≥
+μD`. -/
 theorem cfin_runK (hR : R.OK) (hPE : R.PayExt) (E P : Row) (err : Option Val)
     {T : CTy} {μD μ μP : M} (hμ : R.le μD μ)
     (hE : ∀ n i o, Row.find E n i = some o → ∃ o', Row.find T.rowOf n i = some o' ∧ o.Sig o' ∧
@@ -280,11 +280,11 @@ theorem cfin_runK (hR : R.OK) (hPE : R.PayExt) (E P : Row) (err : Option Val)
 
 /-! ### A cancel run through the finaliser frame -/
 
-/-- **A cancel run through a finaliser frame, at `erwpK`** (`then_cancelN`), by recursion on the
-cancel row `F` below it and, inside, induction on the index. `D` is read under the mode `μD`, the
-cancel run under `μ`, the result under any `μ′` above both. The frame `Fr`, read at a world, rides
-in each stop's continuation and is carried to the resumption world along the stop's order, at the
-floor the stop chose (`hFe`). -/
+/-- **A cancel run through a finaliser frame, at `erwpK`** (Core's `then_cancel`), by recursion on
+the cancel row `F` below it and, inside, induction on the index. `D` is read under the mode `μD`,
+the cancel run under `μ`, the result under any `μ′` above both. The frame `Fr`, read at a world,
+rides in each stop's continuation and is carried to the resumption world along the stop's order, at
+the floor the stop chose (`hFe`). -/
 theorem then_cancelK (hR : R.OK) (hPE : R.PayExt) (E : Row)
     (hNZ : ∀ n i o, Row.find E n i = some o → o.n ≠ 0) (Nv Dv : Val)
     (Fr : ι → List SRec → WProp)
@@ -389,8 +389,8 @@ decreasing_by exact rowOf_fin_lt F (Row.find_mem hfo).1
 
 /-! ### The finaliser frame -/
 
-/-- **A finaliser under ordinary unwinding, at `erwpK`** (`seq_raise_runN`): `D (); raise p`, `D`
-at a row `E ≤ Σ`. The pending raise's payload rides in each stop of `D` and is carried to the
+/-- **A finaliser under ordinary unwinding, at `erwpK`** (Core's `seq_raise_run`): `D (); raise p`,
+`D` at a row `E ≤ Σ`. The pending raise's payload rides in each stop of `D` and is carried to the
 resumption world (`RowRd.PayExt`); at a cancel it is left behind (`entF_plain`). -/
 theorem seq_raise_runK (hR : R.OK) (hPE : R.PayExt) (S E : Row) (hES : RowLe E S)
     {n i : UInt32} {v : Val} {o : OpSig} (hfo : Row.find S n i = some o) (ha : o.abort = true)
@@ -486,11 +486,11 @@ theorem seq_raise_runK (hR : R.OK) (hPE : R.PayExt) (S E : Row) (hES : RowLe E S
       ⟨(seqRaiseK (opPayload n i v)).comp K₁, m, j, w, _, pure_sep_mk ⟨rfl, hKo, hT',
         hLa ▸ ha₁⟩ ⟨ρa, z, hcz, ⟨hLA ▸ hPA, hnA⟩, noOwn_compS hz hnn hp'.2⟩⟩))
 
-/-- **The finaliser frame around an effectful computation, at `erwpK`** (`erwp_frame_then`), at
-the rows of `[then]`, every table under one mode `μ`. A stop of `M` keeps the frame in its
-continuation, carried to the resumption world at the floor the stop chose (`hFe`); its cancel
-passes the frame and fires `D` (`then_cancelK`, under the cancel row's mode). An abortive stop runs `D` first (`seq_raise_runK`).
-A value is posted at the run's own world. -/
+/-- **The finaliser frame around an effectful computation, at `erwpK`** (Core's
+`ewp_frame_then_or`), at the rows of `[then]`, every table under one mode `μ`. A stop of `M` keeps
+the frame in its continuation, carried to the resumption world at the floor the stop chose (`hFe`);
+its cancel passes the frame and fires `D` (`then_cancelK`, under the cancel row's mode). An abortive
+stop runs `D` first (`seq_raise_runK`). A value is posted at the run's own world. -/
 theorem erwpK_frame_then (hR : R.OK) (hPE : R.PayExt) (S SM SD : Row) (hNZ : S.NZ)
     (hMS : RowLe SM S) (hDS : RowLe SD S)
     (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
@@ -621,7 +621,7 @@ theorem gNFrame_carryKW (δ : LSub) (Γ : Ctx VTy) (γ : List Val) (N : Nat) :
 
 /-- **The finaliser frame at `cN`'s tables** (`erwpK_frame_then` at `KW`): every table the row's
 `tabN`, the reading's premises discharged (`rdN_ok`, `rdN_payExt`). What is left is
-`erwp_frame_then`'s, read at every world whose location typing is downward closed, and the frame
+`erwpK_frame_then`'s, read at every world whose location typing is downward closed, and the frame
 carried along the order (`hFe`, which `gNFrame_carryKW` discharges for `[then]`'s context). -/
 theorem erwpK_frame_then_tabKW {δ : LSub} (SS SM SD : Row) (hNZ : SS.NZ)
     (hMS : RowLe SM SS) (hDS : RowLe SD SS)
@@ -652,8 +652,6 @@ theorem erwpK_frame_then_tabKW {δ : LSub} (SS SM SD : Row) (hNZ : SS.NZ)
   simp only [tabN_eq] at hD hkv ⊢
   exact erwpK_frame_then (rdN_ok δ) (rdN_payExt δ) SS SM SD hNZ hMS hDS hfin hP Nv Dv Fr hFs
     hFe hU hQd N₀ hD Q₁ Q hQ hkv
-
-/-! ### At one world -/
 
 end BoCa.Fig16.LogRel.Core.Chain.SI
 

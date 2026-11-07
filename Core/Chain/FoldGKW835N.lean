@@ -7,8 +7,9 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 /-!
 # The generic fold at the typed world  `[spec §47]`
 
-`FoldG836N`'s `foldOwnG_compatN` at `SemJN`, the one-world proof: the traversal stops nowhere, its
-algebras' `F` answers read at the empty table (`erwp_of_cN_ret`); `dropU_sem` is `λu. ()` at `vN`.
+Core's `foldOwnG_compatX` at `SemJN` (`foldOwnG_compatN`), over `FoldG836N`'s reductions: the
+traversal stops nowhere, its algebras' `F` answers read at the empty table (`erwp_of_cN_ret`);
+`dropU_sem` is `λu. ()` at `vN`.
 -/
 
 namespace BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
@@ -44,14 +45,10 @@ attribute [local simp] Expr.subst Val.val_shift Expr.shift_shift Expr.shift_zero
 -- Every reduction below normalises with one list of substitution facts, as Core's does.
 set_option linter.unusedSimpArgs false
 
-/-! ### Reductions -/
-
 section Red
 variable {Φ : LocFam} {Q : PostN}
 
 end Red
-
-/-! ### The counted loop with an invariant (Core's `countLoop_inv`) -/
 
 /-! ### The owned traversal of an array -/
 

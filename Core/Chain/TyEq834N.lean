@@ -6,10 +6,12 @@ import Core.ShapeMu
 # The relation reads a type only up to `TyEq`  `[spec §62]`
 
 `docs/new-core/scope-831-interface.md` §2, unit L2 (V1): Core's `vC_tyEq`/`cC_tyEq`
-(`Core/RelationFacts.lean`, `vCE_tyEq`/`cC_tyEq_aux`) at the chain, by the same induction on the
-type, under type-variable environments related by Core's `EnvEq` (`EnvEqN`). `Imm`'s witness
-is closed under `TyEq` by Core's `CohE.tyEq`; `⊸`, `U` read `forceE` alike (`forceE_of_cTyEq`); an
-effect row's entries read `B.isZero` alike (`TyEq.isZero_eq`, `capB_congr`).
+(`Core/RelationFacts.lean`, `vCE_tyEq`/`cC_tyEq_aux`) at the chain are `vN_tyEq`/`cN_tyEq`
+(`RulesKW835N`), by the same induction on the type, under type-variable environments related by
+Core's `EnvEq` (`EnvEqN`). `Imm`'s witness is closed under `TyEq` (`immWitW_tyEq`, by Core's
+`CohE.tyEq`); `⊸`, `U` read `forceE` alike (`forceE_of_cTyEq`); an effect row's entries read
+`B.isZero` alike (`TyEq.isZero_eq`, `capB_congr`). This file holds `immWitW_tyEq` and the
+environments' relation (`EnvEqN`, `envEqN_none`, `envEqN_tClose`, `envEqN_nu`).
 -/
 
 noncomputable section

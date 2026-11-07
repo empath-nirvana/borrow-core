@@ -4,45 +4,30 @@ import Core.Chain.SI.StopRaiseN
 import Core.Chain.SI.LocTy
 
 /-!
-# #791 at the rule level over the chain relation: the interpretation and the statements
+# #791 at the rule level over the chain relation: the definitions the relation is built on
 `[spec §62]`
 
-The relation here is the one-world relation, its names suffixed `₀`; `Goal791N.lean` holds the
-relation at the typed world `KW` under the unsuffixed names. The statements below and the files
-that import this one read the one-world relation until they are restated at `KW`.
-
 `docs/new-core/chain-interpretation.md` is the design: the world, the interpretation, the
-departures from Core. `Core/TreeGoal791.lean` states #791's end goal over the tree relation; here the
-interpretation and the statements are restated over Core's step-indexed chain relation `erwp`
-(`Core/Chain/SI/*`), at the per-lend world `LocTy` (`Core/Chain/SI/LocTy.lean`).
+departures from Core. `Core/TreeGoal791.lean` states #791's end goal over the tree relation; the
+relation at the typed world `KW` (`Goal791N.lean`: `vN`, `cN`, `tabN`, `gN`, `SemJN`) restates
+Core's interpretation over Core's step-indexed chain relation `erwp` (`Core/Chain/SI/*`), at the
+per-lend world `LocTy` (`Core/Chain/SI/LocTy.lean`). This file holds the pieces it is built from
+that do not read the relation itself:
 
-* **§1. The interpretation.** `vN₀ A δ Θ k v ρ` (`𝒱⟦A⟧δ` at the world `Θ` and the index `k`) and
-  `cN₀ C δ Θ c k ls e ρ` (`𝒞⟦C⟧δ` at the world `Θ`, the run's live lifetimes `c`, the index `k`
-  and the record list `ls`). Every run is `erwp` at the view `Θ.view c`, the relation's `LocFam`.
-  `F_Σ R` is read at the table of the row's layers (`tabN₀`, each capturable entry with its cancel
-  row's obligation `finN₀`) and its answer `retN₀`. A table's answers are read at the view: an
-  answer's resource enters the run, and is consistent with the view as every resource entering a
-  run is (`SemJN₀`'s start, `U`'s thunk, `⊸`'s composite). Core's `vCE`/`cC`/`effTab`/`finObl`/`effRet`
-  clause by clause, with `ewpTS`/`wpTS` replaced by `erwp`:
-  - `Mut` is Core's `ptoMutS` shape over the world: the cell at some `b ⊒ @aδ` (`mutL b`) holds a
-    member of the payload read at the world above `b`, the family the world stores at the lend's
-    key, and every value of the payload is in `Res_b`;
-  - `U C` is Kripke along Core's resource-relative order (`LocTy.ExtR` at the thunk's
-    resource), at every view consistent with the resource (`ConsistentX`); `⊸` is Core's plain
-    wand at the same world, step-indexed (every later index) and at every view consistent with
-    the composite.
-  - `Imm` is Core's `ptoImmS` shape over the world: one `imm` cell, its payload in the
-    observable view `vO₀` (Core's `vCE false`), its location witnessed in the world's `imm`
-    records (`ImmWitW`, Core's `CohE`); the relation's entry tie (`ImmTieL`) puts the witness's
-    record on the run's list.
-  `gN₀`, `SemJN₀`.
-* **§2. Laws.** Downward closure of every piece; `vN₀`/`cN₀` read `δ` only at free variables
-  (`vN_congr₀`); values stable along the resource-relative order (`vN_extR₀`), hence along the
-  world-relative `ExtA` (`vN_extA₀`), computations too except at an effect row (`cN_extA₀`); values in
-  a lend's stratum do not read the lend (`vN_local₀`); `𝒱⟦A⟧` of an outliving `A` in the stratum
-  (`vN_outlives₀`); `F_Σ R` as `erwp` at the row's table (`cN_effOf₀`).
-* **§3. The statements**: `ConstN₀`, `ConstsN₀`, `FundamentalN₀`, `BridgeN`, `Goal791SchedN`, and
-  `goal791Sched_of`: `Goal791SchedN` from `FundamentalN₀` and `ConstsN₀`.
+* **§1. Tables, cells, candidates and environments.** A row table's entry (`entN`) and one more
+  layer (`extTabN`); an `imm` borrow (`immCell`, Core's `ptoImmS` without the record list) and its
+  witness in the world's `imm` records (`ImmWitW`, Core's `CohE`); a candidate for `νX. C`
+  (`CandN`) and `U X` at it (`thunkRN`, Core's `thunkR`); the type-variable environment
+  (`TEntN`, `tEnvN`, `tEnvPN`, `tCloseN`, `muEnvN`, Core's `RelMu`) and `ν`'s one-entry
+  environment (`nuPN`, `nuEnvN`).
+* **§2. Laws of these pieces.** Downward closure (`extTabN_down`, `cancelOblN_down`,
+  `EnvDownN`, `thunkRN_down`, `envDownN_nu`), the candidate's order (`CandN.LeOK`,
+  `thunkRN_mono`), `δ` read only at free variables (`cohE_congr_ty`, `immWitW_congr`,
+  `EnvAgreeN`), stability along the resource-relative order (`EnvExtRN`), and the computation
+  types read through no effect row (`noEffSpine`).
+* **§3. The fragment.** The formers the interpretation covers (`VTy.inFrag`, `CTy.inFrag`, their
+  `ν`-body forms `VTy.inFragNu`, `CTy.inFragNu`), a judgment and a #791 constant inside it
+  (`JdgInFrag`, `Const791.InFrag`), and `liveWithin_ctx791`.
 -/
 
 noncomputable section
@@ -60,7 +45,7 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open BoCa.Fig16.Tree.Wp.Goal791 (Const791 ctx791 vals791 jdgC)
 open BoCa.BoLo (Heap Kont hndE hndVal)
 
-/-! ## §1. The interpretation -/
+/-! ## §1. Tables, cells, candidates and environments -/
 
 /-- An entry of a row's table: the qualifier; abortive as Core's (`B` empty, not `lin`); payload
 and answer at their value types, at every record list; the cancel obligation where Core's `capB`
@@ -94,7 +79,7 @@ the run's list, whose typed world holds its descendants (`TI`). -/
 def ImmWitW (I : List SRec) (l : Loc) (s : LSet) (A : VTy) (δ : LSub) : Prop :=
   ∃ x ∈ I, s.meet ≤ x.2 ∧ ∃ d, DescR x.1 d ∧ CohE [d] l A δ
 
-/-- **A candidate for `νX. C`** at a fixed `δ`: `cN₀`'s signature with `δ` applied (Core's
+/-- **A candidate for `νX. C`** at a fixed `δ`: `cN`'s signature with `δ` applied (Core's
 `CPred`, with the world, the view and the index). -/
 abbrev CandN := LocTy → (Loc → Option Life) → Nat → List SRec → Expr → WRes → Prop
 
@@ -102,15 +87,15 @@ abbrev CandN := LocTy → (Loc → Option Life) → Nat → List SRec → Expr �
 def CandN.Le (R R' : CandN) : Prop :=
   ∀ Θ c n ls e ρ, R Θ c n ls e ρ → R' Θ c n ls e ρ
 
-/-- **`U X` at the candidate `R`** (Core's `thunkR`): `vN₀`'s `U` clause with `R` in place of
+/-- **`U X` at the candidate `R`** (Core's `thunkR`): `vN`'s `U` clause with `R` in place of
 `𝒞⟦νX. C⟧`, at every extension of the world along `ExtR` at the thunk's resource, every view
 consistent with it and every record list. -/
 def thunkRN (R : CandN) : LocTy → Nat → Val → WRes → Prop := fun Θ n v ρ =>
   ∀ Θ' : LocTy, Θ.ExtR Θ' ρ → Θ'.OK → ∀ c, ConsistentX c ρ → ∀ ls, R Θ' c n ls v.1 ρ
 
-/-- **An entry of `vNE₀`'s type-variable environment** (Core's `TEnt`): the closed type the
+/-- **An entry of `vNE`'s type-variable environment** (Core's `TEnt`): the closed type the
 variable stands for, which the `Imm` clause's witness reads, and the candidate it is read at, over
-the mode (`true` the program's relation `vN₀`, `false` the observable view `vO₀`), the world, the
+the mode (`true` the program's relation `vN`, `false` the observable view `vO`), the world, the
 index and the value. -/
 structure TEntN where
   ty : VTy
@@ -144,10 +129,10 @@ def nuEnvN (S : VTy) (P : LocTy → Nat → Val → WRes → Prop) : Option (Nat
 
 /-! ### The environment (Core's `RelMu`)
 
-`vNE₀ η` reads a type variable at its entry in `η` and `μX. A` at the least fixed point, the
-candidate joint over the mode, the world and the index. `vBN₀ η b` is `vNE₀ η` (`b = true`) or
-`vOE₀ η` (`b = false`), Core's `vCE η b`. Every law below is Core's (`Core/RelMu.lean`), read at
-the chain's arguments. -/
+`vNE η` reads a type variable at its entry in `η` and `μX. A` at the least fixed point, the
+candidate joint over the mode, the world and the index. `vBN η b` is `vNE η` (`b = true`) or
+`vOE η` (`b = false`), Core's `vCE η b`. The definitions below are Core's (`Core/RelMu.lean`),
+read at the chain's arguments. -/
 
 theorem TEntN.ext' {a b : TEntN} (h₁ : a.ty = b.ty) (h₂ : a.P = b.P) : a = b := by
   cases a; cases b; simp only at h₁ h₂; subst h₁; subst h₂; rfl
@@ -166,14 +151,6 @@ theorem tCloseN_eq (η : Option (Nat → TEntN)) (A : VTy) :
 def muEnvN (η : Option (Nat → TEntN)) (A : VTy) (P : Bool → LocTy → Nat → Val → WRes → Prop) :
     Option (Nat → TEntN) :=
   some (VTy.scons ⟨tCloseN η (.mu A), P⟩ (tEnvN η))
-
-/-! ### Renaming and substitution -/
-
-/-! ### Monotonicity in an entry outside every `Mut` payload -/
-
-/-! ### The unroll equation -/
-
-/-! ### The induction principle -/
 
 /-! ## §2. Laws -/
 
@@ -253,8 +230,6 @@ theorem envDownN_nu {S : VTy} {P : LocTy → Nat → Val → WRes → Prop}
     | false => trivial
   | succ m => exact h
 
-/-! ### Rows -/
-
 /-! ### `δ` is read only at free variables -/
 
 /-- `CohE` reads `δ` only at the type's free variables. -/
@@ -296,8 +271,6 @@ theorem envAgreeN_nu {S : VTy} {P : LocTy → Nat → Val → WRes → Prop} {δ
   | zero => exact hS y hy
   | succ n => exact hy.elim
 
-/-! ### Outliving types lie in the stratum -/
-
 /-! ### Values along the Kripke order -/
 
 /-- One cell at one location determines both. -/
@@ -312,7 +285,7 @@ def EnvExtRN (η : Option (Nat → TEntN)) : Prop :=
 
 theorem envExtRN_none : EnvExtRN none := fun _ _ _ _ _ _ _ _ h => h
 
-/-- The computation types `cN_extA₀` covers: `F A` and `⊤`, read through `&` and `∀`. Not
+/-- The computation types `cN_extA` covers: `F A` and `⊤`, read through `&` and `∀`. Not
 an effect row (`F_Σ R`), and not `⊸`: a plain wand at `Θ` reads its argument at `Θ`, and an
 argument at an extension `Θ′` is not one at `Θ`. Not `ν`, whose observation trees hold both. -/
 def noEffSpine : CTy → Prop
@@ -324,21 +297,17 @@ def noEffSpine : CTy → Prop
   | .nu _ => False
   | .eff _ _ _ _ _ _ _ _ => False
 
-/-! ### Values in a lend's stratum do not read the lend -/
-
-/-! ### `ν`: the greatest fixed point -/
-
-/-! ### Rule checks: `⊑mut`, `⊑imm`, `∀I` at `SemJN₀` -/
+/-! ### The lifetime order -/
 
 /-- `Δ ⊨ a ⊑ b`'s order on interpretations is `Life`'s. -/
 theorem sLe_life {m n : Life} (h : BoCa.Lifetime.SLife.Le m n) : m ≤ n := h
 
-/-! ## §3. The statements -/
+/-! ## §3. The fragment -/
 
 mutual
 /-- **The formers the interpretation covers**: every former. `μ` is covered at a covered body, a
 type variable always (its environment entry, empty at the empty environment). `ν` is covered at a
-covered body, whose variable `X` (`VTy.inFragNu`) `cN₀` reads at the candidate. Families (arrays and
+covered body, whose variable `X` (`VTy.inFragNu`) `cN` reads at the candidate. Families (arrays and
 slices) are covered at a covered leaf, and opaque types (`Tok` and the host types) always.
 Decidable. -/
 def _root_.BoCa.Fig16.LogRel.Core.VTy.inFrag : VTy → Bool
@@ -357,7 +326,7 @@ def _root_.BoCa.Fig16.LogRel.Core.CTy.inFrag : CTy → Bool
   | .nu C => C.inFragNu
   | .eff _ _ _ A B fin _ C => A.inFrag && B.inFrag && fin.inFrag && C.inFrag
 /-- The value-type formers a `ν` body covers: `VTy.inFrag`'s, and the body's variable `X`
-(index `0`). A thunk is read by `vN₀`, where `X` does not occur. -/
+(index `0`). A thunk is read by `vN`, where `X` does not occur. -/
 def _root_.BoCa.Fig16.LogRel.Core.VTy.inFragNu : VTy → Bool
   | .tvar 0 => true
   | .unit | .zero | .unk | .int _ | .opq _ => true

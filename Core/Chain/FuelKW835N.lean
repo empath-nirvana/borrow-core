@@ -4,8 +4,8 @@ import Core.Chain.Fuel835N
 /-!
 # `div_fuel` at the typed world  `[spec §14]`
 
-`Fuel835N`'s handler at `cN`: `fuel_totalN` at `erwpK` and `divFuel_compatN` at `SemJN`, each step
-`fuel_totalN₀`'s, at the relation at `KW`.
+Core's `divFuel_compatX` (`Core/DivFuel.lean`) at the relation at `KW`: `fuel_totalN` (Core's
+`fuel_total`) at `erwpK` and `divFuel_compatN` at `SemJN`, over `Fuel835N`'s handler steps.
 
 * the handler's steps at `erwpK`: `κ`'s resumption under a frame (`erwpK_kappaC_resume_in`), a
   tick under a one-clause handler of `Div` (`erwpK_hnd_tick`), a tick answered *close* or *next*
@@ -16,7 +16,9 @@ import Core.Chain.Fuel835N
   with that world's view (`rwpG_consistentXV`); an operation of `Σ` passes the handler with its
   frame, and the run goes on at each world the entry owes, consistent there (`KW.Owed`, the
   answer's reading); its cancel passes the plain frame (`entF_plain`).
-* `divFuel_compatN`.
+* `divFuel_compatN`: the constant at `SemJN`. The callback runs at the function's own world and
+  view. No typed code runs after a resumption here: an answer of `Σ` goes back into the callback's
+  own continuation.
 -/
 
 noncomputable section
@@ -162,7 +164,7 @@ theorem tabN_tickK (S : Row) (A : VTy) (δ : LSub) (x : KW) :
         (finN (ℍ := ℍ) (.ret .unit) δ) (fun f y ρ => x.Owed f y ρ))
       (tabN (ℍ := ℍ) (CTy.effOf S A) δ x) := rfl
 
-/-- **`div_fuel` is total, at the typed world** (`fuel_totalN₀`): under a frame at any budget, a
+/-- **`div_fuel` is total, at the typed world**: under a frame at any budget, a
 computation at the row `tick, Σ`, from a resource consistent with the view of a world whose
 location typing is `OK`, is, handled, at `Σ`. By induction on the index: a tick is resumed at the
 stop's own world, *next* (the frame at one less) or *close* (the frame `spent`), below the tick's
@@ -312,7 +314,7 @@ theorem fuel_totalN {S : Row} (hS : ∀ o ∈ S, o.n ≠ divEff) {A : VTy} {δ :
         ⟨(K.comp (hndK fuelH)).comp K₁, m, i, v, en, pure_sep_mk ⟨rfl, hKo, hT', ha⟩
           ⟨ρa, ρn, hcan, ⟨hPA, hnA⟩, hnn⟩⟩))
 
-/-- **`div_fuel` at `SemJN`** (`divFuel_compatN₀`): total at the rest of the row. The callback is
+/-- **`div_fuel` at `SemJN`**: total at the rest of the row. The callback is
 forced at the function's own world and view, applied at `()`; `div_fuel (t, k)` steps to the
 handler under the budget's frame (`divFuel_steps`), and `fuel_totalN` takes it to the row `Σ` at
 every floor. -/

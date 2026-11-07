@@ -3,9 +3,10 @@ import Core.Chain.RulesKW835N
 /-!
 # The opaque token and the families at the typed world  `[spec §9, §11, §42]`
 
-`Fam836N`'s rules at `SemJN` (the relation at `KW`), each the one-world proof: a family operation
-stops nowhere, so its value's judgment is `erwp` at the empty table (`cN_ret_of`), and every
-`U` it reads is applied at `F A` (`erwp_of_cN_ret`).
+The token's and the families' rules at `SemJN` (the relation at `KW`), each Core's compatibility
+lemma (`Core/Tok.lean`, `Core/Arrays.lean`, `Core/Slices.lean`, `Core/SliceOps.lean`) against `vN`'s
+`opq` and family clauses: a family operation stops nowhere, so its value's judgment is `erwp` at the
+empty table (`cN_ret_of`), and every `U` it reads is applied at `F A` (`erwp_of_cN_ret`).
 -/
 
 noncomputable section

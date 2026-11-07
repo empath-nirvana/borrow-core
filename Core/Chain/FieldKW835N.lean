@@ -3,10 +3,10 @@ import Core.Chain.ReborrowKW835N
 /-!
 # The suspending field reborrow at the typed world  `[spec §62]`
 
-`Field791N`'s `withborFS_compat` at `SemJN`, step for step: `withbor3S_compat`'s proof at the
-source `Mut @a (Ref A)`, with the `load` from the opened cell (`rwp_load`, `erwpK_bindR`) and the
-opened cell `ℓ ↦ own(loc ℓ₂)` framed outside the guarded Mut Frame at the field
-(`erwpK_frameGR_tab`).
+`withborF` at a suspending row at `SemJN` (`withborFS_compat`), step for step: `withbor3S_compat`'s
+proof at the source `Mut @a (Ref A)`, with the `load` from the opened cell (`rwp_load`,
+`erwpK_bindR`) and the opened cell `ℓ ↦ own(loc ℓ₂)` framed outside the guarded Mut Frame at the
+field (`erwpK_frameGR_tab`).
 -/
 
 noncomputable section
@@ -24,16 +24,16 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open BoCa.Fig16.Tree.Wp.Goal791 (withborFSTy withborFV withborFE)
 open BoCa.BoLo (Heap Kont Head ubindE)
 
-/-- **`withborF` at a suspending row is a value of `!` its type, at `SemJN`**
-(`withborFS_compat₀` at the typed world): `withborF d` at
+/-- **`withborF` at a suspending row is a value of `!` its type, at `SemJN`**:
+`withborF d` at
 `Mut @a (Ref A) ⊸ (∀'x ⊏ @bnd. Mut 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ(Mut @a (Ref A) ⊗ B)`, `Σ` a
-`Row.Suspend x bnd` row. `withbor3S_compat`'s steps at the source `Mut @a (Ref A)`, with
-`withborFS_compat₀`'s three changes: the source's content read as a `Ref A` value
+`Row.Suspend x bnd` row. `withbor3S_compat`'s steps at the source `Mut @a (Ref A)`, with three
+changes: the source's content read as a `Ref A` value
 `ℓ₂ ↦ own(u₀) ● σ_u`; the `load` from the opened cell `ℓ ↦ own(loc ℓ₂)` (`rwp_load`); the guarded
 Mut Frame at `ℓ₂` (`erwpK_M_frameCRG_cN`), the opened cell framed outside it
 (`erwpK_frameGR_tab`), `hunif` at `A` and the inclusion into `F_o` from `hunif` at `Ref A`.
 
-Premises as `withborFS_compat₀`'s; `hd` is `d`'s judgment at `SemJN`. -/
+Premises those of the rule; `hd` is `d`'s judgment at `SemJN`. -/
 theorem withborFS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {S : Row} {d : Expr} (hbnd : LifeCtx.empty.Defines bnd) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
     (hS : S.Suspend x bnd)

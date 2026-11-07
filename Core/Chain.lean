@@ -117,7 +117,6 @@ import Core.Chain.Unwind833N
 import Core.Chain.Let835N
 import Core.Chain.Fuel835N
 import Core.Chain.Iter835N
-import Core.Chain.Then835N
 import Core.Chain.Fam836N
 import Core.Chain.FamFrame836N
 import Core.Chain.FamStop836N

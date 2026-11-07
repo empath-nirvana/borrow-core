@@ -7,21 +7,20 @@ A capturable operation's cancel row may have layers: cleanup that performs (clos
 the consume glue a raise or cancel runs) stops at them. Under a live `mut` lend the cancel run
 then stops while the borrow is live, so the cancel row meets `Row.Suspend`'s clauses
 (`CTy.SuspendC`), and the lender's cancel run is the borrowed one with the borrow folded at
-every stop, ending at the cancel's `raise` carrying the lend's claim. Each cancel run runs at its
-own cancel row's table.
+every stop, ending at the cancel's `raise` carrying the lend's claim. The lemmas here are the
+pieces of that argument that do not read the relation; `CancelKW835N` and `ClaimKW835N` assemble
+the suspending lend at `SemJN` from them.
 
+* `errOkN_inStratum`, `errOkN_twin`: a cancel run's error payload is an abortive entry's payload,
+  and is one at a twin table.
 * `erwp_M_frame_cancelRunCR`: the Mut Frame over a cancel run at a table with abortive,
   must-resume and cancellable entries (`OpTabN.LendOKCR`), its nested cancel obligations
   transferred by a premise (`hcan`, as `erwp_M_frameCR`'s).
-* `tabR`/`finR`: a row's table with every capturable entry's cancel obligation the cancel run at
-  the cancel row's own table, ending at the claim, recursively: the lender's twin of the
-  callback's `tabN₀`.
-* `tabR_can`: the transfer `hcan` asks, by induction on the cancel row.
-* `erwp_ubind_cancelRunCR`: the finaliser frame over a cancel run at `cancelTabR (tabR …)`, ending
-  at `cancelTabN (tabN₀ …)`: `D` consumes the claim at the cancel's `raise`, with or without an
-  error payload; a nested cancel run passes the frame by the same lemma one level down.
-* `erwp_ubindClaimRT`: the finaliser frame around a body at `opTableR (tabR …)`.
-* `withbor2S_compat₀`: the suspending lend, its premises those of the rule.
+* `erwp_of_valid`: a run may assume its resource valid.
+* `CTy.LayerOf`, `CTy.cdepth`, `layer_cdepth`, `layer_suspend`, `entN_capB`: a row's layers, how
+  deep cancel rows nest, and a suspending row's layers meeting its clauses.
+* `claimX`: the claim, consistent with the view.
+* `suspendC_effOf`: `Row.Suspend` is `CTy.SuspendC` of the row's computation type.
 -/
 
 noncomputable section
@@ -199,7 +198,7 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open BoCa.Fig16.Tree.Wp.Goal791 (Const791 ctx791 vals791 jdgC interp_top_of_defines_empty)
 open BoCa.BoLo (Heap Kont ubindE Head performE raiseE cancelVal opPayload)
 
-/-! ### The lender's twin: every cancel run at its cancel row's table, ending at the claim -/
+/-! ### A row's layers -/
 
 /-- A layer of a row: its qualifier, payload, answer and cancel row. -/
 def _root_.BoCa.Fig16.LogRel.Core.CTy.LayerOf : CTy → Qual → VTy → VTy → CTy → Prop
@@ -258,13 +257,11 @@ theorem entN_capB {q : Qual} {B : VTy} {PA PB : Nat → Val → WRes → Prop}
 /-! ### The claim with the view's consistency -/
 
 /-- **The claim, consistent with the view.** The finaliser consumes the claim by `d`'s judgment,
-whose argument clause reads a view consistent with the argument (`fin_claim₀`). -/
+whose argument clause reads a view consistent with the argument (`fin_claim`). -/
 def claimX (R : Nat → WProp) (c : Loc → Option Life) : Nat → WProp :=
   fun k ρ => R k ρ ∧ ConsistentX c ρ
 
-/-! ### The finaliser frame at the view -/
-
-/-! ### The suspending lend -/
+/-! ### The suspending lend's row -/
 
 /-- `Row.Suspend` is `CTy.SuspendC` of the row's computation type. -/
 theorem suspendC_effOf {S : Row} {x : LifeVar} {bnd : Lifetime.Life} (hS : S.Suspend x bnd)

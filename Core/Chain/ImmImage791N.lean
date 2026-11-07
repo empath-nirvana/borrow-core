@@ -1,19 +1,17 @@
 import Core.Chain.RelBase791N
 
 /-!
-# The observable view and the image of a reborrow at `vN₀`  `[spec §62]`
+# Escrow pieces and positions across `TyEq`, for the image of a reborrow  `[spec §62]`
 
-`withload_compatX`'s steps 5, 7 and 8 (`chain-interpretation.md` §6.3) at `vN₀`'s `Imm` clause, which
-reads its payload in the observable view `vO₀` (Core's `vCE false`) and its location's witness in
-the world's `imm` records (`ImmWitW`, Core's `CohE`):
+`withload_compatX`'s steps 5, 7 and 8 (`chain-interpretation.md` §6.3) read `vN`'s `Imm` clause,
+which reads its payload in the observable view `vO` (Core's `vCE false`) and its location's
+witness in the world's `imm` records (`ImmWitW`, Core's `CohE`). `ImmImageKW835N` holds those
+steps at `vN`/`vO` (`vN_vO`, `vN_vShape`, `vO_vShape`, `vO_transfer`, `relabel_vN`). This file
+holds the facts they read that do not read the relation:
 
-* `vN_vO₀`: a value is observable (Core's `vC` at `true` read at `false`);
-* `vN_vShape₀`, `vO_vShape₀`: the shape of a value (Core's `vC_vShape`);
-* `vO_transfer₀`: the observable view transfers between two pieces of one escrow (Core's
-  `obs_transfer`);
-* `relabel_vN₀`: an image of an escrow re-taken at `β` is a value of `Imm̲ 'x A` at `δ['x ↦ β]`
-  (Core's `relabel_obs`), the witnesses of the image's new cells supplied at the escrow's `Ref`
-  and `Mut` positions;
+* `loc_inj`: `Val.loc` is injective;
+* `LifeBoundOn`, `LifeBoundW`, `LifeBoundWit`, `imm_piece_left`: the `imm` cells of two pieces of
+  one escrow, and the lifetime bound on them;
 * `RefPos.tyEq`, `MutPos.tyEq`: positions read across `TyEq`.
 -/
 
@@ -30,11 +28,7 @@ open BoCa.Fig16.LogRel.Core.Chain.SI
 open BoCa.Fig16.LogRel (LtLife substAll)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
-/-! ### A value is observable -/
-
-/-! ### The shape of a value -/
-
-/-! ### The observable view transfers between pieces of one escrow -/
+/-! ### Pieces of one escrow -/
 
 /-- `Val.loc` is injective. -/
 theorem loc_inj {l l' : Loc} (h : Val.loc l = Val.loc l') : l = l' := by
@@ -86,8 +80,6 @@ theorem LifeBoundWit.left {I : List SRec} {R c₁ c₂ c : WRes} (hc : ResU.Comp
   obtain ⟨ψ', e', -, w', -⟩ := compS_get_left' hc e
   rw [← w']
   exact h m ψ' e' hR
-
-/-! ### The image of a reborrow, re-taken at `β`, at `vN₀` -/
 
 /-! ### Positions across `TyEq` -/
 

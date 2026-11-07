@@ -1,23 +1,21 @@
 import Core.Chain.Stop835N
 
 /-!
-# `[sub]`, `[perform]` and `[raise]` at `SemJN₀`  `[spec §19, §27]`
+# Stops at once, and cancel runs along their table  `[spec §19, §27]`
 
-Core's `sub_compatC`, `perform_compatC` and `raise_compatC` (`Core/EffFin.lean`), step by step, at
-the chain relation, over the interface entries they reach for (`scope-831-interface.md` E3, E5,
-E6, E7):
+Helpers for Core's `sub_compatC`, `perform_compatC` and `raise_compatC` (`Core/EffFin.lean`) at
+the chain relation (`scope-831-interface.md` E3, E5, E6, E7), which `EffKW835N` assembles at
+`SemJN`:
 
-* **E3** (Core's `effWp_sub`, `finObl_mono`, `cancelObl_le`): a row's table at a key is the entry
-  of the operation `Row.find` finds there (`tabN_effOf_find`); a cancel row's obligation is the
-  cancel run at its layers' table, or none at `⊤` (`finN_eq_ite`); a cancel run is monotone in its
-  table (`cancelOblN_le`); so the obligation grows with the cancel row (`finN_mono`, along
-  `FinLe`, by Core's recursion on the cancel row) and the table with the row (`tabN_le_of_rowLe`);
+* **E3** (Core's `cancelObl_le`): a cancel run is monotone in its table (`cancelTabN_le`,
+  `cancelOblN_le`);
 * **E5** (Core's `ewp_bind_pure_frame`): a computation that never stops, framed, in front of an
-  `erwp` at any table (`rwp_frame`, `erwp_bindR`). A value's judgment is `erwp` at the empty table,
-  a run that never stops (`rwp_of_erwp_empty`);
-* **E6** (Core's `ewp_perform_here`, `ent_start`, `cancelObl_start`): a `perform` stops at once;
-  the cancel run of the empty region is in every cancel obligation of a row's entry;
-* **E7** (Core's `ewp_raise_here`): a `raise` stops at once, at an argument owning nothing.
+  `erwp` at any table (`erwp_bind_pure_frame`, by `rwp_frame` and `erwp_bindR`);
+* **E6** (Core's `ewp_perform_here`, `cancelObl_start`): a `perform` stops at once
+  (`erwp_perform_here`); the cancel run of the empty region is in every cancel obligation
+  (`cancelOblN_start`);
+* **E7** (Core's `ewp_raise_here`): a `raise` stops at once, at an argument owning nothing
+  (`erwp_raise_here`).
 -/
 
 noncomputable section

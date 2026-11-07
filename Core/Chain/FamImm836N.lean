@@ -2,7 +2,7 @@ import Core.Chain.FamNew836N
 import Core.Chain.FamCancel836N
 
 /-!
-# The `n`-cell Imm Frame and `slice_borrow` at `SemJN₀`  `[spec §9, §19, §23]`
+# The one-cell Imm Frame at an incoming claim, and records added to a world  `[spec §9, §19, §23]`
 
 Core's `wpTS_I_frameFam`/`wpG_I_frameFam` (`Core/SliceFrames.lean`) nest one Imm Frame per cell
 of an owned array around the callback, by induction on the list (`wpG_I_frameList`). On the
@@ -10,17 +10,14 @@ chain:
 
 * `erwp_I_frameRR` is the one-cell frame `erwp_I_frameR` with the callback's raises already
   carrying the inner frames' claims (as `erwp_M_frameRR` is for the Mut Frame);
-* `erwp_I_frameListRN₀` is the list induction over it. Frame `j` lends its leaf `imm` at a
-  lifetime `αⱼ` below the frame's rest, the payloads' and the result's strata and the callback's
-  bound, its record `(pⱼ, αⱼ)` in the inner frames' world (`LocTy.addImm`); the run of the inner
-  frames is read at the lender's view by `erwp_tieEntryR` (the table is abortive), as in
-  `withbor1U_sem₀`. The callback receives every leaf at the innermost lifetime (`immCell` reads
-  `α ⊑ ⊓s`), at the world holding every record (`LocTy.addImms`). Frame `j`'s output moves what the
-  inner frames returned to the world without its record (`LocTy.extR_of_addImm`), and its claim
-  joins theirs, the cells owned again (`claimL₀`);
-* `sliceBorrowI_compatN₀` and `sliceBorrowIU_compatN₀` are Core's `sliceBorrowI_compatX` and
-  `sliceBorrowIU_compatX` against it, with `withbor1_sem₀`'s and `withbor1U_sem₀`'s steps around
-  the callback.
+* `erwp_tieEntryR` reads a run of the inner frames at the lender's view (the table is abortive);
+* `LocTy.addImms` adds a list of records to a world (`LocTy.addImm_addImms`,
+  `LocTy.extR_addImms`, `LocTy.addImms_ok`): the world holding every frame's record, at which the
+  callback receives every leaf.
+
+The list induction over `erwp_I_frameRR` is `erwp_I_frameListRN` (`FamImmKW835N`); `slice_borrow`
+at `SemJN` is `sliceBorrowI_compatN` (`FamImmKW835N`) at the pure row and `sliceBorrowIU_compatN`
+(`UnwindKW835N`) at an unwinding row.
 -/
 
 noncomputable section
@@ -230,10 +227,6 @@ open BoCa.Fig16.LogRel.Core.Chain.SI
 open BoCa.Fig16.LogRel (LtLife substAll)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open BoCa.BoLo (Heap Kont Head ubindE)
-
-/-! ### `slice_borrow` at the pure row -/
-
-/-! ### `slice_borrow` at an unwinding row -/
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

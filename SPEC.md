@@ -5474,6 +5474,11 @@ R1 of `docs/async-capabilities.md` §3.3 as a rule of an extended judgment besid
 states its soundness as `PinLaw`. `CDerives` and its theorems are unchanged; a program that does not
 use R1 keeps them unconditionally.
 
+The chain interpretation of §62 has a second named hypothesis of the same form, `HandlerLawN`
+(`Core/Chain/HandlerLawN.lean`): the compatibility lemmas of `[handle]` at a value form, BOXED-κ
+`[handle]` and `reify`, from which `FundamentalN` and plain adequacy `Goal791N` are proved (§62,
+*The named assertion*).
+
 *Decision 71 is void (decision 72); R1 and `PinLaw` stay as stated here until §62's PRs land.*
 
 **Frozen for now (decision 71, the user's "Freeze r1 for now").** R1, with §29a's cancel-path
@@ -11011,6 +11016,56 @@ passes through.
 - **Raise, cancel and panic unwind only through closeable points.** A raise passes a `[let]` frame
   only at a row that cancels, where the rule above holds; a cancel runs `κ.2`, which exists only at
   a `cancel` operation. Core has no panic: an integer division with no answer raises (§39).
+
+### The named assertion: `HandlerLawN` (#835)
+
+Over the chain, at the relation at the typed world `KW` (`Core/Chain/Goal791N.lean`), every
+`CDerives` rule but three has a compatibility lemma, and `fundamentalN_all` proves `SemJN` at every
+derivation from those three, `MissingN`. `HandlerLawN` (`Core/Chain/HandlerLawN.lean`) names them
+as one hypothesis, a `Prop` and not an axiom, in `PinLaw`'s form (§29): three fields, each over
+`SemJN` premises only, at every row, qualifier, handler and handled computation.
+
+| Field | Rule | Core's lemma |
+|---|---|---|
+| `handleV : HandleVN` | `effHandleV`, `[handle]` at a value form | `handleV_compatC` |
+| `handleVB : HandleVBN` | `effHandleVB`, BOXED-κ `[handle]` | `handleV_compatCB` |
+| `reify : ReifyN` | `reify` | `reify_compatX` |
+
+The top-level theorem is plain adequacy, every handler inside the program
+(`Core/Chain/Adequacy791N.lean`):
+
+    Goal791N : every cs, e₀ with (∀ c ∈ cs, c.OK) and CDerives ∅ (ctx791 cs) e₀ (F 1)
+               has OrDiverges (substAll (vals791 cs) e₀)
+    goal791N            : HandlerLawN → Goal791N
+    fundamentalN_all    : MissingN → CDerives Δ Γ e j → SemJN Δ Γ e j
+    handlerLawN_iff     : HandlerLawN ↔ MissingN
+
+No scheduler, scheduler contract (`SchedOKN`) or restriction on handler names is quantified over:
+a program that suspends handles its operations inside itself, and those handlers are typed by
+`CDerives`'s handler rules.
+
+It is believed because Core proves all three on its own relation, and `PinLaw` already rests on
+the same belief: a borrow held across a suspension is sound under a handler written in the
+program. The step `cN` does not give is the one `docs/new-core/assert-boundary.md` §2.2 names: a
+clause that keeps `κ` hands it to `vN`'s `U` clause, which reads `KW.OwedR`, where the stop owes it
+along `KW.Owed` at the floor the stop chose; `reify` reads its loop through the same clause. The
+tail and last handlers (`effHandleT`, `effHandleL`) resume or cancel `κ` at the world the clause's
+value is posted at, and are proved (`handleT_compatN`, `handleL_compatN`).
+
+- **Not refuted.** Every configuration in the tree was checked against the three fields
+  (`docs/new-core/configurations.md`, *Against `HandlerLawN`*): each is pointwise over a `κ`, a
+  world or a share, and those at a `κ` use the thunk `κ = ()`, which no `[op]` step hands a clause
+  (`kappa_ne_unit`, `kappaC_ne_unit`), and whose resumption is final (`unit_resume_final`), where
+  every handed `κ`'s resumption steps (`kappa_resume_not_final`, `kappaC_resume_not_final`). Not
+  verified that no typed instance refutes a field.
+- **Not vacuous.** `handle_resume_inst`: the conclusion of `HandleVN` and `HandleVBN` at the
+  relation at `KW` holds at the handler `resumeH`, whose one clause receives `κ` and resumes it,
+  over every handled computation at every outer row (`handleVN_at_resumeH`,
+  `handleVBN_at_resumeH`); every premise of each holds there over `perform`
+  (`handleVN_resume_premises`, `handleVBN_resume_premises`). `ReifyN`'s premises hold at the
+  residual `λx. x` (`reifyN_premises_inst`); no instance of its conclusion is proved. `Goal791N`'s
+  premises hold at `prog791` (`goal791N_premises_inst`): a cell lent `mut` with `withbor (2)`,
+  its callback performing `wait` while it holds the borrow, `wait` handled inside the program.
 
 ### Not claimed
 

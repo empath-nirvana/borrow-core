@@ -17,9 +17,12 @@ on the index, each case the existing one:
   the cell the claim the `raise` carries (`erwp_M_frameR`'s case). The lender's stops are at a
   twin table `T′`, its raises carrying the claim (`opTableR`).
 
-The lender's cancel obligations, the finaliser frame and the compatibility of `withbor (2)` at a
-suspending row (`withbor2S_compat₀`) are in `Core/Chain/Cancel791N.lean`, where each cancel run
-runs at its own cancel row's table.
+The lender's cancel obligations and the finaliser frame are in `Core/Chain/Cancel791N.lean` and
+`Core/Chain/ClaimKW835N.lean`, where each cancel run runs at its own cancel row's table; the
+compatibility of `withbor (2)` at a suspending row (`withbor2S_compat`) is in
+`Core/Chain/CancelKW835N.lean`. This file also holds the terms and rows the lend's instances read
+(`NFv`, `DFv`, `cbRelease`, `unitThunk`, `closingOp`, `hardestRow`); the configurations at
+`vN`/`cN` are in `Core/Chain/ConfigsKW835N.lean`.
 -/
 
 noncomputable section
@@ -170,7 +173,7 @@ theorem erwp_M_frameCR {Φ : LocFam} {l : Loc} {A : Life} {F : Nat → Val → S
 
 end BoCa.Fig16.LogRel.Core.Chain.SI
 
-/-! ## The suspending `mut` lend, compatible with the interpretation -/
+/-! ## Terms and rows of the suspending `mut` lend -/
 
 namespace BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 open BoCa

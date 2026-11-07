@@ -7,8 +7,9 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 /-!
 # `withbor (1)` and `withbor (2)` at the pure row, at the typed world  `[spec §62]`
 
-`ImmLend833N`'s pure-row lends at `SemJN`: the callback stops nowhere, so the one-world Imm and
-Mut Frames apply at `F A`'s empty table (`cN_ret_iff`).
+Core's `withbor1_compatX` and the `mut` lend at the pure row at `SemJN` (`withbor1_compatN`,
+`withbor2_compatN`), over `ImmLend833N`'s steps: the callback stops nowhere, so the chain's Imm and
+Mut Frames at `erwp` apply at `F A`'s empty table (`cN_ret_iff`).
 -/
 
 namespace BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N

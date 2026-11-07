@@ -1,25 +1,27 @@
 import Core.Chain.Borrow834N
 
 /-!
-# The unwinding reborrows `withbor (3)` and `withload` at `SemJN₀`  `[spec §19, §62]`
+# The Mut Anti-Frame at an unwinding row  `[spec §19, §62]`
 
 Core's `withbor3U_compatX` and `withloadU_compatX` (`Core/EffBorrow.lean`), step by step, at the
 per-lend world, any `Δ` and a `Row.Unwind x` row. Every entry of such a row's table is abortive
-(`tabN_unwind_abort`), so the callback's stops are raises and nothing is resumed under the
-borrow.
+(`tabUN_abort`), so the callback's stops are raises and nothing is resumed under the
+borrow. This file holds the anti-frame and an unwinding row with an unrestricted operation; the
+rules at `SemJN` are in `UnwindKW835N`.
 
 * `erwp_M_antiFrameU`: the Mut Anti-Frame at an unwinding row (Core's `ewpTS_M_antiFrameU`),
   `erwp_M_antiFrameCR` at the row's own table as its twin. The twin guards no stop; only the
   raises' claim (`hRin`/`hRout`) remains, and the cancel obligations are vacuous.
-* `withbor3U_sem₀`, `withbor3U_compatN₀`: `withbor3S_compat₀`'s steps with the bound `Δ.meetOfDom`,
-  the callback's table the lender's (`tabN_unwind_eq_add`), the anti-frame `erwp_M_antiFrameU`,
+* `withbor3U_sem`, `withbor3U_compatN`: `withbor3S_compat`'s steps with the bound `Δ.meetOfDom`,
+  the callback's table the lender's (`tabUN_eq_add`), the anti-frame `erwp_M_antiFrameU`,
   the claim consistent (`erwp_claimX_abort`), the finaliser frame at a raise (`erwp_ubindRaise`,
-  `fin_claimMN₀`).
-* `withloadU_sem₀`, `withloadU_compatN₀`: `withloadS_compat₀`'s steps, 6.150 across the row's raises
-  (`withload_rebT₀`, `erwp_rebGen`). An unwinding row may hold an unrestricted operation; it is
+  `fin_claimMN`).
+* `withloadU_sem`, `withloadU_compatN`: `withloadS_compat`'s steps, 6.150 across the row's raises
+  (`withload_rebT`, `erwp_rebGen`). An unwinding row may hold an unrestricted operation; it is
   abortive, so it never resumes and the reborrow is never re-entered through it
   (`OpTabN.RebOKR.entry` reads only resumable entries). The row's table admits the reborrow at
-  every `β` (`tabN_unwind_rebOKR`) and has no cancel obligation (`tabN_unwind_rebClosed`).
+  every `β` (`tabUN_rebOKR`) and has no cancel obligation (`tabUN_rebClosed`) (`unrRaiseRow`,
+  `unrRaiseRow_unwind`: such a row).
 -/
 
 noncomputable section
@@ -68,12 +70,6 @@ open BoCa.Fig16.LogRel.Core.Chain.SI
 open BoCa.Fig16.LogRel (LtLife substAll)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open BoCa.BoLo (Heap Kont Head ubindE)
-
-/-! ### An unwinding row's table -/
-
-/-! ### `withbor (3)` at an unwinding row -/
-
-/-! ### `withload` at an unwinding row -/
 
 /-! ### An unwinding row with an unrestricted operation -/
 

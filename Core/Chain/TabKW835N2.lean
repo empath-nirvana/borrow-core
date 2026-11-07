@@ -8,7 +8,7 @@ import Core.Chain.HandleK835N
 `docs/new-core/scope-835-tables.md` §8. Two premises of the mechanical producers read off the
 typed tables at `KW`:
 
-* **the guarded twin with the frame** (`tabGK_canF`, `tabG_canF` at `KW`): the field reborrow
+* **the guarded twin with the frame** (`tabGK_canF`): the field reborrow
   `withborF` frames `ℓ ↦ own(loc ℓ₂)` outside the Mut Frame at the field (`erwpK_frameGR`); the
   guarded twin's cancel obligations with the frame beside the share are the twin's, by induction on
   how deep cancel rows nest, each step `erwpK_frame_cancelRunGR` at the cancel row's tables. The
@@ -112,8 +112,7 @@ theorem tab_lookupGGK : ∀ (F : CTy) {R : Nat → WProp} {G : ShareG} {vr : VRe
   | .all _ _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
   | .nu _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
 
-/-- Two guarded twins at the same world agree but for the cancel obligations (`tabG_tabG_twin` at
-`KW`). -/
+/-- Two guarded twins at the same world agree but for the cancel obligations. -/
 theorem tabGK_tabGK_twin (R : Nat → WProp) (G : ShareG) (R' : Nat → WProp) (G' : ShareG)
     (vr : VRel) (g : KW → KW) (F : CTy) (δ : LSub) (x : KW) :
     (tabGK (ℍ := ℍ) R G vr g F δ x).Twin (tabGK (ℍ := ℍ) R' G' vr g F δ x) := by
@@ -124,7 +123,7 @@ theorem tabGK_tabGK_twin (R : Nat → WProp) (G : ShareG) (R' : Nat → WProp) (
 /-! ### The guarded twin with the frame -/
 
 /-- **The guarded twin's cancel obligations with a frame beside the share, at the typed world**
-(`tabG_canF` at `KW`, the premise `hcan` of `erwpK_frameGR`), by induction on how deep cancel rows
+(the premise `hcan` of `erwpK_frameGR`), by induction on how deep cancel rows
 nest: at a capturable entry the cancel run at its cancel row's guarded table is framed
 (`erwpK_frame_cancelRunGR`), its entries' order read at the run's share (`KW.Owed.left`), its own
 nested cancel obligations by the induction. -/
@@ -200,10 +199,9 @@ theorem erwpK_frameGR_tab {V : KW → KW → Prop} {Φ : KW → LocFam} {xv : Li
   cases Option.some.inj h₂
   exact KW.Owed.left hcσ hvσ hy'
 
-/-! ### The scheduler's `[handle]` at a row's table -/
+/-! ### An entry's order at a row's table -/
 
-/-- **An entry's order at a part of a valid share, at a row's table** (the premise `hwk` of
-`erwpK_handle_schedKW`). -/
+/-- **An entry's order at a part of a valid share, at a row's table**. -/
 theorem tabNK_wkLeft {vr : VRel} (F : CTy) (δ : LSub) :
     ∀ x m i en, tabNK (ℍ := ℍ) vr id F δ x m i = some en → ∀ f y (ρ₁ ρ₂ ρ : WRes),
       ResU.CompS ρ₁ ρ₂ ρ → ResU.Valid ρ → en.wk f y ρ → en.wk f y ρ₁ := by
@@ -212,7 +210,7 @@ theorem tabNK_wkLeft {vr : VRel} (F : CTy) (δ : LSub) :
   exact KW.Owed.left hc hv hy
 
 /-- **Every world an entry of a row's table owes its continuation at has a valid location
-typing** (the premise `hOK` of `erwpK_handle_schedKW`). -/
+typing**. -/
 theorem tabNK_wkOK {vr : VRel} (F : CTy) (δ : LSub) :
     ∀ x m i en, tabNK (ℍ := ℍ) vr id F δ x m i = some en → ∀ f y ρ, en.wk f y ρ → y.Θ.OK := by
   intro x m i en h f y ρ hy

@@ -7,9 +7,10 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 /-!
 # `withswap` and `withbor (3)` at the pure row, at the typed world  `[spec §62]`
 
-`Borrow834N`'s `withswap_compatN` and `withbor3_compatN` at `SemJN`: the callback stops nowhere
-(the pure row), so the one-world Mut Frame and Anti-Frame apply at `F A`'s empty table, read
-through `cN_ret_iff`. `callback_at_imageP` is the pure-row callback at a reborrow's image.
+Core's `withswap_compatX` and `withbor3_compatX` at `SemJN` (`withswap_compatN`,
+`withbor3_compatN`): the callback stops nowhere (the pure row), so the chain's Mut Frame and
+Anti-Frame at `erwp` apply at `F A`'s empty table, read through `cN_ret_iff`. `callback_at_imageP`
+is the pure-row callback at a reborrow's image.
 -/
 
 namespace BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
@@ -287,7 +288,8 @@ theorem withbor3_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
 /-- **The pure callback at the image**: the callback `U(∀'x ⊏ @bnd. F(U(Imm̲ 'x A ⊸ F(['x] B))))`,
 at `β ⊏ @bnd`, its `f ()` run beside the image (`erwp_bind_frame`), then applied to the image's
 value; its result `['x] B` read at `B` (`vN_extend_of_not_free`). The pure row's `withload_compatX`
-reads the callback this way, where the unwinding form reads `callback_at_image₀`. -/
+reads the callback this way; a suspending row reads it by `callback_at_image`, an unwinding row by
+`callback_at_imageU`. -/
 theorem callback_at_imageP {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     (hB : ¬ VFree x B) {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK)
     {c : Loc → Option Life} {n : Nat} {ls : List SRec} {f u : Val} {ρf χ Bχ : WRes} {β : Life}

@@ -7,8 +7,9 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 /-!
 # `μ` at the typed world  `[spec §47]`
 
-`Mu836N`'s rules at `SemJN`: `roll`, `unroll`, and the folds `fold_own` and `fold_reuse` over the
-traversal specifications, each the one-world proof, the algebras' `F` answers read at the empty
+The `μ` rows at `SemJN`: `roll`, `unroll`, and the folds `fold_own` and `fold_reuse` over the
+traversal specifications (`roll_compatN`, `unroll_compatN`, `foldOwn_compatN`,
+`foldReuse_compatN`), over `Mu836N`'s reductions, the algebras' `F` answers read at the empty
 table (`erwp_of_cN_ret`).
 -/
 

@@ -4,16 +4,22 @@ import Core.Chain.ImmTie791N
 import Core.Chain.SI.RebRaiseC
 
 /-!
-# `withload` at a suspending row  `[spec §62]`
+# `withload` at a suspending row: the witness and the image  `[spec §62]`
 
 Core's `withload_compatX` (`Core/Compatibility.lean:252`), step by step (`chain-interpretation.md`
-§6.3), at a `Row.Suspend` callback row:
+§6.3), at a `Row.Suspend` callback row, is `withloadS_compat` (`WithloadSKW835N`), over
+`withload_rebT` (`WithloadKW835N`). The callback's table is the constant's
+(`tabN_extend_suspendC`): the row's layers do not mention `'x`. It may be stopped at under a
+reborrow at `β ⊏ @bnd` (`tabNK_rebOKR_K`), and its cancel obligations are closed under the
+reborrow (`tabNK_rebCanK`, by induction on how deep cancel rows nest, `erwp_rebGen_cancelRun` at
+each level).
 
-* **The tables.** The callback's table is the constant's (`tabN_extend_suspendC₀`): the row's
-  layers do not mention `'x`. It may be stopped at under a reborrow at `β ⊏ @bnd`
-  (`tabN_rebOKR`), and its cancel obligations are closed under the reborrow (`tab_rebClosed`,
-  by induction on how deep cancel rows nest, `erwp_rebGen_cancelRun` at each level: the
-  `tabR_canA` pattern).
+This file holds the facts those read that do not read the relation: the witness read at the run's
+first entry (`desc_mem_of_tie`, `cohE_of_immWitW`), the witnesses of an image's new cells
+(`immWitW_root`, `immWitW_rootMut`, `immWitW_child`, `immWitW_childMut`), a chain view's template
+(`tmplD_exists`), the image's lifetimes from the run's tags (`lifeBoundW_of_entry`,
+`lifeBoundOn_reb`, `lifeBoundWit_reb`), the reborrow's type (`tyEq_immReb`), and `wl`'s
+antecedent at the hardest case's row (`wl_ok`).
 -/
 
 noncomputable section
@@ -279,7 +285,7 @@ theorem tyEq_immReb {A T : VTy} {δ δ' : LSub} (he : TyEq A δ T δ') {x y : Li
   TyEq.immReborrow (by rw [interp_ext_self, interp_ext_self])
     (TyEq.extend_left hy β (TyEq.extend_left hx β he).symm).symm
 
-/-! ### `withload` at a suspending row -/
+/-! ### `wl`'s antecedent -/
 
 /-- **`wl`'s antecedent holds** at the hardest case's row. -/
 theorem wl_ok (a : Lifetime.Life) (x : LifeVar) :

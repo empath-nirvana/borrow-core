@@ -21,8 +21,6 @@ The laws: downward closure (`cN_down`, `tabN_downI`), `δ` read only at free var
 (`cN_congr`), values along the resource-relative order (`vN_extR`), values in a lend's stratum
 (`vN_local`, `vN_outlives`), the `μ`/`ν` fixed points (`vN_ind`, `cN_nu_unfold`), `F_Σ R` at the
 row's table (`cN_effOf`, `cN_effOf_tabF`).
-
-`Goal791N0` holds the one-world relation (`cN₀`, `vN₀`, …) and the statements still read over it.
 -/
 
 noncomputable section
@@ -2504,7 +2502,7 @@ theorem finNK_vN (F : CTy) (δ : LSub) :
   rw [finN_eq, ← finF_N]; rfl
 
 /-- **`F A` is `erwp` at the empty table**: a run that stops nowhere reads no world, so at every
-floor it is the one-world run. -/
+floor it is the run at `erwp`. -/
 theorem cN_ret_iff (A : VTy) (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (n : Nat)
     (ls : List SRec) (e : Expr) (ρ : WRes) :
     cN (ℍ := ℍ) (.ret A) δ Θ c n ls e ρ ↔

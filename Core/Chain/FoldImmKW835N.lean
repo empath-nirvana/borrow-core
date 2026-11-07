@@ -7,7 +7,8 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 /-!
 # The `imm` fold at the typed world  `[spec §47, §62]`
 
-`FoldImm836N`'s `foldImm_compatN` at `SemJN`: the traversal stops nowhere, each leaf's `withload`
+Core's `foldImm_compatX` (`Core/FoldImm.lean`) at `SemJN` (`foldImm_compatN`), over
+`FoldImm836N`'s reductions: the traversal stops nowhere, each leaf's `withload`
 is `withload_rebT` at the empty table, and the algebras' `F` answers are read at the empty table
 (`erwp_of_cN_ret`).
 -/

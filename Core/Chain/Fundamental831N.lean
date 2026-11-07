@@ -20,30 +20,17 @@ import Core.Chain.Let835N
 import Core.Chain.Mu836N
 import Core.Chain.Nu837N
 import Core.Chain.Rules834N
-import Core.Chain.Then835N
+import Core.Chain.Iter835N
 import Core.Chain.Unwind833N
 import Core.Fundamental
 
 /-!
-# `FundamentalN₀` assembled by induction on `CDerives`  `[spec §62]`
+# Adapters for the fundamental property's induction  `[spec §62]`
 
-`docs/new-core/scope-831-interface.md` §14. `fundamentalN_all` is Core's `fundamentalC` at
-`SemJN₀`: one case per constructor of `CDerives`, in `fundamentalC`'s order and with its case
-splits, each calling the rule's chain lemma. The rules with no chain lemma are the conjuncts of
-`MissingN`, each stated as its `*_compatN` would be: Core's compatibility lemma with `SemV`/`SemC`
-read as `SemJN₀`.
-
-No chain lemma takes a fragment premise, so the induction proves `SemJN₀` at every derivation;
-`fundamentalN_of` reads `FundamentalN₀` off it, the fragment premise unused.
-
-The small adapters, each a corollary of the chain's existing laws:
-* `ret_compatN₀`, `ofRet_compatN₀`: `jdgC (.val A)` is `F A`;
-* `topI_compatN₀`: `⊤` holds every term;
-* `unitI_compatN₀`, `sumI₁_compatN₀`, `sumI₂_compatN₀`: Core's proofs, `erwp_val` and `erwp_bind`;
-* `proj₁_compatN₀`, `proj₂_compatN₀`: `cN₀` at `&` is the pair of projections;
-* `bangE_compatN₀`, `boxE_compatN₀`: the postcondition weakened (`erwp_mono`);
-* `semJN_dead₀`: Core's `semC_dead`, for `effAwait` at a consumed context;
-* `semJN_effOf_rc₀`: Core's `semC_effOf_rc`, for the handlers' marked rows.
+`docs/new-core/scope-831-interface.md` §14. Small facts the rules at `SemJN` (`RulesKW835N`,
+`FamOpsKW835N`) and the induction on `CDerives` (`fundamentalN_all`, `FundamentalKW835N`) read:
+`liveWithin_dead_ctx` (a consumed context lives within every value list), `awaitE_closed`, and
+`swap` as a value (`swapV`, `swapAt`).
 -/
 
 noncomputable section

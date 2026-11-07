@@ -5,23 +5,22 @@ import Core.Chain.ThenKW835N
 /-!
 # The lend's claim at the typed world  `[spec §62]`
 
-`docs/new-core/scope-835-tables.md` §10.11. `Cancel791N`'s claim machinery at `KW`:
+`docs/new-core/scope-835-tables.md` §10.11. The suspending lend's claim machinery at `KW`:
 
 * `tabRWK`/`finRWK`: the lender's twin with a claim read at a world: `tabRK`'s entries, every
   capturable one's cancel run at its cancel row's own table, its cancel's `raise` carrying the claim
   at the world it is raised at;
 * `erwpK_claimXK`, `erwpK_cancelRun_claimXK`: the lender's run carries the view's consistency to its
-  claim (`erwp_claimX`, `erwp_cancelRun_claimX`). At a world the run is read at the view of that
-  world: a run from a resource consistent with the view returns consistent resources
-  (`rwpG_consistentXV`); a stop's continuation is resumed from its share, consistent with the
-  resumption world's view (`KW.Owed`), and an answer, consistent with it by the entry's answer; a
-  cancellable stop's cancel run is one at its cancel row's table, by induction on how deep cancel
-  rows nest;
-* `tabRWK_ubindCan`: the finaliser frame over the lender's cancel runs (`erwp_ubind_cancelRunCR` at
-  `KW`): a cancellable stop's cancel run at `tabRWK` under `ubind (N, D)` is one at `tabNK`, by
-  `erwpK_ubind_cancelRunCRI` and induction on how deep cancel rows nest;
-* `erwpK_ubindClaimRWK`: the finaliser frame around the lender's body (`erwp_ubindClaimRT` at
-  `KW`), by `erwpK_ubindClaimRTI`.
+  claim. At a world the run is read at the view of that world: a run from a resource consistent with
+  the view returns consistent resources (`rwpG_consistentXV`); a stop's continuation is resumed from
+  its share, consistent with the resumption world's view (`KW.Owed`), and an answer, consistent with
+  it by the entry's answer; a cancellable stop's cancel run is one at its cancel row's table, by
+  induction on how deep cancel rows nest;
+* `tabRWK_ubindCan`: the finaliser frame over the lender's cancel runs: a cancellable stop's cancel
+  run at `tabRWK` under `ubind (N, D)` is one at `tabNK`, by `erwpK_ubind_cancelRunCRI` and
+  induction on how deep cancel rows nest;
+* `erwpK_ubindClaimRWK`: the finaliser frame around the lender's body, by
+  `erwpK_ubindClaimRTI`.
 
 Each is read at the worlds an invariant `Inv` holds at, which every world a stop at a floor no
 higher than the run's own owes its continuation at keeps (`hInvW`).
@@ -198,12 +197,12 @@ theorem entNK_capB {q : Qual} {B : VTy} {PA : Nat → Val → WRes → Prop}
 
 /-- **The claim, consistent with the view of a world.** The finaliser consumes the claim at the
 world its `raise` is at, by `d`'s judgment, whose argument clause reads a view consistent with the
-argument (`fin_claim₀`). -/
+argument (`fin_claim`). -/
 def claimXK (R : Nat → WProp) : KW → Nat → WProp :=
   fun z k ρ => R k ρ ∧ ConsistentX z.c ρ
 
 /-- **A cancel run at the lender's twin carries the view's consistency to its claim, at the typed
-world** (`erwp_cancelRun_claimX`). A run at a world, from a resource consistent with that world's
+world**. A run at a world, from a resource consistent with that world's
 view, returns consistent resources (`rwpG_consistentXV`), so the claim a `raise` carries is
 consistent with it; a stop's continuation is resumed at a world whose view is consistent with its
 share (`KW.Owed`) and with the answer (the entry's answer); a cancellable stop's cancel run is one at
@@ -256,7 +255,7 @@ theorem erwpK_cancelRun_claimXK {vr : VRel} {R : Nat → WProp} {δ : LSub} :
       consistentX_right hy hcσ hvσ⟩⟩)
 
 /-- **A body at the lender's twin carries the view's consistency to its claim, at the typed
-world** (`erwp_claimX`): as `erwpK_cancelRun_claimXK`, at a `raise` the claim beside the payload. -/
+world**: as `erwpK_cancelRun_claimXK`, at a `raise` the claim beside the payload. -/
 theorem erwpK_claimXK {vr : VRel} {R : Nat → WProp} {F : CTy} {δ : LSub} {Q : KW → PostN} :
     ∀ n (x : KW) ls e ρ, ConsistentX x.c ρ →
       erwpK (ℍ := ℍ) KW.PostK (fun z => z.Θ.view z.c)
@@ -339,7 +338,7 @@ theorem tabRWK_wkInv {RW : KW → Nat → WProp} {vr : VRel} {F : CTy} {δ : LSu
   exact hInvW x hx f hf y ρ hy
 
 /-- **The finaliser frame over the lender's cancel runs, at the typed world**
-(`erwp_ubind_cancelRunCR` at `KW`, the premise `hcan` of `erwpK_ubindClaimRTI`): a cancellable
+(the premise `hcan` of `erwpK_ubindClaimRTI`): a cancellable
 stop's cancel run at its cancel row's `tabRWK`, under `ubind (N, D)`, is one at its `tabNK`, at the
 worlds `Inv` holds at. By `erwpK_ubind_cancelRunCRI` at the cancel row, its own cancellable stops by
 the induction on how deep cancel rows nest. -/
@@ -381,8 +380,8 @@ theorem tabRWK_ubindCan {vr : VRel} (hv : ValRelOK vr) {RW : KW → Nat → WPro
       hin
   · simp [entNK, hcap] at hP
 
-/-- **The finaliser frame around the lender's body, at the typed world** (`erwp_ubindClaimRT` at
-`KW`): `erwpK_ubindClaimRTI` at `tabRWK`/`tabNK`, at the worlds `Inv` holds at, the lender's cancel
+/-- **The finaliser frame around the lender's body, at the typed world**:
+`erwpK_ubindClaimRTI` at `tabRWK`/`tabNK`, at the worlds `Inv` holds at, the lender's cancel
 runs by `tabRWK_ubindCan`. -/
 theorem erwpK_ubindClaimRWK {vr : VRel} (hv : ValRelOK vr) {RW : KW → Nat → WProp}
     {Inv : KW → Prop} (hΦ : ∀ x : KW, Inv x → (x.Θ.view x.c).Down)

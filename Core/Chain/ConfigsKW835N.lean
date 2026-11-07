@@ -10,8 +10,12 @@ import Core.Chain.ImmRec791N
 /-!
 # Configurations at the relation at `KW`  `[spec §62]`
 
-The configurations of `Map831N`, `ImmRec791N`, `Depart831N`, `Shape791N`, `ExtRLit791`,
-`Kappa835N`, `Public835N` and `LendExit835N` that read `𝒱⟦·⟧` or `𝒞⟦·⟧`, at `vN`/`cN`.
+The configurations that read `𝒱⟦·⟧` or `𝒞⟦·⟧`, at `vN`/`cN`, one section per file whose design
+they check: `ImmRec791N`, `Depart831N`, `Shape791N`, `ExtRLit791`, `Kappa835N`, `Public835N`,
+`LendExit835N` and `Lend791N`. The `Map831N` section checks an `imm` lend's step at the per-lend
+world (`docs/new-core/scope-831-map.md` §3): at an `OK` world with a `mut` key at `α`, the world
+with one more record lent below `α` is an extension (`extR_addImm_inst`), and an extension of it
+holds an `Imm` value (`imm_at_extension`).
 -/
 
 noncomputable section
@@ -155,7 +159,7 @@ open BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 open BoCa.Fig16.LogRel.Core.Chain.SI.ImmRec791N (recT cellI escU escU_inStratum)
 open BoCa.Lifetime (LSub LifeVar)
 
-/-- **The step `tabN_unwind_eq` takes, under the location reading**: a value of an `Imm` type at
+/-- **The step `tabUN_eq_addImm` takes, under the location reading**: a value of an `Imm` type at
 the world with a record lent at `α`, at a resource in `Res_α`, is at an extension of the world
 without the record. -/
 def UnwindArgStepLoc : Prop :=
@@ -629,5 +633,68 @@ theorem flooredExit_inst :
     consistentX_single_mut (consistentX_empty c) rfl⟩
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.LendExit835N
+
+
+/-! ## `Lend791N` -/
+
+namespace BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
+open BoCa
+open BoCa.Fig16
+open BoCa.Fig16.BoLo
+open BoCa.Fig16.LogRel.Core
+open BoCa.Fig16.LogRel.Core.Chain.SI
+open BoCa.Fig16.LogRel.Core.Chain.SI.LendProg (noOwn_single_mut)
+open BoCa.BoLo (Head Kont)
+open BoCa.Lifetime (LSub LifeVar)
+
+/-- **`λ_. λu. ()` is a callback of the lend at the empty row and the answer `1`**: it performs
+nothing, and the borrow is left as garbage at the return (admissible: Core has `releaseMut`).
+A callback that performs at a suspending row while holding the borrow is `cbPerform_sem`
+(`Core/Chain/ConstKW835N.lean`). -/
+theorem cbRelease_sem {x : LifeVar} {bnd : Lifetime.Life} {A : VTy} {δ : LSub}
+    (Θ : LocTy) (n : Nat) :
+    vN (ℍ := ℍ) (cbUTy x bnd (.mut (.var x) A) .unit []) δ Θ n cbRelease PMap.empty := by
+  intro Θ' _ hOK c _ ls
+  refine fun α _ c' k _ v ρv ρ' hc hv _ => ?_
+  obtain rfl := eq_of_compS_empty_left hc
+  obtain ⟨β, hβ, b, -, ⟨l, w, χ, hχ, j, hw, -, rfl, -, rfl⟩, -⟩ := hv
+  have hΦ := LocTy.view_down hOK.1 c'
+  have hQ : PostN.Down
+      (fun k _ v ρ => vN (ℍ := ℍ) (.box (.var x) .unit) (δ.extend x α) Θ' k v ρ) :=
+    fun k _ v ρ h => vN_down _ _ _ k v ρ h
+  refine (cN_ret_iff _ _ _ _ _ _ _ _).mpr ?_
+  show erwp (ℍ := ℍ) (Θ'.view c') (opTableN OpTabN.empty) _ k ls
+    (.app (.app cbRelease.1 (.val .unit)) (.val (Val.loc l))) _
+  refine erwp_det hΦ (opTableN_down OpTabN.empty_down) hQ
+    (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl (.appL .hole (Val.loc l))) ?_
+  refine erwp_det hΦ (opTableN_down OpTabN.empty_down) hQ
+    (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl .hole) ?_
+  simp only [Kont.plug, Expr.subst, Val.unit, Expr.val]
+  exact erwp_garbage (compS_empty_left _) (noOwn_single_mut l)
+    (erwp_val (v := Val.unit) ⟨α, interp_ext_self δ x α, ⟨rfl, rfl⟩, ResU.inStratum_empty α⟩)
+
+/-- **`U(F 1)` has values outside every stratum `↓α`**: `λ_. ()` holding a short `mut` cell as
+garbage. -/
+theorem answer_not_inStratum (δ : LSub) (α : Life) (l : Loc) :
+    ∃ ρ : WRes, (∀ Θ n, vN (ℍ := ℍ) (.thunk (.ret .unit)) δ Θ n unitThunk ρ) ∧
+      ¬ ρ.InStratum (↓α) := by
+  refine ⟨ResU.single l (CellU.mutOf (↓(↓α)) Val.unit PMap.empty
+    (ResU.inStratum_empty _) (fun _ _ => True) trivial), fun Θ n Θ' _ hOK c _ ls => ?_,
+    fun h => ?_⟩
+  · have hΦ := LocTy.view_down hOK.1 c
+    refine (cN_ret_iff _ _ _ _ _ _ _ _).mpr ?_
+    show erwp (ℍ := ℍ) (Θ'.view c) (opTableN OpTabN.empty) _ n ls
+      (.app unitThunk.1 (.val .unit)) _
+    refine erwp_det hΦ (opTableN_down OpTabN.empty_down)
+      (fun k _ v ρ h => vN_down _ _ _ k v ρ h)
+      (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) ?_
+    simp only [Kont.plug, Expr.subst, Val.unit, Expr.val]
+    exact erwp_garbage (compS_empty_left _) (noOwn_single_mut l)
+      (erwp_val (v := Val.unit) ⟨rfl, rfl⟩)
+  · have := h l _ (ResU.single_get_self _ _)
+    rw [CellU.inStratum_mutOf] at this
+    exact lt_asymm this (Life.down_sqsubset _)
+
+end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 
 end

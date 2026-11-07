@@ -1,20 +1,22 @@
 import Core.Chain.Field791N
 
 /-!
-# #791: the compatibility lemmas' hypotheses discharged  `[spec §62]`
+# #791: the terms that discharge the compatibility lemmas' hypotheses  `[spec §62]`
 
-`withbor2S_compat₀`, `withbor3S_compat₀` and `withborFS_compat₀` take the finaliser's semantic
-judgment `hd` beside `Const791.OK`'s clauses. Here each is instantiated with every hypothesis
-discharged, so none of them is vacuous:
+`withbor2S_compat`, `withbor3S_compat` and `withborFS_compat` take the finaliser's semantic
+judgment `hd` beside `Const791.OK`'s clauses. `ConstKW835N` instantiates each with every
+hypothesis discharged, so none of them is vacuous (`withbor2S_inst`, `withbor3S_inst`,
+`withborFS_inst`, the finalisers at `SemJN` by `dRelease_sem` and `dFree_sem`, the performing
+callback by `cbPerform_sem`). This file holds the terms and `Const791.OK`'s instances:
 
-* **The finalisers.** `dRelease = λr. ()` at `Mut @a A ⊸ 1` (`dRelease_sem₀`), the borrow left as
-  garbage (Core's `releaseMut`); `dFree = λr. free r` at `Ref 1 ⊸ 1` (`dFree_sem₀`), the cell
-  freed.
-* **The constants at the hardest case's row** (`hardestRow`, `park` as `TJN` types it), the bound
-  Core's rules fix at the empty context (`LifeCtx.empty.meetOfDom`): `withbor2S_inst₀`,
-  `withbor3S_inst₀`, `withborFS_inst₀`.
-* **A callback that performs an operation while holding the borrow** (`cbPerform_sem₀`):
-  `λ_. λu. perform op ()` at a one-operation suspending row, the borrow live across the stop.
+* **The finalisers.** `dRelease = λr. ()` at `Mut @a A ⊸ 1`, the borrow left as garbage (Core's
+  `releaseMut`); `dFree = λr. free r` at `Ref 1 ⊸ 1`, the cell freed.
+* **A callback that performs an operation while holding the borrow** (`cbPerform`):
+  `λ_. λu. perform op ()` at a one-operation suspending row (`linSig`), the borrow live across the
+  stop.
+* **`Const791.OK` inhabited** (`w2_ok`, `w3_ok`, `wF_ok`) at the hardest case's row
+  (`hardestRow`, `park` as `TJN` types it), the bound Core's rules fix at the empty context
+  (`LifeCtx.empty.meetOfDom`).
 
 The finalisers are read semantically; `λr. ()` is not a `CDerives` term at `Mut @a A ⊸ 1` (the
 judgment consumes a live `Mut` only through `forget`), so these instances discharge the compat
@@ -48,8 +50,6 @@ def dFree : Expr := .val (Val.lam (freeE (.var 0)))
 theorem dRelease_closed : closedAt 0 dRelease = true := by decide
 
 theorem dFree_closed : closedAt 0 dFree = true := by decide
-
-/-! ### The constants at the hardest case's row -/
 
 /-! ### A callback that performs while holding the borrow -/
 
@@ -91,8 +91,6 @@ theorem w3_ok (a : Lifetime.Life) (x : LifeVar) :
 theorem wF_ok (a : Lifetime.Life) (x : LifeVar) :
     (Const791.wF a x LifeCtx.empty.meetOfDom .unit .unit hardestRow dRelease).OK :=
   ⟨defines_meetOfDom_empty, id, id, hardestRow_suspend x _, dRelease_closed, .releaseMut .nil⟩
-
-/-! ### The constant applied to a callback that performs while holding the borrow -/
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

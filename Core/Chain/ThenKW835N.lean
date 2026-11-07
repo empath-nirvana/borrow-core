@@ -3,7 +3,8 @@ import Core.Chain.LetKW835N
 /-!
 # `[then]` at the typed world  `[spec §14, §19, §27]`
 
-`Then835N`'s `then_compatN` at `SemJN`, step for step: `erwpK_frame_then` around `M` at the
+Core's `then_compatC` (`Core/EffFin.lean`) at `SemJN` (`then_compatN`, and `thenDiv_compatN` at a
+row holding `Div`), step for step: `erwpK_frame_then` around `M` at the
 relation's reading (`rdN`), the frame the context of `N` and `D` at the frame's world, consistent
 with its view, at a world whose location typing is `OK` (`letFrN`). At a stop the frame moves to the
 world the continuation is resumed at along the order the entry owes (as `gNFrame_carryKW`); `M`'s

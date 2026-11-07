@@ -4,13 +4,14 @@ import Core.Chain.ImmRec791N
 import Core.Chain.SI.IStopRaiseN
 
 /-!
-# The `imm` lend at `SemJN₀`  `[spec §62]`
+# The `imm` lend: the steps that do not read the relation  `[spec §62]`
 
 Core's `withbor1U_compatX` (`Core/EffBorrow.lean`) and `withbor1_compatX`
-(`Core/Compatibility.lean`), step by step, at the per-lend world:
+(`Core/Compatibility.lean`), step by step, at the per-lend world, are `withbor1U_compatN`
+(`UnwindKW835N`) and `withbor1_compatN` (`ImmLendKW835N`):
 
-* the context owns nothing (`gN_deadP₀`) and the finaliser's judgment holds at every world and
-  lower index (`gN_dead_any₀`, Core's `semV_dead_closed`);
+* the context owns nothing (`gN_deadP`) and the finaliser's judgment holds at every world and
+  lower index (`gN_dead_any`, Core's `semV_dead_closed`);
 * the lend's record goes into the callback's world (`LocTy.addImm`), an extension at the
   callback's resource in the lend's stratum (`LocTy.extR_addImm`, Core's `ext_add`); the
   callback's `Imm` argument is witnessed there by the record;
@@ -20,11 +21,15 @@ Core's `withbor1U_compatX` (`Core/EffBorrow.lean`) and `withbor1_compatX`
 * the Imm Frame across the row's raises (`erwp_I_frameR`, Core's `ewpTS_I_frameU`);
 * the callback's result `['x] B` returns to the world without the record (`LocTy.extR_of_addImm`,
   Core's `ext_drop`);
-* the finaliser frame consumes the lend's claim at a raise (`erwp_ubindRaise`, `fin_claimI₀`).
+* the finaliser frame consumes the lend's claim at a raise (`erwp_ubindRaise`, `fin_claimI`).
 
 The same steps give the `mut` lend `withbor (2)` at the pure row and at an unwinding row, at any
-`Δ` (`withbor2_compatN₀`, `withbor2U_compatN₀`): the Mut Frame across raises (`erwp_M_frameR`), the
+`Δ` (`withbor2_compatN`, `withbor2U_compatN`): the Mut Frame across raises (`erwp_M_frameR`), the
 claim consistent with the view (`erwp_claimX_abort`).
+
+This file holds the steps that do not read the relation: `rwpG_tieEntry`, `erwp_tieEntry`,
+`unwind_B`, `empty_iLendOKR`, `withbor`'s body as a value (`withborAt`, `withborVal`) and
+`erwp_claimX_abort`.
 -/
 
 noncomputable section
@@ -40,8 +45,6 @@ open BoCa.Fig16.LogRel.Core.Chain.SI
 open BoCa.Fig16.LogRel (LtLife substAll)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open BoCa.BoLo (Heap Kont Head ubindE)
-
-/-! ### A dead context -/
 
 /-! ### A run whose table never resumes reads its tie only at its entry -/
 
@@ -78,10 +81,6 @@ theorem erwp_tieEntry {Φ Φ' : LocFam} (hfam : Φ'.fam = Φ.fam) {T : OpTabN}
 theorem unwind_B {S : Row} {x : LifeVar} (hS : S.Unwind x) {o : OpSig} (ho : o ∈ S) :
     o.B = .zero := OpSig.B_zero (hS o ho).1
 
-/-! ### The finaliser at the lend's claim -/
-
-/-! ### `withbor (1)` at an unwinding row -/
-
 /-! ### `withbor (1)` at the pure row -/
 
 /-- The pure row's table may be stopped at under any lend: it has no entry. -/
@@ -103,9 +102,9 @@ theorem withborVal_eq : withborVal.1 = withbor := rfl
 
 /-! ### `withbor (2)` at an unwinding row -/
 
-/-- **A body at an abortive table carries the view's consistency to its claim** (`erwp_claimX`'s
-`raise` case): a run from a resource consistent with `c` returns consistent resources, and the
-claim a `raise` carries is part of one. -/
+/-- **A body at an abortive table carries the view's consistency to its claim** (`erwpK_claimX`'s
+`raise` case at `erwp`): a run from a resource consistent with `c` returns consistent resources, and
+the claim a `raise` carries is part of one. -/
 theorem erwp_claimX_abort {Θ : LocTy} {c : Loc → Option Life} {T : OpTabN}
     (hab : ∀ m i en, T m i = some en → en.abort = true) {R : Nat → WProp} {Q : PostN} {n : Nat}
     {ls : List SRec} {e : Expr} {ρ : WRes} (hc : ConsistentX c ρ)
@@ -121,8 +120,6 @@ theorem erwp_claimX_abort {Θ : LocTy} {c : Loc → Option Life} {T : OpTabN}
   · obtain ⟨hpt, σ₁, ρR, hcσR, hpa, hR⟩ := pure_sep_iff.mp hp
     exact Or.inr (Or.inr ⟨K₁, m, i, v, en, pure_sep_mk hpt
       ⟨σ₁, ρR, hcσR, hpa, hR, consistentX_right hcσR hcσ hvσ⟩⟩)
-
-/-! ### `withbor (2)` at the pure row -/
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

@@ -1,20 +1,10 @@
 import Core.Chain.TabK835N
 
 /-!
-# The `n`-cell Mut Frame at `erwpK`  `[spec §19, §27, §62]`
+# A run at `erwpK` may assume its resource valid  `[spec §19, §27, §62]`
 
-`docs/new-core/scope-835-tables.md` §4. `erwp_M_frameListCRN` and `erwp_M_frameListRN₀`
-(`FamCancel836N.lean`) are one list induction, each step a Mut Frame. `erwpK_M_frameList` is that
-induction at `erwpK` over any world index: the run at the world `x`, its location family
-`Φ Θ c` and its tables `TbL Θ c I` read at the location typing and the view the frames before it
-reached and at the cells not yet lent; each step the frame `hstep` from the table at the inner
-world to the table at the outer one, at `x` (`KFrame` with the invariant `· = x`). The lifetime of
-each frame is chosen fresh and below the frame's rest, `β`, `β′` and `mb`, as in the originals.
-
-Each original statement is proved again, word for word, from `erwpK_M_frameList` at one world
-(`erwp_M_frameListCRN_of_K`, `erwp_M_frameListRN_of_K`): the step is the original's, the frame
-(`erwp_M_frameCRR` / `erwp_M_frameRR`) and the claim joined to the inner frames' (`tabR_le`,
-`OpTabN.Sub.le`), read at one world by `erwp_eq_erwpK`.
+`docs/new-core/scope-835-tables.md` §4. `erwpK_of_valid`: `erwp_of_valid` at `erwpK`, over any world
+index. The rules at `SemJN` that split a valid resource use it.
 -/
 
 noncomputable section
@@ -43,8 +33,6 @@ theorem erwpK_of_valid {V : ι → ι → Prop} {Φ : ι → LocFam} {Tb : ι �
   have h' := h (ResU.Valid.split hc hT.valid).2
   rw [erwpK_eq] at h'
   exact h' ρf fρ ps μ hf hc hT htg hI hl hfd j μ' e' hj hrun hfin
-
-/-! ### The original statements at one world -/
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

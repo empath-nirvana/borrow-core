@@ -2,7 +2,7 @@ import Core.Chain.RelBase791N
 import Core.Chain.SI.CaptureScopeM
 
 /-!
-# Core's `Ext` read literally on the per-lend world breaks `vN_extA₀` at `U`  `[spec §62]`
+# Core's `Ext` read literally on the per-lend world breaks `vN_extA` at `U`  `[spec §62]`
 
 `docs/new-core/chain-interpretation.md` §5, D4. `LocTy.ExtR Θ Θ′ ρ` asks that nothing be added above a
 lifetime `a` only where `a` is a key of `Θ` with `CellIn ρ a`. Core's `Ext ls ls′ ρ`
@@ -18,9 +18,13 @@ holds the argument `ℓ′ ↦ mut(α, (), ∅, 𝒱⟦1⟧)`, and the thunk is 
 (`not_valid_at_lend`): the run of `() ℓ′` from the typed world of the two cells (`world_two`)
 is stuck at its first configuration.
 
-`vUgen E` is `vN₀`'s `U` clause, reading the order `E`, followed by `cN₀`'s `⊸` clause at this type,
-a plain wand at the world `U` reached; at `E = LocTy.ExtR` it is `vN₀` itself (`vN_eq_vUgen`). The `Mut` and `F` clauses do not
-read the order, so `vUgen ExtRL` is the literal reading's `𝒱⟦U(Mut 'x 1 ⊸ F 1)⟧`.
+`vUgen E` is `vN`'s `U` clause, reading the order `E`, followed by `cN`'s `⊸` clause at this
+type, a plain wand at the world `U` reached; at `E = LocTy.ExtR` it is `vN` itself
+(`vN_eq_vUgen`). The `Mut` and `F` clauses do not read the order, so `vUgen ExtRL` is the literal
+reading's `𝒱⟦U(Mut 'x 1 ⊸ F 1)⟧`.
+
+This file holds the order `ExtRL` and the configuration's pieces (`tyC`, `ρb`, `world_two`);
+`vUgen` and the lemmas that read `vN`/`cN` are in `Core/Chain/ConfigsKW835N.lean`.
 -/
 
 noncomputable section

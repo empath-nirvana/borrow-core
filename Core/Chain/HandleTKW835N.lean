@@ -5,8 +5,9 @@ import Core.Chain.HandleTK835N
 /-!
 # `[handle]` at clauses that resume `κ` in tail position, at the typed world  `[spec §14, §19]`
 
-`HandleT835N`'s handler at `cN`: `erwp_handle_tail` at `erwpK` and `handleT_compatN` at `SemJN`,
-each step `erwp_handle_tail₀`'s, at the relation at `KW`.
+Core's `handleT_compatC` (`Core/DivHandle.lean`) at the relation at `KW`: `erwp_handle_tail`
+(Core's `ewp_handle_tail`) at `erwpK` and `handleT_compatN` at `SemJN`, over `HandleT835N`'s
+steps.
 
 * `erwpK_postPA`: the pre-pass. The handled run's stops are consistent with the view of their
   world, and their worlds valid (`rwpG_consistentXV`, `KW.Owed`); a stop at the handler's name
@@ -298,8 +299,8 @@ theorem tabF_of_tabN {F : CTy} {δ : LSub} {x : KW} {m i : UInt32} {en : OpEntK 
     (h : tabN (ℍ := ℍ) F δ x m i = some en) : tabF (ℍ := ℍ) (rdN (ℍ := ℍ) δ) () F x m i = some en := by
   rwa [tabN_eq] at h
 
-/-- An operation of another name in `Σ` extended by the handler's effect is `Σ`'s
-(`tabN_ofEff_ne`), at the typed world. -/
+/-- An operation of another name in `Σ` extended by the handler's effect is `Σ`'s, at the typed
+world. -/
 theorem tabN_ofEff_neK {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
     (A R : VTy) (δ : LSub) (x : KW) {m i : UInt32} (hm : m ≠ n) :
     tabN (ℍ := ℍ) (CTy.effOf (Row.ofEff n E 0 fs ++ S) A) δ x m i =
@@ -308,8 +309,8 @@ theorem tabN_ofEff_neK {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → C
     Row.find_ofEff_ne n E 0 fs m i hm]
   rfl
 
-/-- **An operation of the handler's name is the effect's `j`-th, at index `j`**
-(`tabN_ofEff_self`), at the typed world. -/
+/-- **An operation of the handler's name is the effect's `j`-th, at index `j`**, at the typed world.
+-/
 theorem tabN_ofEff_selfK {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
     {A : VTy} {δ : LSub} {x : KW} (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
     {i : UInt32} {en : OpEntK KW}
@@ -331,7 +332,7 @@ theorem tabN_ofEff_selfK {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat →
     rw [Nat.zero_add]; exact UInt32.toNat_ofNat_of_lt' (by simp [UInt32.size]; omega)
   exact ⟨j, hj, hjn, rfl, rfl⟩
 
-/-- **A handler records its effect's qualifiers** (`capTag_ofEffN`), at the typed world. -/
+/-- **A handler records its effect's qualifiers**, at the typed world. -/
 theorem capTag_ofEffK {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
     {A : VTy} {δ : LSub} {x : KW} (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
     (i : UInt32) (en : OpEntK KW)
@@ -341,7 +342,7 @@ theorem capTag_ofEffK {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CT
   rw [hji, capTag_qualsVal _ j (by simpa using hj)]
   simp [RowRd.ent]
 
-/-- The frame conditions at a row of must-resume operations (`lin_condsN`), at the typed world. -/
+/-- The frame conditions at a row of must-resume operations, at the typed world. -/
 theorem lin_condsK {SN : Row} (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false) {B : VTy}
     {δ : LSub} {x : KW} {m i : UInt32} {en : OpEntK KW}
     (h : tabN (ℍ := ℍ) (CTy.effOf SN B) δ x m i = some en) : en.q = .lin ∧ en.abort = false := by
@@ -359,7 +360,7 @@ theorem tabN_wkC (δ : LSub) (G : CTy) (x : KW) (m i : UInt32) (en : OpEntK KW)
 
 /-! ### The answering functions -/
 
-/-- **The answering functions at `vN`** (`ansesTy_atN₀`). -/
+/-- **The answering functions at `vN`** (Core's `ansesTy_at`). -/
 theorem ansesTy_atN {S SN : Row} {R : VTy} {δ : LSub} {Θ : LocTy} {k : Nat} :
     ∀ (E : List (Qual × VTy × VTy)) {vc : Val} {ρ : WRes},
       vN (ℍ := ℍ) (ansesTy S SN R E) δ Θ k vc ρ →
@@ -388,7 +389,7 @@ section
 variable {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} {S SN : Row}
   {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
 
-/-- **A tail-resuming handler at the typed world** (`erwp_handle_tail₀`): `erwpK_handle_leI` at
+/-- **A tail-resuming handler at the typed world** (Core's `ewp_handle_tail`): `erwpK_handle_leI` at
 the handled row's table pre-passed by `erwpK_postPA`. A clause pays its `β` step and runs its
 answering function at its must-resume row, from the floor `f` the handled stop chose
 (`erwpK_flr_tabN`), under the resume frame (`erwpK_frame_plain_orI`, from `Σ_N` to `Σ`). The
@@ -568,10 +569,10 @@ theorem erwp_handle_tail (hΘ : Θ.OK) (hnS : ∀ o ∈ S, o.n ≠ n)
 
 end
 
-/-- **`[handle]` at clauses that resume `κ` in tail position, at `SemJN`** (`handleT_compatN₀`):
-the handler's value is read off its run at the run's start (`erwp_val_post`); the handled
-computation runs at its row's table from the part of the resource consistent with the view
-(`gN_splitC`), at every floor, and the handler is `erwp_handle_tail`. -/
+/-- **`[handle]` at clauses that resume `κ` in tail position, at `SemJN`** (Core's
+`handleT_compatC`): the handler's value is read off its run at the run's start (`erwp_val_post`);
+the handled computation runs at its row's table from the part of the resource consistent with the
+view (`gN_splitC`), at every floor, and the handler is `erwp_handle_tail`. -/
 theorem handleT_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Hr Hc e : Expr} {S SN : Row}
     {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)

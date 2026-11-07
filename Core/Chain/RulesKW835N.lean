@@ -7,16 +7,17 @@ import Core.Chain.FrameListKW835N
 /-!
 # The context and bind layer, and the rules with no stop, at the typed world  `[spec §62]`
 
-`docs/new-core/scope-835-tables.md` §10.3. The relation-level lemmas of `Iface834N`, `TyEq834N`
-and `Rules834N`, and the structural rules, at `cN`/`SemJN` (the relation at `KW`), each following
-the one-world proof:
+`docs/new-core/scope-835-tables.md` §10.3. The interface's relation-level lemmas
+(`scope-831-interface.md` §2: the G, C, V and F entries, `Iface834N`; V1, `TyEq834N`) and the
+structural rules L1 and L2 (§3), at `cN`/`SemJN` (the relation at `KW`), each Core's
+compatibility lemma line by line:
 
 * `F A` is `erwp` at the empty table at every floor (`cN_ret_iff`), so a value's judgment is read
   and built at `erwp` as before (`cN_ret_of`, `erwp_of_cN_ret`).
 * `F_Σ R` is `erwpK` at every floor from `⟨Θ, c, lo⟩` at the row's table. A computation that never
   stops binds into it (`erwpK_bind_frame`: `rwp_frame`, then `erwpK_bindR`), as `erwp_bind_frame`
   binds into `erwp`; validity is assumed by `erwpK_of_valid`.
-* The context relation `gN` reads `vN`; its laws are the one-world proofs at `vN`'s laws.
+* The context relation `gN` reads `vN`; its laws follow from `vN`'s laws.
 -/
 
 noncomputable section

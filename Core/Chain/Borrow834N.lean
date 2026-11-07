@@ -1,14 +1,12 @@
 import Core.Chain.Rules834N
 
 /-!
-# `withswap` at `SemJN₀`  `[spec §62]`
+# `withswap` and `withload` as values  `[spec §62]`
 
-Core's `withswap_compatX` (`Core/Compatibility.lean`), step by step, at the per-lend world and the
-pure row. The source's cell is at its view lifetime and the view types it with its family
-(`erwp_antiFrame_view`, the anti-frame at the view, Core's `wpTS_M_antiFrameX`); the content is
-loaded (`rwp_load`), handed to the callback, framed beside the cell (`erwp_bind_frame`, Core's
-`wpTS_bind_frame`), and the callback's first component stored back (`rwp_store`); the resealed cell
-is a `Mut @a A` value again, at the content's index.
+The terms `withswap` and `withload` run, read at the chain: `withswapV` (`withswap` as a value),
+`withswapAt` (its body at the source `ℓ`, after the first β step), `withloadAt` (`withload`'s inner
+abstraction at `ℓ`), and `consistentX_single_own` (a single owned cell is consistent with every
+view). `BorrowKW835N` (`withswap` at `SemJN`), `WithloadKW835N` and the family files use them.
 -/
 
 noncomputable section
@@ -37,10 +35,6 @@ theorem consistentX_single_own (c : Loc → Option Life) (l : Loc) (w : Val) :
 def withswapAt (l : Loc) : Val :=
   Val.lam (.letpair (.app BoCa.v0 (eLoad l))
     (.seq (.app (.app store' (.val (.loc l))) BoCa.v1) (.pair (.val (.loc l)) BoCa.v0)))
-
-/-! ### `withbor (3)` at the pure row -/
-
-/-! ### `withload` at the pure row -/
 
 /-- `withload`'s inner abstraction at the source `ℓ`: `λf. f () (load ℓ)`. -/
 def withloadAt (l : Loc) : Val :=

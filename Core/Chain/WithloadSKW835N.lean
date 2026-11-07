@@ -4,9 +4,10 @@ import Core.Chain.WithloadKW835N
 /-!
 # `withload` at a suspending row, at the typed world  `[spec §62]`
 
-`Withload791N`'s `withloadS_compat` at `SemJN`, step for step: the load (`rwp_load_cell` under
+Core's `withload_compatX` at a suspending row at `SemJN` (`withloadS_compat`), step for step, over
+`Withload791N`'s witness facts: the load (`rwp_load_cell` under
 `erwpK_bindR`); at the run's first entry the record the source witnesses, its template and the
-image re-taken at a fresh `β` (`withload_reb`, `withload_rebT₀`'s steps at `erwpK`); 6.150 across
+image re-taken at a fresh `β` (`withload_reb`, `withload_rebT`'s steps at `erwpK`); 6.150 across
 the callback's stops, raises and layered cancel runs at the row's table at the typed world
 (`erwpK_rebGen_tab`); the callback at the image as a thunk of `cN` (`callback_at_image`).
 -/
@@ -68,7 +69,7 @@ theorem tabN_extend_suspendC {x : LifeVar} {bnd : Lifetime.Life} (α : Life) :
   | .all _ _ _, _, _, _ => rfl
   | .nu _, _, _, _ => rfl
 
-/-- **The callback at the image, at `SemJN`** (`callback_at_image₀`): the callback, at
+/-- **The callback at the image, at `SemJN`**: the callback, at
 `β ⊏ @bnd`, applied to the image `χ` of the loaded payload, typed at `Imm̲ 'x A`, runs at the
 constant's table at the typed world, with `[β]𝒱⟦B⟧` as its post, from every world at `Θ`. -/
 theorem callback_at_image {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Row}
@@ -99,7 +100,7 @@ theorem callback_at_image {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : R
   rw [vN_extend_of_not_free hB] at hbB
   exact ⟨hbB, hst⟩
 
-/-- **Step 8 at the run's first entry, at the typed world** (`withload_reb₀`, `withload_rebT₀`'s
+/-- **Step 8 at the run's first entry, at the typed world** (`withload_rebT`'s
 steps at `erwpK`): the loaded cell `ℓ ↦ imm(s, v, σ)`, its payload observable at `A`, its location
 witnessed in the world's `imm` records, and the callback. At the run's first entry the tie puts
 the witness's record on the run's list (`cohE_of_immWitW`); the cell is that record's own cell
@@ -250,14 +251,13 @@ theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     rw [erwpK_eq] at hrun'
     exact hrun' ρF fρ ps μ hF hcF hT htg hI hl hfd j μ' e' hj hrun hfin
 
-/-- **`withload` at a suspending row is a value of `!` its type, at `SemJN`**
-(`withloadS_compat₀` at the typed world): at
+/-- **`withload` at a suspending row is a value of `!` its type, at `SemJN`**: at
 `Imm @a A ⊸ (∀'x ⊏ @bnd. Imm̲ 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ B` with `Σ` a `Row.Suspend x bnd` row.
-`withloadS_compat₀`'s steps at every floor: the load (`rwp_load_cell` under `erwpK_bindR`); at the
+Its steps at every floor: the load (`rwp_load_cell` under `erwpK_bindR`); at the
 run's first entry the record, its template and the image (`withload_reb`); 6.150 at the row's table
 at the typed world; the callback at the image as a thunk of `cN` (`callback_at_image`).
 
-Premises as `withloadS_compat₀`'s. -/
+Premises those of the rule. -/
 theorem withloadS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {S : Row} (hbnd : LifeCtx.empty.Defines bnd) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
     (hS : S.Suspend x bnd) (δ : LSub) (Θ₀ : LocTy) (n : Nat) :

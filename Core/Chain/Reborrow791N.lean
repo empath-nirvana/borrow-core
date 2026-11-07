@@ -1,7 +1,7 @@
 import Core.Chain.Cancel791N
 
 /-!
-# The suspending reborrow `withbor (3)`  `[spec §62]`
+# The suspending reborrow `withbor (3)`: the guarded frames  `[spec §62]`
 
 Core's `withbor3U_compatX` (`Core/EffBorrow.lean`), whose proof is 6.174's (`withbor3_compatX`,
 `Core/Compatibility.lean:1109`): the finaliser frame outermost, the Mut Anti-Frame at the source
@@ -18,10 +18,13 @@ anti-frame runs across stops, raises and layered cancel runs.
   and to cancel runs that stop: at a raise the claim is sealed again into the source's entry and
   carried out (`Rout`, the `Mut @a A` value the finaliser consumes); a cancellable stop's cancel
   obligation is transferred by a premise (`hcan`), as the Mut Frame's is.
-* `tabG`/`finG`: the lender's twin of the callback's table with every cancel run at its cancel
-  row's own guarded table, ending at the claim; `tabG_can`, `tabR_canA`: the two transfers, by
-  induction on how deep cancel rows nest.
-* `withbor3S_compat₀`, `constN_w3₀`.
+* `consistentX_mut_wit`, `exS_wit_none`: a `mut` cell's witness; `cancelOblGN`: a cancel run's
+  obligation at a guarded table.
+
+The lender's guarded twin at the typed world (`tabGK`/`finGK`, `TabKW835N`) has every cancel run
+at its cancel row's own guarded table, ending at the claim; the two transfers are by induction on
+how deep cancel rows nest. The rule at `SemJN` is `withbor3S_compat` (`ReborrowKW835N`), its
+constant `constN_w3` (`ConstKW835N`).
 -/
 
 noncomputable section
@@ -522,10 +525,6 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open BoCa.Fig16.Tree.Wp.Goal791 (Const791 ctx791 vals791 jdgC)
 open BoCa.Fig16.LogRel.Core.Chain.SI.Hardest791 (rwp_det'')
 open BoCa.BoLo (Heap Kont ubindE Head performE raiseE cancelVal opPayload)
-
-/-! ### The lender's guarded twin -/
-
-/-! ### The suspending reborrow -/
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

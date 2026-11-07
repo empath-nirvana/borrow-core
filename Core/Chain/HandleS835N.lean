@@ -10,8 +10,8 @@ operation receives `κ` with its resource in `Res_α`. The proof is `erwp_handle
 the share and its cell, an `own` cell, which is in every stratum.
 
 This is the step from `stop_semN` to BOXED-κ's handler. `effHandleVB`'s compatibility lemma also
-needs the clauses read at `vN₀` (interface entry E10), which is not built here: a clause's `κ` is at
-`kTy Σ R q B F`, a thunk type, and `vN₀` of a thunk asks the computation at every world `Θ′` along
+needs the clauses read at `vN` (interface entry E10), which is not built here: a clause's `κ` is at
+`kTy Σ R q B F`, a thunk type, and `vN` of a thunk asks the computation at every world `Θ′` along
 `ExtR` from `κ`'s resource and every view consistent with it, while the handled run's stop owes
 its continuation (`KapRelN`) only at the run's own view and along `extF` on the record list.
 Not derived; obstruction not verified.

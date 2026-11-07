@@ -3,19 +3,14 @@ import Core.Chain.HandleT835N
 /-!
 # `[handle-last]`: a clause that uses `κ` once, last  `[spec §14, §19, §27, §51]`
 
-Core's `handleL_compatC` (`Core/DivHandleLast.lean`) at `SemJN₀`, its proof `ewp_handle_last` at
-`erwp` (the last instance, `scope-831-interface.md` §10.5), each step Core's:
-
-* `worksTy_atN₀`, `exitsTy_atN₀` (Core's `worksTy_at`, `exitsTy_at`): the works and the exits read
-  at `vN₀`;
-* `last_contN₀` (Core's `last_cont`): the finaliser frame's answer: `inl y` resumes `κ` at `y`,
-  `inr z` cancels `κ` at the table of its cancel row under the exit's frame
-  (`erwp_frame_plain_or`), then runs the exit at `z`;
-* `erwp_handle_last₀` (Core's `ewp_handle_last`): `erwp_handle_le` with a clause running its work
-  at its row under the finaliser frame (`erwp_frame_then`, its frame `κ`'s relation at the record
-  list), `κ.2 ()` the finaliser; the clause pays its `β` step, so the work's run, the finaliser and
-  the frame's answer are all below the stop's index, where `κ` is owed;
-* `handleL_compatN₀` (Core's `handleL_compatC`).
+Core's `handleL_compatC` (`Core/DivHandleLast.lean`), its proof `ewp_handle_last` (the last
+instance, `scope-831-interface.md` §10.5), is read at `SemJN` in `HandleLKW835N`
+(`worksTy_atN`, `exitsTy_atN`, `erwp_handle_last`, `handleL_compatN`). This file holds two of its
+steps: `lastClause_steps_body` (a last clause's steps after its `β` step) and `capB_of_entN` (a
+row entry's capture flag). The finaliser frame's answer (Core's `last_cont`): `inl y` resumes `κ`
+at `y`, `inr z` cancels `κ` at the table of its cancel row under the exit's frame
+(`erwp_frame_plain_or`), then runs the exit at `z`. The clause pays its `β` step, so the work's
+run, the finaliser and the frame's answer are all below the stop's index, where `κ` is owed.
 
 As at `[handle]` with tail clauses (`Core/Chain/HandleT835N.lean`), the works and the exits are read
 at the view from consistent resources: the payload at the handler's name (`erwp_consistentPA`), the
@@ -79,14 +74,10 @@ theorem capB_of_entN {q : Qual} {B : VTy} (ha : (B.isZero && q != .lin) = false)
   · exact ⟨hq, ha⟩
   · exact absurd ha hq
 
-/-! ### The frame's answer -/
-
 section
 variable {δ : LSub} {Θ : LocTy} {c : Loc → Option Life}
 
 end
-
-/-! ### The handler -/
 
 section
 variable {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} {S SW : Row}

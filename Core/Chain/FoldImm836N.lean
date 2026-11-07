@@ -3,14 +3,18 @@ import Core.Chain.Withload791N
 import Core.FoldImm
 
 /-!
-# The borrowed fold at `SemJN₀`  `[spec §6]`
+# The borrowed fold on the chain: reductions  `[spec §6]`
 
 Core's `foldImm_compatX` (`Core/FoldImm.lean`) at the chain, line by line: Core's term
 (`foldImmV`, `travK`, `selfF`, `hV`) and its reductions, and Core's induction on a bound of the
-borrowed cell's witness size and then on the view's size. `withload_sizedN₀` is Core's
-`withload_sized` at the empty row: `withload_reb₀`, its callback handed the image's relation to the
+borrowed cell's witness size and then on the view's size. `withload_sizedN` is Core's
+`withload_sized` at the empty row: `withload_reb`, its callback handed the image's relation to the
 loaded witness (`ResU.Reb β σ χ`), so the view handed over is `Good` at the witness's size
-(`good_of_imageN₀`).
+(`good_of_imageN`).
+
+This file holds Core's reductions at `erwp` (`cbOf_appN`, `travK_appN`, `hV_appN`);
+`FoldImmKW835N` holds `withload_sizedN`, `good_of_imageN` and the rule at `SemJN`
+(`foldImm_compatN`).
 -/
 
 noncomputable section
@@ -28,10 +32,6 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open BoCa.BoLo (Heap Kont Head)
 
 attribute [local simp] Expr.subst Val.val_shift Expr.shift_shift Expr.shift_zero
-
-/-! ### `withload` with a sized callback (Core's `withload_sized`) -/
-
-/-! ### The measure at the view -/
 
 /-! ### Reductions -/
 
@@ -81,21 +81,15 @@ theorem hV_appN (hΦ : Φ.Down) (hQ : Q.Down) (F : FShape) (g w : Val) {n : Nat}
 
 end Red
 
-/-! ### The traversal (Core's `trav_spec`) -/
-
 section Trav
 variable (M R : VTy) (y : LifeVar) (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (Nb : Nat)
 
 end Trav
 
-/-! ### Induction on the witness size, then on the view -/
-
 section Ind
 variable {M R : VTy} {y : LifeVar} {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} {Nb : Nat}
 
 end Ind
-
-/-! ### The rule -/
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

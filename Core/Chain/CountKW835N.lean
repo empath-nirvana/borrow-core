@@ -7,9 +7,10 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 /-!
 # `count_fold` and `count_try` at the typed world  `[spec §62]`
 
-`Count834N`'s rules at `SemJN` (the relation at `KW`), each the one-world proof: the loop stops
-nowhere, so a value's judgment is `erwp` at the empty table (`cN_ret_of`), and the `!` step it
-calls is applied at `F A` (`erwp_of_cN_ret`, through `bang_app`).
+`countFold_compatN` and `countTry_compatN`, the rules at `SemJN` (the relation at `KW`), over
+their loops `countLoop_wpN` and `countTryLoop_wpN`: the loop stops nowhere, so a value's judgment
+is `erwp` at the empty table (`cN_ret_of`), and the `!` step it calls is applied at `F A`
+(`erwp_of_cN_ret`, through `bang_app`).
 -/
 
 namespace BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N

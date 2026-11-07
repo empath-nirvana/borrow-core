@@ -4,15 +4,16 @@ import Core.Chain.Fuel835N
 import Core.FoldReuse
 
 /-!
-# The `μ` rows at `SemJN₀`  `[spec §6]`
+# The `μ` rows' reductions at `erwp`  `[spec §6]`
 
-`docs/new-core/scope-831-interface.md` §13. `vN₀` reads `μX. A` at Core's least fixed point
-(`vNE₀`'s `μ` clause), the candidate joint over the mode, the world and the index; unfolding costs
+`docs/new-core/scope-831-interface.md` §13. `vN` reads `μX. A` at Core's least fixed point
+(`vNE`'s `μ` clause), the candidate joint over the mode, the world and the index; unfolding costs
 no step, as in Core, where the machine has no `roll`/`unroll` step.
 
-* `roll_compatN₀`, `unroll_compatN₀`: Core's `roll_compatX`, `unroll_compatX`, with `vN_roll₀` and
-  `vN_unfold₀` under `erwp_mono`.
-* `foldOwn_compatN₀`, `foldReuse_compatN₀`: Core's `foldOwn_compatX`, `foldReuse_compatX`.
+`MuKW835N` reads the rules at `SemJN`: `roll_compatN`, `unroll_compatN` (Core's `roll_compatX`,
+`unroll_compatX`, with `vN_roll` and `vN_unfold` under `erwp_mono`), `foldOwn_compatN` and
+`foldReuse_compatN` (Core's `foldOwn_compatX`, `foldReuse_compatX`). This file holds the folds'
+reductions they read (`travO_appN`, `hO_appN`, `erwp_swapN`, `travR_appN`, `hR_appN`).
 
 `foldOwnG` is `Core/Chain/FoldG836N.lean`, `foldImm` `Core/Chain/FoldImm836N.lean`.
 -/
@@ -36,7 +37,7 @@ open BoCa.BoLo (Heap Kont Head eLoad eStore)
 The term is Core's (`foldOwnV`, `travO`, `selfO`, `hO`) and so are its reductions; each pure step is
 `erwp_det` at the same index, a `free` costs one (`erwp_free`). The induction is Core's: on a
 bound of the owned resource's size (`dsize`), then on the size of the value. The run is at one
-world and one view; the algebra is read at that world (`vN_extR₀` at its empty resource), at
+world and one view; the algebra is read at that world (`vN_extR` at its empty resource), at
 every index below the fold's. -/
 
 section FoldOwn

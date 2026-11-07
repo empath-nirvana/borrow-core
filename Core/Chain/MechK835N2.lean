@@ -173,7 +173,7 @@ theorem erwpK_cancelTabN_ctx {V : ι → ι → Prop} {Φ : ι → LocFam} (hΦ 
 
 /-! ### The claim with the view's consistency -/
 
-/-- **A body carries the view's consistency to its claim, at `erwpK`** (`erwp_claimX`). The body's
+/-- **A body carries the view's consistency to its claim, at `erwpK`**. The body's
 table `Ti` and the outer `To` agree but for the cancel obligations; a stop's share is consistent,
 and so is every answer (`hPBc`); a cancellable stop's cancel obligation passes by `hcan`, read at
 the resumption world; a `raise`'s claim is part of a consistent resource. -/
@@ -219,8 +219,7 @@ theorem erwpK_claimX {V : ι → ι → Prop} {Φ : ι → LocFam} {fl : ι → 
     exact Or.inr (Or.inr ⟨K₁, m, i, v, en', pure_sep_mk ⟨hpt, hK₁, hT', hab'.trans hab⟩
       ⟨σ₁, ρR, hcσR, hPA ▸ hpa, hR, consistentX_right hcσR hcσ hvσ⟩⟩)
 
-/-- **A cancel run carries the view's consistency to its claim, at `erwpK`**
-(`erwp_cancelRun_claimX`), as `erwpK_claimX`. -/
+/-- **A cancel run carries the view's consistency to its claim, at `erwpK`**, as `erwpK_claimX`. -/
 theorem erwpK_cancelRun_claimX {V : ι → ι → Prop} {Φ : ι → LocFam} {fl : ι → Life}
     {Ti To : ι → OpTabK ι}
     (hTw : ∀ x m i en, Ti x m i = some en → ∃ en', To x m i = some en' ∧ en'.q = en.q ∧

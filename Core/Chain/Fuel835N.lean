@@ -2,10 +2,10 @@ import Core.Chain.Let835N
 import Core.DivFuel
 
 /-!
-# `div_fuel` at `SemJN₀`  `[spec §14]`
+# `div_fuel`'s handler steps at `erwp`  `[spec §14]`
 
-Core's `divFuel_compatX` (`Core/DivFuel.lean`), step by step, at the chain relation (interface
-entries E8, E11, E13):
+The steps of Core's `divFuel_compatX` (`Core/DivFuel.lean`) at the chain (interface entries E8,
+E11, E13), which `FuelKW835N` reads at a world:
 
     div_fuel : !U(U(1 ⊸ F_{tick, Σ} A) ⊗ I32 ⊸ F_Σ A)
 
@@ -14,19 +14,12 @@ entries E8, E11, E13):
   under a one-clause handler of `Div`, `κ` given its cell (`erwp_hnd_tick`, Core's `hnd_tick`);
   a tick answered *close* or *next* (`fuel_tick_zeroN`, `fuel_tick_succN`, Core's
   `fuel_tick_zero`, `fuel_tick_succ`), over Core's `fuel_clause`, `FuelFrame`, `nextK_frame`,
-  `spentK_frame`, read unchanged;
-* **`fuel_totalN₀`** (Core's `fuel_total`): `div_fuel` of a computation at the row `tick, Σ` is at
-  `Σ`. Core inducts on the budget and, inside, on `cwp`'s segment, and treats the spent budget by
-  `Closing` (`fuel_closing`). A `Div` row is a row of the chain's table (E13), so here the
-  induction is on the index alone: every tick's continuation is owed below the tick's index,
-  whether it is answered *next* or *close*. An operation of `Σ` passes the handler with its frame
-  (Core's `fuel_fwd`, `hnd_fwd`), its cancel carried through the plain frame
-  (`tabN_plainCancel`);
-* `divFuel_compatN₀`: the constant at `SemJN₀`. The callback runs at the function's own world
-  (`LocTy.extR_refl`) and view.
+  `spentK_frame`, read unchanged.
 
-No typed code runs after a resumption here: an answer of `Σ` goes back into the callback's own
-continuation.
+Core's `fuel_total` inducts on the budget and, inside, on `cwp`'s segment, and treats the spent
+budget by `Closing` (`fuel_closing`). A `Div` row is a row of the chain's table (E13), so
+`fuel_totalN` (`FuelKW835N`) inducts on the index alone: every tick's continuation is owed below
+the tick's index, whether it is answered *next* or *close*.
 -/
 
 noncomputable section

@@ -7,25 +7,23 @@ import Core.Chain.HandleS835N
 Core's `let_compatC` (`Core/EffFin.lean`) is `ewp_frame_plain` around `M`, the frame the context of
 `N`, with `ent_plain` carrying a cancel through the frame. At the chain the same proof reaches one
 more fact: `N`'s judgment is read at the run's view `c`, so the resource it starts from, `M`'s
-value beside the frame, must be consistent with `c` (`SemJN₀`'s `ConsistentX`). The frame is (the
-context's part, `gN_splitC₀`). `M`'s value is too when its run never stops (`rwp_consistentXV`, as
-`bind_compatN₀` reads it); across a stop it is the continuation's share beside the answer the stop
-was resumed at, and a row's table reads its answers at the view (`tabN₀`'s `ConsistentX c`), as
-`SemJN₀` reads the resource a run starts from and `⊸` the argument's composite.
+value beside the frame, must be consistent with `c` (`SemJN`'s `ConsistentX`). The frame is (the
+context's part, `gN_splitC`). `M`'s value is too when its run never stops (`rwp_consistentXV`, as
+`bind_compatN` reads it); across a stop it is the continuation's share beside the answer the stop
+was resumed at, and a row's table reads its answers at the view (`tabN`'s `ConsistentX c`), as
+`SemJN` reads the resource a run starts from and `⊸` the argument's composite.
 
 * `OpTabN.AnsC c T`: the answers of every entry of `T` are consistent with `c`.
 * `erwp_consistentAns`: a run from a resource consistent with `c`, at a table whose answers are,
   returns consistent resources at every value it reaches, resumptions included (by induction on
   the index: at a stop the share is a part of a consistent valid resource, `consistentX_right`;
   the resumed composite is consistent by `consistentX_compS`). Its post also carries the index
-  bound and validity, which the frame's context reads (`gN_le₀`).
-* `tabN_ansC`: a row's table reads its answers at its view, so they are consistent with it.
-* `let_compatN₀`: Core's `let_compatC`, step for step (`erwp_frame_plain`, `entN_plain`,
-  `gN_noOwn₀`, `gN_persistent₀`).
-* `let_compatN_persist₀`: the same proof binding a persistent type: the bound value owns nothing, so `N` starts from the frame's resource (`erwp_idxLe` gives the
-  index bound the frame's context is read at).
-* `await_compatN₀`: Core's `await_compatC`, `[perform]`, `[case]`, `[sub]` and `[raise]` under
-  `let_compatN_persist₀`, the answer at `1 + 1`.
+  bound and validity, which the frame's context reads (`gN_le`).
+* `erwp_idxLe`: a run's values are reached at indices up to its own, across its resumptions: the
+  index bound the frame's context is read at when the bound value owns nothing.
+
+`LetKW835N` reads `[let]` and `[await]` at `SemJN` (`let_compatN`, `let_compatN_persist`,
+`await_compatN`).
 -/
 
 noncomputable section

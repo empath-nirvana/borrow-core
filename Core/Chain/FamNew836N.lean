@@ -2,7 +2,7 @@ import Core.Chain.FamSwap836N
 import Core.EffCancelRuns
 
 /-!
-# `array_new` at `SemJN₀`  `[spec §9]`
+# `array_new`'s `tab` step on the chain  `[spec §9]`
 
 Core's `arrNew_compatX` (`Core/Arrays.lean`) is the `tab` step (`wpTS_tab`, `Core/ArrayWp.lean`)
 then the fill (`tabFill_wp`). On the chain:
@@ -12,8 +12,10 @@ then the fill (`tabFill_wp`). On the chain:
 * `rwpG_tab` is `wpTS_tab` at the step index: the `tab` step is one allocating head step to a
   term that is not a value, so the run after it is the continuation's run from the world
   `alloc_blockN` builds, the index paying for the step; `erwp_tab` is the same at `erwp`.
-* `tabFill_wpN₀` is `tabFill_wp`, by Core's induction: `bang_app₀` for the call of the
-  `!`-function, `erwp_bind_frame` for Core's `wpTS_bind_frame`, `rwp_store`, and the `1↦` step.
+* `consistentX_sepRange_own`: the allocated block is consistent with every view.
+
+`FamOpsKW835N` reads the fill at `SemJN` (`tabFill_wpN`, Core's `tabFill_wp`) and the constant
+(`arrNew_compatN`).
 -/
 
 noncomputable section

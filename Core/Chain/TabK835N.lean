@@ -25,9 +25,7 @@ world (`KW.lend`), which is how `erwpK_M_frameCR_KW` reads them. `tabNK vr g` is
 (`tabNK_vN`).
 
 At the typed world the Mut Frame's premises are discharged (`tabNK_lendOKCR`, `tabNK_foldTwin`,
-`tabRK_canK`) and the frame stated at the typed tables (`erwpK_M_frameCR_tab`); the scheduler's
-contract is restated at `erwpK` (`SchedOKNK`), `SchedOKN` its instance at one world
-(`schedOKN_iff_K`).
+`tabRK_canK`) and the frame stated at the typed tables (`erwpK_M_frameCR_tab`).
 -/
 
 noncomputable section
@@ -161,7 +159,7 @@ def finNK (vr : VRel) (g : KW → KW) : CTy → LSub →
 end
 
 mutual
-/-- **The lender's table at the typed world** (`tabR`): `tabNK`'s entries, every capturable one's
+/-- **The lender's table at the typed world**: `tabNK`'s entries, every capturable one's
 cancel run ending at `R`. -/
 def tabRK (R : Nat → WProp) (vr : VRel) (g : KW → KW) : CTy → LSub → KW → OpTabK KW
   | .eff m i q A B fin _ C, δ, x => extTabK m i
@@ -239,8 +237,8 @@ theorem tabNK_wk {vr : VRel} {F : CTy} {δ : LSub} {x : KW} {m j : UInt32} {en :
 
 /-! ### The Mut Frame's premises at the typed world -/
 
-/-- **The callback's table at the typed world may be stopped at under a lend at `α ⊏ @bnd`**
-(`tabN_lendOKCR_C` at `KW`): at every world, the answer read at every resumption world. -/
+/-- **The callback's table at the typed world may be stopped at under a lend at `α ⊏ @bnd`**: at
+every world, the answer read at every resumption world. -/
 theorem tabNK_lendOKCR {vr : VRel} (hv : ValRelOK vr) {xv : LifeVar} {bnd : Lifetime.Life}
     {α : Life} {F : CTy} (hF : F.SuspendC xv bnd) (g : KW → KW) (δ : LSub)
     (hLt : LtLife δ bnd α) (x : KW) : (tabNK (ℍ := ℍ) vr g F (δ.extend xv α) x).LendOKCR α where
@@ -282,8 +280,8 @@ theorem tabNK_foldTwin {vr : VRel} (hv : ValRelOK vr) {xv : LifeVar} {bnd : Life
   · simp only [entNK, hv.extend hA δ α]
   · simp only [entNK, hv.extend hB δ α]
 
-/-- **The lender's cancel obligations from the callback's, at the typed world** (`tabR_can` at
-`KW`, the premise `CanFold`), by induction on how deep cancel rows nest. At a capturable entry, the
+/-- **The lender's cancel obligations from the callback's, at the typed world** (the
+premise `CanFold`), by induction on how deep cancel rows nest. At a capturable entry, the
 callback's cancel run at its cancel row's table, indexed by the lender's worlds at the lend's
 world, framed by `erwpK_M_frame_cancelRunCR` at the cancel row's tables (`FoldTwin` by
 `foldTwin_owed`), its own nested cancel obligations by the induction. -/

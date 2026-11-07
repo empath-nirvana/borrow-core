@@ -1,27 +1,26 @@
-import Core.Chain.Then835N
+import Core.Chain.Iter835N
 import Core.DivHandleLast
 
 /-!
 # `[handle]` at clauses that resume `κ` in tail position  `[spec §14, §19]`
 
-Core's `handleT_compatC` (`Core/DivHandle.lean`) at `SemJN₀`, its proof `ewp_handle_tail` at `erwp`
-(the tail instance, `scope-831-interface.md` §10.5), each step Core's:
+Core's `handleT_compatC` (`Core/DivHandle.lean`), its proof `ewp_handle_tail` (the tail instance,
+`scope-831-interface.md` §10.5), is read at `SemJN` in `HandleTKW835N` (`ansesTy_atN`,
+`erwp_handle_tail`, `handleT_compatN`). This file holds the steps at `erwp`:
 
 * `erwp_frame_plain_or` (Core's `ewp_frame_plain_or` with no table beside, by E13): a plain frame
   around a computation at a table `T` below the outer `T′`; the frame's conditions are read at `T`'s
   entries only;
-* `tabN_ofEff_ne`, `tabN_ofEff_self`, `capTag_ofEffN` (Core's `Row.tab_ofEff_ne`,
-  `Row.tab_ofEff_self`, `capTag_ofEff`): the split of the handled row's table;
-* `ansesTy_atN₀` (Core's `ansesTy_at`): the answering functions read at `vN₀`;
-* `erwp_handle_tail₀` (Core's `ewp_handle_tail`): `erwp_handle` with a clause running its answering
-  function at its must-resume row under the resume frame `resK κ`; the clause's `β` step is paid
-  (`erwp_step`), so the answering function's run returns below the stop's index, where `κ` is owed;
-* `handleT_compatN₀` (Core's `handleT_compatC`).
+* `OpTabN.withPA`, `erwp_consistentPA`: the payloads at the handler's name read at the view;
+* `tailClause_steps_body`: a tail clause's steps after its `β` step, to the resume of `κ`; the
+  clause's `β` step is paid, so the answering function's run returns below the stop's index, where
+  `κ` is owed;
+* `extF_trans`, `KapRelN.extF`: the record-list order composes, and `κ`'s relation moves along it.
 
-Two readings the chain adds, each where `SemJN₀` reads a run at its view (D7):
+Two readings the chain adds, each where `SemJN` reads a run at its view (D7):
 
 * **the answers.** The answer `κ` is resumed at is the answering function's value, consistent with
-  the view across that run's resumptions (`erwp_consistentAns`, `tabN_ansC`): the reading of
+  the view across that run's resumptions (`erwp_consistentAns`): the reading of
   §10.2 is met there;
 * **the arguments.** An answering function and `h_ret` are typed code; `⊸` reads its argument at a
   view consistent with it. The handled run starts consistent with the view, so its stops and its
@@ -221,8 +220,6 @@ open BoCa.Fig16.LogRel.Core.Chain.SI
 open BoCa.Fig16.LogRel (substAll)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open BoCa.BoLo (Heap Head Kont performE raiseE cancelVal opPayload hndE hndVal clauseAt capTag)
-
-/-! ### The handled row's table -/
 
 /-! ### The answering functions -/
 

@@ -13,8 +13,8 @@ inside a run, at the Imm Frame's exit, by `not_rel_lineage` from the run's `Fram
 `ICpAt`. The chain does the same at the run's record list: `erwp_I_frameR`'s `hQ` is Core's `Ext`
 on lists, and its exit is Core's.
 
-The world's records (`LocTy.imm`) are a second carrier, which `vN₀`'s `Imm` clause reads.
-`tabN_unwind_eq` (`Core/Chain/ImmLend833N.lean`) moves the world-level step outside any run. It
+The world's records (`LocTy.imm`) are a second carrier, which `vN`'s `Imm` clause reads.
+`tabUN_eq_addImm` (`Core/Chain/UnwindKW835N.lean`) moves the world-level step outside any run. It
 identifies the callback's table at `Θ + (p, α)` with the lender's at `Θ`, and it does that by
 moving every value of every operation's argument type, at a resource in `Res_α`, from the world
 with the record to the world without it (`LocTy.extR_of_addImm`). A table is a function of the
@@ -22,16 +22,16 @@ world and the view. It has no run, so there is no `FrameLife`, `AgW` or `ICpAt` 
 `not_rel_lineage` to read.
 
 `LocTy.KeepsLoc`/`LocTy.ExtRLoc` are Core's reading at the world: `Keeps` on `rsOf Θ.imm`, and
-`ExtR`'s key conjunct unchanged. `UnwindArgStepLoc` is the step `tabN_unwind_eq` takes, read that
-way, at every value of an `Imm` type. **It fails** (`not_unwindArgStepLoc`). The configuration
-`unwindArg_inst` is an `OK` world holding one record `q`, lent at `γ = 1` at `ℓ`, and a record
-`p ≠ q` at the same location, lent at `α = 2 ⊏ γ`. The resource is `ℓ ↦ imm({γ}, …)`. It is a
-value of `Imm 'y (Ref 1)` at `δ['y ↦ γ]` in the world with `p`, witnessed by `q`, and it lies in
-`Res_α`. `Rel p ρ` holds there, and `p` is not a record of the world without it. Under the
-lifetime reading the same step holds (`unwindArg_inst`'s fourth conjunct, by
-`LocTy.extR_of_addImm`).
+`ExtR`'s key conjunct unchanged. `UnwindArgStepLoc` is the step `tabUN_eq_addImm` takes, read that
+way, at every value of an `Imm` type. **It fails** (`not_unwindArgStepLoc`,
+`Core/Chain/ConfigsKW835N.lean`). The configuration `unwindArg_inst` is an `OK` world holding one
+record `q`, lent at `γ = 1` at `ℓ`, and a record `p ≠ q` at the same location, lent at `α = 2 ⊏ γ`.
+The resource is `ℓ ↦ imm({γ}, …)`. It is a value of `Imm 'y (Ref 1)` at `δ['y ↦ γ]` in the world
+with `p`, witnessed by `q`, and it lies in `Res_α`. `Rel p ρ` holds there, and `p` is not a record
+of the world without it. Under the lifetime reading the same step holds (`unwindArg_inst`'s fourth
+conjunct, by `LocTy.extR_of_addImm`).
 
-This configures the step, not `tabN_unwind_eq` itself. The step is the one Core never takes,
+This configures the step, not `tabUN_eq_addImm` itself. The step is the one Core never takes,
 because Core's table does not read the record list (`Row.tab_local`, `hS.tab_extend`). Core moves a
 stop's argument along `Ext` inside the frame instead (`opTable_ext` at `hQ`).
 
@@ -42,7 +42,7 @@ holds `Div` Core takes the greatest fixed point over segments (`cwp`, `Core/DivD
 `erwp` at `n` constrains only the runs of fewer than `n` steps that reach a final configuration.
 So a computation with no final configuration is in `erwp` at every index, whatever the table
 and the postcondition (`erwp_of_noFinal`), and no fixed point needs to be added to admit it. The
-chain's `F_Σ R` is `erwp` at the row's table at every row (`cN_effOf₀`), whether or not the row
+chain's `F_Σ R` is `erwp` at the row's table at every row (`cN_effOf`), whether or not the row
 holds `Div` (`cN_effOf_divB`). Core's split on `Row.divB` is a split between `CDerives`
 constructors (`effThen`, `effThenDiv`) and between `effWp`'s branches. The first is kept as
 printed. Under the second, both branches go to `erwp`.

@@ -4,13 +4,13 @@ import Core.Chain.FamCancel836N
 /-!
 # The #791 constants at the typed world  `[spec §62]`
 
-`ConstN₀`, `ConstsN₀` and `FundamentalN₀` at `SemJN`: a constant is a value of `!` its type at
-`vN`, and the fundamental property is read at `SemJN`. Each constant's `constN_*` is the
+The statements `ConstN`, `ConstsN` and `FundamentalN` at `SemJN`: a constant is a value of `!` its
+type at `vN`, and the fundamental property is read at `SemJN`. Each constant's `constN_*` is the
 compatibility lemma at `cN` (`withbor2S_compat`, `withbor3S_compat`, `withborFS_compat`,
 `withloadS_compat`, `sliceBorrowMS_compat`), its finaliser's judgment read by the fundamental
 property; `constsN_of` gathers them. The instances at the hardest case's row discharge every
-hypothesis of each compatibility lemma, the finalisers read at `SemJN` (`dFree_sem`,
-`dRelease_sem`, `dArrFree_sem`).
+hypothesis of each compatibility lemma, the finalisers read at `SemJN` (`dFree_sem`, `dRelease_sem`,
+`dArrFree_sem`).
 -/
 
 noncomputable section
@@ -32,16 +32,16 @@ open BoCa.Fig16.LogRel.Core.Chain.SI.LendProg (noOwn_single_mut)
 /-! ### The constants' statements at `SemJN` -/
 
 /-- **A #791 constant is a value of `!` its type at the typed world**, at every `δ`, world and
-index, from its rule's premises (`ConstN₀` at `vN`). -/
+index, from its rule's premises. -/
 def ConstN (c : Const791) : Prop :=
   c.OK → ∀ (δ : LSub) (Θ : LocTy) (n : Nat), Θ.OK →
     vN (ℍ := ℍ) (.bang c.ty) δ Θ n c.val PMap.empty
 
-/-- Every #791 constant inside the fragment, at the typed world (`ConstsN₀` at `vN`). -/
+/-- Every #791 constant inside the fragment, at the typed world. -/
 def ConstsN : Prop := ∀ c : Const791, c.InFrag → ConstN (ℍ := ℍ) c
 
-/-- **The fundamental property at the typed world, on the fragment** (`FundamentalN₀` at
-`SemJN`): every derivation of the existing judgment whose context and type lie in the fragment. -/
+/-- **The fundamental property at the typed world, on the fragment**: every
+derivation of the existing judgment whose context and type lie in the fragment. -/
 def FundamentalN : Prop :=
   ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (j : Jdg), CDerives Δ Γ e j → JdgInFrag Γ j = true →
     SemJN (ℍ := ℍ) Δ Γ e j
@@ -105,7 +105,7 @@ theorem constsN_of (hF : FundamentalN (ℍ := ℍ)) : ConstsN (ℍ := ℍ)
 
 /-! ### The finalisers at `SemJN` -/
 
-/-- **`λr. ()` is a finaliser of a `Mut` source, at `SemJN`** (`dRelease_sem₀`). -/
+/-- **`λr. ()` is a finaliser of a `Mut` source, at `SemJN`**. -/
 theorem dRelease_sem (a : Lifetime.Life) (A : VTy) :
     SemJN (ℍ := ℍ) LifeCtx.empty [] dRelease (.val (.lolli (.mut a A) .unit)) := by
   intro δ γ Θ c n ls ρ _ _ _ _ hg
@@ -125,7 +125,7 @@ theorem dRelease_sem (a : Lifetime.Life) (A : VTy) :
   exact erwp_garbage (compS_empty_left _) (noOwn_single_mut l)
     (erwp_val (v := Val.unit) ⟨rfl, rfl⟩)
 
-/-- **`λr. free r` is a finaliser of a `Ref 1` source, at `SemJN`** (`dFree_sem₀`). -/
+/-- **`λr. free r` is a finaliser of a `Ref 1` source, at `SemJN`**. -/
 theorem dFree_sem :
     SemJN (ℍ := ℍ) LifeCtx.empty [] dFree (.val (.lolli (.ref .unit) .unit)) := by
   intro δ γ Θ c n ls ρ _ _ _ _ hg
@@ -148,8 +148,8 @@ theorem dFree_sem :
   refine erwp_free hΦ (opTableN_local _) .hole l Val.unit
     ⟨_, PMap.empty, hcl, rfl, erwp_val (v := Val.unit) ⟨rfl, rfl⟩⟩
 
-/-- **`λa. drop (λu. (), a)` is a finaliser of an `Array 1` source, at `SemJN`**
-(`dArrFree_sem₀`): the cells are freed in order by `dropFill` (`dropFill_wpN`). -/
+/-- **`λa. drop (λu. (), a)` is a finaliser of an `Array 1` source, at `SemJN`**:
+the cells are freed in order by `dropFill` (`dropFill_wpN`). -/
 theorem dArrFree_sem :
     SemJN (ℍ := ℍ) LifeCtx.empty [] dArrFree (.val (.lolli (.array .unit) .unit)) := by
   intro δ γ Θ c n ls ρ _ _ _ _ hg
@@ -233,8 +233,8 @@ theorem sliceBorrowMS_inst (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
 
 /-! ### A callback that performs while holding the borrow -/
 
-/-- **A callback of the suspending lend that performs while holding the borrow, at `vN`**
-(`cbPerform_sem₀`): `cbPerform` is a value of `∀'x ⊏ @bnd. Mut 'x A ⊸ F_Σ(['x] 1)` at the
+/-- **A callback of the suspending lend that performs while holding the borrow, at `vN`**:
+`cbPerform` is a value of `∀'x ⊏ @bnd. Mut 'x A ⊸ F_Σ(['x] 1)` at the
 one-operation row `[linSig n i]`. Its stop is taken at the floor of its world, with the borrow in
 the continuation's share; at every world the entry owes, the answer `()` returns `['x] ()` with the
 borrow left as garbage. -/
@@ -278,7 +278,7 @@ theorem cbPerform_sem {x : LifeVar} {bnd : Lifetime.Life} {A : VTy} {δ : LSub} 
     (erwpK_val (KW.postK_refl y)
       (v := Val.unit) ⟨α, interp_ext_self δ x α, ⟨rfl, rfl⟩, ResU.inStratum_empty α⟩)
 
-/-- **`withbor (2)` applied to a cell and to `cbPerform`, at `cN`** (`withbor2S_perform₀`): at the
+/-- **`withbor (2)` applied to a cell and to `cbPerform`, at `cN`**: at the
 one-operation row `[linSig n i]`, `withborU dFree ℓ cbPerform` runs at `F_Σ(Ref 1 ⊗ 1)` from
 `ℓ ↦ own(())`. The callback stops at the must-resume operation with the borrow of `ℓ` in the
 continuation's share (`cbPerform_sem`); `withbor2S_compat` gives the rest. -/

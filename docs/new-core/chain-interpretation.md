@@ -1,9 +1,11 @@
 # The chain interpretation
 
-The semantic interpretation of types over Core's step-indexed chain relation `erwp`, at the
-per-lend world `LocTy`, as it stands on branch `rule-791`. It is the rule-level track of #791
-(structure.md §3, §7): every #791 constant and every `CDerives` rule is to be proved compatible
-at `SemJN`, and `Goal791SchedN` follows from that.
+The semantic interpretation of types over Core's step-indexed chain relation, at the per-lend
+world `LocTy` and the typed world `KW` (`scope-835-tables.md` §10). It is the rule-level track of
+#791 (structure.md §3, §7): every #791 constant and every `CDerives` rule but three is proved
+compatible at `SemJN`; the three (`effHandleV`, `effHandleVB`, `reify`) are the named assertion
+`HandlerLawN`, and plain adequacy of every closed program, its handlers inside it, follows
+(`Goal791N`, §6.4).
 
 The configurations each design choice rests on are indexed in `configurations.md`. The plan for
 `FundamentalN` is `scope-831-interface.md` (the lemma interface and units L1–L7), over the
@@ -15,7 +17,13 @@ rule-by-rule map `scope-831-map.md`. How the design got here is Appendix A.
 |---|---|
 | `Core/Chain/SI/LocTy.lean` | the world `LocTy`, its orders `ExtA`/`ExtR`, `Keeps`, `addImm`, the view, `ConsistentX`, `erwp_consistent`, the reseal at the lend's entry |
 | `Core/Chain/SI/UpdN.lean` | `ImmTieL`, the relation's entry tie; `rwp`, `rwpG`, `rwpG0` read it (`SI/WpN.lean`, `SI/RwpG.lean`) |
-| `Core/Chain/Goal791N.lean` | `vN`, `vO`, `cN`, `tabN`, `finN`, `retN`, `gN`, `SemJN`, `ImmWitW`; the laws; `mutSub`/`immSub`/`allI` at `SemJN`; `ConstN`, `ConstsN`, `FundamentalN`, `BridgeN`, `Goal791SchedN`; `goal791Sched_of` |
+| `Core/Chain/RelBase791N.lean` | the definitions the relation is built on: `TEntN`, `CandN`, `thunkRN`, `nuEnvN`, `EnvDownN`, `ImmWitW`, the fragment predicates (`VTy.inFrag`, `JdgInFrag`) |
+| `Core/Chain/Goal791N.lean` | `vN`, `vO`, `cN`, `tabN`, `finN`, `retN`, `gN`, `SemJN`, `rowTabN` at `KW`; the laws |
+| `Core/Chain/*KW835N.lean` | the compatibility lemmas at `cN`, every rule but `effHandleV`, `effHandleVB`, `reify`; the constants (`ConstKW835N`: `ConstN`, `ConstsN`, `FundamentalN`, `constN_*`, `constsN_of`) |
+| `Core/Chain/FundamentalKW835N.lean` | `MissingN`, `fundamentalN_all`, `fundamentalN_of` |
+| `Core/Chain/HandlerLawN.lean` | `HandlerLawN`, its non-vacuity at a clause that resumes `κ` (`handle_resume_inst`) |
+| `Core/Chain/Adequacy791N.lean` | `Goal791N`, `goal791N`; the instance `prog791` |
+| `Core/Chain/ConfigsKW835N.lean`, `StopKW835N.lean` | the configurations that read `vN`/`cN`; BOXED-κ's stop lemma at `SemJN` |
 | `Core/Chain/Lend791N.lean`, `Cancel791N.lean` | the suspending `mut` lend: row lemmas, cancel runs at their rows' tables, the finaliser frame; `withbor2S_compat`, `constN_w2` |
 | `Core/Chain/Reborrow791N.lean` | guarded tables, the Mut Frame with its fold, the anti-frame across stops; `withbor3S_compat`, `constN_w3` |
 | `Core/Chain/Field791N.lean` | the frame at a field; `withborFS_compat`, `constN_wF` |
@@ -118,8 +126,8 @@ record on the list, which is Core's `CohE (rsOf ls)` (`desc_mem_of_tie`, `cohE_o
 
 Statements the tie changed: `rwp_compose`/`rwpG_compose` take it; `rwp_safe`, `rwpG_safe`,
 `erwp_safe` and `erwp_adequacy` take `ImmTieL Φ.imm []` (`erwp_adequacy` discharges it by
-default); `rwpG_extΦ`/`erwp_extΦ` take `Φ.ImmLe Φ′`; `PoolSchedAdequacyN`, `progOfN_orDiverges`
-and `Goal791SchedN` take `imm = []`. The capture bridges into `crwpG` (`crwpG_of_rwpG`,
+default); `rwpG_extΦ`/`erwp_extΦ` take `Φ.ImmLe Φ′`; `PoolSchedAdequacyN` and `progOfN_orDiverges`
+take `imm = []`; `goal791N` reads `erwp_adequacy` at the empty world. The capture bridges into `crwpG` (`crwpG_of_rwpG`,
 `cerwp_of_erwp`, `cerwp_bindRwp`, `cerwp_alloc`, `cerwp_free`, `cerwp_scope`, …) take
 `Φ.imm = []`: `crwpG`'s entry does not carry the tie (§7).
 
@@ -135,17 +143,17 @@ and `Goal791SchedN` take `imm = []`. The capture bridges into `crwpG` (`crwpG_of
 | `Mut @a A` | §3.2 | `ptoMutS` |
 | `Imm @a A` | §3.2 | `ptoImmS` at `vCE false`, with `CohE` |
 | `U C` | `C` at every `Θ′` with `Θ.ExtR Θ′ ρ` and `Θ′.OK`, every view `c` with `ConsistentX c ρ`, every record list | `vCE`'s `U`, Kripke along `Ext` |
-| `F A` | `erwp (Θ.view c) (opTableN OpTabN.empty) 𝒱⟦A⟧` | `cC`'s `F` (`wpTS`) |
+| `F A` | at every floor `lo`, `erwpK KW.PostK (·.Θ.view ·.c)` from `⟨Θ, c, lo⟩` at the empty table, post `𝒱⟦A⟧` at the world reached; it is `erwp (Θ.view c) (opTableN OpTabN.empty) 𝒱⟦A⟧` (`cN_ret_iff`) | `cC`'s `F` (`wpTS`) |
 | `A ⊸ C` | at the function's own world `Θ`: every `k ≤ n`, every argument in `𝒱⟦A⟧` at `Θ` composed with the function's resource, every view consistent with the composite | `cC`'s `⊸`, a wand at the same world (#834) |
 | `C & D`, `⊤` | componentwise; `True` | `cC` |
 | `∀'x ⊏ @c. C` | every `α ⊏ @cδ` (`LtLife`), vacuous where `@cδ` is undefined | `cC`'s `∀` |
-| `F_Σ R` | `erwp (Θ.view c)` at the table of the row's layers (`extTabN` over `entN`, `tabN`), post `retN` | `cC`'s `eff` (`effTab`, `finObl`, `effRet`) |
+| `F_Σ R` | at every floor `lo`, `erwpK KW.PostK` from `⟨Θ, c, lo⟩` at the table of the row's layers (`tabN`, read at the world `KW`, each entry owing along `KW.Owed`), post `retN` | `cC`'s `eff` (`effTab`, `finObl`, `effRet`) |
 | `entN q B PA PB fin` | qualifier; abortive iff `B` is empty and `q ≠ lin`; payload and answer at every list; the cancel obligation where `capB q B`; resumed under `extF` | `effTab`'s entry (D8) |
 | a row's answers (`tabN`, `finN`, `F_Σ`) | `vN B δ Θ ∧ ConsistentX c`: read at the view, as every resource entering a run is (D7) | `vC true B` |
 | `finN` | `none` at `⊤`; else `cancelOblN` at the cancel row's table, at the view | `finObl` |
 | `gN δ Θ Γ γ n ρ` | the live slots' values over a split of `ρ` | `gSepC` |
 | `SemJN Δ Γ e j` | every `δ ⊨ Δ`, `γ`, world `Θ` with `Θ.OK`, view `c` with `ConsistentX c ρ`, index `n`, list `ls`, resource in `𝒢⟦Γ⟧`, `Ctx.LiveWithin Γ γ` | `SemC` |
-| `rowTabN S Θ c` | `tabN (F_S 1) ∅ Θ c`: the table a task at the row `S` runs at | `rowTab S` |
+| `rowTabN S` | `tabN (F_S 1) ∅`: the table a task at the row `S` runs at, at each world | `rowTab S` |
 
 ### 3.2 `Mut` and `Imm`
 
@@ -226,7 +234,7 @@ none is recorded and the departure is a choice still open. The IDs in brackets a
 | D9 | the interpretation carries a step index; rules owe `vN_le`, `gN_le` and consistency at a split [V11, G11, G12] | no index | none needed: the index is the relation's |
 | D10 | a `Div` row is a row of the table; Core's coinductive `cwp` has no counterpart [E13] | `cwp` and its bookkeeping | no configuration: it is how `erwp` is defined |
 | D11 | `withload`'s image is typed at the source's type, the record's positions read across `TyEq` (`immWitW_root`/`…Mut`/`child`/`childMut`, `RefPos.tyEq`, `MutPos.tyEq`); the first entry is unfolded and `erwp_rebGen` applied at the canonical image | `vC_tyEq` converts the source to the record's type; `RebChooseTW` picks the image inside `wpTS_reborrow` | no configuration yet; `vN_tyEq` is not built (L2) |
-| D12 | the capture bridges into `crwpG` are read at `Φ.imm = []` | — | no configuration: `crwpG`'s entry does not carry the tie yet (#821). (`Goal791SchedN`'s `Θ.imm = []` is not a restriction: a closed task starts at the empty list) |
+| D12 | the capture bridges into `crwpG` are read at `Φ.imm = []` | — | no configuration: `crwpG`'s entry does not carry the tie yet (#821). (`goal791N` starts at the empty world, whose `imm` is `[]`: a closed program starts at the empty list) |
 
 What is Core's, not a departure: `Mut`'s slack and uniform conjunct; `Imm`'s payload at the
 observable view; `∀` vacuous where the bound is undefined; `vN_extR` as `vC_local`;
@@ -277,7 +285,8 @@ the Mut Frame across the row's raises (`erwp_M_frameR`) and the claim's consiste
 
 Each `*S_compat` proves the constant a value of `!` its type at every `δ`, world and index, from
 `Const791.OK`'s clauses and, where the constant has a finaliser, the finaliser's semantic judgment
-`hd`. `constN_*` reads `hd` off `FundamentalN` at the finaliser's derivation.
+`hd`. `constN_*` reads `hd` off `FundamentalN` at the finaliser's derivation; `constN_all` reads it
+off `fundamentalN_all`, with no fragment premise.
 
 | Constant | Compat lemma | `ConstN` | Instance, every hypothesis discharged |
 |---|---|---|---|
@@ -342,33 +351,23 @@ Core's `lifeBound_of_tagged`), which is why the entry tie matches a record's lif
 | `ConstN c` | `c.OK → ∀ δ Θ n, Θ.OK → vN (! c.ty) δ Θ n c.val ∅` |
 | `ConstsN` | `ConstN c` for every `c` with `c.InFrag` |
 | `FundamentalN` | every `CDerives Δ Γ e j` with `JdgInFrag Γ j` gives `SemJN Δ Γ e j` |
-| `BridgeN` | a closed `F 1` run at every `OK` world and view is `OrDiverges` |
-| `Goal791SchedN` | `poolSchedAdequacyN`'s form at `rowTabN S Θ c`, at any `Θ` with `Θ.OK` and `Θ.imm = []`, for a task typed from in-fragment constants at an in-fragment row |
-| `Withbor2SN`, `Withbor3SN`, `WithborFSN`, `WithloadSN`, `SliceBorrowMSN` | `ConstN` at each constant, every parameter |
-
-Proved: `bridgeN : BridgeN` (`erwp_adequacy` at the empty world), and
+| `MissingN` | `HandleVN ∧ HandleVBN ∧ ReifyN`: the three rules with no compatibility lemma, each as its `*_compatN` would be |
+| `HandlerLawN` | a structure of the same three fields, a `Prop` hypothesis in `PinLaw`'s form |
+| `Goal791N` | every closed program typed at `F 1` from constants meeting their premises, its handlers inside it, is `OrDiverges` |
 
 ```
-goal791Sched_of : FundamentalN → ConstsN → Goal791SchedN
+fundamentalN_all : MissingN → CDerives Δ Γ e j → SemJN Δ Γ e j
+fundamentalN_of  : MissingN → FundamentalN
+constN_all       : MissingN → ∀ c, ConstN c
+goal791N         : HandlerLawN → Goal791N
 ```
 
-through `poolSchedAdequacyN` at the view. Its hypotheses are exactly the two named. `ConstsN` is
-not assembled in Lean: `sm`'s type holds `.array A = .fam (.ref A)`, so `sm` is outside the
-fragment, and the in-fragment constants are covered by `constN_w2`/`w3`/`wF`, each conditional on
-`FundamentalN`, and `constN_wl`.
-
-**The assembly** (`Fundamental831N.lean`, `scope-831-interface.md` §14):
-
-```
-fundamentalN_all         : MissingN → CDerives Δ Γ e j → SemJN Δ Γ e j
-fundamentalN_of          : MissingN → FundamentalN
-goal791SchedN_of_missing : MissingN → Goal791SchedN
-```
-
-`fundamentalN_all` is `fundamentalC`'s induction, every case its rule's chain lemma. No chain
-lemma reads the fragment, so the induction holds at every derivation, one that cuts through a type
-outside the fragment included. `MissingN` is the conjunction of the three rules with no chain
-lemma, each as its `*_compatN` would be:
+`fundamentalN_all` is `fundamentalC`'s induction, every case its rule's compatibility lemma at
+`cN`. No lemma reads the fragment, so the induction holds at every derivation; `constN_all` reads
+each finaliser's judgment off it, so `Goal791N` needs no fragment premise on the constants.
+`goal791N`: `fundamentalN_all` at the program's derivation, at the empty world and view, the
+constants' context met by their values (`gN_ctx791`); `F 1` at `KW` is `erwp` at the empty table
+(`cN_ret_iff`), and `erwp_adequacy` gives `OrDiverges`.
 
 | Conjunct | Rule | Core's lemma |
 |---|---|---|
@@ -376,42 +375,36 @@ lemma, each as its `*_compatN` would be:
 | `HandleVBN` | `effHandleVB` | `handleV_compatCB` |
 | `ReifyN` | `reify` | `reify_compatX` |
 
+**Non-vacuity.** `goal791N_premises_inst`: every premise of `Goal791N` at `prog791`, which
+allocates a cell, lends it `mut` with the constant `withbor (2)` at the row `{wait}`
+(`wait : 1 ↠^lin 1`), whose callback performs `wait` while it holds the borrow and then releases
+it, frees the cell after the lend, and handles `wait` inside the program (`effHandleT`, its clause
+resuming `κ`). `prog791_orDiverges : HandlerLawN → OrDiverges prog791`. `handle_resume_inst`: the
+conclusion of `HandleVN`/`HandleVBN` at a handler whose clause resumes `κ`, at every handled
+computation, every premise inhabited (`HandlerLawN.lean`).
+
 ### 6.5 Relation-level results the track rests on
 
-`poolSchedAdequacyN` (`PoolN.lean`), `PoolSpawnN`, `erwp_adequacy`; `hardestCase791` and
-`hardestCase791C` (`Hardest791N.lean`: the hardest case, resumed and cancelled, as closed programs
-through `progOfN_orDiverges`). They read no interpretation.
+`erwp_adequacy` (`goal791N`'s last step). `poolSchedAdequacyN` (`PoolN.lean`), `SchedOKN`,
+`PoolSpawnN` (`HS`, `hs_schedOKN`); `hardestCase791` and `hardestCase791C` (`Hardest791N.lean`:
+the hardest case, resumed and cancelled, as closed programs under the untyped scheduler `HS`,
+through `progOfN_orDiverges`). They read no interpretation, and `Goal791N` reads none of them.
 
 ## 7. What is open
 
-**`FundamentalN`.** Proved from `MissingN` (§6.4): every rule but `effHandleV`, `effHandleVB` and
-`reify` is proved at `SemJN`. The units below are as the port planned them in
-`scope-831-interface.md`, line by line against chain lemmas named after Core's (its §4, option B),
-in these units (its §5):
-
-| Unit | Builds | Hardest case |
-|---|---|---|
-| L1, context and bind | the context split with its consistency (G1, G12), `gN_le`, `gN` along `ExtR`, the bind frame (W4), `cN_bind`, `wpTS_box`, `bang_app`, `host_call_sound` at `vN`, … | G12 at a conclusion that is not `F`/`F_Σ`; `cN_bind`'s `⊸` case under D6 |
-| L2, type equality | `vN_tyEq`/`cN_tyEq` | the `Imm`/`Mut` clauses under `TyEq` |
-| L3, the unwinding anti-frame | `erwp_M_antiFrameCR` at a `Row.Unwind` row's twin (R3) | that twin |
-| L4, effects and handlers | the BOXED-κ stop lemma (E12), the row frames, `erwp_ubind` in Core's form, the handler clauses at `vN`, `erwp_iterate`'s close branch | E12: not derived, obstruction not verified |
-| L5, opaque types and families | an `opq` clause, a `fam` clause, the `n`-cell frames | the frames across stops, one key per cell |
-| L6, `μ` | an environment argument, the `μ`/`tvar` clauses, `RelMu` at the index (built, `scope-831-interface.md` §13) | the environment argument |
-| L7, `ν` | a reading of `ν` at `erwp` | a design choice first |
-
-What is left of them is `MissingN`: the handler clauses at `vN` for `effHandleV` and
-`effHandleVB` (E10, `scope-831-interface.md` §10.1), and `reify` (§12.5).
+**`HandlerLawN`.** `effHandleV`, `effHandleVB` and `reify` have no compatibility lemma at `cN`.
+The step that does not go through is `assert-boundary.md` §2.2: a clause that keeps `κ` hands it
+to `vN`'s `U` clause, which reads `KW.OwedR`, where the stop owes it along `KW.Owed` at the floor
+the stop chose. `assert-boundary.md` §3 ranks smaller assertions (a per-operation mark,
+`StopReadNW`); each needs E10 at `OwedR` entries and the reading-parametrised fundamental lemma.
 
 **Departures with no configuration yet** (D5, D6, D7's `Covers` half, D11, D12). Each is a
 choice: a configuration that forces it, or a return to Core's reading. `scope-831-interface.md`
 §5 lists what each return would touch.
 
 **Other open items.**
-- `sm`: a `fam` clause in `vN` and the `n` Mut Frames at once across stops, raises and layered
-  cancel runs (L5).
-- `Goal791Top` (`Core/TreeGoal791.lean`): `[handle]` typed inside the program (#792), so that the
-  closed `F 1` program reduces to `Goal791SchedN`'s form. No Lean lemma relates `Goal791SchedN`
-  to the tree's `Goal791Sched`.
+- `Goal791Top` (`Core/TreeGoal791.lean`) is the tree track's form of `Goal791N`. No Lean lemma
+  relates the two.
 - `cN_extA` at `F_Σ R`: not derived, obstruction not verified. No rule needs it
   (`scope-831-map.md` §3.2): it would need an `erwp` lemma over tables whose payloads grow and
   whose answers agree.

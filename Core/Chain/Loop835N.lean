@@ -10,10 +10,11 @@ a coinduction up to `cwp` whose candidate holds the loop after a *next* and whos
 (E13), so the loop is `erwp_iterate`'s induction on the index (`SI/LoopN.lean`), with the tick's
 answer read as Core's: *next* goes round again, below the index the tick is at; *close* runs the
 close path `inr ((f s′).2)`, the close observation bound under `inr` (`erwp_bind`, the context
-closed by `tabN_ctxClosed`).
+closed by `tabNK_ctxClosed`).
 
-`tabN_ctxClosed` is E5's `CtxClosed` at a row's table: a context with no handler that catches no
-cancel carries the cancel obligations (`cancelOblN_plain₀`, Core's `plain_cancel₀`).
+`tabNK_ctxClosed` (`RowFamK835N`) is E5's `CtxClosed` at a row's table: a context with no handler
+that catches no cancel carries the cancel obligations (`tabF_plain_cancel`, Core's
+`plain_cancel₀`).
 -/
 
 noncomputable section

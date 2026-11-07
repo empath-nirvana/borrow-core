@@ -3,7 +3,8 @@ import Core.Chain.CancelKW835N
 /-!
 # The suspending reborrow at the typed world  `[spec §62]`
 
-`Reborrow791N`'s `withbor3S_compat` at `SemJN`, step for step: the anti-frame at the source's own
+Core's `withbor3U_compatX` at a suspending row at `SemJN` (`withbor3S_compat`), step for step,
+over `Reborrow791N`'s frames: the anti-frame at the source's own
 entry (`erwpK_M_antiFrameCR_tab`, its invariant `KW.SealInv`), the opened cell lent at a lifetime
 `α` below the source's (`erwpK_M_frameCRG_cN`, the guarded Mut Frame with the callback read as a
 thunk of `cN`), the lender at the floor no higher than `α` (`erwpK_flr`, `LendInv`), the claim
@@ -61,7 +62,7 @@ theorem erwpK_M_frameCRG_cN {xv : LifeVar} {bnd : Lifetime.Life}
   exact hQ x' k ls v ρ hq
 
 /-- **The finaliser consumes the source, at `SemJN`**: `λ_. d ℓ` from a `Mut @a A` value at `ℓ`,
-by `d`'s judgment at `Mut @a A ⊸ 1` (`fin_claimM₀`). -/
+by `d`'s judgment at `Mut @a A ⊸ 1`. -/
 theorem fin_claimM {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
     (hd : SemJN (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.mut a A) .unit))) {δ : LSub}
     {Θ : LocTy} (hΘ : Θ.OK) {c : Loc → Option Life} {l : Loc} {k : Nat} {ls : List SRec}
@@ -86,10 +87,9 @@ theorem fin_claimM {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d 
     c k' le_rfl (Val.loc l) τ₂ τ hcτ (vN_le hk' h) hcτ'
   exact rwp_of_erwp_empty (erwp_of_cN_ret this)
 
-/-- **`withbor (3)` at a suspending row is a value of `!` its type, at `SemJN`**
-(`withbor3S_compat₀` at the typed world): `withborU d`, at
-`Mut @a A ⊸ (∀'x ⊏ @bnd. Mut 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ(Mut @a A ⊗ B)` with `Σ` a
-`Row.Suspend x bnd` row. `withbor3S_compat₀`'s steps at every floor:
+/-- **`withbor (3)` at a suspending row is a value of `!` its type, at `SemJN`**:
+`withborU d`, at `Mut @a A ⊸ (∀'x ⊏ @bnd. Mut 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ(Mut @a A ⊗ B)` with `Σ`
+a `Row.Suspend x bnd` row. Its steps at every floor:
 
 * the source `ℓ ↦ mut(β, w₀, σ₀, F_o j₀)`, `Θ (ℓ, β) = F_o`, and `c ℓ = β` (`consistentX_get`):
   the anti-frame's invariant `KW.SealInv` at the start;
@@ -103,7 +103,7 @@ theorem fin_claimM {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d 
   `LendInv Θ α` holds at (`vN_above`); the claim consistent (`erwpK_claimXK`); the finaliser frame
   consumes it with `d` (`erwpK_ubindClaimRWK`, `fin_claimM`).
 
-Premises as `withbor3S_compat₀`'s; `hd` is `d`'s judgment at `SemJN`. -/
+Premises those of the rule; `hd` is `d`'s judgment at `SemJN`. -/
 theorem withbor3S_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {S : Row} {d : Expr} (hbnd : LifeCtx.empty.Defines bnd) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
     (hS : S.Suspend x bnd)

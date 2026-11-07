@@ -740,3 +740,30 @@ their proofs under `₀`.
 **Not built.** The loop made at a tick: `candR`'s first disjunct, `reify_next`, `reify_close`. It
 is the handler's induction over a segment (`hnd_tick`, `hnd_fwd`, the resumption of the stored
 `κ`), so it waits on the handler step at `erwpK` (E10, §12.5 of `scope-831-interface.md`).
+
+### 10.13 `MissingN`, `HandlerLawN` and plain adequacy at `SemJN`
+
+`assert-boundary.md` §5. The relation at `KW` is the only relation: `Goal791N0.lean` and every
+statement over the one-world relation are deleted.
+
+- **`fundamentalN_all`** (`FundamentalKW835N`): `fundamentalC`'s induction at `SemJN`, case for
+  case the one-world assembly's, every case its compatibility lemma at `cN`. `MissingN` is
+  `HandleVN ∧ HandleVBN ∧ ReifyN` at `SemJN`. `fundamentalN_of : MissingN → FundamentalN`.
+- **`HandlerLawN`** (`HandlerLawN`): the three fields of `MissingN`. `handle_resume_inst` at
+  `erwpK`: the handled run pre-passed (`erwpK_postPA`), `erwpK_handle_leI` at the handled row's
+  table; the clause pays its `β` step, moves to the floor the stop chose (`erwpK_flr_tabN`) and
+  resumes `κ` at the world `postOK` gives (`KW.Post` to the lowered floor, its location typing
+  valid).
+- **`Goal791N`** (`Adequacy791N`): every closed program typed at `F 1` from the constants, its
+  handlers inside it, is `OrDiverges`. `goal791N : HandlerLawN → Goal791N`, by
+  `fundamentalN_all`, `constN_all` (each constant's finaliser read off `fundamentalN_all`, no
+  fragment premise), `cN_ret_iff` and `erwp_adequacy`. Non-vacuous at `prog791`.
+- **Retired.** `Goal791SchedN` and its proofs: `Goal791N` covers a scheduler typed in the
+  program; an untyped scheduler under a semantic contract is not a closed typed program, so
+  `Goal791SchedN` does not follow from `Goal791N`. `SchedOKNK`, `SchedOKNLeK`, `SchedOKNKW` and
+  the scheduler's handler lemmas at `KW` (`erwpK_handle_sched*`): nothing used them.
+  `Restrict835N.lean`: nothing used it. `SchedOKN`, `HS`, `hs_schedOKN` and `poolSchedAdequacyN`
+  stay: `hardestCase791`/`hardestCase791C` and `progOfN_orDiverges` use them.
+- **Kept at `KW`.** The configurations that read `vN`/`cN` (`ConfigsKW835N`), BOXED-κ's stop
+  lemma (`StopKW835N`: `tabN_ansIn`, `SemCSN`, `SemCSN.semJN`, `stop_semN`, by
+  `erwpK_stratify`).

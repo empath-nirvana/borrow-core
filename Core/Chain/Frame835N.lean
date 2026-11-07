@@ -9,13 +9,13 @@ Interface entries E8 and W9 (`scope-831-interface.md`), each Core's proof at `er
   `ent_plain`, `ewp_frame_plain`). A cancel run under a plain context `K` (no handler, catches no
   cancel), beside a frame owning nothing, ends leaving both behind; at a stop both join the
   continuation (`cancelOblN_frame`). A row's table carries its cancel obligations through `K`, by
-  Core's recursion on the cancel rows (`tabN_plainCancel`). A frame owning nothing is garbage
-  (`cancelOblN_frame_consume`, `entN_plain`). An effectful computation under `K`, beside a frame
-  `Fr`, carries `Fr` into every stop's continuation; at an abortive stop `Fr` is left behind
-  owning nothing, at an unrestricted one it is empty, and at a cancel it is carried by the
-  entry's cancel obligation (`erwp_frame_plain`). Core inducts on `ewpTS`'s least fixed point;
-  here the induction is on the index. Core's `ewp_frame_plain_or` has a table beside (a tick at a
-  `Div` row); a `Div` row is a row of the chain's table (E13), so there is none.
+  Core's recursion on the cancel rows (`tabF_plain_cancel`, `RowFamK835N`). A frame owning nothing
+  is garbage (`cancelOblN_frame_consume`; at a row's entry, `entF_plain`). An effectful computation
+  under `K`, beside a frame `Fr`, carries `Fr` into every stop's continuation; at an abortive stop
+  `Fr` is left behind owning nothing, at an unrestricted one it is empty, and at a cancel it is
+  carried by the entry's cancel obligation (`erwp_frame_plain`). Core inducts on `ewpTS`'s least
+  fixed point; here the induction is on the index. Core's `ewp_frame_plain_or` has a table beside (a
+  tick at a `Div` row); a `Div` row is a row of the chain's table (E13), so there is none.
 * **W9** (Core's `wpTS_val_post`): a value's run at `erwp` stops at once, so the postcondition
   holds at the run's own configuration (`erwp_val_post`).
 

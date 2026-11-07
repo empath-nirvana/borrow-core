@@ -7,9 +7,9 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 /-!
 # `withload` at the pure row, at the typed world  `[spec §62]`
 
-`withload_rebT` (6.150 at the run's first entry) at `vN`, over any one-world table `T` with the
+`withload_rebT` (6.150 at the run's first entry) at `vN`, over any table `T` at `erwp` with the
 reborrow's premises (`hTab`, `hClo`); at the pure row `T` is the empty table, where both hold of
-no entry. `withload_compatN` is `Borrow834N`'s proof with it.
+no entry. `withload_compatN` is Core's `withload_compatX` at the pure row, with it.
 -/
 
 namespace BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
@@ -41,7 +41,7 @@ the bound is a value of `Imm̲ 'x A` (`relabel_vN`), and 6.150 across the callba
 and layered cancel runs (`erwp_rebGen`) gives the run. The table's premises are `hTab` (the
 table may be stopped at under the reborrow) and `hClo` (its cancel obligations are closed under
 it). The callback's run at the image is the premise `hcb`: at a suspending row
-`callback_at_image₀`, at an unwinding row `callback_at_imageU₀`, at the pure row its `F (U …)`
+`callback_at_image`, at an unwinding row `callback_at_imageU`, at the pure row its `F (U …)`
 form. -/
 theorem withload_rebT {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {T : OpTabN} {δ : LSub} (hbnd : ∃ γ, bnd.interp δ = some γ) (hA : ¬ VFree x A)

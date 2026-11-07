@@ -71,12 +71,10 @@ unchanged; `LocFam` carries the `imm` records, and the relation's entry (`rwp`, 
 carries the tie `ImmTieL` (every `imm` record of the location typing is on the run's list). This
 is a second track beside the one relation above, not an instance of it.
 
-The bridge to the tree goal: `Goal791SchedN` restates `TreeGoal791`'s `Goal791Sched` over `erwp`,
-with the same constants (`Const791`, `Const791.OK`), context (`ctx791`), program and conclusion
-(`OrDiverges` of the scheduled task). It differs in the scheduler premise (`SchedOKN` at the row's
-chain table `rowTabN`, not `SchedOKT`), in the world (`LocTy` and a view, not `TWd`), and in its
-scope (the fragment: `Const791.InFrag` and the row's types, `VTy.inFrag`). No Lean lemma relates
-the two; neither has been derived from the other.
+The bridge to the tree goal: `Goal791N` is `TreeGoal791`'s `Goal791Top` over the chain, with the
+same constants (`Const791`, `Const791.OK`), context (`ctx791`), program at `F 1` and conclusion
+(`OrDiverges`). It differs in the world (`LocTy` and `KW`, not `TWd`) and in its hypothesis
+(`HandlerLawN`). No Lean lemma relates the two.
 
 ## 4. Lifetimes as a tree; the carrier; re-reading
 
@@ -139,9 +137,8 @@ branch points), not as branches of `CactusInvT`; this is decision 74 (`scope-781
 `scope-795.md`). Open: adequacy at the
 relation the typing rules use; the frame rules as instances of capture (condition 20).
 
-The chain interpretation of §3 does not go through the cactus invariant: `goal791Sched_of`
-derives `Goal791SchedN` through `poolSchedAdequacyN` at the view, from `FundamentalN` and
-`ConstsN`.
+The chain interpretation of §3 does not go through the cactus invariant: `goal791N` derives
+`Goal791N` from `fundamentalN_all` and `erwp_adequacy` at the empty world, under `HandlerLawN`.
 
 Threads: the invariant is per computation. The two dependencies on sequential scheduling (a frame
 fixed for a whole segment; `JoinReady` read at the resume) are kept separate, so a concurrent
@@ -195,20 +192,25 @@ Core's plain results over canonical worlds are `Core.C` (condition 8); over the 
 are part of step 2.
 
 **Over the chain (#791, §3).** `chain-interpretation.md` §3, §6, §7.
-1. 𝒱/𝒞 over `erwp` at `LocTy` (`vN`, `vO`, `cN`, `tabN`, `finN`, `retN`, `gN`, `SemJN`) for every
-   former in the fragment (`VTy.inFrag`): `Mut` at Core's `ptoMutS` shape (a cell at `b ⊒ @aδ`,
-   the uniform conjunct at `b`), `Imm` at Core's `ptoImmS` shape (the payload in the observable
-   view `vO`, the location witnessed in the world's `imm` records, `ImmWitW`), `U` and `⊸` Kripke
-   along the resource-relative `LocTy.ExtR`, `∀` as Core's `cC`. Type variables, μ, families,
-   opaque types are read as empty; ν is Core's greatest fixed point (#837). Laws: downward closure, `vN_extR`, `vN_local`,
+1. 𝒱/𝒞 at `LocTy` and the typed world `KW` (`vN`, `vO`, `cN`, `tabN`, `finN`, `retN`, `gN`,
+   `SemJN`): `Mut` at Core's `ptoMutS` shape (a cell at `b ⊒ @aδ`, the uniform conjunct at `b`),
+   `Imm` at Core's `ptoImmS` shape (the payload in the observable view `vO`, the location
+   witnessed in the world's `imm` records, `ImmWitW`), `U` and `⊸` Kripke along the
+   resource-relative `LocTy.ExtR`, `∀` as Core's `cC`, μ and type variables through Core's
+   `RelMu` environment, ν as Core's greatest fixed point. `F A` and `F_Σ R` are `erwpK` at every
+   floor, each table entry owing along `KW.Owed`. Laws: downward closure, `vN_extR`, `vN_local`,
    `vN_outlives`.
-2. Rule checks at `SemJN`: `mutSub`, `immSub`, `allI`, `withbor1`, `withbor1U`, `withbor2`,
-   `withbor2U`. The constants: `withbor2S_compat`, `withbor3S_compat`, `withborFS_compat` (each
-   with its finaliser's judgment `hd` as a premise) and `withloadS_compat`, instantiated with every
-   hypothesis discharged. `FundamentalN` is stated on the fragment (`JdgInFrag`) and not proved;
-   its plan is `scope-831-interface.md` (units L1–L7). A derivation of an in-fragment judgment may
-   cut through an excluded former, which the interpretation does not read until L5–L7.
-3. Adequacy: `goal791Sched_of` (`Goal791SchedN` from `FundamentalN` and `ConstsN`).
+2. Every `CDerives` rule at `SemJN` but `effHandleV`, `effHandleVB` and `reify`; the five
+   constants (`withbor2S_compat`, `withbor3S_compat`, `withborFS_compat`, `withloadS_compat`,
+   `sliceBorrowMS_compat`). `fundamentalN_all : MissingN → CDerives Δ Γ e j → SemJN Δ Γ e j` by
+   induction on the derivation. The three missing rules are the named assertion `HandlerLawN`
+   (`Core/Chain/HandlerLawN.lean`), a `Prop` hypothesis in `PinLaw`'s form; non-vacuous at a
+   handler whose clause resumes `κ` (`handle_resume_inst`).
+3. Adequacy: `goal791N : HandlerLawN → Goal791N`. `Goal791N`: every closed program typed at
+   `F 1` from the constants (each meeting its rule's premises), every handler it uses inside it,
+   is `OrDiverges`. No scheduler, scheduler contract or restriction on handler names is
+   quantified over. Non-vacuous at `prog791`, a lend callback that performs while it holds a
+   `mut` borrow, under a handler inside the program (`goal791N_premises_inst`).
 
 ## 8. Termination
 
