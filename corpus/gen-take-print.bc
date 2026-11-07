@@ -1,0 +1,23 @@
+-- A generator that never finishes, taken lazily under a loop that prints: `naturals` returns `0`,
+-- the empty type, so the `for` inside `take` matches its source's end at `absurd`. `main`'s
+-- output capability is live across that arm, which never runs: `absurd` absorbs it (SPEC §66),
+-- and no consume of it is made there.
+--
+-- Answer: the lines 1, 2, 3, then `()`. A `take` that stopped one late prints 4 as well.
+
+include textio
+include yield
+
+fn naturals() -> 0 with Yield[i32] =
+  let mut i = 1;
+  loop { yield(i); i = i + 1 }
+
+fn take(n: i32, it: U (pull i32 0 1)) -> 1 with Yield[i32] =
+  let mut i = 0;
+  for x in it {
+    if i < n { yield(x); i = i + 1 } else { break }
+  };
+  ()
+
+main -> 1 =
+  for x in take(3, naturals()) { print_dec(x); print_byte(b'\n') }

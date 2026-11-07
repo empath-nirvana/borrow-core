@@ -207,6 +207,7 @@ gen-div 3 0 0 3 3 0 # the generator that read the input (the stdin cell) is in c
 gen-fib 3 0 0 3 3 0
 gen-from 3 0 0 3 3 0 # the generator that echoed the input (the stdin cell) is in corpus/pending/ (a capability across a yield, SPEC §15 Open)
 gen-nested 3 0 0 3 3 0
+gen-take-print 3 0 0 9 3 0
 gen-pipeline 3 0 0 3 3 0
 gen-pipeline-adapters 3 0 0 3 3 0
 gen-pipeline-pipe 3 0 0 3 3 0 # as gen-pipeline-adapters: the pipelines are its nested calls
