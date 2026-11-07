@@ -11668,8 +11668,19 @@ proofs; every corpus and kernel program its output. The later units must preserv
   built. `unfoldK`'s, that `unfold step` is in the clause at `hCode C`, is not built.
 - **The scope's `ρR`.** With a part of the resource the environment does not hold, `nuOutK` is not
   derived; obstruction not verified. This entry drops `ρR` and moves the obligation to `codeI`'s
-  premise `Γ.CapOK`. That a well-typed closure always meets `CapOK` (no live non-persistent slot
-  goes unused) is not derived; where it fails, the checker keeps `U C`.
+  premise `Γ.CapOK`. `CapOK` is not derivable from `CDerives`: `topI` and `zeroE`'s absorbed part
+  are the two rules that leave a live slot of any type unread (every other rule's context premises
+  are `SplitP`, `DeadP`, `SoloP`, `Dead` or `Banged`, read by inspection of the constructors, not a
+  theorem), so a closure whose body ends at `⊤` or `absurd` with an unread resource fails it, and
+  the checker keeps `U C` there. Measured (`experiments/CapOK`): of the 9,152 closure nodes of the
+  330 corpus programs, none fails `CapOK` and none captures a dead slot; 14 contain a `topI` or
+  `zeroE`, 2 of them with a live slot, which they capture; 3 leave a live slot unread, each
+  persistent.
+- **Removing `CapOK` later.** Two ways keep `Code⟨N; E⟩ C` and every rule but `codeI` as stated.
+  The frame `ρR` back in the clause changes only `codeI` (its premise dropped) and the clause, but
+  `nuOutK`'s step is then not derived. Or `E` lists the absorbed slots after the captures and the
+  clause reads `v = N[take k us]`: this changes `codeI`'s `capTy` and the clause, and leaves
+  `nuOutK`, whose `etaEnv` has no absorbed slot, as proved. Neither is built.
 - **The observable view** at `code` is stated `True`, not built.
 
 ---
