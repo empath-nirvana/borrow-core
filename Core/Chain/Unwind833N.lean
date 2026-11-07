@@ -15,7 +15,7 @@ borrow.
   the callback's table the lender's (`tabN_unwind_eq_add`), the anti-frame `erwp_M_antiFrameU`,
   the claim consistent (`erwp_claimX_abort`), the finaliser frame at a raise (`erwp_ubindRaise`,
   `fin_claimMN`).
-* `withloadU_sem`, `withloadU_compatN`: `withloadS_compat`'s steps, 6.150 across the row's raises
+* `withloadU_sem`, `withloadU_compatN`: `withloadS_compat₀`'s steps, 6.150 across the row's raises
   (`withload_rebT₀`, `erwp_rebGen`). An unwinding row may hold an unrestricted operation; it is
   abortive, so it never resumes and the reborrow is never re-entered through it
   (`OpTabN.RebOKR.entry` reads only resumable entries). The row's table admits the reborrow at
@@ -351,7 +351,7 @@ theorem withbor3U_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B
 
 /-- **The unwinding callback at the image**: the callback, at `β ⊏ @bnd`, applied to the image
 `χ` of the loaded payload, typed at `Imm̲ 'x A`, runs at the row's table with `[β]𝒱⟦B⟧` as its
-post (`callback_at_image` at a `Row.Unwind` row, its table by `tabN_unwind_extend`). -/
+post (`callback_at_image₀` at a `Row.Unwind` row, its table by `tabN_unwind_extend`). -/
 theorem callback_at_imageU {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Row}
     (hB : ¬ VFree x B) (hS : S.Unwind x) {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK)
     {c : Loc → Option Life} {n : Nat} {ls : List SRec} {f u : Val} {ρf χ Bχ : WRes} {β : Life}
@@ -376,7 +376,7 @@ theorem callback_at_imageU {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : 
 
 /-- **`withload` at an unwinding row is a value of its type**: at
 `Imm @a A ⊸ (∀'x ⊏ @Δ. Imm̲ 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ B` with `Σ` a `Row.Unwind x` row. Core's
-`withloadU_compatX`, step by step, as `withloadS_compat`: the `Imm` argument is `loc ℓ`; the
+`withloadU_compatX`, step by step, as `withloadS_compat₀`: the `Imm` argument is `loc ℓ`; the
 load (`rwp_load_cell` under `erwp_bindR`); 6.150 at the run's first entry (`withload_rebT₀`),
 across the row's raises (`erwp_rebGen`): the row's table admits the reborrow at every `β`
 (`tabN_unwind_rebOKR`; an unrestricted operation of the row is abortive, so it never resumes) and

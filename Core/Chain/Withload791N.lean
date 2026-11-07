@@ -9,7 +9,7 @@ import Core.Chain.SI.RebRaiseC
 Core's `withload_compatX` (`Core/Compatibility.lean:252`), step by step (`chain-interpretation.md`
 §6.3), at a `Row.Suspend` callback row:
 
-* **The tables.** The callback's table is the constant's (`tabN_extend_suspendC`): the row's
+* **The tables.** The callback's table is the constant's (`tabN_extend_suspendC₀`): the row's
   layers do not mention `'x`. It may be stopped at under a reborrow at `β ⊏ @bnd`
   (`tabN_rebOKR`), and its cancel obligations are closed under the reborrow (`tab_rebClosed`,
   by induction on how deep cancel rows nest, `erwp_rebGen_cancelRun` at each level: the
@@ -44,7 +44,7 @@ theorem entN_fin_congr {q : Qual} {B : VTy} {PA PB : Nat → Val → WRes → Pr
     congr 1
 
 /-- A row's cancel obligation reads `δ` only through its table. -/
-theorem finN_of_tabN : ∀ (F : CTy) {δ₁ δ₂ : LSub} {Θ : LocTy} {c : Loc → Option Life},
+theorem finN_of_tabN₀ : ∀ (F : CTy) {δ₁ δ₂ : LSub} {Θ : LocTy} {c : Loc → Option Life},
     tabN₀ (ℍ := ℍ) F δ₁ Θ c = tabN₀ (ℍ := ℍ) F δ₂ Θ c →
       finN₀ (ℍ := ℍ) F δ₁ Θ c = finN₀ (ℍ := ℍ) F δ₂ Θ c
   | .eff _ _ _ _ _ _ _ _, _, _, _, _, h => by
@@ -58,16 +58,16 @@ theorem finN_of_tabN : ∀ (F : CTy) {δ₁ δ₂ : LSub} {Θ : LocTy} {c : Loc 
   | .nu _, _, _, _, _, _ => rfl
 
 /-- **A row whose layers do not mention `'x` has one table at `δ` and `δ['x ↦ α]`.** -/
-theorem tabN_extend_suspendC {x : LifeVar} {bnd : Lifetime.Life} (α : Life) :
+theorem tabN_extend_suspendC₀ {x : LifeVar} {bnd : Lifetime.Life} (α : Life) :
     ∀ (F : CTy), F.SuspendC x bnd → ∀ (δ : LSub) (Θ : LocTy) (c : Loc → Option Life),
       tabN₀ (ℍ := ℍ) F (δ.extend x α) Θ c = tabN₀ (ℍ := ℍ) F δ Θ c
   | .eff m i q A B fin rc C, hF, δ, Θ, c => by
       obtain ⟨⟨_, hA, hB, _, _, hfin⟩, hC⟩ := hF
       simp only [tabN₀]
       rw [vN_extend_of_not_free₀ hA, vN_extend_of_not_free₀ hB,
-        tabN_extend_suspendC α C hC δ Θ c,
+        tabN_extend_suspendC₀ α C hC δ Θ c,
         entN_fin_congr (f := finN₀ (ℍ := ℍ) fin (δ.extend x α) Θ c) (f' := finN₀ (ℍ := ℍ) fin δ Θ c)
-          (fun hcap => finN_of_tabN fin (tabN_extend_suspendC α fin (hfin hcap) δ Θ c))]
+          (fun hcap => finN_of_tabN₀ fin (tabN_extend_suspendC₀ α fin (hfin hcap) δ Θ c))]
   | .ret _, _, _, _, _ => rfl
   | .arr _ _, _, _, _, _ => rfl
   | .amp _ _, _, _, _, _ => rfl
@@ -372,7 +372,7 @@ theorem tyEq_immReb {A T : VTy} {δ δ' : LSub} (he : TyEq A δ T δ') {x y : Li
 
 /-- **The callback at the image**: the callback, at `β ⊏ @bnd`, applied to the image `χ` of the
 loaded payload, typed at `Imm̲ 'x A`, runs at the constant's table with `[β]𝒱⟦B⟧` as its post. -/
-theorem callback_at_image {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Row}
+theorem callback_at_image₀ {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Row}
     (hB : ¬ VFree x B) (hS : S.Suspend x bnd) {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK)
     {c : Loc → Option Life} {n : Nat} {ls : List SRec} {f u : Val} {ρf χ Bχ : WRes} {β : Life}
     (hLt : LtLife δ bnd β)
@@ -386,7 +386,7 @@ theorem callback_at_image {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : R
   have h1 := (hf Θ (LocTy.extR_refl _ _) hΘ c hcf ls) β hLt
   have hcon : ConsistentX c Bχ := consistentX_compS hBχ hcf (consistentX_allImm hχ c)
   have h2 := h1 c n le_rfl u χ Bχ hBχ himg hcon
-  rw [cN_effOf₀, tabN_extend_suspendC β _ (suspendC_effOf hS _) δ Θ c,
+  rw [cN_effOf₀, tabN_extend_suspendC₀ β _ (suspendC_effOf hS _) δ Θ c,
     tabN_effOf_base₀ S (.box (.var x) B) B δ Θ c] at h2
   refine erwp_mono (fun k _ w ρ hb => ?_) (opTableN_local _) n ls _ Bχ h2
   obtain ⟨α', hα', hbB, hst⟩ := hb
@@ -404,7 +404,7 @@ the bound is a value of `Imm̲ 'x A` (`relabel_vN₀`), and 6.150 across the cal
 and layered cancel runs (`erwp_rebGen`) gives the run. The table's premises are `hTab` (the
 table may be stopped at under the reborrow) and `hClo` (its cancel obligations are closed under
 it). The callback's run at the image is the premise `hcb`: at a suspending row
-`callback_at_image`, at an unwinding row `callback_at_imageU`, at the pure row its `F (U …)`
+`callback_at_image₀`, at an unwinding row `callback_at_imageU`, at the pure row its `F (U …)`
 form. -/
 theorem withload_rebT₀ {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {S : Row} {δ : LSub} (hbnd : ∃ γ, bnd.interp δ = some γ) (hA : ¬ VFree x A)
@@ -542,7 +542,7 @@ theorem withload_rebT₀ {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
 
 /-- **`withload_rebT₀` at a suspending row**: the row's table may be stopped at under the
 reborrow (`tabN_rebOKR`), and its cancel obligations are closed under it (`tab_rebClosed`). -/
-theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
+theorem withload_reb₀ {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {S : Row} {δ : LSub} (hbnd : ∃ γ, bnd.interp δ = some γ) (hA : ¬ VFree x A)
     (hS : S.Suspend x bnd) {Θ : LocTy} {c : Loc → Option Life}
     {n : Nat} {ls : List SRec} {f v : Val} {l : Loc} {s : LSet} {σ : WRes}
@@ -573,17 +573,17 @@ Core's `withload_compatX`, step by step (`chain-interpretation.md` §6.3):
 3. the callback, at the same world: `⊸` is a plain wand;
 4. both are at the world `Θ` the run is at, which the thunk's `U` reached;
 5. the load: its payload observable at `A` (`rwp_load_I` under `erwp_bindR`);
-6.–11. at the run's first entry (`withload_reb`): the record whose cell or chain view the source
+6.–11. at the run's first entry (`withload_reb₀`): the record whose cell or chain view the source
    is, at the source's type (the tie and `TI`); its template (6.132, `tmpl_exists`,
    `tmplD_exists`); the image typed at `Imm̲ 'x A` (`relabel_vN₀`); the fresh `β`; 6.150 across the
    callback's stops, raises and layered cancel runs (`erwp_rebGen`); the callback at `δ['x ↦ β]`
-   (`callback_at_image`);
+   (`callback_at_image₀`);
 12.–13. the result `['x] B` read at `B` (`vN_extend_of_not_free₀`).
 
 Premises, and the rule that supplies each: `hbnd` is the bound's definedness (`Const791.OK`'s
 first conjunct); `hA`, `hB`, `hS` are `withloadU`'s with `Row.Suspend` for `Row.Unwind`
 (`Const791.OK`). -/
-theorem withloadS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
+theorem withloadS_compat₀ {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {S : Row} (hbnd : LifeCtx.empty.Defines bnd) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
     (hS : S.Suspend x bnd) (δ : LSub) (Θ₀ : LocTy) (n : Nat) :
     vN₀ (ℍ := ℍ) (.bang (withloadUTy a x bnd A B S)) δ Θ₀ n withloadV PMap.empty := by
@@ -617,23 +617,23 @@ theorem withloadS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
   refine rwp_load_cell ls l s w σ hσs _ hc' ?_
   -- steps 6–13
   simp only [Kont.plug]
-  exact withload_reb (hbnd δ (models_empty_any _)) hA hS (vO_le₀ (Nat.sub_le k' 1) hpay)
+  exact withload_reb₀ (hbnd δ (models_empty_any _)) hA hS (vO_le₀ (Nat.sub_le k' 1) hpay)
     (hwit l s w σ hσs rfl)
     (fun β hLt u χ Bχ hχ _ _ himg hBχ =>
-      callback_at_image hB hS hΘ hLt (vN_le₀ (Nat.sub_le k' 1) hf) hcf hχ himg hBχ) hc' 
+      callback_at_image₀ hB hS hΘ hLt (vN_le₀ (Nat.sub_le k' 1) hf) hcf hχ himg hBχ) hc' 
 
 /-- **`ConstN` for `withload` at a suspending row**, from its rule's premises. -/
 theorem constN_wl {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {S : Row} : ConstN (ℍ := ℍ) (.wl a x bnd A B S) := by
   rintro ⟨hbnd, hA, hB, hS⟩ δ Θ n _
-  exact withloadS_compat hbnd hA hB hS δ Θ n
+  exact withloadS_compat₀ hbnd hA hB hS δ Θ n
 
-/-- **`withload` at the hardest case's row**, every hypothesis of `withloadS_compat` discharged:
+/-- **`withload` at the hardest case's row**, every hypothesis of `withloadS_compat₀` discharged:
 an `Imm @a 1` source at the bound `LifeCtx.empty.meetOfDom`. -/
 theorem withloadS_inst (a : Lifetime.Life) (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
     vN₀ (ℍ := ℍ) (.bang (withloadUTy a x LifeCtx.empty.meetOfDom .unit .unit hardestRow)) δ Θ n
       withloadV PMap.empty :=
-  withloadS_compat defines_meetOfDom_empty id id (hardestRow_suspend x _) δ Θ n
+  withloadS_compat₀ defines_meetOfDom_empty id id (hardestRow_suspend x _) δ Θ n
 
 /-- **`wl`'s antecedent holds** at the hardest case's row. -/
 theorem wl_ok (a : Lifetime.Life) (x : LifeVar) :

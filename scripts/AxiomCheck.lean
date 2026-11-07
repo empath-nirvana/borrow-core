@@ -1510,14 +1510,14 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_rebGen_cancelRun
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.rebEntryG_top
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.rebEntryG_deep
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabN_extend_suspendC
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabN_extend_suspendC₀
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabN_rebOKR
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tab_rebClosed
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cohE_of_immWitW
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tmplD_exists
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.callback_at_image
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withload_reb
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withloadS_compat
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.callback_at_image₀
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withload_reb₀
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withloadS_compat₀
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.constN_wl
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withloadS_inst
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.wl_ok
@@ -2704,3 +2704,7 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fin_claimM
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor3S_compat
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withborFS_compat
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabN_extend_suspendC
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.callback_at_image
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withload_reb
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withloadS_compat

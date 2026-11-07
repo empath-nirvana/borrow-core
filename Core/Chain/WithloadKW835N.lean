@@ -41,7 +41,7 @@ the bound is a value of `Imm̲ 'x A` (`relabel_vN`), and 6.150 across the callba
 and layered cancel runs (`erwp_rebGen`) gives the run. The table's premises are `hTab` (the
 table may be stopped at under the reborrow) and `hClo` (its cancel obligations are closed under
 it). The callback's run at the image is the premise `hcb`: at a suspending row
-`callback_at_image`, at an unwinding row `callback_at_imageU`, at the pure row its `F (U …)`
+`callback_at_image₀`, at an unwinding row `callback_at_imageU`, at the pure row its `F (U …)`
 form. -/
 theorem withload_rebT {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {T : OpTabN} {δ : LSub} (hbnd : ∃ γ, bnd.interp δ = some γ) (hA : ¬ VFree x A)

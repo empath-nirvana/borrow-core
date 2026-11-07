@@ -297,7 +297,7 @@ theorem withbor3_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A
 /-- **The pure callback at the image**: the callback `U(∀'x ⊏ @bnd. F(U(Imm̲ 'x A ⊸ F(['x] B))))`,
 at `β ⊏ @bnd`, its `f ()` run beside the image (`erwp_bind_frame`), then applied to the image's
 value; its result `['x] B` read at `B` (`vN_extend_of_not_free₀`). The pure row's `withload_compatX`
-reads the callback this way, where the unwinding form reads `callback_at_image`. -/
+reads the callback this way, where the unwinding form reads `callback_at_image₀`. -/
 theorem callback_at_imageP₀ {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     (hB : ¬ VFree x B) {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK)
     {c : Loc → Option Life} {n : Nat} {ls : List SRec} {f u : Val} {ρf χ Bχ : WRes} {β : Life}
@@ -333,7 +333,7 @@ def withloadAt (l : Loc) : Val :=
 `Imm @a A ⊸ (∀'x ⊏ @Δ. Imm̲ 'x A ⊸ ['x] B) ⊸ B` at the pure row. Core's steps: the `Imm`
 argument at the callback's world (`vC_local`, here `vN_extR₀`); the load (`wpTS_load_I`, here
 `rwp_load_cell` under `erwp_bindR`); 6.150 at the record the program's own `Imm` value
-witnesses (`wpTS_reborrow`, here `withload_reb` at the empty row), the callback run at the image
+witnesses (`wpTS_reborrow`, here `withload_reb₀` at the empty row), the callback run at the image
 (`callback_at_imageP₀`). -/
 theorem withload_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B : VTy}
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hA : ¬ VFree x A) (hB : ¬ VFree x B) :
@@ -376,7 +376,7 @@ theorem withload_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A
   refine rwp_load_cell ls₂ l s w σ hσs _ hc' ?_
   simp only [Kont.plug]
   -- 6.150 at the record, the callback at the image
-  exact withload_reb (S := []) (Lifetime.Life.interp_defined_of_wf hδ
+  exact withload_reb₀ (S := []) (Lifetime.Life.interp_defined_of_wf hδ
       (Lifetime.meetOfDomL_wf Δ.entries)) hA (fun o ho => absurd ho List.not_mem_nil)
     (vO_le₀ (Nat.sub_le k₂ 1) hpay) (hwit l s w σ hσs rfl)
     (fun β hLt u χ Bχ hχ _ _ himg hBχ =>

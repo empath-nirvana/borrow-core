@@ -8,7 +8,7 @@ import Core.FoldImm
 Core's `foldImm_compatX` (`Core/FoldImm.lean`) at the chain, line by line: Core's term
 (`foldImmV`, `travK`, `selfF`, `hV`) and its reductions, and Core's induction on a bound of the
 borrowed cell's witness size and then on the view's size. `withload_sizedN₀` is Core's
-`withload_sized` at the empty row: `withload_reb`, its callback handed the image's relation to the
+`withload_sized` at the empty row: `withload_reb₀`, its callback handed the image's relation to the
 loaded witness (`ResU.Reb β σ χ`), so the view handed over is `Good` at the witness's size
 (`good_of_imageN₀`).
 -/
@@ -66,7 +66,7 @@ theorem withload_sizedN₀ {T₁ : VTy} (x : LifeVar) (hfree₁ : ¬ VFree x T�
   refine erwp_bindR hΦ (opTableN_local _) (Kont.appR (.app (.val vf) (.val .unit)) .hole) ?_
   refine rwp_load_cell ls ℓ s w σ hσs _ hc ?_
   simp only [Kont.plug]
-  exact withload_reb (S := []) (bnd := LifeCtx.empty.meetOfDom) ⟨_, rfl⟩ hfree₁
+  exact withload_reb₀ (S := []) (bnd := LifeCtx.empty.meetOfDom) ⟨_, rfl⟩ hfree₁
     (fun o ho => absurd ho List.not_mem_nil) (vO_le₀ (Nat.sub_le n 1) hpay) (hwit ℓ s w σ hσs rfl)
     (fun β hLt u χ Bχ hχ hu hreb himg hBχ => by
       subst hu

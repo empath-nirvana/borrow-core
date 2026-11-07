@@ -287,7 +287,7 @@ theorem withbor3_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
 /-- **The pure callback at the image**: the callback `U(∀'x ⊏ @bnd. F(U(Imm̲ 'x A ⊸ F(['x] B))))`,
 at `β ⊏ @bnd`, its `f ()` run beside the image (`erwp_bind_frame`), then applied to the image's
 value; its result `['x] B` read at `B` (`vN_extend_of_not_free`). The pure row's `withload_compatX`
-reads the callback this way, where the unwinding form reads `callback_at_image`. -/
+reads the callback this way, where the unwinding form reads `callback_at_image₀`. -/
 theorem callback_at_imageP {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     (hB : ¬ VFree x B) {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK)
     {c : Loc → Option Life} {n : Nat} {ls : List SRec} {f u : Val} {ρf χ Bχ : WRes} {β : Life}
