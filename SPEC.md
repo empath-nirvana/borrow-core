@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.38 · 2026-11-05
+Version 1.39 · 2026-11-07
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -10956,11 +10956,13 @@ given the entries'); the typing rules and the fundamental theorem over these typ
   Multi-shot continuations over duplicable state are a hypothesis, not a rule.
 - **A lend's callback `∀'x ⊏ @bnd` may suspend at a row `Row.Suspend 'x @bnd`**
   (`Core/TreeGoal791.lean`): every operation named and not unrestricted; its payload and answer
-  types free of `'x` and outliving `@bnd` (`VOutlives ∅ bnd`), so their values lie in the stratum
-  of every lend `α ⊏ @bnd`, what the Mut Frame asks of a stop (the relation's `LendOK`); and each
-  capturable operation's cancel row meeting the same clauses (`CTy.SuspendC`), since the cancel
-  run stops at its layers under the live lend. The constants are stated at the empty lifetime
-  context, where the bound, being defined, is closed and so `⊤`; an answer, which arrives from
+  types free of `'x` and outliving `@bnd` at the constant's context (`VOutlives Δ bnd`), so their
+  values lie in the stratum of every lend `α ⊏ @bnd`, what the Mut Frame asks of a stop (the
+  relation's `LendOK`); and each capturable operation's cancel row meeting the same clauses
+  (`CTy.SuspendC`), since the cancel run stops at its layers under the live lend. A constant is
+  stated at its own lifetime context (*Lifetime-polymorphic suspending constants* below); at the
+  empty context the bound, being defined, is closed and so `⊤`. Answers are kept at a closed
+  bound (`Row.AnsC`); an answer, which arrives from
   outside the borrowed run, then lies in the top stratum and holds no borrow cell, so it is
   consistent with the run's view. `VOutlives ∅ bnd` excludes exactly the payload and answer types
   with, outside a box or `!`, an `Imm @b A` or `Mut @b A` (no `@b` is strictly longer-lived than
@@ -11068,6 +11070,42 @@ value is posted at, and are proved (`handleT_compatN`, `handleL_compatN`).
   residual `λx. x` (`reifyN_premises_inst`); no instance of its conclusion is proved. `Goal791N`'s
   premises hold at `prog791` (`goal791N_premises_inst`): a cell lent `mut` with `withbor (2)`,
   its callback performing `wait` while it holds the borrow, `wait` handled inside the program.
+
+### Lifetime-polymorphic suspending constants (#844, Tier 1)
+
+**What it adds.** The suspending lend constants (`Const791`) are typed at a lifetime context of
+their own, so a callback's bound `@bnd` may name lifetime variables and a payload may hold a borrow
+of a lend that encloses the suspending one.
+- **The constant.** `Const791.poly 'y @b c` is `c` under one lifetime binder: its type is
+  `∀'y ⊏ @b. c.ty` (the existing former `VTy.all`, `U(∀'y ⊏ @b. F A)`), its value `λ_. c.val`. A
+  constant under binders `'y₁ ⊏ @b₁, …` is typed at `!∀'y₁ ⊏ @b₁. … c.ty`; a program instantiates
+  it by `allEV`. No `VTy` former, `CTy` former or `CDerives` rule is added.
+- **The premises at a context.** `Const791.OKAt Δ c`: at `poly 'y @b c`, `∀I`'s side conditions
+  (`@b` and `Δ`'s bounds do not mention `'y`) and `c.OKAt (Δ, 'y ⊏ @b)`; at a lend constant, its
+  rule's premises with the empty context replaced by `Δ`: `Δ ⊨ @bnd`, the outliving premises at
+  `Δ`, the row `Row.Suspend Δ 'x @bnd`, the finaliser typed at `Δ`. `Const791.OK c` is
+  `c.OKAt ∅`. One clause is kept closed: every answer of the row and of its cancel rows outlives a
+  bound defined at the empty context (`Row.AnsC`), which is today's answer clause.
+- **`Row.Suspend Δ 'x @bnd`**, `CTy.SuspendC Δ 'x @bnd`: the outliving clauses at `Δ`
+  (`VOutlives Δ bnd`) instead of `∅`.
+- **The laws** read at `δ ⊨ Δ`: `vN_inStratum_bnd`, `vN_add_eq_bnd`, `vN_add_eq`, `vN_lend_eq`,
+  `ValRelOK.inStratum`, `tabNK_lendOKCR` and `tabNK_lend_comap` take `VOutlives Δ bnd` and
+  `Δ.Models δ`. The `∅` forms are their instances at `models_empty_any`. The constants'
+  compatibility lemmas (`withbor2S_compat`, `withbor3S_compat`, `withborFS_compat`,
+  `withloadS_compat`, `sliceBorrowMS_compat`) are stated at `Δ` and `δ ⊨ Δ`.
+- **The answer's view.** At a closed bound an answer lies in `Res_⊤` and is consistent with every
+  view (`consistentX_of_outlivesN`). At a bound with a variable it need not be. The step that moves
+  an answer from the lender's view to the lend's (`tabNK_lend_comap`, and its slice form) carries
+  that move as a named premise, `AnsViewG`; the constants discharge it from `Row.AnsC`.
+
+**Baseline preserved.** `goal791N : HandlerLawN → Goal791N`, its statement unchanged but for
+`Const791.OK`'s shape; `fundamentalN_all`; `handlerLawN_iff`; `goal791N_premises_inst`; the
+instances at the hardest case's row (`w2_ok`, `w3_ok`, `wF_ok`, `wl_ok`, the `*S_inst`). No change
+to `CDerives`, the checker, the backends or the corpus.
+
+**Open.** The answer at a bound with a variable (#844 T1.3): `AnsViewG` without `Row.AnsC`, so
+that an answer may hold a borrow of an enclosing lend. A closed instance yielding an outer `imm`
+slice across an inner suspending lend (T1.4).
 
 ### Not claimed
 
@@ -11531,6 +11569,12 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
 
 ## Changelog
 
+- **1.39** (2026-11-07) — §62 (#844 Tier 1, *Lifetime-polymorphic suspending constants*): the
+  suspending lend constants under lifetime binders (`Const791.poly`, typed at `VTy.all`), their
+  premises at the constant's own context (`Const791.OKAt`), `Row.Suspend`/`CTy.SuspendC` at a
+  context, and the laws that read the callback bound at `δ ⊨ Δ`. The answer's move between views
+  is a named premise (`AnsViewG`), discharged by answers outliving a closed bound (`Row.AnsC`).
+  `goal791N` keeps its statement. No change to `CDerives`, the checker, the backends or the corpus.
 - **1.38** (2026-11-04) — §62 (*Semantic types read at the tree*): `F A` is a bare `cerwpT` run
   (`SCmp.ret`), Core's `cC (.ret A)`; the Kripke quantifier over later worlds and lists sits at
   `U` only. Thunks are introduced as Core's `thunkF_compatC` does, from the computation at every
