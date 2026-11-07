@@ -19,6 +19,8 @@ read by `vNX` with `X` at the candidate.
   typing is `OK` (`tabN_downI_OK`, `tabN_ctxClosed_OK`), up to the step's index; the answer is
   mapped at the world it is posted at.
 * `unfoldN_compatN` (Core's `unfold_compatX`): coinduction with the candidate `candNN`.
+* `doneLoop_cBN`, `clLoop_cBN`: the `done b` and `closed r` cases of Core's `candR_post`, at one
+  unfolding of `Loop_Σ B R` at every candidate (`cBN_effOf`, `vNX_rename`).
 -/
 
 noncomputable section
@@ -453,6 +455,101 @@ theorem unfoldN_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {C : CTy} (hC : C.NuOk) (S
   rw [hN_subst]
   exact cN_nu_coind (candNN_post hC hS (fun Θ'' => vN_le hk' (hg' Θ''))) Θ₂ c₃ k' ls₂ _ _
     ⟨le_rfl, hΘ₂, hcon', s, rfl, hs⟩
+
+/-! ### `reify`'s loop values at one unfolding
+
+Core's `candR_post` (`Core/DivReify.lean`) cases on the three loop values of its candidate. Its
+`done b` and `closed r` cases read no handler; they are stated here at every candidate `Rc`, with
+`Rc` holding `closed r` where `closed r`'s *next* answers it. -/
+
+/-- The answer of a row's layers is the answer type's (Core's `effRetE_effOf`). -/
+theorem retNX_effOf (S : VTy) (P : LocTy → Nat → Val → WRes → Prop) (δ : LSub) (Θ : LocTy) :
+    ∀ (Sg : Row) (A : VTy), retNX (ℍ := ℍ) S P (CTy.effOf Sg A) δ Θ = vNX (ℍ := ℍ) S P A δ Θ
+  | [], A => by funext k v ρ; simp only [CTy.effOf, retNX]
+  | _ :: Sg, A => by funext k v ρ; simp only [CTy.effOf, retNX]; rw [retNX_effOf S P δ Θ Sg A]
+
+/-- **One unfolding at `F_Σ A`** (Core's `cB_effOf`): `erwpK` at every floor at the row's table,
+the answer read by `vNX`. Every row, `Div` included. -/
+theorem cBN_effOf (S : VTy) (R : CandN) (Sg : Row) (A : VTy) (δ : LSub) (Θ : LocTy)
+    (c : Loc → Option Life) (n : Nat) (ls : List SRec) (e : Expr) (ρ : WRes) :
+    cBN (ℍ := ℍ) S R (CTy.effOf Sg A) δ Θ c n ls e ρ ↔ ∀ lo : Life,
+      erwpK (ℍ := ℍ) KW.PostK (fun z => z.Θ.view z.c)
+        (fun z => opTableK z.lo (tabN (ℍ := ℍ) (CTy.effOf Sg A) δ z))
+        (fun z k _ v ρ => vNX (ℍ := ℍ) S (thunkRN R) A δ z.Θ k v ρ) ⟨Θ, c, lo⟩ n ls e ρ := by
+  cases Sg with
+  | nil => simp only [CTy.effOf, cBN, tabN]
+  | cons o Sg =>
+      simp only [CTy.effOf, cBN, tabN]
+      simp only [retNX_effOf]
+
+/-- **A type without the variable reads the same in `νX. C`'s environment** (Core's
+`vCE_nuEnv_rename`). -/
+theorem vNX_rename (S : VTy) (P : LocTy → Nat → Val → WRes → Prop) (A : VTy) (δ : LSub) :
+    vNX (ℍ := ℍ) S P (A.rename Nat.succ) δ = vN (ℍ := ℍ) A δ := by
+  rw [vNX_inst_occ S P _ (VTy.not_occ_rename_succ A) δ, VTy.inst_rename_succ]
+
+/-- `inl b` at `A ⊕ X` (Core's `nuAns_inl`). -/
+theorem nuAnsN_inl {S : VTy} {P : LocTy → Nat → Val → WRes → Prop} {A : VTy} {δ : LSub}
+    {Θ : LocTy} {n : Nat} {b : Val} {ρ : WRes} (h : vN (ℍ := ℍ) A δ Θ n b ρ) :
+    vNX (ℍ := ℍ) S P (.sum (A.rename Nat.succ) (.tvar 0)) δ Θ n (Val.inj₁ b) ρ :=
+  Or.inl ⟨b, rfl, by rw [vNX_rename]; exact h⟩
+
+/-- `inr L` at `A ⊕ X`, `L` a thunk of the candidate (Core's `nuAns_inr`). -/
+theorem nuAnsN_inr {S : VTy} {R : CandN} {A : VTy} {δ : LSub} {Θ : LocTy} {n : Nat} {L : Val}
+    {ρ : WRes} (h : thunkRN R Θ n L ρ) :
+    vNX (ℍ := ℍ) S (thunkRN R) (.sum (A.rename Nat.succ) (.tvar 0)) δ Θ n (Val.inj₂ L) ρ :=
+  Or.inr ⟨L, rfl, h⟩
+
+/-- A row's table does not read the answer type. -/
+theorem tabN_effOf_ans (Sg : Row) (A B : VTy) (δ : LSub) :
+    tabN (ℍ := ℍ) (CTy.effOf Sg A) δ = tabN (ℍ := ℍ) (CTy.effOf Sg B) δ := by
+  funext x; rw [tabN_eq, tabN_eq, tabF_effOf_ret]
+
+/-- **`done b` is one unfolding of `Loop_Σ B R` at every candidate** (Core's `candR_post`, the
+`done b` case): *next* answers `inl b`; *close* runs the residual `res b`. -/
+theorem doneLoop_cBN {Sg : Row} {B R : VTy} {res : Val} (hres : closedAt 0 res.1 = true)
+    {δ : LSub} (hresR : ∀ Θ : LocTy, Θ.OK → ∀ c k ls b ρ, vN (ℍ := ℍ) B δ Θ k b ρ →
+      ConsistentX c ρ → cN (ℍ := ℍ) (CTy.effOf Sg R) δ Θ c k ls (.app (.val res) (.val b)) ρ)
+    {Rc : CandN} (hRc : Rc.Down) {Θ : LocTy} (hΘ : Θ.OK) {c : Loc → Option Life} {n : Nat}
+    {ls : List SRec} {b : Val} {ρ : WRes} (hc : ConsistentX c ρ) (hb : vN (ℍ := ℍ) B δ Θ n b ρ) :
+    cBN (ℍ := ℍ) (.thunk (CTy.loopEff Sg B R)) Rc (CTy.loopEffBody Sg B R) δ Θ c n ls
+      (.val (doneLoop res b)) ρ := by
+  have hΦ := LocTy.view_down hΘ.1 c
+  constructor
+  · refine (cBN_effOf _ Rc Sg _ δ Θ c n ls _ ρ).mpr fun lo => ?_
+    refine erwpK_pureSteps (x := (⟨Θ, c, lo⟩ : KW)) (Φ := fun z : KW => z.Θ.view z.c) hΦ
+      (opTableK_downI (tabN_downI_OK _ δ _))
+      (fun y k _ v ρ h => vNX_down _ _ (thunkRN_down hRc) _ δ y.Θ k v ρ h)
+      (doneLoop_next res hres b) ?_
+    exact erwpK_val (KW.postK_refl _) (nuAnsN_inl hb)
+  · refine (cBN_effOf _ Rc Sg _ δ Θ c n ls _ ρ).mpr fun lo => ?_
+    have h := (cN_effOf Sg R δ Θ c n ls _ ρ).mp (hresR Θ hΘ c n ls b ρ hb hc) lo
+    simp only [vNX_rename]
+    rw [tabN_effOf_ans Sg (R.rename Nat.succ) R δ]
+    exact erwpK_pureSteps (x := (⟨Θ, c, lo⟩ : KW)) (Φ := fun z : KW => z.Θ.view z.c) hΦ
+      (opTableK_downI (tabN_downI_OK _ δ _)) (fun y k _ v ρ h => vN_down R δ y.Θ k v ρ h)
+      (doneLoop_close res hres b) h
+
+/-- **`closed r` is one unfolding of `Loop_Σ B R` at a candidate holding it** (Core's
+`candR_post`, the `closed r` case): *next* answers `inr (closed r)`; *close* answers `r`. -/
+theorem clLoop_cBN {Sg : Row} {B R : VTy} {δ : LSub} {Rc : CandN} (hRc : Rc.Down) {Θ : LocTy}
+    (hΘ : Θ.OK) {c : Loc → Option Life} {n : Nat} {ls : List SRec} {r : Val} {ρ : WRes}
+    (hr : vN (ℍ := ℍ) R δ Θ n r ρ) (hcl : thunkRN Rc Θ n (clLoop r) ρ) :
+    cBN (ℍ := ℍ) (.thunk (CTy.loopEff Sg B R)) Rc (CTy.loopEffBody Sg B R) δ Θ c n ls
+      (.val (clLoop r)) ρ := by
+  have hΦ := LocTy.view_down hΘ.1 c
+  constructor
+  · refine (cBN_effOf _ Rc Sg _ δ Θ c n ls _ ρ).mpr fun lo => ?_
+    refine erwpK_pureSteps (x := (⟨Θ, c, lo⟩ : KW)) (Φ := fun z : KW => z.Θ.view z.c) hΦ
+      (opTableK_downI (tabN_downI_OK _ δ _))
+      (fun y k _ v ρ h => vNX_down _ _ (thunkRN_down hRc) _ δ y.Θ k v ρ h)
+      (clLoop_next r) ?_
+    exact erwpK_val (KW.postK_refl _) (nuAnsN_inr hcl)
+  · refine (cBN_effOf _ Rc Sg _ δ Θ c n ls _ ρ).mpr fun lo => ?_
+    simp only [vNX_rename]
+    exact erwpK_pureSteps (x := (⟨Θ, c, lo⟩ : KW)) (Φ := fun z : KW => z.Θ.view z.c) hΦ
+      (opTableK_downI (tabN_downI_OK _ δ _)) (fun y k _ v ρ h => vN_down R δ y.Θ k v ρ h)
+      (clLoop_close r) (erwpK_val (KW.postK_refl _) hr)
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

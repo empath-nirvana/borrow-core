@@ -667,3 +667,34 @@ lender's run reaches has the location typing above `a` of `Θ` (`LocTy.ExtP.abov
 **Not restated.** `divFuel`; the tail and last handlers (`erwpK_handle_leI` is ready for them);
 `ν`; the unwinding-row lends; `MissingN` and `fundamentalN_all` at `SemJN`; the instance with a
 callback that performs (`withbor2S_perform`).
+
+### 10.12 `ν` at `cN`
+
+`Core/Chain/NuKW835N.lean` restates `Nu837N` at the relation at `KW`. The one-world statements keep
+their proofs under `₀`.
+
+- **The unrolling.** These go through with the proof text unchanged: `vNX_inst_occ`,
+  `vNX_inst_poly`, `retNX_inst`, `thunkRN_nuCand`, `cBN_unroll`, `cN_nu_iff`, `nuIn_compatN` and
+  `nuOut_compatN`. `tabN_instT` holds at every world.
+- **`cBN_step`** (Core's `cB_step`). `F` and `F_Σ` are runs at every floor. A pure step in front is
+  handled by `erwpK_ret_det` and `cBN_eff_det`.
+- **`node_okN`** (Core's `node_ok`). The leaf runs `c ()`, then maps its answer. At `F_Σ` that run
+  stops at the row's table, so the map is bound in by `erwpK_bind_leI`:
+  - it is read at the worlds whose location typing is `OK` (`tabN_downI_OK`, `tabN_ctxClosed_OK`);
+  - it holds up to the step's index, which replaces `erwp_mono_le`;
+  - the answer is mapped at the world it is posted at (`map_okN` at that world's location typing).
+
+  `F A` takes the same route, at the empty table.
+- **`unfoldN_compatN`**. Coinduction with `candNN`, as in `Nu837N`. The outer values are built by
+  `cN_ret_of`.
+- **`reify`'s loop values.** Core's `candR_post` cases on three loop values. Two of them read no
+  handler, and these hold at one unfolding at every candidate:
+  - `doneLoop_cBN`: `done b`; its *close* runs the residual at `cN (F_Σ R)`;
+  - `clLoop_cBN`: `closed r`, at a candidate holding `closed r`.
+
+  Both read the row through `cBN_effOf` (Core's `cB_effOf`, at every row), `vNX_rename` and
+  `nuAnsN_inl`/`nuAnsN_inr`.
+
+**Not built.** The loop made at a tick: `candR`'s first disjunct, `reify_next`, `reify_close`. It
+is the handler's induction over a segment (`hnd_tick`, `hnd_fwd`, the resumption of the stored
+`κ`), so it waits on the handler step at `erwpK` (E10, §12.5 of `scope-831-interface.md`).

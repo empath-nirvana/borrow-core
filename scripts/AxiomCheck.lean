@@ -1868,6 +1868,10 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.nuIn_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.nuOut_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.unfoldN_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cBN_effOf
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vNX_rename
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.doneLoop_cBN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.clLoop_cBN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.ExtRLit791.world_two
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sliceSwapM_compatN₀
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.arrNew_compatN₀
