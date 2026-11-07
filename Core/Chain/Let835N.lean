@@ -20,12 +20,12 @@ was resumed at, and a row's table reads its answers at the view (`tabN₀`'s `Co
   the resumed composite is consistent by `consistentX_compS`). Its post also carries the index
   bound and validity, which the frame's context reads (`gN_le₀`).
 * `tabN_ansC`: a row's table reads its answers at its view, so they are consistent with it.
-* `let_compatN`: Core's `let_compatC`, step for step (`erwp_frame_plain`, `entN_plain`,
+* `let_compatN₀`: Core's `let_compatC`, step for step (`erwp_frame_plain`, `entN_plain`,
   `gN_noOwn₀`, `gN_persistent₀`).
-* `let_compatN_persist`: the same proof binding a persistent type: the bound value owns nothing, so `N` starts from the frame's resource (`erwp_idxLe` gives the
+* `let_compatN_persist₀`: the same proof binding a persistent type: the bound value owns nothing, so `N` starts from the frame's resource (`erwp_idxLe` gives the
   index bound the frame's context is read at).
-* `await_compatN`: Core's `await_compatC`, `[perform]`, `[case]`, `[sub]` and `[raise]` under
-  `let_compatN_persist`, the answer at `1 + 1`.
+* `await_compatN₀`: Core's `await_compatC`, `[perform]`, `[case]`, `[sub]` and `[raise]` under
+  `let_compatN_persist₀`, the answer at `1 + 1`.
 -/
 
 noncomputable section
@@ -132,7 +132,7 @@ frame, its cancels carried by `ent_plain`, left behind owning nothing where the 
 empty at an unrestricted row (`hU`). `N`'s judgment is read at the run's view, from `M`'s value
 beside the frame: `M`'s value is consistent with that view across its resumptions
 (`erwp_consistentAns`), the row's answers being read at the view (`tabN_ansC`). -/
-theorem let_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B : VTy} {S : Row}
+theorem let_compatN₀ {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B : VTy} {S : Row}
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hW : S.Cancels → Γ₂.OwnFree) (hU : S.Unr → Ctx.Banged Γ₂)
     (hM : SemJN₀ (ℍ := ℍ) Δ Γ₁ M (.comp (CTy.effOf S A)))
     (hN : SemJN₀ (ℍ := ℍ) Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) :
@@ -179,7 +179,7 @@ theorem let_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B 
 /-- **`[let]` binding a persistent type** (Core's `let_compatC`, the bound value owning nothing):
 `M`'s value holds `∅`, so the resource `N` starts from is the frame's, consistent with the view
 from the start; no premise on the row's answers is read. -/
-theorem let_compatN_persist {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B : VTy} {S : Row}
+theorem let_compatN_persist₀ {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B : VTy} {S : Row}
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hW : S.Cancels → Γ₂.OwnFree) (hU : S.Unr → Ctx.Banged Γ₂)
     (hA : A.Persistent)
     (hM : SemJN₀ (ℍ := ℍ) Δ Γ₁ M (.comp (CTy.effOf S A)))
@@ -251,8 +251,8 @@ theorem hardestRow_entry_PB (Θ : LocTy) (c : Loc → Option Life) :
 /-- **`[await-c]` at `SemJN₀`** (Core's `await_compatC`): `[perform]` of the cancellable `a`, then
 a `case` whose `inl` arm returns and whose `inr` arm raises the cancel target `c`, each by its own
 compatibility lemma, under `[let]`. The bound answer is at `1 + 1`, persistent, so the `[let]` is
-`let_compatN_persist`. -/
-theorem await_compatN {Δ : LifeCtx} {S : Row} {n : UInt32} {a c : OpSig}
+`let_compatN_persist₀`. -/
+theorem await_compatN₀ {Δ : LifeCtx} {S : Row} {n : UInt32} {a c : OpSig}
     (hfa : Row.find S n 0 = some a) (ha : a.Cancellable) (haA : a.A = .unit)
     (hfc : Row.find S n 1 = some c) (hc : c.CancelTarget) :
     SemJN₀ (ℍ := ℍ) Δ [] (awaitE n) (.comp (CTy.effOf S .unit)) := by
@@ -268,20 +268,20 @@ theorem await_compatN {Δ : LifeCtx} {S : Row} {n : UInt32} {a c : OpSig}
     exact erwp_val (v := Val.unit) ⟨rfl, rfl⟩
   have hP : SemJN₀ (ℍ := ℍ) Δ [] (performE (opArgE n 0 (.val .unit)))
       (.comp (CTy.effOf S (.sum .unit .unit))) := by
-    have h := perform_compatN (Δ := Δ) (Γ := []) (V := .val .unit) (o := a)
+    have h := perform_compatN₀ (Δ := Δ) (Γ := []) (V := .val .unit) (o := a)
       (by rw [han, hai]; exact hfa) hna hunit
     rw [han, hai, hB] at h; exact h
   have h₁ : SemJN₀ (ℍ := ℍ) Δ [⟨.unit, true⟩, ⟨.sum .unit .unit, false⟩] (.var 0)
       (.comp (CTy.effOf S .unit)) :=
-    sub_compatN (S := []) (RowLe.nil S) (var_compatN₀ (.here (.cons .nil)))
+    sub_compatN₀ (S := []) (RowLe.nil S) (var_compatN₀ (.here (.cons .nil)))
   have h₂ : SemJN₀ (ℍ := ℍ) Δ [⟨.unit, true⟩, ⟨.sum .unit .unit, false⟩]
       (raiseE (opArgE n 1 (.var 0))) (.comp (CTy.effOf S .unit)) := by
-    have h := raise_compatN (Δ := Δ) (Γ := [⟨.unit, true⟩, ⟨.sum .unit .unit, false⟩])
+    have h := raise_compatN₀ (Δ := Δ) (Γ := [⟨.unit, true⟩, ⟨.sum .unit .unit, false⟩])
       (V := .var 0) (o := c) (B := .unit) (by rw [hcn, hci]; exact hfc) hcab
       (fun _ _ _ _ _ h => vN_noOwn_of_ownFree₀ (by rw [hcA]; exact .unit) h)
       (by rw [hcA]; exact var_compatN₀ (.here (.cons .nil)))
     rw [hcn, hci] at h; exact h
-  exact let_compatN_persist .nil (fun _ s hs => absurd hs List.not_mem_nil)
+  exact let_compatN_persist₀ .nil (fun _ s hs => absurd hs List.not_mem_nil)
     (fun _ s hs => absurd hs List.not_mem_nil) (by decide) hP
     (sumE_compatN₀ (.left .nil) (var_compatN₀ (.here .nil)) h₁ h₂)
 

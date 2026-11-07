@@ -13,7 +13,7 @@ lemma at `erwp`, by induction on the index where Core inducts on `ewpTS`'s least
 * `seq_raise_runN` (Core's `seq_raise_run`): a finaliser under ordinary unwinding;
 * `erwp_frame_then` (Core's `ewp_frame_then_or`): the finaliser frame around an effectful
   computation;
-* `then_compatN` (Core's `then_compatC`) and `thenDiv_compatN` (Core's `then_compatC_div`).
+* `then_compatN₀` (Core's `then_compatC`) and `thenDiv_compatN₀` (Core's `then_compatC_div`).
 
 Two readings the chain adds, each where `erwp_frame_plain` adds it:
 
@@ -27,7 +27,7 @@ Two readings the chain adds, each where `erwp_frame_plain` adds it:
 A `Div` row is a row of the chain's table (E13), so Core's table beside the operation table (`Px`,
 a tick at a row holding `Div`) and the erasure of the tick's key (`er`) have no counterpart:
 `erwp_frame_then` is Core's `ewp_frame_then_or` at `Px = ∅`, `er = false`, and `[then]` at a row
-holding `Div` is the same lemma (`thenDiv_compatN`).
+holding `Div` is the same lemma (`thenDiv_compatN₀`).
 -/
 
 noncomputable section
@@ -658,7 +658,7 @@ theorem erwp_frame_then {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Op
 unrestricted operation. `erwp_frame_then` around `M`, the frame the context of `N` and `D`
 consistent with the view; `M`'s value consistent with the view across its resumptions
 (`erwp_consistentAns`), so `N` is read at the view from the value beside the frame. -/
-theorem then_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A B : VTy}
+theorem then_compatN₀ {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A B : VTy}
     {S SM SD : Row} (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hU : S.UnrD → Ctx.Banged Γ₂)
     (hMS : RowLe SM S) (hDS : RowLe SD S)
     (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
@@ -722,11 +722,11 @@ theorem then_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A
     (fun k _ v ρ h => vN_down₀ _ δ Θ k v ρ h) hk n le_rfl ls _ ρ₁ hM'' ρ₂ ρ ⟨hg₂, hc₂⟩ hcρ
 
 /-- **`[then]` with a finaliser that may loop** (Core's `then_compatC_div`): `M`'s row has no
-capturable operation (`hcap`), so `then_compatN`'s cancel-row record holds of no operation. A
+capturable operation (`hcap`), so `then_compatN₀`'s cancel-row record holds of no operation. A
 `Div` row is a row of the chain's table (E13), so the finaliser's row holding `Div` reads as any
 other row: Core's split of `[then]` at `cwp` (`cwp_then_div`) has no counterpart, and this is
-`then_compatN`. -/
-theorem thenDiv_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A B : VTy}
+`then_compatN₀`. -/
+theorem thenDiv_compatN₀ {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A B : VTy}
     {S SM SD : Row} (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hU : S.UnrD → Ctx.Banged Γ₂)
     (hMS : RowLe SM S) (hDS : RowLe SD S)
     (hP : SD.UnrD → SM.PendPers) (hcap : ∀ o ∈ SM, capB o.q o.B = false)
@@ -734,7 +734,7 @@ theorem thenDiv_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr}
     (hN : SemJN₀ (ℍ := ℍ) Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
     (hD : SemJN₀ (ℍ := ℍ) Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
     SemJN₀ (ℍ := ℍ) Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
-  then_compatN hsp hNZ hU hMS hDS (fun _ _ o _ hf _ h => by
+  then_compatN₀ hsp hNZ hU hMS hDS (fun _ _ o _ hf _ h => by
     rw [hcap o (Row.find_mem hf).1] at h; cases h) hP hM hN hD
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N

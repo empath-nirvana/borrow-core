@@ -7,7 +7,7 @@ import Core.Chain.Goal791N
 row (`tabN`, which is `tabNK vN id`, `tabNK_vN`), every table premise discharged:
 
 * **the tick's invariant along the tick's order** (`tabNK_tickInv`): the typed loop's invariant
-  `𝒱⟦S⟧ ∧ ConsistentX` (`iterate_compatN`'s) at the stop's world is one at every world the tick's
+  `𝒱⟦S⟧ ∧ ConsistentX` (`iterate_compatN₀`'s) at the stop's world is one at every world the tick's
   entry owes its continuation at. The order is `KW.Owed`, `ExtR` at the share, the state's resource
   being the whole share, along which the value relation is kept (`ValRelOK.extR`); the view is one
   the order makes consistent with the share;

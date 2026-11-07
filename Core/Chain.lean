@@ -163,3 +163,6 @@ import Core.Chain.Goal791N
 import Core.Chain.ReindexK835N
 import Core.Chain.RulesKW835N
 import Core.Chain.FamKW835N
+import Core.Chain.EffKW835N
+import Core.Chain.LetKW835N
+import Core.Chain.ThenKW835N

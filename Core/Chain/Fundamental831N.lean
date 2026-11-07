@@ -586,7 +586,7 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | countFold _ hΓ => exact countFold_compatN hΓ
   | countTry _ _ hΓ => exact countTry_compatN hΓ
   | boundedFix _ _ hΓ => exact boundedFix_compatN₀ hΓ
-  | iterate _ _ _ _ hS hΓ => exact iterate_compatN hS hΓ
+  | iterate _ _ _ _ hS hΓ => exact iterate_compatN₀ hS hΓ
   | divFuel _ _ hS hΓ => exact divFuel_compatN hS hΓ
   | reify _ _ _ _ hS hcl _ hΓ ihres => exact hReify hS hcl ihres hΓ
   | sliceBorrowM x hΓ hA hB hf₁ hf₂ => exact sliceBorrowM_compatN x hΓ hA hB hf₁ hf₂
@@ -627,24 +627,24 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | nuIn hC _ ih => exact nuIn_compatN hC ih
   | nuOut hC _ ih => exact nuOut_compatN hC ih
   | unfoldN C S hC hS hΓ => exact unfoldN_compatN hC S hS hΓ
-  | effSub hle _ ih => exact sub_compatN hle ih
-  | effPerform hf hna _ _ ih => exact perform_compatN hf hna ih
+  | effSub hle _ ih => exact sub_compatN₀ hle ih
+  | effPerform hf hna _ _ ih => exact perform_compatN₀ hf hna ih
   | effAwait hΓ hfa ha haA hfc hc =>
       exact semJN_dead₀ .nil hΓ (fun γ γ' => by
           rw [show substAll γ (awaitE _) = _ from psub_closedAt _ γ awaitE_closed le_rfl,
             show substAll γ' (awaitE _) = _ from psub_closedAt _ γ' awaitE_closed le_rfl])
-        (await_compatN hfa ha haA hfc hc)
+        (await_compatN₀ hfa ha haA hfc hc)
   | effRaise hf ha _ hd _ ih =>
-      exact raise_compatN hf ha (fun _ _ _ _ _ h => vN_noOwn_of_ownFree₀ hd h) ih
-  | effLet hs hW hU _ _ ihM ihN => exact let_compatN hs hW hU ihM ihN
+      exact raise_compatN₀ hf ha (fun _ _ _ _ _ h => vN_noOwn_of_ownFree₀ hd h) ih
+  | effLet hs hW hU _ _ ihM ihN => exact let_compatN₀ hs hW hU ihM ihN
   | effThen hs hNZ _ hU hMS hDS hfin hP _ _ _ _ ihM ihN ihD =>
-      exact then_compatN hs hNZ hU hMS hDS
+      exact then_compatN₀ hs hNZ hU hMS hDS
         (fun n i o o' h₁ h₂ hc => hfin n i o o' h₁ h₂ (OpSig.finRead_of_capB hc)) hP ihM ihN ihD
   | @effThenDiv _ _ _ _ _ _ _ _ _ _ SM SD hs hNZ _ hU hMS hDS hfin hP hcap _ _ _ ihM ihN ihD =>
       cases hSD : Row.divB SD
-      · exact then_compatN hs hNZ hU hMS hDS
+      · exact then_compatN₀ hs hNZ hU hMS hDS
           (fun n i o o' h₁ h₂ hc => hfin n i o o' h₁ h₂ (OpSig.finRead_of_capB hc)) hP ihM ihN ihD
-      · exact thenDiv_compatN hs hNZ hU hMS hDS hP hcap ihM ihN ihD
+      · exact thenDiv_compatN₀ hs hNZ hU hMS hDS hP hcap ihM ihN ihD
   | effHandleV hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
       exact hHV hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
         (semJN_effOf_rc₀ (Row.unmark_ofEff_append _ _ _ _ _ _) ihe)

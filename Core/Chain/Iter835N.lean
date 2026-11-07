@@ -23,7 +23,7 @@ read these steps at any `f` and `s′`, so `erwp_iterateCI` asks no closedness o
 
 * `erwp_iterateCI`: E14 at an invariant read at the index, up to an index `N`;
 * `tickB_sig`: a row holding `Div` finds `tick`'s signature at `Div`'s key;
-* `iterate_compatN`: the constant at `SemJN₀` (Core's `iterate_compatX`).
+* `iterate_compatN₀`: the constant at `SemJN₀` (Core's `iterate_compatX`).
 -/
 
 noncomputable section
@@ -123,7 +123,7 @@ theorem tickB_sig {q : Qual} {A B : VTy} (h : tickB q A B = true) :
 (`LocTy.extR_refl`, its resource empty); E14 at the invariant `𝒱⟦S⟧ ∧ ConsistentX`, read at the
 index (`erwp_iterateCI`), the turn's answer consistent with the view (`erwp_consistentAns`), the
 tick the row's `tick` (`Row.divB_find`). -/
-theorem iterate_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {Sg : Row} {St B R : VTy}
+theorem iterate_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {Sg : Row} {St B R : VTy}
     (hS : Row.divB Sg = true) (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val (.prim .iterate)) (.val (iterTy Sg St B R)) := by
   intro δ γ Θ c n ls ρ _ _ _ _ hg

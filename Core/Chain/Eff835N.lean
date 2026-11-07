@@ -233,14 +233,14 @@ theorem tabN_le_of_rowLe {S S' : Row} (hle : RowLe S S') (R R' : VTy) (δ : LSub
     finN_mono δ Θ c o.fin (hfl (by simp [OpSig.finRead, hcap]))⟩
 
 /-- **`erwp` at a row grows with the row** (Core's `effWp_sub`). -/
-theorem erwp_rowLe {S S' : Row} (hle : RowLe S S') {A : VTy} {δ : LSub} {Θ : LocTy}
+theorem erwp_rowLe₀ {S S' : Row} (hle : RowLe S S') {A : VTy} {δ : LSub} {Θ : LocTy}
     {c : Loc → Option Life} {n : Nat} {ls : List SRec} {e : Expr} {ρ : WRes}
     (h : cN₀ (ℍ := ℍ) (CTy.effOf S A) δ Θ c n ls e ρ) : cN₀ (ℍ := ℍ) (CTy.effOf S' A) δ Θ c n ls e ρ :=
   (cN_effOf₀ S' A δ Θ c n ls e ρ).mpr (erwp_tabLe (tabN_le_of_rowLe hle A A δ Θ c) n ls e ρ
     ((cN_effOf₀ S A δ Θ c n ls e ρ).mp h))
 
 /-- **E6: an entry's cancel obligation holds of the empty region** (Core's `ent_start`). -/
-theorem entN_start (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (o : OpSig) (k : Nat)
+theorem entN_start₀ (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (o : OpSig) (k : Nat)
     (ls : List SRec) :
     cancelOKN (entN o.q o.B (fun k v ρ => vN₀ (ℍ := ℍ) o.A δ Θ k v ρ)
       (fun k v ρ => vN₀ (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN₀ (ℍ := ℍ) o.fin δ Θ c)) k ls .hole
@@ -287,15 +287,15 @@ theorem vN_noOwn_of_ownFree₀ {A : VTy} (hA : A.OwnFree) :
 /-! ### The rules -/
 
 /-- **`[sub]`** (Core's `sub_compatC`): a row may grow, its entries' cancel rows with it. -/
-theorem sub_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {S S' : Row} {A : VTy}
+theorem sub_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {S S' : Row} {A : VTy}
     (hle : RowLe S S') (h : SemJN₀ (ℍ := ℍ) Δ Γ e (.comp (CTy.effOf S A))) :
     SemJN₀ (ℍ := ℍ) Δ Γ e (.comp (CTy.effOf S' A)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
-  exact erwp_rowLe hle (h δ γ Θ c n ls ρ hδ hΘ hc hlw hg)
+  exact erwp_rowLe₀ hle (h δ γ Θ c n ls ρ hδ hΘ hc hlw hg)
 
 /-- **`[perform]`**, at any cancel row (Core's `perform_compatC`): the argument's run never
 stops, and the operation stops at once at its entry. -/
-theorem perform_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {o : OpSig}
+theorem perform_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {o : OpSig}
     (hf : Row.find S o.n o.i = some o) (hna : o.abort = false)
     (h : SemJN₀ (ℍ := ℍ) Δ Γ V (.val o.A)) :
     SemJN₀ (ℍ := ℍ) Δ Γ (performE (opArgE o.n o.i V)) (.comp (CTy.effOf S o.B)) := by
@@ -313,11 +313,11 @@ theorem perform_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {o : 
       (finN₀ (ℍ := ℍ) o.fin δ Θ c)) := by
     rw [tabN_effOf_find, hf]; rfl
   exact erwp_perform_here hT (by simpa [entN, OpSig.abort] using hna)
-    (entN_start δ Θ c o) (fun _ _ _ _ h => h.1) hv
+    (entN_start₀ δ Θ c o) (fun _ _ _ _ h => h.1) hv
 
 /-- **`[raise]`**: an abortive operation, at any answer type, its argument owning nothing (Core's
 `raise_compatC`). -/
-theorem raise_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {o : OpSig} {B : VTy}
+theorem raise_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {o : OpSig} {B : VTy}
     (hf : Row.find S o.n o.i = some o) (ha : o.abort = true)
     (hd : ∀ δ Θ n v ρ, vN₀ (ℍ := ℍ) o.A δ Θ n v ρ → NoOwn ρ)
     (h : SemJN₀ (ℍ := ℍ) Δ Γ V (.val o.A)) :
