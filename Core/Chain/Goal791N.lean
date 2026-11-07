@@ -2424,41 +2424,19 @@ theorem vN_empty_of_persistent : ∀ (A : VTy), A.Persistent → ∀ {δ : LSub}
         show (VTy.inst (.mu A) A).persistent = true
         rw [Inversions.persistent_inst_mu]; exact hp)
 
-/-- **The relation's reading of a row's table**: values at `vN`, at the world's location typing
-and view; every entry, and every entry of a cancel row, owes its continuation along `KW.Owed`, so
-the reading has one mode; the runs at the world's view and floor, posted at their own world, read
-at the worlds whose location typing is downward closed. -/
-def rdN (δ : LSub) : RowRd KW Unit where
-  vr := fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ
-  δ := δ
-  Θ := fun x => x.Θ
-  c := fun x => x.c
-  wk := fun _ _ x f y ρ => x.Owed f y ρ
-  sub := fun _ _ => ()
-  le := fun _ _ => True
-  V := KW.PostK
-  Φ := fun z => z.Θ.view z.c
-  fl := fun z => z.lo
-  Inv := fun z => z.Θ.Down
+/-- **The relation's reading of a row's table** (`rdNv` at `vN`, the lender's tables): every
+entry, and every entry of a cancel row, owes its continuation along `KW.Owed`. -/
+def rdN (δ : LSub) : RowRd KW Unit :=
+  rdNv (fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) id δ
 
-theorem rdN_ok (δ : LSub) : (rdN (ℍ := ℍ) δ).OK where
-  vrDown := fun A Θ k v ρ h => vN_down A δ Θ k v ρ h
-  vrPers := fun A hA _ _ _ _ h => vN_empty_of_persistent A hA h
-  wkInv := fun _ _ _ _ _ _ h => h.2.1.1
-  ΦDown := fun x hx => LocTy.view_down hx x.c
-  wkLeft := fun _ _ _ _ _ _ _ _ hc hv h => KW.Owed.left hc hv h
-  le_refl := fun _ => trivial
-  le_trans := fun _ _ _ _ _ => trivial
-  le_sub := fun _ _ => trivial
-  sub_mono := fun _ _ _ _ => trivial
-  wk_anti := fun _ _ _ _ _ _ _ _ h => h
-  Veq := fun _ _ h => h
+theorem rdN_ok (δ : LSub) : (rdN (ℍ := ℍ) δ).OK :=
+  rdNv_ok (fun A δ Θ k v ρ h => vN_down A δ Θ k v ρ h)
+    (fun A hA _ _ _ _ _ h => vN_empty_of_persistent A hA h) id δ
 
-/-- **The payload reading along `KW.Owed`** (`rdKW_payExt`): the order is `ExtR` at the share, so
-at a part of it, along which `𝒱⟦A⟧` is kept (`vN_extR`). -/
-theorem rdN_payExt (δ : LSub) : (rdN (ℍ := ℍ) δ).PayExt := by
-  intro _ _ x f y ρa ρb ρ hc hy A k v hv
-  exact vN_extR A δ k v ρa (hy.1.extR.left hc) hv
+/-- **The payload reading along `KW.Owed`** (`rdKW_payExt`): `𝒱⟦A⟧` is kept along `ExtR`
+(`vN_extR`). -/
+theorem rdN_payExt (δ : LSub) : (rdN (ℍ := ℍ) δ).PayExt :=
+  rdNv_payExt (fun A δ _ _ k v ρ hE h => vN_extR A δ k v ρ hE h) δ
 
 /-- **`tabN` is `tabF` at `rdN`, and `finN` is `finF`.** -/
 theorem tabN_finN_eq (δ : LSub) : ∀ F : CTy,

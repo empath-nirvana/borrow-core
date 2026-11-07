@@ -207,6 +207,49 @@ theorem rdKWv_ok {vr : VTy → LSub → LocTy → Nat → Val → WRes → Prop}
     ⟨fun hm => h.1 (hle m hm), fun _ => h.owedR⟩
   Veq := fun _ _ h => h
 
+/-- **The typed world's reading at one mode**, at a value relation and a world map: values at
+`vr`, at the world's location typing and view; every entry, and every entry of a cancel row, owes
+its continuation at `g y` along `KW.Owed` from `g x`; the cancel runs at `g`'s view and floor,
+posted at their own world, read at the worlds whose location typing under `g` is downward
+closed. -/
+def rdNv (vr : VTy → LSub → LocTy → Nat → Val → WRes → Prop) (g : KW → KW) (δ : LSub) :
+    RowRd KW Unit where
+  vr := vr
+  δ := δ
+  Θ := fun x => x.Θ
+  c := fun x => x.c
+  wk := fun _ _ x f y ρ => (g x).Owed f (g y) ρ
+  sub := fun _ _ => ()
+  le := fun _ _ => True
+  V := KW.PostK
+  Φ := fun z => (g z).Θ.view (g z).c
+  fl := fun z => (g z).lo
+  Inv := fun z => (g z).Θ.Down
+
+theorem rdNv_ok {vr : VTy → LSub → LocTy → Nat → Val → WRes → Prop}
+    (hD : ∀ A δ Θ k v ρ, vr A δ Θ (k + 1) v ρ → vr A δ Θ k v ρ)
+    (hP : ∀ A, A.Persistent → ∀ δ Θ k v ρ, vr A δ Θ k v ρ → ρ = PMap.empty)
+    (g : KW → KW) (δ : LSub) : (rdNv vr g δ).OK where
+  vrDown := fun A Θ k v ρ h => hD A δ Θ k v ρ h
+  vrPers := fun A hA Θ k v ρ h => hP A hA δ Θ k v ρ h
+  wkInv := fun _ _ _ _ _ _ h => h.2.1.1
+  ΦDown := fun x hx => LocTy.view_down hx (g x).c
+  wkLeft := fun _ _ _ _ _ _ _ _ hc hv h => KW.Owed.left hc hv h
+  le_refl := fun _ => trivial
+  le_trans := fun _ _ _ _ _ => trivial
+  le_sub := fun _ _ => trivial
+  sub_mono := fun _ _ _ _ => trivial
+  wk_anti := fun _ _ _ _ _ _ _ _ h => h
+  Veq := fun _ _ h => h
+
+/-- **The payload reading along `KW.Owed`** at the lender's tables, at any value relation kept
+along `ExtR`: the order is `ExtR` at the share, so at a part of it. -/
+theorem rdNv_payExt {vr : VTy → LSub → LocTy → Nat → Val → WRes → Prop}
+    (hE : ∀ A δ {Θ Θ' : LocTy} k v ρ, Θ.ExtR Θ' ρ → vr A δ Θ k v ρ → vr A δ Θ' k v ρ)
+    (δ : LSub) : (rdNv vr id δ).PayExt := by
+  intro _ _ x f y ρa ρb ρ hc hy A k v hv
+  exact hE A δ k v ρa (hy.1.extR.left hc) hv
+
 theorem rdKW_ok (g : KW → KW) (δ : LSub) : (rdKW (ℍ := ℍ) g δ).OK :=
   rdKWv_ok (fun A δ Θ k v ρ h => vN_down₀ A δ Θ k v ρ h)
     (fun A hA _ _ _ _ _ h => vN_empty_of_persistent₀ A hA h) g δ

@@ -2456,6 +2456,8 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cN_effOf
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cN_nu_unfold
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vN_empty_of_persistent
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.rdNv_ok
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.rdNv_payExt
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.rdN_ok
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.rdN_payExt
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabN_eq

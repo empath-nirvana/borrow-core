@@ -536,3 +536,22 @@ the relation at `KW`.
   with the lender's twin, so that the frames apply to `vNW`'s tables.
 - **The compatibility lemmas** of §10.3, all classes; `SemJNW`-level statements, `FundamentalNW`,
   `fundamentalNW_all`, `Goal791SchedNW`.
+
+### 10.8 The swap: the relation at `KW` under the canonical names
+
+`scope-835-qualifier.md` §5 replaces §10.1's "beside" and its `Sch` parameter.
+- `Core/Chain/Goal791N.lean` is the relation at `KW` under the canonical names
+  (`vNE`/`vOE`/`cN`/`cBN`/`retNX`/`tabN`/`finN`/`retN`, `vN`/`vO`/`vNX`/`vOX`, `gN`, `SemJN`,
+  `rowTabN`, the μ/ν machinery) with §10.2's laws. There is no scheduler-name parameter and no
+  mode: every entry, and every entry of a cancel row, owes along `KW.Owed`. `rdN δ` is
+  `rdNv vN id δ`, the one-mode reading (`RowRd KW Unit`); `tabN_eq`/`finN_eq`:
+  `tabN F δ x = tabF (rdN δ) () F x`.
+- `Core/Chain/Goal791N0.lean` is the one-world block and its statements. Every name the `KW` block
+  also defines carries `₀` there and at every use (`vN₀`, `cN₀`, `tabN₀`, `vN_down₀`, …, and
+  `finN_eq₀`, `vN_empty_of_persistent₀` from `Cancel791N`/`ImmLend833N`). Names only the old block
+  defines (`ConstN`, `FundamentalN`, `Goal791SchedN`, `tabN_down`, the `*_compatN`) keep theirs
+  until they are restated.
+- `CNW835N.lean` is deleted. Done-when for the rework: `Goal791N0.lean` deleted and no `₀` name
+  left.
+- The table layer at `vr` starts at `rdNv vr g δ` (`RowFamK835N`), `rdKWv` at one mode, with
+  `rdNv_ok` and `rdNv_payExt`. `tabNK`/`tabRK`/`tabGK`/`tabListK` still read `vN₀`.
