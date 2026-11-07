@@ -94,6 +94,24 @@ def closT : LTy := .thunk (.arr .unit (.ret .unit))
 #guard accepts (consumeProg i32T .unused)
 #guard refuses (consumeProg (.imm i32T) .unused) "(unused), where the rule's premise does not hold"
 
+/-- `f0 (x0 : t, x1 : 0) = absurd x1`: `x0` left unconsumed on a path that ends at `absurd`, as
+`zeroE` absorbs a slot its value does not read; and `f0 (x0 : t, x1 : 0) = ()`, the same slot
+left on a path that returns.  [spec §66] -/
+def absorbProg (t : LTy) (ends : Bool := true) : Prog where
+  fns := #[{ name := "absorbs", params := [0, 1], ret := .unit,
+             body := if ends then .absurd 1 else .consume .dead 1 .unit }]
+  codes := #[]
+  main := .unit
+  mainTy := .unit
+  ty := (({} : Std.HashMap Var LTy).insert 0 t).insert 1 .zero
+-- At `absurd` the path never returns: an owned cell, a borrow or an opaque value is left there,
+-- read from the node, whatever its type.
+#guard accepts (absorbProg (.ref i32T))
+#guard accepts (absorbProg (.imm i32T))
+#guard accepts (absorbProg (.opq .output))
+-- On a path that returns, the same slot is refused.
+#guard refuses (absorbProg (.ref i32T) false) "ends with [x0] unconsumed"
+
 -- A consume of an opaque value, or of a pair holding one: refused at every rule. No constant discards
 -- an opaque value and it is not consumable, so only an `abandon` node discards one.
 #guard refuses (consumeProg (.opq .output)) "where the rule's premise does not hold"
