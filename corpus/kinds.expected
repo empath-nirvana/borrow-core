@@ -246,6 +246,8 @@ corpus/effects-instances.bc 3.0 cancellable abortive: branch; agree
 corpus/effects-instances.bc 2.0 cancellable abortive: branch; agree
 corpus/effects-instances.bc 5.0 cancellable abortive: branch; agree
 corpus/effects-instances.bc 6.0 cancellable abortive: branch; agree
+corpus/effects-load-raise.bc 1.0 cancellable abortive: branch; agree
+corpus/effects-load-raise.bc 2.0 cancellable abortive: branch; agree
 corpus/effects-log-fail.bc 1.0 cancellable abortive: branch; agree
 corpus/effects-log-fail.bc 2.0 cancellable abortive: branch; agree
 corpus/effects-map-fail.bc 1.0 cancellable abortive: branch; agree
@@ -480,6 +482,10 @@ corpus/rec-layer.bc 1.0 cancellable abortive: branch; agree
 corpus/rec-lifetimes.bc 3.0 cancellable abortive: branch; agree
 corpus/rec-lifetimes.bc 2.0 cancellable abortive: branch; agree
 corpus/rec-lifetimes.bc 1.0 cancellable abortive: branch; agree
+corpus/rec-load-exhausted.bc 1.0 cancellable abortive: branch; agree
+corpus/rec-load-exhausted.bc 2.0 cancellable abortive: branch; agree
+corpus/rec-load-exhausted.bc 3.0 cancellable abortive: branch; agree
+corpus/rec-load-walk.bc 1.0 cancellable abortive: branch; agree
 corpus/rec-log.bc 1.0 cancellable abortive: branch; agree
 corpus/rec-mixed.bc 1.0 cancellable abortive: branch; agree
 corpus/rec-overflow.bc 2.0 cancellable abortive: branch; agree

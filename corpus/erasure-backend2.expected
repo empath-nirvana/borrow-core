@@ -82,6 +82,7 @@ clause-captures erased handles 2 performs 0 raises 2 machines 1 suspends 2 left 
 clo-capture erased handles 0 performs 0 raises 0 left 0 0
 clo-coerce erased handles 0 performs 0 raises 0 left 0 0
 clo-counter erased handles 0 performs 0 raises 0 left 0 0
+effects-load-raise erased handles 3 performs 0 raises 6 left 0 0
 for-arm-raises-owned erased handles 8 performs 0 raises 8 left 0 0
 handle-arm-releases erased handles 2 performs 0 raises 2 left 0 0
 infer-local-from-call erased handles 1 performs 0 raises 1 left 0 0
@@ -417,6 +418,8 @@ rec-generic-mutual erased handles 1 performs 0 raises 4 left 0 0
 rec-in-for-linear erased handles 2 performs 0 raises 2 left 0 0
 rec-layer erased handles 2 performs 0 raises 2 left 0 0
 rec-lifetimes erased handles 3 performs 0 raises 5 left 0 0
+rec-load-exhausted erased handles 4 performs 0 raises 4 left 0 0
+rec-load-walk erased handles 2 performs 0 raises 3 left 0 0
 rec-log erased handles 1 performs 0 raises 1 left 0 0
 rec-mixed erased handles 1 performs 0 raises 4 left 0 0
 rec-overflow erased handles 2 performs 0 raises 2 left 0 0
