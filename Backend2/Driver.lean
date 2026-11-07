@@ -1,4 +1,8 @@
-import Backend.Driver
+import Pipeline.Driver
+import Target.Flat.Interp
+import Target.Wasm.Lower
+import Target.Wasm.Print
+import Target.Native.Lower
 import Backend2.Convert
 import Backend2.Print
 import Backend2.Interp
