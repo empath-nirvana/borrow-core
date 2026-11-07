@@ -147,6 +147,9 @@ import Core.Chain.MechK835N3
 import Core.Chain.MechK835N4
 import Core.Chain.HandleK835N
 import Core.Chain.TabKW835N2
+import Core.Chain.HandleSK835N
+import Core.Chain.HandleTK835N
+import Core.Chain.MechK835N5
 import Core.Chain.SI.IFrameK
 import Core.Chain.IFrameK835N
 import Core.Chain.SI.AFrameK

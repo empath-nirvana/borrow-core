@@ -1,5 +1,6 @@
 import Core.Chain.MechK835N
 import Core.Chain.Field791N
+import Core.Chain.SI.AntiCancelN
 
 /-!
 # The frame at a guarded table with raises, at `erwpK`  `[spec §19, §27, §62]`
@@ -216,6 +217,140 @@ theorem erwp_frame_cancelRunGR_of_K {Φ : LocFam} {T₁ T₂ : OpTabN} (hTT : T�
     obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some h₁
     obtain ⟨en₀', h₀', rfl⟩ := liftTabK_some h₂
     exact cancelOKK_lift_conv (hcan m i en₀ en₀' h₀ h₀' ha hq k ls K ρk ρ₂' ρk' hc' hF)
+
+/-! ### The frame at a guarded table -/
+
+/-- **The frame at `erwpK` at a guarded table** (`erwpG_frame`): the frame goes into each stop's
+continuation share beside the guarded part, and is taken back at the resume, at the world the
+stop is resumed at; the entry's order at the joint share is read at the run's share (`hwk`). -/
+theorem erwpGK_frame {V : ι → ι → Prop} {Φ : ι → LocFam} {fl : ι → Life} {T : ι → OpTabK ι}
+    (hT : ∀ x m i en, T x m i = some en → en.abort = false → en.q = .lin ∧ en.wc = extF)
+    (hwk : ∀ x m i en, T x m i = some en → en.abort = false → ∀ f y (ρk ρ₂ ρk' : WRes),
+      ResU.CompS ρk ρ₂ ρk' → ResU.Valid ρk' → en.wk f y ρk' → en.wk f y ρk)
+    {G : ShareG} {Q : ι → PostN} (R : List SRec → WProp)
+    (hR : ∀ ls ls' ρ, extF ls ls' ρ → R ls ρ → R ls' ρ) :
+    ∀ n x ls e (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ → R ls ρ₂ →
+      erwpK (ℍ := ℍ) V Φ (fun z => opTableGK (fl z) (T z) G) Q x n ls e ρ₁ →
+      erwpK (ℍ := ℍ) V Φ (fun z => opTableGK (fl z) (T z) (G.sep R))
+        (fun y k ls' v => Q y k ls' v ⋆ R ls') x n ls e ρ := by
+  intro n
+  induction n using Nat.strong_induction_on with
+  | _ n ih =>
+  intro x ls e ρ₁ ρ₂ ρ hc hR₂ h
+  rw [erwpK_eq] at h ⊢
+  refine rwpG_mono_le (fun k hk ls' t σ ⟨⟨σ₁, σ₂, hσ, ht, hσ₂⟩, hvσ⟩ => ?_)
+    (rwpG_validK (rwpG_frame R (fun ls ls' hs ρ => hR ls ls' ρ (extF_of_same hs ρ)) hc h hR₂))
+  rcases ht with ⟨v, rfl, y, hy, hv⟩ | ⟨K, m, i, v, en, hp⟩
+  · exact Or.inl ⟨v, rfl, y, hy, σ₁, σ₂, hσ, hv, hσ₂⟩
+  obtain ⟨⟨rfl, hK, hTe, ha⟩, ρa, ρk, hcak, hA, hG, -, f, hf, hcont⟩ := pure_sep_iff.mp hp
+  obtain ⟨hql, hwc⟩ := hT x m i en hTe ha
+  obtain ⟨ρk₂, hk₂, haσ⟩ := (ResU.CompS.assoc ρa ρk σ₂ σ).mpr ⟨σ₁, hcak, hσ⟩
+  have hvk : ResU.Valid ρk₂ := (ResU.Valid.split haσ hvσ).2
+  refine Or.inr ⟨K, m, i, v, en, pure_sep_mk ⟨rfl, hK, hTe, ha⟩ ⟨ρa, ρk₂, haσ, hA,
+    ⟨ρk, σ₂, hk₂, hG, hσ₂⟩, fun hu' => absurd (hql.symm.trans hu') (by simp), f, hf,
+      fun y hy ls'' he => ⟨fun k' hk' w τ₁ τ₂ hB hcτ => ?_, fun hq' => absurd hql hq'⟩⟩⟩
+  have he' : en.wc ls' ls'' ρk := by rw [hwc] at he ⊢; exact extF_left _ _ _ _ _ hk₂ he
+  have hls : extF ls' ls'' σ₂ := by rw [hwc] at he; exact extF_right hk₂ he
+  have hy' := hwk x m i en hTe ha f y ρk σ₂ ρk₂ hk₂ hvk hy
+  obtain ⟨z, hz, hzτ⟩ := compS_exch hk₂ hcτ
+  have hc' := (hcont y hy' ls'' he').1 k' hk' w τ₁ z hB hz
+  simp only [erwpCK, show k' < n by omega, if_true] at hc' ⊢
+  exact ih k' (by omega) y ls'' _ z σ₂ τ₂ hzτ (hR ls' ls'' σ₂ hls hσ₂) hc'
+
+/-- `erwpG_frame` from `erwpGK_frame`. -/
+theorem erwpG_frame_of_K {Φ : LocFam} {T : OpTabN} (hT : T.AFOK) {G : ShareG} {Q : PostN}
+    (R : List SRec → WProp)
+    (hR : ∀ ls ls' ρ, extF ls ls' ρ → R ls ρ → R ls' ρ) :
+    ∀ n ls e (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ → R ls ρ₂ →
+      erwp (ℍ := ℍ) Φ (opTableG T G) Q n ls e ρ₁ →
+      erwp (ℍ := ℍ) Φ (opTableG T (G.sep R)) (fun k ls' v => Q k ls' v ⋆ R ls') n ls e ρ := by
+  intro n ls e ρ₁ ρ₂ ρ hc hR₂ h
+  rw [erwp_eq_erwpK_of (opTableGK_lift 0 T G) Φ Q] at h
+  rw [erwp_eq_erwpK_of (opTableGK_lift 0 T (G.sep R)) Φ _]
+  refine erwpGK_frame (ℍ := ℍ) (V := fun _ _ => True) (Φ := fun _ => Φ) (fl := fun _ => 0)
+    (T := fun _ => liftTabK T) (Q := fun _ => Q) ?_ ?_ R hR n () ls e ρ₁ ρ₂ ρ hc hR₂ h
+  · intro _ m i en h₁ ha
+    obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some h₁
+    exact hT m i en₀ h₀ ha
+  · intro _ m i en h₁ _ _ _ _ _ _ _ _ _
+    obtain ⟨en₀, -, rfl⟩ := liftTabK_some h₁
+    trivial
+
+/-- **The frame at `erwpK` at a guarded table, across cancellable stops** (`erwpG_frameT`):
+`erwpGK_frame` with the twin `T′`, whose cancel obligations are `T`'s with the frame added
+(`hcan`), read at the resumption world. -/
+theorem erwpGK_frameT {V : ι → ι → Prop} {Φ : ι → LocFam} {fl : ι → Life} {T T' : ι → OpTabK ι}
+    (hT : ∀ x m i en, T x m i = some en → en.abort = false → en.q ≠ .unr ∧ en.wc = extF)
+    (hTT' : ∀ x, (T x).Twin (T' x)) (R₂ : WProp)
+    (hwk : ∀ x m i en en', T x m i = some en → T' x m i = some en' → en.abort = false →
+      ∀ f y (ρk ρ₂ ρk' : WRes), ResU.CompS ρk ρ₂ ρk' → ResU.Valid ρk' → R₂ ρ₂ →
+        en'.wk f y ρk' → en.wk f y ρk)
+    (hcan : ∀ x m i en en', T x m i = some en → T' x m i = some en' → en.q ≠ .lin →
+      ∀ f y k ls (K : Kont) (ρk σ₂ ρk₂ : WRes), ResU.CompS ρk σ₂ ρk₂ → ResU.Valid ρk₂ → R₂ σ₂ →
+        en'.wk f y ρk₂ → cancelOKK en y k ls K ρk → cancelOKK en' y k ls K ρk₂)
+    {G : ShareG} {Q : ι → PostN} :
+    ∀ n x ls e (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ → R₂ ρ₂ →
+      erwpK (ℍ := ℍ) V Φ (fun z => opTableGK (fl z) (T z) G) Q x n ls e ρ₁ →
+      erwpK (ℍ := ℍ) V Φ (fun z => opTableGK (fl z) (T' z) (G.sep fun _ => R₂))
+        (fun y k ls' v => Q y k ls' v ⋆ R₂) x n ls e ρ := by
+  intro n
+  induction n using Nat.strong_induction_on with
+  | _ n ih =>
+  intro x ls e ρ₁ ρ₂ ρ hc hR₂ h
+  rw [erwpK_eq] at h ⊢
+  refine rwpG_mono_le (fun k hk ls' t σ ⟨⟨σ₁, σ₂, hσ, ht, hσ₂⟩, hvσ⟩ => ?_)
+    (rwpG_validK (rwpG_frame (fun _ => R₂) (fun _ _ _ _ h => h) hc h hR₂))
+  rcases ht with ⟨v, rfl, y, hy, hv⟩ | ⟨K, m, i, v, en, hp⟩
+  · exact Or.inl ⟨v, rfl, y, hy, σ₁, σ₂, hσ, hv, hσ₂⟩
+  obtain ⟨⟨rfl, hK, hTe, ha⟩, ρa, ρk, hcak, hA, hG, -, f, hf, hcont⟩ := pure_sep_iff.mp hp
+  obtain ⟨hqu, hwc⟩ := hT x m i en hTe ha
+  obtain ⟨en', hTe', hq', hab', hPA', hPB', hwc'⟩ := hTT' x m i en hTe
+  obtain ⟨ρk₂, hk₂, haσ⟩ := (ResU.CompS.assoc ρa ρk σ₂ σ).mpr ⟨σ₁, hcak, hσ⟩
+  have hvk : ResU.Valid ρk₂ := (ResU.Valid.split haσ hvσ).2
+  refine Or.inr ⟨K, m, i, v, en', pure_sep_mk ⟨rfl, hK, hTe', hab'.trans ha⟩ ⟨ρa, ρk₂, haσ,
+    hPA' ▸ hA, ⟨ρk, σ₂, hk₂, hG, hσ₂⟩, fun hu' => absurd (hq' ▸ hu') hqu, f, hf,
+      fun y hy ls'' he => ⟨fun k' hk' w τ₁ τ₂ hB hcτ => ?_, fun hql => ?_⟩⟩⟩
+  · have he' : en.wc ls' ls'' ρk := by
+      rw [hwc]; rw [hwc', hwc] at he; exact extF_left _ _ _ _ _ hk₂ he
+    have hy' := hwk x m i en en' hTe hTe' ha f y ρk σ₂ ρk₂ hk₂ hvk hσ₂ hy
+    obtain ⟨z, hz, hzτ⟩ := compS_exch hk₂ hcτ
+    have hc' := (hcont y hy' ls'' he').1 k' hk' w τ₁ z (hPB' ▸ hB) hz
+    simp only [erwpCK, show k' < n by omega, if_true] at hc' ⊢
+    exact ih k' (by omega) y ls'' _ z σ₂ τ₂ hzτ hσ₂ hc'
+  · have he' : en.wc ls' ls'' ρk := by
+      rw [hwc]; rw [hwc', hwc] at he; exact extF_left _ _ _ _ _ hk₂ he
+    have hy' := hwk x m i en en' hTe hTe' ha f y ρk σ₂ ρk₂ hk₂ hvk hσ₂ hy
+    exact hcan x m i en en' hTe hTe' (hq' ▸ hql) f y k ls'' K ρk σ₂ ρk₂ hk₂ hvk hσ₂ hy
+      ((hcont y hy' ls'' he').2 (hq' ▸ hql))
+
+/-- `erwpG_frameT` from `erwpGK_frameT`. -/
+theorem erwpG_frameT_of_K {Φ : LocFam} {T T' : OpTabN}
+    (hT : ∀ m i en, T m i = some en → en.abort = false → en.q ≠ .unr ∧ en.wc = extF)
+    (hTT' : T.Twin T') (R₂ : WProp)
+    (hcan : ∀ m i en en', T m i = some en → T' m i = some en' → en.q ≠ .lin →
+      ∀ k ls (K : Kont) (ρk σ₂ ρk₂ : WRes), ResU.CompS ρk σ₂ ρk₂ → R₂ σ₂ →
+        cancelOKN en k ls K ρk → cancelOKN en' k ls K ρk₂)
+    {G : ShareG} {Q : PostN} :
+    ∀ n ls e (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ → R₂ ρ₂ →
+      erwp (ℍ := ℍ) Φ (opTableG T G) Q n ls e ρ₁ →
+      erwp (ℍ := ℍ) Φ (opTableG T' (G.sep fun _ => R₂)) (fun k ls' v => Q k ls' v ⋆ R₂) n ls e
+        ρ := by
+  intro n ls e ρ₁ ρ₂ ρ hc hR₂ h
+  rw [erwp_eq_erwpK_of (opTableGK_lift 0 T G) Φ Q] at h
+  rw [erwp_eq_erwpK_of (opTableGK_lift 0 T' (G.sep fun _ => R₂)) Φ _]
+  refine erwpGK_frameT (ℍ := ℍ) (V := fun _ _ => True) (Φ := fun _ => Φ) (fl := fun _ => 0)
+    (T := fun _ => liftTabK T) (T' := fun _ => liftTabK T') (Q := fun _ => Q) ?_
+    (fun _ => hTT'.liftK) R₂ ?_ ?_ n () ls e ρ₁ ρ₂ ρ hc hR₂ h
+  · intro _ m i en h₁ ha
+    obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some h₁
+    exact hT m i en₀ h₀ ha
+  · intro _ m i en _ h₁ _ _ _ _ _ _ _ _ _ _ _
+    obtain ⟨en₀, -, rfl⟩ := liftTabK_some h₁
+    trivial
+  · intro _ m i en en' h₁ h₂ hq _ _ k ls K ρk σ₂ ρk₂ hc' _ hR _
+    obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some h₁
+    obtain ⟨en₀', h₀', rfl⟩ := liftTabK_some h₂
+    exact cancelOKK_lift_conv (hcan m i en₀ en₀' h₀ h₀' hq k ls K ρk σ₂ ρk₂ hc' hR)
 
 end BoCa.Fig16.LogRel.Core.Chain.SI
 
