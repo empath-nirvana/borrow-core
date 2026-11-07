@@ -3297,11 +3297,20 @@ def runP {α} (p : Nat → P α) (src : String) (resolve : Bool := false) : Exce
   (·.1) <$> runPS p src resolve
 
 /-- The table of a program that includes the modules `incs` and whose own table is `own` (SPEC
-§42, §61): the prelude's, the included modules', and its own, `lib` giving a module's source; a
-later one of a name hides an earlier one (`Data.Table`). The parser's table and the typed
-elaboration's are both this one (`dataOf`, `Sugar.dataDecls`).  `[spec §61]` -/
+§42, §61), `lib` giving a module's source; a later one of a name hides an earlier one
+(`Data.Table`). Its `data` declarations are the prelude's, the included modules' and its own; its
+abbreviations are the included modules' and its own. The parser's table and the typed
+elaboration's abbreviations are both this one (`dataOf`, `Sugar.dataDecls`).
+
+The abbreviations do not depend on the prelude's source: the included modules are read with the
+prelude counted as read, so a program that includes no module has its abbreviations without
+reading the library. The kernel evaluates the cross-checked programs' elaboration
+(`Frontend/Check/CrossCheck.lean`), and cannot read a module: `Sugar.libSources` is read when
+`bcc` starts.  `[spec §61]` -/
 def tableOf (lib : String → Option String) (incs : List String) (own : Data.Table) : Data.Table :=
-  (dataOfModules lib 64 ("prelude" :: incs) []).1 ++ own
+  let pre := (dataOfModules lib 64 ["prelude"] []).1
+  let mods := (dataOfModules lib 64 incs ["prelude"]).1
+  { decls := pre.decls ++ mods.decls ++ own.decls, abbrevs := mods.abbrevs ++ own.abbrevs }
 
 /-- The `data` declarations and the `type` abbreviations in scope in the source `src` (SPEC §42,
 §61), `lib` giving a module's source (`tableOf`). -/

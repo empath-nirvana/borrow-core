@@ -6309,14 +6309,11 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
             let g := (f.name.map (·.name)).getD s!"{j + 1} of `{c.name.name}`"
             modify (· ++ [(sp, .closes dd.name.name g (cl.map (·.name)))])
   -- The abbreviations of the data table: the parser's, of the modules the program includes and
-  -- its own (`Parser.tableOf`), so the two tables are one. The table is read only for `data`
-  -- declarations, so a program with none is elaborated without reading the library, as the
-  -- kernel evaluates the cross-checked programs (`preludeData`).
+  -- its own (`Parser.tableOf`), so the two tables are one. A program that includes no module
+  -- has them without reading the library, as the kernel evaluates the cross-checked programs.
   let incs := p₀.decls.filterMap fun | .include _ m => some m.name | _ => none
   let ownAbbrevs := p₀.decls.filterMap Data.Abbrev.ofDecl?
-  let abbrevs := if decls₀.any (fun | .data .. => true | _ => false) then
-      (tableOf libSrc incs { abbrevs := ownAbbrevs }).abbrevs
-    else []
+  let abbrevs := (tableOf libSrc incs { abbrevs := ownAbbrevs }).abbrevs
   let decls₀ ← (dataDecls decls₀ abbrevs : Except Error _)
   -- A program's declaration shadows an included module's of the same name (SPEC §41, rule R1):
   -- the module's is renamed, and so is every use of it in the module's own declarations.

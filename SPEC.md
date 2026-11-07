@@ -10327,9 +10327,13 @@ closed once elaborated.
 
 The table the parser and the typed elaboration read holds the abbreviations in scope beside the
 `data` declarations (`Data.Table`). Both take their abbreviations from one function,
-`Parser.tableOf`: the prelude's and those of the modules the program's `include`s name, read in the
-pass that reads the declarations, then the program's own, a later abbreviation of a name hiding an
-earlier one, so they agree on which constructors are blocks. The I/O library the typed elaboration
+`Parser.tableOf`: those of the modules the program's `include`s name, read in the pass that reads
+the declarations, then the program's own, a later abbreviation of a name hiding an earlier one, so
+they agree on which constructors are blocks. The prelude's `data` declarations are in the table
+and its abbreviations are not, so a program that includes no module has its abbreviations without
+reading the library: the kernel evaluates the cross-checked programs' elaboration
+(`Frontend/Check/CrossCheck.lean`, `declTxn_checks`), and cannot read a module, whose source is read
+when `bcc` starts (`Sugar.libSources`, an `opaque`). The I/O library the typed elaboration
 brings in for a `main` that uses the streams ambiently (§34) is not one the program includes, and
 is in neither table.
 
@@ -11656,7 +11660,9 @@ checker or the old backend.
   `Obj(JMap)` is accepted; such a `type` declaration written before the `data` one is placed after
   its group. The data table (`Data.Table`) carries the abbreviations in scope; the parser's and the
   typed elaboration's are built by one function (`Parser.tableOf`), a later one of a name hiding an
-  earlier one; the I/O library brought in for an ambient `main` is in neither. `pTy`'s
+  earlier one; the I/O library brought in for an ambient `main` is in neither, and the prelude's
+  abbreviations are not read, so a program with `data` declarations that includes no module
+  cross-checks in the kernel (`declTxn_checks`). `pTy`'s
   `UNPROVED:` assumption narrows to type parameters. A recursive abbreviation around the root is refused with
   U3's message before it is opened; `box C(…)` of a constructor that is not a block, where its value
   is expected, is refused with a message saying so. New programs `data-json-map`, `data-set-rec`,
