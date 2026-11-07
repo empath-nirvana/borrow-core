@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.42 · 2026-11-07
+Version 1.46 · 2026-11-07
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -11880,7 +11880,7 @@ checker or the old backend.
 
 ## Changelog
 
-- **1.43** (2026-11-07) — §66 (#862): at `absurd` (`zeroE`) Backend2 leaves a live slot neither
+- **1.46** (2026-11-07) — §66 (#862): at `absurd` (`zeroE`) Backend2 leaves a live slot neither
   mask holds unconsumed, as it leaves `zeroE`'s absorbed part, on the path that ends at
   `Tm.absurd`; `Lint` admits it from that node, at every type. Every other rule's weakening at a
   split stays at a persistent type. `book/src/guide/iteration.md`'s `take(6, fib())` and
