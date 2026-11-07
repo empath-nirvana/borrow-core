@@ -11547,6 +11547,131 @@ the consumes no longer made are on paths that end at `absurd`, which never run.
 
 ---
 
+## 67. Entry 66 — the new backend: an owned fold by pointer reversal (#876, B6)
+
+### Motivation
+
+Backend2 compiled every owned fold as a function that calls itself once per node
+(`Backend2/Convert.lean`, `genFoldFns`), so a fold over a list of `n` nodes takes `n` native
+frames: `corpus/deep-list.bc` (50000 nodes, `fold_own[1 + (i32 * X), i32]`) ran in a native
+stack of 64 KiB on the old backend and needed 1–4 MiB on Backend2 (#876). The old backend
+reverses pointers in an owned fold (`Backend/README.md`, *Stack*), but on a term it recognises,
+assuming the ownership (`docs/compiler.md` §7.2, defect 6). The ownership is the rule's: §6's
+`foldOwn` and `foldReuse` take the structure as `μX. T ⊸ F R`.
+
+### Language
+
+No change: no type, rule, term, typing, elaboration, semantics or erasure. Only Backend2's
+conversion of a `foldOwn` or `foldReuse` node changes.
+
+### The fact
+
+The node itself, with its shape `F : FShape` (`TExpr.foldOwn`, `TExpr.foldReuse`;
+`TDerives.foldOwn`, `TDerives.foldReuse`, `Frontend/Check/TDerives.lean`; `CDerives.foldOwn`,
+`CDerives.foldReuse`, `Core/Fundamental.lean`, by `foldOwn_compatX` (`Core/FoldOwn.lean`) and
+`foldReuse_compatX` (`Core/FoldReuse.lean`)). Its type `!U(A′_R ⊸ F R) ⊸ !U(μX. F.ty ⊸ F R)`
+(`algOTy`, `foldOTy`; `A″_R`, `algRTy`, at `foldReuse`) says:
+
+- the fold consumes the structure: `μX. F.ty` is taken by `⊸` and given back nowhere, so every
+  node of it, and every cell at a `Ref X`, is the fold's own while it runs;
+- where the recursive positions are: `F`'s `varX` and `refX` leaves;
+- what the algebra is applied to: `F.resO R` (`F.resR R`), `R` at each recursive position, never
+  a node of the structure.
+
+The conversion reads `F` and nothing else: no term is recognised.
+
+### The rule
+
+- **The shapes** (`shapeReversal?`): `F = 1 ⊕ C` or `C ⊕ 1`, with `C` a product (`⊗`) of
+  closed leaves and exactly one recursive position, `X` or `Ref X` (`shapeIsProd`,
+  `shapeXCount`). Every other shape keeps `genFoldFns`' recursion.
+- **The lowering** (`genFoldRev`): an entry function and two loops of tail calls. The stack is a
+  value of the structure's own type `μX. T`, its bottom the base node `1`. The descent
+  (`fold_down`) unrolls a node; at `C` it puts the stack at the recursive position and the node
+  becomes the stack's top (`cutRev`: a boxed `X` rebuilt by a pair or an injection, a `Ref X`
+  cell given the stack by `swap`), and it goes on with the child; at the base it applies the
+  algebra and calls the ascent. The ascent (`fold_up`) unrolls the stack; at a node it takes the
+  link from the recursive position and puts the result there (`plugRev`: at `Ref X` the cell is
+  freed under `foldOwn`, and under `foldReuse` its contents swapped for `()` and the emptied cell
+  paired with the result, as `travR` does), applies the algebra and goes on with the link; at the
+  bottom it answers the result.
+- **Nothing is allocated.** A boxed `X` taken apart by the descent is a spare box of the node's
+  words (§64), and the node rebuilt with the stack in it is of the same type, so it is built in
+  that box before the tail call; a `Ref X` cell holds the stack in place of the child, at the same
+  type. The ascent frees each box and cell once, as the recursion did.
+
+### What it rests on
+
+- **Read:** the node's ownership of the structure (above). The stack is made of the structure's
+  nodes, so no other word reaches them while they are reversed. In the LIR the reversal is
+  values taken apart and rebuilt, each consumed once (`Lint`); the in-place storage is §64's spare
+  box, at `Backend2/Layout.lean`'s existing `UNPROVED:` assumption on boxed fields, and a `swap`
+  on a cell the fold owns.
+- **`UNPROVED:`** (`genFoldRev`): that the two loops compute the fold the kernel's term computes
+  (`foldOwnV`'s `travO`, `foldReuseV`'s `travR`): the algebra applied to the same arguments in the
+  same order, the innermost node first, and the same cells freed, a `Ref X` cell at the ascent
+  rather than at the descent. The algebra never receives a reversed link: it is applied to the
+  base and to nodes whose recursive position holds a result. A mismatch shows as a disagreement
+  with the source stage, or a leak or a double free in `live`.
+
+### Programs
+
+`corpus/deep-list.bc` runs natively on Backend2 in a stack of 64 KiB (and of 16 KiB), with its
+golden output and `live 0`; its owned fold's 50000 nodes take no frame each. Every corpus program
+keeps its output at every stage of Backend2 (`scripts/compile-backend2.sh`: the LIR, the word IR,
+Wasm and native).
+
+Counts per run (`bcc-counts --backend new`): no `allocs`, `indirect`, `copies` or `bounds` count
+changes. `loads` and `stores` rise on the 19 programs whose owned folds run (below): the descent
+stores each node back with the link in it and the ascent loads it again, where the recursion
+kept the node's words in its frame. `deep-list`'s are now the old backend's (`450003 450003`).
+`corpus/counts-backend2.expected` takes the new lines.
+
+| program | loads stores before | after |
+|---|---|---|
+| `deep-list` | `300003 300003` | `450003 450003` |
+| `13-2-sum-prog` | `120 78` | `153 111` |
+| `sum-prog-exact` | `120 78` | `153 111` |
+| `axes/data-effects` | `94 67` | `118 91` |
+| `axes/result-fold-own` | `28 28` | `49 49` |
+| `axes/scope-data-effects` | `52 33` | `61 42` |
+| `clone-reuse` | `27 18` | `36 27` |
+| `data-fold-bang` | `8 8` | `14 14` |
+| `data-fold-generic` | `20 11` | `26 17` |
+| `data-fold-list` | `42 27` | `60 45` |
+| `data-fold-whole` | `92 50` | `107 65` |
+| `decl-promise` | `15 15` | `24 24` |
+| `gen-adapters` | `18 18` | `33 33` |
+| `gen-adapters-fail` | `27 27` | `51 51` |
+| `map-reuse` | `30 30` | `48 48` |
+| `surface/map-reuse` | `24 24` | `42 42` |
+| `print-borrowed-list` | `67 42` | `76 51` |
+| `sched-a` | `445 441` | `477 473` |
+| `sched-b` | `448 442` | `480 474` |
+
+The owned folds that keep the recursion: `data-fold-tree`, `data-fold-forest`, `data-fold-group`
+and `consumes` in `data-fold-whole` (a second recursive position, there under a `⊕`), and
+`axes/free-monad` (`i32 + i32 * X`, a base with data). `sum-i32` has no fold node: its list is
+freed by a consume (§12).
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, the checker, the elaboration, the layouts,
+the word-IR lowering, the old backend or a kernel program. Every corpus program keeps its output
+at every stage of Backend2.
+
+### Open
+
+- **A base with data.** `i32 + i32 * X` and other shapes whose base summand is not `1` keep the
+  recursion: the stack's bottom must be a node of `μX. T`, and only `1` is one without data.
+- **More than one recursive summand, or a recursive position under a `⊕` of `C`** (the old
+  backend's *linear* shapes, e.g. `A ⊕ X ⊕ (B ⊗ X)`) keep the recursion.
+- **Two recursive positions** (trees, `data-fold-tree`, `data-fold-forest`) keep a frame a level,
+  as `fold_imm` does everywhere.
+- **`foldOwnG`** (§61) and the consume of a `μ` (`genConsume`, §12) recurse once per node.
+
+---
+
 ## 68. Entry 67 — per-code closure types: `Code⟨N; E⟩ C` (#855, K0)
 
 ### Motivation
@@ -12154,6 +12279,10 @@ Entry 62 (§63) is implemented in `Frontend/Check/Derived.lean` (`allI_inst`,
 case, the `lendR` case of `conv`); no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the
 checker or the old backend.
 
+
+Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cutRev`, `plugRev`,
+`genFoldRev`, the `foldOwn`/`foldReuse` case of `conv`); no change to `CDerives`, `Core/`, `Paper/`,
+`Support/`, the checker or the old backend.
 ---
 
 ## Changelog
@@ -12182,6 +12311,12 @@ checker or the old backend.
   and `nuOutK_step` at Core's relation and the chain's (`Core/CapNorm.lean`, `Core/CodeNu.lean`,
   `Core/Chain/CodeNuKW835N.lean`); the size measurement `experiments/CodeSize`. No change to
   `CDerives`, the relation, the checker, the backends or any program's output.
+- **1.48** (2026-11-07) — §67 (#876, B6): Backend2 lowers a `foldOwn` or `foldReuse` node whose
+  shape is `1 ⊕ C`, `C` a product with one recursive position, by pointer reversal: two loops of
+  tail calls whose stack is the structure's own nodes, read from the node's ownership of the
+  structure and its `FShape`. `deep-list` runs natively in 64 KiB; no allocation is added; loads
+  and stores rise on 19 programs. Other shapes keep the recursion. No change to `CDerives`, the
+  relation, the machine, the checker or the old backend.
 - **1.47** (2026-11-07) — §15 (#849, #686, *A local whose type is not known*): inference's slot
   types are `Option`s, so a local whose binding it does not type is not known to it, rather than
   `1`, and every reader handles that. An unannotated injection bound and passed to a generic
