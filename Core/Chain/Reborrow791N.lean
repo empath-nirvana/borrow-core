@@ -21,7 +21,7 @@ anti-frame runs across stops, raises and layered cancel runs.
 * `tabG`/`finG`: the lender's twin of the callback's table with every cancel run at its cancel
   row's own guarded table, ending at the claim; `tabG_can`, `tabR_canA`: the two transfers, by
   induction on how deep cancel rows nest.
-* `withbor3S_compat`, `constN_w3`.
+* `withbor3S_compat₀`, `constN_w3`.
 -/
 
 noncomputable section
@@ -748,7 +748,7 @@ theorem tabR_canA {x : LifeVar} {bnd : Lifetime.Life} {δ : LSub} {Θ : LocTy} (
 
 /-- **The finaliser consumes the source**: `λ_. d ℓ` from a `Mut @a A` value at `ℓ`, by `d`'s
 judgment at `Mut @a A ⊸ 1` (`fin_claim₀` at the reborrow's source). -/
-theorem fin_claimM {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
+theorem fin_claimM₀ {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
     (hd : SemJN₀ (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.mut a A) .unit))) {δ : LSub}
     {Θ : LocTy} (hΘ : Θ.OK) {c : Loc → Option Life} {l : Loc} {k : Nat} {ls : List SRec}
     {ρ : WRes} (h : vN₀ (ℍ := ℍ) (.mut a A) δ Θ k (Val.loc l) ρ) (hc : ConsistentX c ρ) :
@@ -802,13 +802,13 @@ theorem fin_claimM {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d 
 13. the content handed back in `F_i k` is in `F_o k` (`hunif`, `vN_above₀`), and the resealed cell
     is a `Mut @a A` value again, beside the result and in every raise's claim; the claim is
     consistent (`erwp_claimX`) and the finaliser frame consumes it with `d`
-    (`erwp_ubindClaimRT`, `fin_claimM`).
+    (`erwp_ubindClaimRT`, `fin_claimM₀`).
 
 Premises, and the rule that supplies each: `hbnd` is the bound's definedness, which Core's rule
 gets from its bound `Δ.meetOfDom` (`Const791.OK`); `hA`, `hB`, `hS`, `hdc` are `withbor3U`'s with
 `Row.Suspend` for `Row.Unwind` (`Const791.OK`); `hd` is the fundamental property at `d`'s
 derivation, the premise `CDerives Δ Γ d (Mut @a A ⊸ 1)` read semantically. -/
-theorem withbor3S_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
+theorem withbor3S_compat₀ {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {S : Row} {d : Expr} (hbnd : LifeCtx.empty.Defines bnd) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
     (hS : S.Suspend x bnd)
     (hdc : closedAt 0 d = true)
@@ -931,7 +931,7 @@ theorem withbor3S_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
     have hM' := erwp_claimX (c := c) hbnd hFS k' ls _ ρ'' hcon hAF
     refine erwp_ubindClaimRT hΘ.1 (F := Fo) (δ := δ) (c := c)
       (fun m i en h _ => by obtain ⟨o, ho, rfl, -⟩ := tabN_effOf_some h; exact (hS o ho).2.1)
-      (NFv l) (DFv d l) (fun k ls ρ hR => fin_claimM hdc hd hΘ hR.1 hR.2) hQo
+      (NFv l) (DFv d l) (fun k ls ρ hR => fin_claimM₀ hdc hd hΘ hR.1 hR.2) hQo
       (fun k ls b ρ hq => ?_) k' ls _ ρ'' hM'
     refine erwp_det hΦ (opTableN_down hTd) hQo
       (fun μ => step1Only_plug (Head.beta μ _ b) rfl .hole) ?_
@@ -974,7 +974,7 @@ theorem constN_w3 (hF : FundamentalN (ℍ := ℍ)) {a : Lifetime.Life} {x : Life
   rintro ⟨hbnd, hA, hB, hS, hdc, hder⟩ δ Θ n _
   have hL : (VTy.mut a A).inFrag = true := by
     simp_all [Const791.InFrag, Const791.ty, withbor3UTy, withborUTy, VTy.inFrag, CTy.inFrag]
-  exact withbor3S_compat hbnd hA hB hS hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ Θ n
+  exact withbor3S_compat₀ hbnd hA hB hS hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ Θ n
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

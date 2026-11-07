@@ -1600,8 +1600,8 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabG_afok
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabG_can
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabR_canA
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fin_claimM
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor3S_compat
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fin_claimM₀
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor3S_compat₀
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.constN_w3
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.opTableGR_local
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_frameGR
@@ -1612,7 +1612,7 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tab_lookupGG
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabG_tabG_twin
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabG_canF
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withborFS_compat
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withborFS_compat₀
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.constN_wF
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.mutSub_compatN₀
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.immSub_compatN₀
@@ -2699,3 +2699,8 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpK_flr
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fin_claim
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor2S_compat
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwpK_flr_tabN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwpK_M_frameCRG_cN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fin_claimM
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor3S_compat
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withborFS_compat

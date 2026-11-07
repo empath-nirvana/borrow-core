@@ -62,8 +62,7 @@ theorem fin_claimN {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
     (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) ?_
   have e : Kont.hole.plug (Expr.subst 0 Val.unit (.app d (.val (Val.loc l)))) =
       (Kont.appL .hole (Val.loc l)).plug d := by
-    simp [Kont.plug, Expr.subst, subst_closedAt d (s := _) hdc (Nat.zero_le _), Val.loc,
-      Expr.loc]
+    simp [Kont.plug, Expr.subst, subst_closedAt d (s := _) hdc (Nat.zero_le _), Val.loc]
   rw [e]
   refine rwp_bind hΦ _ ?_
   have hd0 := hd δ [] Θ c k ls PMap.empty (models_empty_any _) hΘ (consistentX_empty c) trivial rfl
@@ -75,6 +74,20 @@ theorem fin_claimN {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
   have := hP Θ (LocTy.extR_refl Θ _) hΘ c (consistentX_left hcτ hcτ' hvτ) ls'
     c k' le_rfl (Val.loc l) τ₂ τ hcτ ⟨l, w, σ, rfl, hcl, vN_le hk' hF'⟩ hcτ'
   exact rwp_of_erwp_empty (erwp_of_cN_ret this)
+
+/-- **A run at `cN`'s table from the lowered floor's world is a run from the world**
+(`erwpK_flr` at `vN`). -/
+theorem erwpK_flr_tabN {F : CTy} {δ : LSub} (a : Life) {Q : KW → PostN}
+    (hQ : ∀ (x : KW) k ls v ρ, Q (x.flr a) k ls v ρ → Q x k ls v ρ) :
+    ∀ n (x : KW) ls e ρ,
+      erwpK (ℍ := ℍ) KW.PostK (fun z => z.Θ.view z.c)
+        (fun z => opTableK z.lo (tabN (ℍ := ℍ) F δ z)) Q (x.flr a) n ls e ρ →
+      erwpK (ℍ := ℍ) KW.PostK (fun z => z.Θ.view z.c)
+        (fun z => opTableK z.lo (tabN (ℍ := ℍ) F δ z)) Q x n ls e ρ := by
+  intro n x ls e ρ h
+  have h' := erwpK_flr (ℍ := ℍ) (vr := fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) (F := F)
+    (δ := δ) a hQ n x ls e ρ (by simpa only [tabNK_vN] using h)
+  simpa only [tabNK_vN] using h'
 
 /-- **The lender's worlds across a suspending lend at `α`**: the location typing valid, the floor
 no higher than `α`, and the location typing above `α` the lend's. Every world a stop at a floor no
@@ -195,7 +208,7 @@ theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Ro
           (((Expr.var 0).app (Expr.val Val.unit)).app (Expr.var 1))))) =
       ubindE (.pair (NFv l) (DFv d l)) (.app (.app (.val f) (.val .unit)) (.val (Val.loc l))) := by
     simp [Kont.plug, Expr.subst, Expr.shift, thenE, ubindE, NFv, DFv, Val.shift, Val.pair,
-      Val.loc, Val.lam, Expr.val, Val.prim, Expr.loc,
+      Val.loc, Val.lam, Expr.val, Val.prim,
       subst_closedAt d (s := _) hdc (Nat.zero_le _)]
   rw [e₃]
   -- the lender's post: at a world whose location typing above `α` is the lend's, the pair
@@ -221,7 +234,7 @@ theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Ro
       refine erwpK_det (Φ := fun z : KW => z.Θ.view z.c) (x := z) (LocTy.view_down hz.1.1 z.c)
         hTdz hQoD
         (fun μ => step1Only_plug (Head.beta μ _ bv) rfl .hole) ?_
-      simp [Kont.plug, Expr.subst, NFv]
+      simp [Kont.plug, Expr.subst]
       exact erwpK_val (KW.postK_refl z) (v := Val.pair (Val.loc l) bv) (hq hz.2.2)
   · -- the callback's post: the cell handed back, the pair at the lender's world
     intro z j ls' bv ρ' hb

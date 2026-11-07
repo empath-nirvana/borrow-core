@@ -11,7 +11,7 @@ borrow.
 * `erwp_M_antiFrameU`: the Mut Anti-Frame at an unwinding row (Core's `ewpTS_M_antiFrameU`),
   `erwp_M_antiFrameCR` at the row's own table as its twin. The twin guards no stop; only the
   raises' claim (`hRin`/`hRout`) remains, and the cancel obligations are vacuous.
-* `withbor3U_sem`, `withbor3U_compatN`: `withbor3S_compat`'s steps with the bound `Δ.meetOfDom`,
+* `withbor3U_sem`, `withbor3U_compatN`: `withbor3S_compat₀`'s steps with the bound `Δ.meetOfDom`,
   the callback's table the lender's (`tabN_unwind_eq_add`), the anti-frame `erwp_M_antiFrameU`,
   the claim consistent (`erwp_claimX_abort`), the finaliser frame at a raise (`erwp_ubindRaise`,
   `fin_claimMN`).
@@ -123,7 +123,7 @@ theorem tabN_unwind_extend {S : Row} {x : LifeVar} (hS : S.Unwind x) (R₁ R₂ 
 /-! ### `withbor (3)` at an unwinding row -/
 
 /-- **The finaliser `λ_. d ℓ` consumes a `Mut @a A` source**, `d`'s judgment at `Mut @a A ⊸ 1`
-read at the world and an index at or below `N` (`fin_claimM` with the judgment at the run's
+read at the world and an index at or below `N` (`fin_claimM₀` with the judgment at the run's
 world). -/
 theorem fin_claimMN {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
     {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {c : Loc → Option Life} {N : Nat}
@@ -152,7 +152,7 @@ theorem fin_claimMN {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d
 
 /-- **`withbor (3)` at an unwinding row is a value of its type**: `withborU d`, at
 `Mut @a A ⊸ (∀'x ⊏ @Δ. Mut 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ(Mut @a A ⊗ B)` with `Σ` a `Row.Unwind x`
-row. Core's `withbor3U_compatX`, step by step, as `withbor3S_compat`:
+row. Core's `withbor3U_compatX`, step by step, as `withbor3S_compat₀`:
 
 1. the source is `loc ℓ` with its cell `ℓ ↦ mut(β, w₀, σ₀, F_o j₀)`, `F_o = famL β 𝒱⟦A⟧ Θ`;
 2. `withborU d ℓ f` steps to the callback under the finaliser frame `then b. (ℓ, b) unwind d ℓ`;

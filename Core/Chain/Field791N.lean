@@ -6,7 +6,7 @@ import Core.Chain.Reborrow791N
 `withborF d : Mut @a (Ref A) ⊸ (∀'x ⊏ @bnd. Mut 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ(Mut @a (Ref A) ⊗ B)`,
 `λr. λf. (f [] (load r)) then b. (r, b) unwind d r`: the callback borrows the boxed field of the
 borrowed cell. Core has no rule for it (`Core/TreeGoal791.lean`, §1). The proof is
-`withbor3S_compat`'s (Core's `withbor3U_compatX`) with the source at `Ref A`, a `load` from the
+`withbor3S_compat₀`'s (Core's `withbor3U_compatX`) with the source at `Ref A`, a `load` from the
 opened cell, and the Mut Frame at the field's location `ℓ₂` rather than at `ℓ`:
 
 * the anti-frame opens `ℓ ↦ mut(β, loc ℓ₂, σ₀, F_o j)` to `ℓ ↦ own(loc ℓ₂) ● σ₀`,
@@ -259,7 +259,7 @@ theorem tabG_canF {x : LifeVar} {δ : LSub} {Θ : LocTy} {c : Loc → Option Lif
 
 /-- **`withborF` at a suspending row is a value of `!` its type**: `withborF d` at
 `Mut @a (Ref A) ⊸ (∀'x ⊏ @bnd. Mut 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ(Mut @a (Ref A) ⊗ B)`, `Σ` a
-`Row.Suspend x bnd` row. Core has no rule for it. The proof is `withbor3S_compat`'s 13 steps (Core's
+`Row.Suspend x bnd` row. Core has no rule for it. The proof is `withbor3S_compat₀`'s 13 steps (Core's
 `withbor3U_compatX`) at the source `Mut @a (Ref A)`, with three changes, each from the term:
 
 * step 2 reads the source's content as a `Ref A` value: `loc ℓ₂` with
@@ -274,7 +274,7 @@ Premises, and the rule that supplies each: `hbnd`, `hA`, `hB`, `hS`, `hdc` are `
 (`withbor3U`'s at `Mut @a (Ref A)`, `Row.Suspend` for `Row.Unwind`); `hd` is the fundamental
 property at `d`'s derivation, the premise `CDerives Δ Γ d (Mut @a (Ref A) ⊸ 1)` read
 semantically. -/
-theorem withborFS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
+theorem withborFS_compat₀ {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {S : Row} {d : Expr} (hbnd : LifeCtx.empty.Defines bnd) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
     (hS : S.Suspend x bnd)
     (hdc : closedAt 0 d = true)
@@ -434,7 +434,7 @@ theorem withborFS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
     have hM' := erwp_claimX (c := c) hbnd hFS k' ls _ ρ'' hcon hAF
     refine erwp_ubindClaimRT hΘ.1 (F := Fo) (δ := δ) (c := c)
       (fun m i en h _ => by obtain ⟨o, ho, rfl, -⟩ := tabN_effOf_some h; exact (hS o ho).2.1)
-      (NFv l) (DFv d l) (fun k ls ρ hR => fin_claimM hdc hd hΘ hR.1 hR.2) hQo
+      (NFv l) (DFv d l) (fun k ls ρ hR => fin_claimM₀ hdc hd hΘ hR.1 hR.2) hQo
       (fun k ls b ρ hq => ?_) k' ls _ ρ'' hM'
     refine erwp_det hΦ (opTableN_down hTd) hQo
       (fun μ => step1Only_plug (Head.beta μ _ b) rfl .hole) ?_
@@ -492,7 +492,7 @@ theorem constN_wF (hF : FundamentalN (ℍ := ℍ)) {a : Lifetime.Life} {x : Life
   rintro ⟨hbnd, hA, hB, hS, hdc, hder⟩ δ Θ n _
   have hL : (VTy.mut a (.ref A)).inFrag = true := by
     simp_all [Const791.InFrag, Const791.ty, withborFSTy, withborUTy, VTy.inFrag, CTy.inFrag]
-  exact withborFS_compat hbnd hA hB hS hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ Θ n
+  exact withborFS_compat₀ hbnd hA hB hS hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ Θ n
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

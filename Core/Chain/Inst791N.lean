@@ -3,7 +3,7 @@ import Core.Chain.Field791N
 /-!
 # #791: the compatibility lemmas' hypotheses discharged  `[spec §62]`
 
-`withbor2S_compat₀`, `withbor3S_compat` and `withborFS_compat` take the finaliser's semantic
+`withbor2S_compat₀`, `withbor3S_compat₀` and `withborFS_compat₀` take the finaliser's semantic
 judgment `hd` beside `Const791.OK`'s clauses. Here each is instantiated with every hypothesis
 discharged, so none of them is vacuous:
 
@@ -100,21 +100,21 @@ theorem withbor2S_inst (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
   withbor2S_compat₀ defines_meetOfDom_empty
     ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩ id id (hardestRow_suspend x _) dFree_closed dFree_sem δ Θ n
 
-/-- **`withbor (3)` at the hardest case's row**, every hypothesis of `withbor3S_compat`
+/-- **`withbor (3)` at the hardest case's row**, every hypothesis of `withbor3S_compat₀`
 discharged: a `Mut @a 1` source reborrowed, finalised by `dRelease`. -/
 theorem withbor3S_inst (a : Lifetime.Life) (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
     vN₀ (ℍ := ℍ) (.bang (withbor3UTy a x LifeCtx.empty.meetOfDom .unit .unit hardestRow)) δ Θ n
       (withborUV dRelease) PMap.empty :=
-  withbor3S_compat defines_meetOfDom_empty id id (hardestRow_suspend x _) dRelease_closed
+  withbor3S_compat₀ defines_meetOfDom_empty id id (hardestRow_suspend x _) dRelease_closed
     (dRelease_sem a .unit) δ Θ n
 
-/-- **The field reborrow at the hardest case's row**, every hypothesis of `withborFS_compat`
+/-- **The field reborrow at the hardest case's row**, every hypothesis of `withborFS_compat₀`
 discharged: a `Mut @a (Ref 1)` source, its field reborrowed, finalised by `dRelease`. -/
 theorem withborFS_inst (a : Lifetime.Life) (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
     vN₀ (ℍ := ℍ)
       (.bang (BoCa.Fig16.Tree.Wp.Goal791.withborFSTy a x LifeCtx.empty.meetOfDom .unit .unit
         hardestRow)) δ Θ n (BoCa.Fig16.Tree.Wp.Goal791.withborFV dRelease) PMap.empty :=
-  withborFS_compat defines_meetOfDom_empty id id (hardestRow_suspend x _) dRelease_closed
+  withborFS_compat₀ defines_meetOfDom_empty id id (hardestRow_suspend x _) dRelease_closed
     (dRelease_sem a (.ref .unit)) δ Θ n
 
 /-! ### A callback that performs while holding the borrow -/

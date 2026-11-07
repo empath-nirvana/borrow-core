@@ -178,3 +178,5 @@ import Core.Chain.FoldImmKW835N
 import Core.Chain.FamImmKW835N
 import Core.Chain.ClaimKW835N
 import Core.Chain.CancelKW835N
+import Core.Chain.ReborrowKW835N
+import Core.Chain.FieldKW835N
