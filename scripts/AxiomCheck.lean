@@ -2683,3 +2683,6 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwp_I_frameListRN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sliceBorrowI_sem
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sliceBorrowI_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fundamentalN_all
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fundamentalN_of
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.goal791SchedN_of_missing
