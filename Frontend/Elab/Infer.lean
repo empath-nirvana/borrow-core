@@ -14,7 +14,9 @@ Where a type needs one of the core's substitutions (instantiating a lifetime, un
 or a `ν`, shortening a family), inference asks the checker's own synthesis (`synV`, `synC`) for
 it, on that node alone. The checker is not changed and its derivation is discarded: it is used
 as a function from terms to types. A node inference cannot type has type `none`; nothing fails
-here, since the checker checks the elaborated program in any case.
+here, since the checker checks the elaborated program in any case. A variable bound by such a
+node has a slot whose type is not known (`Slots`), and a node naming it is not typed from it:
+it is not given a type it does not have.
 
 Every variable a node binds gets an identity, numbered in order through the program.
 -/
@@ -50,36 +52,60 @@ def Ty.c? : Ty → Option CCTy
   | .comp C => some C
   | _ => Option.none
 
-/-- The checker's synthesis of a value's type. -/
-def askV (E : Env) (Δ : LifeCtx) (T : List CVTy) (v : Val) : Option CVTy :=
-  match (synV inferFuel E.clearOwn Δ T v).run' [] with
+/-- The slot types of a context, as inference has them: a slot's type, `none` when it is not known
+(a local whose binding inference does not type). A dead slot, which no name reads, is `1`, as the
+checker has it.  `[spec §15]` -/
+abbrev Slots := List (Option CVTy)
+
+/-- The slot types as the checker takes them, which have no unknown type: a slot whose type is
+not known is `1` there. The checker is asked only about a node that names no such slot
+(`namesUnknown`), so that `1` never reaches a synthesized type.  `[spec §15]` -/
+def Slots.chk (T : Slots) : List CVTy := T.map (·.getD .unit)
+
+/-- A slot the predicate `ment` holds of by name, as the innermost binding of that name, whose
+type is not known.  `[spec §15]` -/
+def namesUnknown (E : Env) (T : Slots) (ment : String → Bool) : Bool :=
+  E.vars.any fun
+    | some x => ment x && (match lookupVar x E.vars with
+      | some i => (T[i]?).join.isNone
+      | none => false)
+    | none => false
+
+/-- The checker's synthesis of a value's type; `none` when the value names a local whose type is
+not known.  `[spec §15]` -/
+def askV (E : Env) (Δ : LifeCtx) (T : Slots) (v : Val) : Option CVTy :=
+  if namesUnknown E T (mentionsV · v) then none else
+  match (synV inferFuel E.clearOwn Δ T.chk v).run' [] with
   | .ok ⟨A, _⟩ => some A
   | .error _ => none
 
-/-- The checker's synthesis of a computation's type. -/
-def askC (E : Env) (Δ : LifeCtx) (T : List CVTy) (M : Comp) : Option CCTy :=
-  match (synC inferFuel E.clearOwn Δ T M).run' [] with
+/-- The checker's synthesis of a computation's type; `none` when the computation names a local
+whose type is not known.  `[spec §15]` -/
+def askC (E : Env) (Δ : LifeCtx) (T : Slots) (M : Comp) : Option CCTy :=
+  if namesUnknown E T (mentionsC · M) then none else
+  match (synC inferFuel E.clearOwn Δ T.chk M).run' [] with
   | .ok ⟨C, _⟩ => some C
   | .error _ => none
 
-/-- The type of a name: a variable's slot, or a `def` without type parameters. -/
-def varTy (E : Env) (Δ : LifeCtx) (T : List CVTy) (x : String) : Option CVTy :=
+/-- The type of a name: a variable's slot (`none` when it is not known), or a `def` without type
+parameters.  `[spec §15]` -/
+def varTy (E : Env) (Δ : LifeCtx) (T : Slots) (x : String) : Option CVTy :=
   match lookupVar x E.vars with
-  | some i => T[i]?
+  | some i => (T[i]?).join
   | none => match E.scope.findDef x with
-    | some d => if d.params.isEmpty then ((E.forDef T d []).elabV Δ d.ty).toOption else none
+    | some d => if d.params.isEmpty then ((E.forDef T.chk d []).elabV Δ d.ty).toOption else none
     | none => none
 
 /-- The type of a `def` at type arguments. -/
-def defAppTy (E : Env) (Δ : LifeCtx) (T : List CVTy) (x : String) (args : List VTy) :
+def defAppTy (E : Env) (Δ : LifeCtx) (T : Slots) (x : String) (args : List VTy) :
     Option CVTy := do
   let d ← E.scope.findDef x
   if d.params.length != args.length then none
   let targs ← (args.mapM (E.elabV Δ)).toOption
-  ((E.forDef T d ((d.params.map (·.name)).zip targs)).elabV Δ d.ty).toOption
+  ((E.forDef T.chk d ((d.params.map (·.name)).zip targs)).elabV Δ d.ty).toOption
 
-/-- A slot's type, `1` when it is not known (a node whose type is not known). -/
-def slot (A : Option CVTy) : CVTy := A.getD .unit
+/-- The slot types under `<M, N>`'s two dead binders (the checker's `withT`). -/
+def withSlots (T : Slots) : Slots := withT [] |>.map some |>.append T
 
 /-- A `&c` in a value, outside nested computations (`Parser`'s `Val.lends`). -/
 def valLends : Val → Bool
@@ -91,7 +117,7 @@ def valLends : Val → Bool
 
 mutual
 /-- The inference nodes of a value, checked against `exp` when it is given. -/
-def inferV : Nat → Env → LifeCtx → List CVTy → Option CVTy → Val → IM TNode
+def inferV : Nat → Env → LifeCtx → Slots → Option CVTy → Val → IM TNode
   | 0, _, _, _, exp, v => pure (.mk (.val v) (tyV exp) [] [])
   | n + 1, E, Δ, T, exp, v => do
     -- A value performs no operation: its computations are at no row, as the checker has them.
@@ -107,7 +133,7 @@ def inferV : Nat → Env → LifeCtx → List CVTy → Option CVTy → Val → I
       let a ← inferV n E Δ T exp V
       pure (node a.ty.v? [a])
     | .const sp c =>
-      pure (node (match synConst E Δ T sp c with | .ok ⟨A, _⟩ => some A | .error _ => none) [])
+      pure (node (match synConst E Δ T.chk sp c with | .ok ⟨A, _⟩ => some A | .error _ => none) [])
     | .pair _ V W => do
       let (ea, eb) := match exp with
         | some (.tensor A B) => (some A, some B)
@@ -123,7 +149,7 @@ def inferV : Nat → Env → LifeCtx → List CVTy → Option CVTy → Val → I
       pure (node none [← inferV n E Δ T e V])
     | .thunk _ M => do
       let e := match exp with | some (.thunk (.ret A)) => some (.ret A) | _ => none
-      let m ← inferC n (E.push none) Δ (.unit :: T) e M
+      let m ← inferC n (E.push none) Δ (some .unit :: T) e M
       pure (node (m.ty.c?.map .thunk) [m])
     | .thunkv _ N => do
       let e := match exp with | some (.thunk C) => some C | _ => none
@@ -131,7 +157,7 @@ def inferV : Nat → Env → LifeCtx → List CVTy → Option CVTy → Val → I
       pure (node (m.ty.c?.map .thunk) [m])
     | .bangThunk _ M => do
       let e := match exp with | some (.bang (.thunk (.ret A))) => some (.ret A) | _ => none
-      let m ← inferC n (E.push none) Δ (.unit :: T) e M
+      let m ← inferC n (E.push none) Δ (some .unit :: T) e M
       pure (node (m.ty.c?.map (.bang ∘ .thunk)) [m])
     | .bangThunkv _ N => do
       let e := match exp with | some (.bang (.thunk C)) => some C | _ => none
@@ -189,7 +215,7 @@ def inferV : Nat → Env → LifeCtx → List CVTy → Option CVTy → Val → I
       pure (node (askV E Δ T v) [a])
 
 /-- The inference nodes of a computation, checked against `exp` when it is given. -/
-def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → IM TNode
+def inferC : Nat → Env → LifeCtx → Slots → Option CCTy → Comp → IM TNode
   | 0, _, _, _, exp, m => pure (.mk (.comp m) (tyC exp) [] [])
   | n + 1, E, Δ, T, exp, m => do
     let E := match exp with
@@ -216,11 +242,11 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
         | some (.tensor _ B) => some B
         | _ => none
       let b ← mkBinder x.name A
-      let rest ← inferC n (E.push (some x.name)) Δ (slot A :: T) exp N
+      let rest ← inferC n (E.push (some x.name)) Δ (A :: T) exp N
       pure (node rest.ty.c? [hd, rest] [b])
     | .force _ x =>
       pure (node (match lookupVar x.name E.vars with
-        | some i => match T[i]? with
+        | some i => match (T[i]?).join with
           | some (.thunk C) => some C
           | _ => none
         | none => none) [])
@@ -228,7 +254,7 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
       let A' := (E.elabV Δ A).toOption
       let e := match exp with | some (.arr _ C) => some C | _ => none
       let b ← mkBinder x.name A'
-      let body ← inferC n (E.push (some x.name)) Δ (slot A' :: T) e M
+      let body ← inferC n (E.push (some x.name)) Δ (A' :: T) e M
       pure (node (do pure (.arr (← A') (← body.ty.c?))) [body] [b])
     | .app _ M _ => do
       let f ← inferC n E Δ T none M
@@ -238,8 +264,8 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
         | some (.amp C D) => (some C, some D)
         | _ => (none, none)
       let E' := E.push none |>.push none
-      let a ← inferC n E' Δ (withT T) e₁ M
-      let b ← inferC n E' Δ (withT T) e₂ N
+      let a ← inferC n E' Δ (withSlots T) e₁ M
+      let b ← inferC n E' Δ (withSlots T) e₂ N
       pure (node (do pure (.amp (← a.ty.c?) (← b.ty.c?))) [a, b])
     | .proj _ i M => do
       let a ← inferC n E Δ T none M
@@ -259,7 +285,7 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
       let bx ← mkBinder x.name A
       let byy ← mkBinder y.name B
       let body ← inferC n (E.push (some x.name) |>.push (some y.name)) Δ
-        (slot B :: slot A :: T) exp M
+        (B :: A :: T) exp M
       pure (node body.ty.c? [a, body] [bx, byy])
     | .case _ V x M y N => do
       let a ← inferV n E Δ T none V
@@ -267,14 +293,14 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
         | some (.sum A B) => (some A, some B)
         | _ => (none, none)
       let bx ← mkBinder x.name A
-      let m₁ ← inferC n (E.push (some x.name)) Δ (slot A :: T) exp M
+      let m₁ ← inferC n (E.push (some x.name)) Δ (A :: T) exp M
       -- At a row (SPEC §19), the second arm is at the row too: the first may be pure, or an abort.
       let lift (C : CCTy) : CCTy := match effRow? C, E.row with
         | some (_, A), some S@(_ :: _) => effOf S A
         | _, _ => C
       let C := exp <|> m₁.ty.c?.map lift
       let byy ← mkBinder y.name B
-      let m₂ ← inferC n (E.push (some y.name)) Δ (slot B :: T) C N
+      let m₂ ← inferC n (E.push (some y.name)) Δ (B :: T) C N
       pure (node (C <|> m₂.ty.c?) [a, m₁, m₂] [bx, byy])
     | .absurd _ V => do
       let a ← inferV n E Δ T (some .zero) V
@@ -285,7 +311,7 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
         | some (.all v _ C) => (v, some C)
         | _ => (Δ.freshVar, none)
       let E' := { E.push none with lenv := (x.name, v) :: E.lenv }
-      let body ← inferC n E' (Δ.extend v (bl.getD .top)) (.unit :: T) e M
+      let body ← inferC n E' (Δ.extend v (bl.getD .top)) (some .unit :: T) e M
       pure (node (do pure (.all v (← bl) (← body.ty.c?))) [body])
     | .inst _ M _ => do
       let a ← inferC n E Δ T none M
@@ -306,7 +332,7 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
       match src.var? with
       | some x =>
         let bx ← mkBinder x.name none
-        let body ← inferC n (E.push (some x.name)) Δ (.unit :: T) none M
+        let body ← inferC n (E.push (some x.name)) Δ (none :: T) none M
         let rest ← inferC n E Δ T exp N
         pure (node none [a, body, rest] [bx])
       | none =>
@@ -340,9 +366,9 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
       let S := E.row <|> hr.map (·.1)
       let E := { E with row := S }
       let b ← mkBinder x.name A
-      let d ← inferC n (E.push none) Δ (.unit :: T)
+      let d ← inferC n (E.push none) Δ (some .unit :: T)
         (S.map fun _ => effOf [] .unit) D
-      let rest ← inferC n (E.push (some x.name)) Δ (slot A :: T) exp N
+      let rest ← inferC n (E.push (some x.name)) Δ (A :: T) exp N
       pure (node rest.ty.c? [hd, d, rest] [b])
     | .withbor2r sp x b A B r _ m M => do
       -- R1 (SPEC §29): the body sees the view alone.
@@ -354,7 +380,7 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
       let E' : Env := { E with vars := [some m.name], own := [false], nExt := 0,
                                 lenv := (x.name, v) :: E.lenv, row := S }
       let bm ← mkBinder m.name (A'.map (.mut (.var v)))
-      let body ← inferC n E' (Δ.extend v bl) [slot (A'.map (.mut (.var v)))]
+      let body ← inferC n E' (Δ.extend v bl) [A'.map (.mut (.var v))]
         (do pure (effOf (← S) (.box (.var v) (← B')))) M
       pure (node (do pure (effOf (← S) (.tensor (.ref (← A')) (← B')))) [body] [bm])
 end

@@ -1123,7 +1123,7 @@ def MCx.restOf (m : MCx) (M : Comp) : Comp := match m.loops with
 /-- The extern slots of a context, with their types. -/
 def mExterns (c : TCx) : List (String × CVTy) :=
   let vs := c.E.vars.zip c.T
-  (vs.drop (vs.length - c.E.nExt)).filterMap fun (x, T) => x.map (·, T)
+  (vs.drop (vs.length - c.E.nExt)).filterMap fun (x, T) => do pure (← x, ← T)
 
 /-- The locals, other than capabilities and `excl`, that `rest` uses, with their types. -/
 def mLive (m : MCx) (c : TCx) (rest : Comp) (excl : List String) : MM (List (String × CVTy)) := do
@@ -2611,6 +2611,11 @@ def lendCall (c : TCx) (sp : Span) (f W : Val)
     (unw : Option (Const → Const) := none) : DM (Option Val) := do
   pure ((← lendCallT c sp f W apps unw).map (·.1))
 
+/-- An operand as an error message names it: a variable by its name.  `[spec §15]` -/
+def shownOperand : Val → String
+  | .var _ x | .clone _ x => s!"`{x}`"
+  | _ => "this"
+
 /-- The typing context `c` with the declarations made so far in scope (the instances and copies
 made while elaborating the declaration it is in). -/
 def refresh (c : TCx) : DM TCx := do
@@ -3791,8 +3796,11 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let As ← content A
         lendBorrow c dsp ⟨x, vsp⟩ .imm A A fun l mv =>
           boxedResult sp l (.ret sp (load (.var sp l) As (.var sp mv)))
-      | t, _ => throw ⟨dsp, s!"`*` reads an `imm` borrow or a cell, but this has type " ++
-          s!"`{(t.map ppT).getD "?"}`"⟩
+      | some t, _ => throw ⟨dsp, s!"`*` reads an `imm` borrow or a cell, but this has type " ++
+          s!"`{ppT t}`"⟩
+      -- A local whose type inference does not know (SPEC §15).  `[spec §15]`
+      | none, _ => throw ⟨dsp, s!"`*` reads an `imm` borrow or a cell, but the type of " ++
+          s!"{shownOperand V} is not known here"⟩
     | .app sp (.sugar _ .brace) (.bangThunk tsp M) => do
       pure (.bangThunk tsp (← surfC n c.pushDead none M))
     | .app sp (.app sp₂ (.sugar ksp (.borrow .modify _)) (.lend psp px pm))
@@ -3832,8 +3840,10 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let G' ← surfV n c none G
         let (a, A) ← match (← refresh c).tyV G' with
           | some (.imm a A) => pure (a, A)
-          | t => throw ⟨dsp, s!"`borrow imm *g` reads through an `imm` borrow, but this has type " ++
-              s!"`{(t.map ppT).getD "?"}`"⟩
+          | some t => throw ⟨dsp, s!"`borrow imm *g` reads through an `imm` borrow, but this " ++
+              s!"has type `{ppT t}`"⟩
+          | none => throw ⟨dsp, s!"`borrow imm *g` reads through an `imm` borrow, but the type " ++
+              s!"of {shownOperand G} is not known here"⟩
         let dom ← need lsp "the block's bound" (c.elabL (.dom lsp))
         let c₁ := c.pushLife x dom
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
@@ -5776,7 +5786,8 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
               args := args.set! k (some Wi')
               continue
             else if pass == 0 then continue
-            else throw ⟨Wi.span, s!"the type of this argument of `{fname}` is not determined here"⟩
+            else throw ⟨Wi.span, s!"the type of this argument of " ++
+              s!"`{(fname.splitOn "__").headD fname}` is not determined here"⟩
         -- A callback that loops where a function is expected: its result is what its loop
         -- finishes with (it is specialized at its own type, `specV`), unless the parameter's
         -- result is itself a loop.
@@ -5935,6 +5946,10 @@ def elabDecl : Nat → DivSt → Decl → SM DivSt
     let d := (← (Frontend.Elab.LoopLend.lentDef c₀ (dataFor st.sizedFns) d :
       Except Error (Option Decl))).getD d
     let (d, st) ← (surfDecl fuel d).run st
+    -- A binding inference did not type, left to the checker at a call whose parameter the other
+    -- arguments determine: its type, solved from that use now that the call is at its instance's
+    -- types (metavariables, as before the typed elaboration).  `[spec §15]`
+    let d := Elab.fillDecl (st.lib ++ st.out) st.caps d
     -- A recursive group's source under a heap driver: its machine (SPEC §20).
     let d ← match d with
       | .def_ _ nm _ _ _ _ =>

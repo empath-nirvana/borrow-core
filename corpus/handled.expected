@@ -1017,6 +1017,13 @@ corpus/hygiene-local-fn.bc flows [0, 4294967295]; main []
 corpus/imm-copy-view.bc flows [0, 4294967295]; main []
 corpus/imm-copy.bc flows [0, 4294967295]; main []
 corpus/implicit-consumes.bc flows [0, 4294967295]; main []
+corpus/infer-local-from-call.bc flows [0, 4294967295]; main [1]
+corpus/infer-local-from-call.bc 21:3: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/infer-local-from-call.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/infer-local-sum-generic.bc flows [0, 4294967295]; main []
+corpus/infer-local-unit.bc flows [0, 4294967295]; main [1]
+corpus/infer-local-unit.bc 25:11: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/infer-local-unit.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/int-arith.bc flows [0, 4294967295]; main []
 corpus/int-ops.bc flows [0, 4294967295]; main []
 corpus/int-slash.bc flows [0, 4294967295]; main []

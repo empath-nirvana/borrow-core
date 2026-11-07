@@ -32,24 +32,25 @@ open BoCa BoCa.Lifetime
 /-- The typing context at a point of a body. -/
 structure TCx where
   E : Env
-  T : List CVTy
+  /-- The slot types, `none` for a local whose type is not known.  `[spec §15]` -/
+  T : Slots
   /-- The variables the body has bound so far, newest first, with their types when known. -/
   locals : List (String × Option CVTy) := []
   /-- The lifetime context: the `Fun` binders entered, as the checker numbers them. -/
   Δ : LifeCtx := LifeCtx.empty
 
-/-- Bind `x : A` (`A` unknown when `none`). -/
+/-- Bind `x : A` (`A` unknown when `none`, and so to inference).  `[spec §15]` -/
 def TCx.push (c : TCx) (x : String) (A : Option CVTy) : TCx :=
-  { c with E := c.E.push (some x), T := A.getD .unit :: c.T, locals := (x, A) :: c.locals }
+  { c with E := c.E.push (some x), T := A :: c.T, locals := (x, A) :: c.locals }
 
 /-- Enter `Fun 'x < @b`, as the checker does: a dead slot, `'x` named, `Δ` extended. -/
 def TCx.pushLife (c : TCx) (x : String) (b : BoCa.Lifetime.Life) : TCx :=
   let v := c.Δ.freshVar
-  { c with E := { c.E.push none with lenv := (x, v) :: c.E.lenv }, T := .unit :: c.T,
+  { c with E := { c.E.push none with lenv := (x, v) :: c.E.lenv }, T := some .unit :: c.T,
            Δ := c.Δ.extend v b }
 
 /-- A slot with no name: a dead binder of the checker (`thunk M`, `<M, N>`, `Fun`). -/
-def TCx.pushDead (c : TCx) : TCx := { c with E := c.E.push none, T := .unit :: c.T }
+def TCx.pushDead (c : TCx) : TCx := { c with E := c.E.push none, T := some .unit :: c.T }
 
 /-- The context of a body among the declarations `scope`: every extern when `all`, else the
 persistent ones (the context of a `def`, SPEC §11). -/
@@ -57,7 +58,7 @@ def TCx.ofScope (scope : List Decl) (all : Bool) : TCx :=
   let ds := scope.toArray
   let xs := externsBefore ds ds.size
   let vars := (xs.map (fun (x, B) => if all || B.persistent then some x else none)).reverse
-  { E := Env.mk ⟨ds, ds.size, [], []⟩ vars [] [] [] xs.length none, T := (xs.map (·.2)).reverse }
+  { E := Env.mk ⟨ds, ds.size, [], []⟩ vars [] [] [] xs.length none, T := (xs.map (some ·.2)).reverse }
 
 /-- A written type, elaborated. -/
 def TCx.elabV (c : TCx) (A : VTy) : Option CVTy := (c.E.elabV c.Δ A).toOption

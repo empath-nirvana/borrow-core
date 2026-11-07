@@ -116,17 +116,6 @@ def callee : Val → Option (String × Option (List VTy))
   | .inst _ V _ | .unbang _ V => callee V
   | _ => none
 
-/-- The variables a value names outside its computations. -/
-def varsV : Nat → Val → List String
-  | 0, _ => []
-  | k + 1, V => match V with
-    | .var _ x | .clone _ x => [x]
-    | .lend _ x _ => [x.name]
-    | .pair _ V W | .app _ V W => varsV k V ++ varsV k W
-    | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-    | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => varsV k V
-    | _ => []
-
 /-- The error type of an integer division, `lib/arith.bc`'s `DivError`: `inl ()` a zero divisor,
 `inr ()` an overflow (SPEC §39). -/
 def divErrorTy : VTy := .name .none "DivError"
@@ -144,8 +133,8 @@ def isCmp : SurfOp → Bool
   | .eq | .ne | .lt | .le | .gt | .ge => true
   | _ => false
 
-/-- The type of an argument, when inference knows it: every local it names has a known type (an
-unknown one is a slot of type `1` to inference), and it is not a computation's (a loop a call runs
+/-- The type of an argument, when inference knows it (a local whose type is not known is not known
+to inference either, `TCx.tyV`), and it is not a computation's (a loop a call runs
 in direct style answers its element, not the loop). An operator's is its operands' width, a
 literal taking the other operand's (a comparison's is `1 + 1`), as the typed elaboration gives it;
 a checked division's is that width and `DivError` (SPEC §39). -/
@@ -165,12 +154,9 @@ def argTy (c : TCx) : Val → Option CVTy
   | W => argTyOf c W
 where
   argTyOf (c : TCx) (W : Val) : Option CVTy :=
-    if (varsV fuel W).any (fun x => match c.locals.lookup x with
-        | some none => true
-        | _ => false) then none
-    else match c.tyV W with
-      | some (.thunk _) => none
-      | t => t
+    match c.tyV W with
+    | some (.thunk _) => none
+    | t => t
 
 /-- The divisor `b` is a literal at which the division `o` at the width `w` has an answer:
 nonzero there, and not `-1` for a signed `/`. With the width not known, a written literal `k`

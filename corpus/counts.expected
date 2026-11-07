@@ -89,6 +89,9 @@ clo-depth 2 0 0 49 49 0 # as clo-counter: four calls through three functions and
 clo-consume 3 0 0 5 5 0 # three counters' cells, each freed by its `close`
 for-arm-raises-owned 8 0 0 54 54 54
 handle-arm-releases 2 0 0 13 13 13
+infer-local-from-call 4 0 0 16 16 0
+infer-local-sum-generic 1 0 0 16 16 5
+infer-local-unit 2 0 0 4 4 1
 leetcode/dp/0039-combination-sum-loop 40 0 0 5494 4929 4861 # as 0039-combination-sum: the same search, by a loop over the candidates
 lend-call-raise 9 0 0 34 31 4 # the cells of the eight lending runs, those scoped to a call included, and the table
 lend-call-record 1 0 0 6 2 0 # the cell scoped to the call, freed by the unwinding lend's finaliser

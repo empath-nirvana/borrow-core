@@ -84,6 +84,9 @@ clo-coerce 1 0 0 3 3 0
 clo-counter 2 0 0 17 17 0
 for-arm-raises-owned 8 0 0 54 54 18
 handle-arm-releases 2 0 0 13 13 5
+infer-local-from-call 4 0 0 16 16 0
+infer-local-sum-generic 1 0 0 16 16 5
+infer-local-unit 2 0 0 4 4 1
 leetcode/dp/0039-combination-sum-loop 40 0 0 5494 4929 695
 lend-call-raise 9 0 0 34 31 4
 lend-call-record 1 0 0 6 2 0
