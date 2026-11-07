@@ -6,6 +6,10 @@ Frame's table premises there and restates the scheduler's contract and the two l
 scheduler) and `Core/Chain/FrameListK835N.lean` (the list frames). It builds on
 `scope-835-mframes.md` and `scope-835-lendexit.md`.
 
+> Superseded, §1–§9: these sections describe the restriction-era tables (`SchedOKNK`, the `Sch`
+> parameter, `CNW835N.lean`), which were retired (§10.13). §10 is current, with
+> `chain-interpretation.md` and SPEC §62; the configurations are indexed in `configurations.md`.
+
 ## 1. The tables
 
 `tabNK S g C δ x`, `finNK`, and the lender's twin `tabRK R S g C δ x` / `finRK` are `tabN`, `finN`,

@@ -1,4 +1,11 @@
-# #831: the rule-by-rule map for `FundamentalN`
+# #831: the rule-by-rule map for `FundamentalN` (superseded)
+
+Superseded: `FundamentalN` is now stated at `KW` (`ConstKW835N.lean`) and assembled from `MissingN`
+by induction on `CDerives` (`FundamentalKW835N.lean`). The current design is
+`chain-interpretation.md` (the interpretation at the typed world `KW`, the departures from Core,
+what is proved and what is open), `scope-835-tables.md` §10 and SPEC §62; the configurations are
+indexed in `configurations.md`. The body below is the record of the rule-by-rule map and cites
+`Goal791N.lean` as it then was.
 
 Branch `rule-791` (from a711a05c). `FundamentalN` (`Core/Chain/Goal791N.lean`) asks `SemJN` of
 every `CDerives` derivation whose judgment is in the fragment (`JdgInFrag`). This document maps

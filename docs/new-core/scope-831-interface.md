@@ -1,4 +1,11 @@
-# #831 step 1: the lemma interface for `FundamentalN`
+# #831 step 1: the lemma interface for `FundamentalN` (superseded)
+
+Superseded: `FundamentalN` is now stated at `KW` (`ConstKW835N.lean`) and assembled from `MissingN`
+by induction on `CDerives` (`FundamentalKW835N.lean`); `goal791Sched_of` is gone. The current design
+is `chain-interpretation.md` (the interpretation at the typed world `KW`, the departures from Core,
+what is proved and what is open), `scope-835-tables.md` §10 and SPEC §62; the configurations are
+indexed in `configurations.md`. The body below is the record of the interface plan and cites
+`Goal791N.lean` as it then was.
 
 Branch `rule-791` (from 63b3dd7e). Core's `fundamentalC` (`Core/Fundamental.lean`) proves each of
 `CDerives`'s 104 constructors by a compatibility lemma (`*_compatC`/`*_compatX`). Those proofs are

@@ -1,4 +1,11 @@
-# #835: an operation qualifier for suspending under a borrow, and the handler contract
+# #835: an operation qualifier for suspending under a borrow, and the handler contract (superseded)
+
+Superseded: its §4 claim that `HandlerLawN` can go is superseded by the decision to keep
+`HandlerLawN` as the named assertion for `effHandleV`, `effHandleVB` and `reify`, tracked in #838;
+`Goal791SchedN` and `CNW835N.lean` are gone. The current design is `chain-interpretation.md` (the
+interpretation at the typed world `KW`, the departures from Core, what is proved and what is open),
+`scope-835-tables.md` §10 and SPEC §62; the configurations are indexed in `configurations.md`. The
+body below is the record of the qualifier design.
 
 Kernel target: none. This note is a design scope; it changes no Lean.
 

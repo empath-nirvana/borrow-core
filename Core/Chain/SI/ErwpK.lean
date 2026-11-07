@@ -28,7 +28,7 @@ location typing and the view and may lower the floor (`KW.Post`). A stop at `x`,
 it chose, owes its continuation at the worlds `y` of `KW.Owed x f y`: `ExtP f` at the
 continuation's share, a valid location typing, every view consistent with the share, a floor no
 higher, and **`FoldInv g` kept at every `g ≥ f`** (if it held at `x`, it holds at `y`). `ExtP`
-at `A` alone does not keep `FoldInv A` (`KStopSpike835N.extP_not_foldInv`), and a frame's
+at `A` alone does not keep `FoldInv A` (`Public835N.extP_not_foldInv`), and a frame's
 induction re-enters at the resumption world, where it needs it (`kw_owed_fold`); under nested
 lends the stop's floor is the innermost lend's, below the frame's. Kept rather than asked, it holds at the
 stop's own world for every floor (`KW.owed_self`), which is where a handler that resumes in place

@@ -1,4 +1,10 @@
-# #835: posts across a lend's exit, at the Kripke stop
+# #835: posts across a lend's exit, at the Kripke stop (superseded)
+
+Superseded: this note builds on the restriction (`Restrict835N.lean`), which was retired. The
+current design is `chain-interpretation.md` (the interpretation at the typed world `KW`, the
+departures from Core, what is proved and what is open), `scope-835-tables.md` §10 and SPEC §62; the
+configurations are indexed in `configurations.md`. The body below is the record of that design and
+cites files that no longer exist.
 
 This settles the item `scope-835-kripke-stop.md` §5 left open: what a lender's post is after a lend
 it took has exited, and whether E10 survives for an ordinary handler around that lender. The Lean

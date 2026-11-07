@@ -5,14 +5,16 @@ This is a cost map for one change: a stop (`contShareN`, `KapRelN`) owes its con
 `K⟦τ⟧` (JFP 2012, Fig. 6), which `scope-835-public.md` §8 names as the step E10, `effHandleV`,
 `effHandleVB` and `reify` wait on. This document measures the change; `erwp` is not changed.
 
-The Lean is in `Core/Chain/KStopSpike835N.lean`, and it uses local copies of the new definitions.
+The Lean was a spike, `Core/Chain/KStopSpike835N.lean`, with local copies of the new definitions;
+it is deleted (`git show c3669cec:Core/Chain/KStopSpike835N.lean`), and its configuration
+`extP_not_foldInv` is in `ConfigsKW835N.lean` (`Public835N`), over `LocTy.FoldInv`.
 §6 has the verdict. The definitions are now a module, `Core/Chain/SI/ErwpK.lean`, with the stop's
 floor and `FoldInv` kept (§1's two additions) and the generic laws; `scope-835-restriction.md` §6
 lists what it holds.
 
 ## 1. The new definitions
 
-All of them are in `KStopSpike835N.lean`. They are indexed by a world type `ι`.
+All of them were in the spike `KStopSpike835N.lean`, indexed by a world type `ι`.
 
 ```lean
 structure OpEntK (ι : Type) where
@@ -297,7 +299,7 @@ files, with the most in `Rules834N` (22) and `Fam836N` (21).
   monotonicity along `ExtP`. The step is mechanical, but every one of those proofs has to be
   touched.
 
-## 4. The spike (`Core/Chain/KStopSpike835N.lean`)
+## 4. The spike (`Core/Chain/KStopSpike835N.lean`, deleted; in git history at `c3669cec`)
 
 **Producer 1: `perform`. It works.**
 - `erwpK_perform` is `erwp_perform`'s proof, with the continuation premise read at every

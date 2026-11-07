@@ -15,7 +15,9 @@ they check: `ImmRec791N`, `Depart831N`, `Shape791N`, `ExtRLit791`, `Kappa835N`, 
 `LendExit835N` and `Lend791N`. The `Map831N` section checks an `imm` lend's step at the per-lend
 world (`docs/new-core/scope-831-map.md` §3): at an `OK` world with a `mut` key at `α`, the world
 with one more record lent below `α` is an extension (`extR_addImm_inst`), and an extension of it
-holds an `Imm` value (`imm_at_extension`).
+holds an `Imm` value (`imm_at_extension`). The `Public835N` section also holds
+`extP_not_foldInv`, which reads no relation: `ExtP` at a lend's floor `A` does not keep
+`LocTy.FoldInv A`, the reason `KW.Owed` keeps it.
 -/
 
 noncomputable section
@@ -548,6 +550,18 @@ theorem not_kapRelP_view (x : LifeVar) (δ : LSub) {N α b : Life} (hNα : N < �
       (ρb m b) := fun h =>
   not_kTy_at x δ hml c hcm hcl (h _ (LocTy.extP_refl _ _ _) (Θ₁_ok x _ hNα l') c
     (consistentX_single_mut (consistentX_empty c) hcm) [])
+
+/-- **`ExtP` at `A` does not keep `FoldInv A`**: a key at `A` itself is a public move at the floor
+`A` (`LocTy.extP_add` at `α = A`). So the order the lender's stop owes under a live lend at `A`
+must carry `FoldInv A` for the frame's induction to re-enter at the resumption world
+(`KW.Owed`). -/
+theorem extP_not_foldInv (A : Life) (l : Loc) (G : Nat → Val → SPropS Loc Val A) (ρ : WRes) :
+    LocTy.empty.ExtP A (LocTy.empty.add l A G) ρ ∧ LocTy.empty.FoldInv A ∧
+      ¬ (LocTy.empty.add l A G).FoldInv A := by
+  refine ⟨LocTy.extP_add (fun _ _ h => absurd rfl h) le_rfl l G ρ,
+    ⟨fun _ _ h => absurd rfl h, fun x hx => by simp [LocTy.empty] at hx⟩, fun h => ?_⟩
+  have := h.1 l A (by rw [LocTy.add_self]; simp)
+  exact lt_irrefl _ this
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Public835N
 

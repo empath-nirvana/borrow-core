@@ -1,4 +1,11 @@
-# #835: only the scheduler catches a resuming operation performed under a live lend
+# #835: only the scheduler catches a resuming operation performed under a live lend (superseded)
+
+Superseded: the restriction (`Restrict835N.lean`, `Sched`, `SchedOK`) was retired; the relation at
+`KW` reads no scheduler parameter, and handlers that keep `κ` are covered by the named assertion
+`HandlerLawN`. The current design is `chain-interpretation.md` (the interpretation at the typed
+world `KW`, the departures from Core, what is proved and what is open), `scope-835-tables.md` §10
+and SPEC §62; the configurations are indexed in `configurations.md`. The body below is the record of
+the restriction-era design and cites files that no longer exist.
 
 The user's decision (#835, 2026-11-06): while a borrow is open, only the scheduler may catch a
 resuming operation whose handler receives `κ` as a value. This document states that restriction
