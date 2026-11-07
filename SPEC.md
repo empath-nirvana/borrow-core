@@ -8694,7 +8694,7 @@ No change: no type, rule, term, typing, elaboration or semantics.
   converted with the binder's slot dead; an `allE` or `allEV` node is its operand. A borrow's
   callback, `fold_imm`'s algebra and answer, and the I/O externs are at the erased types. An
   `allI` whose body is not a λ-value is outside the new backend's fragment; the checked corpus has
-  none.
+  none. (§63 states the fact at a body that erases to a value form.)
 
 ### Programs
 
@@ -11092,6 +11092,78 @@ starts to pass, a variation must pass as well (#771). Three fail first on earlie
 `docs/new-core/structure.md` (target structure and its rules), `docs/new-core/conditions.md` (every
 condition and gap, classified), `docs/new-core/evidence.md` (the spikes' results by Lean name).
 
+---
+
+## 63. Entry 62 — the new backend: a `Λ` over a value form; `[lend-R]` at the empty row (#847)
+
+### Motivation
+
+Backend2 refused four checked programs (#847). Three (`corpus/alpha-app-arg.bc`,
+`alpha-generic-arg.bc`, `alpha-lam-binder.bc`) build `Fun 'y < top. return v` with `v` a variable
+or a literal: the `Λ`'s body erases to a value form, not a λ-value, and §44's fact covered only a
+λ-value. The fourth (`alpha-withbor2r.bc`) holds a relaxed lend (`[lend-R]`, §29) at `main`'s
+empty row, which Backend2 compiled only inside a state machine (§49).
+
+### Language
+
+No change: no type, rule, term, typing, elaboration, semantics or erasure.
+
+### The rule
+
+- **A `Λ` over a value form** (`Frontend/Check/Derived.lean`, `allI_inst`, replacing §44's
+  statement at `t.isLam`). `[∀I]` checks its body with the binder's slot dead (`TDerives.allI`:
+  the context `⟨S, false⟩ :: Γ`), so no variable of the body reads it. For an `allI` node whose body
+  `t` has `valFormB (false :: u) t.erase` (`Frontend/Check/Rules.lean`: the erasure is a value
+  form whose variables are slots live in `u`, the binder's slot not among them; a λ-value is one
+  whatever it mentions; sound by `valFormB_sound`, `Expr.ValFormIn` of §24), the instantiation
+  `(λ_. t.erase) ()` steps by one β, at every memory (`PureSteps`), to `t.erase.subst 0 ()`, and
+  that is a value form over `u` (`valFormB_subst_dead`):
+
+      allI_inst : valFormB (false :: u) t.erase = true →
+        PureSteps ((allI … t).erase ()) (t.erase.subst 0 ()) ∧ valFormB u (t.erase.subst 0 ()) = true
+
+  No code runs and no memory is touched: the instantiation's value is the body's. A λ-value
+  satisfies the premise, so the statement contains §44's. Backend2 (`Backend2/Convert.lean`, the
+  `allI` case) decides the same Boolean at the slots its context holds live
+  (`valFormB (false :: ctx.map Option.isSome) c.erase`) and converts the body with the binder's
+  slot dead, as §44 does.
+- **`[lend-R]` at the empty row** (`Frontend/Check/Derived.lean`, `lendR_plain`). R1's term at
+  the owner is `withborU d r (Λ. λm. M)` (`lendRE d M`, §29): the callback under the unwinding
+  frame, whose finaliser `d` runs on the owner only when the callback stops at an operation
+  (`ewp_unwind`, §19). At a row `Σ` with `Σ.isEmpty` the row's table has no entry
+  (`rowTab_isEmpty`), so the callback never stops, and every end of its run is a return, where the
+  frame pairs the owner with the answer (`ewp_ret_pair`):
+
+      lendR_plain : Σ.isEmpty = true → closedAt 0 d → closedAt 0 (lendCb M) → closedAt 0 u →
+        ewpTS ((lendCb M) () u) (opTable (Row.tab Σ δ)) (fun w => Q (u, w)) →
+        ewpTS ((lendRE d M)[u/0]) (opTable (Row.tab Σ δ)) Q
+
+  for every `d`: the finaliser never runs, and the relaxed lend is the plain lend, the callback
+  run on the owner and its answer `b` giving `(r, b)`. Backend2's `conv` (`Backend2/Convert.lean`,
+  the `lendR` case) reads the node's row by the same Boolean: at an empty row it lends the owner
+  `mut`, converts the callback on the view and answers `(r, b)`, as the plain lends do
+  (`genLend`); `d` is not converted. At any other row the node is a machine's (§49, `convK`) and
+  `conv` leaves it outside the fragment.
+
+### Programs
+
+`corpus/alpha-app-arg.bc`, `alpha-generic-arg.bc`, `alpha-lam-binder.bc` and `alpha-withbor2r.bc`
+at their goldens at every stage of Backend2; Backend2 compiles every corpus program.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, the checker, the elaboration, the old
+backend's output or a kernel program. `corpus/counts-backend2.expected` and
+`erasure-backend2.expected` gain the four programs' lines; no other line changes.
+
+### Open
+
+- `lendR_plain` is stated at the empty row. A row of resuming operations handled by a direct call
+  (§47) never cancels the callback either, but its proof needs the resumption, which is
+  `PinLaw`'s ground (§29); such a lend stays a machine's.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -11526,11 +11598,20 @@ Entry 61 (§62): `resourceSafety` and `rtSafety` are in `Core/ResourceSafety.lea
 world (#781) is in `Support/Model/Tree/World/`, and the step-indexed relation over it in `Core/StepsN.lean`, `Core/TreeWp.lean`, `Core/TreeWpEff.lean`,
 `Core/TreeCactus.lean`, `Core/TreeStepKeep.lean` and `Core/TreeHeadlines.lean` (adequacy and R1–R4
 at one branch). No relation the typing rules use reads them yet. The rest of §62 is design.
+Entry 62 (§63) is implemented in `Frontend/Check/Derived.lean` (`allI_inst`,
+`valFormB_subst_dead`, `rowTab_isEmpty`, `lendR_plain`) and `Backend2/Convert.lean` (the `allI`
+case, the `lendR` case of `conv`); no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the
+checker or the old backend.
 
 ---
 
 ## Changelog
 
+- **1.39** (2026-11-07) — §63 (#847): `allI_inst` generalised from a body that erases to a
+  λ-value to one that erases to a value form not naming the binder's dead slot (`valFormB`);
+  `lendR_plain`: `[lend-R]` at the empty row is the plain lend, the finaliser never run. Backend2
+  reads both and compiles every corpus program. No change to `CDerives`, the relation, the
+  machine, the checker or the old backend.
 - **1.38** (2026-11-04) — §62 (*Semantic types read at the tree*): `F A` is a bare `cerwpT` run
   (`SCmp.ret`), Core's `cC (.ret A)`; the Kripke quantifier over later worlds and lists sits at
   `U` only. Thunks are introduced as Core's `thunkF_compatC` does, from the computation at every

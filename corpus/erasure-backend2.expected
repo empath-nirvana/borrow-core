@@ -439,3 +439,7 @@ tree-view-tasks erased handles 0 performs 0 raises 0 left 0 0
 trim-replace erased handles 1 performs 0 raises 1 left 0 0
 utf8-count erased handles 1 performs 0 raises 1 left 0 0
 yield-callback erased handles 0 performs 0 raises 0 machines 4 suspends 2 left 0 0
+alpha-app-arg erased handles 0 performs 0 raises 0 left 0 0
+alpha-generic-arg erased handles 0 performs 0 raises 0 left 0 0
+alpha-lam-binder erased handles 0 performs 0 raises 0 left 0 0
+alpha-withbor2r erased handles 0 performs 0 raises 0 left 0 0
