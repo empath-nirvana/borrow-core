@@ -619,3 +619,51 @@ lends (`withbor2S`/`3S`/`FS`, `withloadS`, `sliceBorrowMS`) and their `_inst`; `
   over its cancel runs, at `tabRK`, by induction on how deep cancel rows nest;
 - `ν`'s one unfolding at `F A` and `F_Σ` (`cBN_step`, `node_okN`) at `erwpK`;
 - `div_fuel`'s handler by hand (`fuel_totalN`) at `erwpK`, its tick resumed at the stop's own world.
+
+### 10.11 The suspending constants at `cN`
+
+**The finaliser frame and the handler at an invariant** (`MechK835N`, `HandleK835N`).
+`erwpK_ubindClaimRTI`, `erwpK_ubind_cancelRunCRI`, `erwpK_handleLe_leI`, `erwpK_handle_leI` and
+`erwpK_ccatchLeI` are read at the worlds an invariant `Inv` holds at: the location family closed in
+the index there, the tables closed in the index at those worlds (`opTableK`/`cancelTabK` `Down` at
+`Inv x`; for the handled run's table, `OpTabK.DownAt`), and every world a stop at a floor no
+higher than the run's is resumed at is one `Inv` holds at. The finaliser's claim is read at a world
+(`R : ι → Nat → WProp`). Each old statement is the instance at `Inv = True`, its claim constant.
+
+**The claim at a world** (`ClaimKW835N`). At `KW` the finaliser runs `D ()` at the world the `raise`
+is at, so the claim it consumes is consistent with that world's view. `tabRWK`/`finRWK` are
+`tabRK` at `g = id` with the claim read at a world; `claimXK R z = R ∧ ConsistentX z.c`.
+- `erwpK_claimXK`, `erwpK_cancelRun_claimXK`: the lender's run carries the consistency to its claim,
+  by induction on how deep cancel rows nest. A continuation is resumed at a world whose view is
+  consistent with its share (`KW.Owed`) and with the answer (the entry's answer).
+- `tabRWK_ubindCan`: the finaliser over the lender's cancel runs, by `erwpK_ubind_cancelRunCRI` and
+  the same induction. `erwpK_ubindClaimRWK`: the finaliser around the body.
+
+**The lender's floor** (`erwpK_flr`, `LendInv`). The claim's content and the lender's post are
+values at the lend's world `Θ`; the finaliser and the post read them at the world they are at. The
+lender runs from `KW.flr a x`, the floor no higher than `a` (a run there is a run from `x`,
+`erwpK_comap` at `KW.flr a`). Every stop then chooses a floor at most `a`, so every world the
+lender's run reaches has the location typing above `a` of `Θ` (`LocTy.ExtP.above_eq`); a value in
+`Res_a` at `Θ` is one there (`vN_above`). `a` is the lend's lifetime (`withbor2S`, `withbor3S`,
+`withborFS`) or the cells' and the result's stratum (`sliceBorrowMS`).
+
+**The constants.**
+- `withbor2S_compat`: the Mut Frame with the callback a thunk of `cN` (`erwpK_M_frameCR_cN`), then
+  `erwpK_claimXK` and `erwpK_ubindClaimRWK`, `fin_claim`.
+- `withbor3S_compat`, `withborFS_compat`: the anti-frame (`erwpK_M_antiFrameCR_tab`, its invariant
+  `KW.SealInv`) around the guarded Mut Frame with the callback a thunk of `cN`
+  (`erwpK_M_frameCRG_cN`); the resealed source carries `Res_α` (`Rout`); `withborFS` frames the
+  opened cell outside (`erwpK_frameGR_tab`) after the `load`.
+- `withloadS_compat`: `withload_rebT₀`'s steps at `erwpK` (`withload_reb`), 6.150 at the row's
+  table at the typed world (`erwpK_rebGen_tab`), the callback at the image (`callback_at_image`,
+  `tabN_extend_suspendC`).
+- `sliceBorrowMS_compat`: the `n`-cell frame with its lends read by a predicate
+  (`erwpK_M_frameListKWP` at `KW.LendMapB`: lends below the bound and the result's stratum); the
+  callback, a thunk of `cN` at the innermost lend's world, read at the lender's worlds
+  (`erwpK_lendMapB_comap`, its posts moved along an invariant on the callback's worlds).
+- `ConstN`, `ConstsN`, `FundamentalN` at `vN`/`SemJN` (`ConstKW835N`); `constN_*`, `constsN_of` and
+  the instances at the hardest case's row, their finalisers read at `SemJN`.
+
+**Not restated.** `divFuel`; the tail and last handlers (`erwpK_handle_leI` is ready for them);
+`ν`; the unwinding-row lends; `MissingN` and `fundamentalN_all` at `SemJN`; the instance with a
+callback that performs (`withbor2S_perform`).
